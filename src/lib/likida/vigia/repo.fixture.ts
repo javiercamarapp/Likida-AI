@@ -213,11 +213,16 @@ export class RepoEnMemoria implements RepoVigia {
       && (m.estado === 'pendiente_aprobacion' || m.estado === 'borrador')).map((m) => m.id);
   }
 
-  async actualizarConversacion(tenantId: string, id: string, p: Parameters<RepoVigia['actualizarConversacion']>[2]): Promise<void> {
+  async actualizarConversacion(tenantId: string, id: string, p: Parameters<RepoVigia['actualizarConversacion']>[2], guarda?: Parameters<RepoVigia['actualizarConversacion']>[3]): Promise<boolean> {
     this.verifica('actualizarConversacion');
     const c = this.conversaciones.get(id);
-    if (!c || c.tenantId !== tenantId) return;
+    if (!c || c.tenantId !== tenantId) return false;
+    if (guarda) {
+      if (c.sinRespuestaDesde !== guarda.sinRespuestaDesde) return false;
+      if (guarda.nivelMenorA !== undefined && !(c.escalamientoNivel < guarda.nivelMenorA)) return false;
+    }
     Object.assign(c, p);
+    return true;
   }
   async marcarRespondida(tenantId: string, conversacionId: string, ahora: Date): Promise<void> {
     const c = this.conversaciones.get(conversacionId);

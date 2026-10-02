@@ -158,3 +158,61 @@ describe('ejecutarEscalamiento · sello sin actualizar', () => {
     expect(repo.conversaciones.get(c.id)?.escalamientoNivel).toBe(1);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// La CARRERA del barrido con datos viejos (ronda 09 · adversarial): el barrido lee las filas una vez y escribe después de varias
+// idas a la base. Si el gerente contesta en medio, no se avisa por algo ya atendido ni se deja un nivel que heredaría el ciclo siguiente.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('barridoVigia · el gerente contesta entre la lectura y la escritura', () => {
+  /** El barrido lee las filas (copias, como PostgREST) y, justo después, `marcarRespondida` reinicia el hilo. */
+  function contestaEnMedio(repo: RepoEnMemoria, id: string, tenantId: string) {
+    const original = repo.conversacionesEnEspera.bind(repo);
+    vi.spyOn(repo, 'conversacionesEnEspera').mockImplementation(async (limite, ahora) => {
+      const filas = (await original(limite, ahora)).map((f) => ({ ...f, conversacion: { ...f.conversacion } }));
+      await repo.marcarRespondida(tenantId, id, ahora ?? AHORA);
+      return filas;
+    });
+  }
+
+  it('no manda el aviso falso ni deja nivel ni molestia sobre el hilo ya contestado', async () => {
+    const { repo } = escenario({ slaRespuestaMin: 10 });
+    const c = hilo(repo, T1, CLIENTE_A, { sinRespuestaDesde: hace(11), entradasSinRespuesta: 5 });
+    contestaEnMedio(repo, c.id, T1);
+    const { deps, alGerente } = armar(repo, AHORA);
+    const r = await barridoVigia(deps);
+    expect(alGerente).toEqual([]);
+    expect(r.escaladas).toBe(0);
+    const despues = repo.conversaciones.get(c.id)!;
+    expect(despues).toMatchObject({ sinRespuestaDesde: null, escalamientoNivel: 0, molestiaNivel: 0, escaladoEn: null });
+  });
+
+  it('solo la escalera: sin molestia que subir, el nivel tampoco se escribe sobre el hilo contestado', async () => {
+    const { repo } = escenario({ slaRespuestaMin: 10 });
+    const c = hilo(repo, T1, CLIENTE_A, { sinRespuestaDesde: hace(11), entradasSinRespuesta: 1 });
+    contestaEnMedio(repo, c.id, T1);
+    const { deps, alGerente } = armar(repo, AHORA);
+    await barridoVigia(deps);
+    expect(alGerente).toEqual([]);
+    expect(repo.conversaciones.get(c.id)?.escalamientoNivel).toBe(0);
+  });
+
+  it('el reintento tras un sello a medias tampoco sube el nivel de un hilo contestado', async () => {
+    const { repo } = escenario({ slaRespuestaMin: 10 });
+    const c = hilo(repo, T1, CLIENTE_A, { sinRespuestaDesde: hace(11) });
+    await repo.evento(T1, { conversacionId: c.id, tipo: 'escalada', clave: `${c.id}:${Date.parse(c.sinRespuestaDesde!)}:n1`, nivel: 1 });
+    contestaEnMedio(repo, c.id, T1);
+    const { deps } = armar(repo, AHORA);
+    await barridoVigia(deps);
+    expect(repo.conversaciones.get(c.id)?.escalamientoNivel).toBe(0);
+  });
+
+  it('sin carrera, el mismo hilo SÍ avisa y sube su nivel (la guarda no apaga el barrido)', async () => {
+    const { repo } = escenario({ slaRespuestaMin: 10 });
+    const c = hilo(repo, T1, CLIENTE_A, { sinRespuestaDesde: hace(11), entradasSinRespuesta: 1 });
+    const { deps, alGerente } = armar(repo, AHORA);
+    const r = await barridoVigia(deps);
+    expect(r.escaladas).toBe(1);
+    expect(alGerente).toHaveLength(1);
+    expect(repo.conversaciones.get(c.id)?.escalamientoNivel).toBe(1);
+  });
+});

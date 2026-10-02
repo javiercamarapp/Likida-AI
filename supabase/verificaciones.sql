@@ -18838,3 +18838,37 @@ begin
   raise exception E'ORQ_BARRIDO_0652 primera-toma-todas=% segunda-nada=% ventana-respeta=% ventana-vencida-vuelve=% error-reintenta-10min=% limite-respeta=% dominio-rebota=% solo-service-role=%   (esperado t / t / t / t / t / t / t / t)',
     primera, segunda, ventana, vencida, err10, limite, dom, solo;
 end $$;
+
+-- ── 297. Vigía: un ciclo de espera nuevo nace sin la escalera ni la molestia del anterior (mig. 0648) ──
+-- El barrido puede escribir nivel/molestia sobre un hilo que el gerente ya contestó; el ciclo siguiente no debe heredarlos (con nivel 1 el
+-- responsable nunca recibía su aviso, con nivel 2 el hilo salía de la cola). Lo que solo la base demuestra: un segundo mensaje del MISMO
+-- ciclo conserva la escalera, un ciclo nuevo arranca en 0 (nivel, molestia, fechas), y un duplicado no mueve nada.
+-- Esperado: VIGIA_CICLO_0648 mismo-ciclo-conserva=t ciclo-nuevo-limpio=t reloj-arranca=t duplicado-no-mueve=t
+do $$
+declare
+  ta uuid; cl uuid; co uuid; v record;
+  conserva boolean := false; limpio boolean := false; reloj boolean := false; dup boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0648 A') returning id into ta;
+  insert into cliente (tenant_id, nombre) values (ta, 'Cliente 0648') returning id into cl;
+  insert into vigia_contacto (tenant_id, cliente_id, telefono, telefono_hash, nombre, consentimiento_en, consentimiento_origen)
+  values (ta, cl, '525548010002', repeat('b', 64), 'Compras', now(), 'alta_flota') returning id into co;
+  perform * from vigia_recibir_mensaje(ta, co, 'wamid.v0648.1', 'texto', 'hola', now() - interval '20 minutes');
+  update vigia_conversacion set escalamiento_nivel = 1, escalado_en = now(), molestia_nivel = 2, molestia_motivos = '{espera}', molestia_en = now() where contacto_id = co and estado = 'activa';
+  perform * from vigia_recibir_mensaje(ta, co, 'wamid.v0648.2', 'texto', 'alguien', now());
+  select * into v from vigia_conversacion where contacto_id = co and estado = 'activa';
+  conserva := v.escalamiento_nivel = 1 and v.molestia_nivel = 2 and v.escalado_en is not null;
+  update vigia_conversacion set sin_respuesta_desde = null, entradas_sin_respuesta = 0 where id = v.id;
+  update vigia_conversacion set escalamiento_nivel = 2, escalado_en = now(), molestia_nivel = 3, molestia_motivos = '{espera}', molestia_en = now() where id = v.id;
+  perform * from vigia_recibir_mensaje(ta, co, 'wamid.v0648.3', 'texto', 'de nuevo', now());
+  select * into v from vigia_conversacion where id = v.id;
+  limpio := v.escalamiento_nivel = 0 and v.escalado_en is null and v.molestia_nivel = 0 and v.molestia_motivos = '{}' and v.molestia_en is null;
+  reloj := v.sin_respuesta_desde is not null and v.entradas_sin_respuesta = 1;
+  update vigia_conversacion set sin_respuesta_desde = null, escalamiento_nivel = 2 where id = v.id;
+  perform * from vigia_recibir_mensaje(ta, co, 'wamid.v0648.3', 'texto', 'de nuevo', now());
+  select * into v from vigia_conversacion where id = v.id;
+  dup := v.sin_respuesta_desde is null and v.escalamiento_nivel = 2;
+
+  raise exception E'VIGIA_CICLO_0648 mismo-ciclo-conserva=% ciclo-nuevo-limpio=% reloj-arranca=% duplicado-no-mueve=%   (esperado t / t / t / t)',
+    conserva, limpio, reloj, dup;
+end $$;

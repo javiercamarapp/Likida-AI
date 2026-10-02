@@ -41,7 +41,7 @@ import { evaluarMolestia } from './molestia';
 import { decidirEnvio } from './politica';
 import { pulirBorrador, redactarBorrador, type ViajeParaRedactar } from './redactor';
 import { elegirRespuestaRapida } from './respuestas_rapidas';
-import type { DepsVigia, Destinatario } from './puertos';
+import type { DepsVigia, Destinatario, GuardaConversacion } from './puertos';
 import { configParaCliente } from './tipos';
 import type { AdjuntoRef, Clasificacion, ConfigVigia, Contacto, Conversacion, MensajeVigia, MotivoEscalamiento } from './tipos';
 
@@ -441,19 +441,28 @@ async function entregarAdjuntos(e: EntradaEnviarSaliente, via: 'texto' | 'botone
 
 interface ContextoEscalamiento {
   tenantId: string;
-  conv: Pick<Conversacion, 'id'>;
+  conv: Pick<Conversacion, 'id' | 'sinRespuestaDesde'>;
   contacto: Contacto;
   config: ConfigVigia;
   nombreCliente: string | null;
 }
 
-export type ResultadoEscalamiento = 'avisado' | 'registrado' | 'sin_destinatario' | 'duplicado' | 'fallo_envio';
+/** `obsoleto`: el hilo ya no esperaba (o cambió de ciclo) cuando el barrido llegó a escribir; no se avisa ni se toca. */
+export type ResultadoEscalamiento = 'avisado' | 'registrado' | 'sin_destinatario' | 'duplicado' | 'fallo_envio' | 'obsoleto';
 
 async function ejecutarEscalamiento(
-  a: AccionEscalamiento, c: ContextoEscalamiento, deps: DepsVigia, opciones: { enviar: boolean } = { enviar: true },
+  a: AccionEscalamiento, c: ContextoEscalamiento, deps: DepsVigia, opciones: { enviar: boolean; guardaCiclo?: boolean } = { enviar: true },
 ): Promise<ResultadoEscalamiento> {
   const { repo } = deps;
   const ahora = ahoraDe(deps);
+
+  // `guardaCiclo` (solo el barrido; la ruta en caliente actúa sobre el hilo que acaba de tocar y a veces escala TRAS responder): el barrido lee las filas UNA vez y escribe después de varias idas a la base: si mientras tanto el gerente contestó
+  // (`marcarRespondida` deja `sin_respuesta_desde` en null) o el cliente abrió otro ciclo, esa lectura es vieja. Toda
+  // escritura va condicionada al mismo ciclo de espera que se leyó; si ya no coincide, no se avisa por algo ya atendido
+  // ni se deja un nivel heredado que silenciaría el siguiente ciclo.
+  if (opciones.guardaCiclo && !c.conv.sinRespuestaDesde) return 'obsoleto';
+  const guarda = (nivelMenorA: number): GuardaConversacion | undefined =>
+    (opciones.guardaCiclo && c.conv.sinRespuestaDesde ? { sinRespuestaDesde: c.conv.sinRespuestaDesde, nivelMenorA } : undefined);
 
   // El SELLO: la clave es única por flota. Solo quien la inserta primero avisa.
   const nuevo = await repo.evento(c.tenantId, {
@@ -463,11 +472,12 @@ async function ejecutarEscalamiento(
   if (!nuevo) {
     // El sello ya existía pero la conversación sigue en un nivel menor: una pasada anterior murió entre el sello y la
     // actualización. Se sube el nivel aquí; si no, el hilo se quedaría en la cola para siempre sin poder avisar.
-    await repo.actualizarConversacion(c.tenantId, c.conv.id, { escalamientoNivel: a.nivel });
+    await repo.actualizarConversacion(c.tenantId, c.conv.id, { escalamientoNivel: a.nivel }, guarda(a.nivel));
     return 'duplicado';
   }
 
-  await repo.actualizarConversacion(c.tenantId, c.conv.id, { escalamientoNivel: a.nivel, escaladoEn: ahora.toISOString() });
+  const aplicado = await repo.actualizarConversacion(c.tenantId, c.conv.id, { escalamientoNivel: a.nivel, escaladoEn: ahora.toISOString() }, guarda(a.nivel));
+  if (!aplicado) return 'obsoleto';
   if (!opciones.enviar) return 'registrado';
 
   const destino: Destinatario | null = await repo.destinatarioNivel(c.tenantId, c.contacto, a.nivel);
@@ -684,7 +694,10 @@ export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number;
       });
       const convActual = { ...conv };
       if (molestia.nivel > conv.molestiaNivel) {
-        await repo.actualizarConversacion(f.config.tenantId, conv.id, { molestiaNivel: molestia.nivel, molestiaMotivos: molestia.motivos, molestiaEn: ahora.toISOString() });
+        const aplicada = conv.sinRespuestaDesde
+          ? await repo.actualizarConversacion(f.config.tenantId, conv.id, { molestiaNivel: molestia.nivel, molestiaMotivos: molestia.motivos, molestiaEn: ahora.toISOString() }, { sinRespuestaDesde: conv.sinRespuestaDesde })
+          : false;
+        if (!aplicada) continue;   // ya contestada (o ciclo nuevo) desde que se leyó la fila: nada que subir ni avisar
         convActual.molestiaNivel = molestia.nivel;
         convActual.molestiaMotivos = molestia.motivos;
         convActual.molestiaEn = ahora.toISOString();
@@ -692,9 +705,10 @@ export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number;
       const accion = evaluarEscalamiento({ conversacion: convActual, config: f.config, ahoraMs: ahora.getTime() });
       if (!accion) continue;
       const nombreCliente = await repo.nombreCliente(f.config.tenantId, conv.clienteId);
-      const res = await ejecutarEscalamiento(accion, { tenantId: f.config.tenantId, conv, contacto: f.contacto, config: f.config, nombreCliente: nombreCliente ?? f.contacto.nombre }, deps);
+      const res = await ejecutarEscalamiento(accion, { tenantId: f.config.tenantId, conv, contacto: f.contacto, config: f.config, nombreCliente: nombreCliente ?? f.contacto.nombre }, deps, { enviar: true, guardaCiclo: true });
       if (res === 'avisado' || res === 'registrado') r.escaladas += 1;
       else if (res === 'duplicado') r.duplicadas += 1;
+      else if (res === 'obsoleto') continue;
       else if (res === 'sin_destinatario') r.sinDestinatario += 1;
       else r.fallosEnvio += 1;
     } catch (e) {

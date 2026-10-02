@@ -443,7 +443,7 @@ export function crearRepoVigia(): RepoVigia {
       return (f ?? []).map((x) => String(x.id));
     },
 
-    async actualizarConversacion(tenantId, id, p) {
+    async actualizarConversacion(tenantId, id, p, guarda) {
       const m: Record<string, string> = {
         viajeId: 'viaje_id', molestiaNivel: 'molestia_nivel', molestiaMotivos: 'molestia_motivos', molestiaEn: 'molestia_en',
         escalamientoNivel: 'escalamiento_nivel', escaladoEn: 'escalado_en', control: 'control', tomadaPor: 'tomada_por',
@@ -451,9 +451,15 @@ export function crearRepoVigia(): RepoVigia {
       };
       const parche: Fila = { updated_at: new Date().toISOString() };
       for (const [k, v] of Object.entries(p)) if (m[k] !== undefined && v !== undefined) parche[m[k]] = v;
-      const { error } = await acotada(supabaseAdmin().from('vigia_conversacion')
-        .update(parche).eq('id', id).eq('tenant_id', tenantId), 'vigia.actualizar_conversacion');
+      let q = supabaseAdmin().from('vigia_conversacion').update(parche).eq('id', id).eq('tenant_id', tenantId);
+      // Condicional (barrido): si el gerente contestó entre la lectura y esta escritura, `sin_respuesta_desde` ya no coincide y no se toca nada.
+      if (guarda) {
+        q = q.eq('sin_respuesta_desde', guarda.sinRespuestaDesde);
+        if (guarda.nivelMenorA !== undefined) q = q.lt('escalamiento_nivel', guarda.nivelMenorA);
+      }
+      const { data, error } = await acotada(q.select('id'), 'vigia.actualizar_conversacion');
       if (error) throw new Error(`vigia.actualizar_conversacion: ${error.message}`);
+      return ((data ?? []) as Fila[]).length > 0;
     },
 
     async marcarRespondida(tenantId, conversacionId, ahora) {
