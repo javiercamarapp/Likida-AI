@@ -114,6 +114,43 @@ describe('los veredictos de ubicación (excepción «ya llegué» sin GPS)', () 
   });
 });
 
+describe('lo sembrado por los importadores reales y los escenarios nuevos', () => {
+  const imp = readFileSync(`${DIR}sembrar-importadores.mjs`, 'utf8');
+  const liq = sinComentarios(readFileSync(`${DIR}sql/05_liquidacion.sql`, 'utf8'));
+  it('sembrar.sh corre sembrar-importadores.mjs después del motor de veredictos y usa los importadores del producto', () => {
+    const sh = readFileSync(`${DIR}sembrar.sh`, 'utf8');
+    expect(sh.indexOf('node sembrar-importadores.mjs')).toBeGreaterThan(sh.indexOf('node generar-veredictos.mjs'));
+    for (const modulo of ['liquidacion_externa/formato_flota.ts', 'vigia/historial/export_whatsapp.ts', 'vigia/historial/zip_lector.ts', 'vigia/historial/analisis.ts', 'vigia/respuestas_rapidas.ts', 'peajes/archivo.ts']) expect(imp).toContain(modulo);
+    expect(imp).toContain('exigirBaseLocal()');
+  });
+  it('la copia al jefe y la discrepancia llevan la marca 28999 (la que rechaza el envío) y coinciden con los avisos sembrados', () => {
+    const copia = /const COPIA = \[([^\]]*)\]/.exec(imp)?.[1].match(/\d+/g) ?? [];
+    const disc = /const DISCREPANCIA = \[([^\]]*)\]/.exec(imp)?.[1].match(/\d+/g) ?? [];
+    expect(copia.length).toBeGreaterThan(0);
+    expect(disc.length).toBeGreaterThan(0);
+    for (const t of [...copia, ...disc]) expect(esTelefonoDemo(t), t).toBe(true);
+    // Los avisos de discrepancia «entregados» de 05_liquidacion.sql llevan exactamente los teléfonos de discrepancia del formato.
+    expect([...liq.matchAll(/array\['(\d+)', '(\d+)'\]/g)].map((m) => [m[1], m[2]])).toEqual([disc]);
+  });
+  it('ningún aviso ni liquidación sembrados queda pendiente: nada que un cron intente mandar', () => {
+    expect(liq).toMatch(/case when d\.rn in \(3, 6\) then 'fallido' else 'enviado' end/);
+    expect(liq).not.toMatch(/'pendiente'|'enviando'|'en_cola'/);
+    expect(liq).toMatch(/'omitido'/); // avisos del asistente a personas: apagados
+  });
+  it('el barrido de «sin señal de vida» y la detección en vivo no se encienden en el seed', () => {
+    const vig = sinComentarios(readFileSync(`${DIR}sql/07_vigia_y_conductor.sql`, 'utf8'));
+    expect(vig).not.toMatch(/avisar_senal_vida\s*=\s*true/i);
+    const sh = readFileSync(`${DIR}sembrar.sh`, 'utf8');
+    expect(sh).not.toMatch(/avisar_senal_vida/);
+  });
+  it('los polígonos del seed son los del importador: 5, aproximada = false y el círculo que los contiene', () => {
+    const base = sinComentarios(readFileSync(`${DIR}sql/01_base.sql`, 'utf8'));
+    expect(base).toMatch(/codigo in \('PATIO-GDL', 'PL-C03', 'PL-C05', 'PL-C10', 'PL-C12'\)/);
+    expect(base).toMatch(/aproximada = false/);
+    expect(base).toMatch(/ceil\(max\(1000 \* innovativos_sim\.dist_km/); // radio = vértice más lejano, sin inflar
+  });
+});
+
 function correr(script: string, args: string[], env: Record<string, string>) {
   // Entorno mínimo: sin DATABASE_URL heredada. Si una guarda fallara, psql se abriría contra un host inexistente y la prueba lo notaría por el código de salida.
   return spawnSync('bash', [`${DIR}${script}`, ...args], { env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...env } as unknown as NodeJS.ProcessEnv, encoding: 'utf8' });

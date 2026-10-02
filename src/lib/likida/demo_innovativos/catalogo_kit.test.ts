@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { validarArchivo } from './archivos';
 import { TIPOS_ARCHIVO_KIT } from './contratos';
 import { KIT } from './catalogo_kit';
+import { analizarHistorial } from '../vigia/historial/analisis';
+import { leerExportWhatsapp } from '../vigia/historial/export_whatsapp';
+import { textoDeZip } from '../vigia/historial/zip_lector';
 import { bytesMuestra, textoMuestra } from './muestras.test.util';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -37,8 +40,11 @@ describe('catálogo del kit', () => {
       expect(k.importador.donde.length).toBeGreaterThan(20);
     }
   });
-  it('lo único que es solo contrato es el lector de tabla propia (el resto existe o viene en una rama dueña)', () => {
-    expect(KIT.filter((k) => k.importador.estado === 'contrato').map((k) => k.id)).toEqual(['gps_posiciones']);
+  it('los nueve importadores están integrados: ninguno queda como contrato ni como «en rama» (y el kit no lo dice)', () => {
+    expect(KIT.filter((k) => k.importador.estado !== 'existe').map((k) => k.id)).toEqual([]);
+    expect(doc).not.toContain('**contrato**');
+    expect(doc).not.toContain('**en_rama**');
+    expect(doc).not.toMatch(/w3-(agentes-1-4|conductor-vigia|convenios|gps-jornada)/);
   });
 });
 
@@ -81,13 +87,22 @@ describe('el guion y el documento citan lo que de verdad está sembrado', () => 
     for (const clave of citadas) expect(muestra, `${clave} no está en la muestra`).toContain(clave);
     // La verdad de las cifras (8 «No coincide», 158 en total…) se verifica contra la BASE en verificar-hechos-del-guion.mjs.
   });
-  it('los conteos del guion para los chats son los del resumen esperado', () => {
+  it('la tabla del Vigía del guion son los números del análisis REAL del histórico (lector del Vigía + analizarHistorial)', () => {
     const e = JSON.parse(textoMuestra('whatsapp/resumen_esperado.json'));
-    for (const g of ['afb', 'arr', 'cfn']) {
-      expect(guion).toContain(`| ${e[g].mensajes} | ${e[g].preguntas} | ${e[g].sin_respuesta_10min} | ${e[g].quejas} |`);
+    const equipo = ['Despacho Innovativos Demo', 'Servicio a Cliente Demo A', 'Servicio a Cliente Demo B', 'Servicio a Cliente Demo C'];
+    const filas: Array<[string, string, string]> = [
+      ['afb', 'Autopartes (iOS)', 'whatsapp/grupo_afb_silao_ios.txt'], ['arr', 'Armadora (Android)', 'whatsapp/grupo_arr_ramos_android.txt'], ['cfn', 'Cervecería (iOS, .zip)', 'whatsapp/grupo_cfn_apodaca_ios.zip'],
+    ];
+    for (const [id, etiqueta, rel] of filas) {
+      let texto: string;
+      if (rel.endsWith('.zip')) { const z = textoDeZip(bytesMuestra(rel)); if (!z.ok) throw new Error(z.error); texto = z.texto; } else texto = textoMuestra(rel);
+      const a = analizarHistorial(leerExportWhatsapp(texto, { equipo, sal: 'prueba' }).mensajes);
+      const quejas = a.porTema.find((t) => t.tema === 'queja')?.mensajes ?? 0;
+      expect(quejas).toBe(e[id].quejas);
+      expect(guion.replace(/\*\*/g, '')).toContain(`| ${etiqueta} | ${a.mensajes} | ${a.mensajesCliente} | ${a.tiempos.sobreUmbral} | ${a.tiempos.medianaMin} / ${a.tiempos.p90Min} | ${quejas} |`);
     }
   });
-  it('«4 de 17 son polígonos» sale del archivo de geocercas de muestra', () => {
+  it('«5 de 17 son polígonos» sale del archivo de geocercas de muestra', () => {
     const filas = textoMuestra('gps/geocercas.csv').trim().split('\n');
     const iTipo = filas[0].split(',').indexOf('tipo');
     expect(iTipo).toBeGreaterThanOrEqual(0);
@@ -95,6 +110,20 @@ describe('el guion y el documento citan lo que de verdad está sembrado', () => 
     expect(datos.length).toBeGreaterThan(0);
     const poligonos = datos.filter((f) => f.split(',')[iTipo] === 'poligono').length;
     expect(guion.replace(/\*\*/g, '').replace(/\s+/g, ' ')).toContain(`${poligonos} de ${datos.length} son polígonos`);
+    expect(doc.replace(/\*\*/g, '').replace(/\s+/g, ' ')).toContain(`${poligonos} de ${datos.length} son polígonos`);
+  });
+  it('los viajes cuyo hito detectó el GPS por geocerca (sin chofer) se calculan del SQL y TODOS están en el guion y en el kit', () => {
+    const m = /update innovativos_sim\.plan_viaje set por_geocerca = true where tipo = 'abierto' and escenario = 'normal' and i % (\d+) = (\d+);/.exec(viajesSql);
+    expect(m, '02_viajes.sql ya no define el escenario por_geocerca').not.toBeNull();
+    const [, mod, resto] = m as RegExpExecArray;
+    const llegue = foliosDelSql('llegue_sin_gps'); const silencio = foliosDelSql('silencio');
+    const folios: string[] = [];
+    for (let i = 1; i <= 140; i++) {
+      const folio = `INN-${24000 + i}`;
+      if (i % Number(mod) === Number(resto) && !llegue.includes(folio) && !silencio.includes(folio)) folios.push(folio);
+    }
+    expect(folios.length, '0 folios: el SQL cambió y esta prueba no verifica nada').toBeGreaterThan(0);
+    for (const f of folios) { expect(guion, `el guion no cita ${f}`).toContain(f); expect(doc, `el kit no cita ${f}`).toContain(f); }
   });
 });
 
@@ -106,30 +135,43 @@ describe('estructura del guion: cada agente en su sección y cada cosa con su et
     ];
     for (const [nombre, re] of esperado) expect(secciones.some((s) => re.test(s.titulo)), `falta una sección «${nombre}»`).toBe(true);
   });
-  it('las secciones de demostración (1–6) llevan etiquetas de estado: lo que corre hoy, lo que depende de otra rama y lo de terceros', () => {
+  it('las secciones de demostración (1–6) llevan etiquetas de estado: lo que corre hoy, lo que depende de terceros y lo que todavía no existe', () => {
     const demo = secciones.filter((s) => /^[1-6]\. /.test(s.titulo));
     expect(demo.length).toBe(6);
     for (const s of demo) expect(s.cuerpo, `sin etiqueta «[corre hoy]» en ${s.titulo}`).toContain('[corre hoy');
     const todo = demo.map((s) => s.cuerpo).join('\n');
-    expect(todo).toContain('[se enseña cuando se integre');
+    expect(todo).toContain('[todavía no existe]');
     expect(todo).toMatch(/\[depende de (Meta|GPS real|el cliente)/);
   });
-  it('lo que no existe en esta rama NO se promete: está marcado «se enseña cuando se integre»', () => {
-    // Botones de escalamiento, conciliación obligatoria, histórico de grupos, reporte de reclamación, convenios y chat con fuentes nuevas.
-    for (const [fragmento, rama] of [['botones de escalamiento', 'w3-conductor-vigia'], ['conciliación obligatoria', 'w3-conductor-vigia'], ['histórico exportado', 'w3-conductor-vigia'], ['reporte de reclamación', 'w3-agentes-1-4'], ['instrucciones por convenio', 'w3-convenios'], ['una sola pestaña', 'w3-agentes-1-4']]) {
-      const i = guion.toLowerCase().indexOf(fragmento);
-      expect(i, `el guion ya no menciona «${fragmento}»`).toBeGreaterThan(-1);
-      expect(guion.slice(Math.max(0, i - 400), i + 400), `«${fragmento}» no está marcado como dependiente de ${rama}`).toContain(`se enseña cuando se integre \`${rama}\``);
+  it('lo integrado ya no se dice «cuando se integre» ni «no está construido»: el guion enseña lo que el código hace', () => {
+    expect(guion).not.toContain('se enseña cuando se integre');
+    expect(guion).not.toContain('[no está construido]');
+    expect(guion).not.toMatch(/w3-(agentes-1-4|conductor-vigia|convenios|gps-jornada)/);
+    for (const frag of ['Reavisar', 'copia al jefe de flota', 'sin señal de vida', 'geocerca', 'Reporte de reclamación', 'worker', 'polígono', 'respuestas rápidas', 'Grupos e histórico']) {
+      expect(guion.toLowerCase(), `el guion ya no enseña «${frag}»`).toContain(frag.toLowerCase());
     }
   });
-  it('lo que no está construido no se dice como si lo estuviera (aviso a la oficina, copia al jefe, Excel por WhatsApp)', () => {
-    expect(guion).toMatch(/\[no está construido\][\s\S]{0,200}le avisamos a la oficina/);
-    expect(guion).not.toMatch(/el jefe de flota recibe copia/i);
+  it('lo que NO existe todavía se dice como tal y no se promete', () => {
+    const g = guion.replace(/\*\*/g, '');
+    for (const fragmento of ['alta y la edición de un convenio', '«cursos»', 'varios embarques', 'SAP/TMS en vivo']) {
+      const i = g.indexOf(fragmento);
+      expect(i, `el guion ya no menciona «${fragmento}»`).toBeGreaterThan(-1);
+      expect(g.slice(Math.max(0, i - 300), i + 300), `«${fragmento}» no está marcado [todavía no existe]`).toContain('[todavía no existe]');
+    }
+  });
+  it('lo que sigue sin existir en el producto es verdad: no hay alta de convenio en pantalla, ni cursos, ni lector de SAP', () => {
+    const rutas = (rel: string) => existsSync(`${RAIZ}${rel}`);
+    expect(rutas('src/lib/likida/peajes/cursos.ts')).toBe(false);
+    expect(rutas('src/lib/likida/conectores/sap')).toBe(false);
+    expect(rutas('src/lib/likida/conectores/tabla_propia/sftp.ts')).toBe(false);
   });
   it('el apartado de terceros cubre Meta, GPS, grupos, pases, liquidación, Carta Porte y la «calle de instrucciones»', () => {
     const t = guion.slice(guion.indexOf('## 8.'));
     for (const fila of ['**Meta (WhatsApp)**', '**GPS real**', '**WhatsApp, grupos**', '**Archivo de pases**', '**Liquidación**', '**Carta Porte**', '**«Calle de instrucciones»**']) expect(t, fila).toContain(fila);
     expect(t).toContain('plantilla aprobada');
     expect(t).toContain('API de Business');
+  });
+  it('el repo es público: ni nombres de personas del cliente ni datos comerciales en el guion ni en el kit', () => {
+    for (const texto of [guion, doc]) expect(texto).not.toMatch(/jos[eé] |lorena|320 trac|competid|primer mes/i);
   });
 });
