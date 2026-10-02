@@ -22,6 +22,40 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 3. Aprobación: Meta tarda de minutos a 2–5 días hábiles. Hasta que una plantilla esté `APPROVED`, el envío devuelve `132001` y el selector lo reporta con ese motivo (fail-closed y dicho).
 4. Si Meta reclasifica una plantilla a MARKETING, el script lo marca como desviación: sale más cara y con más límites; hay que apelar o reescribir.
 
+## Lista consolidada por someter a Meta (25)
+
+Todas las que siguen en estado «nueva para aprobación»: el código ya las nombra (o las nombrará) y, mientras Meta no las apruebe, el envío fuera de la ventana de 24 h devuelve `132001`, queda dicho en `wa_envio_registro` y NO se reintenta en cada pasada. Las funciones que las usan nacen **apagadas por defecto** y se encienden por flota; no hace falta aprobar todas para el demo, solo las de lo que se vaya a enseñar en vivo.
+
+| # | Plantilla | Agente | Llamador en código | Variables | Botones | Texto |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `cobranza_gastos_v1` | Chofer — cobranza de comprobantes / recordatorio de aceptación | `src/lib/likida/agentes/cobranza_gasto.ts` | 3 | — | autoritativo |
+| 2 | `regla_aviso_v1` | Mis reglas (vigilante) | `src/lib/likida/reglas/vigilante.ts` | 3 | — | autoritativo |
+| 3 | `conductor_solicitud_llegada_carga_v1` | Agente 5 — Conductor | `src/lib/likida/conductor/ejecutor.ts` | 4 | «Ya llegué», «Voy con retraso», «Compartir ubicación» | autoritativo |
+| 4 | `conductor_contacto_anden_v1` | Agente 5 — Conductor | sin llamador todavía | 3 | «Aún no tengo contacto» | autoritativo |
+| 5 | `conductor_salida_carga_v1` | Agente 5 — Conductor | `src/lib/likida/conductor/ejecutor.ts` | 2 | «Ya salí», «Sigo cargando» | autoritativo |
+| 6 | `conductor_llegada_descarga_v1` | Agente 5 — Conductor | `src/lib/likida/conductor/ejecutor.ts` | 3 | «Ya llegué», «Compartir ubicación» | autoritativo |
+| 7 | `conductor_salida_descarga_v1` | Agente 5 — Conductor | `src/lib/likida/conductor/ejecutor.ts` | 2 | «Ya salí», «Sigo descargando» | autoritativo |
+| 8 | `conductor_recordatorio_1_v1` | Agente 5 — Conductor | `src/lib/likida/conductor/ejecutor.ts` | 3 | «Registrar ahora», «Tengo un problema» | autoritativo |
+| 9 | `conductor_recordatorio_2_v1` | Agente 5 — Conductor | `src/lib/likida/conductor/ejecutor.ts` | 4 | «Registrar ahora», «Tengo un problema» | autoritativo |
+| 10 | `conductor_recordatorio_3_v1` | Agente 5 — Conductor | `src/lib/likida/conductor/ejecutor.ts` | 4 | «Registrar ahora», «Tengo un problema» | autoritativo |
+| 11 | `conductor_llegada_carga_sin_cita_v1` | Agente 5 — Conductor | `src/lib/likida/conductor/ejecutor.ts` | 3 | «Ya llegué», «Voy con retraso», «Compartir ubicación» | autoritativo |
+| 12 | `conductor_solicitud_regreso_v1` | Agente 5 — Conductor | `src/lib/likida/conductor/ejecutor.ts` | 2 | «Voy de regreso», «Aún no» | autoritativo |
+| 13 | `convenio_instrucciones_despacho_v1` | Agente 5 — Conductor | `src/lib/likida/convenios/envio.ts` | 4 | — | autoritativo |
+| 14 | `convenio_instrucciones_acercamiento_v1` | Agente 5 — Conductor | `src/lib/likida/convenios/acercamiento.ts` | 4 | — | autoritativo |
+| 15 | `aviso_jefe_trafico_v1` | Agente 5 — Conductor | `src/lib/likida/conductor/ejecutor.ts` | 5 | «Ya lo atiendo», «Abrir tablero» | autoritativo |
+| 16 | `conductor_llegada_sin_confirmar_v1` | Agente 5 — Conductor | `src/lib/likida/conductor/alertas_llegada.ts` | 4 | — | autoritativo |
+| 17 | `conductor_senal_vida_v1` | Agente 5 — Conductor | `src/lib/likida/conductor/senal_vida.ts` | 3 | «Sí, estoy», «Voy a cargar», «Estoy bien» | autoritativo |
+| 18 | `aviso_jefe_senal_vida_v1` | Agente 5 — Conductor | `src/lib/likida/conductor/senal_vida.ts` | 4 | «Ya lo atiendo», «Abrir tablero» | autoritativo |
+| 19 | `operador_invitacion_v1` | Alta de operadores (invitación del chofer) | `src/lib/likida/invitacion_operador.ts` | 2 | — | autoritativo |
+| 20 | `vigia_respuesta_cliente_v1` | Agente 4 — Vigía de servicio al cliente | `src/lib/likida/vigia/enviar.ts` | 2 | — | autoritativo |
+| 21 | `vigia_aprobacion_v1` | Agente 4 — Vigía de servicio al cliente | `src/lib/likida/vigia/avisos.ts` | 3 | «Enviar», «No enviar», «Yo me encargo» | autoritativo |
+| 22 | `vigia_escalamiento_v1` | Agente 4 — Vigía de servicio al cliente | `src/lib/likida/vigia/avisos.ts` | 4 | «Yo me encargo» | autoritativo |
+| 23 | `liquidacion_externa_v1` | Agente 1 — Liquidación externa (entrega al chofer) | `src/lib/likida/liquidacion_externa/entrega.ts` | 4 | «Recibida», «No coincide» | autoritativo |
+| 24 | `jornada_aviso_encargado_v1` | Agente 12 — Jornada (alerta de tope) | `src/lib/likida/jornada/alerta_tope.ts` | 5 | — | autoritativo |
+| 25 | `jornada_aviso_operador_v1` | Agente 12 — Jornada (alerta de tope) | `src/lib/likida/jornada/alerta_tope.ts` | 3 | — | autoritativo |
+
+El cuerpo exacto, las variables con su ejemplo y los botones de cada una están en el bloque de más abajo (los mismos que `scripts/verificar-plantillas-meta.ts --crear` manda a Meta).
+
 ## Plantillas en uso (8)
 
 ### `viaje_asignado`
