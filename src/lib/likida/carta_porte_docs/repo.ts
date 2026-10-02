@@ -26,7 +26,7 @@ import type { FirmaPerfil, Mapeo, EjemploPerfil, Perfil } from './perfiles';
 export const BUCKET = 'cartaporte-docs';
 
 export type CanalDoc = 'manual' | 'correo' | 'whatsapp';
-export type EstadoDoc = 'recibido' | 'procesando' | 'por_revisar' | 'aprobado' | 'rechazado' | 'fallido';
+export type EstadoDoc = 'recibido' | 'procesando' | 'por_revisar' | 'aprobado' | 'rechazado' | 'fallido' | 'dividido';
 
 export interface MetaExtraccion {
   origen: 'xml' | 'perfil' | 'llm' | 'perfil+llm';
@@ -236,7 +236,9 @@ export type TipoEvento =
   | 'recibido' | 'duplicado_recibido' | 'extraccion_iniciada' | 'extraccion_ok' | 'extraccion_fallida' | 'escalada' | 'revision_abierta'
   | 'campo_corregido' | 'aprobado' | 'rechazado' | 'reabierto' | 'salida_viaje' | 'exportado' | 'perfil_aprendido' | 'purgado'
   // 0642: el worker (cron carta-porte-docs).
-  | 'aviso_oficina' | 'reintentos_agotados';
+  | 'aviso_oficina' | 'reintentos_agotados'
+  // 0670: un Excel con varios embarques se partió en documentos hijos.
+  | 'dividido';
 
 /** La bitácora: append-only, sin el contenido de los campos. Un fallo AQUÍ se lanza: sin rastro no hay operación. */
 export async function registrarEvento(tenantId: string, documentoId: string, tipo: TipoEvento, actorId: string | null, detalle: Record<string, unknown> = {}): Promise<void> {
@@ -659,3 +661,96 @@ export async function liberarAvisoDoc(tenantId: string, id: string, tipo: TipoAv
   if (r.error) { logger.error('cartaporte_docs.aviso_no_liberado', { id, tipo, err: r.error.message }); return false; }
   return r.data === true;
 }
+
+// ── Un archivo con N embarques partido en N documentos (0670-0671) ──────────
+//
+// La RPC de la 0671 hace TODO en una transacción (hijos + linaje + eventos + el padre a `dividido`). Contra una base SIN
+// la 0670/0671 el módulo sigue funcionando: `sin_migracion` le dice a quien llama que lea el archivo como siempre (por su
+// primer embarque, con el aviso) en vez de perder el documento.
+
+export interface HijoNuevo { indice: number; clave: string; nombre: string; sha256: string; bytes: number; storageRuta: string }
+
+export type ResultadoDivision =
+  | { estado: 'ok'; hijos: Array<{ indice: number; documentoId: string; creado: boolean }> }
+  /** El documento ya no es de quien lo reclamó (otra invocación lo terminó, venció el lease, se purgó). */
+  | { estado: 'perdido' }
+  | { estado: 'sin_migracion' };
+
+export async function dividirDocumento(
+  tenantId: string, padreId: string, versionReclamada: number, hijos: HijoNuevo[], retenerHijos: string, retenerPadre: string,
+): Promise<ResultadoDivision> {
+  const r = await acotada(supabaseAdmin().rpc('cp_documento_dividir', {
+    p_tenant: tenantId, p_padre: padreId, p_version: versionReclamada,
+    p_hijos: hijos.map((h) => ({ indice: h.indice, clave: h.clave, nombre: h.nombre, sha256: h.sha256, bytes: h.bytes, storage_ruta: h.storageRuta })),
+    p_retener_hijos: retenerHijos, p_retener_padre: retenerPadre,
+  }), 'cpdocs.dividir');
+  if (r.error) {
+    if (funcionAusente(r.error)) { logger.warn('cartaporte_docs.dividir_sin_migracion', { motivo: r.error.message }); return { estado: 'sin_migracion' }; }
+    throw new Error(`cpdocs.dividir: ${r.error.message}`);
+  }
+  const filas = (r.data ?? []) as unknown as Fila[];
+  if (filas.length === 0) return { estado: 'perdido' };
+  return { estado: 'ok', hijos: filas.map((f) => ({ indice: Number(f.indice), documentoId: String(f.documento_id), creado: Boolean(f.creado) })) };
+}
+
+/** El linaje de un documento partido: el hijo apunta a su padre; el padre, a cuántos hijos tiene. */
+export interface Linaje {
+  /** `hijo`: nació de partir un archivo. `padre`: es ese archivo, ya dividido. */
+  rol: 'hijo' | 'padre';
+  padreId: string;
+  /** Solo del hijo. */
+  indice: number | null;
+  total: number;
+  clave: string | null;
+  huellaBase: string;
+}
+
+/**
+ * El linaje de varios documentos de la bandeja de una vez. MEJOR ESFUERZO: sin la 0670 (o si la lectura falla) la
+ * bandeja se ve igual que antes, sin etiquetas de «embarque i de N».
+ */
+export async function linajeDeDocumentos(tenantId: string, ids: string[]): Promise<Map<string, Linaje>> {
+  const mapa = new Map<string, Linaje>();
+  if (ids.length === 0) return mapa;
+  try {
+    for (let i = 0; i < ids.length; i += 100) {
+      const lote = ids.slice(i, i + 100);
+      const h = await acotada(supabaseAdmin().from('cp_documento_embarque').select('documento_id, padre_id, huella_base, indice, total, clave')
+        .eq('tenant_id', tenantId).in('documento_id', lote).order('documento_id').limit(200), 'cpdocs.linaje_hijos');
+      if (h.error) { if (funcionAusente(h.error)) return mapa; throw new Error(h.error.message); }
+      for (const f of (h.data ?? []) as unknown as Fila[]) {
+        mapa.set(String(f.documento_id), { rol: 'hijo', padreId: String(f.padre_id), indice: Number(f.indice), total: Number(f.total), clave: s(f.clave), huellaBase: String(f.huella_base) });
+      }
+      const p = await acotada(supabaseAdmin().from('cp_documento_embarque').select('padre_id, huella_base, total')
+        .eq('tenant_id', tenantId).in('padre_id', lote).eq('indice', 1).order('padre_id').limit(200), 'cpdocs.linaje_padres');
+      if (p.error) throw new Error(p.error.message);
+      for (const f of (p.data ?? []) as unknown as Fila[]) {
+        mapa.set(String(f.padre_id), { rol: 'padre', padreId: String(f.padre_id), indice: null, total: Number(f.total), clave: null, huellaBase: String(f.huella_base) });
+      }
+    }
+  } catch (e) {
+    logger.warn('cartaporte_docs.linaje_fallo', { err: e instanceof Error ? e.message : String(e) });
+  }
+  return mapa;
+}
+
+/** Los hijos de un documento dividido (ligeros, como la bandeja), en el orden del archivo. Vacío sin la 0670. */
+export async function hijosDeDocumento(tenantId: string, padreId: string): Promise<Array<{ documento: DocumentoFila; indice: number; total: number; clave: string | null }>> {
+  const e = await acotada(supabaseAdmin().from('cp_documento_embarque').select('documento_id, indice, total, clave')
+    .eq('tenant_id', tenantId).eq('padre_id', padreId).order('indice').limit(MAX_HIJOS_LEIDOS), 'cpdocs.hijos');
+  if (e.error) {
+    if (funcionAusente(e.error)) return [];
+    throw new Error(`cpdocs.hijos: ${e.error.message}`);
+  }
+  const fichas = (e.data ?? []) as unknown as Fila[];
+  if (fichas.length === 0) return [];
+  const d = await acotada(supabaseAdmin().from('cp_documento').select(COLUMNAS_LISTA)
+    .eq('tenant_id', tenantId).in('id', fichas.map((f) => String(f.documento_id))).order('id').limit(MAX_HIJOS_LEIDOS), 'cpdocs.hijos_docs');
+  const docs = new Map(((exigir(d, 'cpdocs.hijos_docs') ?? []) as unknown as Fila[]).map((f) => [String(f.id), aDocumento(f)]));
+  return fichas.flatMap((f) => {
+    const doc = docs.get(String(f.documento_id));
+    return doc ? [{ documento: doc, indice: Number(f.indice), total: Number(f.total), clave: s(f.clave) }] : [];
+  });
+}
+
+const MAX_HIJOS_LEIDOS = 100;

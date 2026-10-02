@@ -83,6 +83,7 @@ export function revisionDe(doc: Pick<DocumentoFila, 'extraccion' | 'validacion'>
 
 export const ROTULO_ESTADO: Record<EstadoDoc, string> = {
   recibido: 'Recibido', procesando: 'Leyendo…', por_revisar: 'Por revisar', aprobado: 'Aprobado', rechazado: 'Rechazado', fallido: 'No se pudo leer',
+  dividido: 'Dividido en embarques',
 };
 
 export const ROTULO_ORIGEN: Record<Origen, string> = { xml: 'XML', perfil: 'Perfil del cliente', llm: 'Modelo', humano: 'Persona', derivado: 'Calculado' };
@@ -95,5 +96,5 @@ export const ROTULO_CANAL: Record<string, string> = { manual: 'Carga manual', co
 
 /** El orden de la bandeja: lo que necesita a una persona primero. */
 export function prioridadEstado(e: EstadoDoc): number {
-  return { por_revisar: 0, fallido: 1, recibido: 2, procesando: 3, rechazado: 4, aprobado: 5 }[e];
+  return { por_revisar: 0, fallido: 1, recibido: 2, procesando: 3, rechazado: 4, aprobado: 5, dividido: 6 }[e];
 }

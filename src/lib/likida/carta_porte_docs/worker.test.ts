@@ -79,6 +79,13 @@ describe('procesar lo pendiente', () => {
     expect(r).toMatchObject({ pendientes: 3, procesados: 3, fallidos: 0, errores: 0, cortadosPorReloj: 0 });
   });
 
+  it('un archivo con varios embarques que se PARTE cuenta como procesado y como dividido (sus hijos entran a la pasada siguiente)', async () => {
+    const DIVIDIDO: ResultadoProceso = { ok: true, estado: 'dividido', embarques: 3, hijos: ['h1', 'h2', 'h3'], yaExistian: 0 };
+    const m = mundo({ pendientes: ['a', 'b'], proceso: (id) => (id === 'a' ? DIVIDIDO : OK) });
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(r).toMatchObject({ pendientes: 2, procesados: 2, divididos: 1, fallidos: 0, errores: 0 });
+  });
+
   it('un documento que otra invocación ya tenía no es un error ni un fallo', async () => {
     const m = mundo({ pendientes: ['a', 'b'], proceso: (id) => (id === 'a' ? { ok: false, motivo: 'no_reclamable', mensaje: 'ya', permanente: false } : OK) });
     const r = await correrWorkerCartaPorte(m.deps, opts(m));

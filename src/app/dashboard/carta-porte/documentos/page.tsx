@@ -23,6 +23,10 @@ const RUTA = '/dashboard/carta-porte/documentos';
 const DIAS_VENTANA = 90;
 /** Las server actions de Next aceptan hasta 10 MB de cuerpo (next.config.ts): 9 MB deja lugar al multipart. */
 const MAX_BYTES_SUBIDA = 9 * 1024 * 1024;
+/** Lo que se le dice a quien subió un archivo que traía varios embarques. */
+const mensajeDeDivision = (n: number): string =>
+  `El archivo trae ${n} embarques: lo separé en ${n} documentos, uno por embarque. Se van leyendo y los verás en la bandeja para revisar; el archivo original queda como constancia.`;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -50,8 +54,10 @@ async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
     const correcciones = await repo.contarCorreccionesPorDocumento(tenantId, recientes.filter((d) => d.estado === 'aprobado').map((d) => d.id));
     const versiones = await Promise.all(perfiles.map((p) => repo.listarVersionesPerfil(tenantId, p.id)));
     const dominio = dominioBuzon();
+    const linaje = await repo.linajeDeDocumentos(tenantId, lista.filas.map((d) => d.id));
     return {
-      filas: lista.filas, total: lista.total, metricas: calcularMetricas(recientes, correcciones), clientes,
+      filas: lista.filas, total: lista.total,
+      linaje: Object.fromEntries([...linaje].map(([id, l]) => [id, { rol: l.rol, indice: l.indice, total: l.total, clave: l.clave }])), metricas: calcularMetricas(recientes, correcciones), clientes,
       perfiles: perfiles.map((p, i) => ({ id: p.id, nombre: p.nombre, formato: p.formato, versionActiva: p.versionActiva, mapeos: p.activa.mapeos.length, versiones: versiones[i].map((v) => ({ version: v.version, nota: v.nota, mapeos: v.mapeos })) })),
       buzon: buzon ? { direccion: direccionCp(buzon.token, dominio), activo: buzon.activo, remitentes: buzon.remitentesPermitidos, dominioConfigurado: dominio !== null } : null,
       configs: configs.map((c) => ({ id: c.id, nombre: c.nombre, formato: c.formato, config: c.config })),
@@ -97,6 +103,7 @@ export default async function PaginaDocumentos({
       const p = r.estado === 'recibido' ? await procesarDocumento(s.tenantId, r.documentoId, {}) : null;
       revalidatePath(RUTA);
       if (p && !p.ok) return { ok: false, error: `Se guardó, pero no se pudo leer: ${p.mensaje} Queda en la bandeja para reintentar.` };
+      if (p && p.ok && p.estado === 'dividido') return { ok: true, mensaje: mensajeDeDivision(p.embarques) };
       return { ok: true, mensaje: 'Documento leído. Ya está en la bandeja para revisar.' };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'subir el documento') };
@@ -114,6 +121,7 @@ export default async function PaginaDocumentos({
       if (!(await rateLimit(`cp-docs-subir:${s.tenantId}`, 30, 60_000))) return { ok: false, error: 'Demasiadas lecturas en poco tiempo. Espera un minuto.' };
       const p = await procesarDocumento(s.tenantId, id, {});
       revalidatePath(RUTA);
+      if (p.ok && p.estado === 'dividido') return { ok: true, mensaje: mensajeDeDivision(p.embarques) };
       return p.ok ? { ok: true, mensaje: 'Documento leído.' } : { ok: false, error: p.mensaje };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'leer el documento') };

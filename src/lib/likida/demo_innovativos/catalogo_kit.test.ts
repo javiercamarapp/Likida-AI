@@ -153,11 +153,17 @@ describe('estructura del guion: cada agente en su sección y cada cosa con su et
   });
   it('lo que NO existe todavía se dice como tal y no se promete', () => {
     const g = guion.replace(/\*\*/g, '');
-    for (const fragmento of ['«cursos»', 'varios embarques', 'SAP/TMS en vivo']) {
+    for (const fragmento of ['«cursos»', 'SAP/TMS en vivo']) {
       const i = g.indexOf(fragmento);
       expect(i, `el guion ya no menciona «${fragmento}»`).toBeGreaterThan(-1);
       expect(g.slice(Math.max(0, i - 300), i + 300), `«${fragmento}» no está marcado [todavía no existe]`).toContain('[todavía no existe]');
     }
+  });
+  it('la partición de un Excel con varios embarques YA existe (P13): el guion lo enseña como hecho y no la promete como pendiente', () => {
+    const g = guion.replace(/\*\*/g, '');
+    expect(g).toContain('se parte solo en un documento por embarque');
+    expect(g).not.toMatch(/varios embarques[^.]*\[todavía no existe\]/);
+    expect(existsSync(`${RAIZ}src/lib/likida/carta_porte_docs/multiembarque.ts`)).toBe(true);
   });
   it('lo que sigue sin existir en el producto es verdad: no hay cursos, ni lector de SAP, ni SFTP', () => {
     const rutas = (rel: string) => existsSync(`${RAIZ}${rel}`);

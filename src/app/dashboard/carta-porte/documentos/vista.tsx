@@ -27,8 +27,13 @@ export interface PerfilVista {
 export interface BuzonVista { direccion: string | null; activo: boolean; remitentes: string[]; dominioConfigurado: boolean }
 export interface ConfigVista { id: string; nombre: string; formato: 'csv' | 'json'; config: unknown }
 
+/** De dónde viene un documento que nació de partir un archivo con varios embarques (0670), o cuántos hijos tiene el que se partió. */
+export interface LinajeVista { rol: 'hijo' | 'padre'; indice: number | null; total: number; clave: string | null }
+
 export interface DatosDocumentos {
   filas: DocumentoFila[];
+  /** Por id de documento. Vacío/ausente = nada se partió (o la base aún no tiene la 0670). */
+  linaje?: Record<string, LinajeVista>;
   total: number;
   metricas: MetricasAgente;
   perfiles: PerfilVista[];
@@ -54,6 +59,7 @@ const PILL: Record<DocumentoFila['estado'], { fg: string; bg: string }> = {
   fallido: { fg: 'var(--bad)', bg: 'var(--badbg)' },
   recibido: { fg: 'var(--muted)', bg: 'var(--canvas)' },
   procesando: { fg: 'var(--muted)', bg: 'var(--canvas)' },
+  dividido: { fg: 'var(--muted)', bg: 'var(--canvas)' },
 };
 
 function Cifra({ rotulo, valor, nota }: { rotulo: string; valor: string; nota?: string }) {
@@ -179,6 +185,7 @@ function Bandeja({ datos, acciones, sufijo }: { datos: DatosDocumentos; acciones
               {orden.map((d) => {
                 const p = PILL[d.estado];
                 const v = d.validacion;
+                const lin = datos.linaje?.[d.id];
                 return (
                   <tr key={d.id} className="border-t" style={{ borderColor: 'var(--line)' }}>
                     <td className="px-3 py-2"><span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: p.fg, background: p.bg }}>{ROTULO_ESTADO[d.estado]}</span></td>
@@ -188,6 +195,12 @@ function Bandeja({ datos, acciones, sufijo }: { datos: DatosDocumentos; acciones
                         {pesoArchivo(d.bytes)}{d.clienteId && cliente.get(d.clienteId) ? ` · ${cliente.get(d.clienteId)}` : ''}
                         {d.riesgoInyeccion && <span style={{ color: 'var(--warn)' }}> · trae instrucciones para un modelo</span>}
                       </p>
+                      {lin?.rol === 'hijo' && (
+                        <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
+                          <Layers width={11} height={11} strokeWidth={1.75} className="inline -mt-0.5 mr-1" />
+                          Embarque {numero(lin.indice ?? 0)} de {numero(lin.total)}{lin.clave ? ` · folio ${lin.clave}` : ''}
+                        </p>
+                      )}
                     </td>
                     <td className="px-3 py-2">{ROTULO_FORMATO[d.formato] ?? d.formato} · {ROTULO_CANAL[d.canal] ?? d.canal}</td>
                     <td className="px-3 py-2">
@@ -204,6 +217,8 @@ function Bandeja({ datos, acciones, sufijo }: { datos: DatosDocumentos; acciones
                         <span style={{ color: d.viajeId ? 'var(--ok)' : 'var(--warn)' }}>{d.viajeId ? 'Con viaje' : 'Sin viaje todavía'}</span>
                       ) : d.estado === 'rechazado' ? (
                         <span style={{ color: 'var(--muted)' }}>{d.rechazoMotivo}</span>
+                      ) : d.estado === 'dividido' ? (
+                        <span style={{ color: 'var(--muted)' }}>{lin?.rol === 'padre' ? `Trae ${numero(lin.total)} embarques: cada uno es un documento aparte` : 'Se separó en un documento por embarque'}</span>
                       ) : '—'}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">{fechaHoraMx(d.createdAt)}</td>

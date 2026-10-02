@@ -36,15 +36,16 @@ vi.mock('@/lib/meta/aviso_oficina', async (original) => ({
 }));
 
 import { estado, reset } from '../carta_porte_docs/repo_falso.fixture';
-import { A, B, ACTOR, USUARIO_B, llmBoreal, sembrarFlotas, sinAgenteApagado, subir, subirYProcesar } from '../carta_porte_docs/escenario.fixture';
+import { A, B, ACTOR, USUARIO_B, lecturaAtlas, llmBoreal, sembrarFlotas, sinAgenteApagado, subir, subirYProcesar } from '../carta_porte_docs/escenario.fixture';
 import { llmFalso, lecturaBoreal, type LlmFalso } from '../carta_porte_docs/llm_falso.fixture';
 import type { LlmExtractor } from '../carta_porte_docs/extractor';
-import { defectuosos, excelAtlas, pdfBoreal } from '../carta_porte_docs/documentos_sinteticos.fixture';
+import { defectuosos, EMBARQUE_ATLAS, excelAtlas, filaAtlas, pdfBoreal } from '../carta_porte_docs/documentos_sinteticos.fixture';
 import { aprobarDocumento, corregirCampos, abrirRevision, rechazarDocumento, reabrirDocumento, ConflictoDeVersion } from '../carta_porte_docs/bandeja';
 import { atenderCorreoCartaPorte, type DepsCorreo } from '../carta_porte_docs/correo_entrante';
 import { ingerirDesdeWhatsapp, type DepsWhatsapp } from '../carta_porte_docs/whatsapp';
 import { procesarDocumento, recibirDocumento } from '../carta_porte_docs/servicio';
 import { exportarDocumentos, configEstandar } from '../carta_porte_docs/exportacion';
+import { calcularMetricas } from '../carta_porte_docs/metricas';
 import * as repo from '../carta_porte_docs/repo';
 
 const TOKEN_A = 'abcdefghjkmnpqrstvwxyz23';
@@ -388,6 +389,126 @@ describe('otro tenant', () => {
     const r = await subir(A, await pdfBoreal());
     expect(await procesarDocumento(B, r.documentoId, { ...sinAgenteApagado, llm: () => llmBoreal() })).toMatchObject({ ok: false, motivo: 'no_reclamable' });
     expect(estado.docs.get(r.documentoId)!.estado).toBe('recibido');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MULTI-EMBARQUE (P13, 0670-0671): un Excel con N embarques se parte en N documentos con huella base común, en lugar de
+// leer el primero y avisar «sube el resto por separado» (los demás embarques se perdían en silencio).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('multi-embarque: un Excel con tres embarques', () => {
+  beforeEach(() => { avisosOficina.length = 0; latidos.length = 0; depsHolder.envio = null; vi.useRealTimers(); });
+
+  // Tres embarques de «Atlas» con operadores y unidades distintos (la base admite UN viaje abierto por operador).
+  const planDelDia = () => excelAtlas([
+    filaAtlas({ ...EMBARQUE_ATLAS, folio: 'ATL-1', operador: 'Juan Pérez López', placas: 'ABC1234' }),
+    filaAtlas({ ...EMBARQUE_ATLAS, folio: 'ATL-1', producto: 'Tapas metálicas', cantidad: '300', pesoKg: '600', operador: 'Juan Pérez López', placas: 'ABC1234' }),
+    filaAtlas({ ...EMBARQUE_ATLAS, folio: 'ATL-2', producto: 'Cajas de cartón', operador: 'María Hernández Soto', placas: 'XYZ9876' }),
+    filaAtlas({ ...EMBARQUE_ATLAS, folio: 'ATL-3', producto: 'Etiquetas', operador: 'Juan Pérez López', placas: 'ABC1234' }),
+  ]);
+  /** El modelo lee el folio que ve en el texto que le llega: cada hijo trae UN solo embarque. */
+  const PRODUCTO: Record<string, string> = { 'ATL-2': 'Cajas de cartón', 'ATL-3': 'Etiquetas' };
+  const modeloPorFolio = (): LlmFalso => llmFalso((e) => {
+    const folios = new Set(String(e.texto).match(/ATL-\d+/g));
+    if (folios.size !== 1) throw new Error(`el modelo recibió ${folios.size} folios: un documento es UN embarque`);
+    const base = lecturaAtlas(e.nivel, [...folios][0]);
+    // «1,200» / «8,400» son ambiguos (miles o decimal) y la aprobación exige confirmarlos: aquí el modelo los lee ya sin ambigüedad.
+    const sinAmbiguedad = (v: string): string => v.replace(',', '');
+    const lectura = { ...base, mercancias: base.mercancias.map((m) => ({ ...m, campos: m.campos.map((c) => (c.clave === 'cantidad' || c.clave === 'peso_kg' ? { ...c, valor: sinAmbiguedad(String(c.valor)) } : c.clave === 'descripcion' && PRODUCTO[[...folios][0]] ? { ...c, valor: PRODUCTO[[...folios][0]], evidencia: PRODUCTO[[...folios][0]] } : c)) })) };
+    if ([...folios][0] !== 'ATL-2') return lectura;
+    return { ...lectura, campos: lectura.campos.map((c) => (c.clave === 'operador_nombre' ? { ...c, valor: 'María Hernández Soto', evidencia: 'María Hernández Soto' } : c.clave === 'unidad_placas' ? { ...c, valor: 'XYZ9876', evidencia: 'XYZ9876' } : c)) };
+  });
+  const nadaDeModelo = (): LlmFalso => llmFalso(() => { throw new Error('partir el archivo no debe llamar al modelo'); });
+  const hijos = (padre: string) => estado.embarques.filter((h) => h.padreId === padre).sort((a, b) => a.indice - b.indice);
+
+  it('por CORREO: el adjunto se parte al recibirlo, el cron lee los 3 embarques, se aprueban y salen 3 viajes', async () => {
+    const r = await atenderCorreoCartaPorte(TOKEN_A, { emailId: 'em-multi', from: 'Logística <plan@cliente.example>', subject: 'Plan del día', attachments: [{ id: 'a1', filename: 'plan-del-dia.xlsx' }] },
+      depsCorreo({ a1: planDelDia() }, { llm: nadaDeModelo }));
+    expect(r).toMatchObject({ status: 200, cuerpo: { ok: true, recibidos: 1, procesados: 1 } });
+
+    // El original queda como constancia (`dividido`) y NO se lee; cada embarque es su propio documento `recibido`.
+    const padre = docs(A).find((d) => d.nombreArchivo === 'plan-del-dia.xlsx')!;
+    expect(padre.estado).toBe('dividido');
+    expect(docs(A)).toHaveLength(4);
+    expect(hijos(padre.id).map((h) => [h.indice, h.total, h.clave, h.huellaBase === padre.sha256])).toEqual([[1, 3, 'ATL-1', true], [2, 3, 'ATL-2', true], [3, 3, 'ATL-3', true]]);
+    expect(hijos(padre.id).every((h) => estado.docs.get(h.documentoId)!.estado === 'recibido' && estado.docs.get(h.documentoId)!.canal === 'correo')).toBe(true);
+    expect(docs(B)).toHaveLength(0);
+
+    // El cron (pasada la gracia) lee los TRES, cada uno con su modelo y sus filas; ninguno ve el embarque de otro.
+    minutos(10);
+    expect(await cron(modeloPorFolio)).toMatchObject({ pendientes: 3, procesados: 3, fallidos: 0, divididos: 0 });
+    const lista = hijos(padre.id).map((h) => estado.docs.get(h.documentoId)!);
+    expect(lista.map((d) => d.estado)).toEqual(['por_revisar', 'por_revisar', 'por_revisar']);
+    expect(lista.map((d) => d.extraccion?.campos.folio_cliente.valor)).toEqual(['ATL-1', 'ATL-2', 'ATL-3']);
+
+    // Revisión y aprobación POR EMBARQUE: los dos primeros (operadores distintos) crean su viaje; el tercero sigue por revisar.
+    for (const d of lista.slice(0, 2)) {
+      await abrirRevision(A, d.id, ACTOR.id, new Date('2026-10-02T10:00:00Z'));
+      const ap = await aprobarDocumento(A, d.id, estado.docs.get(d.id)!.version, ACTOR, { ahora: new Date('2026-10-02T10:02:00Z') });
+      expect(ap.documento.estado).toBe('aprobado');
+    }
+    expect(estado.viajes.map((v) => v.folio).sort()).toEqual(['ATL-1', 'ATL-2']);
+    expect(estado.docs.get(lista[2].id)!.estado).toBe('por_revisar');
+
+    // El original NO cuenta como documento por revisar ni se exporta: lo que se mide y sale son los embarques.
+    const { filas } = await repo.listarDocumentos(A, { completo: true });
+    expect(calcularMetricas(filas, new Map())).toMatchObject({ recibidos: 3, aprobados: 2, porRevisar: 1 });
+    const csv = exportarDocumentos(filas.map((doc) => ({ doc, viajeFolio: doc.viajeId ? 'viaje' : null })), 'csv', configEstandar(), 'Formato Ficticio', new Date('2026-10-02T12:00:00Z'));
+    expect(csv).toMatchObject({ documentos: 2 });
+    expect(csv.omitidos.some((o) => o.id === padre.id)).toBe(true);
+  });
+
+  it('por el PANEL / WhatsApp: el mensaje dice cuántos embarques traía y cada uno queda en la bandeja', async () => {
+    const respuestas: string[] = [];
+    expect(await ingerirDesdeWhatsapp(wa(A, 'media-multi'), depsWa(planDelDia(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', respuestas))).toBe('atendido');
+    expect(respuestas).toHaveLength(1);
+    expect(respuestas[0]).toMatch(/trae 3 embarques.*separé en 3 documentos/);
+    expect(docs(A).filter((d) => d.estado === 'recibido')).toHaveLength(3);
+    expect(docs(A).filter((d) => d.estado === 'dividido')).toHaveLength(1);
+  });
+
+  it('mandar el MISMO Excel dos veces (correo y luego WhatsApp) es un duplicado: no se parte otra vez ni se duplican los embarques', async () => {
+    const bytes = planDelDia();
+    await atenderCorreoCartaPorte(TOKEN_A, { emailId: 'em-m1', from: 'plan@cliente.example', subject: 'Plan', attachments: [{ id: 'a1', filename: 'plan.xlsx' }] }, depsCorreo({ a1: bytes }, { llm: nadaDeModelo }));
+    const respuestas: string[] = [];
+    await ingerirDesdeWhatsapp(wa(A, 'media-dup'), depsWa(bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', respuestas));
+    expect(respuestas[0]).toMatch(/ya estaba en la bandeja/);
+    expect(docs(A)).toHaveLength(4);
+    expect(estado.embarques).toHaveLength(3);
+  });
+
+  it('un cron sin el modelo disponible NO pierde embarques: partir no lo necesita, y cada hijo se reintenta con su espera', async () => {
+    const r = await subir(A, planDelDia(), 'plan.xlsx', { canal: 'correo' });
+    minutos(10);
+    const caido = () => llmFalso(() => { throw new Error('proveedor caído'); });
+    // 1.ª pasada: parte el original (sin modelo) — los hijos nacen `recibido`, dentro de la gracia de la pasada siguiente.
+    expect(await cron(caido)).toMatchObject({ pendientes: 1, procesados: 1, divididos: 1, fallidos: 0 });
+    expect(estado.docs.get(r.documentoId)!.estado).toBe('dividido');
+    expect(hijos(r.documentoId)).toHaveLength(3);
+    // 2.ª: el proveedor sigue caído: los tres hijos fallan reintentables (no se pierden ni se marcan terminales).
+    minutos(20);
+    expect(await cron(caido)).toMatchObject({ pendientes: 3, procesados: 0, fallidos: 3 });
+    expect(hijos(r.documentoId).every((h) => estado.docs.get(h.documentoId)!.estado === 'fallido' && estado.docs.get(h.documentoId)!.intentos === 1)).toBe(true);
+    // El proveedor vuelve: con su espera cumplida se leen los tres.
+    minutos(60);
+    expect(await cron(modeloPorFolio)).toMatchObject({ procesados: 3, fallidos: 0 });
+  });
+
+  it('una base SIN la 0670/0671 sigue funcionando como hasta hoy: lee el primer embarque y AVISA que hay más', async () => {
+    estado.sinDivision = true;
+    const r = await subirYProcesar(A, planDelDia(), llmFalso((e) => lecturaAtlas(e.nivel, 'ATL-1')), 'plan.xlsx');
+    expect(r.proceso).toMatchObject({ ok: true, estado: 'por_revisar' });
+    expect(estado.embarques).toHaveLength(0);
+    expect(estado.docs.get(r.documentoId)!.extraccion?.meta?.avisos.join(' ')).toMatch(/3 embarques pero esta base aún no sabe partirlos/);
+  });
+
+  it('aislamiento: la flota B manda la misma planilla y obtiene sus propios hijos; los de A no se tocan', async () => {
+    await subirYProcesar(A, planDelDia(), nadaDeModelo(), 'plan.xlsx');
+    await subirYProcesar(B, planDelDia(), nadaDeModelo(), 'plan.xlsx');
+    expect(estado.embarques.filter((h) => h.tenantId === A)).toHaveLength(3);
+    expect(estado.embarques.filter((h) => h.tenantId === B)).toHaveLength(3);
+    expect(new Set(estado.embarques.map((h) => h.documentoId)).size).toBe(6);
+    expect(estado.embarques.every((h) => estado.docs.get(h.documentoId)!.tenantId === h.tenantId && estado.docs.get(h.padreId)!.tenantId === h.tenantId)).toBe(true);
   });
 });
 

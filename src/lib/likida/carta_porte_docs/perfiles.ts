@@ -110,7 +110,7 @@ export function tablasDe(contenido: ContenidoDoc): TablaLeida[] {
 }
 
 const FILA_TOTAL = /^\s*(total(es)?|subtotal|suma|gran total)\b/i;
-const filasDeDatos = (t: TablaLeida): string[][] => t.filas.filter((r) => !FILA_TOTAL.test(r.find((c) => c.trim() !== '') ?? ''));
+export const filasDeDatos = (t: TablaLeida): string[][] => t.filas.filter((r) => !FILA_TOTAL.test(r.find((c) => c.trim() !== '') ?? ''));
 
 // ── La firma ────────────────────────────────────────────────────────────────
 
@@ -201,13 +201,16 @@ function valor(campo: string, mercancia: boolean, crudo: string | null, evidenci
 
 export interface ResultadoPerfil { extraccion: Extraccion; avisos: string[]; camposAplicados: number }
 
+/** La tabla correcta de un libro para un mapeo: la que tiene más de las columnas mapeadas. */
+export function tablaDeMapeos(m: Mapeo[], c: ContenidoDoc): TablaLeida | null {
+  const claves = m.filter((x) => x.fuente.tipo === 'columna').map((x) => llaveColumna((x.fuente as { encabezado: string }).encabezado));
+  return [...tablasDe(c)].sort((a, b) => claves.filter((k) => b.llaves.includes(k)).length - claves.filter((k) => a.llaves.includes(k)).length)[0] ?? null;
+}
+
 function aplicarTabla(m: Mapeo[], c: ContenidoDoc, e: Extraccion, avisos: string[]): void {
-  const tablas = tablasDe(c);
   const delDoc = m.filter((x) => !x.mercancia && x.fuente.tipo === 'columna');
   const deMerc = m.filter((x) => x.mercancia && x.fuente.tipo === 'columna');
-  // La tabla correcta: la que tiene más de las columnas mapeadas.
-  const claves = [...delDoc, ...deMerc].map((x) => llaveColumna((x.fuente as { encabezado: string }).encabezado));
-  const t = [...tablas].sort((a, b) => claves.filter((k) => b.llaves.includes(k)).length - claves.filter((k) => a.llaves.includes(k)).length)[0];
+  const t = tablaDeMapeos(m, c);
   if (!t) return;
   const datos = filasDeDatos(t);
   if (datos.length === 0) { avisos.push('La tabla no trae filas de datos.'); return; }

@@ -109,13 +109,20 @@ export async function ingerirDesdeWhatsapp(e: EntradaWhatsapp, deps: DepsWhatsap
     if (r.duplicado) { await deps.responder(`Ese documento ya estaba en la bandeja 📎. Revísalo aquí: ${liga}`); return 'atendido'; }
 
     let leyo = false;
+    let partido: number | null = null;
     if (r.estado === 'recibido' && deps.restanteMs() >= (deps.margenProcesoMs ?? 25_000)) {
       try {
         const p = await procesarDocumento(e.tenantId, r.documentoId, { ...deps, signal: deps.senal?.(Math.max(5_000, deps.restanteMs() - 8_000)) });
         leyo = p.ok;
+        if (p.ok && p.estado === 'dividido') partido = p.embarques;
       } catch (err) {
         logger.error('cp_wa.proceso_fallo', { documentoId: r.documentoId, err: err instanceof Error ? err.message : String(err) });
       }
+    }
+    if (partido !== null) {
+      // El archivo traía varios embarques: ahora son documentos separados; el original queda como constancia.
+      await deps.responder(`Recibí el archivo 📄 y trae ${partido} embarques: lo separé en ${partido} documentos, uno por embarque. Se van leyendo y los verás listos para revisar en la bandeja de Carta Porte: ${e.urlBandeja}`);
+      return 'atendido';
     }
     await deps.responder(leyo
       ? `Recibí el documento y ya lo leí 📄. Revísalo y apruébalo aquí: ${liga}`
