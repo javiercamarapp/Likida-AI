@@ -243,7 +243,7 @@ export async function guardarConvenioDelPanel(
     const partes = [`${base} Se actualizaron las instrucciones de ${plural(cambiados.length, 'viaje en curso', 'viajes en curso')}.`];
     if (entrada.reenviar) {
       partes.push(porReenviar.length === 0
-        ? 'Ninguno había recibido ya el despacho, así que no hubo nada que reenviar (lo recibirán con las instrucciones nuevas).'
+        ? 'Ninguno tenía un despacho que volver a mandar (los que no tienen operador no reciben mensajes): solo quedaron con las instrucciones nuevas.'
         : `Se volvieron a mandar a ${plural(enviados, 'operador', 'operadores')}.`);
       if (sinMandar.length > 0) partes.push(`${plural(sinMandar.length, 'viaje no pudo recibirlas', 'viajes no pudieron recibirlas')} ahorita (sin teléfono, sin plantilla aprobada o WhatsApp caído): ya tienen las instrucciones nuevas, pero el mensaje no salió: mándalo desde «Convenio ligado a cada viaje en curso» (elige el mismo convenio y deja marcada la casilla de reenviar).`);
     }

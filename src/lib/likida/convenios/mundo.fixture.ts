@@ -111,12 +111,14 @@ export class Mundo {
       .filter((i) => i.convenio_id === a.p_convenio && i.tenant_id === t && i.activa !== false)
       .sort((x, y) => Number(x.orden) - Number(y.orden))
       .map((i) => ({ categoria: i.categoria, texto: i.texto, momento: i.momento, lugar: i.lugar, orden: i.orden }));
+    const despacha = (f: unknown): boolean => Array.isArray(f) && f.some((i) => i?.momento === 'despacho' || i?.momento === 'ambos');
     const salida: Fila[] = [];
     for (const vc of this.tablas.viaje_convenio) {
       if (vc.tenant_id !== t || vc.convenio_id !== a.p_convenio) continue;
       const viaje = this.tablas.viaje.find((v) => v.id === vc.viaje_id && v.tenant_id === t);
       if (!viaje || viaje.estatus === 'liquidado' || JSON.stringify(vc.instrucciones) === JSON.stringify(foto)) continue;
-      const habia = !!vc.despacho_enviado_en;
+      // 0658: «habia» = ya salió, o nunca pudo salir (la foto vieja no traía nada para el despacho) y hay operador a quien mandárselo.
+      const habia = !!vc.despacho_enviado_en || (!!viaje.operador_id && despacha(foto) && !despacha(vc.instrucciones));
       vc.instrucciones = foto;
       if (a.p_reenviar === true && habia) { vc.despacho_reclamado_en = null; vc.despacho_enviado_en = null; vc.despacho_canal = null; }
       salida.push({ viaje_id: vc.viaje_id, reenviar: a.p_reenviar === true && habia });
