@@ -176,8 +176,10 @@ import { join, relative } from 'node:path';
 // OLA 3, W3 «Conductor + Vigía» (2-oct-2026), medido contra el commit base (268 / 1,580):
 //   · catálogos separados de `geocerca` (0480): +1 llamada en `peajes/datos.ts` (leer si el
 //     nombre ya es un sitio del Conductor antes del upsert; el resto son filtros añadidos).
+//   · Vigía conectado al Conductor y adjunto del POD (`vigia/repo.ts`): +3 llamadas de `archivoAdjuntoReal`
+//     (el viaje de ESE cliente, su POD y la URL firmada del bucket); el estatus de viaje ya existía.
 const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 268;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_581;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_584;
 
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;

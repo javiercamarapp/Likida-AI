@@ -18,7 +18,7 @@ export function estatus(extra: Partial<EstatusViaje> = {}): EstatusViaje {
     viajeId: VIAJE_1, folio: 'F-1042', origen: 'Guadalajara', destino: 'Monterrey',
     etapa: 'en_curso', ultimoHito: null,
     posicion: { lat: 21.1619, lng: -101.6921, medidaEn: new Date(AHORA.getTime() - 12 * 60_000).toISOString() },
-    etaIso: null,
+    etaIso: null, etaFuente: null, citaCarga: null, enAnden: null, adjuntos: [],
     documentos: [{ nombre: 'Carta porte', estado: 'entregado' }, { nombre: 'Remisión firmada', estado: 'pendiente' }],
     podRecibido: false, facturaEmitida: false,
     ...extra,
