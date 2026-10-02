@@ -16,6 +16,9 @@
 --    falló, se reintenta a la hora (no cada 5 min contra su base).
 -- 3. `registrar_importacion_geocercas(...)` — cierra el intento. La huella solo avanza
 --    cuando salió bien (o sin cambios): un fallo no «gasta» el cambio pendiente.
+-- 4. `flotas_para_reimportar_geocercas(límite, ventana)` — las flotas con «mis propias tablas»
+--    activas que ya les toca (nunca intentadas o con la ventana cumplida), las más atrasadas
+--    primero. Una consulta por corrida del cron en vez de un claim por flota cada 5 minutos.
 --
 -- Solo service_role; RLS activa sin políticas (deny-all), como las demás tablas de estado.
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -88,7 +91,31 @@ begin
     aproximadas = coalesce(p_aproximadas, e.aproximadas);
 end $$;
 
+create or replace function public.flotas_para_reimportar_geocercas(p_limite integer default 20, p_ventana_min integer default 1380)
+returns table (tenant_id uuid)
+language plpgsql security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if p_limite is null or p_limite not between 1 and 500 or p_ventana_min is null or p_ventana_min not between 1 and 10080 then
+    raise exception 'flotas_para_reimportar_geocercas: argumentos inválidos' using errcode = '22023';
+  end if;
+  return query
+    select cc.tenant_id
+      from public.conector_credencial cc
+      left join public.geocerca_importacion_estado e on e.tenant_id = cc.tenant_id
+     where cc.conector_id = 'tabla_propia'
+       and cc.activo
+       and (e.tenant_id is null
+            or e.ultimo_intento_en < clock_timestamp()
+               - make_interval(mins => case when e.ultimo_resultado = 'error' then least(p_ventana_min, 60) else p_ventana_min end))
+     order by coalesce(e.ultimo_intento_en, '-infinity'::timestamptz), cc.tenant_id
+     limit p_limite;
+end $$;
+
 revoke all on function public.reclamar_importacion_geocercas(uuid, integer) from public, anon, authenticated;
 grant execute on function public.reclamar_importacion_geocercas(uuid, integer) to service_role;
 revoke all on function public.registrar_importacion_geocercas(uuid, text, text, integer, integer, integer, text) from public, anon, authenticated;
 grant execute on function public.registrar_importacion_geocercas(uuid, text, text, integer, integer, integer, text) to service_role;
+revoke all on function public.flotas_para_reimportar_geocercas(integer, integer) from public, anon, authenticated;
+grant execute on function public.flotas_para_reimportar_geocercas(integer, integer) to service_role;
