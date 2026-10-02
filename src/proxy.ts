@@ -33,8 +33,7 @@ import { construirCsp, nonceActivo, nuevoNonce } from '@/lib/seguridad/csp';
  * - `script-src`: el App Router de Next inyecta scripts inline para revelar
  *   streaming/Suspense (`self.__next_f.push(...)`). OLA 9: las rutas con sesión
  *   llevan nonce por petición + `'strict-dynamic'` (y el hash del único script
- *   inline propio, el del tema); las públicas, que son estáticas, conservan
- *   `'unsafe-inline'`. La política vive en `lib/seguridad/csp.ts`; el porqué y
+ *   inline propio, el del tema); desde la Ola 9b también las públicas (dinámicas). La política vive en `lib/seguridad/csp.ts`; el porqué y
  *   la deuda residual, en `docs/operacion/csp.md`.
  * - `style-src 'unsafe-inline'`: **1,178** `style={{...}}` en 125 archivos
  *   (`command grep -rc "style={{" src --include="*.tsx"`), el mecanismo con
@@ -100,12 +99,12 @@ export const RUTAS_CON_SESION = ['/dashboard', '/admin', '/vendedor'] as const;
 export async function proxy(req: NextRequest) {
   const path = req.nextUrl.pathname;
 
-  // CSP con nonce (Ola 9) SOLO en las rutas con sesión: son dinámicas (leen la cookie) y por eso Next
-  // puede poner un nonce por petición en sus scripts. El nonce y la política viajan en la PETICIÓN
-  // (Next lee el nonce de ahí) y en la respuesta (la que obedece el navegador). Las públicas, estáticas,
-  // conservan `'unsafe-inline'`: ver lib/seguridad/csp.ts y docs/operacion/csp.md.
+  // CSP con nonce en TODAS las rutas que pasan por el proxy (Ola 9 las de sesión; Ola 9b también las públicas,
+  // por decisión de Javier del 2-oct-2026). El nonce y la política viajan en la PETICIÓN (Next lee el nonce de
+  // ahí) y en la respuesta (la que obedece el navegador). Las páginas públicas dejan de ser estáticas: el layout
+  // raíz llama `connection()`. Solo `LIKIDA_CSP_NONCE=0` vuelve a `'unsafe-inline'`: ver lib/seguridad/csp.ts.
   const conSesion = RUTAS_CON_SESION.some((p) => path.startsWith(p));
-  const nonce = conSesion && nonceActivo() ? nuevoNonce() : null;
+  const nonce = nonceActivo() ? nuevoNonce() : null;
   const csp = construirCsp(nonce);
   // Patrón documentado de Next: los headers de la petición se copian a un `Headers` nuevo (no se muta la
   // petición) y se pasan en `request.headers`. Se vuelve a llamar tras cada `req.cookies.set` del refresco

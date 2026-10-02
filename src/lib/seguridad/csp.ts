@@ -18,12 +18,11 @@ import { SCRIPT_TEMA } from './script_tema';
 //   · Esas rutas ya son dinámicas (leen la cookie de sesión y los tres layouts
 //     exportan `force-dynamic`), requisito de Next para poder poner un nonce.
 //
+// OLA 9b (decisión de Javier, 2-oct-2026): el nonce se aplica TAMBIÉN a las rutas públicas.
+//   El layout raíz llama `connection()`, así que todo el sitio es dinámico (sin caché de CDN).
+//   `'unsafe-inline'` en scripts solo sobrevive con `LIKIDA_CSP_NONCE=0` (palanca de reversa).
+//
 // LO QUE NO CAMBIA, A PROPÓSITO:
-//   · Las rutas PÚBLICAS (landing, blog, login, aviso, demo) siguen con
-//     `'unsafe-inline'`: son estáticas/prerenderizadas, sus scripts inline no
-//     pueden llevar un nonce por petición, y volverlas dinámicas (nonce en el
-//     layout raíz) es una decisión de costo y de caché de Javier, no de este
-//     paquete. Quedan documentadas como deuda residual en docs/operacion/csp.md.
 //   · `style-src 'unsafe-inline'`: ~1,200 `style={{…}}` (atributo, no `<style>`);
 //     ni nonce ni hash los cubren.
 //
@@ -48,7 +47,7 @@ export function nonceActivo(env: Record<string, string | undefined> = process.en
 }
 
 /**
- * La política completa. `nonce` null = política de las rutas públicas (con `'unsafe-inline'`).
+ * La política completa. `nonce` null = política de reversa (`LIKIDA_CSP_NONCE=0`, con `'unsafe-inline'`).
  * Cada directiva sale de recorrer qué carga la app de verdad (ver el historial en proxy.ts).
  */
 export function construirCsp(nonce: string | null, dev: boolean = process.env.NODE_ENV === 'development'): string {
