@@ -30,6 +30,10 @@ vi.mock('@/lib/likida/conductor/alertas_estadia', () => ({ correrAlertasEstadia:
 const barrido = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisados: 2, validados: 1, sinCoincidencia: 0, sinDato: 1, saltados: 0, fallos: 0 }));
 vi.mock('@/lib/likida/conductor/validar_hito', () => ({ barridoValidacion: () => barrido(), depsValidacionReales: {} }));
 vi.mock('@/lib/likida/conductor/trabajo', () => ({ leerCandidatosValidacion: async () => [] }));
+const acercamiento = vi.fn(async (): Promise<Record<string, unknown>> => ({ candidatos: 3, enviados: 1, sinPosicion: 1, lejos: 1, rechazados: 0, fallos: 0, cortadosPorReloj: 0 }));
+vi.mock('@/lib/likida/convenios/acercamiento', () => ({ barridoAcercamiento: () => acercamiento() }));
+class ConveniosNoDisponiblesDoble extends Error {}
+vi.mock('@/lib/likida/convenios/repo', () => ({ ConveniosNoDisponibles: ConveniosNoDisponiblesDoble }));
 const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...a) }));
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'cod' }));
@@ -41,7 +45,7 @@ const j = async (r: Response) => (await r.json()) as Record<string, any>; // esl
 
 beforeEach(() => {
   autorizado = 'si'; interruptores = {}; horaMx = 12;
-  correr.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); mantenimiento.mockClear(); alertasEstadia.mockClear(); barrido.mockClear();
+  correr.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); mantenimiento.mockClear(); alertasEstadia.mockClear(); barrido.mockClear(); acercamiento.mockClear();
 });
 
 describe('la puerta y las palancas', () => {
@@ -164,5 +168,29 @@ describe('la corrida', () => {
     const r = await llamar();
     expect(r.status).toBe(200);
     expect((await j(r)).mantenimiento.anonimizar_conductor_hitos).toContain('boom');
+  });
+});
+
+describe('el aviso de acercamiento a la planta (0580)', () => {
+  it('corre en cada pasada y su resultado va en el cuerpo y en el latido', async () => {
+    const r = await j(await llamar());
+    expect(acercamiento).toHaveBeenCalledTimes(1);
+    expect(r.acercamiento).toMatchObject({ candidatos: 3, enviados: 1 });
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'ok', expect.objectContaining({ acercamientos: 1 }));
+  });
+
+  it('si revienta, las demás pasadas ya corrieron y el latido sale parcial con el motivo a la vista', async () => {
+    acercamiento.mockRejectedValueOnce(new Error('boom acercamiento'));
+    const r = await j(await llamar());
+    expect(barrido).toHaveBeenCalledTimes(1);
+    expect(r.fallos.join(' ')).toContain('boom acercamiento');
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'parcial', expect.anything());
+  });
+
+  it('con la base sin migrar (convenios no disponibles) NO es un fallo: no hay nada que avisar', async () => {
+    acercamiento.mockRejectedValueOnce(new ConveniosNoDisponiblesDoble('falta 0580'));
+    const r = await j(await llamar());
+    expect(r.fallos).toEqual([]);
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'ok', expect.anything());
   });
 });

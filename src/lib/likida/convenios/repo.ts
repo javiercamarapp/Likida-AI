@@ -26,6 +26,11 @@ const FALTA_ESQUEMA = new Set(['42P01', '42703', 'PGRST200', 'PGRST204', 'PGRST2
 /** `traerTodo` relanza solo el mensaje (sin el código): se reconoce por el texto de Postgres/PostgREST. */
 const MENSAJE_FALTA_ESQUEMA = /relation .* does not exist|column .* does not exist|schema cache/i;
 
+/** Un error de base por esquema ausente se vuelve `ConveniosNoDisponibles`; cualquier otro pasa igual. */
+export function traducirFaltaDeEsquema(e: unknown): unknown {
+  return e instanceof Error && !(e instanceof ConveniosNoDisponibles) && MENSAJE_FALTA_ESQUEMA.test(e.message) ? new ConveniosNoDisponibles() : e;
+}
+
 async function leerTodo(pagina: Parameters<typeof traerTodo<Fila>>[0], etiqueta: string): Promise<Fila[]> {
   try {
     return await traerTodo<Fila>(pagina, etiqueta);

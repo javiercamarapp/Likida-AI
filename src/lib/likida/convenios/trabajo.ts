@@ -1,0 +1,100 @@
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from '../presupuesto';
+import { exigir, traerTodo } from '../pg';
+import type { CandidatoAcercamiento, PosicionUnidad } from './acercamiento';
+import { traducirFaltaDeEsquema } from './repo';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA LISTA DE TRABAJO DEL AVISO DE ACERCAMIENTO — las lecturas que CRUZAN flotas.
+//
+// El barrido del cron recorre los viajes de TODAS las flotas en una corrida, así que estas consultas no llevan
+// `.eq('tenant_id', …)` A PROPÓSITO (como `conductor/trabajo.ts`). Cada candidato trae su `tenantId`, y TODO lo que se
+// hace después con él (leer la foto, reclamar, enviar, sellar) se ancla a ESE tenant (`acercarInstrucciones`). Viven en
+// su propio archivo para que la exención de las guardias no cubra a `repo.ts`, que atiende a una flota por llamada.
+// ═══════════════════════════════════════════════════════════════════════════
+
+type Fila = Record<string, unknown>;
+
+const trozos = <T>(xs: T[], n: number): T[][] => {
+  const r: T[][] = [];
+  for (let i = 0; i < xs.length; i += n) r.push(xs.slice(i, i + n));
+  return r;
+};
+
+/** Cuántos días atrás se sigue vigilando un viaje ligado (más viejo que esto, ya no es un viaje en curso). */
+const DIAS_VIGILANCIA = 3;
+const ids = (fs: Fila[], c: string): string[] => fs.map((f) => String(f[c]));
+
+/**
+ * Los viajes abiertos, aceptados y con unidad, con convenio ligado y el aviso de acercamiento por mandar, y la planta a la
+ * que se acercan. Acotado a los ligados en los últimos días (más recientes primero): el trabajo por pasada no crece con
+ * la historia de la flota.
+ */
+export async function leerCandidatosAcercamiento(limite: number): Promise<CandidatoAcercamiento[]> {
+  try {
+    return await candidatos(limite);
+  } catch (e) {
+    throw traducirFaltaDeEsquema(e); // base sin la 0580: «no disponible», no un fallo del cron
+  }
+}
+
+async function candidatos(limite: number): Promise<CandidatoAcercamiento[]> {
+  const admin = supabaseAdmin();
+  const desde = new Date(Date.now() - DIAS_VIGILANCIA * 86_400_000).toISOString();
+  const ligados = exigir(await acotada(admin.from('viaje_convenio').select('viaje_id, tenant_id')
+    .is('acercamiento_enviado_en', null).gte('ligado_en', desde).order('ligado_en', { ascending: false }).order('viaje_id').limit(limite), 'convenios.trabajo_ligados') as never, 'convenios.trabajo_ligados') as Fila[] | null;
+  if (!ligados || ligados.length === 0) return [];
+
+  const viajes: Fila[] = [];
+  for (const lote of trozos(ids(ligados, 'viaje_id'), 150)) {
+    const rv = await acotada(admin.from('viaje').select('id, tenant_id, unidad_id, origen_geocerca_id, destino_geocerca_id')
+      .in('id', lote).eq('estatus', 'abierto').not('aceptado_en', 'is', null).not('unidad_id', 'is', null), 'convenios.trabajo_viajes');
+    viajes.push(...((exigir(rv as never, 'convenios.trabajo_viajes') ?? []) as Fila[]));
+  }
+  if (viajes.length === 0) return [];
+  const tenantDeLigado = new Map(ligados.map((l) => [String(l.viaje_id), String(l.tenant_id)] as const));
+
+  // Qué hitos ya están resueltos: de ahí sale la planta que toca y si ya llegó.
+  const hitos: Fila[] = [];
+  for (const lote of trozos(ids(viajes, 'id'), 150)) {
+    const h = await traerTodo<Fila>((d, hasta) => acotada(admin.from('viaje_hito').select('viaje_id, tipo, estado')
+      .in('viaje_id', lote).in('tipo', ['llegada_carga', 'salida_carga', 'llegada_descarga']).in('estado', ['recibido', 'validado']).order('id').range(d, hasta), 'convenios.trabajo_hitos') as never, 'convenios.trabajo_hitos');
+    hitos.push(...h);
+  }
+  const resueltos = new Map<string, Set<string>>();
+  for (const h of hitos) resueltos.set(String(h.viaje_id), (resueltos.get(String(h.viaje_id)) ?? new Set()).add(String(h.tipo)));
+
+  const sitioIds = [...new Set(viajes.flatMap((v) => [v.origen_geocerca_id, v.destino_geocerca_id]).filter((x): x is string => typeof x === 'string'))];
+  const sitios = new Map<string, { lat: number; lng: number; radioM: number }>();
+  for (const lote of trozos(sitioIds, 150)) {
+    const g = await acotada(admin.from('geocerca').select('id, lat, lng, radio_m').in('id', lote).eq('activa', true), 'convenios.trabajo_sitios');
+    for (const f of (exigir(g as never, 'convenios.trabajo_sitios') ?? []) as Fila[]) sitios.set(String(f.id), { lat: Number(f.lat), lng: Number(f.lng), radioM: Number(f.radio_m) });
+  }
+
+  return viajes.flatMap((v): CandidatoAcercamiento[] => {
+    const id = String(v.id);
+    const hechos = resueltos.get(id) ?? new Set<string>();
+    // Mientras no salga de la carga, la planta es la de origen; ya cargado, la de descarga. Si ya llegó a ella, no hace falta.
+    const lado = hechos.has('salida_carga') ? 'destino' : 'origen';
+    if (hechos.has(lado === 'origen' ? 'llegada_carga' : 'llegada_descarga')) return [];
+    const sitio = sitios.get(String(lado === 'origen' ? v.origen_geocerca_id : v.destino_geocerca_id));
+    // El tenant del candidato es el del VIAJE y debe coincidir con el de su fila de convenio.
+    if (!sitio || tenantDeLigado.get(id) !== String(v.tenant_id)) return [];
+    return [{ tenantId: String(v.tenant_id), viajeId: id, unidadId: String(v.unidad_id), lado, sitio }];
+  });
+}
+
+/** La última posición de cada unidad desde `desde` (una consulta por lote de unidades, no una por viaje). */
+export async function leerPosicionesRecientes(unidadIds: string[], desde: Date): Promise<Map<string, PosicionUnidad>> {
+  const salida = new Map<string, PosicionUnidad>();
+  for (const lote of trozos(unidadIds, 100)) {
+    const filas = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('posicion').select('unidad_id, lat, lng, medida_en')
+      .in('unidad_id', lote).gte('medida_en', desde.toISOString()).order('medida_en', { ascending: false }).order('id').range(d, h), 'convenios.trabajo_posiciones') as never, 'convenios.trabajo_posiciones');
+    // Vienen de la más reciente a la más vieja: la primera de cada unidad es la que vale.
+    for (const f of filas) {
+      const u = String(f.unidad_id);
+      if (!salida.has(u)) salida.set(u, { lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(String(f.medida_en)) });
+    }
+  }
+  return salida;
+}

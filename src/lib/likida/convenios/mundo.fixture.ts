@@ -19,7 +19,7 @@ const PK_NOMBRE: Record<string, string> = { viaje_convenio: 'viaje_convenio_pkey
 
 export class Mundo {
   tablas: Record<string, Fila[]> = {
-    cliente: [], geocerca: [], cliente_convenio: [], convenio_instruccion: [], convenio_comercial: [], viaje_convenio: [], viaje: [], viaje_hito: [], operador: [],
+    cliente: [], geocerca: [], posicion: [], cliente_convenio: [], convenio_instruccion: [], convenio_comercial: [], viaje_convenio: [], viaje: [], viaje_hito: [], operador: [],
   };
   /** Las tablas que «no existen» (base sin migrar). */
   ausentes = new Set<string>();
@@ -30,7 +30,7 @@ export class Mundo {
 
   poner(tabla: string, fila: Fila): Fila {
     const f = { id: this.id(tabla), ...fila };
-    this.tablas[tabla].push(f);
+    (this.tablas[tabla] ??= []).push(f);
     return f;
   }
 
@@ -48,6 +48,7 @@ class Builder implements PromiseLike<{ data: unknown; error: unknown }> {
   private rango: [number, number] | null = null;
   private pedirFilas = false;
   private uno: 'single' | 'maybe' | null = null;
+  private tope: number | null = null;
 
   constructor(private m: Mundo, private tabla: string) {}
 
@@ -59,6 +60,9 @@ class Builder implements PromiseLike<{ data: unknown; error: unknown }> {
   eq(c: string, v: unknown) { this.pistas.push([c, v]); this.filtros.push((f) => f[c] === v); return this; }
   in(c: string, vs: unknown[]) { this.pistas.push([c, vs]); this.filtros.push((f) => vs.includes(f[c])); return this; }
   is(c: string, v: null) { this.pistas.push([c, v]); this.filtros.push((f) => (f[c] ?? null) === v); return this; }
+  gte(c: string, v: unknown) { this.pistas.push([c, v]); this.filtros.push((f) => String(f[c] ?? '') >= String(v)); return this; }
+  lte(c: string, v: unknown) { this.pistas.push([c, v]); this.filtros.push((f) => String(f[c] ?? '') <= String(v)); return this; }
+  not(c: string, op: string, v: unknown) { this.pistas.push([c, v]); this.filtros.push((f) => (op === 'is' && v === null ? (f[c] ?? null) !== null : false)); return this; }
   or(expr: string) {
     const partes = expr.split(',').map((p) => {
       const [col, op, ...resto] = p.split('.');
@@ -68,9 +72,9 @@ class Builder implements PromiseLike<{ data: unknown; error: unknown }> {
     this.filtros.push((f) => partes.some((p) => p(f)));
     return this;
   }
-  order(c: string) { this.orden.push(c); return this; }
+  order(c: string, o?: { ascending?: boolean }) { this.orden.push(o?.ascending === false ? `-${c}` : c); return this; }
   range(d: number, h: number) { this.rango = [d, h]; return this; }
-  limit() { return this; }
+  limit(n: number) { this.tope = n; return this; }
   maybeSingle() { this.uno = 'maybe'; return this; }
   single() { this.uno = 'single'; return this; }
   abortSignal() { return this; }
@@ -92,7 +96,7 @@ class Builder implements PromiseLike<{ data: unknown; error: unknown }> {
           return { data: null, error: { code: '23505', message: `duplicate key value violates unique constraint "${PK_NOMBRE[tabla] ?? tabla}"` } };
         }
         if (dup) { Object.assign(dup, nueva); salida.push(dup); }
-        else { const f: Fila = { id: m.id(tabla), ...nueva }; filas.push(f); salida.push(f); }
+        else { const f: Fila = { id: m.id(tabla), ...(tabla === 'viaje_convenio' ? { ligado_en: new Date().toISOString() } : {}), ...nueva }; filas.push(f); salida.push(f); }
       }
     } else if (this.op === 'update') {
       for (const f of filas.filter(coincide)) { Object.assign(f, this.payload as Fila); salida.push(f); }
@@ -102,8 +106,13 @@ class Builder implements PromiseLike<{ data: unknown; error: unknown }> {
       salida = quitar;
     }
 
-    for (const c of [...this.orden].reverse()) salida = salida.slice().sort((a, b) => String(a[c] ?? '').localeCompare(String(b[c] ?? ''), undefined, { numeric: true }));
+    for (const c0 of [...this.orden].reverse()) {
+      const desc = c0.startsWith('-');
+      const c = desc ? c0.slice(1) : c0;
+      salida = salida.slice().sort((a, b) => (desc ? -1 : 1) * String(a[c] ?? '').localeCompare(String(b[c] ?? ''), undefined, { numeric: true }));
+    }
     if (this.rango) salida = salida.slice(this.rango[0], this.rango[1] + 1);
+    if (this.tope !== null) salida = salida.slice(0, this.tope);
     if (tabla === 'viaje') {
       salida = salida.map((f) => ({ ...f, operador: m.tablas.operador.find((o) => o.id === f.operador_id) ?? null }));
     }
