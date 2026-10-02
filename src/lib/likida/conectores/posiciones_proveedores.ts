@@ -343,7 +343,10 @@ export async function leerPosicionesNavixy(
 // origen que la dirección de prueba (el token no viaja a otro host), solo HTTPS
 // público (el transporte rechaza IP privadas).
 export const PROHIBIDAS = new Set(['__proto__', 'constructor', 'prototype']);
-export const RUTA = z.string().min(1).max(200).regex(/^[A-Za-z0-9_$-]+(\.[A-Za-z0-9_$-]+)*$/, 'ruta con puntos')
+// Regex lineal (sin cuantificador anidado): la forma de cada segmento va aquí y los segmentos vacíos («a..b», «.a», «a.») se
+// rechazan abajo con split — equivale a `^seg(\.seg)*$` con seg = [A-Za-z0-9_$-]+.
+export const RUTA = z.string().min(1).max(200).regex(/^[A-Za-z0-9_$.-]+$/, 'ruta con puntos')
+  .refine((r) => !r.split('.').some((p) => p === ''), 'segmento vacío')
   .refine((r) => !r.split('.').some((p) => PROHIBIDAS.has(p)), 'segmento no permitido');
 export const MapeoGenerico = z.object({
   url: z.string().url().max(500).optional(),

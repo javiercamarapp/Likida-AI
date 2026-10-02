@@ -13,7 +13,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
-import { abrir, errorApi, fallo } from '../../../_comun';
+import { abrir, fallo } from '../../../_comun';
 import { leerCuerpo, validar, CampoInvalido } from '../../../_escritura';
 import { confirmarAcusesLeidos, MAX_IDS_CONFIRMACION } from '@/lib/likida/liquidacion_externa/servicio';
 

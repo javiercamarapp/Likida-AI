@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Map, MapPinOff, Satellite } from 'lucide-react';
 import { numero, fechaHoraMx } from '@/lib/formato';
 import { BarraPagina } from '../resumen-visual';
@@ -176,7 +177,7 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
                 {typeof rastreo.huerfanos === 'number' && rastreo.huerfanos > 0 && (
                   <p className="text-[12px] mb-2" style={{ color: 'var(--warn)' }}>
                     {numero(rastreo.huerfanos)} {rastreo.huerfanos === 1 ? 'dispositivo que reporta tu proveedor no está ligado' : 'dispositivos que reporta tu proveedor no están ligados'} a ninguna unidad:
-                    no se dibujan (Likida no inventa camiones). Lígalos en <a href="/dashboard/conexiones#gps" className="underline">Conexiones</a>.
+                    no se dibujan (Likida no inventa camiones). Lígalos en <Link href="/dashboard/conexiones#gps" className="underline">Conexiones</Link>.
                   </p>
                 )}
                 <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
