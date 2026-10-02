@@ -33,6 +33,10 @@ export const estado = {
   unidades: [] as Array<{ tenantId: string; id: string; placas: string; activo: boolean }>,
   clientes: [] as Array<{ tenantId: string; id: string; nombre: string }>,
   correos: new Map<string, { estado: 'claimed' | 'applied'; token: string }>(),
+  /** 0640: avisos a la oficina reclamados por documento ({tipo: instante}). */
+  avisos: new Map<string, Record<string, string>>(),
+  /** Simula una base SIN la 0641: las RPC del worker dicen «no existe». */
+  sinMigracion: false,
   /** Para forzar fallos: `fallar.set('subirArchivo', new Error('x'))`. */
   fallar: new Map<string, Error>(),
   reloj: { ahora: () => new Date() },
@@ -43,7 +47,7 @@ export const estado = {
 export function reset(): void {
   estado.docs.clear(); estado.archivos.clear(); estado.eventos.length = 0; estado.correcciones.length = 0; estado.buzones.clear();
   estado.perfiles.clear(); estado.versiones.length = 0; estado.exportConfigs.length = 0; estado.viajes.length = 0; estado.mercancias.length = 0;
-  estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.fallar.clear(); estado.llamadas.length = 0;
+  estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.sinMigracion = false; estado.fallar.clear(); estado.llamadas.length = 0;
   estado.seq = 0; estado.reloj.ahora = () => new Date();
 }
 
@@ -313,6 +317,58 @@ export const api: typeof Real = {
     const d = estado.docs.get(id);
     if (!d || d.tenantId !== tenantId || d.purgadoEn) return false;
     d.storageRuta = null; d.textoExtracto = null; d.purgadoEn = ahoraIso();
+    return true;
+  },
+
+  // ── El worker (0640-0642): la MISMA regla que las RPC de la 0641 ──────────
+  TOPE_INTENTOS_DOC: 5,
+  GRACIA_RECIBIDO_SEG: 120,
+  esperaFallidoMin: (intentos) => 15 * 2 ** Math.max(Math.min(intentos, 6) - 1, 0),
+  funcionAusente: (e) => Boolean(e && (e.code === 'PGRST202' || e.code === '42883')),
+  async documentosPendientes(limite = 25) {
+    falla('documentosPendientes');
+    const t = estado.reloj.ahora().getTime();
+    const orden: Record<string, number> = { recibido: 0, procesando: 1, fallido: 2 };
+    return [...estado.docs.values()]
+      .filter((d) => {
+        if (d.purgadoEn || !d.storageRuta || d.intentos >= 5) return false;
+        if (d.estado === 'recibido') return t - new Date(d.createdAt).getTime() > 120_000;
+        if (d.estado === 'procesando') return d.procesandoHasta !== null && new Date(d.procesandoHasta).getTime() < t;
+        if (d.estado === 'fallido') return t - new Date(d.updatedAt).getTime() > 15 * 2 ** Math.max(Math.min(d.intentos, 6) - 1, 0) * 60_000;
+        return false;
+      })
+      .sort((a, b) => orden[a.estado] - orden[b.estado] || (a.updatedAt < b.updatedAt ? -1 : 1))
+      .slice(0, limite)
+      .map((d) => ({ tenantId: d.tenantId, id: d.id, estado: d.estado, intentos: d.intentos }));
+  },
+  async documentosAgotados(limite = 25) {
+    if (estado.sinMigracion) return null;
+    return [...estado.docs.values()]
+      .filter((d) => !d.purgadoEn && d.estado === 'fallido' && d.intentos >= 5 && !estado.avisos.get(d.id)?.agotado)
+      .slice(0, limite).map((d) => ({ tenantId: d.tenantId, id: d.id }));
+  },
+  async documentosPorAvisar(umbral, limite = 25) {
+    if (estado.sinMigracion) return null;
+    return [...estado.docs.values()]
+      .filter((d) => !d.purgadoEn && d.estado === 'por_revisar' && d.canal === 'correo' && !estado.avisos.get(d.id)?.hallazgos
+        && ((d.validacion?.bloqueos ?? 0) > 0 || (d.confianzaMin !== null && d.confianzaMin < umbral)))
+      .slice(0, limite).map((d) => ({ tenantId: d.tenantId, id: d.id }));
+  },
+  async reclamarAvisoDoc(tenantId, id, tipo) {
+    if (estado.sinMigracion) return 'sin_migracion';
+    const d = estado.docs.get(id);
+    if (!d || d.tenantId !== tenantId) return 'perdido';
+    const a = estado.avisos.get(id) ?? {};
+    if (a[tipo]) return 'perdido';
+    estado.avisos.set(id, { ...a, [tipo]: ahoraIso() });
+    return 'ganado';
+  },
+  async liberarAvisoDoc(tenantId, id, tipo) {
+    const d = estado.docs.get(id);
+    const a = estado.avisos.get(id);
+    if (!d || d.tenantId !== tenantId || !a?.[tipo]) return false;
+    const { [tipo]: _quitado, ...resto } = a;
+    estado.avisos.set(id, resto);
     return true;
   },
 };

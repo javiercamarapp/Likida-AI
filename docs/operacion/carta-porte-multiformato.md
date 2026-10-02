@@ -59,6 +59,17 @@ El documento es dato no confiable. Capas (ninguna depende de que el modelo «se 
 
 Mapeo declarativo (columna / etiqueta / ruta XML / constante) con el separador de miles propio del cliente. Se aprende **solo de lo que un humano aprobó** (y nunca de un documento con instrucciones); aprender crea la **versión siguiente** (las versiones son inmutables: trigger en la base) y volver atrás solo mueve `version_activa`. Se reaplica sin modelo; el modelo solo completa lo que falte (el perfil gana en lo que ya dio). Límite: un Excel con **varios embarques** (una fila por embarque) lee el primero y avisa; un documento = un embarque. Fotos y escaneos no aprenden (no hay columnas ni etiquetas).
 
+## El worker de la bandeja (cron `carta-porte-docs`, 0640-0642)
+
+`/api/cron/carta-porte-docs`, cada 5 minutos (puerta `CRON_SECRET`, palancas `global` y `agente:carta_porte` fail-closed, latido en todo camino de salida). Lo que antes dependía de que la petición que recibió el documento alcanzara el reloj (o de que alguien apretara «Procesar») ahora lo hace el cron:
+
+- **Elige** con `cp_documentos_pendientes`: recibidos con más de 2 min (gracia para la petición que los recibió), de lease vencido y fallidos con **espera creciente** (15, 30, 60, 120 min según los intentos). **Procesa** con `procesarDocumento`, que reclama con `cp_documento_reclamar` (lease 120 s, tope de 5 intentos): dos corridas solapadas no extraen —ni le pagan al modelo— dos veces.
+- **Estado terminal**: `fallido` con 5 intentos (un archivo ilegible los agota de inmediato). Nadie lo reclama más; queda visible en la bandeja con su `ultimo_error`. El presupuesto de IA agotado **no gasta intentos** y para la pasada; cuatro fallos de modelo seguidos también (y alertan al operador).
+- **Avisa a la oficina** (jefe de tráfico, `avisarOficina`: texto o plantilla `aviso_operacion_v1`) **una vez por documento y tipo** con el candado `cp_documento_reclamar_aviso` (no sube `version`): `hallazgos` (llegó por correo y quedó por revisar con un bloqueo o confianza menor al umbral crítico) y `agotado` (no se pudo leer). El texto lleva el nombre del archivo, conteos y la liga; nunca valores de los campos extraídos. Máximo 10 por pasada.
+- **Regla del outbox**: un rechazo reintentable de Meta (timeout, 429, 5xx) YA dejó el aviso en `wa_outbox`; el candado se queda cerrado y no se reenvía. Solo un rechazo definitivo (plantilla sin aprobar) suelta el candado.
+- **Sin migrar**: contra una base sin la 0641 la elección cae a una consulta directa con la misma regla y los avisos quedan apagados (sin candado atómico se repetirían); el latido sale `parcial`. Sin la 0642 el latido no se registra y los eventos `aviso_oficina`/`reintentos_agotados` no se escriben (mejor esfuerzo).
+- No sustituye a la revisión humana: el cron solo extrae y avisa; aprobar sigue siendo de una persona.
+
 ## Revisión
 
 Documento al lado de lo leído (imagen, páginas del escaneo o texto), todos los campos del complemento (también los vacíos), confianza, origen y evidencia por campo, motivo de cada bloqueo/duda. Candado optimista por `version`: dos revisores no se pisan. Aprobar **revalida en el servidor**. Cada paso deja evento en `cp_documento_evento` (append-only, sin el contenido de los campos).

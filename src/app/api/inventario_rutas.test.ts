@@ -221,7 +221,13 @@ import { join, relative, sep } from 'node:path';
 //   tipo `completo` (tarifa y requisitos de cobro), del DINERO (área `dinero`); rate limit por IP y por flota. Las instrucciones
 //   salen sin dinero (ni siquiera se consulta la tabla comercial). Prueba: `export/convenios/route.test.ts`.
 // Integración ola 3b: 102 (peajes-reclamacion, gps push, cron jornada-alertas) + 1 (export/convenios).
-const RUTAS_APP_REVISADAS = 103;
+// 103 → 104 (ronda 07, P3 «carta-porte-worker», 0640-0642): una ruta,
+//   · `api/cron/carta-porte-docs/route.ts` — cron: `puertaCron` (CRON_SECRET o 401/500) y las palancas `global` y
+//     `agente:carta_porte`, ambas fail-closed; latido en todo camino de salida. Reclama con la RPC existente
+//     (`cp_documento_reclamar`: lease + tope de 5 intentos) los documentos de CADA flota recibidos, de lease vencido o
+//     de fallo reintentable, y cada acción posterior usa el tenant de la propia fila; el aviso a la oficina sale al
+//     teléfono de ESA flota, una vez por documento (candado de la 0641). No acepta cuerpo ni parámetros.
+const RUTAS_APP_REVISADAS = 104;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

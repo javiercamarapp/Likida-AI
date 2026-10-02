@@ -125,15 +125,36 @@ describe('perseguir: la escalera avanza de nivel en nivel', () => {
 });
 
 describe('fallos de envío', () => {
-  it('un rechazo REINTENTABLE (429) libera el claim: la corrida siguiente lo reintenta', async () => {
-    let falla = true;
-    const m = crearPuertos({ viajes: [viaje('v1')], hitos: hitosDe('v1'), envio: () => (falla ? { ok: false, reintentable: true, mensaje: '429' } : { ok: true, via: 'texto' }) });
+  it('un rechazo REINTENTABLE (429) YA está en wa_outbox: el claim se cierra «en cola» y la corrida siguiente NO reenvía', async () => {
+    let intentos = 0;
+    const m = crearPuertos({ viajes: [viaje('v1')], hitos: hitosDe('v1'), envio: () => { intentos++; return { ok: false, reintentable: true, mensaje: '429' }; } });
     const r1 = await correrConductor(m.puertos, { ahora: mx('07:30') });
     expect(r1.rechazosReintentables).toBe(1);
-    expect(m.reclamos.size).toBe(0);
-    falla = false;
+    expect(intentos).toBe(1);
+    expect([...m.reclamos.values()]).toEqual([expect.objectContaining({ ok: true, motivo: 'en_cola_outbox' })]);
+    // Las corridas siguientes ven «ya reclamado»: ni un intento de envío más (el outbox es quien reintenta).
     const r2 = await correrConductor(m.puertos, { ahora: mx('07:35') });
-    expect(r2.solicitudes).toBe(1);
+    expect(r2.solicitudes + r2.recordatorios).toBe(0);
+    expect(intentos).toBe(1);
+    expect(m.enviados).toHaveLength(0);
+  });
+
+  it('un recordatorio al chofer con rechazo reintentable tampoco se reenvía (el claim del nivel queda cerrado)', async () => {
+    // Un aviso de solicitud ya entregado hace rato: toca el recordatorio del nivel 1.
+    let intentos = 0;
+    const ok = crearPuertos({ viajes: [viaje('v1')], hitos: hitosDe('v1') });
+    await correrConductor(ok.puertos, { ahora: mx('07:30') });
+    const m = crearPuertos({
+      viajes: [viaje('v1')], hitos: hitosDe('v1'), avisos: [...ok.reclamos.keys()].map((k) => { const [hitoId, ciclo, clase, nivel] = k.split('|'); return { hitoId, ciclo: Number(ciclo), clase: clase as 'solicitud', nivel: Number(nivel), operadorId: 'o-v1', creado: mx('07:30') }; }),
+      envio: () => { intentos++; return { ok: false, reintentable: true, mensaje: 'timeout' }; },
+    });
+    await correrConductor(m.puertos, { ahora: mx('08:30') });
+    const tras1 = intentos;
+    expect(tras1).toBe(1);
+    await correrConductor(m.puertos, { ahora: mx('08:35') });
+    await correrConductor(m.puertos, { ahora: mx('08:40') });
+    expect(intentos).toBe(tras1);
+    expect(m.enviados).toHaveLength(0);
   });
 
   it('un rechazo NO reintentable (plantilla sin aprobar) deja el claim con el motivo y avanza: no se repite cada 5 minutos', async () => {
@@ -152,7 +173,7 @@ describe('fallos de envío', () => {
     expect(r.cortadaPorRechazoMasivo).toBe(true);
     expect(r.rechazosReintentables).toBe(TOPE_RECHAZOS_SEGUIDOS);
     expect(r.cortadosPorReloj).toBe(8 - TOPE_RECHAZOS_SEGUIDOS);
-    expect(m.reclamos.size).toBe(0); // todo quedó sin reclamar para la siguiente
+    expect(m.reclamos.size).toBe(TOPE_RECHAZOS_SEGUIDOS); // los cinco ya están en cola del outbox (cerrados); el resto, sin reclamar para la siguiente
   });
 
   it('un viaje que revienta no tumba el lote', async () => {
@@ -212,12 +233,18 @@ describe('escalar: patio responsable → jefe general', () => {
     expect(r2.sinDestinatario).toBe(0);
   });
 
-  it('un rechazo reintentable a TODOS los destinos libera el claim', async () => {
-    const m = crearPuertos({ viajes: [viaje('v1')], hitos: hitosDe('v1'), avisos: escalera('v1-0'), envio: () => ({ ok: false, reintentable: true, mensaje: '429' }) });
+  it('un rechazo reintentable a TODOS los destinos YA está en wa_outbox: el claim se cierra «en cola» y la siguiente corrida NO reenvía la escalación', async () => {
+    let intentos = 0;
+    const m = crearPuertos({ viajes: [viaje('v1')], hitos: hitosDe('v1'), avisos: escalera('v1-0'), envio: () => { intentos++; return { ok: false, reintentable: true, mensaje: '429' }; } });
     const r = await correrConductor(m.puertos, { ahora: mx('09:00') });
     expect(r.rechazosReintentables).toBe(1);
-    expect(m.hitos.get('v1-0')?.estado).toBe('esperado');
-    expect([...m.reclamos.keys()].some((k) => k.includes('escalacion'))).toBe(false);
+    expect(intentos).toBe(1);
+    expect([...m.reclamos.entries()].find(([k]) => k.includes('escalacion'))?.[1]).toMatchObject({ ok: true, motivo: 'en_cola_outbox' });
+    expect(m.hitos.get('v1-0')?.estado).toBe('escalado');
+    const r2 = await correrConductor(m.puertos, { ahora: mx('09:05') });
+    expect(r2.rechazosReintentables).toBe(0);
+    expect(intentos).toBe(1);
+    expect(m.enviados).toHaveLength(0);
   });
 
   it('se avisa a todos los destinos del nivel (máx. 3) y basta uno entregado', async () => {
@@ -240,6 +267,18 @@ describe('escalar: patio responsable → jefe general', () => {
     expect([a, b]).toEqual(['ok', 'perdido']);
     expect(m.enviados).toHaveLength(1);
     expect(m.enviados[0].texto).toContain('el chofer reportó un problema');
+  });
+
+  it('«Tengo un problema» con rechazo reintentable (ya en wa_outbox): el segundo toque NO reenvía la escalación', async () => {
+    const v = viaje('v1');
+    let intentos = 0;
+    const m = crearPuertos({ viajes: [v], hitos: hitosDe('v1'), envio: () => { intentos++; return { ok: false, reintentable: true, mensaje: '429' }; } });
+    const hs = [...m.hitos.values()];
+    const a = await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:40'));
+    const b = await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:41'));
+    expect([a, b]).toEqual(['reintentable', 'perdido']);
+    expect(intentos).toBe(1);
+    expect(m.enviados).toHaveLength(0);
   });
 });
 

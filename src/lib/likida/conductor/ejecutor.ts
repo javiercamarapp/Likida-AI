@@ -30,9 +30,11 @@ import type { HitoFila } from './tipos';
 // ── EL ENVÍO Y LOS RECHAZOS ────────────────────────────────────────────────
 //   · Todo sale por `enviarConFallback`: ventana 24 h → texto con botones; fuera
 //     de ventana → la plantilla del catálogo. Nunca `sendText` directo.
-//   · Un rechazo REINTENTABLE (429, bloqueo temporal) libera el claim: el aviso
-//     no salió y la corrida siguiente lo reintenta. Cinco seguidos paran la
-//     corrida (es Meta diciendo «hoy no», no cinco teléfonos malos).
+//   · Un rechazo REINTENTABLE (timeout, 429, 5xx) YA dejó el mensaje en `wa_outbox`
+//     (el cliente de Meta lo encola), que lo entrega con su backoff: el claim se
+//     CIERRA como «en cola» y no se suelta, o la corrida siguiente lo mandaría
+//     otra vez y el aviso saldría doble. Cinco seguidos paran la corrida (es
+//     Meta diciendo «hoy no», no cinco teléfonos malos).
 //   · Un rechazo NO reintentable (plantilla sin aprobar, número inválido) deja el
 //     claim con `ok = false`: la escalera avanza al siguiente nivel en vez de
 //     repetir el mismo fallo cada 5 minutos, y el motivo queda a la vista.
@@ -184,11 +186,14 @@ export async function correrConductor(
           enviadosHoy[v.operadorId] = (enviadosHoy[v.operadorId] ?? 0) + 1;
           if (accion.clase === 'solicitud') r.solicitudes++; else r.recordatorios++;
         } else if (envio.reintentable) {
-          // El aviso NO salió y el problema no es este viaje: se libera el claim.
-          await p.liberarAviso(claim);
+          // El texto YA está en `wa_outbox` (client.ts), que lo entrega con su backoff. Soltar el claim haría que
+          // la siguiente corrida lo mande otra vez y el outbox entregue el primero: dos avisos al chofer. Se
+          // CIERRA como «en cola» y el aviso cuenta para la escalera (el recordatorio sí va a llegar).
+          await p.cerrarAviso(claim, { ok: true, canal: 'texto', motivo: 'en_cola_outbox', ult4: ult4(v.operadorTelefono!) });
+          await p.anotarAvisoChofer(accion.hito, ahora);
           r.rechazosReintentables++;
           rechazosSeguidos++;
-          r.fallos.push(`${accion.clase} ${v.folio ?? v.id}: ${envio.mensaje} (se reintenta en la siguiente corrida)`);
+          r.fallos.push(`${accion.clase} ${v.folio ?? v.id}: ${envio.mensaje} (queda en la cola de WhatsApp; no se reenvía)`);
         } else {
           await p.cerrarAviso(claim, { ok: false, canal: 'ninguno', motivo: envio.mensaje.slice(0, 200), ult4: ult4(v.operadorTelefono!) });
           // Cuenta como avisado a efectos de la escalera: sigue al siguiente nivel, no repite el fallo.
@@ -256,9 +261,13 @@ async function escalar(
   }
 
   if (entregados === 0 && reintentables === destinos.length) {
-    await p.liberarAviso(claim);
+    // Todos los rechazos son reintentables: cada texto YA está en `wa_outbox`, que lo entrega. Soltar el claim
+    // mandaría la escalación otra vez (aviso doble al jefe de tráfico). Se CIERRA como «en cola» y el nivel se
+    // marca: la escalera avanza y el outbox es quien reintenta.
+    await p.cerrarAviso(claim, { ok: true, canal: 'texto', motivo: 'en_cola_outbox', ult4: ult4(destinos[0].telefono) });
+    await p.marcarEscalado(a.hito, a.nivel, ahora);
     r.rechazosReintentables++;
-    r.fallos.push(`escalación ${v.folio ?? v.id}: ${ultimoError} (se reintenta en la siguiente corrida)`);
+    r.fallos.push(`escalación ${v.folio ?? v.id}: ${ultimoError} (queda en la cola de WhatsApp; no se reenvía)`);
     return 'reintentable';
   }
   await p.cerrarAviso(claim, {
