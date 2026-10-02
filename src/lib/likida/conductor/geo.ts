@@ -150,5 +150,6 @@ export function dentroDeGeocerca(punto: Punto, g: GeocercaGeom, margenM = 0): Re
     return { dentro: m.dentro || borde <= margen, distanciaBordeM: borde, metodo: 'poligono', aproximada: false };
   }
   const d = haversineM(punto, { lat: g.lat, lng: g.lng });
-  return { dentro: d <= g.radioM + margen, distanciaBordeM: Math.max(0, d - g.radioM), metodo: 'circulo', aproximada: g.aproximada === true };
+  // En metros enteros, como siempre se midió el círculo (es la distancia que se guarda y se enseña): el borde exacto cuenta como dentro.
+  return { dentro: Math.round(d) <= g.radioM + margen, distanciaBordeM: Math.max(0, d - g.radioM), metodo: 'circulo', aproximada: g.aproximada === true };
 }

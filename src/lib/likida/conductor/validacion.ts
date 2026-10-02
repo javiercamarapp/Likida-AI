@@ -1,4 +1,4 @@
-import { coordenadasValidas, haversineM, type Punto } from './geo';
+import { coordenadasValidas, dentroDeGeocerca, haversineM, type Punto } from './geo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // VALIDAR UN HITO CONTRA LA UBICACIÓN — la decisión pura (sin I/O).
@@ -33,6 +33,10 @@ export interface SitioValidable {
   lat: number;
   lng: number;
   radioM: number;
+  /** 0630: polígono nativo del sitio. Con él, «dentro» es punto en polígono (más la tolerancia al BORDE) y no la distancia al centro. */
+  poligono?: readonly Punto[] | null;
+  /** 0630: el círculo sustituye a un polígono del cliente que no se guardó. */
+  aproximada?: boolean;
 }
 
 export interface PosicionComparada extends Punto {
@@ -64,6 +68,8 @@ export interface Veredicto {
   radioM: number | null;
   sitioId: string | null;
   medidaEn: Date | null;
+  /** Con qué se decidió (no se guarda: solo cambia la frase). Ausente en un sin_dato. */
+  metodo?: 'poligono' | 'circulo';
 }
 
 const sinDato = (e: EntradaValidacion, motivo: MotivoSinDato): Veredicto => ({
@@ -81,10 +87,11 @@ export function evaluarUbicacion(e: EntradaValidacion): Veredicto {
   if (Math.abs(t - e.mensajeEn.getTime()) > e.ventanaMin * 60_000) return sinDato(e, 'ubicacion_fuera_de_ventana');
 
   const distanciaM = Math.round(haversineM(e.posicion, e.sitio));
-  const dentro = distanciaM <= e.sitio.radioM + e.toleranciaM;
+  // El helper único (0630): polígono si lo hay, círculo + tolerancia si no. `distanciaM` sigue siendo al CENTRO (es lo que se guarda).
+  const medida = dentroDeGeocerca(e.posicion, e.sitio, e.toleranciaM);
   return {
-    resultado: dentro ? 'validado' : 'sin_coincidencia', motivo: null, fuente: e.posicion.fuente, distanciaM,
-    toleranciaM: e.toleranciaM, radioM: e.sitio.radioM, sitioId: e.sitio.id, medidaEn: e.posicion.medidaEn,
+    resultado: medida.dentro ? 'validado' : 'sin_coincidencia', motivo: null, fuente: e.posicion.fuente, distanciaM,
+    toleranciaM: e.toleranciaM, radioM: e.sitio.radioM, sitioId: e.sitio.id, medidaEn: e.posicion.medidaEn, metodo: medida.metodo,
   };
 }
 
@@ -111,7 +118,7 @@ export function textoVeredicto(v: Veredicto, sitioNombre: string | null): string
     case 'validado':
       return `Coincide con el sitio${sitioNombre ? ` «${sitioNombre}»` : ''} (a ${v.distanciaM} m del centro, según ${por}).`;
     case 'sin_coincidencia':
-      return `La posición comparada (${por}) cae a ${v.distanciaM} m del centro${sitio}, fuera de su radio. Puede ser una muestra vieja, otra entrada del mismo sitio o un radio mal capturado: revísalo antes de dar por mala la llegada.`;
+      return `La posición comparada (${por}) cae a ${v.distanciaM} m del centro${sitio}, fuera de ${v.metodo === 'poligono' ? 'su polígono' : 'su radio'}. Puede ser una muestra vieja, otra entrada del mismo sitio o un radio mal capturado: revísalo antes de dar por mala la llegada.`;
     case 'sin_dato':
       switch (v.motivo) {
         case 'sin_sitio': return 'Sin dato: el viaje no tiene sitio asignado para comparar.';
