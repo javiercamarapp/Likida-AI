@@ -98,9 +98,26 @@ export function validarEscalacion(args: Record<string, unknown>): ResultadoValid
   return { ok: true, valor: { destino: destino as Destino, motivo: motivo as Motivo, viajeFolio, resumen } };
 }
 
-/** Una abierta por (destino, motivo, viaje): preguntar tres veces lo mismo no abre tres tareas. */
-export function llaveDedupe(v: Pick<EscalacionValida, 'destino' | 'motivo'>, viajeId: string | null): string {
-  return `${v.destino}|${v.motivo}|${viajeId ?? '-'}`;
+/** Hash corto y estable (FNV-1a de 32 bits, dos pasadas) de un texto; solo distingue incidentes, no protege nada. */
+function huellaCorta(t: string): string {
+  let a = 0x811c9dc5; let b = 0x01000193;
+  for (let i = 0; i < t.length; i++) {
+    a = Math.imul(a ^ t.charCodeAt(i), 0x01000193) >>> 0;
+    b = Math.imul(b + t.charCodeAt(i), 0x85ebca6b) >>> 0;
+  }
+  return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0');
+}
+
+/**
+ * Una abierta por incidente. Con folio: (destino, motivo, viaje) —preguntar tres veces lo mismo no abre tres tareas—.
+ * SIN folio: el índice único de la 0650 juntaría con «-» cualquier incidente distinto del mismo destino y motivo
+ * (la falla del buzón se perdería detrás de la del Vigía), así que la llave suma la huella del resumen: el mismo
+ * texto repetido sigue siendo la misma tarea; otro incidente es otra tarea.
+ */
+export function llaveDedupe(v: Pick<EscalacionValida, 'destino' | 'motivo'> & { resumen?: string }, viajeId: string | null): string {
+  if (viajeId) return `${v.destino}|${v.motivo}|${viajeId}`;
+  const r = (v.resumen ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+  return r ? `${v.destino}|${v.motivo}|t:${huellaCorta(r)}` : `${v.destino}|${v.motivo}|-`;
 }
 
 export interface TareaAbierta {
