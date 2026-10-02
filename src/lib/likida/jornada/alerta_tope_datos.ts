@@ -48,7 +48,7 @@ export const puertosAlertaReales: PuertosAlerta = {
   },
   asientos: asientosDeJornada,
   politica: leerPolitica,
-  async operador(tenantId, operadorId) {
+  async datosDelOperador(tenantId, operadorId) {
     const { data, error } = await acotada(
       supabaseAdmin().from('operador').select('nombre, telefono, terminal_id, activo')
         .eq('tenant_id', tenantId).eq('id', operadorId).maybeSingle(),

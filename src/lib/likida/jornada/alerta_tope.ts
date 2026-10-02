@@ -204,7 +204,7 @@ export interface PuertosAlerta {
   candidatas(ahora: Date, limite: number): Promise<{ filas: FilaCandidata[]; hayMas: boolean }>;
   asientos(tenantId: string, jornadaId: string): Promise<Asiento[] | null>;
   politica(tenantId: string): Promise<PoliticaFlota | null>;
-  operador(tenantId: string, operadorId: string): Promise<DatosOperador | null>;
+  datosDelOperador(tenantId: string, operadorId: string): Promise<DatosOperador | null>;
   encargados(tenantId: string, terminalId: string | null): Promise<Destino[]>;
   reclamar(a: { tenantId: string; jornadaId: string; nivel: NivelAlerta; minutos: number; topeMin: number; cota: boolean; fuente: Procedencia; descansoSinCierre: boolean; ahora: Date }): Promise<ReclamoAlerta | null | 'fallo'>;
   cerrar(a: {
@@ -290,7 +290,7 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
       if (reclamo === null) { r.yaAvisadas++; continue; }
       if (reclamo === 'fallo') { r.fallos.push(`jornada ${f.jornadaId}: no se pudo reclamar la alerta ${nivel}`); continue; }
 
-      const op = await p.operador(f.tenantId, f.operadorId);
+      const op = await p.datosDelOperador(f.tenantId, f.operadorId);
       const datos: DatosAviso = {
         nombreOperador: op?.nombre ?? '', nivel, minutos: curso.minutos, topeMin, cotaInferior: curso.cotaInferior,
         fuente: curso.fuente, descansoSinCierre: curso.descansoSinCierre, liga: `${p.appUrl()}/dashboard/jornada`,

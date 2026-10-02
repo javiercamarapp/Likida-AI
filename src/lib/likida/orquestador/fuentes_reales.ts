@@ -142,7 +142,7 @@ export function crearFuentesReales(): Fuentes {
         if (esSinTabla(ins.error)) return { estado: 'no_disponible' };
         if (ins.error.code === '23505') {
           const previa = await acotada(db.from('orquestador_escalacion').select('id, creada_en')
-            .eq('tenant_id', tenantId).eq('dedupe_key', dedupe).eq('estado', 'abierta').order('creada_en', { ascending: false }).limit(1), 'orquestador.escalar_previa');
+            .eq('tenant_id', tenantId).eq('dedupe_key', dedupe).eq('estado', 'abierta').order('creada_en', { ascending: false }).order('id').limit(1), 'orquestador.escalar_previa');
           const f = ((previa.data ?? []) as Array<{ id: string; creada_en: string }>)[0];
           if (f) return { estado: 'ya_abierta', id: f.id, creadaEn: f.creada_en };
         }

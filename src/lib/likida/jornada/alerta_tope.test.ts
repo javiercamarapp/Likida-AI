@@ -21,7 +21,7 @@ function puertos(asientos: Asiento[] | null, over: Partial<PuertosAlerta> = {}):
     candidatas: async () => ({ filas: [FILA], hayMas: false }),
     asientos: async () => asientos,
     politica: async () => null,
-    operador: async () => ({ nombre: 'Luis', telefono: '5215500000001', terminalId: null }),
+    datosDelOperador: async () => ({ nombre: 'Luis', telefono: '5215500000001', terminalId: null }),
     encargados: async () => [{ nombre: 'Jefe', telefono: '5215500000002' }],
     reclamar: vi.fn(async () => ({ id: 'r1', token: 'tk' })),
     cerrar: vi.fn(async () => true),
@@ -108,7 +108,7 @@ describe('correrAlertasTope', () => {
   });
   it('sin destinatarios se asienta sin_destinatario', async () => {
     const p = puertos([a('inicio_jornada', hace(10))], {
-      encargados: async () => [], operador: async () => ({ nombre: 'Luis', telefono: null, terminalId: null }),
+      encargados: async () => [], datosDelOperador: async () => ({ nombre: 'Luis', telefono: null, terminalId: null }),
     });
     const r = await correrAlertasTope(p, { ahora: AHORA });
     expect(r.sinDestinatario).toBe(1);
