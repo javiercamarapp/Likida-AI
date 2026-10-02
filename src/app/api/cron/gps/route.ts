@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { sincronizarGpsTodas, httpReal } from '@/lib/likida/conectores/sincronizar_gps';
 import { sincronizarEventosTodas } from '@/lib/likida/conectores/sincronizar_eventos';
+import { reimportarGeocercasTodas, type ResumenReimportacion } from '@/lib/likida/conectores/tabla_propia/reimportar_geocercas';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
@@ -121,6 +122,14 @@ export async function GET(req: Request) {
 
     const resultados = await sincronizarGpsTodas(httpReal, { venceEn });
 
+    // P1 (0631): las geocercas de «mis propias tablas» se re-importan solas una vez al día por flota (idempotente por huella,
+    // con claim atómico). Va DESPUÉS de las posiciones y comparte su reloj: lo que no alcance queda para la corrida siguiente.
+    // No lanza, y un fallo suyo NUNCA le quita al GPS lo que ya sincronizó.
+    const geocercas: ResumenReimportacion = await reimportarGeocercasTodas({ venceEn }).catch((e: unknown) => {
+      logger.error('cron.gps.geocercas_fallo', { error: e instanceof Error ? e.message : String(e) });
+      return { flotas: [], importadas: 0, sinCambios: 0, conError: 1, sinTurno: 0, sinMigracion: false };
+    });
+
     const conError = resultados.filter((r) => r.error);
     const guardadas = resultados.reduce((s, r) => s + r.guardadas, 0);
     const huerfanas = resultados.reduce((s, r) => s + r.huerfanas, 0);
@@ -184,6 +193,12 @@ export async function GET(req: Request) {
       },
       // El detalle SIN la credencial: aquí solo viaja el id del proveedor.
       errores: conError.map((r) => ({ tenantId: r.tenantId, proveedor: r.proveedor, error: r.error })),
+      // P1: la re-importación diaria de geocercas. Informativa: no cambia el latido (su error se reintenta a la hora).
+      geocercas: {
+        flotas: geocercas.flotas.length, importadas: geocercas.importadas, sinCambios: geocercas.sinCambios,
+        conError: geocercas.conError, sinTurnoPorReloj: geocercas.sinTurno, sinMigracion: geocercas.sinMigracion,
+        errores: geocercas.flotas.filter((f) => f.estado === 'error').map((f) => ({ tenantId: f.tenantId, error: f.error })),
+      },
     };
 
     // `parcial` también cuando el reloj cortó: ni «ok» (quedó trabajo sin
@@ -214,7 +229,7 @@ export async function GET(req: Request) {
       });
     } else {
       logger.info('cron.gps.ok', cuerpo);
-      await registrarLatido('gps', 'ok', { flotas: resultados.length, guardadas, disparos });
+      await registrarLatido('gps', 'ok', { flotas: resultados.length, guardadas, disparos, geocercasConError: geocercas.conError });
     }
     return NextResponse.json(cuerpo);
   } catch (e) {

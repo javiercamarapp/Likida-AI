@@ -80,13 +80,19 @@ export type ResultadoImportGeocercas =
   | { ok: true; sinCambios: false; creados: number; actualizados: number; aproximadas: ResultadoSitios['aproximadas']; poligonos: number; rechazadas: FilaRechazada[]; leidas: number; huella: string }
   /** La tabla del cliente no cambió desde la última importación buena: no se escribió nada. */
   | { ok: true; sinCambios: true; creados: 0; actualizados: 0; aproximadas: ResultadoSitios['aproximadas']; poligonos: number; rechazadas: FilaRechazada[]; leidas: number; huella: string }
-  | { ok: false; error: string; detalles?: string[] };
+  /** `motivo`: 'sin_conexion' (no hay «mis propias tablas» guardadas) o 'sin_geocercas' (la conexión no trae vista/archivo/endpoint de geocercas): no son errores de la flota para el proceso automático. */
+  | { ok: false; error: string; detalles?: string[]; motivo?: 'sin_conexion' | 'sin_geocercas' };
+
+/** Los mensajes con que los lectores dicen «esta conexión no tiene geocercas configuradas» (no es una falla: es que no aplica). */
+export const SIN_GEOCERCAS_CONFIGURADAS = /^no hay (?:vista|archivo|endpoint) de geocercas/i;
 
 export interface DepsImportGeocercas {
   lector: LectorTablaPropia;
   /** La huella de la última importación buena de esta flota: si el contenido leído coincide, no se escribe nada (re-importación diaria). */
   huellaPrevia?: string | null;
   importar: (tenantId: string, filas: readonly SitioCsv[]) => Promise<ResultadoImportacion>;
+  /** La re-importación automática no reactiva los sitios que la flota archivó (el botón manual sí, como siempre). */
+  conservarActiva?: boolean;
 }
 
 const MAX_DETALLES = 30;
@@ -97,7 +103,7 @@ export async function importarGeocercasConLector(tenantId: string, d: DepsImport
   try {
     leido = await d.lector.leerGeocercas();
   } catch (e) {
-    if (e instanceof ErrorTablaPropia) return { ok: false, error: e.message };
+    if (e instanceof ErrorTablaPropia) return { ok: false, error: e.message, ...(SIN_GEOCERCAS_CONFIGURADAS.test(e.message) ? { motivo: 'sin_geocercas' as const } : {}) };
     logger.error('tabla_propia.geocercas_lectura_fallo', { err: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: 'No pude leer las geocercas de su tabla ahorita.' };
   }
@@ -117,7 +123,7 @@ export async function importarGeocercasConLector(tenantId: string, d: DepsImport
     return { ok: true, sinCambios: true, creados: 0, actualizados: 0, aproximadas: sitios.aproximadas, poligonos: sitios.poligonos, rechazadas: [], leidas: leido.filas.length, huella };
   }
   try {
-    const r = await d.importar(tenantId, sitios.filas);
+    const r = await d.importar(tenantId, d.conservarActiva ? sitios.filas.map((f) => ({ ...f, conservar_activa: true })) : sitios.filas);
     if (!r.ok) return { ok: false, error: 'No se importó nada: revisa estos puntos.', detalles: r.errores.slice(0, MAX_DETALLES).map((e) => `Línea ${e.linea}: ${e.mensaje}`) };
     return { ok: true, sinCambios: false, creados: r.creados, actualizados: r.actualizados, aproximadas: sitios.aproximadas, poligonos: sitios.poligonos, rechazadas: [], leidas: leido.filas.length, huella };
   } catch (e) {
@@ -126,23 +132,33 @@ export async function importarGeocercasConLector(tenantId: string, d: DepsImport
   }
 }
 
+export interface DepsFlota { leerCredencial?: (tenantId: string, conectorId: string) => Promise<ValoresCredencial | null>; http?: Http; importar?: DepsImportGeocercas['importar']; huellaPrevia?: string | null; conservarActiva?: boolean }
+
+/**
+ * Lee la credencial de la flota, arma el lector y importa — SIN comprobar permisos: lo llama la acción del panel (que ya
+ * los comprobó) y la re-importación automática del cron (que no tiene sesión). El `tenantId` lo pone quien llama.
+ */
+export async function importarGeocercasDeFlota(tenantId: string, deps: DepsFlota = {}): Promise<ResultadoImportGeocercas> {
+  let valores: ValoresCredencial | null;
+  try {
+    valores = await (deps.leerCredencial ?? leerCredencial)(tenantId, 'tabla_propia');
+  } catch {
+    return { ok: false, error: 'No pude abrir la conexión guardada de su tabla. Vuelve a capturarla en Conexiones.' };
+  }
+  if (!valores) return { ok: false, error: 'Primero conecta tus tablas de GPS en Conexiones.', motivo: 'sin_conexion' };
+  const c = crearLectorTablaPropia(valores, { http: deps.http ?? httpReal() });
+  if (!c.ok) return { ok: false, error: `La conexión de su tabla no es válida: ${c.motivo}.` };
+  return importarGeocercasConLector(tenantId, { lector: c.lector, importar: deps.importar ?? importarSitios, huellaPrevia: deps.huellaPrevia, conservarActiva: deps.conservarActiva });
+}
+
 /**
  * La acción del panel: el permiso se comprueba AQUÍ (una acción de servidor es un endpoint) y el `tenantId` sale de
  * la SESIÓN. Lee la credencial de la flota, arma el lector y importa. La credencial no sale de esta función.
  */
 export async function importarGeocercasDeTablaPropia(
   ctx: { tenantId: string; rol: string },
-  deps: { leerCredencial?: (tenantId: string, conectorId: string) => Promise<ValoresCredencial | null>; http?: Http; importar?: DepsImportGeocercas['importar'] } = {},
+  deps: Pick<DepsFlota, 'leerCredencial' | 'http' | 'importar'> = {},
 ): Promise<ResultadoImportGeocercas> {
   if (!puedeAsignar(ctx.rol)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico importan sitios.' };
-  let valores: ValoresCredencial | null;
-  try {
-    valores = await (deps.leerCredencial ?? leerCredencial)(ctx.tenantId, 'tabla_propia');
-  } catch {
-    return { ok: false, error: 'No pude abrir la conexión guardada de su tabla. Vuelve a capturarla en Conexiones.' };
-  }
-  if (!valores) return { ok: false, error: 'Primero conecta tus tablas de GPS en Conexiones.' };
-  const c = crearLectorTablaPropia(valores, { http: deps.http ?? httpReal() });
-  if (!c.ok) return { ok: false, error: `La conexión de su tabla no es válida: ${c.motivo}.` };
-  return importarGeocercasConLector(ctx.tenantId, { lector: c.lector, importar: deps.importar ?? importarSitios });
+  return importarGeocercasDeFlota(ctx.tenantId, deps);
 }
