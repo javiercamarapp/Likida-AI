@@ -152,16 +152,43 @@ error crudo de entrega (solo `falloCodigo`), nunca el teléfono ni la ruta del P
 Ejemplo de layout para un asiento contable en Excel en español:
 `/v1/liquidaciones-externas/exportacion?granularidad=concepto&separador=punto_y_coma&decimal=coma&fechas=sap&bom=1&sinConfirmar=1`.
 
-## «No coincide» avisa a la oficina
+## «No coincide» avisa a la oficina — y el aviso tiene red (mig. 0643–0645)
 
 Cuando el chofer aprieta **No coincide**, además de marcarla en el panel, se
-avisa por WhatsApp a quien ve **dinero** (dueño o contador; nunca al encargado,
-ver `telefonoParaDineroDe`) con el selector central (texto en ventana, plantilla
+avisa por WhatsApp a la persona responsable (ver el orden de preferencia en la
+sección siguiente) con el selector central (texto en ventana, plantilla
 `aviso_operacion_v1` fuera). El aviso lleva chofer y clave, **sin cifras**.
-Al chofer solo se le dice «ya le avisé a tu oficina» si Meta **aceptó** el aviso;
-si no salió (sin destinatario capturado, plantilla sin aprobar), se le dice que
-quedó marcada en el panel y que avise directo. Queda el evento `aviso_oficina`
-en la bitácora con `enviado: true|false`.
+Al chofer solo se le dice «ya le avisé a tu oficina» si el aviso salió al menos
+a una persona (Meta lo aceptó o ya quedó en la cola de salida); si no salió, se
+le dice que quedó marcada en el panel y que avise directo.
+
+**Con las migraciones 0643–0645 el aviso ya no es «una vez y se acabó»:**
+
+1. **Atómico.** El acuse y su aviso nacen en **una** transacción (`registrar_acuse_no_coincide`).
+   De dos entregas del mismo botón solo una lo gana, y solo esa avisa.
+2. **Estado persistido** (`liquidacion_aviso_discrepancia`, una fila por liquidación y
+   «ciclo»; cambiar de respuesta y volver a decir «No coincide» abre un ciclo nuevo):
+   `pendiente → enviando → enviado | fallido`. Se **reclama con arriendo** antes de
+   mandar (dos invocaciones no duplican el WhatsApp) y guarda **a quién ya le llegó**.
+3. **Reintento en el cron `liquidaciones-externas`.** Lo que no llegó se reintenta con
+   espera creciente (2, 4, 8, 16 min), **solo a los faltantes**, hasta 5 intentos; agotado
+   queda `fallido`. Un rechazo transitorio que ya quedó en la cola de salida cuenta como
+   entregado (reenviarlo lo duplicaría). Un aviso que sigue `pendiente` o `fallido` deja el
+   latido del cron en `parcial`.
+4. **Tarea durable.** Antes de mandar el WhatsApp se abre una tarea en la cola del
+   orquestador (destino `liquidacion`, motivo `diferencia_liquidacion`, **una abierta por
+   liquidación**; el resumen no lleva cifras ni números largos). Si el WhatsApp no sale, la
+   discrepancia ya está a la vista de una persona.
+5. **Panel.** Junto a «No coincide» se pinta el estado del aviso («Oficina avisada», «Aviso
+   pendiente», «El aviso no llegó», «Aviso sin registrar») y el botón **Reavisar** rearma el
+   aviso fallido o pendiente y lo manda ya (no repite a quien ya lo recibió; uno ya
+   enviado no se rearma). Queda `aviso_oficina` en la bitácora (`destino: discrepancia`,
+   `tarea_orquestador` o `reavisar`).
+
+**Sin las migraciones** (0643/0644) todo funciona como antes: «No coincide» queda atómico por
+una transición condicional en el código, se avisa una vez, el resultado queda en la bitácora
+(`aviso_oficina` con `enviado`) y **no hay** estado, reintento ni rótulo en el panel (jamás se
+inventa uno). «Reavisar» en esa base manda el aviso una vez más, a petición.
 
 ## El formato de la flota, la copia al jefe y la persona responsable (mig. 0564)
 
@@ -196,6 +223,13 @@ guarda).
    teléfonos de «persona responsable» designados, (b) si no hay, los de la copia al
    jefe, (c) si tampoco, quien ve dinero (como antes). Al chofer solo se le promete «ya
    avisé a tu oficina» si Meta aceptó el aviso a **al menos una** persona.
+
+**Teléfonos sin Excel de muestra (mig. 0645).** Una flota con el PDF genérico no necesita
+subir un formato para designar a quién se le copia ni quién revisa discrepancias: en la
+misma pantalla captura los teléfonos y la fila queda con el formato vacío (el documento sigue
+saliendo con el PDF genérico). Subir la muestra o quitar el formato **no borra** los
+teléfonos. Sin la 0645, guardar teléfonos sin muestra lo dice en palabras y pide aplicarla
+(subir la muestra y capturarlos ahí sigue funcionando).
 
 Sin la 0564 aplicada todo funciona como antes (la tabla ausente se trata como «sin
 formato»). El fallo de lectura **distinto** de «tabla ausente» no cae en silencio al
@@ -243,7 +277,8 @@ Javier/su abogado deben confirmar** (ver bloqueos).
 6. **Excel de muestra de la flota** (el «formatito» que hoy copian y pegan) y los teléfonos del jefe de flota y de la persona responsable de discrepancias: sin ellos la entrega sale con el PDF genérico y sin copia.
 7. **Plantilla de avisos `aviso_operacion_v1`** aprobada en Meta: la copia al jefe y el aviso de discrepancia usan texto dentro de las 24 h y esa plantilla fuera; sin ella, fuera de ventana quedan `no_enviada` (dicho en el panel, reenviable).
 8. **Aplicar la migración 0564** (aditiva e idempotente; el código corre sin ella, pero el formato y la copia no se guardan hasta aplicarla).
-9. **Confirmar el plazo de retención** (60 meses para liquidaciones externas) con quien lleve lo legal.
+9. **Aplicar las migraciones 0643, 0644 y 0645** (aditivas e idempotentes; el código corre sin ellas, pero sin la 0643/0644 el aviso de «No coincide» no tiene estado, reintento ni «Reavisar», y sin la 0645 los teléfonos no se guardan sin Excel de muestra). La tarea para una persona requiere además la 0650.
+10. **Confirmar el plazo de retención** (60 meses para liquidaciones externas) con quien lleve lo legal.
 
 ## Límites conocidos (pendientes)
 
