@@ -8,6 +8,7 @@ import { cuadrarDesdeDB } from './cuadre/desde_db';
 import { generarLiquidacionPDF } from './liquidacion/pdf';
 import { getDatosFiscales } from '@/lib/saas/fiscal';
 import { rutasPdfVersionadas, rutaPdfOperador } from './liquidacion/rutas_pdf';
+import { estadiasParaLiquidacion } from './conductor/servicios';
 import { logger } from '@/lib/logger';
 import type { Gasto, Liquidacion } from '@/types/likida';
 
@@ -140,8 +141,9 @@ export async function regenerarPdfTrasAjuste(
     if (!operador) return { regenerado: false };
     const full: Liquidacion = { ...cuadre, id: liquidacionId, creadaEn: new Date().toISOString(), revision: 'ajustada', revisadaPor, revisadaEn };
     const paths = rutasPdfVersionadas(tenantId, viajeId);
+    const estadias = await estadiasParaLiquidacion(tenantId, viajeId);
     const uploads = await Promise.all([
-      generarLiquidacionPDF(full, viaje, operador, razon, 'contralor').then((b) => subir(paths.contralor, b)),
+      generarLiquidacionPDF(full, viaje, operador, razon, 'contralor', { estadias }).then((b) => subir(paths.contralor, b)),
       generarLiquidacionPDF(full, viaje, operador, razon, 'operador').then((b) => subir(paths.operador, b)),
     ]);
     if (!uploads.every(Boolean)) return { regenerado: false };

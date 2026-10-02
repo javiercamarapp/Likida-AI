@@ -1,7 +1,7 @@
 import { logger } from '@/lib/logger';
 import { enviarSolicitudUbicacion } from '@/lib/meta/client';
 import type { ConfigConductor } from './config';
-import { interpretarBoton, interpretarTexto, pareceHablarDeHito, type Interpretacion } from './interprete';
+import { interpretarBoton, interpretarTexto, pareceHablarDeHito, type Intencion, type Interpretacion } from './interprete';
 import { interpretarConLlm } from './llm';
 import { decidir, hitoActivo, type Decision } from './maquina';
 import { mensajeParaChofer, type ContextoMensaje, type Salida } from './mensajes';
@@ -11,13 +11,13 @@ import {
   type ResultadoEscritura, type ViajeContexto,
 } from './repo';
 import { tenantDelViaje } from './trabajo';
-import { leerBotonConductor, PREFIJO_BOTON, type HitoFila, type FuenteHito, type TipoEvidencia } from './tipos';
+import { leerBotonConductor, PREFIJO_BOTON, type HitoFila, type FuenteHito, type TipoEvidencia, type TipoHito } from './tipos';
 import { escalarPorProblema, puertosReales } from './ejecutor';
 import { avisarOficinaDeHito } from './avisos_oficina';
 import { puedeAcusar } from './escalamiento';
 import { depsValidacionReales, validarHitoContraSitio, type EntradaValidarHito, type SalidaValidar } from './validar_hito';
 import { guardarEvidencia, hitoLlegadaReciente } from './repo_validacion';
-import { hitoParaEvidencia, mensajeEvidencia, tipoEvidenciaDeCaption } from './evidencia';
+import { ETIQUETA_EVIDENCIA, hitoParaEvidencia, mensajeEvidencia, tipoEvidenciaDeCaption } from './evidencia';
 import { textoVeredicto } from './validacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -240,7 +240,7 @@ async function aplicar(d: Decision, c: ContextoAplicar): Promise<'ok' | 'carrera
       const r = resultado(await deps.registrarHito({
         hito: objetivo, fuente: c.fuente, interpretacion: c.interp.via, confianza: c.interp.confianza,
         waMessageId: c.e.waMessageId ?? null, mensajeEn: d.mensajeEn, ahora,
-        texto: c.fuente === 'boton' ? null : c.e.texto, contacto: d.contacto,
+        texto: c.fuente === 'boton' || c.fuente === 'foto' ? null : c.e.texto, contacto: d.contacto,
         omitir: d.omitir.map((t) => hitoDe(hitos, t)),
       }));
       if (r !== 'ok') return r;
@@ -446,10 +446,37 @@ export interface EntradaEvidenciaPrevia {
   ahora?: Date;
 }
 
+/**
+ * Qué aviso es cada foto cuando no hay hito al cual colgarla (0483). El papel decide: el «andén» es estar en una parada
+ * (la llegada; a cargar o a descargar lo dice lo que el viaje ya lleva, igual que un «ya llegué» a secas), el «sello» es
+ * la carga terminada y sellada (la salida de la carga) y el «recibido» es la descarga recibida (la salida de la descarga).
+ * `otra` nunca es un aviso.
+ */
+export function intencionDeFoto(tipo: TipoEvidencia): Intencion | null {
+  switch (tipo) {
+    case 'anden': return { clase: 'llegada', lugar: null };
+    case 'sello': return { clase: 'salida', lugar: 'carga' };
+    case 'recibido': return { clase: 'salida', lugar: 'descarga' };
+    default: return null;
+  }
+}
+
+export interface EvidenciaPrevia {
+  tipo: TipoEvidencia;
+  /** El hito al que se cuelga la foto (ya registrado). `null` = no hay. */
+  hito: HitoFila | null;
+  /**
+   * 0483: no hay hito al cual colgarla, pero la foto PUEDE ser el aviso: este es el hito que registraría. El processor
+   * descarga y sube la foto y llama a `registrarHitoDesdeFoto`; sin esto (flota que lo apagó, o aviso ambiguo) la foto
+   * se queda en «primero dime ya llegué» como siempre.
+   */
+  comoHito?: TipoHito;
+}
+
 /** `null` = el caption no es de evidencia de hito. Si lo es: el hito destino (o `sin_hito`) y el tipo. */
 export async function hitoParaEvidenciaDelChofer(
   e: EntradaEvidenciaPrevia, deps: DepsAtender = depsReales,
-): Promise<{ tipo: TipoEvidencia; hito: HitoFila | null } | null> {
+): Promise<EvidenciaPrevia | null> {
   const tipo = tipoEvidenciaDeCaption(e.caption);
   if (!tipo) return null;
   const ahora = e.ahora ?? new Date();
@@ -457,7 +484,19 @@ export async function hitoParaEvidenciaDelChofer(
     // El viaje tiene que ser DE ESE chofer y de esa flota: la foto nunca se cuelga de un hito ajeno.
     const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, e.viajeId);
     if (!viaje || viaje.estatus === 'liquidado') return { tipo, hito: null };
-    return { tipo, hito: hitoParaEvidencia(tipo, await deps.cargarHitos(e.tenantId, e.viajeId), ahora) };
+    const hitos = await deps.cargarHitos(e.tenantId, e.viajeId);
+    // 0483: ¿la foto es el AVISO? Primero se mira esto (si la flota lo permite): un «sello» cuya salida de carga aún no está
+    // registrada ES la salida, aunque la llegada sí lo esté; un «andén» solo cuando la máquina lo resuelve sin preguntar (con la
+    // llegada a carga ya registrada y nada más es ambiguo y la foto se cuelga de esa parada, como siempre).
+    const intencion = intencionDeFoto(tipo);
+    const config = intencion ? await deps.config(e.tenantId) : null;
+    if (intencion && config?.fotoRegistraHito) {
+      const d = decidir({
+        hitos, intencion, contacto: null, ahora, mensajeEn: ahora, ventanaCorreccionMin: config.ventanaCorreccionMin, posponerMin: config.posponerMin,
+      });
+      if (d.accion === 'registrar') return { tipo, hito: null, comoHito: d.objetivo };
+    }
+    return { tipo, hito: hitoParaEvidencia(tipo, hitos, ahora) };
   } catch (err) {
     logger.warn('conductor.evidencia_previa_fallo', { viaje: e.viajeId, err: err instanceof Error ? err.message : String(err) });
     return { tipo, hito: null };
@@ -486,6 +525,85 @@ export async function registrarEvidenciaDelChofer(e: EntradaEvidencia, deps: Dep
   } catch (err) {
     logger.error('conductor.evidencia_fallo', { hito: e.hito.id, err: err instanceof Error ? err.message : String(err) });
     return mensajeEvidencia('fallo', e.tipo);
+  }
+}
+
+export interface EntradaFotoComoHito {
+  tenantId: string;
+  operadorId: string;
+  telefono: string;
+  viajeId: string;
+  tipo: TipoEvidencia;
+  ruta: string;
+  sha256: string;
+  waMessageId?: string | null;
+  /** La hora del MENSAJE de la foto según Meta; sin ella, el reloj local. */
+  mensajeEn?: Date | null;
+  ahora?: Date;
+}
+
+/**
+ * 0483 — LA FOTO ES EL AVISO. Se llama con la foto YA subida, cuando `hitoParaEvidenciaDelChofer` dijo `comoHito`.
+ * Se vuelve a decidir con los hitos de AHORA (la foto tardó en subir y el mundo pudo cambiar: si el chofer escribió «ya
+ * llegué» mientras tanto, la foto se cuelga de ese hito y no se registra otro), se registra con fuente `foto` y la hora
+ * del mensaje, se corre la validación contra el sitio como en cualquier llegada y la foto queda de evidencia.
+ * Nunca lanza: devuelve lo que se le dice al chofer.
+ */
+export async function registrarHitoDesdeFoto(e: EntradaFotoComoHito, deps: DepsAtender = depsReales): Promise<SalidaAtender> {
+  const ahora = e.ahora ?? new Date();
+  try {
+    const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, e.viajeId);
+    if (!viaje || viaje.estatus === 'liquidado') return { mensajes: [{ texto: mensajeEvidencia('sin_hito', e.tipo) }] };
+    const intencion = intencionDeFoto(e.tipo);
+    const config = await deps.config(e.tenantId);
+    const hitos = await deps.asegurarHitos(e.tenantId, viaje.id);
+    if (!intencion || !config.fotoRegistraHito) return { mensajes: [{ texto: mensajeEvidencia('sin_hito', e.tipo) }] };
+
+    const mensajeEn = e.mensajeEn && !Number.isNaN(e.mensajeEn.getTime()) ? e.mensajeEn : ahora;
+    const decision = decidir({
+      hitos, intencion, contacto: null, ahora, mensajeEn, ventanaCorreccionMin: config.ventanaCorreccionMin, posponerMin: config.posponerMin,
+    });
+    // Un duplicado (el aviso ya estaba: el chofer lo dijo mientras la foto subía), una aclaración o un rechazo NO son avisos
+    // nuevos: si hay un hito al cual colgarla es evidencia; si no, se le dice. La foto no inventa ninguno.
+    if (decision.accion !== 'registrar') {
+      const destino = hitoParaEvidencia(e.tipo, hitos, ahora);
+      return { mensajes: [{ texto: destino
+        ? await registrarEvidenciaDelChofer({ tenantId: e.tenantId, hito: destino, tipo: e.tipo, ruta: e.ruta, sha256: e.sha256, waMessageId: e.waMessageId, ahora }, deps)
+        : mensajeEvidencia('sin_hito', e.tipo) }] };
+    }
+
+    const efectos = { pedirUbicacion: false };
+    const interp: Interpretacion = { intencion, contacto: null, via: 'foto', confianza: 1 };
+    const aplicado = await aplicar(decision, {
+      deps, e: { tenantId: e.tenantId, operadorId: e.operadorId, telefono: e.telefono, viajeAbiertoId: viaje.id, texto: '', waMessageId: e.waMessageId ?? null }, viaje, hitos,
+      interp, fuente: 'foto', ahora, mensajeEn, config, efectos,
+    });
+    logger.info('hito.conductor', { viaje: viaje.id, accion: 'registrar', via: 'foto', aplicado, objetivo: decision.objetivo });
+    if (aplicado !== 'ok') {
+      // Carrera (otro mensaje registró el hito primero) o fallo: la foto no se pierde si hay un hito resuelto al cual colgarla.
+      const frescos = await deps.cargarHitos(e.tenantId, viaje.id);
+      const destino = hitoParaEvidencia(e.tipo, frescos, ahora);
+      if (destino) return { mensajes: [{ texto: await registrarEvidenciaDelChofer({ tenantId: e.tenantId, hito: destino, tipo: e.tipo, ruta: e.ruta, sha256: e.sha256, waMessageId: e.waMessageId, ahora }, deps) }] };
+      return { mensajes: [{ texto: mensajeEvidencia('fallo', e.tipo) }] };
+    }
+
+    // El hito quedó registrado: la foto es su evidencia.
+    const registrado = (await deps.cargarHitos(e.tenantId, viaje.id)).find((h) => h.tipo === decision.objetivo);
+    const evidencia = registrado
+      ? await registrarEvidenciaDelChofer({ tenantId: e.tenantId, hito: registrado, tipo: e.tipo, ruta: e.ruta, sha256: e.sha256, waMessageId: e.waMessageId, ahora }, deps)
+      : null;
+    const ctx: ContextoMensaje = { viajeId: viaje.id, folio: viaje.folio, origen: viaje.origen, destino: viaje.destino };
+    const acuse = mensajeParaChofer(decision, ctx, ahora, aplicado);
+    const conFoto = `${acuse.texto}\n📷 Lo anoté con tu foto de ${ETIQUETA_EVIDENCIA[e.tipo]}.`;
+    const pedir = efectos.pedirUbicacion ? { solicitarUbicacion: TEXTO_PEDIR_UBICACION } : {};
+    // Si la foto no se pudo colgar (raro: el hito acaba de registrarse), el chofer lo sabe; el hito sí quedó.
+    const aviso = evidencia && !/Recibí la foto/.test(evidencia) ? [{ texto: evidencia }] : [];
+    // Con la confirmación apagada el hito queda en silencio, pero lo que falló de la foto sí se dice.
+    if (!config.confirmarAlChofer) return { mensajes: aviso, ...pedir };
+    return { mensajes: [{ ...acuse, texto: conFoto }, ...aviso], ...pedir };
+  } catch (err) {
+    logger.error('conductor.foto_como_hito_fallo', { viaje: e.viajeId, err: err instanceof Error ? err.message : String(err) });
+    return { mensajes: [{ texto: mensajeEvidencia('fallo', e.tipo) }] };
   }
 }
 

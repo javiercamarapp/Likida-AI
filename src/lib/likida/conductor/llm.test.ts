@@ -82,10 +82,10 @@ describe('interpretarConLlm', () => {
     expect(llamada.budget).toBeDefined();
   });
 
-  it('asienta el costo (fase router) siempre que hubo llamada', async () => {
+  it('asienta el costo (fase conductor) siempre que hubo llamada', async () => {
     generateStructured.mockResolvedValue(respuesta(salida({ intencion: 'ninguna' })));
     expect(await interpretarConLlm(args)).toBeNull();
-    expect(registrarCosto).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't1', fase: 'router', costoUsd: 0.0002, modelo: 'google/gemini-3.5-flash-lite' }));
+    expect(registrarCosto).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't1', fase: 'conductor', costoUsd: 0.0002, modelo: 'google/gemini-3.5-flash-lite' }));
   });
 
   it('no llama al modelo si el texto no parece hablar de un hito, ni si es una pregunta o un gasto', async () => {

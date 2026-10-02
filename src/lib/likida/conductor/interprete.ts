@@ -51,7 +51,8 @@ export type Intencion =
 export interface Interpretacion {
   intencion: Intencion;
   contacto: Contacto | null;
-  via: 'regla' | 'boton' | 'llm';
+  /** `foto` (0483): el aviso lo dio una foto con pie «andén»/«sello»/«recibido», no un texto. */
+  via: 'regla' | 'boton' | 'llm' | 'foto';
   confianza: number;
   /** Solo botones: el viaje que trae el payload (el llamador comprueba que sea del chofer). */
   viajeId?: string;

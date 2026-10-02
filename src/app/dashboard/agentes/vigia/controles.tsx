@@ -96,7 +96,7 @@ export function FormaConfig({ accion, valores }: {
   accion: AccionVigia;
   valores: {
     habilitado: boolean; modoAprobacion: ModoAprobacion; autoenviarMinAprobaciones: number; slaRespuestaMin: number;
-    escalarNivel2Min: number; retencionDias: number; avisoPrivacidadUrl: string | null;
+    escalarNivel2Min: number; slaCriticoMin: number; molestiaAvisoNivel: number; retencionDias: number; avisoPrivacidadUrl: string | null;
   };
 }) {
   const [estado, despachar] = useActionState(accion, null);
@@ -131,6 +131,19 @@ export function FormaConfig({ accion, valores }: {
           <label htmlFor="cfg-n2" className={ETIQUETA}>Minutos adicionales antes de avisar al dueño</label>
           <input id="cfg-n2" name="escalarNivel2Min" type="text" inputMode="numeric" defaultValue={valores.escalarNivel2Min} className={CAMPO} style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 5 y 2,880.</p>
+        </div>
+        <div>
+          <label htmlFor="cfg-crit" className={ETIQUETA}>Minutos sin respuesta en clientes CRÍTICOS</label>
+          <input id="cfg-crit" name="slaCriticoMin" type="text" inputMode="numeric" defaultValue={valores.slaCriticoMin} className={CAMPO} style={{ background: 'var(--surface)' }} />
+          <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 2 y 1,440 (10 recomendado). Rige para los clientes con un grupo marcado como crítico; el barrido corre cada 5 minutos.</p>
+        </div>
+        <div>
+          <label htmlFor="cfg-mol" className={ETIQUETA}>Avisar al responsable desde la molestia nivel</label>
+          <select id="cfg-mol" name="molestiaAvisoNivel" defaultValue={String(valores.molestiaAvisoNivel)} className={CAMPO} style={{ background: 'var(--surface)' }}>
+            <option value="2">2 — cliente molesto (recomendado)</option>
+            <option value="3">3 — solo molestia crítica</option>
+          </select>
+          <p className={AYUDA} style={{ color: 'var(--faint)' }}>La molestia crítica (nivel 3) siempre avisa también al dueño.</p>
         </div>
         <div>
           <label htmlFor="cfg-ret" className={ETIQUETA}>Días que se conservan los mensajes</label>

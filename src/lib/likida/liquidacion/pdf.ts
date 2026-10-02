@@ -14,6 +14,8 @@ import { resumenLaboral } from '../laboral/pagadero';
 import { cubetaDe, copiasDeComprobante, etiquetaConcepto } from '../cuadre/engine';
 import { fechaMx, mxn } from '@/lib/formato';
 import { SOLO_CONTRALOR, type Destinatario } from '../cuadre/resumen';
+import { estadiasParaPapel } from './estadias_papel';
+import type { ResultadoEstadiasPeriodo } from '../conductor/estadias_lectura';
 
 import { leyendaPdf } from '../cuadre/leyendas';
 import { LOGO_PNG_BASE64 } from '@/lib/marca/logo';
@@ -83,6 +85,11 @@ export async function generarLiquidacionPDF(
    * destinatario recibía todo, en un documento que además puede reenviar.
    */
   destinatario: Destinatario = 'contralor',
+  /**
+   * Anexos informativos que NO son parte del cuadre. Hoy: las estadías en andén del viaje (Agente 5 «Conductor»), que se
+   * imprimen SOLO en el ejemplar del contralor y no suman a ningún total (ver `estadias_papel.ts`).
+   */
+  anexos: { estadias?: ResultadoEstadiasPeriodo | null } = {},
 ): Promise<Uint8Array> {
   // AUDITORÍA 24 (revision → fiscal): un rechazo (0299) devuelve el viaje a
   // `en_cuadre` y admite gastos nuevos — el PDF emitido antes deja de
@@ -497,6 +504,39 @@ export async function generarLiquidacionPDF(
       text(`… y ${difFuera} ${difFuera === 1 ? 'observación más' : 'observaciones más'} en el panel`, M + 14, y, 9, font, MUTED);
       y -= 16;
     }
+  }
+
+  // ─── Estadías en andén (anexo informativo, solo el ejemplar del contralor) ──────
+  // Tiempo en andén medido con los hitos del Agente 5: hora exacta del mensaje del chofer, de dónde salió, qué lo
+  // respalda y —si hay pacto— el cobro PROPUESTO. No suma a ningún total de arriba (la nota del anexo lo dice).
+  const anexoEstadias = destinatario === 'contralor' ? estadiasParaPapel(anexos.estadias ?? null) : null;
+  if (anexoEstadias) {
+    y -= 12;
+    asegurar(70);
+    seccionTitulo('ESTADIAS EN ANDEN (informativo, no suma al cuadre)');
+    for (const r of anexoEstadias.renglones) {
+      const lineasSitio = r.sitio ? [`${r.parada}: ${r.sitio}`] : [r.parada];
+      const cuerpo = [
+        `Llegada ${r.llegada}   Salida ${r.salida}   Duracion ${r.duracion}`,
+        ...envolverMedido(r.respaldo, cMonto - (M + 14), font, 8),
+        ...envolverMedido(r.cobro, cMonto - (M + 14), font, 8),
+      ];
+      // Cada parada cabe entera o se va a la hoja siguiente: una parada partida se lee como dos.
+      if (asegurar(14 + cuerpo.length * 10 + 8)) seccionTitulo('ESTADIAS EN ANDEN (cont.)');
+      text(cortar(lineasSitio[0], cMonto - (M + 14), bold, 9.5), M + 14, y, 9.5, bold, INK);
+      y -= 12;
+      cuerpo.forEach((ln, i) => { text(ln, M + 14, y, 8, font, i === 0 ? INK : MUTED); y -= 10; });
+      y -= 6;
+    }
+    for (const nota of anexoEstadias.notas) {
+      for (const linea of envolverMedido(nota, cMonto - (M + 14), font, 7)) {
+        if (asegurar(9)) seccionTitulo('ESTADIAS EN ANDEN (cont.)');
+        text(linea, M + 14, y, 7, font, MUTED);
+        y -= 9;
+      }
+    }
+    if (anexoEstadias.truncada) { text('La lectura de estadias se trunco: hay mas viajes de los leidos.', M + 14, y, 7, font, AMBER); y -= 9; }
+    y -= 6;
   }
 
   // ─── Pie ────────────────────────────────────────────────────────────────────

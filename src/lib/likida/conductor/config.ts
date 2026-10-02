@@ -45,6 +45,8 @@ export interface ConfigConductor {
   estadiaAlertaDescargaMin: number | null;
   /** Invitar al chofer a mandar la foto del sello / andén / recibido tras la salida. */
   pedirFotoEvidencia: boolean;
+  /** 0483: una foto con pie «sello»/«andén»/«recibido» sin hito al que colgarla REGISTRA el hito (con la foto como evidencia). */
+  fotoRegistraHito: boolean;
 }
 
 export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze({
@@ -75,6 +77,7 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   estadiaAlertaCargaMin: null,
   estadiaAlertaDescargaMin: null,
   pedirFotoEvidencia: false,
+  fotoRegistraHito: true,
 });
 
 /** El tope de aplazamientos por hito: pasado esto «voy con retraso» ya no calla al agente. */
@@ -187,6 +190,7 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       estadiaAlertaCargaMin: alertaCarga.ok,
       estadiaAlertaDescargaMin: alertaDescarga.ok,
       pedirFotoEvidencia: Boolean(b.pedirFotoEvidencia),
+      fotoRegistraHito: Boolean(b.fotoRegistraHito),
     },
   };
 }
