@@ -284,7 +284,13 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 286;
 // (cada paquete midió contra su propia base; P5 y P6 no se pisan: vigia/ y orquestador/fuentes_reales.ts). 0 archivos nuevos (286 sin cambio).
 // CORRECTOR ronda 09 (adversarial): +2 en `orquestador/fuentes_reales.ts` (1,869 → 1,871): la lectura del anti-rebote del barrido de salud
 // (`cerradaSolaDesde`) y la de «qué agentes usa esta flota» (`hayFilas`, una sola función que sirve a tres tablas). Ambas acotadas con `.limit(1)`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_871;
+// OLA 4d, paquete P7 «convenios-edicion» (0656-0657): 0 archivos y +5 llamadas (1,851 → 1,856), todas en `convenios/repo.ts`, que ya contaba, y todas por
+// `acotada`: la versión de cada convenio (lectura aparte a propósito, para que una base sin la 0656 no deje sin lista a toda la pantalla), los clientes y los
+// sitios que ofrece el formulario de alta/edición (2) y las dos RPC de la edición — `guardar_convenio` (alta/edición atómica con control de versión) y
+// `refrescar_viajes_de_convenio` (llevar la edición a los viajes en curso). Funcionalidad nueva, no código migrado. Medido contra su propia base (1,851):
+// al integrarla con las otras ramas de la ola, el techo es la suma de los tramos.
+// INTEGRACIÓN P7 + P9 (ronda 10): 1,871 + 5 (P7) + 6 (P9) = 1,882 por suma; el valor de abajo se confirma con el barrido real del árbol fusionado.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_876;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

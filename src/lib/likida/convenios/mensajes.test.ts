@@ -64,6 +64,17 @@ describe('armarMensajeAcercamiento', () => {
   });
 });
 
+describe('armarMensajeDespacho tras una edición del convenio', () => {
+  it('el texto libre dice que se actualizaron; la plantilla de Meta (texto fijo) no cambia', () => {
+    const normal = armarMensajeDespacho(CTX, [I('puerta', 'Puerta 9')])!;
+    const nuevo = armarMensajeDespacho(CTX, [I('puerta', 'Puerta 9')], { actualizado: true })!;
+    expect(normal.texto).toContain('estas son las instrucciones de tu viaje');
+    expect(nuevo.texto).toContain('actualizamos las instrucciones de tu viaje');
+    expect(nuevo.texto).toContain('Puerta 9');
+    expect(nuevo.plantilla).toEqual(normal.plantilla);
+  });
+});
+
 describe('piezaPlantilla', () => {
   it('se acota para no pasar el tope del parámetro de Meta', () => {
     const largas = Array.from({ length: 10 }, (_, n) => I('otro', `${'x'.repeat(390)}${n}`));

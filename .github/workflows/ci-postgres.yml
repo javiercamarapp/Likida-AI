@@ -225,6 +225,7 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0420_carta_porte_multiformato.sql
           PGUSER=postgres bash supabase/tests/0420_carta_porte_claim_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0580_convenios.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0656_convenio_guardar.sql
           PGUSER=postgres bash supabase/tests/0375_peajes_claim_concurrencia.sh localhost 5432 postgres
           PGUSER=postgres bash supabase/tests/0341_gps_alerta_minima_concurrencia.sh localhost 5432 postgres
           PGUSER=postgres bash supabase/tests/0360_ventana_wa.sh localhost 5432 postgres

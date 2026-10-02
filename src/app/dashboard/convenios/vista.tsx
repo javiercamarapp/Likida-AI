@@ -5,7 +5,7 @@ import { fechaMx, mxn } from '@/lib/formato';
 import { ETIQUETA_CATEGORIA } from '@/lib/likida/convenios/tipos';
 import { textoParaSistemaDeLaFlota } from '@/lib/likida/convenios/importador';
 import type { ConvenioFila, ViajeConvenioFila } from '@/lib/likida/convenios/repo';
-import { FormaCorregirConvenio, FormaImportarConvenios, type AccionConvenio } from './formas';
+import { FormaConvenio, FormaCorregirConvenio, FormaImportarConvenios, type AccionConvenio, type CatalogosFormaConvenio } from './formas';
 
 // SOLO tipos del repositorio: la vista no arrastra al bundle el acceso a datos.
 
@@ -27,6 +27,9 @@ export interface PropsVistaConvenios {
   /** Los viajes abiertos con su convenio ligado. `null` = no se pudieron leer (o no se pidieron: la sección no se pinta). */
   viajes?: ViajeConvenioFila[] | null;
   accionCorregir?: AccionConvenio;
+  /** Alta y edición en pantalla (P7). Sin catálogos o sin acción, la pantalla se queda como estaba (solo importar). */
+  catalogos?: CatalogosFormaConvenio | null;
+  accionGuardar?: AccionConvenio;
 }
 
 const vigencia = (c: ConvenioFila): string => {
@@ -36,6 +39,9 @@ const vigencia = (c: ConvenioFila): string => {
 
 export function VistaConvenios(p: PropsVistaConvenios) {
   const lista = p.convenios ?? [];
+  const puedeEditarEnPantalla = p.estado === 'ok' && p.puedeEditar && !!p.accionGuardar && !!p.catalogos;
+  // La base sin la 0656 no trae versiones: la edición se apaga y se dice (importar sigue funcionando).
+  const edicionDisponible = puedeEditarEnPantalla && lista.every((c) => c.version !== null);
   const descarga = (tipo: string) => `/api/export/convenios?tipo=${tipo}${p.sufijo.startsWith('?') ? `&${p.sufijo.slice(1)}` : ''}`;
   return (
     <main className="h-full">
@@ -95,6 +101,14 @@ export function VistaConvenios(p: PropsVistaConvenios) {
                         {(c.sitioOrigenNombre || c.sitioDestinoNombre) && <> · sitios: {c.sitioOrigenNombre ?? '—'} → {c.sitioDestinoNombre ?? '—'}</>}
                         {' · '}{vigencia(c)}
                       </p>
+                      {edicionDisponible && c.version !== null && (
+                        <details className="text-[12.5px]">
+                          <summary className="cursor-pointer underline" style={{ color: 'var(--muted)' }}>Editar convenio e instrucciones</summary>
+                          <div className="mt-2 p-3 rounded-lg" style={{ background: 'var(--canvas)' }}>
+                            <FormaConvenio accion={p.accionGuardar!} catalogos={p.catalogos!} convenio={{ ...c, version: c.version }} />
+                          </div>
+                        </details>
+                      )}
                       {c.instrucciones.length === 0 ? (
                         <p className="text-[12px]" style={{ color: 'var(--warn)' }}>Sin instrucciones de operación: el operador no recibirá nada de este convenio.</p>
                       ) : (
@@ -161,6 +175,21 @@ export function VistaConvenios(p: PropsVistaConvenios) {
             </section>
           )}
 
+          {puedeEditarEnPantalla && (edicionDisponible ? (
+            <section className="card p-4 space-y-3" aria-label="Nuevo convenio">
+              <h2 className="font-display text-[15px] font-semibold">Nuevo convenio</h2>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                Da de alta un convenio y su calle de instrucciones sin subir un archivo. El cliente tiene que existir en Clientes y los sitios salen del catálogo de sitios.
+                La tarifa y los requisitos de cobro no se editan aquí: entran por la importación con permiso de finanzas.
+              </p>
+              <FormaConvenio accion={p.accionGuardar!} catalogos={p.catalogos!} />
+            </section>
+          ) : (
+            <p role="alert" className="text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
+              La edición de convenios en pantalla todavía no está disponible en tu cuenta: falta aplicar la actualización de la base (0656). Mientras tanto puedes importar el archivo.
+            </p>
+          ))}
+
           {p.puedeEditar ? (
             <section className="card p-4 space-y-3" aria-label="Importar convenios">
               <h2 className="font-display text-[15px] font-semibold">Importar desde CSV o Excel</h2>
@@ -178,7 +207,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
             <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota o el jefe de tráfico editan los convenios.</p>
           )}
           <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
-            Las instrucciones que ya se le mandaron a un operador no cambian si editas el convenio después: cada viaje conserva las que se le dijeron.{' '}
+            Las instrucciones que ya se le mandaron a un operador no cambian si editas el convenio después, salvo que marques «llevar este cambio a los viajes en curso»: cada viaje conserva las que se le dijeron.{' '}
             <Link href={`/dashboard/agentes/conductores/sitios${p.sufijo}`} className="underline">Catálogo de sitios</Link>
           </p>
         </div>
