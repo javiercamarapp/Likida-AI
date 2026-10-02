@@ -186,6 +186,52 @@ describe('la cola de excepciones', () => {
     expect(t.excepciones.find((x) => x.tipo === 'sin_coincidencia')).toBeUndefined();
   });
 
+  describe('llegada sin confirmar (adversarial ronda 03): el «ya llegué» que ninguna posición respalda es visible', () => {
+    const sinDato = (motivo: string): VeredictoFila[] => [{ hitoId: '1-llegada_carga', ciclo: 1, resultado: 'sin_dato', motivo: motivo as VeredictoFila['motivo'], fuente: null, distanciaM: null, radioM: null, toleranciaM: 150, sitioId: null, medidaEn: null }];
+    const conSitio = { origenSitioId: 's1' };
+
+    it('sin posición (sin_ubicacion) o con la posición fuera de ventana: excepción «Vigilar», dicha sin acusar', () => {
+      for (const motivo of ['sin_ubicacion', 'ubicacion_fuera_de_ventana']) {
+        const t = armarTablero(datos([viaje('1', conSitio)], hitos('1', { llegada_carga: hace(30) }), { veredictos: sinDato(motivo) }), cfg(), AHORA);
+        const e = t.excepciones.find((x) => x.tipo === 'llegada_sin_confirmar');
+        expect(e).toMatchObject({ gravedad: 1, hitoTipo: 'llegada_carga', hitoId: '1-llegada_carga' });
+        expect(e?.texto).toMatch(/sin confirmar/i);
+        expect(e?.texto).not.toMatch(/mintió|falso/i);
+      }
+    });
+
+    it('sin veredicto y con sitio asignado también (la validación pudo fallar); sin sitio no hay nada que confirmar', () => {
+      const con = armarTablero(datos([viaje('1', conSitio)], hitos('1', { llegada_carga: hace(30) })), cfg(), AHORA);
+      expect(con.excepciones.find((x) => x.tipo === 'llegada_sin_confirmar')).toBeDefined();
+      const sin = armarTablero(datos([viaje('1')], hitos('1', { llegada_carga: hace(30) })), cfg(), AHORA);
+      expect(sin.excepciones.find((x) => x.tipo === 'llegada_sin_confirmar')).toBeUndefined();
+      const sinSitio = armarTablero(datos([viaje('1', conSitio)], hitos('1', { llegada_carga: hace(30) }), { veredictos: sinDato('sin_sitio') }), cfg(), AHORA);
+      expect(sinSitio.excepciones.find((x) => x.tipo === 'llegada_sin_confirmar')).toBeUndefined();
+    });
+
+    it('un aviso de hace pocos minutos todavía no es excepción (el GPS reporta con retraso)', () => {
+      const t = armarTablero(datos([viaje('1', conSitio)], hitos('1', { llegada_carga: hace(3) }), { veredictos: sinDato('sin_ubicacion') }), cfg(), AHORA);
+      expect(t.excepciones.find((x) => x.tipo === 'llegada_sin_confirmar')).toBeUndefined();
+    });
+
+    it('validada, declarada por la oficina o con la validación apagada: no es excepción', () => {
+      const validado = hitos('1', { llegada_carga: { estado: 'validado', fuente: 'texto', mensajeEn: hace(30), recibidoEn: hace(30), validadoEn: hace(20), validadoPor: 'gps' } });
+      const ofi = hitos('1', { llegada_carga: { estado: 'recibido', fuente: 'oficina', mensajeEn: hace(30), recibidoEn: hace(30) } });
+      for (const hs of [validado, ofi]) {
+        const t = armarTablero(datos([viaje('1', conSitio)], hs, { veredictos: sinDato('sin_ubicacion') }), cfg(), AHORA);
+        expect(t.excepciones.find((x) => x.tipo === 'llegada_sin_confirmar')).toBeUndefined();
+      }
+      const apagada = armarTablero(datos([viaje('1', conSitio)], hitos('1', { llegada_carga: hace(30) }), { veredictos: sinDato('sin_ubicacion') }), cfg({ validarUbicacion: false }), AHORA);
+      expect(apagada.excepciones.find((x) => x.tipo === 'llegada_sin_confirmar')).toBeUndefined();
+    });
+
+    it('«sin coincidencia» conserva SU excepción y no se duplica con la de «sin confirmar»', () => {
+      const v: VeredictoFila[] = [{ hitoId: '1-llegada_carga', ciclo: 1, resultado: 'sin_coincidencia', motivo: null, fuente: 'gps', distanciaM: 900, radioM: 300, toleranciaM: 150, sitioId: 's1', medidaEn: hace(10) }];
+      const t = armarTablero(datos([viaje('1', conSitio)], hitos('1', { llegada_carga: hace(30) }), { veredictos: v }), cfg(), AHORA);
+      expect(t.excepciones.filter((x) => x.hitoId === '1-llegada_carga' && ['sin_coincidencia', 'llegada_sin_confirmar'].includes(x.tipo)).map((x) => x.tipo)).toEqual(['sin_coincidencia']);
+    });
+  });
+
   it('estadía excedida: parada en curso sobre el umbral de la flota', () => {
     const hs = hitos('1', { llegada_carga: hace(200) });
     const t = armarTablero(datos([viaje('1')], hs), cfg({ estadiaAlertaCargaMin: 120 }), AHORA);
