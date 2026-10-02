@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- las respuestas de las herramientas son JSON libre que el modelo lee; la prueba las recorre por forma, no por tipo. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const AHORA = Date.parse('2026-10-02T18:00:00.000Z');
