@@ -1,0 +1,236 @@
+20/9/26 05:00 - Los mensajes y las llamadas están cifrados de extremo a extremo. Solo las personas en este chat pueden leerlos, escucharlos o compartirlos.
+20/9/26 07:01 - Auxiliar Ficticio de Recibo: Ya pasó la hora de la cita y no sé dónde viene la unidad
+20/9/26 07:40 - Servicio a Cliente Demo B: Está a unos 161 km de su planta; le aviso al llegar.
+20/9/26 08:53 - Gerente Ficticio de Embarques: Vigilancia pide placas y económico de la unidad que viene
+20/9/26 08:56 - Despacho Innovativos Demo: Le comparto placas y económico por este medio.
+21/9/26 08:40 - Gerente Ficticio de Embarques: Vigilancia pide placas y económico de la unidad que viene
+21/9/26 08:47 - Despacho Innovativos Demo: Le comparto placas y económico por este medio.
+21/9/26 09:12 - Gerente Ficticio de Embarques: Otra vez tarde. Voy a levantar una queja con mi gerente
+21/9/26 09:20 - Servicio a Cliente Demo B: Lamentamos la demora; ya estoy escalando con el jefe de tráfico y le doy una respuesta en minutos.
+21/9/26 10:23 - Auxiliar Ficticio de Recibo: ¿Cuánto falta para que llegue el viaje INN-2149?
+21/9/26 10:25 - Servicio a Cliente Demo B: Le confirmo: llega aproximadamente a las 10:30.
+22/9/26 09:56 - Auxiliar Ficticio de Recibo: ¿Cuánto falta para que llegue el viaje INN-2056?
+22/9/26 10:02 - Despacho Innovativos Demo: Buen día. La unidad va en ruta; su hora estimada de llegada es 15:30.
+22/9/26 11:11 - Gerente Ficticio de Embarques: Mándenme la remisión sellada del viaje INN-2056, por favor
+22/9/26 11:16 - Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
+22/9/26 11:22 - Gerente Ficticio de Embarques: Otra vez tarde. Voy a levantar una queja con mi gerente
+22/9/26 12:05 - Servicio a Cliente Demo B: Una disculpa, estamos verificando la unidad ahora mismo.
+22/9/26 12:23 - Gerente Ficticio de Embarques: ¿Cuánto falta para que llegue el viaje INN-2742?
+22/9/26 12:25 - Servicio a Cliente Demo B: Le confirmo: llega aproximadamente a las 15:45.
+22/9/26 12:51 - Auxiliar Ficticio de Recibo: ¿Qué andén nos toca mañana?
+22/9/26 12:51 - Auxiliar Ficticio de Recibo: <Multimedia omitido>
+22/9/26 13:35 - Servicio a Cliente Demo B: Anotado, lo coordinamos con el operador y le confirmo.
+23/9/26 09:06 - Gerente Ficticio de Embarques: Ya pasó la hora de la cita y no sé dónde viene la unidad
+23/9/26 09:10 - Despacho Innovativos Demo: La unidad va por León, avanzando con normalidad.
+23/9/26 09:38 - Gerente Ficticio de Embarques: Ya pasó la hora de la cita y no sé dónde viene la unidad
+23/9/26 09:40 - Servicio a Cliente Demo B: Está a unos 215 km de su planta; le aviso al llegar.
+24/9/26 06:42 - Gerente Ficticio de Embarques: ¿Cuánto falta para que llegue el viaje INN-2017?
+24/9/26 06:44 - Despacho Innovativos Demo: Buen día. La unidad va en ruta; su hora estimada de llegada es 17:45.
+24/9/26 07:43 - Gerente Ficticio de Embarques: ¿Ya tienen el POD? Lo necesita facturación
+24/9/26 07:48 - Despacho Innovativos Demo: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+24/9/26 08:28 - Auxiliar Ficticio de Recibo: Otra vez tarde. Voy a levantar una queja con mi gerente
+24/9/26 08:32 - Servicio a Cliente Demo B: Lamentamos la demora; ya estoy escalando con el jefe de tráfico y le doy una respuesta en minutos.
+24/9/26 08:47 - Auxiliar Ficticio de Recibo: Vigilancia pide placas y económico de la unidad que viene
+24/9/26 08:50 - Servicio a Cliente Demo B: Placas DMDC1227, operador a su nombre en el pase de vigilancia.
+25/9/26 08:04 - Gerente Ficticio de Embarques: Otra vez tarde. Voy a levantar una queja con mi gerente
+25/9/26 08:23 - Despacho Innovativos Demo: Una disculpa, estamos verificando la unidad ahora mismo.
+25/9/26 08:48 - Auxiliar Ficticio de Recibo: Necesito el ETA del embarque de hoy
+25/9/26 09:36 - Servicio a Cliente Demo B: Buen día. La unidad va en ruta; su hora estimada de llegada es 09:30.
+25/9/26 10:49 - Auxiliar Ficticio de Recibo: Necesito el ETA del embarque de hoy
+25/9/26 10:56 - Despacho Innovativos Demo: Buen día. La unidad va en ruta; su hora estimada de llegada es 12:00.
+25/9/26 11:20 - Auxiliar Ficticio de Recibo: Falta la carta porte del embarque INN-2489
+25/9/26 11:27 - Servicio a Cliente Demo B: Enseguida le comparto la remisión sellada.
+25/9/26 12:04 - Gerente Ficticio de Embarques: Llevamos 2 horas esperando la unidad, esto es inaceptable
+25/9/26 12:06 - Despacho Innovativos Demo: Lamentamos la demora; ya estoy escalando con el jefe de tráfico y le doy una respuesta en minutos.
+26/9/26 06:56 - Auxiliar Ficticio de Recibo: ¿Me pueden mandar la ubicación del tracto?
+26/9/26 06:57 - Servicio a Cliente Demo B: Está a unos 207 km de su planta; le aviso al llegar.
+26/9/26 07:10 - Gerente Ficticio de Embarques: ¿Ya tienen el POD? Lo necesita facturación
+26/9/26 07:13 - Servicio a Cliente Demo B: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+26/9/26 07:47 - Auxiliar Ficticio de Recibo: ¿Qué andén nos toca mañana?
+26/9/26 07:48 - Servicio a Cliente Demo B: Anotado, lo coordinamos con el operador y le confirmo.
+26/9/26 08:10 - Gerente Ficticio de Embarques: Nadie contesta, la línea está parada por falta de material
+26/9/26 08:14 - Servicio a Cliente Demo B: Una disculpa, estamos verificando la unidad ahora mismo.
+26/9/26 09:26 - Auxiliar Ficticio de Recibo: Otra vez tarde. Voy a levantar una queja con mi gerente
+26/9/26 09:29 - Despacho Innovativos Demo: Una disculpa, estamos verificando la unidad ahora mismo.
+27/9/26 07:15 - Gerente Ficticio de Embarques: Mándenme la remisión sellada del viaje INN-2794, por favor
+27/9/26 07:22 - Servicio a Cliente Demo B: Enseguida le comparto la remisión sellada.
+27/9/26 07:52 - Auxiliar Ficticio de Recibo: ¿Cuánto falta para que llegue el viaje INN-2083?
+27/9/26 07:53 - Despacho Innovativos Demo: Buen día. La unidad va en ruta; su hora estimada de llegada es 16:15.
+27/9/26 08:38 - Auxiliar Ficticio de Recibo: Necesito el ETA del embarque de hoy
+27/9/26 08:39 - Auxiliar Ficticio de Recibo: <Multimedia omitido>
+27/9/26 09:12 - Servicio a Cliente Demo B: Buen día. La unidad va en ruta; su hora estimada de llegada es 19:45.
+27/9/26 09:17 - Gerente Ficticio de Embarques: ¿Qué andén nos toca mañana?
+27/9/26 09:24 - Despacho Innovativos Demo: Anotado, lo coordinamos con el operador y le confirmo.
+27/9/26 10:28 - Gerente Ficticio de Embarques: Ya pasó la hora de la cita y no sé dónde viene la unidad
+27/9/26 10:30 - Despacho Innovativos Demo: Está a unos 276 km de su planta; le aviso al llegar.
+28/9/26 07:45 - Auxiliar Ficticio de Recibo: Vigilancia pide placas y económico de la unidad que viene
+28/9/26 07:52 - Despacho Innovativos Demo: Placas DMEC1008, operador a su nombre en el pase de vigilancia.
+28/9/26 08:42 - Gerente Ficticio de Embarques: ¿Ya tienen el POD? Lo necesita facturación
+28/9/26 09:14 - Servicio a Cliente Demo B: Enseguida le comparto la remisión sellada.
+28/9/26 09:48 - Auxiliar Ficticio de Recibo: ¿Qué andén nos toca mañana?
+28/9/26 09:50 - Servicio a Cliente Demo B: Sin problema, ajustamos la cita y le aviso.
+29/9/26 06:20 - Gerente Ficticio de Embarques: ¿Me pasan las placas y el nombre del operador?
+29/9/26 06:22 - Servicio a Cliente Demo B: Placas DMFD1025, operador a su nombre en el pase de vigilancia.
+29/9/26 07:30 - Gerente Ficticio de Embarques: ¿Qué andén nos toca mañana?
+29/9/26 07:36 - Despacho Innovativos Demo: Sin problema, ajustamos la cita y le aviso.
+30/9/26 06:36 - Auxiliar Ficticio de Recibo: ¿Pueden llegar antes de las 8? Hay espacio en andén
+30/9/26 06:44 - Despacho Innovativos Demo: Anotado, lo coordinamos con el operador y le confirmo.
+30/9/26 07:06 - Auxiliar Ficticio de Recibo: ¿Me pasan las placas y el nombre del operador?
+30/9/26 07:12 - Servicio a Cliente Demo B: Le comparto placas y económico por este medio.
+30/9/26 07:17 - Auxiliar Ficticio de Recibo: Vigilancia pide placas y económico de la unidad que viene
+30/9/26 07:25 - Despacho Innovativos Demo: Le comparto placas y económico por este medio.
+30/9/26 07:36 - Auxiliar Ficticio de Recibo: Llevamos 2 horas esperando la unidad, esto es inaceptable
+30/9/26 07:37 - Servicio a Cliente Demo B: Una disculpa, estamos verificando la unidad ahora mismo.
+30/9/26 07:48 - Auxiliar Ficticio de Recibo: ¿Me pueden mandar la ubicación del tracto?
+30/9/26 07:52 - Despacho Innovativos Demo: Está a unos 123 km de su planta; le aviso al llegar.
+30/9/26 08:01 - Auxiliar Ficticio de Recibo: Mándenme la remisión sellada del viaje INN-2040, por favor
+30/9/26 08:03 - Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
+1/10/26 07:16 - Auxiliar Ficticio de Recibo: ¿Me pueden mandar la ubicación del tracto?
+1/10/26 07:17 - Servicio a Cliente Demo B: Está a unos 121 km de su planta; le aviso al llegar.
+1/10/26 07:26 - Auxiliar Ficticio de Recibo: Ya pasó la hora de la cita y no sé dónde viene la unidad
+1/10/26 07:34 - Despacho Innovativos Demo: Está a unos 227 km de su planta; le aviso al llegar.
+1/10/26 08:03 - Auxiliar Ficticio de Recibo: ¿Me pueden mandar la ubicación del tracto?
+1/10/26 08:09 - Servicio a Cliente Demo B: La unidad va por Saltillo, avanzando con normalidad.
+1/10/26 09:09 - Gerente Ficticio de Embarques: Ya pasó la hora de la cita y no sé dónde viene la unidad
+1/10/26 09:09 - Gerente Ficticio de Embarques: <Multimedia omitido>
+1/10/26 09:16 - Despacho Innovativos Demo: La unidad va por Saltillo, avanzando con normalidad.
+2/10/26 07:03 - Gerente Ficticio de Embarques: Vigilancia pide placas y económico de la unidad que viene
+2/10/26 07:06 - Servicio a Cliente Demo B: Placas DMEC1028, operador a su nombre en el pase de vigilancia.
+2/10/26 07:44 - Auxiliar Ficticio de Recibo: Falta la carta porte del embarque INN-2047
+2/10/26 08:16 - Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
+2/10/26 08:29 - Gerente Ficticio de Embarques: ¿Cuánto falta para que llegue el viaje INN-2848?
+2/10/26 08:30 - Servicio a Cliente Demo B: Le confirmo: llega aproximadamente a las 16:00.
+2/10/26 08:52 - Auxiliar Ficticio de Recibo: ¿Me pasan las placas y el nombre del operador?
+2/10/26 08:53 - Servicio a Cliente Demo B: Le comparto placas y económico por este medio.
+3/10/26 08:57 - Auxiliar Ficticio de Recibo: Mándenme la remisión sellada del viaje INN-2573, por favor
+3/10/26 09:41 - Servicio a Cliente Demo B: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+3/10/26 10:19 - Auxiliar Ficticio de Recibo: Buen día, ¿me confirman la hora estimada de llegada?
+3/10/26 10:19 - Auxiliar Ficticio de Recibo: <Multimedia omitido>
+3/10/26 10:23 - Servicio a Cliente Demo B: Buen día. La unidad va en ruta; su hora estimada de llegada es 10:15.
+3/10/26 11:36 - Auxiliar Ficticio de Recibo: Ya pasó la hora de la cita y no sé dónde viene la unidad
+3/10/26 11:41 - Despacho Innovativos Demo: La unidad va por Querétaro, avanzando con normalidad.
+3/10/26 11:46 - Auxiliar Ficticio de Recibo: Vigilancia pide placas y económico de la unidad que viene
+3/10/26 11:49 - Servicio a Cliente Demo B: Le comparto placas y económico por este medio.
+4/10/26 08:18 - Auxiliar Ficticio de Recibo: Vigilancia pide placas y económico de la unidad que viene
+4/10/26 09:08 - Servicio a Cliente Demo B: Le comparto placas y económico por este medio.
+4/10/26 10:01 - Auxiliar Ficticio de Recibo: Falta la carta porte del embarque INN-2233
+4/10/26 10:50 - Servicio a Cliente Demo B: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+4/10/26 11:30 - Gerente Ficticio de Embarques: ¿A qué hora llega la unidad?
+4/10/26 11:31 - Despacho Innovativos Demo: Le confirmo: llega aproximadamente a las 18:45.
+4/10/26 11:39 - Auxiliar Ficticio de Recibo: ¿Ya tienen el POD? Lo necesita facturación
+4/10/26 11:39 - Auxiliar Ficticio de Recibo: Mi teléfono por si es urgente: 00 0000 0101 y correo ficticio@demo.invalid
+4/10/26 11:46 - Servicio a Cliente Demo B: Enseguida le comparto la remisión sellada.
+4/10/26 11:51 - Gerente Ficticio de Embarques: Mándenme la remisión sellada del viaje INN-2208, por favor
+4/10/26 11:51 - Gerente Ficticio de Embarques: <Multimedia omitido>
+4/10/26 11:57 - Servicio a Cliente Demo B: Enseguida le comparto la remisión sellada.
+4/10/26 12:48 - Auxiliar Ficticio de Recibo: Otra vez tarde. Voy a levantar una queja con mi gerente
+4/10/26 12:49 - Servicio a Cliente Demo B: Lamentamos la demora; ya estoy escalando con el jefe de tráfico y le doy una respuesta en minutos.
+5/10/26 06:45 - Auxiliar Ficticio de Recibo: Nadie contesta, la línea está parada por falta de material
+5/10/26 06:45 - Auxiliar Ficticio de Recibo: <Multimedia omitido>
+5/10/26 06:51 - Servicio a Cliente Demo B: Una disculpa, estamos verificando la unidad ahora mismo.
+5/10/26 07:56 - Gerente Ficticio de Embarques: ¿Me pueden mandar la ubicación del tracto?
+5/10/26 08:04 - Despacho Innovativos Demo: Está a unos 224 km de su planta; le aviso al llegar.
+5/10/26 09:07 - Gerente Ficticio de Embarques: ¿A qué hora llega la unidad?
+5/10/26 09:13 - Servicio a Cliente Demo B: Le confirmo: llega aproximadamente a las 09:30.
+5/10/26 09:36 - Gerente Ficticio de Embarques: ¿Qué andén nos toca mañana?
+5/10/26 09:41 - Servicio a Cliente Demo B: Anotado, lo coordinamos con el operador y le confirmo.
+6/10/26 08:28 - Gerente Ficticio de Embarques: ¿Ya tienen el POD? Lo necesita facturación
+6/10/26 08:30 - Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
+6/10/26 09:10 - Auxiliar Ficticio de Recibo: Nadie contesta, la línea está parada por falta de material
+6/10/26 09:10 - Auxiliar Ficticio de Recibo: <Multimedia omitido>
+6/10/26 09:49 - Despacho Innovativos Demo: Lamentamos la demora; ya estoy escalando con el jefe de tráfico y le doy una respuesta en minutos.
+6/10/26 10:50 - Auxiliar Ficticio de Recibo: Otra vez tarde. Voy a levantar una queja con mi gerente
+6/10/26 10:53 - Servicio a Cliente Demo B: Lamentamos la demora; ya estoy escalando con el jefe de tráfico y le doy una respuesta en minutos.
+6/10/26 11:48 - Gerente Ficticio de Embarques: Mándenme la remisión sellada del viaje INN-2187, por favor
+6/10/26 11:50 - Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
+6/10/26 12:06 - Auxiliar Ficticio de Recibo: Buen día, ¿me confirman la hora estimada de llegada?
+6/10/26 12:54 - Servicio a Cliente Demo B: Le confirmo: llega aproximadamente a las 19:45.
+7/10/26 09:13 - Gerente Ficticio de Embarques: ¿Ya tienen el POD? Lo necesita facturación
+7/10/26 09:21 - Despacho Innovativos Demo: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+7/10/26 09:34 - Auxiliar Ficticio de Recibo: Llevamos 2 horas esperando la unidad, esto es inaceptable
+7/10/26 09:36 - Servicio a Cliente Demo B: Una disculpa, estamos verificando la unidad ahora mismo.
+8/10/26 07:26 - Gerente Ficticio de Embarques: Llevamos 2 horas esperando la unidad, esto es inaceptable
+8/10/26 07:28 - Despacho Innovativos Demo: Lamentamos la demora; ya estoy escalando con el jefe de tráfico y le doy una respuesta en minutos.
+8/10/26 08:29 - Auxiliar Ficticio de Recibo: ¿Dónde va la unidad del viaje INN-2073?
+8/10/26 08:30 - Despacho Innovativos Demo: Está a unos 109 km de su planta; le aviso al llegar.
+8/10/26 08:44 - Auxiliar Ficticio de Recibo: ¿Me pasan las placas y el nombre del operador?
+8/10/26 08:48 - Despacho Innovativos Demo: Placas DMBC1081, operador a su nombre en el pase de vigilancia.
+8/10/26 09:43 - Gerente Ficticio de Embarques: ¿Qué andén nos toca mañana?
+8/10/26 10:23 - Despacho Innovativos Demo: Sin problema, ajustamos la cita y le aviso.
+8/10/26 11:13 - Auxiliar Ficticio de Recibo: ¿A qué hora llega la unidad?
+8/10/26 11:29 - Servicio a Cliente Demo B: Le confirmo: llega aproximadamente a las 09:15.
+9/10/26 09:08 - Auxiliar Ficticio de Recibo: Necesito el ETA del embarque de hoy
+9/10/26 09:12 - Despacho Innovativos Demo: Le confirmo: llega aproximadamente a las 17:00.
+9/10/26 09:38 - Auxiliar Ficticio de Recibo: ¿Pueden llegar antes de las 8? Hay espacio en andén
+9/10/26 09:43 - Servicio a Cliente Demo B: Anotado, lo coordinamos con el operador y le confirmo.
+10/10/26 08:59 - Gerente Ficticio de Embarques: Necesito el ETA del embarque de hoy
+10/10/26 09:02 - Servicio a Cliente Demo B: Buen día. La unidad va en ruta; su hora estimada de llegada es 16:00.
+10/10/26 10:00 - Auxiliar Ficticio de Recibo: ¿Dónde va la unidad del viaje INN-2881?
+10/10/26 10:07 - Despacho Innovativos Demo: Está a unos 271 km de su planta; le aviso al llegar.
+11/10/26 06:26 - Gerente Ficticio de Embarques: Nadie contesta, la línea está parada por falta de material
+11/10/26 06:49 - Servicio a Cliente Demo B: Lamentamos la demora; ya estoy escalando con el jefe de tráfico y le doy una respuesta en minutos.
+11/10/26 07:08 - Auxiliar Ficticio de Recibo: Vigilancia pide placas y económico de la unidad que viene
+11/10/26 07:11 - Servicio a Cliente Demo B: Le comparto placas y económico por este medio.
+11/10/26 08:13 - Gerente Ficticio de Embarques: Buen día, ¿me confirman la hora estimada de llegada?
+11/10/26 08:17 - Despacho Innovativos Demo: Buen día. La unidad va en ruta; su hora estimada de llegada es 14:00.
+12/10/26 08:13 - Auxiliar Ficticio de Recibo: Otra vez tarde. Voy a levantar una queja con mi gerente
+12/10/26 08:20 - Servicio a Cliente Demo B: Una disculpa, estamos verificando la unidad ahora mismo.
+12/10/26 08:30 - Gerente Ficticio de Embarques: ¿Me pueden mandar la ubicación del tracto?
+12/10/26 08:47 - Servicio a Cliente Demo B: La unidad va por Querétaro, avanzando con normalidad.
+12/10/26 09:02 - Auxiliar Ficticio de Recibo: ¿Qué andén nos toca mañana?
+12/10/26 09:03 - Auxiliar Ficticio de Recibo: <Multimedia omitido>
+12/10/26 09:04 - Despacho Innovativos Demo: Anotado, lo coordinamos con el operador y le confirmo.
+12/10/26 09:44 - Gerente Ficticio de Embarques: Otra vez tarde. Voy a levantar una queja con mi gerente
+12/10/26 09:47 - Servicio a Cliente Demo B: Lamentamos la demora; ya estoy escalando con el jefe de tráfico y le doy una respuesta en minutos.
+12/10/26 10:33 - Gerente Ficticio de Embarques: Mándenme la remisión sellada del viaje INN-2719, por favor
+12/10/26 10:38 - Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
+12/10/26 10:50 - Gerente Ficticio de Embarques: Nadie contesta, la línea está parada por falta de material
+12/10/26 10:51 - Gerente Ficticio de Embarques: <Multimedia omitido>
+12/10/26 11:24 - Despacho Innovativos Demo: Lamentamos la demora; ya estoy escalando con el jefe de tráfico y le doy una respuesta en minutos.
+13/10/26 07:49 - Auxiliar Ficticio de Recibo: ¿Ya tienen el POD? Lo necesita facturación
+13/10/26 07:57 - Servicio a Cliente Demo B: Enseguida le comparto la remisión sellada.
+13/10/26 09:08 - Gerente Ficticio de Embarques: ¿Ya tienen el POD? Lo necesita facturación
+13/10/26 09:12 - Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
+13/10/26 09:35 - Gerente Ficticio de Embarques: ¿Qué andén nos toca mañana?
+13/10/26 09:36 - Despacho Innovativos Demo: Sin problema, ajustamos la cita y le aviso.
+14/10/26 08:40 - Gerente Ficticio de Embarques: ¿Ya tienen el POD? Lo necesita facturación
+14/10/26 09:09 - Servicio a Cliente Demo B: Enseguida le comparto la remisión sellada.
+14/10/26 09:40 - Auxiliar Ficticio de Recibo: ¿Ya tienen el POD? Lo necesita facturación
+14/10/26 09:42 - Despacho Innovativos Demo: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+15/10/26 09:11 - Gerente Ficticio de Embarques: Necesito el ETA del embarque de hoy
+15/10/26 09:43 - Servicio a Cliente Demo B: Le confirmo: llega aproximadamente a las 14:00.
+15/10/26 10:20 - Auxiliar Ficticio de Recibo: ¿A qué hora llega la unidad?
+15/10/26 10:28 - Despacho Innovativos Demo: Buen día. La unidad va en ruta; su hora estimada de llegada es 14:45.
+15/10/26 10:59 - Gerente Ficticio de Embarques: ¿Pueden llegar antes de las 8? Hay espacio en andén
+15/10/26 11:06 - Servicio a Cliente Demo B: Anotado, lo coordinamos con el operador y le confirmo.
+16/10/26 08:55 - Gerente Ficticio de Embarques: ¿Me pasan las placas y el nombre del operador?
+16/10/26 09:23 - Servicio a Cliente Demo B: Placas DMDC1181, operador a su nombre en el pase de vigilancia.
+16/10/26 10:24 - Gerente Ficticio de Embarques: Llevamos 2 horas esperando la unidad, esto es inaceptable
+16/10/26 10:30 - Despacho Innovativos Demo: Una disculpa, estamos verificando la unidad ahora mismo.
+16/10/26 11:08 - Auxiliar Ficticio de Recibo: ¿Me pueden mandar la ubicación del tracto?
+16/10/26 11:13 - Servicio a Cliente Demo B: La unidad va por Saltillo, avanzando con normalidad.
+16/10/26 11:59 - Auxiliar Ficticio de Recibo: Mándenme la remisión sellada del viaje INN-2207, por favor
+16/10/26 12:10 - Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
+16/10/26 12:43 - Auxiliar Ficticio de Recibo: ¿Me pasan las placas y el nombre del operador?
+16/10/26 12:46 - Servicio a Cliente Demo B: Placas DMGC1222, operador a su nombre en el pase de vigilancia.
+17/10/26 08:44 - Auxiliar Ficticio de Recibo: Necesitamos mover la cita del viaje INN-2864 una hora
+17/10/26 08:45 - Despacho Innovativos Demo: Sin problema, ajustamos la cita y le aviso.
+17/10/26 08:59 - Gerente Ficticio de Embarques: ¿Ya tienen el POD? Lo necesita facturación
+17/10/26 09:07 - Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
+17/10/26 10:02 - Auxiliar Ficticio de Recibo: Mándenme la remisión sellada del viaje INN-2065, por favor
+17/10/26 10:03 - Auxiliar Ficticio de Recibo: <Multimedia omitido>
+17/10/26 10:03 - Auxiliar Ficticio de Recibo: Mi teléfono por si es urgente: 00 0000 0101 y correo ficticio@demo.invalid
+17/10/26 10:43 - Servicio a Cliente Demo B: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+18/10/26 07:20 - Auxiliar Ficticio de Recibo: ¿Cuánto falta para que llegue el viaje INN-2894?
+18/10/26 07:22 - Despacho Innovativos Demo: Buen día. La unidad va en ruta; su hora estimada de llegada es 10:15.
+18/10/26 07:39 - Gerente Ficticio de Embarques: Otra vez tarde. Voy a levantar una queja con mi gerente
+18/10/26 07:47 - Servicio a Cliente Demo B: Una disculpa, estamos verificando la unidad ahora mismo.
+18/10/26 08:05 - Auxiliar Ficticio de Recibo: ¿Me pueden mandar la ubicación del tracto?
+18/10/26 08:27 - Despacho Innovativos Demo: Está a unos 32 km de su planta; le aviso al llegar.
+19/10/26 09:26 - Gerente Ficticio de Embarques: Mándenme la remisión sellada del viaje INN-2121, por favor
+19/10/26 09:27 - Gerente Ficticio de Embarques: Mi teléfono por si es urgente: 00 0000 0101 y correo ficticio@demo.invalid
+19/10/26 09:31 - Servicio a Cliente Demo B: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+19/10/26 10:32 - Auxiliar Ficticio de Recibo: ¿Ya tienen el POD? Lo necesita facturación
+19/10/26 10:34 - Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
+19/10/26 11:18 - Auxiliar Ficticio de Recibo: Mándenme la remisión sellada del viaje INN-2184, por favor
+19/10/26 11:20 - Servicio a Cliente Demo B: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
