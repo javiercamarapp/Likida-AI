@@ -6,7 +6,7 @@ import { resolverNombre } from './filtros';
 import { rolPuedeUsar } from './permisos';
 import { resumirAutofactura, resumirBuzon, resumirCobranza, resumirVigia, nombreSeguro } from './resumenes';
 import { resumirSalud } from './salud_agentes';
-import { armarTableroViajes, type FilaViaje, type TableroViajes } from './tablero_viajes';
+import { armarTableroViajes, textoAntiguedad, type FilaViaje, type TableroViajes } from './tablero_viajes';
 import { ETIQUETA_DESTINO, DESTINOS, MOTIVOS, MAX_RESUMEN, validarEscalacion } from './escalamiento';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -43,10 +43,14 @@ function sinPermiso(nombre: string, rol: string | undefined) {
   };
 }
 
-/** Envuelve el executor: una herramienta del mapa que el rol no ve se rechaza SIN ejecutarse. */
-export function conPermisos(rol: string | undefined, base: ToolExecutor): ToolExecutor {
+/**
+ * Envuelve el executor y FALLA CERRADO: solo corre una herramienta que está en el mapa de áreas y que el
+ * rol puede ver (o una de `siempre`, p. ej. la tool terminal que entrega la respuesta). Cualquier otra —una
+ * registrada para otro agente (`guardar_liquidacion`), una inventada, una de otra área— se rechaza SIN ejecutarse.
+ */
+export function conPermisos(rol: string | undefined, base: ToolExecutor, siempre: readonly string[] = []): ToolExecutor {
   return async (name, args, signal) => {
-    if (!rolPuedeUsar(rol, name)) {
+    if (!siempre.includes(name) && !rolPuedeUsar(rol, name)) {
       return { success: true, result: sinPermiso(name, rol), durationMs: 0 };
     }
     return base(name, args, signal);
@@ -76,7 +80,7 @@ function vistaFila(f: FilaViaje) {
     ultimoHito: f.ultimoHito ? { hito: f.ultimoHito.etiqueta, estado: f.ultimoHito.estado, cuando: f.ultimoHito.cuando } : null,
     hitoQueToca: f.hitoActivo,
     gps: f.posicion
-      ? { latAprox: redondea(f.posicion.lat), lngAprox: redondea(f.posicion.lng), antiguedadMin: f.posicion.antiguedadMin, frescura: f.posicion.frescura }
+      ? { latAprox: redondea(f.posicion.lat), lngAprox: redondea(f.posicion.lng), antiguedadMin: f.posicion.antiguedadMin, antiguedad: textoAntiguedad(Math.max(0, f.posicion.antiguedadMin)), frescura: f.posicion.frescura }
       : null,
     senalDeVida: f.senalDeVida,
     escaladoATrafico: f.escalado,
@@ -95,19 +99,19 @@ async function tablero(args: Record<string, unknown>, tenantId: string): Promise
   }
   const t = armarTableroViajes({
     ...entrada,
-    filtros: { terminalId: term.tipo === 'ok' ? term.id : null, clienteId: cli.tipo === 'ok' ? cli.id : null, soloExcepciones: args.solo_excepciones === true },
+    filtros: { terminalId: term.tipo === 'ok' ? term.id : null, clienteId: cli.tipo === 'ok' ? cli.id : null, soloExcepciones: args.vista === 'solo_excepciones' },
   });
   return { t };
 }
 
 registrar('tablero_viajes',
-  'El tablero de viajes EN VIVO de la flota: cada viaje en curso con su último hito del Conductor, la última posición del tractor y qué tan vieja es (antigüedad del GPS), y las EXCEPCIONES que piden a una persona (llegada sin confirmar por ubicación, sin señal de vida, escalado al jefe de tráfico, estadía excedida, GPS obsoleto). Ordenado: lo más urgente primero. Filtros opcionales por terminal y cliente (por nombre) y `solo_excepciones`. Máx. 15 viajes por respuesta; `total` es el conteo real tras los filtros. SOLO LECTURA.',
+  'El tablero de viajes EN VIVO de la flota: cada viaje en curso con su último hito del Conductor, la última posición del tractor y qué tan vieja es (antigüedad del GPS), y las EXCEPCIONES que piden a una persona (llegada sin confirmar por ubicación, sin señal de vida, escalado al jefe de tráfico, estadía excedida, GPS obsoleto). Ordenado: lo más urgente primero. Filtros opcionales por terminal y cliente (por nombre) y `vista` (todos | solo_excepciones). Máx. 15 viajes por respuesta; `total` es el conteo real tras los filtros. SOLO LECTURA.',
   {
     type: 'object',
     properties: {
       terminal: { type: 'string', maxLength: 80, description: 'Nombre de la terminal (se busca en el catálogo de la flota). Omítelo para todas.' },
       cliente: { type: 'string', maxLength: 80, description: 'Nombre del cliente (se busca en el catálogo de la flota). Omítelo para todos.' },
-      solo_excepciones: { type: 'boolean', description: 'true = solo los viajes con al menos una excepción.' },
+      vista: { type: 'string', enum: ['todos', 'solo_excepciones'], description: 'solo_excepciones = solo los viajes con al menos una excepción (por omisión, todos).' },
     },
     additionalProperties: false,
   },

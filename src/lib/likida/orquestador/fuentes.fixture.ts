@@ -72,6 +72,14 @@ export function crearFuentesEnMemoria(mundos: Record<string, MundoFlota>) {
       tareas.set(t, lista);
       return { estado: 'creada', id };
     },
+    async atenderEscalacion(t, id, quien) {
+      const lista = tareas.get(t) ?? [];
+      const i = lista.findIndex((x) => x.id === id);
+      if (i < 0) return false;
+      lista.splice(i, 1);
+      void quien;
+      return true;
+    },
     async escalacionesAbiertas(t) { return (tareas.get(t) ?? []).map(({ dedupe: _d, tenantId: _t, usuarioId: _u, ...x }) => x); },
   };
   return { fuentes, llamadas, tareas };

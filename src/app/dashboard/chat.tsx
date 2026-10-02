@@ -52,6 +52,15 @@ const ETIQUETA_TOOL: Record<string, string> = {
   top_rutas: 'Rankeando tus rutas por gasto',
   duplicados_detectados: 'Buscando tickets duplicados',
   proyectar_serie: 'Proyectando la serie',
+  consultar_carta_porte: 'Revisando la Carta Porte',
+  tablero_viajes: 'Leyendo el tablero de viajes en vivo',
+  detalle_viaje: 'Revisando el viaje',
+  estado_vigia: 'Consultando al Vigía',
+  estado_buzon: 'Revisando el buzón de facturas',
+  estado_cobranza: 'Revisando la cobranza',
+  estado_autofactura: 'Revisando la autofactura',
+  salud_agentes: 'Revisando la salud de los agentes',
+  escalar_a_persona: 'Avisando a la persona que decide',
   entregar_respuesta: 'Armando la respuesta',
 };
 const rotuloTool = (t: string) => ETIQUETA_TOOL[t] ?? t.replaceAll('_', ' ');

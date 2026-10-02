@@ -158,6 +158,15 @@ export function crearFuentesReales(): Fuentes {
       if (r.error) throw new Error(`orquestador.abiertas: ${r.error.message}`);
       return ((r.data ?? []) as Array<Record<string, unknown>>).map(aTarea);
     },
+
+    async atenderEscalacion(tenantId, id, quien) {
+      // El UPDATE condicional es el claim: solo una abierta DE ESTA flota pasa a atendida, una sola vez.
+      const r = await acotada(supabaseAdmin().from('orquestador_escalacion').update({
+        estado: 'atendida', atendida_en: new Date().toISOString(), atendida_por: quien.usuarioId, nota_atencion: quien.nota,
+      }).eq('tenant_id', tenantId).eq('id', id).eq('estado', 'abierta').select('id'), 'orquestador.atender');
+      if (r.error) throw new Error(`orquestador.atender: ${r.error.message}`);
+      return ((r.data ?? []) as unknown[]).length === 1;
+    },
   };
 }
 

@@ -19,6 +19,7 @@ import {
   MapPin,
   QrCode,
   ListChecks,
+  Activity,
 } from 'lucide-react';
 
 /**
@@ -82,6 +83,8 @@ export const OPERACION: Item[] = [
   // página lo declara. La /dashboard/mapa vieja (borrada el 10-ago) no
   // dibujaba nada; esta dibuja lo que SÍ es verdad.
   { href: '/dashboard/mapa', nombre: 'Mapa', Icono: Map },
+  // Ola 3b: el tablero de todos los viajes en curso con hito, posición y excepciones (y las tareas del asistente).
+  { href: '/dashboard/viajes-en-vivo', nombre: 'Viajes en vivo', Icono: Activity },
   // A3 (auditoría 4, 14-ago-2026): por viaje en curso, si necesita el
   // complemento y qué dato falta — partido 19 del cliente / 18 del
   // transportista, que es como la ley parte la responsabilidad.
