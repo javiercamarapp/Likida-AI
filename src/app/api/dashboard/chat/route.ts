@@ -15,7 +15,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSessionTenant } from '@/lib/auth/session';
 import { rechazoMfaSuperadminApi } from '@/lib/auth/api-superadmin';
-import { puedeVerArea } from '@/lib/auth/visibilidad';
+import { rolPuedeConversar } from '@/lib/likida/orquestador/permisos';
 import { registrarCosto, faseDeModelo } from '@/lib/likida/costos';
 import { PartialExecutionError } from '@/lib/llm/openrouter';
 import { guardarIntercambio } from '@/lib/likida/chat/conversaciones';
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   if (!sesion) return NextResponse.json({ error: 'sin sesion' }, { status: 401 });
   const rechazoMfa = await rechazoMfaSuperadminApi(sesion);
   if (rechazoMfa) return rechazoMfa;
-  if (!puedeVerArea(sesion.rol, 'dinero')) {
+  if (!rolPuedeConversar(sesion.rol)) {
     return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
   }
   if (!(await rateLimit(`chat:${sesion.userId}`, TURNOS_POR_MINUTO, 60_000))) {
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
       };
       try {
         const r = await ejecutarAnalista({
-          tenantId, nombreFlota, usuario: { nombre: sesion.nombre, rol: sesion.rol }, documento, mensajes,
+          tenantId, nombreFlota, usuario: { nombre: sesion.nombre, rol: sesion.rol, id: sesion.userId }, documento, mensajes,
           onPaso: (p) => manda({ t: 'paso', fase: p.fase, tool: p.tool }),
         });
         // El costo se registra POR MODELO real (mismo criterio que

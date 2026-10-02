@@ -18203,3 +18203,50 @@ begin
   raise exception E'CONVENIOS_0580 unico=% fk_ajena=% claim=% set_null=%   (esperado t / t / t / t)',
     unico, fk_ajena, claim, set_null;
 end $$;
+
+-- ── 268. Orquestador: una sola tarea abierta por incidente y sin cruzar flotas (mig. 0650) ──
+-- La 0650 guarda lo que el asistente del panel le deja a una PERSONA. Lo que solo la base demuestra:
+-- el índice único PARCIAL (una abierta por flota+llave; atendida, el siguiente incidente abre otra),
+-- la FK compuesta (la tarea de A no cuelga del viaje de B), y que borrar el viaje conserva la tarea.
+-- Esperado: ORQ_ESCALACION_0650 abierta-unica=t otra-flota-puede=t tras-atender-nueva=t viaje-ajeno-rebota=t borrar-viaje-conserva=t
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid; va uuid; vb uuid;
+  abierta_unica boolean := false; otra_flota boolean := false; nueva boolean := false; ajeno boolean := false; conserva boolean := false;
+  n int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0650 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0650 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0650A', '5215559990650') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono) values (tb, 'ZZZ 0650B', '5215559990651') returning id into ob;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo) values (ta, oa, 'ZZZ-0650-A', 'abierto', current_date, 0) returning id into va;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo) values (tb, ob, 'ZZZ-0650-B', 'abierto', current_date, 0) returning id into vb;
+
+  insert into orquestador_escalacion (tenant_id, destino, motivo, viaje_id, viaje_folio, resumen, pedida_por_rol, dedupe_key)
+    values (ta, 'mesa_de_control', 'posible_emergencia', va, 'ZZZ-0650-A', 'x', 'encargado', 'k');
+  begin
+    insert into orquestador_escalacion (tenant_id, destino, motivo, viaje_id, resumen, pedida_por_rol, dedupe_key)
+      values (ta, 'mesa_de_control', 'posible_emergencia', va, 'x', 'encargado', 'k');
+  exception when unique_violation then abierta_unica := true; end;
+  begin
+    insert into orquestador_escalacion (tenant_id, destino, motivo, viaje_id, resumen, pedida_por_rol, dedupe_key)
+      values (tb, 'mesa_de_control', 'posible_emergencia', vb, 'x', 'encargado', 'k');
+    otra_flota := true;
+  exception when others then otra_flota := false; end;
+  update orquestador_escalacion set estado = 'atendida', atendida_en = now() where tenant_id = ta;
+  begin
+    insert into orquestador_escalacion (tenant_id, destino, motivo, viaje_id, resumen, pedida_por_rol, dedupe_key)
+      values (ta, 'mesa_de_control', 'posible_emergencia', va, 'x', 'encargado', 'k');
+    nueva := true;
+  exception when others then nueva := false; end;
+  begin
+    insert into orquestador_escalacion (tenant_id, destino, motivo, viaje_id, resumen, pedida_por_rol, dedupe_key)
+      values (ta, 'liquidacion', 'diferencia_liquidacion', vb, 'x', 'contador', 'k2');
+  exception when foreign_key_violation then ajeno := true; end;
+  delete from viaje where id = va;
+  select count(*) into n from orquestador_escalacion where tenant_id = ta and viaje_id is null and viaje_folio = 'ZZZ-0650-A';
+  conserva := n = 1;
+
+  raise exception E'ORQ_ESCALACION_0650 abierta-unica=% otra-flota-puede=% tras-atender-nueva=% viaje-ajeno-rebota=% borrar-viaje-conserva=%   (esperado t / t / t / t / t)',
+    abierta_unica, otra_flota, nueva, ajeno, conserva;
+end $$;

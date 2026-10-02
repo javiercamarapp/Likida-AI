@@ -99,6 +99,9 @@ describe('TC-N3 · `total` es el conteo real de la flota, no el límite de la co
   });
 });
 
+/** Texto libre permitido: se resuelve contra datos de la flota YA cargados en memoria, nunca contra la base. */
+const PARAMS_TEXTO_RESUELTOS_EN_MEMORIA = new Set(['tablero_viajes.terminal', 'tablero_viajes.cliente', 'detalle_viaje.folio']);
+
 describe('TC-N6 · la lista del analista sale del código, no de una lista a mano', () => {
   /** `TOOLS_LECTURA` de analista.ts, leída del fuente: es la lista que el chat de verdad recibe. */
   const fuente = readFileSync('src/lib/agents/analista.ts', 'utf8');
@@ -111,16 +114,25 @@ describe('TC-N6 · la lista del analista sale del código, no de una lista a man
     expect(TOOLS).toContain('consultar_normas');
   });
 
-  it('cada una está registrada y cierra additionalProperties', () => {
+  it('cada una está registrada y cierra additionalProperties', async () => {
+    await import('@/lib/likida/orquestador/herramientas'); // registra las tools del orquestador (analista.ts las importa)
     const schemas = toolSchemas(TOOLS);
     expect(schemas.map((s) => (s.type === 'function' ? s.function.name : '?'))).toEqual(TOOLS);
     for (const s of schemas) {
       if (s.type !== 'function') throw new Error('tool custom');
       const p = s.function.parameters as { additionalProperties?: boolean; properties?: Record<string, { enum?: unknown[]; type?: string }> };
       expect(p.additionalProperties, s.function.name).toBe(false);
-      // Ningún parámetro de texto libre: solo enums cerrados.
+      // Ningún parámetro de texto libre: solo enums cerrados…
       for (const [nombre, def] of Object.entries(p.properties ?? {})) {
-        expect(def.enum, `${s.function.name}.${nombre}`).toBeDefined();
+        const clave = `${s.function.name}.${nombre}`;
+        // …con UNA excepción deliberada y revisada: los tres nombres que el orquestador busca EN MEMORIA contra
+        // el catálogo/tablero de la flota (jamás llegan a una consulta; ver `orquestador/herramientas.ts`, punto 4,
+        // y `orquestador/filtros.ts`). Deben declarar su `maxLength`; cualquier otro texto libre sigue prohibido.
+        if (PARAMS_TEXTO_RESUELTOS_EN_MEMORIA.has(clave)) {
+          expect((def as { maxLength?: number }).maxLength, clave).toBeGreaterThan(0);
+          continue;
+        }
+        expect(def.enum, clave).toBeDefined();
       }
     }
   });
