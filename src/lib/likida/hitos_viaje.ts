@@ -5,6 +5,17 @@ import { strip_accents } from './cuadre/util';
 import { TZ_MX } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ESTADO ACTUAL (P12, 2-oct-2026): UTILITARIO SIN LLAMADOR EN PRODUCCIÓN.
+// `processor.ts` ya no llama a `interpretarHito`/`sellarHito`: los hitos del chofer los atiende el motor del Conductor
+// (`conductor/atender.ts`, con máquina de estados, validación contra el sitio, evidencia y estadías). Este módulo quedó con
+// sus pruebas unitarias (`hitos_viaje.test.ts`) y como referencia del contrato de «lista cerrada, frase completa» que
+// copian `jornada/wa.ts` y `talacha_wa.ts` (solo lo mencionan en comentarios; ninguno lo importa). NO lo cablees de nuevo:
+// sellaría `viaje.llegada_en` sin validar. Retirarlo (archivo, prueba y esa llamada) es seguro, pero obliga a bajar a la vez
+// los dos techos de `frontera_datos_guardiana.test.ts` (286 → 285 archivos y -1 llamada), por eso no se hizo en un paquete
+// de documentación: hágase en la integración, con la suma de techos del momento.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
 // LOS HITOS DEL CHOFER (0090, F4 del plan): "ya llegué", "estoy descargando",
 // "voy de regreso" — el aviso que hoy da por teléfono y nadie anota.
 //
