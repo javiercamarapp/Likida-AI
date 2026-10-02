@@ -184,7 +184,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Botones:** ninguno
 
-## Plantillas nuevas, listas para enviar a aprobación (16)
+## Plantillas nuevas, listas para enviar a aprobación (18)
 
 ### `regla_aviso_v1`
 
@@ -506,4 +506,46 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 | `{{4}}` | liga al tablero del Vigía | https://app.likida.ai/dashboard/agentes/vigia |
 
 - **Botones:** «Yo me encargo» (respuesta rápida, payload `vig_tomo:<viaje_id>`)
+
+### `jornada_aviso_encargado_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 12 — Jornada (alerta de tope). Avisar al encargado que la jornada en curso de un operador llegó al umbral de aviso, al umbral crítico o rebasó el tope que la flota configuró (LFT 132 fr. XXXIV, 68).
+- **Llamador en código:** src/lib/likida/jornada/alerta_tope.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Aviso de jornada (LFT) de {{1}}: {{2}}. Horas registradas: {{3}} de un tope de {{4}}. Revísalo en {{5}}. Likida.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | operador | Juan Pérez |
+| `{{2}}` | frase del nivel (≤ 60 caracteres) | va al 80 % del tope |
+| `{{3}}` | horas registradas (con «al menos» si el inicio es derivado) | 9.6 h (al menos) |
+| `{{4}}` | tope en horas | 12 h |
+| `{{5}}` | liga al tablero de jornada | https://app.likida.ai/dashboard/jornada |
+
+- **Botones:** ninguno
+
+### `jornada_aviso_operador_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 12 — Jornada (alerta de tope). Avisar al operador que su jornada de hoy se acerca o rebasó el tope, e indicarle cómo marcar su fin o su descanso por WhatsApp.
+- **Llamador en código:** src/lib/likida/jornada/alerta_tope.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, tu jornada de hoy registra {{2}} de un máximo de {{3}}. Si ya terminaste, escribe «fin de mi jornada»; si vas a descansar, «voy a descansar». Aviso informativo de Likida.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del operador | Juan |
+| `{{2}}` | horas registradas | 9.6 h |
+| `{{3}}` | tope en horas | 12 h |
+
+- **Botones:** ninguno
 

@@ -15,6 +15,7 @@ const AGENTES: Record<PlantillaCatalogo['agente'], string> = {
   agente5_conductor: 'Agente 5 — Conductor',
   onboarding_operador: 'Alta de operadores (invitación del chofer)',
   vigia_cliente: 'Agente 4 — Vigía de servicio al cliente',
+  jornada: 'Agente 12 — Jornada (alerta de tope)',
 };
 
 function botonTexto(b: BotonCatalogo): string {
