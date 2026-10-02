@@ -153,3 +153,56 @@ export async function borrarGrupo(tenantId: string, grupoId: string): Promise<bo
   if (r.error) throw new Error(`vigia.borrar_grupo: ${r.error.message}`);
   return ((r.data ?? []) as Fila[]).length > 0;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RESPUESTAS RÁPIDAS APROBADAS (0647) — lo que ve y hace el gerente en la pantalla del histórico.
+// El Vigía las LEE por `crearRepoVigia().respuestasRapidas`; aquí se listan con su uso, se aprueban (alta o corrección atómica,
+// con tope de 200 por flota) y se retiran. Sin la 0647 en la base, la lectura devuelve `null` y la pantalla lo dice.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface RespuestaRapidaFila {
+  id: string;
+  tema: string;
+  pregunta: string;
+  texto: string;
+  usos: number;
+  ultimoUsoEn: string | null;
+  aprobadaEn: string;
+}
+
+const SIN_FUNCION = new Set(['42883', 'PGRST202']);
+
+export async function leerRespuestasRapidas(tenantId: string): Promise<RespuestaRapidaFila[] | null> {
+  const r = await acotada(supabaseAdmin().from('vigia_respuesta_rapida')
+    .select('id, tema, pregunta, texto, usos, ultimo_uso_en, aprobada_en').eq('tenant_id', tenantId).eq('estado', 'aprobada')
+    .order('aprobada_en', { ascending: false }).order('id').limit(200), 'vigia.leer_respuestas_rapidas');
+  if (esSinTabla(r.error)) return null;
+  if (r.error) throw new Error(`vigia.leer_respuestas_rapidas: ${r.error.message}`);
+  return ((r.data ?? []) as Fila[]).map((f) => ({
+    id: String(f.id), tema: String(f.tema), pregunta: String(f.pregunta), texto: String(f.texto), usos: Number(f.usos) || 0,
+    ultimoUsoEn: f.ultimo_uso_en ? String(f.ultimo_uso_en) : null, aprobadaEn: String(f.aprobada_en),
+  }));
+}
+
+export type ResultadoAprobarRapida = { ok: true; id: string } | { ok: false; error: string };
+
+/** Alta o corrección atómica de la respuesta aprobada de una pregunta. `{ ok: false }` con el motivo legible si la base no la acepta. */
+export async function aprobarRespuestaRapida(tenantId: string, a: { tema: string; pregunta: string; texto: string; usuarioId: string | null }): Promise<ResultadoAprobarRapida> {
+  const r = await acotada(supabaseAdmin().rpc('vigia_respuesta_rapida_aprobar', {
+    p_tenant: tenantId, p_tema: a.tema, p_pregunta: a.pregunta, p_texto: a.texto, p_usuario: a.usuarioId,
+  }), 'vigia.aprobar_respuesta_rapida');
+  if (r.error) {
+    if (r.error.code === '54000') return { ok: false, error: 'Ya tienes 200 respuestas rápidas aprobadas: retira alguna antes de agregar otra.' };
+    if (r.error.code && (SIN_FUNCION.has(r.error.code) || SIN_TABLA.has(r.error.code))) return { ok: false, error: 'Falta aplicar la migración 0647 en la base de datos para guardar respuestas rápidas.' };
+    throw new Error(`vigia.aprobar_respuesta_rapida: ${r.error.message}`);
+  }
+  return { ok: true, id: String(r.data) };
+}
+
+/** Retira una respuesta aprobada (no se borra: queda el rastro de quién la aprobó). `false` = no existe en esta flota o ya estaba retirada. */
+export async function retirarRespuestaRapida(tenantId: string, id: string): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().from('vigia_respuesta_rapida')
+    .update({ estado: 'retirada', updated_at: new Date().toISOString() }).eq('tenant_id', tenantId).eq('id', id).eq('estado', 'aprobada').select('id'), 'vigia.retirar_respuesta_rapida');
+  if (r.error) throw new Error(`vigia.retirar_respuesta_rapida: ${r.error.message}`);
+  return ((r.data ?? []) as Fila[]).length > 0;
+}

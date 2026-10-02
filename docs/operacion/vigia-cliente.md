@@ -41,6 +41,7 @@ Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`* * * * *`).
 | Fuera de 24 h solo plantilla del catálogo; sin consentimiento o con BAJA no se envía | `enviar.test.ts` |
 | Escalera por niveles con sello anti-repetición (`vigia_evento.clave`) | `escalamiento.test.ts`, `servicio.test.ts` (barrido) |
 | La cola del barrido no se tapa: lo que llegó al nivel 2 no entra, se ordena por próximo vencimiento y una flota con plazo largo no tapa a otra con plazo corto; los ciclos muertos (7 días) se cierran | `cola_barrido.test.ts`, `repo.test.ts` |
+| Una respuesta rápida solo reemplaza al «no entendí», nunca se autoenvía y no se pule con modelo; una por pregunta y flota, tope de 200 | `respuestas_rapidas.test.ts`, `ciclo_completo.e2e.test.ts` · `supabase/tests/0647_vigia_respuesta_rapida.sql` |
 | Retención y ARCO (supresión) | `0400` (`vigia_purgar`, `vigia_suprimir_contacto`) · SQL test · `repo.test.ts` |
 
 ## Puesta en marcha para una flota
@@ -73,6 +74,28 @@ Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`* * * * *`).
   baja con BAJA) están listas; el documento lo redacta legal.
 - **Solicitud ARCO de un cliente por WhatsApp**: `PRIVACIDAD` registra la solicitud a nombre de su
   flota; la supresión de sus chats la ejecuta el dueño desde su fila en el tablero.
+
+## Respuestas rápidas aprobadas (0647)
+
+El reporte del histórico (`/dashboard/agentes/vigia/historial`) calcula las preguntas frecuentes y lo que el equipo suele contestar.
+Desde ahí, el dueño o el encargado **aprueba** (y puede corregir) la respuesta de una pregunta: queda guardada con la pregunta que
+la originó. Cuándo se usa:
+
+- Solo cuando el cliente escribe algo que el Vigía **no entendió** («otro») y se parece a una pregunta aprobada (mismas palabras
+  con contenido que las FAQs, parecido ≥ 0.5, al menos dos palabras). Una pregunta de dato del viaje (ubicación, hora, documentos,
+  factura) se contesta SIEMPRE con el dato real de ese viaje; una queja o «quiero hablar con alguien» las atiende una persona.
+- El borrador sale con ese texto, riesgo medio, **siempre al gerente** (lo no entendido nunca se autoenvía, ni en modo
+  «autoenviar bajo riesgo»), con la advertencia «es una respuesta rápida que tú aprobaste: revisa que conteste lo que preguntó el
+  cliente». El pulido con modelo no la toca.
+- Cada uso se cuenta (`vigia_respuesta_rapida_usar`, atómico) y se ve en la pantalla; una respuesta se retira sin borrarla.
+- Tope: 200 aprobadas por flota. Sin la 0647 en la base no hay respuestas rápidas y el Vigía contesta como siempre.
+
+## Reporte de preguntas frecuentes y tendencias en Excel o PDF
+
+`GET /api/export/vigia-faqs?[grupo=<uuid>]&formato=xlsx|pdf` (botones en la pantalla del histórico). Mismas cifras que la pantalla:
+preguntas frecuentes con la respuesta del equipo, temas por semana con su cambio contra las 4 semanas previas y tiempos de
+respuesta contra el umbral. Puertas: área `operacion` + `puedeExportar`, rate limit por IP y por flota, grupo buscado con la flota
+de la sesión (otro grupo = 404), sin las tablas de la 0484 = 409.
 
 ## Cuándo llega la alerta de «más de 10 minutos»
 

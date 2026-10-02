@@ -7,8 +7,8 @@ import { logger } from '@/lib/logger';
 import { emailDeUsuario } from '@/lib/likida/conductor/trabajo';
 import { crearRepoVigia } from '@/lib/likida/vigia/repo';
 import { analizarHistorial } from '@/lib/likida/vigia/historial/analisis';
-import { leerClientesParaGrupo, leerGrupos, leerMensajesHistorial } from '@/lib/likida/vigia/historial/repo';
-import { altaGrupoPanel, borrarGrupoPanel, criticoGrupoPanel, importarHistorialPanel } from '@/lib/likida/vigia/historial/acciones';
+import { leerClientesParaGrupo, leerGrupos, leerMensajesHistorial, leerRespuestasRapidas } from '@/lib/likida/vigia/historial/repo';
+import { altaGrupoPanel, aprobarRespuestaRapidaPanel, borrarGrupoPanel, criticoGrupoPanel, importarHistorialPanel, retirarRespuestaRapidaPanel } from '@/lib/likida/vigia/historial/acciones';
 import { sufijoTenant } from '../../../sufijo';
 import { VistaHistorialVigia } from './vista';
 import type { ResultadoGrupos } from './formas';
@@ -38,10 +38,11 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
   const grupoElegido = sp.grupo && UUID.test(sp.grupo) ? sp.grupo : null;
 
-  const [grupos, clientes, config] = await Promise.all([
+  const [grupos, clientes, config, rapidas] = await Promise.all([
     leerGrupos(tenantId).catch((e) => { logger.warn('vigia.grupos_no_leidos', { err: e instanceof Error ? e.message : String(e) }); return null; }),
     leerClientesParaGrupo(tenantId).catch(() => []),
     crearRepoVigia().config(tenantId).catch(() => null),
+    leerRespuestasRapidas(tenantId).catch((e) => { logger.warn('vigia.respuestas_rapidas_no_leidas', { err: e instanceof Error ? e.message : String(e) }); return null; }),
   ]);
   const umbralMin = config?.slaCriticoMin ?? 10;
   const datos = grupos === null ? null : await leerMensajesHistorial(tenantId, grupoElegido).catch((e) => { logger.warn('vigia.historial_no_leido', { err: e instanceof Error ? e.message : String(e) }); return null; });
@@ -71,6 +72,22 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
     if (r.ok) revalidatePath(RUTA);
     return r;
   }
+  async function aprobarRapida(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
+    'use server';
+    const c = await contexto(sp);
+    if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
+    const r = await aprobarRespuestaRapidaPanel(c, fd);
+    if (r.ok) revalidatePath(RUTA);
+    return r;
+  }
+  async function retirarRapida(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
+    'use server';
+    const c = await contexto(sp);
+    if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
+    const r = await retirarRespuestaRapidaPanel(c, fd);
+    if (r.ok) revalidatePath(RUTA);
+    return r;
+  }
   async function importar(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
     const c = await contexto(sp);
@@ -85,7 +102,8 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   return (
     <VistaHistorialVigia
       sufijo={sufijoTenant(sp)} grupos={grupos} clientes={clientes} reporte={reporte} grupoElegido={grupoElegido} truncado={datos?.truncado ?? false}
-      umbralMin={umbralMin} puedeEditar={puedeAdministrar(rol)} acciones={{ alta, critico, borrar, importar }}
+      umbralMin={umbralMin} puedeEditar={puedeAdministrar(rol)} puedeAprobar={['superadmin', 'flota_admin', 'encargado'].includes(rol)} rapidas={rapidas}
+      acciones={{ alta, critico, borrar, importar, aprobarRapida, retirarRapida }}
     />
   );
 }

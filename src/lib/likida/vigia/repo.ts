@@ -24,6 +24,7 @@ import { telefonoDeUsuario, telefonoJefeDe } from '../contactos';
 import { normalizarTelefonoWa } from '../wa_ventana';
 import { hashTelefono } from './servicio';
 import { seleccionarEnEspera } from './escalamiento';
+import type { RespuestaRapida } from './respuestas_rapidas';
 import {
   etapaDeViaje, ultimoHitoDe, type EstatusViaje, type ResumenViaje, type ServicioEstatusViaje,
 } from './estatus_viaje';
@@ -262,8 +263,32 @@ async function clientesCriticos(tenants: string[]): Promise<Set<string>> {
   }
 }
 
+/** Cuántas flotas caben en un filtro `or` de la cola del barrido. */
+const FLOTAS_POR_CONSULTA = 40;
+
+/** La 0647 aún no está en la base: no hay tabla ni función. */
+const SIN_0647 = new Set(['42P01', 'PGRST205', '42883', 'PGRST202']);
+
 export function crearRepoVigia(): RepoVigia {
   return {
+    // 0647. Sin la tabla (base sin migrar) o con un error de lectura, no hay respuestas rápidas y el borrador sale como siempre.
+    async respuestasRapidas(tenantId) {
+      const r = await acotada(supabaseAdmin().from('vigia_respuesta_rapida')
+        .select('id, tema, pregunta, texto, usos').eq('tenant_id', tenantId).eq('estado', 'aprobada').order('id').limit(200), 'vigia.respuestas_rapidas');
+      if (r.error) {
+        if (!(r.error.code && SIN_0647.has(r.error.code))) logger.warn('vigia.respuestas_rapidas_fallo', { err: r.error.message });
+        return [];
+      }
+      return ((r.data ?? []) as Fila[]).map((f) => ({
+        id: String(f.id), tema: String(f.tema) as RespuestaRapida['tema'], pregunta: String(f.pregunta), texto: String(f.texto), usos: num(f.usos),
+      }));
+    },
+
+    async usarRespuestaRapida(tenantId, id) {
+      const r = await acotada(supabaseAdmin().rpc('vigia_respuesta_rapida_usar', { p_tenant: tenantId, p_id: id }), 'vigia.usar_respuesta_rapida');
+      if (r.error && !(r.error.code && SIN_0647.has(r.error.code))) logger.warn('vigia.usar_respuesta_rapida_fallo', { err: r.error.message });
+    },
+
     async clienteCritico(tenantId, clienteId) {
       return (await clientesCriticos([tenantId])).has(`${tenantId}:${clienteId}`);
     },
@@ -497,13 +522,18 @@ export function crearRepoVigia(): RepoVigia {
       const configs = (exigir('en_espera_config', await acotada(db.from('vigia_config')
         .select('*').eq('habilitado', true).order('tenant_id').limit(1000), 'vigia.en_espera_config')) as Fila[] | null ?? []).map(aConfig);
       if (configs.length === 0) return [];
-      const alcance = configs.map((c) => {
-        const corte = new Date(ahora.getTime() - Math.min(c.slaRespuestaMin, c.slaCriticoMin) * 60_000).toISOString();
-        return `and(tenant_id.eq.${c.tenantId},or(sin_respuesta_desde.lte.${corte},molestia_nivel.gte.2,entradas_sin_respuesta.gte.5))`;
-      }).join(',');
-      const convs = (exigir('en_espera', await acotada(db.from('vigia_conversacion')
-        .select(COLS_CONV).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).lt('escalamiento_nivel', 2).or(alcance)
-        .order('sin_respuesta_desde', { ascending: true }).order('id').limit(Math.max(1, limite) * 3), 'vigia.en_espera')) as Fila[] | null ?? []).map(aConversacion);
+      // Por tandas de flotas: el filtro `or` viaja en la URL y no debe crecer con el número de flotas.
+      const convs: Conversacion[] = [];
+      for (let i = 0; i < configs.length; i += FLOTAS_POR_CONSULTA) {
+        const alcance = configs.slice(i, i + FLOTAS_POR_CONSULTA).map((c) => {
+          const corte = new Date(ahora.getTime() - Math.min(c.slaRespuestaMin, c.slaCriticoMin) * 60_000).toISOString();
+          return `and(tenant_id.eq.${c.tenantId},or(sin_respuesta_desde.lte.${corte},molestia_nivel.gte.2,entradas_sin_respuesta.gte.5))`;
+        }).join(',');
+        const f = exigir('en_espera', await acotada(db.from('vigia_conversacion')
+          .select(COLS_CONV).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).lt('escalamiento_nivel', 2).or(alcance)
+          .order('sin_respuesta_desde', { ascending: true }).order('id').limit(Math.max(1, limite) * 3), 'vigia.en_espera')) as Fila[] | null ?? [];
+        convs.push(...f.map(aConversacion));
+      }
       if (convs.length === 0) return [];
       const tenants = [...new Set(convs.map((c) => c.tenantId))];
       const contactos = (exigir('en_espera_contactos', await acotada(db.from('vigia_contacto')

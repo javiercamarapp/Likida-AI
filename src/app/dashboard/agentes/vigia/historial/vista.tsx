@@ -4,9 +4,10 @@ import { numero, fechaHoraMx } from '@/lib/formato';
 import type { GrupoVigia } from '@/lib/likida/vigia/historial/repo';
 import type { ReporteHistorial } from '@/lib/likida/vigia/historial/analisis';
 import { BarraPagina } from '../../../resumen-visual';
-import { FilaBorrar, FilaCritico, FormaAltaGrupo, FormaImportar, type AccionGrupos } from './formas';
+import type { RespuestaRapidaFila } from '@/lib/likida/vigia/historial/repo';
+import { FilaBorrar, FilaCritico, FilaRetirarRapida, FormaAltaGrupo, FormaAprobarRapida, FormaImportar, type AccionGrupos } from './formas';
 
-export interface AccionesGrupos { alta: AccionGrupos; critico: AccionGrupos; borrar: AccionGrupos; importar: AccionGrupos }
+export interface AccionesGrupos { alta: AccionGrupos; critico: AccionGrupos; borrar: AccionGrupos; importar: AccionGrupos; aprobarRapida: AccionGrupos; retirarRapida: AccionGrupos }
 
 function Seccion({ id, titulo, children }: { id: string; titulo: string; children: React.ReactNode }) {
   return (
@@ -31,7 +32,7 @@ function duracion(min: number | null): string {
   return `${numero(Math.floor(min / 60))} h ${numero(min % 60)} min`;
 }
 
-export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, grupoElegido, truncado, umbralMin, puedeEditar, acciones }: {
+export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, grupoElegido, truncado, umbralMin, puedeEditar, puedeAprobar, rapidas, acciones }: {
   sufijo: string;
   /** `null` = la base aún no tiene la 0484: se dice, no se enseña «no hay grupos». */
   grupos: GrupoVigia[] | null;
@@ -42,8 +43,15 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, grupoEl
   truncado: boolean;
   umbralMin: number;
   puedeEditar: boolean;
+  /** Dueño o encargado: aprueban y retiran respuestas rápidas. */
+  puedeAprobar: boolean;
+  /** Respuestas rápidas aprobadas; `null` = la base aún no tiene la 0647. */
+  rapidas: RespuestaRapidaFila[] | null;
   acciones: AccionesGrupos;
 }) {
+  // La exportación respeta el mismo recorte del reporte que se ve (grupo elegido o todos).
+  const qExport = `${grupoElegido ? `grupo=${grupoElegido}&` : ''}`;
+  const aprobadas = new Set((rapidas ?? []).map((r) => r.pregunta.trim().toLowerCase()));
   return (
     <main className="h-full">
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
@@ -96,11 +104,43 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, grupoEl
                 <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota agrega grupos y sube histórico.</p>
               )}
 
+              <Seccion id="rapidas" titulo="Respuestas rápidas aprobadas">
+                {rapidas === null ? (
+                  <Aviso>La base de datos todavía no tiene las respuestas rápidas (falta aplicar la migración 0647). Mientras tanto el Vigía contesta como siempre.</Aviso>
+                ) : (
+                  <>
+                    <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                      Cuando un cliente escribe algo que el Vigía no entiende y se parece a una de estas preguntas, el borrador sale con la respuesta que aprobaste. Siempre te llega para aprobar antes de enviarse. Apruébalas desde las preguntas frecuentes del reporte de abajo.
+                    </p>
+                    {rapidas.length === 0 ? (
+                      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Aún no hay respuestas rápidas aprobadas.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {rapidas.map((r) => (
+                          <li key={r.id} className="text-[12.5px] flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div><strong>{r.pregunta}</strong> <span style={{ color: 'var(--faint)' }}>· {numero(r.usos)} {r.usos === 1 ? 'uso' : 'usos'}{r.ultimoUsoEn ? ` · último ${fechaHoraMx(r.ultimoUsoEn)}` : ''}</span></div>
+                              <div style={{ color: 'var(--muted)' }}>«{r.texto}»</div>
+                            </div>
+                            {puedeAprobar && <FilaRetirarRapida accion={acciones.retirarRapida} respuestaId={r.id} />}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </Seccion>
+
               <Seccion id="reporte" titulo={grupoElegido ? 'Reporte del grupo elegido' : 'Reporte de todos los grupos'}>
                 {reporte === null || reporte.mensajes === 0 ? (
                   <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Todavía no hay histórico subido: sube el chat de un grupo y aquí aparecen sus preguntas frecuentes, sus temas y los tiempos de respuesta.</p>
                 ) : (
                   <div className="space-y-5">
+                    <p className="text-[12px] flex flex-wrap gap-x-3 gap-y-1">
+                      <span style={{ color: 'var(--muted)' }}>Descargar el reporte de preguntas frecuentes y tendencias:</span>
+                      <a href={`/api/export/vigia-faqs?${qExport}formato=xlsx${sufijo ? `&${sufijo.slice(1)}` : ''}`} className="underline">Excel</a>
+                      <a href={`/api/export/vigia-faqs?${qExport}formato=pdf${sufijo ? `&${sufijo.slice(1)}` : ''}`} className="underline">PDF</a>
+                    </p>
                     {truncado && <Aviso>El histórico es más grande de lo que se analiza de una vez: el reporte usa solo los primeros 50,000 mensajes.</Aviso>}
                     <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
                       {numero(reporte.mensajes)} mensajes ({numero(reporte.mensajesCliente)} de clientes, {numero(reporte.mensajesEquipo)} de tu equipo)
@@ -125,6 +165,9 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, grupoEl
                             <li key={f.pregunta} className="text-[12.5px]">
                               <div><strong>{f.pregunta}</strong> <span style={{ color: 'var(--faint)' }}>· {numero(f.veces)} veces en {numero(f.dias)} días</span></div>
                               <div style={{ color: 'var(--muted)' }}>{f.respuestaTipica ? <>Lo que suele contestar tu equipo: «{f.respuestaTipica}»</> : 'Sin una respuesta del equipo en la hora siguiente.'}</div>
+                              {puedeAprobar && rapidas !== null && (aprobadas.has(f.pregunta.trim().toLowerCase())
+                                ? <div className="text-[11.5px]" style={{ color: 'var(--ok)' }}>Ya es una respuesta rápida aprobada.</div>
+                                : <FormaAprobarRapida accion={acciones.aprobarRapida} tema={f.tema} pregunta={f.pregunta} textoInicial={f.respuestaTipica ?? ''} />)}
                             </li>
                           ))}
                         </ul>

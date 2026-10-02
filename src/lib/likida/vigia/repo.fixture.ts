@@ -12,6 +12,7 @@ import {
 } from './tipos';
 import { CLIENTE_A, T1 } from './datos.fixture';
 import { seleccionarEnEspera } from './escalamiento';
+import type { RespuestaRapida } from './respuestas_rapidas';
 import { adjuntosDeRespaldo, type ArchivoParaEnviar } from './adjuntos';
 
 export interface EventoGuardado extends NuevoEvento { tenantId: string; id: number }
@@ -86,6 +87,16 @@ export class RepoEnMemoria implements RepoVigia {
     return this.archivos.get(`${a.tenantId}|${a.clienteId}|${a.viajeId}|${a.clave}`) ?? null;
   }
   criticos = new Set<string>();
+  /** 0647: respuestas rápidas aprobadas por flota. */
+  rapidas = new Map<string, RespuestaRapida[]>();
+  usosRapidas: Array<{ tenantId: string; id: string }> = [];
+  async respuestasRapidas(tenantId: string): Promise<RespuestaRapida[]> { this.verifica('respuestasRapidas'); return [...(this.rapidas.get(tenantId) ?? [])]; }
+  async usarRespuestaRapida(tenantId: string, id: string): Promise<void> {
+    this.verifica('usarRespuestaRapida');
+    this.usosRapidas.push({ tenantId, id });
+    const r = (this.rapidas.get(tenantId) ?? []).find((x) => x.id === id);
+    if (r) r.usos += 1;
+  }
   async clienteCritico(tenantId: string, clienteId: string): Promise<boolean> { this.verifica('clienteCritico'); return this.criticos.has(`${tenantId}:${clienteId}`); }
   async config(tenantId: string): Promise<ConfigVigia> { this.verifica('config'); return this.configs.get(tenantId) ?? configApagada(tenantId); }
   async contactoPorTelefono(telefono: string): Promise<Contacto | null> {

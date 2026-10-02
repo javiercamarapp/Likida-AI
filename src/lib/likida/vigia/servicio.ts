@@ -40,6 +40,7 @@ import { resolverViaje, type ResumenViaje } from './estatus_viaje';
 import { evaluarMolestia } from './molestia';
 import { decidirEnvio } from './politica';
 import { pulirBorrador, redactarBorrador, type ViajeParaRedactar } from './redactor';
+import { elegirRespuestaRapida } from './respuestas_rapidas';
 import type { DepsVigia, Destinatario } from './puertos';
 import { configParaCliente } from './tipos';
 import type { AdjuntoRef, Clasificacion, ConfigVigia, Contacto, Conversacion, MensajeVigia, MotivoEscalamiento } from './tipos';
@@ -246,10 +247,18 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
 
   // ── Borrador con datos reales (o con «lo consulto») ─────────────────────
   const [nombreFlota, nombreCliente] = await Promise.all([repo.nombreFlota(tenantId), repo.nombreCliente(tenantId, contacto.clienteId)]);
+  // 0647: lo que el Vigía no entendió, pero se parece a una pregunta cuya respuesta el gerente ya aprobó. Si leerlas falla, el
+  // borrador sale como siempre: una respuesta rápida es un atajo, nunca un requisito para atender al cliente.
+  let respuestaRapida: ReturnType<typeof elegirRespuestaRapida> = null;
+  if (cl.intencion === 'otro' && c.tipo === 'texto' && !senales.includes('inyeccion')) {
+    try { respuestaRapida = elegirRespuestaRapida(c.texto, await repo.respuestasRapidas(tenantId)); }
+    catch (e) { logger.warn('vigia.respuestas_rapidas_no_leidas', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) }); }
+  }
   let borrador = redactarBorrador({
     clasificacion: { intencion: cl.intencion, secundarias: cl.secundarias, senales },
     nombreContacto: contacto.nombre, nombreFlota, viaje, ahora,
     primerContacto: !contacto.avisoPrivacidadEn, avisoPrivacidadUrl: config.avisoPrivacidadUrl ?? `${appUrl()}/privacidad`,
+    respuestaRapida,
   });
   const folio = viaje.tipo === 'uno' ? viaje.estatus.folio : null;
   const pulido = await pulirBorrador(borrador, c.texto, folio, deps.pulir, tenantId);
@@ -275,9 +284,10 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
   });
   // Otra pasada (reintento, carrera) ya redactó la respuesta de este mensaje.
   if (!saliente.creado) return;
+  if (borrador.origen === 'respuesta_rapida' && respuestaRapida) await repo.usarRespuestaRapida(tenantId, respuestaRapida.id).catch(() => {});
   await repo.evento(tenantId, {
     conversacionId: conv.id, tipo: 'borrador',
-    detalle: { intencion: cl.intencion, riesgo: borrador.riesgo, decision: decision.motivo, faltantes: borrador.faltantes, tareas: borrador.tareas, origen: borrador.origen },
+    detalle: { intencion: cl.intencion, riesgo: borrador.riesgo, decision: decision.motivo, faltantes: borrador.faltantes, tareas: borrador.tareas, origen: borrador.origen, ...(respuestaRapida ? { respuestaRapidaId: respuestaRapida.id } : {}) },
   });
 
   // ── Lo que falta o lo que pide humano: ESCALA (spec: «consultará y escala») ─
@@ -345,8 +355,9 @@ async function escalarPorFallo(tenantId: string, conversacionId: string, contact
   }
 }
 
-function advertenciaDeBorrador(b: { faltantes: string[]; requiereHumano: boolean; adjuntos?: Array<AdjuntoRef['clave']> }, senales: string[]): string | null {
+function advertenciaDeBorrador(b: { faltantes: string[]; requiereHumano: boolean; adjuntos?: Array<AdjuntoRef['clave']>; origen?: string }, senales: string[]): string | null {
   const partes: string[] = [];
+  if (b.origen === 'respuesta_rapida') partes.push('es una respuesta rápida que tú aprobaste para una pregunta parecida: revisa que conteste lo que preguntó el cliente');
   if (b.adjuntos && b.adjuntos.length > 0) partes.push(`adjuntará: ${b.adjuntos.map(nombreDeAdjunto).join(', ')} (solo si la ventana de 24 h del cliente sigue abierta)`);
   if (senales.includes('inyeccion')) partes.push('el mensaje del cliente trae instrucciones raras; revisa bien antes de enviar');
   if (senales.includes('folio_ajeno')) partes.push('preguntó por un folio que no es suyo');

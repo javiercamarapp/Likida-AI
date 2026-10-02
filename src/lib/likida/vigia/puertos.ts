@@ -14,6 +14,7 @@ import type { PuertoModelo } from './clasificador';
 import type { PuertoPulir } from './redactor';
 import type { ServicioEstatusViaje } from './estatus_viaje';
 import type { ArchivoParaEnviar } from './adjuntos';
+import type { RespuestaRapida } from './respuestas_rapidas';
 import type { Enviador, EntradaEnvioCliente, ResultadoEnvioCliente } from './enviar';
 import type {
   AdjuntoRef, Clasificacion, ConfigVigia, Contacto, Conversacion, EstadoMensajeSaliente, Intencion, MensajeVigia, Riesgo, TipoEvento,
@@ -71,6 +72,10 @@ export interface Destinatario {
 
 export interface RepoVigia {
   config(tenantId: string): Promise<ConfigVigia>;
+  /** 0647: las respuestas rápidas APROBADAS de la flota. Falla hacia `[]` (el borrador sale como siempre), nunca lanza por una base sin migrar. */
+  respuestasRapidas(tenantId: string): Promise<RespuestaRapida[]>;
+  /** 0647: cuenta un uso de una respuesta rápida. Mejor esfuerzo: nunca lanza. */
+  usarRespuestaRapida(tenantId: string, id: string): Promise<void>;
   /** 0484: ¿el cliente tiene algún grupo CRÍTICO? Falla hacia `false` (el plazo general), nunca lanza por una base sin migrar. */
   clienteCritico(tenantId: string, clienteId: string): Promise<boolean>;
   /** El contacto ACTIVO o dado de baja de ese número; `null` si no está en ninguna allowlist (o está suprimido). */

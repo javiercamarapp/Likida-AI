@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { Save, Upload, Trash2 } from 'lucide-react';
+import { Save, Upload, Trash2, Check } from 'lucide-react';
 import { AvisoResultado, type ResultadoUI } from '../../../../admin/ui/aviso-resultado';
 
 export type ResultadoGrupos = ResultadoUI;
@@ -97,6 +97,39 @@ export function FormaImportar({ accion, grupos }: { accion: AccionGrupos; grupos
         <span className={AYUDA} style={{ color: 'var(--faint)' }}>Tal como salen en el chat. Todo otro nombre se cuenta como cliente. Los nombres no se guardan, solo un código que no se puede revertir; los teléfonos y correos escritos en los mensajes se tapan.</span>
       </label>
       <Enviar Icono={Upload}>Subir histórico</Enviar>
+      <AvisoResultado estado={estado} />
+    </form>
+  );
+}
+
+/**
+ * Aprobar la respuesta de una pregunta frecuente como «respuesta rápida» (0647). El texto viene con lo que suele contestar el equipo,
+ * editable: lo que el gerente aprueba es lo que el Vigía propondrá, no lo que se calculó.
+ */
+export function FormaAprobarRapida({ accion, tema, pregunta, textoInicial }: { accion: AccionGrupos; tema: string; pregunta: string; textoInicial: string }) {
+  const [estado, despachar] = useActionState(accion, null);
+  return (
+    <form action={despachar} className="mt-1.5 space-y-1.5">
+      <input type="hidden" name="tema" value={tema} />
+      <input type="hidden" name="pregunta" value={pregunta} />
+      <label className="block">
+        <span className={ETIQUETA}>Respuesta rápida que el Vigía propondrá (puedes corregirla)</span>
+        <textarea name="texto" required maxLength={700} rows={2} defaultValue={textoInicial} className="hairline rounded-lg px-2.5 py-1.5 text-[13px] outline-none focus:border-[var(--muted)] w-full" />
+      </label>
+      <Enviar Icono={Check}>Aprobar como respuesta rápida</Enviar>
+      <AvisoResultado estado={estado} />
+    </form>
+  );
+}
+
+export function FilaRetirarRapida({ accion, respuestaId }: { accion: AccionGrupos; respuestaId: string }) {
+  const [estado, despachar] = useActionState(accion, null);
+  return (
+    <form action={despachar} className="inline-flex items-center gap-2">
+      <input type="hidden" name="respuestaId" value={respuestaId} />
+      <button type="submit" className="rounded-md px-2 h-7 text-[11.5px] inline-flex items-center gap-1 hover:bg-[var(--canvas)]" style={{ color: 'var(--bad)' }} aria-label="Retirar esta respuesta rápida">
+        <Trash2 width={12} height={12} strokeWidth={1.75} aria-hidden />Retirar
+      </button>
       <AvisoResultado estado={estado} />
     </form>
   );
