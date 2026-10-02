@@ -24,9 +24,11 @@ let secuencia = 0;
 
 export function crearDbMemoria(
   inicial: Record<string, Fila[]> = {},
-  rpcs: Record<string, (args: Record<string, unknown>) => Fila[]> = {},
+  rpcs: Record<string, (args: Record<string, unknown>) => Fila[] | boolean> = {},
   /** Restricciones únicas por tabla (lista de columnas): el INSERT que choca devuelve el error 23505 como Postgres. */
   unicos: Record<string, string[][]> = {},
+  /** Valores por omisión de columnas por tabla (los DEFAULT de la migración). */
+  defaults: Record<string, Fila> = {},
 ): DbMemoria {
   const tablas: Record<string, Fila[]> = Object.fromEntries(Object.entries(inicial).map(([k, v]) => [k, v.map((f) => ({ ...f }))]));
   const llamadas: Llamada[] = [];
@@ -44,7 +46,7 @@ export function crearDbMemoria(
     private head = false;
     private retorna = false;
     private opcionesUpsert: { onConflict?: string } = {};
-    constructor(private tabla: string, private fuente?: () => Fila[], private clave?: string) {}
+    constructor(private tabla: string, private fuente?: () => Fila[] | boolean, private clave?: string) {}
 
     select(_c?: string, o?: { count?: string; head?: boolean }) {
       if (this.op !== 'select') this.retorna = true;
@@ -95,7 +97,10 @@ export function crearDbMemoria(
       if (falla) return { data: null, error: { message: falla } };
 
       if (this.fuente) {
-        let filas = this.fuente().filter((f) => this.coincide(f));
+        // Una RPC puede devolver un escalar (p. ej. `true` de finalizar_correo).
+        const bruto = this.fuente() as unknown;
+        if (!Array.isArray(bruto)) return { data: bruto, error: null };
+        let filas = (bruto as Fila[]).filter((f) => this.coincide(f));
         for (const [c, asc] of [...this.orden].reverse()) {
           filas = [...filas].sort((a, b) => (a[c]! < b[c]! ? -1 : a[c]! > b[c]! ? 1 : 0) * (asc ? 1 : -1));
         }
@@ -108,7 +113,7 @@ export function crearDbMemoria(
         const nuevos = (Array.isArray(this.payload) ? this.payload : [this.payload]) as Fila[];
         const creados: Fila[] = [];
         for (const n of nuevos) {
-          const fila: Fila = { id: `id-${++secuencia}`, ...n };
+          const fila: Fila = { id: `id-${++secuencia}`, created_at: new Date().toISOString(), ...(defaults[this.tabla] ?? {}), ...n };
           if (this.op === 'insert') {
             const choca = (unicos[this.tabla] ?? []).some((cols) => tabla.some((t) => cols.every((k) => t[k] === fila[k])));
             if (choca) return { data: null, error: { message: 'duplicate key value violates unique constraint', code: '23505' } };
