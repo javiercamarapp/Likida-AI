@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CONFIG_CONDUCTOR_DEFAULT } from '@/lib/likida/conductor/config';
 import { armarTableroViajes } from '@/lib/likida/orquestador/tablero_viajes';
@@ -28,6 +30,13 @@ function pintar(opciones: { posiciones?: Record<string, { lat: number; lng: numb
 }
 
 describe('la pantalla de viajes en vivo', () => {
+  it('se refresca sola: dice cada cuánto, deja actualizar a mano y pausar', () => {
+    const html = pintar();
+    expect(html).toContain('Se actualiza solo cada 60 s');
+    expect(html).toContain('Actualizar ahora');
+    expect(html).toContain('Pausar');
+  });
+
   it('pinta cada viaje con su posición, su antigüedad y su excepción, lo urgente primero', () => {
     const html = pintar();
     expect(html).toContain('F-1');

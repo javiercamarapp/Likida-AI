@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { puedeAsignar } from '@/lib/auth/permisos';
+import { puedeAdministrar, puedeAsignar } from '@/lib/auth/permisos';
 import { fuentes } from '@/lib/likida/orquestador/fuentes';
 import '@/lib/likida/orquestador/fuentes_reales';
 import { rolPuedeLeerTarea } from '@/lib/likida/orquestador/permisos';
@@ -10,6 +10,8 @@ import { limpiarResumen } from '@/lib/likida/orquestador/escalamiento';
 import { armarTableroViajes } from '@/lib/likida/orquestador/tablero_viajes';
 import { logger } from '@/lib/logger';
 import { ahoraMs } from '@/lib/saludo';
+import { Bloque, EsqTabla } from '../bloque';
+import { SeccionNotificaciones } from '../agentes/seccion-notificaciones';
 import { PreguntaAlAsistente } from './pregunta';
 import { TareasAbiertas, VistaViajesEnVivo } from './vista';
 
@@ -73,6 +75,12 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
         hrefMapa="/dashboard/mapa"
         pregunta={<PreguntaAlAsistente tenantParam={sp.tenant ?? null} />}
         tareas={<TareasAbiertas tareas={tareas} accion={puedeAtender ? atender : null} ocultos={ocultos} />}
+        // A quién le llega el aviso de una tarea nueva (apagado por defecto): solo el dueño decide quién recibe los correos de la flota.
+        notificaciones={puedeAdministrar(rol) ? (
+          <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTabla filas={4} />}>
+            <SeccionNotificaciones tenantId={tenantId} agenteId="orquestador" />
+          </Bloque>
+        ) : null}
       />
     </main>
   );

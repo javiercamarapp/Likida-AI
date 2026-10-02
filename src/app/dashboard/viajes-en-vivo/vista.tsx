@@ -4,6 +4,7 @@ import { ETIQUETA_DESTINO, type TareaAbierta } from '@/lib/likida/orquestador/es
 import { textoAntiguedad, type FilaViaje, type TableroViajes, type TipoExcepcionViaje } from '@/lib/likida/orquestador/tablero_viajes';
 import type { NivelFrescura } from '@/lib/likida/orquestador/enganche_gps';
 import type { Semaforo } from '@/lib/likida/conductor/tablero';
+import { ActualizarSolo } from './actualizar_solo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL TABLERO DE VIAJES EN VIVO — presentación pura (el modelo ya viene armado
@@ -172,7 +173,7 @@ export function TareasAbiertas({ tareas, accion, ocultos }: {
   );
 }
 
-export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocultos, hrefMapa, pregunta, tareas }: {
+export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocultos, hrefMapa, pregunta, tareas, notificaciones }: {
   tablero: TableroViajes;
   filtros: FiltrosVistaViajes;
   catalogo: CatalogoVista;
@@ -182,6 +183,8 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
   /** La caja de preguntas del asistente (componente de cliente). */
   pregunta?: ReactNodeLike;
   tareas: ReactNodeLike;
+  /** La sección «Notificaciones» (a quién le llega el aviso de una tarea nueva). Solo la ve quien puede configurarla. */
+  notificaciones?: ReactNodeLike;
 }) {
   const c = tablero.conteos;
   return (
@@ -192,6 +195,7 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
           <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
             Todos los viajes en curso con su último hito, la posición del tractor y qué tan vieja es. Actualizado {fechaHoraMx(tablero.generadoEn)}.
           </p>
+          <ActualizarSolo />
         </div>
         <a href={hrefMapa} className="text-[12.5px] underline" style={{ color: 'var(--muted)' }}>Ver el mapa</a>
       </header>
@@ -228,6 +232,7 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
       </div>
       {pregunta}
       {tareas}
+      {notificaciones}
     </div>
   );
 }
