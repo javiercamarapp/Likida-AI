@@ -120,10 +120,13 @@ export async function correrAlertasEstadia(
           if (envio.ok) { entregados++; canal = envio.via; } else { ultimoError = envio.mensaje; if (envio.reintentable) reintentables++; }
         }
         if (entregados === 0 && reintentables === destinos.length) {
-          await p.liberarAviso(claim);
+          // Un rechazo reintentable (timeout, 429, 5xx) YA dejó el texto en `wa_outbox` (client.ts), que lo
+          // entrega con su backoff. Soltar el claim aquí haría que la siguiente corrida lo mande otra vez y el
+          // outbox entregue el primero: dos avisos. El claim se CIERRA como «en cola» y el outbox es quien reintenta.
+          await p.cerrarAviso(claim, { ok: true, canal: 'texto', motivo: 'en_cola_outbox', ult4: destinos[0].telefono.slice(-4) });
           r.rechazosReintentables++;
           rechazosSeguidos++;
-          r.fallos.push(`estadía ${v.folio ?? v.id}: ${ultimoError} (se reintenta en la siguiente corrida)`);
+          r.fallos.push(`estadía ${v.folio ?? v.id}: ${ultimoError} (queda en la cola de WhatsApp; no se reenvía)`);
         } else {
           rechazosSeguidos = 0;
           await p.cerrarAviso(claim, { ok: entregados > 0, canal: entregados > 0 ? canal : 'ninguno', motivo: entregados > 0 ? null : ultimoError.slice(0, 200), ult4: destinos[0].telefono.slice(-4) });
