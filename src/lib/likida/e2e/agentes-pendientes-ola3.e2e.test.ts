@@ -36,13 +36,7 @@ describe('Agente 10 — GPS: lectores Wialon/Geotab/Navixy/genérico + PUSH + ta
   it.todo('TABLA PROPIA DEL CLIENTE DE DEMO (lector genérico de vista SQL de solo lectura / CSV-SFTP / endpoint + importador de geocercas): columnas unidad, lat, lon, fecha_hora, velocidad, ignición; geocercas polígono o centro+radio — pendiente de construir y de recibir el acceso del cliente (12-oct)');
 });
 
-describe('Agente 12 — Jornada: alerta saliente al acercarse al tope (w3-gps-jornada, cron jornada-alertas, plantillas nuevas)', () => {
-  it.todo('FELIZ: el cron jornada-alertas avisa al operador y al jefe cuando la jornada derivada (marcas + GPS) se acerca al tope, con la plantilla Meta del catálogo');
-  it.todo('FALLO: sin GPS ni marcas no se afirma nada («nunca certifica que cumple»); plantilla sin aprobar con ventana cerrada deja el aviso sin sello y se reintenta');
-  it.todo('DUPLICADO: el cron cada hora no repite la alerta del mismo umbral en la misma jornada');
-  it.todo('FUERA DE ORDEN: una marca de «descanso» tardía reabre/cierra el cálculo y cancela la alerta pendiente sin avisar de más');
-  it.todo('OTRO TENANT: topes y destinatarios de cada flota; la alerta de A jamás llega al jefe de B');
-});
+// Agente 12 — Jornada: sus cinco casos ya son pruebas verdes en `agente-12-jornada.e2e.test.ts`.
 
 describe('Convenios, perfiles de cliente e instrucciones (w3-convenios 46b759fa, migración 0580)', () => {
   it.todo('FELIZ: cliente → convenio (A→B, tarifa, instrucciones de cobro y operación) → al crear el viaje sale la «calle de instrucciones» al operador y al acercarse a la planta (geocerca); el operador pregunta «¿por dónde entro?» y responde el agente con el convenio');
