@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { politicasDetencion } from '../estadias/lector';
 import { CONFIG_CONDUCTOR_DEFAULT, type ConfigConductor } from './config';
 import { armarFilasEstadias, type ResultadoEstadiasPeriodo } from './estadias_lectura';
@@ -65,6 +66,21 @@ export async function estadiasDeViaje(
   return armarFilasEstadias(
     { viajes: [datos.viaje], hitos: datos.hitos, veredictos: [], evidencias: [], sitios: new Map(), truncada: false }, ahora, pol,
   );
+}
+
+/**
+ * Las estadías de UN viaje para el anexo del PDF de la liquidación (ejemplar del contralor). NUNCA lanza: el papel de
+ * una liquidación jamás se pierde por no poder leer un anexo informativo; sin lectura, no hay anexo (`null`) y se loguea.
+ */
+export async function estadiasParaLiquidacion(
+  tenantId: string, viajeId: string, ahora: Date = new Date(), d: DepsServicios = depsServiciosReales,
+): Promise<ResultadoEstadiasPeriodo | null> {
+  try {
+    return await estadiasDeViaje(tenantId, viajeId, ahora, d);
+  } catch (e) {
+    logger.warn('conductor.estadias_para_liquidacion_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
 }
 
 export async function evidenciaJornadaDeViaje(
