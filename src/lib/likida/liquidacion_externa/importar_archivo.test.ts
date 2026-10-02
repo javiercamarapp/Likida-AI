@@ -64,4 +64,30 @@ describe('importar liquidaciones desde el archivo de la flota', () => {
     const r = textoDeArchivoLiquidaciones('a.csv', bytes('﻿clave_externa,x'));
     expect(r.ok && r.texto.startsWith('clave_externa')).toBe(true);
   });
+
+  it('un Excel con las fechas como NÚMERO DE SERIE (lo que guarda Excel) se acepta, no se rechaza', async () => {
+    const XLSX = await import('xlsx');
+    // 46023 = 2026-01-01 y 46029 = 2026-01-07 en el calendario de Excel; el segundo con fracción de hora.
+    const hoja = XLSX.utils.aoa_to_sheet([
+      ['clave_externa', 'numero_empleado', 'periodo_desde', 'periodo_hasta', 'folios_viaje', 'concepto', 'tipo', 'monto', 'total_sistema'],
+      ['LQ-X1', 'E1', 46023, 46029.5, 'F-1', 'Sueldo', 'percepcion', 1000, 1000],
+    ]);
+    const libro = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(libro, hoja, 'H');
+    const xlsx = new Uint8Array(XLSX.write(libro, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer);
+    const recibidos: Array<{ periodo: { desde: string; hasta: string } }> = [];
+    const x = deps();
+    const r = await importarLiquidacionesDeArchivo('t', 'liq.xlsx', xlsx, {
+      ...x.d, recibir: async (_t, datos) => { recibidos.push(datos as never); return { liquidacion: { id: datos.claveExterna } as never }; },
+    });
+    expect(r.problemas).toEqual([]);
+    expect(r.recibidas).toBe(1);
+    expect(recibidos[0].periodo).toEqual({ desde: '2026-01-01', hasta: '2026-01-07' });
+  });
+
+  it('un número que NO parece fecha de Excel sigue rechazándose con el motivo del periodo', async () => {
+    const csv = 'clave_externa,numero_empleado,periodo_desde,periodo_hasta,concepto,tipo,monto,total_sistema\nLQ-Y,E1,1500,99,Sueldo,percepcion,10,10';
+    const r = await importarLiquidacionesDeArchivo('t', 'liq.csv', bytes(csv), deps().d);
+    expect(r.recibidas).toBe(0);
+    expect(r.problemas[0].motivo).toMatch(/periodo ilegible/);
+  });
 });

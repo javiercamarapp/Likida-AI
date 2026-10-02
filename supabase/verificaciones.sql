@@ -18324,3 +18324,39 @@ begin
   raise exception E'CONDUCTOR_0604 claim-unico=% clase-inventada-rebota=% evento-nuevo-entra=% margen-por-omision=% margen-fuera-rebota=% aviso-apagado=%   (esperado t / t / t / t / t / t)',
     claim_unico, clase_mala, evento_ok, margen_ok, margen_malo, apagado;
 end $$;
+
+-- ── 271. Copia de la liquidación al jefe: un solo envío por teléfono y reintento solo de faltantes (mig. 0620) ──
+-- La 0620 da el candado atómico de la copia con cifras: una fila por (liquidación, generación, teléfono) que se
+-- RECLAMA antes de mandar el WhatsApp. Lo que solo la base demuestra: el segundo reclamo del mismo teléfono rebota,
+-- otro teléfono sí puede, una copia aceptada no se vuelve a reclamar ni con el arriendo vencido, soltar la deja
+-- reintentable, el token viejo no cierra un reclamo retomado y una liquidación ajena no se reclama.
+-- Esperado: COPIA_JEFE_0620 segundo-rebota=t otro-telefono=t aceptada-no-repite=t soltar-reintenta=t token-viejo-no-cierra=t flota-ajena-null=t
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; liq uuid; t1 uuid; t2 uuid; t3 uuid; t4 uuid;
+  segundo boolean := false; otro boolean := false; no_repite boolean := false; reintenta boolean := false;
+  viejo_no boolean := false; ajena boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0620 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0620 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0620A', '5215559990620') returning id into oa;
+  insert into liquidacion_externa (tenant_id, clave_externa, huella, operador_id, periodo_desde, periodo_hasta, conceptos, total, moneda, pdf_origen, estado)
+    values (ta, 'ZZZ-0620', repeat('f', 64), oa, '2026-09-01', '2026-09-07', '[{"descripcion":"x","tipo":"percepcion","monto":1}]'::jsonb, 1, 'MXN', 'generado', 'enviada')
+    returning id into liq;
+
+  t1 := reclamar_copia_jefe(ta, liq, 1, '525511110001');
+  segundo := t1 is not null and reclamar_copia_jefe(ta, liq, 1, '525511110001') is null;
+  otro := reclamar_copia_jefe(ta, liq, 1, '525511110002') is not null;
+  perform cerrar_copia_jefe(ta, liq, 1, '525511110001', t1, true);
+  no_repite := reclamar_copia_jefe(ta, liq, 1, '525511110001', clock_timestamp() + interval '1 day') is null;
+  t2 := reclamar_copia_jefe(ta, liq, 1, '525511110003');
+  perform cerrar_copia_jefe(ta, liq, 1, '525511110003', t2, false);
+  t3 := reclamar_copia_jefe(ta, liq, 1, '525511110003');
+  reintenta := t3 is not null;
+  t4 := reclamar_copia_jefe(ta, liq, 1, '525511110003', clock_timestamp() + interval '10 minutes');
+  viejo_no := t4 is not null and not cerrar_copia_jefe(ta, liq, 1, '525511110003', t3, true);
+  ajena := reclamar_copia_jefe(tb, liq, 1, '525511110009') is null;
+
+  raise exception E'COPIA_JEFE_0620 segundo-rebota=% otro-telefono=% aceptada-no-repite=% soltar-reintenta=% token-viejo-no-cierra=% flota-ajena-null=%   (esperado t / t / t / t / t / t)',
+    segundo, otro, no_repite, reintenta, viejo_no, ajena;
+end $$;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { aCsv, aJson, celdaCsv, configEstandar, construirFilas, exportarDocumentos, nombreSeguro, resolverRuta, validarConfigExport, aExportable, type ExportConfig } from './exportacion';
+import * as XLSX from 'xlsx';
+import { aCsv, aXlsx, MIME_XLSX, aJson, celdaCsv, configEstandar, construirFilas, exportarDocumentos, nombreSeguro, resolverRuta, validarConfigExport, aExportable, type ExportConfig } from './exportacion';
 import { cv, extraccionAtlasOk } from './documentos_sinteticos.fixture';
 import type { DocumentoFila } from './repo';
 
@@ -151,6 +152,32 @@ describe('exportarDocumentos: solo lo aprobado', () => {
     const r = exportarDocumentos([{ doc: docAprobado(), viajeFolio: null }], 'json', cfg(), 'x');
     expect(r.nombreArchivo.endsWith('.json')).toBe(true);
     expect(r.mime).toMatch(/json/);
+  });
+
+  it('xlsx: mismo contenido que el csv, nombre .xlsx, mime de Excel y solo lo aprobado', () => {
+    const r = exportarDocumentos(
+      [{ doc: docAprobado(), viajeFolio: null }, { doc: docAprobado({ id: 'd2', estado: 'por_revisar' }), viajeFolio: null }],
+      'xlsx', cfg(), 'Estándar', new Date('2026-10-02T12:00:00Z'),
+    );
+    expect(r.nombreArchivo).toBe('carta-porte-estandar-2026-10-02.xlsx');
+    expect(r.mime).toBe(MIME_XLSX);
+    expect(r.documentos).toBe(1);
+    expect(r.omitidos.map((o) => o.id)).toEqual(['d2']);
+    expect(r.contenido).toBeInstanceOf(Uint8Array);
+    const libro = XLSX.read(r.contenido, { type: 'array' });
+    const filas = XLSX.utils.sheet_to_json<Record<string, unknown>>(libro.Sheets[libro.SheetNames[0]]);
+    const csvFilas = construirFilas([aExportable(docAprobado(), null)], cfg());
+    expect(filas).toHaveLength(csvFilas.length);
+    expect(filas[0].PesoKg).toBe(csvFilas[0].PesoKg);
+  });
+
+  it('aXlsx: sin encabezados no los escribe, vacío es celda vacía y el texto con = va neutralizado', () => {
+    const c = cfg({ encabezados: false, columnas: [{ encabezado: 'A', campo: 'origen_cp' }, { encabezado: 'B', constante: '=1+1' }, { encabezado: 'C', campo: 'distancia_km' }] });
+    const libro = XLSX.read(aXlsx([{ A: '01000', B: '=1+1', C: null }], c), { type: 'array' });
+    const hoja = libro.Sheets[libro.SheetNames[0]];
+    expect(hoja.A1.v).toBe('01000');
+    expect(hoja.B1.v).toBe("'=1+1");
+    expect(hoja.C1).toBeUndefined();
   });
 
   it('nombreSeguro nunca devuelve rutas ni vacío', () => {

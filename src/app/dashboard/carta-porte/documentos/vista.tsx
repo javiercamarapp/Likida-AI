@@ -345,8 +345,12 @@ function Exportacion({ configs, acciones, apiSufijo }: { configs: ConfigVista[];
       <div className="flex flex-wrap gap-2 text-[12px]">
         <a className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={liga('estandar', 'csv')}>Estándar · CSV</a>
         <a className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={liga('estandar', 'json')}>Estándar · JSON</a>
+        <a className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={liga('estandar', 'xlsx')}>Estándar · Excel</a>
         {configs.map((c) => (
           <a key={c.id} className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={liga(c.id, c.formato)}>{c.nombre} · {c.formato.toUpperCase()}</a>
+        ))}
+        {configs.map((c) => (
+          <a key={`${c.id}-xlsx`} className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={liga(c.id, 'xlsx')}>{c.nombre} · Excel</a>
         ))}
       </div>
       {acciones.guardarExport && (
