@@ -4,8 +4,6 @@ import { exigir, traerTodo } from '../pg';
 import { logger } from '@/lib/logger';
 import { leerConfigConductor } from '../conductor/repo';
 import { CONFIG_CONDUCTOR_DEFAULT } from '../conductor/config';
-import type { GeocercaGeom } from '../conductor/geo';
-import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../conductor/geometria_datos';
 import type { CandidatoAcercamiento, PosicionUnidad } from './acercamiento';
 import { traducirFaltaDeEsquema } from './repo';
 
