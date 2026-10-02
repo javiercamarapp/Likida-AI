@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PREFIJO_BARRIDO, barrerSaludDeFlota, llaveBarrido, planBarrido, type DepsBarrido, type TareaDeSistema } from './barrido_salud';
+import { ENFRIAMIENTO_REAPERTURA_H, NOTA_RESUELTO_SOLO, PREFIJO_BARRIDO, barrerSaludDeFlota, llaveBarrido, planBarrido, type DepsBarrido, type TareaDeSistema } from './barrido_salud';
 import { AGENTES_VIGILADOS, resumirSalud, type EntradaSalud, type LatidoVisto } from './salud_agentes';
 import { DESTINOS } from './escalamiento';
 
@@ -128,5 +128,78 @@ describe('el barrido de una flota', () => {
     expect(t.resumen).not.toMatch(/\d{10}/);
     expect(t.resumen).not.toMatch(/https?:/);
     expect(t.resumen.length).toBeLessThanOrEqual(300);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Ronda 09 · adversarial: el latido es GLOBAL del entorno. Un fallo de un cron abría tareas (y correos) en todas las flotas, usaran o no
+// el agente, y al volver a la normalidad se cerraban y se reabrían con otro correo en bucle.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('un latido global no abre tareas en flotas que no usan el agente', () => {
+  const vigiaCaido = (usa?: Record<string, boolean>): EntradaSalud =>
+    sana({ latidos: { ...sana().latidos!, vigia: { estado: 'ok', haceMin: 1, ultimoEstado: 'fallo' } }, ...(usa ? { usa } : {}) });
+
+  it('con el Vigía apagado en la flota, su último latido en fallo se ve como problema pero NO abre tarea', () => {
+    const e = vigiaCaido({ vigia: false });
+    expect(planBarrido(e).abrir).toEqual([]);
+    expect(resumirSalud(e).agentes.find((a) => a.agente === 'vigia')!.problemas.join(' ')).toMatch(/último latido reportó un fallo/);
+  });
+
+  it('un latido vencido tampoco abre tarea en la flota que no usa ese agente', () => {
+    const e = sana({ latidos: { ...sana().latidos!, peajes: { estado: 'vencido', haceMin: 90, ultimoEstado: 'ok' } }, usa: { peajes: false } });
+    expect(planBarrido(e).abrir).toEqual([]);
+  });
+
+  it('la flota que SÍ lo usa (o sin dato de uso) conserva la falla', () => {
+    expect(planBarrido(vigiaCaido({ vigia: true })).abrir.map((a) => a.agente)).toEqual(['vigia']);
+    expect(planBarrido(vigiaCaido()).abrir.map((a) => a.agente)).toEqual(['vigia']);
+  });
+
+  it('lo que es de la flota (sus corridas, sus envíos sin salir) sigue abriendo tarea aunque el latido no cuente', () => {
+    const e = sana({
+      usa: { vigia: false, cobranza: false },
+      corridas: { cobranza: [{ estado: 'fallo', inicio: '2026-10-02T14:00:00Z', fin: null, error: 'x' }] },
+      enviosSinSalir: { vigiaFallidos24h: 3, buzonEntregasConProblema: 0 },
+    });
+    expect(planBarrido(e).abrir.map((a) => a.agente).sort()).toEqual(['cobranza', 'vigia']);
+  });
+});
+
+describe('anti-rebote: una falla que va y viene no abre, cierra y reabre con un correo cada vez', () => {
+  const caida = (): EntradaSalud => sana({ latidos: { ...sana().latidos!, vigia: { estado: 'ok', haceMin: 1, ultimoEstado: 'fallo' } } });
+
+  function conHistorial(entradas: EntradaSalud[]) {
+    const base = armar(entradas);
+    const cierres: Array<{ dedupe: string; en: number; nota: string }> = [];
+    const deps: DepsBarrido = {
+      ...base.deps,
+      async cerrarTarea(t, dedupe, nota) { const ok = await base.deps.cerrarTarea(t, dedupe, nota); if (ok) cierres.push({ dedupe, en: AHORA.getTime(), nota }); return ok; },
+      async cerradaSolaDesde(_t, dedupe, desde) { return cierres.some((c) => c.dedupe === dedupe && c.nota === NOTA_RESUELTO_SOLO && c.en >= desde.getTime()); },
+    };
+    return { deps, abiertas: base.abiertas, cierres };
+  }
+
+  it('abre, se resuelve sola, y una recaída dentro de la ventana NO abre otra tarea', async () => {
+    const { deps, abiertas, cierres } = conHistorial([caida(), sana(), caida()]);
+    expect((await barrerSaludDeFlota(T, AHORA, deps)).abiertas).toBe(1);
+    expect((await barrerSaludDeFlota(T, AHORA, deps)).cerradas).toBe(1);
+    const r = await barrerSaludDeFlota(T, new Date(AHORA.getTime() + 3_600_000), deps);
+    expect(r).toMatchObject({ abiertas: 0, enfriadas: 1 });
+    expect(abiertas.size).toBe(0);
+    expect(cierres).toHaveLength(1);
+  });
+
+  it('pasada la ventana, la falla nueva SÍ abre tarea', async () => {
+    const { deps } = conHistorial([caida(), sana(), caida()]);
+    await barrerSaludDeFlota(T, AHORA, deps);
+    await barrerSaludDeFlota(T, AHORA, deps);
+    const r = await barrerSaludDeFlota(T, new Date(AHORA.getTime() + (ENFRIAMIENTO_REAPERTURA_H + 1) * 3_600_000), deps);
+    expect(r).toMatchObject({ abiertas: 1, enfriadas: 0 });
+  });
+
+  it('una falla que SIGUE no se afecta: su tarea sigue abierta y no cuenta como enfriada', async () => {
+    const { deps } = conHistorial([caida()]);
+    await barrerSaludDeFlota(T, AHORA, deps);
+    expect(await barrerSaludDeFlota(T, AHORA, deps)).toMatchObject({ abiertas: 0, yaAbiertas: 1, enfriadas: 0 });
   });
 });

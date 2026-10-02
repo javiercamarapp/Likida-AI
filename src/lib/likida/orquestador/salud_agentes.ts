@@ -46,6 +46,13 @@ export interface EntradaSalud {
   latidos: Record<string, LatidoVisto> | null;
   /** Por nombre de corridas; la lista viene de la más reciente a la más vieja; null = no se pudo leer. */
   corridas: Record<string, CorridaVista[] | null>;
+  /**
+   * Qué agentes USA esta flota (por id). El LATIDO es global del entorno: un fallo transitorio de un cron abriría tareas en TODAS las
+   * flotas, también en las que no usan ese agente. Con `usa[agente] === false` el latido (vencido o en fallo) se cuenta como problema
+   * a la vista pero NO como falla de la flota; las corridas y los envíos sin salir, que sí son de la flota, siguen contando.
+   * Sin la llave (o sin el mapa) se asume que lo usa (comportamiento anterior).
+   */
+  usa?: Record<string, boolean>;
   /** Envíos que no salieron: null = no se pudo contar. */
   enviosSinSalir: { vigiaFallidos24h: number | null; buzonEntregasConProblema: number | null };
 }
@@ -88,14 +95,17 @@ export function resumirSalud(e: EntradaSalud) {
     let lecturaIncompleta = false;
     /** Un problema que además es una falla de verdad (ver `SaludAgente.fallas`). */
     const falla = (t: string): void => { problemas.push(t); fallas.push(t); };
+    // Un latido es de la PLATAFORMA: solo es falla de ESTA flota si la flota usa el agente.
+    const usaAgente = e.usa?.[a.id] !== false;
+    const fallaDeLatido = (t: string): void => { if (usaAgente) falla(t); else problemas.push(t); };
     let hayDato = false;
     const lat = a.cron && e.latidos ? e.latidos[a.cron] ?? null : null;
     if (a.cron && e.latidos === null) { problemas.push('no se pudo leer el latido del proceso que lo despierta'); lecturaIncompleta = true; }
     if (lat) {
       hayDato = true;
-      if (lat.estado === 'vencido') falla(`el proceso que lo despierta dejó de latir (último latido hace ${lat.haceMin ?? '?'} min)`);
+      if (lat.estado === 'vencido') fallaDeLatido(`el proceso que lo despierta dejó de latir (último latido hace ${lat.haceMin ?? '?'} min)`);
       else if (lat.estado === 'sin_latido') problemas.push('el proceso que lo despierta nunca ha latido');
-      else if (lat.ultimoEstado === 'fallo') falla('su último latido reportó un fallo');
+      else if (lat.ultimoEstado === 'fallo') fallaDeLatido('su último latido reportó un fallo');
     }
     const lista = a.corridas ? e.corridas[a.corridas] : undefined;
     let ultima: SaludAgente['ultimaCorrida'] = null;
