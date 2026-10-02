@@ -448,3 +448,100 @@ describe('AUDITORÍA 32 c10 — SEG/AG/TC-32C10-C1: la banda 1900-2099 sin marca
       expect(tieneCifrasDeDinero(t), t).toBe(false);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AG/SEG/TC-32C11-C1 (auditoría 32 c11, CRÍTICO) — LA BANDA 1900-2099, TERCERA
+// APARICIÓN: EL ARREGLO DE AYER SE REVIERTE CON UNA PREPOSICIÓN.
+//
+// La c9 cerró el monto con `$` y sin coma. La c10 cerró el monto PELADO
+// («te sobran 2000»). Las dos declararon por escrito que la banda quedaba
+// cerrada «en los dos carriles». Ninguna midió el fraseo que el modelo produce
+// de verdad: `prompts.ts:79` lo obliga a contestar con los números de
+// `estado_viaje`, y como la tool devuelve `anticipo` y `comprobado` pero nunca
+// el remanente, el modelo lo RESTA y lo introduce con una preposición, que es
+// como se escribe un importe en español.
+//
+// Medido ejecutando este archivo con el respaldo real (anticipo 8000,
+// comprobado 6000), barriendo los 200 enteros de la banda:
+//
+//     NO VE | []     | Tu saldo a favor es de 2000.      ← sale VERBATIM
+//     NO VE | []     | Te queda un remanente de 1950.
+//     NO VE | []     | Hay una diferencia de 2000 a tu favor.
+//     VE    | [3200] | Tu saldo a favor es de 3200.      ← el contraste
+//
+//     «de»/«del» delante del monto: escapan 200 de 200, en LOS DOS CARRILES
+//
+// Sin `logger.warn` y sin `evento_seguridad`: falla silenciosa CON SELLO DE
+// APROBACIÓN, que es la regla que define al producto.
+//
+// CAUSA RAÍZ: `de` y `del` estaban en la lista cerrada de marcas de año. Son
+// la preposición más común del español delante de un monto. Piden
+// corroboración —un sustantivo de periodo, una norma, o el rango `del X al Y`—
+// y sin ella mandan la asimetría que el archivo ya declara: ante la duda se
+// CONSERVA el número.
+//
+// LO QUE ESTE ARREGLO **NO** CIERRA, dicho aquí para que la c12 lo cobre y
+// para no repetir la historia de las tres rondas anteriores: las otras OCHO
+// preposiciones de la lista (`en`, `al`, `para`, `desde`, `hasta`, `durante`,
+// `hacia`, `entre`) siguen abriendo la banda entera, 200/200 cada una, medido.
+// No se tocan aquí porque cerrarlas obliga a dar vuelta a los contrapesos
+// `en 2026` y «cerró en 2026» que el bloque de arriba fija, y eso es una
+// decisión de producto sobre qué dirección de fallo se acepta — un rediseño,
+// no un parche. Queda como hallazgo abierto con su medición.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('AG/SEG/TC-32C11-C1 — una preposición no convierte un monto en un año', () => {
+  const estado = [{ anticipo: 8000, comprobado: 6000, comprobantes: 4 }];
+
+  it('«un saldo de 2000» se atrapa en LOS DOS carriles, igual que «de 3200»', () => {
+    for (const t of [
+      'Comprobaste $6,000.00 de los $8,000.00; te queda un saldo de 2000.',
+      'Tu saldo a favor es de 2000.',
+      'Te queda un remanente de 1950.',
+      'Hay una diferencia de 2000 a tu favor.',
+      'El total a devolver es de 2050.',
+      'Tienes un sobrante del 1999.',
+    ]) {
+      expect(tieneCifrasDeDinero(t), `portón: ${t}`).toBe(true);
+      expect(cifrasSinRespaldo(t, estado).length, `cotejo: ${t}`).toBeGreaterThan(0);
+    }
+  });
+
+  it('LA BANDA COMPLETA con «de» delante: los 200 enteros, en los dos carriles', () => {
+    const ciegosPorton: number[] = [];
+    const ciegosCotejo: number[] = [];
+    for (let n = 1900; n <= 2099; n++) {
+      const t = `Tu saldo a favor es de ${n}.`;
+      if (!tieneCifrasDeDinero(t)) ciegosPorton.push(n);
+      if (cifrasSinRespaldo(t, estado).length === 0) ciegosCotejo.push(n);
+    }
+    expect(ciegosPorton, 'el portón no veía ninguno de los 200').toEqual([]);
+    expect(ciegosCotejo, 'el cotejo los sellaba como respaldados').toEqual([]);
+  });
+
+  it('CONTRAPESO — un año de verdad con `de`/`del` SIGUE fuera de los dos carriles', () => {
+    // Si esto se cae, el arreglo se pasó de largo y una cita a una norma o una
+    // fecha dispararían la sustitución de una respuesta correcta.
+    for (const t of [
+      'el ejercicio de 2026',
+      'la vigencia de 2026',
+      '1 de enero de 2026',
+      'a partir de 2026',
+      'antes de 2026',
+      'después de 2026',
+      'del 2026 al 2027',
+    ])
+      expect(tieneCifrasDeDinero(t), t).toBe(false);
+  });
+
+  it('CONTRAPESO — los contrapesos que la c10 fijó siguen en pie', () => {
+    for (const t of [
+      'El viaje VJ-2026-0847 cerró en 2026 con $6,000.00 comprobados de $8,000.00.',
+      'La RFA 2026 aplica; comprobaste $6,000.00 de $8,000.00.',
+      'La regla 2.9 de la RFA 2026 aplica; comprobaste $6,000.00 de $8,000.00.',
+    ])
+      expect(cifrasSinRespaldo(t, estado), t).not.toContain(2026);
+    for (const t of ['en 2026', 'el ejercicio 2026', 'del 2026 al 2027'])
+      expect(tieneCifrasDeDinero(t), t).toBe(false);
+  });
+});
