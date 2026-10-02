@@ -40,7 +40,7 @@ Nacen **encendidos**: la detección de llegadas y salidas por geocerca (solo con
 
 El código de cada agente funciona contra una base sin su migración y lo dice (no inventa un estado): la migración habilita lo que está en la columna de arriba. Orden recomendado,
 aditivas e idempotentes: `0603, 0604, 0620, 0630, 0631, 0632, 0635, 0636, 0637, 0640, 0641, 0642, 0643, 0644, 0645, 0647, 0650, 0651, 0652`. Además siguen pendientes las de las
-rondas anteriores (lista consolidada en `~/likida-loop/rondas/ronda-05-auditoria-cierre.md`, sección 3, punto 1). La compuerta de despliegue no construye si la base va atrás de la última
+rondas anteriores (la lista consolidada de la auditoría de cierre, bloqueo 1). La compuerta de despliegue no construye si la base va atrás de la última
 migración; correr antes la cadena contra una copia del estado actual de producción.
 
 ## Plantillas de WhatsApp
