@@ -8,6 +8,7 @@ import { alertarOperador } from '@/lib/observability/alerta';
 import { registrarLatido, puertaCron } from '@/lib/admin/salud';
 import { purgarDocumentosVencidos } from '@/lib/likida/carta_porte_docs/retencion';
 import { mantenerDatosAgentes } from '@/lib/likida/retencion_agentes';
+import { mantenerLedgers } from '@/lib/likida/retencion_ledgers';
 import { purgarRecepcionesVencidas } from '@/lib/likida/buzon/repo';
 
 export const runtime = 'nodejs';
@@ -450,6 +451,22 @@ export async function GET(req: Request) {
       logger.error('cron.purgar.vinculacion_portal_excepcion', { error: e instanceof Error ? e.message : String(e) });
     }
 
+    // ── LEDGERS SIN PURGA (mig. 0680) Y AUTOFACTURA (mig. 0542) ────────────────────────────────────
+    // evento_seguridad, evento_stripe, vigia_evento, cp_documento_evento y buzon_entrega_evento solo se
+    // escribían (auditoría ola 1 #23); `purgar_autofactura` existía desde la 0542 sin que ningún cron la
+    // llamara. Cada tabla es independiente: una que falla se grita y se avisa, pero no tumba a las demás ni
+    // la corrida. `parcial` = quedó trabajo para la corrida de mañana (no cambia el estado de la corrida).
+    let ledgers: Awaited<ReturnType<typeof mantenerLedgers>> | null = null;
+    try {
+      ledgers = await mantenerLedgers(new Date(inicio), new Date(venceRetencionMs));
+      const fallidasLedgers = ledgers.filter((p) => !p.ok);
+      if (fallidasLedgers.length > 0) {
+        await alertarOperador('cron.purgar.ledgers', { error: fallidasLedgers.map((p) => `${p.nombre}: ${p.error}`).join(' · ').slice(0, 500) });
+      }
+    } catch (e) {
+      logger.error('cron.purgar.ledgers_excepcion', { error: e instanceof Error ? e.message : String(e) });
+    }
+
     // 0332 separa la señal de las purgas restantes: si conversación/códigos
     // ya se drenaron fuera de la RPC, no conservamos un `parcial` obsoleto de
     // la última tanda de mantenimiento. En rollout sobre una BD anterior se
@@ -459,7 +476,7 @@ export async function GET(req: Request) {
     const estado = erroresRetencion0104.length > 0 || productoEventoError !== null
       ? 'fallo'
       : parcialGlobal ? 'parcial' : 'ok';
-    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal };
+    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers };
     if (estado === 'fallo') logger.error('cron.purgar.retencion_0104_incompleta', detalleFinal);
     else if (estado === 'parcial') logger.warn('cron.purgar.incompleta', detalleFinal);
     else logger.info('cron.purgar.ok', detalleFinal);
@@ -472,7 +489,7 @@ export async function GET(req: Request) {
       productoEventoError,
     });
     return NextResponse.json(
-      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal },
+      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers },
       { status: estado === 'fallo' ? 500 : 200 },
     );
   } catch (e) {

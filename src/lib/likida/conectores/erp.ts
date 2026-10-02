@@ -43,6 +43,17 @@ import {
 // (la misma decisión que ya está tomada en `ajustes_operativos.ts`).
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── LO QUE LA CONEXIÓN EN VIVO HACE HOY, DICHO SIN ADORNO (auditoría ola 1 #29, Ola 9) ──
+// Los tres ERP «api_en_vivo» (SAP B1, Oracle Fusion, Odoo) implementan `probar()`: un login documentado que
+// verifica la credencial. NINGUNO escribe una póliza ni una factura de proveedor: ese código no existe (ver
+// `CAPACIDADES_SIN_EJECUTOR` en tipos.ts y la prueba de contrato que lo vigila). Vender «deja el asiento en tu
+// ERP» sin decirlo es la venta mal entendida que el resto de este archivo evita. El camino que SÍ funciona hoy
+// es el archivo (póliza TXT/CSV, `/api/export/poliza`).
+const SOLO_COMPRUEBA_CREDENCIAL =
+  'HOY la conexión en vivo solo comprueba que tu credencial sirve (un login, sin escribir nada). Dejar la póliza o la factura de proveedor directo en tu sistema NO está construido: lo que funciona es el archivo.';
+const PARA_SUBIR_ESCRITURA =
+  'Construir el escritor de póliza y de factura de proveedor contra una instancia real de la flota (con la ruta de red que abra su área de sistemas) y verificarlo con un caso real. Sin eso, el camino es el archivo.';
+
 function base(v: string | undefined, porDefecto = ''): string {
   const b = (v ?? '').trim() || porDefecto;
   return b.replace(/\/+$/, '');
@@ -128,11 +139,11 @@ export const SAP_B1: Conector = {
   // internal component calls only and you do not need to expose it to the
   // Internet». O sea que en un B1 instalado en la oficina —que es el caso
   // normal— Likida NO puede llamarlo desde la nube sin que el cliente abra una
-  // ruta: VPN, túnel o proxy inverso. El adaptador está completo; lo que falta
-  // es de red, y eso lo decide su área de sistemas, no nosotros. Prometerlo sin
-  // decirlo es cómo se pierde la segunda reunión.
-  comoConectaHoy: 'Con la dirección de tu Service Layer, el nombre de tu base de datos de compañía y un usuario de SAP. OJO: SAP recomienda NO exponer el Service Layer a internet, así que si tu B1 está en la oficina hace falta primero una ruta de red (VPN, túnel o proxy) que abra tu área de sistemas.',
-  paraSubirDeEscalon: null,
+  // ruta: VPN, túnel o proxy inverso. Y aun con la ruta abierta, HOY solo está
+  // construida la prueba de credenciales (el login): el escritor de pólizas y de facturas
+  // de proveedor no existe todavía. Prometerlo sin decirlo es cómo se pierde la segunda reunión.
+  comoConectaHoy: 'Con la dirección de tu Service Layer, el nombre de tu base de datos de compañía y un usuario de SAP. OJO: SAP recomienda NO exponer el Service Layer a internet, así que si tu B1 está en la oficina hace falta primero una ruta de red (VPN, túnel o proxy) que abra tu área de sistemas. ' + SOLO_COMPRUEBA_CREDENCIAL,
+  paraSubirDeEscalon: PARA_SUBIR_ESCRITURA,
   capacidades: ['leer_catalogo_cuentas', 'leer_proveedores', 'escribir_asiento', 'escribir_factura_proveedor'],
   claveAlmacen: null,
   fuente: {
@@ -339,10 +350,10 @@ export const ORACLE_FUSION: Conector = {
   id: 'oracle_fusion',
   nombre: 'Oracle Fusion Cloud ERP',
   categoria: 'ERP y contabilidad',
-  queHace: 'Deja el asiento de la liquidación y la factura de proveedor en Oracle Cloud, y lee tu catálogo de cuentas para que la póliza no se adivine.',
+  queHace: 'Objetivo: dejar el asiento de la liquidación y la factura de proveedor en Oracle Cloud y leer tu catálogo de cuentas para que la póliza no se adivine. Hoy solo comprueba la credencial; la escritura no está construida.',
   formaDeConectar: 'api_en_vivo',
-  comoConectaHoy: `Con la dirección de tu instancia (tu "pod"), un usuario de servicio y su contraseña. Es el único Oracle que se conecta sin proyecto de infraestructura. ${PREGUNTA_ORACLE}`,
-  paraSubirDeEscalon: null,
+  comoConectaHoy: `Con la dirección de tu instancia (tu "pod"), un usuario de servicio y su contraseña. Es el único Oracle que se conecta sin proyecto de infraestructura. ${PREGUNTA_ORACLE} ${SOLO_COMPRUEBA_CREDENCIAL}`,
+  paraSubirDeEscalon: PARA_SUBIR_ESCRITURA,
   capacidades: ['leer_catalogo_cuentas', 'escribir_asiento', 'escribir_factura_proveedor'],
   claveAlmacen: null,
   fuente: {
@@ -451,10 +462,10 @@ export const ODOO: Conector = {
   id: 'odoo',
   nombre: 'Odoo',
   categoria: 'ERP y contabilidad',
-  queHace: 'Deja el asiento y la factura de proveedor en Odoo, y lee tu catálogo de cuentas y tus proveedores para casar el RFC de cada factura.',
+  queHace: 'Objetivo: dejar el asiento y la factura de proveedor en Odoo y leer tu catálogo de cuentas y tus proveedores para casar el RFC de cada factura. Hoy solo comprueba la credencial; la escritura no está construida.',
   formaDeConectar: 'api_en_vivo',
-  comoConectaHoy: 'Con una API key de Odoo. DOS ADVERTENCIAS antes de prometer nada: la API externa NO está disponible en los planes One App Free ni Standard de Odoo Online —solo en Custom—, y si tu Odoo es 18 o anterior el camino es el XML-RPC viejo, que Odoo va a eliminar en la versión 22.',
-  paraSubirDeEscalon: null,
+  comoConectaHoy: 'Con una API key de Odoo. DOS ADVERTENCIAS antes de prometer nada: la API externa NO está disponible en los planes One App Free ni Standard de Odoo Online —solo en Custom—, y si tu Odoo es 18 o anterior el camino es el XML-RPC viejo, que Odoo va a eliminar en la versión 22.' + ' ' + SOLO_COMPRUEBA_CREDENCIAL,
+  paraSubirDeEscalon: PARA_SUBIR_ESCRITURA,
   capacidades: ['leer_catalogo_cuentas', 'leer_proveedores', 'escribir_asiento', 'escribir_factura_proveedor'],
   claveAlmacen: null,
   fuente: {

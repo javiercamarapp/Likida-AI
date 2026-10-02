@@ -70,10 +70,10 @@ Corridos localmente contra PG 17 con todas las migraciones aplicadas en orden so
 - **Clasificación del 602 (7)**: solo cambió el TEXTO («no se pudo confirmar»). `cfdi_no_encontrado` sigue en
   `NO_DEDUCIBLE_ISR`/`SIN_IVA_ACREDITABLE`; si el criterio P36 del fiscalista pide «por confirmar» (ni deducible ni acreditable,
   como `cfdi_efos_indeterminado`), es un cambio de dinero que debe decidir el fiscalista.
-- **Techo de IA por flota con pantalla (17)**: el plan «empresa» ya deriva ~$138/día en vez de $5; falta una pantalla de admin
-  para fijar `tenant.config.presupuestoLlmUsdDia` (el cliente de demo ≥ $50/día).
-- **CSP con nonce (4)**, `/api/health` público con la lista de migraciones (57), retención de las demás tablas (22, 53), costo
-  de WhatsApp fuera de la liquidación (20), flood de `evento_seguridad` (19): fuera de este alcance; siguen en la cola.
+- **Techo de IA por flota con pantalla (17)**: *cerrado en la Ola 9* (`/admin/techo-ia`, mig. 0682).
+- **CSP con nonce (4)**, retención de ledgers (22) y flood de `evento_seguridad` (19): *cerrados en la Ola 9* (ver «Ola 9» abajo).
+  Siguen fuera de alcance: `/api/health` público con la lista de migraciones (57), retención de `jornada_*` (53, decisión legal) y
+  costo de WhatsApp fuera de la liquidación (20).
 
 ## Qué cambia para operación
 
@@ -83,3 +83,26 @@ Corridos localmente contra PG 17 con todas las migraciones aplicadas en orden so
   **sale igual** con esos datos dichos como pendientes.
 - Subir `VERSION_TERMINOS`/`VERSION_AVISO_PRIVACIDAD` (en `src/lib/legal/documentos.ts`) cuando cambie el texto; cambiar el texto
   del mandato exige subir su versión y su huella (la prueba lo obliga) y retira el mandato de todas las flotas.
+
+## Ola 9 (2-oct-2026) — rama `loop/w4-ola9-seguridad`, migraciones 0680–0682
+
+| Mig. | Qué hace | Efecto al aplicarla |
+|---|---|---|
+| 0680 | `purgar_evento_seguridad` (info 90 / media 180 / alta 365) y `mantener_ledgers` (+ `evento_stripe` 400, `vigia_evento` 365, `cp_documento_evento` 730, `buzon_entrega_evento` 365) | La primera corrida de `/api/cron/purgar` tras aplicarla borra el histórico vencido (en tandas, con deadline); las purgas que fallan se avisan, no tumban el cron |
+| 0681 | `evento_seguridad.repeticiones/ultimo_en/clave` y la RPC `registrar_evento_seguridad` | Los webhooks dejan de abrir una fila por petición: misma señal en su ventana = una fila con conteo; tope de filas distintas con fila de desborde. Lo `alta` nunca se descarta. Con código adelante de la migración cae al insert directo |
+| 0682 | `fijar_techo_ia_tenant` | La pantalla `/admin/techo-ia` fija/quita `tenant.config.presupuestoLlmUsdDia` (rango 0.10–1000) con `jsonb_set` atómico |
+
+- **CSP con nonce**: `docs/operacion/csp.md`. Rutas con sesión; públicas sin cambio; reversa con `LIKIDA_CSP_NONCE=0`. **Sin `next build` ni navegador en esta ronda: verificar antes de producción.**
+- **`purgar_autofactura` (0542)** ya cuelga de `/api/cron/purgar` (módulo `retencion_ledgers.ts`).
+- **Hallazgos 28–30**: `docs/operacion/hallazgos-ola1-agentes-28-30.md`.
+- **Bump de `next` (CVE GHSA-vcvr-r3jv-pc5j) — NO hecho, requiere autorización de Javier** (`package.json` intacto). Primera versión parcheada: 16.3.6; la
+  última estable al 2-oct-2026 es 16.3.8. Diff exacto:
+  ```diff
+  -    "next": "^16.3.5",
+  +    "next": "^16.3.8",
+  ...
+  -    "eslint-config-next": "^16.3.5",
+  +    "eslint-config-next": "^16.3.8",
+  ```
+  y luego `npm install` (regenera `package-lock.json`), `npm audit --omit=dev`, typecheck y la suite. El CSP con nonce usa solo APIs estables de Next 16
+  (`proxy.ts` y el header CSP de la petición), no depende del parche.

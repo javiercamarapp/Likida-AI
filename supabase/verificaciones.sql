@@ -19120,4 +19120,53 @@ begin
 
   raise exception E'CP_DIVIDIR_0670 divide=% padre-dividido=% huella-base-comun=% atomica=% idempotente=% version-vieja-no-parte=% huella-existente-no-se-pisa=% por-flota=% dividido-no-se-reclama=% solo-service-role=%   (esperado t / t / t / t / t / t / t / t / t / t)',
     divide, padre, comun, atomica, idem, vieja, existente, flota, sin_reclamo, permisos;
+-- ── 315. Seguridad Ola 9: retención de ledgers, flood de evento_seguridad y techo de IA por flota (mig. 0680 + 0681 + 0682) ──
+-- Cuatro garantías que solo la base demuestra. (1) La purga de evento_seguridad respeta el plazo POR SEVERIDAD (una alta de 200 días
+-- sobrevive donde una media de 200 ya no) y mantener_ledgers no toca lo vigente. (2) Registrar una ráfaga de la misma señal deja UNA fila con
+-- su conteo y, pasado el tope de filas distintas, el excedente cae en una fila de desborde: la suma de repeticiones iguala SIEMPRE a los eventos
+-- registrados (lo crítico no se pierde, se agrupa). (3) fijar_techo_ia_tenant escribe SOLO su llave de tenant.config, la quita con null y valida
+-- el rango en la base. Esperado: SEGURIDAD_OLA9 purga-por-severidad=t ledgers-vigente-intacto=t agrupa-ventana=t tope-desborde=t suma-intacta=t techo-sin-pisar=t techo-quita=t techo-rango=t
+do $$
+declare
+  t0 timestamptz := timestamptz '2026-10-02 12:00:30+00';
+  r jsonb; i integer; n integer; f record; c jsonb; tid uuid;
+  purga boolean; vigente boolean; agrupa boolean; desborde boolean; suma boolean; sin_pisar boolean; quita boolean; rango boolean;
+begin
+  -- (1) purga por severidad
+  insert into evento_seguridad (origen, tipo, severidad, creado_en, actor) values
+    ('wa_webhook', 'firma_invalida', 'info',  now() - interval '100 days', 'zzv315-info-100'),
+    ('wa_webhook', 'firma_invalida', 'media', now() - interval '200 days', 'zzv315-media-200'),
+    ('api_v1', 'acceso_denegado', 'alta', now() - interval '200 days', 'zzv315-alta-200'),
+    ('api_v1', 'acceso_denegado', 'alta', now() - interval '400 days', 'zzv315-alta-400');
+  perform purgar_evento_seguridad();
+  purga := not exists (select 1 from evento_seguridad where actor in ('zzv315-info-100', 'zzv315-media-200', 'zzv315-alta-400'));
+  vigente := exists (select 1 from evento_seguridad where actor = 'zzv315-alta-200');
+  perform mantener_ledgers();
+  vigente := vigente and exists (select 1 from evento_seguridad where actor = 'zzv315-alta-200');
+  delete from evento_seguridad where actor like 'zzv315-%';
+
+  -- (2) agrupar por ventana + tope + desborde; la suma de repeticiones es exacta
+  for i in 1..20 loop perform registrar_evento_seguridad('copiloto', 'intent_invalido', 'media', null, 'zzv315-misma', null, t0); end loop;
+  select * into f from evento_seguridad where actor = 'zzv315-misma';
+  agrupa := f.repeticiones = 20 and (select count(*) from evento_seguridad where actor = 'zzv315-misma') = 1;
+  for i in 1..130 loop perform registrar_evento_seguridad('ratelimit', 'rate_limit', 'media', null, 'zzv315-rota-' || i, null, t0); end loop;
+  select count(*) into n from evento_seguridad where origen = 'ratelimit' and coalesce((detalle->>'desborde')::boolean, false) = false;
+  desborde := n = 100 and (select repeticiones from evento_seguridad where origen = 'ratelimit' and coalesce((detalle->>'desborde')::boolean, false)) = 30;
+  suma := (select sum(repeticiones) from evento_seguridad where origen = 'ratelimit') = 130;
+  delete from evento_seguridad where origen in ('copiloto', 'ratelimit') and (actor like 'zzv315-%' or detalle->>'desborde' = 'true');
+
+  -- (3) techo por flota
+  insert into tenant (nombre, config) values ('ZZZ VERIF 0682', '{"empresa": {"nombre": "Flota A"}}') returning id into tid;
+  perform fijar_techo_ia_tenant(tid, 25.555);
+  select config into c from tenant where id = tid;
+  sin_pisar := c->'presupuestoLlmUsdDia' = '25.56'::jsonb and c->'empresa'->>'nombre' = 'Flota A';
+  perform fijar_techo_ia_tenant(tid, null);
+  select config into c from tenant where id = tid;
+  quita := not (c ? 'presupuestoLlmUsdDia') and c->'empresa'->>'nombre' = 'Flota A';
+  rango := false;
+  begin perform fijar_techo_ia_tenant(tid, 5000); exception when sqlstate 'PU001' then rango := true; end;
+  rango := rango and (select config from tenant where id = tid) = c;
+
+  raise exception E'SEGURIDAD_OLA9 purga-por-severidad=% ledgers-vigente-intacto=% agrupa-ventana=% tope-desborde=% suma-intacta=% techo-sin-pisar=% techo-quita=% techo-rango=%   (esperado t / t / t / t / t / t / t / t)',
+    purga, vigente, agrupa, desborde, suma, sin_pisar, quita, rango;
 end $$;

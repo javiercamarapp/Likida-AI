@@ -132,6 +132,7 @@ export function resumenHonesto(): string {
     `${c.porForma.requiere_piloto} que necesitan que un cliente nos dé accesos para cerrarse;`,
     `${c.porForma.no_construido} declarados como todavía no construidos.`,
     'Ninguna conexión está verificada contra una instancia real: hoy no tenemos credenciales de ningún cliente.',
+    'Las conexiones de ERP en vivo solo comprueban la credencial: ninguna escribe todavía póliza ni factura de proveedor en el sistema del cliente (el camino que funciona es el archivo).',
   ].join(' ');
 }
 
