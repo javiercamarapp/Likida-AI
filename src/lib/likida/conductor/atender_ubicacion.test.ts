@@ -363,3 +363,94 @@ describe('la foto de evidencia', () => {
     expect(await registrarEvidenciaDelChofer({ tenantId: 't1', hito, tipo: 'sello', ruta: 'x', sha256: 'd'.repeat(64), ahora: AHORA }, m.deps)).toMatch(/No pude guardar/);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ADVERSARIAL RONDA 03 · un «ya llegué» sin posición que lo respalde NO sella el destino.
+// El hito queda `recibido` (el chofer sí avisó: no se le persigue por lo mismo), pero `viaje.llegada_en` —de donde leen
+// el Vigía y la espera en patio— solo se escribe cuando la ubicación lo confirma (o no hay con qué compararlo).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('«ya llegué» a descargar sin respaldo de ubicación no sella `viaje.llegada_en`', () => {
+  async function aDescarga(m: Memoria) {
+    await dice(m, 'ya llegué a cargar');
+    await dice(m, 'ya cargué');
+    m.legado.length = 0; // lo que importa es lo que pasa con la llegada a DESCARGA
+  }
+  const selladas = (m: Memoria) => m.legado.flatMap((l) => l.sellos);
+  const sinDato = (motivo: string) => salidaValidar('sin_dato', { veredicto: { resultado: 'sin_dato', motivo, fuente: null, distanciaM: null, toleranciaM: 150, radioM: null, sitioId: null, medidaEn: null } });
+
+  it('sin ninguna posición (sin_ubicacion): el hito queda recibido pero NO se sella la llegada', async () => {
+    const m = nueva();
+    await aDescarga(m);
+    m.validarResultado.valor = salidaValidar('sin_dato');
+    await dice(m, 'ya llegué');
+    expect(m.de(V1).find((h) => h.tipo === 'llegada_descarga')?.estado).toBe('recibido');
+    expect(selladas(m)).not.toContain('llegada');
+  });
+
+  it('con posición que NO coincide con el sitio: tampoco se sella', async () => {
+    const m = nueva();
+    await aDescarga(m);
+    m.validarResultado.valor = salidaValidar('sin_coincidencia');
+    await dice(m, 'ya llegué');
+    expect(selladas(m)).not.toContain('llegada');
+  });
+
+  it('si la validación falló (null), no se asume que llegó: se difiere y el barrido decide', async () => {
+    const m = nueva();
+    await aDescarga(m);
+    m.validarResultado.valor = null;
+    await dice(m, 'ya llegué');
+    expect(selladas(m)).not.toContain('llegada');
+  });
+
+  it('con la ubicación confirmada sí se sella, con la hora del mensaje', async () => {
+    const m = nueva();
+    await aDescarga(m);
+    m.validarResultado.valor = salidaValidar('validado');
+    await dice(m, 'ya llegué');
+    expect(selladas(m)).toContain('llegada');
+  });
+
+  it('sin sitio asignado (no hay con qué comparar) se conserva el comportamiento anterior: se sella', async () => {
+    const m = nueva();
+    await aDescarga(m);
+    m.validarResultado.valor = sinDato('sin_sitio');
+    await dice(m, 'ya llegué');
+    expect(selladas(m)).toContain('llegada');
+  });
+
+  it('una flota que apagó la validación de ubicación sigue sellando como siempre', async () => {
+    const m = nueva({ config: { validarUbicacion: false } });
+    await aDescarga(m);
+    await dice(m, 'ya llegué');
+    expect(selladas(m)).toContain('llegada');
+  });
+
+  it('los demás sellos de la 0090 (descarga, regreso) no esperan a la ubicación', async () => {
+    const m = nueva();
+    await aDescarga(m);
+    m.validarResultado.valor = salidaValidar('sin_dato');
+    await dice(m, 'estoy descargando');
+    expect(selladas(m)).toContain('descarga');
+    expect(selladas(m)).not.toContain('llegada');
+  });
+
+  it('el pin que después confirma la llegada a descargar la sella', async () => {
+    const m = nueva();
+    await aDescarga(m);
+    m.validarResultado.valor = salidaValidar('sin_dato');
+    await dice(m, 'ya llegué');
+    expect(selladas(m)).not.toContain('llegada');
+    m.validarResultado.valor = salidaValidar('validado');
+    await atenderPinConductor({ tenantId: 't1', operadorId: 'o1', viajeId: V1, lat: 20.72, lng: -103.39, ahora: AHORA }, m.deps);
+    expect(selladas(m)).toContain('llegada');
+  });
+
+  it('la llegada a CARGAR confirmada por el pin no sella el destino jamás', async () => {
+    const m = nueva();
+    await dice(m, 'ya llegué');
+    m.validarResultado.valor = salidaValidar('validado');
+    await atenderPinConductor({ tenantId: 't1', operadorId: 'o1', viajeId: V1, lat: 20.72, lng: -103.39, ahora: AHORA }, m.deps);
+    expect(selladas(m)).not.toContain('llegada');
+  });
+});

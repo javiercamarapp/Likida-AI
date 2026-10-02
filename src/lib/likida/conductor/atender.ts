@@ -15,10 +15,10 @@ import { leerBotonConductor, PREFIJO_BOTON, type HitoFila, type FuenteHito, type
 import { escalarPorProblema, puertosReales } from './ejecutor';
 import { avisarOficinaDeHito } from './avisos_oficina';
 import { puedeAcusar } from './escalamiento';
-import { depsValidacionReales, validarHitoContraSitio, type EntradaValidarHito, type SalidaValidar } from './validar_hito';
+import { debeSellarTrasValidar, depsValidacionReales, validarHitoContraSitio, type EntradaValidarHito, type SalidaValidar } from './validar_hito';
 import { guardarEvidencia, hitoLlegadaReciente } from './repo_validacion';
 import { ETIQUETA_EVIDENCIA, hitoParaEvidencia, mensajeEvidencia, tipoEvidenciaDeCaption } from './evidencia';
-import { textoVeredicto } from './validacion';
+import { textoVeredicto, veredictoSellaLlegada } from './validacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA ENTRADA DEL CONDUCTOR EN EL PROCESSOR — del mensaje al hito registrado.
@@ -244,7 +244,10 @@ async function aplicar(d: Decision, c: ContextoAplicar): Promise<'ok' | 'carrera
         omitir: d.omitir.map((t) => hitoDe(hitos, t)),
       }));
       if (r !== 'ok') return r;
-      await deps.sincronizarLegado(viaje.tenantId, viaje.id, d.legado, d.mensajeEn);
+      // `viaje.llegada_en` (la llegada al DESTINO) no se sella con un «ya llegué» a secas: espera a que la ubicación lo respalde
+      // (más abajo, tras validar) o lo difiere al barrido y al pin. Los otros sellos de la 0090 no dependen de la ubicación.
+      const difiereLlegada = d.legado.includes('llegada') && c.config.validarUbicacion;
+      await deps.sincronizarLegado(viaje.tenantId, viaje.id, difiereLlegada ? d.legado.filter((l) => l !== 'llegada') : d.legado, d.mensajeEn);
       await deps.evento(objetivo, 'recibido', { fuente: c.fuente, via: c.interp.via, ambigua: d.ambigua, tarde: d.reabre, hora_ajustada: d.ajustadaPorFuturo });
       for (const t of d.omitir) await deps.evento(hitoDe(hitos, t), 'omitido', { por: d.objetivo });
       if (d.contacto) await deps.evento(objetivo, 'contacto', {});
@@ -253,6 +256,7 @@ async function aplicar(d: Decision, c: ContextoAplicar): Promise<'ok' | 'carrera
       const registrado: HitoFila = { ...objetivo, estado: 'recibido', mensajeEn: d.mensajeEn.toISOString(), recibidoEn: ahora.toISOString() };
       const v = await deps.validarHito({ viaje, hito: registrado, config: c.config, mensajeEn: d.mensajeEn, ahora });
       if (v?.pedirUbicacion) c.efectos.pedirUbicacion = true;
+      if (difiereLlegada && veredictoSellaLlegada(v?.veredicto ?? null, true)) await deps.sincronizarLegado(viaje.tenantId, viaje.id, ['llegada'], d.mensajeEn);
       // El aviso a la oficina es best-effort y no retrasa el acuse más de lo que cuesta un envío.
       const esLlegada = d.objetivo === 'llegada_carga' || d.objetivo === 'llegada_descarga';
       if (esLlegada ? c.config.avisarOficinaLlegada : c.config.avisarOficinaSalida) {
@@ -413,6 +417,8 @@ export async function atenderPinConductor(e: EntradaPin, deps: DepsAtender = dep
     const mensajeEn = new Date(hito.mensajeEn ?? hito.recibidoEn ?? ahora);
     const v = await deps.validarHito({ viaje, hito, config, mensajeEn, pin: { lat: e.lat, lng: e.lng, medidaEn }, ahora });
     if (!v || v.aplicado === 'fallo' || v.aplicado === 'hito_cambio') return null;
+    // El pin puede ser lo que por fin confirma la llegada a descargar que se difirió al registrarla.
+    if (debeSellarTrasValidar(hito.tipo, v)) await deps.sincronizarLegado(e.tenantId, e.viajeId, ['llegada'], mensajeEn);
     const donde = v.sitioNombre ? `«${v.sitioNombre}»` : 'el sitio del viaje';
     const que = hito.tipo === 'llegada_carga' ? 'a cargar' : 'a descargar';
     switch (v.veredicto.resultado) {
