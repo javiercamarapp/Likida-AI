@@ -65,6 +65,9 @@ export type ResultadoAvisoOficina =
     /** El rechazo fue transitorio (timeout, 429, 5xx): el cliente de Meta YA dejó el mensaje en `wa_outbox`,
      *  que lo entrega solo. Reenviarlo desde afuera lo duplica: quien reclama un «una sola vez» NO debe soltar el reclamo. */
     reintentable: boolean;
+    /** El cliente de Meta YA lo dejó en `wa_outbox` (también con el token vencido 190/401, que no es reintentable
+     *  pero se encola): un reclamo «una sola vez» no debe soltarse ni reenviarse. Implica o amplía `reintentable`. */
+    encolado?: boolean;
   };
 
 /**
@@ -97,8 +100,8 @@ export async function avisarOficina(
   if (!r.fueraDeVentana) {
     // Rechazo que NO es de ventana (rate limit, número inválido, red): si es
     // reintentable ya quedó en el outbox; una plantilla no lo arreglaría.
-    return { ok: false, motivo: r.mensaje, codigo: r.codigo, fueraDeVentana: false, reintentable: r.reintentable };
+    return { ok: false, motivo: r.mensaje, codigo: r.codigo, fueraDeVentana: false, reintentable: r.reintentable, encolado: r.encolado };
   }
   logger.error('aviso_oficina.no_entregado', { ...ctx, codigoTexto: r.codigoTexto, codigoPlantilla: r.codigo, plantilla, motivo: r.mensaje });
-  return { ok: false, motivo: r.mensaje, codigo: r.codigo, fueraDeVentana: true, reintentable: r.reintentable };
+  return { ok: false, motivo: r.mensaje, codigo: r.codigo, fueraDeVentana: true, reintentable: r.reintentable, encolado: r.encolado };
 }

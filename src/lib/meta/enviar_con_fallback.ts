@@ -41,6 +41,11 @@ export function esFueraDeVentana(codigo?: number): boolean {
   return codigo !== undefined && CODIGOS_FUERA_VENTANA.includes(codigo);
 }
 
+/** Misma regla que `esTokenMetaInvalido` de client.ts (190, o un 401 sin código): ese rechazo NO es «reintentable», pero
+ *  `alFallarPorToken` SÍ deja el mensaje en `wa_outbox`. Copia local (y no importada) para no obligar a cada prueba que
+ *  simula `./client` a exportar una función más. */
+const esTokenVencido = (codigo?: number, status?: number): boolean => codigo === 190 || (codigo === undefined && status === 401);
+
 /** (#132001) la plantilla no existe o no está aprobada. */
 const PLANTILLA_NO_APROBADA = 132001;
 
@@ -96,6 +101,9 @@ export type ResultadoEnvioConFallback =
     fueraDeVentana: boolean;
     /** «Vuelve más tarde» (429, bloqueo temporal): no consumir sellos/tiers. */
     reintentable: boolean;
+    /** El cliente de Meta YA dejó este mensaje en `wa_outbox` (reintentable o token vencido 190/401, que no es
+     *  «vuelve más tarde» pero sí se encola). Quien reclama un «una sola vez» NO debe soltar el reclamo ni reenviar. */
+    encolado?: boolean;
     ventana: EstadoVentana;
   };
 
@@ -139,10 +147,12 @@ export async function enviarConFallback(
       }
     }
 
-    const reintentable = esReintentableMeta(p.codigo) || esReintentableMeta(undefined, estadoTexto?.status);
+    const reintentable = esReintentableMeta(p.codigo, p.status) || esReintentableMeta(undefined, estadoTexto?.status);
+    // Lo que `sendTemplate` encoló: «vuelve más tarde» (código, 429/5xx o timeout) y el token vencido.
+    const encolado = esReintentableMeta(p.codigo, p.status) || esTokenVencido(p.codigo, p.status);
     return registrar({
       ok: false, motivo: 'plantilla_rechazada', mensaje: motivoDeFalloWhatsApp(p.error, p.codigo),
-      codigo: p.codigo, codigoTexto: estadoTexto?.codigo, status: estadoTexto?.status, fueraDeVentana: true, reintentable, ventana: ventana.estado,
+      codigo: p.codigo, codigoTexto: estadoTexto?.codigo, status: p.status ?? estadoTexto?.status, fueraDeVentana: true, reintentable, encolado, ventana: ventana.estado,
     }, 'ninguno', p.codigo);
   };
 
@@ -165,7 +175,8 @@ export async function enviarConFallback(
         ok: false, motivo: 'rechazo_no_ventana',
         mensaje: t.codigo !== undefined ? motivoDeFalloWhatsApp(t.error, t.codigo) : t.error,
         codigo: t.codigo, status: t.status, fueraDeVentana: false,
-        reintentable: esReintentableMeta(t.codigo, t.status), ventana: ventana.estado,
+        reintentable: esReintentableMeta(t.codigo, t.status),
+        encolado: esReintentableMeta(t.codigo, t.status) || esTokenVencido(t.codigo, t.status), ventana: ventana.estado,
       }, 'ninguno', t.codigo);
     }
 

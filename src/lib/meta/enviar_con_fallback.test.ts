@@ -168,6 +168,35 @@ describe('ventana rechazada y la plantilla además da 429', () => {
   });
 });
 
+describe('ADVERSARIAL 07: lo que el cliente de Meta YA encoló (`encolado`) aunque no sea «reintentable»', () => {
+  it('plantilla con timeout de red (status 503 de sendTemplate): reintentable y encolado', async () => {
+    ventana('cerrada');
+    sendTemplate.mockResolvedValue({ ok: false, error: 'No se pudo contactar a WhatsApp: x', status: 503 });
+    expect(await enviarConFallback(TEL, OP)).toMatchObject({ ok: false, reintentable: true, encolado: true });
+  });
+  it('plantilla con HTTP 503 y código no listado: reintentable y encolado', async () => {
+    ventana('cerrada');
+    sendTemplate.mockResolvedValue({ ok: false, error: 'x', codigo: 2, status: 503 });
+    expect(await enviarConFallback(TEL, OP)).toMatchObject({ ok: false, reintentable: true, encolado: true });
+  });
+  it('token vencido (190) en la plantilla: NO es reintentable, pero SÍ quedó encolado', async () => {
+    ventana('cerrada');
+    sendTemplate.mockResolvedValue({ ok: false, error: 'token', codigo: 190, status: 401 });
+    expect(await enviarConFallback(TEL, OP)).toMatchObject({ ok: false, reintentable: false, encolado: true });
+  });
+  it('token vencido (190) en el texto: NO es reintentable, pero SÍ quedó encolado', async () => {
+    ventana('abierta');
+    enviarTexto.mockResolvedValue(KO(190, 401, 'token'));
+    expect(await enviarConFallback(TEL, OP)).toMatchObject({ ok: false, reintentable: false, encolado: true });
+  });
+  it('plantilla sin aprobar (132001): definitivo y NO encolado (reintentar es gratis)', async () => {
+    ventana('cerrada');
+    enviarTexto.mockResolvedValue(KO(131047, 400));
+    sendTemplate.mockResolvedValue({ ok: false, error: 'no aprobada', codigo: 132001, status: 400 });
+    expect(await enviarConFallback(TEL, OP)).toMatchObject({ ok: false, reintentable: false, encolado: false });
+  });
+});
+
 describe('robustez', () => {
   it('si un envío lanza (p. ej. falta WHATSAPP_ACCESS_TOKEN), devuelve ok:false y no lanza', async () => {
     ventana('abierta');
