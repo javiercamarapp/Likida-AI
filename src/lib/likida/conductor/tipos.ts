@@ -153,3 +153,8 @@ export function leerBotonConductor(texto: string | undefined): BotonLeido | null
   }
   return { prefijo, viajeId: viajeId.toLowerCase(), hito: null };
 }
+
+/** Minutos de silencio tras «Ya lo atiendo» del jefe: el GPS seguirá mudo y repreguntar al chofer / reescalar al instante sería acoso. */
+export const MINUTOS_SILENCIO_JEFE = 120;
+/** Minutos de silencio tras cerrar por «señal recuperada» un episodio que ya avisó: un GPS que reporta cada ~50 min alternaría obsoleto y ok sin fin. */
+export const MINUTOS_SILENCIO_RECUPERADA = 120;
