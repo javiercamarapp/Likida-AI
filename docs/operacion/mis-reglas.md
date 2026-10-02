@@ -33,7 +33,7 @@ cerradas** de `src/lib/likida/reglas/catalogo.ts`; lo guardado es la estructura
 | b | Lógica | `traductor.ts` (una llamada, rol `extraccion`, presupuesto por flota) → `catalogo.ts` valida y arma la frase; `lectores.ts` evalúa. |
 | c | Persistencia | `regla_vigilancia` (0229), `regla_disparo` (sello anti-spam por objeto y ciclo), **`regla_aviso` (0520, historial de avisos)**. RLS deny-all + `service_role`; FK compuesta (una flota no cuelga de otra). |
 | d | Salida | **`enviarConFallback`** (`lib/meta/enviar_con_fallback.ts`): texto con la ventana de 24 h abierta, plantilla **`regla_aviso_v1`** con ella cerrada. Verificado: ya no se usa `sendText` a secas. |
-| e | Cron | `vigilarReglas` dentro del cron `escalar` (cada hora). «Claim» = el sello: se manda **primero** y se sella **después**; un aviso que no salió se reintenta. |
+| e | Cron | `vigilarReglas` dentro del cron `escalar` (cada hora). «Claim» = la llave en `regla_disparo` (**0660**): se **reclama** antes de mandar (`enviando` + token + arriendo de 5 min), se manda y se **confirma** (`enviado`). Dos corridas solapadas no mandan el mismo aviso: quien pierde el insert de la llave no manda. Si Meta rechaza o el envío lanza, la llave se **libera** y el caso se reintenta; si la corrida muere a media, el arriendo vence y otra la retoma. Sin la 0660 en la base cae al orden anterior (manda primero, sella después). |
 | f | UI | Tarjeta por regla: confirmar, pausar/reanudar, borrar (diálogo único), **historial de avisos y límite de frecuencia** (toasts/estados del sistema D2). |
 | g | Pruebas | Ver abajo. |
 | h | Integración externa | Solo WhatsApp (Meta) y el modelo (OpenRouter), ambos detrás de interfaces probadas con dobles. |
@@ -103,3 +103,12 @@ barrido que escribe (`purgarAvisosViejos`).
   reales (sin banco de frases).
 * El render de la pantalla no se vio en un navegador (solo pruebas de página y de
   componentes).
+
+## Reclamo antes de enviar (0660, P9)
+
+* **Qué cierra:** la carrera de dos corridas del cron (Vercel entrega *at-least-once*) que leían los mismos casos nuevos y ambas mandaban el WhatsApp porque el sello llegaba después del envío.
+* **Cómo:** `reclamar_disparos_regla` inserta las llaves `(regla, objeto, ciclo)` como `enviando`; solo gana las que no existían (o cuyo arriendo venció). `confirmar_disparos_regla` las pasa a `enviado` solo con el token vigente; `liberar_disparos_regla` borra las del token cuando Meta rechazó.
+* **Orden:** primero la frecuencia y el teléfono (lo pospuesto o sin destinatario no reclama nada), luego el reclamo, luego Meta.
+* **Límite conocido:** el límite de frecuencia se evalúa antes del reclamo; dos corridas con casos DISTINTOS podrían pasar ambas por el chequeo y mandar dos avisos en la misma hora. No duplica casos; solo puede rozar el tope diario por uno.
+* **Arriendo perdido:** si el envío tarda más de 5 minutos y otra corrida retoma la llave, el aviso puede salir dos veces; la corrida lo deja en el log (`reglas.arriendo_perdido_al_confirmar`).
+* **Pruebas:** `supabase/tests/0660_reglas_reclamo.sql` + `0660_reglas_reclamo_concurrencia.sh` (8 sesiones reales), bloque 305 de `verificaciones.sql`, `reglas/vigilante.test.ts` (dos corridas solapadas) y los e2e con las RPC en memoria (`reclamo_en_memoria.fixture.ts`).
