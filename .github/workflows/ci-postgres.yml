@@ -205,6 +205,7 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0460_patio_invitacion.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0500_gps_backoff.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0501_gps_push_huerfanos.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0502_jornada_alerta_tope.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0380_conductor_hitos.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0385_conductor_validacion_sitios.sql
           PGUSER=postgres bash supabase/tests/0385_conductor_concurrencia.sh localhost 5432 postgres

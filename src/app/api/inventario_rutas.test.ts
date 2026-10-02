@@ -156,7 +156,7 @@ import { join, relative, sep } from 'node:path';
 //     `api/correo/entrante/route.ts`, que verifica la firma Svix antes de leer el cuerpo.
 //
 // Conteo de la integración de la ola 2: 78 + 9 (Conductor) + 1 (Vigía) + 1 (Carta Porte) = 89.
-// 89 → 90 (loop punta a punta, W3 «GPS/Jornada», 2-oct-2026): una ruta,
+// 89 → 91 (loop punta a punta, W3 «GPS/Jornada», 2-oct-2026): una ruta,
 //   · `api/gps/push/[flota]/route.ts` — SIN sesión a propósito: es el endpoint al que un GPS
 //     propio hace POST. Su puerta es la firma HMAC-SHA256 por flota (secreto cifrado en la
 //     base, rotable con ventana de 24 h, tiempo constante, timestamp firmado ±5 min); el
@@ -164,7 +164,11 @@ import { join, relative, sep } from 'node:path';
 //     acotado (256 KiB / 500 lecturas), flota inexistente, push apagado y firma mala
 //     responden igual (401) y todo se asienta con el tenant del PATH ya autenticado por su
 //     secreto — nunca con un dato del cuerpo.
-const RUTAS_APP_REVISADAS = 90;
+//   · `api/cron/jornada-alertas/route.ts` (91) — cron: `puertaCron` (CRON_SECRET o 401/500) y la
+//     palanca global fail-closed; lee jornadas en curso solo de las flotas con la alerta
+//     ENCENDIDA (apagada por omisión) y manda WhatsApp/correo al encargado y al operador de ESA
+//     flota; claim por (jornada, nivel) en la base y latido en todo camino de salida.
+const RUTAS_APP_REVISADAS = 91;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
