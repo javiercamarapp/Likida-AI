@@ -57,7 +57,8 @@ export const TOPE_VIAJES_CICLO_GPS = 400;
  */
 export const HORAS_VIAJE_SIN_ACTIVIDAD = 24;
 
-export interface MuestraGps { lat: number; lng: number; medidaEn: Date }
+/** `ignicion`: la que reporta el proveedor (0500); `null`/ausente = no la reporta (no es lo mismo que apagada). */
+export interface MuestraGps { lat: number; lng: number; medidaEn: Date; ignicion?: boolean | null }
 
 export interface SitioGps extends GeocercaGeom { id: string; nombre: string }
 

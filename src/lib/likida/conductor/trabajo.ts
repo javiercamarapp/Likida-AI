@@ -195,13 +195,21 @@ export async function leerMuestrasGps(unidades: UnidadDeViaje[], desde: Date): P
   const tenants = [...new Set(unidades.map((u) => u.tenantId))];
   const pedidas = new Set(unidades.map((u) => `${u.tenantId}|${u.unidadId}`));
   for (const ids of trozos([...new Set(unidades.map((u) => u.unidadId))], 100)) {
-    const filas = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('posicion').select('tenant_id, unidad_id, lat, lng, medida_en')
+    const traer = (columnas: string) => traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('posicion').select(columnas)
       .in('tenant_id', tenants).in('unidad_id', ids).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString())
       .order('medida_en', { ascending: true }).order('id').range(d, h), 'conductor.ciclo_muestras') as never, 'conductor.ciclo_muestras');
+    // La ignición (0500) sirve a la señal de vida; una base sin la columna sigue funcionando sin ella.
+    let filas: Fila[];
+    try { filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion'); } catch (e) {
+      if (!/ignicion/i.test(e instanceof Error ? e.message : String(e))) throw e;
+      filas = await traer('tenant_id, unidad_id, lat, lng, medida_en');
+    }
     for (const f of filas) {
       const llave = `${String(f.tenant_id)}|${String(f.unidad_id)}`;
       if (!pedidas.has(llave)) continue; // la combinación flota/unidad que no se pidió no es de esta corrida
-      salida.set(llave, [...(salida.get(llave) ?? []), { lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(String(f.medida_en)) }]);
+      salida.set(llave, [...(salida.get(llave) ?? []), {
+        lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(String(f.medida_en)), ignicion: typeof f.ignicion === 'boolean' ? f.ignicion : null,
+      }]);
     }
   }
   return salida;
@@ -287,15 +295,50 @@ export async function leerEpisodiosSenalVida(viajeIds: string[], ahora: Date): P
   return salida;
 }
 
-/** La hora de la última muestra de GPS de verdad de cada unidad desde `desde` (una consulta por unidad; son pocas: solo las que no tienen muestras recientes). */
-export async function leerUltimaMuestraGps(unidades: UnidadDeViaje[], desde: Date): Promise<Map<string, Date>> {
-  const salida = new Map<string, Date>();
+/** La última muestra de GPS de verdad de cada unidad desde `desde` (posición e ignición; una consulta por unidad; son pocas: solo las que no tienen muestras recientes). */
+export async function leerUltimaMuestraGps(unidades: UnidadDeViaje[], desde: Date): Promise<Map<string, MuestraGps>> {
+  const salida = new Map<string, MuestraGps>();
   for (const u of unidades.slice(0, 200)) {
-    const res = await acotada(supabaseAdmin().from('posicion').select('medida_en')
+    const consulta = (columnas: string) => acotada(supabaseAdmin().from('posicion').select(columnas)
       .eq('tenant_id', u.tenantId).eq('unidad_id', u.unidadId).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString())
       .order('medida_en', { ascending: false }).order('id').limit(1), 'conductor.senal_ultima_muestra');
+    let res = await consulta('lat, lng, medida_en, ignicion');
+    if (res.error && faltaEsquema(res.error, /ignicion/i)) res = await consulta('lat, lng, medida_en'); // base sin la 0500
     const f = ((exigir(res as never, 'conductor.senal_ultima_muestra') ?? []) as unknown as Fila[])[0];
-    if (f && typeof f.medida_en === 'string') salida.set(`${u.tenantId}|${u.unidadId}`, new Date(f.medida_en));
+    if (f && typeof f.medida_en === 'string') {
+      salida.set(`${u.tenantId}|${u.unidadId}`, { lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(f.medida_en), ignicion: typeof f.ignicion === 'boolean' ? f.ignicion : null });
+    }
   }
+  return salida;
+}
+
+/**
+ * Los sitios activos del catálogo del Conductor de cada flota CON su geometría: patios, plantas de otros clientes, cualquier lugar
+ * donde un tractor espera con razón. La señal de vida los usa para no preguntarle «¿sigues bien?» a un chofer que descansa en el patio.
+ */
+export async function leerSitiosGeometriaDeFlotas(tenantIds: string[]): Promise<Map<string, SitioGps[]>> {
+  const salida = new Map<string, SitioGps[]>();
+  if (tenantIds.length === 0) return salida;
+  const filas = await traerTodo<Fila>((d, h) => conPoligonoOCirculo((conPoligono) => acotada(supabaseAdmin().from('geocerca')
+    .select(conPoligono ? `id, tenant_id, nombre, lat, lng, radio_m, ${COLUMNAS_POLIGONO}` : 'id, tenant_id, nombre, lat, lng, radio_m')
+    .in('tenant_id', tenantIds).eq('catalogo', 'conductor').eq('activa', true).order('id').range(d, h), 'conductor.senal_sitios_flota')) as never, 'conductor.senal_sitios_flota');
+  for (const f of filas) {
+    const t = String(f.tenant_id);
+    salida.set(t, [...(salida.get(t) ?? []), { id: String(f.id), nombre: String(f.nombre), lat: Number(f.lat), lng: Number(f.lng), radioM: Number(f.radio_m), ...geometriaDeFila(f) }]);
+  }
+  return salida;
+}
+
+/** Las flotas cuyo conector de GPS (recurso `posiciones`) tiene la última lectura fallida: backoff por credencial vencida o proveedor caído (0500). */
+export async function leerFlotasConConectorDegradado(tenantIds: string[]): Promise<Set<string>> {
+  const salida = new Set<string>();
+  if (tenantIds.length === 0) return salida;
+  const res = await acotada(supabaseAdmin().from('conector_poll_estado').select('tenant_id')
+    .in('tenant_id', tenantIds).eq('recurso', 'posiciones').gt('errores_seguidos', 0).range(0, 999), 'conductor.senal_conector');
+  if (res.error) {
+    if (faltaEsquema(res.error, /errores_seguidos/i)) return salida; // base sin la 0500: no hay backoff que consultar
+    throw new Error(`conductor.senal_conector: ${res.error.message}`);
+  }
+  for (const f of (res.data ?? []) as unknown as Fila[]) salida.add(String(f.tenant_id));
   return salida;
 }

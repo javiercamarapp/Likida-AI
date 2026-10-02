@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 import { CONFIG_CONDUCTOR_DEFAULT, type ConfigConductor } from './config';
-import type { MuestraGps, SitiosViaje } from './ciclo_gps';
+import type { MuestraGps, SitioGps, SitiosViaje } from './ciclo_gps';
 import { hitoVacio, viajeBase } from './memoria.fixture';
 import {
   barridoSenalVida, decidirSenalVida, enTransito, evaluarSenal, silencioDeRespuesta, avisosFallidosAlChofer, marcaAvisoChoferFallido,
@@ -83,6 +83,85 @@ describe('evaluarSenal — qué dice el GPS', () => {
     const sitios: SitiosViaje = { origen: null, destino: { id: 's', nombre: 'CEDIS', lat: 20.7, lng: -103.4, radioM: 300 } };
     const muestras = [M(60), M(45), M(30), M(15), M(2)];
     expect(evaluarSenal({ ...base, sitios, muestras }).estado).toBe('ok');
+  });
+});
+
+describe('evaluarSenal — un tractor apagado en la planta no es «sin señal de vida» (adversarial ronda 08)', () => {
+  const DEST: SitioGps = { id: 's-dest', nombre: 'CEDIS', lat: 25.7, lng: -100.3, radioM: 300 };
+  const base = { sitios: { origen: null, destino: DEST } as SitiosViaje, toleranciaM: 150, ahora: AHORA, ultimaMuestraEn: null };
+  const EN_DEST = (min: number, ignicion?: boolean | null): MuestraGps => ({ lat: 25.7005, lng: -100.3, medidaEn: hace(min), ignicion });
+
+  it('una sola muestra DENTRO del destino y 46 min de silencio: ok (el motor se apagó, no el tractor)', () => {
+    expect(evaluarSenal({ ...base, muestras: [M(55, 25.5, -100.3), EN_DEST(MINUTOS_GPS_OBSOLETO + 1)] }).estado).toBe('ok');
+  });
+
+  it('lo mismo con la última muestra fuera de la ventana corta (solo la fecha y la posición de la última de 24 h)', () => {
+    expect(evaluarSenal({ ...base, muestras: [], ultimaMuestraEn: hace(300), ultimaMuestra: EN_DEST(300) }).estado).toBe('ok');
+  });
+
+  it('fuera de todo sitio y con el motor encendido, el silencio SÍ es obsoleto', () => {
+    expect(evaluarSenal({ ...base, muestras: [M(60, 25.4, -100.3)] }).estado).toBe('gps_obsoleto');
+    expect(evaluarSenal({ ...base, muestras: [{ ...M(60, 25.4, -100.3), ignicion: true }] }).estado).toBe('gps_obsoleto');
+  });
+
+  it('la ignición apagada en la última lectura explica el silencio… hasta 12 h', () => {
+    expect(evaluarSenal({ ...base, muestras: [{ ...M(120, 25.4, -100.3), ignicion: false }] }).estado).toBe('ok');
+    expect(evaluarSenal({ ...base, muestras: [], ultimaMuestraEn: hace(13 * 60), ultimaMuestra: { ...M(13 * 60, 25.4, -100.3), ignicion: false } }).estado).toBe('gps_obsoleto');
+  });
+
+  it('ignición desconocida (null) NO equivale a apagada', () => {
+    expect(evaluarSenal({ ...base, muestras: [{ ...M(120, 25.4, -100.3), ignicion: null }] }).estado).toBe('gps_obsoleto');
+  });
+
+  it('70 min detenido en el PATIO de la flota (un sitio que no es del viaje) no es «gps_detenido»', () => {
+    const patio: SitioGps = { id: 's-patio', nombre: 'Patio', lat: 20.9, lng: -103.2, radioM: 200 };
+    const parado = [75, 60, 45, 30, 15, 2].map((m) => M(m, 20.9, -103.2));
+    expect(evaluarSenal({ ...base, muestras: parado }).estado).toBe('gps_detenido');
+    expect(evaluarSenal({ ...base, muestras: parado, sitiosFlota: [patio] }).estado).toBe('ok');
+  });
+});
+
+describe('barridoSenalVida — el silencio de toda la flota es del conector, no de los tractores (adversarial ronda 08)', () => {
+  const viajes5 = [1, 2, 3, 4, 5].map((n) => viajeBase({ id: `v${n}`, unidadId: `u${n}` }));
+  const transito5 = viajes5.flatMap((v) => hitos({ llegada_carga: hecho(300), salida_carga: hecho(240) }, v.id));
+
+  it('5 de 5 unidades en tránsito dejan de reportar a la vez: no se abre ningún episodio ni se manda un solo «¿sigues bien?»', async () => {
+    const w = mundo({ viajes: viajes5, hitosViaje: transito5, muestras: [M(100)] });
+    const r = await barridoSenalVida(w.puertos, AHORA);
+    expect(r.abiertos).toBe(0);
+    expect(r.avisosChofer).toBe(0);
+    expect(w.enviados).toHaveLength(0);
+    expect(r.saltados.conector_caido).toBe(5);
+  });
+
+  it('una sola unidad muda entre cinco que reportan sí es un problema de ESA unidad', async () => {
+    const vivo = [M(30, 20.5), M(20, 20.55), M(10, 20.6), M(2, 20.65)];
+    const w = mundo({ viajes: viajes5, hitosViaje: transito5, muestras: vivo, muestrasUnidad: { u3: [M(100)] } });
+    const r = await barridoSenalVida(w.puertos, AHORA);
+    expect(r.abiertos).toBe(1);
+    expect(w.enviados).toHaveLength(1);
+  });
+
+  it('con el conector reportado como degradado (credencial vencida) basta con una unidad muda para no molestar al chofer', async () => {
+    const w = mundo({ muestras: [M(100)], conectoresDegradados: ['t1'] });
+    const r = await barridoSenalVida(w.puertos, AHORA);
+    expect(r.abiertos).toBe(0);
+    expect(w.enviados).toHaveLength(0);
+  });
+
+  it('con un episodio ya abierto y el conector caído, la escalera no avanza (ni se cierra como «recuperada»)', async () => {
+    const w = mundo({ muestras: [M(100)], conectoresDegradados: ['t1'], episodio: ep({ nivelEnviado: 1, aviso1En: hace(50).toISOString() }) });
+    await barridoSenalVida(w.puertos, AHORA);
+    expect(w.llamadas.niveles).toEqual([]);
+    expect(w.llamadas.cerrados).toEqual([]);
+  });
+
+  it('si no se puede leer el estado del conector se dice y se evalúa sin él (el barrido no se cae)', async () => {
+    const w = mundo({ muestras: [M(100)] });
+    w.puertos.conectoresDegradados = async () => { throw new Error('base lenta'); };
+    const r = await barridoSenalVida(w.puertos, AHORA);
+    expect(r.fallos.some((f) => /estado del conector/.test(f))).toBe(true);
+    expect(r.abiertos).toBe(1);
   });
 });
 
@@ -172,6 +251,9 @@ function mundo(o: {
   config?: Partial<ConfigConductor>;
   hitosViaje?: HitoFila[];
   muestras?: MuestraGps[];
+  muestrasUnidad?: Record<string, MuestraGps[]>;
+  sitiosFlota?: SitioGps[];
+  conectoresDegradados?: string[];
   ultima?: Date | null;
   episodio?: EpisodioFila | null;
   silenciadoHasta?: Date | null;
@@ -190,8 +272,10 @@ function mundo(o: {
     hitosDe: async (ids) => (o.hitosViaje ?? TRANSITO).filter((h) => ids.includes(h.viajeId)),
     configDe: async () => ({ ...CONFIG_CONDUCTOR_DEFAULT, avisarSenalVida: true, ...(o.config ?? {}) }),
     sitiosDe: async (vs) => new Map(vs.map((v) => [v.id, SIN_SITIOS])),
-    muestras: async (us) => new Map(us.map((u) => [`${u.tenantId}|${u.unidadId}`, o.muestras ?? []])),
-    ultimaMuestra: async (us) => new Map(us.flatMap((u) => (o.ultima ? [[`${u.tenantId}|${u.unidadId}`, o.ultima] as const] : []))),
+    muestras: async (us) => new Map(us.map((u) => [`${u.tenantId}|${u.unidadId}`, o.muestrasUnidad?.[u.unidadId] ?? o.muestras ?? []])),
+    sitiosFlota: async () => new Map([['t1', o.sitiosFlota ?? []]]),
+    conectoresDegradados: async () => new Set(o.conectoresDegradados ?? []),
+    ultimaMuestra: async (us) => new Map(us.flatMap((u) => (o.ultima ? [[`${u.tenantId}|${u.unidadId}`, { lat: 20.7, lng: -103.4, medidaEn: o.ultima }] as const] : []))),
     episodios: async (ids) => new Map(ids.map((id) => [id, { abierto: episodio, silenciadoHasta: o.silenciadoHasta ?? null }])),
     abrir: async (t, v, motivo, ahora) => {
       llamadas.abrir++;
@@ -323,12 +407,17 @@ describe('barridoSenalVida', () => {
   });
 
   it('cinco rechazos reintentables seguidos paran la corrida (Meta diciendo «hoy no»)', async () => {
-    const viajes = Array.from({ length: 8 }, (_, i) => viajeBase({ id: `v${i}`, operadorId: `o${i}`, unidadId: `u${i}` }));
-    const w = mundo({ viajes, hitosViaje: viajes.flatMap((v) => hitos({ llegada_carga: hecho(300), salida_carga: hecho(240) }, v.id)), muestras: [M(100)], envio: () => ({ ok: false, reintentable: true, mensaje: 'límite' }) });
+    // 8 unidades mudas entre 11 (3 reportan): el silencio NO es de toda la flota (eso sería el conector).
+    const viajes = Array.from({ length: 11 }, (_, i) => viajeBase({ id: `v${i}`, operadorId: `o${i}`, unidadId: `u${i}` }));
+    const vivo = [M(30, 20.5), M(20, 20.55), M(10, 20.6), M(2, 20.65)];
+    const w = mundo({
+      viajes, hitosViaje: viajes.flatMap((v) => hitos({ llegada_carga: hecho(300), salida_carga: hecho(240) }, v.id)), muestras: [M(100)],
+      muestrasUnidad: { u8: vivo, u9: vivo, u10: vivo }, envio: () => ({ ok: false, reintentable: true, mensaje: 'límite' }),
+    });
     const r = await barridoSenalVida(w.puertos, AHORA);
     expect(r.cortadaPorRechazoMasivo).toBe(true);
     expect(r.rechazosReintentables).toBe(TOPE_RECHAZOS_SEGUIDOS_SENAL);
-    expect(r.cortadosPorReloj).toBe(3);
+    expect(r.cortadosPorReloj).toBe(6);
   });
 
   it('con el GPS recuperado cierra el episodio abierto y no manda nada', async () => {
