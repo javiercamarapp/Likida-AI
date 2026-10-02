@@ -475,6 +475,8 @@ function fechaDdMmAaaa(iso: string | null): string {
  */
 export async function listarAprobadasCompletas(tenantId: string): Promise<FacturaProveedor[]> {
   const traer = (columnas: string) => traerTodo<Record<string, unknown>>(
+    // `columnas` es una cadena dinámica (la lista nueva o la de antes de la 0530): supabase-js no puede inferir
+    // el tipo de fila de un select dinámico, así que se afirma el contrato de `traerTodo`.
     (d, h) => acotada(supabaseAdmin()
       .from('factura_proveedor')
       .select(columnas, conteo(d))
@@ -482,7 +484,7 @@ export async function listarAprobadasCompletas(tenantId: string): Promise<Factur
       .eq('estado', 'aprobada')
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
-      .range(d, h), 'proveedores.aprobadas'),
+      .range(d, h) as unknown as PromiseLike<{ data: Record<string, unknown>[] | null; error: { message: string } | null; count?: number | null }>, 'proveedores.aprobadas'),
     'proveedores.aprobadas',
   );
   try {
@@ -492,6 +494,11 @@ export async function listarAprobadasCompletas(tenantId: string): Promise<Factur
     if (/42703|42P01|does not exist/i.test(e instanceof Error ? e.message : String(e))) return (await traer(COLUMNAS_FACTURA_ANTERIOR)).map(aFactura);
     throw e;
   }
+}
+
+/** El mapeo de una factura a su fila, según el layout. Lo comparten el export manual y la entrega al contador. */
+export function mapaDeFormato(formato: FormatoExport): (f: FacturaProveedor) => Record<string, string | number> {
+  return formato === 'sap_b1' ? aFilaSapB1 : formato === 'contpaqi' ? aFilaContpaqi : aFilaExportProveedor;
 }
 
 /**
@@ -509,7 +516,7 @@ export async function exportarAprobadas(
   formato: FormatoExport,
 ): Promise<{ filas: Record<string, string | number>[]; ids: string[] }> {
   const aprobadas = await listarAprobadasCompletas(tenantId);
-  const mapa = formato === 'sap_b1' ? aFilaSapB1 : formato === 'contpaqi' ? aFilaContpaqi : aFilaExportProveedor;
+  const mapa = mapaDeFormato(formato);
   return {
     filas: aprobadas.map(mapa),
     ids: aprobadas.map((f) => f.id),

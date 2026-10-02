@@ -1,4 +1,7 @@
+import { enviarCorreo } from '@/lib/correo/enviar';
 import * as repoBuzon from './repo';
+import * as repoEntrega from './entrega_repo';
+import type { DepsEntrega } from './entrega';
 import { crearPuertosPdf } from './pdf_adaptador';
 import { parseRepXml, ingerirRep } from '../intake/rep';
 import { guardarFacturaProveedor, estadoSatDeCfdi } from '../proveedores';
@@ -23,3 +26,14 @@ export function atenderAdjuntosBuzon(ctx: ContextoCorreo, adjuntos: readonly Adj
 }
 
 export type { AdjuntoBuzon, ContextoCorreo, ResumenCorreo };
+
+/** Los puertos REALES de la entrega al contador (en pruebas se sustituyen por dobles). */
+export function depsEntregaReales(): DepsEntrega {
+  return {
+    repo: repoEntrega,
+    enviarCorreo: (para, correo, op) => enviarCorreo(para, correo, op),
+    descargarPdf: repoBuzon.descargarPdf,
+    nombreFlota: repoEntrega.nombreFlota,
+    ahora: () => new Date(),
+  };
+}
