@@ -31,6 +31,8 @@ const { atenderConductor, atenderAcuseJefe, atenderPinConductor, registrarEviden
 const { correrConductor } = await import('./ejecutor');
 const { correrAlertasEstadia } = await import('./alertas_estadia');
 const { barridoValidacion } = await import('./validar_hito');
+const { barridoCicloGps } = await import('./ciclo_gps');
+const { barridoSenalVida } = await import('./senal_vida');
 const { armarTablero } = await import('./tablero');
 const { calcularEstancias } = await import('./estadias_anden');
 const { crearMundo } = await import('./mundo.fixture');
@@ -676,5 +678,230 @@ describe('9. el tablero con TODO junto', () => {
     expect(t.filas[0].hitoActivo).toBe('salida_carga');
     expect(t.filas[0].semaforo).toBe('a_tiempo');
     expect(t.excepciones.filter((e) => e.tipo === 'escalado_sin_atender')).toEqual([]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('10. P2: el sistema se entera solo por geocerca (sin que el chofer escriba) y pregunta si el GPS se calla', () => {
+  type Muestra = { tenantId: string; unidadId: string; lat: number; lng: number; medidaEn: Date; fuente: 'gps' | 'pin' };
+  const en = (sitio: { lat: number; lng: number }, hhmm: string, dentro: boolean, unidadId = 'u1', tenantId = 't1'): Muestra => ({
+    tenantId, unidadId, lat: sitio.lat + (dentro ? 0.001 : 0.03), lng: sitio.lng, medidaEn: T(hhmm), fuente: 'gps',
+  });
+  /** El cron siembra los hitos al inicio de cada pasada (`sembrar_hitos_conductor`); aquí se hace igual antes del barrido. */
+  const ciclo = (w: Mundo, cuando: Date) => { for (const id of w.m.viajes.keys()) w.m.sembrar(id); return barridoCicloGps(w.puertosCiclo, cuando); };
+  const senal = (w: Mundo, cuando: Date) => barridoSenalVida(w.puertosSenal, cuando);
+
+  it('el tractor llega, sale, llega al destino y sale, SIN un solo mensaje del chofer: hitos «sistema» validados por GPS, con sus sellos, y el cron no le pide nada', async () => {
+    const gps: Muestra[] = [en(SITIO_CARGA, '13:30', false), en(SITIO_CARGA, '14:00', true), en(SITIO_CARGA, '14:05', true), en(SITIO_CARGA, '14:10', true)];
+    const w = mundo({ gps });
+    const r1 = await ciclo(w, T('14:12'));
+    expect(r1).toMatchObject({ detectados: 1, llegadas: 1 });
+    expect(hitoDe(w, 'llegada_carga')).toMatchObject({ estado: 'validado', fuente: 'sistema', interpretacion: 'sistema', validadoPor: 'gps', mensajeEn: T('14:00').toISOString() });
+    expect(w.veredictos.get(hitoDe(w, 'llegada_carga').id)?.v).toMatchObject({ resultado: 'validado', fuente: 'gps', sitioId: 's-carga' });
+    expect(w.m.eventos.find((e) => e.hito === hitoDe(w, 'llegada_carga').id && e.evento === 'recibido')?.detalle).toMatchObject({ fuente: 'sistema', por: 'geocerca', cruce: 'entrada' });
+
+    // 15:10: sin la detección el cron ya le estaría pidiendo la llegada (ancla 15:00); con ella no le pide nada.
+    meta.estado.reloj = T('15:10');
+    meta.entrante(TEL_CHOFER, T('13:00'));
+    expect(await cron(w, T('15:10'))).toMatchObject({ solicitudes: 0, recordatorios: 0, escalaciones: 0 });
+    expect(meta.salientes).toHaveLength(0);
+
+    // Sale de la carga.
+    gps.push(en(SITIO_CARGA, '14:50', false), en(SITIO_CARGA, '14:55', false));
+    expect(await ciclo(w, T('15:00'))).toMatchObject({ detectados: 1, salidas: 1 });
+    expect(hitoDe(w, 'salida_carga')).toMatchObject({ estado: 'validado', fuente: 'sistema', validadoPor: 'gps', mensajeEn: T('14:50').toISOString() });
+
+    // Llega al destino: sella `llegada` (lo que lee el Vigía).
+    gps.push(en(SITIO_DESCARGA, '20:00', false), en(SITIO_DESCARGA, '20:05', true), en(SITIO_DESCARGA, '20:10', true));
+    expect(await ciclo(w, T('20:12'))).toMatchObject({ detectados: 1, llegadas: 1 });
+    expect(hitoDe(w, 'llegada_descarga')).toMatchObject({ estado: 'validado', fuente: 'sistema', mensajeEn: T('20:05').toISOString() });
+    expect(w.m.legado).toContainEqual({ viajeId: V1, sellos: ['llegada'] });
+
+    // Sale del destino: sella `descarga`.
+    gps.push(en(SITIO_DESCARGA, '21:00', false), en(SITIO_DESCARGA, '21:05', false));
+    expect(await ciclo(w, T('21:10'))).toMatchObject({ detectados: 1, salidas: 1 });
+    expect(hitoDe(w, 'salida_descarga')).toMatchObject({ estado: 'validado', fuente: 'sistema' });
+    expect(w.m.legado).toContainEqual({ viajeId: V1, sellos: ['descarga'] });
+    expect(estados(w)).toEqual({ llegada_carga: 'validado', salida_carga: 'validado', llegada_descarga: 'validado', salida_descarga: 'validado', regreso: 'esperado' });
+  });
+
+  it('DUPLICADO: dos barridos solapados (el cron entrega al menos una vez) registran UNA sola vez cada hito', async () => {
+    const gps: Muestra[] = [en(SITIO_CARGA, '14:00', true), en(SITIO_CARGA, '14:05', true)];
+    const w = mundo({ gps });
+    const [a, b] = await Promise.all([ciclo(w, T('14:12')), ciclo(w, T('14:12'))]);
+    expect(a.detectados + b.detectados).toBe(1);
+    expect(a.yaDetectados + b.yaDetectados).toBe(1);
+    expect(w.m.eventos.filter((e) => e.hito === hitoDe(w, 'llegada_carga').id && e.evento === 'recibido')).toHaveLength(1);
+    // y un tercero, más tarde, no mueve nada
+    expect(await ciclo(w, T('14:20'))).toMatchObject({ detectados: 0 });
+    expect(hitoDe(w, 'llegada_carga').mensajeEn).toBe(T('14:00').toISOString());
+  });
+
+  it('el chofer que ya avisó MANDA: el barrido no le cambia la fuente ni la hora', async () => {
+    const gps: Muestra[] = [en(SITIO_CARGA, '14:00', true), en(SITIO_CARGA, '14:05', true)];
+    const w = mundo({ gps });
+    await chofer(w, `hito_llegada_carga:${V1}`, T('14:01'));
+    const antes = { ...hitoDe(w, 'llegada_carga') };
+    const r = await ciclo(w, T('14:12'));
+    expect(r.detectados).toBe(0);
+    expect(hitoDe(w, 'llegada_carga')).toMatchObject({ fuente: 'boton', mensajeEn: antes.mensajeEn });
+  });
+
+  it('un tractor que solo PASA por la puerta (una muestra dentro) no «llega»; ni uno que se queda fuera del sitio', async () => {
+    const gps: Muestra[] = [en(SITIO_CARGA, '14:00', false), en(SITIO_CARGA, '14:05', true), en(SITIO_CARGA, '14:10', false)];
+    const w = mundo({ gps });
+    expect(await ciclo(w, T('14:15'))).toMatchObject({ detectados: 0 });
+    expect(hitoDe(w, 'llegada_carga').estado).toBe('esperado');
+  });
+
+  it('OTRA FLOTA: la unidad de otra flota dentro de MI sitio no registra nada, y mi unidad dentro del sitio de otra flota tampoco', async () => {
+    const gps: Muestra[] = [en(SITIO_CARGA, '14:00', true, 'ub', 't2'), en(SITIO_CARGA, '14:05', true, 'ub', 't2')];
+    const w = mundo({ gps });
+    expect(await ciclo(w, T('14:12'))).toMatchObject({ detectados: 0 });
+    // el viaje de t2 con las mismas coordenadas de sitio de t1: el sitio de otra flota «no existe» para él
+    const w2 = mundo({
+      viajes: [viaje(), viaje({ id: VB, tenantId: 't2', operadorId: 'ob', unidadId: 'ub', operadorTelefono: TEL_B })],
+      sitios: { [V1]: { carga: SITIO_CARGA }, [VB]: { carga: SITIO_CARGA } }, gps,
+    });
+    const r = await ciclo(w2, T('14:12'));
+    expect(r.detectados).toBe(0);
+    expect(hitoDe(w2, 'llegada_carga', VB).estado).toBe('esperado');
+  });
+
+  it('la flota que apagó la detección no recibe nada; la que la dejó encendida sí, en la misma pasada', async () => {
+    const gps: Muestra[] = [
+      en(SITIO_CARGA, '14:00', true), en(SITIO_CARGA, '14:05', true),
+      en(SITIO_CARGA, '14:00', true, 'ub', 't2'), en(SITIO_CARGA, '14:05', true, 'ub', 't2'),
+    ];
+    const SITIO_B = { ...SITIO_CARGA, tenantId: 't2', id: 's-b' };
+    const w = mundo({
+      viajes: [viaje(), viaje({ id: VB, tenantId: 't2', operadorId: 'ob', unidadId: 'ub', operadorTelefono: TEL_B })],
+      sitios: { [V1]: { carga: SITIO_CARGA }, [VB]: { carga: SITIO_B } }, gps, configs: { t2: { detectarHitosGps: false } },
+    });
+    await ciclo(w, T('14:12'));
+    expect(hitoDe(w, 'llegada_carga').fuente).toBe('sistema');
+    expect(hitoDe(w, 'llegada_carga', VB).estado).toBe('esperado');
+  });
+
+  it('el aviso a la oficina de la llegada sale solo si la flota lo pidió (con la hora de la MUESTRA)', async () => {
+    const gps: Muestra[] = [en(SITIO_CARGA, '14:00', true), en(SITIO_CARGA, '14:05', true)];
+    const w = mundo({ gps, configs: { t1: { avisarOficinaLlegada: true } } });
+    await ciclo(w, T('14:12'));
+    expect(w.m.oficina).toEqual([{ hito: hitoDe(w, 'llegada_carga').id, contacto: null }]);
+  });
+
+  // ── sin señal de vida ────────────────────────────────────────────────────
+  const enTransito = (w: Mundo) => {
+    w.m.sembrar(V1);
+    w.m.registrar(V1, 'llegada_carga', T('13:30').toISOString());
+    w.m.registrar(V1, 'salida_carga', T('13:40').toISOString());
+  };
+  const CALLADO: Muestra[] = [en({ lat: 21.5, lng: -102.5 }, '13:10', false)]; // la última muestra es de las 13:10Z (07:10 MX)
+  const cfgSenal = { t1: { avisarSenalVida: true } };
+
+  it('apagada por omisión: un tractor mudo en tránsito no recibe ni un mensaje', async () => {
+    const w = mundo({ gps: [...CALLADO] });
+    enTransito(w);
+    expect(await senal(w, T('14:30'))).toMatchObject({ abiertos: 0, avisosChofer: 0 });
+    expect(meta.salientes).toHaveLength(0);
+  });
+
+  it('GPS mudo → aviso 1 con tres botones → aviso 2 → jefe de tráfico con «Ya lo atiendo», que cierra el episodio', async () => {
+    const w = mundo({ gps: [...CALLADO], configs: cfgSenal });
+    enTransito(w);
+    meta.entrante(TEL_CHOFER, T('13:35'));
+    meta.entrante(TEL_PATIO, T('13:00'));
+    meta.estado.reloj = T('14:30');
+
+    expect(await senal(w, T('14:30'))).toMatchObject({ abiertos: 1, avisosChofer: 1 });
+    expect(meta.salientes.at(-1)).toMatchObject({ tipo: 'botones', botones: [`senal_vida_estoy:${V1}`, `senal_vida_cargar:${V1}`, `senal_vida_bien:${V1}`] });
+    expect(meta.salientes.at(-1)?.cuerpo).toMatch(/no recibimos la señal del GPS de tu unidad desde hace 1 hora y 20 minutos/);
+
+    // 19 min después: todavía no toca el segundo.
+    expect(await senal(w, T('14:49'))).toMatchObject({ avisosChofer: 0 });
+    expect(meta.salientes).toHaveLength(1);
+    // 20 min después: el segundo aviso.
+    expect(await senal(w, T('14:50'))).toMatchObject({ avisosChofer: 1 });
+    expect(meta.salientes.at(-1)?.cuerpo).toMatch(/segundo aviso:/);
+    // 20 min más: al jefe de tráfico (patio), no al chofer.
+    expect(await senal(w, T('15:10'))).toMatchObject({ escalaciones: 1 });
+    expect(meta.salientes.at(-1)).toMatchObject({ a: TEL_PATIO, botones: [`jefe_atiendo:${V1}`] });
+    expect(meta.salientes.at(-1)?.cuerpo).toMatch(/no hay señal de vida de Juan Pérez/);
+    // y no se insiste
+    expect(await senal(w, T('16:00'))).toMatchObject({ avisosChofer: 0, escalaciones: 0 });
+    expect(meta.salientes).toHaveLength(3);
+
+    // El patio toca «Ya lo atiendo»: el episodio se cierra.
+    const ack = await atenderAcuseJefe(TEL_PATIO, `jefe_atiendo:${V1}`, T('16:05'), w.depsAcuse);
+    expect(ack).toContain('lo marqué como atendido');
+    expect([...w.episodios.values()][0]).toMatchObject({ cierre: 'atendido_por_jefe' });
+  });
+
+  it('el chofer contesta «Sí, estoy»: no hay segundo aviso, y el mismo GPS mudo NO abre otro episodio hasta que pase el silencio (2 h)', async () => {
+    const w = mundo({ gps: [...CALLADO], configs: cfgSenal });
+    enTransito(w);
+    meta.estado.reloj = T('14:30');
+    meta.entrante(TEL_CHOFER, T('14:00'));
+    await senal(w, T('14:30'));
+    const r = await chofer(w, `senal_vida_estoy:${V1}`, T('14:35'));
+    expect(r?.mensajes[0].texto).toMatch(/anotado/i);
+    expect([...w.episodios.values()][0]).toMatchObject({ cierre: 'respondio', respuesta: 'estoy' });
+    expect(hitoDe(w, 'salida_carga').estado).toBe('recibido'); // no cambia hitos
+
+    expect(await senal(w, T('14:55'))).toMatchObject({ abiertos: 0, avisosChofer: 0 });
+    expect(await senal(w, T('16:30'))).toMatchObject({ abiertos: 0 });          // 14:35 + 2 h = 16:35
+    expect(await senal(w, T('16:40'))).toMatchObject({ abiertos: 1, avisosChofer: 1 });
+  });
+
+  it('«Voy a cargar» deja un silencio de 1 h', async () => {
+    const w = mundo({ gps: [...CALLADO], configs: cfgSenal });
+    enTransito(w);
+    meta.entrante(TEL_CHOFER, T('14:00'));
+    await senal(w, T('14:30'));
+    await chofer(w, `senal_vida_cargar:${V1}`, T('14:35'));
+    expect(await senal(w, T('15:30'))).toMatchObject({ abiertos: 0 });
+    expect(await senal(w, T('15:40'))).toMatchObject({ abiertos: 1 });
+  });
+
+  it('si el GPS vuelve a reportar, el episodio se cierra solo y no hay segundo aviso', async () => {
+    const gps: Muestra[] = [...CALLADO];
+    const w = mundo({ gps, configs: cfgSenal });
+    enTransito(w);
+    meta.entrante(TEL_CHOFER, T('14:00'));
+    await senal(w, T('14:30'));
+    gps.push(
+      en({ lat: 21.6, lng: -102.5 }, '14:00', false), en({ lat: 21.7, lng: -102.5 }, '14:10', false), en({ lat: 21.8, lng: -102.5 }, '14:20', false),
+      en({ lat: 21.9, lng: -102.5 }, '14:30', false), en({ lat: 22.0, lng: -102.5 }, '14:40', false),
+    );
+    const r = await senal(w, T('14:45'));
+    expect(r).toMatchObject({ cerrados: 1, avisosChofer: 0 });
+    expect([...w.episodios.values()][0]).toMatchObject({ cierre: 'senal_recuperada' });
+    expect(meta.salientes).toHaveLength(1);
+  });
+
+  it('una unidad que NUNCA reportó GPS (flota sin conector) no recibe nada; y de noche, fuera de la ventana de la flota, tampoco', async () => {
+    const sin = mundo({ gps: [], configs: cfgSenal });
+    enTransito(sin);
+    expect(await senal(sin, T('14:30'))).toMatchObject({ abiertos: 0 });
+    const noche = mundo({ gps: [...CALLADO], configs: cfgSenal });
+    enTransito(noche);
+    expect(await senal(noche, T('06:30', '2026-10-03'))).toMatchObject({ abiertos: 0 });
+    expect(meta.salientes).toHaveLength(0);
+  });
+
+  it('un viaje que NO va en tránsito (todavía en la carga) con el GPS mudo no recibe aviso', async () => {
+    const w = mundo({ gps: [...CALLADO], configs: cfgSenal });
+    w.m.sembrar(V1);
+    w.m.registrar(V1, 'llegada_carga', T('13:30').toISOString());
+    expect(await senal(w, T('14:30'))).toMatchObject({ abiertos: 0, enTransito: 0 });
+  });
+
+  it('dos barridos solapados: el aviso 1 sale UNA vez', async () => {
+    const w = mundo({ gps: [...CALLADO], configs: cfgSenal });
+    enTransito(w);
+    meta.entrante(TEL_CHOFER, T('14:00'));
+    const [a, b] = await Promise.all([senal(w, T('14:30')), senal(w, T('14:30'))]);
+    expect(a.avisosChofer + b.avisosChofer).toBe(1);
+    expect(meta.salientes).toHaveLength(1);
   });
 });

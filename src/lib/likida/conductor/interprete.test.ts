@@ -204,6 +204,14 @@ describe('botones de las plantillas', () => {
     expect(clase('ya estoy en la puerta')).toEqual({ clase: 'llegada', lugar: null });
   });
 
+  it('P2: los tres botones del «¿sigues bien?» son respuestas de señal de vida (no cambian hitos)', () => {
+    expect(b('senal_vida_estoy')?.intencion).toEqual({ clase: 'senal_vida', respuesta: 'estoy' });
+    expect(b('senal_vida_cargar')?.intencion).toEqual({ clase: 'senal_vida', respuesta: 'voy_a_cargar' });
+    expect(b('senal_vida_bien')?.intencion).toEqual({ clase: 'senal_vida', respuesta: 'estoy_bien' });
+    // y no traen hito: un payload con tercer campo se rechaza
+    expect(interpretarBoton(`senal_vida_estoy:${V}:salida_carga`)).toBeNull();
+  });
+
   it('el botón del jefe NO es del chofer', () => {
     expect(b('jefe_atiendo')).toBeNull();
   });

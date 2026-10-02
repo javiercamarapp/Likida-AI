@@ -3,7 +3,13 @@ import { correrConductor, puertosReales } from '@/lib/likida/conductor/ejecutor'
 import { correrAlertasEstadia, type ResultadoAlertasEstadia } from '@/lib/likida/conductor/alertas_estadia';
 import { correrAlertasLlegadaSinConfirmar, puertosAlertaLlegadaReales, type ResultadoAlertasLlegada } from '@/lib/likida/conductor/alertas_llegada';
 import { barridoValidacion, depsValidacionReales, type ResultadoBarrido } from '@/lib/likida/conductor/validar_hito';
-import { leerCandidatosValidacion } from '@/lib/likida/conductor/trabajo';
+import { leerCandidatosValidacion, leerCandidatosSitioDerivado, leerCatalogoSitios } from '@/lib/likida/conductor/trabajo';
+import { barridoCicloGps, type ResultadoCicloGps } from '@/lib/likida/conductor/ciclo_gps';
+import { puertosCicloGpsReales } from '@/lib/likida/conductor/ciclo_gps_real';
+import { barridoSitioDerivado, type ResultadoSitioDerivado } from '@/lib/likida/conductor/sitio_derivado';
+import { asignarSitioDerivado } from '@/lib/likida/conductor/repo';
+import { barridoSenalVida, type ResultadoSenalVida } from '@/lib/likida/conductor/senal_vida';
+import { puertosSenalVidaReales } from '@/lib/likida/conductor/senal_vida_real';
 import { barridoAcercamiento, type ResultadoAcercamiento } from '@/lib/likida/convenios/acercamiento';
 import { ConveniosNoDisponibles } from '@/lib/likida/convenios/repo';
 import { horaYDiaMx } from '@/lib/likida/conductor/config';
@@ -91,6 +97,26 @@ export async function GET(req: Request) {
     let llegadas: ResultadoAlertasLlegada | undefined;
     let validacion: ResultadoBarrido | undefined;
     let acercamiento: ResultadoAcercamiento | undefined;
+    let sitios: ResultadoSitioDerivado | undefined;
+    let ciclo: ResultadoCicloGps | undefined;
+    let senalVida: ResultadoSenalVida | undefined;
+    // P2 (0635-0637): primero el sitio de los viajes sin convenio (sin sitio no hay geocerca) y luego el ciclo por geocerca
+    // (el GPS entra o sale del sitio y el hito se registra solo). Van ANTES de la validación y de los avisos de llegada: una llegada
+    // que el GPS acaba de dar por hecha no debe avisar como «sin confirmar». Aislados como los demás.
+    try {
+      sitios = await barridoSitioDerivado({ candidatos: leerCandidatosSitioDerivado, catalogo: leerCatalogoSitios, asignar: asignarSitioDerivado }, new Date(), venceEn);
+      if (sitios.fallos > 0) extras.push(`sitio derivado: ${sitios.fallos} viaje(s) con fallo`);
+    } catch (e) {
+      extras.push(`sitio derivado: ${e instanceof Error ? e.message : String(e)}`);
+      logger.error('cron.conductor_hitos.sitio_derivado_fallo', { error: e instanceof Error ? e.message : String(e) });
+    }
+    try {
+      ciclo = await barridoCicloGps(puertosCicloGpsReales(), new Date(), venceEn);
+      extras.push(...ciclo.fallos);
+    } catch (e) {
+      extras.push(`ciclo por geocerca: ${e instanceof Error ? e.message : String(e)}`);
+      logger.error('cron.conductor_hitos.ciclo_gps_fallo', { error: e instanceof Error ? e.message : String(e) });
+    }
     try {
       alertas = await correrAlertasEstadia(puertosReales(), { venceEn });
       extras.push(...alertas.fallos);
@@ -126,6 +152,15 @@ export async function GET(req: Request) {
       }
     }
 
+    // P2 (0636): «sin señal de vida» en tránsito (apagado por flota por omisión). Manda a personas: al final, aislado.
+    try {
+      senalVida = await barridoSenalVida(puertosSenalVidaReales(), new Date(), venceEn);
+      extras.push(...senalVida.fallos);
+    } catch (e) {
+      extras.push(`señal de vida: ${e instanceof Error ? e.message : String(e)}`);
+      logger.error('cron.conductor_hitos.senal_vida_fallo', { error: e instanceof Error ? e.message : String(e) });
+    }
+
     // Mantenimiento de privacidad: una vez al día, a las 03:xx de México.
     let mantenimiento: Record<string, number | string> | undefined;
     const { hora } = horaYDiaMx(new Date());
@@ -134,7 +169,7 @@ export async function GET(req: Request) {
     }
 
     const huboFallo = r.fallos.length > 0 || r.configIlegible > 0 || r.sinDestinatario > 0 || extras.length > 0;
-    const incompleto = r.cortadosPorReloj > 0 || r.cortadaPorRechazoMasivo;
+    const incompleto = r.cortadosPorReloj > 0 || r.cortadaPorRechazoMasivo || Boolean(senalVida?.cortadaPorRechazoMasivo);
     logger.info('cron.conductor_hitos.ok', { ...r, fallos: r.fallos.length });
     const estado: EstadoLatido = huboFallo || incompleto ? 'parcial' : 'ok';
     latido = {
@@ -145,6 +180,8 @@ export async function GET(req: Request) {
         rechazoMasivo: r.cortadaPorRechazoMasivo,
         alertasEstadia: alertas?.alertas ?? null, avisosLlegadaSinConfirmar: llegadas?.avisos ?? null, validados: validacion?.validados ?? null, sinCoincidencia: validacion?.sinCoincidencia ?? null,
         acercamientos: acercamiento?.enviados ?? null,
+        hitosPorGps: ciclo?.detectados ?? null, sitiosDerivados: sitios?.derivados ?? null,
+        senalVidaAvisos: senalVida?.avisosChofer ?? null, senalVidaEscalaciones: senalVida?.escalaciones ?? null,
       },
     };
     if (r.cortadaPorRechazoMasivo) {
@@ -154,7 +191,7 @@ export async function GET(req: Request) {
       });
     }
     return NextResponse.json({
-      corrio: true, ...r, fallos: [...r.fallos, ...extras].slice(0, 20), alertasEstadia: alertas, llegadasSinConfirmar: llegadas, validacion, acercamiento,
+      corrio: true, ...r, fallos: [...r.fallos, ...extras].slice(0, 20), alertasEstadia: alertas, llegadasSinConfirmar: llegadas, validacion, acercamiento, cicloGps: ciclo, sitiosDerivados: sitios, senalVida,
       ...(mantenimiento ? { mantenimiento } : {}),
     });
   } catch (e) {
