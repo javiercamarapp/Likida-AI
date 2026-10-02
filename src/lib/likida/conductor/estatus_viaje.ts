@@ -5,6 +5,7 @@ import type { ViajeTablero } from './repo_validacion';
 import { calcularEstancias, type Estancia } from './estadias_anden';
 import { estaResuelto, TIPOS_HITO, type HitoFila, type TipoHito } from './tipos';
 import type { Semaforo } from './tablero';
+import { llegadaPorConfirmar, type VeredictoMinimo } from './validacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // `estatusViaje(viajeId)` — el servicio interno que el futuro agente Vigía consulta: ¿en qué va este
@@ -30,6 +31,11 @@ export interface EstatusViaje {
   estatus: string;
   operador: { id: string; nombre: string | null };
   ultimoHito: PuntoHitoEstatus | null;
+  /**
+   * Un «ya llegué» del chofer que NINGUNA posición respalda (sin GPS, GPS que no coincide, o aún sin medir): NO es el último hito
+   * ni abre el andén —el Vigía no puede decirle al cliente «en destino» por eso—, pero tampoco se pierde: aquí queda, con su hora.
+   */
+  llegadaPorConfirmar: { tipo: TipoHito; hora: string | null } | null;
   siguienteHito: {
     tipo: TipoHito;
     estado: HitoFila['estado'];
@@ -66,9 +72,17 @@ function citaDelHito(tipo: TipoHito, v: ViajeTablero): { en: string; fuente: 'ci
   return null;
 }
 
-export function construirEstatus(v: ViajeTablero, hitos: readonly HitoFila[], config: ConfigConductor, ahora: Date): EstatusViaje {
+export function construirEstatus(
+  v: ViajeTablero, hitos: readonly HitoFila[], config: ConfigConductor, ahora: Date,
+  /** El veredicto de ubicación vigente por hito (id). `null` = no se pudo leer / no hay: con sitio asignado la llegada queda por confirmar. */
+  veredictos: ReadonlyMap<string, VeredictoMinimo> | null = null,
+): EstatusViaje {
   const ordenados = [...hitos].sort((a, b) => TIPOS_HITO.indexOf(a.tipo) - TIPOS_HITO.indexOf(b.tipo));
-  const resueltos = ordenados.filter((h) => estaResuelto(h));
+  const porConfirmar = ordenados.filter((h) => llegadaPorConfirmar(
+    h, veredictos?.get(h.id), config.validarUbicacion, (h.tipo === 'llegada_carga' ? v.origenSitioId : v.destinoSitioId) !== null,
+  ));
+  const sinConfirmar = new Set(porConfirmar.map((h) => h.id));
+  const resueltos = ordenados.filter((h) => estaResuelto(h) && !sinConfirmar.has(h.id));
   // «Último» = el de mayor hora (un hito corregido o capturado después puede quedar fuera de secuencia).
   const hora = (h: HitoFila) => new Date(h.mensajeEn ?? h.recibidoEn ?? 0).getTime();
   const ultimo = [...resueltos].sort((a, b) => hora(b) - hora(a))[0] ?? null;
@@ -86,7 +100,7 @@ export function construirEstatus(v: ViajeTablero, hitos: readonly HitoFila[], co
     semaforo = vencido >= config.escalarTrasMin ? 'sin_reporte' : vencido >= primerRecordatorio ? 'atrasado' : 'a_tiempo';
   }
 
-  const llegoA = (t: TipoHito) => ordenados.some((h) => h.tipo === t && estaResuelto(h));
+  const llegoA = (t: TipoHito) => ordenados.some((h) => h.tipo === t && estaResuelto(h) && !sinConfirmar.has(h.id));
   const citas = {
     carga: llegoA('llegada_carga') ? null : citaDelHito('llegada_carga', v),
     descarga: llegoA('llegada_descarga') ? null : citaDelHito('llegada_descarga', v),
@@ -94,13 +108,17 @@ export function construirEstatus(v: ViajeTablero, hitos: readonly HitoFila[], co
   const enCurso = calcularEstancias(v, ordenados, ahora, { validaciones: new Map(), evidencias: new Map() }).find((e) => e.fase === 'en_curso') ?? null;
   return {
     viajeId: v.id, folio: v.folio, estatus: v.estatus, operador: { id: v.operadorId, nombre: v.operadorNombre },
+    llegadaPorConfirmar: porConfirmar.length > 0 ? (() => {
+      const h = [...porConfirmar].sort((a, b) => hora(b) - hora(a))[0];
+      return { tipo: h.tipo, hora: h.mensajeEn ?? h.recibidoEn };
+    })() : null,
     ultimoHito: ultimo ? { tipo: ultimo.tipo, estado: ultimo.estado, hora: ultimo.mensajeEn ?? ultimo.recibidoEn, fuente: ultimo.fuente, validadoPor: ultimo.validadoPor } : null,
     siguienteHito: activo ? {
       tipo: activo.tipo, estado: activo.estado, tocaDesde: tocaDesde ? tocaDesde.toISOString() : null, cita: citaDelHito(activo.tipo, v),
       escalado: activo.estado === 'escalado', atendido: activo.escalacionAtendidaEn !== null,
     } : null,
     semaforo, citas,
-    enAnden: enCurso ? { lugar: enCurso.lugar, minutos: enCurso.minutos, desde: enCurso.llegada?.en ?? null } : null,
+    enAnden: enCurso && !(enCurso.llegada && sinConfirmar.has(enCurso.llegada.hitoId)) ? { lugar: enCurso.lugar, minutos: enCurso.minutos, desde: enCurso.llegada?.en ?? null } : null,
     completo: ordenados.length > 0 && !activo,
     calculadoEn: ahora.toISOString(),
   };

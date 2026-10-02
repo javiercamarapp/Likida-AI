@@ -147,3 +147,26 @@ export function veredictoSellaLlegada(v: Pick<Veredicto, 'resultado' | 'motivo'>
   if (!v) return false;
   return v.resultado === 'validado' || (v.resultado === 'sin_dato' && v.motivo === 'sin_sitio');
 }
+
+export type VeredictoMinimo = { resultado: string; motivo: string | null };
+
+/**
+ * ¿Este «ya llegué» sigue SIN confirmar? (el hito quedó `recibido` porque el chofer avisó, pero ninguna posición lo respalda).
+ * No es una acusación: es lo que el tablero muestra como excepción y lo que el Vigía no puede afirmarle al cliente como «en
+ * destino». Lo declarado por la oficina, lo validado y las flotas sin validación de ubicación quedan fuera; sin sitio asignado
+ * tampoco hay nada que confirmar (misma regla que `veredictoSellaLlegada`).
+ */
+export function llegadaPorConfirmar(
+  h: { tipo: string; estado: string; fuente: string | null },
+  v: VeredictoMinimo | null | undefined,
+  validarUbicacion: boolean,
+  haySitio: boolean,
+): boolean {
+  if (!validarUbicacion) return false;
+  if (h.tipo !== 'llegada_carga' && h.tipo !== 'llegada_descarga') return false;
+  if (h.estado !== 'recibido' || h.fuente === 'oficina') return false;
+  if (!v) return haySitio; // sin veredicto todavía (o no se pudo leer): con sitio asignado hay algo que confirmar
+  if (v.resultado === 'sin_coincidencia') return true;
+  if (v.resultado === 'sin_dato') return v.motivo !== 'sin_sitio';
+  return false;
+}
