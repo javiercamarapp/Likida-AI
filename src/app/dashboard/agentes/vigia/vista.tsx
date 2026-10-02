@@ -51,6 +51,8 @@ const NOMBRE_EVENTO: Record<string, string> = {
   escalada: 'Escalamiento', sin_destinatario: 'No había a quién avisar', optout: 'Un cliente pidió su baja', alta: 'Se autorizó un contacto',
   baja_manual: 'Se dio de baja un contacto', suprimido: 'Se suprimieron los datos de un contacto (ARCO)', spam: 'Se detectó spam',
   sin_dato: 'Faltaba un dato real: se consultó', inyeccion: 'Mensaje con instrucciones sospechosas', otro_cliente: 'Preguntó por un folio que no es suyo',
+  adjunto_enviado: 'Se envió el archivo adjunto (POD)', adjunto_pendiente: 'El archivo no salió: la ventana de 24 h del cliente está cerrada; mándaselo tú',
+  adjunto_fallo: 'No se pudo mandar el archivo adjunto: revísalo y mándaselo tú',
 };
 
 export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministrar, acciones }: {
@@ -207,6 +209,7 @@ export async function BloqueAprobacion({ datos: p, puedeDecidir, acciones }: { d
                 {m.riesgo && <Chip tono={m.riesgo === 'alto' ? 'bad' : m.riesgo === 'medio' ? 'warn' : 'ok'}>Riesgo {m.riesgo}</Chip>}
                 {m.senales.includes('inyeccion') && <Chip tono="bad">Mensaje con instrucciones raras</Chip>}
                 {m.senales.includes('folio_ajeno') && <Chip tono="warn">Preguntó por un folio que no es suyo</Chip>}
+                {m.adjuntos.length > 0 && <Chip>Adjuntará: {m.adjuntos.join(', ')}</Chip>}
                 <span className="ml-auto text-[11px]" style={{ color: 'var(--faint)' }}>{fechaHoraMx(m.creadoEn)}</span>
               </div>
               <blockquote className="text-[12.5px] pl-3 border-l-2" style={{ borderColor: 'var(--line2)', color: 'var(--muted)' }}>

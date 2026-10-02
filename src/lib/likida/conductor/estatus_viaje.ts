@@ -41,6 +41,12 @@ export interface EstatusViaje {
     atendido: boolean;
   } | null;
   semaforo: Semaforo;
+  /**
+   * La cita (manda) o la ETA de LLEGADA a cada punto del viaje, sin importar cuál es el hito activo: el Vigía le
+   * contesta a quien espera la carga en el destino aunque el chofer aún no salga de la carga. Una llegada que ya
+   * se registró NO se lista (ya no es un dato futuro). `null` = nadie capturó cita ni ETA: no se inventa.
+   */
+  citas: { carga: { en: string; fuente: 'cita' | 'eta' } | null; descarga: { en: string; fuente: 'cita' | 'eta' } | null };
   /** La parada en la que está AHORA (llegó y no ha salido), con sus minutos. */
   enAnden: Pick<Estancia, 'lugar' | 'minutos'> & { desde: string | null } | null;
   completo: boolean;
@@ -80,6 +86,11 @@ export function construirEstatus(v: ViajeTablero, hitos: readonly HitoFila[], co
     semaforo = vencido >= config.escalarTrasMin ? 'sin_reporte' : vencido >= primerRecordatorio ? 'atrasado' : 'a_tiempo';
   }
 
+  const llegoA = (t: TipoHito) => ordenados.some((h) => h.tipo === t && estaResuelto(h));
+  const citas = {
+    carga: llegoA('llegada_carga') ? null : citaDelHito('llegada_carga', v),
+    descarga: llegoA('llegada_descarga') ? null : citaDelHito('llegada_descarga', v),
+  };
   const enCurso = calcularEstancias(v, ordenados, ahora, { validaciones: new Map(), evidencias: new Map() }).find((e) => e.fase === 'en_curso') ?? null;
   return {
     viajeId: v.id, folio: v.folio, estatus: v.estatus, operador: { id: v.operadorId, nombre: v.operadorNombre },
@@ -88,7 +99,7 @@ export function construirEstatus(v: ViajeTablero, hitos: readonly HitoFila[], co
       tipo: activo.tipo, estado: activo.estado, tocaDesde: tocaDesde ? tocaDesde.toISOString() : null, cita: citaDelHito(activo.tipo, v),
       escalado: activo.estado === 'escalado', atendido: activo.escalacionAtendidaEn !== null,
     } : null,
-    semaforo,
+    semaforo, citas,
     enAnden: enCurso ? { lugar: enCurso.lugar, minutos: enCurso.minutos, desde: enCurso.llegada?.en ?? null } : null,
     completo: ordenados.length > 0 && !activo,
     calculadoEn: ahora.toISOString(),

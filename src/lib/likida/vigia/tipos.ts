@@ -87,6 +87,13 @@ export interface Conversacion {
   atendidaEn: string | null;
 }
 
+/** Un archivo que viaja con la respuesta. Hoy solo el comprobante de entrega (POD) ya recibido. */
+export interface AdjuntoRef {
+  clave: 'pod';
+  viajeId: string;
+  folio: string | null;
+}
+
 export type EstadoMensajeSaliente =
   | 'borrador' | 'pendiente_aprobacion' | 'aprobado' | 'enviado' | 'rechazado' | 'fallido' | 'descartado';
 
@@ -112,12 +119,15 @@ export interface MensajeVigia {
   via: 'texto' | 'botones' | 'plantilla' | null;
   error: string | null;
   senales: string[];
+  /** Los archivos que saldrán (o salieron) junto con este texto: salen del respaldo con el que se redactó. */
+  adjuntos: AdjuntoRef[];
   createdAt: string;
 }
 
 export type TipoEvento =
   | 'entrante' | 'borrador' | 'aprobado' | 'rechazado' | 'enviado' | 'autoenviado' | 'fallo_envio'
   | 'tomada' | 'devuelta' | 'cerrada' | 'molestia' | 'sin_respuesta' | 'escalada' | 'sin_destinatario'
-  | 'optout' | 'alta' | 'baja_manual' | 'suprimido' | 'spam' | 'sin_dato' | 'inyeccion' | 'otro_cliente';
+  | 'optout' | 'alta' | 'baja_manual' | 'suprimido' | 'spam' | 'sin_dato' | 'inyeccion' | 'otro_cliente'
+  | 'adjunto_enviado' | 'adjunto_pendiente' | 'adjunto_fallo';
 
 export type MotivoEscalamiento = 'sin_respuesta' | 'molestia' | 'pide_humano' | 'sin_dato' | 'folio_ajeno';

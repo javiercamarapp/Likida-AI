@@ -26,6 +26,10 @@ import { hashTelefono } from './servicio';
 import {
   etapaDeViaje, ultimoHitoDe, type EstatusViaje, type ResumenViaje, type ServicioEstatusViaje,
 } from './estatus_viaje';
+import { estatusViaje as estatusDelConductor } from '../conductor/servicios';
+import type { EstatusViaje as EstatusConductor } from '../conductor/estatus_viaje';
+import { mezclarEstatus, parteDelConductor } from './desde_conductor';
+import { adjuntosDeRespaldo, nombreDeAdjunto, nombreDeArchivo, pieDeAdjunto, rutaEsDeLaFlota, SEGUNDOS_URL_ADJUNTO, type ArchivoParaEnviar } from './adjuntos';
 import type {
   CambioReclamo, Destinatario, FilaEnEspera, NuevoEvento, NuevoSaliente, RepoVigia, ResultadoRecibir,
 } from './puertos';
@@ -89,21 +93,30 @@ export function aMensaje(f: Fila): MensajeVigia {
     respuestaA: str(f.respuesta_a), riesgo: str(f.riesgo) as MensajeVigia['riesgo'], autoenviado: f.autoenviado === true,
     editado: f.editado === true, aprobadoPor: str(f.aprobado_por), enviadoEn: str(f.enviado_en),
     via: str(f.via) as MensajeVigia['via'], error: str(f.error), senales: Array.isArray(f.senales) ? (f.senales as string[]) : [],
+    adjuntos: adjuntosDeRespaldo(f.datos_respaldo),
     createdAt: String(f.created_at),
   };
 }
 
 const COLS_CONTACTO = 'id, tenant_id, cliente_id, telefono, nombre, gerente_user_id, estado, consentimiento_en, optout_en, aviso_privacidad_en';
 const COLS_CONV = 'id, tenant_id, contacto_id, cliente_id, viaje_id, estado, control, tomada_por, ultima_entrada_en, ultima_salida_en, sin_respuesta_desde, entradas_sin_respuesta, molestia_nivel, molestia_motivos, molestia_en, escalamiento_nivel, escalado_en, atendida_en';
-const COLS_MSG = 'id, tenant_id, conversacion_id, direccion, autor, wamid, tipo, texto, intencion, estado, respuesta_a, riesgo, autoenviado, editado, aprobado_por, enviado_en, via, error, senales, created_at';
+const COLS_MSG = 'id, tenant_id, conversacion_id, direccion, autor, wamid, tipo, texto, intencion, estado, respuesta_a, riesgo, autoenviado, editado, aprobado_por, enviado_en, via, error, senales, datos_respaldo, created_at';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ESTATUS DE VIAJE REAL: viaje + posicion + pod + factura, de UN cliente en UNA flota
+// ESTATUS DE VIAJE REAL: viaje + posicion + pod + factura + lo del Agente 5 «Conductor»,
+// de UN cliente en UNA flota
 // ═══════════════════════════════════════════════════════════════════════════
 
 const ESTATUS_EN_CURSO = ['abierto', 'en_cuadre'];
 
-export const estatusViajeReal: ServicioEstatusViaje = {
+/** Lo que el estatus real necesita de afuera (inyectable para pruebas). */
+export interface DepsEstatusReal {
+  /** El estatus que calcula el Conductor (hitos, cita/ETA, andén) de un viaje de ESA flota; `null` si no existe. */
+  conductor(tenantId: string, viajeId: string): Promise<EstatusConductor | null>;
+}
+
+export function crearEstatusViajeReal(d: DepsEstatusReal): ServicioEstatusViaje {
+  return {
   async viajesEnCurso({ tenantId, clienteId }) {
     const db = supabaseAdmin();
     const { data, error } = await acotada(db.from('viaje')
@@ -171,17 +184,60 @@ export const estatusViajeReal: ServicioEstatusViaje = {
       logger.warn('vigia.estatus_factura_ilegible', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
     }
 
-    return {
-      viajeId: String(v.id), folio: str(v.folio), origen: str(v.origen), destino: str(v.destino),
+    // Lo del Agente 5 «Conductor»: los cinco hitos, la cita/ETA de cada punto y si el operador está en un andén. Si no se
+    // pudo leer, el viaje dice lo que digan sus sellos y SIN ETA (no se rellena: el Vigía contesta «lo consulto» y escala).
+    let delConductor: EstatusConductor | null = null;
+    try {
+      const c = await d.conductor(tenantId, viajeId);
+      // El viaje ya se verificó contra el cliente arriba; que el Conductor hable del MISMO viaje es la segunda llave.
+      if (c && c.viajeId === viajeId) delConductor = c;
+    } catch (e) {
+      logger.warn('vigia.estatus_conductor_ilegible', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    }
+    const parte = parteDelConductor(delConductor);
+    const base = {
       etapa: etapaDeViaje({ estatus: str(v.estatus), llegadaEn, descargaEn, regresoEn }),
       ultimoHito: ultimoHitoDe({ llegadaEn, descargaEn, regresoEn }),
-      posicion,
-      // Likida no guarda cita ni ETA por viaje (no hay columna): hasta que exista, el Vigía lo consulta y escala.
-      etaIso: null,
+    };
+    const mezcla = mezclarEstatus(base, parte);
+    // Un viaje que ya llegó a descarga no tiene «hora estimada de llegada» por decir.
+    const yaLlego = mezcla.etapa === 'cerrado' || ['en_destino', 'descargando', 'entregado', 'regresando'].includes(mezcla.etapa);
+
+    return {
+      viajeId: String(v.id), folio: str(v.folio), origen: str(v.origen), destino: str(v.destino),
+      etapa: mezcla.etapa, ultimoHito: mezcla.ultimoHito, posicion,
+      etaIso: yaLlego ? null : parte.etaIso, etaFuente: yaLlego ? null : parte.etaFuente,
+      citaCarga: parte.citaCarga, enAnden: parte.enAnden,
+      adjuntos: podRecibido === true ? [{ clave: 'pod', nombre: nombreDeAdjunto('pod') }] : [],
       documentos, podRecibido, facturaEmitida,
     };
   },
-};
+  };
+}
+
+export const estatusViajeReal: ServicioEstatusViaje = crearEstatusViajeReal({ conductor: (tenantId, viajeId) => estatusDelConductor(tenantId, viajeId) });
+
+/**
+ * El archivo a adjuntar, de ESE cliente en ESA flota, con URL firmada de 10 min. Se busca por (flota, cliente, viaje): el
+ * POD de un viaje de otro cliente de la misma flota (o de otra flota) devuelve `null`. Si la base no contesta LANZA.
+ */
+export async function archivoAdjuntoReal(a: { tenantId: string; clienteId: string; viajeId: string; clave: 'pod' }): Promise<ArchivoParaEnviar | null> {
+  const db = supabaseAdmin();
+  const v = exigir('adjunto_viaje', await acotada(db.from('viaje')
+    .select('id, folio').eq('id', a.viajeId).eq('tenant_id', a.tenantId).eq('cliente_id', a.clienteId).maybeSingle(), 'vigia.adjunto_viaje')) as Fila | null;
+  if (!v) return null;
+  const pods = exigir('adjunto_pod', await acotada(db.from('pod')
+    .select('storage_path').eq('tenant_id', a.tenantId).eq('viaje_id', a.viajeId).eq('estado', 'subido').order('id').limit(1), 'vigia.adjunto_pod')) as Fila[] | null;
+  const ruta = str(pods?.[0]?.storage_path);
+  if (!ruta || !rutaEsDeLaFlota(a.tenantId, ruta)) return null;
+  const { data, error } = await acotada(db.storage.from('comprobantes').createSignedUrl(ruta, SEGUNDOS_URL_ADJUNTO), 'vigia.adjunto_firma');
+  if (error || !data?.signedUrl) {
+    logger.warn('vigia.adjunto_no_firmado', { tenant: a.tenantId, err: error?.message ?? 'sin url' });
+    return null;
+  }
+  const folio = str(v.folio);
+  return { url: data.signedUrl, nombre: nombreDeArchivo(a.clave, folio, ruta), pie: pieDeAdjunto(a.clave, folio) };
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL REPO
@@ -190,6 +246,7 @@ export const estatusViajeReal: ServicioEstatusViaje = {
 export function crearRepoVigia(): RepoVigia {
   return {
     estatus: estatusViajeReal,
+    archivoAdjunto: archivoAdjuntoReal,
 
     async config(tenantId) {
       const f = exigir('config', await acotada(supabaseAdmin().from('vigia_config')
@@ -472,6 +529,8 @@ export interface PendienteTablero {
   intencion: Intencion | null;
   riesgo: 'bajo' | 'medio' | 'alto' | null;
   senales: string[];
+  /** Los archivos que saldrán con la respuesta (nombres legibles) si el gerente la aprueba. */
+  adjuntos: string[];
   creadoEn: string;
 }
 
@@ -553,7 +612,7 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
   const pendientes: PendienteTablero[] = pend.map((m) => ({
     id: m.id, conversacionId: m.conversacionId, clienteNombre: clienteDeConv.get(m.conversacionId) ?? null,
     mensajeCliente: m.respuestaA ? entrantesDe.get(m.respuestaA) ?? null : null, borrador: m.texto ?? '',
-    intencion: m.intencion, riesgo: m.riesgo, senales: m.senales, creadoEn: m.createdAt,
+    intencion: m.intencion, riesgo: m.riesgo, senales: m.senales, adjuntos: m.adjuntos.map((a) => nombreDeAdjunto(a.clave)), creadoEn: m.createdAt,
   }));
 
   // Envíos fallidos de las últimas 24 h.
