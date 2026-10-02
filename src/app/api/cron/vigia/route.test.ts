@@ -72,6 +72,17 @@ describe('la corrida', () => {
     expect(opciones.vencePorReloj).toBeGreaterThan(antes);
     expect(opciones.vencePorReloj).toBeLessThan(antes + 60_000);
   });
+  it('el mantenimiento (atorados, ciclos muertos, retención) corre solo en los minutos múltiplo de 5; la vigilancia de clientes, siempre', async () => {
+    vi.useFakeTimers();
+    try {
+      for (const [hora, esperado] of [['2026-10-02T12:10:00Z', true], ['2026-10-02T12:11:00Z', false], ['2026-10-02T12:14:59Z', false], ['2026-10-02T12:15:00Z', true]] as const) {
+        vi.setSystemTime(new Date(hora));
+        barrido.mockClear();
+        await llamar();
+        expect((barrido.mock.calls[0][1] as { mantenimiento: boolean }).mantenimiento, hora).toBe(esperado);
+      }
+    } finally { vi.useRealTimers(); }
+  });
   it('barrido parcial (corte por reloj, envíos fallidos, atorados): latido `parcial`, no «ok»', async () => {
     for (const parcial of [{ cortadoPorReloj: true }, { fallosEnvio: 2 }, { atorados: 1 }]) {
       registrarLatido.mockClear();

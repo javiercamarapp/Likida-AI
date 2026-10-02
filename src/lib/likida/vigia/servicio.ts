@@ -35,11 +35,12 @@ import { nombreDeAdjunto } from './adjuntos';
 import { avisarAprobacion, avisarEscalamiento, interpretarBoton, type DecisionBoton } from './avisos';
 import { clasificar } from './clasificador';
 import { esSpam, limpiarTexto } from './entrada';
-import { evaluarEscalamiento, minutosEsperando, type AccionEscalamiento } from './escalamiento';
+import { DIAS_CICLO_INACTIVO, evaluarEscalamiento, minutosEsperando, type AccionEscalamiento } from './escalamiento';
 import { resolverViaje, type ResumenViaje } from './estatus_viaje';
 import { evaluarMolestia } from './molestia';
 import { decidirEnvio } from './politica';
 import { pulirBorrador, redactarBorrador, type ViajeParaRedactar } from './redactor';
+import { elegirRespuestaRapida } from './respuestas_rapidas';
 import type { DepsVigia, Destinatario } from './puertos';
 import { configParaCliente } from './tipos';
 import type { AdjuntoRef, Clasificacion, ConfigVigia, Contacto, Conversacion, MensajeVigia, MotivoEscalamiento } from './tipos';
@@ -246,10 +247,18 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
 
   // ── Borrador con datos reales (o con «lo consulto») ─────────────────────
   const [nombreFlota, nombreCliente] = await Promise.all([repo.nombreFlota(tenantId), repo.nombreCliente(tenantId, contacto.clienteId)]);
+  // 0647: lo que el Vigía no entendió, pero se parece a una pregunta cuya respuesta el gerente ya aprobó. Si leerlas falla, el
+  // borrador sale como siempre: una respuesta rápida es un atajo, nunca un requisito para atender al cliente.
+  let respuestaRapida: ReturnType<typeof elegirRespuestaRapida> = null;
+  if (cl.intencion === 'otro' && c.tipo === 'texto' && !senales.includes('inyeccion')) {
+    try { respuestaRapida = elegirRespuestaRapida(c.texto, await repo.respuestasRapidas(tenantId)); }
+    catch (e) { logger.warn('vigia.respuestas_rapidas_no_leidas', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) }); }
+  }
   let borrador = redactarBorrador({
     clasificacion: { intencion: cl.intencion, secundarias: cl.secundarias, senales },
     nombreContacto: contacto.nombre, nombreFlota, viaje, ahora,
     primerContacto: !contacto.avisoPrivacidadEn, avisoPrivacidadUrl: config.avisoPrivacidadUrl ?? `${appUrl()}/privacidad`,
+    respuestaRapida,
   });
   const folio = viaje.tipo === 'uno' ? viaje.estatus.folio : null;
   const pulido = await pulirBorrador(borrador, c.texto, folio, deps.pulir, tenantId);
@@ -275,9 +284,10 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
   });
   // Otra pasada (reintento, carrera) ya redactó la respuesta de este mensaje.
   if (!saliente.creado) return;
+  if (borrador.origen === 'respuesta_rapida' && respuestaRapida) await repo.usarRespuestaRapida(tenantId, respuestaRapida.id).catch(() => {});
   await repo.evento(tenantId, {
     conversacionId: conv.id, tipo: 'borrador',
-    detalle: { intencion: cl.intencion, riesgo: borrador.riesgo, decision: decision.motivo, faltantes: borrador.faltantes, tareas: borrador.tareas, origen: borrador.origen },
+    detalle: { intencion: cl.intencion, riesgo: borrador.riesgo, decision: decision.motivo, faltantes: borrador.faltantes, tareas: borrador.tareas, origen: borrador.origen, ...(respuestaRapida ? { respuestaRapidaId: respuestaRapida.id } : {}) },
   });
 
   // ── Lo que falta o lo que pide humano: ESCALA (spec: «consultará y escala») ─
@@ -345,8 +355,9 @@ async function escalarPorFallo(tenantId: string, conversacionId: string, contact
   }
 }
 
-function advertenciaDeBorrador(b: { faltantes: string[]; requiereHumano: boolean; adjuntos?: Array<AdjuntoRef['clave']> }, senales: string[]): string | null {
+function advertenciaDeBorrador(b: { faltantes: string[]; requiereHumano: boolean; adjuntos?: Array<AdjuntoRef['clave']>; origen?: string }, senales: string[]): string | null {
   const partes: string[] = [];
+  if (b.origen === 'respuesta_rapida') partes.push('es una respuesta rápida que tú aprobaste para una pregunta parecida: revisa que conteste lo que preguntó el cliente');
   if (b.adjuntos && b.adjuntos.length > 0) partes.push(`adjuntará: ${b.adjuntos.map(nombreDeAdjunto).join(', ')} (solo si la ventana de 24 h del cliente sigue abierta)`);
   if (senales.includes('inyeccion')) partes.push('el mensaje del cliente trae instrucciones raras; revisa bien antes de enviar');
   if (senales.includes('folio_ajeno')) partes.push('preguntó por un folio que no es suyo');
@@ -449,7 +460,12 @@ async function ejecutarEscalamiento(
     conversacionId: c.conv.id, tipo: 'escalada', clave: a.clave, nivel: a.nivel,
     detalle: { motivo: a.motivo, minutos: a.minutosEsperando },
   });
-  if (!nuevo) return 'duplicado';
+  if (!nuevo) {
+    // El sello ya existía pero la conversación sigue en un nivel menor: una pasada anterior murió entre el sello y la
+    // actualización. Se sube el nivel aquí; si no, el hilo se quedaría en la cola para siempre sin poder avisar.
+    await repo.actualizarConversacion(c.tenantId, c.conv.id, { escalamientoNivel: a.nivel });
+    return 'duplicado';
+  }
 
   await repo.actualizarConversacion(c.tenantId, c.conv.id, { escalamientoNivel: a.nivel, escaladoEn: ahora.toISOString() });
   if (!opciones.enviar) return 'registrado';
@@ -638,18 +654,24 @@ export interface ResultadoBarrido {
   fallosEnvio: number;
   atorados: number;
   purgadas: number;
+  /** Hilos de ciclo muerto que se cerraron (ver `DIAS_CICLO_INACTIVO`). */
+  expiradas: number;
   cortadoPorReloj: boolean;
 }
 
 /** Un aprobado sin enviar tras este tiempo se da por interrumpido (NO se reenvía: podría haber salido). */
 export const MINUTOS_APROBADO_ATORADO = 5;
 
-export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number; vencePorReloj?: number } = {}): Promise<ResultadoBarrido> {
+/**
+ * `mantenimiento: false` salta lo que no corre contra el reloj de un cliente (atorados, expiración, retención): el cron pasa cada
+ * minuto para que la alerta de 10 min salga a tiempo, y eso solo hace falta cada pocos minutos.
+ */
+export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number; vencePorReloj?: number; mantenimiento?: boolean } = {}): Promise<ResultadoBarrido> {
   const { repo } = deps;
   const ahora = ahoraDe(deps);
-  const r: ResultadoBarrido = { revisadas: 0, escaladas: 0, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, cortadoPorReloj: false };
+  const r: ResultadoBarrido = { revisadas: 0, escaladas: 0, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, expiradas: 0, cortadoPorReloj: false };
 
-  const filas = await repo.conversacionesEnEspera(opciones.limite ?? 100);
+  const filas = await repo.conversacionesEnEspera(opciones.limite ?? 100, ahora);
   for (const f of filas) {
     if (opciones.vencePorReloj && Date.now() >= opciones.vencePorReloj) { r.cortadoPorReloj = true; break; }
     r.revisadas += 1;
@@ -681,10 +703,22 @@ export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number;
     }
   }
 
+  if (opciones.mantenimiento === false) return r;
+
   const atorados = await repo.aprobadosAtorados(new Date(ahora.getTime() - MINUTOS_APROBADO_ATORADO * 60_000), 50);
   for (const a of atorados) {
     await repo.marcarFallido(a.tenantId, a.id, 'envío interrumpido: no se sabe si salió, revísalo antes de reenviar').catch(() => {});
     r.atorados += 1;
+  }
+  // Ciclos muertos: cerrados con su huella en la bitácora (sin texto ni teléfono). Una falla aquí no tira el barrido.
+  try {
+    const cerradas = await repo.expirarCiclosInactivos(new Date(ahora.getTime() - DIAS_CICLO_INACTIVO * 86_400_000), 100, ahora);
+    for (const x of cerradas) {
+      await repo.evento(x.tenantId, { conversacionId: x.id, tipo: 'cerrada', detalle: { motivo: 'ciclo_inactivo', dias: DIAS_CICLO_INACTIVO } }).catch(() => false);
+    }
+    r.expiradas = cerradas.length;
+  } catch (e) {
+    logger.error('vigia.expirar_ciclos_fallo', { err: e instanceof Error ? e.message : String(e) });
   }
   r.purgadas = await repo.purgar(500).catch((e) => {
     logger.error('vigia.purga_fallo', { err: e instanceof Error ? e.message : String(e) });

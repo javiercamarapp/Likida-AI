@@ -227,7 +227,10 @@ import { join, relative, sep } from 'node:path';
 //     (`cp_documento_reclamar`: lease + tope de 5 intentos) los documentos de CADA flota recibidos, de lease vencido o
 //     de fallo reintentable, y cada acción posterior usa el tenant de la propia fila; el aviso a la oficina sale al
 //     teléfono de ESA flota, una vez por documento (candado de la 0641). No acepta cuerpo ni parámetros.
-const RUTAS_APP_REVISADAS = 104;
+// 104 → 105 (ronda 08, P5 «vigia-cierre»): `api/export/vigia-faqs/route.ts` — GET de la flota de la SESIÓN (`resolverTenantApi`): puerta del dato
+//   (área `operacion`, la de la pantalla del Vigía), del verbo (`puedeExportar`), rate limit por IP y por flota; `grupo` validado como uuid y
+//   buscado CON el tenant de la sesión (uno ajeno es 404); sin las tablas de la 0484 es 409. Prueba: `export/vigia-faqs/route.test.ts`.
+const RUTAS_APP_REVISADAS = 105;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

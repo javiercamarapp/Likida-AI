@@ -5,7 +5,8 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { leerExportWhatsapp, type MensajeHistorial } from './export_whatsapp';
 import { esZip, textoDeZip } from './zip_lector';
-import { borrarGrupo, crearGrupo, grupoDeFlota, guardarImportacion, marcarGrupoCritico } from './repo';
+import { aprobarRespuestaRapida, borrarGrupo, crearGrupo, grupoDeFlota, guardarImportacion, marcarGrupoCritico, retirarRespuestaRapida } from './repo';
+import { validarRespuestaRapida } from '../respuestas_rapidas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS ACCIONES DE LA PANTALLA «GRUPOS E HISTÓRICO» DEL VIGÍA — con puertos para probarlas.
@@ -144,5 +145,54 @@ export async function importarHistorialPanel(ctx: ContextoGrupos, fd: FormData, 
   } catch (e) {
     logger.error('vigia.historial_importar_fallo', { err: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: mensajeParaPantalla(e, 'guardar el histórico') };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RESPUESTAS RÁPIDAS (0647). A diferencia de dar de alta grupos o subir histórico, aprobar el texto que el Vigía usará como base
+// de un borrador es del GERENTE (el mismo que aprueba cada mensaje a un cliente con un toque): dueño o encargado. Cada envío
+// sigue pasando por su aprobación; esto solo decide qué texto se propone.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const ROLES_QUE_APRUEBAN_RESPUESTAS = new Set(['superadmin', 'flota_admin', 'encargado']);
+const SIN_PERMISO_RAPIDAS: ResultadoGrupos = { ok: false, error: 'Solo el dueño o el encargado de la flota aprueban respuestas rápidas.' };
+
+export interface DepsRapidas {
+  aprobar: typeof aprobarRespuestaRapida;
+  retirar: typeof retirarRespuestaRapida;
+  bitacora: typeof anotarBitacora;
+}
+export const depsRapidasReales: DepsRapidas = { aprobar: aprobarRespuestaRapida, retirar: retirarRespuestaRapida, bitacora: anotarBitacora };
+
+export async function aprobarRespuestaRapidaPanel(ctx: ContextoGrupos, fd: FormData, d: DepsRapidas = depsRapidasReales): Promise<ResultadoGrupos> {
+  if (!ROLES_QUE_APRUEBAN_RESPUESTAS.has(ctx.rol)) return SIN_PERMISO_RAPIDAS;
+  const v = validarRespuestaRapida({ tema: fd.get('tema'), pregunta: fd.get('pregunta'), texto: fd.get('texto') });
+  if (!v.ok) return { ok: false, error: v.error };
+  try {
+    const r = await d.aprobar(ctx.tenantId, { ...v.valor, usuarioId: ctx.usuarioId });
+    if (!r.ok) return { ok: false, error: r.error };
+    // La bitácora lleva el tema y los largos: nunca el texto (puede nombrar tarifas o instrucciones de la flota).
+    await d.bitacora({
+      tenantId: ctx.tenantId, actor: { id: ctx.usuarioId, email: ctx.email }, accion: 'vigia.respuesta_rapida_aprobada', entidad: 'vigia_respuesta_rapida', entidadId: r.id,
+      detalle: { tema: v.valor.tema, largoPregunta: v.valor.pregunta.length, largoTexto: v.valor.texto.length },
+    });
+    return { ok: true, mensaje: 'Respuesta aprobada. Cuando un cliente escriba algo parecido que el Vigía no entienda, el borrador saldrá con este texto (siempre con tu aprobación antes de enviarse).' };
+  } catch (e) {
+    logger.error('vigia.respuesta_rapida_aprobar_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, error: mensajeParaPantalla(e, 'guardar la respuesta') };
+  }
+}
+
+export async function retirarRespuestaRapidaPanel(ctx: ContextoGrupos, fd: FormData, d: DepsRapidas = depsRapidasReales): Promise<ResultadoGrupos> {
+  if (!ROLES_QUE_APRUEBAN_RESPUESTAS.has(ctx.rol)) return SIN_PERMISO_RAPIDAS;
+  const id = texto(fd, 'respuestaId');
+  if (!UUID.test(id)) return { ok: false, error: 'Respuesta no válida.' };
+  try {
+    if (!(await d.retirar(ctx.tenantId, id))) return { ok: false, error: 'No encuentro esa respuesta en tu flota (o ya estaba retirada).' };
+    await d.bitacora({ tenantId: ctx.tenantId, actor: { id: ctx.usuarioId, email: ctx.email }, accion: 'vigia.respuesta_rapida_retirada', entidad: 'vigia_respuesta_rapida', entidadId: id, detalle: {} });
+    return { ok: true, mensaje: 'Respuesta retirada: el Vigía ya no la propone.' };
+  } catch (e) {
+    logger.error('vigia.respuesta_rapida_retirar_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, error: mensajeParaPantalla(e, 'retirar la respuesta') };
   }
 }

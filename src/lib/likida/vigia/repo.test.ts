@@ -336,9 +336,88 @@ describe('recibir / reclamar / evento / crearSaliente', () => {
       ], error: null };
       return { data: [], error: null };
     };
-    const filas = await crearRepoVigia().conversacionesEnEspera(100);
+    const filas = await crearRepoVigia().conversacionesEnEspera(100, new Date('2026-10-01T18:00:00Z'));
     expect(filas.map((f) => f.conversacion.id)).toEqual(['c1']);
     expect(filas[0].config.tenantId).toBe(T1);
+  });
+});
+
+describe('conversacionesEnEspera / expirarCiclosInactivos: la cola no se tapa', () => {
+  const ahora = new Date('2026-10-01T18:00:00Z');
+  const cfg = (tenant: string, sla: number) => ({ tenant_id: tenant, habilitado: true, sla_respuesta_min: sla, sla_critico_min: 10, escalar_nivel2_min: 60 });
+
+  it('pide solo lo que no llegó al nivel 2, por flota y desde su propio plazo corto, y lo ordena por vencimiento', async () => {
+    const conv = (id: string, tenant: string, desde: string, contacto: string) => ({ id, tenant_id: tenant, contacto_id: contacto, cliente_id: 'c', estado: 'activa', sin_respuesta_desde: desde, escalamiento_nivel: 0, entradas_sin_respuesta: 1, molestia_nivel: 0 });
+    respuesta = (l) => {
+      if (l.tabla === 'vigia_config') return { data: [cfg(T1, 30), cfg(T2, 1440)], error: null };
+      // La flota B (plazo de 24 h) trae el hilo MÁS viejo, que aún no vence; la A trae uno más nuevo que ya venció.
+      if (l.tabla === 'vigia_conversacion') return { data: [conv('lento', T2, '2026-10-01T02:00:00Z', 'k2'), conv('vencido', T1, '2026-10-01T17:20:00Z', 'k1')], error: null };
+      if (l.tabla === 'vigia_contacto') return { data: [
+        { id: 'k1', tenant_id: T1, cliente_id: 'c', telefono: '525511110001', estado: 'activo' },
+        { id: 'k2', tenant_id: T2, cliente_id: 'c', telefono: '525511110002', estado: 'activo' },
+      ], error: null };
+      return { data: [], error: null };
+    };
+    const filas = await crearRepoVigia().conversacionesEnEspera(1, ahora);
+    expect(filas.map((f) => f.conversacion.id)).toEqual(['vencido']);
+    const q = llamadas.find((l) => l.tabla === 'vigia_conversacion')!;
+    expect(tiene(q, 'lt', 'escalamiento_nivel', 2)).toBe(true);
+    expect(tiene(q, 'eq', 'estado', 'activa')).toBe(true);
+    const alcance = String(q.filtros.find(([o]) => o === 'or')?.[1]);
+    expect(alcance).toContain(`tenant_id.eq.${T1}`);
+    expect(alcance).toContain(`tenant_id.eq.${T2}`);
+    // El corte de la flota A es su plazo corto (10 min, el crítico), el de la B su plazo de 24 h menos nada: min(1440, 10) = 10.
+    expect(alcance).toContain('sin_respuesta_desde.lte.2026-10-01T17:50:00.000Z');
+    expect(alcance).toContain('molestia_nivel.gte.2');
+  });
+
+  it('sin ninguna flota con el agente encendido no consulta conversaciones', async () => {
+    respuesta = () => ({ data: [], error: null });
+    expect(await crearRepoVigia().conversacionesEnEspera(100, ahora)).toEqual([]);
+    expect(llamadas.some((l) => l.tabla === 'vigia_conversacion')).toBe(false);
+  });
+
+  it('expirarCiclosInactivos cierra solo con la condición repetida (si el cliente escribió en medio, no se cierra) y devuelve lo cerrado', async () => {
+    respuesta = (l) => {
+      if (l.tabla === 'vigia_conversacion' && l.op === 'select') return { data: [{ id: 'a', tenant_id: T1 }, { id: 'b', tenant_id: T2 }], error: null };
+      if (l.tabla === 'vigia_conversacion' && l.op === 'update') return { data: tiene(l, 'eq', 'id', 'a') ? [{ id: 'a' }] : [], error: null };
+      return { data: [], error: null };
+    };
+    const cerradas = await crearRepoVigia().expirarCiclosInactivos(new Date('2026-09-24T18:00:00Z'), 100, ahora);
+    expect(cerradas).toEqual([{ tenantId: T1, id: 'a' }]);
+    const up = llamadas.filter((l) => l.op === 'update');
+    expect(up).toHaveLength(2);
+    for (const u of up) {
+      expect(tiene(u, 'eq', 'estado', 'activa')).toBe(true);
+      expect(tiene(u, 'lt', 'sin_respuesta_desde')).toBe(true);
+      expect(u.filtros.some(([o, c]) => o === 'eq' && c === 'tenant_id')).toBe(true);
+    }
+  });
+});
+
+describe('respuestas rápidas (0647)', () => {
+  it('lee SOLO las aprobadas de esa flota, hasta 200, y las mapea', async () => {
+    respuesta = () => ({ data: [{ id: 'r1', tema: 'tarifa', pregunta: '¿Cuánto cuesta?', texto: 'Te cotizamos hoy.', usos: 3 }], error: null });
+    const r = await crearRepoVigia().respuestasRapidas(T1);
+    expect(r).toEqual([{ id: 'r1', tema: 'tarifa', pregunta: '¿Cuánto cuesta?', texto: 'Te cotizamos hoy.', usos: 3 }]);
+    const q = llamadas.find((l) => l.tabla === 'vigia_respuesta_rapida')!;
+    expect(tiene(q, 'eq', 'tenant_id', T1)).toBe(true);
+    expect(tiene(q, 'eq', 'estado', 'aprobada')).toBe(true);
+  });
+
+  it('base sin la 0647 (tabla o función inexistente) o con un error de lectura: sin respuestas, sin lanzar', async () => {
+    for (const code of ['42P01', 'PGRST205', '42883', 'PGRST202', 'XX000']) {
+      respuesta = () => ({ data: null, error: { message: 'x', code } });
+      expect(await crearRepoVigia().respuestasRapidas(T1)).toEqual([]);
+      await expect(crearRepoVigia().usarRespuestaRapida(T1, 'r1')).resolves.toBeUndefined();
+    }
+  });
+
+  it('cuenta el uso por la función de la base (atómica) con el tenant', async () => {
+    respuesta = () => ({ data: true, error: null });
+    await crearRepoVigia().usarRespuestaRapida(T1, 'r1');
+    const l = llamadas.find((x) => x.tabla === 'rpc:vigia_respuesta_rapida_usar')!;
+    expect(l.valores).toEqual({ p_tenant: T1, p_id: 'r1' });
   });
 });
 

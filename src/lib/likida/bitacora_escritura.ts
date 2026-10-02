@@ -124,6 +124,8 @@ export type EntidadBitacora =
   // Ola 3, Vigía: grupos de clientes (críticos o no) y el histórico exportado que se importó. Ids y conteos: nunca texto del chat.
   | 'vigia_grupo'
   | 'vigia_historial'
+  // Ronda 08, P5: quién aprobó o retiró una respuesta rápida del Vigía (0647). Id, tema y largos: nunca el texto.
+  | 'vigia_respuesta_rapida'
   // W3 «autofacturación» (agente 6): la vinculación asistida de un portal (quién la
   // pidió, cuándo se reclamó y cerró), la bandera ensayo→real por flota, los límites,
   // la confirmación humana de cada lote y las reversas. `entidadId` es el comercio, el

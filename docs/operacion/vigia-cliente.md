@@ -22,11 +22,11 @@ cliente ──► webhook (idempotencia por wamid, kill switch global, ventana 2
         ──► política: ¿autoenviar o aprobar?
         ──► gerente: Enviar / No enviar / Yo me encargo (botones; plantilla fuera de 24 h)
         ──► enviarAlCliente (consentimiento, baja, 24 h → plantilla)
-cron /api/cron/vigia (cada 5 min): SLA → nivel 1 (responsable) → nivel 2 (dueño), atorados, retención
+cron /api/cron/vigia (cada minuto): SLA → nivel 1 (responsable) → nivel 2 (dueño); cada 5 min además: atorados, ciclos muertos, retención
 ```
 
 Código: `src/lib/likida/vigia/` (`servicio.ts` orquesta; `repo.ts` es el único acceso a datos).
-Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`*/5 * * * *`).
+Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`* * * * *`).
 
 ## Qué garantiza (y dónde está probado)
 
@@ -40,6 +40,8 @@ Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`*/5 * * * *`).
 | Duplicados y carreras: un wamid = un mensaje; una respuesta del agente por entrante; un envío por aprobación | `supabase/tests/0400_vigia_concurrencia.sh`, `servicio.test.ts` |
 | Fuera de 24 h solo plantilla del catálogo; sin consentimiento o con BAJA no se envía | `enviar.test.ts` |
 | Escalera por niveles con sello anti-repetición (`vigia_evento.clave`) | `escalamiento.test.ts`, `servicio.test.ts` (barrido) |
+| La cola del barrido no se tapa: lo que llegó al nivel 2 no entra, se ordena por próximo vencimiento y una flota con plazo largo no tapa a otra con plazo corto; los ciclos muertos (7 días) se cierran | `cola_barrido.test.ts`, `repo.test.ts` |
+| Una respuesta rápida solo reemplaza al «no entendí», nunca se autoenvía y no se pule con modelo; una por pregunta y flota, tope de 200 | `respuestas_rapidas.test.ts`, `ciclo_completo.e2e.test.ts` · `supabase/tests/0647_vigia_respuesta_rapida.sql` |
 | Retención y ARCO (supresión) | `0400` (`vigia_purgar`, `vigia_suprimir_contacto`) · SQL test · `repo.test.ts` |
 
 ## Puesta en marcha para una flota
@@ -73,6 +75,37 @@ Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`*/5 * * * *`).
 - **Solicitud ARCO de un cliente por WhatsApp**: `PRIVACIDAD` registra la solicitud a nombre de su
   flota; la supresión de sus chats la ejecuta el dueño desde su fila en el tablero.
 
+## Respuestas rápidas aprobadas (0647)
+
+El reporte del histórico (`/dashboard/agentes/vigia/historial`) calcula las preguntas frecuentes y lo que el equipo suele contestar.
+Desde ahí, el dueño o el encargado **aprueba** (y puede corregir) la respuesta de una pregunta: queda guardada con la pregunta que
+la originó. Cuándo se usa:
+
+- Solo cuando el cliente escribe algo que el Vigía **no entendió** («otro») y se parece a una pregunta aprobada (mismas palabras
+  con contenido que las FAQs, parecido ≥ 0.5, al menos dos palabras). Una pregunta de dato del viaje (ubicación, hora, documentos,
+  factura) se contesta SIEMPRE con el dato real de ese viaje; una queja o «quiero hablar con alguien» las atiende una persona.
+- El borrador sale con ese texto, riesgo medio, **siempre al gerente** (lo no entendido nunca se autoenvía, ni en modo
+  «autoenviar bajo riesgo»), con la advertencia «es una respuesta rápida que tú aprobaste: revisa que conteste lo que preguntó el
+  cliente». El pulido con modelo no la toca.
+- Cada uso se cuenta (`vigia_respuesta_rapida_usar`, atómico) y se ve en la pantalla; una respuesta se retira sin borrarla.
+- Tope: 200 aprobadas por flota. Sin la 0647 en la base no hay respuestas rápidas y el Vigía contesta como siempre.
+
+## Reporte de preguntas frecuentes y tendencias en Excel o PDF
+
+`GET /api/export/vigia-faqs?[grupo=<uuid>]&formato=xlsx|pdf` (botones en la pantalla del histórico). Mismas cifras que la pantalla:
+preguntas frecuentes con la respuesta del equipo, temas por semana con su cambio contra las 4 semanas previas y tiempos de
+respuesta contra el umbral. Puertas: área `operacion` + `puedeExportar`, rate limit por IP y por flota, grupo buscado con la flota
+de la sesión (otro grupo = 404), sin las tablas de la 0484 = 409.
+
+## Cuándo llega la alerta de «más de 10 minutos»
+
+El plazo de un cliente con grupo crítico es de 10 min (`sla_critico_min`, mínimo 5). El cron del Vigía pasa **cada minuto**
+(decisión de la ronda 08: con `*/5` la alerta salía entre el minuto 10 y el 15; ahora sale entre el 10 y el 11). Un webhook no
+puede sustituir al cron: la alerta nace de que NO llegó nada, así que alguien tiene que mirar el reloj. La pasada de cada
+minuto es una lectura acotada (≤100 hilos, sin modelo) que casi siempre vuelve vacía; atorados, ciclos muertos y retención
+corren solo en los minutos múltiplo de 5. Cuesta ~1,440 invocaciones diarias de una función de segundos: si en producción
+se prefiere abaratar, volver a `*/5` en `vercel.json` y `CADENCIA_MS.vigia` (el plazo efectivo sube hasta 5 min).
+
 ## Variables de entorno
 
 | Variable | Efecto |
@@ -83,7 +116,7 @@ Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`*/5 * * * *`).
 
 ## Operación
 
-- Si el cron `vigia` envejece, `/api/health` lo declara; `salud.ts` espera un latido cada 5 minutos.
+- Si el cron `vigia` envejece, `/api/health` lo declara; `salud.ts` espera un latido cada minuto.
 - Un mensaje «aprobado» que no llegó a «enviado» en 5 minutos se marca fallido **sin reenviar**
   (podría haber salido): se revisa a mano en el tablero.
 - Costo de IA: una clasificación por modelo solo ocurre cuando las reglas no reconocen el mensaje;
