@@ -1,3 +1,4 @@
+import { TABLA_PROPIA } from './tabla_propia/conector';
 import {
   probarConGuardas, veredictoHttp, sinApiQueProbar,
   type Conector, type Http, type ResultadoPrueba, type ValoresCredencial,
@@ -521,6 +522,7 @@ export const CONECTORES_GPS: readonly Conector[] = [
   // piden GPS sin marca contra 9 que nombran Samsara. La lista ordenada por
   // fama de marca describiría un mercado que no es el mexicano.
   GPS_GENERICO,
+  TABLA_PROPIA,
   SAMSARA,
   WIALON,
   GEOTAB,

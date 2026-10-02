@@ -208,8 +208,16 @@ import { join, relative } from 'node:path';
 // ADVERSARIAL ronda 03: +4 llamadas, todas en archivos que ya contaban — `conductor/repo_validacion.ts` (+1, `unidadReportaGps`: ¿la unidad
 // reporta GPS de verdad? decide si un pin basta como evidencia) y `buzon/repo.ts` (+3: dos lecturas «¿esta ruta de PDF la usa una factura?» y el
 // UPDATE que suelta la ruta de la recepción descartada). 1,701 → 1,705.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 277;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_705;
+// LOOP PUNTA A PUNTA, W3 «GPS/Jornada» (integración sobre la ola 3): 277 → 280 archivos y 1,705 → 1,728 llamadas,
+// medido con el barrido. Funcionalidad nueva, no código migrado; cada archivo junta TODO el acceso a datos de su pieza:
+//   · `gps_push/datos.ts` (+1 archivo, 9): secreto del push por flota, rotación y salud por RPC;
+//   · `importacion/gps_dispositivos.ts` (+1, 4): mapeo masivo unidad↔dispositivo por CSV y lista de huérfanos;
+//   · `jornada/alerta_tope_datos.ts` (+1, 8): jornadas en curso de las flotas con la alerta encendida, claim por
+//     (jornada, nivel) y configuración (0502);
+//   · `conectores/sincronizar_gps.ts` (+2): registro de dispositivos huérfanos y la lectura de unidades por número
+//     económico (tabla propia: se liga por el económico que la flota ya usa; solo su flota, solo activas).
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 280;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_728;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

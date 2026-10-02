@@ -26,6 +26,8 @@ import { descifrar } from './cofre';
 import { lectorDe, LECTORES_POSICION } from './posiciones';
 import { httpReal as crearHttpReal, type Http } from './tipos';
 import { conPool } from '../lotes';
+import { llaveEconomico } from './tabla_propia/validar';
+import { PROVEEDOR_TABLA_PROPIA } from './tabla_propia/contrato';
 import { unidadesSinAvisoPrevio } from '../privacidad';
 import { finalizarPoll, reclamarPolls } from './poll_durable';
 
@@ -185,7 +187,41 @@ export async function sincronizarGpsDeFlota(
   return asentarLecturas(tenantId, conectorId, r.posiciones, {
     ahora, reloj: opciones.reloj, venceEn: opciones.venceEn,
     invalidasDelLector: r.invalidas, paginas: r.paginas, sinPosicion: r.sinPosicion,
+    ligarPorEconomico: conectorId === PROVEEDOR_TABLA_PROPIA,
   });
+}
+
+/** Techo de unidades que se leen para ligar por económico (una flota de 50,000 unidades no existe; es un fusible). */
+const MAX_UNIDADES_POR_ECONOMICO = 50_000;
+const PAGINA_UNIDADES = 1_000;
+
+/** Económico normalizado → id de unidad, solo de ESA flota y solo activas. Ambiguos fuera. `null` = no se pudo leer. */
+async function unidadesPorEconomico(tenantId: string): Promise<Map<string, string> | null> {
+  const mapa = new Map<string, string | null>();
+  for (let desde = 0; desde < MAX_UNIDADES_POR_ECONOMICO; desde += PAGINA_UNIDADES) {
+    const { data, error } = await acotada(
+      supabaseAdmin().from('unidad')
+        .select('id, numero_economico')
+        .eq('tenant_id', tenantId)
+        .eq('activo', true)
+        .order('id', { ascending: true })
+        .range(desde, desde + PAGINA_UNIDADES - 1),
+      'gps.unidades_por_economico',
+    );
+    if (error) {
+      logger.error('gps.unidades_por_economico_no_leidas', { tenantId, err: error.message });
+      return null;
+    }
+    for (const u of data ?? []) {
+      const k = llaveEconomico(String(u.numero_economico ?? ''));
+      if (k === '') continue;
+      mapa.set(k, mapa.has(k) ? null : String(u.id)); // dos económicos que chocan al normalizar => ambiguo
+    }
+    if ((data ?? []).length < PAGINA_UNIDADES) break;
+  }
+  const limpio = new Map<string, string>();
+  for (const [k, v] of mapa) if (v) limpio.set(k, v);
+  return limpio;
 }
 
 /**
@@ -206,6 +242,12 @@ export async function asentarLecturas(
     maxAntiguedadMs?: number;
     /** Push: las lecturas malas se cuentan pero NO hacen fallar el lote (no hay reintento que las arregle). */
     descartadasNoSonError?: boolean;
+    /**
+     * Tabla propia: la flota llama a la unidad por su NÚMERO ECONÓMICO, no por un id de proveedor. Lo que no ligó
+     * `gps_device_id` se liga por `numero_economico` normalizado («IN-001» = «in 001»). Un económico que choca al
+     * normalizar con otro de la misma flota es ambiguo y NO se liga (se registra como huérfano, jamás se adivina).
+     */
+    ligarPorEconomico?: boolean;
   } = {},
 ): Promise<ResultadoSync> {
   const ahora = opciones.ahora ?? Date.now;
@@ -255,6 +297,17 @@ export async function asentarLecturas(
     }
     for (const u of unidades ?? []) {
       if (u.gps_device_id) porDevice.set(String(u.gps_device_id), String(u.id));
+    }
+  }
+
+  if (opciones.ligarPorEconomico && ids.some((id) => !porDevice.has(id))) {
+    if (sinTiempo()) return { ...base, backlog: true, error: 'quedó mapeo de unidades pendiente al vencer el presupuesto' };
+    const porEco = await unidadesPorEconomico(tenantId);
+    if (porEco === null) return { ...base, error: motivoParaPanel('leer_unidades') };
+    for (const id of ids) {
+      if (porDevice.has(id)) continue;
+      const u = porEco.get(llaveEconomico(id));
+      if (u) porDevice.set(id, u);
     }
   }
 

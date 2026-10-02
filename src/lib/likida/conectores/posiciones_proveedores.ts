@@ -342,8 +342,8 @@ export async function leerPosicionesNavixy(
 // cada campo. Sin mapeo no hay lectura (no se adivina). Solo GET, solo el mismo
 // origen que la dirección de prueba (el token no viaja a otro host), solo HTTPS
 // público (el transporte rechaza IP privadas).
-const PROHIBIDAS = new Set(['__proto__', 'constructor', 'prototype']);
-const RUTA = z.string().min(1).max(200).regex(/^[A-Za-z0-9_$-]+(\.[A-Za-z0-9_$-]+)*$/, 'ruta con puntos')
+export const PROHIBIDAS = new Set(['__proto__', 'constructor', 'prototype']);
+export const RUTA = z.string().min(1).max(200).regex(/^[A-Za-z0-9_$-]+(\.[A-Za-z0-9_$-]+)*$/, 'ruta con puntos')
   .refine((r) => !r.split('.').some((p) => PROHIBIDAS.has(p)), 'segmento no permitido');
 export const MapeoGenerico = z.object({
   url: z.string().url().max(500).optional(),
@@ -361,7 +361,7 @@ export type MapeoGenericoT = z.infer<typeof MapeoGenerico>;
 
 const FACTOR_KMH = { kmh: 1, mph: 1.609344, ms: 3.6, nudos: 1.852 } as const;
 
-function porRuta(obj: unknown, ruta: string): unknown {
+export function porRuta(obj: unknown, ruta: string): unknown {
   let actual: unknown = obj;
   for (const p of ruta.split('.')) {
     if (PROHIBIDAS.has(p) || actual === null || typeof actual !== 'object' || !Object.hasOwn(actual as object, p)) return undefined;
