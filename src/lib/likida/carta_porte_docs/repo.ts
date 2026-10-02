@@ -737,7 +737,7 @@ export async function linajeDeDocumentos(tenantId: string, ids: string[]): Promi
 /** Los hijos de un documento dividido (ligeros, como la bandeja), en el orden del archivo. Vacío sin la 0670. */
 export async function hijosDeDocumento(tenantId: string, padreId: string): Promise<Array<{ documento: DocumentoFila; indice: number; total: number; clave: string | null }>> {
   const e = await acotada(supabaseAdmin().from('cp_documento_embarque').select('documento_id, indice, total, clave')
-    .eq('tenant_id', tenantId).eq('padre_id', padreId).order('indice').limit(MAX_HIJOS_LEIDOS), 'cpdocs.hijos');
+    .eq('tenant_id', tenantId).eq('padre_id', padreId).order('indice').order('documento_id').limit(MAX_HIJOS_LEIDOS), 'cpdocs.hijos');
   if (e.error) {
     if (funcionAusente(e.error)) return [];
     throw new Error(`cpdocs.hijos: ${e.error.message}`);
