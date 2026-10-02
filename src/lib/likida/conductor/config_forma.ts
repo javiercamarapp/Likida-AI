@@ -15,12 +15,12 @@ export const FILAS_NUEVAS_CONTACTO = 3;
 export const MAX_FILAS_CONTACTO = 20;
 
 export const CASILLAS: ReadonlyArray<keyof ConfigConductor> = [
-  'activo', 'usarLlm', 'confirmarAlChofer', 'avisarOficinaLlegada', 'avisarOficinaSalida', 'pedirFotoEvidencia', 'fotoRegistraHito', 'validarUbicacion', 'pedirUbicacion',
+  'activo', 'usarLlm', 'confirmarAlChofer', 'avisarOficinaLlegada', 'avisarOficinaSalida', 'avisarLlegadaSinConfirmar', 'pedirFotoEvidencia', 'fotoRegistraHito', 'validarUbicacion', 'pedirUbicacion',
 ];
 
 export const NUMEROS: ReadonlyArray<keyof ConfigConductor> = [
   'escalarTrasMin', 'segundoNivelMin', 'horaInicio', 'horaFin', 'topeDiarioChofer', 'anticipoCitaMin', 'esperaSinCitaMin', 'esperaCargaMin',
-  'trayectoSinEtaMin', 'esperaDescargaMin', 'regresoMin', 'posponerMin', 'ventanaCorreccionMin', 'toleranciaUbicacionM', 'ventanaUbicacionMin',
+  'trayectoSinEtaMin', 'esperaDescargaMin', 'regresoMin', 'posponerMin', 'ventanaCorreccionMin', 'toleranciaUbicacionM', 'ventanaUbicacionMin', 'margenAcercamientoM',
 ];
 
 /** Alertas de estadía: vacío = apagada (null), no 0. */

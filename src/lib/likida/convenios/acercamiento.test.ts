@@ -129,10 +129,55 @@ describe('barridoAcercamiento — de punta a punta con la base en memoria', () =
         { tenantId: A, viajeId: 'v1', unidadId: 'u1', lado: 'origen' as const, sitio: { ...ORIGEN, radioM: 300 } },
         { tenantId: A, viajeId: 'v2', unidadId: 'u2', lado: 'origen' as const, sitio: { ...ORIGEN, radioM: 300 } },
       ],
+      margenes: async () => new Map<string, number>(),
       posiciones: async () => new Map([['u1', { ...ORIGEN, medidaEn: AHORA }], ['u2', { ...ORIGEN, medidaEn: AHORA }]]),
       enviar: vi.fn(async (_t: string, v: string) => (v === 'v1' ? { estado: 'fallo' as const, motivo: 'boom' } : { estado: 'enviado' as const, canal: 'texto' as const })),
     };
     expect(await barridoAcercamiento(puertos, AHORA)).toMatchObject({ candidatos: 2, enviados: 1, fallos: 1 });
+  });
+});
+
+/** Una fila COMPLETA de `agente_conductor_config` (lo que la lectura valida), con la perilla de margen en `margen`. */
+const filaConfig = (margen: number | null) => ({
+  tenant_id: A, activo: true, solicitudes_min: [0, 15, 30, 45], escalar_tras_min: 90, segundo_nivel_min: 30, hora_inicio: 6, hora_fin: 22,
+  dias_semana: [1, 2, 3, 4, 5, 6, 7], tope_diario_chofer: 12, anticipo_cita_min: 30, espera_sin_cita_min: 120, espera_carga_min: 120,
+  trayecto_sin_eta_min: 480, espera_descarga_min: 120, regreso_min: 30, posponer_min: 30, ventana_correccion_min: 60, usar_llm: true,
+  avisar_oficina_llegada: false, avisar_oficina_salida: false, confirmar_al_chofer: true, validar_ubicacion: true, tolerancia_ubicacion_m: 150,
+  ventana_ubicacion_min: 30, pedir_ubicacion: true, estadia_alerta_carga_min: null, estadia_alerta_descarga_min: null, pedir_foto_evidencia: false,
+  foto_registra_hito: true, ...(margen === null ? {} : { margen_acercamiento_m: margen }),
+});
+
+describe('el margen de acercamiento es de cada flota (0604)', () => {
+  it('estaCerca acepta el margen de la flota: lo que con 5 km está lejos, con 10 km está cerca', () => {
+    const sitio = { ...DESTINO, radioM: 300 };
+    const lejos = { ...km(DESTINO.lat + 0.06, DESTINO.lng), medidaEn: AHORA }; // ~6.7 km
+    expect(estaCerca(lejos, sitio)).toBe(false);
+    expect(estaCerca(lejos, sitio, 10_000)).toBe(true);
+    expect(estaCerca({ ...km(DESTINO.lat + 0.03, DESTINO.lng), medidaEn: AHORA }, sitio, 1_000)).toBe(false); // ~3.3 km con margen de 1 km
+  });
+
+  it('con un margen ampio configurado, el aviso sale a 8 km de la planta de carga (con el de partida no saldría)', async () => {
+    mundo.poner('agente_conductor_config', filaConfig(10_000));
+    posicion({ lat: ORIGEN.lat + 0.072, lng: ORIGEN.lng }); // ~8 km
+    const r = await barridoAcercamiento(undefined, AHORA);
+    expect(r).toMatchObject({ candidatos: 1, enviados: 1, lejos: 0 });
+  });
+
+  it('con un margen corto, a 3 km todavía no se avisa', async () => {
+    mundo.poner('agente_conductor_config', filaConfig(1_000));
+    posicion({ lat: ORIGEN.lat + 0.027, lng: ORIGEN.lng }); // ~3 km
+    const r = await barridoAcercamiento(undefined, AHORA);
+    expect(r).toMatchObject({ candidatos: 1, enviados: 0, lejos: 1 });
+    expect(enviadosWa).toHaveLength(0);
+  });
+
+  it('una flota sin fila de config, o con una base sin la columna, conserva los 5 km de siempre', async () => {
+    posicion({ lat: ORIGEN.lat + 0.072, lng: ORIGEN.lng }); // ~8 km: lejos con 5 km
+    expect(await barridoAcercamiento(undefined, AHORA)).toMatchObject({ enviados: 0, lejos: 1 });
+    mundo.poner('agente_conductor_config', filaConfig(null)); // fila de una base sin migrar: no trae margen_acercamiento_m
+    expect(await barridoAcercamiento(undefined, AHORA)).toMatchObject({ enviados: 0, lejos: 1 });
+    posicion({ lat: ORIGEN.lat + 0.03, lng: ORIGEN.lng }, 1); // ~3.3 km, más reciente: cerca con 5 km
+    expect(await barridoAcercamiento(undefined, AHORA)).toMatchObject({ enviados: 1 });
   });
 });
 

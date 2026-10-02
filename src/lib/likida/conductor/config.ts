@@ -47,6 +47,10 @@ export interface ConfigConductor {
   pedirFotoEvidencia: boolean;
   /** 0483: una foto con pie «sello»/«andén»/«recibido» sin hito al que colgarla REGISTRA el hito (con la foto como evidencia). */
   fotoRegistraHito: boolean;
+  /** 0604: avisar al jefe de tráfico, una vez, de un «ya llegué» que sigue sin confirmarse con ubicación (o sin sitio para comparar). */
+  avisarLlegadaSinConfirmar: boolean;
+  /** 0604: metros ANTES del borde de la geocerca en que se manda la calle de instrucciones de la planta (convenios). */
+  margenAcercamientoM: number;
 }
 
 export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze({
@@ -78,6 +82,8 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   estadiaAlertaDescargaMin: null,
   pedirFotoEvidencia: false,
   fotoRegistraHito: true,
+  avisarLlegadaSinConfirmar: false,
+  margenAcercamientoM: 5000,
 });
 
 /** El tope de aplazamientos por hito: pasado esto «voy con retraso» ya no calla al agente. */
@@ -148,6 +154,8 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
 
   const toleranciaUbicacionM = entero(b.toleranciaUbicacionM, 0, 5000);
   if (toleranciaUbicacionM === null) return { error: 'La tolerancia de ubicación va de 0 a 5,000 metros.' };
+  const margenAcercamientoM = entero(b.margenAcercamientoM, 0, 50_000);
+  if (margenAcercamientoM === null) return { error: 'El margen de acercamiento a la planta va de 0 a 50,000 metros.' };
   const ventanaUbicacionMin = entero(b.ventanaUbicacionMin, 5, 180);
   if (ventanaUbicacionMin === null) return { error: 'La ventana para comparar la ubicación va de 5 a 180 minutos.' };
   // null = alerta apagada; un número fuera de rango NO se toma por «apagada».
@@ -191,6 +199,8 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       estadiaAlertaDescargaMin: alertaDescarga.ok,
       pedirFotoEvidencia: Boolean(b.pedirFotoEvidencia),
       fotoRegistraHito: Boolean(b.fotoRegistraHito),
+      avisarLlegadaSinConfirmar: Boolean(b.avisarLlegadaSinConfirmar),
+      margenAcercamientoM,
     },
   };
 }

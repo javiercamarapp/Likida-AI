@@ -156,7 +156,7 @@ const LLAVES_CONFIG: readonly (keyof ConfigConductor)[] = [
   'anticipoCitaMin', 'esperaSinCitaMin', 'esperaCargaMin', 'trayectoSinEtaMin', 'esperaDescargaMin', 'regresoMin', 'posponerMin',
   'ventanaCorreccionMin', 'usarLlm', 'avisarOficinaLlegada', 'avisarOficinaSalida', 'confirmarAlChofer',
   'validarUbicacion', 'toleranciaUbicacionM', 'ventanaUbicacionMin', 'pedirUbicacion', 'estadiaAlertaCargaMin', 'estadiaAlertaDescargaMin',
-  'pedirFotoEvidencia', 'fotoRegistraHito',
+  'pedirFotoEvidencia', 'fotoRegistraHito', 'avisarLlegadaSinConfirmar', 'margenAcercamientoM',
 ];
 
 export const MAX_CONTACTOS_TRAFICO = 20;
