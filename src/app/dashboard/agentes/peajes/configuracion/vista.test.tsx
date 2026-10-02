@@ -6,7 +6,7 @@ import type { EntradasVista } from './entradas';
 const nada = async () => {};
 const acciones: AccionesConfiguracion = {
   activarBuzon: nada, desactivarBuzon: nada, rotarLlave: nada, reintentarArchivo: nada, altaTag: nada, bajaTag: nada, importarTags: nada,
-  importarCasetas: nada, estadoCaseta: nada, guardarGeocerca: nada, estadoGeocerca: nada, guardarMapeo: nada, borrarMapeo: nada,
+  importarCasetas: nada, estadoCaseta: nada, guardarGeocerca: nada, estadoGeocerca: nada, importarCursos: nada, importarCursosDeTabla: nada, estadoCurso: nada, guardarMapeo: nada, borrarMapeo: nada,
   activarCorreo: nada, desactivarCorreo: nada, rotarCorreo: nada, guardarRemitentes: nada, guardarPull: nada, apagarPull: nada, borrarCredencialPull: nada,
 };
 const entradasBase: EntradasVista = { config: null, puedeAdministrar: true, direccionCorreo: null, cofreConfigurado: true };
@@ -17,7 +17,7 @@ function pintar(o: Partial<Parameters<typeof VistaConfiguracionPeajes>[0]> = {})
   return renderToStaticMarkup(
     <VistaConfiguracionPeajes
       sufijo="" aviso={null} error={null} agenteApagado={null}
-      tags={[]} unidades={[{ id: 'u1', numeroEconomico: 'C2-08', placas: 'ABC-123' }]} casetas={[]} geocercas={[]} mapeos={[]} archivos={[]}
+      tags={[]} unidades={[{ id: 'u1', numeroEconomico: 'C2-08', placas: 'ABC-123' }]} casetas={[]} geocercas={[]} cursos={[]} convenios={[]} mapeos={[]} archivos={[]}
       tiposGeocerca={['origen', 'punto_interes']} buzon={buzonActivo} entradas={entradasBase} acciones={acciones}
       {...o}
     />,
@@ -164,5 +164,40 @@ describe('recepción por correo y pull (0563)', () => {
   it('lectura fallida de la configuración dice «no se pudo leer», no «apagado»', () => {
     const html = pintar({ entradas: E({ config: null }) });
     expect(html).toContain('No se pudo leer esta configuración');
+  });
+});
+
+describe('cursos (rutas autorizadas)', () => {
+  const curso = (o: Partial<import('@/lib/likida/peajes/datos').CursoVista> = {}): import('@/lib/likida/peajes/datos').CursoVista => ({
+    id: 'k1', codigo: 'CUR-001', nombre: 'Planta Poniente a Patio Norte', tipo: 'casetas', unidadId: null, convenioId: 'cv1',
+    vigenteDesde: null, vigenteHasta: null, activo: true, casetas: [{ id: 'a', nombre: 'Caseta Ejemplo Norte' }, { id: 'b', nombre: 'Caseta Ejemplo Sur' }],
+    corredor: null, bufferM: null, ...o,
+  });
+  it('sin cursos: dice que no se evalúa «fuera de curso» y cómo se cuenta, y ofrece cargar (no hay botón muerto)', () => {
+    const html = pintar();
+    expect(html).toContain('Cursos (rutas autorizadas)');
+    expect(html).toContain('Aún no hay cursos');
+    expect(html).toContain('sin curso declarado');
+    expect(html).toContain('CSV de cursos');
+    expect(html).toContain('Leer los cursos de mi tabla conectada');
+  });
+  it('con cursos: el convenio por nombre, la unidad por económico, las casetas en orden y el estado con su botón', () => {
+    const html = pintar({ cursos: [curso(), curso({ id: 'k2', codigo: 'COR-1', nombre: 'Corredor', tipo: 'corredor', convenioId: null, unidadId: 'u1', casetas: [], corredor: [{ lat: 20, lng: -103 }, { lat: 20.1, lng: -103.1 }], bufferM: 500, activo: false })],
+      convenios: [{ id: 'cv1', nombre: 'Convenio Ficticio Uno' }] });
+    expect(html).toContain('convenio Convenio Ficticio Uno');
+    expect(html).toContain('Caseta Ejemplo Norte → Caseta Ejemplo Sur');
+    expect(html).toContain('unidad C2-08');
+    expect(html).toContain('corredor de 2 puntos');
+    expect(html).toContain('1 activos de 2');
+    expect(html).toContain('>Desactivar<');
+    expect(html).toContain('>Activar<');
+  });
+  it('si no se pudieron leer, lo dice (no «aún no hay cursos»)', () => {
+    const html = pintar({ cursos: null });
+    expect(html).toContain('No se pudo leer los cursos');
+    expect(html).not.toContain('Aún no hay cursos');
+  });
+  it('declara que el formato real del corredor está pendiente', () => {
+    expect(pintar()).toContain('el formato real de tus rutas está pendiente');
   });
 });

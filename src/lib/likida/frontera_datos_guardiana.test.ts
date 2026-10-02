@@ -304,7 +304,12 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 287;
 // (`cp_documento_embarque`: hijos de un padre, linaje por lote de documentos, y el padre de un hijo) y la lectura por ids de los hijos (`cp_documento`).
 // El módulo nuevo `multiembarque.ts` es puro y no suma archivos (su `Array.from` se reescribió para no contar como `.from(`). Medido con el barrido real.
 // Integración P13 + Ola 9 (ronda 13): 1,881 + 5 (P13) + 4 (Ola 9, ver la nota de archivos, arriba) = 1,890.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_890;
+// RONDA 14, paquete P8 «peajes-cursos» (0665): 0 archivos y +6 llamadas (1,890 → 1,896), todas en `peajes/datos.ts`, que ya contaba y donde cada una va por
+// `acotada` con el `tenant_id` anclado — funcionalidad nueva, no código migrado: la lectura de `peaje_curso` y de `peaje_curso_caseta` (los cursos con sus casetas),
+// los convenios de la flota por nombre (para que el importador resuelva «Convenio X»), el convenio ligado a cada viaje (`viaje_convenio`), la RPC atómica
+// `peaje_curso_reemplazar` y el cambio de estado de un curso. Los módulos nuevos (`cursos.ts`, `cursos_importar.ts`) son puros o reciben sus puertos y no suman
+// archivos. Medido con el barrido real (`1,896 de 1,896`); al integrar con el resto de la ronda 14 el techo se vuelve a medir con el barrido del árbol fusionado.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_896;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

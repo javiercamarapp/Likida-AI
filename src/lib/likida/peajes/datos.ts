@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
-import { traerTodo, conteo, type RespuestaPg } from '../pg';
+import { traerTodo, traerPorIds, conteo, type RespuestaPg } from '../pg';
 import { normalizarNombre, normalizarTag } from './formatos';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../conductor/geometria_datos';
 import { matrizDeArchivoCatalogo } from './archivo';
@@ -703,4 +703,114 @@ export async function evaluarGpsDeLineas(
     if (!p.listo) return { lineaId: p.lineaId, casetaId: p.casetaId, veredicto: p.veredicto };
     return { lineaId: p.lineaId, casetaId: p.casetaId, veredicto: evaluarCruceGps(p.cruceMs, p.caseta, muestrasPorLinea.get(p.lineaId) ?? []) };
   });
+}
+
+// ── Cursos (rutas autorizadas, 0665) ────────────────────────────────────────
+// El I/O de `peaje_curso` y `peaje_curso_caseta`. Las reglas (qué es «fuera de curso») viven en `cursos.ts` (puro) y la
+// traducción de nombres a ids en `cursos_importar.ts`; aquí solo se lee y se guarda. El guardado es la RPC 0665: todo-o-nada.
+
+export interface CursoVista {
+  id: string; codigo: string; nombre: string; tipo: 'casetas' | 'corredor';
+  unidadId: string | null; convenioId: string | null;
+  vigenteDesde: string | null; vigenteHasta: string | null; activo: boolean;
+  /** Las casetas autorizadas, en orden de recorrido (solo `casetas`). */
+  casetas: Array<{ id: string; nombre: string }>;
+  corredor: Array<{ lat: number; lng: number }> | null;
+  bufferM: number | null;
+}
+
+const puntosDeCorredor = (v: unknown): Array<{ lat: number; lng: number }> | null => {
+  if (!Array.isArray(v)) return null;
+  const pts = v.map((p) => ({ lat: Number((p as { lat?: unknown })?.lat), lng: Number((p as { lng?: unknown })?.lng) }));
+  return pts.every((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng)) ? pts : null;
+};
+
+/** Todos los cursos de la flota (activos o no) con sus casetas por nombre. Lanza si la base no contesta: un curso que falta produciría reclamos de más. */
+export async function listarCursos(tenantId: string): Promise<CursoVista[]> {
+  const admin = supabaseAdmin();
+  const [cursos, enlaces, casetas] = await Promise.all([
+    traerTodo<Record<string, unknown>>(
+      (d, h) => acotada(admin.from('peaje_curso')
+        .select('id, codigo, nombre, tipo, unidad_id, convenio_id, vigente_desde, vigente_hasta, activo, corredor, buffer_m', conteo(d))
+        .eq('tenant_id', tenantId).order('codigo').order('id').range(d, h), 'peajes.cursos'),
+      'peajes.cursos',
+    ),
+    traerTodo<{ curso_id: unknown; caseta_id: unknown; orden: unknown }>(
+      (d, h) => acotada(admin.from('peaje_curso_caseta').select('curso_id, caseta_id, orden', conteo(d))
+        .eq('tenant_id', tenantId).order('curso_id').order('orden').order('caseta_id').range(d, h), 'peajes.cursos_casetas'),
+      'peajes.cursos_casetas',
+    ),
+    listarCasetas(tenantId),
+  ]);
+  const nombre = new Map(casetas.map((c) => [c.id, c.nombre]));
+  const porCurso = new Map<string, Array<{ id: string; nombre: string }>>();
+  for (const e of enlaces) {
+    const lista = porCurso.get(String(e.curso_id)) ?? [];
+    lista.push({ id: String(e.caseta_id), nombre: nombre.get(String(e.caseta_id)) ?? '' });
+    porCurso.set(String(e.curso_id), lista);
+  }
+  return cursos.map((c) => ({
+    id: String(c.id), codigo: String(c.codigo), nombre: String(c.nombre), tipo: c.tipo === 'corredor' ? 'corredor' : 'casetas',
+    unidadId: (c.unidad_id as string | null) ?? null, convenioId: (c.convenio_id as string | null) ?? null,
+    vigenteDesde: (c.vigente_desde as string | null) ?? null, vigenteHasta: (c.vigente_hasta as string | null) ?? null,
+    activo: c.activo !== false, casetas: porCurso.get(String(c.id)) ?? [],
+    corredor: puntosDeCorredor(c.corredor), bufferM: c.buffer_m === null || c.buffer_m === undefined ? null : Number(c.buffer_m),
+  }));
+}
+
+/** Los convenios de la flota por nombre (para que el importador resuelva «Convenio X» a su id). */
+export async function listarConveniosPorNombre(tenantId: string): Promise<Array<{ id: string; nombre: string }>> {
+  const filas = await traerTodo<{ id: unknown; nombre: unknown }>(
+    (d, h) => acotada(supabaseAdmin().from('cliente_convenio').select('id, nombre', conteo(d)).eq('tenant_id', tenantId).order('nombre').order('id').range(d, h), 'peajes.cursos_convenios'),
+    'peajes.cursos_convenios',
+  );
+  return filas.map((f) => ({ id: String(f.id), nombre: String(f.nombre) }));
+}
+
+/** viaje → convenio ligado (0580 `viaje_convenio`), solo de los viajes pedidos. Los viajes sin convenio no aparecen. */
+export async function convenioPorViaje(tenantId: string, viajeIds: readonly string[]): Promise<Map<string, string>> {
+  const m = new Map<string, string>();
+  if (viajeIds.length === 0) return m;
+  const filas = await traerPorIds<{ viaje_id: unknown; convenio_id: unknown }>(
+    [...viajeIds],
+    (tanda) => acotada(supabaseAdmin().from('viaje_convenio').select('viaje_id, convenio_id').eq('tenant_id', tenantId).in('viaje_id', tanda), 'peajes.cursos_viaje_convenio'),
+    'peajes.cursos_viaje_convenio',
+  );
+  for (const f of filas) if (f.convenio_id) m.set(String(f.viaje_id), String(f.convenio_id));
+  return m;
+}
+
+export interface CursoParaGuardar {
+  codigo: string; nombre: string; tipo: 'casetas' | 'corredor';
+  unidadId: string | null; convenioId: string | null;
+  vigenteDesde: string | null; vigenteHasta: string | null;
+  casetaIds: string[];
+  corredor: Array<{ lat: number; lng: number }> | null;
+  bufferM: number | null;
+}
+export type ResultadoGuardarCursos =
+  | { estado: 'ok'; creados: number; actualizados: number }
+  | { estado: 'invalida' | 'referencia_invalida' | 'error' };
+
+/** Guarda el lote TODO-O-NADA por la RPC 0665. Una referencia de otra flota (unidad, convenio o caseta) vuelve como `referencia_invalida` y no escribe nada. */
+export async function guardarCursosLote(tenantId: string, cursos: readonly CursoParaGuardar[]): Promise<ResultadoGuardarCursos> {
+  const lote = cursos.map((c) => ({
+    codigo: c.codigo, nombre: c.nombre, tipo: c.tipo, unidad_id: c.unidadId, convenio_id: c.convenioId,
+    vigente_desde: c.vigenteDesde, vigente_hasta: c.vigenteHasta, buffer_m: c.bufferM, corredor: c.corredor, casetas: c.casetaIds,
+  }));
+  const { data, error } = await acotada(supabaseAdmin().rpc('peaje_curso_reemplazar', { p_tenant: tenantId, p_cursos: lote }), 'peajes.cursos_guardar');
+  if (error) {
+    logger.error('peajes.cursos_guardar', { tenant: tenantId, err: error.message });
+    return { estado: 'error' };
+  }
+  // PostgREST entrega el jsonb de la función tal cual; un doble que entrega filas lo trae en la primera.
+  const r = ((Array.isArray(data) ? data[0] : data) ?? {}) as { estado?: string; creados?: number; actualizados?: number };
+  if (r.estado === 'ok') return { estado: 'ok', creados: Number(r.creados ?? 0), actualizados: Number(r.actualizados ?? 0) };
+  return { estado: r.estado === 'referencia_invalida' ? 'referencia_invalida' : 'invalida' };
+}
+
+export async function cambiarEstadoCurso(tenantId: string, cursoId: string, activo: boolean): Promise<boolean> {
+  const { error } = await acotada(supabaseAdmin().from('peaje_curso').update({ activo, actualizado_en: new Date().toISOString() }).eq('tenant_id', tenantId).eq('id', cursoId), 'peajes.estado_curso');
+  if (error) logger.error('peajes.estado_curso', { tenant: tenantId, err: error.message });
+  return !error;
 }
