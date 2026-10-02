@@ -321,7 +321,7 @@ function lugarDeObjetivo(t: HitoFila['tipo']): 'carga' | 'descarga' | null {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface DepsAcuse {
-  viaje(viajeId: string): Promise<{ tenantId: string } | null>;
+  viajePorId(viajeId: string): Promise<{ tenantId: string } | null>;
   puedeAcusar(tenantId: string, telefono: string): Promise<boolean>;
   marcar(tenantId: string, viajeId: string, ahora: Date): Promise<HitoFila[]>;
   evento: typeof registrarEvento;
@@ -330,7 +330,7 @@ export interface DepsAcuse {
 const depsAcuseReales: DepsAcuse = {
   // El tenant sale del VIAJE del payload; después `puedeAcusar` exige que el teléfono sea de ESA
   // flota (contacto de tráfico o cuenta de oficina).
-  viaje: async (id) => {
+  viajePorId: async (id) => {
     const tenantId = await tenantDelViaje(id);
     return tenantId ? { tenantId } : null;
   },
@@ -346,7 +346,7 @@ export async function atenderAcuseJefe(
   const b = leerBotonConductor(texto);
   if (!b || b.prefijo !== PREFIJO_BOTON.jefeAtiendo) return null;
   try {
-    const v = await deps.viaje(b.viajeId);
+    const v = await deps.viajePorId(b.viajeId);
     // Misma respuesta para «no existe» y «no es tuyo»: no se confirma qué viajes hay.
     if (!v || !(await deps.puedeAcusar(v.tenantId, telefono))) return 'No tengo ese aviso asignado a este número.';
     const marcados = await deps.marcar(v.tenantId, b.viajeId, ahora);

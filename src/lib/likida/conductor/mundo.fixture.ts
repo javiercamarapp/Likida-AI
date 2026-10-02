@@ -113,7 +113,7 @@ export function crearMundo(o: OpcionesMundo) {
 
   // ── el «Ya lo atiendo» del patio ─────────────────────────────────────────
   const depsAcuse: DepsAcuse = {
-    viaje: async (id) => { const v = m.viajes.get(id); return v ? { tenantId: v.tenantId } : null; },
+    viajePorId: async (id) => { const v = m.viajes.get(id); return v ? { tenantId: v.tenantId } : null; },
     puedeAcusar: async (tenantId, telefono) => {
       const t = telefono.replace(/\D/g, '');
       return [...(o.destinatarios?.[tenantId]?.[1] ?? []), ...(o.destinatarios?.[tenantId]?.[2] ?? [])].some((x) => x.replace(/\D/g, '') === t);
