@@ -65,7 +65,7 @@ export const KIT: readonly EntradaKit[] = [
     id: 'liquidaciones', agentes: ['Liquidación fase 1'],
     muestra: 'liquidacion/liquidaciones_sistema.csv',
     formato: 'una fila por renglón: clave_externa, numero_empleado, periodo, folios_viaje, concepto, tipo, monto, total_sistema',
-    importador: { estado: 'existe', donde: 'POST /api/v1/liquidaciones-externas (liquidacion_externa/esquema.ts); el convertidor CSV→cuerpo es liquidacion_csv.ts; la plantilla de liquidación por flota la construye w3-agentes-1-4' },
+    importador: { estado: 'existe', donde: 'POST /api/v1/liquidaciones-externas (liquidacion_externa/esquema.ts); el convertidor CSV→cuerpo es liquidacion_csv.ts; en el panel, /dashboard/agentes/liquidacion → «Subir liquidaciones» (CSV/Excel) lo usa y entrega por el mismo camino (liquidacion_externa/importar_archivo.ts); la plantilla de liquidación por flota la construye w3-agentes-1-4' },
     pantalla: '/dashboard/agentes/liquidacion',
   },
   {

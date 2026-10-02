@@ -251,3 +251,30 @@ describe('el formato de la flota (0564)', () => {
     expect(leerMensajeExterno('<script>')).toBeNull();
   });
 });
+
+describe('subir el archivo de liquidaciones desde el panel', () => {
+  const base = (o: Partial<Parameters<typeof SeccionExternas>[0]>) => SeccionExternas({
+    fichas: Promise.resolve(FICHAS),
+    pagina: Promise.resolve<PaginaExternas>({ filas: [], hayMas: false, siguiente: null, total: 0 }),
+    filtroEstado: null, contexto: [], mensaje: null, puedeReintentar: true, reintentar, ...o,
+  });
+  it('el control de subida solo sale si el host lo entrega (rol que administra)', async () => {
+    expect(renderToStaticMarkup(await base({}))).not.toContain('type="file"');
+    const html = renderToStaticMarkup(await base({ subirArchivo: async () => {} }));
+    expect(html).toContain('type="file"');
+    expect(html).toContain('Subir liquidaciones');
+  });
+  it('dice cuántas entraron, cuántas ya estaban y cuáles fallaron; el detalle hostil se escapa', async () => {
+    const html = renderToStaticMarkup(await base({ mensaje: 'importada', importacion: { conteo: '2.1.1', detalle: 'LQ-3: <script>x</script>' } }));
+    expect(html).toContain('2 liquidación(es) recibida(s)');
+    expect(html).toContain('1 ya estaban');
+    expect(html).toContain('1 con problemas');
+    expect(html).not.toContain('<script>x');
+  });
+  it('un conteo malformado de la URL no se pinta', async () => {
+    const html = renderToStaticMarkup(await base({ mensaje: 'importada', importacion: { conteo: '<b>', detalle: undefined } }));
+    expect(html).toContain('Archivo procesado.');
+    expect(html).not.toContain('<b>');
+  });
+});
+
