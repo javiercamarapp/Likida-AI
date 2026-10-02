@@ -155,8 +155,10 @@ describe('recepción por correo y pull (0563)', () => {
     const html = pintar({ entradas: E({ cofreConfigurado: false }) });
     expect(html).toContain('ya hay uno guardado');
     expect(html).toContain('Falta LIKIDA_COFRE_LLAVE');
-    expect(html).toMatch(/name="token"[^>]*disabled/);
-    expect(html).not.toMatch(/name="token"[^>]*value=/);
+    // El orden de los atributos lo decide React, no la fuente: se mira la etiqueta completa del campo.
+    const campo = /<input[^>]*name="token"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(campo).toMatch(/disabled/);
+    expect(campo).not.toMatch(/value=/);
   });
 
   it('lectura fallida de la configuración dice «no se pudo leer», no «apagado»', () => {
