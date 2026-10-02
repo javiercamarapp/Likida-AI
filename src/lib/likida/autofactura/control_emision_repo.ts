@@ -154,6 +154,7 @@ export async function lotesVivos(tenantId: string): Promise<LoteTablero[] | null
   }));
 }
 export async function fasesDePortales(tenantId: string): Promise<FaseTablero[] | null> {
+  // orden-no-importa: la llave primaria es (tenant_id, comercio) y se filtra por tenant, así que ordenar por comercio ya es un orden total
   const { data, error } = await acotada(supabaseAdmin().from('autofactura_portal_fase')
     .select('comercio, fase, emisiones_confirmadas, ultima_emision_en').eq('tenant_id', tenantId).order('comercio').limit(200), 'autofactura.fases');
   if (error) { logger.warn('autofactura.fases_sin_leer', { err: error.message }); return null; }
