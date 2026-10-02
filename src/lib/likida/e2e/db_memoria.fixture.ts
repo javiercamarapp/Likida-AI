@@ -45,7 +45,7 @@ export function crearDbMemoria(
     private conteo = false;
     private head = false;
     private retorna = false;
-    private opcionesUpsert: { onConflict?: string } = {};
+    private opcionesUpsert: { onConflict?: string; ignoreDuplicates?: boolean } = {};
     constructor(private tabla: string, private fuente?: () => Fila[] | boolean, private clave?: string) {}
 
     select(_c?: string, o?: { count?: string; head?: boolean }) {
@@ -57,7 +57,7 @@ export function crearDbMemoria(
     insert(p: unknown) { this.op = 'insert'; this.payload = p; return this; }
     update(p: unknown) { this.op = 'update'; this.payload = p; return this; }
     delete() { this.op = 'delete'; return this; }
-    upsert(p: unknown, o?: { onConflict?: string }) { this.op = 'upsert'; this.payload = p; this.opcionesUpsert = o ?? {}; return this; }
+    upsert(p: unknown, o?: { onConflict?: string; ignoreDuplicates?: boolean }) { this.op = 'upsert'; this.payload = p; this.opcionesUpsert = o ?? {}; return this; }
     eq(c: string, v: unknown) { this.filtros.push([c, 'eq', v]); return this; }
     in(c: string, v: unknown[]) { this.filtros.push([c, 'in', v]); return this; }
     gte(c: string, v: unknown) { this.filtros.push([c, 'gte', v]); return this; }
@@ -121,6 +121,8 @@ export function crearDbMemoria(
           if (this.op === 'upsert') {
             const llaves = (this.opcionesUpsert.onConflict ?? 'id').split(',').map((s) => s.trim());
             const previa = tabla.find((t) => llaves.every((k) => t[k] === fila[k]));
+            // `ignoreDuplicates` (ON CONFLICT DO NOTHING): la fila previa queda intacta y NO se devuelve como insertada.
+            if (previa && this.opcionesUpsert.ignoreDuplicates) continue;
             if (previa) { Object.assign(previa, n); creados.push(previa); continue; }
             // Un upsert que NO choca por su onConflict pero sí por OTRA restricción única falla como en Postgres.
             const choca = (unicos[this.tabla] ?? []).some((cols) => tabla.some((t) => cols.every((k) => JSON.stringify(t[k]) === JSON.stringify(fila[k]))));
