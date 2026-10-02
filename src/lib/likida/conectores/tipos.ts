@@ -421,6 +421,32 @@ export function veredictoDe(r: Pick<ResultadoPrueba, 'ok' | 'sobreLaCredencial'>
 }
 
 /**
+ * Las capacidades que el catálogo DECLARA y que NINGÚN código del producto ejecuta todavía
+ * (auditoría ola 1 #29, Ola 9). `capacidades` describe el alcance al que aspira cada ficha;
+ * esta lista es el contrapeso honesto: lo que está aquí no se puede vender como «ya lo hace».
+ *
+ * Son las del ERP y el TMS: el único código que toca el sistema del cliente es `probar()` (un login
+ * documentado) y la salida de la póliza al ARCHIVO. Ningún módulo lee el catálogo de cuentas ni los
+ * proveedores del ERP, ni escribe un asiento o una factura de proveedor en él.
+ *
+ * `capacidades_con_ejecutor.test.ts` vigila las dos direcciones: si alguien construye un ejecutor y no
+ * saca la capacidad de aquí, la prueba falla; si alguien declara una capacidad de ESCRITURA nueva sin
+ * ejecutor y sin listarla aquí, también. Es la prueba de contrato que el hallazgo pedía.
+ */
+export const CAPACIDADES_SIN_EJECUTOR: readonly Capacidad[] = [
+  'leer_viajes',
+  'leer_catalogo_cuentas',
+  'leer_proveedores',
+  'escribir_asiento',
+  'escribir_factura_proveedor',
+];
+
+/** Lo que la ficha puede prometer HOY: sus capacidades menos las que no tienen ejecutor. */
+export function capacidadesConEjecutor(c: Pick<Conector, 'capacidades'>): Capacidad[] {
+  return c.capacidades.filter((k) => !CAPACIDADES_SIN_EJECUTOR.includes(k));
+}
+
+/**
  * LA FICHA DE UN SISTEMA DE TERCEROS.
  *
  * Todo lo que hace falta para que conectar a un cliente sea capturar datos.
