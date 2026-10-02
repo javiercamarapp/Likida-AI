@@ -68,7 +68,7 @@ describe('fallo', () => {
 
   it('Meta rechaza el envío al cliente: el mensaje queda FALLIDO, el cliente sigue esperando y queda en bitácora', async () => {
     const { repo } = escenario(); repo.estatus.agregar(T1, CLIENTE_A, estatus());
-    const { deps } = armar(repo, { cliente: () => ({ ok: false, motivo: 'rechazado por Meta' }) });
+    const { deps } = armar(repo, { cliente: () => ({ ok: false, motivo: 'plantilla_rechazada', mensaje: 'rechazado por Meta', reintentable: false } as unknown as ResultadoEnvioCliente) });
     await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), deps);
     await atenderDecisionVigia(gerente, `vig_ok:${repo.salientes()[0].id}`, deps);
     expect(repo.salientes()[0].estado).toBe('fallido');

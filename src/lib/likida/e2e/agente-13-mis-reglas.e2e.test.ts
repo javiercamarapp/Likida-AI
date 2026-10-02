@@ -73,7 +73,7 @@ describe('feliz', () => {
     generateStructured.mockResolvedValueOnce(modelo({ plantilla: 'gasto_de_concepto_mayor_a', concepto: 'caseta', monto: 3000 }));
     const i = await interpretar('avísame si un gasto de caseta pasa de $3,000', { tenantId: A, rol: 'flota_admin' });
     expect(i).toMatchObject({ ok: true, plantilla: 'gasto_de_concepto_mayor_a' });
-    const r = await crearReglaPendiente(A, { plantilla: (i as { plantilla: never }).plantilla, params: (i as { params: never }).params, textoOriginal: 'x', frase: (i as { frase: string }).frase, modelo: 'm', costoUsd: 0.0001 }, ACTOR.id);
+    const r = await crearReglaPendiente(A, { plantilla: (i as unknown as { plantilla: never }).plantilla, params: (i as unknown as { params: never }).params, textoOriginal: 'x', frase: (i as unknown as { frase: string }).frase, modelo: 'm', costoUsd: 0.0001 }, ACTOR.id);
     expect(r).toMatchObject({ ok: true, valor: { estado: 'pendiente' } });
 
     // Pendiente: el vigilante NO la corre.
@@ -161,7 +161,7 @@ describe('duplicado', () => {
     const r1 = await declararYConfirmar(A);
     generateStructured.mockResolvedValueOnce(modelo({ plantilla: 'gasto_de_concepto_mayor_a', concepto: 'caseta', monto: 3000 }));
     const i = await interpretar('otra vez lo mismo de casetas de 3000', { tenantId: A, rol: 'flota_admin' });
-    const dup = await crearReglaPendiente(A, { plantilla: (i as { plantilla: never }).plantilla, params: (i as { params: never }).params, textoOriginal: 'x', frase: 'f', modelo: null, costoUsd: 0 }, ACTOR.id);
+    const dup = await crearReglaPendiente(A, { plantilla: (i as unknown as { plantilla: never }).plantilla, params: (i as unknown as { params: never }).params, textoOriginal: 'x', frase: 'f', modelo: null, costoUsd: 0 }, ACTOR.id);
     expect(dup).toMatchObject({ ok: false, error: expect.stringMatching(/ya está declarada/) });
     expect(await confirmarRegla(A, r1.id, ACTOR)).toMatchObject({ ok: false, error: expect.stringMatching(/ya no está esperando/) });
   });
