@@ -27,6 +27,8 @@ const OPERADORES: Record<string, { id: string; nombre: string; telefono: string;
 };
 
 vi.mock('../wa_outbox', () => ({
+  // La entrega lee el estado de la salida por llave con `leerSalidasPorLlave` (0560): mapa vacío = «no hay fila».
+  leerSalidasPorLlave: vi.fn(async (llaves: string[]) => new Map(llaves.filter((l) => outbox.has(l)).map((l) => [l, outbox.get(l)!]))),
   encolarSalidaWhatsAppDedupe: vi.fn(async (llave: string, payload: Record<string, unknown>) => {
     const previa = outbox.get(llave);
     if (previa) return { id: llave, estado: previa.estado, providerMessageId: previa.provider_message_id };
@@ -71,7 +73,7 @@ vi.mock('../liquidacion_externa/repo', async (orig) => {
         foliosViaje: n.datos.viajes, viajeIds: n.viajeIds, periodoDesde: n.datos.periodo.desde, periodoHasta: n.datos.periodo.hasta,
         conceptos: [], total: n.datos.total, moneda: n.datos.moneda, pdfRuta: n.pdfRuta, pdfOrigen: n.pdfOrigen,
         estado: 'pendiente', via: null, generacion: 1, intentos: 0, proximoIntentoEn: AHORA.toISOString(),
-        ultimoError: null, wamid: null, enviadaEn: null, acuseTipo: null, acuseEn: null, creadaEn: AHORA.toISOString(),
+        ultimoError: null, wamid: null, enviadaEn: null, acuseTipo: null, acuseEn: null, acuseConfirmadoEn: null, creadaEn: AHORA.toISOString(),
       };
       store.set(fila.id, fila);
       return { ...fila };
@@ -102,7 +104,14 @@ const { atenderAcuseLiquidacionExterna } = await import('../liquidacion_externa/
 const { entregaPorOutbox } = await import('../liquidacion_externa/entrega');
 const { PREFIJO_BOTON_RECIBIDA } = await import('../liquidacion_externa/presentacion');
 
-const deps = { entrega: entregaPorOutbox, ahora: () => AHORA, razonSocial: async () => 'Flota Ficticia SA', firmarPdf: async () => 'https://firmada.example.invalid/x.pdf' };
+const deps = { entrega: entregaPorOutbox, ahora: () => AHORA, razonSocial: async () => 'Flota Ficticia SA', firmarPdf: async () => 'https://firmada.example.invalid/x.pdf',
+  // Piezas de la ola 3b (formato de la flota 0564 y avisos): sin formato, sin jefe y con el aviso a la oficina aceptado — esta
+  // prueba ejerce el ciclo base; la copia al jefe y el formato tienen sus propias pruebas en `liquidacion_externa/`.
+  avisarNoCoincide: async () => true,
+  formato: async () => null,
+  subirArchivo: async (ruta: string, bytes: Uint8Array) => { storage.set(ruta, bytes.length); },
+  copiarAJefe: async () => ({ estado: 'sin_destinatarios' as const }),
+};
 
 /** El proveedor Meta: drena el outbox. Con ventana abierta la sesión sale; cerrada, muere con 131047 y solo la plantilla sale. */
 function drenarMeta(ventanaAbierta: boolean, plantillaAprobada = true) {

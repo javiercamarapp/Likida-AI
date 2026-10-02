@@ -148,10 +148,10 @@ describe('duplicado', () => {
     expect(db.tablas.factura_proveedor).toHaveLength(1);
   });
 
-  it('el proveedor manda la MISMA factura en OTRO correo: el unique (flota, UUID) lo cuenta como ignorada, nunca dos filas', async () => {
+  it('el proveedor manda la MISMA factura en OTRO correo: el unique (flota, UUID) lo cuenta como duplicada, nunca dos filas', async () => {
     await webhook('em_9', [{ id: 'a1', filename: 'f.xml', contenido: cfdi(U1, '1160.00') }]);
     const r = await webhook('em_10', [{ id: 'a2', filename: 'reenvio.xml', contenido: cfdi(U1, '1160.00') }]);
-    expect(await r.json()).toMatchObject({ guardadas: 0, ignoradas: 1 });
+    expect(await r.json()).toMatchObject({ guardadas: 0, duplicadas: 1, ignoradas: 0 });
     expect(db.tablas.factura_proveedor).toHaveLength(1);
   });
 
@@ -165,9 +165,11 @@ describe('duplicado', () => {
 });
 
 describe('fuera de orden', () => {
-  it('el correo trae el PDF primero y el XML después: solo el XML cuenta, sin importar el orden de los adjuntos', async () => {
+  it('el correo trae el PDF primero y el XML después: solo el XML cuenta (el PDF de relleno no es un PDF válido y el buzón lo rechaza), sin importar el orden de los adjuntos', async () => {
     const r = await webhook('em_12', [{ id: 'p1', filename: 'factura.pdf', contenido: '%PDF-1.4 sintetico' }, { id: 'x1', filename: 'factura.xml', contenido: cfdi(U1, '100.00') }]);
-    expect(await r.json()).toMatchObject({ guardadas: 1, ignoradas: 1 });
+    // Desde la ingesta de PDF (0530) un PDF que no lo es se RECHAZA (antes se ignoraba): lo que importa es que la factura entra una vez.
+    expect(await r.json()).toMatchObject({ guardadas: 1, rechazadas: 1, ignoradas: 0 });
+    expect(db.tablas.factura_proveedor).toHaveLength(1);
   });
 
   it('exportar ANTES de aprobar no incluye la pendiente; aprobar después y re-exportar la incluye; una rechazada nunca sale', async () => {
