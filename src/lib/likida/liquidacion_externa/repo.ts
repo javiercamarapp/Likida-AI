@@ -489,11 +489,15 @@ export async function cerrarCopiaJefe(
 export async function transicionar(
   tenantId: string, id: string, desde: EstadoLiquidacionExterna[],
   cambios: Record<string, unknown>,
+  /** Además del estado, la fila NO debe traer ya ese acuse: dos entregas del mismo botón no aplican las dos
+   *  (la primera lo cambia; la segunda ve el acuse igual y no transiciona, con lo que tampoco repite su aviso). */
+  opciones: { acuseDistintoDe?: TipoAcuse } = {},
 ): Promise<boolean> {
-  const res = await acotada(supabaseAdmin().from('liquidacion_externa')
+  let q = supabaseAdmin().from('liquidacion_externa')
     .update({ ...cambios, updated_at: new Date().toISOString() })
-    .eq('tenant_id', tenantId).eq('id', id).in('estado', desde)
-    .select('id'), 'liqext.transicion');
+    .eq('tenant_id', tenantId).eq('id', id).in('estado', desde);
+  if (opciones.acuseDistintoDe) q = q.or(`acuse_tipo.is.null,acuse_tipo.neq.${opciones.acuseDistintoDe}`);
+  const res = await acotada(q.select('id'), 'liqext.transicion');
   if (res.error) throw new Error(`liquidacion_externa transición: ${res.error.message}`);
   return (res.data ?? []).length > 0;
 }

@@ -367,11 +367,19 @@ export async function registrarAcuseConAviso(
   const liq = await leerPorId(tenantId, liquidacionId);
   if (!liq || liq.operadorId !== operadorId) return { resultado: 'no_encontrada', avisoOficina: 'no_aplica' };
   if (liq.estado === 'acusada' && liq.acuseTipo === tipo) return { resultado: 'ya_registrado', avisoOficina: 'no_aplica' };
+  // La transición es condicional TAMBIÉN sobre el acuse: de dos entregas simultáneas del mismo botón (el chequeo de arriba
+  // las deja pasar a las dos) solo una la aplica, y solo esa avisa a la oficina.
   const aplicada = await transicionar(
     tenantId, liquidacionId, ['pendiente', 'en_cola', 'enviada', 'fallida', 'acusada'],
     { estado: 'acusada', acuse_tipo: tipo, acuse_en: deps.ahora().toISOString(), acuse_confirmado_en: null },
+    { acuseDistintoDe: tipo },
   );
-  if (!aplicada) return { resultado: 'no_encontrada', avisoOficina: 'no_aplica' };
+  if (!aplicada) {
+    const ahora = await leerPorId(tenantId, liquidacionId);
+    return ahora && ahora.estado === 'acusada' && ahora.acuseTipo === tipo
+      ? { resultado: 'ya_registrado', avisoOficina: 'no_aplica' }
+      : { resultado: 'no_encontrada', avisoOficina: 'no_aplica' };
+  }
   await registrarEvento(tenantId, liquidacionId, tipo === 'recibida' ? 'acuse_recibida' : 'acuse_no_coincide', {});
   if (tipo !== 'no_coincide') return { resultado: 'registrado', avisoOficina: 'no_aplica' };
 
