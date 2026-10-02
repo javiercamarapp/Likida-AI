@@ -25,6 +25,7 @@ const TTL_FIRMA_S = 300;
 
 async function originalDe(d: repo.DocumentoFila): Promise<OriginalVista> {
   if (d.purgadoEn || !d.storageRuta) return { tipo: 'nada', motivo: 'El archivo ya se borró por retención; solo quedan los datos leídos.' };
+  if (d.estado === 'dividido') return { tipo: 'nada', motivo: 'El archivo se dividió en un documento por embarque; el contenido de cada uno está en su propia revisión.' };
   try {
     if (d.formato === 'imagen') return { tipo: 'imagen', url: await repo.firmarArchivo(d.storageRuta, TTL_FIRMA_S) };
     if (d.formato === 'pdf_escaneado') {
@@ -59,12 +60,17 @@ export default async function PaginaRevision({
   // La primera apertura arranca el tiempo de revisión medido (idempotente).
   const doc = previo.estado === 'por_revisar' ? await abrirRevision(tenantId, id, userId) : previo;
 
-  const [original, operadores, eventos, viaje] = await Promise.all([
+  const [original, operadores, eventos, viaje, linaje, hijos] = await Promise.all([
     originalDe(doc),
     repo.operadoresDeFlota(tenantId),
     repo.listarEventos(tenantId, id),
     doc.viajeId ? repo.viajePorId(tenantId, doc.viajeId) : Promise.resolve(null),
+    repo.linajeDeDocumentos(tenantId, [id]),
+    doc.estado === 'dividido' ? repo.hijosDeDocumento(tenantId, id) : Promise.resolve([]),
   ]);
+  // De qué archivo nació este embarque (si nació de partir uno): su nombre para el enlace de regreso.
+  const lin = linaje.get(id);
+  const padre = lin?.rol === 'hijo' ? await repo.leerDocumento(tenantId, lin.padreId) : null;
 
   const ruta = `${RUTA_PADRE}/${id}`;
 
@@ -162,6 +168,8 @@ export default async function PaginaRevision({
       sufijo={sufijoTenant(sp)}
       salida={viaje ? { folio: viaje.folio ?? viaje.id.slice(0, 8) } : null}
       puedeEliminar={puedeAdministrar(rol)}
+      embarque={lin?.rol === 'hijo' && padre ? { indice: lin.indice ?? 0, total: lin.total, clave: lin.clave, padreId: padre.id, padreNombre: padre.nombreArchivo } : null}
+      hijos={hijos.map((h) => ({ id: h.documento.id, indice: h.indice, clave: h.clave, estado: h.documento.estado, nombre: h.documento.nombreArchivo, bloqueos: h.documento.validacion?.bloqueos ?? 0, porConfirmar: h.documento.validacion?.porConfirmar ?? 0 }))}
     />
   );
 }

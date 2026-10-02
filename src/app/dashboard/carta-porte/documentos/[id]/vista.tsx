@@ -26,11 +26,16 @@ export type OriginalVista =
 
 export interface EventoVista { tipo: string; creadoEn: string }
 
+/** De qué archivo nació este documento (0670). */
+export interface EmbarqueVista { indice: number; total: number; clave: string | null; padreId: string; padreNombre: string }
+/** Un embarque hijo de un archivo dividido. */
+export interface HijoVista { id: string; indice: number; clave: string | null; estado: DocumentoFila['estado']; nombre: string; bloqueos: number; porConfirmar: number }
+
 const ROTULO_EVENTO: Record<string, string> = {
   recibido: 'Recibido', duplicado_recibido: 'Llegó otra vez (mismo archivo)', extraccion_iniciada: 'Lectura iniciada', extraccion_ok: 'Leído',
   extraccion_fallida: 'No se pudo leer', escalada: 'Se releyó con un modelo más fuerte', revision_abierta: 'Se abrió para revisar', campo_corregido: 'Se corrigieron datos',
   aprobado: 'Aprobado', rechazado: 'Rechazado', reabierto: 'Reabierto', salida_viaje: 'Viaje creado o completado', perfil_aprendido: 'El perfil del cliente aprendió',
-  exportado: 'Exportado', purgado: 'Archivo borrado por retención',
+  exportado: 'Exportado', purgado: 'Archivo borrado por retención', dividido: 'Se separó en un documento por embarque',
 };
 
 function color(sev: 'bloqueo' | 'confirmar' | 'aviso'): string {
@@ -75,7 +80,7 @@ function Campo({ f, editable }: { f: FilaCampo; editable: boolean }) {
   );
 }
 
-export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', salida = null, puedeEliminar = false }: {
+export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', salida = null, puedeEliminar = false, embarque = null, hijos = [] }: {
   doc: DocumentoFila;
   revision: Revision | null;
   original: OriginalVista;
@@ -87,6 +92,10 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
   salida?: { folio: string } | null;
   /** Quien administra la flota puede eliminar el documento y su archivo (cancelación ARCO / subido por error). */
   puedeEliminar?: boolean;
+  /** Si este documento es UN embarque de un archivo que se partió: cuál y de cuántos. */
+  embarque?: EmbarqueVista | null;
+  /** Si este documento es el archivo que se partió: sus embarques. */
+  hijos?: HijoVista[];
 }) {
   const editable = doc.estado === 'por_revisar';
   const meta = doc.extraccion?.meta;
@@ -120,6 +129,12 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
             se aprueba sin que lo confirmes tú, y de este documento el perfil del cliente no aprende.
           </p>
         )}
+        {embarque && (
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+            Embarque {numero(embarque.indice)} de {numero(embarque.total)}{embarque.clave ? ` (folio ${embarque.clave})` : ''} del archivo{' '}
+            <Link href={`/dashboard/carta-porte/documentos/${embarque.padreId}${sufijo}`} className="font-medium" style={{ color: 'var(--marca)' }}>{embarque.padreNombre}</Link>.
+          </p>
+        )}
         {doc.estado === 'fallido' && <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>{doc.ultimoError}</p>}
         {doc.estado === 'rechazado' && <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Rechazado: {doc.rechazoMotivo}</p>}
       </header>
@@ -138,7 +153,33 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
         </section>
 
         <section aria-label="Lo que se leyó" className="space-y-3">
-          {revision === null ? (
+          {doc.estado === 'dividido' ? (
+            <div className="card p-4 space-y-2.5">
+              <p className="text-[12.5px]">
+                Este archivo traía varios embarques. Cada uno es un documento aparte, con su propia revisión, su aprobación y su viaje;
+                este queda como constancia de lo que llegó.
+              </p>
+              {hijos.length === 0 ? (
+                <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No hay embarques ligados a este archivo.</p>
+              ) : (
+                <ul className="space-y-1.5 text-[12.5px]">
+                  {hijos.map((h) => (
+                    <li key={h.id} className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="cifra-mono" style={{ color: 'var(--faint)' }}>{numero(h.indice)}.</span>
+                      <Link href={`/dashboard/carta-porte/documentos/${h.id}${sufijo}`} className="font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>
+                        {h.clave ? `Folio ${h.clave}` : h.nombre}
+                      </Link>
+                      <span style={{ color: 'var(--muted)' }}>
+                        {ROTULO_ESTADO[h.estado]}
+                        {h.estado === 'por_revisar' && h.bloqueos > 0 ? ` · ${numero(h.bloqueos)} por corregir` : ''}
+                        {h.estado === 'por_revisar' && h.bloqueos === 0 && h.porConfirmar > 0 ? ` · ${numero(h.porConfirmar)} por confirmar` : ''}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : revision === null ? (
             <p className="card p-4 text-[12.5px]" style={{ color: 'var(--muted)' }}>
               {doc.estado === 'fallido' ? 'El documento no se pudo leer; no hay datos que revisar.' : 'El documento todavía no tiene datos leídos.'}
             </p>
