@@ -113,7 +113,7 @@ describe('generarExportacion', () => {
   });
 
   it('los datos que no son del archivo no salen: ni teléfono ni ruta del PDF (no existen en el catálogo)', () => {
-    const todas = generarExportacion([liq()], opc(`columnas=${Object.entries(CATALOGO_COLUMNAS).filter(([, c]) => c.alcance === 'liquidacion').map(([k]) => k).join(',')}`));
+    const todas = generarExportacion([liq()], opc(`columnas=${Object.entries(CATALOGO_COLUMNAS).filter(([, c]) => !c.soloEn).map(([k]) => k).join(',')}`));
     expect(todas).not.toMatch(/525512345678|SECRETA|wamid/);
   });
 
