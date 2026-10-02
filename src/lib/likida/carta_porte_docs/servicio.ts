@@ -122,7 +122,13 @@ export async function validarDocumento(tenantId: string, doc: Pick<DocumentoFila
 export type ResultadoProceso =
   | { ok: true; estado: 'por_revisar'; origen: ResultadoExtraccion['origen']; nivel: number; costoUsd: number; listoParaAprobar: boolean }
   /** El archivo traía N embarques: quedó `dividido` y cada embarque es un documento hijo `recibido` (lo lee el cron o «Procesar»). */
-  | { ok: true; estado: 'dividido'; embarques: number; hijos: string[]; yaExistian: number }
+  | {
+    ok: true; estado: 'dividido'; embarques: number; hijos: string[]; yaExistian: number;
+    /** Hijos cuya huella era de un documento rechazado o fallido: volvieron a `recibido` (0672). La oficina debe saberlo. */
+    reabiertos?: number;
+    /** Hijos que ya existían, ya sin archivo (purgados): el archivo recién subido se borró en vez de quedar huérfano. */
+    sinArchivo?: number;
+  }
   | {
     ok: false; motivo: 'no_reclamable' | 'perdi_el_lease' | 'archivo' | 'ilegible' | 'presupuesto' | 'modelo'; mensaje: string; permanente: boolean;
     /** Solo con `motivo: 'presupuesto'`: qué techo se topó. `run` es el tope POR DOCUMENTO (culpa del archivo, cuenta como
@@ -163,10 +169,40 @@ async function dividirEnHijos(tenantId: string, doc: DocumentoFila, version: num
     hijos.map((h) => ({ indice: h.indice, clave: h.clave, nombre: h.nombre, sha256: h.sha256, bytes: h.bytes.length, storageRuta: rutaDe(tenantId, h.sha256) })),
     diasDespues(ahora, DIAS_RETENCION.recibido), diasDespues(ahora, DIAS_RETENCION.cerrado),
   );
+  if (r.estado === 'perdido') await limpiarArchivosHuerfanos(tenantId, doc.id, hijos.map((h) => h.sha256));
   if (r.estado !== 'ok') return r;
   const yaExistian = r.hijos.filter((h) => !h.creado).length;
-  logger.info('carta_porte_docs.dividido', { tenantId, documentoId: doc.id, embarques: hijos.length, yaExistian, columna: plan.origenColumna, avisos: plan.avisos });
-  return { estado: 'ok', resultado: { ok: true, estado: 'dividido', embarques: hijos.length, hijos: r.hijos.map((h) => h.documentoId), yaExistian } };
+  const reabiertos = r.hijos.filter((h) => h.accion === 'reabierto').length;
+  // M1 (ronda 15): un hijo que ya existía pero SIN archivo (purgado) dejaba el archivo recién subido sin dueño. Se borra.
+  const huerfanos = r.hijos.filter((h) => h.accion === 'sin_archivo');
+  for (const h of huerfanos) {
+    const sha = hijos[h.indice - 1]?.sha256;
+    if (!sha) continue;
+    try { await repo.borrarArchivo(rutaDe(tenantId, sha)); } catch (e) { logger.warn('carta_porte_docs.hijo_huerfano_no_borrado', { tenantId, documentoId: doc.id, err: resumenError(e) }); }
+  }
+  logger.info('carta_porte_docs.dividido', { tenantId, documentoId: doc.id, embarques: hijos.length, yaExistian, reabiertos, sinArchivo: huerfanos.length, columna: plan.origenColumna, avisos: plan.avisos });
+  return {
+    estado: 'ok',
+    resultado: { ok: true, estado: 'dividido', embarques: hijos.length, hijos: r.hijos.map((h) => h.documentoId), yaExistian, reabiertos, sinArchivo: huerfanos.length },
+  };
+}
+
+/**
+ * La RPC dijo «perdido»: este documento ya no es de quien lo reclamó. Los archivos de los hijos que se acababan de subir solo
+ * se borran si el padre YA NO EXISTE o se purgó (nadie los va a retener) y ninguna fila de la flota los usa; si el padre
+ * sigue vivo (otra invocación lo está dividiendo, o ya lo dividió), esos mismos archivos son de SUS hijos y no se tocan.
+ */
+async function limpiarArchivosHuerfanos(tenantId: string, padreId: string, huellas: string[]): Promise<void> {
+  try {
+    const padre = await repo.leerDocumento(tenantId, padreId);
+    if (padre && !padre.purgadoEn) return;
+    for (const sha of huellas) {
+      if (await repo.documentoPorHuella(tenantId, sha)) continue;
+      await repo.borrarArchivo(rutaDe(tenantId, sha));
+    }
+  } catch (e) {
+    logger.warn('carta_porte_docs.huerfanos_no_limpiados', { tenantId, documentoId: padreId, err: resumenError(e) });
+  }
 }
 
 export async function procesarDocumento(

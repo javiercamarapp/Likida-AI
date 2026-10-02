@@ -50,7 +50,7 @@ describe('dividirDocumento', () => {
   it('con la 0671: manda a la RPC el tenant, el padre, la versión reclamada, los hijos y las dos retenciones, y devuelve los ids', async () => {
     rpcs.cp_documento_dividir = { data: [{ indice: 1, documento_id: HIJO1, creado: true }, { indice: 2, documento_id: HIJO2, creado: false }], error: null };
     const r = await repo.dividirDocumento(T, PADRE, 7, hijosNuevos(), '2027-04-01T00:00:00Z', '2027-01-01T00:00:00Z');
-    expect(r).toEqual({ estado: 'ok', hijos: [{ indice: 1, documentoId: HIJO1, creado: true }, { indice: 2, documentoId: HIJO2, creado: false }] });
+    expect(r).toEqual({ estado: 'ok', hijos: [{ indice: 1, documentoId: HIJO1, creado: true, accion: 'creado' }, { indice: 2, documentoId: HIJO2, creado: false, accion: 'reutilizado' }] });
     expect(llamadasRpc).toHaveLength(1);
     expect(llamadasRpc[0].nombre).toBe('cp_documento_dividir');
     expect(llamadasRpc[0].args).toMatchObject({ p_tenant: T, p_padre: PADRE, p_version: 7, p_retener_hijos: '2027-04-01T00:00:00Z', p_retener_padre: '2027-01-01T00:00:00Z' });
@@ -73,6 +73,19 @@ describe('dividirDocumento', () => {
   it('cualquier OTRO error se lanza: un fallo de la base no se lee como «no había nada que dividir»', async () => {
     rpcs.cp_documento_dividir = { data: null, error: { message: 'statement timeout', code: '57014' } };
     await expect(repo.dividirDocumento(T, PADRE, 7, hijosNuevos(), 'x', 'y')).rejects.toThrow(/statement timeout/);
+  });
+});
+
+describe('dividirDocumento con la 0672 (accion por hijo)', () => {
+  it('lee la `accion` de cada hijo: creado, reabierto, reutilizado y sin_archivo', async () => {
+    rpcs.cp_documento_dividir = { data: [
+      { indice: 1, documento_id: HIJO1, creado: true, accion: 'creado' },
+      { indice: 2, documento_id: HIJO2, creado: false, accion: 'reabierto' },
+      { indice: 3, documento_id: HIJO2, creado: false, accion: 'sin_archivo' },
+      { indice: 4, documento_id: HIJO2, creado: false, accion: 'inventada' },
+    ], error: null };
+    const r = await repo.dividirDocumento(T, PADRE, 7, hijosNuevos(), 'x', 'y');
+    expect(r.estado === 'ok' && r.hijos.map((h) => h.accion)).toEqual(['creado', 'reabierto', 'sin_archivo', 'reutilizado']);
   });
 });
 

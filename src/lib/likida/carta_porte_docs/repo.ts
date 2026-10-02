@@ -670,8 +670,15 @@ export async function liberarAvisoDoc(tenantId: string, id: string, tipo: TipoAv
 
 export interface HijoNuevo { indice: number; clave: string; nombre: string; sha256: string; bytes: number; storageRuta: string }
 
+/**
+ * Qué pasó con cada hijo (0672): `creado` nació como documento nuevo; `reabierto` su huella era de un documento rechazado o
+ * fallido y volvió a `recibido` con el archivo nuevo; `reutilizado` ya había un documento vigente o aprobado (no se toca);
+ * `sin_archivo` ya había uno pero purgado: el archivo recién subido no lo retiene nadie y quien divide debe BORRARLO.
+ */
+export type AccionHijo = 'creado' | 'reabierto' | 'reutilizado' | 'sin_archivo';
+
 export type ResultadoDivision =
-  | { estado: 'ok'; hijos: Array<{ indice: number; documentoId: string; creado: boolean }> }
+  | { estado: 'ok'; hijos: Array<{ indice: number; documentoId: string; creado: boolean; accion: AccionHijo }> }
   /** El documento ya no es de quien lo reclamó (otra invocación lo terminó, venció el lease, se purgó). */
   | { estado: 'perdido' }
   | { estado: 'sin_migracion' };
@@ -690,7 +697,16 @@ export async function dividirDocumento(
   }
   const filas = (r.data ?? []) as unknown as Fila[];
   if (filas.length === 0) return { estado: 'perdido' };
-  return { estado: 'ok', hijos: filas.map((f) => ({ indice: Number(f.indice), documentoId: String(f.documento_id), creado: Boolean(f.creado) })) };
+  const ACCIONES: readonly string[] = ['creado', 'reabierto', 'reutilizado', 'sin_archivo'];
+  return {
+    estado: 'ok',
+    hijos: filas.map((f) => {
+      const creado = Boolean(f.creado);
+      // Una base con la 0671 pero sin la 0672 no manda `accion`: lo no creado se trata como reutilizado (el comportamiento de antes).
+      const accion = (typeof f.accion === 'string' && ACCIONES.includes(f.accion) ? f.accion : creado ? 'creado' : 'reutilizado') as AccionHijo;
+      return { indice: Number(f.indice), documentoId: String(f.documento_id), creado, accion };
+    }),
+  };
 }
 
 /** El linaje de un documento partido: el hijo apunta a su padre; el padre, a cuántos hijos tiene. */

@@ -67,7 +67,7 @@ describe('un Excel con N embarques se parte en N documentos hijos', () => {
     const r = await subirYDividir();
     expect(tipos(r.documentoId)).toEqual(['recibido', 'extraccion_iniciada', 'dividido']);
     const ev = estado.eventos.find((e) => e.documentoId === r.documentoId && e.tipo === 'dividido')!;
-    expect(ev.detalle).toEqual({ embarques: 3, nuevos: 3, ya_existian: 0 });
+    expect(ev.detalle).toMatchObject({ embarques: 3, nuevos: 3, ya_existian: 0, reabiertos: 0, sin_archivo: 0 });
     const primero = estado.eventos.find((e) => e.documentoId === hijosDe(r.documentoId)[0].documentoId)!;
     expect(primero.detalle).toMatchObject({ division: true, indice: 1, total: 3 });
   });
@@ -115,7 +115,7 @@ describe('un Excel con N embarques se parte en N documentos hijos', () => {
     expect(hijosDe(b.documentoId).map((h) => h.clave)).toEqual(['ATL-3']);
     expect(hijosDe(a.documentoId)).toHaveLength(2);
     expect([...estado.docs.values()].filter((d) => d.formato === 'csv' && d.tenantId === A)).toHaveLength(3);
-    expect(estado.eventos.find((e) => e.documentoId === b.documentoId && e.tipo === 'dividido')!.detalle).toEqual({ embarques: 3, nuevos: 1, ya_existian: 2 });
+    expect(estado.eventos.find((e) => e.documentoId === b.documentoId && e.tipo === 'dividido')!.detalle).toMatchObject({ embarques: 3, nuevos: 1, ya_existian: 2, reabiertos: 0 });
   });
 
   it('aislamiento: la misma planilla en OTRA flota se parte aparte y sus hijos no se mezclan', async () => {
@@ -187,6 +187,99 @@ describe('eliminar un archivo dividido (cancelación ARCO)', () => {
     expect(rutas.some((x) => estado.archivos.has(x))).toBe(false);
     expect(estado.archivos.has(`${A}/${estado.docs.get(r.documentoId)?.sha256 ?? 'x'}`)).toBe(false);
     expect([...estado.docs.values()].filter((d) => d.tenantId === A)).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RONDA 15, M1: un hijo con la huella de un documento ya RECHAZADO, FALLIDO o PURGADO se perdía sin aviso y su archivo quedaba huérfano.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('hijos cuya huella ya existía (M1, ronda 15)', () => {
+  const dias = [fila('ATL-1'), fila('ATL-2')];
+
+  /** Divide un Excel de 2 folios y deja al primer hijo en el estado dado. */
+  async function conHijoPrevio(cambios: Partial<import('./repo').DocumentoFila>) {
+    const a = await subirYDividir(A, dias);
+    const [h1] = hijosDe(a.documentoId);
+    const d = estado.docs.get(h1.documentoId)!;
+    Object.assign(d, cambios);
+    // Un padre nuevo con los mismos dos embarques (por ejemplo, el plan reenviado con otro nombre y una fila de más).
+    const b = await subirYDividir(A, [...dias, fila('ATL-3')]);
+    return { a, b, h1: d };
+  }
+
+  it('un hijo RECHAZADO se REABRE como recibido con el archivo nuevo, linaje bajo el padre nuevo, evento visible y la oficina lo ve en la bandeja', async () => {
+    const { b, h1 } = await conHijoPrevio({ estado: 'rechazado', rechazoMotivo: 'duplicado de otro viaje', revisadoPor: null });
+    expect(b.proceso).toMatchObject({ ok: true, estado: 'dividido', embarques: 3, yaExistian: 2, reabiertos: 1 });
+    const d = estado.docs.get(h1.id)!;
+    expect(d.estado).toBe('recibido');
+    expect(d.rechazoMotivo).toBeNull();
+    expect(d.intentos).toBe(0);
+    expect(estado.archivos.has(d.storageRuta!)).toBe(true);
+    expect(tipos(d.id)).toContain('reabierto');
+    expect(estado.eventos.find((e) => e.documentoId === d.id && e.tipo === 'reabierto')!.detalle).toMatchObject({ origen: 'division', estado_previo: 'rechazado', padre_id: b.documentoId });
+    expect(estado.embarques.find((e) => e.documentoId === d.id)).toMatchObject({ padreId: b.documentoId, indice: 1 });
+    expect(estado.eventos.find((e) => e.documentoId === b.documentoId && e.tipo === 'dividido')!.detalle).toMatchObject({ reabiertos: 1, sin_archivo: 0 });
+  });
+
+  it('un hijo FALLIDO también se reabre y vuelve a tener intentos', async () => {
+    const { b, h1 } = await conHijoPrevio({ estado: 'fallido', intentos: 5, ultimoError: 'no se pudo leer' });
+    expect(b.proceso).toMatchObject({ reabiertos: 1 });
+    expect(estado.docs.get(h1.id)).toMatchObject({ estado: 'recibido', intentos: 0, ultimoError: null });
+  });
+
+  it('un hijo ya APROBADO y PURGADO no se reabre (ya es un viaje) y su archivo recién subido se BORRA en vez de quedar huérfano', async () => {
+    const a = await subirYDividir(A, dias);
+    const [h1] = hijosDe(a.documentoId);
+    const d = estado.docs.get(h1.documentoId)!;
+    const ruta = d.storageRuta!;
+    Object.assign(d, { estado: 'aprobado', aprobadoEn: new Date().toISOString(), storageRuta: null, purgadoEn: new Date().toISOString() });
+    estado.archivos.delete(ruta); // la retención lo borró
+    const b = await subirYDividir(A, [...dias, fila('ATL-3')]);
+    expect(b.proceso).toMatchObject({ ok: true, estado: 'dividido', yaExistian: 2, reabiertos: 0, sinArchivo: 1 });
+    expect(estado.docs.get(h1.documentoId)!.estado).toBe('aprobado');
+    expect(estado.archivos.has(ruta)).toBe(false); // sin huérfano
+    expect(tipos(h1.documentoId)).toContain('duplicado_recibido');
+  });
+
+  it('un hijo vigente (por revisar) NO se toca y su archivo NO se borra', async () => {
+    const a = await subirYDividir(A, dias);
+    const [h1] = hijosDe(a.documentoId);
+    const ruta = estado.docs.get(h1.documentoId)!.storageRuta!;
+    await subirYDividir(A, [...dias, fila('ATL-3')]);
+    expect(estado.docs.get(h1.documentoId)!.estado).toBe('recibido');
+    expect(estado.archivos.has(ruta)).toBe(true);
+    expect(tipos(h1.documentoId)).toContain('duplicado_recibido');
+  });
+
+  it('el replay sobre un padre ya dividido devuelve TODOS los hijos, no solo los que tienen ficha', async () => {
+    const a = await subirYDividir(A, dias);
+    const b = await subirYDividir(A, [...dias, fila('ATL-3')]);
+    // El padre ya está dividido: la RPC no mira los hijos que llegan, devuelve los que tiene.
+    const hijos = [1, 2, 3].map((i) => ({ indice: i, clave: `x${i}`, nombre: `n${i}`, sha256: String(i).repeat(64), bytes: 1, storageRuta: `r${i}` }));
+    const r = await repo.dividirDocumento(A, b.documentoId, 99, hijos, 'x', 'y');
+    expect(r).toMatchObject({ estado: 'ok' });
+    if (r.estado === 'ok') {
+      expect(r.hijos.map((h) => h.indice)).toEqual([1, 2, 3]);
+      expect(r.hijos.every((h) => !h.creado && h.accion === 'reutilizado')).toBe(true);
+      expect(new Set(r.hijos.slice(0, 2).map((h) => h.documentoId))).toEqual(new Set(hijosDe(a.documentoId).map((h) => h.documentoId)));
+    }
+  });
+
+  it('si la RPC dice «perdido» y el original se purgó, los archivos recién subidos que ninguna fila retiene se borran', async () => {
+    const r = await subir(A, excelAtlas([fila('ATL-1'), fila('ATL-2')]), 'plan.xlsx');
+    estado.antesDeDividir = () => { const d = estado.docs.get(r.documentoId)!; d.purgadoEn = new Date().toISOString(); };
+    const antes = new Set(estado.archivos.keys());
+    const p = await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado });
+    expect(p).toMatchObject({ ok: false, motivo: 'perdi_el_lease' });
+    expect([...estado.archivos.keys()].filter((k) => !antes.has(k))).toEqual([]);
+  });
+
+  it('si la RPC dice «perdido» pero el original sigue vivo (otra invocación lo divide), los archivos NO se tocan', async () => {
+    const r = await subir(A, excelAtlas([fila('ATL-1'), fila('ATL-2')]), 'plan.xlsx');
+    estado.antesDeDividir = () => { estado.docs.get(r.documentoId)!.version += 1; };
+    const antes = new Set(estado.archivos.keys());
+    await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado });
+    expect([...estado.archivos.keys()].filter((k) => !antes.has(k))).toHaveLength(2);
   });
 });
 

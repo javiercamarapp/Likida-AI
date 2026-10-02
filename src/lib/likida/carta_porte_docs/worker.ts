@@ -87,6 +87,8 @@ export interface ResultadoWorker {
   omitidosPorPresupuesto: number;
   paradaPorFallosSeguidos: boolean;
   agotados: number;
+  /** M1: archivos partidos cuyos hijos ya existían (reabiertos o sin archivo) y de los que se avisó a la oficina. */
+  divisionesAvisadas: number;
   hallazgos: number;
   avisosEnviados: number;
   /** Rechazos reintentables: el aviso YA está en `wa_outbox` y el candado se quedó cerrado. NO se reenvía. */
@@ -102,7 +104,7 @@ export interface ResultadoWorker {
 
 const vacio = (): ResultadoWorker => ({
   pendientes: 0, procesados: 0, fallidos: 0, yaTomados: 0, divididos: 0, errores: 0, cortadosPorReloj: 0, paradaPorPresupuesto: false, omitidosPorPresupuesto: 0,
-  paradaPorFallosSeguidos: false, agotados: 0, hallazgos: 0, avisosEnviados: 0, avisosEnCola: 0, avisosFallidos: 0, avisosPerdidos: 0,
+  paradaPorFallosSeguidos: false, agotados: 0, divisionesAvisadas: 0, hallazgos: 0, avisosEnviados: 0, avisosEnCola: 0, avisosFallidos: 0, avisosPerdidos: 0,
   sinTelefono: 0, avisosSinMigracion: false, fallos: [],
 });
 
@@ -112,8 +114,6 @@ const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 export async function correrWorkerCartaPorte(deps: DepsWorker, opts: OpcionesWorker): Promise<ResultadoWorker> {
   const r = vacio();
   await procesarPendientes(deps, opts, r);
-  // Los avisos NO dependen del modelo: aunque el proveedor esté caído o el presupuesto agotado, la oficina se
-  // entera de lo que ya está listo (o perdido). Necesitan poco reloj: un envío a Meta.
   await avisarOficinaDe(deps, opts, r);
   return r;
 }
@@ -166,7 +166,15 @@ async function procesarPendientes(deps: DepsWorker, opts: OpcionesWorker, r: Res
     if (flotasSinPresupuesto.has(d.tenantId)) { r.omitidosPorPresupuesto++; continue; }
     try {
       const p = await deps.procesar(d.tenantId, d.id, deps.senal?.(Math.max(5_000, opts.venceEn - deps.ahora() - 8_000)));
-      if (p.ok) { r.procesados++; if (p.estado === 'dividido') r.divididos++; modeloSeguidos = 0; continue; }
+      if (p.ok) {
+        r.procesados++;
+        if (p.estado === 'dividido') {
+          r.divididos++;
+          if ((p.reabiertos ?? 0) > 0 || (p.sinArchivo ?? 0) > 0) await avisarDivisionConPrevios(deps, opts, d, p.embarques, p.reabiertos ?? 0, p.sinArchivo ?? 0, r);
+        }
+        modeloSeguidos = 0;
+        continue;
+      }
       if (p.motivo === 'no_reclamable' || p.motivo === 'perdi_el_lease') { r.yaTomados++; continue; }
       r.fallidos++;
       r.fallos.push(`${p.motivo}${p.permanente ? ' (permanente)' : ''}: ${p.mensaje.slice(0, 120)}`);
@@ -197,6 +205,46 @@ async function procesarPendientes(deps: DepsWorker, opts: OpcionesWorker, r: Res
 }
 
 // ── Avisar a la oficina ─────────────────────────────────────────────────────
+
+/**
+ * M1 (ronda 15): un archivo con varios embarques se partió y algunos hijos YA existían como documentos rechazados o fallidos
+ * (se reabrieron) o ya resueltos pero purgados (no se vuelven a leer). Sin este aviso la oficina no se enteraba de que un
+ * embarque volvió a la bandeja. Una vez por división: el padre queda `dividido` y no se vuelve a procesar. Mejor esfuerzo.
+ */
+async function avisarDivisionConPrevios(
+  deps: DepsWorker, opts: OpcionesWorker, d: DocPendiente, embarques: number, reabiertos: number, sinArchivo: number, r: ResultadoWorker,
+): Promise<void> {
+  try {
+    const tel = await deps.telefonoOficina(d.tenantId).catch(() => null);
+    if (!tel) { r.sinTelefono++; logger.error('cp_worker.aviso_sin_telefono_de_oficina', { tenantId: d.tenantId, documentoId: d.id, tipo: 'division' }); return; }
+    const doc = await deps.leer(d.tenantId, d.id);
+    if (!doc) return;
+    const liga = `${opts.urlBandeja}/${doc.id}`;
+    const { texto, resumen } = armarAvisoDivision(doc, embarques, reabiertos, sinArchivo, liga);
+    const envio = await deps.avisar(tel, texto, parametrosAvisoOficina('Carta Porte', resumen, liga), { agente: 'carta_porte', tenantId: d.tenantId, documentoId: d.id, tipo: 'division_con_previos' });
+    r.divisionesAvisadas++;
+    if (envio.ok || envio.reintentable || envio.encolado) {
+      await deps.evento(d.tenantId, d.id, 'aviso_oficina', { tipo: 'division_con_previos', via: envio.ok ? envio.via : 'en_cola_outbox' }).catch(() => {});
+    } else {
+      r.fallos.push(`aviso division: ${envio.motivo.slice(0, 120)}`);
+    }
+  } catch (e) {
+    r.errores++;
+    r.fallos.push(`aviso division ${d.id.slice(0, 8)}: ${msg(e)}`);
+    logger.error('cp_worker.aviso_division_fallo', { documentoId: d.id, err: msg(e) });
+  }
+}
+
+export function armarAvisoDivision(doc: DocumentoFila, embarques: number, reabiertos: number, sinArchivo: number, liga: string): { texto: string; resumen: string } {
+  const nombre = doc.nombreArchivo.length > 60 ? `${doc.nombreArchivo.slice(0, 59)}…` : doc.nombreArchivo;
+  const partes: string[] = [];
+  if (reabiertos > 0) partes.push(`${reabiertos} ${reabiertos === 1 ? 'embarque ya estaba en la bandeja rechazado o fallido y se reabrió' : 'embarques ya estaban en la bandeja rechazados o fallidos y se reabrieron'} para revisarse de nuevo`);
+  if (sinArchivo > 0) partes.push(`${sinArchivo} ${sinArchivo === 1 ? 'ya estaba resuelto y su archivo se purgó' : 'ya estaban resueltos y sus archivos se purgaron'} (no se vuelve a leer)`);
+  return {
+    texto: [`📄 El archivo «${nombre}» traía ${embarques} embarques:`, `${partes.join('; ')}.`, `Revísalo aquí: ${liga}`].join(' '),
+    resumen: 'Un archivo de Carta Porte repitió embarques ya conocidos',
+  };
+}
 
 async function avisarOficinaDe(deps: DepsWorker, opts: OpcionesWorker, r: ResultadoWorker): Promise<void> {
   let presupuesto = TOPE_AVISOS_POR_PASADA;

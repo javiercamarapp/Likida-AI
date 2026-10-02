@@ -389,7 +389,11 @@ export const api: typeof Real = {
     const pad = estado.docs.get(padreId);
     if (!pad || pad.tenantId !== tenantId) throw new Error('cp_documento_dividir: el documento no existe en esta flota');
     if (pad.estado === 'dividido') {
-      return { estado: 'ok', hijos: estado.embarques.filter((e) => e.tenantId === tenantId && e.padreId === padreId).sort((a, b) => a.indice - b.indice).map((e) => ({ indice: e.indice, documentoId: e.documentoId, creado: false })) };
+      // 0672: el replay devuelve TODOS los hijos (los de la lista del evento «dividido»), no solo los que tienen ficha.
+      const ev = [...estado.eventos].reverse().find((e) => e.documentoId === padreId && e.tipo === 'dividido');
+      const lista = (ev?.detalle.hijos ?? []) as Array<{ indice: number; documento_id: string }>;
+      if (lista.length > 0) return { estado: 'ok', hijos: lista.map((x) => ({ indice: x.indice, documentoId: x.documento_id, creado: false, accion: 'reutilizado' as const })) };
+      return { estado: 'ok', hijos: estado.embarques.filter((e) => e.tenantId === tenantId && e.padreId === padreId).sort((a, b) => a.indice - b.indice).map((e) => ({ indice: e.indice, documentoId: e.documentoId, creado: false, accion: 'reutilizado' as const })) };
     }
     if (pad.estado !== 'procesando' || pad.version !== versionReclamada || pad.purgadoEn) return { estado: 'perdido' };
     const huellas = new Set<string>();
@@ -399,11 +403,36 @@ export const api: typeof Real = {
       huellas.add(h.sha256);
       if (h.indice !== i + 1) throw new Error('cp_documento_dividir: los índices deben ir de 1 a n sin huecos');
     });
-    const salida: Array<{ indice: number; documentoId: string; creado: boolean }> = [];
-    let nuevos = 0;
+    const salida: Array<{ indice: number; documentoId: string; creado: boolean; accion: Real.AccionHijo }> = [];
+    let nuevos = 0; let reabiertos = 0; let sinArchivo = 0;
     for (const h of hijos) {
       const previo = [...estado.docs.values()].find((x) => x.tenantId === tenantId && x.sha256 === h.sha256);
-      if (previo) { salida.push({ indice: h.indice, documentoId: previo.id, creado: false }); continue; }
+      if (previo && (previo.estado === 'rechazado' || previo.estado === 'fallido')) {
+        // 0672: un embarque sin documento legible se REABRE con el archivo nuevo en vez de perderse.
+        const estadoPrevio = previo.estado;
+        Object.assign(previo, {
+          estado: 'recibido', version: previo.version + 1, intentos: 0, procesandoHasta: null, ultimoError: null, rechazoMotivo: null,
+          storageRuta: h.storageRuta, purgadoEn: null, bytes: h.bytes, formato: 'csv', mime: 'text/csv', retenerHasta: retenerHijos,
+          perfilId: null, perfilVersion: null, textoExtracto: null, riesgoInyeccion: false, extraccion: null, validacion: null,
+          confianzaMin: null, nivelModelo: null, modelo: null, tokensIn: 0, tokensOut: 0, costoUsd: 0, abiertoEn: null, revisadoPor: null,
+          tiempoRevisionSeg: null, updatedAt: ahoraIso(),
+        });
+        estado.avisos.delete(previo.id);
+        const i = estado.embarques.findIndex((e) => e.documentoId === previo.id);
+        if (i >= 0) estado.embarques.splice(i, 1);
+        estado.embarques.push({ documentoId: previo.id, tenantId, padreId, huellaBase: pad.sha256, indice: h.indice, total: hijos.length, clave: h.clave.slice(0, 120) });
+        estado.eventos.push({ tenantId, documentoId: previo.id, tipo: 'reabierto', actorId: null, detalle: { origen: 'division', estado_previo: estadoPrevio, padre_id: padreId, indice: h.indice, total: hijos.length }, creadoEn: ahoraIso() });
+        reabiertos++;
+        salida.push({ indice: h.indice, documentoId: previo.id, creado: false, accion: 'reabierto' });
+        continue;
+      }
+      if (previo) {
+        const accion: Real.AccionHijo = !previo.storageRuta || previo.purgadoEn ? 'sin_archivo' : 'reutilizado';
+        if (accion === 'sin_archivo') sinArchivo++;
+        estado.eventos.push({ tenantId, documentoId: previo.id, tipo: 'duplicado_recibido', actorId: null, detalle: { origen: 'division', estado: previo.estado, padre_id: padreId, indice: h.indice, total: hijos.length }, creadoEn: ahoraIso() });
+        salida.push({ indice: h.indice, documentoId: previo.id, creado: false, accion });
+        continue;
+      }
       const id = `hijo-${++estado.seq}-${h.indice}`;
       estado.docs.set(id, {
         ...clon(pad), id, formato: 'csv', nombreArchivo: h.nombre.slice(0, 255), mime: 'text/csv', bytes: h.bytes, sha256: h.sha256, storageRuta: h.storageRuta,
@@ -415,10 +444,17 @@ export const api: typeof Real = {
       estado.embarques.push({ documentoId: id, tenantId, padreId, huellaBase: pad.sha256, indice: h.indice, total: hijos.length, clave: h.clave.slice(0, 120) });
       estado.eventos.push({ tenantId, documentoId: id, tipo: 'recibido', actorId: null, detalle: { canal: pad.canal, formato: 'csv', bytes: h.bytes, division: true, indice: h.indice, total: hijos.length }, creadoEn: ahoraIso() });
       nuevos++;
-      salida.push({ indice: h.indice, documentoId: id, creado: true });
+      salida.push({ indice: h.indice, documentoId: id, creado: true, accion: 'creado' });
     }
     pad.estado = 'dividido'; pad.version++; pad.procesandoHasta = null; pad.ultimoError = null; pad.retenerHasta = retenerPadre; pad.updatedAt = ahoraIso();
-    estado.eventos.push({ tenantId, documentoId: padreId, tipo: 'dividido', actorId: null, detalle: { embarques: hijos.length, nuevos, ya_existian: hijos.length - nuevos }, creadoEn: ahoraIso() });
+    estado.eventos.push({
+      tenantId, documentoId: padreId, tipo: 'dividido', actorId: null,
+      detalle: {
+        embarques: hijos.length, nuevos, ya_existian: hijos.length - nuevos, reabiertos, sin_archivo: sinArchivo,
+        hijos: salida.map((x) => ({ indice: x.indice, documento_id: x.documentoId, accion: x.accion })),
+      },
+      creadoEn: ahoraIso(),
+    });
     return { estado: 'ok', hijos: salida };
   },
   async linajeDeDocumentos(tenantId, ids) {
