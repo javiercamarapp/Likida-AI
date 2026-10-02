@@ -19376,3 +19376,56 @@ begin
   raise exception E'VIGIA_CORREO_0673 sin-repetidos=% otro-nivel-y-flota=% tope-10=% tope-cambio-nivel=% ajeno-no-existe=% reclamo-unico=% arriendo-retoma=% token-viejo-no-cierra=% cerrado-no-se-reclama=% fk-compuesta=% abandona-6h=% evento-dominio=% solo-servicio=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t / t)',
     sin_rep, otro, tope, tope_nivel, ajeno, unico, retoma, viejo, cerrado, fk, abandona, evento, solo;
 end $$;
+
+-- ── 335. Vigía, la lista de directores y los correos de respaldo solo los lee el dueño de la flota (mig. 0677) ──
+-- La 0673/0674 dejaban leer por PostgREST la lista de directores (teléfonos y correos completos) y los destinos de los correos de respaldo a todo
+-- el que «atiende clientes» (flota_admin y encargado). La pantalla ya los enmascaraba para el encargado, pero con su JWT el encargado los pedía
+-- completos. Lo que solo la base demuestra: el dueño lee los de SU flota y solo esos, el encargado y el contador no leen nada, el dueño de otra
+-- flota no ve los de ésta, y `es_dueno_flota()` no es ejecutable por anon.
+-- Esperado: VIGIA_DUENO_0677 dueno-lee-lo-suyo=t dueno-no-ve-otra-flota=t encargado-no-lee=t contador-no-lee=t anon-sin-funcion=t
+do $$
+declare
+  ta uuid; tb uuid; ca uuid; cb uuid; con_a uuid; con_b uuid; conv_a uuid; conv_b uuid; ua uuid; ue uuid; uc uuid;
+  dueno boolean := false; otra boolean := false; encargado boolean := false; contador boolean := false; anon boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0677 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0677 B') returning id into tb;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ 0677 CA') returning id into ca;
+  insert into cliente (tenant_id, nombre) values (tb, 'ZZZ 0677 CB') returning id into cb;
+  ua := gen_random_uuid(); ue := gen_random_uuid(); uc := gen_random_uuid();
+  insert into app_user (id, tenant_id, email, rol) values (ua, ta, 'dueno-0677@test.invalid', 'flota_admin');
+  insert into app_user (id, tenant_id, email, rol) values (ue, ta, 'encargado-0677@test.invalid', 'encargado');
+  insert into app_user (id, tenant_id, email, rol) values (uc, ta, 'contador-0677@test.invalid', 'contador');
+  insert into vigia_contacto (tenant_id, cliente_id, telefono, telefono_hash, nombre, consentimiento_en, consentimiento_origen)
+    values (ta, ca, '525577990001', repeat('d', 64), 'Compras A', now(), 'alta_flota') returning id into con_a;
+  insert into vigia_contacto (tenant_id, cliente_id, telefono, telefono_hash, nombre, consentimiento_en, consentimiento_origen)
+    values (tb, cb, '525577990002', repeat('e', 64), 'Compras B', now(), 'alta_flota') returning id into con_b;
+  insert into vigia_conversacion (tenant_id, contacto_id, cliente_id) values (ta, con_a, ca) returning id into conv_a;
+  insert into vigia_conversacion (tenant_id, contacto_id, cliente_id) values (tb, con_b, cb) returning id into conv_b;
+  perform vigia_director_guardar(ta, null, 1, 'Ana', '525511110677', 'ana-0677@test.invalid', null);
+  perform vigia_director_guardar(tb, null, 1, 'Beto', '525511110678', 'beto-0677@test.invalid', null);
+  perform vigia_correo_reclamar(ta, conv_a, 'zzz-0677-a', 1, null, 'ana-0677@test.invalid', '{}'::jsonb);
+  perform vigia_correo_reclamar(tb, conv_b, 'zzz-0677-b', 1, null, 'beto-0677@test.invalid', '{}'::jsonb);
+
+  perform set_config('request.jwt.claims', json_build_object('sub', ua, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  dueno := (select count(*) from vigia_director where telefono = '525511110677' and correo = 'ana-0677@test.invalid') = 1
+    and (select count(*) from vigia_aviso_correo where destino_correo = 'ana-0677@test.invalid') = 1;
+  otra := not exists (select 1 from vigia_director where tenant_id = tb) and not exists (select 1 from vigia_aviso_correo where tenant_id = tb);
+  execute 'reset role';
+
+  perform set_config('request.jwt.claims', json_build_object('sub', ue, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  encargado := not exists (select 1 from vigia_director) and not exists (select 1 from vigia_aviso_correo);
+  execute 'reset role';
+
+  perform set_config('request.jwt.claims', json_build_object('sub', uc, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  contador := not exists (select 1 from vigia_director) and not exists (select 1 from vigia_aviso_correo);
+  execute 'reset role';
+
+  anon := not has_function_privilege('anon', 'public.es_dueno_flota()', 'execute') and not has_function_privilege('public', 'public.es_dueno_flota()', 'execute');
+
+  raise exception E'VIGIA_DUENO_0677 dueno-lee-lo-suyo=% dueno-no-ve-otra-flota=% encargado-no-lee=% contador-no-lee=% anon-sin-funcion=%   (esperado t / t / t / t / t)',
+    dueno, otra, encargado, contador, anon;
+end $$;
