@@ -23,10 +23,4 @@ describe('Agente 6 — Autofactura (migraciones 0540-0542; paquete P11)', () => 
   it.todo('OTRO TENANT: credenciales, cupo y bandera de emisión real son por flota; la flota B no puede promover ni consumir el lote de la A');
 });
 
-describe('Agente 12 — Jornada: alerta saliente al acercarse al tope (cron jornada-alertas; sin UI para encenderla, paquete P10)', () => {
-  it.todo('FELIZ: el cron jornada-alertas avisa al operador y al jefe cuando la jornada derivada (marcas + GPS) se acerca al tope, con la plantilla Meta del catálogo');
-  it.todo('FALLO: sin GPS ni marcas no se afirma nada («nunca certifica que cumple»); plantilla sin aprobar con ventana cerrada deja el aviso sin sello y se reintenta');
-  it.todo('DUPLICADO: el cron cada hora no repite la alerta del mismo umbral en la misma jornada');
-  it.todo('FUERA DE ORDEN: una marca de «descanso» tardía reabre/cierra el cálculo y cancela la alerta pendiente sin avisar de más');
-  it.todo('OTRO TENANT: topes y destinatarios de cada flota; la alerta de A jamás llega al jefe de B');
-});
+// Agente 12 — Jornada: sus cinco casos ya son pruebas verdes en `agente-12-jornada.e2e.test.ts`.
