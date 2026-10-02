@@ -41,4 +41,9 @@ describe('sección GPS de Conexiones', () => {
   it('sin huérfanos lo dice en verde', () => {
     expect(renderToStaticMarkup(<SeccionGps {...base} huerfanos={[]} />)).toContain('Ningún dispositivo huérfano');
   });
+  it('el importador de geocercas solo aparece con la tabla propia conectada y para quien administra', () => {
+    expect(renderToStaticMarkup(<SeccionGps {...base} />)).not.toContain('Importar mis geocercas');
+    expect(renderToStaticMarkup(<SeccionGps {...base} importarGeocercas={accion} />)).toContain('Importar mis geocercas');
+    expect(renderToStaticMarkup(<SeccionGps {...base} importarGeocercas={accion} puedeAdministrarGps={false} />)).not.toContain('Importar mis geocercas');
+  });
 });

@@ -16,7 +16,8 @@ import {
   SeccionCredenciales, catalogoParaCaptura, pistasConRotulo, type CredencialPantalla,
 } from './seccion-credenciales';
 import { SeccionIntegraciones } from './seccion-integraciones';
-import { SeccionGps, type ResultadoSecreto } from './seccion-gps';
+import { SeccionGps, type ResultadoSecreto, type ResultadoImportGeocercas } from './seccion-gps';
+import { importarGeocercasDeTablaPropia } from '@/lib/likida/conectores/tabla_propia/importar_geocercas';
 import { VistaConexiones } from './vista';
 import { armarPanelGps } from '@/lib/likida/gps_push/panel';
 import { generarSecretoPush } from '@/lib/likida/gps_push/datos';
@@ -197,6 +198,18 @@ export default async function PaginaConexiones({
     return r;
   }
 
+  /** Trae las geocercas de «mis propias tablas» al catálogo de sitios (el permiso lo vuelve a comprobar la acción). */
+  async function importarGeocercas(_previo: ResultadoImportGeocercas, _fd: FormData): Promise<ResultadoImportGeocercas> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA, sp);
+    if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) return { ok: false, error: 'Solo el dueño de la flota importa sus geocercas.' };
+    const r = await importarGeocercasDeTablaPropia({ tenantId: s.tenantId, rol: s.rol });
+    if (!r.ok) return r;
+    revalidatePath(RUTA);
+    return { ok: true, mensaje: `Importado: ${r.creados} sitio${r.creados === 1 ? '' : 's'} nuevo${r.creados === 1 ? '' : 's'} y ${r.actualizados} actualizado${r.actualizados === 1 ? '' : 's'}.`, aproximadas: r.aproximadas.length };
+  }
+  const tieneTablaPropia = (guardadasCrudas ?? []).some((c) => c.conectorId === 'tabla_propia' && c.activo);
+
   return (
     <VistaConexiones
       conectores={conectores}
@@ -210,6 +223,7 @@ export default async function PaginaConexiones({
           huerfanos={panelGps.huerfanos} hayMasHuerfanos={panelGps.hayMasHuerfanos} conteos={panelGps.conteos}
           puedeAdministrarGps={puedeAdministrar(rol)} generarSecreto={generarSecreto} mapear={mapearGps}
           plantillaCsv={plantillaGpsCsv()} hrefPatios={`/dashboard/patios${sufijoTenant(sp)}`}
+          importarGeocercas={tieneTablaPropia ? importarGeocercas : undefined}
         />
       )}
       credenciales={(
