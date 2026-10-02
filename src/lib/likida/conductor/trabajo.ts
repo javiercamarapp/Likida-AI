@@ -5,6 +5,11 @@ import { COLUMNAS_HITO, COLUMNAS_VIAJE_CTX, filaAHito, filaAViajeCtx, type Viaje
 import type { AvisoReclamado } from './planificador';
 import type { HitoFila } from './tipos';
 import { debeReintentarseValidacion } from './validacion';
+import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from './geometria_datos';
+import type { MuestraGps, SitioGps, SitiosViaje, UnidadDeViaje } from './ciclo_gps';
+import type { CandidatoSitio, LadoViaje, SitioCatalogo } from './sitio_derivado';
+import { faltaEsquema, filaAEpisodio } from './repo';
+import type { EstadoEpisodios } from './senal_vida';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA LISTA DE TRABAJO DEL CRON `conductor-hitos` — las lecturas que CRUZAN flotas.
@@ -144,6 +149,153 @@ export async function leerSitiosDeViajes(viajeIds: string[]): Promise<Map<string
     const filas = await traerTodo<Fila>((desde, hasta) => acotada(supabaseAdmin()
       .from('viaje').select('id, origen_geocerca_id, destino_geocerca_id').in('id', ids).order('id').range(desde, hasta), 'conductor.sitios_viajes') as never, 'conductor.sitios_viajes');
     for (const f of filas) salida.set(String(f.id), { origen: typeof f.origen_geocerca_id === 'string', destino: typeof f.destino_geocerca_id === 'string' });
+  }
+  return salida;
+}
+
+/**
+ * Los sitios (con su polígono nativo si lo tienen) que cada viaje espera para cargar y descargar. Cruza flotas a propósito:
+ * el barrido del ciclo por geocerca es del cron. El sitio de un viaje es de SU flota (FK compuesta con tenant, 0385) y aun así
+ * se acota la lectura del catálogo por las flotas de los viajes. Un sitio archivado no cuenta (es como no tenerlo).
+ */
+export async function leerSitiosGeometriaDeViajes(viajes: Array<{ id: string; tenantId: string }>): Promise<Map<string, SitiosViaje>> {
+  const salida = new Map<string, SitiosViaje>();
+  if (viajes.length === 0) return salida;
+  const tenants = [...new Set(viajes.map((v) => v.tenantId))];
+  const asignados = new Map<string, { origen: string | null; destino: string | null }>();
+  for (const ids of trozos(viajes.map((v) => v.id), 150)) {
+    const filas = await traerTodo<Fila>((desde, hasta) => acotada(supabaseAdmin()
+      .from('viaje').select('id, origen_geocerca_id, destino_geocerca_id').in('tenant_id', tenants).in('id', ids).order('id').range(desde, hasta), 'conductor.ciclo_sitios_viajes') as never, 'conductor.ciclo_sitios_viajes');
+    for (const f of filas) asignados.set(String(f.id), { origen: typeof f.origen_geocerca_id === 'string' ? f.origen_geocerca_id : null, destino: typeof f.destino_geocerca_id === 'string' ? f.destino_geocerca_id : null });
+  }
+  const sitioIds = [...new Set([...asignados.values()].flatMap((a) => [a.origen, a.destino]).filter((x): x is string => x !== null))];
+  const sitios = new Map<string, SitioGps>();
+  for (const ids of trozos(sitioIds, 150)) {
+    const g = await conPoligonoOCirculo((conPoligono) => acotada(supabaseAdmin().from('geocerca')
+      .select(conPoligono ? `id, nombre, lat, lng, radio_m, ${COLUMNAS_POLIGONO}` : 'id, nombre, lat, lng, radio_m')
+      .in('tenant_id', tenants).in('id', ids).eq('activa', true), 'conductor.ciclo_sitios'));
+    for (const f of (exigir(g as never, 'conductor.ciclo_sitios') ?? []) as unknown as Fila[]) {
+      sitios.set(String(f.id), { id: String(f.id), nombre: String(f.nombre), lat: Number(f.lat), lng: Number(f.lng), radioM: Number(f.radio_m), ...geometriaDeFila(f) });
+    }
+  }
+  for (const [viajeId, a] of asignados) {
+    salida.set(viajeId, { origen: a.origen ? sitios.get(a.origen) ?? null : null, destino: a.destino ? sitios.get(a.destino) ?? null : null });
+  }
+  return salida;
+}
+
+/**
+ * Las muestras de GPS de verdad (el pin de WhatsApp NO: lo elige el chofer, no mide dónde está el tractor) de cada unidad desde
+ * `desde`, de la más vieja a la más reciente. Llave `<tenant>|<unidad>`. Cruza flotas a propósito (cron); cada lectura se acota
+ * por las flotas de las unidades pedidas.
+ */
+export async function leerMuestrasGps(unidades: UnidadDeViaje[], desde: Date): Promise<Map<string, MuestraGps[]>> {
+  const salida = new Map<string, MuestraGps[]>();
+  if (unidades.length === 0) return salida;
+  const tenants = [...new Set(unidades.map((u) => u.tenantId))];
+  const pedidas = new Set(unidades.map((u) => `${u.tenantId}|${u.unidadId}`));
+  for (const ids of trozos([...new Set(unidades.map((u) => u.unidadId))], 100)) {
+    const filas = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('posicion').select('tenant_id, unidad_id, lat, lng, medida_en')
+      .in('tenant_id', tenants).in('unidad_id', ids).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString())
+      .order('medida_en', { ascending: true }).order('id').range(d, h), 'conductor.ciclo_muestras') as never, 'conductor.ciclo_muestras');
+    for (const f of filas) {
+      const llave = `${String(f.tenant_id)}|${String(f.unidad_id)}`;
+      if (!pedidas.has(llave)) continue; // la combinación flota/unidad que no se pidió no es de esta corrida
+      salida.set(llave, [...(salida.get(llave) ?? []), { lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(String(f.medida_en)) }]);
+    }
+  }
+  return salida;
+}
+
+/**
+ * Los viajes abiertos y aceptados a los que les falta el sitio de carga o de descarga, con el texto de su origen y destino, su
+ * cliente y qué lados ya se derivaron una vez (0637; una base sin esa tabla se lee como «ninguno»). Cruza flotas a propósito
+ * (cron); cada candidato lleva su `tenantId` y todo lo posterior se ancla a él. Los más recientes primero.
+ */
+export async function leerCandidatosSitioDerivado(limite: number): Promise<CandidatoSitio[]> {
+  const res = await acotada(supabaseAdmin().from('viaje')
+    .select('id, tenant_id, origen, destino, cliente_id, origen_geocerca_id, destino_geocerca_id')
+    .eq('estatus', 'abierto').not('aceptado_en', 'is', null).or('origen_geocerca_id.is.null,destino_geocerca_id.is.null')
+    .order('aceptado_en', { ascending: false }).order('id').limit(limite), 'conductor.sitio_derivado_viajes');
+  const viajes = (exigir(res as never, 'conductor.sitio_derivado_viajes') ?? []) as unknown as Fila[];
+  if (viajes.length === 0) return [];
+
+  const derivados = new Map<string, Set<LadoViaje>>();
+  for (const ids of trozos(viajes.map((v) => String(v.id)), 150)) {
+    const rd = await acotada(supabaseAdmin().from('viaje_sitio_derivado').select('viaje_id, lado').in('viaje_id', ids), 'conductor.sitio_derivado_previos');
+    if (rd.error) {
+      if (faltaEsquema(rd.error, /viaje_sitio_derivado/i)) break; // base sin la 0637: no hay derivaciones previas que respetar
+      throw new Error(`conductor.sitio_derivado_previos: ${rd.error.message}`);
+    }
+    for (const f of (rd.data ?? []) as unknown as Fila[]) {
+      const k = String(f.viaje_id);
+      derivados.set(k, (derivados.get(k) ?? new Set()).add(f.lado === 'destino' ? 'destino' : 'origen'));
+    }
+  }
+  return viajes.map((v): CandidatoSitio => {
+    const conSitio = new Set<LadoViaje>();
+    if (typeof v.origen_geocerca_id === 'string') conSitio.add('origen');
+    if (typeof v.destino_geocerca_id === 'string') conSitio.add('destino');
+    return {
+      tenantId: String(v.tenant_id), viajeId: String(v.id), origen: typeof v.origen === 'string' ? v.origen : null,
+      destino: typeof v.destino === 'string' ? v.destino : null, clienteId: typeof v.cliente_id === 'string' ? v.cliente_id : null,
+      conSitio, yaDerivados: derivados.get(String(v.id)) ?? new Set(),
+    };
+  });
+}
+
+/** Los sitios ACTIVOS del catálogo del Conductor de cada flota (el de peajes es de otra pantalla). Acotado a las flotas pedidas. */
+export async function leerCatalogoSitios(tenantIds: string[]): Promise<Map<string, SitioCatalogo[]>> {
+  const salida = new Map<string, SitioCatalogo[]>();
+  if (tenantIds.length === 0) return salida;
+  const filas = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('geocerca').select('id, tenant_id, nombre, codigo, cliente_id')
+    .in('tenant_id', tenantIds).eq('catalogo', 'conductor').eq('activa', true).order('id').range(d, h), 'conductor.sitio_derivado_catalogo') as never, 'conductor.sitio_derivado_catalogo');
+  for (const f of filas) {
+    const t = String(f.tenant_id);
+    salida.set(t, [...(salida.get(t) ?? []), {
+      id: String(f.id), nombre: String(f.nombre), codigo: typeof f.codigo === 'string' ? f.codigo : null, clienteId: typeof f.cliente_id === 'string' ? f.cliente_id : null,
+    }]);
+  }
+  return salida;
+}
+
+/**
+ * Los episodios de «sin señal de vida» de estos viajes: el abierto (si lo hay) y el silencio vigente que dejó la respuesta del chofer.
+ * Cruza flotas a propósito (cron). Una base sin la 0636 se lee como «sin episodios» (la perilla de la flota tampoco existe: apagada).
+ */
+export async function leerEpisodiosSenalVida(viajeIds: string[], ahora: Date): Promise<Map<string, EstadoEpisodios>> {
+  const salida = new Map<string, EstadoEpisodios>();
+  for (const ids of trozos(viajeIds, 150)) {
+    const res = await acotada(supabaseAdmin().from('viaje_senal_vida')
+      .select('id, tenant_id, viaje_id, motivo, abierto_en, nivel_enviado, aviso_1_en, aviso_2_en, escalado_en, cerrado_en, silenciado_hasta')
+      .in('viaje_id', ids).or(`cerrado_en.is.null,silenciado_hasta.gt.${ahora.toISOString()}`).order('abierto_en', { ascending: false }).order('id').limit(ids.length * 3), 'conductor.senal_episodios');
+    if (res.error) {
+      if (faltaEsquema(res.error, /viaje_senal_vida/i)) return salida;
+      throw new Error(`conductor.senal_episodios: ${res.error.message}`);
+    }
+    for (const f of (res.data ?? []) as unknown as Fila[]) {
+      const k = String(f.viaje_id);
+      const previo = salida.get(k) ?? { abierto: null, silenciadoHasta: null };
+      if (f.cerrado_en === null || f.cerrado_en === undefined) previo.abierto = filaAEpisodio(f);
+      else if (typeof f.silenciado_hasta === 'string') {
+        const t = new Date(f.silenciado_hasta);
+        if (!previo.silenciadoHasta || t.getTime() > previo.silenciadoHasta.getTime()) previo.silenciadoHasta = t;
+      }
+      salida.set(k, previo);
+    }
+  }
+  return salida;
+}
+
+/** La hora de la última muestra de GPS de verdad de cada unidad desde `desde` (una consulta por unidad; son pocas: solo las que no tienen muestras recientes). */
+export async function leerUltimaMuestraGps(unidades: UnidadDeViaje[], desde: Date): Promise<Map<string, Date>> {
+  const salida = new Map<string, Date>();
+  for (const u of unidades.slice(0, 200)) {
+    const res = await acotada(supabaseAdmin().from('posicion').select('medida_en')
+      .eq('tenant_id', u.tenantId).eq('unidad_id', u.unidadId).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString())
+      .order('medida_en', { ascending: false }).order('id').limit(1), 'conductor.senal_ultima_muestra');
+    const f = ((exigir(res as never, 'conductor.senal_ultima_muestra') ?? []) as unknown as Fila[])[0];
+    if (f && typeof f.medida_en === 'string') salida.set(`${u.tenantId}|${u.unidadId}`, new Date(f.medida_en));
   }
   return salida;
 }
