@@ -1,0 +1,44 @@
+{
+  "afb": {
+    "mensajes": 214,
+    "preguntas": 104,
+    "sin_respuesta_10min": 21,
+    "por_tema": {
+      "placas": 22,
+      "documentos": 17,
+      "eta": 22,
+      "cita": 15,
+      "ubicacion": 17,
+      "queja": 11
+    },
+    "quejas": 11
+  },
+  "arr": {
+    "mensajes": 235,
+    "preguntas": 111,
+    "sin_respuesta_10min": 24,
+    "por_tema": {
+      "ubicacion": 17,
+      "placas": 15,
+      "queja": 20,
+      "eta": 20,
+      "documentos": 26,
+      "cita": 13
+    },
+    "quejas": 20
+  },
+  "cfn": {
+    "mensajes": 214,
+    "preguntas": 103,
+    "sin_respuesta_10min": 21,
+    "por_tema": {
+      "eta": 19,
+      "cita": 20,
+      "documentos": 20,
+      "ubicacion": 10,
+      "placas": 26,
+      "queja": 8
+    },
+    "quejas": 8
+  }
+}

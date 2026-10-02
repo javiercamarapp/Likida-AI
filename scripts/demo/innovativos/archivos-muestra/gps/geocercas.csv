@@ -1,0 +1,18 @@
+codigo,nombre,tipo,lat_centro,lon_centro,radio_m,poligono_wkt,cliente
+PATIO-APO,Patio Apodaca,circulo,25.780000,-100.190000,600,,
+PATIO-GDL,Patio Tlaquepaque,circulo,20.639500,-103.312000,600,,
+PATIO-SIL,Patio Silao,circulo,20.944000,-101.430000,600,,
+PL-C01,Planta El Salto,circulo,20.515000,-103.185000,550,,Electrónica Ficticia de Occidente
+PL-C02,CEDIS Tlaquepaque,circulo,20.628000,-103.292000,400,,Lácteos Ficticios de Jalisco
+PL-C03,Planta Lagos de Moreno,poligono,21.352000,-101.918000,350,"POLYGON((-101.922000 21.349000, -101.914000 21.349000, -101.914000 21.355000, -101.922000 21.355000, -101.922000 21.349000))",Alimentos Ficticios de los Altos
+PL-C04,Bodega León,circulo,21.105000,-101.655000,400,,Calzado Ficticio de León
+PL-C05,Planta Silao,poligono,20.935000,-101.425000,550,"POLYGON((-101.429000 20.932000, -101.421000 20.932000, -101.421000 20.938000, -101.429000 20.938000, -101.429000 20.932000))",Autopartes Ficticias del Bajío
+PL-C06,Puerto Seco Silao,circulo,20.972000,-101.392000,550,,Ensambladora Ficticia Guanajuato
+PL-C07,Planta Química SLP,circulo,22.115000,-100.925000,550,,Químicos Ficticios del Centro
+PL-C08,Planta Envases SLP,circulo,22.190000,-101.020000,500,,Envases Ficticios Potosinos
+PL-C09,Patio Minero Matehuala,circulo,23.640000,-100.650000,550,,Minerales Ficticios del Altiplano
+PL-C10,Planta Ramos Arizpe,poligono,25.560000,-100.940000,400,"POLYGON((-100.944000 25.557000, -100.936000 25.557000, -100.936000 25.563000, -100.944000 25.563000, -100.944000 25.557000))",Armadora Ficticia Ramos Arizpe
+PL-C11,Planta Acero Saltillo,circulo,25.440000,-100.980000,400,,Acero Ficticio de Coahuila
+PL-C12,CEDIS Apodaca Norte,poligono,25.775000,-100.185000,500,"POLYGON((-100.189000 25.772000, -100.181000 25.772000, -100.181000 25.778000, -100.189000 25.778000, -100.189000 25.772000))",Cervecería Ficticia del Norte
+PL-C13,Planta Apodaca,circulo,25.790000,-100.210000,350,,Electrodomésticos Ficticios Apodaca
+PL-C14,Bodega Escobedo,circulo,25.800000,-100.320000,350,,Logística Ficticia Escobedo

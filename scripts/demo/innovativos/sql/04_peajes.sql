@@ -7,7 +7,8 @@
 -- Los veredictos de GPS de las líneas no son inventados: las líneas normales
 -- caen sobre la trayectoria que 03 sembró (veredicto «confirma»); las sembradas
 -- «fuera de ruta» están a decenas de km de esa trayectoria («no_coincide»); y
--- los cruces posteriores al silencio del GPS quedan «sin_datos».
+-- los cruces posteriores al silencio del GPS quedan «sin_datos» (la última posición
+-- es de ancla−100 min; el motor tolera 5 min de desfase de reloj: de ahí el corte en −95).
 -- ═══════════════════════════════════════════════════════════════════════════
 
 drop table if exists innovativos_sim.caseta cascade;
@@ -88,13 +89,13 @@ select innovativos_sim.uid('pase:' || x.folio || ':' || x.nombre || ':' || x.ori
        (x.cruce at time zone 'America/Mexico_City')::time,
        x.cruce, innovativos_sim.uid('unidad:' || x.n), innovativos_sim.uid('caseta:' || x.nombre),
        case when x.origen_linea = 'fuera_de_ruta' then 'no_coincide'
-            when x.escenario = 'silencio' and x.cruce > current_setting('inn.ancla')::timestamptz - interval '100 minutes' then 'sin_datos'
+            when x.escenario = 'silencio' and x.cruce > current_setting('inn.ancla')::timestamptz - interval '95 minutes' then 'sin_datos'
             else 'confirma' end,
        case when x.origen_linea = 'fuera_de_ruta' then round((1000 * 1.22 * (case when x.ckm < least(x.ka, x.kb) then least(x.ka, x.kb) - x.ckm else x.ckm - greatest(x.ka, x.kb) end))::numeric, 0)
-            when x.escenario = 'silencio' and x.cruce > current_setting('inn.ancla')::timestamptz - interval '100 minutes' then null
+            when x.escenario = 'silencio' and x.cruce > current_setting('inn.ancla')::timestamptz - interval '95 minutes' then null
             else round((15 + 70 * innovativos_sim.u('dm' || x.folio || x.nombre))::numeric, 0) end,
        case when x.origen_linea = 'fuera_de_ruta' then '{"via":"trayectoria","motivo":"el tractor estaba a decenas o cientos de km de la caseta cobrada"}'::jsonb
-            when x.escenario = 'silencio' and x.cruce > current_setting('inn.ancla')::timestamptz - interval '100 minutes' then '{"motivo":"sin_posiciones_ventana"}'::jsonb
+            when x.escenario = 'silencio' and x.cruce > current_setting('inn.ancla')::timestamptz - interval '95 minutes' then '{"motivo":"sin_posiciones_ventana"}'::jsonb
             else '{"via":"trayectoria","muestras":2}'::jsonb end
 from (select cp.*, cp.t_cruce + make_interval(secs => (innovativos_sim.h('dr' || cp.folio || cp.nombre) % 90)::int) as cruce
       from innovativos_sim.cruce_plan cp) x

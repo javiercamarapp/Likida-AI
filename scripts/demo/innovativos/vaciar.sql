@@ -1,0 +1,73 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- vaciar.sql — quita el dato SINTÉTICO de UN conjunto del demo para que entre
+-- el real de Innovativos (docs/demo/innovativos.md). Solo toca el tenant demo y
+-- solo filas sembradas por el demo. Uso (lo arma vaciar-sintetico.sh):
+--   psql -v que=gps|geocercas|pases|liquidaciones|cartaporte|vigia|convenios|todo -f vaciar.sql
+-- Re-sembrar (sembrar.sh) lo vuelve a poner idéntico.
+-- ═══════════════════════════════════════════════════════════════════════════
+\set ON_ERROR_STOP on
+\set t 'eeeeeeee-0620-4000-8000-000000000250'
+
+do $$
+declare ip inet := inet_server_addr(); n text;
+begin
+  if not (ip is null or ip <<= '127.0.0.0/8'::inet or ip = '::1'::inet or ip <<= '10.0.0.0/8'::inet or ip <<= '172.16.0.0/12'::inet or ip <<= '192.168.0.0/16'::inet) then
+    raise exception 'DEMO INNOVATIVOS: el servidor no es local; no se vacía nada.';
+  end if;
+  select nombre into n from tenant where id = 'eeeeeeee-0620-4000-8000-000000000250';
+  if n is distinct from 'Innovativos (demo)' then
+    raise exception 'el tenant demo no existe o no se llama «Innovativos (demo)» (%)', n;
+  end if;
+end $$;
+
+select :'que' in ('gps', 'todo') as es_gps, :'que' in ('geocercas', 'todo') as es_geo, :'que' in ('pases', 'todo') as es_pases,
+       :'que' in ('liquidaciones', 'todo') as es_liq, :'que' in ('cartaporte', 'todo') as es_cp,
+       :'que' in ('vigia', 'todo') as es_vigia, :'que' in ('convenios', 'todo') as es_conv,
+       :'que' in ('gps', 'geocercas', 'pases', 'liquidaciones', 'cartaporte', 'vigia', 'convenios', 'todo') as es_valido \gset
+
+\if :es_valido
+\else
+  \echo 'ERROR: «que» debe ser gps | geocercas | pases | liquidaciones | cartaporte | vigia | convenios | todo'
+  \quit 2
+\endif
+
+\if :es_gps
+  delete from posicion where tenant_id = :'t' and proveedor = 'tabla_propia';
+  update unidad set gps_visto_en = null where tenant_id = :'t';
+  \echo 'gps: posiciones sintéticas (proveedor tabla_propia) borradas. La tabla simulada innovativos_sim queda (es «su» tabla de prueba).'
+\endif
+\if :es_geo
+  delete from geocerca where tenant_id = :'t' and fuente = 'csv';
+  \echo 'geocercas: borradas (viaje, cliente y andén quedan sin referencia; el catálogo real entra por Sitios).'
+\endif
+\if :es_pases
+  delete from desglose_peaje where tenant_id = :'t' and proveedor = 'PASE (demo)';
+  delete from peaje_tag where tenant_id = :'t' and proveedor = 'PASE (demo)';
+  delete from peaje_caseta where tenant_id = :'t' and nombre like 'Caseta Demo %';
+  \echo 'pases: desglose, líneas, TAG y casetas sintéticos borrados.'
+\endif
+\if :es_liq
+  delete from liquidacion_externa where tenant_id = :'t' and sistema_origen = 'SAP (demo)';
+  \echo 'liquidaciones: las de «SAP (demo)» borradas.'
+\endif
+\if :es_cp
+  delete from cp_documento where tenant_id = :'t' and modelo = 'demo-sintetico';
+  delete from cp_export_config where tenant_id = :'t' and nombre like '%(demo%';
+  delete from cp_perfil where tenant_id = :'t' and clave like '%-demo';
+  \echo 'cartaporte: documentos, perfiles y formato de exportación sintéticos borrados.'
+\endif
+\if :es_vigia
+  delete from vigia_mensaje where tenant_id = :'t';
+  delete from vigia_conversacion where tenant_id = :'t';
+  delete from vigia_contacto where tenant_id = :'t';
+  \echo 'vigia: contactos, conversaciones y mensajes sintéticos borrados.'
+\endif
+\if :es_conv
+  do $$ begin
+    if to_regclass('public.cliente_convenio') is not null then
+      delete from public.cliente_convenio where tenant_id = 'eeeeeeee-0620-4000-8000-000000000250'
+        and id in (select innovativos_sim.uid('convenio:' || clave) from innovativos_sim.convenio);
+    end if;
+  end $$;
+  \echo 'convenios: los sembrados en public.cliente_convenio (si la 0580 está) borrados; innovativos_sim.convenio* queda como copia de su sistema.'
+\endif

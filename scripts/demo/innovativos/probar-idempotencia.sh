@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════════════
-# PRUEBA: el seed corre DOS veces (y una tercera tras --reiniciar) sin duplicar
-# ni cambiar nada. Compara, tabla por tabla, conteo + huella md5 del contenido.
+# PRUEBA: el seed corre DOS veces (una tercera tras --reiniciar y una cuarta tras vaciar) sin duplicar
+# ni cambiar nada (y que vaciar + re-sembrar vuelve al mismo estado). Compara, tabla por tabla, conteo + huella md5 del contenido.
 #
 #   DEMO_DATABASE_URL='postgresql:///likida_demo' bash scripts/demo/innovativos/probar-idempotencia.sh
 #
@@ -42,10 +42,16 @@ echo "== corrida 1 =="; bash ./sembrar.sh --reiniciar >/dev/null; huella > /tmp/
 echo "== corrida 2 (sin reiniciar: no debe cambiar nada) =="; bash ./sembrar.sh >/dev/null; huella > /tmp/inn_h2.txt
 echo "== corrida 3 (tras --reiniciar: mismo resultado desde cero) =="; bash ./sembrar.sh --reiniciar >/dev/null; huella > /tmp/inn_h3.txt
 
+echo "== corrida 4 (vaciar TODO lo sintético y volver a sembrar: mismo resultado) =="
+for q in gps geocercas pases liquidaciones cartaporte vigia convenios; do bash ./vaciar-sintetico.sh "$q" >/dev/null; done
+bash ./sembrar.sh >/dev/null; huella > /tmp/inn_h4.txt
+
 cat /tmp/inn_h1.txt
 ok=1
 diff -q /tmp/inn_h1.txt /tmp/inn_h2.txt >/dev/null || { echo "FALLA: la 2.ª corrida cambió filas" >&2; diff /tmp/inn_h1.txt /tmp/inn_h2.txt >&2 || true; ok=0; }
 diff -q /tmp/inn_h1.txt /tmp/inn_h3.txt >/dev/null || { echo "FALLA: --reiniciar no reproduce lo mismo" >&2; diff /tmp/inn_h1.txt /tmp/inn_h3.txt >&2 || true; ok=0; }
+
+diff -q /tmp/inn_h1.txt /tmp/inn_h4.txt >/dev/null || { echo "FALLA: vaciar + sembrar no reproduce lo mismo" >&2; diff /tmp/inn_h1.txt /tmp/inn_h4.txt >&2 || true; ok=0; }
 
 echo "== rol de solo lectura =="
 if psql "$URL" -q -v ON_ERROR_STOP=1 -c "set role innovativos_demo_lector; insert into innovativos_sim.gps_posicion values ('X', 1, 1, now(), 1, 1)" >/dev/null 2>&1; then
