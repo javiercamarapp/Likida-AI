@@ -195,7 +195,11 @@ import { join, relative, sep } from 'node:path';
 // 92 → 93 en la integración de la ola 3 (ronda-03): `api/v1/hitos/[id]/validar/route.ts` (W3 Conductor,
 //   POST con llave de API de la flota: valida el hito DE ESA flota con la RPC atómica; la rama de Conductor
 //   no subió esta constante) más las 2 de autofactura (vinculación de portal) y la de cron buzon-entrega.
-const RUTAS_APP_REVISADAS = 99;
+// 99 → 100 (ola 3b, Agente 2, reporte de reclamación): `api/export/peajes-reclamacion/route.ts` — las dos puertas de todo export de
+//   dinero (área `dinero` Y `puedeExportar`), rate limit por IP y por flota, formato `xlsx|pdf` validado, y el desglose se busca CON el
+//   tenant de la sesión (`reporteReclamacion(t.tenantId, …)`): un uuid de otra flota es 404, nunca datos ajenos. Una lectura incompleta no
+//   sale como archivo corto. Mismo molde que `api/export/bitacora-conciliada`.
+const RUTAS_APP_REVISADAS = 100;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
