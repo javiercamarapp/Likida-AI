@@ -31,4 +31,12 @@ select entidad, filas from (
   union all select 23, 'contactos de escalamiento (tráfico/flota)', count(*) from conductor_contacto_trafico, t where tenant_id = t.id
   union all select 24, 'convenios (copia de su sistema)', count(*) from innovativos_sim.convenio
   union all select 25, 'instrucciones de operación', count(*) from innovativos_sim.convenio_instruccion
+  union all select 26, 'geocercas con polígono nativo', count(*) from geocerca, t where tenant_id = t.id and poligono is not null
+  union all select 27, 'hitos detectados por geocerca (sin chofer)', count(*) from viaje_hito, t where tenant_id = t.id and fuente = 'sistema'
+  union all select 28, 'episodios de sin señal de vida', count(*) from viaje_senal_vida, t where tenant_id = t.id
+  union all select 29, 'avisos de discrepancia (fallidos: muestran Reavisar)', count(*) from liquidacion_aviso_discrepancia, t where tenant_id = t.id and estado = 'fallido'
+  union all select 30, 'tareas de diferencia de liquidación (orquestador)', count(*) from orquestador_escalacion, t where tenant_id = t.id and motivo = 'diferencia_liquidacion'
+  union all select 31, 'documentos de Carta Porte recibidos / fallidos (worker)', count(*) from cp_documento, t where tenant_id = t.id and estado in ('recibido', 'fallido')
 ) x order by o;
+-- Lo que siembran los importadores reales (formato de liquidación, grupos, histórico y respuestas rápidas del Vigía) lo
+-- cuenta sembrar-importadores.mjs al terminar.
