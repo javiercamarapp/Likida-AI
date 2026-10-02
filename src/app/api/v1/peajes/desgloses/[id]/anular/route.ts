@@ -26,7 +26,7 @@ export const maxDuration = 30;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export function validarAnulacion(crudo: unknown): string {
+function validarAnulacion(crudo: unknown): string {
   if (crudo === null || typeof crudo !== 'object' || Array.isArray(crudo)) {
     throw new CampoInvalido('cuerpo', 'El cuerpo tiene que ser un objeto `{ "motivo": "..." }`.');
   }
