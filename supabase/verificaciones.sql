@@ -19297,4 +19297,78 @@ begin
 
   raise exception E'CURSOS_PEAJE_0665 lote-atomico=% idempotente=% orden-del-arreglo=% otra-flota-rebota=% fk-directa-rebota=% forma-sana=% deny-all=%   (esperado t / t / t / t / t / t / t)',
     atomico, idem, en_orden, ajena, directa, forma, deny;
+-- ── 325. Vigía, directores por nivel y respaldo por correo: sin repetidos, tope de 10, un correo por aviso y persona, arriendo y aislamiento (mig. 0673 + 0674) ──
+-- El aviso de escalamiento ya no va a UN teléfono sino a una lista por nivel (teléfono y/o correo), y si el WhatsApp no sale se manda por correo.
+-- Lo que solo la base demuestra: el mismo teléfono o correo (sin importar mayúsculas) no se repite DENTRO de un nivel de una flota pero sí en otro
+-- nivel u otra flota; el tope de 10 por nivel y flota (también al cambiar de nivel); corregir o quitar a un director de OTRA flota no existe; el
+-- reclamo del correo lo gana UNO solo (insertar la llave es reclamarla), un arriendo vencido se retoma con otro token y el viejo ya no cierra, lo
+-- cerrado no se reclama de nuevo; la FK compuesta (la conversación o el director de otra flota no sirven); lo de más de 6 h sin cerrar se abandona;
+-- el dominio de eventos reescrito admite los dos nuevos; el rol authenticated no escribe ni ejecuta nada.
+-- Esperado: VIGIA_CORREO_0673 sin-repetidos=t otro-nivel-y-flota=t tope-10=t tope-cambio-nivel=t ajeno-no-existe=t reclamo-unico=t arriendo-retoma=t token-viejo-no-cierra=t cerrado-no-se-reclama=t fk-compuesta=t abandona-6h=t evento-dominio=t solo-servicio=t
+do $$
+declare
+  ta uuid; tb uuid; cli uuid; con uuid; conv uuid; da uuid; db uuid; r1 record; r2 record; n int; i int; t0 timestamptz := now();
+  sin_rep boolean := false; otro boolean := false; tope boolean := false; tope_nivel boolean := false; ajeno boolean := false;
+  unico boolean := false; retoma boolean := false; viejo boolean := false; cerrado boolean := false; fk boolean := false;
+  abandona boolean := false; evento boolean := false; solo boolean := false;
+  datos constant jsonb := '{"cliente":"C","motivo":"sin_respuesta","minutos":45,"nivel":1}';
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0673 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0673 B') returning id into tb;
+  insert into cliente (tenant_id, nombre) values (ta, 'Cliente A') returning id into cli;
+  insert into vigia_contacto (tenant_id, cliente_id, telefono, telefono_hash, nombre, consentimiento_en, consentimiento_origen)
+    values (ta, cli, '525573990001', repeat('c', 64), 'Compras', now(), 'alta_flota') returning id into con;
+  insert into vigia_conversacion (tenant_id, contacto_id, cliente_id) values (ta, con, cli) returning id into conv;
+
+  da := vigia_director_guardar(ta, null, 1, 'Gerente', '525511113333', 'Gerente@Empresa.mx', null);
+  begin perform vigia_director_guardar(ta, null, 1, 'Otro', '525511113333', null, null); exception when unique_violation then sin_rep := true; end;
+  if sin_rep then
+    sin_rep := false;
+    begin perform vigia_director_guardar(ta, null, 1, 'Otro', null, 'GERENTE@empresa.mx', null); exception when unique_violation then sin_rep := true; end;
+  end if;
+
+  db := vigia_director_guardar(tb, null, 1, 'Gerente B', '525511113333', 'gerente@empresa.mx', null);
+  otro := vigia_director_guardar(ta, null, 2, 'Dueño', '525511113333', 'gerente@empresa.mx', null) is not null and db is not null;
+
+  begin perform vigia_director_guardar(ta, db, 1, 'Cruce', '525511113333', null, null); exception when sqlstate 'P0002' then ajeno := true; end;
+  ajeno := ajeno and not vigia_director_quitar(ta, db) and (select nombre from vigia_director where id = db) = 'Gerente B';
+
+  for i in 1..9 loop perform vigia_director_guardar(ta, null, 1, 'G' || i, '52551100' || lpad(i::text, 4, '0'), null, null); end loop;
+  begin perform vigia_director_guardar(ta, null, 1, 'G11', null, 'g11@empresa.mx', null); exception when sqlstate '54000' then tope := true; end;
+  begin perform vigia_director_guardar(ta, (select id from vigia_director where tenant_id = ta and nivel = 2 limit 1), 1, 'Subir', '525511118888', null, null);
+  exception when sqlstate '54000' then tope_nivel := true; end;
+
+  select * into r1 from vigia_correo_reclamar(ta, conv, 'v:n1:abc', 1, da, 'dir@empresa.mx', datos, 300, t0);
+  select count(*) into n from vigia_correo_reclamar(ta, conv, 'v:n1:abc', 1, da, 'dir@empresa.mx', datos, 300, t0 + interval '1 minute');
+  unico := r1.o_id is not null and n = 0;
+  select * into r2 from vigia_correo_reclamar(ta, conv, 'v:n1:abc', 1, da, 'dir@empresa.mx', datos, 300, t0 + interval '10 minutes');
+  retoma := r2.o_id = r1.o_id and r2.o_token <> r1.o_token;
+  viejo := not vigia_correo_cerrar(ta, r1.o_id, r1.o_token, 'enviado', null, t0 + interval '11 minutes')
+    and vigia_correo_cerrar(ta, r2.o_id, r2.o_token, 'sin_configurar', 'falta la llave', t0 + interval '11 minutes');
+  select count(*) into n from vigia_correo_reclamar(ta, conv, 'v:n1:abc', 1, da, 'dir@empresa.mx', datos, 300, t0 + interval '2 days');
+  cerrado := n = 0 and (select estado from vigia_aviso_correo where id = r1.o_id) = 'sin_configurar';
+
+  begin perform vigia_correo_reclamar(tb, conv, 'v:n1:fk', 1, null, 'x@empresa.mx', datos, 300, t0); exception when foreign_key_violation then fk := true; end;
+  if fk then
+    fk := false;
+    begin perform vigia_correo_reclamar(ta, conv, 'v:n1:fk2', 1, db, 'x@empresa.mx', datos, 300, t0); exception when foreign_key_violation then fk := true; end;
+  end if;
+
+  perform vigia_correo_reclamar(ta, conv, 'v:n1:viejo', 1, null, 'v@empresa.mx', datos, 300, t0);
+  update vigia_aviso_correo set created_at = t0 - interval '7 hours' where tenant_id = ta and clave = 'v:n1:viejo';
+  perform count(*) from vigia_correos_vencidos(50, t0 + interval '2 hours');
+  abandona := (select estado from vigia_aviso_correo where tenant_id = ta and clave = 'v:n1:viejo') = 'red';
+
+  insert into vigia_evento (tenant_id, conversacion_id, tipo) values (ta, conv, 'correo_enviado'), (ta, conv, 'correo_fallo'), (ta, conv, 'entrante');
+  evento := true;
+  begin insert into vigia_evento (tenant_id, conversacion_id, tipo) values (ta, conv, 'inventado'); evento := false; exception when check_violation then null; end;
+
+  solo := not has_table_privilege('authenticated', 'public.vigia_director', 'insert')
+    and not has_table_privilege('authenticated', 'public.vigia_aviso_correo', 'insert')
+    and not has_function_privilege('authenticated', 'public.vigia_director_guardar(uuid, uuid, integer, text, text, text, uuid)', 'execute')
+    and not has_function_privilege('authenticated', 'public.vigia_correo_reclamar(uuid, uuid, text, integer, uuid, text, jsonb, integer, timestamptz)', 'execute')
+    and not has_function_privilege('authenticated', 'public.vigia_correos_vencidos(integer, timestamptz)', 'execute');
+
+  raise exception E'VIGIA_CORREO_0673 sin-repetidos=% otro-nivel-y-flota=% tope-10=% tope-cambio-nivel=% ajeno-no-existe=% reclamo-unico=% arriendo-retoma=% token-viejo-no-cierra=% cerrado-no-se-reclama=% fk-compuesta=% abandona-6h=% evento-dominio=% solo-servicio=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t / t)',
+    sin_rep, otro, tope, tope_nivel, ajeno, unico, retoma, viejo, cerrado, fk, abandona, evento, solo;
 end $$;

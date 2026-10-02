@@ -42,13 +42,15 @@ export interface ConfigVigia {
   molestiaAvisoNivel: 2 | 3;
   retencionDias: number;
   avisoPrivacidadUrl: string | null;
+  /** 0673: si el aviso de escalamiento por WhatsApp no sale, mandarlo por correo a quien tenga correo en la lista de directores. Apagado por omisión. */
+  respaldoCorreo: boolean;
 }
 
 /** Lo que vale cuando la flota no tiene fila: APAGADO (falla cerrado). */
 export function configApagada(tenantId: string): ConfigVigia {
   return {
     tenantId, habilitado: false, modoAprobacion: 'siempre', autoenviarMinAprobaciones: 5,
-    slaRespuestaMin: 30, escalarNivel2Min: 60, slaCriticoMin: 10, molestiaAvisoNivel: 2, retencionDias: 180, avisoPrivacidadUrl: null,
+    slaRespuestaMin: 30, escalarNivel2Min: 60, slaCriticoMin: 10, molestiaAvisoNivel: 2, retencionDias: 180, avisoPrivacidadUrl: null, respaldoCorreo: false,
   };
 }
 
@@ -140,6 +142,39 @@ export type TipoEvento =
   | 'entrante' | 'borrador' | 'aprobado' | 'rechazado' | 'enviado' | 'autoenviado' | 'fallo_envio'
   | 'tomada' | 'devuelta' | 'cerrada' | 'molestia' | 'sin_respuesta' | 'escalada' | 'sin_destinatario'
   | 'optout' | 'alta' | 'baja_manual' | 'suprimido' | 'spam' | 'sin_dato' | 'inyeccion' | 'otro_cliente'
-  | 'adjunto_enviado' | 'adjunto_pendiente' | 'adjunto_fallo';
+  | 'adjunto_enviado' | 'adjunto_pendiente' | 'adjunto_fallo'
+  | 'correo_enviado' | 'correo_fallo';
 
 export type MotivoEscalamiento = 'sin_respuesta' | 'molestia' | 'pide_humano' | 'sin_dato' | 'folio_ajeno';
+
+// ── 0673/0674: lista de directores por nivel y respaldo por correo ──────────
+
+export type NivelDirector = 1 | 2;
+
+/** Una persona de la lista de directores de un nivel (nivel 1 gerente, nivel 2 director o dueño). Teléfono (52 + 10 dígitos) y/o correo. */
+export interface Director {
+  id: string;
+  nivel: NivelDirector;
+  nombre: string;
+  telefono: string | null;
+  correo: string | null;
+}
+
+/** A quien se le avisa en un nivel: puede venir de la lista de directores o del destino de siempre (gerente del cliente, jefe, dueño). */
+export interface DestinatarioAviso {
+  userId: string | null;
+  directorId: string | null;
+  nombre: string | null;
+  telefono: string | null;
+  correo: string | null;
+}
+
+/** Lo que el correo de respaldo necesita para armarse de nuevo si el envío se retoma (sin texto de clientes ni teléfonos). */
+export interface DatosAvisoCorreo {
+  cliente: string;
+  motivo: MotivoEscalamiento;
+  minutos: number;
+  nivel: NivelDirector;
+}
+
+export type EstadoCorreo = 'enviando' | 'enviado' | 'sin_configurar' | 'rechazado' | 'red';

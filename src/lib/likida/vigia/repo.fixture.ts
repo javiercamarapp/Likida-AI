@@ -4,11 +4,11 @@
 // flota, reclamo condicional de estado y aislamiento por tenant en TODA lectura.
 // SOLO para pruebas (`.fixture.ts`).
 import type {
-  CambioReclamo, Destinatario, FilaEnEspera, NuevoEvento, NuevoSaliente, RepoVigia, ResultadoRecibir,
+  CambioReclamo, CorreoVencido, Destinatario, FilaEnEspera, NuevoEvento, NuevoSaliente, RepoVigia, ResultadoRecibir,
 } from './puertos';
 import type { EstatusViaje, ResumenViaje, ServicioEstatusViaje } from './estatus_viaje';
 import {
-  configApagada, configParaCliente, type ConfigVigia, type Contacto, type Conversacion, type EstadoMensajeSaliente, type Intencion, type MensajeVigia, type TipoEvento,
+  configApagada, configParaCliente, type ConfigVigia, type Contacto, type Conversacion, type DatosAvisoCorreo, type DestinatarioAviso, type EstadoCorreo, type EstadoMensajeSaliente, type Intencion, type MensajeVigia, type TipoEvento,
 } from './tipos';
 import { CLIENTE_A, T1 } from './datos.fixture';
 import { seleccionarEnEspera } from './escalamiento';
@@ -254,6 +254,63 @@ export class RepoEnMemoria implements RepoVigia {
   }
   async destinatarioNivel(tenantId: string, _contacto: Contacto, nivel: 1 | 2): Promise<Destinatario | null> {
     return this.destinatarios.get(`${tenantId}|${nivel}`) ?? null;
+  }
+
+  // ── 0673/0674: lista de directores y correos de respaldo, con las mismas garantías que la base ──
+  /** La lista de directores por flota y nivel (la base real: tabla `vigia_director`). */
+  directores = new Map<string, DestinatarioAviso[]>();
+  agregarDirector(tenantId: string, nivel: 1 | 2, d: Partial<DestinatarioAviso> & ({ telefono: string } | { correo: string })): void {
+    const k = `${tenantId}|${nivel}`;
+    const lista = this.directores.get(k) ?? [];
+    lista.push({ userId: null, directorId: this.id(), nombre: 'Director', telefono: null, correo: null, ...d });
+    this.directores.set(k, lista);
+  }
+  async destinatariosNivel(tenantId: string, contacto: Contacto, nivel: 1 | 2): Promise<DestinatarioAviso[]> {
+    this.verifica('destinatariosNivel');
+    const lista: DestinatarioAviso[] = [...(this.directores.get(`${tenantId}|${nivel}`) ?? [])];
+    if (nivel === 1 && contacto.gerenteUserId) {
+      const g = this.destinatarios.get(`${tenantId}|1`);
+      if (g) lista.unshift({ userId: g.userId, directorId: null, nombre: null, telefono: g.telefono, correo: null });
+    }
+    if (lista.length === 0) {
+      const d = this.destinatarios.get(`${tenantId}|${nivel}`);
+      if (d) lista.push({ userId: d.userId, directorId: null, nombre: null, telefono: d.telefono, correo: null });
+    }
+    return lista;
+  }
+  /** Los correos de respaldo: llave única (flota, clave), con arriendo, como `vigia_aviso_correo`. */
+  correos: Array<{
+    tenantId: string; id: string; conversacionId: string; clave: string; nivel: 1 | 2; directorId: string | null; destino: string; datos: DatosAvisoCorreo;
+    estado: EstadoCorreo; token: string | null; expiraEn: number | null; intentos: number; detalle: string | null;
+  }> = [];
+  async reclamarCorreo(tenantId: string, a: { conversacionId: string; clave: string; nivel: 1 | 2; directorId: string | null; destino: string; datos: DatosAvisoCorreo }) {
+    this.verifica('reclamarCorreo');
+    const conv = this.conversaciones.get(a.conversacionId);
+    if (!conv || conv.tenantId !== tenantId) throw new Error('FK compuesta: conversación de otra flota');
+    const ahora = this.reloj().getTime();
+    const previo = this.correos.find((c) => c.tenantId === tenantId && c.clave === a.clave);
+    if (previo) {
+      if (previo.estado !== 'enviando' || (previo.expiraEn ?? 0) > ahora) return null;
+      previo.token = `tok-${(this.seq += 1)}`; previo.expiraEn = ahora + 300_000; previo.intentos += 1;
+      return { id: previo.id, token: previo.token };
+    }
+    const id = this.id();
+    const token = `tok-${(this.seq += 1)}`;
+    this.correos.push({ tenantId, id, conversacionId: a.conversacionId, clave: a.clave, nivel: a.nivel, directorId: a.directorId, destino: a.destino, datos: a.datos,
+      estado: 'enviando', token, expiraEn: ahora + 300_000, intentos: 1, detalle: null });
+    return { id, token };
+  }
+  async cerrarCorreo(tenantId: string, id: string, token: string, estado: Exclude<EstadoCorreo, 'enviando'>, detalle: string | null): Promise<boolean> {
+    this.verifica('cerrarCorreo');
+    const c = this.correos.find((x) => x.tenantId === tenantId && x.id === id);
+    if (!c || c.estado !== 'enviando' || c.token !== token) return false;
+    c.estado = estado; c.token = null; c.expiraEn = null; c.detalle = detalle;
+    return true;
+  }
+  async correosVencidos(limite: number, ahora: Date): Promise<CorreoVencido[]> {
+    this.verifica('correosVencidos');
+    return this.correos.filter((c) => c.estado === 'enviando' && (c.expiraEn ?? 0) <= ahora.getTime()).slice(0, limite)
+      .map((c) => ({ tenantId: c.tenantId, id: c.id, conversacionId: c.conversacionId, clave: c.clave, nivel: c.nivel, directorId: c.directorId, destino: c.destino, datos: c.datos }));
   }
 
   async conversacionesEnEspera(limite: number, _ahora?: Date): Promise<FilaEnEspera[]> {
