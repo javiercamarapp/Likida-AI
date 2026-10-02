@@ -93,6 +93,39 @@ update cliente c set geocerca_id = innovativos_sim.uid('geo:planta:' || s.client
 from innovativos_sim.sitio s
 where c.id = innovativos_sim.uid('cliente:' || s.cliente_key) and c.geocerca_id is null;
 
+-- ── Polígonos nativos (0630) ───────────────────────────────────────────────
+-- Tal como los deja el importador de su tabla (importar_geocercas.ts): el polígono se guarda con sus vértices
+-- (`poligono`, aproximada = false) y el catálogo conserva el círculo que lo CONTIENE (centro = promedio de vértices,
+-- radio = vértice más lejano, sin inflarlo). Son 4 plantas «poligonales» y el patio alargado de Tlaquepaque: una franja
+-- de ~1 km por ~150 m junto a una carretera. Con el círculo (≈ 520 m) la carretera de junto quedaba «dentro» del patio;
+-- con el polígono ya no (lo enseña el cruce de peajes de 04_peajes.sql). Los demás sitios siguen siendo círculo.
+-- Se RESTAURA sin pisar nada: solo se llena donde el sitio sigue sin polígono y es de fuente csv (re-sembrar tras
+-- `vaciar-sintetico.sh geocercas` los devuelve; una edición manual del sitio no se toca).
+drop table if exists innovativos_sim.poligono cascade;
+create table innovativos_sim.poligono as
+select g.id as geocerca_id, g.codigo, g.lat as lat_c, g.lng as lng_c, v.vertices
+from geocerca g
+cross join lateral (
+  select case when g.codigo = 'PATIO-GDL' then 0.0050 else 0.0040 end as dx,
+         case when g.codigo = 'PATIO-GDL' then 0.0007 else 0.0030 end as dy
+) d
+cross join lateral (
+  select jsonb_build_array(
+    jsonb_build_object('lat', round((g.lat - d.dy)::numeric, 6), 'lng', round((g.lng - d.dx)::numeric, 6)),
+    jsonb_build_object('lat', round((g.lat - d.dy)::numeric, 6), 'lng', round((g.lng + d.dx)::numeric, 6)),
+    jsonb_build_object('lat', round((g.lat + d.dy)::numeric, 6), 'lng', round((g.lng + d.dx)::numeric, 6)),
+    jsonb_build_object('lat', round((g.lat + d.dy)::numeric, 6), 'lng', round((g.lng - d.dx)::numeric, 6))) as vertices
+) v
+where g.tenant_id = current_setting('inn.tenant')::uuid
+  and g.codigo in ('PATIO-GDL', 'PL-C03', 'PL-C05', 'PL-C10', 'PL-C12');
+
+update geocerca g set
+  poligono = p.vertices, aproximada = false,
+  radio_m = (select ceil(max(1000 * innovativos_sim.dist_km(p.lat_c, p.lng_c, (e->>'lat')::float8, (e->>'lng')::float8)))::int
+               from jsonb_array_elements(p.vertices) e)
+from innovativos_sim.poligono p
+where g.id = p.geocerca_id and g.tenant_id = current_setting('inn.tenant')::uuid and g.poligono is null and g.fuente = 'csv';
+
 -- ── Tractos y operadores (1..250 emparejados; 251..262 = relevos) ──────────
 -- Terminal: 40 % Tlaquepaque, 30 % Silao, 30 % Apodaca.
 drop table if exists innovativos_sim.tracto cascade;

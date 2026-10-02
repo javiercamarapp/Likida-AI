@@ -38,7 +38,7 @@ const filas = JSON.parse(psql(['-c', `select coalesce(json_agg(x), '[]') from (
          extract(epoch from coalesce(h.mensaje_en, h.recibido_en)) * 1000 as mensaje_ms,
          extract(epoch from h.recibido_en) * 1000 as recibido_ms,
          v.unidad_id,
-         g.id as sitio_id, g.nombre as sitio_nombre, g.lat as sitio_lat, g.lng as sitio_lng, g.radio_m as sitio_radio,
+         g.id as sitio_id, g.nombre as sitio_nombre, g.lat as sitio_lat, g.lng as sitio_lng, g.radio_m as sitio_radio, g.poligono as sitio_poligono, g.aproximada as sitio_aproximada,
          (select coalesce(json_agg(json_build_object('lat', p.lat, 'lng', p.lng, 't', extract(epoch from p.medida_en) * 1000) order by p.medida_en), '[]'::json)
             from posicion p where p.tenant_id = h.tenant_id and p.unidad_id = v.unidad_id
               and p.medida_en between coalesce(h.mensaje_en, h.recibido_en) - make_interval(mins => ${Number(cfg.ventanaUbicacionMin)})
@@ -56,7 +56,8 @@ if (filas.length === 0) { console.error('FALLA: no hay hitos de llegada de viaje
 let actual = null;
 const veredictos = [];
 const deps = {
-  sitio: async () => (actual.sitio_id ? { id: actual.sitio_id, nombre: actual.sitio_nombre, lat: actual.sitio_lat, lng: actual.sitio_lng, radioM: actual.sitio_radio } : null),
+  // El polígono nativo (0630) decide «dentro» cuando el sitio lo tiene: el mismo dato que lee el producto (repo_validacion.sitioDelHito).
+  sitio: async () => (actual.sitio_id ? { id: actual.sitio_id, nombre: actual.sitio_nombre, lat: actual.sitio_lat, lng: actual.sitio_lng, radioM: actual.sitio_radio, poligono: actual.sitio_poligono ?? null, aproximada: actual.sitio_aproximada === true } : null),
   posiciones: async (_t, _u, desde, hasta) => actual.gps
     .filter((p) => p.t >= desde.getTime() && p.t <= hasta.getTime())
     .map((p) => ({ lat: p.lat, lng: p.lng, medidaEn: new Date(p.t), fuente: 'gps' })),
