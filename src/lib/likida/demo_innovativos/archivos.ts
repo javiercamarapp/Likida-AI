@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-unsafe-regex -- el texto viene de archivos que Innovativos entrega y se lee en CLI/pruebas (no en una ruta pública); los cuantificadores llevan tope y archivos.test.ts mide que una línea adversaria de 50,000 caracteres no explota. */
 // ═══════════════════════════════════════════════════════════════════════════
 // VALIDADOR DE LOS ARCHIVOS DEL CLIENTE DE DEMO — el paso «validación» del kit de
 // carga (docs/demo/innovativos.md). Se corre ANTES de cargar nada: dice si el
