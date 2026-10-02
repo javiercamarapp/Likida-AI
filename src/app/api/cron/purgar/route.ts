@@ -7,6 +7,7 @@ import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { registrarLatido, puertaCron } from '@/lib/admin/salud';
 import { purgarDocumentosVencidos } from '@/lib/likida/carta_porte_docs/retencion';
+import { purgarRecepcionesVencidas } from '@/lib/likida/buzon/repo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -412,6 +413,16 @@ export async function GET(req: Request) {
       logger.error('cron.purgar.carta_porte_docs_excepcion', { error: e instanceof Error ? e.message : String(e) });
     }
 
+    // ── BUZÓN DE FACTURAS (mig. 0530): bitácora de archivos recibidos que no cuelgan de una factura ──
+    // 365 días; los PDF guardados se encolan en `storage_huerfano_candidato` y el borrado de Storage de
+    // arriba los vacía en la corrida siguiente. `null` = la base aún no trae la 0530 (dicho, no un 0).
+    let buzonRecepcionesPurgadas: number | null = null;
+    try {
+      buzonRecepcionesPurgadas = await purgarRecepcionesVencidas(new Date(inicio));
+    } catch (e) {
+      logger.error('cron.purgar.buzon_recepcion_excepcion', { error: e instanceof Error ? e.message : String(e) });
+    }
+
     // 0332 separa la señal de las purgas restantes: si conversación/códigos
     // ya se drenaron fuera de la RPC, no conservamos un `parcial` obsoleto de
     // la última tanda de mantenimiento. En rollout sobre una BD anterior se
@@ -421,7 +432,7 @@ export async function GET(req: Request) {
     const estado = erroresRetencion0104.length > 0 || productoEventoError !== null
       ? 'fallo'
       : parcialGlobal ? 'parcial' : 'ok';
-    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs };
+    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, buzonRecepcionesPurgadas };
     if (estado === 'fallo') logger.error('cron.purgar.retencion_0104_incompleta', detalleFinal);
     else if (estado === 'parcial') logger.warn('cron.purgar.incompleta', detalleFinal);
     else logger.info('cron.purgar.ok', detalleFinal);
@@ -434,7 +445,7 @@ export async function GET(req: Request) {
       productoEventoError,
     });
     return NextResponse.json(
-      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs },
+      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, buzonRecepcionesPurgadas },
       { status: estado === 'fallo' ? 500 : 200 },
     );
   } catch (e) {

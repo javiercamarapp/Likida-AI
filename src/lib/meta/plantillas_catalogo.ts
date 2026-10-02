@@ -108,6 +108,15 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
     botones: [], textoVerificado: false, estado: 'en_uso',
   },
   {
+    nombre: 'cobranza_gastos_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'chofer_cobranza',
+    proposito: 'Cobranza por GASTO (Agente 7): avisar al chofer, con un solo mensaje fusionado, cuántos gastos suyos siguen sin comprobante y cuál es el primero, cuando su ventana de 24 h está cerrada.',
+    llamador: 'src/lib/likida/agentes/cobranza_gasto.ts',
+    cuerpo: 'Recordatorio de Likida: {{1}}, tienes pendientes los comprobantes de {{2}} de tus gastos. El primero: {{3}}. Manda por aquí la foto del ticket o el XML de la factura.',
+    ejemplos: ['Juan Pérez', '2', 'Diésel $1,200.00 del 29 sept: falta la factura (CFDI)'],
+    variables: ['nombre del chofer', 'cuántos gastos', 'el gasto más atrasado y qué comprobante le falta (una sola línea)'],
+    botones: [], textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
     nombre: 'aviso_operacion_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'oficina',
     proposito: 'Aviso genérico de operación al jefe/oficina cuando su ventana está cerrada (asistencia, cierre de liquidación).',
     llamador: 'src/lib/meta/aviso_oficina.ts',
@@ -376,6 +385,7 @@ export function parametrosReglaAviso(casos: number, frase: string, liga: string)
 export const PLANTILLA = {
   viajeAsignado: 'viaje_asignado',
   recordatorioCierre: 'recordatorio_cierre',
+  cobranzaGastos: 'cobranza_gastos_v1',
   avisoOperacion: 'aviso_operacion_v1',
   plazoFactura: 'plazo_factura',
   respuestaArco: 'respuesta_arco_v2',

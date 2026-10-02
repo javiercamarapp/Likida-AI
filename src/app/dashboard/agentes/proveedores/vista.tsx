@@ -9,6 +9,7 @@ import { BarraPagina } from '../../resumen-visual';
  *  porque es la vista la que tiene que confesarlo (FE-13). Si la página
  *  cambia su límite, este número cambia con él. */
 const TOPE_FACTURAS = 100;
+import { BotonVerPdf } from './controles_buzon';
 import {
   SubirFactura, SubirFotoFactura, BotonesDecision, DireccionBuzon, GenerarBuzon, RotarBuzon,
   type AccionProveedores,
@@ -22,7 +23,7 @@ import {
  */
 export function VistaAgenteProveedores({
   facturas, rfcFlota, sufijo, acciones, notificaciones, ficha,
-  buzon, dominioConfigurado, puedeAdministrarBuzon,
+  buzon, dominioConfigurado, puedeAdministrarBuzon, entrega, recepcion,
 }: {
   facturas: FacturaProveedor[];
   rfcFlota: string | null;
@@ -30,7 +31,13 @@ export function VistaAgenteProveedores({
   acciones: {
     subirFactura: AccionProveedores; subirFoto: AccionProveedores; decidir: AccionProveedores;
     generarBuzon: AccionProveedores; rotarBuzon: AccionProveedores;
+    /** «Ver PDF» de una factura del buzón (URL firmada). Sin ella no se pinta el botón. */
+    verPdf?: AccionProveedores;
   };
+  /** La entrega al contador y lo recibido por correo (Agente 9), ya renderizadas por la página: ReactNode y no
+   *  datos, porque esas secciones traen el repositorio del buzón (`supabaseAdmin`). */
+  entrega?: React.ReactNode;
+  recepcion?: React.ReactNode;
   /** La ficha de corridas ya renderizada (`FichaCorridas`). ReactNode y no
    *  datos por la misma razón que las notificaciones: esta vista no debe
    *  importar el módulo de corridas, que trae `supabaseAdmin`. */
@@ -128,6 +135,8 @@ export function VistaAgenteProveedores({
             acciones={{ generarBuzon: acciones.generarBuzon, rotarBuzon: acciones.rotarBuzon }}
           />
 
+          {recepcion}
+
           <section className="card p-4">
             <h2 className="font-display text-[15px] font-semibold mb-1">La bandeja</h2>
             <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
@@ -185,10 +194,19 @@ export function VistaAgenteProveedores({
                           )}
                           {/* Cifra leída por VISIÓN, no del XML: se dice siempre, con su
                               confianza, para que nadie apruebe un OCR como dato duro. */}
+                          {f.requiereRevision && (
+                            <span className="inline-flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--warn)' }}>
+                              <TriangleAlert width={10} height={10} strokeWidth={2} />
+                              {f.revisionMotivo ?? 'lectura de PDF: cotéjala antes de aprobar'}
+                            </span>
+                          )}
+                          {f.tienePdf && acciones.verPdf && (
+                            <span className="block mt-1"><BotonVerPdf campo="facturaId" id={f.id} ver={acciones.verPdf} /></span>
+                          )}
                           {f.ocrConfianza !== null && (
                             <span className="inline-flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--warn)' }}>
                               <TriangleAlert width={10} height={10} strokeWidth={2} />
-                              leída de foto (OCR {numero(f.ocrConfianza)}) — revisa contra el papel
+                              leída de {f.fuenteDatos === 'pdf_texto' || f.fuenteDatos === 'pdf_vision' ? 'PDF' : 'foto'} (OCR {numero(f.ocrConfianza)}) — revisa contra el papel
                             </span>
                           )}
                         </td>
@@ -211,6 +229,8 @@ export function VistaAgenteProveedores({
               </div>
             )}
           </section>
+
+          {entrega}
 
           <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
             Los CSV usan el layout estándar de importación de facturas de compra (SAP Business
@@ -337,7 +357,9 @@ function PillEstado({ f }: { f: FacturaProveedor }) {
   // «Exportada» no borra la decisión: es una aprobada que YA salió en un CSV
   // (`exportada_en`, 0108) — el anti-doble-import visible.
   const cfg = f.estado === 'aprobada'
-    ? f.exportadaEn
+    ? f.entregadaEn
+      ? { rotulo: 'Entregada al contador', fg: 'var(--ok)', bg: 'var(--okbg)' }
+    : f.exportadaEn
       ? { rotulo: 'Exportada', fg: 'var(--ok)', bg: 'var(--okbg)' }
       : { rotulo: 'Aprobada', fg: 'var(--ok)', bg: 'var(--okbg)' }
     : f.estado === 'rechazada'
