@@ -6,7 +6,7 @@ import { construirEstatus, type EstatusViaje } from './estatus_viaje';
 import { evidenciaJornadaDeHitos, type EvidenciaJornada } from './jornada_hitos';
 import { leerConfigConductor } from './repo';
 import {
-  leerDatosEstadias, leerHitosDeOperador, leerViajeConHitos, type DatosEstadias, type FiltrosTablero, type ViajeTablero,
+  leerDatosEstadias, leerHitosDeOperador, leerVeredictos, leerViajeConHitos, type DatosEstadias, type FiltrosTablero, type VeredictoFila, type ViajeTablero,
 } from './repo_validacion';
 import type { HitoFila } from './tipos';
 import { diaEnZona, TZ_MX } from '@/lib/formato';
@@ -27,6 +27,8 @@ export interface DepsServicios {
   datosEstadias(tenantId: string, desde: Date, hasta: Date, f: FiltrosTablero): Promise<DatosEstadias>;
   politicas: typeof politicasDetencion;
   hitosDeOperador(tenantId: string, operadorId: string, desde: Date, hasta: Date): Promise<HitoFila[]>;
+  /** Los veredictos de ubicación de UN viaje de esa flota (para saber qué llegadas siguen sin confirmar). Opcional: sin él, nada se da por confirmado. */
+  veredictos?(tenantId: string, viajeId: string): Promise<VeredictoFila[]>;
 }
 
 export const depsServiciosReales: DepsServicios = {
@@ -35,6 +37,7 @@ export const depsServiciosReales: DepsServicios = {
   datosEstadias: leerDatosEstadias,
   politicas: politicasDetencion,
   hitosDeOperador: leerHitosDeOperador,
+  veredictos: (tenantId, viajeId) => leerVeredictos(tenantId, [viajeId]),
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -45,7 +48,13 @@ export async function estatusViaje(tenantId: string, viajeId: string, ahora: Dat
   if (!datos) return null;
   // Un viaje de otra flota no sale de `viajeConHitos` (la consulta está anclada); se comprueba igual, por si un doble lo devolviera.
   const config = await d.config(tenantId).catch(() => ({ ...CONFIG_CONDUCTOR_DEFAULT }));
-  return construirEstatus(datos.viaje, datos.hitos, config, ahora);
+  // Los veredictos de ubicación: sin ellos (no se pueden leer) una llegada que solo dijo el chofer no se afirma como hecha.
+  const lista = d.veredictos ? await d.veredictos(tenantId, viajeId.toLowerCase()).catch(() => null) : null;
+  // Solo el veredicto del CICLO vigente de cada hito (una corrección retira el hito y deja el veredicto viejo en el historial).
+  const ciclos = new Map(datos.hitos.map((h) => [h.id, h.ciclo]));
+  const vigentes = new Map<string, { resultado: string; motivo: string | null }>();
+  for (const f of lista ?? []) if (ciclos.get(f.hitoId) === f.ciclo) vigentes.set(f.hitoId, { resultado: f.resultado, motivo: f.motivo });
+  return construirEstatus(datos.viaje, datos.hitos, config, ahora, vigentes);
 }
 
 export async function estadiasDelPeriodo(
