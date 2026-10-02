@@ -159,3 +159,29 @@ from (
   ) q
 ) d
 on conflict (id) do nothing;
+
+-- ── El worker de la bandeja (0640–0642, cron carta-porte-docs cada 5 min) ──────────────────────────────────────
+-- Tres huellas del barrido, sin una sola llamada a un modelo (los tres sin archivo en Storage: el worker solo toma
+-- documentos CON archivo, así que ninguno vuelve a procesarse en un demo):
+--   · `orden_c05_3.pdf` (por revisar, entró por correo, CP de destino con confianza baja) YA avisó a la oficina una sola
+--     vez por ese hallazgo: `avisos_oficina.hallazgos` es el candado de «una sola vez».
+--   · `orden_c05_5.pdf` acaba de entrar por correo y sigue «recibido»: el siguiente barrido lo toma tras 2 min de gracia.
+--   · `orden_c05_6.pdf` agotó sus 5 intentos (el modelo no respondió): queda 'fallido' terminal y la oficina ya recibió el
+--     aviso «agotado» (una sola vez). Sin este aviso, un documento así quedaba mudo en la bandeja.
+update cp_documento set avisos_oficina = jsonb_build_object('hallazgos', current_setting('inn.ancla')::timestamptz - interval '90 minutes')
+where tenant_id = current_setting('inn.tenant')::uuid and id = innovativos_sim.uid('cpdoc:orden_c05_3.pdf') and avisos_oficina = '{}'::jsonb;
+
+insert into cp_documento (id, tenant_id, canal, formato, nombre_archivo, mime, bytes, sha256, estado, version, cliente_id, remitente, asunto,
+                          remitente_reconocido, riesgo_inyeccion, modelo, intentos, ultimo_error, avisos_oficina, retener_hasta, created_at, updated_at)
+select innovativos_sim.uid('cpdoc:' || d.nombre), current_setting('inn.tenant')::uuid, 'correo', 'pdf_texto', d.nombre, 'application/pdf',
+       21000 + (innovativos_sim.h(d.nombre) % 9000)::int, innovativos_sim.sha('cpdoc:' || d.nombre), d.estado, 1,
+       innovativos_sim.uid('cliente:c05'), 'logistica@c05.demo.invalid', 'Orden de embarque ' || d.folio, true, false, 'demo-sintetico',
+       d.intentos, d.error, d.avisos, current_setting('inn.ancla')::timestamptz + interval '180 days', d.creado, d.actualizado
+from (values
+  ('orden_c05_5.pdf', 'C05-590', 'recibido', 0, null::text, '{}'::jsonb,
+     current_setting('inn.ancla')::timestamptz - interval '2 minutes', current_setting('inn.ancla')::timestamptz - interval '2 minutes'),
+  ('orden_c05_6.pdf', 'C05-597', 'fallido', 5, 'La extracción con el modelo no respondió en 5 intentos (dato de demo).',
+     jsonb_build_object('agotado', current_setting('inn.ancla')::timestamptz - interval '20 minutes'),
+     current_setting('inn.ancla')::timestamptz - interval '6 hours', current_setting('inn.ancla')::timestamptz - interval '20 minutes')
+) d(nombre, folio, estado, intentos, error, avisos, creado, actualizado)
+on conflict (id) do nothing;
