@@ -225,6 +225,38 @@ describe('barridoValidacion', () => {
     expect(aplicados).toHaveLength(0);
   });
 
+  it('cuando el barrido VALIDA una llegada a descarga, es entonces cuando se sella `viaje.llegada_en`, con la hora del mensaje', async () => {
+    const { d } = deps({ gps: [gps()] });
+    const sellos: Array<[string, string, string]> = [];
+    d.sellarLlegada = async (t, v, cuando) => { sellos.push([t, v, cuando.toISOString()]); };
+    const c = candidato('a');
+    c.hito = { ...c.hito, tipo: 'llegada_descarga' };
+    await barridoValidacion({ candidatos: async () => [c, candidato('b')], configDe: async () => ({ ...CONFIG_CONDUCTOR_DEFAULT }), deps: d }, MENSAJE);
+    expect(sellos).toEqual([['t1', 'v-a', MENSAJE.toISOString()]]); // la llegada a CARGA ('b') no sella el destino
+  });
+
+  it('si el barrido sigue sin dato o sin coincidencia, no se sella nada', async () => {
+    for (const g of [[], [gps({ lat: 25 })]]) {
+      const { d } = deps({ gps: g });
+      const sellar = vi.fn(async () => {});
+      d.sellarLlegada = sellar;
+      const c = candidato('a');
+      c.hito = { ...c.hito, tipo: 'llegada_descarga' };
+      await barridoValidacion({ candidatos: async () => [c], configDe: async () => ({ ...CONFIG_CONDUCTOR_DEFAULT }), deps: d }, MENSAJE);
+      expect(sellar).not.toHaveBeenCalled();
+    }
+  });
+
+  it('un sitio que no existe (sin_sitio) no se puede confirmar nunca: el barrido sella para no dejar el destino mudo', async () => {
+    const { d } = deps({ sitio: null });
+    const sellar = vi.fn(async () => {});
+    d.sellarLlegada = sellar;
+    const c = candidato('a');
+    c.hito = { ...c.hito, tipo: 'llegada_descarga' };
+    await barridoValidacion({ candidatos: async () => [c], configDe: async () => ({ ...CONFIG_CONDUCTOR_DEFAULT }), deps: d }, MENSAJE);
+    expect(sellar).toHaveBeenCalledTimes(1);
+  });
+
   it('idempotente: si la base dice «igual», no cuenta como mejora', async () => {
     const { d } = deps({ gps: [gps({ lat: 25 })], aplicar: async () => 'igual' });
     const r = await barridoValidacion({ candidatos: async () => [candidato('a')], configDe: async () => ({ ...CONFIG_CONDUCTOR_DEFAULT }), deps: d }, MENSAJE);

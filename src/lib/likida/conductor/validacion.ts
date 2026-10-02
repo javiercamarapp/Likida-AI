@@ -133,3 +133,17 @@ export function debeReintentarseValidacion(v: { resultado: string; motivo: strin
   if (v.resultado === 'sin_coincidencia') return true;
   return v.resultado === 'sin_dato' && (v.motivo === 'sin_ubicacion' || v.motivo === 'ubicacion_fuera_de_ventana');
 }
+
+/**
+ * ¿Este veredicto autoriza sellar `viaje.llegada_en` (la llegada al DESTINO que leen el Vigía y la espera en patio)?
+ *
+ * Un «ya llegué» no es una posición: sin algo que lo respalde el hito queda `recibido` (el chofer sí avisó y no se le
+ * persigue por lo mismo) pero NO se declara al cliente que el camión está en el destino. Se sella cuando la ubicación lo
+ * confirma, cuando NO HAY con qué compararlo (el viaje no tiene sitio asignado: no hay confirmación posible, y dejar el
+ * destino mudo para siempre rompería las flotas sin catálogo) o cuando la flota apagó la validación.
+ */
+export function veredictoSellaLlegada(v: Pick<Veredicto, 'resultado' | 'motivo'> | null | undefined, validarUbicacion: boolean): boolean {
+  if (!validarUbicacion) return true;
+  if (!v) return false;
+  return v.resultado === 'validado' || (v.resultado === 'sin_dato' && v.motivo === 'sin_sitio');
+}

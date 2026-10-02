@@ -1,10 +1,10 @@
 import { logger } from '@/lib/logger';
 import type { ConfigConductor } from './config';
 import { aplicarVeredicto, posicionesDeUnidad, sitioDelHito, unidadReportaGps, type ResultadoVeredicto } from './repo_validacion';
-import type { ViajeContexto } from './repo';
+import { sincronizarLegado, type ViajeContexto } from './repo';
 import type { HitoFila } from './tipos';
 import {
-  evaluarUbicacion, posicionMasCercanaEnTiempo, type PosicionComparada, type SitioValidable, type Veredicto,
+  evaluarUbicacion, posicionMasCercanaEnTiempo, veredictoSellaLlegada, type PosicionComparada, type SitioValidable, type Veredicto,
 } from './validacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -38,6 +38,8 @@ export interface DepsValidacion {
    * trata como «no»: el pin es la única evidencia posible. Con GPS activo, un pin solo NUNCA valida: lo elige el chofer.
    */
   gpsActivo?(tenantId: string, unidadId: string, desde: Date): Promise<boolean>;
+  /** Sella `viaje.llegada_en` (el primero gana) cuando una llegada a DESCARGA queda confirmada DESPUÉS de registrarse. */
+  sellarLlegada?(tenantId: string, viajeId: string, cuando: Date): Promise<void>;
 }
 
 /** Cuánto atrás se mira si la unidad reporta GPS: más viejo que esto, se considera una unidad sin GPS operativo. */
@@ -48,6 +50,7 @@ export const depsValidacionReales: DepsValidacion = {
   posiciones: posicionesDeUnidad,
   aplicar: aplicarVeredicto,
   gpsActivo: unidadReportaGps,
+  sellarLlegada: (tenantId, viajeId, cuando) => sincronizarLegado(tenantId, viajeId, ['llegada'], cuando),
 };
 
 export type ConfigValidacion = Pick<ConfigConductor, 'validarUbicacion' | 'toleranciaUbicacionM' | 'ventanaUbicacionMin' | 'pedirUbicacion'>;
@@ -73,6 +76,10 @@ export interface SalidaValidar {
 }
 
 export const esLlegada = (t: HitoFila['tipo']): boolean => t === 'llegada_carga' || t === 'llegada_descarga';
+
+/** ¿Una validación posterior al registro (barrido o pin) debe sellar `viaje.llegada_en`? Solo la llegada a DESCARGA, y solo si quedó confirmada. */
+export const debeSellarTrasValidar = (tipo: HitoFila['tipo'], s: Pick<SalidaValidar, 'veredicto' | 'aplicado'> | null): boolean =>
+  tipo === 'llegada_descarga' && s !== null && s.aplicado !== 'fallo' && s.aplicado !== 'hito_cambio' && veredictoSellaLlegada(s.veredicto, true);
 
 export async function validarHitoContraSitio(d: DepsValidacion, e: EntradaValidarHito): Promise<SalidaValidar | null> {
   if (!e.config.validarUbicacion || !esLlegada(e.hito.tipo)) return null;
@@ -180,6 +187,7 @@ export async function barridoValidacion(p: PuertosBarrido, ahora: Date, venceEn?
     r.revisados++;
     const s = await validarHitoContraSitio(p.deps, { viaje: c.viaje, hito: c.hito, config, mensajeEn, ahora });
     if (!s) { r.fallos++; continue; }
+    if (debeSellarTrasValidar(c.hito.tipo, s)) await p.deps.sellarLlegada?.(c.viaje.tenantId, c.viaje.id, mensajeEn);
     if (s.aplicado === 'mejorado' || s.aplicado === 'nuevo') {
       if (s.veredicto.resultado === 'validado') r.validados++;
       else if (s.veredicto.resultado === 'sin_coincidencia') r.sinCoincidencia++;

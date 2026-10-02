@@ -98,6 +98,7 @@ export function crearMundo(o: OpcionesMundo) {
     posiciones: async (tenantId, unidadId, desde, hasta) =>
       (o.gps ?? []).filter((p) => p.tenantId === tenantId && p.unidadId === unidadId && p.medidaEn >= desde && p.medidaEn <= hasta)
         .map(({ lat, lng, medidaEn, fuente }) => ({ lat, lng, medidaEn, fuente })),
+    sellarLlegada: async (_tenantId, viajeId) => { m.legado.push({ viajeId, sellos: ['llegada'] }); },
     aplicar: async (tenantId, hito, v, ahora) => {
       const h = m.hitos.get(hito.id);
       if (!h || h.tenantId !== tenantId || h.ciclo !== hito.ciclo || !['recibido', 'validado'].includes(h.estado)) return 'hito_cambio';
