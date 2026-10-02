@@ -48,6 +48,7 @@ const RUTA: Record<CronId, string> = {
   vigia: '/api/cron/vigia',
   'jornada-alertas': '/api/cron/jornada-alertas',
   'buzon-entrega': '/api/cron/buzon-entrega',
+  'carta-porte-docs': '/api/cron/carta-porte-docs',
 };
 
 /** Qué hace cada reloj, en una línea, para que el rojo se pueda priorizar. */
@@ -69,6 +70,7 @@ const OFICIO: Record<CronId, string> = {
   vigia: 'vigila el SLA de los clientes finales, escala por niveles y purga lo que ya cumplió su retención',
   'jornada-alertas': 'avisa al encargado y al operador cuando la jornada en curso se acerca al tope legal (80 %, 95 % y exceso)',
   'buzon-entrega': 'arma y manda al contador el lote de facturas aprobadas, reintenta con espera y marca lo que Resend no confirma',
+  'carta-porte-docs': 'extrae los documentos de Carta Porte que quedaron en la bandeja, reintenta con espera y avisa a la oficina de los que traen dudas o no se pudieron leer',
 };
 
 /**

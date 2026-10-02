@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos', 'vigia', 'buzon-entrega', 'jornada-alertas'] as const;
+export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos', 'vigia', 'buzon-entrega', 'jornada-alertas', 'carta-porte-docs'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -96,6 +96,10 @@ export const CADENCIA_MS: Record<CronId, number> = {
   // es la cadencia. Sin modelo: lee el expediente, cruza umbrales y manda a lo más dos
   // mensajes por jornada y nivel (el claim lo impide repetir).
   'jornada-alertas': 15 * 60_000,
+  // La bandeja de Carta Porte (0640): extrae lo que quedó «recibido», el lease vencido y los fallos reintentables
+  // (con espera creciente de 15 min en adelante) y avisa a la oficina una vez por documento. Cada 5 minutos: es lo
+  // que tarda en cumplirse el «lo verás en la bandeja en un momento»; el claim con lease impide el doble proceso.
+  'carta-porte-docs': 300_000,
 };
 
 /** Cuánto retraso sobre la cadencia se tolera antes de llamarlo muerto. */
