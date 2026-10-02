@@ -26,6 +26,7 @@ import { MAX_ARCHIVO_BYTES, matrizDeArchivo, TOPE_FILAS_IMPORTACION } from './ar
 import { asignarPatios } from './patios';
 import { interpretarFilasOperadores, planificarOperadores, importarOperadores, type OperadorImportado } from './operadores';
 import { interpretarFilasUnidades, planificarUnidades, importarUnidades, type UnidadImportada } from './unidades';
+import { interpretarFilasGps, planificarMapeoGps, aplicarMapeoGps } from './gps_dispositivos';
 import {
   type PasoImportacion, type ResultadoImportacionUI, type ProblemaFilaUI, type MuestraFilaUI,
   TOPE_PROBLEMAS_UI, TOPE_MUESTRA_UI,
@@ -211,4 +212,51 @@ export async function cargarUnidadesDesdeArchivo(e: EntradaImportacion): Promise
     nuevas: r.creadas.length, yaEstaban: r.duplicadas.length,
     conProblema: problemasFinales.total, problemas: problemasFinales.problemas,
   };
+}
+
+// ── Dispositivos GPS (mapeo unidad ↔ dispositivo) ──────────────────────────
+
+/**
+ * Liga el dispositivo GPS de cada unidad desde un archivo. Mismo flujo de dos
+ * pasos (revisar sin escribir, confirmar con la huella). NO da de alta unidades:
+ * `nuevas` aquí son los dispositivos que se ligarían (o cambiarían).
+ */
+export async function mapearGpsDesdeArchivo(e: EntradaImportacion): Promise<ResultadoImportacionUI> {
+  const paso = pasoDe(e.datos);
+  const leido = await leerArchivo(e.datos);
+  if (!leido.ok) return vacio(paso, leido.error);
+
+  const lectura = interpretarFilasGps(leido.matriz);
+  if (lectura.error && lectura.filas.length === 0) return vacio(paso, lectura.error);
+
+  const plan = await planificarMapeoGps(e.tenantId, lectura.filas, e.alcance);
+  if (plan.error) return vacio(paso, plan.error);
+
+  const archivoDescartadas = lectura.descartadas.filter((d) => !d.motivo.startsWith('El archivo trae'));
+  const { problemas, total } = juntarProblemas(archivoDescartadas, plan.errores);
+  const excedeTope = excede(leido.matriz);
+  const base: ResultadoImportacionUI = {
+    paso, huella: leido.huella, archivo: leido.nombre,
+    leidas: lectura.filas.length + archivoDescartadas.length,
+    nuevas: plan.aplicar.length, yaEstaban: plan.yaEstaban.length, conProblema: total,
+    muestra: plan.aplicar.slice(0, TOPE_MUESTRA_UI).map((f): MuestraFilaUI => ({
+      fila: f.fila, titulo: f.numeroEconomico,
+      detalle: `${f.proveedor} · dispositivo ${f.dispositivo}${f.cambiaDe ? ` (antes ${f.cambiaDe})` : ''}`,
+    })),
+    problemas, patiosDesconocidos: [], avisos: [], excedeTope,
+  };
+  if (excedeTope && lectura.error) base.avisos.push(lectura.error);
+  if (paso === 'previsualizar') return base;
+
+  if (excedeTope) return { ...base, error: 'El archivo rebasa el tope de filas: parte el archivo y vuelve a subirlo. No cambié nada.' };
+  const huellaRevisada = String(e.datos.get('huella') ?? '');
+  if (huellaRevisada !== '' && huellaRevisada !== leido.huella) {
+    return { ...base, error: 'El archivo cambió desde la vista previa. Revísalo otra vez antes de confirmar. No cambié nada.' };
+  }
+  if (plan.aplicar.length === 0) return { ...base, error: 'No hay nada nuevo que ligar.', confirmado: false };
+
+  const r = await aplicarMapeoGps(e.tenantId, lectura.filas, e.alcance, { actor: e.actor });
+  if (r.error) return { ...base, error: r.error, confirmado: false };
+  const finales = juntarProblemas(archivoDescartadas, r.errores);
+  return { ...base, confirmado: true, nuevas: r.ligadas, conProblema: finales.total, problemas: finales.problemas };
 }

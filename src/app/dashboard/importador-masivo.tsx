@@ -47,7 +47,7 @@ export function ImportadorMasivo({
   entidad, accion, plantillaCsv, archivoPlantilla, columnas, hrefPatios, ofrecerInvitacion = false, patioDelJefe = null, tope,
   estadoInicial = null,
 }: {
-  entidad: 'operadores' | 'unidades';
+  entidad: 'operadores' | 'unidades' | 'dispositivos_gps';
   accion: AccionImportacion;
   /** El texto de la plantilla (con BOM), armado en el servidor. */
   plantillaCsv: string;
@@ -74,8 +74,11 @@ export function ImportadorMasivo({
   const { notificar } = useNotificar();
 
   const clave = archivo ? `${archivo.name}|${archivo.size}|${archivo.lastModified}` : null;
-  const sustantivo = entidad === 'operadores' ? 'operadores' : 'unidades';
-  const singular = entidad === 'operadores' ? 'operador' : 'unidad';
+  const esGps = entidad === 'dispositivos_gps';
+  const sustantivo = entidad === 'operadores' ? 'operadores' : esGps ? 'dispositivos GPS' : 'unidades';
+  const singular = entidad === 'operadores' ? 'operador' : esGps ? 'dispositivo GPS' : 'unidad';
+  // W3: el mapeo de GPS LIGA dispositivos a unidades que ya existen, no da de alta nada.
+  const verboPasado = esGps ? 'ligaron' : 'dieron de alta';
 
   function enviar(paso: 'previsualizar' | 'confirmar') {
     if (!archivo) return;
@@ -112,13 +115,13 @@ export function ImportadorMasivo({
     router.refresh();
     notificar({
       tono: 'ok',
-      mensaje: `Se dieron de alta ${numero(estado.nuevas)} ${estado.nuevas === 1 ? singular : sustantivo}${estado.yaEstaban > 0 ? ` (${numero(estado.yaEstaban)} ya estaban)` : ''}.`,
+      mensaje: `Se ${verboPasado} ${numero(estado.nuevas)} ${estado.nuevas === 1 ? singular : sustantivo}${estado.yaEstaban > 0 ? ` (${numero(estado.yaEstaban)} ya estaban)` : ''}.`,
     });
     if (estado.invitacion && estado.invitacion.fallidas.length > 0) {
       notificar({ tono: 'aviso', mensaje: `${numero(estado.invitacion.fallidas.length)} invitaciones no salieron. Revisa el detalle abajo.` });
     }
     if (entrada.current) entrada.current.value = '';
-  }, [estado, router, notificar, singular, sustantivo]);
+  }, [estado, router, notificar, singular, sustantivo, verboPasado]);
 
   const hrefErrores = useMemo(
     () => (estado && estado.problemas.length > 0
@@ -138,9 +141,9 @@ export function ImportadorMasivo({
           <FileSpreadsheet aria-hidden width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 id="titulo-importar" className="font-display text-[15px] font-semibold">Cargar {sustantivo} desde Excel o CSV</h2>
+          <h2 id="titulo-importar" className="font-display text-[15px] font-semibold">{esGps ? 'Ligar dispositivos GPS desde Excel o CSV' : `Cargar ${sustantivo} desde Excel o CSV`}</h2>
           <p className="mt-0.5 text-[12.5px]" style={{ color: 'var(--muted)' }}>
-            Para dar de alta tu flota completa de una vez. Primero se <strong>revisa</strong> el archivo —no se escribe nada—,
+            {esGps ? 'Para ligar el GPS de toda tu flota de una vez a unidades que YA existen (no se dan de alta unidades).' : 'Para dar de alta tu flota completa de una vez.'} Primero se <strong>revisa</strong> el archivo —no se escribe nada—,
             ves cuántas filas entran y cuáles traen un problema, y recién entonces confirmas.
           </p>
 
@@ -171,7 +174,7 @@ export function ImportadorMasivo({
                 </button>
               </div>
               <p className="mt-1.5 text-[11.5px]" style={{ color: 'var(--faint)' }}>
-                Máximo {MAX_MB} MB y {numero(tope)} filas por archivo. {patioDelJefe
+                Máximo {MAX_MB} MB y {numero(tope)} filas por archivo. {esGps ? 'Un dispositivo es de una sola unidad y una unidad tiene un solo dispositivo.' : patioDelJefe
                   ? <>Tu carga cae en tu patio, <strong>{patioDelJefe}</strong>.</>
                   : <>La columna «patio» debe llevar el nombre de un patio que ya exista en <Link href={hrefPatios} className="underline">Patios</Link>.</>}
               </p>
@@ -189,7 +192,7 @@ export function ImportadorMasivo({
                 </p>
 
                 <div className="grid grid-cols-3 gap-2">
-                  <Cifra titulo={estado.confirmado ? `Se dieron de alta` : `Se darían de alta`} valor={estado.nuevas} tono={estado.nuevas > 0 ? 'ok' : undefined} />
+                  <Cifra titulo={estado.confirmado ? (esGps ? 'Se ligaron' : 'Se dieron de alta') : (esGps ? 'Se ligarían' : 'Se darían de alta')} valor={estado.nuevas} tono={estado.nuevas > 0 ? 'ok' : undefined} />
                   <Cifra titulo="Ya estaban" valor={estado.yaEstaban} nota="no se tocan" />
                   <Cifra titulo="Con problema" valor={estado.conProblema} tono={estado.conProblema > 0 ? 'bad' : undefined} nota="no entran" />
                 </div>
@@ -217,7 +220,7 @@ export function ImportadorMasivo({
                   <div className="overflow-x-auto">
                     <table className="w-full text-[12.5px]">
                       <caption className="pb-1 text-left text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
-                        {estado.confirmado ? 'Las primeras que se dieron de alta' : 'Así entrarían las primeras'}
+                        {estado.confirmado ? (esGps ? 'Las primeras que se ligaron' : 'Las primeras que se dieron de alta') : (esGps ? 'Así se ligarían las primeras' : 'Así entrarían las primeras')}
                       </caption>
                       <tbody>
                         {estado.muestra.map((m) => (
@@ -308,7 +311,7 @@ export function ImportadorMasivo({
                     <button type="button" onClick={() => setConfirmando(true)} disabled={pendiente}
                       className="h-9 rounded-lg px-4 text-[13px] font-medium transition-opacity hover:opacity-85 disabled:opacity-50"
                       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                      {pendiente ? 'Importando…' : `Importar ${numero(estado.nuevas)} ${estado.nuevas === 1 ? singular : sustantivo}`}
+                      {pendiente ? (esGps ? 'Ligando…' : 'Importando…') : `${esGps ? 'Ligar' : 'Importar'} ${numero(estado.nuevas)} ${estado.nuevas === 1 ? singular : sustantivo}`}
                     </button>
                   </div>
                 )}
@@ -320,16 +323,16 @@ export function ImportadorMasivo({
 
       <DialogoConfirmar
         abierto={confirmando} tono="normal" pendiente={pendiente}
-        titulo={`Dar de alta ${numero(estado?.nuevas ?? 0)} ${(estado?.nuevas ?? 0) === 1 ? singular : sustantivo}`}
+        titulo={`${esGps ? 'Ligar' : 'Dar de alta'} ${numero(estado?.nuevas ?? 0)} ${(estado?.nuevas ?? 0) === 1 ? singular : sustantivo}`}
         descripcion={
           <>
-            Se crearán {numero(estado?.nuevas ?? 0)} {sustantivo} nuevos en tu flota
+            {esGps ? 'Se ligarán' : 'Se crearán'} {numero(estado?.nuevas ?? 0)} {sustantivo}{esGps ? ' a sus unidades' : ' nuevos en tu flota'}
             {(estado?.yaEstaban ?? 0) > 0 ? `; los ${numero(estado?.yaEstaban ?? 0)} que ya estaban no se tocan` : ''}
             {(estado?.conProblema ?? 0) > 0 ? `; las ${numero(estado?.conProblema ?? 0)} filas con problema NO entran` : ''}.
-            {invitar ? ' Además se mandará la invitación por WhatsApp a los nuevos (hasta 40 en este paso).' : ' No se manda ningún WhatsApp.'}
+            {esGps ? ' No se crea ninguna unidad ni se manda ningún WhatsApp.' : invitar ? ' Además se mandará la invitación por WhatsApp a los nuevos (hasta 40 en este paso).' : ' No se manda ningún WhatsApp.'}
           </>
         }
-        etiquetaConfirmar="Sí, dar de alta"
+        etiquetaConfirmar={esGps ? 'Sí, ligar' : 'Sí, dar de alta'}
         onCancelar={() => setConfirmando(false)}
         onConfirmar={() => { setConfirmando(false); enviar('confirmar'); }}
       />

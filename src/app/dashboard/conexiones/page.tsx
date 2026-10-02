@@ -16,7 +16,17 @@ import {
   SeccionCredenciales, catalogoParaCaptura, pistasConRotulo, type CredencialPantalla,
 } from './seccion-credenciales';
 import { SeccionIntegraciones } from './seccion-integraciones';
+import { SeccionGps, type ResultadoSecreto } from './seccion-gps';
 import { VistaConexiones } from './vista';
+import { armarPanelGps } from '@/lib/likida/gps_push/panel';
+import { generarSecretoPush } from '@/lib/likida/gps_push/datos';
+import { mapearGpsDesdeArchivo } from '@/lib/likida/importacion/panel';
+import { plantillaGpsCsv } from '@/lib/likida/importacion/gps_dispositivos';
+import type { ResultadoImportacionUI } from '@/lib/likida/importacion/resultado_ui';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
+import { appUrl } from '@/lib/env';
+import { ahoraMs } from '@/lib/saludo';
+import { sufijoTenant } from '../sufijo';
 
 export const dynamic = 'force-dynamic';
 
@@ -155,10 +165,53 @@ export default async function PaginaConexiones({
     }
   }
 
+  const panelGps = await armarPanelGps(tenantId, ahoraMs());
+
+  /** Genera o rota el secreto del GPS propio. El valor en claro viaja UNA vez, de aquí al navegador. */
+  async function generarSecreto(_previo: ResultadoSecreto, _fd: FormData): Promise<ResultadoSecreto> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA, sp);
+    if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) return { ok: false, error: 'Solo el dueño de la flota genera el secreto del GPS propio.' };
+    if (!cofreConfigurado()) return { ok: false, error: 'El cofre de credenciales no está configurado en este entorno: no se puede guardar el secreto cifrado.' };
+    try {
+      const { secreto, version } = await generarSecretoPush(s.tenantId);
+      await anotarBitacora({ tenantId: s.tenantId, actor: { id: s.userId }, accion: 'gps.push_secreto_generado', entidad: 'tenant', entidadId: s.tenantId, detalle: { version } });
+      revalidatePath(RUTA);
+      return { ok: true, secreto, endpoint: `${appUrl()}/api/gps/push/${s.tenantId}` };
+    } catch (e) {
+      return { ok: false, error: mensajeParaPantalla(e, 'generar el secreto') };
+    }
+  }
+
+  /** Liga dispositivos GPS a unidades existentes: revisar (no escribe) y confirmar. */
+  async function mapearGps(_previo: ResultadoImportacionUI | null, fd: FormData): Promise<ResultadoImportacionUI | null> {
+    'use server';
+    const vacio = (error: string): ResultadoImportacionUI => ({
+      error, paso: 'previsualizar', huella: '', archivo: '', leidas: 0, nuevas: 0, yaEstaban: 0, conProblema: 0,
+      muestra: [], problemas: [], patiosDesconocidos: [], avisos: [], excedeTope: false,
+    });
+    const s = await resolverTenantEfectivo(RUTA, sp);
+    if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) return vacio('Solo el dueño de la flota liga dispositivos GPS.');
+    const r = await mapearGpsDesdeArchivo({ tenantId: s.tenantId, alcance: { tipo: 'flota' }, actor: { id: s.userId }, datos: fd });
+    if (r.confirmado) revalidatePath(RUTA);
+    return r;
+  }
+
   return (
     <VistaConexiones
       conectores={conectores}
       integraciones={<SeccionIntegraciones integraciones={catalogoIntegraciones({ credencialesRastreo })} />}
+      gps={panelGps.error !== null ? (
+        <section className="card p-4"><h2 className="font-display text-[15px] font-semibold">GPS</h2>
+          <p role="alert" className="mt-1 text-[12.5px]" style={{ color: 'var(--warn)' }}>{panelGps.error}</p></section>
+      ) : (
+        <SeccionGps
+          salud={panelGps.salud} push={panelGps.push} endpoint={panelGps.endpoint}
+          huerfanos={panelGps.huerfanos} hayMasHuerfanos={panelGps.hayMasHuerfanos} conteos={panelGps.conteos}
+          puedeAdministrarGps={puedeAdministrar(rol)} generarSecreto={generarSecreto} mapear={mapearGps}
+          plantillaCsv={plantillaGpsCsv()} hrefPatios={`/dashboard/patios${sufijoTenant(sp)}`}
+        />
+      )}
       credenciales={(
         <SeccionCredenciales
           cofreListo={cofreConfigurado()}
