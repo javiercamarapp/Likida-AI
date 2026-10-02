@@ -19462,3 +19462,36 @@ begin
   raise exception E'CURSOS_BAJA_0678 nuevo-nace-activo=% reimport-actualiza=% baja-respetada=% activo-sigue-activo=% sin-grants-abiertos=%   (esperado t / t / t / t / t)',
     nuevo, actualiza, baja, sigue, grants;
 end $$;
+
+-- ── 337. Carta Porte, reabrir un hijo rechazado a mano toma el cliente y el remitente de la llegada nueva (mig. 0679) ──
+-- La 0672 reabría el hijo conservando cliente, remitente, asunto y canal de la llegada ANTERIOR (otro remitente, quizá otro cliente) y las marcas
+-- del documento rechazado. La 0679 los toma del padre que se divide ahora, limpia lo que dependía del rechazo (revisor, apertura, exportación) y
+-- renombra el archivo al nuevo.
+-- Esperado: CP_REABRE_0679 accion-reabierto=t cliente-nuevo=t remitente-asunto-canal-nuevos=t nombre-nuevo=t marcas-limpias=t
+do $$
+declare
+  ta uuid; c_viejo uuid; c_nuevo uuid; padre uuid := gen_random_uuid(); hijo uuid := gen_random_uuid(); sha_h text := encode(sha256(convert_to('0679-v-h1', 'utf8')), 'hex');
+  r record; d cp_documento%rowtype; accion boolean := false; cli boolean := false; rem boolean := false; nom boolean := false; marcas boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0679 A') returning id into ta;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ 0679 anterior') returning id into c_viejo;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ 0679 nuevo') returning id into c_nuevo;
+  insert into cp_documento (id, tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta, cliente_id, remitente, asunto, remitente_reconocido)
+    values (padre, ta, 'whatsapp', 'excel', 'plan.xlsx', 1000, encode(sha256(convert_to('0679-v-padre', 'utf8')), 'hex'), 'procesando', 2, 1, now() + interval '2 minutes', 'ruta/p', c_nuevo, 'nuevo@remitente.test.invalid', 'Plan nuevo', true);
+  insert into cp_documento (id, tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, storage_ruta, cliente_id, remitente, asunto, remitente_reconocido, rechazo_motivo, exportado_en, abierto_en, tiempo_revision_seg)
+    values (hijo, ta, 'correo', 'csv', 'h1.csv', 50, sha_h, 'rechazado', 4, 1, 'ruta/viejo', c_viejo, 'viejo@remitente.test.invalid', 'Asunto viejo', false, 'lo rechazó la oficina', now(), now(), 30);
+
+  select * into r from cp_documento_dividir(ta, padre, 2, jsonb_build_array(
+    jsonb_build_object('indice', 1, 'clave', 'F-1', 'nombre', 'h1-nuevo.csv', 'sha256', sha_h, 'bytes', 77, 'storage_ruta', 'ruta/nuevo-1'),
+    jsonb_build_object('indice', 2, 'clave', 'F-2', 'nombre', 'h2.csv', 'sha256', encode(sha256(convert_to('0679-v-h2', 'utf8')), 'hex'), 'bytes', 60, 'storage_ruta', 'ruta/nuevo-2')),
+    now() + interval '180 days', now() + interval '90 days') x where x.indice = 1;
+  select * into d from cp_documento where id = hijo;
+  accion := r.accion = 'reabierto' and d.estado = 'recibido' and d.storage_ruta = 'ruta/nuevo-1';
+  cli := d.cliente_id = c_nuevo;
+  rem := d.remitente = 'nuevo@remitente.test.invalid' and d.asunto = 'Plan nuevo' and d.remitente_reconocido is true and d.canal = 'whatsapp';
+  nom := d.nombre_archivo = 'h1-nuevo.csv';
+  marcas := d.exportado_en is null and d.abierto_en is null and d.revisado_por is null and d.rechazo_motivo is null and d.tiempo_revision_seg is null;
+
+  raise exception E'CP_REABRE_0679 accion-reabierto=% cliente-nuevo=% remitente-asunto-canal-nuevos=% nombre-nuevo=% marcas-limpias=%   (esperado t / t / t / t / t)',
+    accion, cli, rem, nom, marcas;
+end $$;
