@@ -18502,3 +18502,57 @@ begin
   raise exception E'GEOCERCAS_REIMPORTACION_0631 segundo-pierde=% otra-flota=% error-no-pisa-huella=% reintento-tras-error=% sin-reintento-a-10min=% ventana-bueno-respeta=% dominio-rebota=% lista-solo-activas-y-vencidas=%   (esperado t / t / t / t / t / t / t / t)',
     segundo, otra, huella, reint, sin10, ventana, dom, lista;
 end $$;
+
+-- ── 290. Vigía, respuestas rápidas aprobadas: una por pregunta y flota, corregir no duplica, tope de 200 y uso atómico (mig. 0647) ──
+-- La respuesta que el gerente aprueba para una pregunta frecuente se usa como base del borrador. Lo que solo la base demuestra:
+-- una pregunta (sin importar mayúsculas ni espacios) tiene UNA respuesta aprobada por flota y aprobar de nuevo la CORRIGE sin
+-- duplicar; otra flota no comparte la fila; retirada, la pregunta puede volver a aprobarse; el uso se cuenta solo en una aprobada
+-- de ESA flota; el tope de 200 por flota rebota la 201 nueva pero no frena una corrección; los dominios y el acceso del rol authenticated.
+-- Esperado: VIGIA_RESPUESTA_RAPIDA_0647 una-por-pregunta=t corrige-no-duplica=t por-flota=t reaprobar-tras-retirar=t uso-atomico=t uso-solo-de-su-flota=t dominios=t tope-200=t correccion-no-topa=t solo-lectura=t
+do $$
+declare
+  ta uuid; tb uuid; r1 uuid; r2 uuid; r3 uuid; n int; t text; u int; i int;
+  una boolean := false; corrige boolean := false; por_flota boolean := false; reaprueba boolean := false; uso boolean := false; uso_flota boolean := false;
+  dom boolean := true; tope boolean := false; corr_tope boolean := false; lectura boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0647 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0647 B') returning id into tb;
+
+  r1 := vigia_respuesta_rapida_aprobar(ta, 'cita_anden', '¿A qué hora puedo agendar mi cita?', 'De 8 a 18 h.', null);
+  r2 := vigia_respuesta_rapida_aprobar(ta, 'cita_anden', '  ¿A QUÉ HORA puedo agendar mi cita?  ', 'De 7 a 17 h.', null);
+  select count(*), max(texto) into n, t from vigia_respuesta_rapida where tenant_id = ta and estado = 'aprobada';
+  una := n = 1;
+  corrige := r1 = r2 and t = 'De 7 a 17 h.';
+  r3 := vigia_respuesta_rapida_aprobar(tb, 'cita_anden', '¿A qué hora puedo agendar mi cita?', 'Llama al andén.', null);
+  por_flota := r3 <> r1;
+
+  update vigia_respuesta_rapida set estado = 'retirada' where id = r1;
+  r2 := vigia_respuesta_rapida_aprobar(ta, 'cita_anden', '¿A qué hora puedo agendar mi cita?', 'Texto nuevo.', null);
+  reaprueba := r2 <> r1;
+
+  uso := vigia_respuesta_rapida_usar(ta, r2) and vigia_respuesta_rapida_usar(ta, r2);
+  select usos into u from vigia_respuesta_rapida where id = r2;
+  uso := uso and u = 2;
+  uso_flota := not vigia_respuesta_rapida_usar(tb, r2) and not vigia_respuesta_rapida_usar(ta, r1);
+
+  begin perform vigia_respuesta_rapida_aprobar(ta, 'queja', 'una pregunta cualquiera', 'x', null); dom := false; exception when check_violation then null; end;
+  begin perform vigia_respuesta_rapida_aprobar(ta, 'tarifa', 'ab', 'x', null); dom := false; exception when check_violation then null; end;
+  begin perform vigia_respuesta_rapida_aprobar(ta, 'tarifa', 'cuánto cuesta el flete', repeat('x', 701), null); dom := false; exception when check_violation then null; end;
+
+  delete from vigia_respuesta_rapida where tenant_id = ta;
+  for i in 1..200 loop
+    perform vigia_respuesta_rapida_aprobar(ta, 'otro', 'pregunta numero ' || i, 'respuesta ' || i, null);
+  end loop;
+  begin perform vigia_respuesta_rapida_aprobar(ta, 'otro', 'pregunta numero 201', 'respuesta', null); exception when sqlstate '54000' then tope := true; end;
+  perform vigia_respuesta_rapida_aprobar(ta, 'otro', 'PREGUNTA numero 7', 'corregida', null);
+  select count(*) into n from vigia_respuesta_rapida where tenant_id = ta and estado = 'aprobada';
+  corr_tope := n = 200;
+
+  lectura := not has_table_privilege('authenticated', 'public.vigia_respuesta_rapida', 'insert')
+    and not has_table_privilege('authenticated', 'public.vigia_respuesta_rapida', 'update')
+    and not has_function_privilege('authenticated', 'public.vigia_respuesta_rapida_aprobar(uuid, text, text, text, uuid)', 'execute')
+    and not has_function_privilege('authenticated', 'public.vigia_respuesta_rapida_usar(uuid, uuid)', 'execute');
+
+  raise exception E'VIGIA_RESPUESTA_RAPIDA_0647 una-por-pregunta=% corrige-no-duplica=% por-flota=% reaprobar-tras-retirar=% uso-atomico=% uso-solo-de-su-flota=% dominios=% tope-200=% correccion-no-topa=% solo-lectura=%   (esperado t / t / t / t / t / t / t / t / t / t)',
+    una, corrige, por_flota, reaprueba, uso, uso_flota, dom, tope, corr_tope, lectura;
+end $$;
