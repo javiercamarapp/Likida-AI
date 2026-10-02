@@ -64,9 +64,10 @@ select :'que' in ('gps', 'todo') as es_gps, :'que' in ('geocercas', 'todo') as e
 \endif
 \if :es_pases
   delete from desglose_peaje where tenant_id = :'t' and proveedor = 'PASE (demo)';
+  delete from peaje_curso where tenant_id = :'t' and codigo like 'CUR-DEMO-%';
   delete from peaje_tag where tenant_id = :'t' and proveedor = 'PASE (demo)';
   delete from peaje_caseta where tenant_id = :'t' and nombre like 'Caseta Demo %';
-  \echo 'pases: desglose, líneas, TAG y casetas sintéticos borrados.'
+  \echo 'pases: desglose, líneas, TAG, casetas y cursos sintéticos borrados.'
 \endif
 \if :es_liq
   delete from liquidacion_externa where tenant_id = :'t' and sistema_origen = 'SAP (demo)';

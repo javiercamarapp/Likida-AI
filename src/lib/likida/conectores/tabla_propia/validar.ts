@@ -52,6 +52,25 @@ export function haversineM(a: { lat: number; lon: number }, b: { lat: number; lo
 }
 
 const MAX_VERTICES = 2_000;
+/** WKT `LINESTRING(lon lat, lon lat, …)` → vértices {lat, lon} (WKT va lon primero). Una línea simple de 2 a 2,000 vértices. */
+export function leerLineaWkt(wkt: string): { ok: Array<{ lat: number; lon: number }> } | { error: string } {
+  if (wkt.length > 200_000) return { error: 'corredor_wkt demasiado largo' };
+  const m = /^\s*LINESTRING\s*\(\s*([^()]+?)\s*\)\s*$/i.exec(wkt);
+  if (!m) return { error: 'corredor_wkt no es un LINESTRING(lon lat, …) simple' };
+  const pares = m[1].split(',');
+  if (pares.length > MAX_VERTICES) return { error: `un corredor admite hasta ${MAX_VERTICES} vértices` };
+  const pts: Array<{ lat: number; lon: number }> = [];
+  for (const par of pares) {
+    const [x, y, ...resto] = par.trim().split(/\s+/);
+    const lon = leerNumero(x ?? ''); const lat = leerNumero(y ?? '');
+    if (resto.length || lon === null || lat === null) return { error: `vértice ilegible: «${par.trim().slice(0, 40)}»` };
+    pts.push({ lat, lon });
+  }
+  if (pts.length < 2) return { error: 'un corredor necesita al menos 2 vértices' };
+  for (const p of pts) { const mc = motivoCoordenadas(p.lat, p.lon); if (mc) return { error: `vértice: ${mc}` }; }
+  return { ok: pts };
+}
+
 /** WKT `POLYGON((lon lat, lon lat, …))` → vértices {lat, lon} (WKT va lon primero). Solo anillo exterior simple. */
 export function leerPoligonoWkt(wkt: string): { ok: Array<{ lat: number; lon: number }> } | { error: string } {
   if (wkt.length > 200_000) return { error: 'poligono_wkt demasiado largo' };

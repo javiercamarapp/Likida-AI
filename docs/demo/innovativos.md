@@ -111,7 +111,8 @@ GPS.
 | Posiciones GPS | 41,770 (×2) | en **su tabla propia simulada** (`innovativos_sim.gps_posicion`) y ya leídas en `posicion` |
 | Casetas / TAG | 12 / 250 | catálogo sintético «Demo» sobre el eje GDL–APO |
 | Líneas de pase (24 h) | 381 | 9 **fuera de ruta**, 4 **cobros duplicados**, 7 sin GPS (unidad silenciosa) y 2 de tractos sin viaje **junto al patio poligonal** |
-| Reporte de reclamación | 14 reclamables por $9,635 | 9 GPS lejos de la caseta, 4 doble cobro y 1 unidad en zona no autorizada (polígono); el cruce de la carretera de junto **no** se reclama |
+| Cursos (rutas autorizadas) | 140 cursos por casetas autorizadas | uno por tracto en viaje; a 3 cruces reales se les quitó su caseta del curso a propósito |
+| Reporte de reclamación | 17 reclamables por $11,497 | 9 GPS lejos de la caseta, 4 doble cobro, 1 unidad en zona no autorizada (polígono) y 3 cruces fuera de curso; el cruce de la carretera de junto **no** se reclama |
 | Liquidaciones «de su sistema» | 158 | 116 acusadas (8 con «No coincide»), 34 enviadas, 8 fallidas; ninguna pendiente |
 | Formato de liquidación | 1 | derivado del Excel de muestra por el derivador real; copia al jefe de flota (1 teléfono) y aviso de discrepancia (2 teléfonos), todos `28999…` |
 | Avisos de discrepancia | 8 (6 entregados, 2 fallidos) | los 2 fallidos muestran «El aviso no llegó» y **Reavisar**; cada uno con su tarea en la cola del orquestador (8: 3 atendidas, 5 abiertas) |
@@ -228,7 +229,7 @@ Para tener a mano cómo se ven los archivos tal como los exportaría «su sistem
 ### 3.3 Pases de peaje, TAG y catálogo de casetas (`pases`, `tags`, `casetas`)
 
 - **Qué se necesita:** cruzar el archivo de pases contra las posiciones GPS y las geocercas/«cursos» y sacar los cruces
-  fuera de ruta para pedir descuento al proveedor.
+  fuera de ruta o fuera de curso para pedir descuento al proveedor.
 - **Formato:** el **archivo real de PASE no se conoce** (bloqueo declarado). El lector es tolerante (encabezados
   `Fecha/Hora/Caseta/TAG/Importe`, fechas `dd/mm/aaaa`, serial de Excel, importes con `$` o coma decimal). La muestra:
   `Fecha,Hora,Caseta,TAG,Importe`. Aparte necesita **dos archivos más** sin los cuales no hay cruce con GPS:
@@ -237,11 +238,16 @@ Para tener a mano cómo se ven los archivos tal como los exportaría «su sistem
   `peajes/cruce_gps.ts`). El **reporte de reclamación** (`peajes/reclamacion.ts`: los cruces con evidencia a favor de pedir
   la revisión, con el porqué y hasta 3 posiciones de GPS; Excel y PDF en `/api/export/peajes-reclamacion`) está
   integrado: motivos `gps_lejos_de_caseta`, `unidad_en_zona_no_autorizada` (con el **polígono** de patio o zona
-  restringida; confianza «media» si la zona es solo un círculo aproximado) y `doble_cobro`. Los **cursos** (rutas
-  autorizadas por unidad) **no existen todavía**: el reporte lo dice en sus leyendas.
+  restringida; confianza «media» si la zona es solo un círculo aproximado), `fuera_de_curso` y `doble_cobro`. Los **cursos**
+  (rutas autorizadas por unidad o por convenio; mig. 0665, `peajes/cursos.ts`, `peajes/cursos_importar.ts`) **ya existen por
+  casetas autorizadas**: se cargan en la configuración (CSV/Excel) o se leen de la tabla de la flota
+  (`tabla_propia`, con `cursos_url`/`vista_cursos`), y el reporte marca como **«cruce fuera de curso»** (confianza media) el
+  pase en una caseta que no está en el curso. **Sin curso declarado no se reclama nada.** El **corredor** (polilínea + buffer)
+  está construido con datos sintéticos; su **formato real es bloqueo externo (12-oct)**: no se adivina. Detalle en
+  `docs/operacion/conciliacion-peajes.md`.
 - **Validación:** `validar-archivo.mjs pases|tags|casetas <archivo>`. Pruebas extra del demo:
   `verificar-cruces-con-motor.mjs` — las 381 líneas sembradas dan el mismo veredicto que el motor real — y
-  `verificar-hechos-del-guion.mjs`, que corre `construirReclamacion` sobre ellas (14 reclamables por $9,635).
+  `verificar-hechos-del-guion.mjs`, que corre `construirReclamacion` sobre ellas (17 reclamables por $11,497).
 - **Reemplazo:** `vaciar-sintetico.sh pases` (desglose, líneas, TAG y casetas «Demo»).
 - **Ver:** `/dashboard/agentes/peajes` (subir el desglose y ver las tres cubetas) y `/dashboard/agentes/peajes/configuracion`
   (TAG y casetas).
@@ -357,7 +363,7 @@ Todo está integrado en la misma rama: el demo no trae sustitutos de lo que el p
 | Posiciones y geocercas | `conectores/tabla_propia` (lector, asentador común, importador de geocercas con polígono nativo) | `posicion` y `geocerca` sembradas como las dejaría; la tabla simulada `innovativos_sim` es «su» tabla |
 | Validación de llegada, hitos por geocerca y sin señal de vida | `conductor/validar_hito.ts`, `ciclo_gps.ts`, `senal_vida.ts` | veredictos del motor real; cruces y episodios sembrados con su estado |
 | Convenios e instrucciones | `convenios/importador.ts`, envío al despachar, en la primera asignación y al acercarse | 14 convenios con 84 instrucciones en las tablas de la 0580 |
-| Peajes y reclamación | `peajes/cruce_gps.ts`, `peajes/reclamacion.ts` (+ Excel y PDF) | 381 líneas, 14 reclamables, polígono de patio |
+| Peajes y reclamación | `peajes/cruce_gps.ts`, `peajes/reclamacion.ts` (+ Excel y PDF) | 381 líneas, 17 reclamables, polígono de patio, cursos |
 | Liquidación, formato de la flota, copia y discrepancias | `liquidacion_externa/formato_flota.ts`, `copia_jefe.ts`, `aviso_no_coincide.ts` | formato derivado de la muestra, teléfonos `28999…`, avisos entregados y fallidos |
 | Vigía, grupos e histórico | `vigia/historial/*`, `vigia/respuestas_rapidas.ts` | 3 grupos críticos, 642 mensajes leídos por el importador, 2 respuestas rápidas |
 | Carta Porte y su worker | `carta_porte_docs/*` y el cron `carta-porte-docs` | 14 documentos (uno recibido, uno agotado, uno con aviso por dudas) |
@@ -413,6 +419,6 @@ node scripts/demo/innovativos/verificar-hechos-del-guion.mjs
   externa, peajes, jornada…), de solo lectura y por rol; **no** lee SAP/TMS (no hay conector) y llama a un modelo.
 - **Datos reales de Carta Porte, convenios y del formato de liquidación** (12-oct y 15-oct): hasta entonces todo es
   sintético; el guion dice dónde hay que decirlo.
-- **Lo que no existe todavía:** los «cursos» de peajes y la lectura en vivo de los grupos de un WhatsApp común.
+- **Lo que no existe todavía:** la lectura en vivo de los grupos de un WhatsApp común. (Los **cursos por casetas autorizadas** ya existen; el formato real de los **corredores** depende del cliente.)
 - **Viajes y operadores reales:** vendrán de su TMS/SAP (importador masivo de operadores/unidades y de viajes ya
   existentes); no son parte de los 5 agentes y aquí son sintéticos.

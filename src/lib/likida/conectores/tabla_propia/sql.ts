@@ -37,6 +37,8 @@ export const TIMEOUT_SQL_MS = 20_000;
 export type ColumnasPosicion = { unidad: string; lat: string; lon: string; fecha_hora: string; velocidad_kmh?: string; ignicion?: string };
 export type ColumnasGeocerca = { codigo: string; nombre: string; lat_centro?: string; lon_centro?: string; radio_m?: string; poligono_wkt?: string; cliente?: string };
 
+export type ColumnasCurso = { codigo: string; nombre: string; unidad?: string; convenio?: string; casetas?: string; corredor_wkt?: string; buffer_m?: string; vigente_desde?: string; vigente_hasta?: string };
+
 export function identificadorValido(n: unknown): n is string {
   return typeof n === 'string' && IDENT.test(n);
 }

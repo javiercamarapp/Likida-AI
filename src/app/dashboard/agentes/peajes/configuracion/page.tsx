@@ -11,12 +11,14 @@ import {
   listarTags, listarUnidades, altaTag, bajaTag, importarTagsArchivo,
   listarCasetas, importarCasetasArchivo, cambiarEstadoCaseta,
   listarGeocercas, guardarGeocerca, cambiarEstadoGeocerca, TIPOS_GEOCERCA,
+  listarCursos, listarConveniosPorNombre, cambiarEstadoCurso,
   listarMapeos, guardarMapeo, borrarMapeo,
   leerConfigBuzon, activarBuzon, desactivarBuzon, rotarLlaveBuzon, listarArchivosIngesta,
   leerConfigEntradas, activarCorreoPeajes, desactivarCorreoPeajes, rotarCorreoPeajes, guardarRemitentesPeajes,
   guardarPullPeajes, apagarPullPeajes, borrarCredencialPull,
   type ResultadoImportacionCatalogo,
 } from '@/lib/likida/peajes/datos';
+import { importarCursosArchivo, importarCursosDeTablaPropia, type ResultadoImportCursos } from '@/lib/likida/peajes/cursos_importar';
 import { secretoMaestro, claveDeFlota, reintentarArchivoPeaje } from '@/lib/likida/peajes/ingesta';
 import { cofreConfigurado } from '@/lib/likida/conectores/cofre';
 import { direccionPj } from '@/lib/likida/peajes/correo_entrante';
@@ -67,6 +69,15 @@ function resumenImportacion(r: ResultadoImportacionCatalogo, singular: string): 
   return partes.join(' · ');
 }
 
+/** Resume la importación de cursos en una frase corta (el primer problema con su fila o código). */
+function resumenCursos(r: ResultadoImportCursos): string {
+  if (!r.ok) {
+    const det = (r.detalles ?? []).slice(0, 5).join('; ');
+    return `error:${r.error}${det ? ` ${det}${(r.detalles?.length ?? 0) > 5 ? '…' : ''}` : ''}`;
+  }
+  return `${r.leidos} cursos leídos · ${r.creados} nuevos · ${r.actualizados} actualizados.`;
+}
+
 /**
  * La configuración del conciliador de peajes (Agente 2): lo que el cruce
  * necesita saber de la flota y que no se puede adivinar — qué TAG es de qué
@@ -88,11 +99,13 @@ export default async function PaginaConfiguracionPeajes({
   const puedeAdministrar = puedeVerArea(rol, 'administracion');
 
   const secreto = secretoMaestro();
-  const [tags, unidades, casetas, geocercas, mapeos, buzon, archivos, entradas] = await Promise.all([
+  const [tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
     safe(() => listarTags(tenantId)),
     safe(() => listarUnidades(tenantId)),
     safe(() => listarCasetas(tenantId)),
     safe(() => listarGeocercas(tenantId)),
+    safe(() => listarCursos(tenantId)),
+    safe(() => listarConveniosPorNombre(tenantId)),
     safe(() => listarMapeos(tenantId)),
     safe(() => leerConfigBuzon(tenantId)),
     safe(() => listarArchivosIngesta(tenantId, 20)),
@@ -243,6 +256,30 @@ export default async function PaginaConfiguracionPeajes({
     volverConfig(sufijo, (await cambiarEstadoGeocerca(tenantId, String(fd.get('geocerca') ?? ''), activa)) ? (activa ? 'Geocerca activada.' : 'Geocerca desactivada.') : 'error:No se pudo cambiar la geocerca.');
   }
 
+  // ── Cursos (rutas autorizadas) ──
+  async function accionImportarCursos(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) volverConfig(sufijo, `error:${no}`);
+    const a = await archivoDeForm(fd);
+    if (typeof a === 'string') volverConfig(sufijo, `error:${a}`);
+    volverConfig(sufijo, resumenCursos(await importarCursosArchivo(tenantId, (a as { nombre: string }).nombre, (a as { buffer: Uint8Array }).buffer)));
+  }
+  async function accionImportarCursosDeTabla() {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) volverConfig(sufijo, `error:${no}`);
+    const sesion = await requireSessionTenant(RUTA);
+    volverConfig(sufijo, resumenCursos(await importarCursosDeTablaPropia({ tenantId, rol: sesion.rol })));
+  }
+  async function accionEstadoCurso(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) volverConfig(sufijo, `error:${no}`);
+    const activo = String(fd.get('activo')) === 'true';
+    volverConfig(sufijo, (await cambiarEstadoCurso(tenantId, String(fd.get('curso') ?? ''), activo)) ? (activo ? 'Curso activado.' : 'Curso desactivado: ya no se evalúa en el reporte de reclamación.') : 'error:No se pudo cambiar el curso.');
+  }
+
   // ── Mapeo de columnas ──
   async function accionGuardarMapeo(fd: FormData) {
     'use server';
@@ -270,7 +307,7 @@ export default async function PaginaConfiguracionPeajes({
       aviso={sp.aviso ?? null}
       error={sp.error ?? null}
       agenteApagado={aviso}
-      tags={tags} unidades={unidades} casetas={casetas} geocercas={geocercas} mapeos={mapeos} archivos={archivos}
+      tags={tags} unidades={unidades} casetas={casetas} geocercas={geocercas} cursos={cursos} convenios={convenios} mapeos={mapeos} archivos={archivos}
       tiposGeocerca={[...TIPOS_GEOCERCA]}
       buzon={{
         estado: buzon === null ? 'ilegible' : (buzon?.activa ? 'activo' : 'inactivo'),
@@ -294,6 +331,7 @@ export default async function PaginaConfiguracionPeajes({
         altaTag: accionAltaTag, bajaTag: accionBajaTag, importarTags: accionImportarTags,
         importarCasetas: accionImportarCasetas, estadoCaseta: accionEstadoCaseta,
         guardarGeocerca: accionGuardarGeocerca, estadoGeocerca: accionEstadoGeocerca,
+        importarCursos: accionImportarCursos, importarCursosDeTabla: accionImportarCursosDeTabla, estadoCurso: accionEstadoCurso,
         guardarMapeo: accionGuardarMapeo, borrarMapeo: accionBorrarMapeo,
       }}
     />

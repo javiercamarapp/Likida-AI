@@ -34,7 +34,7 @@ export function textoEvidencia(e: EvidenciaMuestra): string {
 
 const ENCABEZADOS = [
   'Línea', 'Fecha del cruce', 'Hora del pase', 'Caseta (proveedor)', 'Caseta (catálogo)', 'TAG', 'Unidad', 'Monto (MXN)',
-  'Motivo', 'Confianza', 'Por qué se reclama', 'Distancia unidad–caseta (m)', 'Radio de la caseta (m)', 'Evidencia GPS', 'Zona', 'Primer cobro (línea)',
+  'Motivo', 'Confianza', 'Por qué se reclama', 'Distancia unidad–caseta (m)', 'Radio de la caseta (m)', 'Evidencia GPS', 'Zona', 'Primer cobro (línea)', 'Curso(s) que no lo autorizan',
 ] as const;
 
 export function reclamacionAExcel(r: ReporteReclamacion): Uint8Array {
@@ -49,7 +49,7 @@ export function reclamacionAExcel(r: ReporteReclamacion): Uint8Array {
     filas.push([
       c.indice + 1, c.fecha, c.hora, c.caseta, c.casetaCatalogo, c.tag, c.unidad, c.monto,
       ETIQUETA_MOTIVO_RECLAMACION[c.motivo], c.confianza, c.porQue, c.distanciaM, c.radioCasetaM,
-      c.evidencia.map(textoEvidencia).join('\n'), c.zona ? c.zona.nombre : '', c.duplicadoDeLinea,
+      c.evidencia.map(textoEvidencia).join('\n'), c.zona ? c.zona.nombre : '', c.duplicadoDeLinea, c.cursos.map((k) => k.nombre).join('; '),
     ]);
   }
   const filaTotal = filas.length + 1;
@@ -63,7 +63,7 @@ export function reclamacionAExcel(r: ReporteReclamacion): Uint8Array {
   }
   const total = hoja[XLSX.utils.encode_cell({ r: filaTotal, c: 7 })];
   if (total && total.t === 'n') total.z = '#,##0.00';
-  hoja['!cols'] = [6, 12, 10, 26, 26, 16, 10, 13, 26, 10, 70, 14, 12, 70, 20, 12].map((wch) => ({ wch }));
+  hoja['!cols'] = [6, 12, 10, 26, 26, 16, 10, 13, 26, 10, 70, 14, 12, 70, 20, 12, 30].map((wch) => ({ wch }));
 
   const resumen = XLSX.utils.aoa_to_sheet([
     ['Resumen'],
@@ -79,6 +79,7 @@ export function reclamacionAExcel(r: ReporteReclamacion): Uint8Array {
     ['Confirmadas por el GPS', r.resumen.confirmadas],
     ['Sin datos suficientes', r.resumen.sinDatos],
     ['Sin evaluar con GPS', r.resumen.sinEvaluar],
+    ['Sin curso declarado (no evaluadas por curso; cuenta aparte, no excluyente)', r.resumen.sinCurso],
     [],
     ['Leyendas'],
     ...r.leyendas.map((l) => [l]),
@@ -169,7 +170,7 @@ export async function reclamacionAPdf(r: ReporteReclamacion, razonSocial: string
   if (r.cruces.length === 0) {
     text('Ningún cruce de este desglose tiene evidencia suficiente para pedir una revisión.', M, y, 10, font);
     y -= 14;
-    text(`Confirmadas por el GPS: ${s.confirmadas} · sin datos suficientes: ${s.sinDatos} · sin evaluar: ${s.sinEvaluar}. Sin datos no es evidencia en contra de nadie.`, M, y, 8.5, font, MUTED);
+    text(`Confirmadas por el GPS: ${s.confirmadas} · sin datos suficientes: ${s.sinDatos} · sin evaluar: ${s.sinEvaluar} · sin curso declarado: ${s.sinCurso}. Sin datos no es evidencia en contra de nadie.`, M, y, 8.5, font, MUTED);
     y -= 20;
   } else {
     cabecera();

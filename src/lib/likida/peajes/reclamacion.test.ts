@@ -189,6 +189,79 @@ function reporte(): ReporteReclamacion {
   return { desgloseId: 'd-1', proveedor: 'PASE', periodoDesde: '2026-08-01', periodoHasta: '2026-08-10', cruces, resumen, leyendas: LEYENDAS_RECLAMACION };
 }
 
+describe('cruce fuera de curso (cursos, 0665)', () => {
+  const CURSO = {
+    id: 'c1', codigo: 'CUR-1', nombre: 'Planta A a Planta B', tipo: 'casetas' as const, casetaIds: ['k-ok'], casetaNombres: ['Caseta Autorizada'],
+    corredor: null, vigenteDesde: null, vigenteHasta: null,
+  };
+
+  it('la caseta no está en el curso de la unidad: se reclama con confianza media y la frase dice el curso y sus casetas', () => {
+    const { cruces, resumen } = construirReclamacion([
+      linea({ indice: 0, gps: 'confirma', gpsDistanciaM: 20, casetaId: 'k-otra', cursos: [CURSO] }),
+    ], []);
+    expect(cruces).toHaveLength(1);
+    expect(cruces[0]).toMatchObject({ motivo: 'fuera_de_curso', confianza: 'media', monto: 189.5, duplicadoDeLinea: null, zona: null });
+    expect(cruces[0].cursos).toEqual([{ nombre: 'Planta A a Planta B', tipo: 'casetas' }]);
+    expect(cruces[0].porQue).toMatch(/la unidad C2-08 cruzó Caseta Ejemplo Norte el 2026-08-05 a las 10:30, fuera de su curso/);
+    expect(cruces[0].porQue).toMatch(/no está en su curso autorizado «Planta A a Planta B» \(casetas autorizadas: Caseta Autorizada\)/);
+    expect(resumen.porMotivo.fuera_de_curso).toEqual({ n: 1, monto: 189.5 });
+    expect(resumen.montoReclamable).toBe(189.5);
+  });
+
+  it('la caseta SÍ está en el curso: no se reclama; sin curso declarado: no se reclama y se cuenta aparte', () => {
+    const { cruces, resumen } = construirReclamacion([
+      linea({ indice: 0, tag: 'T-A', casetaId: 'k-ok', cursos: [CURSO] }),
+      linea({ indice: 1, tag: 'T-B', casetaId: 'k-otra', cursos: [] }),
+      linea({ indice: 2, tag: 'T-C', casetaId: 'k-otra' }),
+    ], []);
+    expect(cruces).toEqual([]);
+    expect(resumen.sinCurso).toBe(2);
+    expect(resumen.porMotivo.fuera_de_curso.n).toBe(0);
+  });
+
+  it('la caseta sin resolver en el catálogo no se acusa de estar fuera de curso', () => {
+    const { cruces } = construirReclamacion([linea({ indice: 0, casetaId: null, cursos: [CURSO] })], []);
+    expect(cruces).toEqual([]);
+  });
+
+  it('un curso fuera de vigencia ese día no reclama', () => {
+    const { cruces, resumen } = construirReclamacion([
+      linea({ indice: 0, casetaId: 'k-otra', cursos: [{ ...CURSO, vigenteHasta: '2026-08-01' }] }),
+    ], []);
+    expect(cruces).toEqual([]);
+    expect(resumen.sinCurso).toBe(1);
+  });
+
+  it('un corredor: la posición a la hora del pase fuera del buffer se reclama con la distancia al corredor y la evidencia GPS', () => {
+    const corredor = { id: 'c2', codigo: 'COR-1', nombre: 'Corredor Norte', tipo: 'corredor' as const, casetaIds: [], casetaNombres: [],
+      corredor: { polilinea: [{ lat: 19.5, lng: -99.30 }, { lat: 19.5, lng: -99.20 }], bufferM: 500 }, vigenteDesde: null, vigenteHasta: null };
+    const { cruces } = construirReclamacion([
+      linea({ indice: 0, gps: 'sin datos', casetaId: 'k-ok', cursos: [corredor], muestras: [{ lat: 19.51, lng: -99.25, t: min(1) }] }),
+    ], []);
+    expect(cruces).toHaveLength(1);
+    expect(cruces[0]).toMatchObject({ motivo: 'fuera_de_curso', confianza: 'media' });
+    expect(cruces[0].distanciaM).toBeGreaterThan(1_100);
+    expect(cruces[0].porQue).toMatch(/del corredor «Corredor Norte», más allá de su buffer de 500 m/);
+    expect(cruces[0].evidencia).toHaveLength(1);
+  });
+
+  it('cada línea recibe UN motivo: el GPS lejos manda sobre el curso, y el curso sobre el doble cobro', () => {
+    const { cruces } = construirReclamacion([
+      linea({ indice: 0, tag: 'T-1', gps: 'no coincide', gpsDistanciaM: 9_000, casetaId: 'k-otra', cursos: [CURSO], muestras: [lejos(0)] }),
+      linea({ indice: 1, tag: 'T-2', casetaId: 'k-otra', cursos: [CURSO], cruceMs: min(0) }),
+      linea({ indice: 2, tag: 'T-2', casetaId: 'k-otra', cursos: [CURSO], cruceMs: min(5), hora: '10:35:00' }),
+    ], []);
+    expect(cruces.map((c) => [c.indice, c.motivo])).toEqual([[0, 'gps_lejos_de_caseta'], [1, 'fuera_de_curso'], [2, 'fuera_de_curso']]);
+  });
+
+  it('las leyendas declaran el motivo nuevo y que el formato real del corredor está pendiente', () => {
+    const t = LEYENDAS_RECLAMACION.join('\n');
+    expect(t).toMatch(/Cruce fuera de curso/);
+    expect(t).toMatch(/formato real del cliente está pendiente/);
+    expect(t).not.toMatch(/Pendiente de datos de la flota: las rutas autorizadas/);
+  });
+});
+
 describe('el Excel del reporte', () => {
   const libro = () => XLSX.read(reclamacionAExcel(reporte()), { type: 'array' });
 

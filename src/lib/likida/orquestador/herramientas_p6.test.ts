@@ -40,8 +40,8 @@ function mundos() {
         desglose: { id: 'd1', proveedor: 'Proveedor Peaje', periodoDesde: '2026-09-01', periodoHasta: '2026-09-15' },
         reporte: {
           desgloseId: 'd1', proveedor: 'Proveedor Peaje', periodoDesde: '2026-09-01', periodoHasta: '2026-09-15', leyendas: [],
-          resumen: { lineas: 40, reclamables: 2, montoReclamable: 310, porMotivo: { gps_lejos_de_caseta: { n: 1, monto: 150 }, unidad_en_zona_no_autorizada: { n: 0, monto: 0 }, doble_cobro: { n: 1, monto: 160 } }, confirmadas: 30, sinDatos: 8, sinEvaluar: 0 },
-          cruces: [{ indice: 3, fecha: '2026-09-03', hora: '10:00', caseta: 'Caseta Uno', casetaCatalogo: 'C1', tag: 'TAG-SECRETO-1', unidad: 'T-12', monto: 150, motivo: 'gps_lejos_de_caseta', confianza: 'alta', porQue: 'x', distanciaM: 900, radioCasetaM: 300, evidencia: [], zona: null, duplicadoDeLinea: null }],
+          resumen: { lineas: 40, reclamables: 2, montoReclamable: 310, porMotivo: { gps_lejos_de_caseta: { n: 1, monto: 150 }, unidad_en_zona_no_autorizada: { n: 0, monto: 0 }, fuera_de_curso: { n: 0, monto: 0 }, doble_cobro: { n: 1, monto: 160 } }, confirmadas: 30, sinDatos: 8, sinEvaluar: 0, sinCurso: 0 },
+          cruces: [{ indice: 3, fecha: '2026-09-03', hora: '10:00', caseta: 'Caseta Uno', casetaCatalogo: 'C1', tag: 'TAG-SECRETO-1', unidad: 'T-12', monto: 150, motivo: 'gps_lejos_de_caseta', confianza: 'alta', porQue: 'x', distanciaM: 900, radioCasetaM: 300, evidencia: [], zona: null, duplicadoDeLinea: null, cursos: [] }],
         } as any,
       },
       jornada: {

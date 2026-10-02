@@ -246,7 +246,7 @@ export function resumirReclamacionPeajes(r: ReclamacionPeajes) {
     periodo: r.desglose.periodoDesde && r.desglose.periodoHasta ? `${r.desglose.periodoDesde} a ${r.desglose.periodoHasta}` : null,
     lineas: x.lineas, reclamables: x.reclamables, montoReclamableMxn: x.montoReclamable,
     porMotivo: Object.fromEntries(Object.entries(x.porMotivo).map(([k, v]) => [ETIQUETA_MOTIVO_RECLAMACION[k as keyof typeof ETIQUETA_MOTIVO_RECLAMACION], v])),
-    confirmadasPorGps: x.confirmadas, sinDatos: x.sinDatos, sinEvaluar: x.sinEvaluar,
+    confirmadasPorGps: x.confirmadas, sinDatos: x.sinDatos, sinEvaluar: x.sinEvaluar, sinCurso: x.sinCurso,
     principales: cruces.items.map((c) => ({ fecha: c.fecha, caseta: nombreSeguro(c.caseta), unidad: nombreSeguro(c.unidad, 30), motivo: ETIQUETA_MOTIVO_RECLAMACION[c.motivo], confianza: c.confianza, montoMxn: c.monto })),
     masNoMostradas: cruces.masNoMostradas,
     nota: 'Es una señal para pedirle al proveedor que revise un cobro; la decisión de reclamar es de la flota. «Sin datos» no es evidencia en contra de nadie.',

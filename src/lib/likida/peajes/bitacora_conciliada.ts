@@ -1,7 +1,8 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { traerTodo, traerPorIds, conteo } from '../pg';
-import { listarCasetas, listarUnidades, listarGeocercas, traerMuestrasPorLinea, type VentanaPosiciones } from './datos';
+import { listarCasetas, listarUnidades, listarGeocercas, listarCursos, convenioPorViaje, traerMuestrasPorLinea, type VentanaPosiciones } from './datos';
+import { cursosQueAplican, type CursoDeFlota } from './cursos';
 import { VENTANA_GPS_MIN } from './cruce_gps';
 import {
   construirReclamacion, LEYENDAS_RECLAMACION, type LineaReclamable, type ReporteReclamacion,
@@ -49,6 +50,8 @@ export interface FilaConciliada {
   /** Para el reporte de reclamación (no salen en el CSV). */
   unidadId?: string | null;
   casetaId?: string | null;
+  /** El viaje contra el que cuadró la línea (para el convenio del curso). */
+  viajeId?: string | null;
   /** ISO UTC del pase (`cruce_en`), si el archivo trae hora. */
   cruceEn?: string | null;
 }
@@ -133,6 +136,7 @@ export async function bitacoraConciliada(tenantId: string, desgloseId: string): 
       gpsNota: gpsVeredicto === 'sin_datos' ? textoMotivoGps(gpsMotivo) : '',
       unidadId: (l.unidad_id as string | null) ?? null,
       casetaId: (l.caseta_id as string | null) ?? null,
+      viajeId: (l.viaje_id as string | null) ?? null,
       cruceEn: (l.cruce_en as string | null) ?? null,
     };
   });
@@ -202,12 +206,26 @@ export function bitacoraConciliadaACsv(b: BitacoraConciliada): string {
 export async function reporteReclamacion(tenantId: string, desgloseId: string): Promise<ReporteReclamacion | null> {
   const b = await bitacoraConciliada(tenantId, desgloseId);
   if (!b) return null;
-  const [casetas, geocercas] = await Promise.all([listarCasetas(tenantId), listarGeocercas(tenantId, { zonasParaReclamacion: true })]);
+  const [casetas, geocercas, cursosVista] = await Promise.all([listarCasetas(tenantId), listarGeocercas(tenantId, { zonasParaReclamacion: true }), listarCursos(tenantId)]);
+  const cursos: CursoDeFlota[] = cursosVista.filter((c) => c.activo).map((c) => ({
+    id: c.id, codigo: c.codigo, nombre: c.nombre, tipo: c.tipo, unidadId: c.unidadId, convenioId: c.convenioId, activo: c.activo,
+    casetaIds: c.casetas.map((k) => k.id), casetaNombres: c.casetas.map((k) => k.nombre),
+    corredor: c.tipo === 'corredor' && c.corredor && c.bufferM !== null ? { polilinea: c.corredor, bufferM: c.bufferM } : null,
+    vigenteDesde: c.vigenteDesde, vigenteHasta: c.vigenteHasta,
+  }));
+  // El convenio de cada línea sale del viaje contra el que cuadró (solo si hay cursos de convenio que consultar).
+  const hayCursosDeConvenio = cursos.some((c) => c.convenioId !== null);
+  const convenioDelViaje = hayCursosDeConvenio
+    ? await convenioPorViaje(tenantId, [...new Set(b.filas.map((f) => f.viajeId).filter((v): v is string => !!v))])
+    : new Map<string, string>();
+  const cursosDe = (f: FilaConciliada) => cursosQueAplican(cursos, f.unidadId ?? null, f.viajeId ? (convenioDelViaje.get(f.viajeId) ?? null) : null);
   const geoPorCaseta = new Map(casetas.filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng)).map((c) => [c.id, { lat: c.lat, lng: c.lng, radioM: c.radioM }]));
 
-  // Candidatas a evidencia: las que el cruce marcó «no coincide» o dejó en «muestras insuficientes».
+  // Candidatas a evidencia: las que el cruce marcó «no coincide» o dejó en «muestras insuficientes», y las que tienen un curso de
+  // tipo corredor (su evaluación mide la posición a la hora del pase contra la polilínea).
   const candidatas = b.filas.filter((f) =>
-    f.cruceEn && f.unidadId && (f.gps === 'no coincide' || (f.gps === 'sin datos' && f.gpsNota === textoMotivoGps('muestras_insuficientes'))));
+    f.cruceEn && f.unidadId && (f.gps === 'no coincide' || (f.gps === 'sin datos' && f.gpsNota === textoMotivoGps('muestras_insuficientes'))
+      || cursosDe(f).some((c) => c.tipo === 'corredor')));
   const ventanas: VentanaPosiciones[] = candidatas.map((f) => {
     const t = Date.parse(f.cruceEn as string);
     return { lineaId: String(f.indice), unidadId: f.unidadId as string, desde: new Date(t - VENTANA_GPS_MIN * 60_000).toISOString(), hasta: new Date(t + VENTANA_GPS_MIN * 60_000).toISOString() };
@@ -221,6 +239,8 @@ export async function reporteReclamacion(tenantId: string, desgloseId: string): 
     gps: f.gps, gpsDistanciaM: f.gpsDistanciaM, gpsNota: f.gpsNota,
     casetaGeo: f.casetaId ? (geoPorCaseta.get(f.casetaId) ?? null) : null,
     muestras: muestras.get(String(f.indice)) ?? [],
+    casetaId: f.casetaId ?? null,
+    cursos: cursosDe(f),
   }));
   const { cruces, resumen } = construirReclamacion(lineas, geocercas.filter((g) => g.activa));
   return {

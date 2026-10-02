@@ -194,6 +194,12 @@ if (p) {
   dice('cruces junto al patio (kit)', `${p.junto_al_patio} de tractos sin viaje junto al patio poligonal`, kit);
   hecho('los fuera de ruta son los «no coincide» del cruce', Number(p.fuera) === Number(p.no_coincide), `${p.fuera} vs ${p.no_coincide}`);
 }
+const cu = uno('cursos sembrados', `select count(*) as cursos, count(distinct unidad_id) as unidades, (select count(*) from peaje_curso_caseta where tenant_id = '${T}') as enlaces
+  from peaje_curso where tenant_id = '${T}' and tipo = 'casetas' and activo`);
+if (cu) {
+  hecho('hay cursos por casetas autorizadas sembrados (uno por tracto en viaje)', Number(cu.cursos) > 0 && Number(cu.cursos) === Number(cu.unidades) && Number(cu.enlaces) >= Number(cu.cursos), JSON.stringify(cu));
+  dice('140 cursos', `${cu.cursos} cursos por casetas autorizadas`, guion);
+}
 const ej = uno('peaje de ejemplo: INN-24091 / IN-091', `select c.nombre, l.gps_veredicto, to_char(l.cruce_en at time zone 'America/Mexico_City', 'HH24:MI') as hora
   from desglose_peaje_linea l join peaje_caseta c on c.id = l.caseta_id join unidad u on u.id = l.unidad_id and u.tenant_id = l.tenant_id
   where l.tenant_id = '${T}' and u.numero_economico = 'IN-091' and l.detalle ->> 'origen_demo' = 'fuera_de_ruta'`);
@@ -205,7 +211,15 @@ if (dupl) hecho('IN-123 tiene un cobro duplicado sembrado', Number(dupl.n) >= 1,
 // ── 5b. El reporte de reclamación: la FUNCIÓN REAL sobre las líneas y las zonas sembradas ──────────────────
 try {
   const { construirReclamacion } = await jiti.import(join(raiz, 'src/lib/likida/peajes/reclamacion.ts'));
-  const filasRecl = consulta(`select l.indice, to_char(l.fecha, 'YYYY-MM-DD') as fecha, to_char(l.hora, 'HH24:MI:SS') as hora, l.caseta, c.nombre as caseta_cat, l.tag, u.numero_economico as unidad, l.monto,
+  const { cursosQueAplican } = await jiti.import(join(raiz, 'src/lib/likida/peajes/cursos.ts'));
+  // Los cursos sembrados (P8, 0665): casetas autorizadas por unidad, en orden de recorrido, con el nombre de cada caseta.
+  const cursosDb = consulta(`select c.id, c.codigo, c.nombre, c.tipo, c.unidad_id, c.convenio_id, c.activo, to_char(c.vigente_desde, 'YYYY-MM-DD') as desde, to_char(c.vigente_hasta, 'YYYY-MM-DD') as hasta,
+      (select coalesce(json_agg(json_build_object('id', k.caseta_id, 'nombre', pc.nombre) order by k.orden), '[]'::json) from peaje_curso_caseta k join peaje_caseta pc on pc.id = k.caseta_id where k.curso_id = c.id) as casetas
+    from peaje_curso c where c.tenant_id = '${T}'`);
+  const cursosFlota = cursosDb.map((k) => ({ id: k.id, codigo: k.codigo, nombre: k.nombre, tipo: k.tipo, unidadId: k.unidad_id, convenioId: k.convenio_id, activo: k.activo,
+    casetaIds: k.casetas.map((x) => x.id), casetaNombres: k.casetas.map((x) => x.nombre), corredor: null, vigenteDesde: k.desde, vigenteHasta: k.hasta }));
+  const filasRecl = consulta(`select l.indice, l.caseta_id, l.unidad_id,
+      (select vc.convenio_id from viaje_convenio vc where vc.viaje_id = l.viaje_id and vc.tenant_id = l.tenant_id) as convenio_id, to_char(l.fecha, 'YYYY-MM-DD') as fecha, to_char(l.hora, 'HH24:MI:SS') as hora, l.caseta, c.nombre as caseta_cat, l.tag, u.numero_economico as unidad, l.monto,
       extract(epoch from l.cruce_en) * 1000 as cruce_ms, l.gps_veredicto, l.gps_distancia_m, c.lat, c.lng, c.radio_m,
       (select coalesce(json_agg(json_build_object('lat', p.lat, 'lng', p.lng, 't', extract(epoch from p.medida_en) * 1000)), '[]'::json) from posicion p
         where p.tenant_id = l.tenant_id and p.unidad_id = l.unidad_id and p.medida_en between l.cruce_en - interval '20 minutes' and l.cruce_en + interval '20 minutes') as muestras
@@ -213,7 +227,8 @@ try {
   const zonas = consulta(`select nombre, tipo, lat, lng, radio_m, poligono, aproximada from geocerca where tenant_id = '${T}' and tipo in ('patio', 'restringida')`);
   const veredicto = { confirma: 'confirma', no_coincide: 'no coincide', sin_datos: 'sin datos' };
   const lineasRecl = filasRecl.map((l) => ({ indice: l.indice, fecha: l.fecha, hora: l.hora, caseta: l.caseta, casetaCatalogo: l.caseta_cat, tag: l.tag, unidad: l.unidad ?? '', monto: Number(l.monto), cruceMs: Number(l.cruce_ms),
-    gps: veredicto[l.gps_veredicto] ?? 'sin evaluar', gpsDistanciaM: l.gps_distancia_m == null ? null : Number(l.gps_distancia_m), gpsNota: '', casetaGeo: { lat: l.lat, lng: l.lng, radioM: l.radio_m }, muestras: l.muestras }));
+    gps: veredicto[l.gps_veredicto] ?? 'sin evaluar', gpsDistanciaM: l.gps_distancia_m == null ? null : Number(l.gps_distancia_m), gpsNota: '', casetaGeo: { lat: l.lat, lng: l.lng, radioM: l.radio_m }, muestras: l.muestras,
+    casetaId: l.caseta_id, cursos: cursosQueAplican(cursosFlota, l.unidad_id ?? null, l.convenio_id ?? null) }));
   hecho('hay líneas para armar la reclamación', lineasRecl.length > 0, 'sin líneas (¿base sin sembrar?)');
   if (lineasRecl.length > 0) {
     const r = construirReclamacion(lineasRecl, zonas.map((z) => ({ nombre: z.nombre, tipo: z.tipo, lat: z.lat, lng: z.lng, radioM: z.radio_m, poligono: z.poligono, aproximada: z.aproximada })));
@@ -223,6 +238,13 @@ try {
     dice('reclamación: GPS lejos', `${m.gps_lejos_de_caseta.n} por «GPS lejos de la caseta» (${peso(m.gps_lejos_de_caseta.monto)}, confianza alta)`, guion);
     dice('reclamación: doble cobro', `${m.doble_cobro.n} por «posible doble cobro» (${peso(m.doble_cobro.monto)}, confianza media)`, guion);
     dice('reclamación: zona no autorizada', `${m.unidad_en_zona_no_autorizada.n} por «unidad en zona no autorizada» (${peso(m.unidad_en_zona_no_autorizada.monto)}, confianza alta)`, guion);
+    dice('reclamación: fuera de curso', `${m.fuera_de_curso.n} por «cruce fuera de curso» (${peso(m.fuera_de_curso.monto)}, confianza media)`, guion);
+    const fueraCurso = r.cruces.filter((x) => x.motivo === 'fuera_de_curso');
+    hecho('los cruces fuera de curso son de tractos con SU curso y con el GPS confirmando la caseta (SÍ estaban ahí, pero no era su ruta autorizada)',
+      fueraCurso.length === 3 && fueraCurso.every((x) => x.confianza === 'media' && x.cursos.length === 1 && lineasRecl.find((l) => l.indice === x.indice)?.gps === 'confirma'),
+      JSON.stringify(fueraCurso.map((x) => [x.unidad, x.confianza, x.cursos.length])));
+    for (const u of fueraCurso.map((x) => x.unidad)) dice(`el guion cita ${u} como cruce fuera de curso`, u, guion);
+    hecho('IN-141 e IN-142 (sin viaje) no tienen curso: no se reclaman por curso', !fueraCurso.some((x) => ['IN-141', 'IN-142'].includes(x.unidad)));
     dice('reclamación (kit)', `${r.resumen.reclamables} reclamables por ${peso(r.resumen.montoReclamable)}`, kit);
     const zona = r.cruces.find((c) => c.unidad === 'IN-141');
     hecho('IN-141 se reclama por zona no autorizada, confianza alta, dentro de «Patio Tlaquepaque» (polígono exacto)', !!zona && zona.motivo === 'unidad_en_zona_no_autorizada' && zona.confianza === 'alta' && zona.zona?.nombre === 'Patio Tlaquepaque', JSON.stringify(zona ?? null));
