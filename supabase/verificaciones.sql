@@ -18250,3 +18250,35 @@ begin
   raise exception E'ORQ_ESCALACION_0650 abierta-unica=% otra-flota-puede=% tras-atender-nueva=% viaje-ajeno-rebota=% borrar-viaje-conserva=%   (esperado t / t / t / t / t)',
     abierta_unica, otra_flota, nueva, ajeno, conserva;
 end $$;
+
+-- ── 269. Las RPC de posiciones no cuentan el pin de WhatsApp (mig. 0603) ──
+-- Con un pin más reciente que el GPS, `ultimas_posiciones_tenant` devolvía el pin y la unidad salía
+-- «sin posición» en el tablero; `peaje_posiciones_ventana` contaba pins como evidencia de cruce.
+-- Esperado: POSICIONES_SIN_PIN_0603 unidad-con-pin-sale-por-gps=t solo-pin-fuera=t ventana-sin-pin=t otra-flota-nada=t
+do $$
+declare
+  ta uuid; tb uuid; u1 uuid; u2 uuid;
+  por_gps boolean := false; solo_pin_fuera boolean := false; ventana boolean := false; otra boolean := false;
+  n int; lat_u double precision;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0603 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0603 B') returning id into tb;
+  insert into unidad (tenant_id, numero_economico, activo) values (ta, 'ZZZ-0603-1', true) returning id into u1;
+  insert into unidad (tenant_id, numero_economico, activo) values (ta, 'ZZZ-0603-2', true) returning id into u2;
+  insert into posicion (tenant_id, unidad_id, lat, lng, medida_en, proveedor) values
+    (ta, u1, 19.10, -99.10, now() - interval '30 minutes', 'samsara'),
+    (ta, u1, 25.00, -100.00, now() - interval '5 minutes', 'whatsapp'),
+    (ta, u2, 20.00, -101.00, now() - interval '5 minutes', 'whatsapp');
+
+  select r.lat into lat_u from ultimas_posiciones_tenant(ta) r where r.unidad_id = u1;
+  por_gps := lat_u = 19.10;
+  solo_pin_fuera := not exists (select 1 from ultimas_posiciones_tenant(ta) r where r.unidad_id = u2);
+  select count(*) into n from peaje_posiciones_ventana(ta, jsonb_build_array(jsonb_build_object(
+    'linea_id', gen_random_uuid(), 'unidad_id', u1, 'desde', now() - interval '2 hours', 'hasta', now())));
+  ventana := n = 1;
+  select count(*) into n from ultimas_posiciones_tenant(tb);
+  otra := n = 0;
+
+  raise exception E'POSICIONES_SIN_PIN_0603 unidad-con-pin-sale-por-gps=% solo-pin-fuera=% ventana-sin-pin=% otra-flota-nada=%   (esperado t / t / t / t)',
+    por_gps, solo_pin_fuera, ventana, otra;
+end $$;
