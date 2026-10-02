@@ -36,6 +36,10 @@ export interface ConfigVigia {
   autoenviarMinAprobaciones: number;
   slaRespuestaMin: number;
   escalarNivel2Min: number;
+  /** 0484: plazo corto (min) para clientes con un grupo CRÍTICO; rige el menor entre este y `slaRespuestaMin`. */
+  slaCriticoMin: number;
+  /** 0484: nivel de molestia (2 o 3) desde el que se avisa al gerente responsable. */
+  molestiaAvisoNivel: 2 | 3;
   retencionDias: number;
   avisoPrivacidadUrl: string | null;
 }
@@ -44,8 +48,16 @@ export interface ConfigVigia {
 export function configApagada(tenantId: string): ConfigVigia {
   return {
     tenantId, habilitado: false, modoAprobacion: 'siempre', autoenviarMinAprobaciones: 5,
-    slaRespuestaMin: 30, escalarNivel2Min: 60, retencionDias: 180, avisoPrivacidadUrl: null,
+    slaRespuestaMin: 30, escalarNivel2Min: 60, slaCriticoMin: 10, molestiaAvisoNivel: 2, retencionDias: 180, avisoPrivacidadUrl: null,
   };
+}
+
+/**
+ * La config que rige a UN cliente: si tiene un grupo crítico, el plazo de respuesta es el menor entre el general y el
+ * crítico. Todo lo que mide espera (molestia por tiempo, escalera) usa esta, no la cruda. PURA.
+ */
+export function configParaCliente(config: ConfigVigia, critico: boolean): ConfigVigia {
+  return critico ? { ...config, slaRespuestaMin: Math.min(config.slaRespuestaMin, config.slaCriticoMin) } : config;
 }
 
 export type EstadoContacto = 'activo' | 'baja' | 'suprimido';

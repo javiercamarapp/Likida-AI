@@ -41,6 +41,7 @@ import { evaluarMolestia } from './molestia';
 import { decidirEnvio } from './politica';
 import { pulirBorrador, redactarBorrador, type ViajeParaRedactar } from './redactor';
 import type { DepsVigia, Destinatario } from './puertos';
+import { configParaCliente } from './tipos';
 import type { AdjuntoRef, Clasificacion, ConfigVigia, Contacto, Conversacion, MensajeVigia, MotivoEscalamiento } from './tipos';
 
 export interface MensajeEntrante {
@@ -92,6 +93,8 @@ export async function atenderMensajeCliente(msg: MensajeEntrante, deps: DepsVigi
   let config: ConfigVigia;
   try {
     config = await repo.config(contacto.tenantId);
+    // 0484: un cliente con grupo crítico se atiende con el plazo corto (la lectura nunca lanza hacia aquí).
+    config = configParaCliente(config, await repo.clienteCritico(contacto.tenantId, contacto.clienteId).catch(() => false));
   } catch (e) {
     logger.error('vigia.config_no_leida', { tenant: contacto.tenantId, err: e instanceof Error ? e.message : String(e) });
     return 'reintentar';

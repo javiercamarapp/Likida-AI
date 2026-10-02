@@ -71,6 +71,8 @@ export interface Destinatario {
 
 export interface RepoVigia {
   config(tenantId: string): Promise<ConfigVigia>;
+  /** 0484: ¿el cliente tiene algún grupo CRÍTICO? Falla hacia `false` (el plazo general), nunca lanza por una base sin migrar. */
+  clienteCritico(tenantId: string, clienteId: string): Promise<boolean>;
   /** El contacto ACTIVO o dado de baja de ese número; `null` si no está en ninguna allowlist (o está suprimido). */
   contactoPorTelefono(telefono: string): Promise<Contacto | null>;
   nombreFlota(tenantId: string): Promise<string>;

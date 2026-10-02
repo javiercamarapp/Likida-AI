@@ -20,7 +20,7 @@ export function esZip(b: Uint8Array): boolean {
 
 export function textoDeZip(bytes: Uint8Array): ResultadoZip {
   if (bytes.length > MAX_ZIP_BYTES) return { ok: false, error: 'El archivo .zip es demasiado grande.' };
-  const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const buf = Buffer.concat([bytes]);
   // EOCD: firma 0x06054b50, a lo más 65,557 bytes antes del final.
   let eocd = -1;
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 22 - 65_535); i--) {
