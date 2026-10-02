@@ -79,7 +79,10 @@ export interface ResultadoWorker {
   /** Excepciones de infraestructura al procesar (la base, Storage): el lease vence solo y se reintenta. */
   errores: number;
   cortadosPorReloj: number;
+  /** Alguna flota topó su techo de IA (diario o de fondo): sus documentos se saltaron en esta pasada; las demás siguieron. */
   paradaPorPresupuesto: boolean;
+  /** Documentos NO intentados por el techo de su flota (ya agotado en esta pasada). */
+  omitidosPorPresupuesto: number;
   paradaPorFallosSeguidos: boolean;
   agotados: number;
   hallazgos: number;
@@ -96,7 +99,7 @@ export interface ResultadoWorker {
 }
 
 const vacio = (): ResultadoWorker => ({
-  pendientes: 0, procesados: 0, fallidos: 0, yaTomados: 0, errores: 0, cortadosPorReloj: 0, paradaPorPresupuesto: false,
+  pendientes: 0, procesados: 0, fallidos: 0, yaTomados: 0, errores: 0, cortadosPorReloj: 0, paradaPorPresupuesto: false, omitidosPorPresupuesto: 0,
   paradaPorFallosSeguidos: false, agotados: 0, hallazgos: 0, avisosEnviados: 0, avisosEnCola: 0, avisosFallidos: 0, avisosPerdidos: 0,
   sinTelefono: 0, avisosSinMigracion: false, fallos: [],
 });
@@ -113,10 +116,33 @@ export async function correrWorkerCartaPorte(deps: DepsWorker, opts: OpcionesWor
   return r;
 }
 
+/** Reparte el lote por turnos entre flotas (conservando el orden dentro de cada una) y lo corta en `limite`. */
+export function intercalarPorFlota(lista: DocPendiente[], limite: number): DocPendiente[] {
+  const porFlota = new Map<string, DocPendiente[]>();
+  for (const d of lista) {
+    const cola = porFlota.get(d.tenantId);
+    if (cola) cola.push(d); else porFlota.set(d.tenantId, [d]);
+  }
+  if (porFlota.size <= 1) return lista.slice(0, limite);
+  const colas = [...porFlota.values()];
+  const salida: DocPendiente[] = [];
+  for (let ronda = 0; salida.length < limite; ronda++) {
+    let hubo = false;
+    for (const c of colas) {
+      if (ronda < c.length && salida.length < limite) { salida.push(c[ronda]); hubo = true; }
+    }
+    if (!hubo) break;
+  }
+  return salida;
+}
+
 async function procesarPendientes(deps: DepsWorker, opts: OpcionesWorker, r: ResultadoWorker): Promise<void> {
   let lista: DocPendiente[];
   try {
-    lista = await deps.pendientes(opts.limite ?? TOPE_DOCS_POR_PASADA);
+    const limite = opts.limite ?? TOPE_DOCS_POR_PASADA;
+    // Se pide de más y se reparte por flota: el orden de la base es «el más viejo primero» y una flota con muchos
+    // recibidos (o con el techo de IA agotado) llenaría el lote y dejaría sin turno a las demás.
+    lista = intercalarPorFlota(await deps.pendientes(limite * 4), limite);
   } catch (e) {
     r.errores++;
     r.fallos.push(`pendientes: ${msg(e)}`);
@@ -125,6 +151,8 @@ async function procesarPendientes(deps: DepsWorker, opts: OpcionesWorker, r: Res
   }
   r.pendientes = lista.length;
   let modeloSeguidos = 0;
+  // Los techos de IA son POR FLOTA: la que agotó el suyo se salta; las demás siguen (aislamiento entre flotas).
+  const flotasSinPresupuesto = new Set<string>();
 
   for (let i = 0; i < lista.length; i++) {
     const d = lista[i];
@@ -133,6 +161,7 @@ async function procesarPendientes(deps: DepsWorker, opts: OpcionesWorker, r: Res
       r.cortadosPorReloj = lista.length - i;
       break;
     }
+    if (flotasSinPresupuesto.has(d.tenantId)) { r.omitidosPorPresupuesto++; continue; }
     try {
       const p = await deps.procesar(d.tenantId, d.id, deps.senal?.(Math.max(5_000, opts.venceEn - deps.ahora() - 8_000)));
       if (p.ok) { r.procesados++; modeloSeguidos = 0; continue; }
@@ -140,10 +169,10 @@ async function procesarPendientes(deps: DepsWorker, opts: OpcionesWorker, r: Res
       r.fallidos++;
       r.fallos.push(`${p.motivo}${p.permanente ? ' (permanente)' : ''}: ${p.mensaje.slice(0, 120)}`);
       if (p.motivo === 'presupuesto') {
-        // Todo lo que siga toparía con el mismo techo: se para y no se gasta un intento más.
-        r.paradaPorPresupuesto = true;
-        r.cortadosPorReloj = lista.length - i - 1;
-        break;
+        // `run` es el tope de ESTE documento: el siguiente puede caber. `tenant`/`proposito` son techos de la flota:
+        // lo que siga DE ESA FLOTA toparía igual (se salta); las demás flotas siguen. Sin alcance se asume el de la flota.
+        if (p.alcance !== 'run') { r.paradaPorPresupuesto = true; flotasSinPresupuesto.add(d.tenantId); }
+        continue;
       }
       if (p.motivo === 'modelo') {
         modeloSeguidos++;
@@ -218,8 +247,9 @@ async function avisarOficinaDe(deps: DepsWorker, opts: OpcionesWorker, r: Result
           rechazadosSeguidos = 0;
           r.avisosEnviados++;
           await deps.evento(d.tenantId, d.id, tipo === 'agotado' ? 'reintentos_agotados' : 'aviso_oficina', { tipo, via: envio.via }).catch(() => {});
-        } else if (envio.reintentable) {
-          // YA está en `wa_outbox`: el candado se queda cerrado y NO se reenvía.
+        } else if (envio.reintentable || envio.encolado) {
+          // YA está en `wa_outbox` (reintentable, o token vencido 190/401 que también se encola): el candado se queda
+          // cerrado y NO se reenvía; cada pasada de 5 min lo encolaría otra vez y el outbox entregaría todas las copias.
           rechazadosSeguidos = 0;
           r.avisosEnCola++;
           await deps.evento(d.tenantId, d.id, tipo === 'agotado' ? 'reintentos_agotados' : 'aviso_oficina', { tipo, via: 'en_cola_outbox' }).catch(() => {});
