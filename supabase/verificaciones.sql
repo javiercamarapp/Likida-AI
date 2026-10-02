@@ -18360,3 +18360,49 @@ begin
   raise exception E'COPIA_JEFE_0620 segundo-rebota=% otro-telefono=% aceptada-no-repite=% soltar-reintenta=% token-viejo-no-cierra=% flota-ajena-null=%   (esperado t / t / t / t / t / t)',
     segundo, otro, no_repite, reintenta, viejo_no, ajena;
 end $$;
+
+-- ── 272. Carta Porte, worker de la bandeja: qué se reintenta, qué queda terminal y un solo aviso (mig. 0640 + 0641 + 0642) ──
+-- Las RPC del worker con cifras: `cp_documentos_pendientes` elige recibidos (con gracia), lease vencido y fallidos con espera
+-- creciente, y NUNCA lo agotado (5 intentos = terminal) ni lo purgado; el candado de aviso a la oficina es de UNA vez por
+-- documento y tipo, por flota, y no sube `version`; la 0642 admite el id de cron y los eventos nuevos sin perder los de antes.
+-- Esperado: CP_WORKER_064X pendientes=t agotado-terminal=t aviso-una-vez=t aviso-no-toca-version=t aviso-por-flota=t soltar-reintenta=t latido-admite=t latido-conserva=t evento-nuevo=t
+do $$
+declare
+  ta uuid; tb uuid; d1 uuid; d2 uuid; d3 uuid; d4 uuid; v0 int; v1 int;
+  pend boolean := false; agot boolean := false; una boolean := false; sin_version boolean := false; por_flota boolean := false;
+  suelta boolean := false; lat_nuevo boolean := false; lat_viejo boolean := false; ev boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 064X A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 064X B') returning id into tb;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, storage_ruta, created_at, updated_at)
+    values (ta, 'correo', 'pdf_texto', 'a.pdf', 10, repeat('1', 64), 'recibido', 'r/1', now() - interval '1 hour', now() - interval '1 hour') returning id into d1;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, storage_ruta, intentos, created_at, updated_at)
+    values (ta, 'correo', 'pdf_texto', 'b.pdf', 10, repeat('2', 64), 'fallido', 'r/2', 2, now() - interval '1 day', now() - interval '45 minutes') returning id into d2;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, storage_ruta, intentos, created_at, updated_at)
+    values (ta, 'correo', 'pdf_texto', 'c.pdf', 10, repeat('3', 64), 'fallido', 'r/3', 5, now() - interval '1 day', now() - interval '1 hour') returning id into d3;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, storage_ruta, intentos, created_at, updated_at)
+    values (ta, 'correo', 'pdf_texto', 'd.pdf', 10, repeat('4', 64), 'fallido', 'r/4', 2, now() - interval '1 day', now() - interval '10 minutes') returning id into d4;
+
+  -- d1 (recibido viejo) y d2 (2.º intento, 45 min > 30) entran; d3 (agotado) y d4 (10 min < 30) no.
+  pend := (select array_agg(id order by id) from cp_documentos_pendientes(100, 5, 120) where tenant_id = ta) = (select array_agg(x order by x) from unnest(array[d1, d2]) x);
+  agot := (select array_agg(id) from cp_documentos_agotados(100, 5, 7) where tenant_id = ta) = array[d3]
+          and not exists (select 1 from cp_documentos_pendientes(100, 5, 120) where id = d3);
+
+  select version into v0 from cp_documento where id = d3;
+  una := cp_documento_reclamar_aviso(ta, d3, 'agotado') and not cp_documento_reclamar_aviso(ta, d3, 'agotado')
+         and not exists (select 1 from cp_documentos_agotados(100, 5, 7) where id = d3);
+  select version into v1 from cp_documento where id = d3;
+  sin_version := v0 = v1;
+  por_flota := not cp_documento_reclamar_aviso(tb, d1, 'agotado') and not cp_documento_liberar_aviso(tb, d3, 'agotado');
+  suelta := cp_documento_liberar_aviso(ta, d3, 'agotado') and exists (select 1 from cp_documentos_agotados(100, 5, 7) where id = d3);
+
+  insert into cron_latido (id, estado, ultimo_latido) values ('carta-porte-docs', 'ok', now()) on conflict (id) do nothing;
+  lat_nuevo := exists (select 1 from cron_latido where id = 'carta-porte-docs');
+  insert into cron_latido (id, estado, ultimo_latido) values ('jornada-alertas', 'ok', now()) on conflict (id) do nothing;
+  lat_viejo := true;
+  insert into cp_documento_evento (documento_id, tenant_id, tipo) values (d3, ta, 'aviso_oficina');
+  ev := exists (select 1 from cp_documento_evento where documento_id = d3 and tipo = 'aviso_oficina');
+
+  raise exception E'CP_WORKER_064X pendientes=% agotado-terminal=% aviso-una-vez=% aviso-no-toca-version=% aviso-por-flota=% soltar-reintenta=% latido-admite=% latido-conserva=% evento-nuevo=%   (esperado t / t / t / t / t / t / t / t / t)',
+    pend, agot, una, sin_version, por_flota, suelta, lat_nuevo, lat_viejo, ev;
+end $$;
