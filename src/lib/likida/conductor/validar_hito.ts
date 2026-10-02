@@ -130,6 +130,8 @@ export async function validarHitoContraSitio(d: DepsValidacion, e: EntradaValida
 export interface CandidatoValidacion {
   hito: HitoFila;
   viaje: ViajeContexto;
+  /** El veredicto que ya tiene este ciclo, si es uno que vale la pena volver a medir (`sin_coincidencia`). */
+  resultadoPrevio?: 'sin_coincidencia' | null;
 }
 
 export interface PuertosBarrido {
@@ -146,6 +148,12 @@ export interface ResultadoBarrido {
   saltados: number;
   fallos: number;
 }
+
+/**
+ * Cuánto después de cerrarse la ventana de comparación (hora del mensaje + ventana de la flota) todavía puede llegar una
+ * muestra de GPS que cuente: el poller reporta con minutos de retraso. Pasado esto, un «sin coincidencia» es definitivo.
+ */
+export const REZAGO_MAX_GPS_MIN = 30;
 
 /** Hasta cuándo atrás se reintenta una llegada sin dato. */
 export const HORAS_REINTENTO_VALIDACION = 3;
@@ -165,6 +173,10 @@ export async function barridoValidacion(p: PuertosBarrido, ahora: Date, venceEn?
     if (!config) { r.fallos++; continue; }
     if (!config.validarUbicacion) { r.saltados++; continue; }
     const mensajeEn = new Date(c.hito.mensajeEn ?? c.hito.recibidoEn ?? ahora);
+    // Un «sin coincidencia» puede ser una muestra vieja (el camión aún no llegaba): se reevalúa mientras puedan llegar
+    // muestras dentro de la ventana; después es definitivo y no se mide en cada corrida.
+    if (c.resultadoPrevio === 'sin_coincidencia'
+      && ahora.getTime() > mensajeEn.getTime() + (config.ventanaUbicacionMin + REZAGO_MAX_GPS_MIN) * 60_000) { r.saltados++; continue; }
     r.revisados++;
     const s = await validarHitoContraSitio(p.deps, { viaje: c.viaje, hito: c.hito, config, mensajeEn, ahora });
     if (!s) { r.fallos++; continue; }
