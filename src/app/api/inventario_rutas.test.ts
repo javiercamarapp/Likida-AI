@@ -177,7 +177,12 @@ import { join, relative, sep } from 'node:path';
 // 92 → 93 en la integración de la ola 3 (ronda-03): `api/v1/hitos/[id]/validar/route.ts` (W3 Conductor,
 //   POST con llave de API de la flota: valida el hito DE ESA flota con la RPC atómica; la rama de Conductor
 //   no subió esta constante) más las 2 de autofactura (vinculación de portal) y la de cron buzon-entrega.
-const RUTAS_APP_REVISADAS = 93;
+//
+// 93 → 94 en la ola 3, W3 «convenios» (0580): `api/export/convenios/route.ts` — GET de la flota de la SESIÓN (`resolverTenantApi`,
+//   `?tenant=` solo lo vale el superadmin ya validado): puerta del dato (área `operacion`), del verbo (`puedeExportar`) y, para el
+//   tipo `completo` (tarifa y requisitos de cobro), del DINERO (área `dinero`); rate limit por IP y por flota. Las instrucciones
+//   salen sin dinero (ni siquiera se consulta la tabla comercial). Prueba: `export/convenios/route.test.ts`.
+const RUTAS_APP_REVISADAS = 94;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
