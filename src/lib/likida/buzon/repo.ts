@@ -340,11 +340,11 @@ export async function descartarRecepcion(tenantId: string, id: string, por: stri
 
 /** ¿Alguna factura —o otra recepción ligada a una— cuelga de esta ruta de PDF? LANZA si la base falla. */
 async function rutaPdfEnUso(tenantId: string, ruta: string, exceptoRecepcionId: string): Promise<boolean> {
-  const f = await acotada(supabaseAdmin().from('factura_proveedor').select('id').eq('tenant_id', tenantId).eq('pdf_ruta', ruta).limit(1), 'buzon.ruta_en_factura');
+  const f = await acotada(supabaseAdmin().from('factura_proveedor').select('id').eq('tenant_id', tenantId).eq('pdf_ruta', ruta).order('id').limit(1), 'buzon.ruta_en_factura');
   if (f.error) { if (faltaMigracion(f.error)) return false; throw new Error(`rutaPdfEnUso: ${f.error.message}`); }
   if ((f.data ?? []).length > 0) return true;
   const r = await acotada(supabaseAdmin().from('buzon_recepcion').select('id').eq('tenant_id', tenantId).eq('storage_ruta', ruta)
-    .not('factura_id', 'is', null).neq('id', exceptoRecepcionId).limit(1), 'buzon.ruta_en_recepcion');
+    .not('factura_id', 'is', null).neq('id', exceptoRecepcionId).order('id').limit(1), 'buzon.ruta_en_recepcion');
   if (r.error) { if (faltaMigracion(r.error)) return false; throw new Error(`rutaPdfEnUso: ${r.error.message}`); }
   return (r.data ?? []).length > 0;
 }

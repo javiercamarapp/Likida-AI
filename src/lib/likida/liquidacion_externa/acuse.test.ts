@@ -5,8 +5,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // puntos y un uuid completo— dispara un acuse, y que el texto que se le devuelve
 // al chofer afirma únicamente lo que de verdad se guardó.
 
-const registrarAcuse = vi.fn(async (..._a: unknown[]): Promise<string> => 'registrado');
-vi.mock('./servicio', () => ({ registrarAcuse: (...a: unknown[]) => registrarAcuse(...a) }));
+const registrarAcuse = vi.fn(async (..._a: unknown[]): Promise<{ resultado: string; avisoOficina: string }> => ({ resultado: 'registrado', avisoOficina: 'no_aplica' }));
+vi.mock('./servicio', () => ({ registrarAcuseConAviso: (...a: unknown[]) => registrarAcuse(...a) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const { leerBotonLiquidacionExterna, atenderAcuseLiquidacionExterna } = await import('./acuse');
@@ -14,7 +14,7 @@ const { leerBotonLiquidacionExterna, atenderAcuseLiquidacionExterna } = await im
 const ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
 const op = { tenantId: 't-1', operadorId: 'o-1' };
 
-beforeEach(() => { registrarAcuse.mockReset(); registrarAcuse.mockResolvedValue('registrado'); });
+beforeEach(() => { registrarAcuse.mockReset(); registrarAcuse.mockResolvedValue({ resultado: 'registrado', avisoOficina: 'no_aplica' }); });
 
 describe('leerBotonLiquidacionExterna', () => {
   it('lee los dos botones', () => {
@@ -54,15 +54,24 @@ describe('atenderAcuseLiquidacionExterna', () => {
     expect(registrarAcuse).toHaveBeenCalledWith('t-1', 'o-1', ID, 'recibida');
   });
 
+  const r = (resultado: string, avisoOficina = 'no_aplica') => ({ resultado, avisoOficina });
   it('cada resultado del servicio tiene su frase, y ninguna afirma de más', async () => {
-    registrarAcuse.mockResolvedValueOnce('registrado');
+    registrarAcuse.mockResolvedValueOnce(r('registrado'));
     expect(await atenderAcuseLiquidacionExterna(op, `liqext_ok:${ID}`)).toMatch(/quedó registrado que recibiste/);
-    registrarAcuse.mockResolvedValueOnce('registrado');
-    expect(await atenderAcuseLiquidacionExterna(op, `liqext_no:${ID}`)).toMatch(/NO coincide.*panel de tu oficina/);
-    registrarAcuse.mockResolvedValueOnce('ya_registrado');
+    registrarAcuse.mockResolvedValueOnce(r('ya_registrado'));
     expect(await atenderAcuseLiquidacionExterna(op, `liqext_ok:${ID}`)).toMatch(/Ya tenía registrada/);
-    registrarAcuse.mockResolvedValueOnce('no_encontrada');
+    registrarAcuse.mockResolvedValueOnce(r('no_encontrada'));
     expect(await atenderAcuseLiquidacionExterna(op, `liqext_ok:${ID}`)).toMatch(/No encontré esa liquidación/);
+  });
+
+  it('«No coincide»: «ya le avisé a tu oficina» SOLO si el aviso salió; si no, lo dice y sugiere avisar directo', async () => {
+    registrarAcuse.mockResolvedValueOnce(r('registrado', 'enviado'));
+    const enviado = await atenderAcuseLiquidacionExterna(op, `liqext_no:${ID}`);
+    expect(enviado).toMatch(/NO coincide.*Ya le avisé a tu oficina/);
+    registrarAcuse.mockResolvedValueOnce(r('registrado', 'no_enviado'));
+    const noEnviado = await atenderAcuseLiquidacionExterna(op, `liqext_no:${ID}`);
+    expect(noEnviado).toMatch(/NO coincide.*panel de tu oficina.*no pude avisarles/);
+    expect(noEnviado).not.toMatch(/Ya le avisé/);
   });
 
   it('si el servicio lanza, falla CERRADO: nunca dice «registrado»', async () => {

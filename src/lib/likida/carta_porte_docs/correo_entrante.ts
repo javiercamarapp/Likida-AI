@@ -21,6 +21,7 @@
 
 import { logger } from '@/lib/logger';
 import { esTokenValido, generarToken } from '@/lib/correo/buzon';
+import { remitenteReconocido } from '@/lib/correo/remitente';
 import { estaApagado } from '../interruptores';
 import { nombreArchivoSeguro, procesarDocumento, recibirDocumento, type DepsServicio } from './servicio';
 import * as repo from './repo';
@@ -34,6 +35,8 @@ export const MIN_CUERPO_CHARS = 80;
 const EXT_ADJUNTO = /\.(pdf|xlsx|xls|csv|xml|png|jpe?g|webp|eml|txt)$/i;
 
 export const generarTokenCp = generarToken;
+/** Reexportada: vive en `lib/correo/remitente.ts` para que otros buzones la usen sin arrastrar este módulo. */
+export { remitenteReconocido };
 
 export function direccionCp(token: string, dominio: string | null | undefined): string | null {
   if (!dominio || !esTokenValido(token)) return null;
@@ -58,15 +61,6 @@ export function tokenCpDeDestinatarios(direcciones: readonly string[], dominio: 
   const t = new Set<string>();
   for (const d of direcciones) { const x = tokenCpDeDireccion(d, dominio); if (x) t.add(x); }
   return t.size === 1 ? [...t][0] : null;
-}
-
-/** `null` = la flota no declaró lista (no hay con qué comparar); `true/false` = coincide o no (por correo o por dominio). */
-export function remitenteReconocido(remitente: string | null | undefined, permitidos: readonly string[]): boolean | null {
-  if (permitidos.length === 0) return null;
-  const m = /([a-z0-9._%+-]+@([a-z0-9.-]+\.[a-z]{2,}))/i.exec(remitente ?? '');
-  if (!m) return false;
-  const correo = m[1].toLowerCase(); const dominio = m[2].toLowerCase();
-  return permitidos.some((p) => { const x = p.trim().toLowerCase(); return x === correo || x === dominio || x === `@${dominio}`; });
 }
 
 export interface AdjuntoEntrante { id?: string; filename?: string; content_type?: string }

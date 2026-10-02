@@ -41,6 +41,7 @@ function nodoDesglose() {
   const nodo: Record<string, unknown> = {
     select: () => nodo,
     eq: () => nodo,
+    is: () => nodo,
     maybeSingle: () => Promise.resolve({
       data: {
         id: 'd1', proveedor: 'IAVE', archivo_nombre: 'corte.xlsx',

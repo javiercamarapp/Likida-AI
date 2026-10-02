@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Truck, Download, RefreshCw, FileText } from 'lucide-react';
+import { Truck, Download, RefreshCw, FileText, FileSpreadsheet, Send, Settings2 } from 'lucide-react';
 import { fechaCorta, numero, hoyMx, fechaHoraMx } from '@/lib/formato';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
@@ -46,10 +46,14 @@ export interface ExternasProps {
   /** Los campos de la query a conservar (`tenant`, `vista`, `rol`). */
   contexto: Array<[string, string]>;
   /** Mensaje de la última acción (`ext_msg`), ya validado contra la lista. */
-  mensaje: 'reintentada' | 'no_aplica' | 'no_encontrada' | 'error' | null;
+  mensaje: MensajeExterno | null;
   puedeReintentar: boolean;
   /** Server action del host: reintenta UNA entrega fallida. */
   reintentar: (fd: FormData) => Promise<void>;
+  /** El formato de la flota (0564): `null` = no se pudo leer; `{…false}` = no tiene. */
+  formato?: Promise<{ excel: boolean; copia: boolean } | null>;
+  /** Server action del host: reenvía la copia al jefe de flota de UNA liquidación. */
+  reenviarCopia?: (fd: FormData) => Promise<void>;
 }
 
 const ROTULO_ESTADO: Record<EstadoLiquidacionExterna, { rotulo: string; ayuda: string; fg: string; bg: string }> = {
@@ -60,7 +64,13 @@ const ROTULO_ESTADO: Record<EstadoLiquidacionExterna, { rotulo: string; ayuda: s
   fallida: { rotulo: 'Falló', ayuda: 'No se pudo entregar. Se puede reintentar.', fg: 'var(--bad)', bg: 'var(--badbg)' },
 };
 
-const MENSAJES: Record<NonNullable<ExternasProps['mensaje']>, { texto: string; tono: 'ok' | 'bad' }> = {
+export type MensajeExterno = 'reintentada' | 'no_aplica' | 'no_encontrada' | 'error' | 'copia_enviada' | 'copia_ya' | 'copia_fallo' | 'copia_sin_jefe';
+
+const MENSAJES: Record<MensajeExterno, { texto: string; tono: 'ok' | 'bad' }> = {
+  copia_enviada: { texto: 'Listo: la copia salió hacia el jefe de flota.', tono: 'ok' },
+  copia_ya: { texto: 'La copia ya se había enviado: no se mandó otra vez.', tono: 'ok' },
+  copia_fallo: { texto: 'WhatsApp no aceptó la copia (¿la plantilla de avisos sigue sin aprobar?). La entrega al operador no se afectó. Vuelve a intentarlo más tarde.', tono: 'bad' },
+  copia_sin_jefe: { texto: 'No hay jefe de flota designado: agrégalo en «Formato de las liquidaciones».', tono: 'bad' },
   reintentada: { texto: 'Listo: la entrega se reintentó. Si WhatsApp la acepta, pasa a «Enviada».', tono: 'ok' },
   no_aplica: { texto: 'Esa liquidación ya no está fallida (alguien más la reintentó, o ya salió): no se mandó otra vez.', tono: 'bad' },
   no_encontrada: { texto: 'No encontré esa liquidación en tu flota.', tono: 'bad' },
@@ -68,7 +78,7 @@ const MENSAJES: Record<NonNullable<ExternasProps['mensaje']>, { texto: string; t
 };
 
 export function leerMensajeExterno(v: string | undefined): ExternasProps['mensaje'] {
-  return v === 'reintentada' || v === 'no_aplica' || v === 'no_encontrada' || v === 'error' ? v : null;
+  return v && Object.prototype.hasOwnProperty.call(MENSAJES, v) ? (v as MensajeExterno) : null;
 }
 
 /** El filtro de la URL: un estado de entrega, o `no_coincide` (la respuesta del
@@ -88,7 +98,7 @@ function query(contexto: Array<[string, string]>, extra: Array<[string, string]>
 
 /** El hijo más sencillo posible de la sección: la que llega por su cuenta. */
 export async function SeccionExternas(p: ExternasProps) {
-  const [fichas, pagina] = await Promise.all([p.fichas, p.pagina]);
+  const [fichas, pagina, formato] = await Promise.all([p.fichas, p.pagina, p.formato ?? null]);
   const hoy = hoyMx();
   const hace30 = (() => { const d = new Date(`${hoy}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 30); return d.toISOString().slice(0, 10); })();
   const sinNada = pagina.filas.length === 0 && !p.filtroEstado;
@@ -105,6 +115,9 @@ export async function SeccionExternas(p: ExternasProps) {
         </p>
       </div>
       <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
+        <Link href={`/dashboard/agentes/liquidacion/formato${query(p.contexto)}`} className="inline-flex items-center gap-1 font-medium hover:opacity-70 mr-1.5" style={{ color: 'var(--marca)' }}>
+          <Settings2 width={12} height={12} strokeWidth={2} /> Formato de las liquidaciones
+        </Link>
         Calculadas por el sistema de tu empresa (SAP/TMS). Likida solo las entrega al chofer por WhatsApp y registra su
         respuesta: no las recalcula ni las mezcla con las del cuadre de arriba.
       </p>
@@ -188,7 +201,7 @@ export async function SeccionExternas(p: ExternasProps) {
                 </tr>
               </thead>
               <tbody>
-                {pagina.filas.map((l) => <Fila key={l.id} l={l} p={p} />)}
+                {pagina.filas.map((l) => <Fila key={l.id} l={l} p={p} formato={formato} />)}
               </tbody>
             </table>
           </div>
@@ -209,7 +222,7 @@ export async function SeccionExternas(p: ExternasProps) {
   );
 }
 
-function Fila({ l, p }: { l: LiquidacionExterna; p: ExternasProps }) {
+function Fila({ l, p, formato }: { l: LiquidacionExterna; p: ExternasProps; formato: { excel: boolean; copia: boolean } | null }) {
   const e = ROTULO_ESTADO[l.estado] ?? { rotulo: l.estado, ayuda: '', fg: 'var(--muted)', bg: 'var(--canvas)' };
   const fallo = motivoDeFallo(l.ultimoError);
   const disputa = l.acuseTipo === 'no_coincide';
@@ -242,6 +255,20 @@ function Fila({ l, p }: { l: LiquidacionExterna; p: ExternasProps }) {
             className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity mr-3" style={{ color: 'var(--marca)' }}>
             <FileText width={12} height={12} strokeWidth={2} /> PDF
           </a>
+        )}
+        {formato?.excel && l.pdfRuta && l.pdfOrigen === 'generado' && (
+          <a href={`/api/export/liquidaciones-externas${query(p.contexto.filter(([k]) => k === 'tenant'), [['excel', l.id]])}`}
+            className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity mr-3" style={{ color: 'var(--marca)' }}>
+            <FileSpreadsheet width={12} height={12} strokeWidth={2} /> Excel
+          </a>
+        )}
+        {formato?.copia && p.reenviarCopia && l.estado !== 'pendiente' && l.estado !== 'fallida' && (
+          <form action={p.reenviarCopia} className="inline mr-3">
+            <input type="hidden" name="id" value={l.id} />
+            <button type="submit" title="Reenvía la copia al jefe de flota (solo se manda si aún no salió)" className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--marca)' }}>
+              <Send width={12} height={12} strokeWidth={2} /> Copia al jefe
+            </button>
+          </form>
         )}
         {l.estado === 'fallida' && p.puedeReintentar && (
           <form action={p.reintentar} className="inline">

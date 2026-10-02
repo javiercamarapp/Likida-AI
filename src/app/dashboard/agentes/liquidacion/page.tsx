@@ -22,7 +22,8 @@ import { buscarCatalogo, type OpcionCatalogo, type TipoCatalogo } from '@/lib/li
 import {
   contarPorEstado, contarNoCoincide, listarLiquidacionesExternas, type FiltroListado,
 } from '@/lib/likida/liquidacion_externa/repo';
-import { reintentarLiquidacionExterna } from '@/lib/likida/liquidacion_externa/servicio';
+import { reintentarLiquidacionExterna, reenviarCopiaAJefe } from '@/lib/likida/liquidacion_externa/servicio';
+import { leerFormatoFlota } from '@/lib/likida/liquidacion_externa/repo';
 import { decodificarCursor, codificarCursor } from '@/app/api/v1/_comun';
 import { SeccionExternas, leerFiltroExterno, leerMensajeExterno } from './externas';
 
@@ -147,6 +148,11 @@ export default async function PaginaAgenteLiquidacion({
       };
     }));
 
+  // El formato de la flota (0564): solo para decidir qué enlaces se pintan; si no se pudo leer, no se pintan.
+  const pFormato = leerFormatoFlota(tenantId)
+    .then((c) => ({ excel: c !== null, copia: (c?.copiaTelefonos.length ?? 0) > 0 }))
+    .catch(() => null);
+
   /** Reintenta UNA entrega fallida. Re-gatea con la sesión REAL (es alcanzable
    *  por POST directo) y siempre vuelve a la pantalla con el resultado en la
    *  URL: ni un éxito ni un fallo pasan en silencio. */
@@ -159,6 +165,26 @@ export default async function PaginaAgenteLiquidacion({
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
       try {
         resultado = await reintentarLiquidacionExterna(s.tenantId, id.toLowerCase(), s.userId);
+      } catch {
+        resultado = 'error';
+      }
+    }
+    revalidatePath('/dashboard/agentes/liquidacion');
+    redirect(`/dashboard/agentes/liquidacion?${new URLSearchParams([...contexto, ['ext_msg', resultado]]).toString()}#liquidaciones-externas`);
+  }
+
+  /** Reenvía la copia al jefe de flota de UNA liquidación ya entregada (la primera pudo no llegar). */
+  async function reenviarCopiaExterna(fd: FormData): Promise<void> {
+    'use server';
+    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
+    const id = String(fd.get('id') ?? '');
+    let resultado: 'copia_enviada' | 'copia_ya' | 'copia_fallo' | 'copia_sin_jefe' | 'no_encontrada' | 'error' = 'no_encontrada';
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      try {
+        const r = await reenviarCopiaAJefe(s.tenantId, id.toLowerCase());
+        resultado = r.estado === 'enviada' ? 'copia_enviada' : r.estado === 'ya_enviada' ? 'copia_ya'
+          : r.estado === 'sin_destinatarios' ? 'copia_sin_jefe' : r.estado === 'no_enviada' ? 'copia_fallo' : 'no_encontrada';
       } catch {
         resultado = 'error';
       }
@@ -220,6 +246,7 @@ export default async function PaginaAgenteLiquidacion({
             fichas={pFichasExternas} pagina={pPaginaExterna} filtroEstado={filtroExterno}
             contexto={contexto} mensaje={leerMensajeExterno(sp.ext_msg)}
             puedeReintentar reintentar={reintentarExterna}
+            formato={pFormato} reenviarCopia={reenviarCopiaExterna}
           />
         </Bloque>
       }

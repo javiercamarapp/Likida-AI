@@ -156,7 +156,25 @@ import { join, relative, sep } from 'node:path';
 //     `api/correo/entrante/route.ts`, que verifica la firma Svix antes de leer el cuerpo.
 //
 // Conteo de la integración de la ola 2: 78 + 9 (Conductor) + 1 (Vigía) + 1 (Carta Porte) = 89.
+// 89 → 92 (loop punta a punta, ola 3, Agente 1 «liquidación externa», salida hacia SAP/TMS por pull):
+//   · `api/v1/liquidaciones-externas/acuses/route.ts` — `abrir(req, 'dinero')` antes de leer; SIEMPRE acotada al
+//     tenant de la credencial; solo trae acuses del propio tenant aún no confirmados;
+//   · `api/v1/liquidaciones-externas/acuses/confirmar/route.ts` — `abrir(req, 'administracion')`; ids validados
+//     como uuid (≤ 200), la confirmación lleva `.eq('tenant_id', …)` y un id ajeno cae en `noAplican`;
+//   · `api/v1/liquidaciones-externas/exportacion/route.ts` — `abrir(req, 'dinero')`; layout por catálogo cerrado
+//     de columnas, texto neutralizado contra inyección de fórmulas, tope duro que falla en vez de entregar un
+//     archivo parcial, y `?tenant=` ignorado (el tenant sale de la credencial).
+// 92 → 95 (ola 3, Agente 2 «conciliación de peajes», salida hacia SAP/ERP y anulación), tres rutas con puerta propia
+// (`abrir()` resuelve credencial → flota → ÁREA antes de tocar un dato; el tenant sale SIEMPRE de la credencial):
+//   · `api/v1/peajes/desgloses/route.ts` — área `dinero`, solo lectura de los desgloses de la flota (los anulados no salen);
+//   · `api/v1/peajes/desgloses/[id]/anular/route.ts` — área `administracion`; motivo obligatorio, la anulación lleva
+//     `.eq('tenant_id', …)` y «no existe»/«no es de tu flota» contestan lo mismo (404); no borra nada;
+//   · `api/v1/peajes/exportacion/route.ts` — área `dinero`; el desglose se busca CON el tenant de la credencial, layout por
+//     catálogo cerrado de columnas, texto neutralizado contra fórmulas.
+// El correo `pj-<token>@…` NO suma ruta: comparte el webhook firmado de `api/correo/entrante/route.ts`, que verifica la firma
+// Svix antes de leer el cuerpo y resuelve la flota por el token del destinatario.
 //
+// (Lo anterior, 89 → 95, es de la rama de los Agentes 1 y 2; lo siguiente, 89 → 93, de la rama integrada; la suma de ambas es 99.)
 // 89 → 90 (loop punta a punta, ola 3, Agente 9 «Buzón de facturas», 2-oct-2026): una ruta,
 //   · `api/cron/buzon-entrega/route.ts` — puertaCron (CRON_SECRET, comparación en tiempo
 //     constante) y palanca `global` (falla cerrado si no se puede leer); latido en todo camino de
@@ -177,7 +195,11 @@ import { join, relative, sep } from 'node:path';
 // 92 → 93 en la integración de la ola 3 (ronda-03): `api/v1/hitos/[id]/validar/route.ts` (W3 Conductor,
 //   POST con llave de API de la flota: valida el hito DE ESA flota con la RPC atómica; la rama de Conductor
 //   no subió esta constante) más las 2 de autofactura (vinculación de portal) y la de cron buzon-entrega.
-const RUTAS_APP_REVISADAS = 93;
+// 99 → 100 (ola 3b, Agente 2, reporte de reclamación): `api/export/peajes-reclamacion/route.ts` — las dos puertas de todo export de
+//   dinero (área `dinero` Y `puedeExportar`), rate limit por IP y por flota, formato `xlsx|pdf` validado, y el desglose se busca CON el
+//   tenant de la sesión (`reporteReclamacion(t.tenantId, …)`): un uuid de otra flota es 404, nunca datos ajenos. Una lectura incompleta no
+//   sale como archivo corto. Mismo molde que `api/export/bitacora-conciliada`.
+const RUTAS_APP_REVISADAS = 100;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

@@ -7,6 +7,7 @@ import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { registrarLatido, puertaCron } from '@/lib/admin/salud';
 import { purgarDocumentosVencidos } from '@/lib/likida/carta_porte_docs/retencion';
+import { mantenerDatosAgentes } from '@/lib/likida/retencion_agentes';
 import { purgarRecepcionesVencidas } from '@/lib/likida/buzon/repo';
 
 export const runtime = 'nodejs';
@@ -413,6 +414,20 @@ export async function GET(req: Request) {
       logger.error('cron.purgar.carta_porte_docs_excepcion', { error: e instanceof Error ? e.message : String(e) });
     }
 
+    // ── AGENTES 1 Y 2 (mig. 0562): ventana de WhatsApp, registro de envíos, liquidaciones externas
+    // terminales con más de 60 meses y contenido de archivos de peajes fallidos. Cada purga es
+    // independiente: una que falla se grita y se avisa, pero no tumba a las demás ni la corrida.
+    let agentesDatos: Awaited<ReturnType<typeof mantenerDatosAgentes>> | null = null;
+    try {
+      agentesDatos = await mantenerDatosAgentes(new Date(inicio));
+      const fallidas = agentesDatos.filter((p) => !p.ok);
+      if (fallidas.length > 0) {
+        await alertarOperador('cron.purgar.agentes_datos', { error: fallidas.map((p) => `${p.nombre}: ${p.error}`).join(' · ').slice(0, 500) });
+      }
+    } catch (e) {
+      logger.error('cron.purgar.agentes_datos_excepcion', { error: e instanceof Error ? e.message : String(e) });
+    }
+
     // ── BUZÓN DE FACTURAS (mig. 0530): bitácora de archivos recibidos que no cuelgan de una factura ──
     // 365 días; los PDF guardados se encolan en `storage_huerfano_candidato` y el borrado de Storage de
     // arriba los vacía en la corrida siguiente. `null` = la base aún no trae la 0530 (dicho, no un 0).
@@ -444,7 +459,7 @@ export async function GET(req: Request) {
     const estado = erroresRetencion0104.length > 0 || productoEventoError !== null
       ? 'fallo'
       : parcialGlobal ? 'parcial' : 'ok';
-    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, buzonRecepcionesPurgadas, vinculacionPortal };
+    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal };
     if (estado === 'fallo') logger.error('cron.purgar.retencion_0104_incompleta', detalleFinal);
     else if (estado === 'parcial') logger.warn('cron.purgar.incompleta', detalleFinal);
     else logger.info('cron.purgar.ok', detalleFinal);
@@ -457,7 +472,7 @@ export async function GET(req: Request) {
       productoEventoError,
     });
     return NextResponse.json(
-      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, buzonRecepcionesPurgadas, vinculacionPortal },
+      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal },
       { status: estado === 'fallo' ? 500 : 200 },
     );
   } catch (e) {

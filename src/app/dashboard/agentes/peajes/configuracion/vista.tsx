@@ -8,9 +8,11 @@ import type {
   TagVista, CasetaVista, GeocercaVista, MapeoVista, ArchivoIngestaVista,
 } from '@/lib/likida/peajes/datos';
 
+import { SeccionEntradas, type AccionesEntradas, type EntradasVista } from './entradas';
+
 type Accion = (fd: FormData) => Promise<void>;
 
-export interface AccionesConfiguracion {
+export interface AccionesConfiguracion extends AccionesEntradas {
   activarBuzon: Accion; desactivarBuzon: Accion; rotarLlave: Accion; reintentarArchivo: Accion;
   altaTag: Accion; bajaTag: Accion; importarTags: Accion;
   importarCasetas: Accion; estadoCaseta: Accion;
@@ -52,7 +54,7 @@ const CSS_SECUNDARIO = 'hairline text-[12.5px] font-medium px-3 py-1.5 rounded-l
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 export function VistaConfiguracionPeajes({
-  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, mapeos, archivos, tiposGeocerca, buzon, acciones,
+  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones,
 }: {
   sufijo: string;
   aviso: string | null;
@@ -66,6 +68,7 @@ export function VistaConfiguracionPeajes({
   archivos: ArchivoIngestaVista[] | null;
   tiposGeocerca: string[];
   buzon: BuzonVista;
+  entradas: EntradasVista;
   acciones: AccionesConfiguracion;
 }) {
   return (
@@ -86,6 +89,7 @@ export function VistaConfiguracionPeajes({
           {agenteApagado && <p role="status" className="card p-3 text-[12px]" style={{ color: 'var(--warn)' }}>{agenteApagado}</p>}
 
           <SeccionBuzon buzon={buzon} archivos={archivos} acciones={acciones} sufijo={sufijo} />
+          <SeccionEntradas entradas={entradas} acciones={acciones} />
           <SeccionMapeo mapeos={mapeos} acciones={acciones} />
           <SeccionTags tags={tags} unidades={unidades} acciones={acciones} />
           <SeccionCasetas casetas={casetas} acciones={acciones} />

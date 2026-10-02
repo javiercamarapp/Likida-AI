@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { importarDesglose, conciliarDesglose } from '../intake/desglose_peaje';
 import { registrarCorrida } from '../agentes/corridas';
+import { avisarDesgloseConciliado } from './aviso_oficina';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA INGESTA AUTOMÁTICA DEL DESGLOSE DE PEAJE (0376).
@@ -131,7 +132,9 @@ export type ResultadoRecepcion =
   | { ok: false; codigo: 'cola_llena' | 'error'; motivo: string };
 
 /** Encola el archivo. Idempotente por (flota, huella). */
-export async function recibirArchivoPeaje(tenantId: string, c: CuerpoIngesta, origen: 'api' | 'panel' = 'api'): Promise<ResultadoRecepcion> {
+export type OrigenArchivoPeaje = 'api' | 'panel' | 'correo' | 'pull';
+
+export async function recibirArchivoPeaje(tenantId: string, c: CuerpoIngesta, origen: OrigenArchivoPeaje = 'api'): Promise<ResultadoRecepcion> {
   const huella = huellaDe(c.contenido);
   const admin = supabaseAdmin();
 
@@ -180,7 +183,10 @@ export interface ResumenCola {
 
 const minutos = (n: number) => new Date(Date.now() + n * 60_000).toISOString();
 
-export async function procesarColaPeajes(opciones: { limite?: number; leaseSegundos?: number; venceEn?: number } = {}): Promise<ResumenCola> {
+export async function procesarColaPeajes(
+  opciones: { limite?: number; leaseSegundos?: number; venceEn?: number; avisar?: (tenantId: string, desgloseId: string) => Promise<unknown> } = {},
+): Promise<ResumenCola> {
+  const avisar = opciones.avisar ?? avisarDesgloseConciliado;
   const limite = opciones.limite ?? 5;
   const lease = opciones.leaseSegundos ?? LEASE_SEGUNDOS;
   const admin = supabaseAdmin();
@@ -235,7 +241,14 @@ export async function procesarColaPeajes(opciones: { limite?: number; leaseSegun
       if (await cerrar({
         estado: 'procesada', contenido: null, desglose_id: imp.desgloseId, procesada_en: new Date().toISOString(),
         ultimo_error: null, reclamo: null, reclamado_hasta: null,
-      })) r.procesados++;
+      })) {
+        r.procesados++;
+        // El aviso a la oficina (0563) va DESPUÉS de cerrar: su fallo nunca reabre ni tumba un archivo ya
+        // procesado (el barrido del cron lo reintenta). Nunca lanza, pero se blinda de todos modos.
+        try { await avisar(a.tenant_id, imp.desgloseId); } catch (e) {
+          logger.error('peajes.cola.aviso', { archivo: a.id, err: e instanceof Error ? e.message : String(e) });
+        }
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       logger.error('peajes.cola.fallo', { archivo: a.id, tenant: a.tenant_id, intentos: a.intentos, err: msg });

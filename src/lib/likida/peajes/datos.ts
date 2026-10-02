@@ -8,6 +8,10 @@ import { parsearCasetasMatriz, type CasetaCatalogo } from './casetas';
 import { parsearTagsMatriz, resolverUnidadesDeTags } from './tags';
 import { validarMapeo, type ConfigMapeo } from './mapeo';
 import { planificarGps, evaluarCruceGps, type LineaParaGps, type VeredictoGps, type Muestra } from './cruce_gps';
+import { createHash } from 'node:crypto';
+import { generarToken, esTokenValido } from '@/lib/correo/buzon';
+import { hostNoPublico } from '@/lib/http/destino_publico';
+import { cifrar, cofreConfigurado } from '../conectores/cofre';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL I/O DE LOS CATÁLOGOS DE PEAJES: TAGs, casetas, geocercas, mapeos.
@@ -357,6 +361,259 @@ export async function rotarLlaveBuzon(tenantId: string): Promise<boolean> {
   return !error;
 }
 
+// ── Los canales de entrada nuevos (0563): correo y pull ─────────────────────
+// Son INDEPENDIENTES del buzón firmado: `activa` es solo del POST firmado. Crear
+// la fila por el correo o el pull la deja con `activa:false`, para que activar
+// uno no encienda (ni enseñe la llave de) el otro.
+
+export interface ConfigEntradas {
+  correoActivo: boolean;
+  correoToken: string | null;
+  remitentes: string[];
+  pullUrl: string | null;
+  pullActivo: boolean;
+  pullIntervaloMin: number;
+  pullUltimoEn: string | null;
+  pullUltimoError: string | null;
+  /** Hay un token guardado (cifrado); el valor NUNCA vuelve a la pantalla. */
+  pullConCredencial: boolean;
+}
+
+const COLUMNAS_ENTRADAS = 'correo_activo, correo_token, remitentes_permitidos, pull_url, pull_activo, pull_intervalo_min, pull_ultimo_en, pull_ultimo_error, pull_credencial_cifrada';
+
+/** La configuración de correo/pull de la flota, o null si nunca se configuró. Lanza ante error de base. */
+export async function leerConfigEntradas(tenantId: string): Promise<ConfigEntradas | null> {
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_ingesta_config')
+    .select(COLUMNAS_ENTRADAS).eq('tenant_id', tenantId).maybeSingle(), 'peajes.config_entradas');
+  if (error) throw new Error(`leerConfigEntradas: ${error.message}`);
+  if (!data) return null;
+  return {
+    correoActivo: data.correo_activo === true,
+    correoToken: (data.correo_token as string | null) ?? null,
+    remitentes: Array.isArray(data.remitentes_permitidos) ? (data.remitentes_permitidos as unknown[]).map(String) : [],
+    pullUrl: (data.pull_url as string | null) ?? null,
+    pullActivo: data.pull_activo === true,
+    pullIntervaloMin: Number(data.pull_intervalo_min ?? 60),
+    pullUltimoEn: (data.pull_ultimo_en as string | null) ?? null,
+    pullUltimoError: (data.pull_ultimo_error as string | null) ?? null,
+    pullConCredencial: typeof data.pull_credencial_cifrada === 'string' && data.pull_credencial_cifrada.length > 0,
+  };
+}
+
+/** Guarda cambios de entradas creando la fila si falta (con `activa:false`: el buzón firmado no se enciende solo). */
+async function guardarEntradas(tenantId: string, cambios: Record<string, unknown>, que: string): Promise<boolean> {
+  const existe = await acotada(supabaseAdmin().from('peaje_ingesta_config')
+    .select('tenant_id').eq('tenant_id', tenantId).maybeSingle(), `peajes.${que}.existe`);
+  if (existe.error) { logger.error(`peajes.${que}`, { tenant: tenantId, err: existe.error.message }); return false; }
+  const ahora = new Date().toISOString();
+  const res = existe.data
+    ? await acotada(supabaseAdmin().from('peaje_ingesta_config').update({ ...cambios, updated_at: ahora }).eq('tenant_id', tenantId), `peajes.${que}`)
+    : await acotada(supabaseAdmin().from('peaje_ingesta_config').insert({ tenant_id: tenantId, activa: false, rotacion: 1, ...cambios, updated_at: ahora }), `peajes.${que}`);
+  if (res.error) logger.error(`peajes.${que}`, { tenant: tenantId, err: res.error.message });
+  return !res.error;
+}
+
+/** Activa el correo de la flota; si no tenía dirección, le crea el token. */
+export async function activarCorreoPeajes(tenantId: string): Promise<boolean> {
+  const actual = await leerConfigEntradas(tenantId);
+  return guardarEntradas(tenantId, { correo_token: actual?.correoToken ?? generarToken(), correo_activo: true }, 'activar_correo');
+}
+
+export async function desactivarCorreoPeajes(tenantId: string): Promise<boolean> {
+  return guardarEntradas(tenantId, { correo_activo: false }, 'desactivar_correo');
+}
+
+/** Cambia el token: la dirección anterior deja de servir al instante. */
+export async function rotarCorreoPeajes(tenantId: string): Promise<boolean> {
+  const actual = await leerConfigEntradas(tenantId);
+  if (!actual?.correoToken) return false;
+  return guardarEntradas(tenantId, { correo_token: generarToken() }, 'rotar_correo');
+}
+
+const CORREO_O_DOMINIO = /^@?[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$|^@?[a-z0-9.-]+\.[a-z]{2,}$/i;
+
+/** Remitentes (correo o dominio) que pueden mandar por correo. Lista vacía = cualquiera que tenga la dirección. */
+export async function guardarRemitentesPeajes(tenantId: string, crudos: readonly string[]): Promise<{ ok: true; guardados: number } | { ok: false; motivo: string }> {
+  const lista = [...new Set(crudos.map((r) => r.trim().toLowerCase()).filter(Boolean))];
+  if (lista.length > 20) return { ok: false, motivo: 'Hasta 20 remitentes.' };
+  const mala = lista.find((r) => r.length > 120 || !CORREO_O_DOMINIO.test(r));
+  if (mala) return { ok: false, motivo: `«${mala.slice(0, 40)}» no es un correo ni un dominio.` };
+  const ok = await guardarEntradas(tenantId, { remitentes_permitidos: lista }, 'guardar_remitentes');
+  return ok ? { ok: true, guardados: lista.length } : { ok: false, motivo: 'No se pudo guardar. Inténtalo de nuevo.' };
+}
+
+/** El buzón de correo dueño de un token (flota, si está activo y a quién acepta). Lanza ante error de base. */
+export async function buzonCorreoPeajesPorToken(token: string): Promise<{ tenantId: string; activo: boolean; remitentes: string[] } | null> {
+  if (!esTokenValido(token)) return null;
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_ingesta_config')
+    .select('tenant_id, correo_activo, remitentes_permitidos').eq('correo_token', token).maybeSingle(), 'peajes.buzon_correo');
+  if (error) throw new Error(`buzonCorreoPeajesPorToken: ${error.message}`);
+  if (!data) return null;
+  return {
+    tenantId: String(data.tenant_id), activo: data.correo_activo === true,
+    remitentes: Array.isArray(data.remitentes_permitidos) ? (data.remitentes_permitidos as unknown[]).map(String) : [],
+  };
+}
+
+export type ResultadoPull = { ok: true } | { ok: false; motivo: string };
+
+/** Valida una URL de pull: https público, sin credenciales en la URL. */
+export function validarUrlPull(crudo: string): { ok: true; url: string } | { ok: false; motivo: string } {
+  const t = crudo.trim();
+  let u: URL;
+  try { u = new URL(t); } catch { return { ok: false, motivo: 'La dirección no es una URL válida.' }; }
+  if (u.protocol !== 'https:') return { ok: false, motivo: 'La dirección tiene que ser https.' };
+  if (u.username || u.password) return { ok: false, motivo: 'No pongas usuario ni clave en la URL: el token va aparte.' };
+  if (hostNoPublico(u.hostname)) return { ok: false, motivo: 'La dirección tiene que ser pública (no una red interna ni localhost).' };
+  if (t.length > 500) return { ok: false, motivo: 'La dirección pasa de 500 caracteres.' };
+  return { ok: true, url: t };
+}
+
+/**
+ * Configura (y enciende) el pull. El token, si se da, se guarda CIFRADO con el cofre;
+ * sin `LIKIDA_COFRE_LLAVE` NO se guarda nada (un token en claro no es una opción).
+ * Si no se da token, se conserva el que ya hubiera.
+ */
+export async function guardarPullPeajes(
+  tenantId: string, entrada: { url: string; token?: string | null; intervaloMin: number },
+): Promise<ResultadoPull> {
+  const v = validarUrlPull(entrada.url);
+  if (!v.ok) return v;
+  if (!Number.isInteger(entrada.intervaloMin) || entrada.intervaloMin < 15 || entrada.intervaloMin > 1440) {
+    return { ok: false, motivo: 'El intervalo va de 15 a 1,440 minutos.' };
+  }
+  const cambios: Record<string, unknown> = {
+    pull_url: v.url, pull_intervalo_min: entrada.intervaloMin, pull_activo: true, pull_proximo_en: new Date().toISOString(), pull_ultimo_error: null,
+  };
+  const token = entrada.token?.trim();
+  if (token) {
+    if (token.length > 500 || /[\r\n]/.test(token)) return { ok: false, motivo: 'El token no es válido (sin saltos de línea, hasta 500 caracteres).' };
+    if (!cofreConfigurado()) return { ok: false, motivo: 'El cofre de credenciales no está configurado (LIKIDA_COFRE_LLAVE): no se puede guardar el token de forma segura.' };
+    cambios.pull_credencial_cifrada = cifrar({ token });
+  }
+  const ok = await guardarEntradas(tenantId, cambios, 'guardar_pull');
+  return ok ? { ok: true } : { ok: false, motivo: 'No se pudo guardar. Inténtalo de nuevo.' };
+}
+
+export async function apagarPullPeajes(tenantId: string): Promise<boolean> {
+  return guardarEntradas(tenantId, { pull_activo: false }, 'apagar_pull');
+}
+
+/** Borra el token guardado del pull (el cifrado se pone en NULL). */
+export async function borrarCredencialPull(tenantId: string): Promise<boolean> {
+  return guardarEntradas(tenantId, { pull_credencial_cifrada: null }, 'borrar_credencial_pull');
+}
+
+export interface PullReclamado {
+  tenantId: string; url: string; credencialCifrada: string | null; ultimoEn: string | null; intervaloMin: number;
+}
+
+/** Toma las flotas cuyo pull ya toca (claim con lease, `peaje_pull_reclamar`). Lanza ante error de base. */
+export async function reclamarPullsPeajes(limite: number, leaseSegundos = 600): Promise<PullReclamado[]> {
+  const r = await acotada(supabaseAdmin().rpc('peaje_pull_reclamar', { p_limite: limite, p_lease_segundos: leaseSegundos }), 'peajes.pull.reclamar');
+  if (r.error) throw new Error(`peajes.pull.reclamar: ${r.error.message}`);
+  return ((r.data ?? []) as Array<Record<string, unknown>>).map((f) => ({
+    tenantId: String(f.tenant_id), url: String(f.pull_url), credencialCifrada: (f.pull_credencial_cifrada as string | null) ?? null,
+    ultimoEn: (f.pull_ultimo_en as string | null) ?? null, intervaloMin: Number(f.pull_intervalo_min ?? 60),
+  }));
+}
+
+/** Cierra un pull: con éxito avanza el cursor (`desde`) y programa el siguiente turno; con error, reintenta pronto (tope 30 min). */
+export async function cerrarPullPeajes(
+  tenantId: string, c: { ok: boolean; avanzarA: string | null; error: string | null; intervaloMin: number; ahora?: Date },
+): Promise<void> {
+  const ahora = c.ahora ?? new Date();
+  const espera = c.ok ? c.intervaloMin : Math.min(c.intervaloMin, 30);
+  const cambios: Record<string, unknown> = {
+    pull_proximo_en: new Date(ahora.getTime() + espera * 60_000).toISOString(),
+    pull_ultimo_error: c.error ? c.error.slice(0, 500) : null,
+    updated_at: ahora.toISOString(),
+  };
+  if (c.avanzarA) cambios.pull_ultimo_en = c.avanzarA;
+  const { error } = await acotada(supabaseAdmin().from('peaje_ingesta_config').update(cambios).eq('tenant_id', tenantId), 'peajes.pull.cerrar');
+  if (error) logger.error('peajes.pull.cerrar', { tenant: tenantId, err: error.message });
+}
+
+// ── Aviso a la oficina y anulación del desglose (0563) ─────────────────────
+
+export const MAX_INTENTOS_AVISO = 5;
+
+export interface EstadoAvisoDesglose {
+  anulado: boolean; avisoEn: string | null; intentos: number;
+  proveedor: string | null; periodoDesde: string | null; periodoHasta: string | null;
+}
+
+/** El estado del aviso de UN desglose (de esta flota), o null si no existe. Lanza ante error de base. */
+export async function leerEstadoAvisoDesglose(tenantId: string, desgloseId: string): Promise<EstadoAvisoDesglose | null> {
+  const { data, error } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .select('anulado_en, aviso_oficina_en, aviso_intentos, proveedor, periodo_desde, periodo_hasta')
+    .eq('tenant_id', tenantId).eq('id', desgloseId).maybeSingle(), 'peajes.estado_aviso');
+  if (error) throw new Error(`leerEstadoAvisoDesglose: ${error.message}`);
+  if (!data) return null;
+  return {
+    anulado: data.anulado_en != null, avisoEn: (data.aviso_oficina_en as string | null) ?? null, intentos: Number(data.aviso_intentos ?? 0),
+    proveedor: (data.proveedor as string | null) ?? null,
+    periodoDesde: (data.periodo_desde as string | null) ?? null, periodoHasta: (data.periodo_hasta as string | null) ?? null,
+  };
+}
+
+/**
+ * Reclama UN intento de aviso (compare-and-set sobre `aviso_intentos`): dos procesos que
+ * leyeron el mismo conteo no pueden ganar los dos, así que el aviso no sale doble.
+ */
+export async function reclamarIntentoAviso(tenantId: string, desgloseId: string, intentosLeidos: number): Promise<boolean> {
+  const { data, error } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .update({ aviso_requerido: true, aviso_intentos: intentosLeidos + 1 })
+    .eq('tenant_id', tenantId).eq('id', desgloseId).eq('aviso_intentos', intentosLeidos)
+    .is('aviso_oficina_en', null).is('anulado_en', null).select('id'), 'peajes.reclamar_aviso');
+  if (error) throw new Error(`reclamarIntentoAviso: ${error.message}`);
+  return (data ?? []).length > 0;
+}
+
+export async function marcarAvisoEnviado(tenantId: string, desgloseId: string): Promise<void> {
+  const { error } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .update({ aviso_oficina_en: new Date().toISOString() }).eq('tenant_id', tenantId).eq('id', desgloseId).is('aviso_oficina_en', null), 'peajes.marcar_aviso');
+  if (error) logger.error('peajes.marcar_aviso', { tenant: tenantId, err: error.message });
+}
+
+/** Los desgloses con aviso por enviar, de todas las flotas (barrido del cron; solo ids). */
+export async function avisosPendientesPeajes(limite: number): Promise<Array<{ tenantId: string; desgloseId: string }>> {
+  const r = await acotada(supabaseAdmin().rpc('peaje_avisos_pendientes', { p_limite: limite, p_max_intentos: MAX_INTENTOS_AVISO }), 'peajes.avisos_pendientes');
+  if (r.error) throw new Error(`peajes.avisos_pendientes: ${r.error.message}`);
+  return ((r.data ?? []) as Array<Record<string, unknown>>).map((f) => ({ tenantId: String(f.tenant_id), desgloseId: String(f.desglose_id) }));
+}
+
+export type ResultadoAnulacion = 'anulado' | 'ya_anulado' | 'no_encontrado';
+
+/**
+ * Anula un desglose (de ESTA flota): condicional a «aún no anulado», así dos anulaciones
+ * simultáneas dejan un solo autor. Además LIBERA la huella del archivo de la cola que lo
+ * generó (la reemplaza por otra derivada, con la misma forma): el archivo correcto, o el
+ * mismo ya arreglado, puede volver a mandarse sin que lo tome por duplicado.
+ */
+export async function anularDesgloseDb(tenantId: string, desgloseId: string, motivo: string, por: string): Promise<ResultadoAnulacion> {
+  const ahora = new Date().toISOString();
+  const upd = await acotada(supabaseAdmin().from('desglose_peaje')
+    .update({ anulado_en: ahora, anulado_por: por.slice(0, 120), anulado_motivo: motivo.trim().slice(0, 500) })
+    .eq('tenant_id', tenantId).eq('id', desgloseId).is('anulado_en', null).select('id'), 'peajes.anular');
+  if (upd.error) throw new Error(`anularDesglose: ${upd.error.message}`);
+  if ((upd.data ?? []).length === 0) {
+    const ex = await acotada(supabaseAdmin().from('desglose_peaje').select('id').eq('tenant_id', tenantId).eq('id', desgloseId).maybeSingle(), 'peajes.anular_existe');
+    if (ex.error) throw new Error(`anularDesglose: ${ex.error.message}`);
+    return ex.data ? 'ya_anulado' : 'no_encontrado';
+  }
+  const arch = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
+    .select('id, huella').eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('id'), 'peajes.anular_archivos');
+  if (arch.error) throw new Error(`anularDesglose: ${arch.error.message}`);
+  for (const a of (arch.data ?? []) as Array<{ id: string; huella: string }>) {
+    const libre = createHash('sha256').update(`${a.huella}:anulada:${desgloseId}`).digest('hex');
+    const r = await acotada(supabaseAdmin().from('peaje_ingesta_archivo').update({ huella: libre })
+      .eq('tenant_id', tenantId).eq('id', a.id), 'peajes.anular_huella');
+    if (r.error) logger.error('peajes.anular_huella', { tenant: tenantId, err: r.error.message });
+  }
+  return 'anulado';
+}
+
 export interface ArchivoIngestaVista {
   id: string; nombre: string; proveedor: string | null; estado: string; intentos: number; bytes: number;
   recibidaEn: string; procesadaEn: string | null; ultimoError: string | null; desgloseId: string | null; reintentable: boolean;
@@ -385,21 +642,17 @@ const VENTANAS_POR_TANDA = 100;
 
 export interface ResultadoGpsLinea { lineaId: string; casetaId: string | null; veredicto: VeredictoGps }
 
-export async function evaluarGpsDeLineas(
-  tenantId: string,
-  lineas: readonly LineaParaGps[],
-  catalogo: readonly CasetaCatalogo[],
-): Promise<ResultadoGpsLinea[]> {
-  const planes = planificarGps(lineas, catalogo);
-  const listos = planes.filter((p): p is Extract<typeof p, { listo: true }> => p.listo);
+/** Una ventana de posiciones a traer: las de `unidadId` entre `desde` y `hasta`, identificada por la línea que la pide. */
+export interface VentanaPosiciones { lineaId: string; unidadId: string; desde: string; hasta: string }
 
-  const muestrasPorLinea = new Map<string, Muestra[]>();
-  for (let i = 0; i < listos.length; i += VENTANAS_POR_TANDA) {
-    const tanda = listos.slice(i, i + VENTANAS_POR_TANDA);
-    const ventanas = tanda.map((p) => ({ linea_id: p.lineaId, unidad_id: p.unidadId, desde: p.desde, hasta: p.hasta }));
+/** Las posiciones de cada ventana, por línea, en tandas (el RPC `peaje_posiciones_ventana`). Reusada por la conciliación y por el reporte de reclamación. */
+export async function traerMuestrasPorLinea(tenantId: string, ventanas: readonly VentanaPosiciones[]): Promise<Map<string, Muestra[]>> {
+  const porLinea = new Map<string, Muestra[]>();
+  for (let i = 0; i < ventanas.length; i += VENTANAS_POR_TANDA) {
+    const tanda = ventanas.slice(i, i + VENTANAS_POR_TANDA).map((p) => ({ linea_id: p.lineaId, unidad_id: p.unidadId, desde: p.desde, hasta: p.hasta }));
     const filas = await traerTodo<{ linea_id: unknown; lat: unknown; lng: unknown; medida_en: unknown }>(
       (d, h) => acotada(
-        supabaseAdmin().rpc('peaje_posiciones_ventana', { p_tenant: tenantId, p_ventanas: ventanas }, conteo(d))
+        supabaseAdmin().rpc('peaje_posiciones_ventana', { p_tenant: tenantId, p_ventanas: tanda }, conteo(d))
           .order('linea_id').order('medida_en').order('lat').order('lng').range(d, h),
         'peajes.posiciones_ventana',
       ),
@@ -407,11 +660,22 @@ export async function evaluarGpsDeLineas(
     );
     for (const f of filas) {
       const id = String(f.linea_id);
-      const l = muestrasPorLinea.get(id) ?? [];
+      const l = porLinea.get(id) ?? [];
       l.push({ lat: Number(f.lat), lng: Number(f.lng), t: Date.parse(String(f.medida_en)) });
-      muestrasPorLinea.set(id, l);
+      porLinea.set(id, l);
     }
   }
+  return porLinea;
+}
+
+export async function evaluarGpsDeLineas(
+  tenantId: string,
+  lineas: readonly LineaParaGps[],
+  catalogo: readonly CasetaCatalogo[],
+): Promise<ResultadoGpsLinea[]> {
+  const planes = planificarGps(lineas, catalogo);
+  const listos = planes.filter((p): p is Extract<typeof p, { listo: true }> => p.listo);
+  const muestrasPorLinea = await traerMuestrasPorLinea(tenantId, listos.map((p) => ({ lineaId: p.lineaId, unidadId: p.unidadId, desde: p.desde, hasta: p.hasta })));
 
   return planes.map((p) => {
     if (!p.listo) return { lineaId: p.lineaId, casetaId: p.casetaId, veredicto: p.veredicto };

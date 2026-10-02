@@ -15,6 +15,7 @@ import { acotada } from '../presupuesto';
 import { exigir } from '../pg';
 import { DatoInvalido } from '../errores';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
+import { validarFormato, type FormatoFlota } from './formato_flota';
 import { ESTADOS, type EstadoLiquidacionExterna, type ConceptoExterno, type LiquidacionExternaNormalizada, type MonedaExterna } from './esquema';
 
 export { ESTADOS };
@@ -24,7 +25,7 @@ export type TipoAcuse = 'recibida' | 'no_coincide';
 
 export type TipoEvento =
   | 'recibida' | 'encolada' | 'enviada' | 'fallback_plantilla' | 'fallida'
-  | 'reintento_manual' | 'acuse_recibida' | 'acuse_no_coincide';
+  | 'reintento_manual' | 'acuse_recibida' | 'acuse_no_coincide' | 'acuse_confirmado' | 'aviso_oficina';
 
 export interface LiquidacionExterna {
   id: string;
@@ -54,13 +55,15 @@ export interface LiquidacionExterna {
   enviadaEn: string | null;
   acuseTipo: TipoAcuse | null;
   acuseEn: string | null;
+  /** Cuándo el sistema del cliente confirmó que ya leyó el acuse (0561). */
+  acuseConfirmadoEn: string | null;
   creadaEn: string;
 }
 
 export const COLUMNAS =
   'id, tenant_id, clave_externa, huella, sistema_origen, operador_id, folios_viaje, viaje_ids, '
   + 'periodo_desde, periodo_hasta, conceptos, total, moneda, pdf_ruta, pdf_origen, estado, via, '
-  + 'generacion, intentos, proximo_intento_en, ultimo_error, wamid, enviada_en, acuse_tipo, acuse_en, '
+  + 'generacion, intentos, proximo_intento_en, ultimo_error, wamid, enviada_en, acuse_tipo, acuse_en, acuse_confirmado_en, '
   + 'created_at, operador:operador_id(nombre, telefono)';
 
 export type Fila = Record<string, unknown> & { operador?: { nombre?: string | null; telefono?: string | null } | null };
@@ -95,6 +98,7 @@ export function aLiquidacionExterna(r: Fila): LiquidacionExterna {
     enviadaEn: (r.enviada_en as string | null) ?? null,
     acuseTipo: (r.acuse_tipo as TipoAcuse | null) ?? null,
     acuseEn: (r.acuse_en as string | null) ?? null,
+    acuseConfirmadoEn: (r.acuse_confirmado_en as string | null) ?? null,
     creadaEn: String(r.created_at),
   };
 }
@@ -107,11 +111,15 @@ export function aLiquidacionExterna(r: Fila): LiquidacionExterna {
 
 const BUCKET = 'liquidaciones';
 
-export async function subirPdfExterno(ruta: string, bytes: Uint8Array): Promise<void> {
+export const TIPO_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+export async function subirArchivoExterno(ruta: string, bytes: Uint8Array, contentType: string): Promise<void> {
   const res = await acotada(supabaseAdmin().storage.from(BUCKET)
-    .upload(ruta, Buffer.from(bytes), { contentType: 'application/pdf', upsert: true }), 'liqext.subir');
-  if (res.error) throw new Error(`liquidacion_externa subir PDF: ${res.error.message}`);
+    .upload(ruta, Buffer.from(bytes), { contentType, upsert: true }), 'liqext.subir');
+  if (res.error) throw new Error(`liquidacion_externa subir ${contentType === TIPO_XLSX ? 'Excel' : 'PDF'}: ${res.error.message}`);
 }
+
+export const subirPdfExterno = (ruta: string, bytes: Uint8Array): Promise<void> => subirArchivoExterno(ruta, bytes, 'application/pdf');
 
 /** Firma la ruta. Lanza si no puede: una URL ausente NO se reemplaza por nada,
  *  porque un mensaje sin documento diría «el detalle va en el PDF» sin PDF. */
@@ -132,6 +140,66 @@ export async function leerRazonSocial(tenantId: string): Promise<string | null> 
     .select('razon_social').eq('id', tenantId).maybeSingle(), 'liqext.razon');
   if (res.error) return null;
   return (res.data as { razon_social?: string | null } | null)?.razon_social?.trim() || null;
+}
+
+// ── el formato de la flota (0564) ───────────────────────────────────────────
+
+export interface ConfigFormatoFlota {
+  formato: FormatoFlota;
+  nombreMuestra: string | null;
+  /** E.164 sin «+»: quién recibe COPIA de cada liquidación entregada. */
+  copiaTelefonos: string[];
+  /** E.164 sin «+»: quién es AVISADO cuando un chofer responde «No coincide». */
+  discrepanciaTelefonos: string[];
+}
+
+/** La tabla de la 0564 todavía no existe en esta base (el código corre sin migrar). */
+const tablaAusente = (e: { code?: string; message?: string }): boolean =>
+  e.code === '42P01' || e.code === 'PGRST205' || /does not exist|schema cache/i.test(e.message ?? '');
+
+/**
+ * El formato de la flota, o `null` si no tiene (o la base aún no trae la 0564):
+ * entonces todo sigue como siempre (PDF genérico, sin copia). Un error de LECTURA
+ * distinto LANZA: caer en silencio al formato genérico entregaría un documento con
+ * otro aspecto y sin copia al jefe, y nadie lo sabría. Una plantilla guardada que ya
+ * no valida se grita y se trata como ausente (no tumba la recepción de todas las
+ * liquidaciones de la flota).
+ */
+export async function leerFormatoFlota(tenantId: string): Promise<ConfigFormatoFlota | null> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota')
+    .select('formato, nombre_muestra, copia_telefonos, discrepancia_telefonos')
+    .eq('tenant_id', tenantId).maybeSingle(), 'liqext.formato_leer');
+  if (res.error) {
+    if (tablaAusente(res.error)) return null;
+    throw new Error(`liquidacion_formato_flota leer: ${res.error.message}`);
+  }
+  const f = res.data as { formato: unknown; nombre_muestra: string | null; copia_telefonos: string[] | null; discrepancia_telefonos: string[] | null } | null;
+  if (!f) return null;
+  try {
+    return {
+      formato: validarFormato(f.formato),
+      nombreMuestra: f.nombre_muestra,
+      copiaTelefonos: f.copia_telefonos ?? [],
+      discrepanciaTelefonos: f.discrepancia_telefonos ?? [],
+    };
+  } catch (e) {
+    logger.error('liqext.formato_invalido', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
+export async function guardarFormatoFlota(tenantId: string, c: ConfigFormatoFlota, por: string): Promise<void> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota').upsert({
+    tenant_id: tenantId, formato: c.formato, nombre_muestra: c.nombreMuestra,
+    copia_telefonos: c.copiaTelefonos, discrepancia_telefonos: c.discrepanciaTelefonos,
+    actualizado_en: new Date().toISOString(), actualizado_por: por.slice(0, 120),
+  }, { onConflict: 'tenant_id' }), 'liqext.formato_guardar');
+  if (res.error) throw new Error(`liquidacion_formato_flota guardar: ${res.error.message}`);
+}
+
+export async function borrarFormatoFlota(tenantId: string): Promise<void> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota').delete().eq('tenant_id', tenantId), 'liqext.formato_borrar');
+  if (res.error) throw new Error(`liquidacion_formato_flota borrar: ${res.error.message}`);
 }
 
 export interface FilaOutbox {
@@ -381,4 +449,81 @@ export async function transicionar(
     .select('id'), 'liqext.transicion');
   if (res.error) throw new Error(`liquidacion_externa transición: ${res.error.message}`);
   return (res.data ?? []).length > 0;
+}
+
+// ── salida hacia el sistema del cliente (SAP/TMS), por pull ─────────────────
+
+/** Los acuses de los choferes que el sistema del cliente aún NO confirmó
+ *  haber leído, en el orden en que se leen (`acuse_en`, `id`). */
+export async function listarAcusesPendientes(
+  tenantId: string, limite: number, despues: { acuseEn: string; id: string } | null,
+): Promise<{ filas: LiquidacionExterna[]; hayMas: boolean }> {
+  let q = supabaseAdmin().from('liquidacion_externa').select(COLUMNAS)
+    .eq('tenant_id', tenantId).not('acuse_en', 'is', null).is('acuse_confirmado_en', null);
+  if (despues) {
+    q = q.or(`acuse_en.gt.${despues.acuseEn},and(acuse_en.eq.${despues.acuseEn},id.gt.${despues.id})`);
+  }
+  q = q.order('acuse_en', { ascending: true }).order('id', { ascending: true }).range(0, limite);
+  const res = await acotada(q, 'liqext.acuses_pendientes');
+  const filas = ((exigir(res, 'liqext.acuses_pendientes') ?? []) as unknown as Fila[]);
+  return { filas: filas.slice(0, limite).map(aLiquidacionExterna), hayMas: filas.length > limite };
+}
+
+export interface ResultadoConfirmacion {
+  /** Ids que pasaron de «por leer» a «confirmado» en esta llamada. */
+  confirmadas: string[];
+  /** Ya estaban confirmadas (reintento del integrador). */
+  yaConfirmadas: string[];
+  /** No existen en esta flota o todavía no tienen acuse del chofer. */
+  noAplican: string[];
+}
+
+/**
+ * El sistema del cliente confirma que ya leyó estos acuses. IDEMPOTENTE: un
+ * reintento deja las ya confirmadas en `yaConfirmadas` sin tocarlas. Un id de
+ * OTRA flota o sin acuse cae en `noAplican` sin decir cuál de las dos cosas es.
+ */
+export async function confirmarAcuses(tenantId: string, ids: string[], ahoraIso: string): Promise<ResultadoConfirmacion> {
+  const leidas = await acotada(supabaseAdmin().from('liquidacion_externa')
+    .select('id, acuse_en, acuse_confirmado_en').eq('tenant_id', tenantId).in('id', ids).order('id'), 'liqext.confirmar_leer');
+  const filas = (exigir(leidas, 'liqext.confirmar_leer') ?? []) as Array<{ id: string; acuse_en: string | null; acuse_confirmado_en: string | null }>;
+  const porId = new Map(filas.map((f) => [f.id, f]));
+  const noAplican = ids.filter((id) => !porId.get(id)?.acuse_en);
+  const yaConfirmadas = ids.filter((id) => porId.get(id)?.acuse_en && porId.get(id)?.acuse_confirmado_en);
+  const porConfirmar = ids.filter((id) => porId.get(id)?.acuse_en && !porId.get(id)?.acuse_confirmado_en);
+  const confirmadas: string[] = [];
+  if (porConfirmar.length > 0) {
+    // Condicional a «sin confirmar»: dos confirmaciones simultáneas no cuentan dos veces.
+    const upd = await acotada(supabaseAdmin().from('liquidacion_externa')
+      .update({ acuse_confirmado_en: ahoraIso, updated_at: ahoraIso })
+      .eq('tenant_id', tenantId).in('id', porConfirmar).not('acuse_en', 'is', null).is('acuse_confirmado_en', null)
+      .select('id'), 'liqext.confirmar');
+    if (upd.error) throw new Error(`liquidacion_externa confirmar acuses: ${upd.error.message}`);
+    const ganadas = new Set(((upd.data ?? []) as Array<{ id: string }>).map((f) => f.id));
+    for (const id of porConfirmar) (ganadas.has(id) ? confirmadas : yaConfirmadas).push(id);
+  }
+  return { confirmadas, yaConfirmadas, noAplican };
+}
+
+/** Las liquidaciones para exportar a SAP/CSV (mismos filtros que el listado),
+ *  más viejas primero y con tope duro. */
+export async function listarParaExportacion(
+  tenantId: string, filtro: FiltroListado & { sinConfirmar?: boolean }, tope: number,
+): Promise<{ filas: LiquidacionExterna[]; truncado: boolean }> {
+  let q = supabaseAdmin().from('liquidacion_externa').select(COLUMNAS).eq('tenant_id', tenantId);
+  if (filtro.estado) q = q.eq('estado', filtro.estado);
+  if (filtro.acuseTipo) q = q.eq('acuse_tipo', filtro.acuseTipo);
+  if (filtro.operadorId) q = q.eq('operador_id', filtro.operadorId);
+  if (filtro.claveExterna) q = q.eq('clave_externa', filtro.claveExterna);
+  if (filtro.sinConfirmar) q = q.not('acuse_en', 'is', null).is('acuse_confirmado_en', null);
+  if (filtro.desde) q = q.gte('created_at', `${filtro.desde}T00:00:00-06:00`);
+  if (filtro.hasta) {
+    const sig = new Date(`${filtro.hasta}T00:00:00Z`);
+    sig.setUTCDate(sig.getUTCDate() + 1);
+    q = q.lt('created_at', `${sig.toISOString().slice(0, 10)}T00:00:00-06:00`);
+  }
+  q = q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(0, tope);
+  const res = await acotada(q, 'liqext.exportar');
+  const filas = ((exigir(res, 'liqext.exportar') ?? []) as unknown as Fila[]);
+  return { filas: filas.slice(0, tope).map(aLiquidacionExterna), truncado: filas.length > tope };
 }
