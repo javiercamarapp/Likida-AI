@@ -8,7 +8,7 @@ function formulario(extra: Record<string, string | null> = {}, contactos: Array<
   const fd = new FormData();
   const v = valoresDeForma({ ...CONFIG_CONDUCTOR_DEFAULT });
   for (const [k, val] of Object.entries(v)) fd.set(`f_${k}`, val);
-  for (const k of ['activo', 'usarLlm', 'confirmarAlChofer', 'validarUbicacion', 'pedirUbicacion', 'fotoRegistraHito']) fd.set(`f_${k}`, 'si');
+  for (const k of ['activo', 'usarLlm', 'confirmarAlChofer', 'validarUbicacion', 'pedirUbicacion', 'fotoRegistraHito', 'detectarHitosGps']) fd.set(`f_${k}`, 'si');
   for (const d of [1, 2, 3, 4, 5, 6, 7]) fd.set(`f_dia_${d}`, 'si');
   fd.set('c_filas', String(contactos.length + 3));
   contactos.forEach(([nivel, nombre, tel, patio], i) => {
