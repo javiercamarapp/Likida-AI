@@ -51,6 +51,20 @@ function bloque(p: PlantillaCatalogo): string {
   return l.join('\n');
 }
 
+/** La lista corta para quien somete: una fila por plantilla pendiente, sin el cuerpo (que vive en el bloque de abajo). */
+function tablaPorSometer(nuevas: readonly PlantillaCatalogo[]): string[] {
+  const l: string[] = [];
+  l.push('| # | Plantilla | Agente | Llamador en código | Variables | Botones | Texto |');
+  l.push('| --- | --- | --- | --- | --- | --- | --- |');
+  nuevas.forEach((p, i) => {
+    const botones = p.botones.length === 0 ? '—' : p.botones.map((b) => `«${b.texto}»`).join(', ');
+    const llamador = p.llamador === null ? 'sin llamador todavía' : p.llamador.split(', ').map((x) => `\`${x}\``).join(', ');
+    const texto = p.textoVerificado ? 'autoritativo' : 'reconstruido: cotejar';
+    l.push(`| ${i + 1} | \`${p.nombre}\` | ${AGENTES[p.agente]} | ${llamador} | ${p.variables.length} | ${botones} | ${texto} |`);
+  });
+  return l;
+}
+
 export function renderizarDocPlantillas(catalogo: readonly PlantillaCatalogo[] = CATALOGO_PLANTILLAS): string {
   const enUso = catalogo.filter((p) => p.estado === 'en_uso');
   const nuevas = catalogo.filter((p) => p.estado === 'nueva_para_aprobacion');
@@ -78,6 +92,14 @@ export function renderizarDocPlantillas(catalogo: readonly PlantillaCatalogo[] =
   l.push('2. **Someter las nuevas**: el mismo script con `--crear --confirmo-meta-real` hace `POST /{WABA}/message_templates` SOLO de las que Meta no tiene. Sin esas dos banderas no escribe nada.');
   l.push('3. Aprobación: Meta tarda de minutos a 2–5 días hábiles. Hasta que una plantilla esté `APPROVED`, el envío devuelve `132001` y el selector lo reporta con ese motivo (fail-closed y dicho).');
   l.push('4. Si Meta reclasifica una plantilla a MARKETING, el script lo marca como desviación: sale más cara y con más límites; hay que apelar o reescribir.');
+  l.push('');
+  l.push(`## Lista consolidada por someter a Meta (${nuevas.length})`);
+  l.push('');
+  l.push('Todas las que siguen en estado «nueva para aprobación»: el código ya las nombra (o las nombrará) y, mientras Meta no las apruebe, el envío fuera de la ventana de 24 h devuelve `132001`, queda dicho en `wa_envio_registro` y NO se reintenta en cada pasada. Las funciones que las usan nacen **apagadas por defecto** y se encienden por flota; no hace falta aprobar todas para el demo, solo las de lo que se vaya a enseñar en vivo.');
+  l.push('');
+  l.push(...tablaPorSometer(nuevas));
+  l.push('');
+  l.push('El cuerpo exacto, las variables con su ejemplo y los botones de cada una están en el bloque de más abajo (los mismos que `scripts/verificar-plantillas-meta.ts --crear` manda a Meta).');
   l.push('');
   l.push(`## Plantillas en uso (${enUso.length})`);
   l.push('');
