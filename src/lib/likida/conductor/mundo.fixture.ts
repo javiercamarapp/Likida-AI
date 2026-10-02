@@ -8,7 +8,7 @@ import type { DepsAcuse } from './atender';
 import type { AvisoReclamado } from './planificador';
 import { validarHitoContraSitio } from './validar_hito';
 import type { DepsValidacion, CandidatoValidacion } from './validar_hito';
-import type { PosicionComparada, SitioValidable, Veredicto } from './validacion';
+import { debeReintentarseValidacion, type PosicionComparada, type SitioValidable, type Veredicto } from './validacion';
 import type { HitoFila } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -98,6 +98,7 @@ export function crearMundo(o: OpcionesMundo) {
     posiciones: async (tenantId, unidadId, desde, hasta) =>
       (o.gps ?? []).filter((p) => p.tenantId === tenantId && p.unidadId === unidadId && p.medidaEn >= desde && p.medidaEn <= hasta)
         .map(({ lat, lng, medidaEn, fuente }) => ({ lat, lng, medidaEn, fuente })),
+    sellarLlegada: async (_tenantId, viajeId) => { m.legado.push({ viajeId, sellos: ['llegada'] }); },
     aplicar: async (tenantId, hito, v, ahora) => {
       const h = m.hitos.get(hito.id);
       if (!h || h.tenantId !== tenantId || h.ciclo !== hito.ciclo || !['recibido', 'validado'].includes(h.estado)) return 'hito_cambio';
@@ -133,8 +134,8 @@ export function crearMundo(o: OpcionesMundo) {
 
   const candidatosValidacion = async (desde: Date): Promise<CandidatoValidacion[]> => [...m.hitos.values()]
     .filter((h) => ['llegada_carga', 'llegada_descarga'].includes(h.tipo) && h.estado === 'recibido' && h.recibidoEn && new Date(h.recibidoEn) >= desde)
-    .filter((h) => { const v = veredictos.get(h.id); return !v || v.ciclo !== h.ciclo || (v.v.resultado === 'sin_dato' && ['sin_ubicacion', 'ubicacion_fuera_de_ventana'].includes(v.v.motivo ?? '')); })
-    .map((h) => ({ hito: { ...h }, viaje: m.viajes.get(h.viajeId)! }))
+    .filter((h) => { const v = veredictos.get(h.id); return !v || v.ciclo !== h.ciclo || debeReintentarseValidacion(v.v); })
+    .map((h) => { const v = veredictos.get(h.id); return { hito: { ...h }, viaje: m.viajes.get(h.viajeId)!, resultadoPrevio: v && v.ciclo === h.ciclo && v.v.resultado === 'sin_coincidencia' ? 'sin_coincidencia' as const : null }; })
     .filter((c) => c.viaje && c.viaje.estatus === 'abierto' && c.viaje.tenantId === c.hito.tenantId);
 
   /** La base entera como la lee el tablero (los viajes ABIERTOS de UNA flota). */

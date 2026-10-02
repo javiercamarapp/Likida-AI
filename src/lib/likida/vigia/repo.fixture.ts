@@ -8,9 +8,10 @@ import type {
 } from './puertos';
 import type { EstatusViaje, ResumenViaje, ServicioEstatusViaje } from './estatus_viaje';
 import {
-  configApagada, type ConfigVigia, type Contacto, type Conversacion, type EstadoMensajeSaliente, type Intencion, type MensajeVigia, type TipoEvento,
+  configApagada, configParaCliente, type ConfigVigia, type Contacto, type Conversacion, type EstadoMensajeSaliente, type Intencion, type MensajeVigia, type TipoEvento,
 } from './tipos';
 import { CLIENTE_A, T1 } from './datos.fixture';
+import { adjuntosDeRespaldo, type ArchivoParaEnviar } from './adjuntos';
 
 export interface EventoGuardado extends NuevoEvento { tenantId: string; id: number }
 
@@ -47,6 +48,9 @@ export class RepoEnMemoria implements RepoVigia {
   /** nivel → destinatario por tenant */
   destinatarios = new Map<string, Destinatario | null>();
   estatus = new EstatusDoble();
+  /** Los archivos adjuntables por (flota|cliente|viaje|clave): la base real solo entrega los de ESE cliente en ESA flota. */
+  archivos = new Map<string, ArchivoParaEnviar>();
+  llamadasArchivo: Array<{ tenantId: string; clienteId: string; viajeId: string; clave: string }> = [];
   purgas = 0;
   fallaEn: Partial<Record<keyof RepoVigia, boolean>> = {};
   private seq = 0;
@@ -75,6 +79,13 @@ export class RepoEnMemoria implements RepoVigia {
   entrantes(): MensajeVigia[] { return [...this.mensajes.values()].filter((m) => m.direccion === 'entrante'); }
 
   // ── RepoVigia ──
+  async archivoAdjunto(a: { tenantId: string; clienteId: string; viajeId: string; clave: 'pod' }): Promise<ArchivoParaEnviar | null> {
+    this.llamadasArchivo.push(a);
+    this.verifica('archivoAdjunto');
+    return this.archivos.get(`${a.tenantId}|${a.clienteId}|${a.viajeId}|${a.clave}`) ?? null;
+  }
+  criticos = new Set<string>();
+  async clienteCritico(tenantId: string, clienteId: string): Promise<boolean> { this.verifica('clienteCritico'); return this.criticos.has(`${tenantId}:${clienteId}`); }
   async config(tenantId: string): Promise<ConfigVigia> { this.verifica('config'); return this.configs.get(tenantId) ?? configApagada(tenantId); }
   async contactoPorTelefono(telefono: string): Promise<Contacto | null> {
     this.verifica('contactoPorTelefono');
@@ -104,7 +115,7 @@ export class RepoEnMemoria implements RepoVigia {
     this.mensajes.set(id, {
       id, tenantId: a.tenantId, conversacionId: conv.id, direccion: 'entrante', autor: 'cliente', wamid: a.wamid, tipo: a.tipo, texto: a.texto,
       intencion: null, estado: 'recibido', respuestaA: null, riesgo: null, autoenviado: false, editado: false, aprobadoPor: null, enviadoEn: null,
-      via: null, error: null, senales: [], createdAt: a.ahora.toISOString(),
+      via: null, error: null, senales: [], adjuntos: [], createdAt: a.ahora.toISOString(),
     });
     conv.ultimaEntradaEn = a.ahora.toISOString();
     conv.sinRespuestaDesde = conv.sinRespuestaDesde ?? a.ahora.toISOString();
@@ -155,8 +166,8 @@ export class RepoEnMemoria implements RepoVigia {
     this.mensajes.set(id, {
       id, tenantId, conversacionId: n.conversacionId, direccion: 'saliente', autor: n.autor, wamid: null, tipo: 'texto', texto: n.texto,
       intencion: n.intencion, estado: n.estado, respuestaA: n.respuestaA, riesgo: n.riesgo, autoenviado: n.autoenviado, editado: false,
-      aprobadoPor: n.aprobadoPor, enviadoEn: null, via: null, error: null, senales: n.senales, createdAt: this.reloj().toISOString(),
-      datosRespaldo: n.datosRespaldo,
+      aprobadoPor: n.aprobadoPor, enviadoEn: null, via: null, error: null, senales: n.senales, adjuntos: adjuntosDeRespaldo(n.datosRespaldo),
+      createdAt: this.reloj().toISOString(), datosRespaldo: n.datosRespaldo,
     });
     return { id, creado: true };
   }
@@ -236,7 +247,7 @@ export class RepoEnMemoria implements RepoVigia {
       const contacto = this.contactos.get(c.contactoId);
       const config = this.configs.get(c.tenantId);
       if (!contacto || !config?.habilitado) continue;
-      filas.push({ conversacion: { ...c }, contacto: { ...contacto }, config });
+      filas.push({ conversacion: { ...c }, contacto: { ...contacto }, config: configParaCliente(config, this.criticos.has(`${c.tenantId}:${c.clienteId}`)) });
     }
     return filas.slice(0, limite);
   }

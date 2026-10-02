@@ -79,7 +79,7 @@ describe('estado y KPIs', () => {
   it('cuenta activas, por aprobar, vencidas contra el SLA de la flota y molestas/escaladas', async () => {
     const d = base({
       conversaciones: [conv(), conv({ id: '2' }), conv({ id: '3', sinRespuestaDesde: hace(31) }), conv({ id: '4', molestiaNivel: 2 }), conv({ id: '5', escalamientoNivel: 1 })],
-      pendientes: [{ id: 'p', conversacionId: '1', clienteNombre: 'x', mensajeCliente: 'm', borrador: 'b', intencion: 'eta', riesgo: 'bajo', senales: [], creadoEn: hace(1) }],
+      pendientes: [{ id: 'p', conversacionId: '1', clienteNombre: 'x', mensajeCliente: 'm', borrador: 'b', intencion: 'eta', riesgo: 'bajo', senales: [], adjuntos: [], creadoEn: hace(1) }],
     });
     const html = await pintar(BloqueEstadoYKpis({ datos: Promise.resolve(d), ahoraMs: AHORA }));
     expect(html).toContain('Sin respuesta (SLA 30 min)');
@@ -91,7 +91,7 @@ describe('estado y KPIs', () => {
 
 describe('cola de aprobación', () => {
   const pend = { id: '22222222-2222-4222-8222-222222222222', conversacionId: '1', clienteNombre: 'Compras Acme', mensajeCliente: '¿A qué hora llega?',
-    borrador: 'Todavía no tengo registrada una hora estimada.', intencion: 'eta' as const, riesgo: 'medio' as const, senales: ['inyeccion', 'folio_ajeno'], creadoEn: hace(2) };
+    borrador: 'Todavía no tengo registrada una hora estimada.', intencion: 'eta' as const, riesgo: 'medio' as const, senales: ['inyeccion', 'folio_ajeno'], adjuntos: [], creadoEn: hace(2) };
 
   it('vacía: lo dice', async () => {
     expect(await pintar(BloqueAprobacion({ datos: Promise.resolve(base()), puedeDecidir: true, acciones }))).toContain('Nada por aprobar');
@@ -114,6 +114,11 @@ describe('cola de aprobación', () => {
     expect(html).toContain('Todavía no tengo registrada una hora estimada.');
     expect(html).not.toContain('value="aprobar"');
     expect(html).not.toContain('<textarea');
+  });
+  it('avisa al gerente qué archivo saldrá con la respuesta que va a aprobar', async () => {
+    const html = await pintar(BloqueAprobacion({ datos: Promise.resolve(base({ pendientes: [{ ...pend, adjuntos: ['Comprobante de entrega (POD)'] }] })), puedeDecidir: true, acciones }));
+    expect(html).toContain('Adjuntará: Comprobante de entrega (POD)');
+    expect(await pintar(BloqueAprobacion({ datos: Promise.resolve(base({ pendientes: [pend] })), puedeDecidir: true, acciones }))).not.toContain('Adjuntará');
   });
   it('un mensaje de un archivo sin texto lo dice', async () => {
     const html = await pintar(BloqueAprobacion({ datos: Promise.resolve(base({ pendientes: [{ ...pend, mensajeCliente: null }] })), puedeDecidir: true, acciones }));

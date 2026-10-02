@@ -1,4 +1,4 @@
-import { TZ_MX } from '@/lib/formato';
+import { TZ_MX, hoyMx } from '@/lib/formato';
 import { ETIQUETA, PREFIJO_BOTON, type Contacto, type TipoHito } from './tipos';
 import type { Decision, MotivoRechazo } from './maquina';
 
@@ -25,7 +25,7 @@ export function horaMx(fecha: Date): string {
 
 /** «13:05 del 02/10» cuando el hito no es de hoy; solo la hora cuando sí. */
 export function horaYDiaMx(fecha: Date, ahora: Date): string {
-  const dia = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX }).format(d);
+  const dia = (d: Date) => hoyMx(d);
   if (dia(fecha) === dia(ahora)) return horaMx(fecha);
   const corto = new Intl.DateTimeFormat('es-MX', { timeZone: TZ_MX, day: '2-digit', month: '2-digit' }).format(fecha);
   return `${horaMx(fecha)} del ${corto}`;

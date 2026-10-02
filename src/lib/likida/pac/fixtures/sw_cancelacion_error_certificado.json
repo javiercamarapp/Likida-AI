@@ -1,0 +1,7 @@
+{
+  "_fuente": "https://developers.sw.com.mx/knowledge-base/cancelacion-cfdi/ (ejemplo de respuesta 400)",
+  "message": "CACFDI33 - Problemas con el xml.",
+  "messageDetail": "CA305 - Certificado Inválido.",
+  "data": null,
+  "status": "error"
+}

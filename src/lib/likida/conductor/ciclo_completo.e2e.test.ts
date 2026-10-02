@@ -140,17 +140,23 @@ describe('1. el viaje feliz: del «ya llegué» a las estadías, con validación
     const ack = await registrarEvidenciaDelChofer({ tenantId: 't1', hito: previa!.hito!, tipo: 'sello', ruta: `t1/${V1}/ev_x.jpg`, sha256: 'a'.repeat(64), waMessageId: 'wamid.foto1', ahora: T('17:11') }, w.m.deps);
     expect(ack).toMatch(/Recibí la foto de el sello/);
 
-    // 22:30 → toca la llegada a descarga (cita 23:00); 22:40 «ya llegué» = DESCARGA (ya salió de la carga). Sella el legado `llegada`.
+    // 22:30 → toca la llegada a descarga (cita 23:00); 22:40 «ya llegué» = DESCARGA (ya salió de la carga).
     meta.estado.reloj = T('22:30');
     expect(await cron(w, T('22:30'))).toMatchObject({ solicitudes: 1 });
     const llegaDesc = await chofer(w, 'ya llegué', T('22:40'));
     expect(llegaDesc?.mensajes[0].texto).toMatch(/llegaste a DESCARGAR \(CEDIS Monterrey\)/);
+    // Sin posición que lo respalde (el GPS reporta con retraso) la llegada al destino NO se sella todavía…
+    expect(w.m.legado).toEqual([]);
+    // …y cuando el poller entrega la muestra DENTRO del CEDIS, el barrido la valida y entonces sí se sella `llegada`.
+    gps.push({ tenantId: 't1', unidadId: 'u1', lat: 25.6867, lng: -100.3162, medidaEn: T('22:42'), fuente: 'gps' });
+    const barridoDesc = await barridoValidacion({ candidatos: w.candidatosValidacion, configDe: async (t) => w.configDe(t), deps: w.depsValidacion }, T('22:50'));
+    expect(barridoDesc).toMatchObject({ validados: 1 });
     expect(w.m.legado).toEqual([{ viajeId: V1, sellos: ['llegada'] }]);
     await chofer(w, 'ya descargué', T('23:50'));
     await chofer(w, 'voy de regreso', T('00:10', '2026-10-03'));
 
     // Resultado: los cinco hitos resueltos y NADA más que pedir.
-    expect(estados(w)).toEqual({ llegada_carga: 'validado', salida_carga: 'recibido', llegada_descarga: 'recibido', salida_descarga: 'recibido', regreso: 'recibido' });
+    expect(estados(w)).toEqual({ llegada_carga: 'validado', salida_carga: 'recibido', llegada_descarga: 'validado', salida_descarga: 'recibido', regreso: 'recibido' });
     meta.estado.reloj = T('00:30', '2026-10-03');
     const antes = meta.salientes.length;
     expect(await cron(w, T('00:30', '2026-10-03'))).toMatchObject({ solicitudes: 0, recordatorios: 0, escalaciones: 0 });

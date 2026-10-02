@@ -26,6 +26,7 @@ import { logger } from '@/lib/logger';
 import type { Liquidacion } from '@/types/likida';
 import { normasDe, normasDePolitica } from './normas/por_diferencia';
 import { getAcumuladoCombustible } from './repo';
+import { estadiasParaLiquidacion } from './conductor/servicios';
 import { evaluarTope15 } from './periodo/combustible';
 import { avisoTope15 } from './periodo/aviso';
 import { NORMAS, esVinculante } from './normas/indice';
@@ -430,7 +431,10 @@ async function cerrarLiquidacion(ctx: ToolContext, inicioCorrida: Date) {
           logger.warn('pdf.razon_social', { err: e instanceof Error ? e.message : String(e) });
         }
         const paths = rutasPdfVersionadas(ctx.tenantId, ctx.viajeId!);
-        pdfPath = await subir(await generarLiquidacionPDF(full, v, o, razonSocial, 'contralor'), paths.contralor);
+        // Las estadías en andén del viaje (Agente 5) van como ANEXO informativo SOLO en el ejemplar del contralor; no
+        // suman a ningún total ni a la fotografía del cierre (`insumos_hash`). Sin lectura, no hay anexo: el papel sale.
+        const estadias = await estadiasParaLiquidacion(ctx.tenantId, ctx.viajeId!);
+        pdfPath = await subir(await generarLiquidacionPDF(full, v, o, razonSocial, 'contralor', { estadias }), paths.contralor);
         pdfOperadorPath = await subir(await generarLiquidacionPDF(full, v, o, razonSocial, 'operador'), paths.operador);
       } catch (e) {
         logger.error('pdf.gen', { err: e instanceof Error ? e.message : String(e) });

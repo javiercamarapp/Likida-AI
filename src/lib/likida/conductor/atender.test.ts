@@ -38,6 +38,8 @@ describe('«ya llegué»: el lugar lo decide el estado del viaje', () => {
     const m = nueva();
     await dice(m, 'ya llegué a cargar');
     await dice(m, 'ya cargué');
+    // La ubicación confirma la llegada (sin ella, `viaje.llegada_en` no se sella: atender_ubicacion.test.ts).
+    m.validarResultado.valor = { veredicto: { resultado: 'validado', motivo: null, fuente: 'gps', distanciaM: 20, toleranciaM: 150, radioM: 300, sitioId: 's1', medidaEn: AHORA }, aplicado: 'nuevo', sitioNombre: 'CEDIS Monterrey', pedirUbicacion: false };
     const r = await dice(m, 'ya llegué');
     expect(estado(m, 'llegada_descarga').estado).toBe('recibido');
     expect(m.legado).toEqual([{ viajeId: V1, sellos: ['llegada'] }]);
@@ -66,7 +68,7 @@ describe('«ya llegué»: el lugar lo decide el estado del viaje', () => {
 
 describe('la secuencia completa por texto y por botón', () => {
   it('cinco mensajes, cinco hitos, cada uno con su hora del MENSAJE', async () => {
-    const m = nueva();
+    const m = nueva({ config: { validarUbicacion: false } }); // sin validar ubicación, los sellos de la 0090 son inmediatos
     await dice(m, 'ya llegué a cargar', { mensajeEn: min(-300) });
     await dice(m, 'ya cargué', { mensajeEn: min(-240) });
     await dice(m, 'ya llegué a descargar', { mensajeEn: min(-60) });

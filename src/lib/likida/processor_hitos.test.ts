@@ -18,6 +18,7 @@ const atenderAcuseJefe = vi.fn();
 const atenderPinConductor = vi.fn();
 const hitoParaEvidenciaDelChofer = vi.fn();
 const registrarEvidenciaDelChofer = vi.fn();
+const registrarHitoDesdeFoto = vi.fn();
 const subirComprobante = vi.fn();
 const enviarSolicitudUbicacion = vi.fn();
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
@@ -31,6 +32,7 @@ vi.mock('@/lib/likida/conductor/atender', () => ({
   atenderPinConductor: (...a: unknown[]) => atenderPinConductor(...a),
   hitoParaEvidenciaDelChofer: (...a: unknown[]) => hitoParaEvidenciaDelChofer(...a),
   registrarEvidenciaDelChofer: (...a: unknown[]) => registrarEvidenciaDelChofer(...a),
+  registrarHitoDesdeFoto: (...a: unknown[]) => registrarHitoDesdeFoto(...a),
 }));
 vi.mock('@/lib/likida/intake/almacen', async (original) => ({
   ...(await original<Record<string, unknown>>()),
@@ -105,7 +107,7 @@ describe('processInbound — los hitos del chofer, cableados', () => {
   beforeEach(() => {
     salientes.length = 0;
     runAgent.mockReset(); resolveOperador.mockReset(); atenderConductor.mockReset(); atenderAcuseJefe.mockReset();
-    atenderPinConductor.mockReset(); hitoParaEvidenciaDelChofer.mockReset(); registrarEvidenciaDelChofer.mockReset(); subirComprobante.mockReset(); enviarSolicitudUbicacion.mockReset(); descargarMedia.mockClear();
+    atenderPinConductor.mockReset(); hitoParaEvidenciaDelChofer.mockReset(); registrarEvidenciaDelChofer.mockReset(); registrarHitoDesdeFoto.mockReset(); subirComprobante.mockReset(); enviarSolicitudUbicacion.mockReset(); descargarMedia.mockClear();
     atenderPinConductor.mockResolvedValue(null); hitoParaEvidenciaDelChofer.mockResolvedValue(null); enviarSolicitudUbicacion.mockResolvedValue({ ok: true });
     resolveOperador.mockResolvedValue({ tenantId: 't1', operadorId: 'o1' });
     atenderConductor.mockResolvedValue(null);
@@ -280,6 +282,54 @@ describe('processInbound — los hitos del chofer, cableados', () => {
       expect(subirComprobante).not.toHaveBeenCalled();
       expect(descargarMedia).not.toHaveBeenCalled(); // sin hito no se paga la descarga
       expect(registrarEvidenciaDelChofer).not.toHaveBeenCalled();
+    });
+
+    describe('0483 · la foto ES el aviso (sin hito al cual colgarla)', () => {
+      it('descarga, sube con el hito que la máquina eligió en el nombre y registra el hito DESDE la foto con la hora del mensaje', async () => {
+        hitoParaEvidenciaDelChofer.mockResolvedValue({ tipo: 'anden', hito: null, comoHito: 'llegada_carga' });
+        subirComprobante.mockResolvedValue('t1/v1/ev_llegada_carga_x.jpg');
+        registrarHitoDesdeFoto.mockResolvedValue({ mensajes: [{ texto: 'Anotado ✅ llegaste a CARGAR a las 08:10.\n📷 Lo anoté con tu foto del andén.' }] });
+        await processInbound({ ...foto('andén'), timestampMs: Date.parse('2026-10-02T14:10:00Z') });
+        expect(descargarMedia).toHaveBeenCalledWith('media-1');
+        expect(subirComprobante).toHaveBeenCalledWith('t1', 'v1', expect.stringMatching(/^ev_llegada_carga_[0-9a-f]{24}$/), expect.stringContaining('data:image'));
+        expect(registrarHitoDesdeFoto.mock.calls[0][0]).toMatchObject({
+          tenantId: 't1', operadorId: 'o1', telefono: '5219993700779', viajeId: 'v1', tipo: 'anden', ruta: 't1/v1/ev_llegada_carga_x.jpg', waMessageId: 'wa-foto',
+          sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+        });
+        expect(registrarHitoDesdeFoto.mock.calls[0][0].mensajeEn).toEqual(new Date('2026-10-02T14:10:00Z'));
+        expect(registrarEvidenciaDelChofer).not.toHaveBeenCalled();     // el registro del hito ya cuelga la foto
+        expect(salientes).toEqual(['Anotado ✅ llegaste a CARGAR a las 08:10.\n📷 Lo anoté con tu foto del andén.']);
+        expect(runAgent).not.toHaveBeenCalled();
+      });
+
+      it('si el hito quedó sin ubicación y hay sitio, la solicitud de ubicación va DESPUÉS del acuse', async () => {
+        hitoParaEvidenciaDelChofer.mockResolvedValue({ tipo: 'anden', hito: null, comoHito: 'llegada_carga' });
+        subirComprobante.mockResolvedValue('t1/v1/x.jpg');
+        registrarHitoDesdeFoto.mockResolvedValue({ mensajes: [{ texto: 'Anotado ✅' }], solicitarUbicacion: 'Comparte tu ubicación' });
+        await processInbound(foto('andén'));
+        expect(salientes).toEqual(['Anotado ✅']);
+        expect(enviarSolicitudUbicacion).toHaveBeenCalledWith('5219993700779', 'Comparte tu ubicación');
+      });
+
+      it('si la descarga o la subida fallan NO se registra ningún hito (la foto no es evidencia de nada si no existe)', async () => {
+        hitoParaEvidenciaDelChofer.mockResolvedValue({ tipo: 'sello', hito: null, comoHito: 'salida_carga' });
+        descargarMedia.mockResolvedValueOnce(null);
+        await processInbound(foto('sello'));
+        expect(salientes[0]).toMatch(/No pude descargar tu foto/);
+        subirComprobante.mockResolvedValue(undefined);
+        salientes.length = 0;
+        await processInbound(foto('sello'));
+        expect(salientes[0]).toMatch(/No pude guardar esa foto/);
+        expect(registrarHitoDesdeFoto).not.toHaveBeenCalled();
+      });
+
+      it('un fallo al registrar el hito se dice (nunca silencio)', async () => {
+        hitoParaEvidenciaDelChofer.mockResolvedValue({ tipo: 'recibido', hito: null, comoHito: 'salida_descarga' });
+        subirComprobante.mockResolvedValue('t1/v1/x.jpg');
+        registrarHitoDesdeFoto.mockRejectedValue(new Error('base caída'));
+        await processInbound(foto('recibido'));
+        expect(salientes[0]).toMatch(/No pude guardar esa foto/);
+      });
     });
 
     it('si la descarga de Meta falla, se le dice y no se sube ni se registra nada', async () => {

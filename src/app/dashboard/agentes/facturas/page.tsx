@@ -10,6 +10,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { PORTALES_CONOCIDOS } from '@/lib/likida/facturacion/adaptadores/registro';
 import { COMERCIOS } from '@/lib/likida/facturacion/comercios';
+import { repoControl, lotesVivos, fasesDePortales, verificacionDeComercio } from '@/lib/likida/autofactura/control_emision_repo';
+import type { DatosControl } from './control-emision';
 import { vinculosDePortales } from '@/lib/likida/facturacion/vinculo_portal';
 import { autorizarRelogin, permisosDeRelogin, revocarRelogin } from '@/lib/likida/facturacion/relogin_portal';
 import { revalidatePath } from 'next/cache';
@@ -44,7 +46,7 @@ export default async function PaginaAgenteFacturas({
 
   // Sin catch: base caída = página caída, no una lista vacía que afirma
   // "todo facturado" estando ciega. El contador degrada solo (null = se dice).
-  const [tickets, conCfdi, corridas, vinculos, permisos] = await Promise.all([
+  const [tickets, conCfdi, corridas, vinculos, permisos, controlLeido, lotes, fases] = await Promise.all([
     getPorFacturar(tenantId),
     contarConCfdi(tenantId),
     // La ficha de corridas (B3): null = no se pudo leer, y la ficha lo dice.
@@ -57,6 +59,10 @@ export default async function PaginaAgenteFacturas({
     // y los controles lo dicen en vez de enseñar la casilla desmarcada — que
     // invitaría a re-autorizar algo que ya está autorizado.
     permisosDeRelogin(tenantId),
+    // 0542: el control de la emisión real. Cada lectura devuelve null si la base no contestó (la sección lo dice).
+    repoControl.control(tenantId),
+    lotesVivos(tenantId),
+    fasesDePortales(tenantId),
   ]);
 
   // Los portales que ESTA pantalla enseña: los del catálogo que piden cuenta,
@@ -100,7 +106,17 @@ export default async function PaginaAgenteFacturas({
   const emite = modoEfectivo(
     process.env.FACTURACION_MODO === 'emitir' ? 'emitir' : 'ensayo',
     mandatoFiscalAceptado(),
-  ) === 'emitir' && await mandatoFlotaVigente(tenantId);
+  ) === 'emitir' && await mandatoFlotaVigente(tenantId)
+    // 0542: y la bandera de la flota (la tercera llave). Con ella apagada el agente ensaya aunque lo demás esté puesto.
+    && controlLeido !== null && controlLeido !== 'sin_fila' && controlLeido.emisionReal;
+
+  const nombreDe = (clave: string) => COMERCIOS.find((c) => c.clave === clave)?.nombre ?? (clave === 'capufe' ? 'CAPUFE' : clave);
+  const control: DatosControl = {
+    control: controlLeido,
+    lotes: lotes === null ? null : lotes.map((l) => ({ id: l.id, comercio: l.comercio, nombre: nombreDe(l.comercio), tickets: l.gastoIds.length, montoTotal: l.montoTotal, estado: l.estado, propuestoEn: l.propuestoEn, expiraEn: l.expiraEn })),
+    portales: (fases ?? []).map((f) => ({ clave: f.comercio, nombre: nombreDe(f.comercio), verificacion: verificacionDeComercio(f.comercio), fase: f.fase, emisionesConfirmadas: f.emisionesConfirmadas })),
+    minimoParaAutonoma: 3,
+  };
 
   async function marcarFacturada(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
@@ -247,6 +263,7 @@ export default async function PaginaAgenteFacturas({
       vinculosLeidos={vinculos !== null}
       autorizarRelogin={accionAutorizarRelogin}
       revocarRelogin={accionRevocarRelogin}
+      control={control}
       extra={{ conCfdi, emite }}
       marcarFacturada={marcarFacturada}
       notificaciones={

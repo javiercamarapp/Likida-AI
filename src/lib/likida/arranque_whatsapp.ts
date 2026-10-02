@@ -52,8 +52,16 @@ export function formatoVisible(digitos: string): string {
 
 const VERDAD = /^(1|true|si|sí|yes)$/i;
 
+/** Las dos variables, leídas por su nombre completo (así el inventario de `.env.example` las ve). */
+function entornoWhatsApp(): Record<string, string | undefined> {
+  return {
+    LIKIDA_WHATSAPP_NUMERO: process.env.LIKIDA_WHATSAPP_NUMERO,
+    LIKIDA_WHATSAPP_NUMERO_PRUEBA: process.env.LIKIDA_WHATSAPP_NUMERO_PRUEBA,
+  };
+}
+
 export function numeroWhatsAppDeLikida(
-  env: Record<string, string | undefined> = process.env,
+  env: Record<string, string | undefined> = entornoWhatsApp(),
 ): NumeroWhatsApp {
   const crudo = env.LIKIDA_WHATSAPP_NUMERO;
   if (!valorEntornoReal(crudo)) return { estado: 'sin_configurar' };

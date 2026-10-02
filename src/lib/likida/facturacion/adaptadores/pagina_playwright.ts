@@ -859,6 +859,22 @@ export class PaginaPlaywright implements PaginaPortal {
   }
 
   /**
+   * ¿El primer nodo de este selector es un control de formulario (input/select/textarea)?
+   * Un control nunca tiene `textContent`: esperar a que «traiga texto» un campo que aparece tras
+   * buscar (el caso de `buscar.esperar` apuntando a los datos fiscales) no termina nunca.
+   */
+  async esControl(selector: string): Promise<boolean> {
+    try {
+      return await acotar(
+        () => this.page.locator(selector).first().evaluate((el) => ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)),
+        this.topes.lectura, `ver si \`${selector}\` es un control`,
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * El inventario de la página, para el piloto de visión.
    *
    * Es la MISMA extracción que el pre-vuelo de Megasur hacía inline (y de la

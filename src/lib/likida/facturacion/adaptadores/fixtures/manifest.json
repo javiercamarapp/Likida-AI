@@ -1,0 +1,110 @@
+{
+  "_nota": "origen sintetico_desde_guion = derivado de los selectores del guion (NO prueba nada del portal real); grabado = DOM real saneado por una corrida supervisada.",
+  "portales": {
+    "office_depot": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "1449a0d3b35302a8d4b3c55d8df8f22315cb56c4c132db1539e1df0c09141bb2",
+      "noSintetizable": []
+    },
+    "controlnet": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "6e49084f60b713e72a340ac3e7940a55ac76fd1571b923c9735e51184b0442e8",
+      "noSintetizable": []
+    },
+    "enerser": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "d1f348cf11e0cc9b6103c6654d3e695ed77a57c881abdb350b7f749b5379f1a1",
+      "noSintetizable": []
+    },
+    "autozone": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "bffd126159aa801151caadcb93dc63488681206fb950f36db0888cde89d74f1c",
+      "noSintetizable": []
+    },
+    "facturagas": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "6dc4bf0390a8fb94ca0fd4b7b883f29ecef6e0c9e4a59490129f0772125aaa0c",
+      "noSintetizable": []
+    },
+    "sevafusa": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "b723f661566ee266c0012accb0114d07dc04b21dc37b2aef08b9986c7d149000",
+      "noSintetizable": []
+    },
+    "gogas": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "76430a9f3a0c50d9f6fb76bc6207e9d9d804b739834d724bbef2fce24d990ac1",
+      "noSintetizable": []
+    },
+    "oxxo": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "dbdfc128ed8a12a47c14af83d9d15a5c7436bb4910b32e37445eccc264c14702",
+      "noSintetizable": []
+    },
+    "red_estatal_autopistas": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "8115428df5655110db563d0896a0e95401d87138e0977a5fde99a80d720056e9",
+      "noSintetizable": []
+    },
+    "supercarreteras": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "49f5970cfc5399f5989b36a3ef83d7cfd842797dd765f6c24bfcebc64ed82992",
+      "noSintetizable": []
+    },
+    "arco_chihuahua": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "730894e759b24a332cd944364c4f30d50ae2ba502a68a1e43407fa9e8edfde08",
+      "noSintetizable": []
+    },
+    "circle_k": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "937c44c2ad83d24dbd78434405467907c858ec4ad01765b6c640dc8be54c1cba",
+      "noSintetizable": []
+    },
+    "redviacorta": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "dce6c332e8d9b2b353669aabf3c6169809fc0c2049fc22bf621d5a063d324f5f",
+      "noSintetizable": []
+    },
+    "libramientos_meta": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "3b22da266fa9d89a93481f6a185e2137cd8171bbda1fad82c1e47b4cd89dbb1b",
+      "noSintetizable": []
+    },
+    "mcdonalds": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "29bb443f34eed199a928cbbfa09a272eb6e3e80aeb4728c08c504600ab07bec4",
+      "noSintetizable": []
+    },
+    "lbbo": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "ff87e8399052dd18612cefa8be792780e47c1420729b511caf9f80068d5eab0e",
+      "noSintetizable": []
+    },
+    "tim_hortons": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "c05ee1f2edbbc7577ef5c3de2d62517a348615d6475036b2bf1463929821ea0b",
+      "noSintetizable": []
+    },
+    "home_depot": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "6091325c8aec0e81a9f8247f86c80613425a6175764fa6ca8e37a417259f9cfa",
+      "noSintetizable": []
+    },
+    "lodemored": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "3783f59b3fc575fe1ceff735c95afce23f4ec020c124069b54352ee6c8d4485a",
+      "noSintetizable": []
+    },
+    "parrot": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "3cbc7159958fe93830c35f89c16819c109dcacc2f135c24fc984b536f4c6e9e0",
+      "noSintetizable": []
+    },
+    "el_globo": {
+      "origen": "sintetico_desde_guion",
+      "huellaGuion": "8ba68e6133bc1eb1f227fb5c19149f0b1ce312a9c5553ad814cc4099379307eb",
+      "noSintetizable": []
+    }
+  }
+}

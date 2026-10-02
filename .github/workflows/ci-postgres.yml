@@ -202,6 +202,9 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0441_presupuesto_llm_indice_por_run.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0442_arco_cancelacion_cuenta_de_oficina.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0443_aceptacion_legal.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0540_portal_vinculacion_solicitud.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0541_ccp_timbre_cancelacion.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0542_autofactura_control_emision.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0460_patio_invitacion.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0560_wa_outbox_dedupe_liquidacion.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0562_retencion_liquidacion_externa_y_peajes.sql
@@ -209,13 +212,21 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0380_conductor_hitos.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0385_conductor_validacion_sitios.sql
           PGUSER=postgres bash supabase/tests/0385_conductor_concurrencia.sh localhost 5432 postgres
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0480_geocerca_catalogos.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0400_vigia_cliente.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0481_vigia_catalogo_costo.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0482_vigia_evento_adjuntos.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0484_vigia_grupos_historial.sql
           PGUSER=postgres bash supabase/tests/0400_vigia_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0420_carta_porte_multiformato.sql
           PGUSER=postgres bash supabase/tests/0420_carta_porte_claim_concurrencia.sh localhost 5432 postgres
           PGUSER=postgres bash supabase/tests/0375_peajes_claim_concurrencia.sh localhost 5432 postgres
           PGUSER=postgres bash supabase/tests/0341_gps_alerta_minima_concurrencia.sh localhost 5432 postgres
           PGUSER=postgres bash supabase/tests/0360_ventana_wa.sh localhost 5432 postgres
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0520_reglas_frecuencia.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0525_cobranza_por_gasto.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0530_buzon_facturas.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0601_buzon_purga_respeta_facturas.sql
 
       # ── Capa 0: contratos de leases/fencing en Postgres real ───────────
       # Este archivo no es informativo: pg_prove interpreta el TAP y falla

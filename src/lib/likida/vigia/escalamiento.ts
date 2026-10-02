@@ -37,7 +37,7 @@ export interface AccionEscalamiento {
 export interface EntradaEscalamiento {
   conversacion: Pick<Conversacion,
     'id' | 'estado' | 'control' | 'sinRespuestaDesde' | 'escalamientoNivel' | 'molestiaNivel' | 'molestiaEn' | 'atendidaEn'>;
-  config: Pick<ConfigVigia, 'slaRespuestaMin' | 'escalarNivel2Min'>;
+  config: Pick<ConfigVigia, 'slaRespuestaMin' | 'escalarNivel2Min'> & Partial<Pick<ConfigVigia, 'molestiaAvisoNivel'>>;
   ahoraMs: number;
   /** Alguien pidió un humano o faltó un dato en el mensaje que se acaba de procesar. */
   disparoInmediato?: Extract<MotivoEscalamiento, 'pide_humano' | 'sin_dato' | 'folio_ajeno'> | null;
@@ -77,7 +77,7 @@ export function evaluarEscalamiento(e: EntradaEscalamiento): AccionEscalamiento 
     else if (espera >= e.config.slaRespuestaMin) { nivel = 1; motivo = 'sin_respuesta'; }
   }
   if (c.molestiaNivel >= 3 && nivel < 2) { nivel = 2; motivo = 'molestia'; }
-  else if (c.molestiaNivel >= 2 && nivel < 1) { nivel = 1; motivo = 'molestia'; }
+  else if (c.molestiaNivel >= Math.max(2, e.config.molestiaAvisoNivel ?? 2) && nivel < 1) { nivel = 1; motivo = 'molestia'; }
   if (e.disparoInmediato && nivel < 1) { nivel = 1; motivo = e.disparoInmediato; }
 
   if (nivel === 0) return null;
