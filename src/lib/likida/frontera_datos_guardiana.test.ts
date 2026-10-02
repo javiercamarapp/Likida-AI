@@ -181,7 +181,9 @@ import { join, relative } from 'node:path';
 const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 268;
 //   · validar un hito por llave de API (`conductor/repo_validacion.ts`): +1 llamada, `hitoDeFlota` (el hito DE ESA flota
 //     antes de la RPC atómica de validar).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_585;
+//   · Vigía, clientes críticos y purga del histórico (0484, `vigia/repo.ts`): +3 llamadas (los clientes con un grupo crítico,
+//     el reintento de guardar la config en una base sin la 0484 y la purga del histórico importado).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_588;
 
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;

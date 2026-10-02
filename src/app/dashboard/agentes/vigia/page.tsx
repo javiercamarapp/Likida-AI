@@ -120,7 +120,7 @@ export default async function PaginaAgenteVigia({
     const v = validarConfig({
       habilitado: fd.get('habilitado') === 'on', modoAprobacion: texto(fd, 'modoAprobacion'),
       autoenviarMinAprobaciones: texto(fd, 'autoenviarMinAprobaciones'), slaRespuestaMin: texto(fd, 'slaRespuestaMin'),
-      escalarNivel2Min: texto(fd, 'escalarNivel2Min'), retencionDias: texto(fd, 'retencionDias'), avisoPrivacidadUrl: texto(fd, 'avisoPrivacidadUrl'),
+      escalarNivel2Min: texto(fd, 'escalarNivel2Min'), slaCriticoMin: texto(fd, 'slaCriticoMin'), molestiaAvisoNivel: texto(fd, 'molestiaAvisoNivel'), retencionDias: texto(fd, 'retencionDias'), avisoPrivacidadUrl: texto(fd, 'avisoPrivacidadUrl'),
     });
     if (!v.ok) return { ok: false, error: v.error };
     try {

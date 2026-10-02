@@ -336,7 +336,7 @@ export async function BloqueConfiguracion({ datos: p, puedeAdministrar, acciones
         <ul className="text-[12.5px] space-y-1" style={{ color: 'var(--muted)' }}>
           <li>Vigía: {config.habilitado ? 'encendido' : 'apagado'}</li>
           <li>Modo: {config.modoAprobacion === 'siempre' ? 'siempre aprobar' : 'autoenviar solo bajo riesgo ya validado'}</li>
-          <li>SLA de respuesta: {numero(config.slaRespuestaMin)} min · dueño a los {numero(config.slaRespuestaMin + config.escalarNivel2Min)} min</li>
+          <li>SLA de respuesta: {numero(config.slaRespuestaMin)} min · dueño a los {numero(config.slaRespuestaMin + config.escalarNivel2Min)} min · clientes críticos: {numero(Math.min(config.slaRespuestaMin, config.slaCriticoMin))} min</li>
           <li>Retención: {numero(config.retencionDias)} días</li>
           <li className="pt-1" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esto.</li>
         </ul>

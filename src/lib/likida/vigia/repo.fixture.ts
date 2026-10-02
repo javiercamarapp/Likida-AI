@@ -8,7 +8,7 @@ import type {
 } from './puertos';
 import type { EstatusViaje, ResumenViaje, ServicioEstatusViaje } from './estatus_viaje';
 import {
-  configApagada, type ConfigVigia, type Contacto, type Conversacion, type EstadoMensajeSaliente, type Intencion, type MensajeVigia, type TipoEvento,
+  configApagada, configParaCliente, type ConfigVigia, type Contacto, type Conversacion, type EstadoMensajeSaliente, type Intencion, type MensajeVigia, type TipoEvento,
 } from './tipos';
 import { CLIENTE_A, T1 } from './datos.fixture';
 import { adjuntosDeRespaldo, type ArchivoParaEnviar } from './adjuntos';
@@ -84,6 +84,8 @@ export class RepoEnMemoria implements RepoVigia {
     this.verifica('archivoAdjunto');
     return this.archivos.get(`${a.tenantId}|${a.clienteId}|${a.viajeId}|${a.clave}`) ?? null;
   }
+  criticos = new Set<string>();
+  async clienteCritico(tenantId: string, clienteId: string): Promise<boolean> { this.verifica('clienteCritico'); return this.criticos.has(`${tenantId}:${clienteId}`); }
   async config(tenantId: string): Promise<ConfigVigia> { this.verifica('config'); return this.configs.get(tenantId) ?? configApagada(tenantId); }
   async contactoPorTelefono(telefono: string): Promise<Contacto | null> {
     this.verifica('contactoPorTelefono');
@@ -245,7 +247,7 @@ export class RepoEnMemoria implements RepoVigia {
       const contacto = this.contactos.get(c.contactoId);
       const config = this.configs.get(c.tenantId);
       if (!contacto || !config?.habilitado) continue;
-      filas.push({ conversacion: { ...c }, contacto: { ...contacto }, config });
+      filas.push({ conversacion: { ...c }, contacto: { ...contacto }, config: configParaCliente(config, this.criticos.has(`${c.tenantId}:${c.clienteId}`)) });
     }
     return filas.slice(0, limite);
   }

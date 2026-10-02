@@ -34,7 +34,7 @@ import type {
   CambioReclamo, Destinatario, FilaEnEspera, NuevoEvento, NuevoSaliente, RepoVigia, ResultadoRecibir,
 } from './puertos';
 import {
-  configApagada, type ConfigVigia, type Contacto, type Conversacion, type Intencion, type MensajeVigia, type ModoAprobacion,
+  configApagada, configParaCliente, type ConfigVigia, type Contacto, type Conversacion, type Intencion, type MensajeVigia, type ModoAprobacion,
 } from './tipos';
 
 type Fila = Record<string, unknown>;
@@ -57,6 +57,9 @@ export function aConfig(f: Fila): ConfigVigia {
     autoenviarMinAprobaciones: num(f.autoenviar_min_aprobaciones) || 5,
     slaRespuestaMin: num(f.sla_respuesta_min) || 30,
     escalarNivel2Min: num(f.escalar_nivel2_min) || 60,
+    // 0484: sin migrar la columna no existe → el valor de siempre.
+    slaCriticoMin: num(f.sla_critico_min) || 10,
+    molestiaAvisoNivel: num(f.molestia_aviso_nivel) === 3 ? 3 : 2,
     retencionDias: num(f.retencion_dias) || 180,
     avisoPrivacidadUrl: str(f.aviso_privacidad_url),
   };
@@ -243,8 +246,27 @@ export async function archivoAdjuntoReal(a: { tenantId: string; clienteId: strin
 // EL REPO
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * Los clientes con al menos un grupo CRÍTICO, como `tenant:cliente`. Una base sin la 0484 (tabla inexistente) o una lectura que
+ * falla NO tira el barrido: sin el dato, el cliente se atiende con el plazo general (nunca con uno más laxo que el de siempre).
+ */
+async function clientesCriticos(tenants: string[]): Promise<Set<string>> {
+  try {
+    const { data, error } = await acotada(supabaseAdmin().from('vigia_grupo').select('tenant_id, cliente_id').in('tenant_id', tenants).eq('critico', true).order('id').limit(5000), 'vigia.clientes_criticos');
+    if (error) throw new Error(error.message);
+    return new Set(((data ?? []) as Fila[]).map((f) => `${String(f.tenant_id)}:${String(f.cliente_id)}`));
+  } catch (e) {
+    logger.warn('vigia.clientes_criticos_no_leidos', { err: e instanceof Error ? e.message : String(e) });
+    return new Set();
+  }
+}
+
 export function crearRepoVigia(): RepoVigia {
   return {
+    async clienteCritico(tenantId, clienteId) {
+      return (await clientesCriticos([tenantId])).has(`${tenantId}:${clienteId}`);
+    },
+
     estatus: estatusViajeReal,
     archivoAdjunto: archivoAdjuntoReal,
 
@@ -477,12 +499,13 @@ export function crearRepoVigia(): RepoVigia {
         .select('*').in('tenant_id', tenants).eq('habilitado', true), 'vigia.en_espera_config')) as Fila[] | null ?? []).map(aConfig);
       const contactos = (exigir('en_espera_contactos', await acotada(db.from('vigia_contacto')
         .select(COLS_CONTACTO).in('tenant_id', tenants).in('id', convs.map((c) => c.contactoId)), 'vigia.en_espera_contactos')) as Fila[] | null ?? []).map(aContacto);
+      const criticos = await clientesCriticos(tenants);
       const salida: FilaEnEspera[] = [];
       for (const conversacion of convs) {
         const config = configs.find((c) => c.tenantId === conversacion.tenantId);
         const contacto = contactos.find((c) => c.id === conversacion.contactoId && c.tenantId === conversacion.tenantId);
         // Sin config encendida o sin contacto de ESA flota: no se toca.
-        if (config && contacto) salida.push({ conversacion, contacto, config });
+        if (config && contacto) salida.push({ conversacion, contacto, config: configParaCliente(config, criticos.has(`${conversacion.tenantId}:${conversacion.clienteId}`)) });
       }
       return salida;
     },
@@ -496,6 +519,9 @@ export function crearRepoVigia(): RepoVigia {
     async purgar(limite) {
       const { data, error } = await acotada(supabaseAdmin().rpc('vigia_purgar', { p_limite: limite }), 'vigia.purgar');
       if (error) throw new Error(`vigia.purgar: ${error.message}`);
+      // 0484: el histórico importado caduca con la misma retención. Sin la función (base sin migrar) no es un fallo del barrido.
+      const h = await acotada(supabaseAdmin().rpc('vigia_historial_purgar', { p_limite: limite }), 'vigia.purgar_historial');
+      if (h.error && h.error.code !== '42883' && h.error.code !== 'PGRST202') logger.warn('vigia.purgar_historial_fallo', { err: h.error.message });
       return typeof data === 'number' ? data : 0;
     },
   };
@@ -671,6 +697,8 @@ export interface ValoresConfig {
   autoenviarMinAprobaciones: number;
   slaRespuestaMin: number;
   escalarNivel2Min: number;
+  slaCriticoMin: number;
+  molestiaAvisoNivel: 2 | 3;
   retencionDias: number;
   avisoPrivacidadUrl: string | null;
 }
@@ -691,23 +719,38 @@ export function validarConfig(c: Record<string, unknown>): Validacion<ValoresCon
   if (sla === null) return { ok: false, error: 'El tiempo de respuesta debe estar entre 5 y 1,440 minutos.' };
   const n2 = entero(c.escalarNivel2Min, 5, 2880);
   if (n2 === null) return { ok: false, error: 'El tiempo para avisar al dueño debe estar entre 5 y 2,880 minutos.' };
+  const vacio = (v: unknown) => v === undefined || v === null || String(v).trim() === '';
+  const crit = vacio(c.slaCriticoMin) ? 10 : entero(c.slaCriticoMin, 2, 1440);
+  if (crit === null) return { ok: false, error: 'El tiempo para clientes críticos debe estar entre 2 y 1,440 minutos.' };
+  const molestia = vacio(c.molestiaAvisoNivel) ? 2 : entero(c.molestiaAvisoNivel, 2, 3);
+  if (molestia === null) return { ok: false, error: 'El nivel de molestia para avisar debe ser 2 o 3.' };
   const ret = entero(c.retencionDias, 30, 730);
   if (ret === null) return { ok: false, error: 'La retención debe estar entre 30 y 730 días.' };
   const urlCruda = typeof c.avisoPrivacidadUrl === 'string' ? c.avisoPrivacidadUrl.trim() : '';
   if (urlCruda && !/^https:\/\/[^\s]{1,480}$/.test(urlCruda)) return { ok: false, error: 'La liga del aviso de privacidad debe empezar con https://' };
   return { ok: true, valor: {
     habilitado: c.habilitado === true, modoAprobacion: modo, autoenviarMinAprobaciones: min, slaRespuestaMin: sla,
-    escalarNivel2Min: n2, retencionDias: ret, avisoPrivacidadUrl: urlCruda || null,
+    escalarNivel2Min: n2, slaCriticoMin: crit, molestiaAvisoNivel: molestia === 3 ? 3 : 2, retencionDias: ret, avisoPrivacidadUrl: urlCruda || null,
   } };
 }
 
 export async function guardarConfigVigia(tenantId: string, userId: string, v: ValoresConfig): Promise<void> {
-  const { error } = await acotada(supabaseAdmin().from('vigia_config').upsert({
+  const base = {
     tenant_id: tenantId, habilitado: v.habilitado, modo_aprobacion: v.modoAprobacion, autoenviar_min_aprobaciones: v.autoenviarMinAprobaciones,
     sla_respuesta_min: v.slaRespuestaMin, escalar_nivel2_min: v.escalarNivel2Min, retencion_dias: v.retencionDias,
     aviso_privacidad_url: v.avisoPrivacidadUrl, updated_at: new Date().toISOString(), updated_by: userId,
-  }, { onConflict: 'tenant_id' }), 'vigia.guardar_config');
-  if (error) throw new Error(`vigia.guardar_config: ${error.message}`);
+  };
+  const db = supabaseAdmin();
+  const { error } = await acotada(db.from('vigia_config').upsert(
+    { ...base, sla_critico_min: v.slaCriticoMin, molestia_aviso_nivel: v.molestiaAvisoNivel }, { onConflict: 'tenant_id' }), 'vigia.guardar_config');
+  if (!error) return;
+  // Base sin la 0484 (columna inexistente): se guarda lo de siempre en vez de perder el cambio entero.
+  if (error.code === '42703' || error.code === 'PGRST204') {
+    const r = await acotada(db.from('vigia_config').upsert(base, { onConflict: 'tenant_id' }), 'vigia.guardar_config_sin_0484');
+    if (!r.error) return;
+    throw new Error(`vigia.guardar_config: ${r.error.message}`);
+  }
+  throw new Error(`vigia.guardar_config: ${error.message}`);
 }
 
 /** Teléfono de un cliente en la forma de la allowlist (52 + 10 dígitos), o `null` si no es mexicano válido. PURA. */
