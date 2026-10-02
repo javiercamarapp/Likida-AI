@@ -28,6 +28,13 @@ export interface ToolContext {
   mutationKey?: string;
   telefono?: string;
   /**
+   * El rol de la persona del panel que habla con el orquestador (viene de la
+   * SESIÓN, nunca del cuerpo de la petición). Solo lo leen las tools del
+   * orquestador para negar lo que su área no ve; el chofer por WhatsApp no
+   * lo trae.
+   */
+  rol?: string;
+  /**
    * El operador YA confirmó (dos veces, vía el freno del processor) que quiere
    * cerrar SIN comprobantes. Sin esta marca, `guardar_liquidacion` se niega a
    * cerrar en ceros — el hallazgo crítico del QA del 16-ago-2026: "ya subí
