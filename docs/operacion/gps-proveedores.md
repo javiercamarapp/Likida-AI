@@ -13,6 +13,14 @@ unidad **de esa flota**, aplica la compuerta del aviso de privacidad, guarda ide
 | **Tabla propia** (la flota ya tiene las posiciones en sus tablas) | poll del cron `gps`, lector de solo lectura | construido; ver abajo |
 | Pin de WhatsApp del chofer | procesador de mensajes (`proveedor = 'whatsapp'`) | construido (respaldo) |
 
+**El pin de WhatsApp no es GPS (0603).** Es un respaldo que el chofer elige a mano: el mapa en vivo (`ultimas_posiciones_tenant`) y la evidencia de la
+reclamación de peajes (`peaje_posiciones_ventana`) lo excluyen en la base, y la validación de llegadas del Conductor lo guarda como evidencia pero con GPS activo un pin
+solo nunca valida. Código seguro contra la base sin la 0603 (la aplicación ya lo descarta en TS).
+
+**Qué falta para que sea de punta a punta:** el acceso real de la flota (vista/CSV/endpoint de posiciones y geocercas), aplicar las migraciones en la base real y,
+para el modo SQL y SFTP, las decisiones de dependencia que están más abajo. El E2E del ciclo (poll → asentador → `posicion` → barrido de validación del Conductor, con
+falla de credencial, lote duplicado, muestra atrasada y otra flota) vive en `src/lib/likida/e2e/agente-10-gps.e2e.test.ts`.
+
 ## Tabla propia (`tabla_propia`)
 
 Conector del catálogo (`Conexiones → Credenciales`, id `tabla_propia`, «Mis propias tablas de GPS»). La
@@ -57,12 +65,21 @@ reabre la decisión.
 cron `gps` con el backoff por clase de falla de la 0500 (credencial/formato → espera larga y se dice;
 proveedor → espera corta) y el mismo latido. Filas sucias hacen el poll **parcial**, no «sano».
 
-**Geocercas:** `Conexiones → GPS → «Importar mis geocercas»` lee la vista/CSV/endpoint de geocercas
+**Geocercas (P1, migraciones 0630-0632):** `Conexiones → GPS → «Importar mis geocercas»` lee la vista/CSV/endpoint de geocercas
 (`codigo, nombre, lat_centro, lon_centro, radio_m` o `poligono_wkt`, `cliente`) y las importa al catálogo de sitios
-con el importador todo-o-nada del Conductor (re-importar actualiza por código). **Círculo:** tal cual. **Polígono:**
-el catálogo guarda centro + radio, así que se aproxima por el círculo más chico (con 5 % de margen) que **lo
-contiene** y la pantalla dice cuántos se aproximaron; no se simplifica en silencio. Soporte nativo de polígonos
-sería un cambio de modelo (columna de geometría + prueba de punto-en-polígono en la validación de llegada).
+con el importador todo-o-nada del Conductor (re-importar actualiza por código, no duplica).
+- **Círculo:** tal cual.
+- **Polígono:** se guarda **nativo** (`geocerca.poligono`, 3 a 500 vértices con área) y la pregunta «¿el tractor está dentro?» la contesta un solo
+  helper, `dentroDeGeocerca()` (`conductor/geo.ts`), que usan la validación de hitos, el acercamiento de convenios, la detección por geocerca del Conductor y la
+  reclamación de peajes. El catálogo conserva además el círculo que CONTIENE al polígono (centro = promedio de vértices, radio = vértice más lejano, **sin
+  inflarlo**: el +5 % anterior abarcaba la carretera de junto y la reclamación acusaba con confianza «alta» a unidades que solo pasaban). Un polígono que no
+  se puede guardar (más de 500 vértices o sin área) entra solo como ese círculo y queda marcado `aproximada`: la pantalla dice cuántos y quien acusa con él
+  baja su confianza a «media» (nunca «alta»). Las filas que ya venían de un CSV antes de la 0630 se marcan `aproximada` una vez (lado seguro) hasta que la
+  re-importación las aclara.
+- **Re-importación diaria dentro del cron `gps` (0631):** una vez cada 23 h por flota con «mis propias tablas» activas (a la hora si el intento falló), con claim
+  atómico y **huella sha256** del contenido: con la misma huella no se escribe nada (no revive un sitio que la flota archivó). Tope de 20 flotas por corrida y
+  reloj duro; el fallo de una flota se anota en su estado y no frena a las demás. Un sitio editado a mano (`fuente = 'manual'`) NO se pisa (0632). Sin las migraciones
+  el cron de posiciones sigue como siempre y la re-importación se apaga con un aviso.
 
 ### Alineación con el demo
 

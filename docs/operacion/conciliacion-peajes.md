@@ -147,7 +147,7 @@ caseta) y la geocerca si la hay. Tres motivos, cada uno con su evidencia:
 | Motivo | Confianza | Cuándo |
 |---|---|---|
 | GPS lejos de la caseta | alta | Dos posiciones consecutivas, una antes y otra después de la hora del pase y a ≤ 6 min entre sí, ubican a la unidad a más de radio + margen de la caseta (el veredicto `no_coincide` del cruce por caseta). |
-| Unidad en zona no autorizada | alta | La posición más cercana en el tiempo al pase (≤ 10 min) cae dentro de una geocerca de **patio** o **restringida** de la flota y no dentro del radio de la caseta. |
+| Unidad en zona no autorizada | alta (media si la zona es aproximada) | La posición más cercana en el tiempo al pase (≤ 10 min) cae dentro de una geocerca de **patio** o **restringida** de la flota y no dentro del radio de la caseta. «Dentro» se decide contra el **polígono** de la zona cuando está cargado (P1, 0630); si la zona solo es un círculo que sustituye a un polígono que no se pudo guardar (`aproximada`) la confianza baja a «media», nunca «alta», y el porqué dice «zona de forma aproximada». Entre varias zonas que contienen el punto gana la exacta. |
 | Posible doble cobro | media | El mismo TAG cobrado dos veces en la misma caseta con ≤ 10 min de diferencia (se reclama el segundo y se señala el primero). Puede ser un retorno real. |
 
 La doctrina es la de siempre: **solo entra una línea con evidencia positiva en contra del cobro**. «Sin datos» (sin hora, TAG sin dar
@@ -220,7 +220,9 @@ la pantalla tras declarar el mapeo. Fallo de infraestructura → reintento con b
    de la flota y su alta en el cofre; cuando exista, se implementa como otra fuente del mismo claim.
 7. Salida a SAP: pull (lista + exportación configurable); no hay escritura a SAP ni webhook saliente.
 8. Migraciones 0375/0376/0562/0563 sin aplicar a ninguna base remota (a propósito); aplicar antes de desplegar.
-9. **Tabla de cursos / geocercas de la flota** y la lectura de sus posiciones de GPS: el reporte de reclamación ya usa las geocercas del
-   catálogo de peajes y la tabla `posicion`; los cursos y el lector de sus tablas propias quedan para cuando entreguen el acceso.
+9. **Cursos (rutas autorizadas) y acceso a las tablas de GPS de la flota**: el reporte de reclamación usa las geocercas del catálogo (con su **polígono nativo**
+   desde P1: una zona `aproximada` baja a «media» la confianza de «unidad en zona no autorizada») y la tabla `posicion`, que alimenta también la «tabla propia» del cliente. Los
+   **cursos** (motivo `fuera_de_curso`) no se evalúan todavía (paquete P8, depende del formato que entregue el cliente) y el acceso real de solo lectura a sus tablas
+   sigue pendiente.
 10. El aviso a la oficina usa la plantilla `aviso_operacion_v1` fuera de la ventana de 24 h: hasta que Meta la apruebe,
    el aviso sale solo dentro de la ventana (y se reintenta).
