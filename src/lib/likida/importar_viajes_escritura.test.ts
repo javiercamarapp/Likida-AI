@@ -54,6 +54,8 @@ let catalogoServido: Record<string, number>;
 /** La "base": folios ya insertados, con el unique 0092 impuesto. */
 let enBase: Set<string>;
 let llamadasUpsert: number;
+/** Cuántos `.in('folio', tanda)` se pidieron: tandas del archivo, no una lectura del tenant entero. */
+let lecturasFolio: number;
 /** Los lotes tal como llegaron al upsert — para afirmar qué NO llegó. */
 let lotesUpsert: FilaInsert[][];
 /** La respuesta de la consulta de operadores ocupados (0029) — una página
@@ -106,12 +108,15 @@ function fromViaje() {
   return {
       select: () => {
         const nodo: Record<string, unknown> = {};
-        for (const m of ['eq', 'not', 'in', 'order', 'abortSignal']) nodo[m] = () => nodo;
+        let porFolio = false;
+        for (const m of ['eq', 'not', 'order', 'abortSignal']) nodo[m] = () => nodo;
+        // Ronda 16: la lectura de folios existentes es `.in('folio', tanda)` (sin range).
+        nodo.in = (col: string) => { if (col === 'folio') { porFolio = true; lecturasFolio++; } return nodo; };
         nodo.range = () => Promise.resolve({ data: paginasLectura.shift() ?? [], error: null });
         // La consulta de OCUPADOS (0029) no pagina: se espera el builder
         // directo — el thenable resuelve con su página.
         nodo.then = (res: (v: unknown) => unknown) =>
-          Promise.resolve(ocupadosError
+          Promise.resolve(porFolio ? { data: paginasLectura.shift() ?? [], error: null } : ocupadosError
             ? { data: null, error: ocupadosError }
             : { data: ocupadosResp.shift() ?? [], error: null }).then(res);
         return nodo;
@@ -169,6 +174,7 @@ beforeEach(() => {
   paginasLectura = [];
   enBase = new Set();
   llamadasUpsert = 0;
+  lecturasFolio = 0;
   lotesUpsert = [];
   ocupadosResp = [];
   ocupadosError = null;
@@ -410,5 +416,13 @@ describe('ESC-18 — ANALYZE después de un import grande', () => {
     const r = await importarViajes('t1', archivo(UMBRAL_ANALYZE + 1));
     expect(r.creados).toBe(UMBRAL_ANALYZE + 1);
     expect(r.error).toBeUndefined();
+  });
+
+  it('ESCALA (ronda 16): los folios existentes se piden por tandas del ARCHIVO, no leyendo todo el tenant', async () => {
+    const archivo = Array.from({ length: 450 }, (_, i) => fila(`V-${1000 + i}`));
+    const r = await importarViajes('t1', archivo);
+    expect(r.error).toBeUndefined();
+    // 450 folios / 200 por tanda = 3 lecturas `.in('folio', …)`; nunca un barrido paginado de la tabla.
+    expect(lecturasFolio).toBe(3);
   });
 });
