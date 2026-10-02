@@ -205,7 +205,7 @@ describe('E2E · lo delicado se escala a una persona, no se decide', () => {
     await preguntar('flota_admin', 'hola');
     const todas = ofrecidas[0].filter((n) => n !== 'entregar_respuesta');
     expect(todas.filter((n) => /guardar|cerrar|cuadrar|enviar|contactar|aprobar|pagar|timbrar/.test(n))).toEqual([]);
-    expect(todas.filter((n) => !/^(estado_|salud_|tablero_|detalle_|kpis_|acreditables_|motor_|viajes_|liquidaciones_|serie_|top_|duplicados_|proyectar_|consultar_|escalar_a_persona)/.test(n))).toEqual([]);
+    expect(todas.filter((n) => !/^(estado_|salud_|tablero_|detalle_|convenio_|reclamacion_|kpis_|acreditables_|motor_|viajes_|liquidaciones_|serie_|top_|duplicados_|proyectar_|consultar_|escalar_a_persona)/.test(n))).toEqual([]);
   });
 });
 
