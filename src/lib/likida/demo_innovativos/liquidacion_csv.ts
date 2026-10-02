@@ -46,6 +46,26 @@ const ALIAS: Record<string, string[]> = {
   moneda: ['moneda'],
 };
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Excel guarda una fecha como NÚMERO DE SERIE (días desde 1899-12-30): 46023 es 2026-01-01. Al volcar la hoja a texto
+ * llega así, y rechazarla obligaba a la oficina a reformatear su archivo. Se acepta SOLO un entero de cinco cifras (con
+ * o sin fracción de hora, que se descarta) entre 2000-01-01 y 2099-12-31, para no confundir un número cualquiera con una
+ * fecha; todo lo demás sigue sin ser fecha y se rechaza con el mismo mensaje.
+ */
+export function fechaDeSerialExcel(texto: string): string | null {
+  const m = /^(\d{5})(?:[.,]\d+)?$/.exec(texto.trim());
+  if (!m) return null;
+  const dias = Number(m[1]);
+  if (dias < 36526 || dias > 73050) return null;
+  return new Date(Date.UTC(1899, 11, 30) + dias * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** `AAAA-MM-DD` tal cual, o la fecha de un número de serie de Excel; vacío si no es ninguna de las dos. */
+export function fechaDeCelda(texto: string): string {
+  const t = texto.trim();
+  return FECHA.test(t) ? t : fechaDeSerialExcel(t) ?? t;
+}
 const centavos = (n: number) => Math.round(n * 100);
 
 export function cuerposDeLiquidacionesCsv(texto: string, sistemaOrigen = 'SAP (demo)'): ResultadoLiquidacionesCsv {
@@ -71,9 +91,9 @@ export function cuerposDeLiquidacionesCsv(texto: string, sistemaOrigen = 'SAP (d
   for (const [clave, g] of grupos) {
     const p = g.filas[0].c;
     const err = (motivo: string, fila: number | null = g.filas[0].fila) => problemas.push({ clave, fila, motivo });
-    const empleado = (p[ix.empleado] ?? '').trim(); const desde = (p[ix.desde] ?? '').trim(); const hasta = (p[ix.hasta] ?? '').trim();
+    const empleado = (p[ix.empleado] ?? '').trim(); const desde = fechaDeCelda(p[ix.desde] ?? ''); const hasta = fechaDeCelda(p[ix.hasta] ?? '');
     if (!empleado) { err('sin numero_empleado'); continue; }
-    if (!FECHA.test(desde) || !FECHA.test(hasta) || desde > hasta) { err('periodo ilegible o incoherente (se espera AAAA-MM-DD y desde ≤ hasta)'); continue; }
+    if (!FECHA.test(desde) || !FECHA.test(hasta) || desde > hasta) { err('periodo ilegible o incoherente (se espera AAAA-MM-DD, o una fecha de Excel, y desde ≤ hasta)'); continue; }
     const total = leerNumero(p[ix.total] ?? '', decimalComa);
     if (total === null) { err('total_sistema ilegible'); continue; }
     const conceptos: CuerpoLiquidacionExterna['conceptos'] = []; let ok = true;
