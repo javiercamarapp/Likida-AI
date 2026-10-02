@@ -172,8 +172,12 @@ import { join, relative } from 'node:path';
 // 259 → 268 archivos y 1,347 → 1,580 llamadas (seguridad +2/+12, producto +1/+24,
 // Conductor +3/+85, Vigía +1/+57, Carta Porte +2/+55); cada tramo está explicado arriba
 // y todo es funcionalidad nueva, no código migrado.
+//
+// OLA 3, W3 «Conductor + Vigía» (2-oct-2026), medido contra el commit base (268 / 1,580):
+//   · catálogos separados de `geocerca` (0480): +1 llamada en `peajes/datos.ts` (leer si el
+//     nombre ya es un sitio del Conductor antes del upsert; el resto son filtros añadidos).
 const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 268;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_580;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_581;
 
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;

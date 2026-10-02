@@ -64,7 +64,7 @@ export async function listarSitios(
   tenantId: string, o: { busqueda?: string; tipo?: TipoSitio; limite?: number } = {},
 ): Promise<{ sitios: SitioFila[]; hayMas: boolean }> {
   const limite = Math.min(Math.max(o.limite ?? 200, 1), 500);
-  let q = supabaseAdmin().from('geocerca').select(COLUMNAS_SITIO).eq('tenant_id', tenantId).in('tipo', o.tipo ? [o.tipo] : [...TIPOS_DEL_CATALOGO]);
+  let q = supabaseAdmin().from('geocerca').select(COLUMNAS_SITIO).eq('tenant_id', tenantId).eq('catalogo', 'conductor').in('tipo', o.tipo ? [o.tipo] : [...TIPOS_DEL_CATALOGO]);
   const b = (o.busqueda ?? '').replace(/[%,()*\\]/g, ' ').trim().slice(0, 60);
   if (b) q = q.or(`nombre.ilike.%${b}%,codigo.ilike.%${b}%`);
   const res = await acotada(q.order('nombre', { ascending: true }).order('id').limit(limite + 1), 'sitios.listar');
@@ -102,9 +102,11 @@ export async function guardarSitio(tenantId: string, d: DatosSitio): Promise<Res
     nombre: d.nombre, tipo: d.tipo, codigo: d.codigo, direccion: d.direccion, lat: d.lat, lng: d.lng, radio_m: d.radioM,
     cliente_id: d.clienteId, padre_id: d.padreId, fuente: 'manual',
   };
+  // Catálogo propio (0480): la edición solo toca filas del Conductor (`.eq('catalogo')`) y el alta se declara suyo,
+  // para que un patio o punto de interés sin código no caiga en el catálogo de peajes.
   const res = d.id
-    ? await acotada(supabaseAdmin().from('geocerca').update(fila).eq('id', d.id).eq('tenant_id', tenantId).select('id'), 'sitios.editar')
-    : await acotada(supabaseAdmin().from('geocerca').insert({ ...fila, tenant_id: tenantId }).select('id'), 'sitios.crear');
+    ? await acotada(supabaseAdmin().from('geocerca').update(fila).eq('id', d.id).eq('tenant_id', tenantId).eq('catalogo', 'conductor').select('id'), 'sitios.editar')
+    : await acotada(supabaseAdmin().from('geocerca').insert({ ...fila, tenant_id: tenantId, catalogo: 'conductor' }).select('id'), 'sitios.crear');
   if (res.error) {
     const code = (res.error as { code?: string }).code;
     if (code === '23505') return 'duplicado';
@@ -117,7 +119,7 @@ export async function guardarSitio(tenantId: string, d: DatosSitio): Promise<Res
 
 export async function cambiarEstadoSitio(tenantId: string, id: string, activa: boolean): Promise<boolean> {
   if (!UUID.test(id)) return false;
-  const res = await acotada(supabaseAdmin().from('geocerca').update({ activa }).eq('id', id).eq('tenant_id', tenantId).select('id'), 'sitios.estado');
+  const res = await acotada(supabaseAdmin().from('geocerca').update({ activa }).eq('id', id).eq('tenant_id', tenantId).eq('catalogo', 'conductor').select('id'), 'sitios.estado');
   const filas = exigir(res as never, 'sitios.estado') as unknown[] | null;
   return Boolean(filas && filas.length > 0);
 }
@@ -144,7 +146,7 @@ export async function asignarSitiosViaje(
     if (v === null) { columnas[columna] = null; continue; }
     // Id o código, SIEMPRE dentro de la flota.
     const campo = UUID.test(v) ? 'id' : 'codigo';
-    const r = await acotada(supabaseAdmin().from('geocerca').select('id').eq('tenant_id', tenantId).eq(campo, UUID.test(v) ? v.toLowerCase() : v).order('id').limit(1), 'sitios.resolver');
+    const r = await acotada(supabaseAdmin().from('geocerca').select('id').eq('tenant_id', tenantId).eq('catalogo', 'conductor').eq(campo, UUID.test(v) ? v.toLowerCase() : v).order('id').limit(1), 'sitios.resolver');
     const f = (exigir(r as never, 'sitios.resolver') ?? []) as unknown as Fila[];
     if (f.length === 0) return 'sitio_no_encontrado';
     columnas[columna] = String(f[0].id);
