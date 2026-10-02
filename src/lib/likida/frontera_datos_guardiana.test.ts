@@ -280,7 +280,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 286;
 //   · la reclamación de peajes: el último desglose no anulado de la flota (1).
 // Las otras lecturas nuevas (convenio, liquidación externa, jornada, reporte de peajes) COMPONEN lectores que ya existen (`convenios/repo.ts`, `liquidacion_externa/repo.ts`,
 // `jornada/repo.ts`, `peajes/bitacora_conciliada.ts`) y no suman llamadas. Cada paquete de la Ola 4 midió contra su propia base: la suma se confirma con el barrido del árbol integrado.
-// INTEGRACIÓN ola 4d (P5 + P6): 1,851 + 7 (P5) + 11 (P6) = 1,869 provisional; ver la medición del barrido real abajo.
+// INTEGRACIÓN ola 4d (P5 + P6), medida con el barrido real del árbol fusionado: 1,851 + 7 (P5) + 11 (P6) = 1,869 llamadas exactas, cero holgura
+// (cada paquete midió contra su propia base; P5 y P6 no se pisan: vigia/ y orquestador/fuentes_reales.ts). 0 archivos nuevos (286 sin cambio).
 const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_869;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
