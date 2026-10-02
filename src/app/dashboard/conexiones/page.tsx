@@ -206,7 +206,7 @@ export default async function PaginaConexiones({
     const r = await importarGeocercasDeTablaPropia({ tenantId: s.tenantId, rol: s.rol });
     if (!r.ok) return r;
     revalidatePath(RUTA);
-    return { ok: true, mensaje: `Importado: ${r.creados} sitio${r.creados === 1 ? '' : 's'} nuevo${r.creados === 1 ? '' : 's'} y ${r.actualizados} actualizado${r.actualizados === 1 ? '' : 's'}.`, aproximadas: r.aproximadas.length };
+    return { ok: true, mensaje: `Importado: ${r.creados} sitio${r.creados === 1 ? '' : 's'} nuevo${r.creados === 1 ? '' : 's'} y ${r.actualizados} actualizado${r.actualizados === 1 ? '' : 's'}.`, aproximadas: r.aproximadas.length, poligonos: r.poligonos };
   }
   const tieneTablaPropia = (guardadasCrudas ?? []).some((c) => c.conectorId === 'tabla_propia' && c.activo);
 

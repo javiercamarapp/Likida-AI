@@ -38,6 +38,10 @@ export interface SitioCsv {
   direccion: string | null;
   cliente: string | null;
   padre: string | null;
+  /** 0630: polígono nativo del cliente (lat/lng/radio_m son el círculo que lo CONTIENE). Solo lo trae el importador de su tabla; el CSV del panel es círculo. */
+  poligono?: Array<{ lat: number; lng: number }> | null;
+  /** 0630: el círculo SUSTITUYE a un polígono que no se pudo guardar (la decisión con él es menos fiable). Nunca junto con `poligono`. */
+  aproximada?: boolean;
 }
 
 export interface ErrorCsv {
