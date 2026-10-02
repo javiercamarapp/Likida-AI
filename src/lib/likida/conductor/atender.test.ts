@@ -373,7 +373,7 @@ describe('«ya lo atiendo» del jefe o del patio', () => {
     return {
       marcar,
       deps: {
-        viaje: async () => (existe ? { tenantId: 't1' } : null),
+        viajePorId: async () => (existe ? { tenantId: 't1' } : null),
         puedeAcusar: async () => puede,
         marcar,
         evento: vi.fn(async () => {}),
