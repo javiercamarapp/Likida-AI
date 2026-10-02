@@ -205,8 +205,17 @@ import { join, relative } from 'node:path';
 //     buzón, la lectura de facturas tolerante a la base sin migrar).
 // INTEGRACIÓN ola 3 (ronda-03): suma de W3 Conductor+Vigía (+1 archivo, +21 llamadas) y W3 buzón/cobranza/reglas (+5 archivos, +77 llamadas)
 // sobre 268 / 1,580 → 274 / 1,679 (medido con el barrido; +1 sobre la suma por llamadas compartidas).
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 274;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_679;
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 277;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_701;
+// INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
+// OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
+//   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)
+//     y la sección de timbrado; vinculación asistida (0540): `autofactura/vinculacion_remota_repo.ts`, que junta TODO el acceso
+//     a datos del módulo (cinco RPC atómicas y las dos lecturas), y la llamada a `purgar_vinculacion_portal` en el cron de
+//     purga. Funcionalidad nueva, no código migrado. Medido: 268 → 270 archivos, 1,580 → 1,591 llamadas.
+//   · control de la emisión real (0542): `autofactura/control_emision_repo.ts` junta TODO el acceso a datos del módulo
+//     (puertos del control, RPC atómicas de cupo/lote/fase y lecturas del tablero) y la pantalla lee tres de ellas.
+//     Funcionalidad nueva. Medido: 270 → 271 archivos, 1,591 → 1,602 llamadas.
 
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;

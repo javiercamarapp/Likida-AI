@@ -10,7 +10,7 @@ import { clasificarFallo, type ClaseDeFallo } from '../vinculo_senales';
 import type { FabricaDePagina, PaginaPortal } from './playwright_base';
 import { ESPERA_UUID_MS, INTERVALO_UUID_MS } from './playwright_base';
 import {
-  aplicarFormato, capturaSegura, clic, descargarXml, escribirCampo, esperarTexto,
+  aplicarFormato, capturaSegura, clic, descargarXml, escribirCampo, esperarResultado, esperarTexto,
   FalloDePortal, leerRechazo, mensajeCaptcha, mensajeSelectoresIdos, mirarCaptcha,
   mirarLogin, preVuelo, SELECTORES_CAPTCHA_COMUNES, textoDeError,
   type FormatoCampo, type SelectorAVerificar,
@@ -303,7 +303,7 @@ export function motivoSinVerificar(g: GuionPortal): string {
   const origen = g.lecturaDeCampo
     ? ` Sus selectores SÍ se copiaron del DOM real el ${g.lecturaDeCampo.fecha} (${g.lecturaDeCampo.acta}), así que el pre-vuelo debería confirmarlos a la primera; si alguno no resuelve, el portal cambió desde esa fecha.`
     : ' Sus selectores son una hipótesis derivada de la etiqueta del campo, no una lectura del portal.';
-  return `El mapeo de "${g.comercio}" NO se ha medido de punta a punta contra ${g.portal}.${origen} Emitir sin ese ensayo crea un CFDI real ante el SAT que puede salir con el dato de otro campo, y eso no se deshace. Se puede ENSAYAR (llena, captura y no aprieta); para emitir hay que correr antes el arnés de pre-vuelo y anotar en \`verificado\` lo que resolvió.`;
+  return `El mapeo de "${g.comercio}" NO se ha medido de punta a punta contra ${g.portal}.${origen} Emitir sin ese ensayo crea un CFDI real ante el SAT que puede salir con el dato de otro campo, y eso no se deshace. Se puede ENSAYAR (llena, captura y no aprieta); para emitir hay que correr la corrida supervisada contra el portal real (\`npx tsx scripts/verificar-portal.mjs ${g.comercio} --visita-real --yo "Tu Nombre"\`, runbook en docs/operacion/verificacion-portales.md), que deja evidencia y registra la verificación. Escribir \`verificado\` a mano en portales.ts NO la habilita.`;
 }
 
 /**
@@ -635,7 +635,7 @@ export class AdaptadorDeclarativo implements AdaptadorPortal {
         await clic(pagina, sel, this.g.buscar.que, contexto);
 
         if (this.g.buscar.esperar) {
-          const { valor, aparecio } = await esperarTexto(pagina, this.g.buscar.esperar, this.espera());
+          const { valor, aparecio } = await esperarResultado(pagina, this.g.buscar.esperar, this.espera());
           if (!valor) {
             const sin = await leerRechazo(pagina, this.g.buscar.sinResultados);
             throw new FalloDePortal(

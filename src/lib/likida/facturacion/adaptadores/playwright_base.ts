@@ -78,6 +78,11 @@ export interface PaginaPortal {
    */
   existe?(selector: string): Promise<boolean>;
   /**
+   * OPCIONAL. ¿El primer nodo del selector es un control de formulario? Lo usa `esperarResultado`: un campo
+   * que aparece tras buscar tiene `textContent` vacío para siempre, y eso no es «el resultado no llegó».
+   */
+  esControl?(selector: string): Promise<boolean>;
+  /**
    * OPCIONAL. Un Chromium por ticket que nadie cierra son 21 navegadores vivos
    * por viaje. Si falla al cerrar no se tumba el resultado: el CFDI ya se
    * decidió antes.

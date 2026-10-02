@@ -164,7 +164,20 @@ import { join, relative, sep } from 'node:path';
 //     (`buzon_entrega_config.activo`, apagada por omisión); cada acción usa el tenant del propio
 //     lote. No acepta cuerpo ni parámetros. La confirmación (entregada/rebotada) NO suma ruta:
 //     comparte el webhook firmado `api/correo/eventos/route.ts` (firma Svix antes de leer).
-const RUTAS_APP_REVISADAS = 90;
+// 90 → 92 (ola 3, Agente 6 «autofacturación», 0540): dos rutas SIN sesión de Likida a propósito — las llama
+//   el script de la máquina con pantalla del contralor, que no tiene cookie del panel. Su ÚNICA credencial es
+//   el código de un solo uso que el dueño genera en el panel (80 bits, 15 min, se consume al reclamarlo; en la
+//   base solo vive su SHA-256), y TODO lo decide el código: el tenant y el portal salen de la solicitud, jamás
+//   del cuerpo (un `tenant_id`/`comercio` en el cuerpo se ignora). Antes de leer nada: rate limit por IP
+//   (20/10 min) y cuerpo acotado en streaming (200 KB). La sesión que suben se vuelve a recortar al dominio del
+//   portal y se cifra en el cofre; si el cofre no está configurado, no se guarda ni se anota «vinculado».
+//   · `api/vinculacion-portal/reclamar/route.ts` — consume el código y devuelve QUÉ portal abrir (nunca tenant ni id).
+//   · `api/vinculacion-portal/completar/route.ts` — sube la sesión ya iniciada (o avisa del fallo).
+//
+// 92 → 93 en la integración de la ola 3 (ronda-03): `api/v1/hitos/[id]/validar/route.ts` (W3 Conductor,
+//   POST con llave de API de la flota: valida el hito DE ESA flota con la RPC atómica; la rama de Conductor
+//   no subió esta constante) más las 2 de autofactura (vinculación de portal) y la de cron buzon-entrega.
+const RUTAS_APP_REVISADAS = 93;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

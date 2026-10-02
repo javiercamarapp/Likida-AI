@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Fixture office_depot — sintético, NO es el portal real</title></head>
+<body>
+<!-- FIXTURE sintetico_desde_guion: derivado de los selectores de office_depot. No es el DOM del portal real. -->
+<form onsubmit="return false" id="fx-form">
+<div class="fx-campo"><input type="text" formcontrolname="rfc"></div>
+<div class="fx-campo"><input type="text" formcontrolname="correo"></div>
+<div class="fx-campo"><input type="text" id="ituTxt"></div>
+<div class="fx-campo"><input type="text" id="inlineFormInputName3"></div>
+
+<button data-fx="emitir" type="button">Facturar</button>
+</form>
+<div id="fx-salida"></div>
+<script>
+  var DESPUES_DE_BUSCAR = "";
+  var AL_EMITIR = "<div class=\"alert-danger\">El RFC capturado no es válido (fixture)</div>";
+  var XML = "<button data-fx=\"xml\" type=\"button\">XML</button>";
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest ? e.target.closest('[data-fx]') : null;
+    if (!el) return;
+    e.preventDefault();
+    var salida = document.getElementById('fx-salida');
+    if (el.getAttribute('data-fx') === 'buscar') salida.insertAdjacentHTML('beforeend', DESPUES_DE_BUSCAR);
+    if (el.getAttribute('data-fx') === 'emitir') salida.insertAdjacentHTML('beforeend', AL_EMITIR + XML);
+    if (el.getAttribute('data-fx') === 'xml') {
+      var blob = new Blob(['<?xml version="1.0"?><fixture UUID="00000000-0000-4000-8000-000000000001"/>'], { type: 'text/xml' });
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'fixture.xml';
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+  });
+</script>
+</body></html>
