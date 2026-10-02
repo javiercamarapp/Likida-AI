@@ -120,7 +120,10 @@ export type EntidadBitacora =
   // se escala (cambia CUÁNDO se le insiste a cada chofer y a quién se despierta) y quién dio de alta, rotó o
   // apagó el webhook hacia el sistema del cliente. Solo nombres de llaves y conteos: nunca teléfonos ni secretos.
   | 'conductor_config'
-  | 'conductor_webhook';
+  | 'conductor_webhook'
+  // Ola 3, Vigía: grupos de clientes (críticos o no) y el histórico exportado que se importó. Ids y conteos: nunca texto del chat.
+  | 'vigia_grupo'
+  | 'vigia_historial';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una
