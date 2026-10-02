@@ -19030,3 +19030,94 @@ begin
   raise exception E'REPARTO_JUSTO_0661 tope-reparte=% vencido-fuera=% hitos-omitidos=% recibido-intacto=% viaje-intacto=% idempotente=%   (esperado t / t / t / t / t / t)',
     reparte, fuera, omitidos, recibido, intacto, idem;
 end $$;
+
+-- ── 310. Carta Porte: un Excel con N embarques se parte en N documentos, atómico, idempotente y por flota (mig. 0670 + 0671) ──
+-- Antes el archivo se leía por su primer embarque y los demás se perdían. La 0671 los parte de una vez: nacen los N hijos (con su huella,
+-- su ficha de linaje —padre, huella base común, lugar— y su evento) y el original queda `dividido`, o no pasa nada. Un reintento no duplica,
+-- una versión vieja del claim no parte, una huella que ya existía no se pisa ni se le cuelga linaje ajeno, y la ficha es por flota.
+-- Esperado: CP_DIVIDIR_0670 divide=t padre-dividido=t huella-base-comun=t atomica=t idempotente=t version-vieja-no-parte=t huella-existente-no-se-pisa=t por-flota=t dividido-no-se-reclama=t solo-service-role=t
+do $$
+declare
+  ta uuid; tb uuid; pa uuid; pv uuid; pt uuid; pe uuid; pb uuid; ex uuid; r record; sha_padre text;
+  divide boolean := false; padre boolean := false; comun boolean := false; atomica boolean := false; idem boolean := false;
+  vieja boolean := false; existente boolean := false; flota boolean := false; sin_reclamo boolean := false; permisos boolean := false;
+  hijos jsonb; hijos_b jsonb; hijos_c jsonb; n int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0670 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0670 B') returning id into tb;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (ta, 'correo', 'excel', 'plan.xlsx', 1000, repeat('1', 64), 'procesando', 2, 1, now() + interval '2 minutes', 'r/1') returning id into pa;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (ta, 'correo', 'excel', 'viejo.xlsx', 1000, repeat('2', 64), 'procesando', 2, 1, now() + interval '2 minutes', 'r/2') returning id into pv;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (ta, 'correo', 'excel', 'atomico.xlsx', 1000, repeat('3', 64), 'procesando', 2, 1, now() + interval '2 minutes', 'r/3') returning id into pt;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (ta, 'correo', 'excel', 'con-existente.xlsx', 1000, repeat('4', 64), 'procesando', 2, 1, now() + interval '2 minutes', 'r/4') returning id into pe;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (tb, 'correo', 'excel', 'de-b.xlsx', 1000, repeat('5', 64), 'procesando', 2, 1, now() + interval '2 minutes', 'r/5') returning id into pb;
+  sha_padre := repeat('1', 64);
+
+  -- Tres juegos de hijos con huellas DISTINTAS (sufijo a / b / c): el de `pa` (feliz), el del intento atómico y el de la huella existente.
+  hijos := (select jsonb_agg(jsonb_build_object('indice', g, 'clave', 'F-' || g, 'nombre', 'plan · embarque F-' || g || '.csv',
+              'sha256', repeat(g::text, 63) || 'a', 'bytes', 100 + g, 'storage_ruta', 'r/h' || g) order by g) from generate_series(1, 3) g);
+  hijos_b := (select jsonb_agg(jsonb_build_object('indice', g, 'clave', 'F-' || g, 'nombre', 'atomico · embarque F-' || g || '.csv',
+              'sha256', repeat(g::text, 63) || 'b', 'bytes', 100 + g, 'storage_ruta', 'r/b' || g) order by g) from generate_series(1, 3) g);
+  hijos_c := (select jsonb_agg(jsonb_build_object('indice', g, 'clave', 'F-' || g, 'nombre', 'existente · embarque F-' || g || '.csv',
+              'sha256', repeat(g::text, 63) || 'c', 'bytes', 100 + g, 'storage_ruta', 'r/c' || g) order by g) from generate_series(1, 3) g);
+
+  -- divide / padre dividido / huella base común
+  select count(*) filter (where creado) = 3 and count(*) = 3 into divide
+    from cp_documento_dividir(ta, pa, 2, hijos, now() + interval '180 days', now() + interval '90 days');
+  padre := (select estado = 'dividido' and version = 3 and procesando_hasta is null from cp_documento where id = pa);
+  comun := (select count(*) = 3 and count(distinct huella_base) = 1 and min(huella_base) = sha_padre and min(indice) = 1 and max(indice) = 3 and min(total) = 3
+              from cp_documento_embarque where padre_id = pa)
+           and (select count(*) = 3 from cp_documento d join cp_documento_embarque e on e.documento_id = d.id where e.padre_id = pa and d.estado = 'recibido' and d.formato = 'csv' and d.sha256 <> sha_padre);
+
+  -- idempotente: otra llamada devuelve los 3 sin crear
+  select count(*) = 3 and count(*) filter (where creado) = 0 into idem from cp_documento_dividir(ta, pa, 3, hijos, now(), now());
+  idem := idem and (select count(*) = 4 from cp_documento where tenant_id = ta and (id = pa or id in (select documento_id from cp_documento_embarque where padre_id = pa)));
+
+  -- versión vieja del claim: no parte
+  select count(*) = 0 into vieja from cp_documento_dividir(ta, pv, 1, hijos, now(), now());
+  vieja := vieja and (select estado = 'procesando' from cp_documento where id = pv) and not exists (select 1 from cp_documento_embarque where padre_id = pv);
+
+  -- atómica: un hijo con bytes = 0 (viola el CHECK) a la mitad no deja el primero ni parte al padre
+  begin
+    perform * from cp_documento_dividir(ta, pt, 2, jsonb_set(hijos_b, '{1,bytes}', '0'::jsonb), now(), now());
+  exception when check_violation then atomica := true; end;
+  atomica := atomica and (select estado = 'procesando' from cp_documento where id = pt)
+             and not exists (select 1 from cp_documento where tenant_id = ta and sha256 in (repeat('1', 63) || 'b', repeat('2', 63) || 'b', repeat('3', 63) || 'b'));
+
+  -- una huella que ya existe en la flota no se duplica ni se le cuelga linaje ajeno
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, storage_ruta)
+    values (ta, 'manual', 'csv', 'suelto.csv', 50, repeat('9', 64), 'por_revisar', 'r/9') returning id into ex;
+  for r in select * from cp_documento_dividir(ta, pe, 2,
+      jsonb_set(jsonb_set(hijos_c, '{1,sha256}', to_jsonb(repeat('9', 64))), '{0,sha256}', to_jsonb(repeat('7', 64))), now(), now()) loop
+    n := coalesce(n, 0) + 1;
+    if r.indice = 2 then existente := r.documento_id = ex and not r.creado; end if;
+  end loop;
+  existente := existente and n = 3 and not exists (select 1 from cp_documento_embarque where documento_id = ex)
+    and (select estado = 'por_revisar' from cp_documento where id = ex);
+
+  -- por flota: el padre de B no se parte desde A, y la ficha no cuelga de un padre de otra flota
+  begin
+    perform * from cp_documento_dividir(ta, pb, 2, hijos, now(), now());
+  exception when no_data_found then flota := true; end;
+  begin
+    insert into cp_documento_embarque (documento_id, tenant_id, padre_id, huella_base, indice, total)
+      values (ex, ta, pb, repeat('a', 64), 1, 2);
+    flota := false;
+  exception when foreign_key_violation then flota := flota; end;
+
+  -- un `dividido` no lo reclama nadie
+  sin_reclamo := (select count(*) = 0 from cp_documento_reclamar(ta, pa, 120))
+                 and not exists (select 1 from cp_documentos_pendientes(200, 5, 0) where id = pa);
+
+  permisos := not has_function_privilege('anon', 'public.cp_documento_dividir(uuid, uuid, int, jsonb, timestamptz, timestamptz)', 'execute')
+              and not has_function_privilege('authenticated', 'public.cp_documento_dividir(uuid, uuid, int, jsonb, timestamptz, timestamptz)', 'execute')
+              and has_function_privilege('service_role', 'public.cp_documento_dividir(uuid, uuid, int, jsonb, timestamptz, timestamptz)', 'execute')
+              and not has_table_privilege('authenticated', 'public.cp_documento_embarque', 'select');
+
+  raise exception E'CP_DIVIDIR_0670 divide=% padre-dividido=% huella-base-comun=% atomica=% idempotente=% version-vieja-no-parte=% huella-existente-no-se-pisa=% por-flota=% dividido-no-se-reclama=% solo-service-role=%   (esperado t / t / t / t / t / t / t / t / t / t)',
+    divide, padre, comun, atomica, idem, vieja, existente, flota, sin_reclamo, permisos;
+end $$;
