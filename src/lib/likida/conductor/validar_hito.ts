@@ -1,6 +1,6 @@
 import { logger } from '@/lib/logger';
 import type { ConfigConductor } from './config';
-import { aplicarVeredicto, posicionesDeUnidad, sitioDelHito, type ResultadoVeredicto } from './repo_validacion';
+import { aplicarVeredicto, posicionesDeUnidad, sitioDelHito, unidadReportaGps, type ResultadoVeredicto } from './repo_validacion';
 import type { ViajeContexto } from './repo';
 import type { HitoFila } from './tipos';
 import {
@@ -33,12 +33,21 @@ export interface DepsValidacion {
   sitio(tenantId: string, viajeId: string, tipo: HitoFila['tipo']): Promise<SitioValidable | null>;
   posiciones(tenantId: string, unidadId: string, desde: Date, hasta: Date): Promise<PosicionComparada[]>;
   aplicar(tenantId: string, hito: HitoFila, v: Veredicto, ahora: Date): Promise<ResultadoVeredicto>;
+  /**
+   * ¿La unidad reporta GPS de verdad (alguna muestra que NO sea un pin de WhatsApp desde `desde`)? Sin esta dependencia se
+   * trata como «no»: el pin es la única evidencia posible. Con GPS activo, un pin solo NUNCA valida: lo elige el chofer.
+   */
+  gpsActivo?(tenantId: string, unidadId: string, desde: Date): Promise<boolean>;
 }
+
+/** Cuánto atrás se mira si la unidad reporta GPS: más viejo que esto, se considera una unidad sin GPS operativo. */
+export const HORAS_HISTORIAL_GPS = 24;
 
 export const depsValidacionReales: DepsValidacion = {
   sitio: sitioDelHito,
   posiciones: posicionesDeUnidad,
   aplicar: aplicarVeredicto,
+  gpsActivo: unidadReportaGps,
 };
 
 export type ConfigValidacion = Pick<ConfigConductor, 'validarUbicacion' | 'toleranciaUbicacionM' | 'ventanaUbicacionMin' | 'pedirUbicacion'>;
@@ -78,9 +87,23 @@ export async function validarHitoContraSitio(d: DepsValidacion, e: EntradaValida
       const gps = await d.posiciones(e.viaje.tenantId, e.viaje.unidadId, new Date(e.mensajeEn.getTime() - margen), new Date(e.mensajeEn.getTime() + margen));
       candidatas.push(...gps);
     }
-    const posicion = posicionMasCercanaEnTiempo(candidatas, e.mensajeEn);
+    // El pin lo ELIGE el chofer («Enviar ubicación» deja marcar cualquier punto del mapa): no es la posición del tractor.
+    //   · Hay una muestra de GPS en la ventana → decide el GPS; el pin queda como evidencia, no como candidato.
+    //   · No la hay pero la unidad SÍ reporta GPS (poller atrasado) → el pin solo no valida: quedaría «validado» para
+    //     siempre (el rango solo sube) aunque después lleguen las posiciones reales. Sin dato; el barrido lo reintenta.
+    //   · La unidad no reporta GPS (flota sin conector) → el pin es la única evidencia posible.
+    const hayGpsEnVentana = candidatas.some((c) => c.fuente === 'gps');
+    let usables = candidatas;
+    let pinsDescartados = false;
+    if (hayGpsEnVentana) usables = candidatas.filter((c) => c.fuente === 'gps');
+    else if (sitio && candidatas.length > 0 && e.viaje.unidadId && d.gpsActivo) {
+      const desde = new Date(e.mensajeEn.getTime() - HORAS_HISTORIAL_GPS * 3_600_000);
+      if (await d.gpsActivo(e.viaje.tenantId, e.viaje.unidadId, desde)) { usables = []; pinsDescartados = true; }
+    }
+    const posicion = posicionMasCercanaEnTiempo(usables, e.mensajeEn);
     const veredicto = evaluarUbicacion({
       sitio, posicion, mensajeEn: e.mensajeEn, toleranciaM: e.config.toleranciaUbicacionM, ventanaMin: e.config.ventanaUbicacionMin,
+      gpsPendiente: pinsDescartados,
     });
     const aplicado = await d.aplicar(e.viaje.tenantId, e.hito, veredicto, e.ahora);
     logger.info('hito.validacion', { viaje: e.viaje.id, hito: e.hito.tipo, resultado: veredicto.resultado, motivo: veredicto.motivo, aplicado });
@@ -141,8 +164,8 @@ export async function barridoValidacion(p: PuertosBarrido, ahora: Date, venceEn?
     const config = configs.get(tenant);
     if (!config) { r.fallos++; continue; }
     if (!config.validarUbicacion) { r.saltados++; continue; }
-    r.revisados++;
     const mensajeEn = new Date(c.hito.mensajeEn ?? c.hito.recibidoEn ?? ahora);
+    r.revisados++;
     const s = await validarHitoContraSitio(p.deps, { viaje: c.viaje, hito: c.hito, config, mensajeEn, ahora });
     if (!s) { r.fallos++; continue; }
     if (s.aplicado === 'mejorado' || s.aplicado === 'nuevo') {

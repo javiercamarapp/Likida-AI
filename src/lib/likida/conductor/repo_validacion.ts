@@ -184,6 +184,15 @@ export async function posicionesDeUnidad(tenantId: string, unidadId: string, des
   }));
 }
 
+/** ¿La unidad tiene alguna muestra de un GPS de verdad (no un pin de WhatsApp) desde `desde`? LANZA si la base falla. */
+export async function unidadReportaGps(tenantId: string, unidadId: string, desde: Date): Promise<boolean> {
+  const res = await acotada(supabaseAdmin()
+    .from('posicion').select('id')
+    .eq('tenant_id', tenantId).eq('unidad_id', unidadId).neq('proveedor', 'whatsapp')
+    .gte('medida_en', desde.toISOString()).order('id').limit(1), 'validacion.unidad_con_gps');
+  return ((exigir(res as never, 'validacion.unidad_con_gps') ?? []) as unknown[]).length > 0;
+}
+
 export type ResultadoVeredicto = 'nuevo' | 'mejorado' | 'igual' | 'hito_cambio' | 'fallo';
 
 export async function aplicarVeredicto(tenantId: string, hito: HitoFila, v: Veredicto, ahora: Date): Promise<ResultadoVeredicto> {
