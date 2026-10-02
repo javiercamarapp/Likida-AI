@@ -19120,6 +19120,8 @@ begin
 
   raise exception E'CP_DIVIDIR_0670 divide=% padre-dividido=% huella-base-comun=% atomica=% idempotente=% version-vieja-no-parte=% huella-existente-no-se-pisa=% por-flota=% dividido-no-se-reclama=% solo-service-role=%   (esperado t / t / t / t / t / t / t / t / t / t)',
     divide, padre, comun, atomica, idem, vieja, existente, flota, sin_reclamo, permisos;
+end $$;
+
 -- ── 315. Seguridad Ola 9: retención de ledgers, flood de evento_seguridad y techo de IA por flota (mig. 0680 + 0681 + 0682) ──
 -- Cuatro garantías que solo la base demuestra. (1) La purga de evento_seguridad respeta el plazo POR SEVERIDAD (una alta de 200 días
 -- sobrevive donde una media de 200 ya no) y mantener_ledgers no toca lo vigente. (2) Registrar una ráfaga de la misma señal deja UNA fila con
