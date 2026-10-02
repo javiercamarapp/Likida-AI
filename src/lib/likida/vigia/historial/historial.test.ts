@@ -57,6 +57,23 @@ describe('leerExportWhatsapp', () => {
     expect(r.formato).toBe('desconocido');
   });
 
+  it('descarta las marcas de multimedia y de llamada en español e inglés, y no toma una fecha por teléfono', () => {
+    const txt = [
+      '12/09/2026 10:00 - A: <Multimedia omitido>', '12/09/2026 10:01 - A: imagen omitida', '12/09/2026 10:02 - A: Llamada perdida',
+      '12/09/2026 10:03 - A: <Media omitted>', '12/09/2026 10:04 - A: entrega 2026-09-12 folio 55-1234-5678',
+    ].join('\n');
+    const r = leerExportWhatsapp(txt, { equipo: [], sal: 's' });
+    expect(r.mensajes.map((m) => m.texto)).toEqual(['entrega 2026-09-12 folio [tel]']);
+    expect(r.descartados).toBe(4);
+  });
+
+  it('un renglón de 1 MB sin separadores se procesa rápido (acotado antes de tapar)', () => {
+    const t0 = Date.now();
+    const r = leerExportWhatsapp(`12/09/2026 10:00 - A: ${'1234567890'.repeat(100_000)}`, { equipo: [], sal: 's' });
+    expect(r.mensajes[0].texto.length).toBeLessThanOrEqual(1_500);
+    expect(Date.now() - t0).toBeLessThan(2_000);
+  });
+
   it('tapa teléfonos largos pero no números cortos como un folio de 5 dígitos', () => {
     expect(taparDatosPersonales('folio 12345 y 55-1234-5678')).toBe('folio 12345 y [tel]');
   });

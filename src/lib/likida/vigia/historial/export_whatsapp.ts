@@ -50,17 +50,26 @@ const HORA = String.raw`(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([ap])?\.?\s?m?\.?`;
 const ENCABEZADO_IOS = new RegExp(String.raw`^\[${FECHA},?\s+${HORA}\]\s*(.*)$`, 'i');
 const ENCABEZADO_ANDROID = new RegExp(String.raw`^${FECHA},?\s+${HORA}\s+-\s+(.*)$`, 'i');
 
-const MULTIMEDIA = /^(<\s*multimedia omitido\s*>|<\s*media omitted\s*>|(imagen|video|audio|sticker|gif|documento|contacto|ubicaci[oó]n)( de .*)? omitid[oa]s?|<adjunto:.*>|se eliminó este mensaje|eliminaste este mensaje|este mensaje fue eliminado|mensaje eliminado|llamada (perdida|de voz|de video).*|videollamada perdida.*)\.?$/i;
+const MEDIO_OMITIDO = /^(imagen|video|audio|sticker|gif|documento|contacto|ubicacion) omitid[oa]s?$/;
+const FRASES_SISTEMA = ['multimedia omitido', 'media omitted', 'se elimino este mensaje', 'eliminaste este mensaje', 'este mensaje fue eliminado', 'mensaje eliminado'];
+
+/** Lo que WhatsApp pone donde iría un archivo o un mensaje borrado: no es texto del chat. Sin expresiones anidadas. */
+function esMultimedia(texto: string): boolean {
+  const n = texto.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[<>.]/g, '').trim();
+  if (n.startsWith('adjunto:')) return true;
+  if (n.startsWith('llamada perdida') || n.startsWith('llamada de voz') || n.startsWith('llamada de video') || n.startsWith('videollamada perdida')) return true;
+  return MEDIO_OMITIDO.test(n) || FRASES_SISTEMA.includes(n);
+}
 
 function limpiar(s: string): string {
   return s.replace(INVISIBLES, '').replace(ESPACIOS_RAROS, ' ').replace(/\r/g, '');
 }
 
-/** Tapa teléfonos (7+ dígitos seguidos, con separadores) y correos del texto. */
+/** Tapa teléfonos (7+ dígitos con separadores; una fecha aaaa-mm-dd no lo es) y correos del texto. */
 export function taparDatosPersonales(texto: string): string {
   return texto
-    .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '[correo]')
-    .replace(/(?:\+?\d[\s().-]?){7,}\d/g, '[tel]');
+    .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, '[correo]')
+    .replace(/[\d+][\d\s().-]{6,}\d/g, (m) => (m.replace(/\D/g, '').length >= 7 && !/^\d{4}-\d{1,2}-\d{1,2}$/.test(m) ? '[tel]' : m));
 }
 
 function hashAutor(sal: string, nombre: string): string {
@@ -116,8 +125,9 @@ export function leerExportWhatsapp(crudo: string, opciones: { equipo: readonly s
 
   const cerrar = () => {
     if (!actual) return;
-    const texto = taparDatosPersonales(actual.texto.trim()).slice(0, MAX_TEXTO_MENSAJE);
-    if (!texto || MULTIMEDIA.test(texto.trim())) descartados += 1;
+    // Se acota ANTES de tapar: las expresiones de tapado corren sobre a lo más MAX_TEXTO_MENSAJE caracteres (entrada de un tercero).
+    const texto = taparDatosPersonales(actual.texto.trim().slice(0, MAX_TEXTO_MENSAJE));
+    if (!texto || esMultimedia(texto)) descartados += 1;
     else {
       autores.add(actual.autor);
       mensajes.push({
