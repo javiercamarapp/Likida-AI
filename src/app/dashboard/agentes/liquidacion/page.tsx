@@ -23,7 +23,7 @@ import {
   contarPorEstado, contarNoCoincide, listarLiquidacionesExternas, avisosDiscrepanciaDe, type FiltroListado,
 } from '@/lib/likida/liquidacion_externa/repo';
 import { reintentarLiquidacionExterna, reenviarCopiaAJefe, reavisarDiscrepancia } from '@/lib/likida/liquidacion_externa/servicio';
-import { leerFormatoFlota } from '@/lib/likida/liquidacion_externa/repo';
+import { leerFormatoFlota, leerTelefonosFlota } from '@/lib/likida/liquidacion_externa/repo';
 import { importarLiquidacionesDeArchivo } from '@/lib/likida/liquidacion_externa/importar_archivo';
 import { decodificarCursor, codificarCursor } from '@/app/api/v1/_comun';
 import { SeccionExternas, leerFiltroExterno, leerMensajeExterno } from './externas';
@@ -157,8 +157,9 @@ export default async function PaginaAgenteLiquidacion({
     .catch(() => null);
 
   // El formato de la flota (0564): solo para decidir qué enlaces se pintan; si no se pudo leer, no se pintan.
-  const pFormato = leerFormatoFlota(tenantId)
-    .then((c) => ({ excel: c !== null, copia: (c?.copiaTelefonos.length ?? 0) > 0 }))
+  // La copia al jefe no depende del formato (0645): se lee de los teléfonos, con o sin Excel de muestra.
+  const pFormato = Promise.all([leerFormatoFlota(tenantId), leerTelefonosFlota(tenantId)])
+    .then(([c, t]) => ({ excel: c !== null, copia: (t?.copia.length ?? 0) > 0 }))
     .catch(() => null);
 
   /** Reintenta UNA entrega fallida. Re-gatea con la sesión REAL (es alcanzable

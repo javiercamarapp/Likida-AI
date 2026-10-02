@@ -256,12 +256,12 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 286;
 // contaba — funcionalidad nueva, no código migrado: las RPC del worker (qué procesar y su respaldo directo contra una base sin la 0641, qué quedó
 // agotado, qué documento por avisar, y el candado de «una sola vez» del aviso a la oficina con su liberación). Cada una va por `acotada`.
 // INTEGRACIÓN ola 4b (P1 + P3): P1 mide 1,807 → 1,811 (+4) y P3 1,807 → 1,811 (+4) contra la misma base; la suma es 1,815 (se confirma con el barrido del árbol fusionado).
-// OLA 4c, paquete P4 «liquidacion-discrepancias» (0643-0645): 0 archivos y +11 llamadas (1,815 → 1,826), todas en archivos que ya contaban —
+// OLA 4c, paquete P4 «liquidacion-discrepancias» (0643-0645): 0 archivos y +14 llamadas (1,815 → 1,829), todas en archivos que ya contaban —
 // funcionalidad nueva, no código migrado: `liquidacion_externa/repo.ts` junta el acceso del aviso de discrepancia (las cuatro RPC de la 0644:
 // «No coincide» atómico, reclamo, cierre y rearme; la lectura de un aviso y la del panel; marcar la tarea abierta; la lectura de los teléfonos
-// de la flota con o sin formato; y las dos de la tarea durable en la cola del orquestador, insertar y leer la previa ante el índice único) y
+// de la flota con o sin formato y su guardado sin Excel de muestra (actualizar o crear la fila) y quitar el formato conservando los teléfonos; y las dos de la tarea durable en la cola del orquestador, insertar y leer la previa ante el índice único) y
 // `liquidacion_externa/trabajo.ts` suma la lista de avisos pendientes que cruza flotas (como su lista de entregas). Todas por `acotada`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_826;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_829;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)
