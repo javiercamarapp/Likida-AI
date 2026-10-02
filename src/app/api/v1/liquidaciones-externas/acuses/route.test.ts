@@ -34,8 +34,10 @@ vi.mock('@/lib/likida/liquidacion_externa/servicio', async (orig) => ({
 }));
 
 const { GET: GET_ACUSES } = await import('./route');
-const { POST: POST_CONFIRMAR, validarIds } = await import('./confirmar/route');
-const { GET: GET_EXPORT, TOPE_EXPORTACION } = await import('../exportacion/route');
+const { POST: POST_CONFIRMAR } = await import('./confirmar/route');
+const { validarIds } = await import('./confirmar/validar_ids');
+const { GET: GET_EXPORT } = await import('../exportacion/route');
+const { TOPE_EXPORTACION } = await import('../exportacion/tope');
 const { CampoInvalido } = await import('../../_escritura');
 
 const B = 'https://app.likida.ai/api/v1/liquidaciones-externas';
