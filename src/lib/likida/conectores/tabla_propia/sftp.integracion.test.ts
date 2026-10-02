@@ -26,7 +26,7 @@ const huellaDeLlave = (publica: string): string => {
 const hostKey = utils.generateKeyPairSync('ed25519');
 const otraHostKey = utils.generateKeyPairSync('ed25519');
 const llaveUsuario = utils.generateKeyPairSync('ed25519');
-const llaveConFrase = utils.generateKeyPairSync('ed25519', { passphrase: 'frase-de-prueba', cipher: 'aes256-ctr' });
+const llaveConFrase = utils.generateKeyPairSync('ed25519', { passphrase: 'frase-de-prueba', cipher: 'aes256-ctr', rounds: 16 });
 const HUELLA = huellaDeLlave(hostKey.public);
 const HUELLA_OTRA = huellaDeLlave(otraHostKey.public);
 
