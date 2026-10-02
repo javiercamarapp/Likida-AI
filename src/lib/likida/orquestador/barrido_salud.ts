@@ -23,6 +23,15 @@ import { AGENTES_VIGILADOS, resumirSalud, type EntradaSalud } from './salud_agen
 
 export const PREFIJO_BARRIDO = 'barrido:';
 
+/** La nota con la que el barrido cierra una tarea cuyo agente volvió a la normalidad (también la reconoce el anti-rebote). */
+export const NOTA_RESUELTO_SOLO = 'Se resolvió solo: el agente volvió a la normalidad en el último barrido.';
+/**
+ * Anti-rebote: si la tarea de ese agente se cerró SOLA hace menos de esto, una falla nueva no abre otra (ni manda otro correo):
+ * un fallo que va y viene cada pocas horas abría, cerraba y reabría sin fin. Una falla que SIGUE no se afecta (su tarea sigue
+ * abierta), y una tarea que una persona atendió a mano no cuenta: lo que falle después es un incidente nuevo.
+ */
+export const ENFRIAMIENTO_REAPERTURA_H = 6;
+
 export const llaveBarrido = (agente: string): string => `${PREFIJO_BARRIDO}${agente}`;
 
 export interface TareaDeSistema { destino: Destino; resumen: string; dedupe: string }
@@ -36,6 +45,8 @@ export interface DepsBarrido {
   tareasAbiertas(tenantId: string): Promise<string[] | null>;
   /** Cierra la tarea abierta con esa llave. `true` si la cerró. */
   cerrarTarea(tenantId: string, dedupe: string, nota: string): Promise<boolean>;
+  /** `true` si la tarea con esa llave se cerró SOLA (nota `NOTA_RESUELTO_SOLO`) desde `desde`. Opcional: sin ella no hay anti-rebote. */
+  cerradaSolaDesde?(tenantId: string, dedupe: string, desde: Date): Promise<boolean>;
 }
 
 export interface PlanBarrido {
@@ -60,15 +71,17 @@ export function planBarrido(entrada: EntradaSalud): PlanBarrido {
   return plan;
 }
 
-export interface ResultadoBarridoFlota { abiertas: number; yaAbiertas: number; cerradas: number; noDisponible: boolean; agentesConFalla: number }
+export interface ResultadoBarridoFlota { abiertas: number; yaAbiertas: number; cerradas: number; enfriadas: number; noDisponible: boolean; agentesConFalla: number }
 
 /** Barre UNA flota. Lanza solo si no pudo LEER la salud (el llamador lo registra y el claim acorta el reintento). */
 export async function barrerSaludDeFlota(tenantId: string, ahora: Date, deps: DepsBarrido): Promise<ResultadoBarridoFlota> {
-  const r: ResultadoBarridoFlota = { abiertas: 0, yaAbiertas: 0, cerradas: 0, noDisponible: false, agentesConFalla: 0 };
+  const r: ResultadoBarridoFlota = { abiertas: 0, yaAbiertas: 0, cerradas: 0, enfriadas: 0, noDisponible: false, agentesConFalla: 0 };
   const plan = planBarrido(await deps.salud(tenantId, ahora));
   r.agentesConFalla = plan.abrir.length;
 
+  const desde = new Date(ahora.getTime() - ENFRIAMIENTO_REAPERTURA_H * 3_600_000);
   for (const t of plan.abrir) {
+    if (deps.cerradaSolaDesde && await deps.cerradaSolaDesde(tenantId, t.dedupe, desde)) { r.enfriadas++; continue; }
     const res = await deps.abrirTarea(tenantId, { destino: t.destino, resumen: t.resumen, dedupe: t.dedupe });
     if (res === 'creada') r.abiertas++;
     else if (res === 'ya_abierta') r.yaAbiertas++;
@@ -80,7 +93,7 @@ export async function barrerSaludDeFlota(tenantId: string, ahora: Date, deps: De
     for (const dedupe of abiertas ?? []) {
       const agente = dedupe.slice(PREFIJO_BARRIDO.length);
       if (!dedupe.startsWith(PREFIJO_BARRIDO) || !plan.sanos.includes(agente)) continue;
-      if (await deps.cerrarTarea(tenantId, dedupe, 'Se resolvió solo: el agente volvió a la normalidad en el último barrido.')) r.cerradas++;
+      if (await deps.cerrarTarea(tenantId, dedupe, NOTA_RESUELTO_SOLO)) r.cerradas++;
     }
   }
   if (r.abiertas > 0 || r.cerradas > 0) logger.info('orquestador.barrido_flota', { tenantId, ...r });

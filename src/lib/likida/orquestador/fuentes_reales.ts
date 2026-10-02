@@ -21,7 +21,7 @@ import { registrarFuentesReales, type Fuentes, type ResultadoCrearEscalacion } f
 import { AGENTES_VIGILADOS, type CorridaVista, type EntradaSalud, type LatidoVisto } from './salud_agentes';
 import { PATRON_FOLIO, llaveDedupe, type Destino, type Motivo, type TareaAbierta } from './escalamiento';
 import { MAX_INTENTOS_AVISO, REINTENTO_AVISO_MIN, avisarEscalacion, depsDeCorreo, type DepsAvisoEscalacion, type TareaParaAviso } from './aviso_escalacion';
-import { PREFIJO_BARRIDO, type DepsBarrido } from './barrido_salud';
+import { NOTA_RESUELTO_SOLO, PREFIJO_BARRIDO, type DepsBarrido } from './barrido_salud';
 import type { PuertoCicloVivo } from './ciclo_cron';
 import { posicionesDeGps } from './tablero_viajes';
 
@@ -67,6 +67,15 @@ async function vigiaFallidos24h(tenantId: string, ahora: Date): Promise<number |
   if (esSinTabla(error)) return null;
   if (error || typeof count !== 'number') throw new Error(`orquestador.vigia_fallidos: ${error?.message ?? 'sin conteo'}`);
   return count;
+}
+
+/** ¿Hay al menos una fila de esta flota en la tabla? `undefined` = no se pudo saber (no se asume ni que sí ni que no). */
+async function hayFilas(tenantId: string, tabla: string, columna: string, filtro?: { columna: string; valor: boolean }): Promise<boolean | undefined> {
+  let q = supabaseAdmin().from(tabla).select(columna).eq('tenant_id', tenantId);
+  if (filtro) q = q.eq(filtro.columna, filtro.valor);
+  const { data, error } = await acotada(q.order(columna).limit(1), `orquestador.uso_${tabla}`);
+  if (error) return undefined;
+  return ((data ?? []) as unknown[]).length > 0;
 }
 
 const FILA_ESCALACION = 'id, creada_en, destino, motivo, viaje_folio, resumen, pedida_por_rol';
@@ -119,12 +128,26 @@ export function crearFuentesReales(): Fuentes {
       ]);
       const latidos: Record<string, LatidoVisto> | null = lat === null ? null
         : Object.fromEntries(Object.entries(lat).map(([k, v]) => [k, { estado: v.estado, haceMin: v.haceMin, ultimoEstado: v.ultimoEstado }]));
+      // Qué agentes USA esta flota: el latido es global y sin esto un fallo transitorio de un cron abre tareas en todas las flotas.
+      const usa: Record<string, boolean> = {};
+      const corridasDe = new Map(corridas);
+      for (const a of AGENTES_VIGILADOS) {
+        if (a.corridas) { const l = corridasDe.get(a.corridas); if (l) usa[a.id] = l.length > 0; }
+      }
+      const [vigiaOn, cpDocs, portales] = await Promise.all([
+        sinFallar('uso_vigia', hayFilas(tenantId, 'vigia_config', 'tenant_id', { columna: 'habilitado', valor: true })),
+        sinFallar('uso_carta_porte', hayFilas(tenantId, 'cp_documento', 'id')),
+        sinFallar('uso_autofactura', hayFilas(tenantId, 'autofactura_portal_fase', 'comercio')),
+      ]);
+      if (vigiaOn !== null && vigiaOn !== undefined) usa.vigia = vigiaOn;
+      if (cpDocs !== null && cpDocs !== undefined) usa.carta_porte = cpDocs;
+      if (portales !== null && portales !== undefined) usa.autofactura = portales;
       const salida: Record<string, CorridaVista[] | null> = {};
       for (const [n, lista] of corridas) {
         salida[n] = lista === null ? null : lista.map((c) => ({ estado: c.estado, inicio: c.inicio, fin: c.fin, error: c.error }));
       }
       return {
-        ahora, latidos, corridas: salida,
+        ahora, latidos, corridas: salida, usa,
         enviosSinSalir: {
           vigiaFallidos24h: vFall,
           buzonEntregasConProblema: bProb === null ? null : (bProb.porEstado.fallida ?? 0) + (bProb.porEstado.rebotada ?? 0),
@@ -336,6 +359,14 @@ export function depsBarridoReales(): DepsBarrido {
       if (esSinTabla(r.error)) return null;
       if (r.error) throw new Error(`orquestador.barrido_abiertas: ${r.error.message}`);
       return ((r.data ?? []) as Array<{ dedupe_key: string }>).map((f) => String(f.dedupe_key));
+    },
+    async cerradaSolaDesde(tenantId, dedupe, desde) {
+      const r = await acotada(supabaseAdmin().from('orquestador_escalacion').select('id')
+        .eq('tenant_id', tenantId).eq('dedupe_key', dedupe).eq('estado', 'atendida').eq('nota_atencion', NOTA_RESUELTO_SOLO)
+        .gte('atendida_en', desde.toISOString()).order('atendida_en', { ascending: false }).order('id').limit(1), 'orquestador.barrido_cerrada_sola');
+      if (esSinTabla(r.error)) return false;
+      if (r.error) throw new Error(`orquestador.barrido_cerrada_sola: ${r.error.message}`);
+      return ((r.data ?? []) as unknown[]).length >= 1;
     },
     async cerrarTarea(tenantId, dedupe, nota) {
       const r = await acotada(supabaseAdmin().from('orquestador_escalacion').update({ estado: 'atendida', atendida_en: new Date().toISOString(), nota_atencion: nota.slice(0, 300) })
