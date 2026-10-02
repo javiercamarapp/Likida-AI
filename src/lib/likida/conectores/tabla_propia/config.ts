@@ -4,6 +4,7 @@ import { RUTA } from '../posiciones_proveedores';
 import { jsonCualquiera } from '../posiciones_comun';
 import { MODOS_TABLA_PROPIA, type ModoTablaPropia } from './contrato';
 import { LIMITE_FILAS_MAXIMO, LIMITE_FILAS_POR_OMISION, identificadorValido, vistaValida, type ColumnasGeocerca, type ColumnasPosicion, type ConexionSql } from './sql';
+import { leerHuellas, normalizarLlave, partirUrlSftp } from './sftp';
 import { ZONA_POR_OMISION, zonaValida } from './tiempo';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -46,6 +47,17 @@ const COLUMNAS_GEOCERCA_SQL = z.object({
 
 export interface Autenticacion { patron: (typeof PATRONES_HTTP)[number]; nombreCampo: string; token: string }
 
+/**
+ * El servidor SFTP de la flota (modo csv_sftp con direcciones sftp://). Usuario en `nombre_campo`, contraseña en `token`
+ * (los mismos campos que ya usa el patrón «basic»: no hay otro cofre), llave privada y su frase en campos secretos propios.
+ * La huella del host es obligatoria: sin ella la configuración no se guarda (ver sftp.ts).
+ */
+export interface ConfigSftp {
+  host: string; puerto: number; usuario: string;
+  clave?: string; llave?: string; frase?: string;
+  huellas: string[];
+}
+
 export interface ConfigComun {
   zona: string;
   ventanaMinutos: number;
@@ -67,7 +79,7 @@ export type ConfigTablaPropia = ConfigComun & (
       modo: 'endpoint'; url: string; auth: Autenticacion; mapeo: MapeoEndpointPosicionesT;
       urlGeocercas?: string; mapeoGeocercas?: MapeoEndpointGeocercasT;
     }
-  | { modo: 'csv_sftp'; url: string; auth: Autenticacion; urlGeocercas?: string }
+  | { modo: 'csv_sftp'; url: string; auth: Autenticacion; urlGeocercas?: string; sftp?: ConfigSftp }
 );
 
 export type ResultadoConfig = { ok: true; config: ConfigTablaPropia } | { ok: false; motivo: string };
@@ -86,12 +98,11 @@ function jsonCampo<T>(texto: string | undefined, esquema: z.ZodType<T>, nombre: 
   return { ok: r.data };
 }
 
-function urlHttps(v: string | undefined, nombre: string, permitirSftp = false): { ok: string } | { error: string } {
+function urlHttps(v: string | undefined, nombre: string): { ok: string } | { error: string } {
   const t = (v ?? '').trim();
   if (t === '') return { error: `falta ${nombre}` };
   let u: URL;
   try { u = new URL(t); } catch { return { error: `${nombre} no es una URL válida` }; }
-  if (u.protocol === 'sftp:' && permitirSftp) return { ok: t };
   if (u.protocol !== 'https:') return { error: `${nombre} debe ser https:// (el token y los datos viajan cifrados)` };
   if (u.username || u.password) return { error: `${nombre} no debe llevar usuario ni contraseña dentro de la dirección` };
   return { ok: t };
@@ -108,6 +119,49 @@ function autenticacion(v: ValoresCredencial): { ok: Autenticacion } | { error: s
   }
   return { ok: { patron: patron as Autenticacion['patron'], nombreCampo, token } };
 }
+
+/** csv_sftp con sftp://: usuario + (clave y/o llave) + huella del host, todo validado ANTES de guardar o conectar. */
+function configSftp(v: ValoresCredencial, comun: ConfigComun): ResultadoConfig {
+  const no = (motivo: string): ResultadoConfig => ({ ok: false, motivo });
+  if (!esSftpUrl(v.base_url) || ((v.geocercas_url ?? '').trim() !== '' && !esSftpUrl(v.geocercas_url))) {
+    return no('base_url y geocercas_url deben ser las dos sftp:// o las dos https:// (la credencial del servidor SFTP no se manda a un sitio https)');
+  }
+  const a = partirUrlSftp(v.base_url!);
+  if ('error' in a) return no(`base_url ${a.error}`);
+  let urlGeo: string | undefined;
+  if ((v.geocercas_url ?? '').trim() !== '') {
+    const g = partirUrlSftp(v.geocercas_url!);
+    if ('error' in g) return no(`geocercas_url ${g.error}`);
+    if (g.ok.host.toLowerCase() !== a.ok.host.toLowerCase() || g.ok.puerto !== a.ok.puerto) return no('los archivos de posiciones y de geocercas deben estar en el mismo servidor SFTP (mismo host y puerto)');
+    urlGeo = v.geocercas_url!.trim();
+  }
+  const usuario = (v.nombre_campo ?? '').trim();
+  if (!/^[A-Za-z0-9_.@-]{1,64}$/.test(usuario)) return no('falta el usuario SFTP en nombre_campo (letras, dígitos, . _ - @)');
+  const clave = v.token ?? '';
+  const llaveCruda = v.llave_privada ?? '';
+  if (/[\u0000-\u001f]/.test(clave) || clave.length > 256) return no('la contraseña SFTP (token) tiene caracteres no permitidos');
+  if (clave === '' && llaveCruda.trim() === '') return no('falta la contraseña SFTP (token) o la llave privada (llave_privada)');
+  let llave: string | undefined;
+  if (llaveCruda.trim() !== '') {
+    const l = normalizarLlave(llaveCruda);
+    if ('error' in l) return no(l.error);
+    llave = l.ok;
+  }
+  const frase = v.frase_llave ?? '';
+  if (frase !== '' && llave === undefined) return no('frase_llave solo aplica con una llave privada');
+  if (frase.length > 256) return no('frase_llave es demasiado larga');
+  const h = leerHuellas(v.huella_host);
+  if ('error' in h) return no(h.error);
+  const url = v.base_url!.trim();
+  return {
+    ok: true,
+    config: {
+      ...comun, modo: 'csv_sftp', url, auth: { patron: 'ninguna', nombreCampo: '', token: '' }, urlGeocercas: urlGeo,
+      sftp: { host: a.ok.host, puerto: a.ok.puerto, usuario, clave: clave === '' ? undefined : clave, llave, frase: frase === '' ? undefined : frase, huellas: h.ok },
+    },
+  };
+}
+const esSftpUrl = (t: string | undefined): boolean => (t ?? '').trim().toLowerCase().startsWith('sftp:');
 
 export function leerConfigTablaPropia(v: ValoresCredencial): ResultadoConfig {
   const no = (motivo: string): ResultadoConfig => ({ ok: false, motivo });
@@ -153,13 +207,15 @@ export function leerConfigTablaPropia(v: ValoresCredencial): ResultadoConfig {
     return { ok: true, config: { ...comun, modo, conexion: { host, puerto, base, usuario, clave, ssl }, vista: v.vista!.trim(), columnas: cols.ok, vistaGeocercas: vistaGeo, columnasGeocercas: colsGeo } };
   }
 
-  const url = urlHttps(v.base_url, 'la dirección (base_url)', modo === 'csv_sftp');
+  const esSftp = (t: string | undefined) => (t ?? '').trim().toLowerCase().startsWith('sftp:');
+  if (modo === 'csv_sftp' && (esSftp(v.base_url) || esSftp(v.geocercas_url))) return configSftp(v, comun);
+  const url = urlHttps(v.base_url, 'la dirección (base_url)');
   if ('error' in url) return no(url.error);
   const auth = autenticacion(v);
   if ('error' in auth) return no(auth.error);
   let urlGeo: string | undefined;
   if ((v.geocercas_url ?? '').trim() !== '') {
-    const ug = urlHttps(v.geocercas_url, 'geocercas_url', modo === 'csv_sftp');
+    const ug = urlHttps(v.geocercas_url, 'geocercas_url');
     if ('error' in ug) return no(ug.error);
     urlGeo = ug.ok;
   }
