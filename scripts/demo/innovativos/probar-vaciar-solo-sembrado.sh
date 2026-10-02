@@ -23,6 +23,7 @@ sembradas_antes="$(q -c "select (select count(*) from posicion where tenant_id='
 # ── Lo «real» (no sembrado por el demo) ─────────────────────────────────────
 R_UNI=ffffffff-0620-4000-8000-0000000000a1; R_GEO=ffffffff-0620-4000-8000-0000000000a2
 R_CON=ffffffff-0620-4000-8000-0000000000a3; R_CV=ffffffff-0620-4000-8000-0000000000a4; R_MSG=ffffffff-0620-4000-8000-0000000000a5
+R_GRU=ffffffff-0620-4000-8000-0000000000a6; R_RR=ffffffff-0620-4000-8000-0000000000a7
 CLI="$(q -c "select id from cliente where tenant_id='$T' order by id limit 1")"
 q <<SQL
 insert into unidad (id, tenant_id, numero_economico, gps_proveedor, gps_device_id, gps_visto_en)
@@ -37,6 +38,9 @@ insert into vigia_contacto (id, tenant_id, cliente_id, telefono, telefono_hash, 
 insert into vigia_conversacion (id, tenant_id, contacto_id, cliente_id) values ('$R_CV', '$T', '$R_CON', '$CLI');
 insert into vigia_mensaje (id, tenant_id, conversacion_id, direccion, autor, estado, texto)
   values ('$R_MSG', '$T', '$R_CV', 'entrante', 'cliente', 'recibido', 'mensaje real');
+-- un grupo y una respuesta rápida REALES (los que cargaría la flota desde «Grupos e histórico»)
+insert into vigia_grupo (id, tenant_id, cliente_id, nombre, critico) values ('$R_GRU', '$T', '$CLI', 'Grupo real del cliente', true);
+insert into vigia_respuesta_rapida (id, tenant_id, tema, pregunta, texto) values ('$R_RR', '$T', 'eta', '¿Cuándo llega mi unidad real?', 'Respuesta aprobada por la flota.');
 SQL
 
 bash ./vaciar-sintetico.sh todo >/dev/null
@@ -52,9 +56,11 @@ reviso "la posición real (proveedor tabla_propia)" "select count(*) from posici
 reviso "el contacto de Vigía real" "select count(*) from vigia_contacto where id='$R_CON'"
 reviso "la conversación de Vigía real" "select count(*) from vigia_conversacion where id='$R_CV'"
 reviso "el mensaje de Vigía real" "select count(*) from vigia_mensaje where id='$R_MSG'"
+reviso "el grupo de Vigía real" "select count(*) from vigia_grupo where id='$R_GRU'"
+reviso "la respuesta rápida real" "select count(*) from vigia_respuesta_rapida where id='$R_RR'"
 
 # …y lo sembrado SÍ se fue.
-resto="$(q -c "select (select count(*) from posicion where tenant_id='$T' and unidad_id <> '$R_UNI') + (select count(*) from geocerca where tenant_id='$T' and id <> '$R_GEO') + (select count(*) from vigia_mensaje where tenant_id='$T' and id <> '$R_MSG') + (select count(*) from vigia_contacto where tenant_id='$T' and id <> '$R_CON') + (select count(*) from desglose_peaje_linea where tenant_id='$T') + (select count(*) from liquidacion_externa where tenant_id='$T' and sistema_origen = 'SAP (demo)')")"
+resto="$(q -c "select (select count(*) from posicion where tenant_id='$T' and unidad_id <> '$R_UNI') + (select count(*) from geocerca where tenant_id='$T' and id <> '$R_GEO') + (select count(*) from vigia_mensaje where tenant_id='$T' and id <> '$R_MSG') + (select count(*) from vigia_contacto where tenant_id='$T' and id <> '$R_CON') + (select count(*) from vigia_grupo where tenant_id='$T' and id <> '$R_GRU') + (select count(*) from vigia_respuesta_rapida where tenant_id='$T' and id <> '$R_RR') + (select count(*) from vigia_historial_mensaje where tenant_id='$T') + (select count(*) from desglose_peaje_linea where tenant_id='$T') + (select count(*) from liquidacion_externa where tenant_id='$T' and sistema_origen = 'SAP (demo)')")"
 [ "$resto" = "0" ] && echo "ok: lo sembrado se fue" || { echo "FALLA: quedaron $resto filas sembradas tras vaciar todo" >&2; ok=0; }
 
 # Limpieza: se quita lo «real» y se deja la base sembrada como estaba.
