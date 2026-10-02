@@ -11,13 +11,15 @@
 //     arriendo) y la misma llave viaja a Resend como `Idempotency-Key`. Dos corridas solapadas no mandan dos correos; si la
 //     corrida que lo llevaba murió, el cron retoma el arriendo vencido y Resend deduplica si el primer POST sí había salido.
 //   · Nada falla en silencio: sin llave de Resend (o sin dominio verificado) el resultado es «no se pudo mandar por correo: falta
-//     configuración», queda en la tabla y en la bitácora, y se ve en el tablero. No se reintenta solo (un aviso viejo mandado
-//     horas después sería ruido): la flota lo atiende.
+//     configuración», queda en la tabla y en la bitácora, y se ve en el tablero. Lo transitorio (red, tiempo agotado, 429 y 5xx de
+//     Resend) se reintenta en el momento, con espera creciente y tope de 3 intentos, con la misma llave de idempotencia; lo final
+//     (4xx de configuración o de datos) no. Pasado el tope no se reintenta solo (un aviso viejo mandado horas después sería
+//     ruido): la flota lo atiende.
 //   · Nunca lanza hacia el escalamiento: un correo que no sale no tumba el barrido.
 //   · No lleva teléfonos ni texto de clientes: solo el nombre del cliente, el motivo, el tiempo y la liga al tablero.
 // ═══════════════════════════════════════════════════════════════════════════
 import { createHash } from 'node:crypto';
-import { enviarCorreo as enviarCorreoReal } from '@/lib/correo/enviar';
+import { enviarCorreo as enviarCorreoReal, type ResultadoEnvio } from '@/lib/correo/enviar';
 import type { Correo } from '@/lib/correo/plantilla';
 import { appUrl } from '@/lib/env';
 import { logger } from '@/lib/logger';
@@ -29,6 +31,21 @@ import type { DatosAvisoCorreo, DestinatarioAviso, Director, NivelDirector } fro
 
 export const TEXTO_SIN_CONFIGURAR = 'No se pudo mandar por correo: falta configuración (llave o dominio de Resend).';
 export const MAX_DIRECTORES_POR_NIVEL = 10;
+
+/** Intentos del envío de un correo de respaldo (el primero y hasta 2 reintentos) y la espera antes de cada reintento. */
+export const INTENTOS_CORREO = 3;
+export const ESPERA_REINTENTO_CORREO_MS = [500, 1_500] as const;
+
+/**
+ * ¿Merece reintento? Solo lo transitorio: la red caída o el tiempo agotado, el 429 y los 5xx de Resend. Un 4xx (llave o dominio
+ * mal configurados, destinatario inválido) es FINAL: reintentarlo no lo arregla. Todos los intentos van con la MISMA llave de
+ * idempotencia, así un POST que sí salió (timeout ambiguo) no duplica el correo.
+ */
+export function esTransitorioCorreo(r: ResultadoEnvio): boolean {
+  if (r.ok || r.motivo === 'sin_configurar') return false;
+  if (r.motivo === 'red') return true;
+  return r.status === 429 || (r.status !== undefined && r.status >= 500);
+}
 
 export type ResultadoRespaldo = 'enviado' | 'duplicado' | 'sin_configurar' | 'rechazado' | 'red' | 'sin_reclamo';
 
@@ -102,7 +119,19 @@ export async function respaldarPorCorreo(e: EntradaRespaldo, deps: DepsVigia): P
   let estado: 'enviado' | 'sin_configurar' | 'rechazado' | 'red';
   let detalle: string | null = null;
   try {
-    const r = await (deps.enviarCorreo ?? enviarCorreoReal)(e.correo, correoDeEscalamiento(e.datos), { idempotencyKey: e.clave });
+    const mandar = deps.enviarCorreo ?? enviarCorreoReal;
+    const esperar = deps.esperar ?? ((ms: number) => new Promise<void>((ok) => setTimeout(ok, ms)));
+    let r: ResultadoEnvio | undefined;
+    for (let intento = 0; intento < INTENTOS_CORREO; intento += 1) {
+      if (intento > 0) await esperar(ESPERA_REINTENTO_CORREO_MS[Math.min(intento - 1, ESPERA_REINTENTO_CORREO_MS.length - 1)]);
+      try {
+        r = await mandar(e.correo, correoDeEscalamiento(e.datos), { idempotencyKey: e.clave });
+      } catch (err) {
+        r = { ok: false, motivo: 'red', detalle: err instanceof Error ? err.message : String(err) };
+      }
+      if (!esTransitorioCorreo(r)) break;
+    }
+    if (!r) throw new Error('sin resultado');
     if (r.ok) estado = 'enviado';
     else if (r.motivo === 'sin_configurar') { estado = 'sin_configurar'; detalle = TEXTO_SIN_CONFIGURAR; }
     else { estado = r.motivo; detalle = r.detalle; }
