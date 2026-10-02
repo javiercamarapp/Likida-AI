@@ -205,6 +205,26 @@ describe('barridoValidacion', () => {
     expect(aplicados).toHaveLength(0);
   });
 
+  it('un «sin coincidencia» SE REEVALÚA mientras la ventana siga abierta: una muestra posterior más cercana lo valida (adversarial ronda 03)', async () => {
+    const { d, aplicados } = deps({ gps: [gps({ medidaEn: new Date(MENSAJE.getTime() + 2 * 60_000) })] });
+    const r = await barridoValidacion({
+      candidatos: async () => [{ ...candidato('a'), resultadoPrevio: 'sin_coincidencia' }],
+      configDe: async () => ({ ...CONFIG_CONDUCTOR_DEFAULT }), deps: d,
+    }, new Date(MENSAJE.getTime() + 10 * 60_000));
+    expect(r).toMatchObject({ revisados: 1, validados: 1 });
+    expect(aplicados).toHaveLength(1);
+  });
+
+  it('un «sin coincidencia» ya sin ventana (no pueden llegar más muestras que cuenten) NO se vuelve a medir', async () => {
+    const { d, aplicados } = deps({ gps: [gps()] });
+    const r = await barridoValidacion({
+      candidatos: async () => [{ ...candidato('a'), resultadoPrevio: 'sin_coincidencia' }],
+      configDe: async () => ({ ...CONFIG_CONDUCTOR_DEFAULT }), deps: d,
+    }, new Date(MENSAJE.getTime() + 3 * 3_600_000));
+    expect(r).toMatchObject({ revisados: 0, saltados: 1 });
+    expect(aplicados).toHaveLength(0);
+  });
+
   it('idempotente: si la base dice «igual», no cuenta como mejora', async () => {
     const { d } = deps({ gps: [gps({ lat: 25 })], aplicar: async () => 'igual' });
     const r = await barridoValidacion({ candidatos: async () => [candidato('a')], configDe: async () => ({ ...CONFIG_CONDUCTOR_DEFAULT }), deps: d }, MENSAJE);

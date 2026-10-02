@@ -121,3 +121,15 @@ export function textoVeredicto(v: Veredicto, sitioNombre: string | null): string
       }
   }
 }
+
+/**
+ * ¿El barrido del cron debe volver a medir una llegada con este veredicto (o sin ninguno)? Sí cuando no hay veredicto, cuando
+ * faltó la posición y cuando fue «sin coincidencia»: con GPS muestreado cada pocos minutos, la muestra de la hora del aviso
+ * puede ser de ANTES de que el camión llegara y una posterior, más cercana en el tiempo, sí cae en el sitio. Nunca baja un
+ * veredicto (la base solo deja subir). Un `sin_dato` por sitio o coordenadas no mejora con más muestras: no se reintenta.
+ */
+export function debeReintentarseValidacion(v: { resultado: string; motivo: string | null } | null | undefined): boolean {
+  if (!v) return true;
+  if (v.resultado === 'sin_coincidencia') return true;
+  return v.resultado === 'sin_dato' && (v.motivo === 'sin_ubicacion' || v.motivo === 'ubicacion_fuera_de_ventana');
+}
