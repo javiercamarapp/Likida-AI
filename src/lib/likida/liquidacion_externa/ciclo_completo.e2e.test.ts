@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as XLSX from 'xlsx';
-import type { LiquidacionExterna, ConfigFormatoFlota } from './repo';
+import type { LiquidacionExterna, ConfigFormatoFlota, TelefonosFlota } from './repo';
+import { AvisosEnMemoria } from './aviso_discrepancia.fixture';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CICLO COMPLETO DE LA LIQUIDACIÓN EXTERNA, DE PUNTA A PUNTA (con dobles).
@@ -27,6 +28,10 @@ let seq = 0;
 /** Lo que se subió a Storage, por ruta (PDF y Excel), y el formato configurado por flota (0564). */
 const archivos = new Map<string, { bytes: Uint8Array; tipo: string }>();
 const formatos = new Map<string, ConfigFormatoFlota>();
+/** Teléfonos de flotas SIN formato de Excel (0645): fila con formato nulo. */
+const telefonosSolos = new Map<string, TelefonosFlota>();
+/** El aviso de discrepancia (0643/0644) y la tarea del orquestador (0650): el doble reproduce la semántica de las RPC. */
+const avisosMem = new AvisosEnMemoria((id) => store.get(id));
 /** Reclamos de la copia al jefe (0620): llave liquidación|generación|teléfono → 'reclamada' | 'aceptada'. */
 const reclamosCopia = new Map<string, 'reclamada' | 'aceptada'>();
 let sinCandado = false;
@@ -35,6 +40,17 @@ vi.mock('./repo', () => ({
   TIPO_XLSX: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   subirArchivoExterno: vi.fn(async (ruta: string, bytes: Uint8Array, tipo: string) => { archivos.set(ruta, { bytes, tipo }); }),
   leerFormatoFlota: vi.fn(async (t: string) => formatos.get(t) ?? null),
+  leerTelefonosFlota: vi.fn(async (t: string) => {
+    const f = formatos.get(t);
+    return f ? { copia: f.copiaTelefonos, discrepancia: f.discrepanciaTelefonos } : (telefonosSolos.get(t) ?? null);
+  }),
+  registrarNoCoincideAtomico: vi.fn((...a: Parameters<typeof avisosMem.registrarNoCoincideAtomico>) => avisosMem.registrarNoCoincideAtomico(...a)),
+  reclamarAvisoDiscrepancia: vi.fn((...a: Parameters<typeof avisosMem.reclamarAvisoDiscrepancia>) => avisosMem.reclamarAvisoDiscrepancia(...a)),
+  cerrarAvisoDiscrepancia: vi.fn((...a: Parameters<typeof avisosMem.cerrarAvisoDiscrepancia>) => avisosMem.cerrarAvisoDiscrepancia(...a)),
+  rearmarAvisoDiscrepancia: vi.fn((...a: Parameters<typeof avisosMem.rearmarAvisoDiscrepancia>) => avisosMem.rearmarAvisoDiscrepancia(...a)),
+  leerAvisoDiscrepancia: vi.fn((...a: Parameters<typeof avisosMem.leerAvisoDiscrepancia>) => avisosMem.leerAvisoDiscrepancia(...a)),
+  marcarTareaAviso: vi.fn((...a: Parameters<typeof avisosMem.marcarTareaAviso>) => avisosMem.marcarTareaAviso(...a)),
+  crearTareaDiferenciaLiquidacion: vi.fn((...a: Parameters<typeof avisosMem.crearTareaDiferenciaLiquidacion>) => avisosMem.crearTareaDiferenciaLiquidacion(...a)),
   reclamarCopiaJefe: vi.fn(async (_t: string, id: string, gen: number, tel: string) => {
     if (sinCandado) return 'sin_candado' as const;
     const k = `${id}|${gen}|${tel}`;
@@ -93,6 +109,7 @@ vi.mock('./repo', () => ({
   listarParaExportacion: vi.fn(async (t: string) => ({ filas: [...store.values()].filter((f) => f.tenantId === t).map((f) => ({ ...f })), truncado: false })),
 }));
 vi.mock('./trabajo', () => ({
+  avisosPendientes: vi.fn((...a: Parameters<typeof avisosMem.avisosPendientes>) => avisosMem.avisosPendientes(...a)),
   trabajoPendiente: vi.fn(async (limite: number, ahoraIso: string) =>
     [...store.values()].filter((f) => f.estado === 'en_cola' || (f.estado === 'pendiente' && f.proximoIntentoEn <= ahoraIso)).slice(0, limite).map((f) => ({ ...f }))),
 }));
@@ -159,7 +176,7 @@ async function entrar(tenant = 't-A', clave = 'SAP-1') {
 const tocar = (id: string) => ({ tenantId: store.get(id)!.tenantId, operadorId: store.get(id)!.operadorId });
 
 beforeEach(() => {
-  store.clear(); eventos.length = 0; outbox.clear(); avisos.length = 0; seq = 0; archivos.clear(); formatos.clear(); reclamosCopia.clear(); telefonosQueFallan.clear(); sinCandado = false;
+  store.clear(); eventos.length = 0; outbox.clear(); avisos.length = 0; seq = 0; archivos.clear(); formatos.clear(); telefonosSolos.clear(); avisosMem.reiniciar(); reclamosCopia.clear(); telefonosQueFallan.clear(); sinCandado = false;
   ventana = 'abierta'; avisoOk = true; telefonoDinero = '525599990000';
 });
 
@@ -211,7 +228,7 @@ describe('FELIZ: de la entrada al retorno al SAP', () => {
     expect(avisos[0].tel).toBe('525599990000');
     expect(avisos[0].texto).toMatch(/Juan Pérez García.*No coincide.*SAP-1/);
     expect(avisos[0].texto).not.toMatch(/1,?200|\$/); // el aviso no lleva cifras
-    expect(eventos.find((e) => e.tipo === 'aviso_oficina')?.detalle).toEqual({ enviado: true });
+    expect(eventos.find((e) => e.tipo === 'aviso_oficina' && e.detalle.destino === 'discrepancia')?.detalle).toMatchObject({ enviado: true, aceptados: 1, destinatarios: 1 });
   });
 });
 
@@ -594,5 +611,126 @@ describe('DISCREPANCIA: «No coincide» AVISA a la persona responsable', () => {
     await serv.intentarEntrega(liq, depsFormato); cronOutbox('sent'); await serv.procesarLiquidacionesExternas(depsFormato, 10);
     expect(await atenderAcuseLiquidacionExterna(tocar(liq.id), `liqext_no:${liq.id}`)).toMatch(/no pude avisarles/);
     expect(store.get(liq.id)!.acuseTipo).toBe('no_coincide');
+  });
+});
+
+describe('DISCREPANCIA CON RED (0643/0644): estado del aviso, reintento del cron, Reavisar y tarea durable', () => {
+  const avisoDe = (id: string, ciclo = 1) => avisosMem.filas.get(`${id}|${ciclo}`)!;
+  async function entregada(clave = 'SAP-1') {
+    const liq = await entrarFmt('t-A', clave);
+    await serv.intentarEntrega(liq, depsFormato); cronOutbox('sent'); await serv.procesarLiquidacionesExternas(depsFormato, 10);
+    avisos.length = 0;
+    return liq;
+  }
+  // El acuse del chofer entra por `atenderAcuse…` con el reloj real: se congela `Date` en la hora de la prueba y se avanza a mano.
+  const reloj = { t: AHORA };
+  const depsReloj = () => ({ ...depsFormato, ahora: () => reloj.t });
+  const avanzar = (ms: number) => { reloj.t = new Date(reloj.t.getTime() + ms); vi.setSystemTime(reloj.t); };
+  beforeEach(() => { reloj.t = AHORA; vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AHORA); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('CICLO: el aviso falla (WhatsApp rechaza) → el chofer NO recibe la promesa → el cron lo reintenta → llega → el aviso queda enviado', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf', { discrepanciaTelefonos: [RESPONSABLE] }));
+    const liq = await entregada();
+    avisoOk = false;
+    expect(await atenderAcuseLiquidacionExterna(tocar(liq.id), `liqext_no:${liq.id}`)).toMatch(/no pude avisarles/);
+    expect(avisoDe(liq.id)).toMatchObject({ estado: 'pendiente', intentos: 1, telefonosAceptados: [] });
+    // la discrepancia YA está en la cola de una persona aunque el WhatsApp no salió
+    expect(avisosMem.tareas).toHaveLength(1);
+    expect(avisosMem.tareas[0].resumen).toMatch(/No coincide.*SAP-1/);
+
+    avisoOk = true; avisos.length = 0;
+    avanzar(3 * 60_000);
+    const r = await serv.procesarLiquidacionesExternas(depsReloj(), 10);
+    expect(r.avisos).toMatchObject({ tomados: 1, enviados: 1, fallidos: 0 });
+    expect(avisos.map((a) => a.tel)).toEqual([RESPONSABLE]);
+    expect(avisoDe(liq.id)).toMatchObject({ estado: 'enviado', telefonosAceptados: [RESPONSABLE] });
+    expect(avisosMem.tareas).toHaveLength(1);
+  });
+
+  it('el aviso agotado queda FALLIDO y «Reavisar» lo rearma y lo manda; un segundo clic no lo repite', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf', { discrepanciaTelefonos: [RESPONSABLE] }));
+    const liq = await entregada();
+    avisoOk = false;
+    await atenderAcuseLiquidacionExterna(tocar(liq.id), `liqext_no:${liq.id}`);
+    for (let i = 0; i < 6; i++) { avanzar(60 * 60_000); await serv.procesarLiquidacionesExternas(depsReloj(), 10); }
+    expect(avisoDe(liq.id).estado).toBe('fallido');
+    expect(avisos).toHaveLength(5); // 5 intentos reales, ni uno más
+
+    avisoOk = true;
+    expect(await serv.reavisarDiscrepancia('t-A', liq.id, 'dueño', depsReloj())).toBe('reavisada');
+    expect(avisoDe(liq.id)).toMatchObject({ estado: 'enviado' });
+    expect(avisos.filter((a) => a.tel === RESPONSABLE)).toHaveLength(6);
+    expect(await serv.reavisarDiscrepancia('t-A', liq.id, 'dueño', depsReloj())).toBe('ya_enviado');
+    expect(avisos).toHaveLength(6);
+  });
+
+  it('DOS designados: si uno falla, el reintento va SOLO al que falta', async () => {
+    const OTRO = '525577770002';
+    formatos.set('t-A', formatoDeMuestra('pdf', { discrepanciaTelefonos: [RESPONSABLE, OTRO] }));
+    const liq = await entregada();
+    telefonosQueFallan.add(OTRO);
+    expect(await atenderAcuseLiquidacionExterna(tocar(liq.id), `liqext_no:${liq.id}`)).toMatch(/Ya le avisé a tu oficina/); // le llegó a alguien
+    expect(avisos.map((a) => a.tel)).toEqual([RESPONSABLE, OTRO]);
+    expect(avisoDe(liq.id)).toMatchObject({ estado: 'pendiente', telefonosAceptados: [RESPONSABLE] });
+
+    telefonosQueFallan.clear(); avisos.length = 0;
+    avanzar(3 * 60_000);
+    await serv.procesarLiquidacionesExternas(depsReloj(), 10);
+    expect(avisos.map((a) => a.tel)).toEqual([OTRO]); // el responsable NO recibe un segundo WhatsApp
+    expect(avisoDe(liq.id)).toMatchObject({ estado: 'enviado', telefonosAceptados: [OTRO, RESPONSABLE].sort() });
+  });
+
+  it('el rechazo transitorio que YA quedó en el outbox cuenta como aceptado: no se duplica el WhatsApp', async () => {
+    const { avisarOficina } = await import('@/lib/meta/aviso_oficina');
+    vi.mocked(avisarOficina).mockClear();
+    vi.mocked(avisarOficina).mockResolvedValueOnce({ ok: false, motivo: 'timeout', fueraDeVentana: false, reintentable: true, encolado: true });
+    formatos.set('t-A', formatoDeMuestra('pdf', { discrepanciaTelefonos: [RESPONSABLE] }));
+    const liq = await entregada();
+    await atenderAcuseLiquidacionExterna(tocar(liq.id), `liqext_no:${liq.id}`);
+    expect(avisoDe(liq.id)).toMatchObject({ estado: 'enviado', telefonosAceptados: [RESPONSABLE] });
+    avanzar(60 * 60_000);
+    await serv.procesarLiquidacionesExternas(depsReloj(), 10);
+    expect(vi.mocked(avisarOficina).mock.calls.filter((c) => c[0] === RESPONSABLE)).toHaveLength(1);
+  });
+
+  it('la tarea del orquestador es UNA por liquidación: «No coincide», cambio de opinión y otro «No coincide» no abren otra mientras siga abierta', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf', { discrepanciaTelefonos: [RESPONSABLE] }));
+    const liq = await entregada();
+    await atenderAcuseLiquidacionExterna(tocar(liq.id), `liqext_no:${liq.id}`);
+    await atenderAcuseLiquidacionExterna(tocar(liq.id), `liqext_ok:${liq.id}`);
+    await atenderAcuseLiquidacionExterna(tocar(liq.id), `liqext_no:${liq.id}`);
+    expect(avisoDe(liq.id, 2)).toMatchObject({ ciclo: 2, estado: 'enviado' });
+    expect(avisosMem.tareas.filter((t) => t.abierta)).toHaveLength(1);
+  });
+
+  it('OTRA FLOTA: el aviso y la tarea de una flota no cruzan a la otra, y Reavisar de la flota equivocada no encuentra nada', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf', { discrepanciaTelefonos: [RESPONSABLE] }));
+    const liq = await entregada();
+    avisoOk = false;
+    await atenderAcuseLiquidacionExterna(tocar(liq.id), `liqext_no:${liq.id}`);
+    expect(avisosMem.tareas.every((t) => t.tenantId === 't-A')).toBe(true);
+    expect(await serv.reavisarDiscrepancia('t-B', liq.id, 'dueño', depsReloj())).toBe('no_encontrada');
+    expect(avisoDe(liq.id).intentos).toBe(1);
+  });
+
+  it('BASE SIN 0644: «No coincide» sigue avisando una vez (sin estado ni reintento) y no revienta', async () => {
+    avisosMem.sinMigrar = true;
+    formatos.set('t-A', formatoDeMuestra('pdf', { discrepanciaTelefonos: [RESPONSABLE] }));
+    const liq = await entregada();
+    expect(await atenderAcuseLiquidacionExterna(tocar(liq.id), `liqext_no:${liq.id}`)).toMatch(/Ya le avisé a tu oficina/);
+    expect(avisos.map((a) => a.tel)).toEqual([RESPONSABLE]);
+    expect(avisosMem.filas.size).toBe(0);
+    expect(await serv.reavisarDiscrepancia('t-A', liq.id, 'dueño', depsReloj())).toBe('reavisada'); // sin estado: manda una vez más, a petición
+  });
+
+  it('SIN FORMATO de Excel (0645): la flota del PDF genérico designa a su responsable solo con teléfonos y el aviso le llega', async () => {
+    telefonosSolos.set('t-A', { copia: [JEFE], discrepancia: [RESPONSABLE] });
+    const liq = await entrarFmt('t-A', 'G-1'); // sin `formatos`: PDF genérico
+    await serv.intentarEntrega(liq, depsFormato); cronOutbox('sent'); await serv.procesarLiquidacionesExternas(depsFormato, 10);
+    expect(avisos.filter((a) => a.tel === JEFE)).toHaveLength(1); // la copia al jefe también funciona sin formato
+    avisos.length = 0;
+    expect(await atenderAcuseLiquidacionExterna(tocar(liq.id), `liqext_no:${liq.id}`)).toMatch(/Ya le avisé a tu oficina/);
+    expect(avisos.map((a) => a.tel)).toEqual([RESPONSABLE]);
   });
 });

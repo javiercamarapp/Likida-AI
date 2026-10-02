@@ -24,7 +24,7 @@ import { logger } from '@/lib/logger';
 import { appUrl } from '@/lib/env';
 import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
 import { dinero, periodoTexto } from './presentacion';
-import { cerrarCopiaJefe, eventosDe, leerFormatoFlota, reclamarCopiaJefe, registrarEvento, type LiquidacionExterna, type ReclamoCopia } from './repo';
+import { cerrarCopiaJefe, eventosDe, leerTelefonosFlota, reclamarCopiaJefe, registrarEvento, type LiquidacionExterna, type ReclamoCopia } from './repo';
 
 export interface DocumentoCopia { url: string; nombre: string }
 
@@ -64,8 +64,8 @@ function aceptadosPrevios(
 
 export const copiarAJefePorOmision: CopiarAJefe = async (liq, doc) => {
   try {
-    const cfg = await leerFormatoFlota(liq.tenantId);
-    const destinos = cfg?.copiaTelefonos ?? [];
+    const cfg = await leerTelefonosFlota(liq.tenantId);
+    const destinos = cfg?.copia ?? [];
     if (destinos.length === 0) return { estado: 'sin_destinatarios' };
 
     const previos = aceptadosPrevios(await eventosDe(liq.tenantId, liq.id), liq.generacion, destinos);

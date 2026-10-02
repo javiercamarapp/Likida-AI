@@ -18,7 +18,7 @@ vi.mock('@/lib/meta/aviso_oficina', () => ({
   }),
 }));
 vi.mock('./repo', () => ({
-  leerFormatoFlota: vi.fn(async () => ({ copiaTelefonos: ['5219990000001'] })),
+  leerTelefonosFlota: vi.fn(async () => ({ copia: ['5219990000001'], discrepancia: [] })),
   eventosDe: vi.fn(async () => eventos),
   registrarEvento: vi.fn(async (_t: string, _id: string, tipo: string, detalle: Record<string, unknown>) => { eventos.push({ tipo, detalle }); }),
   reclamarCopiaJefe: vi.fn(async (_t: string, id: string, gen: number, tel: string) => {
