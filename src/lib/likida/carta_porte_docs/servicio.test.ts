@@ -196,6 +196,8 @@ describe('procesarDocumento', () => {
     const p = await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => sinPresupuesto });
     expect(p).toMatchObject({ ok: false, motivo: 'presupuesto', permanente: false });
     expect(estado.docs.get(r.documentoId)!.ultimoError).toMatch(/presupuesto de IA de hoy/);
+    // El techo de IA no es culpa del documento: no gasta uno de sus 5 intentos (el worker lo reintenta con espera).
+    expect(estado.docs.get(r.documentoId)).toMatchObject({ estado: 'fallido', intentos: 0 });
   });
 
   it('tras 5 intentos fallidos ya no se reclama', async () => {

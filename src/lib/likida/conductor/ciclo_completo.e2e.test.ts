@@ -507,17 +507,21 @@ describe('6. fuera de la ventana de 24 h: la plantilla del catálogo, con los mi
     expect(meta.sendTemplate).toHaveBeenCalledTimes(1);
   });
 
-  it('un rechazo REINTENTABLE (429) no consume el aviso: la siguiente pasada lo manda', async () => {
+  it('un rechazo REINTENTABLE (429) YA está en wa_outbox: el claim se cierra «en cola» y la siguiente pasada NO lo reenvía', async () => {
     const w = mundo();
     meta.entrante(TEL_CHOFER, T('13:00'));
     meta.estado.bloqueados.add(meta.norm(TEL_CHOFER));
     meta.estado.reloj = T('15:00');
     const r1 = await cron(w, T('15:00'));
     expect(r1).toMatchObject({ solicitudes: 0, rechazosReintentables: 1 });
+    expect([...w.reclamos.values()][0]).toMatchObject({ ok: true, motivo: 'en_cola_outbox' });
+    // Aunque Meta ya no bloquee, el cron no manda un segundo aviso: el primero lo entrega el outbox.
     meta.estado.bloqueados.clear();
     const r2 = await cron(w, T('15:05'));
-    expect(r2.solicitudes).toBe(1);
+    expect(r2).toMatchObject({ solicitudes: 0, recordatorios: 0, fallos: [] });
+    expect(meta.salientes).toHaveLength(0);
   });
+
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

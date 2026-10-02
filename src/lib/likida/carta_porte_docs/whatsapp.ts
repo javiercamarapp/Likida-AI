@@ -119,7 +119,7 @@ export async function ingerirDesdeWhatsapp(e: EntradaWhatsapp, deps: DepsWhatsap
     }
     await deps.responder(leyo
       ? `Recibí el documento y ya lo leí 📄. Revísalo y apruébalo aquí: ${liga}`
-      : `Recibí el documento 📄. Lo estoy leyendo; lo verás en la bandeja de Carta Porte en un momento: ${liga}`);
+      : `Recibí el documento 📄. Lo estoy leyendo; en unos minutos lo verás listo para revisar en la bandeja de Carta Porte: ${liga}`);
     return 'atendido';
   } catch (err) {
     logger.error('cp_wa.fallo', { err: err instanceof Error ? err.message : String(err) });

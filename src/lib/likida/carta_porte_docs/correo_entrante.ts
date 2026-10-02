@@ -165,7 +165,8 @@ export async function atenderCorreoCartaPorte(token: string, correo: CorreoEntra
     return { status: 503, cuerpo: { error: 'no se pudieron descargar todos los adjuntos' } };
   }
 
-  // Extraer lo que alcance en el reloj; lo demás queda «recibido» y se procesa desde la bandeja.
+  // Extraer lo que alcance en el reloj de ESTA petición; lo demás queda «recibido» y lo procesa el cron `carta-porte-docs`
+  // (0640: lo reclama pasada la gracia, reintenta los fallos con espera y avisa a la oficina de las dudas).
   let procesados = 0;
   for (const id of porProcesar) {
     if (deps.restanteMs() < (deps.margenProcesoMs ?? 25_000)) break;

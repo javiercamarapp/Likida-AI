@@ -12,10 +12,33 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../carta_porte_docs/repo', async () => (await import('../carta_porte_docs/repo_falso.fixture')).api);
 vi.mock('../bitacora_escritura', () => ({ anotarBitacora: vi.fn(async () => true) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+// El CRON de la bandeja (0640-0642): la ruta REAL con su motor real; solo la puerta, los interruptores, el teléfono de la
+// oficina y WhatsApp son dobles. Los datos pasan por el repo en memoria.
+const { avisosOficina, latidos, depsHolder } = vi.hoisted(() => ({
+  avisosOficina: [] as Array<{ telefono: string; texto: string }>,
+  latidos: [] as unknown[][],
+  depsHolder: { envio: null as null | (() => unknown), modelo: null as null | (() => unknown) },
+}));
+vi.mock('@/lib/admin/salud', () => ({ puertaCron: async () => null, registrarLatido: async (...a: unknown[]) => { latidos.push(a); } }));
+vi.mock('@/lib/likida/interruptores', async (original) => ({ ...(await original<Record<string, unknown>>()), leerInterruptor: async () => 'encendido', estaApagado: async () => false }));
+vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: async () => {} }));
+vi.mock('@/lib/likida/contactos', () => ({ telefonoJefeDe: async (t: string) => (t === 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' ? '5215500000001' : null) }));
+vi.mock('../carta_porte_docs/worker_deps', async (original) => {
+  const real = await original<typeof import('../carta_porte_docs/worker_deps')>();
+  return { depsWorkerReales: () => real.depsWorkerReales({ apagado: async () => false, llm: () => (depsHolder.modelo as () => LlmExtractor)() }) };
+});
+vi.mock('@/lib/meta/aviso_oficina', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  avisarOficina: async (telefono: string, texto: string) => {
+    avisosOficina.push({ telefono, texto });
+    return depsHolder.envio ? depsHolder.envio() : { ok: true, via: 'texto', id: 'w1' };
+  },
+}));
 
 import { estado, reset } from '../carta_porte_docs/repo_falso.fixture';
 import { A, B, ACTOR, USUARIO_B, llmBoreal, sembrarFlotas, sinAgenteApagado, subir, subirYProcesar } from '../carta_porte_docs/escenario.fixture';
-import { llmFalso, lecturaBoreal } from '../carta_porte_docs/llm_falso.fixture';
+import { llmFalso, lecturaBoreal, type LlmFalso } from '../carta_porte_docs/llm_falso.fixture';
+import type { LlmExtractor } from '../carta_porte_docs/extractor';
 import { defectuosos, excelAtlas, pdfBoreal } from '../carta_porte_docs/documentos_sinteticos.fixture';
 import { aprobarDocumento, corregirCampos, abrirRevision, rechazarDocumento, reabrirDocumento, ConflictoDeVersion } from '../carta_porte_docs/bandeja';
 import { atenderCorreoCartaPorte, type DepsCorreo } from '../carta_porte_docs/correo_entrante';
@@ -187,13 +210,151 @@ describe('fuera de orden', () => {
     expect(estado.docs.get(r.documentoId)!.estado).toBe('rechazado');
   });
 
-  it('un lease vencido (worker muerto a mitad del modelo) se recupera: el siguiente cron termina el trabajo', async () => {
+  it('un lease vencido (worker muerto a mitad del modelo) se recupera: el siguiente CRON termina el trabajo', async () => {
     const r = await subir(A, await pdfBoreal());
     const reclamo = await repo.reclamarDocumento(A, r.documentoId, 1);
     expect(reclamo).not.toBeNull();
     estado.reloj.ahora = () => new Date(Date.now() + 10 * 60_000);
-    expect(await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => llmBoreal() })).toMatchObject({ ok: true });
+    const res = await cron();
+    expect(res).toMatchObject({ corrio: true, procesados: 1 });
+    expect(estado.docs.get(r.documentoId)!.estado).toBe('por_revisar');
     estado.reloj.ahora = () => new Date();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL WORKER (cron carta-porte-docs, 0640-0642): lo que el cliente pidió — «que se procese solo y que me avisen de las dudas».
+// ═══════════════════════════════════════════════════════════════════════════
+const URL_BANDEJA = 'https://app.likida.ai/dashboard/carta-porte/documentos';
+const minutos = (n: number) => { estado.reloj.ahora = () => new Date(Date.now() + n * 60_000); };
+
+async function cron(llm: () => LlmFalso = llmBoreal) {
+  const { GET } = await import('../../../app/api/cron/carta-porte-docs/route');
+  depsHolder.modelo = llm;
+  const r = await GET(new Request('https://app.likida.ai/api/cron/carta-porte-docs'));
+  return (await r.json()) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+}
+
+describe('el worker de la bandeja (cron)', () => {
+  beforeEach(() => { avisosOficina.length = 0; latidos.length = 0; depsHolder.envio = null; vi.useRealTimers(); });
+
+  it('un documento «recibido» que ninguna petición alcanzó a leer se extrae SOLO; una gracia evita pelear con la petición que lo recibió', async () => {
+    const r = await subir(A, await pdfBoreal(), 'orden.pdf', { clienteId: 'cli-boreal', canal: 'correo', remitente: 'logistica@boreal.example' });
+    expect(estado.docs.get(r.documentoId)!.estado).toBe('recibido');
+    expect(await cron()).toMatchObject({ corrio: true, pendientes: 0, procesados: 0 });          // dentro de la gracia: no se toca
+    minutos(10);
+    expect(await cron()).toMatchObject({ pendientes: 1, procesados: 1 });
+    expect(estado.docs.get(r.documentoId)!.estado).toBe('por_revisar');
+    expect(tipos(r.documentoId)).toContain('extraccion_ok');
+    expect(latidos.at(-1)).toEqual(['carta-porte-docs', 'ok', expect.objectContaining({ procesados: 1 })]);
+  });
+
+  it('un fallo reintentable (modelo) se reintenta con ESPERA creciente y a los 5 intentos es TERMINAL: la oficina se entera UNA vez', async () => {
+    const r = await subir(A, await pdfBoreal(), 'roto.pdf', { clienteId: 'cli-boreal', canal: 'correo' });
+    const id = r.documentoId;
+    const caido = () => llmFalso(() => { throw new Error('proveedor caído'); });
+    const espera = [10, 20, 40, 70, 130];       // minutos que pasan antes de cada pasada (2 de gracia, luego 15, 30, 60, 120)
+    let reloj = 0;
+    for (let i = 0; i < 5; i++) {
+      reloj += espera[i]; minutos(reloj);
+      const res = await cron(caido);
+      expect(res, `pasada ${i + 1}`).toMatchObject({ procesados: 0, fallidos: 1 });
+      expect(estado.docs.get(id)!.intentos).toBe(i + 1);
+    }
+    expect(estado.docs.get(id)).toMatchObject({ estado: 'fallido', intentos: 5 });
+    // Terminal: nadie lo reclama más, aunque pase una semana.
+    minutos(reloj + 7 * 24 * 60);
+    const despues = await cron(caido);
+    expect(despues).toMatchObject({ pendientes: 0 });
+    expect(estado.docs.get(id)!.intentos).toBe(5);
+    // La oficina se entera UNA vez (el aviso `agotado` se reclama con candado).
+    expect(avisosOficina.filter((a) => a.texto.includes('No pude leer'))).toHaveLength(1);
+  });
+
+  it('entre un intento y el siguiente respeta la espera: una pasada a los 5 min de un fallo NO reintenta', async () => {
+    const r = await subir(A, await pdfBoreal(), 'espera.pdf', { clienteId: 'cli-boreal', canal: 'correo' });
+    minutos(10);
+    await cron(() => llmFalso(() => { throw new Error('proveedor caído'); }));
+    expect(estado.docs.get(r.documentoId)!.intentos).toBe(1);
+    minutos(10 + 5);
+    expect(await cron()).toMatchObject({ pendientes: 0, procesados: 0 });
+    expect(estado.docs.get(r.documentoId)!.estado).toBe('fallido');
+    minutos(10 + 20);
+    expect(await cron()).toMatchObject({ procesados: 1 });
+    expect(estado.docs.get(r.documentoId)!.estado).toBe('por_revisar');
+  });
+
+  it('el presupuesto de IA agotado no gasta intentos: el documento sigue vivo para cuando se amplíe el techo', async () => {
+    const r = await subir(A, await pdfBoreal(), 'p.pdf', { clienteId: 'cli-boreal', canal: 'correo' });
+    minutos(10);
+    const sinPresupuesto = () => llmFalso(() => { throw Object.assign(new Error('presupuesto de IA del día agotado'), { name: 'LlmBudgetExceededError' }); });
+    expect(await cron(sinPresupuesto)).toMatchObject({ paradaPorPresupuesto: true, fallidos: 1 });
+    expect(estado.docs.get(r.documentoId)!.intentos).toBe(0);
+    minutos(40);
+    expect(await cron()).toMatchObject({ procesados: 1 });
+  });
+
+  it('un documento de correo que trae bloqueos o dudas avisa a la oficina UNA vez, con liga, y sin repetir en la pasada siguiente', async () => {
+    const r = await subir(A, await pdfBoreal(), 'dudoso.pdf', { clienteId: 'cli-boreal', canal: 'correo' });
+    minutos(10);
+    // Lectura con confianza baja en los campos críticos: queda por revisar con dudas.
+    const dudoso = () => llmFalso((e) => lecturaBoreal(e.nivel, 0.4));
+    // La MISMA pasada que extrae el documento avisa a la oficina de sus dudas.
+    const c1 = await cron(dudoso);
+    expect(c1).toMatchObject({ procesados: 1, hallazgos: 1, avisosEnviados: 1 });
+    expect(estado.docs.get(r.documentoId)!.estado).toBe('por_revisar');
+    expect(avisosOficina).toHaveLength(1);
+    expect(avisosOficina[0].telefono).toBe('5215500000001');
+    expect(avisosOficina[0].texto).toContain(`${URL_BANDEJA}/${r.documentoId}`);
+    expect(tipos(r.documentoId)).toContain('aviso_oficina');
+    await cron();
+    await cron();
+    expect(avisosOficina).toHaveLength(1);
+  });
+
+  it('un documento limpio o de otro canal NO molesta a la oficina', async () => {
+    await subir(A, await pdfBoreal(), 'limpio.pdf', { clienteId: 'cli-boreal', canal: 'correo' });
+    minutos(10);
+    expect(await cron()).toMatchObject({ procesados: 1, hallazgos: 0, avisosEnviados: 0 });
+    const m = await subir(A, await excelAtlas(), 'panel.xlsx', { canal: 'manual' });
+    minutos(20);
+    await cron(() => llmFalso((e) => lecturaBoreal(e.nivel, 0.4)));
+    expect(estado.docs.get(m.documentoId)!.estado).not.toBe('recibido');
+    await cron();
+    expect(avisosOficina).toHaveLength(0);
+  });
+
+  it('REGLA DEL OUTBOX: si el aviso rebota por algo reintentable ya está en wa_outbox: la pasada siguiente NO lo reenvía', async () => {
+    const r = await subir(A, await pdfBoreal(), 'dudoso.pdf', { clienteId: 'cli-boreal', canal: 'correo' });
+    minutos(10);
+    depsHolder.envio = () => ({ ok: false, motivo: 'límite de tasa', fueraDeVentana: false, reintentable: true });
+    const c1 = await cron(() => llmFalso((e) => lecturaBoreal(e.nivel, 0.4)));
+    expect(c1).toMatchObject({ procesados: 1, avisosEnCola: 1, avisosFallidos: 0 });
+    expect(avisosOficina).toHaveLength(1);
+    depsHolder.envio = null;
+    const c2 = await cron();
+    expect(c2).toMatchObject({ avisosEnviados: 0, avisosEnCola: 0 });
+    expect(avisosOficina).toHaveLength(1);
+    expect(estado.avisos.get(r.documentoId)).toHaveProperty('hallazgos');
+  });
+
+  it('el worker no cruza flotas: el aviso sale al teléfono de la flota DUEÑA del documento y la flota sin teléfono no recibe nada', async () => {
+    await subir(B, await pdfBoreal(), 'otra.pdf', { canal: 'correo' });
+    minutos(10);
+    const c1 = await cron(() => llmFalso((e) => lecturaBoreal(e.nivel, 0.4)));
+    expect(c1).toMatchObject({ procesados: 1, sinTelefono: 1, avisosEnviados: 0 });
+    expect(avisosOficina).toHaveLength(0);
+  });
+
+  it('una base SIN las migraciones nuevas: el cron procesa igual y los avisos quedan apagados (sin repetirse)', async () => {
+    estado.sinMigracion = true;
+    const r = await subir(A, await pdfBoreal(), 'dudoso.pdf', { clienteId: 'cli-boreal', canal: 'correo' });
+    minutos(10);
+    await cron(() => llmFalso((e) => lecturaBoreal(e.nivel, 0.4)));
+    expect(estado.docs.get(r.documentoId)!.estado).toBe('por_revisar');
+    expect(await cron()).toMatchObject({ avisosSinMigracion: true, avisosEnviados: 0 });
+    expect(avisosOficina).toHaveLength(0);
+    expect(latidos.at(-1)![1]).toBe('parcial');
   });
 });
 
