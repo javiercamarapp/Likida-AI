@@ -254,6 +254,7 @@ export function depsAvisoReales(): DepsAvisoEscalacion {
   return {
     ...depsDeCorreo(),
     async leerTarea(tenantId, id): Promise<TareaParaAviso | null> {
+      // orden-no-importa: filtra por `id` exacto dentro de la flota; la consulta deja una sola fila.
       const r = await acotada(supabaseAdmin().from('orquestador_escalacion').select(FILA_AVISO).eq('tenant_id', tenantId).eq('id', id).limit(1), 'orquestador.aviso_leer');
       if (esSinTabla(r.error)) return null;   // base sin la 0651: no hay estado de aviso y el aviso no corre
       if (r.error) throw new Error(`orquestador.aviso_leer: ${r.error.message}`);
@@ -267,6 +268,7 @@ export function depsAvisoReales(): DepsAvisoEscalacion {
     async reclamar(tenantId, id) {
       // El UPDATE condicional ES el claim: pendiente, con intentos por debajo del tope y sin reclamo reciente. Suma el intento.
       const umbral = new Date(Date.now() - REINTENTO_AVISO_MIN * 60_000).toISOString();
+      // orden-no-importa: filtra por `id` exacto dentro de la flota; la consulta deja una sola fila.
       const actual = await acotada(supabaseAdmin().from('orquestador_escalacion').select('aviso_intentos').eq('tenant_id', tenantId).eq('id', id).limit(1), 'orquestador.aviso_intentos');
       const intentos = Number(((actual.data ?? []) as Array<{ aviso_intentos: number }>)[0]?.aviso_intentos ?? 0);
       if (actual.error || intentos >= MAX_INTENTOS_AVISO) return false;
@@ -285,6 +287,7 @@ export function depsAvisoReales(): DepsAvisoEscalacion {
       if (r.error) throw new Error(`orquestador.aviso_marcar: ${r.error.message}`);
     },
     async nombreFlota(tenantId) {
+      // orden-no-importa: filtra por `id` exacto de la flota (llave primaria); la consulta deja una sola fila.
       const r = await acotada(supabaseAdmin().from('tenant').select('nombre').eq('id', tenantId).limit(1), 'orquestador.aviso_flota');
       return r.error ? null : ((r.data ?? []) as Array<{ nombre: string | null }>)[0]?.nombre ?? null;
     },
