@@ -196,3 +196,128 @@ describe('robustez', () => {
     expect(enviarTexto).not.toHaveBeenCalled();
   });
 });
+
+describe('documento en el encabezado (liquidación externa)', () => {
+  const DOC = { url: 'https://storage.example/liq.pdf?t=1', nombreArchivo: 'liquidacion-1.pdf' };
+  const BOT = [{ id: 'liqext_ok:1', titulo: 'Recibida' }, { id: 'liqext_no:1', titulo: 'No coincide' }];
+
+  it('ventana abierta: los botones salen CON el documento en el encabezado', async () => {
+    ventana('abierta');
+    const r = await enviarConFallback(TEL, { ...OP, botones: BOT, documento: DOC });
+    expect(r).toMatchObject({ ok: true, via: 'botones' });
+    expect(enviarBotones).toHaveBeenCalledWith(TEL, 'hola jefe', BOT, DOC);
+  });
+
+  it('ventana cerrada: la plantilla lleva el MISMO documento en su encabezado', async () => {
+    ventana('cerrada');
+    await enviarConFallback(TEL, { ...OP, botones: BOT, documento: DOC });
+    expect(sendTemplate).toHaveBeenCalledWith(TEL, 'aviso_operacion_v1', expect.objectContaining({
+      encabezado: { tipo: 'documento', link: DOC.url, nombreArchivo: DOC.nombreArchivo },
+    }));
+    expect(enviarBotones).not.toHaveBeenCalled();
+  });
+
+  it('un encabezado propio de la plantilla no se pisa con el documento', async () => {
+    ventana('cerrada');
+    const propio = { tipo: 'documento' as const, link: 'https://otro.example/a.pdf' };
+    await enviarConFallback(TEL, { ...OP, plantilla: { ...PLANTILLA, encabezado: propio }, botones: BOT, documento: DOC });
+    expect(sendTemplate).toHaveBeenCalledWith(TEL, 'aviso_operacion_v1', expect.objectContaining({ encabezado: propio }));
+  });
+
+  it('ventana abierta pero Meta dice 131047: cae a plantilla con el documento', async () => {
+    ventana('abierta');
+    enviarBotones.mockResolvedValue(KO(131047, 400));
+    const r = await enviarConFallback(TEL, { ...OP, botones: BOT, documento: DOC });
+    expect(r).toMatchObject({ ok: true, via: 'plantilla', motivo: 'ventana_abierta_rechazada_por_meta' });
+    expect(sendTemplate).toHaveBeenCalledWith(TEL, 'aviso_operacion_v1', expect.objectContaining({
+      encabezado: expect.objectContaining({ tipo: 'documento', link: DOC.url }),
+    }));
+  });
+});
+
+// ── modo durable (por la cola wa_outbox) ───────────────────────────────────
+describe('enviarConFallbackDurable', () => {
+  const DOC = { url: 'https://storage.example/liq.pdf?t=1', nombreArchivo: 'liquidacion-1.pdf' };
+  const BOT = [{ id: 'liqext_ok:1', titulo: 'Recibida' }, { id: 'liqext_no:1', titulo: 'No coincide' }];
+  const OPD = { ...OP, botones: BOT, documento: DOC, llave: 'liqext:1:g1', plantilla: { nombre: 'liquidacion_externa_v1', parametros: ['Juan'] } };
+  type Fila = { dedupe_key: string; estado: 'pending' | 'sending' | 'sent' | 'dead'; provider_message_id: string | null; ultimo_error: string | null };
+  const cola = new Map<string, Fila>();
+  const encolados: Array<{ llave: string; payload: Record<string, unknown> }> = [];
+  let lecturaFalla = false;
+  let colaCaida = false;
+
+  beforeEach(async () => {
+    cola.clear(); encolados.length = 0; lecturaFalla = false; colaCaida = false;
+    const wo = await import('@/lib/likida/wa_outbox');
+    vi.spyOn(wo, 'leerSalidasPorLlave').mockImplementation(async (llaves: string[]) => (
+      lecturaFalla ? null : new Map(llaves.filter((l) => cola.has(l)).map((l) => [l, cola.get(l)!]))
+    ));
+    vi.spyOn(wo, 'encolarSalidaWhatsAppDedupe').mockImplementation(async (llave: string, payload: Record<string, unknown>) => {
+      if (colaCaida) return null;
+      const previa = cola.get(llave);
+      if (previa) return { id: llave, estado: previa.estado, providerMessageId: previa.provider_message_id };
+      encolados.push({ llave, payload });
+      cola.set(llave, { dedupe_key: llave, estado: 'pending', provider_message_id: null, ultimo_error: null });
+      return { id: llave, estado: 'pending', providerMessageId: null };
+    });
+  });
+
+  it('ventana abierta o desconocida: encola la SESIÓN (botones con documento) y no llama a Meta', async () => {
+    const { enviarConFallbackDurable } = await import('./enviar_con_fallback');
+    for (const est of ['abierta', 'desconocida'] as const) {
+      cola.clear(); encolados.length = 0; ventana(est);
+      expect(await enviarConFallbackDurable(TEL, OPD)).toMatchObject({ estado: 'en_cola', via: 'sesion' });
+      expect(encolados.map((e) => e.llave)).toEqual(['liqext:1:g1:sesion']);
+      expect((encolados[0].payload as { interactive: { header: { type: string } } }).interactive.header.type).toBe('document');
+    }
+    expect(enviarBotones).not.toHaveBeenCalled();
+    expect(sendTemplate).not.toHaveBeenCalled();
+  });
+
+  it('ventana cerrada: encola DIRECTO la plantilla con el documento en el encabezado', async () => {
+    const { enviarConFallbackDurable } = await import('./enviar_con_fallback');
+    ventana('cerrada');
+    expect(await enviarConFallbackDurable(TEL, OPD)).toMatchObject({ estado: 'en_cola', via: 'plantilla' });
+    expect(encolados.map((e) => e.llave)).toEqual(['liqext:1:g1:plantilla']);
+    const comps = (encolados[0].payload as { template: { components: Array<{ type: string; parameters: Array<{ type: string }> }> } }).template.components;
+    expect(comps[0].type).toBe('header');
+    expect(comps[0].parameters[0].type).toBe('document');
+    expect(registrarDecisionEnvio).toHaveBeenCalledWith(expect.objectContaining({ canal: 'plantilla', motivo: 'ventana_cerrada', plantilla: 'liquidacion_externa_v1' }));
+  });
+
+  it('idempotente: dos llamadas (y dos concurrentes) dejan UNA sola fila', async () => {
+    const { enviarConFallbackDurable } = await import('./enviar_con_fallback');
+    ventana('abierta');
+    await Promise.all([enviarConFallbackDurable(TEL, OPD), enviarConFallbackDurable(TEL, OPD)]);
+    await enviarConFallbackDurable(TEL, OPD);
+    expect(encolados).toHaveLength(1);
+  });
+
+  it('sesión muerta por 131047 → plantilla UNA vez; muerta por otra causa → fallida sin plantilla', async () => {
+    const { enviarConFallbackDurable } = await import('./enviar_con_fallback');
+    ventana('abierta');
+    await enviarConFallbackDurable(TEL, OPD);
+    cola.set('liqext:1:g1:sesion', { dedupe_key: 'liqext:1:g1:sesion', estado: 'dead', provider_message_id: null, ultimo_error: 'terminal:HTTP 400: {"error":{"code":131047}}' });
+    expect(await enviarConFallbackDurable(TEL, OPD)).toMatchObject({ estado: 'en_cola', via: 'plantilla' });
+    await enviarConFallbackDurable(TEL, OPD);
+    expect(encolados.filter((e) => e.llave.endsWith(':plantilla'))).toHaveLength(1);
+
+    cola.clear(); encolados.length = 0;
+    await enviarConFallbackDurable(TEL, OPD);
+    cola.set('liqext:1:g1:sesion', { dedupe_key: 'liqext:1:g1:sesion', estado: 'dead', provider_message_id: null, ultimo_error: 'terminal:131030' });
+    expect(await enviarConFallbackDurable(TEL, OPD)).toMatchObject({ estado: 'fallida', via: 'sesion', reintentable: false });
+    expect(encolados).toHaveLength(1);
+  });
+
+  it('el outbox ilegible o caído es reintentable y no encola a ciegas; un documento no https ni se encola', async () => {
+    const { enviarConFallbackDurable } = await import('./enviar_con_fallback');
+    ventana('abierta');
+    lecturaFalla = true;
+    expect(await enviarConFallbackDurable(TEL, OPD)).toMatchObject({ estado: 'fallida', reintentable: true });
+    lecturaFalla = false; colaCaida = true;
+    expect(await enviarConFallbackDurable(TEL, OPD)).toMatchObject({ estado: 'fallida', reintentable: true });
+    colaCaida = false;
+    expect(await enviarConFallbackDurable(TEL, { ...OPD, documento: { ...DOC, url: 'http://x.example/a.pdf' } })).toMatchObject({ estado: 'fallida', reintentable: false });
+    expect(encolados).toHaveLength(0);
+  });
+});

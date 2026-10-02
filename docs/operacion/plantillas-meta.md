@@ -184,7 +184,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Botones:** ninguno
 
-## Plantillas nuevas, listas para enviar a aprobación (16)
+## Plantillas nuevas, listas para enviar a aprobación (17)
 
 ### `regla_aviso_v1`
 
@@ -506,4 +506,26 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 | `{{4}}` | liga al tablero del Vigía | https://app.likida.ai/dashboard/agentes/vigia |
 
 - **Botones:** «Yo me encargo» (respuesta rápida, payload `vig_tomo:<viaje_id>`)
+
+### `liquidacion_externa_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 1 — Liquidación externa (entrega al chofer). Entregar al chofer la liquidación que calculó el SAP/TMS de la flota (PDF en el encabezado) cuando su ventana de 24 h está cerrada.
+- **Llamador en código:** src/lib/likida/liquidacion_externa/entrega.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Encabezado:** DOCUMENT
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, esta es tu liquidación de {{2}}. Periodo: {{3}}. Total: {{4}}. El detalle va en el PDF. ¿Te cuadra? Responde con un botón.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | primer nombre del chofer | Juan |
+| `{{2}}` | sistema de origen de la liquidación (o «tu empresa») | SAP |
+| `{{3}}` | periodo | 01/09/2026 al 07/09/2026 |
+| `{{4}}` | total con moneda | $2,499.75 MXN |
+
+- **Botones:** «Recibida» (respuesta rápida, payload `liqext_ok:<viaje_id>`); «No coincide» (respuesta rápida, payload `liqext_no:<viaje_id>`)
 
