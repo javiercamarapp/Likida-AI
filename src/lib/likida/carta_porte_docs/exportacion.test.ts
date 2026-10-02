@@ -137,13 +137,13 @@ describe('exportarDocumentos: solo lo aprobado', () => {
   it('omite los no aprobados diciendo por qué y nombra el archivo sin caracteres raros', () => {
     const r = exportarDocumentos(
       [{ doc: docAprobado(), viajeFolio: null }, { doc: docAprobado({ id: 'd2', estado: 'por_revisar' }), viajeFolio: null }, { doc: docAprobado({ id: 'd3', extraccion: null }), viajeFolio: null }],
-      'csv', cfg(), 'el cliente de demo — formato 1/2', new Date('2026-10-02T12:00:00Z'),
+      'csv', cfg(), 'Flota demo — formato 1/2', new Date('2026-10-02T12:00:00Z'),
     );
     expect(r.documentos).toBe(1);
     expect(r.filas).toBe(1);
     expect(r.omitidos.map((o) => o.id)).toEqual(['d2', 'd3']);
     expect(r.omitidos[0].motivo).toMatch(/solo se exportan documentos aprobados/);
-    expect(r.nombreArchivo).toBe('carta-porte-flota-formato-1-2-2026-10-02.csv');
+    expect(r.nombreArchivo).toBe('carta-porte-flota-demo-formato-1-2-2026-10-02.csv');
     expect(r.mime).toBe('text/csv; charset=utf-8');
   });
 

@@ -105,7 +105,7 @@ describe('VistaDocumentos', () => {
     const h = html(<VistaDocumentos datos={datos([], { configs: [{ id: 'cfg-1', nombre: 'Cliente demo', formato: 'csv', config: {} }] })} acciones={todas} apiSufijo="&tenant=abc" />);
     expect(h).toContain('/api/export/carta-porte-docs?config=estandar&amp;formato=csv&amp;tenant=abc');
     expect(h).toContain('config=cfg-1&amp;formato=csv');
-    expect(h).toMatch(/el cliente de demo · CSV/);
+    expect(h).toMatch(/Cliente demo · CSV/);
     expect(h).toMatch(/apóstrofo/);
   });
 
