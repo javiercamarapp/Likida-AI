@@ -27,8 +27,10 @@ import { CATALOGO } from './catalogo';
 import { evaluar, type Disparo } from './lectores';
 import {
   reglasActivas, sellosDe, sellarDisparos, anotarCorrida, llaveSello,
+  avisosEnviadosDesde, registrarAviso, purgarAvisosViejos,
   type ReglaGuardada,
 } from './repo';
+import { evaluarFrecuencia } from './frecuencia';
 
 export interface ResultadoVigilancia {
   reglas: number;
@@ -37,6 +39,9 @@ export interface ResultadoVigilancia {
   /** Avisos individuales que salieron (filas citadas). */
   avisos: number;
   fallos: number;
+  /** Reglas con casos nuevos cuyo aviso se POSPUSO por su límite de frecuencia
+   *  (no se sellaron: salen en el siguiente aviso permitido). */
+  diferidas: number;
 }
 
 /** Cuántas filas caben en un aviso antes de resumir. Diez líneas se leen en
@@ -59,13 +64,16 @@ export function mensajeDeRegla(frase: string, evidencias: string[]): string {
   return `${cabeza}\n${visibles.join('\n')}${cola}\nPara dejar de recibir esto, pausa la regla en «Mis reglas».`;
 }
 
-/** Corre UNA regla. `true` si esta corrida mandó algo. */
-async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<number> {
+/** El resultado de correr UNA regla: cuántos casos avisó y si se pospuso. */
+interface ResultadoRegla { avisados: number; diferida: boolean }
+
+/** Corre UNA regla. */
+async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<ResultadoRegla> {
   const plantilla = CATALOGO[regla.plantilla];
   const candidatos = await evaluar(regla.plantilla, regla.params, regla.tenantId, ahora);
   if (candidatos.length === 0) {
     await anotarCorrida(regla.tenantId, regla.id, ahora, 0);
-    return 0;
+    return { avisados: 0, diferida: false };
   }
 
   // ¿Cuáles ya se avisaron? Una consulta por regla, no una por candidato — el
@@ -74,7 +82,26 @@ async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<number> {
   const nuevos: Disparo[] = candidatos.filter((d) => !sellados.has(llaveSello(d)));
   if (nuevos.length === 0) {
     await anotarCorrida(regla.tenantId, regla.id, ahora, 0);
-    return 0;
+    return { avisados: 0, diferida: false };
+  }
+
+  // ── EL LÍMITE DE FRECUENCIA (0520) ─────────────────────────────────────────
+  // Se evalúa ANTES de tocar el teléfono o el canal: un aviso pospuesto no gasta
+  // una llamada a Meta. Lo pospuesto NO se sella — el caso sigue siendo «nuevo» y
+  // sale agrupado cuando el límite lo permita. Si el historial no se puede leer,
+  // `avisosEnviadosDesde` lanza y la regla falla POR SU LADO (se reintenta a la
+  // hora siguiente): mandar sin saber cuántos van rompería el tope.
+  const previos = await avisosEnviadosDesde(regla.tenantId, regla.id, new Date(ahora.getTime() - 24 * 3_600_000));
+  const veredicto = evaluarFrecuencia(previos, ahora, {
+    maxAvisosDia: regla.maxAvisosDia, minHorasEntreAvisos: regla.minHorasEntreAvisos,
+  });
+  if (!veredicto.permitido) {
+    logger.info('reglas.aviso_diferido', {
+      regla: regla.id, tenant: regla.tenantId, plantilla: regla.plantilla,
+      motivo: veredicto.motivo, casos: nuevos.length, proximoEn: veredicto.proximoEn.toISOString(),
+    });
+    await anotarCorrida(regla.tenantId, regla.id, ahora, 0);
+    return { avisados: 0, diferida: true };
   }
 
   const telefono = plantilla.canal === 'dinero'
@@ -109,16 +136,23 @@ async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<number> {
   });
   if (!envio.ok) {
     // Sin sello: se reintenta a la siguiente corrida. Es exactamente el
-    // contrato de `avisarVencimientos`.
+    // contrato de `avisarVencimientos`. El intento fallido SÍ queda en el
+    // historial (no cuenta para el tope: no llegó nada al jefe).
+    await registrarAviso(regla.tenantId, regla.id, {
+      resultado: 'fallido', casos, motivo: envio.motivo, error: envio.mensaje,
+    });
     throw new Error(`el WhatsApp no salió: ${envio.mensaje}`);
   }
 
   await sellarDisparos(regla.tenantId, regla.id, nuevos);
+  await registrarAviso(regla.tenantId, regla.id, {
+    resultado: 'enviado', casos, via: envio.via, motivo: envio.motivo, enviadoEn: ahora,
+  });
   await anotarCorrida(regla.tenantId, regla.id, ahora, nuevos.length);
   logger.info('reglas.disparo', {
     regla: regla.id, tenant: regla.tenantId, plantilla: regla.plantilla, casos: nuevos.length,
   });
-  return nuevos.length;
+  return { avisados: nuevos.length, diferida: false };
 }
 
 /**
@@ -137,15 +171,16 @@ export async function vigilarReglas(
   opts: { venceEn?: number } = {},
 ): Promise<ResultadoVigilancia> {
   const reglas = await reglasActivas();
-  const r: ResultadoVigilancia = { reglas: reglas.length, disparadas: 0, avisos: 0, fallos: 0 };
+  const r: ResultadoVigilancia = { reglas: reglas.length, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0 };
   for (const regla of reglas) {
     if (opts.venceEn && Date.now() >= opts.venceEn) break;
     try {
-      const avisos = await correrRegla(regla, ahora);
-      if (avisos > 0) {
+      const { avisados, diferida } = await correrRegla(regla, ahora);
+      if (avisados > 0) {
         r.disparadas += 1;
-        r.avisos += avisos;
+        r.avisos += avisados;
       }
+      if (diferida) r.diferidas += 1;
     } catch (e) {
       r.fallos += 1;
       logger.error('reglas.regla_fallo', {
@@ -154,5 +189,8 @@ export async function vigilarReglas(
       });
     }
   }
+  // Retención del historial (0520): en la misma corrida que lo escribe, sin
+  // tumbarla si falla. Una vez por barrido es una sola sentencia con índice.
+  await purgarAvisosViejos(ahora);
   return r;
 }

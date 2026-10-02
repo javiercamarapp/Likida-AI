@@ -299,7 +299,12 @@ const CALCOM_LOOKUP = ".from('prospecto').select('id,estado,calcom_booking_id,ca
 // que cruzan flotas a propósito; el resto del archivo (≈50 consultas) sigue vigilado por esta prueba.
 const VIGIA_CONTACTO_POR_TELEFONO = ".from('vigia_contacto').select(COLS_CONTACTO).eq('telefono', normalizarTelefonoWa(telefono)).in('estado', ['activo', 'baja']).order('id').limit(5)";
 const VIGIA_EN_ESPERA = ".from('vigia_conversacion').select(COLS_CONV).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).order('sin_respuesta_desde', { ascending: true }).order('id').limit(limite)";
+// Exención por cadena exacta de «Mis reglas» (Agente 13, 0520): la purga de retención del historial de avisos.
+const REGLAS_PURGA_AVISOS = ".from('regla_aviso').delete().lt('enviado_en', corte).select('id')";
 const EXENCIONES_CONSULTA = [{
+  archivo: 'src/lib/likida/reglas/repo.ts', tabla: 'regla_aviso', cadena: REGLAS_PURGA_AVISOS,
+  razon: 'Retención por EDAD (365 días) de una bitácora de operación: el DELETE barre las filas vencidas de TODAS las flotas a la vez, igual que las purgas de wa_mensaje_procesado y llm_costo del cron purgar. No lee ni devuelve datos a ninguna pantalla, solo cuenta cuántas borró; lo llama únicamente vigilarReglas (cron escalar, tras puertaCron y la palanca global). El resto de repo.ts, incluido todo lo que lee o escribe el historial por flota, sigue vigilado por esta prueba.',
+}, {
   archivo: 'src/lib/likida/vigia/repo.ts', tabla: 'vigia_contacto', cadena: VIGIA_CONTACTO_POR_TELEFONO,
   razon: 'El webhook de WhatsApp solo trae el número del cliente: no existe todavía un tenant por el cual anclar. Un número ACTIVO pertenece a UNA sola flota (índice único parcial de la 0400) y el resto de la atención usa el tenantId del contacto que vuelve de aquí. Solo lo llama processor.ts tras la firma del webhook; no devuelve datos a ninguna pantalla.',
 }, {
