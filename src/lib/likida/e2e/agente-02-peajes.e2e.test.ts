@@ -209,9 +209,6 @@ describe('otro tenant', () => {
   });
 });
 
-describe('reclamación al proveedor (cruces fuera de geocerca/ruta)', () => {
-  // La Ola 3 (w3-agentes-1-4 + convenios) construye el reporte de reclamación PASE × GPS × geocerca/«curso».
-  // La interfaz esperada se documenta en docs/e2e/matriz-agentes.md; sin implementación no se finge en verde.
-  it.todo('INTEGRACIÓN PENDIENTE (Ola 3, reporte de reclamación): un cruce cuyo GPS está FUERA del curso autorizado sale en el reporte de descuento con su evidencia (unidad, hora, distancia) y NUNCA se acusa de fraude');
-  it.todo('INTEGRACIÓN PENDIENTE (Ola 3, geocercas de tabla propia): las geocercas/cursos del cliente reemplazan al catálogo de casetas como base del cruce, por flota');
-});
+// La reclamación al proveedor (cruces con GPS fuera de geocerca/curso, sin acusar de fraude, con Excel y PDF) y las
+// geocercas del cliente como base del cruce (polígono nativo; confianza «media» si es aproximada) se ejercen en
+// `peajes/ciclo_completo.e2e.test.ts` («RECLAMACIÓN: pases × GPS × geocercas») y en `peajes/reclamacion*.test.ts`.

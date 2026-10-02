@@ -211,6 +211,5 @@ describe('otro tenant', () => {
   });
 });
 
-describe('cobranza por gasto', () => {
-  it.todo('INTEGRACIÓN PENDIENTE (w3-buzon-cobranza-reglas): cobranza por gasto — el recordatorio nombra el gasto concreto sin comprobante (concepto, monto, fecha) y se cierra cuando el chofer manda la foto de ESE gasto');
-});
+// La cobranza por gasto (qué gasto sin comprobante, un mensaje por chofer, efectividad al llegar el comprobante) tiene
+// su E2E propio: `agentes/cobranza_gasto_e2e.test.ts`.

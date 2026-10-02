@@ -9,8 +9,8 @@ import { crearDbMemoria, type DbMemoria, type Fila } from './db_memoria.fixture'
 // aceptarPorActividad (una foto cuenta como aceptar) → acuse por el selector real (enviarConFallback, ventana 24 h/plantilla).
 // Hitos: atenderConductor real con el mundo en memoria del Conductor (sincroniza el legado 0090 solo en el destino).
 // El orden de llamadas del dispatcher se replica como en processor.ts (cableado probado en processor_hitos.test.ts).
-// NOTA: hitos_viaje.ts (interpretarHito/sellarHito) ya NO lo llama processor.ts; solo talacha_wa y jornada lo importan,
-// por eso aquí NO se prueba como si fuera el camino del chofer.
+// NOTA: hitos_viaje.ts (interpretarHito/sellarHito) ya NO lo llama processor.ts ni lo importa nadie (quedó documentado como
+// utilitario sin llamador); por eso aquí NO se prueba como si fuera el camino del chofer. Los hitos los atiende el Conductor.
 // DOBLES: base en memoria, Meta. Datos sintéticos.
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -194,6 +194,5 @@ describe('hitos «ya llegué» (motor del Conductor)', () => {
   });
 });
 
-describe('instrucciones del convenio', () => {
-  it.todo('INTEGRACIÓN PENDIENTE (convenios, w3-convenios 0580): al despachar y al acercarse a la planta el operador recibe la «calle de instrucciones» del convenio (puerta, con quién reportarse) y puede preguntar «¿por dónde entro?»');
-});
+// La «calle de instrucciones» del convenio al despachar, al reasignar y al acercarse a la planta, y la pregunta
+// «¿por dónde entro?», las ejerce `convenios/convenios.e2e.test.ts` (y P7 las amplía con la edición en pantalla).
