@@ -75,6 +75,26 @@ export const conteo = (desde: number): ConteoPagina => (desde === 0 ? { count: '
  * panel enseñe su estado de error, que es lo honesto: media tabla sumada se ve
  * exactamente igual que la tabla entera, solo que más barata.
  */
+/** REN-30-C2 (auditorías 29-32, CRÍTICO): el reloj de la invocación se agotó a
+ *  media lectura paginada. Se LANZA y no se devuelve lo leído: media lista de
+ *  candidatos concilia de menos y sella el CFDI como si se hubiera revisado
+ *  entero — cambiar una caída ruidosa por una cifra fiscal equivocada y
+ *  silenciosa es el peor intercambio posible en este producto. Quien la atrapa
+ *  deja el comprobante SIN sellar, y la vuelta siguiente lo retoma entero. */
+export class LecturaCortadaPorReloj extends Error {
+  constructor(
+    readonly consulta: string,
+    readonly leidas: number,
+    readonly paginas: number,
+  ) {
+    super(
+      `${consulta}: el reloj de la invocación se agotó tras ${paginas} página(s) y ${leidas} filas. `
+      + 'No se devuelve una lectura parcial: el trabajo se retoma en la vuelta siguiente.',
+    );
+    this.name = 'LecturaCortadaPorReloj';
+  }
+}
+
 export class LecturaIncompleta extends Error {
   constructor(
     readonly consulta: string,
@@ -183,11 +203,30 @@ export async function traerPorIds<T>(
 export async function traerTodo<T>(
   construir: (desde: number, hasta: number) => PromiseLike<RespuestaPg<T[]>>,
   consulta: string,
+  opts: { venceEn?: number } = {},
 ): Promise<T[]> {
+  // REN-32C3-C1: mismo techo estructural que `traerTodoDesdeId` —
+  // `MAX_PAGINAS × PAGINA` son 100,000 filas— y el mismo motivo para acotarlo:
+  // `gastosSinCfdi` lo usa en el prólogo de `ingerir`, ANTES del único chequeo
+  // de reloj de la cadena, dentro de una ruta de `maxDuration = 300`. El reloj
+  // es OPCIONAL: quien no lo pasa se comporta exactamente como antes.
+  const { venceEn } = opts;
   const filas: T[] = [];
   let esperadas: number | null = null;
 
   for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
+    // Antes de pedir la página, no después: con el reloj ya agotado la primera
+    // consulta tampoco debe salir.
+    //
+    // `venceEn !== undefined` ANTES del `Date.now()`, y no un centinela en
+    // infinito: mirar la hora cuando nadie pidió reloj no es gratis en pruebas
+    // —`REND-A3` maneja su propia secuencia de `Date.now` y una llamada de más
+    // se la corre— y «quien no lo pasa se comporta exactamente como antes»
+    // tiene que ser cierto hasta en eso.
+    if (venceEn !== undefined && Date.now() >= venceEn) {
+      logger.error('pg.lectura_cortada_por_reloj', { consulta, leidas: filas.length, paginas: pagina });
+      throw new LecturaCortadaPorReloj(consulta, filas.length, pagina);
+    }
     // Por filas leídas, NO por número de página: con `max_rows` bajo las páginas
     // vienen cortas y saltar de mil en mil se brincaría las filas de en medio.
     const desde = filas.length;
@@ -251,12 +290,25 @@ export async function traerTodo<T>(
 export async function traerTodoDesdeId<T extends { id: string }>(
   construir: (despuesDe: string | null) => PromiseLike<RespuestaPg<T[]>>,
   consulta: string,
+  opts: { venceEn?: number } = {},
 ): Promise<T[]> {
+  // REN-30-C2: sin `venceEn` el techo de esta lectura es estructural —
+  // `MAX_PAGINAS × PAGINA` son 100,000 filas, 30.0 s nominales y hasta 950 s a
+  // techos, contra el `maxDuration = 300` de la ruta más larga del repo. El
+  // reloj es OPCIONAL para no cambiarle el comportamiento a nadie más: quien no
+  // lo pasa se comporta exactamente como antes.
+  const venceEn = opts.venceEn ?? Number.POSITIVE_INFINITY;
   const filas: T[] = [];
   let esperadas: number | null = null;
   let cursor: string | null = null;
 
   for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
+    // Antes de pedir la página, no después: con el reloj ya agotado la primera
+    // consulta tampoco debe salir.
+    if (Date.now() >= venceEn) {
+      logger.error('pg.lectura_cortada_por_reloj', { consulta, leidas: filas.length, paginas: pagina });
+      throw new LecturaCortadaPorReloj(consulta, filas.length, pagina);
+    }
     const res = await construir(cursor);
     const pag = exigir(res, consulta) ?? [];
     // Solo en la primera vuelta, igual que `traerTodo`: el total viene gratis

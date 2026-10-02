@@ -210,8 +210,20 @@ jobs:
           gh label create deriva-sin-desplegar --color FBCA04 --description 'Producción está atrás de master en src/ o supabase/' --force >/dev/null 2>&1 || true
           gh issue create --title 'Producción está atrás de master (código sin publicar)' --label deriva-sin-desplegar --body "$(printf '%s\n\nPulso que lo detectó: %s\n\nEste issue se cierra solo cuando producción alcance a master.\n' "$MENSAJE" "$RUN_URL")"
 
+      # OP-32C2-C1 (auditoría 32 cont. 2, CRÍTICO): la condición replica la
+      # guarda del paso que MIDE, y compara a prueba de coerción. Sin las dos,
+      # la corrida #671 (push a master, 16-sep 08:21:57Z) cerró el issue #474
+      # con «Producción ya corre todo el código de master» mientras producción
+      # corría `cfa00ab` y master llevaba `8b01aec` y `5ce91b2` sin publicar:
+      # el detector había salido `skipped`, y `null == '0'` es VERDADERA porque
+      # GitHub convierte ambos lados a número cuando los tipos difieren.
+      # `format('{0}', …)` fuerza la comparación entre cadenas, así que una
+      # salida que nadie escribió ya no se lee como «medí cero» — ni cuando el
+      # paso se salta, ni cuando se rinde sin publicar salida (:178-:179, que
+      # es el caso de producción caída). Es la lección de OP-C2/#339, que
+      # quedó escrita en el paso hermano de :292 y no se había copiado aquí.
       - name: Cerrar el issue de deriva cuando producción alcanza a master
-        if: always() && steps.deriva.outputs.hay == '0'
+        if: always() && github.event_name != 'push' && format('{0}', steps.deriva.outputs.hay) == '0'
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

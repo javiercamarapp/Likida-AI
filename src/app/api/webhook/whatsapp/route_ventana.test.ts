@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// VENTANA DE 24 H + IDEMPOTENCIA DEL WEBHOOK (P0-B, mig. 0360).
+// VENTANA DE 24 H + IDEMPOTENCIA DEL WEBHOOK (P0-B, mig. 0368).
 //
 // Cada mensaje entrante firmado registra la ventana del contacto con la hora de
 // META; nada de eso puede cambiar el código de respuesta; y las reentregas, los

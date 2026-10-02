@@ -51,7 +51,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 /** Cómo rechaza Meta el texto cuando `sendText` devuelve null (por defecto: ventana cerrada). */
 let rechazoTexto: { codigo?: number; status: number } = { codigo: 131047, status: 400 };
-/** Lo que dice la caché de la ventana (mig. 0360). */
+/** Lo que dice la caché de la ventana (mig. 0368). */
 let estadoVentana: 'abierta' | 'cerrada' | 'desconocida' = 'desconocida';
 const sendText = vi.fn<(...a: unknown[]) => Promise<string | null>>();
 const sendTemplate = vi.fn<(...a: unknown[]) => Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }>>();

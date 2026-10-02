@@ -85,6 +85,13 @@ interface GastoRpc {
   cfdiOrden?: number | null;
   folio?: string | null;
   folioNorm?: string | null;
+  // FIS-C4 / ARQ32C4-C2 (auditoría 32 c5): desde la 0361. Es la columna con
+  // la que `copiasDeComprobante` decide qué es copia desde `790900d` — el
+  // folio lo numera cada estación y se reinicia por emisor. Sin ella esta
+  // ruta corría con la regla ANTERIOR a la 0357 y la base de un comprobante
+  // real desaparecía del asiento. Opcional en el TIPO por la misma razón que
+  // las de arriba: detectar la RPC vieja y fallar cerrado.
+  rfcEmisor?: string | null;
   formaPago?: string | null;
   pagadoEn?: string | null;
   pagadoForma?: string | null;
@@ -102,12 +109,12 @@ interface GastoRpc {
  * contador asentaba el 100% como deducible. Aquí se FALLA CERRADO y se dice
  * qué migración falta.
  */
-const RPC_VERSION_MINIMA = 342;
+const RPC_VERSION_MINIMA = 361;
 
 function rpcDesactualizada(f: FilaPoliza): string | null {
   if (!Array.isArray(f.gastos)) return 'la RPC no entrega `gastos` por comprobante (anterior a la 0272)';
   if (typeof f.version !== 'number' || f.version < RPC_VERSION_MINIMA) {
-    return `la RPC va en una versión anterior a la ${RPC_VERSION_MINIMA} (sin revisión humana ni traslados fiscales por comprobante)`;
+    return `la RPC va en una versión anterior a la ${RPC_VERSION_MINIMA} (sin el emisor del comprobante, con el que se decide qué es copia)`;
   }
   if (!['pendiente', 'aprobada', 'ajustada', 'rechazada'].includes(f.revision ?? '')) return 'la RPC no entrega un estado de revisión reconocido';
   return null;
@@ -144,6 +151,7 @@ function aGasto(g: GastoRpc): Gasto {
     cfdiOrden: num(g.cfdiOrden),
     folio: g.folio ?? undefined,
     folioNorm: g.folioNorm ?? undefined,
+    rfcEmisor: g.rfcEmisor ?? undefined,
     formaPago: g.formaPago ?? undefined,
     pagadoEn: g.pagadoEn ?? undefined,
     pagadoForma: g.pagadoForma ?? undefined,
@@ -347,7 +355,7 @@ export async function GET(req: Request) {
       detalle:
         `No se puede armar la póliza: ${desactualizada}. Faltan insumos para comprobar la revisión humana ` +
         'y el desglose fiscal; actualiza la base de datos antes de exportar. No se genera un archivo parcial.',
-      migracionEsperada: 'supabase/migrations/0342_poliza_revision_y_desglose.sql',
+      migracionEsperada: 'supabase/migrations/0361_poliza_dedup_emisor.sql',
     }, { status: 409 });
   }
 

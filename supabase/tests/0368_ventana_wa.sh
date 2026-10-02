@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# 0360 — la ventana de 24 h de WhatsApp contra un Postgres REAL con la migración
+# 0368 — la ventana de 24 h de WhatsApp contra un Postgres REAL con la migración
 # aplicada. Cubre: normalización 521→52, ventana abierta/cerrada/desconocida,
 # frontera de 24 h exactas, desorden (la hora solo avanza), duplicados
 # idempotentes, hora futura recortada, teléfono inválido, concurrencia, permisos
 # (solo service_role) y la retención.
 set -euo pipefail
 
-pg_host=${1:?uso: 0360_ventana_wa.sh HOST PORT DB}
-pg_port=${2:?uso: 0360_ventana_wa.sh HOST PORT DB}
-pg_db=${3:?uso: 0360_ventana_wa.sh HOST PORT DB}
+pg_host=${1:?uso: 0368_ventana_wa.sh HOST PORT DB}
+pg_port=${2:?uso: 0368_ventana_wa.sh HOST PORT DB}
+pg_db=${3:?uso: 0368_ventana_wa.sh HOST PORT DB}
 psql_cmd=(psql -h "$pg_host" -p "$pg_port" -d "$pg_db" -X -v ON_ERROR_STOP=1 -Atq)
 fallos=0
 q() { "${psql_cmd[@]}" -c "$1"; }
@@ -16,7 +16,7 @@ espera() { # espera "descripción" "esperado" "SQL"
   local obtenido; obtenido=$(q "$3")
   if [ "$obtenido" = "$2" ]; then echo "ok   $1"; else echo "FALLA $1: esperaba [$2], obtuve [$obtenido]"; fallos=$((fallos+1)); fi
 }
-cleanup() { q "delete from public.wa_ventana_contacto where telefono like '5299936%'" >/dev/null 2>&1 || true; q "delete from public.wa_envio_registro where contexto like 'prueba0360%'" >/dev/null 2>&1 || true; }
+cleanup() { q "delete from public.wa_ventana_contacto where telefono like '5299936%'" >/dev/null 2>&1 || true; q "delete from public.wa_envio_registro where contexto like 'prueba0368%'" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 cleanup
 
@@ -86,14 +86,14 @@ espera "…las vivas siguen"     "1" "select count(*) from public.wa_ventana_con
 if q "select public.purgar_wa_ventana_contacto(1, 100)" >/dev/null 2>&1; then echo "FALLA purga de 1 día aceptada"; fallos=$((fallos+1)); else echo "ok   purga de ventanas con menos de 2 días rechazada"; fi
 
 # Registro de decisiones: restricciones y retención.
-q "insert into public.wa_envio_registro(contexto,contacto_ult4,ventana,canal,motivo,ok) values ('prueba0360 vieja','0001','cerrada','plantilla','ventana_cerrada',true)"
-q "update public.wa_envio_registro set creado_en = now() - interval '200 days' where contexto='prueba0360 vieja'"
-q "insert into public.wa_envio_registro(contexto,contacto_ult4,ventana,canal,motivo,ok) values ('prueba0360 nueva','0002','abierta','texto','ventana_abierta',true)"
-if q "insert into public.wa_envio_registro(contexto,ventana,canal,motivo,ok) values ('prueba0360 mala','rara','texto','x',true)" >/dev/null 2>&1; then echo "FALLA ventana inválida aceptada"; fallos=$((fallos+1)); else echo "ok   ventana inválida rechazada"; fi
-if q "insert into public.wa_envio_registro(contexto,contacto_ult4,ventana,canal,motivo,ok) values ('prueba0360 tel','529993600001','abierta','texto','x',true)" >/dev/null 2>&1; then echo "FALLA teléfono completo aceptado en el registro"; fallos=$((fallos+1)); else echo "ok   el registro no admite teléfono completo"; fi
+q "insert into public.wa_envio_registro(contexto,contacto_ult4,ventana,canal,motivo,ok) values ('prueba0368 vieja','0001','cerrada','plantilla','ventana_cerrada',true)"
+q "update public.wa_envio_registro set creado_en = now() - interval '200 days' where contexto='prueba0368 vieja'"
+q "insert into public.wa_envio_registro(contexto,contacto_ult4,ventana,canal,motivo,ok) values ('prueba0368 nueva','0002','abierta','texto','ventana_abierta',true)"
+if q "insert into public.wa_envio_registro(contexto,ventana,canal,motivo,ok) values ('prueba0368 mala','rara','texto','x',true)" >/dev/null 2>&1; then echo "FALLA ventana inválida aceptada"; fallos=$((fallos+1)); else echo "ok   ventana inválida rechazada"; fi
+if q "insert into public.wa_envio_registro(contexto,contacto_ult4,ventana,canal,motivo,ok) values ('prueba0368 tel','529993600001','abierta','texto','x',true)" >/dev/null 2>&1; then echo "FALLA teléfono completo aceptado en el registro"; fallos=$((fallos+1)); else echo "ok   el registro no admite teléfono completo"; fi
 espera "purga borra solo lo viejo" "1" "select public.purgar_wa_envio_registro(90, 100)"
-espera "queda la reciente" "1" "select count(*) from public.wa_envio_registro where contexto like 'prueba0360%'"
+espera "queda la reciente" "1" "select count(*) from public.wa_envio_registro where contexto like 'prueba0368%'"
 if q "select public.purgar_wa_envio_registro(1, 100)" >/dev/null 2>&1; then echo "FALLA purga de 1 día aceptada"; fallos=$((fallos+1)); else echo "ok   purga con parámetros peligrosos rechazada"; fi
 
 if [ "$fallos" -ne 0 ]; then echo "$fallos prueba(s) fallaron"; exit 1; fi
-echo "0360: todas las pruebas pasaron"
+echo "0368: todas las pruebas pasaron"

@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
   }
 
   const messages = extractMessages(payload);
-  // ── VENTANA DE 24 H (mig. 0360) ───────────────────────────────────────────
+  // ── VENTANA DE 24 H (mig. 0368) ───────────────────────────────────────────
   // Todo mensaje entrante válido (firma ya verificada) abre/renueva la ventana
   // de servicio de ESE contacto, con la hora de META y antes de cualquier rate
   // limit o apagado: la ventana es un hecho de WhatsApp, no del procesamiento.

@@ -28,6 +28,10 @@ import { createLlmBudget } from '@/lib/llm/budget';
 import { ahoraMs } from '@/lib/saludo';
 import { TZ_MX, hoyMx } from '@/lib/formato';
 import { guardiaFundamento, normasDeToolCalls } from '@/lib/likida/normas/fundamento';
+// TC-32C5-A1: la MISMA función que ya cotejaba cardinales en el canal de
+// WhatsApp desde la auditoría 13 (`cuadre/cifras.ts:173-175`). No se
+// reimplementa: dos vocabularios de cardinales serían dos criterios.
+import { cardinalesEnPalabras } from '@/lib/likida/cuadre/cifras';
 import './chat-tools'; // registra las tools de lectura al importar
 // El orquestador: las tools de las fuentes nuevas (Conductor, Vigía, buzón, cobranza,
 // autofactura, salud de agentes) y la única acción (escalar a una persona).
@@ -185,9 +189,25 @@ export function esDerivada(n: number, respaldo: Set<number>): boolean {
  *  propia pregunta del usuario. */
 export function cifrasRespaldadas(bloques: Bloque[], respaldo: Set<number>): boolean {
   const usadas = new Set<number>();
+  // TC-32C5-A1 (auditoría 32 c5, ALTO): LOS CARDINALES EN PALABRAS TAMBIÉN.
+  //
+  // `extraerNumeros` sólo ve dígitos. Un texto SIN un solo dígito dejaba
+  // `usadas` vacío, el bucle de abajo no iteraba, y esta función devolvía
+  // `true` — que aguas arriba significa APROBADO, no «no había nada que
+  // verificar». La misma cantidad quedaba bloqueada en dígitos y aprobada en
+  // letras, y redondear a letras es como se habla de dinero en México.
+  //
+  // El hueco ya se había cerrado en el canal de WhatsApp en la auditoría 13;
+  // esta guardia se escribió como su molde y sólo copió la mitad numérica. Se
+  // IMPORTA `cardinalesEnPalabras` en vez de reescribirla: un segundo
+  // vocabulario de cardinales sería un segundo criterio, y este producto emite
+  // uno. Su aproximación falla hacia «no respaldado» a propósito (lo dice su
+  // propia cabecera), que aquí es la dirección segura: dispara el reintento
+  // correctivo y la red determinística en vez de dejar salir la cifra.
+  const cardinales = (t: string) => { for (const n of cardinalesEnPalabras(t)) usadas.add(n); };
   for (const b of bloques) {
-    if (b.tipo === 'texto') extraerNumeros(b.texto, usadas);
-    else if (b.tipo === 'cifra') { usadas.add(Math.round(b.valor * 100) / 100); if (b.nota) extraerNumeros(b.nota, usadas); }
+    if (b.tipo === 'texto') { extraerNumeros(b.texto, usadas); cardinales(b.texto); }
+    else if (b.tipo === 'cifra') { usadas.add(Math.round(b.valor * 100) / 100); if (b.nota) { extraerNumeros(b.nota, usadas); cardinales(b.nota); } }
     else if (b.tipo === 'tabla') extraerNumeros(b.filas, usadas);
     else if (b.tipo === 'dona') for (const s of b.segmentos) usadas.add(Math.round(s.valor * 100) / 100);
     else for (const p of b.puntos) usadas.add(Math.round(p.valor * 100) / 100);

@@ -16,7 +16,7 @@ vi.mock('@/lib/likida/wa_outbox', () => ({
   RETRASO_AMBIGUO_SEGUNDOS: 300,
 }));
 
-// La caché de la ventana (mig. 0360) la lee el selector; aquí se controla.
+// La caché de la ventana (mig. 0368) la lee el selector; aquí se controla.
 let estadoVentana: 'abierta' | 'cerrada' | 'desconocida' = 'desconocida';
 vi.mock('@/lib/likida/wa_ventana', () => ({
   ventanaDeContacto: async () => ({ estado: estadoVentana, ultimoEntranteEn: null, expiraEn: null }),
@@ -117,7 +117,7 @@ describe('parametrosAvisoOficina', () => {
   });
 });
 
-describe('con el registro de ventana (0360)', () => {
+describe('con el registro de ventana (0368)', () => {
   it('ventana CERRADA: sale la plantilla directa, sin el POST de texto que Meta rechazaría', async () => {
     estadoVentana = 'cerrada';
     const r = await avisarOficina('5219990000001', 'texto largo', { parametros: params });

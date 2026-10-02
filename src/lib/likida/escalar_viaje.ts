@@ -340,7 +340,7 @@ export async function escalarViajesSinAceptar(args: {
     if (v.operadorId) {
       try {
         let recordado = false;
-        // P0-B (0360): si el registro dice que la ventana del chofer está CERRADA no
+        // P0-B (0368): si el registro dice que la ventana del chofer está CERRADA no
         // se gasta el intento de texto que Meta rechazaría con 131047: va directo a
         // la plantilla de asignación. Con la ventana abierta o sin dato, el texto
         // primero, como siempre.
@@ -383,7 +383,7 @@ export async function escalarViajesSinAceptar(args: {
         // La plantilla se conserva como plan B porque fuera de la ventana de
         // 24 h es lo único que WhatsApp entrega — y el jefe puede llevar días
         // sin escribirle al número.
-        // P0-B (0360): el selector decide el canal con el registro de la ventana
+        // P0-B (0368): el selector decide el canal con el registro de la ventana
         // del jefe y deja constancia del motivo. Un rechazo que NO es de ventana
         // (429, bloqueo) ya no cae a plantilla: el texto reintentable quedó en
         // `wa_outbox` y la plantilla duplicaba el aviso.

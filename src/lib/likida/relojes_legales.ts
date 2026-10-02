@@ -308,7 +308,7 @@ async function avisarRelojesDeIncidencia(
   let dineroEnviadoAhora = false;
   if (partesDinero.length > 0 && !yaAvisado.dinero) {
     const tel = await telefonoParaDineroDe(inc.tenantId);
-    // P0-B (0360): `avisarOficina` = texto con la ventana abierta, plantilla
+    // P0-B (0368): `avisarOficina` = texto con la ventana abierta, plantilla
     // `aviso_operacion_v1` con la cerrada. Antes `sendText` a secas: el contador
     // que llevaba >24 h sin escribirle al número no se enteraba del plazo legal.
     const envio = tel ? await avisarOficina(tel, partesDinero.join('\n\n'), {
@@ -607,7 +607,7 @@ export async function avisarVencimientos(ahora: Date = new Date(), opts: Opcione
       const texto =
         `📋 Papeles de la flota por vencer:\n${lineas.join('\n')}\n` +
         `Renovar toma días hábiles (cita, taller, pago) — por eso el aviso sale con tiempo. Los detalles están en Unidades y Operadores del panel.`;
-      // P0-B (0360): plantilla de respaldo fuera de la ventana de 24 h (antes
+      // P0-B (0368): plantilla de respaldo fuera de la ventana de 24 h (antes
       // `sendText` a secas: el jefe sin conversación reciente nunca se enteraba
       // del vencimiento y el aviso se reintentaba cada corrida sin llegar).
       const enviado = await avisarOficina(tel, texto, {

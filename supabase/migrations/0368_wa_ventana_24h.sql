@@ -1,4 +1,4 @@
--- 0360 — Ventana de servicio de 24 h de WhatsApp, por contacto, y el registro
+-- 0368 — Ventana de servicio de 24 h de WhatsApp, por contacto, y el registro
 -- de por qué cada aviso salió como texto, botones o plantilla.
 --
 -- POR QUÉ. Likida INICIA muchas conversaciones (avisos al jefe, cobranza,
@@ -45,7 +45,7 @@ alter table public.wa_ventana_contacto enable row level security;
 revoke all on table public.wa_ventana_contacto from public, anon, authenticated;
 grant select, insert, update on table public.wa_ventana_contacto to service_role;
 comment on table public.wa_ventana_contacto is
-  '0360: instante del último mensaje ENTRANTE por teléfono (forma 52+10). Caché de la ventana de 24 h de Meta; la actualiza el webhook con la hora de Meta. Solo service_role.';
+  '0368: instante del último mensaje ENTRANTE por teléfono (forma 52+10). Caché de la ventana de 24 h de Meta; la actualiza el webhook con la hora de Meta. Solo service_role.';
 
 -- Registra un mensaje entrante. IDEMPOTENTE y a prueba de desorden: Meta
 -- reentrega y puede entregar fuera de orden, así que la hora solo AVANZA
@@ -167,7 +167,7 @@ revoke all on table public.wa_envio_registro from public, anon, authenticated;
 grant select on table public.wa_envio_registro to authenticated;
 grant select, insert, delete on table public.wa_envio_registro to service_role;
 comment on table public.wa_envio_registro is
-  '0360: por qué cada aviso proactivo salió como texto, botones o plantilla (o no salió). Sin teléfono completo. Retención: purgar_wa_envio_registro.';
+  '0368: por qué cada aviso proactivo salió como texto, botones o plantilla (o no salió). Sin teléfono completo. Retención: purgar_wa_envio_registro.';
 
 -- Retención acotada (la corre quien programe el mantenimiento; no hay cron nuevo).
 create or replace function public.purgar_wa_envio_registro(
