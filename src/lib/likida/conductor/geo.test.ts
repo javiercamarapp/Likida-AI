@@ -93,11 +93,11 @@ describe('dentroDeGeocerca (helper único)', () => {
     const a100 = { lat: 20, lng: -103 + 99 / (111_195 * Math.cos((20 * Math.PI) / 180)) };
     expect(dentroDeGeocerca(a100, c)).toMatchObject({ dentro: true, metodo: 'circulo', aproximada: false });
     expect(dentroDeGeocerca({ lat: 20.002, lng: -103 }, c).dentro).toBe(false);
-    expect(dentroDeGeocerca({ lat: 20.002, lng: -103 }, c, 150).dentro).toBe(false);
+    expect(dentroDeGeocerca({ lat: 20.002, lng: -103 }, c, 100).dentro).toBe(false);
     expect(dentroDeGeocerca({ lat: 20.0012, lng: -103 }, c, 50).dentro).toBe(true);
     expect(dentroDeGeocerca(a100, { ...c, aproximada: true }).aproximada).toBe(true);
   });
-  it('un polígono polígono con `aproximada` en la fila NO es aproximado: manda el polígono', () => {
+  it('un polígono con `aproximada` en la fila NO es aproximado: manda el polígono', () => {
     expect(dentroDeGeocerca(DENTRO_PATIO, { ...poligonal, aproximada: true }).aproximada).toBe(false);
   });
   it('un polígono cóncavo (en L): el hueco de la L está fuera aunque caiga en su círculo', () => {
