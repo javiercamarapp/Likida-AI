@@ -38,6 +38,8 @@ docs/auditoria-*/
 # terceros, LFPDPPP). NUNCA se rastrea: sin consentimiento de esas personas no
 # puede vivir en un repo público. Prueba de CI: sin_datos_privados_rastreados.test.ts.
 staging_canacar/
+# Salida cruda de la cosecha de prospectos (~200 JSON con correos y teléfonos de terceros): misma regla.
+scripts/cosecha/salida-prospectos/
 docs/comercial/
 docs/REPORTE-ESTADO.md
 PROMPT-SESION-NUEVA.md
