@@ -50,7 +50,7 @@ export const puertosEnvioReales: PuertosEnvio = {
 };
 
 async function enviarInstrucciones(
-  tenantId: string, viajeId: string, cual: Envio, p: PuertosEnvio, ahora: Date,
+  tenantId: string, viajeId: string, cual: Envio, p: PuertosEnvio, ahora: Date, opciones: { actualizado?: boolean } = {},
 ): Promise<ResultadoEnvioInstrucciones> {
   try {
     // El despacho LIGA (fotografía) el convenio; el acercamiento solo lee la foto que el despacho dejó.
@@ -78,7 +78,7 @@ async function enviarInstrucciones(
     }
     const base = { operadorNombre: ctx.operadorNombre, folio: ctx.folio, origen: ctx.origen, destino: ctx.destino };
     const mensaje = cual === 'despacho'
-      ? armarMensajeDespacho(base, ligado.instrucciones)
+      ? armarMensajeDespacho(base, ligado.instrucciones, opciones)
       : armarMensajeAcercamiento(base, ligado.instrucciones, cual === 'acercamiento_origen' ? 'origen' : 'destino');
     if (!mensaje) return { estado: 'sin_instrucciones' };
 
@@ -102,9 +102,14 @@ async function enviarInstrucciones(
   }
 }
 
-/** Al despachar: liga el convenio al viaje (foto de instrucciones) y manda las de `despacho`/`ambos` al operador. */
-export function despacharInstrucciones(tenantId: string, viajeId: string, p: PuertosEnvio = puertosEnvioReales, ahora: Date = new Date()): Promise<ResultadoEnvioInstrucciones> {
-  return enviarInstrucciones(tenantId, viajeId, 'despacho', p, ahora);
+/**
+ * Al despachar: liga el convenio al viaje (foto de instrucciones) y manda las de `despacho`/`ambos` al operador.
+ * `actualizado` = se vuelve a mandar tras editar el convenio (el texto lo dice; el sello ya se había reabierto en la base).
+ */
+export function despacharInstrucciones(
+  tenantId: string, viajeId: string, p: PuertosEnvio = puertosEnvioReales, ahora: Date = new Date(), opciones: { actualizado?: boolean } = {},
+): Promise<ResultadoEnvioInstrucciones> {
+  return enviarInstrucciones(tenantId, viajeId, 'despacho', p, ahora, opciones);
 }
 
 /** Al acercarse a la planta del `lado`: manda las de `acercamiento`/`ambos` de ESA planta, una vez POR PLANTA (cada una con su sello). */
