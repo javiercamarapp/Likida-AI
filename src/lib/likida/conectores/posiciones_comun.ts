@@ -92,7 +92,8 @@ export function relojDe(o: OpcionesLecturaPaginada): Reloj {
 
 export type Llamada =
   | { ok: true; r: RespuestaHttp }
-  | { ok: false; motivo: string; falla: FallaLectura; backlog?: boolean };
+  /** `falla` ausente = se acabó el presupuesto de la corrida: NO es culpa del proveedor y no activa backoff. */
+  | { ok: false; motivo: string; falla?: FallaLectura; backlog?: boolean };
 
 /**
  * UNA petición con la política común: 5xx con backoff exponencial (3), 429 con
@@ -105,7 +106,7 @@ export async function llamar(http: Http, p: PeticionHttp, nombre: string, reloj:
   let r429 = 0;
   for (;;) {
     if (reloj.venceEn !== undefined && reloj.ahora() >= reloj.venceEn) {
-      return { ok: false, motivo: `${nombre} quedó con trabajo pendiente al vencer el presupuesto.`, falla: 'proveedor', backlog: true };
+      return { ok: false, motivo: `${nombre} quedó con trabajo pendiente al vencer el presupuesto.`, backlog: true };
     }
     let r: RespuestaHttp;
     try {

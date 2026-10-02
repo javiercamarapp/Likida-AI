@@ -204,8 +204,37 @@ describe('la idempotencia y el sello', () => {
     const http = httpQue(200, cuerpoSamsara([{ id: 'nadie', lat: 20.9, lng: -89.5, t: '2026-08-23T18:00:00Z' }]));
     const r = await sincronizarGpsDeFlota('t-1', 'samsara', CRED, http);
     expect(r.huerfanas).toBe(1);
-    expect(escrituras).toHaveLength(0);
+    // A `posicion` NO se escribe nada; solo se anota el dispositivo huérfano
+    // (id y hora, jamás coordenadas) para el mapeo masivo.
+    expect(escrituras.filter((e) => e.tabla === 'posicion')).toHaveLength(0);
+    const h = escrituras.filter((e) => e.tabla === 'gps_dispositivo_huerfano');
+    expect(h).toHaveLength(1);
+    expect(h[0].filas).toEqual([expect.objectContaining({ tenant_id: 't-1', proveedor: 'samsara', device_id: 'nadie' })]);
+    expect(JSON.stringify(h[0].filas)).not.toMatch(/lat|lng|20\.9/);
     expect(sellos).toHaveLength(0);
+  });
+});
+
+describe('0500: la clase de falla y la ignición viajan hasta donde se usan', () => {
+  it('un 401 del proveedor sale como falla de credencial (activa el backoff largo)', async () => {
+    const r = await sincronizarGpsDeFlota('t-1', 'samsara', CRED, httpQue(401, '{}'));
+    expect(r.falla).toBe('credencial');
+  });
+  it('un 503 persistente sale como falla del proveedor (backoff corto)', async () => {
+    const r = await sincronizarGpsDeFlota('t-1', 'samsara', CRED, httpQue(503, '{}'), Date.now, { dormir: async () => {} });
+    expect(r.falla).toBe('proveedor');
+  });
+  it('la ignición que reporta el proveedor se guarda; sin dato queda null (no «apagada»)', async () => {
+    const original = LECTORES_POSICION.wialon;
+    LECTORES_POSICION.wialon = async () => ({ ok: true, completo: true, paginas: 1, invalidas: 0, posiciones: [
+      { deviceId: '1234', lat: 20, lng: -99, medidaEn: '2026-08-23T18:00:00Z', velocidad: 1, rumbo: 1, ignicion: true },
+    ] });
+    UNIDADES.push({ id: 'u-w', tenant_id: 't-1', gps_proveedor: 'wialon', gps_device_id: '1234' });
+    try {
+      await sincronizarGpsDeFlota('t-1', 'wialon', CRED, httpQue(200, '{}'));
+      const fila = (escrituras.find((e) => e.tabla === 'posicion')!.filas as Array<Record<string, unknown>>)[0];
+      expect(fila).toMatchObject({ unidad_id: 'u-w', ignicion: true, proveedor: 'wialon' });
+    } finally { LECTORES_POSICION.wialon = original; UNIDADES.pop(); }
   });
 });
 

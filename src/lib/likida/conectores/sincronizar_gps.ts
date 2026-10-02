@@ -53,6 +53,8 @@ const TOLERANCIA_FUTURO_MS = 60 * 60 * 1000;
 /** Evita que una instalación con muchas flotas abra una ráfaga ilimitada de
  * conexiones contra proveedores y PostgREST. */
 const ANCHO_FANOUT_FLOTAS = 4;
+/** Techo de dispositivos huérfanos que se registran por corrida (una ráfaga absurda no llena la tabla). */
+const TOPE_HUERFANOS_POR_CORRIDA = 5_000;
 
 export interface ResultadoSync {
   tenantId: string;
@@ -90,7 +92,7 @@ export interface ResultadoSync {
   sinPosicion?: number;
 }
 
-type Lectura = { deviceId: string; lat: number; lng: number; medidaEn: string; velocidad: number | null; rumbo: number | null; ignicion?: boolean | null };
+export type Lectura = { deviceId: string; lat: number; lng: number; medidaEn: string; velocidad: number | null; rumbo: number | null; ignicion?: boolean | null };
 
 /** La frontera entre un proveedor ajeno y nuestra tabla es estricta: un id
  * vacío, una fecha inválida o números fuera de dominio no llegan a Postgres.
@@ -161,8 +163,6 @@ export async function sincronizarGpsDeFlota(
   opciones: { venceEn?: number; reloj?: () => number; dormir?: (ms: number) => Promise<void> } = {},
 ): Promise<ResultadoSync> {
   const base: ResultadoSync = { tenantId, proveedor: conectorId, leidas: 0, guardadas: 0, huerfanas: 0 };
-  const reloj = opciones.reloj ?? ahora;
-  const sinTiempo = () => opciones.venceEn !== undefined && reloj() >= opciones.venceEn;
 
   const lector = lectorDe(conectorId);
   if (!lector) {
@@ -180,11 +180,40 @@ export async function sincronizarGpsDeFlota(
 
   const r = await lector(valores, http, { venceEn: opciones.venceEn, ahora: opciones.reloj ?? ahora, dormir: opciones.dormir });
   if (!r.ok) return { ...base, paginas: r.paginas, backlog: r.backlog, error: r.motivo, falla: r.falla };
-  base.paginas = r.paginas;
-  if (r.sinPosicion) base.sinPosicion = r.sinPosicion;
+  return asentarLecturas(tenantId, conectorId, r.posiciones, {
+    ahora, reloj: opciones.reloj, venceEn: opciones.venceEn,
+    invalidasDelLector: r.invalidas, paginas: r.paginas, sinPosicion: r.sinPosicion,
+  });
+}
+
+/**
+ * EL ASENTADOR — lo que comparten el POLL (lectores de proveedor) y el PUSH
+ * firmado (`/api/gps/push`): valida la frontera, liga dispositivo → unidad de LA
+ * flota, aplica la compuerta de privacidad, guarda idempotente y sella
+ * `gps_visto_en`. Una sola ruta de escritura a `posicion` significa una sola
+ * garantía de aislamiento, dedupe y privacidad, no dos que se desincronicen.
+ */
+export async function asentarLecturas(
+  tenantId: string,
+  conectorId: string,
+  lecturas: readonly Lectura[],
+  opciones: {
+    ahora?: () => number; reloj?: () => number; venceEn?: number;
+    invalidasDelLector?: number; paginas?: number; sinPosicion?: number;
+    /** Lecturas más viejas que esto (ms) se descartan (push: dispositivos con buffer). */
+    maxAntiguedadMs?: number;
+  } = {},
+): Promise<ResultadoSync> {
+  const ahora = opciones.ahora ?? Date.now;
+  const reloj = opciones.reloj ?? ahora;
+  const sinTiempo = () => opciones.venceEn !== undefined && reloj() >= opciones.venceEn;
+  const base: ResultadoSync = { tenantId, proveedor: conectorId, leidas: 0, guardadas: 0, huerfanas: 0 };
+  if (opciones.paginas !== undefined) base.paginas = opciones.paginas;
+  if (opciones.sinPosicion) base.sinPosicion = opciones.sinPosicion;
   const ahoraMs = ahora();
-  const validas = r.posiciones.filter((p) => posicionValida(p, ahoraMs));
-  const descartadas = r.invalidas + (r.posiciones.length - validas.length);
+  const dentroDeRango = (p: Lectura) => opciones.maxAntiguedadMs === undefined || Date.parse(p.medidaEn) >= ahoraMs - opciones.maxAntiguedadMs;
+  const validas = lecturas.filter((p) => posicionValida(p, ahoraMs) && dentroDeRango(p));
+  const descartadas = (opciones.invalidasDelLector ?? 0) + (lecturas.length - validas.length);
   if (descartadas > 0) {
     base.descartadas = descartadas;
     base.backlog = true;
@@ -220,6 +249,23 @@ export async function sincronizarGpsDeFlota(
     }
     for (const u of unidades ?? []) {
       if (u.gps_device_id) porDevice.set(String(u.gps_device_id), String(u.id));
+    }
+  }
+
+  // ── HUÉRFANOS: se registran (id y hora, jamás coordenadas), NO se vuelven unidades ──
+  const sinUnidad = ids.filter((id) => !porDevice.has(id));
+  if (sinUnidad.length > 0 && !sinTiempo()) {
+    const sello = new Date(ahoraMs).toISOString();
+    for (const tanda of enTandas(sinUnidad.slice(0, TOPE_HUERFANOS_POR_CORRIDA), FILAS_POR_UPSERT)) {
+      const { error: errH } = await acotada(
+        supabaseAdmin().from('gps_dispositivo_huerfano').upsert(
+          tanda.map((device_id) => ({ tenant_id: tenantId, proveedor: conectorId, device_id, ultimo_visto_en: sello })),
+          { onConflict: 'tenant_id,proveedor,device_id' },
+        ),
+        'gps.huerfanos',
+      );
+      // No tumba el poll: la lista de huérfanos es ayuda de mapeo, no el dato.
+      if (errH) { logger.warn('gps.huerfanos_no_guardados', { tenantId, proveedor: conectorId, err: errH.message }); break; }
     }
   }
 
