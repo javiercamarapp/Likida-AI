@@ -107,6 +107,22 @@ describe('enviarBotones (sendButtons con el código de Meta)', () => {
     expect(encolar).not.toHaveBeenCalled();
     expect(await sendButtons('5219993700779', '¿Listo?', B)).toBeNull();
   });
+  it('con documento: el encabezado viaja en el MISMO mensaje interactivo', async () => {
+    const doc = { url: 'https://storage.example/liq.pdf', nombreArchivo: 'liq.pdf' };
+    expect(await enviarBotones('5219993700779', '¿Listo?', B, doc)).toEqual({ ok: true, id: 'wamid.X' });
+    expect(cuerpo().interactive.header).toEqual({ type: 'document', document: { link: doc.url, filename: 'liq.pdf' } });
+    expect(cuerpo().interactive.type).toBe('button');
+  });
+  it('sin documento el payload no lleva header (no cambia de forma)', async () => {
+    await enviarBotones('5219993700779', '¿Listo?', B);
+    expect('header' in cuerpo().interactive).toBe(false);
+  });
+  it('un documento http o sin nombre no llega a Meta', async () => {
+    for (const d of [{ url: 'http://x.example/a.pdf', nombreArchivo: 'a.pdf' }, { url: 'https://x.example/a.pdf', nombreArchivo: ' ' }, { url: 'no-url', nombreArchivo: 'a.pdf' }]) {
+      expect((await enviarBotones('5219993700779', '¿Listo?', B, d)).ok).toBe(false);
+    }
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
   it('botones inválidos: ni llega a Meta', async () => {
     const r = await enviarBotones('5219993700779', 'x', [{ id: 'a', titulo: 'x'.repeat(21) }]);
     expect(r.ok).toBe(false);

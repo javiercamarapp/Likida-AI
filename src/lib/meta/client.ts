@@ -10,7 +10,7 @@ import {
   encolarSalidaWhatsApp, encolarSalidaWhatsAppDedupe, RETRASO_AMBIGUO_SEGUNDOS,
   type SalidaOutboxDedupe,
 } from '@/lib/likida/wa_outbox';
-import { armarComponentesPlantilla, type OpcionesPlantilla } from './plantilla_payload';
+import { armarComponentesPlantilla, type ComponentePlantilla, type OpcionesPlantilla } from './plantilla_payload';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const DOWNLOAD_TIMEOUT_MS = 15_000;
@@ -446,13 +446,49 @@ export async function sendButtons(to: string, cuerpo: string, botones: BotonAcus
 }
 
 /**
+ * Encabezado de DOCUMENTO de un mensaje interactivo de botones (p. ej. el PDF de
+ * una liquidación externa viaja con sus botones en UN solo mensaje, para que el
+ * chofer nunca vea los botones sin el documento).
+ * Contrato: https://developers.facebook.com/docs/whatsapp/cloud-api/messages/interactive-reply-buttons-messages
+ * (`interactive.header = {type:"document", document:{link, filename}}`).
+ */
+export interface DocumentoEncabezado { url: string; nombreArchivo: string }
+
+/** Por qué un documento de encabezado no se puede mandar (null = sirve). */
+export function motivoDocumentoInvalido(d: DocumentoEncabezado): string | null {
+  let u: URL;
+  try { u = new URL(d.url); } catch { return 'la URL no es válida'; }
+  if (u.protocol !== 'https:') return 'la URL debe ser https';
+  const nombre = (d.nombreArchivo ?? '').trim();
+  if (!nombre || nombre.length > 240) return 'el nombre del archivo está vacío o es demasiado largo';
+  return null;
+}
+
+/** El payload (puro) del mensaje de botones, con encabezado de documento opcional. */
+export function payloadBotones(
+  to: string, cuerpo: string, botones: BotonAcuse[], documento?: DocumentoEncabezado,
+): Record<string, unknown> {
+  return {
+    messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'interactive',
+    interactive: {
+      type: 'button',
+      ...(documento ? { header: { type: 'document', document: { link: documento.url.trim(), filename: documento.nombreArchivo.trim() } } } : {}),
+      body: { text: cuerpo },
+      action: { buttons: botones.map((b) => ({ type: 'reply' as const, reply: { id: b.id, title: b.titulo } })) },
+    },
+  };
+}
+
+/**
  * `sendButtons` con el código de Meta: mismo envío, mismo outbox, pero devuelve
  * `{ok:false, codigo, status}` en vez de un `null` mudo. Lo necesita
  * `enviarConFallback` para distinguir «fuera de ventana (131047) → plantilla» de
  * «429 → ya quedó en el outbox, NO mandar la plantilla también» (duplicaría).
  * Nunca lanza.
  */
-export async function enviarBotones(to: string, cuerpo: string, botones: BotonAcuse[]): Promise<EnvioWhatsApp> {
+export async function enviarBotones(
+  to: string, cuerpo: string, botones: BotonAcuse[], documento?: DocumentoEncabezado,
+): Promise<EnvioWhatsApp> {
   let payload: Record<string, unknown> | null = null;
   try {
     // La frontera es pública en tiempo de ejecución aunque TypeScript diga
@@ -464,13 +500,14 @@ export async function enviarBotones(to: string, cuerpo: string, botones: BotonAc
       return { ok: false, error: `botones inválidos: ${String(invalido.motivo)}` };
     }
 
-    payload = {
-      messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'interactive',
-      interactive: {
-        type: 'button', body: { text: cuerpo },
-        action: { buttons: botones.map((b) => ({ type: 'reply' as const, reply: { id: b.id, title: b.titulo } })) },
-      },
-    };
+    if (documento) {
+      const malo = motivoDocumentoInvalido(documento);
+      if (malo) {
+        logger.error('wa.sendButtons.invalido', { motivo: malo });
+        return { ok: false, error: `encabezado de documento inválido: ${malo}` };
+      }
+    }
+    payload = payloadBotones(to, cuerpo, botones, documento);
     const res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
@@ -586,6 +623,16 @@ export async function encolarBotonesWhatsApp(
   return encolarSalidaWhatsAppDedupe(dedupeKey, payload, 'alerta GPS pendiente de entrega');
 }
 
+/** El payload (puro) de un mensaje de plantilla ya armado. */
+export function payloadPlantilla(
+  to: string, plantilla: string, idioma: string, componentes: ComponentePlantilla[] | undefined,
+): Record<string, unknown> {
+  return {
+    messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'template',
+    template: { name: plantilla, language: { code: idioma }, components: componentes },
+  };
+}
+
 /**
  * Envía una PLANTILLA aprobada — lo único que WhatsApp permite cuando Likida
  * INICIA la conversación.
@@ -622,10 +669,7 @@ export async function sendTemplate(
     return { ok: false, error: `Plantilla ${plantilla} mal armada: ${armado.error}` };
   }
 
-  const payload = {
-    messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'template',
-    template: { name: plantilla, language: { code: idioma }, components: armado.componentes },
-  };
+  const payload = payloadPlantilla(to, plantilla, idioma, armado.componentes);
   let res: Response;
   try {
     res = await fetch(`${GRAPH}/${phoneNumberId()}/messages`, {

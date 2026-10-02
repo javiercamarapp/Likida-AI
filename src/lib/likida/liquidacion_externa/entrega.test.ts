@@ -20,7 +20,11 @@ const encolados: Array<{ llave: string; payload: Record<string, unknown> }> = []
 let outboxCaido = false;
 let lecturaFalla = false;
 
-vi.mock('../wa_outbox', () => ({
+let ventanaEstado: 'abierta' | 'cerrada' | 'desconocida' = 'desconocida';
+const decisiones: Array<Record<string, unknown>> = [];
+
+vi.mock('../wa_outbox', async (orig) => ({
+  ...(await orig<typeof import('../wa_outbox')>()),
   encolarSalidaWhatsAppDedupe: vi.fn(async (llave: string, payload: Record<string, unknown>) => {
     if (outboxCaido) return null;
     // La RPC real: si la llave ya existe devuelve LA MISMA fila, sin duplicar.
@@ -30,26 +34,19 @@ vi.mock('../wa_outbox', () => ({
     outbox.set(llave, { dedupe_key: llave, estado: 'pending', provider_message_id: null, ultimo_error: null });
     return { id: llave, estado: 'pending', providerMessageId: null };
   }),
+  // `null` = no se pudo leer (el selector falla cerrado y reintentable).
+  leerSalidasPorLlave: vi.fn(async (llaves: string[]) => (
+    lecturaFalla ? null : new Map(llaves.filter((l) => outbox.has(l)).map((l) => [l, outbox.get(l)!]))
+  )),
 }));
 
-vi.mock('@/lib/supabase/admin', () => ({
-  supabaseAdmin: () => ({
-    from: (t: string) => {
-      expect(t).toBe('wa_outbox');
-      return {
-        select: () => ({
-          in: async (_c: string, llaves: string[]) => lecturaFalla
-            ? { data: null, error: { message: 'boom' } }
-            : { data: llaves.map((l) => outbox.get(l)).filter(Boolean), error: null },
-        }),
-      };
-    },
-  }),
+vi.mock('@/lib/likida/wa_ventana', () => ({
+  ventanaDeContacto: vi.fn(async () => ({ estado: ventanaEstado })),
+  registrarDecisionEnvio: vi.fn(async (d: Record<string, unknown>) => { decisiones.push(d); }),
 }));
-vi.mock('../presupuesto', async (orig) => ({ ...(await orig<typeof import('../presupuesto')>()), acotada: (q: unknown) => q }));
 
 const {
-  payloadSesion, payloadPlantilla, entregaPorOutbox, murioPorVentana,
+  payloadSesion, variablesPlantilla, entregaPorOutbox, murioPorVentana,
   llaveSesion, llavePlantilla, PLANTILLA_LIQUIDACION,
 } = await import('./entrega');
 
@@ -61,7 +58,7 @@ const msg = (p: Record<string, unknown> = {}) => ({
 });
 
 beforeEach(() => {
-  outbox.clear(); encolados.length = 0; outboxCaido = false; lecturaFalla = false;
+  outbox.clear(); encolados.length = 0; decisiones.length = 0; outboxCaido = false; lecturaFalla = false; ventanaEstado = 'desconocida';
 });
 
 describe('los payloads cumplen los límites de Meta', () => {
@@ -100,32 +97,47 @@ describe('los payloads cumplen los límites de Meta', () => {
     expect(p.interactive.body.text).not.toContain('X'.repeat(41));
   });
 
-  it('plantilla: encabezado de documento, cuatro variables de cuerpo y dos botones de respuesta rápida', () => {
-    const p = payloadPlantilla(msg()) as { type: string; template: { name: string; language: { code: string }; components: Array<Record<string, unknown>> } };
+  /** El payload de plantilla tal como lo encola el selector (ventana cerrada). */
+  async function payloadPlantillaEncolado(m = msg()) {
+    ventanaEstado = 'cerrada';
+    await entregaPorOutbox.enviarConFallback(m);
+    return encolados.at(-1)!.payload as { type: string; to: string; template: { name: string; language: { code: string }; components: Array<Record<string, unknown>> } };
+  }
+
+  it('plantilla: encabezado de documento, cuatro variables de cuerpo y dos botones de respuesta rápida', async () => {
+    const p = await payloadPlantillaEncolado();
     expect(p.type).toBe('template');
     expect(p.template.name).toBe(PLANTILLA_LIQUIDACION);
     expect(p.template.language.code).toBe('es_MX');
     const [header, body, b0, b1] = p.template.components as Array<{ type: string; parameters: Array<Record<string, unknown>>; sub_type?: string; index?: string }>;
     expect(header.type).toBe('header');
-    expect(header.parameters[0].type).toBe('document');
+    expect(header.parameters[0]).toEqual({ type: 'document', document: { link: 'https://storage.example/firmada?token=abc', filename: 'liquidacion-SAP-1.pdf' } });
     expect(body.parameters).toHaveLength(4);
-    expect(body.parameters.map((x) => x.text)).toEqual(['Juan', expect.stringContaining('2026'), '$2,499.75 MXN', 'SAP']);
+    // el orden es el del catálogo: nombre, origen, periodo, total
+    expect(body.parameters.map((x) => x.text)).toEqual(['Juan', 'SAP', expect.stringContaining('2026'), '$2,499.75 MXN']);
     for (const b of [b0, b1]) {
       expect(b.type).toBe('button');
       expect(b.sub_type).toBe('quick_reply');
       expect((b.parameters[0] as { payload: string }).payload.endsWith(ID)).toBe(true);
     }
     expect([b0.index, b1.index]).toEqual(['0', '1']);
+    expect((b0.parameters[0] as { payload: string }).payload).toBe(`liqext_ok:${ID}`);
+    expect((b1.parameters[0] as { payload: string }).payload).toBe(`liqext_no:${ID}`);
   });
 
   it('las variables de plantilla no llevan saltos de línea ni tabuladores (Meta los rechaza)', () => {
-    const p = payloadPlantilla(msg({ nombre: 'Ana\nLaura', sistemaOrigen: 'SAP\t\nERP' })) as { template: { components: Array<{ parameters: Array<{ text?: string }> }> } };
-    for (const v of p.template.components[1].parameters) expect(v.text).not.toMatch(/[\n\t]/);
+    for (const v of variablesPlantilla(msg({ nombre: 'Ana\nLaura', sistemaOrigen: 'SAP\t\nERP' }))) expect(v).not.toMatch(/[\n\t]/);
   });
 
-  it('sin sistema de origen la plantilla dice «el sistema de tu empresa», no deja la variable vacía', () => {
-    const p = payloadPlantilla(msg({ sistemaOrigen: null })) as { template: { components: Array<{ parameters: Array<{ text?: string }> }> } };
-    expect(p.template.components[1].parameters[3].text).toBe('el sistema de tu empresa');
+  it('sin sistema de origen la plantilla dice «tu empresa», no deja la variable vacía', () => {
+    expect(variablesPlantilla(msg({ sistemaOrigen: null }))[1]).toBe('tu empresa');
+  });
+
+  it('las variables coinciden en número con el cuerpo aprobado del catálogo', async () => {
+    const { plantillaDeCatalogo, variablesDeTexto } = await import('@/lib/meta/plantillas_catalogo');
+    const cat = plantillaDeCatalogo(PLANTILLA_LIQUIDACION)!;
+    expect(variablesPlantilla(msg())).toHaveLength(variablesDeTexto(cat.cuerpo).length);
+    expect(cat.encabezado).toEqual({ tipo: 'DOCUMENT' });
   });
 
   it('el teléfono sale sin el «1» de los wa_id mexicanos (Meta rechaza los salientes con él)', () => {
@@ -173,10 +185,43 @@ describe('enviarConFallback: sesión primero', () => {
     expect(r).toMatchObject({ estado: 'fallida', via: 'sesion', reintentable: true });
   });
 
-  it('si no se puede LEER el outbox, lanza (no se decide a ciegas entre encolar y no encolar)', async () => {
+  it('si no se puede LEER el outbox, falla reintentable y NO encola (no se decide a ciegas)', async () => {
     lecturaFalla = true;
-    await expect(entregaPorOutbox.enviarConFallback(msg())).rejects.toThrow(/wa_outbox|boom|liqext/i);
+    expect(await entregaPorOutbox.enviarConFallback(msg())).toMatchObject({ estado: 'fallida', reintentable: true });
     expect(encolados).toHaveLength(0);
+  });
+
+  it('el encabezado del mensaje de sesión es un documento https y deja constancia de la decisión', async () => {
+    ventanaEstado = 'abierta';
+    await entregaPorOutbox.enviarConFallback(msg());
+    const p = encolados[0].payload as { interactive: { header: { type: string } } };
+    expect(p.interactive.header.type).toBe('document');
+    expect(decisiones).toHaveLength(1);
+    expect(decisiones[0]).toMatchObject({ contexto: 'liquidacion_externa', canal: 'botones', motivo: 'ventana_abierta', tenantId: 't-1', ok: true });
+  });
+
+  it('un PDF con URL no https se rechaza ANTES de encolar (Meta lo rechazaría)', async () => {
+    const r = await entregaPorOutbox.enviarConFallback(msg({ pdfUrl: 'http://storage.example/x.pdf' }));
+    expect(r).toMatchObject({ estado: 'fallida', reintentable: false });
+    expect(encolados).toHaveLength(0);
+  });
+});
+
+describe('ventana de 24 h cerrada: plantilla directa', () => {
+  it('con la ventana cerrada se encola DIRECTO la plantilla, sin gastar un intento de sesión', async () => {
+    ventanaEstado = 'cerrada';
+    const r = await entregaPorOutbox.enviarConFallback(msg());
+    expect(r).toEqual({ estado: 'en_cola', via: 'plantilla' });
+    expect(encolados.map((e) => e.llave)).toEqual([llavePlantilla(ID, 1)]);
+    expect(decisiones[0]).toMatchObject({ canal: 'plantilla', motivo: 'ventana_cerrada', plantilla: PLANTILLA_LIQUIDACION });
+  });
+
+  it('IDEMPOTENTE también por plantilla: la segunda llamada reporta la misma fila', async () => {
+    ventanaEstado = 'cerrada';
+    await entregaPorOutbox.enviarConFallback(msg());
+    ventanaEstado = 'abierta'; // aunque la ventana se abra después, la plantilla ya es la que manda
+    await entregaPorOutbox.enviarConFallback(msg());
+    expect(encolados).toHaveLength(1);
   });
 });
 

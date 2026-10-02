@@ -60,7 +60,8 @@ export type EncabezadoCatalogo =
 
 export type AgenteDestino =
   | 'chofer_asignacion' | 'chofer_cobranza' | 'oficina' | 'facturacion' | 'privacidad_arco'
-  | 'gps' | 'asistencia' | 'mis_reglas' | 'agente5_conductor' | 'onboarding_operador' | 'vigia_cliente';
+  | 'gps' | 'asistencia' | 'mis_reglas' | 'agente5_conductor' | 'onboarding_operador' | 'vigia_cliente'
+  | 'liquidacion_externa';
 
 export interface PlantillaCatalogo {
   nombre: string;
@@ -360,6 +361,20 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
     botones: [{ tipo: 'QUICK_REPLY', texto: 'Yo me encargo', payloadPrefijo: 'vig_tomo' }],
     textoVerificado: true, estado: 'nueva_para_aprobacion',
   },
+  {
+    nombre: 'liquidacion_externa_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'liquidacion_externa',
+    proposito: 'Entregar al chofer la liquidación que calculó el SAP/TMS de la flota (PDF en el encabezado) cuando su ventana de 24 h está cerrada.',
+    llamador: 'src/lib/likida/liquidacion_externa/entrega.ts',
+    encabezado: { tipo: 'DOCUMENT' },
+    cuerpo: 'Hola {{1}}, esta es tu liquidación de {{2}}. Periodo: {{3}}. Total: {{4}}. El detalle va en el PDF. ¿Te cuadra? Responde con un botón.',
+    ejemplos: ['Juan', 'SAP', '01/09/2026 al 07/09/2026', '$2,499.75 MXN'],
+    variables: ['primer nombre del chofer', 'sistema de origen de la liquidación (o «tu empresa»)', 'periodo', 'total con moneda'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Recibida', payloadPrefijo: 'liqext_ok' },
+      { tipo: 'QUICK_REPLY', texto: 'No coincide', payloadPrefijo: 'liqext_no' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
 ];
 
 /** Nombres que usa el código (evita literales sueltos). */
@@ -384,6 +399,7 @@ export const PLANTILLA = {
   vigiaRespuestaCliente: 'vigia_respuesta_cliente_v1',
   vigiaAprobacion: 'vigia_aprobacion_v1',
   vigiaEscalamiento: 'vigia_escalamiento_v1',
+  liquidacionExterna: 'liquidacion_externa_v1',
 } as const;
 
 export function plantillaDeCatalogo(nombre: string): PlantillaCatalogo | undefined {

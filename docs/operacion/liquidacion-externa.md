@@ -105,14 +105,25 @@ con estado, vía (sesión/plantilla) y respuesta del chofer, descarga del PDF,
    no se pudo encolar (backoff 2/4/8/16 min, 5 intentos) y concilia contra el
    outbox.
 
-### Interfaz con el selector de otra rama
+### El selector central de canal
 
 `EntregaWhatsApp.enviarConFallback(msg)` (`src/lib/likida/liquidacion_externa/entrega.ts`)
-es una interfaz fina e **idempotente**. La implementación por omisión
-(`entregaPorOutbox`) prueba la sesión y cae a plantilla ante el rechazo. Cuando
-exista el selector real de la rama de WhatsApp de producción (con registro de la
-ventana de 24 h), basta un adaptador que cumpla esa interfaz y se cambia en
-`dependenciasPorOmision` de `servicio.ts`.
+es idempotente y delega en el **selector central en modo durable**
+(`enviarConFallbackDurable`, `src/lib/meta/enviar_con_fallback.ts`):
+
+- ventana de 24 h **cerrada** (registro `wa_ventana_contacto`) → se encola
+  directo la plantilla `liquidacion_externa_v1` del catálogo, con el PDF en su
+  encabezado de documento;
+- ventana **abierta o desconocida** → se encola el mensaje de sesión (botones
+  con el PDF en el encabezado, un solo mensaje);
+- si Meta rechaza la sesión por ventana (131047/131026/131042) → se encola la
+  plantilla, una vez (llaves `liqext:<id>:g<n>:sesion` / `:plantilla`);
+- cada decisión deja una fila en `wa_envio_registro` (contexto `liquidacion_externa`).
+
+La plantilla vive en `plantillas_catalogo.ts` y se documenta en
+`docs/operacion/plantillas-meta.md` (generado). **El orden de las variables es el
+del catálogo:** `{{1}}` nombre · `{{2}}` sistema de origen · `{{3}}` periodo ·
+`{{4}}` total con moneda.
 
 ## BLOQUEOS EXTERNOS (no cerrables por código)
 
@@ -121,8 +132,8 @@ ventana de 24 h), basta un adaptador que cumpla esa interfaz y se cambia en
    entonces, las liquidaciones a choferes **fuera de la ventana de 24 h** quedan
    `fallida` con `fallo.codigo = plantilla_no_aprobada`. Definición a registrar:
    - Encabezado: **documento** (PDF).
-   - Cuerpo: `Hola {{1}}, esta es tu liquidación de {{4}}. Periodo: {{2}}. Total: {{3}}. El detalle va en el PDF. ¿Te cuadra? Responde con un botón.`
-   - Variables: `{{1}}` primer nombre · `{{2}}` periodo · `{{3}}` total con moneda · `{{4}}` sistema de origen.
+   - Cuerpo: `Hola {{1}}, esta es tu liquidación de {{2}}. Periodo: {{3}}. Total: {{4}}. El detalle va en el PDF. ¿Te cuadra? Responde con un botón.`
+   - Variables: `{{1}}` primer nombre · `{{2}}` sistema de origen (o «tu empresa») · `{{3}}` periodo · `{{4}}` total con moneda.
    - Botones de respuesta rápida: `Recibida`, `No coincide`.
 2. **Número real de WhatsApp (WABA verificada)**. Con el número de prueba, Meta
    solo entrega a teléfonos dados de alta a mano (131030).
