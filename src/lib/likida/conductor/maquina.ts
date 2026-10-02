@@ -108,14 +108,26 @@ function ultimoResuelto(m: Mapa): HitoFila | null {
 
 type Objetivo = { objetivo: TipoHito; ambigua: boolean } | { aclarar: true } | { duplicadoDe: TipoHito };
 
-function objetivoLlegada(m: Mapa, lugar: Lugar | null): Objetivo {
+/** La hora (ms) en que se REPORTÓ un hito (la del mensaje del chofer; la de recepción si no hay). NaN si no se sabe. */
+function horaDeHito(h: HitoFila | undefined): number {
+  const v = h?.mensajeEn ?? h?.recibidoEn ?? null;
+  return v ? new Date(v).getTime() : Number.NaN;
+}
+
+function objetivoLlegada(m: Mapa, lugar: Lugar | null, mensajeEn: Date): Objetivo {
   if (lugar === 'carga') return { objetivo: 'llegada_carga', ambigua: false };
   if (lugar === 'descarga') return { objetivo: 'llegada_descarga', ambigua: false };
   const lc = m.llegada_carga, sc = m.salida_carga, ld = m.llegada_descarga;
   // Nada registrado todavía: lo primero que pasa en un viaje es llegar a cargar.
   if (!resuelto(lc) && !resuelto(sc) && !resuelto(ld)) return { objetivo: 'llegada_carga', ambigua: true };
-  // Ya salió de la carga y no ha llegado: lo único que puede ser es la descarga.
-  if (resuelto(sc) && !resuelto(ld)) return { objetivo: 'llegada_descarga', ambigua: false };
+  // Ya salió de la carga y no ha llegado: lo único que puede ser es la descarga… salvo que el mensaje sea ANTERIOR a esa
+  // salida (Meta reentrega tarde; el chofer lo escribió en la carga): entonces pertenece a la carga y no sella el destino.
+  if (resuelto(sc) && !resuelto(ld)) {
+    if (mensajeEn.getTime() < horaDeHito(sc)) {
+      return resuelto(lc) ? { duplicadoDe: 'llegada_carga' } : { objetivo: 'llegada_carga', ambigua: true };
+    }
+    return { objetivo: 'llegada_descarga', ambigua: false };
+  }
   if (resuelto(ld)) return { duplicadoDe: 'llegada_descarga' };
   // Llegó a cargar y no ha salido: ¿repite lo mismo o ya llegó a descargar sin avisar la salida?
   return { aclarar: true };
@@ -196,7 +208,7 @@ export function decidir(e: EntradaMaquina): Decision {
 
   switch (i.clase) {
     case 'llegada':
-      return desdeObjetivo(objetivoLlegada(m, i.lugar), m, e);
+      return desdeObjetivo(objetivoLlegada(m, i.lugar, e.mensajeEn), m, e);
 
     case 'salida':
       return desdeObjetivo(objetivoSalida(m, i.lugar), m, e);
@@ -235,7 +247,7 @@ export function decidir(e: EntradaMaquina): Decision {
         // Sin pista de lugar: si ya llegó a algún lado, el contacto es de ahí.
         const ya = ultimaLlegadaResuelta(m);
         if (ya) return { accion: 'contacto', objetivo: ya.tipo, contacto: e.contacto };
-        o = objetivoLlegada(m, null);
+        o = objetivoLlegada(m, null, e.mensajeEn);
       }
       if ('objetivo' in o && resuelto(m[o.objetivo])) return { accion: 'contacto', objetivo: o.objetivo, contacto: e.contacto };
       return desdeObjetivo(o, m, e);
