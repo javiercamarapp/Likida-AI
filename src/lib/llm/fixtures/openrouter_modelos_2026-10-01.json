@@ -1,0 +1,170 @@
+{
+  "capturado": "2026-10-01",
+  "fuente": "GET https://openrouter.ai/api/v1/models (API pública, sin llave)",
+  "nota": "Foto de lo que Likida usa. Regenerar con scripts/verificar-modelos-openrouter.ts. Precios en USD por millón de tokens.",
+  "modelos": {
+    "anthropic/claude-haiku-4.5": {
+      "entrada": [
+        "file",
+        "image",
+        "text"
+      ],
+      "precioEntradaUsdM": 1.0,
+      "precioSalidaUsdM": 5.0
+    },
+    "anthropic/claude-opus-5": {
+      "entrada": [
+        "file",
+        "image",
+        "text"
+      ],
+      "precioEntradaUsdM": 5.0,
+      "precioSalidaUsdM": 25.0
+    },
+    "anthropic/claude-sonnet-5": {
+      "entrada": [
+        "file",
+        "image",
+        "text"
+      ],
+      "precioEntradaUsdM": 2.0,
+      "precioSalidaUsdM": 10.0
+    },
+    "anthropic/claude-sonnet-5.5": {
+      "entrada": [
+        "file",
+        "image",
+        "text"
+      ],
+      "precioEntradaUsdM": 2.0,
+      "precioSalidaUsdM": 10.0
+    },
+    "google/gemini-2.5-flash": {
+      "entrada": [
+        "audio",
+        "file",
+        "image",
+        "text",
+        "video"
+      ],
+      "precioEntradaUsdM": 0.3,
+      "precioSalidaUsdM": 2.5
+    },
+    "google/gemini-2.5-flash-lite": {
+      "entrada": [
+        "audio",
+        "file",
+        "image",
+        "text",
+        "video"
+      ],
+      "precioEntradaUsdM": 0.1,
+      "precioSalidaUsdM": 0.4
+    },
+    "google/gemini-3-flash-preview": {
+      "entrada": [
+        "audio",
+        "file",
+        "image",
+        "text",
+        "video"
+      ],
+      "precioEntradaUsdM": 0.5,
+      "precioSalidaUsdM": 3.0
+    },
+    "google/gemini-3.1-flash-lite": {
+      "entrada": [
+        "audio",
+        "file",
+        "image",
+        "text",
+        "video"
+      ],
+      "precioEntradaUsdM": 0.25,
+      "precioSalidaUsdM": 1.5
+    },
+    "google/gemini-3.5-flash-lite": {
+      "entrada": [
+        "audio",
+        "file",
+        "image",
+        "text",
+        "video"
+      ],
+      "precioEntradaUsdM": 0.3,
+      "precioSalidaUsdM": 2.5
+    },
+    "google/gemini-3.6-flash": {
+      "entrada": [
+        "audio",
+        "file",
+        "image",
+        "text",
+        "video"
+      ],
+      "precioEntradaUsdM": 0.75,
+      "precioSalidaUsdM": 3.75
+    },
+    "google/gemini-3.8-flash": {
+      "entrada": [
+        "audio",
+        "file",
+        "image",
+        "text",
+        "video"
+      ],
+      "precioEntradaUsdM": 0.75,
+      "precioSalidaUsdM": 3.75
+    },
+    "openai/gpt-5-nano": {
+      "entrada": [
+        "file",
+        "image",
+        "text"
+      ],
+      "precioEntradaUsdM": 0.05,
+      "precioSalidaUsdM": 0.4
+    },
+    "openai/gpt-5.6-luna": {
+      "entrada": [
+        "file",
+        "image",
+        "text"
+      ],
+      "precioEntradaUsdM": 0.2,
+      "precioSalidaUsdM": 1.2
+    },
+    "openai/gpt-5.6-terra": {
+      "entrada": [
+        "file",
+        "image",
+        "text"
+      ],
+      "precioEntradaUsdM": 2.0,
+      "precioSalidaUsdM": 12.0
+    },
+    "openai/gpt-6-luna": {
+      "entrada": [
+        "file",
+        "image",
+        "text"
+      ],
+      "precioEntradaUsdM": 0.1,
+      "precioSalidaUsdM": 0.5
+    },
+    "openai/gpt-oss-120b": {
+      "entrada": [
+        "text"
+      ],
+      "precioEntradaUsdM": 0.037,
+      "precioSalidaUsdM": 0.17
+    },
+    "openai/gpt-oss-20b": {
+      "entrada": [
+        "text"
+      ],
+      "precioEntradaUsdM": 0.018,
+      "precioSalidaUsdM": 0.09
+    }
+  }
+}
