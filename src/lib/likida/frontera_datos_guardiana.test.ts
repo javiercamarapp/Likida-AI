@@ -249,7 +249,11 @@ import { join, relative } from 'node:path';
 // registro del resultado; todas sobre la 0631). Vive aparte de `repo.ts` porque su lista cruza flotas, como `conductor/trabajo.ts`.
 // Funcionalidad nueva, no código migrado.
 // INTEGRACIÓN P0 + P12 (ronda 11): se retira `hitos_viaje.ts` (utilitario sin llamador desde la Ola 4a; su única llamada era `viaje`): 286 → 285 archivos.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 285;
+// OLA 9 (seguridad): +2 archivos y +4 llamadas, medidos con el barrido real (285 → 287 y 1,881 → 1,885). Los dos son módulos nuevos que cruzan
+// flotas por diseño: `admin/techo_ia.ts` (lee las flotas y su gasto de hoy para la pantalla del superadmin y escribe el techo por la RPC de
+// la 0682) y `likida/retencion_ledgers.ts` (la retención de los ledgers de la 0680, que el cron corre sobre toda la base, sin flota).
+// Funcionalidad nueva, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 287;
 // INTEGRACIÓN ola 4a (A + B): 1,805 → 1,807. El paquete B (M3/M4, copia al jefe) suma +2 llamadas RPC en un archivo que ya contaba
 // (`reclamar_copia_jefe` y `cerrar_copia_jefe`, el reclamo atómico de la copia); cada paquete midió contra su propia base, por eso
 // la suma de ambos solo se ve en el barrido del árbol integrado. Funcionalidad nueva, no código migrado.
@@ -299,7 +303,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 285;
 // donde cada una va por `acotada` — funcionalidad nueva, no código migrado: la RPC atómica `cp_documento_dividir`, las lecturas de la ficha de linaje
 // (`cp_documento_embarque`: hijos de un padre, linaje por lote de documentos, y el padre de un hijo) y la lectura por ids de los hijos (`cp_documento`).
 // El módulo nuevo `multiembarque.ts` es puro y no suma archivos (su `Array.from` se reescribió para no contar como `.from(`). Medido con el barrido real.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_886;
+// Integración P13 + Ola 9 (ronda 13): 1,881 + 5 (P13) + 4 (Ola 9, ver la nota de archivos, arriba) = 1,890.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_890;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

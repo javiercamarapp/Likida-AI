@@ -62,6 +62,8 @@ export const NEGOCIO: Item[] = [
   // deterministas (16-ago-2026). Hermana de Costos: allá el desglose contable,
   // aquí el diagnóstico.
   { href: '/admin/consumo', nombre: 'Consumo de IA', Icono: Cpu },
+  // El techo diario de IA de cada flota, a la vista y editable (Ola 9): de dónde sale y cuánto lleva hoy.
+  { href: '/admin/techo-ia', nombre: 'Techo de IA', Icono: Gauge },
   { href: '/admin/cobranza', nombre: 'Cobranza', Icono: Receipt },
   { href: '/admin/crecimiento', nombre: 'Crecimiento', Icono: TrendingUp },
   // El estudio de marketing (Fase D, 0266): banco de hooks, personajes y

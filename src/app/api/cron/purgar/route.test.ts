@@ -73,6 +73,10 @@ type PurgaAgente = { nombre: string; ok: boolean; filas: number | null; parcial:
 const purgaAgentes = vi.fn(async (_ahora?: Date): Promise<PurgaAgente[]> => [{ nombre: 'wa_ventana_contacto', ok: true, filas: 0, parcial: false, error: null }]);
 vi.mock('@/lib/likida/retencion_agentes', () => ({ mantenerDatosAgentes: (a?: Date) => purgaAgentes(a) }));
 
+// Ledgers sin purga (0680) y autofactura (0542): su lógica vive en retencion_ledgers.test.ts; aquí que se llama, que se reporta y que no tumba la corrida.
+const purgaLedgers = vi.fn(async (_ahora?: Date, _vence?: Date | null): Promise<PurgaAgente[]> => [{ nombre: 'evento_seguridad', ok: true, filas: 0, parcial: false, error: null }]);
+vi.mock('@/lib/likida/retencion_ledgers', () => ({ mantenerLedgers: (a?: Date, v?: Date | null) => purgaLedgers(a, v) }));
+
 process.env.CRON_SECRET = 'secreto-de-prueba';
 const { GET } = await import('./route');
 
@@ -472,5 +476,45 @@ describe('la retención de los Agentes 1 y 2 (0562)', () => {
     const res = await GET(peticion());
     expect(res.status).toBeGreaterThanOrEqual(401);
     expect(purgaAgentes).not.toHaveBeenCalled();
+  });
+});
+
+describe('la retención de los ledgers y de la autofactura (0680 + 0542)', () => {
+  beforeEach(() => {
+    purgaLedgers.mockReset().mockResolvedValue([
+      { nombre: 'evento_seguridad', ok: true, filas: 7, parcial: false, error: null },
+      { nombre: 'autofactura', ok: true, filas: 3, parcial: false, error: null },
+    ]);
+    alertarOperador.mockClear();
+  });
+
+  it('corre en la misma vuelta con el deadline de la ruta y su resultado viaja en el cuerpo', async () => {
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(purgaLedgers).toHaveBeenCalledTimes(1);
+    const [ahora, vence] = purgaLedgers.mock.calls[0];
+    expect(ahora).toBeInstanceOf(Date);
+    expect((vence as Date).getTime()).toBeGreaterThan((ahora as Date).getTime());
+    expect(await res.json()).toMatchObject({ ledgers: [{ nombre: 'evento_seguridad', filas: 7 }, { nombre: 'autofactura', filas: 3 }] });
+  });
+
+  it('una tabla fallida se avisa al operador con su nombre pero no tumba la corrida', async () => {
+    purgaLedgers.mockResolvedValue([{ nombre: 'vigia_evento', ok: false, filas: null, parcial: false, error: 'boom' }]);
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.purgar.ledgers', expect.objectContaining({ error: expect.stringContaining('vigia_evento: boom') }));
+  });
+
+  it('si el módulo lanza, el cuerpo dice null (no un 0 inventado) y la corrida sigue', async () => {
+    purgaLedgers.mockRejectedValue(new Error('caído'));
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect((await res.json()).ledgers).toBeNull();
+  });
+
+  it('con el interruptor global apagado ni se intenta', async () => {
+    estaApagado.mockResolvedValue(true);
+    await GET(peticion('Bearer secreto-de-prueba'));
+    expect(purgaLedgers).not.toHaveBeenCalled();
   });
 });
