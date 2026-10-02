@@ -3,7 +3,7 @@ import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { exigir } from '../pg';
 import {
-  TIPOS_HITO,
+  TIPOS_HITO, MINUTOS_SILENCIO_JEFE, MINUTOS_SILENCIO_RECUPERADA,
   type Contacto, type FuenteHito, type HitoFila, type InterpretacionHito, type TipoHito,
 } from './tipos';
 import type { LegadoSello } from './maquina';
@@ -805,8 +805,16 @@ export async function reclamarNivelSenalVida(ep: Pick<EpisodioFila, 'id' | 'tena
   return data && data.length > 0 ? 'ganado' : 'perdido';
 }
 
-export async function cerrarEpisodioSenalVida(ep: Pick<EpisodioFila, 'id' | 'tenantId'>, motivo: 'senal_recuperada' | 'viaje_cerrado', ahora: Date): Promise<void> {
-  const { error } = await acotada(supabaseAdmin().from('viaje_senal_vida').update({ cerrado_en: ahora.toISOString(), cierre_motivo: motivo })
+export async function cerrarEpisodioSenalVida(
+  ep: Pick<EpisodioFila, 'id' | 'tenantId'> & Partial<Pick<EpisodioFila, 'nivelEnviado'>>, motivo: 'senal_recuperada' | 'viaje_cerrado', ahora: Date,
+): Promise<void> {
+  // «Señal recuperada» de un episodio que ya avisó deja silencio: un GPS que reporta cada ~50 min alterna obsoleto/ok y, sin silencio,
+  // el chofer recibiría el aviso 1 cada hora sin fin.
+  const silencia = motivo === 'senal_recuperada' && (ep.nivelEnviado ?? 0) >= 1;
+  const { error } = await acotada(supabaseAdmin().from('viaje_senal_vida').update({
+    cerrado_en: ahora.toISOString(), cierre_motivo: motivo,
+    ...(silencia ? { silenciado_hasta: new Date(ahora.getTime() + MINUTOS_SILENCIO_RECUPERADA * 60_000).toISOString() } : {}),
+  })
     .eq('id', ep.id).eq('tenant_id', ep.tenantId).is('cerrado_en', null), 'conductor.senal_cerrar');
   if (error) logger.warn('conductor.senal_cerrar_fallo', { episodio: ep.id, err: error.message });
 }
@@ -835,9 +843,15 @@ export async function responderEpisodioSenalVida(
   return data && data.length > 0 ? 'cerrado' : 'sin_episodio';
 }
 
-/** «Ya lo atiendo» del jefe: el episodio abierto del viaje se cierra. Best-effort (una base sin la 0636 no tiene nada que cerrar). */
+/**
+ * «Ya lo atiendo» del jefe: el episodio abierto del viaje se cierra Y SE SILENCIA (si no, la pasada siguiente abre otro con el mismo GPS
+ * mudo, le repite el aviso 1 al chofer y reescala al jefe 45 min después de que dijo que lo atiende). Best-effort (una base sin la 0636
+ * no tiene nada que cerrar).
+ */
 export async function cerrarEpisodioPorJefe(tenantId: string, viajeId: string, ahora: Date): Promise<number> {
-  const { data, error } = await acotada(supabaseAdmin().from('viaje_senal_vida').update({ cerrado_en: ahora.toISOString(), cierre_motivo: 'atendido_por_jefe' })
+  const { data, error } = await acotada(supabaseAdmin().from('viaje_senal_vida').update({
+    cerrado_en: ahora.toISOString(), cierre_motivo: 'atendido_por_jefe', silenciado_hasta: new Date(ahora.getTime() + MINUTOS_SILENCIO_JEFE * 60_000).toISOString(),
+  })
     .eq('tenant_id', tenantId).eq('viaje_id', viajeId).is('cerrado_en', null).select('id'), 'conductor.senal_jefe');
   if (error) {
     if (!faltaEsquema(error, /viaje_senal_vida/i)) logger.warn('conductor.senal_jefe_fallo', { viaje: viajeId, err: error.message });
