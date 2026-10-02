@@ -50,10 +50,62 @@ function nodoEscritura(tabla: string, resp: () => Resp) {
   return nodo;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// EL DOBLE DEL CAMINO AUTOMÁTICO — `guardarYConciliarConsolidado` (BE-32C8-C1).
+//
+// El doble de arriba sólo cubre `resolverLineaAMano`: sus nodos tienen `eq` y
+// `maybeSingle` y nada más. El camino automático encadena `.order().range()`,
+// `.is().gte().lte().gt().limit()` y hace DOS `upsert`, y por eso el arnés de
+// `69c4e0d` no pudo entrar por aquí — es literalmente el hallazgo `PRU-32C8-C1`.
+//
+// `guionSelects` se indexa por la LISTA DE COLUMNAS del `.select(...)`, no por
+// tabla y no por orden de llamada. `gasto` se consulta TRES veces con formas
+// distintas —`id, cfdi_orden` (sellos), `id, concepto, monto, fecha`
+// (candidatos) y `ocr_extra` (el que `ligarLineaAGasto` necesita)— y las tres
+// son paginadas, así que una cola posicional se desalinea sola en cuanto una
+// pide una página de más. Indexar por columnas hace que el doble no pueda
+// contestarle a una consulta lo que era de otra, que es como un doble empieza a
+// certificar lo que la prueba quiere oír.
+// ═══════════════════════════════════════════════════════════════════════════
+// Una entrada puede ser una respuesta fija o una LISTA consumida por páginas:
+// `traerTodoDesdeId` vuelve a pedir la misma consulta hasta que una página
+// llega vacía, así que una consulta paginada necesita decir dónde se acaba o el
+// doble la pagina 100 veces y revienta con `LecturaIncompleta`.
+const guionSelects: Record<string, Resp | Resp[]> = {};
+function respuestaDe(llave: string): Resp {
+  const v = guionSelects[llave];
+  if (Array.isArray(v)) return (v.length > 1 ? (v.shift() as Resp) : v[0]);
+  return v;
+}
+const upsertsVistos: Array<{ tabla: string; payload: unknown }> = [];
+let respUpsert: Resp = { data: [{ id: 'xml-1' }], error: null };
+
+/** Nodo encadenable que traga cualquier filtro y resuelve al final. */
+function nodoCadena(tabla: string, resp: () => Resp) {
+  const nodo: Record<string, unknown> = {};
+  for (const m of ['eq', 'is', 'gte', 'lte', 'gt', 'order', 'range', 'limit', 'in', 'not', 'select'])
+    nodo[m] = (col?: unknown, val?: unknown) => {
+      if (m === 'eq' || m === 'is') filtrosVistos.push({ tabla, op: 'select', col: String(col), val });
+      return nodo;
+    };
+  nodo.maybeSingle = () => Promise.resolve(resp());
+  nodo.single = () => Promise.resolve(resp());
+  nodo.then = (r: (v: unknown) => unknown) => Promise.resolve(resp()).then(r);
+  return nodo;
+}
+
 const from = vi.fn((tabla: string) => ({
-  select: () => (tabla === 'cfdi_xml' ? nodoLectura(tabla, () => respXmlLectura)
-    : tabla === 'gasto' ? nodoLectura(tabla, () => respGastoLectura)
-    : nodoLectura(tabla, () => respLineaLectura)),
+  select: (cols?: unknown) => {
+    const llave = `${tabla}|${String(cols ?? '')}`;
+    if (llave in guionSelects) return nodoCadena(tabla, () => respuestaDe(llave));
+    return tabla === 'cfdi_xml' ? nodoLectura(tabla, () => respXmlLectura)
+      : tabla === 'gasto' ? nodoLectura(tabla, () => respGastoLectura)
+      : nodoLectura(tabla, () => respLineaLectura);
+  },
+  upsert: (payload: unknown) => {
+    upsertsVistos.push({ tabla, payload });
+    return nodoCadena(tabla, () => respUpsert);
+  },
   update: (payload: Record<string, unknown>) => {
     updatesVistos.push({ tabla, payload });
     return tabla === 'gasto' ? nodoEscritura(tabla, () => respGastoEscritura) : nodoEscritura(tabla, () => respLineaEscritura);
@@ -66,6 +118,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 const {
   conciliarLineas, rangoFechasLineas, mensajeConsolidadoRecibido, resolverLineaAMano,
+  guardarYConciliarConsolidado,
   claveProdServDeLinea, litrosDeLinea, TOLERANCIA_MONTO_MXN, VENTANA_DIAS_FECHA,
 } = await import('./consolidado');
 
@@ -325,9 +378,45 @@ describe('resolverLineaAMano — la pantalla que faltaba, contra Supabase mockea
     });
   });
 
-  it('FASE 1 — si leer ocr_extra falla, sella el uuid SIN pisar el jsonb (no se inventa un extra vacío)', async () => {
+  // BE-32C7-A1 (auditoría 32, c7). Esta prueba afirmaba `ok: true` y un payload
+  // SIN `ocr_extra`, es decir BENDECÍA la pérdida: el `update` sellaba
+  // `cfdi_uuid` + `xml_verificado: true` y los litros se perdían para siempre,
+  // porque el guardia `.is('cfdi_uuid', null)` impide que una segunda pasada
+  // vuelva a entrar y la línea queda `conciliada` (las tres vías que la
+  // tocarían anclan a `por_conciliar`). Con `litros` en 0,
+  // `cuadre/engine.ts:1790` exige `litros > 0` y se salta el bloque ENTERO del
+  // estímulo sin emitir ninguna `diferencia`: `litrosDieselAcreditables` sale
+  // de menos y ninguna pantalla sabe que falta algo.
+  //
+  // El contrato correcto es FALLAR CERRADO: si no se pudo leer `ocr_extra` y
+  // hay litros que fusionar, NO se sella nada. La línea se queda
+  // `por_conciliar` y los tres llamadores ya saben qué hacer con un `false`
+  // (log de error, `siguenPendientes++`, o `ok: false`) — se reintenta, que es
+  // justo lo que la pérdida silenciosa impedía.
+  it('BE-32C7-A1 — si leer ocr_extra falla con litros por fusionar, NO sella el gasto: falla cerrado y la línea sigue reintentable', async () => {
     respLineaLectura = { data: filaLinea({ litros: 120.5, clave_prod_serv: '15101505' }), error: null };
     // `acotada()` al tope resuelve `{ data: null, error }` — no lanza.
+    respGastoLectura = { data: null, error: { message: 'sin respuesta en 1500 ms (tope de consulta)' } };
+
+    const r = await resolverLineaAMano('t1', 'linea-1', { tipo: 'ligar', gastoId: 'g1' }, 'user-1');
+    expect(r.ok).toBe(false);
+
+    // Lo esencial: NO se ejecutó NINGÚN update sobre `gasto`. Sin esto el
+    // `xml_verificado: true` viajaba con los litros perdidos.
+    expect(updatesVistos.find((u) => u.tabla === 'gasto')).toBeUndefined();
+    // Y tampoco se cerró la línea: sigue `por_conciliar` para el reintento.
+    expect(updatesVistos.find((u) => u.tabla === 'cfdi_consolidado_linea')).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(
+      'consolidado.ligar_ocr_extra_ilegible',
+      expect.objectContaining({ gasto: 'g1' }),
+    );
+  });
+
+  // El contraste que prueba que el arreglo es acotado: SIN litros que fusionar
+  // (una caseta), `ligarLineaAGasto` nunca lee `ocr_extra`, así que un fallo de
+  // esa lectura no puede afectarla y liga igual que siempre.
+  it('BE-32C7-A1 — una línea sin diésel liga igual aunque la lectura de ocr_extra estuviera rota (no la consulta)', async () => {
+    respLineaLectura = { data: filaLinea({ litros: null, clave_prod_serv: null }), error: null };
     respGastoLectura = { data: null, error: { message: 'sin respuesta en 1500 ms (tope de consulta)' } };
 
     const r = await resolverLineaAMano('t1', 'linea-1', { tipo: 'ligar', gastoId: 'g1' }, 'user-1');
@@ -337,14 +426,8 @@ describe('resolverLineaAMano — la pantalla que faltaba, contra Supabase mockea
     expect(updateGasto?.payload).toEqual({
       cfdi_uuid: 'uuid-abc',
       cfdi_orden: 2,
-      clave_prod_serv: '15101505',
       xml_verificado: true,
     });
-    expect(updateGasto?.payload).not.toHaveProperty('ocr_extra');
-    expect(logger.warn).toHaveBeenCalledWith(
-      'consolidado.ligar_ocr_extra_ilegible',
-      expect.objectContaining({ gasto: 'g1' }),
-    );
   });
 
   it('FASE 1 — una línea sin litros (p.ej. caseta) liga igual que siempre, sin tocar ocr_extra ni clave_prod_serv', async () => {
@@ -515,5 +598,98 @@ describe('FASE 1 — equivalencia sobre un ECC12 SINTÉTICO: los litros sobreviv
       .filter((l) => claveProdServDeLinea(l) === '15101505')
       .reduce((s, l) => s + (l.cantidad ?? 0), 0);
     expect(litrosDiesel).toBe(215.5);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 32 c8 — BE-32C8-C1 (CRÍTICO) / PRU-32C8-C1 (CRÍTICO).
+//
+// `69c4e0d` (la c7) hizo que `ligarLineaAGasto` FALLE CERRADO cuando no puede
+// leer `gasto.ocr_extra`: no sella el gasto y devuelve `false`. Eso está bien y
+// su prueba muerde. Pero el arnés entró por `resolverLineaAMano` —el llamador
+// MANUAL— y el escenario que el propio commit describe es el AUTOMÁTICO: «llega
+// el XML por WhatsApp». Dos auditores lo encontraron por separado.
+//
+// En el camino automático, `guardarYConciliarConsolidado` ignora ese `false`
+// para lo único que importa: `filasLinea` se construye desde `r.estatus`, que
+// sigue diciendo `'conciliada'`, con `gasto_id` puesto. Resultado medido antes
+// del arreglo, con el `select` de `ocr_extra` en error:
+//
+//   · el gasto NO se sella (el arreglo de ayer funciona),
+//   · pero la línea se escribe `{estatus:'conciliada', gasto_id:'g-217'}`,
+//   · y el resumen sale `{conciliadas:1, porConciliar:0}` → el acuse le dice al
+//     contralor «los N coincidieron uno a uno».
+//
+// La pérdida es DEFINITIVA, no un reintento pendiente: el barrido
+// (`barrerPorConciliar`) sólo toma líneas `por_conciliar`, así que nunca vuelve
+// a mirar ésta; y el reenvío del mismo XML corta en el bloque de reanudación.
+// Los litros de diésel se quedan en `cfdi_consolidado_linea.litros` sin que
+// nadie los reconcilie, y `cuadre/engine.ts` se salta el bloque del estímulo
+// del diésel sin emitir una sola `diferencia`. Nadie se entera.
+//
+// Lo que este arnés fija: si la ligadura no ocurrió, la línea se escribe
+// `por_conciliar` y SIN `gasto_id`, que es lo único que la deja reintentable, y
+// el resumen lo dice. Fallar cerrado y decirlo.
+describe('AUDITORÍA 32 c8 — el camino AUTOMÁTICO no puede marcar conciliada una línea que no se ligó', () => {
+  const XML_CONSOLIDADO = { uuid: 'UUID-C8-0001', tipoComprobante: 'I', lineas: [] as CfdiLineaXml[] };
+
+  function montarGuion() {
+    for (const k of Object.keys(guionSelects)) delete guionSelects[k];
+    upsertsVistos.length = 0;
+    // 1 · `cfdi_xml.upsert(...).select('id')` → el id de la fila del XML.
+    respUpsert = { data: { id: 'xml-c8' }, error: null };
+    // 2 · líneas ya existentes para este XML: ninguna (primera pasada).
+    guionSelects['cfdi_consolidado_linea|estatus'] = { data: [], error: null };
+    // 3 · gastos ya sellados con este uuid: ninguno (primera pasada).
+    guionSelects['gasto|id, cfdi_orden'] = { data: [], error: null };
+    // 4 · candidatos de gasto en el rango: uno que casa exacto.
+    guionSelects['gasto|id, concepto, monto, fecha'] = [
+      { data: [{ id: 'g-217', concepto: 'diesel', monto: 2904.05, fecha: '2026-04-03' }], error: null },
+      { data: [], error: null },
+    ];
+    // 5 · `ligarLineaAGasto` lee `gasto.ocr_extra` y NO PUEDE. Éste es el
+    //     disparador: el arreglo de ayer (`69c4e0d`) devuelve `false` justo aquí.
+    respGastoLectura = { data: null, error: { message: 'canceling statement due to statement timeout' } };
+  }
+
+  beforeEach(montarGuion);
+
+  it('con la lectura de `ocr_extra` rota, la línea NO se escribe conciliada y NO se queda con el gasto_id', async () => {
+    const xml = {
+      ...XML_CONSOLIDADO,
+      lineas: [linea(1, 2904.05, '2026-04-03T09:12:00', { descripcion: 'DIESEL', claveProdServ: '15101505', cantidad: 300 })],
+    } as unknown as Parameters<typeof guardarYConciliarConsolidado>[1];
+
+    const resumen = await guardarYConciliarConsolidado('t-1', xml, '<xml/>');
+
+    const filas = upsertsVistos.find((u) => u.tabla === 'cfdi_consolidado_linea')?.payload as Array<Record<string, unknown>>;
+    expect(filas, 'se escribió la tabla de líneas').toBeTruthy();
+    expect(filas).toHaveLength(1);
+    // Lo que fallaba: `conciliada` + `gasto_id` sobre un gasto que nunca se selló.
+    expect(filas[0].estatus).toBe('por_conciliar');
+    expect(filas[0].gasto_id).toBeNull();
+    // Y el acuse tiene que decir la verdad, no «1 de 1».
+    expect(resumen.conciliadas).toBe(0);
+    expect(resumen.porConciliar).toBe(1);
+  });
+
+  it('cuando la ligadura SÍ ocurre, la línea sigue quedando conciliada con su gasto', async () => {
+    montarGuion();
+    // Misma secuencia, pero `ocr_extra` se lee bien: `ligarLineaAGasto` sella.
+    respGastoLectura = { data: { ocr_extra: {} }, error: null };
+    respGastoEscritura = { data: [{ id: 'g-217' }], error: null };
+
+    const xml = {
+      ...XML_CONSOLIDADO,
+      lineas: [linea(1, 2904.05, '2026-04-03T09:12:00', { descripcion: 'DIESEL', claveProdServ: '15101505', cantidad: 300 })],
+    } as unknown as Parameters<typeof guardarYConciliarConsolidado>[1];
+
+    const resumen = await guardarYConciliarConsolidado('t-1', xml, '<xml/>');
+
+    const filas = upsertsVistos.find((u) => u.tabla === 'cfdi_consolidado_linea')?.payload as Array<Record<string, unknown>>;
+    expect(filas[0].estatus).toBe('conciliada');
+    expect(filas[0].gasto_id).toBe('g-217');
+    expect(resumen.conciliadas).toBe(1);
+    expect(resumen.porConciliar).toBe(0);
   });
 });

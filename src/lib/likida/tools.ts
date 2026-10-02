@@ -115,7 +115,7 @@ registerTool('estado_viaje', {
       // contaba, y `getGastos` (repo.ts, el camino del motor/PDF) ordena
       // distinto. `created_at` es el valor que no cambia tras el insert: es lo
       // que hace que esta tool y el motor elijan la MISMA copia.
-      admin.from('gasto').select('id, concepto, monto, folio, folio_norm, cfdi_uuid, cfdi_orden, ocr_extra').eq('viaje_id', ctx.viajeId).eq('tenant_id', ctx.tenantId).order('created_at', { ascending: true }),
+      admin.from('gasto').select('id, concepto, monto, folio, folio_norm, cfdi_uuid, cfdi_orden, ocr_extra, rfc_emisor').eq('viaje_id', ctx.viajeId).eq('tenant_id', ctx.tenantId).order('created_at', { ascending: true }),
     ]);
     // Fallar cerrado: un error de lectura NO se convierte en "cero gastos".
     if (rViaje.error) throw new Error(`estado_viaje/viaje: ${rViaje.error.message}`);
@@ -142,6 +142,13 @@ registerTool('estado_viaje', {
       cfdiUuid: (g.cfdi_uuid as string | null) || undefined,
       cfdiOrden: g.cfdi_orden != null ? Number(g.cfdi_orden) : undefined,
       ocrExtra: (g.ocr_extra as Record<string, unknown> | null) ?? undefined,
+      // ARQ32C4-C2: `copiasDeComprobante` dedupa por emisor desde `790900d`.
+      // Sin este campo la función no ve «emisor desconocido», ve LA AUSENCIA
+      // DEL CAMPO, y dos gasolineras distintas con el mismo folio vuelven a
+      // contarse como una foto repetida — que es exactamente la separación
+      // entre esta cifra y la del PDF que el comentario de arriba declara
+      // cerrada.
+      rfcEmisor: (g.rfc_emisor as string | null) || undefined,
     }));
     const copias = copiasDeComprobante(gastos);
     const porConcepto = new Map<string, { total: number; n: number }>();

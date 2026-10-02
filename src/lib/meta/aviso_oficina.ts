@@ -72,7 +72,7 @@ export type ResultadoAvisoOficina =
 
 /**
  * Texto libre al jefe; si la ventana de 24 h está cerrada (según el registro de
- * la 0360) o Meta lo rechaza por ventana, la plantilla — todo vía
+ * la 0368) o Meta lo rechaza por ventana, la plantilla — todo vía
  * `enviarConFallback`, que además deja constancia del motivo.
  *
  * `parametros` son los de `parametrosAvisoOficina`. `plantilla` se puede

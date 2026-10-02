@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// LA VENTANA DE 24 H DE WHATSAPP, POR CONTACTO (migración 0360).
+// LA VENTANA DE 24 H DE WHATSAPP, POR CONTACTO (migración 0368).
 //
 // WhatsApp solo entrega texto libre y botones dentro de las 24 h posteriores al
 // ÚLTIMO mensaje del usuario; fuera de ellas solo entra una plantilla aprobada.

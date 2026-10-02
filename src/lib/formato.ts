@@ -234,12 +234,19 @@ const COMPACTO_DESDE = 1_000_000;
  */
 export function mxnCompacto(n: number): string {
   if (Math.abs(n) < COMPACTO_DESDE) return mxn(n);
-  return n.toLocaleString('es-MX', {
-    style: 'currency', currency: 'MXN',
+  // ORQ-32C10-A1 (AUDITORÍA 32 c10, ALTO): la MAGNITUD la sigue formateando
+  // Intl —agrupación, decimal y el NBSP antes de la M son suyos— pero el signo
+  // de pesos lo ponemos nosotros. Con `style: 'currency'` la POSICIÓN del
+  // símbolo la decidía CLDR, y en CLDR 47 el patrón compacto de es-MX la movió
+  // al final: `$999,999.00` en una tarjeta y `1.2 M$` en la de al lado.
+  // El valor numérico nunca estuvo mal; lo que cambiaba era de qué lado se lee.
+  const magnitud = Math.abs(n).toLocaleString('es-MX', {
     notation: 'compact',
     minimumFractionDigits: 0, maximumFractionDigits: 1,
     useGrouping: true,
   });
+  // El `-` antes del `$`, igual que `mxn(-1234567)` → `-$1,234,567.00`.
+  return `${n < 0 ? '-' : ''}$${magnitud}`;
 }
 
 /** Un entero con separador de millares, sin moneda ni unidad — tokens, conteos. */

@@ -1,4 +1,20 @@
 -- PostgreSQL efímero, datos sintéticos propios, rollback completo.
+--
+-- PRU-32C11-C1 (auditoría 32 c11, CRÍTICO): `vence_en` venía con la fecha FIJA
+-- '2026-10-01', y el CHECK `arco_vence_despues_de_recibida` (0291:64) exige
+-- `vence_en >= recibida_en::date`, con `recibida_en` por default `now()`. El
+-- 2-oct-2026 el primer INSERT empezó a morir con exit 3 — y este arnés vive en
+-- un `run:` de `bash -e` (`ci-postgres.yml:185`) con VEINTICINCO invocaciones de
+-- arnés detrás, la 0366 del dedup del dinero entre ellas, más la capa 0 de pgTAP
+-- y los bloques de la capa 1. Un arnés con fecha de caducidad no se cae solo:
+-- se lleva a los que corren después, y la «batería de 27 arneses en PASS» que
+-- tres commits consecutivos citan como evidencia deja de ejecutarse sin que
+-- nada lo diga.
+--
+-- Los 20 días son el plazo del art. 32 de la LFPDPPP para responder una
+-- solicitud ARCO, que es lo que la aplicación calcularía. `vence_en` no
+-- participa en ninguna aserción de este archivo: sólo tiene que existir y
+-- respetar el CHECK.
 \set ON_ERROR_STOP on
 begin;
 insert into public.tenant(id,nombre) values

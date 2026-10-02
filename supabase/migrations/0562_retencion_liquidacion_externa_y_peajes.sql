@@ -1,7 +1,7 @@
 -- 0562 — Retención de datos personales de los Agentes 1 y 2 que nadie purgaba.
 --
 -- Las RPC de purga de `wa_ventana_contacto` y `wa_envio_registro` existen desde
--- la 0360 pero ningún cron las llamaba; `liquidacion_externa` (nombre del chofer
+-- la 0368 pero ningún cron las llamaba; `liquidacion_externa` (nombre del chofer
 -- vía operador, importes, PDF en Storage) y los archivos de peajes que FALLARON
 -- (la 0376 conserva su contenido hasta 4 MB «para reintentar») no tenían ninguna.
 -- Esta migración añade las dos que faltan; el cron `purgar` llama las cuatro.

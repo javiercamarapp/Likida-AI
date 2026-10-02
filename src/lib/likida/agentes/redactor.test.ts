@@ -383,6 +383,62 @@ describe('redactarCorreoFrio — el modelo NUNCA ve el nombre real del contacto'
     expect(dossierEnviado).not.toContain('Pérez');
   });
 
+  // ══════════════════════════════════════════════════════════════════════
+  // LEG-32C5-A1 (auditoría 32 c5, ALTO) — LA PUERTA VIGILABA UNA COLUMNA.
+  //
+  // `notasSinPersona` se aplicaba SÓLO a `prospecto.notas` (redactor.ts:389).
+  // El dossier del investigador entra por otra: `investigador.ts:447-456`
+  // escribe los correos de dominio ajeno CON LA DIRECCIÓN DENTRO DEL TEXTO en
+  // `prospecto_dossier.datos` —a propósito, para revisión humana— y
+  // `redactor.ts:373` empujaba hasta cuatro de esas entradas al prompt.
+  //
+  // Y el aviso de privacidad promete lo contrario, literal
+  // (`privacidad.ts:1085`): «Cuando un programa redacta el primer mensaje, tu
+  // nombre no sale de Likida para esa redacción: la ficha que recibe el modelo
+  // de lenguaje para escribir el texto lleva un marcador en lugar de tu
+  // nombre, Y SIN TUS DATOS DE CONTACTO». `:1123` lo remacha al marcar la
+  // frontera con la investigación, que sí va sin seudonimizar.
+  //
+  // El sitio de una transportista chica devuelve 0-2 hallazgos propios («NO
+  // ENCONTRADO ES UNA SALIDA VÁLIDA Y BUENA», investigador.ts:16-22), así que
+  // los ajenos entran dentro del `.slice(0, 4)`: no es un caso de borde.
+  // ══════════════════════════════════════════════════════════════════════
+  const DOSSIER_CON_CONTACTO_AJENO = {
+    historia: 'Transportes del Sureste, fundada en Mérida. Contacto directo al 999 123 4567.',
+    empleados: '40 a 60 empleados',
+    flotilla: '18 unidades',
+    datos: [
+      { dato: 'Correo hallado con dominio ajeno (NO entra a la lista de envío — revisión humana): sergio.garza@grupogarzalogistica.com.mx', fuente: 'https://transportesdelsureste.mx/contacto' },
+      { dato: 'Correo sobre el tope de 3 por empresa (NO entra a la lista de envío): hola@webstudio.mx', fuente: 'https://transportesdelsureste.mx' },
+      { dato: 'Operan rutas a Cancún y Villahermosa', fuente: 'https://transportesdelsureste.mx' },
+    ],
+  };
+
+  it('LEG-32C5-A1: los hallazgos del investigador entran al prompt SIN correos ni teléfonos', async () => {
+    respuestas.set('prospecto', [{ data: { ...PROSPECTO, contacto_nombre: 'Ramón Treviño' }, error: null }]);
+    respuestas.set('prospecto_dossier', [{ data: DOSSIER_CON_CONTACTO_AJENO, error: null }]);
+    respuestas.set('prospecto_contacto', [{ data: [], error: null }]);
+    respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
+    generateStructured.mockResolvedValueOnce(respuestaModelo(SALIDA_CON_MARCADOR));
+
+    await redactarCorreoFrio('pr-1', 'Javier', 'manual', CONTEXTO);
+
+    const llamada = generateStructured.mock.calls[0][0] as { messages: Array<{ content: string }> };
+    const dossierEnviado = llamada.messages[0].content;
+    // Ni la dirección completa ni el dominio: la persona es identificable por
+    // cualquiera de los dos.
+    expect(dossierEnviado).not.toContain('sergio.garza@grupogarzalogistica.com.mx');
+    expect(dossierEnviado).not.toContain('grupogarzalogistica');
+    expect(dossierEnviado).not.toContain('hola@webstudio.mx');
+    expect(dossierEnviado).not.toContain('999 123 4567');
+    // Y NO se pierde lo que el redactor sí necesita: el hecho verificado de la
+    // empresa sigue ahí. Un arreglo que borrara el dossier entero pasaría las
+    // cuatro aserciones de arriba y le quitaría al correo su única
+    // personalización.
+    expect(dossierEnviado).toContain('18 unidades');
+    expect(dossierEnviado).toContain('Cancún');
+  });
+
   it('la pieza encolada (la que un humano aprueba) SÍ trae el nombre de pila real, sustituido después', async () => {
     respuestas.set('prospecto', [{ data: { ...PROSPECTO, contacto_nombre: 'Juan Pérez López' }, error: null }]);
     respuestas.set('prospecto_contacto', [{ data: [], error: null }]);

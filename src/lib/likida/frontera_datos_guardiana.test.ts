@@ -76,7 +76,7 @@ import { join, relative } from 'node:path';
  * LOOP PUNTA A PUNTA (1-oct-2026), integración — 258 → 259 archivos y 1,344 →
  * 1,347 llamadas, medido tras fusionar las ramas de WhatsApp y de agentes 1-2:
  * el módulo nuevo es `lib/likida/wa_ventana.ts` (Agente WhatsApp), que junta en
- * UN archivo el acceso a la ventana de 24 h por contacto (mig. 0360: RPC de
+ * UN archivo el acceso a la ventana de 24 h por contacto (mig. 0368: RPC de
  * registrar_entrante_wa / ventana_estado_wa y el registro de decisiones de envío).
  * Funcionalidad nueva, no código migrado.
  *

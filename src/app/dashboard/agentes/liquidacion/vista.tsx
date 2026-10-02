@@ -437,8 +437,8 @@ function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; not
 
 const ESTATUS: Record<string, { rotulo: string; fg: string; bg: string }> = {
   cuadrada: { rotulo: 'Cuadrada', fg: 'var(--ok)', bg: 'var(--okbg)' },
-  con_diferencias: { rotulo: 'Con diferencias', fg: 'var(--bad)', bg: 'var(--badbg)' },
-  revisar: { rotulo: 'Por revisar', fg: 'var(--warn)', bg: 'var(--warnbg)' },
+  con_diferencias: { rotulo: 'Con diferencias', fg: 'var(--warn)', bg: 'var(--warnbg)' },
+  revisar: { rotulo: 'Por revisar', fg: 'var(--bad)', bg: 'var(--badbg)' },
 };
 
 function TablaLiqs({ filas, sufijo, conVer }: { filas: LiqRow[]; sufijo: string; conVer?: boolean }) {

@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-// La caché de la ventana de 24 h (mig. 0360). La SQL se prueba contra un
-// Postgres real en supabase/tests/0360_ventana_wa.sh; aquí, el lado TypeScript:
+// La caché de la ventana de 24 h (mig. 0368). La SQL se prueba contra un
+// Postgres real en supabase/tests/0368_ventana_wa.sh; aquí, el lado TypeScript:
 // que se registre lo correcto (hora de Meta, el más reciente del lote, hora
 // futura recortada) y que NADA lance — es una caché, no un requisito.
 
@@ -33,7 +33,7 @@ describe('normalización (misma regla que la SQL y destinatarioWhatsApp)', () =>
   ])('%s → %s', (entrada, esperado) => expect(normalizarTelefonoWa(entrada)).toBe(esperado));
 
   it('la SQL implementa la misma regla (521 + 10 dígitos → 52 + 10)', () => {
-    const sql = readFileSync(join(process.cwd(), 'supabase/migrations/0360_wa_ventana_24h.sql'), 'utf8');
+    const sql = readFileSync(join(process.cwd(), 'supabase/migrations/0368_wa_ventana_24h.sql'), 'utf8');
     expect(sql).toContain("'^521[0-9]{10}$'");
     expect(sql).toContain("'52' || substr(");
   });
