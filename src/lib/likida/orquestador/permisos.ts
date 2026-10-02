@@ -37,6 +37,12 @@ export const AREA_POR_HERRAMIENTA = {
   estado_cobranza: 'dinero',
   estado_autofactura: 'dinero',
   salud_agentes: 'operacion',
+  // P6: más lecturas, todas de solo lectura y por área. El convenio y la jornada no enseñan un peso; la entrega de la liquidación
+  // externa y la reclamación de peajes sí tocan dinero (conteos de liquidaciones, montos de cobros): área `dinero`.
+  convenio_viaje: 'operacion',
+  estado_jornada: 'operacion',
+  estado_liquidacion_externa: 'dinero',
+  reclamacion_peajes: 'dinero',
   // Escalar es DERIVAR: cualquier rol con sesión puede pedir que una persona decida (el contador también
   // escala una diferencia de liquidación). No lee nada de otra área.
   escalar_a_persona: null,

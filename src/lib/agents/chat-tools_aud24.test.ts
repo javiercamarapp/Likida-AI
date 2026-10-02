@@ -100,7 +100,8 @@ describe('TC-N3 · `total` es el conteo real de la flota, no el límite de la co
 });
 
 /** Texto libre permitido: se resuelve contra datos de la flota YA cargados en memoria, nunca contra la base. */
-const PARAMS_TEXTO_RESUELTOS_EN_MEMORIA = new Set(['tablero_viajes.terminal', 'tablero_viajes.cliente', 'detalle_viaje.folio']);
+// P6: `convenio_viaje.folio` es el mismo caso que `detalle_viaje.folio`: valida con el patrón estricto de folio y se busca EN MEMORIA entre los viajes abiertos ya cargados.
+const PARAMS_TEXTO_RESUELTOS_EN_MEMORIA = new Set(['tablero_viajes.terminal', 'tablero_viajes.cliente', 'detalle_viaje.folio', 'convenio_viaje.folio']);
 
 describe('TC-N6 · la lista del analista sale del código, no de una lista a mano', () => {
   /** `TOOLS_LECTURA` de analista.ts, leída del fuente: es la lista que el chat de verdad recibe. */
@@ -125,7 +126,7 @@ describe('TC-N6 · la lista del analista sale del código, no de una lista a man
       // Ningún parámetro de texto libre: solo enums cerrados…
       for (const [nombre, def] of Object.entries(p.properties ?? {})) {
         const clave = `${s.function.name}.${nombre}`;
-        // …con UNA excepción deliberada y revisada: los tres nombres que el orquestador busca EN MEMORIA contra
+        // …con UNA excepción deliberada y revisada: los nombres y folios que el orquestador busca EN MEMORIA contra
         // el catálogo/tablero de la flota (jamás llegan a una consulta; ver `orquestador/herramientas.ts`, punto 4,
         // y `orquestador/filtros.ts`). Deben declarar su `maxLength`; cualquier otro texto libre sigue prohibido.
         if (PARAMS_TEXTO_RESUELTOS_EN_MEMORIA.has(clave)) {
