@@ -20,9 +20,9 @@ import { Bloque, EsqTabla, vigilar } from '../../bloque';
 import { colaRevision, leerFiltrosCola, decodificarCursorCola, listarTerminales } from '@/lib/likida/revision';
 import { buscarCatalogo, type OpcionCatalogo, type TipoCatalogo } from '@/lib/likida/repo';
 import {
-  contarPorEstado, contarNoCoincide, listarLiquidacionesExternas, type FiltroListado,
+  contarPorEstado, contarNoCoincide, listarLiquidacionesExternas, avisosDiscrepanciaDe, type FiltroListado,
 } from '@/lib/likida/liquidacion_externa/repo';
-import { reintentarLiquidacionExterna, reenviarCopiaAJefe } from '@/lib/likida/liquidacion_externa/servicio';
+import { reintentarLiquidacionExterna, reenviarCopiaAJefe, reavisarDiscrepancia } from '@/lib/likida/liquidacion_externa/servicio';
 import { leerFormatoFlota } from '@/lib/likida/liquidacion_externa/repo';
 import { importarLiquidacionesDeArchivo } from '@/lib/likida/liquidacion_externa/importar_archivo';
 import { decodificarCursor, codificarCursor } from '@/app/api/v1/_comun';
@@ -149,6 +149,13 @@ export default async function PaginaAgenteLiquidacion({
       };
     }));
 
+  // El estado del aviso a la oficina de las discrepancias de ESTA página (0643). Mejor esfuerzo: sin la tabla o con un error de lectura
+  // es `null` y la pantalla no pinta rótulo (jamás inventa uno).
+  const pAvisos = pPaginaExterna
+    .then((pg) => avisosDiscrepanciaDe(tenantId, pg.filas.filter((l) => l.acuseTipo === 'no_coincide').map((l) => l.id)))
+    .then((m) => (m ? Object.fromEntries([...m].map(([id, a]) => [id, { estado: a.estado }])) : null))
+    .catch(() => null);
+
   // El formato de la flota (0564): solo para decidir qué enlaces se pintan; si no se pudo leer, no se pintan.
   const pFormato = leerFormatoFlota(tenantId)
     .then((c) => ({ excel: c !== null, copia: (c?.copiaTelefonos.length ?? 0) > 0 }))
@@ -219,6 +226,27 @@ export default async function PaginaAgenteLiquidacion({
     redirect(`/dashboard/agentes/liquidacion?${new URLSearchParams([...contexto, ['ext_msg', resultado]]).toString()}#liquidaciones-externas`);
   }
 
+  /** «Reavisar» una discrepancia: rearma el aviso fallido o pendiente y lo manda ya. Re-gatea con la sesión REAL (es alcanzable por
+   *  POST directo) y vuelve a la pantalla con el resultado en la URL. */
+  async function reavisarExterna(fd: FormData): Promise<void> {
+    'use server';
+    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
+    const id = String(fd.get('id') ?? '');
+    let resultado: 'reaviso_ok' | 'reaviso_parcial' | 'reaviso_pendiente' | 'reaviso_ya' | 'reaviso_en_curso' | 'no_aplica' | 'no_encontrada' | 'error' = 'no_encontrada';
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      try {
+        const r = await reavisarDiscrepancia(s.tenantId, id.toLowerCase(), s.userId);
+        resultado = r === 'reavisada' ? 'reaviso_ok' : r === 'parcial' ? 'reaviso_parcial' : r === 'pendiente' ? 'reaviso_pendiente'
+          : r === 'ya_enviado' ? 'reaviso_ya' : r === 'en_curso' ? 'reaviso_en_curso' : r;
+      } catch {
+        resultado = 'error';
+      }
+    }
+    revalidatePath('/dashboard/agentes/liquidacion');
+    redirect(`/dashboard/agentes/liquidacion?${new URLSearchParams([...contexto, ['ext_msg', resultado]]).toString()}#liquidaciones-externas`);
+  }
+
   // Derivadas: `.then` sobre promesas YA lanzadas — no añaden espera, solo
   // dicen qué hacer cuando lleguen, y agrupan lo que una MISMA tarjeta pinta.
   const extra: ExtraAgenteLiquidacion = {
@@ -272,7 +300,7 @@ export default async function PaginaAgenteLiquidacion({
             fichas={pFichasExternas} pagina={pPaginaExterna} filtroEstado={filtroExterno}
             contexto={contexto} mensaje={leerMensajeExterno(sp.ext_msg)}
             puedeReintentar reintentar={reintentarExterna}
-            formato={pFormato} reenviarCopia={reenviarCopiaExterna}
+            formato={pFormato} reenviarCopia={reenviarCopiaExterna} avisos={pAvisos} reavisar={reavisarExterna}
             subirArchivo={puedeVerArea(rol, 'administracion') ? subirLiquidacionesExternas : undefined}
             importacion={{ conteo: sp.ext_imp, detalle: sp.ext_det }}
           />

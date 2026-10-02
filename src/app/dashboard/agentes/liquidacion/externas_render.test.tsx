@@ -34,12 +34,14 @@ const pintar = async (filas: LiquidacionExterna[], o: {
   fichas?: FichasExternas; total?: number | null; filtro?: Parameters<typeof SeccionExternas>[0]['filtroEstado'];
   mensaje?: Parameters<typeof SeccionExternas>[0]['mensaje']; siguiente?: string | null; puedeReintentar?: boolean;
   formato?: { excel: boolean; copia: boolean } | null;
+  avisos?: Record<string, { estado: 'pendiente' | 'enviando' | 'enviado' | 'fallido' }> | null;
 } = {}) => renderToStaticMarkup(await SeccionExternas({
   fichas: Promise.resolve(o.fichas ?? FICHAS),
   pagina: Promise.resolve<PaginaExternas>({ filas, hayMas: o.siguiente != null, siguiente: o.siguiente ?? null, total: o.total === undefined ? filas.length : o.total }),
   filtroEstado: o.filtro ?? null, contexto: [['tenant', 'flota-1']], mensaje: o.mensaje ?? null,
   puedeReintentar: o.puedeReintentar ?? true, reintentar,
   ...(o.formato !== undefined ? { formato: Promise.resolve(o.formato), reenviarCopia: async () => {} } : {}),
+  ...(o.avisos !== undefined ? { avisos: Promise.resolve(o.avisos), reavisar: async () => {} } : {}),
 }));
 
 describe('lo que dice la sección', () => {
@@ -278,3 +280,56 @@ describe('subir el archivo de liquidaciones desde el panel', () => {
   });
 });
 
+
+describe('el aviso a la oficina de una discrepancia (0643): rótulo y «Reavisar»', () => {
+  const ID = '33333333-3333-4333-8333-333333333333';
+  const disputa = (p: Partial<LiquidacionExterna> = {}) => fila({ id: ID, estado: 'acusada', acuseTipo: 'no_coincide', acuseEn: '2026-09-09T10:00:00Z', ...p });
+
+  it('enviado: «Oficina avisada» y SIN botón (reavisar un aviso que ya salió sería molestar dos veces)', async () => {
+    const html = await pintar([disputa()], { avisos: { [ID]: { estado: 'enviado' } } });
+    expect(html).toContain('Oficina avisada');
+    expect(html).not.toContain('Reavisar</button>');
+  });
+
+  it('pendiente y fallido: rótulo en su tono y botón «Reavisar» con el id de ESA liquidación', async () => {
+    const pendiente = await pintar([disputa()], { avisos: { [ID]: { estado: 'pendiente' } } });
+    expect(pendiente).toContain('Aviso pendiente');
+    expect(pendiente).toContain('Reavisar</button>');
+    expect(pendiente).toContain(`name="id" value="${ID}"`);
+    const fallido = await pintar([disputa()], { avisos: { [ID]: { estado: 'fallido' } } });
+    expect(fallido).toContain('El aviso no llegó');
+    expect(fallido).toContain('Reavisar</button>');
+  });
+
+  it('una discrepancia SIN aviso registrado (acuse anterior a la función) lo dice y deja reavisar', async () => {
+    const html = await pintar([disputa()], { avisos: {} });
+    expect(html).toContain('Aviso sin registrar');
+    expect(html).toContain('Reavisar</button>');
+  });
+
+  it('base sin la tabla (avisos null) o página sin la prop: NO se pinta rótulo ni botón (jamás se inventa un estado)', async () => {
+    const sinTabla = await pintar([disputa()], { avisos: null });
+    expect(sinTabla).not.toContain('Oficina avisada');
+    expect(sinTabla).not.toContain('Aviso sin registrar');
+    expect(sinTabla).not.toContain('Reavisar</button>');
+    const sinProp = await pintar([disputa()]);
+    expect(sinProp).not.toContain('Reavisar</button>');
+  });
+
+  it('solo una discrepancia lleva rótulo de aviso: una «Recibida» no', async () => {
+    const html = await pintar([fila({ id: ID, estado: 'acusada', acuseTipo: 'recibida', acuseEn: '2026-09-09T10:00:00Z' })], { avisos: {} });
+    expect(html).not.toContain('Aviso sin registrar');
+    expect(html).not.toContain('Reavisar</button>');
+  });
+
+  it('sin permiso para reintentar no hay botón, pero el rótulo sí', async () => {
+    const html = await pintar([disputa()], { avisos: { [ID]: { estado: 'fallido' } }, puedeReintentar: false });
+    expect(html).toContain('El aviso no llegó');
+    expect(html).not.toContain('Reavisar</button>');
+  });
+
+  it('el mensaje de la última acción se pinta (reaviso_pendiente es un aviso de falla)', async () => {
+    const html = await pintar([disputa()], { avisos: { [ID]: { estado: 'pendiente' } }, mensaje: 'reaviso_pendiente' });
+    expect(html).toContain('WhatsApp no aceptó el aviso');
+  });
+});
