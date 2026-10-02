@@ -33,11 +33,13 @@ const reintentar = vi.fn(async (_fd: FormData) => {});
 const pintar = async (filas: LiquidacionExterna[], o: {
   fichas?: FichasExternas; total?: number | null; filtro?: Parameters<typeof SeccionExternas>[0]['filtroEstado'];
   mensaje?: Parameters<typeof SeccionExternas>[0]['mensaje']; siguiente?: string | null; puedeReintentar?: boolean;
+  formato?: { excel: boolean; copia: boolean } | null;
 } = {}) => renderToStaticMarkup(await SeccionExternas({
   fichas: Promise.resolve(o.fichas ?? FICHAS),
   pagina: Promise.resolve<PaginaExternas>({ filas, hayMas: o.siguiente != null, siguiente: o.siguiente ?? null, total: o.total === undefined ? filas.length : o.total }),
   filtroEstado: o.filtro ?? null, contexto: [['tenant', 'flota-1']], mensaje: o.mensaje ?? null,
   puedeReintentar: o.puedeReintentar ?? true, reintentar,
+  ...(o.formato !== undefined ? { formato: Promise.resolve(o.formato), reenviarCopia: async () => {} } : {}),
 }));
 
 describe('lo que dice la sección', () => {
@@ -206,5 +208,46 @@ describe('exportar y mensajes', () => {
     expect(leerFiltroExterno('no_coincide')).toBe('no_coincide');
     expect(leerFiltroExterno('drop table')).toBeNull();
     expect(leerFiltroExterno(undefined)).toBeNull();
+  });
+});
+
+describe('el formato de la flota (0564)', () => {
+  it('enlaza a la pantalla del formato, conservando el contexto', async () => {
+    const html = await pintar([fila()]);
+    expect(html).toContain('/dashboard/agentes/liquidacion/formato?tenant=flota-1');
+    expect(html).toContain('Formato de las liquidaciones');
+  });
+
+  it('con formato configurado, las generadas por Likida enseñan «Excel» (apunta al export, con el id)', async () => {
+    const html = await pintar([fila()], { formato: { excel: true, copia: false } });
+    expect(html).toContain('/api/export/liquidaciones-externas?tenant=flota-1&amp;excel=11111111-1111-4111-8111-111111111111');
+    expect(html).not.toContain('Copia al jefe');
+  });
+
+  it('el PDF que adjuntó el cliente NO tiene Excel, aunque la flota tenga formato', async () => {
+    const html = await pintar([fila({ pdfOrigen: 'adjunto' })], { formato: { excel: true, copia: true } });
+    expect(html).not.toContain('excel=');
+  });
+
+  it('«Copia al jefe» solo con jefe designado y solo en las que ya salieron (no pendientes ni fallidas)', async () => {
+    const html = await pintar([
+      fila(), fila({ id: '22222222-2222-4222-8222-222222222222', estado: 'pendiente' }), fila({ id: '33333333-3333-4333-8333-333333333333', estado: 'fallida' }),
+    ], { formato: { excel: true, copia: true } });
+    expect(html.match(/Copia al jefe/g)).toHaveLength(1); // solo la enviada: ni la pendiente ni la fallida
+    const sin = await pintar([fila()], { formato: { excel: true, copia: false } });
+    expect(sin).not.toContain('Copia al jefe');
+  });
+
+  it('sin poder leer el formato (null) no se pinta ningún enlace de más', async () => {
+    const html = await pintar([fila()], { formato: null });
+    expect(html).not.toContain('excel=');
+    expect(html).not.toContain('Copia al jefe');
+  });
+
+  it('los mensajes de la copia se leen de la URL y los desconocidos se ignoran', () => {
+    expect(leerMensajeExterno('copia_enviada')).toBe('copia_enviada');
+    expect(leerMensajeExterno('copia_fallo')).toBe('copia_fallo');
+    expect(leerMensajeExterno('toString')).toBeNull();
+    expect(leerMensajeExterno('<script>')).toBeNull();
   });
 });

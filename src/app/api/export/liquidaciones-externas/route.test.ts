@@ -203,3 +203,46 @@ describe('el PDF', () => {
     expect(firmar.mock.calls[0][2]).toMatch(/^liquidacion_[A-Za-z0-9._-]+\.pdf$/);
   });
 });
+
+describe('el Excel (formato de la flota, 0564)', () => {
+  const ID = '00000000-0000-4000-8000-000000000001';
+
+  it('redirige 302 a la URL firmada del .xlsx junto al PDF, con nombre de descarga', async () => {
+    const r = await get(`?excel=${ID}`);
+    expect(r.status).toBe(302);
+    expect(r.headers.get('Cache-Control')).toBe('no-store');
+    expect(firmar).toHaveBeenCalledWith('t-1/externas/x.xlsx', 60, 'liquidacion_SAP-1.xlsx');
+  });
+
+  it('busca CON el tenant de la sesión y rechaza ids que no son uuid', async () => {
+    leer.mockResolvedValueOnce(null);
+    expect((await get(`?excel=${ID}`)).status).toBe(404);
+    expect(leer).toHaveBeenCalledWith('t-1', ID);
+    expect((await get('?excel=../../x')).status).toBe(400);
+  });
+
+  it('el PDF que adjuntó el cliente no tiene Excel: 404 con su razón', async () => {
+    todas = [fila(1, { pdfOrigen: 'adjunto' })];
+    const r = await get(`?excel=${ID}`);
+    expect(r.status).toBe(404);
+    expect(firmar).not.toHaveBeenCalled();
+  });
+
+  it('llegó antes de configurar el formato (el objeto no existe): 404, no 502', async () => {
+    firmar.mockRejectedValueOnce(new Error('liquidacion_externa firmar PDF: Object not found'));
+    expect((await get(`?excel=${ID}`)).status).toBe(404);
+  });
+
+  it('otro fallo de Storage: 502 de texto fijo', async () => {
+    firmar.mockRejectedValueOnce(new Error('bucket caído'));
+    const r = await get(`?excel=${ID}`);
+    expect(r.status).toBe(502);
+    expect(await r.text()).not.toMatch(/bucket/);
+  });
+
+  it('sin permiso de dinero no firma nada', async () => {
+    tenant = { ok: true, tenantId: 't-1', rol: 'encargado' };
+    expect((await get(`?excel=${ID}`)).status).toBe(403);
+    expect(firmar).not.toHaveBeenCalled();
+  });
+});

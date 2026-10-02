@@ -164,6 +164,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // AGENTES (13-ago-2026): las ventanas de los dos agentes enseñan montos
   // comprobados y colas de facturación — área dinero.
   '/dashboard/agentes/liquidacion': 'dinero',
+  // 0564: el formato de la liquidación de la flota (columnas de su Excel de muestra, documento por WhatsApp, copia al jefe y aviso de discrepancia). Dinero a la vista; solo el dueño guarda (`administracion`, comprobado en cada acción).
+  '/dashboard/agentes/liquidacion/formato': 'dinero',
   '/dashboard/agentes/facturas': 'dinero',
   // Cobranza de COMPROBANTES (0089): la página no enseña pesos, pero es la
   // cola del cierre contable — el dolor del contador — y opera al bloque

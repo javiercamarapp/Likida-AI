@@ -163,6 +163,49 @@ si no salió (sin destinatario capturado, plantilla sin aprobar), se le dice que
 quedó marcada en el panel y que avise directo. Queda el evento `aviso_oficina`
 en la bitácora con `enviado: true|false`.
 
+## El formato de la flota, la copia al jefe y la persona responsable (mig. 0564)
+
+**Alcance de la fase 1 tal como lo pidió la flota:** la flota calcula en su sistema;
+Likida toma el dato del pago y lo manda al operador **en el formato de la flota**
+(el Excel que hoy se copia y se pega), con **copia al jefe de flota**, y una
+discrepancia («No coincide») **avisa a la persona responsable**. No incluye OCR de
+tickets ni facturas (fase 2).
+
+**Pantalla:** `/dashboard/agentes/liquidacion/formato` (área dinero; solo el dueño
+guarda).
+
+1. **Formato.** Se sube un Excel de muestra; Likida lee la primera hoja y deriva la
+   plantilla: título, datos de arriba (operador, folio, periodo, viajes…), columnas
+   de la tabla con sus encabezados y la fila de total. Lo que no reconoce **no se
+   inventa**: se avisa («No reconocí estas columnas y NO se imprimirán»). Después se
+   pueden renombrar encabezados, elegir fechas (`DD/MM/AAAA` o `AAAA-MM-DD`), ocultar el
+   total y elegir qué documento viaja por WhatsApp (PDF o Excel).
+2. **Salida.** Cada liquidación nueva genera el PDF **y** el Excel con esas columnas
+   (mismas cifras que mandó el cliente; el total es el del cliente, nunca una fórmula).
+   En el panel cada fila trae «PDF» y «Excel». El PDF que adjunta el cliente manda:
+   no se reformatea ni se genera Excel. Una liquidación que llegó **antes** de
+   configurar el formato no tiene Excel (el enlace da 404 con su razón).
+3. **Copia al jefe de flota.** Hasta 3 teléfonos designados. Cuando la entrega al
+   chofer queda en cola o enviada, cada uno recibe **una** copia (resumen + liga del
+   documento, vigente 24 h) por el selector central de avisos. Es idempotente (la
+   bitácora recuerda que ya salió: evento `aviso_oficina` con `destino: copia_jefe`),
+   nunca retrasa ni tumba la entrega al chofer y se puede **reenviar** desde el panel
+   («Copia al jefe»). **Sin teléfonos designados no se manda copia a nadie**: la copia
+   lleva cifras y no se adivina el destinatario.
+4. **Discrepancia.** «No coincide» avisa, en este orden de preferencia, a (a) los
+   teléfonos de «persona responsable» designados, (b) si no hay, los de la copia al
+   jefe, (c) si tampoco, quien ve dinero (como antes). Al chofer solo se le promete «ya
+   avisé a tu oficina» si Meta aceptó el aviso a **al menos una** persona.
+
+Sin la 0564 aplicada todo funciona como antes (la tabla ausente se trata como «sin
+formato»). El fallo de lectura **distinto** de «tabla ausente» no cae en silencio al
+formato genérico: la recepción falla (500) para que el sistema del cliente reintente.
+
+**Pendiente de campo:** el formato REAL de la flota. Hasta tener su Excel, el
+diccionario de encabezados (`formato_flota.ts`, sinónimos por campo) está calibrado
+con muestras sintéticas; un encabezado nuevo es una línea. El Excel real también
+decidirá si hace falta un campo más (p. ej. horas, kilómetros por concepto).
+
 ## Retención y purgas (mig. 0562, cron `purgar`)
 
 | Dato | Plazo | Notas |
@@ -197,7 +240,10 @@ Javier/su abogado deben confirmar** (ver bloqueos).
    de despliegue no construye si la base va atrás de la última migración.
 5. **Integración del lado de Innovativos**: su SAP/TMS tiene que llamar al
    endpoint (acceso bajo Zero Trust, llave de API de área `administracion`).
-6. **Confirmar el plazo de retención** (60 meses para liquidaciones externas) con quien lleve lo legal.
+6. **Excel de muestra de la flota** (el «formatito» que hoy copian y pegan) y los teléfonos del jefe de flota y de la persona responsable de discrepancias: sin ellos la entrega sale con el PDF genérico y sin copia.
+7. **Plantilla de avisos `aviso_operacion_v1`** aprobada en Meta: la copia al jefe y el aviso de discrepancia usan texto dentro de las 24 h y esa plantilla fuera; sin ella, fuera de ventana quedan `no_enviada` (dicho en el panel, reenviable).
+8. **Aplicar la migración 0564** (aditiva e idempotente; el código corre sin ella, pero el formato y la copia no se guardan hasta aplicarla).
+9. **Confirmar el plazo de retención** (60 meses para liquidaciones externas) con quien lleve lo legal.
 
 ## Límites conocidos (pendientes)
 

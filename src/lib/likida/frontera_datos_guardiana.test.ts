@@ -208,8 +208,13 @@ import { join, relative } from 'node:path';
 // ADVERSARIAL ronda 03: +4 llamadas, todas en archivos que ya contaban — `conductor/repo_validacion.ts` (+1, `unidadReportaGps`: ¿la unidad
 // reporta GPS de verdad? decide si un pin basta como evidencia) y `buzon/repo.ts` (+3: dos lecturas «¿esta ruta de PDF la usa una factura?» y el
 // UPDATE que suelta la ruta de la recepción descartada). 1,701 → 1,705.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 277;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_705;
+// LOOP PUNTA A PUNTA, ola 3b — integración de la rama de los Agentes 1 y 2 (liquidación externa y peajes) con el tronco: 277 / 1,705 →
+// 279 / 1,730, medido con el barrido completo sobre el árbol fusionado. Los dos archivos nuevos son los de los Agentes 1-2 que el tronco
+// aún no contaba (`liquidacion_externa/trabajo.ts` ya estaba; suman los accesos del correo/pull de peajes y de la retención de
+// agentes); las +25 llamadas, las mismas ramas más 3 en `liquidacion_externa/repo.ts` (el formato de la flota de la 0564: leer, guardar y
+// borrar — junta TODO el acceso a esa tabla en el repo del módulo, no en un archivo aparte). Funcionalidad nueva, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 279;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_730;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)
