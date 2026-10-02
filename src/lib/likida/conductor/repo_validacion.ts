@@ -67,7 +67,7 @@ export async function listarSitios(
   let q = supabaseAdmin().from('geocerca').select(COLUMNAS_SITIO).eq('tenant_id', tenantId).in('tipo', o.tipo ? [o.tipo] : [...TIPOS_DEL_CATALOGO]);
   const b = (o.busqueda ?? '').replace(/[%,()*\\]/g, ' ').trim().slice(0, 60);
   if (b) q = q.or(`nombre.ilike.%${b}%,codigo.ilike.%${b}%`);
-  const res = await acotada(q.order('nombre', { ascending: true }).limit(limite + 1), 'sitios.listar');
+  const res = await acotada(q.order('nombre', { ascending: true }).order('id').limit(limite + 1), 'sitios.listar');
   const filas = (exigir(res as never, 'sitios.listar') ?? []) as unknown as Fila[];
   const pagina = filas.slice(0, limite);
   const clienteIds = [...new Set(pagina.map((f) => s(f.cliente_id)).filter((x): x is string => !!x))];
@@ -144,7 +144,7 @@ export async function asignarSitiosViaje(
     if (v === null) { columnas[columna] = null; continue; }
     // Id o código, SIEMPRE dentro de la flota.
     const campo = UUID.test(v) ? 'id' : 'codigo';
-    const r = await acotada(supabaseAdmin().from('geocerca').select('id').eq('tenant_id', tenantId).eq(campo, UUID.test(v) ? v.toLowerCase() : v).limit(1), 'sitios.resolver');
+    const r = await acotada(supabaseAdmin().from('geocerca').select('id').eq('tenant_id', tenantId).eq(campo, UUID.test(v) ? v.toLowerCase() : v).order('id').limit(1), 'sitios.resolver');
     const f = (exigir(r as never, 'sitios.resolver') ?? []) as unknown as Fila[];
     if (f.length === 0) return 'sitio_no_encontrado';
     columnas[columna] = String(f[0].id);
@@ -174,7 +174,7 @@ export async function posicionesDeUnidad(tenantId: string, unidadId: string, des
     .from('posicion').select('lat, lng, medida_en, proveedor')
     .eq('tenant_id', tenantId).eq('unidad_id', unidadId)
     .gte('medida_en', desde.toISOString()).lte('medida_en', hasta.toISOString())
-    .order('medida_en', { ascending: false }).limit(200), 'validacion.posiciones');
+    .order('medida_en', { ascending: false }).order('id').limit(200), 'validacion.posiciones');
   const filas = (exigir(res as never, 'validacion.posiciones') ?? []) as unknown as Fila[];
   return filas.map((f) => ({
     lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(String(f.medida_en)),
@@ -200,7 +200,7 @@ export async function hitoLlegadaReciente(tenantId: string, viajeId: string, aho
   const res = await acotada(supabaseAdmin()
     .from('viaje_hito').select(COLUMNAS_HITO)
     .eq('tenant_id', tenantId).eq('viaje_id', viajeId).in('tipo', ['llegada_carga', 'llegada_descarga']).eq('estado', 'recibido')
-    .gte('recibido_en', desde).order('recibido_en', { ascending: false }).limit(1), 'validacion.hito_reciente');
+    .gte('recibido_en', desde).order('recibido_en', { ascending: false }).order('id').limit(1), 'validacion.hito_reciente');
   const filas = (exigir(res as never, 'validacion.hito_reciente') ?? []) as unknown as Fila[];
   return filas.length > 0 ? filaAHito(filas[0]) : null;
 }
@@ -415,7 +415,7 @@ export async function leerDatosTablero(tenantId: string, f: FiltrosTablero = {})
   if (f.terminalId && UUID.test(f.terminalId)) q = q.eq('terminal_id', f.terminalId);
   if (f.clienteId && UUID.test(f.clienteId)) q = q.eq('cliente_id', f.clienteId);
   if (f.operadorId && UUID.test(f.operadorId)) q = q.eq('operador_id', f.operadorId);
-  const rv = await acotada(q.order('aceptado_en', { ascending: true }).limit(TOPE_VIAJES_TABLERO + 1), 'tablero.viajes');
+  const rv = await acotada(q.order('aceptado_en', { ascending: true }).order('id').limit(TOPE_VIAJES_TABLERO + 1), 'tablero.viajes');
   const filas = (exigir(rv as never, 'tablero.viajes') ?? []) as unknown as Fila[];
   const hayMas = filas.length > TOPE_VIAJES_TABLERO;
   const viajes = filas.slice(0, TOPE_VIAJES_TABLERO).map(filaAViajeTablero);
@@ -443,9 +443,9 @@ export interface CatalogosFiltro {
 
 export async function leerCatalogosFiltro(tenantId: string): Promise<CatalogosFiltro> {
   const [t, c, o] = await Promise.all([
-    acotada(supabaseAdmin().from('terminal').select('id, nombre').eq('tenant_id', tenantId).order('nombre').limit(300), 'tablero.terminales'),
-    acotada(supabaseAdmin().from('cliente').select('id, nombre').eq('tenant_id', tenantId).eq('activo', true).order('nombre').limit(500), 'tablero.clientes'),
-    acotada(supabaseAdmin().from('operador').select('id, nombre').eq('tenant_id', tenantId).order('nombre').limit(1000), 'tablero.operadores'),
+    acotada(supabaseAdmin().from('terminal').select('id, nombre').eq('tenant_id', tenantId).order('nombre').order('id').limit(300), 'tablero.terminales'),
+    acotada(supabaseAdmin().from('cliente').select('id, nombre').eq('tenant_id', tenantId).eq('activo', true).order('nombre').order('id').limit(500), 'tablero.clientes'),
+    acotada(supabaseAdmin().from('operador').select('id, nombre').eq('tenant_id', tenantId).order('nombre').order('id').limit(1000), 'tablero.operadores'),
   ]);
   const lista = (r: unknown, q: string) => ((exigir(r as never, q) ?? []) as unknown as Fila[]).map((x) => ({ id: String(x.id), nombre: String(x.nombre) }));
   return { terminales: lista(t, 'tablero.terminales'), clientes: lista(c, 'tablero.clientes'), operadores: lista(o, 'tablero.operadores') };
@@ -501,7 +501,7 @@ export async function leerDatosEstadias(tenantId: string, desde: Date, hasta: Da
     .from('viaje_hito').select('viaje_id')
     .eq('tenant_id', tenantId).in('tipo', ['llegada_carga', 'llegada_descarga']).in('estado', ['recibido', 'validado'])
     .gte('mensaje_en', desde.toISOString()).lt('mensaje_en', hasta.toISOString())
-    .order('mensaje_en', { ascending: true }).limit(TOPE_VIAJES_ESTADIAS * 2 + 1), 'estadias.llegadas');
+    .order('mensaje_en', { ascending: true }).order('id').limit(TOPE_VIAJES_ESTADIAS * 2 + 1), 'estadias.llegadas');
   const llegadas = (exigir(rl as never, 'estadias.llegadas') ?? []) as unknown as Fila[];
   const todos = [...new Set(llegadas.map((x) => String(x.viaje_id)))];
   const truncada = todos.length > TOPE_VIAJES_ESTADIAS || llegadas.length > TOPE_VIAJES_ESTADIAS * 2;
@@ -548,7 +548,7 @@ export async function leerHitosDeOperador(tenantId: string, operadorId: string, 
   if (!UUID.test(operadorId)) return [];
   const rv = await acotada(supabaseAdmin().from('viaje').select('id')
     .eq('tenant_id', tenantId).eq('operador_id', operadorId)
-    .gte('created_at', new Date(desde.getTime() - 14 * 86_400_000).toISOString()).limit(500), 'jornada.viajes');
+    .gte('created_at', new Date(desde.getTime() - 14 * 86_400_000).toISOString()).order('id').limit(500), 'jornada.viajes');
   const ids = ((exigir(rv as never, 'jornada.viajes') ?? []) as unknown as Fila[]).map((f) => String(f.id));
   if (ids.length === 0) return [];
   const filas = await traerPorIds<Fila>(ids, (t) => acotada(supabaseAdmin()

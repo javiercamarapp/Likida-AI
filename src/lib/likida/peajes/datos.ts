@@ -271,7 +271,7 @@ export async function cargarMapeo(tenantId: string, proveedor: string | null | u
 
 export async function listarMapeos(tenantId: string): Promise<MapeoVista[]> {
   const { data, error } = await acotada(supabaseAdmin().from('peaje_mapeo_columnas')
-    .select('id, proveedor, columnas, activo').eq('tenant_id', tenantId).order('proveedor').limit(200), 'peajes.mapeos');
+    .select('id, proveedor, columnas, activo').eq('tenant_id', tenantId).order('proveedor').order('id').limit(200), 'peajes.mapeos');
   if (error) throw new Error(`listarMapeos: ${error.message}`);
   const out: MapeoVista[] = [];
   for (const f of data ?? []) {
@@ -351,7 +351,7 @@ export interface ArchivoIngestaVista {
 export async function listarArchivosIngesta(tenantId: string, limite = 20): Promise<ArchivoIngestaVista[]> {
   const { data, error } = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
     .select('id, nombre, proveedor, estado, intentos, bytes, recibida_en, procesada_en, ultimo_error, desglose_id')
-    .eq('tenant_id', tenantId).order('recibida_en', { ascending: false }).limit(limite), 'peajes.archivos_ingesta');
+    .eq('tenant_id', tenantId).order('recibida_en', { ascending: false }).order('id').limit(limite), 'peajes.archivos_ingesta');
   if (error) throw new Error(`listarArchivosIngesta: ${error.message}`);
   return (data ?? []).map((f) => ({
     id: String(f.id), nombre: String(f.nombre), proveedor: (f.proveedor as string | null) ?? null, estado: String(f.estado),
