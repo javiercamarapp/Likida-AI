@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { traerTodo, conteo } from '../pg';
 import { normalizarNombre, normalizarTag } from './formatos';
+import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../conductor/geometria_datos';
 import { matrizDeArchivoCatalogo } from './archivo';
 import { parsearCasetasMatriz, type CasetaCatalogo } from './casetas';
 import { parsearTagsMatriz, resolverUnidadesDeTags } from './tags';
@@ -214,7 +215,12 @@ export async function cambiarEstadoCaseta(tenantId: string, casetaId: string, ac
 }
 
 // ── Geocercas (la tabla de la 0050; nadie creaba filas) ─────────────────────
-export interface GeocercaVista { id: string; nombre: string; tipo: string; lat: number; lng: number; radioM: number; activa: boolean }
+export interface GeocercaVista {
+  id: string; nombre: string; tipo: string; lat: number; lng: number; radioM: number; activa: boolean;
+  /** 0630: polígono nativo (solo en `zonasParaReclamacion`) y si el círculo sustituye a uno que no se guardó. */
+  poligono?: Array<{ lat: number; lng: number }> | null;
+  aproximada?: boolean;
+}
 export const TIPOS_GEOCERCA = ['origen', 'destino', 'patio', 'punto_interes', 'restringida'] as const;
 
 /**
@@ -224,19 +230,24 @@ export const TIPOS_GEOCERCA = ['origen', 'destino', 'patio', 'punto_interes', 'r
  * capturadas a mano en peajes. El editor sigue usando la forma por omisión.
  */
 export async function listarGeocercas(tenantId: string, opciones: { zonasParaReclamacion?: boolean } = {}): Promise<GeocercaVista[]> {
-  const filas = await traerTodo<{ id: unknown; nombre: unknown; tipo: unknown; lat: unknown; lng: unknown; radio_m: unknown; activa: unknown }>(
+  const filas = await traerTodo<{ id: unknown; nombre: unknown; tipo: unknown; lat: unknown; lng: unknown; radio_m: unknown; activa: unknown; poligono?: unknown; aproximada?: unknown }>(
     (d, h) => {
-      const q = supabaseAdmin().from('geocerca')
-        .select('id, nombre, tipo, lat, lng, radio_m, activa', conteo(d))
-        .eq('tenant_id', tenantId);
-      return acotada((opciones.zonasParaReclamacion ? q.in('tipo', ['patio', 'restringida']) : q.eq('catalogo', 'peajes'))
-        .order('nombre').order('id').range(d, h), 'peajes.geocercas');
+      // Solo la reclamación necesita el polígono (0630); con respaldo a círculo si la base aún no tiene la migración.
+      const consulta = (conPoligono: boolean) => {
+        const q = supabaseAdmin().from('geocerca')
+          .select(conPoligono ? `id, nombre, tipo, lat, lng, radio_m, activa, ${COLUMNAS_POLIGONO}` : 'id, nombre, tipo, lat, lng, radio_m, activa', conteo(d))
+          .eq('tenant_id', tenantId);
+        return acotada((opciones.zonasParaReclamacion ? q.in('tipo', ['patio', 'restringida']) : q.eq('catalogo', 'peajes'))
+          .order('nombre').order('id').range(d, h), 'peajes.geocercas');
+      };
+      return opciones.zonasParaReclamacion ? conPoligonoOCirculo(consulta) : consulta(false);
     },
     'peajes.geocercas',
   );
   return filas.map((f) => ({
     id: String(f.id), nombre: String(f.nombre), tipo: String(f.tipo),
     lat: Number(f.lat), lng: Number(f.lng), radioM: Number(f.radio_m), activa: f.activa !== false,
+    ...(opciones.zonasParaReclamacion ? geometriaDeFila(f as Record<string, unknown>) : {}),
   }));
 }
 
