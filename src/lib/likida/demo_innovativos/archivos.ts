@@ -1,28 +1,33 @@
 /* eslint-disable security/detect-unsafe-regex -- el texto viene de archivos que Innovativos entrega y se lee en CLI/pruebas (no en una ruta pública); los cuantificadores llevan tope y archivos.test.ts mide que una línea adversaria de 50,000 caracteres no explota. */
 // ═══════════════════════════════════════════════════════════════════════════
-// VALIDADOR DE LOS ARCHIVOS DE INNOVATIVOS — el paso «validación» del kit de
+// VALIDADOR DE LOS ARCHIVOS DEL CLIENTE DE DEMO — el paso «validación» del kit de
 // carga (docs/demo/innovativos.md). Se corre ANTES de cargar nada: dice si el
 // archivo que llegó se puede leer, cuántas filas entran, cuáles se rechazan y
 // por qué. NO escribe en ninguna base y no toca la red.
 //
 //   node scripts/demo/innovativos/validar-archivo.mjs <tipo> <ruta>
-//   tipos: gps_posiciones | geocercas | pases | liquidaciones | convenios | whatsapp | carta_porte
+//   tipos: gps_posiciones | geocercas | pases | tags | casetas | liquidaciones | convenios | whatsapp | carta_porte
 //
-// Donde el importador real YA existe (pases de peaje, sitios) se valida con SU
-// lector, no con una copia. Donde no existe aún (tabla propia, liquidación CSV,
-// convenios) se valida contra el contrato de este módulo.
+// TODO se valida con el importador REAL del producto, no con una copia: posiciones y geocercas con el lector de tabla
+// propia (conectores/tabla_propia), pases/TAG/casetas con los lectores de peajes, liquidaciones con su esquema, convenios
+// con el importador de convenios y el histórico de WhatsApp con el lector del Vigía. Lo único propio de este módulo
+// es la forma del informe. Si un importador cambia, el informe cambia con él (y la prueba de muestras lo delata).
 // ═══════════════════════════════════════════════════════════════════════════
 
 import * as XLSX from 'xlsx';
-import { parsearCsvSitios } from '../conductor/sitios';
+import { ErrorTablaPropia } from '../conectores/tabla_propia/contrato';
+import { leerGeocercasCsv, leerPosicionesCsv, partirCsv } from '../conectores/tabla_propia/csv';
+import { geocercasASitios } from '../conectores/tabla_propia/importar_geocercas';
+import { localAUtc } from '../conectores/tabla_propia/tiempo';
+import { parsearMatrizConvenios } from '../convenios/importador';
+import { cuerposDeLiquidacionesCsv } from '../liquidacion_externa/liquidacion_csv';
 import { matrizDeArchivoCatalogo } from '../peajes/archivo';
 import { parsearCasetasMatriz } from '../peajes/casetas';
 import { interpretarDesglose } from '../peajes/desglose';
 import { parsearTagsMatriz } from '../peajes/tags';
+import { leerExportWhatsapp } from '../vigia/historial/export_whatsapp';
+import { esZip, textoDeZip } from '../vigia/historial/zip_lector';
 import { TIPOS_ARCHIVO_KIT, type TipoArchivoKit } from './contratos';
-import { leerConveniosCsv } from './convenios_csv';
-import { geocercasASitiosCsv, leerGeocercasCsv, leerPosicionesCsv, localAUtc, partirCsv } from './lector_tabla_propia';
-import { cuerposDeLiquidacionesCsv } from '../liquidacion_externa/liquidacion_csv';
 
 export interface ResultadoValidacion {
   tipo: TipoArchivoKit;
@@ -45,10 +50,19 @@ const lista = (xs: string[]): string[] => (xs.length > MAX_LISTA ? [...xs.slice(
 const res = (tipo: TipoArchivoKit, resumen: string[], problemas: string[], avisos: string[] = []): ResultadoValidacion =>
   ({ tipo, ok: problemas.length === 0, resumen, problemas: lista(problemas), avisos });
 
-// ── gps_posiciones ──────────────────────────────────────────────────────────
+// ── gps_posiciones y geocercas (el lector de tabla propia: conectores/tabla_propia) ──────────────────────
+/** Los lectores reales lanzan `ErrorTablaPropia` con un motivo apto para el panel: aquí es el problema del archivo. */
+function leer<T>(tipo: TipoArchivoKit, f: () => T): T | ResultadoValidacion {
+  try { return f(); } catch (e) {
+    if (e instanceof ErrorTablaPropia) return res(tipo, [], [e.message]);
+    throw e;
+  }
+}
+const esResultado = (x: unknown): x is ResultadoValidacion => typeof x === 'object' && x !== null && 'problemas' in x && 'resumen' in x;
+
 function validarPosiciones(texto: string): ResultadoValidacion {
-  const r = leerPosicionesCsv(texto);
-  if (r.error) return res('gps_posiciones', [], [r.error]);
+  const r = leer('gps_posiciones', () => leerPosicionesCsv(texto));
+  if (esResultado(r)) return r;
   const unidades = new Set(r.filas.map((f) => f.unidad));
   const instantes = r.filas.map((f) => localAUtc(f.fechaHoraLocal).getTime());
   const ultimaPorUnidad = new Map<string, number>();
@@ -64,18 +78,19 @@ function validarPosiciones(texto: string): ResultadoValidacion {
   return res('gps_posiciones', resumen, r.rechazadas.map((x) => `fila ${x.fila}: ${x.motivo}`), avisos);
 }
 
-// ── geocercas ───────────────────────────────────────────────────────────────
 function validarGeocercas(texto: string): ResultadoValidacion {
-  const r = leerGeocercasCsv(texto);
-  if (r.error) return res('geocercas', [], [r.error]);
+  const r = leer('geocercas', () => leerGeocercasCsv(texto));
+  if (esResultado(r)) return r;
   const poligonos = r.filas.filter((g) => g.tipo === 'poligono').length;
-  const s = geocercasASitiosCsv(r.filas);
-  const sitios = parsearCsvSitios(s.csv);
-  const resumen = [`${r.filas.length} geocercas (${r.filas.length - poligonos} círculos, ${poligonos} polígonos)`, `${sitios.filas.length} entrarían al catálogo de sitios del Conductor`];
+  const s = geocercasASitios(r.filas);
+  const resumen = [
+    `${r.filas.length} geocercas (${r.filas.length - poligonos} círculos, ${poligonos} polígonos)`,
+    `${s.filas.length} entrarían al catálogo de sitios del Conductor (${s.poligonos} con su polígono nativo)`,
+  ];
   const avisos = s.aproximadas.length
-    ? [`${s.aproximadas.length} polígono(s) se aproximan a un círculo que los envuelve (${s.aproximadas.map((a) => `${a.codigo}: ${a.radioM} m`).join(', ')}); el catálogo de sitios solo guarda centro + radio`]
+    ? [`${s.aproximadas.length} polígono(s) no se pueden guardar nativos (más de 500 vértices o sin área) y entran solo como el círculo que los contiene, marcados aproximados: ${s.aproximadas.map((a) => `${a.codigo}: ${a.radioM} m`).join(', ')}`]
     : [];
-  return res('geocercas', resumen, [...r.rechazadas.map((x) => `fila ${x.fila}: ${x.motivo}`), ...sitios.errores.map((e) => `al pasar a sitios, línea ${e.linea}: ${e.mensaje}`)], avisos);
+  return res('geocercas', resumen, [...r.rechazadas, ...s.rechazadas].map((x) => `fila ${x.fila}: ${x.motivo}`), avisos);
 }
 
 // ── pases (SU lector: peajes/desglose.ts) ───────────────────────────────────
@@ -122,68 +137,36 @@ function validarLiquidaciones(texto: string): ResultadoValidacion {
     ['el endpoint repite la validación estricta (campos desconocidos, decimales, operador existente); este paso solo adelanta lo que fallaría']);
 }
 
-// ── convenios ───────────────────────────────────────────────────────────────
+// ── convenios (el importador de convenios: convenios/importador.ts) ─────────────────────────────────────
 function validarConvenios(texto: string): ResultadoValidacion {
-  const r = leerConveniosCsv(texto);
+  const r = parsearMatrizConvenios(partirCsv(texto), { puedeVerFinanzas: true });
   const instr = r.convenios.reduce((s, c) => s + c.instrucciones.length, 0);
   const sin = r.convenios.filter((c) => !c.instrucciones.some((i) => i.categoria === 'reportarse')).length;
   return res('convenios', [`${r.convenios.length} convenios con ${instr} instrucciones de operación`],
-    r.problemas.map((p) => `${p.fila ? `fila ${p.fila}: ` : ''}${p.motivo}`),
+    r.errores.map((e) => `${e.fila ? `fila ${e.fila}: ` : ''}${e.motivo}`),
     sin ? [`${sin} convenio(s) sin instrucción «reportarse» (con quién): el operador no sabrá a quién buscar`] : []);
 }
 
-// ── whatsapp (histórico exportado) ──────────────────────────────────────────
-const INVISIBLES = /[‎‏‪-‮﻿]/g;
-const ENC_IOS = /^\[(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4}),?\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:[ap]\.?\s?m\.?)?\]\s*(.*)$/i;
-const ENC_ANDROID = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4}),?\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:[ap]\.?\s?m\.?)?\s+-\s+(.*)$/i;
-
-/** Nombres de las entradas de un .zip leyendo el directorio central (no descomprime). */
-export function entradasDeZip(b: Uint8Array): string[] | null {
-  if (b.length < 22 || b[0] !== 0x50 || b[1] !== 0x4b) return null;
-  const v = new DataView(b.buffer, b.byteOffset, b.byteLength);
-  let fin = -1;
-  for (let i = b.length - 22; i >= Math.max(0, b.length - 65_557); i--) if (v.getUint32(i, true) === 0x06054b50) { fin = i; break; }
-  if (fin < 0) return null;
-  const n = v.getUint16(fin + 10, true); let o = v.getUint32(fin + 16, true); const nombres: string[] = [];
-  for (let k = 0; k < n; k++) {
-    if (o + 46 > b.length || v.getUint32(o, true) !== 0x02014b50) return null;
-    const ln = v.getUint16(o + 28, true); const lx = v.getUint16(o + 30, true); const lc = v.getUint16(o + 32, true);
-    nombres.push(new TextDecoder().decode(b.slice(o + 46, o + 46 + ln))); o += 46 + ln + lx + lc;
-  }
-  return nombres;
-}
-
-export function inspeccionarExportWhatsapp(texto: string): { formato: 'ios' | 'android' | 'desconocido'; encabezados: number; autores: number; sistema: number; ilegibles: number; primera: string | null; ultima: string | null } {
-  const autores = new Set<string>(); let ios = 0; let android = 0; let sistema = 0; let ilegibles = 0; const fechas: string[] = [];
-  let hayEncabezado = false;
-  for (const crudo of texto.replace(INVISIBLES, '').split(/\r?\n/)) {
-    const l = crudo.trim(); if (!l) continue;
-    const mi = ENC_IOS.exec(l); const ma = mi ? null : ENC_ANDROID.exec(l); const m = mi ?? ma;
-    if (!m) { if (!hayEncabezado) ilegibles++; continue; } // las siguientes líneas sin encabezado son continuación de un mensaje
-    hayEncabezado = true; if (mi) ios++; else android++;
-    const a = +m[3] < 100 ? 2000 + +m[3] : +m[3]; fechas.push(`${a}-${String(+m[2]).padStart(2, '0')}-${String(+m[1]).padStart(2, '0')}`);
-    const d = /^([^:]{1,80}):\s/.exec(m[4]);
-    if (d) autores.add(d[1].trim()); else sistema++;
-  }
-  fechas.sort();
-  return { formato: ios && ios >= android ? 'ios' : android ? 'android' : 'desconocido', encabezados: ios + android, autores: autores.size, sistema, ilegibles, primera: fechas[0] ?? null, ultima: fechas[fechas.length - 1] ?? null };
-}
-
+// ── whatsapp (el histórico exportado del Vigía: vigia/historial) ────────────────────────────────────────
 function validarWhatsapp(nombre: string, bytes: Uint8Array): ResultadoValidacion {
-  const zip = entradasDeZip(bytes);
-  if (zip) {
-    const txt = zip.filter((n) => /\.txt$/i.test(n));
-    if (!txt.length) return res('whatsapp', [], ['el .zip no trae ningún .txt (la exportación de WhatsApp debe incluir el chat como texto)']);
-    return res('whatsapp', [`.zip válido con ${txt.length} chat(s): ${txt.join(', ')}`], [], ['el importador lo descomprime; para ver el detalle de mensajes, sube el .txt o usa la pantalla «Grupos e histórico»']);
-  }
-  if (/\.zip$/i.test(nombre)) return res('whatsapp', [], ['dice ser .zip pero no se pudo leer como zip']);
-  const i = inspeccionarExportWhatsapp(decodificar(bytes));
-  if (i.formato === 'desconocido' || i.encabezados === 0) {
+  let texto: string;
+  if (esZip(bytes)) {
+    const z = textoDeZip(bytes);
+    if (!z.ok) return res('whatsapp', [], [z.error]);
+    texto = z.texto;
+  } else if (/\.zip$/i.test(nombre)) {
+    return res('whatsapp', [], ['dice ser .zip pero no se pudo leer como zip']);
+  } else texto = decodificar(bytes);
+  // Sin los nombres del equipo (los declara la persona en la pantalla «Grupos e histórico») no se separa quién contestó.
+  const l = leerExportWhatsapp(texto, { equipo: [], sal: 'validacion' });
+  if (l.formato === 'desconocido' || l.mensajes.length === 0) {
     return res('whatsapp', [], ['no se reconoce la exportación de WhatsApp (se esperaba «[dd/mm/aaaa, hh:mm:ss] Nombre: texto» de iOS o «dd/mm/aa hh:mm - Nombre: texto» de Android)']);
   }
-  const avisos: string[] = [];
-  if (i.autores < 2) avisos.push('solo hay un autor: ¿es el chat completo del grupo?');
-  return res('whatsapp', [`formato ${i.formato}: ${i.encabezados} mensajes, ${i.autores} autores, ${i.sistema} líneas de sistema`, `del ${i.primera} al ${i.ultima}`], [], avisos);
+  const fechas = l.mensajes.map((m) => m.enviadoEn).sort();
+  const avisos = ['para ver tiempos de respuesta, FAQs y tendencias hay que declarar los nombres de tu equipo tal como salen en el chat al importarlo (pantalla «Grupos e histórico»)'];
+  if (l.autores < 2) avisos.push('solo hay un autor: ¿es el chat completo del grupo?');
+  if (l.fechasInvalidas > 0) avisos.push(`${l.fechasInvalidas} mensaje(s) con una fecha que no se pudo leer`);
+  return res('whatsapp', [`formato ${l.formato}: ${l.mensajes.length} mensajes de texto, ${l.autores} autores, ${l.descartados} líneas de sistema o multimedia descartadas`, `del ${fechas[0].slice(0, 10)} al ${fechas[fechas.length - 1].slice(0, 10)}`], [], avisos);
 }
 
 // ── carta_porte (el documento del cliente, tal cual) ────────────────────────

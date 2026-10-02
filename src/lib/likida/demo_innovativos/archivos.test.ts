@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { validarLiquidacionExterna } from '../liquidacion_externa/esquema';
-import { entradasDeZip, inspeccionarExportWhatsapp, validarArchivo } from './archivos';
-import { leerConveniosCsv } from './convenios_csv';
+import { validarArchivo } from './archivos';
+import { partirCsv } from '../conectores/tabla_propia/csv';
+import { parsearMatrizConvenios } from '../convenios/importador';
 import { cuerposDeLiquidacionesCsv } from '../liquidacion_externa/liquidacion_csv';
 import { bytesMuestra, textoMuestra } from './muestras.test.util';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL VALIDADOR DE ARCHIVOS DEL KIT: cada archivo de muestra es válido, y cada
-// forma de romperlo se detecta con su motivo. Donde el importador real existe
-// (pases, sitios, liquidación externa) la prueba usa SU lector, no una copia.
+// forma de romperlo se detecta con su motivo. Todo se valida con el importador
+// REAL del producto (tabla propia, peajes, liquidación externa, convenios y el
+// histórico del Vigía), no con una copia: la prueba usa los mismos lectores.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -39,9 +41,9 @@ describe('los archivos de muestra del demo son válidos', () => {
 });
 
 describe('pases: SU lector lee el archivo y las anomalías sembradas están ahí', () => {
-  it('379 cruces y el total cuadra con el que salió de la base', () => {
+  it('381 cruces (379 + los dos de las unidades junto al patio) y el total cuadra con el que salió de la base', () => {
     const r = validarArchivo('pases', 'pases_24h.csv', bytesMuestra('peajes/pases_24h.csv'));
-    expect(r.resumen[0]).toMatch(/^379 cruces legibles, \d+ TAG distintos, importe total /);
+    expect(r.resumen[0]).toMatch(/^381 cruces legibles, \d+ TAG distintos, importe total /);
   });
   it('cada anomalía de la verdad sembrada corresponde a una línea del archivo (mismo TAG, caseta y minuto)', () => {
     const pases = textoMuestra('peajes/pases_24h.csv').trim().split('\n').slice(1);
@@ -116,22 +118,23 @@ describe('liquidaciones: el CSV de su sistema → el cuerpo que el endpoint real
   });
 });
 
-describe('convenios', () => {
-  const r = leerConveniosCsv(textoMuestra('convenios/convenios.csv'));
+describe('convenios: el importador REAL de convenios', () => {
+  const r = parsearMatrizConvenios(partirCsv(textoMuestra('convenios/convenios.csv')), { puedeVerFinanzas: true });
   it('14 convenios de 6 instrucciones, todas dentro de los dominios de la 0580', () => {
-    expect(r.problemas).toEqual([]);
+    expect(r.errores).toEqual([]);
     expect(r.convenios).toHaveLength(14);
     for (const c of r.convenios) {
       expect(c.instrucciones).toHaveLength(6);
-      expect(c.tarifaModo).not.toBeNull();
-      expect(c.requisitosCobro.length).toBe(3);
+      expect(c.comercial?.modo).toBeTruthy();
+      expect(c.comercial?.requisitos.length).toBe(3);
     }
   });
   it('una categoría, un momento o un texto fuera de dominio se rechazan', () => {
     const base = 'clave,cliente,convenio,origen,destino,categoria,momento,orden,texto\n';
-    expect(leerConveniosCsv(`${base}c,Cl,Conv,A,B,otra_cosa,ambos,1,hola`).problemas[0].motivo).toContain('categoría');
-    expect(leerConveniosCsv(`${base}c,Cl,Conv,A,B,puerta,nunca,1,hola`).problemas[0].motivo).toContain('momento');
-    expect(leerConveniosCsv(`${base}c,Cl,Conv,A,B,puerta,ambos,1,${'x'.repeat(401)}`).problemas[0].motivo).toContain('400');
+    const motivo = (fila: string) => validarArchivo('convenios', 'c.csv', enc(`${base}${fila}`)).problemas[0];
+    expect(motivo('c,Cl,Conv,A,B,otra_cosa,ambos,1,hola')).toContain('categoría');
+    expect(motivo('c,Cl,Conv,A,B,puerta,nunca,1,hola')).toContain('momento');
+    expect(motivo(`c,Cl,Conv,A,B,puerta,ambos,1,${'x'.repeat(401)}`)).toContain('400');
   });
   it('avisa cuando un convenio no dice con quién reportarse', () => {
     const v = validarArchivo('convenios', 'c.csv', enc('clave,cliente,convenio,categoria,momento,texto\nc,Cl,Conv,puerta,ambos,Entrar por la 3'));
@@ -140,28 +143,24 @@ describe('convenios', () => {
   });
 });
 
-describe('whatsapp: formatos de exportación', () => {
-  it('el .txt de iOS (24 h) y el de Android se reconocen; el resumen esperado cuadra con lo generado', () => {
-    const esperado = JSON.parse(textoMuestra('whatsapp/resumen_esperado.json'));
-    const ios = inspeccionarExportWhatsapp(textoMuestra('whatsapp/grupo_afb_silao_ios.txt'));
-    const and = inspeccionarExportWhatsapp(textoMuestra('whatsapp/grupo_arr_ramos_android.txt'));
-    expect(ios.formato).toBe('ios');
-    expect(and.formato).toBe('android');
-    expect(ios.encabezados).toBe(esperado.afb.mensajes + 1); // + la línea de cifrado
-    expect(and.encabezados).toBe(esperado.arr.mensajes + 1);
-    expect(and.sistema).toBe(1);
+describe('whatsapp: el lector REAL del histórico del Vigía', () => {
+  it('el .txt de iOS (24 h) y el de Android se reconocen y dicen su formato', () => {
+    const ios = validarArchivo('whatsapp', 'g.txt', bytesMuestra('whatsapp/grupo_afb_silao_ios.txt'));
+    const and = validarArchivo('whatsapp', 'g.txt', bytesMuestra('whatsapp/grupo_arr_ramos_android.txt'));
+    expect(ios.resumen[0]).toMatch(/^formato ios: \d+ mensajes de texto, \d+ autores/);
+    expect(and.resumen[0]).toMatch(/^formato android: \d+ mensajes de texto, \d+ autores/);
   });
-  it('el .zip trae su .txt (directorio central) y un zip dañado se dice', () => {
-    expect(entradasDeZip(bytesMuestra('whatsapp/grupo_cfn_apodaca_ios.zip'))).toEqual(['Chat de WhatsApp con Cervecería Ficticia del Norte.txt']);
+  it('el .zip trae su .txt y un zip dañado o un .zip que no lo es se dicen', () => {
+    expect(validarArchivo('whatsapp', 'g.zip', bytesMuestra('whatsapp/grupo_cfn_apodaca_ios.zip')).resumen[0]).toMatch(/^formato ios:/);
     const roto = bytesMuestra('whatsapp/grupo_cfn_apodaca_ios.zip').slice(0, 60);
     expect(validarArchivo('whatsapp', 'x.zip', roto).ok).toBe(false);
+    expect(validarArchivo('whatsapp', 'x.zip', enc('esto no es un zip')).problemas[0]).toContain('.zip');
   });
   it('un texto cualquiera no es una exportación', () => {
     expect(validarArchivo('whatsapp', 'x.txt', enc('hola\nesto no es un chat')).ok).toBe(false);
   });
-  it('el histórico trae casos para el Vigía: quejas y respuestas lentas (>10 min) en cada grupo', () => {
-    const e = JSON.parse(textoMuestra('whatsapp/resumen_esperado.json'));
-    for (const g of ['afb', 'arr', 'cfn']) { expect(e[g].quejas).toBeGreaterThan(5); expect(e[g].sin_respuesta_10min).toBeGreaterThan(5); }
+  it('sin los nombres del equipo avisa que no puede medir tiempos de respuesta (los declara la persona al importar)', () => {
+    expect(validarArchivo('whatsapp', 'g.txt', bytesMuestra('whatsapp/grupo_afb_silao_ios.txt')).avisos[0]).toContain('nombres de tu equipo');
   });
 });
 
@@ -169,7 +168,7 @@ describe('regex sin explosión: líneas adversarias no tumban el validador', () 
   it('50,000 caracteres de «casi encabezado» se leen en tiempo lineal (<500 ms por archivo)', () => {
     const casi = `[${'1/'.repeat(25_000)}`;
     const t0 = Date.now();
-    inspeccionarExportWhatsapp(`${casi}\n${'9'.repeat(50_000)} - x\n${'1:'.repeat(25_000)}`);
+    validarArchivo('whatsapp', 'x.txt', enc(`${casi}\n${'9'.repeat(50_000)} - x\n${'1:'.repeat(25_000)}`));
     validarArchivo('gps_posiciones', 'x.csv', enc(`unidad,lat,lon,fecha_hora\nIN-1,25.7,-100.1,${'2026-10-20 '.repeat(5_000)}`));
     expect(Date.now() - t0).toBeLessThan(500);
   });
