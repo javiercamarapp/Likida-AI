@@ -27,6 +27,7 @@ import {
   type PosicionLeida, type ResultadoPosiciones, type OpcionesLecturaPaginada,
   coordenadaValida, retryAfterMs,
 } from './posiciones_comun';
+import { leerPosicionesTablaPropia } from './tabla_propia/lector';
 import { leerPosicionesWialon, leerPosicionesGeotab, leerPosicionesNavixy, leerPosicionesGenerico } from './posiciones_proveedores';
 
 export type { PosicionLeida, ResultadoPosiciones, OpcionesLecturaPaginada, FallaLectura } from './posiciones_comun';
@@ -152,6 +153,8 @@ export const LECTORES_POSICION: Record<
   geotab: leerPosicionesGeotab,
   navixy: leerPosicionesNavixy,
   gps_generico: leerPosicionesGenerico,
+  // La flota que tiene sus posiciones en SUS tablas (SQL de solo lectura, CSV o endpoint): mismo poller, mismo asentador.
+  tabla_propia: (v, http, o) => leerPosicionesTablaPropia(v, http, o),
 };
 
 /** `null` si ese proveedor todavía no tiene lector. El poller lo dice, no lo calla. */
