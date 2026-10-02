@@ -37,7 +37,7 @@ sistema.
 - **El agente solo dice lo que el convenio dice.** Sin instrucciones registradas (o del tema preguntado), lo dice y
   remite al jefe de tráfico; nunca inventa una puerta. Un viaje sin cliente, sin convenio o con varios convenios
   empatados sin coincidencia **no recibe nada** (mandar la puerta de otra ruta es peor que no mandar).
-- **La foto no cambia.** Editar el convenio después no cambia lo que ya se le dijo a un operador en ese viaje.
+- **La foto no cambia sola.** Editar el convenio después no cambia lo que ya se le dijo a un operador en ese viaje, salvo que quien edita lo pida expresamente (ver «Alta y edición en pantalla»).
 - **Un solo envío por viaje, momento y planta.** El envío se reclama con un `UPDATE` condicionado *antes* de mandar
   (`reclamarEnvio`): dos corridas del cron o dos gestos no duplican el mensaje. Un reclamo que lleva más de 10 minutos
   sin cerrarse se considera caído y se puede volver a tomar. Un rechazo reintentable de Meta libera el reclamo; uno que
@@ -75,6 +75,34 @@ La plantilla descargable trae una fila de ejemplo que el importador descarta.
   instrucciones, la fila queda `ligado_por = 'manual'` (el despacho automático ya no la vuelve a elegir; sirve cuando varios
   convenios empatan) y, si se marca, se mandan de nuevo las instrucciones al operador. Un viaje liquidado ya no se corrige.
 
+## Alta y edición en pantalla (P7, migraciones 0656 y 0657)
+
+En `/dashboard/convenios` el dueño y el jefe de tráfico dan de alta un convenio («Nuevo convenio») y lo editan («Editar
+convenio e instrucciones», en cada convenio) **sin volver a subir el Excel**: nombre, A→B, sitios del catálogo, vigencia,
+notas y la lista de instrucciones (tema, texto, cuándo se manda y a qué planta aplica). La tarifa y los requisitos de cobro
+**no se editan aquí** (son dinero: siguen entrando por la importación con permiso de finanzas).
+
+- **Guardado atómico** (`guardar_convenio`, 0656): los datos y la lista de instrucciones se escriben en UNA transacción; las
+  instrucciones que se quitan de la lista se borran al guardar. Un fallo a media lista revierte todo. El cliente de un
+  convenio **no cambia** al editar (ya puede estar ligado a viajes de ese cliente).
+- **Sin pisarse** (`cliente_convenio.version`): cada UPDATE sube la versión (también el del importador y el de archivar). La
+  forma manda la versión que leyó; si alguien cambió el convenio entre tanto, no se guarda nada y se dice (recargar y volver a
+  aplicar). Nombre repetido del mismo cliente, cliente o sitio de otra flota y datos fuera de dominio rebotan con su mensaje.
+- **Llevarlo a los viajes en curso** (opt-in, `refrescar_viajes_de_convenio`, 0657): marcando «Llevar este cambio a los viajes
+  en curso» se vuelve a tomar la foto de instrucciones de los viajes **no liquidados de ESE convenio** que de verdad cambian
+  (no hay envíos de relleno). Con «Volver a mandar…» el despacho se reabre y se reenvía **solo** a los operadores que ya lo
+  habían recibido (el texto dice «actualizamos las instrucciones»; la plantilla de Meta es de texto fijo). El aviso de
+  acercamiento **no se repite** a una planta ya avisada; el de la planta que aún no se avisó sale con la foto nueva. Sin marcar
+  nada, los viajes conservan lo que ya se les dijo.
+- **Fallar cerrado y decirlo:** sin la 0656 la edición se apaga con un aviso (importar sigue funcionando) y la lista no se
+  rompe (la versión se lee aparte); sin la 0657 lo guardado queda y se dice que no se pudo llevar a los viajes; si algún
+  reenvío no sale (sin teléfono, plantilla sin aprobar) se cuenta y se indica cómo mandarlo desde «Convenio ligado a cada
+  viaje en curso». Permiso: dueño y jefe de tráfico; el tenant sale de la sesión; ambas funciones son solo `service_role`.
+- Pruebas: `convenios/edicion.test.ts` (validación), `acciones.test.ts`, `repo.test.ts`, `dashboard/convenios/vista.test.tsx`,
+  el ciclo `convenios/convenios.e2e.test.ts` (acercamiento antes del despacho, convenio cambiado tras despachar con dos corridas
+  del cron, y otra flota) y, contra Postgres real, `supabase/tests/0656_convenio_guardar.sql` (bloque 300 de
+  `verificaciones.sql`).
+
 ## Qué falta (externo o decisión)
 
 - **Aplicar 0580 en producción**, con respaldo previo (autorización de Javier). Hasta entonces la pantalla dice «falta
@@ -86,13 +114,15 @@ La plantilla descargable trae una fila de ejemplo que el importador descarta.
   directa en su sistema depende de su equipo de sistemas (no simulada).
 - **El aviso de acercamiento depende de que el tractor tenga posición reciente (GPS o pin)**: sin posición no se manda.
   El margen ya se ajusta por flota (`/dashboard/agentes/conductores/configuracion`, «Margen de acercamiento a la planta»).
-- Importar `convenio_comercial` por pantalla de edición (hoy solo por archivo).
+- Editar `convenio_comercial` (tarifa y requisitos de cobro) por pantalla: hoy solo por archivo, a propósito (dinero).
+- **Aplicar 0656 y 0657 en producción** junto con la 0580 (autorización de Javier, con respaldo): sin ellas la edición en pantalla se apaga y dice por qué.
 
 ## Dónde está el código
 
 `src/lib/likida/convenios/`: `tipos` (vocabulario), `mensajes` (lo que se le dice al operador y la respuesta del
 perfil), `seleccion` (qué convenio le toca a un viaje), `importador` (CSV/Excel y exportación), `repo` (acceso a datos),
 `envio` (despacho y acercamiento con claim), `acercamiento` + `trabajo` (barrido del cron), `pregunta` («¿por dónde
-entro?»), `acciones` (acciones de la pantalla). Pantalla: `src/app/dashboard/convenios/`. Exportación:
+entro?»), `acciones` (acciones de la pantalla), `edicion` (validación de la forma de alta/edición). Pantalla: `src/app/dashboard/convenios/`. Exportación:
 `src/app/api/export/convenios/route.ts`. Esquema y pruebas SQL: `supabase/migrations/0580_*.sql`,
-`supabase/tests/0580_convenios.sql` y el bloque 580 de `supabase/verificaciones.sql`.
+`supabase/tests/0580_convenios.sql` y el bloque 580 de `supabase/verificaciones.sql`; la edición, `0656_*.sql`, `0657_*.sql`,
+`supabase/tests/0656_convenio_guardar.sql` y el bloque 300.

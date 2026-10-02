@@ -6,7 +6,7 @@ import { VistaConvenios, type PropsVistaConvenios } from './vista';
 const accion = async () => null;
 const accionEstado = async () => {};
 const C = (o: Partial<ConvenioFila> = {}): ConvenioFila => ({
-  id: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d001', clienteId: 'c1', cliente: 'Cliente Uno', nombre: 'Ruta norte', origen: 'Zapopan', destino: 'Tlaquepaque',
+  id: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d001', version: 3, clienteId: 'c1', cliente: 'Cliente Uno', nombre: 'Ruta norte', origen: 'Zapopan', destino: 'Tlaquepaque',
   origenSitioId: null, destinoSitioId: 'g1', sitioOrigenNombre: null, sitioDestinoNombre: 'CEDIS Tlaquepaque', vigenteDesde: null, vigenteHasta: null, notas: null, activo: true,
   instrucciones: [{ categoria: 'puerta', texto: 'Puerta 3, lado poniente', momento: 'ambos', lugar: 'destino', orden: 0 }],
   comercial: undefined, ...o,
@@ -109,5 +109,49 @@ describe('la corrección manual del convenio ligado a cada viaje', () => {
 
   it('sin viajes abiertos lo dice', () => {
     expect(con([])).toContain('No hay viajes abiertos con cliente');
+  });
+});
+
+describe('el alta y la edición en pantalla', () => {
+  const catalogos = { clientes: [{ id: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0c1', nombre: 'Cliente Uno' }], sitios: [{ id: 'g1', nombre: 'CEDIS Tlaquepaque', codigo: 'CED-1' }] };
+  const con = (p: Partial<PropsVistaConvenios> = {}) => pintar({ catalogos, accionGuardar: accion, ...p });
+
+  it('ofrece «Nuevo convenio» (con cliente y sitios del catálogo) y «Editar» en cada convenio, con su versión escondida', () => {
+    const html = con();
+    expect(html).toContain('aria-label="Nuevo convenio"');
+    expect(html).toContain('Elige un cliente…');
+    expect(html).toContain('CEDIS Tlaquepaque (CED-1)');
+    expect(html).toContain('Editar convenio e instrucciones');
+    expect(html).toContain('name="version" value="3"');
+    expect(html).toContain('name="convenioId"');
+    expect(html).toContain('Llevar este cambio a los viajes en curso');
+    expect(html).toContain('Puerta 3, lado poniente');
+    expect(html).toContain('Guardar cambios');
+    expect(html).toContain('Crear convenio');
+  });
+
+  it('declara que la tarifa NO se edita aquí y no pinta campos de dinero', () => {
+    const html = con({ verDinero: true });
+    expect(html).toContain('no se editan aquí');
+    expect(html).not.toMatch(/name="tarifa|name="requisitos/i);
+  });
+
+  it('sin permiso de edición, sin acción o con la lectura caída no hay formularios de edición', () => {
+    expect(con({ puedeEditar: false })).not.toContain('Nuevo convenio');
+    expect(con({ puedeEditar: false })).not.toContain('Editar convenio e instrucciones');
+    expect(pintar()).not.toContain('Nuevo convenio');
+    expect(con({ convenios: null, estado: 'error' })).not.toContain('Nuevo convenio');
+  });
+
+  it('con la base sin la 0656 (convenios sin versión) la edición se apaga y se dice; importar sigue', () => {
+    const html = con({ convenios: [C({ version: null })] });
+    expect(html).not.toContain('Editar convenio e instrucciones');
+    expect(html).not.toContain('aria-label="Nuevo convenio"');
+    expect(html).toContain('falta aplicar la actualización de la base (0656)');
+    expect(html).toContain('Importar desde CSV o Excel');
+  });
+
+  it('el pie ya no promete que editar nunca toca a los viajes: dice cómo llevarlo a los viajes en curso', () => {
+    expect(con()).toContain('salvo que marques «llevar este cambio a los viajes en curso»');
   });
 });

@@ -28,7 +28,8 @@ export class Mundo {
   /** Cada consulta que llegó, para afirmar que todas anclan el tenant. */
   consultas: Array<{ tabla: string; op: string; filtros: Array<[string, unknown]> }> = [];
   private n = 0;
-  id(prefijo = 'id'): string { return `${prefijo}-${++this.n}`; }
+  /** Un uuid determinista (la forma que validan las acciones del panel), no un texto libre. El prefijo ya no entra al id. */
+  id(_prefijo = 'id'): string { return `00000000-0000-4000-8000-${String(++this.n).padStart(12, '0')}`; }
 
   poner(tabla: string, fila: Fila): Fila {
     const f = { id: this.id(tabla), ...fila };
@@ -36,8 +37,92 @@ export class Mundo {
     return f;
   }
 
+  /** Las funciones RPC que «no existen» (base sin la 0656/0657). */
+  rpcAusentes = new Set<string>();
+  /** Cada RPC que llegó, para afirmar que todas anclan el tenant. */
+  rpcLlamadas: Array<{ nombre: string; args: Record<string, unknown> }> = [];
+
   from(tabla: string): Builder { return new Builder(this, tabla); }
-  admin() { return { from: (t: string) => this.from(t) }; }
+  admin() { return { from: (t: string) => this.from(t), rpc: (n: string, a: Record<string, unknown>) => this.rpc(n, a) }; }
+
+  /**
+   * Las dos funciones de edición (0656/0657) ESPEJADAS en memoria: misma entrada, mismos estados de salida. Es una copia a
+   * propósito (la prueba de que la base hace esto es supabase/tests/0656_convenio_guardar.sql contra Postgres real); sirve para
+   * que el panel, las acciones y el ciclo del cron se ejerciten juntos sin una base.
+   */
+  rpc(nombre: string, a: Record<string, unknown>): PromiseLike<{ data: unknown; error: unknown }> {
+    this.rpcLlamadas.push({ nombre, args: a });
+    if (this.rpcAusentes.has(nombre)) {
+      return Promise.resolve({ data: null, error: { code: 'PGRST202', message: `Could not find the function public.${nombre} in the schema cache` } });
+    }
+    return Promise.resolve({ data: nombre === 'guardar_convenio' ? this.guardarConvenio(a) : nombre === 'refrescar_viajes_de_convenio' ? this.refrescarViajes(a) : null, error: null });
+  }
+
+  private guardarConvenio(a: Record<string, unknown>): Fila {
+    const t = a.p_tenant;
+    const instrucciones = a.p_instrucciones as Array<Record<string, unknown>> | null;
+    const convenios = this.tablas.cliente_convenio;
+    // Validaciones de la base (CHECK y FK) ANTES de escribir: todo o nada, como la transacción.
+    const desde = a.p_desde as string | null; const hasta = a.p_hasta as string | null;
+    if (desde && hasta && hasta < desde) return { estado: 'invalida' };
+    const dominio = { categoria: ['puerta', 'reportarse', 'peculiaridad', 'documentos', 'horario', 'seguridad', 'otro'], momento: ['despacho', 'acercamiento', 'ambos'], lugar: ['origen', 'destino', 'ambos'] };
+    for (const i of instrucciones ?? []) {
+      const texto = String(i.texto ?? '');
+      if (!dominio.categoria.includes(String(i.categoria)) || !dominio.momento.includes(String(i.momento ?? 'ambos')) || !dominio.lugar.includes(String(i.lugar ?? 'ambos'))
+        || texto.length < 1 || texto.length > 400 || Number(i.orden ?? 0) < 0 || Number(i.orden ?? 0) > 999) return { estado: 'invalida' };
+    }
+    for (const sitio of [a.p_origen_sitio, a.p_destino_sitio]) {
+      if (sitio && !this.tablas.geocerca.some((g) => g.id === sitio && g.tenant_id === t)) return { estado: 'referencia_invalida' };
+    }
+    let convenio: Fila | undefined; let creado = false;
+    if (a.p_convenio === null || a.p_convenio === undefined) {
+      if (!a.p_cliente || !this.tablas.cliente.some((c) => c.id === a.p_cliente && c.tenant_id === t)) return { estado: 'referencia_invalida' };
+      if (convenios.some((c) => c.tenant_id === t && c.cliente_id === a.p_cliente && c.nombre === a.p_nombre)) return { estado: 'duplicado' };
+      convenio = this.poner('cliente_convenio', { tenant_id: t, cliente_id: a.p_cliente, activo: true, version: 1 });
+      creado = true;
+    } else {
+      convenio = convenios.find((c) => c.id === a.p_convenio && c.tenant_id === t);
+      if (!convenio) return { estado: 'no_existe' };
+      if (a.p_version !== convenio.version) return { estado: 'conflicto', version: convenio.version };
+      if (convenios.some((c) => c !== convenio && c.tenant_id === t && c.cliente_id === convenio!.cliente_id && c.nombre === a.p_nombre)) return { estado: 'duplicado' };
+    }
+    Object.assign(convenio, {
+      nombre: a.p_nombre, origen: a.p_origen, destino: a.p_destino, origen_sitio_id: a.p_origen_sitio, destino_sitio_id: a.p_destino_sitio,
+      vigente_desde: desde, vigente_hasta: hasta, notas: a.p_notas, actualizado_en: new Date().toISOString(),
+      version: creado ? 1 : Number(convenio.version) + 1,
+    });
+    if (instrucciones !== null && instrucciones !== undefined) {
+      const conservar: Fila[] = [];
+      for (const i of instrucciones) {
+        const previa = this.tablas.convenio_instruccion.find((x) => x.convenio_id === convenio!.id && x.categoria === i.categoria && x.texto === i.texto);
+        const datos = { momento: i.momento ?? 'ambos', lugar: i.lugar ?? 'ambos', orden: Number(i.orden ?? 0), activa: true };
+        if (previa) { Object.assign(previa, datos); conservar.push(previa); }
+        else conservar.push(this.poner('convenio_instruccion', { tenant_id: t, convenio_id: convenio.id, categoria: i.categoria, texto: i.texto, ...datos }));
+      }
+      this.tablas.convenio_instruccion = this.tablas.convenio_instruccion.filter((x) => x.convenio_id !== convenio!.id || conservar.includes(x));
+    }
+    return { estado: 'ok', id: convenio.id, version: convenio.version, creado };
+  }
+
+  private refrescarViajes(a: Record<string, unknown>): Fila[] {
+    const t = a.p_tenant;
+    if (!this.tablas.cliente_convenio.some((c) => c.id === a.p_convenio && c.tenant_id === t)) return [];
+    const foto = this.tablas.convenio_instruccion
+      .filter((i) => i.convenio_id === a.p_convenio && i.tenant_id === t && i.activa !== false)
+      .sort((x, y) => Number(x.orden) - Number(y.orden))
+      .map((i) => ({ categoria: i.categoria, texto: i.texto, momento: i.momento, lugar: i.lugar, orden: i.orden }));
+    const salida: Fila[] = [];
+    for (const vc of this.tablas.viaje_convenio) {
+      if (vc.tenant_id !== t || vc.convenio_id !== a.p_convenio) continue;
+      const viaje = this.tablas.viaje.find((v) => v.id === vc.viaje_id && v.tenant_id === t);
+      if (!viaje || viaje.estatus === 'liquidado' || JSON.stringify(vc.instrucciones) === JSON.stringify(foto)) continue;
+      const habia = !!vc.despacho_enviado_en;
+      vc.instrucciones = foto;
+      if (a.p_reenviar === true && habia) { vc.despacho_reclamado_en = null; vc.despacho_enviado_en = null; vc.despacho_canal = null; }
+      salida.push({ viaje_id: vc.viaje_id, reenviar: a.p_reenviar === true && habia });
+    }
+    return salida;
+  }
 }
 
 class Builder implements PromiseLike<{ data: unknown; error: unknown }> {
@@ -103,11 +188,11 @@ class Builder implements PromiseLike<{ data: unknown; error: unknown }> {
         if (dup && this.op === 'insert') {
           return { data: null, error: { code: '23505', message: `duplicate key value violates unique constraint "${PK_NOMBRE[tabla] ?? tabla}"` } };
         }
-        if (dup) { Object.assign(dup, nueva); salida.push(dup); }
-        else { const f: Fila = { id: m.id(tabla), ...(tabla === 'viaje_convenio' ? { ligado_en: new Date().toISOString() } : {}), ...nueva }; filas.push(f); salida.push(f); }
+        if (dup) { Object.assign(dup, nueva); if (tabla === 'cliente_convenio') dup.version = Number(dup.version ?? 1) + 1; salida.push(dup); }
+        else { const f: Fila = { id: m.id(tabla), ...(tabla === 'viaje_convenio' ? { ligado_en: new Date().toISOString() } : {}), ...(tabla === 'cliente_convenio' ? { version: 1 } : {}), ...nueva }; filas.push(f); salida.push(f); }
       }
     } else if (this.op === 'update') {
-      for (const f of filas.filter(coincide)) { Object.assign(f, this.payload as Fila); salida.push(f); }
+      for (const f of filas.filter(coincide)) { Object.assign(f, this.payload as Fila); if (tabla === 'cliente_convenio') f.version = Number(f.version ?? 1) + 1; salida.push(f); }
     } else {
       const quitar = filas.filter(coincide);
       m.tablas[tabla] = filas.filter((f) => !quitar.includes(f));

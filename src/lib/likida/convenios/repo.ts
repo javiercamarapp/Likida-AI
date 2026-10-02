@@ -7,6 +7,7 @@ import { violaIndice } from '../pg_errores';
 import type { ComercialImportado, ConvenioExportable, ConvenioImportado, ErrorFila } from './importador';
 import { elegirConvenio, type ConvenioCandidato, type EleccionConvenio, type ViajeParaLigar } from './seleccion';
 import { esCategoria, esLugar, esMomento, leerFoto, type Instruccion } from './tipos';
+import type { DatosConvenio } from './edicion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL ACCESO A DATOS DE LOS CONVENIOS (0580). Toda consulta ancla `tenant_id`; el tenant sale de la sesión o del viaje
@@ -67,6 +68,8 @@ function filaAInstruccion(f: Fila): Instruccion | null {
 
 export interface ConvenioFila extends ConvenioExportable {
   id: string;
+  /** La versión para editar sin pisar a otra persona (0656). `null` = la base todavía no la tiene: la edición no está disponible. */
+  version: number | null;
   clienteId: string;
   activo: boolean;
   origenSitioId: string | null;
@@ -77,6 +80,39 @@ export interface ConvenioFila extends ConvenioExportable {
 
 // ── LECTURA ─────────────────────────────────────────────────────────────────
 
+/**
+ * La versión de cada convenio (0656), en una lectura aparte A PROPÓSITO: pedirla junto con las demás columnas haría que una base
+ * sin la 0656 dejara sin lista a TODA la pantalla. Sin la columna devuelve `null` y la lista sigue; solo la edición se apaga.
+ */
+async function leerVersiones(tenantId: string): Promise<Map<string, number> | null> {
+  try {
+    const filas = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('cliente_convenio').select('id, version', conteo(d))
+      .eq('tenant_id', tenantId).order('id').range(d, h), 'convenios.versiones') as never, 'convenios.versiones');
+    return new Map(filas.map((f) => [String(f.id), Number(f.version)] as const));
+  } catch (e) {
+    if (e instanceof Error && MENSAJE_FALTA_ESQUEMA.test(e.message)) return null;
+    throw e;
+  }
+}
+
+export interface CatalogosConvenio {
+  clientes: Array<{ id: string; nombre: string }>;
+  sitios: Array<{ id: string; nombre: string; codigo: string | null }>;
+}
+
+/** Lo que el formulario de alta/edición ofrece elegir: los clientes de la flota y sus sitios activos. */
+export async function listarCatalogosConvenio(tenantId: string): Promise<CatalogosConvenio> {
+  const admin = supabaseAdmin();
+  const [clientes, sitios] = await Promise.all([
+    leerTodo((d, h) => acotada(admin.from('cliente').select('id, nombre', conteo(d)).eq('tenant_id', tenantId).order('nombre').order('id').range(d, h), 'convenios.cat_clientes') as never, 'convenios.cat_clientes'),
+    leerTodo((d, h) => acotada(admin.from('geocerca').select('id, nombre, codigo', conteo(d)).eq('tenant_id', tenantId).eq('activa', true).order('nombre').order('id').range(d, h), 'convenios.cat_sitios') as never, 'convenios.cat_sitios'),
+  ]);
+  return {
+    clientes: clientes.map((c) => ({ id: String(c.id), nombre: String(c.nombre) })),
+    sitios: sitios.map((g) => ({ id: String(g.id), nombre: String(g.nombre), codigo: s(g.codigo) })),
+  };
+}
+
 /** Los convenios de la flota con sus instrucciones. El dinero SOLO viene si `conFinanzas` (la base también lo niega). */
 export async function listarConvenios(tenantId: string, opciones: { conFinanzas: boolean }): Promise<ConvenioFila[]> {
   const admin = supabaseAdmin();
@@ -84,7 +120,7 @@ export async function listarConvenios(tenantId: string, opciones: { conFinanzas:
     .eq('tenant_id', tenantId).order('nombre').order('id').range(d, h), 'convenios.lista') as never, 'convenios.lista');
   if (convenios.length === 0) return [];
 
-  const [instrucciones, clientes, sitios, comerciales] = await Promise.all([
+  const [instrucciones, clientes, sitios, comerciales, versiones] = await Promise.all([
     leerTodo((d, h) => acotada(admin.from('convenio_instruccion').select(COLS_INSTRUCCION, conteo(d))
       .eq('tenant_id', tenantId).eq('activa', true).order('orden').order('id').range(d, h), 'convenios.instrucciones') as never, 'convenios.instrucciones'),
     leerTodo((d, h) => acotada(admin.from('cliente').select('id, nombre', conteo(d))
@@ -95,6 +131,7 @@ export async function listarConvenios(tenantId: string, opciones: { conFinanzas:
       ? leerTodo((d, h) => acotada(admin.from('convenio_comercial').select('convenio_id, tarifa_modo, tarifa_precio, tarifa_moneda, requisitos_cobro', conteo(d))
         .eq('tenant_id', tenantId).order('convenio_id').range(d, h), 'convenios.comercial') as never, 'convenios.comercial')
       : Promise.resolve([] as Fila[]),
+    leerVersiones(tenantId),
   ]);
   const nombreCliente = new Map(clientes.map((c) => [String(c.id), String(c.nombre)] as const));
   const nombreSitio = new Map(sitios.map((g) => [String(g.id), String(g.nombre)] as const));
@@ -117,7 +154,7 @@ export async function listarConvenios(tenantId: string, opciones: { conFinanzas:
       }
       : null;
     return {
-      id, clienteId: String(f.cliente_id), cliente: nombreCliente.get(String(f.cliente_id)) ?? '(cliente borrado)', nombre: String(f.nombre),
+      id, version: versiones?.get(id) ?? null, clienteId: String(f.cliente_id), cliente: nombreCliente.get(String(f.cliente_id)) ?? '(cliente borrado)', nombre: String(f.nombre),
       origen: s(f.origen), destino: s(f.destino), origenSitioId: s(f.origen_sitio_id), destinoSitioId: s(f.destino_sitio_id),
       sitioOrigenNombre: f.origen_sitio_id ? (nombreSitio.get(String(f.origen_sitio_id)) ?? null) : null,
       sitioDestinoNombre: f.destino_sitio_id ? (nombreSitio.get(String(f.destino_sitio_id)) ?? null) : null,
@@ -207,6 +244,64 @@ export async function importarConvenios(tenantId: string, convenios: readonly Co
     }
   }
   return { ok: true, creados, actualizados, instrucciones: nInstrucciones };
+}
+
+// ── ALTA Y EDICIÓN EN PANTALLA (0656/0657) ──────────────────────────────────
+
+/** La base todavía no tiene la 0656 (o la 0657): la edición en pantalla no está disponible; todo lo demás sigue igual. */
+export class EdicionNoDisponible extends Error {
+  constructor(public readonly migracion: '0656' | '0657') { super(`La edición de convenios no está disponible: falta aplicar la migración ${migracion}.`); this.name = 'EdicionNoDisponible'; }
+}
+
+/** La función RPC todavía no existe en esta base (PostgREST no la ve, o Postgres no la conoce). */
+const rpcAusente = (e: { code?: string; message?: string }): boolean =>
+  e.code === '42883' || e.code === 'PGRST202' || /could not find the function|function .* does not exist/i.test(e.message ?? '');
+
+export type ResultadoGuardarConvenio =
+  | { estado: 'ok'; id: string; version: number; creado: boolean }
+  | { estado: 'conflicto'; version: number | null }
+  | { estado: 'no_existe' | 'duplicado' | 'referencia_invalida' | 'invalida' };
+
+const ESTADOS_GUARDAR = new Set(['no_existe', 'duplicado', 'referencia_invalida', 'invalida']);
+
+/**
+ * Crea o edita un convenio y reemplaza su lista de instrucciones en UNA transacción (`guardar_convenio`, 0656). El tenant sale
+ * de la sesión. `datos` ya pasó por `validarEntradaConvenio`; la base vuelve a comprobar todo (CHECK, FK de la flota, versión).
+ */
+export async function guardarConvenio(tenantId: string, datos: DatosConvenio): Promise<ResultadoGuardarConvenio> {
+  const res = await acotada(supabaseAdmin().rpc('guardar_convenio', {
+    p_tenant: tenantId, p_convenio: datos.convenioId, p_cliente: datos.clienteId, p_nombre: datos.nombre, p_origen: datos.origen,
+    p_destino: datos.destino, p_origen_sitio: datos.sitioOrigenId, p_destino_sitio: datos.sitioDestinoId, p_desde: datos.vigenteDesde,
+    p_hasta: datos.vigenteHasta, p_notas: datos.notas, p_version: datos.version,
+    p_instrucciones: datos.instrucciones.map((i) => ({ categoria: i.categoria, texto: i.texto, momento: i.momento, lugar: i.lugar, orden: i.orden })),
+  }), 'convenios.guardar');
+  if (res.error) {
+    if (rpcAusente(res.error)) throw new EdicionNoDisponible('0656');
+    throw new Error(`convenios.guardar: ${res.error.message}`);
+  }
+  const r = (res.data ?? {}) as { estado?: string; id?: string; version?: number; creado?: boolean };
+  if (r.estado === 'ok' && typeof r.id === 'string') return { estado: 'ok', id: r.id, version: Number(r.version), creado: r.creado === true };
+  if (r.estado === 'conflicto') return { estado: 'conflicto', version: typeof r.version === 'number' ? r.version : null };
+  if (r.estado && ESTADOS_GUARDAR.has(r.estado)) return { estado: r.estado as 'no_existe' | 'duplicado' | 'referencia_invalida' | 'invalida' };
+  throw new Error(`convenios.guardar: respuesta inesperada (${JSON.stringify(res.data)?.slice(0, 120)})`);
+}
+
+export interface ViajeRefrescado { viajeId: string; reenviar: boolean }
+
+/**
+ * Lleva la edición a los viajes NO liquidados que usan ese convenio (`refrescar_viajes_de_convenio`, 0657): vuelve a tomar su foto
+ * de instrucciones (solo si cambia) y, con `reenviar`, reabre el despacho de los que ya lo habían recibido. El que manda el mensaje
+ * es el llamador, con su claim. Devuelve los viajes que cambiaron.
+ */
+export async function refrescarViajesDeConvenio(tenantId: string, convenioId: string, reenviar: boolean): Promise<ViajeRefrescado[]> {
+  const res = await acotada(supabaseAdmin().rpc('refrescar_viajes_de_convenio', { p_tenant: tenantId, p_convenio: convenioId, p_reenviar: reenviar }), 'convenios.refrescar');
+  if (res.error) {
+    if (rpcAusente(res.error)) throw new EdicionNoDisponible('0657');
+    throw new Error(`convenios.refrescar: ${res.error.message}`);
+  }
+  return ((res.data ?? []) as Array<{ viaje_id?: string; reenviar?: boolean }>)
+    .filter((f) => typeof f.viaje_id === 'string')
+    .map((f) => ({ viajeId: String(f.viaje_id), reenviar: f.reenviar === true }));
 }
 
 /** Archiva o reactiva un convenio (no se borra: los viajes ya despachados conservan su foto). `false` = no existe en la flota. */

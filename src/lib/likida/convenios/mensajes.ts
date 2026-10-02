@@ -72,13 +72,17 @@ export interface MensajeInstrucciones {
 }
 
 /** El mensaje del despacho, o `null` si el convenio no trae nada para este momento (no se manda un mensaje vacío). */
-export function armarMensajeDespacho(ctx: ContextoMensaje, foto: readonly Instruccion[]): MensajeInstrucciones | null {
+export function armarMensajeDespacho(ctx: ContextoMensaje, foto: readonly Instruccion[], opciones: { actualizado?: boolean } = {}): MensajeInstrucciones | null {
   const ins = seleccionar(foto, 'despacho');
   if (ins.length === 0) return null;
   const nombre = primerNombre(ctx.operadorNombre);
   const ruta = `${lugarCorto(ctx.origen, 'el origen')} → ${lugarCorto(ctx.destino, 'el destino')}`;
+  // Tras una edición del convenio, el texto libre lo dice (la plantilla de Meta es de texto fijo y no puede decirlo).
+  const encabezado = opciones.actualizado
+    ? `Hola ${nombre}, actualizamos las instrucciones de tu viaje ${ctx.folio} (${ruta}). Estas son las vigentes:`
+    : `Hola ${nombre}, estas son las instrucciones de tu viaje ${ctx.folio} (${ruta}):`;
   const texto =
-    `Hola ${nombre}, estas son las instrucciones de tu viaje ${ctx.folio} (${ruta}):\n${textoLista(ins, true)}\n` +
+    `${encabezado}\n${textoLista(ins, true)}\n` +
     'Si tienes dudas, escríbeme «¿por dónde entro?» o avisa a tu jefe de tráfico.';
   return {
     texto,

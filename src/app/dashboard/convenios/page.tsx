@@ -5,8 +5,8 @@ import { puedeVerArea, puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar, puedeExportar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
 import { MAX_ARCHIVO_BYTES } from '@/lib/likida/importacion/archivo';
-import { archivarConvenioDelPanel, corregirConvenioDelViajeDelPanel, importarArchivoDelPanel } from '@/lib/likida/convenios/acciones';
-import { ConveniosNoDisponibles, listarConvenios, listarViajesConConvenio, type ConvenioFila, type ViajeConvenioFila } from '@/lib/likida/convenios/repo';
+import { archivarConvenioDelPanel, corregirConvenioDelViajeDelPanel, guardarConvenioDelPanel, importarArchivoDelPanel } from '@/lib/likida/convenios/acciones';
+import { ConveniosNoDisponibles, listarCatalogosConvenio, listarConvenios, listarViajesConConvenio, type CatalogosConvenio, type ConvenioFila, type ViajeConvenioFila } from '@/lib/likida/convenios/repo';
 import { sufijoTenant } from '../sufijo';
 import { VistaConvenios } from './vista';
 import type { ResultadoSitio } from '../agentes/conductores/sitios/formas';
@@ -41,6 +41,34 @@ export default async function PaginaConvenios({ searchParams }: { searchParams: 
     try { viajes = await listarViajesConConvenio(tenantId); } catch (e) {
       logger.warn('convenios.viajes_no_leidos', { tenantId, err: e instanceof Error ? e.message : String(e) });
     }
+  }
+
+  // Lo que el formulario de alta/edición ofrece elegir (solo para quien edita). Un fallo aquí apaga la edición, no la pantalla.
+  let catalogos: CatalogosConvenio | null = null;
+  if (estado === 'ok' && puedeAsignar(rol)) {
+    try { catalogos = await listarCatalogosConvenio(tenantId); } catch (e) {
+      logger.warn('convenios.catalogos_no_leidos', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  async function accionGuardar(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA, sp);
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan los convenios.' };
+    const campo = (k: string): string => (typeof fd.get(k) === 'string' ? (fd.get(k) as string) : '');
+    const categorias = fd.getAll('ins_categoria'), textos = fd.getAll('ins_texto'), momentos = fd.getAll('ins_momento'), lugares = fd.getAll('ins_lugar');
+    const texto = (v: FormDataEntryValue | undefined): string => (typeof v === 'string' ? v : '');
+    const instrucciones: Array<{ categoria: string; texto: string; momento: string; lugar: string }> = [];
+    for (let i = 0; i < Math.min(textos.length, 60); i++) instrucciones.push({ categoria: texto(categorias[i]), texto: texto(textos[i]), momento: texto(momentos[i]), lugar: texto(lugares[i]) });
+    const r = await guardarConvenioDelPanel({ tenantId: s.tenantId, rol: s.rol }, {
+      convenioId: campo('convenioId'), clienteId: campo('clienteId'), nombre: campo('nombre'), origen: campo('origen'), destino: campo('destino'),
+      sitioOrigenId: campo('sitioOrigenId'), sitioDestinoId: campo('sitioDestinoId'), vigenteDesde: campo('vigenteDesde'), vigenteHasta: campo('vigenteHasta'),
+      notas: campo('notas'), version: campo('version'),
+      instrucciones,
+      llevarAViajes: campo('llevarAViajes') === 'si', reenviar: campo('reenviar') === 'si',
+    });
+    if (r.ok) revalidatePath(RUTA);
+    return r;
   }
 
   async function accionCorregir(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
@@ -81,7 +109,7 @@ export default async function PaginaConvenios({ searchParams }: { searchParams: 
     <VistaConvenios
       sufijo={sufijoTenant(sp)} convenios={convenios} estado={estado} puedeEditar={puedeAsignar(rol)} verDinero={verDinero}
       puedeExportar={puedeExportar(rol)} accionImportar={accionImportar} accionEstado={accionEstado}
-      viajes={viajes} accionCorregir={accionCorregir}
+      viajes={viajes} accionCorregir={accionCorregir} catalogos={catalogos} accionGuardar={accionGuardar}
     />
   );
 }
