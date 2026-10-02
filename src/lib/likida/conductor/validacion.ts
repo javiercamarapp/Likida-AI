@@ -50,6 +50,8 @@ export interface EntradaValidacion {
   toleranciaM: number;
   /** Diferencia máxima, en minutos, entre la hora del mensaje y la de la posición. */
   ventanaMin: number;
+  /** Se descartó un pin porque la unidad reporta GPS y la muestra aún no llega: sin posición, pero «esperando al GPS». */
+  gpsPendiente?: boolean;
 }
 
 export interface Veredicto {
@@ -72,7 +74,7 @@ const sinDato = (e: EntradaValidacion, motivo: MotivoSinDato): Veredicto => ({
 export function evaluarUbicacion(e: EntradaValidacion): Veredicto {
   if (!e.sitio) return sinDato(e, 'sin_sitio');
   if (!coordenadasValidas(e.sitio.lat, e.sitio.lng)) return sinDato(e, 'sin_sitio');
-  if (!e.posicion) return sinDato(e, 'sin_ubicacion');
+  if (!e.posicion) return sinDato(e, e.gpsPendiente ? 'ubicacion_fuera_de_ventana' : 'sin_ubicacion');
   if (!coordenadasValidas(e.posicion.lat, e.posicion.lng)) return sinDato(e, 'coordenadas_invalidas');
   const t = e.posicion.medidaEn.getTime();
   if (!Number.isFinite(t) || !Number.isFinite(e.mensajeEn.getTime())) return sinDato(e, 'ubicacion_fuera_de_ventana');

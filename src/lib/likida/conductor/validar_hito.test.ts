@@ -68,13 +68,50 @@ describe('validarHitoContraSitio', () => {
     expect(lejos?.pedirUbicacion).toBe(false);
   });
 
-  it('el pin le gana a un GPS equidistante en el tiempo', async () => {
+  it('el pin NUNCA vence a una muestra de GPS dentro de la ventana: el camión real decide (adversarial ronda 03)', async () => {
     const { d } = deps({ gps: [gps({ lat: 25, lng: -100, medidaEn: new Date(MENSAJE.getTime() + 60_000) })] });
     const r = await validarHitoContraSitio(d, {
       viaje: viaje(), hito: llegada(), config: CONFIG, mensajeEn: MENSAJE, ahora: MENSAJE,
       pin: { lat: 20.72, lng: -103.39, medidaEn: new Date(MENSAJE.getTime() - 60_000) },
     });
+    expect(r?.veredicto).toMatchObject({ resultado: 'sin_coincidencia', fuente: 'gps' });
+  });
+
+  it('GPS atrasado: si la unidad SÍ reporta GPS pero aún no hay muestra en la ventana, el pin solo NO valida (queda sin dato y se reintenta)', async () => {
+    const gpsActivo = vi.fn(async () => true);
+    const { d, aplicados } = deps({ gps: [] });
+    d.gpsActivo = gpsActivo;
+    const r = await validarHitoContraSitio(d, {
+      viaje: viaje(), hito: llegada(), config: CONFIG, mensajeEn: MENSAJE, ahora: MENSAJE,
+      pin: { lat: 20.72, lng: -103.39, medidaEn: new Date(MENSAJE.getTime() + 120_000) },
+    });
+    expect(r?.veredicto).toMatchObject({ resultado: 'sin_dato', motivo: 'ubicacion_fuera_de_ventana' });
+    expect(r?.pedirUbicacion).toBe(false); // ya mandó el pin: pedirlo otra vez no sirve
+    expect(aplicados[0].v.resultado).toBe('sin_dato');
+    expect(gpsActivo).toHaveBeenCalledWith('t1', 'u1', expect.any(Date));
+  });
+
+  it('un pin guardado antes por el processor (proveedor whatsapp) tampoco basta cuando la unidad tiene GPS', async () => {
+    const { d } = deps({ gps: [gps({ fuente: 'pin' })] });
+    d.gpsActivo = async () => true;
+    const r = await validarHitoContraSitio(d, { viaje: viaje(), hito: llegada(), config: CONFIG, mensajeEn: MENSAJE, ahora: MENSAJE });
+    expect(r?.veredicto).toMatchObject({ resultado: 'sin_dato', motivo: 'ubicacion_fuera_de_ventana' });
+  });
+
+  it('unidad SIN historial de GPS (flota sin conector): el pin sigue siendo la evidencia', async () => {
+    const { d } = deps({ gps: [] });
+    d.gpsActivo = async () => false;
+    const r = await validarHitoContraSitio(d, {
+      viaje: viaje(), hito: llegada(), config: CONFIG, mensajeEn: MENSAJE, ahora: MENSAJE,
+      pin: { lat: 20.72, lng: -103.39, medidaEn: new Date(MENSAJE.getTime() + 120_000) },
+    });
     expect(r?.veredicto).toMatchObject({ resultado: 'validado', fuente: 'pin' });
+  });
+
+  it('si la consulta de «¿tiene GPS?» falla, no se asume que no: el pin no valida y se reintenta', async () => {
+    const { d } = deps({ gps: [] });
+    d.gpsActivo = async () => { throw new Error('base caída'); };
+    await expect(validarHitoContraSitio(d, { viaje: viaje(), hito: llegada(), config: CONFIG, mensajeEn: MENSAJE, ahora: MENSAJE, pin: { lat: 20.72, lng: -103.39, medidaEn: MENSAJE } })).resolves.toBeNull();
   });
 
   it('la unidad sin GPS asignado: solo cuenta el pin', async () => {

@@ -124,3 +124,10 @@ describe('textoVeredicto: dice qué pasó sin acusar', () => {
     expect(textoVeredicto(evaluarUbicacion(entrada({ posicion: pos({ medidaEn: new Date(0) }) })), null)).toMatch(/otra hora/);
   });
 });
+
+describe('un pin descartado porque el GPS aún no llega', () => {
+  it('dice «posición de otra hora», no «sin ubicación» (adversarial ronda 03)', () => {
+    expect(evaluarUbicacion(entrada({ posicion: null, gpsPendiente: true }))).toMatchObject({ resultado: 'sin_dato', motivo: 'ubicacion_fuera_de_ventana' });
+    expect(evaluarUbicacion(entrada({ posicion: null }))).toMatchObject({ resultado: 'sin_dato', motivo: 'sin_ubicacion' });
+  });
+});
