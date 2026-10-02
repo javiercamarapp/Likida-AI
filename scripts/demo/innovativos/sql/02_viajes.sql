@@ -111,6 +111,17 @@ join innovativos_sim.sitio so on so.cliente_key = p.o_key
 join innovativos_sim.sitio sd on sd.cliente_key = p.d_key
 on conflict (id) do nothing;
 
+-- Re-sembrar RESTAURA el sitio de origen y de destino. Las FK viaje→geocerca son ON DELETE SET NULL: tras
+-- `vaciar-sintetico.sh geocercas` (o borrar las geocercas a mano) los viajes quedan sin sitio y el INSERT de arriba
+-- (ON CONFLICT DO NOTHING) no los repara. Solo se llena lo que está NULO: un sitio que alguien reasignó a mano no se pisa.
+update viaje v set
+  origen_geocerca_id  = coalesce(v.origen_geocerca_id,  innovativos_sim.uid('geo:planta:' || p.o_key)),
+  destino_geocerca_id = coalesce(v.destino_geocerca_id, innovativos_sim.uid('geo:planta:' || p.d_key))
+from innovativos_sim.plan_viaje p
+where v.tenant_id = current_setting('inn.tenant')::uuid
+  and v.id = innovativos_sim.uid('viaje:' || p.folio)
+  and (v.origen_geocerca_id is null or v.destino_geocerca_id is null);
+
 -- ── Hitos del conductor ────────────────────────────────────────────────────
 -- Cada viaje tiene 4 eventos con su hora «real»; los que ya pasaron se validan
 -- (por GPS en ~55 %, por palabra del chofer conciliada con el GPS en el resto);

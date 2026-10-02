@@ -78,10 +78,10 @@ console.log = consolaLog;
 
 const num = (x) => (x == null ? 'null' : String(Math.round(x)));
 const str = (x) => (x == null ? 'null' : `'${String(x).replace(/'/g, "''")}'`);
-const values = veredictos.map(({ hito, v }) => `('${T}','${hito.viajeId}','${hito.id}',${hito.ciclo},${str(v.resultado)},${str(v.motivo)},${str(v.fuente)},${num(v.distanciaM)},${num(v.toleranciaM)},${num(v.radioM)},${v.sitioId ? `'${v.sitioId}'` : 'null'},${v.medidaEn ? `'${v.medidaEn.toISOString()}'` : 'null'})`);
+const values = veredictos.map(({ hito, v }) => `(md5('innovativos-demo-0620:veredicto:${hito.id}:${hito.ciclo}')::uuid,'${T}','${hito.viajeId}','${hito.id}',${hito.ciclo},${str(v.resultado)},${str(v.motivo)},${str(v.fuente)},${num(v.distanciaM)},${num(v.toleranciaM)},${num(v.radioM)},${v.sitioId ? `'${v.sitioId}'` : 'null'},${v.medidaEn ? `'${v.medidaEn.toISOString()}'` : 'null'})`);
 psql([], `begin;
 delete from viaje_hito_validacion where tenant_id = '${T}';
-insert into viaje_hito_validacion (tenant_id, viaje_id, viaje_hito_id, ciclo, resultado, motivo, fuente, distancia_m, tolerancia_m, radio_m, sitio_id, medida_en)
+insert into viaje_hito_validacion (id, tenant_id, viaje_id, viaje_hito_id, ciclo, resultado, motivo, fuente, distancia_m, tolerancia_m, radio_m, sitio_id, medida_en)
 values ${values.join(',\n')};
 commit;
 `);

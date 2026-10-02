@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════════════
 # PRUEBA: el seed corre DOS veces (una tercera tras --reiniciar y una cuarta tras vaciar) sin duplicar
-# ni cambiar nada (y que vaciar + re-sembrar vuelve al mismo estado). Compara, tabla por tabla, conteo + huella md5 del contenido.
+# ni cambiar nada (y que vaciar + re-sembrar vuelve al mismo estado). Compara, tabla por tabla, conteo + huella md5 de la
+# FILA COMPLETA (to_jsonb, sin created_at/updated_at). FALLA si alguna tabla tiene 0 filas: una huella de nada no prueba nada.
 #
 #   DEMO_DATABASE_URL='postgresql:///likida_demo' bash scripts/demo/innovativos/probar-idempotencia.sh
 #
@@ -12,51 +13,74 @@ set -euo pipefail
 cd "$(dirname "$0")"
 URL="${DEMO_DATABASE_URL:?define DEMO_DATABASE_URL}"
 T=eeeeeeee-0620-4000-8000-000000000250
+# shellcheck source=lib_huella.sh
+. ./lib_huella.sh
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+
+# Huella de CADA tabla del demo: conteo + md5 de la FILA COMPLETA (to_jsonb), no de unas cuantas columnas.
+# Solo se excluyen las marcas de reloj del servidor (created_at/updated_at/creado_en/creada_en) y, en `posicion`, el
+# id (bigserial: cambia cada vez que se borra y se vuelve a insertar). Así una columna que se pierde
+# (p. ej. viaje.origen_geocerca_id tras borrar las geocercas) cambia la huella.
+# Cada entrada: «nombre|tabla|filtro SQL sobre t|columnas extra a excluir (coma)».
+TABLAS=(
+  "tenant|tenant|t.id = '$T'"
+  "terminal|terminal|t.tenant_id = '$T'"
+  "cliente|cliente|t.tenant_id = '$T'"
+  "geocerca|geocerca|t.tenant_id = '$T'"
+  "unidad|unidad|t.tenant_id = '$T'"
+  "operador|operador|t.tenant_id = '$T'"
+  "viaje|viaje|t.tenant_id = '$T'"
+  "viaje_hito|viaje_hito|t.tenant_id = '$T'"
+  "viaje_hito_validacion|viaje_hito_validacion|t.tenant_id = '$T'"
+  "posicion|posicion|t.tenant_id = '$T'|id"
+  "sim.gps_posicion|innovativos_sim.gps_posicion|true"
+  "peaje_caseta|peaje_caseta|t.tenant_id = '$T'"
+  "peaje_tag|peaje_tag|t.tenant_id = '$T'"
+  "desglose_peaje_linea|desglose_peaje_linea|t.tenant_id = '$T'"
+  "liquidacion_externa|liquidacion_externa|t.tenant_id = '$T'"
+  "cp_documento|cp_documento|t.tenant_id = '$T'"
+  "cp_perfil|cp_perfil|t.tenant_id = '$T'"
+  "vigia_config|vigia_config|t.tenant_id = '$T'"
+  "vigia_contacto|vigia_contacto|t.tenant_id = '$T'"
+  "vigia_conversacion|vigia_conversacion|t.tenant_id = '$T'"
+  "vigia_mensaje|vigia_mensaje|t.tenant_id = '$T'"
+  "agente_conductor_config|agente_conductor_config|t.tenant_id = '$T'"
+  "conductor_contacto_trafico|conductor_contacto_trafico|t.tenant_id = '$T'"
+  "sim.convenio_instruccion|innovativos_sim.convenio_instruccion|true"
+)
 
 huella() {
-  psql "$URL" -Atq -v ON_ERROR_STOP=1 <<SQL
-select 'tenant', count(*), md5(string_agg(id::text, ',' order by id)) from tenant where id = '$T'
-union all select 'terminal', count(*), md5(string_agg(id::text, ',' order by id)) from terminal where tenant_id = '$T'
-union all select 'cliente', count(*), md5(string_agg(id::text, ',' order by id)) from cliente where tenant_id = '$T'
-union all select 'geocerca', count(*), md5(string_agg(id::text, ',' order by id)) from geocerca where tenant_id = '$T'
-union all select 'unidad', count(*), md5(string_agg(id::text || coalesce(gps_visto_en::text, ''), ',' order by id)) from unidad where tenant_id = '$T'
-union all select 'operador', count(*), md5(string_agg(id::text, ',' order by id)) from operador where tenant_id = '$T'
-union all select 'viaje', count(*), md5(string_agg(id::text || estatus || folio, ',' order by id)) from viaje where tenant_id = '$T'
-union all select 'viaje_hito', count(*), md5(string_agg(id::text || estado, ',' order by id)) from viaje_hito where tenant_id = '$T'
-union all select 'posicion', count(*), md5(string_agg(unidad_id::text || medida_en::text || lat::text, ',' order by unidad_id, medida_en)) from posicion where tenant_id = '$T'
-union all select 'sim.gps_posicion', count(*), md5(string_agg(id_unidad || fecha_hora::text || latitud::text, ',' order by id_unidad, fecha_hora)) from innovativos_sim.gps_posicion
-union all select 'peaje_caseta', count(*), md5(string_agg(id::text, ',' order by id)) from peaje_caseta where tenant_id = '$T'
-union all select 'peaje_tag', count(*), md5(string_agg(id::text, ',' order by id)) from peaje_tag where tenant_id = '$T'
-union all select 'desglose_peaje_linea', count(*), md5(string_agg(id::text || gps_veredicto, ',' order by id)) from desglose_peaje_linea where tenant_id = '$T'
-union all select 'liquidacion_externa', count(*), md5(string_agg(id::text || total::text || estado, ',' order by id)) from liquidacion_externa where tenant_id = '$T'
-union all select 'cp_documento', count(*), md5(string_agg(id::text || estado, ',' order by id)) from cp_documento where tenant_id = '$T'
-union all select 'cp_perfil', count(*), md5(string_agg(id::text, ',' order by id)) from cp_perfil where tenant_id = '$T'
-union all select 'vigia_mensaje', count(*), md5(string_agg(id::text, ',' order by id)) from vigia_mensaje where tenant_id = '$T'
-union all select 'conductor_contacto_trafico', count(*), md5(string_agg(id::text, ',' order by id)) from conductor_contacto_trafico where tenant_id = '$T'
-union all select 'sim.convenio_instruccion', count(*), md5(string_agg(clave || categoria || texto, ',' order by clave, categoria)) from innovativos_sim.convenio_instruccion
-order by 1;
-SQL
+  local def nombre tabla filtro extra excl
+  for def in "${TABLAS[@]}"; do
+    IFS='|' read -r nombre tabla filtro extra <<<"$def"
+    excl="'created_at','updated_at','creado_en','creada_en'"
+    [ -z "${extra:-}" ] || excl="$excl,'${extra//,/\',\'}'"
+    psql "$URL" -Atq -v ON_ERROR_STOP=1 -c "select '$nombre', count(*), coalesce(md5(string_agg(j::text, ',' order by j::text)), 'vacio') from (select to_jsonb(t) - array[$excl] as j from $tabla t where $filtro) q"
+  done
 }
 
-echo "== corrida 1 =="; bash ./sembrar.sh --reiniciar >/dev/null; huella > /tmp/inn_h1.txt
-echo "== corrida 2 (sin reiniciar: no debe cambiar nada) =="; bash ./sembrar.sh >/dev/null; huella > /tmp/inn_h2.txt
-echo "== corrida 3 (tras --reiniciar: mismo resultado desde cero) =="; bash ./sembrar.sh --reiniciar >/dev/null; huella > /tmp/inn_h3.txt
+echo "== corrida 1 =="; bash ./sembrar.sh --reiniciar >/dev/null; huella > "$TMP/h1.txt"
+echo "== corrida 2 (sin reiniciar: no debe cambiar nada) =="; bash ./sembrar.sh >/dev/null; huella > "$TMP/h2.txt"
+echo "== corrida 3 (tras --reiniciar: mismo resultado desde cero) =="; bash ./sembrar.sh --reiniciar >/dev/null; huella > "$TMP/h3.txt"
 
 echo "== corrida 4 (vaciar TODO lo sintético y volver a sembrar: mismo resultado) =="
 for q in gps geocercas pases liquidaciones cartaporte vigia convenios; do bash ./vaciar-sintetico.sh "$q" >/dev/null; done
-bash ./sembrar.sh >/dev/null; huella > /tmp/inn_h4.txt
+bash ./sembrar.sh >/dev/null; huella > "$TMP/h4.txt"
 
-cat /tmp/inn_h1.txt
+cat "$TMP/h1.txt"
 ok=1
-diff -q /tmp/inn_h1.txt /tmp/inn_h2.txt >/dev/null || { echo "FALLA: la 2.ª corrida cambió filas" >&2; diff /tmp/inn_h1.txt /tmp/inn_h2.txt >&2 || true; ok=0; }
-diff -q /tmp/inn_h1.txt /tmp/inn_h3.txt >/dev/null || { echo "FALLA: --reiniciar no reproduce lo mismo" >&2; diff /tmp/inn_h1.txt /tmp/inn_h3.txt >&2 || true; ok=0; }
+comprobar_huellas "${#TABLAS[@]}" "$TMP/h1.txt" "$TMP/h2.txt" "$TMP/h3.txt" "$TMP/h4.txt" || ok=0
 
-diff -q /tmp/inn_h1.txt /tmp/inn_h4.txt >/dev/null || { echo "FALLA: vaciar + sembrar no reproduce lo mismo" >&2; diff /tmp/inn_h1.txt /tmp/inn_h4.txt >&2 || true; ok=0; }
+# Relaciones que el borrado de geocercas rompe (ON DELETE SET NULL): origen y destino de TODOS los viajes.
+n=$(psql "$URL" -Atq -c "select count(*) from viaje where tenant_id = '$T' and (origen_geocerca_id is null or destino_geocerca_id is null)")
+[ "$n" = "0" ] || { echo "FALLA: $n viajes sin origen_geocerca_id/destino_geocerca_id" >&2; ok=0; }
 
 echo "== rol de solo lectura =="
-if psql "$URL" -q -v ON_ERROR_STOP=1 -c "set role innovativos_demo_lector; insert into innovativos_sim.gps_posicion values ('X', 1, 1, now(), 1, 1)" >/dev/null 2>&1; then
-  echo "FALLA: el rol de lectura pudo ESCRIBIR" >&2; ok=0
-else echo "ok: el rol de lectura no puede escribir"; fi
+err="$(psql "$URL" -q -v ON_ERROR_STOP=1 -c "set role innovativos_demo_lector; insert into innovativos_sim.gps_posicion values ('X', 1, 1, now(), 1, 1)" 2>&1 >/dev/null || true)"
+case "$err" in
+  *"permission denied"*) echo "ok: el rol de lectura no puede escribir (permission denied)" ;;
+  *) echo "FALLA: el insert del rol de lectura no fue rechazado por permisos (salida: ${err:-<sin error: pudo ESCRIBIR>})" >&2; ok=0 ;;
+esac
 n=$(psql "$URL" -Atq -c "set role innovativos_demo_lector; select count(*) from innovativos_sim.v_gps_actual" | tail -1)
 [ "$n" = "250" ] && echo "ok: el rol de lectura ve las 250 unidades en la vista «al momento»" || { echo "FALLA: el rol ve $n unidades" >&2; ok=0; }
 
