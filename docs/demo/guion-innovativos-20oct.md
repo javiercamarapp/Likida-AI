@@ -205,7 +205,9 @@ estadística de ningún cliente.)*
 **Datos sembrados:** 12 casetas «Demo», 250 TAG, **381 cruces de las últimas 24 h** con sus posiciones GPS; **9 cruces
 fuera de ruta** y **4 cobros duplicados** sembrados a propósito (lista exacta en
 `archivos-muestra/peajes/anomalias_sembradas.csv`); 7 cruces sin dato de GPS (unidades silenciosas); y **2 cruces junto
-al patio alargado de Tlaquepaque** (polígono nativo) para el reporte con polígono.
+al patio alargado de Tlaquepaque** (polígono nativo) para el reporte con polígono; y **140 cursos por casetas autorizadas**
+(uno por tracto en viaje: las casetas de su ruta), a **3 cruces reales** (`IN-020`, `IN-098` e `IN-129`) se les quitó su
+caseta del curso a propósito.
 
 **Se enseña**
 1. **[corre hoy] Modo en vivo:** `vaciar-sintetico.sh pases`, cargar en configuración `casetas_catalogo.csv` y
@@ -218,12 +220,18 @@ al patio alargado de Tlaquepaque** (polígono nativo) para el reporte con políg
    caseta; y el **cobro duplicado** de `IN-123` (dos cobros en la misma caseta con 2 min de diferencia, con
    el tractor presente).
 3. **[corre hoy, verificado contra la función real] El reporte de reclamación** (desglose «pases_demo_innovativos_24h.csv»
-   → *Reporte de reclamación*; se baja en **Excel o PDF** listo para el proveedor): **14 cruces reclamables por $9,635** —
-   9 por «GPS lejos de la caseta» ($6,374, confianza alta), 4 por «posible doble cobro» ($2,725, confianza media) y 1 por
-   **«unidad en zona no autorizada»** ($536, confianza alta): `IN-141` estaba **dentro del patio de Tlaquepaque** a la
-   hora del pase, y el patio es un **polígono exacto**. Cada línea lleva el porqué y la evidencia de GPS (hasta 3
+   → *Reporte de reclamación*; se baja en **Excel o PDF** listo para el proveedor): **17 cruces reclamables por $11,497** —
+   9 por «GPS lejos de la caseta» ($6,374, confianza alta), 4 por «posible doble cobro» ($2,725, confianza media), 1 por
+   **«unidad en zona no autorizada»** ($536, confianza alta) y 3 por **«cruce fuera de curso»** ($1,862, confianza media):
+   `IN-141` estaba **dentro del patio de Tlaquepaque** a la hora del pase, y el patio es un **polígono exacto**. Cada línea lleva el porqué y la evidencia de GPS (hasta 3
    posiciones con su distancia a la caseta). Las líneas confirmadas por GPS o **sin datos** no se reclaman: se cuentan
    aparte.
+3b. **[corre hoy, verificado contra la función real] «Cruce fuera de curso»** (los **cursos** son las rutas que la flota
+   autoriza a cada tracto o convenio): `IN-020`, `IN-098` e `IN-129` pasaron por una caseta real, el GPS **confirma** que SÍ
+   estaban ahí, pero esa caseta **no está en su curso autorizado** → se reclaman con confianza **media** y la frase dice el
+   curso y las casetas que sí autoriza. En `/dashboard/agentes/peajes/configuracion`, sección **Cursos**, se ven los 140
+   cursos sembrados, se cargan otros (CSV o Excel, o leídos de «su tabla»), se desactivan, y **sin curso declarado no se
+   reclama nada** (se cuenta aparte). Las líneas con curso evaluable y dentro de él no aparecen.
 4. **[corre hoy] El falso positivo que ya no ocurre — `IN-142`:** pasó por la **carretera de junto** al patio (a 330 m
    del centro: dentro del círculo de ~520 m que contiene al patio, **fuera de su polígono**). Con el círculo habría
    salido acusado; con el polígono **no se reclama**. Si una zona solo existiera como círculo aproximado, la acusación
@@ -241,8 +249,10 @@ al patio alargado de Tlaquepaque** (polígono nativo) para el reporte con políg
 - **El archivo real de PASE:** hoy el lector es tolerante con los formatos típicos (IAVE/PASE/TeleVía), pero «el formato
   real no lo hemos visto». «Si trae otras columnas, **es una línea de configuración**, no una versión nueva.»
 - **TAG y catálogo de casetas con coordenadas:** sin ellos no hay cruce con GPS; hay que pedirlos junto con el archivo.
-- **Los «cursos»** (rutas autorizadas por unidad) **[todavía no existe]**: un cruce fuera de curso pero cerca de su
-  caseta no aparece en el reporte hasta tener su tabla de cursos.
+- **El formato real de sus corredores** (la ruta como línea con buffer) **[depende del cliente]**: el corredor funciona con
+  datos sintéticos, pero **[todavía no existe]** el lector de su formato real, que no conocemos (se espera el 12-oct). Los cursos por **casetas autorizadas** no
+  esperan nada del cliente: salen de sus convenios y de su catálogo de casetas. «Si sus rutas vienen de otra forma, **es
+  una línea de configuración**, no una versión nueva» solo se promete cuando veamos el archivo.
 
 ---
 

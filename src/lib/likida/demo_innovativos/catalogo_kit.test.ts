@@ -153,7 +153,7 @@ describe('estructura del guion: cada agente en su sección y cada cosa con su et
   });
   it('lo que NO existe todavía se dice como tal y no se promete', () => {
     const g = guion.replace(/\*\*/g, '');
-    for (const fragmento of ['«cursos»', 'SAP/TMS en vivo']) {
+    for (const fragmento of ['SAP/TMS en vivo']) {
       const i = g.indexOf(fragmento);
       expect(i, `el guion ya no menciona «${fragmento}»`).toBeGreaterThan(-1);
       expect(g.slice(Math.max(0, i - 300), i + 300), `«${fragmento}» no está marcado [todavía no existe]`).toContain('[todavía no existe]');
@@ -165,9 +165,21 @@ describe('estructura del guion: cada agente en su sección y cada cosa con su et
     expect(g).not.toMatch(/varios embarques[^.]*\[todavía no existe\]/);
     expect(existsSync(`${RAIZ}src/lib/likida/carta_porte_docs/multiembarque.ts`)).toBe(true);
   });
-  it('lo que sigue sin existir en el producto es verdad: no hay cursos, ni lector de SAP, ni SFTP', () => {
+  it('los cursos de peajes YA existen (P8): el guion y el kit los enseñan como «corre hoy»; solo el formato real del corredor depende del cliente', () => {
+    for (const rel of ['src/lib/likida/peajes/cursos.ts', 'src/lib/likida/peajes/cursos_importar.ts', 'src/lib/likida/conectores/tabla_propia/fixtures/cursos.csv', 'supabase/migrations/0665_peaje_cursos.sql']) {
+      expect(existsSync(`${RAIZ}${rel}`), rel).toBe(true);
+    }
+    const g = guion.replace(/\*\*/g, '').replace(/\s+/g, ' ');
+    expect(g, 'el guion enseña el motivo «Cruce fuera de curso» como «corre hoy»').toMatch(/\[corre hoy[^\]]*\] «Cruce fuera de curso»/);
+    expect(g).not.toMatch(/«cursos»[^.]*\[todavía no existe\]/);
+    expect(g).toMatch(/formato real de sus corredores[^.]*\[depende del cliente\]/);
+    const k = doc.replace(/\*\*/g, '').replace(/\s+/g, ' ');
+    expect(k).toContain('cursos por casetas autorizadas');
+    expect(k).not.toContain('Los cursos de peajes y la lectura');
+    expect(k).not.toMatch(/cursos[^.]*no existen todavía/);
+  });
+  it('lo que sigue sin existir en el producto es verdad: no hay lector de SAP ni SFTP', () => {
     const rutas = (rel: string) => existsSync(`${RAIZ}${rel}`);
-    expect(rutas('src/lib/likida/peajes/cursos.ts')).toBe(false);
     expect(rutas('src/lib/likida/conectores/sap')).toBe(false);
     expect(rutas('src/lib/likida/conectores/tabla_propia/sftp.ts')).toBe(false);
   });

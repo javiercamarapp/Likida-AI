@@ -130,6 +130,42 @@ join innovativos_sim.tracto tr on tr.n = z.n
 join geocerca pa on pa.id = innovativos_sim.uid('geo:patio:GDL')
 on conflict (id) do nothing;
 
+-- ── Cursos (rutas autorizadas, P8 / mig. 0665) ─────────────────────────────
+-- Cada tracto con viaje en curso tiene SU curso por casetas autorizadas: las casetas entre el origen y el destino de su
+-- viaje (el mismo criterio con el que se sembraron sus cruces reales). A TRES cruces reales se les quita su caseta del curso
+-- a propósito: el tractor SÍ estaba ahí (el GPS lo confirma) pero esa caseta no figura en su ruta autorizada → el reporte
+-- de reclamación los marca «cruce fuera de curso» (confianza media). Los cruces fuera de ruta y los duplicados no se tocan
+-- (ya tienen su motivo, y la línea recibe solo uno). IN-141 e IN-142 (sin viaje) no tienen curso: quedan «sin curso declarado».
+drop table if exists innovativos_sim.curso_fuera cascade;
+create table innovativos_sim.curso_fuera as
+select x.n, x.folio, x.nombre
+from (
+  select cp.n, cp.folio, cp.nombre,
+         row_number() over (order by md5('curso' || cp.folio || cp.nombre)) as rk
+  from innovativos_sim.cruce_plan cp
+  where cp.escenario = 'normal' and cp.origen_linea = 'real'
+    and not exists (select 1 from innovativos_sim.cruce_plan o
+                     where o.n = cp.n and o.nombre = cp.nombre and o.origen_linea in ('duplicado', 'fuera_de_ruta'))
+) x
+where x.rk <= 3;
+
+insert into peaje_curso (id, tenant_id, codigo, nombre, tipo, unidad_id, activo)
+select innovativos_sim.uid('curso:' || p.n), current_setting('inn.tenant')::uuid, 'CUR-DEMO-' || tr.economico,
+       'Ruta autorizada ' || tr.economico || ' (' || p.folio || ')', 'casetas', innovativos_sim.uid('unidad:' || p.n), true
+from innovativos_sim.plan_viaje p
+join innovativos_sim.tracto tr on tr.n = p.n
+where p.tipo = 'abierto'
+on conflict (id) do nothing;
+
+insert into peaje_curso_caseta (curso_id, caseta_id, tenant_id, orden)
+select innovativos_sim.uid('curso:' || p.n), innovativos_sim.uid('caseta:' || c.nombre), current_setting('inn.tenant')::uuid,
+       (row_number() over (partition by p.n order by case when p.ka <= p.kb then c.km else -c.km end))::int - 1
+from innovativos_sim.plan_viaje p
+join innovativos_sim.caseta c on c.km > least(p.ka, p.kb) + 5 and c.km < greatest(p.ka, p.kb) - 5
+where p.tipo = 'abierto'
+  and not exists (select 1 from innovativos_sim.curso_fuera f where f.n = p.n and f.nombre = c.nombre)
+on conflict (curso_id, caseta_id) do nothing;
+
 -- La lista de anomalías sembradas (para el guion y para la prueba de que el
 -- cruce las encuentra).
 drop table if exists innovativos_sim.anomalias_sembradas cascade;
