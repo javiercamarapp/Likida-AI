@@ -115,7 +115,13 @@ export type EntidadBitacora =
   // operadores, unidades y jefes (borrarlo los deja sin patio), y quién lo hizo
   // es lo que hay que poder reconstruir. Hasta hoy `crearTerminal` firmaba como
   // `tenant`; el id del patio vive en `entidadId`.
-  | 'terminal';
+  | 'terminal'
+  // W3 «autofacturación» (agente 6): la vinculación asistida de un portal (quién la
+  // pidió, cuándo se reclamó y cerró), la bandera ensayo→real por flota, los límites,
+  // la confirmación humana de cada lote y las reversas. `entidadId` es el comercio, el
+  // lote o el gasto según la acción; el detalle nunca lleva cookies, códigos ni RFC.
+  | 'portal_vinculacion'
+  | 'autofactura';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una
