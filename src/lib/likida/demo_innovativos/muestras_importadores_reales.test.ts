@@ -96,7 +96,7 @@ describe('liquidación: el Excel de muestra de la flota se convierte en plantill
     const c = cuerpos[0];
     const datos = {
       claveExterna: c.claveExterna, sistemaOrigen: c.sistemaOrigen, operadorNombre: 'Operador de demo', razonSocial: null,
-      viajes: c.viajes, desde: c.periodo.desde, hasta: c.periodo.hasta, conceptos: c.conceptos, total: c.total, moneda: c.moneda,
+      viajes: c.viajes, desde: c.periodo.desde, hasta: c.periodo.hasta, conceptos: c.conceptos.map((x) => ({ ...x, clave: x.clave ?? null })), total: c.total, moneda: c.moneda,
     };
     const libro = XLSX.read(generarExcelFormato(derivado.formato, datos), { type: 'array' });
     const filas = XLSX.utils.sheet_to_json<unknown[]>(libro.Sheets[libro.SheetNames[0]], { header: 1, defval: '' });
