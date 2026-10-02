@@ -60,7 +60,11 @@ const ETIQUETA_TOOL: Record<string, string> = {
   estado_cobranza: 'Revisando la cobranza',
   estado_autofactura: 'Revisando la autofactura',
   salud_agentes: 'Revisando la salud de los agentes',
-  escalar_a_persona: 'Avisando a la persona que decide',
+  convenio_viaje: 'Revisando el convenio del viaje',
+  estado_liquidacion_externa: 'Revisando la entrega de liquidaciones',
+  reclamacion_peajes: 'Revisando los cobros de peajes',
+  estado_jornada: 'Revisando el registro de jornada',
+  escalar_a_persona: 'Dejando la tarea para la persona que decide',
   entregar_respuesta: 'Armando la respuesta',
 };
 const rotuloTool = (t: string) => ETIQUETA_TOOL[t] ?? t.replaceAll('_', ' ');
