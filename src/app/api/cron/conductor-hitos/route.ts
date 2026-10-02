@@ -3,6 +3,8 @@ import { correrConductor, puertosReales } from '@/lib/likida/conductor/ejecutor'
 import { correrAlertasEstadia, type ResultadoAlertasEstadia } from '@/lib/likida/conductor/alertas_estadia';
 import { barridoValidacion, depsValidacionReales, type ResultadoBarrido } from '@/lib/likida/conductor/validar_hito';
 import { leerCandidatosValidacion } from '@/lib/likida/conductor/trabajo';
+import { barridoAcercamiento, type ResultadoAcercamiento } from '@/lib/likida/convenios/acercamiento';
+import { ConveniosNoDisponibles } from '@/lib/likida/convenios/repo';
 import { horaYDiaMx } from '@/lib/likida/conductor/config';
 import { correrMantenimientoConductor, leerConfigConductor } from '@/lib/likida/conductor/repo';
 import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interruptores';
@@ -86,6 +88,7 @@ export async function GET(req: Request) {
     const extras: string[] = [];
     let alertas: ResultadoAlertasEstadia | undefined;
     let validacion: ResultadoBarrido | undefined;
+    let acercamiento: ResultadoAcercamiento | undefined;
     try {
       alertas = await correrAlertasEstadia(puertosReales(), { venceEn });
       extras.push(...alertas.fallos);
@@ -99,6 +102,17 @@ export async function GET(req: Request) {
     } catch (e) {
       extras.push(`validación de ubicación: ${e instanceof Error ? e.message : String(e)}`);
       logger.error('cron.conductor_hitos.validacion_fallo', { error: e instanceof Error ? e.message : String(e) });
+    }
+    // 0580: el aviso de acercamiento a la planta (las instrucciones del convenio). Aislado como los otros dos: un fallo aquí
+    // no frena el resto. La base sin migrar (sin tablas de convenios) no es un fallo: no hay nada que avisar.
+    try {
+      acercamiento = await barridoAcercamiento(undefined, new Date(), venceEn);
+      if (acercamiento.fallos > 0) extras.push(`acercamiento: ${acercamiento.fallos} aviso(s) con fallo`);
+    } catch (e) {
+      if (!(e instanceof ConveniosNoDisponibles)) {
+        extras.push(`acercamiento a planta: ${e instanceof Error ? e.message : String(e)}`);
+        logger.error('cron.conductor_hitos.acercamiento_fallo', { error: e instanceof Error ? e.message : String(e) });
+      }
     }
 
     // Mantenimiento de privacidad: una vez al día, a las 03:xx de México.
@@ -119,6 +133,7 @@ export async function GET(req: Request) {
         escalaciones: r.escalaciones, fallos: r.fallos.length + extras.length, cortadosPorReloj: r.cortadosPorReloj,
         rechazoMasivo: r.cortadaPorRechazoMasivo,
         alertasEstadia: alertas?.alertas ?? null, validados: validacion?.validados ?? null, sinCoincidencia: validacion?.sinCoincidencia ?? null,
+        acercamientos: acercamiento?.enviados ?? null,
       },
     };
     if (r.cortadaPorRechazoMasivo) {
@@ -128,7 +143,7 @@ export async function GET(req: Request) {
       });
     }
     return NextResponse.json({
-      corrio: true, ...r, fallos: [...r.fallos, ...extras].slice(0, 20), alertasEstadia: alertas, validacion,
+      corrio: true, ...r, fallos: [...r.fallos, ...extras].slice(0, 20), alertasEstadia: alertas, validacion, acercamiento,
       ...(mantenimiento ? { mantenimiento } : {}),
     });
   } catch (e) {
