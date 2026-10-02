@@ -68,6 +68,11 @@ vi.mock('@/lib/likida/interruptores', () => ({
 const purgaCartaPorte = vi.fn(async (_limite?: number) => ({ revisados: 0, purgados: 0, fallidos: 0 }));
 vi.mock('@/lib/likida/carta_porte_docs/retencion', () => ({ purgarDocumentosVencidos: (n?: number) => purgaCartaPorte(n) }));
 
+// Retención de los Agentes 1 y 2 (0562): su lógica vive en retencion_agentes.test.ts; aquí solo que se llama y que no tumba la corrida.
+type PurgaAgente = { nombre: string; ok: boolean; filas: number | null; parcial: boolean; error: string | null };
+const purgaAgentes = vi.fn(async (_ahora?: Date): Promise<PurgaAgente[]> => [{ nombre: 'wa_ventana_contacto', ok: true, filas: 0, parcial: false, error: null }]);
+vi.mock('@/lib/likida/retencion_agentes', () => ({ mantenerDatosAgentes: (a?: Date) => purgaAgentes(a) }));
+
 process.env.CRON_SECRET = 'secreto-de-prueba';
 const { GET } = await import('./route');
 
@@ -436,5 +441,36 @@ describe('la purga de documentos de Carta Porte (0420)', () => {
     estaApagado.mockResolvedValue(true);
     await GET(peticion('Bearer secreto-de-prueba'));
     expect(purgaCartaPorte).not.toHaveBeenCalled();
+  });
+});
+
+describe('la retención de los Agentes 1 y 2 (0562)', () => {
+  beforeEach(() => { purgaAgentes.mockReset().mockResolvedValue([{ nombre: 'liquidacion_externa', ok: true, filas: 2, parcial: false, error: null }]); alertarOperador.mockClear(); });
+
+  it('corre en la misma vuelta y su resultado viaja en el cuerpo', async () => {
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(purgaAgentes).toHaveBeenCalledTimes(1);
+    expect(await res.json()).toMatchObject({ agentesDatos: [{ nombre: 'liquidacion_externa', filas: 2 }] });
+  });
+
+  it('una purga fallida se avisa al operador pero no tumba la corrida', async () => {
+    purgaAgentes.mockResolvedValue([{ nombre: 'liquidacion_externa', ok: false, filas: null, parcial: false, error: 'boom' }]);
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.purgar.agentes_datos', expect.objectContaining({ error: expect.stringContaining('liquidacion_externa: boom') }));
+  });
+
+  it('si el módulo lanza, el cuerpo dice null y la corrida sigue', async () => {
+    purgaAgentes.mockRejectedValue(new Error('caído'));
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect((await res.json()).agentesDatos).toBeNull();
+  });
+
+  it('sin secreto no se purga nada de esto', async () => {
+    const res = await GET(peticion());
+    expect(res.status).toBeGreaterThanOrEqual(401);
+    expect(purgaAgentes).not.toHaveBeenCalled();
   });
 });
