@@ -4,8 +4,8 @@ import type { Instruccion } from './tipos';
 // QUÉ CONVENIO LE TOCA A UN VIAJE — puro. Un cliente puede tener varios (cada punto A→B es uno).
 //
 // La regla es ESCRITA, no adivinada (el criterio de `tarifaSugerida`): se descartan los convenios vencidos, inactivos
-// o que CONTRADICEN al viaje (otra planta de carga/descarga); entre los que quedan manda el que más coincide (sitio
-// de catálogo vale más que el texto del origen/destino). Si queda uno solo, es ese —aunque no coincida en nada: es
+// o que CONTRADICEN al viaje (otra planta de carga/descarga, por sitio de catálogo o por texto distinto); entre los que quedan manda el que más coincide (sitio
+// de catálogo vale más que el texto del origen/destino). Si queda uno solo, es ese —solo si no hay nada que comparar (sin contradicción): es
 // «el convenio del cliente»—. Si quedan varios EMPATADOS sin ninguna coincidencia, NO se elige: mandarle al operador
 // la puerta de OTRA ruta es peor que no mandarle nada, y el panel dice que falta ligarlo.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -38,6 +38,8 @@ export type EleccionConvenio =
 const texto = (t: string | null): string =>
   (t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
+const coincideTexto = (a: string, b: string): boolean => a === b || ` ${a} `.includes(` ${b} `) || ` ${b} `.includes(` ${a} `);
+
 const vigente = (c: ConvenioCandidato, hoy: string): boolean =>
   c.activo && (!c.vigenteDesde || c.vigenteDesde <= hoy) && (!c.vigenteHasta || c.vigenteHasta >= hoy);
 
@@ -49,7 +51,11 @@ function puntos(c: ConvenioCandidato, v: ViajeParaLigar): number | null {
     [c.destinoSitioId, v.destinoSitioId, c.destino, v.destino],
   ] as const) {
     if (sitioC && sitioV) { if (sitioC === sitioV) p += 3; else return null; }
-    else if (texto(txtC) !== '' && texto(txtV) !== '') { if (texto(txtC) === texto(txtV)) p += 2; }
+    else if (texto(txtC) !== '' && texto(txtV) !== '') {
+      // Texto contra texto también CONTRADICE: «Silao» no es «Querétaro». Se acepta que uno contenga al otro por
+      // palabras completas («Silao» ⊂ «Silao Guanajuato»); cualquier otra diferencia descarta el convenio.
+      if (coincideTexto(texto(txtC), texto(txtV))) p += 2; else return null;
+    }
   }
   return p;
 }
