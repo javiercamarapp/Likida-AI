@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { correrConductor, puertosReales } from '@/lib/likida/conductor/ejecutor';
 import { correrAlertasEstadia, type ResultadoAlertasEstadia } from '@/lib/likida/conductor/alertas_estadia';
+import { correrAlertasLlegadaSinConfirmar, puertosAlertaLlegadaReales, type ResultadoAlertasLlegada } from '@/lib/likida/conductor/alertas_llegada';
 import { barridoValidacion, depsValidacionReales, type ResultadoBarrido } from '@/lib/likida/conductor/validar_hito';
 import { leerCandidatosValidacion } from '@/lib/likida/conductor/trabajo';
 import { barridoAcercamiento, type ResultadoAcercamiento } from '@/lib/likida/convenios/acercamiento';
@@ -87,6 +88,7 @@ export async function GET(req: Request) {
     // con el motivo (un `try` global las haría caer juntas y taparía cuál falló).
     const extras: string[] = [];
     let alertas: ResultadoAlertasEstadia | undefined;
+    let llegadas: ResultadoAlertasLlegada | undefined;
     let validacion: ResultadoBarrido | undefined;
     let acercamiento: ResultadoAcercamiento | undefined;
     try {
@@ -102,6 +104,15 @@ export async function GET(req: Request) {
     } catch (e) {
       extras.push(`validación de ubicación: ${e instanceof Error ? e.message : String(e)}`);
       logger.error('cron.conductor_hitos.validacion_fallo', { error: e instanceof Error ? e.message : String(e) });
+    }
+    // 0604: el aviso al jefe de tráfico por «ya llegué» sin confirmar (apagado por flota por omisión). Va DESPUÉS de la validación (una llegada que el barrido acaba de confirmar no debe avisar). Aislado como los demás;
+    // una base sin la 0604/0385 no trae la perilla encendida en ninguna flota, así que no hay nada que avisar.
+    try {
+      llegadas = await correrAlertasLlegadaSinConfirmar(puertosAlertaLlegadaReales(), { venceEn });
+      extras.push(...llegadas.fallos);
+    } catch (e) {
+      extras.push(`llegada sin confirmar: ${e instanceof Error ? e.message : String(e)}`);
+      logger.error('cron.conductor_hitos.llegada_sin_confirmar_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
     // 0580: el aviso de acercamiento a la planta (las instrucciones del convenio). Aislado como los otros dos: un fallo aquí
     // no frena el resto. La base sin migrar (sin tablas de convenios) no es un fallo: no hay nada que avisar.
@@ -132,7 +143,7 @@ export async function GET(req: Request) {
         sembrados: r.sembrados, viajes: r.viajes, solicitudes: r.solicitudes, recordatorios: r.recordatorios,
         escalaciones: r.escalaciones, fallos: r.fallos.length + extras.length, cortadosPorReloj: r.cortadosPorReloj,
         rechazoMasivo: r.cortadaPorRechazoMasivo,
-        alertasEstadia: alertas?.alertas ?? null, validados: validacion?.validados ?? null, sinCoincidencia: validacion?.sinCoincidencia ?? null,
+        alertasEstadia: alertas?.alertas ?? null, avisosLlegadaSinConfirmar: llegadas?.avisos ?? null, validados: validacion?.validados ?? null, sinCoincidencia: validacion?.sinCoincidencia ?? null,
         acercamientos: acercamiento?.enviados ?? null,
       },
     };
@@ -143,7 +154,7 @@ export async function GET(req: Request) {
       });
     }
     return NextResponse.json({
-      corrio: true, ...r, fallos: [...r.fallos, ...extras].slice(0, 20), alertasEstadia: alertas, validacion, acercamiento,
+      corrio: true, ...r, fallos: [...r.fallos, ...extras].slice(0, 20), alertasEstadia: alertas, llegadasSinConfirmar: llegadas, validacion, acercamiento,
       ...(mantenimiento ? { mantenimiento } : {}),
     });
   } catch (e) {

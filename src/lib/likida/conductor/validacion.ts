@@ -170,3 +170,25 @@ export function llegadaPorConfirmar(
   if (v.resultado === 'sin_dato') return v.motivo !== 'sin_sitio';
   return false;
 }
+
+/**
+ * ¿Este «ya llegué» quedó SIN CONCILIAR porque el viaje no tiene sitio contra el cual compararlo?
+ *
+ * `veredictoSellaLlegada` sella la llegada cuando no hay sitio (dejar el destino mudo para siempre rompería a las flotas sin
+ * catálogo), y por eso `llegadaPorConfirmar` lo deja fuera: sin sitio no hay nada que confirmar. Pero entonces el «ya llegué»
+ * del chofer pasa como cierto sin que ninguna posición lo haya contrastado, y la oficina no se entera. Esta es esa otra
+ * excepción: no acusa al chofer, le dice a la oficina que ESE aviso no se pudo conciliar y que falta asignar el sitio.
+ * Mismas exclusiones que las demás: lo declarado por la oficina, lo ya validado y las flotas sin validación de ubicación.
+ */
+export function llegadaSinSitio(
+  h: { tipo: string; estado: string; fuente: string | null },
+  v: VeredictoMinimo | null | undefined,
+  validarUbicacion: boolean,
+  haySitio: boolean,
+): boolean {
+  if (!validarUbicacion) return false;
+  if (h.tipo !== 'llegada_carga' && h.tipo !== 'llegada_descarga') return false;
+  if (h.estado !== 'recibido' || h.fuente === 'oficina') return false;
+  if (!v) return !haySitio;
+  return v.resultado === 'sin_dato' && v.motivo === 'sin_sitio';
+}

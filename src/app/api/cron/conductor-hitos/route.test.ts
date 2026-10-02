@@ -27,6 +27,8 @@ const mantenimiento = vi.fn(async (): Promise<Record<string, number | string>> =
 vi.mock('@/lib/likida/conductor/repo', () => ({ correrMantenimientoConductor: () => mantenimiento(), leerConfigConductor: async () => ({}) }));
 const alertasEstadia = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisadas: 1, alertas: 1, yaReclamadas: 0, sinDestinatario: 0, fueraDeVentana: 0, rechazosReintentables: 0, fallos: [] }));
 vi.mock('@/lib/likida/conductor/alertas_estadia', () => ({ correrAlertasEstadia: () => alertasEstadia() }));
+const llegadas = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisadas: 1, avisos: 1, yaReclamados: 0, sinDestinatario: 0, fueraDeVentana: 0, rechazosReintentables: 0, fallos: [] }));
+vi.mock('@/lib/likida/conductor/alertas_llegada', () => ({ correrAlertasLlegadaSinConfirmar: () => llegadas(), puertosAlertaLlegadaReales: () => ({}) }));
 const barrido = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisados: 2, validados: 1, sinCoincidencia: 0, sinDato: 1, saltados: 0, fallos: 0 }));
 vi.mock('@/lib/likida/conductor/validar_hito', () => ({ barridoValidacion: () => barrido(), depsValidacionReales: {} }));
 vi.mock('@/lib/likida/conductor/trabajo', () => ({ leerCandidatosValidacion: async () => [] }));
@@ -45,7 +47,7 @@ const j = async (r: Response) => (await r.json()) as Record<string, any>; // esl
 
 beforeEach(() => {
   autorizado = 'si'; interruptores = {}; horaMx = 12;
-  correr.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); mantenimiento.mockClear(); alertasEstadia.mockClear(); barrido.mockClear(); acercamiento.mockClear();
+  correr.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); mantenimiento.mockClear(); alertasEstadia.mockClear(); llegadas.mockClear(); barrido.mockClear(); acercamiento.mockClear();
 });
 
 describe('la puerta y las palancas', () => {
@@ -80,6 +82,33 @@ describe('la puerta y las palancas', () => {
     expect(await j(r)).toMatchObject({ codigo: 'interruptor_ilegible' });
     expect(correr).not.toHaveBeenCalled();
     expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'fallo', { codigo: 'interruptor_ilegible' });
+  });
+});
+
+describe('el aviso de llegada sin confirmar (0604)', () => {
+  it('corre DESPUÉS de la validación y su resumen viaja en la respuesta y en el latido', async () => {
+    const orden: string[] = [];
+    barrido.mockImplementationOnce(async () => { orden.push('validacion'); return { revisados: 2, validados: 1, sinCoincidencia: 0, sinDato: 1, saltados: 0, fallos: 0 }; });
+    llegadas.mockImplementationOnce(async () => { orden.push('llegadas'); return { revisadas: 1, avisos: 1, yaReclamados: 0, sinDestinatario: 0, fueraDeVentana: 0, rechazosReintentables: 0, fallos: [] }; });
+    const r = await j(await llamar());
+    expect(orden).toEqual(['validacion', 'llegadas']);
+    expect(r.llegadasSinConfirmar).toMatchObject({ avisos: 1 });
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'ok', expect.objectContaining({ avisosLlegadaSinConfirmar: 1 }));
+  });
+
+  it('revienta: las demás pasadas corren igual, el latido sale parcial y el motivo queda a la vista', async () => {
+    llegadas.mockRejectedValueOnce(new Error('boom llegadas'));
+    const r = await llamar();
+    expect(r.status).toBe(200);
+    expect(acercamiento).toHaveBeenCalledTimes(1);
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'parcial', expect.anything());
+    expect(JSON.stringify((await j(r)).fallos)).toContain('boom llegadas');
+  });
+
+  it('un fallo de envío (plantilla sin aprobar) deja el latido parcial', async () => {
+    llegadas.mockResolvedValueOnce({ revisadas: 1, avisos: 0, fallos: ['llegada F-1: plantilla sin aprobar'] });
+    await llamar();
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'parcial', expect.anything());
   });
 });
 

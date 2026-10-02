@@ -184,7 +184,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Botones:** ninguno
 
-## Plantillas nuevas, listas para enviar a aprobación (22)
+## Plantillas nuevas, listas para enviar a aprobación (23)
 
 ### `cobranza_gastos_v1`
 
@@ -489,6 +489,27 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 | `{{5}}` | última ubicación conocida | Carretera 15D km 120 |
 
 - **Botones:** «Ya lo atiendo» (respuesta rápida, payload `jefe_atiendo:<viaje_id>`); «Abrir tablero» (URL fija https://app.likida.ai/dashboard/despacho)
+
+### `conductor_llegada_sin_confirmar_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor. Avisar al jefe de tráfico que un chofer dijo «ya llegué» y ninguna posición lo respalda (o el viaje no tiene sitio contra el cual compararlo). Apagado por omisión: lo enciende cada flota en la configuración del Conductor.
+- **Llamador en código:** src/lib/likida/conductor/alertas_llegada.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Aviso para el jefe de tráfico: {{1}} avisó que llegó a {{2}} (viaje {{3}}) y {{4}}. Revísalo en el tablero de hitos de Likida antes de darlo por bueno.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | chofer | Juan Pérez |
+| `{{2}}` | carga o descarga, con el sitio | la carga de Planta Zapopan |
+| `{{3}}` | folio | F-1042 |
+| `{{4}}` | por qué quedó sin confirmar (una línea) | ninguna posición la respalda todavía |
+
+- **Botones:** ninguno
 
 ### `operador_invitacion_v1`
 
