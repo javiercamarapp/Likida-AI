@@ -40,9 +40,9 @@ export const PLAZOS_AGENTES = {
   limite: 5000,
 } as const;
 
-type Llamada = { nombre: string; rpc: string; args: Record<string, unknown>; leer: (d: unknown) => { filas: number | null; parcial: boolean } };
+export type Llamada = { nombre: string; rpc: string; args: Record<string, unknown>; leer: (d: unknown) => { filas: number | null; parcial: boolean } };
 
-const numero = (v: unknown): number | null => (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null);
+export const numero = (v: unknown): number | null => (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null);
 
 const LLAMADAS = (ahora: string): Llamada[] => [
   {
@@ -67,14 +67,14 @@ const LLAMADAS = (ahora: string): Llamada[] => [
   },
 ];
 
-/** Corre las cuatro purgas. Nunca lanza. */
-export async function mantenerDatosAgentes(ahora: Date = new Date()): Promise<ResultadoPurgaAgente[]> {
+/** Corre una lista de purgas, una tras otra. Nunca lanza: cada una devuelve su propio resultado. */
+export async function correrPurgas(llamadas: Llamada[], clavesLog = 'agentes'): Promise<ResultadoPurgaAgente[]> {
   const salida: ResultadoPurgaAgente[] = [];
-  for (const l of LLAMADAS(ahora.toISOString())) {
+  for (const l of llamadas) {
     try {
       const r = await supabaseAdmin().rpc(l.rpc, l.args);
       if (r.error) {
-        logger.error('cron.purgar.agentes_fallo', { purga: l.nombre, err: r.error.message });
+        logger.error(`cron.purgar.${clavesLog}_fallo`, { purga: l.nombre, err: r.error.message });
         salida.push({ nombre: l.nombre, ok: false, filas: null, parcial: false, error: r.error.message });
         continue;
       }
@@ -87,9 +87,14 @@ export async function mantenerDatosAgentes(ahora: Date = new Date()): Promise<Re
       salida.push({ nombre: l.nombre, ok: true, filas, parcial, error: null });
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
-      logger.error('cron.purgar.agentes_excepcion', { purga: l.nombre, err: error });
+      logger.error(`cron.purgar.${clavesLog}_excepcion`, { purga: l.nombre, err: error });
       salida.push({ nombre: l.nombre, ok: false, filas: null, parcial: false, error });
     }
   }
   return salida;
+}
+
+/** Corre las cuatro purgas. Nunca lanza. */
+export async function mantenerDatosAgentes(ahora: Date = new Date()): Promise<ResultadoPurgaAgente[]> {
+  return correrPurgas(LLAMADAS(ahora.toISOString()), 'agentes');
 }
