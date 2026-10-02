@@ -82,7 +82,28 @@ const MARCA_DE_DINERO_ANTES = /\$\s?$/;
  * `-` cubre además lo que el lookbehind de `ANIO` ya excluye). Nada más.
  */
 const CONTEXTO_DE_ANIO_ANTES =
-  /(?:\b(?:en|del|de|al|para|desde|hasta|durante|hacia|entre|ejercicio|a[nñ]o|ciclo|RFA|RMF|LIF|LISR|LIVA|CFF|circular|regla|norma|anexo|DOF)\s+|[/-]\s*)$/i;
+  /(?:\b(?:en|al|para|desde|hasta|durante|hacia|entre|ejercicio|a[nñ]o|ciclo|RFA|RMF|LIF|LISR|LIVA|CFF|circular|regla|norma|anexo|DOF)\s+|[/-]\s*)$/i;
+/**
+ * AG/SEG/TC-32C11-C1: `de` y `del` SALIERON de la lista de arriba.
+ *
+ * Son la preposición más común del español delante de un monto, y mientras
+ * contaron como marca de año los 200 enteros de 1900 a 2099 volvían a ser
+ * invisibles en LOS DOS carriles en cuanto el modelo escribía «tu saldo es de
+ * 2000» — que es exactamente el fraseo que `prompts.ts:79` produce, porque
+ * `estado_viaje` devuelve anticipo y comprobado pero nunca el remanente, así
+ * que el modelo lo resta y lo introduce con una preposición.
+ *
+ * Piden corroboración: un sustantivo de periodo o una norma ANTES del `de`, o
+ * el rango `del X al Y`. Es lo que distingue «el ejercicio de 2026» de «un
+ * saldo de 2000», y sin ella manda la asimetría que este archivo ya declara:
+ * ante la duda se CONSERVA el número.
+ */
+const CONTEXTO_DE_ANIO_CON_DE =
+  /\b(?:ejercicios?|a[nñ]os?|ciclos?|mes(?:es)?|per[ií]odos?|vigencias?|partir|antes|despu[eé]s|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|RFA|RMF|LIF|LISR|LIVA|CFF|circular|regla|norma|anexo|DOF)\s+del?\s+$/i;
+/** `de`/`del` a secas, para combinarlo con el rango de abajo. */
+const DE_A_SECAS_ANTES = /\bdel?\s+$/i;
+/** `del 2026 al 2027`: el rango sí fija que lo de en medio es un año. */
+const RANGO_DE_ANIOS_DESPUES = /^\s*al?\s+(?:1[89]|20)\d{2}(?![\d,.])/i;
 /** Un separador de fecha justo después: `2026/01/01`, `2026-01-01`. */
 const CONTEXTO_DE_ANIO_DESPUES = /^\s*[/-]\d/;
 /** `pesos`/`mxn`/`m.n.` justo después, o una cola decimal que lo vuelve monto. */
@@ -142,6 +163,11 @@ function sinAniosQueNoSeanMonto(texto: string): string {
     // defecto, y el default es lo que decide el caso que nadie enumeró.
     if (CONTEXTO_DE_ANIO_ANTES.test(antes)) return ' ';
     if (CONTEXTO_DE_ANIO_DESPUES.test(despues)) return ' ';
+    // AG/SEG/TC-32C11-C1: `de`/`del` sólo cuentan CON corroboración. Sin esto,
+    // «tu saldo es de 2000» salía sellado como respaldado y «de 3200» no: la
+    // única diferencia era caer en la banda de los años.
+    if (CONTEXTO_DE_ANIO_CON_DE.test(antes)) return ' ';
+    if (DE_A_SECAS_ANTES.test(antes) && RANGO_DE_ANIOS_DESPUES.test(despues)) return ' ';
     return anio; // ante la duda se CONSERVA: es la asimetría declarada arriba.
   });
 }
