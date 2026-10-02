@@ -35,9 +35,10 @@ begin
       'portales-vivos',
       'liquidaciones-externas',
       'peajes',
+      'conductor-hitos',
       'vigia'
     ));
 end $$;
 
 comment on constraint cron_latido_id_dominio on public.cron_latido is
-  'El catálogo COMPLETO de ids de cron, espejo de CRONS en lib/admin/salud.ts. Se enumera entero al tocarlo. La 0400 añade vigia.';
+  'El catálogo COMPLETO de ids de cron, espejo de CRONS en lib/admin/salud.ts. Se enumera entero al tocarlo. La 0401 añade vigia (sobre la lista de la 0380, que añadió conductor-hitos).';
