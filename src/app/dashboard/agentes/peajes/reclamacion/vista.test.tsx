@@ -7,13 +7,13 @@ const ID = '11111111-1111-4111-8111-111111111111';
 const reporte = (o: Partial<ReporteReclamacion> = {}): ReporteReclamacion => ({
   desgloseId: ID, proveedor: 'PASE', periodoDesde: '2026-08-05', periodoHasta: '2026-08-07', leyendas: LEYENDAS_RECLAMACION,
   resumen: {
-    lineas: 3, reclamables: 1, montoReclamable: 100, confirmadas: 1, sinDatos: 1, sinEvaluar: 0,
-    porMotivo: { gps_lejos_de_caseta: { n: 1, monto: 100 }, unidad_en_zona_no_autorizada: { n: 0, monto: 0 }, doble_cobro: { n: 0, monto: 0 } },
+    lineas: 3, reclamables: 1, montoReclamable: 100, confirmadas: 1, sinDatos: 1, sinEvaluar: 0, sinCurso: 0,
+    porMotivo: { gps_lejos_de_caseta: { n: 1, monto: 100 }, unidad_en_zona_no_autorizada: { n: 0, monto: 0 }, fuera_de_curso: { n: 0, monto: 0 }, doble_cobro: { n: 0, monto: 0 } },
   },
   cruces: [{
     indice: 1, fecha: '2026-08-05', hora: '11:30:00', caseta: 'Caseta Ejemplo Sur', casetaCatalogo: 'Caseta Ejemplo Sur', tag: 'IMDM10000002', unidad: 'C2-09', monto: 100,
     motivo: 'gps_lejos_de_caseta', confianza: 'alta', porQue: 'La unidad C2-09 no estaba en la caseta <b>x</b>.', distanciaM: 22000, radioCasetaM: 300,
-    evidencia: [{ en: '2026-08-05T17:28:00.000Z', lat: 19.2, lng: -99, minutosDelPase: -2, distanciaCasetaM: 22000 }], zona: null, duplicadoDeLinea: null,
+    evidencia: [{ en: '2026-08-05T17:28:00.000Z', lat: 19.2, lng: -99, minutosDelPase: -2, distanciaCasetaM: 22000 }], zona: null, duplicadoDeLinea: null, cursos: [],
   }],
   ...o,
 });
@@ -45,6 +45,26 @@ describe('la pantalla del reporte de reclamación', () => {
     expect(html).toContain('No se reclaman (sin evidencia en contra del cobro)');
     expect(html).toContain('Sin datos no es evidencia en contra de nadie');
     expect(html).toContain('La decisión de reclamar es de la flota');
+  });
+
+  it('cruce fuera de curso: el motivo con su etiqueta y confianza media, el porqué, la tarjeta del motivo y el aviso de líneas sin curso con su camino', () => {
+    const base = reporte();
+    const r = reporte({
+      resumen: { ...base.resumen, reclamables: 1, montoReclamable: 120, sinCurso: 3, porMotivo: { ...base.resumen.porMotivo, gps_lejos_de_caseta: { n: 0, monto: 0 }, fuera_de_curso: { n: 1, monto: 120 } } },
+      cruces: [{ ...base.cruces[0], monto: 120, motivo: 'fuera_de_curso', confianza: 'media', distanciaM: null, evidencia: [],
+        porQue: 'la unidad C2-08 cruzó Caseta Ejemplo Sur, fuera de su curso: esa caseta no está en su curso autorizado «Ruta de C2-08».',
+        cursos: [{ nombre: 'Ruta de C2-08', tipo: 'casetas' }] }],
+    });
+    const html = pintar('ok', r);
+    expect(html).toContain('Cruce fuera de curso · media');
+    expect(html).toContain('fuera de su curso: esa caseta no está en su curso autorizado «Ruta de C2-08»');
+    expect(html).toContain('Cruce fuera de curso</span>'); // la tarjeta del motivo en el resumen
+    expect(html).toContain('3 de 3 líneas no tienen curso declarado');
+    expect(html).toContain('Configuración, sección Cursos');
+  });
+
+  it('sin líneas sin curso no pinta el aviso de cursos', () => {
+    expect(pintar('ok')).not.toContain('no tienen curso declarado');
   });
 
   it('sin cruces reclamables lo dice y no pinta una tabla vacía con cara de reporte', () => {
