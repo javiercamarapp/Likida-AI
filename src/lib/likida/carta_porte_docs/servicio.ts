@@ -17,6 +17,8 @@ import { esErrorDePresupuesto } from '@/lib/llm/budget';
 import { estaApagado } from '../interruptores';
 import { MAX_BYTES_DOC, detectarFormato, prepararContenido, type FormatoDoc } from './contenido';
 import { extraerDocumento, type LlmExtractor, type ResultadoExtraccion } from './extractor';
+import { derivarHijos, evaluarDivision, MAX_EMBARQUES, type PlanDivision } from './multiembarque';
+import { elegirPerfil } from './perfiles';
 import { confianzaMinimaCritica, validarExtraccion, type Hallazgo, type ResultadoValidacion } from './validacion';
 import type { Extraccion } from './campos';
 import * as repo from './repo';
@@ -119,6 +121,8 @@ export async function validarDocumento(tenantId: string, doc: Pick<DocumentoFila
 
 export type ResultadoProceso =
   | { ok: true; estado: 'por_revisar'; origen: ResultadoExtraccion['origen']; nivel: number; costoUsd: number; listoParaAprobar: boolean }
+  /** El archivo traía N embarques: quedó `dividido` y cada embarque es un documento hijo `recibido` (lo lee el cron o «Procesar»). */
+  | { ok: true; estado: 'dividido'; embarques: number; hijos: string[]; yaExistian: number }
   | {
     ok: false; motivo: 'no_reclamable' | 'perdi_el_lease' | 'archivo' | 'ilegible' | 'presupuesto' | 'modelo'; mensaje: string; permanente: boolean;
     /** Solo con `motivo: 'presupuesto'`: qué techo se topó. `run` es el tope POR DOCUMENTO (culpa del archivo, cuenta como
@@ -138,6 +142,32 @@ function alcanceDePresupuesto(err: unknown): 'run' | 'tenant' | 'proposito' | un
 }
 
 const resumenError = (e: unknown): string => (e instanceof Error ? e.message : String(e)).replace(/\s+/g, ' ').slice(0, 300);
+
+/** Nombre de la ruta de Storage de un archivo de la flota (el mismo esquema que `recibirDocumento`). */
+const rutaDe = (tenantId: string, sha256: string): string => `${tenantId}/${sha256}`;
+
+type ResultadoDividir =
+  | { estado: 'ok'; resultado: Extract<ResultadoProceso, { ok: true; estado: 'dividido' }> }
+  | { estado: 'perdido' }
+  | { estado: 'sin_migracion' };
+
+/**
+ * Parte el documento: sube el archivo derivado de cada embarque (el mismo bytes ⇒ la misma huella ⇒ la misma ruta, así que
+ * un reintento tras una caída sobrescribe lo mismo y no deja basura distinta) y llama a la RPC atómica de la 0671.
+ */
+async function dividirEnHijos(tenantId: string, doc: DocumentoFila, version: number, plan: PlanDivision, ahora: Date): Promise<ResultadoDividir> {
+  const hijos = derivarHijos(plan, doc.nombreArchivo);
+  for (const h of hijos) await repo.subirArchivo(rutaDe(tenantId, h.sha256), h.bytes, 'text/csv');
+  const r = await repo.dividirDocumento(
+    tenantId, doc.id, version,
+    hijos.map((h) => ({ indice: h.indice, clave: h.clave, nombre: h.nombre, sha256: h.sha256, bytes: h.bytes.length, storageRuta: rutaDe(tenantId, h.sha256) })),
+    diasDespues(ahora, DIAS_RETENCION.recibido), diasDespues(ahora, DIAS_RETENCION.cerrado),
+  );
+  if (r.estado !== 'ok') return r;
+  const yaExistian = r.hijos.filter((h) => !h.creado).length;
+  logger.info('carta_porte_docs.dividido', { tenantId, documentoId: doc.id, embarques: hijos.length, yaExistian, columna: plan.origenColumna, avisos: plan.avisos });
+  return { estado: 'ok', resultado: { ok: true, estado: 'dividido', embarques: hijos.length, hijos: r.hijos.map((h) => h.documentoId), yaExistian } };
+}
 
 export async function procesarDocumento(
   tenantId: string, documentoId: string, deps: DepsServicio & { signal?: AbortSignal } = {},
@@ -182,6 +212,19 @@ export async function procesarDocumento(
     try { contenido = await prepararContenido(bytes, d.clase); } catch (e) { return await fallar('ilegible', resumenError(e), true); }
 
     const perfiles = await repo.listarPerfiles(tenantId);
+
+    // Un Excel/CSV con N embarques se PARTE en N documentos (0670-0671) antes de gastar un solo token: cada embarque es
+    // su propio documento, con su revisión, su aprobación y su viaje. Sin la migración cae a leer el primero con el aviso.
+    const { plan, exceso } = evaluarDivision(contenido, elegirPerfil(perfiles, contenido, doc.remitente, doc.clienteId).perfil);
+    if (plan) {
+      const div = await dividirEnHijos(tenantId, doc, version, plan, ahora);
+      if (div.estado === 'ok') return div.resultado;
+      if (div.estado === 'perdido') return { ok: false, motivo: 'perdi_el_lease', mensaje: 'Otra invocación terminó este documento primero.', permanente: false };
+      contenido.avisos.push(`El archivo trae ${plan.embarques.length} embarques pero esta base aún no sabe partirlos: se leyó el primero; sube el resto por separado.`);
+    } else if (exceso !== null) {
+      contenido.avisos.push(`El archivo trae ${exceso} embarques (más de ${MAX_EMBARQUES}): no se parte solo. Se leyó el primero; divide el archivo y súbelo por partes.`);
+    }
+
     const llm = await (deps.llm ?? llmPorDefecto)(tenantId, doc.canal);
     let r: ResultadoExtraccion;
     try {

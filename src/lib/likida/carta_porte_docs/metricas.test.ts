@@ -21,6 +21,14 @@ describe('calcularMetricas', () => {
     expect(m).toMatchObject({ aprobados: 4, sinCorreccion: 2, conCorreccion: 2, pctSinCorreccion: 50 });
   });
 
+  it('un archivo DIVIDIDO en embarques no cuenta: se miden sus hijos (ni infla «recibidos» ni diluye el costo por documento)', () => {
+    const m = calcularMetricas([
+      doc('padre', { estado: 'dividido', aprobadoEn: null, costoUsd: 0 }),
+      doc('h1', { costoUsd: 0.01 }), doc('h2', { costoUsd: 0.03 }), doc('h3', { estado: 'por_revisar', aprobadoEn: null, costoUsd: 0.02 }),
+    ], new Map());
+    expect(m).toMatchObject({ recibidos: 3, aprobados: 2, porRevisar: 1, costoUsdTotal: 0.06, costoUsdPorDocumento: 0.02 });
+  });
+
   it('solo cuentan los APROBADOS: los rechazados y por revisar no inflan el porcentaje', () => {
     const m = calcularMetricas([doc('a'), doc('r', { estado: 'rechazado' }), doc('p', { estado: 'por_revisar' }), doc('f', { estado: 'fallido' })], new Map());
     expect(m).toMatchObject({ recibidos: 4, aprobados: 1, rechazados: 1, porRevisar: 1, fallidos: 1, pctSinCorreccion: 100 });
