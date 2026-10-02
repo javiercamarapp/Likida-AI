@@ -19236,6 +19236,8 @@ begin
 
   raise exception E'CP_R15 reabre-rechazado=% reabre-fallido=% aprobado-purgado-sin-archivo=% replay-completo=% zombi-cerrado=% zombi-avisable=% vivo-intacto=% desborde-no-rompe=%   (esperado t / t / t / t / t / t / t / t)',
     reabre_r, reabre_f, sin_arch, replay, zombi, avisable, vivo, desb;
+end $$;
+
 -- ── 320. Peajes: los «cursos» (rutas autorizadas) se guardan atómicos, por flota y con la forma sana (mig. 0665) ──
 -- El cliente pidió reclamar los cruces fuera de curso. Un curso es la lista de casetas autorizadas de un convenio A→B o de una
 -- unidad (o, cuando llegue su formato, una polilínea con buffer). Lo que solo la base demuestra: el lote se guarda todo-o-nada
@@ -19297,6 +19299,8 @@ begin
 
   raise exception E'CURSOS_PEAJE_0665 lote-atomico=% idempotente=% orden-del-arreglo=% otra-flota-rebota=% fk-directa-rebota=% forma-sana=% deny-all=%   (esperado t / t / t / t / t / t / t)',
     atomico, idem, en_orden, ajena, directa, forma, deny;
+end $$;
+
 -- ── 325. Vigía, directores por nivel y respaldo por correo: sin repetidos, tope de 10, un correo por aviso y persona, arriendo y aislamiento (mig. 0673 + 0674) ──
 -- El aviso de escalamiento ya no va a UN teléfono sino a una lista por nivel (teléfono y/o correo), y si el WhatsApp no sale se manda por correo.
 -- Lo que solo la base demuestra: el mismo teléfono o correo (sin importar mayúsculas) no se repite DENTRO de un nivel de una flota pero sí en otro
