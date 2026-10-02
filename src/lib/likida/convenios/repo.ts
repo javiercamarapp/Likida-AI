@@ -23,11 +23,22 @@ export class ConveniosNoDisponibles extends Error {
 }
 
 const FALTA_ESQUEMA = new Set(['42P01', '42703', 'PGRST200', 'PGRST204', 'PGRST205']);
+/** `traerTodo` relanza solo el mensaje (sin el código): se reconoce por el texto de Postgres/PostgREST. */
+const MENSAJE_FALTA_ESQUEMA = /relation .* does not exist|column .* does not exist|schema cache/i;
+
+async function leerTodo(pagina: Parameters<typeof traerTodo<Fila>>[0], etiqueta: string): Promise<Fila[]> {
+  try {
+    return await traerTodo<Fila>(pagina, etiqueta);
+  } catch (e) {
+    if (e instanceof Error && MENSAJE_FALTA_ESQUEMA.test(e.message)) throw new ConveniosNoDisponibles();
+    throw e;
+  }
+}
 
 /** Desenvuelve la respuesta de PostgREST: error por valor → excepción; esquema ausente → `ConveniosNoDisponibles`. */
 function ok<T>(res: { data: T | null; error: { message: string; code?: string } | null }, consulta: string): T | null {
   if (res.error) {
-    if (res.error.code && FALTA_ESQUEMA.has(res.error.code)) throw new ConveniosNoDisponibles();
+    if ((res.error.code && FALTA_ESQUEMA.has(res.error.code)) || MENSAJE_FALTA_ESQUEMA.test(res.error.message)) throw new ConveniosNoDisponibles();
     throw new Error(`${consulta}: ${res.error.message}`);
   }
   return res.data;
@@ -64,19 +75,19 @@ export interface ConvenioFila extends ConvenioExportable {
 /** Los convenios de la flota con sus instrucciones. El dinero SOLO viene si `conFinanzas` (la base también lo niega). */
 export async function listarConvenios(tenantId: string, opciones: { conFinanzas: boolean }): Promise<ConvenioFila[]> {
   const admin = supabaseAdmin();
-  const convenios = await traerTodo<Fila>((d, h) => acotada(admin.from('cliente_convenio').select(COLS_CONVENIO, conteo(d))
+  const convenios = await leerTodo((d, h) => acotada(admin.from('cliente_convenio').select(COLS_CONVENIO, conteo(d))
     .eq('tenant_id', tenantId).order('nombre').order('id').range(d, h), 'convenios.lista') as never, 'convenios.lista');
   if (convenios.length === 0) return [];
 
   const [instrucciones, clientes, sitios, comerciales] = await Promise.all([
-    traerTodo<Fila>((d, h) => acotada(admin.from('convenio_instruccion').select(COLS_INSTRUCCION, conteo(d))
+    leerTodo((d, h) => acotada(admin.from('convenio_instruccion').select(COLS_INSTRUCCION, conteo(d))
       .eq('tenant_id', tenantId).eq('activa', true).order('orden').order('id').range(d, h), 'convenios.instrucciones') as never, 'convenios.instrucciones'),
-    traerTodo<Fila>((d, h) => acotada(admin.from('cliente').select('id, nombre', conteo(d))
+    leerTodo((d, h) => acotada(admin.from('cliente').select('id, nombre', conteo(d))
       .eq('tenant_id', tenantId).order('id').range(d, h), 'convenios.clientes') as never, 'convenios.clientes'),
-    traerTodo<Fila>((d, h) => acotada(admin.from('geocerca').select('id, nombre', conteo(d))
+    leerTodo((d, h) => acotada(admin.from('geocerca').select('id, nombre', conteo(d))
       .eq('tenant_id', tenantId).order('id').range(d, h), 'convenios.sitios') as never, 'convenios.sitios'),
     opciones.conFinanzas
-      ? traerTodo<Fila>((d, h) => acotada(admin.from('convenio_comercial').select('convenio_id, tarifa_modo, tarifa_precio, tarifa_moneda, requisitos_cobro', conteo(d))
+      ? leerTodo((d, h) => acotada(admin.from('convenio_comercial').select('convenio_id, tarifa_modo, tarifa_precio, tarifa_moneda, requisitos_cobro', conteo(d))
         .eq('tenant_id', tenantId).order('convenio_id').range(d, h), 'convenios.comercial') as never, 'convenios.comercial')
       : Promise.resolve([] as Fila[]),
   ]);
@@ -127,8 +138,8 @@ export type ResultadoImportar =
 export async function importarConvenios(tenantId: string, convenios: readonly ConvenioImportado[], opciones: { conFinanzas: boolean }): Promise<ResultadoImportar> {
   const admin = supabaseAdmin();
   const [clientes, sitios] = await Promise.all([
-    traerTodo<Fila>((d, h) => acotada(admin.from('cliente').select('id, nombre', conteo(d)).eq('tenant_id', tenantId).order('id').range(d, h), 'convenios.imp_clientes') as never, 'convenios.imp_clientes'),
-    traerTodo<Fila>((d, h) => acotada(admin.from('geocerca').select('id, nombre, codigo', conteo(d)).eq('tenant_id', tenantId).eq('activa', true).order('id').range(d, h), 'convenios.imp_sitios') as never, 'convenios.imp_sitios'),
+    leerTodo((d, h) => acotada(admin.from('cliente').select('id, nombre', conteo(d)).eq('tenant_id', tenantId).order('id').range(d, h), 'convenios.imp_clientes') as never, 'convenios.imp_clientes'),
+    leerTodo((d, h) => acotada(admin.from('geocerca').select('id, nombre, codigo', conteo(d)).eq('tenant_id', tenantId).eq('activa', true).order('id').range(d, h), 'convenios.imp_sitios') as never, 'convenios.imp_sitios'),
   ]);
   const clientePorNombre = new Map(clientes.map((c) => [llave(String(c.nombre)), String(c.id)] as const));
   const sitioPorClave = new Map<string, string>();
@@ -151,7 +162,7 @@ export async function importarConvenios(tenantId: string, convenios: readonly Co
   });
   if (errores.length > 0) return { ok: false, errores };
 
-  const previos = await traerTodo<Fila>((d, h) => acotada(admin.from('cliente_convenio').select('id, cliente_id, nombre', conteo(d)).eq('tenant_id', tenantId).order('id').range(d, h), 'convenios.imp_previos') as never, 'convenios.imp_previos');
+  const previos = await leerTodo((d, h) => acotada(admin.from('cliente_convenio').select('id, cliente_id, nombre', conteo(d)).eq('tenant_id', tenantId).order('id').range(d, h), 'convenios.imp_previos') as never, 'convenios.imp_previos');
   const existe = new Set(previos.map((p) => `${p.cliente_id}|${llave(String(p.nombre))}`));
 
   let creados = 0; let actualizados = 0; let nInstrucciones = 0;
@@ -176,7 +187,7 @@ export async function importarConvenios(tenantId: string, convenios: readonly Co
       nInstrucciones += escritas.length;
       // El archivo manda: lo que ya no trae se quita (después de escribir lo nuevo, nunca antes).
       const conservar = new Set(escritas.map((e) => String(e.id)));
-      const actuales = await traerTodo<Fila>((d, h) => acotada(admin.from('convenio_instruccion').select('id', conteo(d))
+      const actuales = await leerTodo((d, h) => acotada(admin.from('convenio_instruccion').select('id', conteo(d))
         .eq('tenant_id', tenantId).eq('convenio_id', convenioId).order('id').range(d, h), 'convenios.imp_actuales') as never, 'convenios.imp_actuales');
       const sobran = actuales.map((a) => String(a.id)).filter((id) => !conservar.has(id));
       if (sobran.length > 0) {
@@ -249,10 +260,10 @@ export async function ligarConvenioAViaje(tenantId: string, viajeId: string, hoy
   const clienteId = s(v.cliente_id);
   if (!clienteId) return { estado: 'sin_convenio', motivo: 'el viaje no tiene cliente' };
 
-  const convenios = await traerTodo<Fila>((d, h) => acotada(admin.from('cliente_convenio').select(COLS_CONVENIO, conteo(d))
+  const convenios = await leerTodo((d, h) => acotada(admin.from('cliente_convenio').select(COLS_CONVENIO, conteo(d))
     .eq('tenant_id', tenantId).eq('cliente_id', clienteId).eq('activo', true).order('id').range(d, h), 'convenios.del_cliente') as never, 'convenios.del_cliente');
   if (convenios.length === 0) return { estado: 'sin_convenio', motivo: 'el cliente no tiene convenios' };
-  const insts = await traerTodo<Fila>((d, h) => acotada(admin.from('convenio_instruccion').select(COLS_INSTRUCCION, conteo(d))
+  const insts = await leerTodo((d, h) => acotada(admin.from('convenio_instruccion').select(COLS_INSTRUCCION, conteo(d))
     .eq('tenant_id', tenantId).eq('activa', true).in('convenio_id', convenios.map((c) => String(c.id))).order('orden').order('id').range(d, h), 'convenios.ins_del_cliente') as never, 'convenios.ins_del_cliente');
   const porConvenio = new Map<string, Instruccion[]>();
   for (const f of insts) {
