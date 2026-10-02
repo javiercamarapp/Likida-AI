@@ -24,6 +24,8 @@ import { normalizarNombre } from './formatos';
 //     error con su fila, no un parecido «cercano».
 //   · Re-importar es seguro: la llave es el código de SU sistema (la RPC 0665 actualiza, no duplica). Un curso que ya no viene
 //     en el archivo NO se borra (se desactiva a mano): seguir autorizando de más solo deja de reclamar, nunca reclama de más.
+//   · Re-importar RESPETA la baja manual (0678): un curso que la flota desactivó sigue desactivado aunque vuelva en el archivo (se
+//     actualizan sus datos, no su `activo`). Para reactivarlo se hace a mano, el mismo gesto que lo desactivó.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const MAX_DETALLES = 30;

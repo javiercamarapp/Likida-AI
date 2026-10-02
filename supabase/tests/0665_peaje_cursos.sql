@@ -151,8 +151,11 @@ set local role authenticated;
 do $$
 declare n int;
 begin
-  select count(*) into n from public.peaje_curso;
-  if n <> 0 then raise exception '0665(h): authenticated leyó % cursos', n; end if;
+  -- Desde la 0678 el revoke explícito corta el SELECT de raíz (permission denied); antes bastaba la RLS sin políticas (0 filas).
+  begin
+    select count(*) into n from public.peaje_curso;
+    if n <> 0 then raise exception '0665(h): authenticated leyó % cursos', n; end if;
+  exception when insufficient_privilege then null; end;
   begin
     insert into public.peaje_curso (tenant_id, codigo, nombre, tipo, unidad_id) values ('66500000-0000-4000-8000-0000000000a1', 'X', 'X', 'casetas', '66500000-0000-4000-8000-0000000000e1');
     raise exception '0665(h): authenticated insertó un curso';

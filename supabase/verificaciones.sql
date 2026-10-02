@@ -19429,3 +19429,36 @@ begin
   raise exception E'VIGIA_DUENO_0677 dueno-lee-lo-suyo=% dueno-no-ve-otra-flota=% encargado-no-lee=% contador-no-lee=% anon-sin-funcion=%   (esperado t / t / t / t / t)',
     dueno, otra, encargado, contador, anon;
 end $$;
+
+-- ── 336. Peajes, re-importar un curso no reactiva el que la flota desactivó, y los cursos ya no tienen grants abiertos (mig. 0678) ──
+-- La 0665 hacía `activo = true` en el `on conflict` de `peaje_curso_reemplazar`: el curso que la flota dio de baja a mano volvía a encenderse con el
+-- siguiente import. Ahora el import actualiza los datos y RESPETA `activo` (uno nuevo nace activo). Además `peaje_curso` y `peaje_curso_caseta`
+-- pierden los grants por defecto de Supabase: solo service_role las toca.
+-- Esperado: CURSOS_BAJA_0678 nuevo-nace-activo=t reimport-actualiza=t baja-respetada=t activo-sigue-activo=t sin-grants-abiertos=t
+do $$
+declare
+  ta uuid; ua uuid; k1 uuid; r jsonb; nuevo boolean := false; actualiza boolean := false; baja boolean := false; sigue boolean := false; grants boolean := true; t text; p text;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0678 A') returning id into ta;
+  insert into unidad (tenant_id, numero_economico) values (ta, 'ZZZ-0678-A') returning id into ua;
+  insert into peaje_caseta (tenant_id, nombre, nombre_norm, lat, lng) values (ta, 'ZZZ 0678 K1', 'zzz 0678 k1', 19.4, -99.1) returning id into k1;
+
+  r := peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-C1', 'nombre', 'Ruta vieja', 'tipo', 'casetas', 'unidad_id', ua, 'casetas', jsonb_build_array(k1))));
+  nuevo := r->>'estado' = 'ok' and (select activo from peaje_curso where tenant_id = ta and codigo = 'ZZZ-C1');
+  update peaje_curso set activo = false where tenant_id = ta and codigo = 'ZZZ-C1';
+  r := peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-C1', 'nombre', 'Ruta nueva', 'tipo', 'casetas', 'unidad_id', ua, 'casetas', jsonb_build_array(k1))));
+  actualiza := (r->>'actualizados')::int = 1 and (select nombre from peaje_curso where tenant_id = ta and codigo = 'ZZZ-C1') = 'Ruta nueva';
+  baja := not (select activo from peaje_curso where tenant_id = ta and codigo = 'ZZZ-C1');
+  perform peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-C2', 'nombre', 'Otro', 'tipo', 'casetas', 'unidad_id', ua, 'casetas', jsonb_build_array(k1))));
+  perform peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-C2', 'nombre', 'Otro 2', 'tipo', 'casetas', 'unidad_id', ua, 'casetas', jsonb_build_array(k1))));
+  sigue := (select activo from peaje_curso where tenant_id = ta and codigo = 'ZZZ-C2');
+
+  foreach t in array array['public.peaje_curso', 'public.peaje_curso_caseta'] loop
+    foreach p in array array['select', 'insert', 'update', 'delete'] loop
+      if has_table_privilege('anon', t, p) or has_table_privilege('authenticated', t, p) or has_table_privilege('public', t, p) then grants := false; end if;
+    end loop;
+  end loop;
+
+  raise exception E'CURSOS_BAJA_0678 nuevo-nace-activo=% reimport-actualiza=% baja-respetada=% activo-sigue-activo=% sin-grants-abiertos=%   (esperado t / t / t / t / t)',
+    nuevo, actualiza, baja, sigue, grants;
+end $$;
