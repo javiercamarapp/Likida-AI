@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { armarEscalacion, armarRecordatorio, armarSolicitud } from './solicitudes';
+import { armarEscalacion, armarEscalacionSenalVida, armarRecordatorio, armarSenalVida, armarSolicitud } from './solicitudes';
 import { plantillaDeCatalogo, textoRenderizado, validarCatalogo, variablesDeTexto } from '@/lib/meta/plantillas_catalogo';
 import { armarComponentesPlantilla } from '@/lib/meta/plantilla_payload';
 import { hitoVacio, viajeBase } from './memoria.fixture';
@@ -125,6 +125,41 @@ describe('el catálogo sigue siendo válido con las plantillas nuevas del Agente
     expect(validarCatalogo()).toEqual([]);
     for (const n of ['conductor_llegada_carga_sin_cita_v1', 'conductor_solicitud_regreso_v1']) {
       expect(plantillaDeCatalogo(n)?.llamador).toBe('src/lib/likida/conductor/ejecutor.ts');
+    }
+  });
+});
+
+describe('sin señal de vida (P2): el «¿sigues bien?» y el aviso al jefe', () => {
+  it('el aviso al chofer: texto y plantilla coinciden, con los TRES botones del viaje, en los dos niveles y los dos motivos', () => {
+    for (const nivel of [1, 2] as const) for (const motivo of ['gps_obsoleto', 'gps_detenido'] as const) {
+      const m = armarSenalVida(viaje, nivel, motivo, 75);
+      coinciden(m);
+      expect(m.botones.map((b) => b.titulo)).toEqual(['Sí, estoy', 'Voy a cargar', 'Estoy bien']);
+      expect(m.plantilla.nombre).toBe('conductor_senal_vida_v1');
+    }
+  });
+
+  it('dice QUÉ se ve sin culpar, con el tiempo en palabras; el segundo aviso lo dice', () => {
+    expect(armarSenalVida(viaje, 1, 'gps_obsoleto', 75).texto).toContain('no recibimos la señal del GPS de tu unidad desde hace 1 hora y 15 minutos');
+    expect(armarSenalVida(viaje, 1, 'gps_detenido', 60).texto).toContain('tu unidad lleva 1 hora detenida fuera de un sitio');
+    expect(armarSenalVida(viaje, 2, 'gps_obsoleto', 75).texto).toContain('segundo aviso: no recibimos');
+    expect(armarSenalVida(viaje, 1, 'gps_obsoleto', 75).texto).not.toContain('segundo aviso');
+  });
+
+  it('el aviso al jefe: texto y plantilla coinciden, con «Ya lo atiendo» (el mismo botón del jefe) y la ubicación', () => {
+    const m = armarEscalacionSenalVida(viaje, 'gps_obsoleto', 80, 'hace 70 min: https://maps.google.com/?q=20.70000,-103.40000');
+    coinciden(m);
+    expect(m.botones.map((b) => b.id)).toEqual([`jefe_atiendo:${V}`]);
+    expect(m.texto).toContain('Se le avisó dos veces sin respuesta');
+    expect(m.texto).toContain('maps.google.com');
+    expect(armarEscalacionSenalVida(viaje, 'gps_detenido', 90, 'x').texto).toContain('detenida fuera de un sitio');
+  });
+
+  it('las dos plantillas nuevas están en el catálogo, declaran su llamador y el catálogo sigue válido', () => {
+    expect(validarCatalogo()).toEqual([]);
+    for (const n of ['conductor_senal_vida_v1', 'aviso_jefe_senal_vida_v1']) {
+      expect(plantillaDeCatalogo(n)?.llamador).toBe('src/lib/likida/conductor/senal_vida.ts');
+      expect(plantillaDeCatalogo(n)?.estado).toBe('nueva_para_aprobacion');
     }
   });
 });

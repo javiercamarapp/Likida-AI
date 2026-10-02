@@ -358,6 +358,33 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
     textoVerificado: true, estado: 'nueva_para_aprobacion',
   },
   {
+    nombre: 'conductor_senal_vida_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
+    proposito: 'Preguntarle al chofer «¿sigues bien?» cuando el GPS de su tractor en tránsito queda sin reportar o detenido fuera de un sitio (primer y segundo aviso). Apagado por omisión: lo enciende cada flota en la configuración del Conductor.',
+    llamador: 'src/lib/likida/conductor/senal_vida.ts',
+    cuerpo: 'Hola {{1}}, sobre tu viaje {{2}}: {{3}}. ¿Sigues bien? Toca un botón para avisarnos.',
+    ejemplos: ['Juan', 'F-1042', 'no recibimos la señal del GPS de tu unidad desde hace 1 hora'],
+    variables: ['nombre del chofer', 'folio', 'qué se ve (una línea, con «segundo aviso:» al principio en el segundo)'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Sí, estoy', payloadPrefijo: 'senal_vida_estoy' },
+      { tipo: 'QUICK_REPLY', texto: 'Voy a cargar', payloadPrefijo: 'senal_vida_cargar' },
+      { tipo: 'QUICK_REPLY', texto: 'Estoy bien', payloadPrefijo: 'senal_vida_bien' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'aviso_jefe_senal_vida_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
+    proposito: 'Escalación al jefe de tráfico: el chofer de un tractor en tránsito no contestó los dos avisos de «sin señal de vida». Apagado por omisión (misma perilla que el aviso al chofer).',
+    llamador: 'src/lib/likida/conductor/senal_vida.ts',
+    cuerpo: 'Atención, jefe de tráfico: no hay señal de vida de {{1}} en el viaje {{2}} ({{3}}). Se le avisó dos veces sin respuesta. Última ubicación conocida: {{4}}. Llámale o revisa el tablero.',
+    ejemplos: ['Juan Pérez', 'F-1042', 'el GPS no reporta desde hace 1 hora', 'hace 52 min: https://maps.google.com/?q=20.67000,-103.35000'],
+    variables: ['chofer', 'folio', 'qué se ve', 'última ubicación conocida'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Ya lo atiendo', payloadPrefijo: 'jefe_atiendo' },
+      { tipo: 'URL', texto: 'Abrir tablero', url: 'https://app.likida.ai/dashboard/despacho' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
     nombre: 'operador_invitacion_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'onboarding_operador',
     proposito: 'Invitar al chofer recién dado de alta (alta masiva o ficha) a escribirle a Likida: inicia su conversación y abre la ventana de 24 h. Solo se manda si la flota lo confirma.',
     llamador: 'src/lib/likida/invitacion_operador.ts',

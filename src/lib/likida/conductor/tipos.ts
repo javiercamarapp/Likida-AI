@@ -113,7 +113,13 @@ export const PREFIJO_BOTON = {
   recordatorioProblema: 'recordatorio_problema',
   pedirUbicacion: 'pedir_ubicacion',
   jefeAtiendo: 'jefe_atiendo',
+  /** P2 (0636): las tres respuestas al «¿sigues bien?» cuando el GPS de un tractor en tránsito se calla. */
+  senalVidaEstoy: 'senal_vida_estoy',
+  senalVidaCargar: 'senal_vida_cargar',
+  senalVidaBien: 'senal_vida_bien',
 } as const;
+
+export type RespuestaSenalVida = 'estoy' | 'voy_a_cargar' | 'estoy_bien';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

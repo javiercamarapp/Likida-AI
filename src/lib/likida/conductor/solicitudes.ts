@@ -151,3 +151,38 @@ export function armarEscalacion(
   };
 }
 
+
+// ── Sin señal de vida (P2, 0636) ────────────────────────────────────────────
+
+export type MotivoSenalVida = 'gps_obsoleto' | 'gps_detenido';
+
+/** Una línea que dice QUÉ se ve, sin culpar a nadie (parámetro de plantilla: sin saltos). */
+export function situacionSenalVida(motivo: MotivoSenalVida, minutos: number): string {
+  const t = textoTiempo(minutos);
+  return motivo === 'gps_obsoleto' ? `no recibimos la señal del GPS de tu unidad desde hace ${t}` : `tu unidad lleva ${t} detenida fuera de un sitio`;
+}
+
+/** El «¿sigues bien?» al chofer: nivel 1 = primer aviso, 2 = segundo. Tres botones: «Sí, estoy», «Voy a cargar», «Estoy bien». */
+export function armarSenalVida(v: ViajeContexto, nivel: 1 | 2, motivo: MotivoSenalVida, minutos: number): MensajeSaliente {
+  const nombre = primerNombre(v.operadorNombre);
+  const folio = folioDe(v);
+  const situacion = (nivel === 2 ? 'segundo aviso: ' : '') + situacionSenalVida(motivo, minutos);
+  const P = PREFIJO_BOTON;
+  return {
+    texto: `Hola ${nombre}, sobre tu viaje ${folio}: ${situacion}. ¿Sigues bien? Toca un botón para avisarnos.`,
+    botones: [b(P.senalVidaEstoy, v.id, 'Sí, estoy'), b(P.senalVidaCargar, v.id, 'Voy a cargar'), b(P.senalVidaBien, v.id, 'Estoy bien')],
+    plantilla: { nombre: 'conductor_senal_vida_v1', ...opcionesDeEnvio('conductor_senal_vida_v1', { cuerpo: [nombre, folio, situacion], idsBotones: v.id }) },
+  };
+}
+
+/** El aviso al jefe de tráfico cuando el chofer no contestó los dos avisos. Con el mismo botón «Ya lo atiendo». */
+export function armarEscalacionSenalVida(v: ViajeContexto, motivo: MotivoSenalVida, minutos: number, ubicacion: string): MensajeSaliente {
+  const chofer = (v.operadorNombre ?? 'El chofer').replace(/\s+/g, ' ').trim().slice(0, 60) || 'El chofer';
+  const folio = folioDe(v);
+  const porque = motivo === 'gps_obsoleto' ? `el GPS no reporta desde hace ${textoTiempo(minutos)}` : `la unidad lleva ${textoTiempo(minutos)} detenida fuera de un sitio`;
+  return {
+    texto: `Atención, jefe de tráfico: no hay señal de vida de ${chofer} en el viaje ${folio} (${porque}). Se le avisó dos veces sin respuesta. Última ubicación conocida: ${ubicacion}. Llámale o revisa el tablero.`,
+    botones: [b(PREFIJO_BOTON.jefeAtiendo, v.id, 'Ya lo atiendo')],
+    plantilla: { nombre: 'aviso_jefe_senal_vida_v1', ...opcionesDeEnvio('aviso_jefe_senal_vida_v1', { cuerpo: [chofer, folio, porque, ubicacion], idsBotones: v.id }) },
+  };
+}

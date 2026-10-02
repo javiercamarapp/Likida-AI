@@ -6,12 +6,13 @@ import { interpretarConLlm } from './llm';
 import { decidir, hitoActivo, type Decision } from './maquina';
 import { mensajeParaChofer, type ContextoMensaje, type Salida } from './mensajes';
 import {
-  adjuntarUbicacion, asegurarHitos, cargarHitos, guardarContacto, leerConfigConductor, marcarEscalacionAtendida, marcarSinContacto,
-  posponerHito, registrarEvento, registrarHito, retirarHitos, sincronizarLegado, viajeDelOperador,
+  adjuntarUbicacion, asegurarHitos, cargarHitos, cerrarEpisodioPorJefe, guardarContacto, leerConfigConductor, marcarEscalacionAtendida, marcarSinContacto,
+  posponerHito, registrarEvento, registrarHito, responderEpisodioSenalVida, retirarHitos, sincronizarLegado, viajeDelOperador,
   type ResultadoEscritura, type ViajeContexto,
 } from './repo';
 import { tenantDelViaje } from './trabajo';
-import { leerBotonConductor, PREFIJO_BOTON, type HitoFila, type FuenteHito, type TipoEvidencia, type TipoHito } from './tipos';
+import { leerBotonConductor, PREFIJO_BOTON, type HitoFila, type FuenteHito, type RespuestaSenalVida, type TipoEvidencia, type TipoHito } from './tipos';
+import { silencioDeRespuesta } from './senal_vida';
 import { escalarPorProblema, puertosReales } from './ejecutor';
 import { avisarOficinaDeHito } from './avisos_oficina';
 import { puedeAcusar } from './escalamiento';
@@ -59,6 +60,8 @@ export interface DepsAtender {
   adjuntarUbicacion: typeof adjuntarUbicacion;
   cargarHitos(tenantId: string, viajeId: string): Promise<HitoFila[]>;
   guardarEvidencia: typeof guardarEvidencia;
+  /** P2 (0636): el chofer contestó un botón del «¿sigues bien?». Opcional: las pruebas que no lo ejercen no lo declaran. */
+  responderSenalVida?(tenantId: string, viajeId: string, respuesta: RespuestaSenalVida, ahora: Date): Promise<'cerrado' | 'sin_episodio' | 'fallo'>;
 }
 
 export const depsReales: DepsAtender = {
@@ -81,7 +84,18 @@ export const depsReales: DepsAtender = {
   adjuntarUbicacion,
   cargarHitos,
   guardarEvidencia,
+  responderSenalVida: (tenantId, viajeId, respuesta, ahora) => responderEpisodioSenalVida(tenantId, viajeId, respuesta, silencioDeRespuesta(respuesta), ahora),
 };
+
+/** Lo que se le contesta al chofer tras tocar un botón de la señal de vida. */
+export function textoRespuestaSenalVida(respuesta: RespuestaSenalVida, resultado: 'cerrado' | 'sin_episodio' | 'fallo', folio: string | null): string {
+  if (resultado === 'fallo') return 'No pude anotarlo ahorita. Intenta de nuevo en un momento. 🙏';
+  if (resultado === 'sin_episodio') return 'Ese aviso ya no está vigente. 👍';
+  const viaje = folio ? ` del viaje ${folio}` : '';
+  if (respuesta === 'voy_a_cargar') return `Anotado ✅ Gracias por avisar. Si el GPS sigue sin reportar, te vuelvo a preguntar en una hora${viaje}.`;
+  if (respuesta === 'estoy_bien') return 'Me da gusto. Anotado ✅ Si tienes algún problema, avísale directo a tu jefe de tráfico.';
+  return `Gracias, anotado ✅ Seguimos al pendiente${viaje}.`;
+}
 
 export interface EntradaAtender {
   tenantId: string;
@@ -152,6 +166,11 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
     const mensajeEn = e.mensajeEn && !Number.isNaN(e.mensajeEn.getTime()) ? e.mensajeEn : ahora;
 
     // ── Lo que NO cambia hitos ─────────────────────────────────────────────
+    if (interp.intencion.clase === 'senal_vida') {
+      const respuesta = interp.intencion.respuesta;
+      const resultado = await (deps.responderSenalVida ?? depsReales.responderSenalVida!)(e.tenantId, viaje.id, respuesta, ahora);
+      return { mensajes: [{ texto: textoRespuestaSenalVida(respuesta, resultado, viaje.folio) }] };
+    }
     if (interp.intencion.clase === 'pedir_ubicacion') {
       const ok = await deps.solicitarUbicacion(e.telefono, '📍 Toca el botón para compartir tu ubicación y la anoto en tu viaje.');
       return { mensajes: ok ? [] : [{ texto: 'No pude abrir la ubicación. Mándame tu pin desde el clip 📎 → Ubicación. 🙏' }] };
@@ -329,6 +348,8 @@ export interface DepsAcuse {
   puedeAcusar(tenantId: string, telefono: string): Promise<boolean>;
   marcar(tenantId: string, viajeId: string, ahora: Date): Promise<HitoFila[]>;
   evento: typeof registrarEvento;
+  /** P2 (0636): el «Ya lo atiendo» también cierra el episodio de «sin señal de vida» del viaje. Opcional. */
+  cerrarSenalVida?(tenantId: string, viajeId: string, ahora: Date): Promise<number>;
 }
 
 const depsAcuseReales: DepsAcuse = {
@@ -341,6 +362,7 @@ const depsAcuseReales: DepsAcuse = {
   puedeAcusar,
   marcar: marcarEscalacionAtendida,
   evento: registrarEvento,
+  cerrarSenalVida: cerrarEpisodioPorJefe,
 };
 
 /** `null` = el texto no es un acuse de escalación. Un número ajeno NO puede acusar viajes de otra flota. */
@@ -355,7 +377,8 @@ export async function atenderAcuseJefe(
     if (!v || !(await deps.puedeAcusar(v.tenantId, telefono))) return 'No tengo ese aviso asignado a este número.';
     const marcados = await deps.marcar(v.tenantId, b.viajeId, ahora);
     for (const h of marcados) await deps.evento(h, 'atendido', {});
-    return marcados.length > 0
+    const episodios = deps.cerrarSenalVida ? await deps.cerrarSenalVida(v.tenantId, b.viajeId, ahora).catch(() => 0) : 0;
+    return marcados.length > 0 || episodios > 0
       ? 'Anotado ✅ lo marqué como atendido; ya no insisto por este viaje.'
       : 'Ya estaba atendido o el chofer ya respondió. 👍';
   } catch (err) {
