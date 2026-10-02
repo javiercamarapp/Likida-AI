@@ -236,3 +236,11 @@ Mismo criterio y pipeline que el POD: el **caption** decide qué papel es (`sell
 - Concurrencia: lo nuevo de la 0385 (veredictos, captura/atención de oficina, importador) **sí** se probó con sesiones reales en paralelo (`0385_conductor_concurrencia.sh`). Sigue **sin** probarse así el claim de avisos de la 0380 (`viaje_hito_aviso`): su garantía es un unique y se probó en una sola sesión y con concurrencia simulada en memoria.
 - `ci-postgres.yml`: se agregaron las dos líneas SQL; no se ejecutó CI (sin push, por instrucción).
 - Aplicar la 0385 (y la 0380) a la base real requiere autorización y respaldo previo; hoy solo se aplicó a una base local desechable.
+
+## Reparto justo del cron y viajes vencidos (0661, P9)
+
+* **El problema:** el cron leía los 400 viajes abiertos más viejos de TODAS las flotas juntas. Una flota grande se comía la pasada y las chicas (o los viajes de hoy) no se atendían nunca, sin aviso.
+* **Ahora:** `viajes_activos_repartidos` reparte por turnos (el más viejo de cada flota, luego el segundo de cada una…) hasta llenar el tope; el turno sobrante rota cada 5 minutos. Lo usan el motor, el ciclo GPS, la señal de vida y las alertas, que leen por `leerViajesActivos`. Si la lista llega al tope el cron lo dice (`conductor.viajes_truncados`, `viajesTruncados` en el latido).
+* **Viajes abiertos viejos:** los que se aceptaron hace más de 30 días (`DIAS_VIAJE_ABIERTO_VENCIDO`) ya no entran a la lista, y `cerrar_hitos_viajes_vencidos` marca `omitido` (`viaje_abierto_vencido`) los hitos que seguían esperando. **El viaje no se toca** (cerrarlo es decisión del negocio): la oficina sigue pudiendo capturar el hito a mano. El plazo de 30 días es un supuesto.
+* **Sin la 0661** el código lee como antes (los más viejos en bloque) y no cierra nada.
+* **Claim de avisos (0380):** `supabase/tests/0380_conductor_claim_concurrencia.sh` ejerce con sesiones reales el `INSERT … ON CONFLICT DO NOTHING` de `reclamarAviso` (un ganador por `(hito, ciclo, clase, nivel)`, lo cerrado no se libera). Pruebas del reparto: `supabase/tests/0661_conductor_reparto_justo.sql`, bloque 306 de `verificaciones.sql` y `conductor/trabajo_reparto.test.ts`.

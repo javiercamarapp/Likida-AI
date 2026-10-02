@@ -9,7 +9,7 @@ import {
   anotarAvisoAlChofer, cerrarAvisoReclamado, leerConfigConductor, liberarAvisoReclamado, marcarHitoEscalado, reclamarAviso,
   registrarEvento, type EventoHito, type ViajeContexto,
 } from './repo';
-import { contarEnviadosPorChofer, leerAvisosDeHitos, leerHitosDeViajes, leerViajesActivos, sembrarHitos } from './trabajo';
+import { cerrarHitosDeViajesVencidos, contarEnviadosPorChofer, leerAvisosDeHitos, leerHitosDeViajes, leerViajesActivos, sembrarHitos } from './trabajo';
 import { planificar, type AccionPlan, type AvisoReclamado, type MotivoNada } from './planificador';
 import { armarEscalacion, armarRecordatorio, armarSolicitud, type MensajeSaliente, type MotivoEscalacion } from './solicitudes';
 import type { HitoFila } from './tipos';
@@ -67,6 +67,8 @@ export interface CierreAviso {
 
 export interface PuertosConductor {
   sembrar(limite: number): Promise<number>;
+  /** Omite los hitos pendientes de los viajes abiertos desde hace demasiado (0661). Opcional: los puertos de prueba no lo traen. */
+  cerrarVencidos?(): Promise<number>;
   viajesActivos(limite: number): Promise<ViajeContexto[]>;
   hitosDe(viajeIds: string[]): Promise<HitoFila[]>;
   avisosDe(hitoIds: string[]): Promise<Array<AvisoReclamado & { hitoId: string }>>;
@@ -86,6 +88,10 @@ export interface PuertosConductor {
 
 export interface ResultadoConductor {
   sembrados: number;
+  /** Hitos pendientes de viajes abiertos vencidos que esta pasada dejó de perseguir (0661). */
+  vencidosCerrados?: number;
+  /** `true` = la lista de trabajo llegó al tope: había más viajes que atender (se atienden en pasadas siguientes, repartidos). */
+  viajesTruncados?: boolean;
   viajes: number;
   solicitudes: number;
   recordatorios: number;
@@ -123,9 +129,21 @@ export async function correrConductor(
   const salta = (m: MotivoNada) => { r.saltados[m] = (r.saltados[m] ?? 0) + 1; };
 
   r.sembrados = await p.sembrar(500);
+  if (p.cerrarVencidos) {
+    // Limpiar lo vencido es higiene: si falla, la pasada sigue (se dice, no se calla).
+    try { r.vencidosCerrados = await p.cerrarVencidos(); } catch (e) {
+      r.fallos.push(`cerrar vencidos: ${e instanceof Error ? e.message : String(e)}`);
+      logger.error('conductor.cerrar_vencidos_fallo', { err: e instanceof Error ? e.message : String(e) });
+    }
+  }
 
   const viajes = await p.viajesActivos(TOPE_VIAJES_POR_PASADA);
   r.viajes = viajes.length;
+  if (viajes.length >= TOPE_VIAJES_POR_PASADA) {
+    // El «tope mudo»: antes la lista se cortaba sin decirlo. Ahora el corte es un reparto entre flotas y además se avisa.
+    r.viajesTruncados = true;
+    logger.warn('conductor.viajes_truncados', { tope: TOPE_VIAJES_POR_PASADA });
+  }
   if (viajes.length === 0) return r;
 
   const hitos = await p.hitosDe(viajes.map((v) => v.id));
@@ -302,6 +320,7 @@ export async function escalarPorProblema(
 export function puertosReales(): PuertosConductor {
   return {
     sembrar: sembrarHitos,
+    cerrarVencidos: cerrarHitosDeViajesVencidos,
     viajesActivos: leerViajesActivos,
     hitosDe: leerHitosDeViajes,
     avisosDe: leerAvisosDeHitos,
