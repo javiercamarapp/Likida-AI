@@ -83,11 +83,11 @@ export const CADENCIA_MS: Record<CronId, number> = {
   // el grano de 5 min es lo que tarda un recordatorio en salir tras vencer su
   // minuto, sin que dos corridas cercanas lo dupliquen (el claim lo impide).
   'conductor-hitos': 300_000,
-  // El barrido del Vigía de servicio al cliente (0400). Cada 5 minutos: el SLA de
-  // respuesta se mide en minutos (5 como mínimo configurable) y un cliente molesto
-  // no puede esperar a que el cron de la hora vuelva a pasar. Sin modelo: solo mide
-  // relojes, escala por niveles y purga lo vencido.
-  vigia: 300_000,
+  // El barrido del Vigía de servicio al cliente (0400). CADA MINUTO: el pedido del cliente es avisar al gerente cuando
+  // alguien lleva más de 10 min sin respuesta; con una pasada cada 5 min la alerta salía entre el minuto 10 y el 15, con
+  // una por minuto sale entre el 10 y el 11. Sin modelo: solo mide relojes y escala por niveles; lo que no corre contra
+  // el reloj de un cliente (atorados, ciclos muertos, retención) solo corre en los minutos múltiplo de 5.
+  vigia: 60_000,
   // La entrega de facturas aprobadas al contador (0531): arma el lote del día y reintenta con backoff
   // (15 min es el primer escalón); cada 15 minutos basta y no duplica (claim + lease + llave de idempotencia).
   'buzon-entrega': 15 * 60_000,

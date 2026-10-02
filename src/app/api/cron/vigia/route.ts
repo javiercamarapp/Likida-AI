@@ -16,14 +16,17 @@ export const maxDuration = 60;
 // ═══════════════════════════════════════════════════════════════════════════
 // EL BARRIDO DEL VIGÍA DE SERVICIO AL CLIENTE (0400).
 //
-// Cada 5 minutos, SIN modelo:
+// Cada MINUTO, SIN modelo (la alerta de 10 min del cliente crítico sale entre el minuto 10 y el 11; con una pasada cada 5 min
+// salía hasta el 15). Es barato: una lectura acotada que casi siempre vuelve vacía, y los avisos están sellados por clave.
+// Lo que no corre contra el reloj de un cliente (atorados, ciclos muertos, retención) solo corre en las pasadas de minuto
+// múltiplo de 5. Qué hace cada pasada:
 //   · mide el tiempo que cada cliente lleva sin respuesta contra el SLA de SU flota
 //     y escala por niveles (1: gerente responsable, 2: dueño), una sola vez por
 //     ciclo (sello en `vigia_evento.clave`);
 //   · sube la molestia por el tiempo aunque el cliente no vuelva a escribir;
 //   · marca como fallidos los «aprobados» que se quedaron sin enviar (no se
 //     reenvían a ciegas: podrían haber salido);
-//   · corre la retención (`vigia_purgar`).
+//   · cierra los hilos de ciclo muerto (7 días) y corre la retención (`vigia_purgar`).
 //
 // Respeta la palanca `global` y falla CERRADO si no puede leerla, igual que sus
 // hermanos. No tiene palanca propia: cada flota enciende o apaga el agente en
@@ -55,7 +58,10 @@ export async function GET(req: Request) {
   }
 
   try {
-    const r = await barridoVigia(crearDepsVigia(), { vencePorReloj: inicio + maxDuration * 1000 - MARGEN_MS });
+    const r = await barridoVigia(crearDepsVigia(), {
+      vencePorReloj: inicio + maxDuration * 1000 - MARGEN_MS,
+      mantenimiento: new Date(inicio).getUTCMinutes() % 5 === 0,
+    });
     logger.info('cron.vigia.ok', { ...r });
     // Trabajo que NO terminó (corte por reloj, envíos fallidos, atorados) no es «ok» limpio.
     const parcial = r.cortadoPorReloj || r.fallosEnvio > 0 || r.atorados > 0;
