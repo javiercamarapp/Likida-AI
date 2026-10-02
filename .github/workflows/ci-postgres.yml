@@ -247,6 +247,7 @@ jobs:
           PGUSER=postgres bash supabase/tests/0643_liquidacion_aviso_discrepancia_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0645_liquidacion_formato_sin_formato.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0640_carta_porte_worker.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0647_vigia_respuesta_rapida.sql
 
       # ── Capa 0: contratos de leases/fencing en Postgres real ───────────
       # Este archivo no es informativo: pg_prove interpreta el TAP y falla

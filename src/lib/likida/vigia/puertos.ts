@@ -14,6 +14,7 @@ import type { PuertoModelo } from './clasificador';
 import type { PuertoPulir } from './redactor';
 import type { ServicioEstatusViaje } from './estatus_viaje';
 import type { ArchivoParaEnviar } from './adjuntos';
+import type { RespuestaRapida } from './respuestas_rapidas';
 import type { Enviador, EntradaEnvioCliente, ResultadoEnvioCliente } from './enviar';
 import type {
   AdjuntoRef, Clasificacion, ConfigVigia, Contacto, Conversacion, EstadoMensajeSaliente, Intencion, MensajeVigia, Riesgo, TipoEvento,
@@ -71,6 +72,10 @@ export interface Destinatario {
 
 export interface RepoVigia {
   config(tenantId: string): Promise<ConfigVigia>;
+  /** 0647: las respuestas rápidas APROBADAS de la flota. Falla hacia `[]` (el borrador sale como siempre), nunca lanza por una base sin migrar. */
+  respuestasRapidas(tenantId: string): Promise<RespuestaRapida[]>;
+  /** 0647: cuenta un uso de una respuesta rápida. Mejor esfuerzo: nunca lanza. */
+  usarRespuestaRapida(tenantId: string, id: string): Promise<void>;
   /** 0484: ¿el cliente tiene algún grupo CRÍTICO? Falla hacia `false` (el plazo general), nunca lanza por una base sin migrar. */
   clienteCritico(tenantId: string, clienteId: string): Promise<boolean>;
   /** El contacto ACTIVO o dado de baja de ese número; `null` si no está en ninguna allowlist (o está suprimido). */
@@ -111,7 +116,16 @@ export interface RepoVigia {
   marcarAvisoPrivacidad(tenantId: string, contactoId: string, ahora: Date): Promise<void>;
   destinatarioNivel(tenantId: string, contacto: Contacto, nivel: 1 | 2): Promise<Destinatario | null>;
 
-  conversacionesEnEspera(limite: number): Promise<FilaEnEspera[]>;
+  /**
+   * Las conversaciones que esta pasada debe mirar: sin las que ya llegaron al nivel 2 y por PRÓXIMO VENCIMIENTO (ver
+   * `seleccionarEnEspera`), no por antigüedad: así una flota con plazo corto no queda detrás de hilos que ya no avisan nada.
+   */
+  conversacionesEnEspera(limite: number, ahora: Date): Promise<FilaEnEspera[]>;
+  /**
+   * Cierra los hilos cuyo cliente lleva esperando desde antes de `antesDe` (ciclo muerto: el cliente se fue, nadie contestó, ya se
+   * escaló lo que se podía). Devuelve los cerrados. Si el cliente vuelve a escribir, abre una conversación nueva.
+   */
+  expirarCiclosInactivos(antesDe: Date, limite: number, ahora: Date): Promise<Array<{ tenantId: string; id: string }>>;
   aprobadosAtorados(antesDe: Date, limite: number): Promise<Array<{ tenantId: string; id: string }>>;
   purgar(limite: number): Promise<number>;
 

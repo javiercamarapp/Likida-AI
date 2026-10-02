@@ -11,6 +11,8 @@ import {
   configApagada, configParaCliente, type ConfigVigia, type Contacto, type Conversacion, type EstadoMensajeSaliente, type Intencion, type MensajeVigia, type TipoEvento,
 } from './tipos';
 import { CLIENTE_A, T1 } from './datos.fixture';
+import { seleccionarEnEspera } from './escalamiento';
+import type { RespuestaRapida } from './respuestas_rapidas';
 import { adjuntosDeRespaldo, type ArchivoParaEnviar } from './adjuntos';
 
 export interface EventoGuardado extends NuevoEvento { tenantId: string; id: number }
@@ -85,6 +87,16 @@ export class RepoEnMemoria implements RepoVigia {
     return this.archivos.get(`${a.tenantId}|${a.clienteId}|${a.viajeId}|${a.clave}`) ?? null;
   }
   criticos = new Set<string>();
+  /** 0647: respuestas rápidas aprobadas por flota. */
+  rapidas = new Map<string, RespuestaRapida[]>();
+  usosRapidas: Array<{ tenantId: string; id: string }> = [];
+  async respuestasRapidas(tenantId: string): Promise<RespuestaRapida[]> { this.verifica('respuestasRapidas'); return [...(this.rapidas.get(tenantId) ?? [])]; }
+  async usarRespuestaRapida(tenantId: string, id: string): Promise<void> {
+    this.verifica('usarRespuestaRapida');
+    this.usosRapidas.push({ tenantId, id });
+    const r = (this.rapidas.get(tenantId) ?? []).find((x) => x.id === id);
+    if (r) r.usos += 1;
+  }
   async clienteCritico(tenantId: string, clienteId: string): Promise<boolean> { this.verifica('clienteCritico'); return this.criticos.has(`${tenantId}:${clienteId}`); }
   async config(tenantId: string): Promise<ConfigVigia> { this.verifica('config'); return this.configs.get(tenantId) ?? configApagada(tenantId); }
   async contactoPorTelefono(telefono: string): Promise<Contacto | null> {
@@ -239,7 +251,7 @@ export class RepoEnMemoria implements RepoVigia {
     return this.destinatarios.get(`${tenantId}|${nivel}`) ?? null;
   }
 
-  async conversacionesEnEspera(limite: number): Promise<FilaEnEspera[]> {
+  async conversacionesEnEspera(limite: number, _ahora?: Date): Promise<FilaEnEspera[]> {
     this.verifica('conversacionesEnEspera');
     const filas: FilaEnEspera[] = [];
     for (const c of this.conversaciones.values()) {
@@ -249,7 +261,20 @@ export class RepoEnMemoria implements RepoVigia {
       if (!contacto || !config?.habilitado) continue;
       filas.push({ conversacion: { ...c }, contacto: { ...contacto }, config: configParaCliente(config, this.criticos.has(`${c.tenantId}:${c.clienteId}`)) });
     }
-    return filas.slice(0, limite);
+    // Misma selección que la real: sin el nivel 2 y por próximo vencimiento (no por orden de inserción).
+    return seleccionarEnEspera(filas, limite);
+  }
+  async expirarCiclosInactivos(antesDe: Date, limite: number, ahora: Date): Promise<Array<{ tenantId: string; id: string }>> {
+    this.verifica('expirarCiclosInactivos');
+    const cerradas: Array<{ tenantId: string; id: string }> = [];
+    for (const c of this.conversaciones.values()) {
+      if (cerradas.length >= limite) break;
+      if (c.estado !== 'activa' || !c.sinRespuestaDesde || Date.parse(c.sinRespuestaDesde) >= antesDe.getTime()) continue;
+      c.estado = 'cerrada'; c.sinRespuestaDesde = null;
+      cerradas.push({ tenantId: c.tenantId, id: c.id });
+    }
+    void ahora;
+    return cerradas;
   }
   async aprobadosAtorados(antesDe: Date, limite: number): Promise<Array<{ tenantId: string; id: string }>> {
     return this.salientes().filter((m) => m.estado === 'aprobado' && Date.parse(m.createdAt) < antesDe.getTime()).slice(0, limite).map((m) => ({ tenantId: m.tenantId, id: m.id }));
