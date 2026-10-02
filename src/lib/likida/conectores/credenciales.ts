@@ -6,6 +6,9 @@ import { acotada } from '../presupuesto';
 import { DatoInvalido } from '../errores';
 import { cifrar, descifrar, pistasDe, cofreConfigurado } from './cofre';
 import { conectorPorId } from './registro';
+import { PROVEEDOR_TABLA_PROPIA } from './tabla_propia/contrato';
+import { leerConfigTablaPropia } from './tabla_propia/config';
+import { partirUrlSftp } from './tabla_propia/sftp';
 import { faltantes, httpReal, veredictoDe, type Http, type ResultadoPrueba, type ValoresCredencial } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -85,6 +88,38 @@ export function validarUrlDeCredencial(clave: string, valor: string): void {
   }
 }
 
+/**
+ * P15 (ronda 15, ALTO): el SFTP del lector de «tabla propia» no se podía
+ * guardar porque la regla de arriba exige https en todo campo `*_url`. Aquí se
+ * admite `sftp://` SOLO para `tabla_propia` con modo `csv_sftp`, y con las
+ * MISMAS reglas del lector (`leerConfigTablaPropia`): las dos direcciones en el
+ * mismo servidor, sin usuario ni clave dentro de la dirección, usuario SFTP,
+ * contraseña o llave, y la huella del host obligatoria. A eso se suma el
+ * destino público (la resolución DNS se vuelve a comprobar al conectar).
+ *
+ * Devuelve las claves `*_url` ya validadas como sftp:// para que el https-only
+ * no se les aplique; cualquier otro conector o modo con sftp:// sigue
+ * rechazado por `validarUrlDeCredencial`.
+ */
+function validarDireccionesSftp(conectorId: string, valores: Record<string, string>): string[] {
+  if (conectorId !== PROVEEDOR_TABLA_PROPIA) return [];
+  const claves = ['base_url', 'geocercas_url'].filter((k) => (valores[k] ?? '').toLowerCase().startsWith('sftp:'));
+  if (claves.length === 0) return [];
+  if ((valores.modo ?? '').trim() !== 'csv_sftp') {
+    throw new DatoInvalido('Una dirección sftp:// solo se admite con el modo csv_sftp; con los demás modos tiene que ir por https://.');
+  }
+  const cfg = leerConfigTablaPropia(valores);
+  if (!cfg.ok) throw new DatoInvalido(`La configuración SFTP no es válida: ${cfg.motivo}.`);
+  for (const k of claves) {
+    const d = partirUrlSftp(valores[k]);
+    if ('error' in d) throw new DatoInvalido(`El campo ${k} ${d.error}.`);
+    if (hostNoPublico(d.ok.host)) {
+      throw new DatoInvalido(`El campo ${k} apunta a una dirección de red interna (${d.ok.host}). Se espera el servidor SFTP público de tu sistema.`);
+    }
+  }
+  return claves;
+}
+
 /** `base_url`, `api_url`, … — la convención del catálogo de conectores. */
 function esCampoUrl(clave: string): boolean {
   return clave === 'url' || clave.endsWith('_url');
@@ -137,8 +172,9 @@ export async function guardarCredencial(
 
   // SEG-6: antes de cifrar. Una dirección interna guardada ya es el oráculo,
   // aunque nadie apriete «Probar»: el poller la usaría cada 5 minutos.
+  const comoSftp = new Set(validarDireccionesSftp(conector.id, limpios));
   for (const [clave, valor] of Object.entries(limpios)) {
-    if (esCampoUrl(clave)) validarUrlDeCredencial(clave, valor);
+    if (esCampoUrl(clave) && !comoSftp.has(clave)) validarUrlDeCredencial(clave, valor);
   }
 
   const { data, error } = await acotada(supabaseAdmin().from('conector_credencial').upsert({
