@@ -11,8 +11,10 @@
 // la liquidación de otro chofer: `registrarAcuse` compara contra el dueño.
 //
 // Honestidad de lo que se le contesta al chofer: la respuesta solo afirma lo que
-// de verdad pasó. «No coincide» queda marcado en el panel de la oficina, y eso
-// es lo único que se dice — no se promete un aviso por WhatsApp que no se manda.
+// de verdad pasó. «No coincide» queda marcado en el panel y AVISA a la oficina
+// por WhatsApp (el selector central); a la persona solo se le dice «le avisé a tu
+// oficina» cuando Meta aceptó ese aviso. Si no salió, se dice que quedó marcado
+// en el panel y se le sugiere avisar directo.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { logger } from '@/lib/logger';
@@ -44,16 +46,17 @@ export async function atenderAcuseLiquidacionExterna(
     // Import perezoso: el processor importa este archivo en cada turno de
     // WhatsApp, y el servicio arrastra el generador de PDF y el cliente de
     // Storage — que solo se necesitan cuando de verdad llega un botón nuestro.
-    const { registrarAcuse } = await import('./servicio');
-    const r = await registrarAcuse(op.tenantId, op.operadorId, boton.liquidacionId, boton.tipo);
-    logger.info('liqext.acuse', { liquidacion: boton.liquidacionId, tipo: boton.tipo, resultado: r });
+    const { registrarAcuseConAviso } = await import('./servicio');
+    const { resultado: r, avisoOficina } = await registrarAcuseConAviso(op.tenantId, op.operadorId, boton.liquidacionId, boton.tipo);
+    logger.info('liqext.acuse', { liquidacion: boton.liquidacionId, tipo: boton.tipo, resultado: r, avisoOficina });
     if (r === 'no_encontrada') {
       return 'No encontré esa liquidación en tu cuenta. Si el botón es de un mensaje viejo, pídele a tu oficina que te la reenvíe. 🙏';
     }
     if (r === 'ya_registrado') return 'Ya tenía registrada esa respuesta. ✅';
-    return boton.tipo === 'recibida'
-      ? 'Listo, quedó registrado que recibiste tu liquidación ✅.'
-      : 'Anotado: tu liquidación NO coincide. Quedó marcada en el panel de tu oficina para que la revisen. Si es urgente, avísale directo. 🙏';
+    if (boton.tipo === 'recibida') return 'Listo, quedó registrado que recibiste tu liquidación ✅.';
+    return avisoOficina === 'enviado'
+      ? 'Anotado: tu liquidación NO coincide. Ya le avisé a tu oficina para que la revisen. 🙏'
+      : 'Anotado: tu liquidación NO coincide. Quedó marcada en el panel de tu oficina para que la revisen, pero no pude avisarles por WhatsApp: si es urgente, avísales directo. 🙏';
   } catch (e) {
     // Fallar CERRADO y decirlo: «registrado» sin que la base lo haya guardado
     // sería una constancia falsa.

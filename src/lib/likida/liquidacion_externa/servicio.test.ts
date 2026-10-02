@@ -38,7 +38,7 @@ vi.mock('./repo', () => ({
       foliosViaje: n.datos.viajes, viajeIds: n.viajeIds, periodoDesde: n.datos.periodo.desde, periodoHasta: n.datos.periodo.hasta,
       conceptos: [], total: n.datos.total, moneda: n.datos.moneda, pdfRuta: n.pdfRuta, pdfOrigen: n.pdfOrigen,
       estado: 'pendiente', via: null, generacion: 1, intentos: 0, proximoIntentoEn: '2026-09-08T00:00:00.000Z',
-      ultimoError: null, wamid: null, enviadaEn: null, acuseTipo: null, acuseEn: null, creadaEn: '2026-09-08T00:00:00.000Z',
+      ultimoError: null, wamid: null, enviadaEn: null, acuseTipo: null, acuseEn: null, acuseConfirmadoEn: null, creadaEn: '2026-09-08T00:00:00.000Z',
     };
     store.set(fila.id, fila);
     return { ...fila };
@@ -48,13 +48,24 @@ vi.mock('./repo', () => ({
     const f = store.get(id);
     return f && f.tenantId === tenantId ? { ...f } : null;
   }),
+  // Contrato de `confirmarAcuses`: solo confirma lo que tiene acuse y no estaba confirmado; lo ajeno/sin acuse no aplica.
+  confirmarAcuses: vi.fn(async (tenantId: string, ids: string[], ahoraIso: string) => {
+    const r = { confirmadas: [] as string[], yaConfirmadas: [] as string[], noAplican: [] as string[] };
+    for (const id of ids) {
+      const f = store.get(id);
+      if (!f || f.tenantId !== tenantId || !f.acuseEn) r.noAplican.push(id);
+      else if (f.acuseConfirmadoEn) r.yaConfirmadas.push(id);
+      else { f.acuseConfirmadoEn = ahoraIso; r.confirmadas.push(id); }
+    }
+    return r;
+  }),
   // El CONTRATO real de `transicionar`: solo aplica si el estado actual está en `desde`.
   transicionar: vi.fn(async (tenantId: string, id: string, desde: string[], cambios: Record<string, unknown>) => {
     const f = store.get(id);
     if (!f || f.tenantId !== tenantId || !desde.includes(f.estado)) return false;
     const mapa: Record<string, keyof LiquidacionExterna> = {
       estado: 'estado', via: 'via', generacion: 'generacion', intentos: 'intentos', proximo_intento_en: 'proximoIntentoEn',
-      ultimo_error: 'ultimoError', wamid: 'wamid', enviada_en: 'enviadaEn', acuse_tipo: 'acuseTipo', acuse_en: 'acuseEn',
+      ultimo_error: 'ultimoError', wamid: 'wamid', enviada_en: 'enviadaEn', acuse_tipo: 'acuseTipo', acuse_en: 'acuseEn', acuse_confirmado_en: 'acuseConfirmadoEn',
     };
     for (const [k, v] of Object.entries(cambios)) (f as unknown as Record<string, unknown>)[mapa[k]] = v;
     return true;
@@ -71,7 +82,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 
 const {
   recibirLiquidacionExterna, intentarEntrega, procesarLiquidacionesExternas,
-  reintentarLiquidacionExterna, registrarAcuse, MAX_INTENTOS_ENCOLADO,
+  reintentarLiquidacionExterna, registrarAcuse, registrarAcuseConAviso, confirmarAcusesLeidos, MAX_INTENTOS_ENCOLADO,
 } = await import('./servicio');
 const { validarLiquidacionExterna, huellaContenido } = await import('./esquema');
 const repo = await import('./repo');
@@ -87,6 +98,7 @@ const deps = {
   entrega, ahora: () => AHORA,
   razonSocial: async () => 'Flota SA',
   firmarPdf: async () => { if (firmaFalla) throw new Error('storage caído'); return 'https://firmada.example/x.pdf'; },
+  avisarNoCoincide: vi.fn(async (_l: LiquidacionExterna) => true),
 };
 
 const PDF_MIN = '%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF\n';
@@ -445,6 +457,75 @@ describe('el acuse del chofer', () => {
     await registrarAcuse('t-1', 'op-1', liq.id, 'no_coincide', deps);
     expect(await intentarEntrega({ ...store.get(liq.id)! }, deps)).toBe('sin_cambio');
     expect(store.get(liq.id)).toMatchObject({ estado: 'acusada', acuseTipo: 'no_coincide' });
+  });
+});
+
+describe('«No coincide» avisa a la oficina', () => {
+  beforeEach(() => { vi.mocked(deps.avisarNoCoincide).mockReset().mockResolvedValue(true); });
+
+  it('avisa UNA vez, deja el evento aviso_oficina y devuelve enviado', async () => {
+    const liq = await recibir();
+    const r = await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps);
+    expect(r).toEqual({ resultado: 'registrado', avisoOficina: 'enviado' });
+    expect(deps.avisarNoCoincide).toHaveBeenCalledTimes(1);
+    expect(eventos.find((e) => e.tipo === 'aviso_oficina')?.detalle).toEqual({ enviado: true });
+    // el mismo botón otra vez NO vuelve a avisar
+    expect(await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps)).toEqual({ resultado: 'ya_registrado', avisoOficina: 'no_aplica' });
+    expect(deps.avisarNoCoincide).toHaveBeenCalledTimes(1);
+  });
+
+  it('si el aviso no sale (sin destinatario o Meta lo rechaza), se dice no_enviado y el acuse SÍ queda', async () => {
+    vi.mocked(deps.avisarNoCoincide).mockResolvedValue(false);
+    const liq = await recibir();
+    expect(await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps)).toEqual({ resultado: 'registrado', avisoOficina: 'no_enviado' });
+    expect(store.get(liq.id)).toMatchObject({ estado: 'acusada', acuseTipo: 'no_coincide' });
+    expect(eventos.find((e) => e.tipo === 'aviso_oficina')?.detalle).toEqual({ enviado: false });
+  });
+
+  it('si el aviso LANZA no tumba el acuse', async () => {
+    vi.mocked(deps.avisarNoCoincide).mockRejectedValue(new Error('meta caído'));
+    const liq = await recibir();
+    expect(await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps)).toEqual({ resultado: 'registrado', avisoOficina: 'no_enviado' });
+    expect(store.get(liq.id)!.estado).toBe('acusada');
+  });
+
+  it('«Recibida» no avisa a nadie, y un chofer ajeno ni dispara el aviso', async () => {
+    const liq = await recibir();
+    expect(await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'recibida', deps)).toEqual({ resultado: 'registrado', avisoOficina: 'no_aplica' });
+    expect(await registrarAcuseConAviso('t-1', 'op-OTRO', liq.id, 'no_coincide', deps)).toEqual({ resultado: 'no_encontrada', avisoOficina: 'no_aplica' });
+    expect(deps.avisarNoCoincide).not.toHaveBeenCalled();
+  });
+});
+
+describe('confirmar acuses leídos por el sistema del cliente', () => {
+  it('confirma lo que tiene acuse, es idempotente y deja el evento acuse_confirmado con el actor', async () => {
+    const liq = await recibir();
+    await registrarAcuse('t-1', 'op-1', liq.id, 'recibida', deps);
+    const r1 = await confirmarAcusesLeidos('t-1', [liq.id, liq.id], 'llave:sap', deps);
+    expect(r1).toEqual({ confirmadas: [liq.id], yaConfirmadas: [], noAplican: [] });
+    expect(store.get(liq.id)!.acuseConfirmadoEn).toBe(AHORA.toISOString());
+    const r2 = await confirmarAcusesLeidos('t-1', [liq.id], 'llave:sap', deps);
+    expect(r2).toEqual({ confirmadas: [], yaConfirmadas: [liq.id], noAplican: [] });
+    expect(eventos.filter((e) => e.tipo === 'acuse_confirmado')).toEqual([{ id: liq.id, tipo: 'acuse_confirmado', detalle: { actor: 'llave:sap' } }]);
+  });
+
+  it('una liquidación SIN acuse, inexistente o de OTRA flota no aplica (y no revela cuál)', async () => {
+    const sinAcuse = await recibir({ claveExterna: 'SIN-ACUSE' });
+    const conAcuse = await recibir({ claveExterna: 'CON-ACUSE' });
+    await registrarAcuse('t-1', 'op-1', conAcuse.id, 'recibida', deps);
+    expect(await confirmarAcusesLeidos('t-OTRA', [conAcuse.id], 'x', deps)).toEqual({ confirmadas: [], yaConfirmadas: [], noAplican: [conAcuse.id] });
+    const r = await confirmarAcusesLeidos('t-1', [sinAcuse.id, 'fantasma'], 'x', deps);
+    expect(r.noAplican.sort()).toEqual([sinAcuse.id, 'fantasma'].sort());
+    expect(store.get(conAcuse.id)!.acuseConfirmadoEn).toBeNull();
+  });
+
+  it('si el chofer CAMBIA su respuesta, la confirmación anterior se reinicia (el acuse nuevo se entrega otra vez)', async () => {
+    const liq = await recibir();
+    await registrarAcuse('t-1', 'op-1', liq.id, 'recibida', deps);
+    await confirmarAcusesLeidos('t-1', [liq.id], 'x', deps);
+    expect(store.get(liq.id)!.acuseConfirmadoEn).not.toBeNull();
+    await registrarAcuse('t-1', 'op-1', liq.id, 'no_coincide', deps);
+    expect(store.get(liq.id)!.acuseConfirmadoEn).toBeNull();
   });
 });
 

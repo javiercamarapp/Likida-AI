@@ -22,7 +22,7 @@ const fila = (p: Partial<LiquidacionExterna> = {}): LiquidacionExterna => ({
   foliosViaje: ['VJ-1'], viajeIds: [], periodoDesde: '2026-09-01', periodoHasta: '2026-09-07', conceptos: [],
   total: 2499.75, moneda: 'MXN', pdfRuta: 't-1/externas/x.pdf', pdfOrigen: 'generado', estado: 'enviada', via: 'sesion',
   generacion: 1, intentos: 1, proximoIntentoEn: 'x', ultimoError: null, wamid: 'w', enviadaEn: '2026-09-08T16:00:00Z',
-  acuseTipo: null, acuseEn: null, creadaEn: '2026-09-08T15:00:00Z', ...p,
+  acuseTipo: null, acuseEn: null, acuseConfirmadoEn: null, creadaEn: '2026-09-08T15:00:00Z', ...p,
 });
 
 const FICHAS: FichasExternas = {

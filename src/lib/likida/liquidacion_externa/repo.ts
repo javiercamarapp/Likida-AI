@@ -24,7 +24,7 @@ export type TipoAcuse = 'recibida' | 'no_coincide';
 
 export type TipoEvento =
   | 'recibida' | 'encolada' | 'enviada' | 'fallback_plantilla' | 'fallida'
-  | 'reintento_manual' | 'acuse_recibida' | 'acuse_no_coincide';
+  | 'reintento_manual' | 'acuse_recibida' | 'acuse_no_coincide' | 'acuse_confirmado' | 'aviso_oficina';
 
 export interface LiquidacionExterna {
   id: string;
@@ -54,13 +54,15 @@ export interface LiquidacionExterna {
   enviadaEn: string | null;
   acuseTipo: TipoAcuse | null;
   acuseEn: string | null;
+  /** Cuándo el sistema del cliente confirmó que ya leyó el acuse (0561). */
+  acuseConfirmadoEn: string | null;
   creadaEn: string;
 }
 
 export const COLUMNAS =
   'id, tenant_id, clave_externa, huella, sistema_origen, operador_id, folios_viaje, viaje_ids, '
   + 'periodo_desde, periodo_hasta, conceptos, total, moneda, pdf_ruta, pdf_origen, estado, via, '
-  + 'generacion, intentos, proximo_intento_en, ultimo_error, wamid, enviada_en, acuse_tipo, acuse_en, '
+  + 'generacion, intentos, proximo_intento_en, ultimo_error, wamid, enviada_en, acuse_tipo, acuse_en, acuse_confirmado_en, '
   + 'created_at, operador:operador_id(nombre, telefono)';
 
 export type Fila = Record<string, unknown> & { operador?: { nombre?: string | null; telefono?: string | null } | null };
@@ -95,6 +97,7 @@ export function aLiquidacionExterna(r: Fila): LiquidacionExterna {
     enviadaEn: (r.enviada_en as string | null) ?? null,
     acuseTipo: (r.acuse_tipo as TipoAcuse | null) ?? null,
     acuseEn: (r.acuse_en as string | null) ?? null,
+    acuseConfirmadoEn: (r.acuse_confirmado_en as string | null) ?? null,
     creadaEn: String(r.created_at),
   };
 }
@@ -381,4 +384,81 @@ export async function transicionar(
     .select('id'), 'liqext.transicion');
   if (res.error) throw new Error(`liquidacion_externa transición: ${res.error.message}`);
   return (res.data ?? []).length > 0;
+}
+
+// ── salida hacia el sistema del cliente (SAP/TMS), por pull ─────────────────
+
+/** Los acuses de los choferes que el sistema del cliente aún NO confirmó
+ *  haber leído, en el orden en que se leen (`acuse_en`, `id`). */
+export async function listarAcusesPendientes(
+  tenantId: string, limite: number, despues: { acuseEn: string; id: string } | null,
+): Promise<{ filas: LiquidacionExterna[]; hayMas: boolean }> {
+  let q = supabaseAdmin().from('liquidacion_externa').select(COLUMNAS)
+    .eq('tenant_id', tenantId).not('acuse_en', 'is', null).is('acuse_confirmado_en', null);
+  if (despues) {
+    q = q.or(`acuse_en.gt.${despues.acuseEn},and(acuse_en.eq.${despues.acuseEn},id.gt.${despues.id})`);
+  }
+  q = q.order('acuse_en', { ascending: true }).order('id', { ascending: true }).range(0, limite);
+  const res = await acotada(q, 'liqext.acuses_pendientes');
+  const filas = ((exigir(res, 'liqext.acuses_pendientes') ?? []) as unknown as Fila[]);
+  return { filas: filas.slice(0, limite).map(aLiquidacionExterna), hayMas: filas.length > limite };
+}
+
+export interface ResultadoConfirmacion {
+  /** Ids que pasaron de «por leer» a «confirmado» en esta llamada. */
+  confirmadas: string[];
+  /** Ya estaban confirmadas (reintento del integrador). */
+  yaConfirmadas: string[];
+  /** No existen en esta flota o todavía no tienen acuse del chofer. */
+  noAplican: string[];
+}
+
+/**
+ * El sistema del cliente confirma que ya leyó estos acuses. IDEMPOTENTE: un
+ * reintento deja las ya confirmadas en `yaConfirmadas` sin tocarlas. Un id de
+ * OTRA flota o sin acuse cae en `noAplican` sin decir cuál de las dos cosas es.
+ */
+export async function confirmarAcuses(tenantId: string, ids: string[], ahoraIso: string): Promise<ResultadoConfirmacion> {
+  const leidas = await acotada(supabaseAdmin().from('liquidacion_externa')
+    .select('id, acuse_en, acuse_confirmado_en').eq('tenant_id', tenantId).in('id', ids).order('id'), 'liqext.confirmar_leer');
+  const filas = (exigir(leidas, 'liqext.confirmar_leer') ?? []) as Array<{ id: string; acuse_en: string | null; acuse_confirmado_en: string | null }>;
+  const porId = new Map(filas.map((f) => [f.id, f]));
+  const noAplican = ids.filter((id) => !porId.get(id)?.acuse_en);
+  const yaConfirmadas = ids.filter((id) => porId.get(id)?.acuse_en && porId.get(id)?.acuse_confirmado_en);
+  const porConfirmar = ids.filter((id) => porId.get(id)?.acuse_en && !porId.get(id)?.acuse_confirmado_en);
+  const confirmadas: string[] = [];
+  if (porConfirmar.length > 0) {
+    // Condicional a «sin confirmar»: dos confirmaciones simultáneas no cuentan dos veces.
+    const upd = await acotada(supabaseAdmin().from('liquidacion_externa')
+      .update({ acuse_confirmado_en: ahoraIso, updated_at: ahoraIso })
+      .eq('tenant_id', tenantId).in('id', porConfirmar).not('acuse_en', 'is', null).is('acuse_confirmado_en', null)
+      .select('id'), 'liqext.confirmar');
+    if (upd.error) throw new Error(`liquidacion_externa confirmar acuses: ${upd.error.message}`);
+    const ganadas = new Set(((upd.data ?? []) as Array<{ id: string }>).map((f) => f.id));
+    for (const id of porConfirmar) (ganadas.has(id) ? confirmadas : yaConfirmadas).push(id);
+  }
+  return { confirmadas, yaConfirmadas, noAplican };
+}
+
+/** Las liquidaciones para exportar a SAP/CSV (mismos filtros que el listado),
+ *  más viejas primero y con tope duro. */
+export async function listarParaExportacion(
+  tenantId: string, filtro: FiltroListado & { sinConfirmar?: boolean }, tope: number,
+): Promise<{ filas: LiquidacionExterna[]; truncado: boolean }> {
+  let q = supabaseAdmin().from('liquidacion_externa').select(COLUMNAS).eq('tenant_id', tenantId);
+  if (filtro.estado) q = q.eq('estado', filtro.estado);
+  if (filtro.acuseTipo) q = q.eq('acuse_tipo', filtro.acuseTipo);
+  if (filtro.operadorId) q = q.eq('operador_id', filtro.operadorId);
+  if (filtro.claveExterna) q = q.eq('clave_externa', filtro.claveExterna);
+  if (filtro.sinConfirmar) q = q.not('acuse_en', 'is', null).is('acuse_confirmado_en', null);
+  if (filtro.desde) q = q.gte('created_at', `${filtro.desde}T00:00:00-06:00`);
+  if (filtro.hasta) {
+    const sig = new Date(`${filtro.hasta}T00:00:00Z`);
+    sig.setUTCDate(sig.getUTCDate() + 1);
+    q = q.lt('created_at', `${sig.toISOString().slice(0, 10)}T00:00:00-06:00`);
+  }
+  q = q.order('created_at', { ascending: true }).order('id', { ascending: true }).range(0, tope);
+  const res = await acotada(q, 'liqext.exportar');
+  const filas = ((exigir(res, 'liqext.exportar') ?? []) as unknown as Fila[]);
+  return { filas: filas.slice(0, tope).map(aLiquidacionExterna), truncado: filas.length > tope };
 }

@@ -1349,6 +1349,85 @@ function documento(servidor: string) {
           },
         },
       },
+      '/v1/liquidaciones-externas/acuses': {
+        get: {
+          operationId: 'listarAcusesLiquidacionesExternas',
+          'x-likida-area': 'dinero',
+          summary: 'Lo que contestaron los choferes (Recibida / No coincide), para registrarlo en tu SAP/TMS.',
+          description:
+            'Área `dinero`. SALIDA POR PULL hacia tu sistema: devuelve solo los acuses que tu sistema AÚN NO CONFIRMÓ haber leído, del más viejo al más nuevo, paginados por cursor (`despues`; `desplazamiento` es 400).\n\n'
+            + 'CICLO: 1) lees esta lista, 2) registras cada acuse en tu sistema, 3) confirmas los `id` con `POST /v1/liquidaciones-externas/acuses/confirmar`. Lo no confirmado vuelve a salir en la siguiente lectura (una caída a mitad de tu proceso no pierde ninguno). Si el chofer cambia su respuesta, el acuse nuevo vuelve a salir.',
+          tags: ['liquidaciones', 'dinero'],
+          parameters: [parametrosPagina[0], ...parametrosCursor],
+          responses: {
+            '200': {
+              description: 'Página de acuses por leer.',
+              content: { 'application/json': { schema: { type: 'object', properties: {
+                datos: { type: 'array', items: { type: 'object', properties: {
+                  id: { type: 'string', format: 'uuid', description: 'El id de Likida: es el que se manda a `acuses/confirmar`.' },
+                  claveExterna: { type: 'string' }, sistemaOrigen: { type: 'string', nullable: true },
+                  operador: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, nombre: { type: 'string', nullable: true } } },
+                  respuestaChofer: { type: 'string', enum: ['recibida', 'no_coincide'] },
+                  respuestaEn: { type: 'string', format: 'date-time' },
+                  total: { type: 'number' }, moneda: { type: 'string', enum: ['MXN', 'USD'] },
+                }, required: ['id', 'claveExterna', 'respuestaChofer', 'respuestaEn'] } },
+                pagina: paginaSobre,
+              }, required: ['datos', 'pagina'] } } },
+            },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/liquidaciones-externas/acuses/confirmar': {
+        post: {
+          operationId: 'confirmarAcusesLiquidacionesExternas',
+          'x-likida-area': 'administracion',
+          summary: 'Confirma que tu sistema ya leyó estos acuses (deja de devolverlos).',
+          description:
+            'Área `administracion`. Cuerpo `{ "ids": [uuid, …] }` (1 a 200). IDEMPOTENTE: repetirlo deja las ya confirmadas en `yaConfirmadas`. `noAplican` agrupa lo que no existe en tu flota o aún no tiene acuse del chofer (no se distingue cuál para no revelar liquidaciones ajenas).',
+          tags: ['liquidaciones', 'dinero'],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { ids: { type: 'array', minItems: 1, maxItems: 200, items: { type: 'string', format: 'uuid' } } }, required: ['ids'], additionalProperties: false } } } },
+          responses: {
+            '200': { description: 'Qué pasó con cada id.', content: { 'application/json': { schema: { type: 'object', properties: { datos: { type: 'object', properties: {
+              confirmadas: { type: 'array', items: { type: 'string', format: 'uuid' } },
+              yaConfirmadas: { type: 'array', items: { type: 'string', format: 'uuid' } },
+              noAplican: { type: 'array', items: { type: 'string', format: 'uuid' } },
+            }, required: ['confirmadas', 'yaConfirmadas', 'noAplican'] } }, required: ['datos'] } } } },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/liquidaciones-externas/exportacion': {
+        get: {
+          operationId: 'exportarLiquidacionesExternas',
+          'x-likida-area': 'dinero',
+          summary: 'Archivo CSV/TSV configurable para tu SAP/TMS (columnas, separador, decimal, fechas).',
+          description:
+            'Área `dinero`. Devuelve un archivo, no JSON. Layout por parámetros: `columnas` (lista ordenada de un catálogo cerrado), `granularidad` (`liquidacion` = una fila por liquidación; `concepto` = una fila por renglón, con `conceptoMontoFirmado`: deducciones en negativo), `separador` (`coma`|`punto_y_coma`|`tab`), `decimal` (`punto`|`coma`; con `coma` el separador no puede ser `coma`), `fechas` (`iso`|`dmy`|`sap` = AAAAMMDD), `bom=1` (marca UTF-8 para Excel) y `encabezado=0`. Los mismos filtros del listado y `sinConfirmar=1` (solo acuses que tu sistema aún no confirmó).\n\n'
+            + 'COMPLETO O NADA: si el filtro trae más de 900 liquidaciones responde `lectura_incompleta` y pide acotar el rango. Las celdas de texto que empiezan con `=`, `+`, `-`, `@` se neutralizan (inyección de fórmulas); nunca sale el error crudo de entrega, solo `falloCodigo`.',
+          tags: ['liquidaciones', 'dinero'],
+          parameters: [
+            { name: 'columnas', in: 'query', required: false, description: 'Nombres separados por coma, p. ej. `claveExterna,total,moneda,respuestaChofer`. Un nombre desconocido es 400 y se listan los válidos.', schema: { type: 'string' } },
+            { name: 'granularidad', in: 'query', required: false, schema: { type: 'string', enum: ['liquidacion', 'concepto'], default: 'liquidacion' } },
+            { name: 'separador', in: 'query', required: false, schema: { type: 'string', enum: ['coma', 'punto_y_coma', 'tab'], default: 'coma' } },
+            { name: 'decimal', in: 'query', required: false, schema: { type: 'string', enum: ['punto', 'coma'], default: 'punto' } },
+            { name: 'fechas', in: 'query', required: false, schema: { type: 'string', enum: ['iso', 'dmy', 'sap'], default: 'iso' } },
+            { name: 'bom', in: 'query', required: false, schema: { type: 'string', enum: ['0', '1'], default: '0' } },
+            { name: 'encabezado', in: 'query', required: false, schema: { type: 'string', enum: ['0', '1'], default: '1' } },
+            { name: 'sinConfirmar', in: 'query', required: false, schema: { type: 'string', enum: ['0', '1'] } },
+            { name: 'estado', in: 'query', required: false, schema: { type: 'string', enum: [...ESTADOS_LIQ_EXTERNA] } },
+            { name: 'respuestaChofer', in: 'query', required: false, schema: { type: 'string', enum: ['recibida', 'no_coincide'] } },
+            { name: 'operadorId', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+            { name: 'claveExterna', in: 'query', required: false, schema: { type: 'string', maxLength: 120 } },
+            { name: 'desde', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
+            { name: 'hasta', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
+          ],
+          responses: {
+            '200': { description: 'El archivo (`text/csv` o `text/tab-separated-values`, UTF-8). `X-Likida-Filas` trae cuántas liquidaciones incluye.', content: { 'text/csv': { schema: { type: 'string' } } } },
+            ...respuestasError,
+          },
+        },
+      },
       '/v1/hitos': {
         get: {
           operationId: 'listarHitos',
