@@ -54,11 +54,14 @@ async function candidatos(limite: number): Promise<CandidatoAcercamiento[]> {
   if (viajes.length === 0) return [];
   const tenantDeLigado = new Map(ligados.map((l) => [String(l.viaje_id), String(l.tenant_id)] as const));
 
+  // Las flotas de estos viajes: cada lectura de abajo se acota también por ellas (defensa en profundidad: los ids ya son únicos).
+  const tenants = [...new Set(viajes.map((v) => String(v.tenant_id)))];
+
   // Qué hitos ya están resueltos: de ahí sale la planta que toca y si ya llegó.
   const hitos: Fila[] = [];
   for (const lote of trozos(ids(viajes, 'id'), 150)) {
     const h = await traerTodo<Fila>((d, hasta) => acotada(admin.from('viaje_hito').select('viaje_id, tipo, estado')
-      .in('viaje_id', lote).in('tipo', ['llegada_carga', 'salida_carga', 'llegada_descarga']).in('estado', ['recibido', 'validado']).order('id').range(d, hasta), 'convenios.trabajo_hitos') as never, 'convenios.trabajo_hitos');
+      .in('tenant_id', tenants).in('viaje_id', lote).in('tipo', ['llegada_carga', 'salida_carga', 'llegada_descarga']).in('estado', ['recibido', 'validado']).order('id').range(d, hasta), 'convenios.trabajo_hitos') as never, 'convenios.trabajo_hitos');
     hitos.push(...h);
   }
   const resueltos = new Map<string, Set<string>>();
@@ -67,7 +70,7 @@ async function candidatos(limite: number): Promise<CandidatoAcercamiento[]> {
   const sitioIds = [...new Set(viajes.flatMap((v) => [v.origen_geocerca_id, v.destino_geocerca_id]).filter((x): x is string => typeof x === 'string'))];
   const sitios = new Map<string, { lat: number; lng: number; radioM: number }>();
   for (const lote of trozos(sitioIds, 150)) {
-    const g = await acotada(admin.from('geocerca').select('id, lat, lng, radio_m').in('id', lote).eq('activa', true), 'convenios.trabajo_sitios');
+    const g = await acotada(admin.from('geocerca').select('id, lat, lng, radio_m').in('tenant_id', tenants).in('id', lote).eq('activa', true), 'convenios.trabajo_sitios');
     for (const f of (exigir(g as never, 'convenios.trabajo_sitios') ?? []) as Fila[]) sitios.set(String(f.id), { lat: Number(f.lat), lng: Number(f.lng), radioM: Number(f.radio_m) });
   }
 
@@ -85,11 +88,11 @@ async function candidatos(limite: number): Promise<CandidatoAcercamiento[]> {
 }
 
 /** La última posición de cada unidad desde `desde` (una consulta por lote de unidades, no una por viaje). */
-export async function leerPosicionesRecientes(unidadIds: string[], desde: Date): Promise<Map<string, PosicionUnidad>> {
+export async function leerPosicionesRecientes(unidadIds: string[], tenantIds: string[], desde: Date): Promise<Map<string, PosicionUnidad>> {
   const salida = new Map<string, PosicionUnidad>();
   for (const lote of trozos(unidadIds, 100)) {
     const filas = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('posicion').select('unidad_id, lat, lng, medida_en')
-      .in('unidad_id', lote).gte('medida_en', desde.toISOString()).order('medida_en', { ascending: false }).order('id').range(d, h), 'convenios.trabajo_posiciones') as never, 'convenios.trabajo_posiciones');
+      .in('tenant_id', tenantIds).in('unidad_id', lote).gte('medida_en', desde.toISOString()).order('medida_en', { ascending: false }).order('id').range(d, h), 'convenios.trabajo_posiciones') as never, 'convenios.trabajo_posiciones');
     // Vienen de la más reciente a la más vieja: la primera de cada unidad es la que vale.
     for (const f of filas) {
       const u = String(f.unidad_id);

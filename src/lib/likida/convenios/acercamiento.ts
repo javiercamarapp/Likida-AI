@@ -36,8 +36,8 @@ export interface PosicionUnidad { lat: number; lng: number; medidaEn: Date }
 
 export interface PuertosAcercamiento {
   candidatos(limite: number): Promise<CandidatoAcercamiento[]>;
-  /** La última posición de cada unidad desde `desde` (por id de unidad). */
-  posiciones(unidadIds: string[], desde: Date): Promise<Map<string, PosicionUnidad>>;
+  /** La última posición de cada unidad desde `desde` (por id de unidad), acotada a las flotas de los candidatos. */
+  posiciones(unidadIds: string[], tenantIds: string[], desde: Date): Promise<Map<string, PosicionUnidad>>;
   enviar(tenantId: string, viajeId: string, lado: LadoViaje, ahora: Date): Promise<ResultadoEnvioInstrucciones>;
 }
 
@@ -68,7 +68,7 @@ export async function barridoAcercamiento(
   const candidatos = await p.candidatos(TOPE_VIAJES_ACERCAMIENTO);
   r.candidatos = candidatos.length;
   if (candidatos.length === 0) return r;
-  const posiciones = await p.posiciones([...new Set(candidatos.map((c) => c.unidadId))], new Date(ahora.getTime() - VIGENCIA_POSICION_MIN * 60_000));
+  const posiciones = await p.posiciones([...new Set(candidatos.map((c) => c.unidadId))], [...new Set(candidatos.map((c) => c.tenantId))], new Date(ahora.getTime() - VIGENCIA_POSICION_MIN * 60_000));
 
   for (const [i, c] of candidatos.entries()) {
     if (venceEn !== undefined && Date.now() >= venceEn) { r.cortadosPorReloj = candidatos.length - i; break; }

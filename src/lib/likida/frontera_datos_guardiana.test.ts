@@ -208,8 +208,14 @@ import { join, relative } from 'node:path';
 // ADVERSARIAL ronda 03: +4 llamadas, todas en archivos que ya contaban — `conductor/repo_validacion.ts` (+1, `unidadReportaGps`: ¿la unidad
 // reporta GPS de verdad? decide si un pin basta como evidencia) y `buzon/repo.ts` (+3: dos lecturas «¿esta ruta de PDF la usa una factura?» y el
 // UPDATE que suelta la ruta de la recepción descartada). 1,701 → 1,705.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 277;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_705;
+// OLA 3, W3 «convenios» (0580): +2 archivos y +31 llamadas (medido con el barrido), 277 / 1,705 → 279 / 1,736. Funcionalidad nueva, no código migrado:
+//   · `convenios/repo.ts` (28): TODO el acceso a datos tenant-anclado del módulo — lista, importador (upserts por llave única), elegir y
+//     ligar el convenio al viaje con su foto, el claim del envío (UN UPDATE condicionado), el contexto del envío y el lado del viaje;
+//   · `convenios/trabajo.ts` (6): las lecturas que CRUZAN flotas del aviso de acercamiento (el cron barre todas las flotas en una
+//     corrida; cada candidato lleva su tenant y todo lo posterior se ancla a él) — viven aparte, como `conductor/trabajo.ts`.
+// El resto: las llamadas propias del conteo de arriba que ya existían (ninguna otra llamada nueva fuera de estos dos archivos).
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 279;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_736;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)
