@@ -217,31 +217,22 @@ export async function cambiarEstadoCaseta(tenantId: string, casetaId: string, ac
 export interface GeocercaVista { id: string; nombre: string; tipo: string; lat: number; lng: number; radioM: number; activa: boolean }
 export const TIPOS_GEOCERCA = ['origen', 'destino', 'patio', 'punto_interes', 'restringida'] as const;
 
-export async function listarGeocercas(tenantId: string): Promise<GeocercaVista[]> {
-  const filas = await traerTodo<{ id: unknown; nombre: unknown; tipo: unknown; lat: unknown; lng: unknown; radio_m: unknown; activa: unknown }>(
-    (d, h) => acotada(supabaseAdmin().from('geocerca')
-      .select('id, nombre, tipo, lat, lng, radio_m, activa', conteo(d))
-      // Solo el catálogo de peajes (0480): los clientes, plantas y andenes del Conductor son de SU pantalla.
-      .eq('tenant_id', tenantId).eq('catalogo', 'peajes').order('nombre').order('id').range(d, h), 'peajes.geocercas'),
-    'peajes.geocercas',
-  );
-  return filas.map((f) => ({
-    id: String(f.id), nombre: String(f.nombre), tipo: String(f.tipo),
-    lat: Number(f.lat), lng: Number(f.lng), radioM: Number(f.radio_m), activa: f.activa !== false,
-  }));
-}
-
 /**
- * Zonas (patio / restringida) para cruzar el PASE con las geocercas de la flota, de AMBOS catálogos: las que se
- * capturan a mano en peajes y las que la flota importó de SUS tablas (catálogo del Conductor, tipo «patio» por
- * omisión). Solo lectura: el editor de peajes sigue escribiendo y listando únicamente el suyo (`listarGeocercas`).
+ * Por omisión, solo el catálogo de peajes (0480): los clientes, plantas y andenes del Conductor son de SU pantalla.
+ * `zonasParaReclamacion` (solo lectura) devuelve las ZONAS (patio / restringida) de AMBOS catálogos: la reclamación
+ * cruza el PASE con las geocercas que la flota importó de SUS tablas (catálogo del Conductor, «patio»), no solo con las
+ * capturadas a mano en peajes. El editor sigue usando la forma por omisión.
  */
-export async function listarZonasParaReclamacion(tenantId: string): Promise<GeocercaVista[]> {
+export async function listarGeocercas(tenantId: string, opciones: { zonasParaReclamacion?: boolean } = {}): Promise<GeocercaVista[]> {
   const filas = await traerTodo<{ id: unknown; nombre: unknown; tipo: unknown; lat: unknown; lng: unknown; radio_m: unknown; activa: unknown }>(
-    (d, h) => acotada(supabaseAdmin().from('geocerca')
-      .select('id, nombre, tipo, lat, lng, radio_m, activa', conteo(d))
-      .eq('tenant_id', tenantId).in('tipo', ['patio', 'restringida']).order('nombre').order('id').range(d, h), 'peajes.zonas_reclamacion'),
-    'peajes.zonas_reclamacion',
+    (d, h) => {
+      const q = supabaseAdmin().from('geocerca')
+        .select('id, nombre, tipo, lat, lng, radio_m, activa', conteo(d))
+        .eq('tenant_id', tenantId);
+      return acotada((opciones.zonasParaReclamacion ? q.in('tipo', ['patio', 'restringida']) : q.eq('catalogo', 'peajes'))
+        .order('nombre').order('id').range(d, h), 'peajes.geocercas');
+    },
+    'peajes.geocercas',
   );
   return filas.map((f) => ({
     id: String(f.id), nombre: String(f.nombre), tipo: String(f.tipo),

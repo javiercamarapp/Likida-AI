@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { traerTodo, traerPorIds, conteo } from '../pg';
-import { listarCasetas, listarUnidades, listarZonasParaReclamacion, traerMuestrasPorLinea, type VentanaPosiciones } from './datos';
+import { listarCasetas, listarUnidades, listarGeocercas, traerMuestrasPorLinea, type VentanaPosiciones } from './datos';
 import { VENTANA_GPS_MIN } from './cruce_gps';
 import {
   construirReclamacion, LEYENDAS_RECLAMACION, type LineaReclamable, type ReporteReclamacion,
@@ -202,7 +202,7 @@ export function bitacoraConciliadaACsv(b: BitacoraConciliada): string {
 export async function reporteReclamacion(tenantId: string, desgloseId: string): Promise<ReporteReclamacion | null> {
   const b = await bitacoraConciliada(tenantId, desgloseId);
   if (!b) return null;
-  const [casetas, geocercas] = await Promise.all([listarCasetas(tenantId), listarZonasParaReclamacion(tenantId)]);
+  const [casetas, geocercas] = await Promise.all([listarCasetas(tenantId), listarGeocercas(tenantId, { zonasParaReclamacion: true })]);
   const geoPorCaseta = new Map(casetas.filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng)).map((c) => [c.id, { lat: c.lat, lng: c.lng, radioM: c.radioM }]));
 
   // Candidatas a evidencia: las que el cruce marcó «no coincide» o dejó en «muestras insuficientes».

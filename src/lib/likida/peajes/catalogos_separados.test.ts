@@ -81,7 +81,7 @@ describe('editor de geocercas de peajes', () => {
 
   it('la reclamación SÍ ve los patios que la flota importó de sus tablas (catálogo del Conductor), no solo los capturados a mano', async () => {
     db.tablas.geocerca.push({ id: 'patio-gdl', tenant_id: T, nombre: 'PATIO GDL', tipo: 'patio', lat: 20.6, lng: -103.3, radio_m: 300, activa: true, catalogo: 'conductor', codigo: 'P-GDL', fuente: 'csv' });
-    const z = await peajes.listarZonasParaReclamacion(T);
+    const z = await peajes.listarGeocercas(T, { zonasParaReclamacion: true });
     expect(z.map((g) => g.nombre).sort()).toEqual(['PATIO GDL', 'Caseta Norte'].sort());
     expect((await peajes.listarGeocercas(T)).map((g) => g.nombre)).toEqual(['Caseta Norte']);
   });
