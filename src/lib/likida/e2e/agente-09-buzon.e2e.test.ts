@@ -185,7 +185,12 @@ describe('fuera de orden', () => {
     const f = (await listarFacturasProveedor(A))[0];
     await decidirFacturaProveedor(A, f.id, 'aprobada', 'u');
     const e1 = await exportarAprobadas(A, 'generico'); await marcarExportadas(A, e1.ids);
-    expect((await exportarAprobadas(A, 'generico')).filas).toHaveLength(1);
+    const marca = db.tablas.factura_proveedor[0].exportada_en;
+    expect(marca).not.toBeNull();                                   // la marca de exportada quedó puesta
+    const e2 = await exportarAprobadas(A, 'generico');
+    expect(e2.filas).toHaveLength(1);
+    expect(e2.ids).toEqual(e1.ids);
+    expect(db.tablas.factura_proveedor[0].exportada_en).toBe(marca); // y volver a pedir el archivo no la mueve
   });
 });
 
