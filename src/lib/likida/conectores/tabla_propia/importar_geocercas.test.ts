@@ -13,6 +13,7 @@ import { crearLectorTablaPropia } from './lector';
 import { geocercasASitios, importarGeocercasConLector, importarGeocercasDeTablaPropia } from './importar_geocercas';
 import { leerGeocercasCsv } from './csv';
 import { haversineM } from './validar';
+import { dentroDeGeocerca } from '../../conductor/geo';
 
 const fx = (n: string) => readFileSync(new URL(`./fixtures/${n}`, import.meta.url), 'utf8');
 const csv = (t: string): Http => async () => ({ estado: 200, cuerpo: t });
@@ -27,13 +28,37 @@ describe('geocercas → sitios del Conductor', () => {
       ['PATIO-A', 'patio', 25.78, -100.19, 600, null],
       ['PL-01', 'planta', 20.515, -103.185, 550, 'Cliente Ficticio Uno'],
       ['PL-02', 'punto_interes', expect.any(Number), expect.any(Number), expect.any(Number), null],
+      ['PATIO-L', 'patio', expect.any(Number), expect.any(Number), expect.any(Number), null],
     ]);
   });
-  it('el polígono se aproxima por un círculo que LO CONTIENE y se REPORTA', () => {
-    expect(r.aproximadas).toHaveLength(1);
-    const s = r.filas[2];
-    for (const v of geo[2].poligono!) expect(haversineM({ lat: s.lat, lon: s.lng }, v)).toBeLessThanOrEqual(s.radio_m);
-    expect(r.aproximadas[0]).toEqual({ codigo: 'PL-02', radioM: s.radio_m });
+  it('el polígono se guarda NATIVO (sus vértices) y su círculo de respaldo lo contiene SIN inflarse 5 %', () => {
+    expect(r.aproximadas).toEqual([]);
+    expect(r.poligonos).toBe(2);
+    for (const k of [2, 3]) {
+      const s = r.filas[k];
+      expect(s.poligono).toHaveLength(4);
+      expect(s.aproximada).toBe(false);
+      const maxVertice = Math.max(...s.poligono!.map((v) => haversineM({ lat: s.lat, lon: s.lng }, { lat: v.lat, lon: v.lng })));
+      expect(s.radio_m).toBe(Math.ceil(maxVertice)); // el vértice más lejano, ni un metro de más
+      for (const v of geo[k].poligono!) expect(haversineM({ lat: s.lat, lon: s.lng }, v)).toBeLessThanOrEqual(s.radio_m);
+    }
+    // un círculo no lleva polígono
+    expect(r.filas[0].poligono).toBeNull();
+  });
+  it('el patio alargado de la carretera: el punto de la carretera cae en el círculo de respaldo pero NO en el polígono', () => {
+    const patio = r.filas[3];
+    const carretera = { lat: patio.lat + 90 / 111_195, lng: patio.lng }; // ≈ 68 m al norte del borde
+    const g = { lat: patio.lat, lng: patio.lng, radioM: patio.radio_m, poligono: patio.poligono };
+    expect(dentroDeGeocerca(carretera, { lat: patio.lat, lng: patio.lng, radioM: patio.radio_m }).dentro).toBe(true);
+    expect(dentroDeGeocerca(carretera, g).dentro).toBe(false);
+    expect(dentroDeGeocerca({ lat: patio.lat, lng: patio.lng + 100 / 104_150 }, g).dentro).toBe(true);
+  });
+  it('un polígono sin área (tres puntos en línea) no se puede guardar: entra como círculo y se REPORTA como aproximado', () => {
+    const recta = { codigo: 'R', nombre: 'Recta', tipo: 'poligono' as const, centro: null, radioM: null, cliente: null, poligono: [{ lat: 20, lon: -103 }, { lat: 20, lon: -103.002 }, { lat: 20, lon: -103.004 }] };
+    const s = geocercasASitios([recta]);
+    expect(s.filas[0]).toMatchObject({ aproximada: true, poligono: null });
+    expect(s.aproximadas).toEqual([{ codigo: 'R', radioM: s.filas[0].radio_m }]);
+    expect(s.poligonos).toBe(0);
   });
   it('lo que produce es lo que el importador de sitios del Conductor acepta (mismo contrato que el CSV del panel)', () => {
     const texto = `codigo,nombre,tipo,lat,lng,radio_m,cliente\n${r.filas.map((s) => [s.codigo, s.nombre, s.tipo, s.lat, s.lng, s.radio_m, s.cliente ?? ''].join(',')).join('\n')}\n`;
@@ -47,12 +72,33 @@ describe('geocercas → sitios del Conductor', () => {
 
 describe('importar (todo-o-nada, con puertos)', () => {
   const lector = (t: string) => { const c = crearLectorTablaPropia(CRED, { http: csv(t) }); if (!c.ok) throw new Error(c.motivo); return c.lector; };
-  it('lee, traduce e importa; reporta creados, actualizados y polígonos aproximados', async () => {
+  it('lee, traduce e importa; reporta creados, actualizados y polígonos nativos', async () => {
     const importar = vi.fn(async () => ({ ok: true as const, creados: 2, actualizados: 1 }));
     const r = await importarGeocercasConLector('t-1', { lector: lector(fx('geocercas.csv')), importar });
-    expect(r).toMatchObject({ ok: true, creados: 2, actualizados: 1, leidas: 3 });
-    expect(r.ok && r.aproximadas).toHaveLength(1);
+    expect(r).toMatchObject({ ok: true, sinCambios: false, creados: 2, actualizados: 1, leidas: 4, poligonos: 2 });
+    expect(r.ok && r.aproximadas).toHaveLength(0);
+    expect(r.ok && r.huella).toMatch(/^[0-9a-f]{64}$/);
     expect(importar).toHaveBeenCalledWith('t-1', expect.arrayContaining([expect.objectContaining({ codigo: 'PATIO-A', radio_m: 600 })]));
+  });
+  it('re-importación idempotente: con la misma huella NO se escribe nada; si la tabla cambió (aunque sea un vértice) sí', async () => {
+    const importar = vi.fn(async () => ({ ok: true as const, creados: 0, actualizados: 4 }));
+    const primera = await importarGeocercasConLector('t-1', { lector: lector(fx('geocercas.csv')), importar });
+    if (!primera.ok) throw new Error('la primera importación debía salir bien');
+    importar.mockClear();
+    const igual = await importarGeocercasConLector('t-1', { lector: lector(fx('geocercas.csv')), importar, huellaPrevia: primera.huella });
+    expect(igual).toMatchObject({ ok: true, sinCambios: true, creados: 0, actualizados: 0, leidas: 4, huella: primera.huella });
+    expect(importar).not.toHaveBeenCalled();
+    // el orden de las filas no cambia la huella
+    const lineas = fx('geocercas.csv').trim().split('\n');
+    const barajado = [lineas[0], ...lineas.slice(1).reverse()].join('\n');
+    const barajada = await importarGeocercasConLector('t-1', { lector: lector(barajado), importar, huellaPrevia: primera.huella });
+    expect(barajada).toMatchObject({ ok: true, sinCambios: true });
+    // un vértice movido SÍ cambia la huella y se importa
+    const movido = fx('geocercas.csv').replace('-103.30288 20.499798, -103.29712 20.499798', '-103.30288 20.499798, -103.29700 20.499798');
+    const cambiada = await importarGeocercasConLector('t-1', { lector: lector(movido), importar, huellaPrevia: primera.huella });
+    expect(cambiada).toMatchObject({ ok: true, sinCambios: false });
+    expect(importar).toHaveBeenCalledTimes(1);
+    expect(cambiada.ok && cambiada.huella).not.toBe(primera.huella);
   });
   it('una fila mala NO deja un catálogo a medias: no se importa ninguna y se dice cuál', async () => {
     const importar = vi.fn();
