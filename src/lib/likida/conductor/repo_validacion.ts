@@ -292,6 +292,14 @@ export async function urlFirmadaEvidencia(tenantId: string, ruta: string): Promi
   return data.signedUrl;
 }
 
+/** Un hito DE ESA FLOTA (lo mínimo para decidir si se puede validar). `null` = no existe o es de otra flota. */
+export async function hitoDeFlota(tenantId: string, hitoId: string): Promise<{ id: string; viajeId: string; tipo: TipoHito; estado: string } | null> {
+  if (!UUID.test(hitoId)) return null;
+  const res = await acotada(supabaseAdmin().from('viaje_hito').select('id, viaje_id, tipo, estado').eq('tenant_id', tenantId).eq('id', hitoId.toLowerCase()).maybeSingle(), 'oficina.hito_de_flota');
+  const f = exigir(res as never, 'oficina.hito_de_flota') as Fila | null;
+  return f ? { id: String(f.id), viajeId: String(f.viaje_id), tipo: f.tipo as TipoHito, estado: String(f.estado) } : null;
+}
+
 // ── Las acciones de la oficina (RPC atómicas con bitácora) ──────────────────
 
 export interface Actor {

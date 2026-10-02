@@ -179,7 +179,9 @@ import { join, relative } from 'node:path';
 //   · Vigía conectado al Conductor y adjunto del POD (`vigia/repo.ts`): +3 llamadas de `archivoAdjuntoReal`
 //     (el viaje de ESE cliente, su POD y la URL firmada del bucket); el estatus de viaje ya existía.
 const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 268;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_584;
+//   · validar un hito por llave de API (`conductor/repo_validacion.ts`): +1 llamada, `hitoDeFlota` (el hito DE ESA flota
+//     antes de la RPC atómica de validar).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_585;
 
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
