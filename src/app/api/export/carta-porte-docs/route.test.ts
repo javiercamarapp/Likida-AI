@@ -14,6 +14,7 @@ import { estado, reset } from '@/lib/likida/carta_porte_docs/repo_falso.fixture'
 import { A, B } from '@/lib/likida/carta_porte_docs/escenario.fixture';
 import { extraccionAtlasOk } from '@/lib/likida/carta_porte_docs/documentos_sinteticos.fixture';
 import type { DocumentoFila } from '@/lib/likida/carta_porte_docs/repo';
+import * as XLSX from 'xlsx';
 import { GET } from './route';
 
 const U1 = '11111111-1111-4111-8111-111111111111'; const U2 = '22222222-2222-4222-8222-222222222222'; const U3 = '33333333-3333-4333-8333-333333333333'; const UB = '44444444-4444-4444-8444-444444444444';
@@ -90,6 +91,23 @@ describe('el archivo', () => {
     expect(JSON.parse(await r.text()).filas).toHaveLength(1);
   });
 
+  it('xlsx: sale un libro de Excel real con encabezado, números como número y el sello de exportación', async () => {
+    const r = await GET(peticion('?formato=xlsx'));
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type')).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    expect(r.headers.get('content-disposition')).toMatch(/filename="carta-porte-estandar-\d{4}-\d{2}-\d{2}\.xlsx"/);
+    const libro = XLSX.read(new Uint8Array(await r.arrayBuffer()), { type: 'array' });
+    const filas = XLSX.utils.sheet_to_json<Record<string, unknown>>(libro.Sheets[libro.SheetNames[0]]);
+    expect(filas).toHaveLength(1);
+    expect(filas[0].PesoKg).toBe(8400);
+    expect(typeof filas[0].PesoKg).toBe('number');
+    expect(estado.eventos.some((e) => (e as unknown as { tipo?: string }).tipo === 'exportado')).toBe(true);
+  });
+
+  it('un formato que no es csv, json ni xlsx → 400', async () => {
+    expect((await GET(peticion('?formato=pdf'))).status).toBe(400);
+  });
+
   it('un formato guardado de la flota (otra flota no se ve) y uno inválido (409)', async () => {
     const cfg = { columnas: [{ encabezado: 'Folio', campo: 'folio_cliente' }, { encabezado: 'Sistema', constante: 'LIKIDA' }] };
     estado.exportConfigs.push({ tenantId: A, id: U1.replace('1', '5'), nombre: 'Cliente demo', formato: 'csv', config: cfg, activa: true });
@@ -123,6 +141,16 @@ describe('el archivo', () => {
   });
 });
 describe('inyección de fórmulas en el archivo real', () => {
+  it('en el xlsx lo que un tercero escribió es TEXTO neutralizado, nunca fórmula', async () => {
+    const e = extraccionAtlasOk(); e.mercancias[0].descripcion = { valor: '=cmd|"/c calc"!A1', confianza: 1, evidencia: null, origen: 'humano' };
+    estado.docs.get(U1)!.extraccion = e;
+    const libro = XLSX.read(new Uint8Array(await (await GET(peticion('?formato=xlsx'))).arrayBuffer()), { type: 'array' });
+    const hoja = libro.Sheets[libro.SheetNames[0]];
+    const celdas = Object.entries(hoja).filter(([k]) => !k.startsWith('!')) as Array<[string, { t: string; v: unknown; f?: string }]>;
+    expect(celdas.some(([, c]) => c.f !== undefined)).toBe(false);
+    expect(celdas.find(([, c]) => c.v === `'=cmd|"/c calc"!A1`)?.[1].t).toBe('s');
+  });
+
   it('lo que un tercero escribió en el documento sale neutralizado', async () => {
     const e = extraccionAtlasOk(); e.mercancias[0].descripcion = { valor: '=cmd|"/c calc"!A1', confianza: 1, evidencia: null, origen: 'humano' };
     estado.docs.get(U1)!.extraccion = e;
