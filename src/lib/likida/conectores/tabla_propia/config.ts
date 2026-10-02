@@ -3,7 +3,7 @@ import type { ValoresCredencial } from '../tipos';
 import { RUTA } from '../posiciones_proveedores';
 import { jsonCualquiera } from '../posiciones_comun';
 import { MODOS_TABLA_PROPIA, type ModoTablaPropia } from './contrato';
-import { LIMITE_FILAS_MAXIMO, LIMITE_FILAS_POR_OMISION, identificadorValido, vistaValida, type ColumnasGeocerca, type ColumnasPosicion, type ConexionSql } from './sql';
+import { LIMITE_FILAS_MAXIMO, LIMITE_FILAS_POR_OMISION, identificadorValido, vistaValida, type ColumnasCurso, type ColumnasGeocerca, type ColumnasPosicion, type ConexionSql } from './sql';
 import { ZONA_POR_OMISION, zonaValida } from './tiempo';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -22,6 +22,10 @@ const CAMPOS_POSICION = z.object({
 const CAMPOS_GEOCERCA = z.object({
   codigo: RUTA, nombre: RUTA, lat_centro: RUTA.optional(), lon_centro: RUTA.optional(), radio_m: RUTA.optional(), poligono_wkt: RUTA.optional(), cliente: RUTA.optional(),
 }).strict();
+const CAMPOS_CURSO = z.object({
+  codigo: RUTA, nombre: RUTA, unidad: RUTA.optional(), convenio: RUTA.optional(), casetas: RUTA.optional(), corredor_wkt: RUTA.optional(),
+  buffer_m: RUTA.optional(), vigente_desde: RUTA.optional(), vigente_hasta: RUTA.optional(),
+}).strict();
 const PAGINACION = z.discriminatedUnion('tipo', [
   z.object({ tipo: z.literal('cursor'), param: RUTA, ruta_siguiente: RUTA }),
   z.object({ tipo: z.literal('pagina'), param: RUTA, inicio: z.number().int().min(0).max(1).default(1), tamano_param: RUTA.optional(), tamano: z.number().int().min(10).max(1000).default(200) }),
@@ -34,9 +38,15 @@ export const MapeoEndpointPosiciones = z.object({
   paginacion: PAGINACION.optional(),
 }).strict();
 export const MapeoEndpointGeocercas = z.object({ lista: RUTA.optional(), campos: CAMPOS_GEOCERCA, paginacion: PAGINACION.optional() }).strict();
+export const MapeoEndpointCursos = z.object({ lista: RUTA.optional(), campos: CAMPOS_CURSO, paginacion: PAGINACION.optional() }).strict();
+export type MapeoEndpointCursosT = z.infer<typeof MapeoEndpointCursos>;
 export type MapeoEndpointPosicionesT = z.infer<typeof MapeoEndpointPosiciones>;
 export type MapeoEndpointGeocercasT = z.infer<typeof MapeoEndpointGeocercas>;
 
+const COLUMNAS_CURSO_SQL = z.object({
+  codigo: z.string(), nombre: z.string(), unidad: z.string().optional(), convenio: z.string().optional(), casetas: z.string().optional(), corredor_wkt: z.string().optional(),
+  buffer_m: z.string().optional(), vigente_desde: z.string().optional(), vigente_hasta: z.string().optional(),
+}).strict();
 const COLUMNAS_POSICION_SQL = z.object({
   unidad: z.string(), lat: z.string(), lon: z.string(), fecha_hora: z.string(), velocidad_kmh: z.string().optional(), ignicion: z.string().optional(),
 }).strict();
@@ -62,12 +72,14 @@ export type ConfigTablaPropia = ConfigComun & (
   | {
       modo: 'sql_solo_lectura'; conexion: ConexionSql; vista: string; columnas: ColumnasPosicion;
       vistaGeocercas?: string; columnasGeocercas?: ColumnasGeocerca;
+      vistaCursos?: string; columnasCursos?: ColumnasCurso;
     }
   | {
       modo: 'endpoint'; url: string; auth: Autenticacion; mapeo: MapeoEndpointPosicionesT;
       urlGeocercas?: string; mapeoGeocercas?: MapeoEndpointGeocercasT;
+      urlCursos?: string; mapeoCursos?: MapeoEndpointCursosT;
     }
-  | { modo: 'csv_sftp'; url: string; auth: Autenticacion; urlGeocercas?: string }
+  | { modo: 'csv_sftp'; url: string; auth: Autenticacion; urlGeocercas?: string; urlCursos?: string }
 );
 
 export type ResultadoConfig = { ok: true; config: ConfigTablaPropia } | { ok: false; motivo: string };
@@ -150,7 +162,18 @@ export function leerConfigTablaPropia(v: ValoresCredencial): ResultadoConfig {
       if (!cg.ok.poligono_wkt && !(cg.ok.lat_centro && cg.ok.lon_centro && cg.ok.radio_m)) return no('las geocercas necesitan centro y radio (lat_centro, lon_centro, radio_m) o poligono_wkt');
       vistaGeo = v.vista_geocercas!.trim(); colsGeo = cg.ok;
     }
-    return { ok: true, config: { ...comun, modo, conexion: { host, puerto, base, usuario, clave, ssl }, vista: v.vista!.trim(), columnas: cols.ok, vistaGeocercas: vistaGeo, columnasGeocercas: colsGeo } };
+    let vistaCur: string | undefined; let colsCur: ColumnasCurso | undefined;
+    if ((v.vista_cursos ?? '').trim() !== '') {
+      const vc = vistaValida(v.vista_cursos);
+      if ('error' in vc) return no(`vista de cursos: ${vc.error}`);
+      const cc = jsonCampo(v.columnas_cursos, COLUMNAS_CURSO_SQL, 'el mapeo de columnas de cursos (columnas_cursos)');
+      if ('error' in cc) return no(cc.error);
+      for (const [k, c] of Object.entries(cc.ok)) if (!identificadorValido(c)) return no(`la columna de cursos ${k} no es un nombre válido`);
+      if (!cc.ok.unidad && !cc.ok.convenio) return no('los cursos necesitan la columna de la unidad o la del convenio (a quién aplica la ruta)');
+      if (!cc.ok.casetas && !(cc.ok.corredor_wkt && cc.ok.buffer_m)) return no('los cursos necesitan la columna de casetas, o corredor_wkt con buffer_m');
+      vistaCur = v.vista_cursos!.trim(); colsCur = cc.ok;
+    }
+    return { ok: true, config: { ...comun, modo, conexion: { host, puerto, base, usuario, clave, ssl }, vista: v.vista!.trim(), columnas: cols.ok, vistaGeocercas: vistaGeo, columnasGeocercas: colsGeo, vistaCursos: vistaCur, columnasCursos: colsCur } };
   }
 
   const url = urlHttps(v.base_url, 'la dirección (base_url)', modo === 'csv_sftp');
@@ -163,7 +186,13 @@ export function leerConfigTablaPropia(v: ValoresCredencial): ResultadoConfig {
     if ('error' in ug) return no(ug.error);
     urlGeo = ug.ok;
   }
-  if (modo === 'csv_sftp') return { ok: true, config: { ...comun, modo, url: url.ok, auth: auth.ok, urlGeocercas: urlGeo } };
+  let urlCur: string | undefined;
+  if ((v.cursos_url ?? '').trim() !== '') {
+    const uc = urlHttps(v.cursos_url, 'cursos_url', modo === 'csv_sftp');
+    if ('error' in uc) return no(uc.error);
+    urlCur = uc.ok;
+  }
+  if (modo === 'csv_sftp') return { ok: true, config: { ...comun, modo, url: url.ok, auth: auth.ok, urlGeocercas: urlGeo, urlCursos: urlCur } };
   const mapeo = jsonCampo(v.mapeo_posiciones, MapeoEndpointPosiciones, 'el mapeo de campos (mapeo_posiciones)');
   if ('error' in mapeo) return no(mapeo.error);
   let mapeoGeo: MapeoEndpointGeocercasT | undefined;
@@ -172,5 +201,11 @@ export function leerConfigTablaPropia(v: ValoresCredencial): ResultadoConfig {
     if ('error' in mg) return no(mg.error);
     mapeoGeo = mg.ok;
   }
-  return { ok: true, config: { ...comun, modo, url: url.ok, auth: auth.ok, mapeo: mapeo.ok, urlGeocercas: urlGeo, mapeoGeocercas: mapeoGeo } };
+  let mapeoCur: MapeoEndpointCursosT | undefined;
+  if (urlCur) {
+    const mc = jsonCampo(v.mapeo_cursos, MapeoEndpointCursos, 'el mapeo de campos de cursos (mapeo_cursos)');
+    if ('error' in mc) return no(mc.error);
+    mapeoCur = mc.ok;
+  }
+  return { ok: true, config: { ...comun, modo, url: url.ok, auth: auth.ok, mapeo: mapeo.ok, urlGeocercas: urlGeo, mapeoGeocercas: mapeoGeo, urlCursos: urlCur, mapeoCursos: mapeoCur } };
 }

@@ -2,12 +2,12 @@ import type { Http, PeticionHttp, ValoresCredencial } from '../tipos';
 import { aNumero, jsonCualquiera, llamar, relojDe, MAX_PAGINAS_DEFENSIVO, type OpcionesLecturaPaginada, type PosicionLeida, type ResultadoPosiciones } from '../posiciones_comun';
 import { porRuta } from '../posiciones_proveedores';
 import {
-  ErrorTablaPropia, PROVEEDOR_TABLA_PROPIA, type FallaTablaPropia, type GeocercaTablaPropia, type LectorTablaPropia,
+  ErrorTablaPropia, PROVEEDOR_TABLA_PROPIA, type CursoTablaPropia, type FallaTablaPropia, type GeocercaTablaPropia, type LectorTablaPropia,
   type OpcionesLecturaPosiciones, type PosicionTablaPropia, type ResultadoLectura,
 } from './contrato';
-import { leerGeocercasCsv, leerPosicionesCsv } from './csv';
-import { leerConfigTablaPropia, type Autenticacion, type ConfigComun, type ConfigTablaPropia, type MapeoEndpointGeocercasT, type MapeoEndpointPosicionesT } from './config';
-import { registrosAGeocercas, registrosAPosiciones, type Registro } from './filas';
+import { leerCursosCsv, leerGeocercasCsv, leerPosicionesCsv } from './csv';
+import { leerConfigTablaPropia, type Autenticacion, type ConfigComun, type ConfigTablaPropia, type MapeoEndpointCursosT, type MapeoEndpointGeocercasT, type MapeoEndpointPosicionesT } from './config';
+import { registrosACursos, registrosAGeocercas, registrosAPosiciones, type Registro } from './filas';
 import { TIMEOUT_SQL_MS, construirSelect, crearEjecutorPg, type EjecutorSql } from './sql';
 import { localAUtc, utcALocal } from './tiempo';
 import { llaveEconomico } from './validar';
@@ -57,6 +57,13 @@ export class LectorTablaPropiaSql implements LectorTablaPropia {
     const consulta = construirSelect(this.cfg.vistaGeocercas, this.cfg.columnasGeocercas, { limite: 20_000 });
     const filas = await this.ejecutor.ejecutar({ ...consulta, timeoutMs: TIMEOUT_SQL_MS, zona: this.cfg.zona });
     return registrosAGeocercas(filas, { primeraFila: 1 });
+  }
+
+  async leerCursos(): Promise<ResultadoLectura<CursoTablaPropia>> {
+    if (!this.cfg.vistaCursos || !this.cfg.columnasCursos) throw new ErrorTablaPropia('no hay vista de cursos configurada', 'formato');
+    const consulta = construirSelect(this.cfg.vistaCursos, this.cfg.columnasCursos, { limite: 20_000 });
+    const filas = await this.ejecutor.ejecutar({ ...consulta, timeoutMs: TIMEOUT_SQL_MS, zona: this.cfg.zona });
+    return registrosACursos(filas, { primeraFila: 1 });
   }
 }
 
@@ -161,6 +168,13 @@ export class LectorTablaPropiaEndpoint implements LectorTablaPropia {
     const items = await leerListaJson(this.deps, this.cfg.urlGeocercas, this.cfg.auth, m.lista, m.paginacion);
     return registrosAGeocercas(items.map((it) => aRegistroPorCampos(it, m.campos)));
   }
+
+  async leerCursos(): Promise<ResultadoLectura<CursoTablaPropia>> {
+    const m: MapeoEndpointCursosT | undefined = this.cfg.mapeoCursos;
+    if (!this.cfg.urlCursos || !m) throw new ErrorTablaPropia('no hay endpoint de cursos configurado', 'formato');
+    const items = await leerListaJson(this.deps, this.cfg.urlCursos, this.cfg.auth, m.lista, m.paginacion);
+    return registrosACursos(items.map((it) => aRegistroPorCampos(it, m.campos)));
+  }
 }
 
 export class LectorTablaPropiaCsvHttp implements LectorTablaPropia {
@@ -182,6 +196,11 @@ export class LectorTablaPropiaCsvHttp implements LectorTablaPropia {
   async leerGeocercas(): Promise<ResultadoLectura<GeocercaTablaPropia>> {
     if (!this.cfg.urlGeocercas) throw new ErrorTablaPropia('no hay archivo de geocercas configurado', 'formato');
     return leerGeocercasCsv(await this.texto(this.cfg.urlGeocercas));
+  }
+
+  async leerCursos(): Promise<ResultadoLectura<CursoTablaPropia>> {
+    if (!this.cfg.urlCursos) throw new ErrorTablaPropia('no hay archivo de cursos configurado', 'formato');
+    return leerCursosCsv(await this.texto(this.cfg.urlCursos));
   }
 }
 
