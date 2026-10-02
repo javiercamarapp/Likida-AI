@@ -11,9 +11,7 @@ import { crearDbMemoria, type DbMemoria, type Fila } from './db_memoria.fixture'
 // ═══════════════════════════════════════════════════════════════════════════
 
 let db: DbMemoria;
-const horasPorFlota: Record<string, number> = {}; // (se usa solo para sembrar tenant.config)
 const jefes: Record<string, string> = {};
-const avisosChofer: Array<{ t: string; op: string; v: string }> = [];
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => db.cliente }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: vi.fn(async () => {}) }));
@@ -22,18 +20,7 @@ vi.mock('../agentes/notificaciones', () => ({ avisar: vi.fn(async () => {}), avi
 const corridas: unknown[] = [];
 vi.mock('../agentes/corridas', () => ({ registrarCorrida: async (t: string, a: string, c: unknown) => { corridas.push({ t, a, c }); } }));
 vi.mock('../contactos', () => ({ telefonosJefe: async (ts: string[]) => Object.fromEntries(ts.filter((t) => jefes[t]).map((t) => [t, jefes[t]])) }));
-// avisarAlChofer es el aviso por PLANTILLA «viaje asignado»: aquí manda la plantilla por el doble de Meta.
-vi.mock('../operacion', async () => {
-  const { meta } = await import('../conductor/meta.fixture');
-  return {
-    avisarAlChofer: async (t: string, op: string, v: string) => {
-      avisosChofer.push({ t, op, v });
-      const fila = db.tablas.viaje.find((x) => x.id === v)!;
-      const tel = (fila.operador as { telefono: string }).telefono;
-      await meta.sendTemplate(tel, 'viaje_asignado', { parametros: [String(fila.folio)] });
-    },
-  };
-});
+// avisarAlChofer (operacion.ts) y notificarAsignacion (notificar.ts) corren REALES: solo el cliente de Meta es doble.
 vi.mock('@/lib/meta/client', async (original) => {
   const real = await original<Record<string, unknown>>();
   const { meta } = await import('../conductor/meta.fixture');
@@ -58,6 +45,7 @@ vi.mock('../wa_ventana', async (original) => {
 const { escalarViajesSinAceptar, viajesSinAceptar } = await import('../escalar_viaje');
 const { meta } = await import('../conductor/meta.fixture');
 
+const PLANTILLA_VIAJE = 'viaje_asignado';
 const A = 't-a'; const B = 't-b';
 const AHORA = new Date('2026-10-02T20:00:00.000Z');
 const hace = (h: number) => new Date(AHORA.getTime() - h * 3_600_000).toISOString();
@@ -71,10 +59,10 @@ const fila = (id: string) => db.tablas.viaje.find((v) => v.id === id)!;
 const a = (tel: string) => meta.salientes.filter((s) => s.a === tel);
 
 beforeEach(() => {
-  meta.reiniciar(); meta.estado.reloj = AHORA; corridas.length = 0; avisosChofer.length = 0;
-  for (const k of Object.keys(horasPorFlota)) delete horasPorFlota[k];
+  meta.reiniciar(); meta.estado.reloj = AHORA; corridas.length = 0;
   jefes[A] = TEL.jefeA; jefes[B] = TEL.jefeB;
-  db = crearDbMemoria({ tenant: [A, B].map((id) => ({ id, rfc: null, config: horasPorFlota[id] ? { agentes: { conductores: { horasEscalacion: horasPorFlota[id] } } } : null })), viaje: [viaje('v1', A, 6, TEL.a1), viaje('v2', A, 2, TEL.a2), viaje('v3', B, 7, TEL.b1)] });
+  db = crearDbMemoria({ tenant: [A, B].map((id) => ({ id, rfc: null, config: null })), viaje: [viaje('v1', A, 6, TEL.a1), viaje('v2', A, 2, TEL.a2), viaje('v3', B, 7, TEL.b1)],
+    operador: [{ id: 'op-v1', tenant_id: A, telefono: TEL.a1 }, { id: 'op-v2', tenant_id: A, telefono: TEL.a2 }, { id: 'op-v3', tenant_id: B, telefono: TEL.b1 }] });
   // El chofer escribió hace una hora, el jefe también: ventanas abiertas.
   for (const t of Object.values(TEL)) meta.entrante(t, new Date(AHORA.getTime() - 3_600_000));
 });
@@ -98,8 +86,10 @@ describe('fallo', () => {
   it('chofer con ventana cerrada: el recordatorio va por PLANTILLA (avisarAlChofer), no se gasta un texto que Meta rechazaría', async () => {
     meta.ultimoEntrante.delete(meta.norm(TEL.a1));
     await escalarViajesSinAceptar({ ahora: AHORA });
-    expect(avisosChofer).toEqual([{ t: A, op: 'op-v1', v: 'v1' }]);
-    expect(meta.salientes.filter((s) => s.a === TEL.a1).every((s) => s.tipo === 'plantilla')).toBe(true);
+    const alChofer = meta.salientes.filter((s) => s.a === TEL.a1);
+    expect(alChofer).toHaveLength(1);                             // un solo aviso: nada de texto que Meta rechazaría
+    expect(alChofer[0]).toMatchObject({ tipo: 'plantilla', plantilla: PLANTILLA_VIAJE });
+    expect(alChofer[0].parametros.join(' ')).toMatch(/F-v1/);     // la plantilla real lleva el folio del viaje
   });
 
   it('flota SIN teléfono de jefe: se marca igual (no reintentar para siempre), se dice en fallos y el chofer sí recibe su recordatorio', async () => {
@@ -192,6 +182,8 @@ describe('otro tenant', () => {
 
   it('el aviso de la flota B nunca llega al jefe de la A, ni al revés', async () => {
     await escalarViajesSinAceptar({ ahora: AHORA });
+    expect(a(TEL.jefeA).length).toBeGreaterThan(0);               // sí hubo avisos: el `every` de abajo no es vacío
+    expect(a(TEL.jefeB).length).toBeGreaterThan(0);
     expect(a(TEL.jefeA).every((s) => !/F-v3/.test(s.cuerpo))).toBe(true);
     expect(a(TEL.jefeB).every((s) => !/F-v1|F-v2/.test(s.cuerpo))).toBe(true);
   });
