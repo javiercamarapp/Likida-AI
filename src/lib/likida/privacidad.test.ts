@@ -122,7 +122,7 @@ describe('avisoSimplificado', () => {
   // ═════════════════════════════════════════════════════════════════════════
   it('enuncia los avisos del viaje como dato y su medición de tiempos como finalidad', () => {
     const a = avisoSimplificado(flota)!;
-    // El dato, con las palabras que el chofer de verdad manda (hitos_viaje.ts).
+    // El dato, con las palabras que el chofer de verdad manda.
     expect(a).toMatch(/ya llegué/i);
     expect(a).toMatch(/estoy descargando/i);
     expect(a).toMatch(/voy de regreso/i);
