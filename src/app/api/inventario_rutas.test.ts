@@ -156,7 +156,29 @@ import { join, relative, sep } from 'node:path';
 //     `api/correo/entrante/route.ts`, que verifica la firma Svix antes de leer el cuerpo.
 //
 // Conteo de la integración de la ola 2: 78 + 9 (Conductor) + 1 (Vigía) + 1 (Carta Porte) = 89.
-// 89 → 91 (loop punta a punta, W3 «GPS/Jornada», 2-oct-2026): una ruta,
+//
+// 89 → 90 (loop punta a punta, ola 3, Agente 9 «Buzón de facturas», 2-oct-2026): una ruta,
+//   · `api/cron/buzon-entrega/route.ts` — puertaCron (CRON_SECRET, comparación en tiempo
+//     constante) y palanca `global` (falla cerrado si no se puede leer); latido en todo camino de
+//     salida. Arma el lote del día y envía los vencidos de las flotas que ENCENDIERON la entrega
+//     (`buzon_entrega_config.activo`, apagada por omisión); cada acción usa el tenant del propio
+//     lote. No acepta cuerpo ni parámetros. La confirmación (entregada/rebotada) NO suma ruta:
+//     comparte el webhook firmado `api/correo/eventos/route.ts` (firma Svix antes de leer).
+// 90 → 92 (ola 3, Agente 6 «autofacturación», 0540): dos rutas SIN sesión de Likida a propósito — las llama
+//   el script de la máquina con pantalla del contralor, que no tiene cookie del panel. Su ÚNICA credencial es
+//   el código de un solo uso que el dueño genera en el panel (80 bits, 15 min, se consume al reclamarlo; en la
+//   base solo vive su SHA-256), y TODO lo decide el código: el tenant y el portal salen de la solicitud, jamás
+//   del cuerpo (un `tenant_id`/`comercio` en el cuerpo se ignora). Antes de leer nada: rate limit por IP
+//   (20/10 min) y cuerpo acotado en streaming (200 KB). La sesión que suben se vuelve a recortar al dominio del
+//   portal y se cifra en el cofre; si el cofre no está configurado, no se guarda ni se anota «vinculado».
+//   · `api/vinculacion-portal/reclamar/route.ts` — consume el código y devuelve QUÉ portal abrir (nunca tenant ni id).
+//   · `api/vinculacion-portal/completar/route.ts` — sube la sesión ya iniciada (o avisa del fallo).
+//
+// 92 → 93 en la integración de la ola 3 (ronda-03): `api/v1/hitos/[id]/validar/route.ts` (W3 Conductor,
+//   POST con llave de API de la flota: valida el hito DE ESA flota con la RPC atómica; la rama de Conductor
+//   no subió esta constante) más las 2 de autofactura (vinculación de portal) y la de cron buzon-entrega.
+//
+// 93 → 95 (ola 3, W3 «GPS/Jornada»): dos rutas,
 //   · `api/gps/push/[flota]/route.ts` — SIN sesión a propósito: es el endpoint al que un GPS
 //     propio hace POST. Su puerta es la firma HMAC-SHA256 por flota (secreto cifrado en la
 //     base, rotable con ventana de 24 h, tiempo constante, timestamp firmado ±5 min); el
@@ -164,11 +186,11 @@ import { join, relative, sep } from 'node:path';
 //     acotado (256 KiB / 500 lecturas), flota inexistente, push apagado y firma mala
 //     responden igual (401) y todo se asienta con el tenant del PATH ya autenticado por su
 //     secreto — nunca con un dato del cuerpo.
-//   · `api/cron/jornada-alertas/route.ts` (91) — cron: `puertaCron` (CRON_SECRET o 401/500) y la
+//   · `api/cron/jornada-alertas/route.ts` — cron: `puertaCron` (CRON_SECRET o 401/500) y la
 //     palanca global fail-closed; lee jornadas en curso solo de las flotas con la alerta
 //     ENCENDIDA (apagada por omisión) y manda WhatsApp/correo al encargado y al operador de ESA
 //     flota; claim por (jornada, nivel) en la base y latido en todo camino de salida.
-const RUTAS_APP_REVISADAS = 91;
+const RUTAS_APP_REVISADAS = 95;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

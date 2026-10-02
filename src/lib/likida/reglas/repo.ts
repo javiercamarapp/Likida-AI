@@ -19,6 +19,7 @@ import {
   type PlantillaId, type ParamsCualquiera, type CanalAviso,
 } from './catalogo';
 import type { Disparo } from './lectores';
+import { LIMITE_POR_OMISION, validarLimite, type LimiteFrecuencia } from './frecuencia';
 
 export type EstadoRegla = 'pendiente' | 'activa' | 'pausada';
 
@@ -35,6 +36,19 @@ export interface ReglaGuardada {
   ultimaCorridaEn: string | null;
   ultimoDisparoEn: string | null;
   modelo: string | null;
+  /** Tope de avisos en 24 h y separación mínima (0520). */
+  maxAvisosDia: number;
+  minHorasEntreAvisos: number;
+}
+
+/** Un aviso que la regla intentó mandar (0520), para el historial. */
+export interface AvisoDeRegla {
+  enviadoEn: string;
+  resultado: 'enviado' | 'fallido';
+  casos: number;
+  via: 'texto' | 'botones' | 'plantilla' | null;
+  motivo: string | null;
+  error: string | null;
 }
 
 /** Lo que la pantalla necesita para pintar una regla. */
@@ -43,6 +57,8 @@ export interface ReglaEnPantalla extends ReglaGuardada {
   canal: CanalAviso;
   /** Los últimos disparos, para que "última vez que sonó" tenga un porqué. */
   ultimasEvidencias: Array<{ evidencia: string; disparadoEn: string }>;
+  /** El historial de avisos (más nuevo primero), enviados y fallidos. */
+  ultimosAvisos: AvisoDeRegla[];
 }
 
 export type Resultado<T> = { ok: true; valor: T } | { ok: false; error: string };
@@ -60,6 +76,8 @@ interface FilaRegla {
   texto_original: string; frase: string; estado: string; creada_en: string;
   confirmada_en: string | null; ultima_corrida_en: string | null;
   ultimo_disparo_en: string | null; modelo: string | null;
+  /** Ausentes en filas anteriores a la 0520 (y en dobles de prueba viejos). */
+  max_avisos_dia?: number | null; min_horas_entre_avisos?: number | null;
 }
 
 /**
@@ -93,10 +111,12 @@ export function desdeFila(f: FilaRegla): ReglaGuardada | null {
     ultimaCorridaEn: f.ultima_corrida_en,
     ultimoDisparoEn: f.ultimo_disparo_en,
     modelo: f.modelo,
+    maxAvisosDia: f.max_avisos_dia ?? LIMITE_POR_OMISION.maxAvisosDia,
+    minHorasEntreAvisos: f.min_horas_entre_avisos ?? LIMITE_POR_OMISION.minHorasEntreAvisos,
   };
 }
 
-const COLUMNAS = 'id, tenant_id, plantilla, params, texto_original, frase, estado, creada_en, confirmada_en, ultima_corrida_en, ultimo_disparo_en, modelo';
+const COLUMNAS = 'id, tenant_id, plantilla, params, texto_original, frase, estado, creada_en, confirmada_en, ultima_corrida_en, ultimo_disparo_en, modelo, max_avisos_dia, min_horas_entre_avisos';
 
 // ── Lo que atiende una persona ─────────────────────────────────────────────
 
@@ -248,6 +268,25 @@ async function contarReglas(tenantId: string): Promise<Resultado<number>> {
   return { ok: true, valor: count };
 }
 
+/** Cuántos renglones de historial (avisos y evidencias) se enseñan por regla. */
+export const HISTORIAL_POR_REGLA = 10;
+
+interface FilaAviso {
+  regla_id: string; enviado_en: string; resultado: string; casos: number;
+  via: string | null; motivo: string | null; error: string | null;
+}
+
+function aAviso(a: FilaAviso): AvisoDeRegla {
+  return {
+    enviadoEn: a.enviado_en,
+    resultado: a.resultado === 'enviado' ? 'enviado' : 'fallido',
+    casos: Number(a.casos),
+    via: a.via === 'texto' || a.via === 'botones' || a.via === 'plantilla' ? a.via : null,
+    motivo: a.motivo ?? null,
+    error: a.error ?? null,
+  };
+}
+
 /** Las reglas de una flota, con sus últimas evidencias, para la pantalla. */
 export async function listarReglas(tenantId: string): Promise<ReglaEnPantalla[]> {
   const { data, error } = await acotada(supabaseAdmin()
@@ -263,20 +302,38 @@ export async function listarReglas(tenantId: string): Promise<ReglaEnPantalla[]>
     .filter((r): r is ReglaGuardada => r !== null);
   if (reglas.length === 0) return [];
 
+  const ids = reglas.map((r) => r.id);
   const { data: sellos, error: errSellos } = await acotada(supabaseAdmin()
     .from('regla_disparo')
     .select('regla_id, evidencia, disparado_en')
     .eq('tenant_id', tenantId)
-    .in('regla_id', reglas.map((r) => r.id))
+    .in('regla_id', ids)
     .order('disparado_en', { ascending: false })
-    .limit(200), 'reglas.sellos_recientes');
+    .order('objeto_id', { ascending: false })
+    .limit(400), 'reglas.sellos_recientes');
   if (errSellos) throw new Error(`listarReglas.sellos: ${errSellos.message}`);
+
+  const { data: avisos, error: errAvisos } = await acotada(supabaseAdmin()
+    .from('regla_aviso')
+    .select('regla_id, enviado_en, resultado, casos, via, motivo, error')
+    .eq('tenant_id', tenantId)
+    .in('regla_id', ids)
+    .order('enviado_en', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(400), 'reglas.avisos_recientes');
+  if (errAvisos) throw new Error(`listarReglas.avisos: ${errAvisos.message}`);
 
   const porRegla = new Map<string, Array<{ evidencia: string; disparadoEn: string }>>();
   for (const s of (sellos ?? []) as Array<{ regla_id: string; evidencia: string; disparado_en: string }>) {
     const lista = porRegla.get(s.regla_id) ?? [];
-    if (lista.length < 3) lista.push({ evidencia: s.evidencia, disparadoEn: s.disparado_en });
+    if (lista.length < HISTORIAL_POR_REGLA) lista.push({ evidencia: s.evidencia, disparadoEn: s.disparado_en });
     porRegla.set(s.regla_id, lista);
+  }
+  const avisosPorRegla = new Map<string, AvisoDeRegla[]>();
+  for (const a of (avisos ?? []) as FilaAviso[]) {
+    const lista = avisosPorRegla.get(a.regla_id) ?? [];
+    if (lista.length < HISTORIAL_POR_REGLA) lista.push(aAviso(a));
+    avisosPorRegla.set(a.regla_id, lista);
   }
 
   return reglas.map((r) => ({
@@ -284,6 +341,7 @@ export async function listarReglas(tenantId: string): Promise<ReglaEnPantalla[]>
     titulo: CATALOGO[r.plantilla].titulo,
     canal: CATALOGO[r.plantilla].canal,
     ultimasEvidencias: porRegla.get(r.id) ?? [],
+    ultimosAvisos: avisosPorRegla.get(r.id) ?? [],
   }));
 }
 
@@ -362,4 +420,95 @@ export async function anotarCorrida(
     .eq('tenant_id', tenantId)
     .eq('id', reglaId), 'reglas.anotar_corrida');
   if (error) logger.warn('reglas.corrida_no_anotada', { regla: reglaId, err: error.message });
+}
+
+// ── Frecuencia e historial (0520) ──────────────────────────────────────────
+
+/**
+ * Cambia el límite de frecuencia de UNA regla. Va anclado por tenant + id: el
+ * `tenantId` sale de la sesión, nunca del formulario, y una regla de otra flota
+ * simplemente no se encuentra.
+ */
+export async function actualizarFrecuencia(
+  tenantId: string, reglaId: string,
+  cruda: { maxAvisosDia: unknown; minHorasEntreAvisos: unknown },
+  actor: { id: string; email?: string | null },
+): Promise<Resultado<LimiteFrecuencia>> {
+  const v = validarLimite(cruda);
+  if (!v.ok) return { ok: false, error: v.error };
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('regla_vigilancia')
+    .update({ max_avisos_dia: v.limite.maxAvisosDia, min_horas_entre_avisos: v.limite.minHorasEntreAvisos })
+    .eq('tenant_id', tenantId)
+    .eq('id', reglaId)
+    .select('id'), 'reglas.frecuencia');
+  if (error) {
+    logger.error('reglas.frecuencia_fallo', { tenant: tenantId, regla: reglaId, err: error.message });
+    return { ok: false, error: 'No se pudo guardar el límite de frecuencia.' };
+  }
+  if (!data || (data as unknown[]).length === 0) return { ok: false, error: 'Esa regla ya no existe.' };
+  await anotarBitacora({
+    tenantId, actor, accion: 'regla.frecuencia', entidad: 'regla_vigilancia', entidadId: reglaId,
+    detalle: { ...v.limite },
+  }, { evento: 'reglas.bitacora_no_escribio' });
+  return { ok: true, valor: v.limite };
+}
+
+/** Los instantes de los avisos que SÍ salieron en la ventana (para el tope).
+ *  LANZA si no se puede leer: sin historial no se sabe si ya se mandó, y mandar
+ *  a ciegas rompería justo el límite que esta lectura protege. */
+export async function avisosEnviadosDesde(tenantId: string, reglaId: string, desde: Date): Promise<Date[]> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('regla_aviso')
+    .select('enviado_en')
+    .eq('tenant_id', tenantId)
+    .eq('regla_id', reglaId)
+    .eq('resultado', 'enviado')
+    .gte('enviado_en', desde.toISOString())
+    .order('enviado_en', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(100), 'reglas.avisos_desde');
+  if (error) throw new Error(`avisosEnviadosDesde: ${error.message}`);
+  return ((data ?? []) as Array<{ enviado_en: string }>).map((a) => new Date(a.enviado_en));
+}
+
+export interface NuevoAviso {
+  resultado: 'enviado' | 'fallido';
+  casos: number;
+  via?: 'texto' | 'botones' | 'plantilla' | null;
+  motivo?: string | null;
+  error?: string | null;
+  enviadoEn?: Date;
+}
+
+/** Anota un intento de aviso. Best-effort declarado: el mensaje YA salió (o ya
+ *  falló); perder la fila deja un hueco en el historial, no un aviso perdido. */
+export async function registrarAviso(tenantId: string, reglaId: string, a: NuevoAviso): Promise<void> {
+  const { error } = await acotada(supabaseAdmin()
+    .from('regla_aviso')
+    .insert({
+      tenant_id: tenantId, regla_id: reglaId, resultado: a.resultado, casos: Math.max(1, a.casos),
+      via: a.resultado === 'enviado' ? (a.via ?? 'texto') : null,
+      motivo: a.motivo ? a.motivo.slice(0, 300) : null,
+      error: a.error ? a.error.slice(0, 300) : null,
+      ...(a.enviadoEn ? { enviado_en: a.enviadoEn.toISOString() } : {}),
+    }), 'reglas.registrar_aviso');
+  if (error) logger.warn('reglas.aviso_no_registrado', { regla: reglaId, err: error.message });
+}
+
+/** Retención: el historial de avisos de más de 365 días se borra en el mismo
+ *  barrido que lo escribe. Best-effort: no tumba la corrida. */
+export const DIAS_RETENCION_AVISOS = 365;
+export async function purgarAvisosViejos(ahora: Date): Promise<number> {
+  const corte = new Date(ahora.getTime() - DIAS_RETENCION_AVISOS * 86_400_000).toISOString();
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('regla_aviso')
+    .delete()
+    .lt('enviado_en', corte)
+    .select('id'), 'reglas.purgar_avisos');
+  if (error) {
+    logger.warn('reglas.purga_avisos_fallo', { err: error.message });
+    return 0;
+  }
+  return ((data ?? []) as unknown[]).length;
 }

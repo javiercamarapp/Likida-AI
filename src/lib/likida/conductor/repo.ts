@@ -408,6 +408,7 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     estadiaAlertaCargaMin: n(f.estadia_alerta_carga_min),
     estadiaAlertaDescargaMin: n(f.estadia_alerta_descarga_min),
     pedirFotoEvidencia: f.pedir_foto_evidencia as boolean,
+    fotoRegistraHito: f.foto_registra_hito !== false,
   });
   if ('error' in v) {
     // La base tiene CHECKs equivalentes; llegar aquí es una fila corrupta. Se grita y se opera
@@ -604,7 +605,7 @@ export async function guardarConfigConductor(
     confirmar_al_chofer: c.confirmarAlChofer, validar_ubicacion: c.validarUbicacion,
     tolerancia_ubicacion_m: c.toleranciaUbicacionM, ventana_ubicacion_min: c.ventanaUbicacionMin, pedir_ubicacion: c.pedirUbicacion,
     estadia_alerta_carga_min: c.estadiaAlertaCargaMin, estadia_alerta_descarga_min: c.estadiaAlertaDescargaMin,
-    pedir_foto_evidencia: c.pedirFotoEvidencia, updated_at: new Date().toISOString(),
+    pedir_foto_evidencia: c.pedirFotoEvidencia, foto_registra_hito: c.fotoRegistraHito, updated_at: new Date().toISOString(),
   }, { onConflict: 'tenant_id' }), 'v1.conductor_config');
   if (error) throw new Error(`v1.conductor_config: ${error.message}`);
   if (contactos === undefined) return 'ok';

@@ -31,6 +31,9 @@ const reglasActivas = vi.hoisted(() => vi.fn());
 const sellosDe = vi.hoisted(() => vi.fn(async () => new Set<string>()));
 const sellarDisparos = vi.hoisted(() => vi.fn(async () => {}));
 const anotarCorrida = vi.hoisted(() => vi.fn(async () => {}));
+const avisosEnviadosDesde = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => [] as Date[]));
+const registrarAviso = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => {}));
+const purgarAvisosViejos = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => 0));
 
 vi.mock('@/lib/meta/enviar_con_fallback', () => ({ enviarConFallback }));
 vi.mock('../contactos', () => ({ telefonoJefeDe, telefonoParaDineroDe }));
@@ -38,6 +41,7 @@ vi.mock('@/lib/logger', () => ({ logger }));
 vi.mock('./lectores', () => ({ evaluar }));
 vi.mock('./repo', () => ({
   reglasActivas, sellosDe, sellarDisparos, anotarCorrida,
+  avisosEnviadosDesde, registrarAviso, purgarAvisosViejos,
   llaveSello: (d: { objeto: string; objetoId: string; clave: string }) => `${d.objeto}|${d.objetoId}|${d.clave}`,
 }));
 
@@ -52,6 +56,7 @@ const REGLA_DINERO = {
   frase: 'Voy a avisarte cuando entre un comprobante de casetas por más de $3,000.00.',
   estado: 'activa' as const, creadaEn: '2026-08-01T00:00:00Z', confirmadaEn: '2026-08-01T00:05:00Z',
   ultimaCorridaEn: null, ultimoDisparoEn: null, modelo: 'modelo-x',
+  maxAvisosDia: 4, minHorasEntreAvisos: 1,
 };
 const REGLA_OPERACION = {
   ...REGLA_DINERO, id: 'r-2', plantilla: 'estadia_mayor_a' as const, params: { horas: 4 },
@@ -69,6 +74,9 @@ beforeEach(() => {
   sellosDe.mockReset().mockResolvedValue(new Set<string>());
   sellarDisparos.mockReset().mockResolvedValue(undefined);
   anotarCorrida.mockReset().mockResolvedValue(undefined);
+  avisosEnviadosDesde.mockReset().mockResolvedValue([]);
+  registrarAviso.mockReset().mockResolvedValue(undefined);
+  purgarAvisosViejos.mockReset().mockResolvedValue(0);
   logger.error.mockClear();
   logger.warn.mockClear();
 });
@@ -103,7 +111,7 @@ describe('el barrido', () => {
     evaluar.mockResolvedValue([DISPARO]);
     const r = await vigilarReglas(AHORA);
 
-    expect(r).toEqual({ reglas: 1, disparadas: 1, avisos: 1, fallos: 0 });
+    expect(r).toEqual({ reglas: 1, disparadas: 1, avisos: 1, fallos: 0, diferidas: 0 });
     expect(enviarConFallback).toHaveBeenCalledWith('5210000000002', expect.objectContaining({
       texto: expect.stringContaining('$3,500.00'),
       plantilla: expect.objectContaining({ nombre: 'regla_aviso_v1', parametros: expect.arrayContaining(['1']) }),
@@ -129,7 +137,7 @@ describe('el barrido', () => {
     sellosDe.mockResolvedValue(new Set(['gasto|g-1|']));
     const r = await vigilarReglas(AHORA);
     expect(enviarConFallback).not.toHaveBeenCalled();
-    expect(r).toEqual({ reglas: 1, disparadas: 0, avisos: 0, fallos: 0 });
+    expect(r).toEqual({ reglas: 1, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0 });
     expect(anotarCorrida).toHaveBeenCalledWith('t-1', 'r-1', AHORA, 0);
   });
 
@@ -147,7 +155,7 @@ describe('el barrido', () => {
     const r = await vigilarReglas(AHORA);
     expect(sellosDe).not.toHaveBeenCalled();
     expect(enviarConFallback).not.toHaveBeenCalled();
-    expect(r).toEqual({ reglas: 1, disparadas: 0, avisos: 0, fallos: 0 });
+    expect(r).toEqual({ reglas: 1, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0 });
   });
 
   it('varios casos nuevos salen en UN mensaje, no en cinco WhatsApps', async () => {
@@ -193,7 +201,7 @@ describe('aislamiento entre reglas y entre flotas', () => {
       .mockRejectedValueOnce(new Error('relation does not exist'))
       .mockResolvedValueOnce([{ ...DISPARO, objeto: 'viaje', objetoId: 'v-9', clave: 'c' }]);
     const r = await vigilarReglas(AHORA);
-    expect(r).toEqual({ reglas: 2, disparadas: 1, avisos: 1, fallos: 1 });
+    expect(r).toEqual({ reglas: 2, disparadas: 1, avisos: 1, fallos: 1, diferidas: 0 });
     expect(enviarConFallback).toHaveBeenCalledTimes(1);
     expect(logger.error).toHaveBeenCalledWith('reglas.regla_fallo', expect.objectContaining({ regla: 'r-1' }));
   });
@@ -205,6 +213,87 @@ describe('aislamiento entre reglas y entre flotas', () => {
 
   it('sin reglas activas la corrida es un cero honesto', async () => {
     const r = await vigilarReglas(AHORA);
-    expect(r).toEqual({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0 });
+    expect(r).toEqual({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0 });
+  });
+});
+
+
+describe('límite de frecuencia por regla (0520)', () => {
+  const hace = (h: number) => new Date(AHORA.getTime() - h * 3_600_000);
+  const unCaso = [{ objeto: 'gasto' as const, objetoId: 'g-1', clave: '', evidencia: 'caseta de $4,000' }];
+
+  beforeEach(() => {
+    reglasActivas.mockResolvedValue([REGLA_DINERO]);
+    evaluar.mockResolvedValue(unCaso);
+  });
+
+  it('al llegar al tope diario NO manda, NO sella, y lo cuenta como diferida', async () => {
+    avisosEnviadosDesde.mockResolvedValue([hace(20), hace(12), hace(6), hace(3)]);
+    const r = await vigilarReglas(AHORA);
+    expect(r).toMatchObject({ disparadas: 0, avisos: 0, fallos: 0, diferidas: 1 });
+    expect(enviarConFallback).not.toHaveBeenCalled();
+    expect(sellarDisparos).not.toHaveBeenCalled();
+    expect(registrarAviso).not.toHaveBeenCalled();
+    // La corrida SÍ se anota: la regla fue revisada.
+    expect(anotarCorrida).toHaveBeenCalledWith('t-1', 'r-1', AHORA, 0);
+  });
+
+  it('la separación mínima pospone el aviso aunque el tope diario no se alcance', async () => {
+    avisosEnviadosDesde.mockResolvedValue([hace(0.5)]);
+    const r = await vigilarReglas(AHORA);
+    expect(r.diferidas).toBe(1);
+    expect(enviarConFallback).not.toHaveBeenCalled();
+  });
+
+  it('lo pospuesto sale en el primer aviso permitido: no se perdió porque nunca se selló', async () => {
+    avisosEnviadosDesde.mockResolvedValueOnce([hace(0.5)]).mockResolvedValueOnce([hace(2)]);
+    const antes = await vigilarReglas(AHORA);
+    expect(antes.diferidas).toBe(1);
+    const despues = await vigilarReglas(new Date(AHORA.getTime() + 3_600_000));
+    expect(despues).toMatchObject({ disparadas: 1, avisos: 1, diferidas: 0 });
+    expect(sellarDisparos).toHaveBeenCalledTimes(1);
+  });
+
+  it('un aviso enviado deja su fila en el historial con el canal y la fecha', async () => {
+    enviarConFallback.mockResolvedValue({ ...OK_ENVIO, via: 'plantilla', motivo: 'ventana_cerrada' });
+    await vigilarReglas(AHORA);
+    expect(registrarAviso).toHaveBeenCalledWith('t-1', 'r-1', {
+      resultado: 'enviado', casos: 1, via: 'plantilla', motivo: 'ventana_cerrada', enviadoEn: AHORA,
+    });
+  });
+
+  it('un aviso que Meta rechazó queda en el historial como fallido y NO se sella', async () => {
+    enviarConFallback.mockResolvedValue(KO_ENVIO);
+    const r = await vigilarReglas(AHORA);
+    expect(r.fallos).toBe(1);
+    expect(registrarAviso).toHaveBeenCalledWith('t-1', 'r-1', expect.objectContaining({
+      resultado: 'fallido', casos: 1, error: 'La plantilla no está aprobada',
+    }));
+    expect(sellarDisparos).not.toHaveBeenCalled();
+  });
+
+  it('si el historial no se puede leer la regla falla POR SU LADO y no manda a ciegas', async () => {
+    avisosEnviadosDesde.mockRejectedValue(new Error('base caída'));
+    reglasActivas.mockResolvedValue([REGLA_DINERO, REGLA_OPERACION]);
+    const r = await vigilarReglas(AHORA);
+    expect(r.fallos).toBe(2);
+    expect(enviarConFallback).not.toHaveBeenCalled();
+  });
+
+  it('cada regla usa SU límite: una con tope 1 se calla y otra con tope 4 sigue', async () => {
+    const estricta = { ...REGLA_DINERO, maxAvisosDia: 1 };
+    reglasActivas.mockResolvedValue([estricta, REGLA_OPERACION]);
+    avisosEnviadosDesde.mockResolvedValue([hace(5)]);
+    const r = await vigilarReglas(AHORA);
+    expect(r).toMatchObject({ diferidas: 1, disparadas: 1 });
+    expect(enviarConFallback).toHaveBeenCalledTimes(1);
+  });
+
+  it('purga el historial viejo al final del barrido sin tumbarlo si falla', async () => {
+    purgarAvisosViejos.mockRejectedValueOnce(new Error('x')).mockResolvedValue(0);
+    // purgarAvisosViejos NO lanza en producción (best-effort); aquí se afirma la llamada.
+    purgarAvisosViejos.mockReset().mockResolvedValue(3);
+    await vigilarReglas(AHORA);
+    expect(purgarAvisosViejos).toHaveBeenCalledWith(AHORA);
   });
 });

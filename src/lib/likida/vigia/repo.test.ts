@@ -346,7 +346,8 @@ describe('validaciones de las acciones de la flota', () => {
   const ok = { modoAprobacion: 'siempre', autoenviarMinAprobaciones: 5, slaRespuestaMin: 30, escalarNivel2Min: 60, retencionDias: 180, habilitado: true, avisoPrivacidadUrl: '' };
 
   it('validarConfig acepta lo válido y normaliza la liga vacía a null', () => {
-    expect(validarConfig(ok)).toEqual({ ok: true, valor: { ...ok, avisoPrivacidadUrl: null } });
+    expect(validarConfig(ok)).toEqual({ ok: true, valor: { ...ok, avisoPrivacidadUrl: null, slaCriticoMin: 10, molestiaAvisoNivel: 2 } });
+    expect(validarConfig({ ...ok, slaCriticoMin: '8', molestiaAvisoNivel: '3' })).toMatchObject({ ok: true, valor: { slaCriticoMin: 8, molestiaAvisoNivel: 3 } });
     expect(validarConfig({ ...ok, slaRespuestaMin: '45', modoAprobacion: 'autoenviar_bajo_riesgo', avisoPrivacidadUrl: ' https://flota.mx/privacidad ' }))
       .toMatchObject({ ok: true, valor: { slaRespuestaMin: 45, modoAprobacion: 'autoenviar_bajo_riesgo', avisoPrivacidadUrl: 'https://flota.mx/privacidad' } });
   });
@@ -354,6 +355,7 @@ describe('validaciones de las acciones de la flota', () => {
     const malos: Array<Record<string, unknown>> = [
       { modoAprobacion: 'siempre_autoenviar' }, { autoenviarMinAprobaciones: 0 }, { autoenviarMinAprobaciones: 101 }, { slaRespuestaMin: 4 },
       { slaRespuestaMin: 1441 }, { slaRespuestaMin: 30.5 }, { slaRespuestaMin: 'abc' }, { escalarNivel2Min: 4 }, { retencionDias: 29 }, { retencionDias: 731 },
+      { slaCriticoMin: 1 }, { slaCriticoMin: 1441 }, { slaCriticoMin: 'diez' }, { molestiaAvisoNivel: 1 }, { molestiaAvisoNivel: 4 },
       { avisoPrivacidadUrl: 'http://x.mx' }, { avisoPrivacidadUrl: 'javascript:alert(1)' }, { avisoPrivacidadUrl: 'https://x.mx/a b' },
     ];
     for (const m of malos) expect(validarConfig({ ...ok, ...m }).ok, JSON.stringify(m)).toBe(false);

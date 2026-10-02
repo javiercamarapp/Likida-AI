@@ -68,13 +68,50 @@ describe('validarHitoContraSitio', () => {
     expect(lejos?.pedirUbicacion).toBe(false);
   });
 
-  it('el pin le gana a un GPS equidistante en el tiempo', async () => {
+  it('el pin NUNCA vence a una muestra de GPS dentro de la ventana: el camión real decide (adversarial ronda 03)', async () => {
     const { d } = deps({ gps: [gps({ lat: 25, lng: -100, medidaEn: new Date(MENSAJE.getTime() + 60_000) })] });
     const r = await validarHitoContraSitio(d, {
       viaje: viaje(), hito: llegada(), config: CONFIG, mensajeEn: MENSAJE, ahora: MENSAJE,
       pin: { lat: 20.72, lng: -103.39, medidaEn: new Date(MENSAJE.getTime() - 60_000) },
     });
+    expect(r?.veredicto).toMatchObject({ resultado: 'sin_coincidencia', fuente: 'gps' });
+  });
+
+  it('GPS atrasado: si la unidad SÍ reporta GPS pero aún no hay muestra en la ventana, el pin solo NO valida (queda sin dato y se reintenta)', async () => {
+    const gpsActivo = vi.fn(async () => true);
+    const { d, aplicados } = deps({ gps: [] });
+    d.gpsActivo = gpsActivo;
+    const r = await validarHitoContraSitio(d, {
+      viaje: viaje(), hito: llegada(), config: CONFIG, mensajeEn: MENSAJE, ahora: MENSAJE,
+      pin: { lat: 20.72, lng: -103.39, medidaEn: new Date(MENSAJE.getTime() + 120_000) },
+    });
+    expect(r?.veredicto).toMatchObject({ resultado: 'sin_dato', motivo: 'ubicacion_fuera_de_ventana' });
+    expect(r?.pedirUbicacion).toBe(false); // ya mandó el pin: pedirlo otra vez no sirve
+    expect(aplicados[0].v.resultado).toBe('sin_dato');
+    expect(gpsActivo).toHaveBeenCalledWith('t1', 'u1', expect.any(Date));
+  });
+
+  it('un pin guardado antes por el processor (proveedor whatsapp) tampoco basta cuando la unidad tiene GPS', async () => {
+    const { d } = deps({ gps: [gps({ fuente: 'pin' })] });
+    d.gpsActivo = async () => true;
+    const r = await validarHitoContraSitio(d, { viaje: viaje(), hito: llegada(), config: CONFIG, mensajeEn: MENSAJE, ahora: MENSAJE });
+    expect(r?.veredicto).toMatchObject({ resultado: 'sin_dato', motivo: 'ubicacion_fuera_de_ventana' });
+  });
+
+  it('unidad SIN historial de GPS (flota sin conector): el pin sigue siendo la evidencia', async () => {
+    const { d } = deps({ gps: [] });
+    d.gpsActivo = async () => false;
+    const r = await validarHitoContraSitio(d, {
+      viaje: viaje(), hito: llegada(), config: CONFIG, mensajeEn: MENSAJE, ahora: MENSAJE,
+      pin: { lat: 20.72, lng: -103.39, medidaEn: new Date(MENSAJE.getTime() + 120_000) },
+    });
     expect(r?.veredicto).toMatchObject({ resultado: 'validado', fuente: 'pin' });
+  });
+
+  it('si la consulta de «¿tiene GPS?» falla, no se asume que no: el pin no valida y se reintenta', async () => {
+    const { d } = deps({ gps: [] });
+    d.gpsActivo = async () => { throw new Error('base caída'); };
+    await expect(validarHitoContraSitio(d, { viaje: viaje(), hito: llegada(), config: CONFIG, mensajeEn: MENSAJE, ahora: MENSAJE, pin: { lat: 20.72, lng: -103.39, medidaEn: MENSAJE } })).resolves.toBeNull();
   });
 
   it('la unidad sin GPS asignado: solo cuenta el pin', async () => {
@@ -166,6 +203,58 @@ describe('barridoValidacion', () => {
     const r = await barridoValidacion({ candidatos: async () => [candidato('a'), candidato('b')], configDe: async () => ({ ...CONFIG_CONDUCTOR_DEFAULT }), deps: d }, MENSAJE, Date.now() - 1);
     expect(r.revisados).toBe(0);
     expect(aplicados).toHaveLength(0);
+  });
+
+  it('un «sin coincidencia» SE REEVALÚA mientras la ventana siga abierta: una muestra posterior más cercana lo valida (adversarial ronda 03)', async () => {
+    const { d, aplicados } = deps({ gps: [gps({ medidaEn: new Date(MENSAJE.getTime() + 2 * 60_000) })] });
+    const r = await barridoValidacion({
+      candidatos: async () => [{ ...candidato('a'), resultadoPrevio: 'sin_coincidencia' }],
+      configDe: async () => ({ ...CONFIG_CONDUCTOR_DEFAULT }), deps: d,
+    }, new Date(MENSAJE.getTime() + 10 * 60_000));
+    expect(r).toMatchObject({ revisados: 1, validados: 1 });
+    expect(aplicados).toHaveLength(1);
+  });
+
+  it('un «sin coincidencia» ya sin ventana (no pueden llegar más muestras que cuenten) NO se vuelve a medir', async () => {
+    const { d, aplicados } = deps({ gps: [gps()] });
+    const r = await barridoValidacion({
+      candidatos: async () => [{ ...candidato('a'), resultadoPrevio: 'sin_coincidencia' }],
+      configDe: async () => ({ ...CONFIG_CONDUCTOR_DEFAULT }), deps: d,
+    }, new Date(MENSAJE.getTime() + 3 * 3_600_000));
+    expect(r).toMatchObject({ revisados: 0, saltados: 1 });
+    expect(aplicados).toHaveLength(0);
+  });
+
+  it('cuando el barrido VALIDA una llegada a descarga, es entonces cuando se sella `viaje.llegada_en`, con la hora del mensaje', async () => {
+    const { d } = deps({ gps: [gps()] });
+    const sellos: Array<[string, string, string]> = [];
+    d.sellarLlegada = async (t, v, cuando) => { sellos.push([t, v, cuando.toISOString()]); };
+    const c = candidato('a');
+    c.hito = { ...c.hito, tipo: 'llegada_descarga' };
+    await barridoValidacion({ candidatos: async () => [c, candidato('b')], configDe: async () => ({ ...CONFIG_CONDUCTOR_DEFAULT }), deps: d }, MENSAJE);
+    expect(sellos).toEqual([['t1', 'v-a', MENSAJE.toISOString()]]); // la llegada a CARGA ('b') no sella el destino
+  });
+
+  it('si el barrido sigue sin dato o sin coincidencia, no se sella nada', async () => {
+    for (const g of [[], [gps({ lat: 25 })]]) {
+      const { d } = deps({ gps: g });
+      const sellar = vi.fn(async () => {});
+      d.sellarLlegada = sellar;
+      const c = candidato('a');
+      c.hito = { ...c.hito, tipo: 'llegada_descarga' };
+      await barridoValidacion({ candidatos: async () => [c], configDe: async () => ({ ...CONFIG_CONDUCTOR_DEFAULT }), deps: d }, MENSAJE);
+      expect(sellar).not.toHaveBeenCalled();
+    }
+  });
+
+  it('un sitio que no existe (sin_sitio) no se puede confirmar nunca: el barrido sella para no dejar el destino mudo', async () => {
+    const { d } = deps({ sitio: null });
+    const sellar = vi.fn(async () => {});
+    d.sellarLlegada = sellar;
+    const c = candidato('a');
+    c.hito = { ...c.hito, tipo: 'llegada_descarga' };
+    await barridoValidacion({ candidatos: async () => [c], configDe: async () => ({ ...CONFIG_CONDUCTOR_DEFAULT }), deps: d }, MENSAJE);
+    expect(sellar).toHaveBeenCalledTimes(1);
   });
 
   it('idempotente: si la base dice «igual», no cuenta como mejora', async () => {

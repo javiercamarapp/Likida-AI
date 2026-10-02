@@ -14,6 +14,7 @@ import {
   aprobarMensaje, rechazarMensaje, tomarConversacion, devolverConversacion, responderComoHumano, cerrarConversacion,
   type ResultadoDecision,
 } from '@/lib/likida/vigia/servicio';
+import { sufijoTenant } from '../../sufijo';
 import { VistaAgenteVigia } from './vista';
 import type { ResultadoVigia } from './controles';
 
@@ -120,7 +121,7 @@ export default async function PaginaAgenteVigia({
     const v = validarConfig({
       habilitado: fd.get('habilitado') === 'on', modoAprobacion: texto(fd, 'modoAprobacion'),
       autoenviarMinAprobaciones: texto(fd, 'autoenviarMinAprobaciones'), slaRespuestaMin: texto(fd, 'slaRespuestaMin'),
-      escalarNivel2Min: texto(fd, 'escalarNivel2Min'), retencionDias: texto(fd, 'retencionDias'), avisoPrivacidadUrl: texto(fd, 'avisoPrivacidadUrl'),
+      escalarNivel2Min: texto(fd, 'escalarNivel2Min'), slaCriticoMin: texto(fd, 'slaCriticoMin'), molestiaAvisoNivel: texto(fd, 'molestiaAvisoNivel'), retencionDias: texto(fd, 'retencionDias'), avisoPrivacidadUrl: texto(fd, 'avisoPrivacidadUrl'),
     });
     if (!v.ok) return { ok: false, error: v.error };
     try {
@@ -187,6 +188,7 @@ export default async function PaginaAgenteVigia({
       puedeDecidir={DECIDE.includes(rol)}
       puedeAdministrar={rol === 'flota_admin'}
       acciones={{ decidir, conversacion, config, alta, contacto }}
+      sufijo={sufijoTenant(sp)}
     />
   );
 }

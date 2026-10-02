@@ -173,13 +173,52 @@ import { join, relative } from 'node:path';
 // Conductor +3/+85, Vigía +1/+57, Carta Porte +2/+55); cada tramo está explicado arriba
 // y todo es funcionalidad nueva, no código migrado.
 //
-// LOOP PUNTA A PUNTA, W3 «GPS/Jornada» (2-oct-2026): 268 → 269 archivos y 1,580 → 1,585
-// llamadas (medido contra la rama integradora). El único módulo nuevo con acceso directo es
-// `gps_push/datos.ts`, que junta en UN archivo el acceso del push de posiciones (secreto por
-// flota, rotación y salud por RPC); las llamadas nuevas de `sincronizar_gps.ts` son el registro
-// de dispositivos huérfanos. Funcionalidad nueva, no código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 269;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_585;
+// OLA 3, W3 «Conductor + Vigía» (2-oct-2026), medido contra el commit base (268 / 1,580):
+//   · catálogos separados de `geocerca` (0480): +1 llamada en `peajes/datos.ts` (leer si el
+//     nombre ya es un sitio del Conductor antes del upsert; el resto son filtros añadidos).
+//   · Vigía conectado al Conductor y adjunto del POD (`vigia/repo.ts`): +3 llamadas de `archivoAdjuntoReal`
+//     (el viaje de ESE cliente, su POD y la URL firmada del bucket); el estatus de viaje ya existía.
+//   · grupos e histórico exportado del Vigía (0484): +1 archivo, `vigia/historial/repo.ts` (+13 llamadas: grupos, clientes, importación
+//     por lotes con deshacer, lectura paginada del histórico y borrado), todo filtrado por `tenant_id` y con `acotada`.
+//   · validar un hito por llave de API (`conductor/repo_validacion.ts`): +1 llamada, `hitoDeFlota` (el hito DE ESA flota
+//     antes de la RPC atómica de validar).
+//   · Vigía, clientes críticos y purga del histórico (0484, `vigia/repo.ts`): +3 llamadas (los clientes con un grupo crítico,
+//     el reintento de guardar la config en una base sin la 0484 y la purga del histórico importado).
+//
+// LOOP PUNTA A PUNTA, ola 3, W3 «Mis reglas» (Agente 13) — 1,580 → 1,585 llamadas, mismos
+// 268 archivos: las cinco llamadas son de `reglas/repo.ts` (ya medido) para la tabla nueva
+// `regla_aviso` de la 0520 — historial de avisos (lista), avisos enviados en la ventana de
+// 24 h (tope de frecuencia), registrar un aviso, purga de retención y el UPDATE del límite
+// de frecuencia. Funcionalidad nueva, no código migrado.
+//
+// LOOP PUNTA A PUNTA, ola 3, W3 «Cobranza por gasto» (Agente 7) y «Buzón de facturas»
+// (Agente 9) — 268 → 273 archivos y 1,585 → 1,657 llamadas (medido con el barrido completo).
+// Funcionalidad nueva, no código migrado:
+//   · `agentes/cobranza_gasto.ts` (17): toda la cobranza por gasto de la 0525 — gastos con
+//     comprobante faltante, claim de contactos (un contacto por gasto y tier), config por flota;
+//   · `buzon/repo.ts` (16): recepción por archivo, bucket `buzon-facturas`, emparejado PDF↔CFDI
+//     y bitácora de la 0530; `buzon/entrega_repo.ts` (26): config, lotes, reserva atómica de
+//     facturas, claim con lease, eventos y confirmación de Resend de la 0531;
+//   · `buzon/bytes.ts` (6): SOLO conversiones `Buffer.from(` que esta regexp cuenta como `.from(`
+//     (ninguna es Supabase; mismo motivo que `carta_porte_docs/bytes.ts`);
+//   · el resto (≈7) son llamadas añadidas a archivos que ya contaban (purga de la bitácora del
+//     buzón, la lectura de facturas tolerante a la base sin migrar).
+// INTEGRACIÓN ola 3 (ronda-03): suma de W3 Conductor+Vigía (+1 archivo, +21 llamadas) y W3 buzón/cobranza/reglas (+5 archivos, +77 llamadas)
+// sobre 268 / 1,580 → 274 / 1,679 (medido con el barrido; +1 sobre la suma por llamadas compartidas).
+// ADVERSARIAL ronda 03: +4 llamadas, todas en archivos que ya contaban — `conductor/repo_validacion.ts` (+1, `unidadReportaGps`: ¿la unidad
+// reporta GPS de verdad? decide si un pin basta como evidencia) y `buzon/repo.ts` (+3: dos lecturas «¿esta ruta de PDF la usa una factura?» y el
+// UPDATE que suelta la ruta de la recepción descartada). 1,701 → 1,705.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 277;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_705;
+// INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
+// OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
+//   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)
+//     y la sección de timbrado; vinculación asistida (0540): `autofactura/vinculacion_remota_repo.ts`, que junta TODO el acceso
+//     a datos del módulo (cinco RPC atómicas y las dos lecturas), y la llamada a `purgar_vinculacion_portal` en el cron de
+//     purga. Funcionalidad nueva, no código migrado. Medido: 268 → 270 archivos, 1,580 → 1,591 llamadas.
+//   · control de la emisión real (0542): `autofactura/control_emision_repo.ts` junta TODO el acceso a datos del módulo
+//     (puertos del control, RPC atómicas de cupo/lote/fase y lecturas del tablero) y la pantalla lee tres de ellas.
+//     Funcionalidad nueva. Medido: 270 → 271 archivos, 1,591 → 1,602 llamadas.
 
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;

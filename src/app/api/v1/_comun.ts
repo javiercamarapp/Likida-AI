@@ -136,7 +136,8 @@ export const TASA_POR_FLOTA = 240;
 export const VENTANA_MS = 60_000;
 
 export type Acceso =
-  | { ok: true; tenantId: string; rol: string }
+  // `llaveId` solo viene cuando se entró con una llave de API: es lo que firma una acción que deja bitácora («llave a1b2c3d4»).
+  | { ok: true; tenantId: string; rol: string; llaveId?: string }
   | { ok: false; respuesta: NextResponse<CuerpoError> };
 
 /**
@@ -225,7 +226,7 @@ export async function abrir(req: Request, area: Area): Promise<Acceso> {
       logger.warn('v1.llave_area', { area_llave: l.area, area });
       return { ok: false, respuesta: errorApi('sin_permiso', 'Esta llave no tiene acceso a esa parte de la flota.') };
     }
-    return { ok: true, tenantId: l.tenantId, rol: `llave:${l.area}` };
+    return { ok: true, tenantId: l.tenantId, rol: `llave:${l.area}`, llaveId: l.llaveId };
   }
 
   // ── LA COOKIE ESCRIBE SOLO DESDE NUESTRO SITIO (auditoría prod, SEG-9) ──

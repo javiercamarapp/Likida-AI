@@ -4,8 +4,7 @@ import { hitoActivo } from './maquina';
 import { anclaDe, textoTiempo } from './planificador';
 import type { AccionOficinaFila, DatosTablero, IndicadoresCrudos, ViajeTablero, VeredictoFila } from './repo_validacion';
 import { ETIQUETA, estaResuelto, TIPOS_HITO, type HitoFila, type TipoHito } from './tipos';
-import type { ResultadoValidacion } from './validacion';
-import { textoVeredicto, type Veredicto } from './validacion';
+import { llegadaPorConfirmar, textoVeredicto, type ResultadoValidacion, type Veredicto } from './validacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL TABLERO DE HITOS — el modelo de vista del jefe de tráfico. Puro, sin I/O.
@@ -55,7 +54,7 @@ export interface HitoVista {
 }
 
 export type TipoExcepcion =
-  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'estadia_excedida' | 'horas_incoherentes';
+  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'llegada_sin_confirmar' | 'estadia_excedida' | 'horas_incoherentes';
 
 export interface Excepcion {
   tipo: TipoExcepcion;
@@ -93,6 +92,9 @@ export interface Tablero {
 }
 
 const MS_MIN = 60_000;
+
+/** Cuánto se espera antes de mostrar una llegada sin respaldo como excepción: el GPS reporta con minutos de retraso. */
+export const MINUTOS_GRACIA_LLEGADA_SIN_CONFIRMAR = 10;
 
 function veredictoVigente(h: HitoFila, veredictos: ReadonlyMap<string, VeredictoFila>): VeredictoFila | undefined {
   const v = veredictos.get(h.id);
@@ -209,6 +211,16 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
         excepciones.push({
           ...base, tipo: 'sin_coincidencia', hitoId: h.id, hitoTipo: h.tipo, gravedad: 2, desde: h.recibidoEn,
           texto: `${ETIQUETA[h.tipo].corta}: ${textoVeredicto(aVeredicto(v), v.sitioId ? datos.sitios.get(v.sitioId) ?? null : null)}`,
+        });
+      } else if (
+        v?.resultado !== 'sin_coincidencia'
+        && llegadaPorConfirmar(h, v, config.validarUbicacion, (h.tipo === 'llegada_carga' ? viaje.origenSitioId : viaje.destinoSitioId) !== null)
+        && h.recibidoEn && ahora.getTime() - new Date(h.recibidoEn).getTime() >= MINUTOS_GRACIA_LLEGADA_SIN_CONFIRMAR * MS_MIN
+      ) {
+        // El «ya llegué» del chofer quedó anotado, pero ninguna posición lo respalda: se ve, sin acusar a nadie.
+        excepciones.push({
+          ...base, tipo: 'llegada_sin_confirmar', hitoId: h.id, hitoTipo: h.tipo, gravedad: 1, desde: h.recibidoEn,
+          texto: `${ETIQUETA[h.tipo].corta}: ${nombreChofer(viaje)} avisó que llegó y sigue sin confirmar con ubicación. ${v ? textoVeredicto(aVeredicto(v), null) : 'Todavía no se pudo comparar contra el sitio.'}`,
         });
       }
     }

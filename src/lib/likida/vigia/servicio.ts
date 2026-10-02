@@ -29,7 +29,9 @@ import { createHash } from 'node:crypto';
 import { logger } from '@/lib/logger';
 import { appUrl } from '@/lib/env';
 import { normalizarTelefonoWa } from '@/lib/likida/wa_ventana';
+import { sendDocument } from '@/lib/meta/client';
 import { enviarAlCliente, MAX_TEXTO_AL_CLIENTE } from './enviar';
+import { nombreDeAdjunto } from './adjuntos';
 import { avisarAprobacion, avisarEscalamiento, interpretarBoton, type DecisionBoton } from './avisos';
 import { clasificar } from './clasificador';
 import { esSpam, limpiarTexto } from './entrada';
@@ -39,7 +41,8 @@ import { evaluarMolestia } from './molestia';
 import { decidirEnvio } from './politica';
 import { pulirBorrador, redactarBorrador, type ViajeParaRedactar } from './redactor';
 import type { DepsVigia, Destinatario } from './puertos';
-import type { Clasificacion, ConfigVigia, Contacto, Conversacion, MensajeVigia, MotivoEscalamiento } from './tipos';
+import { configParaCliente } from './tipos';
+import type { AdjuntoRef, Clasificacion, ConfigVigia, Contacto, Conversacion, MensajeVigia, MotivoEscalamiento } from './tipos';
 
 export interface MensajeEntrante {
   from: string;
@@ -90,6 +93,8 @@ export async function atenderMensajeCliente(msg: MensajeEntrante, deps: DepsVigi
   let config: ConfigVigia;
   try {
     config = await repo.config(contacto.tenantId);
+    // 0484: un cliente con grupo crítico se atiende con el plazo corto (la lectura nunca lanza hacia aquí).
+    config = configParaCliente(config, await repo.clienteCritico(contacto.tenantId, contacto.clienteId).catch(() => false));
   } catch (e) {
     logger.error('vigia.config_no_leida', { tenant: contacto.tenantId, err: e instanceof Error ? e.message : String(e) });
     return 'reintentar';
@@ -290,7 +295,7 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
   });
 
   if (decision.accion === 'autoenviar') {
-    await enviarSaliente({ tenantId, mensajeId: saliente.id, texto: borrador.texto, contacto, config, conversacionId: conv.id, nombreFlota, autoenviado: true }, deps);
+    await enviarSaliente({ tenantId, mensajeId: saliente.id, texto: borrador.texto, contacto, config, conversacionId: conv.id, nombreFlota, autoenviado: true, adjuntos: [] }, deps);
     if (accion) await ejecutarEscalamiento(accion, { tenantId, conv: convActual, contacto, config, nombreCliente: nombreCliente ?? contacto.nombre }, deps);
     return;
   }
@@ -340,8 +345,9 @@ async function escalarPorFallo(tenantId: string, conversacionId: string, contact
   }
 }
 
-function advertenciaDeBorrador(b: { faltantes: string[]; requiereHumano: boolean }, senales: string[]): string | null {
+function advertenciaDeBorrador(b: { faltantes: string[]; requiereHumano: boolean; adjuntos?: Array<AdjuntoRef['clave']> }, senales: string[]): string | null {
   const partes: string[] = [];
+  if (b.adjuntos && b.adjuntos.length > 0) partes.push(`adjuntará: ${b.adjuntos.map(nombreDeAdjunto).join(', ')} (solo si la ventana de 24 h del cliente sigue abierta)`);
   if (senales.includes('inyeccion')) partes.push('el mensaje del cliente trae instrucciones raras; revisa bien antes de enviar');
   if (senales.includes('folio_ajeno')) partes.push('preguntó por un folio que no es suyo');
   if (senales.includes('no_texto')) partes.push('mandó un archivo que el Vigía no lee');
@@ -363,6 +369,8 @@ interface EntradaEnviarSaliente {
   conversacionId: string;
   nombreFlota: string;
   autoenviado: boolean;
+  /** Archivos que salen JUNTO con el texto, si la ventana lo permite. */
+  adjuntos: AdjuntoRef[];
 }
 
 export type ResultadoSalida = { ok: true; via: 'texto' | 'botones' | 'plantilla' } | { ok: false; motivo: string };
@@ -379,11 +387,41 @@ async function enviarSaliente(e: EntradaEnviarSaliente, deps: DepsVigia): Promis
     await repo.marcarRespondida(e.tenantId, e.conversacionId, ahora);
     if (!e.contacto.avisoPrivacidadEn) await repo.marcarAvisoPrivacidad(e.tenantId, e.contacto.id, ahora);
     await repo.evento(e.tenantId, { conversacionId: e.conversacionId, tipo: e.autoenviado ? 'autoenviado' : 'enviado', detalle: { via: r.via, ventana: r.ventana } });
+    // Los archivos son un EXTRA: que fallen no deshace el texto que ya salió (queda a la vista del gerente).
+    if (e.adjuntos.length > 0) {
+      await entregarAdjuntos(e, r.via, deps).catch((err) => logger.error('vigia.adjuntos_fallo', { tenant: e.tenantId, err: err instanceof Error ? err.message : String(err) }));
+    }
     return { ok: true, via: r.via };
   }
   await repo.marcarFallido(e.tenantId, e.mensajeId, `${r.motivo}: ${r.mensaje}`.slice(0, 300));
   await repo.evento(e.tenantId, { conversacionId: e.conversacionId, tipo: 'fallo_envio', detalle: { motivo: r.motivo, reintentable: r.reintentable } });
   return { ok: false, motivo: r.mensaje };
+}
+
+/**
+ * Los archivos que acompañan a la respuesta. Reglas (ver adjuntos.ts): solo dentro de la ventana de 24 h —si el texto
+ * salió como PLANTILLA, el archivo queda pendiente a la vista del gerente—, el archivo se busca por (flota, cliente,
+ * viaje) con el cliente del CONTACTO, y cada resultado queda en la bitácora sin teléfono ni ruta.
+ */
+async function entregarAdjuntos(e: EntradaEnviarSaliente, via: 'texto' | 'botones' | 'plantilla', deps: DepsVigia): Promise<void> {
+  const { repo } = deps;
+  const base = { conversacionId: e.conversacionId, destinatarioHash: hashTelefono(e.contacto.telefono) };
+  for (const adj of e.adjuntos) {
+    const clave = `${e.mensajeId}:adjunto:${adj.clave}`;
+    if (via === 'plantilla') {
+      await repo.evento(e.tenantId, { ...base, tipo: 'adjunto_pendiente', clave, detalle: { adjunto: adj.clave, motivo: 'ventana_cerrada' } });
+      continue;
+    }
+    const archivo = await repo.archivoAdjunto({ tenantId: e.tenantId, clienteId: e.contacto.clienteId, viajeId: adj.viajeId, clave: adj.clave });
+    if (!archivo) {
+      await repo.evento(e.tenantId, { ...base, tipo: 'adjunto_fallo', detalle: { adjunto: adj.clave, motivo: 'archivo_no_disponible' } });
+      continue;
+    }
+    const mandar = deps.enviarDocumento ?? sendDocument;
+    const r = await mandar(e.contacto.telefono, archivo.url, archivo.nombre, archivo.pie);
+    if (r.ok) await repo.evento(e.tenantId, { ...base, tipo: 'adjunto_enviado', clave, detalle: { adjunto: adj.clave } });
+    else await repo.evento(e.tenantId, { ...base, tipo: 'adjunto_fallo', detalle: { adjunto: adj.clave, motivo: 'rechazado', codigo: r.codigo ?? null } });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -483,6 +521,8 @@ export async function aprobarMensaje(actor: Actor, mensajeId: string, deps: Deps
 
   const r = await enviarSaliente({
     tenantId: actor.tenantId, mensajeId, texto: reclamado.texto ?? '', contacto, config, conversacionId: m.conversacionId, nombreFlota, autoenviado: false,
+    // Los archivos salen con lo APROBADO: el gerente los vio en el aviso («adjuntará: …»).
+    adjuntos: reclamado.adjuntos ?? m.adjuntos ?? [],
   }, deps);
   if (r.ok) return { ok: true, mensaje: `Listo, se envió la respuesta a ${contacto.nombre ?? 'tu cliente'}.` };
   return { ok: false, motivo: 'envio_fallido', mensaje: `No se pudo enviar: ${r.motivo}. Quedó en el tablero.` };
@@ -543,7 +583,7 @@ export async function responderComoHumano(actor: Actor, conversacionId: string, 
     conversacionId: conv.id, respuestaA: null, autor: 'humano', texto, estado: 'aprobado', intencion: null, riesgo: null,
     datosRespaldo: null, senales: [], autoenviado: false, aprobadoPor: actor.userId,
   });
-  const r = await enviarSaliente({ tenantId: actor.tenantId, mensajeId: creado.id, texto, contacto, config, conversacionId: conv.id, nombreFlota, autoenviado: false }, deps);
+  const r = await enviarSaliente({ tenantId: actor.tenantId, mensajeId: creado.id, texto, contacto, config, conversacionId: conv.id, nombreFlota, autoenviado: false, adjuntos: [] }, deps);
   return r.ok
     ? { ok: true, mensaje: 'Enviado.' }
     : { ok: false, motivo: 'envio_fallido', mensaje: r.motivo };

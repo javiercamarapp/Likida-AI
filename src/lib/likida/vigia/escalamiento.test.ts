@@ -102,3 +102,14 @@ describe('conversación cerrada', () => {
     expect(evaluarEscalamiento(entrada({ estado: 'cerrada', sinRespuestaDesde: hace(500), molestiaNivel: 3 }))).toBeNull();
   });
 });
+
+describe('0484 · nivel de molestia configurable para avisar', () => {
+  it('por omisión la molestia 2 avisa al responsable (nivel 1)', () => {
+    expect(evaluarEscalamiento(entrada({ molestiaNivel: 2, molestiaEn: hace(1) }))).toMatchObject({ nivel: 1, motivo: 'molestia' });
+  });
+  it('con aviso desde el nivel 3, la molestia 2 no avisa y la 3 sube al dueño', () => {
+    const config = { slaRespuestaMin: 30, escalarNivel2Min: 60, molestiaAvisoNivel: 3 as const };
+    expect(evaluarEscalamiento(entrada({ molestiaNivel: 2, molestiaEn: hace(1) }, { config }))).toBeNull();
+    expect(evaluarEscalamiento(entrada({ molestiaNivel: 3, molestiaEn: hace(1) }, { config }))).toMatchObject({ nivel: 2, motivo: 'molestia' });
+  });
+});

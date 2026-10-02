@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "total": 188,
+  "total": 187,
   "porArchivo": {
     "src/app/admin/agentes/contenido.tsx": 1,
     "src/app/admin/evals/page.tsx": 1,
@@ -72,7 +72,7 @@
     "src/lib/likida/portal_pago_lectura.ts": 12,
     "src/lib/likida/proveedores.ts": 1,
     "src/lib/likida/reglas/lectores.ts": 11,
-    "src/lib/likida/reglas/repo.ts": 3,
+    "src/lib/likida/reglas/repo.ts": 2,
     "src/lib/likida/relojes_legales.ts": 3,
     "src/lib/likida/repo.ts": 6,
     "src/lib/likida/sat_descarga/ciclo.ts": 2,

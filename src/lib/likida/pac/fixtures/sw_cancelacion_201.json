@@ -1,0 +1,8 @@
+{
+  "_fuente": "https://developers.sw.com.mx/knowledge-base/cancelacion-cfdi/ (ejemplo de respuesta 200; acuse recortado, UUID de la doc. de SW, sin datos reales)",
+  "data": {
+    "acuse": "<?xml version=\"1.0\" encoding=\"utf-8\"?><Acuse xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"><Folios><UUID>FE4E71B0-8959-4FB9-8091-F5AC4FB0FEF8</UUID><EstatusUUID>201</EstatusUUID></Folios></Acuse>",
+    "uuid": { "FE4E71B0-8959-4FB9-8091-F5AC4FB0FEF8": "201" }
+  },
+  "status": "success"
+}

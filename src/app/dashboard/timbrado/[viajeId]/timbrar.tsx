@@ -9,6 +9,8 @@ import {
   leerContextoTimbre, timbrarViaje, guardarReceptorFiscal, motivoDeReservaViva,
   liberarReservaTimbre, MINUTOS_MIN_LIBERAR_RESERVA,
 } from '@/lib/likida/carta_porte_timbre';
+import { solicitarCancelacionTimbre, confirmarCancelacionTimbre } from '@/lib/likida/carta_porte_cancelacion';
+import { MOTIVOS_CANCELACION, type MotivoCancelacion } from '@/lib/likida/pac/tipos';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 // FE-23: las cifras del panel SOLO salen de aquí. Éstas se leen junto al botón
 // que emite un CFDI irreversible, así que con más razón.
@@ -125,6 +127,38 @@ export async function SeccionTimbrado({ v, searchParams }: {
     }
   }
 
+  // 0541: CANCELAR el CFDI vía PAC. Mismas dos puertas (área + verbo) y bitácora.
+  async function cancelarTimbre(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA, searchParams);
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no ve el timbrado de la flota.' };
+    if (!puedeTimbrar(s.rol)) return { error: 'Tu rol no puede cancelar un CFDI: es del dueño de la flota o del contador.' };
+    const motivo = String(fd.get('motivo') ?? '') as MotivoCancelacion;
+    try {
+      const r = await solicitarCancelacionTimbre(s.tenantId, v.viajeId, { id: s.userId }, { motivo, folioSustitucion: t(fd.get('folioSustitucion')) });
+      return r.ok ? { ok: r.mensaje } : { error: r.motivo };
+    } catch (e) {
+      return { error: `${mensajeParaPantalla(e, 'cancelar el CFDI')} No des la cancelación por fallida: si el PAC alcanzó a enviarla, el SAT la recibió. Recarga y verifica el estatus.` };
+    } finally {
+      revalidatePath(rutaActual);
+    }
+  }
+
+  async function confirmarCancelacion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA, searchParams);
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no ve el timbrado de la flota.' };
+    if (!puedeTimbrar(s.rol)) return { error: 'Tu rol no puede confirmar la cancelación: es del dueño de la flota o del contador.' };
+    try {
+      const r = await confirmarCancelacionTimbre(s.tenantId, v.viajeId, { id: s.userId }, fd.get('verificadoEnSat') === 'on');
+      return r.ok ? { ok: r.mensaje } : { error: r.motivo };
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'confirmar la cancelación') };
+    } finally {
+      revalidatePath(rutaActual);
+    }
+  }
+
   async function guardarReceptor(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
     const s = await resolverTenantEfectivo(RUTA, searchParams);
@@ -168,6 +202,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
         >
           Descargar XML timbrado ↓
         </a>
+        {puedeEmitir && <CancelacionDelTimbre cancelacion={tv.cancelacion} cancelar={cancelarTimbre} confirmar={confirmarCancelacion} />}
       </section>
     );
   }
@@ -299,5 +334,60 @@ export async function SeccionTimbrado({ v, searchParams }: {
         </div>
       )}
     </section>
+  );
+}
+
+
+/**
+ * 0541 — CANCELAR EL CFDI. Tres estados honestos (nunca «cancelado» sin que el SAT lo diga):
+ *   · sin cancelación: el formulario (motivo SAT + folio de sustitución si es 01);
+ *   · en proceso: el SAT recibió la solicitud pero el CFDI sigue vigente hasta ver el acuse;
+ *     quien lo vio lo confirma aquí y recién entonces el viaje queda libre para re-timbrar;
+ *   · rechazada / sin respuesta: se muestra el mensaje del PAC tal cual y se puede volver a pedir.
+ */
+function CancelacionDelTimbre({ cancelacion, cancelar, confirmar }: {
+  cancelacion: import('@/lib/likida/carta_porte_timbre').CancelacionTimbre | null;
+  cancelar: (p: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
+  confirmar: (p: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
+}) {
+  if (cancelacion?.estado === 'en_proceso') {
+    return (
+      <div className="space-y-2 pt-3 border-t" style={{ borderColor: 'var(--line2)' }}>
+        <p className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+          Cancelación EN PROCESO (código {cancelacion.codigoSat ?? 's/d'}, motivo {cancelacion.motivo}). El SAT recibió la solicitud, pero este CFDI sigue
+          vigente hasta ver el acuse o el estatus «Cancelado» en el portal del SAT o en el panel de tu PAC.
+        </p>
+        <FormaConAviso accion={confirmar} boton="Confirmar que ya está cancelado" columnas="md:grid-cols-1">
+          <label className="flex items-start gap-2 text-[12px]">
+            <input type="checkbox" name="verificadoEnSat" />
+            <span>Vi el acuse o el estatus «Cancelado» de este CFDI.</span>
+          </label>
+        </FormaConAviso>
+      </div>
+    );
+  }
+  return (
+    <details className="rounded-lg hairline px-3 py-2 mt-3">
+      <summary className="text-[12.5px] font-medium cursor-pointer">Cancelar este CFDI</summary>
+      <div className="pt-2 space-y-2">
+        {cancelacion?.estado === 'rechazada' && (
+          <p className="text-[12px]" style={{ color: 'var(--bad)' }}>El PAC no canceló: {cancelacion.error ?? 'sin detalle'}</p>
+        )}
+        {cancelacion?.estado === 'solicitada' && (
+          <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
+            La última solicitud no tuvo respuesta del PAC y pudo llegar al SAT. Repetirla es seguro: si ya estaba cancelado, el PAC lo dice.
+            {cancelacion.error ? ` (${cancelacion.error})` : ''}
+          </p>
+        )}
+        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
+          La cancelación tiene ventana y, a veces, exige la aceptación del receptor. Con el motivo 01 el SAT pide el folio fiscal del CFDI que lo sustituye.
+        </p>
+        <FormaConAviso accion={cancelar} boton="Pedir la cancelación" columnas="md:grid-cols-2">
+          <Selector nombre="motivo" etiqueta="Motivo (SAT)" valorInicial="02"
+            opciones={(Object.keys(MOTIVOS_CANCELACION) as MotivoCancelacion[]).map((k) => ({ valor: k, texto: `${k} — ${MOTIVOS_CANCELACION[k]}` }))} />
+          <Campo nombre="folioSustitucion" etiqueta="Folio fiscal del CFDI que lo sustituye (solo motivo 01)" placeholder="UUID" />
+        </FormaConAviso>
+      </div>
+    </details>
   );
 }

@@ -13,9 +13,10 @@
 import type { PuertoModelo } from './clasificador';
 import type { PuertoPulir } from './redactor';
 import type { ServicioEstatusViaje } from './estatus_viaje';
+import type { ArchivoParaEnviar } from './adjuntos';
 import type { Enviador, EntradaEnvioCliente, ResultadoEnvioCliente } from './enviar';
 import type {
-  Clasificacion, ConfigVigia, Contacto, Conversacion, EstadoMensajeSaliente, Intencion, MensajeVigia, Riesgo, TipoEvento,
+  AdjuntoRef, Clasificacion, ConfigVigia, Contacto, Conversacion, EstadoMensajeSaliente, Intencion, MensajeVigia, Riesgo, TipoEvento,
 } from './tipos';
 
 export interface ResultadoRecibir {
@@ -70,6 +71,8 @@ export interface Destinatario {
 
 export interface RepoVigia {
   config(tenantId: string): Promise<ConfigVigia>;
+  /** 0484: ¿el cliente tiene algún grupo CRÍTICO? Falla hacia `false` (el plazo general), nunca lanza por una base sin migrar. */
+  clienteCritico(tenantId: string, clienteId: string): Promise<boolean>;
   /** El contacto ACTIVO o dado de baja de ese número; `null` si no está en ninguna allowlist (o está suprimido). */
   contactoPorTelefono(telefono: string): Promise<Contacto | null>;
   nombreFlota(tenantId: string): Promise<string>;
@@ -113,6 +116,11 @@ export interface RepoVigia {
   purgar(limite: number): Promise<number>;
 
   estatus: ServicioEstatusViaje;
+  /**
+   * El archivo que se puede adjuntar, de ESE cliente en ESA flota, ya con una URL firmada de corta vida; `null` si no
+   * existe, no es de ese cliente o no se pudo firmar. El `clienteId` sale del contacto, nunca del texto.
+   */
+  archivoAdjunto(a: { tenantId: string; clienteId: string; viajeId: string; clave: AdjuntoRef['clave'] }): Promise<ArchivoParaEnviar | null>;
 }
 
 export interface DepsVigia {
@@ -121,6 +129,8 @@ export interface DepsVigia {
   pulir?: PuertoPulir | null;
   enviar?: Enviador;
   /** Envío al cliente (inyectable para pruebas); por omisión `enviarAlCliente`. */
+  /** Manda un archivo (URL firmada) dentro de la ventana de 24 h; por omisión `sendDocument` de Meta. */
+  enviarDocumento?: (telefono: string, link: string, nombre: string, pie?: string) => Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }>;
   enviarCliente?: (e: EntradaEnvioCliente, enviar?: Enviador, opciones?: { confirmacionDeBaja?: boolean }) => Promise<ResultadoEnvioCliente>;
   ahora?: () => Date;
 }
