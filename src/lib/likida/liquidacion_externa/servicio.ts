@@ -23,10 +23,11 @@ import {
 } from './entrega';
 import {
   resolverOperadorDestino, resolverViajeIds, insertarLiquidacionExterna, registrarEvento,
-  transicionar, leerPorId, subirPdfExterno, firmarPdfExterno, leerRazonSocial,
-  type LiquidacionExterna, type TipoAcuse,
+  transicionar, leerPorId, subirPdfExterno, firmarPdfExterno, leerRazonSocial, confirmarAcuses,
+  type LiquidacionExterna, type TipoAcuse, type ResultadoConfirmacion,
 } from './repo';
 import { trabajoPendiente } from './trabajo';
+import { avisarNoCoincidePorOmision, type AvisarNoCoincide } from './aviso_no_coincide';
 import type { LiquidacionExternaNormalizada } from './esquema';
 
 /** Cuántas veces el cron intenta ENCOLAR (fallos nuestros, transitorios) antes
@@ -41,6 +42,8 @@ export interface Dependencias {
   /** Razón social de la flota, para el encabezado del PDF que Likida genera. */
   razonSocial: (tenantId: string) => Promise<string | null>;
   firmarPdf: (ruta: string, ttlSegundos: number) => Promise<string>;
+  /** Avisa a la oficina que un chofer respondió «No coincide». `true` = Meta aceptó el aviso. */
+  avisarNoCoincide: AvisarNoCoincide;
 }
 
 export const dependenciasPorOmision: Dependencias = {
@@ -48,6 +51,7 @@ export const dependenciasPorOmision: Dependencias = {
   ahora: () => new Date(),
   razonSocial: leerRazonSocial,
   firmarPdf: (ruta, ttl) => firmarPdfExterno(ruta, ttl),
+  avisarNoCoincide: avisarNoCoincidePorOmision,
 };
 
 // ── recibir ─────────────────────────────────────────────────────────────────
@@ -249,24 +253,65 @@ export async function reintentarLiquidacionExterna(
 
 export type ResultadoAcuse = 'registrado' | 'ya_registrado' | 'no_encontrada';
 
+/** Qué pasó con el aviso a la oficina (solo aplica a «No coincide»). */
+export type AvisoOficina = 'enviado' | 'no_enviado' | 'no_aplica';
+
+export interface AcuseRegistrado { resultado: ResultadoAcuse; avisoOficina: AvisoOficina }
+
 /**
  * El chofer apretó un botón. El `operadorId` sale de SU teléfono (processor), no
  * del id del botón: un chofer que reenvía o fabrica un id ajeno no puede acusar
  * la liquidación de otro. `no_encontrada` cubre «no existe», «es de otra flota»
  * y «es de otro chofer» a propósito: no se distingue para no revelar cuál.
+ *
+ * «No coincide» AVISA a la oficina (quien ve dinero) por el selector central; el
+ * resultado del aviso se devuelve para que al chofer solo se le prometa lo que de
+ * verdad salió, y queda en la bitácora (`aviso_oficina`). Si el chofer cambia de
+ * respuesta, la confirmación que el sistema del cliente ya había dado (0561) se
+ * reinicia: el acuse nuevo se le entrega otra vez.
  */
-export async function registrarAcuse(
+export async function registrarAcuseConAviso(
   tenantId: string, operadorId: string, liquidacionId: string, tipo: TipoAcuse,
-  deps: Pick<Dependencias, 'ahora'> = dependenciasPorOmision,
-): Promise<ResultadoAcuse> {
+  deps: Pick<Dependencias, 'ahora'> & Partial<Pick<Dependencias, 'avisarNoCoincide'>> = dependenciasPorOmision,
+): Promise<AcuseRegistrado> {
   const liq = await leerPorId(tenantId, liquidacionId);
-  if (!liq || liq.operadorId !== operadorId) return 'no_encontrada';
-  if (liq.estado === 'acusada' && liq.acuseTipo === tipo) return 'ya_registrado';
+  if (!liq || liq.operadorId !== operadorId) return { resultado: 'no_encontrada', avisoOficina: 'no_aplica' };
+  if (liq.estado === 'acusada' && liq.acuseTipo === tipo) return { resultado: 'ya_registrado', avisoOficina: 'no_aplica' };
   const aplicada = await transicionar(
     tenantId, liquidacionId, ['pendiente', 'en_cola', 'enviada', 'fallida', 'acusada'],
-    { estado: 'acusada', acuse_tipo: tipo, acuse_en: deps.ahora().toISOString() },
+    { estado: 'acusada', acuse_tipo: tipo, acuse_en: deps.ahora().toISOString(), acuse_confirmado_en: null },
   );
-  if (!aplicada) return 'no_encontrada';
+  if (!aplicada) return { resultado: 'no_encontrada', avisoOficina: 'no_aplica' };
   await registrarEvento(tenantId, liquidacionId, tipo === 'recibida' ? 'acuse_recibida' : 'acuse_no_coincide', {});
-  return 'registrado';
+  if (tipo !== 'no_coincide') return { resultado: 'registrado', avisoOficina: 'no_aplica' };
+
+  const avisar = deps.avisarNoCoincide ?? dependenciasPorOmision.avisarNoCoincide;
+  let enviado = false;
+  try { enviado = await avisar(liq); } catch (e) {
+    logger.error('liqext.no_coincide_aviso_lanzo', { id: liquidacionId, err: e instanceof Error ? e.message : String(e) });
+  }
+  await registrarEvento(tenantId, liquidacionId, 'aviso_oficina', { enviado });
+  return { resultado: 'registrado', avisoOficina: enviado ? 'enviado' : 'no_enviado' };
+}
+
+/** Compatibilidad: solo el resultado del acuse. */
+export async function registrarAcuse(
+  tenantId: string, operadorId: string, liquidacionId: string, tipo: TipoAcuse,
+  deps: Pick<Dependencias, 'ahora'> & Partial<Pick<Dependencias, 'avisarNoCoincide'>> = dependenciasPorOmision,
+): Promise<ResultadoAcuse> {
+  return (await registrarAcuseConAviso(tenantId, operadorId, liquidacionId, tipo, deps)).resultado;
+}
+
+// ── el sistema del cliente confirma que ya leyó los acuses ──────────────────
+
+/** Máximo de ids por confirmación (un lote de pull razonable). */
+export const MAX_IDS_CONFIRMACION = 200;
+
+export async function confirmarAcusesLeidos(
+  tenantId: string, ids: string[], actor: string, deps: Pick<Dependencias, 'ahora'> = dependenciasPorOmision,
+): Promise<ResultadoConfirmacion> {
+  const unicos = [...new Set(ids)];
+  const r = await confirmarAcuses(tenantId, unicos, deps.ahora().toISOString());
+  for (const id of r.confirmadas) await registrarEvento(tenantId, id, 'acuse_confirmado', { actor });
+  return r;
 }

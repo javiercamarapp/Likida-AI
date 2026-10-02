@@ -56,7 +56,7 @@ describe('aLiquidacionExternaApi', () => {
     conceptos: [{ clave: null, descripcion: 'x', tipo: 'percepcion', monto: 1 }], total: 1, moneda: 'MXN',
     pdfRuta: 'TENANT-SECRETO/externas/SECRETA.pdf', pdfOrigen: 'adjunto', estado: 'enviada', via: 'plantilla', generacion: 3, intentos: 2,
     proximoIntentoEn: 'x', ultimoError: null, wamid: 'wamid.SECRETO', enviadaEn: '2026-09-08T10:00:00Z',
-    acuseTipo: 'recibida', acuseEn: '2026-09-08T11:00:00Z', creadaEn: '2026-09-08T09:00:00Z',
+    acuseTipo: 'recibida', acuseEn: '2026-09-08T11:00:00Z', acuseConfirmadoEn: null, creadaEn: '2026-09-08T09:00:00Z',
   };
 
   it('expone lo del contrato y cuenta cuántos viajes existen en Likida', () => {

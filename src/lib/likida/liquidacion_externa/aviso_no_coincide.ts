@@ -1,0 +1,51 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// LIQUIDACIÓN EXTERNA — el aviso a la oficina cuando el chofer dice «No coincide».
+//
+// Antes «No coincide» solo quedaba MARCADO en el panel: una oficina que no abre
+// el panel no se enteraba de que un chofer disputaba su pago. Ahora se le avisa
+// por WhatsApp a quien ve DINERO (dueño o contador; nunca al encargado «por lo
+// menos»: el canal no puede ser la puerta trasera de la matriz de visibilidad,
+// ver `telefonoParaDineroDe`).
+//
+// Sale por el selector central (`avisarOficina` → `enviarConFallback`): texto si
+// la ventana de 24 h de la oficina está abierta, plantilla `aviso_operacion_v1`
+// si no. El texto NO lleva cifras (clave externa y chofer), y la plantilla
+// tampoco: el detalle vive en el panel.
+//
+// Nunca lanza. `true` solo si Meta ACEPTÓ el aviso: el chofer solo recibe la
+// promesa «avisé a tu oficina» cuando de verdad salió.
+// ═══════════════════════════════════════════════════════════════════════════
+
+import { logger } from '@/lib/logger';
+import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
+import { telefonoParaDineroDe } from '../contactos';
+import type { LiquidacionExterna } from '../liquidacion_externa/repo';
+
+export type AvisarNoCoincide = (liq: LiquidacionExterna) => Promise<boolean>;
+
+const liga = () => `${(process.env.NEXT_PUBLIC_APP_URL || 'https://app.likida.ai').replace(/\/+$/, '')}/dashboard/agentes/liquidacion`;
+
+export const avisarNoCoincidePorOmision: AvisarNoCoincide = async (liq) => {
+  try {
+    const tel = await telefonoParaDineroDe(liq.tenantId);
+    if (!tel) {
+      logger.warn('liqext.no_coincide_sin_destinatario', { id: liq.id, tenant: liq.tenantId });
+      return false;
+    }
+    const chofer = (liq.operadorNombre ?? '').trim() || 'Un chofer';
+    const resumen = `liquidación ${liq.claveExterna} no coincide`;
+    const r = await avisarOficina(
+      tel,
+      `⚠️ ${chofer} respondió «No coincide» a su liquidación ${liq.claveExterna}${liq.sistemaOrigen ? ` (${liq.sistemaOrigen})` : ''}. Revísala en el panel: ${liga()}`,
+      {
+        parametros: parametrosAvisoOficina(chofer, resumen, liga()),
+        contexto: { tenantId: liq.tenantId, agente: 'liquidacion_externa', liquidacion: liq.id },
+      },
+    );
+    if (!r.ok) logger.error('liqext.no_coincide_aviso_fallo', { id: liq.id, motivo: r.motivo, codigo: r.codigo });
+    return r.ok;
+  } catch (e) {
+    logger.error('liqext.no_coincide_aviso_error', { id: liq.id, err: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
+};

@@ -17,7 +17,7 @@ const liq = (p: Partial<LiquidacionExterna> = {}): LiquidacionExterna => ({
   conceptos: [], total: 2499.75, moneda: 'MXN', pdfRuta: 't-1/externas/x.pdf', pdfOrigen: 'generado',
   estado: 'acusada', via: 'sesion', generacion: 1, intentos: 1, proximoIntentoEn: '2026-09-08T00:00:00Z',
   ultimoError: null, wamid: 'wamid.X', enviadaEn: '2026-09-08T10:00:00Z', acuseTipo: 'no_coincide',
-  acuseEn: '2026-09-08T11:00:00Z', creadaEn: '2026-09-08T09:00:00Z', ...p,
+  acuseEn: '2026-09-08T11:00:00Z', acuseConfirmadoEn: null, creadaEn: '2026-09-08T09:00:00Z', ...p,
 });
 
 describe('celdaTexto: la inyección de fórmulas', () => {

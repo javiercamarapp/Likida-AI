@@ -33,7 +33,7 @@ const baseFila = (p: Partial<LiquidacionExterna> = {}): LiquidacionExterna => ({
   foliosViaje: ['VJ-1'], viajeIds: ['v-1'], periodoDesde: '2026-09-01', periodoHasta: '2026-09-07',
   conceptos: [{ clave: null, descripcion: 'Sueldo', tipo: 'percepcion', monto: 100 }], total: 100, moneda: 'MXN',
   pdfRuta: 't-1/externas/SECRETA.pdf', pdfOrigen: 'generado', estado: 'pendiente', via: null, generacion: 1, intentos: 0,
-  proximoIntentoEn: 'x', ultimoError: null, wamid: null, enviadaEn: null, acuseTipo: null, acuseEn: null,
+  proximoIntentoEn: 'x', ultimoError: null, wamid: null, enviadaEn: null, acuseTipo: null, acuseEn: null, acuseConfirmadoEn: null,
   creadaEn: '2026-09-08T09:00:00.000Z', ...p,
 });
 

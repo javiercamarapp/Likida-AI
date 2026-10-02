@@ -156,7 +156,15 @@ import { join, relative, sep } from 'node:path';
 //     `api/correo/entrante/route.ts`, que verifica la firma Svix antes de leer el cuerpo.
 //
 // Conteo de la integración de la ola 2: 78 + 9 (Conductor) + 1 (Vigía) + 1 (Carta Porte) = 89.
-const RUTAS_APP_REVISADAS = 89;
+// 89 → 92 (loop punta a punta, ola 3, Agente 1 «liquidación externa», salida hacia SAP/TMS por pull):
+//   · `api/v1/liquidaciones-externas/acuses/route.ts` — `abrir(req, 'dinero')` antes de leer; SIEMPRE acotada al
+//     tenant de la credencial; solo trae acuses del propio tenant aún no confirmados;
+//   · `api/v1/liquidaciones-externas/acuses/confirmar/route.ts` — `abrir(req, 'administracion')`; ids validados
+//     como uuid (≤ 200), la confirmación lleva `.eq('tenant_id', …)` y un id ajeno cae en `noAplican`;
+//   · `api/v1/liquidaciones-externas/exportacion/route.ts` — `abrir(req, 'dinero')`; layout por catálogo cerrado
+//     de columnas, texto neutralizado contra inyección de fórmulas, tope duro que falla en vez de entregar un
+//     archivo parcial, y `?tenant=` ignorado (el tenant sale de la credencial).
+const RUTAS_APP_REVISADAS = 92;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

@@ -93,10 +93,14 @@ con estado, vía (sesión/plantilla) y respuesta del chofer, descarga del PDF,
 1. **Sesión** (dentro de las 24 h del último mensaje del chofer): un solo
    mensaje interactivo con el PDF como encabezado, el resumen (periodo y total
    con moneda) y dos botones: **Recibida** / **No coincide**.
-2. Si Meta contesta *ventana cerrada* (131047 / 131026 / 131042), **cae a la
-   plantilla** `liquidacion_externa_v1` (una sola vez).
+2. Si la **ventana ya está cerrada** (registro `wa_ventana_contacto`) se encola
+   directo la plantilla `liquidacion_externa_v1`; si Meta contesta *ventana
+   cerrada* (131047 / 131026 / 131042) a la sesión, **cae a la plantilla** (una
+   sola vez). Lo decide el selector central (ver más abajo).
 3. Todo viaja por `wa_outbox` (llave de deduplicación `liqext:<id>:g<n>:<canal>`):
-   encolarlo dos veces es la misma fila.
+   encolarlo dos veces es la misma fila. **La RPC `encolar_wa_outbox_dedupe`
+   valida el payload por prefijo de llave (mig. 0560): antes solo aceptaba la
+   alerta GPS y esta entrega habría fallado contra la base real.**
 4. El botón llega al webhook (`interactive.button_reply` en sesión, `button.payload`
    en plantilla) y el processor lo atiende **antes** del agente y **aunque el
    chofer no tenga viaje abierto**. El operador sale de su teléfono, no del id
@@ -125,6 +129,54 @@ La plantilla vive en `plantillas_catalogo.ts` y se documenta en
 del catálogo:** `{{1}}` nombre · `{{2}}` sistema de origen · `{{3}}` periodo ·
 `{{4}}` total con moneda.
 
+## Salida hacia el SAP/TMS del cliente (pull) — mig. 0561
+
+Likida no empuja nada al sistema del cliente (no hay webhook saliente en este
+repo: el de la rama del Conductor no existe todavía; cuando exista, esta salida
+puede colgarse de él). El cliente **jala** con su llave de API:
+
+| Ruta | Área | Para qué |
+|---|---|---|
+| `GET /v1/liquidaciones-externas/acuses` | `dinero` | Los acuses de los choferes (`recibida` / `no_coincide`) que su sistema **aún no confirmó** haber leído. Del más viejo al más nuevo, por cursor. |
+| `POST /v1/liquidaciones-externas/acuses/confirmar` | `administracion` | `{ "ids": [...] }` (1–200): confirma lo que ya registró. **Idempotente**; `noAplican` agrupa lo inexistente, ajeno o sin acuse. |
+| `GET /v1/liquidaciones-externas/exportacion` | `dinero` | Archivo CSV/TSV con el layout que pida: `columnas`, `granularidad` (`liquidacion`/`concepto`), `separador`, `decimal`, `fechas` (`iso`/`dmy`/`sap`), `bom`, `encabezado`, y los filtros del listado + `sinConfirmar=1`. |
+
+**Ciclo recomendado:** `GET acuses` → registrar en su sistema → `POST confirmar`.
+Lo no confirmado vuelve a salir (una caída a mitad de su proceso no pierde
+ninguno). Si el chofer **cambia** su respuesta, la confirmación anterior se
+reinicia y el acuse nuevo sale otra vez. La exportación es **completa o nada**:
+sobre 900 liquidaciones responde `lectura_incompleta` y pide acotar el rango.
+Seguridad: celdas de texto neutralizadas contra fórmulas de Excel, nunca sale el
+error crudo de entrega (solo `falloCodigo`), nunca el teléfono ni la ruta del PDF.
+
+Ejemplo de layout para un asiento contable en Excel en español:
+`/v1/liquidaciones-externas/exportacion?granularidad=concepto&separador=punto_y_coma&decimal=coma&fechas=sap&bom=1&sinConfirmar=1`.
+
+## «No coincide» avisa a la oficina
+
+Cuando el chofer aprieta **No coincide**, además de marcarla en el panel, se
+avisa por WhatsApp a quien ve **dinero** (dueño o contador; nunca al encargado,
+ver `telefonoParaDineroDe`) con el selector central (texto en ventana, plantilla
+`aviso_operacion_v1` fuera). El aviso lleva chofer y clave, **sin cifras**.
+Al chofer solo se le dice «ya le avisé a tu oficina» si Meta **aceptó** el aviso;
+si no salió (sin destinatario capturado, plantilla sin aprobar), se le dice que
+quedó marcada en el panel y que avise directo. Queda el evento `aviso_oficina`
+en la bitácora con `enviado: true|false`.
+
+## Retención y purgas (mig. 0562, cron `purgar`)
+
+| Dato | Plazo | Notas |
+|---|---|---|
+| `wa_ventana_contacto` (teléfono + hora del último mensaje del chofer) | 7 días | La ventana de Meta dura 24 h. |
+| `wa_envio_registro` (canal y motivo de cada aviso; solo últimos 4 dígitos) | 90 días | |
+| `liquidacion_externa` en estado terminal (`enviada`, `acusada`, `fallida`) | **60 meses** (piso 24) | Decisión de política: CFF art. 30 / conservación laboral. El PDF se encola en `storage_huerfano_candidato` y el cron lo borra de Storage por la API. Una `pendiente`/`en_cola` jamás se purga. La cancelación ARCO del operador **no** anonimiza estas filas: caducan aquí. |
+| Contenido de `peaje_ingesta_archivo` en estado `fallida` | 30 días | La fila queda de constancia; reprocesar exige volver a subir el archivo. |
+
+Las cuatro corren en `/api/cron/purgar` (secreto de cron, kill switch global y
+latido ya existentes); una purga que falla se grita y se avisa al operador pero
+no tumba a las demás. **El plazo de 60 meses es una decisión de política que
+Javier/su abogado deben confirmar** (ver bloqueos).
+
 ## BLOQUEOS EXTERNOS (no cerrables por código)
 
 1. **Plantilla Meta `liquidacion_externa_v1`** (categoría *utility*, idioma
@@ -141,20 +193,22 @@ del catálogo:** `{{1}}` nombre · `{{2}}` sistema de origen · `{{3}}` periodo 
    documento y botones `quick_reply` y el de sesión con encabezado de documento en
    botones siguen la documentación de Cloud API, pero **no se verificaron contra
    Meta real**; las pruebas usan dobles de contrato.
-4. **Aplicar la migración 0370 en producción** (y luego `[deploy]`): la compuerta
+4. **Aplicar las migraciones 0370 y 0560–0562 en producción** (con respaldo previo; sin 0560 la entrega por la cola falla; luego `[deploy]`): la compuerta
    de despliegue no construye si la base va atrás de la última migración.
 5. **Integración del lado de Innovativos**: su SAP/TMS tiene que llamar al
    endpoint (acceso bajo Zero Trust, llave de API de área `administracion`).
+6. **Confirmar el plazo de retención** (60 meses para liquidaciones externas) con quien lleve lo legal.
 
 ## Límites conocidos (pendientes)
 
 - No hay **anulación/corrección** de una liquidación ya recibida: se manda una
   nueva con otra `claveExterna`.
-- «No coincide» queda **marcado en el panel**; no se avisa por WhatsApp a la
-  oficina.
 - La URL firmada del PDF dentro del mensaje vive 24 h (la cola reintenta con
   backoff); cada reintento manual la renueva.
 - La cancelación ARCO del operador no anonimiza `liquidacion_externa`
   (retención laboral/fiscal): decisión de política pendiente.
-- El selector `enviarConFallback` real y el registro de ventana de 24 h son de
-  la rama de WhatsApp de producción.
+- No hay webhook saliente hacia el sistema del cliente: la salida es por pull
+  (acuses + exportación). Un empujón con política anti-SSRF queda pendiente de
+  que exista el de la rama del Conductor.
+- La confirmación de acuses es por id de Likida; no hay confirmación por
+  `claveExterna`.

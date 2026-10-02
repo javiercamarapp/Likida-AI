@@ -20,7 +20,7 @@ const fila = (i: number, p: Partial<LiquidacionExterna> = {}): LiquidacionExtern
   sistemaOrigen: 'SAP', operadorId: 'o-1', operadorNombre: 'Juan Pérez', operadorTelefono: '525512345678',
   foliosViaje: ['V1'], viajeIds: [], periodoDesde: '2026-09-01', periodoHasta: '2026-09-07', conceptos: [], total: 100,
   moneda: 'MXN', pdfRuta: 't-1/externas/x.pdf', pdfOrigen: 'generado', estado: 'enviada', via: 'sesion', generacion: 1, intentos: 1,
-  proximoIntentoEn: 'x', ultimoError: null, wamid: 'w', enviadaEn: '2026-09-08T10:00:00Z', acuseTipo: null, acuseEn: null,
+  proximoIntentoEn: 'x', ultimoError: null, wamid: 'w', enviadaEn: '2026-09-08T10:00:00Z', acuseTipo: null, acuseEn: null, acuseConfirmadoEn: null,
   creadaEn: `2026-09-08T09:${String(59 - (i % 60)).padStart(2, '0')}:00.000Z`, ...p,
 });
 

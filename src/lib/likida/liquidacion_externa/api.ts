@@ -91,3 +91,27 @@ export function aLiquidacionExternaApi(l: LiquidacionExterna): LiquidacionExtern
     creadaEn: l.creadaEn,
   };
 }
+
+/** Un acuse del chofer, para el sistema del cliente (GET /v1/liquidaciones-externas/acuses). */
+export interface AcuseApi {
+  /** El id de Likida: es el que se manda a `acuses/confirmar`. */
+  id: string;
+  claveExterna: string;
+  sistemaOrigen: string | null;
+  operador: { id: string; nombre: string | null };
+  /** recibida | no_coincide. */
+  respuestaChofer: 'recibida' | 'no_coincide';
+  respuestaEn: string;
+  total: number;
+  moneda: string;
+}
+
+/** `null` si la liquidación no tiene acuse (no debería llegar aquí). */
+export function aAcuseApi(l: LiquidacionExterna): AcuseApi | null {
+  if (!l.acuseTipo || !l.acuseEn) return null;
+  return {
+    id: l.id, claveExterna: l.claveExterna, sistemaOrigen: l.sistemaOrigen,
+    operador: { id: l.operadorId, nombre: l.operadorNombre },
+    respuestaChofer: l.acuseTipo, respuestaEn: l.acuseEn, total: l.total, moneda: l.moneda,
+  };
+}
