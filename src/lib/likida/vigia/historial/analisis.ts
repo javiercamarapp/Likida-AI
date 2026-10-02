@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// FAQs, TENDENCIAS POR TEMA y TIEMPOS DE RESPUESTA a partir del histórico de un grupo (pedido de Lorena).
+// FAQs, TENDENCIAS POR TEMA y TIEMPOS DE RESPUESTA a partir del histórico de un grupo (pedido del levantamiento).
 //
 // PURO y determinista: sin modelo, sin base. Los temas salen de las MISMAS reglas que clasifican al cliente en vivo
 // (`clasificarPorReglas`) más dos que el histórico de grupos pide y el chat 1:1 no (cita/andén y tarifa); lo que ninguna
