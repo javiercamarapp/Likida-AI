@@ -30,14 +30,17 @@ interface Armado {
   deps: DepsVigia;
   whatsapp: Array<{ telefono: string; contexto: string }>;
   correos: Array<{ para: string; asunto: string; llave?: string }>;
+  esperas: number[];
 }
 
 /** WhatsApp: la aprobación del borrador sale; el escalamiento sale solo para los teléfonos de `waOk`. Correo: `correo` decide el resultado. */
 function armar(repo: RepoEnMemoria, o: { waOk?: string[]; correo?: () => ResultadoEnvio | Promise<ResultadoEnvio>; ahora?: Date } = {}): Armado {
   const whatsapp: Armado['whatsapp'] = [];
   const correos: Armado['correos'] = [];
+  const esperas: number[] = [];
   const deps: DepsVigia = {
     repo, ahora: () => o.ahora ?? AHORA,
+    esperar: async (ms) => { esperas.push(ms); },
     enviar: (async (telefono: string, op: { contexto: string }) => {
       whatsapp.push({ telefono, contexto: op.contexto });
       return op.contexto === 'vigia.escalamiento' && !(o.waOk ?? []).includes(telefono) ? FALLO_WA : WA_OK;
@@ -47,7 +50,7 @@ function armar(repo: RepoEnMemoria, o: { waOk?: string[]; correo?: () => Resulta
       return o.correo ? o.correo() : { ok: true, id: `re_${correos.length}` };
     },
   };
-  return { deps, whatsapp, correos };
+  return { deps, whatsapp, correos, esperas };
 }
 
 /** Un cliente escribe y nadie le contesta: a los 35 min toca el nivel 1 (SLA 30), a los 95 el nivel 2. */
@@ -330,5 +333,42 @@ describe('ronda 17 · el fallo de un destinatario no corta a los demás', () => 
     expect(a.whatsapp.filter((w) => w.contexto === 'vigia.escalamiento').map((w) => w.telefono).sort()).toEqual(['525577770001', '525577770002']);
     await barridoVigia(a.deps);
     expect(a.whatsapp.filter((w) => w.contexto === 'vigia.escalamiento')).toHaveLength(2);
+  });
+});
+
+describe('ronda 17 · Resend transitorio se reintenta, lo final no', () => {
+  const unAviso = async (correo: () => ResultadoEnvio) => {
+    const { repo } = escenario({ respaldoCorreo: true });
+    repo.agregarDirector(T1, 1, { nombre: 'Ana', correo: 'ana@flota.mx' });
+    await clienteEspera(repo);
+    const a = armar(repo, { ahora: min(35), correo });
+    await barridoVigia(a.deps);
+    return { repo, a };
+  };
+
+  it('un 429 y luego un 503 y luego OK: sale al tercer intento, con espera creciente y la misma llave', async () => {
+    const respuestas: ResultadoEnvio[] = [
+      { ok: false, motivo: 'rechazado', detalle: 'HTTP 429', status: 429 },
+      { ok: false, motivo: 'rechazado', detalle: 'HTTP 503', status: 503 },
+      { ok: true, id: 're_1' },
+    ];
+    const { repo, a } = await unAviso(() => respuestas.shift() as ResultadoEnvio);
+    expect(a.correos).toHaveLength(3);
+    expect(new Set(a.correos.map((c) => c.llave)).size).toBe(1);               // misma Idempotency-Key: un POST ambiguo no duplica
+    expect(a.esperas).toEqual([500, 1500]);
+    expect(repo.correos[0].estado).toBe('enviado');
+  });
+
+  it('un timeout que no se arregla se corta en el tope (3 intentos) y queda como «red»', async () => {
+    const { repo, a } = await unAviso(() => ({ ok: false, motivo: 'red', detalle: 'timeout' }));
+    expect(a.correos).toHaveLength(3);
+    expect(repo.correos[0].estado).toBe('red');
+  });
+
+  it('un 4xx de configuración es FINAL: un solo intento, sin espera', async () => {
+    const { repo, a } = await unAviso(() => ({ ok: false, motivo: 'rechazado', detalle: 'HTTP 403', status: 403 }));
+    expect(a.correos).toHaveLength(1);
+    expect(a.esperas).toEqual([]);
+    expect(repo.correos[0].estado).toBe('rechazado');
   });
 });

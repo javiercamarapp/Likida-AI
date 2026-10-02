@@ -182,6 +182,8 @@ export interface DepsVigia {
   enviar?: Enviador;
   /** 0674: envío del correo de respaldo (inyectable para pruebas); por omisión Resend vía `enviarCorreo`. */
   enviarCorreo?: typeof enviarCorreo;
+  /** Espera entre reintentos del correo de respaldo (inyectable para pruebas); por omisión un `setTimeout`. */
+  esperar?: (ms: number) => Promise<void>;
   /** Envío al cliente (inyectable para pruebas); por omisión `enviarAlCliente`. */
   /** Manda un archivo (URL firmada) dentro de la ventana de 24 h; por omisión `sendDocument` de Meta. */
   enviarDocumento?: (telefono: string, link: string, nombre: string, pie?: string) => Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }>;

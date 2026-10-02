@@ -45,7 +45,8 @@ export type ResultadoEnvio =
   | { ok: true; id: string }
   /** No hay llave: no es un error, es que no está encendido. */
   | { ok: false; motivo: 'sin_configurar' }
-  | { ok: false; motivo: 'rechazado'; detalle: string }
+  /** `status`: el código HTTP de Resend cuando fue ÉL quien rechazó (429 y 5xx son transitorios; el resto, de configuración o de datos). */
+  | { ok: false; motivo: 'rechazado'; detalle: string; status?: number }
   | { ok: false; motivo: 'red'; detalle: string };
 
 /** ¿Está el canal encendido? Lo usa la pantalla de Conexiones para decir la
@@ -198,7 +199,7 @@ export async function enviarCorreo(
       // no es el lugar para un dato personal.
       const cuerpo = (await r.text().catch(() => '')).slice(0, 200);
       logger.error('correo.rechazado', { status: r.status, cuerpo, asunto: correo.asunto });
-      return { ok: false, motivo: 'rechazado', detalle: `HTTP ${r.status}` };
+      return { ok: false, motivo: 'rechazado', detalle: `HTTP ${r.status}`, status: r.status };
     }
 
     const json = (await r.json().catch(() => null)) as { id?: string } | null;
