@@ -22,11 +22,11 @@ cliente ──► webhook (idempotencia por wamid, kill switch global, ventana 2
         ──► política: ¿autoenviar o aprobar?
         ──► gerente: Enviar / No enviar / Yo me encargo (botones; plantilla fuera de 24 h)
         ──► enviarAlCliente (consentimiento, baja, 24 h → plantilla)
-cron /api/cron/vigia (cada 5 min): SLA → nivel 1 (responsable) → nivel 2 (dueño), atorados, retención
+cron /api/cron/vigia (cada minuto): SLA → nivel 1 (responsable) → nivel 2 (dueño); cada 5 min además: atorados, ciclos muertos, retención
 ```
 
 Código: `src/lib/likida/vigia/` (`servicio.ts` orquesta; `repo.ts` es el único acceso a datos).
-Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`*/5 * * * *`).
+Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`* * * * *`).
 
 ## Qué garantiza (y dónde está probado)
 
@@ -40,6 +40,7 @@ Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`*/5 * * * *`).
 | Duplicados y carreras: un wamid = un mensaje; una respuesta del agente por entrante; un envío por aprobación | `supabase/tests/0400_vigia_concurrencia.sh`, `servicio.test.ts` |
 | Fuera de 24 h solo plantilla del catálogo; sin consentimiento o con BAJA no se envía | `enviar.test.ts` |
 | Escalera por niveles con sello anti-repetición (`vigia_evento.clave`) | `escalamiento.test.ts`, `servicio.test.ts` (barrido) |
+| La cola del barrido no se tapa: lo que llegó al nivel 2 no entra, se ordena por próximo vencimiento y una flota con plazo largo no tapa a otra con plazo corto; los ciclos muertos (7 días) se cierran | `cola_barrido.test.ts`, `repo.test.ts` |
 | Retención y ARCO (supresión) | `0400` (`vigia_purgar`, `vigia_suprimir_contacto`) · SQL test · `repo.test.ts` |
 
 ## Puesta en marcha para una flota
@@ -73,6 +74,15 @@ Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`*/5 * * * *`).
 - **Solicitud ARCO de un cliente por WhatsApp**: `PRIVACIDAD` registra la solicitud a nombre de su
   flota; la supresión de sus chats la ejecuta el dueño desde su fila en el tablero.
 
+## Cuándo llega la alerta de «más de 10 minutos»
+
+El plazo de un cliente con grupo crítico es de 10 min (`sla_critico_min`, mínimo 5). El cron del Vigía pasa **cada minuto**
+(decisión de la ronda 08: con `*/5` la alerta salía entre el minuto 10 y el 15; ahora sale entre el 10 y el 11). Un webhook no
+puede sustituir al cron: la alerta nace de que NO llegó nada, así que alguien tiene que mirar el reloj. La pasada de cada
+minuto es una lectura acotada (≤100 hilos, sin modelo) que casi siempre vuelve vacía; atorados, ciclos muertos y retención
+corren solo en los minutos múltiplo de 5. Cuesta ~1,440 invocaciones diarias de una función de segundos: si en producción
+se prefiere abaratar, volver a `*/5` en `vercel.json` y `CADENCIA_MS.vigia` (el plazo efectivo sube hasta 5 min).
+
 ## Variables de entorno
 
 | Variable | Efecto |
@@ -83,7 +93,7 @@ Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`*/5 * * * *`).
 
 ## Operación
 
-- Si el cron `vigia` envejece, `/api/health` lo declara; `salud.ts` espera un latido cada 5 minutos.
+- Si el cron `vigia` envejece, `/api/health` lo declara; `salud.ts` espera un latido cada minuto.
 - Un mensaje «aprobado» que no llegó a «enviado» en 5 minutos se marca fallido **sin reenviar**
   (podría haber salido): se revisa a mano en el tablero.
 - Costo de IA: una clasificación por modelo solo ocurre cuando las reglas no reconocen el mensaje;

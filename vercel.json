@@ -65,7 +65,7 @@
     },
     {
       "path": "/api/cron/vigia",
-      "schedule": "*/5 * * * *"
+      "schedule": "* * * * *"
     },
     {
       "path": "/api/cron/buzon-entrega",
