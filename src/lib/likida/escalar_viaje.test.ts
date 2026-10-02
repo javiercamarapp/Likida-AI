@@ -808,14 +808,40 @@ describe('escalarViajesSinAceptar — con el registro de la ventana y el selecto
     expect(sendTemplate).not.toHaveBeenCalled();
   });
 
-  it('un 429 del TEXTO al jefe: ya no se manda además la plantilla y el claim se libera (RES-1)', async () => {
+  it('un 429 del TEXTO al jefe YA está en wa_outbox: no se manda la plantilla, el sello se queda y la corrida siguiente NO reenvía nada', async () => {
     estadoVentana = 'abierta';
     rechazoTexto = { codigo: undefined, status: 429 };
     lectura = { data: [fila()], error: null };
     const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
     expect(sendTemplate).not.toHaveBeenCalled();
     expect(r.rechazosReintentables).toBe(1);
-    expect(r.escalados).toBe(0);
-    expect(r.fallos[0]).toMatch(/se reintenta en la siguiente corrida/);
+    expect(r.escalados).toBe(1);                          // el aviso está en cola: el viaje cuenta como escalado
+    expect(r.fallos[0]).toMatch(/no se reenvía/);
+    // El sello NO se soltó: un solo UPDATE (el claim), ninguno que ponga escalado_en en null.
+    expect(updates).toHaveLength(1);
+    expect(updates.some((u) => u.fila.escalado_en === null)).toBe(false);
+
+    // La corrida siguiente ya no ve el viaje (escalado_en sellado): ni texto ni plantilla ni recordatorio de más.
+    const intentosTexto = sendText.mock.calls.length;
+    lectura = { data: [], error: null };
+    await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+    expect(sendText.mock.calls.length).toBe(intentosTexto);
+    expect(sendTemplate).not.toHaveBeenCalled();
+  });
+
+  it('un 429 del recordatorio de TEXTO al chofer YA está en wa_outbox: no cae además a la plantilla de asignación', async () => {
+    estadoVentana = 'abierta';
+    rechazoTexto = { codigo: undefined, status: 429 };
+    lectura = { data: [fila({ operador: { nombre: 'Juan Pérez', telefono: '5213312345678' } })], error: null };
+    const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+    expect(r.reintentados).toBe(1);
+    expect(avisarAlChofer).not.toHaveBeenCalled();
+  });
+
+  it('un rechazo DEFINITIVO del recordatorio de texto al chofer (ventana cerrada) sí cae a la plantilla', async () => {
+    estadoVentana = 'abierta';                            // el registro dice abierta, Meta contesta 131047
+    lectura = { data: [fila({ operador: { nombre: 'Juan Pérez', telefono: '5213312345678' } })], error: null };
+    await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+    expect(avisarAlChofer).toHaveBeenCalledWith('t-1', 'o-1', 'v-1');
   });
 });
