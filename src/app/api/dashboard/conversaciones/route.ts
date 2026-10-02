@@ -4,7 +4,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSessionTenant } from '@/lib/auth/session';
 import { rechazoMfaSuperadminApi } from '@/lib/auth/api-superadmin';
-import { puedeVerArea } from '@/lib/auth/visibilidad';
+import { rolPuedeConversar } from '@/lib/likida/orquestador/permisos';
 import { listarConversaciones } from '@/lib/likida/chat/conversaciones';
 import { logger } from '@/lib/logger';
 import { tenantEfectivoChat } from '../chat/tenant';
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   if (!sesion) return NextResponse.json({ error: 'sin sesion' }, { status: 401 });
   const rechazoMfa = await rechazoMfaSuperadminApi(sesion);
   if (rechazoMfa) return rechazoMfa;
-  if (!puedeVerArea(sesion.rol, 'dinero')) {
+  if (!rolPuedeConversar(sesion.rol)) {
     return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
   }
   const efectivo = await tenantEfectivoChat(sesion, req.nextUrl.searchParams.get('tenant'));

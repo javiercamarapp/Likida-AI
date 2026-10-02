@@ -229,8 +229,14 @@ import { join, relative } from 'node:path';
 //     corrida; cada candidato lleva su tenant y todo lo posterior se ancla a él) — viven aparte, como `conductor/trabajo.ts`.
 // El resto: las llamadas propias del conteo de arriba que ya existían (ninguna otra llamada nueva fuera de estos dos archivos).
 // Integración ola 3b con convenios: 282/1,753 + (2/31) = 284 / 1,784 (se re-mide con el barrido).
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 284;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_784;
+// W3 ORQUESTADOR (Ola 3b): +1 archivo, +7 llamadas — 277 → 278 y 1,705 → 1,712. El módulo nuevo es `orquestador/fuentes_reales.ts`, que
+// junta en UN archivo lo propio del asistente: las tareas que deja para una persona (tabla de la 0650: insertar, leer la previa ante el
+// índice único, listar las abiertas, atender con UPDATE condicional) y tres lecturas de «envíos que no salieron» (entregas del buzón, mensajes
+// fallidos del Vigía, folio de un viaje). Todo lo demás COMPONE los lectores que cada agente ya tiene (`conductor/repo_validacion.ts`,
+// `vigia/repo.ts`, `buzon/repo.ts`, `agentes/cobranza*.ts`, `autofactura/control_emision_repo.ts`): no abre una segunda ruta a esos datos.
+// Integración ola 3b con el orquestador: 284/1,784 + (1/7) = 285 / 1,791 (se re-mide con el barrido).
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 285;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_791;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)
