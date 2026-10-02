@@ -61,7 +61,9 @@ export function construirCsp(nonce: string | null, dev: boolean = process.env.NO
     "default-src 'self'",
     scriptSrc,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https://*.supabase.co",
+    // Solo los orígenes que el código usa de verdad: Storage (avatares y fotos), los tiles de OpenStreetMap del mapa de prospectos
+    // (`admin/mapa-prospectos/calles.tsx`) y `blob:` para la vista previa local del avatar (`URL.createObjectURL`, ronda 15).
+    "img-src 'self' data: blob: https://*.supabase.co https://tile.openstreetmap.org",
     // SEG-5 (auditoría 24): el video de marketing y las notas de voz salen de Storage.
     "media-src 'self' https://*.supabase.co",
     "font-src 'self' data:",

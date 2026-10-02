@@ -87,7 +87,7 @@ describe('proxy · CSP con nonce en las rutas con sesión', () => {
 
   it('las demás directivas no se aflojan con el nonce', async () => {
     const csp = (await pedir('/dashboard')).headers.get('Content-Security-Policy') ?? '';
-    for (const d of ["default-src 'self'", "connect-src 'self'", "frame-src 'none'", "base-uri 'self'", "form-action 'self'", "img-src 'self' data: https://*.supabase.co"]) {
+    for (const d of ["default-src 'self'", "connect-src 'self'", "frame-src 'none'", "base-uri 'self'", "form-action 'self'", "img-src 'self' data: blob: https://*.supabase.co https://tile.openstreetmap.org"]) {
       expect(csp).toContain(d);
     }
   });

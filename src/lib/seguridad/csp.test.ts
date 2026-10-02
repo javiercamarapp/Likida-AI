@@ -24,6 +24,21 @@ describe('construirCsp', () => {
   });
 });
 
+describe('img-src (ronda 15)', () => {
+  const imgSrc = (n: string | null) => construirCsp(n, false).split('; ').find((d) => d.startsWith('img-src'))!.split(' ').slice(1);
+
+  it('admite los tiles de OpenStreetMap (mapa de prospectos) y blob: (vista previa del avatar), con y sin nonce', () => {
+    for (const n of [null, 'bm9uY2U=']) {
+      expect(imgSrc(n)).toEqual(expect.arrayContaining(["'self'", 'data:', 'blob:', 'https://*.supabase.co', 'https://tile.openstreetmap.org']));
+    }
+  });
+
+  it('solo esos orígenes: nada de https: genérico, comodines de OSM ni http:', () => {
+    expect(imgSrc('bm9uY2U=')).toHaveLength(5);
+    expect(imgSrc('bm9uY2U=').some((o) => o === 'https:' || o === 'http:' || o === '*' || o.includes('*.openstreetmap'))).toBe(false);
+  });
+});
+
 describe('nuevoNonce', () => {
   it('es base64 válido de 16 bytes y distinto cada vez', () => {
     const a = nuevoNonce();
