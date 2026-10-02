@@ -277,13 +277,15 @@ describe('otro tenant', () => {
     const ra = await declarar(A);
     const rb = await declarar(B);
     if (!ra.guardada.ok || !rb.guardada.ok) throw new Error('x');
+    const idA = ra.guardada.valor.id;
+    const idB = rb.guardada.valor.id;
 
     // Un usuario de B no puede confirmar la regla de A (anclada por tenant).
     expect(await repo.confirmarRegla(B, ra.guardada.valor.id, { id: 'u-b' })).toMatchObject({ ok: false });
-    expect(estado.db.tabla('regla_vigilancia').find((r) => r.id === ra.guardada.valor.id)?.estado).toBe('pendiente');
+    expect(estado.db.tabla('regla_vigilancia').find((r) => r.id === idA)?.estado).toBe('pendiente');
 
     await repo.confirmarRegla(A, ra.guardada.valor.id, DUENO_A);
-    await repo.confirmarRegla(B, rb.guardada.valor.id, { id: 'u-b' });
+    await repo.confirmarRegla(B, idB, { id: 'u-b' });
     const r = await vigilarReglas(T0);
     expect(r).toMatchObject({ reglas: 2, avisos: 2 });
 

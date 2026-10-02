@@ -71,6 +71,19 @@ function comparar(col: string, op: string, crudo: string): Predicado {
   };
 }
 
+/** Las columnas de un `select` separadas por coma SOLO al nivel superior (los embeds llevan comas adentro). */
+function columnasDeNivel(columnas: string): string[] {
+  const salida: string[] = [];
+  let prof = 0; let actual = '';
+  for (const ch of columnas) {
+    if (ch === '(') prof++;
+    if (ch === ')') prof--;
+    if (ch === ',' && prof === 0) { salida.push(actual.trim()); actual = ''; } else actual += ch;
+  }
+  if (actual.trim()) salida.push(actual.trim());
+  return salida.filter(Boolean);
+}
+
 /** Igualdad para UNIQUE: un jsonb (objeto) se compara por contenido, no por referencia. */
 function igualUnico(a: unknown, b: unknown): boolean {
   if (a === b) return true;
@@ -188,7 +201,13 @@ export function crearBaseEnMemoria(
       const proyectar = (f: Fila): Fila => {
         if (this.columnas === '*' || this.columnas === '') return { ...f };
         const sal: Fila = {};
-        for (const c of this.columnas.split(',').map((x) => x.trim()).filter(Boolean)) sal[c] = f[c];
+        for (const c of columnasDeNivel(this.columnas)) {
+          // `alias:relacion(col, …)` / `relacion(col, …)`: el doble no hace joins; copia lo que
+          // la prueba haya PRE-EMBEBIDO en la fila bajo el nombre del alias.
+          const embed = /^(?:([a-z_0-9]+):)?([a-z_0-9]+)(?:!inner)?\(/i.exec(c);
+          if (embed) { const nombre = embed[1] ?? embed[2]; sal[nombre] = f[nombre]; continue; }
+          sal[c] = f[c];
+        }
         return sal;
       };
       const entregar = (rs: Fila[], count?: number) => {
