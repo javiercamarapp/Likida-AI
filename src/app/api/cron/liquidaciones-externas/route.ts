@@ -23,7 +23,10 @@ export const maxDuration = 60;
 //     backoff, y al agotar intentos queda `fallida` a la vista del panel;
 //   · lo que SÍ está en la cola se CONCILIA: cuando Meta aceptó el mensaje pasa
 //     a `enviada` (con su wamid), y cuando la ventana de 24 h estaba cerrada y
-//     la sesión murió, cae a la plantilla — una sola vez.
+//     la sesión murió, cae a la plantilla — una sola vez;
+//   · el aviso a la oficina cuando un chofer responde «No coincide» (0643/0644)
+//     tiene su propio estado: lo que no llegó se reintenta aquí con espera
+//     creciente y, agotado, queda `fallido` hasta que alguien pulsa «Reavisar».
 //
 // Respeta la palanca `global` y falla CERRADO si no puede leerla, igual que sus
 // hermanos. No tiene palanca propia: el catálogo de interruptores se enumera
@@ -73,7 +76,8 @@ export async function GET(req: Request) {
     logger.info('cron.liquidaciones_externas.ok', { ...r });
     // `fallidas` y `reintentar` son trabajo que NO terminó: ni «ok» ni «fallo»
     // total, que son las dos maneras de mentir aquí.
-    const parcial = r.fallidas > 0 || r.reintentar > 0;
+    // Un aviso de «No coincide» que no llegó (por reintentar o ya fallido) es trabajo que tampoco terminó: la oficina no sabe.
+    const parcial = r.fallidas > 0 || r.reintentar > 0 || r.avisos.reintentar > 0 || r.avisos.fallidos > 0;
     await registrarLatido('liquidaciones-externas', parcial ? 'parcial' : 'ok', { ...r });
     return NextResponse.json({ corrio: true, ...r });
   } catch (e) {

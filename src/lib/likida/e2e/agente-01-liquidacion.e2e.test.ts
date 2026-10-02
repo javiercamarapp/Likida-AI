@@ -58,6 +58,9 @@ vi.mock('../liquidacion_externa/repo', async (orig) => {
       if (!o || o.tenant !== tenantId || !o.activo) throw new Error('operador no encontrado en esta flota');
       return o;
     }),
+    // Este e2e ejerce el ciclo base contra una base SIN 0644: «No coincide» cae a la ruta de siempre (el estado persistido del
+    // aviso, el reintento y la tarea del orquestador tienen su prueba en `liquidacion_externa/ciclo_completo.e2e.test.ts`).
+    registrarNoCoincideAtomico: vi.fn(async () => 'sin_rpc' as const),
     resolverViajeIds: vi.fn(async (_t: string, folios: string[]) => folios.filter((f) => f.startsWith('VJ-')).map((f) => `uuid-${f}`)),
     subirPdfExterno: vi.fn(async (ruta: string, bytes: Uint8Array) => { storage.set(ruta, bytes.length); }),
     firmarPdfExterno: vi.fn(async () => 'https://firmada.example.invalid/x.pdf'),
@@ -107,7 +110,8 @@ const { PREFIJO_BOTON_RECIBIDA } = await import('../liquidacion_externa/presenta
 const deps = { entrega: entregaPorOutbox, ahora: () => AHORA, razonSocial: async () => 'Flota Ficticia SA', firmarPdf: async () => 'https://firmada.example.invalid/x.pdf',
   // Piezas de la ola 3b (formato de la flota 0564 y avisos): sin formato, sin jefe y con el aviso a la oficina aceptado — esta
   // prueba ejerce el ciclo base; la copia al jefe y el formato tienen sus propias pruebas en `liquidacion_externa/`.
-  avisarNoCoincide: async () => true,
+  avisarNoCoincide: async () => ({ destinatarios: ['525599990001'], aceptados: ['525599990001'] }),
+  crearTareaDiferencia: async () => ({ estado: 'no_disponible' as const }),
   formato: async () => null,
   subirArchivo: async (ruta: string, bytes: Uint8Array) => { storage.set(ruta, bytes.length); },
   copiarAJefe: async () => ({ estado: 'sin_destinatarios' as const }),
