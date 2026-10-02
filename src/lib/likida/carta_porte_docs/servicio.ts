@@ -215,12 +215,15 @@ export async function procesarDocumento(
 
     // Un Excel/CSV con N embarques se PARTE en N documentos (0670-0671) antes de gastar un solo token: cada embarque es
     // su propio documento, con su revisión, su aprobación y su viaje. Sin la migración cae a leer el primero con el aviso.
-    const { plan, exceso } = evaluarDivision(contenido, elegirPerfil(perfiles, contenido, doc.remitente, doc.clienteId).perfil);
+    const { plan, exceso, variasHojas } = evaluarDivision(contenido, elegirPerfil(perfiles, contenido, doc.remitente, doc.clienteId).perfil);
     if (plan) {
       const div = await dividirEnHijos(tenantId, doc, version, plan, ahora);
       if (div.estado === 'ok') return div.resultado;
       if (div.estado === 'perdido') return { ok: false, motivo: 'perdi_el_lease', mensaje: 'Otra invocación terminó este documento primero.', permanente: false };
       contenido.avisos.push(`El archivo trae ${plan.embarques.length} embarques pero esta base aún no sabe partirlos: se leyó el primero; sube el resto por separado.`);
+    } else if (variasHojas !== null) {
+      const otras = variasHojas.otras.slice(0, 5).map((n) => `«${n}»`).join(', ');
+      contenido.avisos.push(`El libro trae ${variasHojas.embarques} embarques en la hoja «${variasHojas.hojaDelFolio}» y además datos en otra(s) hoja(s) (${otras}): partirlo dejaría a cada embarque sin esas hojas, así que no se parte. Se leyó el primero; deja los embarques en una sola hoja o súbelos por separado.`);
     } else if (exceso !== null) {
       contenido.avisos.push(`El archivo trae ${exceso} embarques (más de ${MAX_EMBARQUES}): no se parte solo. Se leyó el primero; divide el archivo y súbelo por partes.`);
     }

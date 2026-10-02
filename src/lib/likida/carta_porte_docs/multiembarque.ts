@@ -81,6 +81,13 @@ export interface EvaluacionDivision {
   plan: PlanDivision | null;
   /** Cuántos embarques trae cuando son MÁS de `MAX_EMBARQUES` (no se parte; la lectura lo avisa). `null` en los demás casos. */
   exceso: number | null;
+  /**
+   * M2 (ronda 15): el libro trae varios embarques en la hoja del folio PERO también datos en otras hojas. Los hijos son CSV de UNA
+   * tabla: partir solo se llevaría la hoja del folio y cada embarque perdería, sin aviso, las demás (detalle por folio, mercancías,
+   * catálogos). Decisión: NO se parte; el libro entero se lee como un solo documento y se avisa. Es mejor un documento con todo
+   * y un aviso claro que N documentos que callan lo que les falta.
+   */
+  variasHojas: { hojaDelFolio: string; otras: string[]; embarques: number } | null;
 }
 
 /**
@@ -88,7 +95,7 @@ export interface EvaluacionDivision {
  * folio inequívoca, o son más de `MAX_EMBARQUES`: en ese caso `exceso` lo dice).
  */
 export function evaluarDivision(c: ContenidoDoc, perfil: Perfil | null): EvaluacionDivision {
-  const nada: EvaluacionDivision = { plan: null, exceso: null };
+  const nada: EvaluacionDivision = { plan: null, exceso: null, variasHojas: null };
   if (!c.tabla || (c.formato !== 'excel' && c.formato !== 'csv')) return nada;
   const hallada = localizarColumnaFolio(c, perfil);
   if (!hallada) return nada;
@@ -114,7 +121,9 @@ export function evaluarDivision(c: ContenidoDoc, perfil: Perfil | null): Evaluac
     else huerfanas.push(fila); // filas con datos ANTES del primer folio
   }
   if (grupos.size < 2) return nada;
-  if (grupos.size > MAX_EMBARQUES) return { plan: null, exceso: grupos.size };
+  if (grupos.size > MAX_EMBARQUES) return { plan: null, exceso: grupos.size, variasHojas: null };
+  const otras = (c.tabla ?? []).filter((h) => h.nombre !== tabla.hoja && h.filas.some((f) => f.some((x) => String(x ?? '').trim() !== ''))).map((h) => h.nombre);
+  if (otras.length > 0) return { plan: null, exceso: null, variasHojas: { hojaDelFolio: tabla.hoja, otras, embarques: grupos.size } };
   if (huerfanas.length > 0) {
     // Heredan el primer folio: lo más probable es un renglón de mercancía del primer embarque con la celda combinada.
     const primero = [...grupos.values()][0];
@@ -127,6 +136,7 @@ export function evaluarDivision(c: ContenidoDoc, perfil: Perfil | null): Evaluac
       origenColumna: origen, avisos,
     },
     exceso: null,
+    variasHojas: null,
   };
 }
 
