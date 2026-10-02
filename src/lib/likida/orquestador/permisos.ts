@@ -37,7 +37,9 @@ export const AREA_POR_HERRAMIENTA = {
   estado_cobranza: 'dinero',
   estado_autofactura: 'dinero',
   salud_agentes: 'operacion',
-  escalar_a_persona: 'operacion',
+  // Escalar es DERIVAR: cualquier rol con sesión puede pedir que una persona decida (el contador también
+  // escala una diferencia de liquidación). No lee nada de otra área.
+  escalar_a_persona: null,
 } as const satisfies Record<string, Area | null>;
 
 export type HerramientaOrquestada = keyof typeof AREA_POR_HERRAMIENTA;
