@@ -27,6 +27,8 @@ function responder(tabla: string, op: string, payload: unknown, filtros: string[
 
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
+    // Ronda 16 (0687): las casetas medidas van por dos RPC. Cada una se prepara en `respuestas['rpc:<nombre>']`.
+    rpc: (nombre: string, args: unknown) => Promise.resolve(responder(`rpc:${nombre}`, 'rpc', args, [])),
     from: (tabla: string) => {
       let payload: unknown = null;
       let op = 'select';
@@ -94,7 +96,7 @@ beforeEach(() => {
 // Lo mínimo que crearCotizacion consulta en el camino feliz.
 function prepararCotizar() {
   respuestas['cotizador_config'] = [{ data: { diesel_por_km: 10, salario_dia: 500, viaticos_dia: 100, fijos_por_km: 2, factor_regreso_vacio: 2, margen_objetivo_pct: 10 }, error: null }];
-  respuestas['liquidacion'] = [{ data: [], error: null }];    // nada liquidado en la ventana
+  respuestas['rpc:rutas_liquidadas_tenant'] = [{ data: [], error: null }];   // nada liquidado en la ventana
   respuestas['viaje'] = [{ data: [], error: null }];          // sin histórico de la ruta
   respuestas['tarifa'] = [{ data: [], error: null }];         // sin catálogo
   respuestas['cotizacion'] = [{ data: { id: 'q-1' }, error: null }];
@@ -152,48 +154,43 @@ describe('la config declarada', () => {
 });
 
 describe('las casetas medidas de la ruta', () => {
-  it('promedia SOLO los viajes con gasto caseta, con la ruta normalizada', async () => {
-    // La ventana se recorre por LIQUIDACIÓN (c6-13): `v1` con dos
-    // liquidaciones sigue contando UNA vez.
-    respuestas['liquidacion'] = [{ data: [
-      { viaje_id: 'v1' }, { viaje_id: 'v1' }, { viaje_id: 'v2' }, { viaje_id: 'v3' },
+  it('pide los pares liquidados, elige los de la MISMA ruta normalizada y devuelve el promedio de la base', async () => {
+    respuestas['rpc:rutas_liquidadas_tenant'] = [{ data: [
+      { origen: 'León', destino: 'CDMX' },
+      { origen: 'leon ', destino: ' cdmx' },
+      { origen: 'León', destino: 'Monterrey' },   // otra ruta: fuera
     ], error: null }];
-    respuestas['viaje'] = [{ data: [
-      { id: 'v1', origen: 'León', destino: 'CDMX' },
-      { id: 'v2', origen: 'leon ', destino: ' cdmx' },
-      { id: 'v3', origen: 'León', destino: 'Monterrey' },   // otra ruta: fuera
-    ], error: null }];
-    // v1 con dos casetas (600+400=1000), v2 SIN gasto caseta → no cuenta.
-    respuestas['gasto'] = [{ data: [
-      { viaje_id: 'v1', monto: 600 }, { viaje_id: 'v1', monto: 400 },
-    ], error: null }];
+    respuestas['rpc:casetas_medidas_ruta_tenant'] = [{ data: [{ promedio: '1000.00', viajes: 1 }], error: null }];
     const m = await casetasMedidasPorRuta('t1', 'leon', 'CDMX', '2026-08-27');
     expect(m).toEqual({ promedio: 1000, viajes: 1 });
+    const llamada = escrituras.find((e) => e.tabla === 'rpc:casetas_medidas_ruta_tenant');
+    const args = llamada?.payload as { p_tenant: string; p_origenes: string[]; p_destinos: string[] };
+    expect(args.p_tenant).toBe('t1');
+    expect([...args.p_origenes].sort()).toEqual(['León', 'leon '].sort());
+    expect([...args.p_destinos].sort()).toEqual([' cdmx', 'CDMX'].sort());
+    // Nada de leer tablas enteras: solo RPC.
+    expect(escrituras.every((e) => e.tabla.startsWith('rpc:'))).toBe(true);
   });
 
-  it('la ventana la marca la FECHA DE LIQUIDACIÓN, no el alta del viaje (c6-13)', async () => {
-    respuestas['liquidacion'] = [{ data: [{ viaje_id: 'v1' }], error: null }];
-    respuestas['viaje'] = [{ data: [{ id: 'v1', origen: 'León', destino: 'CDMX' }], error: null }];
-    respuestas['gasto'] = [{ data: [{ viaje_id: 'v1', monto: 800 }], error: null }];
+  it('la ventana la marca la FECHA DE LIQUIDACIÓN: el piso viaja a la base como 366 días antes de hoy (c6-13)', async () => {
+    respuestas['rpc:rutas_liquidadas_tenant'] = [{ data: [{ origen: 'León', destino: 'CDMX' }], error: null }];
+    respuestas['rpc:casetas_medidas_ruta_tenant'] = [{ data: [{ promedio: 800, viajes: 1 }], error: null }];
     await casetasMedidasPorRuta('t1', 'León', 'CDMX', '2026-08-27');
-
-    // El `gte` de la ventana cuelga de `liquidacion.created_at`…
-    const liq = escrituras.find((e) => e.tabla === 'liquidacion');
-    expect(liq?.filtros.some((f) => f.startsWith('gte:"created_at"'))).toBe(true);
-    // …y la consulta de viajes ya NO filtra por su propia fecha de alta: solo
-    // resuelve la ruta de los ids que la ventana ya eligió.
-    const viajes = escrituras.find((e) => e.tabla === 'viaje');
-    expect(viajes?.filtros.some((f) => f.startsWith('gte:'))).toBe(false);
-    expect(viajes?.filtros.some((f) => f.startsWith('in:"id"'))).toBe(true);
+    const piso = (escrituras.find((e) => e.tabla === 'rpc:rutas_liquidadas_tenant')?.payload as { p_piso: string }).p_piso;
+    expect(piso).toBe(new Date(Date.parse('2026-08-27T12:00:00Z') - 366 * 86_400_000).toISOString());
   });
 
   it('sin nada liquidado en la ventana, o sin casetas registradas → null, jamás $0', async () => {
-    respuestas['liquidacion'] = [{ data: [], error: null }];
+    respuestas['rpc:rutas_liquidadas_tenant'] = [{ data: [], error: null }];
     expect(await casetasMedidasPorRuta('t1', 'León', 'CDMX', '2026-08-27')).toBeNull();
-    respuestas['liquidacion'] = [{ data: [{ viaje_id: 'v1' }], error: null }];
-    respuestas['viaje'] = [{ data: [{ id: 'v1', origen: 'León', destino: 'CDMX' }], error: null }];
-    respuestas['gasto'] = [{ data: [], error: null }];
+    respuestas['rpc:rutas_liquidadas_tenant'] = [{ data: [{ origen: 'León', destino: 'CDMX' }], error: null }];
+    respuestas['rpc:casetas_medidas_ruta_tenant'] = [{ data: [{ promedio: null, viajes: 0 }], error: null }];
     expect(await casetasMedidasPorRuta('t1', 'León', 'CDMX', '2026-08-27')).toBeNull();
+  });
+
+  it('un error de la base LANZA: no se rellena con un promedio inventado', async () => {
+    respuestas['rpc:rutas_liquidadas_tenant'] = [{ data: null, error: { message: 'boom' } }];
+    await expect(casetasMedidasPorRuta('t1', 'León', 'CDMX', '2026-08-27')).rejects.toThrow('cotizador.rutasLiquidadas');
   });
 });
 
@@ -242,10 +239,8 @@ describe('crearCotizacion — los candados de entrada', () => {
 
   it('la medición GANA sobre la captura manual, y el desglose persistido lo dice', async () => {
     prepararCotizar();
-    // La ventana la abre `liquidacion` desde c6-13.
-    respuestas['liquidacion'] = [{ data: [{ viaje_id: 'v1' }], error: null }];
-    respuestas['viaje'] = [{ data: [{ id: 'v1', origen: 'León', destino: 'CDMX' }], error: null }];
-    respuestas['gasto'] = [{ data: [{ viaje_id: 'v1', monto: 800 }], error: null }];
+    respuestas['rpc:rutas_liquidadas_tenant'] = [{ data: [{ origen: 'León', destino: 'CDMX' }], error: null }];
+    respuestas['rpc:casetas_medidas_ruta_tenant'] = [{ data: [{ promedio: 800, viajes: 1 }], error: null }];
     await crearCotizacion('t1', { ...base, casetasManual: 999 }, 'u1');
     const ins = escrituras.find((e) => e.tabla === 'cotizacion' && e.op === 'insert');
     const desglose = (ins?.payload as { desglose: { lineas: Array<{ concepto: string; monto: number | null; supuesto: string }> } }).desglose;
