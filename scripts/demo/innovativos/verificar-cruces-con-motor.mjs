@@ -31,6 +31,8 @@ const q = `select coalesce(json_agg(x), '[]'::json) from (
   from desglose_peaje_linea l join peaje_caseta c on c.id = l.caseta_id
   where l.tenant_id = 'eeeeeeee-0620-4000-8000-000000000250' order by l.indice) x`;
 const filas = JSON.parse(execFileSync('psql', [URL_DB, '-Atq', '-v', 'ON_ERROR_STOP=1', '-c', q], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 }));
+// Cero líneas no «coincide» con nada: es una base sin sembrar (o sin pases), no un éxito. Antes salía OK con 0.
+if (filas.length === 0) { console.log('FALLA: la base no tiene líneas de pase del tenant demo (0 líneas): no hay nada que comparar con el motor. ¿Sembraste?'); process.exit(1); }
 let mal = 0; const cuenta = {};
 for (const f of filas) {
   const v = evaluarCruceGps(f.cruce_ms, { id: String(f.indice), lat: f.lat, lng: f.lng, radioM: f.radio_m }, f.muestras);
