@@ -18360,3 +18360,86 @@ begin
   raise exception E'COPIA_JEFE_0620 segundo-rebota=% otro-telefono=% aceptada-no-repite=% soltar-reintenta=% token-viejo-no-cierra=% flota-ajena-null=%   (esperado t / t / t / t / t / t)',
     segundo, otro, no_repite, reintenta, viejo_no, ajena;
 end $$;
+
+-- ── 272. La geocerca guarda su polígono nativo y la RPC del catálogo lo valida (mig. 0630) ──
+-- Un patio alargado junto a una carretera ya no se aproxima por un círculo +5 %: la fila trae su polígono y el CHECK
+-- impide uno roto o una fila «aproximada» que además tenga polígono. Lo que solo la base demuestra: la validez del jsonb,
+-- el todo-o-nada de la RPC ante un polígono inválido, que re-importar actualiza sin duplicar y quita la aproximación, y el CHECK
+-- de la tabla fuera de la RPC.
+-- Esperado: GEOCERCA_POLIGONO_0630 valida=t guarda-poligono=t lote-invalido-rebota=t idempotente=t check-tabla=t aprox-con-poligono-rebota=t
+do $$
+declare
+  ta uuid; r jsonb; p jsonb; n int;
+  patio jsonb := '[{"lat":20.4998,"lng":-103.3030},{"lat":20.4998,"lng":-103.2970},{"lat":20.5002,"lng":-103.2970},{"lat":20.5002,"lng":-103.3030}]'::jsonb;
+  valida boolean := false; guarda boolean := false; rebota boolean := false; idem boolean := false; chk boolean := false; aprox boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0630') returning id into ta;
+  valida := geocerca_poligono_valido(patio)
+    and not geocerca_poligono_valido('[{"lat":20,"lng":-103},{"lat":20,"lng":-103.1},{"lat":20,"lng":-103.2}]'::jsonb)
+    and not geocerca_poligono_valido('[{"lat":20,"lng":-103},{"lat":20,"lng":-103.1}]'::jsonb);
+
+  r := importar_sitios_conductor(ta, jsonb_build_array(
+    jsonb_build_object('linea', 2, 'codigo', 'ZZ-PAT', 'nombre', 'ZZZ Patio 0630', 'tipo', 'patio', 'lat', 20.5, 'lng', -103.3, 'radio_m', 340, 'poligono', patio)));
+  select poligono into p from geocerca where tenant_id = ta and codigo = 'ZZ-PAT';
+  guarda := (r->>'ok')::boolean and p = patio;
+
+  r := importar_sitios_conductor(ta, jsonb_build_array(
+    jsonb_build_object('linea', 2, 'codigo', 'ZZ-BUENO', 'nombre', 'ZZZ Bueno', 'tipo', 'patio', 'lat', 20.5, 'lng', -103.3, 'radio_m', 100),
+    jsonb_build_object('linea', 3, 'codigo', 'ZZ-MALO', 'nombre', 'ZZZ Malo', 'tipo', 'patio', 'lat', 20.5, 'lng', -103.3, 'radio_m', 100, 'poligono', '[{"lat":20,"lng":-103}]'::jsonb)));
+  rebota := (r->>'ok')::boolean is false and not exists (select 1 from geocerca where tenant_id = ta and codigo in ('ZZ-BUENO', 'ZZ-MALO'));
+
+  r := importar_sitios_conductor(ta, jsonb_build_array(
+    jsonb_build_object('linea', 2, 'codigo', 'ZZ-PAT', 'nombre', 'ZZZ Patio 0630', 'tipo', 'patio', 'lat', 20.5, 'lng', -103.3, 'radio_m', 340, 'poligono', patio)));
+  select count(*) into n from geocerca where tenant_id = ta and codigo = 'ZZ-PAT';
+  idem := (r->>'actualizados')::int = 1 and (r->>'creados')::int = 0 and n = 1;
+
+  begin
+    insert into geocerca (tenant_id, nombre, tipo, lat, lng, radio_m, poligono) values (ta, 'ZZZ roto', 'patio', 20, -103, 100, '[{"lat":20,"lng":-103}]'::jsonb);
+  exception when check_violation then chk := true; end;
+  begin
+    insert into geocerca (tenant_id, nombre, tipo, lat, lng, radio_m, poligono, aproximada) values (ta, 'ZZZ aprox', 'patio', 20, -103, 100, patio, true);
+  exception when check_violation then aprox := true; end;
+
+  raise exception E'GEOCERCA_POLIGONO_0630 valida=% guarda-poligono=% lote-invalido-rebota=% idempotente=% check-tabla=% aprox-con-poligono-rebota=%   (esperado t / t / t / t / t / t)',
+    valida, guarda, rebota, idem, chk, aprox;
+end $$;
+
+-- ── 273. Re-importación diaria de geocercas: un claim por flota y ventana, y la huella solo avanza con un intento bueno (mig. 0631) ──
+-- El cron gps re-importa las geocercas de «mis propias tablas»; dos invocaciones solapadas no deben leer a la vez ni
+-- un fallo «gastar» el cambio pendiente. Lo que solo la base demuestra: el segundo claim de la ventana pierde, otra flota
+-- no espera, un error acorta la ventana a 60 min, el error no pisa la huella buena y los argumentos fuera de dominio rebotan.
+-- Esperado: GEOCERCAS_REIMPORTACION_0631 segundo-pierde=t otra-flota=t error-no-pisa-huella=t reintento-tras-error=t sin-reintento-a-10min=t ventana-bueno-respeta=t dominio-rebota=t
+do $$
+declare
+  ta uuid; tb uuid; e record;
+  segundo boolean := false; otra boolean := false; huella boolean := false; reint boolean := false; sin10 boolean := false; ventana boolean := false; dom boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0631 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0631 B') returning id into tb;
+
+  segundo := reclamar_importacion_geocercas(ta) and not reclamar_importacion_geocercas(ta);
+  otra := reclamar_importacion_geocercas(tb);
+
+  perform registrar_importacion_geocercas(ta, 'importada', repeat('a', 64), 3, 1, 2, null);
+  perform registrar_importacion_geocercas(ta, 'error', null, null, null, null, 'la tabla no contestó');
+  select * into e from geocerca_importacion_estado where tenant_id = ta;
+  huella := e.huella = repeat('a', 64) and e.ultimo_resultado = 'error' and e.ultimo_ok_en is not null;
+
+  update geocerca_importacion_estado set ultimo_intento_en = clock_timestamp() - interval '2 hours' where tenant_id = ta;
+  reint := reclamar_importacion_geocercas(ta, 1380);
+  perform registrar_importacion_geocercas(ta, 'error', null, null, null, null, 'otra vez');
+  update geocerca_importacion_estado set ultimo_intento_en = clock_timestamp() - interval '10 minutes' where tenant_id = ta;
+  sin10 := not reclamar_importacion_geocercas(ta, 1380);
+
+  perform registrar_importacion_geocercas(ta, 'sin_cambios', repeat('b', 64), null, null, null, null);
+  update geocerca_importacion_estado set ultimo_intento_en = clock_timestamp() - interval '2 hours' where tenant_id = ta;
+  ventana := not reclamar_importacion_geocercas(ta, 1380);
+  update geocerca_importacion_estado set ultimo_intento_en = clock_timestamp() - interval '24 hours' where tenant_id = ta;
+  ventana := ventana and reclamar_importacion_geocercas(ta, 1380);
+
+  begin perform registrar_importacion_geocercas(ta, 'inventado'); exception when sqlstate '22023' then dom := true; end;
+  begin perform reclamar_importacion_geocercas(ta, 0); exception when sqlstate '22023' then dom := dom and true; end;
+
+  raise exception E'GEOCERCAS_REIMPORTACION_0631 segundo-pierde=% otra-flota=% error-no-pisa-huella=% reintento-tras-error=% sin-reintento-a-10min=% ventana-bueno-respeta=% dominio-rebota=%   (esperado t / t / t / t / t / t / t)',
+    segundo, otra, huella, reint, sin10, ventana, dom;
+end $$;
