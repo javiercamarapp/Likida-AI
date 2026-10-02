@@ -347,6 +347,21 @@ export async function cerrarEnvio(tenantId: string, viajeId: string, cual: Envio
   if (res.error) logger.error('convenios.cerrar_fallo', { viajeId, cual, err: res.error.message });
 }
 
+/**
+ * El operador del viaje CAMBIÓ: el nuevo no recibió ninguna de las instrucciones que se le mandaron al anterior, así que se
+ * borran los tres sellos (despacho y acercamiento a cada planta) para que vuelvan a salir, una vez, hacia el operador nuevo.
+ * Sin fila ligada no hace nada (la primera asignación liga y manda por la vía normal). La foto de instrucciones NO se toca:
+ * lo que se le dijo al operador anterior es lo mismo que debe oír el nuevo; corregir el convenio es otro gesto (`corregirConvenioDelViaje`).
+ */
+export async function reiniciarEnvios(tenantId: string, viajeId: string): Promise<void> {
+  const res = await acotada(supabaseAdmin().from('viaje_convenio').update({
+    despacho_reclamado_en: null, despacho_enviado_en: null, despacho_canal: null,
+    acercamiento_origen_reclamado_en: null, acercamiento_origen_enviado_en: null, acercamiento_origen_canal: null,
+    acercamiento_destino_reclamado_en: null, acercamiento_destino_enviado_en: null, acercamiento_destino_canal: null,
+  }).eq('tenant_id', tenantId).eq('viaje_id', viajeId).select('viaje_id'), 'convenios.reiniciar_envios');
+  ok(res as never, 'convenios.reiniciar_envios');
+}
+
 /** Suelta el reclamo tras un rechazo REINTENTABLE de Meta: el aviso no salió y la corrida siguiente lo intenta de nuevo. */
 export async function liberarEnvio(tenantId: string, viajeId: string, cual: Envio): Promise<void> {
   const res = await acotada(supabaseAdmin().from('viaje_convenio').update({ [`${cual}_reclamado_en`]: null })
