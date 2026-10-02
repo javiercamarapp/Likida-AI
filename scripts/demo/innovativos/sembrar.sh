@@ -42,7 +42,7 @@ command -v node >/dev/null 2>&1 || { echo "Falta node." >&2; exit 2; }
 [ -n "$URL" ] || { echo "Define DEMO_DATABASE_URL (p. ej. postgresql:///likida_demo). Este seed no adivina la base." >&2; exit 2; }
 
 # Guarda de host (antes de abrir NINGUNA conexión): una sola implementación, probada contra cada bypass.
-node "$(dirname "$0")/guarda-host.mjs" || exit $?
+node ./guarda-host.mjs || exit $?
 RED_PRIVADA=0; [ "${DEMO_PERMITIR_RED_PRIVADA:-}" = "1" ] && RED_PRIVADA=1
 
 export PGOPTIONS="${PGOPTIONS:-} -c client_min_messages=warning"
