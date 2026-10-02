@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
 import {
-  BloqueEstadoYKpis, BloqueAprobacion, BloqueExcepciones, BloqueConversaciones, BloqueConfiguracion, BloqueBitacora, BloqueContactos,
+  BloqueEstadoYKpis, BloqueAprobacion, BloqueExcepciones, BloqueConversaciones, BloqueConfiguracion, BloqueBitacora, BloqueContactos, BloqueDirectores, BloqueCorreos,
   minutosDeEspera, duracion, motivosDeExcepcion, type AccionesVigia,
 } from './vista';
 import type { DatosTablero, ConversacionTablero } from '@/lib/likida/vigia/repo';
@@ -19,7 +19,7 @@ import { configApagada } from '@/lib/likida/vigia/tipos';
 const AHORA = Date.parse('2026-10-01T18:00:00Z');
 const hace = (min: number) => new Date(AHORA - min * 60_000).toISOString();
 const noop = (async () => null) as AccionesVigia['decidir'];
-const acciones: AccionesVigia = { decidir: noop, conversacion: noop, config: noop, alta: noop, contacto: noop };
+const acciones: AccionesVigia = { decidir: noop, conversacion: noop, config: noop, alta: noop, contacto: noop, director: noop };
 
 const conv = (extra: Partial<ConversacionTablero> = {}): ConversacionTablero => ({
   id: '11111111-1111-4111-8111-111111111111', contactoId: 'ct', contactoNombre: 'María Pérez', clienteNombre: 'Compras Acme', control: 'agente',
@@ -230,5 +230,64 @@ describe('configuración, bitácora y contactos', () => {
   it('sin clientes en el catálogo, manda a darlos de alta primero', async () => {
     const html = await pintar(BloqueContactos({ datos: Promise.resolve(base({ clientes: [] })), puedeAdministrar: true, acciones }));
     expect(html).toContain('Primero da de alta al cliente');
+  });
+});
+
+describe('P14 · lista de directores y respaldo por correo', () => {
+  const dirs: NonNullable<DatosTablero['directores']> = [
+    { id: '66666666-6666-4666-8666-666666666661', nivel: 1, nombre: 'Ana Gerente', telefono: '525577770001', correo: 'ana@flota.mx' },
+    { id: '66666666-6666-4666-8666-666666666662', nivel: 2, nombre: 'Beto Dueño', telefono: null, correo: 'beto@flota.mx' },
+  ];
+
+  it('el dueño ve a cada persona en su nivel con sus campos para corregir y quitar, y la forma de agregar', async () => {
+    const html = await pintar(BloqueDirectores({ datos: Promise.resolve(base({ directores: dirs })), puedeAdministrar: true, acciones }));
+    expect(html).toContain('Nivel 1 — gerente de servicio');
+    expect(html).toContain('Nivel 2 — director o dueño');
+    expect(html).toContain('value="Ana Gerente"');
+    expect(html).toContain('value="ana@flota.mx"');
+    expect(html).toContain('value="5577770001"');                       // el 52 no se le pide al dueño
+    expect(html).toContain('Guardar cambios');
+    expect(html).toContain('Quitar');
+    expect(html).toContain('Agregar a la lista');
+  });
+  it('quien solo mira no ve campos ni botones, y el teléfono completo NUNCA se pinta', async () => {
+    const html = await pintar(BloqueDirectores({ datos: Promise.resolve(base({ directores: dirs })), puedeAdministrar: false, acciones }));
+    expect(html).toContain('Ana Gerente');
+    expect(html).toContain('…0001');
+    expect(html).not.toContain('525577770001');
+    expect(html).not.toContain('ana@flota.mx');
+    expect(html).not.toContain('Quitar');
+    expect(html).not.toContain('Agregar a la lista');
+    expect(html).toContain('Solo el dueño de la flota cambia esta lista');
+  });
+  it('sin lista, dice que se avisa como siempre; y dice si el respaldo por correo está apagado o encendido', async () => {
+    const apagado = await pintar(BloqueDirectores({ datos: Promise.resolve(base({ directores: [] })), puedeAdministrar: true, acciones }));
+    expect(apagado).toContain('Nadie en la lista: se avisa como siempre');
+    expect(apagado).toContain('El respaldo por correo está apagado');
+    const encendido = await pintar(BloqueDirectores({ datos: Promise.resolve(base({ config: { ...configApagada('t1'), respaldoCorreo: true } })), puedeAdministrar: true, acciones }));
+    expect(encendido).toContain('El respaldo por correo está encendido');
+  });
+  it('los correos de respaldo se ven con su estado; «falta configuración» se dice tal cual y sin correos no se inventa nada', async () => {
+    const vacio = await pintar(BloqueCorreos({ datos: Promise.resolve(base()) }));
+    expect(vacio).toContain('Ningún aviso ha necesitado el respaldo por correo');
+    const html = await pintar(BloqueCorreos({ datos: Promise.resolve(base({ correos: [
+      { id: 'a', nivel: 1, estado: 'sin_configurar', detalle: null, creadoEn: hace(3), conversacionId: 'c1' },
+      { id: 'b', nivel: 2, estado: 'enviado', detalle: null, creadoEn: hace(9), conversacionId: 'c2' },
+    ] })) }));
+    expect(html).toContain('No se pudo mandar por correo: falta configuración');
+    expect(html).toContain('Enviado');
+    expect(html).not.toMatch(/@/);
+  });
+  it('la bitácora nombra los dos eventos nuevos', async () => {
+    const html = await pintar(BloqueBitacora({ datos: Promise.resolve(base({ eventos: [
+      { id: 2, tipo: 'correo_fallo', nivel: 1, creadoEn: hace(3), conversacionId: null }, { id: 1, tipo: 'correo_enviado', nivel: 2, creadoEn: hace(9), conversacionId: null },
+    ] })) }));
+    expect(html).toContain('No se pudo mandar el aviso por correo');
+    expect(html).toContain('Se mandó el aviso de escalamiento por correo');
+  });
+  it('la configuración ofrece el interruptor del respaldo por correo al dueño', async () => {
+    const html = await pintar(BloqueConfiguracion({ datos: Promise.resolve(base()), puedeAdministrar: true, acciones }));
+    expect(html).toContain('name="respaldoCorreo"');
+    expect(html).toContain('Respaldo por correo');
   });
 });
