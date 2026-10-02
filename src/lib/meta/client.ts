@@ -671,7 +671,7 @@ export async function sendTemplate(
   to: string,
   plantilla: string,
   opciones: { idioma?: string } & OpcionesPlantilla = {},
-): Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }> {
+): Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number; status?: number }> {
   if (esTelefonoDemo(to)) return rechazarDemo(to, 'wa.sendTemplate');
   const { idioma = 'es_MX', ...resto } = opciones;
 
@@ -699,7 +699,8 @@ export async function sendTemplate(
     // AUDITORÍA E.28 (H1): mismo caso que `sendText` — la respuesta nunca
     // llegó, así que Meta pudo haber aceptado el mensaje igual.
     await encolarSalidaWhatsApp(payload, error, RETRASO_AMBIGUO_SEGUNDOS);
-    return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}` };
+    // Igual que `enviarTexto`: el status 503 le dice al llamador que esto YA quedó en el outbox (no reenviar).
+    return { ok: false, error: `No se pudo contactar a WhatsApp: ${error}`, status: 503 };
   }
 
   if (!res.ok) {
@@ -708,7 +709,7 @@ export async function sendTemplate(
     logger.error('wa.sendTemplate', { plantilla, para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
     if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo);
     else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
-    return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo };
+    return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
   }
 
   const id = await idDeRespuesta(res);

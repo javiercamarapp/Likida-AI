@@ -76,7 +76,7 @@ describe('sendTemplate: fallos', () => {
   it('132001 (no aprobada): devuelve el código y NO encola (reintentar no la aprueba)', async () => {
     fetchSpy.mockResolvedValue(respuestaError(400, 132001, 'template not approved'));
     const r = await sendTemplate('5219993700779', 'x', { parametros: ['a'] });
-    expect(r).toEqual({ ok: false, error: 'template not approved', codigo: 132001 });
+    expect(r).toEqual({ ok: false, error: 'template not approved', codigo: 132001, status: 400 });
     expect(encolar).not.toHaveBeenCalled();
   });
   it('429 reintentable: se encola con el mismo payload (con botones y todo)', async () => {
