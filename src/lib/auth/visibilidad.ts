@@ -179,6 +179,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // firmado. Mismo área que la ventana del agente: dinero. La llave del buzón
   // se enseña solo con `administracion` (adentro de la página).
   '/dashboard/agentes/peajes/configuracion': 'dinero',
+  // El reporte de reclamación (Agente 2, ola 3b): los cruces que el GPS no respalda, para pedir al proveedor la revisión del cobro. Montos por cruce — dinero. El desglose va en `?desglose=` (se busca CON el tenant de la sesión).
+  '/dashboard/agentes/peajes/reclamacion': 'dinero',
   // Proveedores (F6): facturas y totales — dinero, y la decisión es del
   // contador/dueño.
   '/dashboard/agentes/proveedores': 'dinero',

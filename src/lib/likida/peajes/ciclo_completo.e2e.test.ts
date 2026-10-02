@@ -55,6 +55,11 @@ vi.mock('@/app/api/v1/_comun', async (orig) => ({
   abrir: async (req: Request) => ({ ok: true, tenantId: req.headers.get('x-test-tenant') ?? T, rol: 'llave:test' }),
 }));
 
+// El export del reporte de reclamación: la puerta de sesión resuelve la flota que toque en cada prueba.
+let sesionApi: { ok: true; tenantId: string; rol: string } | { ok: false; status: 401; motivo: string } = { ok: true, tenantId: '11111111-1111-4111-8111-111111111111', rol: 'flota_admin' };
+vi.mock('@/lib/auth/tenant-api', () => ({ resolverTenantApi: async () => sesionApi }));
+vi.mock('@/lib/ratelimit', () => ({ rateLimit: async () => true, clientIp: () => '1.2.3.4' }));
+
 const ingesta = await import('./ingesta');
 const { atenderCorreoPeajes } = await import('./correo_entrante');
 const { ejecutarPulls } = await import('./pull');
@@ -64,6 +69,9 @@ const { GET: v1Desgloses } = await import('@/app/api/v1/peajes/desgloses/route')
 const { POST: v1Anular } = await import('@/app/api/v1/peajes/desgloses/[id]/anular/route');
 const { GET: v1Exportacion } = await import('@/app/api/v1/peajes/exportacion/route');
 const { cifrar } = await import('../conectores/cofre');
+const { reporteReclamacion } = await import('./bitacora_conciliada');
+const { GET: exportReclamacion } = await import('@/app/api/export/peajes-reclamacion/route');
+const XLSX = await import('xlsx');
 
 const T = '11111111-1111-4111-8111-111111111111';
 const T2 = '22222222-2222-4222-8222-222222222222';
@@ -84,6 +92,9 @@ const posiciones = [
   { unidad_id: 'u1', lat: N.lat + 0.001, lng: N.lng, medida_en: '2026-08-05T16:30:30.000Z' },
   { unidad_id: 'u2', lat: S.lat + 0.2, lng: S.lng, medida_en: '2026-08-05T17:28:00.000Z' },
   { unidad_id: 'u2', lat: S.lat + 0.2, lng: S.lng + 0.01, medida_en: '2026-08-05T17:32:00.000Z' },
+  // la unidad de la flota B, a 22 km de la caseta a la hora del pase: SU cobro del 05/08 10:30 es «el GPS no la ubica en la caseta»
+  { unidad_id: 'u3', lat: N.lat + 0.2, lng: N.lng, medida_en: '2026-08-05T16:28:00.000Z' },
+  { unidad_id: 'u3', lat: N.lat + 0.2, lng: N.lng + 0.01, medida_en: '2026-08-05T16:32:00.000Z' },
 ];
 
 function base(): Record<string, Fila[]> {
@@ -96,14 +107,17 @@ function base(): Record<string, Fila[]> {
     unidad: [
       { id: 'u1', tenant_id: T, numero_economico: 'C2-08', placas: null },
       { id: 'u2', tenant_id: T, numero_economico: 'C2-09', placas: null },
+      { id: 'u3', tenant_id: T2, numero_economico: 'B-01', placas: null },
     ],
     peaje_tag: [
       { id: 't1', tenant_id: T, tag: 'IMDM10000001', unidad_id: 'u1', activo: true },
       { id: 't2', tenant_id: T, tag: 'IMDM10000002', unidad_id: 'u2', activo: true },
+      { id: 't3', tenant_id: T2, tag: 'IMDM10000001', unidad_id: 'u3', activo: true },
     ],
     peaje_caseta: [
       { id: 'cN', tenant_id: T, nombre: 'Caseta Ejemplo Norte', nombre_norm: 'caseta ejemplo norte', alias: [], lat: N.lat, lng: N.lng, radio_m: 300, activa: true },
       { id: 'cS', tenant_id: T, nombre: 'Caseta Ejemplo Sur', nombre_norm: 'caseta ejemplo sur', alias: [], lat: S.lat, lng: S.lng, radio_m: 300, activa: true },
+      { id: 'cN2', tenant_id: T2, nombre: 'Caseta Ejemplo Norte', nombre_norm: 'caseta ejemplo norte', alias: [], lat: N.lat, lng: N.lng, radio_m: 300, activa: true },
     ],
     viaje: [
       { id: 'v1', tenant_id: T, folio: 'V-1', unidad_id: 'u1' }, { id: 'v2', tenant_id: T, folio: 'V-2', unidad_id: 'u2' },
@@ -377,8 +391,7 @@ describe('OTRO TENANT', () => {
     await atenderCorreoPeajes(TOKEN, correo('e1', [['corte.csv', 'adj1']]), deps);
     expect((await atenderCorreoPeajes(TOKEN2, correo('e2', [['corte.csv', 'adj1']]), deps)).cuerpo).toMatchObject({ recibidos: 1 });
     expect(db.tablas.peaje_ingesta_archivo.map((a) => a.tenant_id).sort()).toEqual([T, T2]);
-    const rr = await procesar();
-    console.log('DEBUG', JSON.stringify(rr), JSON.stringify(db.tablas.peaje_ingesta_archivo.map((a) => [a.tenant_id, a.estado, a.ultimo_error])), JSON.stringify(db.tablas.desglose_peaje.map((d) => [d.tenant_id, d.aviso_requerido, d.aviso_intentos, d.aviso_oficina_en])), JSON.stringify(db.tablas.desglose_peaje_linea.filter((l) => l.tenant_id === T2).map((l) => [l.estatus, l.detalle])));
+    await procesar();
     expect(envios.map((e) => e.tel).sort()).toEqual(['525588880000', '525599990000']);
   });
 
@@ -401,5 +414,120 @@ describe('OTRO TENANT', () => {
     await datos.anularDesgloseDb(T, String(db.tablas.desglose_peaje.find((d) => d.tenant_id === T)!.id), 'error', 'ana');
     expect((await atenderCorreoPeajes(TOKEN, correo('e3', [['corte.csv', 'adj1']]), deps)).cuerpo).toMatchObject({ recibidos: 1 });
     expect((await atenderCorreoPeajes(TOKEN2, correo('e4', [['corte.csv', 'adj1']]), deps)).cuerpo).toMatchObject({ duplicados: 1 });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL REPORTE DE RECLAMACIÓN, de punta a punta: archivo de pases (PASE, por correo)
+// × TAG↔unidad × hora del pase × posiciones GPS × geocercas de la flota →
+// los cruces que se le pueden pedir al proveedor, con su porqué y su evidencia,
+// en pantalla (el reporte), Excel y PDF.
+//
+// El proveedor es un DOBLE: el archivo de pases real de la flota es un BLOQUEO
+// EXTERNO (docs/operacion/conciliacion-peajes.md); aquí se usa un CSV sintético
+// con la forma que el lector tolerante ya reconoce.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const PATIO = { lat: 19.3, lng: -99.1 };
+// 07/08 08:00 y 08:06 (mismo TAG, misma caseta, 6 min) → doble cobro; 08/08 09:00 en el patio con muestras que no alcanzan para afirmar → zona.
+const ARCHIVO_RECLAMACION = [
+  'Fecha de cobro;Hora;Plaza;Importe;No. TAG',
+  '05/08/2026;10:30:00;Caseta Ejemplo Norte;189,50;IMDM 10000001', // GPS cerca               → NO se reclama
+  '05/08/2026;11:30:00;Caseta Ejemplo Sur;100,00;IMDM 10000002',   // GPS a 22 km             → GPS lejos de la caseta
+  '06/08/2026;09:00:00;Caseta Ejemplo Norte;200,00;IMDM 10000001', // sin posiciones          → NO se reclama (sin datos)
+  '07/08/2026;08:00:00;Caseta Ejemplo Norte;50,00;IMDM 10000001',  // primer cobro
+  '07/08/2026;08:06:00;Caseta Ejemplo Norte;50,00;IMDM 10000001',  // 6 min después            → posible doble cobro
+  '08/08/2026;09:00:00;Caseta Ejemplo Sur;77,00;IMDM 10000002',    // unidad en su patio       → zona no autorizada
+].join('\n');
+
+function conReclamacion() {
+  guardar('adjR', ARCHIVO_RECLAMACION);
+  db.tablas.geocerca = [{ id: 'g1', tenant_id: T, catalogo: 'peajes', nombre: 'Patio Central', tipo: 'patio', lat: PATIO.lat, lng: PATIO.lng, radio_m: 500, activa: true }];
+  // u2 el 08/08: a las 08:56 locales (14:56Z) en el patio y a las 09:10 (15:10Z) ya en carretera: 14 min de hueco → el GPS «no alcanza para concluir»
+  (posiciones as Array<Record<string, unknown>>).push(
+    { unidad_id: 'u2', lat: PATIO.lat + 0.001, lng: PATIO.lng, medida_en: '2026-08-08T14:56:00.000Z' },
+    { unidad_id: 'u2', lat: S.lat + 0.3, lng: S.lng, medida_en: '2026-08-08T15:10:00.000Z' },
+  );
+}
+async function conciliado() {
+  conReclamacion();
+  await atenderCorreoPeajes(TOKEN, correo('eR', [['corte-pase.csv', 'adjR']]), deps);
+  await procesar();
+  return idDesglose();
+}
+
+describe('RECLAMACIÓN: pases × GPS × geocercas → reporte para el proveedor', () => {
+  it('FELIZ: solo entran los cruces con evidencia en contra, cada uno con su motivo, su porqué y su evidencia de GPS', async () => {
+    const r = (await reporteReclamacion(T, await conciliado()))!;
+    expect(r.resumen).toMatchObject({ lineas: 6, reclamables: 3, montoReclamable: 227, confirmadas: 1 });
+    expect(r.cruces.map((c) => [c.indice + 1, c.motivo, c.monto])).toEqual([
+      [2, 'gps_lejos_de_caseta', 100],
+      [5, 'doble_cobro', 50],
+      [6, 'unidad_en_zona_no_autorizada', 77],
+    ]);
+
+    const [gps, doble, zona] = r.cruces;
+    // TAG↔unidad y hora del PASE: el cruce sabe qué unidad es y a qué hora (la de México) pasó
+    expect(gps).toMatchObject({ fecha: '2026-08-05', hora: '11:30:00', caseta: 'Caseta Ejemplo Sur', tag: 'IMDM 10000002', unidad: 'C2-09', confianza: 'alta', radioCasetaM: 300 });
+    expect(gps.porQue).toMatch(/la unidad C2-09 no estaba en Caseta Ejemplo Sur a la hora del pase \(11:30\)/);
+    expect(gps.distanciaM).toBeGreaterThan(20_000);
+    expect(gps.evidencia).toHaveLength(2);
+    expect(gps.evidencia.map((e) => e.en)).toEqual(['2026-08-05T17:28:00.000Z', '2026-08-05T17:32:00.000Z']);
+    expect(gps.evidencia.every((e) => (e.distanciaCasetaM ?? 0) > 20_000)).toBe(true);
+
+    expect(doble).toMatchObject({ tag: 'IMDM 10000001', unidad: 'C2-08', confianza: 'media', duplicadoDeLinea: 4 });
+    expect(zona).toMatchObject({ unidad: 'C2-09', confianza: 'alta', zona: { nombre: 'Patio Central', tipo: 'patio' } });
+    expect(zona.evidencia[0].en).toBe('2026-08-08T14:56:00.000Z');
+    expect(r.leyendas.join(' ')).toMatch(/La decisión de reclamar es de la flota/);
+  });
+
+  it('lo que NO se reclama: GPS que confirma y líneas sin datos (se cuentan, no se acusan)', async () => {
+    const r = (await reporteReclamacion(T, await conciliado()))!;
+    const lineas = r.cruces.map((c) => c.indice);
+    expect(lineas).not.toContain(0); // 05/08 10:30: el GPS la confirma
+    expect(lineas).not.toContain(2); // 06/08 09:00: sin posiciones
+    expect(r.resumen.sinDatos + r.resumen.confirmadas + r.resumen.sinEvaluar + r.resumen.reclamables).toBe(r.resumen.lineas);
+  });
+
+  it('Excel y PDF por la puerta de export: mismo contenido que el reporte, con el total reclamable', async () => {
+    const id = await conciliado();
+    const x = await exportReclamacion(new Request(`https://app.likida.ai/api/export/peajes-reclamacion?desglose=${id}`));
+    expect(x.status).toBe(200);
+    const libro = XLSX.read(new Uint8Array(await x.arrayBuffer()), { type: 'array' });
+    const m = XLSX.utils.sheet_to_json<unknown[]>(libro.Sheets['Reclamación'], { header: 1, defval: null });
+    const enc = m.findIndex((f) => f[0] === 'Línea');
+    expect(m.slice(enc + 1, enc + 4).map((f) => [f[0], f[5], f[6], f[7], f[8]])).toEqual([
+      [2, 'IMDM 10000002', 'C2-09', 100, 'GPS lejos de la caseta'],
+      [5, 'IMDM 10000001', 'C2-08', 50, 'Posible doble cobro'],
+      [6, 'IMDM 10000002', 'C2-09', 77, 'Unidad en zona no autorizada'],
+    ]);
+    expect(m.find((f) => f[0] === 'Total reclamable')?.[7]).toBe(227);
+    const p = await exportReclamacion(new Request(`https://app.likida.ai/api/export/peajes-reclamacion?desglose=${id}&formato=pdf`));
+    expect(p.headers.get('Content-Type')).toBe('application/pdf');
+    expect(Buffer.from(await p.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-');
+  });
+
+  it('OTRO TENANT: la flota B no baja el reporte de la flota A (404), ni su Excel', async () => {
+    const id = await conciliado();
+    expect(await reporteReclamacion(T2, id)).toBeNull();
+    sesionApi = { ok: true, tenantId: T2, rol: 'flota_admin' };
+    try {
+      expect((await exportReclamacion(new Request(`https://app.likida.ai/api/export/peajes-reclamacion?desglose=${id}`))).status).toBe(404);
+    } finally { sesionApi = { ok: true, tenantId: T, rol: 'flota_admin' }; }
+  });
+
+  it('un desglose ANULADO no tiene reporte (404), y al volver a conciliarlo el reporte vuelve a salir', async () => {
+    const id = await conciliado();
+    await datos.anularDesgloseDb(T, id, 'periodo equivocado', 'ana');
+    expect(await reporteReclamacion(T, id)).toBeNull();
+  });
+
+  it('sin geocercas ni posiciones de patio, la línea del patio NO se reclama: el GPS «sin datos» no acusa', async () => {
+    conReclamacion();
+    db.tablas.geocerca = [];
+    await atenderCorreoPeajes(TOKEN, correo('eR', [['corte-pase.csv', 'adjR']]), deps);
+    await procesar();
+    const r = (await reporteReclamacion(T, idDesglose()))!;
+    expect(r.cruces.map((c) => c.motivo)).toEqual(['gps_lejos_de_caseta', 'doble_cobro']);
   });
 });

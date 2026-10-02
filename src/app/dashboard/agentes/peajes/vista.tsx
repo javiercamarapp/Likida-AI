@@ -288,6 +288,11 @@ export function VistaAgentePeajes({
                         style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
                         <FileDown width={13} height={13} strokeWidth={2} /> Bitácora conciliada (CSV)
                       </a>
+                      <Link href={`/dashboard/agentes/peajes/reclamacion${sufijo}${sufijo ? '&' : '?'}desglose=${desgloseSeleccionado.desgloseId}`}
+                        className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85"
+                        style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+                        <FileDown width={13} height={13} strokeWidth={2} /> Reporte de reclamación
+                      </Link>
                     </div>
                     <EstadoConciliado v={verificacion} />
                     {detalleSeleccionado === null ? (
