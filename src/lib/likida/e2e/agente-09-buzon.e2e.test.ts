@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createHmac } from 'node:crypto';
-import { crearDbMemoria, type DbMemoria, type Fila } from './db_memoria.fixture';
+import { crearDbMemoria, type DbMemoria } from './db_memoria.fixture';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // E2E AGENTE 9 — BUZÓN DE FACTURAS DE PROVEEDORES.
