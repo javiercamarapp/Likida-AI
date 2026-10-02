@@ -28,7 +28,8 @@
 --
 --  4. `viaje_convenio` — el convenio LIGADO AL VIAJE, con una FOTO de las
 --     instrucciones vigentes al despachar. Una sola fila por viaje (PK). Lleva el
---     sello de cada envío al operador (despacho y acercamiento) con CLAIM: se
+--     sello de cada envío al operador (despacho, y acercamiento a la planta de carga y a la de
+--     descarga) con CLAIM: se
 --     reclama con un UPDATE condicionado a «no enviado y no reclamado» ANTES de
 --     mandar, así que dos corridas del cron (Vercel entrega at-least-once) o dos
 --     gestos del chofer no le mandan dos veces la misma calle de instrucciones.
@@ -96,20 +97,28 @@ create table if not exists public.convenio_instruccion (
   categoria   text not null,
   texto       text not null,
   momento     text not null default 'ambos',
+  -- A qué planta aplica: la del punto A (origen, donde se carga), la del B (destino, donde se
+  -- descarga) o las dos. El aviso de acercamiento solo manda las del lado al que se acerca.
+  lugar       text not null default 'ambos',
   orden       int not null default 0,
   activa      boolean not null default true,
   creada_en   timestamptz not null default now(),
   constraint convenio_instruccion_categoria_dominio
     check (categoria in ('puerta', 'reportarse', 'peculiaridad', 'documentos', 'horario', 'seguridad', 'otro')),
   constraint convenio_instruccion_momento_dominio check (momento in ('despacho', 'acercamiento', 'ambos')),
-  constraint convenio_instruccion_lugar_dominio check (lugar in ('origen', 'destino', 'ambos')),
   constraint convenio_instruccion_texto_largo check (char_length(texto) between 1 and 400),
   constraint convenio_instruccion_orden_sano check (orden between 0 and 999),
   constraint convenio_instruccion_unica unique (convenio_id, categoria, texto)
 );
 
+-- `lugar` llegó después del primer borrador de esta migración: se garantiza también sobre una tabla ya creada.
+alter table public.convenio_instruccion add column if not exists lugar text not null default 'ambos';
+
 do $$
 begin
+  if not exists (select 1 from pg_constraint where conname = 'convenio_instruccion_lugar_dominio' and conrelid = 'public.convenio_instruccion'::regclass) then
+    alter table public.convenio_instruccion add constraint convenio_instruccion_lugar_dominio check (lugar in ('origen', 'destino', 'ambos'));
+  end if;
   if not exists (select 1 from pg_constraint where conname = 'convenio_instruccion_convenio_tenant_fkey' and conrelid = 'public.convenio_instruccion'::regclass) then
     alter table public.convenio_instruccion add constraint convenio_instruccion_convenio_tenant_fkey
       foreign key (convenio_id, tenant_id) references public.cliente_convenio (id, tenant_id) on delete cascade;
@@ -161,18 +170,24 @@ create table if not exists public.viaje_convenio (
   despacho_reclamado_en     timestamptz,
   despacho_enviado_en       timestamptz,
   despacho_canal            text,
-  acercamiento_reclamado_en timestamptz,
-  acercamiento_enviado_en   timestamptz,
-  acercamiento_canal        text,
+  -- El acercamiento se sella POR PLANTA: llegar a la de carga y luego a la de descarga son dos avisos distintos.
+  acercamiento_origen_reclamado_en  timestamptz,
+  acercamiento_origen_enviado_en    timestamptz,
+  acercamiento_origen_canal         text,
+  acercamiento_destino_reclamado_en timestamptz,
+  acercamiento_destino_enviado_en   timestamptz,
+  acercamiento_destino_canal        text,
   constraint viaje_convenio_ligado_por_dominio check (ligado_por in ('auto', 'manual')),
   constraint viaje_convenio_instrucciones_lista
     check (jsonb_typeof(instrucciones) = 'array' and jsonb_array_length(instrucciones) <= 40),
   constraint viaje_convenio_canal_dominio
     check ((despacho_canal is null or despacho_canal in ('texto', 'botones', 'plantilla'))
-       and (acercamiento_canal is null or acercamiento_canal in ('texto', 'botones', 'plantilla'))),
+       and (acercamiento_origen_canal is null or acercamiento_origen_canal in ('texto', 'botones', 'plantilla'))
+       and (acercamiento_destino_canal is null or acercamiento_destino_canal in ('texto', 'botones', 'plantilla'))),
   -- Un envío con hora tiene canal y viceversa: si no, «enviado» no dice por dónde.
   constraint viaje_convenio_despacho_coherente check ((despacho_enviado_en is null) = (despacho_canal is null)),
-  constraint viaje_convenio_acercamiento_coherente check ((acercamiento_enviado_en is null) = (acercamiento_canal is null))
+  constraint viaje_convenio_acercamiento_origen_coherente check ((acercamiento_origen_enviado_en is null) = (acercamiento_origen_canal is null)),
+  constraint viaje_convenio_acercamiento_destino_coherente check ((acercamiento_destino_enviado_en is null) = (acercamiento_destino_canal is null))
 );
 
 do $$

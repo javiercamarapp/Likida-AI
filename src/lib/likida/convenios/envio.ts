@@ -48,7 +48,7 @@ export const puertosEnvioReales: PuertosEnvio = {
 };
 
 async function enviarInstrucciones(
-  tenantId: string, viajeId: string, cual: Envio, lado: LadoViaje | null, p: PuertosEnvio, ahora: Date,
+  tenantId: string, viajeId: string, cual: Envio, p: PuertosEnvio, ahora: Date,
 ): Promise<ResultadoEnvioInstrucciones> {
   try {
     // El despacho LIGA (fotografía) el convenio; el acercamiento solo lee la foto que el despacho dejó.
@@ -64,7 +64,8 @@ async function enviarInstrucciones(
       ligado = await p.ligado(tenantId, viajeId);
       if (!ligado) return { estado: 'sin_convenio' };
     }
-    if (cual === 'despacho' ? ligado.despachoEnviado : ligado.acercamientoEnviado) return { estado: 'ya_enviado' };
+    const yaEnviado = cual === 'despacho' ? ligado.despachoEnviado : cual === 'acercamiento_origen' ? ligado.acercamientoOrigenEnviado : ligado.acercamientoDestinoEnviado;
+    if (yaEnviado) return { estado: 'ya_enviado' };
 
     const ctx = await p.contexto(tenantId, viajeId);
     if (!ctx) return { estado: 'sin_convenio' };
@@ -76,7 +77,7 @@ async function enviarInstrucciones(
     const base = { operadorNombre: ctx.operadorNombre, folio: ctx.folio, origen: ctx.origen, destino: ctx.destino };
     const mensaje = cual === 'despacho'
       ? armarMensajeDespacho(base, ligado.instrucciones)
-      : armarMensajeAcercamiento(base, ligado.instrucciones, lado ?? 'destino');
+      : armarMensajeAcercamiento(base, ligado.instrucciones, cual === 'acercamiento_origen' ? 'origen' : 'destino');
     if (!mensaje) return { estado: 'sin_instrucciones' };
 
     const reclamo = await p.reclamar(tenantId, viajeId, cual, ahora);
@@ -101,10 +102,10 @@ async function enviarInstrucciones(
 
 /** Al despachar: liga el convenio al viaje (foto de instrucciones) y manda las de `despacho`/`ambos` al operador. */
 export function despacharInstrucciones(tenantId: string, viajeId: string, p: PuertosEnvio = puertosEnvioReales, ahora: Date = new Date()): Promise<ResultadoEnvioInstrucciones> {
-  return enviarInstrucciones(tenantId, viajeId, 'despacho', null, p, ahora);
+  return enviarInstrucciones(tenantId, viajeId, 'despacho', p, ahora);
 }
 
-/** Al acercarse a la planta del `lado`: manda las de `acercamiento`/`ambos` de ESA planta. */
+/** Al acercarse a la planta del `lado`: manda las de `acercamiento`/`ambos` de ESA planta, una vez POR PLANTA (cada una con su sello). */
 export function acercarInstrucciones(tenantId: string, viajeId: string, lado: LadoViaje, p: PuertosEnvio = puertosEnvioReales, ahora: Date = new Date()): Promise<ResultadoEnvioInstrucciones> {
-  return enviarInstrucciones(tenantId, viajeId, 'acercamiento', lado, p, ahora);
+  return enviarInstrucciones(tenantId, viajeId, lado === 'origen' ? 'acercamiento_origen' : 'acercamiento_destino', p, ahora);
 }

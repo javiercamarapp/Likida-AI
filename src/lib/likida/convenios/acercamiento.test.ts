@@ -71,7 +71,7 @@ describe('barridoAcercamiento — de punta a punta con la base en memoria', () =
     expect(enviadosWa[0].texto).toContain('ya vas llegando a Zapopan');
     expect(enviadosWa[0].texto).toContain('guardia de la caseta 1');
     expect(enviadosWa[0].texto).not.toContain('Puerta 3'); // esa es de la planta de descarga
-    expect(mundo.tablas.viaje_convenio[0].acercamiento_enviado_en).toBeTruthy();
+    expect(mundo.tablas.viaje_convenio[0].acercamiento_origen_enviado_en).toBeTruthy();
 
     // Segunda pasada: ya no es candidato (y aunque lo fuera, el claim lo impide).
     expect(await barridoAcercamiento(undefined, AHORA)).toMatchObject({ candidatos: 0, enviados: 0 });
@@ -92,7 +92,7 @@ describe('barridoAcercamiento — de punta a punta con la base en memoria', () =
     posicion({ lat: ORIGEN.lat + 0.5, lng: ORIGEN.lng });
     expect(await barridoAcercamiento(undefined, AHORA)).toMatchObject({ candidatos: 1, lejos: 1, enviados: 0 });
     expect(enviadosWa).toHaveLength(0);
-    expect(mundo.tablas.viaje_convenio[0].acercamiento_enviado_en ?? null).toBeNull();
+    expect(mundo.tablas.viaje_convenio[0].acercamiento_origen_enviado_en ?? null).toBeNull();
   });
 
   it('sin posición reciente (flota sin GPS o poller atrasado) NO adivina', async () => {

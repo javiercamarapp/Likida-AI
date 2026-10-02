@@ -185,12 +185,14 @@ describe('el claim del envío', () => {
     expect(await repo.reclamarEnvio(A, viajeId, 'despacho', T0)).toBe('ganado');
     await repo.cerrarEnvio(A, viajeId, 'despacho', 'texto', T0);
     expect(await repo.reclamarEnvio(A, viajeId, 'despacho', new Date(T0.getTime() + 60 * 60_000))).toBe('perdido');
-    expect(await repo.reclamarEnvio(B, viajeId, 'acercamiento', T0)).toBe('perdido');
+    expect(await repo.reclamarEnvio(B, viajeId, 'acercamiento_origen', T0)).toBe('perdido');
   });
 
-  it('el acercamiento tiene su propio claim, independiente del despacho', async () => {
+  it('cada acercamiento (a la planta de carga y a la de descarga) tiene su propio claim, independiente del despacho y del otro', async () => {
     await repo.reclamarEnvio(A, viajeId, 'despacho', T0);
-    expect(await repo.reclamarEnvio(A, viajeId, 'acercamiento', T0)).toBe('ganado');
+    expect(await repo.reclamarEnvio(A, viajeId, 'acercamiento_origen', T0)).toBe('ganado');
+    expect(await repo.reclamarEnvio(A, viajeId, 'acercamiento_destino', T0)).toBe('ganado');
+    expect(await repo.reclamarEnvio(A, viajeId, 'acercamiento_origen', T0)).toBe('perdido');
   });
 });
 
