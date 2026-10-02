@@ -18502,3 +18502,75 @@ begin
   raise exception E'GEOCERCAS_REIMPORTACION_0631 segundo-pierde=% otra-flota=% error-no-pisa-huella=% reintento-tras-error=% sin-reintento-a-10min=% ventana-bueno-respeta=% dominio-rebota=% lista-solo-activas-y-vencidas=%   (esperado t / t / t / t / t / t / t / t)',
     segundo, otra, huella, reint, sin10, ventana, dom, lista;
 end $$;
+
+-- ── 295. Orquestador: el aviso de una tarea sale una sola vez y su estado no se contradice (mig. 0651) ──
+-- La 0651 le da a cada tarea del asistente un estado de aviso (pendiente → enviado | omitido | agotado). Lo que solo la base
+-- demuestra: el dominio del estado, «enviado ⇔ trae su fecha», los intentos acotados y que el claim condicional (UPDATE sobre
+-- pendiente + reclamo vencido) lo gana UNO solo: el segundo proceso no manda otro correo.
+-- Esperado: ORQ_AVISO_0651 agente-existe=t nace-pendiente=t dominio-rebota=t enviado-exige-fecha=t pendiente-sin-fecha=t primer-claim-gana=t segundo-claim-pierde=t intentos-acotados=t
+do $$
+declare
+  ta uuid; id1 uuid; n int;
+  agente boolean := false; nace boolean := false; dominio boolean := false; exige boolean := false; sinfecha boolean := false;
+  gana boolean := false; pierde boolean := false; acotados boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0651 A') returning id into ta;
+  agente := exists (select 1 from agente_definicion where id = 'orquestador');
+  insert into orquestador_escalacion (tenant_id, destino, motivo, resumen, pedida_por_rol, dedupe_key)
+    values (ta, 'mesa_de_control', 'posible_emergencia', 'x', 'encargado', 'k1') returning id into id1;
+  nace := (select aviso_estado = 'pendiente' and aviso_intentos = 0 from orquestador_escalacion where id = id1);
+  begin update orquestador_escalacion set aviso_estado = 'inventado' where id = id1; exception when check_violation then dominio := true; end;
+  begin update orquestador_escalacion set aviso_estado = 'enviado' where id = id1; exception when check_violation then exige := true; end;
+  begin update orquestador_escalacion set avisada_en = now() where id = id1; exception when check_violation then sinfecha := true; end;
+  update orquestador_escalacion set aviso_intentos = aviso_intentos + 1, aviso_reclamado_en = now()
+   where id = id1 and aviso_estado = 'pendiente' and (aviso_reclamado_en is null or aviso_reclamado_en < now() - interval '10 minutes');
+  get diagnostics n = row_count; gana := n = 1;
+  update orquestador_escalacion set aviso_intentos = aviso_intentos + 1, aviso_reclamado_en = now()
+   where id = id1 and aviso_estado = 'pendiente' and (aviso_reclamado_en is null or aviso_reclamado_en < now() - interval '10 minutes');
+  get diagnostics n = row_count; pierde := n = 0;
+  begin update orquestador_escalacion set aviso_intentos = 11 where id = id1; exception when check_violation then acotados := true; end;
+
+  raise exception E'ORQ_AVISO_0651 agente-existe=% nace-pendiente=% dominio-rebota=% enviado-exige-fecha=% pendiente-sin-fecha=% primer-claim-gana=% segundo-claim-pierde=% intentos-acotados=%   (esperado t / t / t / t / t / t / t / t)',
+    agente, nace, dominio, exige, sinfecha, gana, pierde, acotados;
+end $$;
+
+-- ── 296. Orquestador: el barrido de salud reclama cada flota una vez por ventana (mig. 0652) ──
+-- El cron escalar barre la salud de los agentes de cada flota. Dos corridas solapadas no deben barrer la misma flota en la misma
+-- ventana, y un error acorta el reintento. Lo que solo la base demuestra: el claim atómico (la segunda pasada no toma nada),
+-- la ventana, el reintento a 10 min tras un error, el tope por pasada, los argumentos fuera de dominio y que solo service_role ejecuta.
+-- Esperado: ORQ_BARRIDO_0652 primera-toma-todas=t segunda-nada=t ventana-respeta=t ventana-vencida-vuelve=t error-reintenta-10min=t limite-respeta=t dominio-rebota=t solo-service-role=t
+do $$
+declare
+  ta uuid; tb uuid; r1 uuid[]; r2 uuid[]; r3 uuid[]; r4 uuid[]; r5 uuid[];
+  primera boolean := false; segunda boolean := false; ventana boolean := false; vencida boolean := false; err10 boolean := false;
+  limite boolean := false; dom boolean := false; solo boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0652 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0652 B') returning id into tb;
+  select coalesce(array_agg(tenant_id), '{}') into r1 from reclamar_flotas_barrido_orquestador(500, 30);
+  primera := ta = any(r1) and tb = any(r1);
+  select coalesce(array_agg(tenant_id), '{}') into r2 from reclamar_flotas_barrido_orquestador(500, 30);
+  segunda := not (ta = any(r2)) and not (tb = any(r2));
+  perform registrar_barrido_orquestador(ta, 'ok', 2, 1, null);
+  update orquestador_barrido_estado set ultimo_barrido_en = clock_timestamp() - interval '20 minutes' where tenant_id = ta;
+  select coalesce(array_agg(tenant_id), '{}') into r3 from reclamar_flotas_barrido_orquestador(500, 30);
+  ventana := not (ta = any(r3));
+  update orquestador_barrido_estado set ultimo_barrido_en = clock_timestamp() - interval '40 minutes' where tenant_id = ta;
+  select coalesce(array_agg(tenant_id), '{}') into r3 from reclamar_flotas_barrido_orquestador(500, 30);
+  vencida := ta = any(r3);
+  perform registrar_barrido_orquestador(tb, 'error', 0, 0, 'no pudo leer');
+  update orquestador_barrido_estado set ultimo_barrido_en = clock_timestamp() - interval '12 minutes' where tenant_id = tb;
+  select coalesce(array_agg(tenant_id), '{}') into r4 from reclamar_flotas_barrido_orquestador(500, 30);
+  err10 := tb = any(r4);
+  update orquestador_barrido_estado set ultimo_barrido_en = clock_timestamp() - interval '2 days';
+  select coalesce(array_agg(tenant_id), '{}') into r5 from reclamar_flotas_barrido_orquestador(1, 30);
+  limite := cardinality(r5) = 1;
+  begin perform reclamar_flotas_barrido_orquestador(0, 30); exception when sqlstate '22023' then dom := true; end;
+  begin perform registrar_barrido_orquestador(ta, 'inventado'); exception when sqlstate '22023' then dom := dom and true; end;
+  solo := not has_function_privilege('anon', 'public.reclamar_flotas_barrido_orquestador(integer, integer)', 'execute')
+      and not has_function_privilege('authenticated', 'public.reclamar_flotas_barrido_orquestador(integer, integer)', 'execute')
+      and has_function_privilege('service_role', 'public.reclamar_flotas_barrido_orquestador(integer, integer)', 'execute');
+
+  raise exception E'ORQ_BARRIDO_0652 primera-toma-todas=% segunda-nada=% ventana-respeta=% ventana-vencida-vuelve=% error-reintenta-10min=% limite-respeta=% dominio-rebota=% solo-service-role=%   (esperado t / t / t / t / t / t / t / t)',
+    primera, segunda, ventana, vencida, err10, limite, dom, solo;
+end $$;
