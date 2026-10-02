@@ -115,7 +115,7 @@ export function crearDbMemoria(
         for (const n of nuevos) {
           const fila: Fila = { id: `id-${++secuencia}`, created_at: new Date().toISOString(), ...(defaults[this.tabla] ?? {}), ...n };
           if (this.op === 'insert') {
-            const choca = (unicos[this.tabla] ?? []).some((cols) => tabla.some((t) => cols.every((k) => t[k] === fila[k])));
+            const choca = (unicos[this.tabla] ?? []).some((cols) => tabla.some((t) => cols.every((k) => JSON.stringify(t[k]) === JSON.stringify(fila[k]))));
             if (choca) return { data: null, error: { message: 'duplicate key value violates unique constraint', code: '23505' } };
           }
           if (this.op === 'upsert') {
