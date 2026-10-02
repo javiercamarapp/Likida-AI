@@ -24,7 +24,7 @@ const PISO = 70;
 
 /** WinAnsi no codifica todo Unicode, y estos textos vienen de un sistema ajeno:
  *  un solo carácter fuera de Latin-1 haría que `drawText` lanzara. */
-function wa(s: string): string {
+export function wa(s: string): string {
   return s
     .replace(/→/g, '-')
     .replace(/[“”]/g, '"')
@@ -34,7 +34,7 @@ function wa(s: string): string {
     .replace(/[^ -ÿ–—•€]/g, '?');
 }
 
-function cortar(s: string, ancho: number, f: PDFFont, size: number): string {
+export function cortar(s: string, ancho: number, f: PDFFont, size: number): string {
   const v = wa(s);
   if (f.widthOfTextAtSize(v, size) <= ancho) return v;
   let lo = 0, hi = v.length;
@@ -48,7 +48,7 @@ function cortar(s: string, ancho: number, f: PDFFont, size: number): string {
 /** Parte un texto en líneas que caben en `ancho`, midiendo con la fuente real:
  *  el descargo no se recorta, se envuelve (un descargo cortado a medias es peor
  *  que ninguno). */
-function envolver(s: string, ancho: number, f: PDFFont, size: number): string[] {
+export function envolver(s: string, ancho: number, f: PDFFont, size: number): string[] {
   const lineas: string[] = [];
   let actual = '';
   for (const p of wa(s).split(/\s+/).filter(Boolean)) {
