@@ -1,0 +1,15 @@
+codigo,nombre,unidad,convenio,casetas,corredor_wkt,buffer_m,vigente_desde,vigente_hasta
+OK-1,Buena,UN-001,,Caseta Ejemplo Norte,,,,
+OK-1,Código repetido,UN-001,,Caseta Ejemplo Sur,,,,
+,Sin código,UN-001,,Caseta Ejemplo Sur,,,,
+NADIE,Sin unidad ni convenio,,,Caseta Ejemplo Sur,,,,
+VACIO,Sin casetas ni corredor,UN-001,,,,,,
+AMBOS,Casetas y corredor,UN-001,,Caseta Ejemplo Sur,"LINESTRING(-103.30 20.62, -103.20 20.62)",500,,
+SINBUF,Corredor sin buffer,UN-001,,,"LINESTRING(-103.30 20.62, -103.20 20.62)",,,
+BUF5,Buffer corto,UN-001,,,"LINESTRING(-103.30 20.62, -103.20 20.62)",5,,
+UNPUNTO,Un solo vértice,UN-001,,,"LINESTRING(-103.30 20.62)",500,,
+FUERA,Vértice fuera de México,UN-001,,,"LINESTRING(-103.30 20.62, 2.35 48.85)",500,,
+INVERT,Lat y lon intercambiadas,UN-001,,,"LINESTRING(20.62 -103.30, 20.62 -103.20)",500,,
+FECHA,Fecha inexistente,UN-001,,Caseta Ejemplo Sur,,,2026-02-30,
+ORDEN,Hasta antes de desde,UN-001,,Caseta Ejemplo Sur,,,2026-09-01,2026-08-01
+DUPCAS,Caseta repetida,UN-001,,Caseta Ejemplo Sur | caseta ejemplo sur,,,,

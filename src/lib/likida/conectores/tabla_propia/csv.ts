@@ -1,6 +1,6 @@
-import { ErrorTablaPropia, type GeocercaTablaPropia, type PosicionTablaPropia, type ResultadoLectura } from './contrato';
+import { ErrorTablaPropia, type CursoTablaPropia, type GeocercaTablaPropia, type PosicionTablaPropia, type ResultadoLectura } from './contrato';
 import {
-  ALIAS_GEOCERCA, ALIAS_POSICION, MAX_FILAS_LECTURA, indiceDe, registrosAGeocercas, registrosAPosiciones, type Registro,
+  ALIAS_CURSO, ALIAS_GEOCERCA, ALIAS_POSICION, MAX_FILAS_LECTURA, indiceDe, registrosACursos, registrosAGeocercas, registrosAPosiciones, type Registro,
 } from './filas';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -36,7 +36,11 @@ export function partirCsv(texto: string): string[][] {
 
 function aRegistros<K extends string>(texto: string, alias: Record<K, string[]>, obligatorias: readonly K[], aceptaUna?: readonly K[]): { registros: Registro[]; decimalComa: boolean } {
   if (texto.length > MAX_BYTES_CSV) throw new ErrorTablaPropia('El archivo pesa más de 25 MB; acota la ventana o divídelo.', 'formato');
-  const matriz = partirCsv(texto);
+  return { ...aRegistrosDeMatriz(partirCsv(texto), alias, obligatorias, aceptaUna), decimalComa: separadorDe(texto) === ';' };
+}
+
+/** La misma lectura sobre una matriz ya partida (un Excel o un CSV leído por otro lado): la primera fila son los encabezados. */
+function aRegistrosDeMatriz<K extends string>(matriz: readonly (readonly string[])[], alias: Record<K, string[]>, obligatorias: readonly K[], aceptaUna?: readonly K[]): { registros: Registro[] } {
   if (matriz.length === 0) throw new ErrorTablaPropia('El archivo está vacío.', 'formato');
   const enc = matriz[0];
   const ix = Object.fromEntries((Object.keys(alias) as K[]).map((k) => [k, indiceDe(enc, alias[k])])) as Record<K, number>;
@@ -50,7 +54,7 @@ function aRegistros<K extends string>(texto: string, alias: Record<K, string[]>,
     for (const k of Object.keys(alias) as K[]) r[k] = ix[k] >= 0 ? (c[ix[k]] ?? '') : undefined;
     return r;
   });
-  return { registros, decimalComa: separadorDe(texto) === ';' };
+  return { registros };
 }
 
 export function leerPosicionesCsv(texto: string, opciones: { zona?: string } = {}): ResultadoLectura<PosicionTablaPropia> {
@@ -61,4 +65,17 @@ export function leerPosicionesCsv(texto: string, opciones: { zona?: string } = {
 export function leerGeocercasCsv(texto: string): ResultadoLectura<GeocercaTablaPropia> {
   const { registros, decimalComa } = aRegistros(texto, ALIAS_GEOCERCA, ['codigo', 'nombre'], ['lat_centro', 'poligono_wkt']);
   return registrosAGeocercas(registros, { decimalComa, primeraFila: 2 });
+}
+
+/** Cursos (rutas autorizadas): una fila por curso; las casetas van en UNA celda separadas por «|»; el corredor, como LINESTRING(lon lat, …). */
+export function leerCursosCsv(texto: string): ResultadoLectura<CursoTablaPropia> {
+  const { registros, decimalComa } = aRegistros(texto, ALIAS_CURSO, ['codigo', 'nombre'], ['casetas', 'corredor_wkt']);
+  return registrosACursos(registros, { decimalComa, primeraFila: 2 });
+}
+
+/** Los cursos de un Excel o de cualquier matriz ya leída (las celdas se leen como texto: las fechas se escriben AAAA-MM-DD o DD/MM/AAAA). */
+export function leerCursosMatriz(matriz: ReadonlyArray<ReadonlyArray<unknown>>): ResultadoLectura<CursoTablaPropia> {
+  const texto = matriz.slice(0, MAX_FILAS_LECTURA + 1).map((f) => f.map((c) => (c === null || c === undefined ? '' : c instanceof Date ? c.toISOString().slice(0, 10) : String(c))));
+  const { registros } = aRegistrosDeMatriz(texto.filter((f) => f.some((x) => x.trim() !== '')), ALIAS_CURSO, ['codigo', 'nombre'], ['casetas', 'corredor_wkt']);
+  return registrosACursos(registros, { primeraFila: 2 });
 }

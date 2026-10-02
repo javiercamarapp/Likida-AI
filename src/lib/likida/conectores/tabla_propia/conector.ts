@@ -29,6 +29,8 @@ const CAMPOS: readonly CampoCredencial[] = [
   { clave: 'columnas', rotulo: 'SQL: columnas de la vista (JSON)', forma: 'texto', requerida: false, ayuda: 'Qué columna es cada dato: unidad (su número económico), lat, lon, fecha_hora, y opcionalmente velocidad_kmh e ignicion.', ejemplo: '{"unidad":"...","lat":"..."}' },
   { clave: 'vista_geocercas', rotulo: 'SQL: vista de geocercas (opcional)', forma: 'texto', requerida: false, ayuda: 'Para importar sus geocercas como sitios.', ejemplo: 'esquema.vista_geocercas' },
   { clave: 'columnas_geocercas', rotulo: 'SQL: columnas de geocercas (JSON)', forma: 'texto', requerida: false, ayuda: 'codigo, nombre y (lat_centro, lon_centro, radio_m) o poligono_wkt; opcional cliente.', ejemplo: '{"codigo":"...","nombre":"..."}' },
+  { clave: 'vista_cursos', rotulo: 'SQL: vista de cursos o rutas autorizadas (opcional)', forma: 'texto', requerida: false, ayuda: 'Para reclamar los cruces fuera de curso en peajes. Una fila por curso.', ejemplo: 'esquema.vista_cursos' },
+  { clave: 'columnas_cursos', rotulo: 'SQL: columnas de cursos (JSON)', forma: 'texto', requerida: false, ayuda: 'codigo, nombre, unidad (su número económico) o convenio (su nombre), y casetas (nombres separados por «|») o corredor_wkt con buffer_m; opcional vigente_desde y vigente_hasta.', ejemplo: '{"codigo":"...","nombre":"...","unidad":"..."}' },
   // CSV / endpoint
   { clave: 'base_url', rotulo: 'Dirección del archivo CSV o del endpoint (https)', forma: 'url', requerida: false, ayuda: 'Debe ser https y pública. Un servidor SFTP todavía no está habilitado; deja el archivo en una dirección https.', ejemplo: 'https://su-sistema.com/posiciones.csv' },
   { clave: 'patron', rotulo: 'Cómo se manda la credencial', forma: 'texto', requerida: false, ayuda: 'ninguna, bearer, cabecera, query o basic (por omisión, ninguna).', ejemplo: 'bearer' },
@@ -37,6 +39,8 @@ const CAMPOS: readonly CampoCredencial[] = [
   { clave: 'mapeo_posiciones', rotulo: 'Endpoint: mapeo de campos de posiciones (JSON)', forma: 'texto', requerida: false, ayuda: 'Dónde está la lista y qué campo es cada dato: lista, campos {unidad, lat, lon, fecha_hora, velocidad_kmh, ignicion}, formato_fecha, unidad_velocidad y paginacion.', ejemplo: '{"lista":"data","campos":{...}}' },
   { clave: 'geocercas_url', rotulo: 'Dirección del archivo o endpoint de geocercas (opcional)', forma: 'url', requerida: false, ayuda: 'Para importar sus geocercas como sitios. https.', ejemplo: 'https://su-sistema.com/geocercas.csv' },
   { clave: 'mapeo_geocercas', rotulo: 'Endpoint: mapeo de campos de geocercas (JSON)', forma: 'texto', requerida: false, ayuda: 'Solo con endpoint: lista y campos {codigo, nombre, lat_centro, lon_centro, radio_m | poligono_wkt, cliente}.', ejemplo: '{"campos":{"codigo":"...","nombre":"..."}}' },
+  { clave: 'cursos_url', rotulo: 'Dirección del archivo o endpoint de cursos (opcional)', forma: 'url', requerida: false, ayuda: 'Las rutas autorizadas por unidad o convenio, para reclamar los cruces fuera de curso en peajes. https.', ejemplo: 'https://su-sistema.com/cursos.csv' },
+  { clave: 'mapeo_cursos', rotulo: 'Endpoint: mapeo de campos de cursos (JSON)', forma: 'texto', requerida: false, ayuda: 'Solo con endpoint: lista y campos {codigo, nombre, unidad | convenio, casetas | corredor_wkt + buffer_m, vigente_desde, vigente_hasta}.', ejemplo: '{"campos":{"codigo":"...","nombre":"..."}}' },
 ];
 
 const mostrable = (url: string | undefined): string | null => {

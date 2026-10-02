@@ -47,6 +47,29 @@ export interface GeocercaTablaPropia {
   cliente: string | null;
 }
 
+/**
+ * Un CURSO de SU sistema: una ruta autorizada (P8, 0665). Dos formas, nunca las dos a la vez:
+ *  · `casetas`  — los nombres de las casetas autorizadas, en orden de recorrido (A→B). No depende de ningún formato del cliente.
+ *  · `corredor` — una polilínea (vértices) con un buffer en metros. El formato real del cliente es bloqueo externo (12-oct):
+ *    esto es el contrato con el que se prueba con datos sintéticos.
+ * Aplica a una unidad (su número económico), a un convenio (su nombre) o a ambos.
+ */
+export interface CursoTablaPropia {
+  codigo: string;
+  nombre: string;
+  tipo: 'casetas' | 'corredor';
+  /** Número económico tal como lo escribe su sistema; null si el curso es del convenio. */
+  unidad: string | null;
+  /** Nombre del convenio; null si el curso es de la unidad. */
+  convenio: string | null;
+  casetas: string[];
+  corredor: Array<{ lat: number; lon: number }> | null;
+  bufferM: number | null;
+  /** AAAA-MM-DD */
+  vigenteDesde: string | null;
+  vigenteHasta: string | null;
+}
+
 export interface FilaRechazada { fila: number; motivo: string }
 export interface ResultadoLectura<T> { filas: T[]; rechazadas: FilaRechazada[] }
 
@@ -62,6 +85,8 @@ export interface LectorTablaPropia {
   readonly modo: ModoTablaPropia;
   leerPosiciones(opciones?: OpcionesLecturaPosiciones): Promise<ResultadoLectura<PosicionTablaPropia>>;
   leerGeocercas(): Promise<ResultadoLectura<GeocercaTablaPropia>>;
+  /** Opcional (P8): el demo no lo implementa y sigue satisfaciendo esta interfaz. Los tres lectores de aquí sí. */
+  leerCursos?(): Promise<ResultadoLectura<CursoTablaPropia>>;
 }
 
 /**
