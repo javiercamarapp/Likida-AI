@@ -200,6 +200,35 @@ describe('procesarDocumento', () => {
     expect(estado.docs.get(r.documentoId)).toMatchObject({ estado: 'fallido', intentos: 0 });
   });
 
+  it('ADVERSARIAL 07: el tope POR DOCUMENTO (scope run) SÍ gasta el intento; el techo de la flota (tenant) no', async () => {
+    const r = await subir(A, await pdfBoreal());
+    const topeRun = llmFalso(() => { throw Object.assign(new Error('presupuesto de IA agotado para esta corrida'), { name: 'LlmBudgetExceededError', scope: 'run' }); });
+    const p = await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => topeRun });
+    expect(p).toMatchObject({ ok: false, motivo: 'presupuesto', alcance: 'run', permanente: false });
+    expect(estado.docs.get(r.documentoId)!.ultimoError).toMatch(/por documento/);
+    expect(estado.docs.get(r.documentoId)).toMatchObject({ estado: 'fallido', intentos: 1 });
+  });
+
+  it('ADVERSARIAL 07: el techo de la flota (scope tenant) no gasta el intento y avisa su alcance', async () => {
+    const r = await subir(A, await pdfBoreal());
+    const topeFlota = llmFalso(() => { throw Object.assign(new Error('presupuesto de IA del día agotado'), { name: 'LlmBudgetExceededError', scope: 'tenant' }); });
+    const q = await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => topeFlota });
+    expect(q).toMatchObject({ ok: false, motivo: 'presupuesto', alcance: 'tenant' });
+    expect(estado.docs.get(r.documentoId)).toMatchObject({ estado: 'fallido', intentos: 0 });
+  });
+
+  it('ADVERSARIAL 07: un documento que rebasa siempre el tope por documento llega a 5 intentos y queda terminal', async () => {
+    const r = await subir(A, await pdfBoreal());
+    const topeRun = llmFalso(() => { throw Object.assign(new Error('tope'), { name: 'LlmBudgetExceededError', scope: 'run' }); });
+    for (let i = 0; i < MAX_INTENTOS; i++) {
+      estado.docs.get(r.documentoId)!.updatedAt = '2000-01-01T00:00:00Z';
+      await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => topeRun });
+    }
+    expect(estado.docs.get(r.documentoId)).toMatchObject({ estado: 'fallido', intentos: MAX_INTENTOS });
+    const sexto = await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => topeRun });
+    expect(sexto).toMatchObject({ ok: false, motivo: 'no_reclamable' });
+  });
+
   it('tras 5 intentos fallidos ya no se reclama', async () => {
     const r = await subir(A, await pdfBoreal());
     const roto = llmFalso(() => { throw new Error('timeout'); });

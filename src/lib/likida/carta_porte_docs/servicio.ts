@@ -119,7 +119,23 @@ export async function validarDocumento(tenantId: string, doc: Pick<DocumentoFila
 
 export type ResultadoProceso =
   | { ok: true; estado: 'por_revisar'; origen: ResultadoExtraccion['origen']; nivel: number; costoUsd: number; listoParaAprobar: boolean }
-  | { ok: false; motivo: 'no_reclamable' | 'perdi_el_lease' | 'archivo' | 'ilegible' | 'presupuesto' | 'modelo'; mensaje: string; permanente: boolean };
+  | {
+    ok: false; motivo: 'no_reclamable' | 'perdi_el_lease' | 'archivo' | 'ilegible' | 'presupuesto' | 'modelo'; mensaje: string; permanente: boolean;
+    /** Solo con `motivo: 'presupuesto'`: qué techo se topó. `run` es el tope POR DOCUMENTO (culpa del archivo, cuenta como
+     *  intento); `tenant` y `proposito` son de la FLOTA (no son culpa del documento ni afectan a otras flotas). */
+    alcance?: 'run' | 'tenant' | 'proposito';
+  };
+
+/** El `scope` del `LlmBudgetExceededError` (a través de la cadena de `cause`), o `undefined` si no se puede leer. */
+function alcanceDePresupuesto(err: unknown): 'run' | 'tenant' | 'proposito' | undefined {
+  let actual: unknown = err;
+  for (let i = 0; i < 6 && actual && typeof actual === 'object'; i++) {
+    const sc = (actual as { scope?: unknown }).scope;
+    if (sc === 'run' || sc === 'tenant' || sc === 'proposito') return sc;
+    actual = (actual as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
 
 const resumenError = (e: unknown): string => (e instanceof Error ? e.message : String(e)).replace(/\s+/g, ' ').slice(0, 300);
 
@@ -133,20 +149,24 @@ export async function procesarDocumento(
   if (!doc) return { ok: false, motivo: 'no_reclamable', mensaje: 'El documento ya no existe.', permanente: true };
 
   let version = claim.version;
-  const fallar = async (motivo: 'archivo' | 'ilegible' | 'presupuesto' | 'modelo', mensaje: string, permanente: boolean): Promise<ResultadoProceso> => {
+  const fallar = async (
+    motivo: 'archivo' | 'ilegible' | 'presupuesto' | 'modelo', mensaje: string, permanente: boolean, alcance?: 'run' | 'tenant' | 'proposito',
+  ): Promise<ResultadoProceso> => {
     const nueva = await repo.actualizarDocumento(tenantId, documentoId, version, {
       estado: 'fallido', ultimo_error: mensaje, procesando_hasta: null, retener_hasta: diasDespues(ahora, DIAS_RETENCION.cerrado),
       // Un archivo que no se deja leer no mejora reintentando: se agota el contador para que nadie lo reclame de nuevo.
       ...(permanente ? { intentos: MAX_INTENTOS } : {}),
-      // El presupuesto de IA agotado no es culpa del documento: no gasta uno de sus intentos (el worker lo reintenta
-      // con su espera, y el día que se amplíe el techo sigue vivo en vez de quedar terminal por un tope del proveedor).
-      ...(motivo === 'presupuesto' ? { intentos: Math.max(0, claim.intentos - 1) } : {}),
+      // El techo de la FLOTA (diario o de fondo) no es culpa del documento: no gasta uno de sus intentos (el worker lo
+      // reintenta con su espera, y el día que se amplíe el techo sigue vivo en vez de quedar terminal). PERO el tope POR
+      // DOCUMENTO (`run`) SÍ lo es: un archivo cuyo escalamiento rebasa el tope lo rebasará cada vez y pagaría los niveles
+      // anteriores en cada pasada. Ese cuenta su intento, para llegar al estado terminal y avisar a la oficina.
+      ...(motivo === 'presupuesto' && alcance !== 'run' ? { intentos: Math.max(0, claim.intentos - 1) } : {}),
     });
     if (nueva) {
       await repo.registrarEvento(tenantId, documentoId, 'extraccion_fallida', null, { motivo, permanente, intento: claim.intentos });
     }
     logger.warn('carta_porte_docs.extraccion_fallida', { tenantId, documentoId, motivo, permanente, intento: claim.intentos });
-    return { ok: false, motivo, mensaje, permanente };
+    return { ok: false, motivo, mensaje, permanente, ...(alcance ? { alcance } : {}) };
   };
 
   try {
@@ -167,7 +187,13 @@ export async function procesarDocumento(
     try {
       r = await extraerDocumento(contenido, { llm, perfiles, remitente: doc.remitente, clienteId: doc.clienteId, signal: deps.signal });
     } catch (e) {
-      if (esErrorDePresupuesto(e)) return await fallar('presupuesto', 'El presupuesto de IA de hoy se agotó. El documento queda en la bandeja y se puede reintentar mañana o cuando se amplíe el techo.', false);
+      if (esErrorDePresupuesto(e)) {
+        const alcance = alcanceDePresupuesto(e);
+        if (alcance === 'run') {
+          return await fallar('presupuesto', 'Este documento rebasó el tope de IA por documento al escalar de nivel (suele ser un archivo muy grande o ilegible). Se reintenta unas veces más y, si sigue igual, captúralo a mano.', false, alcance);
+        }
+        return await fallar('presupuesto', 'El presupuesto de IA de hoy se agotó. El documento queda en la bandeja y se puede reintentar mañana o cuando se amplíe el techo.', false, alcance);
+      }
       return await fallar('modelo', `El modelo no pudo leer el documento: ${resumenError(e)}`, false);
     }
 

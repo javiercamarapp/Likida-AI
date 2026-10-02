@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 
 const {
-  correrWorkerCartaPorte, armarAviso, TOPE_FALLOS_MODELO_SEGUIDOS, TOPE_AVISOS_POR_PASADA, TOPE_AVISOS_RECHAZADOS_SEGUIDOS, MARGEN_EXTRACCION_MS,
+  correrWorkerCartaPorte, armarAviso, intercalarPorFlota, TOPE_FALLOS_MODELO_SEGUIDOS, TOPE_AVISOS_POR_PASADA, TOPE_AVISOS_RECHAZADOS_SEGUIDOS, MARGEN_EXTRACCION_MS,
 } = await import('./worker');
 type DepsWorker = import('./worker').DepsWorker;
 type DocumentoFila = import('./repo').DocumentoFila;
@@ -13,7 +13,7 @@ type ResultadoAvisoOficina = import('@/lib/meta/aviso_oficina').ResultadoAvisoOf
 const T = 'tenant-a';
 const URL = 'https://app.test/dashboard/carta-porte/documentos';
 const OK: ResultadoProceso = { ok: true, estado: 'por_revisar', origen: 'llm', nivel: 1, costoUsd: 0.01, listoParaAprobar: true };
-const falla = (motivo: 'archivo' | 'ilegible' | 'presupuesto' | 'modelo', permanente = false): ResultadoProceso => ({ ok: false, motivo, mensaje: `fallo ${motivo}`, permanente });
+const falla = (motivo: 'archivo' | 'ilegible' | 'presupuesto' | 'modelo', permanente = false, alcance?: 'run' | 'tenant' | 'proposito'): ResultadoProceso => ({ ok: false, motivo, mensaje: `fallo ${motivo}`, permanente, ...(alcance ? { alcance } : {}) });
 
 const doc = (over: Partial<DocumentoFila> = {}): DocumentoFila => ({
   id: 'd1', tenantId: T, canal: 'correo', formato: 'pdf_texto', nombreArchivo: 'orden.pdf', mime: 'application/pdf', bytes: 10, sha256: 'x', storageRuta: 'r',
@@ -92,11 +92,11 @@ describe('procesar lo pendiente', () => {
     expect(r.cortadosPorReloj).toBe(2);
   });
 
-  it('el presupuesto de IA agotado PARA la pasada: ningún otro documento se toca', async () => {
+  it('el techo de IA agotado de la flota: el resto de SUS documentos no se toca (se omiten, no se cortan por reloj)', async () => {
     const m = mundo({ pendientes: ['a', 'b', 'c'], proceso: () => falla('presupuesto') });
     const r = await correrWorkerCartaPorte(m.deps, opts(m));
     expect(m.procesados).toEqual(['a']);
-    expect(r).toMatchObject({ paradaPorPresupuesto: true, fallidos: 1, cortadosPorReloj: 2 });
+    expect(r).toMatchObject({ paradaPorPresupuesto: true, fallidos: 1, omitidosPorPresupuesto: 2 });
   });
 
   it(`${TOPE_FALLOS_MODELO_SEGUIDOS} fallos de modelo seguidos paran la pasada; uno bueno reinicia la racha`, async () => {
@@ -246,3 +246,71 @@ describe('el texto del aviso', () => {
 });
 
 beforeEach(() => vi.clearAllMocks());
+
+
+describe('ADVERSARIAL 07: aislamiento entre flotas y presupuesto', () => {
+  const pend = (tenantId: string, id: string) => ({ tenantId, id, estado: 'recibido' as const, intentos: 0 });
+
+  it('el techo de IA de una flota NO detiene a las demás: sus documentos se saltan y la otra flota se procesa', async () => {
+    const m = mundo();
+    m.deps.pendientes = async () => [pend('A', 'a1'), pend('A', 'a2'), pend('A', 'a3'), pend('B', 'b1')];
+    m.deps.procesar = async (t, id) => { m.procesados.push(id); return t === 'A' ? falla('presupuesto', false, 'tenant') : OK; };
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(m.procesados).toEqual(['a1', 'b1']);
+    expect(r).toMatchObject({ paradaPorPresupuesto: true, fallidos: 1, procesados: 1, omitidosPorPresupuesto: 2 });
+  });
+
+  it('el tope de fondo de una flota (proposito) tampoco frena a las otras', async () => {
+    const m = mundo();
+    m.deps.pendientes = async () => [pend('A', 'a1'), pend('B', 'b1'), pend('B', 'b2')];
+    m.deps.procesar = async (t, id) => { m.procesados.push(id); return t === 'A' ? falla('presupuesto', false, 'proposito') : OK; };
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(m.procesados).toEqual(['a1', 'b1', 'b2']);
+    expect(r.procesados).toBe(2);
+  });
+
+  it('el tope POR DOCUMENTO (run) no corta nada: el siguiente documento de la misma flota se intenta', async () => {
+    const m = mundo({ pendientes: ['a', 'b', 'c'], proceso: (id) => (id === 'a' ? falla('presupuesto', false, 'run') : OK) });
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(m.procesados).toEqual(['a', 'b', 'c']);
+    expect(r).toMatchObject({ paradaPorPresupuesto: false, fallidos: 1, procesados: 2, omitidosPorPresupuesto: 0 });
+  });
+
+  it('el lote se reparte por turnos entre flotas: una flota con muchos recibidos no deja sin turno a la otra', () => {
+    const lista = [...Array.from({ length: 30 }, (_, i) => pend('A', `a${i}`)), pend('B', 'b0'), pend('C', 'c0')];
+    const lote = intercalarPorFlota(lista, 25);
+    expect(lote).toHaveLength(25);
+    expect(lote.slice(0, 3).map((d) => d.id)).toEqual(['a0', 'b0', 'c0']);
+    expect(lote.filter((d) => d.tenantId === 'A').map((d) => d.id).slice(0, 3)).toEqual(['a0', 'a1', 'a2']);
+    expect(intercalarPorFlota(lista.filter((d) => d.tenantId === 'A'), 25)).toHaveLength(25);
+  });
+
+  it('pide a la base más de lo que va a procesar (para poder repartir) y procesa a lo más el tope', async () => {
+    const m = mundo();
+    let pedido = 0;
+    m.deps.pendientes = async (limite) => { pedido = limite; return Array.from({ length: 60 }, (_, i) => pend(i % 2 ? 'A' : 'B', `d${i}`)); };
+    const r = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(pedido).toBeGreaterThan(25);
+    expect(r.pendientes).toBe(25);
+  });
+});
+
+describe('ADVERSARIAL 07: el aviso que el cliente de Meta ya encoló no se reenvía en cada pasada', () => {
+  it('token vencido (no reintentable pero encolado): el candado se queda cerrado y la 2.ª pasada no vuelve a mandar', async () => {
+    const m = mundo({ porAvisar: ['x'], docs: { x: { confianzaMin: 0.4 } }, envio: () => ({ ok: false, motivo: 'token vencido', codigo: 190, fueraDeVentana: false, reintentable: false, encolado: true }) });
+    const r1 = await correrWorkerCartaPorte(m.deps, opts(m));
+    const r2 = await correrWorkerCartaPorte(m.deps, opts(m));
+    const r3 = await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(m.avisos).toHaveLength(1);
+    expect(r1).toMatchObject({ avisosEnCola: 1, avisosFallidos: 0 });
+    expect(r2.avisosPerdidos).toBe(1);
+    expect(r3.avisosPerdidos).toBe(1);
+  });
+
+  it('un rechazo definitivo que NO se encoló sí suelta el candado (reintentar es gratis)', async () => {
+    const m = mundo({ porAvisar: ['x'], docs: { x: { confianzaMin: 0.4 } }, envio: () => ({ ok: false, motivo: 'plantilla sin aprobar', fueraDeVentana: true, reintentable: false, encolado: false }) });
+    await correrWorkerCartaPorte(m.deps, opts(m));
+    await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(m.avisos).toHaveLength(2);
+  });
+});
