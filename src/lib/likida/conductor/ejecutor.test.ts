@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('esta prueba no toca la base'); } }));
 
-const { correrConductor, escalarPorProblema, TOPE_RECHAZOS_SEGUIDOS } = await import('./ejecutor');
+const { correrConductor, escalarPorProblema, TOPE_RECHAZOS_SEGUIDOS, TOPE_VIAJES_POR_PASADA } = await import('./ejecutor');
 const { crearPuertos } = await import('./memoria.fixture');
 const { hitoVacio, viajeBase } = await import('./memoria.fixture');
 const { TIPOS_HITO } = await import('./tipos');
@@ -67,6 +67,40 @@ describe('pedir: la solicitud sale una sola vez', () => {
     m.definirSembrados(7);
     const r = await correrConductor(m.puertos, { ahora: mx('07:00') });
     expect(r).toMatchObject({ sembrados: 7, viajes: 1 });
+  });
+});
+
+describe('P9 — higiene del cron: vencidos y tope', () => {
+  it('antes de leer los viajes cierra los hitos de los viajes abiertos vencidos y lo reporta', async () => {
+    const m = crearPuertos({ viajes: [viaje('v1')], hitos: hitosDe('v1') });
+    const cerrarVencidos = vi.fn(async () => 3);
+    const r = await correrConductor({ ...m.puertos, cerrarVencidos }, { ahora: mx('07:00') });
+    expect(cerrarVencidos).toHaveBeenCalledTimes(1);
+    expect(r.vencidosCerrados).toBe(3);
+  });
+
+  it('si el cierre de vencidos FALLA la pasada sigue y el fallo queda a la vista', async () => {
+    const m = crearPuertos({ viajes: [viaje('v1')], hitos: hitosDe('v1') });
+    const r = await correrConductor({ ...m.puertos, cerrarVencidos: async () => { throw new Error('deadlock'); } }, { ahora: mx('07:30') });
+    expect(r.solicitudes).toBe(1);
+    expect(r.fallos.some((f) => /cerrar vencidos: deadlock/.test(f))).toBe(true);
+  });
+
+  it('sin el puerto (bases sin la 0661, puertos de prueba) no hay cierre ni error', async () => {
+    const m = crearPuertos({ viajes: [viaje('v1')], hitos: hitosDe('v1') });
+    const r = await correrConductor(m.puertos, { ahora: mx('07:00') });
+    expect(r.vencidosCerrados).toBeUndefined();
+    expect(r.fallos).toEqual([]);
+  });
+
+  it('cuando la lista llega al tope lo DICE (el «tope mudo» ya no es mudo)', async () => {
+    const m = crearPuertos({ viajes: [viaje('v1')], hitos: hitosDe('v1') });
+    const lleno = Array.from({ length: TOPE_VIAJES_POR_PASADA }, (_, i) => viaje(`v${i + 1}`));
+    const r = await correrConductor({ ...m.puertos, viajesActivos: async () => lleno }, { ahora: mx('07:00') });
+    expect(r.viajes).toBe(TOPE_VIAJES_POR_PASADA);
+    expect(r.viajesTruncados).toBe(true);
+    const corta = await correrConductor({ ...m.puertos, viajesActivos: async () => lleno.slice(0, 3) }, { ahora: mx('07:00') });
+    expect(corta.viajesTruncados).toBeUndefined();
   });
 });
 

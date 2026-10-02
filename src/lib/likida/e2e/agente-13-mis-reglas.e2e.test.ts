@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { crearDbMemoria, type DbMemoria } from './db_memoria.fixture';
+import { reclamoEnMemoria } from '../reglas/reclamo_en_memoria.fixture';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // E2E AGENTE 13 — MIS REGLAS (español libre → plantilla del catálogo → confirmación humana → vigilante SQL → WhatsApp).
@@ -10,6 +11,7 @@ import { crearDbMemoria, type DbMemoria } from './db_memoria.fixture';
 // ═══════════════════════════════════════════════════════════════════════════
 
 let db: DbMemoria;
+const reclamo = reclamoEnMemoria(() => (db.tablas.regla_disparo ??= []));
 const jefes: Record<string, string | null> = {};
 const dineros: Record<string, string | null> = {};
 const generateStructured = vi.hoisted(() => vi.fn());
@@ -63,7 +65,13 @@ beforeEach(() => {
   for (const t of [TEL_DINERO_A, TEL_JEFE_A, TEL_DINERO_B]) meta.entrante(t, new Date(AHORA.getTime() - 3_600_000));
   db = crearDbMemoria(
     { regla_vigilancia: [], regla_disparo: [], gasto: [gasto('g1', A, 3500), gasto('g2', A, 1000), gasto('g3', B, 9000)] },
-    {}, { regla_vigilancia: [['tenant_id', 'plantilla', 'params']], regla_disparo: [['regla_id', 'objeto', 'objeto_id', 'clave']] },
+    // Las tres RPC del reclamo (0660) sobre las mismas filas de `regla_disparo`.
+    {
+      reclamar_disparos_regla: (a) => reclamo.reclamar(a),
+      confirmar_disparos_regla: (a) => reclamo.confirmar(a) as unknown as boolean,
+      liberar_disparos_regla: (a) => reclamo.liberar(a) as unknown as boolean,
+    },
+    { regla_vigilancia: [['tenant_id', 'plantilla', 'params']], regla_disparo: [['regla_id', 'objeto', 'objeto_id', 'clave']] },
     { regla_vigilancia: { confirmada_en: null, ultima_corrida_en: null, ultimo_disparo_en: null } },
   );
 });

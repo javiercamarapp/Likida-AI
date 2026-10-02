@@ -290,7 +290,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 286;
 // `refrescar_viajes_de_convenio` (llevar la edición a los viajes en curso). Funcionalidad nueva, no código migrado. Medido contra su propia base (1,851):
 // al integrarla con las otras ramas de la ola, el techo es la suma de los tramos.
 // INTEGRACIÓN P7 + P9 (ronda 10): 1,871 + 5 (P7) + 6 (P9) = 1,882 por suma; el valor de abajo se confirma con el barrido real del árbol fusionado.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_876;
+// RONDA 09, paquete P9 «claims-concurrencia» (0660-0661): 0 archivos y +6 llamadas (1,851 + 6 = 1,857), en archivos que ya contaban — funcionalidad nueva, no código
+// migrado: `reglas/repo.ts` +3 (las RPC del reclamo de «Mis reglas»: reclamar, confirmar y liberar las llaves de un aviso) y `conductor/trabajo.ts` +3 (la lectura de
+// viajes ahora es la RPC de reparto justo entre flotas + la lectura por lotes + la anterior como respaldo sin la 0661, y el cierre de los hitos de viajes vencidos).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_882;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)
