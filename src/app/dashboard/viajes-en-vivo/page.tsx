@@ -9,6 +9,7 @@ import { limpiarResumen } from '@/lib/likida/orquestador/escalamiento';
 import { armarTableroViajes } from '@/lib/likida/orquestador/tablero_viajes';
 import { logger } from '@/lib/logger';
 import { ahoraMs } from '@/lib/saludo';
+import { PreguntaAlAsistente } from './pregunta';
 import { TareasAbiertas, VistaViajesEnVivo } from './vista';
 
 export const dynamic = 'force-dynamic';
@@ -68,6 +69,7 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
         accionUrl={RUTA}
         ocultos={ocultos}
         hrefMapa="/dashboard/mapa"
+        pregunta={<PreguntaAlAsistente tenantParam={sp.tenant ?? null} />}
         tareas={<TareasAbiertas tareas={tareas} accion={puedeAtender ? atender : null} ocultos={ocultos} />}
       />
     </main>
