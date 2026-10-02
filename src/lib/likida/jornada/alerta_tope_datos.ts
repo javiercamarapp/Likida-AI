@@ -113,7 +113,9 @@ export async function leerConfigAlerta(tenantId: string): Promise<ConfigAlerta &
 
 export const EntradaConfigAlerta = z.object({
   activa: z.boolean(),
-  topeHoras: z.number().gt(0).max(12).nullable(),
+  // Mínimo en el SERVIDOR (ronda 15): el HTML ya pone min=0.25, pero un POST con 0.005 pasaba `gt(0)` y generaba alertas inmediatas a todos
+  // los operadores de la propia flota (la columna es numeric(4,2): 0.005 se guarda como 0.01). Un cuarto de hora es lo mínimo con sentido.
+  topeHoras: z.number().min(0.25, 'El tope propio debe ser de al menos 0.25 horas (un cuarto de hora)').max(12).nullable(),
   umbralAvisoPct: z.number().int().min(1).max(98),
   umbralCriticoPct: z.number().int().min(2).max(99),
   canalEncargado: z.enum(['whatsapp', 'correo', 'ambos', 'ninguno']),
