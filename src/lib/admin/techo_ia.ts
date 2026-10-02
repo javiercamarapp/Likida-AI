@@ -77,7 +77,7 @@ async function enLotes<T, R>(items: T[], tamano: number, f: (x: T) => Promise<R>
 /** LANZA si la lista de flotas no se puede leer: una pantalla de techos que no ve las flotas no debe pintar «ninguna». */
 export async function getTechosIa(): Promise<TechosIa> {
   const r = await acotada(
-    supabaseAdmin().from('tenant').select('id, nombre, config').not('nombre', 'ilike', 'ZZZ %').order('nombre').limit(MAX_FLOTAS_TECHO + 1),
+    supabaseAdmin().from('tenant').select('id, nombre, config').not('nombre', 'ilike', 'ZZZ %').order('nombre').order('id').limit(MAX_FLOTAS_TECHO + 1),
     'techoIa.tenants',
   );
   if (r.error) throw new Error(`getTechosIa: ${r.error.message}`);
