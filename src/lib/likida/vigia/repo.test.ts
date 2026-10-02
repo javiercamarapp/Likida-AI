@@ -45,7 +45,7 @@ vi.mock('../contactos', () => ({
 }));
 
 const repoMod = await import('./repo');
-const { crearRepoVigia, estatusViajeReal, aConfig, aContacto, validarConfig, telefonoDeAllowlist, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, cargarTablero } = repoMod;
+const { crearRepoVigia, estatusViajeReal, aConfig, aContacto, validarConfig, telefonoDeAllowlist, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, cargarTablero, guardarDirectorVigia, quitarDirectorVigia, guardarConfigVigia } = repoMod;
 const { T1, T2, CLIENTE_A, VIAJE_1 } = await import('./datos.fixture');
 
 const tiene = (l: Llamada, op: string, col: string, valor?: unknown) =>
@@ -54,12 +54,12 @@ const tiene = (l: Llamada, op: string, col: string, valor?: unknown) =>
 beforeEach(() => { llamadas = []; respuesta = () => ({ data: [], error: null }); });
 
 describe('AISLAMIENTO: toda consulta a una tabla con tenant filtra por él', () => {
-  const TABLAS_CON_TENANT = ['vigia_config', 'vigia_contacto', 'vigia_conversacion', 'vigia_mensaje', 'vigia_evento', 'viaje', 'posicion', 'pod', 'factura_emitida', 'cliente', 'app_user', 'tenant'];
+  const TABLAS_CON_TENANT = ['vigia_config', 'vigia_contacto', 'vigia_conversacion', 'vigia_mensaje', 'vigia_evento', 'viaje', 'posicion', 'pod', 'factura_emitida', 'cliente', 'app_user', 'tenant', 'vigia_director', 'vigia_aviso_correo'];
 
   /** Las únicas dos que cruzan flotas A PROPÓSITO (rotuladas en el código). */
-  const EXENTAS = new Set(['contactoPorTelefono', 'conversacionesEnEspera', 'aprobadosAtorados']);
+  const EXENTAS = new Set(['contactoPorTelefono', 'conversacionesEnEspera', 'aprobadosAtorados', 'correosVencidos']);
 
-  it('cada método del repo (salvo las tres que cruzan flotas a propósito) filtra por tenant_id en cada consulta', async () => {
+  it('cada método del repo (salvo las que cruzan flotas a propósito) filtra por tenant_id en cada consulta', async () => {
     const repo = crearRepoVigia();
     const id = '12345678-1234-4234-8234-123456789abc';
     const ahora = new Date('2026-10-01T18:00:00Z');
@@ -94,6 +94,12 @@ describe('AISLAMIENTO: toda consulta a una tabla con tenant filtra por él', () 
       ['registrarOptOut', () => repo.registrarOptOut(T1, id, ahora)],
       ['marcarAvisoPrivacidad', () => repo.marcarAvisoPrivacidad(T1, id, ahora)],
       ['destinatarioNivel2', () => repo.destinatarioNivel(T1, contacto, 2)],
+      ['destinatariosNivel1', () => repo.destinatariosNivel(T1, contacto, 1)],
+      ['destinatariosNivel2', () => repo.destinatariosNivel(T1, contacto, 2)],
+      ['reclamarCorreo', () => repo.reclamarCorreo(T1, { conversacionId: id, clave: 'k', nivel: 1, directorId: null, destino: 'a@b.mx', datos: { cliente: 'x', motivo: 'sin_respuesta', minutos: 1, nivel: 1 } })],
+      ['cerrarCorreo', () => repo.cerrarCorreo(T1, id, id, 'enviado', null)],
+      ['guardarDirector', () => guardarDirectorVigia(T1, 'u', null, { nivel: 1, nombre: 'x', telefono: null, correo: 'a@b.mx' })],
+      ['quitarDirector', () => quitarDirectorVigia(T1, id)],
       ['viajesEnCurso', () => estatusViajeReal.viajesEnCurso({ tenantId: T1, clienteId: CLIENTE_A })],
       ['estatus', () => estatusViajeReal.estatus({ tenantId: T1, clienteId: CLIENTE_A, viajeId: id })],
       ['altaContacto', () => altaContactoVigia(T1, 'u', { clienteId: CLIENTE_A, telefono: '5511110001', nombre: null, gerenteUserId: 'u-ger', consentimiento: true })],
@@ -113,10 +119,10 @@ describe('AISLAMIENTO: toda consulta a una tabla con tenant filtra por él', () 
         expect(tiene(l, 'eq', colTenant, T1) || tiene(l, 'in', 'tenant_id'), `${nombre} → ${l.op} ${l.tabla} sin filtro de tenant: ${JSON.stringify(l.filtros)}`).toBe(true);
       }
     }
-    expect(EXENTAS.size).toBe(3);
+    expect(EXENTAS.size).toBe(4);
   });
 
-  it('las tres que cruzan flotas a propósito lo hacen por la llave correcta y devuelven filas con su propio tenant', async () => {
+  it('las que cruzan flotas a propósito lo hacen por la llave correcta y devuelven filas con su propio tenant', async () => {
     const repo = crearRepoVigia();
     await repo.contactoPorTelefono('+52 1 55 1111 0001');
     expect(llamadas[0].tabla).toBe('vigia_contacto');
@@ -125,6 +131,9 @@ describe('AISLAMIENTO: toda consulta a una tabla con tenant filtra por él', () 
     llamadas = [];
     await repo.aprobadosAtorados(new Date(), 10);
     expect(tiene(llamadas[0], 'eq', 'estado', 'aprobado') && tiene(llamadas[0], 'eq', 'direccion', 'saliente')).toBe(true);
+    llamadas = [];
+    await repo.correosVencidos(10, new Date('2026-10-01T18:00:00Z'));
+    expect(llamadas[0]).toMatchObject({ tabla: 'rpc:vigia_correos_vencidos', valores: { p_limite: 10, p_ahora: '2026-10-01T18:00:00.000Z' } });
   });
 
   it('el estatus del viaje SOLO se lee si el viaje es de ese tenant Y de ese cliente', async () => {
@@ -225,6 +234,9 @@ describe('mapeos y config', () => {
     await expect(crearRepoVigia().config(T1)).rejects.toThrow(/caída/);
   });
   it('aConfig: valores basura caen a los defaults seguros, nunca a «encendido»', () => {
+    expect(aConfig({ tenant_id: T1 })).toMatchObject({ respaldoCorreo: false });
+    expect(aConfig({ tenant_id: T1, respaldo_correo: 'true' })).toMatchObject({ respaldoCorreo: false });
+    expect(aConfig({ tenant_id: T1, respaldo_correo: true })).toMatchObject({ respaldoCorreo: true });
     expect(aConfig({ tenant_id: T1 })).toMatchObject({ habilitado: false, modoAprobacion: 'siempre', slaRespuestaMin: 30, escalarNivel2Min: 60, retencionDias: 180 });
     expect(aConfig({ tenant_id: T1, habilitado: 'true', modo_aprobacion: 'otra_cosa' })).toMatchObject({ habilitado: false, modoAprobacion: 'siempre' });
     expect(aConfig({ tenant_id: T1, habilitado: true, modo_aprobacion: 'autoenviar_bajo_riesgo', sla_respuesta_min: 15 })).toMatchObject({ habilitado: true, modoAprobacion: 'autoenviar_bajo_riesgo', slaRespuestaMin: 15 });
@@ -425,7 +437,9 @@ describe('validaciones de las acciones de la flota', () => {
   const ok = { modoAprobacion: 'siempre', autoenviarMinAprobaciones: 5, slaRespuestaMin: 30, escalarNivel2Min: 60, retencionDias: 180, habilitado: true, avisoPrivacidadUrl: '' };
 
   it('validarConfig acepta lo válido y normaliza la liga vacía a null', () => {
-    expect(validarConfig(ok)).toEqual({ ok: true, valor: { ...ok, avisoPrivacidadUrl: null, slaCriticoMin: 10, molestiaAvisoNivel: 2 } });
+    expect(validarConfig(ok)).toEqual({ ok: true, valor: { ...ok, avisoPrivacidadUrl: null, slaCriticoMin: 10, molestiaAvisoNivel: 2, respaldoCorreo: false } });
+    expect(validarConfig({ ...ok, respaldoCorreo: true })).toMatchObject({ ok: true, valor: { respaldoCorreo: true } });
+    expect(validarConfig({ ...ok, respaldoCorreo: 'true' })).toMatchObject({ ok: true, valor: { respaldoCorreo: false } });
     expect(validarConfig({ ...ok, slaCriticoMin: '8', molestiaAvisoNivel: '3' })).toMatchObject({ ok: true, valor: { slaCriticoMin: 8, molestiaAvisoNivel: 3 } });
     expect(validarConfig({ ...ok, slaRespuestaMin: '45', modoAprobacion: 'autoenviar_bajo_riesgo', avisoPrivacidadUrl: ' https://flota.mx/privacidad ' }))
       .toMatchObject({ ok: true, valor: { slaRespuestaMin: 45, modoAprobacion: 'autoenviar_bajo_riesgo', avisoPrivacidadUrl: 'https://flota.mx/privacidad' } });
@@ -564,5 +578,115 @@ describe('cargarTablero', () => {
     const t = await cargarTablero(T1);
     expect(t.respuesta).toEqual({ muestra: 0, promedioMin: null, medianaMin: null });
     expect(t.config.habilitado).toBe(false);
+  });
+});
+
+describe('P14 · directores y correos de respaldo (0673/0674)', () => {
+  const base = { id: 'c', tenantId: T1, clienteId: CLIENTE_A, telefono: '525511110001', nombre: null, estado: 'activo' as const, consentimientoEn: 'x', optoutEn: null, avisoPrivacidadEn: null };
+
+  it('destinatariosNivel: la lista de la flota (teléfono y/o correo), en el nivel pedido y solo de esa flota', async () => {
+    respuesta = (l) => (l.tabla === 'vigia_director'
+      ? { data: [{ id: 'd1', nivel: 2, nombre: 'Dueña', telefono: '525588887777', correo: 'duena@flota.mx' }, { id: 'd2', nivel: 2, nombre: 'Beto', telefono: null, correo: 'beto@flota.mx' }], error: null }
+      : { data: [], error: null });
+    const r = await crearRepoVigia().destinatariosNivel(T1, { ...base, gerenteUserId: null }, 2);
+    expect(r).toEqual([
+      { userId: null, directorId: 'd1', nombre: 'Dueña', telefono: '525588887777', correo: 'duena@flota.mx' },
+      { userId: null, directorId: 'd2', nombre: 'Beto', telefono: null, correo: 'beto@flota.mx' },
+    ]);
+    const q = llamadas.find((l) => l.tabla === 'vigia_director')!;
+    expect(tiene(q, 'eq', 'tenant_id', T1) && tiene(q, 'eq', 'nivel', 2)).toBe(true);
+    // con lista, no se consulta al dueño de siempre
+    expect(llamadas.some((l) => l.tabla === 'app_user')).toBe(false);
+  });
+
+  it('nivel 1: el responsable asignado al cliente (con su correo) va junto a la lista, sin repetirse', async () => {
+    respuesta = (l) => {
+      if (l.tabla === 'vigia_director') return { data: [{ id: 'd1', nivel: 1, nombre: 'Ana', telefono: '525599990000', correo: null }], error: null };
+      if (l.tabla === 'app_user') return { data: [{ telefono: '5215599990000', email: 'ana@flota.mx', activo: true }], error: null };
+      return { data: [], error: null };
+    };
+    const r = await crearRepoVigia().destinatariosNivel(T1, { ...base, gerenteUserId: 'u-ger' }, 1);
+    expect(r).toEqual([{ userId: 'u-ger', directorId: 'd1', nombre: 'Ana', telefono: '525599990000', correo: 'ana@flota.mx' }]);   // misma persona: un solo aviso con sus dos canales
+    const u = llamadas.find((l) => l.tabla === 'app_user')!;
+    expect(tiene(u, 'eq', 'tenant_id', T1) && tiene(u, 'eq', 'id', 'u-ger')).toBe(true);
+  });
+
+  it('sin lista ni asignado: el destino de siempre; con la tabla inexistente (sin 0673) también', async () => {
+    respuesta = () => ({ data: [], error: null });
+    expect(await crearRepoVigia().destinatariosNivel(T1, { ...base, gerenteUserId: null }, 1)).toEqual([{ userId: null, directorId: null, nombre: null, telefono: '525511112222', correo: null }]);
+    for (const code of ['42P01', 'PGRST205']) {
+      respuesta = (l) => (l.tabla === 'vigia_director' ? { data: null, error: { message: 'x', code } } : { data: [], error: null });
+      expect(await crearRepoVigia().destinatariosNivel(T1, { ...base, gerenteUserId: null }, 1)).toHaveLength(1);
+    }
+    respuesta = (l) => (l.tabla === 'vigia_director' ? { data: null, error: { message: 'caída', code: 'XX000' } } : { data: [], error: null });
+    await expect(crearRepoVigia().destinatariosNivel(T1, { ...base, gerenteUserId: null }, 1)).rejects.toThrow(/caída/);
+  });
+
+  it('reclamarCorreo: la RPC con el tenant y la llave; sin filas = otro lo lleva (null); un error LANZA', async () => {
+    respuesta = () => ({ data: [{ o_id: 'id1', o_token: 'tok1' }], error: null });
+    const a = { conversacionId: 'cv', clave: 'k', nivel: 2 as const, directorId: 'd1', destino: 'a@b.mx', datos: { cliente: 'X', motivo: 'molestia' as const, minutos: 3, nivel: 2 as const } };
+    expect(await crearRepoVigia().reclamarCorreo(T1, a)).toEqual({ id: 'id1', token: 'tok1' });
+    expect(llamadas[0]).toMatchObject({ tabla: 'rpc:vigia_correo_reclamar', valores: { p_tenant: T1, p_conversacion: 'cv', p_clave: 'k', p_nivel: 2, p_director: 'd1', p_destino: 'a@b.mx', p_datos: a.datos } });
+    respuesta = () => ({ data: [], error: null });
+    expect(await crearRepoVigia().reclamarCorreo(T1, a)).toBeNull();
+    respuesta = () => ({ data: null, error: { message: 'sin función', code: '42883' } });
+    await expect(crearRepoVigia().reclamarCorreo(T1, a)).rejects.toThrow(/sin función/);
+  });
+
+  it('cerrarCorreo: true solo si la base lo cerró con el token vigente', async () => {
+    respuesta = () => ({ data: true, error: null });
+    expect(await crearRepoVigia().cerrarCorreo(T1, 'id1', 'tok1', 'sin_configurar', 'falta')).toBe(true);
+    expect(llamadas[0].valores).toEqual({ p_tenant: T1, p_id: 'id1', p_token: 'tok1', p_estado: 'sin_configurar', p_detalle: 'falta' });
+    respuesta = () => ({ data: false, error: null });
+    expect(await crearRepoVigia().cerrarCorreo(T1, 'id1', 'viejo', 'enviado', null)).toBe(false);
+  });
+
+  it('correosVencidos: mapea las filas (forma rara cae a valores seguros); sin la 0674 es lista vacía; otro error lanza', async () => {
+    respuesta = () => ({ data: [{ o_tenant: T2, o_id: 'i', o_conversacion: 'c', o_clave: 'k', o_nivel: 2, o_director: null, o_destino: 'a@b.mx', o_datos: { cliente: 'Acme', motivo: 'inventado', minutos: 7, nivel: 2 } }], error: null });
+    expect(await crearRepoVigia().correosVencidos(5, new Date())).toEqual([{
+      tenantId: T2, id: 'i', conversacionId: 'c', clave: 'k', nivel: 2, directorId: null, destino: 'a@b.mx', datos: { cliente: 'Acme', motivo: 'sin_respuesta', minutos: 7, nivel: 2 },
+    }]);
+    respuesta = () => ({ data: null, error: { message: 'x', code: '42883' } });
+    expect(await crearRepoVigia().correosVencidos(5, new Date())).toEqual([]);
+    respuesta = () => ({ data: null, error: { message: 'caída', code: 'XX000' } });
+    await expect(crearRepoVigia().correosVencidos(5, new Date())).rejects.toThrow(/caída/);
+  });
+
+  it('guardarDirectorVigia: pasa flota y usuario de la sesión; traduce tope, duplicado, ajeno y base sin migrar; lo demás lanza', async () => {
+    const v = { nivel: 1 as const, nombre: 'Ana', telefono: '525511112222', correo: null };
+    respuesta = () => ({ data: 'nuevo-id', error: null });
+    expect(await guardarDirectorVigia(T1, 'u1', null, v)).toEqual({ ok: true, valor: { id: 'nuevo-id' } });
+    expect(llamadas[0].valores).toEqual({ p_tenant: T1, p_id: null, p_nivel: 1, p_nombre: 'Ana', p_telefono: '525511112222', p_correo: null, p_usuario: 'u1' });
+    for (const [code, texto] of [['54000', 'Ya hay 10'], ['23505', 'ya está en ese nivel'], ['P0002', 'No encontré'], ['42883', 'migración 0673']] as const) {
+      respuesta = () => ({ data: null, error: { message: 'x', code } });
+      expect(await guardarDirectorVigia(T1, 'u1', null, v)).toMatchObject({ ok: false, error: expect.stringContaining(texto) });
+    }
+    respuesta = () => ({ data: null, error: { message: 'caída', code: 'XX000' } });
+    await expect(guardarDirectorVigia(T1, 'u1', null, v)).rejects.toThrow(/caída/);
+  });
+
+  it('quitarDirectorVigia: true/false según la base; un error lanza', async () => {
+    respuesta = () => ({ data: true, error: null });
+    expect(await quitarDirectorVigia(T1, 'd1')).toBe(true);
+    expect(llamadas[0].valores).toEqual({ p_tenant: T1, p_id: 'd1' });
+    respuesta = () => ({ data: false, error: null });
+    expect(await quitarDirectorVigia(T1, 'd1')).toBe(false);
+    respuesta = () => ({ data: null, error: { message: 'caída' } });
+    await expect(quitarDirectorVigia(T1, 'd1')).rejects.toThrow(/caída/);
+  });
+
+  it('guardarConfigVigia: con la 0673 guarda el interruptor; sin ella guarda lo demás y AVISA que el respaldo no se pudo guardar', async () => {
+    const v = { habilitado: true, modoAprobacion: 'siempre' as const, autoenviarMinAprobaciones: 5, slaRespuestaMin: 30, escalarNivel2Min: 60, slaCriticoMin: 10, molestiaAvisoNivel: 2 as const, retencionDias: 180, avisoPrivacidadUrl: null, respaldoCorreo: true };
+    respuesta = () => ({ data: null, error: null });
+    await guardarConfigVigia(T1, 'u', v);
+    expect((llamadas[0].valores as Record<string, unknown>).respaldo_correo).toBe(true);
+    // base sin la 0673: la primera falla por columna inexistente, la segunda (sin ella) pasa
+    llamadas = [];
+    respuesta = (l) => ('respaldo_correo' in (l.valores as Record<string, unknown>) ? { data: null, error: { message: 'no existe la columna', code: '42703' } } : { data: null, error: null });
+    await expect(guardarConfigVigia(T1, 'u', v)).rejects.toThrow(/migración 0673/);
+    expect(llamadas.length).toBe(2);
+    // sin pedir el respaldo, la base sin migrar guarda lo demás sin quejarse
+    llamadas = [];
+    await expect(guardarConfigVigia(T1, 'u', { ...v, respaldoCorreo: false })).resolves.toBeUndefined();
   });
 });

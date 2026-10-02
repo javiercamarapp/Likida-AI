@@ -23,6 +23,7 @@ import { acotada } from '../presupuesto';
 import { telefonoDeUsuario, telefonoJefeDe } from '../contactos';
 import { normalizarTelefonoWa } from '../wa_ventana';
 import { hashTelefono } from './servicio';
+import { MAX_DIRECTORES_POR_NIVEL, unirDestinatarios, type ValoresDirector } from './respaldo_correo';
 import { seleccionarEnEspera } from './escalamiento';
 import type { RespuestaRapida } from './respuestas_rapidas';
 import {
@@ -33,10 +34,11 @@ import type { EstatusViaje as EstatusConductor } from '../conductor/estatus_viaj
 import { mezclarEstatus, parteDelConductor } from './desde_conductor';
 import { adjuntosDeRespaldo, nombreDeAdjunto, nombreDeArchivo, pieDeAdjunto, rutaEsDeLaFlota, SEGUNDOS_URL_ADJUNTO, type ArchivoParaEnviar } from './adjuntos';
 import type {
-  CambioReclamo, Destinatario, FilaEnEspera, NuevoEvento, NuevoSaliente, RepoVigia, ResultadoRecibir,
+  CambioReclamo, CorreoVencido, Destinatario, FilaEnEspera, NuevoEvento, NuevoSaliente, RepoVigia, ResultadoRecibir,
 } from './puertos';
 import {
-  configApagada, configParaCliente, type ConfigVigia, type Contacto, type Conversacion, type Intencion, type MensajeVigia, type ModoAprobacion,
+  configApagada, configParaCliente, type ConfigVigia, type Contacto, type Conversacion, type DatosAvisoCorreo, type DestinatarioAviso, type Director,
+  type Intencion, type MensajeVigia, type ModoAprobacion, type NivelDirector,
 } from './tipos';
 
 type Fila = Record<string, unknown>;
@@ -64,6 +66,8 @@ export function aConfig(f: Fila): ConfigVigia {
     molestiaAvisoNivel: num(f.molestia_aviso_nivel) === 3 ? 3 : 2,
     retencionDias: num(f.retencion_dias) || 180,
     avisoPrivacidadUrl: str(f.aviso_privacidad_url),
+    // 0673: sin migrar la columna no existe → apagado.
+    respaldoCorreo: f.respaldo_correo === true,
   };
 }
 
@@ -266,8 +270,61 @@ async function clientesCriticos(tenants: string[]): Promise<Set<string>> {
 /** Cuántas flotas caben en un filtro `or` de la cola del barrido. */
 const FLOTAS_POR_CONSULTA = 40;
 
-/** La 0647 aún no está en la base: no hay tabla ni función. */
+/** La 0647 (y la 0673/0674) aún no están en la base: no hay tabla ni función. */
 const SIN_0647 = new Set(['42P01', 'PGRST205', '42883', 'PGRST202']);
+const sinMigrar = (e: { code?: string } | null | undefined): boolean => !!e?.code && SIN_0647.has(e.code);
+
+/** El destino de SIEMPRE (antes de la lista de directores): nivel 1 el gerente del cliente o el jefe de la flota, nivel 2 el dueño. */
+async function destinoDeSiempre(tenantId: string, contacto: Contacto, nivel: 1 | 2): Promise<Destinatario | null> {
+  if (nivel === 1) {
+    if (contacto.gerenteUserId) {
+      const tel = await telefonoDeUsuario(contacto.gerenteUserId, tenantId);
+      if (tel) return { userId: contacto.gerenteUserId, telefono: normalizarTelefonoWa(tel) };
+    }
+    const jefe = await telefonoJefeDe(tenantId);
+    return jefe ? { userId: null, telefono: normalizarTelefonoWa(jefe) } : null;
+  }
+  const f = exigir('destinatario_dueno', await acotada(supabaseAdmin().from('app_user')
+    .select('id, telefono, activo').eq('tenant_id', tenantId).eq('rol', 'flota_admin')
+    .or('activo.is.null,activo.eq.true').not('telefono', 'is', null).order('id').limit(5), 'vigia.destinatario_dueno')) as Fila[] | null;
+  const dueno = (f ?? []).find((x) => x.activo !== false && str(x.telefono));
+  return dueno ? { userId: String(dueno.id), telefono: normalizarTelefonoWa(String(dueno.telefono)) } : null;
+}
+
+function aDatosCorreo(d: unknown): DatosAvisoCorreo {
+  const o = (d && typeof d === 'object' ? d : {}) as Record<string, unknown>;
+  const motivos = ['sin_respuesta', 'molestia', 'pide_humano', 'sin_dato', 'folio_ajeno'] as const;
+  return {
+    cliente: typeof o.cliente === 'string' && o.cliente ? o.cliente : 'Un cliente',
+    motivo: (motivos as readonly string[]).includes(String(o.motivo)) ? (o.motivo as DatosAvisoCorreo['motivo']) : 'sin_respuesta',
+    minutos: num(o.minutos), nivel: num(o.nivel) === 2 ? 2 : 1,
+  };
+}
+
+export function aDirector(f: Fila): Director {
+  return {
+    id: String(f.id), nivel: num(f.nivel) === 2 ? 2 : 1, nombre: String(f.nombre ?? ''), telefono: str(f.telefono), correo: str(f.correo),
+  };
+}
+
+/** La lista de directores de un nivel (0673). Sin la tabla (base sin migrar) es lista vacía: queda el destino de siempre. */
+async function directoresDeNivel(tenantId: string, nivel: NivelDirector): Promise<Director[]> {
+  const r = await acotada(supabaseAdmin().from('vigia_director')
+    .select('id, nivel, nombre, telefono, correo').eq('tenant_id', tenantId).eq('nivel', nivel).order('created_at').order('id').limit(20), 'vigia.directores_nivel');
+  if (r.error) {
+    if (!sinMigrar(r.error)) throw new Error(`vigia.directores_nivel: ${r.error.message}`);
+    return [];
+  }
+  return ((r.data ?? []) as Fila[]).map(aDirector);
+}
+
+/** Teléfono y correo del gerente asignado a un cliente (solo si es de ESTA flota y está activo). */
+async function avisableDeUsuario(tenantId: string, userId: string): Promise<{ telefono: string | null; correo: string | null } | null> {
+  const f = exigir('avisable_usuario', await acotada(supabaseAdmin().from('app_user')
+    .select('telefono, email, activo').eq('id', userId).eq('tenant_id', tenantId).maybeSingle(), 'vigia.avisable_usuario')) as Fila | null;
+  if (!f || f.activo === false) return null;
+  return { telefono: str(f.telefono) ? normalizarTelefonoWa(String(f.telefono)) : null, correo: str(f.email) };
+}
 
 export function crearRepoVigia(): RepoVigia {
   return {
@@ -504,19 +561,53 @@ export function crearRepoVigia(): RepoVigia {
     },
 
     async destinatarioNivel(tenantId, contacto, nivel): Promise<Destinatario | null> {
-      if (nivel === 1) {
-        if (contacto.gerenteUserId) {
-          const tel = await telefonoDeUsuario(contacto.gerenteUserId, tenantId);
-          if (tel) return { userId: contacto.gerenteUserId, telefono: normalizarTelefonoWa(tel) };
-        }
-        const jefe = await telefonoJefeDe(tenantId);
-        return jefe ? { userId: null, telefono: normalizarTelefonoWa(jefe) } : null;
+      return destinoDeSiempre(tenantId, contacto, nivel);
+    },
+
+    // 0673: la lista. Nivel 1 = gerente asignado al cliente + directores del nivel 1; nivel 2 = directores del nivel 2. Sin ninguno, el destino de siempre.
+    async destinatariosNivel(tenantId, contacto, nivel): Promise<DestinatarioAviso[]> {
+      const lista: DestinatarioAviso[] = [];
+      if (nivel === 1 && contacto.gerenteUserId) {
+        const u = await avisableDeUsuario(tenantId, contacto.gerenteUserId);
+        if (u && (u.telefono || u.correo)) lista.push({ userId: contacto.gerenteUserId, directorId: null, nombre: null, telefono: u.telefono, correo: u.correo });
       }
-      const f = exigir('destinatario_dueno', await acotada(supabaseAdmin().from('app_user')
-        .select('id, telefono, activo').eq('tenant_id', tenantId).eq('rol', 'flota_admin')
-        .or('activo.is.null,activo.eq.true').not('telefono', 'is', null).order('id').limit(5), 'vigia.destinatario_dueno')) as Fila[] | null;
-      const dueno = (f ?? []).find((x) => x.activo !== false && str(x.telefono));
-      return dueno ? { userId: String(dueno.id), telefono: normalizarTelefonoWa(String(dueno.telefono)) } : null;
+      for (const d of await directoresDeNivel(tenantId, nivel)) lista.push({ userId: null, directorId: d.id, nombre: d.nombre, telefono: d.telefono, correo: d.correo });
+      if (lista.length === 0) {
+        const d = await destinoDeSiempre(tenantId, contacto, nivel);
+        if (d) lista.push({ userId: d.userId, directorId: null, nombre: null, telefono: d.telefono, correo: null });
+      }
+      return unirDestinatarios(lista);
+    },
+
+    // 0674: el reclamo del correo de respaldo. Insertar la llave ES reclamarla; sin filas = otro lo lleva o ya salió.
+    async reclamarCorreo(tenantId, a) {
+      const r = await acotada(supabaseAdmin().rpc('vigia_correo_reclamar', {
+        p_tenant: tenantId, p_conversacion: a.conversacionId, p_clave: a.clave, p_nivel: a.nivel, p_director: a.directorId,
+        p_destino: a.destino, p_datos: a.datos,
+      }), 'vigia.correo_reclamar');
+      if (r.error) throw new Error(`vigia.correo_reclamar: ${r.error.message}`);
+      const f = ((r.data ?? []) as Fila[])[0];
+      return f ? { id: String(f.o_id), token: String(f.o_token) } : null;
+    },
+
+    async cerrarCorreo(tenantId, id, token, estado, detalle) {
+      const r = await acotada(supabaseAdmin().rpc('vigia_correo_cerrar', { p_tenant: tenantId, p_id: id, p_token: token, p_estado: estado, p_detalle: detalle }), 'vigia.correo_cerrar');
+      if (r.error) throw new Error(`vigia.correo_cerrar: ${r.error.message}`);
+      return r.data === true;
+    },
+
+    // El cron: cruza flotas A PROPÓSITO (los correos colgados de cualquier flota). Sin la 0674 no hay nada que retomar.
+    async correosVencidos(limite, ahora): Promise<CorreoVencido[]> {
+      const r = await acotada(supabaseAdmin().rpc('vigia_correos_vencidos', { p_limite: limite, p_ahora: ahora.toISOString() }), 'vigia.correos_vencidos');
+      if (r.error) {
+        if (sinMigrar(r.error)) return [];
+        throw new Error(`vigia.correos_vencidos: ${r.error.message}`);
+      }
+      return ((r.data ?? []) as Fila[]).map((f): CorreoVencido => ({
+        tenantId: String(f.o_tenant), id: String(f.o_id), conversacionId: String(f.o_conversacion), clave: String(f.o_clave),
+        nivel: num(f.o_nivel) === 2 ? 2 : 1, directorId: str(f.o_director), destino: String(f.o_destino),
+        datos: aDatosCorreo(f.o_datos),
+      }));
     },
 
     // El cron: cruza flotas A PROPÓSITO (barre todas las que tienen el agente encendido).
@@ -631,6 +722,9 @@ export interface ContactoTablero {
   consentimientoEn: string | null; gerenteUserId: string | null;
 }
 
+/** 0674: un correo de respaldo (sin el correo del destinatario: solo su estado y el motivo legible). */
+export interface CorreoTablero { id: string; nivel: number; estado: string; detalle: string | null; creadoEn: string; conversacionId: string }
+
 export interface EventoTablero { id: number; tipo: string; nivel: number | null; creadoEn: string; conversacionId: string | null }
 
 export interface DatosTablero {
@@ -644,6 +738,10 @@ export interface DatosTablero {
   respuesta: { muestra: number; promedioMin: number | null; medianaMin: number | null };
   clientes: Array<{ id: string; nombre: string }>;
   gerentes: Array<{ id: string; nombre: string | null; rol: string }>;
+  /** 0673: la lista de directores por nivel (vacía si la base no tiene la migración). */
+  directores?: Director[];
+  /** 0674: los últimos correos de respaldo y su resultado (vacío si la base no tiene la migración). */
+  correos?: CorreoTablero[];
 }
 
 function recorta(t: unknown, n: number): string | null {
@@ -744,8 +842,20 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
     .select('id, nombre, rol, activo').eq('tenant_id', tenantId).in('rol', ['flota_admin', 'encargado']).or('activo.is.null,activo.eq.true').order('id').limit(50), 'vigia.tablero_gerentes')) as Fila[] | null ?? [])
     .filter((f) => f.activo !== false).map((f) => ({ id: String(f.id), nombre: str(f.nombre), rol: String(f.rol) }));
 
+  // 0673/0674: tolerantes a una base sin migrar (el tablero se ve igual, sin esos dos bloques).
+  const dirs = await acotada(db.from('vigia_director')
+    .select('id, nivel, nombre, telefono, correo').eq('tenant_id', tenantId).order('nivel').order('created_at').order('id').limit(40), 'vigia.tablero_directores');
+  if (dirs.error && !sinMigrar(dirs.error)) throw new Error(`vigia.tablero_directores: ${dirs.error.message}`);
+  const cors = await acotada(db.from('vigia_aviso_correo')
+    .select('id, nivel, estado, detalle, created_at, conversacion_id').eq('tenant_id', tenantId).order('created_at', { ascending: false }).order('id').limit(15), 'vigia.tablero_correos');
+  if (cors.error && !sinMigrar(cors.error)) throw new Error(`vigia.tablero_correos: ${cors.error.message}`);
+
   return {
     config, conversaciones, pendientes, fallidos, eventos, respuesta, clientes: clientesRows, gerentes,
+    directores: ((dirs.data ?? []) as Fila[]).map(aDirector),
+    correos: ((cors.data ?? []) as Fila[]).map((f): CorreoTablero => ({
+      id: String(f.id), nivel: num(f.nivel), estado: String(f.estado), detalle: str(f.detalle), creadoEn: String(f.created_at), conversacionId: String(f.conversacion_id),
+    })),
     contactos: contactosRows.map((c) => ({
       id: c.id, nombre: c.nombre, clienteNombre: nombreCliente.get(c.clienteId) ?? null, telefonoTerminacion: c.telefono.slice(-4),
       estado: c.estado, consentimientoEn: c.consentimientoEn, gerenteUserId: c.gerenteUserId,
@@ -765,6 +875,7 @@ export interface ValoresConfig {
   molestiaAvisoNivel: 2 | 3;
   retencionDias: number;
   avisoPrivacidadUrl: string | null;
+  respaldoCorreo: boolean;
 }
 
 export type Validacion<T> = { ok: true; valor: T } | { ok: false; error: string };
@@ -795,6 +906,7 @@ export function validarConfig(c: Record<string, unknown>): Validacion<ValoresCon
   return { ok: true, valor: {
     habilitado: c.habilitado === true, modoAprobacion: modo, autoenviarMinAprobaciones: min, slaRespuestaMin: sla,
     escalarNivel2Min: n2, slaCriticoMin: crit, molestiaAvisoNivel: molestia === 3 ? 3 : 2, retencionDias: ret, avisoPrivacidadUrl: urlCruda || null,
+    respaldoCorreo: c.respaldoCorreo === true,
   } };
 }
 
@@ -804,17 +916,46 @@ export async function guardarConfigVigia(tenantId: string, userId: string, v: Va
     sla_respuesta_min: v.slaRespuestaMin, escalar_nivel2_min: v.escalarNivel2Min, retencion_dias: v.retencionDias,
     aviso_privacidad_url: v.avisoPrivacidadUrl, updated_at: new Date().toISOString(), updated_by: userId,
   };
+  const c0484 = { sla_critico_min: v.slaCriticoMin, molestia_aviso_nivel: v.molestiaAvisoNivel };
+  const c0673 = { respaldo_correo: v.respaldoCorreo };
   const db = supabaseAdmin();
-  const { error } = await acotada(db.from('vigia_config').upsert(
-    { ...base, sla_critico_min: v.slaCriticoMin, molestia_aviso_nivel: v.molestiaAvisoNivel }, { onConflict: 'tenant_id' }), 'vigia.guardar_config');
-  if (!error) return;
-  // Base sin la 0484 (columna inexistente): se guarda lo de siempre en vez de perder el cambio entero.
-  if (error.code === '42703' || error.code === 'PGRST204') {
-    const r = await acotada(db.from('vigia_config').upsert(base, { onConflict: 'tenant_id' }), 'vigia.guardar_config_sin_0484');
-    if (!r.error) return;
-    throw new Error(`vigia.guardar_config: ${r.error.message}`);
+  // De la más completa a la de siempre: una base sin la 0673 y/o sin la 0484 (columna inexistente) guarda lo que sí tiene en vez de perder el cambio entero.
+  const intentos: Array<Record<string, unknown>> = [{ ...base, ...c0484, ...c0673 }, { ...base, ...c0484 }, base];
+  let ultimo = '';
+  for (const fila of intentos) {
+    const { error } = await acotada(db.from('vigia_config').upsert(fila, { onConflict: 'tenant_id' }), 'vigia.guardar_config');
+    if (!error) {
+      // Con el interruptor del correo pedido y la 0673 ausente no se guarda en silencio: la pantalla debe saberlo.
+      if (v.respaldoCorreo && !('respaldo_correo' in fila)) throw new Error('vigia.guardar_config: el respaldo por correo necesita la migración 0673 (aún no aplicada); el resto se guardó.');
+      return;
+    }
+    ultimo = error.message;
+    if (error.code !== '42703' && error.code !== 'PGRST204') break;
   }
-  throw new Error(`vigia.guardar_config: ${error.message}`);
+  throw new Error(`vigia.guardar_config: ${ultimo}`);
+}
+
+// ── 0673: la lista de directores ────────────────────────────────────────────
+
+/** Alta (`id` null) o corrección de un director. `ok:false` con un mensaje para la pantalla si no cabe o ya existe. */
+export async function guardarDirectorVigia(tenantId: string, userId: string, id: string | null, v: ValoresDirector): Promise<Validacion<{ id: string }>> {
+  const r = await acotada(supabaseAdmin().rpc('vigia_director_guardar', {
+    p_tenant: tenantId, p_id: id, p_nivel: v.nivel, p_nombre: v.nombre, p_telefono: v.telefono, p_correo: v.correo, p_usuario: userId,
+  }), 'vigia.director_guardar');
+  if (r.error) {
+    if (r.error.code === '54000') return { ok: false, error: `Ya hay ${MAX_DIRECTORES_POR_NIVEL} personas en el nivel ${v.nivel}: quita a alguien antes de agregar a otra.` };
+    if (r.error.code === '23505') return { ok: false, error: 'Esa persona (mismo WhatsApp o mismo correo) ya está en ese nivel.' };
+    if (r.error.code === 'P0002') return { ok: false, error: 'No encontré a esa persona en tu flota.' };
+    if (sinMigrar(r.error)) return { ok: false, error: 'La lista de directores necesita la migración 0673, que aún no está aplicada en la base.' };
+    throw new Error(`vigia.director_guardar: ${r.error.message}`);
+  }
+  return { ok: true, valor: { id: String(r.data) } };
+}
+
+export async function quitarDirectorVigia(tenantId: string, id: string): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().rpc('vigia_director_quitar', { p_tenant: tenantId, p_id: id }), 'vigia.director_quitar');
+  if (r.error) throw new Error(`vigia.director_quitar: ${r.error.message}`);
+  return r.data === true;
 }
 
 /** Teléfono de un cliente en la forma de la allowlist (52 + 10 dígitos), o `null` si no es mexicano válido. PURA. */

@@ -39,11 +39,14 @@ import { DIAS_CICLO_INACTIVO, evaluarEscalamiento, minutosEsperando, type Accion
 import { resolverViaje, type ResumenViaje } from './estatus_viaje';
 import { evaluarMolestia } from './molestia';
 import { decidirEnvio } from './politica';
+import { claveCorreo, debeRespaldarPorCorreo, hashCorreo, reintentarCorreosVencidos, respaldarPorCorreo, unirDestinatarios } from './respaldo_correo';
 import { pulirBorrador, redactarBorrador, type ViajeParaRedactar } from './redactor';
 import { elegirRespuestaRapida } from './respuestas_rapidas';
-import type { DepsVigia, Destinatario, GuardaConversacion } from './puertos';
+import type { DepsVigia, GuardaConversacion, RepoVigia } from './puertos';
 import { configParaCliente } from './tipos';
-import type { AdjuntoRef, Clasificacion, ConfigVigia, Contacto, Conversacion, MensajeVigia, MotivoEscalamiento } from './tipos';
+import type {
+  AdjuntoRef, Clasificacion, ConfigVigia, Contacto, Conversacion, DatosAvisoCorreo, DestinatarioAviso, MensajeVigia, MotivoEscalamiento, NivelDirector,
+} from './tipos';
 
 export interface MensajeEntrante {
   from: string;
@@ -480,23 +483,57 @@ async function ejecutarEscalamiento(
   if (!aplicado) return 'obsoleto';
   if (!opciones.enviar) return 'registrado';
 
-  const destino: Destinatario | null = await repo.destinatarioNivel(c.tenantId, c.contacto, a.nivel);
-  if (!destino) {
+  const destinos = await destinatariosDe(repo, c.tenantId, c.contacto, a.nivel);
+  if (destinos.length === 0) {
     await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'sin_destinatario', clave: `${a.clave}:sin_destinatario`, nivel: a.nivel });
     return 'sin_destinatario';
   }
   const ultimo = await repo.ultimoEntranteId(c.tenantId, c.conv.id);
   if (!ultimo) return 'registrado';
-  const r = await avisarEscalamiento({
-    tenantId: c.tenantId, telefonoDestino: destino.telefono, mensajeId: ultimo, nombreCliente: c.nombreCliente ?? 'Un cliente',
-    motivo: a.motivo, minutosEsperando: a.minutosEsperando, nivel: a.nivel,
-  }, deps.enviar);
-  if (!r.ok) {
-    await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'fallo_envio', nivel: a.nivel, destinatarioHash: hashTelefono(destino.telefono), detalle: { motivo: r.motivo, aviso: 'escalamiento' } });
-    return 'fallo_envio';
+  const datosCorreo: DatosAvisoCorreo = { cliente: c.nombreCliente ?? 'Un cliente', motivo: a.motivo, minutos: a.minutosEsperando, nivel: a.nivel };
+
+  // A CADA persona de la lista, por su canal: WhatsApp si tiene teléfono; correo de respaldo si el WhatsApp no salió (y la flota lo
+  // encendió) o si solo tiene correo. Lo que ya está en camino (cola de reintento de Meta) NO se duplica por correo.
+  let entregado = false;
+  for (const d of destinos) {
+    const hash = d.telefono ? hashTelefono(d.telefono) : d.correo ? hashCorreo(d.correo) : null;
+    let porCorreo = !d.telefono;
+    if (d.telefono) {
+      const r = await avisarEscalamiento({
+        tenantId: c.tenantId, telefonoDestino: d.telefono, mensajeId: ultimo, nombreCliente: c.nombreCliente ?? 'Un cliente',
+        motivo: a.motivo, minutosEsperando: a.minutosEsperando, nivel: a.nivel,
+      }, deps.enviar);
+      if (r.ok) {
+        entregado = true;
+        await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'escalada', nivel: a.nivel, destinatarioHash: hash, actorUserId: d.userId, detalle: { entregado: true, canal: 'whatsapp' } });
+      } else {
+        await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'fallo_envio', nivel: a.nivel, destinatarioHash: hash, detalle: { motivo: r.motivo, aviso: 'escalamiento' } });
+        porCorreo = debeRespaldarPorCorreo(r);
+      }
+    }
+    if (!porCorreo || !d.correo) continue;
+    if (!c.config.respaldoCorreo) {
+      // Solo tiene correo y el respaldo está apagado: no hay por dónde avisarle, y se deja a la vista (no en silencio).
+      if (!d.telefono) await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'fallo_envio', nivel: a.nivel, destinatarioHash: hash, detalle: { motivo: 'correo_apagado', aviso: 'escalamiento' } });
+      continue;
+    }
+    const res = await respaldarPorCorreo({
+      tenantId: c.tenantId, conversacionId: c.conv.id, clave: claveCorreo(a.clave, d.correo), nivel: a.nivel, directorId: d.directorId, correo: d.correo, datos: datosCorreo,
+    }, deps);
+    if (res === 'enviado') entregado = true;
   }
-  await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'escalada', nivel: a.nivel, destinatarioHash: hashTelefono(destino.telefono), actorUserId: destino.userId, detalle: { entregado: true } });
-  return 'avisado';
+  return entregado ? 'avisado' : 'fallo_envio';
+}
+
+/** A quiénes se avisa en un nivel (lista de directores y, si no hay, el destino de siempre). Si la lista no se puede leer, cae al destino de siempre. */
+async function destinatariosDe(repo: RepoVigia, tenantId: string, contacto: Contacto, nivel: NivelDirector): Promise<DestinatarioAviso[]> {
+  try {
+    return unirDestinatarios(await repo.destinatariosNivel(tenantId, contacto, nivel));
+  } catch (e) {
+    logger.warn('vigia.destinatarios_lista_fallo', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    const d = await repo.destinatarioNivel(tenantId, contacto, nivel);
+    return d ? [{ userId: d.userId, directorId: null, nombre: null, telefono: d.telefono, correo: null }] : [];
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -666,6 +703,8 @@ export interface ResultadoBarrido {
   purgadas: number;
   /** Hilos de ciclo muerto que se cerraron (ver `DIAS_CICLO_INACTIVO`). */
   expiradas: number;
+  /** 0674: correos de respaldo cuyo arriendo venció y se retomaron. */
+  correosRetomados: number;
   cortadoPorReloj: boolean;
 }
 
@@ -679,7 +718,7 @@ export const MINUTOS_APROBADO_ATORADO = 5;
 export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number; vencePorReloj?: number; mantenimiento?: boolean } = {}): Promise<ResultadoBarrido> {
   const { repo } = deps;
   const ahora = ahoraDe(deps);
-  const r: ResultadoBarrido = { revisadas: 0, escaladas: 0, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, expiradas: 0, cortadoPorReloj: false };
+  const r: ResultadoBarrido = { revisadas: 0, escaladas: 0, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, expiradas: 0, correosRetomados: 0, cortadoPorReloj: false };
 
   const filas = await repo.conversacionesEnEspera(opciones.limite ?? 100, ahora);
   for (const f of filas) {
@@ -718,6 +757,9 @@ export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number;
   }
 
   if (opciones.mantenimiento === false) return r;
+
+  // 0674: los correos de respaldo que la corrida anterior dejó a medias (arriendo vencido). Mismo reclamo: si otra corrida los retomó, no se repiten.
+  r.correosRetomados = await reintentarCorreosVencidos(deps, 20);
 
   const atorados = await repo.aprobadosAtorados(new Date(ahora.getTime() - MINUTOS_APROBADO_ATORADO * 60_000), 50);
   for (const a of atorados) {

@@ -17,8 +17,10 @@ import type { ArchivoParaEnviar } from './adjuntos';
 import type { RespuestaRapida } from './respuestas_rapidas';
 import type { Enviador, EntradaEnvioCliente, ResultadoEnvioCliente } from './enviar';
 import type {
-  AdjuntoRef, Clasificacion, ConfigVigia, Contacto, Conversacion, EstadoMensajeSaliente, Intencion, MensajeVigia, Riesgo, TipoEvento,
+  AdjuntoRef, Clasificacion, ConfigVigia, Contacto, Conversacion, DatosAvisoCorreo, DestinatarioAviso, EstadoCorreo, EstadoMensajeSaliente, Intencion,
+  MensajeVigia, NivelDirector, Riesgo, TipoEvento,
 } from './tipos';
+import type { enviarCorreo } from '@/lib/correo/enviar';
 
 export interface ResultadoRecibir {
   mensajeId: string;
@@ -68,6 +70,21 @@ export interface FilaEnEspera {
 export interface Destinatario {
   userId: string | null;
   telefono: string;
+}
+
+/** El reclamo ganado de UN correo de respaldo: quien lo tiene (y su token) es el único que lo manda. */
+export interface ReclamoCorreo { id: string; token: string }
+
+/** Un correo de respaldo cuyo arriendo venció sin cerrarse (la corrida murió a media): el cron lo retoma. */
+export interface CorreoVencido {
+  tenantId: string;
+  id: string;
+  conversacionId: string;
+  clave: string;
+  nivel: NivelDirector;
+  directorId: string | null;
+  destino: string;
+  datos: DatosAvisoCorreo;
 }
 
 /**
@@ -122,6 +139,20 @@ export interface RepoVigia {
   registrarOptOut(tenantId: string, contactoId: string, ahora: Date): Promise<void>;
   marcarAvisoPrivacidad(tenantId: string, contactoId: string, ahora: Date): Promise<void>;
   destinatarioNivel(tenantId: string, contacto: Contacto, nivel: 1 | 2): Promise<Destinatario | null>;
+  /**
+   * 0673: TODOS a quienes se avisa en ese nivel. La lista de directores de la flota (teléfono y/o correo); en el nivel 1 también el
+   * gerente asignado al cliente. Sin lista ni asignado, el destino de siempre. Sin duplicados. Falla hacia el destino de siempre.
+   */
+  destinatariosNivel(tenantId: string, contacto: Contacto, nivel: NivelDirector): Promise<DestinatarioAviso[]>;
+  /**
+   * 0674: reclama el correo de respaldo de (aviso, persona). Insertar la llave ES reclamarla: `null` = otro lo lleva o ya salió.
+   * Un arriendo vencido (la corrida que lo llevaba murió) se retoma. Lanza si la base no puede responder.
+   */
+  reclamarCorreo(tenantId: string, a: { conversacionId: string; clave: string; nivel: NivelDirector; directorId: string | null; destino: string; datos: DatosAvisoCorreo }): Promise<ReclamoCorreo | null>;
+  /** 0674: deja el resultado del correo. Solo con el token vigente; `false` = el arriendo ya no era de quien lo cierra. */
+  cerrarCorreo(tenantId: string, id: string, token: string, estado: Exclude<EstadoCorreo, 'enviando'>, detalle: string | null): Promise<boolean>;
+  /** 0674: los correos `enviando` con arriendo vencido, de TODAS las flotas (el cron). Falla hacia `[]` si la base no tiene la migración. */
+  correosVencidos(limite: number, ahora: Date): Promise<CorreoVencido[]>;
 
   /**
    * Las conversaciones que esta pasada debe mirar: sin las que ya llegaron al nivel 2 y por PRÓXIMO VENCIMIENTO (ver
@@ -149,6 +180,8 @@ export interface DepsVigia {
   modelo?: PuertoModelo | null;
   pulir?: PuertoPulir | null;
   enviar?: Enviador;
+  /** 0674: envío del correo de respaldo (inyectable para pruebas); por omisión Resend vía `enviarCorreo`. */
+  enviarCorreo?: typeof enviarCorreo;
   /** Envío al cliente (inyectable para pruebas); por omisión `enviarAlCliente`. */
   /** Manda un archivo (URL firmada) dentro de la ventana de 24 h; por omisión `sendDocument` de Meta. */
   enviarDocumento?: (telefono: string, link: string, nombre: string, pie?: string) => Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }>;
