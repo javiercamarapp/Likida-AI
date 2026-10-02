@@ -8,7 +8,8 @@ import { A, B, lecturaAtlas, sembrarFlotas, sinAgenteApagado, subir } from './es
 import { DIAS_RETENCION, procesarDocumento } from './servicio';
 import { llmFalso } from './llm_falso.fixture';
 import { eliminarDocumento } from './bandeja';
-import { EMBARQUE_ATLAS, excelAtlas, filaAtlas } from './documentos_sinteticos.fixture';
+import { EMBARQUE_ATLAS, ENCABEZADOS_ATLAS, excelAtlas, filaAtlas } from './documentos_sinteticos.fixture';
+import * as XLSX from 'xlsx';
 import * as repo from './repo';
 
 beforeEach(() => { reset(); sembrarFlotas(); });
@@ -186,5 +187,33 @@ describe('eliminar un archivo dividido (cancelación ARCO)', () => {
     expect(rutas.some((x) => estado.archivos.has(x))).toBe(false);
     expect(estado.archivos.has(`${A}/${estado.docs.get(r.documentoId)?.sha256 ?? 'x'}`)).toBe(false);
     expect([...estado.docs.values()].filter((d) => d.tenantId === A)).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RONDA 15, M2: Excel de varias hojas. Los hijos son CSV de UNA tabla: partir se llevaba solo la hoja del folio.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('libros de varias hojas (M2, ronda 15)', () => {
+  const libro = (hojaExtra: string[][] | null): Buffer => {
+    const aoa = [['PLAN'], [], ENCABEZADOS_ATLAS, fila('ATL-1'), fila('ATL-2')];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Embarques');
+    if (hojaExtra) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hojaExtra), 'Detalle');
+    return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+  };
+
+  it('con datos en otra hoja NO se parte: se lee el libro entero y el aviso dice por qué', async () => {
+    const r = await subir(A, libro([['folio', 'nota'], ['ATL-1', 'frágil'], ['ATL-2', 'refrigerado']]), 'plan-con-detalle.xlsx');
+    const llm = llmFalso((e) => lecturaAtlas(e.nivel, 'ATL-1'));
+    const p = await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => llm });
+    expect(p).toMatchObject({ ok: true, estado: 'por_revisar' });
+    expect(estado.embarques).toHaveLength(0);
+    expect(estado.docs.get(r.documentoId)!.extraccion?.meta?.avisos.join(' ')).toMatch(/2 embarques en la hoja «Embarques» y además datos en otra\(s\) hoja\(s\) \(«Detalle»\)/);
+  });
+
+  it('una segunda hoja VACÍA no impide partir', async () => {
+    const r = await subir(A, libro([[]]), 'plan-hoja-vacia.xlsx');
+    const p = await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado });
+    expect(p).toMatchObject({ ok: true, estado: 'dividido', embarques: 2 });
   });
 });

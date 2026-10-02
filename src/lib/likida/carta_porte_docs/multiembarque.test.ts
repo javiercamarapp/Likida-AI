@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import * as XLSX from 'xlsx';
 import { detectarFormato, prepararContenido, type ContenidoDoc } from './contenido';
 import { firmaDe, tablasDe, type Mapeo, type Perfil } from './perfiles';
 import { aCsv, derivarHijos, evaluarDivision, MAX_EMBARQUES, nombreDeHijo, planearDivision } from './multiembarque';
@@ -29,7 +30,7 @@ describe('planearDivision: cuántos embarques trae un archivo', () => {
   it('un solo folio (aunque tenga varios renglones) NO se parte', async () => {
     const c = await contenido(excelAtlas([fila('ATL-1'), fila('ATL-1', 'Tapas')]));
     expect(planearDivision(c, null)).toBeNull();
-    expect(evaluarDivision(c, null)).toEqual({ plan: null, exceso: null });
+    expect(evaluarDivision(c, null)).toEqual({ plan: null, exceso: null, variasHojas: null });
   });
 
   it('el mismo folio escrito con otra mayúscula o espacios sobrantes es el MISMO embarque', async () => {
@@ -92,10 +93,29 @@ describe('planearDivision: cuántos embarques trae un archivo', () => {
     expect(planearDivision(c, null)).toBeNull();
   });
 
+  // M2 (ronda 15): los hijos son CSV de UNA tabla; partir un libro con datos en otras hojas se las quitaría a cada embarque sin avisar.
+  const libro = (extra: Array<[string, string[][]]>): Buffer => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([ENCABEZADOS_ATLAS, fila('ATL-1'), fila('ATL-2')]), 'Embarques');
+    for (const [nombre, aoa] of extra) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), nombre);
+    return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+  };
+
+  it('un libro con datos en OTRA hoja no se parte y lo dice (variasHojas), en vez de quitarle esas hojas a cada embarque', async () => {
+    const c = await contenido(libro([['Detalle', [['folio', 'nota'], ['ATL-1', 'frágil']]], ['Resumen', [['total', '2']]]]));
+    expect(evaluarDivision(c, null)).toEqual({ plan: null, exceso: null, variasHojas: { hojaDelFolio: 'Embarques', otras: ['Detalle', 'Resumen'], embarques: 2 } });
+  });
+
+  it('las hojas VACÍAS no cuentan: el libro se parte igual', async () => {
+    const c = await contenido(libro([['Vacía', [[]]]]));
+    expect(evaluarDivision(c, null).plan?.embarques).toHaveLength(2);
+    expect(evaluarDivision(c, null).variasHojas).toBeNull();
+  });
+
   it('más de 100 embarques NO se parte y lo dice (exceso), en vez de crear cientos de documentos', async () => {
     const filas = Array.from({ length: MAX_EMBARQUES + 1 }, (_, i) => fila(`ATL-${i + 1}`));
     const c = await contenido(excelAtlas(filas));
-    expect(evaluarDivision(c, null)).toEqual({ plan: null, exceso: MAX_EMBARQUES + 1 });
+    expect(evaluarDivision(c, null)).toEqual({ plan: null, exceso: MAX_EMBARQUES + 1, variasHojas: null });
   });
 });
 
