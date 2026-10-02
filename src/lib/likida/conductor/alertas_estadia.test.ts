@@ -88,18 +88,17 @@ describe('correrAlertasEstadia', () => {
     expect([...reclamos.values()][0]).toMatchObject({ ok: false, motivo: 'sin_destinatario' });
   });
 
-  it('un rechazo reintentable libera el claim y la siguiente corrida lo manda', async () => {
-    let falla = true;
-    const { puertos, enviados } = crearPuertos({
+  it('un rechazo reintentable YA dejó el texto en el outbox: el claim se cierra y la siguiente corrida NO lo manda otra vez', async () => {
+    const { puertos, enviados, reclamos } = crearPuertos({
       viajes: [viajeBase({ id: 'v1' })], hitos: sembrar('v1', { llegada_carga: hace(200) }), configs: { t1: cfg() },
-      envio: () => (falla ? { ok: false, reintentable: true, mensaje: '429' } : { ok: true, via: 'texto' }),
+      envio: () => ({ ok: false, reintentable: true, mensaje: '429' }),
     });
     const r1 = await correrAlertasEstadia(puertos, { ahora: AHORA });
     expect(r1).toMatchObject({ alertas: 0, rechazosReintentables: 1 });
-    falla = false;
+    expect([...reclamos.values()][0]).toMatchObject({ ok: true, motivo: 'en_cola_outbox' });
     const r2 = await correrAlertasEstadia(puertos, { ahora: AHORA });
-    expect(r2.alertas).toBe(1);
-    expect(enviados).toHaveLength(1);
+    expect(r2).toMatchObject({ alertas: 0, yaReclamadas: 1 });
+    expect(enviados).toHaveLength(0);
   });
 
   it('un rechazo definitivo (plantilla sin aprobar) deja el claim cerrado con el motivo y NO reintenta cada 5 minutos', async () => {

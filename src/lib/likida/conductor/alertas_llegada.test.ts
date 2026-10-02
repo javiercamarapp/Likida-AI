@@ -152,13 +152,11 @@ describe('correrAlertasLlegadaSinConfirmar', () => {
     expect(enviados).toHaveLength(0);
   });
 
-  it('un rechazo reintentable libera el claim y la corrida siguiente lo manda; uno definitivo lo cierra con el motivo', async () => {
-    let falla = true;
-    const { puertos, enviados } = armar({ hitos: hitos('v1', hace(30)), envio: () => (falla ? { ok: false, reintentable: true, mensaje: 'límite de tasa' } : { ok: true, via: 'texto' }) });
+  it('un rechazo reintentable YA dejó el texto en el outbox: el claim se cierra y la corrida siguiente NO manda un segundo aviso; uno definitivo lo cierra con el motivo', async () => {
+    const { puertos, enviados } = armar({ hitos: hitos('v1', hace(30)), envio: () => ({ ok: false, reintentable: true, mensaje: 'límite de tasa' }) });
     expect(await correrAlertasLlegadaSinConfirmar(puertos, { ahora: AHORA })).toMatchObject({ avisos: 0, rechazosReintentables: 1 });
-    falla = false;
-    expect(await correrAlertasLlegadaSinConfirmar(puertos, { ahora: AHORA })).toMatchObject({ avisos: 1 });
-    expect(enviados).toHaveLength(1);
+    expect(await correrAlertasLlegadaSinConfirmar(puertos, { ahora: AHORA })).toMatchObject({ avisos: 0, yaReclamados: 1 });
+    expect(enviados).toHaveLength(0);
 
     const def = armar({ hitos: hitos('v1', hace(30)), envio: () => ({ ok: false, reintentable: false, mensaje: 'plantilla sin aprobar' }) });
     const r = await correrAlertasLlegadaSinConfirmar(def.puertos, { ahora: AHORA });
