@@ -214,7 +214,6 @@ describe('otro tenant', () => {
   });
 });
 
-describe('PDF/zip y entrega al contador (Ola 3, w3-buzon-cobranza-reglas)', () => {
-  it.todo('INTEGRACIÓN PENDIENTE (0530): un PDF solo, un zip y una pareja XML+PDF entran con rastro por archivo y marca de revisión; el PDF de baja confianza NO se presenta como dato duro');
-  it.todo('INTEGRACIÓN PENDIENTE (0531): entrega al contador — el lote de aprobadas sale por correo con CSV+ZIP, reserva atómica, rebote libera las facturas y la confirmación llega por el webhook de eventos de Resend');
-});
+// PDF solo, zip y pareja XML+PDF con rastro y marca de revisión (0530): `buzon/ingesta_e2e.test.ts`.
+// Entrega al contador (0531: CSV+ZIP, reserva atómica, rebote libera, backoff, cron): `buzon/entrega_e2e.test.ts`;
+// el cron en sí: `src/app/api/cron/buzon-entrega/route.test.ts`.

@@ -80,6 +80,12 @@ opcional, pesa hasta 1 MB ya decodificado).
 teléfono del chofer, y el error de WhatsApp sale como `fallo: { codigo, texto }`
 (nunca el cuerpo crudo de Meta).
 
+## Importar liquidaciones desde Excel o CSV
+
+El importador del panel y el convertidor de CSV aceptan las fechas del periodo como texto (`DD/MM/AAAA`, `AAAA-MM-DD`) **o como el número de serie que Excel
+guarda** cuando la celda no es de texto (un entero de cinco cifras entre los años 2000 y 2099; la fracción de hora se descarta). Cualquier otro valor se sigue
+rechazando con su motivo: no se adivina una fecha.
+
 ## Tablero y exportación
 
 `/dashboard/agentes/liquidacion` → sección **Liquidaciones externas**: fichas
@@ -219,6 +225,10 @@ guarda).
    nunca retrasa ni tumba la entrega al chofer y se puede **reenviar** desde el panel
    («Copia al jefe»). **Sin teléfonos designados no se manda copia a nadie**: la copia
    lleva cifras y no se adivina el destinatario.
+   **Candado por teléfono (mig. 0620).** Con la migración, cada (liquidación, generación, teléfono) se **reclama** antes de mandar
+   (`liquidacion_copia_jefe`, arriendo de 30 a 900 s): la entrega del POST, el cron y dos clics en «Copia al jefe» no pueden mandar el mensaje con el
+   monto dos veces; si el envío no sale el reclamo se suelta y el reintento va **solo a los teléfonos que faltan** (el que ya aceptó no lo recibe de nuevo).
+   Sin la 0620 el código cae a la bitácora, sin candado atómico, y aplicarla no es requisito para desplegar.
 4. **Discrepancia.** «No coincide» avisa, en este orden de preferencia, a (a) los
    teléfonos de «persona responsable» designados, (b) si no hay, los de la copia al
    jefe, (c) si tampoco, quien ve dinero (como antes). Al chofer solo se le promete «ya
@@ -277,7 +287,7 @@ Javier/su abogado deben confirmar** (ver bloqueos).
 6. **Excel de muestra de la flota** (el «formatito» que hoy copian y pegan) y los teléfonos del jefe de flota y de la persona responsable de discrepancias: sin ellos la entrega sale con el PDF genérico y sin copia.
 7. **Plantilla de avisos `aviso_operacion_v1`** aprobada en Meta: la copia al jefe y el aviso de discrepancia usan texto dentro de las 24 h y esa plantilla fuera; sin ella, fuera de ventana quedan `no_enviada` (dicho en el panel, reenviable).
 8. **Aplicar la migración 0564** (aditiva e idempotente; el código corre sin ella, pero el formato y la copia no se guardan hasta aplicarla).
-9. **Aplicar las migraciones 0643, 0644 y 0645** (aditivas e idempotentes; el código corre sin ellas, pero sin la 0643/0644 el aviso de «No coincide» no tiene estado, reintento ni «Reavisar», y sin la 0645 los teléfonos no se guardan sin Excel de muestra). La tarea para una persona requiere además la 0650.
+9. **Aplicar las migraciones 0643, 0644 y 0645** (y, opcional, la 0620 del candado de la copia al jefe) (aditivas e idempotentes; el código corre sin ellas, pero sin la 0643/0644 el aviso de «No coincide» no tiene estado, reintento ni «Reavisar», y sin la 0645 los teléfonos no se guardan sin Excel de muestra). La tarea para una persona requiere además la 0650.
 10. **Confirmar el plazo de retención** (60 meses para liquidaciones externas) con quien lleve lo legal.
 
 ## Límites conocidos (pendientes)
