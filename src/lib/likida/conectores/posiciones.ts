@@ -23,56 +23,16 @@
 // diciendo por qué — mejor que un método vacío que finge.
 // ═══════════════════════════════════════════════════════════════════════════
 import type { Http, ValoresCredencial } from './tipos';
+import {
+  type PosicionLeida, type ResultadoPosiciones, type OpcionesLecturaPaginada,
+  coordenadaValida, retryAfterMs,
+} from './posiciones_comun';
+import { leerPosicionesWialon, leerPosicionesGeotab, leerPosicionesNavixy, leerPosicionesGenerico } from './posiciones_proveedores';
 
-/** Una lectura de GPS, ya normalizada. */
-export interface PosicionLeida {
-  /** Id del dispositivo EN EL SISTEMA DEL PROVEEDOR. Se liga vía unidad.gps_device_id. */
-  deviceId: string;
-  lat: number;
-  lng: number;
-  /** ISO. Es la hora que declara el proveedor, no la de recepción. */
-  medidaEn: string;
-  /** km/h. `null` cuando el proveedor no la da. */
-  velocidad: number | null;
-  /** Grados. `null` cuando no viene. */
-  rumbo: number | null;
-}
-
-export type ResultadoPosiciones =
-  | { ok: true; posiciones: PosicionLeida[]; paginas: number; completo: true; invalidas: number }
-  | { ok: false; motivo: string; paginas?: number; backlog?: boolean };
-
-export interface OpcionesLecturaPaginada {
-  /** Instante absoluto tras el que no se abre otra petición ni se duerme. */
-  venceEn?: number;
-  ahora?: () => number;
-  dormir?: (ms: number) => Promise<void>;
-}
-
+export type { PosicionLeida, ResultadoPosiciones, OpcionesLecturaPaginada, FallaLectura } from './posiciones_comun';
 const MAX_PAGINAS_DEFENSIVO = 1_000;
 const MAX_REINTENTOS_429 = 3;
 const MAX_REINTENTOS_5XX = 3;
-
-function retryAfterMs(valor: string | undefined, ahora: number): number {
-  if (!valor) return 1_000;
-  const segundos = Number(valor);
-  if (Number.isFinite(segundos) && segundos >= 0) return Math.min(segundos * 1_000, 30_000);
-  const fecha = Date.parse(valor);
-  if (!Number.isFinite(fecha)) return 1_000;
-  return Math.min(Math.max(0, fecha - ahora), 30_000);
-}
-
-/** Una lectura sin coordenadas válidas no es una lectura: se descarta. */
-function coordenadaValida(lat: unknown, lng: unknown): boolean {
-  return (
-    typeof lat === 'number' && typeof lng === 'number' &&
-    Number.isFinite(lat) && Number.isFinite(lng) &&
-    lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 &&
-    // (0,0) es el Golfo de Guinea. Ningún camión mexicano está ahí: es el valor
-    // que devuelven los dispositivos que todavía no fijan señal.
-    !(lat === 0 && lng === 0)
-  );
-}
 
 /**
  * Samsara: `GET /fleet/vehicles/stats?types=gps` devuelve la última posición
@@ -147,8 +107,8 @@ export async function leerPosicionesSamsara(
     }
     reintentos429 = 0;
     reintentos5xx = 0;
-    if (r.estado === 401) return { ok: false, motivo: 'Samsara rechazó el token (401). Hay que regenerarlo.', paginas };
-    if (r.estado === 403) return { ok: false, motivo: 'El token no tiene permiso de lectura de flota (403). Faltan scopes.', paginas };
+    if (r.estado === 401) return { ok: false, motivo: 'Samsara rechazó el token (401). Hay que regenerarlo.', paginas, falla: 'credencial' };
+    if (r.estado === 403) return { ok: false, motivo: 'El token no tiene permiso de lectura de flota (403). Faltan scopes.', paginas, falla: 'credencial' };
     if (r.estado !== 200) return { ok: false, motivo: `Samsara contestó ${r.estado}.` };
     paginas += 1;
 
@@ -188,6 +148,10 @@ export const LECTORES_POSICION: Record<
   (v: ValoresCredencial, http: Http, opciones?: OpcionesLecturaPaginada) => Promise<ResultadoPosiciones>
 > = {
   samsara: leerPosicionesSamsara,
+  wialon: leerPosicionesWialon,
+  geotab: leerPosicionesGeotab,
+  navixy: leerPosicionesNavixy,
+  gps_generico: leerPosicionesGenerico,
 };
 
 /** `null` si ese proveedor todavía no tiene lector. El poller lo dice, no lo calla. */

@@ -1,0 +1,5 @@
+{ "success": true, "list": [
+  { "id": 501, "label": "ECO-201", "clone": false, "group_id": 0, "source": { "id": 9001, "device_id": "359000000000001", "model": "tk103", "blocked": false, "tariff_id": 1, "status_listing_id": null, "creation_date": "2025-01-10", "tariff_end_date": null, "phone": null }, "tag_bindings": [] },
+  { "id": 502, "label": "ECO-202", "clone": false, "group_id": 0, "source": { "id": 9002, "device_id": "359000000000002", "model": "tk103", "blocked": false, "tariff_id": 1, "status_listing_id": null, "creation_date": "2025-01-10", "tariff_end_date": null, "phone": null }, "tag_bindings": [] },
+  { "id": 503, "label": "ECO-203-BLOQUEADO", "clone": false, "group_id": 0, "source": { "id": 9003, "device_id": "359000000000003", "model": "tk103", "blocked": true, "tariff_id": 1, "status_listing_id": null, "creation_date": "2025-01-10", "tariff_end_date": null, "phone": null }, "tag_bindings": [] }
+] }

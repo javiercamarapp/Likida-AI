@@ -1,0 +1,1 @@
+{ "error": { "message": "Incorrect login credentials", "code": -32000, "data": { "id": "x", "type": "InvalidUserException", "requestIndex": 0 }, "name": "JSONRPCError", "errors": [ { "message": "Incorrect login credentials", "name": "InvalidUserException" } ] }, "jsonrpc": "2.0" }
