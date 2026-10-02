@@ -16,6 +16,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { exigir } from '../pg';
+import { logger } from '@/lib/logger';
 import { aBuffer } from './bytes';
 import type { Extraccion } from './campos';
 import type { ResultadoValidacion } from './validacion';
@@ -233,7 +234,9 @@ export async function documentosConFolio(tenantId: string, folio: string, except
 
 export type TipoEvento =
   | 'recibido' | 'duplicado_recibido' | 'extraccion_iniciada' | 'extraccion_ok' | 'extraccion_fallida' | 'escalada' | 'revision_abierta'
-  | 'campo_corregido' | 'aprobado' | 'rechazado' | 'reabierto' | 'salida_viaje' | 'exportado' | 'perfil_aprendido' | 'purgado';
+  | 'campo_corregido' | 'aprobado' | 'rechazado' | 'reabierto' | 'salida_viaje' | 'exportado' | 'perfil_aprendido' | 'purgado'
+  // 0642: el worker (cron carta-porte-docs).
+  | 'aviso_oficina' | 'reintentos_agotados';
 
 /** La bitácora: append-only, sin el contenido de los campos. Un fallo AQUÍ se lanza: sin rastro no hay operación. */
 export async function registrarEvento(tenantId: string, documentoId: string, tipo: TipoEvento, actorId: string | null, detalle: Record<string, unknown> = {}): Promise<void> {
@@ -566,4 +569,93 @@ export async function marcarPurgado(tenantId: string, id: string): Promise<boole
     .update({ storage_ruta: null, texto_extracto: null, purgado_en: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq('tenant_id', tenantId).eq('id', id).is('purgado_en', null).select('id'), 'cpdocs.purgar');
   return ((exigir(r, 'cpdocs.purgar') ?? []) as unknown[]).length > 0;
+}
+
+// ── El worker de la bandeja (cron carta-porte-docs, 0640-0642) ──────────────
+//
+// Las RPC de la 0641 ELIGEN qué toca; el claim sigue siendo `cp_documento_reclamar` (0420). Todo funciona contra
+// una base SIN la 0641: la elección cae a una consulta directa con la misma regla (espera creciente incluida) y
+// los avisos a la oficina quedan APAGADOS (sin el candado atómico repetirían el mensaje en cada pasada).
+
+/** Los intentos tras los cuales un documento fallido es terminal (el mismo 5 de `cp_documento_reclamar`). */
+export const TOPE_INTENTOS_DOC = 5;
+/** Un recibido más joven que esto lo está atendiendo la petición que lo recibió (correo, WhatsApp). */
+export const GRACIA_RECIBIDO_SEG = 120;
+/** Minutos de espera de un fallido según los intentos que lleva (15, 30, 60, 120...). Espeja la 0641. */
+export const esperaFallidoMin = (intentos: number): number => 15 * 2 ** Math.max(Math.min(intentos, 6) - 1, 0);
+/** Los avisos a la oficina que el worker reclama (una vez por documento y tipo). */
+export type TipoAvisoDoc = 'hallazgos' | 'agotado';
+
+export interface DocPendiente { tenantId: string; id: string; estado: EstadoDoc; intentos: number }
+
+/** PostgREST/Postgres dicen que la función no existe (la migración no se ha aplicado): PGRST202 / 42883. */
+export function funcionAusente(error: { message?: string; code?: string } | null | undefined): boolean {
+  if (!error) return false;
+  return error.code === 'PGRST202' || error.code === '42883'
+    || /could not find the function|function .* does not exist|schema cache/i.test(error.message ?? '');
+}
+
+/** Lo que el cron debe procesar ya: recibidos (con gracia), lease vencido y fallidos reintentables. */
+export async function documentosPendientes(limite = 25, ahora = new Date()): Promise<DocPendiente[]> {
+  const r = await acotada(supabaseAdmin().rpc('cp_documentos_pendientes', { p_limite: limite, p_max_intentos: TOPE_INTENTOS_DOC, p_gracia_segundos: GRACIA_RECIBIDO_SEG }), 'cpdocs.pendientes');
+  if (!r.error) {
+    return ((r.data ?? []) as unknown as Fila[]).map((f) => ({ tenantId: String(f.tenant_id), id: String(f.id), estado: f.estado as EstadoDoc, intentos: Number(f.intentos ?? 0) }));
+  }
+  if (!funcionAusente(r.error)) throw new Error(`cpdocs.pendientes: ${r.error.message}`);
+
+  // Sin la 0641: la misma regla por consulta directa (cruza flotas A PROPÓSITO: es el barrido del cron; cada fila
+  // trae su tenant_id y todo lo que se hace después con ella va anclado a ESE tenant).
+  logger.warn('cartaporte_docs.pendientes_sin_rpc', { motivo: r.error.message });
+  const t = ahora.getTime();
+  const c = await acotada(supabaseAdmin().from('cp_documento')
+    .select('tenant_id, id, estado, intentos, created_at, updated_at, procesando_hasta')
+    .is('purgado_en', null).not('storage_ruta', 'is', null).lt('intentos', TOPE_INTENTOS_DOC).in('estado', ['recibido', 'procesando', 'fallido'])
+    .order('updated_at', { ascending: true }).limit(limite * 4), 'cpdocs.pendientes_directo');
+  const filas = (exigir(c, 'cpdocs.pendientes_directo') ?? []) as unknown as Fila[];
+  const toca = (f: Fila): boolean => {
+    const estado = f.estado as EstadoDoc;
+    if (estado === 'recibido') return t - new Date(String(f.created_at)).getTime() > GRACIA_RECIBIDO_SEG * 1000;
+    if (estado === 'procesando') return f.procesando_hasta !== null && new Date(String(f.procesando_hasta)).getTime() < t;
+    return t - new Date(String(f.updated_at)).getTime() > esperaFallidoMin(Number(f.intentos ?? 0)) * 60_000;
+  };
+  const orden = { recibido: 0, procesando: 1, fallido: 2 } as Record<string, number>;
+  return filas.filter(toca)
+    .sort((a, b) => (orden[String(a.estado)] ?? 3) - (orden[String(b.estado)] ?? 3))
+    .slice(0, limite)
+    .map((f) => ({ tenantId: String(f.tenant_id), id: String(f.id), estado: f.estado as EstadoDoc, intentos: Number(f.intentos ?? 0) }));
+}
+
+/** Resultado de pedir una lista de avisos: `null` = la base no tiene la 0641 (los avisos quedan apagados). */
+async function listaDeAviso(rpc: string, args: Record<string, unknown>, etiqueta: string): Promise<Array<{ tenantId: string; id: string }> | null> {
+  const r = await acotada(supabaseAdmin().rpc(rpc, args), etiqueta);
+  if (r.error) {
+    if (funcionAusente(r.error)) { logger.warn('cartaporte_docs.aviso_sin_migracion', { rpc }); return null; }
+    throw new Error(`${etiqueta}: ${r.error.message}`);
+  }
+  return ((r.data ?? []) as unknown as Fila[]).map((f) => ({ tenantId: String(f.tenant_id), id: String(f.id) }));
+}
+
+/** Fallidos con los intentos agotados (terminales) cuya noticia a la oficina no se ha reclamado. */
+export const documentosAgotados = (limite = 25) =>
+  listaDeAviso('cp_documentos_agotados', { p_limite: limite, p_max_intentos: TOPE_INTENTOS_DOC }, 'cpdocs.agotados');
+
+/** Documentos de correo por revisar con un bloqueo o con confianza baja y sin aviso a la oficina. */
+export const documentosPorAvisar = (umbral: number, limite = 25) =>
+  listaDeAviso('cp_documentos_por_avisar', { p_limite: limite, p_umbral: umbral }, 'cpdocs.por_avisar');
+
+/** El candado de «avisar UNA vez por documento y tipo». `sin_migracion` = no hay candado atómico: no se avisa. */
+export async function reclamarAvisoDoc(tenantId: string, id: string, tipo: TipoAvisoDoc): Promise<'ganado' | 'perdido' | 'sin_migracion'> {
+  const r = await acotada(supabaseAdmin().rpc('cp_documento_reclamar_aviso', { p_tenant: tenantId, p_id: id, p_tipo: tipo }), 'cpdocs.reclamar_aviso');
+  if (r.error) {
+    if (funcionAusente(r.error)) return 'sin_migracion';
+    throw new Error(`cpdocs.reclamar_aviso: ${r.error.message}`);
+  }
+  return r.data === true ? 'ganado' : 'perdido';
+}
+
+/** Suelta el candado cuando el aviso NO salió y tampoco quedó en la cola de WhatsApp (rechazo definitivo). */
+export async function liberarAvisoDoc(tenantId: string, id: string, tipo: TipoAvisoDoc): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().rpc('cp_documento_liberar_aviso', { p_tenant: tenantId, p_id: id, p_tipo: tipo }), 'cpdocs.liberar_aviso');
+  if (r.error) { logger.error('cartaporte_docs.aviso_no_liberado', { id, tipo, err: r.error.message }); return false; }
+  return r.data === true;
 }

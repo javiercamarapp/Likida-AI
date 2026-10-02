@@ -138,6 +138,9 @@ export async function procesarDocumento(
       estado: 'fallido', ultimo_error: mensaje, procesando_hasta: null, retener_hasta: diasDespues(ahora, DIAS_RETENCION.cerrado),
       // Un archivo que no se deja leer no mejora reintentando: se agota el contador para que nadie lo reclame de nuevo.
       ...(permanente ? { intentos: MAX_INTENTOS } : {}),
+      // El presupuesto de IA agotado no es culpa del documento: no gasta uno de sus intentos (el worker lo reintenta
+      // con su espera, y el día que se amplíe el techo sigue vivo en vez de quedar terminal por un tope del proveedor).
+      ...(motivo === 'presupuesto' ? { intentos: Math.max(0, claim.intentos - 1) } : {}),
     });
     if (nueva) {
       await repo.registrarEvento(tenantId, documentoId, 'extraccion_fallida', null, { motivo, permanente, intento: claim.intentos });
