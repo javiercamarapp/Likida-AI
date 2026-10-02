@@ -115,7 +115,12 @@ export type EntidadBitacora =
   // operadores, unidades y jefes (borrarlo los deja sin patio), y quién lo hizo
   // es lo que hay que poder reconstruir. Hasta hoy `crearTerminal` firmaba como
   // `tenant`; el id del patio vive en `entidadId`.
-  | 'terminal';
+  | 'terminal'
+  // Ola 3, Agente 5 «Conductor»: quién cambió la estrategia de recordatorios, la ventana, el tope diario o a quién
+  // se escala (cambia CUÁNDO se le insiste a cada chofer y a quién se despierta) y quién dio de alta, rotó o
+  // apagó el webhook hacia el sistema del cliente. Solo nombres de llaves y conteos: nunca teléfonos ni secretos.
+  | 'conductor_config'
+  | 'conductor_webhook';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una
