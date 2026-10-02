@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-unsafe-regex -- el texto viene de archivos que Innovativos entrega y se lee en CLI/pruebas (no en una ruta pública); los cuantificadores llevan tope y archivos.test.ts mide que una línea adversaria de 50,000 caracteres no explota. */
 // ═══════════════════════════════════════════════════════════════════════════
 // LECTOR DE «TABLA PROPIA» — implementación de REFERENCIA del contrato
 // (`contratos.ts`) sobre CSV, más lo que cualquier modo (SQL, CSV/SFTP,

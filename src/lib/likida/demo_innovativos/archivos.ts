@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-unsafe-regex -- el texto viene de archivos que Innovativos entrega y se lee en CLI/pruebas (no en una ruta pública); los cuantificadores llevan tope y archivos.test.ts mide que una línea adversaria de 50,000 caracteres no explota. */
 // ═══════════════════════════════════════════════════════════════════════════
 // VALIDADOR DE LOS ARCHIVOS DE INNOVATIVOS — el paso «validación» del kit de
 // carga (docs/demo/innovativos.md). Se corre ANTES de cargar nada: dice si el
@@ -15,7 +16,9 @@
 import * as XLSX from 'xlsx';
 import { parsearCsvSitios } from '../conductor/sitios';
 import { matrizDeArchivoCatalogo } from '../peajes/archivo';
+import { parsearCasetasMatriz } from '../peajes/casetas';
 import { interpretarDesglose } from '../peajes/desglose';
+import { parsearTagsMatriz } from '../peajes/tags';
 import { TIPOS_ARCHIVO_KIT, type TipoArchivoKit } from './contratos';
 import { leerConveniosCsv } from './convenios_csv';
 import { geocercasASitiosCsv, leerGeocercasCsv, leerPosicionesCsv, localAUtc, partirCsv } from './lector_tabla_propia';
@@ -89,6 +92,25 @@ function validarPases(nombre: string, bytes: Uint8Array): ResultadoValidacion {
   const avisos: string[] = [];
   if (l.lineas.some((x) => !x.tag)) avisos.push(`${l.lineas.filter((x) => !x.tag).length} cruce(s) sin TAG: no se podrán cruzar con una unidad`);
   return res('pases', resumen, l.descartadas.map((x) => `fila ${x.fila}: ${x.motivo}`), avisos);
+}
+
+// ── tags y casetas (SUS lectores: peajes/tags.ts y peajes/casetas.ts) ───────
+function validarTags(nombre: string, bytes: Uint8Array): ResultadoValidacion {
+  const m = matrizDeArchivoCatalogo(nombre, bytes);
+  if (!m.ok) return res('tags', [], [m.motivo]);
+  const l = parsearTagsMatriz(m.matriz);
+  if (l.error) return res('tags', [], [l.error]);
+  const unidades = new Set(l.tags.map((t) => t.unidadRef));
+  return res('tags', [`${l.tags.length} TAG legibles de ${unidades.size} unidades`], l.rechazadas.map((x) => `fila ${x.fila}: ${x.motivo}`),
+    ['la unidad de cada TAG se resuelve contra el catálogo de unidades al cargar: las que no existan se rechazan ahí, con su fila']);
+}
+
+function validarCasetas(nombre: string, bytes: Uint8Array): ResultadoValidacion {
+  const m = matrizDeArchivoCatalogo(nombre, bytes);
+  if (!m.ok) return res('casetas', [], [m.motivo]);
+  const l = parsearCasetasMatriz(m.matriz);
+  if (l.error) return res('casetas', [], [l.error]);
+  return res('casetas', [`${l.casetas.length} casetas con coordenadas dentro de México`], l.rechazadas.map((x) => `fila ${x.fila}: ${x.motivo}`));
 }
 
 // ── liquidaciones ───────────────────────────────────────────────────────────
@@ -210,6 +232,8 @@ export function validarArchivo(tipo: string, nombre: string, bytes: Uint8Array):
     case 'gps_posiciones': return validarPosiciones(decodificar(bytes));
     case 'geocercas': return validarGeocercas(decodificar(bytes));
     case 'pases': return validarPases(nombre, bytes);
+    case 'tags': return validarTags(nombre, bytes);
+    case 'casetas': return validarCasetas(nombre, bytes);
     case 'liquidaciones': return validarLiquidaciones(decodificar(bytes));
     case 'convenios': return validarConvenios(decodificar(bytes));
     case 'whatsapp': return validarWhatsapp(nombre, bytes);

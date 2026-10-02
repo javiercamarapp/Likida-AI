@@ -48,6 +48,20 @@ export const KIT: readonly EntradaKit[] = [
     pantalla: '/dashboard/agentes/peajes',
   },
   {
+    id: 'tags', agentes: ['Peajes'],
+    muestra: 'peajes/tags_unidades.csv',
+    formato: 'tag;unidad;proveedor — el TAG de cada tracto (la unidad es el número económico o las placas)',
+    importador: { estado: 'existe', donde: 'alta masiva de TAG (peajes/tags.ts, datos.ts)' },
+    pantalla: '/dashboard/agentes/peajes/configuracion',
+  },
+  {
+    id: 'casetas', agentes: ['Peajes'],
+    muestra: 'peajes/casetas_catalogo.csv',
+    formato: 'nombre;lat;lng;radio_m;alias;fuente — el catálogo de casetas con coordenadas (sin él no hay cruce con GPS)',
+    importador: { estado: 'existe', donde: 'catálogo de casetas por CSV (peajes/casetas.ts)' },
+    pantalla: '/dashboard/agentes/peajes/configuracion',
+  },
+  {
     id: 'liquidaciones', agentes: ['Liquidación fase 1'],
     muestra: 'liquidacion/liquidaciones_sistema.csv',
     formato: 'una fila por renglón: clave_externa, numero_empleado, periodo, folios_viaje, concepto, tipo, monto, total_sistema',

@@ -19,6 +19,8 @@ describe('los archivos de muestra del demo son válidos', () => {
     ['gps_posiciones', 'gps/gps_actual.csv', 'gps_actual.csv'],
     ['geocercas', 'gps/geocercas.csv', 'geocercas.csv'],
     ['pases', 'peajes/pases_24h.csv', 'pases_24h.csv'],
+    ['tags', 'peajes/tags_unidades.csv', 'tags_unidades.csv'],
+    ['casetas', 'peajes/casetas_catalogo.csv', 'casetas_catalogo.csv'],
     ['liquidaciones', 'liquidacion/liquidaciones_sistema.csv', 'liquidaciones_sistema.csv'],
     ['convenios', 'convenios/convenios.csv', 'convenios.csv'],
     ['whatsapp', 'whatsapp/grupo_afb_silao_ios.txt', 'grupo_afb_silao_ios.txt'],
@@ -57,6 +59,27 @@ describe('pases: SU lector lee el archivo y las anomalías sembradas están ahí
   it('un archivo sin columna de importe no se adivina', () => {
     const r = validarArchivo('pases', 'x.csv', enc('Fecha,Caseta,TAG\n19/10/2026,Caseta A,PSD1234'));
     expect(r.ok).toBe(false);
+  });
+});
+
+describe('tags y casetas: SUS lectores', () => {
+  it('250 TAG de 250 unidades y 12 casetas, sin rechazos', () => {
+    expect(validarArchivo('tags', 'tags_unidades.csv', bytesMuestra('peajes/tags_unidades.csv')).resumen[0]).toBe('250 TAG legibles de 250 unidades');
+    expect(validarArchivo('casetas', 'casetas_catalogo.csv', bytesMuestra('peajes/casetas_catalogo.csv')).resumen[0]).toContain('12 casetas');
+  });
+  it('un TAG repetido con dos unidades se rechaza (las dos filas) y una caseta con lat/lng invertidas también', () => {
+    const t = validarArchivo('tags', 't.csv', enc('tag;unidad\nPSD000000001;IN-001\nPSD000000001;IN-002'));
+    expect(t.ok).toBe(false);
+    const c = validarArchivo('casetas', 'c.csv', enc('nombre;lat;lng\nCaseta X;-100,19;25,78'));
+    expect(c.ok).toBe(false);
+    expect(c.problemas[0]).toContain('invertidas');
+  });
+  it('las casetas del catálogo son las de las líneas del archivo de pases (el cruce las encuentra)', () => {
+    const casetas = new Set(textoMuestra('peajes/casetas_catalogo.csv').trim().split('\n').slice(1).map((l) => l.split(';')[0]));
+    const usadas = new Set(textoMuestra('peajes/pases_24h.csv').trim().split('\n').slice(1).map((l) => l.split(',')[2]));
+    for (const u of usadas) expect(casetas.has(u)).toBe(true);
+    const tags = new Set(textoMuestra('peajes/tags_unidades.csv').trim().split('\n').slice(1).map((l) => l.split(';')[0]));
+    for (const l of textoMuestra('peajes/pases_24h.csv').trim().split('\n').slice(1)) expect(tags.has(l.split(',')[3])).toBe(true);
   });
 });
 
@@ -139,6 +162,16 @@ describe('whatsapp: formatos de exportación', () => {
   it('el histórico trae casos para el Vigía: quejas y respuestas lentas (>10 min) en cada grupo', () => {
     const e = JSON.parse(textoMuestra('whatsapp/resumen_esperado.json'));
     for (const g of ['afb', 'arr', 'cfn']) { expect(e[g].quejas).toBeGreaterThan(5); expect(e[g].sin_respuesta_10min).toBeGreaterThan(5); }
+  });
+});
+
+describe('regex sin explosión: líneas adversarias no tumban el validador', () => {
+  it('50,000 caracteres de «casi encabezado» se leen en tiempo lineal (<500 ms por archivo)', () => {
+    const casi = `[${'1/'.repeat(25_000)}`;
+    const t0 = Date.now();
+    inspeccionarExportWhatsapp(`${casi}\n${'9'.repeat(50_000)} - x\n${'1:'.repeat(25_000)}`);
+    validarArchivo('gps_posiciones', 'x.csv', enc(`unidad,lat,lon,fecha_hora\nIN-1,25.7,-100.1,${'2026-10-20 '.repeat(5_000)}`));
+    expect(Date.now() - t0).toBeLessThan(500);
   });
 });
 

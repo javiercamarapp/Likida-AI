@@ -22,7 +22,10 @@
 //      existe, la fila se CUENTA como «sin unidad», jamás se inventa una).
 // ═══════════════════════════════════════════════════════════════════════════
 
-export const ZONA_INNOVATIVOS = 'America/Mexico_City';
+import { TZ_MX } from '@/lib/formato';
+
+/** La zona de «su» fecha_hora. El nombre de la zona vive solo en `formato.ts` (hay una prueba que lo exige). */
+export const ZONA_INNOVATIVOS = TZ_MX;
 /** Proveedor con el que quedan las posiciones en `public.posicion`. */
 export const PROVEEDOR_TABLA_PROPIA = 'tabla_propia';
 
@@ -114,6 +117,6 @@ export const MOMENTOS_INSTRUCCION = ['despacho', 'acercamiento', 'ambos'] as con
 export type MomentoInstruccion = (typeof MOMENTOS_INSTRUCCION)[number];
 export const MAX_TEXTO_INSTRUCCION = 400;
 
-/** Los 7 tipos de archivo que Innovativos entrega y que el kit sabe validar. */
-export const TIPOS_ARCHIVO_KIT = ['gps_posiciones', 'geocercas', 'pases', 'liquidaciones', 'convenios', 'whatsapp', 'carta_porte'] as const;
+/** Los 9 tipos de archivo que Innovativos entrega y que el kit sabe validar. `tags` y `casetas` acompañan a `pases`: sin ellos no hay cruce con GPS. */
+export const TIPOS_ARCHIVO_KIT = ['gps_posiciones', 'geocercas', 'pases', 'tags', 'casetas', 'liquidaciones', 'convenios', 'whatsapp', 'carta_porte'] as const;
 export type TipoArchivoKit = (typeof TIPOS_ARCHIVO_KIT)[number];

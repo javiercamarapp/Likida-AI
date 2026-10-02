@@ -80,6 +80,11 @@ console.log('Peajes');
                          from desglose_peaje_linea where tenant_id = '${TENANT}' order by cruce_en, tag`);
   const fmt = (m) => `$${Number(m).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   escribir('peajes/pases_24h.csv', csv(['Fecha', 'Hora', 'Caseta', 'TAG', 'Importe'], filas.map((f) => [f.fecha, f.hora, f.caseta, f.tag, fmt(f.monto)])));
+  // TAG ↔ unidad (separador «;» como el ejemplo del lector) y catálogo de casetas con coordenadas.
+  const tg = leerCsv(sql(`select tag, economico as unidad, 'PASE (demo)' as proveedor from innovativos_sim.tracto order by n`));
+  escribir('peajes/tags_unidades.csv', tg.filas.length ? `tag;unidad;proveedor\n${tg.filas.map((f) => f.join(';')).join('\n')}\n` : '');
+  const cs = leerCsv(sql(`select nombre, round(lat::numeric, 6) as lat, round(lng::numeric, 6) as lng, 400 as radio_m, replace(lower(nombre), 'caseta demo ', 'cd ') as alias, 'csv' as fuente from innovativos_sim.caseta order by km`));
+  escribir('peajes/casetas_catalogo.csv', `nombre;lat;lng;radio_m;alias;fuente\n${cs.filas.map((f) => f.join(';')).join('\n')}\n`);
   const a = leerCsv(sql(`select tipo, folio, economico, tag, caseta, to_char(cruce_en at time zone 'America/Mexico_City', 'YYYY-MM-DD HH24:MI:SS') as cruce_local, monto, gps_veredicto, gps_distancia_m
                          from innovativos_sim.anomalias_sembradas order by indice`));
   escribir('peajes/anomalias_sembradas.csv', csv(a.cols, a.filas));

@@ -1,0 +1,13 @@
+nombre;lat;lng;radio_m;alias;fuente
+Caseta Demo Zapotlanejo;20.783388;-103.034022;400;cd zapotlanejo;csv
+Caseta Demo Tepatitlan;21.070165;-102.482067;400;cd tepatitlan;csv
+Caseta Demo Encarnacion;21.249401;-102.137094;400;cd encarnacion;csv
+Caseta Demo Leon Norte;21.045379;-101.573234;400;cd leon norte;csv
+Caseta Demo Silao Sur;21.188402;-101.338224;400;cd silao sur;csv
+Caseta Demo Villa de Reyes;21.746451;-101.133236;400;cd villa de reyes;csv
+Caseta Demo Ahualulco;22.598512;-100.883636;400;cd ahualulco;csv
+Caseta Demo Vanegas;23.175853;-100.753157;400;cd vanegas;csv
+Caseta Demo Matehuala;23.898753;-100.695751;400;cd matehuala;csv
+Caseta Demo Los Chorros;24.623997;-100.840799;400;cd los chorros;csv
+Caseta Demo Saltillo Norte;25.204193;-100.956839;400;cd saltillo norte;csv
+Caseta Demo Santa Catarina;25.583725;-100.631619;400;cd santa catarina;csv

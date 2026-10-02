@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- solo pruebas: leen archivos de muestra y SQL del propio repo por rutas armadas sobre constantes de este archivo, nunca por entrada de usuario. */
 import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -65,7 +66,7 @@ describe('el SQL del seed', () => {
 
 function correr(script: string, args: string[], env: Record<string, string>) {
   // Entorno mínimo: sin DATABASE_URL heredada. Si una guarda fallara, psql se abriría contra un host inexistente y la prueba lo notaría por el código de salida.
-  return spawnSync('bash', [`${DIR}${script}`, ...args], { env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...env }, encoding: 'utf8' });
+  return spawnSync('bash', [`${DIR}${script}`, ...args], { env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...env } as unknown as NodeJS.ProcessEnv, encoding: 'utf8' });
 }
 
 describe('sembrar.sh y vaciar-sintetico.sh: NUNCA contra producción', () => {
