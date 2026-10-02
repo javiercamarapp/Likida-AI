@@ -128,7 +128,7 @@ export async function interpretarConLlm(args: ArgsLlm): Promise<Interpretacion |
       maxTokens: 400,
     });
     await registrarCosto({
-      tenantId: args.tenantId, viajeId: null, fase: 'router',
+      tenantId: args.tenantId, viajeId: null, fase: 'conductor',
       modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.cost,
     });
     return validarSalidaLlm(res.data, args.texto);

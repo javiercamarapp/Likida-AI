@@ -208,6 +208,7 @@ jobs:
           PGUSER=postgres bash supabase/tests/0385_conductor_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0480_geocerca_catalogos.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0400_vigia_cliente.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0481_vigia_catalogo_costo.sql
           PGUSER=postgres bash supabase/tests/0400_vigia_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0420_carta_porte_multiformato.sql
           PGUSER=postgres bash supabase/tests/0420_carta_porte_claim_concurrencia.sh localhost 5432 postgres
