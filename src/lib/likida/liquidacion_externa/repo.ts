@@ -15,6 +15,7 @@ import { acotada } from '../presupuesto';
 import { exigir } from '../pg';
 import { DatoInvalido } from '../errores';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
+import { validarFormato, type FormatoFlota } from './formato_flota';
 import { ESTADOS, type EstadoLiquidacionExterna, type ConceptoExterno, type LiquidacionExternaNormalizada, type MonedaExterna } from './esquema';
 
 export { ESTADOS };
@@ -110,11 +111,15 @@ export function aLiquidacionExterna(r: Fila): LiquidacionExterna {
 
 const BUCKET = 'liquidaciones';
 
-export async function subirPdfExterno(ruta: string, bytes: Uint8Array): Promise<void> {
+export const TIPO_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+export async function subirArchivoExterno(ruta: string, bytes: Uint8Array, contentType: string): Promise<void> {
   const res = await acotada(supabaseAdmin().storage.from(BUCKET)
-    .upload(ruta, Buffer.from(bytes), { contentType: 'application/pdf', upsert: true }), 'liqext.subir');
-  if (res.error) throw new Error(`liquidacion_externa subir PDF: ${res.error.message}`);
+    .upload(ruta, Buffer.from(bytes), { contentType, upsert: true }), 'liqext.subir');
+  if (res.error) throw new Error(`liquidacion_externa subir ${contentType === TIPO_XLSX ? 'Excel' : 'PDF'}: ${res.error.message}`);
 }
+
+export const subirPdfExterno = (ruta: string, bytes: Uint8Array): Promise<void> => subirArchivoExterno(ruta, bytes, 'application/pdf');
 
 /** Firma la ruta. Lanza si no puede: una URL ausente NO se reemplaza por nada,
  *  porque un mensaje sin documento diría «el detalle va en el PDF» sin PDF. */
@@ -135,6 +140,61 @@ export async function leerRazonSocial(tenantId: string): Promise<string | null> 
     .select('razon_social').eq('id', tenantId).maybeSingle(), 'liqext.razon');
   if (res.error) return null;
   return (res.data as { razon_social?: string | null } | null)?.razon_social?.trim() || null;
+}
+
+// ── el formato de la flota (0564) ───────────────────────────────────────────
+
+export interface ConfigFormatoFlota {
+  formato: FormatoFlota;
+  nombreMuestra: string | null;
+  /** E.164 sin «+»: quién recibe COPIA de cada liquidación entregada. */
+  copiaTelefonos: string[];
+  /** E.164 sin «+»: quién es AVISADO cuando un chofer responde «No coincide». */
+  discrepanciaTelefonos: string[];
+}
+
+/** La tabla de la 0564 todavía no existe en esta base (el código corre sin migrar). */
+const tablaAusente = (e: { code?: string; message?: string }): boolean =>
+  e.code === '42P01' || e.code === 'PGRST205' || /does not exist|schema cache/i.test(e.message ?? '');
+
+/**
+ * El formato de la flota, o `null` si no tiene (o la base aún no trae la 0564):
+ * entonces todo sigue como siempre (PDF genérico, sin copia). Un error de LECTURA
+ * distinto LANZA: caer en silencio al formato genérico entregaría un documento con
+ * otro aspecto y sin copia al jefe, y nadie lo sabría. Una plantilla guardada que ya
+ * no valida se grita y se trata como ausente (no tumba la recepción de todas las
+ * liquidaciones de la flota).
+ */
+export async function leerFormatoFlota(tenantId: string): Promise<ConfigFormatoFlota | null> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota')
+    .select('formato, nombre_muestra, copia_telefonos, discrepancia_telefonos')
+    .eq('tenant_id', tenantId).maybeSingle(), 'liqext.formato_leer');
+  if (res.error) {
+    if (tablaAusente(res.error)) return null;
+    throw new Error(`liquidacion_formato_flota leer: ${res.error.message}`);
+  }
+  const f = res.data as { formato: unknown; nombre_muestra: string | null; copia_telefonos: string[] | null; discrepancia_telefonos: string[] | null } | null;
+  if (!f) return null;
+  try {
+    return {
+      formato: validarFormato(f.formato),
+      nombreMuestra: f.nombre_muestra,
+      copiaTelefonos: f.copia_telefonos ?? [],
+      discrepanciaTelefonos: f.discrepancia_telefonos ?? [],
+    };
+  } catch (e) {
+    logger.error('liqext.formato_invalido', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
+export async function guardarFormatoFlota(tenantId: string, c: ConfigFormatoFlota, por: string): Promise<void> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota').upsert({
+    tenant_id: tenantId, formato: c.formato, nombre_muestra: c.nombreMuestra,
+    copia_telefonos: c.copiaTelefonos, discrepancia_telefonos: c.discrepanciaTelefonos,
+    actualizado_en: new Date().toISOString(), actualizado_por: por.slice(0, 120),
+  }, { onConflict: 'tenant_id' }), 'liqext.formato_guardar');
+  if (res.error) throw new Error(`liquidacion_formato_flota guardar: ${res.error.message}`);
 }
 
 export interface FilaOutbox {

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { LiquidacionExterna } from './repo';
+import type { LiquidacionExterna, ConfigFormatoFlota } from './repo';
+import type { ResultadoCopia } from './copia_jefe';
 import type { EstadoEntrega, MensajeLiquidacion, EntregaWhatsApp } from './entrega';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -99,6 +100,9 @@ const deps = {
   razonSocial: async () => 'Flota SA',
   firmarPdf: async () => { if (firmaFalla) throw new Error('storage caído'); return 'https://firmada.example/x.pdf'; },
   avisarNoCoincide: vi.fn(async (_l: LiquidacionExterna) => true),
+  formato: vi.fn(async (_t: string): Promise<ConfigFormatoFlota | null> => null),
+  subirArchivo: vi.fn(async (ruta: string, bytes: Uint8Array, _tipo: string) => { subidas.push({ ruta, bytes: bytes.length }); }),
+  copiarAJefe: vi.fn(async (_l: LiquidacionExterna, _d: { url: string; nombre: string } | null): Promise<ResultadoCopia> => ({ estado: 'sin_destinatarios' })),
 };
 
 const PDF_MIN = '%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF\n';
@@ -152,7 +156,7 @@ describe('recibir', () => {
   });
 
   it('si Storage falla NO se inserta la fila (no hay liquidaciones sin PDF)', async () => {
-    vi.mocked(repo.subirPdfExterno).mockRejectedValueOnce(new Error('storage caído'));
+    vi.mocked(deps.subirArchivo).mockRejectedValueOnce(new Error('storage caído'));
     await expect(recibir()).rejects.toThrow(/storage/);
     expect(store.size).toBe(0);
   });

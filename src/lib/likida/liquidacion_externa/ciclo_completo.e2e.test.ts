@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { LiquidacionExterna } from './repo';
+import * as XLSX from 'xlsx';
+import type { LiquidacionExterna, ConfigFormatoFlota } from './repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CICLO COMPLETO DE LA LIQUIDACIÓN EXTERNA, DE PUNTA A PUNTA (con dobles).
@@ -23,8 +24,15 @@ import type { LiquidacionExterna } from './repo';
 const store = new Map<string, LiquidacionExterna>();
 const eventos: Array<{ id: string; tipo: string; detalle: Record<string, unknown> }> = [];
 let seq = 0;
+/** Lo que se subió a Storage, por ruta (PDF y Excel), y el formato configurado por flota (0564). */
+const archivos = new Map<string, { bytes: Uint8Array; tipo: string }>();
+const formatos = new Map<string, ConfigFormatoFlota>();
 
 vi.mock('./repo', () => ({
+  TIPO_XLSX: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  subirArchivoExterno: vi.fn(async (ruta: string, bytes: Uint8Array, tipo: string) => { archivos.set(ruta, { bytes, tipo }); }),
+  leerFormatoFlota: vi.fn(async (t: string) => formatos.get(t) ?? null),
+  eventosDe: vi.fn(async (_t: string, id: string) => eventos.filter((e) => e.id === id).map((e) => ({ tipo: e.tipo, detalle: e.detalle, creadoEn: '' }))),
   resolverOperadorDestino: vi.fn(async (t: string) => ({ id: t === 't-A' ? 'op-A' : 'op-B', nombre: 'Juan Pérez García', telefono: '525512345678', activo: true })),
   resolverViajeIds: vi.fn(async () => []),
   subirPdfExterno: vi.fn(async () => {}),
@@ -135,7 +143,7 @@ async function entrar(tenant = 't-A', clave = 'SAP-1') {
 const tocar = (id: string) => ({ tenantId: store.get(id)!.tenantId, operadorId: store.get(id)!.operadorId });
 
 beforeEach(() => {
-  store.clear(); eventos.length = 0; outbox.clear(); avisos.length = 0; seq = 0;
+  store.clear(); eventos.length = 0; outbox.clear(); avisos.length = 0; seq = 0; archivos.clear(); formatos.clear();
   ventana = 'abierta'; avisoOk = true; telefonoDinero = '525599990000';
 });
 
@@ -305,5 +313,209 @@ describe('OTRO TENANT', () => {
     await serv.intentarEntrega(b, deps); cronOutbox('sent'); await serv.procesarLiquidacionesExternas(deps, 10);
     await atenderAcuseLiquidacionExterna(tocar(b.id), `liqext_no:${b.id}`);
     expect(avisos.map((x) => x.tel)).toEqual(['525588880000']);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FASE 1 COMO LA PIDIÓ LA FLOTA: el cálculo es SUYO; Likida toma el dato del
+// pago y lo manda al operador en SU formato (PDF y Excel), con COPIA al jefe de
+// flota, y las discrepancias («No coincide») AVISAN a la persona responsable.
+//
+// El formato sale de un Excel de muestra SINTÉTICO (una flota inventada) que se
+// construye con la misma librería de hojas; cuando llegue el formato real del
+// cliente (BLOQUEO EXTERNO) se agrega como fixture y se calibra el diccionario.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const { derivarFormatoDeMatriz } = await import('./formato_flota');
+
+const MUESTRA_FLOTA: unknown[][] = [
+  ['LIQUIDACIÓN DE OPERADORES'],
+  ['Operador:', 'Nombre'],
+  ['Folio:', 'X'],
+  ['Periodo:', 'X'],
+  [],
+  ['Cve.', 'Concepto', 'Percepciones', 'Deducciones'],
+  ['P1', 'Sueldo', 100, ''],
+  ['', 'Total a pagar', 100],
+];
+function formatoDeMuestra(salida: 'pdf' | 'xlsx', extra: Partial<ConfigFormatoFlota> = {}): ConfigFormatoFlota {
+  const r = derivarFormatoDeMatriz(MUESTRA_FLOTA as never);
+  if (!r.ok) throw new Error(r.motivo);
+  return { formato: { ...r.formato, salida }, nombreMuestra: 'muestra.xlsx', copiaTelefonos: [], discrepanciaTelefonos: [], ...extra };
+}
+const JEFE = '525511110001';
+const RESPONSABLE = '525511110002';
+// Cada documento firmado conserva su ruta: así se ve QUÉ archivo viaja.
+const depsFormato = { ...deps, firmarPdf: async (ruta: string) => `https://storage.example/${ruta}?token=abc` };
+const leerExcel = (ruta: string) => {
+  const a = archivos.get(ruta);
+  if (!a) throw new Error(`no se subió ${ruta}`);
+  return XLSX.utils.sheet_to_json<unknown[]>(XLSX.read(a.bytes, { type: 'array' }).Sheets.Liquidación, { header: 1, defval: null });
+};
+async function entrarFmt(tenant = 't-A', clave = 'SAP-1') {
+  const d = cuerpo(clave);
+  return (await serv.recibirLiquidacionExterna(tenant, d, huellaContenido(d), depsFormato)).liquidacion;
+}
+
+describe('FORMATO DE LA FLOTA: PDF y Excel con sus columnas', () => {
+  it('con formato configurado suben el PDF y el Excel de la flota (cifras tal cual, total del cliente como número)', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf'));
+    const liq = await entrarFmt();
+    const rutaPdf = liq.pdfRuta as string;
+    expect(archivos.get(rutaPdf)?.tipo).toBe('application/pdf');
+    const rutaXlsx = rutaPdf.replace(/\.pdf$/, '.xlsx');
+    expect(archivos.get(rutaXlsx)?.tipo).toMatch(/spreadsheetml/);
+    const m = leerExcel(rutaXlsx);
+    expect(m[0][0]).toBe('LIQUIDACIÓN DE OPERADORES');
+    const enc = m.findIndex((f) => f[0] === 'Cve.');
+    expect(m[enc].slice(0, 4)).toEqual(['Cve.', 'Concepto', 'Percepciones', 'Deducciones']);
+    expect(m[enc + 1].slice(0, 4)).toEqual(['P010', 'Sueldo', 1500, null]);
+    expect(m[enc + 2].slice(0, 4)).toEqual(['D020', 'Anticipo', null, 300]);
+    expect(m.find((f) => f[0] === 'Total a pagar')).toContain(1200);
+    expect(eventos.find((e) => e.tipo === 'recibida')?.detalle.formatoFlota).toBe(true);
+  });
+
+  it('sin formato todo sigue como siempre: solo el PDF genérico, sin Excel', async () => {
+    const liq = await entrarFmt();
+    expect([...archivos.keys()]).toEqual([liq.pdfRuta]);
+    expect(eventos.find((e) => e.tipo === 'recibida')?.detalle.formatoFlota).toBe(false);
+  });
+
+  it('salida pdf: por WhatsApp viaja el PDF; salida xlsx: viaja el Excel con su nombre', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf'));
+    const a = await entrarFmt('t-A', 'F-1');
+    await serv.intentarEntrega(a, depsFormato);
+    const hdr = (k: string) => (outbox.get(k)!.payload as { interactive: { header: { document: { link: string; filename: string } } } }).interactive.header.document;
+    expect(hdr(`liqext:${a.id}:g1:sesion`).filename).toBe('liquidacion-F-1.pdf');
+    expect(hdr(`liqext:${a.id}:g1:sesion`).link).toMatch(/\.pdf\?/);
+
+    formatos.set('t-A', formatoDeMuestra('xlsx'));
+    const b = await entrarFmt('t-A', 'F-2');
+    await serv.intentarEntrega(b, depsFormato);
+    expect(hdr(`liqext:${b.id}:g1:sesion`).filename).toBe('liquidacion-F-2.xlsx');
+    expect(hdr(`liqext:${b.id}:g1:sesion`).link).toMatch(/\.xlsx\?/);
+  });
+
+  it('el PDF que adjunta el cliente manda: no se reformatea ni se sube Excel', async () => {
+    formatos.set('t-A', formatoDeMuestra('xlsx'));
+    const pdf = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF\n').toString('base64');
+    const d = validarLiquidacionExterna({
+      claveExterna: 'ADJ-1', operador: { telefono: '5512345678' }, viajes: ['VJ-1'], periodo: { desde: '2026-09-01', hasta: '2026-09-07' },
+      conceptos: [{ descripcion: 'Sueldo', tipo: 'percepcion', monto: 100 }], total: 100, moneda: 'MXN', pdf: { base64: pdf },
+    });
+    const liq = (await serv.recibirLiquidacionExterna('t-A', d, huellaContenido(d), depsFormato)).liquidacion;
+    expect(liq.pdfOrigen).toBe('adjunto');
+    expect([...archivos.keys()]).toEqual([liq.pdfRuta]);
+    await serv.intentarEntrega(liq, depsFormato);
+    const doc = (outbox.get(`liqext:${liq.id}:g1:sesion`)!.payload as { interactive: { header: { document: { filename: string } } } }).interactive.header.document;
+    expect(doc.filename).toMatch(/\.pdf$/);
+  });
+
+  it('salida xlsx pero el Excel no está en Storage (llegó antes del formato): se entrega el PDF, no se cae', async () => {
+    const liq = await entrarFmt('t-A', 'VIEJA'); // sin formato → solo PDF
+    formatos.set('t-A', formatoDeMuestra('xlsx'));
+    const sinExcel = { ...depsFormato, firmarPdf: async (ruta: string) => { if (ruta.endsWith('.xlsx')) throw new Error('Object not found'); return `https://storage.example/${ruta}`; } };
+    expect(await serv.intentarEntrega(liq, sinExcel)).toBe('en_cola');
+    const doc = (outbox.get(`liqext:${liq.id}:g1:sesion`)!.payload as { interactive: { header: { document: { filename: string } } } }).interactive.header.document;
+    expect(doc.filename).toBe('liquidacion-VIEJA.pdf');
+  });
+
+  it('el formato de la flota A no se aplica a la flota B', async () => {
+    formatos.set('t-A', formatoDeMuestra('xlsx'));
+    const b = await entrarFmt('t-B', 'B-9');
+    expect([...archivos.keys()]).toEqual([b.pdfRuta]);
+  });
+});
+
+describe('COPIA AL JEFE DE FLOTA', () => {
+  const textoCopia = () => avisos.filter((a) => a.tel === JEFE);
+
+  it('al quedar en cola la entrega, el jefe recibe UNA copia con periodo, total y la liga del documento', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf', { copiaTelefonos: [JEFE] }));
+    const liq = await entrarFmt();
+    await serv.intentarEntrega(liq, depsFormato);
+    expect(textoCopia()).toHaveLength(1);
+    const t = textoCopia()[0].texto;
+    expect(t).toMatch(/Copia de la liquidación SAP-1 de Juan Pérez García/);
+    expect(t).toMatch(/1,200\.00/);
+    expect(t).toMatch(/https:\/\/storage\.example\/.+\.pdf\?token=abc/);
+    expect(eventos.find((e) => e.tipo === 'aviso_oficina')?.detalle).toMatchObject({ destino: 'copia_jefe', enviado: true, aceptados: 1, destinatarios: 1 });
+  });
+
+  it('el cron, el POST otra vez y la conciliación NO repiten la copia', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf', { copiaTelefonos: [JEFE] }));
+    const liq = await entrarFmt();
+    await serv.intentarEntrega(liq, depsFormato);
+    cronOutbox('sent');
+    await serv.procesarLiquidacionesExternas(depsFormato, 10);
+    await serv.procesarLiquidacionesExternas(depsFormato, 10);
+    await serv.intentarEntrega({ ...liq }, depsFormato);
+    expect(store.get(liq.id)!.estado).toBe('enviada');
+    expect(textoCopia()).toHaveLength(1);
+  });
+
+  it('sin jefe designado NO se manda copia a nadie (la copia lleva cifras: no se adivina el destinatario)', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf'));
+    const liq = await entrarFmt();
+    await serv.intentarEntrega(liq, depsFormato);
+    expect(avisos).toHaveLength(0);
+  });
+
+  it('si la copia no sale, la entrega al chofer NO se cae; queda dicho y se puede reenviar desde el panel', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf', { copiaTelefonos: [JEFE] }));
+    avisoOk = false;
+    const liq = await entrarFmt();
+    expect(await serv.intentarEntrega(liq, depsFormato)).toBe('en_cola');
+    expect(eventos.find((e) => e.tipo === 'aviso_oficina')?.detalle).toMatchObject({ destino: 'copia_jefe', enviado: false });
+
+    avisoOk = true;
+    const r = await serv.reenviarCopiaAJefe('t-A', liq.id, depsFormato);
+    expect(r).toMatchObject({ estado: 'enviada', aceptados: 1 });
+    expect(await serv.reenviarCopiaAJefe('t-A', liq.id, depsFormato)).toEqual({ estado: 'ya_enviada' });
+    expect(await serv.reenviarCopiaAJefe('t-B', liq.id, depsFormato)).toEqual({ estado: 'no_encontrada' });
+  });
+
+  it('con varios jefes, cada uno por su cuenta: que uno falle no calla a los demás', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf', { copiaTelefonos: [JEFE, '525511110009'] }));
+    const liq = await entrarFmt();
+    await serv.intentarEntrega(liq, depsFormato);
+    expect(avisos.map((a) => a.tel)).toEqual([JEFE, '525511110009']);
+  });
+});
+
+describe('DISCREPANCIA: «No coincide» AVISA a la persona responsable', () => {
+  async function conNoCoincide() {
+    const liq = await entrarFmt();
+    await serv.intentarEntrega(liq, depsFormato); cronOutbox('sent'); await serv.procesarLiquidacionesExternas(depsFormato, 10);
+    avisos.length = 0; // lo que importa es el aviso de la discrepancia, no la copia
+    return atenderAcuseLiquidacionExterna(tocar(liq.id), `liqext_no:${liq.id}`);
+  }
+
+  it('va a la persona responsable designada (no a quien ve dinero)', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf', { discrepanciaTelefonos: [RESPONSABLE], copiaTelefonos: [JEFE] }));
+    expect(await conNoCoincide()).toMatch(/Ya le avisé a tu oficina/);
+    expect(avisos.map((a) => a.tel)).toEqual([RESPONSABLE]);
+    expect(avisos[0].texto).toMatch(/No coincide.*SAP-1/);
+  });
+
+  it('sin responsable designado cae al jefe de la copia, y sin copia, a quien ve dinero', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf', { copiaTelefonos: [JEFE] }));
+    await conNoCoincide();
+    expect(avisos.map((a) => a.tel)).toEqual([JEFE]);
+
+    avisos.length = 0; formatos.set('t-A', formatoDeMuestra('pdf'));
+    const liq = await entrarFmt('t-A', 'D-2');
+    await serv.intentarEntrega(liq, depsFormato); cronOutbox('sent'); await serv.procesarLiquidacionesExternas(depsFormato, 10);
+    await atenderAcuseLiquidacionExterna(tocar(liq.id), `liqext_no:${liq.id}`);
+    expect(avisos.map((a) => a.tel)).toEqual(['525599990000']);
+  });
+
+  it('si el aviso a la persona responsable no sale, NO se le promete nada al chofer y el acuse queda registrado', async () => {
+    formatos.set('t-A', formatoDeMuestra('pdf', { discrepanciaTelefonos: [RESPONSABLE] }));
+    avisoOk = false;
+    const liq = await entrarFmt();
+    await serv.intentarEntrega(liq, depsFormato); cronOutbox('sent'); await serv.procesarLiquidacionesExternas(depsFormato, 10);
+    expect(await atenderAcuseLiquidacionExterna(tocar(liq.id), `liqext_no:${liq.id}`)).toMatch(/no pude avisarles/);
+    expect(store.get(liq.id)!.acuseTipo).toBe('no_coincide');
   });
 });
