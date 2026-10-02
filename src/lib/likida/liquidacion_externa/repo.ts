@@ -197,6 +197,11 @@ export async function guardarFormatoFlota(tenantId: string, c: ConfigFormatoFlot
   if (res.error) throw new Error(`liquidacion_formato_flota guardar: ${res.error.message}`);
 }
 
+export async function borrarFormatoFlota(tenantId: string): Promise<void> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota').delete().eq('tenant_id', tenantId), 'liqext.formato_borrar');
+  if (res.error) throw new Error(`liquidacion_formato_flota borrar: ${res.error.message}`);
+}
+
 export interface FilaOutbox {
   dedupe_key: string;
   estado: 'pending' | 'sending' | 'sent' | 'dead';
