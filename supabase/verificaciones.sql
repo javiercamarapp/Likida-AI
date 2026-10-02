@@ -18502,3 +18502,129 @@ begin
   raise exception E'GEOCERCAS_REIMPORTACION_0631 segundo-pierde=% otra-flota=% error-no-pisa-huella=% reintento-tras-error=% sin-reintento-a-10min=% ventana-bueno-respeta=% dominio-rebota=% lista-solo-activas-y-vencidas=%   (esperado t / t / t / t / t / t / t / t)',
     segundo, otra, huella, reint, sin10, ventana, dom, lista;
 end $$;
+
+-- ── 275. Conductor: hitos detectados por geocerca — un cruce por (viaje, hito) y las perillas de P2 (mig. 0635) ──
+-- El barrido del cron registra el hito cuando el GPS entra o sale del sitio del viaje. `viaje_cruce_geocerca` es el claim
+-- anti-duplicado y la bitácora de esa detección. Lo que solo la base demuestra: un cruce por (viaje, hito) aunque dos corridas
+-- lo intenten, el dominio del hito (no hay cruce de «regreso») y la pareja hito↔tipo (llegada=entrada, salida=salida), la
+-- cascada al borrar el viaje, el set null al borrar el sitio, y las perillas nuevas (detección encendida, señal de vida apagada).
+-- Esperado: CONDUCTOR_0635 unico=t hito-inventado-rebota=t pareja-rebota=t cascada=t sitio-set-null=t deteccion-encendida=t senal-apagada=t
+do $$
+declare
+  ta uuid; oa uuid; ob uuid; va uuid; g uuid; vb uuid;
+  unico boolean := false; hito_malo boolean := false; pareja_mala boolean := false; cascada boolean := false; set_null boolean := false;
+  encendida boolean := false; apagada boolean := false;
+  c record; sitio uuid;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0635') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0635', '5215559990635') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, oa, 'ZZZ-0635', 'abierto', now() - interval '5 hours', now() - interval '5 hours') returning id into va;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0635 B', '5215559990638') returning id into ob;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, ob, 'ZZZ-0635B', 'abierto', now() - interval '5 hours', now() - interval '5 hours') returning id into vb;
+  insert into geocerca (tenant_id, nombre, tipo, lat, lng, radio_m, catalogo) values (ta, 'ZZZ planta 0635', 'planta', 20.5, -103.3, 300, 'conductor') returning id into g;
+
+  insert into viaje_cruce_geocerca (tenant_id, viaje_id, geocerca_id, hito_tipo, tipo, detectado_en, distancia_m) values (ta, va, g, 'llegada_carga', 'entrada', now(), 40);
+  begin
+    insert into viaje_cruce_geocerca (tenant_id, viaje_id, geocerca_id, hito_tipo, tipo, detectado_en) values (ta, va, g, 'llegada_carga', 'entrada', now());
+  exception when unique_violation then unico := true; end;
+  begin
+    insert into viaje_cruce_geocerca (tenant_id, viaje_id, hito_tipo, tipo, detectado_en) values (ta, va, 'regreso', 'salida', now());
+  exception when check_violation then hito_malo := true; end;
+  begin
+    insert into viaje_cruce_geocerca (tenant_id, viaje_id, hito_tipo, tipo, detectado_en) values (ta, va, 'salida_carga', 'entrada', now());
+  exception when check_violation then pareja_mala := true; end;
+
+  delete from geocerca where id = g;
+  select geocerca_id into sitio from viaje_cruce_geocerca where viaje_id = va and hito_tipo = 'llegada_carga';
+  set_null := sitio is null;
+
+  insert into viaje_cruce_geocerca (tenant_id, viaje_id, hito_tipo, tipo, detectado_en) values (ta, vb, 'salida_descarga', 'salida', now());
+  delete from viaje where id = vb;
+  cascada := not exists (select 1 from viaje_cruce_geocerca where viaje_id = vb);
+
+  insert into agente_conductor_config (tenant_id) values (ta);
+  select detectar_hitos_gps d, avisar_senal_vida s into c from agente_conductor_config where tenant_id = ta;
+  encendida := c.d = true;
+  apagada := c.s = false;
+
+  raise exception E'CONDUCTOR_0635 unico=% hito-inventado-rebota=% pareja-rebota=% cascada=% sitio-set-null=% deteccion-encendida=% senal-apagada=%   (esperado t / t / t / t / t / t / t)',
+    unico, hito_malo, pareja_mala, cascada, set_null, encendida, apagada;
+end $$;
+
+-- ── 276. Conductor: «sin señal de vida» — un episodio abierto por viaje y cada nivel se reclama una sola vez (mig. 0636) ──
+-- Un episodio es la cadena aviso 1 → aviso 2 → jefe de tráfico. Lo que solo la base demuestra: un solo episodio abierto por
+-- viaje (el segundo rebota, y uno cerrado deja abrir otro), el UPDATE condicional `nivel_enviado = k-1` que sirve de claim (el
+-- segundo intento del mismo nivel no gana y no se puede saltar un nivel), los dominios de motivo/respuesta/cierre, que un
+-- cierre exige su motivo, y la cascada al borrar el viaje.
+-- Esperado: CONDUCTOR_0636 un-abierto=t cerrado-deja-abrir=t claim-1=t claim-1-repetido=f claim-salto=f dominios-rebotan=t cierre-exige-motivo=t cascada=t
+do $$
+declare
+  ta uuid; oa uuid; va uuid; e1 uuid; n integer;
+  un_abierto boolean := false; reabre boolean := false; c1 boolean := false; c1b boolean := true; salto boolean := true;
+  dominios boolean := true; cierre boolean := false; cascada boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0636') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0636', '5215559990636') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, oa, 'ZZZ-0636', 'abierto', now() - interval '5 hours', now() - interval '5 hours') returning id into va;
+
+  insert into viaje_senal_vida (tenant_id, viaje_id, motivo) values (ta, va, 'gps_obsoleto') returning id into e1;
+  begin
+    insert into viaje_senal_vida (tenant_id, viaje_id, motivo) values (ta, va, 'gps_detenido');
+  exception when unique_violation then un_abierto := true; end;
+
+  update viaje_senal_vida set nivel_enviado = 1, aviso_1_en = now() where id = e1 and nivel_enviado = 0 and cerrado_en is null;
+  get diagnostics n = row_count; c1 := n = 1;
+  update viaje_senal_vida set nivel_enviado = 1, aviso_1_en = now() where id = e1 and nivel_enviado = 0 and cerrado_en is null;
+  get diagnostics n = row_count; c1b := n = 1;
+  update viaje_senal_vida set nivel_enviado = 3, escalado_en = now() where id = e1 and nivel_enviado = 2 and cerrado_en is null;
+  get diagnostics n = row_count; salto := n = 1;
+
+  begin insert into viaje_senal_vida (tenant_id, viaje_id, motivo) values (ta, va, 'inventado'); dominios := false; exception when check_violation or unique_violation then null; end;
+  begin update viaje_senal_vida set respuesta = 'inventada' where id = e1; dominios := false; exception when check_violation then null; end;
+  begin update viaje_senal_vida set nivel_enviado = 4 where id = e1; dominios := false; exception when check_violation then null; end;
+  begin update viaje_senal_vida set cerrado_en = now(), cierre_motivo = 'inventado' where id = e1; dominios := false; exception when check_violation then null; end;
+
+  begin update viaje_senal_vida set cerrado_en = now() where id = e1; exception when check_violation then cierre := true; end;
+  update viaje_senal_vida set cerrado_en = now(), cierre_motivo = 'respondio', respondido_en = now(), respuesta = 'estoy', silenciado_hasta = now() + interval '2 hours' where id = e1;
+  begin
+    insert into viaje_senal_vida (tenant_id, viaje_id, motivo) values (ta, va, 'gps_detenido');
+    reabre := true;
+  exception when unique_violation then reabre := false; end;
+
+  delete from viaje where id = va;
+  cascada := not exists (select 1 from viaje_senal_vida where viaje_id = va);
+
+  raise exception E'CONDUCTOR_0636 un-abierto=% cerrado-deja-abrir=% claim-1=% claim-1-repetido=% claim-salto=% dominios-rebotan=% cierre-exige-motivo=% cascada=%   (esperado t / t / t / f / f / t / t / t)',
+    un_abierto, reabre, c1, c1b, salto, dominios, cierre, cascada;
+end $$;
+
+-- ── 277. Sitio del viaje derivado: una vez por (viaje, lado) y con su criterio a la vista (mig. 0637) ──
+-- El Conductor asigna solo el sitio a un viaje sin convenio cuando el texto de origen/destino coincide con UN sitio del catálogo.
+-- Lo que solo la base demuestra: una derivación por (viaje, lado) (la oficina que luego cambia el sitio no es pisada por una
+-- segunda), los dominios de lado y criterio, y la cascada al borrar el viaje.
+-- Esperado: CONDUCTOR_0637 unica-por-lado=t otro-lado-entra=t lado-inventado-rebota=t criterio-inventado-rebota=t cascada=t
+do $$
+declare
+  ta uuid; oa uuid; va uuid; g uuid;
+  unica boolean := false; otro boolean := false; lado_malo boolean := false; criterio_malo boolean := false; cascada boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0637') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0637', '5215559990637') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, oa, 'ZZZ-0637', 'abierto', now() - interval '5 hours', now() - interval '5 hours') returning id into va;
+  insert into geocerca (tenant_id, nombre, tipo, lat, lng, radio_m, catalogo) values (ta, 'ZZZ planta 0637', 'planta', 20.5, -103.3, 300, 'conductor') returning id into g;
+
+  insert into viaje_sitio_derivado (tenant_id, viaje_id, lado, geocerca_id, criterio) values (ta, va, 'origen', g, 'nombre_exacto');
+  begin
+    insert into viaje_sitio_derivado (tenant_id, viaje_id, lado, geocerca_id, criterio) values (ta, va, 'origen', g, 'codigo');
+  exception when unique_violation then unica := true; end;
+  insert into viaje_sitio_derivado (tenant_id, viaje_id, lado, geocerca_id, criterio) values (ta, va, 'destino', g, 'nombre_contenido');
+  otro := true;
+  begin insert into viaje_sitio_derivado (tenant_id, viaje_id, lado, criterio) values (ta, va, 'ambos', 'codigo'); exception when check_violation then lado_malo := true; end;
+  begin insert into viaje_sitio_derivado (tenant_id, viaje_id, lado, criterio) values (ta, va, 'origen', 'adivinado'); exception when check_violation or unique_violation then criterio_malo := true; end;
+
+  delete from viaje where id = va;
+  cascada := not exists (select 1 from viaje_sitio_derivado where viaje_id = va);
+
+  raise exception E'CONDUCTOR_0637 unica-por-lado=% otro-lado-entra=% lado-inventado-rebota=% criterio-inventado-rebota=% cascada=%   (esperado t / t / t / t / t)',
+    unica, otro, lado_malo, criterio_malo, cascada;
+end $$;
