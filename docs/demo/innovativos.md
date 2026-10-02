@@ -329,8 +329,8 @@ Para tener a mano cómo se ven los archivos tal como los exportaría «su sistem
   queda `fallido` terminal). Avisa a la oficina **una sola vez** por documento (el candado es `avisos_oficina`) cuando un
   documento que entró por correo trae hallazgos de bloqueo o confianza baja, y cuando agota sus intentos. Un techo de costo
   por flota no corta la pasada de las demás. **Bloqueos externos:** aplicar 0640–0642 en la base real, la plantilla Meta
-  `aviso_operacion_v1` y el dominio/webhooks de Resend para el canal de correo. Un Excel con varios embarques lee el primero
-  y avisa (**todavía no existe** la partición).
+  `aviso_operacion_v1` y el dominio/webhooks de Resend para el canal de correo. Un Excel con varios embarques se parte en un documento por
+  embarque (P13, 0670-0671: aplicar en la base real; hasta entonces lee el primero y avisa).
 - **Validación:** `validar-archivo.mjs carta_porte <archivo>` (tipo real del archivo, contenido activo en PDF, escaneo sin
   texto).
 - **Reemplazo:** `vaciar-sintetico.sh cartaporte`, y subir los documentos reales a la bandeja.
@@ -412,7 +412,6 @@ node scripts/demo/innovativos/verificar-hechos-del-guion.mjs
   externa, peajes, jornada…), de solo lectura y por rol; **no** lee SAP/TMS (no hay conector) y llama a un modelo.
 - **Datos reales de Carta Porte, convenios y del formato de liquidación** (12-oct y 15-oct): hasta entonces todo es
   sintético; el guion dice dónde hay que decirlo.
-- **Lo que no existe todavía:** alta y edición de un convenio en pantalla, los «cursos» de peajes, la partición de un
-  Excel de Carta Porte con varios embarques y la lectura en vivo de los grupos de un WhatsApp común.
+- **Lo que no existe todavía:** alta y edición de un convenio en pantalla, los «cursos» de peajes, la lectura en vivo de los grupos de un WhatsApp común.
 - **Viajes y operadores reales:** vendrán de su TMS/SAP (importador masivo de operadores/unidades y de viajes ya
   existentes); no son parte de los 5 agentes y aquí son sintéticos.

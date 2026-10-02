@@ -321,7 +321,7 @@ tamaño y el `sha256` son inventados y el archivo no está en Storage (vive en `
 
 **[depende del cliente]** Documentos reales de 3 a 5 clientes grandes y su Excel/sistema de carga: hasta entonces la
 exactitud que se muestra es la de documentos de **muestra**; la exactitud real se mide con sus documentos. Un Excel con
-**varios embarques** hoy lee el primero y avisa **[todavía no existe]** la partición en un documento por embarque.
+Un Excel con **varios embarques** se parte solo en un documento por embarque (cada uno con su revisión y su viaje; el original queda como constancia). **[depende de aplicar 0670-0671]** Sin esas migraciones lee el primero y avisa.
 **[depende de Meta / Resend]** El aviso a la oficina sale por WhatsApp con la plantilla `aviso_operacion_v1` (sin
 aprobar) y el canal de correo necesita el dominio y los webhooks de Resend. **Costo de modelo:** una carga **en vivo**
 de un documento nuevo llama a un modelo (costo mínimo por documento); en el demo se usan los **precargados** salvo que
