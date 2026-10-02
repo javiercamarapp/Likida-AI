@@ -51,6 +51,9 @@ export interface FilaViaje {
   ultimoHito: { tipo: TipoHito; etiqueta: string; estado: EstadoHito; cuando: string | null } | null;
   /** El hito que toca ahora (el que se está esperando), o null si el viaje ya completó los cinco. */
   hitoActivo: TipoHito | null;
+  /** Los cinco hitos del viaje, en orden, para el detalle (lo que ya pasó y lo que falta). */
+  linea: Array<{ tipo: TipoHito; etiqueta: string; estado: EstadoHito; cuando: string | null; validacion: string | null; escaladoNivel: number }>;
+  citas: { origen: string | null; destino: string | null; etaOrigen: string | null; etaDestino: string | null };
   /** Posición conocida del tractor; null si no hay unidad o nunca reportó. */
   posicion: (PosicionUnidad & { antiguedadMin: number; frescura: NivelFrescura }) | null;
   senalDeVida: SenalDeVida;
@@ -70,6 +73,8 @@ export interface FiltrosViajes {
 
 export interface TableroViajes {
   generadoEn: string;
+  /** false = no se pudieron leer las posiciones del GPS: el tablero NO dice «sin posición», dice que no lo sabe. */
+  gpsDisponible: boolean;
   filas: FilaViaje[];
   /** Cuántos pasaron los filtros antes de recortar. */
   total: number;
@@ -84,8 +89,8 @@ export interface TableroViajes {
 export interface EntradaTableroViajes {
   datos: DatosTablero;
   config: ConfigConductor;
-  /** Última posición por `unidad_id`. */
-  posiciones: ReadonlyMap<string, PosicionUnidad>;
+  /** Última posición por `unidad_id`. `null` = no se pudieron leer las posiciones: no se inventan excepciones de GPS. */
+  posiciones: ReadonlyMap<string, PosicionUnidad> | null;
   ahora: Date;
   filtros?: FiltrosViajes;
   /** El enganche con el semáforo de obsolescencia del GPS (ver `enganche_gps.ts`). */
@@ -138,7 +143,7 @@ export function armarTableroViajes(e: EntradaTableroViajes): TableroViajes {
     if (f.terminalId && v.terminalId !== f.terminalId) continue;
     if (f.clienteId && v.clienteId !== f.clienteId) continue;
 
-    const pos = v.unidadId ? e.posiciones.get(v.unidadId) ?? null : null;
+    const pos = v.unidadId && e.posiciones ? e.posiciones.get(v.unidadId) ?? null : null;
     let posicion: FilaViaje['posicion'] = null;
     if (pos) {
       const t = Date.parse(pos.medidaEn);
@@ -152,7 +157,7 @@ export function armarTableroViajes(e: EntradaTableroViajes): TableroViajes {
     }));
     const quien = (v.operadorNombre ?? 'El chofer').replace(/\s+/g, ' ').trim() || 'El chofer';
 
-    const gpsMal = !v.unidadId ? 'sin_unidad' : !posicion ? 'sin_posicion' : posicion.frescura === 'obsoleta' ? 'obsoleta' : null;
+    const gpsMal = !e.posiciones ? null : !v.unidadId ? 'sin_unidad' : !posicion ? 'sin_posicion' : posicion.frescura === 'obsoleta' ? 'obsoleta' : null;
     if (gpsMal === 'sin_unidad') {
       excepciones.push({ tipo: 'sin_unidad', gravedad: 1, desde: v.aceptadoEn, texto: `${quien} tiene el viaje en curso pero no tiene tractor asignado: no hay posición que conciliar.` });
     } else if (gpsMal === 'sin_posicion') {
@@ -183,6 +188,11 @@ export function armarTableroViajes(e: EntradaTableroViajes): TableroViajes {
       viajeId: v.id, folio: v.folio, origen: v.origen, destino: v.destino, chofer: v.operadorNombre,
       terminalId: v.terminalId, terminal: v.terminalNombre, clienteId: v.clienteId, cliente: v.clienteNombre,
       semaforo: fila.semaforo, motivo: fila.motivo, ultimoHito: ultimoHitoDe(fila), hitoActivo: fila.hitoActivo,
+      linea: fila.hitos.map((h) => ({
+        tipo: h.tipo, etiqueta: h.etiqueta, estado: h.estado, cuando: h.horaMensaje ?? h.recibidoEn,
+        validacion: h.validacion?.texto ?? null, escaladoNivel: h.escalacionNivel,
+      })),
+      citas: { origen: v.citaOrigenEn, destino: v.citaDestinoEn, etaOrigen: v.etaOrigenEn, etaDestino: v.etaDestinoEn },
       posicion, senalDeVida, escalado: escaladoDe(fila), excepciones, gravedad,
     });
   }
@@ -194,7 +204,7 @@ export function armarTableroViajes(e: EntradaTableroViajes): TableroViajes {
 
   const cuenta = (t: TipoExcepcionViaje) => filas.filter((x) => x.excepciones.some((y) => y.tipo === t)).length;
   return {
-    generadoEn: e.ahora.toISOString(),
+    generadoEn: e.ahora.toISOString(), gpsDisponible: e.posiciones !== null,
     filas, total: filas.length, hayMas: base.hayMas,
     conteos: {
       viajes: filas.length,

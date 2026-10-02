@@ -135,6 +135,23 @@ describe('tablero de viajes en vivo', () => {
     expect(armar(d, { 'u-1': pos(1) }).hayMas).toBe(true);
   });
 
+  it('si no se pudieron leer las posiciones, NO inventa «sin posición»: lo dice con gpsDisponible=false', () => {
+    const v = viaje('1', { citaOrigenEn: new Date(AHORA.getTime() + 600 * 60_000).toISOString() });
+    const t = armarTableroViajes({ datos: datos([v], hitos('1', {})), config: cfg(), posiciones: null, ahora: AHORA });
+    expect(t.gpsDisponible).toBe(false);
+    expect(t.filas[0].posicion).toBeNull();
+    expect(t.filas[0].excepciones).toEqual([]);
+    expect(t.filas[0].senalDeVida).toBe('viva');
+  });
+
+  it('la línea de hitos y las citas viajan para el detalle', () => {
+    const v = viaje('1', { citaOrigenEn: hace(-600) });
+    const t = armar(datos([v], hitos('1', { llegada_carga: hace(50) })), { 'u-1': pos(4) });
+    expect(t.filas[0].linea.map((h) => h.tipo)).toEqual(['llegada_carga', 'salida_carga', 'llegada_descarga', 'salida_descarga', 'regreso']);
+    expect(t.filas[0].linea[0]).toMatchObject({ estado: 'recibido' });
+    expect(t.filas[0].citas.origen).toBe(v.citaOrigenEn);
+  });
+
   it('textoAntiguedad', () => {
     expect(textoAntiguedad(0)).toBe('hace menos de un minuto');
     expect(textoAntiguedad(45)).toBe('hace 45 min');

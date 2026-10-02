@@ -15,7 +15,9 @@ describe('permisos del orquestador por rol', () => {
   it('el contador ve dinero y NO el tablero de viajes ni al Vigía', () => {
     const v = herramientasDelRol('contador', TODAS);
     expect(v).toEqual(expect.arrayContaining(['kpis_flota', 'estado_buzon', 'estado_cobranza', 'estado_autofactura', 'consultar_normas']));
-    for (const o of ['tablero_viajes', 'detalle_viaje', 'estado_vigia', 'salud_agentes', 'escalar_a_persona']) expect(v).not.toContain(o);
+    for (const o of ['tablero_viajes', 'detalle_viaje', 'estado_vigia', 'salud_agentes']) expect(v).not.toContain(o);
+    // Escalar es derivar: el contador también puede pedir que una persona decida.
+    expect(v).toContain('escalar_a_persona');
   });
 
   it('el dueño y el superadmin ven todo', () => {

@@ -34,6 +34,8 @@ export interface ToolContext {
    * lo trae.
    */
   rol?: string;
+  /** El usuario del panel (sesión) que habla con el orquestador; queda en la tarea que escala. */
+  usuarioId?: string;
   /**
    * El operador YA confirmó (dos veces, vía el freno del processor) que quiere
    * cerrar SIN comprobantes. Sin esta marca, `guardar_liquidacion` se niega a
