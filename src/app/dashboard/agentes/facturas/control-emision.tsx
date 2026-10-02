@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useEffect } from 'react';
+import Link from 'next/link';
 import { ShieldCheck, ShieldOff, ListChecks } from 'lucide-react';
 import { mxn, fechaCorta } from '@/lib/formato';
 import { useNotificar } from '../../../admin/ui/notificaciones';
@@ -139,7 +140,7 @@ export function SeccionControlEmision({ datos }: { datos: DatosControl }) {
       <h2 className="font-display text-[15px] font-semibold flex items-center gap-1.5"><ListChecks width={14} height={14} strokeWidth={2} />Emisión real de facturas</h2>
       <p className="text-[11.5px] mt-1" style={{ color: 'var(--muted)' }}>
         Un CFDI emitido no se deshace. Por eso la emisión real es una decisión del dueño de la flota, requiere el mandato otorgado en
-        {' '}<a className="underline" href="/dashboard/legal">Términos y mandato</a>, y cada portal arranca supervisado: el agente propone el lote y tú lo confirmas.
+        {' '}<Link className="underline" href="/dashboard/legal">Términos y mandato</Link>, y cada portal arranca supervisado: el agente propone el lote y tú lo confirmas.
       </p>
       {control === null ? (
         <p role="alert" className="text-[12.5px] mt-3" style={{ color: 'var(--bad)' }}>No se pudo leer el control de emisión: esta sección está ciega y el agente sigue en ensayo. Recarga en un momento.</p>
