@@ -125,6 +125,9 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // 0385: el catálogo de sitios y las estadías en andén del Agente 5 — operación, cero pesos en pantalla (el cobro va por el CSV de /v1/estadias).
   '/dashboard/agentes/conductores/sitios': 'operacion',
   '/dashboard/agentes/conductores/estadias': 'operacion',
+  // Ola 3: la configuración de flota del Agente 5 (escalera, ventana, tope, contactos, webhook). La ve la operación; solo el
+  // dueño guarda (`puedeAdministrar`, comprobado en la acción de servidor).
+  '/dashboard/agentes/conductores/configuracion': 'operacion',
   // El Vigía de servicio al cliente (Agente 4, 0400): su usuario diario es el gerente de
   // servicio (flota_admin y encargado). Cero pesos en pantalla; el contador no atiende
   // clientes y no ve chats de clientes (la 0400 también se lo niega en la base).
