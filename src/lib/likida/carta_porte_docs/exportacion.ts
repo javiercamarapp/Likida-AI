@@ -9,12 +9,14 @@
 //
 // SEGURIDAD DEL ARCHIVO: lo que se exporta lo abre Excel. Todo texto que viene del
 // documento de un tercero y empiece con `=`, `+`, `-`, `@`, tabulador o retorno de
-// carro se neutraliza anteponiendo `'` (inyección de fórmulas). Los NÚMEROS no se
-// tocan: un peso negativo legítimo sigue siendo número.
+// carro se neutraliza anteponiendo `'` (inyección de fórmulas), en CSV y en el .xlsx
+// (donde además se escribe como celda de TEXTO, jamás de fórmula). Los NÚMEROS no
+// se tocan: un peso negativo legítimo sigue siendo número (celda numérica en .xlsx).
 //
 // Nada de esto timbra ni emite: exporta datos que un humano ya aprobó.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import * as XLSX from 'xlsx';
 import { z } from 'zod';
 import { CLAVES_DOC, CLAVES_MERCANCIA, campoDoc, campoMercancia, type CampoValor } from './campos';
 import { llaveTexto } from './catalogos';
@@ -199,8 +201,10 @@ export function aJson(filas: Array<Record<string, Celda>>): string {
   return `${JSON.stringify({ filas }, null, 2)}\n`;
 }
 
-export interface ArchivoExportado {
-  contenido: string;
+export type FormatoExport = 'csv' | 'json' | 'xlsx';
+
+export interface ArchivoExportado<C extends string | Uint8Array = string> {
+  contenido: C;
   nombreArchivo: string;
   mime: string;
   filas: number;
@@ -212,10 +216,43 @@ export function nombreSeguro(nombre: string): string {
   return llaveTexto(nombre).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'exportacion';
 }
 
+/** Texto → celda de texto segura para Excel (sin fórmulas). */
+function textoSeguro(t: string): string {
+  return /^[=+\-@\t\r]/.test(t) ? `'${t}` : t;
+}
+
+/**
+ * El mismo contenido que el CSV, como libro de Excel (.xlsx): números como celdas numéricas (suman, ordenan),
+ * texto como TEXTO —nunca fórmula— y una sola hoja. Determinista (sin fecha de creación dentro del archivo).
+ */
+export function aXlsx(filas: Array<Record<string, Celda>>, cfg: ExportConfig): Uint8Array {
+  const enc = cfg.columnas.map((c) => c.encabezado);
+  const celda = (v: Celda): string | number | boolean | null => (typeof v === 'string' ? textoSeguro(v) : typeof v === 'number' && !Number.isFinite(v) ? null : v ?? null);
+  const matriz: Array<Array<string | number | boolean | null>> = [];
+  if (cfg.encabezados) matriz.push(enc.map((e) => textoSeguro(e)));
+  for (const f of filas) matriz.push(enc.map((e) => celda(f[e] ?? null)));
+  const hoja = XLSX.utils.aoa_to_sheet(matriz);
+  hoja['!cols'] = enc.map((e) => ({ wch: Math.min(40, Math.max(10, e.length + 2)) }));
+  const libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(libro, hoja, 'Carta Porte');
+  return new Uint8Array(XLSX.write(libro, { type: 'array', bookType: 'xlsx', compression: true }) as ArrayBuffer);
+}
+
+export const MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
 /** Solo los APROBADOS salen; el resto se reporta en `omitidos` (nunca se exporta algo sin revisar). */
 export function exportarDocumentos(
-  docs: Array<{ doc: DocumentoFila; viajeFolio: string | null }>, formato: 'csv' | 'json', cfg: ExportConfig, nombreConfig: string, ahora = new Date(),
-): ArchivoExportado {
+  docs: Array<{ doc: DocumentoFila; viajeFolio: string | null }>, formato: 'xlsx', cfg: ExportConfig, nombreConfig: string, ahora?: Date,
+): ArchivoExportado<Uint8Array>;
+export function exportarDocumentos(
+  docs: Array<{ doc: DocumentoFila; viajeFolio: string | null }>, formato: 'csv' | 'json', cfg: ExportConfig, nombreConfig: string, ahora?: Date,
+): ArchivoExportado<string>;
+export function exportarDocumentos(
+  docs: Array<{ doc: DocumentoFila; viajeFolio: string | null }>, formato: FormatoExport, cfg: ExportConfig, nombreConfig: string, ahora?: Date,
+): ArchivoExportado<string> | ArchivoExportado<Uint8Array>;
+export function exportarDocumentos(
+  docs: Array<{ doc: DocumentoFila; viajeFolio: string | null }>, formato: FormatoExport, cfg: ExportConfig, nombreConfig: string, ahora = new Date(),
+): ArchivoExportado<string> | ArchivoExportado<Uint8Array> {
   const omitidos: ArchivoExportado['omitidos'] = [];
   const listos: DocumentoExportable[] = [];
   for (const { doc, viajeFolio } of docs) {
@@ -225,10 +262,11 @@ export function exportarDocumentos(
   }
   const filas = construirFilas(listos, cfg);
   const fecha = ahora.toISOString().slice(0, 10);
+  const comunes = { nombreArchivo: `carta-porte-${nombreSeguro(nombreConfig)}-${fecha}.${formato}`, filas: filas.length, documentos: listos.length, omitidos };
+  if (formato === 'xlsx') return { ...comunes, contenido: aXlsx(filas, cfg), mime: MIME_XLSX };
   return {
+    ...comunes,
     contenido: formato === 'csv' ? aCsv(filas, cfg) : aJson(filas),
-    nombreArchivo: `carta-porte-${nombreSeguro(nombreConfig)}-${fecha}.${formato}`,
     mime: formato === 'csv' ? 'text/csv; charset=utf-8' : 'application/json; charset=utf-8',
-    filas: filas.length, documentos: listos.length, omitidos,
   };
 }
