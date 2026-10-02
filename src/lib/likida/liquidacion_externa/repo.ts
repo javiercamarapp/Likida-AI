@@ -16,6 +16,7 @@ import { exigir } from '../pg';
 import { DatoInvalido } from '../errores';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { validarFormato, type FormatoFlota } from './formato_flota';
+import { PATRON_FOLIO } from '../orquestador/escalamiento';
 import { ESTADOS, type EstadoLiquidacionExterna, type ConceptoExterno, type LiquidacionExternaNormalizada, type MonedaExterna } from './esquema';
 
 export { ESTADOS };
@@ -174,7 +175,8 @@ export async function leerFormatoFlota(tenantId: string): Promise<ConfigFormatoF
     throw new Error(`liquidacion_formato_flota leer: ${res.error.message}`);
   }
   const f = res.data as { formato: unknown; nombre_muestra: string | null; copia_telefonos: string[] | null; discrepancia_telefonos: string[] | null } | null;
-  if (!f) return null;
+  // Fila SOLO de teléfonos (0645, formato nulo): no hay formato; los teléfonos salen por `leerTelefonosFlota`.
+  if (!f || f.formato === null) return null;
   try {
     return {
       formato: validarFormato(f.formato),
@@ -188,6 +190,29 @@ export async function leerFormatoFlota(tenantId: string): Promise<ConfigFormatoF
   }
 }
 
+export interface TelefonosFlota {
+  /** E.164 sin «+»: quién recibe COPIA de cada liquidación entregada. */
+  copia: string[];
+  /** E.164 sin «+»: quién es AVISADO cuando un chofer responde «No coincide». */
+  discrepancia: string[];
+}
+
+/**
+ * Los teléfonos de la copia y del aviso de discrepancia, CON O SIN formato de Excel (la fila puede traer solo teléfonos,
+ * 0645). `null` = la flota no ha designado a nadie (o la base aún no trae la 0564). Un error de lectura distinto LANZA: caer
+ * en «nadie designado» mandaría el aviso a quien ve dinero en vez de a la persona responsable.
+ */
+export async function leerTelefonosFlota(tenantId: string): Promise<TelefonosFlota | null> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota')
+    .select('copia_telefonos, discrepancia_telefonos').eq('tenant_id', tenantId).maybeSingle(), 'liqext.telefonos_leer');
+  if (res.error) {
+    if (tablaAusente(res.error)) return null;
+    throw new Error(`liquidacion_formato_flota leer teléfonos: ${res.error.message}`);
+  }
+  const f = res.data as { copia_telefonos: string[] | null; discrepancia_telefonos: string[] | null } | null;
+  return f ? { copia: f.copia_telefonos ?? [], discrepancia: f.discrepancia_telefonos ?? [] } : null;
+}
+
 export async function guardarFormatoFlota(tenantId: string, c: ConfigFormatoFlota, por: string): Promise<void> {
   const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota').upsert({
     tenant_id: tenantId, formato: c.formato, nombre_muestra: c.nombreMuestra,
@@ -197,7 +222,37 @@ export async function guardarFormatoFlota(tenantId: string, c: ConfigFormatoFlot
   if (res.error) throw new Error(`liquidacion_formato_flota guardar: ${res.error.message}`);
 }
 
+/**
+ * Guarda SOLO los teléfonos de la copia y del aviso de discrepancia, sin tocar el formato (flotas con el PDF genérico). Si la fila
+ * ya existe actualiza únicamente los teléfonos; si no, la crea con formato nulo, que pide la 0645 — sin ella lo dice en palabras.
+ */
+export async function guardarTelefonosFlota(tenantId: string, t: TelefonosFlota, por: string): Promise<void> {
+  const cambios = { copia_telefonos: t.copia, discrepancia_telefonos: t.discrepancia, actualizado_en: new Date().toISOString(), actualizado_por: por.slice(0, 120) };
+  const upd = await acotada(supabaseAdmin().from('liquidacion_formato_flota').update(cambios).eq('tenant_id', tenantId).select('tenant_id'), 'liqext.telefonos_guardar');
+  if (upd.error) throw new Error(`liquidacion_formato_flota guardar teléfonos: ${upd.error.message}`);
+  if ((upd.data ?? []).length > 0 || (t.copia.length === 0 && t.discrepancia.length === 0)) return;
+  const ins = await acotada(supabaseAdmin().from('liquidacion_formato_flota').insert({ tenant_id: tenantId, formato: null, nombre_muestra: null, ...cambios }), 'liqext.telefonos_crear');
+  if (ins.error) {
+    if (ins.error.code === '23502') {
+      throw new DatoInvalido('Para guardar los teléfonos sin un Excel de muestra hace falta aplicar la migración 0645 en la base. Mientras tanto, sube el Excel de muestra y ahí los capturas.');
+    }
+    throw new Error(`liquidacion_formato_flota crear teléfonos: ${ins.error.message}`);
+  }
+}
+
+/**
+ * Quita el FORMATO de la flota. Si la fila trae teléfonos (copia al jefe, aviso de discrepancia) se CONSERVAN: solo se vacía el formato
+ * (0645). Contra una base sin la 0645, o sin teléfonos, se borra la fila entera como siempre.
+ */
 export async function borrarFormatoFlota(tenantId: string): Promise<void> {
+  const tel = await leerTelefonosFlota(tenantId);
+  if (tel && (tel.copia.length > 0 || tel.discrepancia.length > 0)) {
+    const upd = await acotada(supabaseAdmin().from('liquidacion_formato_flota')
+      .update({ formato: null, nombre_muestra: null, actualizado_en: new Date().toISOString() }).eq('tenant_id', tenantId), 'liqext.formato_vaciar');
+    if (!upd.error) return;
+    if (upd.error.code !== '23502') throw new Error(`liquidacion_formato_flota vaciar: ${upd.error.message}`);
+    // Sin la 0645 la columna es NOT NULL: no hay dónde dejar solo los teléfonos, y se borra la fila como antes.
+  }
   const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota').delete().eq('tenant_id', tenantId), 'liqext.formato_borrar');
   if (res.error) throw new Error(`liquidacion_formato_flota borrar: ${res.error.message}`);
 }
@@ -481,6 +536,197 @@ export async function cerrarCopiaJefe(
   }
 }
 
+// ── el aviso de discrepancia: estado, reclamo y reintento (mig. 0643 + 0644) ─
+// La tabla y las RPC son de las migraciones 0643/0644. Contra una base SIN ellas el código sigue como antes (avisa una sola
+// vez y deja el resultado en la bitácora), así que desplegar no exige aplicarlas: cada función lo declara con 'sin_rpc'.
+
+export type EstadoAvisoDiscrepancia = 'pendiente' | 'enviando' | 'enviado' | 'fallido';
+
+export interface AvisoDiscrepancia {
+  liquidacionId: string;
+  tenantId: string;
+  ciclo: number;
+  estado: EstadoAvisoDiscrepancia;
+  intentos: number;
+  proximoIntentoEn: string;
+  ultimoError: string | null;
+  /** A quién YA le llegó (o quedó en el outbox): un reintento va solo a los faltantes. */
+  telefonosAceptados: string[];
+  /** La tarea que se abrió para una persona en la cola del orquestador (0650), si ya se abrió. */
+  tareaId: string | null;
+  enviadoEn: string | null;
+}
+
+const COLUMNAS_AVISO =
+  'liquidacion_externa_id, tenant_id, ciclo, estado, intentos, proximo_intento_en, ultimo_error, telefonos_aceptados, tarea_id, enviado_en';
+
+export function aAvisoDiscrepancia(r: Record<string, unknown>): AvisoDiscrepancia {
+  return {
+    liquidacionId: String(r.liquidacion_externa_id),
+    tenantId: String(r.tenant_id),
+    ciclo: Number(r.ciclo),
+    estado: r.estado as EstadoAvisoDiscrepancia,
+    intentos: Number(r.intentos),
+    proximoIntentoEn: String(r.proximo_intento_en),
+    ultimoError: (r.ultimo_error as string | null) ?? null,
+    telefonosAceptados: Array.isArray(r.telefonos_aceptados) ? (r.telefonos_aceptados as string[]) : [],
+    tareaId: (r.tarea_id as string | null) ?? null,
+    enviadoEn: (r.enviado_en as string | null) ?? null,
+  };
+}
+
+/** Cuántos intentos tiene el aviso antes de quedar `fallido` a la vista del panel (donde «Reavisar» lo rearma). */
+export const MAX_INTENTOS_AVISO = 5;
+
+export interface ReclamoAviso { token: string }
+
+/**
+ * «No coincide» ATÓMICO: una sola sentencia condicional que, en la misma transacción, deja el aviso pendiente.
+ * `{ ciclo }` = esta llamada hizo la transición (y es la ÚNICA que debe avisar); `{ ciclo: null }` = ya era «No coincide»,
+ * o la liquidación no es de ese operador/flota; `'sin_rpc'` = la base no trae la 0644 (el llamador usa la ruta de siempre).
+ */
+export async function registrarNoCoincideAtomico(
+  tenantId: string, liquidacionId: string, operadorId: string, ahoraIso: string,
+): Promise<{ ciclo: number | null } | 'sin_rpc'> {
+  const res = await acotada(supabaseAdmin().rpc('registrar_acuse_no_coincide', {
+    p_tenant: tenantId, p_liquidacion: liquidacionId, p_operador: operadorId, p_ahora: ahoraIso,
+  }), 'liqext.no_coincide_atomico');
+  if (res.error) {
+    if (rpcAusente(res.error)) return 'sin_rpc';
+    throw new Error(`registrar_acuse_no_coincide: ${res.error.message}`);
+  }
+  return { ciclo: typeof res.data === 'number' ? res.data : null };
+}
+
+/** Reclama el envío del aviso. `null` = ya salió, no toca todavía o lo manda otra invocación. LANZA ante un error real. */
+export async function reclamarAvisoDiscrepancia(
+  tenantId: string, liquidacionId: string, ciclo: number, ahoraIso: string,
+): Promise<ReclamoAviso | null> {
+  const res = await acotada(supabaseAdmin().rpc('reclamar_aviso_discrepancia', {
+    p_tenant: tenantId, p_liquidacion: liquidacionId, p_ciclo: ciclo, p_ahora: ahoraIso,
+  }), 'liqext.aviso_reclamar');
+  if (res.error) throw new Error(`reclamar_aviso_discrepancia: ${res.error.message}`);
+  return typeof res.data === 'string' && res.data ? { token: res.data } : null;
+}
+
+export interface CierreAviso {
+  resultado: 'enviado' | 'reintentar' | 'fallido';
+  /** Los teléfonos que aceptaron AHORA (se suman a los de antes). */
+  aceptados: string[];
+  error?: string | null;
+  /** Cuándo toca el próximo intento (solo con `reintentar`). */
+  proximoIso?: string;
+}
+
+/** Cierra el reclamo con el token vigente. Devuelve el estado resultante, o `null` si ya no era vigente. No lanza. */
+export async function cerrarAvisoDiscrepancia(
+  tenantId: string, liquidacionId: string, ciclo: number, reclamo: ReclamoAviso, c: CierreAviso, ahoraIso: string,
+): Promise<EstadoAvisoDiscrepancia | null> {
+  try {
+    const res = await acotada(supabaseAdmin().rpc('cerrar_aviso_discrepancia', {
+      p_tenant: tenantId, p_liquidacion: liquidacionId, p_ciclo: ciclo, p_claim: reclamo.token, p_resultado: c.resultado,
+      p_aceptados: c.aceptados, p_error: c.error ?? null, p_proximo: c.proximoIso ?? null,
+      p_max_intentos: MAX_INTENTOS_AVISO, p_ahora: ahoraIso,
+    }), 'liqext.aviso_cerrar');
+    if (res.error) {
+      logger.error('liqext.aviso_cerrar_fallo', { id: liquidacionId, err: res.error.message });
+      return null;
+    }
+    return typeof res.data === 'string' ? (res.data as EstadoAvisoDiscrepancia) : null;
+  } catch (e) {
+    logger.error('liqext.aviso_cerrar_fallo', { id: liquidacionId, err: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
+/** «Reavisar»: devuelve el aviso fallido o pendiente a pendiente-ya. `{ ciclo: null }` = ya salió, lo manda alguien o no hay «No coincide». */
+export async function rearmarAvisoDiscrepancia(
+  tenantId: string, liquidacionId: string, ahoraIso: string,
+): Promise<{ ciclo: number | null } | 'sin_rpc'> {
+  const res = await acotada(supabaseAdmin().rpc('rearmar_aviso_discrepancia', {
+    p_tenant: tenantId, p_liquidacion: liquidacionId, p_ahora: ahoraIso,
+  }), 'liqext.aviso_rearmar');
+  if (res.error) {
+    if (rpcAusente(res.error)) return 'sin_rpc';
+    throw new Error(`rearmar_aviso_discrepancia: ${res.error.message}`);
+  }
+  return { ciclo: typeof res.data === 'number' ? res.data : null };
+}
+
+/** Un aviso por (liquidación, ciclo). `null` = no existe (o la tabla aún no está en la base). LANZA ante otro error. */
+export async function leerAvisoDiscrepancia(tenantId: string, liquidacionId: string, ciclo: number): Promise<AvisoDiscrepancia | null> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_aviso_discrepancia').select(COLUMNAS_AVISO)
+    .eq('tenant_id', tenantId).eq('liquidacion_externa_id', liquidacionId).eq('ciclo', ciclo).maybeSingle(), 'liqext.aviso_leer');
+  if (res.error) {
+    if (tablaAusente(res.error)) return null;
+    throw new Error(`liquidacion_aviso_discrepancia leer: ${res.error.message}`);
+  }
+  return res.data ? aAvisoDiscrepancia(res.data as unknown as Record<string, unknown>) : null;
+}
+
+/**
+ * El aviso más reciente de cada liquidación dada (para pintar el panel). `null` = la tabla aún no está en la base o no se
+ * pudo leer: la pantalla no muestra rótulo de aviso, jamás inventa uno.
+ */
+export async function avisosDiscrepanciaDe(tenantId: string, ids: string[]): Promise<Map<string, AvisoDiscrepancia> | null> {
+  if (ids.length === 0) return new Map();
+  const res = await acotada(supabaseAdmin().from('liquidacion_aviso_discrepancia').select(COLUMNAS_AVISO)
+    .eq('tenant_id', tenantId).in('liquidacion_externa_id', ids)
+    .order('liquidacion_externa_id').order('ciclo', { ascending: false }).limit(ids.length * 5), 'liqext.avisos_panel');
+  if (res.error) {
+    if (!tablaAusente(res.error)) logger.warn('liqext.avisos_panel_fallo', { err: res.error.message });
+    return null;
+  }
+  const mapa = new Map<string, AvisoDiscrepancia>();
+  for (const f of (res.data ?? []) as unknown as Array<Record<string, unknown>>) {
+    const a = aAvisoDiscrepancia(f);
+    if (!mapa.has(a.liquidacionId)) mapa.set(a.liquidacionId, a); // el primero es el ciclo más reciente
+  }
+  return mapa;
+}
+
+/** Guarda la tarea que se abrió para este aviso (para no abrir otra si la primera ya se atendió). Mejor esfuerzo. */
+export async function marcarTareaAviso(tenantId: string, liquidacionId: string, ciclo: number, tareaId: string): Promise<void> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_aviso_discrepancia').update({ tarea_id: tareaId })
+    .eq('tenant_id', tenantId).eq('liquidacion_externa_id', liquidacionId).eq('ciclo', ciclo), 'liqext.aviso_tarea');
+  if (res.error) logger.warn('liqext.aviso_tarea_fallo', { id: liquidacionId, err: res.error.message });
+}
+
+export interface TareaDiferencia {
+  /** Texto ya limpio (sin números largos, correos ni ligas): viaja a una persona. */
+  resumen: string;
+  viajeFolio: string | null;
+  viajeId: string | null;
+}
+
+/**
+ * La tarea durable en la cola del orquestador (0650): destino liquidación, motivo `diferencia_liquidacion`, UNA abierta por
+ * liquidación (el índice único parcial de la 0650 hace que un reintento no abra otra). No manda mensajes ni toca dinero.
+ * `no_disponible` = la base aún no trae la 0650. LANZA ante cualquier otro error: no se da por abierta una tarea que no se abrió.
+ */
+export async function crearTareaDiferenciaLiquidacion(
+  tenantId: string, liquidacionId: string, t: TareaDiferencia,
+): Promise<{ estado: 'creada' | 'ya_abierta'; id: string } | { estado: 'no_disponible' }> {
+  const db = supabaseAdmin();
+  const folio = t.viajeFolio && PATRON_FOLIO.test(t.viajeFolio) ? t.viajeFolio : null;
+  const dedupe = `liquidacion|diferencia_liquidacion|liq:${liquidacionId}`;
+  const ins = await acotada(db.from('orquestador_escalacion').insert({
+    tenant_id: tenantId, destino: 'liquidacion', motivo: 'diferencia_liquidacion', viaje_id: t.viajeId, viaje_folio: folio,
+    resumen: t.resumen, pedida_por_rol: 'sistema', pedida_por_usuario: null, dedupe_key: dedupe,
+  }).select('id').single(), 'liqext.tarea_crear');
+  if (ins.error) {
+    if (tablaAusente(ins.error)) return { estado: 'no_disponible' };
+    if (ins.error.code === '23505') {
+      const previa = await acotada(db.from('orquestador_escalacion').select('id')
+        .eq('tenant_id', tenantId).eq('dedupe_key', dedupe).eq('estado', 'abierta').order('creada_en', { ascending: false }).order('id').limit(1), 'liqext.tarea_previa');
+      const f = ((previa.data ?? []) as Array<{ id: string }>)[0];
+      if (f) return { estado: 'ya_abierta', id: String(f.id) };
+    }
+    throw new Error(`orquestador_escalacion crear: ${ins.error.message}`);
+  }
+  return { estado: 'creada', id: String((ins.data as { id: string }).id) };
+}
+
 /**
  * Transición CONDICIONAL de estado: solo se aplica si la fila sigue en alguno
  * de los estados `desde`. Devuelve si la aplicó. Es el candado contra dos
@@ -489,11 +735,15 @@ export async function cerrarCopiaJefe(
 export async function transicionar(
   tenantId: string, id: string, desde: EstadoLiquidacionExterna[],
   cambios: Record<string, unknown>,
+  /** Además del estado, la fila NO debe traer ya ese acuse: dos entregas del mismo botón no aplican las dos
+   *  (la primera lo cambia; la segunda ve el acuse igual y no transiciona, con lo que tampoco repite su aviso). */
+  opciones: { acuseDistintoDe?: TipoAcuse } = {},
 ): Promise<boolean> {
-  const res = await acotada(supabaseAdmin().from('liquidacion_externa')
+  let q = supabaseAdmin().from('liquidacion_externa')
     .update({ ...cambios, updated_at: new Date().toISOString() })
-    .eq('tenant_id', tenantId).eq('id', id).in('estado', desde)
-    .select('id'), 'liqext.transicion');
+    .eq('tenant_id', tenantId).eq('id', id).in('estado', desde);
+  if (opciones.acuseDistintoDe) q = q.or(`acuse_tipo.is.null,acuse_tipo.neq.${opciones.acuseDistintoDe}`);
+  const res = await acotada(q.select('id'), 'liqext.transicion');
   if (res.error) throw new Error(`liquidacion_externa transición: ${res.error.message}`);
   return (res.data ?? []).length > 0;
 }

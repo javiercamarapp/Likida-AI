@@ -2,12 +2,12 @@ import Link from 'next/link';
 import { FileSpreadsheet, ArrowLeft, Upload, Trash2, Save } from 'lucide-react';
 import { BarraPagina } from '../../../resumen-visual';
 // SOLO tipos: el repo importa supabaseAdmin y no debe entrar al bundle de la vista.
-import type { ConfigFormatoFlota } from '@/lib/likida/liquidacion_externa/repo';
+import type { ConfigFormatoFlota, TelefonosFlota } from '@/lib/likida/liquidacion_externa/repo';
 import { ETIQUETA_CAMPO_RENGLON, ETIQUETA_CAMPO_ENCABEZADO } from '@/lib/likida/liquidacion_externa/formato_flota';
 
 type Accion = (fd: FormData) => Promise<void>;
 
-export interface AccionesFormato { subirMuestra: Accion; guardarAjustes: Accion; quitar: Accion }
+export interface AccionesFormato { subirMuestra: Accion; guardarAjustes: Accion; quitar: Accion; guardarTelefonos?: Accion }
 
 const CSS_INPUT = 'hairline text-[12.5px] px-2.5 py-1.5 rounded-lg w-full';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
@@ -25,9 +25,11 @@ function Etiqueta({ t, children }: { t: string; children: React.ReactNode }) {
   );
 }
 
-export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, puedeAdministrar, acciones }: {
+export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefonos, puedeAdministrar, acciones }: {
   sufijo: string; aviso: string | null; error: string | null;
-  config: ConfigFormatoFlota | null; puedeAdministrar: boolean; acciones: AccionesFormato;
+  config: ConfigFormatoFlota | null;
+  /** Los teléfonos guardados, con o sin formato (0645). Sin él (`undefined`) se toman del formato, si hay. */
+  telefonos?: TelefonosFlota | null; puedeAdministrar: boolean; acciones: AccionesFormato;
 }) {
   const f = config?.formato ?? null;
   return (
@@ -68,8 +70,30 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, puedeAdm
           {!f && (
             <section className="card p-4">
               <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
-                Todavía no hay formato: las liquidaciones salen con el PDF genérico de Likida y no se manda copia a nadie.
+                Todavía no hay formato: las liquidaciones salen con el PDF genérico de Likida. No necesitas un Excel de muestra para
+                designar a quién se le copia cada liquidación ni quién revisa las discrepancias: captúralos aquí abajo.
               </p>
+            </section>
+          )}
+
+          {!f && acciones.guardarTelefonos && (
+            <section className="card p-4">
+              <h2 className="font-display text-[15px] font-semibold mb-1">2. A quién se le avisa (sin formato de Excel)</h2>
+              <form action={acciones.guardarTelefonos} className="space-y-3">
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <Etiqueta t="Copia al jefe de flota (WhatsApp, hasta 3)">
+                    <textarea name="copia" rows={2} defaultValue={(telefonos?.copia ?? []).join('\n')} placeholder="5512345678" className={CSS_INPUT} style={ESTILO_INPUT} disabled={!puedeAdministrar} />
+                    <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Reciben el resumen y la liga del documento de cada liquidación entregada. La copia lleva cifras: solo los números que pongas aquí.</span>
+                  </Etiqueta>
+                  <Etiqueta t="Aviso cuando un operador responde «No coincide» (hasta 3)">
+                    <textarea name="discrepancia" rows={2} defaultValue={(telefonos?.discrepancia ?? []).join('\n')} placeholder="5512345678" className={CSS_INPUT} style={ESTILO_INPUT} disabled={!puedeAdministrar} />
+                    <span className="text-[11px]" style={{ color: 'var(--faint)' }}>La persona responsable de revisar discrepancias. Si lo dejas vacío, se avisa al jefe de la copia y, sin copia, a quien ve dinero.</span>
+                  </Etiqueta>
+                </div>
+                {puedeAdministrar && (
+                  <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar teléfonos</button>
+                )}
+              </form>
             </section>
           )}
 

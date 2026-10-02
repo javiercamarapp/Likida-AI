@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LiquidacionExterna, ConfigFormatoFlota } from './repo';
 import type { ResultadoCopia } from './copia_jefe';
 import type { EstadoEntrega, MensajeLiquidacion, EntregaWhatsApp } from './entrega';
+import type { ResultadoAvisoDiscrepancia } from './aviso_no_coincide';
+import { AvisosEnMemoria, AVISO_MAX_INTENTOS } from './aviso_discrepancia.fixture';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL SERVICIO: recibir, entregar, reintentar y acusar.
@@ -19,6 +21,8 @@ import type { EstadoEntrega, MensajeLiquidacion, EntregaWhatsApp } from './entre
 // ═══════════════════════════════════════════════════════════════════════════
 
 const store = new Map<string, LiquidacionExterna>();
+/** El aviso de discrepancia (0643/0644) y la tarea del orquestador (0650), en memoria con la semántica de las RPC. */
+const avisosMem = new AvisosEnMemoria((id) => store.get(id));
 const eventos: Array<{ id: string; tipo: string; detalle: Record<string, unknown> }> = [];
 const subidas: Array<{ ruta: string; bytes: number }> = [];
 
@@ -27,6 +31,13 @@ let operadorResuelto: { id: string; nombre: string; telefono: string; activo: bo
 };
 
 vi.mock('./repo', () => ({
+  registrarNoCoincideAtomico: vi.fn((...a: Parameters<typeof avisosMem.registrarNoCoincideAtomico>) => avisosMem.registrarNoCoincideAtomico(...a)),
+  reclamarAvisoDiscrepancia: vi.fn((...a: Parameters<typeof avisosMem.reclamarAvisoDiscrepancia>) => avisosMem.reclamarAvisoDiscrepancia(...a)),
+  cerrarAvisoDiscrepancia: vi.fn((...a: Parameters<typeof avisosMem.cerrarAvisoDiscrepancia>) => avisosMem.cerrarAvisoDiscrepancia(...a)),
+  rearmarAvisoDiscrepancia: vi.fn((...a: Parameters<typeof avisosMem.rearmarAvisoDiscrepancia>) => avisosMem.rearmarAvisoDiscrepancia(...a)),
+  leerAvisoDiscrepancia: vi.fn((...a: Parameters<typeof avisosMem.leerAvisoDiscrepancia>) => avisosMem.leerAvisoDiscrepancia(...a)),
+  marcarTareaAviso: vi.fn((...a: Parameters<typeof avisosMem.marcarTareaAviso>) => avisosMem.marcarTareaAviso(...a)),
+  crearTareaDiferenciaLiquidacion: vi.fn((...a: Parameters<typeof avisosMem.crearTareaDiferenciaLiquidacion>) => avisosMem.crearTareaDiferenciaLiquidacion(...a)),
   resolverOperadorDestino: vi.fn(async () => { if (operadorResuelto instanceof Error) throw operadorResuelto; return operadorResuelto; }),
   resolverViajeIds: vi.fn(async (_t: string, folios: string[]) => folios.filter((f) => f === 'VJ-1').map(() => 'viaje-uuid-1')),
   subirPdfExterno: vi.fn(async (ruta: string, bytes: Uint8Array) => { subidas.push({ ruta, bytes: bytes.length }); }),
@@ -61,9 +72,10 @@ vi.mock('./repo', () => ({
     return r;
   }),
   // El CONTRATO real de `transicionar`: solo aplica si el estado actual está en `desde`.
-  transicionar: vi.fn(async (tenantId: string, id: string, desde: string[], cambios: Record<string, unknown>) => {
+  transicionar: vi.fn(async (tenantId: string, id: string, desde: string[], cambios: Record<string, unknown>, opciones: { acuseDistintoDe?: string } = {}) => {
     const f = store.get(id);
     if (!f || f.tenantId !== tenantId || !desde.includes(f.estado)) return false;
+    if (opciones.acuseDistintoDe && f.acuseTipo === opciones.acuseDistintoDe) return false;
     const mapa: Record<string, keyof LiquidacionExterna> = {
       estado: 'estado', via: 'via', generacion: 'generacion', intentos: 'intentos', proximo_intento_en: 'proximoIntentoEn',
       ultimo_error: 'ultimoError', wamid: 'wamid', enviada_en: 'enviadaEn', acuse_tipo: 'acuseTipo', acuse_en: 'acuseEn', acuse_confirmado_en: 'acuseConfirmadoEn',
@@ -73,6 +85,7 @@ vi.mock('./repo', () => ({
   }),
 }));
 vi.mock('./trabajo', () => ({
+  avisosPendientes: vi.fn((...a: Parameters<typeof avisosMem.avisosPendientes>) => avisosMem.avisosPendientes(...a)),
   trabajoPendiente: vi.fn(async (limite: number, ahoraIso: string) =>
     [...store.values()]
       .filter((f) => f.estado === 'en_cola' || (f.estado === 'pendiente' && f.proximoIntentoEn <= ahoraIso))
@@ -84,11 +97,13 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 const {
   recibirLiquidacionExterna, intentarEntrega, procesarLiquidacionesExternas,
   reintentarLiquidacionExterna, registrarAcuse, registrarAcuseConAviso, confirmarAcusesLeidos, MAX_INTENTOS_ENCOLADO,
+  procesarAvisosDiscrepancia, reavisarDiscrepancia,
 } = await import('./servicio');
 const { validarLiquidacionExterna, huellaContenido } = await import('./esquema');
 const repo = await import('./repo');
 
 const AHORA = new Date('2026-09-08T12:00:00.000Z');
+let reloj = AHORA;
 let firmaFalla = false;
 let siguiente: EstadoEntrega | Error = { estado: 'en_cola', via: 'sesion' };
 const llamadas: MensajeLiquidacion[] = [];
@@ -96,10 +111,10 @@ const entrega: EntregaWhatsApp = {
   enviarConFallback: vi.fn(async (m) => { llamadas.push(m); if (siguiente instanceof Error) throw siguiente; return siguiente; }),
 };
 const deps = {
-  entrega, ahora: () => AHORA,
+  entrega, ahora: () => reloj,
   razonSocial: async () => 'Flota SA',
   firmarPdf: async () => { if (firmaFalla) throw new Error('storage caído'); return 'https://firmada.example/x.pdf'; },
-  avisarNoCoincide: vi.fn(async (_l: LiquidacionExterna) => true),
+  avisarNoCoincide: vi.fn(async (_l: LiquidacionExterna, _ya?: readonly string[]): Promise<ResultadoAvisoDiscrepancia> => ({ destinatarios: ['525599990001'], aceptados: ['525599990001'] })),
   formato: vi.fn(async (_t: string): Promise<ConfigFormatoFlota | null> => null),
   subirArchivo: vi.fn(async (ruta: string, bytes: Uint8Array, _tipo: string) => { subidas.push({ ruta, bytes: bytes.length }); }),
   copiarAJefe: vi.fn(async (_l: LiquidacionExterna, _d: { url: string; nombre: string } | null): Promise<ResultadoCopia> => ({ estado: 'sin_destinatarios' })),
@@ -118,7 +133,7 @@ async function recibir(extra: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
-  store.clear(); eventos.length = 0; subidas.length = 0; llamadas.length = 0;
+  store.clear(); eventos.length = 0; subidas.length = 0; llamadas.length = 0; avisosMem.reiniciar(); reloj = AHORA;
   operadorResuelto = { id: 'op-1', nombre: 'Juan Pérez', telefono: '525512345678', activo: true };
   firmaFalla = false; siguiente = { estado: 'en_cola', via: 'sesion' };
   vi.mocked(entrega.enviarConFallback).mockClear();
@@ -356,7 +371,7 @@ describe('el cron: procesarLiquidacionesExternas', () => {
   });
 
   it('con la cola vacía no hace nada ni lanza', async () => {
-    expect(await procesarLiquidacionesExternas(deps, 10)).toEqual({ tomadas: 0, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0 });
+    expect(await procesarLiquidacionesExternas(deps, 10)).toEqual({ tomadas: 0, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 } });
   });
 
   it('IDEMPOTENTE: pasar el cron dos veces no manda dos veces lo ya encolado', async () => {
@@ -464,26 +479,45 @@ describe('el acuse del chofer', () => {
   });
 });
 
-describe('«No coincide» avisa a la oficina', () => {
-  beforeEach(() => { vi.mocked(deps.avisarNoCoincide).mockReset().mockResolvedValue(true); });
+describe('«No coincide» avisa a la oficina (con red)', () => {
+  const ok = (tels: string[] = ['525599990001']): ResultadoAvisoDiscrepancia => ({ destinatarios: tels, aceptados: tels });
+  beforeEach(() => { vi.mocked(deps.avisarNoCoincide).mockReset().mockResolvedValue(ok()); });
+  const eventoAviso = (destino: string) => eventos.find((e) => e.tipo === 'aviso_oficina' && e.detalle.destino === destino)?.detalle;
+  const avisoDe = (id: string, ciclo = 1) => avisosMem.filas.get(`${id}|${ciclo}`)!;
 
-  it('avisa UNA vez, deja el evento aviso_oficina y devuelve enviado', async () => {
+  it('avisa UNA vez, deja el evento aviso_oficina, el aviso queda enviado y devuelve enviado', async () => {
     const liq = await recibir();
     const r = await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps);
     expect(r).toEqual({ resultado: 'registrado', avisoOficina: 'enviado' });
     expect(deps.avisarNoCoincide).toHaveBeenCalledTimes(1);
-    expect(eventos.find((e) => e.tipo === 'aviso_oficina')?.detalle).toEqual({ enviado: true });
+    expect(eventoAviso('discrepancia')).toMatchObject({ ciclo: 1, enviado: true, aceptados: 1, destinatarios: 1 });
+    expect(avisoDe(liq.id)).toMatchObject({ estado: 'enviado', telefonosAceptados: ['525599990001'], intentos: 0 });
     // el mismo botón otra vez NO vuelve a avisar
     expect(await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps)).toEqual({ resultado: 'ya_registrado', avisoOficina: 'no_aplica' });
     expect(deps.avisarNoCoincide).toHaveBeenCalledTimes(1);
   });
 
-  it('si el aviso no sale (sin destinatario o Meta lo rechaza), se dice no_enviado y el acuse SÍ queda', async () => {
-    vi.mocked(deps.avisarNoCoincide).mockResolvedValue(false);
+  it('abre la tarea DURABLE para una persona (motivo diferencia_liquidacion), una sola, y la guarda en el aviso', async () => {
+    const liq = await recibir();
+    await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps);
+    expect(avisosMem.tareas).toHaveLength(1);
+    expect(avisosMem.tareas[0]).toMatchObject({ tenantId: 't-1', dedupe: `liquidacion|diferencia_liquidacion|liq:${liq.id}`, abierta: true });
+    expect(avisosMem.tareas[0].resumen).toMatch(/Juan Pérez.*No coincide.*SAP-1/);
+    expect(avisosMem.tareas[0].resumen).not.toMatch(/\d{10}/);
+    expect(avisoDe(liq.id).tareaId).toBe(avisosMem.tareas[0].id);
+    expect(eventoAviso('tarea_orquestador')).toEqual({ destino: 'tarea_orquestador', tarea: 'creada' });
+  });
+
+  it('si el aviso no sale (sin destinatario o Meta lo rechaza), se dice no_enviado, el acuse SÍ queda y el aviso queda PENDIENTE con espera', async () => {
+    vi.mocked(deps.avisarNoCoincide).mockResolvedValue({ destinatarios: [], aceptados: [], motivo: 'No hay a quién avisar' });
     const liq = await recibir();
     expect(await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps)).toEqual({ resultado: 'registrado', avisoOficina: 'no_enviado' });
     expect(store.get(liq.id)).toMatchObject({ estado: 'acusada', acuseTipo: 'no_coincide' });
-    expect(eventos.find((e) => e.tipo === 'aviso_oficina')?.detalle).toEqual({ enviado: false });
+    expect(eventoAviso('discrepancia')).toMatchObject({ enviado: false, aceptados: 0, destinatarios: 0 });
+    const a = avisoDe(liq.id);
+    expect(a).toMatchObject({ estado: 'pendiente', intentos: 1, ultimoError: 'No hay a quién avisar' });
+    expect(Date.parse(a.proximoIntentoEn) - AHORA.getTime()).toBe(2 * 60_000);
+    expect(avisosMem.tareas).toHaveLength(1); // aunque el WhatsApp no salió, la discrepancia ya está en la cola de una persona
   });
 
   it('si el aviso LANZA no tumba el acuse', async () => {
@@ -491,6 +525,159 @@ describe('«No coincide» avisa a la oficina', () => {
     const liq = await recibir();
     expect(await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps)).toEqual({ resultado: 'registrado', avisoOficina: 'no_enviado' });
     expect(store.get(liq.id)!.estado).toBe('acusada');
+    expect(avisoDe(liq.id).estado).toBe('pendiente');
+  });
+
+  it('el cron REINTENTA el aviso cuando toca (no antes) y, al llegar, lo deja enviado', async () => {
+    vi.mocked(deps.avisarNoCoincide).mockResolvedValueOnce({ destinatarios: ['525599990001'], aceptados: [], motivo: 'rechazado' });
+    const liq = await recibir();
+    await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps);
+    expect(await procesarAvisosDiscrepancia(deps, 10)).toMatchObject({ tomados: 0 }); // la espera de 2 min no se cumplió
+    reloj = new Date(AHORA.getTime() + 3 * 60_000);
+    expect(await procesarAvisosDiscrepancia(deps, 10)).toMatchObject({ tomados: 1, enviados: 1, fallidos: 0 });
+    expect(avisoDe(liq.id)).toMatchObject({ estado: 'enviado', intentos: 1 });
+    expect(deps.avisarNoCoincide).toHaveBeenCalledTimes(2);
+    expect(avisosMem.tareas).toHaveLength(1); // la tarea no se abre otra vez
+    // y ya no se levanta más
+    expect(await procesarAvisosDiscrepancia(deps, 10)).toMatchObject({ tomados: 0 });
+  });
+
+  it('PARCIAL: con dos designados, el reintento va SOLO al que falta (no repite el WhatsApp a quien ya lo recibió)', async () => {
+    vi.mocked(deps.avisarNoCoincide)
+      .mockResolvedValueOnce({ destinatarios: ['525511110001', '525511110002'], aceptados: ['525511110001'], motivo: 'uno rebotó' })
+      .mockImplementationOnce(async (_l, ya = []) => ({ destinatarios: ['525511110001', '525511110002'], aceptados: ['525511110002', ...ya] }));
+    const liq = await recibir();
+    expect(await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps)).toEqual({ resultado: 'registrado', avisoOficina: 'enviado' });
+    expect(avisoDe(liq.id)).toMatchObject({ estado: 'pendiente', telefonosAceptados: ['525511110001'] });
+    reloj = new Date(AHORA.getTime() + 3 * 60_000);
+    await procesarAvisosDiscrepancia(deps, 10);
+    expect(vi.mocked(deps.avisarNoCoincide).mock.calls[1][1]).toEqual(['525511110001']);
+    expect(avisoDe(liq.id)).toMatchObject({ estado: 'enviado', telefonosAceptados: ['525511110001', '525511110002'] });
+  });
+
+  it(`tras ${AVISO_MAX_INTENTOS} intentos sin llegar queda FALLIDO a la vista (no se reintenta solo)`, async () => {
+    vi.mocked(deps.avisarNoCoincide).mockResolvedValue({ destinatarios: ['525599990001'], aceptados: [], motivo: 'rechazado' });
+    const liq = await recibir();
+    await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps);
+    for (let i = 0; i < AVISO_MAX_INTENTOS; i++) {
+      reloj = new Date(reloj.getTime() + 60 * 60_000);
+      await procesarAvisosDiscrepancia(deps, 10);
+    }
+    expect(avisoDe(liq.id)).toMatchObject({ estado: 'fallido', intentos: AVISO_MAX_INTENTOS });
+    reloj = new Date(reloj.getTime() + 24 * 60 * 60_000);
+    expect(await procesarAvisosDiscrepancia(deps, 10)).toMatchObject({ tomados: 0 });
+  });
+
+  it('REAVISAR: rearma el fallido y lo manda (solo a los faltantes); uno ya enviado no se repite', async () => {
+    vi.mocked(deps.avisarNoCoincide).mockResolvedValue({ destinatarios: ['525599990001'], aceptados: [], motivo: 'rechazado' });
+    const liq = await recibir();
+    await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps);
+    for (let i = 0; i < AVISO_MAX_INTENTOS; i++) { reloj = new Date(reloj.getTime() + 60 * 60_000); await procesarAvisosDiscrepancia(deps, 10); }
+    expect(avisoDe(liq.id).estado).toBe('fallido');
+
+    vi.mocked(deps.avisarNoCoincide).mockResolvedValue(ok());
+    expect(await reavisarDiscrepancia('t-1', liq.id, 'dueño', deps)).toBe('reavisada');
+    expect(avisoDe(liq.id)).toMatchObject({ estado: 'enviado', telefonosAceptados: ['525599990001'] });
+    expect(eventoAviso('reavisar')).toMatchObject({ actor: 'dueño', ciclo: 1 });
+    // ya salió: otro clic no manda otra vez
+    const llamadas0 = vi.mocked(deps.avisarNoCoincide).mock.calls.length;
+    expect(await reavisarDiscrepancia('t-1', liq.id, 'dueño', deps)).toBe('ya_enviado');
+    expect(vi.mocked(deps.avisarNoCoincide).mock.calls.length).toBe(llamadas0);
+  });
+
+  it('REAVISAR solo aplica a una liquidación en «No coincide» de ESTA flota', async () => {
+    const liq = await recibir();
+    expect(await reavisarDiscrepancia('t-1', liq.id, 'dueño', deps)).toBe('no_aplica');
+    await registrarAcuse('t-1', 'op-1', liq.id, 'recibida', deps);
+    expect(await reavisarDiscrepancia('t-1', liq.id, 'dueño', deps)).toBe('no_aplica');
+    expect(await reavisarDiscrepancia('t-OTRA', liq.id, 'dueño', deps)).toBe('no_encontrada');
+    expect(await reavisarDiscrepancia('t-1', 'fantasma', 'dueño', deps)).toBe('no_encontrada');
+  });
+
+  it('si la TAREA no se puede abrir, no se manda todavía: queda pendiente y se reintenta completo', async () => {
+    avisosMem.falloTarea = new Error('base caída');
+    const liq = await recibir();
+    expect(await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps)).toEqual({ resultado: 'registrado', avisoOficina: 'no_enviado' });
+    expect(deps.avisarNoCoincide).not.toHaveBeenCalled();
+    expect(avisoDe(liq.id)).toMatchObject({ estado: 'pendiente', intentos: 1 });
+    expect(avisoDe(liq.id).ultimoError).toMatch(/tarea: base caída/);
+    avisosMem.falloTarea = null;
+    reloj = new Date(AHORA.getTime() + 3 * 60_000);
+    await procesarAvisosDiscrepancia(deps, 10);
+    expect(avisosMem.tareas).toHaveLength(1);
+    expect(deps.avisarNoCoincide).toHaveBeenCalledTimes(1);
+    expect(avisoDe(liq.id).estado).toBe('enviado');
+  });
+
+  it('sin la 0650 (tarea no disponible) el aviso sale igual', async () => {
+    avisosMem.sinTareas = true;
+    const liq = await recibir();
+    expect(await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps)).toEqual({ resultado: 'registrado', avisoOficina: 'enviado' });
+    expect(avisosMem.tareas).toHaveLength(0);
+  });
+
+  it('un aviso ya reclamado por otra invocación NO se manda dos veces (el reclamo es el candado)', async () => {
+    const liq = await recibir();
+    await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps);
+    vi.mocked(deps.avisarNoCoincide).mockClear();
+    // otro proceso lo tiene reclamado (arriendo vigente): el cron lo ve `enviando` y no lo toca
+    avisoDe(liq.id).estado = 'enviando';
+    expect(await procesarAvisosDiscrepancia(deps, 10)).toMatchObject({ tomados: 0 });
+    expect(deps.avisarNoCoincide).not.toHaveBeenCalled();
+  });
+
+  it('el chofer cambió su respuesta antes del reintento: el aviso queda obsoleto y NO se manda', async () => {
+    vi.mocked(deps.avisarNoCoincide).mockResolvedValueOnce({ destinatarios: ['525599990001'], aceptados: [], motivo: 'rechazado' });
+    const liq = await recibir();
+    await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps);
+    await registrarAcuse('t-1', 'op-1', liq.id, 'recibida', deps);
+    reloj = new Date(AHORA.getTime() + 3 * 60_000);
+    expect(await procesarAvisosDiscrepancia(deps, 10)).toMatchObject({ tomados: 1, fallidos: 1 });
+    expect(deps.avisarNoCoincide).toHaveBeenCalledTimes(1);
+    expect(avisoDe(liq.id)).toMatchObject({ estado: 'fallido' });
+    expect(avisoDe(liq.id).ultimoError).toMatch(/Obsoleto/);
+  });
+
+  it('cambiar de opinión (no coincide → recibida → no coincide) abre un aviso NUEVO (ciclo 2)', async () => {
+    const liq = await recibir();
+    await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps);
+    await registrarAcuse('t-1', 'op-1', liq.id, 'recibida', deps);
+    await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps);
+    expect(avisoDe(liq.id, 2)).toMatchObject({ estado: 'enviado', ciclo: 2 });
+    expect(deps.avisarNoCoincide).toHaveBeenCalledTimes(2);
+  });
+
+  it('BASE SIN 0643/0644: se avisa UNA vez, sin estado persistido, y el doble clic sigue sin duplicar', async () => {
+    avisosMem.sinMigrar = true;
+    const liq = await recibir();
+    const [a, b] = await Promise.all([
+      registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps),
+      registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps),
+    ]);
+    expect([a.resultado, b.resultado].sort()).toEqual(['registrado', 'ya_registrado']);
+    expect(deps.avisarNoCoincide).toHaveBeenCalledTimes(1);
+    expect(avisosMem.filas.size).toBe(0);
+    expect(eventoAviso('discrepancia')).toMatchObject({ enviado: true });
+  });
+
+  it('la ruta sin la 0644 pide al repo una transición condicional sobre el acuse (distinto del actual)', async () => {
+    avisosMem.sinMigrar = true;
+    const liq = await recibir();
+    await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps);
+    const llamada = vi.mocked(repo.transicionar).mock.calls.find((c) => (c[3] as { acuse_tipo?: string }).acuse_tipo === 'no_coincide');
+    expect(llamada?.[4]).toEqual({ acuseDistintoDe: 'no_coincide' });
+  });
+
+  it('ATÓMICO: dos entregas SIMULTÁNEAS del mismo botón avisan UNA sola vez y dejan un solo aviso y un solo evento', async () => {
+    const liq = await recibir();
+    const [a, b] = await Promise.all([
+      registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps),
+      registrarAcuseConAviso('t-1', 'op-1', liq.id, 'no_coincide', deps),
+    ]);
+    expect([a.resultado, b.resultado].sort()).toEqual(['registrado', 'ya_registrado']);
+    expect(deps.avisarNoCoincide).toHaveBeenCalledTimes(1);
+    expect(avisosMem.filas.size).toBe(1);
+    expect(eventos.filter((e) => e.tipo === 'acuse_no_coincide')).toHaveLength(1);
   });
 
   it('«Recibida» no avisa a nadie, y un chofer ajeno ni dispara el aviso', async () => {
@@ -498,6 +685,7 @@ describe('«No coincide» avisa a la oficina', () => {
     expect(await registrarAcuseConAviso('t-1', 'op-1', liq.id, 'recibida', deps)).toEqual({ resultado: 'registrado', avisoOficina: 'no_aplica' });
     expect(await registrarAcuseConAviso('t-1', 'op-OTRO', liq.id, 'no_coincide', deps)).toEqual({ resultado: 'no_encontrada', avisoOficina: 'no_aplica' });
     expect(deps.avisarNoCoincide).not.toHaveBeenCalled();
+    expect(avisosMem.filas.size).toBe(0);
   });
 });
 
