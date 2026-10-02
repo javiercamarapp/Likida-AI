@@ -22,6 +22,7 @@ import { join } from 'node:path';
 const PROHIBIDOS = [
   'staging_canacar',
   'docs/auditoria-*',
+  'scripts/cosecha/salida-prospectos',
   'docs/comercial',
   'docs/REPORTE-ESTADO.md',
   'PROMPT-SESION-NUEVA.md',
@@ -41,7 +42,7 @@ function rastreados(): string[] | null {
 }
 
 describe('el índice de git no contiene datos privados', () => {
-  it('ningún archivo de staging_canacar/, docs/auditoria-*/ ni material comercial está rastreado', () => {
+  it('ningún archivo de staging_canacar/, docs/auditoria-*/, salida-prospectos/ ni material comercial está rastreado', () => {
     const lista = rastreados();
     if (lista === null) return;
     expect(
@@ -55,7 +56,7 @@ describe('el índice de git no contiene datos privados', () => {
   it('.gitignore declara cada ruta privada', () => {
     const gi = readFileSync(join(process.cwd(), '.gitignore'), 'utf8')
       .split('\n').map((l) => l.trim());
-    for (const patron of ['staging_canacar/', 'docs/auditoria-*/', 'docs/comercial/']) {
+    for (const patron of ['staging_canacar/', 'docs/auditoria-*/', 'docs/comercial/', 'scripts/cosecha/salida-prospectos/']) {
       expect(gi, `falta ${patron} en .gitignore`).toContain(patron);
     }
   });
