@@ -495,7 +495,7 @@ grant execute on function public.vigia_suprimir_contacto(uuid, uuid) to service_
 -- ── El rol de modelo del Vigía ─────────────────────────────────────────────
 -- `agente_definicion_modelo_rol_dominio` se enumera ENTERO cada vez (0125/0311):
 -- agente_definicion_modelo_rol_dominio.test.ts lo cruza contra ModelRole.
--- Se recrea con la lista COMPLETA más `vigia_cliente`.
+-- Se recrea con la lista COMPLETA más `vigia_cliente` (y `conductor_hito`, de la 0380).
 do $$
 begin
   if exists (
@@ -510,6 +510,6 @@ begin
     check (modelo_rol is null or modelo_rol in (
       'ocr', 'cuadre', 'cuadre_fallback', 'chat', 'back_office', 'analisis', 'extraccion',
       'marketing', 'codigo', 'codigo_escritura', 'qa', 'piloto', 'transcripcion', 'contador',
-      'vigia_cliente'
+      'conductor_hito', 'vigia_cliente'
     ));
 end $$;

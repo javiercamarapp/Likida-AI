@@ -23,6 +23,7 @@ begin
       ('ocr', 'cuadre', 'cuadre_fallback', 'chat', 'back_office', 'analisis',
        'extraccion', 'marketing', 'codigo', 'codigo_escritura', 'qa',
        'piloto', 'transcripcion', 'contador',
+       'conductor_hito', 'vigia_cliente',
        'cartaporte_extractor', 'cartaporte_extractor_escala', 'cartaporte_extractor_escala2'));
 end $$;
 
