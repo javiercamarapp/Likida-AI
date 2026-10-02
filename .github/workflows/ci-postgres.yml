@@ -242,6 +242,9 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0650_orquestador_escalacion.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0620_liquidacion_copia_jefe_reclamo.sql
           PGUSER=postgres bash supabase/tests/0620_liquidacion_copia_jefe_concurrencia.sh localhost 5432 postgres
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0643_liquidacion_aviso_discrepancia.sql
+          PGUSER=postgres bash supabase/tests/0643_liquidacion_aviso_discrepancia_concurrencia.sh localhost 5432 postgres
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0645_liquidacion_formato_sin_formato.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0640_carta_porte_worker.sql
 
       # ── Capa 0: contratos de leases/fencing en Postgres real ───────────

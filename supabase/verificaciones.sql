@@ -18502,3 +18502,87 @@ begin
   raise exception E'GEOCERCAS_REIMPORTACION_0631 segundo-pierde=% otra-flota=% error-no-pisa-huella=% reintento-tras-error=% sin-reintento-a-10min=% ventana-bueno-respeta=% dominio-rebota=% lista-solo-activas-y-vencidas=%   (esperado t / t / t / t / t / t / t / t)',
     segundo, otra, huella, reint, sin10, ventana, dom, lista;
 end $$;
+
+-- ── 275. «No coincide» atómico y aviso de discrepancia con reclamo, reintento y rearme (mig. 0643 + 0644) ──
+-- Dos entregas del mismo botón pasaban el chequeo «ya estaba acusada» a la vez y mandaban el aviso dos veces. La 0644 hace la
+-- transición en UNA sentencia condicional que deja el aviso pendiente en la misma transacción; el aviso se reclama con
+-- arriendo, se cierra solo con el token vigente, suma a quién ya le llegó y al agotar intentos queda fallido hasta que alguien
+-- lo rearma. Lo que solo la base demuestra: la segunda llamada rebota sin duplicar el aviso, el operador o la flota ajena no
+-- acusan, cambiar de opinión abre un ciclo nuevo, el segundo reclamo (arriendo vigente) rebota, el token viejo no cierra,
+-- los aceptados se suman sin repetir, el tope deja fallido, rearmar conserva a quién ya le llegó y un enviado no se rearma.
+-- Esperado: AVISO_DISCREPANCIA_0644 segunda-rebota=t un-solo-aviso=t ajeno-rebota=t ciclo-nuevo=t segundo-reclamo-rebota=t token-viejo-no-cierra=t aceptados-suman=t tope-fallido=t rearmar-conserva=t enviado-no-rearma=t
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; oa2 uuid; liq uuid; liq2 uuid; c int; c2 int; n int; t1 uuid; t2 uuid; t3 uuid; r text; ac text[];
+  segunda boolean := false; uno boolean := false; ajeno boolean := false; nuevo boolean := false; segundo boolean := false;
+  viejo_no boolean := false; suman boolean := false; tope boolean := false; conserva boolean := false; no_rearma boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0644 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0644 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0644A', '5215559990644') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0644B', '5215559990645') returning id into oa2;
+  insert into liquidacion_externa (tenant_id, clave_externa, huella, operador_id, periodo_desde, periodo_hasta, conceptos, total, moneda, pdf_origen, estado)
+    values (ta, 'ZZZ-0644', repeat('e', 64), oa, '2026-09-01', '2026-09-07', '[{"descripcion":"x","tipo":"percepcion","monto":1}]'::jsonb, 1, 'MXN', 'generado', 'enviada')
+    returning id into liq;
+  insert into liquidacion_externa (tenant_id, clave_externa, huella, operador_id, periodo_desde, periodo_hasta, conceptos, total, moneda, pdf_origen, estado)
+    values (ta, 'ZZZ-0644B', repeat('d', 64), oa, '2026-09-01', '2026-09-07', '[{"descripcion":"x","tipo":"percepcion","monto":1}]'::jsonb, 1, 'MXN', 'generado', 'enviada')
+    returning id into liq2;
+
+  c := registrar_acuse_no_coincide(ta, liq, oa);
+  segunda := c = 1 and registrar_acuse_no_coincide(ta, liq, oa) is null;
+  select count(*) into n from liquidacion_aviso_discrepancia where liquidacion_externa_id = liq;
+  uno := n = 1;
+  ajeno := registrar_acuse_no_coincide(ta, liq2, oa2) is null and registrar_acuse_no_coincide(tb, liq2, oa) is null;
+
+  update liquidacion_externa set acuse_tipo = 'recibida' where id = liq;
+  nuevo := registrar_acuse_no_coincide(ta, liq, oa) = 2;
+
+  t1 := reclamar_aviso_discrepancia(ta, liq, 1);
+  segundo := t1 is not null and reclamar_aviso_discrepancia(ta, liq, 1) is null;
+  t2 := reclamar_aviso_discrepancia(ta, liq, 1, clock_timestamp() + interval '10 minutes');
+  viejo_no := t2 is not null and cerrar_aviso_discrepancia(ta, liq, 1, t1, 'enviado') is null;
+  perform cerrar_aviso_discrepancia(ta, liq, 1, t2, 'reintentar', array['525511110001'], 'x', null, 3);
+  t3 := reclamar_aviso_discrepancia(ta, liq, 1, clock_timestamp() + interval '1 hour');
+  perform cerrar_aviso_discrepancia(ta, liq, 1, t3, 'reintentar', array['525511110001', '525511110002'], 'y', null, 3);
+  select telefonos_aceptados into ac from liquidacion_aviso_discrepancia where liquidacion_externa_id = liq and ciclo = 1;
+  suman := ac = array['525511110001', '525511110002'];
+  t3 := reclamar_aviso_discrepancia(ta, liq, 1, clock_timestamp() + interval '2 hours');
+  r := cerrar_aviso_discrepancia(ta, liq, 1, t3, 'reintentar', '{}', 'z', null, 3);
+  tope := r = 'fallido';
+
+  c2 := registrar_acuse_no_coincide(ta, liq2, oa);
+  t1 := reclamar_aviso_discrepancia(ta, liq2, c2);
+  perform cerrar_aviso_discrepancia(ta, liq2, c2, t1, 'reintentar', array['525511110003'], 'q', null, 1);
+  select count(*) into n from liquidacion_aviso_discrepancia where liquidacion_externa_id = liq2 and estado = 'fallido';
+  conserva := n = 1 and rearmar_aviso_discrepancia(ta, liq2) = c2;
+  select count(*) into n from liquidacion_aviso_discrepancia
+   where liquidacion_externa_id = liq2 and estado = 'pendiente' and intentos = 0 and telefonos_aceptados = array['525511110003'];
+  conserva := conserva and n = 1;
+  t1 := reclamar_aviso_discrepancia(ta, liq2, c2);
+  perform cerrar_aviso_discrepancia(ta, liq2, c2, t1, 'enviado', array['525511110003']);
+  no_rearma := rearmar_aviso_discrepancia(ta, liq2) is null;
+
+  raise exception E'AVISO_DISCREPANCIA_0644 segunda-rebota=% un-solo-aviso=% ajeno-rebota=% ciclo-nuevo=% segundo-reclamo-rebota=% token-viejo-no-cierra=% aceptados-suman=% tope-fallido=% rearmar-conserva=% enviado-no-rearma=%   (esperado t / t / t / t / t / t / t / t / t / t)',
+    segunda, uno, ajeno, nuevo, segundo, viejo_no, suman, tope, conserva, no_rearma;
+end $$;
+
+-- ── 276. La fila de formato de la flota puede guardar solo los teléfonos (mig. 0645) ──
+-- Una flota con el PDF genérico no tenía dónde decir quién es su jefe de flota ni quién revisa discrepancias. La 0645 permite
+-- `formato` nulo. Lo que solo la base demuestra: la fila sin formato se guarda, los CHECK de teléfonos (forma y tope de 3) y el
+-- de «objeto» para un formato no nulo (0564) siguen vigentes.
+-- Esperado: FORMATO_SIN_FORMATO_0645 fila-sin-formato=t telefono-corto-rebota=t mas-de-tres-rebota=t formato-no-objeto-rebota=t
+do $$
+declare
+  t uuid; n int; fila boolean := false; corto boolean := false; tres boolean := false; objeto boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0645') returning id into t;
+  insert into liquidacion_formato_flota (tenant_id, formato, copia_telefonos, discrepancia_telefonos)
+    values (t, null, array['525512345678'], array['525512345679']);
+  select count(*) into n from liquidacion_formato_flota where tenant_id = t and formato is null;
+  fila := n = 1;
+  begin update liquidacion_formato_flota set copia_telefonos = array['123'] where tenant_id = t; exception when check_violation then corto := true; end;
+  begin update liquidacion_formato_flota set copia_telefonos = array['525512345678','525512345679','525512345670','525512345671'] where tenant_id = t; exception when check_violation then tres := true; end;
+  begin update liquidacion_formato_flota set formato = '[1,2]'::jsonb where tenant_id = t; exception when check_violation then objeto := true; end;
+  raise exception E'FORMATO_SIN_FORMATO_0645 fila-sin-formato=% telefono-corto-rebota=% mas-de-tres-rebota=% formato-no-objeto-rebota=%   (esperado t / t / t / t)',
+    fila, corto, tres, objeto;
+end $$;
