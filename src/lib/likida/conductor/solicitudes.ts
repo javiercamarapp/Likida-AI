@@ -176,12 +176,18 @@ export function armarSenalVida(v: ViajeContexto, nivel: 1 | 2, motivo: MotivoSen
 }
 
 /** El aviso al jefe de tráfico cuando el chofer no contestó los dos avisos. Con el mismo botón «Ya lo atiendo». */
-export function armarEscalacionSenalVida(v: ViajeContexto, motivo: MotivoSenalVida, minutos: number, ubicacion: string): MensajeSaliente {
+export function armarEscalacionSenalVida(
+  v: ViajeContexto, motivo: MotivoSenalVida, minutos: number, ubicacion: string, avisosEntregados: 0 | 1 | 2 = 2,
+): MensajeSaliente {
   const chofer = (v.operadorNombre ?? 'El chofer').replace(/\s+/g, ' ').trim().slice(0, 60) || 'El chofer';
   const folio = folioDe(v);
-  const porque = motivo === 'gps_obsoleto' ? `el GPS no reporta desde hace ${textoTiempo(minutos)}` : `la unidad lleva ${textoTiempo(minutos)} detenida fuera de un sitio`;
+  const que = motivo === 'gps_obsoleto' ? `el GPS no reporta desde hace ${textoTiempo(minutos)}` : `la unidad lleva ${textoTiempo(minutos)} detenida fuera de un sitio`;
+  // Lo que se le dice al jefe es lo que PASÓ con los avisos al chofer (un rechazo definitivo no es «se le avisó»).
+  const avisos = avisosEntregados === 2 ? 'se le avisó dos veces sin respuesta'
+    : avisosEntregados === 1 ? 'solo se le pudo avisar una vez, sin respuesta' : 'no se le pudo avisar por WhatsApp';
+  const porque = `${que}; ${avisos}`;
   return {
-    texto: `Atención, jefe de tráfico: no hay señal de vida de ${chofer} en el viaje ${folio} (${porque}). Se le avisó dos veces sin respuesta. Última ubicación conocida: ${ubicacion}. Llámale o revisa el tablero.`,
+    texto: `Atención, jefe de tráfico: no hay señal de vida de ${chofer} en el viaje ${folio} (${porque}). Última ubicación conocida: ${ubicacion}. Llámale o revisa el tablero.`,
     botones: [b(PREFIJO_BOTON.jefeAtiendo, v.id, 'Ya lo atiendo')],
     plantilla: { nombre: 'aviso_jefe_senal_vida_v1', ...opcionesDeEnvio('aviso_jefe_senal_vida_v1', { cuerpo: [chofer, folio, porque, ubicacion], idsBotones: v.id }) },
   };

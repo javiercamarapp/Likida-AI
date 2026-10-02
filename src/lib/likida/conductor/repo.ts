@@ -774,13 +774,13 @@ export async function asignarSitioDerivado(
 
 // ── 0636: los episodios de «sin señal de vida» ───────────────────────────────
 
-const COLUMNAS_EPISODIO = 'id, tenant_id, viaje_id, motivo, abierto_en, nivel_enviado, aviso_1_en, aviso_2_en, escalado_en';
+const COLUMNAS_EPISODIO = 'id, tenant_id, viaje_id, motivo, abierto_en, nivel_enviado, aviso_1_en, aviso_2_en, escalado_en, ultimo_error';
 
 export function filaAEpisodio(f: Fila): EpisodioFila {
   return {
     id: String(f.id), tenantId: String(f.tenant_id), viajeId: String(f.viaje_id), motivo: f.motivo === 'gps_detenido' ? 'gps_detenido' : 'gps_obsoleto',
     abiertoEn: String(f.abierto_en), nivelEnviado: ([0, 1, 2, 3].includes(Number(f.nivel_enviado)) ? Number(f.nivel_enviado) : 0) as EpisodioFila['nivelEnviado'],
-    aviso1En: s(f.aviso_1_en), aviso2En: s(f.aviso_2_en), escaladoEn: s(f.escalado_en),
+    aviso1En: s(f.aviso_1_en), aviso2En: s(f.aviso_2_en), escaladoEn: s(f.escalado_en), ultimoError: s(f.ultimo_error),
   };
 }
 

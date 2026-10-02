@@ -150,9 +150,17 @@ describe('sin señal de vida (P2): el «¿sigues bien?» y el aviso al jefe', ()
     const m = armarEscalacionSenalVida(viaje, 'gps_obsoleto', 80, 'hace 70 min: https://maps.google.com/?q=20.70000,-103.40000');
     coinciden(m);
     expect(m.botones.map((b) => b.id)).toEqual([`jefe_atiendo:${V}`]);
-    expect(m.texto).toContain('Se le avisó dos veces sin respuesta');
+    expect(m.texto).toContain('se le avisó dos veces sin respuesta');
     expect(m.texto).toContain('maps.google.com');
     expect(armarEscalacionSenalVida(viaje, 'gps_detenido', 90, 'x').texto).toContain('detenida fuera de un sitio');
+  });
+
+  it('el aviso al jefe cuenta lo que pasó con los avisos al chofer (rechazados no son «se le avisó»)', () => {
+    expect(armarEscalacionSenalVida(viaje, 'gps_obsoleto', 80, 'x', 1).texto).toContain('solo se le pudo avisar una vez, sin respuesta');
+    const cero = armarEscalacionSenalVida(viaje, 'gps_obsoleto', 80, 'x', 0);
+    expect(cero.texto).toContain('no se le pudo avisar por WhatsApp');
+    expect(cero.texto).not.toContain('avisó dos veces');
+    coinciden(cero);
   });
 
   it('las dos plantillas nuevas están en el catálogo, declaran su llamador y el catálogo sigue válido', () => {
