@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- solo pruebas: leen fixtures del propio directorio por URL relativa a este archivo, nunca por entrada de usuario. */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { leerGeocercasCsv, leerPosicionesCsv, partirCsv } from './csv';
@@ -21,6 +22,13 @@ describe('hora local ⇄ UTC con zona configurable', () => {
   it('una fecha CON zona explícita se respeta y se pasa a la hora local configurada', () => {
     expect(normalizarFechaLocal('2026-10-20T15:00:00Z')).toEqual({ ok: '2026-10-20 09:00:00' });
     expect(normalizarFechaLocal('2026-10-20 09:00:00-06:00')).toEqual({ ok: '2026-10-20 09:00:00' });
+    // lo que escribe Postgres para timestamptz: desfase sin minutos (+00, -06) o compacto (-0600)
+    expect(normalizarFechaLocal('2026-10-20 15:00:00+00')).toEqual({ ok: '2026-10-20 09:00:00' });
+    expect(normalizarFechaLocal('2026-10-20 09:00:00.123456-06')).toEqual({ ok: '2026-10-20 09:00:00' });
+    expect(normalizarFechaLocal('2026-10-20T15:00:00+0000')).toEqual({ ok: '2026-10-20 09:00:00' });
+  });
+  it('descarta la fracción de segundo de un timestamp sin zona', () => {
+    expect(normalizarFechaLocal('2026-10-20 09:00:00.250')).toEqual({ ok: '2026-10-20 09:00:00' });
   });
   it('rechaza lo ilegible: mm/dd no se voltea, fechas imposibles, texto', () => {
     expect(normalizarFechaLocal('10/20/2026 10:00')).toHaveProperty('error');

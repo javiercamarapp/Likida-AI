@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-unsafe-regex -- los cuantificadores llevan tope y se aplican a valores de una sola celda (≤ 80 caracteres tras acotar); lectura.test.ts mide que una línea adversaria de 200,000 caracteres no explota. */
 import { TZ_MX } from '@/lib/formato';
 
 // ── Hora local sin zona ⇄ UTC, con la zona configurable por flota ───────────
@@ -53,12 +54,15 @@ export function normalizarFechaLocal(v: string, zona: string = ZONA_POR_OMISION)
   const t = v.trim();
   if (t === '') return { error: 'fecha_hora vacía' };
   if (CON_ZONA.test(t) && /\d{2}:\d{2}/.test(t)) {
-    const ms = Date.parse(t.includes(' ') && !t.includes('T') ? t.replace(' ', 'T') : t);
+    // Postgres escribe el desfase como «+00» o «-06» (sin minutos) y V8 solo acepta «±hh:mm»: se completa.
+    const iso = (t.includes(' ') && !t.includes('T') ? t.replace(' ', 'T') : t).replace(/([+-]\d{2})(\d{2})$/, '$1:$2').replace(/([+-]\d{2})$/, '$1:00');
+    const ms = Date.parse(iso);
     if (!Number.isFinite(ms)) return { error: 'fecha_hora con zona ilegible' };
     return { ok: utcALocal(new Date(ms), zona) };
   }
   let a: number, m: number, d: number, h: number, mi: number, s: number;
-  let r = FECHA_LOCAL.exec(t);
+  // `timestamp` de Postgres trae fracción de segundo cuando la hay: se descarta (la serie es de segundos).
+  let r = FECHA_LOCAL.exec(t.replace(/(\d{2}:\d{2}:\d{2})\.\d+$/, '$1'));
   if (r) { [a, m, d, h, mi, s] = [+r[1], +r[2], +r[3], +r[4], +r[5], +(r[6] ?? 0)]; }
   else {
     r = FECHA_DMY.exec(t);
