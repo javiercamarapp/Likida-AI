@@ -1,16 +1,19 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { numero } from '@/lib/formato';
 import { leerRespuesta, PREGUNTAS_OPERACION, textoDeBloques, type BloqueVista } from './respuesta';
+import { Dona, Serie } from './graficas';
 
 /**
  * La caja de preguntas del asistente DENTRO de la pantalla de viajes en vivo: el jefe de tráfico le pregunta a la
  * operación sin pasar por la pestaña de dinero. Habla con `/api/dashboard/chat` (el MISMO asistente, con las
  * herramientas que su rol ve): aquí no hay lógica de datos, solo escribir, mandar y pintar bloques simples.
- * Lo delicado el asistente lo deriva a una persona (aparece abajo, en «Tareas del asistente», tras recargar).
+ * Lo delicado el asistente lo deriva a una persona (aparece abajo, en «Tareas del asistente»: la caja pide el tablero de nuevo al terminar cada respuesta).
  */
 export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | null }) {
+  const router = useRouter();
   const [texto, setTexto] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [historial, setHistorial] = useState<Array<{ rol: 'usuario' | 'asistente'; texto: string }>>([]);
@@ -32,6 +35,9 @@ export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | nul
         setBloques(r.bloques);
         setHistorial([...mensajes, { rol: 'asistente' as const, texto: textoDeBloques(r.bloques) }].slice(-12));
         setTexto('');
+        // Si el asistente dejó una tarea para una persona, ya está en la base: se pide el tablero de nuevo para que aparezca en
+        // «Tareas del asistente» sin recargar a mano. `refresh` conserva lo que está en pantalla (la respuesta y el historial).
+        router.refresh();
       } else setError(r.error);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo consultar al asistente.');
@@ -62,6 +68,8 @@ export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | nul
             ? <p key={i}>{b.texto}</p>
             : b.tipo === 'cifra'
               ? <div key={i} className="card px-3 py-2 inline-block"><div className="cifra-mono text-[20px] font-medium">{numero(b.valor)}</div>{b.nota && <div className="text-[11px]" style={{ color: 'var(--faint)' }}>{b.nota}</div>}</div>
+              : b.tipo === 'dona' ? <Dona key={i} b={b} />
+              : b.tipo === 'serie' ? <Serie key={i} b={b} />
               : (
                 <div key={i} className="card p-1.5 overflow-x-auto">
                   <table className="w-full border-collapse text-[12.5px]"><tbody>

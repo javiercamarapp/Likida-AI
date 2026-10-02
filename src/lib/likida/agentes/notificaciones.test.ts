@@ -38,11 +38,22 @@ function entrada(sobre: Partial<EntradaDecision> = {}): EntradaDecision {
 // ── EL CATÁLOGO ────────────────────────────────────────────────────────────
 
 describe('el catálogo declara agentes reales, no una lista suelta', () => {
-  it('son los siete agentes y sus llaves no se repiten', () => {
-    // Siete desde las Fases B-C de Carta Porte (25-ago-2026).
-    expect(AGENTES_NOTIFICABLES).toHaveLength(7);
+  it('son los ocho agentes y sus llaves no se repiten', () => {
+    // Siete desde las Fases B-C de Carta Porte (25-ago-2026); ocho con el asistente del panel (mig. 0651).
+    expect(AGENTES_NOTIFICABLES).toHaveLength(8);
     const ids = AGENTES_NOTIFICABLES.map((a) => a.id);
-    expect(new Set(ids).size).toBe(7);
+    expect(new Set(ids).size).toBe(8);
+  });
+
+  it('el asistente del panel declara solo `escalado`, tiene emisor y nace APAGADO', () => {
+    const orq = agentePorId('orquestador')!;
+    expect(orq.eventos).toEqual(['escalado']);
+    expect(PARES_CON_EMISOR).toContain('orquestador:escalado');
+    // El default sin fila solo enciende `corrida_fallida`, que este agente no declara: validado, no queda ningún evento.
+    const v = validarConfigNotificaciones(orq, CONFIG_NOTIF_DEFAULT);
+    expect('ok' in v && v.ok.eventos).toEqual([]);
+    // Sus destinatarios son quienes abren la pantalla de viajes en vivo: el dueño y el encargado, no el contador.
+    expect(rolesQuePueden(orq)).toEqual(['flota_admin', 'encargado']);
   });
 
   it('la ruta de cada agente es una que el panel sabe gatear', () => {
@@ -63,15 +74,16 @@ describe('el catálogo declara agentes reales, no una lista suelta', () => {
     }
   });
 
-  it('los seis pueden fallar una corrida — es el único evento universal', () => {
-    for (const a of AGENTES_NOTIFICABLES) {
+  it('los agentes con corridas pueden fallar una corrida — es el único evento universal', () => {
+    // El asistente del panel no corre «corridas» propias (barre la salud de los demás y deja tareas): solo `escalado`.
+    for (const a of AGENTES_NOTIFICABLES.filter((x) => x.id !== 'orquestador')) {
       expect(a.eventos, a.id).toContain('corrida_fallida');
     }
   });
 
-  it('`escalado` solo lo declara quien de verdad escala (Conductores)', () => {
+  it('`escalado` solo lo declara quien de verdad escala (Conductores y el asistente del panel)', () => {
     const conEscalado = AGENTES_NOTIFICABLES.filter((a) => a.eventos.includes('escalado'));
-    expect(conEscalado.map((a) => a.id)).toEqual(['conductores']);
+    expect(conEscalado.map((a) => a.id)).toEqual(['conductores', 'orquestador']);
   });
 
   it('ningún evento del catálogo es un "todo salió bien"', () => {

@@ -53,6 +53,8 @@ const TOOLS_LECTURA = [
   // El orquestador (solo lectura; lo que cada rol ve lo decide `herramientasDelRol`).
   'tablero_viajes', 'detalle_viaje', 'estado_vigia', 'estado_buzon', 'estado_cobranza',
   'estado_autofactura', 'salud_agentes',
+  // P6: convenio e instrucciones de un viaje, entrega de la liquidación externa, reclamación de peajes y jornada.
+  'convenio_viaje', 'estado_liquidacion_externa', 'reclamacion_peajes', 'estado_jornada',
 ];
 
 /** La única herramienta del chat que ESCRIBE (abre una tarea para una persona): jamás se cachea entre rondas. */
