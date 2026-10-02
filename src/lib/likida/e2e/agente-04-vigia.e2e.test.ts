@@ -63,6 +63,10 @@ describe('fallo', () => {
     const b = escenario(); b.repo.estatus.falla = true;
     const rb = armar(b.repo);
     expect(await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), rb.deps)).toBe('atendido');
+    // La escalación se verifica por su evento propio (el aviso normal de aprobación también llega al gerente).
+    expect(b.repo.eventosDe('sin_dato')).toHaveLength(1);
+    expect(b.repo.eventosDe('sin_dato')[0].detalle).toMatchObject({ causa: 'fallo_interno' });
+    expect(b.repo.salientes()).toEqual([]);                  // no se inventó ningún borrador sobre una ubicación
     expect(rb.alGerente.length).toBeGreaterThan(0);
   });
 
@@ -213,9 +217,19 @@ describe('otro tenant / otro cliente', () => {
 
   it('el agente apagado en una flota no escala nada ni frena a otra flota habilitada', async () => {
     const repo = new RepoEnMemoria();
-    repo.agregarContacto({ tenantId: T1, clienteId: CLIENTE_A, telefono: '525511110001' }); // sin config = apagado
-    expect(await atenderMensajeCliente(msg('hola'), armar(repo).deps)).toBe('atendido');
-    expect(repo.mensajes.size).toBe(0);
+    repo.agregarContacto({ tenantId: T1, clienteId: CLIENTE_A, telefono: '525511110001' }); // flota A: sin config = apagado
+    repo.habilitar(T2);                                                                      // flota B: habilitada
+    repo.agregarContacto({ tenantId: T2, clienteId: CLIENTE_B, telefono: '525511110002' });
+    repo.destinatario(T2, 1, { userId: 'u-gerente-b', telefono: '525577777777' });
+    repo.estatus.agregar(T2, CLIENTE_B, estatus({ viajeId: VIAJE_AJENO, folio: 'F-B-7' }));
+    const { deps } = armar(repo);
+    expect(await atenderMensajeCliente(msg('hola'), deps)).toBe('atendido');
+    expect([...repo.mensajes.values()].filter((m) => m.tenantId === T1)).toHaveLength(0);   // A apagada: nada se guarda
+    expect(await atenderMensajeCliente(msg('¿Dónde va mi viaje?', { from: '525511110002' }), deps)).toBe('atendido');
+    const deB = repo.salientes().filter((m) => m.tenantId === T2);
+    expect(deB).toHaveLength(1);                                                            // B sigue atendida
+    expect(deB[0].texto).toMatch(/F-B-7/);
+    expect(repo.eventosDe('escalada').filter((e) => e.tenantId === T1)).toHaveLength(0);
   });
 });
 
