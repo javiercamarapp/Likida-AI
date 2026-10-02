@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AREA_POR_HERRAMIENTA, areaDeHerramienta, herramientasDelRol, rolPuedeConversar, rolPuedeUsar } from './permisos';
+import { AREA_POR_HERRAMIENTA, areaDeHerramienta, herramientasDelRol, rolPuedeConversar, rolPuedeLeerTarea, rolPuedeUsar, tareaEsDeDinero } from './permisos';
 
 const TODAS = Object.keys(AREA_POR_HERRAMIENTA);
 
@@ -40,5 +40,26 @@ describe('permisos del orquestador por rol', () => {
 
   it('puede conversar quien ve operación o dinero', () => {
     for (const r of ['encargado', 'contador', 'flota_admin', 'superadmin']) expect(rolPuedeConversar(r)).toBe(true);
+  });
+});
+
+describe('quién lee una tarea escalada (ronda 04, adversarial)', () => {
+  const dinero = { destino: 'contador', motivo: 'diferencia_liquidacion' };
+  const duda = { destino: 'mesa_de_control', motivo: 'duda_fiscal' };
+  const operativa = { destino: 'mesa_de_control', motivo: 'falla_de_agente' };
+  it('una tarea de dinero no la lee el encargado; sí el contador y el dueño', () => {
+    expect(tareaEsDeDinero(dinero)).toBe(true);
+    expect(tareaEsDeDinero(duda)).toBe(true);
+    expect(tareaEsDeDinero(operativa)).toBe(false);
+    expect(rolPuedeLeerTarea('encargado', dinero)).toBe(false);
+    expect(rolPuedeLeerTarea('encargado', duda)).toBe(false);
+    expect(rolPuedeLeerTarea('contador', dinero)).toBe(true);
+    expect(rolPuedeLeerTarea('flota_admin', dinero)).toBe(true);
+  });
+  it('una operativa la lee quien ve operación; el contador no; un rol desconocido nada', () => {
+    expect(rolPuedeLeerTarea('encargado', operativa)).toBe(true);
+    expect(rolPuedeLeerTarea('contador', operativa)).toBe(false);
+    expect(rolPuedeLeerTarea('operador', operativa)).toBe(false);
+    expect(rolPuedeLeerTarea(undefined, operativa)).toBe(false);
   });
 });

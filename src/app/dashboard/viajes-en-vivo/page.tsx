@@ -5,6 +5,7 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { fuentes } from '@/lib/likida/orquestador/fuentes';
 import '@/lib/likida/orquestador/fuentes_reales';
+import { rolPuedeLeerTarea } from '@/lib/likida/orquestador/permisos';
 import { limpiarResumen } from '@/lib/likida/orquestador/escalamiento';
 import { armarTableroViajes } from '@/lib/likida/orquestador/tablero_viajes';
 import { logger } from '@/lib/logger';
@@ -39,7 +40,8 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
   const clienteId = sp.cliente && UUID.test(sp.cliente) && entrada.clientes.some((c) => c.id === sp.cliente) ? sp.cliente : '';
   const soloExcepciones = sp.vista === 'excepciones';
   const tablero = armarTableroViajes({ ...entrada, filtros: { terminalId: terminalId || null, clienteId: clienteId || null, soloExcepciones } });
-  const tareas = await fuentes().escalacionesAbiertas(tenantId, 20).catch((e) => {
+  // Se pide de más y se filtra por rol: una tarea de dinero no la lee quien no ve dinero (y el recorte a 20 va DESPUÉS).
+  const tareas = await fuentes().escalacionesAbiertas(tenantId, 60).then((l) => l && l.filter((t) => rolPuedeLeerTarea(rol, t)).slice(0, 20)).catch((e) => {
     logger.warn('viajes_en_vivo.tareas_sin_leer', { tenantId, err: e instanceof Error ? e.message : String(e) });
     return null;
   });
