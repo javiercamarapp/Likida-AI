@@ -156,7 +156,15 @@ import { join, relative, sep } from 'node:path';
 //     `api/correo/entrante/route.ts`, que verifica la firma Svix antes de leer el cuerpo.
 //
 // Conteo de la integración de la ola 2: 78 + 9 (Conductor) + 1 (Vigía) + 1 (Carta Porte) = 89.
-const RUTAS_APP_REVISADAS = 89;
+//
+// 89 → 90 (loop punta a punta, ola 3, Agente 9 «Buzón de facturas», 2-oct-2026): una ruta,
+//   · `api/cron/buzon-entrega/route.ts` — puertaCron (CRON_SECRET, comparación en tiempo
+//     constante) y palanca `global` (falla cerrado si no se puede leer); latido en todo camino de
+//     salida. Arma el lote del día y envía los vencidos de las flotas que ENCENDIERON la entrega
+//     (`buzon_entrega_config.activo`, apagada por omisión); cada acción usa el tenant del propio
+//     lote. No acepta cuerpo ni parámetros. La confirmación (entregada/rebotada) NO suma ruta:
+//     comparte el webhook firmado `api/correo/eventos/route.ts` (firma Svix antes de leer).
+const RUTAS_APP_REVISADAS = 90;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
