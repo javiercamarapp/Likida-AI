@@ -5,8 +5,8 @@ import { createHash } from 'node:crypto';
 // ═══════════════════════════════════════════════════════════════════════════
 // OLA 9 · CSP CON NONCE (auditoría ola 1 #5). Las rutas con sesión dejan de
 // llevar `script-src 'unsafe-inline'`: nonce por petición + 'strict-dynamic' +
-// el hash del único script inline propio (el del tema). Las públicas, estáticas,
-// no cambian. Estas pruebas fijan el contrato Y las condiciones de las que
+// el hash del único script inline propio (el del tema). Ola 9b: las públicas
+// también (layout raíz con connection()). Estas pruebas fijan el contrato Y las condiciones de las que
 // depende (rutas dinámicas, ningún otro <script> inline), porque un nonce en una
 // página estática o un script inline nuevo sin hash rompería la pantalla en
 // producción sin que ninguna prueba de render lo notara.
@@ -102,24 +102,46 @@ describe('proxy · CSP con nonce en las rutas con sesión', () => {
   });
 });
 
-describe('proxy · las rutas públicas NO cambian (son estáticas: no pueden llevar nonce por petición)', () => {
-  it.each(['/', '/login', '/blog/algo', '/demo', '/aviso/x'])('%s conserva unsafe-inline, sin nonce y sin tocar la petición', async (ruta) => {
+describe('proxy · Ola 9b: las rutas públicas TAMBIÉN llevan nonce (decisión de Javier, 2-oct-2026)', () => {
+  it.each(['/', '/login', '/terminos', '/privacidad', '/blog/algo', '/demo', '/aviso/x', '/sitemap.xml'])('%s: nonce + strict-dynamic, sin unsafe-inline, nonce también en la petición', async (ruta) => {
     const res = await pedir(ruta);
     const csp = res.headers.get('Content-Security-Policy');
-    expect(scriptSrc(csp)).toBe("script-src 'self' 'unsafe-inline'");
-    expect(nonceDe(csp)).toBeUndefined();
-    expect(res.headers.get('x-middleware-request-content-security-policy')).toBeNull();
-    expect(res.headers.get('x-middleware-request-x-nonce')).toBeNull();
+    const src = scriptSrc(csp);
+    const nonce = nonceDe(csp);
+    expect(nonce).toBeTruthy();
+    expect(src).toContain("'strict-dynamic'");
+    expect(src).not.toContain("'unsafe-inline'");
+    expect(res.headers.get('x-middleware-request-content-security-policy')).toBe(csp);
+    expect(res.headers.get('x-middleware-request-x-nonce')).toBe(nonce);
+  });
+
+  it('las públicas no pasan por el gate de sesión: no hay Cache-Control no-store ni redirect', async () => {
+    usuario = null;
+    const res = await pedir('/login');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBeNull();
+  });
+
+  it('el layout raíz llama connection() (sin eso las públicas serían estáticas y el nonce no llegaría a sus scripts)', () => {
+    const layout = readFileSync('src/app/layout.tsx', 'utf8');
+    expect(layout).toContain("from 'next/server'");
+    expect(layout).toMatch(/await connection\(\)/);
+    expect(layout).toMatch(/export default async function RootLayout/);
   });
 });
 
 describe('proxy · palanca de reversa LIKIDA_CSP_NONCE=0', () => {
-  it('devuelve las rutas con sesión a la política anterior, sin tocar la petición', async () => {
+  it('devuelve las rutas con sesión Y las públicas a la política anterior, sin tocar la petición', async () => {
     vi.stubEnv('LIKIDA_CSP_NONCE', '0');
     vi.resetModules();
     const res = await pedir('/dashboard');
     expect(scriptSrc(res.headers.get('Content-Security-Policy'))).toBe("script-src 'self' 'unsafe-inline'");
     expect(res.headers.get('x-middleware-request-content-security-policy')).toBeNull();
+    for (const ruta of ['/', '/login', '/terminos']) {
+      const pub = await pedir(ruta);
+      expect(scriptSrc(pub.headers.get('Content-Security-Policy'))).toBe("script-src 'self' 'unsafe-inline'");
+      expect(pub.headers.get('x-middleware-request-content-security-policy')).toBeNull();
+    }
   });
 
   it('cualquier otro valor (incluido vacío) deja el nonce encendido: la reversa es explícita', async () => {
