@@ -395,6 +395,32 @@ describe('conversacionesEnEspera / expirarCiclosInactivos: la cola no se tapa', 
   });
 });
 
+describe('respuestas rápidas (0647)', () => {
+  it('lee SOLO las aprobadas de esa flota, hasta 200, y las mapea', async () => {
+    respuesta = () => ({ data: [{ id: 'r1', tema: 'tarifa', pregunta: '¿Cuánto cuesta?', texto: 'Te cotizamos hoy.', usos: 3 }], error: null });
+    const r = await crearRepoVigia().respuestasRapidas(T1);
+    expect(r).toEqual([{ id: 'r1', tema: 'tarifa', pregunta: '¿Cuánto cuesta?', texto: 'Te cotizamos hoy.', usos: 3 }]);
+    const q = llamadas.find((l) => l.tabla === 'vigia_respuesta_rapida')!;
+    expect(tiene(q, 'eq', 'tenant_id', T1)).toBe(true);
+    expect(tiene(q, 'eq', 'estado', 'aprobada')).toBe(true);
+  });
+
+  it('base sin la 0647 (tabla o función inexistente) o con un error de lectura: sin respuestas, sin lanzar', async () => {
+    for (const code of ['42P01', 'PGRST205', '42883', 'PGRST202', 'XX000']) {
+      respuesta = () => ({ data: null, error: { message: 'x', code } });
+      expect(await crearRepoVigia().respuestasRapidas(T1)).toEqual([]);
+      await expect(crearRepoVigia().usarRespuestaRapida(T1, 'r1')).resolves.toBeUndefined();
+    }
+  });
+
+  it('cuenta el uso por la función de la base (atómica) con el tenant', async () => {
+    respuesta = () => ({ data: true, error: null });
+    await crearRepoVigia().usarRespuestaRapida(T1, 'r1');
+    const l = llamadas.find((x) => x.tabla === 'rpc:vigia_respuesta_rapida_usar')!;
+    expect(l.valores).toEqual({ p_tenant: T1, p_id: 'r1' });
+  });
+});
+
 describe('validaciones de las acciones de la flota', () => {
   const ok = { modoAprobacion: 'siempre', autoenviarMinAprobaciones: 5, slaRespuestaMin: 30, escalarNivel2Min: 60, retencionDias: 180, habilitado: true, avisoPrivacidadUrl: '' };
 

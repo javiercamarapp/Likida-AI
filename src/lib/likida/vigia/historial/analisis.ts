@@ -44,11 +44,11 @@ const PARO = new Set([
   'ya', 'les', 'le', 'lo', 'nos', 'si', 'no', 'pero', 'como', 'esta', 'estan', 'este', 'esto', 'esa', 'ese',
 ]);
 
-function fichas(texto: string): string[] {
+export function fichas(texto: string): string[] {
   return normalizar(texto).split(' ').filter((t) => t.length > 1 && !PARO.has(t));
 }
 
-function jaccard(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
+export function jaccard(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
   if (a.size === 0 || b.size === 0) return 0;
   let comunes = 0;
   for (const x of a) if (b.has(x)) comunes += 1;

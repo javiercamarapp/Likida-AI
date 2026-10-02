@@ -40,6 +40,11 @@ export interface EntradaRedaccion {
   /** Primer mensaje que se le manda a este contacto: lleva el aviso de privacidad y cómo darse de baja. */
   primerContacto: boolean;
   avisoPrivacidadUrl: string | null;
+  /**
+   * La respuesta rápida APROBADA por el gerente que se parece al mensaje (0647). Solo se usa cuando el Vigía no entendió el
+   * mensaje («otro»); en cualquier otra intención se ignora: un dato del viaje se contesta con el dato de ese viaje.
+   */
+  respuestaRapida?: { id: string; tema: string; texto: string; similitud: number } | null;
 }
 
 export interface Borrador {
@@ -55,7 +60,7 @@ export interface Borrador {
   requiereHumano: boolean;
   /** Los datos exactos con los que se escribió (para la bitácora y la auditoría). */
   respaldo: Record<string, unknown>;
-  origen: 'plantilla' | 'modelo';
+  origen: 'plantilla' | 'modelo' | 'respuesta_rapida';
 }
 
 export const MAX_RESPUESTA = 700;
@@ -220,6 +225,7 @@ export function redactarBorrador(e: EntradaRedaccion): Borrador {
   let cuerpo: string;
   let riesgo: Riesgo = 'bajo';
   let requiereHumano = false;
+  let origen: Borrador['origen'] = 'plantilla';
 
   const pie = e.primerContacto ? pieDePrimerContacto(e.nombreFlota, e.avisoPrivacidadUrl) : '';
 
@@ -230,6 +236,15 @@ export function redactarBorrador(e: EntradaRedaccion): Borrador {
     riesgo = 'alto'; requiereHumano = true;
   } else if (intencion === 'saludo') {
     cuerpo = `${saludo}, soy el asistente de ${e.nombreFlota}. Puedo decirte dónde va tu viaje, qué documentos tiene pendientes o el estado de tu factura. ¿Qué necesitas?`;
+  } else if (intencion === 'otro' && e.respuestaRapida && !e.clasificacion.senales.includes('inyeccion') && !e.clasificacion.senales.includes('no_texto')) {
+    // Lo que el Vigía no entendió, pero el gerente ya aprobó una respuesta para una pregunta que se le parece: va ese texto,
+    // tal cual, y SIEMPRE a aprobación (riesgo medio, nunca autoenviable): el gerente ve si de verdad contesta lo que se preguntó.
+    cuerpo = `${saludo}. ${e.respuestaRapida.texto}`;
+    riesgo = 'medio';
+    respaldo.respuestaRapidaId = e.respuestaRapida.id;
+    respaldo.respuestaRapidaTema = e.respuestaRapida.tema;
+    respaldo.similitud = e.respuestaRapida.similitud;
+    origen = 'respuesta_rapida';
   } else if (!DATO.includes(intencion)) {
     // «otro»: no se entendió. Nada que consultar; una persona decide.
     cuerpo = `${saludo}, gracias por escribir. No logré entender tu mensaje con certeza, así que lo paso a tu ejecutivo en ${e.nombreFlota} para que te responda.`;
@@ -273,7 +288,7 @@ export function redactarBorrador(e: EntradaRedaccion): Borrador {
 
   let texto = `${cuerpo}${pie}`;
   if (texto.length > MAX_RESPUESTA + pie.length) texto = `${texto.slice(0, MAX_RESPUESTA + pie.length - 1)}…`;
-  return { texto, faltantes, tareas, riesgo, adjuntos, requiereHumano, respaldo, origen: 'plantilla' };
+  return { texto, faltantes, tareas, riesgo, adjuntos, requiereHumano, respaldo, origen };
 }
 
 // ── PULIR CON MODELO: opcional, y guardado ───────────────────────────────────
@@ -320,7 +335,7 @@ export async function pulirBorrador(
   borrador: Borrador, mensajeCliente: string, folio: string | null, modelo: PuertoPulir | null | undefined, tenantId: string = '',
 ): Promise<{ borrador: Borrador; motivoDescartado: string | null }> {
   // Un borrador que pide humano, trae faltantes o responde una queja no se «embellece»: se manda como está.
-  if (!modelo || !tenantId || borrador.requiereHumano || borrador.riesgo === 'alto') return { borrador, motivoDescartado: null };
+  if (!modelo || !tenantId || borrador.requiereHumano || borrador.riesgo === 'alto' || borrador.origen === 'respuesta_rapida') return { borrador, motivoDescartado: null };
   let pulido: string | null;
   try {
     pulido = await modelo.pulir(borrador.texto, { tenantId });

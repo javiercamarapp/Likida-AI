@@ -343,3 +343,121 @@ describe('E2E · duplicado, fallo y otro tenant', () => {
     expect(repo.estatus.llamadas.every((l) => l.tenantId === T2 && l.clienteId === 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')).toBe(true);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RONDA 08 · P5 «vigia-cierre»: el ciclo completo con las piezas REALES (servicio, barrido, escalera, importador del chat, análisis
+// del histórico, acciones de la pantalla, redactor, archivos del reporte). Lo único doble es la base en memoria y Meta.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('E2E · P5 · alerta de 10 min con la cola llena de hilos agotados', () => {
+  it('120 hilos que ya llegaron al nivel 2 NO tapan al cliente crítico: a los 11 min el gerente recibe la alerta, UNA vez; responder la apaga', async () => {
+    const { repo } = escenario({ slaRespuestaMin: 30, escalarNivel2Min: 60 });
+    repo.criticos.add(`${T1}:${CLIENTE_A}`);                         // grupo crítico: plazo de 10 min
+    repo.estatus.agregar(T1, CLIENTE_A, estatusConConductor({ llegada_carga: hace(75) }));
+    // 120 hilos de OTRO cliente de la misma flota, muy viejos y con la escalera completa (el dueño ya fue avisado).
+    for (let i = 0; i < 120; i++) {
+      const c = repo.agregarContacto({ tenantId: T1, clienteId: CLIENTE_A2, telefono: `52551555${String(i).padStart(4, '0')}` });
+      repo.conversaciones.set(`viejo-${i}`, {
+        id: `viejo-${i}`, tenantId: T1, contactoId: c.id, clienteId: CLIENTE_A2, viajeId: null, estado: 'activa', control: 'agente', tomadaPor: null,
+        ultimaEntradaEn: hace(5000), ultimaSalidaEn: null, sinRespuestaDesde: hace(5000 + i), entradasSinRespuesta: 1, molestiaNivel: 0, molestiaMotivos: [],
+        molestiaEn: null, escalamientoNivel: 2, escaladoEn: hace(4000), atendidaEn: null,
+      });
+    }
+
+    // El cliente crítico pregunta por su viaje: el Vigía redacta con el dato real y se lo pone al gerente para aprobar.
+    await atenderMensajeCliente(entrante('¿Dónde va mi viaje F-1042?', 'p5-a'), { repo, ahora: () => AHORA });
+    const [borrador] = repo.salientes();
+    expect(borrador.estado).toBe('pendiente_aprobacion');
+    expect(enviarBotones.mock.calls.filter((c) => c[0] === GERENTE_TEL)).toHaveLength(1);   // el aviso de aprobación
+    enviarBotones.mockClear(); enviarTexto.mockClear(); sendTemplate.mockClear();
+
+    // Pasan 5 min: todavía dentro del plazo. Nadie avisa.
+    const en5 = { repo, ahora: () => new Date(AHORA.getTime() + 5 * 60_000) };
+    expect(await barridoVigia(en5, { limite: 100 })).toMatchObject({ escaladas: 0 });
+    expect(enviarBotones).not.toHaveBeenCalled();
+
+    // A los 11 min nadie ha contestado: alerta al gerente responsable (nivel 1), aun con 120 hilos viejos en la base.
+    const en11 = { repo, ahora: () => new Date(AHORA.getTime() + 11 * 60_000) };
+    const r = await barridoVigia(en11, { limite: 100 });
+    expect(r.escaladas).toBe(1);
+    const alertas = enviarBotones.mock.calls.filter((c) => c[0] === GERENTE_TEL);
+    expect(alertas).toHaveLength(1);
+    expect(JSON.stringify(alertas[0])).toContain('11 minutos sin respuesta');
+    expect(repo.conversaciones.get([...repo.conversaciones.keys()].find((k) => !k.startsWith('viejo-'))!)?.escalamientoNivel).toBe(1);
+    // Los 120 hilos agotados no avisaron nada.
+    expect(enviarBotones.mock.calls.every((c) => c[0] === GERENTE_TEL)).toBe(true);
+
+    // Otra pasada (el cron corre cada minuto): el sello impide repetir la alerta.
+    enviarBotones.mockClear();
+    await barridoVigia({ repo, ahora: () => new Date(AHORA.getTime() + 12 * 60_000) }, { limite: 100 });
+    expect(enviarBotones).not.toHaveBeenCalled();
+
+    // El gerente aprueba con un toque: el cliente recibe la respuesta y la alerta ya no vuelve.
+    await atenderDecisionVigia(GERENTE, `vig_ok:${borrador.id}`, en11);
+    expect(enviarTexto).toHaveBeenCalled();
+    enviarBotones.mockClear();
+    expect(await barridoVigia({ repo, ahora: () => new Date(AHORA.getTime() + 200 * 60_000) }, { limite: 100 })).toMatchObject({ escaladas: 0 });
+    expect(enviarBotones).not.toHaveBeenCalled();
+  });
+});
+
+describe('E2E · P5 · del histórico exportado a una respuesta rápida aprobada y usada, y al reporte en Excel', () => {
+  const CHAT = [
+    '[01/09/2026, 10:00:00] Cliente Uno: ¿A qué hora puedo agendar mi cita de descarga?',
+    '[01/09/2026, 10:06:00] Ana Servicio: Las citas de descarga se agendan de 8 a 18 h con el andén.',
+    '[03/09/2026, 11:00:00] Cliente Dos: a qué hora puedo agendar la cita de descarga?',
+    '[03/09/2026, 11:04:00] Ana Servicio: Las citas de descarga se agendan de 8 a 18 h con el andén.',
+  ].join('\n');
+
+  it('el chat exportado → FAQ con la respuesta del equipo → el gerente la aprueba (con permiso) → un cliente pregunta algo parecido → borrador con ese texto → aprobación → sale', async () => {
+    const { leerExportWhatsapp } = await import('./historial/export_whatsapp');
+    const { analizarHistorial } = await import('./historial/analisis');
+    const { aprobarRespuestaRapidaPanel } = await import('./historial/acciones');
+    const { faqsAExcel } = await import('./historial/reporte_archivos');
+    const XLSX = await import('xlsx');
+    const { repo } = escenario();
+
+    // 1. El histórico real pasa por el importador y el análisis REALES.
+    const lectura = leerExportWhatsapp(CHAT, { equipo: ['Ana Servicio'], sal: T1 });
+    expect(lectura.mensajes).toHaveLength(4);
+    const reporte = analizarHistorial(lectura.mensajes, { umbralMin: 10 });
+    const faq = reporte.faqs.find((f) => f.tema === 'cita_anden');
+    expect(faq).toMatchObject({ veces: 2, respuestaTipica: 'Las citas de descarga se agendan de 8 a 18 h con el andén.' });
+
+    // 2. El gerente aprueba esa respuesta desde la pantalla (la acción real; la función de la base se prueba en Postgres, aquí un doble).
+    const forma = new FormData();
+    forma.set('tema', faq!.tema); forma.set('pregunta', faq!.pregunta); forma.set('texto', faq!.respuestaTipica!);
+    const guardadas: Array<{ id: string; tema: string; pregunta: string; texto: string }> = [];
+    const deps = {
+      aprobar: async (tenantId: string, a: { tema: string; pregunta: string; texto: string }) => {
+        const id = `rr-${guardadas.length + 1}`;
+        guardadas.push({ id, ...a });
+        repo.rapidas.set(tenantId, guardadas.map((g) => ({ ...g, tema: g.tema as never, usos: 0 })));
+        return { ok: true as const, id };
+      },
+      retirar: async () => true,
+      bitacora: async () => true,
+    };
+    expect((await aprobarRespuestaRapidaPanel({ tenantId: T1, rol: 'contador', usuarioId: 'u', email: null }, forma, deps)).ok).toBe(false);
+    expect(guardadas).toHaveLength(0);
+    expect((await aprobarRespuestaRapidaPanel({ tenantId: T1, rol: 'encargado', usuarioId: 'u-gerente', email: null }, forma, deps)).ok).toBe(true);
+    expect(guardadas).toHaveLength(1);
+
+    // 3. Un cliente escribe algo parecido que el Vigía no entiende: el borrador sale con el texto aprobado, al gerente.
+    await atenderMensajeCliente(entrante('Buenas, ¿a qué hora puedo agendar una cita de descarga mañana?', 'p5-b'), { repo, ahora: () => AHORA });
+    const [borrador] = repo.salientes();
+    expect(borrador.texto).toContain('Las citas de descarga se agendan de 8 a 18 h con el andén.');
+    expect(borrador).toMatchObject({ estado: 'pendiente_aprobacion', riesgo: 'medio' });
+    expect(enviarTexto).not.toHaveBeenCalled();                      // nada sale al cliente sin el gerente
+    expect(JSON.stringify(enviarBotones.mock.calls.find((c) => c[0] === GERENTE_TEL))).toContain('respuesta rápida que tú aprobaste');
+    expect(repo.usosRapidas).toEqual([{ tenantId: T1, id: 'rr-1' }]);
+
+    // 4. Un toque del gerente y llega al cliente.
+    await atenderDecisionVigia(GERENTE, `vig_ok:${borrador.id}`, { repo, ahora: () => AHORA });
+    expect(enviarTexto.mock.calls.some((c) => c[0] === CLIENTE_TEL && String(c[1]).includes('citas de descarga'))).toBe(true);
+
+    // 5. El mismo reporte, a Excel: la FAQ y su respuesta salen en el archivo.
+    const libro = XLSX.read(faqsAExcel(reporte, { alcance: 'Todos los grupos', truncado: false, umbralMin: 10 }), { type: 'array' });
+    const filas = XLSX.utils.sheet_to_json<unknown[]>(libro.Sheets['Preguntas frecuentes'], { header: 1 });
+    expect(filas.some((f) => String(f[0]).includes('agendar') && String(f[4]).includes('8 a 18 h'))).toBe(true);
+  });
+});

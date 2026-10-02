@@ -256,7 +256,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 286;
 // contaba — funcionalidad nueva, no código migrado: las RPC del worker (qué procesar y su respaldo directo contra una base sin la 0641, qué quedó
 // agotado, qué documento por avisar, y el candado de «una sola vez» del aviso a la oficina con su liberación). Cada una va por `acotada`.
 // INTEGRACIÓN ola 4b (P1 + P3): P1 mide 1,807 → 1,811 (+4) y P3 1,807 → 1,811 (+4) contra la misma base; la suma es 1,815 (se confirma con el barrido del árbol fusionado).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_815;
+// RONDA 08, P5 «vigia-cierre» (0647): 0 archivos y +7 llamadas (1,815 → 1,822), todas en `vigia/repo.ts` y `vigia/historial/repo.ts`, que ya contaban —
+// funcionalidad nueva—: la cola del barrido y los ciclos muertos (`expirarCiclosInactivos`: lectura + cierre condicional), y las respuestas rápidas
+// (lectura de las aprobadas, uso atómico, leer/aprobar/retirar desde la pantalla). Cada una va por `acotada`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_822;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)
