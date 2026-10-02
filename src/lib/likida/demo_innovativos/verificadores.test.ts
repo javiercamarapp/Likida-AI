@@ -39,3 +39,19 @@ describe('verificar-cruces-con-motor.mjs', () => {
     expect(r.stdout).toMatch(/FALLA/);
   });
 });
+
+describe('verificar-hechos-del-guion.mjs', () => {
+  it('contra una base vacía (psql que devuelve []) FALLA: no hay nada que verificar y no «pasa»', () => {
+    const r = conPsqlFalso('verificar-hechos-del-guion.mjs', '[]');
+    expect(r.status).toBe(1);
+    expect(r.stdout).toMatch(/FALLA/);
+    expect(r.stdout).not.toMatch(/^OK/m);
+  });
+  it('una cifra de la base que el documento no dice FALLA (la verdad es la base, no el texto)', () => {
+    // 140 viajes en curso en la base «falsa»; los documentos dicen otra cosa en el resto de conteos → debe fallar.
+    const fila = JSON.stringify([{ terminales: 9, tractos: 9, operadores: 9, clientes: 9, geocercas: 9, en_curso: 9, cerrados: 9, hitos: 9, posiciones: 9, casetas: 9, tags: 9, veredictos: 9, validados: 9, sin_coincidencia: 9, contactos_escalamiento: 9, vigia_contactos: 9, vigia_conversaciones: 9, vigia_mensajes: 9, convenios: 9, instrucciones: 9 }]);
+    const r = conPsqlFalso('verificar-hechos-del-guion.mjs', fila);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toMatch(/FALLA {2}140 viajes en curso|FALLA {2}terminales/);
+  });
+});

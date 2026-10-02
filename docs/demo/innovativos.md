@@ -5,15 +5,18 @@ Objetivo: **demo de los 5 primeros agentes sobre datos con la forma de los de un
 1. **El demo sintético** — un tenant «Innovativos (demo)» que se siembra con un comando, en una base **local**
    (nunca producción), con datos coherentes con su operación. Sirve para ensayar y para presentar mientras los
    archivos reales no llegan.
-2. **El kit de carga** — archivo por archivo: cómo reemplazar cada dato sintético por **su** archivo real cuando llegue
-   : formato esperado, importador que lo consume, validación y cómo verlo en pantalla.
+2. **El kit de carga** — archivo por archivo: cómo reemplazar cada dato sintético por **su** archivo real cuando llegue:
+   formato esperado, importador que lo consume, validación y cómo verlo en pantalla.
 
-El guion de lo que se enseña y se dice está en [`guion-innovativos-20oct.md`](./guion-innovativos-20oct.md).
+El guion de lo que se enseña y se dice (y de lo que **no** se puede enseñar todavía) está en
+[`guion-innovativos-20oct.md`](./guion-innovativos-20oct.md).
 
-> **Todo lo sembrado es sintético.** Empresas con la palabra «Ficticia/o», RFC, placas, TAG y teléfonos inventados
-> (rangos `52155595…`, `52155596…`, `52155597…`), casetas «Demo». El repo es público: nada aquí es dato real de
-> Innovativos ni de sus clientes. Lo que no existe todavía (formato real de su Excel, archivo real de PASE, su tabla
-> de GPS) está **declarado como bloqueo**, no adivinado.
+> **Todo lo sembrado es sintético.** Empresas con la palabra «Ficticia/o», RFC, placas, TAG y casetas «Demo» inventados.
+> **Los teléfonos llevan la marca `28999…`** (código de país 289: sin asignar, no es de nadie) y el envío real de
+> WhatsApp rechaza cualquier destinatario con esa marca antes de llamar a Meta. El repo es público: nada aquí es dato
+> real de ningún cliente. Lo que no existe todavía (formato real de su Excel, archivo real de PASE, su tabla de GPS)
+> está **declarado como bloqueo**, no adivinado. **El Vigía y el Conductor del tenant demo vienen APAGADOS** (ningún cron
+> les escribe a nadie); se encienden a propósito con `--encender-agentes`.
 
 ---
 
@@ -42,25 +45,46 @@ Sembrar (idempotente: correrlo dos veces no duplica nada):
 export DEMO_DATABASE_URL='postgresql:///likida_demo'        # o la de la pila local
 bash scripts/demo/innovativos/sembrar.sh                     # ancla del demo: 2026-10-20 09:00 CDMX
 bash scripts/demo/innovativos/sembrar.sh --reiniciar         # borra el tenant demo y siembra de cero
-bash scripts/demo/innovativos/sembrar.sh --ancla '2026-10-20 08:00:00-06'   # «ahora» del demo
+bash scripts/demo/innovativos/sembrar.sh --reiniciar --ancla '2026-10-20 08:00:00-06'   # otro «ahora» (EXIGE --reiniciar)
 bash scripts/demo/innovativos/sembrar.sh --solo-limpiar      # solo borra
+bash scripts/demo/innovativos/sembrar.sh --encender-agentes  # enciende el Vigía y el Conductor del tenant demo
 ```
 
+`--ancla` sin `--reiniciar` **falla** con un mensaje claro: sembrar encima de una base con otra ancla mezclaría dos
+«ahora» (viajes, posiciones y pases a medias). El SQL lo vuelve a comprobar (`innovativos_sim.meta` guarda la ancla
+sembrada).
+
 **Guardas (no se negocian):** exige `DEMO_DATABASE_URL` explícita (no usa `DATABASE_URL` ni `SUPABASE_DB_URL` a
-propósito); rechaza hosts que no sean socket, `localhost` o red privada y cualquier `*.supabase.*`; y el propio SQL se
-niega si el servidor no escucha en loopback/red privada. Una prueba (`seed_estatico.test.ts`) fija que los scripts
-rechazan hosts remotos **antes** de abrir una conexión.
+propósito). `guarda-host.mjs` (una sola implementación, la usan todos los scripts) solo acepta socket, `localhost`,
+`127.x`, `[::1]` y `host.docker.internal`, y rechaza **cualquier** `?host=`, `?hostaddr=` o `?service=`, `PGHOSTADDR` /
+`PGSERVICE`, dominios (`localhost.evil.com`, `127.0.0.1.nip.io`), IPs escritas en decimal/hex/abreviadas, IPv6 mapeado,
+listas de hosts, IPs públicas, link-local, CGNAT, Supabase/Neon/nubes y bases cuyo nombre contenga «prod» (un túnel a
+producción se ve como localhost). **Las redes privadas (10/8, 172.16/12, 192.168/16) se rechazan salvo
+`DEMO_PERMITIR_RED_PRIVADA=1`** (valor exacto): ahí viven las bases de producción detrás de una VPN o un pooler. El
+propio SQL repite la comprobación sobre la dirección real del servidor. `guardas_host.test.ts` tiene una prueba por
+cada bypass y comprueba, con un `psql` de mentira, que los scripts cortan **antes** de abrir una conexión.
 
 **Todo cuelga de una ancla.** «Ahora» del demo es `2026-10-20 09:00 -06`: los viajes «en curso», las posiciones de las
 últimas 24 h, los pases y los avisos pendientes se calculan contra ella, por eso dos corridas dan exactamente las mismas
-filas. Para ensayar en otro día se pasa `--ancla` junto con `--reiniciar`.
+filas. Para ensayar en otro día se pasa `--reiniciar --ancla '…'`.
 
-Probar que no duplica (4 corridas: sembrar, sembrar, `--reiniciar`, vaciar-todo + sembrar; compara conteo y huella md5
-tabla por tabla, y que el rol de solo lectura no puede escribir):
+Probar que no duplica (4 corridas: sembrar, sembrar, `--reiniciar`, vaciar-todo + sembrar): compara, de **24 tablas**,
+el conteo y la huella md5 de la **fila completa** (`to_jsonb`, sin marcas de reloj), así que una columna que se pierde
+(p. ej. `viaje.origen_geocerca_id` tras borrar las geocercas) cambia la huella. **Falla si alguna tabla tiene 0 filas**,
+si algún viaje queda sin origen/destino, si algún teléfono del tenant demo no lleva la marca `28999`, si el Vigía o el
+Conductor quedaron encendidos, o si el rol de solo lectura no es rechazado por permisos:
 
 ```bash
 bash scripts/demo/innovativos/probar-idempotencia.sh      # termina con «IDEMPOTENCIA OK»
+bash scripts/demo/innovativos/probar-vaciar-solo-sembrado.sh   # vaciar-sintetico.sh no toca lo «real» ya cargado
+node scripts/demo/innovativos/verificar-cruces-con-motor.mjs   # falla con 0 líneas
+node scripts/demo/innovativos/verificar-hechos-del-guion.mjs   # cada cifra y folio de los documentos, contra la base
 ```
+
+**Los veredictos de ubicación no se escriben a mano:** `generar-veredictos.mjs` (lo corre `sembrar.sh`) ejecuta el motor
+real del Conductor (`validarHitoContraSitio`) sobre los hitos de llegada de los viajes en curso y escribe
+`viaje_hito_validacion`. Falla si los `sin_coincidencia` no son exactamente los viajes sembrados como «ya llegué» sin
+GPS.
 
 ## 2. Qué hay sembrado
 
@@ -68,40 +92,48 @@ bash scripts/demo/innovativos/probar-idempotencia.sh      # termina con «IDEMPO
 |---|---|---|
 | Terminales | 3 | Tlaquepaque, Silao, Apodaca |
 | Tractos (`unidad`) | 250 | `IN-001`…`IN-250`; 140 en ruta, 12 en taller, 98 disponibles; TAG `PSD…` y dispositivo GPS `INN-GPS-…` |
-| Operadores | 262 | 250 emparejados con tracto + 12 de relevo; teléfonos del rango falso; un operador por viaje abierto |
+| Operadores | 262 | 250 emparejados con tracto + 12 de relevo; teléfonos `289992…` (marca de demo); un operador por viaje abierto |
 | Clientes | 14 | «… Ficticia …»; cada uno con planta y andén como geocercas |
 | Geocercas | 31 | 3 patios + 14 plantas + 14 andenes (hijas de su planta) |
 | Viajes | 140 en curso + 266 cerrados (7 días) | folios `INN-24001…` (en curso) y `INN-23001…` (cerrados) |
 | Hitos del conductor | 1,466 | llegó a cargar / salió / llegó a descargar / salió; validados por GPS o por texto del chofer |
+| Veredictos de ubicación | 158 | uno por hito de llegada de un viaje en curso, **calculado por el motor real** (152 validados, 6 sin coincidencia) |
 | Posiciones GPS | 41,770 (×2) | en **su tabla propia simulada** (`innovativos_sim.gps_posicion`) y ya leídas en `posicion` |
 | Casetas / TAG | 12 / 250 | catálogo sintético «Demo» sobre el eje GDL–APO |
 | Líneas de pase (24 h) | 379 | 9 **fuera de ruta**, 4 **cobros duplicados**, 7 sin GPS (unidad silenciosa) |
 | Liquidaciones «de su sistema» | 158 | 116 acusadas (8 con «No coincide»), 34 enviadas, 8 fallidas; ninguna pendiente |
 | Carta Porte | 12 documentos, 3 perfiles | PDF / Excel / CSV de 3 clientes; aprobados, por revisar, rechazado, uno con **inyección** |
-| Vigía | 3 contactos críticos, 3 conversaciones, 6 mensajes | una a >10 min sin respuesta, una molesta, una atendida |
-| Escalamiento | 6 contactos | jefe de tráfico (nivel 1) y jefe de flota (nivel 2) por terminal |
+| Vigía | 3 contactos críticos, 3 conversaciones, 6 mensajes | una a >10 min sin respuesta, una molesta, una atendida; **agente apagado** (`habilitado = false`) |
+| Escalamiento | 6 contactos | jefe de tráfico (nivel 1) y jefe de flota (nivel 2) por terminal; Conductor **apagado** (`activo = false`) |
 | Convenios | 14 con 84 instrucciones de operación | copia en `innovativos_sim.convenio*`; si la 0580 existe, también en `cliente_convenio` |
 
 **Escenarios sembrados a propósito** (los que el guion enseña; todos reproducibles porque son deterministas):
 
 - **«Ya llegué» sin GPS que lo respalde** — 6 viajes: `INN-24005`, `INN-24032`, `INN-24059`, `INN-24086`, `INN-24113`,
-  `INN-24140`. El hito `llegada_descarga` queda **recibido** (no validado) y el GPS lo muestra lejos de la planta.
+  `INN-24140`. El hito `llegada_descarga` entra por texto y queda **recibido** (no validado); el seed le pone la posición
+  REAL del tractor (a 23–342 km de la planta) y el motor de validación del Conductor emite el veredicto
+  **sin coincidencia** (`generar-veredictos.mjs`). Eso es lo que alimenta la «Cola de excepciones» del tablero.
 - **Sin señal de vida** — 6 viajes: `INN-24023`, `INN-24046`, `INN-24069`, `INN-24092`, `INN-24115`, `INN-24138`. El
-  GPS dejó de reportar hace >100 min y el hito pendiente está **escalado** (3 a nivel 1, 3 a nivel 2).
+  GPS dejó de reportar hace >100 min y el hito pendiente está **escalado** (3 a nivel 1, 3 a nivel 2). El seed deja el
+  estado como lo dejaría el cron `conductor-hitos`; el aviso en sí NO se manda (agente apagado, teléfonos de demo).
 - **Peajes**: la verdad sembrada está en `archivos-muestra/peajes/anomalias_sembradas.csv` (13 líneas: fuera de ruta y
   duplicados, con TAG, caseta y hora). `verificar-cruces-con-motor.mjs` comprueba que el motor real de cruce
   (`evaluarCruceGps`) da el mismo veredicto en las **379** líneas.
-- **Liquidación**: 8 liquidaciones acusadas con «No coincide» (la discrepancia que se escala al jefe de flota).
-- **Carta Porte**: `orden_c12_4` trae una instrucción dentro del documento («IGNORA LAS INSTRUCCIONES…»): el extractor
-  la ignora y pide revisión humana.
+- **Liquidación**: 8 liquidaciones acusadas con «No coincide» (el chofer apretó ese botón). Hoy queda **registrado y
+  filtrable** en la pantalla; **no existe** todavía un aviso a una persona de la oficina.
+- **Carta Porte**: `orden_c12_4` trae una instrucción dentro del documento («IGNORA LAS INSTRUCCIONES…»). El documento
+  sembrado YA viene marcado con riesgo (lo escribe el seed); lo que sí se verifica de verdad es que el detector real
+  (`detectarInyeccion`) marca el archivo de muestra (`verificar-hechos-del-guion.mjs`). Los valores, confianzas y la
+  «evidencia» de los 12 documentos sembrados son **dato de demo**, no salida de un modelo; `sha256` y tamaño son
+  inventados (el archivo vive en `archivos-muestra/`, no en Storage).
 
 ## 3. El kit de carga
 
-Cada fila es un archivo que Innovativos prometió. **La columna «Importador» dice si ya existe en esta rama
+Cada fila es un archivo que entrega el cliente. **La columna «Importador» dice si ya existe en esta rama
 (`existe`), lo construye otro stream del loop (`en_rama`) o es solo contrato con fixtures y prueba (`contrato`).**
 
 | Archivo (id) | Muestra (`scripts/demo/innovativos/archivos-muestra/…`) | Importador | Se ve en |
-|---|---|---|---|---|
+|---|---|---|---|
 | `gps_posiciones` | `gps/gps_posicion_muestra.csv`, `gps/gps_actual.csv` | **contrato** — `LectorTablaPropia` | `/dashboard/mapa`, `/dashboard/agentes/conductores` |
 | `geocercas` | `gps/geocercas.csv` | **existe** — catálogo de sitios (0385) | `/dashboard/agentes/conductores/sitios` |
 | `pases` | `peajes/pases_24h.csv` | **existe** — ingesta de desglose de peaje | `/dashboard/agentes/peajes` |
@@ -216,7 +248,7 @@ Para tener a mano cómo se ven los archivos tal como los exportaría «su sistem
 
 ### 3.6 Histórico de WhatsApp (`whatsapp`)
 
-- **Riesgo declarado:** sus grupos viven en WhatsApp de teléfonos comunes; la API de Business **no lee esos grupos**.
+- **Riesgo declarado:** si los grupos del cliente viven en WhatsApp de teléfonos comunes, la API de Business **no lee esos grupos**.
   Fase 1 = **histórico exportado** (.txt/.zip) → FAQs, tendencias, respuestas sugeridas y modo copiloto (sugiere, humano
   envía). En vivo solo si los grupos críticos migran a un número Business (verificar la API de grupos de Meta **antes** de
   prometerlo).
@@ -252,7 +284,7 @@ Para tener a mano cómo se ven los archivos tal como los exportaría «su sistem
 |---|---|
 | Especificación enviada al equipo de sistemas del cliente | §3.1 (columnas, solo lectura) y §3.3 (TAG y casetas) |
 | Cualquier archivo del kit (§3) | `validar-archivo.mjs` → `vaciar-sintetico.sh` → cargar → abrir la pantalla |
-| Antes del demo | Ensayo completo con el guion; `probar-idempotencia.sh` y `verificar-cruces-con-motor.mjs` |
+| Antes del demo | Ensayo completo con el guion; `probar-idempotencia.sh`, `verificar-cruces-con-motor.mjs` y `verificar-hechos-del-guion.mjs` |
 
 Si un archivo **no** llega a tiempo, el demo conserva el dato sintético de ese conjunto y el guion dice qué decir
 (§ «Cuando algo depende de un tercero»). Nunca se mezcla un archivo real con sintético del mismo conjunto: `vaciar` primero.
@@ -277,6 +309,8 @@ prevista, sin tocar producción:
 3. Levantar la app con el entorno local, pedir el enlace de `superadmin.e2e@likida.test` en `/login` y abrirlo desde
    Mailpit (`http://127.0.0.1:54324`).
 4. `/admin/elegir-flota` → **«Innovativos (demo)»** → el resto de las rutas de la tabla de §3.
+5. Para la pantalla del Vigía (muestra «apagado» si no) y el tablero del Conductor:
+   `bash scripts/demo/innovativos/sembrar.sh --encender-agentes` (sigue sin enviar nada: los teléfonos `28999…` se rechazan).
 
 **Lo verificado en esta ronda** fue contra Postgres directo (conteos, restricciones, idempotencia, lectores y motor de
 cruce reales), **no contra las pantallas renderizadas**. El ensayo visual con la pila local está pendiente.
@@ -284,15 +318,28 @@ cruce reales), **no contra las pantallas renderizadas**. El ensayo visual con la
 ## 7. Pruebas de este stream
 
 ```bash
-npx vitest run src/lib/likida/demo_innovativos      # contratos, lector, validador, kit, guardas del seed
-bash scripts/demo/innovativos/probar-idempotencia.sh  # requiere DEMO_DATABASE_URL (base local con migraciones)
+# sin base (vitest, un archivo a la vez):
+npx vitest run src/lib/likida/demo_innovativos/guardas_host.test.ts       # una prueba por cada bypass de la guarda de host
+npx vitest run src/lib/likida/demo_innovativos/idempotencia_huellas.test.ts  # la comparación de huellas no pasa en falso
+npx vitest run src/lib/likida/demo_innovativos/verificadores.test.ts      # los verificadores fallan con 0 líneas
+npx vitest run src/lib/likida/demo_innovativos/seed_estatico.test.ts      # SQL determinista, teléfonos con marca, veredictos
+npx vitest run src/lib/likida/demo_innovativos/vaciar_acotado.test.ts     # vaciar solo toca filas sembradas
+npx vitest run src/lib/meta/telefono_demo.test.ts src/app/api/cron/wa-outbox/route_demo.test.ts   # el envío rechaza teléfonos demo
+# con base local migrada (DEMO_DATABASE_URL):
+bash scripts/demo/innovativos/probar-idempotencia.sh
+bash scripts/demo/innovativos/probar-vaciar-solo-sembrado.sh
 node scripts/demo/innovativos/verificar-cruces-con-motor.mjs
+node scripts/demo/innovativos/verificar-hechos-del-guion.mjs
 ```
 
 ## 8. Qué NO es el demo (límites declarados)
 
 - **Meta / WhatsApp:** no se manda nada real. Los avisos con botones fuera de la ventana de 24 h necesitan **plantillas
   aprobadas por Meta (2 a 5 días hábiles)**; mandarlas a aprobación en cuanto haya número verificado.
-- **GPS real:** las posiciones son simuladas hasta que llegue el acceso de lectura a su tabla.
+- **GPS real:** las posiciones son simuladas hasta que llegue el acceso de lectura a su tabla. El lector de tabla propia
+  (`LectorTablaPropia`) es solo contrato y referencia CSV: **no está conectado a ninguna ruta ni cron**; las posiciones
+  se siembran directo en `posicion`.
+- **Orquestador (chat):** hoy consulta KPIs, viajes, liquidaciones, Carta Porte y normas; **no** lee hitos, peajes ni
+  Vigía (fuentes nuevas de `w3-agentes-1-4`).
 - **Viajes y operadores reales:** vendrán de su TMS/SAP (importador masivo de operadores/unidades y de viajes ya
   existentes); no son parte de los 5 agentes y aquí son sintéticos.
