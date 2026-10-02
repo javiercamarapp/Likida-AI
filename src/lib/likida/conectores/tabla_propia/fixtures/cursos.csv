@@ -1,0 +1,4 @@
+codigo,nombre,unidad,convenio,casetas,corredor_wkt,buffer_m,vigente_desde,vigente_hasta
+CUR-001,Planta Poniente a Patio Norte,,Convenio Ficticio Uno,Caseta Ejemplo Norte | Caseta Ejemplo Sur | Caseta Ejemplo Centro,,,,
+CUR-002,Ruta de la unidad UN-001,UN-001,,Caseta Ejemplo Sur,,,2026-01-01,2026-12-31
+COR-001,Corredor sintético de la unidad UN-002,UN-002,,,"LINESTRING(-103.30 20.62, -103.20 20.62, -103.10 20.70)",500,01/02/2026,

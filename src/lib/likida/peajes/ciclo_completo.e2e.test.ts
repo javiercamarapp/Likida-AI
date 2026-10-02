@@ -171,7 +171,7 @@ const peticion = (ruta: string, init: RequestInit = {}, tenant = T) =>
 const idDesglose = (n = 0) => String(db.tablas.desglose_peaje[n].id);
 
 beforeEach(() => {
-  db = crearDbFalsa(base(), { peaje_archivo_reclamar: claimArchivos, peaje_pull_reclamar: claimPull, peaje_avisos_pendientes: avisosPendientes, peaje_posiciones_ventana: rpcPosiciones });
+  db = crearDbFalsa(base(), { peaje_archivo_reclamar: claimArchivos, peaje_pull_reclamar: claimPull, peaje_avisos_pendientes: avisosPendientes, peaje_posiciones_ventana: rpcPosiciones, peaje_curso_reemplazar: rpcCursos });
   correosProcesados.clear(); correosEnCurso.clear(); adjuntos.clear(); envios.length = 0;
   telefonoDinero = { [T]: '525599990000', [T2]: '525588880000' }; envioOk = true; apagado = false;
   process.env.RESEND_API_KEY = 're_test';
@@ -529,5 +529,179 @@ describe('RECLAMACIÓN: pases × GPS × geocercas → reporte para el proveedor'
     await procesar();
     const r = (await reporteReclamacion(T, idDesglose()))!;
     expect(r.cruces.map((c) => c.motivo)).toEqual(['gps_lejos_de_caseta', 'doble_cobro']);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS CURSOS (P8, 0665): rutas autorizadas por unidad o por convenio → motivo `fuera_de_curso`.
+//
+// Entrada real: el CSV de cursos por el importador (nombres → ids de la flota). Lógica: la evaluación pura de `cursos.ts` dentro
+// de `construirReclamacion`. Persistencia: `peaje_curso` / `peaje_curso_caseta` por la RPC 0665 (aquí un doble en memoria que
+// respeta lo que la base garantiza: lote atómico, upsert por código, referencias de la misma flota). Salida: el reporte, el Excel
+// y el PDF. Casos: feliz, fallo, duplicado, fuera de orden y otro tenant.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const { importarCursosArchivo, resolverCursos } = await import('./cursos_importar');
+
+const ARCHIVO_CURSOS = [
+  'Fecha de cobro;Hora;Plaza;Importe;No. TAG',
+  '05/08/2026;10:30:00;Caseta Ejemplo Norte;189,50;IMDM 10000001', // u1 en Norte, GPS confirma, su curso lo autoriza   → NO se reclama
+  '05/08/2026;11:00:00;Caseta Ejemplo Sur;120,00;IMDM 10000001',   // u1 en Sur: su curso solo autoriza Norte           → FUERA DE CURSO
+  '05/08/2026;15:00:00;Caseta Ejemplo Sur;100,00;IMDM 10000002',   // u2 en Sur, viaje V-2 con el convenio A→B (Norte)  → FUERA DE CURSO (por convenio)
+  '06/08/2026;09:00:00;Caseta Ejemplo Norte;200,00;IMDM 10000002', // u2 sin viaje ni curso propio                       → sin curso (no se reclama)
+].join('\n');
+
+const CSV_CURSOS = [
+  'codigo,nombre,unidad,convenio,casetas',
+  'CUR-U1,Ruta de la unidad C2-08,C2-08,,Caseta Ejemplo Norte',
+  'CUR-CV1,Convenio Ficticio Uno A a B,,Convenio Ficticio Uno,Caseta Ejemplo Norte',
+].join('\n');
+const bytes = (t: string) => new TextEncoder().encode(t);
+
+/** Lo que la base garantiza de `peaje_curso_reemplazar` (0665), en memoria: atómico, upsert por código y referencias de la misma flota. */
+function rpcCursos(args: Record<string, unknown>): Fila[] {
+  const t = args.p_tenant as string;
+  const lote = args.p_cursos as Array<Record<string, unknown>>;
+  const existe = (tabla: string, id: unknown) => id == null || db.tablas[tabla]?.some((f) => f.id === id && f.tenant_id === t);
+  for (const c of lote) {
+    const casetas = (c.casetas as string[]) ?? [];
+    if (!existe('unidad', c.unidad_id) || !existe('cliente_convenio', c.convenio_id) || !casetas.every((k) => existe('peaje_caseta', k))) return [{ estado: 'referencia_invalida' }];
+    if (c.tipo === 'casetas' && casetas.length === 0) return [{ estado: 'invalida' }];
+  }
+  db.tablas.peaje_curso ??= []; db.tablas.peaje_curso_caseta ??= [];
+  let creados = 0, actualizados = 0;
+  for (const c of lote) {
+    let fila = db.tablas.peaje_curso.find((f) => f.tenant_id === t && f.codigo === c.codigo);
+    const datos = { tenant_id: t, codigo: c.codigo, nombre: c.nombre, tipo: c.tipo, unidad_id: c.unidad_id ?? null, convenio_id: c.convenio_id ?? null, vigente_desde: c.vigente_desde ?? null, vigente_hasta: c.vigente_hasta ?? null, corredor: c.corredor ?? null, buffer_m: c.buffer_m ?? null, activo: true };
+    if (fila) { Object.assign(fila, datos); actualizados++; } else { fila = { id: `cur-${db.tablas.peaje_curso.length + 1}`, ...datos }; db.tablas.peaje_curso.push(fila); creados++; }
+    db.tablas.peaje_curso_caseta = db.tablas.peaje_curso_caseta.filter((e) => e.curso_id !== fila!.id);
+    ((c.casetas as string[]) ?? []).forEach((k, orden) => db.tablas.peaje_curso_caseta.push({ curso_id: fila!.id, caseta_id: k, tenant_id: t, orden }));
+  }
+  return [{ estado: 'ok', creados, actualizados }];
+}
+
+function conCursos() {
+  db.tablas.cliente_convenio = [{ id: 'cv1', tenant_id: T, nombre: 'Convenio Ficticio Uno' }];
+  db.tablas.viaje_convenio = [{ viaje_id: 'v2', tenant_id: T, convenio_id: 'cv1' }];
+  guardar('adjC', ARCHIVO_CURSOS);
+}
+async function conciliadoCursos() {
+  conCursos();
+  await atenderCorreoPeajes(TOKEN, correo('eC', [['corte-pase.csv', 'adjC']]), deps);
+  await procesar();
+  return idDesglose();
+}
+
+describe('CURSOS: cruce fuera de curso → reporte para el proveedor', () => {
+  it('FELIZ: el CSV de cursos se importa y el reporte reclama las dos líneas fuera de curso (por unidad y por convenio), con su porqué', async () => {
+    const id = await conciliadoCursos();
+    const imp = await importarCursosArchivo(T, 'cursos.csv', bytes(CSV_CURSOS));
+    expect(imp).toEqual({ ok: true, creados: 2, actualizados: 0, leidos: 2 });
+    // los cursos quedaron ligados a SUS ids de la flota (unidad, convenio, caseta), no a nombres
+    expect(db.tablas.peaje_curso.map((c) => [c.codigo, c.unidad_id, c.convenio_id])).toEqual([['CUR-U1', 'u1', null], ['CUR-CV1', null, 'cv1']]);
+    expect(db.tablas.peaje_curso_caseta.map((e) => [e.curso_id, e.caseta_id, e.tenant_id])).toEqual([['cur-1', 'cN', T], ['cur-2', 'cN', T]]);
+
+    const r = (await reporteReclamacion(T, id))!;
+    expect(r.cruces.map((c) => [c.indice + 1, c.motivo, c.confianza, c.monto, c.unidad])).toEqual([
+      [2, 'fuera_de_curso', 'media', 120, 'C2-08'],
+      [3, 'fuera_de_curso', 'media', 100, 'C2-09'],
+    ]);
+    expect(r.cruces[0].cursos).toEqual([{ nombre: 'Ruta de la unidad C2-08', tipo: 'casetas' }]);
+    expect(r.cruces[0].porQue).toMatch(/la unidad C2-08 cruzó Caseta Ejemplo Sur el 2026-08-05 a las 11:00, fuera de su curso: esa caseta no está en su curso autorizado «Ruta de la unidad C2-08» \(casetas autorizadas: Caseta Ejemplo Norte\)/);
+    expect(r.cruces[1].cursos).toEqual([{ nombre: 'Convenio Ficticio Uno A a B', tipo: 'casetas' }]); // el curso llegó por el convenio del viaje V-2
+    expect(r.resumen).toMatchObject({ lineas: 4, reclamables: 2, montoReclamable: 220, confirmadas: 1, sinDatos: 1, sinCurso: 1 });
+    expect(r.resumen.porMotivo.fuera_de_curso).toEqual({ n: 2, monto: 220 });
+    expect(r.leyendas.join(' ')).toMatch(/Cruce fuera de curso/);
+
+    // la salida: Excel (motivo, curso y total) y PDF por la puerta de export
+    const x = await exportReclamacion(new Request(`https://app.likida.ai/api/export/peajes-reclamacion?desglose=${id}`));
+    expect(x.status).toBe(200);
+    const libro = XLSX.read(new Uint8Array(await x.arrayBuffer()), { type: 'array' });
+    const m = XLSX.utils.sheet_to_json<unknown[]>(libro.Sheets['Reclamación'], { header: 1, defval: null });
+    const enc = m.findIndex((f) => f[0] === 'Línea');
+    expect(m.slice(enc + 1, enc + 3).map((f) => [f[0], f[7], f[8], f[16]])).toEqual([
+      [2, 120, 'Cruce fuera de curso', 'Ruta de la unidad C2-08'],
+      [3, 100, 'Cruce fuera de curso', 'Convenio Ficticio Uno A a B'],
+    ]);
+    expect(m.find((f) => f[0] === 'Total reclamable')?.[7]).toBe(220);
+    const resumen = XLSX.utils.sheet_to_json<unknown[]>(libro.Sheets['Resumen'], { header: 1, defval: null });
+    expect(resumen.find((f) => f[0] === 'Cruce fuera de curso')).toEqual(['Cruce fuera de curso', 2, 220]);
+    const p = await exportReclamacion(new Request(`https://app.likida.ai/api/export/peajes-reclamacion?desglose=${id}&formato=pdf`));
+    expect(Buffer.from(await p.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-');
+  });
+
+  it('FALLO: una caseta que no está en el catálogo o una unidad desconocida no importa NADA y dice cuál; una base caída tampoco guarda', async () => {
+    const id = await conciliadoCursos();
+    const malo = await importarCursosArchivo(T, 'cursos.csv', bytes([
+      'codigo,nombre,unidad,convenio,casetas',
+      'CUR-U1,Buena,C2-08,,Caseta Ejemplo Norte',
+      'CUR-X,Caseta inventada,C2-08,,Caseta Que No Existe',
+      'CUR-Y,Unidad desconocida,Z-99,,Caseta Ejemplo Norte',
+    ].join('\n')));
+    expect(malo).toMatchObject({ ok: false, error: expect.stringMatching(/No se importó nada: 2 curso\(s\) con problema/) });
+    expect(malo.ok === false && malo.detalles?.join(' ')).toMatch(/CUR-X: la caseta «Caseta Que No Existe» no está en el catálogo/);
+    expect(malo.ok === false && malo.detalles?.join(' ')).toMatch(/CUR-Y: la unidad «Z-99» no está en la flota/);
+    expect(db.tablas.peaje_curso ?? []).toEqual([]);
+    // un archivo sin columna de ruta se rechaza entero
+    expect(await importarCursosArchivo(T, 'cursos.csv', bytes('codigo,nombre,unidad\nA,B,C2-08\n'))).toMatchObject({ ok: false });
+    // la base cae al guardar: el mensaje es nuestro y no quedó nada
+    db.fallar('rpc:peaje_curso_reemplazar', 'connection refused: postgres://usuario:clave@host');
+    const caido = await importarCursosArchivo(T, 'cursos.csv', bytes(CSV_CURSOS));
+    expect(caido).toEqual({ ok: false, error: 'No pude guardar ahorita. No se guardó nada; intenta de nuevo en un momento.' });
+    expect(JSON.stringify(caido)).not.toContain('clave');
+    // sin cursos, el reporte no inventa ninguno: todo queda «sin curso» y no se reclama por curso
+    const r = (await reporteReclamacion(T, id))!;
+    expect(r.cruces).toEqual([]);
+    expect(r.resumen).toMatchObject({ reclamables: 0, sinCurso: 4 });
+  });
+
+  it('DUPLICADO: importar el mismo archivo dos veces actualiza (no duplica cursos ni casetas) y el reporte no cambia', async () => {
+    const id = await conciliadoCursos();
+    await importarCursosArchivo(T, 'cursos.csv', bytes(CSV_CURSOS));
+    const antes = (await reporteReclamacion(T, id))!;
+    expect(await importarCursosArchivo(T, 'cursos.csv', bytes(CSV_CURSOS))).toEqual({ ok: true, creados: 0, actualizados: 2, leidos: 2 });
+    expect(db.tablas.peaje_curso).toHaveLength(2);
+    expect(db.tablas.peaje_curso_caseta).toHaveLength(2);
+    expect(await reporteReclamacion(T, id)).toEqual(antes);
+    // dos filas con el mismo código en el MISMO archivo: la segunda se rechaza y no se importa nada
+    const dup = await importarCursosArchivo(T, 'cursos.csv', bytes('codigo,nombre,unidad,casetas\nA,Uno,C2-08,Caseta Ejemplo Norte\nA,Dos,C2-08,Caseta Ejemplo Sur\n'));
+    expect(dup).toMatchObject({ ok: false, detalles: [expect.stringMatching(/código repetido: A/)] });
+  });
+
+  it('FUERA DE ORDEN: cargar los cursos DESPUÉS de conciliar cambia el reporte sin re-conciliar; el orden de las casetas del curso no importa; un curso vencido no aplica', async () => {
+    const id = await conciliadoCursos();
+    expect((await reporteReclamacion(T, id))!.cruces).toEqual([]); // todavía sin cursos
+    // el curso de la unidad lista Sur ANTES que Norte (orden de recorrido distinto): la línea de Sur ya no es «fuera de curso»
+    await importarCursosArchivo(T, 'cursos.csv', bytes('codigo,nombre,unidad,casetas\nCUR-U1,Ruta de C2-08,C2-08,Caseta Ejemplo Sur | Caseta Ejemplo Norte\n'));
+    expect((await reporteReclamacion(T, id))!.cruces).toEqual([]);
+    // el mismo código ahora SOLO con Norte → la de Sur sale; y con la vigencia terminada antes del pase, no aplica
+    await importarCursosArchivo(T, 'cursos.csv', bytes('codigo,nombre,unidad,casetas,vigente_hasta\nCUR-U1,Ruta de C2-08,C2-08,Caseta Ejemplo Norte,2026-08-04\n'));
+    expect((await reporteReclamacion(T, id))!.cruces).toEqual([]);
+    await importarCursosArchivo(T, 'cursos.csv', bytes('codigo,nombre,unidad,casetas,vigente_hasta\nCUR-U1,Ruta de C2-08,C2-08,Caseta Ejemplo Norte,2026-08-05\n'));
+    expect((await reporteReclamacion(T, id))!.cruces.map((c) => c.indice + 1)).toEqual([2]);
+    // desactivar el curso (el botón de la configuración) lo saca de la evaluación
+    db.tablas.peaje_curso[0].activo = false;
+    expect((await reporteReclamacion(T, id))!.cruces).toEqual([]);
+  });
+
+  it('OTRO TENANT: los cursos de una flota no tocan el reporte de otra, ni se pueden ligar a ids ajenos', async () => {
+    const id = await conciliadoCursos();
+    await importarCursosArchivo(T, 'cursos.csv', bytes(CSV_CURSOS));
+    // la flota B tiene una caseta con el MISMO nombre: su importación se liga a SU caseta, nunca a la de A
+    const b = await importarCursosArchivo(T2, 'cursos.csv', bytes('codigo,nombre,unidad,casetas\nCUR-B,Ruta de B-01,B-01,Caseta Ejemplo Norte\n'));
+    expect(b).toMatchObject({ ok: true, creados: 1 });
+    expect(db.tablas.peaje_curso_caseta.find((e) => e.curso_id === 'cur-3')).toMatchObject({ caseta_id: 'cN2', tenant_id: T2 });
+    // el reporte de A no cambió, y la flota B no ve el desglose de A
+    expect((await reporteReclamacion(T, id))!.cruces.map((c) => c.indice + 1)).toEqual([2, 3]);
+    expect(await reporteReclamacion(T2, id)).toBeNull();
+    // el curso de A no se importa con los ids de B (la base lo rechaza): resolver con el catálogo de A y guardar en B
+    const deA = resolverCursos([{ codigo: 'X', nombre: 'x', tipo: 'casetas', unidad: 'C2-08', convenio: null, casetas: ['Caseta Ejemplo Norte'], corredor: null, bufferM: null, vigenteDesde: null, vigenteHasta: null }],
+      { unidades: [{ id: 'u1', numeroEconomico: 'C2-08' }], casetas: [{ id: 'cN', nombreNorm: 'caseta ejemplo norte', alias: [] }], convenios: [] });
+    expect(deA.problemas).toEqual([]);
+    expect(await datos.guardarCursosLote(T2, deA.ok)).toEqual({ estado: 'referencia_invalida' });
+    expect(db.tablas.peaje_curso.some((c) => c.codigo === 'X')).toBe(false);
+    // y por la flota B el listado solo trae lo suyo
+    expect((await datos.listarCursos(T2)).map((c) => c.codigo)).toEqual(['CUR-B']);
+    expect((await datos.listarCursos(T)).map((c) => c.codigo)).toEqual(['CUR-U1', 'CUR-CV1'].sort());
   });
 });

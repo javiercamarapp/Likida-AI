@@ -64,7 +64,7 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte }: {
                     <FileDown width={13} height={13} strokeWidth={2} /> PDF
                   </a>
                 </div>
-                <div className="grid sm:grid-cols-3 gap-2 mt-3">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 mt-3">
                   {(Object.keys(ETIQUETA_MOTIVO_RECLAMACION) as Array<keyof typeof ETIQUETA_MOTIVO_RECLAMACION>).map((m) => (
                     <div key={m} className="rounded-lg hairline p-2.5">
                       <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>{ETIQUETA_MOTIVO_RECLAMACION[m]}</span>
@@ -76,6 +76,7 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte }: {
                 <p className="text-[11px] mt-3" style={{ color: 'var(--faint)' }}>
                   No se reclaman (sin evidencia en contra del cobro): {numero(reporte.resumen.confirmadas)} confirmadas por el GPS · {numero(reporte.resumen.sinDatos)} sin datos suficientes
                   {reporte.resumen.sinEvaluar > 0 ? ` · ${numero(reporte.resumen.sinEvaluar)} sin evaluar (vuelve a conciliar el desglose)` : ''}. Sin datos no es evidencia en contra de nadie.
+                  {reporte.resumen.sinCurso > 0 ? ` ${numero(reporte.resumen.sinCurso)} de ${numero(reporte.resumen.lineas)} líneas no tienen curso declarado y no se evaluaron por curso: cárgalos en Configuración, sección Cursos.` : ''}
                 </p>
               </section>
 

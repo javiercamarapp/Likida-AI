@@ -142,12 +142,13 @@ Para pedirle al proveedor de peaje que revise un cobro. Cruza el archivo de pase
 
 Por cada cruce reclamable lleva: fecha, hora, caseta (del proveedor y del catálogo), TAG, unidad, monto, el **porqué** en una frase,
 la distancia unidad↔caseta y el radio de la caseta, hasta 3 posiciones GPS como evidencia (con su hora, coordenadas y distancia a la
-caseta) y la geocerca si la hay. Tres motivos, cada uno con su evidencia:
+caseta) y la geocerca si la hay. Cuatro motivos, cada uno con su evidencia:
 
 | Motivo | Confianza | Cuándo |
 |---|---|---|
 | GPS lejos de la caseta | alta | Dos posiciones consecutivas, una antes y otra después de la hora del pase y a ≤ 6 min entre sí, ubican a la unidad a más de radio + margen de la caseta (el veredicto `no_coincide` del cruce por caseta). |
 | Unidad en zona no autorizada | alta (media si la zona es aproximada) | La posición más cercana en el tiempo al pase (≤ 10 min) cae dentro de una geocerca de **patio** o **restringida** de la flota y no dentro del radio de la caseta. «Dentro» se decide contra el **polígono** de la zona cuando está cargado (P1, 0630); si la zona solo es un círculo que sustituye a un polígono que no se pudo guardar (`aproximada`) la confianza baja a «media», nunca «alta», y el porqué dice «zona de forma aproximada». Entre varias zonas que contienen el punto gana la exacta. |
+| Cruce fuera de curso | media | La unidad (o el convenio del viaje contra el que cuadró la línea) tiene un **curso** —la ruta que la flota autoriza— y el pase no está dentro: la caseta no figura entre las casetas autorizadas, o (corredor) la posición GPS a la hora del pase cae fuera del buffer. Ver «Cursos» abajo. |
 | Posible doble cobro | media | El mismo TAG cobrado dos veces en la misma caseta con ≤ 10 min de diferencia (se reclama el segundo y se señala el primero). Puede ser un retorno real. |
 
 La doctrina es la de siempre: **solo entra una línea con evidencia positiva en contra del cobro**. «Sin datos» (sin hora, TAG sin dar
@@ -156,10 +157,48 @@ significa «hay evidencia suficiente para pedir la revisión», no «el cobro es
 leyenda del reporte lo dice. Las posiciones solo se piden para las líneas candidatas (el GPS dijo «no coincide» o «no alcanzan las
 muestras»), no para todo el desglose.
 
-**Pendiente de datos de la flota (no se inventa):** los **cursos** (rutas autorizadas por unidad dentro de geocercas) no se evalúan
-hasta contar con su tabla; un cruce fuera de curso pero cerca de su caseta no aparece en el reporte. Tampoco hay posiciones reales
-mientras no esté conectada la tabla/vista de GPS de la flota (bloqueo 4) ni el archivo real de pases (bloqueo 1): el E2E usa un CSV
-sintético y un doble de GPS.
+Cada línea recibe **a lo más un motivo**, el más fuerte: GPS lejos > zona no autorizada > fuera de curso > doble cobro.
+
+**Pendiente de datos de la flota (no se inventa):** tampoco hay posiciones reales mientras no esté conectada la tabla/vista de GPS
+de la flota (bloqueo 4) ni el archivo real de pases (bloqueo 1): el E2E usa un CSV sintético y un doble de GPS.
+
+### Cursos (rutas autorizadas) — P8, mig. 0665
+
+Un **curso** es la ruta que la flota autoriza. Cruzar una caseta que no está en el curso de la unidad es motivo para pedirle el
+descuento al proveedor. Dos formas (`peaje_curso.tipo`):
+
+| Tipo | Qué es | Estado |
+|---|---|---|
+| `casetas` | La lista de casetas autorizadas (del catálogo de casetas de la flota), en orden de recorrido A→B. | **Funciona hoy.** No espera nada del cliente: sale de los convenios (0580) y del catálogo de casetas. |
+| `corredor` | Una polilínea (2–2,000 vértices) con un buffer en metros (25–20,000). La posición GPS más cercana al pase (≤ 10 min) debe caer dentro del buffer. | Contrato, importador, evaluación y fixtures **sintéticos**. El **formato real de los corredores del cliente es bloqueo externo (12-oct)**: no se adivina ningún formato. |
+
+**A quién aplica.** A una unidad (`unidad_id`), a un convenio (`convenio_id`: aplica a los pases cuya línea cuadró contra un viaje
+ligado a ese convenio, `viaje_convenio`) o a ambos a la vez (la unidad solo dentro de ese convenio). Un curso sin ninguno no aplica a
+nadie y la base lo rechaza. Una línea que no cuadró contra un viaje solo recibe los cursos de su unidad (el TAG resuelve la unidad).
+
+**Cómo se evalúa** (`peajes/cursos.ts`, pura). Doctrina:
+- **Fuera de curso solo si TODOS los cursos aplicables se pudieron evaluar y NINGUNO autoriza el pase.** Con varios cursos basta que uno
+  lo autorice. Un curso fuera de su vigencia (`vigente_desde`/`vigente_hasta`, inclusivas) o inactivo no aplica.
+- **Sin curso declarado** → no se reclama y se cuenta aparte (`sinCurso` en el resumen, «Sin curso declarado» en el Excel, el PDF y la pantalla).
+- **Dato insuficiente** (caseta del pase sin resolver en el catálogo; corredor sin una posición GPS cercana al pase) → no se reclama.
+- Confianza **media**: el curso lo declara la flota y un desvío autorizado de último momento también explica el cruce.
+
+**Cómo se cargan.** Dos entradas y un solo guardado, con la misma regla (todo-o-nada y sin adivinar):
+1. **CSV o Excel subido** en `/dashboard/agentes/peajes/configuracion`, sección «Cursos». Una fila por curso:
+   `codigo, nombre, unidad, convenio, casetas, corredor_wkt, buffer_m, vigente_desde, vigente_hasta`. La unidad es el número económico; el
+   convenio, su nombre; las casetas, nombres separados por `|` (por nombre o alias del catálogo); el corredor, `LINESTRING(lon lat, …)`;
+   las fechas, `AAAA-MM-DD` o `DD/MM/AAAA`. Un curso es de casetas **o** de corredor, nunca de los dos.
+2. **La tabla propia de la flota** (botón «Leer los cursos de mi tabla conectada»): `tabla_propia` lee cursos por los tres modos (CSV por https
+   con `cursos_url`, endpoint JSON con `cursos_url` + `mapeo_cursos`, y SQL de solo lectura con `vista_cursos` + `columnas_cursos`).
+Las dos pasan por `peajes/cursos_importar.ts`, que traduce nombres a ids de la flota y guarda por la RPC `peaje_curso_reemplazar` (0665): un lote
+   **atómico**, idempotente por `codigo` (re-importar actualiza, no duplica; las casetas se reemplazan enteras con el orden del archivo).
+   Una caseta que no está en el catálogo, una unidad desconocida o un convenio repetido rechazan el lote entero y dicen la fila. Un curso que
+   ya no viene en el archivo **no se borra** (se desactiva con el botón de la configuración): seguir autorizando de más solo deja de
+   reclamar, nunca reclama de más.
+
+**Base (0665).** `peaje_curso` y `peaje_curso_caseta`, ambas con `tenant_id`, FKs compuestas de flota (`unidad`, `cliente_convenio`,
+`peaje_caseta`) y RLS **deny-all** (solo service_role, que filtra por flota). Prueba SQL: `supabase/tests/0665_peaje_cursos.sql`; bloque 320
+de `supabase/verificaciones.sql`. E2E: `peajes/ciclo_completo.e2e.test.ts` (sección «CURSOS»).
 
 ## Salida a SAP/ERP (por pull, configurable)
 
@@ -220,9 +259,10 @@ la pantalla tras declarar el mapeo. Fallo de infraestructura → reintento con b
    de la flota y su alta en el cofre; cuando exista, se implementa como otra fuente del mismo claim.
 7. Salida a SAP: pull (lista + exportación configurable); no hay escritura a SAP ni webhook saliente.
 8. Migraciones 0375/0376/0562/0563 sin aplicar a ninguna base remota (a propósito); aplicar antes de desplegar.
-9. **Cursos (rutas autorizadas) y acceso a las tablas de GPS de la flota**: el reporte de reclamación usa las geocercas del catálogo (con su **polígono nativo**
+9. **Corredores (cursos) y acceso a las tablas de GPS de la flota**: el reporte de reclamación usa las geocercas del catálogo (con su **polígono nativo**
    desde P1: una zona `aproximada` baja a «media» la confianza de «unidad en zona no autorizada») y la tabla `posicion`, que alimenta también la «tabla propia» del cliente. Los
-   **cursos** (motivo `fuera_de_curso`) no se evalúan todavía (paquete P8, depende del formato que entregue el cliente) y el acceso real de solo lectura a sus tablas
-   sigue pendiente.
+   **cursos por casetas autorizadas** (motivo `fuera_de_curso`) ya funcionan (P8, mig. 0665). **Bloqueo externo (12-oct):** el **formato real de los corredores**
+   del cliente (polilínea + buffer) — hoy solo hay contrato y datos sintéticos — y el acceso real de solo lectura a sus tablas de GPS/geocercas/cursos.
+   La migración 0665 sin aplicar a ninguna base remota (a propósito).
 10. El aviso a la oficina usa la plantilla `aviso_operacion_v1` fuera de la ventana de 24 h: hasta que Meta la apruebe,
    el aviso sale solo dentro de la ventana (y se reintenta).

@@ -94,6 +94,15 @@ describe('lectura por SFTP con un doble del cliente', () => {
     expect((await c.lector.leerGeocercas()).filas.map((g) => g.codigo)).toEqual(['P1']);
     expect(d.llamadas[0].destino.ruta).toBe('/entrega/geocercas.csv');
   });
+  it('cursos por el mismo servidor, con SU ruta (integración P8 + P15); otro servidor o https se rechazan', async () => {
+    const d = doble('codigo,nombre,unidad,convenio,casetas\nCUR-1,Ruta,UN-1,,Caseta Ejemplo Sur\n');
+    const c = crearLectorTablaPropia({ ...BASE, cursos_url: 'sftp://s.ejemplo.com/entrega/cursos.csv' }, { http: sinHttp, sftp: d.sftp });
+    if (!c.ok) throw new Error(c.motivo);
+    expect((await c.lector.leerCursos!()).filas.map((x) => x.codigo)).toEqual(['CUR-1']);
+    expect(d.llamadas[0].destino.ruta).toBe('/entrega/cursos.csv');
+    expect(leerConfigTablaPropia({ ...BASE, cursos_url: 'sftp://otro.ejemplo.com/c.csv' })).toMatchObject({ ok: false });
+    expect(leerConfigTablaPropia({ ...BASE, cursos_url: 'https://d.ejemplo.com/c.csv' })).toMatchObject({ ok: false });
+  });
   it('sin archivo de geocercas configurado: formato, sin conectar', async () => {
     const d = doble(CSV);
     const c = crearLectorTablaPropia(BASE, { http: sinHttp, sftp: d.sftp });

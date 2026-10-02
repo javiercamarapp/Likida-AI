@@ -5,7 +5,7 @@ import { EstadoVacio } from '@/app/admin/ui/kit';
 import { numero } from '@/lib/formato';
 // SOLO tipos: los módulos importan supabaseAdmin y no deben entrar al bundle de la vista.
 import type {
-  TagVista, CasetaVista, GeocercaVista, MapeoVista, ArchivoIngestaVista,
+  TagVista, CasetaVista, GeocercaVista, MapeoVista, ArchivoIngestaVista, CursoVista,
 } from '@/lib/likida/peajes/datos';
 
 import { SeccionEntradas, type AccionesEntradas, type EntradasVista } from './entradas';
@@ -17,6 +17,7 @@ export interface AccionesConfiguracion extends AccionesEntradas {
   altaTag: Accion; bajaTag: Accion; importarTags: Accion;
   importarCasetas: Accion; estadoCaseta: Accion;
   guardarGeocerca: Accion; estadoGeocerca: Accion;
+  importarCursos: Accion; importarCursosDeTabla: Accion; estadoCurso: Accion;
   guardarMapeo: Accion; borrarMapeo: Accion;
 }
 
@@ -54,7 +55,7 @@ const CSS_SECUNDARIO = 'hairline text-[12.5px] font-medium px-3 py-1.5 rounded-l
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 export function VistaConfiguracionPeajes({
-  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones,
+  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones,
 }: {
   sufijo: string;
   aviso: string | null;
@@ -64,6 +65,8 @@ export function VistaConfiguracionPeajes({
   unidades: Array<{ id: string; numeroEconomico: string; placas: string | null }> | null;
   casetas: CasetaVista[] | null;
   geocercas: GeocercaVista[] | null;
+  cursos: CursoVista[] | null;
+  convenios: Array<{ id: string; nombre: string }> | null;
   mapeos: MapeoVista[] | null;
   archivos: ArchivoIngestaVista[] | null;
   tiposGeocerca: string[];
@@ -94,6 +97,7 @@ export function VistaConfiguracionPeajes({
           <SeccionTags tags={tags} unidades={unidades} acciones={acciones} />
           <SeccionCasetas casetas={casetas} acciones={acciones} />
           <SeccionGeocercas geocercas={geocercas} tipos={tiposGeocerca} acciones={acciones} />
+          <SeccionCursos cursos={cursos} unidades={unidades} convenios={convenios} acciones={acciones} />
         </div>
       </div>
     </main>
@@ -392,6 +396,58 @@ function SeccionGeocercas({ geocercas, tipos, acciones }: { geocercas: GeocercaV
                 <input type="hidden" name="geocerca" value={g.id} />
                 <input type="hidden" name="activa" value={g.activa ? 'false' : 'true'} />
                 <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>{g.activa ? 'Desactivar' : 'Activar'}</button>
+              </form>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ── Cursos (rutas autorizadas) ──────────────────────────────────────────────
+function SeccionCursos({ cursos, unidades, convenios, acciones }: {
+  cursos: CursoVista[] | null;
+  unidades: Array<{ id: string; numeroEconomico: string }> | null;
+  convenios: Array<{ id: string; nombre: string }> | null;
+  acciones: AccionesConfiguracion;
+}) {
+  const eco = new Map((unidades ?? []).map((u) => [u.id, u.numeroEconomico]));
+  const conv = new Map((convenios ?? []).map((c) => [c.id, c.nombre]));
+  return (
+    <section className="card p-4" id="cursos">
+      <Titulo t="Cursos (rutas autorizadas)"
+        nota={<>Las casetas que cada unidad, o cada convenio A→B, puede cruzar. Un pase en una caseta que <b>no</b> está en el curso aparece en el reporte de reclamación como
+          «Cruce fuera de curso» (confianza media: el curso lo declara la flota). Sin curso declarado no se reclama nada por este motivo. Carga tu CSV o Excel
+          <span className="cifra-mono"> codigo; nombre; unidad; convenio; casetas</span> (una fila por curso; las casetas, en orden de recorrido y separadas por «|»; deben existir en el catálogo de casetas;
+          la unidad es su número económico y el convenio, su nombre). Volver a cargar el mismo código lo actualiza. El corredor (<span className="cifra-mono">corredor_wkt</span> + <span className="cifra-mono">buffer_m</span>) se
+          acepta, pero el formato real de tus rutas está pendiente: hoy se prueba con datos sintéticos.</>} />
+      <SubirCsv accion={acciones.importarCursos} etiqueta="CSV de cursos" />
+      <form action={acciones.importarCursosDeTabla} className="mt-2">
+        <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Leer los cursos de mi tabla conectada</button>
+      </form>
+      {cursos === null ? <NoSePudoLeer que="los cursos" /> : cursos.length === 0 ? (
+        <p className="text-[12.5px] mt-3" style={{ color: 'var(--muted)' }}>
+          Aún no hay cursos: el reporte de reclamación no evalúa «fuera de curso» y lo dice (las líneas se cuentan como «sin curso declarado»).
+        </p>
+      ) : (
+        <div className="mt-3 space-y-1 max-h-[320px] overflow-y-auto">
+          <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{numero(cursos.filter((c) => c.activo).length)} activos de {numero(cursos.length)}</p>
+          {cursos.slice(0, 300).map((c) => (
+            <div key={c.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12.5px]" style={c.activo ? undefined : { opacity: 0.55 }}>
+              <span className="font-medium">{c.nombre}</span>
+              <span className="cifra-mono text-[11px]" style={{ color: 'var(--faint)' }}>{c.codigo}</span>
+              <span className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+                {[c.unidadId ? `unidad ${eco.get(c.unidadId) ?? '—'}` : null, c.convenioId ? `convenio ${conv.get(c.convenioId) ?? '—'}` : null].filter(Boolean).join(' · ')}
+              </span>
+              <span className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+                {c.tipo === 'casetas' ? c.casetas.map((k) => k.nombre || '—').join(' → ') : `corredor de ${numero(c.corredor?.length ?? 0)} puntos · ±${numero(c.bufferM ?? 0)} m`}
+              </span>
+              {(c.vigenteDesde || c.vigenteHasta) && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{c.vigenteDesde ?? '…'} a {c.vigenteHasta ?? '…'}</span>}
+              <form action={acciones.estadoCurso} className="ml-auto">
+                <input type="hidden" name="curso" value={c.id} />
+                <input type="hidden" name="activo" value={c.activo ? 'false' : 'true'} />
+                <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>{c.activo ? 'Desactivar' : 'Activar'}</button>
               </form>
             </div>
           ))}

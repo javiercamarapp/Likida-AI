@@ -82,6 +82,23 @@ con el importador todo-o-nada del Conductor (re-importar actualiza por código, 
   reloj duro; el fallo de una flota se anota en su estado y no frena a las demás. Un sitio editado a mano (`fuente = 'manual'`) NO se pisa (0632). Sin las migraciones
   el cron de posiciones sigue como siempre y la re-importación se apaga con un aviso.
 
+### Cursos (rutas autorizadas) por el mismo lector — P8
+
+Además de posiciones y geocercas, el lector puede leer los **cursos** que consume el reporte de reclamación de peajes
+(motivo «cruce fuera de curso», ver `docs/operacion/conciliacion-peajes.md`). Misma interfaz (`leerCursos?` de
+`LectorTablaPropia`, opcional para no romper la alineación con el demo), mismo juez para los tres modos y mismo rechazo
+con motivo de lo que no se entiende:
+
+- **CSV por https:** `cursos_url`. Una fila por curso: `codigo, nombre, unidad | convenio, casetas | corredor_wkt + buffer_m,
+  vigente_desde, vigente_hasta`. Las casetas, en una celda separadas por `|` y en orden de recorrido; el corredor, `LINESTRING(lon lat, …)`.
+- **Endpoint JSON:** `cursos_url` + `mapeo_cursos` (`lista`, `campos`, paginación); las casetas pueden venir como arreglo.
+- **SQL de solo lectura:** `vista_cursos` + `columnas_cursos` (JSON), con el mismo `SELECT` armado y validado.
+
+Un curso es de **casetas o de corredor**, nunca de los dos; sin unidad ni convenio no aplica a nadie y se rechaza; el corredor exige un
+buffer de 25 a 20,000 m (no se supone uno). **El formato real de los corredores del cliente es bloqueo externo (12-oct):** hoy hay
+contrato y fixtures sintéticos (`tabla_propia/fixtures/cursos*.csv`, `endpoint_cursos.json`). La importación (nombres → ids de la flota,
+guardado atómico) está en `peajes/cursos_importar.ts`.
+
 ### Alineación con el demo
 
 `demo_flota-demo/contratos.ts` (rama `loop/w3-demo`) define `LectorTablaPropia`. Los tipos de

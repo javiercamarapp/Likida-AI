@@ -304,9 +304,11 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 287;
 // (`cp_documento_embarque`: hijos de un padre, linaje por lote de documentos, y el padre de un hijo) y la lectura por ids de los hijos (`cp_documento`).
 // El módulo nuevo `multiembarque.ts` es puro y no suma archivos (su `Array.from` se reescribió para no contar como `.from(`). Medido con el barrido real.
 // Integración P13 + Ola 9 (ronda 13): 1,881 + 5 (P13) + 4 (Ola 9, ver la nota de archivos, arriba) = 1,890.
-// Ronda 15 (corrector, 0676): +1 llamada en `carta_porte_docs/repo.ts` (ya contaba, va por `acotada`): la RPC `cp_documentos_cerrar_zombis`, funcionalidad nueva y no código
-// migrado. 1,890 → 1,891, medido con el barrido real. Si otra rama de la ola también sube el techo, el techo de la integración es la SUMA de los tramos.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_891;
+// RONDA 14, paquete P8 «peajes-cursos» (0665): 0 archivos y +6 llamadas, todas en `peajes/datos.ts` (ya contaba; cada una va por `acotada` con el `tenant_id` anclado): funcionalidad nueva, no código migrado.
+// Ronda 15, P14 «vigia-respaldo-correo» (0673-0674): +8 llamadas en `vigia/repo.ts`, por `acotada` (lista de directores, RPC del correo, tablero).
+// Ronda 15 (corrector, 0676): +1 en `carta_porte_docs/repo.ts` (la RPC `cp_documentos_cerrar_zombis`).
+// Ronda 16 (integración): 1,890 + 6 + 8 + 1 = 1,905; CONFIRMADO con el barrido real del árbol fusionado (ver la prueba: «N de 1,905»). Un techo de integración es la SUMA de los tramos.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_905;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

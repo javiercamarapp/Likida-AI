@@ -103,7 +103,7 @@ export function validarUrlDeCredencial(clave: string, valor: string): void {
  */
 function validarDireccionesSftp(conectorId: string, valores: Record<string, string>): string[] {
   if (conectorId !== PROVEEDOR_TABLA_PROPIA) return [];
-  const claves = ['base_url', 'geocercas_url'].filter((k) => (valores[k] ?? '').toLowerCase().startsWith('sftp:'));
+  const claves = ['base_url', 'geocercas_url', 'cursos_url'].filter((k) => (valores[k] ?? '').toLowerCase().startsWith('sftp:'));
   if (claves.length === 0) return [];
   if ((valores.modo ?? '').trim() !== 'csv_sftp') {
     throw new DatoInvalido('Una dirección sftp:// solo se admite con el modo csv_sftp; con los demás modos tiene que ir por https://.');
