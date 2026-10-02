@@ -71,6 +71,36 @@ function comparar(col: string, op: string, crudo: string): Predicado {
   };
 }
 
+/** Las columnas de un `select` separadas por coma SOLO al nivel superior (los embeds llevan comas adentro). */
+function columnasDeNivel(columnas: string): string[] {
+  const salida: string[] = [];
+  let prof = 0; let actual = '';
+  for (const ch of columnas) {
+    if (ch === '(') prof++;
+    if (ch === ')') prof--;
+    if (ch === ',' && prof === 0) { salida.push(actual.trim()); actual = ''; } else actual += ch;
+  }
+  if (actual.trim()) salida.push(actual.trim());
+  return salida.filter(Boolean);
+}
+
+/** Igualdad para UNIQUE: un jsonb (objeto) se compara por contenido, no por referencia. */
+function igualUnico(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  return typeof a === 'object' && a !== null && typeof b === 'object' && b !== null && JSON.stringify(a) === JSON.stringify(b);
+}
+
+function comparaOrden(a: unknown, b: unknown, ok: (d: number) => boolean): boolean {
+  if (a === null || a === undefined) return false;
+  const na = typeof a === 'number' ? a : Number.NaN;
+  const nb = typeof b === 'number' ? b : Number.NaN;
+  const numA = Number.isFinite(na) ? na : (typeof a === 'string' && /^-?\d+(\.\d+)?$/.test(a) ? Number(a) : Number.NaN);
+  const numB = Number.isFinite(nb) ? nb : (typeof b === 'string' && /^-?\d+(\.\d+)?$/.test(b) ? Number(b) : Number.NaN);
+  if (Number.isFinite(numA) && Number.isFinite(numB)) return ok(numA - numB);
+  const sa = String(a); const sb = String(b);
+  return ok(sa < sb ? -1 : sa > sb ? 1 : 0);
+}
+
 export interface BaseEnMemoria {
   /** Sustituye a `supabaseAdmin()`. */
   cliente: { from: (t: string) => unknown; rpc: (n: string, a?: unknown) => unknown };
@@ -146,6 +176,12 @@ export function crearBaseEnMemoria(
     }
     in(c: string, vs: unknown[]) { this.filtros.push((f) => vs.includes(f[c])); return this; }
     lt(c: string, v: unknown) { this.filtros.push((f) => f[c] !== null && f[c] !== undefined && String(f[c]) < String(v)); return this; }
+    // gt/gte/lte (loop punta a punta, ola 3): comparan NUMÉRICAMENTE cuando los dos
+    // lados son números (un monto «500» no es mayor que «3000» como texto) y como
+    // texto en el resto (las fechas ISO ordenan igual).
+    gt(c: string, v: unknown) { this.filtros.push((f) => comparaOrden(f[c], v, (d) => d > 0)); return this; }
+    gte(c: string, v: unknown) { this.filtros.push((f) => comparaOrden(f[c], v, (d) => d >= 0)); return this; }
+    lte(c: string, v: unknown) { this.filtros.push((f) => comparaOrden(f[c], v, (d) => d <= 0)); return this; }
     or(expr: string) { this.filtros.push(predicadoDeOr(expr)); return this; }
     order(c: string, o?: { ascending?: boolean }) { this.ordenes.push({ col: c, asc: o?.ascending !== false }); return this; }
     limit(n: number) { this.limite = n; return this; }
@@ -165,7 +201,13 @@ export function crearBaseEnMemoria(
       const proyectar = (f: Fila): Fila => {
         if (this.columnas === '*' || this.columnas === '') return { ...f };
         const sal: Fila = {};
-        for (const c of this.columnas.split(',').map((x) => x.trim()).filter(Boolean)) sal[c] = f[c];
+        for (const c of columnasDeNivel(this.columnas)) {
+          // `alias:relacion(col, …)` / `relacion(col, …)`: el doble no hace joins; copia lo que
+          // la prueba haya PRE-EMBEBIDO en la fila bajo el nombre del alias.
+          const embed = /^(?:([a-z_0-9]+):)?([a-z_0-9]+)(?:!inner)?\(/i.exec(c);
+          if (embed) { const nombre = embed[1] ?? embed[2]; sal[nombre] = f[nombre]; continue; }
+          sal[c] = f[c];
+        }
         return sal;
       };
       const entregar = (rs: Fila[], count?: number) => {
@@ -184,7 +226,7 @@ export function crearBaseEnMemoria(
           const vistas: Fila[] = [...filas];
           for (const f of lote) {
             for (const r of restricciones.filter((x) => x.tabla === this.t)) {
-              if (vistas.some((x) => r.columnas.every((k) => x[k] === f[k]))) {
+              if (vistas.some((x) => r.columnas.every((k) => igualUnico(x[k], f[k])))) {
                 return { data: null, error: { message: `duplicate key value violates unique constraint "${r.nombre}"`, code: '23505' } };
               }
             }

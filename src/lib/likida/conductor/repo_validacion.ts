@@ -64,7 +64,7 @@ export async function listarSitios(
   tenantId: string, o: { busqueda?: string; tipo?: TipoSitio; limite?: number } = {},
 ): Promise<{ sitios: SitioFila[]; hayMas: boolean }> {
   const limite = Math.min(Math.max(o.limite ?? 200, 1), 500);
-  let q = supabaseAdmin().from('geocerca').select(COLUMNAS_SITIO).eq('tenant_id', tenantId).in('tipo', o.tipo ? [o.tipo] : [...TIPOS_DEL_CATALOGO]);
+  let q = supabaseAdmin().from('geocerca').select(COLUMNAS_SITIO).eq('tenant_id', tenantId).eq('catalogo', 'conductor').in('tipo', o.tipo ? [o.tipo] : [...TIPOS_DEL_CATALOGO]);
   const b = (o.busqueda ?? '').replace(/[%,()*\\]/g, ' ').trim().slice(0, 60);
   if (b) q = q.or(`nombre.ilike.%${b}%,codigo.ilike.%${b}%`);
   const res = await acotada(q.order('nombre', { ascending: true }).order('id').limit(limite + 1), 'sitios.listar');
@@ -102,9 +102,11 @@ export async function guardarSitio(tenantId: string, d: DatosSitio): Promise<Res
     nombre: d.nombre, tipo: d.tipo, codigo: d.codigo, direccion: d.direccion, lat: d.lat, lng: d.lng, radio_m: d.radioM,
     cliente_id: d.clienteId, padre_id: d.padreId, fuente: 'manual',
   };
+  // Catálogo propio (0480): la edición solo toca filas del Conductor (`.eq('catalogo')`) y el alta se declara suyo,
+  // para que un patio o punto de interés sin código no caiga en el catálogo de peajes.
   const res = d.id
-    ? await acotada(supabaseAdmin().from('geocerca').update(fila).eq('id', d.id).eq('tenant_id', tenantId).select('id'), 'sitios.editar')
-    : await acotada(supabaseAdmin().from('geocerca').insert({ ...fila, tenant_id: tenantId }).select('id'), 'sitios.crear');
+    ? await acotada(supabaseAdmin().from('geocerca').update(fila).eq('id', d.id).eq('tenant_id', tenantId).eq('catalogo', 'conductor').select('id'), 'sitios.editar')
+    : await acotada(supabaseAdmin().from('geocerca').insert({ ...fila, tenant_id: tenantId, catalogo: 'conductor' }).select('id'), 'sitios.crear');
   if (res.error) {
     const code = (res.error as { code?: string }).code;
     if (code === '23505') return 'duplicado';
@@ -117,7 +119,7 @@ export async function guardarSitio(tenantId: string, d: DatosSitio): Promise<Res
 
 export async function cambiarEstadoSitio(tenantId: string, id: string, activa: boolean): Promise<boolean> {
   if (!UUID.test(id)) return false;
-  const res = await acotada(supabaseAdmin().from('geocerca').update({ activa }).eq('id', id).eq('tenant_id', tenantId).select('id'), 'sitios.estado');
+  const res = await acotada(supabaseAdmin().from('geocerca').update({ activa }).eq('id', id).eq('tenant_id', tenantId).eq('catalogo', 'conductor').select('id'), 'sitios.estado');
   const filas = exigir(res as never, 'sitios.estado') as unknown[] | null;
   return Boolean(filas && filas.length > 0);
 }
@@ -144,7 +146,7 @@ export async function asignarSitiosViaje(
     if (v === null) { columnas[columna] = null; continue; }
     // Id o código, SIEMPRE dentro de la flota.
     const campo = UUID.test(v) ? 'id' : 'codigo';
-    const r = await acotada(supabaseAdmin().from('geocerca').select('id').eq('tenant_id', tenantId).eq(campo, UUID.test(v) ? v.toLowerCase() : v).order('id').limit(1), 'sitios.resolver');
+    const r = await acotada(supabaseAdmin().from('geocerca').select('id').eq('tenant_id', tenantId).eq('catalogo', 'conductor').eq(campo, UUID.test(v) ? v.toLowerCase() : v).order('id').limit(1), 'sitios.resolver');
     const f = (exigir(r as never, 'sitios.resolver') ?? []) as unknown as Fila[];
     if (f.length === 0) return 'sitio_no_encontrado';
     columnas[columna] = String(f[0].id);
@@ -180,6 +182,15 @@ export async function posicionesDeUnidad(tenantId: string, unidadId: string, des
     lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(String(f.medida_en)),
     fuente: (f.proveedor === 'whatsapp' ? 'pin' : 'gps') as FuenteUbicacion,
   }));
+}
+
+/** ¿La unidad tiene alguna muestra de un GPS de verdad (no un pin de WhatsApp) desde `desde`? LANZA si la base falla. */
+export async function unidadReportaGps(tenantId: string, unidadId: string, desde: Date): Promise<boolean> {
+  const res = await acotada(supabaseAdmin()
+    .from('posicion').select('id')
+    .eq('tenant_id', tenantId).eq('unidad_id', unidadId).neq('proveedor', 'whatsapp')
+    .gte('medida_en', desde.toISOString()).order('id').limit(1), 'validacion.unidad_con_gps');
+  return ((exigir(res as never, 'validacion.unidad_con_gps') ?? []) as unknown[]).length > 0;
 }
 
 export type ResultadoVeredicto = 'nuevo' | 'mejorado' | 'igual' | 'hito_cambio' | 'fallo';
@@ -288,6 +299,14 @@ export async function urlFirmadaEvidencia(tenantId: string, ruta: string): Promi
   const { data, error } = await acotada(supabaseAdmin().storage.from('comprobantes').createSignedUrl(ruta, 600), 'evidencia.firmar');
   if (error || !data?.signedUrl) { logger.warn('conductor.evidencia_no_firmada', { err: error?.message ?? 'sin url' }); return null; }
   return data.signedUrl;
+}
+
+/** Un hito DE ESA FLOTA (lo mínimo para decidir si se puede validar). `null` = no existe o es de otra flota. */
+export async function hitoDeFlota(tenantId: string, hitoId: string): Promise<{ id: string; viajeId: string; tipo: TipoHito; estado: string } | null> {
+  if (!UUID.test(hitoId)) return null;
+  const res = await acotada(supabaseAdmin().from('viaje_hito').select('id, viaje_id, tipo, estado').eq('tenant_id', tenantId).eq('id', hitoId.toLowerCase()).maybeSingle(), 'oficina.hito_de_flota');
+  const f = exigir(res as never, 'oficina.hito_de_flota') as Fila | null;
+  return f ? { id: String(f.id), viajeId: String(f.viaje_id), tipo: f.tipo as TipoHito, estado: String(f.estado) } : null;
 }
 
 // ── Las acciones de la oficina (RPC atómicas con bitácora) ──────────────────

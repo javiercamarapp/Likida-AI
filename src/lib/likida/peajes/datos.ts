@@ -221,7 +221,8 @@ export async function listarGeocercas(tenantId: string): Promise<GeocercaVista[]
   const filas = await traerTodo<{ id: unknown; nombre: unknown; tipo: unknown; lat: unknown; lng: unknown; radio_m: unknown; activa: unknown }>(
     (d, h) => acotada(supabaseAdmin().from('geocerca')
       .select('id, nombre, tipo, lat, lng, radio_m, activa', conteo(d))
-      .eq('tenant_id', tenantId).order('nombre').order('id').range(d, h), 'peajes.geocercas'),
+      // Solo el catálogo de peajes (0480): los clientes, plantas y andenes del Conductor son de SU pantalla.
+      .eq('tenant_id', tenantId).eq('catalogo', 'peajes').order('nombre').order('id').range(d, h), 'peajes.geocercas'),
     'peajes.geocercas',
   );
   return filas.map((f) => ({
@@ -231,6 +232,9 @@ export async function listarGeocercas(tenantId: string): Promise<GeocercaVista[]
 }
 
 export type ResultadoGeocerca = { ok: true } | { ok: false; motivo: string };
+
+const MOTIVO_SITIO_DEL_CONDUCTOR =
+  'Ese nombre ya es un sitio del catálogo del Agente Conductor (clientes, plantas y andenes). Elige otro nombre, o edítalo en Agente Conductor → Sitios.';
 
 export async function guardarGeocerca(
   tenantId: string,
@@ -242,10 +246,21 @@ export async function guardarGeocerca(
   if (![e.lat, e.lng, e.radioM].every(Number.isFinite)) return { ok: false, motivo: 'Latitud, longitud y radio deben ser números.' };
   if (e.lat < -90 || e.lat > 90 || e.lng < -180 || e.lng > 180) return { ok: false, motivo: 'Las coordenadas están fuera de rango.' };
   if (!Number.isInteger(e.radioM) || e.radioM < 25 || e.radioM > 100_000) return { ok: false, motivo: 'El radio va de 25 a 100,000 metros.' };
+  // Dos catálogos comparten la tabla (0480): este editor SOLO escribe el de peajes. Si el nombre ya es un sitio del
+  // Conductor (cliente, planta, andén…), el upsert por (tenant, nombre) lo pisaría —cambiaría su tipo y su círculo—;
+  // se avisa antes y la base lo impide además (catálogo inmutable + CHECK de pareja con el tipo).
+  const previa = await acotada(supabaseAdmin().from('geocerca').select('id, catalogo')
+    .eq('tenant_id', tenantId).eq('nombre', nombre).order('id').limit(1), 'peajes.geocerca_previa');
+  if (previa.error) {
+    logger.error('peajes.guardar_geocerca', { tenant: tenantId, err: previa.error.message });
+    return { ok: false, motivo: 'No se pudo guardar la geocerca. Inténtalo de nuevo.' };
+  }
+  if ((previa.data ?? []).some((f: { catalogo?: unknown }) => f.catalogo === 'conductor')) return { ok: false, motivo: MOTIVO_SITIO_DEL_CONDUCTOR };
   const { error } = await acotada(supabaseAdmin().from('geocerca').upsert({
-    tenant_id: tenantId, nombre, tipo: e.tipo, lat: e.lat, lng: e.lng, radio_m: e.radioM, activa: true,
+    tenant_id: tenantId, nombre, tipo: e.tipo, lat: e.lat, lng: e.lng, radio_m: e.radioM, activa: true, catalogo: 'peajes',
   }, { onConflict: 'tenant_id,nombre' }), 'peajes.guardar_geocerca');
   if (error) {
+    if ((error as { code?: string }).code === '23514') return { ok: false, motivo: MOTIVO_SITIO_DEL_CONDUCTOR };
     logger.error('peajes.guardar_geocerca', { tenant: tenantId, err: error.message });
     return { ok: false, motivo: 'No se pudo guardar la geocerca. Inténtalo de nuevo.' };
   }
@@ -253,7 +268,7 @@ export async function guardarGeocerca(
 }
 
 export async function cambiarEstadoGeocerca(tenantId: string, id: string, activa: boolean): Promise<boolean> {
-  const { error } = await acotada(supabaseAdmin().from('geocerca').update({ activa }).eq('tenant_id', tenantId).eq('id', id), 'peajes.estado_geocerca');
+  const { error } = await acotada(supabaseAdmin().from('geocerca').update({ activa }).eq('tenant_id', tenantId).eq('catalogo', 'peajes').eq('id', id), 'peajes.estado_geocerca');
   if (error) logger.error('peajes.estado_geocerca', { tenant: tenantId, err: error.message });
   return !error;
 }

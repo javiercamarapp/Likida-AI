@@ -184,7 +184,27 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 
 - **Botones:** ninguno
 
-## Plantillas nuevas, listas para enviar a aprobación (17)
+## Plantillas nuevas, listas para enviar a aprobación (18)
+
+### `cobranza_gastos_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Chofer — cobranza de comprobantes / recordatorio de aceptación. Cobranza por GASTO (Agente 7): avisar al chofer, con un solo mensaje fusionado, cuántos gastos suyos siguen sin comprobante y cuál es el primero, cuando su ventana de 24 h está cerrada.
+- **Llamador en código:** src/lib/likida/agentes/cobranza_gasto.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Recordatorio de Likida: {{1}}, tienes pendientes los comprobantes de {{2}} de tus gastos. El primero: {{3}}. Manda por aquí la foto del ticket o el XML de la factura.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del chofer | Juan Pérez |
+| `{{2}}` | cuántos gastos | 2 |
+| `{{3}}` | el gasto más atrasado y qué comprobante le falta (una sola línea) | Diésel $1,200.00 del 29 sept: falta la factura (CFDI) |
+
+- **Botones:** ninguno
 
 ### `regla_aviso_v1`
 

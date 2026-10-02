@@ -140,6 +140,8 @@ export function corridaDeCobranza(r: {
   omitido?: string;
   fallos: string[];
   cortadosPorReloj: number;
+  /** La cobranza por gasto (0525): cuando corrió, su desglose viaja en el renglón de la bitácora. */
+  gasto?: { mensajes: number; gastosAvisados: number; pospuestosPorTope: number };
 }): {
   estado: 'ok' | 'parcial';
   tareasHechas: number;
@@ -159,6 +161,11 @@ export function corridaDeCobranza(r: {
       fallos: r.fallos.length,
       cortadosPorReloj: r.cortadosPorReloj,
       sinTelefono: r.sinTelefono,
+      ...(r.gasto ? {
+        gastoMensajes: r.gasto.mensajes,
+        gastosAvisados: r.gasto.gastosAvisados,
+        gastoPospuestosPorTope: r.gasto.pospuestosPorTope,
+      } : {}),
       ...(r.omitido ? { omitido: r.omitido } : {}),
     },
   };

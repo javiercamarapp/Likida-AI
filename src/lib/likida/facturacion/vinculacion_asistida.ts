@@ -82,6 +82,13 @@ export async function vincularPortalAsistido(args: {
   senaDeAdentro?: string;
   topeMs?: number;
   intervaloMs?: number;
+  /**
+   * MODO REMOTO (0540): quien corre esto no tiene el cofre ni la base —es la máquina
+   * con pantalla del contralor—, así que en vez de guardar aquí ENTREGA la sesión ya
+   * recortada al servidor (que la cifra, la guarda y anota el vínculo). Si lanza, la
+   * vinculación falla y se dice por qué; nada se anota como vinculado.
+   */
+  entregar?: (estadoRecortado: string, capturadaEn: string) => Promise<void>;
 }): Promise<ResultadoVinculacion> {
   const ficha = fichaComercio(args.comercio);
   if (!ficha) {
@@ -142,13 +149,24 @@ export async function vincularPortalAsistido(args: {
   }
 
   const capturadaEn = new Date(ahora()).toISOString();
-  await guardarSesionPortal(args.tenantId, conectorDePortal(args.comercio), {
-    storageState: recortado, capturadaEn,
-  });
-  await anotarVinculo({
-    tenantId: args.tenantId, comercio: args.comercio, estado: 'vinculado',
-    motivo: null, ahora: capturadaEn,
-  });
+  if (args.entregar) {
+    try {
+      await args.entregar(recortado, capturadaEn);
+    } catch (e) {
+      return {
+        ok: false, comercio: args.comercio,
+        motivo: `La persona entró, pero el servidor no pudo guardar la sesión: ${e instanceof Error ? e.message : String(e)}. No quedó vinculado.`,
+      };
+    }
+  } else {
+    await guardarSesionPortal(args.tenantId, conectorDePortal(args.comercio), {
+      storageState: recortado, capturadaEn,
+    });
+    await anotarVinculo({
+      tenantId: args.tenantId, comercio: args.comercio, estado: 'vinculado',
+      motivo: null, ahora: capturadaEn,
+    });
+  }
 
   const cookies = (JSON.parse(recortado) as { cookies: unknown[] }).cookies.length;
   logger.info('vinculacion.asistida.ok', { tenant: args.tenantId, comercio: args.comercio, cookies });

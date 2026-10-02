@@ -115,7 +115,21 @@ export type EntidadBitacora =
   // operadores, unidades y jefes (borrarlo los deja sin patio), y quién lo hizo
   // es lo que hay que poder reconstruir. Hasta hoy `crearTerminal` firmaba como
   // `tenant`; el id del patio vive en `entidadId`.
-  | 'terminal';
+  | 'terminal'
+  // Ola 3, Agente 5 «Conductor»: quién cambió la estrategia de recordatorios, la ventana, el tope diario o a quién
+  // se escala (cambia CUÁNDO se le insiste a cada chofer y a quién se despierta) y quién dio de alta, rotó o
+  // apagó el webhook hacia el sistema del cliente. Solo nombres de llaves y conteos: nunca teléfonos ni secretos.
+  | 'conductor_config'
+  | 'conductor_webhook'
+  // Ola 3, Vigía: grupos de clientes (críticos o no) y el histórico exportado que se importó. Ids y conteos: nunca texto del chat.
+  | 'vigia_grupo'
+  | 'vigia_historial'
+  // W3 «autofacturación» (agente 6): la vinculación asistida de un portal (quién la
+  // pidió, cuándo se reclamó y cerró), la bandera ensayo→real por flota, los límites,
+  // la confirmación humana de cada lote y las reversas. `entidadId` es el comercio, el
+  // lote o el gasto según la acción; el detalle nunca lleva cookies, códigos ni RFC.
+  | 'portal_vinculacion'
+  | 'autofactura';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una

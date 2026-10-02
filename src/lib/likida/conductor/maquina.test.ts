@@ -70,6 +70,39 @@ describe('«ya llegué» a secas se resuelve por el ESTADO del viaje (el defecto
   });
 });
 
+describe('«ya llegué» entregado tarde y fuera de orden (adversarial ronda 03)', () => {
+  const horaDe = (min: number) => new Date(AHORA.getTime() - min * 60_000);
+
+  it('un «ya llegué» ANTERIOR a la salida de la carga NO es la llegada a descargar: llena el hueco de la carga', () => {
+    // llegada_carga omitida por la salida; el «ya llegué» a secas se mandó 10 min antes de esa salida y Meta lo reentregó tarde.
+    const hs = viaje({
+      llegada_carga: { estado: 'omitido', omitidoMotivo: 'inferido_por_salida_carga' },
+      salida_carga: { estado: 'recibido', hace: 5 },
+    });
+    const d = registra(decidir(entrada(hs, llegada(), { mensajeEn: horaDe(15) })));
+    expect(d.objetivo).toBe('llegada_carga');
+    expect(d.reabre).toBe(true);
+    expect(d.legado).toEqual([]); // jamás sella `viaje.llegada_en` (destino)
+  });
+
+  it('con la llegada a carga ya registrada, el «ya llegué» previo a la salida es un duplicado de la carga', () => {
+    const hs = viaje({ llegada_carga: { estado: 'recibido', hace: 40 }, salida_carga: { estado: 'recibido', hace: 5 } });
+    const d = decidir(entrada(hs, llegada(), { mensajeEn: horaDe(15) }));
+    expect(d).toMatchObject({ accion: 'duplicado', objetivo: 'llegada_carga' });
+  });
+
+  it('un «ya llegué» POSTERIOR a la salida sigue siendo la llegada a descargar', () => {
+    const hs = viaje({ llegada_carga: { estado: 'recibido', hace: 40 }, salida_carga: { estado: 'recibido', hace: 30 } });
+    const d = registra(decidir(entrada(hs, llegada(), { mensajeEn: horaDe(2) })));
+    expect(d.objetivo).toBe('llegada_descarga');
+  });
+
+  it('el lugar explícito sigue mandando sobre la hora', () => {
+    const hs = viaje({ llegada_carga: { estado: 'recibido', hace: 40 }, salida_carga: { estado: 'recibido', hace: 5 } });
+    expect(registra(decidir(entrada(hs, llegada('descarga'), { mensajeEn: horaDe(15) }))).objetivo).toBe('llegada_descarga');
+  });
+});
+
 describe('secuencia válida y mensajes fuera de orden', () => {
   it('la secuencia completa, paso a paso, registra cada hito sin omitir nada', () => {
     let hs = viaje();

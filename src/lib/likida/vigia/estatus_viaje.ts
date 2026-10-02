@@ -14,19 +14,37 @@
 // CONTACTO autorizado (la allowlist), nunca del texto del mensaje.
 //
 // ── LO QUE NO SE SABE, NO SE DICE ───────────────────────────────────────────
-//   · `etaIso`: Likida no guarda cita ni ETA por viaje (no hay columna). Hasta
-//     que exista, es siempre `null` y el Vigía contesta «lo consulto» y escala.
+//   · `etaIso`: es la CITA (o, si no hay, la ETA) de LLEGADA A DESCARGA que el
+//     despachador o el TMS del cliente capturó en el viaje (0380: `cita_destino_en`,
+//     `eta_destino_en`) y que el Agente 5 «Conductor» expone. NO es telemetría: se
+//     dice de dónde salió (`etaFuente`). Sin captura (o si el viaje ya llegó) es
+//     `null` y el Vigía contesta «lo consulto» y escala.
 //   · `posicion`: `null` si no hay GPS (hoy casi ninguna flota lo tiene).
 //   · `documentos`/`podRecibido`/`facturaEmitida`: `null` = no se pudo determinar
 //     (error de lectura), que NO es lo mismo que «no hay faltantes».
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type EtapaViaje = 'en_curso' | 'en_destino' | 'descargando' | 'regresando' | 'cerrado';
+export type EtapaViaje =
+  | 'en_curso' | 'en_origen' | 'en_ruta' | 'en_destino' | 'descargando' | 'entregado' | 'regresando' | 'cerrado';
+
+/**
+ * Los hitos que el cliente puede oír. `llegada`/`descarga` son los sellos viejos de la 0090 (solo si el viaje
+ * no tiene hitos del Conductor); los otros cuatro son los de la 0380.
+ */
+export type TipoHitoViaje =
+  | 'llegada' | 'descarga' | 'regreso'
+  | 'llegada_carga' | 'salida_carga' | 'llegada_descarga' | 'salida_descarga';
 
 export interface HitoViaje {
-  tipo: 'llegada' | 'descarga' | 'regreso';
+  tipo: TipoHitoViaje;
   /** ISO. Es la hora del MENSAJE del operador (no la del evento). */
   en: string;
+}
+
+/** Un archivo que Likida puede adjuntar a la respuesta (el archivo en sí lo resuelve el repo al enviar). */
+export interface AdjuntoDisponible {
+  clave: 'pod';
+  nombre: string;
 }
 
 export interface PosicionViaje {
@@ -50,6 +68,14 @@ export interface EstatusViaje {
   ultimoHito: HitoViaje | null;
   posicion: PosicionViaje | null;
   etaIso: string | null;
+  /** De dónde salió `etaIso`: la cita pactada o la ETA capturada. `null` si no hay. */
+  etaFuente: 'cita' | 'eta' | null;
+  /** La cita (o ETA) de llegada a CARGAR, mientras la unidad no haya llegado ahí. */
+  citaCarga: { en: string; fuente: 'cita' | 'eta' } | null;
+  /** La parada en la que está AHORA el operador (llegó y no ha avisado su salida). */
+  enAnden: { lugar: 'carga' | 'descarga'; desde: string | null } | null;
+  /** Archivos que se pueden mandar junto con la respuesta (hoy solo el POD ya recibido). */
+  adjuntos: AdjuntoDisponible[];
   documentos: DocumentoViaje[] | null;
   podRecibido: boolean | null;
   facturaEmitida: boolean | null;

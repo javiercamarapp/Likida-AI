@@ -264,3 +264,64 @@ describe('guardia anti-invención del texto pulido', () => {
     });
   });
 });
+
+describe('lo que aporta el Conductor (ronda 03)', () => {
+  const en = (min: number) => new Date(AHORA.getTime() + min * 60_000).toISOString();
+
+  it('una CITA se dice como cita y se aclara que no es una medición del GPS', () => {
+    const b = redactarBorrador(base({ clasificacion: { intencion: 'eta', secundarias: [], senales: [] }, viaje: { tipo: 'uno', estatus: estatus({ etaIso: en(300), etaFuente: 'cita' }) } }));
+    expect(b.texto).toContain('La cita de llegada a destino de F-1042');
+    expect(b.texto).toContain('no una medición del GPS');
+    expect(b.respaldo).toMatchObject({ eta: en(300), etaFuente: 'cita' });
+    expect(b.faltantes).toEqual([]);
+  });
+
+  it('una ETA capturada se dice como hora estimada; la cita de carga solo mientras no ha llegado a cargar', () => {
+    const e = estatus({ etaIso: en(300), etaFuente: 'eta', citaCarga: { en: en(30), fuente: 'cita' }, etapa: 'en_curso' });
+    const b = redactarBorrador(base({ clasificacion: { intencion: 'eta', secundarias: [], senales: [] }, viaje: { tipo: 'uno', estatus: e } }));
+    expect(b.texto).toContain('Hora estimada de llegada de F-1042');
+    expect(b.texto).toContain('La cita de carga es el');
+    const yaCargando = redactarBorrador(base({ clasificacion: { intencion: 'eta', secundarias: [], senales: [] }, viaje: { tipo: 'uno', estatus: { ...e, etapa: 'en_origen' } } }));
+    expect(yaCargando.texto).not.toContain('La cita de carga');
+  });
+
+  it('ya en destino no hay «hora estimada» que prometer y no falta ningún dato', () => {
+    const b = redactarBorrador(base({ clasificacion: { intencion: 'eta', secundarias: [], senales: [] }, viaje: { tipo: 'uno', estatus: estatus({ etapa: 'entregado' }) } }));
+    expect(b.texto).toContain('terminó de descargar');
+    expect(b.faltantes).toEqual([]);
+  });
+
+  it('el último hito de los cinco se nombra bien y dice que lo reportó el operador', () => {
+    const b = redactarBorrador(base({ viaje: { tipo: 'uno', estatus: estatus({ etapa: 'en_ruta', ultimoHito: { tipo: 'salida_carga', en: AHORA.toISOString() } }) } }));
+    expect(b.texto).toContain('Último registro del operador: salida de la carga');
+    expect(b.texto).toContain('salió de la carga y va en camino al destino');
+  });
+
+  it('en andén: dice en cuál parada y desde cuándo, sin minutos de más', () => {
+    const b = redactarBorrador(base({ viaje: { tipo: 'uno', estatus: estatus({ enAnden: { lugar: 'descarga', desde: AHORA.toISOString() } }) } }));
+    expect(b.texto).toContain('Sigue en la descarga desde las');
+  });
+
+  it('con POD recibido ofrece adjuntarlo: riesgo medio (lo aprueba una persona) y sin tarea de entrega manual', () => {
+    const e = estatus({ podRecibido: true, facturaEmitida: true, adjuntos: [{ clave: 'pod', nombre: 'Comprobante de entrega (POD)' }] });
+    const b = redactarBorrador(base({ clasificacion: { intencion: 'factura_pod', secundarias: [], senales: [] }, viaje: { tipo: 'uno', estatus: e } }));
+    expect(b.adjuntos).toEqual(['pod']);
+    expect(b.respaldo).toMatchObject({ adjuntos: ['pod'], viajeId: e.viajeId, folio: 'F-1042' });
+    expect(b.riesgo).toBe('medio');
+    expect(b.tareas).toEqual([]);
+    expect(b.texto).toContain('Si necesitas el archivo y no te llega por aquí');
+  });
+
+  it('sin archivo que adjuntar, el archivo lo entrega una persona (tarea) y no hay adjuntos', () => {
+    const b = redactarBorrador(base({ clasificacion: { intencion: 'factura_pod', secundarias: [], senales: [] }, viaje: { tipo: 'uno', estatus: estatus({ podRecibido: true, facturaEmitida: false }) } }));
+    expect(b.adjuntos).toEqual([]);
+    expect(b.tareas).toEqual(['entrega_de_archivo']);
+    expect(b.respaldo).not.toHaveProperty('adjuntos');
+  });
+
+  it('pedir «documentos» no adjunta nada aunque haya POD', () => {
+    const e = estatus({ podRecibido: true, adjuntos: [{ clave: 'pod', nombre: 'Comprobante de entrega (POD)' }] });
+    const b = redactarBorrador(base({ clasificacion: { intencion: 'documentos', secundarias: [], senales: [] }, viaje: { tipo: 'uno', estatus: e } }));
+    expect(b.adjuntos).toEqual([]);
+  });
+});

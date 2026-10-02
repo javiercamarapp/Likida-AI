@@ -1538,6 +1538,26 @@ function documento(servidor: string) {
           },
         },
       },
+      '/v1/hitos/{id}/validar': {
+        post: {
+          operationId: 'validarHito',
+          'x-likida-area': 'administracion',
+          summary: 'Marca un hito como validado (confirmado por tu sistema u oficina).',
+          description: 'Área `administracion` y SOLO con llave de API (la bitácora firma «llave-api:<prefijo>»). Es la misma acción que el botón «Validar» del tablero del Agente Conductor. `motivo` es obligatorio (5 a 200 caracteres) y queda en la bitácora con la llave y la hora, en la misma transacción que el cambio. Solo se valida un hito ya reportado por el chofer (`recibido`): uno `esperado`, `omitido` o `escalado` es 409. Un reintento sobre uno ya validado es 200 con `idempotente: true`. Validar no mueve la hora del mensaje del chofer. «No existe» y «no es de tu flota» contestan lo mismo (404).',
+          tags: ['hitos'],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'El id del hito (de `GET /v1/hitos`).' }],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { type: 'object', properties: { motivo: { type: 'string', minLength: 5, maxLength: 200 } }, required: ['motivo'], additionalProperties: false } } },
+          },
+          responses: {
+            '200': { description: 'El hito quedó validado (o ya lo estaba).', content: { 'application/json': { schema: { type: 'object' } } } },
+            '404': noEncontrado,
+            '409': { description: 'El hito no está en un estado validable, o cambió entre la lectura y la acción.', content: { 'application/json': { schema: { type: 'object' } } } },
+            ...respuestasError,
+          },
+        },
+      },
       '/v1/viajes/{id}/citas': {
         put: {
           operationId: 'fijarCitasDeViaje',

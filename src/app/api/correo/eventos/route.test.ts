@@ -67,6 +67,17 @@ vi.mock('@/lib/likida/agentes/enviador', () => ({
   suprimirCorreo: async (correo: string, motivo: string) => { suprimidas.push({ correo, motivo }); },
 }));
 
+// 0531: la confirmación de un lote de facturas al contador. Por omisión «no es de un lote».
+const confirmaciones: Array<{ id: string; r: string }> = [];
+let respuestaLote: 'aplicada' | 'sin_lote' | 'ya_estaba' | Error = 'sin_lote';
+vi.mock('@/lib/likida/buzon/entrega_repo', () => ({
+  confirmarPorResend: async (id: string, r: string) => {
+    confirmaciones.push({ id, r });
+    if (respuestaLote instanceof Error) throw respuestaLote;
+    return respuestaLote;
+  },
+}));
+
 const { POST } = await import('./route');
 
 const SECRETO_CRUDO = crypto.randomBytes(24);
@@ -176,6 +187,29 @@ describe('el circuito', () => {
     const r = await postear(JSON.stringify({ type: 'email.bounced', data: { email_id: 're_otro' } }));
     expect(await r.json()).toMatchObject({ sinPieza: true });
     expect(tabla[0].entrega_estado).toBeNull();
+  });
+
+  it('0531: un id que NO es de una pieza pero sí de un lote al contador lo confirma (entregada) y no cuenta como sinPieza', async () => {
+    confirmaciones.length = 0; respuestaLote = 'aplicada';
+    const r = await postear(JSON.stringify({ type: 'email.delivered', data: { email_id: 're_lote' } }));
+    expect(await r.json()).toMatchObject({ entrega: 'aplicada', estado: 'entregado' });
+    expect(confirmaciones).toEqual([{ id: 're_lote', r: 'entregada' }]);
+    respuestaLote = 'sin_lote';
+  });
+
+  it('0531: el rebote de un lote lo marca rebotada y NO suprime la dirección del contador sola', async () => {
+    confirmaciones.length = 0; suprimidas.length = 0; respuestaLote = 'aplicada';
+    const r = await postear(JSON.stringify({ type: 'email.bounced', data: { email_id: 're_lote', to: ['contador@x.mx'] } }));
+    expect(await r.json()).toMatchObject({ entrega: 'aplicada', estado: 'rebotado' });
+    expect(confirmaciones[0].r).toBe('rebotada');
+    expect(suprimidas).toEqual([]);
+    respuestaLote = 'sin_lote';
+  });
+
+  it('0531: base caída al confirmar un lote: 500 para que Resend reintente', async () => {
+    respuestaLote = new Error('db down');
+    expect((await postear(JSON.stringify({ type: 'email.delivered', data: { email_id: 're_lote' } }))).status).toBe(500);
+    respuestaLote = 'sin_lote';
   });
 
   it('un tipo que no rastrea entrega se acusa sin efecto', async () => {

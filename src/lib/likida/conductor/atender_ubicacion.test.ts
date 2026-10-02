@@ -4,7 +4,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('esta prueba no toca la base'); } }));
 vi.mock('@/lib/meta/client', () => ({ enviarSolicitudUbicacion: vi.fn(async () => ({ ok: true })) }));
 
-const { atenderConductor, atenderPinConductor, hitoParaEvidenciaDelChofer, registrarEvidenciaDelChofer, TEXTO_PEDIR_UBICACION } = await import('./atender');
+const { atenderConductor, atenderPinConductor, hitoParaEvidenciaDelChofer, registrarEvidenciaDelChofer, registrarHitoDesdeFoto, TEXTO_PEDIR_UBICACION } = await import('./atender');
 const { crearMemoria, viajeBase } = await import('./memoria.fixture');
 type Memoria = ReturnType<typeof import('./memoria.fixture').crearMemoria>;
 
@@ -206,10 +206,124 @@ describe('la foto de evidencia', () => {
     expect(await hitoParaEvidenciaDelChofer({ ...entrada, caption: undefined }, m.deps)).toBeNull();
   });
 
-  it('con el caption pero sin hito al cual colgarla: devuelve el tipo y hito null (el processor lo dice y no descarga)', async () => {
-    const m = nueva();
+  it('con el caption pero sin hito al cual colgarla y la foto-como-aviso APAGADA: devuelve el tipo y hito null (el processor lo dice y no descarga)', async () => {
+    const m = nueva({ config: { fotoRegistraHito: false } });
     const r = await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'sello' }, m.deps);
     expect(r).toEqual({ tipo: 'sello', hito: null });
+  });
+
+  describe('0483 · la foto ES el aviso', () => {
+    const foto = (m: Memoria, tipo: 'anden' | 'sello' | 'recibido', extra: Record<string, unknown> = {}) => registrarHitoDesdeFoto({
+      tenantId: 't1', operadorId: 'o1', telefono: base.telefono, viajeId: V1, tipo, ruta: `t1/${V1}/ev_x.jpg`, sha256: 'e'.repeat(64), waMessageId: 'wamid.foto', mensajeEn: min(-4), ahora: AHORA, ...extra,
+    }, m.deps);
+
+    it('un «andén» sin nada registrado registra la LLEGADA A CARGAR con fuente foto, la hora del mensaje y la foto de evidencia', async () => {
+      const m = nueva();
+      const previa = await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'andén' }, m.deps);
+      expect(previa).toEqual({ tipo: 'anden', hito: null, comoHito: 'llegada_carga' });
+      const r = await foto(m, 'anden');
+      const h = m.de(V1).find((x) => x.tipo === 'llegada_carga')!;
+      expect(h).toMatchObject({ estado: 'recibido', fuente: 'foto', interpretacion: 'foto', mensajeEn: min(-4).toISOString() });
+      expect(m.evidencias).toEqual([expect.objectContaining({ hitoId: h.id, tipo: 'anden', waMessageId: 'wamid.foto' })]);
+      expect(textos(r)).toMatch(/llegaste a CARGAR/);
+      expect(textos(r)).toMatch(/Lo anoté con tu foto de el andén/);
+      expect(m.validaciones).toEqual([{ hito: h.id, tipo: 'llegada_carga', pin: false }]);   // como cualquier llegada: se compara con el sitio
+    });
+
+    it('un «andén» ya salido de la carga registra la LLEGADA A DESCARGAR (no cuelga la foto de la carga)', async () => {
+      const m = nueva();
+      m.registrar(V1, 'llegada_carga', min(-300).toISOString());
+      m.registrar(V1, 'salida_carga', min(-240).toISOString());
+      const previa = await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'andén' }, m.deps);
+      expect(previa).toMatchObject({ hito: null, comoHito: 'llegada_descarga' });
+      await foto(m, 'anden');
+      expect(m.de(V1).find((x) => x.tipo === 'llegada_descarga')).toMatchObject({ estado: 'recibido', fuente: 'foto' });
+    });
+
+    it('un «andén» AMBIGUO (llegó a cargar y no ha salido) no adivina: se cuelga de la parada donde está, como siempre', async () => {
+      const m = nueva();
+      m.registrar(V1, 'llegada_carga', min(-30).toISOString());
+      const previa = await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'andén' }, m.deps);
+      expect(previa?.comoHito).toBeUndefined();
+      expect(previa?.hito?.tipo).toBe('llegada_carga');
+    });
+
+    it('un «sello» registra la SALIDA DE LA CARGA aunque la llegada ya esté (el sello es la carga terminada)', async () => {
+      const m = nueva();
+      m.registrar(V1, 'llegada_carga', min(-90).toISOString());
+      const previa = await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'sello' }, m.deps);
+      expect(previa).toEqual({ tipo: 'sello', hito: null, comoHito: 'salida_carga' });
+      const r = await foto(m, 'sello');
+      expect(m.de(V1).find((x) => x.tipo === 'salida_carga')).toMatchObject({ estado: 'recibido', fuente: 'foto', interpretacion: 'foto' });
+      expect(m.de(V1).find((x) => x.tipo === 'llegada_carga')?.estado).toBe('recibido');       // la llegada NO se toca
+      expect(textos(r)).toMatch(/Lo anoté con tu foto de el sello/);
+    });
+
+    it('un «sello» sin la llegada registrada: la salida entra y la llegada pendiente se marca omitida (fuera de orden, como un texto)', async () => {
+      const m = nueva();
+      await foto(m, 'sello');
+      expect(m.de(V1).find((x) => x.tipo === 'salida_carga')?.estado).toBe('recibido');
+      expect(m.de(V1).find((x) => x.tipo === 'llegada_carga')).toMatchObject({ estado: 'omitido', omitidoMotivo: 'inferido_por_salida_carga' });
+    });
+
+    it('un «recibido» registra la SALIDA DE LA DESCARGA', async () => {
+      const m = nueva();
+      m.registrar(V1, 'llegada_carga', min(-400).toISOString());
+      m.registrar(V1, 'salida_carga', min(-300).toISOString());
+      m.registrar(V1, 'llegada_descarga', min(-100).toISOString());
+      const previa = await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'recibido' }, m.deps);
+      expect(previa).toEqual({ tipo: 'recibido', hito: null, comoHito: 'salida_descarga' });
+      await foto(m, 'recibido');
+      expect(m.de(V1).find((x) => x.tipo === 'salida_descarga')).toMatchObject({ estado: 'recibido', fuente: 'foto' });
+    });
+
+    it('con la perilla APAGADA la foto no registra nada: queda como evidencia de lo ya registrado (o «primero dime»)', async () => {
+      const m = nueva({ config: { fotoRegistraHito: false } });
+      expect(await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'andén' }, m.deps)).toEqual({ tipo: 'anden', hito: null });
+      const r = await foto(m, 'anden');
+      expect(textos(r)).toMatch(/Primero dime/);
+      expect(m.de(V1).every((h) => h.estado === 'esperado')).toBe(true);
+      expect(m.evidencias).toHaveLength(0);
+    });
+
+    it('«otra» (o un caption que no es de evidencia) jamás es un aviso', async () => {
+      const m = nueva();
+      expect(await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'diésel 800' }, m.deps)).toBeNull();
+      const r = await registrarHitoDesdeFoto({ tenantId: 't1', operadorId: 'o1', telefono: base.telefono, viajeId: V1, tipo: 'otra', ruta: 'x', sha256: 'f'.repeat(64), ahora: AHORA }, m.deps);
+      expect(textos(r)).toMatch(/Primero dime/);
+      expect(m.de(V1).every((h) => h.estado === 'esperado')).toBe(true);
+    });
+
+    it('la hora es la del MENSAJE y nunca del futuro; el reintento del webhook (mismo mensaje) no duplica ni el hito ni la foto', async () => {
+      const m = nueva();
+      await foto(m, 'anden', { mensajeEn: min(30) });                                  // un timestamp del futuro se recorta al reloj
+      expect(new Date(m.de(V1).find((x) => x.tipo === 'llegada_carga')!.mensajeEn!).getTime()).toBeLessThanOrEqual(AHORA.getTime());
+      const antes = m.evidencias.length;
+      const otra = await foto(m, 'anden');                                              // reentrega: ya hay hito, es evidencia duplicada
+      expect(textos(otra)).toMatch(/ya la tenía/);
+      expect(m.evidencias.length).toBe(antes);
+      expect(m.de(V1).filter((h) => h.estado === 'recibido')).toHaveLength(1);
+    });
+
+    it('el aviso de la foto respeta «confirmar al chofer» apagado (silencio) y la solicitud de ubicación sigue yendo', async () => {
+      const m = nueva({ config: { confirmarAlChofer: false } });
+      m.validarResultado.valor = salidaValidar('sin_dato', { pedirUbicacion: true });
+      const r = await foto(m, 'anden');
+      expect(r.mensajes).toEqual([]);
+      expect(r.solicitarUbicacion).toBe(TEXTO_PEDIR_UBICACION);
+    });
+
+    it('el viaje de OTRO chofer o de otra flota: la foto no registra nada', async () => {
+      const m = nueva();
+      expect(textos(await foto(m, 'anden', { operadorId: 'o-otro' }))).toMatch(/Primero dime/);
+      expect(textos(await foto(m, 'anden', { tenantId: 't-otro' }))).toMatch(/Primero dime/);
+      expect(m.de(V1).every((h) => h.estado === 'esperado')).toBe(true);
+    });
+
+    it('un viaje liquidado no recibe avisos de una foto', async () => {
+      const m = nueva({ viajes: [viajeBase({ id: V1, unidadId: 'u1', estatus: 'liquidado' })] });
+      expect(await hitoParaEvidenciaDelChofer({ ...entrada, caption: 'andén' }, m.deps)).toEqual({ tipo: 'anden', hito: null });
+    });
   });
 
   it('el viaje de otro chofer o de otra flota nunca aporta hito', async () => {
@@ -247,5 +361,96 @@ describe('la foto de evidencia', () => {
     m.deps.guardarEvidencia = async () => { throw new Error('storage caído'); };
     const hito = m.de(V1).find((h) => h.tipo === 'salida_carga')!;
     expect(await registrarEvidenciaDelChofer({ tenantId: 't1', hito, tipo: 'sello', ruta: 'x', sha256: 'd'.repeat(64), ahora: AHORA }, m.deps)).toMatch(/No pude guardar/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ADVERSARIAL RONDA 03 · un «ya llegué» sin posición que lo respalde NO sella el destino.
+// El hito queda `recibido` (el chofer sí avisó: no se le persigue por lo mismo), pero `viaje.llegada_en` —de donde leen
+// el Vigía y la espera en patio— solo se escribe cuando la ubicación lo confirma (o no hay con qué compararlo).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('«ya llegué» a descargar sin respaldo de ubicación no sella `viaje.llegada_en`', () => {
+  async function aDescarga(m: Memoria) {
+    await dice(m, 'ya llegué a cargar');
+    await dice(m, 'ya cargué');
+    m.legado.length = 0; // lo que importa es lo que pasa con la llegada a DESCARGA
+  }
+  const selladas = (m: Memoria) => m.legado.flatMap((l) => l.sellos);
+  const sinDato = (motivo: string) => salidaValidar('sin_dato', { veredicto: { resultado: 'sin_dato', motivo, fuente: null, distanciaM: null, toleranciaM: 150, radioM: null, sitioId: null, medidaEn: null } });
+
+  it('sin ninguna posición (sin_ubicacion): el hito queda recibido pero NO se sella la llegada', async () => {
+    const m = nueva();
+    await aDescarga(m);
+    m.validarResultado.valor = salidaValidar('sin_dato');
+    await dice(m, 'ya llegué');
+    expect(m.de(V1).find((h) => h.tipo === 'llegada_descarga')?.estado).toBe('recibido');
+    expect(selladas(m)).not.toContain('llegada');
+  });
+
+  it('con posición que NO coincide con el sitio: tampoco se sella', async () => {
+    const m = nueva();
+    await aDescarga(m);
+    m.validarResultado.valor = salidaValidar('sin_coincidencia');
+    await dice(m, 'ya llegué');
+    expect(selladas(m)).not.toContain('llegada');
+  });
+
+  it('si la validación falló (null), no se asume que llegó: se difiere y el barrido decide', async () => {
+    const m = nueva();
+    await aDescarga(m);
+    m.validarResultado.valor = null;
+    await dice(m, 'ya llegué');
+    expect(selladas(m)).not.toContain('llegada');
+  });
+
+  it('con la ubicación confirmada sí se sella, con la hora del mensaje', async () => {
+    const m = nueva();
+    await aDescarga(m);
+    m.validarResultado.valor = salidaValidar('validado');
+    await dice(m, 'ya llegué');
+    expect(selladas(m)).toContain('llegada');
+  });
+
+  it('sin sitio asignado (no hay con qué comparar) se conserva el comportamiento anterior: se sella', async () => {
+    const m = nueva();
+    await aDescarga(m);
+    m.validarResultado.valor = sinDato('sin_sitio');
+    await dice(m, 'ya llegué');
+    expect(selladas(m)).toContain('llegada');
+  });
+
+  it('una flota que apagó la validación de ubicación sigue sellando como siempre', async () => {
+    const m = nueva({ config: { validarUbicacion: false } });
+    await aDescarga(m);
+    await dice(m, 'ya llegué');
+    expect(selladas(m)).toContain('llegada');
+  });
+
+  it('los demás sellos de la 0090 (descarga, regreso) no esperan a la ubicación', async () => {
+    const m = nueva();
+    await aDescarga(m);
+    m.validarResultado.valor = salidaValidar('sin_dato');
+    await dice(m, 'estoy descargando');
+    expect(selladas(m)).toContain('descarga');
+    expect(selladas(m)).not.toContain('llegada');
+  });
+
+  it('el pin que después confirma la llegada a descargar la sella', async () => {
+    const m = nueva();
+    await aDescarga(m);
+    m.validarResultado.valor = salidaValidar('sin_dato');
+    await dice(m, 'ya llegué');
+    expect(selladas(m)).not.toContain('llegada');
+    m.validarResultado.valor = salidaValidar('validado');
+    await atenderPinConductor({ tenantId: 't1', operadorId: 'o1', viajeId: V1, lat: 20.72, lng: -103.39, ahora: AHORA }, m.deps);
+    expect(selladas(m)).toContain('llegada');
+  });
+
+  it('la llegada a CARGAR confirmada por el pin no sella el destino jamás', async () => {
+    const m = nueva();
+    await dice(m, 'ya llegué');
+    m.validarResultado.valor = salidaValidar('validado');
+    await atenderPinConductor({ tenantId: 't1', operadorId: 'o1', viajeId: V1, lat: 20.72, lng: -103.39, ahora: AHORA }, m.deps);
+    expect(selladas(m)).not.toContain('llegada');
   });
 });

@@ -11,6 +11,7 @@ import {
   CONFIG_COBRANZA_DEFAULT, validarConfigCobranza, dentroDeVentana,
   tierPendiente, armarMensajeCobranza, type ConfigCobranza,
 } from './cobranza_pura';
+import { ejecutarCobranzaGastos, resultadoGastoVacio, type ResultadoCobranzaGasto } from './cobranza_gasto';
 import { getPerfilCrudo } from '../repo';
 import { ventanaCobranzaDeclarada } from '../perfil/preguntas';
 
@@ -217,6 +218,8 @@ export interface ResultadoCobranza {
   /** WhatsApp rechazó tantos seguidos que la corrida se detuvo (RES-1). La
    *  corrida global lo lee para no seguir quemando flotas contra una pared. */
   rechazoMasivo?: boolean;
+  /** La cobranza por GASTO (0525), cuando la flota la encendió: mensajes, gastos avisados, topes, etc. */
+  gasto?: Omit<ResultadoCobranzaGasto, 'fallos' | 'telefonosHoy' | 'viajesConGastoPendiente'> & { fallos: number };
 }
 
 /** Rechazos reintentables SEGUIDOS que detienen la corrida (RES-1). Un solo
@@ -263,7 +266,30 @@ export async function ejecutarCobranza(
       if (error) logger.warn('cobranza.rescate_claims_fallo', { tenantId, err: error.message });
     });
 
+  // ── LA COBRANZA POR GASTO (0525), ANTES que la de por viaje ─────────────────
+  // Encendida por la flota (`por_gasto`), cobra QUÉ comprobante falta de QUÉ gasto, con un solo mensaje
+  // fusionado por chofer y su tope diario. La cobranza por viaje que sigue NO le duplica el día: se salta
+  // los viajes que ya tienen gastos pendientes (esos los cobra el gasto) y a los choferes a los que ya se
+  // les escribió hoy. Con la flota sin encenderla esto es un no-op y la conducta de siempre no cambia.
+  let gasto: ResultadoCobranzaGasto = resultadoGastoVacio('la cobranza por gasto está apagada');
+  try {
+    gasto = await ejecutarCobranzaGastos(tenantId, ahora, {
+      venceEn: opts.venceEn, firma: config.firma, instrucciones: config.instrucciones,
+    });
+  } catch (e) {
+    // Un fallo de la cobranza por gasto no deja sin cobrar por viaje: se dice y se sigue.
+    logger.error('cobranza.gasto_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    gasto = { ...resultadoGastoVacio(), fallos: [`cobranza por gasto: ${e instanceof Error ? e.message : 'corrida fallida'}`] };
+  }
+  const gastoActivo = gasto.omitido === undefined;
+
   const cola = await colaCobranza(tenantId, ahora);
+  if (gastoActivo) {
+    const viajesDelGasto = new Set(gasto.viajesConGastoPendiente);
+    const yaEscritos = new Set(gasto.telefonosHoy);
+    cola.paraContactar = cola.paraContactar.filter((f) => !viajesDelGasto.has(f.viajeId) && !(f.operadorTelefono && yaEscritos.has(f.operadorTelefono)));
+    cola.sinTelefono = cola.sinTelefono.filter((f) => !viajesDelGasto.has(f.viajeId));
+  }
   const r: ResultadoCobranza = {
     revisados: cola.paraContactar.length + cola.sinTelefono.length,
     contactados: 0,
@@ -272,6 +298,23 @@ export async function ejecutarCobranza(
     cortadosPorReloj: 0,
     rechazosReintentables: 0,
   };
+  if (gastoActivo) {
+    const { fallos, telefonosHoy: _t, viajesConGastoPendiente: _v, ...resto } = gasto;
+    void _t; void _v;
+    r.gasto = { ...resto, fallos: fallos.length };
+    r.contactados += gasto.mensajes;
+    r.revisados += gasto.mensajes + gasto.pospuestosPorTope;
+    r.sinTelefono += gasto.sinTelefono;
+    r.fallos.push(...fallos);
+    r.cortadosPorReloj += gasto.cortadosPorReloj;
+    r.rechazosReintentables = (r.rechazosReintentables ?? 0) + gasto.rechazosReintentables;
+    if (gasto.rechazoMasivo) {
+      // WhatsApp rechaza en masa: la corrida entera se detiene (el problema es del número, no de la flota).
+      r.rechazoMasivo = true;
+      logger.info('agente_cobranza.corrida', { tenantId, ...r, fallos: r.fallos.length });
+      return r;
+    }
+  }
   let rechazosSeguidos = 0;
 
   // Los sin teléfono TAMBIÉN quedan en bitácora (enviado=false, con el
