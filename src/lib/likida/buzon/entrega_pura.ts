@@ -1,4 +1,4 @@
-import { hoyMx, diaEnZona } from '@/lib/formato';
+import { hoyMx, diaEnZona, TZ_MX } from '@/lib/formato';
 import type { FormatoExport } from '../proveedores';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -58,7 +58,7 @@ export function validarConfigEntrega(c: ConfigEntrega): string | null {
 
 /** La hora (0–23) en la Ciudad de México. */
 export function horaMx(ahora: Date): number {
-  const h = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Mexico_City', hour: '2-digit', hour12: false }).format(ahora);
+  const h = new Intl.DateTimeFormat('en-US', { timeZone: TZ_MX, hour: '2-digit', hour12: false }).format(ahora);
   return Number(h) % 24;
 }
 
@@ -69,7 +69,7 @@ export function horaMx(ahora: Date): number {
 export function tocaLoteAutomatico(config: ConfigEntrega, ahora: Date, ultimoAutomaticoEn: string | null): boolean {
   if (!config.activo || !config.automatica || config.destinatarios.length === 0) return false;
   if (horaMx(ahora) < config.horaEnvio) return false;
-  if (ultimoAutomaticoEn && diaEnZona(new Date(ultimoAutomaticoEn), 'America/Mexico_City') === hoyMx(ahora)) return false;
+  if (ultimoAutomaticoEn && diaEnZona(new Date(ultimoAutomaticoEn), TZ_MX) === hoyMx(ahora)) return false;
   return true;
 }
 

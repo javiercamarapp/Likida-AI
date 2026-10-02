@@ -1,4 +1,4 @@
-import { TZ_MX } from '@/lib/formato';
+import { TZ_MX, hoyMx } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CONFIGURACIÓN POR FLOTA DEL AGENTE 5 (agente_conductor_config, 0380).
@@ -216,7 +216,7 @@ export function dentroDeVentana(config: Pick<ConfigConductor, 'horaInicio' | 'ho
 
 /** El instante (UTC) en que empieza el día calendario de México de `ahora`. */
 export function inicioDiaMx(ahora: Date): Date {
-  const fecha = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX, year: 'numeric', month: '2-digit', day: '2-digit' }).format(ahora);
+  const fecha = hoyMx(ahora);
   // México no tiene horario de verano desde 2022 (UTC-6 fijo); se calcula con la
   // diferencia real del instante para no depender de ello.
   const mediaNoche = new Date(`${fecha}T00:00:00Z`);
