@@ -4,6 +4,7 @@ import { acotada } from '../presupuesto';
 import { exigir, traerPorIds } from '../pg';
 import { COLUMNAS_HITO, filaAHito } from './repo';
 import { coordenadasValidas } from './geo';
+import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from './geometria_datos';
 import type { ErrorCsv, SitioCsv, TipoSitio } from './sitios';
 import type { PosicionComparada, SitioValidable, Veredicto, ResultadoValidacion, MotivoSinDato, FuenteUbicacion } from './validacion';
 import { TIPOS_HITO, type HitoFila, type TipoEvidencia, type TipoHito } from './tipos';
@@ -163,9 +164,11 @@ export async function sitioDelHito(tenantId: string, viajeId: string, tipo: Tipo
   const v = exigir(rv as never, 'validacion.viaje') as Fila | null;
   const sitioId = v ? s(v[columna]) : null;
   if (!sitioId) return null;
-  const rs = await acotada(supabaseAdmin().from('geocerca').select('id, nombre, lat, lng, radio_m').eq('id', sitioId).eq('tenant_id', tenantId).eq('activa', true).maybeSingle(), 'validacion.sitio');
+  const rs = await conPoligonoOCirculo((conPoligono) => acotada(supabaseAdmin().from('geocerca')
+    .select(conPoligono ? `id, nombre, lat, lng, radio_m, ${COLUMNAS_POLIGONO}` : 'id, nombre, lat, lng, radio_m')
+    .eq('id', sitioId).eq('tenant_id', tenantId).eq('activa', true).maybeSingle(), 'validacion.sitio'));
   const g = exigir(rs as never, 'validacion.sitio') as Fila | null;
-  return g ? { id: String(g.id), nombre: String(g.nombre), lat: Number(g.lat), lng: Number(g.lng), radioM: Number(g.radio_m) } : null;
+  return g ? { id: String(g.id), nombre: String(g.nombre), lat: Number(g.lat), lng: Number(g.lng), radioM: Number(g.radio_m), ...geometriaDeFila(g) } : null;
 }
 
 // ── La validación ───────────────────────────────────────────────────────────

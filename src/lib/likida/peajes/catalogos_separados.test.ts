@@ -86,6 +86,17 @@ describe('editor de geocercas de peajes', () => {
     expect((await peajes.listarGeocercas(T)).map((g) => g.nombre)).toEqual(['Caseta Norte']);
   });
 
+  it('la reclamación lee el polígono y la bandera aproximada de la zona; el editor de peajes no los trae', async () => {
+    const poli = [{ lat: 20.6, lng: -103.3 }, { lat: 20.6, lng: -103.29 }, { lat: 20.61, lng: -103.29 }];
+    db.tablas.geocerca.push({ id: 'patio-poli', tenant_id: T, nombre: 'PATIO POLI', tipo: 'patio', lat: 20.603, lng: -103.293, radio_m: 900, activa: true, catalogo: 'conductor', codigo: 'P-POLI', fuente: 'csv', poligono: poli, aproximada: false });
+    db.tablas.geocerca.push({ id: 'patio-aprox', tenant_id: T, nombre: 'PATIO APROX', tipo: 'patio', lat: 20.7, lng: -103.3, radio_m: 300, activa: true, catalogo: 'conductor', codigo: 'P-APR', fuente: 'csv', poligono: null, aproximada: true });
+    const z = await peajes.listarGeocercas(T, { zonasParaReclamacion: true });
+    expect(z.find((g) => g.nombre === 'PATIO POLI')).toMatchObject({ poligono: poli, aproximada: false, radioM: 900 });
+    expect(z.find((g) => g.nombre === 'PATIO APROX')).toMatchObject({ poligono: null, aproximada: true });
+    // el editor (catálogo de peajes) no trae el polígono
+    expect((await peajes.listarGeocercas(T))[0]).not.toHaveProperty('poligono');
+  });
+
   it('activar/desactivar solo toca las suyas: el id de un sitio del Conductor no hace nada', async () => {
     await peajes.cambiarEstadoGeocerca(T, ID_SITIO, false);
     expect(db.tablas.geocerca.find((f) => f.id === ID_SITIO)!.activa).toBe(true);

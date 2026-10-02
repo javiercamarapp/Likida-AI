@@ -107,7 +107,7 @@ describe('CSV de geocercas', () => {
   it('círculo y polígono; sin radio no se supone uno', () => {
     const r = leerGeocercasCsv(fx('geocercas.csv'));
     expect(r.rechazadas).toEqual([]);
-    expect(r.filas.map((g) => g.tipo)).toEqual(['circulo', 'circulo', 'poligono']);
+    expect(r.filas.map((g) => g.tipo)).toEqual(['circulo', 'circulo', 'poligono', 'poligono']);
     expect(r.filas[2].poligono).toHaveLength(4);
     const sin = leerGeocercasCsv('codigo,nombre,lat_centro,lon_centro\nA,Uno,25.78,-100.19\n');
     expect(sin.rechazadas[0].motivo).toContain('radio_m obligatorio');

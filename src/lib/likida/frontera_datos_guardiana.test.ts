@@ -243,14 +243,20 @@ import { join, relative } from 'node:path';
 //   · `conductor/trabajo.ts` (+1): qué viajes traen sitio de carga/descarga, para distinguir «sin posición» de «sin sitio» en el aviso
 //     de llegada sin confirmar (lectura que cruza flotas, como el resto del archivo);
 //   · `conductor/repo.ts` (+1): el reintento del guardado de la config contra una base sin la 0604.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 285;
+// P1 «geocercas-polígono» (ola 4b): 285 → 286 archivos y 1,807 → 1,811 llamadas. Un módulo nuevo,
+// `conectores/tabla_propia/reimportar_geocercas.ts`, con las 4 llamadas de la re-importación diaria de geocercas (la RPC que lista
+// las flotas a las que ya les toca, el claim atómico por flota, la lectura de la huella del último contenido importado y el
+// registro del resultado; todas sobre la 0631). Vive aparte de `repo.ts` porque su lista cruza flotas, como `conductor/trabajo.ts`.
+// Funcionalidad nueva, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 286;
 // INTEGRACIÓN ola 4a (A + B): 1,805 → 1,807. El paquete B (M3/M4, copia al jefe) suma +2 llamadas RPC en un archivo que ya contaba
 // (`reclamar_copia_jefe` y `cerrar_copia_jefe`, el reclamo atómico de la copia); cada paquete midió contra su propia base, por eso
 // la suma de ambos solo se ve en el barrido del árbol integrado. Funcionalidad nueva, no código migrado.
 // OLA 4b, paquete P3 «carta-porte-worker» (0640-0642): 0 archivos y +4 llamadas (1,807 → 1,811), todas en `carta_porte_docs/repo.ts`, que ya
 // contaba — funcionalidad nueva, no código migrado: las RPC del worker (qué procesar y su respaldo directo contra una base sin la 0641, qué quedó
 // agotado, qué documento por avisar, y el candado de «una sola vez» del aviso a la oficina con su liberación). Cada una va por `acotada`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_811;
+// INTEGRACIÓN ola 4b (P1 + P3): P1 mide 1,807 → 1,811 (+4) y P3 1,807 → 1,811 (+4) contra la misma base; la suma es 1,815 (se confirma con el barrido del árbol fusionado).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_815;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

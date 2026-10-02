@@ -1,4 +1,5 @@
 import { haversineM, coordenadasValidas } from './geo';
+import { dentroDeGeocerca } from '../conductor/geo';
 import type { Muestra } from './cruce_gps';
 import { numero } from '@/lib/formato';
 
@@ -25,8 +26,11 @@ import { numero } from '@/lib/formato';
 //                                    (veredicto `no_coincide` del cruce por caseta).
 //       unidad_en_zona_no_autorizada (alta)  la posición más cercana a la hora del
 //                                    pase está DENTRO de una geocerca de patio o
-//                                    restringida de la flota: una unidad parada en
-//                                    su patio no cruza una caseta.
+//                                    restringida de la flota (punto en su POLÍGONO
+//                                    si lo tiene): una unidad parada en su patio no
+//                                    cruza una caseta. Si la geocerca solo es un
+//                                    círculo que sustituye a un polígono (aproximada),
+//                                    la confianza baja a «media», nunca «alta».
 //       doble_cobro                  (media) el mismo TAG cobrado dos veces en la
 //                                    misma caseta con ≤ 10 min de diferencia. Puede
 //                                    ser un retorno real: por eso es «media».
@@ -57,7 +61,13 @@ export const MAX_DESFASE_ZONA_MIN = 10;
 
 const MIN = 60_000;
 
-export interface ZonaEntrada { nombre: string; tipo: string; lat: number; lng: number; radioM: number }
+export interface ZonaEntrada {
+  nombre: string; tipo: string; lat: number; lng: number; radioM: number;
+  /** 0630: polígono nativo de la zona; con él «dentro» es punto en polígono (un patio alargado ya no abarca la carretera de junto). */
+  poligono?: readonly { lat: number; lng: number }[] | null;
+  /** 0630: el círculo SUSTITUYE a un polígono del cliente que no se guardó: la acusación con él baja a confianza «media», nunca «alta». */
+  aproximada?: boolean;
+}
 export interface CasetaEntrada { lat: number; lng: number; radioM: number }
 
 /** Una línea del desglose, lista para evaluar (la arma la capa de datos). */
@@ -138,7 +148,7 @@ export const LEYENDAS_RECLAMACION: readonly string[] = [
   'Reporte de cruces para pedir al proveedor de peaje la revisión de un cobro. Lo prepara Likida con el desglose del proveedor, el catálogo de TAGs y casetas de la flota y las posiciones GPS de las unidades. La decisión de reclamar es de la flota.',
   'Solo entran las líneas con evidencia a favor de la reclamación. «Sin datos» (sin hora, TAG sin dar de alta, caseta sin coordenadas, sin posiciones) NO es evidencia en contra de nadie y no se reclama: se cuenta aparte para saber qué dato falta.',
   'GPS lejos de la caseta: dos posiciones consecutivas de la unidad, una antes y otra después de la hora del pase, a menos de 6 minutos entre sí, la ubican a más de radio + margen de la caseta (distancia Haversine contra las coordenadas del catálogo).',
-  'Unidad en zona no autorizada: la posición más cercana a la hora del pase cae dentro de una geocerca de patio o restringida de la flota.',
+  'Unidad en zona no autorizada: la posición más cercana a la hora del pase cae dentro de una geocerca de patio o restringida de la flota (dentro de su polígono cuando está cargado; si solo hay un círculo aproximado, la confianza es media).',
   'Posible doble cobro: el mismo TAG cobrado dos veces en la misma caseta con 10 minutos o menos de diferencia. Confianza media: puede ser un retorno real.',
   'La hora es la hora local de México tal como la trae el archivo del proveedor; el reloj del proveedor y el del GPS pueden diferir unos minutos.',
   'Pendiente de datos de la flota: las rutas autorizadas por unidad («cursos») no se evalúan hasta contar con su tabla; un cruce fuera de curso pero cerca de su caseta no aparece aquí.',
@@ -168,8 +178,13 @@ function evidenciaDe(l: LineaReclamable): EvidenciaMuestra[] {
     }));
 }
 
-/** La zona (patio o restringida) donde estaba la unidad a la hora del pase, si la posición MÁS cercana en el tiempo cae dentro. */
-function zonaDelPase(l: LineaReclamable, zonas: readonly ZonaEntrada[]): ZonaEntrada | null {
+/**
+ * La zona (patio o restringida) donde estaba la unidad a la hora del pase, si la posición MÁS cercana en el tiempo cae dentro.
+ * «Dentro» lo decide el helper único (`dentroDeGeocerca`, 0630): polígono nativo si lo hay, círculo si no. Si la zona es un
+ * círculo que SUSTITUYE a un polígono (`aproximada`), se devuelve marcada: la acusación con ella nunca queda «alta». Entre varias
+ * zonas que contengan el punto gana la exacta sobre la aproximada.
+ */
+function zonaDelPase(l: LineaReclamable, zonas: readonly ZonaEntrada[]): { zona: ZonaEntrada; aproximada: boolean } | null {
   if (l.cruceMs === null || zonas.length === 0) return null;
   const cruce = l.cruceMs;
   const cercana = [...l.muestras]
@@ -178,12 +193,15 @@ function zonaDelPase(l: LineaReclamable, zonas: readonly ZonaEntrada[]): ZonaEnt
   if (!cercana || Math.abs(cercana.t - cruce) > MAX_DESFASE_ZONA_MIN * MIN) return null;
   // La caseta misma no es una zona no autorizada: si la posición está dentro del radio de la caseta, no se reclama por zona.
   if (l.casetaGeo && haversineM(cercana, l.casetaGeo) <= l.casetaGeo.radioM) return null;
+  let aproximada: { zona: ZonaEntrada; aproximada: boolean } | null = null;
   for (const z of zonas) {
     if (z.tipo !== 'patio' && z.tipo !== 'restringida') continue;
-    const d = haversineM(cercana, z);
-    if (Number.isFinite(d) && d <= z.radioM) return z;
+    const d = dentroDeGeocerca(cercana, z);
+    if (!d.dentro) continue;
+    if (!d.aproximada) return { zona: z, aproximada: false };
+    aproximada ??= { zona: z, aproximada: true };
   }
-  return null;
+  return aproximada;
 }
 
 const nombreUnidad = (l: LineaReclamable) => (l.unidad ? `la unidad ${l.unidad}` : 'la unidad del TAG');
@@ -228,22 +246,26 @@ export function construirReclamacion(
     if (l.gps === 'no coincide') {
       const distancia = l.gpsDistanciaM;
       const evidencia = evidenciaDe(l);
-      const zona = zonaDelPase(l, zonas);
+      const hallada = zonaDelPase(l, zonas);
+      const zona = hallada?.zona ?? null;
       cruces.push({
         ...base, motivo: 'gps_lejos_de_caseta', confianza: 'alta',
         porQue: `${nombreUnidad(l)} no estaba en ${nombreCaseta(l)} a la hora del pase${l.hora ? ` (${l.hora.slice(0, 5)})` : ''}: `
           + `su trayectoria GPS pasó a ${distancia !== null ? metros(distancia) : 'más de 1 km'} de la caseta${l.casetaGeo ? ` (radio de la caseta: ${metros(l.casetaGeo.radioM)})` : ''}.`
-          + (zona ? ` A esa hora estaba en «${zona.nombre}».` : ''),
+          + (zona ? (hallada?.aproximada ? ` A esa hora estaba cerca de «${zona.nombre}» (zona de forma aproximada).` : ` A esa hora estaba en «${zona.nombre}».`) : ''),
         distanciaM: distancia, evidencia, zona: zona ? { nombre: zona.nombre, tipo: zona.tipo } : null, duplicadoDeLinea: null,
       });
       continue;
     }
 
-    const zona = l.gps === 'confirma' ? null : zonaDelPase(l, zonas);
-    if (zona) {
+    const hallada = l.gps === 'confirma' ? null : zonaDelPase(l, zonas);
+    if (hallada) {
+      const { zona, aproximada } = hallada;
       cruces.push({
-        ...base, motivo: 'unidad_en_zona_no_autorizada', confianza: 'alta',
-        porQue: `${nombreUnidad(l)} estaba dentro de «${zona.nombre}» (${zona.tipo === 'patio' ? 'patio' : 'zona restringida'} de la flota) a la hora del pase en ${nombreCaseta(l)}: no pudo cruzar la caseta.`,
+        ...base, motivo: 'unidad_en_zona_no_autorizada', confianza: aproximada ? 'media' : 'alta',
+        porQue: aproximada
+          ? `${nombreUnidad(l)} estaba en el área aproximada de «${zona.nombre}» (${zona.tipo === 'patio' ? 'patio' : 'zona restringida'} de la flota) a la hora del pase en ${nombreCaseta(l)}. La forma exacta de esa geocerca no está cargada y se midió con el círculo que la contiene, así que puede ser una unidad que iba por la vía de junto: confirma antes de reclamar.`
+          : `${nombreUnidad(l)} estaba dentro de «${zona.nombre}» (${zona.tipo === 'patio' ? 'patio' : 'zona restringida'} de la flota) a la hora del pase en ${nombreCaseta(l)}: no pudo cruzar la caseta.`,
         distanciaM: l.gpsDistanciaM, evidencia: evidenciaDe(l), zona: { nombre: zona.nombre, tipo: zona.tipo }, duplicadoDeLinea: null,
       });
       continue;

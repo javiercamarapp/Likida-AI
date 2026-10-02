@@ -14,6 +14,7 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => mundo.admin() }));
 
 const { barridoAcercamiento, estaCerca, MARGEN_ACERCAMIENTO_M } = await import('./acercamiento');
 const { despacharInstrucciones } = await import('./envio');
+const { reiniciarMemoriaPoligono } = await import('../conductor/geometria_datos');
 const { importarConvenios } = await import('./repo');
 const { parsearMatrizConvenios } = await import('./importador');
 
@@ -50,6 +51,37 @@ beforeEach(async () => {
   const r = await despacharInstrucciones(A, viajeId);
   expect(r.estado).toBe('sin_instrucciones'); // el convenio solo trae instrucciones de acercamiento: nada que mandar al despachar
   enviadosWa.length = 0;
+});
+
+// Patio alargado (600 m E-O × 45 m N-S) centrado en ORIGEN: su círculo de respaldo (340 m) lo contiene.
+const M_LAT = 1 / 111_195; const M_LNG = 1 / (111_195 * Math.cos((ORIGEN.lat * Math.PI) / 180));
+const PATIO_LARGO = [
+  { lat: ORIGEN.lat - 22.5 * M_LAT, lng: ORIGEN.lng - 300 * M_LNG }, { lat: ORIGEN.lat - 22.5 * M_LAT, lng: ORIGEN.lng + 300 * M_LNG },
+  { lat: ORIGEN.lat + 22.5 * M_LAT, lng: ORIGEN.lng + 300 * M_LNG }, { lat: ORIGEN.lat + 22.5 * M_LAT, lng: ORIGEN.lng - 300 * M_LNG },
+];
+
+describe('con polígono nativo (0630): «cerca» se mide al borde del polígono, no al del círculo de respaldo', () => {
+  const alNorte = (m: number) => ({ lat: ORIGEN.lat + m * M_LAT, lng: ORIGEN.lng });
+  it('estaCerca: a 5.2 km del centro el círculo de 340 m dice «cerca» (4.86 km del borde) y el polígono «lejos» (5.18 km)', () => {
+    const circulo = { ...ORIGEN, radioM: 340 };
+    expect(estaCerca({ ...alNorte(5200), medidaEn: AHORA }, circulo)).toBe(true);
+    expect(estaCerca({ ...alNorte(5200), medidaEn: AHORA }, { ...circulo, poligono: PATIO_LARGO })).toBe(false);
+    expect(estaCerca({ ...alNorte(4900), medidaEn: AHORA }, { ...circulo, poligono: PATIO_LARGO })).toBe(true); // 4.88 km del borde
+  });
+  it('el barrido lee el polígono de la geocerca: a 5.2 km no manda; a 4.9 km sí', async () => {
+    mundo.tablas.geocerca[0].poligono = PATIO_LARGO;
+    posicion(alNorte(5200));
+    expect(await barridoAcercamiento(undefined, AHORA)).toMatchObject({ candidatos: 1, lejos: 1, enviados: 0 });
+    posicion(alNorte(4900), 1);
+    expect(await barridoAcercamiento(undefined, AHORA)).toMatchObject({ enviados: 1 });
+  });
+  it('una base sin la 0630 (sin las columnas poligono/aproximada) sigue funcionando como círculo, sin fallar', async () => {
+    reiniciarMemoriaPoligono();
+    mundo.columnasAusentes.set('geocerca', new Set(['poligono', 'aproximada']));
+    posicion(alNorte(5200)); // 4.86 km del borde del círculo de respaldo: «cerca» como círculo
+    expect(await barridoAcercamiento(undefined, AHORA)).toMatchObject({ candidatos: 1, enviados: 1 });
+    reiniciarMemoriaPoligono();
+  });
 });
 
 describe('estaCerca', () => {
