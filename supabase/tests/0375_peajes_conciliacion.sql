@@ -184,7 +184,7 @@ begin
     ('huella corta', 'huella', 'abc'),
     ('huella en mayúsculas', 'huella', repeat('A', 64)),
     ('estado inventado', 'estado', 'enviada'),
-    ('origen inventado', 'origen', 'correo'),
+    ('origen inventado', 'origen', 'sftp'),   -- 'correo' y 'pull' son canales válidos desde la 0563
     ('bytes 0', 'bytes', '0'),
     ('bytes > 4 MB', 'bytes', '4194305'),
     ('intentos negativos', 'intentos', '-1')
