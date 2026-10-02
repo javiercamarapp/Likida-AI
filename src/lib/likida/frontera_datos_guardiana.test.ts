@@ -269,7 +269,12 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 286;
 // `liquidacion_externa/trabajo.ts` suma la lista de avisos pendientes que cruza flotas (como su lista de entregas). Todas por `acotada`.
 // RONDA 08, corrector adversarial (señal de vida): 0 archivos y +2 llamadas, en `conductor/trabajo.ts` (1,849 + 2 = 1,851): la lectura de los sitios
 // de la flota con su geometría (patios donde esperar es normal) y la del estado del conector de GPS (`conector_poll_estado`); ambas por `acotada`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_851;
+// OLA 4d, paquete P7 «convenios-edicion» (0656-0657): 0 archivos y +5 llamadas (1,851 → 1,856), todas en `convenios/repo.ts`, que ya contaba, y todas por
+// `acotada`: la versión de cada convenio (lectura aparte a propósito, para que una base sin la 0656 no deje sin lista a toda la pantalla), los clientes y los
+// sitios que ofrece el formulario de alta/edición (2) y las dos RPC de la edición — `guardar_convenio` (alta/edición atómica con control de versión) y
+// `refrescar_viajes_de_convenio` (llevar la edición a los viajes en curso). Funcionalidad nueva, no código migrado. Medido contra su propia base (1,851):
+// al integrarla con las otras ramas de la ola, el techo es la suma de los tramos.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_856;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

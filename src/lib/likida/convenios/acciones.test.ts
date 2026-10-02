@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { archivarConvenioDelPanel, bytesParaLector, corregirConvenioDelViajeDelPanel, importarArchivoDelPanel, type DepsConvenios } from './acciones';
-import { ConveniosNoDisponibles } from './repo';
+import { archivarConvenioDelPanel, bytesParaLector, corregirConvenioDelViajeDelPanel, guardarConvenioDelPanel, importarArchivoDelPanel, type DepsConvenios, type DepsGuardarConvenio } from './acciones';
+import type { EntradaConvenio } from './edicion';
+import { ConveniosNoDisponibles, EdicionNoDisponible } from './repo';
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('esta prueba no toca la base'); } }));
@@ -186,5 +187,118 @@ describe('corregirConvenioDelViajeDelPanel', () => {
     const r = await corregirConvenioDelViajeDelPanel(dueno, { viajeId: VIAJE, convenioId: CONV, reenviar: false }, roto);
     expect(r).toMatchObject({ ok: false });
     expect((r as { error: string }).error).not.toContain('10.0.0.5');
+  });
+});
+
+describe('guardarConvenioDelPanel (alta y edición en pantalla)', () => {
+  const ID = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d001';
+  const CLI = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0c1';
+  const V1 = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0a1';
+  const V2 = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0a2';
+  const ENTRADA = (o: Partial<EntradaConvenio> = {}): EntradaConvenio => ({
+    convenioId: '', clienteId: CLI, nombre: 'Ruta norte', origen: '', destino: '', sitioOrigenId: '', sitioDestinoId: '', vigenteDesde: '', vigenteHasta: '', notas: '', version: '',
+    instrucciones: [{ categoria: 'puerta', texto: 'Puerta 3', momento: 'ambos', lugar: 'destino' }], llevarAViajes: false, reenviar: false, ...o,
+  });
+  const EDITA = (o: Partial<EntradaConvenio> = {}) => ENTRADA({ convenioId: ID, clienteId: '', version: '2', ...o });
+  const dg = (o: Partial<DepsGuardarConvenio> = {}): DepsGuardarConvenio => ({
+    guardar: vi.fn(async () => ({ estado: 'ok' as const, id: ID, version: 3, creado: false })),
+    refrescar: vi.fn(async () => []),
+    enviar: vi.fn(async () => ({ estado: 'enviado' as const, canal: 'texto' as const })), ...o,
+  });
+  const ctx = { tenantId: 'flota-1', rol: 'flota_admin' };
+
+  it('solo el dueño y el jefe de tráfico guardan; el contador, el vendedor y un rol raro no (no se llama a la base)', async () => {
+    const d = dg();
+    expect((await guardarConvenioDelPanel({ tenantId: 't', rol: 'encargado' }, ENTRADA(), d)).ok).toBe(true);
+    for (const rol of ['contador', 'vendedor', 'raro']) {
+      expect(await guardarConvenioDelPanel({ tenantId: 't', rol }, ENTRADA(), d)).toEqual({ ok: false, error: expect.stringContaining('Solo el dueño') });
+    }
+    expect(d.guardar).toHaveBeenCalledTimes(1);
+  });
+
+  it('el tenant sale de la SESIÓN, no del formulario, y lo que llega a la base ya está validado y normalizado', async () => {
+    const d = dg({ guardar: vi.fn(async () => ({ estado: 'ok' as const, id: ID, version: 1, creado: true })) });
+    const r = await guardarConvenioDelPanel(ctx, ENTRADA({ nombre: '  Ruta   norte ' }), d);
+    expect(r).toEqual({ ok: true, mensaje: 'Convenio «Ruta norte» creado con 1 instrucción.' });
+    expect(d.guardar).toHaveBeenCalledWith('flota-1', expect.objectContaining({ convenioId: null, clienteId: CLI, nombre: 'Ruta norte', version: null }));
+  });
+
+  it('un formulario inválido dice TODOS los problemas y no toca la base', async () => {
+    const d = dg();
+    const r = await guardarConvenioDelPanel(ctx, ENTRADA({ nombre: '', clienteId: '' }), d);
+    expect(r).toMatchObject({ ok: false, error: 'No se guardó nada: 2 problemas en el formulario.', detalles: expect.arrayContaining([expect.stringContaining('cliente'), expect.stringContaining('nombre')]) });
+    expect(d.guardar).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['conflicto', /Alguien más cambió este convenio.*No se guardó nada/],
+    ['no_existe', /ya no existe/],
+    ['duplicado', /Ya hay un convenio con ese nombre/],
+    ['referencia_invalida', /no es de tu flota/],
+    ['invalida', /rechazó un dato/],
+  ] as const)('el estado «%s» de la base se dice en palabras y no se lleva nada a los viajes', async (estado, texto) => {
+    const d = dg({ guardar: vi.fn(async () => (estado === 'conflicto' ? { estado, version: 5 } : { estado })) });
+    const r = await guardarConvenioDelPanel(ctx, EDITA({ llevarAViajes: true, reenviar: true }), d);
+    expect(r).toMatchObject({ ok: false, error: expect.stringMatching(texto) });
+    expect(d.refrescar).not.toHaveBeenCalled();
+    expect(d.enviar).not.toHaveBeenCalled();
+  });
+
+  it('sin marcar «llevar a los viajes», los viajes en curso conservan lo que se les dijo (no se refresca ni se manda nada)', async () => {
+    const d = dg();
+    const r = await guardarConvenioDelPanel(ctx, EDITA(), d);
+    expect(r).toEqual({ ok: true, mensaje: expect.stringContaining('conservan las instrucciones que ya se les dijeron') });
+    expect(d.refrescar).not.toHaveBeenCalled();
+    expect(d.enviar).not.toHaveBeenCalled();
+  });
+
+  it('llevar a los viajes: refresca solo ESE convenio y reenvía el despacho únicamente a quien ya lo había recibido', async () => {
+    const d = dg({ refrescar: vi.fn(async () => [{ viajeId: V1, reenviar: true }, { viajeId: V2, reenviar: false }]) });
+    const r = await guardarConvenioDelPanel(ctx, EDITA({ llevarAViajes: true, reenviar: true }), d);
+    expect(d.refrescar).toHaveBeenCalledWith('flota-1', ID, true);
+    expect(d.enviar).toHaveBeenCalledTimes(1);
+    expect(d.enviar).toHaveBeenCalledWith('flota-1', V1);
+    expect(r).toEqual({ ok: true, mensaje: expect.stringMatching(/actualizaron las instrucciones de 2 viajes en curso.*mandar a 1 operador/) });
+  });
+
+  it('llevar a los viajes SIN reenviar: se actualiza la foto y no se manda ningún mensaje', async () => {
+    const d = dg({ refrescar: vi.fn(async () => [{ viajeId: V1, reenviar: false }]) });
+    const r = await guardarConvenioDelPanel(ctx, EDITA({ llevarAViajes: true, reenviar: false }), d);
+    expect(d.refrescar).toHaveBeenCalledWith('flota-1', ID, false);
+    expect(d.enviar).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ ok: true, mensaje: expect.stringContaining('de 1 viaje en curso') });
+  });
+
+  it('si algún reenvío no sale (sin teléfono, plantilla sin aprobar) lo dice y dice cómo mandarlo; lo guardado queda', async () => {
+    const d = dg({
+      refrescar: vi.fn(async () => [{ viajeId: V1, reenviar: true }, { viajeId: V2, reenviar: true }]),
+      enviar: vi.fn(async (_t: string, v: string) => (v === V1 ? { estado: 'enviado' as const, canal: 'texto' as const } : { estado: 'sin_destinatario' as const })),
+    });
+    const r = await guardarConvenioDelPanel(ctx, EDITA({ llevarAViajes: true, reenviar: true }), d);
+    expect(r).toMatchObject({ ok: true, mensaje: expect.stringMatching(/mandar a 1 operador.*1 viaje no pudo recibirlas.*Convenio ligado a cada viaje en curso/) });
+  });
+
+  it('un convenio nuevo no tiene viajes: no se refresca aunque se marque', async () => {
+    const d = dg({ guardar: vi.fn(async () => ({ estado: 'ok' as const, id: ID, version: 1, creado: true })) });
+    await guardarConvenioDelPanel(ctx, ENTRADA({ llevarAViajes: true, reenviar: true }), d);
+    expect(d.refrescar).not.toHaveBeenCalled();
+  });
+
+  it('ningún viaje cambia: lo dice (no envíos de relleno)', async () => {
+    const r = await guardarConvenioDelPanel(ctx, EDITA({ llevarAViajes: true, reenviar: true }), dg());
+    expect(r).toMatchObject({ ok: true, mensaje: expect.stringContaining('Ningún viaje en curso tenía instrucciones distintas') });
+  });
+
+  it('base sin la 0656: lo explica; sin la 0657: lo guardado queda y lo dice; error al refrescar: no deshace lo guardado', async () => {
+    const sin0656 = await guardarConvenioDelPanel(ctx, ENTRADA(), dg({ guardar: async () => { throw new EdicionNoDisponible('0656'); } }));
+    expect(sin0656).toMatchObject({ ok: false, error: expect.stringContaining('0656') });
+    const sin0657 = await guardarConvenioDelPanel(ctx, EDITA({ llevarAViajes: true }), dg({ refrescar: async () => { throw new EdicionNoDisponible('0657'); } }));
+    expect(sin0657).toMatchObject({ ok: true, mensaje: expect.stringContaining('0657') });
+    const roto = await guardarConvenioDelPanel(ctx, EDITA({ llevarAViajes: true }), dg({ refrescar: async () => { throw new Error('boom'); } }));
+    expect(roto).toMatchObject({ ok: true, mensaje: expect.stringContaining('No pude llevar el cambio a los viajes en curso') });
+    const caida = await guardarConvenioDelPanel(ctx, ENTRADA(), dg({ guardar: async () => { throw new Error('boom'); } }));
+    expect(caida).toMatchObject({ ok: false, error: expect.stringContaining('No se cambió nada') });
+    const sin0580 = await guardarConvenioDelPanel(ctx, ENTRADA(), dg({ guardar: async () => { throw new ConveniosNoDisponibles(); } }));
+    expect(sin0580).toMatchObject({ ok: false, error: expect.stringContaining('0580') });
   });
 });

@@ -343,3 +343,82 @@ describe('ladoDelViaje', () => {
     expect(await repo.ladoDelViaje(B, 'v1')).toBeNull();
   });
 });
+
+describe('guardarConvenio y refrescarViajesDeConvenio (0656/0657)', () => {
+  const datos = (o: Partial<import('./edicion').DatosConvenio> = {}): import('./edicion').DatosConvenio => ({
+    convenioId: null, clienteId: String(mundo.tablas.cliente[0].id), nombre: 'Ruta norte', origen: 'Zapopan', destino: null, sitioOrigenId: null, sitioDestinoId: null,
+    vigenteDesde: null, vigenteHasta: null, notas: null, version: null,
+    instrucciones: [{ categoria: 'puerta', texto: 'Puerta 3', momento: 'ambos', lugar: 'destino', orden: 1 }], ...o,
+  });
+
+  it('el alta crea el convenio con su lista y devuelve la versión; la llamada lleva el tenant de la sesión', async () => {
+    const r = await repo.guardarConvenio(A, datos());
+    expect(r).toMatchObject({ estado: 'ok', creado: true, version: 1 });
+    expect(mundo.tablas.convenio_instruccion).toHaveLength(1);
+    expect(mundo.rpcLlamadas[0]).toMatchObject({ nombre: 'guardar_convenio', args: { p_tenant: A, p_convenio: null } });
+  });
+
+  it('editar con la versión vigente funciona y sube la versión; con una vieja es conflicto y no escribe', async () => {
+    const alta = await repo.guardarConvenio(A, datos());
+    if (alta.estado !== 'ok') throw new Error('alta');
+    const viejo = await repo.guardarConvenio(A, datos({ convenioId: alta.id, clienteId: null, nombre: 'Otro nombre', version: 99, instrucciones: [] }));
+    expect(viejo).toEqual({ estado: 'conflicto', version: 1 });
+    expect(mundo.tablas.cliente_convenio[0]).toMatchObject({ nombre: 'Ruta norte' });
+    expect(mundo.tablas.convenio_instruccion).toHaveLength(1);
+    const ok = await repo.guardarConvenio(A, datos({ convenioId: alta.id, clienteId: null, nombre: 'Ruta norte 2', version: 1, instrucciones: [{ categoria: 'documentos', texto: 'Carta porte', momento: 'despacho', lugar: 'ambos', orden: 1 }] }));
+    expect(ok).toMatchObject({ estado: 'ok', creado: false, version: 2 });
+    expect(mundo.tablas.convenio_instruccion.map((i) => i.texto)).toEqual(['Carta porte']);
+  });
+
+  it('el importador del Excel también sube la versión: una forma abierta antes de re-importar ya no guarda', async () => {
+    const alta = await repo.guardarConvenio(A, datos());
+    if (alta.estado !== 'ok') throw new Error('alta');
+    await importar([['Cliente Uno', 'Ruta norte', '', '', '', 'puerta', 'Puerta 3', '', '', '', '', '']]);
+    const r = await repo.guardarConvenio(A, datos({ convenioId: alta.id, clienteId: null, version: alta.version }));
+    expect(r.estado).toBe('conflicto');
+  });
+
+  it('nombre repetido, cliente de otra flota y convenio de otra flota se distinguen', async () => {
+    const alta = await repo.guardarConvenio(A, datos());
+    if (alta.estado !== 'ok') throw new Error('alta');
+    expect(await repo.guardarConvenio(A, datos())).toEqual({ estado: 'duplicado' });
+    expect(await repo.guardarConvenio(A, datos({ nombre: 'x', clienteId: String(mundo.tablas.cliente[1].id) }))).toEqual({ estado: 'referencia_invalida' });
+    expect(await repo.guardarConvenio(B, datos({ convenioId: alta.id, clienteId: null, version: 1 }))).toEqual({ estado: 'no_existe' });
+  });
+
+  it('la base sin la 0656/0657 se dice (EdicionNoDisponible), no se confunde con un fallo', async () => {
+    mundo.rpcAusentes.add('guardar_convenio');
+    await expect(repo.guardarConvenio(A, datos())).rejects.toMatchObject({ name: 'EdicionNoDisponible', migracion: '0656' });
+    mundo.rpcAusentes.add('refrescar_viajes_de_convenio');
+    await expect(repo.refrescarViajesDeConvenio(A, 'x', false)).rejects.toMatchObject({ name: 'EdicionNoDisponible', migracion: '0657' });
+  });
+
+  it('listarConvenios trae la versión; sin la columna la lista sigue y la versión es null (la edición se apaga, no la pantalla)', async () => {
+    await repo.guardarConvenio(A, datos());
+    expect((await repo.listarConvenios(A, { conFinanzas: false }))[0]).toMatchObject({ version: 1 });
+    mundo.columnasAusentes.set('cliente_convenio', new Set(['version']));
+    const sin = await repo.listarConvenios(A, { conFinanzas: false });
+    expect(sin).toHaveLength(1);
+    expect(sin[0].version).toBeNull();
+  });
+
+  it('refrescar vuelve a tomar la foto solo de los viajes abiertos de ESE convenio que cambian, reabre el despacho si se pide y respeta otras flotas', async () => {
+    const alta = await repo.guardarConvenio(A, datos());
+    if (alta.estado !== 'ok') throw new Error('alta');
+    const cli = mundo.tablas.cliente[0].id;
+    const mk = (estatus: string, enviado: boolean) => {
+      const v = mundo.poner('viaje', { tenant_id: A, folio: `F-${mundo.tablas.viaje.length}`, estatus, cliente_id: cli });
+      mundo.poner('viaje_convenio', { viaje_id: v.id, tenant_id: A, convenio_id: alta.id, instrucciones: [], despacho_enviado_en: enviado ? '2026-10-01T10:00:00Z' : null, despacho_canal: enviado ? 'texto' : null, acercamiento_origen_enviado_en: enviado ? '2026-10-01T11:00:00Z' : null });
+      return String(v.id);
+    };
+    const despachado = mk('abierto', true); const sinDespachar = mk('abierto', false); const liquidado = mk('liquidado', true);
+    expect(await repo.refrescarViajesDeConvenio(B, String(alta.id), true)).toEqual([]);
+    const r = await repo.refrescarViajesDeConvenio(A, String(alta.id), true);
+    expect(r).toEqual(expect.arrayContaining([{ viajeId: despachado, reenviar: true }, { viajeId: sinDespachar, reenviar: false }]));
+    expect(r).toHaveLength(2);
+    const fila = (id: string) => mundo.tablas.viaje_convenio.find((x) => x.viaje_id === id)!;
+    expect(fila(despachado)).toMatchObject({ despacho_enviado_en: null, despacho_canal: null, acercamiento_origen_enviado_en: '2026-10-01T11:00:00Z' });
+    expect(fila(liquidado).instrucciones).toEqual([]);
+    expect(await repo.refrescarViajesDeConvenio(A, String(alta.id), true)).toEqual([]);
+  });
+});
