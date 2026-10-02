@@ -95,3 +95,103 @@ export async function estadoPush(tenantId: string): Promise<EstadoPush> {
     previoVigenteHasta: (data.previo_vence_en as string | null) ?? null,
   };
 }
+
+// ── Lectura para el panel (Conexiones y Mapa) ──────────────────────────────
+
+export interface PollGpsFila {
+  proveedor: string; ultimoPollEn: string | null; ultimoCompletoEn: string | null;
+  erroresSeguidos: number; ultimaFalla: 'credencial' | 'proveedor' | 'formato' | null;
+  proximoIntentoEn: string | null; ultimoError: string | null; backlogPendiente: boolean; elementos: number;
+}
+
+/** Salud por proveedor (recurso `posiciones`). Lanza si la base no contesta. */
+export async function saludPollsGps(tenantId: string): Promise<PollGpsFila[]> {
+  const { data, error } = await acotada(
+    supabaseAdmin().from('conector_poll_estado')
+      .select('proveedor, ultimo_poll_en, ultimo_completo_en, errores_seguidos, ultima_falla, proximo_intento_en, ultimo_error, backlog_pendiente, elementos_ultima')
+      .eq('tenant_id', tenantId).eq('recurso', 'posiciones').order('proveedor').range(0, 49),
+    'gps_panel.polls',
+  );
+  if (error) throw new Error(`gps_panel.polls: ${error.message}`);
+  return (data ?? []).map((f) => ({
+    proveedor: String(f.proveedor),
+    ultimoPollEn: (f.ultimo_poll_en as string | null) ?? null,
+    ultimoCompletoEn: (f.ultimo_completo_en as string | null) ?? null,
+    erroresSeguidos: Number(f.errores_seguidos ?? 0),
+    ultimaFalla: (f.ultima_falla as PollGpsFila['ultimaFalla']) ?? null,
+    proximoIntentoEn: (f.proximo_intento_en as string | null) ?? null,
+    ultimoError: (f.ultimo_error as string | null) ?? null,
+    backlogPendiente: f.backlog_pendiente === true,
+    elementos: Number(f.elementos_ultima ?? 0),
+  }));
+}
+
+export interface HuerfanoGps { proveedor: string; deviceId: string; primerVistoEn: string; ultimoVistoEn: string }
+export const TOPE_HUERFANOS_PANEL = 200;
+
+/**
+ * Dispositivos que el proveedor reporta y NINGUNA unidad reclama. Se filtran los
+ * que ya fueron ligados (la lista se limpia al mapear, pero la verdad es la
+ * columna `unidad.gps_device_id`). `hayMas` = se cortó en el tope.
+ */
+export async function huerfanosGps(tenantId: string): Promise<{ lista: HuerfanoGps[]; hayMas: boolean }> {
+  const { data, error } = await acotada(
+    supabaseAdmin().from('gps_dispositivo_huerfano')
+      .select('proveedor, device_id, primer_visto_en, ultimo_visto_en')
+      .eq('tenant_id', tenantId)
+      .order('ultimo_visto_en', { ascending: false }).order('device_id')
+      .range(0, TOPE_HUERFANOS_PANEL),
+    'gps_panel.huerfanos',
+  );
+  if (error) throw new Error(`gps_panel.huerfanos: ${error.message}`);
+  const filas = data ?? [];
+  const hayMas = filas.length > TOPE_HUERFANOS_PANEL;
+  const candidatos = filas.slice(0, TOPE_HUERFANOS_PANEL);
+  const reclamados = new Set<string>();
+  const ids = [...new Set(candidatos.map((f) => String(f.device_id)))];
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data: u, error: e2 } = await acotada(
+      supabaseAdmin().from('unidad').select('gps_proveedor, gps_device_id')
+        .eq('tenant_id', tenantId).in('gps_device_id', ids.slice(i, i + 200)),
+      'gps_panel.huerfanos_reclamados',
+    );
+    if (e2) throw new Error(`gps_panel.huerfanos_reclamados: ${e2.message}`);
+    for (const x of u ?? []) reclamados.add(`${x.gps_proveedor}|${x.gps_device_id}`);
+  }
+  return {
+    hayMas,
+    lista: candidatos
+      .filter((f) => !reclamados.has(`${f.proveedor}|${f.device_id}`))
+      .map((f) => ({ proveedor: String(f.proveedor), deviceId: String(f.device_id), primerVistoEn: String(f.primer_visto_en), ultimoVistoEn: String(f.ultimo_visto_en) })),
+  };
+}
+
+export interface ConteosUnidadesGps { activas: number; conDispositivo: number; sinDispositivo: number; sinSenalNunca: number }
+
+/** Cuántas unidades activas tienen dispositivo, cuáles no y cuáles lo tienen y nunca han reportado. */
+export async function conteosUnidadesGps(tenantId: string): Promise<ConteosUnidadesGps> {
+  const base = () => supabaseAdmin().from('unidad').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('activo', true);
+  const [a, c, n] = await Promise.all([
+    acotada(base(), 'gps_panel.unidades_activas'),
+    acotada(base().not('gps_device_id', 'is', null), 'gps_panel.unidades_con_dispositivo'),
+    acotada(base().not('gps_device_id', 'is', null).is('gps_visto_en', null), 'gps_panel.unidades_sin_senal'),
+  ]);
+  for (const r of [a, c, n]) if (r.error) throw new Error(`gps_panel.unidades: ${r.error.message}`);
+  const activas = a.count ?? 0; const conDispositivo = c.count ?? 0;
+  return { activas, conDispositivo, sinDispositivo: Math.max(0, activas - conDispositivo), sinSenalNunca: n.count ?? 0 };
+}
+
+/** Ids de las unidades que tienen un dispositivo GPS ligado (para rotular el pin de WhatsApp como respaldo). */
+export async function unidadesConDispositivo(tenantId: string): Promise<Set<string>> {
+  const salida = new Set<string>();
+  for (let d = 0; ; d += 1000) {
+    const { data, error } = await acotada(
+      supabaseAdmin().from('unidad').select('id').eq('tenant_id', tenantId).not('gps_device_id', 'is', null).order('id').range(d, d + 999),
+      'gps_panel.unidades_con_dispositivo_ids',
+    );
+    if (error) throw new Error(`gps_panel.unidades_con_dispositivo_ids: ${error.message}`);
+    for (const f of data ?? []) salida.add(String(f.id));
+    if ((data ?? []).length < 1000) return salida;
+    if (d > 50_000) throw new Error('gps_panel.unidades_con_dispositivo_ids: más de 50,000 unidades');
+  }
+}
