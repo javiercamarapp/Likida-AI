@@ -118,7 +118,7 @@ Datos personales nuevos: el nombre de un **tercero** (quien recibe en el andén)
 ## Operación
 
 - Palancas: `global` y `agente:conductores` (fail-closed: ilegible = no corre). Latido `conductor-hitos` (parcial = fallos de envío, cortes por reloj o rechazo masivo).
-- Config por flota: `agente_conductor_config` (sin fila = defaults del código, `conductor/config.ts`), editable en `/dashboard/agentes/conductores/configuracion` (dueño o quien administra; si no se pudo leer la config, la pantalla lo dice en vez de enseñar los defaults como si fueran lo guardado) o con `PUT /v1/conductor/config`.
+- Config por flota: `agente_conductor_config` (sin fila = defaults del código, `conductor/config.ts`), editable en `/dashboard/agentes/conductores/configuracion` (la ven los roles con acceso a la ruta; solo guarda quien puede administrar; si no se pudo leer la config, la pantalla lo dice en vez de enseñar los defaults como si fueran lo guardado) o con `PUT /v1/conductor/config`.
 - Interruptores por flota que nacen APAGADOS (se encienden una flota a la vez): `avisar_oficina_llegada`/`avisar_oficina_salida`, `avisar_llegada_sin_confirmar` (0604), `avisar_senal_vida` (0636), las alertas de estadía y `pedir_foto_evidencia`. Encendidos por defecto: la detección por geocerca (`detectar_hitos_gps`, solo con sitio asignado y GPS de la unidad), la validación de ubicación y la confirmación al chofer.
 - Cada paso proactivo del cron `conductor-hitos` corre aislado: si uno falla, los demás corren y el latido sale `parcial`.
 - Contactos de escalamiento: `conductor_contacto_trafico`, por el mismo `PUT /v1/conductor/config` (teléfonos normalizados a 52+10).

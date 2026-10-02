@@ -80,7 +80,7 @@ Crea el viaje (folio del cliente o `CP-<huella>`) o, si ya existe con ese folio,
 
 ## Exportación
 
-`/api/export/carta-porte-docs?config=estandar|<id>&formato=csv|json[&ids=…]`. El formato real del cliente de demo **se desconoce**: cada flota declara el mapeo (`cp_export_config`; columnas = campo del complemento / de mercancía / de sistema / constante; una fila por mercancía o por documento). Solo documentos aprobados. El texto que empieza con `= + - @` sale con apóstrofo (inyección de fórmulas en Excel).
+`/api/export/carta-porte-docs?config=estandar|<id>&formato=csv|json|xlsx[&ids=…]` (el `.xlsx` es el que se abre directo en Excel, con las mismas columnas y la misma neutralización de fórmulas; hay un botón por formato en la bandeja). El formato real del cliente de demo **se desconoce**: cada flota declara el mapeo (`cp_export_config`; columnas = campo del complemento / de mercancía / de sistema / constante; una fila por mercancía o por documento). Solo documentos aprobados. El texto que empieza con `= + - @` sale con apóstrofo (inyección de fórmulas en Excel).
 
 ## Métricas
 
