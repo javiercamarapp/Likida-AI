@@ -172,8 +172,14 @@ import { join, relative } from 'node:path';
 // 259 → 268 archivos y 1,347 → 1,580 llamadas (seguridad +2/+12, producto +1/+24,
 // Conductor +3/+85, Vigía +1/+57, Carta Porte +2/+55); cada tramo está explicado arriba
 // y todo es funcionalidad nueva, no código migrado.
+//
+// LOOP PUNTA A PUNTA, ola 3, W3 «Mis reglas» (Agente 13) — 1,580 → 1,585 llamadas, mismos
+// 268 archivos: las cinco llamadas son de `reglas/repo.ts` (ya medido) para la tabla nueva
+// `regla_aviso` de la 0520 — historial de avisos (lista), avisos enviados en la ventana de
+// 24 h (tope de frecuencia), registrar un aviso, purga de retención y el UPDATE del límite
+// de frecuencia. Funcionalidad nueva, no código migrado.
 const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 268;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_580;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_585;
 
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
