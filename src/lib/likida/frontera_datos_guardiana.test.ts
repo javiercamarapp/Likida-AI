@@ -256,7 +256,15 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 286;
 // contaba — funcionalidad nueva, no código migrado: las RPC del worker (qué procesar y su respaldo directo contra una base sin la 0641, qué quedó
 // agotado, qué documento por avisar, y el candado de «una sola vez» del aviso a la oficina con su liberación). Cada una va por `acotada`.
 // INTEGRACIÓN ola 4b (P1 + P3): P1 mide 1,807 → 1,811 (+4) y P3 1,807 → 1,811 (+4) contra la misma base; la suma es 1,815 (se confirma con el barrido del árbol fusionado).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_815;
+// OLA 4d, paquete P6 «orquestador-vivo» (0651-0652): 0 archivos y +11 llamadas (1,815 → 1,826), todas en `orquestador/fuentes_reales.ts`, que ya contaba y que
+// sigue siendo el ÚNICO archivo con acceso a datos propio del asistente (funcionalidad nueva, no código migrado; cada una va por `acotada`):
+//   · el aviso de una tarea (0651): leer su estado, el claim del intento (lee los intentos y hace el UPDATE condicional), cerrar/anotar el estado y el nombre de la flota (4+1);
+//   · el ciclo del cron escalar (0652): el claim de flotas por RPC, el registro del barrido por RPC y las tareas con aviso pendiente (3);
+//   · las tareas de sistema del barrido de salud: listar las abiertas `barrido:*` y cerrar por llave (2);
+//   · la reclamación de peajes: el último desglose no anulado de la flota (1).
+// Las otras lecturas nuevas (convenio, liquidación externa, jornada, reporte de peajes) COMPONEN lectores que ya existen (`convenios/repo.ts`, `liquidacion_externa/repo.ts`,
+// `jornada/repo.ts`, `peajes/bitacora_conciliada.ts`) y no suman llamadas. Cada paquete de la Ola 4 midió contra su propia base: la suma se confirma con el barrido del árbol integrado.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_826;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)
