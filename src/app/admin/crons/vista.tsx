@@ -46,6 +46,7 @@ const RUTA: Record<CronId, string> = {
   peajes: '/api/cron/peajes',
   'conductor-hitos': '/api/cron/conductor-hitos',
   vigia: '/api/cron/vigia',
+  'buzon-entrega': '/api/cron/buzon-entrega',
 };
 
 /** Qué hace cada reloj, en una línea, para que el rojo se pueda priorizar. */
@@ -65,6 +66,7 @@ const OFICIO: Record<CronId, string> = {
   peajes: 'importa y concilia los desgloses de peaje que el proveedor mandó por el buzón firmado',
   'conductor-hitos': 'pide, persigue y escala los hitos del viaje (llegada, salida, regreso) a los choferes',
   vigia: 'vigila el SLA de los clientes finales, escala por niveles y purga lo que ya cumplió su retención',
+  'buzon-entrega': 'arma y manda al contador el lote de facturas aprobadas, reintenta con espera y marca lo que Resend no confirma',
 };
 
 /**
