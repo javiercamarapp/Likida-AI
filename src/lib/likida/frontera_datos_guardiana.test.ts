@@ -289,7 +289,7 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 286;
 // sitios que ofrece el formulario de alta/edición (2) y las dos RPC de la edición — `guardar_convenio` (alta/edición atómica con control de versión) y
 // `refrescar_viajes_de_convenio` (llevar la edición a los viajes en curso). Funcionalidad nueva, no código migrado. Medido contra su propia base (1,851):
 // al integrarla con las otras ramas de la ola, el techo es la suma de los tramos.
-// INTEGRACIÓN P7 + P9 (ronda 10): 1,871 + 5 (P7) + 6 (P9) = 1,882 por suma; el valor de abajo se confirma con el barrido real del árbol fusionado.
+// INTEGRACIÓN P7 + P9 (ronda 10): 1,871 + 5 (P7) + 6 (P9) = 1,882 por suma; medido con el barrido real del árbol fusionado: 1,882 exactas, cero holgura.
 // RONDA 09, paquete P9 «claims-concurrencia» (0660-0661): 0 archivos y +6 llamadas (1,851 + 6 = 1,857), en archivos que ya contaban — funcionalidad nueva, no código
 // migrado: `reglas/repo.ts` +3 (las RPC del reclamo de «Mis reglas»: reclamar, confirmar y liberar las llaves de un aviso) y `conductor/trabajo.ts` +3 (la lectura de
 // viajes ahora es la RPC de reparto justo entre flotas + la lectura por lotes + la anterior como respaldo sin la 0661, y el cierre de los hitos de viajes vencidos).
