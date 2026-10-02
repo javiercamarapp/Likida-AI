@@ -222,7 +222,37 @@ export async function guardarFormatoFlota(tenantId: string, c: ConfigFormatoFlot
   if (res.error) throw new Error(`liquidacion_formato_flota guardar: ${res.error.message}`);
 }
 
+/**
+ * Guarda SOLO los teléfonos de la copia y del aviso de discrepancia, sin tocar el formato (flotas con el PDF genérico). Si la fila
+ * ya existe actualiza únicamente los teléfonos; si no, la crea con formato nulo, que pide la 0645 — sin ella lo dice en palabras.
+ */
+export async function guardarTelefonosFlota(tenantId: string, t: TelefonosFlota, por: string): Promise<void> {
+  const cambios = { copia_telefonos: t.copia, discrepancia_telefonos: t.discrepancia, actualizado_en: new Date().toISOString(), actualizado_por: por.slice(0, 120) };
+  const upd = await acotada(supabaseAdmin().from('liquidacion_formato_flota').update(cambios).eq('tenant_id', tenantId).select('tenant_id'), 'liqext.telefonos_guardar');
+  if (upd.error) throw new Error(`liquidacion_formato_flota guardar teléfonos: ${upd.error.message}`);
+  if ((upd.data ?? []).length > 0 || (t.copia.length === 0 && t.discrepancia.length === 0)) return;
+  const ins = await acotada(supabaseAdmin().from('liquidacion_formato_flota').insert({ tenant_id: tenantId, formato: null, nombre_muestra: null, ...cambios }), 'liqext.telefonos_crear');
+  if (ins.error) {
+    if (ins.error.code === '23502') {
+      throw new DatoInvalido('Para guardar los teléfonos sin un Excel de muestra hace falta aplicar la migración 0645 en la base. Mientras tanto, sube el Excel de muestra y ahí los capturas.');
+    }
+    throw new Error(`liquidacion_formato_flota crear teléfonos: ${ins.error.message}`);
+  }
+}
+
+/**
+ * Quita el FORMATO de la flota. Si la fila trae teléfonos (copia al jefe, aviso de discrepancia) se CONSERVAN: solo se vacía el formato
+ * (0645). Contra una base sin la 0645, o sin teléfonos, se borra la fila entera como siempre.
+ */
 export async function borrarFormatoFlota(tenantId: string): Promise<void> {
+  const tel = await leerTelefonosFlota(tenantId);
+  if (tel && (tel.copia.length > 0 || tel.discrepancia.length > 0)) {
+    const upd = await acotada(supabaseAdmin().from('liquidacion_formato_flota')
+      .update({ formato: null, nombre_muestra: null, actualizado_en: new Date().toISOString() }).eq('tenant_id', tenantId), 'liqext.formato_vaciar');
+    if (!upd.error) return;
+    if (upd.error.code !== '23502') throw new Error(`liquidacion_formato_flota vaciar: ${upd.error.message}`);
+    // Sin la 0645 la columna es NOT NULL: no hay dónde dejar solo los teléfonos, y se borra la fila como antes.
+  }
   const res = await acotada(supabaseAdmin().from('liquidacion_formato_flota').delete().eq('tenant_id', tenantId), 'liqext.formato_borrar');
   if (res.error) throw new Error(`liquidacion_formato_flota borrar: ${res.error.message}`);
 }
