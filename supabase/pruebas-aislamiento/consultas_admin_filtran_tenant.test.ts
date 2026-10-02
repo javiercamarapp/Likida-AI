@@ -301,6 +301,8 @@ const VIGIA_CONTACTO_POR_TELEFONO = ".from('vigia_contacto').select(COLS_CONTACT
 const VIGIA_EN_ESPERA = ".from('vigia_conversacion').select(COLS_CONV).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).order('sin_respuesta_desde', { ascending: true }).order('id').limit(limite)";
 // Exención por cadena exacta de «Mis reglas» (Agente 13, 0520): la purga de retención del historial de avisos.
 const REGLAS_PURGA_AVISOS = ".from('regla_aviso').delete().lt('enviado_en', corte).select('id')";
+// Exención por cadena exacta del buzón (Agente 9, 0531): la lista de trabajo del cron de entrega al contador.
+const BUZON_LOTES_PARA_ENVIAR = ".from('buzon_entrega').select(COLUMNAS_ENTREGA).or(`and(estado.eq.pendiente,proximo_intento_en.lte.${iso}),and(estado.eq.enviando,lease_hasta.lt.${iso})`).order('proximo_intento_en', { ascending: true }).order('id', { ascending: true }).limit(limite)";
 const EXENCIONES_CONSULTA = [{
   archivo: 'src/lib/likida/reglas/repo.ts', tabla: 'regla_aviso', cadena: REGLAS_PURGA_AVISOS,
   razon: 'Retención por EDAD (365 días) de una bitácora de operación: el DELETE barre las filas vencidas de TODAS las flotas a la vez, igual que las purgas de wa_mensaje_procesado y llm_costo del cron purgar. No lee ni devuelve datos a ninguna pantalla, solo cuenta cuántas borró; lo llama únicamente vigilarReglas (cron escalar, tras puertaCron y la palanca global). El resto de repo.ts, incluido todo lo que lee o escribe el historial por flota, sigue vigilado por esta prueba.',
@@ -310,6 +312,9 @@ const EXENCIONES_CONSULTA = [{
 }, {
   archivo: 'src/lib/likida/vigia/repo.ts', tabla: 'vigia_conversacion', cadena: VIGIA_EN_ESPERA,
   razon: 'La lista de trabajo del cron /api/cron/vigia barre las conversaciones en espera de TODAS las flotas con el agente encendido en una corrida (puertaCron + palanca global); cada acción posterior usa el tenantId de la propia conversación y la configuración se relee filtrada por esos tenants. Mismo molde que conductor/trabajo.ts.',
+}, {
+  archivo: 'src/lib/likida/buzon/entrega_repo.ts', tabla: 'buzon_entrega', cadena: BUZON_LOTES_PARA_ENVIAR,
+  razon: 'La lista de trabajo del cron /api/cron/buzon-entrega recoge los lotes VENCIDOS (pendientes con su espera cumplida y «enviando» con el lease muerto) de TODAS las flotas en una corrida (puertaCron + palanca global); cada fila trae su tenant_id y TODO lo que `entrega.ts` hace con ella después (reclamar, leer sus facturas, marcar enviada o fallida, anotar el evento) se ancla a ESE tenant. El resto de entrega_repo.ts, incluido todo lo que atiende a una flota por llamada, sigue vigilado por esta prueba. Mismo molde que vigia/repo.ts y conductor/trabajo.ts. ⚠️ Otras dos consultas de este archivo también cruzan flotas a propósito y hoy pasan la vigilancia solo porque su select nombra `tenant_id`: `flotasConEntregaAutomatica` (la lista de flotas que encendieron la entrega, mismo cron) y `confirmarPorResend` (busca el lote por `resend_id`, un id que emite el proveedor y llega por webhook firmado; después ancla TODO por el tenant del lote).',
 }, {
   archivo: 'src/lib/admin/calcom.ts', tabla: 'prospecto', cadena: CALCOM_LOOKUP,
   razon: 'CRM global de LIKIDA (0105): tenant_id sólo existe al cerrar. Este SELECT por correo canónico y no duplicado decide 0/1/>1 para reconciliar no-show; la entrada productiva es cron/escalar tras puertaCron y la entrega usa el webhook firmado. No exime escrituras ni otras tablas o consultas.',
