@@ -4,8 +4,8 @@ import { BarraPagina } from '../resumen-visual';
 import { fechaMx, mxn } from '@/lib/formato';
 import { ETIQUETA_CATEGORIA } from '@/lib/likida/convenios/tipos';
 import { textoParaSistemaDeLaFlota } from '@/lib/likida/convenios/importador';
-import type { ConvenioFila } from '@/lib/likida/convenios/repo';
-import { FormaImportarConvenios, type AccionConvenio } from './formas';
+import type { ConvenioFila, ViajeConvenioFila } from '@/lib/likida/convenios/repo';
+import { FormaCorregirConvenio, FormaImportarConvenios, type AccionConvenio } from './formas';
 
 // SOLO tipos del repositorio: la vista no arrastra al bundle el acceso a datos.
 
@@ -24,6 +24,9 @@ export interface PropsVistaConvenios {
   puedeExportar: boolean;
   accionImportar: AccionConvenio;
   accionEstado: (fd: FormData) => Promise<void>;
+  /** Los viajes abiertos con su convenio ligado. `null` = no se pudieron leer (o no se pidieron: la sección no se pinta). */
+  viajes?: ViajeConvenioFila[] | null;
+  accionCorregir?: AccionConvenio;
 }
 
 const vigencia = (c: ConvenioFila): string => {
@@ -117,6 +120,40 @@ export function VistaConvenios(p: PropsVistaConvenios) {
                           {c.comercial.requisitos.length > 0 && <> · Para cobrar: {c.comercial.requisitos.join(', ')}</>}
                         </p>
                       )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
+          {p.estado === 'ok' && p.puedeEditar && p.accionCorregir && p.viajes && (
+            <section className="card p-4 space-y-3" aria-label="Convenio ligado a cada viaje">
+              <h2 className="font-display text-[15px] font-semibold">Convenio ligado a cada viaje en curso</h2>
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                Si el sistema ligó el convenio equivocado, o no pudo elegir porque varios empataban, corrígelo aquí: se vuelve a tomar la foto de
+                instrucciones del convenio que elijas y queda como corrección manual (el despacho automático ya no lo cambia). Puedes mandarle de nuevo
+                las instrucciones al operador.
+              </p>
+              {p.viajes.length === 0 ? (
+                <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No hay viajes abiertos con cliente.</p>
+              ) : (
+                <ul className="divide-y" style={{ borderColor: 'var(--line2)' }}>
+                  {p.viajes.map((v) => (
+                    <li key={v.viajeId} className="py-3 space-y-1.5">
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <span className="font-medium text-[13.5px]">{v.folio}</span>
+                        <span className="text-[13px]">· {v.cliente ?? 'sin cliente'}</span>
+                        <span className="text-[12px]" style={{ color: 'var(--muted)' }}>{v.origen ?? '¿origen?'} → {v.destino ?? '¿destino?'}{v.operador ? ` · ${v.operador}` : ''}</span>
+                      </div>
+                      <p className="text-[12px]" style={{ color: v.convenioNombre || v.ligadoPor === null ? 'var(--muted)' : 'var(--warn)' }}>
+                        {v.ligadoPor === null
+                          ? 'Sin convenio ligado todavía (nunca se despachó con convenio, o varios empataron).'
+                          : v.convenioNombre
+                            ? `Ligado: «${v.convenioNombre}» (${v.ligadoPor === 'manual' ? 'corrección manual' : 'automático'}) · ${v.instrucciones} instrucci${v.instrucciones === 1 ? 'ón' : 'ones'}${v.despachoEnviado ? ' · ya enviadas al operador' : ''}`
+                            : 'Sin convenio (decisión de la oficina o convenio borrado): no se le manda nada al operador.'}
+                      </p>
+                      <FormaCorregirConvenio accion={p.accionCorregir!} viajeId={v.viajeId} folio={v.folio} actual={v.convenioId} opciones={v.opciones} />
                     </li>
                   ))}
                 </ul>

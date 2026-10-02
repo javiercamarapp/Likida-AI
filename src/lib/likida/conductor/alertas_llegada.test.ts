@@ -183,7 +183,8 @@ describe('la plantilla de la llegada sin confirmar', () => {
     expect(validarCatalogo()).toEqual([]);
     const m = armarAvisoLlegadaSinConfirmar(viajeBase({ id: 'v1', origen: 'Planta Zapopan' }), hitos('v1', hace(30))[0], 'sin_ubicacion', AHORA);
     expect(m.plantilla.nombre).toBe('conductor_llegada_sin_confirmar_v1');
-    expect(m.plantilla.parametros).toHaveLength(4);
-    expect(m.plantilla.parametros.every((x) => !/\n/.test(x))).toBe(true);
+    const parametros = m.plantilla.parametros ?? [];
+    expect(parametros).toHaveLength(4);
+    expect(parametros.every((x) => !/\n/.test(x))).toBe(true);
   });
 });

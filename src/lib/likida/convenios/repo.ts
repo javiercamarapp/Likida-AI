@@ -315,6 +315,146 @@ export async function ligarConvenioAViaje(tenantId: string, viajeId: string, hoy
   return { estado: 'ligado', ligado: { convenioId: elegido.id, instrucciones: elegido.instrucciones, despachoEnviado: false, acercamientoOrigenEnviado: false, acercamientoDestinoEnviado: false } };
 }
 
+// ── CORREGIR A MANO EL CONVENIO LIGADO A UN VIAJE ───────────────────────────
+
+export interface OpcionConvenio { id: string; nombre: string }
+
+/** Un viaje abierto con el convenio que tiene ligado (o ninguno) y los convenios activos de su cliente entre los que se puede elegir. */
+export interface ViajeConvenioFila {
+  viajeId: string;
+  folio: string;
+  origen: string | null;
+  destino: string | null;
+  cliente: string | null;
+  operador: string | null;
+  convenioId: string | null;
+  convenioNombre: string | null;
+  /** `null` = el viaje todavía no tiene fila ligada (nunca se despachó con convenio, o hubo empate entre varios). */
+  ligadoPor: 'auto' | 'manual' | null;
+  instrucciones: number;
+  despachoEnviado: boolean;
+  opciones: OpcionConvenio[];
+}
+
+/** Cuántos viajes abiertos se listan en la pantalla (los más recientes). */
+export const TOPE_VIAJES_CONVENIO = 60;
+
+/** Los viajes abiertos con cliente, con su convenio ligado y las opciones para corregirlo. Lanza si la base no contesta. */
+export async function listarViajesConConvenio(tenantId: string): Promise<ViajeConvenioFila[]> {
+  const admin = supabaseAdmin();
+  const rv = await acotada(admin.from('viaje').select('id, folio, origen, destino, cliente_id, operador:operador_id(nombre)')
+    .eq('tenant_id', tenantId).eq('estatus', 'abierto').not('cliente_id', 'is', null)
+    .order('created_at', { ascending: false }).order('id').limit(TOPE_VIAJES_CONVENIO), 'convenios.viajes_lista');
+  const viajes = (ok(rv as never, 'convenios.viajes_lista') ?? []) as Fila[];
+  if (viajes.length === 0) return [];
+  const viajeIds = viajes.map((v) => String(v.id));
+  const clienteIds = [...new Set(viajes.map((v) => String(v.cliente_id)))];
+
+  const [ligados, opciones, clientes] = await Promise.all([
+    acotada(admin.from('viaje_convenio').select('viaje_id, convenio_id, ligado_por, instrucciones, despacho_enviado_en')
+      .eq('tenant_id', tenantId).in('viaje_id', viajeIds), 'convenios.viajes_ligados'),
+    acotada(admin.from('cliente_convenio').select('id, cliente_id, nombre').eq('tenant_id', tenantId).in('cliente_id', clienteIds).eq('activo', true)
+      .order('nombre').order('id'), 'convenios.viajes_opciones'),
+    acotada(admin.from('cliente').select('id, nombre').eq('tenant_id', tenantId).in('id', clienteIds), 'convenios.viajes_clientes'),
+  ]);
+  const filasLigadas = (ok(ligados as never, 'convenios.viajes_ligados') ?? []) as Fila[];
+  const filasOpciones = (ok(opciones as never, 'convenios.viajes_opciones') ?? []) as Fila[];
+  const nombreCliente = new Map(((ok(clientes as never, 'convenios.viajes_clientes') ?? []) as Fila[]).map((c) => [String(c.id), String(c.nombre)] as const));
+  // El nombre de un convenio ligado que ya se archivó no está entre las opciones activas: se lee aparte.
+  const ligadosIds = [...new Set(filasLigadas.map((l) => s(l.convenio_id)).filter((x): x is string => x !== null))];
+  const nombres = new Map(filasOpciones.map((o) => [String(o.id), String(o.nombre)] as const));
+  const faltan = ligadosIds.filter((id) => !nombres.has(id));
+  if (faltan.length > 0) {
+    const r = await acotada(admin.from('cliente_convenio').select('id, nombre').eq('tenant_id', tenantId).in('id', faltan), 'convenios.viajes_archivados');
+    for (const o of ((ok(r as never, 'convenios.viajes_archivados') ?? []) as Fila[])) nombres.set(String(o.id), String(o.nombre));
+  }
+  const ligadoDe = new Map(filasLigadas.map((l) => [String(l.viaje_id), l] as const));
+
+  return viajes.map((v): ViajeConvenioFila => {
+    const l = ligadoDe.get(String(v.id));
+    const convenioId = l ? s(l.convenio_id) : null;
+    const rel = v.operador as { nombre?: string } | Array<{ nombre?: string }> | null;
+    return {
+      viajeId: String(v.id), folio: s(v.folio) ?? String(v.id).slice(0, 8), origen: s(v.origen), destino: s(v.destino),
+      cliente: nombreCliente.get(String(v.cliente_id)) ?? null, operador: (Array.isArray(rel) ? rel[0] : rel)?.nombre ?? null,
+      convenioId, convenioNombre: convenioId ? (nombres.get(convenioId) ?? null) : null,
+      ligadoPor: l ? (l.ligado_por === 'manual' ? 'manual' : 'auto') : null,
+      instrucciones: l ? leerFoto(l.instrucciones).length : 0,
+      despachoEnviado: !!l?.despacho_enviado_en,
+      opciones: filasOpciones.filter((o) => String(o.cliente_id) === String(v.cliente_id)).map((o) => ({ id: String(o.id), nombre: String(o.nombre) })),
+    };
+  });
+}
+
+export type ResultadoCorregir =
+  | { estado: 'ok'; convenioNombre: string | null; instrucciones: number }
+  | { estado: 'viaje_no_encontrado' | 'viaje_cerrado' | 'sin_cliente' | 'convenio_no_valido' };
+
+const SELLOS_VACIOS = {
+  despacho_reclamado_en: null, despacho_enviado_en: null, despacho_canal: null,
+  acercamiento_origen_reclamado_en: null, acercamiento_origen_enviado_en: null, acercamiento_origen_canal: null,
+  acercamiento_destino_reclamado_en: null, acercamiento_destino_enviado_en: null, acercamiento_destino_canal: null,
+};
+
+/**
+ * La oficina corrige a mano el convenio de UN viaje: `convenioId` = otro convenio ACTIVO del MISMO cliente, o `null` = «este viaje no
+ * usa convenio». La foto de instrucciones se vuelve a tomar del convenio elegido (con sus instrucciones de hoy) y la fila queda
+ * `manual`: el despacho automático ya no la vuelve a elegir. `reenviar` borra los sellos de envío para que las instrucciones
+ * correctas salgan otra vez (el que las manda es el llamador, con su claim). El convenio tiene que ser del cliente del viaje y de
+ * la flota: un id ajeno o de otro cliente no pasa (`convenio_no_valido`). Un viaje liquidado ya no se corrige.
+ */
+export async function corregirConvenioDelViaje(
+  tenantId: string, viajeId: string, convenioId: string | null, opciones: { reenviar: boolean },
+): Promise<ResultadoCorregir> {
+  const admin = supabaseAdmin();
+  const rv = await acotada(admin.from('viaje').select('id, cliente_id, estatus, origen_geocerca_id, destino_geocerca_id')
+    .eq('tenant_id', tenantId).eq('id', viajeId).maybeSingle(), 'convenios.corregir_viaje');
+  const v = ok(rv as never, 'convenios.corregir_viaje') as Fila | null;
+  if (!v) return { estado: 'viaje_no_encontrado' };
+  if (v.estatus === 'liquidado') return { estado: 'viaje_cerrado' };
+  const clienteId = s(v.cliente_id);
+  if (!clienteId) return { estado: 'sin_cliente' };
+
+  let convenio: Fila | null = null;
+  let foto: Instruccion[] = [];
+  if (convenioId !== null) {
+    const rc = await acotada(admin.from('cliente_convenio').select(COLS_CONVENIO)
+      .eq('tenant_id', tenantId).eq('id', convenioId).eq('cliente_id', clienteId).eq('activo', true).maybeSingle(), 'convenios.corregir_convenio');
+    convenio = ok(rc as never, 'convenios.corregir_convenio') as Fila | null;
+    if (!convenio) return { estado: 'convenio_no_valido' };
+    const ri = await leerTodo((d, h) => acotada(admin.from('convenio_instruccion').select(COLS_INSTRUCCION, conteo(d))
+      .eq('tenant_id', tenantId).eq('activa', true).eq('convenio_id', convenioId).order('orden').order('id').range(d, h), 'convenios.corregir_instrucciones') as never, 'convenios.corregir_instrucciones');
+    foto = ri.map(filaAInstruccion).filter((x): x is Instruccion => x !== null);
+  }
+
+  const cambio = {
+    convenio_id: convenioId, cliente_id: clienteId, ligado_por: 'manual', instrucciones: foto, ligado_en: new Date().toISOString(),
+    ...(opciones.reenviar ? SELLOS_VACIOS : {}),
+  };
+  const actualizar = async (): Promise<boolean> => {
+    const r = await acotada(admin.from('viaje_convenio').update(cambio).eq('tenant_id', tenantId).eq('viaje_id', viajeId).select('viaje_id'), 'convenios.corregir_actualizar');
+    return ((ok(r as never, 'convenios.corregir_actualizar') ?? []) as Fila[]).length > 0;
+  };
+  if (!(await actualizar())) {
+    const ins = await acotada(admin.from('viaje_convenio').insert({ viaje_id: viajeId, tenant_id: tenantId, ...cambio }).select('viaje_id'), 'convenios.corregir_insertar');
+    // Otro gesto la creó entre la lectura y la escritura: se aplica la corrección sobre la fila que ganó.
+    if (ins.error && violaIndice(ins.error, 'viaje_convenio_pkey')) await actualizar();
+    else ok(ins as never, 'convenios.corregir_insertar');
+  }
+
+  // Los sitios del convenio elegido pasan al viaje SOLO donde el viaje no traía (best-effort, igual que al ligar).
+  if (convenio) {
+    const sitios: Record<string, string> = {};
+    if (!s(v.origen_geocerca_id) && s(convenio.origen_sitio_id)) sitios.origen_geocerca_id = String(convenio.origen_sitio_id);
+    if (!s(v.destino_geocerca_id) && s(convenio.destino_sitio_id)) sitios.destino_geocerca_id = String(convenio.destino_sitio_id);
+    for (const [col, id] of Object.entries(sitios)) {
+      const u = await acotada(admin.from('viaje').update({ [col]: id }).eq('tenant_id', tenantId).eq('id', viajeId).is(col, null), 'convenios.corregir_sitio');
+      if (u.error) logger.warn('convenios.corregir_sitio_fallo', { viajeId, col, err: u.error.message });
+    }
+  }
+  return { estado: 'ok', convenioNombre: convenio ? String(convenio.nombre) : null, instrucciones: foto.length };
+}
+
 // ── EL ENVÍO AL OPERADOR, CON CLAIM ─────────────────────────────────────────
 
 /** Cada envío tiene su propio sello: el despacho y el acercamiento a cada planta (`<envio>_reclamado_en`, `_enviado_en`, `_canal`). */
@@ -354,11 +494,8 @@ export async function cerrarEnvio(tenantId: string, viajeId: string, cual: Envio
  * lo que se le dijo al operador anterior es lo mismo que debe oír el nuevo; corregir el convenio es otro gesto (`corregirConvenioDelViaje`).
  */
 export async function reiniciarEnvios(tenantId: string, viajeId: string): Promise<void> {
-  const res = await acotada(supabaseAdmin().from('viaje_convenio').update({
-    despacho_reclamado_en: null, despacho_enviado_en: null, despacho_canal: null,
-    acercamiento_origen_reclamado_en: null, acercamiento_origen_enviado_en: null, acercamiento_origen_canal: null,
-    acercamiento_destino_reclamado_en: null, acercamiento_destino_enviado_en: null, acercamiento_destino_canal: null,
-  }).eq('tenant_id', tenantId).eq('viaje_id', viajeId).select('viaje_id'), 'convenios.reiniciar_envios');
+  const res = await acotada(supabaseAdmin().from('viaje_convenio').update(SELLOS_VACIOS)
+    .eq('tenant_id', tenantId).eq('viaje_id', viajeId).select('viaje_id'), 'convenios.reiniciar_envios');
   ok(res as never, 'convenios.reiniciar_envios');
 }
 

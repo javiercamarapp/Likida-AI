@@ -5,8 +5,8 @@ import { puedeVerArea, puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar, puedeExportar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
 import { MAX_ARCHIVO_BYTES } from '@/lib/likida/importacion/archivo';
-import { archivarConvenioDelPanel, importarArchivoDelPanel } from '@/lib/likida/convenios/acciones';
-import { ConveniosNoDisponibles, listarConvenios, type ConvenioFila } from '@/lib/likida/convenios/repo';
+import { archivarConvenioDelPanel, corregirConvenioDelViajeDelPanel, importarArchivoDelPanel } from '@/lib/likida/convenios/acciones';
+import { ConveniosNoDisponibles, listarConvenios, listarViajesConConvenio, type ConvenioFila, type ViajeConvenioFila } from '@/lib/likida/convenios/repo';
 import { sufijoTenant } from '../sufijo';
 import { VistaConvenios } from './vista';
 import type { ResultadoSitio } from '../agentes/conductores/sitios/formas';
@@ -33,6 +33,24 @@ export default async function PaginaConvenios({ searchParams }: { searchParams: 
   } catch (e) {
     if (e instanceof ConveniosNoDisponibles) estado = 'no_disponible';
     else { estado = 'error'; logger.warn('convenios.no_leidos', { tenantId, err: e instanceof Error ? e.message : String(e) }); }
+  }
+
+  // Los viajes en curso con su convenio ligado (solo quien edita convenios lo ve). Un fallo aquí no tira el resto de la pantalla.
+  let viajes: ViajeConvenioFila[] | null = null;
+  if (estado === 'ok' && puedeAsignar(rol)) {
+    try { viajes = await listarViajesConConvenio(tenantId); } catch (e) {
+      logger.warn('convenios.viajes_no_leidos', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  async function accionCorregir(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA, sp);
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan los convenios.' };
+    const campo = (k: string): string => (typeof fd.get(k) === 'string' ? (fd.get(k) as string) : '');
+    const r = await corregirConvenioDelViajeDelPanel({ tenantId: s.tenantId, rol: s.rol }, { viajeId: campo('viajeId'), convenioId: campo('convenioId'), reenviar: campo('reenviar') === 'si' });
+    if (r.ok) revalidatePath(RUTA);
+    return r;
   }
 
   async function accionImportar(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
@@ -63,6 +81,7 @@ export default async function PaginaConvenios({ searchParams }: { searchParams: 
     <VistaConvenios
       sufijo={sufijoTenant(sp)} convenios={convenios} estado={estado} puedeEditar={puedeAsignar(rol)} verDinero={verDinero}
       puedeExportar={puedeExportar(rol)} accionImportar={accionImportar} accionEstado={accionEstado}
+      viajes={viajes} accionCorregir={accionCorregir}
     />
   );
 }

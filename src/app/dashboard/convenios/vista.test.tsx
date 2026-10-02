@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { ConvenioFila } from '@/lib/likida/convenios/repo';
+import type { ConvenioFila, ViajeConvenioFila } from '@/lib/likida/convenios/repo';
 import { VistaConvenios, type PropsVistaConvenios } from './vista';
 
 const accion = async () => null;
@@ -72,5 +72,42 @@ describe('la pantalla de convenios', () => {
     const html = pintar({ convenios: [C({ activo: false })] });
     expect(html).toContain('(archivado)');
     expect(html).toContain('Reactivar');
+  });
+});
+
+describe('la corrección manual del convenio ligado a cada viaje', () => {
+  const V = (o: Partial<ViajeConvenioFila> = {}): ViajeConvenioFila => ({
+    viajeId: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0aa', folio: 'F-1042', origen: 'Zapopan', destino: 'Tlaquepaque', cliente: 'Cliente Uno', operador: 'Juan Pérez',
+    convenioId: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d001', convenioNombre: 'Ruta norte', ligadoPor: 'auto', instrucciones: 2, despachoEnviado: true,
+    opciones: [{ id: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d001', nombre: 'Ruta norte' }, { id: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d002', nombre: 'Ruta sur' }], ...o,
+  });
+  const con = (viajes: ViajeConvenioFila[] | null, p: Partial<PropsVistaConvenios> = {}) => pintar({ viajes, accionCorregir: accion, ...p });
+
+  it('lista cada viaje con su convenio ligado, quién lo ligó y las opciones del cliente más «sin convenio»', () => {
+    const html = con([V()]);
+    expect(html).toContain('Convenio ligado a cada viaje en curso');
+    expect(html).toContain('F-1042');
+    expect(html).toContain('Ligado: «Ruta norte» (automático) · 2 instrucciones · ya enviadas al operador');
+    expect(html).toContain('Sin convenio (no mandar instrucciones)');
+    expect(html).toContain('Ruta sur');
+    expect(html).toContain('Mandar de nuevo las instrucciones al operador');
+    expect(html).toContain('Corregir convenio');
+  });
+
+  it('distingue la corrección manual, el viaje sin fila ligada (empate o nunca despachado) y el «sin convenio» de la oficina', () => {
+    expect(con([V({ ligadoPor: 'manual' })])).toContain('(corrección manual)');
+    expect(con([V({ ligadoPor: null, convenioId: null, convenioNombre: null, instrucciones: 0, despachoEnviado: false })])).toContain('Sin convenio ligado todavía');
+    expect(con([V({ ligadoPor: 'manual', convenioId: null, convenioNombre: null, instrucciones: 0, despachoEnviado: false })])).toContain('Sin convenio (decisión de la oficina');
+  });
+
+  it('sin permiso de edición, sin lista o con la base sin migrar, la sección no se pinta', () => {
+    expect(con([V()], { puedeEditar: false })).not.toContain('Convenio ligado a cada viaje en curso');
+    expect(con(null)).not.toContain('Convenio ligado a cada viaje en curso');
+    expect(con([V()], { estado: 'no_disponible', convenios: null })).not.toContain('Convenio ligado a cada viaje en curso');
+    expect(pintar()).not.toContain('Convenio ligado a cada viaje en curso');
+  });
+
+  it('sin viajes abiertos lo dice', () => {
+    expect(con([])).toContain('No hay viajes abiertos con cliente');
   });
 });

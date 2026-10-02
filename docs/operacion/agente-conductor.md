@@ -85,6 +85,8 @@ A los `escalar_tras_min` (90) con la escalera agotada:
 - **Confirmación al chofer** de cada hito registrado (hora del mensaje + qué sigue). Se puede apagar (`confirmar_al_chofer`).
 - **Aviso a la oficina** con la hora exacta de llegada/salida, **configurable** y apagado por defecto (`avisar_oficina_llegada`, `avisar_oficina_salida`): texto al jefe con respaldo `aviso_operacion_v1`; un solo aviso por hito y ciclo (claim).
 
+- **Aviso al jefe de tráfico por «ya llegué» sin confirmar** (`avisar_llegada_sin_confirmar`, apagado por defecto, 0604): un solo aviso por llegada y ciclo (claim `llegada_sin_confirmar`) al patio responsable, con la hora exacta del mensaje del chofer, a los 10 minutos de gracia y hasta 12 horas después, dentro de la ventana de la flota; texto con respaldo en la plantilla `conductor_llegada_sin_confirmar_v1` (declarada en el catálogo, pendiente de aprobación en Meta). Cubre sin posición, «sin coincidencia» y el viaje sin sitio. Corre en el cron `conductor-hitos` después de la validación.
+
 ## API para el sistema del cliente (`/v1`)
 
 | Ruta | Área | Qué |
@@ -189,7 +191,7 @@ Mismo criterio y pipeline que el POD: el **caption** decide qué papel es (`sell
 
 - **Línea de tiempo** por viaje con los 5 hitos: hora del mensaje, fuente, contacto en andén, veredicto, fotos y quién actuó desde la oficina y por qué.
 - **Semáforo** con la **misma escalera que el agente**: `completo`, `a_tiempo`, `atrasado` (ya pasó el primer recordatorio), `sin_reporte` (escalado, o pasó el umbral de escalación aunque el cron aún no escale), `sin_ancla` (un viaje sin hitos o sin de qué colgarse **no** se pinta verde).
-- **Cola de excepciones** (más urgente primero): escalado sin atender (3), sin reporte / sin coincidencia / estadía excedida (2), atrasado / horas incoherentes (1). «Sin dato» **no** es excepción.
+- **Cola de excepciones** (más urgente primero): escalado sin atender (3), sin reporte / sin coincidencia / estadía excedida (2), atrasado / horas incoherentes (1). «Sin dato» **no** es excepción, con una salvedad: un «ya llegué» de un viaje **sin sitio asignado** sale como **«Llegada sin sitio para conciliar»** (1), porque la llegada se sella con el puro aviso del chofer y ninguna posición lo contrastó; la solución es asignar el sitio al viaje (o validarla a mano).
 - **Filtros** por patio, cliente, chofer, semáforo y periodo de indicadores; el filtro mueve **todo** lo de debajo.
 - **Indicadores** (agregados en SQL, `conductor_indicadores`): tasa de hitos reportados **sin insistencia** (resuelto con a lo más un mensaje del agente en el ciclo vigente y sin escalar), tiempo medio de respuesta (solo donde el agente pidió el hito), escalados, validados con ubicación. Sin datos dice «sin datos», nunca 0. La ventana filtra por `viaje_hito.updated_at` (hitos con actividad en el periodo) y así se rotula.
 - **Acciones del jefe** (dueño de flota, encargado y superadmin; **el contador no ve ni la pantalla**; el permiso lo comprueba el servidor, no el botón): **capturar a mano** (hora de México no futura ni anterior a la aceptación; omite los pendientes anteriores), **validar** y **marcar atendido**. Todas con **motivo obligatorio (5–200)** y bitácora `conductor_accion_oficina` (append-only: quién, cuándo, por qué) escrita en la **misma transacción** que el cambio. Un hito capturado queda `fuente = oficina`.

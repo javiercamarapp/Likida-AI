@@ -3,7 +3,8 @@ import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
 import { avisoDeTope, matrizDeArchivo, MAX_ARCHIVO_BYTES } from '../importacion/archivo';
 import { parsearMatrizConvenios } from './importador';
-import { cambiarEstadoConvenio, ConveniosNoDisponibles, importarConvenios } from './repo';
+import { despacharInstrucciones, type ResultadoEnvioInstrucciones } from './envio';
+import { cambiarEstadoConvenio, ConveniosNoDisponibles, corregirConvenioDelViaje, importarConvenios, type ResultadoCorregir } from './repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS ACCIONES DE LA PANTALLA DE CONVENIOS — la lógica de las acciones de servidor, con puertos para poder probarla:
@@ -106,5 +107,59 @@ export async function archivarConvenioDelPanel(ctx: ContextoConvenios, id: strin
     if (e instanceof ConveniosNoDisponibles) return { ok: false, error: NO_DISPONIBLE };
     logger.error('convenios.estado_fallo', { err: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: 'No pude guardarlo ahorita. Intenta de nuevo en un momento.' };
+  }
+}
+
+// ── CORREGIR A MANO EL CONVENIO DE UN VIAJE ─────────────────────────────────
+
+export interface DepsCorregirConvenio {
+  corregir: typeof corregirConvenioDelViaje;
+  enviar: (tenantId: string, viajeId: string) => Promise<ResultadoEnvioInstrucciones>;
+}
+export const depsCorregirReales: DepsCorregirConvenio = { corregir: corregirConvenioDelViaje, enviar: (t, v) => despacharInstrucciones(t, v) };
+
+const FRASE_ENVIO: Partial<Record<ResultadoEnvioInstrucciones['estado'], string>> = {
+  enviado: 'Ya se le mandaron al operador.',
+  sin_instrucciones: 'Ese convenio no trae instrucciones para mandar al despachar; las de acercamiento le llegarán al acercarse a la planta.',
+  sin_destinatario: 'El viaje no tiene operador con teléfono: no se mandó nada.',
+  viaje_cerrado: 'El viaje ya está liquidado: no se mandó nada.',
+  rechazado: 'WhatsApp no aceptó el mensaje; revisa las plantillas de Meta y vuelve a intentarlo desde aquí.',
+  fallo: 'No pude mandárselas ahorita; vuelve a intentarlo en un momento.',
+  ya_enviado: 'Ya se le habían mandado.',
+  perdido: 'Otro proceso ya las estaba mandando.',
+};
+
+const MENSAJE_CORREGIR: Record<Exclude<ResultadoCorregir['estado'], 'ok'>, string> = {
+  viaje_no_encontrado: 'Ese viaje ya no existe.',
+  viaje_cerrado: 'Ese viaje ya está liquidado: su convenio ya no se corrige.',
+  sin_cliente: 'Ese viaje no tiene cliente: sin cliente no hay convenio que elegir. Asígnale uno primero.',
+  convenio_no_valido: 'Ese convenio no es de este cliente o está archivado. Elige uno de la lista.',
+};
+
+/**
+ * La oficina corrige el convenio ligado a un viaje: `convenioId` vacío = «sin convenio». Con `reenviar`, las instrucciones del
+ * convenio correcto se mandan de nuevo al operador (claim, ventana de 24 h y plantilla como siempre). El permiso es el de editar
+ * convenios (dueño y jefe de tráfico) y el tenant sale de la sesión.
+ */
+export async function corregirConvenioDelViajeDelPanel(
+  ctx: ContextoConvenios, entrada: { viajeId: string; convenioId: string; reenviar: boolean }, d: DepsCorregirConvenio = depsCorregirReales,
+): Promise<ResultadoAccionConvenio> {
+  if (!puedeAsignar(ctx.rol)) return { ok: false, error: SIN_PERMISO };
+  const viajeId = entrada.viajeId.trim().toLowerCase();
+  const convenioId = entrada.convenioId.trim().toLowerCase();
+  if (!UUID.test(viajeId)) return { ok: false, error: 'No reconozco el viaje.' };
+  if (convenioId !== '' && !UUID.test(convenioId)) return { ok: false, error: 'No reconozco el convenio.' };
+  try {
+    const r = await d.corregir(ctx.tenantId, viajeId, convenioId === '' ? null : convenioId, { reenviar: entrada.reenviar });
+    if (r.estado !== 'ok') return { ok: false, error: MENSAJE_CORREGIR[r.estado] };
+    const que = r.convenioNombre ? `Convenio del viaje: «${r.convenioNombre}» (${r.instrucciones} instrucci${r.instrucciones === 1 ? 'ón' : 'ones'}).` : 'El viaje quedó sin convenio: no se le mandarán instrucciones.';
+    const manual = 'Quedó como corrección manual: el despacho automático ya no lo cambia.';
+    if (!entrada.reenviar || !r.convenioNombre) return { ok: true, mensaje: `${que} ${manual}` };
+    const envio = await d.enviar(ctx.tenantId, viajeId);
+    return { ok: true, mensaje: `${que} ${FRASE_ENVIO[envio.estado] ?? 'Las instrucciones de acercamiento le llegarán al acercarse a la planta.'} ${manual}` };
+  } catch (e) {
+    if (e instanceof ConveniosNoDisponibles) return { ok: false, error: NO_DISPONIBLE };
+    logger.error('convenios.corregir_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, error: 'No pude guardar la corrección ahorita. Intenta de nuevo en un momento.' };
   }
 }
