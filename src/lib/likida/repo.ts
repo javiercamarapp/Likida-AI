@@ -331,7 +331,7 @@ export async function listOperadores(
  * Mismo patrón que los dos hallazgos que se cerraron esta misma ronda: se
  * acota el tenant y se olvida el rol/dueño del segundo id.
  */
-export async function reasignarOperador(tenantId: string, viajeId: string, operadorId: string): Promise<void> {
+export async function reasignarOperador(tenantId: string, viajeId: string, operadorId: string): Promise<{ cambio: boolean; operadorAnteriorId: string | null }> {
   const propio = await getOperador(operadorId, tenantId);
   if (!propio) throw new Error('reasignarOperador: el operador no pertenece a esta flota');
   // AUDITORÍA 20 (H2): y tiene que SEGUIR trabajando aquí. El combo de
@@ -343,12 +343,18 @@ export async function reasignarOperador(tenantId: string, viajeId: string, opera
     throw new Error('reasignarOperador: el operador está dado de baja en esta flota');
   }
 
+  // Quién lo tenía: de eso depende si hay que mandarle las instrucciones del convenio al nuevo (ver `instruccionesAlCambiarOperador`).
+  const previo = await acotada(supabaseAdmin().from('viaje').select('operador_id').eq('id', viajeId).eq('tenant_id', tenantId).maybeSingle(), 'reasignarOperador.previo');
+  const operadorAnteriorId = typeof (previo.data as { operador_id?: unknown } | null)?.operador_id === 'string'
+    ? String((previo.data as { operador_id: string }).operador_id) : null;
+
   const { error } = await acotada(supabaseAdmin()
     .from('viaje')
     .update({ operador_id: operadorId })
     .eq('id', viajeId)
     .eq('tenant_id', tenantId), 'reasignarOperador');
   if (error) throw new Error(`reasignarOperador: ${error.message}`);
+  return { cambio: operadorAnteriorId !== operadorId, operadorAnteriorId };
 }
 
 export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Promise<void> {
