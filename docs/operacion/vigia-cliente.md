@@ -3,7 +3,7 @@
 Atiende por WhatsApp a los **clientes** de la flota (quien espera su carga): clasifica
 lo que preguntan, contesta con datos reales del viaje, el gerente aprueba con un
 toque, y lo molesto o sin respuesta escala por niveles. Migraciones `0400` y `0401` (base), `0481`-`0482` (costo de IA propio y
-adjuntos), `0484` (grupos críticos, histórico exportado y alertas) y `0647` (respuestas rápidas aprobadas). Estado al 2-oct-2026:
+adjuntos), `0484` (grupos críticos, histórico exportado y alertas), `0647` (respuestas rápidas aprobadas) y `0673`-`0674` (directores por nivel y respaldo por correo). Estado al 2-oct-2026:
 construido y probado con dobles; **ninguna de esas migraciones está aplicada en la base real** (ver «Puesta en marcha»).
 
 Antes de este agente, un número que no era chofer, oficina ni proveedor recibía
@@ -42,13 +42,14 @@ Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`* * * * *`).
 | Duplicados y carreras: un wamid = un mensaje; una respuesta del agente por entrante; un envío por aprobación | `supabase/tests/0400_vigia_concurrencia.sh`, `servicio.test.ts` |
 | Fuera de 24 h solo plantilla del catálogo; sin consentimiento o con BAJA no se envía | `enviar.test.ts` |
 | Escalera por niveles con sello anti-repetición (`vigia_evento.clave`) | `escalamiento.test.ts`, `servicio.test.ts` (barrido) |
+| Lista de directores sin repetidos y con tope; un correo de respaldo por aviso y persona (reclamo con arriendo), sin duplicar con la cola de Meta | `supabase/tests/0673_vigia_directores_correo.sql`, `0674_vigia_correo_concurrencia.sh`, bloque 325 · `respaldo_correo.test.ts`, `respaldo_correo.e2e.test.ts` |
 | La cola del barrido no se tapa: lo que llegó al nivel 2 no entra, se ordena por próximo vencimiento y una flota con plazo largo no tapa a otra con plazo corto; los ciclos muertos (7 días) se cierran | `cola_barrido.test.ts`, `repo.test.ts` |
 | Una respuesta rápida solo reemplaza al «no entendí», nunca se autoenvía y no se pule con modelo; una por pregunta y flota, tope de 200 | `respuestas_rapidas.test.ts`, `ciclo_completo.e2e.test.ts` · `supabase/tests/0647_vigia_respuesta_rapida.sql` |
 | Retención y ARCO (supresión) | `0400` (`vigia_purgar`, `vigia_suprimir_contacto`) · SQL test · `repo.test.ts` |
 
 ## Puesta en marcha para una flota
 
-1. Aplicar `0400`, `0401`, `0481`, `0482`, `0484` y `0647` (la compuerta de despliegue exige migraciones antes de `[deploy]`; sin la 0484 no hay grupos, histórico ni plazo crítico, y sin la 0647 no hay respuestas rápidas: el Vigía contesta como siempre).
+1. Aplicar `0400`, `0401`, `0481`, `0482`, `0484` y `0647` —y `0673`/`0674` si se quiere la lista de directores y el respaldo por correo— (la compuerta de despliegue exige migraciones antes de `[deploy]`; sin la 0484 no hay grupos, histórico ni plazo crítico, y sin la 0647 no hay respuestas rápidas: el Vigía contesta como siempre).
 2. Plantillas de Meta: aprobar `vigia_respuesta_cliente_v1`, `vigia_aprobacion_v1` y
    `vigia_escalamiento_v1` (texto exacto en `docs/operacion/plantillas-meta.md`). Sin ellas
    todo funciona **dentro** de la ventana de 24 h; fuera, el envío se rechaza y queda como fallido.
@@ -102,12 +103,39 @@ formatos de fecha; máx. 50,000 mensajes por importación y 1,500 caracteres por
 - **Coexistencia de WhatsApp** (que los chats de servicio que la flota ya tiene en su número lleguen
   a Likida): no hay código; depende de Meta y del número real de la flota.
 - **Otros documentos** además del POD (factura, carta porte): el Vigía dice el estado y avisa al gerente; no los adjunta.
-- **Respaldo por correo** cuando la plantilla no está aprobada o la ventana está cerrada, y lista de directores por nivel en lugar de un solo teléfono (paquete P14, necesita Resend).
+- **Correo funcionando en producción**: el respaldo por correo está construido y probado con dobles (sección siguiente), pero Resend necesita la llave y el dominio verificado; sin eso queda registrado «no se pudo mandar por correo: falta configuración».
 - **Aviso de privacidad para clientes finales**: el texto legal no existe en Likida (el aviso integral
   cubre choferes). La liga configurable y la primera respuesta (que explica el asistente, la liga y la
   baja con BAJA) están listas; el documento lo redacta legal. **Antes de cualquier uso con clientes finales.**
 - **Solicitud ARCO de un cliente por WhatsApp**: `PRIVACIDAD` registra la solicitud a nombre de su
   flota; la supresión de sus chats la ejecuta el dueño desde su fila en el tablero.
+
+## A quién se avisa (lista de directores) y el respaldo por correo (0673, 0674)
+
+Hasta la ronda 14 el escalamiento avisaba a **un solo teléfono** por nivel y, si el WhatsApp no salía (plantilla sin aprobar, ventana de 24 h
+cerrada, rechazo de Meta), el aviso **no llegaba a nadie**. Ahora:
+
+- **Lista por nivel** (`vigia_director`): nivel 1 = gerente de servicio, nivel 2 = director o dueño; hasta 10 personas por nivel y flota, cada una
+  con WhatsApp, correo o ambos (el mismo teléfono o correo no se repite dentro de un nivel). La edita **solo el dueño** (`flota_admin`) en
+  `/dashboard/agentes/vigia`, bloque «A quién avisa el Vigía»; el resto de los roles la ve sin teléfonos completos ni correos. El nivel 1 también
+  avisa al responsable asignado al cliente (si lo hay). **Sin lista, todo funciona como antes** (responsable del cliente o jefe de la flota para el
+  nivel 1, dueño para el 2).
+- **Respaldo por correo** (`vigia_config.respaldo_correo`, **apagado por omisión**, casilla en «Configuración y SLA»): si el aviso de WhatsApp a una
+  persona no salió y tiene correo, se le manda el mismo aviso por correo (Resend, `lib/correo/enviar.ts`; sin teléfonos ni texto del cliente, con la
+  liga al tablero). Una persona con solo correo se avisa por correo. Si el WhatsApp falló pero **quedó en la cola de reintento de Meta** (429, bloqueo
+  temporal), NO se manda el correo: saldría doble. Con el respaldo apagado una persona con solo correo queda como «fallo de envío» en la bitácora.
+- **Un correo por aviso y persona** (`vigia_aviso_correo`): el envío se **reclama antes de salir** (insertar la llave `<aviso>:<huella del correo>` es
+  reclamarla, con arriendo de 5 min, el mismo patrón que «Mis reglas», 0660); la misma llave viaja a Resend como `Idempotency-Key`. Dos corridas del
+  cron no mandan dos correos. Si la corrida murió entre reclamar y cerrar, el cron (en la pasada de mantenimiento, cada 5 min) retoma el arriendo
+  vencido y manda una vez; lo que lleva más de 6 h sin cerrar se abandona como `red`.
+- **Nada falla en silencio**: sin `RESEND_API_KEY` o sin `RESEND_EMAIL_DOMAIN` el resultado es «No se pudo mandar por correo: falta configuración»; queda
+  en `vigia_aviso_correo`, en la bitácora (`correo_fallo`) y en el bloque «Avisos por correo (respaldo)» del tablero. Los estados finales
+  (`sin_configurar`, `rechazado`, `red`) **no se reintentan solos**: un aviso viejo mandado horas después, cuando por fin haya llave, sería ruido.
+- Base sin las migraciones: el Vigía usa el destino único de siempre, el tablero no muestra esos dos bloques y guardar el interruptor del respaldo
+  avisa que necesita la 0673.
+
+**Para encenderlo en una flota** (pendiente externo): verificar el dominio de envío en Resend (SPF/DKIM), poner `RESEND_API_KEY` y `RESEND_EMAIL_DOMAIN`
+en Vercel, aplicar `0673` y `0674` (con respaldo y rollback), cargar la lista de directores y marcar «Respaldo por correo».
 
 ## Respuestas rápidas aprobadas (0647)
 
@@ -146,6 +174,7 @@ se prefiere abaratar, volver a `*/5` en `vercel.json` y `CADENCIA_MS.vigia` (el 
 |---|---|
 | `LIKIDA_MODEL_VIGIA_CLIENTE` | Cambia el modelo del rol (default `google/gemini-3.5-flash-lite`). |
 | `LIKIDA_VIGIA_MODELO=no` | Apaga el clasificador por modelo: quedan solo las reglas. |
+| `RESEND_API_KEY` + `RESEND_EMAIL_DOMAIN` | Sin ambas, el respaldo por correo registra «falta configuración» y no manda nada (ver arriba). |
 | `LIKIDA_VIGIA_PULIR=si` | Enciende el pulido de redacción (apagado por omisión); su salida pasa por la guardia de cifras/ligas y se tira si falla. |
 
 ## Operación

@@ -3,7 +3,7 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Check, X, Hand, Send, Save, UserPlus, TriangleAlert, CheckCircle2, RotateCcw, Archive, Trash2, UserX } from 'lucide-react';
-import type { ModoAprobacion } from '@/lib/likida/vigia/tipos';
+import type { Director, ModoAprobacion } from '@/lib/likida/vigia/tipos';
 
 export type ResultadoVigia = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionVigia = (previo: ResultadoVigia, fd: FormData) => Promise<ResultadoVigia>;
@@ -96,7 +96,7 @@ export function FormaConfig({ accion, valores }: {
   accion: AccionVigia;
   valores: {
     habilitado: boolean; modoAprobacion: ModoAprobacion; autoenviarMinAprobaciones: number; slaRespuestaMin: number;
-    escalarNivel2Min: number; slaCriticoMin: number; molestiaAvisoNivel: number; retencionDias: number; avisoPrivacidadUrl: string | null;
+    escalarNivel2Min: number; slaCriticoMin: number; molestiaAvisoNivel: number; retencionDias: number; avisoPrivacidadUrl: string | null; respaldoCorreo: boolean;
   };
 }) {
   const [estado, despachar] = useActionState(accion, null);
@@ -156,7 +156,54 @@ export function FormaConfig({ accion, valores }: {
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>Va en el primer mensaje que recibe cada cliente. Sin liga, se manda la de Likida.</p>
         </div>
       </div>
+      <label className="flex items-start gap-2 text-[12.5px]">
+        <input type="checkbox" name="respaldoCorreo" defaultChecked={valores.respaldoCorreo} className="mt-0.5" />
+        <span>
+          <strong>Respaldo por correo.</strong> Si el aviso de escalamiento por WhatsApp no sale (plantilla sin aprobar o ventana de 24 h cerrada), se manda por correo a quien
+          tenga correo en la lista de directores. Apagado, el aviso solo sale por WhatsApp.
+        </span>
+      </label>
       <Boton tono="marca" Icono={Save}>Guardar</Boton>
+      <Aviso estado={estado} />
+    </form>
+  );
+}
+
+/**
+ * Un director de la lista (nivel 1 gerente, nivel 2 director o dueño): se corrige o se quita. Sin `director`, es el alta de uno nuevo.
+ * El botón «Quitar» no pide confirmar: quitar no borra ningún dato de clientes y se puede volver a agregar.
+ */
+export function FormaDirector({ accion, director }: { accion: AccionVigia; director?: Director }) {
+  const [estado, despachar] = useActionState(accion, null);
+  const k = director?.id ?? 'nuevo';
+  return (
+    <form action={despachar} className="space-y-2">
+      {director && <input type="hidden" name="id" value={director.id} />}
+      <div className="grid sm:grid-cols-4 gap-2">
+        <div>
+          <label htmlFor={`dir-nombre-${k}`} className={ETIQUETA}>Nombre</label>
+          <input id={`dir-nombre-${k}`} name="nombre" type="text" required maxLength={120} defaultValue={director?.nombre ?? ''} className={CAMPO} style={{ background: 'var(--surface)' }} />
+        </div>
+        <div>
+          <label htmlFor={`dir-nivel-${k}`} className={ETIQUETA}>Nivel</label>
+          <select id={`dir-nivel-${k}`} name="nivel" defaultValue={String(director?.nivel ?? 1)} className={CAMPO} style={{ background: 'var(--surface)' }}>
+            <option value="1">1 — Gerente de servicio</option>
+            <option value="2">2 — Director o dueño</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor={`dir-tel-${k}`} className={ETIQUETA}>WhatsApp (10 dígitos)</label>
+          <input id={`dir-tel-${k}`} name="telefono" type="tel" inputMode="tel" defaultValue={director?.telefono ? director.telefono.replace(/^52/, '') : ''} className={CAMPO} style={{ background: 'var(--surface)' }} />
+        </div>
+        <div>
+          <label htmlFor={`dir-correo-${k}`} className={ETIQUETA}>Correo</label>
+          <input id={`dir-correo-${k}`} name="correo" type="email" maxLength={254} defaultValue={director?.correo ?? ''} className={CAMPO} style={{ background: 'var(--surface)' }} />
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Boton name="accion" value="guardar" tono="marca" Icono={director ? Save : UserPlus}>{director ? 'Guardar cambios' : 'Agregar a la lista'}</Boton>
+        {director && <Boton name="accion" value="quitar" tono="peligro" Icono={Trash2}>Quitar</Boton>}
+      </div>
       <Aviso estado={estado} />
     </form>
   );
