@@ -2,7 +2,7 @@
 
 import { useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { Radio, KeyRound, Copy, Truck } from 'lucide-react';
+import { Radio, KeyRound, Copy, Truck, MapPinned } from 'lucide-react';
 import { AvisoResultado } from '../../admin/ui/aviso-resultado';
 import { BotonConfirmar } from '../../admin/ui/confirmar';
 import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
@@ -21,6 +21,48 @@ export interface FilaSaludGps { clave: string; nombre: string; tono: 'ok' | 'war
 export interface HuerfanoPantalla { proveedor: string; deviceId: string; ultimoVistoEn: string }
 export type ResultadoSecreto = { ok: true; secreto: string; endpoint: string } | { ok: false; error: string } | null;
 export type AccionSecreto = (previo: ResultadoSecreto, fd: FormData) => Promise<ResultadoSecreto>;
+/** Importar las geocercas de «mis propias tablas» al catálogo de sitios. */
+export type ResultadoImportGeocercas = { ok: true; mensaje: string; aproximadas: number } | { ok: false; error: string; detalles?: string[] } | null;
+export type AccionImportGeocercas = (previo: ResultadoImportGeocercas, fd: FormData) => Promise<ResultadoImportGeocercas>;
+
+function BotonImportarGeocercas() {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending}
+      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+      <MapPinned aria-hidden width={14} height={14} strokeWidth={1.75} />
+      {pending ? 'Leyendo tus geocercas…' : 'Importar mis geocercas'}
+    </button>
+  );
+}
+
+/** Lee las geocercas de su tabla/CSV y las deja como sitios (todo-o-nada; un polígono se aproxima y se avisa). */
+function ImportadorGeocercas({ accion }: { accion: AccionImportGeocercas }) {
+  const [estado, despachar] = useActionState(accion, null);
+  return (
+    <div className="border-t pt-4" style={{ borderColor: 'var(--line)' }}>
+      <h3 className="font-display text-[14px] font-semibold">Geocercas de tu sistema</h3>
+      <p className="mt-0.5 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        Si conectaste «Mis propias tablas de GPS» con una vista o archivo de geocercas, aquí las traes al catálogo de sitios
+        (el que usan el Conductor, los peajes y el mapa). Volver a importar actualiza por código, no duplica. Un polígono se
+        guarda como el círculo más chico que lo contiene y se te dice cuáles.
+      </p>
+      <form action={despachar} className="mt-2"><BotonImportarGeocercas /></form>
+      {estado?.ok === true && (
+        <p role="status" className="mt-2 text-[12.5px]" style={{ color: 'var(--ok)' }}>
+          {estado.mensaje}{estado.aproximadas > 0 ? ` ${estado.aproximadas} polígono(s) se guardaron como círculo que los contiene.` : ''}
+        </p>
+      )}
+      {estado?.ok === false && (
+        <div role="alert" className="mt-2 text-[12.5px]" style={{ color: 'var(--bad)' }}>
+          <p>{estado.error}</p>
+          {estado.detalles && estado.detalles.length > 0 && <ul className="mt-1 list-disc pl-5">{estado.detalles.map((d) => <li key={d}>{d}</li>)}</ul>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const TONO: Record<FilaSaludGps['tono'], string> = { ok: 'var(--ok)', warn: 'var(--warn)', bad: 'var(--bad)', neutral: 'var(--muted)' };
 const FONDO: Record<FilaSaludGps['tono'], string> = { ok: 'var(--okbg)', warn: 'var(--warnbg)', bad: 'var(--badbg)', neutral: 'var(--canvas)' };
@@ -37,7 +79,7 @@ function BotonGenerar({ rotulo }: { rotulo: string }) {
   );
 }
 
-export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, conteos, puedeAdministrarGps, generarSecreto, mapear, plantillaCsv, hrefPatios }: {
+export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, conteos, puedeAdministrarGps, generarSecreto, mapear, plantillaCsv, hrefPatios, importarGeocercas }: {
   salud: FilaSaludGps[];
   push: { fila: FilaSaludGps; configurado: boolean; version: number | null; recepciones: number; rechazos: number; previoHasta: string | null };
   endpoint: string;
@@ -49,6 +91,8 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
   mapear: AccionImportacion;
   plantillaCsv: string;
   hrefPatios: string;
+  /** Solo si la flota tiene conectada su tabla propia. */
+  importarGeocercas?: AccionImportGeocercas;
 }) {
   const [estadoSecreto, despachar] = useActionState(generarSecreto, null);
   const [copiado, setCopiado] = useState(false);
@@ -176,6 +220,8 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
         )}
         {hayMasHuerfanos && <p className="mt-1 text-[11.5px]" style={{ color: 'var(--faint)' }}>Se muestran los más recientes; liga estos y vuelve a mirar para ver el resto.</p>}
       </div>
+
+      {puedeAdministrarGps && importarGeocercas && <ImportadorGeocercas accion={importarGeocercas} />}
 
       {puedeAdministrarGps && (
         <ImportadorMasivo
