@@ -79,15 +79,15 @@ export async function leerPosicionesSamsara(
         encabezados: { Authorization: `Bearer ${token}`, accept: 'application/json' },
       });
     } catch (e) {
-      return { ok: false, motivo: `no se pudo llamar a Samsara: ${e instanceof Error ? e.message : String(e)}` };
+      return { ok: false, motivo: `no se pudo llamar a Samsara: ${e instanceof Error ? e.message : String(e)}`, falla: 'proveedor' };
     }
     if (r.estado >= 500 && r.estado <= 599) {
       if (reintentos5xx >= MAX_REINTENTOS_5XX) {
-        return { ok: false, motivo: `Samsara mantuvo ${r.estado} después de 3 reintentos.`, paginas, backlog: true };
+        return { ok: false, motivo: `Samsara mantuvo ${r.estado} después de 3 reintentos.`, paginas, backlog: true, falla: 'proveedor' };
       }
       const espera = Math.min(1_000 * 2 ** reintentos5xx, 8_000);
       if (opciones.venceEn !== undefined && ahora() + espera >= opciones.venceEn) {
-        return { ok: false, motivo: 'Samsara siguió en 5xx más allá del presupuesto disponible.', paginas, backlog: true };
+        return { ok: false, motivo: 'Samsara siguió en 5xx más allá del presupuesto disponible.', paginas, backlog: true, falla: 'proveedor' };
       }
       reintentos5xx += 1;
       await dormir(espera);
@@ -95,11 +95,11 @@ export async function leerPosicionesSamsara(
     }
     if (r.estado === 429) {
       if (reintentos429 >= MAX_REINTENTOS_429) {
-        return { ok: false, motivo: 'Samsara mantuvo el límite 429 después de 3 reintentos.', paginas, backlog: true };
+        return { ok: false, motivo: 'Samsara mantuvo el límite 429 después de 3 reintentos.', paginas, backlog: true, falla: 'proveedor' };
       }
       const espera = retryAfterMs(r.encabezados?.['retry-after'], ahora());
       if (opciones.venceEn !== undefined && ahora() + espera >= opciones.venceEn) {
-        return { ok: false, motivo: 'Samsara pidió Retry-After más allá del presupuesto disponible.', paginas, backlog: true };
+        return { ok: false, motivo: 'Samsara pidió Retry-After más allá del presupuesto disponible.', paginas, backlog: true, falla: 'proveedor' };
       }
       reintentos429 += 1;
       await dormir(espera);
@@ -109,14 +109,14 @@ export async function leerPosicionesSamsara(
     reintentos5xx = 0;
     if (r.estado === 401) return { ok: false, motivo: 'Samsara rechazó el token (401). Hay que regenerarlo.', paginas, falla: 'credencial' };
     if (r.estado === 403) return { ok: false, motivo: 'El token no tiene permiso de lectura de flota (403). Faltan scopes.', paginas, falla: 'credencial' };
-    if (r.estado !== 200) return { ok: false, motivo: `Samsara contestó ${r.estado}.` };
+    if (r.estado !== 200) return { ok: false, motivo: `Samsara contestó ${r.estado}.`, falla: 'proveedor' };
     paginas += 1;
 
     let json: {
       data?: Array<{ id?: string; gps?: { latitude?: number; longitude?: number; time?: string; speedMilesPerHour?: number; headingDegrees?: number } }>;
       pagination?: { hasNextPage?: boolean; endCursor?: string | null };
     };
-    try { json = JSON.parse(r.cuerpo); } catch { return { ok: false, motivo: 'Samsara contestó 200 con un cuerpo que no es JSON.' }; }
+    try { json = JSON.parse(r.cuerpo); } catch { return { ok: false, motivo: 'Samsara contestó 200 con un cuerpo que no es JSON.', falla: 'formato' }; }
     for (const v of json.data ?? []) {
       const g = v.gps;
       if (!v.id || !g || !coordenadaValida(g.latitude, g.longitude) || !g.time) {
@@ -134,12 +134,12 @@ export async function leerPosicionesSamsara(
     }
     const siguiente = json.pagination.endCursor?.trim() || null;
     if (!siguiente || siguiente === cursor || vistos.has(siguiente)) {
-      return { ok: false, motivo: 'Samsara anunció otra página sin entregar un cursor nuevo; la lectura no es completa.', paginas, backlog: true };
+      return { ok: false, motivo: 'Samsara anunció otra página sin entregar un cursor nuevo; la lectura no es completa.', paginas, backlog: true, falla: 'formato' };
     }
     vistos.add(siguiente);
     cursor = siguiente;
   }
-  return { ok: false, motivo: 'Samsara excedió el fusible de 1,000 páginas; la lectura no se declaró completa.', paginas, backlog: true };
+  return { ok: false, motivo: 'Samsara excedió el fusible de 1,000 páginas; la lectura no se declaró completa.', paginas, backlog: true, falla: 'proveedor' };
 }
 
 /** Los lectores que existen HOY. Un proveedor que no está aquí no se sincroniza. */
