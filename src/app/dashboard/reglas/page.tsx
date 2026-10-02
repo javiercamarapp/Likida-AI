@@ -7,7 +7,7 @@ import { EstadoError } from '@/app/admin/ui/kit';
 import { logger } from '@/lib/logger';
 import { interpretar, interpretarAMano } from '@/lib/likida/reglas/traductor';
 import {
-  crearReglaPendiente, confirmarRegla, alternarPausa, borrarRegla, listarReglas,
+  crearReglaPendiente, confirmarRegla, alternarPausa, borrarRegla, listarReglas, actualizarFrecuencia,
   type ReglaEnPantalla,
 } from '@/lib/likida/reglas/repo';
 import { plantillasPara, loQueSiSeVigila } from '@/lib/likida/reglas/catalogo';
@@ -192,6 +192,18 @@ export default async function PaginaReglas({
     return { ok: true, mensaje: 'Borrada.' };
   }
 
+  async function accionFrecuencia(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
+    'use server';
+    const s = await sesionConPermiso(sp);
+    if (!s) return NEGADO;
+    const r = await actualizarFrecuencia(s.tenantId, String(fd.get('id') ?? ''), {
+      maxAvisosDia: fd.get('maxAvisosDia'), minHorasEntreAvisos: fd.get('minHorasEntreAvisos'),
+    }, { id: s.userId });
+    if (!r.ok) return { ok: false, error: r.error };
+    revalidatePath(RUTA);
+    return { ok: true, mensaje: 'Límite guardado.' };
+  }
+
   return (
     <main className="h-full">
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
@@ -229,7 +241,7 @@ export default async function PaginaReglas({
               reglas={reglas}
               acciones={{
                 confirmar: accionConfirmar, pausar: accionPausar,
-                reanudar: accionReanudar, borrar: accionBorrar,
+                reanudar: accionReanudar, borrar: accionBorrar, frecuencia: accionFrecuencia,
               }}
             />
           )}
