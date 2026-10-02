@@ -313,10 +313,40 @@ export async function descartarRecepcion(tenantId: string, id: string, por: stri
   const fila = (data ?? [])[0] as { storage_ruta: string | null } | undefined;
   if (!fila) return { error: 'Ese archivo ya no está esperando revisión.' };
   if (fila.storage_ruta) {
-    // Best-effort: un PDF que se descartó y no se pudo borrar ahora lo barre la retención.
-    await borrarPdf(fila.storage_ruta).catch((e) => logger.warn('buzon.pdf_descartado_no_borrado', { tenantId, err: e instanceof Error ? e.message : String(e) }));
+    // La ruta depende del CONTENIDO: si el mismo PDF ya cuelga de una factura (reentró por otro correo), el objeto es SUYO
+    // (evidencia fiscal, CFF 30) y no se borra. Si la lectura de «¿en uso?» falla, tampoco: mejor un PDF de más que uno de menos.
+    let borrado = false;
+    const enUso = await rutaPdfEnUso(tenantId, fila.storage_ruta, id).catch((e) => {
+      logger.warn('buzon.pdf_en_uso_ilegible', { tenantId, err: e instanceof Error ? e.message : String(e) });
+      return null; // se ignora: ni se borra ni se suelta la ruta
+    });
+    if (enUso === false) {
+      // Best-effort: un PDF que se descartó y no se pudo borrar ahora lo barre la retención.
+      borrado = await borrarPdf(fila.storage_ruta).then(() => true, (e) => {
+        logger.warn('buzon.pdf_descartado_no_borrado', { tenantId, err: e instanceof Error ? e.message : String(e) });
+        return false;
+      });
+    }
+    // La recepción descartada deja de apuntar al archivo (borrado, o ajeno): así ninguna purga posterior lo confunde con suyo.
+    // Si el borrado falló, la ruta se conserva para que la retención lo reintente (la purga ya respeta las facturas).
+    if (borrado || enUso === true) {
+      const { error: errRuta } = await acotada(supabaseAdmin()
+        .from('buzon_recepcion').update({ storage_ruta: null }).eq('tenant_id', tenantId).eq('id', id), 'buzon.descartar_ruta');
+      if (errRuta) logger.warn('buzon.descartar_ruta_fallo', { tenantId, id, err: errRuta.message });
+    }
   }
   return {};
+}
+
+/** ¿Alguna factura —o otra recepción ligada a una— cuelga de esta ruta de PDF? LANZA si la base falla. */
+async function rutaPdfEnUso(tenantId: string, ruta: string, exceptoRecepcionId: string): Promise<boolean> {
+  const f = await acotada(supabaseAdmin().from('factura_proveedor').select('id').eq('tenant_id', tenantId).eq('pdf_ruta', ruta).limit(1), 'buzon.ruta_en_factura');
+  if (f.error) { if (faltaMigracion(f.error)) return false; throw new Error(`rutaPdfEnUso: ${f.error.message}`); }
+  if ((f.data ?? []).length > 0) return true;
+  const r = await acotada(supabaseAdmin().from('buzon_recepcion').select('id').eq('tenant_id', tenantId).eq('storage_ruta', ruta)
+    .not('factura_id', 'is', null).neq('id', exceptoRecepcionId).limit(1), 'buzon.ruta_en_recepcion');
+  if (r.error) { if (faltaMigracion(r.error)) return false; throw new Error(`rutaPdfEnUso: ${r.error.message}`); }
+  return (r.data ?? []).length > 0;
 }
 
 /** La URL firmada (5 min) del PDF de una recepción, anclada por tenant. */
