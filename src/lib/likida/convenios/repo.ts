@@ -379,3 +379,11 @@ export async function leerContextoEnvio(tenantId: string, viajeId: string): Prom
     operadorNombre: op?.nombre ?? null, telefono: op?.telefono ?? null,
   };
 }
+
+/** ¿Este viaje es de ESTE operador y de esta flota, y sigue abierto? Quien pregunta por las instrucciones solo ve las suyas. */
+export async function viajeAbiertoDelOperador(tenantId: string, operadorId: string, viajeId: string): Promise<boolean> {
+  const res = await acotada(supabaseAdmin().from('viaje').select('id, estatus')
+    .eq('tenant_id', tenantId).eq('operador_id', operadorId).eq('id', viajeId).maybeSingle(), 'convenios.viaje_del_operador');
+  const f = ok(res as never, 'convenios.viaje_del_operador') as Fila | null;
+  return !!f && f.estatus !== 'liquidado';
+}

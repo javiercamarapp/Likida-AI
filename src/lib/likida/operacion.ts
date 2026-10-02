@@ -15,6 +15,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { notificarAsignacion } from './notificar';
 import { evaluarYAvisarCcpDespacho } from './carta_porte_wa';
+import { despacharInstrucciones } from './convenios/envio';
 import { enviarBriefingInicio } from './briefing_inicio_wa';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
@@ -685,6 +686,11 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
   // de despacho. El fallo se loguea y el aviso se puede reintentar desde el
   // panel.
   if (v.operadorId) await avisarAlChofer(tenantId, v.operadorId, id as string).catch(() => {});
+
+  // LAS INSTRUCCIONES DEL CONVENIO (0580): se liga el convenio del cliente al viaje (foto de la «calle de instrucciones»)
+  // y se le mandan al operador —puerta, con quién reportarse, documentos—. Después del aviso del viaje, para que llegue
+  // en ese orden. NUNCA LANZA (un convenio mal capturado o una base sin migrar no deshacen el despacho) y lleva su claim.
+  if (v.operadorId) await despacharInstrucciones(tenantId, id as string);
 
   // EL DISPARO DE CARTA PORTE (Fase B, hueco H1): en cuanto el viaje existe se
   // corre el clasificador legal y el jefe recibe lo que falta declarar (o el
