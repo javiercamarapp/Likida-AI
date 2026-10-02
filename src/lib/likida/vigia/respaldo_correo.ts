@@ -150,21 +150,28 @@ export async function reintentarCorreosVencidos(deps: DepsVigia, limite = 20): P
   return n;
 }
 
-/** Quita repetidos: la misma persona por teléfono o por correo es UNA (se juntan sus dos canales). PURA y estable. */
+/**
+ * Quita repetidos: la misma persona por teléfono o por correo es UNA (se juntan sus dos canales). PURA y estable.
+ * NUNCA pierde un canal: si dos filas coinciden en un canal pero traen el OTRO distinto (mismo correo y teléfonos distintos, o al
+ * revés), lo que no cabe en la fila previa se conserva como una persona aparte con solo ese canal.
+ */
 export function unirDestinatarios(lista: readonly DestinatarioAviso[]): DestinatarioAviso[] {
   const salida: DestinatarioAviso[] = [];
   for (const d of lista) {
     const tel = d.telefono ? normalizarTelefonoWa(d.telefono) : null;
     const correo = d.correo ? d.correo.trim().toLowerCase() : null;
     const previo = salida.find((x) => (tel && x.telefono === tel) || (correo && x.correo === correo));
-    if (previo) {
-      previo.telefono = previo.telefono ?? tel;
-      previo.correo = previo.correo ?? correo;
-      previo.userId = previo.userId ?? d.userId;
-      previo.directorId = previo.directorId ?? d.directorId;
-      previo.nombre = previo.nombre ?? d.nombre;
-    } else {
-      salida.push({ ...d, telefono: tel, correo });
+    if (!previo) { salida.push({ ...d, telefono: tel, correo }); continue; }
+    const telAparte = tel && previo.telefono && previo.telefono !== tel ? tel : null;
+    const correoAparte = correo && previo.correo && previo.correo !== correo ? correo : null;
+    previo.telefono = previo.telefono ?? tel;
+    previo.correo = previo.correo ?? correo;
+    previo.userId = previo.userId ?? d.userId;
+    previo.directorId = previo.directorId ?? d.directorId;
+    previo.nombre = previo.nombre ?? d.nombre;
+    if (telAparte || correoAparte) {
+      const resto = { ...d, telefono: telAparte, correo: correoAparte };
+      if (!salida.some((x) => x.telefono === resto.telefono && x.correo === resto.correo)) salida.push(resto);
     }
   }
   return salida;

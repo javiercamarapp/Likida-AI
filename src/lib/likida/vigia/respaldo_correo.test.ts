@@ -70,6 +70,25 @@ describe('unirDestinatarios', () => {
   });
 });
 
+describe('unirDestinatarios · no pierde canales (ronda 17)', () => {
+  it('mismo correo y teléfonos distintos: se conservan los dos WhatsApp', () => {
+    const lista = unirDestinatarios([
+      { userId: 'u1', directorId: null, nombre: null, telefono: '525577770001', correo: 'ana@flota.mx' },
+      { userId: null, directorId: 'd1', nombre: 'Beto', telefono: '525577770002', correo: 'ana@flota.mx' },
+    ]);
+    expect(lista.map((d) => d.telefono).sort()).toEqual(['525577770001', '525577770002']);
+    expect(lista.filter((d) => d.correo === 'ana@flota.mx')).toHaveLength(1);   // el correo no se duplica
+  });
+  it('mismo teléfono y correos distintos: se conservan los dos correos', () => {
+    const lista = unirDestinatarios([
+      { userId: null, directorId: 'd1', nombre: 'Ana', telefono: '525577770001', correo: 'a@flota.mx' },
+      { userId: null, directorId: 'd2', nombre: 'Ana2', telefono: '525577770001', correo: 'b@flota.mx' },
+    ]);
+    expect(lista.map((d) => d.correo).sort()).toEqual(['a@flota.mx', 'b@flota.mx']);
+    expect(lista.filter((d) => d.telefono === '525577770001')).toHaveLength(1);
+  });
+});
+
 describe('validarDirector', () => {
   const ok = { nivel: '1', nombre: '  Ana   Pérez ', telefono: '55 7777 0001', correo: ' ana@flota.mx ' };
   it('normaliza nombre, teléfono (52 + 10 dígitos) y correo', () => {
