@@ -468,6 +468,11 @@ export async function BloqueDirectores({ datos: p, puedeAdministrar, acciones }:
               <div className="space-y-3">
                 {lista.map((x) => (
                   <div key={x.id} className="hairline rounded-xl p-3" style={{ background: 'var(--surface)' }}>
+                    {!d.config.respaldoCorreo && !x.telefono && x.correo && (
+                      <p role="alert" className="text-[12px] mb-2" style={{ color: 'var(--bad, #b42318)' }}>
+                        {x.nombre} solo tiene correo y el respaldo por correo está apagado: no recibirá ningún aviso. Agrega su WhatsApp o enciende el respaldo en «Configuración y SLA».
+                      </p>
+                    )}
                     {puedeAdministrar ? (
                       <FormaDirector accion={acciones.director} director={x} />
                     ) : (
