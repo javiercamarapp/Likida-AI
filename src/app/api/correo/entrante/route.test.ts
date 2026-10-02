@@ -279,7 +279,7 @@ describe('0530 — PDF y zip entran al buzón, con su propio tope', () => {
   });
 
   it('un PDF de 8 MB pasa (el tope de pdf/zip es 12 MB); un XML de 8 MB no (el suyo sigue en 4 MB)', async () => {
-    stub((u) => new Response(new Uint8Array(8 * 1024 * 1024), { status: 200, headers: { 'content-length': String(8 * 1024 * 1024) } }));
+    stub(() => new Response(new Uint8Array(8 * 1024 * 1024), { status: 200, headers: { 'content-length': String(8 * 1024 * 1024) } }));
     const r = await POST(pedir(evento(adjuntos('grande.pdf', 'grande.xml'))));
     expect(r.status).toBe(200);
     expect(recibidosPorIngesta.map((x) => x.nombre)).toEqual(['grande.pdf']);

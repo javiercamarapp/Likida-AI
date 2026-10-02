@@ -47,7 +47,6 @@ export interface Recepcion extends Required<Omit<NuevaRecepcion, 'emailId'>> {
 
 /** Un nombre de archivo del remitente, saneado para guardarlo y mostrarlo. */
 export function nombreVisible(nombre: string): string {
-  // eslint-disable-next-line no-control-regex
   return nombre.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 160) || 'sin nombre';
 }
 
@@ -314,4 +313,17 @@ export async function purgarRecepcionesVencidas(ahora: Date): Promise<number | n
     throw new Error(`purgarRecepcionesVencidas: ${r.error.message}`);
   }
   return typeof r.data === 'number' ? r.data : Number(r.data) || 0;
+}
+
+/** La URL firmada (5 min) del PDF de una FACTURA de la bandeja, anclada por tenant. `null` si no tiene PDF. */
+export async function urlPdfDeFactura(tenantId: string, facturaId: string): Promise<string | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('factura_proveedor')
+    .select('pdf_ruta')
+    .eq('tenant_id', tenantId)
+    .eq('id', facturaId)
+    .maybeSingle(), 'buzon.url_pdf_factura');
+  if (error) throw new Error(`urlPdfDeFactura: ${error.message}`);
+  const ruta = (data as { pdf_ruta: string | null } | null)?.pdf_ruta;
+  return ruta ? firmarPdf(ruta) : null;
 }
