@@ -133,14 +133,24 @@ describe('fallo', () => {
     await expect(vigilarReglas(AHORA)).rejects.toThrow(/reglasActivas/);
   });
 
-  it('una regla rota (lector falla) no deja sin vigilancia a las demás', async () => {
+  it('una regla rota (lector falla) no deja sin vigilancia a las demás: la de la flota B sigue avisando', async () => {
     await declararYConfirmar(A);
-    db.tablas.gasto.push(gasto('g9', B, 5000));
     await declararYConfirmar(B);
-    db.fallar('gasto.select', 'tabla caída'); // todas fallan: se cuentan, no se lanza
+    db.fallar('gasto.select', 'tabla caída', (f) => f.some(([c, o, v]) => c === 'tenant_id' && o === 'eq' && v === A)); // solo la regla de A se rompe
     const r = await vigilarReglas(AHORA);
-    expect(r.fallos).toBe(2);
-    expect(r.reglas).toBe(2);
+    expect(r).toMatchObject({ reglas: 2, fallos: 1, avisos: 1 });
+    expect(mensajesA(TEL_DINERO_A)).toHaveLength(0);
+    expect(mensajesA(TEL_DINERO_B)).toHaveLength(1);
+    expect(mensajesA(TEL_DINERO_B)[0].cuerpo).toMatch(/\$9,000\.00/);
+  });
+
+  it('si TODOS los lectores fallan, se cuentan los fallos y el barrido no lanza ni avisa', async () => {
+    await declararYConfirmar(A);
+    await declararYConfirmar(B);
+    db.fallar('gasto.select', 'tabla caída');
+    const r = await vigilarReglas(AHORA);
+    expect(r).toMatchObject({ reglas: 2, fallos: 2 });
+    expect(meta.salientes).toHaveLength(0);
   });
 });
 
@@ -221,6 +231,18 @@ describe('otro tenant', () => {
     expect(await borrarRegla(B, r.id, ACTOR)).toMatchObject({ ok: false });
     expect((await listarReglas(B))).toHaveLength(0);
     expect((await listarReglas(A))[0]).toMatchObject({ estado: 'activa' });
+  });
+
+  it('la flota B no puede CONFIRMAR una regla pendiente de la A: sigue pendiente y no vigila', async () => {
+    generateStructured.mockResolvedValueOnce(modelo({ plantilla: 'gasto_de_concepto_mayor_a', concepto: 'caseta', monto: 3000 }));
+    const i = await interpretar('avísame si un gasto de caseta pasa de $3,000', { tenantId: A, rol: 'flota_admin' });
+    if (!i.ok) throw new Error(i.motivo);
+    const p = await crearReglaPendiente(A, { plantilla: i.plantilla, params: i.params, textoOriginal: 'x', frase: i.frase, modelo: i.modelo, costoUsd: i.costoUsd }, ACTOR.id);
+    if (!p.ok) throw new Error(p.error);
+    expect(await confirmarRegla(B, p.valor.id, ACTOR)).toMatchObject({ ok: false });
+    expect((await listarReglas(A))[0]).toMatchObject({ estado: 'pendiente' });
+    expect(await vigilarReglas(AHORA)).toMatchObject({ reglas: 0 });
+    expect(meta.salientes).toHaveLength(0);
   });
 
   it('la misma vigilancia con los mismos parámetros en dos flotas son dos reglas independientes', async () => {
