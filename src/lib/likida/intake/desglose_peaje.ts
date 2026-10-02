@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // EL DESGLOSE DEL PROVEEDOR DE PEAJE — FASE 5, el PoC del Plaud #2.
 //
-// La recomendación literal de la sesión con Transportes Innovativos: "el
+// La recomendación literal de la sesión con el cliente de demo: "el
 // agente toma el desglose del proveedor [...] y cruza [...] marcando
 // discrepancias automáticamente". El desglose que IAVE/PASE/TeleVía mandan
 // cada corte NO es un CFDI: es una tabla de cruces (fecha, caseta, importe,
@@ -765,9 +765,11 @@ export async function conciliarDesglose(
     .select('id')
     .eq('tenant_id', tenantId)
     .eq('id', desgloseId)
+    .is('anulado_en', null)
     .maybeSingle(), 'desglose_peaje.existe');
   if (errExiste) throw new Error(`conciliarDesglose: ${errExiste.message}`);
-  if (!existe) throw new Error('conciliarDesglose: ese desglose no existe en esta flota');
+  // Un desglose ANULADO (0563) se trata como inexistente: no se concilia ni se anota.
+  if (!existe) throw new Error('conciliarDesglose: ese desglose no existe en esta flota (o fue anulado)');
 
   const inicio = new Date();
   try {
@@ -1023,6 +1025,7 @@ export async function resumenConciliacion(tenantId: string, desgloseId: string):
     .select('id, proveedor, archivo_nombre, periodo_desde, periodo_hasta, creado_en')
     .eq('tenant_id', tenantId)
     .eq('id', desgloseId)
+    .is('anulado_en', null)
     .maybeSingle(), 'desglose_peaje.leer_desglose');
   if (error) throw new Error(`resumenConciliacion: ${error.message}`);
   if (!data) return null;
@@ -1043,6 +1046,7 @@ export async function listarDesgloses(tenantId: string, limite = 8): Promise<Res
     .from('desglose_peaje')
     .select('id, proveedor, archivo_nombre, periodo_desde, periodo_hasta, creado_en')
     .eq('tenant_id', tenantId)
+    .is('anulado_en', null)
     .order('creado_en', { ascending: false })
     .limit(limite), 'desglose_peaje.listar');
   if (error) throw new Error(`listarDesgloses: ${error.message}`);
@@ -1208,6 +1212,7 @@ export async function bitacoraRmf918(tenantId: string, desgloseId: string): Prom
     .select('id, proveedor, periodo_desde, periodo_hasta')
     .eq('tenant_id', tenantId)
     .eq('id', desgloseId)
+    .is('anulado_en', null)
     .maybeSingle(), 'bitacora.desglose');
   if (errDesglose) throw new Error(`bitacoraRmf918: ${errDesglose.message}`);
   if (!desglose) return null;

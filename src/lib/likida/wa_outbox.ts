@@ -44,6 +44,32 @@ export async function encolarSalidaWhatsAppDedupe(
   };
 }
 
+export interface FilaSalidaOutbox {
+  dedupe_key: string;
+  estado: 'pending' | 'sending' | 'sent' | 'dead';
+  provider_message_id: string | null;
+  ultimo_error: string | null;
+}
+
+/** Lee el estado de las salidas encoladas con esas llaves de deduplicación.
+ *  Devuelve `null` si la lectura falló: quien decide si encolar o no necesita
+ *  distinguir «no hay fila» (mapa vacío) de «no pude mirar» (null) — confundirlos
+ *  mandaría el mismo mensaje dos veces. */
+export async function leerSalidasPorLlave(llaves: string[]): Promise<Map<string, FilaSalidaOutbox> | null> {
+  try {
+    const { data, error } = await acotada(supabaseAdmin().from('wa_outbox')
+      .select('dedupe_key, estado, provider_message_id, ultimo_error').in('dedupe_key', llaves), 'wa.outbox.leer_llaves');
+    if (error) {
+      logger.error('wa.outbox_lectura_llaves', { err: error.message });
+      return null;
+    }
+    return new Map(((data ?? []) as FilaSalidaOutbox[]).map((f) => [f.dedupe_key, f]));
+  } catch (e) {
+    logger.error('wa.outbox_lectura_llaves', { err: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
 /**
  * AUDITORÍA 20 (R-1, CRÍTICO): este lease vivía en 120s mientras
  * `wa-outbox/route.ts` mide 155.5s reales y puede correr hasta los 300s de

@@ -1,7 +1,11 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { traerTodo, traerPorIds, conteo } from '../pg';
-import { listarCasetas, listarUnidades } from './datos';
+import { listarCasetas, listarUnidades, listarGeocercas, traerMuestrasPorLinea, type VentanaPosiciones } from './datos';
+import { VENTANA_GPS_MIN } from './cruce_gps';
+import {
+  construirReclamacion, LEYENDAS_RECLAMACION, type LineaReclamable, type ReporteReclamacion,
+} from './reclamacion';
 import {
   clasificarVerificacion, resumirVerificacion, textoMotivoGps,
   type EstadoConciliado, type MotivoVerificacion, type ResumenVerificacion,
@@ -42,6 +46,11 @@ export interface FilaConciliada {
   gps: 'confirma' | 'no coincide' | 'sin datos' | 'sin evaluar';
   gpsDistanciaM: number | null;
   gpsNota: string;
+  /** Para el reporte de reclamación (no salen en el CSV). */
+  unidadId?: string | null;
+  casetaId?: string | null;
+  /** ISO UTC del pase (`cruce_en`), si el archivo trae hora. */
+  cruceEn?: string | null;
 }
 
 export interface BitacoraConciliada {
@@ -70,13 +79,13 @@ const rotuloGps = (v: unknown): FilaConciliada['gps'] =>
 export async function bitacoraConciliada(tenantId: string, desgloseId: string): Promise<BitacoraConciliada | null> {
   const admin = supabaseAdmin();
   const { data: desglose, error: errD } = await acotada(admin.from('desglose_peaje')
-    .select('id, proveedor, periodo_desde, periodo_hasta').eq('tenant_id', tenantId).eq('id', desgloseId).maybeSingle(), 'bitacora_conciliada.desglose');
+    .select('id, proveedor, periodo_desde, periodo_hasta').eq('tenant_id', tenantId).eq('id', desgloseId).is('anulado_en', null).maybeSingle(), 'bitacora_conciliada.desglose');
   if (errD) throw new Error(`bitacoraConciliada: ${errD.message}`);
   if (!desglose) return null;
 
   const crudas = await traerTodo<Record<string, unknown>>(
     (d, h) => acotada(admin.from('desglose_peaje_linea')
-      .select('indice, fecha, hora, caseta, monto, tag, estatus, diferencia, detalle, viaje_id, unidad_id, caseta_id, gps_veredicto, gps_distancia_m, gps_detalle', conteo(d))
+      .select('indice, fecha, hora, cruce_en, caseta, monto, tag, estatus, diferencia, detalle, viaje_id, unidad_id, caseta_id, gps_veredicto, gps_distancia_m, gps_detalle', conteo(d))
       .eq('tenant_id', tenantId).eq('desglose_id', desgloseId)
       .order('indice').order('id').range(d, h), 'bitacora_conciliada.lineas'),
     'bitacora_conciliada.lineas',
@@ -122,6 +131,9 @@ export async function bitacoraConciliada(tenantId: string, desgloseId: string): 
       gps: rotuloGps(gpsVeredicto),
       gpsDistanciaM: l.gps_distancia_m === null || l.gps_distancia_m === undefined ? null : Number(l.gps_distancia_m),
       gpsNota: gpsVeredicto === 'sin_datos' ? textoMotivoGps(gpsMotivo) : '',
+      unidadId: (l.unidad_id as string | null) ?? null,
+      casetaId: (l.caseta_id as string | null) ?? null,
+      cruceEn: (l.cruce_en as string | null) ?? null,
     };
   });
 
@@ -173,4 +185,46 @@ export function bitacoraConciliadaACsv(b: BitacoraConciliada): string {
     ETIQUETA_ESTADO[f.estado], f.motivo, f.explicacion, f.viaje, f.diferencia, f.gps, f.gpsDistanciaM, f.gpsNota,
   ].map(celdaCsvSegura).join(','));
   return `${cab}\n${ENCABEZADOS_CSV_CONCILIADA.join(',')}\n${filas.join('\n')}\n`;
+}
+
+// ── El reporte de reclamación ───────────────────────────────────────────────
+
+/**
+ * El reporte de cruces para pedirle al proveedor la revisión de un cobro: el
+ * desglose cruzado con TAG↔unidad, la hora del PASE, las posiciones GPS y las
+ * geocercas de la flota (`reclamacion.ts` decide y explica; aquí solo se traen
+ * los datos). `null` si el desglose no existe en la flota (o está anulado).
+ *
+ * Las posiciones solo se piden para las candidatas (el GPS dijo «no coincide» o
+ * dijo «no alcanzan las muestras»): las confirmadas y las sin datos no necesitan
+ * evidencia ni se reclaman, y traerlas todas multiplicaría las consultas.
+ */
+export async function reporteReclamacion(tenantId: string, desgloseId: string): Promise<ReporteReclamacion | null> {
+  const b = await bitacoraConciliada(tenantId, desgloseId);
+  if (!b) return null;
+  const [casetas, geocercas] = await Promise.all([listarCasetas(tenantId), listarGeocercas(tenantId)]);
+  const geoPorCaseta = new Map(casetas.filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng)).map((c) => [c.id, { lat: c.lat, lng: c.lng, radioM: c.radioM }]));
+
+  // Candidatas a evidencia: las que el cruce marcó «no coincide» o dejó en «muestras insuficientes».
+  const candidatas = b.filas.filter((f) =>
+    f.cruceEn && f.unidadId && (f.gps === 'no coincide' || (f.gps === 'sin datos' && f.gpsNota === textoMotivoGps('muestras_insuficientes'))));
+  const ventanas: VentanaPosiciones[] = candidatas.map((f) => {
+    const t = Date.parse(f.cruceEn as string);
+    return { lineaId: String(f.indice), unidadId: f.unidadId as string, desde: new Date(t - VENTANA_GPS_MIN * 60_000).toISOString(), hasta: new Date(t + VENTANA_GPS_MIN * 60_000).toISOString() };
+  }).filter((v) => Number.isFinite(Date.parse(v.desde)));
+  const muestras = await traerMuestrasPorLinea(tenantId, ventanas);
+
+  const lineas: LineaReclamable[] = b.filas.map((f) => ({
+    indice: f.indice, fecha: f.fecha, hora: f.hora, caseta: f.casetaProveedor, casetaCatalogo: f.casetaCatalogo,
+    tag: f.tag, unidad: f.unidad, monto: f.monto,
+    cruceMs: f.cruceEn ? Date.parse(f.cruceEn) : null,
+    gps: f.gps, gpsDistanciaM: f.gpsDistanciaM, gpsNota: f.gpsNota,
+    casetaGeo: f.casetaId ? (geoPorCaseta.get(f.casetaId) ?? null) : null,
+    muestras: muestras.get(String(f.indice)) ?? [],
+  }));
+  const { cruces, resumen } = construirReclamacion(lineas, geocercas.filter((g) => g.activa));
+  return {
+    desgloseId, proveedor: b.proveedor, periodoDesde: b.periodoDesde, periodoHasta: b.periodoHasta,
+    cruces, resumen, leyendas: LEYENDAS_RECLAMACION,
+  };
 }

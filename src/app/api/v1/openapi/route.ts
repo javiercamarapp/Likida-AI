@@ -1349,6 +1349,149 @@ function documento(servidor: string) {
           },
         },
       },
+      '/v1/liquidaciones-externas/acuses': {
+        get: {
+          operationId: 'listarAcusesLiquidacionesExternas',
+          'x-likida-area': 'dinero',
+          summary: 'Lo que contestaron los choferes (Recibida / No coincide), para registrarlo en tu SAP/TMS.',
+          description:
+            'Área `dinero`. SALIDA POR PULL hacia tu sistema: devuelve solo los acuses que tu sistema AÚN NO CONFIRMÓ haber leído, del más viejo al más nuevo, paginados por cursor (`despues`; `desplazamiento` es 400).\n\n'
+            + 'CICLO: 1) lees esta lista, 2) registras cada acuse en tu sistema, 3) confirmas los `id` con `POST /v1/liquidaciones-externas/acuses/confirmar`. Lo no confirmado vuelve a salir en la siguiente lectura (una caída a mitad de tu proceso no pierde ninguno). Si el chofer cambia su respuesta, el acuse nuevo vuelve a salir.',
+          tags: ['liquidaciones', 'dinero'],
+          parameters: [parametrosPagina[0], ...parametrosCursor],
+          responses: {
+            '200': {
+              description: 'Página de acuses por leer.',
+              content: { 'application/json': { schema: { type: 'object', properties: {
+                datos: { type: 'array', items: { type: 'object', properties: {
+                  id: { type: 'string', format: 'uuid', description: 'El id de Likida: es el que se manda a `acuses/confirmar`.' },
+                  claveExterna: { type: 'string' }, sistemaOrigen: { type: 'string', nullable: true },
+                  operador: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, nombre: { type: 'string', nullable: true } } },
+                  respuestaChofer: { type: 'string', enum: ['recibida', 'no_coincide'] },
+                  respuestaEn: { type: 'string', format: 'date-time' },
+                  total: { type: 'number' }, moneda: { type: 'string', enum: ['MXN', 'USD'] },
+                }, required: ['id', 'claveExterna', 'respuestaChofer', 'respuestaEn'] } },
+                pagina: paginaSobre,
+              }, required: ['datos', 'pagina'] } } },
+            },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/liquidaciones-externas/acuses/confirmar': {
+        post: {
+          operationId: 'confirmarAcusesLiquidacionesExternas',
+          'x-likida-area': 'administracion',
+          summary: 'Confirma que tu sistema ya leyó estos acuses (deja de devolverlos).',
+          description:
+            'Área `administracion`. Cuerpo `{ "ids": [uuid, …] }` (1 a 200). IDEMPOTENTE: repetirlo deja las ya confirmadas en `yaConfirmadas`. `noAplican` agrupa lo que no existe en tu flota o aún no tiene acuse del chofer (no se distingue cuál para no revelar liquidaciones ajenas).',
+          tags: ['liquidaciones', 'dinero'],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { ids: { type: 'array', minItems: 1, maxItems: 200, items: { type: 'string', format: 'uuid' } } }, required: ['ids'], additionalProperties: false } } } },
+          responses: {
+            '200': { description: 'Qué pasó con cada id.', content: { 'application/json': { schema: { type: 'object', properties: { datos: { type: 'object', properties: {
+              confirmadas: { type: 'array', items: { type: 'string', format: 'uuid' } },
+              yaConfirmadas: { type: 'array', items: { type: 'string', format: 'uuid' } },
+              noAplican: { type: 'array', items: { type: 'string', format: 'uuid' } },
+            }, required: ['confirmadas', 'yaConfirmadas', 'noAplican'] } }, required: ['datos'] } } } },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/liquidaciones-externas/exportacion': {
+        get: {
+          operationId: 'exportarLiquidacionesExternas',
+          'x-likida-area': 'dinero',
+          summary: 'Archivo CSV/TSV configurable para tu SAP/TMS (columnas, separador, decimal, fechas).',
+          description:
+            'Área `dinero`. Devuelve un archivo, no JSON. Layout por parámetros: `columnas` (lista ordenada de un catálogo cerrado), `granularidad` (`liquidacion` = una fila por liquidación; `concepto` = una fila por renglón, con `conceptoMontoFirmado`: deducciones en negativo), `separador` (`coma`|`punto_y_coma`|`tab`), `decimal` (`punto`|`coma`; con `coma` el separador no puede ser `coma`), `fechas` (`iso`|`dmy`|`sap` = AAAAMMDD), `bom=1` (marca UTF-8 para Excel) y `encabezado=0`. Los mismos filtros del listado y `sinConfirmar=1` (solo acuses que tu sistema aún no confirmó).\n\n'
+            + 'COMPLETO O NADA: si el filtro trae más de 900 liquidaciones responde `lectura_incompleta` y pide acotar el rango. Las celdas de texto que empiezan con `=`, `+`, `-`, `@` se neutralizan (inyección de fórmulas); nunca sale el error crudo de entrega, solo `falloCodigo`.',
+          tags: ['liquidaciones', 'dinero'],
+          parameters: [
+            { name: 'columnas', in: 'query', required: false, description: 'Nombres separados por coma, p. ej. `claveExterna,total,moneda,respuestaChofer`. Un nombre desconocido es 400 y se listan los válidos.', schema: { type: 'string' } },
+            { name: 'granularidad', in: 'query', required: false, schema: { type: 'string', enum: ['liquidacion', 'concepto'], default: 'liquidacion' } },
+            { name: 'separador', in: 'query', required: false, schema: { type: 'string', enum: ['coma', 'punto_y_coma', 'tab'], default: 'coma' } },
+            { name: 'decimal', in: 'query', required: false, schema: { type: 'string', enum: ['punto', 'coma'], default: 'punto' } },
+            { name: 'fechas', in: 'query', required: false, schema: { type: 'string', enum: ['iso', 'dmy', 'sap'], default: 'iso' } },
+            { name: 'bom', in: 'query', required: false, schema: { type: 'string', enum: ['0', '1'], default: '0' } },
+            { name: 'encabezado', in: 'query', required: false, schema: { type: 'string', enum: ['0', '1'], default: '1' } },
+            { name: 'sinConfirmar', in: 'query', required: false, schema: { type: 'string', enum: ['0', '1'] } },
+            { name: 'estado', in: 'query', required: false, schema: { type: 'string', enum: [...ESTADOS_LIQ_EXTERNA] } },
+            { name: 'respuestaChofer', in: 'query', required: false, schema: { type: 'string', enum: ['recibida', 'no_coincide'] } },
+            { name: 'operadorId', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+            { name: 'claveExterna', in: 'query', required: false, schema: { type: 'string', maxLength: 120 } },
+            { name: 'desde', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
+            { name: 'hasta', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
+          ],
+          responses: {
+            '200': { description: 'El archivo (`text/csv` o `text/tab-separated-values`, UTF-8). `X-Likida-Filas` trae cuántas liquidaciones incluye.', content: { 'text/csv': { schema: { type: 'string' } } } },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/peajes/desgloses': {
+        get: {
+          operationId: 'listarDesglosesPeaje',
+          'x-likida-area': 'dinero',
+          summary: 'Los desgloses del proveedor de peaje de la flota y su conciliación medida.',
+          description: 'Área `dinero`. Del más nuevo al más viejo; los ANULADOS no salen. Cada uno trae cuántas líneas cuadran, no cuadran o no tienen contraparte (conteos medidos, nunca un 0 inventado). El `id` es el que se pasa a `GET /v1/peajes/exportacion`. `limite` de 1 a 50; `desplazamiento` es 400.',
+          tags: ['peajes', 'dinero'],
+          parameters: [parametrosPagina[0]],
+          responses: {
+            '200': {
+              description: 'Desgloses vigentes.',
+              content: { 'application/json': { schema: { type: 'object', properties: {
+                datos: { type: 'array', items: { type: 'object', properties: {
+                  id: { type: 'string', format: 'uuid' }, proveedor: { type: 'string', nullable: true }, archivo: { type: 'string', nullable: true },
+                  periodo: { type: 'object', properties: { desde: { type: 'string', format: 'date', nullable: true }, hasta: { type: 'string', format: 'date', nullable: true } } },
+                  recibidoEn: { type: 'string', format: 'date-time' },
+                  resumen: { type: 'object', properties: { total: { type: 'integer' }, cuadra: { type: 'integer' }, noCuadra: { type: 'integer' }, sinContraparte: { type: 'integer' }, pctCuadra: { type: 'integer', nullable: true } } },
+                }, required: ['id', 'recibidoEn', 'resumen'] } },
+                pagina: paginaSobre,
+              }, required: ['datos', 'pagina'] } } },
+            },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/peajes/desgloses/{id}/anular': {
+        post: {
+          operationId: 'anularDesglosePeaje',
+          'x-likida-area': 'administracion',
+          summary: 'Anula un desglose subido por error (no se borra: queda de constancia).',
+          description: 'Área `administracion`. Cuerpo `{ "motivo": "…" }` (1 a 500 caracteres, obligatorio). El desglose deja de aparecer, de contar en la bitácora RMF 9.1.8, de exportarse y de avisar a la oficina, y su archivo libera la huella para que el correcto pueda volver a mandarse. IDEMPOTENTE (`yaAnulado: true`). «No existe» y «no es de tu flota» contestan 404.',
+          tags: ['peajes', 'dinero'],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { motivo: { type: 'string', minLength: 1, maxLength: 500 } }, required: ['motivo'], additionalProperties: false } } } },
+          responses: {
+            '200': { description: 'Anulado.', content: { 'application/json': { schema: { type: 'object', properties: { datos: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, anulado: { type: 'boolean' }, yaAnulado: { type: 'boolean' } }, required: ['id', 'anulado', 'yaAnulado'] } }, required: ['datos'] } } } },
+            '404': noEncontrado,
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/peajes/exportacion': {
+        get: {
+          operationId: 'exportarBitacoraPeajes',
+          'x-likida-area': 'dinero',
+          summary: 'La bitácora conciliada de un desglose, en el layout que pida tu SAP/ERP.',
+          description: 'Área `dinero`. Devuelve un archivo, no JSON. `desglose` (uuid, de `GET /v1/peajes/desgloses`) es obligatorio; un desglose anulado o de otra flota es 404. Layout: `columnas` (catálogo cerrado), `separador` (`coma`|`punto_y_coma`|`tab`), `decimal` (`punto`|`coma`; con `coma` el separador no puede ser `coma`), `fechas` (`iso`|`dmy`|`sap`), `bom`, `encabezado`. Cada fila trae `estado` (cuadra / sin respaldo / por verificar), `motivo` y `explicacion`: «sin respaldo» es un hecho sobre los datos de Likida, NO una acusación (la leyenda viaja en `X-Likida-Leyenda`, URL-encoded).',
+          tags: ['peajes', 'dinero'],
+          parameters: [
+            { name: 'desglose', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } },
+            { name: 'columnas', in: 'query', required: false, description: 'Nombres separados por coma. Un nombre desconocido es 400 y se listan los válidos.', schema: { type: 'string' } },
+            { name: 'separador', in: 'query', required: false, schema: { type: 'string', enum: ['coma', 'punto_y_coma', 'tab'], default: 'coma' } },
+            { name: 'decimal', in: 'query', required: false, schema: { type: 'string', enum: ['punto', 'coma'], default: 'punto' } },
+            { name: 'fechas', in: 'query', required: false, schema: { type: 'string', enum: ['iso', 'dmy', 'sap'], default: 'iso' } },
+            { name: 'bom', in: 'query', required: false, schema: { type: 'string', enum: ['0', '1'], default: '0' } },
+            { name: 'encabezado', in: 'query', required: false, schema: { type: 'string', enum: ['0', '1'], default: '1' } },
+          ],
+          responses: {
+            '200': { description: 'El archivo (`text/csv` o `text/tab-separated-values`, UTF-8). `X-Likida-Filas` trae cuántas líneas incluye.', content: { 'text/csv': { schema: { type: 'string' } } } },
+            '404': noEncontrado,
+            ...respuestasError,
+          },
+        },
+      },
       '/v1/hitos': {
         get: {
           operationId: 'listarHitos',

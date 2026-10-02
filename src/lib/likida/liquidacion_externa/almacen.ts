@@ -18,3 +18,9 @@ export function rutaPdfExterno(tenantId: string, claveExterna: string, huella: s
   const clave = createHash('sha256').update(claveExterna, 'utf8').digest('hex').slice(0, 24);
   return `${tenantId}/externas/${clave}-${huella.slice(0, 16)}.pdf`;
 }
+
+/** El Excel en el formato de la flota vive junto al PDF, con el mismo nombre
+ *  direccionado por contenido y otra extensión. Pura. */
+export function rutaExcelExterno(rutaPdf: string): string {
+  return rutaPdf.replace(/\.pdf$/, '.xlsx');
+}

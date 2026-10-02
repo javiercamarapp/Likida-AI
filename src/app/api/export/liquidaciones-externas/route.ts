@@ -11,6 +11,7 @@ import {
   type Cursor, type EstadoLiquidacionExterna, type FiltroListado, type LiquidacionExterna,
 } from '@/lib/likida/liquidacion_externa/repo';
 import { csvLiquidacionesExternas } from '@/lib/likida/liquidacion_externa/csv';
+import { rutaExcelExterno } from '@/lib/likida/liquidacion_externa/almacen';
 
 export const runtime = 'nodejs';
 // Literal a propósito (BE-19): Next lo lee en build y la prueba de exports lo exige.
@@ -21,6 +22,7 @@ export const maxDuration = 120;
 //
 //   GET ?desde=AAAA-MM-DD&hasta=AAAA-MM-DD[&estado=…][&respuestaChofer=…] → CSV del periodo
 //   GET ?pdf=<uuid>                                    → 302 al PDF (URL firmada)
+//   GET ?excel=<uuid>                                  → 302 al Excel en el formato de la flota (0564), si lo hay
 //
 // La puerta es la de todo export de dinero: sesión → flota → área `dinero` →
 // `puedeExportar`. El PDF se busca CON el tenant de la sesión: un id de otra
@@ -69,6 +71,25 @@ export async function GET(req: Request) {
       return NextResponse.redirect(url, { status: 302, headers: { 'Cache-Control': 'no-store' } });
     } catch (e) {
       logger.error('export.liqext.pdf', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+      return new NextResponse('No se pudo preparar la descarga. Intenta de nuevo en un momento.', { status: 502 });
+    }
+  }
+
+  // ── Excel de una liquidación (el formato de la flota, 0564) ──────────────
+  // Solo existe para las que Likida generó DESPUÉS de que la flota configuró su
+  // formato; el resto es 404 con su razón, nunca un archivo vacío.
+  const excel = params.get('excel');
+  if (excel !== null) {
+    if (!UUID.test(excel)) return new NextResponse('`excel` tiene que ser el id de una liquidación.', { status: 400 });
+    try {
+      const liq = await leerPorId(tenantId, excel.toLowerCase());
+      if (!liq || !liq.pdfRuta || liq.pdfOrigen !== 'generado') return new NextResponse('Esa liquidación no tiene Excel (solo las que Likida generó con el formato de la flota).', { status: 404 });
+      const url = await firmarPdfExterno(rutaExcelExterno(liq.pdfRuta), 60, `liquidacion_${liq.claveExterna.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60)}.xlsx`);
+      return NextResponse.redirect(url, { status: 302, headers: { 'Cache-Control': 'no-store' } });
+    } catch (e) {
+      const mensaje = e instanceof Error ? e.message : String(e);
+      if (/not found|no existe|404/i.test(mensaje)) return new NextResponse('Esa liquidación no tiene Excel (llegó antes de configurar el formato de la flota).', { status: 404 });
+      logger.error('export.liqext.excel', { tenant: tenantId, err: mensaje });
       return new NextResponse('No se pudo preparar la descarga. Intenta de nuevo en un momento.', { status: 502 });
     }
   }

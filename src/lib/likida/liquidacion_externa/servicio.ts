@@ -16,17 +16,20 @@
 import { logger } from '@/lib/logger';
 import { conPool } from '../lotes';
 import { generarPdfLiquidacionExterna } from './pdf';
-import { rutaPdfExterno } from './almacen';
+import { generarExcelFormato, generarPdfFormato, type DatosFormato } from './render_formato';
+import { rutaPdfExterno, rutaExcelExterno } from './almacen';
 import {
   entregaPorOutbox, TTL_URL_PDF_SEGUNDOS,
   type EntregaWhatsApp, type EstadoEntrega,
 } from './entrega';
 import {
   resolverOperadorDestino, resolverViajeIds, insertarLiquidacionExterna, registrarEvento,
-  transicionar, leerPorId, subirPdfExterno, firmarPdfExterno, leerRazonSocial,
-  type LiquidacionExterna, type TipoAcuse,
+  transicionar, leerPorId, subirArchivoExterno, firmarPdfExterno, leerRazonSocial, confirmarAcuses, leerFormatoFlota, TIPO_XLSX,
+  type LiquidacionExterna, type TipoAcuse, type ResultadoConfirmacion, type ConfigFormatoFlota,
 } from './repo';
 import { trabajoPendiente } from './trabajo';
+import { avisarNoCoincidePorOmision, type AvisarNoCoincide } from './aviso_no_coincide';
+import { copiarAJefePorOmision, type CopiarAJefe, type ResultadoCopia } from './copia_jefe';
 import type { LiquidacionExternaNormalizada } from './esquema';
 
 /** Cuántas veces el cron intenta ENCOLAR (fallos nuestros, transitorios) antes
@@ -41,6 +44,14 @@ export interface Dependencias {
   /** Razón social de la flota, para el encabezado del PDF que Likida genera. */
   razonSocial: (tenantId: string) => Promise<string | null>;
   firmarPdf: (ruta: string, ttlSegundos: number) => Promise<string>;
+  /** Avisa a la oficina que un chofer respondió «No coincide». `true` = Meta aceptó el aviso. */
+  avisarNoCoincide: AvisarNoCoincide;
+  /** El formato de la flota (0564), o `null` si no tiene o la base aún no trae la 0564. */
+  formato: (tenantId: string) => Promise<ConfigFormatoFlota | null>;
+  /** Sube un archivo al bucket de liquidaciones (PDF o Excel). */
+  subirArchivo: (ruta: string, bytes: Uint8Array, tipo: string) => Promise<void>;
+  /** Copia de la liquidación entregada al jefe de flota. */
+  copiarAJefe: CopiarAJefe;
 }
 
 export const dependenciasPorOmision: Dependencias = {
@@ -48,6 +59,10 @@ export const dependenciasPorOmision: Dependencias = {
   ahora: () => new Date(),
   razonSocial: leerRazonSocial,
   firmarPdf: (ruta, ttl) => firmarPdfExterno(ruta, ttl),
+  avisarNoCoincide: avisarNoCoincidePorOmision,
+  formato: (t) => leerFormatoFlota(t),
+  subirArchivo: (r, b, t) => subirArchivoExterno(r, b, t),
+  copiarAJefe: copiarAJefePorOmision,
 };
 
 // ── recibir ─────────────────────────────────────────────────────────────────
@@ -72,27 +87,50 @@ export async function recibirLiquidacionExterna(
   let bytes: Uint8Array;
   let pdfOrigen: 'adjunto' | 'generado';
   let pdfSha: string | null;
+  let excel: Uint8Array | null = null;
+  let formato: ConfigFormatoFlota | null = null;
   if (datos.pdf) {
+    // El PDF del cliente manda: no se reformatea ni se le pone otro aspecto.
     bytes = datos.pdf.bytes;
     pdfOrigen = 'adjunto';
     pdfSha = datos.pdf.sha256;
   } else {
-    bytes = await generarPdfLiquidacionExterna({
-      liquidacion: datos, operadorNombre: operador.nombre, razonSocial: await deps.razonSocial(tenantId),
-    });
+    const razonSocial = await deps.razonSocial(tenantId);
+    // El formato de la flota (0564): si lo tiene, el PDF y el Excel salen con SUS columnas.
+    formato = await deps.formato(tenantId);
+    if (formato) {
+      const df: DatosFormato = {
+        claveExterna: datos.claveExterna, sistemaOrigen: datos.sistemaOrigen, operadorNombre: operador.nombre, razonSocial,
+        viajes: datos.viajes, desde: datos.periodo.desde, hasta: datos.periodo.hasta, conceptos: datos.conceptos,
+        total: datos.total, moneda: datos.moneda,
+      };
+      bytes = await generarPdfFormato(formato.formato, df);
+      excel = generarExcelFormato(formato.formato, df);
+    } else {
+      bytes = await generarPdfLiquidacionExterna({ liquidacion: datos, operadorNombre: operador.nombre, razonSocial });
+    }
     pdfOrigen = 'generado';
     pdfSha = null;
   }
   const ruta = rutaPdfExterno(tenantId, datos.claveExterna, huella);
-  await subirPdfExterno(ruta, bytes);
-
+  await deps.subirArchivo(ruta, bytes, 'application/pdf');
+  if (excel) {
+    try {
+      await deps.subirArchivo(rutaExcelExterno(ruta), excel, TIPO_XLSX);
+    } catch (e) {
+      // Si el Excel es el documento que viaja por WhatsApp, sin él no hay entrega: se falla
+      // (el cliente reintenta). Si es solo el complemento del panel, se dice y se sigue.
+      if (formato?.formato.salida === 'xlsx') throw e;
+      logger.warn('liqext.excel_sin_subir', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
   const liquidacion = await insertarLiquidacionExterna({
     tenantId, datos, huella, operadorId: operador.id, viajeIds,
     pdfRuta: ruta, pdfOrigen, pdfSha256: pdfSha,
   });
   await registrarEvento(tenantId, liquidacion.id, 'recibida', {
     origen: datos.sistemaOrigen, conceptos: datos.conceptos.length, viajes: datos.viajes.length,
-    viajesEnLikida: viajeIds.length, pdf: pdfOrigen,
+    viajesEnLikida: viajeIds.length, pdf: pdfOrigen, formatoFlota: formato !== null,
   });
   return { liquidacion };
 }
@@ -122,13 +160,13 @@ export async function intentarEntrega(
     if (!liq.pdfRuta) throw new Error('la liquidación no tiene PDF en Storage');
     if (!liq.operadorTelefono) throw new Error('el operador no tiene teléfono');
 
-    const pdfUrl = await deps.firmarPdf(liq.pdfRuta, TTL_URL_PDF_SEGUNDOS);
+    const base = `liquidacion-${liq.claveExterna.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60)}`;
+    const doc = await documentoDeEntrega(liq, base, deps);
     const estado: EstadoEntrega = await deps.entrega.enviarConFallback({
       tenantId, liquidacionId: liq.id, generacion: liq.generacion,
       telefono: liq.operadorTelefono, nombre: liq.operadorNombre ?? '',
       desde: liq.periodoDesde, hasta: liq.periodoHasta, total: liq.total, moneda: liq.moneda,
-      sistemaOrigen: liq.sistemaOrigen, pdfUrl,
-      pdfNombre: `liquidacion-${liq.claveExterna.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60)}.pdf`,
+      sistemaOrigen: liq.sistemaOrigen, pdfUrl: doc.url, pdfNombre: doc.nombre,
     });
     const ahora = deps.ahora();
 
@@ -142,6 +180,7 @@ export async function intentarEntrega(
       });
       if (aplicada) {
         await registrarEvento(tenantId, liq.id, estado.via === 'plantilla' && cambioDeVia ? 'fallback_plantilla' : 'encolada', { via: estado.via });
+        if (cambio) await copiarSinTumbar(liq, doc, deps);
       }
       return 'en_cola';
     }
@@ -151,7 +190,10 @@ export async function intentarEntrega(
         estado: 'enviada', via: estado.via, wamid: estado.wamid || null,
         enviada_en: ahora.toISOString(), ultimo_error: null,
       });
-      if (aplicada) await registrarEvento(tenantId, liq.id, 'enviada', { via: estado.via, wamid: estado.wamid || null });
+      if (aplicada) {
+        await registrarEvento(tenantId, liq.id, 'enviada', { via: estado.via, wamid: estado.wamid || null });
+        await copiarSinTumbar(liq, doc, deps);
+      }
       return 'enviada';
     }
 
@@ -193,6 +235,58 @@ export async function intentarEntrega(
       return 'sin_cambio';
     }
   }
+}
+
+
+// ── el documento que viaja y la copia al jefe ───────────────────────────────
+
+interface DocumentoEntrega { url: string; nombre: string; formato: 'pdf' | 'xlsx' }
+
+/**
+ * Qué documento se entrega: el PDF de siempre, salvo que la flota pidió el
+ * Excel de su formato (y la liquidación es de las que Likida generó: el PDF
+ * que adjunta el cliente jamás se reemplaza). Si el Excel no está en Storage
+ * (la liquidación llegó antes de configurar el formato), se entrega el PDF y se
+ * dice, en vez de fallar la entrega.
+ */
+async function documentoDeEntrega(liq: LiquidacionExterna, base: string, deps: Dependencias): Promise<DocumentoEntrega> {
+  const pdfRuta = liq.pdfRuta as string;
+  if (liq.pdfOrigen === 'generado') {
+    const cfg = await deps.formato(liq.tenantId);
+    if (cfg?.formato.salida === 'xlsx') {
+      try {
+        const url = await deps.firmarPdf(rutaExcelExterno(pdfRuta), TTL_URL_PDF_SEGUNDOS);
+        return { url, nombre: `${base}.xlsx`, formato: 'xlsx' };
+      } catch (e) {
+        logger.warn('liqext.excel_no_disponible_se_entrega_pdf', { id: liq.id, err: e instanceof Error ? e.message : String(e) });
+      }
+    }
+  }
+  return { url: await deps.firmarPdf(pdfRuta, TTL_URL_PDF_SEGUNDOS), nombre: `${base}.pdf`, formato: 'pdf' };
+}
+
+/** La copia al jefe NUNCA tumba ni retrasa la entrega al chofer: ya salió o quedó en cola. */
+async function copiarSinTumbar(liq: LiquidacionExterna, doc: DocumentoEntrega, deps: Dependencias): Promise<void> {
+  try {
+    await deps.copiarAJefe(liq, { url: doc.url, nombre: doc.nombre });
+  } catch (e) {
+    logger.error('liqext.copia_jefe_lanzo', { id: liq.id, err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/**
+ * Reenvía la copia al jefe de una liquidación ya entregada (el panel, cuando la
+ * primera no llegó). No toca el estado ni al chofer.
+ */
+export async function reenviarCopiaAJefe(
+  tenantId: string, id: string, deps: Dependencias = dependenciasPorOmision,
+): Promise<ResultadoCopia | { estado: 'no_encontrada' } | { estado: 'no_aplica' }> {
+  const liq = await leerPorId(tenantId, id);
+  if (!liq) return { estado: 'no_encontrada' };
+  if (!liq.pdfRuta || liq.estado === 'pendiente') return { estado: 'no_aplica' };
+  const base = `liquidacion-${liq.claveExterna.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60)}`;
+  const doc = await documentoDeEntrega(liq, base, deps);
+  return deps.copiarAJefe(liq, { url: doc.url, nombre: doc.nombre });
 }
 
 // ── el cron ─────────────────────────────────────────────────────────────────
@@ -249,24 +343,65 @@ export async function reintentarLiquidacionExterna(
 
 export type ResultadoAcuse = 'registrado' | 'ya_registrado' | 'no_encontrada';
 
+/** Qué pasó con el aviso a la oficina (solo aplica a «No coincide»). */
+export type AvisoOficina = 'enviado' | 'no_enviado' | 'no_aplica';
+
+export interface AcuseRegistrado { resultado: ResultadoAcuse; avisoOficina: AvisoOficina }
+
 /**
  * El chofer apretó un botón. El `operadorId` sale de SU teléfono (processor), no
  * del id del botón: un chofer que reenvía o fabrica un id ajeno no puede acusar
  * la liquidación de otro. `no_encontrada` cubre «no existe», «es de otra flota»
  * y «es de otro chofer» a propósito: no se distingue para no revelar cuál.
+ *
+ * «No coincide» AVISA a la oficina (quien ve dinero) por el selector central; el
+ * resultado del aviso se devuelve para que al chofer solo se le prometa lo que de
+ * verdad salió, y queda en la bitácora (`aviso_oficina`). Si el chofer cambia de
+ * respuesta, la confirmación que el sistema del cliente ya había dado (0561) se
+ * reinicia: el acuse nuevo se le entrega otra vez.
  */
-export async function registrarAcuse(
+export async function registrarAcuseConAviso(
   tenantId: string, operadorId: string, liquidacionId: string, tipo: TipoAcuse,
-  deps: Pick<Dependencias, 'ahora'> = dependenciasPorOmision,
-): Promise<ResultadoAcuse> {
+  deps: Pick<Dependencias, 'ahora'> & Partial<Pick<Dependencias, 'avisarNoCoincide'>> = dependenciasPorOmision,
+): Promise<AcuseRegistrado> {
   const liq = await leerPorId(tenantId, liquidacionId);
-  if (!liq || liq.operadorId !== operadorId) return 'no_encontrada';
-  if (liq.estado === 'acusada' && liq.acuseTipo === tipo) return 'ya_registrado';
+  if (!liq || liq.operadorId !== operadorId) return { resultado: 'no_encontrada', avisoOficina: 'no_aplica' };
+  if (liq.estado === 'acusada' && liq.acuseTipo === tipo) return { resultado: 'ya_registrado', avisoOficina: 'no_aplica' };
   const aplicada = await transicionar(
     tenantId, liquidacionId, ['pendiente', 'en_cola', 'enviada', 'fallida', 'acusada'],
-    { estado: 'acusada', acuse_tipo: tipo, acuse_en: deps.ahora().toISOString() },
+    { estado: 'acusada', acuse_tipo: tipo, acuse_en: deps.ahora().toISOString(), acuse_confirmado_en: null },
   );
-  if (!aplicada) return 'no_encontrada';
+  if (!aplicada) return { resultado: 'no_encontrada', avisoOficina: 'no_aplica' };
   await registrarEvento(tenantId, liquidacionId, tipo === 'recibida' ? 'acuse_recibida' : 'acuse_no_coincide', {});
-  return 'registrado';
+  if (tipo !== 'no_coincide') return { resultado: 'registrado', avisoOficina: 'no_aplica' };
+
+  const avisar = deps.avisarNoCoincide ?? dependenciasPorOmision.avisarNoCoincide;
+  let enviado = false;
+  try { enviado = await avisar(liq); } catch (e) {
+    logger.error('liqext.no_coincide_aviso_lanzo', { id: liquidacionId, err: e instanceof Error ? e.message : String(e) });
+  }
+  await registrarEvento(tenantId, liquidacionId, 'aviso_oficina', { enviado });
+  return { resultado: 'registrado', avisoOficina: enviado ? 'enviado' : 'no_enviado' };
+}
+
+/** Compatibilidad: solo el resultado del acuse. */
+export async function registrarAcuse(
+  tenantId: string, operadorId: string, liquidacionId: string, tipo: TipoAcuse,
+  deps: Pick<Dependencias, 'ahora'> & Partial<Pick<Dependencias, 'avisarNoCoincide'>> = dependenciasPorOmision,
+): Promise<ResultadoAcuse> {
+  return (await registrarAcuseConAviso(tenantId, operadorId, liquidacionId, tipo, deps)).resultado;
+}
+
+// ── el sistema del cliente confirma que ya leyó los acuses ──────────────────
+
+/** Máximo de ids por confirmación (un lote de pull razonable). */
+export const MAX_IDS_CONFIRMACION = 200;
+
+export async function confirmarAcusesLeidos(
+  tenantId: string, ids: string[], actor: string, deps: Pick<Dependencias, 'ahora'> = dependenciasPorOmision,
+): Promise<ResultadoConfirmacion> {
+  const unicos = [...new Set(ids)];
+  const r = await confirmarAcuses(tenantId, unicos, deps.ahora().toISOString());
+  for (const id of r.confirmadas) await registrarEvento(tenantId, id, 'acuse_confirmado', { actor });
+  return r;
 }

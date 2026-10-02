@@ -13,9 +13,14 @@ import {
   listarGeocercas, guardarGeocerca, cambiarEstadoGeocerca, TIPOS_GEOCERCA,
   listarMapeos, guardarMapeo, borrarMapeo,
   leerConfigBuzon, activarBuzon, desactivarBuzon, rotarLlaveBuzon, listarArchivosIngesta,
+  leerConfigEntradas, activarCorreoPeajes, desactivarCorreoPeajes, rotarCorreoPeajes, guardarRemitentesPeajes,
+  guardarPullPeajes, apagarPullPeajes, borrarCredencialPull,
   type ResultadoImportacionCatalogo,
 } from '@/lib/likida/peajes/datos';
 import { secretoMaestro, claveDeFlota, reintentarArchivoPeaje } from '@/lib/likida/peajes/ingesta';
+import { cofreConfigurado } from '@/lib/likida/conectores/cofre';
+import { direccionPj } from '@/lib/likida/peajes/correo_entrante';
+import { dominioBuzon } from '@/lib/correo/buzon';
 import { VistaConfiguracionPeajes } from './vista';
 
 export const dynamic = 'force-dynamic';
@@ -83,7 +88,7 @@ export default async function PaginaConfiguracionPeajes({
   const puedeAdministrar = puedeVerArea(rol, 'administracion');
 
   const secreto = secretoMaestro();
-  const [tags, unidades, casetas, geocercas, mapeos, buzon, archivos] = await Promise.all([
+  const [tags, unidades, casetas, geocercas, mapeos, buzon, archivos, entradas] = await Promise.all([
     safe(() => listarTags(tenantId)),
     safe(() => listarUnidades(tenantId)),
     safe(() => listarCasetas(tenantId)),
@@ -91,6 +96,7 @@ export default async function PaginaConfiguracionPeajes({
     safe(() => listarMapeos(tenantId)),
     safe(() => leerConfigBuzon(tenantId)),
     safe(() => listarArchivosIngesta(tenantId, 20)),
+    safe(() => leerConfigEntradas(tenantId)),
   ]);
 
   // La llave SOLO se calcula para quien administra y SOLO si el buzón está activo.
@@ -122,6 +128,54 @@ export default async function PaginaConfiguracionPeajes({
     if (no) volverConfig(sufijo, `error:${no}`);
     const id = String(fd.get('archivo') ?? '');
     volverConfig(sufijo, (await reintentarArchivoPeaje(tenantId, id)) ? 'El archivo volvió a la cola: el siguiente ciclo (≤ 15 min) lo procesa.' : 'error:Ese archivo no se puede reintentar (solo los fallidos que conservan su contenido).');
+  }
+
+  // ── Recepción por correo y pull (0563) ──
+  async function accionActivarCorreo() {
+    'use server';
+    const no = await puertaConfig(tenantId, 'administracion');
+    if (no) volverConfig(sufijo, `error:${no}`);
+    volverConfig(sufijo, (await activarCorreoPeajes(tenantId)) ? 'Correo activado. Comparte la dirección solo con quien manda los cortes.' : 'error:No se pudo activar el correo. Inténtalo de nuevo.');
+  }
+  async function accionDesactivarCorreo() {
+    'use server';
+    const no = await puertaConfig(tenantId, 'administracion');
+    if (no) volverConfig(sufijo, `error:${no}`);
+    volverConfig(sufijo, (await desactivarCorreoPeajes(tenantId)) ? 'Correo apagado: lo que llegue a la dirección se ignora.' : 'error:No se pudo apagar el correo.');
+  }
+  async function accionRotarCorreo() {
+    'use server';
+    const no = await puertaConfig(tenantId, 'administracion');
+    if (no) volverConfig(sufijo, `error:${no}`);
+    volverConfig(sufijo, (await rotarCorreoPeajes(tenantId)) ? 'Dirección cambiada: la anterior dejó de servir. Avísale a quien manda los cortes.' : 'error:No se pudo cambiar la dirección (¿el correo está activado?).');
+  }
+  async function accionGuardarRemitentes(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId, 'administracion');
+    if (no) volverConfig(sufijo, `error:${no}`);
+    const r = await guardarRemitentesPeajes(tenantId, String(fd.get('remitentes') ?? '').split(/[\n,;]+/));
+    volverConfig(sufijo, r.ok ? (r.guardados === 0 ? 'Sin lista: entra el correo de cualquiera que tenga la dirección.' : `${r.guardados} remitente(s) permitidos.`) : `error:${r.motivo}`);
+  }
+  async function accionGuardarPull(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId, 'administracion');
+    if (no) volverConfig(sufijo, `error:${no}`);
+    const r = await guardarPullPeajes(tenantId, {
+      url: String(fd.get('url') ?? ''), token: String(fd.get('token') ?? ''), intervaloMin: Number(String(fd.get('intervalo') ?? '').trim()),
+    });
+    volverConfig(sufijo, r.ok ? 'Consulta automática encendida: la primera corre en el siguiente ciclo (≤ 15 min).' : `error:${r.motivo}`);
+  }
+  async function accionApagarPull() {
+    'use server';
+    const no = await puertaConfig(tenantId, 'administracion');
+    if (no) volverConfig(sufijo, `error:${no}`);
+    volverConfig(sufijo, (await apagarPullPeajes(tenantId)) ? 'Consulta automática apagada.' : 'error:No se pudo apagar.');
+  }
+  async function accionBorrarCredencialPull() {
+    'use server';
+    const no = await puertaConfig(tenantId, 'administracion');
+    if (no) volverConfig(sufijo, `error:${no}`);
+    volverConfig(sufijo, (await borrarCredencialPull(tenantId)) ? 'Token borrado.' : 'error:No se pudo borrar el token.');
   }
 
   // ── TAGs ──
@@ -227,7 +281,15 @@ export default async function PaginaConfiguracionPeajes({
         url: `${baseUrl}/api/peajes/ingesta`,
         flotaId: tenantId,
       }}
+      entradas={{
+        config: entradas,
+        puedeAdministrar,
+        direccionCorreo: entradas?.correoToken ? direccionPj(entradas.correoToken, dominioBuzon()) : null,
+        cofreConfigurado: cofreConfigurado(),
+      }}
       acciones={{
+        activarCorreo: accionActivarCorreo, desactivarCorreo: accionDesactivarCorreo, rotarCorreo: accionRotarCorreo, guardarRemitentes: accionGuardarRemitentes,
+        guardarPull: accionGuardarPull, apagarPull: accionApagarPull, borrarCredencialPull: accionBorrarCredencialPull,
         activarBuzon: accionActivarBuzon, desactivarBuzon: accionDesactivarBuzon, rotarLlave: accionRotarLlave, reintentarArchivo: accionReintentarArchivo,
         altaTag: accionAltaTag, bajaTag: accionBajaTag, importarTags: accionImportarTags,
         importarCasetas: accionImportarCasetas, estadoCaseta: accionEstadoCaseta,
