@@ -81,6 +81,8 @@ export interface ResultadoSync {
    * piloto. Se cuenta para que el cron lo pinte y la flota pueda cerrarlo.
    */
   sinAvisoPrevio?: number;
+  /** Lecturas (no unidades) que la compuerta de privacidad dejó sin guardar. */
+  lecturasSinAviso?: number;
   /** La corrida se quedó sin presupuesto de tiempo ANTES de tocar esta flota.
    *  No es un error de la flota: le toca en la corrida siguiente (cada 5 min),
    *  y el cron lo reporta como `parcial` — un verde aquí mentiría. */
@@ -202,6 +204,8 @@ export async function asentarLecturas(
     invalidasDelLector?: number; paginas?: number; sinPosicion?: number;
     /** Lecturas más viejas que esto (ms) se descartan (push: dispositivos con buffer). */
     maxAntiguedadMs?: number;
+    /** Push: las lecturas malas se cuentan pero NO hacen fallar el lote (no hay reintento que las arregle). */
+    descartadasNoSonError?: boolean;
   } = {},
 ): Promise<ResultadoSync> {
   const ahora = opciones.ahora ?? Date.now;
@@ -216,8 +220,10 @@ export async function asentarLecturas(
   const descartadas = (opciones.invalidasDelLector ?? 0) + (lecturas.length - validas.length);
   if (descartadas > 0) {
     base.descartadas = descartadas;
-    base.backlog = true;
-    base.error = `${descartadas} lectura(s) GPS inválida(s); poll parcial`;
+    if (!opciones.descartadasNoSonError) {
+      base.backlog = true;
+      base.error = `${descartadas} lectura(s) GPS inválida(s); poll parcial`;
+    }
     logger.warn('gps.lecturas_descartadas', { tenantId, proveedor: conectorId, descartadas: base.descartadas });
   }
   const posiciones = validas;
@@ -301,7 +307,9 @@ export async function asentarLecturas(
     }
     if (compuerta.sinAviso.size > 0) {
       base.sinAvisoPrevio = compuerta.sinAviso.size;
+      const antes = filas.length;
       filas = filas.filter((f) => !compuerta.sinAviso.has(f.unidad_id));
+      base.lecturasSinAviso = antes - filas.length;
       for (const u of compuerta.sinAviso) unidadesVistas.delete(u);
       logger.warn('gps.sin_aviso_previo', { tenantId, proveedor: conectorId, unidades: compuerta.sinAviso.size });
     }

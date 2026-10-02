@@ -156,7 +156,15 @@ import { join, relative, sep } from 'node:path';
 //     `api/correo/entrante/route.ts`, que verifica la firma Svix antes de leer el cuerpo.
 //
 // Conteo de la integración de la ola 2: 78 + 9 (Conductor) + 1 (Vigía) + 1 (Carta Porte) = 89.
-const RUTAS_APP_REVISADAS = 89;
+// 89 → 90 (loop punta a punta, W3 «GPS/Jornada», 2-oct-2026): una ruta,
+//   · `api/gps/push/[flota]/route.ts` — SIN sesión a propósito: es el endpoint al que un GPS
+//     propio hace POST. Su puerta es la firma HMAC-SHA256 por flota (secreto cifrado en la
+//     base, rotable con ventana de 24 h, tiempo constante, timestamp firmado ±5 min); el
+//     límite de tasa (por IP y por flota) corre ANTES de leer el cuerpo, el cuerpo está
+//     acotado (256 KiB / 500 lecturas), flota inexistente, push apagado y firma mala
+//     responden igual (401) y todo se asienta con el tenant del PATH ya autenticado por su
+//     secreto — nunca con un dato del cuerpo.
+const RUTAS_APP_REVISADAS = 90;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
