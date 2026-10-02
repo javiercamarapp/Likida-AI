@@ -147,3 +147,83 @@ describe('resolverPac — sin configuración no hay PAC', () => {
     vi.unstubAllEnvs();
   });
 });
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CANCELACIÓN (0541) — contrato contra fixtures de la documentación oficial de SW:
+//   https://developers.sw.com.mx/knowledge-base/cancelacion-cfdi/
+//   https://developers.sw.com.mx/knowledge-base/cancelacion-cfdi-con-estatus/
+// NO se probó contra SW real: el CSD de la flota en la bóveda del PAC y el
+// comportamiento con receptor que debe aceptar son bloqueos externos.
+// ═══════════════════════════════════════════════════════════════════════════
+import fx201 from './fixtures/sw_cancelacion_201.json';
+import fx202 from './fixtures/sw_cancelacion_202_ya_cancelado.json';
+import fx205 from './fixtures/sw_cancelacion_205_inexistente.json';
+import fxErr from './fixtures/sw_cancelacion_error_certificado.json';
+
+describe('SW · cancelar por UUID', () => {
+  const UUID = 'fe4e71b0-8959-4fb9-8091-f5ac4fb0fef8';
+  const SOL = { rfcEmisor: 'EKU9003173C9', uuid: UUID, motivo: '02' as const };
+  const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status });
+
+  it('201 → en_proceso (NO cancelado) y la URL es la documentada', async () => {
+    fetchMock.mockResolvedValueOnce(respAuth()).mockResolvedValueOnce(json(fx201));
+    const r = await crearProveedorSw(CFG).cancelar(SOL);
+    expect(r).toMatchObject({ ok: true, estado: 'en_proceso', codigoSat: '201', yaEstaba: false });
+    const [url, init] = fetchMock.mock.calls[1];
+    expect(url).toBe(`https://pac.prueba/cfdi33/cancel/EKU9003173C9/${UUID}/02`);
+    expect(init.method).toBe('POST');
+    expect(init.headers.Authorization).toBe('Bearer tok-1');
+  });
+
+  it('motivo 01 con folio de sustitución lo agrega a la ruta', async () => {
+    fetchMock.mockResolvedValueOnce(respAuth()).mockResolvedValueOnce(json(fx201));
+    await crearProveedorSw(CFG).cancelar({ ...SOL, motivo: '01', folioSustitucion: 'fe4e71b0-0000-0000-0000-f5ac4fb0fef8' });
+    expect(fetchMock.mock.calls[1][0]).toBe(`https://pac.prueba/cfdi33/cancel/EKU9003173C9/${UUID}/01/fe4e71b0-0000-0000-0000-f5ac4fb0fef8`);
+  });
+
+  it('202 → cancelado y yaEstaba (repetir la petición es inocuo)', async () => {
+    fetchMock.mockResolvedValueOnce(respAuth()).mockResolvedValueOnce(json(fx202));
+    expect(await crearProveedorSw(CFG).cancelar(SOL)).toMatchObject({ ok: true, estado: 'cancelado', yaEstaba: true });
+  });
+
+  it('205 (UUID inexistente) NO es una cancelación: rechazado con el código', async () => {
+    fetchMock.mockResolvedValueOnce(respAuth()).mockResolvedValueOnce(json(fx205));
+    const r = await crearProveedorSw(CFG).cancelar(SOL);
+    expect(r).toMatchObject({ ok: false, clase: 'rechazado', codigo: '205' });
+    if (!r.ok) expect(r.mensaje).toContain('48 h');
+  });
+
+  it('el error 400 del PAC viaja tal cual, con su código separado', async () => {
+    fetchMock.mockResolvedValueOnce(respAuth()).mockResolvedValueOnce(json(fxErr, 400));
+    const r = await crearProveedorSw(CFG).cancelar(SOL);
+    expect(r).toMatchObject({ ok: false, clase: 'rechazado', codigo: 'CACFDI33' });
+    if (!r.ok) expect(r.mensaje).toContain('CA305 - Certificado Inválido.');
+  });
+
+  it('timeout = clase red con la advertencia (no se da por cancelado)', async () => {
+    fetchMock.mockResolvedValueOnce(respAuth()).mockRejectedValueOnce(new Error('timeout'));
+    const r = await crearProveedorSw(CFG).cancelar(SOL);
+    expect(r).toMatchObject({ ok: false, clase: 'red' });
+    if (!r.ok) expect(r.mensaje).toContain('sigue vigente');
+  });
+
+  it('un 401 con token cacheado renueva UNA vez; el segundo es auth', async () => {
+    fetchMock.mockResolvedValueOnce(respAuth('viejo')).mockResolvedValueOnce(json({}, 401)).mockResolvedValueOnce(respAuth('nuevo')).mockResolvedValueOnce(json({}, 401));
+    const r = await crearProveedorSw(CFG).cancelar(SOL);
+    expect(r).toMatchObject({ ok: false, clase: 'auth' });
+  });
+
+  it('valida localmente: motivo fuera del catálogo, 01 sin folio y folio con motivo ≠ 01 NO llaman al PAC', async () => {
+    const pac = crearProveedorSw(CFG);
+    expect(await pac.cancelar({ ...SOL, motivo: '09' as never })).toMatchObject({ ok: false, clase: 'rechazado' });
+    expect(await pac.cancelar({ ...SOL, motivo: '01' })).toMatchObject({ ok: false, clase: 'rechazado' });
+    expect(await pac.cancelar({ ...SOL, folioSustitucion: 'x' })).toMatchObject({ ok: false, clase: 'rechazado' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('cuerpo ilegible = red (verifica antes de dar por cancelado)', async () => {
+    fetchMock.mockResolvedValueOnce(respAuth()).mockResolvedValueOnce(new Response('<html>502</html>', { status: 502 }));
+    expect(await crearProveedorSw(CFG).cancelar(SOL)).toMatchObject({ ok: false, clase: 'red' });
+  });
+});
