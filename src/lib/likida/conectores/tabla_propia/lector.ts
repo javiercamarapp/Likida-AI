@@ -6,7 +6,7 @@ import {
   type OpcionesLecturaPosiciones, type PosicionTablaPropia, type ResultadoLectura,
 } from './contrato';
 import { leerGeocercasCsv, leerPosicionesCsv } from './csv';
-import { leerConfigTablaPropia, type Autenticacion, type ConfigTablaPropia, type MapeoEndpointGeocercasT, type MapeoEndpointPosicionesT } from './config';
+import { leerConfigTablaPropia, type Autenticacion, type ConfigComun, type ConfigTablaPropia, type MapeoEndpointGeocercasT, type MapeoEndpointPosicionesT } from './config';
 import { registrosAGeocercas, registrosAPosiciones, type Registro } from './filas';
 import { TIMEOUT_SQL_MS, construirSelect, crearEjecutorPg, type EjecutorSql } from './sql';
 import { localAUtc, utcALocal } from './tiempo';
@@ -43,7 +43,13 @@ export class LectorTablaPropiaSql implements LectorTablaPropia {
       columnaFecha: 'fecha_hora', desdeLocal: utcALocal(desde, this.cfg.zona), columnaUnidad: 'unidad', unidades: o.unidades, limite: this.cfg.limiteFilas,
     });
     const filas = await this.ejecutor.ejecutar({ ...consulta, timeoutMs: TIMEOUT_SQL_MS, zona: this.cfg.zona });
-    return registrosAPosiciones(filas, { zona: this.cfg.zona, primeraFila: 1 });
+    const r = registrosAPosiciones(filas, { zona: this.cfg.zona, primeraFila: 1 });
+    // La consulta ordena de la más reciente a la más vieja y corta en `limite_filas`: lo que se pierde por el tope son
+    // justo los puntos más viejos de la ventana (los que sube un búfer tardío). Se DICE: la vuelta sale parcial.
+    if (filas.length >= this.cfg.limiteFilas) {
+      r.rechazadas.push({ fila: this.cfg.limiteFilas + 1, motivo: `la lectura llegó al tope de ${this.cfg.limiteFilas} filas: se leyeron las más recientes y las más viejas de la ventana quedaron fuera; acota la ventana o sube limite_filas` });
+    }
+    return r;
   }
 
   async leerGeocercas(): Promise<ResultadoLectura<GeocercaTablaPropia>> {
@@ -194,6 +200,20 @@ export function crearLectorTablaPropia(valores: ValoresCredencial, deps: DepsLec
 const falla = (e: unknown): { motivo: string; falla: FallaTablaPropia; backlog: boolean } =>
   e instanceof ErrorTablaPropia ? { motivo: e.message, falla: e.falla, backlog: e.backlog } : { motivo: 'la lectura de la tabla propia falló', falla: 'proveedor', backlog: false };
 
+/** Los minutos de cada hora UTC en los que la vuelta del cron (cada 5 min) hace el barrido largo: exactamente una vuelta por hora. */
+export const MINUTOS_DE_BARRIDO_LARGO = 5;
+
+/**
+ * Cuánto hacia atrás lee ESTA vuelta. Normalmente la ventana de la flota; en la primera vuelta de cada hora, y si la flota
+ * encendió el barrido largo, esa ventana más larga (M2: los puntos que el tractor sube tarde, con la hora de cuando se
+ * midieron, que la ventana corta ya dejó atrás). Sin estado: lo decide el reloj; una vuelta perdida solo atrasa el barrido
+ * a la hora siguiente y repetir una lectura nunca duplica (el asentador es idempotente).
+ */
+export function ventanaDeLaVuelta(cfg: Pick<ConfigComun, 'ventanaMinutos' | 'barridoLargoMinutos'>, ahoraMs: number): number {
+  if (cfg.barridoLargoMinutos > cfg.ventanaMinutos && new Date(ahoraMs).getUTCMinutes() < MINUTOS_DE_BARRIDO_LARGO) return cfg.barridoLargoMinutos;
+  return cfg.ventanaMinutos;
+}
+
 // ── Adaptador al poller/asentador común ─────────────────────────────────────
 /**
  * Lo que `LECTORES_POSICION['tabla_propia']` ejecuta. Lee la ventana reciente (30 min por omisión; el asentador
@@ -209,7 +229,7 @@ export async function leerPosicionesTablaPropia(
   const c = crearLectorTablaPropia(valores, { http, ejecutor: opciones.ejecutor, reloj: opciones, ahora });
   if (!c.ok) return { ok: false, motivo: c.motivo, falla: 'formato' };
   try {
-    const r = await c.lector.leerPosiciones({ desdeUtc: new Date(ahora() - c.config.ventanaMinutos * 60_000) });
+    const r = await c.lector.leerPosiciones({ desdeUtc: new Date(ahora() - ventanaDeLaVuelta(c.config, ahora()) * 60_000) });
     const posiciones: PosicionLeida[] = r.filas.map((f) => ({
       deviceId: f.unidad, lat: f.lat, lng: f.lon, medidaEn: localAUtc(f.fechaHoraLocal, c.config.zona).toISOString(),
       velocidad: f.velocidadKmh, rumbo: null, ignicion: f.ignicion,

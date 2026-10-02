@@ -139,6 +139,12 @@ describe('configuración por flota', () => {
     expect(leerConfigTablaPropia({ ...csv, patron: 'bearer' })).toMatchObject({ ok: false }); // falta token
     expect(leerConfigTablaPropia({ ...csv, zona: 'Mordor/X' })).toMatchObject({ ok: false });
     expect(leerConfigTablaPropia({ ...csv, ventana_minutos: '99999' })).toMatchObject({ ok: false });
+    // M2: el barrido largo nace apagado y solo admite 0 o 60..1,440, mayor que la ventana
+    expect(leerConfigTablaPropia(csv)).toMatchObject({ ok: true, config: { barridoLargoMinutos: 0 } });
+    expect(leerConfigTablaPropia({ ...csv, barrido_largo_minutos: '360' })).toMatchObject({ ok: true, config: { barridoLargoMinutos: 360, ventanaMinutos: 30 } });
+    for (const malo of ['30', '59', '1441', 'seis horas', '-1']) expect(leerConfigTablaPropia({ ...csv, barrido_largo_minutos: malo }), malo).toMatchObject({ ok: false });
+    expect(leerConfigTablaPropia({ ...csv, ventana_minutos: '120', barrido_largo_minutos: '120' })).toMatchObject({ ok: false }); // no mayor que la ventana
+    expect(leerConfigTablaPropia({ ...csv, ventana_minutos: '120', barrido_largo_minutos: '0' })).toMatchObject({ ok: true });
     expect(leerConfigTablaPropia({ modo: 'telepatia' })).toMatchObject({ ok: false });
     expect(leerConfigTablaPropia({ ...csv, base_url: 'sftp://s.ejemplo.com/p.csv' })).toMatchObject({ ok: true });
   });
