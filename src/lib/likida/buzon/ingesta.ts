@@ -113,6 +113,14 @@ export async function procesarCorreoBuzon(
     else if (estado === 'ignorada') resumen.ignoradas++;
   };
   const caida = (nombre: string, e: unknown) => {
+    // Un entorno sin la 0530 NO puede guardar este archivo (PDF/bucket): es permanente, no se reintenta el correo
+    // (reintentarlo daría 503 para siempre sobre los XML buenos del mismo correo). Se cuenta como ignorado.
+    if (e instanceof repoBuzon.BuzonSinMigrar) {
+      resumen.ignoradas++;
+      resumen.documentos.push({ nombre, estado: 'ignorada', motivo: 'el buzón de PDF aún no está disponible en este entorno (falta la 0530)', cfdiUuid: null });
+      logger.warn('buzon.documento_sin_migrar', { emailId, tenantId, archivo: repoBuzon.nombreVisible(nombre) });
+      return;
+    }
     resumen.caidas++;
     logger.warn('buzon.documento_caido', { emailId, tenantId, archivo: repoBuzon.nombreVisible(nombre), err: e instanceof Error ? e.message : String(e) });
   };

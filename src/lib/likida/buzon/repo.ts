@@ -20,6 +20,16 @@ import type { DatosPdfFactura } from './pdf_factura';
 
 export const BUCKET_BUZON = 'buzon-facturas';
 
+/** La base (o el bucket) de este entorno aún no trae la 0530. Lo permanente para ESTE archivo (no se puede
+ *  guardar un PDF sin su columna y su bucket), no un fallo transitorio: el correo NO debe reintentarse por esto. */
+export class BuzonSinMigrar extends Error {
+  constructor(detalle: string) { super(`buzón sin migrar (0530): ${detalle}`); this.name = 'BuzonSinMigrar'; }
+}
+
+/** 42P01 tabla inexistente, 42703 columna inexistente; PGRST204/PGRST205 son sus equivalentes de PostgREST. */
+const faltaMigracion = (e: { code?: string } | null | undefined): boolean =>
+  e?.code === '42P01' || e?.code === '42703' || e?.code === 'PGRST204' || e?.code === 'PGRST205';
+
 export type EstadoRecepcion = 'procesada' | 'duplicada' | 'revision' | 'descartada' | 'ignorada' | 'rechazada' | 'error';
 export type TipoRecepcion = 'xml' | 'pdf' | 'zip' | 'otro';
 
@@ -53,6 +63,7 @@ export function nombreVisible(nombre: string): string {
 /** Anota (o ACTUALIZA, si el correo se reintenta) la recepción de un archivo. LANZA si no se puede: sin el
  *  rastro, el correo no puede darse por procesado. */
 export async function registrarRecepcion(tenantId: string, r: NuevaRecepcion): Promise<void> {
+  // Sin la 0530 no hay dónde anotar el rastro: el XML sigue entrando como siempre y el rastro se pierde (se dice en el log).
   const { error } = await acotada(supabaseAdmin()
     .from('buzon_recepcion')
     .upsert({
@@ -64,7 +75,10 @@ export async function registrarRecepcion(tenantId: string, r: NuevaRecepcion): P
       confianza: r.confianza === null || r.confianza === undefined ? null : Math.round(r.confianza * 100) / 100,
       storage_ruta: r.storageRuta ?? null,
     }, { onConflict: 'tenant_id,email_id,sha256' }), 'buzon.registrar_recepcion');
-  if (error) throw new Error(`registrarRecepcion: ${error.message}`);
+  if (error) {
+    if (faltaMigracion(error)) { logger.warn('buzon.recepcion_sin_migrar', { tenantId, codigo: error.code }); return; }
+    throw new Error(`registrarRecepcion: ${error.message}`);
+  }
 }
 
 /** ¿Ese MISMO archivo ya se procesó antes (en otro correo)? Evita volver a pagar la visión. */
@@ -78,7 +92,10 @@ export async function recepcionPrevia(tenantId: string, sha256: string): Promise
     .order('recibido_en', { ascending: false })
     .order('id', { ascending: false })
     .limit(1), 'buzon.recepcion_previa');
-  if (error) throw new Error(`recepcionPrevia: ${error.message}`);
+  if (error) {
+    if (faltaMigracion(error)) return null;
+    throw new Error(`recepcionPrevia: ${error.message}`);
+  }
   const f = (data ?? [])[0] as { estado: EstadoRecepcion; cfdi_uuid: string | null; factura_id: string | null } | undefined;
   return f ? { estado: f.estado, cfdiUuid: f.cfdi_uuid, facturaId: f.factura_id } : null;
 }
@@ -88,7 +105,11 @@ export async function recepcionPrevia(tenantId: string, sha256: string): Promise
 export async function subirPdf(tenantId: string, sha256: string, bytes: Uint8Array): Promise<string> {
   const ruta = `${tenantId}/${sha256}.pdf`;
   const res = await acotada(supabaseAdmin().storage.from(BUCKET_BUZON).upload(ruta, aBuffer(bytes), { contentType: 'application/pdf', upsert: true }), 'buzon.subir_pdf');
-  if (res.error) throw new Error(`buzon subir: ${res.error.message}`);
+  if (res.error) {
+    // Bucket inexistente («Bucket not found»): el entorno no aplicó la 0530.
+    if (/bucket not found/i.test(res.error.message)) throw new BuzonSinMigrar('falta el bucket buzon-facturas');
+    throw new Error(`buzon subir: ${res.error.message}`);
+  }
   return ruta;
 }
 
@@ -114,16 +135,19 @@ export async function borrarPdf(ruta: string): Promise<void> {
 export interface FacturaExistente { id: string; estado: 'pendiente' | 'aprobada' | 'rechazada'; tieneXml: boolean; tienePdf: boolean }
 
 export async function facturaPorUuid(tenantId: string, uuid: string): Promise<FacturaExistente | null> {
-  const { data, error } = await acotada(supabaseAdmin()
+  const leer = (columnas: string) => acotada(supabaseAdmin()
     .from('factura_proveedor')
-    .select('id, estado, xml_crudo, pdf_ruta')
+    .select(columnas)
     .eq('tenant_id', tenantId)
     .eq('cfdi_uuid', uuid.toLowerCase())
     // orden-no-importa: (tenant_id, cfdi_uuid) es único en factura_proveedor: a lo más una fila
     .limit(1), 'buzon.factura_por_uuid');
+  let { data, error } = await leer('id, estado, xml_crudo, pdf_ruta');
+  // Base sin la 0530 (no existe `pdf_ruta`): se lee con las columnas de antes; ninguna fila tiene PDF.
+  if (faltaMigracion(error)) ({ data, error } = await leer('id, estado, xml_crudo'));
   if (error) throw new Error(`facturaPorUuid: ${error.message}`);
-  const f = (data ?? [])[0] as { id: string; estado: FacturaExistente['estado']; xml_crudo: string | null; pdf_ruta: string | null } | undefined;
-  return f ? { id: f.id, estado: f.estado, tieneXml: f.xml_crudo !== null, tienePdf: f.pdf_ruta !== null } : null;
+  const f = ((data ?? []) as unknown as Array<Record<string, unknown>>)[0] as { id: string; estado: FacturaExistente['estado']; xml_crudo: string | null; pdf_ruta: string | null } | undefined;
+  return f ? { id: f.id, estado: f.estado, tieneXml: f.xml_crudo !== null, tienePdf: typeof f.pdf_ruta === 'string' } : null;
 }
 
 /** Cuelga el PDF de una factura que aún no lo tiene. `false` = ya tenía uno (no se pisa). */
@@ -137,6 +161,7 @@ export async function adjuntarPdfAFactura(
     .eq('id', facturaId)
     .is('pdf_ruta', null)
     .select('id'), 'buzon.adjuntar_pdf');
+  if (faltaMigracion(error)) throw new BuzonSinMigrar('factura_proveedor sin columnas de PDF');
   if (error) throw new Error(`adjuntarPdfAFactura: ${error.message}`);
   return (data ?? []).length > 0;
 }
@@ -166,6 +191,8 @@ export async function completarFacturaConXml(
     .eq('estado', 'pendiente')
     .is('xml_crudo', null)
     .select('id'), 'buzon.completar_con_xml');
+  // Sin la 0530 ninguna fila se leyó de un PDF: no hay nada que completar (el XML duplicado es solo un duplicado).
+  if (faltaMigracion(error)) return false;
   if (error) throw new Error(`completarFacturaConXml: ${error.message}`);
   return (data ?? []).length > 0;
 }
@@ -199,6 +226,7 @@ export async function guardarFacturaDePdf(
     .single(), 'buzon.guardar_factura_pdf');
   if (error) {
     if (error.code === '23505') return { ok: false, motivo: 'duplicada' };
+    if (faltaMigracion(error)) throw new BuzonSinMigrar('factura_proveedor sin las columnas de lectura de PDF');
     logger.error('buzon.guardar_factura_pdf_fallo', { tenantId, err: error.message });
     return { ok: false, motivo: 'error' };
   }

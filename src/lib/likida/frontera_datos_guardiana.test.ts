@@ -192,7 +192,7 @@ import { join, relative } from 'node:path';
 //   · el resto (≈7) son llamadas añadidas a archivos que ya contaban (purga de la bitácora del
 //     buzón, la lectura de facturas tolerante a la base sin migrar).
 const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 273;
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_657;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_658;
 
 
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;

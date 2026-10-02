@@ -415,6 +415,20 @@ describe('convivencia con la cobranza por viaje', () => {
   });
 });
 
+describe('base SIN migrar (la 0525 aún no se aplica)', () => {
+  it('sin las columnas de la 0525 la cobranza por gasto se apaga sola y la de por viaje corre como siempre, sin fallos', async () => {
+    nuevaBase({ agente_cobranza_config: [config(A)], viaje: [viaje(A, 'v1', JUAN)], gasto: [gasto(A, 'g1', 'v1')] });
+    // El primer select de `agente_cobranza_config` es el de la cobranza por viaje (columnas de siempre); el
+    // segundo, el de la por gasto, pide las columnas nuevas y sobre una base sin migrar da 42703.
+    estado.db.fallarProxima('agente_cobranza_config', 'select', { code: '42703', message: 'column "por_gasto" does not exist' } as never, 1);
+    const r = await ejecutarCobranza(A, AHORA);
+    expect(r.fallos).toEqual([]);
+    expect(r.gasto).toBeUndefined();
+    expect(contactos()).toHaveLength(0);
+    expect(meta.sendTemplate.mock.calls.map((c) => c[1])).toEqual(['recordatorio_cierre']);
+  });
+});
+
 describe('otro tenant', () => {
   it('cada flota cobra SOLO sus gastos, a SUS choferes, y la que no encendió la función no se toca', async () => {
     nuevaBase({
