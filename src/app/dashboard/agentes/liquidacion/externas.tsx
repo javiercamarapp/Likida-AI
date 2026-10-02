@@ -54,6 +54,10 @@ export interface ExternasProps {
   formato?: Promise<{ excel: boolean; copia: boolean } | null>;
   /** Server action del host: reenvía la copia al jefe de flota de UNA liquidación. */
   reenviarCopia?: (fd: FormData) => Promise<void>;
+  /** Server action del host: sube el CSV/Excel de liquidaciones de la flota. Solo si el rol puede administrar. */
+  subirArchivo?: (fd: FormData) => Promise<void>;
+  /** Lo que dejó la última carga (de la URL: se valida aquí, no se confía). */
+  importacion?: { conteo?: string; detalle?: string };
 }
 
 const ROTULO_ESTADO: Record<EstadoLiquidacionExterna, { rotulo: string; ayuda: string; fg: string; bg: string }> = {
@@ -64,13 +68,15 @@ const ROTULO_ESTADO: Record<EstadoLiquidacionExterna, { rotulo: string; ayuda: s
   fallida: { rotulo: 'Falló', ayuda: 'No se pudo entregar. Se puede reintentar.', fg: 'var(--bad)', bg: 'var(--badbg)' },
 };
 
-export type MensajeExterno = 'reintentada' | 'no_aplica' | 'no_encontrada' | 'error' | 'copia_enviada' | 'copia_ya' | 'copia_fallo' | 'copia_sin_jefe';
+export type MensajeExterno = 'reintentada' | 'no_aplica' | 'no_encontrada' | 'error' | 'copia_enviada' | 'copia_ya' | 'copia_fallo' | 'copia_sin_jefe' | 'importada' | 'importacion_error';
 
 const MENSAJES: Record<MensajeExterno, { texto: string; tono: 'ok' | 'bad' }> = {
   copia_enviada: { texto: 'Listo: la copia salió hacia el jefe de flota.', tono: 'ok' },
   copia_ya: { texto: 'La copia ya se había enviado: no se mandó otra vez.', tono: 'ok' },
   copia_fallo: { texto: 'WhatsApp no aceptó la copia (¿la plantilla de avisos sigue sin aprobar?). La entrega al operador no se afectó. Vuelve a intentarlo más tarde.', tono: 'bad' },
   copia_sin_jefe: { texto: 'No hay jefe de flota designado: agrégalo en «Formato de las liquidaciones».', tono: 'bad' },
+  importada: { texto: 'Archivo procesado.', tono: 'ok' },
+  importacion_error: { texto: 'No se pudo leer el archivo.', tono: 'bad' },
   reintentada: { texto: 'Listo: la entrega se reintentó. Si WhatsApp la acepta, pasa a «Enviada».', tono: 'ok' },
   no_aplica: { texto: 'Esa liquidación ya no está fallida (alguien más la reintentó, o ya salió): no se mandó otra vez.', tono: 'bad' },
   no_encontrada: { texto: 'No encontré esa liquidación en tu flota.', tono: 'bad' },
@@ -88,6 +94,15 @@ export type FiltroExterno = EstadoLiquidacionExterna | 'no_coincide';
 export function leerFiltroExterno(v: string | undefined): FiltroExterno | null {
   if (v === 'no_coincide') return 'no_coincide';
   return v && (ESTADOS as readonly string[]).includes(v) ? (v as EstadoLiquidacionExterna) : null;
+}
+
+function textoImportacion(m: 'importada' | 'importacion_error', imp: ExternasProps['importacion']): string {
+  const det = (imp?.detalle ?? '').slice(0, 700);
+  if (m === 'importacion_error') return det || MENSAJES.importacion_error.texto;
+  const n = /^(\d{1,5})\.(\d{1,5})\.(\d{1,5})$/.exec(imp?.conteo ?? '');
+  if (!n) return MENSAJES.importada.texto;
+  const base = `Archivo procesado: ${n[1]} liquidación(es) recibida(s) y puestas a entregar, ${n[2]} ya estaban (no se repitieron), ${n[3]} con problemas.`;
+  return det ? `${base} ${det}` : base;
 }
 
 const CLASE_CONTROL = 'text-[12.5px] rounded-lg px-2 py-1.5 min-w-[9rem]';
@@ -125,8 +140,19 @@ export async function SeccionExternas(p: ExternasProps) {
       {p.mensaje && (
         <p role="status" className="text-[12.5px] rounded-lg px-3 py-2 mb-3"
           style={{ background: MENSAJES[p.mensaje].tono === 'ok' ? 'var(--okbg)' : 'var(--badbg)', color: MENSAJES[p.mensaje].tono === 'ok' ? 'var(--ok)' : 'var(--bad)' }}>
-          {MENSAJES[p.mensaje].texto}
+          {p.mensaje === 'importada' || p.mensaje === 'importacion_error' ? textoImportacion(p.mensaje, p.importacion) : MENSAJES[p.mensaje].texto}
         </p>
+      )}
+
+      {p.subirArchivo && (
+        <form action={p.subirArchivo} className="flex flex-wrap items-end gap-2 mb-3">
+          <label className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+            Subir liquidaciones (CSV o Excel de tu sistema; una fila por renglón, agrupadas por clave_externa)
+            <input type="file" name="archivo" accept=".csv,.txt,.xlsx,.xls,.ods" required className={`${CLASE_CONTROL} block mt-1`} style={ESTILO_CONTROL} />
+          </label>
+          <button type="submit" className="text-[12px] font-medium rounded-lg px-3 py-1.5"
+            style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Subir y entregar</button>
+        </form>
       )}
 
       {/* ── Las fichas: lo que pide a una persona, primero ── */}
