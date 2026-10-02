@@ -28,7 +28,8 @@ let mundo = new Mundo();
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => mundo.admin() }));
 
 const { crearViaje } = await import('../operacion');
-const { importarArchivoDelPanel } = await import('./acciones');
+const { importarArchivoDelPanel, guardarConvenioDelPanel } = await import('./acciones');
+const { despacharInstrucciones, instruccionesAlCambiarOperador } = await import('./envio');
 const { barridoAcercamiento } = await import('./acercamiento');
 const { atenderPreguntaConvenio } = await import('./pregunta');
 const { GET } = await import('@/app/api/export/convenios/route');
@@ -149,5 +150,143 @@ describe('el ciclo completo de un convenio', () => {
     expect(wa).toHaveLength(0);
     const r = await atenderPreguntaConvenio({ tenantId: T, operadorId, viajeAbiertoId: String(viajeId), texto: '¿qué documentos llevo?' });
     expect(r).toMatch(/No tengo indicaciones de «documentos que llevas» registradas.*jefe de tráfico/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// P7 — EDICIÓN EN PANTALLA Y EL CICLO DEL CRON, fuera de orden y con otra flota. Se ejerce el camino real: la acción del panel
+// (`guardarConvenioDelPanel`), el envío con claim, el barrido de acercamiento y el tablero de hitos, sobre la base en memoria
+// (con las dos funciones de la 0656/0657 espejadas; su garantía real la prueba supabase/tests/0656_convenio_guardar.sql).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('P7 — convenio editado en pantalla y ciclo del cron', () => {
+  const T2 = 'flota-2';
+  const cuerpo = (n: number) => wa[n].texto;
+  const convenioDe = (t: string) => mundo.tablas.cliente_convenio.find((c) => c.tenant_id === t)!;
+  const entradaEditada = (c: Record<string, unknown>, o: Partial<import('./edicion').EntradaConvenio> = {}): import('./edicion').EntradaConvenio => ({
+    convenioId: String(c.id), clienteId: '', nombre: 'Ruta norte', origen: 'Planta Zapopan', destino: 'CEDIS Tlaquepaque', sitioOrigenId: '', sitioDestinoId: '',
+    vigenteDesde: '', vigenteHasta: '', notas: '', version: String(c.version),
+    instrucciones: [
+      { categoria: 'puerta', texto: 'Entra por la puerta 7 de carga', momento: 'ambos', lugar: 'origen' },
+      { categoria: 'reportarse', texto: 'Con el guardia de la caseta 1', momento: 'acercamiento', lugar: 'origen' },
+      { categoria: 'puerta', texto: 'Puerta 5 lado oriente', momento: 'ambos', lugar: 'destino' },
+      { categoria: 'reportarse', texto: 'Con el jefe de andén Sr. Ramírez', momento: 'acercamiento', lugar: 'destino' },
+      { categoria: 'documentos', texto: 'Carta porte y orden de compra', momento: 'despacho', lugar: 'ambos' },
+    ],
+    llevarAViajes: true, reenviar: true, ...o,
+  });
+
+  it('acercamiento ANTES del despacho: el tractor ya está en la planta pero el viaje no tiene operador ni foto → no sale nada; al asignar, sale el despacho una vez y el acercamiento una sola vez, aunque el cron corra dos veces', async () => {
+    await importarArchivoDelPanel({ tenantId: T, rol: 'flota_admin' }, { bytes: null, texto: ARCHIVO });
+    // viaje SIN operador (no hay a quién escribirle): no despacha ni liga nada
+    const viajeId = await crearViaje(T, { unidadId, clienteId, origen: 'Planta Zapopan', destino: 'CEDIS Tlaquepaque', folio: 'F-3001' });
+    mundo.tablas.viaje.find((v) => v.id === viajeId)!.aceptado_en = AHORA.toISOString();
+    posicion(ORIGEN);
+    expect(wa).toHaveLength(0);
+    expect(mundo.tablas.viaje_convenio).toHaveLength(0);
+    for (let i = 0; i < 2; i++) expect(await barridoAcercamiento(undefined, AHORA)).toMatchObject({ candidatos: 0, enviados: 0 });
+
+    // ahora se asigna el operador (primera asignación): se liga el convenio y sale el despacho
+    mundo.tablas.viaje.find((v) => v.id === viajeId)!.operador_id = operadorId;
+    expect(await instruccionesAlCambiarOperador(T, String(viajeId), { cambio: true, operadorAnteriorId: null })).toMatchObject({ estado: 'enviado' });
+    expect(wa).toHaveLength(1);
+    expect(cuerpo(0)).toContain('instrucciones de tu viaje F-3001');
+    // dos corridas del cron (at-least-once): un solo aviso de acercamiento
+    const r1 = await barridoAcercamiento(undefined, AHORA);
+    const r2 = await barridoAcercamiento(undefined, AHORA);
+    expect([r1.enviados, r2.enviados]).toEqual([1, 0]);
+    expect(wa).toHaveLength(2);
+    // y reintentar el despacho (misma entrega duplicada) no manda otro
+    expect(await despacharInstrucciones(T, String(viajeId))).toEqual({ estado: 'ya_enviado' });
+    expect(wa).toHaveLength(2);
+  });
+
+  it('convenio CAMBIADO tras despachar: la oficina lo edita, el viaje en curso recibe la versión nueva UNA vez, el acercamiento ya avisado no se repite y el de la otra planta sale con lo nuevo', async () => {
+    await importarArchivoDelPanel({ tenantId: T, rol: 'flota_admin' }, { bytes: null, texto: ARCHIVO });
+    const viajeId = String(await crearViaje(T, { operadorId, unidadId, clienteId, origen: 'Planta Zapopan', destino: 'CEDIS Tlaquepaque', folio: 'F-3002' }));
+    mundo.tablas.viaje.find((v) => v.id === viajeId)!.aceptado_en = AHORA.toISOString();
+    posicion(ORIGEN);
+    expect((await barridoAcercamiento(undefined, AHORA)).enviados).toBe(1);
+    expect(wa).toHaveLength(2); // despacho + acercamiento a la planta de carga
+
+    // La oficina corrige las dos puertas desde la pantalla, llevándolo a los viajes en curso y reenviando.
+    const conv = convenioDe(T);
+    const r = await guardarConvenioDelPanel({ tenantId: T, rol: 'encargado' }, entradaEditada(conv));
+    expect(r).toMatchObject({ ok: true, mensaje: expect.stringMatching(/actualizaron las instrucciones de 1 viaje en curso.*mandar a 1 operador/) });
+    expect(wa).toHaveLength(3);
+    expect(wa[2].telefono).toBe('5213312345678');
+    expect(cuerpo(2)).toContain('actualizamos las instrucciones de tu viaje F-3002');
+    expect(cuerpo(2)).toContain('Al cargar: Entra por la puerta 7 de carga');
+    expect(cuerpo(2)).toContain('Al descargar: Puerta 5 lado oriente');
+    expect(cuerpo(2)).not.toMatch(/puerta 1|Puerta 3/);
+    expect(mundo.tablas.viaje_convenio[0]).toMatchObject({ despacho_canal: 'texto' }); // el despacho volvió a sellarse al reenviar
+
+    // Cron fuera de orden: el aviso de la planta de carga ya salió y NO se repite con la versión nueva…
+    expect((await barridoAcercamiento(undefined, AHORA)).enviados).toBe(0);
+    expect(wa).toHaveLength(3);
+    // …carga, sale, y al acercarse a la planta de descarga el aviso trae la puerta NUEVA, una sola vez, aunque el cron corra dos veces.
+    mundo.poner('viaje_hito', { tenant_id: T, viaje_id: viajeId, tipo: 'llegada_carga', estado: 'validado' });
+    mundo.poner('viaje_hito', { tenant_id: T, viaje_id: viajeId, tipo: 'salida_carga', estado: 'recibido' });
+    posicion(DESTINO, 0);
+    expect([(await barridoAcercamiento(undefined, AHORA)).enviados, (await barridoAcercamiento(undefined, AHORA)).enviados]).toEqual([1, 0]);
+    expect(wa).toHaveLength(4);
+    expect(cuerpo(3)).toContain('Puerta 5 lado oriente');
+    expect(cuerpo(3)).not.toMatch(/Puerta 3|puerta 7/);
+    // y la pregunta del operador responde con lo vigente
+    expect(await atenderPreguntaConvenio({ tenantId: T, operadorId, viajeAbiertoId: viajeId, texto: 'por donde entro' })).toBe('• Por dónde entras: Puerta 5 lado oriente');
+  });
+
+  it('editar SIN marcar «llevar a los viajes»: el viaje en curso conserva lo que se le dijo, y la versión vieja de la forma ya no guarda', async () => {
+    await importarArchivoDelPanel({ tenantId: T, rol: 'flota_admin' }, { bytes: null, texto: ARCHIVO });
+    const viajeId = String(await crearViaje(T, { operadorId, unidadId, clienteId, origen: 'Planta Zapopan', destino: 'CEDIS Tlaquepaque', folio: 'F-3003' }));
+    const conv = convenioDe(T);
+    const versionQueLeyoLaForma = conv.version;
+    const r = await guardarConvenioDelPanel({ tenantId: T, rol: 'flota_admin' }, entradaEditada(conv, { llevarAViajes: false, reenviar: false }));
+    expect(r).toMatchObject({ ok: true, mensaje: expect.stringContaining('conservan las instrucciones que ya se les dijeron') });
+    expect(wa).toHaveLength(1); // solo el despacho original
+    expect(JSON.stringify(mundo.tablas.viaje_convenio[0].instrucciones)).toContain('puerta 1 de carga');
+    expect(JSON.stringify(mundo.tablas.viaje_convenio[0].instrucciones)).not.toContain('puerta 7');
+    // un viaje nuevo del mismo cliente SÍ toma la versión nueva
+    const otro = String(mundo.poner('operador', { tenant_id: T, nombre: 'Ana López', telefono: '5213398765432', activo: true }).id);
+    await crearViaje(T, { operadorId: otro, unidadId, clienteId, origen: 'Planta Zapopan', destino: 'CEDIS Tlaquepaque', folio: 'F-3004' });
+    expect(cuerpo(1)).toContain('puerta 7 de carga');
+    // la forma que se abrió antes (versión vieja) choca: no se guarda nada
+    const viejo = await guardarConvenioDelPanel({ tenantId: T, rol: 'flota_admin' }, { ...entradaEditada(conv, { nombre: 'Pisado' }), version: String(versionQueLeyoLaForma) });
+    expect(viejo).toMatchObject({ ok: false, error: expect.stringContaining('Alguien más cambió este convenio') });
+    expect(convenioDe(T).nombre).toBe('Ruta norte');
+    void viajeId;
+  });
+
+  it('OTRA flota: no puede editar el convenio ajeno, y editar el de una flota no toca los viajes de otra que se llame igual', async () => {
+    // flota 2: mismo nombre de cliente, de convenio y de sitios, su propio viaje ya despachado
+    const cliente2 = String(mundo.poner('cliente', { tenant_id: T2, nombre: 'Cliente Uno' }).id);
+    const operador2 = String(mundo.poner('operador', { tenant_id: T2, nombre: 'Luis Ruiz', telefono: '5213300001111', activo: true }).id);
+    const unidad2 = String(mundo.poner('unidad', { tenant_id: T2, numero_economico: 'T-90' }).id);
+    mundo.poner('geocerca', { tenant_id: T2, nombre: 'Planta Zapopan', codigo: 'ZAP', activa: true, ...ORIGEN, radio_m: 300 });
+    mundo.poner('geocerca', { tenant_id: T2, nombre: 'CEDIS Tlaquepaque', codigo: 'CED', activa: true, ...DESTINO, radio_m: 300 });
+    await importarArchivoDelPanel({ tenantId: T, rol: 'flota_admin' }, { bytes: null, texto: ARCHIVO });
+    await importarArchivoDelPanel({ tenantId: T2, rol: 'flota_admin' }, { bytes: null, texto: ARCHIVO });
+    const v1 = String(await crearViaje(T, { operadorId, unidadId, clienteId, origen: 'Planta Zapopan', destino: 'CEDIS Tlaquepaque', folio: 'F-3005' }));
+    const v2 = String(await crearViaje(T2, { operadorId: operador2, unidadId: unidad2, clienteId: cliente2, origen: 'Planta Zapopan', destino: 'CEDIS Tlaquepaque', folio: 'F-4005' }));
+    expect(wa).toHaveLength(2);
+    const c1 = convenioDe(T); const c2 = convenioDe(T2);
+    expect(c1.id).not.toBe(c2.id);
+
+    // la flota 2 intenta editar el convenio de la flota 1 (id adivinado): no existe para ella
+    const ajeno = await guardarConvenioDelPanel({ tenantId: T2, rol: 'flota_admin' }, entradaEditada(c1, { nombre: 'Robado' }));
+    expect(ajeno).toMatchObject({ ok: false, error: expect.stringContaining('ya no existe') });
+    expect(convenioDe(T).nombre).toBe('Ruta norte');
+
+    // la flota 1 edita el suyo y lo lleva a sus viajes: el viaje de la flota 2 no se entera
+    const r = await guardarConvenioDelPanel({ tenantId: T, rol: 'flota_admin' }, entradaEditada(c1));
+    expect(r).toMatchObject({ ok: true });
+    expect(wa).toHaveLength(3);
+    expect(wa[2].telefono).toBe('5213312345678');
+    const foto = (v: string) => JSON.stringify(mundo.tablas.viaje_convenio.find((x) => x.viaje_id === v)!.instrucciones);
+    expect(foto(v1)).toContain('puerta 7');
+    expect(foto(v2)).toContain('puerta 1 de carga');
+    expect(foto(v2)).not.toContain('puerta 7');
+    // toda llamada a las funciones de edición llevó el tenant de la sesión que la hizo
+    expect(mundo.rpcLlamadas.every((l) => l.args.p_tenant === T || l.args.p_tenant === T2)).toBe(true);
+    expect(mundo.rpcLlamadas.filter((l) => l.nombre === 'refrescar_viajes_de_convenio').every((l) => l.args.p_tenant === T)).toBe(true);
   });
 });
