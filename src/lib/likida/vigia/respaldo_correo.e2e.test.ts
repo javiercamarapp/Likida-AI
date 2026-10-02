@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { atenderMensajeCliente, barridoVigia } from './servicio';
+import { atenderMensajeCliente, barridoVigia, hashTelefono } from './servicio';
 import { respaldarPorCorreo, claveCorreo, TEXTO_SIN_CONFIGURAR } from './respaldo_correo';
 import { escenario, RepoEnMemoria } from './repo.fixture';
 import { AHORA, T1, T2, CLIENTE_A, CLIENTE_B, estatus } from './datos.fixture';
@@ -264,5 +264,71 @@ describe('otro tenant', () => {
     expect(a.correos).toHaveLength(0);
     expect(repo.correos).toHaveLength(0);
     expect(CLIENTE_A).not.toBe(CLIENTE_B);
+  });
+});
+
+describe('ronda 17 · M1: el gerente solo con correo y el respaldo apagado no deja el nivel 1 sin aviso', () => {
+  it('con el respaldo APAGADO el aviso cae al destino de siempre (jefe de flota) y el gerente sin teléfono queda a la vista', async () => {
+    const { repo } = escenario();                                                // respaldoCorreo = false; el jefe de flota tiene teléfono
+    repo.destinatariosNivel = async () => [{ userId: 'u-ger', directorId: null, nombre: null, telefono: null, correo: 'ger@flota.mx' }];
+    await clienteEspera(repo);
+    const a = armar(repo, { ahora: min(35), waOk: ['525599999999'] });
+    const r = await barridoVigia(a.deps);
+    expect(a.whatsapp.some((w) => w.telefono === '525599999999' && w.contexto === 'vigia.escalamiento')).toBe(true);
+    expect(r.escaladas).toBe(1);
+    expect(a.correos).toHaveLength(0);
+    const motivos = repo.eventosDe('fallo_envio').map((e) => (e.detalle as { motivo: string }).motivo);
+    expect(motivos).toContain('correo_apagado');
+  });
+
+  it('con el respaldo ENCENDIDO el gerente solo con correo sí cuenta y el jefe no se consulta', async () => {
+    const { repo } = escenario({ respaldoCorreo: true });
+    repo.destinatariosNivel = async () => [{ userId: 'u-ger', directorId: null, nombre: null, telefono: null, correo: 'ger@flota.mx' }];
+    await clienteEspera(repo);
+    const a = armar(repo, { ahora: min(35) });
+    await barridoVigia(a.deps);
+    expect(a.correos.map((c) => c.para)).toEqual(['ger@flota.mx']);
+    expect(a.whatsapp.some((w) => w.telefono === '525599999999' && w.contexto === 'vigia.escalamiento')).toBe(false);
+  });
+});
+
+describe('ronda 17 · el fallo de un destinatario no corta a los demás', () => {
+  it('si la base falla al reclamar a Ana, Beto y Carla igual reciben su aviso', async () => {
+    const { repo } = escenario({ respaldoCorreo: true });
+    repo.agregarDirector(T1, 1, { nombre: 'Ana', telefono: '525577770001' });
+    repo.agregarDirector(T1, 1, { nombre: 'Beto', telefono: '525577770002' });
+    repo.agregarDirector(T1, 1, { nombre: 'Carla', telefono: '525577770003' });
+    await clienteEspera(repo);
+    const huellaAna = hashTelefono('525577770001').slice(0, 16);
+    const evento = repo.evento.bind(repo);
+    repo.evento = (async (t: string, e: Parameters<typeof evento>[1]) => {
+      if (e.clave?.includes(`:d:${huellaAna}`)) throw new Error('base caída');
+      return evento(t, e);
+    }) as typeof repo.evento;
+    const a = armar(repo, { ahora: min(35), waOk: ['525577770002', '525577770003'] });
+    await barridoVigia(a.deps);
+    const enviados = a.whatsapp.filter((w) => w.contexto === 'vigia.escalamiento').map((w) => w.telefono).sort();
+    expect(enviados).toEqual(['525577770002', '525577770003']);
+  });
+
+  it('si la pasada murió entre el sello y la lista, la reentrada retoma a todos sin repetir a los ya reclamados', async () => {
+    const { repo } = escenario({ respaldoCorreo: true });
+    repo.agregarDirector(T1, 1, { nombre: 'Ana', telefono: '525577770001' });
+    repo.agregarDirector(T1, 1, { nombre: 'Beto', telefono: '525577770002' });
+    await clienteEspera(repo);
+    const actualizar = repo.actualizarConversacion.bind(repo);
+    repo.actualizarConversacion = (async (...args: Parameters<typeof actualizar>) => {
+      if ('escalamientoNivel' in args[2]) throw new Error('murió tras el sello');   // solo la subida de nivel: el sello ya quedó escrito
+      return actualizar(...args);
+    }) as typeof repo.actualizarConversacion;
+    const a = armar(repo, { ahora: min(35), waOk: ['525577770001', '525577770002'] });
+    await barridoVigia(a.deps).catch(() => undefined);
+    expect(a.whatsapp.filter((w) => w.contexto === 'vigia.escalamiento')).toHaveLength(0);
+    expect(repo.eventosDe('escalada').filter((e) => e.clave && !e.clave.includes(':d:'))).toHaveLength(1);   // el sello sí quedó
+    repo.actualizarConversacion = actualizar;
+    await barridoVigia(a.deps);
+    expect(a.whatsapp.filter((w) => w.contexto === 'vigia.escalamiento').map((w) => w.telefono).sort()).toEqual(['525577770001', '525577770002']);
+    await barridoVigia(a.deps);
+    expect(a.whatsapp.filter((w) => w.contexto === 'vigia.escalamiento')).toHaveLength(2);
   });
 });

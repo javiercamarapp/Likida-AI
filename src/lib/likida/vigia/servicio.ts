@@ -475,7 +475,9 @@ async function ejecutarEscalamiento(
   if (!nuevo) {
     // El sello ya existía pero la conversación sigue en un nivel menor: una pasada anterior murió entre el sello y la
     // actualización. Se sube el nivel aquí; si no, el hilo se quedaría en la cola para siempre sin poder avisar.
-    await repo.actualizarConversacion(c.tenantId, c.conv.id, { escalamientoNivel: a.nivel }, guarda(a.nivel));
+    const subido = await repo.actualizarConversacion(c.tenantId, c.conv.id, { escalamientoNivel: a.nivel }, guarda(a.nivel));
+    // Y se RETOMA la lista: si la pasada murió a media lista, el resto no se avisó. Las personas ya reclamadas se saltan.
+    if (subido && opciones.enviar) await avisarLista(a, c, deps).catch((e) => logger.error('vigia.escalamiento_retomar_fallo', { tenant: c.tenantId, err: e instanceof Error ? e.message : String(e) }));
     return 'duplicado';
   }
 
@@ -483,7 +485,17 @@ async function ejecutarEscalamiento(
   if (!aplicado) return 'obsoleto';
   if (!opciones.enviar) return 'registrado';
 
-  const destinos = await destinatariosDe(repo, c.tenantId, c.contacto, a.nivel);
+  return avisarLista(a, c, deps);
+}
+
+/**
+ * Avisa a la lista del nivel. CADA PERSONA se reclama y se procesa por separado: se reclama con su propia llave (`:d:<huella>`,
+ * única por flota) ANTES de mandar, y un fallo con una persona (la base, WhatsApp, el correo) se registra y NO corta a las demás.
+ * Si la pasada murió a media lista, la reentrada (el sello ya existe) retoma por aquí: las personas ya reclamadas se saltan.
+ */
+async function avisarLista(a: AccionEscalamiento, c: ContextoEscalamiento, deps: DepsVigia): Promise<ResultadoEscalamiento> {
+  const { repo } = deps;
+  const destinos = await destinatariosDe(repo, c.tenantId, c.contacto, a.nivel, c.config.respaldoCorreo);
   if (destinos.length === 0) {
     await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'sin_destinatario', clave: `${a.clave}:sin_destinatario`, nivel: a.nivel });
     return 'sin_destinatario';
@@ -492,43 +504,78 @@ async function ejecutarEscalamiento(
   if (!ultimo) return 'registrado';
   const datosCorreo: DatosAvisoCorreo = { cliente: c.nombreCliente ?? 'Un cliente', motivo: a.motivo, minutos: a.minutosEsperando, nivel: a.nivel };
 
-  // A CADA persona de la lista, por su canal: WhatsApp si tiene teléfono; correo de respaldo si el WhatsApp no salió (y la flota lo
-  // encendió) o si solo tiene correo. Lo que ya está en camino (cola de reintento de Meta) NO se duplica por correo.
   let entregado = false;
+  let reclamados = 0;
   for (const d of destinos) {
-    const hash = d.telefono ? hashTelefono(d.telefono) : d.correo ? hashCorreo(d.correo) : null;
-    let porCorreo = !d.telefono;
-    if (d.telefono) {
-      const r = await avisarEscalamiento({
-        tenantId: c.tenantId, telefonoDestino: d.telefono, mensajeId: ultimo, nombreCliente: c.nombreCliente ?? 'Un cliente',
-        motivo: a.motivo, minutosEsperando: a.minutosEsperando, nivel: a.nivel,
-      }, deps.enviar);
-      if (r.ok) {
-        entregado = true;
-        await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'escalada', nivel: a.nivel, destinatarioHash: hash, actorUserId: d.userId, detalle: { entregado: true, canal: 'whatsapp' } });
-      } else {
-        await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'fallo_envio', nivel: a.nivel, destinatarioHash: hash, detalle: { motivo: r.motivo, aviso: 'escalamiento' } });
-        porCorreo = debeRespaldarPorCorreo(r);
-      }
+    try {
+      const r = await avisarADestinatario(d, a, c, deps, ultimo, datosCorreo);
+      if (r === 'saltado') continue;
+      reclamados += 1;
+      if (r === 'entregado') entregado = true;
+    } catch (e) {
+      reclamados += 1;
+      logger.error('vigia.escalamiento_destinatario_fallo', { tenant: c.tenantId, err: e instanceof Error ? e.message : String(e) });
     }
-    if (!porCorreo || !d.correo) continue;
-    if (!c.config.respaldoCorreo) {
-      // Solo tiene correo y el respaldo está apagado: no hay por dónde avisarle, y se deja a la vista (no en silencio).
-      if (!d.telefono) await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'fallo_envio', nivel: a.nivel, destinatarioHash: hash, detalle: { motivo: 'correo_apagado', aviso: 'escalamiento' } });
-      continue;
-    }
-    const res = await respaldarPorCorreo({
-      tenantId: c.tenantId, conversacionId: c.conv.id, clave: claveCorreo(a.clave, d.correo), nivel: a.nivel, directorId: d.directorId, correo: d.correo, datos: datosCorreo,
-    }, deps);
-    if (res === 'enviado') entregado = true;
   }
+  if (reclamados === 0) return 'duplicado';   // todos ya estaban reclamados por otra pasada: aquí no se avisó a nadie
   return entregado ? 'avisado' : 'fallo_envio';
 }
 
-/** A quiénes se avisa en un nivel (lista de directores y, si no hay, el destino de siempre). Si la lista no se puede leer, cae al destino de siempre. */
-async function destinatariosDe(repo: RepoVigia, tenantId: string, contacto: Contacto, nivel: NivelDirector): Promise<DestinatarioAviso[]> {
+/**
+ * Una persona de la lista, por su canal: WhatsApp si tiene teléfono; correo de respaldo si el WhatsApp no salió (y la flota lo
+ * encendió) o si solo tiene correo. Lo que ya está en camino (cola de reintento de Meta) NO se duplica por correo.
+ * `saltado`: otra pasada ya reclamó a esta persona para este aviso.
+ */
+async function avisarADestinatario(
+  d: DestinatarioAviso, a: AccionEscalamiento, c: ContextoEscalamiento, deps: DepsVigia, ultimo: string, datosCorreo: DatosAvisoCorreo,
+): Promise<'entregado' | 'no_entregado' | 'saltado'> {
+  const { repo } = deps;
+  const hash = d.telefono ? hashTelefono(d.telefono) : d.correo ? hashCorreo(d.correo) : null;
+  if (hash) {
+    const reclamo = await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'escalada', clave: `${a.clave}:d:${hash.slice(0, 16)}`, nivel: a.nivel, detalle: { destinatario: true } });
+    if (!reclamo) return 'saltado';
+  }
+  let entregado = false;
+  let porCorreo = !d.telefono;
+  if (d.telefono) {
+    const r = await avisarEscalamiento({
+      tenantId: c.tenantId, telefonoDestino: d.telefono, mensajeId: ultimo, nombreCliente: c.nombreCliente ?? 'Un cliente',
+      motivo: a.motivo, minutosEsperando: a.minutosEsperando, nivel: a.nivel,
+    }, deps.enviar);
+    if (r.ok) {
+      entregado = true;
+      await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'escalada', nivel: a.nivel, destinatarioHash: hash, actorUserId: d.userId, detalle: { entregado: true, canal: 'whatsapp' } });
+    } else {
+      await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'fallo_envio', nivel: a.nivel, destinatarioHash: hash, detalle: { motivo: r.motivo, aviso: 'escalamiento' } });
+      porCorreo = debeRespaldarPorCorreo(r);
+    }
+  }
+  if (!porCorreo || !d.correo) return entregado ? 'entregado' : 'no_entregado';
+  if (!c.config.respaldoCorreo) {
+    // Solo tiene correo y el respaldo está apagado: no hay por dónde avisarle, y se deja a la vista (no en silencio).
+    if (!d.telefono) await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'fallo_envio', nivel: a.nivel, destinatarioHash: hash, detalle: { motivo: 'correo_apagado', aviso: 'escalamiento' } });
+    return entregado ? 'entregado' : 'no_entregado';
+  }
+  const res = await respaldarPorCorreo({
+    tenantId: c.tenantId, conversacionId: c.conv.id, clave: claveCorreo(a.clave, d.correo), nivel: a.nivel, directorId: d.directorId, correo: d.correo, datos: datosCorreo,
+  }, deps);
+  return entregado || res === 'enviado' ? 'entregado' : 'no_entregado';
+}
+
+/**
+ * A quiénes se avisa en un nivel (lista de directores y, si no hay, el destino de siempre). Si la lista no se puede leer, cae al
+ * destino de siempre. Con el respaldo por correo APAGADO, quien solo tiene correo no tiene canal: si nadie de la lista tiene
+ * teléfono, el nivel se completa con el destino de siempre (gerente con teléfono o jefe de flota), como antes de P14. Los que solo
+ * tienen correo se conservan para que quede el evento `correo_apagado` (no en silencio).
+ */
+async function destinatariosDe(repo: RepoVigia, tenantId: string, contacto: Contacto, nivel: NivelDirector, respaldoCorreo: boolean): Promise<DestinatarioAviso[]> {
   try {
-    return unirDestinatarios(await repo.destinatariosNivel(tenantId, contacto, nivel));
+    const lista = unirDestinatarios(await repo.destinatariosNivel(tenantId, contacto, nivel));
+    if (!respaldoCorreo && !lista.some((d) => d.telefono)) {
+      const d = await repo.destinatarioNivel(tenantId, contacto, nivel);
+      if (d) return unirDestinatarios([{ userId: d.userId, directorId: null, nombre: null, telefono: d.telefono, correo: null }, ...lista]);
+    }
+    return lista;
   } catch (e) {
     logger.warn('vigia.destinatarios_lista_fallo', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
     const d = await repo.destinatarioNivel(tenantId, contacto, nivel);
