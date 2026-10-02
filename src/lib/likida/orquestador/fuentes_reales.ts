@@ -15,7 +15,7 @@ import { estadoLatidos } from '@/lib/admin/salud';
 import { registrarFuentesReales, type Fuentes } from './fuentes';
 import { AGENTES_VIGILADOS, type CorridaVista, type EntradaSalud, type LatidoVisto } from './salud_agentes';
 import { PATRON_FOLIO, llaveDedupe, type Destino, type Motivo, type TareaAbierta } from './escalamiento';
-import type { PosicionUnidad } from './tablero_viajes';
+import { posicionesDeGps } from './tablero_viajes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS FUENTES REALES — solo COMPONEN los lectores que cada agente ya tiene (con su
@@ -76,7 +76,7 @@ export function crearFuentesReales(): Fuentes {
         leerDatosTablero(tenantId), leerConfigConductor(tenantId), leerCatalogosFiltro(tenantId),
         sinFallar('posiciones', getUltimasPosiciones(tenantId)),
       ]);
-      const posiciones = pos === null ? null : new Map<string, PosicionUnidad>(pos.map((p) => [p.unidadId, { lat: p.lat, lng: p.lng, medidaEn: p.medidaEn }]));
+      const posiciones = pos === null ? null : posicionesDeGps(pos);
       return { datos, config, posiciones, ahora, terminales: cat.terminales, clientes: cat.clientes };
     },
 

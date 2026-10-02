@@ -120,6 +120,22 @@ function escaladoDe(f: FilaTablero): FilaViaje['escalado'] {
   return mejor;
 }
 
+/**
+ * La posición del TRACTOR es la del GPS. El pin de WhatsApp lo elige el operador (puede marcar cualquier punto del
+ * mapa), así que no vale como «posición en vivo»: si lo fuera, un GPS caído con un pin reciente apagaría la excepción
+ * `gps_obsoleto` y «sin señal de vida». Se descartan las filas de proveedor `whatsapp`; sin GPS queda «sin posición».
+ */
+export function posicionesDeGps(
+  pos: ReadonlyArray<{ unidadId: string; lat: number; lng: number; medidaEn: string; proveedor?: string }>,
+): Map<string, PosicionUnidad> {
+  const m = new Map<string, PosicionUnidad>();
+  for (const p of pos) {
+    if ((p.proveedor ?? '').toLowerCase() === 'whatsapp') continue;
+    m.set(p.unidadId, { lat: p.lat, lng: p.lng, medidaEn: p.medidaEn });
+  }
+  return m;
+}
+
 const etiquetaFrescura: Record<NivelFrescura, string> = { en_vivo: 'en vivo', atrasada: 'atrasada', obsoleta: 'obsoleta' };
 
 export function textoAntiguedad(min: number): string {

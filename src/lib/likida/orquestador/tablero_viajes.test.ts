@@ -3,7 +3,7 @@ import { CONFIG_CONDUCTOR_DEFAULT, type ConfigConductor } from '../conductor/con
 import { hitoVacio } from '../conductor/memoria.fixture';
 import type { DatosTablero, ViajeTablero } from '../conductor/repo_validacion';
 import type { HitoFila, TipoHito } from '../conductor/tipos';
-import { armarTableroViajes, textoAntiguedad, type PosicionUnidad } from './tablero_viajes';
+import { armarTableroViajes, posicionesDeGps, textoAntiguedad, type PosicionUnidad } from './tablero_viajes';
 
 const AHORA = new Date('2026-10-02T18:00:00.000Z');
 const hace = (min: number) => new Date(AHORA.getTime() - min * 60_000).toISOString();
@@ -157,5 +157,19 @@ describe('tablero de viajes en vivo', () => {
     expect(textoAntiguedad(45)).toBe('hace 45 min');
     expect(textoAntiguedad(120)).toBe('hace 2 h');
     expect(textoAntiguedad(135)).toBe('hace 2 h 15 min');
+  });
+
+  it('un pin de WhatsApp NO cuenta como posición del tractor: con el GPS de 3 h sigue gps_obsoleto y sin señal de vida', () => {
+    const mapa = posicionesDeGps([
+      { unidadId: 'u-1', lat: 20, lng: -103, medidaEn: hace(1), proveedor: 'whatsapp' },
+      { unidadId: 'u-2', lat: 21, lng: -103, medidaEn: hace(2), proveedor: 'samsara' },
+    ]);
+    expect(mapa.has('u-1')).toBe(false);
+    expect(mapa.get('u-2')).toMatchObject({ lat: 21 });
+    const v = viaje('1', { citaOrigenEn: hace(-600) });
+    const t = armarTableroViajes({ datos: datos([v], hitos('1', {})), config: cfg(), posiciones: mapa, ahora: AHORA });
+    expect(t.filas[0].posicion).toBeNull();
+    expect(t.filas[0].excepciones.some((x) => x.tipo === 'sin_posicion')).toBe(true);
+    expect(t.filas[0].senalDeVida).not.toBe('viva');
   });
 });
