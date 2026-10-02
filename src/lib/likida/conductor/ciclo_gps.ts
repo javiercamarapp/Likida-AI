@@ -51,6 +51,11 @@ export const MINUTOS_FUTURO_TOLERADO = 5;
 /** Un claim sin completar más viejo que esto lo retoma otra corrida (la anterior murió a media). */
 export const MINUTOS_CLAIM_VENCIDO = 10;
 export const TOPE_VIAJES_CICLO_GPS = 400;
+/**
+ * Un viaje sin actividad (ni aceptación ni hito resuelto) en más horas que esto ya no es «el viaje que la unidad lleva»: si hay
+ * otro más reciente de la misma unidad, este cede (el GPS de hoy no es la prueba de un viaje de hace días).
+ */
+export const HORAS_VIAJE_SIN_ACTIVIDAD = 24;
 
 export interface MuestraGps { lat: number; lng: number; medidaEn: Date }
 
@@ -129,6 +134,35 @@ const horaDe = (h: HitoFila | undefined): Date | null => {
   const v = h?.mensajeEn ?? h?.recibidoEn ?? null;
   return v ? new Date(v) : null;
 };
+
+/**
+ * De todos los viajes abiertos con algo pendiente, SOLO UNO por unidad recibe el GPS en esta pasada: el GPS es de la unidad,
+ * no del viaje, y darle las mismas muestras a dos viajes sella hitos ya «validados» en el equivocado (que nadie puede revertir).
+ * Los viajes de una unidad son secuenciales: el vigente es el MÁS ANTIGUO que sigue con actividad reciente; uno sin actividad
+ * en `HORAS_VIAJE_SIN_ACTIVIDAD` cede ante uno más nuevo (el viaje viejo que quedó abierto hasta liquidarse). Si todos están
+ * viejos, el más reciente. Los demás esperan: en cuanto el vigente cierra lo detectable, el siguiente ocupa su lugar.
+ */
+export function elegirViajesVigentes<V extends Pick<ViajeContexto, 'id' | 'tenantId' | 'unidadId' | 'aceptadoEn'>>(
+  viajes: readonly V[], hitosDe: (viajeId: string) => readonly HitoFila[], ahora: Date,
+): { vigentes: V[]; cedidos: V[] } {
+  const porUnidad = new Map<string, V[]>();
+  for (const v of viajes) {
+    const k = `${v.tenantId}|${v.unidadId}`;
+    porUnidad.set(k, [...(porUnidad.get(k) ?? []), v]);
+  }
+  const t = (v: V): number => (v.aceptadoEn ? new Date(v.aceptadoEn).getTime() : 0);
+  const limiteMs = HORAS_VIAJE_SIN_ACTIVIDAD * 3_600_000;
+  const vigentes: V[] = [];
+  const cedidos: V[] = [];
+  for (const grupo of porUnidad.values()) {
+    const orden = [...grupo].sort((a, b) => t(a) - t(b) || a.id.localeCompare(b.id));
+    const actividad = (v: V): number => Math.max(t(v), ...hitosDe(v.id).filter(estaResuelto).map((h) => horaDe(h)?.getTime() ?? 0));
+    const vivos = orden.filter((v) => ahora.getTime() - actividad(v) <= limiteMs);
+    const elegido = vivos.length > 0 ? vivos[0] : orden[orden.length - 1];
+    for (const v of orden) (v === elegido ? vigentes : cedidos).push(v);
+  }
+  return { vigentes, cedidos };
+}
 
 export interface EntradaProxima {
   hitos: Readonly<Record<TipoDeteccion, HitoFila | undefined>>;
@@ -227,6 +261,8 @@ export interface ResultadoCicloGps {
   yaDetectados: number;
   sinSitio: number;
   sinMuestras: number;
+  /** Viajes con algo pendiente que esperaron porque otro viaje de la misma unidad es el vigente. */
+  cedidosAOtroViaje: number;
   fallos: string[];
   cortadosPorReloj: number;
 }
@@ -235,7 +271,7 @@ const TIPOS: readonly TipoDeteccion[] = ['llegada_carga', 'salida_carga', 'llega
 
 export async function barridoCicloGps(p: PuertosCicloGps, ahora: Date = new Date(), venceEn?: number): Promise<ResultadoCicloGps> {
   const r: ResultadoCicloGps = {
-    viajes: 0, evaluados: 0, detectados: 0, llegadas: 0, salidas: 0, fueraDeOrden: 0, yaDetectados: 0, sinSitio: 0, sinMuestras: 0, fallos: [], cortadosPorReloj: 0,
+    viajes: 0, evaluados: 0, detectados: 0, llegadas: 0, salidas: 0, fueraDeOrden: 0, yaDetectados: 0, sinSitio: 0, sinMuestras: 0, cedidosAOtroViaje: 0, fallos: [], cortadosPorReloj: 0,
   };
   const viajes = await p.viajes(TOPE_VIAJES_CICLO_GPS);
   r.viajes = viajes.length;
@@ -261,12 +297,15 @@ export async function barridoCicloGps(p: PuertosCicloGps, ahora: Date = new Date
 
   // Solo los viajes con algo detectable pendiente y un sitio con qué compararlo piden muestras.
   const sitios = await p.sitiosDe(aptos);
-  const candidatos = aptos.filter((v) => {
+  const conPendiente = aptos.filter((v) => {
     const hs = porViaje.get(v.id) ?? [];
     const s = sitios.get(v.id);
     if (!s || (!s.origen && !s.destino)) { r.sinSitio++; return false; }
     return hs.some((h) => estaPendiente(h) && (TIPOS as readonly string[]).includes(h.tipo));
   });
+  // El GPS es de la unidad: solo el viaje vigente de cada unidad lo recibe (ver `elegirViajesVigentes`).
+  const { vigentes: candidatos, cedidos } = elegirViajesVigentes(conPendiente, (id) => porViaje.get(id) ?? [], ahora);
+  r.cedidosAOtroViaje = cedidos.length;
   if (candidatos.length === 0) return r;
 
   const desde = new Date(ahora.getTime() - HORAS_VENTANA_GPS * 3_600_000);

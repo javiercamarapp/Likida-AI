@@ -4,7 +4,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 
 import { CONFIG_CONDUCTOR_DEFAULT, type ConfigConductor } from './config';
 import {
-  barridoCicloGps, buscarEntrada, buscarSalida, proximaDeteccion, MIN_MUESTRAS_DENTRO_APROXIMADO,
+  barridoCicloGps, elegirViajesVigentes, buscarEntrada, buscarSalida, proximaDeteccion, MIN_MUESTRAS_DENTRO_APROXIMADO,
   type ClaimCruce, type MuestraGps, type PuertosCicloGps, type SitioGps, type SitiosViaje,
 } from './ciclo_gps';
 import { hitoVacio, viajeBase } from './memoria.fixture';
@@ -344,7 +344,7 @@ describe('barridoCicloGps', () => {
   });
 
   it('un viaje que revienta no tumba al resto del lote', async () => {
-    const viajes = [viajeBase({ id: 'v1', unidadId: 'u1', aceptadoEn: aceptadoEn.toISOString() }), viajeBase({ id: 'v2', operadorId: 'o2', unidadId: 'u1', aceptadoEn: aceptadoEn.toISOString() })];
+    const viajes = [viajeBase({ id: 'v1', unidadId: 'u1', aceptadoEn: aceptadoEn.toISOString() }), viajeBase({ id: 'v2', operadorId: 'o2', unidadId: 'u2', aceptadoEn: aceptadoEn.toISOString() })];
     const w = mundo({ viajes, muestras: [DENTRO(0), DENTRO(5)] });
     const original = w.puertos.reclamar;
     let n = 0;
@@ -359,5 +359,57 @@ describe('barridoCicloGps', () => {
     const r = await barridoCicloGps(w.puertos, AHORA, Date.now() - 1);
     expect(r.cortadosPorReloj).toBe(1);
     expect(r.detectados).toBe(0);
+  });
+});
+
+// ── el GPS es de la unidad, no del viaje ────────────────────────────────────
+
+describe('un solo viaje por unidad recibe el GPS (adversarial ronda 08)', () => {
+  const viajeA = () => viajeBase({ id: 'vA', unidadId: 'u1', aceptadoEn: en(-120).toISOString() });
+  const viajeB = () => viajeBase({ id: 'vB', operadorId: 'o2', unidadId: 'u1', aceptadoEn: en(-60).toISOString() });
+
+  it('dos viajes abiertos de la MISMA unidad con el mismo origen: la llegada es del más antiguo, el otro espera', async () => {
+    const w = mundo({ viajes: [viajeA(), viajeB()], muestras: [FUERA(0), DENTRO(5), DENTRO(10)] });
+    const r = await barridoCicloGps(w.puertos, AHORA);
+    expect(w.llamadas.aplicar.map((a) => a.hito)).toEqual(['vA-llegada_carga']);
+    expect(w.llamadas.reclamar.map((c) => c.viajeId)).toEqual(['vA']);
+    expect(r).toMatchObject({ detectados: 1, cedidosAOtroViaje: 1 });
+  });
+
+  it('cuando el primero ya no tiene nada detectable pendiente, el siguiente ocupa su lugar', async () => {
+    const t = en(0).toISOString();
+    const w = mundo({
+      viajes: [viajeA(), viajeB()], muestras: [FUERA(0), DENTRO(5), DENTRO(10)],
+      hitosPorViaje: { vA: { llegada_carga: resuelto(t), salida_carga: resuelto(t), llegada_descarga: resuelto(t), salida_descarga: resuelto(t) } },
+    });
+    await barridoCicloGps(w.puertos, AHORA);
+    expect(w.llamadas.aplicar.map((a) => a.hito)).toEqual(['vB-llegada_carga']);
+  });
+
+  it('un viaje viejo que sigue «abierto» (salida de la descarga sin registrar, >24 h sin actividad) cede ante el de hoy', async () => {
+    const viejo = viajeBase({ id: 'vA', unidadId: 'u1', aceptadoEn: en(-60 * 24 * 3).toISOString() });
+    const hoy = viajeBase({ id: 'vB', operadorId: 'o2', unidadId: 'u1', aceptadoEn: en(-60).toISOString() });
+    const viejoT = en(-60 * 24 * 3 + 30).toISOString();
+    const w = mundo({
+      viajes: [viejo, hoy], sitios: SITIOS, muestras: [DENTRO(0, DESTINO), DENTRO(5, DESTINO), FUERA(10, DESTINO), FUERA(15, DESTINO)],
+      hitosPorViaje: { vA: { llegada_carga: resuelto(viejoT), salida_carga: resuelto(viejoT), llegada_descarga: resuelto(viejoT) } },
+    });
+    await barridoCicloGps(w.puertos, AHORA);
+    expect(w.llamadas.aplicar.every((a) => a.hito.startsWith('vB'))).toBe(true);
+    expect(w.llamadas.aplicar.some((a) => a.hito === 'vA-salida_descarga')).toBe(false);
+  });
+
+  it('unidades distintas no se estorban', () => {
+    const a = viajeBase({ id: 'a', unidadId: 'u1', aceptadoEn: en(-5).toISOString() });
+    const b = viajeBase({ id: 'b', unidadId: 'u2', aceptadoEn: en(-5).toISOString() });
+    const { vigentes, cedidos } = elegirViajesVigentes([a, b], () => [], AHORA);
+    expect(vigentes.map((v) => v.id).sort()).toEqual(['a', 'b']);
+    expect(cedidos).toEqual([]);
+  });
+
+  it('si TODOS los viajes de la unidad están viejos, queda el más reciente', () => {
+    const a = viajeBase({ id: 'a', unidadId: 'u1', aceptadoEn: en(-60 * 100).toISOString() });
+    const b = viajeBase({ id: 'b', unidadId: 'u1', aceptadoEn: en(-60 * 50).toISOString() });
+    expect(elegirViajesVigentes([a, b], () => [], AHORA).vigentes.map((v) => v.id)).toEqual(['b']);
   });
 });
