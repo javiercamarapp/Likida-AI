@@ -838,6 +838,26 @@ describe('escalarViajesSinAceptar — con el registro de la ventana y el selecto
     expect(avisarAlChofer).not.toHaveBeenCalled();
   });
 
+  it('TOKEN VENCIDO (190) en el recordatorio de TEXTO al chofer: el cliente de Meta ya lo encoló, así que no cae además a la plantilla (era un segundo mensaje encolado)', async () => {
+    estadoVentana = 'abierta';
+    rechazoTexto = { codigo: 190, status: 401 };
+    lectura = { data: [fila({ operador: { nombre: 'Juan Pérez', telefono: '5213312345678' } })], error: null };
+    const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+    expect(r.reintentados).toBe(1);
+    expect(avisarAlChofer).not.toHaveBeenCalled();
+  });
+
+  it('TOKEN VENCIDO (190) en el aviso al jefe: ya está en wa_outbox (`encolado`), el sello se queda y no se reenvía', async () => {
+    estadoVentana = 'abierta';
+    rechazoTexto = { codigo: 190, status: 401 };
+    lectura = { data: [fila()], error: null };
+    const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(r.escalados).toBe(1);
+    expect(r.fallos[0]).toMatch(/no se reenvía/);
+    expect(updates.some((u) => u.fila.escalado_en === null)).toBe(false);
+  });
+
   it('un rechazo DEFINITIVO del recordatorio de texto al chofer (ventana cerrada) sí cae a la plantilla', async () => {
     estadoVentana = 'abierta';                            // el registro dice abierta, Meta contesta 131047
     lectura = { data: [fila({ operador: { nombre: 'Juan Pérez', telefono: '5213312345678' } })], error: null };

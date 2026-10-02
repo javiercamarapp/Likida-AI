@@ -1,5 +1,5 @@
 import {
-  PREFIJO_BOTON, leerBotonConductor, type Contacto, type Lugar, type TipoHito,
+  PREFIJO_BOTON, leerBotonConductor, type Contacto, type Lugar, type RespuestaSenalVida, type TipoHito,
 } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -46,7 +46,9 @@ export type Intencion =
   /** «Sigo cargando / descargando» (botón): sigue en el lugar, sin registrar nada nuevo. */
   | { clase: 'sigue'; lugar: Lugar }
   /** Botón «Aún no voy de regreso». */
-  | { clase: 'aun_no_regreso' };
+  | { clase: 'aun_no_regreso' }
+  /** P2: respuesta de botón al «¿sigues bien?» de la señal de vida (no cambia hitos). */
+  | { clase: 'senal_vida'; respuesta: RespuestaSenalVida };
 
 export interface Interpretacion {
   intencion: Intencion;
@@ -264,6 +266,9 @@ export function interpretarBoton(texto: string | undefined): Interpretacion | nu
     case P.recordatorioRegistrar: return base({ clase: 'registrar_activo', hito: b.hito });
     case P.recordatorioProblema: return base({ clase: 'problema' });
     case P.pedirUbicacion: return base({ clase: 'pedir_ubicacion' });
+    case P.senalVidaEstoy: return base({ clase: 'senal_vida', respuesta: 'estoy' });
+    case P.senalVidaCargar: return base({ clase: 'senal_vida', respuesta: 'voy_a_cargar' });
+    case P.senalVidaBien: return base({ clase: 'senal_vida', respuesta: 'estoy_bien' });
     default: return null; // `jefe_atiendo` es del jefe, no del chofer
   }
 }

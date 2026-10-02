@@ -239,6 +239,7 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0630_geocerca_poligono.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0631_geocercas_reimportacion_estado.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0632_geocerca_reimportacion_conserva_manual.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0635_conductor_ciclo_gps.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0650_orquestador_escalacion.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0620_liquidacion_copia_jefe_reclamo.sql
           PGUSER=postgres bash supabase/tests/0620_liquidacion_copia_jefe_concurrencia.sh localhost 5432 postgres

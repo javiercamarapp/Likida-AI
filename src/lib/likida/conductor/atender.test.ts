@@ -4,7 +4,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('esta prueba no toca la base'); } }));
 vi.mock('@/lib/meta/client', () => ({ enviarSolicitudUbicacion: vi.fn(async () => ({ ok: true })) }));
 
-const { atenderConductor, atenderAcuseJefe } = await import('./atender');
+const { atenderConductor, atenderAcuseJefe, textoRespuestaSenalVida } = await import('./atender');
 const { crearMemoria, viajeBase } = await import('./memoria.fixture');
 type Memoria = ReturnType<typeof import('./memoria.fixture').crearMemoria>;
 
@@ -407,5 +407,57 @@ describe('«ya lo atiendo» del jefe o del patio', () => {
     const x = mk(true);
     x.marcar.mockResolvedValueOnce([]);
     expect(await atenderAcuseJefe('5219990000099', `jefe_atiendo:${V}`, AHORA, x.deps)).toContain('Ya estaba atendido');
+  });
+});
+
+describe('P2: los botones del «¿sigues bien?» (sin señal de vida)', () => {
+  const llamadas: Array<[string, string, string]> = [];
+  const conRespuesta = (m: Memoria, resultado: 'cerrado' | 'sin_episodio' | 'fallo') => {
+    llamadas.length = 0;
+    m.deps.responderSenalVida = async (t, v, r) => { llamadas.push([t, v, r]); return resultado; };
+    return m;
+  };
+
+  it.each([['senal_vida_estoy', 'estoy'], ['senal_vida_cargar', 'voy_a_cargar'], ['senal_vida_bien', 'estoy_bien']])('«%s» cierra el episodio de ESE viaje y de ESA flota con la respuesta «%s» y contesta sin tocar los hitos', async (boton, respuesta) => {
+    const m = conRespuesta(nueva(), 'cerrado');
+    const r = await dice(m, `${boton}:${V1}`);
+    expect(llamadas).toEqual([['t1', V1, respuesta]]);
+    expect(textos(r)).toMatch(/anotado|Anotado/);
+    expect(m.de(V1).every((h) => h.estado === 'esperado')).toBe(true);
+    expect(m.legado).toEqual([]);
+  });
+
+  it('un botón viejo (ya no hay episodio abierto) dice que ya no está vigente; un fallo de la base dice que no pudo anotarlo', async () => {
+    expect(textos(await dice(conRespuesta(nueva(), 'sin_episodio'), `senal_vida_estoy:${V1}`))).toContain('ya no está vigente');
+    expect(textos(await dice(conRespuesta(nueva(), 'fallo'), `senal_vida_estoy:${V1}`))).toContain('No pude anotarlo');
+  });
+
+  it('el botón de OTRO viaje (o tecleado a mano) no toca nada: la respuesta nunca llega a cerrar episodios ajenos', async () => {
+    const m = conRespuesta(nueva(), 'cerrado');
+    const r = await dice(m, `senal_vida_estoy:4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d999`);
+    expect(llamadas).toEqual([]);
+    expect(textos(r)).toContain('otro viaje');
+  });
+
+  it('un viaje liquidado no responde la señal de vida', async () => {
+    const m = conRespuesta(crearMemoria({ viajes: [viajeBase({ id: V1, estatus: 'liquidado' })] }), 'cerrado');
+    expect(textos(await dice(m, `senal_vida_estoy:${V1}`))).toContain('ya está cerrado');
+    expect(llamadas).toEqual([]);
+  });
+
+  it('los textos de respuesta: «voy a cargar» promete volver a preguntar en una hora; «estoy bien» manda al jefe si hay problema', () => {
+    expect(textoRespuestaSenalVida('voy_a_cargar', 'cerrado', 'F-1')).toContain('una hora');
+    expect(textoRespuestaSenalVida('estoy_bien', 'cerrado', null)).toContain('jefe de tráfico');
+    expect(textoRespuestaSenalVida('estoy', 'cerrado', 'F-1')).toContain('del viaje F-1');
+  });
+
+  it('el «Ya lo atiendo» del jefe también cierra el episodio de señal de vida, aunque no haya hito escalado', async () => {
+    const cerrados: string[] = [];
+    const deps = {
+      viajePorId: async () => ({ tenantId: 't1' }), puedeAcusar: async () => true, marcar: async () => [], evento: async () => {},
+      cerrarSenalVida: async (_t: string, v: string) => { cerrados.push(v); return 1; },
+    };
+    expect(await atenderAcuseJefe('5219990000099', `jefe_atiendo:${V1}`, AHORA, deps)).toContain('lo marqué como atendido');
+    expect(cerrados).toEqual([V1]);
   });
 });

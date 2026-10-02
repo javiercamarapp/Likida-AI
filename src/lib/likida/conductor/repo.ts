@@ -11,6 +11,9 @@ import { CONFIG_CONDUCTOR_DEFAULT, validarConfigConductor, type ConfigConductor 
 import { aHitoApi, type EventoApi, type FiltrosHitos, type HitoApi, type CambioCitas } from './lectura';
 import type { AvisoReclamado } from './planificador';
 import type { ContactoTrafico } from './escalamiento';
+import type { EpisodioFila } from './senal_vida';
+import type { MotivoSenalVida } from './solicitudes';
+import type { RespuestaSenalVida } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL ACCESO A DATOS DEL AGENTE 5 (viaje_hito y sus bitácoras, 0380).
@@ -412,6 +415,9 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     // 0604: la base sin migrar no trae las columnas; el aviso queda apagado y el margen en su valor de partida.
     avisarLlegadaSinConfirmar: f.avisar_llegada_sin_confirmar === true,
     margenAcercamientoM: f.margen_acercamiento_m === undefined || f.margen_acercamiento_m === null ? CONFIG_CONDUCTOR_DEFAULT.margenAcercamientoM : Number(f.margen_acercamiento_m),
+    // 0635: la base sin migrar no trae las columnas; la detección sigue en su valor de partida (encendida) y la señal de vida apagada.
+    detectarHitosGps: f.detectar_hitos_gps !== false,
+    avisarSenalVida: f.avisar_senal_vida === true,
   });
   if ('error' in v) {
     // La base tiene CHECKs equivalentes; llegar aquí es una fila corrupta. Se grita y se opera
@@ -610,16 +616,26 @@ export async function guardarConfigConductor(
     estadia_alerta_carga_min: c.estadiaAlertaCargaMin, estadia_alerta_descarga_min: c.estadiaAlertaDescargaMin,
     pedir_foto_evidencia: c.pedirFotoEvidencia, foto_registra_hito: c.fotoRegistraHito, updated_at: new Date().toISOString(),
   };
-  // 0604 agregó dos columnas. Contra la base SIN migrar se guarda lo demás si esas dos están en su valor de partida;
-  // si el dueño pidió algo distinto (aviso encendido, otro margen) se dice que falta la migración en vez de callarlo.
-  const nuevas = { avisar_llegada_sin_confirmar: c.avisarLlegadaSinConfirmar, margen_acercamiento_m: c.margenAcercamientoM };
-  let { error } = await acotada(supabaseAdmin().from('agente_conductor_config').upsert({ ...fila, ...nuevas }, { onConflict: 'tenant_id' }), 'v1.conductor_config');
-  if (error && /avisar_llegada_sin_confirmar|margen_acercamiento_m/.test(error.message)) {
-    if (c.avisarLlegadaSinConfirmar || c.margenAcercamientoM !== CONFIG_CONDUCTOR_DEFAULT.margenAcercamientoM) {
-      throw new Error('v1.conductor_config: el aviso por llegada sin confirmar y el margen de acercamiento necesitan la migración 0604 (aún no aplicada en esta base).');
+  // 0604 y 0635 agregaron columnas. Contra la base SIN migrar se guarda lo demás si esas columnas están en su valor de
+  // partida; si el dueño pidió algo distinto (aviso encendido, otro margen, detección apagada) se dice que falta la migración
+  // en vez de callarlo. Cada grupo se retira solo cuando el error de la base nombra una de SUS columnas.
+  const grupos: Array<{ mig: string; cols: Record<string, unknown>; esDePartida: boolean }> = [
+    { mig: '0635', cols: { detectar_hitos_gps: c.detectarHitosGps, avisar_senal_vida: c.avisarSenalVida }, esDePartida: c.detectarHitosGps === CONFIG_CONDUCTOR_DEFAULT.detectarHitosGps && c.avisarSenalVida === CONFIG_CONDUCTOR_DEFAULT.avisarSenalVida },
+    { mig: '0604', cols: { avisar_llegada_sin_confirmar: c.avisarLlegadaSinConfirmar, margen_acercamiento_m: c.margenAcercamientoM }, esDePartida: !c.avisarLlegadaSinConfirmar && c.margenAcercamientoM === CONFIG_CONDUCTOR_DEFAULT.margenAcercamientoM },
+  ];
+  let vigentes = grupos.slice();
+  let error: { message: string } | null = null;
+  for (;;) {
+    ({ error } = await acotada(supabaseAdmin().from('agente_conductor_config').upsert({ ...fila, ...Object.assign({}, ...vigentes.map((g) => g.cols)) }, { onConflict: 'tenant_id' }), 'v1.conductor_config'));
+    const faltante = error ? vigentes.find((g) => Object.keys(g.cols).some((col) => error!.message.includes(col))) : undefined;
+    if (!faltante) break;
+    if (!faltante.esDePartida) {
+      throw new Error(faltante.mig === '0604'
+        ? 'v1.conductor_config: el aviso por llegada sin confirmar y el margen de acercamiento necesitan la migración 0604 (aún no aplicada en esta base).'
+        : 'v1.conductor_config: la detección de hitos por GPS y el aviso de señal de vida necesitan la migración 0635 (aún no aplicada en esta base).');
     }
-    logger.warn('conductor.config_sin_0604', { tenant: tenantId });
-    ({ error } = await acotada(supabaseAdmin().from('agente_conductor_config').upsert(fila, { onConflict: 'tenant_id' }), 'v1.conductor_config'));
+    logger.warn(`conductor.config_sin_${faltante.mig}`, { tenant: tenantId });
+    vigentes = vigentes.filter((g) => g !== faltante);
   }
   if (error) throw new Error(`v1.conductor_config: ${error.message}`);
   if (contactos === undefined) return 'ok';
@@ -655,4 +671,177 @@ export async function guardarConfigConductor(
     if (e4) throw new Error(`v1.conductor_contactos_nombre: ${e4.message}`);
   }
   return 'ok';
+}
+
+// ── 0635: los cruces de geocerca (el claim de «el GPS ya probó este hito») ───
+
+export interface DatosCruce {
+  tenantId: string;
+  viajeId: string;
+  geocercaId: string;
+  hitoTipo: string;
+  tipo: 'entrada' | 'salida';
+  detectadoEn: Date;
+  distanciaM: number;
+}
+
+/** El error es «esa tabla o columna no existe» (base sin la migración), no otro fallo cualquiera. */
+export function faltaEsquema(e: { code?: string | null; message?: string | null } | null | undefined, objeto: RegExp): boolean {
+  if (!e) return false;
+  const msg = e.message ?? '';
+  if (!objeto.test(msg)) return false;
+  return e.code === '42P01' || e.code === '42703' || e.code === 'PGRST205' || e.code === 'PGRST204' || /does not exist|schema cache|could not find/i.test(msg);
+}
+
+/**
+ * Reclama la detección de UN hito de UN viaje: insertar es reclamar (único por (viaje, hito)). `perdido` = otra corrida ya
+ * la reclamó y la completó (o la lleva en curso); un claim SIN completar con más de `MINUTOS_CLAIM_VENCIDO` se retoma (la
+ * corrida que lo tomó murió a media). `sin_tabla` = base sin la 0635: se sigue sin claim (el candado es el hito mismo).
+ */
+export async function reclamarCruce(d: DatosCruce, ahora: Date, minutosVencido: number): Promise<'ganado' | 'perdido' | 'sin_tabla' | 'fallo'> {
+  const { error } = await acotada(supabaseAdmin().from('viaje_cruce_geocerca').insert({
+    tenant_id: d.tenantId, viaje_id: d.viajeId, geocerca_id: d.geocercaId, hito_tipo: d.hitoTipo, tipo: d.tipo,
+    detectado_en: d.detectadoEn.toISOString(), distancia_m: d.distanciaM, registrado_en: ahora.toISOString(),
+  }), 'conductor.cruce_reclamar');
+  if (!error) return 'ganado';
+  if (faltaEsquema(error, /viaje_cruce_geocerca/i)) return 'sin_tabla';
+  if ((error as { code?: string }).code !== '23505') {
+    logger.error('conductor.cruce_reclamar_fallo', { viaje: d.viajeId, err: error.message });
+    return 'fallo';
+  }
+  const vencido = new Date(ahora.getTime() - minutosVencido * 60_000).toISOString();
+  const retomado = await acotada(supabaseAdmin().from('viaje_cruce_geocerca')
+    .update({ registrado_en: ahora.toISOString(), detectado_en: d.detectadoEn.toISOString(), distancia_m: d.distanciaM })
+    .eq('tenant_id', d.tenantId).eq('viaje_id', d.viajeId).eq('hito_tipo', d.hitoTipo).is('completado_en', null).lt('registrado_en', vencido).select('id'), 'conductor.cruce_retomar');
+  if (retomado.error) { logger.error('conductor.cruce_retomar_fallo', { viaje: d.viajeId, err: retomado.error.message }); return 'fallo'; }
+  return retomado.data && retomado.data.length > 0 ? 'ganado' : 'perdido';
+}
+
+/** Marca el cruce como completado (el hito quedó registrado, o ya lo estaba). Best-effort: sin esto el claim se retoma a los minutos y la transición condicional del hito lo frena. */
+export async function completarCruce(d: Pick<DatosCruce, 'tenantId' | 'viajeId' | 'hitoTipo'>, ahora: Date): Promise<void> {
+  try {
+    const { error } = await acotada(supabaseAdmin().from('viaje_cruce_geocerca').update({ completado_en: ahora.toISOString() })
+      .eq('tenant_id', d.tenantId).eq('viaje_id', d.viajeId).eq('hito_tipo', d.hitoTipo).is('completado_en', null), 'conductor.cruce_completar');
+    if (error && !faltaEsquema(error, /viaje_cruce_geocerca/i)) logger.warn('conductor.cruce_completar_fallo', { viaje: d.viajeId, err: error.message });
+  } catch (e) {
+    logger.warn('conductor.cruce_completar_fallo', { viaje: d.viajeId, err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/** Suelta el claim cuando el hito NO se pudo registrar (así la siguiente pasada lo reintenta de inmediato en vez de esperar a que venza). */
+export async function liberarCruce(d: Pick<DatosCruce, 'tenantId' | 'viajeId' | 'hitoTipo'>): Promise<void> {
+  try {
+    const { error } = await acotada(supabaseAdmin().from('viaje_cruce_geocerca').delete()
+      .eq('tenant_id', d.tenantId).eq('viaje_id', d.viajeId).eq('hito_tipo', d.hitoTipo).is('completado_en', null), 'conductor.cruce_liberar');
+    if (error && !faltaEsquema(error, /viaje_cruce_geocerca/i)) logger.warn('conductor.cruce_liberar_fallo', { viaje: d.viajeId, err: error.message });
+  } catch (e) {
+    logger.warn('conductor.cruce_liberar_fallo', { viaje: d.viajeId, err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+// ── 0637: asignar el sitio derivado a un viaje ───────────────────────────────
+
+/**
+ * Asigna al viaje el sitio derivado (lado `origen` o `destino`) SOLO si sigue sin él, y deja constancia de qué se derivó y por
+ * qué (única por (viaje, lado): derivar es una sola vez). `ya` = otra corrida o la oficina llegaron primero. Contra una base sin
+ * la 0637 se asigna igual, sin constancia (el UPDATE condicional «sigue sin sitio» es el candado).
+ */
+export async function asignarSitioDerivado(
+  tenantId: string, viajeId: string, lado: 'origen' | 'destino', sitioId: string, criterio: 'codigo' | 'nombre_exacto' | 'nombre_contenido', ahora: Date,
+): Promise<'ok' | 'ya' | 'fallo'> {
+  const claim = await acotada(supabaseAdmin().from('viaje_sitio_derivado').insert({
+    tenant_id: tenantId, viaje_id: viajeId, lado, geocerca_id: sitioId, criterio, derivado_en: ahora.toISOString(),
+  }), 'conductor.sitio_derivado_reclamar');
+  const sinTabla = faltaEsquema(claim.error, /viaje_sitio_derivado/i);
+  if (claim.error && !sinTabla) {
+    if ((claim.error as { code?: string }).code === '23505') return 'ya';
+    logger.error('conductor.sitio_derivado_reclamar_fallo', { viaje: viajeId, err: claim.error.message });
+    return 'fallo';
+  }
+  const columna = lado === 'origen' ? 'origen_geocerca_id' : 'destino_geocerca_id';
+  const { data, error } = await acotada(supabaseAdmin().from('viaje').update({ [columna]: sitioId })
+    .eq('id', viajeId).eq('tenant_id', tenantId).eq('estatus', 'abierto').is(columna, null).select('id'), 'conductor.sitio_derivado_asignar');
+  if (error) {
+    // No se asignó por un fallo: la constancia no debe quedar diciendo que sí (y bloquear un reintento legítimo).
+    if (!sinTabla) await acotada(supabaseAdmin().from('viaje_sitio_derivado').delete().eq('tenant_id', tenantId).eq('viaje_id', viajeId).eq('lado', lado), 'conductor.sitio_derivado_soltar');
+    logger.error('conductor.sitio_derivado_asignar_fallo', { viaje: viajeId, err: error.message });
+    return 'fallo';
+  }
+  // Cero filas: alguien le puso sitio entre la lectura y este UPDATE. La constancia se queda (la derivación ya no aplica).
+  if (!data || data.length === 0) return 'ya';
+  return 'ok';
+}
+
+// ── 0636: los episodios de «sin señal de vida» ───────────────────────────────
+
+const COLUMNAS_EPISODIO = 'id, tenant_id, viaje_id, motivo, abierto_en, nivel_enviado, aviso_1_en, aviso_2_en, escalado_en';
+
+export function filaAEpisodio(f: Fila): EpisodioFila {
+  return {
+    id: String(f.id), tenantId: String(f.tenant_id), viajeId: String(f.viaje_id), motivo: f.motivo === 'gps_detenido' ? 'gps_detenido' : 'gps_obsoleto',
+    abiertoEn: String(f.abierto_en), nivelEnviado: ([0, 1, 2, 3].includes(Number(f.nivel_enviado)) ? Number(f.nivel_enviado) : 0) as EpisodioFila['nivelEnviado'],
+    aviso1En: s(f.aviso_1_en), aviso2En: s(f.aviso_2_en), escaladoEn: s(f.escalado_en),
+  };
+}
+
+/** Abre el episodio del viaje (único abierto: el índice parcial). `null` = otro lo abrió primero o la base no pudo (se loguea). */
+export async function abrirEpisodioSenalVida(tenantId: string, viajeId: string, motivo: MotivoSenalVida, ahora: Date): Promise<EpisodioFila | null> {
+  const { data, error } = await acotada(supabaseAdmin().from('viaje_senal_vida')
+    .insert({ tenant_id: tenantId, viaje_id: viajeId, motivo, abierto_en: ahora.toISOString() }).select(COLUMNAS_EPISODIO).maybeSingle(), 'conductor.senal_abrir');
+  if (error) {
+    if ((error as { code?: string }).code !== '23505') logger.error('conductor.senal_abrir_fallo', { viaje: viajeId, err: error.message });
+    return null;
+  }
+  return data ? filaAEpisodio(data as unknown as Fila) : null;
+}
+
+/** Reclama el nivel k del episodio: UPDATE condicional `nivel_enviado = k-1` y sin cerrar. Quien pierde no manda nada. */
+export async function reclamarNivelSenalVida(ep: Pick<EpisodioFila, 'id' | 'tenantId'>, nivel: 1 | 2 | 3, ahora: Date): Promise<'ganado' | 'perdido' | 'fallo'> {
+  const hora = ahora.toISOString();
+  const cambio = nivel === 1 ? { nivel_enviado: 1, aviso_1_en: hora } : nivel === 2 ? { nivel_enviado: 2, aviso_2_en: hora } : { nivel_enviado: 3, escalado_en: hora };
+  const { data, error } = await acotada(supabaseAdmin().from('viaje_senal_vida').update(cambio)
+    .eq('id', ep.id).eq('tenant_id', ep.tenantId).eq('nivel_enviado', nivel - 1).is('cerrado_en', null).select('id'), 'conductor.senal_nivel');
+  if (error) { logger.error('conductor.senal_nivel_fallo', { episodio: ep.id, err: error.message }); return 'fallo'; }
+  return data && data.length > 0 ? 'ganado' : 'perdido';
+}
+
+export async function cerrarEpisodioSenalVida(ep: Pick<EpisodioFila, 'id' | 'tenantId'>, motivo: 'senal_recuperada' | 'viaje_cerrado', ahora: Date): Promise<void> {
+  const { error } = await acotada(supabaseAdmin().from('viaje_senal_vida').update({ cerrado_en: ahora.toISOString(), cierre_motivo: motivo })
+    .eq('id', ep.id).eq('tenant_id', ep.tenantId).is('cerrado_en', null), 'conductor.senal_cerrar');
+  if (error) logger.warn('conductor.senal_cerrar_fallo', { episodio: ep.id, err: error.message });
+}
+
+export async function anotarFalloSenalVida(ep: Pick<EpisodioFila, 'id' | 'tenantId'>, texto: string): Promise<void> {
+  const { error } = await acotada(supabaseAdmin().from('viaje_senal_vida').update({ ultimo_error: texto.slice(0, 200) }).eq('id', ep.id).eq('tenant_id', ep.tenantId), 'conductor.senal_error');
+  if (error) logger.warn('conductor.senal_error_fallo', { episodio: ep.id, err: error.message });
+}
+
+/**
+ * El chofer contestó un botón del «¿sigues bien?»: se cierra el episodio abierto del viaje con su respuesta y se SILENCIA para que
+ * el mismo GPS mudo no abra otro enseguida. `sin_episodio` = ya estaba cerrado (un botón viejo): no se hace nada.
+ */
+export async function responderEpisodioSenalVida(
+  tenantId: string, viajeId: string, respuesta: RespuestaSenalVida, silencioMin: number, ahora: Date,
+): Promise<'cerrado' | 'sin_episodio' | 'fallo'> {
+  const { data, error } = await acotada(supabaseAdmin().from('viaje_senal_vida').update({
+    respondido_en: ahora.toISOString(), respuesta, cerrado_en: ahora.toISOString(), cierre_motivo: 'respondio',
+    silenciado_hasta: new Date(ahora.getTime() + silencioMin * 60_000).toISOString(),
+  }).eq('tenant_id', tenantId).eq('viaje_id', viajeId).is('cerrado_en', null).select('id'), 'conductor.senal_responder');
+  if (error) {
+    if (faltaEsquema(error, /viaje_senal_vida/i)) return 'sin_episodio';
+    logger.error('conductor.senal_responder_fallo', { viaje: viajeId, err: error.message });
+    return 'fallo';
+  }
+  return data && data.length > 0 ? 'cerrado' : 'sin_episodio';
+}
+
+/** «Ya lo atiendo» del jefe: el episodio abierto del viaje se cierra. Best-effort (una base sin la 0636 no tiene nada que cerrar). */
+export async function cerrarEpisodioPorJefe(tenantId: string, viajeId: string, ahora: Date): Promise<number> {
+  const { data, error } = await acotada(supabaseAdmin().from('viaje_senal_vida').update({ cerrado_en: ahora.toISOString(), cierre_motivo: 'atendido_por_jefe' })
+    .eq('tenant_id', tenantId).eq('viaje_id', viajeId).is('cerrado_en', null).select('id'), 'conductor.senal_jefe');
+  if (error) {
+    if (!faltaEsquema(error, /viaje_senal_vida/i)) logger.warn('conductor.senal_jefe_fallo', { viaje: viajeId, err: error.message });
+    return 0;
+  }
+  return data?.length ?? 0;
 }

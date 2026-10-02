@@ -51,6 +51,10 @@ export interface ConfigConductor {
   avisarLlegadaSinConfirmar: boolean;
   /** 0604: metros ANTES del borde de la geocerca en que se manda la calle de instrucciones de la planta (convenios). */
   margenAcercamientoM: number;
+  /** 0635: dar por hecho el hito cuando el GPS entra o sale del sitio del viaje, sin esperar al chofer (hito con fuente `sistema`, validado por GPS). Solo actúa con sitio asignado y GPS de la unidad. */
+  detectarHitosGps: boolean;
+  /** 0635: si el GPS de un tractor en tránsito queda obsoleto o detenido, preguntarle al chofer «¿sigues bien?» (2 avisos) y luego al jefe de tráfico. Apagado: manda mensajes a personas. */
+  avisarSenalVida: boolean;
 }
 
 export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze({
@@ -84,6 +88,8 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   fotoRegistraHito: true,
   avisarLlegadaSinConfirmar: false,
   margenAcercamientoM: 5000,
+  detectarHitosGps: true,
+  avisarSenalVida: false,
 });
 
 /** El tope de aplazamientos por hito: pasado esto «voy con retraso» ya no calla al agente. */
@@ -201,6 +207,8 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       fotoRegistraHito: Boolean(b.fotoRegistraHito),
       avisarLlegadaSinConfirmar: Boolean(b.avisarLlegadaSinConfirmar),
       margenAcercamientoM,
+      detectarHitosGps: Boolean(b.detectarHitosGps),
+      avisarSenalVida: Boolean(b.avisarSenalVida),
     },
   };
 }

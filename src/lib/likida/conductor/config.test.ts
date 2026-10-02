@@ -115,6 +115,12 @@ describe('validarConfigConductor — validación de ubicación y estadías (0385
     expect('error' in v && v.error).toMatch(re);
   });
 
+  it('0635: la detección de hitos por GPS nace ENCENDIDA y el aviso de señal de vida APAGADO; ambos se pueden ajustar', () => {
+    expect(CONFIG_CONDUCTOR_DEFAULT).toMatchObject({ detectarHitosGps: true, avisarSenalVida: false });
+    const v = validarConfigConductor({ detectarHitosGps: false, avisarSenalVida: true });
+    expect('ok' in v && v.ok).toMatchObject({ detectarHitosGps: false, avisarSenalVida: true });
+  });
+
   it('0604: el aviso por llegada sin confirmar nace APAGADO y el margen de acercamiento en 5,000 m; ambos se pueden ajustar', () => {
     expect(CONFIG_CONDUCTOR_DEFAULT).toMatchObject({ avisarLlegadaSinConfirmar: false, margenAcercamientoM: 5000 });
     const v = validarConfigConductor({ avisarLlegadaSinConfirmar: true, margenAcercamientoM: 0 });
