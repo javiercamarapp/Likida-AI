@@ -109,6 +109,10 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/unidades': 'operacion',
   // El mapa (F3): viajes vivos sobre México, sin un peso en pantalla.
   '/dashboard/mapa': 'operacion',
+  // Viajes en vivo (Ola 3b, orquestador): todos los viajes en curso con su último hito, la posición del tractor y
+  // su antigüedad, y las excepciones. Es del jefe de tráfico y no enseña un peso. Las tareas que el asistente deja
+  // para una persona se atienden aquí (la acción exige `puedeAsignar`).
+  '/dashboard/viajes-en-vivo': 'operacion',
   // Carta Porte (A3, 14-ago-2026): cero pesos en pantalla, y la declaración
   // de ruta ("¿pisa federal?") es del jefe de tráfico — la regla 2.7.7.2.1
   // exige plena certeza de quien CONOCE la ruta, no del que ve el dinero.

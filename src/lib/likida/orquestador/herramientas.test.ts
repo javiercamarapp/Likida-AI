@@ -168,9 +168,9 @@ describe('tablero_viajes', () => {
     expect(x.viajes).toBeUndefined();
   });
 
-  it('solo_excepciones deja fuera al viaje sano', async () => {
+  it('vista=solo_excepciones deja fuera al viaje sano', async () => {
     const { llamar } = armar('flota_admin');
-    expect((await llamar('tablero_viajes', { solo_excepciones: true })).viajes.map((v: any) => v.folio)).toEqual(['F-a2']);
+    expect((await llamar('tablero_viajes', { vista: 'solo_excepciones' })).viajes.map((v: any) => v.folio)).toEqual(['F-a2']);
   });
 
   it('SIN PII de más: ni contacto del andén, ni correo de oficina, ni ids internos, ni coordenadas exactas', async () => {

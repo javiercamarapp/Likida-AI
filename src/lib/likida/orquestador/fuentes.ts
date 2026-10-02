@@ -47,6 +47,8 @@ export interface Fuentes {
     quien: { rol: string; usuarioId: string | null },
   ): Promise<ResultadoCrearEscalacion>;
   escalacionesAbiertas(tenantId: string, limite?: number): Promise<TareaAbierta[] | null>;
+  /** Una persona atiende una tarea abierta de SU flota. `false` = no existe, no es de esta flota o ya estaba atendida. */
+  atenderEscalacion(tenantId: string, id: string, quien: { usuarioId: string | null; nota: string | null }): Promise<boolean>;
 }
 
 let actuales: Fuentes | null = null;
