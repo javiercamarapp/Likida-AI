@@ -8,8 +8,9 @@ import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { crearDepsVigia } from '@/lib/likida/vigia/deps';
 import {
-  cargarTablero, validarConfig, guardarConfigVigia, altaContactoVigia, bajaManualContacto, suprimirContactoVigia,
+  cargarTablero, validarConfig, guardarConfigVigia, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, guardarDirectorVigia, quitarDirectorVigia,
 } from '@/lib/likida/vigia/repo';
+import { validarDirector } from '@/lib/likida/vigia/respaldo_correo';
 import {
   aprobarMensaje, rechazarMensaje, tomarConversacion, devolverConversacion, responderComoHumano, cerrarConversacion,
   type ResultadoDecision,
@@ -122,6 +123,7 @@ export default async function PaginaAgenteVigia({
       habilitado: fd.get('habilitado') === 'on', modoAprobacion: texto(fd, 'modoAprobacion'),
       autoenviarMinAprobaciones: texto(fd, 'autoenviarMinAprobaciones'), slaRespuestaMin: texto(fd, 'slaRespuestaMin'),
       escalarNivel2Min: texto(fd, 'escalarNivel2Min'), slaCriticoMin: texto(fd, 'slaCriticoMin'), molestiaAvisoNivel: texto(fd, 'molestiaAvisoNivel'), retencionDias: texto(fd, 'retencionDias'), avisoPrivacidadUrl: texto(fd, 'avisoPrivacidadUrl'),
+      respaldoCorreo: fd.get('respaldoCorreo') === 'on',
     });
     if (!v.ok) return { ok: false, error: v.error };
     try {
@@ -130,6 +132,33 @@ export default async function PaginaAgenteVigia({
       return { ok: true, mensaje: v.valor.habilitado ? 'Guardado. El Vigía está encendido.' : 'Guardado. El Vigía está apagado: ningún cliente recibe respuesta.' };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'guardar la configuración') };
+    }
+  }
+
+  async function director(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
+    'use server';
+    const a = await actor(sp, 'administra');
+    if (!a) return { ok: false, error: 'Solo el dueño de la flota cambia a quién avisa el Vigía.' };
+    const id = texto(fd, 'id');
+    if (id && !UUID.test(id)) return { ok: false, error: 'Persona no válida.' };
+    const que = texto(fd, 'accion');
+    try {
+      if (que === 'quitar') {
+        if (!id) return { ok: false, error: 'Elige a quién quitar.' };
+        const ok = await quitarDirectorVigia(a.tenantId, id);
+        revalidatePath(RUTA);
+        return ok ? { ok: true, mensaje: 'Quitado de la lista.' } : { ok: false, error: 'No encontré a esa persona en tu flota.' };
+      }
+      if (que !== 'guardar') return { ok: false, error: 'Acción no válida.' };
+      const v = validarDirector({ nivel: texto(fd, 'nivel'), nombre: texto(fd, 'nombre'), telefono: texto(fd, 'telefono'), correo: texto(fd, 'correo') });
+      if (!v.ok) return { ok: false, error: v.error };
+      const r = await guardarDirectorVigia(a.tenantId, a.userId, id || null, v.valor);
+      if (!r.ok) return { ok: false, error: r.error };
+      revalidatePath(RUTA);
+      return { ok: true, mensaje: id ? 'Cambios guardados.' : 'Agregado a la lista.' };
+    } catch (e) {
+      logger.error('vigia.accion_director_fallo', { tenant: a.tenantId, err: e instanceof Error ? e.message : String(e) });
+      return { ok: false, error: mensajeParaPantalla(e, 'guardar la lista de avisos') };
     }
   }
 
@@ -187,7 +216,7 @@ export default async function PaginaAgenteVigia({
       ahoraMs={ahoraMs()}
       puedeDecidir={DECIDE.includes(rol)}
       puedeAdministrar={rol === 'flota_admin'}
-      acciones={{ decidir, conversacion, config, alta, contacto }}
+      acciones={{ decidir, conversacion, config, alta, contacto, director }}
       sufijo={sufijoTenant(sp)}
     />
   );

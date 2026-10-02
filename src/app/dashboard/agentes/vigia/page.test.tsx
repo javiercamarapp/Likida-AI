@@ -32,9 +32,11 @@ const guardarConfigVigia = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => {}
 const altaContactoVigia = vi.hoisted(() => vi.fn());
 const bajaManualContacto = vi.hoisted(() => vi.fn());
 const suprimirContactoVigia = vi.hoisted(() => vi.fn());
+const guardarDirectorVigia = vi.hoisted(() => vi.fn());
+const quitarDirectorVigia = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/likida/vigia/repo', async () => {
   const real = await vi.importActual<typeof import('@/lib/likida/vigia/repo')>('@/lib/likida/vigia/repo').catch(() => ({} as Record<string, unknown>));
-  return { ...real, cargarTablero, guardarConfigVigia, altaContactoVigia, bajaManualContacto, suprimirContactoVigia };
+  return { ...real, cargarTablero, guardarConfigVigia, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, guardarDirectorVigia, quitarDirectorVigia };
 });
 const aprobarMensaje = vi.hoisted(() => vi.fn());
 const rechazarMensaje = vi.hoisted(() => vi.fn());
@@ -62,6 +64,8 @@ beforeEach(() => {
   altaContactoVigia.mockResolvedValue({ ok: true, valor: { id: 'n' } });
   bajaManualContacto.mockResolvedValue(true);
   suprimirContactoVigia.mockResolvedValue({ mensajes: 3, conversaciones: 1 });
+  guardarDirectorVigia.mockResolvedValue({ ok: true, valor: { id: 'd' } });
+  quitarDirectorVigia.mockResolvedValue(true);
   repoMsg.mockResolvedValue({ id: ID, conversacionId: 'conv-1' });
 });
 
@@ -235,5 +239,62 @@ describe('configuración, alta y contactos: solo el dueño', () => {
     const { acciones: a } = await acciones();
     expect(await a.contacto(null, fd({ id: ID, accion: 'baja' }))).toMatchObject({ ok: false, error: expect.stringContaining('No encontré') });
     expect(await a.contacto(null, fd({ id: ID, accion: 'suprimir', confirmo: 'on' }))).toMatchObject({ ok: false, error: expect.stringContaining('No encontré') });
+  });
+});
+
+describe('P14 · la lista de directores (solo el dueño)', () => {
+  const ok = { nivel: '1', nombre: 'Ana Pérez', telefono: '5577770001', correo: 'ana@flota.mx' };
+  beforeEach(() => { sesion = { tenantId: 't-sesion', rol: 'flota_admin', userId: 'u-dueno' }; });
+
+  it('agregar: valida, toma flota y usuario de la SESIÓN y guarda con teléfono 52+10', async () => {
+    const { acciones: a } = await acciones();
+    expect(await a.director(null, fd({ accion: 'guardar', ...ok, tenantId: 'otra-flota' }))).toEqual({ ok: true, mensaje: 'Agregado a la lista.' });
+    expect(guardarDirectorVigia).toHaveBeenCalledWith('t-sesion', 'u-dueno', null, { nivel: 1, nombre: 'Ana Pérez', telefono: '525577770001', correo: 'ana@flota.mx' });
+    expect(revalidatePath).toHaveBeenCalled();
+  });
+  it('corregir pasa el id; quitar llama a quitar con la flota de la sesión', async () => {
+    const { acciones: a } = await acciones();
+    expect(await a.director(null, fd({ accion: 'guardar', id: ID, ...ok }))).toEqual({ ok: true, mensaje: 'Cambios guardados.' });
+    expect(guardarDirectorVigia).toHaveBeenCalledWith('t-sesion', 'u-dueno', ID, expect.anything());
+    expect(await a.director(null, fd({ accion: 'quitar', id: ID }))).toEqual({ ok: true, mensaje: 'Quitado de la lista.' });
+    expect(quitarDirectorVigia).toHaveBeenCalledWith('t-sesion', ID);
+  });
+  it('datos inválidos, ids que no son uuid y acciones inventadas se rechazan antes de tocar la base', async () => {
+    const { acciones: a } = await acciones();
+    expect(await a.director(null, fd({ accion: 'guardar', ...ok, telefono: '', correo: '' }))).toMatchObject({ ok: false });
+    expect(await a.director(null, fd({ accion: 'guardar', ...ok, nivel: '3' }))).toMatchObject({ ok: false });
+    expect(await a.director(null, fd({ accion: 'quitar', id: "1'; drop" }))).toMatchObject({ ok: false, error: 'Persona no válida.' });
+    expect(await a.director(null, fd({ accion: 'quitar' }))).toMatchObject({ ok: false });
+    expect(await a.director(null, fd({ accion: 'borrar_todo', id: ID }))).toMatchObject({ ok: false, error: 'Acción no válida.' });
+    expect(guardarDirectorVigia).not.toHaveBeenCalled();
+    expect(quitarDirectorVigia).not.toHaveBeenCalled();
+  });
+  it('el tope o el duplicado que dice la base llegan a la pantalla; quitar a alguien ajeno dice que no lo encuentra', async () => {
+    guardarDirectorVigia.mockResolvedValue({ ok: false, error: 'Ya hay 10 personas en el nivel 1' });
+    quitarDirectorVigia.mockResolvedValue(false);
+    const { acciones: a } = await acciones();
+    expect(await a.director(null, fd({ accion: 'guardar', ...ok }))).toEqual({ ok: false, error: 'Ya hay 10 personas en el nivel 1' });
+    expect(await a.director(null, fd({ accion: 'quitar', id: ID }))).toMatchObject({ ok: false, error: expect.stringContaining('No encontré') });
+  });
+  it('quien no es dueño (encargado, contador, superadmin «viendo como») no cambia la lista', async () => {
+    const { acciones: a } = await acciones();
+    for (const rol of ['encargado', 'contador', 'superadmin']) {
+      sesion = { ...sesion, rol };
+      expect(await a.director(null, fd({ accion: 'guardar', ...ok })), rol).toMatchObject({ ok: false, error: expect.stringContaining('dueño') });
+    }
+    expect(guardarDirectorVigia).not.toHaveBeenCalled();
+  });
+  it('un fallo inesperado no filtra detalles', async () => {
+    guardarDirectorVigia.mockRejectedValue(new Error('rpc vigia_director_guardar: password=hunter2'));
+    const { acciones: a } = await acciones();
+    const r = await a.director(null, fd({ accion: 'guardar', ...ok }));
+    expect(r).toEqual({ ok: false, error: 'No se pudo guardar la lista de avisos' });
+  });
+  it('la configuración recibe el interruptor del respaldo por correo', async () => {
+    const { acciones: a } = await acciones();
+    await a.config(null, fd({ habilitado: 'on', modoAprobacion: 'siempre', autoenviarMinAprobaciones: '5', slaRespuestaMin: '30', escalarNivel2Min: '60', retencionDias: '180', respaldoCorreo: 'on' }));
+    expect(guardarConfigVigia).toHaveBeenCalledWith('t-sesion', 'u-dueno', expect.objectContaining({ respaldoCorreo: true }));
+    await a.config(null, fd({ habilitado: 'on', modoAprobacion: 'siempre', autoenviarMinAprobaciones: '5', slaRespuestaMin: '30', escalarNivel2Min: '60', retencionDias: '180' }));
+    expect(guardarConfigVigia).toHaveBeenLastCalledWith('t-sesion', 'u-dueno', expect.objectContaining({ respaldoCorreo: false }));
   });
 });

@@ -1,11 +1,11 @@
 import Link from 'next/link';
-import { UsersRound, Hand, Clock, Flame, Inbox, ShieldCheck, History, Settings2, AlertTriangle } from 'lucide-react';
+import { UsersRound, Hand, Clock, Flame, Inbox, ShieldCheck, History, Settings2, AlertTriangle, Mail } from 'lucide-react';
 import { numero, fechaHoraMx } from '@/lib/formato';
 import type { DatosTablero, ConversacionTablero } from '@/lib/likida/vigia/repo';
 import { BarraPagina } from '../../resumen-visual';
 import { Bloque, Barra, EsqTabla } from '../../bloque';
 import {
-  FormaBorrador, BotonConversacion, FormaResponder, FormaConfig, FormaAlta, AccionesContacto, type AccionVigia,
+  FormaBorrador, BotonConversacion, FormaResponder, FormaConfig, FormaAlta, FormaDirector, AccionesContacto, type AccionVigia,
 } from './controles';
 
 export interface AccionesVigia {
@@ -14,6 +14,8 @@ export interface AccionesVigia {
   config: AccionVigia;
   alta: AccionVigia;
   contacto: AccionVigia;
+  /** 0673: alta, corrección y baja de un director de la lista de avisos (solo el dueño). */
+  director: AccionVigia;
 }
 
 /** Minutos enteros que lleva esperando una conversación (0 si nadie espera). */
@@ -54,6 +56,17 @@ const NOMBRE_EVENTO: Record<string, string> = {
   sin_dato: 'Faltaba un dato real: se consultó', inyeccion: 'Mensaje con instrucciones sospechosas', otro_cliente: 'Preguntó por un folio que no es suyo',
   adjunto_enviado: 'Se envió el archivo adjunto (POD)', adjunto_pendiente: 'El archivo no salió: la ventana de 24 h del cliente está cerrada; mándaselo tú',
   adjunto_fallo: 'No se pudo mandar el archivo adjunto: revísalo y mándaselo tú',
+  correo_enviado: 'Se mandó el aviso de escalamiento por correo (respaldo del WhatsApp)',
+  correo_fallo: 'No se pudo mandar el aviso por correo: revisa la configuración del correo',
+};
+
+/** El estado de un correo de respaldo, en palabras de la flota (la falta de configuración se dice tal cual: nada falla en silencio). */
+export const TEXTO_ESTADO_CORREO: Record<string, string> = {
+  enviando: 'En curso',
+  enviado: 'Enviado',
+  sin_configurar: 'No se pudo mandar por correo: falta configuración',
+  rechazado: 'El proveedor de correo lo rechazó',
+  red: 'No se pudo mandar por correo: falla de red o sin confirmar',
 };
 
 export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministrar, acciones, sufijo = '' }: {
@@ -101,6 +114,14 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
               <BloqueBitacora datos={datos} />
             </Bloque>
           </div>
+
+          <Bloque mensaje="No se pudo leer la lista de directores." esqueleto={<EsqTabla filas={3} />}>
+            <BloqueDirectores datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
+          </Bloque>
+
+          <Bloque mensaje="No se pudieron leer los correos de respaldo." esqueleto={<EsqTabla filas={3} />}>
+            <BloqueCorreos datos={datos} />
+          </Bloque>
 
           <Bloque mensaje="No se pudieron leer los contactos autorizados." esqueleto={<EsqTabla filas={4} />}>
             <BloqueContactos datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
@@ -413,6 +434,92 @@ export async function BloqueContactos({ datos: p, puedeAdministrar, acciones }: 
         </div>
       ) : (
         <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota autoriza o da de baja contactos.</p>
+      )}
+    </section>
+  );
+}
+
+const NOMBRE_NIVEL: Record<number, string> = { 1: 'Nivel 1 — gerente de servicio', 2: 'Nivel 2 — director o dueño' };
+
+/** 0673: a quién avisa el Vigía en cada nivel. Solo el dueño la edita; el resto la ve. */
+export async function BloqueDirectores({ datos: p, puedeAdministrar, acciones }: { datos: Promise<DatosTablero>; puedeAdministrar: boolean; acciones: AccionesVigia }) {
+  const d = await p;
+  return (
+    <section className="card p-4" aria-labelledby="h-dir">
+      <div className="flex items-center gap-2 mb-1">
+        <UsersRound width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+        <h2 id="h-dir" className="font-display text-[15px] font-semibold">A quién avisa el Vigía</h2>
+      </div>
+      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+        Cuando un cliente espera de más o se molesta, el Vigía avisa al nivel 1 y, si nadie atiende, al nivel 2. Cada persona puede tener WhatsApp, correo o ambos.
+        {' '}{d.config.respaldoCorreo
+          ? 'El respaldo por correo está encendido: si el WhatsApp no sale, se manda por correo.'
+          : 'El respaldo por correo está apagado: solo se avisa por WhatsApp (enciéndelo en «Configuración y SLA»).'}
+        {' '}Sin lista, se avisa como siempre: al responsable del cliente o al jefe de la flota (nivel 1) y al dueño (nivel 2).
+      </p>
+      {[1, 2].map((nivel) => {
+        const lista = (d.directores ?? []).filter((x) => x.nivel === nivel);
+        return (
+          <div key={nivel} className="mb-4">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>{NOMBRE_NIVEL[nivel]}</h3>
+            {lista.length === 0 ? (
+              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Nadie en la lista: se avisa como siempre.</p>
+            ) : (
+              <div className="space-y-3">
+                {lista.map((x) => (
+                  <div key={x.id} className="hairline rounded-xl p-3" style={{ background: 'var(--surface)' }}>
+                    {puedeAdministrar ? (
+                      <FormaDirector accion={acciones.director} director={x} />
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+                        <strong>{x.nombre}</strong>
+                        {x.telefono && <Chip>WhatsApp …{x.telefono.slice(-4)}</Chip>}
+                        {x.correo && <Chip>Correo</Chip>}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {puedeAdministrar ? (
+        <div className="pt-3 border-t" style={{ borderColor: 'var(--line2)' }}>
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>Agregar a la lista</h3>
+          <FormaDirector accion={acciones.director} />
+        </div>
+      ) : (
+        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esta lista.</p>
+      )}
+    </section>
+  );
+}
+
+/** 0674: los últimos avisos mandados por correo como respaldo y su resultado. */
+export async function BloqueCorreos({ datos: p }: { datos: Promise<DatosTablero> }) {
+  const { correos = [] } = await p;
+  return (
+    <section className="card p-4" aria-labelledby="h-cor">
+      <div className="flex items-center gap-2 mb-1">
+        <Mail width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+        <h2 id="h-cor" className="font-display text-[15px] font-semibold">Avisos por correo (respaldo)</h2>
+      </div>
+      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+        Los últimos avisos que se intentaron por correo porque el WhatsApp no salió. Si dice «falta configuración», el correo de Likida aún no está encendido para tu flota: avísanos.
+      </p>
+      {correos.length === 0 ? (
+        <Leyenda>Ningún aviso ha necesitado el respaldo por correo.</Leyenda>
+      ) : (
+        <div className="space-y-2 text-[12.5px]">
+          {correos.map((c) => (
+            <div key={c.id} className="flex flex-wrap items-center gap-2">
+              <Chip tono={c.estado === 'enviado' ? 'ok' : c.estado === 'enviando' ? undefined : 'bad'}>{TEXTO_ESTADO_CORREO[c.estado] ?? c.estado}</Chip>
+              <span style={{ color: 'var(--muted)' }}>Nivel {c.nivel}</span>
+              <span className="ml-auto text-[11px]" style={{ color: 'var(--faint)' }}>{fechaHoraMx(c.creadoEn)}</span>
+            </div>
+          ))}
+        </div>
       )}
     </section>
   );
