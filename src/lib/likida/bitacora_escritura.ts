@@ -123,7 +123,13 @@ export type EntidadBitacora =
   | 'conductor_webhook'
   // Ola 3, Vigía: grupos de clientes (críticos o no) y el histórico exportado que se importó. Ids y conteos: nunca texto del chat.
   | 'vigia_grupo'
-  | 'vigia_historial';
+  | 'vigia_historial'
+  // W3 «autofacturación» (agente 6): la vinculación asistida de un portal (quién la
+  // pidió, cuándo se reclamó y cerró), la bandera ensayo→real por flota, los límites,
+  // la confirmación humana de cada lote y las reversas. `entidadId` es el comercio, el
+  // lote o el gasto según la acción; el detalle nunca lleva cookies, códigos ni RFC.
+  | 'portal_vinculacion'
+  | 'autofactura';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una

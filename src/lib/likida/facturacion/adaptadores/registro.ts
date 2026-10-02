@@ -5,6 +5,8 @@ import { registrarCapufe, revisarReceptor, type DatosReceptorCapufe, type Opcion
 import { AdaptadorDeclarativo, motivoSinVerificar, revisarDatosDeGuion } from './guion';
 import { crearPilotoVision } from './piloto_vision';
 import { GUIONES } from './portales';
+import { guionConVerificacion } from '../../autofactura/verificacion';
+import { REGISTRO_VERIFICACIONES } from '../../autofactura/registro_verificaciones';
 import type { FabricaDePagina } from './playwright_base';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -245,7 +247,11 @@ const TABLA: ReadonlyArray<{
   // arriba anticipaba —«el día que entre uno que no necesite régimen fiscal,
   // no puede quedar fuera porque la flota no lo tenga capturado»— y ese día es
   // hoy: ninguno de los cuatro primeros guiones pide régimen.
-  ...GUIONES.map((guion) => ({
+  // `verificado` se DERIVA del registro con evidencia (autofactura/verificacion.ts), no de lo que diga
+  // `portales.ts`: un guion cuyos selectores cambiaron después de su corrida supervisada vuelve a no verificado.
+  ...GUIONES.map((guionBase) => {
+    const guion = guionConVerificacion(guionBase, REGISTRO_VERIFICACIONES);
+    return {
     comercio: guion.comercio,
     // DOS BLOQUEOS, Y EL DEL CATÁLOGO VA PRIMERO A PROPÓSITO.
     //
@@ -279,7 +285,8 @@ const TABLA: ReadonlyArray<{
         },
       }));
     },
-  })),
+  };
+  }),
 ];
 
 /**

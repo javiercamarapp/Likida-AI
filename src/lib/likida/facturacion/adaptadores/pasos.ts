@@ -304,7 +304,9 @@ export async function mirarLogin(
  */
 export type FormatoCampo =
   | 'texto' | 'mayusculas' | 'monto' | 'monto_entero'
-  | 'fecha_dmy' | 'fecha_dmy_guion' | 'solo_digitos';
+  | 'fecha_dmy' | 'fecha_dmy_guion' | 'fecha_iso' | 'solo_digitos';
+// `fecha_iso` (AAAA-MM-DD) es la ÚNICA forma que acepta `fill` en un `<input type="date">`: con dd/mm/aaaa Playwright
+// lanza «Malformed value». Lo encontró la prueba de contrato contra fixtures (Circle K).
 
 const RE_FECHA_ISO = /^(\d{4})-(\d{2})-(\d{2})/;
 
@@ -348,6 +350,10 @@ export function aplicarFormato(valor: string | null, formato: FormatoCampo = 'te
       const n = Number(limpio.replace(/,/g, '.'));
       if (!Number.isFinite(n)) return null;
       return formato === 'monto_entero' ? String(Math.trunc(n)) : n.toFixed(2);
+    }
+    case 'fecha_iso': {
+      const m = RE_FECHA_ISO.exec(v);
+      return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
     }
     case 'fecha_dmy':
     case 'fecha_dmy_guion': {
@@ -502,6 +508,37 @@ export async function esperarTexto(
     await op.dormir(op.intervaloMs);
   }
 
+  return { valor: null, aparecio };
+}
+
+/**
+ * Espera a que APAREZCA el resultado de una búsqueda: texto no vacío, O un control de formulario presente.
+ *
+ * `buscar.esperar` de varios guiones apunta a los datos fiscales que el portal muestra TRAS buscar (`#txtName,
+ * #selFiscalRegime`…): son <input>/<select>, y un <input> tiene `textContent` vacío para siempre, así que
+ * `esperarTexto` los declaraba «siguió VACÍO» aunque el formulario ya estuviera ahí. Lo cazó la prueba de contrato
+ * contra fixtures (autofactura/contrato_portales.test.ts) en sevafusa, oxxo, facturagas, redviacorta y
+ * libramientos_meta. Un contenedor de TEXTO vacío (pre-pintado) sigue contando como «no llegó».
+ */
+export async function esperarResultado(
+  pagina: PaginaPortal,
+  selector: string,
+  op: OpcionesEspera,
+): Promise<{ valor: string | null; aparecio: boolean }> {
+  const limite = op.ahora() + op.topeMs;
+  const vueltas = Math.max(1, Math.ceil(op.topeMs / op.intervaloMs));
+  let aparecio = false;
+  for (let i = 0; i < vueltas; i++) {
+    const bruto = await pagina.leerTexto(selector);
+    if (bruto !== null) {
+      aparecio = true;
+      const v = bruto.trim();
+      if (v) return { valor: v, aparecio: true };
+      if (pagina.esControl && (await pagina.esControl(selector))) return { valor: '(campo presente)', aparecio: true };
+    }
+    if (i === vueltas - 1 || op.ahora() >= limite) break;
+    await op.dormir(op.intervaloMs);
+  }
   return { valor: null, aparecio };
 }
 

@@ -7,6 +7,8 @@ import { enrutar } from './enrutar';
 import { cuentasCompartidas } from './cuentas';
 import { modoEfectivo } from './modo';
 import { mandatoFlotaVigente } from '@/lib/legal/aceptacion';
+import { decidirEmision, registrarResultado, type DecisionEmision, type ResultadoEmision } from '../autofactura/control_emision';
+import { crearDepsControl } from '../autofactura/control_emision_repo';
 import {
   facturarConAgente,
   facturarLoteConAgente,
@@ -72,7 +74,8 @@ export type MotivoNoFactura =
   | 'confianza_baja'     // la lectura no da para emitir un documento fiscal
   | 'bloqueado'          // la máquina se rindió a propósito: entra una persona
   | 'ya_facturado'
-  | 'ya_en_proceso';     // otra corrida lo tomó primero y su claim sigue vivo
+  | 'ya_en_proceso'     // otra corrida lo tomó primero y su claim sigue vivo
+  | 'espera_control';    // el control de emisión (0542) lo retiene: lote por confirmar, límite o cupo
 
 /**
  * EL CANDADO POR FLOTA (auditoría ola 1, #48). `modoEfectivo` solo mira el
@@ -91,6 +94,32 @@ async function modoDeFlota(tenantId: string, pedido: 'ensayo' | 'emitir'): Promi
     detalle: 'emitir ignorado: la flota no tiene el mandato de autofacturación vigente (aceptacion_legal) — el dueño lo otorga en /dashboard/legal',
   });
   return 'ensayo';
+}
+
+/**
+ * EL CONTROL DE LA EMISIÓN REAL (0542), tercera llave después del interruptor global y el mandato de la flota.
+ * Solo se consulta cuando ya se iba a emitir: bandera de la flota, portal verificado, límites, cupo del día
+ * y —en fase supervisada— el lote confirmado por una persona. Si degrada a ensayo se dice por qué; si deja
+ * pasar solo una parte, el resto NO llega al portal. Falla cerrado (decidirEmision nunca lanza hacia emitir).
+ */
+async function puertaDeControl(
+  tenantId: string, comercio: string, tickets: Array<{ gastoId: string; monto: number }>,
+): Promise<DecisionEmision> {
+  try {
+    return await decidirEmision({ tenantId, comercio, tickets, modoPedido: 'emitir' }, crearDepsControl());
+  } catch (e) {
+    logger.error('autofactura.control_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    return { modo: 'ensayo', razon: 'control_ilegible', detalle: 'el control de emisión no contestó: se ensaya' };
+  }
+}
+
+/** Cierra el ciclo del control (cupo devuelto, emisiones contadas, bitácora). Nunca lanza. */
+async function cerrarControl(
+  tenantId: string, comercio: string, decision: Extract<DecisionEmision, { modo: 'emitir' }>, resultados: ResultadoEmision[],
+): Promise<void> {
+  try {
+    await registrarResultado({ tenantId, comercio, decision, resultados }, crearDepsControl());
+  } catch { /* best-effort: el resultado ya está en el gasto */ }
 }
 
 export interface DecisionAutofactura {
@@ -271,10 +300,22 @@ export async function facturarAlVuelo(args: {
     return { intentado: false, facturado: false, motivo: decision.motivo, detalle: decision.detalle };
   }
 
-  const modo = await modoDeFlota(args.tenantId, args.modo ?? 'ensayo');
+  let modo = await modoDeFlota(args.tenantId, args.modo ?? 'ensayo');
+  // 0542: la tercera llave. Degrada a ensayo o retiene el ticket; nunca abre más de lo que la persona confirmó.
+  let control: Extract<DecisionEmision, { modo: 'emitir' }> | null = null;
+  if (modo === 'emitir') {
+    const d = await puertaDeControl(args.tenantId, t.comercio!.clave, [{ gastoId: args.gastoId, monto: Number(data.monto) }]);
+    if (d.modo === 'ensayo') {
+      logger.warn('autofactura.control_ensayo', { gastoId: args.gastoId, razon: d.razon });
+      modo = 'ensayo';
+    } else if (d.permitidos.length === 0) {
+      return { intentado: false, facturado: false, motivo: 'espera_control', detalle: d.rechazados[0]?.detalle };
+    } else control = d;
+  }
   // RES-10: LA MARCA DE "EMISIÓN EN CURSO" VA ANTES DE ABRIR LA SESIÓN.
   // Solo en `emitir`: un ensayo no timbra nada y no hay qué proteger.
   if (modo === 'emitir' && !(await marcarEmisionEnCurso(admin, [args.gastoId], args.tenantId, args.ahora))) {
+    if (control) await cerrarControl(args.tenantId, t.comercio!.clave, control, [{ gastoId: args.gastoId, monto: Number(data.monto), cfdiUuid: null, detalle: SIN_MARCA_NO_SE_EMITE }]);
     return { intentado: true, facturado: false, detalle: SIN_MARCA_NO_SE_EMITE };
   }
 
@@ -291,8 +332,10 @@ export async function facturarAlVuelo(args: {
   // intentarlo la hora que viene" es la respuesta equivocada de las dos maneras:
   // contra un CAPTCHA no cambia nada, y tras un emitir sin confirmar duplica el
   // CFDI.
+  const cerrar1 = (uuid: string | null, detalle?: string) => (control ? cerrarControl(args.tenantId, t.comercio!.clave, control, [{ gastoId: args.gastoId, monto: Number(data.monto), cfdiUuid: uuid, detalle }]) : Promise.resolve());
   const bloqueo = motivoDeBloqueo(r);
   if (bloqueo) {
+    await cerrar1(null, `${bloqueo} ${r.error ?? ''}`);
     const guardado = await bloquear(admin, args.gastoId, args.tenantId, bloqueo, args.ahora);
     return {
       intentado: true, facturado: false, motivo: 'bloqueado',
@@ -302,6 +345,7 @@ export async function facturarAlVuelo(args: {
 
   if (!r.ok) {
     logger.warn('autofactura.fallo', { gastoId: args.gastoId, error: r.error });
+    await cerrar1(null, r.error);
     // Un fallo LIMPIO (el portal no cargó, sin apretar emitir): la marca se
     // levanta y el ticket vuelve a la cola. Si fue ambiguo, `motivoDeBloqueo`
     // ya lo atrapó arriba y aquí no se llega.
@@ -316,6 +360,7 @@ export async function facturarAlVuelo(args: {
   // encontraba fallos que no ocurrieron.
   if (!r.cfdiUuid) {
     logger.info('autofactura.ensayo', { gastoId: args.gastoId, capturado: Object.keys(r.capturado).length });
+    await cerrar1(null, 'sin UUID');
     if (modo === 'emitir') await levantarEmisionEnCurso(admin, args.gastoId, args.tenantId);
     return {
       intentado: true, facturado: false,
@@ -332,6 +377,7 @@ export async function facturarAlVuelo(args: {
   // `escribirUuid` ya la reemplazó por el bloqueo de verdad ("YA SE EMITIÓ…").
   if (guardado === null && modo === 'emitir') await levantarEmisionEnCurso(admin, args.gastoId, args.tenantId);
 
+  await cerrar1(r.cfdiUuid);
   logger.info('autofactura.ok', { gastoId: args.gastoId, uuid: r.cfdiUuid });
   return {
     intentado: true, facturado: true, cfdiUuid: r.cfdiUuid,
@@ -483,18 +529,40 @@ export async function facturarLoteAlVuelo(args: {
 
   if (tickets.length === 0) return { porGasto, facturados: 0, bloqueados };
 
-  const modo = await modoDeFlota(args.tenantId, args.modo ?? 'ensayo');
+  let modo = await modoDeFlota(args.tenantId, args.modo ?? 'ensayo');
+  // 0542: la tercera llave. En emitir solo viaja al portal lo que el control deja pasar (confirmado, dentro de
+  // límites y de cupo); el resto se queda esperando y NO abre la sesión. Si todo degrada a ensayo, ensayo.
+  let control: Extract<DecisionEmision, { modo: 'emitir' }> | null = null;
+  let aPortal = tickets;
+  if (modo === 'emitir') {
+    const d = await puertaDeControl(args.tenantId, args.comercio, tickets.map((x) => ({ gastoId: x.gastoId, monto: Number(filas.get(x.gastoId)?.monto) })));
+    if (d.modo === 'ensayo') {
+      logger.warn('autofactura.control_ensayo', { tenant: args.tenantId, comercio: args.comercio, razon: d.razon });
+      modo = 'ensayo';
+    } else {
+      control = d;
+      const ok = new Set(d.permitidos);
+      for (const x of tickets) {
+        if (ok.has(x.gastoId)) continue;
+        porGasto.push({ gastoId: x.gastoId, intentado: false, facturado: false, motivo: 'espera_control', detalle: d.rechazados.find((z) => z.gastoId === x.gastoId)?.detalle });
+      }
+      aPortal = tickets.filter((x) => ok.has(x.gastoId));
+      if (aPortal.length === 0) return { porGasto, facturados: 0, bloqueados };
+    }
+  }
+  const montoDe = (id: string) => Number(filas.get(id)?.monto);
   // RES-10: la marca de "emisión en curso" para TODO el lote, en un UPDATE,
   // antes de abrir la sesión. Sin marca confirmada no se toca el portal.
-  if (modo === 'emitir' && !(await marcarEmisionEnCurso(admin, tickets.map((x) => x.gastoId), args.tenantId, args.ahora))) {
-    for (const x of tickets) porGasto.push({ gastoId: x.gastoId, intentado: true, facturado: false, detalle: SIN_MARCA_NO_SE_EMITE });
+  if (modo === 'emitir' && !(await marcarEmisionEnCurso(admin, aPortal.map((x) => x.gastoId), args.tenantId, args.ahora))) {
+    for (const x of aPortal) porGasto.push({ gastoId: x.gastoId, intentado: true, facturado: false, detalle: SIN_MARCA_NO_SE_EMITE });
+    if (control) await cerrarControl(args.tenantId, args.comercio, control, aPortal.map((x) => ({ gastoId: x.gastoId, monto: montoDe(x.gastoId), cfdiUuid: null, detalle: SIN_MARCA_NO_SE_EMITE })));
     return { porGasto, facturados: 0, bloqueados, error: SIN_MARCA_NO_SE_EMITE };
   }
 
   const r = await facturarLoteConAgente({
     tenantId: args.tenantId,
     comercio: args.comercio,
-    tickets,
+    tickets: aPortal,
     modo,
   });
 
@@ -504,15 +572,18 @@ export async function facturarLoteAlVuelo(args: {
   const bloqueoDelLote = motivoDeBloqueo(r);
   const vinculoDelLote = vinculoDelResultado(r);
 
+  const paraControl: ResultadoEmision[] = [];
   for (const p of r.porGasto) {
     const propio = await guardarUno(admin, args, p, r.error, ordenPorUuid, bloqueoDelLote, modo === 'emitir');
     porGasto.push({ gastoId: p.gastoId, ...propio });
     if (propio.bloqueado) bloqueados.push({ gastoId: p.gastoId, motivo: propio.bloqueado });
+    paraControl.push({ gastoId: p.gastoId, monto: montoDe(p.gastoId), cfdiUuid: propio.cfdiUuid ?? null, detalle: `${propio.detalle ?? ''} ${propio.bloqueado ?? ''}`.trim() || undefined });
   }
+  if (control) await cerrarControl(args.tenantId, args.comercio, control, paraControl);
 
   logger.info('autofactura.lote', {
     tenant: args.tenantId, comercio: args.comercio, modo: r.modo,
-    pedidos: args.gastoIds.length, alPortal: tickets.length,
+    pedidos: args.gastoIds.length, alPortal: aPortal.length,
     facturados: porGasto.filter((x) => x.facturado).length, bloqueados: bloqueados.length,
   });
 

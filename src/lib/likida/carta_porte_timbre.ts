@@ -46,6 +46,17 @@ export interface TimbreVigente {
   modo: 'sandbox' | 'produccion';
   proveedor: string;
   selloSat: string | null;
+  /** 0541: el estado de una cancelación pedida desde Likida; null = ninguna. */
+  cancelacion: CancelacionTimbre | null;
+}
+
+/** 0541: lo que la pantalla necesita saber de una cancelación en curso. */
+export interface CancelacionTimbre {
+  estado: 'solicitada' | 'en_proceso' | 'rechazada' | 'confirmada';
+  motivo: string | null;
+  codigoSat: string | null;
+  error: string | null;
+  solicitadaEn: string | null;
 }
 
 /**
@@ -92,7 +103,7 @@ export async function leerContextoTimbre(tenantId: string, viajeId: string): Pro
     // así que `maybeSingle` sigue siendo correcto — y leer las dos en la misma
     // pasada evita que la pantalla enseñe "sin timbre" durante una reserva.
     acotada(admin.from('ccp_timbre')
-      .select('uuid_fiscal, fecha_timbrado, modo, proveedor, sello_sat, estado, reservado_en')
+      .select('uuid_fiscal, fecha_timbrado, modo, proveedor, sello_sat, estado, reservado_en, cancelacion_estado, cancelacion_motivo, cancelacion_codigo, cancelacion_error, cancelacion_solicitada_en')
       .eq('tenant_id', tenantId).eq('viaje_id', viajeId)
       .in('estado', ['vigente', 'pendiente']).maybeSingle(), 'timbre.vigente'),
   ]);
@@ -126,6 +137,13 @@ export async function leerContextoTimbre(tenantId: string, viajeId: string): Pro
       modo: t.modo === 'produccion' ? 'produccion' : 'sandbox',
       proveedor: String(t.proveedor),
       selloSat: txt(t.sello_sat),
+      cancelacion: txt(t.cancelacion_estado) === null ? null : {
+        estado: String(t.cancelacion_estado) as CancelacionTimbre['estado'],
+        motivo: txt(t.cancelacion_motivo),
+        codigoSat: txt(t.cancelacion_codigo),
+        error: txt(t.cancelacion_error),
+        solicitadaEn: txt(t.cancelacion_solicitada_en),
+      },
     },
     reservaPendiente: reserva === null ? null : {
       reservadoEn: txt(reserva.reservado_en),

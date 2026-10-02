@@ -2,6 +2,7 @@ import { CircleCheck, CircleDashed, TriangleAlert, ExternalLink, ShieldAlert } f
 import { fechaCorta } from '@/lib/formato';
 import type { EstadoVinculo } from '@/lib/likida/facturacion/vinculo_portal';
 import { ControlesRelogin, type AccionRelogin, type EstadoRelogin } from './relogin-controles';
+import { VincularAsistida } from './vincular-asistida';
 
 // ════════════════════════════════════════════════════════════════════════════
 // EL ESTADO DEL VÍNCULO, POR PORTAL — la pantalla que faltaba.
@@ -116,10 +117,15 @@ export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelo
                         <a href={f.portal} target="_blank" rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 text-[11.5px] underline"
                           style={{ color: 'var(--muted)' }}>
-                          Vincular ahora <ExternalLink width={10} height={10} strokeWidth={2} />
+                          Abrir el portal <ExternalLink width={10} height={10} strokeWidth={2} />
                         </a>
                       )}
                     </div>
+                  </div>
+                  {/* 0540: el paso humano del CAPTCHA/MFA con código de un solo uso. También
+                      con el portal vinculado: «re-vincular» antes de que la sesión caduque. */}
+                  <div className="mt-1.5">
+                    <VincularAsistida clave={f.clave} nombre={f.nombre} />
                   </div>
                   {/* La casilla del re-login va DEBAJO de cada portal y no en
                       un ajuste global: el permiso es por portal, porque una
@@ -135,16 +141,14 @@ export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelo
             })}
           </ul>
 
-          {/* LO QUE NO SE PROMETE. Vincular deja la sesión guardada solo cuando
-              el login lo captura una sesión asistida (scripts/vincular-portal.mjs,
-              en una máquina con pantalla): un servidor no tiene dónde enseñarte
-              un navegador. Decirlo aquí es la diferencia entre un botón honesto
-              y uno que parece no funcionar. */}
+          {/* LO QUE NO SE PROMETE. Un servidor no tiene pantalla donde enseñarte un navegador:
+              «Vincular con código» te da un código de un solo uso y el comando que corres en TU
+              computadora; ahí entras tú. Likida no resuelve ni rodea CAPTCHAs ni guarda tu contraseña. */}
           <p className="text-[11px] mt-3 pt-2 border-t" style={{ color: 'var(--faint)', borderColor: 'var(--line2)' }}>
-            «Vincular ahora» abre el portal para que entres tú. Para que el agente pueda reusar esa
-            sesión hay que capturarla desde la sesión asistida de Likida — pídenosla y la corremos
-            contigo; toma un minuto y no nos das ninguna contraseña. Un CAPTCHA en ese login lo
-            resuelves tú: Likida no los resuelve ni los rodea.
+            «Vincular con código» te da un código de un solo uso (caduca en 15 minutos) y el comando
+            que corres en tu computadora: se abre el portal, entras tú y resuelves el CAPTCHA o el
+            código de dos pasos, y a Likida solo llegan las cookies de ese portal, cifradas — nunca tu
+            contraseña. Si la sesión se cae, el portal aparece como «Sesión caducada» y vuelves a vincular.
           </p>
         </>
       )}
