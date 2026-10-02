@@ -68,8 +68,9 @@ describe('cron wa-outbox — destinatarios del tenant demo', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     const [, init] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(String(init.body)).to).toBe('5215512345678');
-    const demo = finalizarSalidaWhatsApp.mock.calls.find((c) => (c[0] as { id: string }).id === 'out-demo') as unknown[];
+    const llamadas = finalizarSalidaWhatsApp.mock.calls as unknown as Array<[{ id: string }, string | undefined, string | undefined]>;
+    const demo = llamadas.find((c) => c[0].id === 'out-demo');
     expect(demo).toBeTruthy();
-    expect(String(demo[2])).toMatch(/^terminal:.*demo/i);
+    expect(String(demo?.[2])).toMatch(/^terminal:.*demo/i);
   });
 });

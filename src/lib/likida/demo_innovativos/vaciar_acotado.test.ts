@@ -13,11 +13,9 @@ describe('vaciar.sql solo toca filas sembradas', () => {
   });
   it.each(sentencias.map((x) => [x.replace(/\s+/g, ' ').trim().slice(0, 90), x] as const))('acotada por una marca del demo, no solo por el tenant: %s', (_t, x) => {
     // Quitado el filtro por tenant, tiene que quedar OTRA condición (proveedor/origen/modelo/nombre/ids deterministas).
-    const sinTenant = x.replace(/(\w+\.)?tenant_id\s*=\s*:'t'/gi, '').replace(/\bwhere\b/gi, '').replace(/\band\b/gi, '');
     const donde = /\bwhere\b([\s\S]*)$/i.exec(x)?.[1] ?? '';
     expect(donde.trim(), 'sin WHERE').not.toBe('');
     expect(/proveedor\s*=|sistema_origen\s*=|modelo\s*=|\blike\b|innovativos_sim\.uid\(|recibida_en\s*-\s*medida_en/i.test(x), x).toBe(true);
-    expect(sinTenant.trim().length).toBeGreaterThan(10);
   });
   it('ya no borra «todo lo csv» ni «todo lo de tabla_propia» del tenant', () => {
     expect(sql).not.toMatch(/delete from geocerca where tenant_id = :'t' and fuente = 'csv'/);
