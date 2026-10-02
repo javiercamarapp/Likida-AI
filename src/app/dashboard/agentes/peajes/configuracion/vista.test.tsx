@@ -1,12 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { VistaConfiguracionPeajes, type BuzonVista, type AccionesConfiguracion } from './vista';
+import type { EntradasVista } from './entradas';
 
 const nada = async () => {};
 const acciones: AccionesConfiguracion = {
   activarBuzon: nada, desactivarBuzon: nada, rotarLlave: nada, reintentarArchivo: nada, altaTag: nada, bajaTag: nada, importarTags: nada,
   importarCasetas: nada, estadoCaseta: nada, guardarGeocerca: nada, estadoGeocerca: nada, guardarMapeo: nada, borrarMapeo: nada,
+  activarCorreo: nada, desactivarCorreo: nada, rotarCorreo: nada, guardarRemitentes: nada, guardarPull: nada, apagarPull: nada, borrarCredencialPull: nada,
 };
+const entradasBase: EntradasVista = { config: null, puedeAdministrar: true, direccionCorreo: null, cofreConfigurado: true };
 const LLAVE = 'a'.repeat(64);
 const buzonActivo: BuzonVista = { estado: 'activo', rotacion: 2, secretoConfigurado: true, puedeAdministrar: true, llave: LLAVE, url: 'https://app.likida.ai/api/peajes/ingesta', flotaId: 'f-1' };
 
@@ -15,7 +18,7 @@ function pintar(o: Partial<Parameters<typeof VistaConfiguracionPeajes>[0]> = {})
     <VistaConfiguracionPeajes
       sufijo="" aviso={null} error={null} agenteApagado={null}
       tags={[]} unidades={[{ id: 'u1', numeroEconomico: 'C2-08', placas: 'ABC-123' }]} casetas={[]} geocercas={[]} mapeos={[]} archivos={[]}
-      tiposGeocerca={['origen', 'punto_interes']} buzon={buzonActivo} acciones={acciones}
+      tiposGeocerca={['origen', 'punto_interes']} buzon={buzonActivo} entradas={entradasBase} acciones={acciones}
       {...o}
     />,
   );
@@ -106,5 +109,58 @@ describe('mensajes', () => {
     expect(html).toContain('Eliminar el TAG IMDM10000001');
     expect(html).toContain('Eliminar el mapeo de PASE');
     expect(html).toContain('hora=«Hora»');
+  });
+});
+
+describe('recepción por correo y pull (0563)', () => {
+  const cfg = { correoActivo: true, correoToken: 'abcdefghjkmnpqrstvwxyz23', remitentes: ['pase.example'], pullUrl: 'https://tms.flota.example/cortes', pullActivo: true, pullIntervaloMin: 60, pullUltimoEn: '2026-10-01T12:00:00Z', pullUltimoError: null, pullConCredencial: true };
+  const E = (o: Partial<EntradasVista> = {}): EntradasVista => ({ config: cfg, puedeAdministrar: true, direccionCorreo: 'pj-abcdefghjkmnpqrstvwxyz23@mail.likida.ai', cofreConfigurado: true, ...o });
+
+  it('muestra la dirección del buzón de correo, los remitentes permitidos y los botones de quien administra', () => {
+    const html = pintar({ entradas: E() });
+    expect(html).toContain('pj-abcdefghjkmnpqrstvwxyz23@mail.likida.ai');
+    expect(html).toContain('pase.example');
+    expect(html).toContain('Cambiar dirección');
+    expect(html).toContain('Guardar remitentes');
+  });
+
+  it('quien NO administra ve el estado pero ningún botón que cambie algo, y el token no se imprime nunca', () => {
+    const html = pintar({ entradas: E({ puedeAdministrar: false }) });
+    expect(html).toContain('Solo quien administra la flota cambia esto');
+    for (const b of ['Cambiar dirección', 'Guardar remitentes', 'Guardar y encender', 'Borrar el token guardado']) expect(html).not.toContain(b);
+    expect(html).not.toContain('type="password"');
+  });
+
+  it('correo apagado ofrece «Activar correo» y no enseña la dirección', () => {
+    const html = pintar({ entradas: E({ config: { ...cfg, correoActivo: false } }) });
+    expect(html).toContain('Activar correo');
+    expect(html).not.toContain('pj-abcdefghjkmnpqrstvwxyz23@');
+  });
+
+  it('sin dominio de correo en el servidor lo dice (no inventa una dirección)', () => {
+    expect(pintar({ entradas: E({ direccionCorreo: null }) })).toContain('Falta RESEND_EMAIL_DOMAIN');
+  });
+
+  it('pull: URL, intervalo, última consulta buena y el último error del endpoint, escapado', () => {
+    const html = pintar({ entradas: E({ config: { ...cfg, pullUltimoError: '<script>x</script> HTTP 500' } }) });
+    expect(html).toContain('https://tms.flota.example/cortes');
+    expect(html).toContain('cada 1 h');
+    expect(html).toContain('2026-10-01 12:00 UTC');
+    expect(html).toContain('Última consulta con problema');
+    expect(html).not.toContain('<script>x</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('el token guardado no vuelve a la pantalla (solo se sabe que existe) y sin cofre el campo se deshabilita con el motivo', () => {
+    const html = pintar({ entradas: E({ cofreConfigurado: false }) });
+    expect(html).toContain('ya hay uno guardado');
+    expect(html).toContain('Falta LIKIDA_COFRE_LLAVE');
+    expect(html).toMatch(/name="token"[^>]*disabled/);
+    expect(html).not.toMatch(/name="token"[^>]*value=/);
+  });
+
+  it('lectura fallida de la configuración dice «no se pudo leer», no «apagado»', () => {
+    const html = pintar({ entradas: E({ config: null }) });
+    expect(html).toContain('No se pudo leer esta configuración');
   });
 });

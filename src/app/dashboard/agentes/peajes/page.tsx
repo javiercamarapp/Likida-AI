@@ -11,6 +11,7 @@ import {
   importarDesglose, conciliarDesglose, listarDesgloses, detalleDesglose,
 } from '@/lib/likida/intake/desglose_peaje';
 import { evidenciaGpsDeDesglose } from '@/lib/likida/peajes/evidencia_gps';
+import { anularDesgloseDb } from '@/lib/likida/peajes/datos';
 import { bitacoraConciliada } from '@/lib/likida/peajes/bitacora_conciliada';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../../sufijo';
@@ -22,6 +23,7 @@ import { registrarCorrida, ultimasCorridas } from '@/lib/likida/agentes/corridas
 import { ahoraMs } from '@/lib/saludo';
 import type { EstadoImportar } from './subir-desglose';
 import type { EstadoConciliar } from './conciliar-desglose';
+import type { EstadoAnular } from './anular-desglose';
 import { MAX_ARCHIVO_SUBIDA_BYTES, MENSAJE_ARCHIVO_GRANDE } from '@/lib/http/subidas_formulario';
 
 export const dynamic = 'force-dynamic';
@@ -211,6 +213,32 @@ export default async function PaginaAgentePeajes({
   }
 
   /**
+   * Anular un desglose subido por error (0563). Área `administracion`: quita un dato de la
+   * contabilidad de la flota. No borra: deja quién y por qué, y libera la huella del archivo.
+   * Se repite la puerta ADENTRO (patrón del repo): una action es un endpoint por POST directo.
+   */
+  async function anularDesgloseAhora(_prev: EstadoAnular, fd: FormData): Promise<EstadoAnular> {
+    'use server';
+    const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
+    if (!puedeVerArea(sesion.rol, 'administracion')) return { error: 'Solo quien administra la flota puede anular un desglose.' };
+    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+    const desgloseId = String(fd.get('desglose') ?? '').trim();
+    const motivo = String(fd.get('motivo') ?? '').trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(desgloseId)) return { error: 'Falta el desglose a anular.' };
+    if (!motivo) return { error: 'Escribe el motivo: una anulación sin porqué no se puede defender después.' };
+    if (motivo.length > 500) return { error: 'El motivo pasa de 500 caracteres.' };
+    try {
+      const r = await anularDesgloseDb(tenantId, desgloseId.toLowerCase(), motivo, `panel:${sesion.rol}`);
+      if (r === 'no_encontrado') return { error: 'No encontré ese desglose en tu flota.' };
+      logger.info('peajes.desglose_anulado', { tenantId, desglose: desgloseId, resultado: r });
+      return { ok: r === 'ya_anulado' ? 'Ese desglose ya estaba anulado.' : 'Desglose anulado: ya no cuenta. El archivo correcto puede volver a mandarse.' };
+    } catch (e) {
+      logger.error('peajes.anular_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+      return { error: 'No se pudo anular el desglose. Inténtalo de nuevo.' };
+    }
+  }
+
+  /**
    * El barrido a demanda (auditoría 4, B1): re-corre el cruce de las líneas
    * `por_conciliar` contra los gastos que llegaron DESPUÉS del estado de
    * cuenta. Es el mismo patrón que el «Ejecutar ahora» de Cobranza
@@ -285,6 +313,8 @@ export default async function PaginaAgentePeajes({
       verificacion={verificacionSel}
       importarDesglose={importarYCruzarDesglose}
       conciliarDesglose={conciliarDesgloseAhora}
+      anularDesglose={anularDesgloseAhora}
+      puedeAnular={puedeVerArea(rol, 'administracion')}
       notificaciones={
         <>
           <FichaCorridas corridas={corridas} />

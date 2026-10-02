@@ -13,6 +13,7 @@ import { SubirDesglose, type AccionSubir } from './subir';
 import { BotonEjecutar, type AccionBarrer } from './controles';
 import { SubirDesgloseProveedor, type AccionImportar } from './subir-desglose';
 import { BotonConciliar, type AccionConciliar } from './conciliar-desglose';
+import { BotonAnular, type AccionAnular } from './anular-desglose';
 
 /**
  * La ventana del Agente de Peajes (F5): lo que el estado de cuenta del
@@ -42,7 +43,7 @@ import { BotonConciliar, type AccionConciliar } from './conciliar-desglose';
 export function VistaAgentePeajes({
   conciliacion, lineas, desgloses, peajeAcreditable, sufijo, subirDesglose, ejecutarAhora,
   desglosesProveedor, desgloseSeleccionado, detalleSeleccionado, evidenciaGps, verificacion, importarDesglose, conciliarDesglose,
-  notificaciones,
+  anularDesglose, puedeAnular = false, notificaciones,
 }: {
   conciliacion: ConciliacionConsolidado | null;
   // FE-10: `ColaPorConciliar`, no `LineaPorConciliar[]` a secas — sin el
@@ -68,6 +69,9 @@ export function VistaAgentePeajes({
   verificacion: { resumen: ResumenVerificacion; sinEvaluarGps: number } | null;
   importarDesglose: AccionImportar;
   conciliarDesglose: AccionConciliar;
+  /** Anular un desglose subido por error (0563). Solo se pinta si `puedeAnular` (área administración). */
+  anularDesglose?: AccionAnular;
+  puedeAnular?: boolean;
   /** La sección de Notificaciones, ya renderizada en el servidor
    *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
    *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
@@ -267,6 +271,7 @@ export function VistaAgentePeajes({
                   <div>
                     <div className="flex items-center gap-2 flex-wrap mb-3">
                       <BotonConciliar conciliar={conciliarDesglose} desgloseId={desgloseSeleccionado.desgloseId} />
+                      {puedeAnular && anularDesglose && <BotonAnular anular={anularDesglose} desgloseId={desgloseSeleccionado.desgloseId} />}
                       {desgloseSeleccionado.cuadra > 0 ? (
                         <a href={`/api/export/bitacora-peaje?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
                           className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg hairline transition-colors hover:bg-[var(--canvas)]"

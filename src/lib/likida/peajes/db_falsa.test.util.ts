@@ -102,7 +102,8 @@ export function crearDbFalsa(
         const nuevos = (Array.isArray(this.payload) ? this.payload : [this.payload]) as Fila[];
         const creados: Fila[] = [];
         for (const n of nuevos) {
-          const fila: Fila = { id: `id-${++secuencia}`, ...n };
+          // uuid con forma válida: las rutas /v1 validan el id como uuid, y un `id-3` jamás pasaría esa puerta.
+          const fila: Fila = { id: `00000000-0000-4000-8000-${String(++secuencia).padStart(12, '0')}`, ...n };
           if (this.op === 'upsert') {
             const llaves = (this.opcionesUpsert.onConflict ?? 'id').split(',').map((s) => s.trim());
             const previa = tabla.find((t) => llaves.every((k) => t[k] === fila[k]));
