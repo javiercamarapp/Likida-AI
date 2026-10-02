@@ -211,8 +211,8 @@ describe('la idempotencia y el sello', () => {
 
 describe('los fallos se declaran, no se tragan', () => {
   it('un proveedor sin lector se dice por su nombre', async () => {
-    const r = await sincronizarGpsDeFlota('t-1', 'wialon', CRED, httpQue(200, '{}'));
-    expect(r.error).toContain('wialon');
+    const r = await sincronizarGpsDeFlota('t-1', 'traccar', CRED, httpQue(200, '{}'));
+    expect(r.error).toContain('traccar');
     expect(r.guardadas).toBe(0);
   });
 

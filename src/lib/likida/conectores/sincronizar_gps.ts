@@ -84,9 +84,13 @@ export interface ResultadoSync {
    *  y el cron lo reporta como `parcial` — un verde aquí mentiría. */
   sinTurno?: boolean;
   error?: string;
+  /** Clase de la falla del PROVEEDOR (0500): decide el backoff del poll. */
+  falla?: 'credencial' | 'proveedor' | 'formato';
+  /** Unidades que el proveedor lista y todavía no reportan posición (no es error). */
+  sinPosicion?: number;
 }
 
-type Lectura = { deviceId: string; lat: number; lng: number; medidaEn: string; velocidad: number | null; rumbo: number | null };
+type Lectura = { deviceId: string; lat: number; lng: number; medidaEn: string; velocidad: number | null; rumbo: number | null; ignicion?: boolean | null };
 
 /** La frontera entre un proveedor ajeno y nuestra tabla es estricta: un id
  * vacío, una fecha inválida o números fuera de dominio no llegan a Postgres.
@@ -175,8 +179,9 @@ export async function sincronizarGpsDeFlota(
   }
 
   const r = await lector(valores, http, { venceEn: opciones.venceEn, ahora: opciones.reloj ?? ahora, dormir: opciones.dormir });
-  if (!r.ok) return { ...base, paginas: r.paginas, backlog: r.backlog, error: r.motivo };
+  if (!r.ok) return { ...base, paginas: r.paginas, backlog: r.backlog, error: r.motivo, falla: r.falla };
   base.paginas = r.paginas;
+  if (r.sinPosicion) base.sinPosicion = r.sinPosicion;
   const ahoraMs = ahora();
   const validas = r.posiciones.filter((p) => posicionValida(p, ahoraMs));
   const descartadas = r.invalidas + (r.posiciones.length - validas.length);
@@ -218,7 +223,7 @@ export async function sincronizarGpsDeFlota(
     }
   }
 
-  let filas: Array<{ tenant_id: string; unidad_id: string; lat: number; lng: number; velocidad: number | null; rumbo: number | null; medida_en: string; proveedor: string }> = [];
+  let filas: Array<{ tenant_id: string; unidad_id: string; lat: number; lng: number; velocidad: number | null; rumbo: number | null; ignicion: boolean | null; medida_en: string; proveedor: string }> = [];
   const unidadesVistas = new Set<string>();
   for (const p of posiciones) {
     const unidadId = porDevice.get(p.deviceId);
@@ -231,6 +236,7 @@ export async function sincronizarGpsDeFlota(
       lng: p.lng,
       velocidad: p.velocidad,
       rumbo: p.rumbo,
+      ignicion: p.ignicion ?? null,
       medida_en: p.medidaEn,
       proveedor: conectorId,
     });
@@ -357,6 +363,7 @@ export async function sincronizarGpsTodas(
         paginas: resultado.paginas,
         elementos: resultado.leidas,
         error: resultado.error ?? (!completo ? 'posiciones huérfanas o sin aviso previo' : undefined),
+        falla: resultado.falla,
       });
       if (!completo) resultado.backlog = true;
       return resultado;
