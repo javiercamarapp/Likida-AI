@@ -160,7 +160,7 @@ describe('proxy · CSP — unsafe-eval solo en desarrollo', () => {
     const req = new NextRequest('https://likidaai.vercel.app/login');
     req.cookies.set('sb-proyecto-auth-token', 'token-muerto');
     const res = await proxyDev(req);
-    expect(res.headers.get('Content-Security-Policy')).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval'");
+    expect(res.headers.get('Content-Security-Policy')).toMatch(/script-src 'self' 'nonce-[^']+' 'sha256-[^']+' 'strict-dynamic' 'unsafe-eval'/);
   });
 
   it('en producción, unsafe-eval NUNCA aparece — relajarlo ahí sería la auditoría 10 otra vez', async () => {
@@ -171,7 +171,8 @@ describe('proxy · CSP — unsafe-eval solo en desarrollo', () => {
     req.cookies.set('sb-proyecto-auth-token', 'token-muerto');
     const res = await proxyProd(req);
     const csp = res.headers.get('Content-Security-Policy');
-    expect(csp).toContain("script-src 'self' 'unsafe-inline'");
+    expect(csp).toMatch(/script-src 'self' 'nonce-[^']+' 'sha256-[^']+' 'strict-dynamic'/);
+    expect(csp).not.toContain("'unsafe-inline'; style");
     expect(csp).not.toContain('unsafe-eval');
   });
 });
