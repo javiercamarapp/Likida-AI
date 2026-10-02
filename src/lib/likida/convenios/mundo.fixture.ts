@@ -23,6 +23,8 @@ export class Mundo {
   };
   /** Las tablas que «no existen» (base sin migrar). */
   ausentes = new Set<string>();
+  /** Columnas que «no existen» por tabla (base sin migrar): pedirlas en un select da 42703. */
+  columnasAusentes = new Map<string, Set<string>>();
   /** Cada consulta que llegó, para afirmar que todas anclan el tenant. */
   consultas: Array<{ tabla: string; op: string; filtros: Array<[string, unknown]> }> = [];
   private n = 0;
@@ -49,10 +51,11 @@ class Builder implements PromiseLike<{ data: unknown; error: unknown }> {
   private pedirFilas = false;
   private uno: 'single' | 'maybe' | null = null;
   private tope: number | null = null;
+  private columnas: string | null = null;
 
   constructor(private m: Mundo, private tabla: string) {}
 
-  select(_cols?: string, _op?: unknown) { if (this.op === 'select') this.pedirFilas = true; else this.pedirFilas = true; return this; }
+  select(cols?: string, _op?: unknown) { this.columnas = cols ?? null; if (this.op === 'select') this.pedirFilas = true; else this.pedirFilas = true; return this; }
   insert(p: Fila | Fila[]) { this.op = 'insert'; this.payload = p; return this; }
   upsert(p: Fila | Fila[], o?: { onConflict?: string }) { this.op = 'upsert'; this.payload = p; this.conflicto = o?.onConflict ? o.onConflict.split(',') : null; return this; }
   update(p: Fila) { this.op = 'update'; this.payload = p; return this; }
@@ -83,6 +86,11 @@ class Builder implements PromiseLike<{ data: unknown; error: unknown }> {
     const { tabla, m } = this;
     m.consultas.push({ tabla, op: this.op, filtros: this.pistas });
     if (m.ausentes.has(tabla)) return { data: null, error: { code: '42P01', message: `relation "public.${tabla}" does not exist` } };
+    const ausentes = m.columnasAusentes.get(tabla);
+    if (this.op === 'select' && ausentes && this.columnas) {
+      const pedida = [...ausentes].find((c) => this.columnas!.split(',').map((x) => x.trim()).includes(c));
+      if (pedida) return { data: null, error: { code: '42703', message: `column ${tabla}.${pedida} does not exist` } };
+    }
     const filas = m.tablas[tabla] ?? (m.tablas[tabla] = []);
     const coincide = (f: Fila) => this.filtros.every((p) => p(f));
     let salida: Fila[] = [];
