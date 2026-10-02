@@ -1,3 +1,4 @@
+import { aBuffer } from './bytes';
 import { parseCfdiXml, type CfdiXmlData } from '../intake/cfdi_xml';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -39,7 +40,7 @@ export function declaraDtd(texto: string): boolean {
 }
 
 function decodificar(bytes: Uint8Array): string | null {
-  const b = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const b = aBuffer(bytes);
   // UTF-16 (BOM FF FE / FE FF) o con bytes nulos: un CFDI del SAT es UTF-8. No se adivina.
   if ((b[0] === 0xff && b[1] === 0xfe) || (b[0] === 0xfe && b[1] === 0xff)) return null;
   if (b.subarray(0, Math.min(b.length, 200)).includes(0)) return null;

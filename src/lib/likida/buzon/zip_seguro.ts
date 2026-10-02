@@ -1,4 +1,5 @@
 import { inflateRawSync, crc32 } from 'node:zlib';
+import { aBuffer, copiar } from './bytes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LECTOR DE ZIP A PRUEBA DE BOMBAS (buzón de facturas, Agente 9).
@@ -90,7 +91,7 @@ const TAM_LOCAL = 30;
 /** ¿Los primeros bytes son los de un zip? (local header o EOCD de un zip vacío). */
 export function pareceZip(bytes: Uint8Array): boolean {
   if (bytes.length < 4) return false;
-  const b = Buffer.from(bytes.buffer, bytes.byteOffset, 4);
+  const b = aBuffer(bytes.subarray(0, 4));
   const sig = b.readUInt32LE(0);
   return sig === SIG_LOCAL || sig === SIG_EOCD;
 }
@@ -238,7 +239,7 @@ function leerNivel(buf: Buffer, profundidad: number, ctx: CtxZip, salida: Result
       // El tamaño declarado PUEDE MENTIR: el tope real lo pone `maxOutputLength` (declarado + 1 para
       // detectar que se pasó, nunca más que el límite por entrada ni que lo que queda del total).
       const tope = Math.min(e.tamano + 1, lim.maxBytesEntrada + 1, lim.maxBytesTotal - ctx.bytesTotales + 1);
-      datos = e.metodo === 0 ? Buffer.from(comprimido) : inflateRawSync(comprimido, { maxOutputLength: Math.max(1, tope) });
+      datos = e.metodo === 0 ? copiar(comprimido) : inflateRawSync(comprimido, { maxOutputLength: Math.max(1, tope) });
     } catch (err) {
       // `ERR_BUFFER_TOO_LARGE` = se pasó del tope mientras descomprimía: es la bomba que mintió.
       if ((err as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE') return 'bomba';
@@ -279,7 +280,7 @@ export function leerZipSeguro(bytes: Uint8Array, limites: Partial<LimitesZip> = 
   const lim = { ...LIMITES_ZIP, ...limites };
   const salida: ResultadoZip = { entradas: [], omitidas: [], rechazado: null };
   try {
-    const buf = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const buf = aBuffer(bytes);
     if (!pareceZip(buf)) { salida.rechazado = 'no_es_zip'; return salida; }
     const motivo = leerNivel(buf, 0, { lim, bytesTotales: 0, entradasVistas: 0 }, salida);
     if (motivo) return { entradas: [], omitidas: salida.omitidas, rechazado: motivo };

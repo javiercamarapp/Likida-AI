@@ -1,4 +1,5 @@
 import { deflateRawSync, crc32 } from 'node:zlib';
+import { aBuffer, bufferDeTexto } from './bytes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ESCRITOR DE ZIP MÍNIMO — para el lote que se le manda al contador.
@@ -48,8 +49,8 @@ export function crearZip(entradas: readonly EntradaParaZip[], ahora: Date = new 
       nombre = punto > 0 ? `${nombre.slice(0, punto)} (${n})${nombre.slice(punto)}` : `${nombre} (${n})`;
     }
     usados.add(nombre.toLowerCase());
-    const nombreBuf = Buffer.from(nombre, 'utf8');
-    const crudo = Buffer.from(e.bytes.buffer, e.bytes.byteOffset, e.bytes.byteLength);
+    const nombreBuf = bufferDeTexto(nombre);
+    const crudo = aBuffer(e.bytes);
     const metodo = e.almacenar ? 0 : 8;
     const datos = metodo === 8 ? deflateRawSync(crudo) : crudo;
     const crc = crc32(crudo) >>> 0;
