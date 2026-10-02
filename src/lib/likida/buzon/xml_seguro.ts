@@ -39,6 +39,27 @@ export function declaraDtd(texto: string): boolean {
   return /<!\s*(doctype|entity|element|attlist|notation)\b/i.test(texto);
 }
 
+/** ¿Empieza como un documento XML (declaración opcional, comentarios, y un elemento)? Barrido LINEAL con indexOf: una
+ *  regexp con comentarios repetidos (`(<!--[\s\S]*?-->)*`) puede retroceder catastróficamente con un archivo hostil. */
+function empiezaComoXml(texto: string): boolean {
+  let i = 0;
+  const saltarEspacios = () => { while (i < texto.length && /\s/.test(texto[i])) i++; };
+  saltarEspacios();
+  if (texto.startsWith('<?xml', i)) {
+    const fin = texto.indexOf('?>', i);
+    if (fin < 0) return false;
+    i = fin + 2;
+    saltarEspacios();
+  }
+  while (texto.startsWith('<!--', i)) {
+    const fin = texto.indexOf('-->', i + 4);
+    if (fin < 0) return false;
+    i = fin + 3;
+    saltarEspacios();
+  }
+  return /[A-Za-z_]/.test(texto[i + 1] ?? '') && texto[i] === '<';
+}
+
 function decodificar(bytes: Uint8Array): string | null {
   const b = aBuffer(bytes);
   // UTF-16 (BOM FF FE / FE FF) o con bytes nulos: un CFDI del SAT es UTF-8. No se adivina.
@@ -60,7 +81,7 @@ export function validarXmlEntrante(bytes: Uint8Array): { ok: true; texto: string
   const texto = decodificar(bytes);
   if (texto === null) return { ok: false, motivo: 'codificacion' };
   if (declaraDtd(texto)) return { ok: false, motivo: 'dtd' };
-  if (!/^\s*(<\?xml[^>]*\?>\s*)?(<!--[\s\S]*?-->\s*)*<[A-Za-z_]/.test(texto)) return { ok: false, motivo: 'no_es_xml' };
+  if (!empiezaComoXml(texto)) return { ok: false, motivo: 'no_es_xml' };
   return { ok: true, texto };
 }
 
