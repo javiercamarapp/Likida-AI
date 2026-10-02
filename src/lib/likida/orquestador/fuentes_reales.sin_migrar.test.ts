@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 // «Código que funciona contra la base SIN migrar»: sin la 0651 (columnas del aviso) y sin la 0652 (claim del barrido) el orquestador lo dice y sigue
 // como hasta hoy; no lanza ni pinta ceros. El cliente de Supabase es un doble encadenable que contesta siempre con el error que se le pida.
 let error: { code: string; message: string } | null = null;
-let datos: unknown = null;
+const datos: unknown = null;
 function cadena(): unknown {
   const p: unknown = new Proxy(function () { /* encadenable */ }, {
     get: (_t, k) => (k === 'then' ? (ok: (v: unknown) => unknown) => Promise.resolve({ data: datos, error, count: null }).then(ok) : () => p),
