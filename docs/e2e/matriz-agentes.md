@@ -3,7 +3,7 @@
 Criterio (cola-maestra.md, «PRIORIDAD MÁXIMA»): para cada uno de los 13 agentes, **una prueba E2E del ciclo completo con dobles de proveedor** y estos cinco casos:
 **feliz, fallo, duplicado, fuera de orden y otra flota (otro tenant)**.
 
-Esta matriz es el índice de esas pruebas y refleja el estado del árbol `loop/punta-a-punta` tras la Ola 4d, P7 (convenios-edición), P9 (claims-concurrencia), P0 (demo) y P12 (2-oct-2026, ronda 11). Las cifras salen de una
+Esta matriz es el índice de esas pruebas y refleja el estado del árbol `loop/punta-a-punta` tras la Ola 4d, P7 (convenios-edición), P9 (claims-concurrencia), P0 (demo), P12, P13 (Carta Porte multiembarque) y Ola 9 (2-oct-2026, ronda 13). Las cifras salen de una
 corrida real de cada archivo con `heavy.sh`; si cambian, se actualiza esta tabla en el mismo commit. Se corre **un archivo a la vez** y con el candado de memoria:
 
 ```bash
@@ -45,7 +45,7 @@ criterio: los archivos `e2e/agente-NN-*.e2e.test.ts` los traen como bloques `des
 |---|---|---|---|
 | 1 | `src/lib/likida/e2e/agente-01-liquidacion.e2e.test.ts` · `src/lib/likida/liquidacion_externa/ciclo_completo.e2e.test.ts` | verde (14 + 39) | sí, en ambos (la segunda suma formato de la flota, copia al jefe, discrepancia y discrepancia con red) |
 | 2 | `e2e/agente-02-peajes.e2e.test.ts` · `peajes/ciclo_completo.e2e.test.ts` · `peajes/flujo_completo.test.ts` | verde (14 + 23 + 5) | sí; la reclamación PASE × GPS × geocerca (Excel y PDF, otro tenant, desglose anulado) en `ciclo_completo` |
-| 3 | `e2e/agente-03-carta-porte.e2e.test.ts` | verde (29); 1 todo | sí, más el bloque del **worker del cron** (reclamo, tope de intentos, avisos a la oficina). Todo: salida al layout del cliente, que depende de documentos reales |
+| 3 | `e2e/agente-03-carta-porte.e2e.test.ts` | verde (35); 1 todo | sí, más el bloque del **worker del cron** (reclamo, tope de intentos, avisos a la oficina) y el de **varios embarques** (P13: correo, panel/WhatsApp, duplicado, sin modelo, base sin 0670/0671 y otra flota). Todo: salida al layout del cliente, que depende de documentos reales |
 | 4 | `e2e/agente-04-vigia.e2e.test.ts` · `vigia/ciclo_completo.e2e.test.ts` | verde (18 + 20) | sí; el segundo cubre dato real del Conductor, POD adjunto, queja con niveles, alerta de 10 min con la cola llena y del histórico a la respuesta rápida |
 | 5 | `conductor/ciclo_completo.e2e.test.ts` | verde (53) | sí, en 10 bloques: viaje feliz, chofer que no contesta, fuera de orden, duplicados y solapes, chofer y flota equivocados, fuera de ventana de 24 h, validación sin acusar, flotas en la misma pasada, tablero y **P2** (hitos por geocerca y señal de vida) |
 | 6 | `e2e/agente-06-autofactura.e2e.test.ts` · `src/app/api/cron/portales-vivos/route.test.ts` | verde (26 + 13) | sí; lote al vuelo real con un doble del portal (feliz, fallo, duplicado, fuera de orden, otra flota); el contrato del vigilante de portales en `route.test` |
