@@ -76,6 +76,8 @@ export interface ResultadoWorker {
   fallidos: number;
   /** Documentos que otra invocación ya tenía o terminó (no es un error). */
   yaTomados: number;
+  /** Archivos con varios embarques que esta pasada partió (0670): cada embarque nace como documento hijo y entra a la siguiente pasada. */
+  divididos: number;
   /** Excepciones de infraestructura al procesar (la base, Storage): el lease vence solo y se reintenta. */
   errores: number;
   cortadosPorReloj: number;
@@ -99,7 +101,7 @@ export interface ResultadoWorker {
 }
 
 const vacio = (): ResultadoWorker => ({
-  pendientes: 0, procesados: 0, fallidos: 0, yaTomados: 0, errores: 0, cortadosPorReloj: 0, paradaPorPresupuesto: false, omitidosPorPresupuesto: 0,
+  pendientes: 0, procesados: 0, fallidos: 0, yaTomados: 0, divididos: 0, errores: 0, cortadosPorReloj: 0, paradaPorPresupuesto: false, omitidosPorPresupuesto: 0,
   paradaPorFallosSeguidos: false, agotados: 0, hallazgos: 0, avisosEnviados: 0, avisosEnCola: 0, avisosFallidos: 0, avisosPerdidos: 0,
   sinTelefono: 0, avisosSinMigracion: false, fallos: [],
 });
@@ -164,7 +166,7 @@ async function procesarPendientes(deps: DepsWorker, opts: OpcionesWorker, r: Res
     if (flotasSinPresupuesto.has(d.tenantId)) { r.omitidosPorPresupuesto++; continue; }
     try {
       const p = await deps.procesar(d.tenantId, d.id, deps.senal?.(Math.max(5_000, opts.venceEn - deps.ahora() - 8_000)));
-      if (p.ok) { r.procesados++; modeloSeguidos = 0; continue; }
+      if (p.ok) { r.procesados++; if (p.estado === 'dividido') r.divididos++; modeloSeguidos = 0; continue; }
       if (p.motivo === 'no_reclamable' || p.motivo === 'perdi_el_lease') { r.yaTomados++; continue; }
       r.fallidos++;
       r.fallos.push(`${p.motivo}${p.permanente ? ' (permanente)' : ''}: ${p.mensaje.slice(0, 120)}`);

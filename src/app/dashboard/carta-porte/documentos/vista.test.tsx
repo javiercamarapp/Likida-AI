@@ -220,3 +220,45 @@ describe('VistaRevision', () => {
     expect(h).toContain('&lt;script&gt;');
   });
 });
+
+describe('archivos con varios embarques (P13, 0670)', () => {
+  const padre = () => doc({ id: 'pa', estado: 'dividido', nombreArchivo: 'plan-del-dia.xlsx', extraccion: null, validacion: null });
+  const hijo = (n: number, folio: string, over: Partial<DocumentoFila> = {}) => doc({ id: `h${n}`, nombreArchivo: `plan-del-dia · embarque ${folio}.csv`, formato: 'csv', estado: 'recibido', extraccion: null, validacion: null, ...over });
+
+  it('la bandeja dice «Embarque i de N · folio» en cada hijo y cuántos embarques trajo el original', () => {
+    const h = html(<VistaDocumentos datos={datos([padre(), hijo(1, 'ATL-1'), hijo(2, 'ATL-2')], {
+      linaje: { pa: { rol: 'padre', indice: null, total: 2, clave: null }, h1: { rol: 'hijo', indice: 1, total: 2, clave: 'ATL-1' }, h2: { rol: 'hijo', indice: 2, total: 2, clave: 'ATL-2' } },
+    })} acciones={todas} />);
+    expect(h).toMatch(/Embarque 1 de 2 · folio ATL-1/);
+    expect(h).toMatch(/Embarque 2 de 2 · folio ATL-2/);
+    expect(h).toMatch(/Dividido en embarques/);
+    expect(h).toMatch(/Trae 2 embarques: cada uno es un documento aparte/);
+    // El original dividido no ofrece «Leer ahora» (no se vuelve a leer): solo «Ver».
+    expect(h.match(/Leer ahora/g)).toHaveLength(2);
+  });
+
+  it('sin linaje (base sin la 0670) la bandeja se ve igual que antes, sin etiquetas', () => {
+    const h = html(<VistaDocumentos datos={datos([hijo(1, 'ATL-1')])} acciones={todas} />);
+    expect(h).not.toMatch(/Embarque 1 de/);
+  });
+
+  it('el original dividido lista sus embarques con su estado y enlaza a cada uno', () => {
+    const h = html(<VistaRevision doc={padre()} revision={null} original={{ tipo: 'nada', motivo: 'x' }} operadores={[]} eventos={[]} acciones={{ revisar: accion }} sufijo="?tenant=abc"
+      hijos={[
+        { id: 'h1', indice: 1, clave: 'ATL-1', estado: 'por_revisar', nombre: 'a.csv', bloqueos: 2, porConfirmar: 0 },
+        { id: 'h2', indice: 2, clave: 'ATL-2', estado: 'aprobado', nombre: 'b.csv', bloqueos: 0, porConfirmar: 0 },
+      ]} />);
+    expect(h).toMatch(/Este archivo traía varios embarques/);
+    expect(h).toMatch(/href="\/dashboard\/carta-porte\/documentos\/h1\?tenant=abc"[^>]*>Folio ATL-1</);
+    expect(h).toMatch(/2 por corregir/);
+    expect(h).toMatch(/Aprobado/);
+    expect(h).not.toMatch(/Guardar cambios|Aprobar</); // el original no se revisa
+  });
+
+  it('un hijo dice de qué archivo nació y enlaza de regreso', () => {
+    const h = html(<VistaRevision doc={hijo(1, 'ATL-1', { estado: 'por_revisar' })} revision={null} original={{ tipo: 'nada', motivo: 'x' }} operadores={[]} eventos={[]} acciones={{ revisar: accion }}
+      embarque={{ indice: 1, total: 3, clave: 'ATL-1', padreId: 'pa', padreNombre: 'plan-del-dia.xlsx' }} />);
+    expect(h).toMatch(/Embarque 1 de 3 \(folio ATL-1\) del archivo/);
+    expect(h).toMatch(/href="\/dashboard\/carta-porte\/documentos\/pa"[^>]*>plan-del-dia\.xlsx</);
+  });
+});

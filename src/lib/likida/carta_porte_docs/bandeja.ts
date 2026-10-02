@@ -332,10 +332,24 @@ export async function eliminarDocumento(tenantId: string, id: string, actor: { i
   if (d.estado === 'procesando' && d.procesandoHasta && new Date(d.procesandoHasta) > new Date()) {
     throw new DatoInvalido('El documento se está leyendo ahora mismo. Espera un momento y vuelve a intentarlo.');
   }
+  // Un archivo dividido (0670): sus hijos contienen los MISMOS datos personales y la base los arrastra en cascada, pero sus
+  // archivos en Storage no: se borran uno por uno ANTES, o quedarían huérfanos con datos de terceros.
+  let hijosBorrados = 0;
+  if (d.estado === 'dividido') {
+    for (const h of await repo.hijosDeDocumento(tenantId, id)) {
+      if (h.documento.estado === 'procesando' && h.documento.procesandoHasta && new Date(h.documento.procesandoHasta) > new Date()) {
+        throw new DatoInvalido('Uno de los embarques de este archivo se está leyendo ahora mismo. Espera un momento y vuelve a intentarlo.');
+      }
+    }
+    for (const h of await repo.hijosDeDocumento(tenantId, id)) {
+      if (h.documento.storageRuta) await repo.borrarArchivo(h.documento.storageRuta);
+      if (await repo.borrarDocumento(tenantId, h.documento.id)) hijosBorrados++;
+    }
+  }
   if (d.storageRuta) await repo.borrarArchivo(d.storageRuta);
   if (!(await repo.borrarDocumento(tenantId, id))) throw new DatoInvalido('Ese documento ya no existe.');
   await anotarBitacora(
-    { tenantId, actor: { id: actor.id ?? undefined, email: actor.email }, accion: 'ccp.documento_eliminado', entidad: 'tenant', entidadId: tenantId, detalle: { documentoId: id, formato: d.formato, estado: d.estado, conViaje: d.viajeId !== null } },
+    { tenantId, actor: { id: actor.id ?? undefined, email: actor.email }, accion: 'ccp.documento_eliminado', entidad: 'tenant', entidadId: tenantId, detalle: { documentoId: id, formato: d.formato, estado: d.estado, conViaje: d.viajeId !== null, ...(d.estado === 'dividido' ? { hijosBorrados } : {}) } },
     { evento: 'carta_porte_docs.bitacora_no_escribio' },
   );
 }

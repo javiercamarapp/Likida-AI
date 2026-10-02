@@ -183,3 +183,29 @@ it('eliminar: solo quien ADMINISTRA la flota; el encargado (que sí revisa) no',
   expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: ver(), intencion: 'eliminar' }))).toMatchObject({ ok: true });
   expect(estado.docs.has(ID)).toBe(false);
 });
+
+it('un archivo DIVIDIDO (P13): la pantalla recibe sus embarques en orden y no lo abre como revisión; un hijo recibe de dónde nació', async () => {
+  const padre = sembrarDoc({ estado: 'dividido', extraccion: null, validacion: null, textoExtracto: null, nombreArchivo: 'plan.xlsx' });
+  const h1 = '33333333-3333-4333-8333-333333333331';
+  const h2 = '33333333-3333-4333-8333-333333333332';
+  for (const [i, id] of [h1, h2].entries()) {
+    estado.docs.set(id, { ...padre, id, estado: i === 0 ? 'por_revisar' : 'recibido', nombreArchivo: `plan · embarque ATL-${i + 1}.csv`, formato: 'csv', sha256: `${i}`.repeat(64), version: 1 });
+    estado.embarques.push({ documentoId: id, tenantId: A, padreId: padre.id, huellaBase: padre.sha256, indice: i + 1, total: 2, clave: `ATL-${i + 1}` });
+  }
+  const p = await montar() as unknown as { props: { doc: DocumentoFila; original: { tipo: string; motivo?: string }; hijos: Array<{ id: string; indice: number; clave: string; estado: string }>; embarque: unknown } };
+  expect(p.props.doc.estado).toBe('dividido');
+  expect(p.props.original).toMatchObject({ tipo: 'nada', motivo: expect.stringMatching(/se dividió en un documento por embarque/) });
+  expect(p.props.hijos.map((h) => [h.id, h.indice, h.clave, h.estado])).toEqual([[h1, 1, 'ATL-1', 'por_revisar'], [h2, 2, 'ATL-2', 'recibido']]);
+  expect(p.props.embarque).toBeNull();
+  expect(estado.docs.get(padre.id)!.abiertoEn).toBeNull(); // no es una revisión: no arranca el tiempo medido
+});
+
+it('un embarque HIJO sabe de qué archivo nació (para el enlace de regreso)', async () => {
+  const padre = sembrarDoc({ estado: 'dividido', extraccion: null, validacion: null, nombreArchivo: 'plan.xlsx' });
+  const hijoId = '33333333-3333-4333-8333-333333333331';
+  estado.docs.set(hijoId, { ...padre, id: hijoId, estado: 'por_revisar', formato: 'csv', nombreArchivo: 'plan · embarque ATL-1.csv', sha256: 'c'.repeat(64) });
+  estado.embarques.push({ documentoId: hijoId, tenantId: A, padreId: padre.id, huellaBase: padre.sha256, indice: 1, total: 2, clave: 'ATL-1' });
+  const p = (await PaginaRevision({ params: Promise.resolve({ id: hijoId }), searchParams: SP })) as unknown as { props: { embarque: unknown; hijos: unknown[] } };
+  expect(p.props.embarque).toEqual({ indice: 1, total: 2, clave: 'ATL-1', padreId: padre.id, padreNombre: 'plan.xlsx' });
+  expect(p.props.hijos).toEqual([]);
+});

@@ -59,7 +59,10 @@ export function origenDeLectura(d: Pick<DocumentoFila, 'nivelModelo' | 'perfilId
   return d.perfilId === null ? 'llm' : 'perfil+llm';
 }
 
-export function calcularMetricas(docs: DocumentoFila[], correcciones: Map<string, number>): MetricasAgente {
+export function calcularMetricas(todos: DocumentoFila[], correcciones: Map<string, number>): MetricasAgente {
+  // Un archivo que se partió en embarques (0670) es la constancia de lo que llegó, no un documento por revisar ni un
+  // embarque: lo que se mide es cada embarque (sus hijos). Contarlo inflaría «recibidos» y diluiría el costo por documento.
+  const docs = todos.filter((d) => d.estado !== 'dividido');
   const por = (e: DocumentoFila['estado']) => docs.filter((d) => d.estado === e);
   const aprobados = por('aprobado');
   const sin = aprobados.filter((d) => (correcciones.get(d.id) ?? 0) === 0);
