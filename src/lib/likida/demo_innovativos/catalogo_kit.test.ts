@@ -165,11 +165,16 @@ describe('estructura del guion: cada agente en su sección y cada cosa con su et
     expect(g).not.toMatch(/varios embarques[^.]*\[todavía no existe\]/);
     expect(existsSync(`${RAIZ}src/lib/likida/carta_porte_docs/multiembarque.ts`)).toBe(true);
   });
-  it('lo que sigue sin existir en el producto es verdad: no hay cursos, ni lector de SAP, ni SFTP', () => {
+  it('lo que sigue sin existir en el producto es verdad: no hay cursos ni lector de SAP', () => {
     const rutas = (rel: string) => existsSync(`${RAIZ}${rel}`);
     expect(rutas('src/lib/likida/peajes/cursos.ts')).toBe(false);
     expect(rutas('src/lib/likida/conectores/sap')).toBe(false);
-    expect(rutas('src/lib/likida/conectores/tabla_propia/sftp.ts')).toBe(false);
+  });
+  it('el lector SFTP de la tabla propia YA existe (P15): el kit y el guion no lo prometen como cliente por instalar', () => {
+    expect(existsSync(`${RAIZ}src/lib/likida/conectores/tabla_propia/sftp.ts`)).toBe(true);
+    for (const t of [guion, doc]) {
+      expect(t).not.toMatch(/SFTP (necesita )?un cliente|SFTP pendientes? de dependencia|y SFTP pendientes/);
+    }
   });
   it('el alta y la edición de convenios en pantalla ya existen (P7) y el guion lo dice como «corre hoy»', () => {
     expect(existsSync(`${RAIZ}src/lib/likida/convenios/edicion.ts`)).toBe(true);

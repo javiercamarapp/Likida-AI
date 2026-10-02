@@ -64,7 +64,7 @@ Meta. Lo que parezca un envío es el registro de lo que se enviaría.
 
 **[depende de GPS real]** El acceso de lectura a su tabla de posiciones y geocercas. El lector de tabla propia **ya está
 conectado** al cron de GPS (CSV por https o endpoint JSON); el modo SQL de solo lectura está escrito pero **necesita el
-controlador `pg`** (decisión pendiente) y el SFTP un cliente que no está instalado. Las posiciones del demo se sembraron
+controlador `pg`** (decisión pendiente); el SFTP ya existe en el producto, pero falta servidor, credencial y huella real del cliente. Las posiciones del demo se sembraron
 directo en `posicion` (proveedor `tabla_propia`): «al conectar su tabla cambia la fuente, no la pantalla».
 
 ---
@@ -355,7 +355,7 @@ agente falla, **avisa**.» **No** decir «una sola pestaña con SAP, GPS y Whats
 | Tercero | Qué falta | Qué decir (verdad) | Quién |
 |---|---|---|---|
 | **Meta (WhatsApp)** | Número verificado y plantillas aprobadas (incluidas las de «sin señal de vida» y la de avisos a la oficina) | «Los avisos con botones fuera de 24 h necesitan plantilla aprobada por Meta (2 a 5 días hábiles). Las mandamos en cuanto haya número; hoy ven el registro de lo que se enviaría.» | Likida, al verificar el número |
-| **GPS real** | Vista de solo lectura a su tabla y a sus geocercas | «El lector de su tabla ya está conectado para CSV y endpoint; el SQL directo necesita un controlador que aún no instalamos y el SFTP un cliente. Pedimos un usuario de solo lectura sobre una vista o réplica, nunca producción.» | Sistemas del cliente |
+| **GPS real** | Vista de solo lectura a su tabla y a sus geocercas | «El lector de su tabla ya está conectado para CSV y endpoint; el SFTP ya está escrito y lo probamos con su servidor y la huella de su llave; el SQL directo necesita un controlador que aún no instalamos. Pedimos un usuario de solo lectura sobre una vista o réplica, nunca producción.» | Sistemas del cliente |
 | **WhatsApp, grupos** | Que los grupos críticos migren a Business, o seguir en copiloto | «La API de Business no lee los grupos de un teléfono común. Fase 1: histórico exportado + copiloto. En vivo solo con grupos en Business, y lo verificamos con Meta antes de prometerlo.» | El cliente (histórico) · Likida (API de grupos) |
 | **Archivo de pases** | El archivo real de PASE, TAG y casetas con coordenadas | «El lector es tolerante; si trae columnas nuevas es una línea de configuración. Sin TAG ni coordenadas de casetas no hay cruce con GPS.» | El cliente |
 | **Liquidación** | Su Excel de liquidación y los teléfonos del jefe de flota y de discrepancias | «La plantilla se deriva de su archivo de muestra; hoy ven un formato de ejemplo y teléfonos de demo.» | El cliente |
@@ -369,7 +369,7 @@ agente falla, **avisa**.» **No** decir «una sola pestaña con SAP, GPS y Whats
   de un cobro de peaje es una razón para **pedir** la revisión, no una acusación.
 - **«¿Leen mis grupos de WhatsApp hoy?»** → No en vivo (ver sección 3). Histórico exportado + copiloto.
 - **«¿Y si cambio de proveedor de GPS?»** → Hay lectores por proveedor (Wialon, Geotab, Navixy, genérico, push) y el de su
-  tabla propia (CSV o endpoint ya conectados; SQL directo y SFTP pendientes de dependencia).
+  tabla propia (CSV o endpoint ya conectados; SFTP escrito, pendiente de servidor y huella del cliente; SQL directo pendiente de dependencia).
 - **«¿Mis datos están seguros?»** → Acceso de **solo lectura** con usuario restringido; el demo corre en base local y
   sintética, con teléfonos que no son de nadie; nada va a producción sin su autorización.
 

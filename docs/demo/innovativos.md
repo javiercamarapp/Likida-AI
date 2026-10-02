@@ -198,8 +198,9 @@ Para tener a mano cómo se ven los archivos tal como los exportaría «su sistem
   `gps`). Normaliza encabezados, convierte hora local a UTC con el desfase real de esa fecha, resuelve la unidad por
   económico, rechaza lat/lng intercambiadas sin «arreglarlas» y cuenta las unidades que Likida no tiene en vez de
   inventarlas. **Bloqueos declarados:** el modo **SQL de solo lectura** está escrito (SELECT único, `READ ONLY`, sin SSRF)
-  pero necesita el controlador `pg`, que no está instalado (decisión pendiente); el **SFTP** necesita un cliente que
-  tampoco está.
+  pero necesita el controlador `pg`, que no está instalado (decisión pendiente); el **SFTP** ya existe (cliente `ssh2`,
+  huella del host obligatoria, `tabla_propia/sftp.ts`) y queda en `requiere_piloto` hasta tener servidor, credencial y
+  huella reales del cliente.
 - **Validación:** `node scripts/demo/innovativos/validar-archivo.mjs gps_posiciones <archivo.csv>` (usa `leerPosicionesCsv`
   del conector; avisa de unidades sin lectura en los últimos 30 min del archivo y de columnas faltantes: velocidad,
   ignición).
@@ -404,8 +405,8 @@ node scripts/demo/innovativos/verificar-hechos-del-guion.mjs
 - **Meta / WhatsApp:** no se manda nada real. Los avisos con botones fuera de la ventana de 24 h necesitan **plantillas
   aprobadas por Meta (2 a 5 días hábiles)**; mandarlas a aprobación en cuanto haya número verificado.
 - **GPS real:** las posiciones son simuladas hasta que llegue el acceso de lectura a su tabla. El lector de tabla propia
-  está conectado al cron `gps` para CSV por https y endpoint; el modo SQL necesita el controlador `pg` y el SFTP un
-  cliente (decisiones pendientes). Las posiciones del demo se siembran directo en `posicion`.
+  está conectado al cron `gps` para CSV por https y endpoint; el SFTP ya está escrito (pendiente de servidor, credencial y huella reales del cliente) y el modo SQL necesita el
+  controlador `pg` (decisión pendiente). Las posiciones del demo se siembran directo en `posicion`.
 - **Los barridos:** la detección de hitos por geocerca y el aviso de «sin señal de vida» corren en el cron
   `conductor-hitos` con el reloj real; en el demo se enseña su **resultado sembrado**, no el barrido en vivo.
 - **Orquestador (chat):** consulta lo que Likida ya tiene (viajes en vivo, hitos, Vigía, buzón, cobranza, liquidación
