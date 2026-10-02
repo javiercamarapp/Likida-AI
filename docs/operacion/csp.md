@@ -18,7 +18,10 @@ Hallazgo de origen: auditoría ola 1 #5 (`script-src 'unsafe-inline'` en producc
   estampar el nonce, el layout raíz es `async` y llama `await connection()`: **todo el sitio se renderiza por petición**.
 - Scripts de terceros: se buscaron `next/script`, `<script`, `@vercel/analytics`, Speed Insights, Sentry de navegador, Cal.com,
   gtag, plausible, posthog e `<iframe>` en `src`/`package.json`: **no hay ninguno** en el navegador (Sentry y Cal.com son solo
-  servidor). Por eso `connect-src 'self'`, `img-src 'self' data: https://*.supabase.co` y `frame-src 'none'` no cambian.
+  servidor). Por eso `connect-src 'self'` y `frame-src 'none'` no cambian.
+  `img-src` es `'self' data: blob: https://*.supabase.co https://tile.openstreetmap.org`: Storage (avatares, fotos), los tiles del mapa de
+  prospectos (`admin/mapa-prospectos/calles.tsx`) y `blob:` para la vista previa local del avatar (`admin/mi-perfil/avatar-uploader.tsx`).
+  Solo esos orígenes: se buscaron `tileLayer`, `createObjectURL` y `<img src="https://…">` en `src` y no hay otros que se pinten.
   Si se agrega uno: `next/script` con nonce (se propaga solo en páginas dinámicas) y ampliar solo la directiva que use.
 - `style-src 'self' 'unsafe-inline'` se queda: ~1,200 `style={{…}}` (atributos) que ni nonce ni hash cubren. Riesgo menor que scripts.
 - No hay excepción de `'unsafe-inline'` en scripts en ninguna ruta de HTML.
@@ -29,12 +32,15 @@ Hallazgo de origen: auditoría ola 1 #5 (`script-src 'unsafe-inline'` en producc
 
 Las páginas públicas que eran estáticas (prerenderizadas, servidas desde CDN) ahora se renderizan en cada petición: más cómputo
 de funciones, más latencia (TTFB) y sin caché de borde. La home, `/login` y `/aviso/[tenant]` ya eran `force-dynamic`. Las cifras de
-rutas que cambiaron de estática a dinámica están en `~/likida-loop/rondas/ronda-13-ola9b-csp-publica.md`.
+rutas, medidas con `next build` antes y después de la Ola 9b: **242 rutas = 13 estáticas + 1 SSG + 228 dinámicas** antes (nonce solo en `/dashboard`, `/admin`, `/vendedor`) y
+**4 estáticas + 0 SSG + 238 dinámicas** después (solo quedan estáticas `/apple-icon.png`, `/icon.svg`, `/robots.txt` y `/sitemap.xml`). Pasan a dinámicas `/blog`,
+`/blog/[slug]`, `/calculadora`, `/demo`, `/privacidad`, `/seguridad`, `/sin-acceso`, `/terminos`, `/aviso/prospectos` y `/_not-found`. No se midió latencia ni costo en producción.
 
 ## Deuda residual
 
 1. **`style-src 'unsafe-inline'`** (arriba).
-2. **Verificación en navegador real** de la consola («Refused to execute»): ver la ronda 13 para lo que se corrió.
+2. **Verificación en navegador real** de la consola («Refused to execute»): `next start` con Playwright (Chromium) en `/`, `/login`, un artículo del blog y una 404 dio
+   0 errores de CSP; el HTML con sesión real de `/dashboard`, `/admin` y `/vendedor` no se pudo verificar sin Supabase y lo cubren `proxy_csp_nonce.test.ts` y `csp.test.ts`.
 
 ## Revertir sin tocar código
 

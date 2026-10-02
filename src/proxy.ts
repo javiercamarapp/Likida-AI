@@ -44,7 +44,10 @@ import { construirCsp, nonceActivo, nuevoNonce } from '@/lib/seguridad/csp';
  * - `img-src https://*.supabase.co`: los avatares y las fotos de
  *   comprobante son URLs firmadas/públicas de Storage
  *   (`admin/mi-perfil/page.tsx:52`) — el navegador las pide directo, sin
- *   pasar por `/api`.
+ *   pasar por `/api`. Además `https://tile.openstreetmap.org` (los tiles del
+ *   mapa de prospectos, `admin/mapa-prospectos/calles.tsx`) y `blob:` (la vista
+ *   previa local del avatar, `URL.createObjectURL` en `avatar-uploader.tsx`):
+ *   sin ellos el mapa salía sin calles y la vista previa no se veía.
  * - `connect-src 'self'` y nada más: los `fetch(` que existen en código de
  *   cliente (`dashboard/rail.tsx`, `demo/page.tsx`, y `logger.ts` reportando
  *   un fallo de cliente a `/api/client-error` — auditoría 25) son TODOS a
