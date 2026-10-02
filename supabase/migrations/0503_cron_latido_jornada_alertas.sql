@@ -10,11 +10,13 @@
 -- SE REESCRIBE ENTERO (partiendo del CHECK vigente tras 0401, que ya incluye
 -- `conductor-hitos` y `vigia`): un CHECK parcial pisaría los valores de otras
 -- ramas. La lista contra `CRONS` de salud.ts la compara salud.test.ts.
+-- INTEGRACIÓN ola 3: también lista `buzon-entrega` (W3 buzón, 0531) para que el CHECK quede completo en cualquier
+-- orden de aplicación; la 0531 corre después y lista también `jornada-alertas`.
 -- ═══════════════════════════════════════════════════════════════════════════
 alter table public.cron_latido drop constraint if exists cron_latido_id_dominio;
 alter table public.cron_latido add constraint cron_latido_id_dominio
   check (id in (
     'wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps',
     'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas',
-    'peajes', 'conductor-hitos', 'vigia', 'jornada-alertas'
+    'peajes', 'conductor-hitos', 'vigia', 'jornada-alertas', 'buzon-entrega'
   ));
