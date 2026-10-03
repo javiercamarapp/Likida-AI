@@ -51,6 +51,23 @@ describe('puertaCron', () => {
 });
 
 describe('registrarLatido', () => {
+  it('M2 (ronda 19): el latido se escribe ANTES que la latencia (un insert de latencia colgado no retrasa el latido)', async () => {
+    const r = await puertaCron('purgar', new Request('http://x', { headers: { authorization: 'Bearer s3cr3t' } }), '');
+    expect(r).toBeNull();
+    await registrarLatido('purgar', 'ok', {});
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(insertLatencia).toHaveBeenCalledTimes(1);
+    expect(upsert.mock.invocationCallOrder[0]).toBeLessThan(insertLatencia.mock.invocationCallOrder[0]);
+  });
+
+  it('M2: aunque el insert de latencia nunca conteste, el latido ya quedó escrito', async () => {
+    await puertaCron('purgar', new Request('http://x', { headers: { authorization: 'Bearer s3cr3t' } }), '');
+    insertLatencia.mockReturnValueOnce(new Promise(() => {}) as never);
+    void registrarLatido('purgar', 'ok', {});
+    await new Promise((res) => setTimeout(res, 20));
+    expect(upsert).toHaveBeenCalledTimes(1);
+  });
+
   it("A1 (ronda 19): el latido 'guardia' sin la 0701 (CHECK 23514) degrada con UN log claro, no lanza ni repite en bucle", async () => {
     upsert.mockResolvedValueOnce({ error: { message: 'new row for relation "cron_latido" violates check constraint "cron_latido_id_dominio"', code: '23514' } as unknown as { message: string } });
     await expect(registrarLatido('guardia', 'ok', {})).resolves.toBeUndefined();
