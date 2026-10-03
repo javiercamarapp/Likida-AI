@@ -273,7 +273,6 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0680_retencion_ledgers.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0681_evento_seguridad_agrupar.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0682_techo_ia_tenant.sql
-<<<<<<< HEAD
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0683_evento_seguridad_desborde_robusto.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0673_vigia_directores_correo.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0677_vigia_directores_solo_dueno.sql
@@ -283,12 +282,10 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0695_cp_documentos_por_avisar_todos_los_canales.sql
           PGUSER=postgres bash supabase/tests/0693_vigia_respuesta_rapida_tope_concurrencia.sh localhost 5432 postgres
           PGUSER=postgres bash supabase/tests/0674_vigia_correo_concurrencia.sh localhost 5432 postgres
-=======
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0684_carga_250_camiones.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0688_gastos_fiscales_sin_ventanas_encadenadas.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0689_vigia_purgar_por_lotes.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0690_agregados_resumen_por_grupo.sql
->>>>>>> loop/w5-carga
           PGUSER=postgres bash supabase/tests/0380_conductor_claim_concurrencia.sh localhost 5432 postgres
 
       # ── Capa 0: contratos de leases/fencing en Postgres real ───────────
