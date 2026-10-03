@@ -51,6 +51,13 @@ function constructor(tabla: string) {
     is: (c: string, v: unknown) => { filtros.push([c, v]); return api; },
     neq: (c: string, v: unknown) => { filtros.push([`!${c}`, v]); return api; },
     order: () => api,
+    // `limit` cierra una consulta de UNA página (`getViajesSinAsignar`): rebana
+    // igual que PostgREST y el `count` exacto es el de la tabla ENTERA, no el de la página.
+    limit: (n: number) => {
+      if (FALLAN[tabla]) return Promise.resolve(resultado());
+      const todas = TABLAS[tabla] ?? [];
+      return Promise.resolve({ data: todas.slice(0, n), error: null, count: pidioConteo ? todas.length : null });
+    },
     range: (desde: number, hasta: number) => {
       if (FALLAN[tabla]) return Promise.resolve(resultado());
       const todas = TABLAS[tabla] ?? [];
@@ -96,7 +103,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 const {
   getCargaOperadores, getViajesSinAsignar, getUnidades, getIncidencias,
   getTableroOperacion, cambiarEstadoIncidencia, crearViaje, asignarUnidad, rechazarPod,
-  DIAS_LIQUIDADOS_CARGA, LIMITE_INCIDENCIAS,
+  DIAS_LIQUIDADOS_CARGA, LIMITE_INCIDENCIAS, TOPE_SIN_ASIGNAR,
   marcarPodPedido, crearIncidencia, validarUnidad, crearUnidad, editarUnidad,
   cambiarEstadoUnidad, ESTADOS_UNIDAD,
 } = await import('./operacion');
@@ -190,7 +197,31 @@ describe('getViajesSinAsignar', () => {
   it('pide los que no tienen operador y no están liquidados', async () => {
     TABLAS = { viaje: [{ id: 'v-1', folio: 'VJ-1', origen: 'GDL', destino: 'MTY', fecha_inicio: '2026-08-01', estatus: 'abierto' }] };
     const r = await getViajesSinAsignar('t-1');
-    expect(r).toEqual([{ id: 'v-1', folio: 'VJ-1', origen: 'GDL', destino: 'MTY', fechaInicio: '2026-08-01', estatus: 'abierto' }]);
+    expect(r).toEqual({
+      filas: [{ id: 'v-1', folio: 'VJ-1', origen: 'GDL', destino: 'MTY', fechaInicio: '2026-08-01', estatus: 'abierto' }],
+      total: 1,
+    });
+  });
+
+  // RONDA 16 (carga de 250 camiones): antes traía TODOS los viajes sin chofer por
+  // offset solo para pintar 12 o contarlos. Ahora trae una página y el TOTAL exacto aparte.
+  it('con 400 viajes sin chofer trae solo el tope y el total sigue exacto', async () => {
+    TABLAS = {
+      viaje: Array.from({ length: 400 }, (_, i) => ({
+        id: `v-${i}`, folio: `VJ-${i}`, origen: 'GDL', destino: 'MTY', fecha_inicio: '2026-08-01', estatus: 'abierto',
+      })),
+    };
+    const r = await getViajesSinAsignar('t-1');
+    expect(r.filas).toHaveLength(TOPE_SIN_ASIGNAR);
+    expect(r.total).toBe(400);
+    const chica = await getViajesSinAsignar('t-1', 12);
+    expect(chica.filas).toHaveLength(12);
+    expect(chica.total).toBe(400);
+  });
+
+  it('un error de lectura LANZA: «0 sin chofer» sobre una base caída sería mentira', async () => {
+    FALLAN = { viaje: 'timeout' };
+    await expect(getViajesSinAsignar('t-1')).rejects.toThrow('timeout');
   });
 });
 
