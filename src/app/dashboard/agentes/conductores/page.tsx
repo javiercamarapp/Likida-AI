@@ -161,7 +161,8 @@ export default async function PaginaAgenteConductores({
   const pCatalogos = safe(() => leerCatalogosFiltro(tenantId));
   // Los episodios de «sin señal de vida» del mismo periodo y con los mismos filtros. `null` = no se pudo leer; `{ episodios: [] }` = ninguno.
   const pEpisodios = safe(async () => {
-    const r = await leerEpisodiosParaTablero(tenantId, new Date(Date.now() - filtrosVista.dias * 86_400_000), filtrosRepo);
+    const hasta = new Date();
+    const r = await leerEpisodiosParaTablero(tenantId, new Date(hasta.getTime() - filtrosVista.dias * 86_400_000), filtrosRepo);
     return { episodios: episodiosVista(r?.episodios ?? []), hayMas: r?.hayMas ?? false };
   });
   // Los sitios que se pueden asignar a un viaje (solo los activos; hasta 500). Sin lectura, la forma de asignar no ofrece nada.
