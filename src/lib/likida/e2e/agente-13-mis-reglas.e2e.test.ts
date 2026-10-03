@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { crearDbMemoria, type DbMemoria } from './db_memoria.fixture';
 import { reclamoEnMemoria } from '../reglas/reclamo_en_memoria.fixture';
+import './reloj_adelantado.fixture';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // E2E AGENTE 13 — MIS REGLAS (español libre → plantilla del catálogo → confirmación humana → vigilante SQL → WhatsApp).

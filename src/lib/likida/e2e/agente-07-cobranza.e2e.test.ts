@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { crearDbMemoria, type DbMemoria, type Fila } from './db_memoria.fixture';
+import './reloj_adelantado.fixture';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // E2E AGENTE 7 — COBRANZA DE COMPROBANTES (el cron que persigue al chofer que lleva días sin mandar recibos).

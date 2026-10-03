@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { crearMemoriaControl } from '../autofactura/control.fixture';
 import { crearMemoriaVinculacion } from '../autofactura/memoria.fixture';
+import './reloj_adelantado.fixture';
 import type { ResultadoLoteAgente, TicketDeLote } from '../facturacion/agente';
 
 // ═══════════════════════════════════════════════════════════════════════════

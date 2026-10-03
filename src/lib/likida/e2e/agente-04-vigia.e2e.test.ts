@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { atenderMensajeCliente, atenderDecisionVigia, aprobarMensaje, tomarConversacion, barridoVigia, type MensajeEntrante } from '../vigia/servicio';
 import { escenario, RepoEnMemoria } from '../vigia/repo.fixture';
 import { estatus, AHORA, T1, T2, CLIENTE_A, CLIENTE_B, VIAJE_AJENO } from '../vigia/datos.fixture';
+import './reloj_adelantado.fixture';
 import type { DepsVigia } from '../vigia/puertos';
 import type { EntradaEnvioCliente, ResultadoEnvioCliente } from '../vigia/enviar';
 
