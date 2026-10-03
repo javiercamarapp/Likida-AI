@@ -112,7 +112,8 @@ export default async function PaginaDespacho({
   // `count: 'exact'` y un buscador por folio (`?q=`).
   const [tablero, sinAsignar, activos, carga, totalOperadores, totalClientes, totalUnidades] = await Promise.all([
     safe(() => getTableroOperacion(tenantId)),
-    getViajesSinAsignar(tenantId),
+    // 12 = `MAX_FILAS` de la vista: solo se trae lo que se pinta, y el total real viaja aparte.
+    getViajesSinAsignar(tenantId, 12),
     viajesEnCursoPaginados(tenantId, { pagina: paginaPedida, folio: folioPedido }),
     safe(() => getCargaOperadores(tenantId)),
     contarCatalogo(tenantId, 'operador'),
@@ -351,7 +352,8 @@ export default async function PaginaDespacho({
     <VistaDespacho
       puedeCapturarDinero={puedeCapturarDinero}
       tablero={tablero}
-      sinAsignar={sinAsignar}
+      sinAsignar={sinAsignar.filas}
+      totalSinAsignar={sinAsignar.total}
       activos={activos}
       sufijo={sufijo}
       folioPedido={folioPedido}

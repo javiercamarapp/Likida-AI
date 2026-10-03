@@ -12,7 +12,7 @@ vi.mock('next/navigation', () => ({ redirect: (url: string) => { throw new Error
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => ({ tenantId: 't1', rol: m.rol }) }));
 vi.mock('@/lib/auth/guard', () => ({ requireSessionTenant: async () => ({ tenantId: m.tenant, rol: m.rol, userId: 'u1' }) }));
 vi.mock('@/lib/likida/operacion', () => ({
-  getTableroOperacion: async () => null, getViajesSinAsignar: async () => [], getCargaOperadores: async () => [],
+  getTableroOperacion: async () => null, getViajesSinAsignar: async () => ({ filas: [], total: 0 }), getCargaOperadores: async () => [],
   crearViaje: (...args: unknown[]) => m.crear(...args), avisarAlChofer: vi.fn(), asignarUnidad: vi.fn(),
 }));
 vi.mock('@/lib/likida/repo', () => ({

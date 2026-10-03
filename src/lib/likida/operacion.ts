@@ -104,24 +104,50 @@ export interface ViajeSinAsignar {
   estatus: string;
 }
 
-/** Lo primero que el encargado abre en la mañana: qué está sin repartir. */
-export async function getViajesSinAsignar(tenantId: string): Promise<ViajeSinAsignar[]> {
-  const filas = await traerTodo<Record<string, unknown>>(
-    (d, h) => acotada(supabaseAdmin().from('viaje')
-      .select('id, folio, origen, destino, fecha_inicio, estatus', conteo(d))
-      .eq('tenant_id', tenantId).is('operador_id', null)
-      .neq('estatus', 'liquidado')
-      .order('id').range(d, h), 'getViajesSinAsignar'),
-    'getViajesSinAsignar',
-  );
-  return filas.map((v) => ({
-    id: v.id as string,
-    folio: (v.folio as string) || null,
-    origen: (v.origen as string) || null,
-    destino: (v.destino as string) || null,
-    fechaInicio: (v.fecha_inicio as string) || null,
-    estatus: v.estatus as string,
-  }));
+/** Cuántos viajes sin chofer se listan de una vez (el resto se cuenta, no se trae). */
+export const TOPE_SIN_ASIGNAR = 50;
+
+export interface ViajesSinAsignar {
+  /** A lo más `limite` viajes, los más viejos primero (los que más urge repartir). */
+  filas: ViajeSinAsignar[];
+  /** El total REAL de viajes sin chofer — exacto, no `filas.length`. */
+  total: number;
+}
+
+/**
+ * Lo primero que el encargado abre en la mañana: qué está sin repartir.
+ *
+ * RONDA 16 (carga de 250 camiones): antes `traerTodo` paginaba TODOS los viajes
+ * sin operador y las dos pantallas (Inicio y Despacho) solo pintaban un puñado
+ * (Despacho mostraba 12) o contaban. Ahora UNA consulta trae las primeras
+ * `limite` filas Y el conteo exacto (`count: 'exact'` con `limit`: PostgREST
+ * devuelve el total completo junto con la página recortada), de modo que el
+ * encabezado «N viajes sin chofer» sigue siendo exacto sin cargar los N.
+ */
+export async function getViajesSinAsignar(tenantId: string, limite = TOPE_SIN_ASIGNAR): Promise<ViajesSinAsignar> {
+  const { data, error, count } = await acotada(supabaseAdmin().from('viaje')
+    .select('id, folio, origen, destino, fecha_inicio, estatus', { count: 'exact' })
+    .eq('tenant_id', tenantId).is('operador_id', null)
+    .neq('estatus', 'liquidado')
+    .order('fecha_inicio', { ascending: true, nullsFirst: false })
+    .order('id')
+    .limit(limite), 'getViajesSinAsignar');
+  if (error) throw new Error(`getViajesSinAsignar: ${error.message}`);
+  const filas = (data ?? []) as Array<Record<string, unknown>>;
+  // Un conteo ausente no se inventa con `filas.length`: con el tope puesto sería
+  // una cifra baja presentada como total.
+  if (typeof count !== 'number') throw new Error('getViajesSinAsignar: la base no devolvió el conteo');
+  return {
+    filas: filas.map((v) => ({
+      id: v.id as string,
+      folio: (v.folio as string) || null,
+      origen: (v.origen as string) || null,
+      destino: (v.destino as string) || null,
+      fechaInicio: (v.fecha_inicio as string) || null,
+      estatus: v.estatus as string,
+    })),
+    total: count,
+  };
 }
 
 // ── Unidades ───────────────────────────────────────────────────────────────
