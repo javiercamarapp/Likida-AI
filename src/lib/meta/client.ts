@@ -529,8 +529,11 @@ export async function enviarBotones(
       const crudo = await res.text().catch(() => '');
       const { codigo, mensaje } = errorDeMeta(crudo);
       logger.error('wa.sendButtons', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
-      if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo);
-    else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
+      if (esTokenMetaInvalido(codigo, res.status)) {
+        await alFallarPorToken(payload, codigo, res.status, crudo);
+      } else if (esReintentableMeta(codigo, res.status)) {
+        await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
+      }
       return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
     }
     const id = await idDeRespuesta(res);
