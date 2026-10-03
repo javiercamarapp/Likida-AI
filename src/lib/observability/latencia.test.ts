@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { medirRuta, tasaDeMuestreo } from './latencia';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { medirRuta, tasaDeMuestreo, TOPE_ESCRITURA_MS } from './latencia';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // medirRuta (E1-A): barato y acotado — muestreo uniforme, nombres estáticos,
@@ -7,6 +7,10 @@ import { medirRuta, tasaDeMuestreo } from './latencia';
 // ═══════════════════════════════════════════════════════════════════════════
 
 vi.mock('@/lib/admin/salud', () => ({ registrarLatencia: vi.fn(async () => {}) }));
+// `after()` solo existe dentro de una petición: por omisión lanza (como fuera de una), y una prueba lo captura.
+const after = vi.fn<(f: () => unknown) => void>(() => { throw new Error('after fuera de una petición'); });
+vi.mock('next/server', () => ({ after: (f: () => unknown) => after(f) }));
+beforeEach(() => { after.mockReset(); after.mockImplementation(() => { throw new Error('after fuera de una petición'); }); });
 
 function reloj(...marcas: number[]) {
   let i = 0;
@@ -55,6 +59,38 @@ describe('medirRuta', () => {
     const escribir = vi.fn(async () => { throw new Error('base caída'); });
     const resp = new Response('ok');
     await expect(medirRuta('x', async () => resp, { tasa: 1, azar: () => 0, escribir })).resolves.toBe(resp);
+  });
+});
+
+describe('M1 (ronda 19): la escritura va fuera del camino crítico', () => {
+  it('dentro de una petición la escritura se entrega a after() y la respuesta NO la espera', async () => {
+    let nunca: () => void = () => {};
+    const escribir = vi.fn(() => new Promise<void>((res) => { nunca = () => res(); })); // un insert que no contesta
+    let pendiente: (() => unknown) | undefined;
+    after.mockImplementation((f) => { pendiente = f; });
+    const resp = new Response('ok');
+    // si esperara la escritura, esta promesa no resolvería nunca
+    await expect(medirRuta('webhook.whatsapp', async () => resp, { tasa: 1, azar: () => 0, escribir })).resolves.toBe(resp);
+    expect(escribir).toHaveBeenCalledTimes(1);
+    expect(pendiente).toBeTypeOf('function');
+    nunca();
+  });
+
+  it('también en el camino de error: se re-lanza la MISMA excepción sin esperar la escritura', async () => {
+    const escribir = vi.fn(() => new Promise<void>(() => {}));
+    after.mockImplementation(() => undefined);
+    const boom = new Error('boom');
+    await expect(medirRuta('x', async () => { throw boom; }, { tasa: 1, azar: () => 0, escribir })).rejects.toBe(boom);
+    expect(escribir).toHaveBeenCalledWith('x', expect.any(Number), false);
+  });
+
+  it('fuera de una petición (after lanza) espera como mucho ~300 ms aunque la escritura cuelgue', async () => {
+    const escribir = vi.fn(() => new Promise<void>(() => {}));
+    const t0 = Date.now();
+    const resp = new Response('ok');
+    await expect(medirRuta('x', async () => resp, { tasa: 1, azar: () => 0, escribir })).resolves.toBe(resp);
+    expect(Date.now() - t0).toBeLessThan(TOPE_ESCRITURA_MS + 400);
+    expect(escribir).toHaveBeenCalledTimes(1);
   });
 });
 

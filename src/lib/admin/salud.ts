@@ -148,15 +148,24 @@ export async function puertaCron(cron: CronId, req: Request, sinSecreto: string)
 
 /** Deja la marca de ESTA corrida. Best-effort con log: nunca lanza. */
 export async function registrarLatido(cron: CronId, estado: EstadoLatido, detalle: Record<string, unknown> = {}): Promise<void> {
-  await registrarLatenciaDeCron(cron, estado);
+  // M2 (ronda 19): el LATIDO va primero. Un insert de latencia colgado (hasta ~9.5 s con la base lenta) retrasaba el
+  // latido; un cron cerca de maxDuration moría antes de latir y parecía muerto (alerta falsa de vencido). El cronómetro
+  // se lee AHORA (la duración es hasta aquí) y la muestra se escribe después del latido.
+  const muestra = muestraDeCron(cron, estado);
   try {
     const { error } = await acotada(supabaseAdmin()
       .from('cron_latido')
       .upsert({ id: cron, ultimo_latido: new Date().toISOString(), estado, detalle }, { onConflict: 'id' }), 'registrarLatido');
-    if (error) logger.warn('cron.latido_sin_escribir', { cron, err: error.message });
+    if (error) {
+      // A1 (ronda 19): el código salió antes que la 0701 → el CHECK de cron_latido no admite 'guardia' (23514). Se dice
+      // una vez, con código estable, y se sigue: la guardia no lanza en bucle (el aviso de /api/health es el respaldo).
+      if ((error as { code?: string }).code === '23514') logger.error('cron.latido_migracion_pendiente', { cron, codigo: 'migracion_0701_pendiente', err: error.message });
+      else logger.warn('cron.latido_sin_escribir', { cron, err: error.message });
+    }
   } catch (e) {
     logger.warn('cron.latido_sin_escribir', { cron, err: e instanceof Error ? e.message : String(e) });
   }
+  if (muestra) await registrarLatencia('cron', cron, muestra.ms, muestra.ok);
 }
 
 export interface Latido { ultimoLatido: string; estado: EstadoLatido; detalle: Record<string, unknown> }
@@ -352,13 +361,13 @@ export async function registrarLatencia(tipo: 'ruta' | 'cron', nombre: string, m
 
 /** La duración de esta corrida de cron: desde la puerta hasta el latido. Un `saltado` (apagado por palanca) responde
  *  en milisegundos sin trabajar: contarlo hundiría el p50 de un cron que de verdad tarda segundos. */
-async function registrarLatenciaDeCron(cron: CronId, estado: EstadoLatido): Promise<void> {
+function muestraDeCron(cron: CronId, estado: EstadoLatido): { ms: number; ok: boolean } | null {
   const inicio = iniciosDeCorrida.get(cron);
   iniciosDeCorrida.delete(cron);
-  if (inicio === undefined || estado === 'saltado') return;
+  if (inicio === undefined || estado === 'saltado') return null;
   const ms = performance.now() - inicio;
-  if (ms > TECHO_CORRIDA_MS) return;
-  await registrarLatencia('cron', cron, ms, estado === 'ok');
+  if (ms > TECHO_CORRIDA_MS) return null;
+  return { ms, ok: estado === 'ok' };
 }
 
 export const COMPONENTES_ESTADO = ['app', 'base', 'crons', 'whatsapp', 'correo'] as const;

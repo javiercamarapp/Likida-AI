@@ -19,7 +19,29 @@
 // fallo y la excepción se re-lanza sin tocarla.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { after } from 'next/server';
 import { registrarLatencia } from '@/lib/admin/salud';
+
+/** Tope de espera de la escritura cuando no hay `after()` disponible (fuera de una petición). */
+export const TOPE_ESCRITURA_MS = 300;
+
+/**
+ * M1 (ronda 19): la escritura de la muestra NO va en el camino crítico de la respuesta. Con la base lenta (justo cuando
+ * más pesa) un `await` aquí retrasaba el ack a Meta, el chat y la ingesta hasta ~9.5 s en el 10 % muestreado. Se lanza y
+ * se entrega a `after()` (el proyecto ya lo usa en el webhook de WhatsApp): la respuesta sale y la función vive hasta que
+ * termine. Fuera de una petición (`after` lanza) se espera como mucho `TOPE_ESCRITURA_MS`.
+ */
+function fueraDelCaminoCritico(escritura: Promise<void>): Promise<void> | undefined {
+  try {
+    after(() => escritura);
+    return undefined;
+  } catch {
+    return new Promise<void>((listo) => {
+      const t = setTimeout(listo, TOPE_ESCRITURA_MS);
+      escritura.then(() => { clearTimeout(t); listo(); }, () => { clearTimeout(t); listo(); });
+    });
+  }
+}
 
 /** La proporción de peticiones que se miden. Un valor fuera de 0..1 o no numérico vuelve al default. */
 export function tasaDeMuestreo(env: string | undefined = process.env.LIKIDA_LATENCIA_MUESTREO): number {
@@ -54,9 +76,9 @@ export async function medirRuta(
   try {
     respuesta = await trabajo();
   } catch (e) {
-    if (muestrear) await escribir(nombre, reloj() - t0, false).catch(() => undefined);
+    if (muestrear) await fueraDelCaminoCritico(escribir(nombre, reloj() - t0, false).catch(() => undefined));
     throw e;
   }
-  if (muestrear) await escribir(nombre, reloj() - t0, respuesta.status < 500).catch(() => undefined);
+  if (muestrear) await fueraDelCaminoCritico(escribir(nombre, reloj() - t0, respuesta.status < 500).catch(() => undefined));
   return respuesta;
 }
