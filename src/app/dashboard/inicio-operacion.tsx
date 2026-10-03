@@ -8,7 +8,7 @@ import {
 } from '@/lib/likida/analytics';
 import {
   getTableroOperacion, getViajesSinAsignar, getCargaOperadores, getIncidencias, getUnidades,
-  type TableroOperacion, type ViajeSinAsignar, type CargaOperador, type IncidenciaRow, type UnidadRow,
+  type TableroOperacion, type ViajesSinAsignar, type CargaOperador, type IncidenciaRow, type UnidadRow,
 } from '@/lib/likida/operacion';
 import { clasificarVigencia, contarVigencias, avisoVigencias, DIAS_AVISO } from '@/lib/likida/vigencias';
 import { EstadoVacio } from '../admin/ui/kit';
@@ -90,7 +90,7 @@ export async function InicioOperacion({
   // Lanzadas de una, esperadas por tarjeta. Todas pasan por `safe`: ninguna
   // rechaza, resuelven a `null` y su bloque pinta la leyenda honesta.
   const pTablero = safe<TableroOperacion>(() => getTableroOperacion(tenantId));
-  const pSinAsignar = safe<ViajeSinAsignar[]>(() => getViajesSinAsignar(tenantId));
+  const pSinAsignar = safe<ViajesSinAsignar>(() => getViajesSinAsignar(tenantId));
   const pCarga = safe<CargaOperador[]>(() => getCargaOperadores(tenantId));
   const pIncidencias = safe<IncidenciaRow[]>(() => getIncidencias(tenantId));
   const pViajes = safe<ViajeRow[]>(() => getViajes(tenantId));
@@ -203,7 +203,7 @@ export async function InicioOperacion({
               viajes sin chofer, que es la urgencia real de la mañana. */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-3 items-start">
             <Bloque mensaje="No se pudo leer la lista de viajes sin chofer." esqueleto={<EsqTabla filas={4} />}>
-              <BloqueSinAsignar pSinAsignar={pSinAsignar} />
+              <BloqueSinAsignar pSinAsignar={pSinAsignar} sufijo={sufijo} />
             </Bloque>
             <Bloque mensaje="No se pudo leer la carga por operador." esqueleto={<EsqTabla filas={4} />}>
               <BloqueCarga pCarga={pCarga} sufijo={sufijo} />
@@ -242,7 +242,7 @@ async function BloqueArranque({ pPasos, sufijo }: {
 }
 
 async function BloqueAlertas({ pSinAsignar, pIncidencias, pTablero, pUnidades, pOperadores, diaMx, sufijo }: {
-  pSinAsignar: Promise<ViajeSinAsignar[] | null>;
+  pSinAsignar: Promise<ViajesSinAsignar | null>;
   pIncidencias: Promise<IncidenciaRow[] | null>;
   pTablero: Promise<TableroOperacion | null>;
   pUnidades: Promise<UnidadRow[] | null>;
@@ -257,13 +257,13 @@ async function BloqueAlertas({ pSinAsignar, pIncidencias, pTablero, pUnidades, p
   // Una banda que siempre dice algo entrena a ignorarla. Cada alerta lleva a
   // LA pantalla donde se resuelve, con el sufijo del superadmin a cuestas —
   // y la que no tiene pantalla va SIN link: las incidencias y los POD hoy no
-  // se trabajan en ninguna página (`getIncidencias`/`getPods` no se usan
-  // fuera de este inicio), y un "Ver →" a un 404 es peor que nada.
+  // se trabajan en ninguna página (`getIncidencias` no se usa
+  // fuera de este inicio; `getPods` se borró en la ronda 16), y un "Ver →" a un 404 es peor que nada.
   const alertas: Array<{ texto: string; href: string | null }> = [];
 
-  if (sinAsignar && sinAsignar.length > 0) {
+  if (sinAsignar && sinAsignar.total > 0) {
     alertas.push({
-      texto: `${sinAsignar.length} viaje${sinAsignar.length === 1 ? '' : 's'} sin chofer — se asigna en Despacho`,
+      texto: `${sinAsignar.total} viaje${sinAsignar.total === 1 ? '' : 's'} sin chofer — se asigna en Despacho`,
       href: `/dashboard/despacho${sufijo}`,
     });
   }
@@ -444,7 +444,7 @@ async function BloqueTablero({ pTablero }: { pTablero: Promise<TableroOperacion 
   return <TableroCifras t={tablero} />;
 }
 
-async function BloqueSinAsignar({ pSinAsignar }: { pSinAsignar: Promise<ViajeSinAsignar[] | null> }) {
+async function BloqueSinAsignar({ pSinAsignar, sufijo }: { pSinAsignar: Promise<ViajesSinAsignar | null>; sufijo: string }) {
   const sinAsignar = await pSinAsignar;
   return (
     <section className="card overflow-hidden">
@@ -454,7 +454,7 @@ async function BloqueSinAsignar({ pSinAsignar }: { pSinAsignar: Promise<ViajeSin
       </div>
       {sinAsignar === null ? (
         <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la lista.</div>
-      ) : sinAsignar.length === 0 ? (
+      ) : sinAsignar.total === 0 ? (
         <div className="px-5 pb-4">
           <EstadoVacio icono={<Send width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
             Todo lo que está en curso ya trae chofer.
@@ -462,7 +462,7 @@ async function BloqueSinAsignar({ pSinAsignar }: { pSinAsignar: Promise<ViajeSin
         </div>
       ) : (
         <ul className="pb-3">
-          {sinAsignar.map((v) => (
+          {sinAsignar.filas.map((v) => (
             <li key={v.id} className="px-5 py-2 border-t flex items-center gap-3 text-sm" style={{ borderColor: 'var(--line2)' }}>
               <span className="font-medium">{v.folio ?? '—'}</span>
               <span className="truncate" style={{ color: 'var(--muted)' }}>
@@ -471,6 +471,12 @@ async function BloqueSinAsignar({ pSinAsignar }: { pSinAsignar: Promise<ViajeSin
               <span className="ml-auto shrink-0 text-[12px]" style={{ color: 'var(--muted)' }}>{fechaMx(v.fechaInicio)}</span>
             </li>
           ))}
+          {sinAsignar.total > sinAsignar.filas.length && (
+            <li className="px-5 py-2 border-t text-[12px]" style={{ borderColor: 'var(--line2)', color: 'var(--muted)' }}>
+              Se muestran {sinAsignar.filas.length} — hay {sinAsignar.total - sinAsignar.filas.length} más sin chofer.{' '}
+              <Link href={`/dashboard/despacho${sufijo}`} className="underline">Ver en Despacho</Link>
+            </li>
+          )}
         </ul>
       )}
     </section>

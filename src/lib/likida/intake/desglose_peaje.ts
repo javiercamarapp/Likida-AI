@@ -993,25 +993,34 @@ async function agregarEstatus(tenantId: string, desgloseId: string): Promise<Pic
   // cabe completo» sobre un `.limit(MAX_LINEAS_DESGLOSE)` — y la premisa era
   // FALSA: PostgREST aplica min(limit, max_rows), así que un `.limit(5000)`
   // entrega 1,000 filas sin error. `total` y `pctCuadra` se congelaban en
-  // 1,000 — en el detalle Y EN EL ACUSE que se le manda al cliente. Se pagina
-  // con `traerTodo`, que además exige demostrar que la lectura quedó completa.
-  const filas = await traerTodo<{ estatus: unknown }>(
-    (d, h) => acotada(supabaseAdmin()
+  // 1,000 — en el detalle Y EN EL ACUSE que se le manda al cliente.
+  //
+  // RONDA 16 (carga de 250 camiones): la solución de entonces (`traerTodo`)
+  // traía TODAS las líneas del desglose —con 5,000 viajes al mes y 3 pases por
+  // viaje, un estado de cuenta mensual son decenas de miles de filas— solo para
+  // contar tres estatus. Ahora son CUATRO CONTEOS EN SQL (`head: true`: no viaja
+  // ninguna fila): el total y uno por estatus. Un conteo exacto es exacto sea
+  // cual sea `max_rows`, y un error de lectura sigue LANZANDO (nunca un 0%).
+  const contar = async (estatus?: EstatusLineaDesglose): Promise<number> => {
+    let q = supabaseAdmin()
       .from('desglose_peaje_linea')
-      .select('estatus', conteo(d))
+      .select('id', { count: 'exact', head: true })
       .eq('tenant_id', tenantId)
-      .eq('desglose_id', desgloseId)
-      .order('id').range(d, h), 'desglose_peaje.agregar_estatus'),
-    'desglose_peaje.agregar_estatus',
-  );
-  const cuenta = (e: EstatusLineaDesglose) => filas.filter((f) => f.estatus === e).length;
-  const total = filas.length;
-  const cuadra = cuenta('cuadra');
+      .eq('desglose_id', desgloseId);
+    if (estatus) q = q.eq('estatus', estatus);
+    const { count, error } = await acotada(q, 'desglose_peaje.agregar_estatus');
+    if (error) throw new Error(`desglose_peaje.agregar_estatus: ${error.message}`);
+    if (typeof count !== 'number') throw new Error('desglose_peaje.agregar_estatus: la base no devolvió el conteo');
+    return count;
+  };
+  const [total, cuadra, noCuadra, sinContraparte] = await Promise.all([
+    contar(), contar('cuadra'), contar('no_cuadra'), contar('sin_contraparte'),
+  ]);
   return {
     total,
     cuadra,
-    noCuadra: cuenta('no_cuadra'),
-    sinContraparte: cuenta('sin_contraparte'),
+    noCuadra,
+    sinContraparte,
     pctCuadra: total > 0 ? Math.round((cuadra / total) * 100) : null,
   };
 }
