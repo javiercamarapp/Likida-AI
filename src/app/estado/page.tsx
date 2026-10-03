@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import Link from 'next/link';
-import { cargarEstadoPublico, type EstadoPublico } from './datos';
+import { headers } from 'next/headers';
+import { cargarEstadoPublico, estadoMemoizado, type EstadoPublico } from './datos';
+import { clientIp, rateLimit } from '@/lib/ratelimit';
 import type { ComponenteEstado, EstadoMedido } from '@/lib/admin/salud';
 import type { CeldaDia } from '@/lib/admin/estado';
 
@@ -63,8 +65,22 @@ function fechaLegible(iso: string): string {
   return fechaHoraMx(iso);
 }
 
+/**
+ * M3 (ronda 19): el mismo rate limit por IP que `/api/health` (30/min). Pasado el límite se sirve lo último memoizado SIN
+ * tocar la base (o «no pudimos leer» si no hay nada). Falla ABIERTO si Redis no contesta: una página de estado que se
+ * apaga porque el limitador cayó es justo la que se necesita en una caída.
+ */
+async function dentroDelLimite(): Promise<boolean> {
+  try {
+    const ip = clientIp(new Request('http://estado.local', { headers: await headers() }));
+    return await rateLimit(`estado:${ip}`, 30, 60_000, { fallaCerrado: false });
+  } catch {
+    return true;
+  }
+}
+
 export default async function PaginaEstado() {
-  const estado = await cargarEstadoPublico().catch((): null => null);
+  const estado = (await dentroDelLimite()) ? await cargarEstadoPublico().catch((): null => null) : estadoMemoizado();
 
   if (estado === null) {
     // Ni siquiera se pudo armar: se dice. No se pinta un verde por omisión.
