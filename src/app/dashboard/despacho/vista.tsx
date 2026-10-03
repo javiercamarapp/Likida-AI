@@ -36,9 +36,13 @@ function hrefPaginaActivos(sufijo: string, folioPedido: string, pagina: number):
  */
 export function VistaDespacho({
   tablero, sinAsignar, totalSinAsignar, activos, sufijo, folioPedido, buscarCatalogo, totalOperadores, totalClientes, totalUnidades,
-  puedeCapturarDinero = false, carga, crear, asignarYAvisar, asignarUnidadViaje, reenviarAviso, altaOperador,
+  puedeCapturarDinero = false, puedeCapturarAnticipo = false, topeAnticipo, topeAnticipoOrigen, carga, crear, asignarYAvisar, asignarUnidadViaje, reenviarAviso, altaOperador,
 }: {
   puedeCapturarDinero?: boolean;
+  /** Quien despacha captura anticipo aunque no vea dinero (E1-B). */
+  puedeCapturarAnticipo?: boolean;
+  topeAnticipo?: number;
+  topeAnticipoOrigen?: 'politica' | 'umbral_revision';
   tablero: TableroOperacion | null;
   sinAsignar: ViajeSinAsignar[];
   /** El total REAL de viajes sin chofer (la lista trae a lo más `MAX_FILAS`). Sin él, `sinAsignar.length`. */
@@ -168,7 +172,7 @@ export function VistaDespacho({
               <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
                 Nace abierto: desde ese momento el operador puede mandar comprobantes por WhatsApp
               </p>
-              <FormaViaje action={crear} buscarCatalogo={buscarCatalogo} puedeCapturarDinero={puedeCapturarDinero}
+              <FormaViaje action={crear} buscarCatalogo={buscarCatalogo} puedeCapturarDinero={puedeCapturarDinero} puedeCapturarAnticipo={puedeCapturarAnticipo} topeAnticipo={topeAnticipo} topeAnticipoOrigen={topeAnticipoOrigen}
                 totalOperadores={totalOperadores} totalClientes={totalClientes} totalUnidades={totalUnidades} />
             </section>
           </div>

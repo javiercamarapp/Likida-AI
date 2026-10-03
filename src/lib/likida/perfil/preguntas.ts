@@ -132,6 +132,36 @@ export function calificaEstimuloPeaje(perfilCrudo: unknown): ElegibilidadEstimul
   return { elegible: menoresA300M && !parteRelacionada };
 }
 
+/**
+ * ¿Las tarjetas y monederos con los que se paga el combustible son de la
+ * empresa? Es el insumo del estímulo del diésel (LIF 2026 art. 20-A fr. IV:
+ * el medio de pago electrónico tiene que ser de la cuenta del contribuyente).
+ *
+ * Tri-estado y fail-closed, igual que `calificaEstimuloPeaje`:
+ *  - `true`  solo con la declaración positiva y sin contradicción.
+ *  - `false` si declaró que NO, o si declaró que el chofer paga con la suya y
+ *    se le reembolsa (`pagoEnBomba = 'chofer_reembolso'`), aunque haya dicho sí
+ *    a la otra pregunta: «con la suya y le reembolsamos» tumba el estímulo.
+ *  - `undefined` si no hay declaración suficiente (no contestó las tarjetas;
+ *    `mixto` solo, sin respuesta de tarjetas, tampoco afirma nada). Un valor inferido o un
+ *    default de Likida cuentan como no declarado (`decidir`).
+ *
+ * Solo aplica el criterio determinístico; la regla fiscal fina sobre tarjetas
+ * de terceros queda como pregunta abierta al fiscalista
+ * (docs/fiscalista/PREGUNTAS-AL-FISCALISTA.md, C5).
+ */
+export function tarjetasDeLaEmpresa(perfilCrudo: unknown): boolean | undefined {
+  const perfil = leerPerfil(perfilCrudo);
+  const declaradas = decidir(perfil.tarjetasANombreEmpresa);
+  const bomba = decidir(perfil.pagoEnBomba);
+  if (declaradas === false || bomba === 'chofer_reembolso') return false;
+  // `mixto` no veta la respuesta de tarjetas: si la flota dijo que sus tarjetas y
+  // monederos SON de la empresa, «depende del viaje» (empresa o efectivo/otro
+  // medio) no la contradice; el reembolso explícito sí, y ya se cortó arriba.
+  if (declaradas === true) return true;
+  return undefined;
+}
+
 /** Para una futura UI de cuestionario: la pregunta pendiente, o `null` si ya
  *  se sabe. Usa `sugerir()` (no `decidir()`) a propósito: aquí SÍ importa
  *  distinguir "ya se preguntó y no se sabe" (sigue pendiente) de "hay un

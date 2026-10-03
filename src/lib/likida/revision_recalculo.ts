@@ -46,6 +46,9 @@ export async function recalcularParaAjuste(
   tenantId: string,
   viajeId: string,
   ajustes: AjustePedido[],
+  /** Fecha de cierre de la liquidación ajustada (`created_at`): una anterior a la
+   *  vigencia de `tarjeta_no_empresa` no se recalcula con esa regla (A2). */
+  cerradaEn?: string | null,
 ): Promise<ResultadoRecalculo> {
   const gastos = await getGastos(viajeId, tenantId);
   const porId = new Map(gastos.map((g) => [g.id, g]));
@@ -58,7 +61,7 @@ export async function recalcularParaAjuste(
   const gastosAjustados: Gasto[] = gastos.map((g) => (
     nuevos.has(g.id) ? { ...g, monto: nuevos.get(g.id)! } : g
   ));
-  const cuadre = await cuadrarDesdeDB(tenantId, viajeId, gastosAjustados);
+  const cuadre = await cuadrarDesdeDB(tenantId, viajeId, gastosAjustados, { cerradaEn });
   return {
     cuadre,
     recalculo: {
@@ -87,7 +90,7 @@ export function cifrasPdf(cuadre: Omit<Liquidacion, 'id' | 'creadaEn'>) {
 
 async function filaPdf(tenantId: string, liquidacionId: string) {
   const { data, error } = await acotada(supabaseAdmin().from('liquidacion')
-    .select('id,viaje_id,pdf_url,pdf_versionada,revision,revisada_en,revisada_por_email,total_comprobado,total_anticipo,diferencia,estatus,diferencias,ieps_acreditable,litros_diesel_acreditables,iva_acreditable,peaje_acreditable')
+    .select('id,viaje_id,created_at,pdf_url,pdf_versionada,revision,revisada_en,revisada_por_email,total_comprobado,total_anticipo,diferencia,estatus,diferencias,ieps_acreditable,litros_diesel_acreditables,iva_acreditable,peaje_acreditable')
     .eq('tenant_id', tenantId).eq('id', liquidacionId).maybeSingle(), 'revision.pdf_fila');
   if (error || !data) throw new Error('No se pudo leer la liquidación para conservar/publicar sus PDF');
   return data;
@@ -169,7 +172,7 @@ export async function reintentarPdfAjustado(tenantId: string, liquidacionId: str
   const f = await filaPdf(tenantId, liquidacionId);
   if (f.revision !== 'ajustada' || !f.revisada_en) throw new Error('Esta liquidación no tiene un ajuste firmado pendiente de PDF');
   if (f.pdf_url) return { regenerado: true };
-  const cuadre = await cuadrarDesdeDB(tenantId, String(f.viaje_id));
+  const cuadre = await cuadrarDesdeDB(tenantId, String(f.viaje_id), undefined, { cerradaEn: (f.created_at as string | null) ?? null });
   return regenerarPdfTrasAjuste(tenantId, String(f.viaje_id), liquidacionId, cuadre,
     String(f.revisada_por_email ?? 'Responsable de la flota'), String(f.revisada_en));
 }

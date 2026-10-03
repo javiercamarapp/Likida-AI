@@ -50,7 +50,7 @@ const diesel = (formaPago: string | undefined, extra: Partial<Gasto> = {}): Gast
 });
 
 const litros = (g: Gasto) =>
-  cuadrarViaje({ viajeId: 'v1', anticipo: 5000, politica, hidrocarburos: HC, estimulos: EST, gastos: [g] })
+  cuadrarViaje({ viajeId: 'v1', anticipo: 5000, politica, hidrocarburos: HC, estimulos: EST, tarjetasEmpresa: true, gastos: [g] })
     .litrosDieselAcreditables;
 
 // SON DOS CAPAS Y HAY QUE PROBAR LAS DOS.

@@ -190,3 +190,28 @@ describe('PDF0346: pareja inmutable y publicación condicionada', () => {
     expect(rpc.mock.calls.every(([name]) => name === 'publicar_pdf_liquidacion')).toBe(true);
   });
 });
+
+describe('A2: el recálculo de un ajuste no aplica retroactivamente la regla de tarjeta ajena', () => {
+  const CUADRE_A2 = {
+    viajeId: U(9), totalComprobado: 8000, totalAnticipo: 9000, diferencia: 1000, estatus: 'cuadrada' as const,
+    diferencias: [], gastos: [], totalDeducible: 0, totalNoDeducible: 0, totalPorConfirmar: 0,
+    iepsAcreditable: 0, litrosDieselAcreditables: 200, ivaAcreditable: 0, peajeAcreditable: 0,
+  };
+  it('recalcularParaAjuste le pasa al motor la fecha de cierre de la liquidación', async () => {
+    getGastos.mockResolvedValueOnce([gasto()]);
+    cuadrarDesdeDB.mockResolvedValueOnce(CUADRE_A2);
+    await recalcularParaAjuste('t1', U(9), [{ gastoId: U(3), montoNuevo: 8000 }], '2026-09-20T12:00:00Z');
+    expect(cuadrarDesdeDB.mock.calls[0][3]).toEqual({ cerradaEn: '2026-09-20T12:00:00Z' });
+  });
+
+  it('reintentarPdfAjustado reconstruye con el created_at de la fila (no como cierre nuevo)', async () => {
+    getViaje.mockResolvedValue({ id: U(9), anticipo: 9000, operadorId: U(5) });
+    getOperador.mockResolvedValue({ id: U(5), nombre: 'Sintético', telefono: '000' });
+    getDatosFiscales.mockResolvedValue(null);
+    generarLiquidacionPDF.mockResolvedValue(new Uint8Array([8]));
+    fila = { id: U(1), viaje_id: U(9), created_at: '2026-09-20T12:00:00Z', pdf_url: null, pdf_versionada: true, revision: 'ajustada', revisada_en: '2026-09-21T00:00:00Z', revisada_por_email: 'synthetic@test' };
+    cuadrarDesdeDB.mockResolvedValueOnce(CUADRE_A2);
+    await reintentarPdfAjustado('t1', U(1));
+    expect(cuadrarDesdeDB.mock.calls[0][3]).toEqual({ cerradaEn: '2026-09-20T12:00:00Z' });
+  });
+});

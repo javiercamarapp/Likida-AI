@@ -6,6 +6,7 @@
 // hairlines, montos tabulares, diferencias en rojo sutil (ver DESIGN.md).
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { sanearWinAnsi } from './winansi';
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib';
 import { resumenOmitidos, filasImprimibles } from './omitidos';
 import { filasDeducibilidad } from './deducibilidad';
@@ -130,23 +131,7 @@ export async function generarLiquidacionPDF(
   // dejando pasar los controles enteros. Un \x1b de una impresora térmica mal
   // leído tumbaba la generación con "WinAnsi cannot encode". Justo lo que este
   // saneador existe para evitar, y los datos vienen de fotos de tickets.
-  const wa = (s: string): string =>
-    s
-      .replace(/→/g, '-')
-      .replace(/[●○]/g, '•')            // círculos → bullet (WinAnsi sí lo tiene)
-      .replace(/[“”]/g, '"')
-      .replace(/[‘’]/g, "'")
-      .replace(/…/g, '...')
-      // ── AUDITORÍA 22, BE-1 (ALTO) ────────────────────────────────────────
-      // El rango ` -ÿ` es 0x20–0xFF e INCLUYE los controles C1 (0x7F–0x9F),
-      // que WinAnsi no codifica: `drawText` lanza y la liquidación se cierra
-      // SIN PAPEL, para siempre —el cierre es irreversible por los triggers
-      // 0036/0037— mientras al chofer se le dice que el contralor sí lo tiene.
-      // Un solo byte basta, y llega gratis: un OCR sobre un ticket con ruido,
-      // o un nombre pegado desde Word (0x92 es la comilla tipográfica de
-      // Windows-1252).
-      .replace(/[\u007F-\u009F]/g, '?')
-      .replace(/[^ -ÿ–—•€]/g, '?');
+  const wa = sanearWinAnsi;
 
   const text = (s: string, x: number, yy: number, size: number, f: PDFFont, color = INK) =>
     page.drawText(wa(s), { x, y: yy, size, font: f, color });
