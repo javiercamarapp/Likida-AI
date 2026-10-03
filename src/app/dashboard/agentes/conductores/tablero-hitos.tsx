@@ -182,6 +182,17 @@ export function ColaExcepciones({ excepciones, puedeActuar, accion }: { excepcio
 const FOTO_TEXTO: Record<string, string> = { sello: 'sello', anden: 'andén', recibido: 'recibido', otra: 'foto' };
 const FUENTE_TEXTO: Record<string, string> = { texto: 'texto', boton: 'botón', ubicacion: 'ubicación', foto: 'foto', sistema: 'sistema', oficina: 'oficina' };
 
+/**
+ * R10-8: por qué se ve «omitido». Antes TODO omitido decía «avisó el siguiente», incluso el hito escalado que cerró el barrido de viajes
+ * abiertos hace más de 30 días (`viaje_abierto_vencido`): la oficina creía que el chofer había avisado el siguiente y nadie lo capturó.
+ */
+function textoOmitido(h: HitoVista): string {
+  if (h.omitidoMotivo === 'viaje_abierto_vencido') {
+    return `cerrado sin reporte: el viaje lleva más de 30 días abierto${h.escaladoEn ? ' y ya se había escalado' : ''} · captúralo a mano si hace falta`;
+  }
+  return 'omitido (avisó el siguiente)';
+}
+
 function CeldaHito({ h, puedeActuar, accion, viajeId }: { h: HitoVista; puedeActuar: boolean; accion: AccionOficinaServidor; viajeId: string }) {
   const resuelto = h.estado === 'recibido' || h.estado === 'validado';
   const Icono = h.estado === 'validado' ? CheckCircle2 : resuelto ? CheckCircle2 : h.estado === 'escalado' ? Flag : h.estado === 'omitido' ? CircleDashed : Clock;
@@ -201,7 +212,7 @@ function CeldaHito({ h, puedeActuar, accion, viajeId }: { h: HitoVista; puedeAct
         <div className="cifra-mono" title="Hora del mensaje del chofer (no del evento físico)">{fechaHoraMx(h.horaMensaje)}</div>
       ) : (
         <div style={{ color: 'var(--faint)' }}>
-          {h.estado === 'omitido' ? 'omitido (avisó el siguiente)' : h.estado === 'escalado' ? `escalado${h.atendidaEn ? ' · atendido' : ''}` : h.tocaDesde ? `toca desde ${fechaHoraMx(h.tocaDesde)}` : 'pendiente'}
+          {h.estado === 'omitido' ? textoOmitido(h) : h.estado === 'escalado' ? `escalado${h.atendidaEn ? ' · atendido' : ''}` : h.tocaDesde ? `toca desde ${fechaHoraMx(h.tocaDesde)}` : 'pendiente'}
         </div>
       )}
       {resuelto && (

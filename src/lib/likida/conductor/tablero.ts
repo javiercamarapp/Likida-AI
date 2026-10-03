@@ -44,6 +44,8 @@ export interface HitoVista {
   evidencias: number;
   /** Cada foto viva del ciclo vigente (para abrirla con GET /v1/evidencias/{id}). */
   fotos: Array<{ id: string; tipo: 'sello' | 'anden' | 'recibido' | 'otra' }>;
+  /** Por qué quedó `omitido` (`inferido_por_<tipo>`: avisó uno posterior · `viaje_abierto_vencido`: lo cerró el barrido de viajes viejos · …). */
+  omitidoMotivo: string | null;
   escaladoEn: string | null;
   escalacionNivel: number;
   atendidaEn: string | null;
@@ -185,7 +187,7 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
         sinContacto: h.sinContacto,
         validacion: v ? { resultado: v.resultado, texto: textoVeredicto(aVeredicto(v), sitioNombre), distanciaM: v.distanciaM } : null,
         validadoPor: h.validadoPor, evidencias: evidenciasVigentes.get(h.id) ?? 0, fotos: fotosVigentes.get(h.id) ?? [],
-        escaladoEn: h.escaladoEn, escalacionNivel: h.escalacionNivel, atendidaEn: h.escalacionAtendidaEn,
+        omitidoMotivo: h.omitidoMotivo, escaladoEn: h.escaladoEn, escalacionNivel: h.escalacionNivel, atendidaEn: h.escalacionAtendidaEn,
         tocaDesde: activo && activo.id === h.id && tocaDesde ? tocaDesde.toISOString() : null,
         accionesOficina: accionesDe(h.id),
       };
