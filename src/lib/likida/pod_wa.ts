@@ -20,8 +20,8 @@ import { strip_accents } from './cuadre/util';
 // barrera del "listo" (cerrar la liquidación no depende de ella).
 //
 // ── DÓNDE ATERRIZA ─────────────────────────────────────────────────────────
-// En la tabla `pod` (0047), que `getPods` ya lee y el tablero de operación
-// ya cuenta (`podPendientes`). Subirla aquí es lo que la saca de la lista
+// En la tabla `pod` (0047), que el tablero de operación ya cuenta
+// (`podPendientes`). Subirla aquí es lo que la saca de la lista
 // de "viajes sin evidencia" que el encargado persigue.
 // ═══════════════════════════════════════════════════════════════════════════
 

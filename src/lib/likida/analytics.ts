@@ -901,8 +901,7 @@ export interface ViajeRow {
 /** Los viajes de la flota, el más reciente primero. `viaje.unidad_id` existe
  *  desde la 0047 y aquí se trae con su número económico (el comentario viejo
  *  decía que no había columna de unidad — dejó de ser verdad ese día). De POD
- *  sigue sin haber columna en `viaje`: esa evidencia vive en su tabla y se
- *  cruza en `getPods`. */
+ *  sigue sin haber columna en `viaje`: esa evidencia vive en su tabla (`pod`). */
 /**
  * Cuántos viajes tiene la flota EN TOTAL.
  *
