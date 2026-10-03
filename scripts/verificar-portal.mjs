@@ -126,10 +126,17 @@ const dirFx = join(FIXTURES, clave);
 mkdirSync(dirFx, { recursive: true });
 writeFileSync(join(dirFx, 'grabado.html'), domSaneado, 'utf8');
 const manifiestoRuta = join(FIXTURES, 'manifest.json');
-if (existsSync(manifiestoRuta)) {
-  const m = JSON.parse(readFileSync(manifiestoRuta, 'utf8'));
-  m.portales[clave] = { ...(m.portales[clave] ?? {}), grabado: { fecha: hoy, archivo: 'grabado.html' } };
-  writeFileSync(manifiestoRuta, `${JSON.stringify(m, null, 2)}\n`, 'utf8');
+// Lectura directa y «no existe» por código de error: `existsSync` + lectura abría una ventana entre la
+// comprobación y el uso (CodeQL js/file-system-race).
+let manifiesto = null;
+try {
+  manifiesto = JSON.parse(readFileSync(manifiestoRuta, 'utf8'));
+} catch (e) {
+  if (e?.code !== 'ENOENT') throw e;
+}
+if (manifiesto) {
+  manifiesto.portales[clave] = { ...(manifiesto.portales[clave] ?? {}), grabado: { fecha: hoy, archivo: 'grabado.html' } };
+  writeFileSync(manifiestoRuta, `${JSON.stringify(manifiesto, null, 2)}\n`, 'utf8');
 }
 console.log(`✓ ${clave} quedó VERIFICADO (nivel prevuelo, ${hoy}, confirmado por ${quien}).`);
 console.log('  REVISA el diff: el DOM saneado (grabado.html) va a git — confirma que no trae datos de nadie. Luego commitea.');
