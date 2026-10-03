@@ -392,6 +392,8 @@ export async function escalarViajesSinAceptar(args: {
           plantilla: { nombre: PLANTILLA_JEFE, parametros: [v.operadorNombre ?? 'Tu chofer', v.folio ?? 'sin folio'] },
           contexto: 'escalacion.viaje_sin_aceptar',
           tenantId: v.tenantId,
+          // La ventana de 24 h se evalúa al reloj de la corrida (en producción es el reloj real).
+          ahora: args.ahora,
         });
         if (envio.ok) {
           rechazosSeguidos = 0;

@@ -265,6 +265,7 @@ export async function invitarOperadores(
         plantilla: { nombre: PLANTILLA.operadorInvitacion, ...opcionesDeEnvio(PLANTILLA.operadorInvitacion, { cuerpo: valores }) },
         contexto: 'operador.invitacion',
         tenantId,
+        ahora,
       });
       if (r.ok) {
         await marcarEnviada(tenantId, op.id, r.via);
