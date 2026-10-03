@@ -18,7 +18,9 @@ import type { Registro } from './filas';
 //      sentencia, empieza en SELECT, sin `;`, sin comentarios, sin palabras de
 //      escritura/administración, sin `into`/`for update`. Si algo no cuadra, NO
 //      se envía (defensa en profundidad: la capa 1 ya lo hace imposible).
-//   4. La conexión corre en `READ ONLY` con `statement_timeout`, y un `LIMIT`.
+//   4. La conexión corre en `SET TRANSACTION READ ONLY` con `statement_timeout` e `idle_in_transaction_session_timeout`,
+//      un `LIMIT` en la consulta y, además, un tope de filas y de BYTES al traerlas (cursor del servidor: nunca se
+//      carga en memoria más de lo permitido).
 //   5. SSRF: el host se resuelve y se rechaza si CUALQUIER dirección es
 //      privada/loopback/enlace local/metadatos; el socket se abre contra la IP
 //      ya validada (sin segunda resolución) con TLS verificado contra el host.
@@ -33,6 +35,9 @@ const PROHIBIDAS = /\b(insert|update|delete|drop|alter|create|truncate|grant|rev
 export const LIMITE_FILAS_POR_OMISION = 50_000;
 export const LIMITE_FILAS_MAXIMO = 200_000;
 export const TIMEOUT_SQL_MS = 20_000;
+/** Tope de bytes de datos (suma de los valores de texto) que una lectura puede traer: 32 MiB. */
+export const MAX_BYTES_SQL = 32 * 1024 * 1024;
+const LOTE_CURSOR = 1_000;
 
 export type ColumnasPosicion = { unidad: string; lat: string; lon: string; fecha_hora: string; velocidad_kmh?: string; ignicion?: string };
 export type ColumnasGeocerca = { codigo: string; nombre: string; lat_centro?: string; lon_centro?: string; radio_m?: string; poligono_wkt?: string; cliente?: string };
@@ -123,12 +128,33 @@ export interface ConexionSql {
   base: string;
   usuario: string;
   clave: string;
-  /** `verificar` (por omisión): TLS con certificado verificado. `sin_verificar`: cifrado pero acepta un certificado propio. Nunca en claro. */
+  /** `verificar` (por omisión): TLS con certificado verificado (equivale a sslmode=verify-full). `sin_verificar`: cifrado pero acepta un certificado propio (sslmode=require). Nunca en claro. */
   ssl: 'verificar' | 'sin_verificar';
+  /** CA del cliente en PEM (una o varias): con ella el certificado del servidor se verifica contra ESA CA. */
+  ca?: string;
 }
 
 export interface EjecutorSql {
   ejecutar(c: ConsultaSql & { timeoutMs: number; zona: string }): Promise<Registro[]>;
+}
+
+/**
+ * Una CA pegada en un campo de una sola línea llega sin saltos (o con «\n» literales). Se reconstruye cada certificado
+ * (encabezado, cuerpo en base64 a 64 columnas y pie). Solo certificados públicos: una llave privada se rechaza.
+ */
+export function normalizarCaPem(texto: string): { ok: string } | { error: string } {
+  const t = texto.trim().replace(/\\n/g, '\n').replace(/\r/g, '');
+  if (t.length > 30_000) return { error: 'sql_ca es demasiado larga' };
+  if (/PRIVATE KEY/.test(t)) return { error: 'sql_ca debe ser un certificado público (CA), nunca una llave privada' };
+  const bloques = [...t.matchAll(/-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/g)];
+  if (bloques.length === 0 || bloques.length > 5) return { error: 'sql_ca debe traer de 1 a 5 certificados PEM («-----BEGIN CERTIFICATE-----»)' };
+  const salida: string[] = [];
+  for (const b of bloques) {
+    const cuerpo = b[1].replace(/\s+/g, '');
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(cuerpo) || cuerpo.length < 100) return { error: 'sql_ca trae un certificado con cuerpo no válido' };
+    salida.push(`-----BEGIN CERTIFICATE-----\n${(cuerpo.match(/.{1,64}/g) ?? []).join('\n')}\n-----END CERTIFICATE-----\n`);
+  }
+  return { ok: salida.join('') };
 }
 
 /** El host se resuelve y se descarta si CUALQUIER dirección no es pública. Devuelve la IP ya validada para abrir el socket. */
@@ -158,59 +184,94 @@ type ClientePg = {
   on(ev: string, f: (e: unknown) => void): void;
 };
 
-const frasePorCodigo = (e: unknown): ErrorTablaPropia => {
+const mensajeDe = (e: unknown): string => (typeof e === 'object' && e !== null && 'message' in e ? String((e as { message: unknown }).message) : '');
+
+/** Del error del controlador a una frase NUESTRA y una clase (credencial, red/proveedor, formato). Nunca el texto del servidor. */
+export const frasePorCodigo = (e: unknown): ErrorTablaPropia => {
   const codigo = typeof e === 'object' && e !== null && 'code' in e ? String((e as { code: unknown }).code) : '';
+  const msg = mensajeDe(e);
   if (codigo === '28P01' || codigo === '28000') return new ErrorTablaPropia('el servidor SQL rechazó el usuario o la contraseña', 'credencial');
   if (codigo === '42501') return new ErrorTablaPropia('el usuario SQL no tiene permiso de lectura sobre esa vista', 'credencial');
   if (codigo === '3D000') return new ErrorTablaPropia('la base de datos configurada no existe en el servidor', 'formato');
   if (codigo === '42P01') return new ErrorTablaPropia('la vista configurada no existe (o no es visible para ese usuario)', 'formato');
   if (codigo === '42703') return new ErrorTablaPropia('una de las columnas configuradas no existe en la vista', 'formato');
   if (codigo === '57014') return new ErrorTablaPropia('la consulta superó el tiempo máximo; acota la vista o la ventana', 'proveedor');
+  if (codigo === '25006') return new ErrorTablaPropia('la conexión SQL no es de solo lectura; se rechazó la operación', 'formato');
+  // pg dice «The server does not support SSL connections» cuando el servidor no ofrece TLS: no hay modo en claro.
+  if (/does not support ssl/i.test(msg)) return new ErrorTablaPropia('el servidor SQL no ofrece conexión cifrada (TLS); Likida no se conecta en claro', 'formato');
+  if (/self[- ]signed|unable to verify|certificate|hostname|altnames|ssl|tls/i.test(msg)) {
+    return new ErrorTablaPropia('no se pudo verificar el certificado del servidor SQL (usa la CA de tu servidor en sql_ca)', 'formato');
+  }
   if (/^(08|53|57P)/.test(codigo) || ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'ECONNRESET', 'EHOSTUNREACH'].includes(codigo)) {
     return new ErrorTablaPropia('el servidor SQL no contestó', 'proveedor');
   }
-  if (typeof e === 'object' && e !== null && 'message' in e && /timeout|terminated|ssl|certificate/i.test(String((e as { message: unknown }).message))) {
-    return new ErrorTablaPropia(/ssl|certificate/i.test(String((e as { message: unknown }).message)) ? 'no se pudo establecer la conexión cifrada (certificado del servidor SQL)' : 'el servidor SQL no contestó a tiempo', 'proveedor');
-  }
+  if (/timeout|timed out|terminated/i.test(msg)) return new ErrorTablaPropia('el servidor SQL no contestó a tiempo', 'proveedor');
   return new ErrorTablaPropia('la consulta al servidor SQL falló', 'proveedor');
 };
 
+export interface DepsEjecutorPg {
+  cargarPg?: () => Promise<unknown>;
+  resolver?: typeof dns.promises.lookup;
+  /** Solo pruebas de integración (un Postgres en 127.0.0.1): sustituye TODA la resolución del host, incluido el guardián SSRF. */
+  resolverHost?: (host: string) => Promise<string>;
+  maxBytes?: number;
+}
+
 /**
- * El ejecutor REAL contra PostgreSQL. Requiere el paquete `pg`, que NO está entre las dependencias de este
- * repositorio (BLOQUEO EXTERNO: agregarlo cambia package-lock y lo decide el integrador). Mientras no esté,
- * el modo SQL contesta con una frase clara y `falla: 'formato'` (backoff largo, visible en el panel); el modo
- * se prueba entero con un ejecutor de prueba (`EjecutorSql`). Cuando `pg` exista, esto funciona sin tocar nada más.
+ * El ejecutor REAL contra PostgreSQL, con `pg` (JavaScript puro, sin pg-native). UN cliente por pasada, siempre
+ * cerrado (`finally`): compatible con funciones serverless (no hay pool que sobreviva a la invocación).
+ * Orden: SSRF → TLS obligatorio → `begin` + `set transaction read only` + timeouts → cursor de solo lectura sobre el
+ * SELECT ya validado → lotes con tope de filas y de bytes → rollback → cierre.
  */
-export function crearEjecutorPg(conn: ConexionSql, deps: { cargarPg?: () => Promise<unknown>; resolver?: typeof dns.promises.lookup } = {}): EjecutorSql {
+export function crearEjecutorPg(conn: ConexionSql, deps: DepsEjecutorPg = {}): EjecutorSql {
   return {
     async ejecutar({ text, values, timeoutMs, zona }) {
       afirmarSelectSeguro(text);
-      const ip = await resolverHostPublico(conn.host, deps.resolver);
+      const ip = await (deps.resolverHost ? deps.resolverHost(conn.host) : resolverHostPublico(conn.host, deps.resolver));
       let pg: { Client: new (c: Record<string, unknown>) => ClientePg };
       try {
-        const nombre = 'pg';
-        const m = (await (deps.cargarPg ? deps.cargarPg() : import(/* webpackIgnore: true */ nombre))) as { default?: unknown; Client?: unknown };
+        const m = (await (deps.cargarPg ? deps.cargarPg() : import('pg'))) as { default?: unknown; Client?: unknown };
         pg = ((m.Client ? m : m.default) ?? m) as typeof pg;
         if (typeof pg.Client !== 'function') throw new Error('sin Client');
       } catch {
         throw new ErrorTablaPropia('El lector SQL no está habilitado en este despliegue (falta el controlador de PostgreSQL); usa CSV o endpoint mientras tanto.', 'formato');
       }
+      const maxBytes = deps.maxBytes ?? MAX_BYTES_SQL;
       const cliente = new pg.Client({
         host: ip, port: conn.puerto, database: conn.base, user: conn.usuario, password: conn.clave,
-        ssl: { servername: conn.host, rejectUnauthorized: conn.ssl === 'verificar' },
+        // TLS SIEMPRE (si el servidor no lo ofrece, pg falla: no hay retroceso a texto claro). La CA del cliente, si la dio.
+        ssl: { ...(isIP(conn.host.replace(/^\[|\]$/g, '')) ? {} : { servername: conn.host }), rejectUnauthorized: conn.ssl === 'verificar', ...(conn.ca ? { ca: conn.ca } : {}) },
         connectionTimeoutMillis: Math.min(timeoutMs, 10_000),
-        statement_timeout: timeoutMs, query_timeout: timeoutMs + 2_000,
+        statement_timeout: timeoutMs, query_timeout: timeoutMs + 2_000, idle_in_transaction_session_timeout: timeoutMs + 5_000,
         application_name: 'likida_lector_tabla_propia',
         options: '-c default_transaction_read_only=on',
       });
       cliente.on('error', () => { /* un error de socket tras cerrar no debe tumbar el proceso */ });
       try {
         await cliente.connect();
-        await cliente.query('begin read only');
-        await cliente.query('select set_config($1, $2, true), set_config($3, $4, true)', ['statement_timeout', String(timeoutMs), 'TimeZone', zona]);
-        const r = await cliente.query(text, values);
+        await cliente.query('begin');
+        await cliente.query('set transaction read only');
+        await cliente.query(
+          'select set_config($1, $2, true), set_config($3, $4, true), set_config($5, $6, true)',
+          ['statement_timeout', String(timeoutMs), 'idle_in_transaction_session_timeout', String(timeoutMs + 5_000), 'TimeZone', zona],
+        );
+        await cliente.query(`declare likida_lectura no scroll cursor for ${text}`, values);
+        const filas: Registro[] = [];
+        let bytes = 0;
+        for (;;) {
+          const lote = (await cliente.query(`fetch forward ${LOTE_CURSOR} from likida_lectura`)).rows;
+          if (lote.length === 0) break;
+          for (const f of lote) {
+            for (const v of Object.values(f)) bytes += typeof v === 'string' ? Buffer.byteLength(v) : 8;
+            if (bytes > maxBytes) throw new ErrorTablaPropia(`la lectura superó el tope de ${Math.round(maxBytes / 1024 / 1024)} MB de datos; acota la ventana, la vista o limite_filas`, 'formato');
+            filas.push(f);
+          }
+          if (filas.length > LIMITE_FILAS_MAXIMO) throw new ErrorTablaPropia(`la lectura superó el tope de ${LIMITE_FILAS_MAXIMO} filas`, 'formato');
+          if (lote.length < LOTE_CURSOR) break;
+        }
+        await cliente.query('close likida_lectura');
         await cliente.query('rollback');
-        return r.rows;
+        return filas;
       } catch (e) {
         throw e instanceof ErrorTablaPropia ? e : frasePorCodigo(e);
       } finally {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ErrorTablaPropia } from './contrato';
-import { afirmarSelectSeguro, construirSelect, crearEjecutorPg, resolverHostPublico, vistaValida } from './sql';
+import { afirmarSelectSeguro, construirSelect, crearEjecutorPg, type ConexionSql, frasePorCodigo, normalizarCaPem, resolverHostPublico, vistaValida } from './sql';
 
 const COLS = { unidad: 'eco', lat: 'latitud', lon: 'longitud', fecha_hora: 'ts', velocidad_kmh: 'vel', ignicion: 'motor' };
 
@@ -59,32 +59,104 @@ describe('SSRF: el servidor SQL debe ser público', () => {
 });
 
 describe('el ejecutor real (pg inyectado): solo lectura, con tiempo y sin filtrar el texto del servidor', () => {
-  const conn = { host: 'bd.ejemplo.com', puerto: 5432, base: 'flota', usuario: 'lectura', clave: 'secreta-123', ssl: 'verificar' as const };
+  const conn: ConexionSql = { host: 'bd.ejemplo.com', puerto: 5432, base: 'flota', usuario: 'lectura', clave: 'secreta-123', ssl: 'verificar' };
   const resolver = (async () => [{ address: '8.8.8.8', family: 4 }]) as never;
   const consulta = construirSelect('v', COLS, { limite: 5 });
-  function pgFalso(cuerpo: (q: string) => unknown) {
-    const llamadas: Array<{ q: string; v?: unknown[] }> = []; const cfg: Record<string, unknown>[] = []; let cerrado = false;
+  /** `fetch` devuelve los lotes de `lotes` en orden y luego vacío. */
+  function pgFalso(lotes: unknown[][] = [], falla?: (q: string) => unknown) {
+    const llamadas: Array<{ q: string; v?: unknown[] }> = []; const cfg: Record<string, unknown>[] = []; let cerrado = false; let n = 0;
     class Client {
       constructor(c: Record<string, unknown>) { cfg.push(c); }
       on() { /* */ }
-      async connect() { /* */ }
-      async query(q: string, v?: unknown[]) { llamadas.push({ q, v }); return { rows: (cuerpo(q) as never) ?? [] }; }
+      async connect() { if (falla) { const e = falla('connect'); if (e) throw e; } }
+      async query(q: string, v?: unknown[]) {
+        llamadas.push({ q, v });
+        if (falla) { const e = falla(q); if (e) throw e; }
+        return { rows: (q.startsWith('fetch') ? (lotes[n++] ?? []) : []) as never };
+      }
       async end() { cerrado = true; }
     }
     return { llamadas, cfg, cargarPg: async () => ({ Client }), cerrado: () => cerrado };
   }
-  it('abre contra la IP validada con SNI del host, en transacción READ ONLY con statement_timeout y zona, y cierra', async () => {
-    const pg = pgFalso((q) => (q.startsWith('select "eco"') ? [{ unidad: 'UN-1' }] : []));
-    const filas = await crearEjecutorPg(conn, { cargarPg: pg.cargarPg, resolver }).ejecutar({ ...consulta, timeoutMs: 5_000, zona: 'America/Monterrey' });
+  const correr = (pg: ReturnType<typeof pgFalso>, c = conn, extra: Record<string, unknown> = {}) =>
+    crearEjecutorPg(c, { cargarPg: pg.cargarPg, resolver, ...extra }).ejecutar({ ...consulta, timeoutMs: 5_000, zona: 'America/Monterrey' });
+
+  it('caso feliz: abre contra la IP validada con SNI del host, TLS verificado, SET TRANSACTION READ ONLY, timeouts y zona; cursor; cierra', async () => {
+    const pg = pgFalso([[{ unidad: 'UN-1' }]]);
+    const filas = await correr(pg);
     expect(filas).toEqual([{ unidad: 'UN-1' }]);
-    expect(pg.cfg[0]).toMatchObject({ host: '8.8.8.8', ssl: { servername: 'bd.ejemplo.com', rejectUnauthorized: true }, statement_timeout: 5_000 });
+    expect(pg.cfg[0]).toMatchObject({ host: '8.8.8.8', ssl: { servername: 'bd.ejemplo.com', rejectUnauthorized: true }, statement_timeout: 5_000, idle_in_transaction_session_timeout: 10_000 });
     expect(String(pg.cfg[0].options)).toContain('default_transaction_read_only=on');
-    expect(pg.llamadas.map((l) => l.q)).toEqual(['begin read only', 'select set_config($1, $2, true), set_config($3, $4, true)', consulta.text, 'rollback']);
-    expect(pg.llamadas[1].v).toEqual(['statement_timeout', '5000', 'TimeZone', 'America/Monterrey']);
+    expect(pg.llamadas.map((l) => l.q)).toEqual([
+      'begin', 'set transaction read only', 'select set_config($1, $2, true), set_config($3, $4, true), set_config($5, $6, true)',
+      `declare likida_lectura no scroll cursor for ${consulta.text}`, 'fetch forward 1000 from likida_lectura', 'close likida_lectura', 'rollback',
+    ]);
+    expect(pg.llamadas[2].v).toEqual(['statement_timeout', '5000', 'idle_in_transaction_session_timeout', '10000', 'TimeZone', 'America/Monterrey']);
     expect(pg.cerrado()).toBe(true);
   });
+  it('TLS: sin «verificar» solo se acepta un certificado propio (require); con CA del cliente se verifica contra ella', async () => {
+    const a = pgFalso(); await correr(a, { ...conn, ssl: 'sin_verificar' });
+    expect(a.cfg[0]).toMatchObject({ ssl: { rejectUnauthorized: false } });
+    const b = pgFalso(); await correr(b, { ...conn, ca: '-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n' });
+    expect(b.cfg[0]).toMatchObject({ ssl: { rejectUnauthorized: true, ca: expect.stringContaining('BEGIN CERTIFICATE') } });
+    expect(a.cfg[0].ssl).toBeTruthy(); // nunca `false`: jamás en claro
+  });
+  it('TLS ausente en el servidor: falla de formato con frase propia y se cierra el cliente (no hay retroceso a texto claro)', async () => {
+    const pg = pgFalso([], (q) => (q === 'connect' ? new Error('The server does not support SSL connections') : null));
+    const e = await correr(pg).catch((x) => x);
+    expect(e).toMatchObject({ falla: 'formato' });
+    expect(e.message).toMatch(/cifrada \(TLS\)/);
+    expect(pg.cerrado()).toBe(true);
+  });
+  it('certificado no verificable: frase propia que manda a sql_ca', async () => {
+    const pg = pgFalso([], (q) => (q === 'connect' ? new Error('self-signed certificate in certificate chain') : null));
+    const e = await correr(pg).catch((x) => x);
+    expect(e).toMatchObject({ falla: 'formato' });
+    expect(e.message).toMatch(/sql_ca/);
+    expect(e.message).not.toMatch(/self-signed/);
+  });
+  it('timeout del servidor (57014): clase de red/proveedor con frase propia, y se hace rollback implícito al cerrar', async () => {
+    const pg = pgFalso([], (q) => (q.startsWith('fetch') ? Object.assign(new Error('canceling statement due to statement timeout'), { code: '57014' }) : null));
+    const e = await correr(pg).catch((x) => x);
+    expect(e).toMatchObject({ falla: 'proveedor' });
+    expect(e.message).toMatch(/tiempo máximo/);
+    expect(pg.cerrado()).toBe(true);
+  });
+  it('tope de bytes: se corta MIENTRAS trae (no carga todo) y dice cómo acotar', async () => {
+    const grande = 'x'.repeat(1_000);
+    const pg = pgFalso([Array.from({ length: 1_000 }, () => ({ unidad: grande })), [{ unidad: 'nunca' }]]);
+    const e = await correr(pg, conn, { maxBytes: 500_000 }).catch((x) => x);
+    expect(e).toMatchObject({ falla: 'formato' });
+    expect(e.message).toMatch(/tope de .* MB/);
+    expect(pg.llamadas.filter((l) => l.q.startsWith('fetch'))).toHaveLength(1);
+    expect(pg.cerrado()).toBe(true);
+  });
+  it('tope de filas: más del máximo absoluto se rechaza', async () => {
+    const lote = Array.from({ length: 1_000 }, () => ({ u: 'a' }));
+    const pg = pgFalso(Array.from({ length: 205 }, () => lote));
+    const e = await correr(pg).catch((x) => x);
+    expect(e).toMatchObject({ falla: 'formato' });
+    expect(e.message).toMatch(/200000 filas/);
+  });
+  it('varios lotes: junta todos los del cursor hasta el lote corto', async () => {
+    const lote = Array.from({ length: 1_000 }, (_, i) => ({ u: String(i) }));
+    const pg = pgFalso([lote, [{ u: 'ultima' }]]);
+    expect(await correr(pg)).toHaveLength(1_001);
+  });
+  it('credencial inválida: frase propia, clase credencial, sin el texto del servidor ni la clave', async () => {
+    const veneno = 'password authentication failed for user "lectura" at 8.8.8.8 clave=secreta-123';
+    const pg = pgFalso([], (q) => (q === 'connect' ? Object.assign(new Error(veneno), { code: '28P01' }) : null));
+    const e = await correr(pg).catch((x) => x);
+    expect(e).toMatchObject({ falla: 'credencial' });
+    expect(e.message).not.toMatch(/secreta|8\.8\.8\.8|"lectura"/);
+    expect(pg.cerrado()).toBe(true);
+  });
+  it('un intento de escritura que llegara al servidor (25006 read-only) se clasifica y no se reintenta', async () => {
+    const pg = pgFalso([], (q) => (q.startsWith('declare') ? Object.assign(new Error('cannot execute INSERT in a read-only transaction'), { code: '25006' }) : null));
+    await expect(correr(pg)).rejects.toMatchObject({ falla: 'formato' });
+  });
   it('rechaza una sentencia que no sea SELECT ANTES de conectar', async () => {
-    const pg = pgFalso(() => []);
+    const pg = pgFalso();
     await expect(crearEjecutorPg(conn, { cargarPg: pg.cargarPg, resolver }).ejecutar({ text: 'delete from x', values: [], timeoutMs: 1, zona: 'UTC' })).rejects.toThrow(/rechazada/);
     expect(pg.cfg).toHaveLength(0);
   });
@@ -99,15 +171,35 @@ describe('el ejecutor real (pg inyectado): solo lectura, con tiempo y sin filtra
     ['57014', 'proveedor', /tiempo máximo/], ['08006', 'proveedor', /no contestó/], ['ECONNREFUSED', 'proveedor', /no contestó/],
   ])('el código %s se traduce a una frase NUESTRA (%s) sin el texto del servidor', async (code, falla, frase) => {
     const veneno = 'password authentication failed for user "lectura" at 8.8.8.8 clave=secreta-123';
-    const Client = class { on() { /* */ } async connect() { throw Object.assign(new Error(veneno), { code }); } async query() { return { rows: [] }; } async end() { /* */ } };
-    const e = await crearEjecutorPg(conn, { cargarPg: async () => ({ Client }), resolver }).ejecutar({ ...consulta, timeoutMs: 1, zona: 'UTC' }).catch((x) => x);
+    const e = frasePorCodigo(Object.assign(new Error(veneno), { code }));
     expect(e).toMatchObject({ falla });
     expect(e.message).toMatch(frase);
     expect(e.message).not.toMatch(/secreta|8\.8\.8\.8|"lectura"/);
   });
-  it('el host privado se rechaza antes de abrir socket', async () => {
-    const pg = pgFalso(() => []);
-    await expect(crearEjecutorPg({ ...conn, host: '10.0.0.9' }, { cargarPg: pg.cargarPg, resolver }).ejecutar({ ...consulta, timeoutMs: 1, zona: 'UTC' })).rejects.toThrow(/pública/);
+  it('destino privado: el host se rechaza antes de abrir socket (loopback, privada, metadatos, nombre que resuelve a privada)', async () => {
+    for (const host of ['10.0.0.9', '127.0.0.1', '169.254.169.254', '192.168.0.4']) {
+      const pg = pgFalso();
+      await expect(crearEjecutorPg({ ...conn, host }, { cargarPg: pg.cargarPg, resolver }).ejecutar({ ...consulta, timeoutMs: 1, zona: 'UTC' }), host).rejects.toThrow(/pública/);
+      expect(pg.cfg).toHaveLength(0);
+    }
+    const pg = pgFalso();
+    await expect(crearEjecutorPg(conn, { cargarPg: pg.cargarPg, resolver: (async () => [{ address: '10.1.1.1', family: 4 }]) as never }).ejecutar({ ...consulta, timeoutMs: 1, zona: 'UTC' })).rejects.toThrow(/interna/);
     expect(pg.cfg).toHaveLength(0);
+  });
+});
+
+describe('normalizarCaPem', () => {
+  const CUERPO = 'QUJD'.repeat(40);
+  const PEM = `-----BEGIN CERTIFICATE-----\n${CUERPO}\n-----END CERTIFICATE-----`;
+  it('reconstruye el PEM pegado en una línea o con «\\n» literales', () => {
+    const esperado = normalizarCaPem(PEM);
+    expect(esperado).toHaveProperty('ok');
+    expect(normalizarCaPem(PEM.replace(/\n/g, ' '))).toEqual(esperado);
+    expect(normalizarCaPem(PEM.replace(/\n/g, '\\n'))).toEqual(esperado);
+  });
+  it('rechaza una llave privada, un texto cualquiera y un cuerpo roto', () => {
+    expect(normalizarCaPem('-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----')).toHaveProperty('error');
+    expect(normalizarCaPem('hola')).toHaveProperty('error');
+    expect(normalizarCaPem('-----BEGIN CERTIFICATE-----\n<<<>>>\n-----END CERTIFICATE-----')).toHaveProperty('error');
   });
 });
