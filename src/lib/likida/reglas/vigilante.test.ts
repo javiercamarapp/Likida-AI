@@ -35,6 +35,7 @@ type D = { objeto: string; objetoId: string; clave: string; evidencia: string };
 const reclamarDisparos = vi.hoisted(() => vi.fn(async (..._a: unknown[]): Promise<{ modo: 'reclamo'; token: string; ganados: D[] } | { modo: 'sin_rpc' }> => ({ modo: 'reclamo', token: 'tok-1', ganados: [] })));
 const confirmarDisparos = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => 1));
 const liberarDisparos = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => {}));
+const hayEnvioAjenoEnVuelo = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => false));
 const anotarCorrida = vi.hoisted(() => vi.fn(async () => {}));
 const avisosEnviadosDesde = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => [] as Date[]));
 const registrarAviso = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => {}));
@@ -47,7 +48,7 @@ vi.mock('./lectores', () => ({ evaluar }));
 vi.mock('./repo', () => ({
   reglasActivas, sellosDe, sellarDisparos, anotarCorrida,
   avisosEnviadosDesde, registrarAviso, purgarAvisosViejos,
-  reclamarDisparos, confirmarDisparos, liberarDisparos,
+  reclamarDisparos, confirmarDisparos, liberarDisparos, hayEnvioAjenoEnVuelo,
   llaveSello: (d: { objeto: string; objetoId: string; clave: string }) => `${d.objeto}|${d.objetoId}|${d.clave}`,
 }));
 
@@ -83,6 +84,7 @@ beforeEach(() => {
   reclamarDisparos.mockReset().mockImplementation(async (...a: unknown[]) => ({ modo: 'reclamo' as const, token: 'tok-1', ganados: a[2] as D[] }));
   confirmarDisparos.mockReset().mockImplementation(async (..._a: unknown[]) => (reclamarDisparos.mock.calls.at(-1)?.[2] as D[] | undefined)?.length ?? 1);
   liberarDisparos.mockReset().mockResolvedValue(undefined);
+  hayEnvioAjenoEnVuelo.mockReset().mockResolvedValue(false);
   anotarCorrida.mockReset().mockResolvedValue(undefined);
   avisosEnviadosDesde.mockReset().mockResolvedValue([]);
   registrarAviso.mockReset().mockResolvedValue(undefined);
@@ -307,6 +309,52 @@ describe('el reclamo antes de mandar (0660)', () => {
     const r = await vigilarReglas(AHORA);
     expect(r.avisos).toBe(1);
     expect(logger.warn).toHaveBeenCalledWith('reglas.arriendo_perdido_al_confirmar', expect.objectContaining({ casos: 1, confirmadas: 0 }));
+  });
+});
+
+describe('cierre de la ronda 18: R10-5 y R10-6', () => {
+  it('R10-6: DOS CORRIDAS SOLAPADAS con casos DISTINTOS: la que ve a la otra mandando suelta lo suyo y difiere; el tope no se rebasa', async () => {
+    reglasActivas.mockResolvedValue([REGLA_DINERO]);
+    evaluar.mockResolvedValue([DISPARO]);
+    hayEnvioAjenoEnVuelo.mockResolvedValueOnce(true);
+    const r = await vigilarReglas(AHORA);
+    expect(r).toMatchObject({ avisos: 0, diferidas: 1, fallos: 0 });
+    expect(enviarConFallback).not.toHaveBeenCalled();
+    expect(liberarDisparos).toHaveBeenCalledWith('t-1', 'r-1', 'tok-1');
+    expect(sellarDisparos).not.toHaveBeenCalled();
+    expect(confirmarDisparos).not.toHaveBeenCalled();
+    expect(anotarCorrida).toHaveBeenCalledWith('t-1', 'r-1', AHORA, 0);
+    // sin otra corrida en vuelo, sale normal
+    const ok = await vigilarReglas(AHORA);
+    expect(ok.avisos).toBe(1);
+  });
+
+  it('R10-6: si no se puede saber si hay otra corrida mandando, la regla falla por su lado y SUELTA su reclamo (no manda a ciegas)', async () => {
+    reglasActivas.mockResolvedValue([REGLA_DINERO]);
+    evaluar.mockResolvedValue([DISPARO]);
+    hayEnvioAjenoEnVuelo.mockRejectedValueOnce(new Error('base caída'));
+    const r = await vigilarReglas(AHORA);
+    expect(r).toMatchObject({ avisos: 0, fallos: 1 });
+    expect(enviarConFallback).not.toHaveBeenCalled();
+    expect(liberarDisparos).toHaveBeenCalledWith('t-1', 'r-1', 'tok-1');
+  });
+
+  it('R10-5: Meta aceptó y CONFIRMAR lanza: se reintenta, y si no se logra, el aviso igual se registra (el tope de la hora siguiente lo ve) sin fallar la regla', async () => {
+    reglasActivas.mockResolvedValue([REGLA_DINERO]);
+    evaluar.mockResolvedValue([DISPARO]);
+    confirmarDisparos.mockRejectedValueOnce(new Error('parpadeo')).mockResolvedValueOnce(1);
+    const r1 = await vigilarReglas(AHORA);
+    expect(r1).toMatchObject({ avisos: 1, fallos: 0 });
+    expect(confirmarDisparos).toHaveBeenCalledTimes(2);
+
+    confirmarDisparos.mockReset().mockRejectedValue(new Error('base caída'));
+    registrarAviso.mockClear();
+    const r2 = await vigilarReglas(AHORA);
+    expect(r2).toMatchObject({ avisos: 1, fallos: 0 });
+    expect(confirmarDisparos).toHaveBeenCalledTimes(3);
+    expect(logger.error).toHaveBeenCalledWith('reglas.confirmacion_fallo_tras_envio', expect.objectContaining({ regla: 'r-1', casos: 1 }));
+    expect(registrarAviso).toHaveBeenCalledWith('t-1', 'r-1', expect.objectContaining({ resultado: 'enviado', casos: 1 }));
+    expect(enviarConFallback).toHaveBeenCalledTimes(2); // una vez por corrida: confirmar NO relanza el envío
   });
 });
 
