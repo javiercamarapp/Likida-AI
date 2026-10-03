@@ -69,6 +69,9 @@ export interface ResumenLiquidacion {
   /** Misma convención que `Liquidacion`: + a favor de la empresa, − a favor del operador. */
   diferencia: number;
   diferencias: DiferenciaResumen[];
+  /** ISO de la fecha REAL de cierre de la liquidación (`liquidacion.created_at`). El acuse «solo folio»
+   *  la imprime; sin ella (resumen armado a mano) se usa el momento del envío. */
+  cerradaEn?: string;
 }
 
 /**

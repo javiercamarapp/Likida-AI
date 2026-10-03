@@ -4,9 +4,12 @@
 -- monedero) y litros > 0 NO acredita litros y manda el viaje a «revisar», salvo que la flota haya
 -- declarado que sus tarjetas son de la empresa (`tarjetasDeLaEmpresa(perfil) === true`):
 --   perfil.tarjetasANombreEmpresa.valor = true (procedencia declarado/detectado) Y
---   perfil.pagoEnBomba no es 'chofer_reembolso' ni 'mixto'.
+--   perfil.pagoEnBomba no es 'chofer_reembolso' («mixto» NO la anula).
 -- Espejo SQL de src/lib/likida/perfil/preguntas.ts (`tarjetasDeLaEmpresa`) y de la condición de
 -- src/lib/likida/cuadre/engine.ts (bloque de `tarjeta_no_empresa`). Si cambian, cámbialo aquí.
+--
+-- Dos tipos de diferencia según la causa: `tarjeta_sin_declarar` (no contestó: ruta panel, un aviso al
+-- dueño) y `tarjeta_no_empresa` (declaró que no / reembolso: decisión del jefe).
 --
 -- NO retroactiva (src/lib/likida/cuadre/vigencia_tarjeta.ts): las liquidaciones cerradas ANTES de
 -- TARJETA_NO_EMPRESA_VIGENTE_DESDE (2026-10-04 00:00 -06) se reabren/recalculan SIN la regla.
@@ -33,7 +36,7 @@ sin_declarar as (
   select tenant_id, nombre
   from perfil_decidido
   where coalesce(tarjetas, '') = 'false' or coalesce(bomba, '') = 'chofer_reembolso'          -- declaró que NO
-     or not (coalesce(tarjetas, '') = 'true' and coalesce(bomba, '') <> 'mixto')              -- sin declaración suficiente (incluye 'mixto')
+     or coalesce(tarjetas, '') <> 'true'                                                      -- sin declaración suficiente («mixto» no la anula)
 ),
 gastos_que_disparan as (
   select g.tenant_id, g.viaje_id, g.id as gasto_id
