@@ -8,7 +8,7 @@ import { medirRuta, tasaDeMuestreo, TOPE_ESCRITURA_MS } from './latencia';
 
 vi.mock('@/lib/admin/salud', () => ({ registrarLatencia: vi.fn(async () => {}) }));
 // `after()` solo existe dentro de una petición: por omisión lanza (como fuera de una), y una prueba lo captura.
-const after = vi.fn((_f: () => unknown) => { throw new Error('after fuera de una petición'); });
+const after = vi.fn<(f: () => unknown) => void>(() => { throw new Error('after fuera de una petición'); });
 vi.mock('next/server', () => ({ after: (f: () => unknown) => after(f) }));
 beforeEach(() => { after.mockReset(); after.mockImplementation(() => { throw new Error('after fuera de una petición'); }); });
 
@@ -64,8 +64,8 @@ describe('medirRuta', () => {
 
 describe('M1 (ronda 19): la escritura va fuera del camino crítico', () => {
   it('dentro de una petición la escritura se entrega a after() y la respuesta NO la espera', async () => {
-    let nunca: (v?: unknown) => void = () => {};
-    const escribir = vi.fn(() => new Promise<void>((res) => { nunca = res; })); // un insert que no contesta
+    let nunca: () => void = () => {};
+    const escribir = vi.fn(() => new Promise<void>((res) => { nunca = () => res(); })); // un insert que no contesta
     let pendiente: (() => unknown) | undefined;
     after.mockImplementation((f) => { pendiente = f; });
     const resp = new Response('ok');

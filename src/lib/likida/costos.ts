@@ -153,7 +153,7 @@ export async function registrarCosto(c: CostoLLM): Promise<void> {
     };
     // E1-A (0700): solo una duración creíble; sin ella la columna queda NULL (no medido), nunca un 0 inventado.
     const duracion = c.duracionMs !== undefined && Number.isFinite(c.duracionMs) && c.duracionMs >= 0 && c.duracionMs <= 3_600_000 ? Math.round(c.duracionMs) : null;
-    let { error } = await acotada(supabaseAdmin().from('llm_costo').insert(duracion === null ? fila : { ...fila, duracion_ms: duracion }), 'registrarCosto');
+    let { error } = await acotada(supabaseAdmin().from('llm_costo').insert({ ...fila, ...(duracion === null ? {} : { duracion_ms: duracion }) }), 'registrarCosto');
     // A1 (ronda 19): si el código sale antes que la 0700, la columna no existe y CADA insert fallaría: se perdería toda la
     // contabilidad de IA. 42703 = columna indefinida; PGRST204 = columna fuera del caché de esquema de PostgREST. Se
     // reintenta UNA vez sin la duración (el costo importa más que la métrica). El orden correcto sigue siendo 0700 antes del deploy.
