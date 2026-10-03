@@ -17,7 +17,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // exactamente ese caso.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const { enviarTexto, sendTemplate, sendDocument, telefonoParaDineroDe, alertarOperador } = vi.hoisted(() => ({
+const { enviarTexto, sendTemplate, sendDocument, telefonoParaDineroDe, alertarOperador, telefonoJefeDe } = vi.hoisted(() => ({
+  telefonoJefeDe: vi.fn(async () => null),
   enviarTexto: vi.fn(),
   sendTemplate: vi.fn(),
   sendDocument: vi.fn(),
@@ -42,7 +43,7 @@ vi.mock('@/lib/meta/client', async (importOriginal) => {
   };
 });
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador }));
-vi.mock('./contactos', () => ({ telefonoParaDineroDe }));
+vi.mock('./contactos', () => ({ telefonoParaDineroDe, telefonoJefeDe }));
 
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));

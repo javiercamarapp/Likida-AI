@@ -8,6 +8,7 @@ import { alertarOperador } from '@/lib/observability/alerta';
 import { variantesTelefono } from './conv';
 import { armarAvisoJefe, type ResumenLiquidacion, type DiferenciaResumen } from './cierre_aviso';
 import { telefonoParaDineroDe } from './contactos';
+import { acuseSoloFolioAlEncargado } from './acuse_folio';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LO QUE LA OFICINA SE ENTERA CUANDO UN CHOFER CIERRA.
@@ -295,6 +296,11 @@ export async function avisarCierreAlJefe(args: {
   // El fallo del texto se reporta DESPUÉS de intentar el PDF: el llamador
   // sigue viendo `enviado: false` (y loguea `cierre.jefe_no_avisado`), pero
   // el documento ya se intentó mandar de todos modos.
+  // El acuse «solo folio» del encargado va DESPUÉS y no condiciona nada: ni el
+  // resultado de este aviso ni el sello de entrega dependen de él.
+  await acuseSoloFolioAlEncargado({ tenantId: args.tenantId, viajeId: args.viajeId, resumen, requiereDecision, telefonoDinero: tel, telefonoOperador: args.telefonoOperador })
+    .catch((e) => logger.warn('cierre.acuse_folio_fallo', { viaje: args.viajeId, err: e instanceof Error ? e.message : String(e) }));
+
   if (motivoTexto) return { enviado: false, motivo: motivoTexto, fueraDeVentana, pdfEnviado, pdfEstado };
 
   logger.info('cierre.avisado_al_jefe', { viaje: args.viajeId, requiereDecision, via, pdfEnviado, pdfEstado });
