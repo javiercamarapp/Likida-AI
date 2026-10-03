@@ -301,8 +301,10 @@ select * from incidencias_tenant(:T, now() - interval '30 days', 100);
 
 -- @nombre: pantalla.operacion.viajes_sin_asignar
 -- @tipo: pantalla
--- @origen: operacion.ts getViajesSinAsignar (inicio y despacho)
-select id, folio, origen, destino, created_at from viaje where tenant_id = :T and operador_id is null and estatus <> 'liquidado' limit 1000;
+-- @origen: operacion.ts getViajesSinAsignar (inicio y despacho): una página (tope 50) + count exacto (ronda 16 v2; antes traerTodo por offset)
+with t as (select count(*) c from viaje where tenant_id = :T and operador_id is null and estatus <> 'liquidado'),
+     p as (select id, folio, origen, destino, fecha_inicio, estatus from viaje where tenant_id = :T and operador_id is null and estatus <> 'liquidado' order by fecha_inicio, id limit 50)
+select (select c from t) total, p.* from p;
 
 -- @nombre: pantalla.viajes.registro_todos
 -- @tipo: pantalla
@@ -366,8 +368,9 @@ select * from desglose_peaje where tenant_id = :T and anulado_en is null order b
 
 -- @nombre: pantalla.peajes.agregar_estatus_desglose
 -- @tipo: pantalla
--- @origen: intake/desglose_peaje.ts agregarEstatus (por desglose)
-select estatus from desglose_peaje_linea where tenant_id = :T and desglose_id = (select id from desglose_peaje where tenant_id = :T order by creado_en desc limit 1) order by id limit 1000;
+-- @origen: intake/desglose_peaje.ts agregarEstatus (por desglose): 4 conteos en SQL (ronda 16 v2; antes traía todas las líneas)
+select count(*) total, count(*) filter (where estatus = 'cuadra') cuadra, count(*) filter (where estatus = 'no_cuadra') no_cuadra, count(*) filter (where estatus = 'sin_contraparte') sin_contraparte
+  from desglose_peaje_linea where tenant_id = :T and desglose_id = (select id from desglose_peaje where tenant_id = :T order by creado_en desc limit 1);
 
 -- @nombre: pantalla.peajes.bitacora_lineas
 -- @tipo: pantalla
@@ -441,10 +444,23 @@ select * from liquidacion where tenant_id = :T and created_at >= now() - interva
 
 -- @nombre: pantalla.ruta.facturas_por_facturar
 -- @tipo: pantalla
--- @origen: facturacion/pendientes.ts:159 getPorFacturar
-select id, viaje_id, monto, fecha from gasto where tenant_id = :T and cfdi_uuid is null and fecha >= current_date - 45 and concepto <> 'factura' order by fecha, id limit 1000 offset 5000;
+-- @origen: facturacion/pendientes.ts getPorFacturar — página en medio de la lectura por cursor (fecha, id) (ronda 16 v2; antes offset 5000)
+with c as (select fecha, id from gasto where tenant_id = :T and cfdi_uuid is null and fecha >= current_date - 45 and concepto <> 'factura' order by fecha, id offset 5000 limit 1)
+select g.id, g.concepto, g.monto, g.fecha, g.folio, g.rfc_emisor, g.cfdi_uuid, g.ocr_extra from gasto g, c
+ where g.tenant_id = :T and g.cfdi_uuid is null and g.fecha >= current_date - 45 and g.concepto <> 'factura'
+   and g.fecha >= c.fecha and (g.fecha > c.fecha or g.id > c.id)
+ order by g.fecha, g.id limit 1000;
 
 -- @nombre: pantalla.ruta.admin_viaje_sin_ventana_global
 -- @tipo: pantalla
 -- @origen: sat_descarga/peaje_cierre.ts:246 (gasto de todos los tenants, caseta sin CFDI, mes en curso)
 select id, tenant_id, viaje_id, monto, fecha from gasto where concepto = 'caseta' and cfdi_uuid is null and fecha >= date_trunc('month', now())::date order by tenant_id, fecha, id limit 1000;
+
+-- @nombre: pantalla.ruta.gastos_sin_cfdi_pagina_media
+-- @tipo: pantalla
+-- @origen: sat_descarga/ciclo.ts gastosSinCfdi e intake/consolidado.ts candidatosDeGasto/barrido — ventana de ~1 mes, página en medio (cursor (fecha, id))
+with c as (select fecha, id from gasto where tenant_id = :T and cfdi_uuid is null and fecha >= current_date - 31 and fecha <= current_date + 1 order by fecha, id offset 5000 limit 1)
+select g.id, g.concepto, g.monto, g.fecha, g.rfc_emisor, g.cfdi_uuid, g.ocr_extra from gasto g, c
+ where g.tenant_id = :T and g.cfdi_uuid is null and g.fecha >= current_date - 31 and g.fecha <= current_date + 1
+   and g.fecha >= c.fecha and (g.fecha > c.fecha or g.id > c.id)
+ order by g.fecha, g.id limit 1000;
