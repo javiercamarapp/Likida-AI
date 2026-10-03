@@ -116,3 +116,18 @@ const ETIQUETA_PIPELINE: Record<string, string> = {
 export function etiquetaInterruptor(id: string): string {
   return ETIQUETA_INTERRUPTOR[id] ?? ETIQUETA_PIPELINE[id] ?? id;
 }
+
+/**
+ * B3 (ronda 19): hasta dónde mide `medirRuta` en rutas que responden ANTES de terminar su trabajo. El p95 de estas dos
+ * NO es la latencia de procesamiento: el webhook devuelve el acuse a Meta y procesa en `after()`; el chat devuelve el
+ * primer byte y sigue en streaming. Un rótulo tiene que ser verdad: la tabla lo dice junto al nombre.
+ */
+const NOTA_LATENCIA_RUTA: Record<string, string> = {
+  'webhook.whatsapp': 'hasta el acuse; el procesamiento corre después, en segundo plano',
+  'dashboard.chat': 'hasta el primer byte; la respuesta sigue en streaming',
+};
+
+/** La aclaración de qué mide la latencia de esta ruta, o `null` si mide la respuesta completa. */
+export function notaDeLatenciaRuta(nombre: string): string | null {
+  return NOTA_LATENCIA_RUTA[nombre] ?? null;
+}
