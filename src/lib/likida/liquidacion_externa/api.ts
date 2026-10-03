@@ -36,7 +36,7 @@ export function motivoDeFallo(ultimoError: string | null): { codigo: CodigoFallo
   if (/\b190\b|\b133016\b/.test(e)) {
     return { codigo: 'canal_whatsapp', texto: 'El canal de WhatsApp tiene un problema de credenciales; Likida ya lo está atendiendo.' };
   }
-  if (/^terminal:|HTTP [45]\d\d/.test(e)) {
+  if (/^terminal:/.test(e) || /HTTP [45]\d\d/.test(e)) {
     return { codigo: 'rechazada_por_whatsapp', texto: 'WhatsApp rechazó el mensaje.' };
   }
   return { codigo: 'entrega_interna', texto: 'No se pudo entregar por un problema interno; se reintenta o se puede reintentar desde el panel.' };
