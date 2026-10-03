@@ -190,9 +190,19 @@ export function redactarConservandoFolio(texto: string): string {
 // mira a las 3 a.m.
 const EVENTOS_DE_DINERO = /^(timbre\.|finanzas\.|stripe\.|cron\.facturar|cron\.cobranza|wa\.rechazo_masivo|pdf\.no_entregado)/;
 
-/** ¿Este evento toca dinero? Solo esos salen por WhatsApp. */
+/** ¿Este evento toca dinero? */
 export function esEventoDeDinero(evento: string): boolean {
   return EVENTOS_DE_DINERO.test(evento);
+}
+
+// E1-A (P0-8): la guardia de producción pasó de launchd (que avisaba por WhatsApp) al servidor. Si el aviso de un
+// incidente S1/S2 o de una guardia ciega se queda solo en el correo, la migración habría empeorado el canal. Todo
+// evento `guardia.*` sale TAMBIÉN por WhatsApp (si hay ALERTA_WA), bajo el mismo piso que el correo.
+const EVENTOS_DE_GUARDIA = /^guardia\./;
+
+/** ¿Es un aviso de la guardia de producción? Sale por WhatsApp igual que el dinero. */
+export function esEventoDeGuardia(evento: string): boolean {
+  return EVENTOS_DE_GUARDIA.test(evento);
 }
 
 /** Para /admin/salud-sistema: hay un WhatsApp del operador al que avisar.
@@ -210,7 +220,8 @@ async function avisarPorWhatsApp(evento: string, datos: Array<[string, string]>)
     // número configurado.
     const { enviarTexto } = await import('@/lib/meta/client');
     const lineas = datos.filter(([k]) => k !== 'Evento').map(([k, v]) => `${k}: ${v.slice(0, 200)}`);
-    const cuerpo = [`Likida — falló ${evento}`, ...lineas, `Detalle en ${APP}/admin/salud-sistema`]
+    const titulo = esEventoDeGuardia(evento) ? `Likida — aviso de la guardia (${evento})` : `Likida — falló ${evento}`;
+    const cuerpo = [titulo, ...lineas, `Detalle en ${APP}/admin/salud-sistema`]
       .join('\n').slice(0, 1500);
     const r = await enviarTexto(String(process.env.ALERTA_WA), cuerpo);
     if (!r.ok) logger.warn('alerta.wa_no_salio', { evento, motivo: r.error, status: r.status ?? null });
@@ -257,7 +268,7 @@ const LLAVES_SIN_REDACTAR = new Set([
 export async function alertarOperador(evento: string, detalle: Record<string, unknown>): Promise<void> {
   try {
     const para = process.env.ALERTA_EMAIL;
-    const porWhatsApp = alertaWhatsAppConfigurada() && esEventoDeDinero(evento);
+    const porWhatsApp = alertaWhatsAppConfigurada() && (esEventoDeDinero(evento) || esEventoDeGuardia(evento));
     if (!para && !porWhatsApp) {
       if (!avisadoSinConfigurar) {
         logger.info('alerta.sin_configurar', { evento });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clasificarBandeja } from './guardia';
+import { clasificarBandeja, decidirAvisos, decidirBaseCaida, estadoDeDetalle, claveDeItem, huellaDeClave, lineasDeAviso, ESTADO_GUARDIA_INICIAL } from './guardia';
 import type { BandejaEscalaciones, ItemEscalacion, FuenteLeida } from './escalaciones';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -73,5 +73,84 @@ describe('las fuentes ciegas y los límites', () => {
     const c = clasificarBandeja(bandeja([]), AHORA);
     expect(c.porSeveridad.S1).toBe(0);
     expect(c.limites.join(' ')).toMatch(/S1.*no se deriva/i);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// E1-A (P0-8): la decisión de AVISAR vive en `guardia.ts` y la comparten el
+// cron del servidor y el script de la Mac. Pura: se prueba sin base.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('decidirAvisos — se avisa el CAMBIO, no el estado', () => {
+  const corrida = bandeja([item('corridas', null)]);
+  const clasif = clasificarBandeja(corrida, AHORA);
+
+  it('un S2 nuevo se avisa y queda como visto (por huella, sin guardar el título ni la flota)', () => {
+    const d = decidirAvisos(clasif, ESTADO_GUARDIA_INICIAL);
+    expect(d.nuevos).toHaveLength(1);
+    expect(d.estado.vistos).toEqual([huellaDeClave(claveDeItem(clasif.items[0]))]);
+    expect(JSON.stringify(d.estado)).not.toMatch(/Flota X|item de corridas/);
+  });
+
+  it('el mismo incidente en la pasada siguiente NO vuelve a sonar (y sigue como visto)', () => {
+    const d1 = decidirAvisos(clasif, ESTADO_GUARDIA_INICIAL);
+    const d2 = decidirAvisos(clasif, d1.estado);
+    expect(d2.nuevos).toHaveLength(0);
+    expect(d2.urgentes).toHaveLength(1);
+    expect(d2.estado.vistos).toEqual(d1.estado.vistos);
+  });
+
+  it('lo resuelto sale del estado: si reaparece, es incidente NUEVO y vuelve a sonar', () => {
+    const d1 = decidirAvisos(clasif, ESTADO_GUARDIA_INICIAL);
+    const vacio = decidirAvisos(clasificarBandeja(bandeja([]), AHORA), d1.estado);
+    expect(vacio.estado.vistos).toEqual([]);
+    expect(decidirAvisos(clasif, vacio.estado).nuevos).toHaveLength(1);
+  });
+
+  it('reconoce las claves CRUDAS que dejó el script de la Mac: migrar al cron no repite lo ya avisado', () => {
+    const cruda = claveDeItem(clasif.items[0]);
+    expect(decidirAvisos(clasif, { vistos: [cruda], baseCaidaDesde: null }).nuevos).toHaveLength(0);
+  });
+
+  it('S3 no interrumpe: lo que espera decisión humana no es un aviso', () => {
+    const d = decidirAvisos(clasificarBandeja(bandeja([item('talachas', null)]), AHORA), ESTADO_GUARDIA_INICIAL);
+    expect(d.nuevos).toHaveLength(0);
+    expect(d.urgentes).toHaveLength(0);
+  });
+
+  it('una fuente ciega nueva se avisa UNA vez y su huella queda como vista', () => {
+    const c = clasificarBandeja(bandeja([], { tickets: ciega('db down') }), AHORA);
+    const d1 = decidirAvisos(c, ESTADO_GUARDIA_INICIAL);
+    expect(d1.ciegasNuevas).toHaveLength(1);
+    expect(decidirAvisos(c, d1.estado).ciegasNuevas).toHaveLength(0);
+    expect(lineasDeAviso(d1)[0]).toMatch(/Fuente CIEGA: tickets.*db down/);
+  });
+
+  it('si la base estaba caída en la pasada anterior, avisa que volvió y limpia la racha', () => {
+    const d = decidirAvisos(clasificarBandeja(bandeja([]), AHORA), { vistos: [], baseCaidaDesde: '2026-10-03T00:00:00Z' });
+    expect(d.baseVolvio).toBe(true);
+    expect(d.estado.baseCaidaDesde).toBeNull();
+  });
+
+  it('el estado persistido tiene tope: no crece sin límite dentro del jsonb del latido', () => {
+    const muchos = Array.from({ length: 300 }, (_, i) => ({ ...item('corridas', null), titulo: `c${i}` }));
+    expect(decidirAvisos(clasificarBandeja(bandeja(muchos), AHORA), ESTADO_GUARDIA_INICIAL).estado.vistos.length).toBeLessThanOrEqual(200);
+  });
+});
+
+describe('decidirBaseCaida — una vez por racha', () => {
+  it('la primera pasada ciega avisa y marca desde cuándo; las siguientes callan', () => {
+    const a = decidirBaseCaida(ESTADO_GUARDIA_INICIAL, '2026-10-03T00:00:00Z');
+    expect(a).toMatchObject({ avisar: true, estado: { baseCaidaDesde: '2026-10-03T00:00:00Z' } });
+    expect(decidirBaseCaida(a.estado, '2026-10-03T00:05:00Z')).toMatchObject({ avisar: false, estado: { baseCaidaDesde: '2026-10-03T00:00:00Z' } });
+  });
+});
+
+describe('estadoDeDetalle — no confía en la forma del jsonb', () => {
+  it('basura → estado inicial; lo válido se conserva; lo inválido se descarta', () => {
+    expect(estadoDeDetalle(null)).toEqual(ESTADO_GUARDIA_INICIAL);
+    expect(estadoDeDetalle('x')).toEqual(ESTADO_GUARDIA_INICIAL);
+    expect(estadoDeDetalle({ vistos: ['a', 3, null, 'b'], baseCaidaDesde: 'no es fecha' })).toEqual({ vistos: ['a', 'b'], baseCaidaDesde: null });
+    expect(estadoDeDetalle({ vistos: 'x', baseCaidaDesde: '2026-10-03T00:00:00Z' })).toEqual({ vistos: [], baseCaidaDesde: '2026-10-03T00:00:00Z' });
   });
 });

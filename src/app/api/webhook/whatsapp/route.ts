@@ -15,6 +15,7 @@ import { leerInterruptor } from '@/lib/likida/interruptores';
 import { registrarEntrantesWhatsApp } from '@/lib/likida/wa_ventana';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { avisadosDeApagado, VENTANA_AVISO_APAGADO_MS } from './avisos_apagado';
+import { medirRuta } from '@/lib/observability/latencia';
 import {
   guardarEventosPendientes, pendientesYaConocidos, reclamarPendiente,
   marcarPendienteProcesado, anotarFalloPendiente, devolverIntentoPendiente,
@@ -127,7 +128,12 @@ export async function GET(req: NextRequest) {
 }
 
 // POST — mensajes entrantes. Verifica HMAC, responde 200 rápido y procesa en after().
-export async function POST(req: NextRequest) {
+/** E1-A: la latencia de esta ruta (p50/p95 en /admin/observabilidad). Muestreada y sin riesgo: ver `medirRuta`. */
+export function POST(req: NextRequest) {
+  return medirRuta('webhook.whatsapp', () => manejarPOST(req));
+}
+
+async function manejarPOST(req: NextRequest) {
   // El reloj de la INVOCACIÓN: `maxDuration` corre desde aquí, no desde cada
   // mensaje. Se le pasa a cada `processInbound` del pool para que la foto 6
   // pida lo que queda y no los 120s enteros (auditoría 18, C4).

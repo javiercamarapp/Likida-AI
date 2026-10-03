@@ -96,6 +96,8 @@ export interface CostoLLM {
   tokensIn: number;
   tokensOut: number;
   costoUsd: number;
+  /** Cuánto tardó la llamada al modelo (ms). Opcional: sin cronómetro la fila queda con `duracion_ms` NULL (no medido ≠ 0). */
+  duracionMs?: number;
 }
 
 /**
@@ -143,6 +145,8 @@ export async function registrarCosto(c: CostoLLM): Promise<void> {
       tokens_in: entero(c.tokensIn),
       tokens_out: entero(c.tokensOut),
       costo_usd: Number(c.costoUsd.toFixed(6)),
+      // E1-A (0700): solo una duración creíble; sin ella la columna queda NULL (no medido), nunca un 0 inventado.
+      ...(c.duracionMs !== undefined && Number.isFinite(c.duracionMs) && c.duracionMs >= 0 && c.duracionMs <= 3_600_000 ? { duracion_ms: Math.round(c.duracionMs) } : {}),
     }), 'registrarCosto');
     if (error) fallo(c, error.message, (error as { code?: string }).code);
   } catch (e) {

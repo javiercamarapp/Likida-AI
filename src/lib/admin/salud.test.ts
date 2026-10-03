@@ -12,11 +12,18 @@ vi.mock('@/lib/logger', () => ({ logger }));
 const alertarOperador = vi.fn(async () => {});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...(a as [])) }));
 const upsert = vi.fn(async () => ({ error: null as null | { message: string } }));
+const insertLatencia = vi.fn(async (..._a: unknown[]) => ({ error: null as null | { message: string } }));
+const rpc = vi.fn(async (..._a: unknown[]) => ({ data: null as unknown, error: null as null | { message: string } }));
 vi.mock('@/lib/supabase/admin', () => ({
-  supabaseAdmin: () => ({ from: () => ({ upsert: (...a: unknown[]) => upsert(...(a as [])) }) }),
+  supabaseAdmin: () => ({
+    from: (tabla: string) => (tabla === 'latencia_muestra'
+      ? { insert: (...a: unknown[]) => insertLatencia(...a) }
+      : { upsert: (...a: unknown[]) => upsert(...(a as [])) }),
+    rpc: (...a: unknown[]) => rpc(...a),
+  }),
 }));
 
-const { puertaCron, registrarLatido, juzgarLatido, motivoDeSalto, esHuecoDeConfiguracion, CRONS, CADENCIA_MS, TOLERANCIA_LATIDO_MS } = await import('./salud');
+const { puertaCron, registrarLatido, registrarLatencia, registrarEstado, leerEstado30Dias, purgarObservabilidad, juzgarLatido, motivoDeSalto, esHuecoDeConfiguracion, CRONS, CADENCIA_MS, TOLERANCIA_LATIDO_MS } = await import('./salud');
 const { estadoDescargaSat } = await import('@/lib/likida/sat_descarga');
 
 beforeEach(() => { vi.clearAllMocks(); process.env.CRON_SECRET = 's3cr3t'; });
@@ -286,5 +293,110 @@ describe('esHuecoDeConfiguracion', () => {
       vi.stubEnv('LIKIDA_PAC_PASSWORD', '');
       expect(esHuecoDeConfiguracion(estadoDescargaSat().motivo)).toBe(true);
     });
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// E1-A (0700): la duración de cada corrida de cron se mide de la puerta al
+// latido — sin tocar una sola ruta — y se escribe UNA fila por corrida.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('la latencia de los crons (puerta → latido)', () => {
+  const autorizada = () => new Request('http://x', { headers: { authorization: 'Bearer s3cr3t' } });
+
+  it('una corrida autorizada deja una muestra de tipo cron con su duración y ok = (estado ok)', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-03T12:00:00Z'));
+      await puertaCron('gps', autorizada(), '');
+      vi.advanceTimersByTime(2500);
+      await registrarLatido('gps', 'ok');
+      expect(insertLatencia).toHaveBeenCalledTimes(1);
+      expect(insertLatencia).toHaveBeenCalledWith({ tipo: 'cron', nombre: 'gps', ms: 2500, ok: true });
+      await puertaCron('gps', autorizada(), '');
+      vi.advanceTimersByTime(500);
+      await registrarLatido('gps', 'fallo');
+      expect(insertLatencia).toHaveBeenLastCalledWith(expect.objectContaining({ ok: false }));
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('un `saltado` (apagado por palanca) NO cuenta: respondería en ms sin trabajar y hundiría el p50', async () => {
+    await puertaCron('jornada', autorizada(), '');
+    await registrarLatido('jornada', 'saltado', { interruptor: 'global' });
+    expect(insertLatencia).not.toHaveBeenCalled();
+  });
+
+  it('un latido sin puerta previa (o un segundo latido de la misma corrida) no escribe muestra', async () => {
+    await registrarLatido('peajes', 'ok');
+    expect(insertLatencia).not.toHaveBeenCalled();
+    await puertaCron('peajes', autorizada(), '');
+    await registrarLatido('peajes', 'ok');
+    await registrarLatido('peajes', 'fallo');
+    expect(insertLatencia).toHaveBeenCalledTimes(1);
+  });
+
+  it('una puerta rechazada (401) NO arranca el cronómetro', async () => {
+    await puertaCron('asistencia', new Request('http://x', { headers: { authorization: 'Bearer mal' } }), '');
+    await registrarLatido('asistencia', 'ok');
+    expect(insertLatencia).not.toHaveBeenCalled();
+  });
+
+  it('medir NUNCA tumba el latido: con la tabla de latencias caída, el latido igual se escribe', async () => {
+    insertLatencia.mockRejectedValueOnce(new Error('caída'));
+    await puertaCron('escalar', autorizada(), '');
+    await expect(registrarLatido('escalar', 'ok')).resolves.toBeUndefined();
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ id: 'escalar' }), { onConflict: 'id' });
+  });
+});
+
+describe('registrarLatencia', () => {
+  it('escribe tipo, nombre, ms entero y ok; recorta el nombre y el tope de una hora', async () => {
+    await registrarLatencia('ruta', 'x'.repeat(200), 12.6, false);
+    expect(insertLatencia).toHaveBeenCalledWith({ tipo: 'ruta', nombre: 'x'.repeat(120), ms: 13, ok: false });
+    await registrarLatencia('ruta', 'y', 99_999_999, true);
+    expect(insertLatencia).toHaveBeenLastCalledWith(expect.objectContaining({ ms: 3_600_000 }));
+  });
+  it('una duración inválida (NaN, negativa) NO se escribe', async () => {
+    await registrarLatencia('ruta', 'y', Number.NaN, true);
+    await registrarLatencia('ruta', 'y', -5, true);
+    expect(insertLatencia).not.toHaveBeenCalled();
+  });
+  it('nunca lanza: error de la base o excepción', async () => {
+    insertLatencia.mockResolvedValueOnce({ error: { message: 'rls' } });
+    await expect(registrarLatencia('ruta', 'y', 5, true)).resolves.toBeUndefined();
+    insertLatencia.mockRejectedValueOnce(new Error('caída'));
+    await expect(registrarLatencia('ruta', 'y', 5, true)).resolves.toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith('latencia.sin_escribir', expect.objectContaining({ nombre: 'y' }));
+  });
+});
+
+describe('estado público (0701)', () => {
+  it('registrarEstado llama la RPC y devuelve si escribió; nunca lanza', async () => {
+    expect(await registrarEstado('base', 'ok')).toBe(true);
+    expect(rpc).toHaveBeenCalledWith('registrar_estado', { p_componente: 'base', p_estado: 'ok' });
+    rpc.mockResolvedValueOnce({ data: null, error: { message: 'x' } });
+    expect(await registrarEstado('base', 'caido')).toBe(false);
+    rpc.mockRejectedValueOnce(new Error('caída'));
+    expect(await registrarEstado('base', 'caido')).toBe(false);
+  });
+  it('leerEstado30Dias normaliza filas y descarta componentes fuera del catálogo; LANZA si la base falla', async () => {
+    rpc.mockResolvedValueOnce({ data: [
+      { componente: 'app', dia: '2026-10-03', muestras: 10, ok: 9, degradadas: 1, caidas: 0 },
+      { componente: 'intruso', dia: '2026-10-03', muestras: 1, ok: 1, degradadas: 0, caidas: 0 },
+    ], error: null });
+    expect(await leerEstado30Dias()).toEqual([{ componente: 'app', dia: '2026-10-03', muestras: 10, ok: 9, degradadas: 1, caidas: 0 }]);
+    rpc.mockResolvedValueOnce({ data: null, error: { message: 'boom' } });
+    await expect(leerEstado30Dias()).rejects.toThrow(/boom/);
+  });
+  it('purgarObservabilidad repite la tanda mientras quede vencido (con tope) y borra el estado viejo', async () => {
+    rpc.mockResolvedValueOnce({ data: { borradas: 20000, parcial: true }, error: null });
+    rpc.mockResolvedValueOnce({ data: { borradas: 5, parcial: false }, error: null });
+    rpc.mockResolvedValueOnce({ data: 3, error: null });
+    expect(await purgarObservabilidad()).toEqual({ latencias: 20005, estados: 3, parcial: false });
+    expect(rpc.mock.calls.map((c) => c[0])).toEqual(['purgar_latencia', 'purgar_latencia', 'purgar_estado_dia']);
+  });
+  it('purgarObservabilidad LANZA si la base falla (la guardia lo registra)', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: { message: 'lock' } });
+    await expect(purgarObservabilidad()).rejects.toThrow(/lock/);
   });
 });

@@ -281,6 +281,8 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0694_convenio_refrescar_solo_en_curso.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0695_cp_documentos_por_avisar_todos_los_canales.sql
           PGUSER=postgres bash supabase/tests/0693_vigia_respuesta_rapida_tope_concurrencia.sh localhost 5432 postgres
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0700_latencia_observabilidad.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0701_estado_publico.sql
           PGUSER=postgres bash supabase/tests/0674_vigia_correo_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0684_carga_250_camiones.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0688_gastos_fiscales_sin_ventanas_encadenadas.sql

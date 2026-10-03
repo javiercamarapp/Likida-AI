@@ -62,7 +62,7 @@ export function crearModeloClasificador(): PuertoModelo {
           signal: AbortSignal.timeout(12_000), budget,
         });
         // Fase `vigia` (0481): antes iba en `chat` y le restaba al freno diario del dueño que conversa con sus datos.
-        await registrarCosto({ tenantId, viajeId: null, fase: 'vigia', modelo: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut, costoUsd: r.cost });
+        await registrarCosto({ tenantId, viajeId: null, fase: 'vigia', modelo: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut, costoUsd: r.cost, duracionMs: r.ms });
         return r.data;
       } catch (e) {
         if (e instanceof LlmBudgetExceededError) {
@@ -89,7 +89,7 @@ export function crearModeloPulidor(): PuertoPulir {
           role: 'vigia_cliente', system: SYSTEM_PULIR, messages: [{ role: 'user', content: borrador }],
           maxTokens: 320, temperature: 0.2, signal: AbortSignal.timeout(15_000), budget,
         });
-        if (!r.noMedido) await registrarCosto({ tenantId, viajeId: null, fase: 'vigia', modelo: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut, costoUsd: r.cost });
+        if (!r.noMedido) await registrarCosto({ tenantId, viajeId: null, fase: 'vigia', modelo: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut, costoUsd: r.cost, duracionMs: r.ms });
         return typeof r.text === 'string' ? r.text : null;
       } catch (e) {
         if (e instanceof LlmBudgetExceededError) return null;

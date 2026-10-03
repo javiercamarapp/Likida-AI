@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos', 'vigia', 'buzon-entrega', 'jornada-alertas', 'carta-porte-docs'] as const;
+export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos', 'vigia', 'buzon-entrega', 'jornada-alertas', 'carta-porte-docs', 'guardia'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -100,10 +100,21 @@ export const CADENCIA_MS: Record<CronId, number> = {
   // (con espera creciente de 15 min en adelante) y avisa a la oficina una vez por documento. Cada 5 minutos: es lo
   // que tarda en cumplirse el «lo verás en la bandeja en un momento»; el claim con lease impide el doble proceso.
   'carta-porte-docs': 300_000,
+  // La GUARDIA de producción en el servidor (0701, E1-A/P0-8): clasifica la bandeja con las reglas del A0, mide los
+  // componentes de /estado y avisa al operador. Cada 5 minutos: antes corría en launchd en la Mac de Javier cada 2 h
+  // (una Mac apagada o dormida era una guardia ausente). 288 invocaciones/día de unos segundos cada una — es el
+  // costo de que el aviso de un incidente tarde ≤ 5 min y de que la página de estado tenga resolución de 5 min.
+  guardia: 300_000,
 };
 
 /** Cuánto retraso sobre la cadencia se tolera antes de llamarlo muerto. */
 export const TOLERANCIA_LATIDO_MS = 20 * 60_000;
+
+/** El instante en que cada cron pasó la puerta, hasta que `registrarLatido` lo consume. */
+const iniciosDeCorrida = new Map<CronId, number>();
+
+/** Una corrida que dura más que esto no es una latencia: es una marca vieja que nunca se consumió. */
+const TECHO_CORRIDA_MS = 15 * 60_000;
 
 /**
  * La puerta común de los crons. Devuelve la respuesta que hay que contestar
@@ -125,11 +136,19 @@ export async function puertaCron(cron: CronId, req: Request, sinSecreto: string)
     logger.error(`cron.${cron}.no_autorizado`, { codigo: 'cron_401' });
     return new NextResponse(null, { status: 401 });
   }
+  // E1-A: el cronómetro de la corrida arranca AQUÍ (los 18+ crons pasan por esta puerta) y `registrarLatido` lo lee al
+  // cerrar — así cada cron mide su duración sin tocar una sola ruta. Por instancia: dos corridas simultáneas del MISMO
+  // cron en la misma instancia se pisan la marca (no pasa con el calendario de vercel.json) y el peor caso es una
+  // duración subestimada de una muestra, nunca un error.
+  // `performance.now()` y no `Date.now()`: el cronómetro no puede consumir ni depender del reloj de pared que los crons (y sus pruebas) controlan.
+  iniciosDeCorrida.set(cron, performance.now());
   return null;
 }
 
+
 /** Deja la marca de ESTA corrida. Best-effort con log: nunca lanza. */
 export async function registrarLatido(cron: CronId, estado: EstadoLatido, detalle: Record<string, unknown> = {}): Promise<void> {
+  await registrarLatenciaDeCron(cron, estado);
   try {
     const { error } = await acotada(supabaseAdmin()
       .from('cron_latido')
@@ -307,4 +326,93 @@ export async function estadoLatidos(ahoraMs: number = Date.now()): Promise<Recor
     salida[c] = juzgarLatido(c, f ? String(f.ultimo_latido) : null, f ? (f.estado as EstadoLatido) : null, ahoraMs);
   }
   return salida;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LATENCIAS (0700, E1-A/E18). Escritura BARATA y ACOTADA: un cron escribe UNA
+// fila por corrida (≈ 6,000/día en total) y una ruta solo escribe la MUESTRA
+// que `medirRuta` decide (lib/observability/latencia.ts). La retención la
+// aplica `purgar_latencia` desde la guardia. NUNCA lanza: medir no puede
+// tumbar lo medido.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Escribe una muestra de latencia. Best-effort con log: nunca lanza. */
+export async function registrarLatencia(tipo: 'ruta' | 'cron', nombre: string, ms: number, ok: boolean): Promise<void> {
+  if (!Number.isFinite(ms) || ms < 0) return;
+  try {
+    const { error } = await acotada(supabaseAdmin().from('latencia_muestra').insert({
+      tipo, nombre: nombre.slice(0, 120), ms: Math.min(Math.round(ms), 3_600_000), ok,
+    }), 'registrarLatencia');
+    if (error) logger.warn('latencia.sin_escribir', { tipo, nombre, err: error.message });
+  } catch (e) {
+    logger.warn('latencia.sin_escribir', { tipo, nombre, err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/** La duración de esta corrida de cron: desde la puerta hasta el latido. Un `saltado` (apagado por palanca) responde
+ *  en milisegundos sin trabajar: contarlo hundiría el p50 de un cron que de verdad tarda segundos. */
+async function registrarLatenciaDeCron(cron: CronId, estado: EstadoLatido): Promise<void> {
+  const inicio = iniciosDeCorrida.get(cron);
+  iniciosDeCorrida.delete(cron);
+  if (inicio === undefined || estado === 'saltado') return;
+  const ms = performance.now() - inicio;
+  if (ms > TECHO_CORRIDA_MS) return;
+  await registrarLatencia('cron', cron, ms, estado === 'ok');
+}
+
+export const COMPONENTES_ESTADO = ['app', 'base', 'crons', 'whatsapp', 'correo'] as const;
+export type ComponenteEstado = (typeof COMPONENTES_ESTADO)[number];
+export type EstadoMedido = 'ok' | 'degradado' | 'caido';
+
+/** Suma una medición al día del componente (0701). Best-effort con log: nunca lanza. */
+export async function registrarEstado(componente: ComponenteEstado, estado: EstadoMedido): Promise<boolean> {
+  try {
+    const { error } = await acotada(supabaseAdmin().rpc('registrar_estado', { p_componente: componente, p_estado: estado }), 'registrarEstado');
+    if (error) {
+      logger.warn('estado.sin_escribir', { componente, err: error.message });
+      return false;
+    }
+    return true;
+  } catch (e) {
+    logger.warn('estado.sin_escribir', { componente, err: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
+}
+
+export interface DiaEstado { componente: ComponenteEstado; dia: string; muestras: number; ok: number; degradadas: number; caidas: number }
+
+/** Los últimos 30 días medidos de cada componente (0701). LANZA ante error: una página de estado que no puede leer
+ *  su historial tiene que decirlo, no pintar treinta días verdes. */
+export async function leerEstado30Dias(): Promise<DiaEstado[]> {
+  const { data, error } = await acotada(supabaseAdmin().rpc('estado_30_dias'), 'leerEstado30Dias');
+  if (error) throw new Error(`leerEstado30Dias: ${error.message}`);
+  const filas = Array.isArray(data) ? data : [];
+  return filas.flatMap((f: Record<string, unknown>) => {
+    const componente = String(f.componente) as ComponenteEstado;
+    if (!COMPONENTES_ESTADO.includes(componente)) return [];
+    return [{
+      componente, dia: String(f.dia),
+      muestras: Number(f.muestras), ok: Number(f.ok), degradadas: Number(f.degradadas), caidas: Number(f.caidas),
+    }];
+  });
+}
+
+/** La retención diaria de la guardia: las muestras de latencia (en tandas, repitiendo mientras haya vencidas y quede
+ *  presupuesto) y los contadores de estado. Devuelve lo borrado; LANZA si la base falla (la guardia lo registra). */
+export async function purgarObservabilidad(): Promise<{ latencias: number; estados: number; parcial: boolean }> {
+  const admin = supabaseAdmin();
+  let latencias = 0;
+  let parcial = false;
+  for (let i = 0; i < 5; i++) {
+    const { data, error } = await acotada(admin.rpc('purgar_latencia'), 'purgarLatencia');
+    if (error) throw new Error(`purgarLatencia: ${error.message}`);
+    const r = (data ?? {}) as { borradas?: number; parcial?: boolean };
+    latencias += Number(r.borradas ?? 0);
+    parcial = r.parcial === true;
+    if (!parcial) break;
+  }
+  const { data: n, error: e2 } = await acotada(admin.rpc('purgar_estado_dia'), 'purgarEstadoDia');
+  if (e2) throw new Error(`purgarEstadoDia: ${e2.message}`);
+  return { latencias, estados: Number(n ?? 0), parcial };
 }
