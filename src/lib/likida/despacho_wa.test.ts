@@ -509,11 +509,19 @@ describe('el tope de anticipo de la política de la flota', () => {
     expect(r).toContain('Responde SÍ');
   });
 
-  it('si la política no se puede leer, cae al umbral por defecto (100 mil), sin tumbar el despacho', async () => {
+  it('M3 · si la política no se puede leer, un anticipo se RECHAZA con mensaje claro (no cae a 100 mil)', async () => {
     getConfig.mockRejectedValue(new Error('base caída'));
     resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez López' });
-    expect(await atenderDespachoOficina(JEFE, TEL, pide(8000), AHORA)).toContain('Responde SÍ');
-    estadoGuardado = null;
-    expect(await atenderDespachoOficina(JEFE, TEL, pide(150000), AHORA)).toContain('tope de anticipo');
+    // una política de 20 mil habría rechazado esto; el respaldo de 100 mil lo dejaba pasar
+    const r = await atenderDespachoOficina(ENCARGADO, TEL, pide(60000), AHORA);
+    expect(r).toContain('No pude leer la política');
+    expect(estadoGuardado).toBeNull();
+    expect(crearViaje).not.toHaveBeenCalled();
+  });
+
+  it('M3 · si la política no se puede leer pero el despacho no trae anticipo, sigue (un cero no se topa)', async () => {
+    getConfig.mockRejectedValue(new Error('base caída'));
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez López' });
+    expect(await atenderDespachoOficina(JEFE, TEL, 'nuevo viaje para juan perez, Puebla a Monterrey', AHORA)).toContain('Responde SÍ');
   });
 });

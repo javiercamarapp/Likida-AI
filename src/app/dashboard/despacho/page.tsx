@@ -19,7 +19,7 @@ import { logger } from '@/lib/logger';
 import { VistaDespacho } from './vista';
 import { validarIngreso } from '@/lib/likida/ingreso_viaje';
 import { getConfig } from '@/lib/likida/config';
-import { topeAnticipoDe, evaluarAnticipo, TOPE_ANTICIPO_POR_DEFECTO } from '@/lib/likida/crear_viaje_wa';
+import { topeAnticipoParaPanel, evaluarAnticipo, MENSAJE_POLITICA_ILEGIBLE, type TopeAnticipo } from '@/lib/likida/crear_viaje_wa';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,14 +50,16 @@ export const dynamic = 'force-dynamic';
  * A nivel de módulo no es una variable capturada, es una referencia del módulo.
  * Las acciones ahora solo cierran sobre `tenantId` y `destino`, dos strings.
  */
-/** El tope de anticipo de la política de la flota (el MISMO que aplica
- *  WhatsApp). Sin poder leer la política cae al umbral por defecto. */
-async function topeAnticipoDeLaFlota(tenantId: string): Promise<number> {
+/** El tope de anticipo que aplica el panel (la MISMA regla que WhatsApp, `crear_viaje_wa.ts`).
+ *  `{ ok: false }` = la política no se pudo leer: NO se inventa un tope (el respaldo de 100 mil
+ *  era más holgado que una política de 20 mil) y quien captura un anticipo recibe un rechazo
+ *  claro. `{ ok: true, tope: null }` = sin tope (dueño sin política explícita). */
+async function topeAnticipoDeLaFlota(tenantId: string, puedeVerDinero: boolean): Promise<{ ok: true; tope: TopeAnticipo | null } | { ok: false }> {
   try {
-    return topeAnticipoDe((await getConfig(tenantId)).politica);
+    return { ok: true, tope: topeAnticipoParaPanel((await getConfig(tenantId)).politica, puedeVerDinero) };
   } catch (err) {
     logger.warn('despacho.tope_anticipo_no_disponible', { err: err instanceof Error ? err.message : String(err) });
-    return TOPE_ANTICIPO_POR_DEFECTO;
+    return { ok: false };
   }
 }
 
@@ -97,7 +99,9 @@ export default async function PaginaDespacho({
   const puedeCapturarDinero = puedeVerArea(rol, 'dinero');
   // Quien despacha (`puedeAsignar`) captura anticipo; ver `crear` abajo.
   const puedeCapturarAnticipo = puedeAsignar(rol);
-  const topeAnticipo = puedeCapturarAnticipo ? await topeAnticipoDeLaFlota(tenantId) : undefined;
+  const topeLeido = puedeCapturarAnticipo ? await topeAnticipoDeLaFlota(tenantId, puedeCapturarDinero) : null;
+  const topeAnticipo = topeLeido?.ok ? (topeLeido.tope?.tope ?? undefined) : undefined;
+  const topeAnticipoOrigen = topeLeido?.ok ? topeLeido.tope?.origen : undefined;
   const sufijo = sufijoTenant(sp);
   const destino = `/dashboard/despacho${sufijo}`;
   // `leerPagina` (repo_paginado.ts) ya clampa a `PAGINA_MAX_VIAJES_EN_CURSO`
@@ -186,7 +190,16 @@ export default async function PaginaDespacho({
     };
     const anticipoCrudo = fd.get('anticipo');
     const anticipo = typeof anticipoCrudo === 'string' && anticipoCrudo.trim() !== '' ? Number(anticipoCrudo) : 0;
-    const veredicto = evaluarAnticipo(anticipo, await topeAnticipoDeLaFlota(tenantId));
+    // Sin anticipo no hace falta leer la política (un cero no se topa). Con anticipo, la regla es la
+    // de la política VIVA y el rol VIVO: el dueño no queda topado salvo política explícita (M3).
+    let tope: TopeAnticipo | number = Number.MAX_SAFE_INTEGER;
+    if (anticipo > 0) {
+      const sesion = await requireSessionTenant('/dashboard/despacho');
+      const topeVivo = await topeAnticipoDeLaFlota(tenantId, puedeVerArea(sesion.rol, 'dinero'));
+      if (!topeVivo.ok) return { error: MENSAJE_POLITICA_ILEGIBLE };
+      if (topeVivo.tope) tope = topeVivo.tope;
+    }
+    const veredicto = evaluarAnticipo(anticipo, tope);
     if (!veredicto.ok) return { error: veredicto.motivo };
     // `viaje.operador_id` es NOT NULL (0001). Sin este guard, elegir "sin
     // operador" llegaba a la base y volvía como un 23502 traducido a "No se
@@ -373,6 +386,7 @@ export default async function PaginaDespacho({
       puedeCapturarDinero={puedeCapturarDinero}
       puedeCapturarAnticipo={puedeCapturarAnticipo}
       topeAnticipo={topeAnticipo}
+      topeAnticipoOrigen={topeAnticipoOrigen}
       tablero={tablero}
       sinAsignar={sinAsignar.filas}
       totalSinAsignar={sinAsignar.total}

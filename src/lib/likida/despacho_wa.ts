@@ -4,7 +4,7 @@ import { acotada } from './presupuesto';
 import { ConsultaFallida, variantesTelefono } from './conv';
 import { esAfirmacion, esNegacion } from './intake/huerfanos';
 import {
-  interpretarPeticionViaje, resumenParaConfirmar, resolverOperadorPorNombre, topeAnticipoDe, TOPE_ANTICIPO_POR_DEFECTO,
+  interpretarPeticionViaje, resumenParaConfirmar, resolverOperadorPorNombre, topeAnticipoDe, TOPE_ANTICIPO_POR_DEFECTO, MENSAJE_POLITICA_ILEGIBLE,
   resolverUnidadPorEconomico, OperadorNombreAmbiguo,
 } from './crear_viaje_wa';
 import { crearViaje } from './operacion';
@@ -13,6 +13,8 @@ import { violaIndice } from './pg_errores';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { hoyMx } from '@/lib/formato';
 import type { RolOficina } from './contactos';
+
+const RE_MENCIONA_ANTICIPO = /\banticipo\b/i;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL JEFE DESPACHA POR WHATSAPP (F4 del plan) — el cableado que
@@ -382,18 +384,24 @@ export async function atenderDespachoOficina(
     return 'Ese despacho no lo puedo hacer con tu rol — los viajes los asigna el dueño o el jefe de tráfico.';
   }
 
-  // E1-B (P0-7): el tope de anticipo es el de la POLÍTICA de la flota, el mismo
-  // que aplica el panel (`evaluarAnticipo`). Si la política no se puede leer se
-  // cae al umbral por defecto —el más estricto de los dos casos razonables— y
-  // se avisa en el log; no se inventa un tope más holgado.
+  // E1-B (P0-7): el tope de anticipo es el de la POLÍTICA de la flota, el mismo que aplica el
+  // panel (`evaluarAnticipo`). Si la política no se puede leer NO se inventa un tope: el
+  // respaldo «100 mil» era MÁS holgado que una política de, digamos, 20 mil. Se parsea con el
+  // umbral por defecto solo para saber si el mensaje trae anticipo; si lo trae, se rechaza con
+  // un mensaje claro (M3); si no lo trae, el despacho sigue (un cero no se topa).
   let topeAnticipo = TOPE_ANTICIPO_POR_DEFECTO;
+  let politicaIlegible = false;
   try {
     topeAnticipo = topeAnticipoDe((await getConfig(cuenta.tenantId)).politica);
   } catch (e) {
+    politicaIlegible = true;
     logger.warn('despacho_wa.tope_anticipo_no_disponible', { tenant: cuenta.tenantId, err: e instanceof Error ? e.message : String(e) });
   }
   const intencion = interpretarPeticionViaje(texto, { topeAnticipo });
   if (!intencion) return null;
+  if (politicaIlegible && (RE_MENCIONA_ANTICIPO.test(texto) || (intencion.tipo === 'crear' && (intencion.anticipo ?? 0) > 0))) {
+    return MENSAJE_POLITICA_ILEGIBLE;
+  }
 
   if (intencion.tipo === 'incompleto') return resumenParaConfirmar(intencion);
 
