@@ -2,7 +2,7 @@ import type { ConfigConductor } from './config';
 import { calcularEstancias, excedeUmbral, type Estancia } from './estadias_anden';
 import { hitoActivo } from './maquina';
 import { anclaDe, textoTiempo } from './planificador';
-import type { AccionOficinaFila, DatosTablero, IndicadoresCrudos, ViajeTablero, VeredictoFila } from './repo_validacion';
+import type { AccionOficinaFila, DatosTablero, EpisodioTablero, IndicadoresCrudos, ViajeTablero, VeredictoFila } from './repo_validacion';
 import { ETIQUETA, estaResuelto, TIPOS_HITO, type HitoFila, type TipoHito } from './tipos';
 import { llegadaPorConfirmar, llegadaSinSitio, textoVeredicto, type ResultadoValidacion, type Veredicto } from './validacion';
 
@@ -306,4 +306,54 @@ export function filtrarPorSemaforo(t: Tablero, semaforo: Semaforo | null): Table
   const filas = t.filas.filter((f) => f.semaforo === semaforo);
   const ids = new Set(filas.map((f) => f.viaje.id));
   return { ...t, filas, excepciones: t.excepciones.filter((e) => ids.has(e.viajeId)) };
+}
+
+
+// ── «Sin señal de vida»: la cadena de cada episodio, lista para pintar ────────────────────────────────────────────────────────────
+
+export interface EpisodioVista {
+  id: string;
+  viajeId: string;
+  folio: string;
+  chofer: string;
+  /** «GPS sin reportar» / «Detenido fuera de un sitio». */
+  motivo: string;
+  abiertoEn: string;
+  abierto: boolean;
+  /** Dónde va (abierto) o cómo terminó (cerrado), en una línea. */
+  estado: string;
+  /** Cada paso que sí ocurrió, con su hora: «Primer aviso al chofer», «Segundo aviso», «Escalado al jefe de tráfico». */
+  pasos: Array<{ texto: string; en: string }>;
+  /** Un episodio escalado al jefe y todavía abierto es lo que más urge. */
+  urgente: boolean;
+}
+
+const MOTIVO_EPISODIO: Record<EpisodioTablero['motivo'], string> = { gps_obsoleto: 'GPS sin reportar', gps_detenido: 'Detenido fuera de un sitio' };
+const RESPUESTA_EPISODIO: Record<NonNullable<EpisodioTablero['respuesta']>, string> = { estoy: 'Sí, estoy', voy_a_cargar: 'Voy a cargar', estoy_bien: 'Estoy bien' };
+
+/** Los episodios de la pantalla, en el orden que llegan (más reciente primero). Puro: no lee nada. */
+export function episodiosVista(eps: readonly EpisodioTablero[]): EpisodioVista[] {
+  return eps.map((e): EpisodioVista => {
+    const abierto = e.cerradoEn === null;
+    const pasos: EpisodioVista['pasos'] = [];
+    if (e.aviso1En) pasos.push({ texto: 'Primer aviso al chofer', en: e.aviso1En });
+    if (e.aviso2En) pasos.push({ texto: 'Segundo aviso al chofer', en: e.aviso2En });
+    if (e.escaladoEn) pasos.push({ texto: 'Aviso al jefe de tráfico', en: e.escaladoEn });
+    let estado: string;
+    if (abierto) {
+      estado = e.nivelEnviado === 3 ? 'Escalado al jefe de tráfico, sigue sin atenderse'
+        : e.nivelEnviado === 2 ? 'Segundo aviso mandado, sin respuesta del chofer'
+        : e.nivelEnviado === 1 ? 'Primer aviso mandado, sin respuesta del chofer'
+        : 'Detectado, falta mandar el primer aviso (o la flota lo tiene apagado)';
+    } else {
+      estado = e.cierreMotivo === 'respondio' ? `El chofer respondió${e.respuesta ? `: «${RESPUESTA_EPISODIO[e.respuesta]}»` : ''}`
+        : e.cierreMotivo === 'senal_recuperada' ? 'El GPS volvió a reportar'
+        : e.cierreMotivo === 'atendido_por_jefe' ? 'Lo atendió el jefe de tráfico'
+        : e.cierreMotivo === 'viaje_cerrado' ? 'El viaje se cerró' : 'Cerrado';
+    }
+    return {
+      id: e.id, viajeId: e.viajeId, folio: e.folio ?? 'sin folio', chofer: e.operador ?? 'sin chofer', motivo: MOTIVO_EPISODIO[e.motivo],
+      abiertoEn: e.abiertoEn, abierto, estado, pasos, urgente: abierto && e.nivelEnviado === 3,
+    };
+  });
 }
