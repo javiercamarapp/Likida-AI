@@ -305,7 +305,7 @@ const REGLAS_PURGA_AVISOS = ".from('regla_aviso').delete().lt('enviado_en', cort
 // Exención por cadena exacta del buzón (Agente 9, 0531): la lista de trabajo del cron de entrega al contador.
 const BUZON_LOTES_PARA_ENVIAR = ".from('buzon_entrega').select(COLUMNAS_ENTREGA).or(`and(estado.eq.pendiente,proximo_intento_en.lte.${iso}),and(estado.eq.enviando,lease_hasta.lt.${iso})`).order('proximo_intento_en', { ascending: true }).order('id', { ascending: true }).limit(limite)";
 // E1-B (P0-7): las dos lecturas de /admin/cobranza sobre la bandeja y las corridas del agente `cobranza_saas` (el dunning de las mensualidades DE LIKIDA).
-const DUNNING_PIEZAS = ".from('cola_aprobacion').select('titulo, estado, enviado_en, creado_en').eq('agente', 'cobranza_saas').eq('tipo', 'recordatorio_cobranza').order('creado_en', { ascending: false }).order('id').limit(limite)";
+const DUNNING_PIEZAS = ".from('cola_aprobacion').select('titulo, estado, enviado_en, creado_en').eq('agente', 'cobranza_saas').eq('tipo', 'recordatorio_cobranza').in('titulo', lote).order('creado_en', { ascending: false }).order('id').limit(1000)";
 const DUNNING_CORRIDA = ".from('agente_corrida').select('estado, fin, error, resumen').eq('agente', 'cobranza_saas').order('fin', { ascending: false }).order('id').limit(1)";
 const EXENCIONES_CONSULTA = [{
   archivo: 'src/lib/likida/repo.ts', tabla: 'cola_aprobacion', cadena: DUNNING_PIEZAS,

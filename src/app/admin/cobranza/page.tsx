@@ -4,9 +4,10 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { mxn } from '@/lib/utils';
 import { hoyMx } from '@/lib/formato';
 import { logger } from '@/lib/logger';
-import { getPorCobrar } from '@/lib/saas/transferencia';
+import { getPorCobrarTodas } from '@/lib/saas/transferencia';
 import { getPiezasDunningPlataforma, getUltimaCorridaDunningPlataforma, type CorridaDunning, type PiezaDunning } from '@/lib/likida/repo';
 import { armarEstadoDunning, type SelloToque } from '@/lib/likida/cobranza_estado';
+import { toquesDeHoy, tituloToque } from '@/lib/likida/agentes/exito';
 import type { FacturaPorCobrar } from '@/lib/saas/transferencia';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { EstadoVacio, StatusPill, type Estado } from '../ui/kit';
@@ -38,6 +39,9 @@ const ROTULO_SELLO: Record<SelloToque, { texto: string; estado: Estado }> = {
   enviada: { texto: 'enviada', estado: 'ok' },
 };
 
+/** Filas de la lista; las cifras de arriba cubren todas las facturas, no solo estas. */
+const FILAS_MOSTRADAS = 50;
+
 const hito = (h: number) => `D${h >= 0 ? '+' : ''}${h}`;
 
 async function leer<T>(nombre: string, f: () => Promise<T>): Promise<{ dato: T | null; error: boolean }> {
@@ -51,12 +55,21 @@ export default async function CobranzaPage() {
   // que protege estos datos de TODAS las flotas (service role) es esta llamada.
   await requireSuperadmin();
   const hoy = hoyMx();
-  const [facturas, piezas, corrida] = await Promise.all([
-    leer<FacturaPorCobrar[]>('por_cobrar', getPorCobrar),
-    leer<PiezaDunning[]>('piezas', () => getPiezasDunningPlataforma()),
+  // Los totales se calculan sobre TODAS las pendientes/fallidas (conteo exacto de la
+  // base), no sobre las filas que se pintan; la lista se acota a FILAS_MOSTRADAS y lo dice.
+  const [facturas, corrida] = await Promise.all([
+    leer<{ facturas: FacturaPorCobrar[]; total: number }>('por_cobrar', getPorCobrarTodas),
     leer<CorridaDunning | null>('corrida', getUltimaCorridaDunningPlataforma),
   ]);
-  const estado = facturas.dato ? armarEstadoDunning(facturas.dato, piezas.dato ?? [], hoy) : null;
+  // Las piezas se piden por los títulos de los toques de esas facturas: nunca «las N más
+  // nuevas», que dejaba a las facturas viejas con un falso «sin propuesta».
+  const piezas = facturas.dato
+    ? await leer<PiezaDunning[]>('piezas', () => getPiezasDunningPlataforma(toquesDeHoy(facturas.dato!.facturas, hoy).map(tituloToque)))
+    : { dato: null as PiezaDunning[] | null, error: false };
+  const estado = facturas.dato ? armarEstadoDunning(facturas.dato.facturas, piezas.dato ?? [], hoy) : null;
+  const filasVistas = estado ? estado.facturas.slice(0, FILAS_MOSTRADAS) : [];
+  const totalBase = facturas.dato?.total ?? 0;
+  const truncada = !!facturas.dato && totalBase > facturas.dato.facturas.length;
 
   return (
     <main className="h-full">
@@ -114,7 +127,8 @@ export default async function CobranzaPage() {
           {estado && (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-                <Cifra etiqueta="Por cobrar" valor={`${estado.porCobrar} · ${mxn(estado.montoPorCobrar)}`} />
+                <Cifra etiqueta="Por cobrar" valor={`${totalBase} · ${mxn(estado.montoPorCobrar)}`}
+                  nota={truncada ? 'Incompleto: hay más facturas de las que se leyeron.' : undefined} alerta={truncada} />
                 <Cifra etiqueta="Vencidas" valor={`${estado.vencidas} · ${mxn(estado.montoVencido)}`} />
                 <Cifra etiqueta="Toques sin propuesta" valor={String(estado.toquesSinPropuesta)}
                   nota={estado.toquesSinPropuesta > 0 ? 'El agente no ha preparado toques que ya tocaban.' : undefined}
@@ -124,6 +138,11 @@ export default async function CobranzaPage() {
 
               <div className="card p-4">
                 <TituloSeccion>Facturas por cobrar y su cadencia</TituloSeccion>
+                {(estado.facturas.length > filasVistas.length || truncada) && (
+                  <p className="text-xs mt-2" style={{ color: 'var(--muted)' }} role="note">
+                    Mostrando {filasVistas.length} de {totalBase}; las cifras de arriba cubren {truncada ? `las ${estado.facturas.length} leídas (hay más en la base: sus totales están incompletos)` : 'todas'}.
+                  </p>
+                )}
                 {estado.facturas.length === 0 ? (
                   <p className="text-sm mt-3" style={{ color: 'var(--muted)' }}>
                     0 mensualidades por cobrar: no hay ninguna factura pendiente ni fallida. Es el estado real del
@@ -131,7 +150,7 @@ export default async function CobranzaPage() {
                   </p>
                 ) : (
                   <ul className="mt-3 space-y-3 text-sm">
-                    {estado.facturas.map((f) => (
+                    {filasVistas.map((f) => (
                       <li key={f.factura.id} className="border-t pt-3 first:border-t-0 first:pt-0" style={{ borderColor: 'var(--line)' }}>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-medium">{f.factura.tenantNombre}</span>
