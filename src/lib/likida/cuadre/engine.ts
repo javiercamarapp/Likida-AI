@@ -136,6 +136,8 @@ export const MEDIOS_LISR_27_III = ['02', '03', '04', '05', '28', '29'] as const;
 /** Los medios de LISR 27-III que son un instrumento con titular (tarjeta de
  *  crédito, monedero, débito, servicios): el estímulo del diésel exige que sea
  *  de la empresa (LIF 2026 art. 20-A fr. IV). Cheque y transferencia no entran. */
+/** Dónde se contestan las preguntas del perfil que gobiernan la tarjeta del diésel. */
+export const PANTALLA_PERFIL_TARJETAS = 'el perfil de la flota (/dashboard/onboarding)';
 export const MEDIOS_CON_TITULAR_TARJETA = ['04', '05', '28', '29'] as const;
 /** '99 Por definir' = la contraprestación no se ha pagado (RMF 2.7.1.29 fr. II). */
 export const FORMA_PAGO_SIN_PAGAR = '99';
@@ -440,7 +442,7 @@ export const SIN_ESTIMULO: TipoDiferencia[] = [...SIN_IVA_ACREDITABLE, 'combusti
  * en el renglón de deducibilidad, ver `liquidacion/deducibilidad.ts`— pero ya
  * no puede bajar un estatus que nunca podría volver a subir.
  */
-export const REVISAR_OPERATIVO: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'monto_invalido', 'complemento_no_verificable', 'efectivo_sobre_15', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'iva_mes_del_pago', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'tarjeta_no_empresa', 'oposicion_titular'];
+export const REVISAR_OPERATIVO: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'monto_invalido', 'complemento_no_verificable', 'efectivo_sobre_15', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'iva_mes_del_pago', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'tarjeta_no_empresa', 'tarjeta_sin_declarar', 'oposicion_titular'];
 
 /**
  * Lo que baja una liquidación a «Por revisar». DERIVADA, no copiada.
@@ -1869,14 +1871,23 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // qué (revisión humana); no se afirma que sea deducible ni que se pierda.
       const tarjetaConTitular = !!formaPagoEfectiva && (MEDIOS_CON_TITULAR_TARJETA as readonly string[]).includes(formaPagoEfectiva);
       if (pagoElectronico && tarjetaConTitular && input.tarjetasEmpresa !== true && Number.isFinite(litros) && litros > 0) {
-        const motivo = input.tarjetasEmpresa === false
-          ? 'la flota declaró que la tarjeta o monedero NO es de la empresa (o que el chofer paga con la suya y se le reembolsa)'
-          : 'la flota no ha declarado que sus tarjetas y monederos estén a nombre de la empresa';
-        diferencias.push({
-          tipo: 'tarjeta_no_empresa', concepto: g.concepto, monto: 0,
-          nota: `Los ${litros} L de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} se pagaron con forma «${formaPagoEfectiva}» (tarjeta o monedero), pero ${motivo}. El medio de pago electrónico del estímulo debe ser de la cuenta del contribuyente (LIF 2026 art. 20-A fr. IV): no se acreditan esos litros hasta que una persona lo confirme.`,
-          gastoId: g.id,
-        });
+        // Dos causas, dos tipos (E1-B, M5): «declaró que NO» es una decisión de la
+        // flota; «no ha contestado» se resuelve contestando el perfil (y por eso va
+        // al panel, no a una decisión por viaje por WhatsApp: ver `cierre_aviso.ts`).
+        const declaroQueNo = input.tarjetasEmpresa === false;
+        const lit = `Los ${litros} L de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} se pagaron con forma «${formaPagoEfectiva}» (tarjeta o monedero)`;
+        const ley = 'El medio de pago electrónico del estímulo debe ser de la cuenta del contribuyente (LIF 2026 art. 20-A fr. IV): no se acreditan esos litros';
+        diferencias.push(declaroQueNo
+          ? {
+            tipo: 'tarjeta_no_empresa', concepto: g.concepto, monto: 0,
+            nota: `${lit}, pero la flota declaró que la tarjeta o monedero NO es de la empresa (o que el chofer paga con la suya y se le reembolsa). ${ley} mientras no cambie esa respuesta del perfil o una persona lo confirme. Si no es así, corrígelo en ${PANTALLA_PERFIL_TARJETAS}.`,
+            gastoId: g.id,
+          }
+          : {
+            tipo: 'tarjeta_sin_declarar', concepto: g.concepto, monto: 0,
+            nota: `${lit}, pero la flota no ha declarado que sus tarjetas y monederos estén a nombre de la empresa. ${ley} hasta que se conteste. Cómo resolverlo: contesta «Tarjetas a nombre de la empresa» y «Quién paga en la bomba» en ${PANTALLA_PERFIL_TARJETAS}.`,
+            gastoId: g.id,
+          });
       } else if (pagoElectronico && Number.isFinite(litros) && litros > 0) {
         // AUDITORÍA 8, CRÍTICO: los litros salen del OCR y nada los cotejaba —
         // ni contra el XML (no siempre trae la cantidad desglosada), ni contra

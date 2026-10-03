@@ -142,8 +142,8 @@ export function calificaEstimuloPeaje(perfilCrudo: unknown): ElegibilidadEstimul
  *  - `false` si declaró que NO, o si declaró que el chofer paga con la suya y
  *    se le reembolsa (`pagoEnBomba = 'chofer_reembolso'`), aunque haya dicho sí
  *    a la otra pregunta: «con la suya y le reembolsamos» tumba el estímulo.
- *  - `undefined` si no hay declaración suficiente (incluye `mixto`: sin saber
- *    cuáles pagos son de quién no se afirma nada). Un valor inferido o un
+ *  - `undefined` si no hay declaración suficiente (no contestó las tarjetas;
+ *    `mixto` solo, sin respuesta de tarjetas, tampoco afirma nada). Un valor inferido o un
  *    default de Likida cuentan como no declarado (`decidir`).
  *
  * Solo aplica el criterio determinístico; la regla fiscal fina sobre tarjetas
@@ -155,7 +155,10 @@ export function tarjetasDeLaEmpresa(perfilCrudo: unknown): boolean | undefined {
   const declaradas = decidir(perfil.tarjetasANombreEmpresa);
   const bomba = decidir(perfil.pagoEnBomba);
   if (declaradas === false || bomba === 'chofer_reembolso') return false;
-  if (declaradas === true && bomba !== 'mixto') return true;
+  // `mixto` no veta la respuesta de tarjetas: si la flota dijo que sus tarjetas y
+  // monederos SON de la empresa, «depende del viaje» (empresa o efectivo/otro
+  // medio) no la contradice; el reembolso explícito sí, y ya se cortó arriba.
+  if (declaradas === true) return true;
   return undefined;
 }
 

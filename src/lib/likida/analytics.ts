@@ -8,7 +8,7 @@ import type { Anomalia } from './duplicados';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { cuadrarDesdeDB } from './cuadre/desde_db';
 import { cubetaDe, copiasDeComprobante } from './cuadre/engine';
-import { reglaTarjetaRigeParaCierre } from './cuadre/vigencia_tarjeta';
+import { reglaTarjetaRigeParaCierre, TIPOS_DE_TARJETA_AJENA } from './cuadre/vigencia_tarjeta';
 import { resumenLaboral, type ResumenLaboral } from './laboral/pagadero';
 // La agregación de `llm_costo` de una flota vive en el módulo que ESCRIBE esa
 // tabla (`costos.ts`), y se importa en vez de reescribirse: `getResumenCosto` y
@@ -1703,13 +1703,13 @@ export function derivoLaConfig(
   persistidas: unknown,
   actuales: Array<{ tipo?: string; esperado?: number }>,
   /** `cerradaEn`: fecha de cierre de la liquidación. Si es anterior a la vigencia
-   *  de `tarjeta_no_empresa`, ese tipo NO cuenta como deriva (A2): la regla es
+   *  de `tarjeta_no_empresa`, esos tipos NO cuentan como deriva (A2): la regla es
    *  posterior al cierre y no estaba persistida, no hubo cambio de config. */
   opciones: { cerradaEn?: string | null } = {},
 ): boolean {
   if (!Array.isArray(persistidas)) return false;
   if (!reglaTarjetaRigeParaCierre(opciones.cerradaEn)) {
-    actuales = (actuales ?? []).filter((d) => d?.tipo !== 'tarjeta_no_empresa');
+    actuales = (actuales ?? []).filter((d) => !TIPOS_DE_TARJETA_AJENA.includes(d?.tipo ?? ''));
   }
   const llaves = (xs: Array<{ tipo?: string; esperado?: number }>) =>
     new Set(

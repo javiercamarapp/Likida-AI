@@ -20,6 +20,9 @@
 // hacia delante, al revés, dejaría cerrar sin regla (estímulo concedido sin
 // declaración). Antes de publicar, corre la consulta de impacto de
 // docs/operacion/impacto-tarjeta-no-empresa.sql.
+/** Los dos tipos de la regla (declaró que NO / no ha contestado): ambos nacen con ella. */
+export const TIPOS_DE_TARJETA_AJENA: readonly string[] = ['tarjeta_no_empresa', 'tarjeta_sin_declarar'];
+
 export const TARJETA_NO_EMPRESA_VIGENTE_DESDE = '2026-10-04T00:00:00-06:00';
 
 /**

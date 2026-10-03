@@ -139,7 +139,13 @@ export const RUTA_DE_DIFERENCIA: Record<TipoDiferencia, RutaDeAviso> = {
   // letrero que nadie tiene que atender.
   oposicion_titular: 'decision',
   diesel_desviacion: 'decision',       // consumo fuera de rango: puede ser robo
-  tarjeta_no_empresa: 'decision',      // el estímulo no se acredita: ¿la tarjeta es de la empresa? Lo confirma el jefe o el contador
+  tarjeta_no_empresa: 'decision',      // la flota DECLARÓ que la tarjeta no es suya (o que reembolsa al chofer): el estímulo no se acredita y lo confirma el jefe o el contador
+  // E1-B (M5): mientras la causa sea solo «no ha contestado», el jefe NO puede
+  // resolverlo decidiendo el viaje por WhatsApp —solo contestando el perfil—, así
+  // que un «necesita tu decisión» por viaje era ruido que además encendía el
+  // acuse «decisión pendiente» del encargado. Va al panel; el dueño recibe UN
+  // aviso por flota (`aviso_perfil_tarjetas.ts`) con la instrucción.
+  tarjeta_sin_declarar: 'panel',
   fecha_sospechosa: 'decision',        // un ticket de otro viaje cobrado aquí es dinero mal asignado
   gasto_otro_ejercicio: 'decision',    // no deducible en este ejercicio; solo el jefe decide qué hacer con el papel
   iva_mes_del_pago: 'panel',           // información contable de periodo — la asienta el contador, no la decide el jefe en WhatsApp

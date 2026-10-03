@@ -128,7 +128,8 @@ export type TipoDiferencia =
   | 'factura_por_vencer'   // ticket de portal sin timbrar y con la ventana cerrándose
   | 'comprobante_no_fiscal' // el papel dice de sí mismo que no lo es → no ampara deducción (CFF 29-A)
   | 'diesel_desviacion'    // consumo de diésel fuera del rango esperado
-  | 'tarjeta_no_empresa'   // diésel pagado con tarjeta/monedero que no consta como de la empresa → no acredita litros (LIF 20-A fr. IV)
+  | 'tarjeta_no_empresa'   // diésel pagado con tarjeta/monedero y la flota DECLARÓ que no es de la empresa (o que el chofer paga y se le reembolsa) → no acredita litros (LIF 20-A fr. IV)
+  | 'tarjeta_sin_declarar'  // lo mismo, pero la flota todavía NO contestó de quién es la tarjeta: se resuelve contestando el perfil, no decidiendo el viaje
   | 'permiso_cre_no_verificable' // CFDI de combustible: el permiso CRE del proveedor no se valida (LISR 27-III / RFA 2026 2.9) → a revisión, no baja la cubeta
   // RFA 2026 regla 2.9 — la facilidad del 15% de combustible en efectivo (deber ser):
   | 'combustible_efectivo_dentro15' // efectivo DENTRO del 15% del ejercicio y flota elegible → deducible, con el contador a la vista

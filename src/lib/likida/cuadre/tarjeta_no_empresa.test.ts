@@ -56,8 +56,27 @@ describe('estímulo de diésel — la tarjeta tiene que ser de la empresa (LIF 2
   it('sin declarar tampoco acredita: un estímulo no se concede por omisión', () => {
     const r = cuadrar('04');
     expect(r.litrosDieselAcreditables).toBe(0);
-    expect(r.diferencias.find((x) => x.tipo === 'tarjeta_no_empresa')?.nota).toMatch(/no ha declarado/);
+    expect(r.diferencias.find((x) => x.tipo === 'tarjeta_sin_declarar')?.nota).toMatch(/no ha declarado/);
     expect(r.estatus).toBe('revisar');
+  });
+
+  it('M5 · la nota de «sin declarar» dice CÓMO resolverlo: qué preguntas contestar y dónde', () => {
+    const d = cuadrar('04').diferencias.find((x) => x.tipo === 'tarjeta_sin_declarar');
+    expect(d?.nota).toMatch(/Tarjetas a nombre de la empresa/);
+    expect(d?.nota).toMatch(/Quién paga en la bomba/);
+    expect(d?.nota).toContain('/dashboard/onboarding');
+  });
+
+  it('M5 · la nota de «declaró que no» también apunta a la pantalla por si fue un error', () => {
+    const d = cuadrar('04', false).diferencias.find((x) => x.tipo === 'tarjeta_no_empresa');
+    expect(d?.nota).toContain('/dashboard/onboarding');
+  });
+
+  it('M5 · cada causa tiene su tipo: declaró que no ≠ no ha contestado', () => {
+    expect(tipos(cuadrar('04', false))).toEqual(expect.arrayContaining(['tarjeta_no_empresa']));
+    expect(tipos(cuadrar('04', false))).not.toContain('tarjeta_sin_declarar');
+    expect(tipos(cuadrar('04'))).toContain('tarjeta_sin_declarar');
+    expect(tipos(cuadrar('04'))).not.toContain('tarjeta_no_empresa');
   });
 
   it.each(['04', '28', '29', '05'])('la forma %s (instrumento con titular) también exige tarjeta de la empresa', (f) => {
@@ -101,8 +120,10 @@ describe('tarjetasDeLaEmpresa(perfil) — tri-estado y fail-closed', () => {
     expect(tarjetasDeLaEmpresa({ tarjetasANombreEmpresa: dec(true), pagoEnBomba: dec('chofer_reembolso') })).toBe(false);
     expect(tarjetasDeLaEmpresa({ pagoEnBomba: dec('chofer_reembolso') })).toBe(false);
   });
-  it('pago mixto: no se afirma nada', () => {
-    expect(tarjetasDeLaEmpresa({ tarjetasANombreEmpresa: dec(true), pagoEnBomba: dec('mixto') })).toBeUndefined();
+  it('M5 · pago mixto respeta la respuesta de tarjetas: sí + mixto = true; no + mixto = false; solo mixto = nada', () => {
+    expect(tarjetasDeLaEmpresa({ tarjetasANombreEmpresa: dec(true), pagoEnBomba: dec('mixto') })).toBe(true);
+    expect(tarjetasDeLaEmpresa({ tarjetasANombreEmpresa: dec(false), pagoEnBomba: dec('mixto') })).toBe(false);
+    expect(tarjetasDeLaEmpresa({ pagoEnBomba: dec('mixto') })).toBeUndefined();
   });
   it('pago de la empresa + tarjetas de la empresa: true', () => {
     expect(tarjetasDeLaEmpresa({ tarjetasANombreEmpresa: dec(true), pagoEnBomba: dec('empresa') })).toBe(true);
