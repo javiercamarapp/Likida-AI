@@ -1,42 +1,58 @@
 {
+  "_fuente": "lo calcula el importador real (leerExportWhatsapp + analizarHistorial) con regenerar-resumen-esperado.mjs; no editar a mano",
   "afb": {
-    "mensajes": 214,
-    "preguntas": 104,
-    "sin_respuesta_10min": 21,
+    "mensajes": 210,
+    "mensajes_cliente": 106,
+    "mensajes_equipo": 104,
+    "descartados": 5,
+    "sin_respuesta_10min": 17,
+    "mediana_min": 6,
+    "p90_min": 30,
     "por_tema": {
-      "placas": 22,
-      "documentos": 17,
+      "otro": 24,
       "eta": 22,
-      "cita": 15,
       "ubicacion": 17,
-      "queja": 11
+      "cita_anden": 15,
+      "queja": 11,
+      "documentos": 10,
+      "factura_pod": 7
     },
     "quejas": 11
   },
   "arr": {
-    "mensajes": 235,
-    "preguntas": 111,
-    "sin_respuesta_10min": 24,
+    "mensajes": 225,
+    "mensajes_cliente": 114,
+    "mensajes_equipo": 111,
+    "descartados": 11,
+    "sin_respuesta_10min": 23,
+    "mediana_min": 5,
+    "p90_min": 34,
     "por_tema": {
-      "ubicacion": 17,
-      "placas": 15,
-      "queja": 20,
       "eta": 20,
-      "documentos": 26,
-      "cita": 13
+      "queja": 20,
+      "otro": 18,
+      "ubicacion": 17,
+      "documentos": 14,
+      "cita_anden": 13,
+      "factura_pod": 12
     },
     "quejas": 20
   },
   "cfn": {
-    "mensajes": 214,
-    "preguntas": 103,
-    "sin_respuesta_10min": 21,
+    "mensajes": 207,
+    "mensajes_cliente": 104,
+    "mensajes_equipo": 103,
+    "descartados": 8,
+    "sin_respuesta_10min": 19,
+    "mediana_min": 5,
+    "p90_min": 23,
     "por_tema": {
+      "otro": 27,
+      "cita_anden": 20,
       "eta": 19,
-      "cita": 20,
-      "documentos": 20,
+      "documentos": 11,
       "ubicacion": 10,
-      "placas": 26,
+      "factura_pod": 9,
       "queja": 8
     },
     "quejas": 8
