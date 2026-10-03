@@ -1,4 +1,4 @@
-import { traerTodoPorLlave, llaveFechaId, despuesDeFechaId, PAGINA } from '../pg';
+import { traerTodoPorLlave, llaveFechaId, despuesDeFechaId, PAGINA, type LlaveFechaId } from '../pg';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
@@ -167,7 +167,7 @@ export async function getPorFacturar(
   // flota) y un UUID sin correlación con la fecha, `id > último` recorre el índice
   // de `id` de toda la flota (medido 1.8 s la lectura de 15k filas contra 0.24 s
   // por `(fecha, id)`; scripts/carga/250-camiones/07-offset-vs-cursor.sql).
-  const filas = await traerTodoPorLlave<FilaGasto>(
+  const filas = await traerTodoPorLlave<FilaGasto, LlaveFechaId>(
     (despuesDe) => {
       let q = supabaseAdmin()
         .from('gasto')
