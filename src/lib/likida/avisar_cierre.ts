@@ -9,6 +9,8 @@ import { variantesTelefono } from './conv';
 import { armarAvisoJefe, type ResumenLiquidacion, type DiferenciaResumen } from './cierre_aviso';
 import { telefonoParaDineroDe } from './contactos';
 import { acuseSoloFolioAlEncargado } from './acuse_folio';
+import { avisarPerfilTarjetasUnaVez } from './aviso_perfil_tarjetas';
+import { after } from 'next/server';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LO QUE LA OFICINA SE ENTERA CUANDO UN CHOFER CIERRA.
@@ -163,6 +165,40 @@ export async function resumenDeCierre(tenantId: string, viajeId: string): Promis
 }
 
 /**
+ * Tope de lo que un accesorio puede retrasar al llamador cuando NO hay ámbito de
+ * petición donde programarlo (cron, reintento fuera del webhook): peor caso real
+ * del acuse eran ~48 s de techos encadenados sobre un margen de cierre ya agotado.
+ */
+export const TECHO_ACCESORIOS_SIN_AFTER_MS = 6_000;
+
+/**
+ * Corre un accesorio del cierre FUERA de la ruta crítica (M2).
+ *
+ * - En una petición de Next (webhook de WhatsApp y su `after()`): se programa con
+ *   `after()` y la función devuelve de inmediato; el sello de entrega no espera.
+ * - Sin ámbito de petición (`after` lanza: cron `wa-pendientes`, pruebas): se espera
+ *   con un TECHO duro, y si lo rebasa se sigue sin él — nunca más de
+ *   `TECHO_ACCESORIOS_SIN_AFTER_MS` sobre el cierre. Los accesorios son idempotentes
+ *   (sellos propios), así que lo que se corte lo retoma un intento posterior.
+ * Nunca lanza.
+ */
+export async function enSegundoPlano(etiqueta: string, tarea: () => Promise<void>): Promise<void> {
+  const protegida = () => tarea().catch((e) => logger.warn(`${etiqueta}_fallo`, { err: e instanceof Error ? e.message : String(e) }));
+  try {
+    after(protegida);
+    return;
+  } catch {
+    /* sin ámbito de petición: cae al camino acotado */
+  }
+  let reloj: ReturnType<typeof setTimeout> | undefined;
+  const techo = new Promise<void>((resolver) => {
+    reloj = setTimeout(() => { logger.warn(`${etiqueta}_techo`, { ms: TECHO_ACCESORIOS_SIN_AFTER_MS }); resolver(); }, TECHO_ACCESORIOS_SIN_AFTER_MS);
+  });
+  await Promise.race([protegida(), techo]);
+  if (reloj) clearTimeout(reloj);
+}
+
+/**
  * Le manda al jefe el cierre: el PDF siempre, el texto solo si hay que decidir.
  *
  * `urlPdf` viene firmada y de vida corta — se pasa desde el cierre en vez de
@@ -297,10 +333,19 @@ export async function avisarCierreAlJefe(args: {
   // El fallo del texto se reporta DESPUÉS de intentar el PDF: el llamador
   // sigue viendo `enviado: false` (y loguea `cierre.jefe_no_avisado`), pero
   // el documento ya se intentó mandar de todos modos.
-  // El acuse «solo folio» del encargado va DESPUÉS y no condiciona nada: ni el
-  // resultado de este aviso ni el sello de entrega dependen de él.
-  await acuseSoloFolioAlEncargado({ tenantId: args.tenantId, viajeId: args.viajeId, resumen, requiereDecision, telefonoDinero: tel, telefonoOperador: args.telefonoOperador })
-    .catch((e) => logger.warn('cierre.acuse_folio_fallo', { viaje: args.viajeId, err: e instanceof Error ? e.message : String(e) }));
+  // Los ACCESORIOS del cierre (el acuse «solo folio» del encargado y el aviso único del
+  // perfil de tarjetas) NO van en la ruta crítica (M2): ni el resultado de este aviso ni
+  // el sello de entrega que el llamador pone DESPUÉS dependen de ellos. Se programan para
+  // después de la respuesta (`after()`); ver `enSegundoPlano`.
+  await enSegundoPlano('cierre.accesorios', async () => {
+    await acuseSoloFolioAlEncargado({ tenantId: args.tenantId, viajeId: args.viajeId, resumen, requiereDecision, telefonoDinero: tel, telefonoOperador: args.telefonoOperador })
+      .catch((e) => logger.warn('cierre.acuse_folio_fallo', { viaje: args.viajeId, err: e instanceof Error ? e.message : String(e) }));
+    // M5: UN aviso por flota (no uno por viaje) mientras las tarjetas del diésel sigan sin declarar.
+    if (resumen.diferencias.some((d) => d.tipo === 'tarjeta_sin_declarar')) {
+      await avisarPerfilTarjetasUnaVez({ tenantId: args.tenantId, telefonoDinero: tel, folio: resumen.folio, operador: resumen.operador })
+        .catch((e) => logger.warn('cierre.aviso_perfil_tarjetas_fallo', { viaje: args.viajeId, err: e instanceof Error ? e.message : String(e) }));
+    }
+  });
 
   if (motivoTexto) return { enviado: false, motivo: motivoTexto, fueraDeVentana, pdfEnviado, pdfEstado };
 

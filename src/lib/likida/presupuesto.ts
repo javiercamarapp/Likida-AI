@@ -126,6 +126,12 @@ export const PASOS_CIERRE: ReadonlyArray<PasoCierre> = [
  * presupuesto de 60 s del webhook (39.6 s de 40 s) y meter aquí cuatro pasos
  * más lo dejaría negativo. Está escrito para que se vea, no para que se
  * olvide; `presupuesto.test.ts` fija su suma.
+ *
+ * M2 (ronda 20): además NO se espera. `avisar_cierre.ts#enSegundoPlano` lo programa
+ * con `after()` y devuelve de inmediato, así que ni siquiera los ~4.7 s nominales
+ * retrasan el sello de entrega; solo sin ámbito de petición (cron, reintentos) se
+ * espera, con un techo duro de `TECHO_ACCESORIOS_SIN_AFTER_MS` (6 s) — el peor caso
+ * encadenado de techos (~48 s) ya no puede colgar el cierre del chofer.
  */
 export const PASOS_POST_CIERRE: Array<{ paso: string; donde: string; ms: number; techoMs: number }> = [
   { paso: 'telefonoJefeDe (encargado)',                     donde: 'contactos.ts',   ms: 600,   techoMs: 2 * TECHO_PASO_CONSULTA_MS },
