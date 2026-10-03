@@ -129,9 +129,13 @@ export const PASOS_CIERRE: ReadonlyArray<PasoCierre> = [
  */
 export const PASOS_POST_CIERRE: Array<{ paso: string; donde: string; ms: number; techoMs: number }> = [
   { paso: 'telefonoJefeDe (encargado)',                     donde: 'contactos.ts',   ms: 600,   techoMs: 2 * TECHO_PASO_CONSULTA_MS },
+  { paso: 'createSignedUrl del sello de entrega del acuse', donde: 'acuse_folio.ts', ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
   { paso: 'upload del PDF solo folio',                      donde: 'acuse_folio.ts', ms: 500,   techoMs: TECHO_PASO_CONSULTA_MS },
   { paso: 'createSignedUrl del PDF solo folio',             donde: 'acuse_folio.ts', ms: 500,   techoMs: TECHO_PASO_CONSULTA_MS },
   { paso: 'sendDocument del acuse solo folio al encargado', donde: 'acuse_folio.ts', ms: 2_500, techoMs: TECHO_ENVIO_WHATSAPP_MS },
+  { paso: 'upload del sello de entrega del acuse',          donde: 'acuse_folio.ts', ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
+  // Solo si Meta rechaza el documento por ventana de 24 h (131047): ruta de excepción, 0 en el nominal.
+  { paso: 'sendText (plantilla) del acuse fuera de ventana', donde: 'acuse_folio.ts', ms: 0,      techoMs: TECHO_ENVIO_WHATSAPP_MS },
 ];
 
 /** Suma nominal de la tabla de arriba. 14.0s con los costos unitarios de este archivo. */

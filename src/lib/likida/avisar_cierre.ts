@@ -133,7 +133,7 @@ export async function resumenDeCierre(tenantId: string, viajeId: string): Promis
   const admin = supabaseAdmin();
   const [rLiq, rViaje] = await Promise.all([
     acotada(admin.from('liquidacion')
-      .select('total_comprobado, total_anticipo, diferencia, diferencias')
+      .select('total_comprobado, total_anticipo, diferencia, diferencias, created_at')
       .eq('viaje_id', viajeId).eq('tenant_id', tenantId)
       .order('created_at', { ascending: false }).limit(1).maybeSingle(), 'resumenDeCierre.liquidacion'),
     acotada(admin.from('viaje')
@@ -158,6 +158,7 @@ export async function resumenDeCierre(tenantId: string, viajeId: string): Promis
     totalComprobado: Number(l.total_comprobado ?? 0),
     diferencia: Number(l.diferencia ?? 0),
     diferencias: (Array.isArray(l.diferencias) ? l.diferencias : []) as DiferenciaResumen[],
+    ...(typeof l.created_at === 'string' ? { cerradaEn: l.created_at } : {}),
   };
 }
 
