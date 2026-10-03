@@ -18,6 +18,7 @@ import { deflateRawSync, crc32 } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { bytesMultiembarque, NOMBRE_MULTIEMBARQUE } from './muestra-multiembarque.mjs';
 
 const require = createRequire(import.meta.url);
 const AQUI = dirname(fileURLToPath(import.meta.url));
@@ -195,6 +196,9 @@ console.log('Carta Porte');
   }
 }
 
+// El Excel con VARIOS embarques (P13): no sale de la base (no es un documento ya leído) sino de su propia definición.
+escribir(`carta_porte/${NOMBRE_MULTIEMBARQUE}`, bytesMultiembarque(require('xlsx')));
+
 // ── 6. Histórico de WhatsApp de 3 grupos críticos (formatos iOS 24 h, Android, iOS 12 h en .zip) ──
 console.log('WhatsApp (histórico exportado)');
 {
@@ -203,14 +207,13 @@ console.log('WhatsApp (histórico exportado)');
     { id: 'arr', estilo: 'android', archivo: 'grupo_arr_ramos_android.txt', cliente: 'Armadora Ficticia Ramos Arizpe', cli: ['Gerente Ficticio de Embarques', 'Auxiliar Ficticio de Recibo'], equipo: ['Despacho Innovativos Demo', 'Servicio a Cliente Demo B'], semilla: 23 },
     { id: 'cfn', estilo: 'ios12', archivo: 'grupo_cfn_apodaca_ios.zip', cliente: 'Cervecería Ficticia del Norte', cli: ['Jefa Ficticia de CEDIS', 'Programador Ficticio de Citas'], equipo: ['Despacho Innovativos Demo', 'Servicio a Cliente Demo C'], semilla: 37 },
   ];
-  const resumen = {};
   for (const g of grupos) {
-    const { texto, stats } = generarChat(g);
-    resumen[g.id] = stats;
+    const { texto } = generarChat(g);
     if (g.archivo.endsWith('.zip')) escribir(`whatsapp/${g.archivo}`, zip([[`Chat de WhatsApp con ${g.cliente}.txt`, Buffer.from(texto, 'utf8')]]));
     else escribir(`whatsapp/${g.archivo}`, texto);
   }
-  escribir('whatsapp/resumen_esperado.json', `${JSON.stringify(resumen, null, 2)}\n`);
+  // `resumen_esperado.json` YA NO lo escribe este generador (eran sus propias cuentas, con su taxonomía): lo calcula el importador REAL del
+  // producto con `regenerar-resumen-esperado.mjs`, y una prueba falla si el archivo deja de coincidir con lo que el importador lee.
 }
 console.log('Listo.');
 

@@ -27,9 +27,26 @@
 -- 255: con cualquier URL no nula el INSERT revienta con «invalid repetition
 -- count(s)». Hallazgo para el stream del Vigía (reportado en la ronda 03).
 insert into vigia_config (tenant_id, habilitado, modo_aprobacion, autoenviar_min_aprobaciones, sla_respuesta_min,
-                          escalar_nivel2_min, retencion_dias, updated_at)
-values (current_setting('inn.tenant')::uuid, false, 'siempre', 5, 10, 30, 180, current_setting('inn.ancla')::timestamptz)
+                          escalar_nivel2_min, retencion_dias, respaldo_correo, updated_at)
+values (current_setting('inn.tenant')::uuid, false, 'siempre', 5, 10, 30, 180, false, current_setting('inn.ancla')::timestamptz)
 on conflict (tenant_id) do nothing;
+
+-- ── LISTA DE DIRECTORES por nivel de escalamiento (P14, 0673) y el respaldo por correo APAGADO ───────────────────
+-- Nivel 1 = gerente de servicio; nivel 2 = director o dueño. Dos personas por nivel, para que se vea que son LISTAS y no un
+-- destino único. Solo CORREO a propósito: `vigia_director.telefono` exige 52 + 10 dígitos y la marca de demo 28999… (la que
+-- garantiza que nadie real recibe un WhatsApp) no cumple ese formato; un teléfono que sí lo cumpla podría ser de alguien. Con
+-- `vigia_config.respaldo_correo = false` (el default, y así se siembra) estos correos NO se usan: el Vigía se comporta como antes.
+-- Al encenderlo, si el aviso por WhatsApp no sale, el MISMO aviso va por correo a esta lista. Correos `.demo.invalid` (no existen).
+insert into vigia_director (id, tenant_id, nivel, nombre, telefono, correo, created_at, updated_at)
+select innovativos_sim.uid('vigiadirector:' || d.clave), current_setting('inn.tenant')::uuid, d.nivel, d.nombre, null, d.correo,
+       current_setting('inn.ancla')::timestamptz - interval '10 days', current_setting('inn.ancla')::timestamptz - interval '10 days'
+from (values
+  ('n1a', 1, 'Gerente de Servicio Ficticia (Bajío)', 'gerente.bajio@innovativos.demo.invalid'),
+  ('n1b', 1, 'Gerente de Servicio Ficticio (Norte)', 'gerente.norte@innovativos.demo.invalid'),
+  ('n2a', 2, 'Director de Operaciones Ficticio',     'director.operaciones@innovativos.demo.invalid'),
+  ('n2b', 2, 'Dueña Ficticia de la Flota',           'duena@innovativos.demo.invalid')
+) d(clave, nivel, nombre, correo)
+on conflict (id) do nothing;
 
 insert into vigia_contacto (id, tenant_id, cliente_id, telefono, telefono_hash, nombre, estado,
                             consentimiento_en, consentimiento_origen, aviso_privacidad_en, created_at, updated_at)

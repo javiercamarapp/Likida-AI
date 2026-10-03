@@ -42,8 +42,10 @@ TABLAS=(
   "peaje_curso_caseta|peaje_curso_caseta|t.tenant_id = '$T'"
   "liquidacion_externa|liquidacion_externa|t.tenant_id = '$T'"
   "cp_documento|cp_documento|t.tenant_id = '$T'"
+  "cp_documento_embarque|cp_documento_embarque|t.tenant_id = '$T'"
   "cp_perfil|cp_perfil|t.tenant_id = '$T'"
   "vigia_config|vigia_config|t.tenant_id = '$T'"
+  "vigia_director|vigia_director|t.tenant_id = '$T'"
   "vigia_contacto|vigia_contacto|t.tenant_id = '$T'"
   "vigia_conversacion|vigia_conversacion|t.tenant_id = '$T'"
   "vigia_mensaje|vigia_mensaje|t.tenant_id = '$T'"
@@ -99,8 +101,14 @@ n=$(psql "$URL" -Atq -c "select (select count(*) from liquidacion_formato_flota 
 [ "$n" = "1" ] || { echo "FALLA: el formato de la flota no trae teléfonos de copia y de discrepancia sembrados" >&2; ok=0; }
 n=$(psql "$URL" -Atq -c "select (select count(*) from liquidacion_aviso_discrepancia where tenant_id = '$T' and estado in ('pendiente', 'enviando')) + (select count(*) from orquestador_escalacion where tenant_id = '$T' and aviso_estado = 'pendiente') + (select count(*) from liquidacion_externa where tenant_id = '$T' and estado in ('pendiente', 'en_cola'))")
 [ "$n" = "0" ] || { echo "FALLA: hay $n avisos o liquidaciones del tenant demo con salida pendiente (algún cron intentaría mandarlos)" >&2; ok=0; }
-n=$(psql "$URL" -Atq -c "select (select count(*) from vigia_config where tenant_id = '$T' and habilitado) + (select count(*) from agente_conductor_config where tenant_id = '$T' and (activo or avisar_senal_vida))")
+n=$(psql "$URL" -Atq -c "select (select count(*) from vigia_config where tenant_id = '$T' and (habilitado or respaldo_correo)) + (select count(*) from agente_conductor_config where tenant_id = '$T' and (activo or avisar_senal_vida))")
 [ "$n" = "0" ] || { echo "FALLA: el Vigía o el Conductor del tenant demo están ENCENDIDOS tras sembrar (deben venir apagados)" >&2; ok=0; }
+# La lista de directores del Vigía (P14) se siembra con CORREO nada más: `vigia_director.telefono` exige 52 + 10 dígitos y la marca 28999… no
+# cumple ese formato; un teléfono que sí lo cumpla podría ser de alguien. Y la lista SÍ está sembrada (el guion la enseña), 2 por nivel.
+n=$(psql "$URL" -Atq -c "select count(*) from vigia_director where tenant_id = '$T' and (telefono is not null or correo not like '%.demo.invalid')")
+[ "$n" = "0" ] || { echo "FALLA: hay $n directores del Vigía del tenant demo con teléfono o con un correo que no es .demo.invalid (alguien real podría recibir un aviso)" >&2; ok=0; }
+n=$(psql "$URL" -Atq -c "select (select count(*) from vigia_director where tenant_id = '$T' and nivel = 1) || '-' || (select count(*) from vigia_director where tenant_id = '$T' and nivel = 2)")
+[ "$n" = "2-2" ] || { echo "FALLA: la lista de directores del Vigía sembrada debía ser 2-2 por nivel y es $n" >&2; ok=0; }
 
 echo "== rol de solo lectura =="
 err="$(psql "$URL" -q -v ON_ERROR_STOP=1 -c "set role innovativos_demo_lector; insert into innovativos_sim.gps_posicion values ('X', 1, 1, now(), 1, 1)" 2>&1 >/dev/null || true)"

@@ -9,6 +9,9 @@
 //   · Vigía: los 3 grupos CRÍTICOS (vigia_grupo, 0484), su histórico exportado (.txt iOS, .txt Android, .zip) leído con
 //     `leerExportWhatsapp` + `textoDeZip` (vigia_historial_import / vigia_historial_mensaje) y las respuestas rápidas
 //     APROBADAS que salen de las FAQs que calcula `analizarHistorial` (vigia_respuesta_rapida, 0647).
+//   · Carta Porte con VARIOS embarques (P13, 0670-0672): el Excel de muestra se lee con el lector del producto (`prepararContenido`), se
+//     PARTE con `evaluarDivision`/`derivarHijos`, el original queda `dividido` por la RPC real `cp_documento_dividir` y cada hijo se lee
+//     con el perfil del cliente (`aplicarPerfil`, sin modelo) y se valida con `validarExtraccion`, como lo haría el worker.
 //
 // POR QUÉ ASÍ: el seed no inventa resultados de un importador; si cambia el importador, cambia lo sembrado (y la prueba
 // de muestras lo delata). Se corre después de sembrar.sql (lo hace sembrar.sh). IDEMPOTENTE: ids deterministas, upsert
@@ -39,6 +42,11 @@ const { leerExportWhatsapp } = await jiti.import(join(raiz, 'src/lib/likida/vigi
 const { textoDeZip } = await jiti.import(join(raiz, 'src/lib/likida/vigia/historial/zip_lector.ts'));
 const { analizarHistorial } = await jiti.import(join(raiz, 'src/lib/likida/vigia/historial/analisis.ts'));
 const { validarRespuestaRapida } = await jiti.import(join(raiz, 'src/lib/likida/vigia/respuestas_rapidas.ts'));
+const { prepararContenido } = await jiti.import(join(raiz, 'src/lib/likida/carta_porte_docs/contenido.ts'));
+const { evaluarDivision, derivarHijos } = await jiti.import(join(raiz, 'src/lib/likida/carta_porte_docs/multiembarque.ts'));
+const { aplicarPerfil } = await jiti.import(join(raiz, 'src/lib/likida/carta_porte_docs/perfiles.ts'));
+const { validarExtraccion, confianzaMinimaCritica } = await jiti.import(join(raiz, 'src/lib/likida/carta_porte_docs/validacion.ts'));
+import { NOMBRE_MULTIEMBARQUE } from './muestra-multiembarque.mjs';
 
 const psql = (input) => execFileSync('psql', [URL_DB, '-Atq', '-v', 'ON_ERROR_STOP=1'], { encoding: 'utf8', input, maxBuffer: 256 * 1024 * 1024 });
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
@@ -122,6 +130,52 @@ elegidas.forEach((r, i) => {
 sql.push('commit;');
 psql(sql.join('\n'));
 
+// ── 3. Carta Porte: un Excel con VARIOS embarques partido en hijos (P13) ─────────────────────────────────────────
+// El padre nace `procesando` (así lo deja el worker al reclamarlo) y la RPC real lo pasa a `dividido` con sus hijos y su linaje. Cada hijo se lee
+// con el perfil del cliente SIN modelo (la siguiente vez del mismo formato) y queda por revisar, con su validación real.
+const PERFIL_CLAVE = 'arr-excel-demo';
+const bytesExcel = new Uint8Array(readFileSync(join(muestras, 'carta_porte', NOMBRE_MULTIEMBARQUE)));
+const mapeos = JSON.parse(psql(`select mapeos::text from cp_perfil_version where tenant_id = '${T}' and perfil_id = ${uid(`cpperfil:${PERFIL_CLAVE}`)} and version = 1`).trim());
+const perfil = { id: 'perfil-demo', clave: PERFIL_CLAVE, nombre: 'Armadora (Excel)', clienteId: null, formato: 'excel', firma: { formato: 'excel' }, versionActiva: 1, activa: { version: 1, mapeos, ejemplos: [] } };
+const contenidoExcel = await prepararContenido(bytesExcel, 'excel');
+const evaluacion = evaluarDivision(contenidoExcel, perfil);
+if (!evaluacion.plan) { console.error(`FALLA: el partidor del producto no partió el Excel de muestra de varios embarques (exceso=${evaluacion.exceso}, variasHojas=${JSON.stringify(evaluacion.variasHojas)}).`); process.exit(1); }
+const hijosDerivados = derivarHijos(evaluacion.plan, NOMBRE_MULTIEMBARQUE);
+const hijosLeidos = [];
+for (const h of hijosDerivados) {
+  const contenido = await prepararContenido(h.bytes, 'csv');
+  const r = aplicarPerfil(perfil, contenido);
+  const validacion = validarExtraccion(r.extraccion, { riesgoInyeccion: false, remitenteReconocido: true });
+  hijosLeidos.push({ ...h, extraccion: r.extraccion, validacion, confianzaMin: confianzaMinimaCritica(r.extraccion), textoExtracto: Buffer.from(h.bytes).toString('utf8').slice(0, 2000) });
+}
+const idPadre = uid(`cpdoc:${NOMBRE_MULTIEMBARQUE}`);
+const shaPadre = createHash('sha256').update(bytesExcel).digest('hex');
+// El id de cada hijo es determinista (igual que `uid` en SQL: md5 → uuid); la RPC lo respeta cuando viene en el hijo.
+const uuidJs = (k) => { const x = createHash('md5').update(`innovativos-demo-0620:${k}`).digest('hex'); return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`; };
+const idHijo = (h) => `'${uuidJs(`cpdoc:${NOMBRE_MULTIEMBARQUE}:hijo:${h.indice}`)}'::uuid`;
+const fecha = "(select valor::timestamptz from innovativos_sim.meta where clave = 'ancla')";
+const cp = ['begin;',
+  // Idempotente: se rehace el padre y sus hijos desde cero (los hijos primero; la ficha de linaje cae en cascada con cualquiera de los dos).
+  `delete from cp_documento where tenant_id = '${T}' and id in (${hijosLeidos.map(idHijo).join(',')});`,
+  `delete from cp_documento where tenant_id = '${T}' and id = ${idPadre};`,
+  `insert into cp_documento (id, tenant_id, canal, formato, nombre_archivo, mime, bytes, sha256, estado, version, intentos, procesando_hasta, cliente_id, perfil_id, perfil_version,
+                            remitente, asunto, remitente_reconocido, modelo, retener_hasta, created_at, updated_at)
+   values (${idPadre}, '${T}', 'whatsapp', 'excel', ${q(NOMBRE_MULTIEMBARQUE)}, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ${bytesExcel.length}, ${q(shaPadre)},
+           'procesando', 2, 1, ${fecha} + interval '2 minutes', ${uid('cliente:c10')}, ${uid(`cpperfil:${PERFIL_CLAVE}`)}, 1,
+           'logistica@c10.demo.invalid', 'Plan de embarques del día', true, 'demo-sintetico', ${fecha} + interval '180 days', ${fecha} - interval '3 hours', ${fecha} - interval '3 hours');`,
+  `select count(*) from cp_documento_dividir('${T}', ${idPadre}, 2, ${q(JSON.stringify(hijosLeidos.map((h) => ({ id: uuidJs(`cpdoc:${NOMBRE_MULTIEMBARQUE}:hijo:${h.indice}`), indice: h.indice, clave: h.clave, nombre: h.nombre, sha256: h.sha256, bytes: h.bytes.length, storage_ruta: null }))))}::jsonb,
+         ${fecha} + interval '180 days', ${fecha} + interval '180 days');`,
+];
+for (const h of hijosLeidos) {
+  cp.push(`update cp_documento set estado = 'por_revisar', version = 2, perfil_id = ${uid(`cpperfil:${PERFIL_CLAVE}`)}, perfil_version = 1, texto_extracto = ${q(h.textoExtracto)},
+           extraccion = ${q(JSON.stringify(h.extraccion))}::jsonb, validacion = ${q(JSON.stringify(h.validacion))}::jsonb, confianza_min = ${h.confianzaMin ?? 'null'}, nivel_modelo = 1, modelo = 'demo-sintetico',
+           abierto_en = ${fecha} - interval '2 hours', created_at = ${fecha} - interval '3 hours', updated_at = ${fecha} - interval '2 hours', remitente = 'logistica@c10.demo.invalid', asunto = 'Plan de embarques del día'
+         where tenant_id = '${T}' and id = ${idHijo(h)};`);
+}
+cp.push(`update cp_documento set modelo = 'demo-sintetico', updated_at = ${fecha} - interval '3 hours' where tenant_id = '${T}' and id = ${idPadre};`, 'commit;');
+psql(cp.join('\n'));
+
 console.log(`formato de liquidación derivado del Excel de muestra: ${derivado.formato.columnas.length} columnas, ${derivado.formato.datos.length} datos de encabezado; copia a ${COPIA.length} y discrepancia a ${DISCREPANCIA.length} teléfonos 28999…`);
 for (const g of leidos) console.log(`histórico del grupo ${g.cli}: ${g.mensajes.length} mensajes leídos por el importador real`);
 console.log(`respuestas rápidas aprobadas desde las FAQs del histórico: ${elegidas.length} (${elegidas.map((r) => r.tema).join(', ')})`);
+console.log(`Carta Porte con varios embarques (P13): ${NOMBRE_MULTIEMBARQUE} partido por el producto en ${hijosLeidos.length} hijos (${hijosLeidos.map((h) => `${h.clave}: ${h.filas} fila${h.filas === 1 ? '' : 's'}`).join('; ')}); cada uno leído con el perfil del cliente`);

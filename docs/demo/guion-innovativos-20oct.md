@@ -152,7 +152,8 @@ Vigía encendido (`--encender-agentes`), si no la pantalla dice que está apagad
 
 **Datos sembrados:** 3 clientes críticos con su conversación y su **grupo crítico** (plazo de 10 min); **modo copiloto**
 (el agente sugiere, una persona envía); SLA de 10 min y escalamiento a los 30; el **histórico exportado** de los 3 grupos
-leído por el importador real; **2 respuestas rápidas aprobadas**.
+leído por el importador real; **2 respuestas rápidas aprobadas**; y la **lista de directores** por nivel de escalamiento
+(2 en el nivel 1, gerentes de servicio, y 2 en el nivel 2, director y dueña) con el **respaldo por correo apagado**.
 
 **Se enseña**
 1. **[corre hoy] Autopartes Ficticias del Bajío — 14 min sin respuesta** (SLA 10): el cliente escribió «¿Ya salió la
@@ -169,6 +170,14 @@ leído por el importador real; **2 respuestas rápidas aprobadas**.
    FAQs y tendencias se baja en Excel o PDF. De las FAQs se aprueban **respuestas rápidas** (2 sembradas) que el Vigía usa
    como base del borrador cuando no entiende un mensaje que se les parece; las quejas y «quiero hablar con alguien» las
    atiende siempre una persona.
+5. **[corre hoy, verificado] La lista de directores y su respaldo por correo** (P14, mig. 0673): el aviso de escalamiento
+   ya no va a **un solo teléfono**: nivel 1 = **gerentes de servicio**, nivel 2 = **director y dueña**, cada persona con
+   WhatsApp, correo o ambos (hasta 10 por nivel; solo el dueño de la flota la edita). En el demo hay 2 por nivel, **solo con
+   correo** `…demo.invalid` (un teléfono con el formato que exige la lista podría ser de alguien; la marca `28999…` no lo
+   cumple) y **el respaldo por correo apagado** (`respaldo_correo = false`, el valor de siempre): así el Vigía se comporta
+   como antes. Se enseña **qué pasa al encenderlo**: si el aviso por WhatsApp a un nivel no sale (plantilla sin aprobar,
+   ventana de 24 h cerrada, rechazo), el **mismo** aviso sale por correo a quien tenga correo en la lista, **una sola vez**
+   por escalamiento. *(El demo no manda ningún correo: el respaldo necesita Resend y el interruptor encendido.)*
 
 | Grupo | Mensajes leídos | De cliente | Respuestas >10 min | Mediana / p90 (min) | Quejas | Temas más frecuentes |
 |---|---|---|---|---|---|---|
@@ -304,8 +313,8 @@ aprobada).
 
 **Pantalla:** `/dashboard/carta-porte/documentos` (bandeja de revisión) y la exportación por mapeo.
 
-**Datos sembrados:** 14 documentos de 3 clientes ficticios (PDF, Excel, CSV): **6 aprobados, 5 por revisar, 1
-rechazado, 1 recibido y 1 fallido**; 3 perfiles (mapeos); un formato de exportación **sintético**. **Los valores, las
+**Datos sembrados:** 18 documentos de 3 clientes ficticios (PDF, Excel, CSV): **6 aprobados, 8 por revisar, 1
+rechazado, 1 recibido, 1 fallido y 1 dividido**; 3 perfiles (mapeos); un formato de exportación **sintético**. **Los valores, las
 confianzas y la «evidencia» de los documentos leídos son dato de demo escrito por el seed, no salida de un modelo**; el
 tamaño y el `sha256` son inventados y el archivo no está en Storage (vive en `archivos-muestra/`).
 
@@ -327,6 +336,14 @@ tamaño y el `sha256` son inventados y el archivo no está en Storage (vive en `
    ocurre al **subir** un documento.
 5. **[corre hoy] Salida a su sistema:** la exportación con el mapeo declarado → un CSV con las columnas de carga
    (sintéticas) que Excel abre, o un **.xlsx** nativo; cuando llegue su formato real, se carga como configuración.
+6. **[corre hoy, verificado] Un Excel con varios embarques** (P13, mig. 0670-0672): `orden_c10_multi_embarques.xlsx`
+   (Armadora, **3 pedidos y 6 renglones de mercancía** en una sola hoja). El partidor del producto agrupa por folio y lo
+   **parte en 3 documentos**, uno por embarque (`C10-801`, `C10-802`, `C10-803`); el original queda como **constancia**
+   (`dividido`, sin revisión propia) y cada hijo lleva su **linaje** (de qué archivo nació, su lugar «1 de 3», el folio) y
+   sigue el camino de siempre. En el demo el partido lo hizo el **código real** al sembrar (`sembrar-importadores.mjs`: el
+   lector de Excel, `evaluarDivision`, la RPC `cp_documento_dividir`, y cada hijo leído con el perfil del cliente **sin
+   modelo**); quedan **por revisar** con las dudas reales que la validación encuentra (a la hoja le faltan el remitente,
+   el operador y las placas). Se dice: «ya no se pierde ningún embarque en silencio: antes se leía el primero».
 
 **Qué decir**
 - «Cada cliente manda **su** formato. El perfil por cliente es lo que hace que esto escale **sin reprogramar**.»
@@ -334,7 +351,8 @@ tamaño y el `sha256` son inventados y el archivo no está en Storage (vive en `
 
 **[depende del cliente]** Documentos reales de 3 a 5 clientes grandes y su Excel/sistema de carga: hasta entonces la
 exactitud que se muestra es la de documentos de **muestra**; la exactitud real se mide con sus documentos. Un Excel con
-Un Excel con **varios embarques** se parte solo en un documento por embarque (cada uno con su revisión y su viaje; el original queda como constancia). **[depende de aplicar 0670-0671]** Sin esas migraciones lee el primero y avisa.
+**varios embarques** se parte solo en un documento por embarque (cada uno con su revisión y su viaje; el original queda
+como constancia). **[depende de aplicar 0670-0672]** Sin esas migraciones lee el primero y avisa.
 **[depende de Meta / Resend]** El aviso a la oficina sale por WhatsApp con la plantilla `aviso_operacion_v1` (sin
 aprobar) y el canal de correo necesita el dominio y los webhooks de Resend. **Costo de modelo:** una carga **en vivo**
 de un documento nuevo llama a un modelo (costo mínimo por documento); en el demo se usan los **precargados** salvo que
