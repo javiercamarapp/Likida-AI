@@ -190,6 +190,9 @@ const MENSAJE_GUARDAR: Record<'conflicto' | 'no_existe' | 'duplicado' | 'referen
   invalida: 'La base rechazó un dato del convenio: revisa las fechas y los textos.',
 };
 
+/** Resultados de un reenvío que no son un fallo: no hay nada pendiente que la oficina deba reintentar. */
+const NO_ES_FALLO_DE_ENVIO: ReadonlySet<ResultadoEnvioInstrucciones['estado']> = new Set(['sin_instrucciones', 'ya_enviado', 'perdido']);
+
 const plural = (n: number, uno: string, varios: string): string => `${n} ${n === 1 ? uno : varios}`;
 
 /**
@@ -238,7 +241,9 @@ export async function guardarConvenioDelPanel(
     for (const c of porReenviar) {
       const r = await d.enviar(ctx.tenantId, c.viajeId);
       if (r.estado === 'enviado') enviados++;
-      else sinMandar.push(c.viajeId);
+      // R10-2: «no hay nada que mandar» (sin instrucciones de despacho), «ya se había mandado» y «otro proceso lo está mandando» NO son
+      // un fallo: contarlos como «no pudo recibirlas» mandaba a la oficina por un camino que borra los sellos de acercamiento.
+      else if (!NO_ES_FALLO_DE_ENVIO.has(r.estado)) sinMandar.push(c.viajeId);
     }
     const partes = [`${base} Se actualizaron las instrucciones de ${plural(cambiados.length, 'viaje en curso', 'viajes en curso')}.`];
     if (entrada.reenviar) {

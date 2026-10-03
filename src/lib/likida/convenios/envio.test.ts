@@ -75,6 +75,37 @@ describe('despacharInstrucciones', () => {
     expect(enviados).toHaveLength(1);
   });
 
+  it('R10-3: si el refresco del convenio cae ENTRE leer la foto y ganar el reclamo, se manda la foto NUEVA (no la vieja) y queda sellado', async () => {
+    const conRefresco: import('./envio').PuertosEnvio = {
+      ...puertos(),
+      async reclamar(t, v, cual, ahora) {
+        // la edición con «llevar a los viajes» cae justo antes del reclamo: la foto del viaje cambia
+        const fila = mundo.tablas.viaje_convenio.find((x) => x.viaje_id === v)!;
+        fila.instrucciones = [{ categoria: 'documentos', texto: 'Solo la orden de compra NUEVA', momento: 'despacho', lugar: 'ambos', orden: 0 }];
+        return envio.puertosEnvioReales.reclamar(t, v, cual, ahora);
+      },
+    };
+    expect(await envio.despacharInstrucciones(A, viajeId, conRefresco)).toEqual({ estado: 'enviado', canal: 'texto' });
+    expect(enviados).toHaveLength(1);
+    expect(enviados[0].texto).toContain('Solo la orden de compra NUEVA');
+    expect(enviados[0].texto).not.toContain('Carta porte y orden de compra');
+    expect(mundo.tablas.viaje_convenio[0].despacho_enviado_en).toBeTruthy();
+  });
+
+  it('R10-3: si la foto nueva ya no trae nada para el despacho, no se manda lo viejo y el reclamo se suelta (la siguiente corrida decide)', async () => {
+    const conRefresco: import('./envio').PuertosEnvio = {
+      ...puertos(),
+      async reclamar(t, v, cual, ahora) {
+        mundo.tablas.viaje_convenio.find((x) => x.viaje_id === v)!.instrucciones = [{ categoria: 'reportarse', texto: 'Con el guardia', momento: 'acercamiento', lugar: 'origen', orden: 0 }];
+        return envio.puertosEnvioReales.reclamar(t, v, cual, ahora);
+      },
+    };
+    expect(await envio.despacharInstrucciones(A, viajeId, conRefresco)).toEqual({ estado: 'sin_instrucciones' });
+    expect(enviados).toHaveLength(0);
+    expect(mundo.tablas.viaje_convenio[0].despacho_enviado_en ?? null).toBeNull();
+    expect(mundo.tablas.viaje_convenio[0].despacho_reclamado_en ?? null).toBeNull();
+  });
+
   it('sin convenio del cliente no manda nada y no falla', async () => {
     const otro = mundo.poner('cliente', { tenant_id: A, nombre: 'Otro' });
     const v = mundo.poner('viaje', { tenant_id: A, cliente_id: otro.id, operador_id: mundo.tablas.operador[0].id, estatus: 'abierto' });
