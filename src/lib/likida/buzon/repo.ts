@@ -1,7 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
-import { traerTodo, conteo } from '../pg';
 import { leerDescripcionPrimerConcepto, compararReceptor } from '../proveedores';
 import type { CfdiXmlData } from '../intake/cfdi_xml';
 import type { EstadoSat } from '../intake/sat';
@@ -270,30 +269,51 @@ export interface ConteoBuzon {
   facturasPorRevisar: number;
 }
 
-/** Cuenta TODO lo recibido en los últimos `dias`, paginado y demostrado (no un `.limit()` recortado). */
+/**
+ * Cuenta TODO lo recibido en los últimos `dias`, con conteos EXACTOS en SQL (no un `.limit()` recortado).
+ *
+ * RONDA 16 (carga de 250 camiones): antes `traerTodo` paginaba por offset TODAS las
+ * recepciones de la ventana (con un correo de facturas por viaje, decenas de miles) para
+ * hacer un `for` que sumaba por estado. Ahora son conteos `head: true` (no viaja ninguna fila):
+ * uno por estado y el total, en paralelo, más UNA fila para la fecha de la última recepción.
+ */
 export async function conteoBuzon(tenantId: string, ahora: Date, dias = 30): Promise<ConteoBuzon> {
   const desde = new Date(ahora.getTime() - dias * 86_400_000).toISOString();
-  const filas = await traerTodo<{ estado: EstadoRecepcion; recibido_en: string }>(
-    (d, h) => supabaseAdmin()
+  const contar = async (estado?: EstadoRecepcion): Promise<number> => {
+    let q = supabaseAdmin()
       .from('buzon_recepcion')
-      .select('estado, recibido_en', conteo(d))
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .gte('recibido_en', desde);
+    if (estado) q = q.eq('estado', estado);
+    const { count, error } = await acotada(q, 'buzon.conteo');
+    if (error || typeof count !== 'number') throw new Error(`conteoBuzon: ${error?.message ?? 'sin conteo'}`);
+    return count;
+  };
+  const estados: EstadoRecepcion[] = ['procesada', 'duplicada', 'revision', 'descartada', 'ignorada', 'rechazada', 'error'];
+  const [total, porCada, ultima, porRevisar] = await Promise.all([
+    contar(),
+    Promise.all(estados.map((e) => contar(e))),
+    acotada(supabaseAdmin()
+      .from('buzon_recepcion')
+      .select('recibido_en')
       .eq('tenant_id', tenantId)
       .gte('recibido_en', desde)
       .order('recibido_en', { ascending: false })
       .order('id', { ascending: false })
-      .range(d, h),
-    'buzon.conteo',
-  );
-  const porEstado: Record<EstadoRecepcion, number> = { procesada: 0, duplicada: 0, revision: 0, descartada: 0, ignorada: 0, rechazada: 0, error: 0 };
-  for (const f of filas) porEstado[f.estado] = (porEstado[f.estado] ?? 0) + 1;
-  const { count, error } = await acotada(supabaseAdmin()
-    .from('factura_proveedor')
-    .select('id', { count: 'exact', head: true })
-    .eq('tenant_id', tenantId)
-    .eq('estado', 'pendiente')
-    .eq('requiere_revision', true), 'buzon.facturas_por_revisar');
-  if (error || typeof count !== 'number') throw new Error(`conteoBuzon: ${error?.message ?? 'sin conteo'}`);
-  return { porEstado, total: filas.length, ultimaRecepcionEn: filas[0]?.recibido_en ?? null, facturasPorRevisar: count };
+      .limit(1), 'buzon.conteo_ultima'),
+    acotada(supabaseAdmin()
+      .from('factura_proveedor')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .eq('estado', 'pendiente')
+      .eq('requiere_revision', true), 'buzon.facturas_por_revisar'),
+  ]);
+  if (ultima.error) throw new Error(`conteoBuzon: ${ultima.error.message}`);
+  if (porRevisar.error || typeof porRevisar.count !== 'number') throw new Error(`conteoBuzon: ${porRevisar.error?.message ?? 'sin conteo'}`);
+  const porEstado = Object.fromEntries(estados.map((e, i) => [e, porCada[i]])) as Record<EstadoRecepcion, number>;
+  const ult = (ultima.data ?? [])[0] as { recibido_en: string } | undefined;
+  return { porEstado, total, ultimaRecepcionEn: ult?.recibido_en ?? null, facturasPorRevisar: porRevisar.count };
 }
 
 /** Una persona descarta un archivo en revisión (no era una factura). Borra el PDF guardado. */
