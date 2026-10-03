@@ -2,7 +2,7 @@
 //   npx tsx scripts/generar-fixtures-portales.ts
 // Un fixture `grabado` (DOM real saneado, escrito por scripts/verificar-portal.mjs) NO se pisa. Ver
 // src/lib/likida/autofactura/fixtures_portal.ts para lo que estos fixtures prueban y lo que no.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GUIONES } from '@/lib/likida/facturacion/adaptadores/portales';
 import { construirFixture } from '@/lib/likida/autofactura/fixtures_portal';
@@ -11,7 +11,17 @@ import { huellaDeGuion } from '@/lib/likida/autofactura/verificacion';
 const RAIZ = join(process.cwd(), 'src/lib/likida/facturacion/adaptadores/fixtures');
 mkdirSync(RAIZ, { recursive: true });
 const manifiestoRuta = join(RAIZ, 'manifest.json');
-const previo: Record<string, { origen: string }> = existsSync(manifiestoRuta) ? JSON.parse(readFileSync(manifiestoRuta, 'utf8')).portales ?? {} : {};
+// Se lee directo y se distingue «no existe» por el código del error: `existsSync` + lectura abría una
+// ventana entre la comprobación y el uso (CodeQL js/file-system-race).
+function leerManifiestoPrevio(): Record<string, { origen: string }> {
+  try {
+    return JSON.parse(readFileSync(manifiestoRuta, 'utf8')).portales ?? {};
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return {};
+    throw e;
+  }
+}
+const previo = leerManifiestoPrevio();
 const portales: Record<string, unknown> = {};
 
 for (const g of GUIONES) {
