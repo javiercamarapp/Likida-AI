@@ -21,7 +21,7 @@ describe('cambiosDeFormulario', () => {
     f.set('c:origen_rfc', new File(['x'], 'x.txt'));
     const r = cambiosDeFormulario(f, extraccionAtlasOk());
     expect(r.cambios.map((c) => c.campo)).toEqual(['origen_cp']);
-    expect(r.ignorados.sort()).toEqual(['c:__proto__'.replace('__proto__', '__proto__'), 'c:inventado', 'c:origen_rfc', 'm:0:inventado', 'm:9:descripcion'].sort());
+    expect(r.ignorados.sort()).toEqual(['c:__proto__', 'c:inventado', 'c:origen_rfc', 'm:0:inventado', 'm:9:descripcion'].sort());
   });
 
   it('un valor kilométrico se recorta antes de llegar al servicio', () => {

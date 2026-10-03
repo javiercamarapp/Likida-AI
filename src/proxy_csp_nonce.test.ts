@@ -187,7 +187,7 @@ describe('contrato: el nonce solo funciona si estas condiciones se mantienen', (
     for (const f of fuentes('src/app')) {
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       const src = readFileSync(f, 'utf8').split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
-      if (/<script[\s>]/.test(src) || /from 'next\/script'/.test(src)) inline.push(f);
+      if (/<script[\s>]/i.test(src) || /from 'next\/script'/.test(src)) inline.push(f);
     }
     expect(inline).toEqual(['src/app/layout.tsx']);
   });

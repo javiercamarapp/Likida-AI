@@ -379,7 +379,7 @@ describe('AUDITORÍA 32 c9 — SEG-32C9-C1: un monto con marca de dinero no es u
       ),
     ).toEqual([]);
   });
-})
+});
 
 describe('AUDITORÍA 32 c10 — SEG/AG/TC-32C10-C1: la banda 1900-2099 sin marca de dinero', () => {
   // Lo que `2d527d6` (c9) cerró fue la MITAD marcada: `$2000`, `2000 pesos`,

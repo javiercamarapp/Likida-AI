@@ -47,7 +47,7 @@ describe('la dirección pj-<token>@dominio', () => {
   it('el nombre del adjunto se sanea: sin rutas, sin control ni caracteres de dirección de texto', () => {
     expect(nombreAdjuntoSeguro('../../etc/passwd.csv')).toBe('passwd.csv');
     expect(nombreAdjuntoSeguro('C:\\x\\corte.xlsx')).toBe('corte.xlsx');
-    expect(nombreAdjuntoSeguro('co\u202Ertc.csv\u0000')).toBe('cortc.csv'.replace('cortc', 'co' + 'rtc'));
+    expect(nombreAdjuntoSeguro('co\u202Ertc.csv\u0000')).toBe('cortc.csv');
     expect(nombreAdjuntoSeguro('')).toBe('desglose');
     expect(nombreAdjuntoSeguro('..')).toBe('desglose');
     expect(nombreAdjuntoSeguro('a'.repeat(500)).length).toBe(200);
