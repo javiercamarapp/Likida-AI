@@ -144,39 +144,136 @@ export function entradaDeRegistro(a: {
 
 // ── El DOM grabado, saneado (para el fixture `grabado`) ─────────────────────
 
+const ETIQUETAS_CON_CUERPO_FUERA = new Set(['script', 'noscript', 'iframe', 'object', 'embed']);
+const ATRIBUTOS_FUERA = new Set(['nonce', 'integrity', 'data-token', 'data-csrf', 'data-sitekey', 'autocomplete']);
+const esBlanco = (c: string | undefined): boolean => c === ' ' || c === '\n' || c === '\t' || c === '\r' || c === '\f';
+const esInicioDeNombre = (c: string | undefined): boolean => c !== undefined && /[A-Za-z_:]/.test(c);
+const esCharDeNombre = (c: string | undefined): boolean => c !== undefined && /[-A-Za-z0-9_:.]/.test(c);
+
+/** Escapa lo que no es etiqueta: un `>` o `<` suelto en el texto nunca puede volver a leerse como marcado. */
+function escaparTexto(t: string): string {
+  return t.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function escaparValor(v: string): string {
+  return v.replace(/&(?![a-zA-Z#][a-zA-Z0-9]*;)/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Fin (índice del `>`) de la etiqueta que empieza en `desde` (un `<`), respetando comillas; -1 si no cierra. */
+function finDeEtiqueta(html: string, desde: number): number {
+  let comilla = '';
+  for (let i = desde + 1; i < html.length; i++) {
+    const c = html[i];
+    if (comilla) { if (c === comilla) comilla = ''; continue; }
+    if (c === '"' || c === "'") { comilla = c; continue; }
+    if (c === '>') return i;
+  }
+  return -1;
+}
+
+/** Nombre y atributos de lo que hay entre `<` y `>`, leídos carácter a carácter (sin regex de etiquetas). */
+function leerEtiqueta(cuerpo: string): { cierre: boolean; nombre: string; atributos: Array<[string, string | null]> } {
+  let i = 0;
+  const cierre = cuerpo[0] === '/';
+  if (cierre) i++;
+  let nombre = '';
+  if (esInicioDeNombre(cuerpo[i])) while (esCharDeNombre(cuerpo[i])) nombre += cuerpo[i++];
+  const atributos: Array<[string, string | null]> = [];
+  while (i < cuerpo.length) {
+    while (i < cuerpo.length && (esBlanco(cuerpo[i]) || cuerpo[i] === '/')) i++;
+    if (!esInicioDeNombre(cuerpo[i])) { i++; continue; } // basura (p. ej. un `<` o una comilla suelta): se descarta
+    let an = '';
+    while (esCharDeNombre(cuerpo[i])) an += cuerpo[i++];
+    while (esBlanco(cuerpo[i])) i++;
+    let valor: string | null = null;
+    if (cuerpo[i] === '=') {
+      i++;
+      while (esBlanco(cuerpo[i])) i++;
+      const q = cuerpo[i];
+      if (q === '"' || q === "'") {
+        const f = cuerpo.indexOf(q, i + 1);
+        valor = cuerpo.slice(i + 1, f < 0 ? cuerpo.length : f);
+        i = f < 0 ? cuerpo.length : f + 1;
+      } else {
+        let v = '';
+        while (i < cuerpo.length && !esBlanco(cuerpo[i])) v += cuerpo[i++];
+        valor = v;
+      }
+    }
+    atributos.push([an.toLowerCase(), valor]);
+  }
+  return { cierre, nombre: nombre.toLowerCase(), atributos };
+}
+
+/** Índice justo después del `>` que cierra `</nombre`, o -1. */
+function despuesDeCierre(html: string, minusculas: string, nombre: string, desde: number): number {
+  const k = minusculas.indexOf(`</${nombre}`, desde);
+  if (k < 0) return -1;
+  const g = html.indexOf('>', k);
+  return g < 0 ? -1 : g + 1;
+}
+
 /**
  * Quita lo que no debe llegar a git: scripts, estilos en línea de terceros, iframes, comentarios, atributos de
  * evento, valores de campos, tokens y todo lo que parezca un correo o un RFC. El resultado se REVISA a mano
  * antes de commitear (runbook), esto es la primera barrera, no la única.
+ *
+ * NO sanea con regex de etiquetas (un patrón que borra `<script>` puede reconstruir otro al juntar los trozos
+ * que quedan: CodeQL js/incomplete-multi-character-sanitization). Recorre el HTML una sola vez, reconstruye
+ * cada etiqueta desde sus partes ya leídas y ESCAPA cualquier `<` / `>` que no pertenezca a una etiqueta
+ * completa, así que lo emitido no puede volver a leerse como marcado distinto del que se decidió.
  */
-function pasadaSaneoHtml(html: string): string {
-  return html
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<(script|noscript|iframe|object|embed)\b[\s\S]*?<\/\1>/gi, '')
-    .replace(/<(script|iframe|object|embed|link)\b[^>]*\/?>/gi, '')
-    .replace(/<meta\b[^>]*(csrf|token|nonce|viewport-fit)[^>]*>/gi, '')
-    .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/\s+(nonce|integrity|data-token|data-csrf|data-sitekey|autocomplete)\s*=\s*("[^"]*"|'[^']*')/gi, '')
-    .replace(/(<input\b[^>]*?\svalue\s*=\s*)("[^"]*"|'[^']*')/gi, '$1""')
-    .replace(/(<input\b[^>]*type\s*=\s*["']hidden["'][^>]*?\svalue\s*=\s*)("[^"]*"|'[^']*')/gi, '$1""')
-    .replace(/<textarea\b([^>]*)>[\s\S]*?<\/textarea>/gi, '<textarea$1></textarea>')
+export function sanearHtml(html: string): string {
+  const minusculas = html.toLowerCase();
+  let out = '';
+  let i = 0;
+  while (i < html.length) {
+    if (html[i] !== '<') {
+      const j = html.indexOf('<', i);
+      const fin = j < 0 ? html.length : j;
+      out += escaparTexto(html.slice(i, fin));
+      i = fin;
+      continue;
+    }
+    if (html.startsWith('<!--', i)) {
+      const f = html.indexOf('-->', i + 4);
+      i = f < 0 ? html.length : f + 3;
+      continue;
+    }
+    const f = finDeEtiqueta(html, i);
+    const cuerpo = f < 0 ? '' : html.slice(i + 1, f);
+    if (f >= 0 && (cuerpo[0] === '!' || cuerpo[0] === '?')) {
+      if (minusculas.startsWith('<!doctype', i)) out += '<!DOCTYPE html>';
+      i = f + 1;
+      continue;
+    }
+    const t = f < 0 ? null : leerEtiqueta(cuerpo);
+    if (!t || !t.nombre) { out += '&lt;'; i++; continue; } // un `<` que no abre etiqueta es texto
+    if (ETIQUETAS_CON_CUERPO_FUERA.has(t.nombre)) {
+      if (t.cierre) { i = f + 1; continue; }
+      const d = despuesDeCierre(html, minusculas, t.nombre, f + 1);
+      i = d < 0 ? html.length : d;
+      continue;
+    }
+    if (t.cierre) { out += `</${t.nombre}>`; i = f + 1; continue; }
+    if (t.nombre === 'link') { i = f + 1; continue; }
+    if (t.nombre === 'meta' && /(csrf|token|nonce|viewport-fit)/i.test(cuerpo)) { i = f + 1; continue; }
+    const partes = t.atributos
+      .filter(([n]) => !ATRIBUTOS_FUERA.has(n) && !(n.length > 2 && n.startsWith('on')))
+      .map(([n, v]) => {
+        if (v === null) return n;
+        return `${n}="${escaparValor(t.nombre === 'input' && n === 'value' ? '' : v)}"`;
+      });
+    out += `<${[t.nombre, ...partes].join(' ')}>`;
+    i = f + 1;
+    if (t.nombre === 'textarea') {
+      const d = despuesDeCierre(html, minusculas, 'textarea', i);
+      out += '</textarea>';
+      i = d < 0 ? html.length : d;
+    }
+  }
+  return out
     .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, 'correo@fixture.invalid')
     .replace(/\b[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b/g, 'XAXX010101000')
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '00000000-0000-4000-8000-000000000001')
     .replace(/\n{3,}/g, '\n\n');
-}
-
-/**
- * Una sola pasada puede RECONSTRUIR lo que quitó (`<scr<script></script>ipt>` →
- * `<script>` tras borrar el interior): se repite hasta que el texto deja de cambiar
- * (CodeQL js/incomplete-multi-character-sanitization). El tope evita un bucle patológico.
- */
-export function sanearHtml(html: string): string {
-  let actual = html;
-  for (let i = 0; i < 10; i++) {
-    const siguiente = pasadaSaneoHtml(actual);
-    if (siguiente === actual) return siguiente;
-    actual = siguiente;
-  }
-  return actual;
 }
