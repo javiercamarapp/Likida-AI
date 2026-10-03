@@ -309,12 +309,12 @@ describe('la latencia de los crons (puerta → latido)', () => {
     try {
       vi.setSystemTime(new Date('2026-10-03T12:00:00Z'));
       await puertaCron('gps', autorizada(), '');
-      vi.setSystemTime(new Date('2026-10-03T12:00:02.500Z'));
+      vi.advanceTimersByTime(2500);
       await registrarLatido('gps', 'ok');
       expect(insertLatencia).toHaveBeenCalledTimes(1);
       expect(insertLatencia).toHaveBeenCalledWith({ tipo: 'cron', nombre: 'gps', ms: 2500, ok: true });
       await puertaCron('gps', autorizada(), '');
-      vi.setSystemTime(new Date('2026-10-03T12:00:03Z'));
+      vi.advanceTimersByTime(500);
       await registrarLatido('gps', 'fallo');
       expect(insertLatencia).toHaveBeenLastCalledWith(expect.objectContaining({ ok: false }));
     } finally { vi.useRealTimers(); }
