@@ -21,7 +21,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { traerTodoDesdeId, LecturaCortadaPorReloj, PAGINA } from '@/lib/likida/pg';
+import { traerTodoPorLlave, llaveFechaId, despuesDeFechaId, LecturaCortadaPorReloj, PAGINA, type LlaveFechaId } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
 import type { Gasto } from '@/types/likida';
@@ -172,15 +172,15 @@ export function rangoPendiente(
  * gastos sin comprobante en el mes, `decidirCruce` solo veía la mitad del
  * fondo: los CFDI cuyo ticket cayó fuera del corte se marcaban `disponible`
  * en vez de `casado`, y el sello de dedup impide una segunda oportunidad
- * automática. `traerTodoDesdeId` trae el fondo COMPLETO o lanza.
+ * automática. `traerTodoPorLlave` trae el fondo COMPLETO o lanza.
  */
 export async function gastosSinCfdi(
   tenantId: string, desde: string, hasta: string, venceEn?: number,
 ): Promise<Gasto[]> {
-  const data = await traerTodoDesdeId<{
+  const leidos = await traerTodoPorLlave<{
     id: string; concepto: unknown; monto: unknown; fecha: unknown;
     rfc_emisor: unknown; cfdi_uuid: unknown; ocr_extra: unknown;
-  }>(
+  }, LlaveFechaId>(
     (despuesDe) => {
       let q = supabaseAdmin()
         .from('gasto')
@@ -192,16 +192,21 @@ export async function gastosSinCfdi(
         // consolidados (VENTANA_DIAS_FECHA, 0076).
         .gte('fecha', sumarDias(desde, -1))
         .lte('fecha', sumarDias(hasta, 1));
-      // RONDA 16 (carga de 250 camiones): cursor por `id` y no `range(d, h)`.
+      // RONDA 16 (carga de 250 camiones): cursor `(fecha, id)` y no `range(d, h)`.
       // Con 10-23k tickets sin CFDI en el rango son hasta 23 páginas; por offset
-      // cada una cuesta más (O(n²)) y un ticket nuevo mientras se pagina corre
-      // las posiciones. El resultado es el mismo conjunto, ordenado por `id`.
-      if (despuesDe !== null) q = q.gt('id', despuesDe);
-      return acotada(q.order('id').limit(PAGINA), 'sat_descarga.gastos_sin_cfdi');
+      // cada una cuesta más (O(n²)) y un ticket nuevo mientras se pagina corre las
+      // posiciones. Y no `id > último` a secas: con una ventana de ~1 mes (6% de la
+      // flota) recorre el índice de `id` de TODA la flota (1.8 s contra 0.24 s,
+      // scripts/carga/250-camiones/07-offset-vs-cursor.sql).
+      if (despuesDe !== null) q = q.gte('fecha', despuesDe.fecha).or(despuesDeFechaId(despuesDe));
+      return acotada(q.order('fecha').order('id').limit(PAGINA), 'sat_descarga.gastos_sin_cfdi');
     },
+    (r) => llaveFechaId({ fecha: r.fecha, id: r.id }),
     'sat_descarga.gastos_sin_cfdi',
     { venceEn },
   );
+  // Antes salían ordenados por `id` y `decidirCruce` los recorre en ese orden: se conserva EXACTO.
+  const data = leidos.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return data.map((r) => ({
     id: r.id as string,
     concepto: r.concepto as Gasto['concepto'],

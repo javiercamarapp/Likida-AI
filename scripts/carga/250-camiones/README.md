@@ -33,6 +33,8 @@ python3 scripts/carga/250-camiones/medir.py --corridas 20 --log $PGDATA/../pg.lo
 SESIONES=2 bash scripts/carga/250-camiones/05-concurrencia.sh
 # 5. Caminos que cargan en memoria (traerTodo): costo del offset contra el cursor
 psql -q -f scripts/carga/250-camiones/06-paginacion-traertodo.sql
+# 5b. Vuelta 2: offset contra cursor (id y (fecha,id)) en lecturas reales de gasto sin CFDI, y conteos en SQL
+psql -q -f scripts/carga/250-camiones/07-offset-vs-cursor.sql
 # 6. Limpiar y borrar el cluster
 psql -q -f scripts/carga/250-camiones/04-limpiar.sql
 pg_ctl -D $PGDATA stop && rm -rf $PGDATA

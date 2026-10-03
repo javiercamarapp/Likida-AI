@@ -35,7 +35,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import { traerTodo, traerTodoDesdeId, conteo, PAGINA } from '../pg';
+import { traerTodo, traerTodoPorLlave, llaveFechaId, despuesDeFechaId, conteo, PAGINA, type LlaveFechaId } from '../pg';
 import { logger } from '@/lib/logger';
 import { enLotes } from '../lotes';
 import { strip_accents } from '../cuadre/util';
@@ -362,7 +362,7 @@ async function candidatosDeGasto(
   rango: { desde: string; hasta: string },
   venceEn?: number,
 ): Promise<Gasto[]> {
-  const data = await traerTodoDesdeId<{ id: string; concepto: unknown; monto: unknown; fecha: unknown }>(
+  const leidos = await traerTodoPorLlave<{ id: string; concepto: unknown; monto: unknown; fecha: unknown }, LlaveFechaId>(
     (despuesDe) => {
       let q = supabaseAdmin()
         .from('gasto')
@@ -371,12 +371,20 @@ async function candidatosDeGasto(
         .is('cfdi_uuid', null)
         .gte('fecha', rango.desde)
         .lte('fecha', rango.hasta);
-      if (despuesDe !== null) q = q.gt('id', despuesDe);
-      return acotada(q.order('id').limit(PAGINA), 'consolidado.candidatos_gasto');
+      // RONDA 16 (carga de 250 camiones): cursor `(fecha, id)` y no `id` solo. Con el rango de un
+      // consolidado (~1 mes, 6% de la flota) y un UUID sin correlación con la fecha, `id > último`
+      // recorría el índice de `id` de TODA la flota en cada página (1.8 s la lectura de 15k filas contra
+      // 0.24 s por `(fecha, id)`; scripts/carga/250-camiones/07-offset-vs-cursor.sql). Inmune igual a
+      // inserciones y borrados a media lectura.
+      if (despuesDe !== null) q = q.gte('fecha', despuesDe.fecha).or(despuesDeFechaId(despuesDe));
+      return acotada(q.order('fecha').order('id').limit(PAGINA), 'consolidado.candidatos_gasto');
     },
+    (g) => llaveFechaId({ fecha: g.fecha, id: g.id }),
     'consolidado.candidatos_gasto',
     { venceEn },
   );
+  // Antes salían ordenados por `id` y `conciliarLineas` los recorre en ese orden: se conserva EXACTO.
+  const data = leidos.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return data.map((g) => ({
     id: g.id,
     concepto: g.concepto as Gasto['concepto'],
