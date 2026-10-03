@@ -83,7 +83,7 @@ export type ResultadoAvisoOficina =
 export async function avisarOficina(
   telefono: string,
   texto: string,
-  opciones: { parametros: [string, string, string]; plantilla?: string; contexto?: Record<string, unknown> },
+  opciones: { parametros: [string, string, string]; plantilla?: string; contexto?: Record<string, unknown>; ahora?: Date },
 ): Promise<ResultadoAvisoOficina> {
   const ctx = opciones.contexto ?? {};
   const plantilla = opciones.plantilla ?? plantillaAvisoOficina();
@@ -92,6 +92,7 @@ export async function avisarOficina(
     plantilla: { nombre: plantilla, parametros: opciones.parametros },
     contexto: typeof ctx.agente === 'string' ? `aviso_oficina.${ctx.agente}` : 'aviso_oficina',
     tenantId: typeof ctx.tenantId === 'string' ? ctx.tenantId : null,
+    ahora: opciones.ahora,
   });
   if (r.ok) {
     if (r.via === 'plantilla') logger.info('aviso_oficina.fuera_de_ventana', { ...ctx, motivo: r.motivo, plantilla });

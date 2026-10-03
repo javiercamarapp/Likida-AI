@@ -184,6 +184,7 @@ async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<Resultado
       },
       contexto: `reglas.vigilante.${regla.plantilla}`,
       tenantId: regla.tenantId,
+      ahora,
     });
   } catch (e) {
     // Una excepción antes de saber si Meta aceptó: se suelta el reclamo para que la hora siguiente reintente.
