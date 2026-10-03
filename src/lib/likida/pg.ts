@@ -292,6 +292,39 @@ export async function traerTodoDesdeId<T extends { id: string }>(
   consulta: string,
   opts: { venceEn?: number } = {},
 ): Promise<T[]> {
+  return traerTodoPorLlave<T, string>(construir, (f) => f.id, consulta, opts);
+}
+
+/** Cursor `(fecha, id)` para `traerTodoPorLlave` sobre lecturas con `.gte('fecha', …)` (la fecha nunca es nula). */
+export interface LlaveFechaId { fecha: string; id: string }
+
+export const llaveFechaId = (f: { fecha: unknown; id: string }): LlaveFechaId => ({ fecha: String(f.fecha).slice(0, 10), id: f.id });
+
+/**
+ * El filtro `or` de PostgREST que deja solo lo que viene DESPUÉS de `(fecha, id)` en el orden `fecha, id`.
+ * Va SIEMPRE con `.gte('fecha', cursor.fecha)`: esa cota redundante es la que le da al servidor el rango del
+ * índice `(tenant_id, fecha)` (el `or` por sí solo no se convierte en condición de índice).
+ */
+export const despuesDeFechaId = (c: LlaveFechaId): string =>
+  `fecha.gt.${c.fecha},and(fecha.eq.${c.fecha},id.gt.${c.id})`;
+
+/**
+ * Lo mismo que `traerTodoDesdeId`, con una LLAVE de cursor cualquiera (`K`): el llamador dice cuál es la
+ * llave de una fila (`llaveDe`) y `construir` recibe la del último renglón leído (`null` en la primera vuelta).
+ *
+ * RONDA 16 (carga de 250 camiones): existe porque `id > último` NO siempre es el cursor barato. Con un filtro
+ * selectivo por otra columna (los tickets sin CFDI de una ventana de 45 días son 6% de la flota) y un `id` UUID sin
+ * correlación con la fecha, `id > último` obliga al servidor a recorrer el índice de `id` de TODA la flota
+ * (medido: 1.8 s la lectura completa de 15k filas, contra 0.27 s por offset). Un cursor por `(fecha, id)` sigue
+ * el índice `(tenant_id, fecha)` y cada página cuesta como la primera (0.24 s). Mismo contrato: se demuestra con el
+ * `count` exacto de la primera página o LANZA, y sin `venceEn` no se mira el reloj.
+ */
+export async function traerTodoPorLlave<T, K>(
+  construir: (despuesDe: K | null) => PromiseLike<RespuestaPg<T[]>>,
+  llaveDe: (fila: T) => K,
+  consulta: string,
+  opts: { venceEn?: number } = {},
+): Promise<T[]> {
   // REN-30-C2: sin `venceEn` el techo de esta lectura es estructural —
   // `MAX_PAGINAS × PAGINA` son 100,000 filas, 30.0 s nominales y hasta 950 s a
   // techos, contra el `maxDuration = 300` de la ruta más larga del repo. El
@@ -300,7 +333,7 @@ export async function traerTodoDesdeId<T extends { id: string }>(
   const { venceEn } = opts;
   const filas: T[] = [];
   let esperadas: number | null = null;
-  let cursor: string | null = null;
+  let cursor: K | null = null;
 
   for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
     // Antes de pedir la página, no después: con el reloj ya agotado la primera
@@ -325,7 +358,7 @@ export async function traerTodoDesdeId<T extends { id: string }>(
       // servidor "dejó de entregar": con cursor por fila, vacío es vacío.
       return filas;
     }
-    cursor = pag[pag.length - 1].id;
+    cursor = llaveDe(pag[pag.length - 1]);
   }
 
   logger.error('pg.lectura_incompleta', { consulta, leidas: filas.length, esperadas });

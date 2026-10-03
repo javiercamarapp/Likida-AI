@@ -8,7 +8,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: () => {
       const nodo: Record<string, unknown> = {};
-      for (const m of ['select', 'eq', 'is', 'gte', 'neq', 'gt', 'order', 'limit', 'range']) {
+      for (const m of ['select', 'eq', 'is', 'gte', 'neq', 'or', 'order', 'limit', 'range']) {
         nodo[m] = (...a: unknown[]) => { filtros.push([m, a]); return nodo; };
       }
       nodo.then = (r: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null, count: 0 }).then(r);

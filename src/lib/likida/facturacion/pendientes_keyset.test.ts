@@ -3,7 +3,7 @@
 // de 45 días con `traerTodo` por OFFSET. A 5,000 viajes al mes son 10-23k filas
 // (hasta 23 páginas): cada página con offset mayor cuesta más en el servidor
 // (O(n²)) y un ticket que entra por WhatsApp a media lectura corre las posiciones
-// (una fila repetida o una saltada). Ahora pagina por CURSOR de `id`.
+// (una fila repetida o una saltada). Ahora pagina por CURSOR `(fecha, id)` — el orden de la pantalla.
 //
 // El servidor falso: filtra, ordena, aplica `max_rows = 1000` pida lo que pida,
 // y puede INSERTAR un gasto entre dos páginas — lo que hace WhatsApp en vivo.
@@ -33,7 +33,14 @@ vi.mock('@/lib/supabase/admin', () => ({
         is: (c: string, v: unknown) => { filtros.push((f) => (f[c] ?? null) === v); return nodo; },
         neq: (c: string, v: unknown) => { filtros.push((f) => f[c] !== v); return nodo; },
         gte: (c: string, v: string) => { filtros.push((f) => f[c] !== null && (f[c] as string) >= v); return nodo; },
-        gt: (c: string, v: string) => { filtros.push((f) => (f[c] as string) > v); return nodo; },
+        // `.or('fecha.gt.F,and(fecha.eq.F,id.gt.I)')`: el filtro de cursor (fecha, id) que arma `despuesDeFechaId`.
+        or: (expr: string) => {
+          const m = /^fecha\.gt\.([\d-]+),and\(fecha\.eq\.\1,id\.gt\.([0-9a-f-]+)\)$/.exec(expr);
+          if (!m) throw new Error(`filtro or inesperado: ${expr}`);
+          const [, fecha, id] = m;
+          filtros.push((f) => (f.fecha as string) > fecha || (f.fecha === fecha && f.id > id));
+          return nodo;
+        },
         order: (c: string, o?: { ascending?: boolean }) => { ordenes.push([c, o?.ascending !== false]); return nodo; },
         limit: (n: number) => { tope = n; return nodo; },
         range: (d: number, h: number) => { if (d > 0) offsets.push(d); rango = [d, h]; return nodo; },
@@ -74,7 +81,7 @@ const gasto = (n: number, extra: Partial<Fila> = {}): Fila => ({
 
 beforeEach(() => { tabla = []; offsets.length = 0; alTerminarPagina = null; paginasServidas = 0; });
 
-describe('getPorFacturar — cursor por id, no offset (ronda 16)', () => {
+describe('getPorFacturar — cursor (fecha, id), no offset (ronda 16)', () => {
   it('con 2,600 tickets sin CFDI trae los 2,600, una sola vez cada uno, y sin offsets', async () => {
     // mezcla de fechas (y la fecha cae en el orden de la pantalla), ids no correlacionados con la fecha
     for (let i = 1; i <= 2_600; i++) tabla.push(gasto((i * 7919) % 100_003, { fecha: `2026-08-${String(1 + (i % 25)).padStart(2, '0')}` }));
@@ -94,9 +101,9 @@ describe('getPorFacturar — cursor por id, no offset (ronda 16)', () => {
     expect(r.map((t) => t.gastoId)).toEqual([9, 2, 5, 1].map((n) => `${hex(n)}-0000-4000-8000-000000000000`));
   });
 
-  it('un ticket que entra A MEDIA lectura (id menor al cursor) no repite ni salta ninguno', async () => {
+  it('un ticket que entra A MEDIA lectura (antes del cursor) no repite ni salta ninguno', async () => {
     for (let i = 1; i <= 2_100; i++) tabla.push(gasto(1_000 + i));
-    // tras servir la 1ª página entra un ticket con id MENOR a todo lo ya leído: por offset corría todo una posición
+    // tras servir la 1ª página entra un ticket que en el orden (fecha, id) cae ANTES de lo ya leído: por offset corría todo una posición
     alTerminarPagina = (n) => { if (n === 1) tabla.push(gasto(1)); };
     const r = await getPorFacturar('t1', '2026-08-22');
     const ids = r.map((t) => t.gastoId);

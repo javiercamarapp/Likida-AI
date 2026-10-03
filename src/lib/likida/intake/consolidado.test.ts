@@ -83,7 +83,7 @@ let respUpsert: Resp = { data: [{ id: 'xml-1' }], error: null };
 /** Nodo encadenable que traga cualquier filtro y resuelve al final. */
 function nodoCadena(tabla: string, resp: () => Resp) {
   const nodo: Record<string, unknown> = {};
-  for (const m of ['eq', 'is', 'gte', 'lte', 'gt', 'order', 'range', 'limit', 'in', 'not', 'select'])
+  for (const m of ['eq', 'is', 'gte', 'lte', 'gt', 'or', 'order', 'range', 'limit', 'in', 'not', 'select'])
     nodo[m] = (col?: unknown, val?: unknown) => {
       if (m === 'eq' || m === 'is') filtrosVistos.push({ tabla, op: 'select', col: String(col), val });
       return nodo;

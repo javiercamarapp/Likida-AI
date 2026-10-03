@@ -1,4 +1,4 @@
-import { traerTodoDesdeId, PAGINA } from '../pg';
+import { traerTodoPorLlave, llaveFechaId, despuesDeFechaId, PAGINA } from '../pg';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
@@ -153,19 +153,21 @@ export async function getPorFacturar(
   const fechaMinima = desdeVentana(hoy);
   // AUDITORÍA 13, MEDIO: `.limit(500)` recortaba en silencio la pantalla "por
   // facturar" y el aviso de WhatsApp (506 tickets → "Tienes 500 comprobantes
-  // sin factura"). `traerTodoDesdeId` pagina hasta probar que trajo TODO y lanza
+  // sin factura"). `traerTodoPorLlave` pagina hasta probar que trajo TODO y lanza
   // LecturaIncompleta si no puede; el llamador muestra el error en vez de una
   // cifra baja.
   //
   // RONDA 16 (carga de 250 camiones): era `traerTodo` por OFFSET (`range(desde,
   // hasta)`) con orden (fecha, id). A 5,000 viajes al mes los tickets sin CFDI de
-  // 45 días son 10-23k filas: ~23 páginas, y cada una con offset mayor cuesta
-  // más en el servidor (O(n²): 2 ms en la posición 0, 250 ms en la 99,000). El
-  // cursor por `id` cuesta lo mismo en todas las páginas y, de paso, no se
-  // corre si entra un ticket por WhatsApp mientras se pagina. El orden de la
-  // pantalla (fecha ascendente, sin fecha al final, `id` de desempate) se
-  // reconstruye aquí, en memoria, sobre filas que ya están leídas.
-  const filas = await traerTodoDesdeId<FilaGasto>(
+  // 45 días son 10-23k filas (hasta 23 páginas): cada una con offset mayor cuesta
+  // más en el servidor (O(n²)) y un ticket que entra por WhatsApp a media lectura
+  // corre las posiciones (una fila repetida o una saltada). Ahora pagina por
+  // CURSOR `(fecha, id)` — el MISMO orden de la pantalla, así que no hay que
+  // reordenar nada — y no por `id` solo: con la ventana de 45 días (6% de la
+  // flota) y un UUID sin correlación con la fecha, `id > último` recorre el índice
+  // de `id` de toda la flota (medido 1.8 s la lectura de 15k filas contra 0.24 s
+  // por `(fecha, id)`; scripts/carga/250-camiones/07-offset-vs-cursor.sql).
+  const filas = await traerTodoPorLlave<FilaGasto>(
     (despuesDe) => {
       let q = supabaseAdmin()
         .from('gasto')
@@ -179,22 +181,15 @@ export async function getPorFacturar(
         // (la que manda en el portal); `factura` ya ES un CFDI, no hay qué pedir.
         .gte('fecha', fechaMinima)
         .neq('concepto', 'factura');
-      if (despuesDe !== null) q = q.gt('id', despuesDe);
-      return q.order('id', { ascending: true }).limit(PAGINA);
+      if (despuesDe !== null) q = q.gte('fecha', despuesDe.fecha).or(despuesDeFechaId(despuesDe));
+      return q
+        .order('fecha', { ascending: true })
+        .order('id', { ascending: true })
+        .limit(PAGINA);
     },
+    (f) => llaveFechaId({ fecha: f.fecha, id: f.id }),
     'getPorFacturar',
   );
-  // Mismo orden que tenía el `ORDER BY fecha ASC NULLS LAST, id ASC` de la base
-  // (`fecha` es AAAA-MM-DD y `id` un UUID en minúsculas: comparar cadenas es
-  // comparar como Postgres).
-  filas.sort((a, b) => {
-    if (a.fecha !== b.fecha) {
-      if (a.fecha === null) return 1;
-      if (b.fecha === null) return -1;
-      return a.fecha < b.fecha ? -1 : 1;
-    }
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-  });
   return filas.map((g) => armar(g, hoy));
 }
 
