@@ -2000,7 +2000,7 @@ export interface CorridaDunning { estado: string; fin: string; error: string | n
 /** Las propuestas de recordatorio del dunning (agente `cobranza_saas`, tipo
  *  `recordatorio_cobranza`). LANZA si la lectura falla: sin poder leer, la
  *  página dice que no pudo, no que no hay propuestas. */
-export async function getPiezasDunning(limite = 500): Promise<PiezaDunning[]> {
+export async function getPiezasDunningPlataforma(limite = 500): Promise<PiezaDunning[]> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('cola_aprobacion')
     .select('titulo, estado, enviado_en, creado_en')
@@ -2009,7 +2009,7 @@ export async function getPiezasDunning(limite = 500): Promise<PiezaDunning[]> {
     .order('creado_en', { ascending: false })
     .order('id')
     .limit(limite), 'dunning.piezas');
-  if (error) throw new Error(`getPiezasDunning: ${error.message}`);
+  if (error) throw new Error(`getPiezasDunningPlataforma: ${error.message}`);
   return (data ?? []).map((r) => ({
     titulo: r.titulo as string,
     estado: r.estado as string,
@@ -2020,7 +2020,7 @@ export async function getPiezasDunning(limite = 500): Promise<PiezaDunning[]> {
 
 /** La última corrida registrada del agente de cobranza SaaS, o `null` si nunca
  *  corrió (que es un hecho distinto de «no se pudo leer», que lanza). */
-export async function getUltimaCorridaDunning(): Promise<CorridaDunning | null> {
+export async function getUltimaCorridaDunningPlataforma(): Promise<CorridaDunning | null> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('agente_corrida')
     .select('estado, fin, error, resumen')
@@ -2028,7 +2028,7 @@ export async function getUltimaCorridaDunning(): Promise<CorridaDunning | null> 
     .order('fin', { ascending: false })
     .order('id')
     .limit(1), 'dunning.corrida');
-  if (error) throw new Error(`getUltimaCorridaDunning: ${error.message}`);
+  if (error) throw new Error(`getUltimaCorridaDunningPlataforma: ${error.message}`);
   const r = data?.[0];
   if (!r) return null;
   return {

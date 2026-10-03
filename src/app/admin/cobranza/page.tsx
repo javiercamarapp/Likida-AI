@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { Receipt } from 'lucide-react';
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { mxn } from '@/lib/utils';
 import { hoyMx } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 import { getPorCobrar } from '@/lib/saas/transferencia';
-import { getPiezasDunning, getUltimaCorridaDunning, type CorridaDunning, type PiezaDunning } from '@/lib/likida/repo';
+import { getPiezasDunningPlataforma, getUltimaCorridaDunningPlataforma, type CorridaDunning, type PiezaDunning } from '@/lib/likida/repo';
 import { armarEstadoDunning, type SelloToque } from '@/lib/likida/cobranza_estado';
 import type { FacturaPorCobrar } from '@/lib/saas/transferencia';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -45,11 +46,15 @@ async function leer<T>(nombre: string, f: () => Promise<T>): Promise<{ dato: T |
 }
 
 export default async function CobranzaPage() {
+  // La puerta de la PÁGINA, no solo la del layout: en Next un layout no se vuelve a
+  // ejecutar si la petición RSC declara que el cliente ya lo tiene, así que lo único
+  // que protege estos datos de TODAS las flotas (service role) es esta llamada.
+  await requireSuperadmin();
   const hoy = hoyMx();
   const [facturas, piezas, corrida] = await Promise.all([
     leer<FacturaPorCobrar[]>('por_cobrar', getPorCobrar),
-    leer<PiezaDunning[]>('piezas', () => getPiezasDunning()),
-    leer<CorridaDunning | null>('corrida', getUltimaCorridaDunning),
+    leer<PiezaDunning[]>('piezas', () => getPiezasDunningPlataforma()),
+    leer<CorridaDunning | null>('corrida', getUltimaCorridaDunningPlataforma),
   ]);
   const estado = facturas.dato ? armarEstadoDunning(facturas.dato, piezas.dato ?? [], hoy) : null;
 
