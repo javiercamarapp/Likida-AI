@@ -13,7 +13,7 @@
 //      (15, 30, 60, 120 min); el presupuesto agotado además no gasta un intento. A los 5 intentos el documento
 //      es TERMINAL (`fallido`, intentos = 5): nadie lo reclama más y la oficina se entera UNA vez.
 //   3. AVISA a la oficina (jefe de tráfico) UNA vez por documento y tipo, con el candado de la 0641:
-//        · `hallazgos`: un documento (llegó por correo, WhatsApp o el panel: 0692) quedó por revisar con un bloqueo o con
+//        · `hallazgos`: un documento (llegó por correo, WhatsApp o el panel: 0695) quedó por revisar con un bloqueo o con
 //          lectura poco segura — el «marcar dudas y mandar al equipo» que pidió el cliente;
 //        · `agotado`: no se pudo leer tras todos los intentos.
 //
@@ -347,7 +347,7 @@ async function avisarOficinaDe(deps: DepsWorker, opts: OpcionesWorker, r: Result
   }
 }
 
-/** Cómo llegó el documento, para el aviso (el aviso de dudas cubre los tres canales, 0692). */
+/** Cómo llegó el documento, para el aviso (el aviso de dudas cubre los tres canales, 0695). */
 function canalTexto(canal: DocumentoFila['canal']): string {
   return canal === 'correo' ? 'correo' : canal === 'whatsapp' ? 'WhatsApp' : 'el panel';
 }

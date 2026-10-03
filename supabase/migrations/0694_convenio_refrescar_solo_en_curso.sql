@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- 0691 — Convenios: llevar una edición SOLO a los viajes en curso (R10-1, adversarial de la ronda 10, re-auditoría de la ronda 18).
+-- 0694 — Convenios: llevar una edición SOLO a los viajes en curso (R10-1, adversarial de la ronda 10, re-auditoría de la ronda 18).
 --
 -- La 0657/0658 refrescaban la foto de instrucciones de todos los viajes `<> 'liquidado'`. Un viaje `en_cuadre` ya entregó su carga y está
 -- en el cuadre del cierre: reabrirle el despacho mandaba a su operador «actualizamos las instrucciones de tu viaje F-123» de un viaje
@@ -54,4 +54,4 @@ revoke all on function public.refrescar_viajes_de_convenio(uuid, uuid, boolean) 
 grant execute on function public.refrescar_viajes_de_convenio(uuid, uuid, boolean) to service_role;
 
 comment on function public.refrescar_viajes_de_convenio(uuid, uuid, boolean) is
-  '0657/0658/0691: vuelve a tomar la foto de instrucciones de los viajes EN CURSO (abiertos) de un convenio (solo los que cambian) y, si se pide, reabre el despacho de los que ya lo habían recibido y marca para mandar el de los que nunca lo recibieron por no haber instrucciones de despacho.';
+  '0657/0658/0694: vuelve a tomar la foto de instrucciones de los viajes EN CURSO (abiertos) de un convenio (solo los que cambian) y, si se pide, reabre el despacho de los que ya lo habían recibido y marca para mandar el de los que nunca lo recibieron por no haber instrucciones de despacho.';

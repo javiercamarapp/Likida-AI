@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Vigía (0690): el tope de 200 respuestas rápidas aprobadas por flota aguanta aprobaciones SIMULTÁNEAS.
+# Vigía (0693): el tope de 200 respuestas rápidas aprobadas por flota aguanta aprobaciones SIMULTÁNEAS.
 #   (1) con 199 aprobadas, una sesión aprueba la 200 y mantiene su transacción abierta; otra aprobación NUEVA que llega en ese plazo
 #       espera, ve 200 y rebota con 54000 (con la 0647 sola entraba y la flota quedaba en 201); 8 sesiones más rebotan todas;
 #   (2) con la flota en 200, 8 sesiones corrigen a la vez la MISMA pregunta ya aprobada: ninguna topa y el conteo sigue en 200;
@@ -17,13 +17,13 @@ limpiar() {
   "${psql_cmd[@]}" -c "delete from public.tenant where id in ('$ta','$tb');" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
-[[ "$("${psql_cmd[@]}" -c "select count(*) from public.tenant where id in ('$ta','$tb');")" = 0 ]] || { echo 'Fixture0690 ya existe; no tocar datos ajenos.'; exit 1; }
+[[ "$("${psql_cmd[@]}" -c "select count(*) from public.tenant where id in ('$ta','$tb');")" = 0 ]] || { echo 'Fixture0693 ya existe; no tocar datos ajenos.'; exit 1; }
 trap limpiar EXIT
 "${psql_cmd[@]}" >/dev/null <<SQL
-insert into public.tenant(id,nombre) values('$ta','Vigía 0690 A'),('$tb','Vigía 0690 B');
+insert into public.tenant(id,nombre) values('$ta','Vigía 0693 A'),('$tb','Vigía 0693 B');
 select public.vigia_respuesta_rapida_aprobar('$ta','otro','pregunta base '||i,'respuesta '||i,null) from generate_series(1,199) i;
 SQL
-[[ "$("${psql_cmd[@]}" -c "select count(*) from public.vigia_respuesta_rapida where tenant_id='$ta' and estado='aprobada';")" = 199 ]] || { echo '0690: no quedó la base de 199'; exit 1; }
+[[ "$("${psql_cmd[@]}" -c "select count(*) from public.vigia_respuesta_rapida where tenant_id='$ta' and estado='aprobada';")" = 199 ]] || { echo '0693: no quedó la base de 199'; exit 1; }
 
 aprobar() { # $1 = archivo, $2 = flota, $3 = pregunta
   "${psql_cmd[@]}" -c "select public.vigia_respuesta_rapida_aprobar('$2','otro','$3','texto',null);" > "$work/$1.ok" 2> "$work/$1.err" && echo ok > "$work/$1.res" || echo fallo > "$work/$1.res"
@@ -38,24 +38,24 @@ p1=$!
 sleep 1
 aprobar s2 "$ta" 'pregunta nueva 2'
 wait "$p1"
-[[ -s "$work/s1.err" ]] && { echo '0690: la sesión 1 falló'; cat "$work/s1.err"; exit 1; }
-[[ "$(cat "$work/s2.res")" = fallo ]] && grep -q '54000\|tope de 200' "$work/s2.err" || { echo '0690: la 2.ª aprobación nueva NO rebotó: el tope se rebasa con aprobaciones simultáneas'; cat "$work/s2.err"; exit 1; }
-[[ "$("${psql_cmd[@]}" -c "select count(*) from public.vigia_respuesta_rapida where tenant_id='$ta' and estado='aprobada';")" = 200 ]] || { echo '0690: la flota rebasó o no llegó a 200'; exit 1; }
+[[ -s "$work/s1.err" ]] && { echo '0693: la sesión 1 falló'; cat "$work/s1.err"; exit 1; }
+[[ "$(cat "$work/s2.res")" = fallo ]] && grep -q '54000\|tope de 200' "$work/s2.err" || { echo '0693: la 2.ª aprobación nueva NO rebotó: el tope se rebasa con aprobaciones simultáneas'; cat "$work/s2.err"; exit 1; }
+[[ "$("${psql_cmd[@]}" -c "select count(*) from public.vigia_respuesta_rapida where tenant_id='$ta' and estado='aprobada';")" = 200 ]] || { echo '0693: la flota rebasó o no llegó a 200'; exit 1; }
 
 # 8 sesiones más sobre la flota ya topada: todas rebotan, ninguna entra
 pids=()
 for n in $(seq 1 8); do aprobar "a$n" "$ta" "pregunta nueva x$n" & pids+=($!); done
 for p in "${pids[@]}"; do wait "$p"; done
-[[ "$(cat "$work"/a?.res | grep -c '^ok$' || true)" = 0 ]] || { echo '0690: entró una aprobación nueva con la flota ya en 200'; exit 1; }
+[[ "$(cat "$work"/a?.res | grep -c '^ok$' || true)" = 0 ]] || { echo '0693: entró una aprobación nueva con la flota ya en 200'; exit 1; }
 
 # ── (2) corregir la MISMA pregunta ya aprobada: nadie topa ──────────────────
 pids=()
 for n in $(seq 1 8); do aprobar "b$n" "$ta" "pregunta base 7" & pids+=($!); done
 for p in "${pids[@]}"; do wait "$p"; done
-[[ "$(cat "$work"/b?.res | grep -c '^ok$' || true)" = 8 ]] || { echo '0690: una corrección de pregunta existente topó'; cat "$work"/b?.err; exit 1; }
-[[ "$("${psql_cmd[@]}" -c "select count(*) from public.vigia_respuesta_rapida where tenant_id='$ta' and estado='aprobada';")" = 200 ]] || { echo '0690: las correcciones cambiaron el conteo'; exit 1; }
+[[ "$(cat "$work"/b?.res | grep -c '^ok$' || true)" = 8 ]] || { echo '0693: una corrección de pregunta existente topó'; cat "$work"/b?.err; exit 1; }
+[[ "$("${psql_cmd[@]}" -c "select count(*) from public.vigia_respuesta_rapida where tenant_id='$ta' and estado='aprobada';")" = 200 ]] || { echo '0693: las correcciones cambiaron el conteo'; exit 1; }
 
 # ── (3) otra flota no se afecta ─────────────────────────────────────────────
 aprobar c1 "$tb" 'pregunta de la otra flota'
-[[ "$(cat "$work"/c1.res)" = ok ]] || { echo '0690: la otra flota fue bloqueada por el tope de la primera'; cat "$work"/c1.err; exit 1; }
-echo '0690_vigia_respuesta_rapida_tope_concurrencia PASS: con 199 aprobadas, aprobaciones traslapadas mantienen la flota exactamente en 200; corregir no topa; otra flota no se afecta.'
+[[ "$(cat "$work"/c1.res)" = ok ]] || { echo '0693: la otra flota fue bloqueada por el tope de la primera'; cat "$work"/c1.err; exit 1; }
+echo '0693_vigia_respuesta_rapida_tope_concurrencia PASS: con 199 aprobadas, aprobaciones traslapadas mantienen la flota exactamente en 200; corregir no topa; otra flota no se afecta.'

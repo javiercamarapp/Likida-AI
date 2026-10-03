@@ -19496,44 +19496,44 @@ begin
     accion, cli, rem, nom, marcas;
 end $$;
 
--- ── 340. Vigía, el tope de 200 respuestas rápidas sigue rebotando la 201 nueva y no frena una corrección, con el candado por flota (mig. 0690) ──
--- La carrera (dos aprobaciones traslapadas) la prueba supabase/tests/0690_vigia_respuesta_rapida_tope_concurrencia.sh con sesiones reales; aquí,
+-- ── 340. Vigía, el tope de 200 respuestas rápidas sigue rebotando la 201 nueva y no frena una corrección, con el candado por flota (mig. 0693) ──
+-- La carrera (dos aprobaciones traslapadas) la prueba supabase/tests/0693_vigia_respuesta_rapida_tope_concurrencia.sh con sesiones reales; aquí,
 -- en una sola sesión, que la función con candado conserva el contrato de la 0647.
--- Esperado: VIGIA_TOPE_0690 nueva-201-rebota=t correccion-no-topa=t conteo-200=t otra-flota-libre=t
+-- Esperado: VIGIA_TOPE_0693 nueva-201-rebota=t correccion-no-topa=t conteo-200=t otra-flota-libre=t
 do $$
 declare
   ta uuid; tb uuid; i int; n int; rebota boolean := false; corrige boolean := false; otra boolean := false;
 begin
-  insert into tenant (nombre) values ('ZZZ VERIF 0690 A') returning id into ta;
-  insert into tenant (nombre) values ('ZZZ VERIF 0690 B') returning id into tb;
+  insert into tenant (nombre) values ('ZZZ VERIF 0693 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0693 B') returning id into tb;
   for i in 1..200 loop
-    perform vigia_respuesta_rapida_aprobar(ta, 'otro', 'zzz pregunta 0690 ' || i, 'respuesta ' || i, null);
+    perform vigia_respuesta_rapida_aprobar(ta, 'otro', 'zzz pregunta 0693 ' || i, 'respuesta ' || i, null);
   end loop;
-  begin perform vigia_respuesta_rapida_aprobar(ta, 'otro', 'zzz pregunta 0690 201', 'respuesta', null);
+  begin perform vigia_respuesta_rapida_aprobar(ta, 'otro', 'zzz pregunta 0693 201', 'respuesta', null);
   exception when sqlstate '54000' then rebota := true; end;
-  perform vigia_respuesta_rapida_aprobar(ta, 'otro', 'ZZZ PREGUNTA 0690 7', 'corregida', null);
-  corrige := (select texto from vigia_respuesta_rapida where tenant_id = ta and lower(pregunta) = 'zzz pregunta 0690 7' and estado = 'aprobada') = 'corregida';
+  perform vigia_respuesta_rapida_aprobar(ta, 'otro', 'ZZZ PREGUNTA 0693 7', 'corregida', null);
+  corrige := (select texto from vigia_respuesta_rapida where tenant_id = ta and lower(pregunta) = 'zzz pregunta 0693 7' and estado = 'aprobada') = 'corregida';
   select count(*) into n from vigia_respuesta_rapida where tenant_id = ta and estado = 'aprobada';
-  otra := vigia_respuesta_rapida_aprobar(tb, 'otro', 'zzz pregunta 0690 b', 'respuesta', null) is not null;
+  otra := vigia_respuesta_rapida_aprobar(tb, 'otro', 'zzz pregunta 0693 b', 'respuesta', null) is not null;
 
-  raise exception E'VIGIA_TOPE_0690 nueva-201-rebota=% correccion-no-topa=% conteo-200=% otra-flota-libre=%   (esperado t / t / t / t)',
+  raise exception E'VIGIA_TOPE_0693 nueva-201-rebota=% correccion-no-topa=% conteo-200=% otra-flota-libre=%   (esperado t / t / t / t)',
     rebota, corrige, n = 200, otra;
 end $$;
 
--- ── 341. Convenios, llevar una edición a los viajes toca solo los EN CURSO: un viaje en cuadre o liquidado no recibe la foto nueva (mig. 0691) ──
--- Esperado: CONVENIO_REFRESCO_0691 solo-abierto-refresca=t abierto-reabre-despacho=t cuadre-intacto=t liquidado-intacto=t
+-- ── 341. Convenios, llevar una edición a los viajes toca solo los EN CURSO: un viaje en cuadre o liquidado no recibe la foto nueva (mig. 0694) ──
+-- Esperado: CONVENIO_REFRESCO_0694 solo-abierto-refresca=t abierto-reabre-despacho=t cuadre-intacto=t liquidado-intacto=t
 do $$
 declare
   ta uuid; ca uuid; op1 uuid; op2 uuid; op3 uuid; conv uuid; r jsonb; v int; va uuid; vc uuid; vl uuid;
   vieja constant jsonb := '[{"categoria":"puerta","texto":"Vieja","momento":"despacho","lugar":"origen","orden":0}]';
   solo boolean := false; reabre boolean := false; cuadre boolean := false; liquidado boolean := false; hechos int;
 begin
-  insert into tenant (nombre) values ('ZZZ VERIF 0691 A') returning id into ta;
-  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ 0691 cliente') returning id into ca;
-  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0691 op1', '525500069111') returning id into op1;
-  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0691 op2', '525500069112') returning id into op2;
-  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0691 op3', '525500069113') returning id into op3;
-  r := guardar_convenio(ta, null, ca, 'ZZZ Ruta 0691', null, null, null, null, null, null, null, null, vieja);
+  insert into tenant (nombre) values ('ZZZ VERIF 0694 A') returning id into ta;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ 0694 cliente') returning id into ca;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0694 op1', '525500069411') returning id into op1;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0694 op2', '525500069412') returning id into op2;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0694 op3', '525500069413') returning id into op3;
+  r := guardar_convenio(ta, null, ca, 'ZZZ Ruta 0694', null, null, null, null, null, null, null, null, vieja);
   conv := (r->>'id')::uuid;
   insert into viaje (tenant_id, operador_id, folio, estatus, cliente_id) values (ta, op1, 'ZZZ-A', 'abierto', ca) returning id into va;
   insert into viaje (tenant_id, operador_id, folio, estatus, cliente_id) values (ta, op2, 'ZZZ-C', 'en_cuadre', ca) returning id into vc;
@@ -19541,7 +19541,7 @@ begin
   insert into viaje_convenio (viaje_id, tenant_id, convenio_id, cliente_id, instrucciones, despacho_enviado_en, despacho_canal)
     select x, ta, conv, ca, vieja, now(), 'texto' from unnest(array[va, vc, vl]) x;
   select version into v from cliente_convenio where id = conv;
-  perform guardar_convenio(ta, conv, null, 'ZZZ Ruta 0691', null, null, null, null, null, null, null, v,
+  perform guardar_convenio(ta, conv, null, 'ZZZ Ruta 0694', null, null, null, null, null, null, null, v,
     '[{"categoria":"puerta","texto":"Puerta nueva","momento":"despacho","lugar":"origen","orden":0}]');
   select count(*) into hechos from refrescar_viajes_de_convenio(ta, conv, true);
   solo := hechos = 1;
@@ -19549,12 +19549,12 @@ begin
   cuadre := (select instrucciones::text like '%Vieja%' and despacho_enviado_en is not null from viaje_convenio where viaje_id = vc);
   liquidado := (select instrucciones::text like '%Vieja%' and despacho_enviado_en is not null from viaje_convenio where viaje_id = vl);
 
-  raise exception E'CONVENIO_REFRESCO_0691 solo-abierto-refresca=% abierto-reabre-despacho=% cuadre-intacto=% liquidado-intacto=%   (esperado t / t / t / t)',
+  raise exception E'CONVENIO_REFRESCO_0694 solo-abierto-refresca=% abierto-reabre-despacho=% cuadre-intacto=% liquidado-intacto=%   (esperado t / t / t / t)',
     solo, reabre, cuadre, liquidado;
 end $$;
 
--- ── 342. Carta Porte, el aviso de dudas a la oficina cubre correo, WhatsApp y panel, y sigue siendo una vez por documento (mig. 0692) ──
--- Esperado: CP_POR_AVISAR_0692 correo=t whatsapp=t panel=t limpio-no=t una-vez=t
+-- ── 342. Carta Porte, el aviso de dudas a la oficina cubre correo, WhatsApp y panel, y sigue siendo una vez por documento (mig. 0695) ──
+-- Esperado: CP_POR_AVISAR_0695 correo=t whatsapp=t panel=t limpio-no=t una-vez=t
 do $$
 declare
   ta uuid; ids uuid[]; c1 uuid := gen_random_uuid(); c2 uuid := gen_random_uuid(); c3 uuid := gen_random_uuid(); c4 uuid := gen_random_uuid();
@@ -19562,18 +19562,18 @@ declare
   v_ok constant jsonb := '{"hallazgos":[],"bloqueos":0,"porConfirmar":0,"listoParaAprobar":true}';
   r_correo boolean; r_wa boolean; r_panel boolean; r_limpio boolean; r_una boolean;
 begin
-  insert into tenant (nombre) values ('ZZZ VERIF 0692 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0695 A') returning id into ta;
   insert into cp_documento (id, tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, storage_ruta, validacion, confianza_min) values
-    (c1, ta, 'correo',   'pdf_texto', 'zzz1.pdf', 10, encode(sha256(convert_to('0692-v-1', 'utf8')), 'hex'), 'por_revisar', 'r/1', v_mal, 0.95),
-    (c2, ta, 'whatsapp', 'pdf_texto', 'zzz2.pdf', 10, encode(sha256(convert_to('0692-v-2', 'utf8')), 'hex'), 'por_revisar', 'r/2', v_mal, 0.95),
-    (c3, ta, 'manual',   'pdf_texto', 'zzz3.pdf', 10, encode(sha256(convert_to('0692-v-3', 'utf8')), 'hex'), 'por_revisar', 'r/3', v_mal, 0.95),
-    (c4, ta, 'whatsapp', 'pdf_texto', 'zzz4.pdf', 10, encode(sha256(convert_to('0692-v-4', 'utf8')), 'hex'), 'por_revisar', 'r/4', v_ok, 0.99);
+    (c1, ta, 'correo',   'pdf_texto', 'zzz1.pdf', 10, encode(sha256(convert_to('0695-v-1', 'utf8')), 'hex'), 'por_revisar', 'r/1', v_mal, 0.95),
+    (c2, ta, 'whatsapp', 'pdf_texto', 'zzz2.pdf', 10, encode(sha256(convert_to('0695-v-2', 'utf8')), 'hex'), 'por_revisar', 'r/2', v_mal, 0.95),
+    (c3, ta, 'manual',   'pdf_texto', 'zzz3.pdf', 10, encode(sha256(convert_to('0695-v-3', 'utf8')), 'hex'), 'por_revisar', 'r/3', v_mal, 0.95),
+    (c4, ta, 'whatsapp', 'pdf_texto', 'zzz4.pdf', 10, encode(sha256(convert_to('0695-v-4', 'utf8')), 'hex'), 'por_revisar', 'r/4', v_ok, 0.99);
   select array_agg(id) into ids from cp_documentos_por_avisar(200, 0.85, 3) where tenant_id = ta;
   r_correo := c1 = any(ids); r_wa := c2 = any(ids); r_panel := c3 = any(ids); r_limpio := not (c4 = any(ids));
   perform cp_documento_reclamar_aviso(ta, c2, 'hallazgos');
   select array_agg(id) into ids from cp_documentos_por_avisar(200, 0.85, 3) where tenant_id = ta;
   r_una := not (c2 = any(ids)) and c1 = any(ids);
 
-  raise exception E'CP_POR_AVISAR_0692 correo=% whatsapp=% panel=% limpio-no=% una-vez=%   (esperado t / t / t / t / t)',
+  raise exception E'CP_POR_AVISAR_0695 correo=% whatsapp=% panel=% limpio-no=% una-vez=%   (esperado t / t / t / t / t)',
     r_correo, r_wa, r_panel, r_limpio, r_una;
 end $$;
