@@ -363,7 +363,7 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
     llamador: 'src/lib/likida/conductor/senal_vida.ts',
     cuerpo: 'Hola {{1}}, sobre tu viaje {{2}}: {{3}}. ¿Sigues bien? Toca un botón para avisarnos.',
     ejemplos: ['Juan', 'F-1042', 'no recibimos la señal del GPS de tu unidad desde hace 1 hora'],
-    variables: ['nombre del chofer', 'folio', 'qué se ve (una línea, con «segundo aviso:» al principio en el segundo)'],
+    variables: ['nombre del chofer', 'folio', 'qué se ve (una línea; en el segundo aviso empieza con «segundo aviso:» y termina con «Si no contestas, aviso al jefe de tráfico»)'],
     botones: [
       { tipo: 'QUICK_REPLY', texto: 'Sí, estoy', payloadPrefijo: 'senal_vida_estoy' },
       { tipo: 'QUICK_REPLY', texto: 'Voy a cargar', payloadPrefijo: 'senal_vida_cargar' },
