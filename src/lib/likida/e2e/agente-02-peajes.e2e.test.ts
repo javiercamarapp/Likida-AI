@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { crearDbFalsa, type DbFalsa, type Fila } from '../peajes/db_falsa.test.util';
+import './reloj_adelantado.fixture';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // E2E AGENTE 2 — PEAJES (archivo del proveedor × gasto × GPS × caseta).

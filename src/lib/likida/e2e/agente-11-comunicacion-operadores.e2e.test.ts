@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { crearDbMemoria, type DbMemoria, type Fila } from './db_memoria.fixture';
+import './reloj_adelantado.fixture';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // E2E AGENTE 11 — COMUNICACIÓN CON OPERADORES (aceptar el viaje + avisos y acuses por el selector de WhatsApp +

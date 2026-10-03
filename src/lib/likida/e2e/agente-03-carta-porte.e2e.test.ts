@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import './reloj_adelantado.fixture';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // E2E AGENTE 3 — CARTA PORTE MULTI-FORMATO (lo que manda el cliente → revisión → viaje → export a SU formato).

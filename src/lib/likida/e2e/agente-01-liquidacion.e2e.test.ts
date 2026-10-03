@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import './reloj_adelantado.fixture';
 import type { LiquidacionExterna } from '../liquidacion_externa/repo';
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -344,7 +344,7 @@ export async function escalarViajesSinAceptar(args: {
         // se gasta el intento de texto que Meta rechazaría con 131047: va directo a
         // la plantilla de asignación. Con la ventana abierta o sin dato, el texto
         // primero, como siempre.
-        if (v.operadorTelefono && (await ventanaDeContacto(v.operadorTelefono)).estado !== 'cerrada') {
+        if (v.operadorTelefono && (await ventanaDeContacto(v.operadorTelefono, args.ahora)).estado !== 'cerrada') {
           const t = await enviarTexto(v.operadorTelefono, armarRecordatorioChofer(v, horasDe(v.tenantId)));
           // Lo que el cliente de Meta YA dejó en `wa_outbox` (un rechazo reintentable —timeout, 429, 5xx— Y el token vencido
           // 190/401, que no es «vuelve más tarde» pero sí se encola: es la regla del campo `encolado`) lo entrega el outbox con

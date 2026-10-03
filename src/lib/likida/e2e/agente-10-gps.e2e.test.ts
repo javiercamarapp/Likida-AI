@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { crearDbMemoria, type DbMemoria, type Fila } from './db_memoria.fixture';
+import './reloj_adelantado.fixture';
 import type { Http } from '../conectores/tipos';
 import type { DepsValidacion } from '../conductor/validar_hito';
 import type { SitioValidable, Veredicto } from '../conductor/validacion';
