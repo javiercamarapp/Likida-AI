@@ -77,13 +77,41 @@ describe('el aviso de una tarea escalada', () => {
   });
 
   it('una tarea de dinero no llega al encargado: si solo él está marcado, se omite diciendo por qué', async () => {
-    const dinero = armar([tarea({ destino: 'contador', motivo: 'duda_fiscal', resumen: 'Diferencia de $45,320' })], { conf: { eventos: ['escalado' as never], roles: ['encargado'] } });
+    const dinero = armar([tarea({ destino: 'liquidacion', motivo: 'diferencia_liquidacion', resumen: 'Diferencia de $45,320' })], { conf: { eventos: ['escalado' as never], roles: ['encargado'] } });
     expect(await avisarEscalacion(T, 't1', dinero.deps)).toBe('omitido_sin_destinatario');
     expect(dinero.enviados).toHaveLength(0);
     // con el dueño marcado, solo el dueño la recibe
     const conDueno = armar([tarea({ destino: 'liquidacion', motivo: 'diferencia_liquidacion' })]);
     expect(await avisarEscalacion(T, 't1', conDueno.deps)).toBe('enviado');
     expect(conDueno.enviados[0].a).toEqual(['dueno@flota.test']);
+  });
+
+  it('R09-3: una tarea dirigida al CONTADOR le llega a sus cuentas (con su propio botón) además del dueño; el encargado sigue sin verla', async () => {
+    const r = armar([tarea({ destino: 'contador', motivo: 'duda_fiscal', resumen: 'Duda sobre un CFDI' })], { conf: { eventos: ['escalado' as never], roles: ['flota_admin', 'encargado'] } });
+    expect(await avisarEscalacion(T, 't1', r.deps)).toBe('enviado');
+    expect(r.enviados[0].a.sort()).toEqual(['conta@flota.test', 'dueno@flota.test']);
+    expect(correoDeTarea({ destino: 'contador', motivo: 'duda_fiscal', viajeFolio: null, resumen: 'x' }, null).boton?.href).toContain('/dashboard/contador');
+    // el destino NO elige a otros: una tarea para liquidación no se la manda al contador, y una operativa tampoco
+    const otra = armar([tarea({ destino: 'liquidacion', motivo: 'diferencia_liquidacion' })]);
+    await avisarEscalacion(T, 't1', otra.deps);
+    expect(otra.enviados[0].a).toEqual(['dueno@flota.test']);
+    // sin duplicar el correo si la cuenta del contador ya estaba marcada, ni mandar a un contador sin correo
+    const sinCorreo = armar([tarea({ destino: 'contador', motivo: 'duda_fiscal' })], { usuarios: async () => [{ id: 'u1', nombre: 'Dueño', email: 'dueno@flota.test', rol: 'flota_admin' }, { id: 'u3', nombre: 'Conta', email: ' ', rol: 'contador' }] });
+    await avisarEscalacion(T, 't1', sinCorreo.deps);
+    expect(sinCorreo.enviados[0].a).toEqual(['dueno@flota.test']);
+  });
+
+  it('R09-5: si el correo SALIÓ y sellarlo falla, se reintenta el sello y no se lanza ni se reenvía: queda enviado', async () => {
+    let fallos = 2; const sellos: string[] = [];
+    const r = armar([tarea()], { async marcar(_t, id, estado) { if (estado === 'enviado' && fallos-- > 0) throw new Error('base parpadeó'); sellos.push(`${id}:${estado}`); } });
+    expect(await avisarEscalacion(T, 't1', r.deps)).toBe('enviado');
+    expect(sellos).toEqual(['t1:enviado']);
+    expect(r.enviados).toHaveLength(1);
+    // la base no vuelve en los 3 intentos: el aviso salió y se dice, sin lanzar
+    fallos = 99;
+    const r2 = armar([tarea({ id: 't2' })], { async marcar() { throw new Error('base caída'); } });
+    expect(await avisarEscalacion(T, 't2', r2.deps)).toBe('enviado');
+    expect(r2.enviados).toHaveLength(1);
   });
 
   it('sin canal de correo en el entorno: omitida diciéndolo, sin reclamar', async () => {

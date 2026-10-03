@@ -116,11 +116,15 @@ export async function listarCatalogosConvenio(tenantId: string): Promise<Catalog
 /** Los convenios de la flota con sus instrucciones. El dinero SOLO viene si `conFinanzas` (la base también lo niega). */
 export async function listarConvenios(tenantId: string, opciones: { conFinanzas: boolean }): Promise<ConvenioFila[]> {
   const admin = supabaseAdmin();
+  // R10-4: la versión se lee PRIMERO, antes que las filas y las instrucciones. Leída en paralelo con ellas, una edición que cayera en medio
+  // dejaba la pantalla con instrucciones viejas y la versión nueva: guardar entonces pasaba el control de la 0656 y pisaba esa edición. Con la
+  // versión primero, lo peor que puede pasar es mostrar instrucciones más nuevas que la versión: guardar choca («alguien más lo cambió»).
+  const versiones = await leerVersiones(tenantId);
   const convenios = await leerTodo((d, h) => acotada(admin.from('cliente_convenio').select(COLS_CONVENIO, conteo(d))
     .eq('tenant_id', tenantId).order('nombre').order('id').range(d, h), 'convenios.lista') as never, 'convenios.lista');
   if (convenios.length === 0) return [];
 
-  const [instrucciones, clientes, sitios, comerciales, versiones] = await Promise.all([
+  const [instrucciones, clientes, sitios, comerciales] = await Promise.all([
     leerTodo((d, h) => acotada(admin.from('convenio_instruccion').select(COLS_INSTRUCCION, conteo(d))
       .eq('tenant_id', tenantId).eq('activa', true).order('orden').order('id').range(d, h), 'convenios.instrucciones') as never, 'convenios.instrucciones'),
     leerTodo((d, h) => acotada(admin.from('cliente').select('id, nombre', conteo(d))
@@ -131,7 +135,6 @@ export async function listarConvenios(tenantId: string, opciones: { conFinanzas:
       ? leerTodo((d, h) => acotada(admin.from('convenio_comercial').select('convenio_id, tarifa_modo, tarifa_precio, tarifa_moneda, requisitos_cobro', conteo(d))
         .eq('tenant_id', tenantId).order('convenio_id').range(d, h), 'convenios.comercial') as never, 'convenios.comercial')
       : Promise.resolve([] as Fila[]),
-    leerVersiones(tenantId),
   ]);
   const nombreCliente = new Map(clientes.map((c) => [String(c.id), String(c.nombre)] as const));
   const nombreSitio = new Map(sitios.map((g) => [String(g.id), String(g.nombre)] as const));

@@ -278,6 +278,9 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0677_vigia_directores_solo_dueno.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0678_peaje_curso_respeta_baja.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0679_cp_documento_reabre_con_la_llegada_nueva.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0694_convenio_refrescar_solo_en_curso.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0695_cp_documentos_por_avisar_todos_los_canales.sql
+          PGUSER=postgres bash supabase/tests/0693_vigia_respuesta_rapida_tope_concurrencia.sh localhost 5432 postgres
           PGUSER=postgres bash supabase/tests/0674_vigia_correo_concurrencia.sh localhost 5432 postgres
           PGUSER=postgres bash supabase/tests/0380_conductor_claim_concurrencia.sh localhost 5432 postgres
 

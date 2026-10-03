@@ -244,4 +244,41 @@ describe('E2E del orquestador vivo', () => {
     expect(t).toMatchObject({ destino: 'jefe_de_trafico', motivo: 'falla_de_agente' });
     expect(t!.resumen).toContain('Carta Porte');
   });
+  it('8) FUERA DE ORDEN: la tarea se atiende o el agente se recupera ANTES de que llegue el aviso → no se manda un correo de algo ya resuelto', async () => {
+    // a) la persona atiende la tarea mientras el aviso sigue pendiente (el correo falló una vez): la corrida siguiente no escribe.
+    w.romperCorreo(true);
+    await w.asistente(A)('escalar_a_persona', { destino: 'jefe_de_trafico', motivo: 'operador_sin_respuesta', resumen: 'El operador no responde' });
+    expect(w.tareas[0]).toMatchObject({ avisoEstado: 'pendiente', avisoIntentos: 1 });
+    w.tareas[0].estado = 'atendida';
+    w.romperCorreo(false);
+    expect(await avisarEscalacion(A, w.tareas[0].id, w.aviso)).toBe('no_aplica');
+    w.avanzar(31);
+    await w.ciclo();
+    expect(w.correos).toHaveLength(0);
+    expect(w.tareas[0]).toMatchObject({ avisoEstado: 'pendiente', avisoIntentos: 1 });
+
+    // b) el latido cae, el barrido abre la tarea con el correo caído, el agente se recupera y el barrido la cierra solo: el aviso
+    //    que llega después (cuando el correo vuelve) ya no aplica y no sale nada.
+    w.romperCorreo(true);
+    w.caerVigia(A);
+    w.avanzar(31);
+    await w.ciclo();
+    const barrida = w.tareas.find((t) => t.dedupe === 'barrido:vigia')!;
+    expect(barrida).toMatchObject({ estado: 'abierta', avisoEstado: 'pendiente' });
+    w.sanar(A);
+    w.romperCorreo(false);
+    w.avanzar(31);
+    const c = await w.ciclo();
+    expect(c.barrido).toMatchObject({ cerradas: 1 });
+    expect(barrida.estado).toBe('atendida');
+    expect(w.correos).toHaveLength(0);
+    expect(await avisarEscalacion(A, barrida.id, w.aviso)).toBe('no_aplica');
+
+    // c) un latido que se recupera ANTES del primer barrido no abre ninguna tarea
+    const antes = w.tareas.length;
+    w.caerVigia(B); w.sanar(B);
+    w.avanzar(31);
+    await w.ciclo();
+    expect(w.tareas).toHaveLength(antes);
+  });
 });

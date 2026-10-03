@@ -308,7 +308,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 287;
 // Ronda 15, P14 «vigia-respaldo-correo» (0673-0674): +8 llamadas en `vigia/repo.ts`, por `acotada` (lista de directores, RPC del correo, tablero).
 // Ronda 15 (corrector, 0676): +1 en `carta_porte_docs/repo.ts` (la RPC `cp_documentos_cerrar_zombis`).
 // Ronda 16 (integración): 1,890 + 6 + 8 + 1 = 1,905; CONFIRMADO con el barrido real del árbol fusionado (ver la prueba: «N de 1,905»). Un techo de integración es la SUMA de los tramos.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_905;
+// RONDA 18, paquete «cierre-reauditoria»: 0 archivos y +5 llamadas (1,905 → 1,910), todas en `repo.ts` de su módulo (ya contaban; cada una va por `acotada` con el
+// `tenant_id` anclado): `conductor/repo.ts` +4 (los episodios de «sin señal de vida» para el tablero: filtro por viajes, episodios, folios y choferes) y `reglas/repo.ts` +1
+// (¿hay otra corrida mandando el aviso de esta regla?, R10-6). Funcionalidad nueva, no código migrado. Medido con el barrido real: base 3e61ee1d = 1,905; con el paquete = 1,910.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_910;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

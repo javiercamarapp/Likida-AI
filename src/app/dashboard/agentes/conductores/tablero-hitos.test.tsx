@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { CONFIG_CONDUCTOR_DEFAULT } from '@/lib/likida/conductor/config';
 import { hitoVacio } from '@/lib/likida/conductor/memoria.fixture';
 import type { DatosTablero, ViajeTablero } from '@/lib/likida/conductor/repo_validacion';
-import { armarTablero, indicadoresVista } from '@/lib/likida/conductor/tablero';
+import { armarTablero, episodiosVista, indicadoresVista } from '@/lib/likida/conductor/tablero';
 import type { HitoFila, TipoHito } from '@/lib/likida/conductor/tipos';
 import { TableroHitos, type FiltrosVista } from './tablero-hitos';
 
@@ -27,17 +27,53 @@ function H(viajeId: string, e: Partial<Record<TipoHito, string | Partial<HitoFil
 const FILTROS: FiltrosVista = { terminalId: '', clienteId: '', operadorId: '', semaforo: '', dias: 7 };
 const IND = indicadoresVista({ recibidos: 40, sinInsistencia: 30, conRespuestaMedida: 25, minutosRespuestaPromedio: 12.4, escalados: 3, omitidos: 0, validadosUbicacion: 20, sinCoincidencia: 1, capturadosOficina: 0 });
 
-function pintar(datos: DatosTablero, o: { puedeActuar?: boolean; ind?: ReturnType<typeof indicadoresVista> | null; filtros?: FiltrosVista } = {}) {
+function pintar(datos: DatosTablero, o: { puedeActuar?: boolean; ind?: ReturnType<typeof indicadoresVista> | null; filtros?: FiltrosVista; episodios?: ReturnType<typeof episodiosVista> | null } = {}) {
   return renderToStaticMarkup(
     <TableroHitos
       tablero={armarTablero(datos, cfg, AHORA)} indicadores={o.ind === undefined ? IND : o.ind} dias={7} filtros={o.filtros ?? FILTROS}
       catalogos={{ terminales: [{ id: 'tm1', nombre: 'Tlaquepaque' }], clientes: [{ id: 'c1', nombre: 'Cliente A' }], operadores: [{ id: 'o1', nombre: 'Chofer 1' }] }}
       ocultos={{ tenant: 't-9' }} accionUrl="/dashboard/agentes/conductores" puedeActuar={o.puedeActuar ?? true} accion={accion}
-      accionSitios={accion} sitios={[{ id: 's1', nombre: 'Planta Zapopan', tipo: 'planta' }]}
+      accionSitios={accion} sitios={[{ id: 's1', nombre: 'Planta Zapopan', tipo: 'planta' }]} episodios={o.episodios}
     />,
   );
 }
 const datos = (viajes: ViajeTablero[], hitos: HitoFila[], extra: Partial<DatosTablero> = {}): DatosTablero => ({ viajes, hayMas: false, hitos, veredictos: [], evidencias: [], acciones: [], sitios: new Map(), ...extra });
+
+describe('el tablero de hitos — los episodios de «sin señal de vida» se LISTAN en pantalla', () => {
+  const ep = { id: 'e1', viajeId: 'v1', folio: 'F-77', operador: 'Juan Pérez', motivo: 'gps_obsoleto' as const, abiertoEn: hace(90), nivelEnviado: 3 as const, aviso1En: hace(89), aviso2En: hace(69), escaladoEn: hace(49), cerradoEn: null, cierreMotivo: null, respuesta: null };
+
+  it('lista cada episodio con folio, chofer, motivo, la cadena de avisos y dónde va; uno cerrado dice cómo terminó', () => {
+    const html = pintar(datos([], []), { episodios: episodiosVista([ep, { ...ep, id: 'e2', folio: 'F-78', nivelEnviado: 1, aviso2En: null, escaladoEn: null, cerradoEn: hace(10), cierreMotivo: 'respondio', respuesta: 'estoy' }]) });
+    expect(html).toContain('Sin señal de vida');
+    expect(html).toContain('F-77');
+    expect(html).toContain('Juan Pérez');
+    expect(html).toContain('GPS sin reportar');
+    expect(html).toContain('Primer aviso al chofer');
+    expect(html).toContain('Segundo aviso al chofer');
+    expect(html).toContain('Aviso al jefe de tráfico');
+    expect(html).toContain('Escalado al jefe de tráfico, sigue sin atenderse');
+    expect(html).toContain('F-78');
+    expect(html).toContain('El chofer respondió: «Sí, estoy»');
+  });
+
+  it('sin episodios lo dice (no pinta un hueco); sin poder leerlos lo dice; una vista que no los trae no pinta la sección', () => {
+    expect(pintar(datos([], []), { episodios: [] })).toContain('Ningún tractor quedó sin señal de vida en los últimos 7 días');
+    expect(pintar(datos([], []), { episodios: null })).toContain('No se pudieron leer los episodios');
+    expect(pintar(datos([], []))).not.toContain('Sin señal de vida');
+  });
+});
+
+describe('el tablero de hitos — por qué un hito está omitido (R10-8)', () => {
+  it('omitido porque avisó el siguiente: «avisó el siguiente»; omitido porque el barrido cerró un viaje abierto 30+ días: lo dice y dice que se puede capturar', () => {
+    const inferido = pintar(datos([V('1')], H('1', { llegada_carga: { estado: 'omitido', omitidoMotivo: 'inferido_por_salida_carga' }, salida_carga: hace(200) })));
+    expect(inferido).toContain('omitido (avisó el siguiente)');
+    expect(inferido).not.toContain('más de 30 días');
+    const vencido = pintar(datos([V('2')], H('2', { llegada_carga: { estado: 'omitido', omitidoMotivo: 'viaje_abierto_vencido', escaladoEn: hace(5000) } })));
+    expect(vencido).toContain('el viaje lleva más de 30 días abierto y ya se había escalado');
+    expect(vencido).toContain('captúralo a mano');
+    expect(vencido).not.toContain('omitido (avisó el siguiente)');
+  });
+});
 
 describe('el tablero de hitos — lo que ve el jefe de tráfico', () => {
   it('pinta el semáforo con conteos, los 5 hitos de cada viaje y la hora del mensaje', () => {

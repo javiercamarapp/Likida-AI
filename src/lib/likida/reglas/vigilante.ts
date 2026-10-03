@@ -33,7 +33,7 @@ import { evaluar, type Disparo } from './lectores';
 import {
   reglasActivas, sellosDe, sellarDisparos, anotarCorrida, llaveSello,
   avisosEnviadosDesde, registrarAviso, purgarAvisosViejos,
-  reclamarDisparos, confirmarDisparos, liberarDisparos,
+  reclamarDisparos, confirmarDisparos, liberarDisparos, hayEnvioAjenoEnVuelo,
   type ReglaGuardada,
 } from './repo';
 import { evaluarFrecuencia } from './frecuencia';
@@ -68,6 +68,16 @@ export function mensajeDeRegla(frase: string, evidencias: string[]): string {
     ? `\n…y ${resto} caso${resto === 1 ? '' : 's'} más. Están todos en «Mis reglas» del panel.`
     : '';
   return `${cabeza}\n${visibles.join('\n')}${cola}\nPara dejar de recibir esto, pausa la regla en «Mis reglas».`;
+}
+
+/** Confirma con hasta 3 intentos; `null` = no se pudo (el aviso ya salió: nunca se relanza). */
+async function confirmarConReintento(tenantId: string, reglaId: string, token: string, ahora: Date): Promise<number | null> {
+  for (let i = 0; i < 3; i++) {
+    try { return await confirmarDisparos(tenantId, reglaId, token, ahora); } catch (e) {
+      logger.warn('reglas.confirmar_reintento', { regla: reglaId, tenant: tenantId, intento: i + 1, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return null;
 }
 
 /** El resultado de correr UNA regla: cuántos casos avisó y si se pospuso. */
@@ -137,6 +147,26 @@ async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<Resultado
   }
   const token = reclamo.modo === 'reclamo' ? reclamo.token : '';
 
+  // ── EL TOPE, OTRA VEZ, YA CON EL RECLAMO PUESTO (R10-6) ────────────────────
+  // El chequeo de frecuencia de arriba lee el historial de avisos YA registrados. Dos corridas solapadas con casos distintos no se ven
+  // ahí (ninguna ha registrado nada) y cada una gana SUS llaves: mandarían dos avisos en la hora. Con el reclamo ya insertado, quien
+  // ve otro envío vigente de esta misma regla suelta lo suyo y lo deja para la hora siguiente (no se sella: sigue siendo «nuevo»).
+  if (reclamo.modo === 'reclamo') {
+    let ajeno: boolean;
+    try {
+      ajeno = await hayEnvioAjenoEnVuelo(regla.tenantId, regla.id, token, ahora);
+    } catch (e) {
+      await liberarDisparos(regla.tenantId, regla.id, token);
+      throw e;
+    }
+    if (ajeno) {
+      await liberarDisparos(regla.tenantId, regla.id, token);
+      logger.info('reglas.aviso_diferido_por_envio_en_vuelo', { regla: regla.id, tenant: regla.tenantId, plantilla: regla.plantilla, casos: aMandar.length });
+      await anotarCorrida(regla.tenantId, regla.id, ahora, 0);
+      return { avisados: 0, diferida: true };
+    }
+  }
+
   // ── FUERA DE LA VENTANA DE 24 H TAMBIÉN SALE (auditoría 6-7-9-10-12-13, §13) ─
   // `sendText` a secas fallaba con 131047 cuando el jefe llevaba más de 24 h sin
   // escribirle al número: `correrRegla` lanzaba, no sellaba y reintentaba cada
@@ -172,8 +202,13 @@ async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<Resultado
   }
 
   if (reclamo.modo === 'reclamo') {
-    const confirmadas = await confirmarDisparos(regla.tenantId, regla.id, token, ahora);
-    if (confirmadas < casos) {
+    // R10-5: Meta YA aceptó. Si confirmar lanza (la base parpadeó), antes la regla fallaba sin registrar el aviso: las llaves quedaban
+    // `enviando`, el tope de frecuencia no veía nada y a la hora siguiente (arriendo vencido) el aviso salía OTRA vez. Ahora se
+    // reintenta, y si de verdad no se pudo se DICE en el log y la corrida sigue: el aviso se registra (el tope de la hora siguiente lo ve).
+    const confirmadas = await confirmarConReintento(regla.tenantId, regla.id, token, ahora);
+    if (confirmadas === null) {
+      logger.error('reglas.confirmacion_fallo_tras_envio', { regla: regla.id, tenant: regla.tenantId, casos });
+    } else if (confirmadas < casos) {
       // El arriendo venció durante el envío y otra corrida retomó la llave: el aviso pudo salir dos veces. No es un fallo
       // de ESTA corrida (Meta aceptó), pero se deja a la vista para quien lea el log.
       logger.warn('reglas.arriendo_perdido_al_confirmar', { regla: regla.id, tenant: regla.tenantId, casos, confirmadas });
