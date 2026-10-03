@@ -344,7 +344,7 @@ export async function enviarTexto(to: string, body: string): Promise<EnvioWhatsA
     const { codigo, mensaje } = errorDeMeta(crudo);
     logger.error('wa.sendText', { para: destinatarioEnmascarado(to), status: res.status, codigo, body: crudo.slice(0, 400) });
     if (esTokenMetaInvalido(codigo, res.status)) await alFallarPorToken(payload, codigo, res.status, crudo);
-    else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
+      else if (esReintentableMeta(codigo, res.status)) await encolarSalidaWhatsApp(payload, `HTTP ${res.status}: ${crudo}`);
     return { ok: false, error: mensaje || `HTTP ${res.status}`, codigo, status: res.status };
   }
   // El ÉXITO también deja rastro. Sin esta línea, "se envió" y "nunca se llamó"
