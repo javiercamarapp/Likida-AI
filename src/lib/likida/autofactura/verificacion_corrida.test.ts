@@ -99,4 +99,8 @@ describe('sanearHtml: lo que llega a git no trae datos ni código', () => {
     expect(s).not.toMatch(/<!--/);
     expect(s).not.toMatch(/\son[a-z]+\s*=/i);
   });
+  it('un < o > suelto queda escapado como texto y un script sin cierre se descarta completo', () => {
+    const s = sanearHtml('<p>1 < 2 > 0</p><script>var x="</p>');
+    expect(s).toBe('<p>1 &lt; 2 &gt; 0</p>');
+  });
 });
