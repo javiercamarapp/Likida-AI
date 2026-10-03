@@ -372,6 +372,8 @@ export async function ejecutarCobranza(
         plantilla: { nombre: PLANTILLA.recordatorioCierre, parametros: [v.operadorNombre ?? 'Operador', v.folio ?? 'sin folio'] },
         contexto: 'cobranza.comprobantes',
         tenantId,
+        // La ventana de 24 h se evalúa al reloj lógico de la corrida (el mismo `ahora` del tier), no al del proceso.
+        ahora,
       });
       if (envio.ok) {
         enviado = true;
