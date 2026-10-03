@@ -33,6 +33,8 @@
 --   4. PASADA ANCHA: las columnas completas SOLO se calculan para las filas
 --      que sobreviven (anti-join contra el conjunto de `descartadas`, que es
 --      pequeño), y `renglones_ajenos` se evalúa UNA vez por fila.
+--   5. LA LIQUIDACIÓN FIRMADA como conjunto por hash (ver el comentario del join): con las
+--      liquidaciones ya aprobadas ahorra otros 0.6 s de CPU de los 2.7 s medidos.
 --
 -- DESCARTADO, y por qué (para no re-litigarlo): un agregado incremental por
 -- trigger. De las 26 dimensiones de las celdas, 9 dependen de PARÁMETROS de la
@@ -176,7 +178,16 @@ AS $function$
               - (case when extract(month from p_hoy)::int = 1 then 1 else 0 end)
       ) as otro_ejercicio
     from gasto g
-    left join liquidacion l on l.viaje_id = g.viaje_id and l.revision in ('aprobada', 'ajustada')
+    -- Las liquidaciones firmadas de ESTA flota, como conjunto (hash), no una búsqueda por cada gasto:
+    -- con las liquidaciones ya aprobadas (el caso normal: «cuadró sola» nace `aprobada`) la unión directa
+    -- por `viaje_id` hacía 180,000 búsquedas de índice (+0.9 s de CPU medido). El filtro por tenant es
+    -- equivalente al original porque el gasto y su liquidación cuelgan del MISMO viaje por llave
+    -- compuesta (viaje_id, tenant_id) en las dos tablas, y `liquidacion_viaje_uidx` (viaje_id único)
+    -- garantiza una fila por viaje, así que la unión no duplica gastos.
+    left join (
+      select l0.viaje_id, l0.id from liquidacion l0
+       where l0.tenant_id = p_tenant and l0.revision in ('aprobada', 'ajustada')
+    ) l on l.viaje_id = g.viaje_id
     left join descartadas d on d.id = g.id
     cross join lateral (
       select case
