@@ -93,4 +93,10 @@ describe('sanearHtml: lo que llega a git no trae datos ni código', () => {
     expect(s).toContain('name="rfc"');
     expect(s).toContain('<form>');
   });
+  it('un fragmento anidado no reconstruye la etiqueta tras el saneo (<scr<script></script>ipt>)', () => {
+    const s = sanearHtml('<p>a</p><scr<script></script>ipt>alert(1)</scr<script></script>ipt><div on<script></script>click="x()">b</div><!<!-- -->-- c -->');
+    expect(s).not.toMatch(/<script/i);
+    expect(s).not.toMatch(/<!--/);
+    expect(s).not.toMatch(/\son[a-z]+\s*=/i);
+  });
 });
