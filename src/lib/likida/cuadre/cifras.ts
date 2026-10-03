@@ -26,7 +26,7 @@ const DINERO_EXPLICITO =
  * mil pesos" ni le aparecía.
  */
 const DINERO_EN_PALABRAS =
-  /\b(?:un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos)\s+(?:mil|millones?|pesos?)\b/i;
+  /\b(?:un|una|uno|medi[oa]|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|doscientos|trescientos|cuatrocientos|quinientos|seiscientos|setecientos|ochocientos|novecientos)\s+(?:mil|mill[oó]n(?:es)?|pesos?)\b/i;
 
 /**
  * Cardinales SUELTOS (sin "pesos"/"mil" pegado). AUDITORÍA 12, MEDIO: "te
@@ -62,9 +62,115 @@ const NUMERO_SUELTO = /(?<![\w-])\d{2,}(?:[.,]\d+)?(?![\w-])/;
 /**
  * Años. Un "2026" suelto casi nunca es dinero, y aparece en fechas, folios y
  * referencias a normas. Un monto de $2,026 sí se distingue: lleva símbolo o coma
- * de miles, y esos ya los atrapa DINERO_EXPLICITO antes de llegar aquí.
+ * de miles, y esos ya los atrapa DINERO_EXPLICITO antes de llegar aquí — cierto
+ * para el PORTÓN de abajo, que es el único que consulta DINERO_EXPLICITO.
  */
 const ANIO = /(?<![\w-])(?:19|20)\d{2}(?![\w-])/g;
+
+/** Un `$` (con o sin espacio) justo antes: es un monto, no un año. */
+const MARCA_DE_DINERO_ANTES = /\$\s?$/;
+/**
+ * Lo que vuelve AÑO a un entero de la banda 1900-2099, y la única razón para
+ * borrarlo. SEG/AG/TC-32C10-C1 (AUDITORÍA 32 c10, CRÍTICO): hasta aquí el
+ * criterio estaba INVERTIDO —se borraba salvo que hubiera marca de dinero—, así
+ * que un monto pelado (`te sobran 2000`), que es como se escribe en WhatsApp,
+ * desaparecía antes de cotejarse y la guardia lo sellaba como respaldado.
+ *
+ * Una preposición o un sustantivo de periodo delante (`en 2026`, `del 2026 al
+ * 2027`, `el ejercicio 2026`), o una referencia normativa (`RFA 2026`, `regla
+ * 2.9 de la RFA 2026`), o un separador de fecha pegado (`01/01/2026`, y el
+ * `-` cubre además lo que el lookbehind de `ANIO` ya excluye). Nada más.
+ */
+const CONTEXTO_DE_ANIO_ANTES =
+  /(?:\b(?:en|al|para|desde|hasta|durante|hacia|entre|ejercicio|a[nñ]o|ciclo|RFA|RMF|LIF|LISR|LIVA|CFF|circular|regla|norma|anexo|DOF)\s+|[/-]\s*)$/i;
+/**
+ * AG/SEG/TC-32C11-C1: `de` y `del` SALIERON de la lista de arriba.
+ *
+ * Son la preposición más común del español delante de un monto, y mientras
+ * contaron como marca de año los 200 enteros de 1900 a 2099 volvían a ser
+ * invisibles en LOS DOS carriles en cuanto el modelo escribía «tu saldo es de
+ * 2000» — que es exactamente el fraseo que `prompts.ts:79` produce, porque
+ * `estado_viaje` devuelve anticipo y comprobado pero nunca el remanente, así
+ * que el modelo lo resta y lo introduce con una preposición.
+ *
+ * Piden corroboración: un sustantivo de periodo o una norma ANTES del `de`, o
+ * el rango `del X al Y`. Es lo que distingue «el ejercicio de 2026» de «un
+ * saldo de 2000», y sin ella manda la asimetría que este archivo ya declara:
+ * ante la duda se CONSERVA el número.
+ */
+const CONTEXTO_DE_ANIO_CON_DE =
+  /\b(?:ejercicios?|a[nñ]os?|ciclos?|mes(?:es)?|per[ií]odos?|vigencias?|partir|antes|despu[eé]s|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|RFA|RMF|LIF|LISR|LIVA|CFF|circular|regla|norma|anexo|DOF)\s+del?\s+$/i;
+/** `de`/`del` a secas, para combinarlo con el rango de abajo. */
+const DE_A_SECAS_ANTES = /\bdel?\s+$/i;
+/** `del 2026 al 2027`: el rango sí fija que lo de en medio es un año. */
+const RANGO_DE_ANIOS_DESPUES = /^\s*al?\s+(?:1[89]|20)\d{2}(?![\d,.])/i;
+/** Un separador de fecha justo después: `2026/01/01`, `2026-01-01`. */
+const CONTEXTO_DE_ANIO_DESPUES = /^\s*[/-]\d/;
+/** `pesos`/`mxn`/`m.n.` justo después, o una cola decimal que lo vuelve monto. */
+const MARCA_DE_DINERO_DESPUES = /^(?:\s*(?:pesos?|mxn|m\.?\s?n\.?)\b|[.,]\d)/i;
+
+/**
+ * Quita los años del texto ANTES del cotejo, respetando los montos.
+ *
+ * SEG-32C9-C1 (AUDITORÍA 32 c9, CRÍTICO). El cotejo borraba los años con `ANIO`
+ * a secas, y el lookbehind `(?<![\w-])` deja pasar el `$`: los 200 enteros de
+ * 1900 a 2099 desaparecían del texto antes de compararse contra el respaldo, y
+ * la lista salía VACÍA — que significa «todo respaldado». La única diferencia
+ * entre que la guardia atrape la cifra y que la apruebe era la coma de miles.
+ * Lo que justificaba borrarlos —«esos ya los atrapa DINERO_EXPLICITO antes de
+ * llegar aquí»— vale para el portón y NO vale aquí: en el cotejo no hay ningún
+ * «antes de llegar aquí», el reemplazo corre incondicionalmente y
+ * DINERO_EXPLICITO no participa. Medido con el respaldo real de `estado_viaje`
+ * (anticipo 8000, comprobado 6000):
+ *
+ *     "…te sobran $2,000.00."  → [2000]  se sustituye por el resumen del motor
+ *     "…te sobran $2000."      → []      SALÍA TAL CUAL al WhatsApp del chofer
+ *     "…te sobran 2000 pesos." → []      ídem
+ *     "…te sobran $2000.50."   → [50]    reportaba una cifra que nadie escribió
+ *
+ * Y no había segunda capa: `hablaDeDineroSinCifraVerificable` tampoco lo salva
+ * cuando el texto trae otros montos, porque entonces `MONEY_G` sí encuentra algo.
+ *
+ * La asimetría del archivo manda igual que en el portón: ante la duda se
+ * CONSERVA el número, porque conservarlo cuesta que se sustituya el texto por el
+ * resumen determinístico del motor —correcto y hasta más útil— y borrarlo cuesta
+ * la garantía sobre la que se vende el producto.
+ *
+ * CORRECCIÓN (AUDITORÍA 32 c10, SEG/AG/TC-32C10-C1). Esta cabecera afirmaba que
+ * «el portón sigue con `ANIO` a secas a propósito: ahí el agujero no existe
+ * porque `DINERO_EXPLICITO` corre ANTES». **Era cierto para los cuatro casos que
+ * enumeraba y falso para el quinto, que no enumeró:** un monto PELADO no lleva
+ * marca, así que `DINERO_EXPLICITO` no encaja y `ANIO` lo borraba igual. Medido
+ * sobre este archivo, con el respaldo real (anticipo 8000, comprobado 6000):
+ *
+ *     "…te sobran 2000."  → cotejo []  y portón false   los DOS carriles ciegos
+ *     "…te sobran 1950."  → ídem        (200 enteros, 1900-2099, contiguos)
+ *     "…te sobran 3200."  → cotejo [3200] y portón true  fuera de la banda
+ *
+ * La única diferencia entre que la guardia atrape la cifra y que la selle como
+ * respaldada era caer en la banda de los años. Arreglado invirtiendo el default
+ * en LOS DOS carriles: se borra sólo con marca de AÑO
+ * (`CONTEXTO_DE_ANIO_ANTES`/`_DESPUES`), nunca por omisión de marca de dinero.
+ * El falso negativo de la cláusula sigue abierto y es SEG-32C9-C2.
+ */
+function sinAniosQueNoSeanMonto(texto: string): string {
+  return texto.replace(ANIO, (anio: string, pos: number) => {
+    const antes = texto.slice(0, pos);
+    const despues = texto.slice(pos + anio.length);
+    if (MARCA_DE_DINERO_ANTES.test(antes.slice(-2))) return anio;
+    if (MARCA_DE_DINERO_DESPUES.test(despues)) return anio;
+    // SEG/AG/TC-32C10-C1: se borra SÓLO con marca de año. Antes se borraba por
+    // defecto, y el default es lo que decide el caso que nadie enumeró.
+    if (CONTEXTO_DE_ANIO_ANTES.test(antes)) return ' ';
+    if (CONTEXTO_DE_ANIO_DESPUES.test(despues)) return ' ';
+    // AG/SEG/TC-32C11-C1: `de`/`del` sólo cuentan CON corroboración. Sin esto,
+    // «tu saldo es de 2000» salía sellado como respaldado y «de 3200» no: la
+    // única diferencia era caer en la banda de los años.
+    if (CONTEXTO_DE_ANIO_CON_DE.test(antes)) return ' ';
+    if (DE_A_SECAS_ANTES.test(antes) && RANGO_DE_ANIOS_DESPUES.test(despues)) return ' ';
+    return anio; // ante la duda se CONSERVA: es la asimetría declarada arriba.
+  });
+}
 
 /**
  * Divide el texto en cláusulas para que "comprobantes" en una parte del
@@ -84,7 +190,11 @@ export function tieneCifrasDeDinero(texto: string): boolean {
   // comprobantes" sigue sin marcar (el 3 y "comprobantes" viven juntos), pero
   // "Llevas 6 comprobantes y te sobran 3200 del anticipo" sí marca (el 3200
   // vive en una cláusula sin ninguna palabra de la lista).
-  const sinAnios = texto.replace(ANIO, ' ');
+  // SEG/AG/TC-32C10-C1: era `texto.replace(ANIO, ' ')` a secas, y por eso el
+  // portón NO veía `Te sobran 2000 del anticipo.` mientras sí veía `3200`. Ahora
+  // usa el MISMO criterio que el cotejo, que es lo que impide que los dos
+  // carriles tengan agujeros distintos.
+  const sinAnios = sinAniosQueNoSeanMonto(texto);
   const clausulas = sinAnios.split(SEPARADOR_DE_CLAUSULA);
   return clausulas.some((c) =>
     (NUMERO_SUELTO.test(c) || CARDINAL_SUELTO.test(c)) && !NO_ES_DINERO.test(c),
@@ -154,7 +264,7 @@ function numerosDe(valor: unknown, acc: number[], profundidad = 0): number[] {
  */
 export function hablaDeDineroSinCifraVerificable(texto: string): boolean {
   if (!tieneCifrasDeDinero(texto)) return false;
-  return [...texto.replace(ANIO, ' ').matchAll(MONEY_G)].length === 0;
+  return [...sinAniosQueNoSeanMonto(texto).matchAll(MONEY_G)].length === 0;
 }
 
 export function cifrasSinRespaldo(texto: string, resultados: unknown[]): number[] {
@@ -162,7 +272,7 @@ export function cifrasSinRespaldo(texto: string, resultados: unknown[]): number[
   const fuera: number[] = [];
   // Los años se quitan antes: aparecen en fechas y referencias a normas, y no
   // son cifras que el modelo tenga que justificar contra una tool.
-  for (const m of texto.replace(ANIO, ' ').matchAll(MONEY_G)) {
+  for (const m of sinAniosQueNoSeanMonto(texto).matchAll(MONEY_G)) {
     const crudo = m.slice(1).find((g) => g != null);
     if (!crudo) continue;
     const n = Number(crudo.replace(/,/g, ''));
@@ -197,11 +307,18 @@ const VALOR_CARDINAL: Record<string, number> = {
   cuatrocientos: 400, cuatrocientas: 400, quinientos: 500, quinientas: 500, seiscientos: 600, seiscientas: 600,
   setecientos: 700, setecientas: 700, ochocientos: 800, ochocientas: 800, novecientos: 900, novecientas: 900,
   mil: 1000,
+  // AUDITORÍA 32 c8 (AG-32C8-C1 / TC-32C8-A1): `millón` faltaba, y sin él el
+  // token se saltaba y salía sólo el multiplicando chico — «tres millones» → 3.
+  'millón': 1_000_000, millon: 1_000_000, millones: 1_000_000,
 };
 
 /** Los cardinales del texto, convertidos a número. Compuestos simples se
- *  suman por aproximación ("treinta y dos" → 30+2=32); sin parseador completo
- *  es mejor verificar de más (un compuesto mal sumado cae a 'fuera'). */
+ *  suman por aproximación ("treinta y dos" → 30+2=32) salvo `mil`, que
+ *  MULTIPLICA cuando va después de un valor menor ("ochocientos mil" → 800,000;
+ *  "mil ochocientos" → 1,800). `millón` sigue la MISMA regla una escala arriba
+ *  ("tres millones" → 3,000,000; "mil millones" → 1,000,000,000). Sin parseador
+ *  completo es mejor verificar de más: un compuesto mal sumado cae a 'fuera', y
+ *  'fuera' es el lado seguro. Ver AUDITORÍA 32 c7 y c8 en el cuerpo. */
 export function cardinalesEnPalabras(texto: string): number[] {
   const out: number[] = [];
   const tokens = texto.toLowerCase().match(/[a-záéíóúñ]+/g) ?? [];
@@ -216,8 +333,41 @@ export function cardinalesEnPalabras(texto: string): number[] {
     while (j < tokens.length && (siguiente === 'y' || VALOR_CARDINAL[siguiente] !== undefined)) {
       if (siguiente === 'y') { j++; siguiente = tokens[j]; continue; }
       const vj = VALOR_CARDINAL[siguiente];
-      // "mil ochocientos": mil + 800 = 1800; "doscientos cincuenta": 200+50.
-      suma = vj > suma || v >= 1000 ? suma + vj : (suma >= 100 ? suma + vj : vj + suma);
+      // AUDITORÍA 32 c7 (ARQ/AG/TC/REN-32C7): `mil` es un MULTIPLICADOR cuando
+      // va DESPUÉS de un valor menor que mil, y un sumando cuando va antes.
+      // Las tres ramas del ternario anterior eran todas sumas —sólo reordenaban
+      // los addendos, así que daban el mismo número— y por eso "ochocientos mil"
+      // valía 800+1000 = 1800 en vez de 800,000.
+      //
+      // Fallaba en LAS DOS direcciones. ABIERTA, que es la cara: un respaldo real
+      // de $1,800 aprobaba el texto "un millón ochocientos mil pesos" — un error
+      // de 1000x con el sello de la guardia, y `5aeda80` (la c5) acababa de
+      // exponer este parser a la frontera del panel al extender la guardia para
+      // que leyera letras. CERRADA pero costosa: "doce mil pesos" con 12,000
+      // respaldado daba 1012 y salía como cifra sin respaldo, y el llamador paga
+      // un segundo ciclo de modelo (`copiloto.ts:267`) o tira la pieza entera sin
+      // reintento (`agentes/contenido.ts:194`, `agentes/faq.ts:264`).
+      //
+      // "mil ochocientos" sigue siendo 1800 (mil va primero, suma > 1000 → suma).
+      //
+      // AUDITORÍA 32 c8 (AG-32C8-C1, TC-32C8-A1): este bloque decía que `millón`
+      // quedaba fuera del vocabulario A PROPÓSITO. Ese rótulo era falso en lo que
+      // importa. Fuera del vocabulario, el token se SALTA y sale el multiplicando
+      // chico — medido: "tres millones de pesos" → [3], "cien millones" → [100],
+      // "un millón de pesos" → []. Un respaldo real que traiga un 3 aprobaba
+      // "tres millones de pesos" con el sello de la guardia puesto: el mismo
+      // error de 1000x de la c7, con la escala de arriba y por la puerta de al
+      // lado. Con `millón` dentro, esos textos dan números que no empatan con
+      // nada y caen a 'fuera', que es a donde tienen que caer.
+      //
+      // Lo que NO cambia y se dice para que nadie lo lea como promesa: el parser
+      // sigue sin ser completo. "un millón ochocientos mil" da 1,001,800, no
+      // 1,800,000 — y está bien, porque tampoco empata. El caso peligroso es el
+      // que empata por accidente, no el que no empata.
+      // AUDITORÍA 32 c8 (AG-32C8-C1 / TC-32C8-A1): la misma regla, una escala
+      // arriba. `millón` multiplica cuando va DESPUÉS de un valor menor que un
+      // millón, igual que `mil` con mil. Así «mil millones» da 1e9 y no 1000.
+      suma = vj >= 1000 && suma < vj ? suma * vj : suma + vj;
       j++; siguiente = tokens[j];
     }
     out.push(suma);

@@ -231,6 +231,51 @@ export function avisoEscalados(d: DatosEscalados): Correo {
   };
 }
 
+// ── 4b. Una tarea que el asistente del panel dejó para una persona ────────
+
+export interface DatosEscalacionAsistente {
+  flota: string | null;
+  /** «la mesa de control», «el equipo de liquidación»…: a quién le toca decidir. */
+  destino: string;
+  /** El motivo en palabras de persona («Posible emergencia»). */
+  motivo: string;
+  /** Folio del viaje si la tarea trae uno. */
+  folio: string | null;
+  /** Una frase ya limpia (sin teléfonos, correos ni ligas). */
+  resumen: string;
+  /** La tarea va dirigida al contador: el botón abre su panel, no el tablero de viajes en vivo. */
+  alContador?: boolean;
+  /** Si el motivo exige actuar de inmediato (emergencia): tono urgente. */
+  urgente: boolean;
+}
+
+/**
+ * El asistente del panel NO decide temas delicados: deja una tarea y, si la flota lo encendió, esto es el aviso a la
+ * persona. Dice qué pasó y a quién le toca; no afirma culpables y no trae datos personales (el resumen ya viene limpio).
+ */
+export function avisoEscalacionAsistente(d: DatosEscalacionAsistente): Correo {
+  return {
+    asunto: `${d.motivo}${d.folio ? ` · viaje ${d.folio}` : ''}: el asistente dejó una tarea`,
+    avance: 'El asistente del panel dejó una tarea que solo una persona puede decidir.',
+    titulo: `${d.motivo}: le toca a ${d.destino}`,
+    parrafos: [
+      'El asistente del panel no decide los temas delicados: los deja en una tarea para la persona que sí decide. Esta quedó abierta y espera a alguien.',
+      d.resumen,
+    ],
+    datos: [
+      ['Motivo', d.motivo],
+      ['Le toca a', d.destino],
+      ...(d.folio ? ([['Viaje', d.folio]] as Array<[string, string]>) : []),
+    ],
+    // La tarea dirigida al contador se abre desde SU panel (el tablero de viajes en vivo no es de su área y lo rebotaría).
+    boton: d.alContador
+      ? { texto: 'Abrir el panel del contador', href: `${APP}/dashboard/contador` }
+      : { texto: 'Abrir las tareas del asistente', href: `${APP}/dashboard/viajes-en-vivo` },
+    tono: d.urgente ? 'urgente' : 'atencion',
+    porQueLoRecibes: porQue(d.flota, 'supervisas la operación'),
+  };
+}
+
 // ── 5. La cola de un agente que dejó de bajar ──────────────────────────────
 
 export interface DatosColaAtorada {

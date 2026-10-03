@@ -21,7 +21,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { traerTodo, conteo } from '@/lib/likida/pg';
+import { traerTodoPorLlave, llaveFechaId, despuesDeFechaId, LecturaCortadaPorReloj, PAGINA, type LlaveFechaId } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
 import type { Gasto } from '@/types/likida';
@@ -172,27 +172,41 @@ export function rangoPendiente(
  * gastos sin comprobante en el mes, `decidirCruce` solo veía la mitad del
  * fondo: los CFDI cuyo ticket cayó fuera del corte se marcaban `disponible`
  * en vez de `casado`, y el sello de dedup impide una segunda oportunidad
- * automática. `traerTodo` trae el fondo COMPLETO o lanza.
+ * automática. `traerTodoPorLlave` trae el fondo COMPLETO o lanza.
  */
-export async function gastosSinCfdi(tenantId: string, desde: string, hasta: string): Promise<Gasto[]> {
-  const data = await traerTodo<{
+export async function gastosSinCfdi(
+  tenantId: string, desde: string, hasta: string, venceEn?: number,
+): Promise<Gasto[]> {
+  const leidos = await traerTodoPorLlave<{
     id: string; concepto: unknown; monto: unknown; fecha: unknown;
     rfc_emisor: unknown; cfdi_uuid: unknown; ocr_extra: unknown;
-  }>(
-    (d, h) => acotada(supabaseAdmin()
-      .from('gasto')
-      .select('id, concepto, monto, fecha, rfc_emisor, cfdi_uuid, ocr_extra', conteo(d))
-      .eq('tenant_id', tenantId)
-      .is('cfdi_uuid', null)
-      // Un día de holgura a cada lado: la fecha del ticket (OCR) y la del
-      // timbrado pueden diferir en uno, igual que en la conciliación de
-      // consolidados (VENTANA_DIAS_FECHA, 0076).
-      .gte('fecha', sumarDias(desde, -1))
-      .lte('fecha', sumarDias(hasta, 1))
-      .order('id')
-      .range(d, h), 'sat_descarga.gastos_sin_cfdi'),
+  }, LlaveFechaId>(
+    (despuesDe) => {
+      let q = supabaseAdmin()
+        .from('gasto')
+        .select('id, concepto, monto, fecha, rfc_emisor, cfdi_uuid, ocr_extra', despuesDe === null ? { count: 'exact' as const } : {})
+        .eq('tenant_id', tenantId)
+        .is('cfdi_uuid', null)
+        // Un día de holgura a cada lado: la fecha del ticket (OCR) y la del
+        // timbrado pueden diferir en uno, igual que en la conciliación de
+        // consolidados (VENTANA_DIAS_FECHA, 0076).
+        .gte('fecha', sumarDias(desde, -1))
+        .lte('fecha', sumarDias(hasta, 1));
+      // RONDA 16 (carga de 250 camiones): cursor `(fecha, id)` y no `range(d, h)`.
+      // Con 10-23k tickets sin CFDI en el rango son hasta 23 páginas; por offset
+      // cada una cuesta más (O(n²)) y un ticket nuevo mientras se pagina corre las
+      // posiciones. Y no `id > último` a secas: con una ventana de ~1 mes (6% de la
+      // flota) recorre el índice de `id` de TODA la flota (1.8 s contra 0.24 s,
+      // scripts/carga/250-camiones/07-offset-vs-cursor.sql).
+      if (despuesDe !== null) q = q.gte('fecha', despuesDe.fecha).or(despuesDeFechaId(despuesDe));
+      return acotada(q.order('fecha').order('id').limit(PAGINA), 'sat_descarga.gastos_sin_cfdi');
+    },
+    (r) => llaveFechaId({ fecha: r.fecha, id: r.id }),
     'sat_descarga.gastos_sin_cfdi',
+    { venceEn },
   );
+  // Antes salían ordenados por `id` y `decidirCruce` los recorre en ese orden: se conserva EXACTO.
+  const data = leidos.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return data.map((r) => ({
     id: r.id as string,
     concepto: r.concepto as Gasto['concepto'],
@@ -266,7 +280,23 @@ async function ingerir(
   conteo: ConteoSolicitud,
   venceEn?: number,
 ): Promise<{ completo: boolean }> {
-  const gastos = await gastosSinCfdi(cfg.tenantId, rango.desde, rango.hasta);
+  // REN-32C3-C1: este prólogo corría SIN reloj, 72 líneas por encima de la
+  // lectura que `fc811a0` acotó, y en TODOS los paquetes —no solo en los que
+  // traen consolidado—. El corte se traduce al contrato que este archivo ya
+  // tiene para «se acabó el tiempo» (`completo: false`, unas líneas más abajo)
+  // en vez de propagarse: un throw se saltaría el `update` de avance del
+  // llamador, que es lo que hace barata la vuelta siguiente.
+  let gastos: Gasto[];
+  try {
+    gastos = await gastosSinCfdi(cfg.tenantId, rango.desde, rango.hasta, venceEn);
+  } catch (e) {
+    if (!(e instanceof LecturaCortadaPorReloj)) throw e;
+    logger.warn('sat.ingerir.corte_por_reloj_en_prologo', {
+      tenantId: cfg.tenantId, solicitudId, sinIngerir: xmls.length,
+    });
+    r.sinTurno += xmls.length;
+    return { completo: false };
+  }
   // El fondo se consume: un gasto que ya casó en este mismo paquete no puede
   // volver a casar con el siguiente CFDI. Sin esto, dos comprobantes del mismo
   // importe se pegarían los dos al mismo ticket… y el update optimista dejaría
@@ -338,7 +368,7 @@ async function ingerir(
       // vuelve a entrar aquí y retoma justo donde se quedó, en vez de saltarlo
       // para siempre. Se reintenta siempre, no solo cuando es nuevo.
       try {
-        await guardarYConciliarConsolidado(cfg.tenantId, cfdi, xml);
+        await guardarYConciliarConsolidado(cfg.tenantId, cfdi, xml, venceEn);
         // AG-C1 (auditoría 30): `marcar` va FUERA del `if (!yaDescargado)`.
         // Reintentar la conciliación y no cerrar el ciclo es peor que no
         // reintentarla: el sello nace en 'disponible' —que es literalmente

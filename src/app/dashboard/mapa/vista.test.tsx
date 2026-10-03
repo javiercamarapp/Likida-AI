@@ -61,3 +61,35 @@ describe('VistaMapa — el error del rastreo no expone el mensaje crudo de Postg
     expect(html).toMatch(/no se pudieron leer las unidades de la flota/);
   });
 });
+
+// ── W3: semáforo de obsolescencia, respaldo por pin de WhatsApp y huérfanos ──
+describe('VistaMapa — frescura del dato, respaldo y dispositivos sin unidad (W3)', () => {
+  const pin = (o: Partial<import('./mapa-vivo').PinUnidad>): import('./mapa-vivo').PinUnidad => ({
+    unidadId: 'u', etiqueta: 'ECO-1', placas: null, estadoUnidad: 'en_ruta', x: 10, y: 10, lat: 20.1, lng: -99.1,
+    medidaEn: '2026-10-01T15:00:00Z', minutos: 5, velocidadKmh: 40, proveedor: 'wialon', ...o,
+  });
+  const pintar = (r: Partial<Rastreo>) => renderToStaticMarkup(
+    <VistaMapa ubicados={[]} sinUbicar={[]} totalVivos={0} tope={200} rastreo={rastreoBase({ unidadesConPosicion: 3, ...r })} />,
+  );
+
+  it('rotula cada pin En vivo / Atrasada / Obsoleta y cuenta cada nivel', () => {
+    const html = pintar({ pines: [pin({ unidadId: 'a', minutos: 5 }), pin({ unidadId: 'b', minutos: 120 }), pin({ unidadId: 'c', minutos: 2000 })] });
+    expect(html).toContain('En vivo'); expect(html).toContain('Atrasada'); expect(html).toContain('Obsoleta');
+    expect(html).toMatch(/1 en vivo/); expect(html).toMatch(/1 atrasadas/); expect(html).toMatch(/1 obsoletas/);
+    expect(html).toContain('Un camión parado puede tener la posición vieja sin que nada falle');
+  });
+
+  it('un pin de WhatsApp de una unidad CON dispositivo se dice respaldo; sin dispositivo, solo pin del chofer', () => {
+    const conResp = pintar({ pines: [pin({ proveedor: 'whatsapp', respaldoWa: true })] });
+    expect(conResp).toContain('respaldo: el GPS de esta unidad no reportó después');
+    const sin = pintar({ pines: [pin({ proveedor: 'whatsapp', respaldoWa: false })] });
+    expect(sin).toContain('pin del chofer (WhatsApp)');
+    expect(sin).not.toContain('respaldo: el GPS');
+  });
+
+  it('los dispositivos huérfanos se dicen y NO se dibujan; con 0 o sin poder contar no se afirma nada', () => {
+    expect(pintar({ huerfanos: 4, pines: [pin({})] })).toMatch(/4 dispositivos que reporta tu proveedor no están ligados/);
+    expect(pintar({ huerfanos: 0, pines: [pin({})] })).not.toMatch(/no están ligados/);
+    expect(pintar({ huerfanos: null, pines: [pin({})] })).not.toMatch(/no están ligados/);
+  });
+});

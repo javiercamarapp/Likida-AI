@@ -1,0 +1,12 @@
+{
+  "searchSpec": { "itemsType": "avl_unit", "propName": "sys_name", "propValueMask": "*", "sortType": "sys_name", "propType": "property", "or_logic": 0 },
+  "dataFlags": 1025,
+  "totalItemsCount": 3,
+  "indexFrom": 0,
+  "indexTo": 2,
+  "items": [
+    { "nm": "ECO-101", "cls": 2, "id": 12001, "mu": 0, "uacl": 1, "pos": { "t": 1790000000, "y": 20.9674, "x": -89.5926, "z": 12, "s": 72, "c": 90, "sc": 11 } },
+    { "nm": "ECO-102", "cls": 2, "id": 12002, "mu": 0, "uacl": 1, "pos": { "t": 1790000060, "y": 19.4326, "x": -99.1332, "z": 2240, "s": 0, "c": 0, "sc": 9 } },
+    { "nm": "ECO-103-SIN-MENSAJES", "cls": 2, "id": 12003, "mu": 0, "uacl": 1 }
+  ]
+}

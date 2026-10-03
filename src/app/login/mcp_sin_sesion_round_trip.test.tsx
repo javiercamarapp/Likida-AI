@@ -87,7 +87,7 @@ vi.mock('@/lib/auth/session', async (importOriginal) => {
 
 const leerCliente = vi.fn(async () => ({
   ok: true as const,
-  cliente: { clientId: 'c1', nombre: 'Claude', redirectUris: ['https://claude.ai/api/mcp/callback'] },
+  cliente: { clientId: 'c1', nombre: 'Claude', redirectUris: ['https://claude.ai/api/mcp/callback'], estado: 'aprobado' as 'aprobado' | 'pendiente' | 'rechazado' },
 }));
 vi.mock('@/lib/mcp/oauth', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/mcp/oauth')>();
@@ -161,7 +161,7 @@ beforeEach(() => {
   getSessionTenant.mockResolvedValue(null);
   leerCliente.mockResolvedValue({
     ok: true,
-    cliente: { clientId: 'c1', nombre: 'Claude', redirectUris: ['https://claude.ai/api/mcp/callback'] },
+    cliente: { clientId: 'c1', nombre: 'Claude', redirectUris: ['https://claude.ai/api/mcp/callback'], estado: 'aprobado' as const },
   });
   signInWithOtp.mockResolvedValue({ error: null });
   signInWithOAuth.mockResolvedValue({ data: { url: 'https://accounts.google.com/o/oauth2/x' }, error: null });
@@ -185,6 +185,18 @@ describe('F-1 — el round-trip completo de /mcp/autorizar sin sesión', () => {
     expect(qs.get('client_id')).toBe('c1');
     expect(qs.get('redirect_uri')).toBe('https://claude.ai/api/mcp/callback');
     expect(qs.get('state')).toBe('estado-1');
+  });
+
+  it('1b) 0440: un cliente PENDIENTE (host desconocido) no llega ni a /login: página que dice a dónde iría el código', async () => {
+    leerCliente.mockResolvedValue({
+      ok: true,
+      cliente: { clientId: 'c1', nombre: 'Claude', redirectUris: ['https://atacante.tld/cb'], estado: 'pendiente' as const },
+    });
+    const el = await Autorizar({ searchParams: Promise.resolve({ ...PARAMS_MCP, redirect_uri: 'https://atacante.tld/cb' }) });
+    expect(redirect).not.toHaveBeenCalled();
+    const props = (el as { props: { titulo: string; detalle: string } }).props;
+    expect(props.titulo).toBe('Cliente pendiente de aprobación');
+    expect(props.detalle).toContain('atacante.tld');
   });
 
   it('2) /login CONSERVA ese next — en el render y en los dos server actions (el bug: se recortaba a /dashboard)', async () => {

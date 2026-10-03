@@ -167,7 +167,7 @@ export async function estadoDelViaje(tenantId: string, viajeId: string): Promise
     // esta consulta sumaba CADA fila (foto ticket + foto acercamiento son el
     // flujo normal, no el caso raro) y podía decirle al chofer "no te falta
     // nada" con comprobantes de verdad sin mandar.
-    acotada(admin.from('gasto').select('id, concepto, monto, ocr_confianza, folio, folio_norm, cfdi_uuid, cfdi_orden, created_at')
+    acotada(admin.from('gasto').select('id, concepto, monto, ocr_confianza, folio, folio_norm, cfdi_uuid, cfdi_orden, created_at, rfc_emisor')
       .eq('viaje_id', viajeId).eq('tenant_id', tenantId).order('created_at', { ascending: true }),
     'estadoDelViaje.gastos'),
   ]);
@@ -194,6 +194,11 @@ export async function estadoDelViaje(tenantId: string, viajeId: string): Promise
     cfdiUuid: (g.cfdi_uuid as string | null) || undefined,
     cfdiOrden: g.cfdi_orden != null ? Number(g.cfdi_orden) : undefined,
     ocrConfianza: (g.ocr_confianza as number | null) ?? undefined,
+    // ARQ32C4-C2: `copiasDeComprobante` dedupa por emisor desde `790900d`. Sin
+    // este campo la función no ve «emisor desconocido», ve LA AUSENCIA DEL
+    // CAMPO, y dos estaciones distintas vuelven a contarse como una foto
+    // repetida — el chofer leía «te faltan $2,500» habiéndolos mandado.
+    rfcEmisor: (g.rfc_emisor as string | null) || undefined,
     createdAt: g.created_at as string,
   }));
   const copias = copiasDeComprobante(gastos);

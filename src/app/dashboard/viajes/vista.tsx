@@ -1,10 +1,11 @@
 import Link from 'next/link';
-import { Truck, ArrowRight, Inbox, Search, FileUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Truck, ArrowRight, Inbox, Search, FileUp } from 'lucide-react';
 import { numero, fechaMx, mxn } from '@/lib/formato';
 import { EstadoVacio, StatusPill, type Estado } from '@/app/admin/ui/kit';
 import { BarraPagina, PILL_ESTATUS } from '../resumen-visual';
 import { PillAviso } from '../despacho/vista';
 import { ImportarViajes, type AccionImportar } from './importar';
+import { EnlacePagina, NavPaginas } from '../paginador';
 
 export type FiltroViajes = 'todos' | 'abiertos' | 'en_cuadre' | 'liquidados' | 'escalados';
 
@@ -265,18 +266,10 @@ export function VistaViajes({
                 <span className="text-[11.5px]" style={{ color: 'var(--faint)' }}>
                   Hasta {numero(porPagina)} viajes por página, del más reciente al más antiguo.
                 </span>
-                <div className="flex items-center gap-1.5">
-                  {cursor ? (
-                    <Link href={hrefRegistro(sufijo, { f: filtro, q })} className={BTN_SEC} style={{ background: 'var(--surface)' }}>
-                      <ChevronLeft width={13} height={13} strokeWidth={1.75} aria-hidden /> Volver al inicio
-                    </Link>
-                  ) : null}
-                  {hayMas && siguiente ? (
-                    <Link href={hrefRegistro(sufijo, { f: filtro, q, c: siguiente })} className={BTN_SEC} style={{ background: 'var(--surface)' }}>
-                      Siguientes <ChevronRight width={13} height={13} strokeWidth={1.75} aria-hidden />
-                    </Link>
-                  ) : null}
-                </div>
+                <NavPaginas>
+                  {cursor ? <EnlacePagina href={hrefRegistro(sufijo, { f: filtro, q })} direccion="inicio" /> : null}
+                  {hayMas && siguiente ? <EnlacePagina href={hrefRegistro(sufijo, { f: filtro, q, c: siguiente })} direccion="siguiente" /> : null}
+                </NavPaginas>
               </div>
             )}
           </section>

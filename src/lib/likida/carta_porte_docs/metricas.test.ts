@@ -1,0 +1,71 @@
+import { describe, expect, it } from 'vitest';
+import { MINUTOS_CAPTURA_MANUAL_EMBARQUE, calcularMetricas } from './metricas';
+import type { DocumentoFila } from './repo';
+
+const doc = (id: string, over: Partial<DocumentoFila> = {}): DocumentoFila => ({
+  id, tenantId: 't', canal: 'manual', formato: 'excel', nombreArchivo: id, mime: null, bytes: 1, sha256: id.padEnd(64, '0'), storageRuta: null, estado: 'aprobado', version: 1, clienteId: null,
+  perfilId: null, perfilVersion: null, remitente: null, asunto: null, remitenteReconocido: null, textoExtracto: null, riesgoInyeccion: false, extraccion: { campos: {}, mercancias: [], meta: { origen: 'llm', nivel: 1, escalamientos: [], avisos: [], notasModelo: [], indiciosInyeccion: [] } },
+  validacion: null, confianzaMin: null, nivelModelo: 1, modelo: null, tokensIn: 0, tokensOut: 0, costoUsd: 0, viajeId: null, procesandoHasta: null, intentos: 1, ultimoError: null, abiertoEn: null, revisadoPor: null,
+  aprobadoPor: null, aprobadoEn: 'x', rechazoMotivo: null, tiempoRevisionSeg: null, exportadoEn: null, retenerHasta: '', purgadoEn: null, createdAt: '', updatedAt: '', ...over,
+});
+
+describe('calcularMetricas', () => {
+  it('sin documentos NO hay porcentajes inventados: todo es null', () => {
+    const m = calcularMetricas([], new Map());
+    expect(m).toMatchObject({ recibidos: 0, aprobados: 0, pctSinCorreccion: null, minutosRevisionPromedio: null, minutosAhorradosTotal: null, minutosAhorradosPorEmbarque: null, costoUsdPorDocumento: null });
+  });
+
+  it('% sin corrección = aprobados sin una sola corrección / aprobados (confirmar no cuenta)', () => {
+    const docs = [doc('a'), doc('b'), doc('c'), doc('d')];
+    const m = calcularMetricas(docs, new Map([['b', 2], ['c', 1]]));
+    expect(m).toMatchObject({ aprobados: 4, sinCorreccion: 2, conCorreccion: 2, pctSinCorreccion: 50 });
+  });
+
+  it('un archivo DIVIDIDO en embarques no cuenta: se miden sus hijos (ni infla «recibidos» ni diluye el costo por documento)', () => {
+    const m = calcularMetricas([
+      doc('padre', { estado: 'dividido', aprobadoEn: null, costoUsd: 0 }),
+      doc('h1', { costoUsd: 0.01 }), doc('h2', { costoUsd: 0.03 }), doc('h3', { estado: 'por_revisar', aprobadoEn: null, costoUsd: 0.02 }),
+    ], new Map());
+    expect(m).toMatchObject({ recibidos: 3, aprobados: 2, porRevisar: 1, costoUsdTotal: 0.06, costoUsdPorDocumento: 0.02 });
+  });
+
+  it('solo cuentan los APROBADOS: los rechazados y por revisar no inflan el porcentaje', () => {
+    const m = calcularMetricas([doc('a'), doc('r', { estado: 'rechazado' }), doc('p', { estado: 'por_revisar' }), doc('f', { estado: 'fallido' })], new Map());
+    expect(m).toMatchObject({ recibidos: 4, aprobados: 1, rechazados: 1, porRevisar: 1, fallidos: 1, pctSinCorreccion: 100 });
+  });
+
+  it('el tiempo ahorrado es MEDIDO (12 min supuesto − revisión real) y solo sobre los medidos', () => {
+    const m = calcularMetricas([doc('a', { tiempoRevisionSeg: 120 }), doc('b', { tiempoRevisionSeg: 600 }), doc('c', { tiempoRevisionSeg: null })], new Map());
+    expect(m.supuestoMinutosManual).toBe(MINUTOS_CAPTURA_MANUAL_EMBARQUE);
+    expect(m).toMatchObject({ aprobadosMedidos: 2, aprobadosSinMedir: 1, minutosRevisionPromedio: 6, minutosAhorradosTotal: 12, minutosAhorradosPorEmbarque: 6 });
+  });
+
+  it('una revisión más lenta que la captura manual no da ahorro negativo', () => {
+    const m = calcularMetricas([doc('a', { tiempoRevisionSeg: 3600 })], new Map());
+    expect(m.minutosAhorradosTotal).toBe(0);
+  });
+
+  it('sin ninguna marca de tiempo: ahorro null, no 0', () => {
+    expect(calcularMetricas([doc('a')], new Map()).minutosAhorradosTotal).toBeNull();
+  });
+
+  it('documentos sin modelo (XML/perfil) y costo', () => {
+    const m = calcularMetricas([doc('a', { nivelModelo: 0, costoUsd: 0 }), doc('b', { nivelModelo: 1, costoUsd: 0.004 }), doc('c', { nivelModelo: null })], new Map());
+    expect(m.sinModelo).toBe(2);
+    expect(m.costoUsdTotal).toBeCloseTo(0.004, 6);
+    expect(m.costoUsdPorDocumento).toBeCloseTo(0.001333, 6);
+  });
+
+  it('desglose por origen de la lectura, sacado de las columnas (la lista liviana no trae la extracción)', () => {
+    const m = calcularMetricas([
+      doc('x', { nivelModelo: 0, perfilId: null, extraccion: null }),
+      doc('p', { nivelModelo: 0, perfilId: 'p1', extraccion: null }),
+      doc('pl', { nivelModelo: 2, perfilId: 'p1', extraccion: null }),
+      doc('l'),
+    ], new Map([['l', 1]]));
+    expect(m.porOrigen).toEqual({
+      xml: { documentos: 1, sinCorreccion: 1 }, perfil: { documentos: 1, sinCorreccion: 1 },
+      'perfil+llm': { documentos: 1, sinCorreccion: 1 }, llm: { documentos: 1, sinCorreccion: 0 },
+    });
+  });
+});

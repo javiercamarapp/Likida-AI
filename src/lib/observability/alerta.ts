@@ -190,9 +190,19 @@ export function redactarConservandoFolio(texto: string): string {
 // mira a las 3 a.m.
 const EVENTOS_DE_DINERO = /^(timbre\.|finanzas\.|stripe\.|cron\.facturar|cron\.cobranza|wa\.rechazo_masivo|pdf\.no_entregado)/;
 
-/** ¿Este evento toca dinero? Solo esos salen por WhatsApp. */
+/** ¿Este evento toca dinero? */
 export function esEventoDeDinero(evento: string): boolean {
   return EVENTOS_DE_DINERO.test(evento);
+}
+
+// E1-A (P0-8): la guardia de producción pasó de launchd (que avisaba por WhatsApp) al servidor. Si el aviso de un
+// incidente S1/S2 o de una guardia ciega se queda solo en el correo, la migración habría empeorado el canal. Todo
+// evento `guardia.*` sale TAMBIÉN por WhatsApp (si hay ALERTA_WA), bajo el mismo piso que el correo.
+const EVENTOS_DE_GUARDIA = /^guardia\./;
+
+/** ¿Es un aviso de la guardia de producción? Sale por WhatsApp igual que el dinero. */
+export function esEventoDeGuardia(evento: string): boolean {
+  return EVENTOS_DE_GUARDIA.test(evento);
 }
 
 /** Para /admin/salud-sistema: hay un WhatsApp del operador al que avisar.
@@ -203,19 +213,22 @@ export function alertaWhatsAppConfigurada(): boolean {
   return typeof v === 'string' && /^\d{10,15}$/.test(v.trim());
 }
 
-async function avisarPorWhatsApp(evento: string, datos: Array<[string, string]>): Promise<void> {
+async function avisarPorWhatsApp(evento: string, datos: Array<[string, string]>): Promise<boolean> {
   try {
     // Import dinámico: `meta/client` arrastra el outbox y Supabase, y este
     // módulo lo importan crons y el health — no se paga ese árbol si no hay
     // número configurado.
     const { enviarTexto } = await import('@/lib/meta/client');
     const lineas = datos.filter(([k]) => k !== 'Evento').map(([k, v]) => `${k}: ${v.slice(0, 200)}`);
-    const cuerpo = [`Likida — falló ${evento}`, ...lineas, `Detalle en ${APP}/admin/salud-sistema`]
+    const titulo = esEventoDeGuardia(evento) ? `Likida — aviso de la guardia (${evento})` : `Likida — falló ${evento}`;
+    const cuerpo = [titulo, ...lineas, `Detalle en ${APP}/admin/salud-sistema`]
       .join('\n').slice(0, 1500);
     const r = await enviarTexto(String(process.env.ALERTA_WA), cuerpo);
     if (!r.ok) logger.warn('alerta.wa_no_salio', { evento, motivo: r.error, status: r.status ?? null });
+    return r.ok === true;
   } catch (e) {
     logger.warn('alerta.wa_fallo', { evento, error: e instanceof Error ? e.message : String(e) });
+    return false;
   }
 }
 
@@ -227,6 +240,8 @@ const APP = appUrl();
 /**
  * Manda UN correo a `ALERTA_EMAIL` diciendo que `evento` falló, con el
  * `detalle` y la hora MX. Respeta el piso de una hora por evento y nunca lanza.
+ * Devuelve `true` solo si el aviso SALIÓ por algún canal (M5, ronda 19): sin canal configurado, descartado por el piso o
+ * con el envío rechazado es `false`, y quien lleva un dedup («ya lo avisé») no debe darlo por avisado.
  *
  * El detalle pasa por `redactarTexto` antes de salir: el correo viaja por
  * Resend (un tercero), así que va anonimizado por el mismo camino que los logs
@@ -254,16 +269,16 @@ const LLAVES_SIN_REDACTAR = new Set([
   'uuid', 'uuidFiscal', 'uuidCfdi', 'folioFiscal',
 ]);
 
-export async function alertarOperador(evento: string, detalle: Record<string, unknown>): Promise<void> {
+export async function alertarOperador(evento: string, detalle: Record<string, unknown>): Promise<boolean> {
   try {
     const para = process.env.ALERTA_EMAIL;
-    const porWhatsApp = alertaWhatsAppConfigurada() && esEventoDeDinero(evento);
+    const porWhatsApp = alertaWhatsAppConfigurada() && (esEventoDeDinero(evento) || esEventoDeGuardia(evento));
     if (!para && !porWhatsApp) {
       if (!avisadoSinConfigurar) {
         logger.info('alerta.sin_configurar', { evento });
         avisadoSinConfigurar = true;
       }
-      return;
+      return false;
     }
 
     const ahora = Date.now();
@@ -279,7 +294,7 @@ export async function alertarOperador(evento: string, detalle: Record<string, un
     // dos incidentes distintos son dos alarmas y el mismo repitiéndose es una.
     // Sin nada saliente que distinguir, la llave se queda como estaba.
     const huella = huellaDeDetalle(detalle);
-    if (!(await reservarPiso(huella === '_' ? evento : `${evento}|${huella}`, ahora))) return;
+    if (!(await reservarPiso(huella === '_' ? evento : `${evento}|${huella}`, ahora))) return false;
 
     // PRU-A3: en un evento de timbrado el UUID que el texto nombra como
     // «uuid»/«folio» es el folio fiscal y se conserva; el resto se redacta igual.
@@ -298,6 +313,7 @@ export async function alertarOperador(evento: string, detalle: Record<string, un
       ] as [string, string]),
     ];
 
+    let salio = false;
     if (para) {
       const r = await enviarCorreo(para, {
         asunto: `[Likida] Falló ${evento}`,
@@ -315,12 +331,15 @@ export async function alertarOperador(evento: string, detalle: Record<string, un
       // `enviarCorreo` nunca lanza; devuelve el motivo. Aquí solo se deja
       // constancia — el respaldo si esto no sale es Sentry.
       if (!r.ok) logger.warn('alerta.no_salio', { evento, motivo: r.motivo });
+      else salio = true;
     }
     // OP-P5: el dinero también suena en el teléfono, si hay número.
-    if (porWhatsApp) await avisarPorWhatsApp(evento, datos);
+    if (porWhatsApp && (await avisarPorWhatsApp(evento, datos))) salio = true;
+    return salio;
   } catch (e) {
     // Cinturón sobre los tirantes: nada de este canal puede propagar al cron.
     logger.warn('alerta.fallo', { evento, error: e instanceof Error ? e.message : String(e) });
+    return false;
   }
 }
 

@@ -36,7 +36,7 @@
 
 import { envPuesta } from '../env';
 
-export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto' | 'transcripcion' | 'contador';
+export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto' | 'transcripcion' | 'contador' | 'conductor_hito' | 'vigia_cliente' | 'cartaporte_extractor' | 'cartaporte_extractor_escala' | 'cartaporte_extractor_escala2';
 
 const DEFAULTS: Record<ModelRole, string> = {
   // OCR de comprobantes (visión + JSON en una sola llamada).
@@ -156,6 +156,37 @@ const DEFAULTS: Record<ModelRole, string> = {
   // cuadre) deja la corrida de 32 preguntas en el orden de lo presupuestado
   // en 22-evaluacion.md, no en el de una corrida sin caché.
   contador: 'anthropic/claude-sonnet-5',        // $2/$10 (lectura de caché al 10%)
+  // AGENTE 5 «CONDUCTOR» (1-oct-2026): clasifica el texto libre del chofer cuando
+  // las reglas deterministas no lo entienden («ya estoy en la puerta, me atiende
+  // Pedro de recibo»). Las reglas van SIEMPRE primero (conductor/interprete.ts):
+  // este modelo solo ve lo que ellas no resolvieron y su salida se valida antes
+  // de tocar nada. Gemini 3.5 Flash-Lite: mejor extracción de datos medida entre
+  // los baratos (91.8 %, #8/53), ~1.5 s y $0.30/$2.50; su respaldo cruzado de
+  // proveedor es GPT-6 Luna (FALLBACK_POR_ROL en openrouter.ts). Fuente:
+  // scratchpad/modelos-precios.md. Precios y slug se re-verifican antes de firmar.
+  conductor_hito: 'google/gemini-3.5-flash-lite', // $0.30/$2.50
+  // EL VIGÍA DE SERVICIO AL CLIENTE (Agente 4, 0400): clasifica la INTENCIÓN de
+  // un mensaje de un cliente final (¿dónde va mi viaje?, ¿qué documento falta?,
+  // queja, pide humano) y, opcionalmente, pule la redacción de una respuesta que
+  // YA trae sus datos reales. El mismo Gemini barato del chat: es una
+  // clasificación de una línea en español coloquial con salida estructurada.
+  // NUNCA decide una acción ni aporta una cifra: las reglas mandan primero, la
+  // salida es un enum validado, y un texto pulido que traiga un número que no
+  // venga del dato se tira (vigia/redactor.ts). Ver el mensaje del cliente como
+  // DATO no confiable (inyección): el prompt lo dice y el código no depende de ello.
+  vigia_cliente: 'google/gemini-3.5-flash-lite', // $0.3/$2.5
+  // CARTA PORTE MULTI-FORMATO (Agente 3, 1-oct-2026): extraer del documento de un
+  // cliente grande (PDF, foto, Excel, correo) los campos del complemento. Tres
+  // peldaños según scratchpad/modelos-precios.md: Gemini 3.5 Flash-Lite lee casi
+  // todo (≈85 %), Gemini 3.8 Flash re-lee lo de baja confianza (≈12 %) y Sonnet
+  // 5.5 es el peor caso (≈3 %). El escalamiento lo decide la CONFIANZA POR CAMPO
+  // y los campos críticos (carta_porte_docs/extractor.ts), no el precio.
+  // ⚠️ SLUGS NO VERIFICADOS contra el catálogo vivo de OpenRouter: `gemini-3.8-flash`
+  // y `claude-sonnet-5.5` salen de modelos-precios.md (1-oct-2026) y todo es
+  // override por env (LIKIDA_MODEL_CARTAPORTE_*). Verificarlos antes del piloto.
+  cartaporte_extractor: 'google/gemini-3.5-flash-lite',            // $0.30/$2.50
+  cartaporte_extractor_escala: 'google/gemini-3.8-flash',          // $0.75/$3.75 (se duplica el 1-ene-2027)
+  cartaporte_extractor_escala2: 'anthropic/claude-sonnet-5.5',     // $2/$10
 
   // ── QUÉ ROL CORRE HOY Y CUÁL NO (verificado el 23-ago-2026) ──────────────
   // Tienen llamador en producción: ocr, cuadre, chat, analisis, marketing,
@@ -194,6 +225,11 @@ const ENV_KEY: Record<ModelRole, string> = {
   piloto: 'LIKIDA_MODEL_PILOTO',
   transcripcion: 'LIKIDA_MODEL_TRANSCRIPCION',
   contador: 'LIKIDA_MODEL_CONTADOR',
+  conductor_hito: 'LIKIDA_MODEL_CONDUCTOR_HITO',
+  vigia_cliente: 'LIKIDA_MODEL_VIGIA_CLIENTE',
+  cartaporte_extractor: 'LIKIDA_MODEL_CARTAPORTE_EXTRACTOR',
+  cartaporte_extractor_escala: 'LIKIDA_MODEL_CARTAPORTE_EXTRACTOR_ESCALA',
+  cartaporte_extractor_escala2: 'LIKIDA_MODEL_CARTAPORTE_EXTRACTOR_ESCALA2',
 };
 
 /** Devuelve el slug del modelo para un rol, respetando override por env.
@@ -223,6 +259,11 @@ export const ROLE_PARAMS: Record<ModelRole, { temperature: number; reasoning?: '
   piloto: { temperature: 0 },                 // un formulario fiscal no se improvisa
   transcripcion: { temperature: 0 },          // se escribe lo que se oye, no se redacta
   contador: { temperature: 0 },               // una opinión fiscal no se improvisa
+  conductor_hito: { temperature: 0 },         // clasificar no es redactar: el mismo texto, la misma intención
+  vigia_cliente: { temperature: 0 },          // se clasifica, no se improvisa
+  cartaporte_extractor: { temperature: 0 },         // se copia lo que dice el documento, no se interpreta
+  cartaporte_extractor_escala: { temperature: 0 },
+  cartaporte_extractor_escala2: { temperature: 0 },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

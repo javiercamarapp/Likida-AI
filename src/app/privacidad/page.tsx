@@ -167,7 +167,7 @@ const SECCIONES: SeccionLegal[] = [
     fundamento: 'Requisito de Meta para apps en producción',
     parrafos: [
       `Escribe a **${RESPONSABLE.contacto}** con el asunto **"Borrar mi cuenta"** desde el correo con el que te registraste.`,
-      `Se borran tus datos de cuenta y de acceso. **Lo que no se puede borrar** son los comprobantes fiscales y las liquidaciones ya emitidas, por la conservación de al menos cinco años del CFF art. 30 — quedan sin vincularse a tu persona.`,
+      `Se da de baja y se borra tu acceso, y tus datos de cuenta se sustituyen por un seudónimo (nombre y teléfono y, en las cuentas de oficina, también el correo), junto con tus conversaciones de WhatsApp y de los asistentes. Se conservan la bitácora de auditoría —el registro de quién hizo qué en la plataforma— y, para los choferes, el identificador interno y el correo de la cuenta que la propia solicitud registra. **Lo que no se puede borrar** son los comprobantes fiscales y las liquidaciones ya emitidas, por la conservación de al menos cinco años del CFF art. 30 — quedan sin vincularse a tu persona.`,
       `Se te confirma por escrito cuando queda hecho.`,
     ],
   },

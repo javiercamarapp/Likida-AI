@@ -33,7 +33,7 @@ export const ROTULOS_ROL: Record<string, RotuloRol> = {
   },
   encargado: {
     nombre: 'Encargado (jefe de tráfico)',
-    detalle: 'Despacha y da seguimiento: viajes, operadores, unidades y mapa. No ve un peso — ni tarifas, ni facturación, ni rentabilidad.',
+    detalle: 'Despacha y da seguimiento: viajes, mapa y patios; da de alta, corrige y da de baja operadores, unidades y jornadas (solo los de su patio si tiene uno asignado). No ve un peso — ni tarifas, ni facturación, ni rentabilidad.',
   },
   operador: {
     nombre: 'Operador (chofer)',

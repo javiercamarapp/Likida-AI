@@ -30,7 +30,7 @@ let lineasUpsertPayload: Array<Record<string, unknown>> | null;
 
 function thenable(resp: () => Resp) {
   const nodo: Record<string, unknown> = {};
-  let cursorGt: string | undefined;
+  let cursorGt: { fecha: string; id: string } | undefined;
   for (const m of ['eq', 'is', 'gte', 'lte', 'select', 'order']) nodo[m] = () => nodo;
   nodo.single = () => Promise.resolve(resp());
   // `traerTodo` pagina con `.range(d, h)`: el mock rebana como lo haría el
@@ -41,16 +41,23 @@ function thenable(resp: () => Resp) {
       ...r,
       data: Array.isArray(r.data) ? (r.data as unknown[]).slice(d, h + 1) : r.data,
     }));
-  // `candidatosDeGasto` pagina con `traerTodoDesdeId` (REN-C1 + auditoría 24):
-  // cursor por `id`, no por posición. `.gt('id', cursor)` filtra, `.limit(n)`
+  // `candidatosDeGasto` pagina con `traerTodoPorLlave` (REN-C1 + auditoría 24):
+  // cursor por fila, no por posición. `.or(…)` filtra, `.limit(n)`
   // corta — igual que `.range` arriba pero por FILA, no por índice: una página
   // que ya no tiene filas después del cursor llega vacía, sin `count`, y con
   // eso `traerTodoDesdeId` sabe que terminó (no necesita el total).
-  nodo.gt = (_col: string, val: string) => { cursorGt = val; return nodo; };
+  // RONDA 16: el cursor es `(fecha, id)` — `.or('fecha.gt.F,and(fecha.eq.F,id.gt.I)')` — para seguir el índice por fecha.
+  nodo.or = (expr: string) => {
+    const m = /^fecha\.gt\.([\d-]+),and\(fecha\.eq\.\1,id\.gt\.(.+)\)$/.exec(expr);
+    if (!m) throw new Error(`filtro or inesperado: ${expr}`);
+    cursorGt = { fecha: m[1], id: m[2] };
+    return nodo;
+  };
   nodo.limit = (n: number) =>
     Promise.resolve(resp()).then((r) => {
-      const todas = Array.isArray(r.data) ? (r.data as Array<{ id: string }>) : [];
-      const filtradas = cursorGt === undefined ? todas : todas.filter((f) => f.id > cursorGt!);
+      const todas = Array.isArray(r.data) ? (r.data as Array<{ id: string; fecha?: string }>) : [];
+      const c = cursorGt;
+      const filtradas = c === undefined ? todas : todas.filter((f) => (f.fecha ?? '') > c.fecha || ((f.fecha ?? '') === c.fecha && f.id > c.id));
       return { ...r, data: filtradas.slice(0, n) };
     });
   nodo.then = (onOk: (v: unknown) => unknown, onErr?: (e: unknown) => unknown) =>
@@ -181,4 +188,44 @@ it('rechaza una nota de crédito antes de persistir líneas o tocar gastos, incl
   expect(xmlUpserts).toBe(0);
   expect(gastoUpdates).toHaveLength(0);
   expect(lineasUpsertPayload).toBeNull();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REN-30-C2 (auditorías 29-32, CRÍTICO) — el reloj de la invocación tiene que
+// llegar hasta la lectura de candidatos, y el corte tiene que ocurrir ANTES
+// del primer avance durable.
+//
+// `sat_descarga/ciclo.ts` mira la hora UNA vez por XML (`:277`) y despacha
+// `guardarYConciliarConsolidado` sin volver a mirarla. Dentro, la lectura de
+// candidatos puede correr 100 páginas de `gasto` —30.0 s nominales, hasta
+// 950 s a techos— contra un margen reservado de 43.5 s y un `maxDuration` de
+// 300. La invocación moría con los sellos a medio escribir y sin
+// `registrarLatido`.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('guardarYConciliarConsolidado — el reloj de la invocación (REN-30-C2)', () => {
+  it('con el reloj agotado LANZA y no deja ni un avance durable escrito', async () => {
+    await expect(guardarYConciliarConsolidado(
+      't1',
+      xmlConsolidado([linea(0, 100, '2026-01-10'), linea(1, 200, '2026-01-11')]),
+      '<xml/>',
+      Date.now() - 1,
+    )).rejects.toThrow(/el reloj de la invocación se agotó/);
+
+    // Lo que hace re-entrante al corte: nada de la decisión llegó a disco, así
+    // que el comprobante queda sin sellar y la vuelta siguiente lo retoma.
+    expect(gastoUpdates, 'selló gastos con una lista de candidatos que nunca terminó de leer').toEqual([]);
+    expect(lineasUpsertPayload, 'escribió líneas de conciliación tras quedarse sin reloj').toBeNull();
+  });
+
+  it('con reloj de sobra concilia exactamente igual que sin reloj', async () => {
+    const sinReloj = await guardarYConciliarConsolidado(
+      't1', xmlConsolidado([linea(0, 100, '2026-01-10')]), '<xml/>',
+    );
+    gastoUpdates = [];
+    lineasUpsertPayload = null;
+    const conReloj = await guardarYConciliarConsolidado(
+      't1', xmlConsolidado([linea(0, 100, '2026-01-10')]), '<xml/>', Date.now() + 60_000,
+    );
+    expect(conReloj).toEqual(sinReloj);
+  });
 });

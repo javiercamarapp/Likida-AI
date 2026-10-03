@@ -26,6 +26,7 @@ import { logger } from '@/lib/logger';
 import type { Liquidacion } from '@/types/likida';
 import { normasDe, normasDePolitica } from './normas/por_diferencia';
 import { getAcumuladoCombustible } from './repo';
+import { estadiasParaLiquidacion } from './conductor/servicios';
 import { evaluarTope15 } from './periodo/combustible';
 import { avisoTope15 } from './periodo/aviso';
 import { NORMAS, esVinculante } from './normas/indice';
@@ -114,7 +115,7 @@ registerTool('estado_viaje', {
       // contaba, y `getGastos` (repo.ts, el camino del motor/PDF) ordena
       // distinto. `created_at` es el valor que no cambia tras el insert: es lo
       // que hace que esta tool y el motor elijan la MISMA copia.
-      admin.from('gasto').select('id, concepto, monto, folio, folio_norm, cfdi_uuid, cfdi_orden, ocr_extra').eq('viaje_id', ctx.viajeId).eq('tenant_id', ctx.tenantId).order('created_at', { ascending: true }),
+      admin.from('gasto').select('id, concepto, monto, folio, folio_norm, cfdi_uuid, cfdi_orden, ocr_extra, rfc_emisor').eq('viaje_id', ctx.viajeId).eq('tenant_id', ctx.tenantId).order('created_at', { ascending: true }),
     ]);
     // Fallar cerrado: un error de lectura NO se convierte en "cero gastos".
     if (rViaje.error) throw new Error(`estado_viaje/viaje: ${rViaje.error.message}`);
@@ -141,6 +142,13 @@ registerTool('estado_viaje', {
       cfdiUuid: (g.cfdi_uuid as string | null) || undefined,
       cfdiOrden: g.cfdi_orden != null ? Number(g.cfdi_orden) : undefined,
       ocrExtra: (g.ocr_extra as Record<string, unknown> | null) ?? undefined,
+      // ARQ32C4-C2: `copiasDeComprobante` dedupa por emisor desde `790900d`.
+      // Sin este campo la función no ve «emisor desconocido», ve LA AUSENCIA
+      // DEL CAMPO, y dos gasolineras distintas con el mismo folio vuelven a
+      // contarse como una foto repetida — que es exactamente la separación
+      // entre esta cifra y la del PDF que el comentario de arriba declara
+      // cerrada.
+      rfcEmisor: (g.rfc_emisor as string | null) || undefined,
     }));
     const copias = copiasDeComprobante(gastos);
     const porConcepto = new Map<string, { total: number; n: number }>();
@@ -430,7 +438,10 @@ async function cerrarLiquidacion(ctx: ToolContext, inicioCorrida: Date) {
           logger.warn('pdf.razon_social', { err: e instanceof Error ? e.message : String(e) });
         }
         const paths = rutasPdfVersionadas(ctx.tenantId, ctx.viajeId!);
-        pdfPath = await subir(await generarLiquidacionPDF(full, v, o, razonSocial, 'contralor'), paths.contralor);
+        // Las estadías en andén del viaje (Agente 5) van como ANEXO informativo SOLO en el ejemplar del contralor; no
+        // suman a ningún total ni a la fotografía del cierre (`insumos_hash`). Sin lectura, no hay anexo: el papel sale.
+        const estadias = await estadiasParaLiquidacion(ctx.tenantId, ctx.viajeId!);
+        pdfPath = await subir(await generarLiquidacionPDF(full, v, o, razonSocial, 'contralor', { estadias }), paths.contralor);
         pdfOperadorPath = await subir(await generarLiquidacionPDF(full, v, o, razonSocial, 'operador'), paths.operador);
       } catch (e) {
         logger.error('pdf.gen', { err: e instanceof Error ? e.message : String(e) });

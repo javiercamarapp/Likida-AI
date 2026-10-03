@@ -27,10 +27,16 @@ function pintar(operadores: Array<{ id: string; nombre: string }> | null) {
       operadores={operadores}
       abrir={null}
       puedeCorregir={false}
+      puedeDeclararPolitica={false}
       anularMarca={accionOk}
       capturarMarca={accionOk}
       cerrarElDia={accionOk}
       declararPolitica={accionOk}
+      alertaConfig={null}
+      alertaConfigIlegible={false}
+      alertas={[]}
+      puedeConfigurarAlerta={false}
+      guardarAlerta={accionOk}
     />,
   );
 }

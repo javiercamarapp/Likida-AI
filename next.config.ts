@@ -63,7 +63,12 @@ const nextConfig: NextConfig = {
   // dice "you must externalize @sparticuz/chromium"—; (2) es ESM puro con
   // efecto de módulo (pone LD_LIBRARY_PATH y FONTCONFIG_PATH al importarse),
   // y eso hay que dejarlo pasar tal cual.
-  serverExternalPackages: ['sharp', 'zxing-wasm', 'pdf-lib', 'playwright-core', '@sparticuz/chromium'],
+  // `ssh2` (lector SFTP de la tabla propia, `conectores/tabla_propia/sftp.ts`) va aquí porque intenta `require` de dos
+  // binarios nativos OPCIONALES (`cpu-features` y su propio `sshcrypto.node`): si el empaquetador los sigue, el build
+  // falla o los deja a medias; externalizado, ssh2 hace su `try/catch` normal y cae al JS puro cuando no están.
+  // `pg` (lector SQL de solo lectura de la tabla propia, `conectores/tabla_propia/sql.ts`) corre en JavaScript puro: su
+  // `pg-native` es un peer OPCIONAL que NO se instala; externalizado, `pg` no lo busca en el empaquetado.
+  serverExternalPackages: ['sharp', 'zxing-wasm', 'pdf-lib', 'playwright-core', '@sparticuz/chromium', 'ssh2', 'pg'],
   // El `.wasm` del lector se lee de disco en runtime (ver cfdi.ts), sin ningún
   // import que el tracer pueda seguir — así que hay que meterlo a la fuerza al
   // bundle de la función. Sin esto el webhook despliega "bien" y truena al

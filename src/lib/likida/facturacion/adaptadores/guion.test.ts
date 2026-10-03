@@ -197,7 +197,7 @@ describe('la política de no emitir con un mapeo sin verificar', () => {
   });
 
   it('el motivo dice a dónde ir, no solo que no se puede', () => {
-    expect(motivoSinVerificar(GUION)).toContain('arnés de pre-vuelo');
+    expect(motivoSinVerificar(GUION)).toContain('scripts/verificar-portal.mjs');
     expect(motivoSinVerificar(GUION)).toContain('portal.prueba.mx');
   });
 });
@@ -413,6 +413,9 @@ describe('los formatos', () => {
   it('la fecha se pasa al formato del portal, y una que no es fecha devuelve null', () => {
     expect(aplicarFormato('2026-08-04', 'fecha_dmy')).toBe('04/08/2026');
     expect(aplicarFormato('2026-08-04', 'fecha_dmy_guion')).toBe('04-08-2026');
+    expect(aplicarFormato('2026-08-04', 'fecha_iso')).toBe('2026-08-04');
+    expect(aplicarFormato('2026-08-04T10:00:00Z', 'fecha_iso')).toBe('2026-08-04');
+    expect(aplicarFormato('04/08/2026', 'fecha_iso')).toBeNull();
     expect(aplicarFormato('el martes', 'fecha_dmy')).toBeNull();
   });
 

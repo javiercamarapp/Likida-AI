@@ -45,7 +45,8 @@ export type ResultadoEnvio =
   | { ok: true; id: string }
   /** No hay llave: no es un error, es que no está encendido. */
   | { ok: false; motivo: 'sin_configurar' }
-  | { ok: false; motivo: 'rechazado'; detalle: string }
+  /** `status`: el código HTTP de Resend cuando fue ÉL quien rechazó (429 y 5xx son transitorios; el resto, de configuración o de datos). */
+  | { ok: false; motivo: 'rechazado'; detalle: string; status?: number }
   | { ok: false; motivo: 'red'; detalle: string };
 
 /** ¿Está el canal encendido? Lo usa la pantalla de Conexiones para decir la
@@ -97,7 +98,19 @@ export interface OpcionesEnvio {
    * (`plantilla.ts`) es para quien no tiene ese botón.
    */
   listaBajaUrl?: string;
+  /**
+   * Adjuntos del correo (buzón de facturas, entrega al contador): el CSV del lote y el ZIP con XML y PDF.
+   * `content` va en BASE64. Resend acepta hasta 40 MB por correo DESPUÉS de codificar (el base64 pesa ~4/3):
+   * este módulo rechaza de entrada lo que pasa de 28 MB crudos, para que el fallo sea nuestro y claro y no
+   * un 4xx de Resend a media entrega.
+   * Fuente: https://resend.com/docs/api-reference/emails/send-email (campo `attachments`: filename,
+   * content, content_type).
+   */
+  adjuntos?: Array<{ filename: string; content: string; contentType?: string }>;
 }
+
+/** Tope crudo de los adjuntos de un correo: 28 MB ⇒ ~37.3 MB en base64, debajo de los 40 MB de Resend. */
+export const MAX_BYTES_ADJUNTOS_CORREO = 28 * 1024 * 1024;
 
 /** Un destinatario que no parece correo no se manda: la API lo rechazaría
  *  igual, pero así no se gasta la llamada ni se ensucia el log con su error. */
@@ -118,6 +131,12 @@ export async function enviarCorreo(
     // entrenaría a ignorar los errores de verdad.
     logger.info('correo.sin_configurar', { asunto: correo.asunto });
     return { ok: false, motivo: 'sin_configurar' };
+  }
+
+  // base64 → bytes crudos ≈ longitud × 3/4.
+  const crudos = (op.adjuntos ?? []).reduce((n, a) => n + Math.floor((a.content.length * 3) / 4), 0);
+  if (crudos > MAX_BYTES_ADJUNTOS_CORREO) {
+    return { ok: false, motivo: 'rechazado', detalle: 'Los adjuntos pasan del tope de 28 MB.' };
   }
 
   const destinos = (Array.isArray(para) ? para : [para])
@@ -155,7 +174,11 @@ export async function enviarCorreo(
           content: LOGO_PNG_BASE64,
           content_id: LOGO_CID,
           content_disposition: 'inline',
-        }],
+        }, ...(op.adjuntos ?? []).map((a) => ({
+          filename: a.filename,
+          content: a.content,
+          ...(a.contentType ? { content_type: a.contentType } : {}),
+        }))],
         // CABECERAS DEL MENSAJE — distintas de las del POST arriba (esas son
         // HTTP hacia Resend; estas viajan DENTRO del correo hacia el cliente
         // del destinatario). Solo van si el llamador trae la liga de baja.
@@ -176,7 +199,7 @@ export async function enviarCorreo(
       // no es el lugar para un dato personal.
       const cuerpo = (await r.text().catch(() => '')).slice(0, 200);
       logger.error('correo.rechazado', { status: r.status, cuerpo, asunto: correo.asunto });
-      return { ok: false, motivo: 'rechazado', detalle: `HTTP ${r.status}` };
+      return { ok: false, motivo: 'rechazado', detalle: `HTTP ${r.status}`, status: r.status };
     }
 
     const json = (await r.json().catch(() => null)) as { id?: string } | null;

@@ -1,0 +1,272 @@
+[
+  {
+    "fecha": "2026-09-26",
+    "gastos": [
+      {
+        "id": "a8553596-7e1c-4fa7-8f9a-0a6ecb36b915",
+        "fecha": null,
+        "folio": null,
+        "monto": 3480.0,
+        "cfdiUuid": "709a0300-8e4d-434f-acca-2f47af178f8c",
+        "concepto": "diesel",
+        "pagadoEn": null,
+        "subtotal": 3000.0,
+        "cfdiOrden": 1,
+        "descuento": null,
+        "folioNorm": null,
+        "formaPago": "03",
+        "rfcEmisor": null,
+        "tieneCfdi": true,
+        "isrRetenido": null,
+        "ivaRetenido": null,
+        "ivaTraslado": 480.0,
+        "pagadoForma": null,
+        "iepsTraslado": 0.0
+      }
+    ],
+    "version": 361,
+    "anticipo": 5000.0,
+    "operador": "Operador sint\u00e9tico AJUSTE-BAJA-COHERENTE",
+    "revision": "ajustada",
+    "comprobado": 3480.0,
+    "diferencia": 1520.0,
+    "folioViaje": "AJUSTE-BAJA-COHERENTE",
+    "diferencias": [],
+    "porConcepto": [
+      {
+        "concepto": "diesel",
+        "subtotal": 3000.0,
+        "baseConocida": true
+      }
+    ],
+    "retenciones": 0,
+    "liquidacionId": "d3bfbde8-5e12-9389-d0df-ca2e6dc30214",
+    "ivaAcreditable": 480.0,
+    "baseDesconocida": 0
+  },
+  {
+    "fecha": "2026-09-26",
+    "gastos": [
+      {
+        "id": "7bdb1c8d-a5f0-4fdd-97cc-f24ab3fa793c",
+        "fecha": null,
+        "folio": null,
+        "monto": 3480.0,
+        "cfdiUuid": "cc55546c-181a-4e32-ae98-4bd4a26462ac",
+        "concepto": "diesel",
+        "pagadoEn": null,
+        "subtotal": 3000.0,
+        "cfdiOrden": 1,
+        "descuento": null,
+        "folioNorm": null,
+        "formaPago": "03",
+        "rfcEmisor": null,
+        "tieneCfdi": true,
+        "isrRetenido": null,
+        "ivaRetenido": null,
+        "ivaTraslado": 480.0,
+        "pagadoForma": null,
+        "iepsTraslado": 0.0
+      }
+    ],
+    "version": 361,
+    "anticipo": 5000.0,
+    "operador": "Operador sint\u00e9tico AJUSTE-SUBE-COHERENTE",
+    "revision": "ajustada",
+    "comprobado": 3480.0,
+    "diferencia": 1520.0,
+    "folioViaje": "AJUSTE-SUBE-COHERENTE",
+    "diferencias": [],
+    "porConcepto": [
+      {
+        "concepto": "diesel",
+        "subtotal": 3000.0,
+        "baseConocida": true
+      }
+    ],
+    "retenciones": 0,
+    "liquidacionId": "a75f2e5d-7063-ddea-1b96-3795f8166135",
+    "ivaAcreditable": 480.0,
+    "baseDesconocida": 0
+  },
+  {
+    "fecha": "2026-09-26",
+    "gastos": [
+      {
+        "id": "1633a7fc-8c0b-4fd5-a9af-f36fa4bd7786",
+        "fecha": null,
+        "folio": null,
+        "monto": 1480.0,
+        "cfdiUuid": "6cf28f50-d702-4647-b3b2-6e77dd6f960d",
+        "concepto": "diesel",
+        "pagadoEn": null,
+        "subtotal": 3000.0,
+        "cfdiOrden": 1,
+        "descuento": null,
+        "folioNorm": null,
+        "formaPago": "03",
+        "rfcEmisor": null,
+        "tieneCfdi": true,
+        "isrRetenido": null,
+        "ivaRetenido": null,
+        "ivaTraslado": 480.0,
+        "pagadoForma": null,
+        "iepsTraslado": 0.0
+      }
+    ],
+    "version": 361,
+    "anticipo": 5000.0,
+    "operador": "Operador sint\u00e9tico AJUSTE-BAJA-INCOMPATIBLE",
+    "revision": "ajustada",
+    "comprobado": 1480.0,
+    "diferencia": 3520.0,
+    "folioViaje": "AJUSTE-BAJA-INCOMPATIBLE",
+    "diferencias": [],
+    "porConcepto": [
+      {
+        "concepto": "diesel",
+        "subtotal": 3000.0,
+        "baseConocida": true
+      }
+    ],
+    "retenciones": 0,
+    "liquidacionId": "f064655d-e835-5e41-3a0e-7b91d87c76a5",
+    "ivaAcreditable": 480.0,
+    "baseDesconocida": 0
+  },
+  {
+    "fecha": "2026-09-26",
+    "gastos": [
+      {
+        "id": "3dbb6f4e-97e6-4275-b00e-c781dcd850c6",
+        "fecha": null,
+        "folio": null,
+        "monto": 5480.0,
+        "cfdiUuid": "47b0c5bb-8c5f-423f-ba46-dfb67aec5c4a",
+        "concepto": "diesel",
+        "pagadoEn": null,
+        "subtotal": 3000.0,
+        "cfdiOrden": 1,
+        "descuento": null,
+        "folioNorm": null,
+        "formaPago": "03",
+        "rfcEmisor": null,
+        "tieneCfdi": true,
+        "isrRetenido": null,
+        "ivaRetenido": null,
+        "ivaTraslado": 480.0,
+        "pagadoForma": null,
+        "iepsTraslado": 0.0
+      }
+    ],
+    "version": 361,
+    "anticipo": 5000.0,
+    "operador": "Operador sint\u00e9tico AJUSTE-SUBE-INCOMPATIBLE",
+    "revision": "ajustada",
+    "comprobado": 5480.0,
+    "diferencia": -480.0,
+    "folioViaje": "AJUSTE-SUBE-INCOMPATIBLE",
+    "diferencias": [],
+    "porConcepto": [
+      {
+        "concepto": "diesel",
+        "subtotal": 3000.0,
+        "baseConocida": true
+      }
+    ],
+    "retenciones": 0,
+    "liquidacionId": "6ccf0cca-298e-36cf-ac97-29c29f04aab0",
+    "ivaAcreditable": 480.0,
+    "baseDesconocida": 0
+  },
+  {
+    "fecha": "2026-09-26",
+    "gastos": [
+      {
+        "id": "178776c1-e881-42ce-abc5-3b6fbb4dfb2a",
+        "fecha": null,
+        "folio": null,
+        "monto": 3480.0,
+        "cfdiUuid": "5e438dbd-8b50-4e69-9663-a206941a364e",
+        "concepto": "diesel",
+        "pagadoEn": null,
+        "subtotal": 3000.0,
+        "cfdiOrden": 1,
+        "descuento": null,
+        "folioNorm": null,
+        "formaPago": "03",
+        "rfcEmisor": null,
+        "tieneCfdi": true,
+        "isrRetenido": null,
+        "ivaRetenido": null,
+        "ivaTraslado": 480.0,
+        "pagadoForma": null,
+        "iepsTraslado": 0.0
+      }
+    ],
+    "version": 361,
+    "anticipo": 5000.0,
+    "operador": "Operador sint\u00e9tico APROBADA",
+    "revision": "aprobada",
+    "comprobado": 3480.0,
+    "diferencia": 1520.0,
+    "folioViaje": "APROBADA",
+    "diferencias": [],
+    "porConcepto": [
+      {
+        "concepto": "diesel",
+        "subtotal": 3000.0,
+        "baseConocida": true
+      }
+    ],
+    "retenciones": 0,
+    "liquidacionId": "70ef7ee4-a918-19d9-ebd2-423f1297d94c",
+    "ivaAcreditable": 480.0,
+    "baseDesconocida": 0
+  },
+  {
+    "fecha": "2026-09-26",
+    "gastos": [
+      {
+        "id": "c57dbe13-518f-4e45-9ad5-5f018a96b40a",
+        "fecha": null,
+        "folio": null,
+        "monto": 3480.0,
+        "cfdiUuid": "519bf96a-d651-4575-855c-e3709be85dfc",
+        "concepto": "diesel",
+        "pagadoEn": null,
+        "subtotal": 3000.0,
+        "cfdiOrden": 1,
+        "descuento": null,
+        "folioNorm": null,
+        "formaPago": "03",
+        "rfcEmisor": null,
+        "tieneCfdi": true,
+        "isrRetenido": null,
+        "ivaRetenido": null,
+        "ivaTraslado": 480.0,
+        "pagadoForma": null,
+        "iepsTraslado": 0.0
+      }
+    ],
+    "version": 361,
+    "anticipo": 5000.0,
+    "operador": "Operador sint\u00e9tico PENDIENTE",
+    "revision": "pendiente",
+    "comprobado": 3480.0,
+    "diferencia": 1520.0,
+    "folioViaje": "PENDIENTE",
+    "diferencias": [],
+    "porConcepto": [
+      {
+        "concepto": "diesel",
+        "subtotal": 3000.0,
+        "baseConocida": true
+      }
+    ],
+    "retenciones": 0,
+    "liquidacionId": "85fce1af-ac52-f318-8cad-4d25608aa3f4",
+    "ivaAcreditable": 480.0,
+    "baseDesconocida": 0
+  }
+]

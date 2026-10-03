@@ -2,7 +2,9 @@
 
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { Sparkles, TriangleAlert, Check, ShieldQuestion } from 'lucide-react';
+import { Sparkles, ShieldQuestion } from 'lucide-react';
+import { AvisoResultado } from '../../admin/ui/aviso-resultado';
+import { BotonConfirmar } from '../../admin/ui/confirmar';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA PANTALLA DE "MIS REGLAS" — lado del navegador.
@@ -47,11 +49,7 @@ const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 function AvisoError({ estado }: { estado: { error: string; puedoVigilar?: string[] } }) {
   return (
     <div className="space-y-2">
-      <div className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
-        style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-        <TriangleAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-        {estado.error}
-      </div>
+      <AvisoResultado estado={{ ok: false, error: estado.error }} />
       {/* La mitad honesta de la negativa. Un "no puedo" a secas deja a la
           persona adivinando qué sí; esta lista es lo que evita que se rinda. */}
       {estado.puedoVigilar && estado.puedoVigilar.length > 0 && (
@@ -74,13 +72,7 @@ function AvisoError({ estado }: { estado: { error: string; puedoVigilar?: string
 }
 
 function AvisoOk({ mensaje }: { mensaje: string }) {
-  return (
-    <div className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
-      style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
-      <Check width={15} height={15} strokeWidth={2} className="mt-0.5 shrink-0" />
-      {mensaje}
-    </div>
-  );
+  return <AvisoResultado estado={{ ok: true, mensaje }} />;
 }
 
 function BotonEnvio({ etiqueta, ocupado, tono = 'marca', Icono }: {
@@ -226,28 +218,53 @@ export function BotonDeRegla({ accion, id, etiqueta, ocupado, tono = 'suave' }: 
 }
 
 /**
- * Borrar, en dos pasos y SIN `confirm()`: el diálogo nativo bloquea headless y
- * no se puede mirar en un screenshot (mismo criterio que llaves-api).
+ * Borrar una regla, con el diálogo de confirmación ÚNICO del panel (W2): dice lo
+ * que se pierde —la regla y la memoria de lo que ya avisó— antes de confirmar.
  */
 export function BorrarRegla({ accion, id }: { accion: AccionForma; id: string }) {
   const [estado, despachar] = useActionState(accion, null);
   return (
-    <details>
-      <summary className="cursor-pointer text-[12px] font-medium select-none list-none"
-        style={{ color: 'var(--bad)' }}>
-        Borrar
-      </summary>
-      <div className="pt-2 space-y-2">
-        <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
-          Se va la regla y también la memoria de lo que ya te avisó. Si la
-          vuelves a declarar, los mismos casos te van a sonar otra vez.
-        </p>
-        {estado && !estado.ok && <p className="text-[11.5px]" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
-        <form action={despachar}>
-          <input type="hidden" name="id" value={id} />
-          <BotonEnvio etiqueta="Sí, borrarla" ocupado="Borrando…" tono="malo" />
-        </form>
+    <form action={despachar} className="space-y-2">
+      <input type="hidden" name="id" value={id} />
+      <BotonConfirmar
+        etiqueta="Borrar" tono="peligro" etiquetaConfirmar="Sí, borrarla"
+        titulo="Borrar esta regla"
+        descripcion="Se va la regla y también la memoria de lo que ya te avisó. Si la vuelves a declarar, los mismos casos te van a sonar otra vez."
+        className="text-[12px] font-medium select-none hover:opacity-70 transition-opacity"
+        style={{ color: 'var(--bad)' }}
+      />
+      {estado && !estado.ok && <AvisoError estado={estado} />}
+    </form>
+  );
+}
+
+
+/**
+ * El límite de frecuencia de UNA regla (0520): cuántos avisos como máximo en 24 h
+ * y cuántas horas de separación entre dos avisos. Lo que se pospone no se pierde:
+ * sale agrupado en el siguiente aviso permitido.
+ */
+export function FormaFrecuencia({ accion, id, maxAvisosDia, minHorasEntreAvisos }: {
+  accion: AccionForma; id: string; maxAvisosDia: number; minHorasEntreAvisos: number;
+}) {
+  const [estado, despachar] = useActionState(accion, null);
+  return (
+    <form action={despachar} className="space-y-2">
+      <input type="hidden" name="id" value={id} />
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="block">
+          <span className={ETIQUETA} style={{ color: 'var(--muted)' }}>Máximo de avisos en 24 h</span>
+          <input type="number" name="maxAvisosDia" min={1} max={24} step={1} required
+            defaultValue={maxAvisosDia} className={`${CAMPO} w-28`} />
+        </label>
+        <label className="block">
+          <span className={ETIQUETA} style={{ color: 'var(--muted)' }}>Horas entre un aviso y otro</span>
+          <input type="number" name="minHorasEntreAvisos" min={0} max={168} step={1} required
+            defaultValue={minHorasEntreAvisos} className={`${CAMPO} w-28`} />
+        </label>
+        <BotonEnvio etiqueta="Guardar límite" ocupado="Guardando…" tono="suave" />
       </div>
-    </details>
+      {estado && <AvisoResultado estado={estado.ok ? { ok: true, mensaje: estado.mensaje } : { ok: false, error: estado.error }} />}
+    </form>
   );
 }

@@ -29,7 +29,8 @@ vi.mock('@/lib/logger', () => ({
 import { hashDeLlave } from '@/lib/auth/llave-api';
 import {
   retoS256, redirectUriAceptable, redirectUriRegistrada,
-  canjearCodigo, refrescarTokens, validarAcceso, registrarCliente,
+  canjearCodigo, refrescarTokens, validarAcceso, registrarCliente, leerCliente,
+  estadoInicialDe, redirectUriDeConfianza, decidirCliente, listarClientesPendientes,
   PREFIJO_CODIGO, PREFIJO_ACCESO, PREFIJO_REFRESCO,
 } from './oauth';
 
@@ -95,6 +96,7 @@ function filaCodigo(extra: Record<string, unknown> = {}) {
     tenant_id: 't-1', rol: 'contador', redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
     code_challenge: CHALLENGE_RFC, resource: null, familia: 'fam-1',
     expira_en: FUTURO, usado_en: null,
+    cliente: { estado: 'aprobado' },
     ...extra,
   };
 }
@@ -280,6 +282,7 @@ describe('refrescarTokens', () => {
     id: 'tok-r', cliente_id: 'cli-1', user_id: 'u-1', user_email: null,
     tenant_id: 't-1', rol: 'contador', familia: 'fam-1',
     expira_en: FUTURO, revocado_en: null, tipo: 'refresco',
+    cliente: { estado: 'aprobado' },
     ...extra,
   });
 
@@ -564,5 +567,159 @@ describe('registrarCliente', () => {
     const h = hashDeLlave(`${PREFIJO_ACCESO}loquesea`);
     expect(h).toMatch(/^[0-9a-f]{64}$/);
     expect(h.includes('loquesea')).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 0440 — anti consent-phishing: hosts conocidos, estado del cliente y decisión.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('estado inicial del cliente según sus redirect_uri', () => {
+  it('hosts conocidos y loopback nacen aprobados', () => {
+    expect(estadoInicialDe(['https://claude.ai/api/mcp/auth_callback'])).toBe('aprobado');
+    expect(estadoInicialDe(['https://chatgpt.com/connector_platform_oauth_redirect'])).toBe('aprobado');
+    expect(estadoInicialDe(['https://platform.openai.com/apps-manage/oauth'])).toBe('aprobado');
+    expect(estadoInicialDe(['http://localhost:49152/callback', 'http://127.0.0.1/cb'])).toBe('aprobado');
+  });
+  it('cualquier otro host nace PENDIENTE (el ataque del hallazgo #2)', () => {
+    expect(estadoInicialDe(['https://atacante.tld/cb'])).toBe('pendiente');
+  });
+  it('una sola URI desconocida arrastra a todo el cliente', () => {
+    expect(estadoInicialDe(['https://claude.ai/cb', 'https://atacante.tld/cb'])).toBe('pendiente');
+  });
+  it('lo que solo se PARECE a un host conocido no cuenta: subdominio falso, ruta, puerto, userinfo, esquema', () => {
+    for (const u of [
+      'https://claude.ai.atacante.tld/cb',
+      'https://atacante.tld/claude.ai',
+      'https://notclaude.ai/cb',
+      'https://claude.ai:8443/cb',
+      'https://claude.ai@atacante.tld/cb',
+      'http://claude.ai/cb',
+      'https://sub.claude.ai/cb',
+      'https://claude.ai./cb',
+    ]) {
+      expect(redirectUriDeConfianza(u), u).toBe(false);
+      expect(estadoInicialDe([u]), u).toBe('pendiente');
+    }
+  });
+  it('una lista vacía no se aprueba sola', () => {
+    expect(estadoInicialDe([])).toBe('pendiente');
+  });
+});
+
+describe('registrarCliente y estado', () => {
+  it('registra un cliente de host desconocido como pendiente (y lo dice)', async () => {
+    const insertados: unknown[] = [];
+    sbMock.mockReturnValue({
+      from: () => ({
+        insert: (fila: unknown) => { insertados.push(fila); return cadena(OK({ id: 'c-1' })); },
+      }),
+    });
+    const r = await registrarCliente('Claude', ['https://atacante.tld/cb']);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.cliente.estado).toBe('pendiente');
+    expect(insertados[0]).toMatchObject({ estado: 'pendiente', estado_en: null });
+  });
+  it('registra Claude como aprobado, con sello de fecha', async () => {
+    const insertados: Array<Record<string, unknown>> = [];
+    sbMock.mockReturnValue({
+      from: () => ({
+        insert: (fila: Record<string, unknown>) => { insertados.push(fila); return cadena(OK({ id: 'c-2' })); },
+      }),
+    });
+    const r = await registrarCliente('Claude', ['https://claude.ai/api/mcp/auth_callback']);
+    expect(r.ok && r.cliente.estado).toBe('aprobado');
+    expect(insertados[0].estado).toBe('aprobado');
+    expect(typeof insertados[0].estado_en).toBe('string');
+  });
+  it('NO deja a un cliente elegir su estado: el que manda el cuerpo se ignora', async () => {
+    const insertados: Array<Record<string, unknown>> = [];
+    sbMock.mockReturnValue({
+      from: () => ({ insert: (f: Record<string, unknown>) => { insertados.push(f); return cadena(OK({ id: 'c-3' })); } }),
+    });
+    // La firma de registrarCliente no recibe estado: el único canal es el nombre y las URIs.
+    await registrarCliente('Claude', ['https://atacante.tld/cb']);
+    expect(insertados[0].estado).toBe('pendiente');
+  });
+});
+
+describe('leerCliente y estado (falla cerrado)', () => {
+  const ID = '11111111-1111-4111-8111-111111111111';
+  it('devuelve el estado de la base', async () => {
+    conTablas({ mcp_oauth_cliente: [OK({ id: ID, nombre: 'X', redirect_uris: ['https://claude.ai/cb'], estado: 'aprobado' })] });
+    const r = await leerCliente(ID);
+    expect(r.ok && r.cliente.estado).toBe('aprobado');
+  });
+  it('un estado ausente o raro cuenta como PENDIENTE', async () => {
+    conTablas({ mcp_oauth_cliente: [OK({ id: ID, nombre: 'X', redirect_uris: [] })] });
+    const r = await leerCliente(ID);
+    expect(r.ok && r.cliente.estado).toBe('pendiente');
+  });
+});
+
+describe('canje y refresco exigen cliente aprobado', () => {
+  it('canje: cliente pendiente, rechazado o sin embed → mismo texto, no se marca nada', async () => {
+    for (const cliente of [{ estado: 'pendiente' }, { estado: 'rechazado' }, null, undefined]) {
+      conTablas({ mcp_oauth_codigo: [OK(filaCodigo({ cliente }))] });
+      const r = await canjearCodigo(CODIGO, 'cli-1', 'https://claude.ai/api/mcp/auth_callback', VERIFIER_RFC);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.error).toBe('no_valido');
+    }
+  });
+  it('refresco: cliente rechazado no rota', async () => {
+    const REFRESCO = `${PREFIJO_REFRESCO}xyz`;
+    conTablas({ mcp_oauth_token: [OK({
+      id: 'tok-r', cliente_id: 'cli-1', user_id: 'u-1', user_email: null, tenant_id: 't-1', rol: 'contador',
+      familia: 'fam-1', expira_en: FUTURO, revocado_en: null, tipo: 'refresco', cliente: { estado: 'rechazado' },
+    })] });
+    const r = await refrescarTokens(REFRESCO, 'cli-1');
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe('decidirCliente (el superadmin)', () => {
+  const ID = '22222222-2222-4222-8222-222222222222';
+  it('rechazar revoca los tokens vivos y lo cuenta', async () => {
+    conTablas({
+      mcp_oauth_cliente: [OK([{ id: ID }])],
+      mcp_oauth_token: [OK([{ id: 't1' }, { id: 't2' }])],
+    });
+    const r = await decidirCliente(ID, 'rechazado', 'admin-1');
+    expect(r).toEqual({ ok: true, revocados: 2 });
+  });
+  it('aprobar no toca tokens', async () => {
+    const tablas: string[] = [];
+    sbMock.mockReturnValue({ from: (t: string) => { tablas.push(t); return cadena(OK([{ id: ID }])); } });
+    const r = await decidirCliente(ID, 'aprobado', 'admin-1');
+    expect(r).toEqual({ ok: true, revocados: 0 });
+    expect(tablas).toEqual(['mcp_oauth_cliente']);
+  });
+  it('un cliente que no existe o ya tiene esa decisión se niega', async () => {
+    conTablas({ mcp_oauth_cliente: [OK([])] });
+    const r = await decidirCliente(ID, 'aprobado', 'admin-1');
+    expect(r.ok).toBe(false);
+  });
+  it('un id que no es uuid ni se consulta', async () => {
+    const r = await decidirCliente("x'; drop table", 'aprobado', 'admin-1');
+    expect(r.ok).toBe(false);
+    expect(sbMock).not.toHaveBeenCalled();
+  });
+  it('base caída = no_disponible; y si falla la revocación se dice, no se calla', async () => {
+    conTablas({ mcp_oauth_cliente: [FALLA()] });
+    const a = await decidirCliente(ID, 'aprobado', 'admin-1');
+    expect(!a.ok && a.error).toBe('no_disponible');
+    conTablas({ mcp_oauth_cliente: [OK([{ id: ID }])], mcp_oauth_token: [FALLA('boom')] });
+    const b = await decidirCliente(ID, 'rechazado', 'admin-1');
+    expect(!b.ok && b.error).toBe('no_disponible');
+  });
+});
+
+describe('listarClientesPendientes', () => {
+  it('lista con sus anfitriones; la base caída LANZA (no devuelve vacío)', async () => {
+    conTablas({ mcp_oauth_cliente: [OK([{ id: 'a', nombre: 'Claude', redirect_uris: ['https://atacante.tld/cb'], estado: 'pendiente', creado_en: PASADO }])] });
+    const l = await listarClientesPendientes();
+    expect(l[0].anfitriones).toEqual(['atacante.tld']);
+    conTablas({ mcp_oauth_cliente: [FALLA()] });
+    await expect(listarClientesPendientes()).rejects.toThrow();
   });
 });

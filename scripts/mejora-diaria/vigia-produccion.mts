@@ -10,7 +10,14 @@
 // 2 horas). Una base inalcanzable también avisa (una vez por racha): el
 // vigía ciego que calla es el fallo que la casa no acepta.
 //
-// Corre con: npx tsx scripts/mejora-diaria/vigia-produccion.mts (launchd).
+// DESDE E1-A (P0-8) ESTA GUARDIA CORRE EN EL SERVIDOR: `/api/cron/guardia` (Vercel, cada 5 min, con latido y el
+// interruptor global). Este script ya NO es la guardia: queda como herramienta MANUAL (probar contra la base real
+// desde la Mac) y como respaldo si Vercel Cron falla. La decisión de qué avisar es la MISMA (`decidirAvisos` de
+// guardia.ts); aquí solo cambia el canal (WhatsApp por wa-notificar.sh) y dónde vive el estado. Con el cron
+// desplegado, descarga el agente: `launchctl bootout gui/$(id -u)/com.likida.vigia-produccion` — dos vigías
+// avisando lo mismo por canales distintos es ruido, no redundancia. Ver docs/operacion/GUARDIA-EN-SERVIDOR.md.
+//
+// Corre con: npx tsx scripts/mejora-diaria/vigia-produccion.mts (manual; ya no por launchd).
 // ═══════════════════════════════════════════════════════════════════════════
 import { readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -30,7 +37,7 @@ for (const linea of readFileSync(join(REPO, '.env.local'), 'utf8').split('\n')) 
   }
 }
 
-const { clasificacionDeGuardia } = await import('../../src/lib/admin/guardia');
+const { clasificacionDeGuardia, decidirAvisos, decidirBaseCaida, lineasDeAviso, estadoDeDetalle } = await import('../../src/lib/admin/guardia');
 
 type Estado = { vistos: string[]; baseCaidaDesde: string | null };
 // AUDITORÍA CODEQL (js/http-to-file-access): el patrón existsSync→readFileSync
@@ -43,7 +50,7 @@ function leerEstado(): Estado {
     throw e;
   }
 }
-const previo: Estado = leerEstado();
+const previo: Estado = estadoDeDetalle(leerEstado());
 
 function whatsapp(texto: string) {
   try {
@@ -55,22 +62,20 @@ let clasificacion;
 try {
   clasificacion = await clasificacionDeGuardia(Date.now());
 } catch (e) {
-  // Base inalcanzable: avisar UNA vez por racha, no cada 2 horas.
-  if (!previo.baseCaidaDesde) {
-    whatsapp(`🔴 VIGÍA: no puedo leer la base de producción (${e instanceof Error ? e.message.slice(0, 120) : 'error'}). Estoy ciego hasta que vuelva — reviso cada 2h.`);
-    writeFileSync(ESTADO, JSON.stringify({ ...previo, baseCaidaDesde: new Date().toISOString() }));
+  // Base inalcanzable: avisar UNA vez por racha, no en cada corrida.
+  const caida = decidirBaseCaida(previo, new Date().toISOString());
+  if (caida.avisar) {
+    whatsapp(`🔴 VIGÍA: no puedo leer la base de producción (${e instanceof Error ? e.message.slice(0, 120) : 'error'}). Estoy ciego hasta que vuelva.`);
+    writeFileSync(ESTADO, JSON.stringify(caida.estado));
   }
   console.error('[vigia] base inalcanzable:', e);
   process.exit(1);
 }
 
-if (previo.baseCaidaDesde) {
+const decision = decidirAvisos(clasificacion, previo);
+if (decision.baseVolvio) {
   whatsapp('🟢 VIGÍA: la base volvió — vuelvo a ver producción.');
 }
-
-// La clave de dedup: qué incidente ES (no cuándo se miró).
-const clave = (i: { fuente: string; titulo: string; flota: string; desde: string }) =>
-  `${i.fuente}|${i.titulo}|${i.flota}|${i.desde}`;
 
 // Las cegueras van SIEMPRE al log con su error crudo — un vigía que no dice
 // POR QUÉ no ve, no se puede arreglar.
@@ -78,17 +83,11 @@ for (const f of clasificacion.fuentesCiegas) {
   console.error(`[vigia] fuente ciega: ${f.fuente} → ${(f.error ?? 'sin detalle').slice(0, 160)}`);
 }
 
-const urgentes = clasificacion.items.filter((i) => i.severidad === 'S1' || i.severidad === 'S2');
-const nuevos = urgentes.filter((i) => !previo.vistos.includes(clave(i)));
-const ciegasNuevas = clasificacion.fuentesCiegas.filter(
-  (f) => !previo.vistos.includes(`ciega|${f.fuente}`),
-);
-
+const { nuevos, ciegasNuevas, urgentes } = decision;
 if (nuevos.length || ciegasNuevas.length) {
   const lineas = [
     `🚨 VIGÍA DE PRODUCCIÓN — ${nuevos.length} incidente(s) nuevo(s):`,
-    ...nuevos.map((i) => `${i.severidad === 'S1' ? '🔴' : '🟠'} [${i.severidad}] ${i.titulo} — ${i.flota} (${i.fuente}, regla: ${i.regla})${i.vence ? ` · vence ${i.vence}` : ''}`),
-    ...ciegasNuevas.map((f) => `🟠 [S2] Fuente CIEGA: ${f.fuente}${f.error ? ` — ${f.error.slice(0, 80)}` : ''}`),
+    ...lineasDeAviso(decision),
     'Resuélvelo en app.likida.ai/admin',
   ];
   whatsapp(lineas.join('\n').slice(0, 3900));
@@ -99,7 +98,4 @@ if (nuevos.length || ciegasNuevas.length) {
 
 // El estado nuevo: TODO lo activo queda como visto; lo resuelto sale solo
 // (si reaparece, es incidente nuevo y se vuelve a avisar).
-writeFileSync(ESTADO, JSON.stringify({
-  vistos: [...urgentes.map(clave), ...clasificacion.fuentesCiegas.map((f) => `ciega|${f.fuente}`)],
-  baseCaidaDesde: null,
-}, null, 2));
+writeFileSync(ESTADO, JSON.stringify(decision.estado, null, 2));

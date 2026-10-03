@@ -8,6 +8,10 @@ import { sufijoTenant } from '../../sufijo';
 import { SeccionTimbrado } from './timbrar';
 
 export const dynamic = 'force-dynamic';
+// El PAC puede tardar hasta 20 s de autenticación + 20 s de timbrado (pac/sw.ts): las
+// server actions de esta página (timbrar, liberar el bloqueo) corren bajo ESTE límite.
+// Sin declararlo dependían del default de la plataforma (auditoría ola 1, #26).
+export const maxDuration = 60;
 
 // La ruta REAL es dinámica (/dashboard/timbrado/<uuid>); el gate usa la llave
 // de su padre — misma área, mismos datos, mismo criterio que /dashboard/<uuid>

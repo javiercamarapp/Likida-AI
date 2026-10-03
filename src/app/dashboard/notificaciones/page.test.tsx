@@ -16,6 +16,9 @@ const dobles = vi.hoisted(() => ({
   contarHuerfanosPendientes: vi.fn(),
   getConexiones: vi.fn(),
   calcularAlertasFlota: vi.fn(),
+  escalacionesAbiertas: vi.fn(),
+  entradaTablero: vi.fn(),
+  armarTableroViajes: vi.fn(),
 }));
 
 let sesion: { tenantId: string; rol: string } = { tenantId: 't-1', rol: 'flota_admin' };
@@ -25,6 +28,10 @@ vi.mock('next/navigation', () => ({ redirect: (ruta: string) => { throw new Erro
 vi.mock('@/lib/likida/analytics', () => ({ getKpis: dobles.getKpis, detectarAnomalias: dobles.detectarAnomalias, contarEscalados: dobles.contarEscalados }));
 vi.mock('@/lib/likida/repo', () => ({ contarHuerfanosPendientes: dobles.contarHuerfanosPendientes }));
 vi.mock('@/lib/likida/conexiones', () => ({ getConexiones: dobles.getConexiones }));
+vi.mock('@/lib/likida/orquestador/fuentes', () => ({ fuentes: () => ({ escalacionesAbiertas: dobles.escalacionesAbiertas, entradaTablero: dobles.entradaTablero }) }));
+vi.mock('@/lib/likida/orquestador/fuentes_reales', () => ({}));
+vi.mock('@/lib/likida/orquestador/tablero_viajes', () => ({ armarTableroViajes: dobles.armarTableroViajes }));
+vi.mock('@/lib/saludo', () => ({ ahoraMs: () => Date.parse('2026-10-02T18:00:00.000Z') }));
 vi.mock('../calcular-alertas-flota', () => ({ calcularAlertasFlota: dobles.calcularAlertasFlota }));
 vi.mock('./lista', () => ({ ListaAlertas: (props: { alertas: unknown }) => props }));
 
@@ -41,6 +48,12 @@ beforeEach(() => {
   dobles.contarHuerfanosPendientes.mockResolvedValue(0);
   dobles.getConexiones.mockResolvedValue([]);
   dobles.calcularAlertasFlota.mockReturnValue([]);
+  dobles.escalacionesAbiertas.mockResolvedValue([
+    { id: 'e1', destino: 'mesa_de_control', motivo: 'posible_emergencia' },
+    { id: 'e2', destino: 'contador', motivo: 'duda_fiscal' },
+  ]);
+  dobles.entradaTablero.mockResolvedValue({});
+  dobles.armarTableroViajes.mockReturnValue({ conteos: { conExcepcion: 4, sinSenal: 1 } });
 });
 
 // `/dashboard/notificaciones` vive en RUTAS_TODO_ROL a propósito (16-ago-2026):
@@ -97,5 +110,42 @@ it('cada señal caída se distingue como null, nunca como 0/vacío (0 sería una
   expect(dobles.calcularAlertasFlota).toHaveBeenCalledWith(
     expect.objectContaining({ duplicados: null, escalados: null }),
     expect.anything(), expect.any(Function),
+  );
+});
+
+// P6: las tareas del asistente y las excepciones del Conductor entran a las notificaciones.
+it('el dueño ve las tareas abiertas (todas) y las excepciones de viajes en vivo con los sin señal de vida', async () => {
+  await PaginaNotificaciones({ searchParams: SP });
+  expect(dobles.escalacionesAbiertas).toHaveBeenCalledWith('t-1', 60);
+  expect(dobles.calcularAlertasFlota).toHaveBeenCalledWith(
+    expect.objectContaining({ tareasAsistente: 2, excepcionesConductor: 4, sinSenalDeVida: 1 }),
+    expect.anything(), expect.any(Function),
+  );
+});
+
+it('el encargado solo cuenta las tareas que puede leer: la de dinero no entra a su campana', async () => {
+  sesion = { tenantId: 't-1', rol: 'encargado' };
+  await PaginaNotificaciones({ searchParams: SP });
+  expect(dobles.calcularAlertasFlota).toHaveBeenCalledWith(
+    expect.objectContaining({ tareasAsistente: 1 }), expect.anything(), expect.any(Function),
+  );
+});
+
+it('el contador no ve viajes en vivo: ni se leen esas fuentes ni existen esas señales (undefined, no null)', async () => {
+  sesion = { tenantId: 't-1', rol: 'contador' };
+  await PaginaNotificaciones({ searchParams: SP });
+  expect(dobles.escalacionesAbiertas).not.toHaveBeenCalled();
+  expect(dobles.entradaTablero).not.toHaveBeenCalled();
+  const senales = dobles.calcularAlertasFlota.mock.calls[0][0] as Record<string, unknown>;
+  expect(senales.tareasAsistente).toBeUndefined();
+  expect(senales.excepcionesConductor).toBeUndefined();
+});
+
+it('si el tablero o las tareas no se pueden leer se confiesa (null), no se pinta como cero', async () => {
+  dobles.escalacionesAbiertas.mockRejectedValueOnce(new Error('caída'));
+  dobles.entradaTablero.mockRejectedValueOnce(new Error('caída'));
+  await PaginaNotificaciones({ searchParams: SP });
+  expect(dobles.calcularAlertasFlota).toHaveBeenCalledWith(
+    expect.objectContaining({ tareasAsistente: null, excepcionesConductor: null }), expect.anything(), expect.any(Function),
   );
 });

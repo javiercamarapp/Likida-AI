@@ -91,7 +91,9 @@ vi.mock('@/lib/supabase/admin', () => ({
 vi.mock('./operacion', () => ({
   getTableroOperacion: async () => ({ viajesActivos: 1500, sinUnidad: 0, podPendientes: 0 }),
 }));
-vi.mock('@/lib/meta/client', () => ({
+// Parcial: el resto del módulo (p. ej. MAX_CUERPO_BOTONES, que lee asistencia_wa al importarse por la cadena del analista) queda real.
+vi.mock('@/lib/meta/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/meta/client')>()),
   sendDocument: async () => ({ ok: true, id: 'wamid-1' }),
 }));
 

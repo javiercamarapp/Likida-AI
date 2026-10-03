@@ -50,6 +50,8 @@ export interface UnidadCrudaImportada {
   polizaVence?: string | null;
   permisoSictVence?: string | null;
   verificacionVence?: string | null;
+  /** El patio como lo escribió el archivo (W2): se resuelve en `asignarPatios`. */
+  patio?: string | null;
 }
 
 /** Una fila ya válida, lista para escribir. */
@@ -57,6 +59,11 @@ export interface UnidadImportada extends UnidadValida {
   fila: number;
   /** La placa normalizada NUNCA es null aquí: es obligatoria. */
   placas: string;
+  /** El patio como lo escribió el archivo, o null (W2). */
+  patio?: string | null;
+  /** El patio YA resuelto contra la flota por `asignarPatios`; manda sobre el
+   *  `terminalId` general de `importarUnidades`. */
+  terminalId?: string | null;
 }
 
 /** La placa como se guarda: mayúsculas, sin espacios sobrantes ni guiones
@@ -91,7 +98,7 @@ export function validarUnidadImportada(c: UnidadCrudaImportada, fila: number, ho
     gpsProveedor: '',
     gpsDeviceId: '',
   }, hoy);
-  return { ...v, placas, fila };
+  return { ...v, placas, fila, patio: (c.patio ?? '').replace(/\s+/g, ' ').trim().slice(0, 80) || null };
 }
 
 // ── El archivo ─────────────────────────────────────────────────────────────
@@ -105,11 +112,12 @@ export const COLUMNAS_UNIDAD = {
   polizaVence: ['poliza vence', 'vence poliza', 'poliza', 'vencimiento poliza', 'vigencia poliza', 'seguro vence', 'seguro'],
   permisoSictVence: ['permiso sict vence', 'vence permiso sict', 'permiso sict', 'sict', 'permiso', 'vencimiento permiso'],
   verificacionVence: ['verificacion vence', 'vence verificacion', 'verificacion', 'vencimiento verificacion', 'verificacion fisico mecanica'],
+  patio: ['patio', 'terminal', 'base', 'sucursal', 'patio terminal'],
 } as const;
 
 export const PLANTILLA_UNIDADES = {
-  encabezados: ['numero economico', 'placas', 'marca', 'modelo', 'anio', 'poliza vence', 'permiso sict vence', 'verificacion vence'],
-  ejemplo: [`T-042 ${MARCA_EJEMPLO}`, 'ABC-123-4', 'Kenworth', 'T680', '2019', '2027-01-31', '2026-11-30', '2026-12-15'],
+  encabezados: ['numero economico', 'placas', 'marca', 'modelo', 'anio', 'poliza vence', 'permiso sict vence', 'verificacion vence', 'patio'],
+  ejemplo: [`T-042 ${MARCA_EJEMPLO}`, 'ABC-123-4', 'Kenworth', 'T680', '2019', '2027-01-31', '2026-11-30', '2026-12-15', 'Patio Norte'],
 } as const;
 
 export function plantillaUnidadesCsv(): string {
@@ -167,6 +175,7 @@ export function interpretarFilasUnidades(matriz: unknown[][], hoy = new Date()):
         polizaVence: fecha('polizaVence', 'la póliza') ?? '',
         permisoSictVence: fecha('permisoSictVence', 'el permiso SICT') ?? '',
         verificacionVence: fecha('verificacionVence', 'la verificación') ?? '',
+        patio: celda('patio', 80),
       }, numero, hoy);
 
       const placaRepetida = placasVistas.get(v.placas);
@@ -227,7 +236,9 @@ async function parqueDeLaFlota(tenantId: string): Promise<UnidadExistente[]> {
   );
 }
 
-function filaParaInsertar(tenantId: string, u: UnidadImportada, terminalId: string | null): Record<string, unknown> {
+function filaParaInsertar(tenantId: string, u: UnidadImportada, terminalGeneral: string | null): Record<string, unknown> {
+  // El patio de la FILA (resuelto contra la flota) manda; si no trae, el general.
+  const terminalId = u.terminalId !== undefined ? u.terminalId : terminalGeneral;
   return {
     tenant_id: tenantId,
     numero_economico: u.numeroEconomico,
@@ -240,6 +251,50 @@ function filaParaInsertar(tenantId: string, u: UnidadImportada, terminalId: stri
     verificacion_vence: u.verificacionVence,
     terminal_id: terminalId,
   };
+}
+
+export interface PlanUnidades {
+  /** Las filas que SÍ se escribirían. */
+  nuevas: UnidadImportada[];
+  /** El número económico ya existía en la flota: no se toca lo que hay. */
+  duplicadas: UnidadDuplicada[];
+  /** No se escribirían, y por qué (placa de otra unidad). */
+  errores: FilaConError[];
+  /** Solo cuando no se pudo leer el parque y NO se puede afirmar nada. */
+  error?: string;
+}
+
+/**
+ * Qué pasaría con estas filas, SIN escribir nada: la misma lectura y la misma
+ * clasificación que usa `importarUnidades` (una sola función: la vista previa no
+ * puede prometer algo que la escritura luego no hace). Falla cerrado.
+ */
+export async function planificarUnidades(tenantId: string, filas: UnidadImportada[]): Promise<PlanUnidades> {
+  const plan: PlanUnidades = { nuevas: [], duplicadas: [], errores: [] };
+  if (!filas.length) return plan;
+  let parque: UnidadExistente[];
+  try {
+    parque = await parqueDeLaFlota(tenantId);
+  } catch (e) {
+    logger.error('importar_unidades.parque_ilegible', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    return { ...plan, error: 'No pude leer el parque actual para comprobar placas y números económicos — no importé nada. Vuelve a intentar.' };
+  }
+  const porEconomico = new Map(parque.map((u) => [u.numero_economico, u] as const));
+  const porPlaca = new Map(parque.filter((u) => u.placas).map((u) => [normalizarPlaca(String(u.placas)), u] as const));
+  for (const f of filas) {
+    const yaEco = porEconomico.get(f.numeroEconomico);
+    if (yaEco) {
+      plan.duplicadas.push({ fila: f.fila, id: yaEco.id, numeroEconomico: f.numeroEconomico, motivo: 'ya estaba (mismo número económico); no se tocó lo que hay' });
+      continue;
+    }
+    const yaPlaca = porPlaca.get(f.placas);
+    if (yaPlaca) {
+      plan.errores.push({ fila: f.fila, motivo: `la placa ${f.placas} ya es de la unidad ${yaPlaca.numero_economico}; una placa es de un solo camión` });
+      continue;
+    }
+    plan.nuevas.push(f);
+  }
+  return plan;
 }
 
 /**
@@ -260,31 +315,18 @@ export async function importarUnidades(
   if (!filas.length) return salida;
 
   const terminalId = await resolverTerminalDeFlota(tenantId, opciones.terminalId);
-
-  let parque: UnidadExistente[];
-  try {
-    parque = await parqueDeLaFlota(tenantId);
-  } catch (e) {
-    logger.error('importar_unidades.parque_ilegible', { tenantId, err: e instanceof Error ? e.message : String(e) });
-    return { ...salida, error: 'No pude leer el parque actual para comprobar placas y números económicos — no importé nada. Vuelve a intentar.' };
+  // Los patios por FILA (columna «patio», ya resueltos por `asignarPatios`) se
+  // vuelven a comprobar contra la flota: defensa en profundidad; la FK compuesta
+  // de la 0298 es la última red.
+  for (const t of new Set(filas.map((f) => f.terminalId).filter((t): t is string => typeof t === 'string' && t !== ''))) {
+    await resolverTerminalDeFlota(tenantId, t);
   }
-  const porEconomico = new Map(parque.map((u) => [u.numero_economico, u] as const));
-  const porPlaca = new Map(parque.filter((u) => u.placas).map((u) => [normalizarPlaca(String(u.placas)), u] as const));
 
-  const porEscribir: UnidadImportada[] = [];
-  for (const f of filas) {
-    const yaEco = porEconomico.get(f.numeroEconomico);
-    if (yaEco) {
-      salida.duplicadas.push({ fila: f.fila, id: yaEco.id, numeroEconomico: f.numeroEconomico, motivo: 'ya estaba (mismo número económico); no se tocó lo que hay' });
-      continue;
-    }
-    const yaPlaca = porPlaca.get(f.placas);
-    if (yaPlaca) {
-      salida.errores.push({ fila: f.fila, motivo: `la placa ${f.placas} ya es de la unidad ${yaPlaca.numero_economico}; una placa es de un solo camión` });
-      continue;
-    }
-    porEscribir.push(f);
-  }
+  const plan = await planificarUnidades(tenantId, filas);
+  if (plan.error) return { ...salida, error: plan.error };
+  salida.duplicadas.push(...plan.duplicadas);
+  salida.errores.push(...plan.errores);
+  const porEscribir = plan.nuevas;
 
   const admin = supabaseAdmin();
   let detenido = false;

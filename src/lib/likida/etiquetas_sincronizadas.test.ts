@@ -125,14 +125,18 @@ describe('etiquetas de concepto — las tres fuentes dicen lo mismo', () => {
   });
 });
 
-// ── ESTATUS: el duplicado SE ELIMINÓ, no se sigue vigilando ────────────────
+// ── ESTATUS: el duplicado de /dashboard se eliminó; había DOS MÁS ──────────
 //
 // Este bloque comparaba las DOS copias de `ESTATUS` (la lista y el detalle del
 // panel) y verificaba que no se separaran — el auditor lo había marcado como
 // "latente para el próximo estatus nuevo". Al reestructurar /dashboard el mapa
-// se movió a `app/dashboard/estatus.ts` y las dos páginas lo importan, así que
-// ya no hay dos copias que puedan divergir: comparar una copia consigo misma
-// no prueba nada.
+// se movió a `app/dashboard/estatus.ts` y esas dos páginas lo importan.
+//
+// AUDITORÍA 32 (c6), FE-32C6-A1: el encabezado de este bloque decía «el
+// duplicado SE ELIMINÓ» y por eso sólo miraba `[id]/page.tsx`. Era falso —
+// `/dashboard/agentes/liquidacion` tenía DOS copias propias, y las dos
+// invertidas. Un rótulo que dejó de ser verdad es lo que dejó ciego al guardia,
+// así que se corrige el rótulo y se añade abajo el bloque que vigila las tres.
 //
 // El mapa gemelo de CONCEPTO (arriba) sí se queda vigilado: vive en runtimes
 // distintos (motor, PDF, panel) y no se puede importar de uno a otro. Este no.
@@ -182,5 +186,60 @@ describe('etiquetas de estatus — la fuente única cubre el tipo', () => {
     const estatus = [...decl.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
     expect(estatus.length, 'no se pudo leer EstatusLiquidacion').toBeGreaterThan(1);
     for (const e of estatus) expect(unica[e], `falta etiqueta para el estatus "${e}"`).toBeTruthy();
+  });
+});
+
+// ── FE-32C6-A1: el duplicado NO se había eliminado, eran TRES copias ───────
+//
+// El bloque de arriba afirmaba que el mapa de estatus ya sólo vivía en
+// `app/dashboard/estatus.ts`, y por eso sólo vigilaba `[id]/page.tsx`. Había
+// dos copias más, en `/dashboard/agentes/liquidacion`, y estaban INVERTIDAS:
+// pintaban `revisar` de ámbar y `con_diferencias` de rojo.
+//
+// Cuál es el severo NO es cuestión de gusto, está escrito en el motor
+// (`cuadre/engine.ts:422-423`, citando la AUDITORÍA 9): «mandarlo a REVISAR
+// volvía "Por revisar" (rojo, `--color-bad` en el panel)». `revisar` es el
+// grave; `con_diferencias` es el intermedio.
+//
+// No se comparan los colores literales a propósito: los tres mapas usan
+// convenciones distintas de variable CSS (`--color-bad` contra `--bad`, y los
+// de agentes llevan además un `bg`). Lo que tiene que coincidir es el NIVEL de
+// severidad, que es lo que el comprador lee.
+describe('etiquetas de estatus — las TRES copias coinciden en la severidad', () => {
+  /** `var(--color-bad)` y `var(--bad)` son el mismo nivel: `bad`. */
+  const nivel = (v: string | undefined): string | undefined =>
+    v?.match(/var\(--(?:color-)?(ok|warn|bad)\)/)?.[1];
+
+  const copias: { ruta: string; ancla: string; campo: string }[] = [
+    { ruta: '../../app/dashboard/estatus.ts', ancla: 'export const ESTATUS', campo: 'color' },
+    { ruta: '../../app/dashboard/agentes/liquidacion/vista.tsx', ancla: 'const ESTATUS', campo: 'fg' },
+    { ruta: '../../app/dashboard/agentes/liquidacion/cola.tsx', ancla: 'const ROTULO_ESTADO', campo: 'fg' },
+  ];
+
+  it('el barrido encuentra las tres copias (si esto falla, el patrón se quedó ciego)', () => {
+    for (const c of copias) {
+      const m = etiquetasAnidadas(c.ruta, c.ancla);
+      expect(Object.keys(m).length, `no se leyó el mapa de ${c.ruta}`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('`revisar` es el grave (rojo) y `con_diferencias` el intermedio (ámbar) en TODAS', () => {
+    for (const c of copias) {
+      const m = etiquetasAnidadas(c.ruta, c.ancla);
+      expect(nivel(m.cuadrada?.[c.campo]), `${c.ruta}: cuadrada no es ok`).toBe('ok');
+      expect(nivel(m.con_diferencias?.[c.campo]), `${c.ruta}: con_diferencias no es warn`).toBe('warn');
+      expect(nivel(m.revisar?.[c.campo]), `${c.ruta}: revisar no es bad`).toBe('bad');
+    }
+  });
+
+  it('el fondo de los de agentes acompaña a su frente, no al contrario', () => {
+    for (const c of copias.filter((x) => x.campo === 'fg')) {
+      const m = etiquetasAnidadas(c.ruta, c.ancla);
+      for (const [clave, campos] of Object.entries(m)) {
+        const fg = nivel(campos.fg);
+        const bg = campos.bg?.match(/var\(--(ok|warn|bad)bg\)/)?.[1];
+        expect(bg, `${c.ruta}: ${clave} tiene fondo "${campos.bg}" y frente "${campos.fg}"`).toBe(fg);
+      }
+    }
   });
 });

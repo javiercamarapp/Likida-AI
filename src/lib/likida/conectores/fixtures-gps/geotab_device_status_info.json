@@ -1,0 +1,7 @@
+{
+  "result": [
+    { "bearing": 180, "currentStateDuration": "00:12:00", "dateTime": "2026-10-01T15:30:00.000Z", "isDeviceCommunicating": true, "isDriving": true, "latitude": 25.6866, "longitude": -100.3161, "speed": 88, "device": { "id": "b1" }, "groups": [], "exceptionEvents": [] },
+    { "bearing": 0, "dateTime": "2026-10-01T15:29:00.000Z", "isDeviceCommunicating": true, "isDriving": false, "latitude": 20.6597, "longitude": -103.3496, "speed": 0, "device": { "id": "b2" } }
+  ],
+  "jsonrpc": "2.0"
+}

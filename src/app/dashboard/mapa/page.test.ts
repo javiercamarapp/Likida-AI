@@ -47,6 +47,13 @@ vi.mock('@/lib/likida/comercial', () => ({
 }));
 
 vi.mock('@/lib/saludo', () => ({ ahoraMs: () => 1_700_000_000_000 }));
+// W3: lo secundario del GPS (dispositivos huérfanos y unidades con dispositivo) no es lo que se prueba aquí.
+const unidadesConDispositivo = vi.fn(async () => new Set<string>());
+const huerfanosGps = vi.fn(async (): Promise<{ lista: Array<{ proveedor: string; deviceId: string; primerVistoEn: string; ultimoVistoEn: string }>; hayMas: boolean }> => ({ lista: [], hayMas: false }));
+vi.mock('@/lib/likida/gps_push/datos', () => ({
+  unidadesConDispositivo: (...a: unknown[]) => unidadesConDispositivo(...(a as [])),
+  huerfanosGps: (...a: unknown[]) => huerfanosGps(...(a as [])),
+}));
 
 import PaginaMapa from './page';
 import type { Rastreo } from './vista';
@@ -89,5 +96,35 @@ describe('/dashboard/mapa — el rastreo caído no entrega el mensaje crudo de P
 
     expect(rastreo.error).toBeNull();
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('/dashboard/mapa — W3: respaldo por WhatsApp y huérfanos (lecturas secundarias)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolverTenantEfectivo.mockResolvedValue({ tenantId: 't-1', rol: 'flota_admin' });
+  });
+  const estado = { unidadesConPosicion: 2, ultimaPosicion: '2026-10-01T15:00:00Z', proveedores: [], polls: [] };
+  const pos = (id: string, proveedor: string) => ({ unidadId: id, numeroEconomico: id, placas: null, estadoUnidad: 'en_ruta', lat: 20, lng: -99, medidaEn: '2026-10-01T14:00:00Z', velocidadKmh: null, proveedor });
+
+  it('un pin de WhatsApp de una unidad con dispositivo ligado sale como respaldo; el de una sin dispositivo no', async () => {
+    getEstadoRastreo.mockResolvedValue(estado);
+    getUltimasPosiciones.mockResolvedValue([pos('u-con', 'whatsapp'), pos('u-sin', 'whatsapp'), pos('u-gps', 'wialon')]);
+    unidadesConDispositivo.mockResolvedValue(new Set(['u-con', 'u-gps']));
+    huerfanosGps.mockResolvedValue({ lista: [{ proveedor: 'wialon', deviceId: '1', primerVistoEn: 'x', ultimoVistoEn: 'x' }], hayMas: false });
+    const r = await rastreoDeLaPagina();
+    expect(r.pines.map((p) => [p.unidadId, p.respaldoWa])).toEqual([['u-con', true], ['u-sin', false], ['u-gps', false]]);
+    expect(r.huerfanos).toBe(1);
+  });
+
+  it('si no se pudo leer lo secundario, el mapa sigue: huérfanos null y ningún pin se rotula respaldo', async () => {
+    getEstadoRastreo.mockResolvedValue(estado);
+    getUltimasPosiciones.mockResolvedValue([pos('u-con', 'whatsapp')]);
+    unidadesConDispositivo.mockRejectedValue(new Error('db'));
+    huerfanosGps.mockRejectedValue(new Error('db'));
+    const r = await rastreoDeLaPagina();
+    expect(r.error).toBeNull();
+    expect(r.huerfanos).toBeNull();
+    expect(r.pines[0].respaldoWa).toBe(false);
   });
 });

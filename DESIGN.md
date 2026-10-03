@@ -131,12 +131,29 @@ globals.css, cero dependencias): prensado `scale(0.97)` en todo botón
 activo y lift de 1px en tarjetas-link al hover. TODO detrás de
 `prefers-reduced-motion`; nada más de movimiento sin pasar por aquí.
 
+**Avisos, diálogos, estados y paginación — UN solo sistema (W2, 1-oct-2026).**
+Antes había 18 copias del aviso de resultado y cuatro maneras de confirmar lo
+destructivo. Ahora cada situación tiene UNA pieza, y una pantalla nueva no inventa
+otra:
+
+| Situación | Pieza | Regla |
+|---|---|---|
+| Resultado de UN formulario (ok / error) | `AvisoResultado` (`admin/ui/aviso-resultado.tsx`) | Junto a los campos que se corrigen. Error `role="alert"`, éxito `role="status"`, ícono + texto (nunca color solo). El error del servidor sale VERBATIM. Acepta las tres formas de resultado de los server actions. |
+| Resultado de una acción de FILA o de una operación larga | Toast (`useNotificar` / `useNotificarResultado`, `admin/ui/notificaciones.tsx`; el proveedor vive en `dashboard/chrome.tsx`) | Éxito/info/aviso se van solos (5/6/9 s); un ERROR no se va solo (WCAG 2.2.1) y se cierra con la X o con Esc; pausa con cursor o foco; máximo 4; el mismo mensaje no se apila. |
+| Confirmar algo destructivo o que corta el acceso de alguien | `DialogoConfirmar` / `BotonConfirmar` (`admin/ui/confirmar.tsx`) sobre `<dialog>` nativo | El diálogo DICE qué pasa y a cuántos afecta. Tono `peligro`: el foco inicial cae en Cancelar. Prohibido `confirm()` del navegador y el `<details>` de dos pasos. |
+| Lista vacía / lectura caída / carga | `EstadoVacio` (con `accion`: un enlace REAL al siguiente paso), `EstadoError`, `EstadoCargando` (`kit.tsx`) | Un vacío dice cómo se llena; una lectura caída NUNCA se pinta como vacío. |
+| Búsqueda y páginas de un registro | `FiltroRegistro` (`dashboard/registro-filtro.tsx`) + `paginar-registro.ts` | El pie declara «25 de N». La URL dice qué se mira. |
+
+Los toasts no reemplazan al aviso del formulario: si el error tiene campos al
+lado, se enseña ahí.
+
 ## 4. Dónde vive cada cosa
 
 | Pieza | Archivo |
 |---|---|
 | Tokens | `src/app/globals.css` (`@theme` + `:root`) |
 | Primitivas compartidas | `src/app/admin/ui/kit.tsx` (`StatCard`, `KpiTile`, `StatusPill`, `ChartCard`, estados) |
+| Avisos, toasts y diálogo de confirmación | `src/app/admin/ui/{aviso-resultado,notificaciones,confirmar}.tsx` |
 | Barra superior del Resumen | `dashboard/resumen-visual.tsx` (`BarraPagina`, `ChipFecha`, `TablaViajes`) + `barra-acciones.tsx` (búsqueda / IA / campana) |
 | Marco de las dos consolas | `src/app/marco.ts` (geometría) — material `.card`, ya no `.glass-panel` |
 | Sidebar de /dashboard | `src/app/dashboard/sidebar-nav.tsx` + `rutas.ts` |

@@ -366,11 +366,33 @@ export async function redactarCorreoFrio(
       logger.info('redactor.dossier_ilegible', { prospecto: prospectoId, err: errD.message });
     } else if (d) {
       const dd = d as { historia: string | null; empleados: string | null; flotilla: string | null; datos: Array<{ dato?: string }> | null };
-      if (dd.historia) lineasInvestigadas.push(`Historia (de su sitio): ${dd.historia.slice(0, 300)}`);
-      if (dd.empleados) lineasInvestigadas.push(`Tamaño (de su sitio): ${dd.empleados.slice(0, 150)}`);
-      if (dd.flotilla) lineasInvestigadas.push(`Flota (de su sitio): ${dd.flotilla.slice(0, 150)}`);
+      // LEG-32C5-A1 (auditoría 32 c5, ALTO): EL DOSSIER TAMBIÉN PASA POR LA
+      // PUERTA. `notasSinPersona` se aplicaba sólo a `prospecto.notas`, unas
+      // líneas más abajo, y el dossier del investigador entraba por otra
+      // columna: `investigador.ts:447-456` escribe los correos de dominio
+      // ajeno CON LA DIRECCIÓN DENTRO DEL TEXTO en `prospecto_dossier.datos`
+      // —a propósito, para revisión humana— y de aquí salían hacia el modelo.
+      //
+      // El aviso promete lo contrario, literal (`privacidad.ts:1085`): la
+      // ficha que recibe el modelo para redactar va «sin tus datos de
+      // contacto». Es la MISMA lección de la auditoría 19: una protección
+      // pegada a UN campo se queda en ese campo.
+      //
+      // Se pasa CADA línea, no sólo `datos`: `historia`/`empleados`/`flotilla`
+      // son texto que un modelo extrajo del sitio y pueden traer el teléfono o
+      // el correo de una persona igual de fácil. El recorte va DESPUÉS del
+      // `slice` para que el marcador no se parta a la mitad.
+      const limpia = (t: string, n: number): string | null =>
+        notasSinPersona(t.slice(0, n), prospecto.contacto_nombre, MARCADOR_NOMBRE);
+      const empuja = (etiqueta: string, t: string | null, n: number) => {
+        const v = t ? limpia(t, n) : null;
+        if (v) lineasInvestigadas.push(`${etiqueta}: ${v}`);
+      };
+      empuja('Historia (de su sitio)', dd.historia, 300);
+      empuja('Tamaño (de su sitio)', dd.empleados, 150);
+      empuja('Flota (de su sitio)', dd.flotilla, 150);
       for (const h of (dd.datos ?? []).slice(0, 4)) {
-        if (h?.dato) lineasInvestigadas.push(`Hallazgo (de su sitio): ${h.dato.slice(0, 200)}`);
+        if (h?.dato) empuja('Hallazgo (de su sitio)', h.dato, 200);
       }
     }
   } catch (e) {

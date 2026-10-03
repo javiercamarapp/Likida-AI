@@ -77,6 +77,8 @@ vi.mock('./crear_viaje_wa', async (orig) => ({
   resolverOperadorPorNombre: (...a: unknown[]) => resolver(...a),
   resolverUnidadPorEconomico: (...a: unknown[]) => resolverUnidad(...a),
 }));
+const getConfig = vi.fn(async (..._a: unknown[]): Promise<{ politica: Array<{ concepto: string; topeMonto?: number }> }> => ({ politica: [] }));
+vi.mock('./config', () => ({ getConfig: (...a: unknown[]) => getConfig(...a) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const { atenderDespachoOficina, VIGENCIA_PENDIENTE_MS } = await import('./despacho_wa');
@@ -97,6 +99,7 @@ beforeEach(() => {
   crearViaje.mockClear();
   resolver.mockReset();
   resolverUnidad.mockReset();
+  getConfig.mockReset().mockResolvedValue({ politica: [] });
 });
 
 describe('lo que NO es despacho', () => {
@@ -473,5 +476,52 @@ describe('la verdad sobre el aviso al chofer (AG-A4)', () => {
     expect(r).toContain('No pude verificar si el aviso salió');
     expect(r).not.toContain('va en camino');
     expect(r).not.toContain('ya salió');
+  });
+});
+
+
+// E1-B (P0-7): la regla de anticipo es la MISMA que la del panel — el tope sale
+// de la política de la flota (`anticipo`), no de una constante del chat.
+describe('el tope de anticipo de la política de la flota', () => {
+  const ENCARGADO = { tenantId: 't1', rol: 'encargado' as const };
+  const pide = (anticipo: number) => `nuevo viaje para juan perez, Puebla a Monterrey, anticipo ${anticipo}`;
+
+  it('el encargado puede dar anticipo por WhatsApp dentro del tope', async () => {
+    getConfig.mockResolvedValue({ politica: [{ concepto: 'anticipo', topeMonto: 10_000 }] });
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez López' });
+    const r = await atenderDespachoOficina(ENCARGADO, TEL, pide(8000), AHORA);
+    expect(r).toContain('Responde SÍ');
+    expect((estadoGuardado?.viajePendiente as { anticipo: number }).anticipo).toBe(8000);
+  });
+
+  it('sobre el tope de la política: no se crea pendiente y se dice por qué', async () => {
+    getConfig.mockResolvedValue({ politica: [{ concepto: 'anticipo', topeMonto: 5_000 }] });
+    const r = await atenderDespachoOficina(ENCARGADO, TEL, pide(8000), AHORA);
+    expect(r).toContain('tope de anticipo de la política');
+    expect(estadoGuardado).toBeNull();
+    expect(crearViaje).not.toHaveBeenCalled();
+  });
+
+  it('una política con tope mayor al umbral por defecto lo respeta (150 mil con tope de 200 mil)', async () => {
+    getConfig.mockResolvedValue({ politica: [{ concepto: 'anticipo', topeMonto: 200_000 }] });
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez López' });
+    const r = await atenderDespachoOficina(JEFE, TEL, pide(150000), AHORA);
+    expect(r).toContain('Responde SÍ');
+  });
+
+  it('M3 · si la política no se puede leer, un anticipo se RECHAZA con mensaje claro (no cae a 100 mil)', async () => {
+    getConfig.mockRejectedValue(new Error('base caída'));
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez López' });
+    // una política de 20 mil habría rechazado esto; el respaldo de 100 mil lo dejaba pasar
+    const r = await atenderDespachoOficina(ENCARGADO, TEL, pide(60000), AHORA);
+    expect(r).toContain('No pude leer la política');
+    expect(estadoGuardado).toBeNull();
+    expect(crearViaje).not.toHaveBeenCalled();
+  });
+
+  it('M3 · si la política no se puede leer pero el despacho no trae anticipo, sigue (un cero no se topa)', async () => {
+    getConfig.mockRejectedValue(new Error('base caída'));
+    resolver.mockResolvedValue({ operadorId: 'op-9', nombre: 'Juan Pérez López' });
+    expect(await atenderDespachoOficina(JEFE, TEL, 'nuevo viaje para juan perez, Puebla a Monterrey', AHORA)).toContain('Responde SÍ');
   });
 });

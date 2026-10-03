@@ -8,7 +8,9 @@ import {
   getTableroOperacion, getViajesSinAsignar, getCargaOperadores, crearViaje, avisarAlChofer,
   asignarUnidad,
 } from '@/lib/likida/operacion';
+import { instruccionesAlCambiarOperador } from '@/lib/likida/convenios/envio';
 import { reasignarOperador, buscarCatalogo, contarCatalogo, type OpcionCatalogo, type TipoCatalogo } from '@/lib/likida/repo';
+import { alcanceDePatio, patioParaCrear } from '@/lib/auth/patio';
 import { crearOperador } from '@/lib/likida/administracion';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { viajesEnCursoPaginados, PAGINA_MAX_VIAJES_EN_CURSO } from '@/lib/likida/repo_paginado';
@@ -16,6 +18,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { VistaDespacho } from './vista';
 import { validarIngreso } from '@/lib/likida/ingreso_viaje';
+import { getConfig } from '@/lib/likida/config';
+import { topeAnticipoParaPanel, evaluarAnticipo, MENSAJE_POLITICA_ILEGIBLE, type TopeAnticipo } from '@/lib/likida/crear_viaje_wa';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +50,19 @@ export const dynamic = 'force-dynamic';
  * A nivel de módulo no es una variable capturada, es una referencia del módulo.
  * Las acciones ahora solo cierran sobre `tenantId` y `destino`, dos strings.
  */
+/** El tope de anticipo que aplica el panel (la MISMA regla que WhatsApp, `crear_viaje_wa.ts`).
+ *  `{ ok: false }` = la política no se pudo leer: NO se inventa un tope (el respaldo de 100 mil
+ *  era más holgado que una política de 20 mil) y quien captura un anticipo recibe un rechazo
+ *  claro. `{ ok: true, tope: null }` = sin tope (dueño sin política explícita). */
+async function topeAnticipoDeLaFlota(tenantId: string, puedeVerDinero: boolean): Promise<{ ok: true; tope: TopeAnticipo | null } | { ok: false }> {
+  try {
+    return { ok: true, tope: topeAnticipoParaPanel((await getConfig(tenantId)).politica, puedeVerDinero) };
+  } catch (err) {
+    logger.warn('despacho.tope_anticipo_no_disponible', { err: err instanceof Error ? err.message : String(err) });
+    return { ok: false };
+  }
+}
+
 async function guardiaDespacho(tenantId: string, requiereDinero = false): Promise<string | null> {
   const sesion = await requireSessionTenant('/dashboard/despacho');
   if (!puedeAsignar(sesion.rol)) return 'Tu rol no puede despachar viajes.';
@@ -64,7 +81,9 @@ function safe<T>(fn: () => Promise<T>): Promise<T | null> {
  * operadores sin brincar de página. La foto de solo lectura de la mañana
  * vive en el Resumen del encargado; aquí viven los botones.
  *
- * Área `operacion`: el jefe de tráfico entra y NO hay un peso en pantalla.
+ * Área `operacion`: el jefe de tráfico entra y no ve ingresos ni clientes; la
+ * única cifra que captura es el ANTICIPO, acotado por el tope de la política
+ * de la flota (decisión de Javier, E1-B).
  * Toda action re-verifica sesión y permiso ADENTRO (alcanzables por POST
  * directo), y el tenant viaja por closure del render, nunca del cliente.
  */
@@ -78,6 +97,11 @@ export default async function PaginaDespacho({
   if (!puedeVerRuta(rol, '/dashboard/despacho')) redirect('/dashboard');
 
   const puedeCapturarDinero = puedeVerArea(rol, 'dinero');
+  // Quien despacha (`puedeAsignar`) captura anticipo; ver `crear` abajo.
+  const puedeCapturarAnticipo = puedeAsignar(rol);
+  const topeLeido = puedeCapturarAnticipo ? await topeAnticipoDeLaFlota(tenantId, puedeCapturarDinero) : null;
+  const topeAnticipo = topeLeido?.ok ? (topeLeido.tope?.tope ?? undefined) : undefined;
+  const topeAnticipoOrigen = topeLeido?.ok ? topeLeido.tope?.origen : undefined;
   const sufijo = sufijoTenant(sp);
   const destino = `/dashboard/despacho${sufijo}`;
   // `leerPagina` (repo_paginado.ts) ya clampa a `PAGINA_MAX_VIAJES_EN_CURSO`
@@ -110,7 +134,8 @@ export default async function PaginaDespacho({
   // `count: 'exact'` y un buscador por folio (`?q=`).
   const [tablero, sinAsignar, activos, carga, totalOperadores, totalClientes, totalUnidades] = await Promise.all([
     safe(() => getTableroOperacion(tenantId)),
-    getViajesSinAsignar(tenantId),
+    // 12 = `MAX_FILAS` de la vista: solo se trae lo que se pinta, y el total real viaja aparte.
+    getViajesSinAsignar(tenantId, 12),
     viajesEnCursoPaginados(tenantId, { pagina: paginaPedida, folio: folioPedido }),
     safe(() => getCargaOperadores(tenantId)),
     contarCatalogo(tenantId, 'operador'),
@@ -152,7 +177,10 @@ export default async function PaginaDespacho({
     'use server';
     // La presencia se valida antes de leer valores: un POST manual, incluso
     // vacío o con claves repetidas, no concede al encargado captura financiera.
-    const requiereDinero = ['anticipo', 'ingresoFlete', 'clienteId'].some((campo) => fd.has(campo));
+    // E1-B (P0-7, decisión de Javier): el ANTICIPO ya no exige el área `dinero` —
+    // el encargado puede darlo, acotado por el tope de la política (abajo), igual
+    // que por WhatsApp. El ingreso del flete y el cliente siguen siendo dinero.
+    const requiereDinero = ['ingresoFlete', 'clienteId'].some((campo) => fd.has(campo));
     const rechazo = await guardiaDespacho(tenantId, requiereDinero);
     if (rechazo) return { error: rechazo };
 
@@ -162,9 +190,17 @@ export default async function PaginaDespacho({
     };
     const anticipoCrudo = fd.get('anticipo');
     const anticipo = typeof anticipoCrudo === 'string' && anticipoCrudo.trim() !== '' ? Number(anticipoCrudo) : 0;
-    if (!Number.isFinite(anticipo) || anticipo < 0) {
-      return { error: 'El anticipo tiene que ser un monto válido (o dejarse vacío).' };
+    // Sin anticipo no hace falta leer la política (un cero no se topa). Con anticipo, la regla es la
+    // de la política VIVA y el rol VIVO: el dueño no queda topado salvo política explícita (M3).
+    let tope: TopeAnticipo | number = Number.MAX_SAFE_INTEGER;
+    if (anticipo > 0) {
+      const sesion = await requireSessionTenant('/dashboard/despacho');
+      const topeVivo = await topeAnticipoDeLaFlota(tenantId, puedeVerArea(sesion.rol, 'dinero'));
+      if (!topeVivo.ok) return { error: MENSAJE_POLITICA_ILEGIBLE };
+      if (topeVivo.tope) tope = topeVivo.tope;
     }
+    const veredicto = evaluarAnticipo(anticipo, tope);
+    if (!veredicto.ok) return { error: veredicto.motivo };
     // `viaje.operador_id` es NOT NULL (0001). Sin este guard, elegir "sin
     // operador" llegaba a la base y volvía como un 23502 traducido a "No se
     // pudo crear el viaje": un mensaje que no dice qué arreglar.
@@ -247,21 +283,27 @@ export default async function PaginaDespacho({
     const operadorId = typeof fd.get('operadorId') === 'string' ? (fd.get('operadorId') as string).trim().slice(0, 64) : '';
     if (!viajeId || !operadorId) return { error: 'Falta el viaje o el operador.' };
 
+    let cambio: Awaited<ReturnType<typeof reasignarOperador>>;
     try {
       // `reasignarOperador` verifica que el operador sea de ESTA flota y el
       // update ancla tenant — un id ajeno no encuentra fila.
-      await reasignarOperador(tenantId, viajeId, operadorId);
+      cambio = await reasignarOperador(tenantId, viajeId, operadorId);
     } catch (err) {
       logger.error('despacho.asignar.fallo', { viajeId, err: err instanceof Error ? err.message : String(err) });
       return { error: 'No se pudo asignar. Inténtalo de nuevo.' };
     }
+    let avisoFallo = false;
     try {
       await avisarAlChofer(tenantId, operadorId, viajeId);
     } catch (err) {
       // Asignado SÍ quedó; el aviso no salió — se dice y "Reavisar" existe.
       logger.error('despacho.aviso.fallo', { viajeId, err: err instanceof Error ? err.message : String(err) });
-      return { error: 'Quedó asignado, pero el aviso de WhatsApp no salió — usa Reavisar en "En curso".' };
+      avisoFallo = true;
     }
+    // Después del aviso del viaje, las instrucciones del convenio (primera asignación o cambio de chofer). Nunca lanza, y un
+    // aviso que no salió no las frena: el chofer ya es el del viaje.
+    await instruccionesAlCambiarOperador(tenantId, viajeId, cambio);
+    if (avisoFallo) return { error: 'Quedó asignado, pero el aviso de WhatsApp no salió — usa Reavisar en "En curso".' };
     redirect(destino);
   }
 
@@ -322,10 +364,15 @@ export default async function PaginaDespacho({
     if (!nombre || !telefono) return { error: 'Faltan el nombre o el WhatsApp.' };
 
     const sesion = await requireSessionTenant('/dashboard/despacho');
+    // W2: un jefe de tráfico CON patio da de alta SIEMPRE en el suyo. Si su patio
+    // no se pudo leer, no se da de alta a nadie: un operador sin patio quedaría
+    // fuera de su alcance y nadie de su patio podría corregirlo.
+    const alcance = await alcanceDePatio(tenantId, sesion.userId, sesion.rol);
+    if (!alcance) return { error: 'No pude comprobar tu patio — no se dio de alta a nadie. Inténtalo de nuevo.' };
     try {
       // `crearOperador` normaliza la lada 52 y falla CERRADO ante duplicados
       // (incluso entre flotas) — sus mensajes están escritos para pantalla.
-      await crearOperador(tenantId, { nombre, telefono }, { id: sesion.userId });
+      await crearOperador(tenantId, { nombre, telefono, terminalId: patioParaCrear(alcance, null) }, { id: sesion.userId });
     } catch (err) {
       if (err instanceof DatoInvalido) return { error: err.message };
       logger.error('despacho.alta_operador.fallo', { err: err instanceof Error ? err.message : String(err) });
@@ -337,8 +384,12 @@ export default async function PaginaDespacho({
   return (
     <VistaDespacho
       puedeCapturarDinero={puedeCapturarDinero}
+      puedeCapturarAnticipo={puedeCapturarAnticipo}
+      topeAnticipo={topeAnticipo}
+      topeAnticipoOrigen={topeAnticipoOrigen}
       tablero={tablero}
-      sinAsignar={sinAsignar}
+      sinAsignar={sinAsignar.filas}
+      totalSinAsignar={sinAsignar.total}
       activos={activos}
       sufijo={sufijo}
       folioPedido={folioPedido}

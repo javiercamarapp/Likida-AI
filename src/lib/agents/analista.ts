@@ -28,7 +28,17 @@ import { createLlmBudget } from '@/lib/llm/budget';
 import { ahoraMs } from '@/lib/saludo';
 import { TZ_MX, hoyMx } from '@/lib/formato';
 import { guardiaFundamento, normasDeToolCalls } from '@/lib/likida/normas/fundamento';
+// TC-32C5-A1: la MISMA función que ya cotejaba cardinales en el canal de
+// WhatsApp desde la auditoría 13 (`cuadre/cifras.ts:173-175`). No se
+// reimplementa: dos vocabularios de cardinales serían dos criterios.
+import { cardinalesEnPalabras } from '@/lib/likida/cuadre/cifras';
 import './chat-tools'; // registra las tools de lectura al importar
+// El orquestador: las tools de las fuentes nuevas (Conductor, Vigía, buzón, cobranza,
+// autofactura, salud de agentes) y la única acción (escalar a una persona).
+import '@/lib/likida/orquestador/herramientas';
+import '@/lib/likida/orquestador/fuentes_reales';
+import { conPermisos } from '@/lib/likida/orquestador/herramientas';
+import { herramientasDelRol } from '@/lib/likida/orquestador/permisos';
 
 // ── El contrato de bloques ──────────────────────────────────────────────────
 
@@ -44,7 +54,15 @@ const TOOLS_LECTURA = [
   'liquidaciones_flota', 'serie_gasto', 'serie_liquidado', 'top_rutas',
   'duplicados_detectados', 'proyectar_serie', 'consultar_carta_porte',
   'consultar_normas',
+  // El orquestador (solo lectura; lo que cada rol ve lo decide `herramientasDelRol`).
+  'tablero_viajes', 'detalle_viaje', 'estado_vigia', 'estado_buzon', 'estado_cobranza',
+  'estado_autofactura', 'salud_agentes',
+  // P6: convenio e instrucciones de un viaje, entrega de la liquidación externa, reclamación de peajes y jornada.
+  'convenio_viaje', 'estado_liquidacion_externa', 'reclamacion_peajes', 'estado_jornada',
 ];
+
+/** La única herramienta del chat que ESCRIBE (abre una tarea para una persona): jamás se cachea entre rondas. */
+const TOOL_ESCALAR = 'escalar_a_persona';
 
 /** Valida y recorta lo que el modelo entregó — nunca se confía en la forma.
  *  TOLERANTE a propósito (12-ago, medido): un solo bloque inválido tiraba la
@@ -171,9 +189,25 @@ export function esDerivada(n: number, respaldo: Set<number>): boolean {
  *  propia pregunta del usuario. */
 export function cifrasRespaldadas(bloques: Bloque[], respaldo: Set<number>): boolean {
   const usadas = new Set<number>();
+  // TC-32C5-A1 (auditoría 32 c5, ALTO): LOS CARDINALES EN PALABRAS TAMBIÉN.
+  //
+  // `extraerNumeros` sólo ve dígitos. Un texto SIN un solo dígito dejaba
+  // `usadas` vacío, el bucle de abajo no iteraba, y esta función devolvía
+  // `true` — que aguas arriba significa APROBADO, no «no había nada que
+  // verificar». La misma cantidad quedaba bloqueada en dígitos y aprobada en
+  // letras, y redondear a letras es como se habla de dinero en México.
+  //
+  // El hueco ya se había cerrado en el canal de WhatsApp en la auditoría 13;
+  // esta guardia se escribió como su molde y sólo copió la mitad numérica. Se
+  // IMPORTA `cardinalesEnPalabras` en vez de reescribirla: un segundo
+  // vocabulario de cardinales sería un segundo criterio, y este producto emite
+  // uno. Su aproximación falla hacia «no respaldado» a propósito (lo dice su
+  // propia cabecera), que aquí es la dirección segura: dispara el reintento
+  // correctivo y la red determinística en vez de dejar salir la cifra.
+  const cardinales = (t: string) => { for (const n of cardinalesEnPalabras(t)) usadas.add(n); };
   for (const b of bloques) {
-    if (b.tipo === 'texto') extraerNumeros(b.texto, usadas);
-    else if (b.tipo === 'cifra') { usadas.add(Math.round(b.valor * 100) / 100); if (b.nota) extraerNumeros(b.nota, usadas); }
+    if (b.tipo === 'texto') { extraerNumeros(b.texto, usadas); cardinales(b.texto); }
+    else if (b.tipo === 'cifra') { usadas.add(Math.round(b.valor * 100) / 100); if (b.nota) { extraerNumeros(b.nota, usadas); cardinales(b.nota); } }
     else if (b.tipo === 'tabla') extraerNumeros(b.filas, usadas);
     else if (b.tipo === 'dona') for (const s of b.segmentos) usadas.add(Math.round(s.valor * 100) / 100);
     else for (const p of b.puntos) usadas.add(Math.round(p.valor * 100) / 100);
@@ -310,7 +344,7 @@ export async function ejecutarAnalista(opts: {
   /** Quién está del otro lado — el agente ajusta a quién le habla (un
    *  contador pregunta distinto que el dueño). Viene de la SESIÓN, jamás
    *  del cuerpo de la petición. */
-  usuario?: { nombre: string | null; rol: string };
+  usuario?: { nombre: string | null; rol: string; /** El id de la sesión; queda en la tarea que se escala. */ id?: string };
   /** El archivo que el usuario adjuntó (extracto ya acotado por
    *  /api/dashboard/archivo). Sus cifras cuentan como respaldo: vienen del
    *  documento del usuario, no de la imaginación del modelo. */
@@ -332,7 +366,11 @@ export async function ejecutarAnalista(opts: {
   // servicio por un lote de fondo ajeno; con 'interactivo' comparte la
   // reserva del chofer, que es lo correcto.
   const budget = createLlmBudget(opts.tenantId, runId, 'interactivo');
-  const ctx: ToolContext = { tenantId: opts.tenantId, conversationId: runId, runId };
+  // El rol viene de la SESIÓN (jamás del cuerpo): decide qué herramientas se OFRECEN y cuáles se niegan.
+  const rol = opts.usuario?.rol;
+  const ctx: ToolContext = { tenantId: opts.tenantId, conversationId: runId, runId, rol, usuarioId: opts.usuario?.id };
+  const toolsLectura = herramientasDelRol(rol, TOOLS_LECTURA);
+  const toolsOfrecidas = herramientasDelRol(rol, [...TOOLS_LECTURA, TOOL_ESCALAR]);
   const ROL_LEGIBLE: Record<string, string> = {
     flota_admin: 'dueño/administrador de la flota',
     contador: 'contador de la flota (enfócate en lo fiscal y financiero)',
@@ -372,8 +410,8 @@ export async function ejecutarAnalista(opts: {
       role: 'chat',
       system,
       messages: history,
-      tools: toolSchemas([...TOOLS_LECTURA, 'entregar_respuesta']),
-      toolExecutor: makeExecutor(ctx),
+      tools: toolSchemas([...toolsOfrecidas, 'entregar_respuesta']),
+      toolExecutor: conPermisos(rol, makeExecutor(ctx), ['entregar_respuesta']),
       // Anti-quemadura por turno: 5 rondas y 900 tokens de salida bastan
       // para un análisis con 3-4 tools; lo que no cabe ahí es señal de que
       // la pregunta necesita partirse, no de que hay que pagar más.
@@ -387,7 +425,7 @@ export async function ejecutarAnalista(opts: {
       // cuanto corre el ciclo termina. B17: las lecturas por sustantivo
       // entran a la caché entre rondas.
       terminalTools: ['entregar_respuesta'],
-      readOnlyTools: TOOLS_LECTURA,
+      readOnlyTools: toolsLectura,
     });
 
     // El respaldo de la guardia: todo lo que las tools devolvieron en este
@@ -442,8 +480,8 @@ export async function ejecutarAnalista(opts: {
           role: 'user',
           content: 'SISTEMA: entrega tu respuesta AHORA llamando la tool entregar_respuesta, usando EXCLUSIVAMENTE cifras que hayan devuelto tus tools en esta conversación (vuelve a llamarlas si te hace falta). Sin cifras de otra fuente.',
         }],
-        tools: toolSchemas([...TOOLS_LECTURA, 'entregar_respuesta']),
-        toolExecutor: makeExecutor(ctx),
+        tools: toolSchemas([...toolsOfrecidas, 'entregar_respuesta']),
+        toolExecutor: conPermisos(rol, makeExecutor(ctx), ['entregar_respuesta']),
         maxToolRounds: 4,
         maxTokens: 900,
         temperature: 0,
@@ -451,7 +489,7 @@ export async function ejecutarAnalista(opts: {
         budget,
         onTool: opts.onPaso,
         terminalTools: ['entregar_respuesta'],
-        readOnlyTools: TOOLS_LECTURA,
+        readOnlyTools: toolsLectura,
       }).catch((e: unknown) => {
         if (e instanceof PartialExecutionError) {
           e.tokensIn += res.tokensIn;
