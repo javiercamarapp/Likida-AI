@@ -94,6 +94,13 @@ describe('el papel «solo folio»', () => {
     const bytes = await generarPdfSoloFolio({ folio: 'F-0042', operador: 'Operador Demo', cerradaEn: '2026-10-03T18:00:00Z', requiereRevisionDeOficina: false });
     expect((await PDFDocument.load(bytes)).getPageCount()).toBe(1);
   });
+  it('B1 · un nombre fuera de WinAnsi (CJK, emoji, controles, comillas tipográficas) NO tumba el PDF: se sanea', async () => {
+    const d = { folio: 'F-0042', operador: 'Muñoz 张伟 🚚 \u0092Nené\u0092 O’Brien\u001b', cerradaEn: '2026-10-03T18:00:00Z', requiereRevisionDeOficina: false };
+    const bytes = await generarPdfSoloFolio(d);
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBe(1);
+    expect(lineasSoloFolio(d).join('\n')).not.toMatch(/[\u4e00-\u9fff]|🚚|\u001b/);
+    expect(lineasSoloFolio(d).join('\n')).toContain('Muñoz');
+  });
   it('los bytes del PDF no contienen los importes del viaje', async () => {
     const bytes = await generarPdfSoloFolio({ folio: 'F-0042', operador: 'Operador Demo', cerradaEn: '2026-10-03T18:00:00Z', requiereRevisionDeOficina: false });
     const crudo = Buffer.from(bytes).toString('latin1');

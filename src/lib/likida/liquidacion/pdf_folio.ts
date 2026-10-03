@@ -13,6 +13,7 @@
 
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { fechaMx } from '@/lib/formato';
+import { sanearWinAnsi } from './winansi';
 
 export interface DatosFolio {
   folio: string;
@@ -29,8 +30,8 @@ export interface DatosFolio {
 export function lineasSoloFolio(d: DatosFolio): string[] {
   return [
     'Acuse de cierre de liquidación',
-    `Folio: ${d.folio}`,
-    `Operador: ${d.operador}`,
+    `Folio: ${sanearWinAnsi(d.folio)}`,
+    `Operador: ${sanearWinAnsi(d.operador)}`,
     `Cierre: ${fechaMx(d.cerradaEn)}`,
     d.requiereRevisionDeOficina
       ? 'Estado: cerrada; la oficina tiene una decisión pendiente sobre este viaje.'
@@ -41,7 +42,9 @@ export function lineasSoloFolio(d: DatosFolio): string[] {
 
 export async function generarPdfSoloFolio(d: DatosFolio): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
-  doc.setTitle(`Cierre ${d.folio}`);
+  // B1: Helvetica estándar (WinAnsi): un nombre de operador con un carácter fuera de WinAnsi (CJK,
+  // emoji, controles) hacía lanzar `drawText` y el acuse no salía. Todo texto de datos se sanea.
+  doc.setTitle(`Cierre ${sanearWinAnsi(d.folio)}`);
   doc.setProducer('Likida');
   const page = doc.addPage([595.28, 841.89]);
   const normal = await doc.embedFont(StandardFonts.Helvetica);
@@ -50,11 +53,11 @@ export async function generarPdfSoloFolio(d: DatosFolio): Promise<Uint8Array> {
   const muted = rgb(0.45, 0.47, 0.52);
   const [titulo, ...resto] = lineasSoloFolio(d);
   let y = 770;
-  page.drawText(titulo, { x: 48, y, size: 18, font: negrita, color: ink });
+  page.drawText(sanearWinAnsi(titulo), { x: 48, y, size: 18, font: negrita, color: ink });
   y -= 40;
   for (const l of resto) {
     const esPie = l.startsWith('Este acuse');
-    page.drawText(l, { x: 48, y, size: esPie ? 9 : 12, font: normal, color: esPie ? muted : ink });
+    page.drawText(sanearWinAnsi(l), { x: 48, y, size: esPie ? 9 : 12, font: normal, color: esPie ? muted : ink });
     y -= esPie ? 20 : 26;
   }
   return doc.save();
