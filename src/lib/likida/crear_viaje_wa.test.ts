@@ -38,7 +38,7 @@ const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
 
 const {
-  topeAnticipoDe, evaluarAnticipo, TOPE_ANTICIPO_POR_DEFECTO,
+  topeAnticipoDe, evaluarAnticipo, TOPE_ANTICIPO_POR_DEFECTO, topeAnticipoDetalle, topeAnticipoParaPanel,
   interpretarPeticionViaje,
   resumenParaConfirmar,
   resolverOperadorPorNombre,
@@ -542,6 +542,25 @@ describe('la regla de anticipo compartida', () => {
     expect(evaluarAnticipo(-1, 25_000).ok).toBe(false);
     expect(evaluarAnticipo(Number.NaN, 25_000).ok).toBe(false);
     expect(evaluarAnticipo(Infinity, 25_000).ok).toBe(false);
+  });
+
+  it('M3 · el dueño (ve dinero) NO queda topado en el panel sin política explícita; con política explícita sí', () => {
+    const sinPolitica = [{ concepto: 'diesel', topeMonto: 4000 }];
+    const conPolitica = [{ concepto: 'anticipo', topeMonto: 20_000 }];
+    expect(topeAnticipoParaPanel(sinPolitica, true)).toBeNull();
+    expect(topeAnticipoParaPanel(sinPolitica, false)).toEqual({ tope: TOPE_ANTICIPO_POR_DEFECTO, origen: 'umbral_revision' });
+    expect(topeAnticipoParaPanel(conPolitica, true)).toEqual({ tope: 20_000, origen: 'politica' });
+    expect(topeAnticipoParaPanel(conPolitica, false)).toEqual({ tope: 20_000, origen: 'politica' });
+    expect(topeAnticipoDetalle(undefined).origen).toBe('umbral_revision');
+  });
+
+  it('M3 · el mensaje de rechazo es accionable según el origen del tope', () => {
+    const umbral = evaluarAnticipo(150_000, { tope: 100_000, origen: 'umbral_revision' });
+    expect(!umbral.ok && umbral.motivo).toMatch(/que el dueño lo capture desde el panel de Despacho/);
+    const pol = evaluarAnticipo(30_000, { tope: 20_000, origen: 'politica' });
+    expect(!pol.ok && pol.motivo).toMatch(/política de la flota/);
+    // ya no manda al dueño a «ajustar el tope» en una pantalla que no existe
+    expect(!pol.ok && pol.motivo).not.toMatch(/ajustando el tope/);
   });
 
   it('el parser de WhatsApp aplica el MISMO tope: lo que el panel rechaza, el chat lo pregunta', () => {

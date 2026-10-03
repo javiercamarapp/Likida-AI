@@ -21,6 +21,9 @@ const filas = new Map<string, { telefono: string; estado: Record<string, unknown
 /** Cada `upsert` que llegó, para poder afirmar que NO se estrenó una segunda fila. */
 let telefonosEscritos: string[] = [];
 
+// La política de la flota se lee con `getConfig`; sin poder leerla un anticipo se rechaza (M3), así que aquí se da una legible.
+vi.mock('./config', () => ({ getConfig: async () => ({ politica: [] }) }));
+
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => {

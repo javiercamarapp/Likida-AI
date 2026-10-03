@@ -45,7 +45,7 @@ function BotonCrear() {
   );
 }
 
-export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClientes, totalUnidades, puedeCapturarDinero = false, puedeCapturarAnticipo = puedeCapturarDinero, topeAnticipo }: {
+export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClientes, totalUnidades, puedeCapturarDinero = false, puedeCapturarAnticipo = puedeCapturarDinero, topeAnticipo, topeAnticipoOrigen = 'politica' }: {
   action: AccionCrearViaje;
   /** Sólo visibilidad; la acción vuelve a exigir el permiso de la sesión viva. */
   puedeCapturarDinero?: boolean;
@@ -55,6 +55,8 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
   /** Tope de anticipo de la política de la flota, solo para mostrarlo: lo hace
    *  cumplir la acción del servidor. */
   topeAnticipo?: number;
+  /** De dónde sale el tope: la política de la flota, o el umbral de revisión (cuando no declaró uno). */
+  topeAnticipoOrigen?: 'politica' | 'umbral_revision';
   /** La búsqueda de catálogos en el servidor (server action del host, con el
    *  tenant por closure). Una sola referencia para los tres combos. */
   buscarCatalogo: BuscarCatalogo;
@@ -100,7 +102,9 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
             className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
           {topeAnticipo !== undefined && (
             <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
-              Tope de la política de tu flota: {mxn(topeAnticipo)}
+              {topeAnticipoOrigen === 'politica'
+                ? `Tope de la política de tu flota: ${mxn(topeAnticipo)}`
+                : `Umbral de revisión: ${mxn(topeAnticipo)} (arriba de eso lo captura el dueño)`}
             </p>
           )}
         </div>}
