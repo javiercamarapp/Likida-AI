@@ -80,13 +80,24 @@ describe('alertarOperador — sin ALERTA_EMAIL', () => {
     vi.stubEnv('ALERTA_EMAIL', '');
     const { alertarOperador } = await cargar();
 
-    await expect(alertarOperador('cron.purgar', { error: 'x' })).resolves.toBeUndefined();
+    await expect(alertarOperador('cron.purgar', { error: 'x' })).resolves.toBe(false);
     await alertarOperador('cron.purgar', { error: 'x' });
 
     expect(enviarCorreo).not.toHaveBeenCalled();
     expect(logger.error).not.toHaveBeenCalled();
     const sinConfigurar = logger.info.mock.calls.filter((c) => c[0] === 'alerta.sin_configurar');
     expect(sinConfigurar).toHaveLength(1);
+  });
+});
+
+describe('alertarOperador — devuelve si el aviso SALIÓ (M5, ronda 19)', () => {
+  it('true si el correo salió; false si el piso lo descarta, si el envío se rechaza o si no hay canal', async () => {
+    vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
+    const { alertarOperador } = await cargar();
+    expect(await alertarOperador('guardia.x', { codigo: 'a' })).toBe(true);
+    expect(await alertarOperador('guardia.x', { codigo: 'a' })).toBe(false); // piso de una hora
+    enviarCorreo.mockResolvedValueOnce({ ok: false, motivo: 'rechazado' });
+    expect(await alertarOperador('guardia.y', { codigo: 'b' })).toBe(false);
   });
 });
 
@@ -133,7 +144,7 @@ describe('alertarOperador — el canal nunca tumba al cron', () => {
     enviarCorreo.mockRejectedValue(new Error('fetch failed'));
     const { alertarOperador } = await cargar();
 
-    await expect(alertarOperador('cron.escalar', { error: 'x' })).resolves.toBeUndefined();
+    await expect(alertarOperador('cron.escalar', { error: 'x' })).resolves.toBe(false);
     expect(logger.warn).toHaveBeenCalledWith('alerta.fallo', expect.objectContaining({ evento: 'cron.escalar' }));
   });
 
@@ -142,7 +153,7 @@ describe('alertarOperador — el canal nunca tumba al cron', () => {
     enviarCorreo.mockResolvedValue({ ok: false, motivo: 'rechazado', detalle: 'HTTP 422' });
     const { alertarOperador } = await cargar();
 
-    await expect(alertarOperador('cron.escalar', { error: 'x' })).resolves.toBeUndefined();
+    await expect(alertarOperador('cron.escalar', { error: 'x' })).resolves.toBe(false);
     expect(logger.warn).toHaveBeenCalledWith('alerta.no_salio', expect.objectContaining({ motivo: 'rechazado' }));
   });
 });
