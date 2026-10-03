@@ -15,7 +15,7 @@ vi.mock('@/lib/admin/salud', () => ({
   leerEstado30Dias: () => leerEstado30Dias(),
 }));
 
-const { armarEstadoPublico, componentesDeDetalle, cargarEstadoPublico, olvidarEstadoMemoizado, VIGENCIA_MEDICION_MS } = await import('./datos');
+const { armarEstadoPublico, componentesDeDetalle, cargarEstadoPublico, estadoMemoizado, olvidarEstadoMemoizado, VIGENCIA_MEDICION_MS, TTL_FALLO_MS } = await import('./datos');
 
 const AHORA = Date.parse('2026-10-03T12:00:00Z');
 const hace = (ms: number) => new Date(AHORA - ms).toISOString();
@@ -70,12 +70,23 @@ describe('cargarEstadoPublico', () => {
     expect(leerLatido).toHaveBeenCalledTimes(2);
   });
 
-  it('una lectura rota se DICE y no se memoiza (el siguiente reintenta)', async () => {
+  it('M3 (ronda 19): una lectura rota se DICE y se memoiza poco (12 s): la base caída no recibe 2 consultas por visita', async () => {
     latido = 'roto'; historial = 'roto';
     const e = await cargarEstadoPublico(AHORA);
     expect(e).toMatchObject({ latidoIlegible: true, historialIlegible: true });
+    for (let i = 1; i <= 20; i++) await cargarEstadoPublico(AHORA + i * 100); // 20 visitas en 2 s
+    expect(leerLatido).toHaveBeenCalledTimes(1);
+    expect(leerEstado30Dias).toHaveBeenCalledTimes(1);
+    expect(estadoMemoizado()).toMatchObject({ latidoIlegible: true });
+    // pasada la ventana corta se reintenta y, si la base volvió, la página se recupera sola
     latido = null; historial = [];
-    const e2 = await cargarEstadoPublico(AHORA + 1000);
+    const e2 = await cargarEstadoPublico(AHORA + TTL_FALLO_MS + 1);
     expect(e2.latidoIlegible).toBe(false);
+    expect(leerLatido).toHaveBeenCalledTimes(2);
+  });
+
+  it('estadoMemoizado no toca la base: sin lectura previa es null', () => {
+    expect(estadoMemoizado()).toBeNull();
+    expect(leerLatido).not.toHaveBeenCalled();
   });
 });
