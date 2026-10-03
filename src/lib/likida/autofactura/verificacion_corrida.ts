@@ -149,7 +149,7 @@ export function entradaDeRegistro(a: {
  * evento, valores de campos, tokens y todo lo que parezca un correo o un RFC. El resultado se REVISA a mano
  * antes de commitear (runbook), esto es la primera barrera, no la única.
  */
-export function sanearHtml(html: string): string {
+function pasadaSaneoHtml(html: string): string {
   return html
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<(script|noscript|iframe|object|embed)\b[\s\S]*?<\/\1>/gi, '')
@@ -164,4 +164,19 @@ export function sanearHtml(html: string): string {
     .replace(/\b[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b/g, 'XAXX010101000')
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '00000000-0000-4000-8000-000000000001')
     .replace(/\n{3,}/g, '\n\n');
+}
+
+/**
+ * Una sola pasada puede RECONSTRUIR lo que quitó (`<scr<script></script>ipt>` →
+ * `<script>` tras borrar el interior): se repite hasta que el texto deja de cambiar
+ * (CodeQL js/incomplete-multi-character-sanitization). El tope evita un bucle patológico.
+ */
+export function sanearHtml(html: string): string {
+  let actual = html;
+  for (let i = 0; i < 10; i++) {
+    const siguiente = pasadaSaneoHtml(actual);
+    if (siguiente === actual) return siguiente;
+    actual = siguiente;
+  }
+  return actual;
 }

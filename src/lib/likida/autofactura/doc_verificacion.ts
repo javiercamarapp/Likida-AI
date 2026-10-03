@@ -9,6 +9,8 @@ import { estadoVerificacion, type RegistroVerificaciones } from './verificacion'
 export interface ManifiestoFixtures { portales: Record<string, { origen?: string; grabado?: { fecha: string; archivo: string } }> }
 
 const lista = (s: string | readonly string[]): string[] => (typeof s === 'string' ? [s] : [...s]);
+// OJO: dentro de un code span el backslash es LITERAL (los selectores CSS llevan `\:`), así que NO se escapa; solo `|`, que la
+// tabla GFM sí interpreta. (CodeQL js/incomplete-sanitization lo marca: falso positivo, escapar el backslash alteraría el runbook.)
 const cod = (s: string) => `\`${s.replace(/`/g, "'").replace(/\|/g, '\\|')}\``;
 
 export function renderizarDocVerificacion(guiones: readonly GuionPortal[], registro: RegistroVerificaciones, manifiesto: ManifiestoFixtures): string {
