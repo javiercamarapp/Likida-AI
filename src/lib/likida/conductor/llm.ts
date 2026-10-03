@@ -129,7 +129,7 @@ export async function interpretarConLlm(args: ArgsLlm): Promise<Interpretacion |
     });
     await registrarCosto({
       tenantId: args.tenantId, viajeId: null, fase: 'conductor',
-      modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.cost,
+      modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.cost, duracionMs: res.ms,
     });
     return validarSalidaLlm(res.data, args.texto);
   } catch (e) {

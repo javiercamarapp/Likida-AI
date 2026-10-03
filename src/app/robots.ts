@@ -10,7 +10,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: '*',
-        allow: ['/blog', '/calculadora', '/privacidad', '/terminos', '/aviso/prospectos'],
+        allow: ['/blog', '/calculadora', '/privacidad', '/terminos', '/estado', '/aviso/prospectos'],
         // `/demo` y `/mcp` (W2): /demo es una simulación con una promesa de PDF que no
         // entrega y /mcp es documentación de una integración privada — no son páginas que
         // un buscador deba ofrecer como si fueran el producto.

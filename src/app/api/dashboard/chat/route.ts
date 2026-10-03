@@ -29,6 +29,7 @@ import { tenantEfectivoChat } from './tenant';
 import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 import { MAX_CHAT_BYTES } from './limites';
+import { medirRuta } from '@/lib/observability/latencia';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -42,7 +43,12 @@ export const maxDuration = 60;
 // a ver. Mismo patrón que `onboarding-chat`, `ingesta` y `archivo`.
 const TURNOS_POR_MINUTO = 10;
 
-export async function POST(req: NextRequest) {
+/** E1-A: la latencia de esta ruta (p50/p95 en /admin/observabilidad). Muestreada y sin riesgo: ver `medirRuta`. */
+export function POST(req: NextRequest) {
+  return medirRuta('dashboard.chat', () => manejarPOST(req));
+}
+
+async function manejarPOST(req: NextRequest) {
   // Auditoría 21, BAJO-MEDIO: el chequeo CSRF explícito (SEG-9) solo cubría
   // /api/admin/palette y /v1/*. Esta ruta escribe (guarda el intercambio) y
   // gasta dinero de modelo, autenticada solo por la cookie de sesión.
