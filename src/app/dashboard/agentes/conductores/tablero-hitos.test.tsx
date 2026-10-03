@@ -39,6 +39,18 @@ function pintar(datos: DatosTablero, o: { puedeActuar?: boolean; ind?: ReturnTyp
 }
 const datos = (viajes: ViajeTablero[], hitos: HitoFila[], extra: Partial<DatosTablero> = {}): DatosTablero => ({ viajes, hayMas: false, hitos, veredictos: [], evidencias: [], acciones: [], sitios: new Map(), ...extra });
 
+describe('el tablero de hitos — por qué un hito está omitido (R10-8)', () => {
+  it('omitido porque avisó el siguiente: «avisó el siguiente»; omitido porque el barrido cerró un viaje abierto 30+ días: lo dice y dice que se puede capturar', () => {
+    const inferido = pintar(datos([V('1')], H('1', { llegada_carga: { estado: 'omitido', omitidoMotivo: 'inferido_por_salida_carga' }, salida_carga: hace(200) })));
+    expect(inferido).toContain('omitido (avisó el siguiente)');
+    expect(inferido).not.toContain('más de 30 días');
+    const vencido = pintar(datos([V('2')], H('2', { llegada_carga: { estado: 'omitido', omitidoMotivo: 'viaje_abierto_vencido', escaladoEn: hace(5000) } })));
+    expect(vencido).toContain('el viaje lleva más de 30 días abierto y ya se había escalado');
+    expect(vencido).toContain('captúralo a mano');
+    expect(vencido).not.toContain('omitido (avisó el siguiente)');
+  });
+});
+
 describe('el tablero de hitos — lo que ve el jefe de tráfico', () => {
   it('pinta el semáforo con conteos, los 5 hitos de cada viaje y la hora del mensaje', () => {
     const html = pintar(datos([V('1')], H('1', { llegada_carga: hace(300), salida_carga: hace(240) })));
