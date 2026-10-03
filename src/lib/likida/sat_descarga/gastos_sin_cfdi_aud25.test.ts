@@ -28,14 +28,17 @@ const gastos = Array.from({ length: TOTAL_GASTOS }, (_, i) => ({
   ocr_extra: null,
 }));
 
+/** Cada llamada de `.range(desde, …)` con `desde > 0`: un OFFSET. El arreglo de la ronda 16 no debe usar ninguno. */
+const offsets: number[] = [];
+
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => {
       if (tabla !== 'gasto') throw new Error(`tabla inesperada en la prueba: ${tabla}`);
       let pedirConteo = false;
-      let desde = 0;
-      let hasta = gastos.length - 1;
-      let usaLimit = false;
+      let cursor: string | null = null;
+      let tope = gastos.length;
+      let rango: [number, number] | null = null;
       const b: Record<string, unknown> = {};
       Object.assign(b, {
         select: (_c: string, o?: { count?: string }) => { pedirConteo = o?.count === 'exact'; return b; },
@@ -44,12 +47,17 @@ vi.mock('@/lib/supabase/admin', () => ({
         gte: () => b,
         lte: () => b,
         order: () => b,
-        range: (d: number, h: number) => { usaLimit = false; desde = d; hasta = h; return b; },
-        // El código VIEJO (pre-arreglo) usaba `.limit(n)` sin paginar.
-        limit: (n: number) => { usaLimit = true; desde = 0; hasta = Math.min(n, gastos.length) - 1; return b; },
+        // Cursor por fila: lo que `traerTodoDesdeId` pide.
+        gt: (_c: string, v: string) => { cursor = v; return b; },
+        limit: (n: number) => { tope = n; return b; },
+        // El código VIEJO paginaba por posición: cualquier `range` con inicio > 0 es un offset.
+        range: (d: number, h: number) => { if (d > 0) offsets.push(d); rango = [d, h]; return b; },
         then: (res: (v: unknown) => unknown) => {
-          void usaLimit;
-          const ventana = gastos.slice(desde, Math.min(hasta, desde + MAX_ROWS_POSTGREST - 1) + 1);
+          const base = cursor === null ? gastos : gastos.filter((g) => g.id > (cursor as string));
+          // El servidor NUNCA entrega más de max_rows, pida lo que pida.
+          const ventana = rango
+            ? gastos.slice(rango[0], Math.min(rango[1], rango[0] + MAX_ROWS_POSTGREST - 1) + 1)
+            : base.slice(0, Math.min(tope, MAX_ROWS_POSTGREST));
           return Promise.resolve({ data: ventana, error: null, count: pedirConteo ? gastos.length : undefined }).then(res);
         },
       });
@@ -64,5 +72,15 @@ describe('AUD25 rendimiento MEDIO L312: gastosSinCfdi trae el fondo COMPLETO, no
   it('con 1,800 gastos sin CFDI en el rango, los 1,800 vuelven', async () => {
     const r = await gastosSinCfdi('t1', '2026-08-01', '2026-08-31');
     expect(r).toHaveLength(TOTAL_GASTOS);
+    expect(new Set(r.map((g) => g.id)).size).toBe(TOTAL_GASTOS);
+  });
+
+  // RONDA 16 (carga de 250 camiones): con 10-23k tickets sin CFDI en el rango, la
+  // lectura por OFFSET costaba O(n²) en el servidor (2 ms en la posición 0, 250 ms
+  // en la 99,000) y corría las posiciones si entraba un gasto a media lectura.
+  it('pagina por CURSOR de id: ninguna página se pide con offset', async () => {
+    offsets.length = 0;
+    await gastosSinCfdi('t1', '2026-08-01', '2026-08-31');
+    expect(offsets, 'ningún range(desde>0): el costo de cada página no puede crecer con la posición').toEqual([]);
   });
 });

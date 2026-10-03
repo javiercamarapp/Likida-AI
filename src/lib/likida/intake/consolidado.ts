@@ -870,26 +870,14 @@ export async function barrerPorConciliar(
   const rango = rangoFechasLineas(pendientes.map(lineaDesdeFila));
   let disponibles: Gasto[] = [];
   if (rango) {
-    // `traerTodo` por la misma razón que `consolidado.candidatos_gasto`: el
-    // recorte a 1,000 dejaba al barrido cruzando contra una fracción del
-    // universo y las líneas cuyo gasto quedó fuera nunca se conciliaban.
-    const data = await traerTodo<{ id: unknown; concepto: unknown; monto: unknown; fecha: unknown }>(
-      (d, h) => acotada(supabaseAdmin()
-        .from('gasto')
-        .select('id, concepto, monto, fecha', conteo(d))
-        .eq('tenant_id', tenantId)
-        .is('cfdi_uuid', null)
-        .gte('fecha', rango.desde)
-        .lte('fecha', rango.hasta)
-        .order('id').range(d, h), 'barrido.candidatos_gasto'),
-      'barrido.candidatos_gasto',
-    );
-    disponibles = data.map((g) => ({
-      id: g.id as string,
-      concepto: g.concepto as Gasto['concepto'],
-      monto: Number(g.monto),
-      fecha: (g.fecha as string | null) ?? undefined,
-    }));
+    // El fondo COMPLETO, no el recorte a 1,000 (que dejaba al barrido cruzando
+    // contra una fracción del universo: las líneas cuyo gasto quedó fuera
+    // nunca se conciliaban). Es la MISMA lectura que `consolidado.candidatos_gasto`
+    // (`candidatosDeGasto`): cursor por `id`, no `range(d, h)` por offset —
+    // RONDA 16, carga de 250 camiones: con 10-23k gastos sin CFDI en el rango, el
+    // offset costaba O(n²) en el servidor y se corría si entraba un gasto por
+    // WhatsApp a media lectura. Sin reloj aquí, como antes.
+    disponibles = await candidatosDeGasto(tenantId, rango);
   }
 
   // 3) El matcher, POR GRUPO de cfdi_xml y en el orden del XML (`indice`),
