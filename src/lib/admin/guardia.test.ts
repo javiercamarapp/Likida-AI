@@ -110,7 +110,7 @@ describe('decidirAvisos — se avisa el CAMBIO, no el estado', () => {
 
   it('reconoce las claves CRUDAS que dejó el script de la Mac: migrar al cron no repite lo ya avisado', () => {
     const cruda = claveDeItem(clasif.items[0]);
-    expect(decidirAvisos(clasif, { vistos: [cruda], baseCaidaDesde: null }).nuevos).toHaveLength(0);
+    expect(decidirAvisos(clasif, { ...ESTADO_GUARDIA_INICIAL, vistos: [cruda] }).nuevos).toHaveLength(0);
   });
 
   it('S3 no interrumpe: lo que espera decisión humana no es un aviso', () => {
@@ -128,7 +128,7 @@ describe('decidirAvisos — se avisa el CAMBIO, no el estado', () => {
   });
 
   it('si la base estaba caída en la pasada anterior, avisa que volvió y limpia la racha', () => {
-    const d = decidirAvisos(clasificarBandeja(bandeja([]), AHORA), { vistos: [], baseCaidaDesde: '2026-10-03T00:00:00Z' });
+    const d = decidirAvisos(clasificarBandeja(bandeja([]), AHORA), { ...ESTADO_GUARDIA_INICIAL, baseCaidaDesde: '2026-10-03T00:00:00Z' });
     expect(d.baseVolvio).toBe(true);
     expect(d.estado.baseCaidaDesde).toBeNull();
   });
