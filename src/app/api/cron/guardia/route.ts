@@ -85,7 +85,7 @@ export async function GET(req: Request) {
     const CORTE = Symbol('corte');
     let clasificacion: Awaited<ReturnType<typeof clasificacionDeGuardia>> | typeof CORTE;
     try {
-      clasificacion = await conRelojDuro(clasificacionDeGuardia(inicio), vence, () => CORTE);
+      clasificacion = await conRelojDuro<Awaited<ReturnType<typeof clasificacionDeGuardia>> | typeof CORTE>(clasificacionDeGuardia(inicio), vence, () => CORTE);
     } catch (e) {
       // Base inalcanzable (o la bandeja entera no se pudo armar): avisar UNA vez por racha.
       const error = e instanceof Error ? e.message : String(e);

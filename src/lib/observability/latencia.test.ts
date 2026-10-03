@@ -15,7 +15,7 @@ function reloj(...marcas: number[]) {
 
 describe('medirRuta', () => {
   it('con la muestra tomada escribe nombre, duración y ok; la respuesta pasa intacta', async () => {
-    const escribir = vi.fn(async () => {});
+    const escribir = vi.fn(async (_n: string, _ms: number, _ok: boolean) => {});
     const resp = new Response('hola', { status: 200 });
     const r = await medirRuta('health', async () => resp, { tasa: 1, azar: () => 0, reloj: reloj(1000, 1087), escribir });
     expect(r).toBe(resp);
@@ -23,28 +23,28 @@ describe('medirRuta', () => {
   });
 
   it('un 5xx cuenta como fallo; un 4xx NO (el cliente se equivocó, la ruta respondió)', async () => {
-    const escribir = vi.fn(async () => {});
+    const escribir = vi.fn(async (_n: string, _ms: number, _ok: boolean) => {});
     await medirRuta('x', async () => new Response(null, { status: 503 }), { tasa: 1, azar: () => 0, reloj: reloj(0, 5), escribir });
     await medirRuta('x', async () => new Response(null, { status: 404 }), { tasa: 1, azar: () => 0, reloj: reloj(0, 5), escribir });
     expect(escribir.mock.calls.map((c) => c[2])).toEqual([false, true]);
   });
 
   it('si la ruta LANZA: anota el fallo y re-lanza la MISMA excepción', async () => {
-    const escribir = vi.fn(async () => {});
+    const escribir = vi.fn(async (_n: string, _ms: number, _ok: boolean) => {});
     const boom = new Error('boom');
     await expect(medirRuta('x', async () => { throw boom; }, { tasa: 1, azar: () => 0, reloj: reloj(0, 9), escribir })).rejects.toBe(boom);
     expect(escribir).toHaveBeenCalledWith('x', 9, false);
   });
 
   it('fuera de la muestra no escribe nada (el muestreo acota la escritura)', async () => {
-    const escribir = vi.fn(async () => {});
+    const escribir = vi.fn(async (_n: string, _ms: number, _ok: boolean) => {});
     await medirRuta('x', async () => new Response(null), { tasa: 0.1, azar: () => 0.5, escribir });
     await medirRuta('x', async () => new Response(null), { tasa: 0, azar: () => 0, escribir });
     expect(escribir).not.toHaveBeenCalled();
   });
 
   it('el muestreo es uniforme: NO depende de lo lento (un percentil sesgado a lo lento miente)', async () => {
-    const escribir = vi.fn(async () => {});
+    const escribir = vi.fn(async (_n: string, _ms: number, _ok: boolean) => {});
     // misma decisión de azar con una ruta rápida y una lenta
     await medirRuta('r', async () => new Response(null), { tasa: 0.1, azar: () => 0.5, reloj: reloj(0, 1), escribir });
     await medirRuta('r', async () => new Response(null), { tasa: 0.1, azar: () => 0.5, reloj: reloj(0, 9000), escribir });
