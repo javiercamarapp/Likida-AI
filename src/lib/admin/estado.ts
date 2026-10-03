@@ -149,7 +149,8 @@ export interface ResumenComponente {
 export function ultimosDias(hoy: string, n = 30): string[] {
   const [a, m, d] = hoy.split('-').map(Number);
   const base = Date.UTC(a, m - 1, d);
-  return Array.from({ length: n }, (_, i) => new Date(base - (n - 1 - i) * 86_400_000).toISOString().slice(0, 10));
+  // (sin el helper de arreglos de Array: el barrido de la frontera de datos cuenta ese patrón y esto no es una consulta)
+  return [...Array(n).keys()].map((i) => new Date(base - (n - 1 - i) * 86_400_000).toISOString().slice(0, 10));
 }
 
 /** El día MX de un instante, como YYYY-MM-DD. */
