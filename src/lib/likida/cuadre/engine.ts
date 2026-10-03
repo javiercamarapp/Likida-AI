@@ -512,8 +512,6 @@ export function cubetaDe(
  * copias suyas.
  */
 export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
-  const vistoUuid = new Map<string, string>();
-  const vistoFolio = new Map<string, string>();
   /** copia → el gasto original del que es copia. */
   const originalDe = new Map<string, string>();
 
@@ -595,6 +593,57 @@ export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
     uuidsEnGrupo.set(k, (uuidsEnGrupo.get(k) ?? 0) + (u !== null ? 1 : 0));
   }
 
+  // FIS/DAT/ARQ-32C12-C1 (auditoría 32 c12, CRÍTICO): EL EJE DEL SOBREVIVIENTE.
+  //
+  // Hasta aquí esta función se quedaba con la PRIMERA fila de cada grupo, igual
+  // que `0367:206` con su `order by created_at, id`. La 0364 ya había decidido
+  // lo contrario para el ejercicio (`0365:165`, `order by sin_forma_pago_util,
+  // created_at, id`), y el eje quedó divergente 1 sede contra 3.
+  //
+  // Y la copia ilegible es SIEMPRE la de `created_at` menor, porque el producto
+  // guarda la foto ANTES de pedir la refoto (`processor.ts:3163` +
+  // `acuse_ticket.ts:202`). Así que «la primera» es «la peor», siempre.
+  //
+  // LA FILA QUE SOBREVIVE NO APORTA SÓLO EL MONTO: aporta `cfdiUuid`,
+  // `ivaTraslado`, `subTotal`, `formaPago` y `claveProdServ`. Medido contra
+  // PostgreSQL 16.14 con las 344 migraciones sobre base virgen, con el par que
+  // el producto de verdad produce (un ticket de $2,500 timbrado, IVA $344.83):
+  // el panel del contador publicaba `iva 0 · ivaEstado 'nulo' · tieneCfdi
+  // false · sobreTopeEfectivo true` mientras el ejercicio leía la legible.
+  //
+  // EL CRITERIO ES EL DE LA 0364 Y NO SE REABRE: las dos copias son fotos del
+  // MISMO pago; que una no se haya podido leer no cambia cómo se pagó, sólo
+  // dice que trae menos información. Sobrevive la que más información trae.
+  //
+  // `Gasto` NO tiene `createdAt`, así que se espeja el PRIMER criterio
+  // (`sin_forma_pago_util`) y el orden del arreglo queda como desempate
+  // residual, exactamente donde el SQL pone `created_at, id`.
+  //
+  // SE RESUELVE EN DOS PASADAS, no eligiendo al vuelo: con TRES o más copias,
+  // cambiar de sobreviviente sobre la marcha deja a las copias ya anotadas
+  // apuntando a una fila que acaba de volverse copia ella misma, y
+  // `originalDe` dejaría de apuntar siempre a un sobreviviente.
+
+  /**
+   * La negación exacta del `case` de `forma_pago_efectiva` de la 0364
+   * (`0364:109-113`): 0 = de esta copia SÍ se puede derivar el numerador del
+   * 15 %; 1 = no. Un CFDI PPD trae `99` sin `pagadoEn` por construcción.
+   */
+  const sinFormaPagoUtil = (g: Gasto): 0 | 1 => {
+    if (!g.formaPago) return 1;
+    if (g.formaPago === '99' && !g.pagadoEn) return 1;
+    return 0;
+  };
+
+  /** Miembros de cada grupo, en el orden en que llegaron. */
+  const miembros = new Map<string, Gasto[]>();
+  const anotar = (ns: string, key: string, g: Gasto): void => {
+    const k = `${ns}${key}`;
+    const ya = miembros.get(k);
+    if (ya) ya.push(g);
+    else miembros.set(k, [g]);
+  };
+
   for (const g of gastos) {
     const u = uuidConOrden(g);
     const llaveDeFolio = llaveDeFolioDe(g);
@@ -606,9 +655,7 @@ export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
       (uuidsEnGrupo.get(llaveDeFolio) ?? 0) <= 1 &&
       (u === null || (filasPorUuid.get(u) ?? 0) <= 1)
     ) {
-      const previo = vistoFolio.get(llaveDeFolio);
-      if (previo) originalDe.set(g.id, previo);
-      else vistoFolio.set(llaveDeFolio, g.id);
+      anotar('f|', llaveDeFolio, g);
       continue;
     }
     if (g.cfdiUuid) {
@@ -626,9 +673,7 @@ export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
       // mismo comprobante no traen orden, caen ambas en 1, y siguen siendo
       // copias.
       const u = `${g.cfdiUuid.toLowerCase()}#${g.cfdiOrden ?? 1}`;
-      const previo = vistoUuid.get(u);
-      if (previo) originalDe.set(g.id, previo);
-      else vistoUuid.set(u, g.id);
+      anotar('u|', u, g);
       continue;
     }
     if (g.folio) {
@@ -651,10 +696,21 @@ export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
       // intacta la regla anterior a la 0357.
       const grupo = grupoDeFolio(g);
       const emisor = g.rfcEmisor ?? emisorDelGrupo.get(grupo) ?? '';
-      const key = `${grupo}|${emisor}`;
-      const previo = vistoFolio.get(key);
-      if (previo) originalDe.set(g.id, previo);
-      else vistoFolio.set(key, g.id);
+      anotar('f|', `${grupo}|${emisor}`, g);
+    }
+  }
+
+  // SEGUNDA PASADA: por cada grupo, sobrevive la copia que más información
+  // trae; el orden de llegada queda de desempate. Todas las demás quedan
+  // apuntando a ESE sobreviviente, nunca a otra copia.
+  for (const grupo of miembros.values()) {
+    if (grupo.length < 2) continue;
+    let sobreviviente = grupo[0];
+    for (const g of grupo) {
+      if (sinFormaPagoUtil(g) < sinFormaPagoUtil(sobreviviente)) sobreviviente = g;
+    }
+    for (const g of grupo) {
+      if (g.id !== sobreviviente.id) originalDe.set(g.id, sobreviviente.id);
     }
   }
   return originalDe;
