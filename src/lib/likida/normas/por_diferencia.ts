@@ -59,6 +59,8 @@ export const NORMA_POR_DIFERENCIA: Partial<Record<TipoDiferencia, string[]>> = {
   complemento_hidrocarburos: ['rmf-2026-2.7.1.48'],
   complemento_no_verificable: ['rmf-2026-2.7.1.48'],
   ieps_no_desglosado: ['lif-2026-art-20-A', 'criterio-1-LIF-PI'],
+  // El medio de pago electrónico del estímulo debe ser de la cuenta del contribuyente.
+  tarjeta_no_empresa: ['lif-2026-art-20-A'],
   factura_por_vencer: ['rmf-2026-2.7.1.21', 'politica-portales-plazos-facturacion'],
   // Mismas dos fichas que `combustible_efectivo`: LISR 27-III es la que exige el
   // permiso vigente del proveedor, y RFA 2026 regla 2.9 lo repite como condición

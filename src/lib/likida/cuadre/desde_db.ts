@@ -6,7 +6,7 @@ import { cuadrarViaje, medioNoAdmitidoCombustible, formaPagoJuzgableDe, copiasDe
 import { ventanaDelViaje } from './fecha_dudosa';
 import { getViaje, getGastos, getOperador, getAcumuladoCombustible, getPerfilCrudo } from '../repo';
 import { getConfig } from '../config';
-import { calificaEstimuloPeaje, facilidad15Vigente } from '../perfil/preguntas';
+import { calificaEstimuloPeaje, facilidad15Vigente, tarjetasDeLaEmpresa } from '../perfil/preguntas';
 import { logger } from '@/lib/logger';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
@@ -219,6 +219,9 @@ export async function cuadrarDesdeDB(
     oposicionTitular,
     facilidad15,
     elegiblePeaje,
+    // P0-6: sin declaración positiva de que las tarjetas son de la empresa, el
+    // diésel pagado con tarjeta no acredita litros (el motor lo explica).
+    tarjetasEmpresa: tarjetasDeLaEmpresa(perfilCrudo),
     lineasEcc: cierreEstricto
       ? await lineasEccParaCuadre(tenantId, gastos)
       : await lineasEccParaCuadre(tenantId, gastos).catch((e) => {

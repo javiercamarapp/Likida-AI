@@ -139,6 +139,7 @@ export const RUTA_DE_DIFERENCIA: Record<TipoDiferencia, RutaDeAviso> = {
   // letrero que nadie tiene que atender.
   oposicion_titular: 'decision',
   diesel_desviacion: 'decision',       // consumo fuera de rango: puede ser robo
+  tarjeta_no_empresa: 'decision',      // el estímulo no se acredita: ¿la tarjeta es de la empresa? Lo confirma el jefe o el contador
   fecha_sospechosa: 'decision',        // un ticket de otro viaje cobrado aquí es dinero mal asignado
   gasto_otro_ejercicio: 'decision',    // no deducible en este ejercicio; solo el jefe decide qué hacer con el papel
   iva_mes_del_pago: 'panel',           // información contable de periodo — la asienta el contador, no la decide el jefe en WhatsApp
