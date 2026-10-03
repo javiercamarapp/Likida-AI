@@ -38,6 +38,7 @@ const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
 
 const {
+  topeAnticipoDe, evaluarAnticipo, TOPE_ANTICIPO_POR_DEFECTO,
   interpretarPeticionViaje,
   resumenParaConfirmar,
   resolverOperadorPorNombre,
@@ -513,5 +514,41 @@ describe('resolverOperadorPorNombre', () => {
     expect(range).toHaveBeenNthCalledWith(1, 0, 999);
     expect(range).toHaveBeenNthCalledWith(2, 1000, 1999);
     expect(range).toHaveBeenNthCalledWith(3, 1001, 2000);
+  });
+});
+
+
+// ── E1-B (P0-7): UNA SOLA REGLA DE ANTICIPO PARA PANEL Y WHATSAPP ───────────
+describe('la regla de anticipo compartida', () => {
+  it('el tope sale de la política (concepto anticipo) y, sin él, del umbral por defecto', () => {
+    expect(topeAnticipoDe([{ concepto: 'diesel', topeMonto: 4000 }, { concepto: 'anticipo', topeMonto: 25_000 }])).toBe(25_000);
+    expect(topeAnticipoDe([{ concepto: 'diesel', topeMonto: 4000 }])).toBe(TOPE_ANTICIPO_POR_DEFECTO);
+    expect(topeAnticipoDe(undefined)).toBe(TOPE_ANTICIPO_POR_DEFECTO);
+    // un tope roto no abre la puerta ni la cierra: vuelve al default
+    expect(topeAnticipoDe([{ concepto: 'anticipo', topeMonto: 0 }])).toBe(TOPE_ANTICIPO_POR_DEFECTO);
+    expect(topeAnticipoDe([{ concepto: 'anticipo', topeMonto: Number.NaN }])).toBe(TOPE_ANTICIPO_POR_DEFECTO);
+    expect(topeAnticipoDe([{ concepto: 'anticipo' }])).toBe(TOPE_ANTICIPO_POR_DEFECTO);
+  });
+
+  it('evaluarAnticipo: en la frontera exacta pasa el tope y no pasa un centavo más', () => {
+    expect(evaluarAnticipo(25_000, 25_000)).toEqual({ ok: true });
+    const r = evaluarAnticipo(25_000.01, 25_000);
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.motivo).toMatch(/tope de \$25,000/);
+    expect(evaluarAnticipo(0, 25_000)).toEqual({ ok: true });
+  });
+
+  it('evaluarAnticipo: negativo y no finito se niegan', () => {
+    expect(evaluarAnticipo(-1, 25_000).ok).toBe(false);
+    expect(evaluarAnticipo(Number.NaN, 25_000).ok).toBe(false);
+    expect(evaluarAnticipo(Infinity, 25_000).ok).toBe(false);
+  });
+
+  it('el parser de WhatsApp aplica el MISMO tope: lo que el panel rechaza, el chat lo pregunta', () => {
+    const texto = 'nuevo viaje para Juan Pérez, Puebla a Monterrey, anticipo 30000';
+    expect(interpretarPeticionViaje(texto, { topeAnticipo: 25_000 })).toMatchObject({ tipo: 'incompleto', falta: ['anticipo'] });
+    expect(interpretarPeticionViaje(texto, { topeAnticipo: 30_000 })).toMatchObject({ tipo: 'crear', anticipo: 30_000 });
+    // sin opciones, igual que siempre
+    expect(interpretarPeticionViaje(texto)).toMatchObject({ tipo: 'crear', anticipo: 30_000 });
   });
 });

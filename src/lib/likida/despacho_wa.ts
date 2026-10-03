@@ -4,10 +4,11 @@ import { acotada } from './presupuesto';
 import { ConsultaFallida, variantesTelefono } from './conv';
 import { esAfirmacion, esNegacion } from './intake/huerfanos';
 import {
-  interpretarPeticionViaje, resumenParaConfirmar, resolverOperadorPorNombre,
+  interpretarPeticionViaje, resumenParaConfirmar, resolverOperadorPorNombre, topeAnticipoDe, TOPE_ANTICIPO_POR_DEFECTO,
   resolverUnidadPorEconomico, OperadorNombreAmbiguo,
 } from './crear_viaje_wa';
 import { crearViaje } from './operacion';
+import { getConfig } from './config';
 import { violaIndice } from './pg_errores';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { hoyMx } from '@/lib/formato';
@@ -374,12 +375,25 @@ export async function atenderDespachoOficina(
     }
   }
 
-  const intencion = interpretarPeticionViaje(texto);
-  if (!intencion) return null;
+  const intencionBruta = interpretarPeticionViaje(texto);
+  if (!intencionBruta) return null;
 
   if (!puedeAsignar(cuenta.rol)) {
     return 'Ese despacho no lo puedo hacer con tu rol — los viajes los asigna el dueño o el jefe de tráfico.';
   }
+
+  // E1-B (P0-7): el tope de anticipo es el de la POLÍTICA de la flota, el mismo
+  // que aplica el panel (`evaluarAnticipo`). Si la política no se puede leer se
+  // cae al umbral por defecto —el más estricto de los dos casos razonables— y
+  // se avisa en el log; no se inventa un tope más holgado.
+  let topeAnticipo = TOPE_ANTICIPO_POR_DEFECTO;
+  try {
+    topeAnticipo = topeAnticipoDe((await getConfig(cuenta.tenantId)).politica);
+  } catch (e) {
+    logger.warn('despacho_wa.tope_anticipo_no_disponible', { tenant: cuenta.tenantId, err: e instanceof Error ? e.message : String(e) });
+  }
+  const intencion = interpretarPeticionViaje(texto, { topeAnticipo });
+  if (!intencion) return null;
 
   if (intencion.tipo === 'incompleto') return resumenParaConfirmar(intencion);
 
