@@ -120,6 +120,21 @@ function validarDireccionesSftp(conectorId: string, valores: Record<string, stri
   return claves;
 }
 
+/**
+ * Mismo criterio para `sql_solo_lectura`: el servidor SQL es un host, no una URL, así que el https-only no lo ve.
+ * Aquí se aplica la MISMA validación del lector (`leerConfigTablaPropia`: base, usuario, clave, vista, columnas,
+ * ssl, CA) y el destino público (la resolución DNS se vuelve a comprobar al conectar). Lo que se guarda es lo que
+ * el lector va a poder usar: nada de configuraciones que luego fallen en el poller cada 5 minutos.
+ */
+function validarServidorSql(conectorId: string, valores: Record<string, string>): void {
+  if (conectorId !== PROVEEDOR_TABLA_PROPIA || (valores.modo ?? '').trim() !== 'sql_solo_lectura') return;
+  const cfg = leerConfigTablaPropia(valores);
+  if (!cfg.ok) throw new DatoInvalido(`La configuración SQL no es válida: ${cfg.motivo}.`);
+  if (cfg.config.modo === 'sql_solo_lectura' && hostNoPublico(cfg.config.conexion.host)) {
+    throw new DatoInvalido(`El campo sql_host apunta a una dirección de red interna (${cfg.config.conexion.host}). Se espera el servidor SQL público de tu sistema.`);
+  }
+}
+
 /** `base_url`, `api_url`, … — la convención del catálogo de conectores. */
 function esCampoUrl(clave: string): boolean {
   return clave === 'url' || clave.endsWith('_url');
@@ -173,6 +188,7 @@ export async function guardarCredencial(
   // SEG-6: antes de cifrar. Una dirección interna guardada ya es el oráculo,
   // aunque nadie apriete «Probar»: el poller la usaría cada 5 minutos.
   const comoSftp = new Set(validarDireccionesSftp(conector.id, limpios));
+  validarServidorSql(conector.id, limpios);
   for (const [clave, valor] of Object.entries(limpios)) {
     if (esCampoUrl(clave) && !comoSftp.has(clave)) validarUrlDeCredencial(clave, valor);
   }
