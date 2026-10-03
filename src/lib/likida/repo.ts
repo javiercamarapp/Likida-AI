@@ -1998,24 +1998,39 @@ export interface PiezaDunning { titulo: string; estado: string; enviadoEn: strin
 export interface CorridaDunning { estado: string; fin: string; error: string | null; resumen: Record<string, unknown> | null }
 
 /** Las propuestas de recordatorio del dunning (agente `cobranza_saas`, tipo
- *  `recordatorio_cobranza`). LANZA si la lectura falla: sin poder leer, la
- *  página dice que no pudo, no que no hay propuestas. */
-export async function getPiezasDunningPlataforma(limite = 500): Promise<PiezaDunning[]> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('cola_aprobacion')
-    .select('titulo, estado, enviado_en, creado_en')
-    .eq('agente', 'cobranza_saas')
-    .eq('tipo', 'recordatorio_cobranza')
-    .order('creado_en', { ascending: false })
-    .order('id')
-    .limit(limite), 'dunning.piezas');
-  if (error) throw new Error(`getPiezasDunningPlataforma: ${error.message}`);
-  return (data ?? []).map((r) => ({
-    titulo: r.titulo as string,
-    estado: r.estado as string,
-    enviadoEn: (r.enviado_en as string | null) ?? null,
-    creadoEn: r.creado_en as string,
-  }));
+ *  `recordatorio_cobranza`) de los TÍTULOS pedidos (los toques de las facturas
+ *  que la pantalla va a mostrar: una pieza por (factura, hito)). Se consulta por
+ *  título y no «las N más nuevas»: con cinco toques por factura, las facturas más
+ *  viejas perdían su pieza y salían en rojo «sin propuesta» sin que fuera cierto.
+ *  LANZA si la lectura falla: sin poder leer, la página dice que no pudo, no que
+ *  no hay propuestas. */
+export async function getPiezasDunningPlataforma(titulos: string[]): Promise<PiezaDunning[]> {
+  const unicos = [...new Set(titulos)];
+  const lotes: string[][] = [];
+  for (let i = 0; i < unicos.length; i += 40) lotes.push(unicos.slice(i, i + 40));
+  const filas: PiezaDunning[] = [];
+  for (const lote of lotes) {
+    const { data, error } = await acotada(supabaseAdmin()
+      .from('cola_aprobacion')
+      .select('titulo, estado, enviado_en, creado_en')
+      .eq('agente', 'cobranza_saas')
+      .eq('tipo', 'recordatorio_cobranza')
+      .in('titulo', lote)
+      .order('creado_en', { ascending: false })
+      .order('id')
+      .limit(1000), 'dunning.piezas');
+    if (error) throw new Error(`getPiezasDunningPlataforma: ${error.message}`);
+    for (const r of data ?? []) {
+      filas.push({
+        titulo: r.titulo as string,
+        estado: r.estado as string,
+        enviadoEn: (r.enviado_en as string | null) ?? null,
+        creadoEn: r.creado_en as string,
+      });
+    }
+  }
+  // Más nueva primero: `armarEstadoDunning` se queda con la primera por título.
+  return filas.sort((x, y) => (x.creadoEn < y.creadoEn ? 1 : x.creadoEn > y.creadoEn ? -1 : 0));
 }
 
 /** La última corrida registrada del agente de cobranza SaaS, o `null` si nunca
