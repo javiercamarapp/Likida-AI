@@ -212,18 +212,30 @@ export interface DecisionGuardia {
   estado: EstadoGuardia;
 }
 
+/** La huella que se persiste de un incidente: lleva su FUENTE (`fuente~hash`) para poder conservarla si esa fuente queda ciega (B1). */
+function huellaDeItem(i: { fuente: string; titulo: string; flota: string; desde: string }): string {
+  return `${i.fuente}~${huellaDeClave(claveDeItem(i))}`;
+}
+
 /** Decide qué avisar. TODO lo vigente queda como visto; lo resuelto sale solo (si reaparece, es incidente nuevo). */
 export function decidirAvisos(c: ClasificacionGuardia, previo: EstadoGuardia): DecisionGuardia {
-  const visto = (clave: string) => previo.vistos.includes(huellaDeClave(clave)) || previo.vistos.includes(clave);
+  // Se reconoce la huella con fuente (formato actual), la huella pelona (estados viejos) y la clave cruda (script de la Mac).
+  const visto = (i: { fuente: string; titulo: string; flota: string; desde: string }) =>
+    previo.vistos.includes(huellaDeItem(i)) || previo.vistos.includes(huellaDeClave(claveDeItem(i))) || previo.vistos.includes(claveDeItem(i));
   const urgentes = c.items.filter((i) => i.severidad === 'S1' || i.severidad === 'S2');
-  const nuevos = urgentes.filter((i) => !visto(claveDeItem(i)));
-  const ciegasNuevas = c.fuentesCiegas.filter((f) => !visto(`ciega|${f.fuente}`));
+  const nuevos = urgentes.filter((i) => !visto(i));
+  const vistoCiega = (fuente: string) => previo.vistos.includes(huellaDeClave(`ciega|${fuente}`)) || previo.vistos.includes(`ciega|${fuente}`);
+  const ciegasNuevas = c.fuentesCiegas.filter((f) => !vistoCiega(f.fuente));
+  // B1 (ronda 19): una fuente CIEGA no ve sus items, pero lo que ya se avisó de ella NO se olvida: si no, al volver la
+  // fuente sus incidentes se reavisaban como nuevos (flapping). Se conservan las huellas de las fuentes ciegas.
+  const ciegas = new Set(c.fuentesCiegas.map((f) => f.fuente));
+  const deFuentesCiegas = previo.vistos.filter((v) => [...ciegas].some((f) => v.startsWith(`${f}~`) || v.startsWith(`${f}|`)));
   return {
     urgentes, nuevos, ciegasNuevas,
     baseVolvio: previo.baseCaidaDesde !== null,
     estado: {
       ...previo,
-      vistos: [...urgentes.map((i) => huellaDeClave(claveDeItem(i))), ...c.fuentesCiegas.map((f) => huellaDeClave(`ciega|${f.fuente}`))].slice(0, TOPE_VISTOS),
+      vistos: [...new Set([...urgentes.map(huellaDeItem), ...c.fuentesCiegas.map((f) => huellaDeClave(`ciega|${f.fuente}`)), ...deFuentesCiegas])].slice(0, TOPE_VISTOS),
       baseCaidaDesde: null,
     },
   };
@@ -237,7 +249,7 @@ export function decidirAvisos(c: ClasificacionGuardia, previo: EstadoGuardia): D
 export function estadoTrasAviso(d: DecisionGuardia, avisoSalio: boolean): EstadoGuardia {
   if (avisoSalio || (d.nuevos.length === 0 && d.ciegasNuevas.length === 0)) return d.estado;
   const sinAvisar = new Set([
-    ...d.nuevos.map((i) => huellaDeClave(claveDeItem(i))),
+    ...d.nuevos.map(huellaDeItem),
     ...d.ciegasNuevas.map((f) => huellaDeClave(`ciega|${f.fuente}`)),
   ]);
   return { ...d.estado, vistos: d.estado.vistos.filter((h) => !sinAvisar.has(h)) };

@@ -88,7 +88,8 @@ describe('decidirAvisos — se avisa el CAMBIO, no el estado', () => {
   it('un S2 nuevo se avisa y queda como visto (por huella, sin guardar el título ni la flota)', () => {
     const d = decidirAvisos(clasif, ESTADO_GUARDIA_INICIAL);
     expect(d.nuevos).toHaveLength(1);
-    expect(d.estado.vistos).toEqual([huellaDeClave(claveDeItem(clasif.items[0]))]);
+    // la huella lleva su fuente (`fuente~hash`, B1) y nunca el título ni la flota
+    expect(d.estado.vistos).toEqual([`corridas~${huellaDeClave(claveDeItem(clasif.items[0]))}`]);
     expect(JSON.stringify(d.estado)).not.toMatch(/Flota X|item de corridas/);
   });
 
@@ -193,5 +194,33 @@ describe('decidirApp — histéresis de la app (A3, ronda 19)', () => {
   });
   it('un sondeo sano reinicia la racha', () => {
     expect(decidirApp({ ...ESTADO_GUARDIA_INICIAL, rachaApp: 1, appCaidaDesde: T1 }, false, T2)).toEqual({ racha: 0, desde: null, caida: false, avisar: false });
+  });
+});
+
+describe('B1 (ronda 19): una fuente ciega no hace flapping de sus incidentes', () => {
+  it('lo ya avisado de una fuente que queda ciega se CONSERVA; al volver no se reavisa como nuevo', () => {
+    const conIncidente = bandeja([item('corridas', null)]);
+    const d1 = decidirAvisos(clasificarBandeja(conIncidente, AHORA), ESTADO_GUARDIA_INICIAL);
+    expect(d1.nuevos).toHaveLength(1);
+    // la fuente de corridas queda ciega: sus items desaparecen de la bandeja
+    const ciegaYa = bandeja([], { corridas: ciega('timeout') });
+    const d2 = decidirAvisos(clasificarBandeja(ciegaYa, AHORA), d1.estado);
+    expect(d2.ciegasNuevas).toHaveLength(1);
+    // vuelve la fuente con el MISMO incidente: ya estaba avisado, no suena otra vez
+    const d3 = decidirAvisos(clasificarBandeja(conIncidente, AHORA), d2.estado);
+    expect(d3.nuevos).toHaveLength(0);
+  });
+  it('lo que NO es de una fuente ciega y ya no está vigente sí sale de vistos (si reaparece, es nuevo)', () => {
+    const d1 = decidirAvisos(clasificarBandeja(bandeja([item('corridas', null)]), AHORA), ESTADO_GUARDIA_INICIAL);
+    const d2 = decidirAvisos(clasificarBandeja(bandeja([]), AHORA), d1.estado); // resuelto, fuente sana
+    expect(d2.estado.vistos).toHaveLength(0);
+    expect(decidirAvisos(clasificarBandeja(bandeja([item('corridas', null)]), AHORA), d2.estado).nuevos).toHaveLength(1);
+  });
+  it('sigue reconociendo los estados viejos: huella pelona y clave cruda (script de la Mac)', () => {
+    const it0 = item('corridas', null);
+    const c = clasificarBandeja(bandeja([it0]), AHORA);
+    const clave = claveDeItem(c.items[0]);
+    expect(decidirAvisos(c, { ...ESTADO_GUARDIA_INICIAL, vistos: [huellaDeClave(clave)] }).nuevos).toHaveLength(0);
+    expect(decidirAvisos(c, { ...ESTADO_GUARDIA_INICIAL, vistos: [clave] }).nuevos).toHaveLength(0);
   });
 });
