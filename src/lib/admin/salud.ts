@@ -140,7 +140,8 @@ export async function puertaCron(cron: CronId, req: Request, sinSecreto: string)
   // cerrar — así cada cron mide su duración sin tocar una sola ruta. Por instancia: dos corridas simultáneas del MISMO
   // cron en la misma instancia se pisan la marca (no pasa con el calendario de vercel.json) y el peor caso es una
   // duración subestimada de una muestra, nunca un error.
-  iniciosDeCorrida.set(cron, Date.now());
+  // `performance.now()` y no `Date.now()`: el cronómetro no puede consumir ni depender del reloj de pared que los crons (y sus pruebas) controlan.
+  iniciosDeCorrida.set(cron, performance.now());
   return null;
 }
 
@@ -355,7 +356,7 @@ async function registrarLatenciaDeCron(cron: CronId, estado: EstadoLatido): Prom
   const inicio = iniciosDeCorrida.get(cron);
   iniciosDeCorrida.delete(cron);
   if (inicio === undefined || estado === 'saltado') return;
-  const ms = Date.now() - inicio;
+  const ms = performance.now() - inicio;
   if (ms > TECHO_CORRIDA_MS) return;
   await registrarLatencia('cron', cron, ms, estado === 'ok');
 }
