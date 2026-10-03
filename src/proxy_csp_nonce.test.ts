@@ -103,7 +103,7 @@ describe('proxy · CSP con nonce en las rutas con sesión', () => {
 });
 
 describe('proxy · Ola 9b: las rutas públicas TAMBIÉN llevan nonce (decisión de Javier, 2-oct-2026)', () => {
-  it.each(['/', '/login', '/terminos', '/privacidad', '/blog/algo', '/demo', '/aviso/x', '/sitemap.xml'])('%s: nonce + strict-dynamic, sin unsafe-inline, nonce también en la petición', async (ruta) => {
+  it.each(['/', '/login', '/terminos', '/privacidad', '/estado', '/blog/algo', '/demo', '/aviso/x', '/sitemap.xml'])('%s: nonce + strict-dynamic, sin unsafe-inline, nonce también en la petición', async (ruta) => {
     const res = await pedir(ruta);
     const csp = res.headers.get('Content-Security-Policy');
     const src = scriptSrc(csp);

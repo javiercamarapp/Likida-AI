@@ -1,7 +1,7 @@
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { sentryActivo } from '@/lib/observability/sentry';
 import { usd } from '@/lib/utils';
-import { Activity, ExternalLink, Power, ScrollText, ListTree, Search } from 'lucide-react';
+import { Activity, ExternalLink, Timer, ScrollText, ListTree, Search } from 'lucide-react';
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -9,6 +9,7 @@ import { listarInterruptores, apagar, encender } from '@/lib/likida/interruptore
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { ultimasEntradasBitacora, type EntradaBitacora } from '@/lib/admin/bitacora';
 import { corridasRecientes, type CorridaCruzada } from '@/lib/admin/corridas-cruzadas';
+import { getLatencias, type LatenciasMedidas, type FilaLatencia } from '@/lib/admin/slo';
 import { fechaHoraMx } from '@/lib/formato';
 import { AreaChartSimple } from '../charts';
 import { StatusPill, EstadoVacio, EstadoError, type Estado } from '../ui/kit';
@@ -32,6 +33,45 @@ function duracion(ms: number | null): string {
   if (ms === null) return '—';
   if (ms < 60_000) return `${Math.round(ms / 100) / 10} s`;
   return `${Math.round(ms / 6_000) / 10} min`;
+}
+
+/** Latencia en ms para la tabla de percentiles: «87 ms» por debajo de un segundo, «2.4 s» por encima. */
+function msLegible(ms: number | null): string {
+  if (ms === null) return '—';
+  if (ms < 1000) return `${ms} ms`;
+  return duracion(ms);
+}
+
+/** La tabla p50/p95 de rutas o crons. Sin filas NO se pinta una tabla vacía: la sección dice por qué no hay. */
+function TablaLatencia({ filas, etiqueta }: { filas: FilaLatencia[]; etiqueta: string }) {
+  return (
+    <div className="overflow-x-auto mt-1">
+      <table className="w-full text-sm">
+        <thead>
+          <tr style={{ color: 'var(--muted)' }} className="text-left">
+            <th className="px-3 py-2 font-medium">{etiqueta}</th>
+            <th className="px-3 py-2 font-medium text-right">Muestras</th>
+            <th className="px-3 py-2 font-medium text-right">p50</th>
+            <th className="px-3 py-2 font-medium text-right">p95</th>
+            <th className="px-3 py-2 font-medium text-right">Máx.</th>
+            <th className="px-3 py-2 font-medium text-right">Fallos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filas.map((f) => (
+            <tr key={f.nombre} className="border-t" style={{ borderColor: 'var(--line2)' }}>
+              <td className="px-3 py-2 font-medium whitespace-nowrap"><code className="font-mono text-xs">{f.nombre}</code></td>
+              <td className="px-3 py-2 tabular text-right" style={{ color: 'var(--muted)' }}>{f.muestras}</td>
+              <td className="px-3 py-2 tabular text-right whitespace-nowrap">{msLegible(f.p50Ms)}</td>
+              <td className="px-3 py-2 tabular text-right whitespace-nowrap">{msLegible(f.p95Ms)}</td>
+              <td className="px-3 py-2 tabular text-right whitespace-nowrap" style={{ color: 'var(--muted)' }}>{msLegible(f.maxMs)}</td>
+              <td className="px-3 py-2 tabular text-right" style={{ color: f.fallos > 0 ? 'var(--bad, #b91c1c)' : 'var(--muted)' }}>{f.fallos}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 /**
@@ -83,12 +123,14 @@ export default async function ObservabilidadPage({
   // responde, los INTERRUPTORES —lo único que esta página tiene que enseñar
   // sí o sí— se caían con ella. Ahora salen las cuatro juntas y la de negocio
   // degrada como las demás: su gráfica lo dice y los kill switches siguen.
-  const [interruptores, corridas, bitacora, resumen] = await Promise.all([
+  const [interruptores, corridas, bitacora, resumen, latencias] = await Promise.all([
     listarInterruptores().catch((): InterruptorParaUi[] | null => null),
     corridasRecientes(15).catch((): CorridaCruzada[] | null => null),
     ultimasEntradasBitacora({ limite: 50, filtroAccion: filtroBitacora })
       .catch((): EntradaBitacora[] | null => null),
     getResumenNegocio().catch(() => null),
+    // E1-A (0700): los p50/p95 se calculan en SQL; cada fuente (rutas, crons, IA) degrada por separado dentro de la función.
+    getLatencias(7).catch((): LatenciasMedidas | null => null),
   ]);
   const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
 
@@ -299,16 +341,99 @@ export default async function ObservabilidadPage({
             </p>
           </div>
 
+          {/* ── Latencias medidas (0700) ──────────────────────────────────── */}
           <div className="card p-3">
-            <TituloSeccion>Rendimiento por llamada</TituloSeccion>
-            <div className="mt-2">
-              <EstadoVacio icono={<Power width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                Latencia p50/p95/p99 por llamada, tasa de éxito de tool-calls, tasa de escalamiento a humano, tiempo de
-                resolución end-to-end — ninguno se instrumenta hoy (no hay columna de duración en{' '}
-                <code className="font-mono text-xs">llm_costo</code>). La traza de una CORRIDA sí existe ya — el link
-                &quot;abrir traza&quot; de arriba — con su costo de IA correlacionado por ventana de tiempo.
-              </EstadoVacio>
-            </div>
+            <TituloSeccion>Latencia por ruta — p50 / p95 ({latencias?.ventanaDias ?? 7} días)</TituloSeccion>
+            <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+              Percentiles calculados en la base (rango más cercano: un valor que de verdad ocurrió). Solo se mide una
+              de cada diez peticiones (muestreo uniforme, sin sesgo hacia lo lento): el p95 de pocas muestras es una
+              estimación, no una garantía.
+            </p>
+            {latencias === null || latencias.rutas === null ? (
+              <div className="mt-2">
+                <EstadoError mensaje="No se pudo leer la latencia de rutas. La consulta falló — no es que no haya tráfico, es que no se pudo mirar (¿migración 0700 sin aplicar?)." />
+              </div>
+            ) : latencias.rutas.length === 0 ? (
+              <div className="mt-2">
+                <EstadoVacio icono={<Timer width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+                  Sin muestras todavía: la tabla existe y está vacía de verdad. Se llena sola con el tráfico de las
+                  rutas medidas (health, webhook de WhatsApp, chat e ingesta del panel).
+                </EstadoVacio>
+              </div>
+            ) : (
+              <TablaLatencia filas={latencias.rutas} etiqueta="Ruta" />
+            )}
+          </div>
+
+          <div className="card p-3">
+            <TituloSeccion>Latencia por cron — p50 / p95 ({latencias?.ventanaDias ?? 7} días)</TituloSeccion>
+            <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+              Una muestra por corrida, de la puerta del cron a su latido. Los saltos por palanca no cuentan (responden
+              en milisegundos sin trabajar y hundirían el p50).
+            </p>
+            {latencias === null || latencias.crons === null ? (
+              <div className="mt-2">
+                <EstadoError mensaje="No se pudo leer la latencia de crons. La consulta falló — no es que no hayan corrido, es que no se pudo mirar." />
+              </div>
+            ) : latencias.crons.length === 0 ? (
+              <div className="mt-2">
+                <EstadoVacio icono={<Timer width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+                  Sin muestras todavía: ningún cron ha corrido desde que existe la medición.
+                </EstadoVacio>
+              </div>
+            ) : (
+              <TablaLatencia filas={latencias.crons} etiqueta="Cron" />
+            )}
+          </div>
+
+          <div className="card p-3">
+            <TituloSeccion>Latencia de la IA por fase — p50 / p95 ({latencias?.ventanaDias ?? 7} días)</TituloSeccion>
+            <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+              Desde <code className="font-mono">llm_costo.duracion_ms</code> (0700). Las llamadas anteriores a la 0700,
+              y las fases cuyo llamador aún no lleva cronómetro, quedan SIN duración: se cuentan aparte, no como cero.
+            </p>
+            {latencias === null || latencias.ia === null ? (
+              <div className="mt-2">
+                <EstadoError mensaje="No se pudo leer la latencia de la IA. La consulta falló — no es que no haya llamadas, es que no se pudo mirar." />
+              </div>
+            ) : latencias.ia.length === 0 ? (
+              <div className="mt-2">
+                <EstadoVacio icono={<Timer width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+                  Sin llamadas de IA registradas en la ventana: la base está en cero porque no hay clientes operando, no porque falte código.
+                </EstadoVacio>
+              </div>
+            ) : (
+              <div className="overflow-x-auto mt-1">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ color: 'var(--muted)' }} className="text-left">
+                      <th className="px-3 py-2 font-medium">Fase</th>
+                      <th className="px-3 py-2 font-medium text-right">Medidas</th>
+                      <th className="px-3 py-2 font-medium text-right">Sin duración</th>
+                      <th className="px-3 py-2 font-medium text-right">p50</th>
+                      <th className="px-3 py-2 font-medium text-right">p95</th>
+                      <th className="px-3 py-2 font-medium text-right">Máx.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {latencias.ia.map((f) => (
+                      <tr key={f.fase} className="border-t" style={{ borderColor: 'var(--line2)' }}>
+                        <td className="px-3 py-2 font-medium whitespace-nowrap"><code className="font-mono text-xs">{f.fase}</code></td>
+                        <td className="px-3 py-2 tabular text-right" style={{ color: 'var(--muted)' }}>{f.muestras}</td>
+                        <td className="px-3 py-2 tabular text-right" style={{ color: 'var(--muted)' }}>{f.sinDuracion}</td>
+                        <td className="px-3 py-2 tabular text-right whitespace-nowrap">{msLegible(f.p50Ms)}</td>
+                        <td className="px-3 py-2 tabular text-right whitespace-nowrap">{msLegible(f.p95Ms)}</td>
+                        <td className="px-3 py-2 tabular text-right whitespace-nowrap" style={{ color: 'var(--muted)' }}>{msLegible(f.maxMs)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
+              Siguen sin instrumentarse: la tasa de éxito de tool-calls, la tasa de escalamiento a humano y el tiempo de
+              resolución de punta a punta. La traza de una CORRIDA sí existe — el enlace «abrir traza» de arriba.
+            </p>
           </div>
         </div>
       </div>

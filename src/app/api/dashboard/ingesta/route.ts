@@ -22,6 +22,7 @@
 //     por flota la cuentan.
 import { NextResponse, type NextRequest } from 'next/server';
 import { MAX_DATAURL, MAX_CUERPO_BYTES } from './limites';
+import { medirRuta } from '@/lib/observability/latencia';
 import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 import { getSessionTenant } from '@/lib/auth/session';
 import { rechazoMfaSuperadminApi } from '@/lib/auth/api-superadmin';
@@ -41,7 +42,12 @@ export const maxDuration = 60;
 const ERROR_TAMANO = 'La imagen pesa demasiado (máx ~3 MB de foto). Vuelve a tomarla en calidad normal o recórtala al ticket.';
 
 
-export async function POST(req: NextRequest) {
+/** E1-A: la latencia de esta ruta (p50/p95 en /admin/observabilidad). Muestreada y sin riesgo: ver `medirRuta`. */
+export function POST(req: NextRequest) {
+  return medirRuta('dashboard.ingesta', () => manejarPOST(req));
+}
+
+async function manejarPOST(req: NextRequest) {
   // Auditoría 21, BAJO-MEDIO: el chequeo CSRF explícito (SEG-9) solo cubría
   // /api/admin/palette y /v1/*. Autenticada solo por cookie y gasta dinero
   // de modelo por llamada (visión).

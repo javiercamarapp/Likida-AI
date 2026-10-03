@@ -6,6 +6,7 @@ import { alertarOperador, alertarHuecoConfiguracion } from '@/lib/observability/
 import { logger } from '@/lib/logger';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { cotejarMigracion } from './migracion';
+import { medirRuta } from '@/lib/observability/latencia';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -49,7 +50,12 @@ export const dynamic = 'force-dynamic';
 // degradación — que es lo que un monitor entiende sin leer el cuerpo.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export async function GET(req: NextRequest) {
+/** E1-A: la latencia de esta ruta (p50/p95 en /admin/observabilidad). Muestreada y sin riesgo: ver `medirRuta`. */
+export function GET(req: NextRequest) {
+  return medirRuta('health', () => manejarGET(req));
+}
+
+async function manejarGET(req: NextRequest) {
   const iniciado = Date.now();
   // OPERABILIDAD-19C2-3 (barrido MEDIO/BAJO): sin auth a propósito (ver
   // arriba), esta ruta hace 2 consultas reales a Supabase por petición, sin

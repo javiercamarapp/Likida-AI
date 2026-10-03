@@ -14,6 +14,6 @@ describe('robots.txt', () => {
   });
 
   it('lo público sigue indexable', () => {
-    for (const r of ['/blog', '/calculadora', '/privacidad', '/terminos']) expect(regla.allow).toContain(r);
+    for (const r of ['/blog', '/calculadora', '/privacidad', '/terminos', '/estado']) expect(regla.allow).toContain(r);
   });
 });
