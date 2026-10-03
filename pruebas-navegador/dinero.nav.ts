@@ -67,17 +67,42 @@ for (const rol of ['duena', 'encargado'] as const) {
       await expect(forma.locator('option[value="Fernando Aguilar Cruz"]')).toBeAttached();
       await forma.locator('#operadorId').fill('Fernando Aguilar Cruz');
       await expect(forma.locator('input[type="hidden"][name="operadorId"]')).not.toHaveValue('');
-      await expect(forma.locator('#anticipo')).toHaveCount(0);
+      // E1-B: el encargado ve el anticipo (con su tope), pero NO el ingreso del flete ni el cliente.
+      await expect(forma.locator('#anticipo')).toBeVisible();
+      await expect(forma.locator('#ingresoFlete')).toHaveCount(0);
+      await expect(forma.locator('#clienteId')).toHaveCount(0);
       // El atacante modifica su DOM, no la sesión ni el servidor.
       await forma.evaluate((nodo) => {
-        for (const valor of ['', '9876']) {
+        for (const [nombre, valor] of [['ingresoFlete', '99999'], ['clienteId', 'cualquiera']]) {
           const input = document.createElement('input');
-          input.type = 'hidden'; input.name = 'anticipo'; input.value = valor;
+          input.type = 'hidden'; input.name = nombre; input.value = valor;
           nodo.appendChild(input);
         }
       });
       await forma.getByRole('button', { name: 'Crear viaje', exact: true }).click();
       await expect(page.locator('body')).toContainText(/Tu rol no puede/);
+      await page.goto(`/dashboard/viajes?q=${FOLIO}`);
+      await expect(page.locator('tr', { hasText: FOLIO })).toHaveCount(0);
+    });
+
+    if (rol === 'encargado') test('rechaza en servidor un anticipo por encima del umbral aunque el navegador lo deje pasar', async ({ page }) => {
+      await page.goto('/dashboard/despacho');
+      const forma = page.locator('form:has(button:has-text("Crear viaje"))');
+      await forma.locator('#folio').fill(FOLIO);
+      await forma.locator('#origen').fill('Silao, GTO');
+      await forma.locator('#destino').fill('Monterrey, NL');
+      await forma.locator('#operadorId').fill('Fernando');
+      await expect(forma.locator('option[value="Fernando Aguilar Cruz"]')).toBeAttached();
+      await forma.locator('#operadorId').fill('Fernando Aguilar Cruz');
+      await expect(forma.locator('input[type="hidden"][name="operadorId"]')).not.toHaveValue('');
+      // El atacante quita el `max` del input y la validación del navegador: el servidor decide.
+      await forma.evaluate((nodo) => {
+        (nodo as HTMLFormElement).noValidate = true;
+        nodo.querySelector('#anticipo')?.removeAttribute('max');
+      });
+      await forma.locator('#anticipo').fill('100001');
+      await forma.getByRole('button', { name: 'Crear viaje', exact: true }).click();
+      await expect(page.locator('body')).toContainText(/rebasa el (umbral de revisión|tope)/);
       await page.goto(`/dashboard/viajes?q=${FOLIO}`);
       await expect(page.locator('tr', { hasText: FOLIO })).toHaveCount(0);
     });
@@ -88,8 +113,9 @@ for (const rol of ['duena', 'encargado'] as const) {
       await forma.locator('#folio').fill(FOLIO);
       await forma.locator('#origen').fill('Silao, GTO');
       await forma.locator('#destino').fill('Monterrey, NL');
-      if (rol === 'duena') await forma.locator('#anticipo').fill('8000');
-      else await expect(forma.locator('#anticipo')).toHaveCount(0);
+      // Ambos roles capturan anticipo (E1-B); el encargado dentro del umbral.
+      await forma.locator('#anticipo').fill('8000');
+      if (rol === 'encargado') await expect(forma.locator('#ingresoFlete')).toHaveCount(0);
 
       // El combo del chofer resuelve el id CONTRA lo que el servidor ofreció
       // (combo-catalogo.tsx): primero se teclea para disparar la búsqueda, y

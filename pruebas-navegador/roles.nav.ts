@@ -26,7 +26,12 @@ test.describe('encargado: operación sin cifras ni administración', () => {
     await page.locator('a[href="/dashboard/despacho"]').first().click();
     await expect(page).toHaveURL(/\/dashboard\/despacho$/);
     await expect(page.getByRole('button', { name: 'Crear viaje', exact: true })).toBeVisible();
-    await expect(page.locator('#anticipo')).toHaveCount(0);
+    // E1-B (decisión de Javier): el encargado SÍ captura el anticipo, rotulado con el
+    // tope/umbral de la política; el ingreso del flete y el cliente siguen siendo del área dinero.
+    await expect(page.locator('#anticipo')).toBeVisible();
+    await expect(page.locator('body')).toContainText(/Umbral de revisión: \$100,000|Tope de la política de tu flota: \$/);
+    await expect(page.locator('#ingresoFlete')).toHaveCount(0);
+    await expect(page.locator('#clienteId')).toHaveCount(0);
     const propietario = await browser.newContext({ storageState: ESTADOS.duena });
     try {
       const control = await propietario.request.get('/dashboard/viajes?_rsc', { headers: { RSC: '1' }, maxRedirects: 0 });
