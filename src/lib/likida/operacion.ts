@@ -30,7 +30,6 @@ import { hoyMx } from '@/lib/formato';
 
 /** Los tres estatus que `viaje` de verdad admite (`viaje_estatus_dominio`,
  *  0025). Un cuarto valor no se traduce ni se esconde: se cuenta aparte. */
-const SIN_CERRAR = new Set(['abierto', 'en_cuadre']);
 
 // ── Carga por operador: "ve cuántos trae cada quien" ───────────────────────
 
@@ -298,79 +297,11 @@ export async function getIncidencias(tenantId: string, ahora = new Date()): Prom
 }
 
 // ── POD (evidencia de entrega) ─────────────────────────────────────────────
-
-export interface PodRow {
-  viajeId: string;
-  folio: string | null;
-  operadorId: string | null;
-  operadorNombre: string | null;
-  telefono: string | null;
-  /** `null` cuando NADIE ha creado el registro — el caso más común y el que
-   *  más se persigue. No es lo mismo que 'pendiente', que ya se pidió. */
-  estado: string | null;
-  podId: string | null;
-  nota: string | null;
-  capturadoEn: string | null;
-}
-
-/**
- * Los viajes EN CURSO y qué evidencia de entrega traen.
- *
- * Se parte de los VIAJES y no de la tabla `pod`: un viaje del que nadie creó
- * el registro es exactamente el que hay que perseguir, y recorrer `pod` lo
- * dejaría fuera. Es el mismo error que `getTableroOperacion` evita al contar.
- */
-export async function getPods(tenantId: string): Promise<PodRow[]> {
-  const admin = supabaseAdmin();
-  const [viajes, pods, operadores] = await Promise.all([
-    traerTodo<{ id: unknown; folio: unknown; operador_id: unknown; estatus: unknown }>(
-      (d, h) => acotada(admin.from('viaje').select('id, folio, operador_id, estatus', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h), 'getPods.viaje'),
-      'getPods.viaje',
-    ),
-    traerTodo<Record<string, unknown>>(
-      (d, h) => acotada(admin.from('pod').select('id, viaje_id, estado, nota, capturado_en', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h), 'getPods.pod'),
-      'getPods.pod',
-    ),
-    traerTodo<{ id: unknown; nombre: unknown; telefono: unknown }>(
-      (d, h) => acotada(admin.from('operador').select('id, nombre, telefono', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h), 'getPods.operador'),
-      'getPods.operador',
-    ),
-  ]);
-
-  const porViaje = new Map(pods.map((p) => [p.viaje_id as string, p]));
-  const opPorId = new Map(operadores.map((o) => [o.id as string, o]));
-
-  return viajes
-    .filter((v) => SIN_CERRAR.has(v.estatus as string))
-    .map((v) => {
-      const p = porViaje.get(v.id as string);
-      const op = v.operador_id ? opPorId.get(v.operador_id as string) : undefined;
-      return {
-        viajeId: v.id as string,
-        folio: (v.folio as string) || null,
-        operadorId: (v.operador_id as string) || null,
-        operadorNombre: op ? (op.nombre as string) : null,
-        telefono: op ? ((op.telefono as string) || null) : null,
-        estado: p ? (p.estado as string) : null,
-        podId: p ? (p.id as string) : null,
-        nota: p ? ((p.nota as string) || null) : null,
-        capturadoEn: p ? ((p.capturado_en as string) || null) : null,
-      };
-    })
-    // Primero lo que falta: sin registro, luego pedido, luego rechazado, y al
-    // final lo que ya llegó. El encargado abre esto para ver qué perseguir.
-    .sort((a, b) => orden(a.estado) - orden(b.estado));
-}
-
-function orden(estado: string | null): number {
-  if (estado === null) return 0;
-  if (estado === 'pendiente') return 1;
-  if (estado === 'rechazado') return 2;
-  return 3;
-}
+//
+// `getPods` (la lista de viajes en curso con su evidencia, ~120k filas de viaje +
+// pod por llamada) se BORRÓ en la ronda 16 (carga de 250 camiones): no tenía ningún
+// llamador en src/ ni en scripts/, y leer los viajes y los pods enteros de la flota
+// en memoria no escala. Si una pantalla la necesita, que sea una consulta acotada.
 
 /**
  * Deja constancia de que ya se pidió la evidencia.
