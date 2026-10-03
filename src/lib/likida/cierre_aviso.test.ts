@@ -308,6 +308,19 @@ describe('comprobantes rechazados', () => {
   });
 });
 
+describe('M5 · tarjeta del diésel: la causa decide la ruta', () => {
+  it('«sin declarar» va al panel: un viaje que cuadra NO pide decisión por WhatsApp', () => {
+    const r = armarAvisoJefe(liq({ diferencias: [dif({ tipo: 'tarjeta_sin_declarar', concepto: 'Diésel' })] }));
+    expect(r.requiereDecision).toBe(false);
+    expect(RUTA_DE_DIFERENCIA.tarjeta_sin_declarar).toBe('panel');
+  });
+
+  it('«declaró que NO» sí es una decisión del jefe', () => {
+    const r = armarAvisoJefe(liq({ diferencias: [dif({ tipo: 'tarjeta_no_empresa', concepto: 'Diésel' })] }));
+    expect(r.requiereDecision).toBe(true);
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────
 // LA RED QUE IMPIDE EL HUECO
 // ─────────────────────────────────────────────────────────────────────────

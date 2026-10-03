@@ -47,7 +47,7 @@ export const SOLO_CONTRALOR: TipoDiferencia[] = [
   'cfdi_pendiente', 'rfc_receptor', 'complemento_hidrocarburos',
   'ieps_no_desglosado', 'texto_sospechoso', 'permiso_cre_no_verificable',
   // Cómo está titulada la tarjeta lo confirma la oficina; al operador no se le juzga.
-  'tarjeta_no_empresa',
+  'tarjeta_no_empresa', 'tarjeta_sin_declarar',
   // El operador no puede cambiar retroactivamente cómo pagó una comida ya
   // hecha (LISR 28-V, condición de tarjeta de crédito) — a diferencia de
   // `alimentacion_sin_soporte`, que sí puede resolver adjuntando la foto que

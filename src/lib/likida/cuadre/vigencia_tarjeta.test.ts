@@ -34,6 +34,11 @@ describe('derivoLaConfig — tarjeta_no_empresa posterior al cierre no es deriva
     expect(derivoLaConfig(persistidasAntesDeLaRegla, hoy, { cerradaEn: '2026-10-20T12:00:00Z' })).toBe(true);
     expect(derivoLaConfig(persistidasAntesDeLaRegla, hoy)).toBe(true);
   });
+  it('el tipo «sin declarar» tampoco cuenta como deriva en una liquidación anterior a la regla', () => {
+    const hoySinDeclarar = [{ tipo: 'anticipo', esperado: 5000 }, { tipo: 'tarjeta_sin_declarar' }];
+    expect(derivoLaConfig(persistidasAntesDeLaRegla, hoySinDeclarar, { cerradaEn: '2026-09-20T12:00:00Z' })).toBe(false);
+    expect(derivoLaConfig(persistidasAntesDeLaRegla, hoySinDeclarar, { cerradaEn: '2026-10-20T12:00:00Z' })).toBe(true);
+  });
   it('ignorar ese tipo no esconde OTRA deriva real (p. ej. cambió el RFC)', () => {
     const conRfc = [...hoy, { tipo: 'rfc_receptor' }];
     expect(derivoLaConfig(persistidasAntesDeLaRegla, conRfc, { cerradaEn: '2026-09-20T12:00:00Z' })).toBe(true);
@@ -61,12 +66,12 @@ describe('reabrir una liquidación vieja (flota sin declarar tarjetas) no cambia
   it('cerrada antes de la regla: litros acreditados, sin tarjeta_no_empresa, sin deriva', () => {
     const r = reabrir('2026-09-20T12:00:00Z');
     expect(r.litrosDieselAcreditables).toBe(200);
-    expect(r.diferencias.map((d) => d.tipo)).not.toContain('tarjeta_no_empresa');
+    expect(r.diferencias.map((d) => d.tipo)).not.toContain('tarjeta_sin_declarar');
     expect(derivoLaConfig(r.diferencias, r.diferencias, { cerradaEn: '2026-09-20T12:00:00Z' })).toBe(false);
   });
   it('cerrada con la regla vigente y sin declarar: sigue fail-closed', () => {
     const r = reabrir('2026-10-20T12:00:00Z');
     expect(r.litrosDieselAcreditables).toBe(0);
-    expect(r.diferencias.map((d) => d.tipo)).toContain('tarjeta_no_empresa');
+    expect(r.diferencias.map((d) => d.tipo)).toContain('tarjeta_sin_declarar');
   });
 });
