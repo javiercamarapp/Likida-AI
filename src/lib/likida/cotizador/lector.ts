@@ -141,65 +141,29 @@ export async function casetasMedidasPorRuta(
   const admin = supabaseAdmin();
   const piso = new Date(Date.parse(`${hoy}T12:00:00Z`) - 366 * 86_400_000).toISOString();
 
-  // 1. QUÉ SE LIQUIDÓ EN LA VENTANA. Un viaje con dos liquidaciones aparece
-  //    dos veces aquí y una sola en el Set — el promedio es POR VIAJE.
-  const liquidados = await traerTodo<{ viaje_id: unknown }>(
-    (d, h) => acotada(admin.from('liquidacion')
-      .select('viaje_id', conteo(d))
-      .eq('tenant_id', tenantId)
-      .gte('created_at', piso)
-      .order('id').range(d, h), 'cotizador.liquidadasVentana'),
-    'cotizador.liquidadasVentana',
-  );
-  const idsLiquidados = [...new Set(liquidados.map((l) => String(l.viaje_id)))];
-  if (idsLiquidados.length === 0) return null;
-
-  // 2. LA RUTA DE ESOS VIAJES, en tandas por el largo de la URL de PostgREST.
-  const viajes: Array<{ id: unknown; origen: unknown; destino: unknown }> = [];
-  for (let i = 0; i < idsLiquidados.length; i += 100) {
-    const tanda = idsLiquidados.slice(i, i + 100);
-    const lote = await traerTodo<{ id: unknown; origen: unknown; destino: unknown }>(
-      (d, h) => acotada(admin.from('viaje')
-        .select('id, origen, destino', conteo(d))
-        .eq('tenant_id', tenantId).eq('estatus', 'liquidado')
-        .in('id', tanda)
-        .not('origen', 'is', null).not('destino', 'is', null)
-        .order('id').range(d, h), 'cotizador.viajesRuta'),
-      'cotizador.viajesRuta',
-    );
-    viajes.push(...lote);
-  }
-
-  const deRuta = viajesDeMismaRuta(
-    viajes.map((v) => ({ id: String(v.id), origen: (v.origen as string) ?? null, destino: (v.destino as string) ?? null })),
-    origen, destino,
-  );
+  // Ronda 16 (carga de 250 camiones): antes eran ~700 consultas secuenciales por
+  // cotización (liquidaciones con offset + viajes en tandas + gastos en tandas).
+  // Ahora DOS RPC (0687): 1) los pares (origen, destino) distintos liquidados en
+  // la ventana —pocos cientos—; 2) el promedio por viaje de las casetas de los
+  // viajes cuyos textos normalizan a ESTA ruta. La regla de normalización sigue
+  // viviendo solo aquí (`normalizarPlaza`).
+  const pares = await acotada(admin.rpc('rutas_liquidadas_tenant', { p_tenant: tenantId, p_piso: piso }), 'cotizador.rutasLiquidadas');
+  if (pares.error) throw new Error(`cotizador.rutasLiquidadas: ${pares.error.message}`);
+  const filas = (pares.data ?? []) as Array<{ origen: string | null; destino: string | null }>;
+  const deRuta = viajesDeMismaRuta(filas, origen, destino);
   if (deRuta.length === 0) return null;
+  const origenes = [...new Set(deRuta.map((r) => r.origen as string))];
+  const destinos = [...new Set(deRuta.map((r) => r.destino as string))];
 
-  // Los gastos 'caseta' de esos viajes, en tandas: `.in()` con cientos de ids
-  // rompe el largo de la URL de PostgREST.
-  const porViaje = new Map<string, number>();
-  const ids = deRuta.map((v) => v.id);
-  for (let i = 0; i < ids.length; i += 100) {
-    const tanda = ids.slice(i, i + 100);
-    const gastos = await traerTodo<{ viaje_id: unknown; monto: unknown }>(
-      (d, h) => acotada(admin.from('gasto')
-        .select('viaje_id, monto', conteo(d))
-        .eq('tenant_id', tenantId).eq('concepto', 'caseta')
-        .in('viaje_id', tanda)
-        .order('id').range(d, h), 'cotizador.casetas'),
-      'cotizador.casetas',
-    );
-    for (const g of gastos) {
-      const id = String(g.viaje_id);
-      const m = Number(g.monto);
-      if (!Number.isFinite(m)) continue;
-      porViaje.set(id, (porViaje.get(id) ?? 0) + m);
-    }
-  }
-  if (porViaje.size === 0) return null;
-  const total = [...porViaje.values()].reduce((s, v) => s + v, 0);
-  return { promedio: round2(total / porViaje.size), viajes: porViaje.size };
+  const res = await acotada(admin.rpc('casetas_medidas_ruta_tenant', {
+    p_tenant: tenantId, p_piso: piso, p_origenes: origenes, p_destinos: destinos,
+  }), 'cotizador.casetasRuta');
+  if (res.error) throw new Error(`cotizador.casetasRuta: ${res.error.message}`);
+  const fila = ((res.data ?? []) as Array<{ promedio: unknown; viajes: unknown }>)[0];
+  const n = Number(fila?.viajes ?? 0);
+  const promedio = Number(fila?.promedio);
+  if (!fila || !Number.isFinite(n) || n === 0 || !Number.isFinite(promedio)) return null;
+  return { promedio: round2(promedio), viajes: n };
 }
 
 // ── El panel completo ──────────────────────────────────────────────────────

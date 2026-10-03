@@ -35,12 +35,14 @@ function hrefPaginaActivos(sufijo: string, folioPedido: string, pagina: number):
  * se ofrecen únicamente a quien tiene permiso de dinero.
  */
 export function VistaDespacho({
-  tablero, sinAsignar, activos, sufijo, folioPedido, buscarCatalogo, totalOperadores, totalClientes, totalUnidades,
+  tablero, sinAsignar, totalSinAsignar, activos, sufijo, folioPedido, buscarCatalogo, totalOperadores, totalClientes, totalUnidades,
   puedeCapturarDinero = false, carga, crear, asignarYAvisar, asignarUnidadViaje, reenviarAviso, altaOperador,
 }: {
   puedeCapturarDinero?: boolean;
   tablero: TableroOperacion | null;
   sinAsignar: ViajeSinAsignar[];
+  /** El total REAL de viajes sin chofer (la lista trae a lo más `MAX_FILAS`). Sin él, `sinAsignar.length`. */
+  totalSinAsignar?: number;
   /** FE-2: consulta propia, ordenada por urgencia y con `count` real —
    *  reemplaza el recorte a 12 de "los últimos 100 viajes creados". */
   activos: Pagina<ViajeEnCursoRow>;
@@ -151,9 +153,9 @@ export function VistaDespacho({
                       )}
                     </div>
                   ))}
-                  {sinAsignar.length > MAX_FILAS && (
+                  {(totalSinAsignar ?? sinAsignar.length) > MAX_FILAS && (
                     <p className="text-[12px]" style={{ color: 'var(--faint)' }}>
-                      Se muestran {MAX_FILAS} — hay {numero(sinAsignar.length - MAX_FILAS)} más sin asignar.
+                      Se muestran {MAX_FILAS} — hay {numero((totalSinAsignar ?? sinAsignar.length) - MAX_FILAS)} más sin asignar.
                     </p>
                   )}
                 </div>
