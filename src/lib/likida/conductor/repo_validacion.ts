@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { exigir, traerPorIds } from '../pg';
-import { COLUMNAS_HITO, faltaEsquema, filaAHito } from './repo';
+import { COLUMNAS_HITO, filaAHito } from './repo';
 import { coordenadasValidas } from './geo';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from './geometria_datos';
 import type { ErrorCsv, SitioCsv, TipoSitio } from './sitios';
@@ -577,88 +577,4 @@ export async function leerHitosDeOperador(tenantId: string, operadorId: string, 
     .from('viaje_hito').select(COLUMNAS_HITO).eq('tenant_id', tenantId).in('viaje_id', t).in('estado', ['recibido', 'validado'])
     .gte('mensaje_en', desde.toISOString()).lt('mensaje_en', hasta.toISOString()), 'jornada.hitos') as never, 'jornada.hitos');
   return filas.map(filaAHito);
-}
-
-
-// ═══════════════════════════════════════════════════════════════════════════
-// LOS EPISODIOS DE «SIN SEÑAL DE VIDA» PARA LA PANTALLA (nota S de la re-auditoría, ronda 18).
-//
-// Hasta aquí vivían solo en la base y en los avisos por WhatsApp: el tablero mostraba el estado del GPS y la excepción «sin reporte», no la
-// cadena «primer aviso → segundo aviso → jefe de tráfico → cómo terminó». Un jefe de tráfico que llegaba al turno no tenía dónde verlo.
-// ═══════════════════════════════════════════════════════════════════════════
-
-export interface EpisodioTablero {
-  id: string;
-  viajeId: string;
-  folio: string | null;
-  operador: string | null;
-  motivo: 'gps_obsoleto' | 'gps_detenido';
-  abiertoEn: string;
-  nivelEnviado: 0 | 1 | 2 | 3;
-  aviso1En: string | null;
-  aviso2En: string | null;
-  escaladoEn: string | null;
-  cerradoEn: string | null;
-  cierreMotivo: 'respondio' | 'senal_recuperada' | 'viaje_cerrado' | 'atendido_por_jefe' | null;
-  respuesta: 'estoy' | 'voy_a_cargar' | 'estoy_bien' | null;
-}
-
-const TOPE_EPISODIOS_TABLERO = 40;
-
-/**
- * Los episodios abiertos en [`desde`, ahora] de UNA flota, el más reciente primero, con el folio y el chofer de su viaje. Los filtros del
- * tablero (patio, cliente, chofer) se aplican a través del viaje. `null` = la base no tiene la 0636 (sin episodios, no un error);
- * una base caída LANZA (el llamador lo muestra como «no se pudo leer», no como «cero episodios»).
- */
-export async function leerEpisodiosParaTablero(
-  tenantId: string, desde: Date, f: FiltrosTablero = {}, limite: number = TOPE_EPISODIOS_TABLERO,
-): Promise<{ episodios: EpisodioTablero[]; hayMas: boolean } | null> {
-  let viajeIds: string[] | null = null;
-  if ((f.terminalId && UUID.test(f.terminalId)) || (f.clienteId && UUID.test(f.clienteId)) || (f.operadorId && UUID.test(f.operadorId))) {
-    let q = supabaseAdmin().from('viaje').select('id').eq('tenant_id', tenantId);
-    if (f.terminalId && UUID.test(f.terminalId)) q = q.eq('terminal_id', f.terminalId);
-    if (f.clienteId && UUID.test(f.clienteId)) q = q.eq('cliente_id', f.clienteId);
-    if (f.operadorId && UUID.test(f.operadorId)) q = q.eq('operador_id', f.operadorId);
-    const rv = await acotada(q.gte('created_at', new Date(desde.getTime() - 45 * 86_400_000).toISOString()).order('id').limit(2000), 'tablero.episodios_viajes');
-    viajeIds = ((exigir(rv as never, 'tablero.episodios_viajes') ?? []) as unknown as Fila[]).map((x) => String(x.id));
-    if (viajeIds.length === 0) return { episodios: [], hayMas: false };
-  }
-  let q = supabaseAdmin().from('viaje_senal_vida')
-    .select('id, viaje_id, motivo, abierto_en, nivel_enviado, aviso_1_en, aviso_2_en, escalado_en, cerrado_en, cierre_motivo, respuesta')
-    .eq('tenant_id', tenantId).gte('abierto_en', desde.toISOString());
-  if (viajeIds) q = q.in('viaje_id', viajeIds.slice(0, 1000));
-  const r = await acotada(q.order('abierto_en', { ascending: false }).order('id').limit(limite + 1), 'tablero.episodios');
-  if (r.error) {
-    if (faltaEsquema(r.error, /viaje_senal_vida/i)) return null;
-    throw new Error(`tablero.episodios: ${r.error.message}`);
-  }
-  const filas = ((r.data ?? []) as unknown as Fila[]);
-  const hayMas = filas.length > limite;
-  const visibles = filas.slice(0, limite);
-  if (visibles.length === 0) return { episodios: [], hayMas: false };
-
-  const ids = [...new Set(visibles.map((x) => String(x.viaje_id)))];
-  const viajes = await traerPorIds<Fila>(ids, (t) => acotada(supabaseAdmin().from('viaje').select('id, folio, operador_id').eq('tenant_id', tenantId).in('id', t), 'tablero.episodios_folios') as never, 'tablero.episodios_folios');
-  const viajePorId = new Map(viajes.map((v) => [String(v.id), v] as const));
-  const opIds = [...new Set(viajes.map((v) => v.operador_id).filter((x): x is string => typeof x === 'string'))];
-  const ops = opIds.length === 0 ? [] : await traerPorIds<Fila>(opIds, (t) => acotada(supabaseAdmin().from('operador').select('id, nombre').eq('tenant_id', tenantId).in('id', t), 'tablero.episodios_choferes') as never, 'tablero.episodios_choferes');
-  const nombrePorOp = new Map(ops.map((o) => [String(o.id), String(o.nombre)] as const));
-  const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
-
-  return {
-    hayMas,
-    episodios: visibles.map((x): EpisodioTablero => {
-      const v = viajePorId.get(String(x.viaje_id));
-      const nivel = Number(x.nivel_enviado);
-      return {
-        id: String(x.id), viajeId: String(x.viaje_id), folio: v ? str(v.folio) : null,
-        operador: v && typeof v.operador_id === 'string' ? nombrePorOp.get(v.operador_id) ?? null : null,
-        motivo: x.motivo === 'gps_detenido' ? 'gps_detenido' : 'gps_obsoleto',
-        abiertoEn: String(x.abierto_en), nivelEnviado: (nivel === 1 || nivel === 2 || nivel === 3 ? nivel : 0),
-        aviso1En: str(x.aviso_1_en), aviso2En: str(x.aviso_2_en), escaladoEn: str(x.escalado_en), cerradoEn: str(x.cerrado_en),
-        cierreMotivo: (['respondio', 'senal_recuperada', 'viaje_cerrado', 'atendido_por_jefe'] as const).find((c) => c === x.cierre_motivo) ?? null,
-        respuesta: (['estoy', 'voy_a_cargar', 'estoy_bien'] as const).find((c) => c === x.respuesta) ?? null,
-      };
-    }),
-  };
 }
