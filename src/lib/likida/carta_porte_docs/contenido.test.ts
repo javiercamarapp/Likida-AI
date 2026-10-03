@@ -161,6 +161,12 @@ describe('prepararContenido', () => {
     expect(c.texto).not.toMatch(/alert|<p>/);
   });
 
+  it('correo HTML: las entidades se decodifican UNA vez (&amp;lt; queda como &lt;, no como <)', async () => {
+    const { c } = await leer(Buffer.from('<html><body><p>Folio: HX-2 &amp;lt;b&amp;gt; Tom &amp; Jerry &lt;x&gt;</p></body></html>'));
+    expect(c.texto).toContain('&lt;b&gt;');
+    expect(c.texto).toContain('Tom & Jerry <x>');
+  });
+
   describe('documentos defectuosos: fallan con una frase, no con un stack', () => {
     it('PDF truncado', async () => {
       const pdf = await defectuosos.pdfTruncado();
