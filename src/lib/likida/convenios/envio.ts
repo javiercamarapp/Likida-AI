@@ -86,7 +86,20 @@ async function enviarInstrucciones(
     if (reclamo === 'perdido') return { estado: 'perdido' };
     if (reclamo === 'fallo') return { estado: 'fallo', motivo: 'no se pudo reclamar el envío' };
 
-    const r = await p.enviar(ctx.telefono, mensaje, `convenios.${cual}`, tenantId, ahora);
+    // R10-3: entre leer la foto y ganar el reclamo pudo caer un refresco del convenio (edición con «llevar a los viajes»). Mandar el texto viejo
+    // y sellarlo dejaba al operador con instrucciones viejas y a la foto nueva sin quien la reenviara. Con el reclamo ya ganado se relee la foto:
+    // si cambió, el mensaje se arma con la nueva (y si ya no trae nada para este momento, se suelta el reclamo y no se manda).
+    let aMandar = mensaje;
+    const fresca = await p.ligado(tenantId, viajeId);
+    if (fresca && JSON.stringify(fresca.instrucciones) !== JSON.stringify(ligado.instrucciones)) {
+      const nuevo = cual === 'despacho'
+        ? armarMensajeDespacho(base, fresca.instrucciones, opciones)
+        : armarMensajeAcercamiento(base, fresca.instrucciones, cual === 'acercamiento_origen' ? 'origen' : 'destino');
+      if (!nuevo) { await p.liberar(tenantId, viajeId, cual); return { estado: 'sin_instrucciones' }; }
+      aMandar = nuevo;
+    }
+
+    const r = await p.enviar(ctx.telefono, aMandar, `convenios.${cual}`, tenantId, ahora);
     if (r.ok) {
       await p.cerrar(tenantId, viajeId, cual, r.via, ahora);
       return { estado: 'enviado', canal: r.via };

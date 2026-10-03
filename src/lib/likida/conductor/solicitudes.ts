@@ -166,7 +166,11 @@ export function situacionSenalVida(motivo: MotivoSenalVida, minutos: number): st
 export function armarSenalVida(v: ViajeContexto, nivel: 1 | 2, motivo: MotivoSenalVida, minutos: number): MensajeSaliente {
   const nombre = primerNombre(v.operadorNombre);
   const folio = folioDe(v);
-  const situacion = (nivel === 2 ? 'segundo aviso: ' : '') + situacionSenalVida(motivo, minutos);
+  // El segundo aviso le dice al chofer lo que pidió el cliente, con sus palabras: «si no contestas aviso al jefe». Va dentro de la misma
+  // variable de la plantilla (una línea, sin saltos), así el texto libre y la plantilla dicen lo mismo y no hay que reaprobar el cuerpo.
+  const situacion = nivel === 2
+    ? `segundo aviso: ${situacionSenalVida(motivo, minutos)}. Si no contestas, aviso al jefe de tráfico`
+    : situacionSenalVida(motivo, minutos);
   const P = PREFIJO_BOTON;
   return {
     texto: `Hola ${nombre}, sobre tu viaje ${folio}: ${situacion}. ¿Sigues bien? Toca un botón para avisarnos.`,

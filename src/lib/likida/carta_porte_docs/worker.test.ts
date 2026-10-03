@@ -246,6 +246,13 @@ describe('el texto del aviso', () => {
     expect(a.resumen.length).toBeLessThanOrEqual(60);
   });
 
+  it('el aviso de dudas dice POR DÓNDE llegó el documento: correo, WhatsApp o el panel (0695: ya no es solo de correo)', () => {
+    const v = { hallazgos: [], bloqueos: 1, porConfirmar: 0, listoParaAprobar: false };
+    expect(armarAviso('hallazgos', doc({ canal: 'correo', validacion: v }), `${URL}/d1`).texto).toContain('Llegó por correo el documento');
+    expect(armarAviso('hallazgos', doc({ canal: 'whatsapp', validacion: v }), `${URL}/d1`).texto).toContain('Llegó por WhatsApp el documento');
+    expect(armarAviso('hallazgos', doc({ canal: 'manual', validacion: v }), `${URL}/d1`).texto).toContain('Llegó por el panel el documento');
+  });
+
   it('un nombre de archivo larguísimo se recorta', () => {
     const a = armarAviso('agotado', doc({ nombreArchivo: `${'x'.repeat(300)}.pdf` }), `${URL}/d1`);
     expect(a.texto.length).toBeLessThan(400);

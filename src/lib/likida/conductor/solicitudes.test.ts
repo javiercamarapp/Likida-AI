@@ -146,6 +146,18 @@ describe('sin señal de vida (P2): el «¿sigues bien?» y el aviso al jefe', ()
     expect(armarSenalVida(viaje, 1, 'gps_obsoleto', 75).texto).not.toContain('segundo aviso');
   });
 
+  it('el SEGUNDO aviso advierte, en palabras del cliente, que si no contesta se avisa al jefe (texto Y plantilla); el primero no amenaza', () => {
+    for (const motivo of ['gps_obsoleto', 'gps_detenido'] as const) {
+      const dos = armarSenalVida(viaje, 2, motivo, 75);
+      expect(dos.texto).toContain('Si no contestas, aviso al jefe de tráfico');
+      expect(JSON.stringify(dos.plantilla)).toContain('Si no contestas, aviso al jefe de tráfico');
+      expect(dos.texto).toMatch(/¿Sigues bien\? Toca un botón/);
+      const uno = armarSenalVida(viaje, 1, motivo, 75);
+      expect(uno.texto).not.toMatch(/jefe/);
+      expect(JSON.stringify(uno.plantilla)).not.toMatch(/jefe/);
+    }
+  });
+
   it('el aviso al jefe: texto y plantilla coinciden, con «Ya lo atiendo» (el mismo botón del jefe) y la ubicación', () => {
     const m = armarEscalacionSenalVida(viaje, 'gps_obsoleto', 80, 'hace 70 min: https://maps.google.com/?q=20.70000,-103.40000');
     coinciden(m);

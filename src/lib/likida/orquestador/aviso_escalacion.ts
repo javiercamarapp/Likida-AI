@@ -2,7 +2,7 @@ import { correoConfigurado, enviarCorreo } from '@/lib/correo/enviar';
 import { avisoEscalacionAsistente } from '@/lib/correo/avisos';
 import { logger } from '@/lib/logger';
 import { fechaHoraMx } from '@/lib/formato';
-import { agentePorId, leerConfigNotificaciones, repartoDe, usuariosAvisables, type ConfigNotificaciones } from '../agentes/notificaciones';
+import { agentePorId, leerConfigNotificaciones, MAX_DESTINATARIOS, repartoDe, usuariosAvisables, type ConfigNotificaciones, type UsuarioAvisable } from '../agentes/notificaciones';
 import { ETIQUETA_DESTINO, ETIQUETA_MOTIVO, type Destino, type Motivo } from './escalamiento';
 import { rolPuedeLeerTarea } from './permisos';
 
@@ -22,7 +22,9 @@ import { rolPuedeLeerTarea } from './permisos';
 //     cron escalar y la creación en caliente— no mandan dos correos. Un envío que falla se reintenta a los 10 min,
 //     hasta 3 intentos; luego `agotado` (se ve en la tarea).
 //  4. QUIÉN RECIBE: las cuentas que el dueño marcó, que pueden abrir la pantalla Y que pueden LEER esa tarea (una
-//     tarea de dinero —diferencia de liquidación, duda fiscal— no llega al encargado: `rolPuedeLeerTarea`).
+//     tarea de dinero —diferencia de liquidación, duda fiscal— no llega al encargado: `rolPuedeLeerTarea`). Si la tarea va
+//     DIRIGIDA al contador (`destino = 'contador'`) también le llega a sus cuentas activas con correo: la pantalla del asistente
+//     no es suya, por eso no sale del reparto por pantalla, pero la tarea es de él (R09-3: antes ningún contador la recibía).
 //  5. TOPE: a lo más 3 correos por flota y por corrida; el resto espera a la siguiente (sin perderse).
 //  6. NUNCA LANZA y nunca decide nada: manda un correo con el resumen YA limpio (sin teléfonos, correos ni ligas).
 // ═══════════════════════════════════════════════════════════════════════════
@@ -71,8 +73,22 @@ export const esUrgente = (m: Motivo): boolean => MOTIVOS_URGENTES.has(m);
 /** Armado puro del correo de una tarea (para probar el texto y para el aviso). */
 export function correoDeTarea(t: Pick<TareaParaAviso, 'destino' | 'motivo' | 'viajeFolio' | 'resumen'>, flota: string | null) {
   return avisoEscalacionAsistente({
-    flota, destino: ETIQUETA_DESTINO[t.destino], motivo: ETIQUETA_MOTIVO[t.motivo], folio: t.viajeFolio, resumen: t.resumen, urgente: esUrgente(t.motivo),
+    flota, destino: ETIQUETA_DESTINO[t.destino], motivo: ETIQUETA_MOTIVO[t.motivo], folio: t.viajeFolio, resumen: t.resumen, urgente: esUrgente(t.motivo), alContador: t.destino === 'contador',
   });
+}
+
+/** Las cuentas de contador a las que va dirigida una tarea de `destino = 'contador'` (sin repetir correo ni cuentas ya incluidas). */
+function contadoresDestinatarios(t: Pick<TareaParaAviso, 'destino' | 'motivo'>, usuarios: readonly UsuarioAvisable[], yaIncluidos: readonly { email: string }[]): Array<{ id: string; nombre: string | null; email: string; rol: string }> {
+  if (t.destino !== 'contador') return [];
+  const vistos = new Set(yaIncluidos.map((u) => u.email.toLowerCase()));
+  const r: Array<{ id: string; nombre: string | null; email: string; rol: string }> = [];
+  for (const u of usuarios) {
+    const email = u.email?.trim() ?? '';
+    if (u.rol !== 'contador' || email === '' || vistos.has(email.toLowerCase()) || !rolPuedeLeerTarea(u.rol, t)) continue;
+    vistos.add(email.toLowerCase());
+    r.push({ id: u.id, nombre: u.nombre, email, rol: u.rol });
+  }
+  return r;
 }
 
 /** Evalúa una tarea y, si corresponde, manda UN correo. Nunca lanza. */
@@ -101,7 +117,7 @@ export async function avisarEscalacion(tenantId: string, tareaId: string, deps: 
       return 'omitido_sin_canal';
     }
     const reparto = repartoDe(await deps.usuarios(tenantId), conf.ok, agente);
-    const reciben = reparto.reciben.filter((u) => rolPuedeLeerTarea(u.rol, t));
+    const reciben = [...reparto.reciben.filter((u) => rolPuedeLeerTarea(u.rol, t)), ...contadoresDestinatarios(t, await deps.usuarios(tenantId), reparto.reciben)].slice(0, MAX_DESTINATARIOS);
     if (reciben.length === 0) {
       await deps.marcar(tenantId, t.id, 'omitido', 'sin destinatario: nadie marcado puede leer esta tarea');
       return 'omitido_sin_destinatario';
@@ -112,7 +128,9 @@ export async function avisarEscalacion(tenantId: string, tareaId: string, deps: 
     const correo = correoDeTarea(t, await deps.nombreFlota(tenantId));
     const envio = await deps.enviar(reciben.map((u) => u.email), correo);
     if (envio.ok) {
-      await deps.marcar(tenantId, t.id, 'enviado', `a ${reciben.length} ${reciben.length === 1 ? 'cuenta' : 'cuentas'} (${fechaHoraMx(deps.ahora().toISOString())})`);
+      // R09-5: el correo YA salió. Si sellarlo falla (la base parpadeó), un fallo aquí dejaba la tarea pendiente y reclamable: a los
+      // 10 min se reenviaba, hasta 3 veces. Se reintenta el sello y, si de verdad no se pudo, se dice SIN lanzar: el aviso salió.
+      await sellarEnviado(deps, tenantId, t.id, `a ${reciben.length} ${reciben.length === 1 ? 'cuenta' : 'cuentas'} (${fechaHoraMx(deps.ahora().toISOString())})`);
       logger.info('orquestador.aviso_enviado', { tenantId, tarea: t.id, destinatarios: reciben.length, motivo: t.motivo });
       return 'enviado';
     }
@@ -130,6 +148,15 @@ export async function avisarEscalacion(tenantId: string, tareaId: string, deps: 
     logger.error('orquestador.aviso_error', { tenantId, tarea: tareaId, err: e instanceof Error ? e.message : String(e) });
     return 'error';
   }
+}
+
+/** Sella «enviado» con hasta 3 intentos. Nunca lanza: tras un envío exitoso, un error de la base no debe convertirse en otro correo. */
+async function sellarEnviado(deps: DepsAvisoEscalacion, tenantId: string, id: string, detalle: string): Promise<void> {
+  let ultimo = '';
+  for (let i = 0; i < 3; i++) {
+    try { await deps.marcar(tenantId, id, 'enviado', detalle); return; } catch (e) { ultimo = e instanceof Error ? e.message : String(e); }
+  }
+  logger.error('orquestador.aviso_enviado_sin_sello', { tenantId, tarea: id, err: ultimo });
 }
 
 export interface ResumenAvisos { revisadas: number; enviadas: number; omitidas: number; reintentables: number; agotadas: number; topadas: number }

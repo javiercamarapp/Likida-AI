@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { fechaHoraMx, numero, porcentaje } from '@/lib/formato';
 import type { CatalogosFiltro } from '@/lib/likida/conductor/repo_validacion';
 import { textoTiempo } from '@/lib/likida/conductor/planificador';
-import type { Excepcion, FilaTablero, HitoVista, IndicadoresVista, Semaforo, Tablero, TipoExcepcion } from '@/lib/likida/conductor/tablero';
+import type { EpisodioVista, Excepcion, FilaTablero, HitoVista, IndicadoresVista, Semaforo, Tablero, TipoExcepcion } from '@/lib/likida/conductor/tablero';
 import type { Estancia } from '@/lib/likida/conductor/estadias_anden';
 import { AccionesHito, FormaAsignarSitios, type AccionOficinaServidor, type ModoAccion, type OpcionSitio } from './acciones-forma';
 
@@ -182,6 +182,17 @@ export function ColaExcepciones({ excepciones, puedeActuar, accion }: { excepcio
 const FOTO_TEXTO: Record<string, string> = { sello: 'sello', anden: 'andén', recibido: 'recibido', otra: 'foto' };
 const FUENTE_TEXTO: Record<string, string> = { texto: 'texto', boton: 'botón', ubicacion: 'ubicación', foto: 'foto', sistema: 'sistema', oficina: 'oficina' };
 
+/**
+ * R10-8: por qué se ve «omitido». Antes TODO omitido decía «avisó el siguiente», incluso el hito escalado que cerró el barrido de viajes
+ * abiertos hace más de 30 días (`viaje_abierto_vencido`): la oficina creía que el chofer había avisado el siguiente y nadie lo capturó.
+ */
+function textoOmitido(h: HitoVista): string {
+  if (h.omitidoMotivo === 'viaje_abierto_vencido') {
+    return `cerrado sin reporte: el viaje lleva más de 30 días abierto${h.escaladoEn ? ' y ya se había escalado' : ''} · captúralo a mano si hace falta`;
+  }
+  return 'omitido (avisó el siguiente)';
+}
+
 function CeldaHito({ h, puedeActuar, accion, viajeId }: { h: HitoVista; puedeActuar: boolean; accion: AccionOficinaServidor; viajeId: string }) {
   const resuelto = h.estado === 'recibido' || h.estado === 'validado';
   const Icono = h.estado === 'validado' ? CheckCircle2 : resuelto ? CheckCircle2 : h.estado === 'escalado' ? Flag : h.estado === 'omitido' ? CircleDashed : Clock;
@@ -201,7 +212,7 @@ function CeldaHito({ h, puedeActuar, accion, viajeId }: { h: HitoVista; puedeAct
         <div className="cifra-mono" title="Hora del mensaje del chofer (no del evento físico)">{fechaHoraMx(h.horaMensaje)}</div>
       ) : (
         <div style={{ color: 'var(--faint)' }}>
-          {h.estado === 'omitido' ? 'omitido (avisó el siguiente)' : h.estado === 'escalado' ? `escalado${h.atendidaEn ? ' · atendido' : ''}` : h.tocaDesde ? `toca desde ${fechaHoraMx(h.tocaDesde)}` : 'pendiente'}
+          {h.estado === 'omitido' ? textoOmitido(h) : h.estado === 'escalado' ? `escalado${h.atendidaEn ? ' · atendido' : ''}` : h.tocaDesde ? `toca desde ${fechaHoraMx(h.tocaDesde)}` : 'pendiente'}
         </div>
       )}
       {resuelto && (
@@ -276,9 +287,51 @@ export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios }: {
   );
 }
 
+/**
+ * Los episodios de «sin señal de vida» del periodo (nota S de la re-auditoría): cada uno con su cadena de avisos y cómo terminó.
+ * `null` = no se pudo leer (se dice, no se pinta un cero); `[]` = ninguno en el periodo.
+ */
+export function EpisodiosSenalVida({ episodios, dias, hayMas }: { episodios: EpisodioVista[] | null; dias: number; hayMas?: boolean }) {
+  return (
+    <section className="card p-4 space-y-3" aria-label="Sin señal de vida">
+      <h2 className="font-display text-[15px] font-semibold">Sin señal de vida</h2>
+      {episodios === null ? (
+        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No se pudieron leer los episodios ahora mismo.</p>
+      ) : episodios.length === 0 ? (
+        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+          Ningún tractor quedó sin señal de vida en los últimos {dias} {dias === 1 ? 'día' : 'días'} (o la flota no tiene encendido este aviso: se enciende en la configuración del Conductor).
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {episodios.map((e) => (
+            <li key={e.id} className="hairline rounded-lg p-3 text-[12.5px] space-y-1" style={e.urgente ? { borderColor: 'var(--bad)' } : undefined}>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="font-medium">{e.folio}</span>
+                <span style={{ color: 'var(--muted)' }}>{e.chofer}</span>
+                <span className="text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>{e.motivo}</span>
+                <span className="cifra-mono text-[11px]" style={{ color: 'var(--faint)' }}>desde {fechaHoraMx(e.abiertoEn)}</span>
+                <span className="text-[11px] font-medium" style={{ color: e.urgente ? 'var(--bad)' : e.abierto ? 'var(--warn)' : 'var(--ok)' }}>{e.abierto ? 'Abierto' : 'Cerrado'}</span>
+              </div>
+              <div>{e.estado}</div>
+              {e.pasos.length > 0 && (
+                <ol className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]" style={{ color: 'var(--muted)' }}>
+                  {e.pasos.map((p) => <li key={p.texto}>{p.texto} · <span className="cifra-mono">{fechaHoraMx(p.en)}</span></li>)}
+                </ol>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {hayMas && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Hay más episodios en el periodo de los que se listan: se muestran los más recientes.</p>}
+    </section>
+  );
+}
+
 export function TableroHitos({
-  tablero, indicadores, dias, filtros, catalogos, ocultos, accionUrl, puedeActuar, accion, accionSitios, sitios,
+  tablero, indicadores, dias, filtros, catalogos, ocultos, accionUrl, puedeActuar, accion, accionSitios, sitios, episodios, hayMasEpisodios,
 }: {
+  /** Episodios de «sin señal de vida» del periodo; `undefined` = esta vista no los trae (no se pinta la sección). */
+  episodios?: EpisodioVista[] | null; hayMasEpisodios?: boolean;
   tablero: Tablero; indicadores: IndicadoresVista | null; dias: number; filtros: FiltrosVista; catalogos: CatalogosFiltro | null;
   ocultos: Record<string, string>; accionUrl: string; puedeActuar: boolean; accion: AccionOficinaServidor;
   /** Asignar el sitio de carga y de descarga de un viaje (misma firma que las demás acciones del tablero). */
@@ -304,6 +357,7 @@ export function TableroHitos({
         )}
       </section>
       <ColaExcepciones excepciones={tablero.excepciones} puedeActuar={puedeActuar} accion={accion} />
+      {episodios !== undefined && <EpisodiosSenalVida episodios={episodios} dias={dias} hayMas={hayMasEpisodios} />}
       {tablero.filas.length === 0 ? (
         <section className="card p-4 text-[12.5px] flex items-center gap-2" style={{ color: 'var(--muted)' }}>
           <CircleAlert width={14} height={14} aria-hidden />

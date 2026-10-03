@@ -243,6 +243,8 @@ export interface DatosEscalacionAsistente {
   folio: string | null;
   /** Una frase ya limpia (sin teléfonos, correos ni ligas). */
   resumen: string;
+  /** La tarea va dirigida al contador: el botón abre su panel, no el tablero de viajes en vivo. */
+  alContador?: boolean;
   /** Si el motivo exige actuar de inmediato (emergencia): tono urgente. */
   urgente: boolean;
 }
@@ -265,7 +267,10 @@ export function avisoEscalacionAsistente(d: DatosEscalacionAsistente): Correo {
       ['Le toca a', d.destino],
       ...(d.folio ? ([['Viaje', d.folio]] as Array<[string, string]>) : []),
     ],
-    boton: { texto: 'Abrir las tareas del asistente', href: `${APP}/dashboard/viajes-en-vivo` },
+    // La tarea dirigida al contador se abre desde SU panel (el tablero de viajes en vivo no es de su área y lo rebotaría).
+    boton: d.alContador
+      ? { texto: 'Abrir el panel del contador', href: `${APP}/dashboard/contador` }
+      : { texto: 'Abrir las tareas del asistente', href: `${APP}/dashboard/viajes-en-vivo` },
     tono: d.urgente ? 'urgente' : 'atencion',
     porQueLoRecibes: porQue(d.flota, 'supervisas la operación'),
   };

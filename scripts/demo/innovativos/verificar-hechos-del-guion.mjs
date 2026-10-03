@@ -287,12 +287,31 @@ if (av) {
 
 // ── 7. Carta Porte: conteos y el detector REAL sobre el archivo de muestra ──
 const cp = uno('carta porte', `select count(*) as total, count(*) filter (where estado = 'aprobado') as aprobados, count(*) filter (where estado = 'por_revisar') as por_revisar,
-  count(*) filter (where estado = 'rechazado') as rechazados, count(*) filter (where estado = 'recibido') as recibidos, count(*) filter (where estado = 'fallido') as fallidos, (select count(*) from cp_perfil where tenant_id = '${T}') as perfiles from cp_documento where tenant_id = '${T}'`);
+  count(*) filter (where estado = 'rechazado') as rechazados, count(*) filter (where estado = 'recibido') as recibidos, count(*) filter (where estado = 'fallido') as fallidos, count(*) filter (where estado = 'dividido') as divididos, (select count(*) from cp_perfil where tenant_id = '${T}') as perfiles from cp_documento where tenant_id = '${T}'`);
 if (cp) {
-  dice('14 documentos', `${cp.total} documentos de 3 clientes ficticios`, guion);
-  dice('estados de Carta Porte', `${cp.aprobados} aprobados, ${cp.por_revisar} por revisar, ${cp.rechazados} rechazado, ${cp.recibidos} recibido y ${cp.fallidos} fallido`, guion);
+  dice('documentos de Carta Porte', `${cp.total} documentos de 3 clientes ficticios`, guion);
+  dice('estados de Carta Porte', `${cp.aprobados} aprobados, ${cp.por_revisar} por revisar, ${cp.rechazados} rechazado, ${cp.recibidos} recibido, ${cp.fallidos} fallido y ${cp.divididos} dividido`, guion);
   dice('Carta Porte (kit)', `Carta Porte | ${cp.total} documentos, ${cp.perfiles} perfiles`, kit);
   dice('perfiles', `${cp.perfiles} perfiles`, guion);
+}
+// P13 (0670–0672): un Excel con varios embarques partido en hijos por el código REAL (lo hizo sembrar-importadores.mjs).
+const padre = uno('Excel con varios embarques (el original)', `select id, estado, sha256, storage_ruta is null as sin_archivo from cp_documento where tenant_id = '${T}' and nombre_archivo = 'orden_c10_multi_embarques.xlsx'`);
+if (padre) {
+  const hijos = consulta(`select d.nombre_archivo, d.estado, e.indice, e.total, e.clave, e.huella_base = '${padre.sha256}' as huella_del_padre, e.padre_id = '${padre.id}' as es_hijo_del_padre,
+      jsonb_array_length(d.extraccion -> 'mercancias') as mercancias, (d.validacion ->> 'bloqueos')::int as bloqueos, d.storage_ruta is null as sin_archivo
+    from cp_documento_embarque e join cp_documento d on d.id = e.documento_id and d.tenant_id = e.tenant_id where e.tenant_id = '${T}' and e.padre_id = '${padre.id}' order by e.indice`);
+  hecho('el Excel de varios embarques quedó «dividido» (constancia, sin revisión propia)', padre.estado === 'dividido', JSON.stringify(padre));
+  hecho('lo partió en 3 hijos, 1 de 3, 2 de 3 y 3 de 3, con el folio de cada pedido', hijos.length === 3 && hijos.every((h, i) => Number(h.indice) === i + 1 && Number(h.total) === 3) && hijos.map((h) => h.clave).join(',') === 'C10-801,C10-802,C10-803', JSON.stringify(hijos));
+  hecho('cada hijo guarda su linaje (huella base = sha256 del original) y sus renglones de mercancía (2, 3 y 1)', hijos.every((h) => h.huella_del_padre && h.es_hijo_del_padre) && hijos.map((h) => Number(h.mercancias)).join(',') === '2,3,1', JSON.stringify(hijos));
+  hecho('los hijos quedan por revisar con las dudas reales de la validación (no listos para aprobar) y sin archivo en Storage', hijos.every((h) => h.estado === 'por_revisar' && Number(h.bloqueos) > 0 && h.sin_archivo) && padre.sin_archivo === true, JSON.stringify(hijos));
+  dice('P13 en el guion (Excel con varios embarques)', 'orden_c10_multi_embarques.xlsx', guion);
+  dice('P13 en el guion (3 pedidos y 6 renglones)', '3 pedidos y 6 renglones de mercancía', guion);
+  const { prepararContenido } = await jiti.import(join(raiz, 'src/lib/likida/carta_porte_docs/contenido.ts'));
+  const { evaluarDivision } = await jiti.import(join(raiz, 'src/lib/likida/carta_porte_docs/multiembarque.ts'));
+  const contenido = await prepararContenido(new Uint8Array(readFileSync(join(raiz, 'scripts/demo/innovativos/archivos-muestra/carta_porte/orden_c10_multi_embarques.xlsx'))), 'excel');
+  const mapeos = consulta(`select mapeos from cp_perfil_version where tenant_id = '${T}' and version = 1 and perfil_id = (select id from cp_perfil where tenant_id = '${T}' and clave = 'arr-excel-demo')`)[0]?.mapeos ?? [];
+  const plan = evaluarDivision(contenido, { id: 'p', clave: 'arr-excel-demo', nombre: 'Armadora', clienteId: null, formato: 'excel', firma: { formato: 'excel' }, versionActiva: 1, activa: { version: 1, mapeos, ejemplos: [] } }).plan;
+  hecho('el partidor REAL, sobre el archivo de muestra del kit, da los mismos 3 embarques que están sembrados', !!plan && plan.embarques.length === 3 && plan.embarques.map((e) => e.clave).join(',') === 'C10-801,C10-802,C10-803' && plan.embarques.map((e) => e.filas.length).join(',') === '2,3,1', JSON.stringify(plan?.embarques.map((e) => [e.clave, e.filas.length]) ?? null));
 }
 // El worker (0640–0642): las tres huellas que cuenta el guion.
 const w = consulta(`select nombre_archivo, estado, intentos, avisos_oficina ? 'hallazgos' as aviso_hallazgos, avisos_oficina ? 'agotado' as aviso_agotado, storage_ruta is null as sin_archivo
@@ -318,6 +337,16 @@ hecho('Autopartes: 14 min sin respuesta (el guion dice 14 min, SLA 10)', !!auto 
 hecho('Armadora: molesta y en nivel 2', !!arma && Number(arma.molestia_nivel) > 0 && Number(arma.escalamiento_nivel) === 2, JSON.stringify(arma));
 const borr = uno('borrador pendiente de aprobación', `select count(*) as n from vigia_mensaje where tenant_id = '${T}' and estado = 'pendiente_aprobacion'`);
 if (borr) hecho('hay exactamente un borrador pendiente de aprobación', Number(borr.n) === 1, `hay ${borr.n}`);
+
+// ── 8a. P14 (0673): la lista de directores por nivel y el respaldo por correo APAGADO ──────────────────────────
+const dirs = consulta(`select nivel, nombre, telefono, correo from vigia_director where tenant_id = '${T}' order by nivel, nombre`);
+const respaldo = uno('respaldo por correo', `select respaldo_correo, habilitado from vigia_config where tenant_id = '${T}'`);
+hecho('hay 4 directores del Vigía: 2 en el nivel 1 (gerentes de servicio) y 2 en el nivel 2 (director y dueña)', dirs.length === 4 && dirs.filter((d) => Number(d.nivel) === 1).length === 2 && dirs.filter((d) => Number(d.nivel) === 2).length === 2, JSON.stringify(dirs));
+hecho('los directores sembrados son solo de correo y de dominio inválido (nadie real recibe nada)', dirs.length > 0 && dirs.every((d) => d.telefono === null && /\.demo\.invalid$/.test(d.correo)), JSON.stringify(dirs));
+if (respaldo) hecho('el respaldo por correo viene APAGADO y el Vigía también', respaldo.respaldo_correo === false && respaldo.habilitado === false, JSON.stringify(respaldo));
+dice('P14 en el guion (lista de directores)', 'La lista de directores y su respaldo por correo', guion);
+dice('P14 en el guion (respaldo apagado)', 'el respaldo por correo apagado', guion);
+dice('P14 en el kit', 'Directores del Vigía | 4 (2 por nivel)', kit);
 
 // ── 8b. Histórico del Vigía: la tabla del guion sale del análisis REAL sobre lo que guardó el importador ───
 try {

@@ -116,8 +116,9 @@ GPS.
 | Liquidaciones «de su sistema» | 158 | 116 acusadas (8 con «No coincide»), 34 enviadas, 8 fallidas; ninguna pendiente |
 | Formato de liquidación | 1 | derivado del Excel de muestra por el derivador real; copia al jefe de flota (1 teléfono) y aviso de discrepancia (2 teléfonos), todos `28999…` |
 | Avisos de discrepancia | 8 (6 entregados, 2 fallidos) | los 2 fallidos muestran «El aviso no llegó» y **Reavisar**; cada uno con su tarea en la cola del orquestador (8: 3 atendidas, 5 abiertas) |
-| Carta Porte | 14 documentos, 3 perfiles | PDF / Excel / CSV de 3 clientes; aprobados, por revisar, rechazado, uno con **inyección**, uno **recibido** y uno **fallido** (5 intentos) |
+| Carta Porte | 18 documentos, 3 perfiles | PDF / Excel / CSV de 3 clientes; aprobados, por revisar, rechazado, uno con **inyección**, uno **recibido**, uno **fallido** (5 intentos) y **un Excel con 3 embarques partido en 3 hijos** (el original queda `dividido`) |
 | Vigía | 3 contactos críticos, 3 conversaciones, 6 mensajes | una a >10 min sin respuesta, una molesta, una atendida; **agente apagado** (`habilitado = false`) |
+| Directores del Vigía | 4 (2 por nivel) | gerentes de servicio (nivel 1) y director y dueña (nivel 2), **solo con correo `.demo.invalid`**; **respaldo por correo apagado** (`respaldo_correo = false`) |
 | Grupos críticos e histórico | 3 grupos, 642 mensajes | los 3 chats de muestra leídos por el importador real; 2 respuestas rápidas aprobadas de las FAQs |
 | Escalamiento | 6 contactos | jefe de tráfico (nivel 1) y jefe de flota (nivel 2) por terminal; Conductor **apagado** (`activo = false`) |
 | Convenios | 14 con 84 instrucciones de operación | en `cliente_convenio`/`convenio_instruccion`/`convenio_comercial` (0580) y copia en `innovativos_sim.convenio*` |
@@ -184,7 +185,7 @@ lee: los nueve están integrados (`existe`) y son los que usa `validar-archivo.m
 3. **Cargar el real** por el importador de la tabla y abrir la pantalla de la última columna.
 
 Para tener a mano cómo se ven los archivos tal como los exportaría «su sistema»:
-`node scripts/demo/innovativos/exportar-archivos.mjs` (determinista; regenera `archivos-muestra/` desde la misma base).
+`node scripts/demo/innovativos/exportar-archivos.mjs` (determinista; regenera `archivos-muestra/` desde la misma base). El único archivo de muestra que **no** sale de ahí es `whatsapp/resumen_esperado.json`: lo calcula el importador real con `node scripts/demo/innovativos/regenerar-resumen-esperado.mjs` (`--revisar` solo compara). `carta_porte/orden_c10_multi_embarques.xlsx` (P13) sale de `muestra-multiembarque.mjs`.
 
 ### 3.1 GPS: posiciones de **su tabla** (`gps_posiciones`)
 
@@ -308,9 +309,9 @@ Para tener a mano cómo se ven los archivos tal como los exportaría «su sistem
 - **Formato:** «Exportar chat» de WhatsApp: iOS `[20/09/2026, 14:32:10] Nombre: texto` (24 h o `a. m.`/`p. m.`) o Android
   `20/9/26 14:32 - Nombre: texto`; `.txt` o `.zip`. La muestra trae 3 grupos de ~30 días (iOS 24 h, Android, iOS 12 h en
   `.zip`), con preguntas frecuentes por tema, quejas, respuestas lentas (>10 min) y un teléfono y un correo dentro del
-  texto para probar el tapado de datos personales. `whatsapp/resumen_esperado.json` trae los conteos con los que se
-  generó; el lector real los lee con la taxonomía del producto («cita» es `cita_anden`, «documentos» del generador son
-  `documentos` + `factura_pod` y «placas» cae en «otros»), y la prueba de muestras lo comprueba.
+  texto para probar el tapado de datos personales. `whatsapp/resumen_esperado.json` trae lo que **el importador real lee** de cada chat
+  (mensajes, equipo y cliente, esperas de más de 10 min, temas con la taxonomía del producto): lo escribe
+  `regenerar-resumen-esperado.mjs` —ya no el generador de muestras— y la prueba de muestras falla si el archivo deja de coincidir.
 - **Importador:** existe — `vigia/historial` (`export_whatsapp.ts`, `zip_lector.ts`, `analisis.ts`) y la pantalla
   «Grupos e histórico». El autor **nunca se guarda en claro** (hash corto con sal de la flota), los teléfonos y correos
   del texto se tapan, subir dos veces el mismo archivo no duplica (huella sha256) y el equipo se declara por nombre. El
@@ -366,7 +367,8 @@ Todo está integrado en la misma rama: el demo no trae sustitutos de lo que el p
 | Peajes y reclamación | `peajes/cruce_gps.ts`, `peajes/reclamacion.ts` (+ Excel y PDF) | 381 líneas, 17 reclamables, polígono de patio, cursos |
 | Liquidación, formato de la flota, copia y discrepancias | `liquidacion_externa/formato_flota.ts`, `copia_jefe.ts`, `aviso_no_coincide.ts` | formato derivado de la muestra, teléfonos `28999…`, avisos entregados y fallidos |
 | Vigía, grupos e histórico | `vigia/historial/*`, `vigia/respuestas_rapidas.ts` | 3 grupos críticos, 642 mensajes leídos por el importador, 2 respuestas rápidas |
-| Carta Porte y su worker | `carta_porte_docs/*` y el cron `carta-porte-docs` | 14 documentos (uno recibido, uno agotado, uno con aviso por dudas) |
+| Directores del Vigía y respaldo por correo | `vigia/servicio.ts`, `vigia/respaldo_correo.ts`, `vigia_director` (0673) | 4 directores (2 por nivel), solo con correo; el respaldo viene apagado |
+| Carta Porte y su worker | `carta_porte_docs/*` y el cron `carta-porte-docs` | 18 documentos (uno recibido, uno agotado, uno con aviso por dudas, un Excel de 3 embarques partido por `multiembarque.ts` y `cp_documento_dividir`) |
 | Orquestador | `orquestador/*` (tablero en vivo, herramientas de solo lectura, tareas para una persona) | 8 tareas de diferencia de liquidación |
 
 ## 6. Cómo ver las pantallas (ruta prevista — **no ejecutada en esta ronda**)

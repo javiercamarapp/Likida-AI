@@ -303,14 +303,17 @@ export async function listarReglas(tenantId: string): Promise<ReglaEnPantalla[]>
   if (reglas.length === 0) return [];
 
   const ids = reglas.map((r) => r.id);
-  const { data: sellos, error: errSellos } = await acotada(supabaseAdmin()
-    .from('regla_disparo')
-    .select('regla_id, evidencia, disparado_en')
-    .eq('tenant_id', tenantId)
-    .in('regla_id', ids)
-    .order('disparado_en', { ascending: false })
-    .order('objeto_id', { ascending: false })
-    .limit(400), 'reglas.sellos_recientes');
+  // R10-7: solo lo que de verdad SONÓ (`estado = 'enviado'`). Una llave `enviando` es un reclamo en vuelo o huérfano (la corrida murió o
+  // Meta rechazó): sin este filtro aparecía en «lo último que sonó» un caso que nunca se avisó. Sin la 0660 no hay columna `estado`
+  // (todo lo anterior ya se mandó): se reintenta sin el filtro.
+  const leerSellos = (soloEnviados: boolean) => {
+    let q = supabaseAdmin().from('regla_disparo').select('regla_id, evidencia, disparado_en').eq('tenant_id', tenantId).in('regla_id', ids);
+    if (soloEnviados) q = q.eq('estado', 'enviado');
+    return acotada(q.order('disparado_en', { ascending: false }).order('objeto_id', { ascending: false }).limit(400), 'reglas.sellos_recientes');
+  };
+  let lectura = await leerSellos(true);
+  if (lectura.error && esColumnaFaltante(lectura.error)) lectura = await leerSellos(false);
+  const { data: sellos, error: errSellos } = lectura;
   if (errSellos) throw new Error(`listarReglas.sellos: ${errSellos.message}`);
 
   const { data: avisos, error: errAvisos } = await acotada(supabaseAdmin()
@@ -458,6 +461,25 @@ export async function reclamarDisparos(
     token: filas[0]?.o_token ?? '',
     ganados: disparos.filter((d) => ganadas.has(llaveSello(d))),
   };
+}
+
+/**
+ * R10-6: ¿hay OTRA corrida mandando AHORA un aviso de esta misma regla? (llaves `enviando` con otro token y arriendo vigente).
+ * El tope de frecuencia se revisa antes del reclamo; dos corridas solapadas con casos DISTINTOS pasaban las dos ese filtro (ninguna
+ * había registrado aún su aviso) y mandaban dos avisos en la misma hora. Tras ganar el reclamo, quien ve a otra corrida en vuelo
+ * suelta lo suyo y difiere (se reintenta a la hora siguiente): del lado seguro, a lo más se pospone, jamás se manda de más.
+ * Sin la 0660 (sin reclamo) no hay llaves `enviando`: devuelve `false`.
+ */
+export async function hayEnvioAjenoEnVuelo(tenantId: string, reglaId: string, token: string, ahora: Date = new Date()): Promise<boolean> {
+  // orden-no-importa: solo se pregunta si existe al menos una fila.
+  const { data, error } = await acotada(supabaseAdmin().from('regla_disparo').select('objeto_id')
+    .eq('tenant_id', tenantId).eq('regla_id', reglaId).eq('estado', 'enviando')
+    .neq('reclamo_token', token).gt('reclamo_expira_en', ahora.toISOString()).limit(1), 'reglas.envio_ajeno_en_vuelo');
+  if (error) {
+    if (esColumnaFaltante(error)) return false;
+    throw new Error(`hayEnvioAjenoEnVuelo: ${error.message}`);
+  }
+  return (data ?? []).length > 0;
 }
 
 /** Meta ACEPTÓ el aviso: las llaves que lleva este token pasan a `enviado`. LANZA si falla (el aviso ya salió; el arriendo

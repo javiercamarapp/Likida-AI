@@ -195,6 +195,8 @@ describe('guardarConvenioDelPanel (alta y edición en pantalla)', () => {
   const CLI = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0c1';
   const V1 = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0a1';
   const V2 = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0a2';
+  const V3 = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0a3';
+  const V4 = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0a4';
   const ENTRADA = (o: Partial<EntradaConvenio> = {}): EntradaConvenio => ({
     convenioId: '', clienteId: CLI, nombre: 'Ruta norte', origen: '', destino: '', sitioOrigenId: '', sitioDestinoId: '', vigenteDesde: '', vigenteHasta: '', notas: '', version: '',
     instrucciones: [{ categoria: 'puerta', texto: 'Puerta 3', momento: 'ambos', lugar: 'destino' }], llevarAViajes: false, reenviar: false, ...o,
@@ -276,6 +278,23 @@ describe('guardarConvenioDelPanel (alta y edición en pantalla)', () => {
     });
     const r = await guardarConvenioDelPanel(ctx, EDITA({ llevarAViajes: true, reenviar: true }), d);
     expect(r).toMatchObject({ ok: true, mensaje: expect.stringMatching(/mandar a 1 operador.*1 viaje no pudo recibirlas.*Convenio ligado a cada viaje en curso/) });
+  });
+
+  it('R10-2: «sin instrucciones de despacho», «ya se había mandado» y «otro proceso lo manda» NO cuentan como «no pudo recibirlas»', async () => {
+    const d = dg({
+      refrescar: vi.fn(async () => [V1, V2, V3, V4].map((viajeId) => ({ viajeId, reenviar: true }))),
+      enviar: vi.fn(async (_t: string, v: string) => (v === V1 ? { estado: 'sin_instrucciones' as const } : v === V2 ? { estado: 'ya_enviado' as const } : v === V3 ? { estado: 'perdido' as const } : { estado: 'enviado' as const, canal: 'texto' as const })),
+    });
+    const r = await guardarConvenioDelPanel(ctx, EDITA({ llevarAViajes: true, reenviar: true }), d);
+    expect(r).toMatchObject({ ok: true, mensaje: expect.stringContaining('Se volvieron a mandar a 1 operador') });
+    expect(r.ok && r.mensaje).not.toMatch(/no pudo|no pudieron|Convenio ligado a cada viaje/);
+    // y un fallo real junto a ellos SÍ se dice, contando solo los reales
+    const d2 = dg({
+      refrescar: vi.fn(async () => [V1, V2, V3].map((viajeId) => ({ viajeId, reenviar: true }))),
+      enviar: vi.fn(async (_t: string, v: string) => (v === V1 ? { estado: 'ya_enviado' as const } : v === V2 ? { estado: 'rechazado' as const, motivo: 'x', reintentable: false } : { estado: 'fallo' as const, motivo: 'y' })),
+    });
+    const r2 = await guardarConvenioDelPanel(ctx, EDITA({ llevarAViajes: true, reenviar: true }), d2);
+    expect(r2).toMatchObject({ ok: true, mensaje: expect.stringMatching(/2 viajes no pudieron recibirlas/) });
   });
 
   it('un convenio nuevo no tiene viajes: no se refresca aunque se marque', async () => {

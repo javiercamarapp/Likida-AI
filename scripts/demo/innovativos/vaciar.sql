@@ -82,6 +82,9 @@ select :'que' in ('gps', 'todo') as es_gps, :'que' in ('geocercas', 'todo') as e
 \if :es_vigia
   -- Solo los 3 contactos críticos, sus conversaciones y sus 6 mensajes sembrados (ids deterministas). Un contacto o
   -- una conversación sembrados que ya tengan mensajes REALES colgando no se borran.
+  -- La lista de directores sembrada (P14): los 4 ids deterministas del demo; un director que la flota haya dado de alta NO se toca.
+  delete from vigia_director where tenant_id = :'t' and id in (
+    select innovativos_sim.uid('vigiadirector:' || c) from unnest(array['n1a', 'n1b', 'n2a', 'n2b']) c);
   delete from vigia_mensaje where tenant_id = :'t' and id in (
     select innovativos_sim.uid('vigiamsg:' || c || ':' || n) from unnest(array['c05', 'c10', 'c12']) c cross join generate_series(1, 3) n);
   delete from vigia_conversacion v where v.tenant_id = :'t'

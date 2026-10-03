@@ -31,7 +31,7 @@ La numeración histórica del inventario (agentes 5–12) se corrió en uno cuan
 | 9 | Buzón de facturas de proveedores | correo Resend firmado → bandeja → aprobación → export SAP/CONTPAQi; entrega al contador | `buzon-facturas.md` |
 | 10 | GPS (mapa y lectores) | poll/push → asentador → `posicion` → barrido de validación del Conductor | `gps-proveedores.md` |
 | 11 | Comunicación con operadores | aviso de asignación, aceptación, acuse por selector de WhatsApp, hitos (motor del Conductor) | `comunicacion-operadores.md` |
-| 12 | Jornada | marcas + GPS → tope → alerta | sin doc todavía (paquete P10) |
+| 12 | Jornada | marcas + GPS → tope → alerta | `jornada-alerta-tope.md` |
 | 13 | Mis reglas | español libre → confirmación humana → vigilante SQL → WhatsApp | `mis-reglas.md` |
 | — | Convenios / perfiles de cliente | archivo → despacho → acercamiento a la planta → pregunta → exportación | `convenios-clientes.md` |
 | — | Orquestador / tablero en vivo | pregunta por rol → herramientas de solo lectura → escalar a una persona → barrido de salud y aviso | `orquestador.md` |
@@ -52,12 +52,12 @@ criterio: los archivos `e2e/agente-NN-*.e2e.test.ts` los traen como bloques `des
 | 7 | `e2e/agente-07-cobranza.e2e.test.ts` · `agentes/cobranza_gasto_e2e.test.ts` | verde (16 + 24) | sí; la cobranza por gasto, su base sin migrar y su configuración en la segunda |
 | 8 | `e2e/agente-08-escalacion.e2e.test.ts` | verde (15) | sí |
 | 9 | `e2e/agente-09-buzon.e2e.test.ts` · `buzon/ingesta_e2e.test.ts` · `buzon/entrega_e2e.test.ts` · `src/app/api/cron/buzon-entrega/route.test.ts` | verde (15 + 7 + 13 + 8) | sí en el primero; PDF/zip/pareja XML+PDF en `ingesta_e2e`; entrega al contador (CSV+ZIP, reserva atómica, backoff, cron) en `entrega_e2e`; el contrato del cron en `route.test` |
-| 10 | `e2e/agente-10-gps.e2e.test.ts` · `conectores/tabla_propia/e2e.test.ts` | verde (17 + 1) | sí: feliz, fallo (401, 5xx, formato, cofre, cierre durable por flota), duplicado (poll y push), fuera de orden (muestra atrasada, de ayer, futura) y otra flota (mismo `device_id`, huérfanos) |
+| 10 | `e2e/agente-10-gps.e2e.test.ts` · `conectores/tabla_propia/e2e.test.ts` | verde (17 + 7) | sí: feliz, fallo (401, 5xx, formato, cofre, cierre durable por flota), duplicado (poll y push), fuera de orden (muestra atrasada, de ayer, futura) y otra flota (mismo `device_id`, huérfanos) |
 | 11 | `e2e/agente-11-comunicacion-operadores.e2e.test.ts` | verde (16) | sí |
 | 12 | `e2e/agente-12-jornada.e2e.test.ts` · `src/app/api/cron/jornada-alertas/route.test.ts` | verde (26 + 10) | sí; la alerta de tope se enciende desde la sección «Alerta de tope» de `/dashboard/jornada` (P10) |
 | 13 | `e2e/agente-13-mis-reglas.e2e.test.ts` · `reglas/e2e_ciclo_completo.test.ts` | verde (19 + 12) | sí; el respaldo por plantilla y «cuál plantilla usé» en la segunda |
-| — | `convenios/convenios.e2e.test.ts` | verde (3) | sí: feliz y sin convenio; P7 suma el ciclo del cron con convenio editado tras despachar, acercamiento antes del despacho, fuera de orden y otra flota |
-| — | `orquestador/orquestador.e2e.test.ts` · `orquestador/orquestador_vivo.e2e.test.ts` | verde (11 + 7) | rol, aislamiento, escalar a una persona, agente caído, sin PII; aviso apagado por omisión, barrido de salud sin duplicar y cierre solo |
+| — | `convenios/convenios.e2e.test.ts` | verde (9) | sí: feliz, fallo (Meta rechaza, reintentable o no) y sin convenio; P7 suma el ciclo del cron con convenio editado tras despachar, acercamiento antes del despacho, fuera de orden y otra flota |
+| — | `orquestador/orquestador.e2e.test.ts` · `orquestador/orquestador_vivo.e2e.test.ts` | verde (11 + 8) | rol, aislamiento, escalar a una persona, agente caído, sin PII; aviso apagado por omisión, barrido de salud sin duplicar y cierre solo, fuera de orden (tarea atendida o agente recuperado antes del aviso) |
 
 El único `todo` que queda en todo el árbol es el de Carta Porte (salida al layout del cliente). El archivo de pendientes se retiró al integrar P10 y P11. Ningún archivo de esta tabla tiene fallos.
 

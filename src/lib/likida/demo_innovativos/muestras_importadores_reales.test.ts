@@ -26,9 +26,9 @@ import { bytesMuestra, textoMuestra } from './muestras.test.util';
 // geocercas.csv…). Si un importador cambia y la muestra deja de entrar, o entra distinta, esto falla antes del demo.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const ESPERADO = JSON.parse(textoMuestra('whatsapp/resumen_esperado.json')) as Record<string, {
-  mensajes: number; preguntas: number; sin_respuesta_10min: number; quejas: number; por_tema: Record<string, number>;
-}>;
+// `resumen_esperado.json` lo escribe el IMPORTADOR REAL (scripts/demo/innovativos/regenerar-resumen-esperado.mjs), no el generador de muestras.
+type Resumen = { mensajes: number; mensajes_cliente: number; mensajes_equipo: number; descartados: number; sin_respuesta_10min: number; mediana_min: number | null; p90_min: number | null; por_tema: Record<string, number>; quejas: number };
+const ESPERADO = JSON.parse(textoMuestra('whatsapp/resumen_esperado.json')) as Record<string, Resumen>;
 const EQUIPO = ['Despacho Innovativos Demo', 'Servicio a Cliente Demo A', 'Servicio a Cliente Demo B', 'Servicio a Cliente Demo C'];
 const GRUPOS = [['afb', 'whatsapp/grupo_afb_silao_ios.txt'], ['arr', 'whatsapp/grupo_arr_ramos_android.txt'], ['cfn', 'whatsapp/grupo_cfn_apodaca_ios.zip']] as const;
 
@@ -38,27 +38,35 @@ function leerGrupo(rel: string) {
   return { lectura, reporte: analizarHistorial(lectura.mensajes) };
 }
 
-describe('whatsapp: el lector del Vigía y el análisis del histórico leen los 3 chats como el generador los escribió', () => {
-  it.each(GRUPOS)('%s: mensajes, quejas y temas coinciden con resumen_esperado.json', (id, rel) => {
+describe('whatsapp: el lector del Vigía y el análisis del histórico leen los 3 chats; resumen_esperado.json es lo que el importador REAL lee', () => {
+  it.each(GRUPOS)('%s: cada cifra de resumen_esperado.json es la que el importador real calcula (mensajes, equipo/cliente, esperas lentas, temas)', (id, rel) => {
     const e = ESPERADO[id];
     const { lectura, reporte } = leerGrupo(rel);
-    // El generador cuenta TODAS las líneas con encabezado menos la de cifrado; el lector separa las de sistema y multimedia.
-    expect(lectura.mensajes.length + lectura.descartados).toBe(e.mensajes + 1);
     expect(lectura.fechasInvalidas).toBe(0);
-    const tema = (t: string) => reporte.porTema.find((x) => x.tema === t)?.mensajes ?? 0;
-    // La taxonomía real del producto: «cita» es cita_anden; «documentos» del generador = documentos + factura_pod; «placas» no es un tema
-    // del producto y cae en «otro».
-    expect(tema('queja')).toBe(e.quejas);
-    expect(tema('ubicacion')).toBe(e.por_tema.ubicacion);
-    expect(tema('eta')).toBe(e.por_tema.eta);
-    expect(tema('cita_anden')).toBe(e.por_tema.cita);
-    expect(tema('documentos') + tema('factura_pod')).toBe(e.por_tema.documentos);
-    expect(tema('otro')).toBeGreaterThanOrEqual(e.por_tema.placas);
+    const por_tema: Record<string, number> = {};
+    for (const t of reporte.porTema) if (t.mensajes > 0) por_tema[t.tema] = t.mensajes;
+    expect({
+      mensajes: reporte.mensajes, mensajes_cliente: reporte.mensajesCliente, mensajes_equipo: reporte.mensajesEquipo, descartados: lectura.descartados,
+      sin_respuesta_10min: reporte.tiempos.sobreUmbral, mediana_min: reporte.tiempos.medianaMin, p90_min: reporte.tiempos.p90Min, por_tema, quejas: por_tema.queja ?? 0,
+    }).toEqual(e);
     // Hay respuestas lentas (el caso que el Vigía alerta a los 10 min) y el equipo se distingue del cliente.
-    expect(reporte.tiempos.sobreUmbral).toBeGreaterThan(5);
-    expect(reporte.tiempos.sobreUmbral).toBeLessThanOrEqual(e.sin_respuesta_10min);
-    expect(reporte.mensajesEquipo).toBeGreaterThan(0);
-    expect(reporte.mensajesCliente).toBeGreaterThan(0);
+    expect(e.sin_respuesta_10min).toBeGreaterThan(5);
+    expect(e.mensajes_equipo).toBeGreaterThan(0);
+    expect(e.mensajes_cliente).toBeGreaterThan(0);
+  });
+  it('el archivo completo es EXACTAMENTE lo que regenerar-resumen-esperado.mjs escribiría (sin cuentas del generador de muestras)', () => {
+    const regenerado: Record<string, unknown> = { _fuente: JSON.parse(textoMuestra('whatsapp/resumen_esperado.json'))._fuente };
+    for (const [id, rel] of GRUPOS) {
+      const { lectura, reporte } = leerGrupo(rel);
+      const por_tema: Record<string, number> = {};
+      for (const t of reporte.porTema) if (t.mensajes > 0) por_tema[t.tema] = t.mensajes;
+      regenerado[id] = {
+        mensajes: reporte.mensajes, mensajes_cliente: reporte.mensajesCliente, mensajes_equipo: reporte.mensajesEquipo, descartados: lectura.descartados,
+        sin_respuesta_10min: reporte.tiempos.sobreUmbral, mediana_min: reporte.tiempos.medianaMin, p90_min: reporte.tiempos.p90Min, por_tema, quejas: por_tema.queja ?? 0,
+      };
+    }
+    expect(`${JSON.stringify(regenerado, null, 2)}\n`).toBe(textoMuestra('whatsapp/resumen_esperado.json'));
+    expect(String(JSON.parse(textoMuestra('whatsapp/resumen_esperado.json'))._fuente)).toContain('importador real');
   });
   it('de los tres chats sale al menos una FAQ con respuesta típica (de ahí se aprueban las respuestas rápidas)', () => {
     const faqs = GRUPOS.flatMap(([, rel]) => leerGrupo(rel).reporte.faqs).filter((f) => f.respuestaTipica);
