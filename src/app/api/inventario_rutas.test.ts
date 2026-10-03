@@ -230,7 +230,12 @@ import { join, relative, sep } from 'node:path';
 // 104 → 105 (ronda 08, P5 «vigia-cierre»): `api/export/vigia-faqs/route.ts` — GET de la flota de la SESIÓN (`resolverTenantApi`): puerta del dato
 //   (área `operacion`, la de la pantalla del Vigía), del verbo (`puedeExportar`), rate limit por IP y por flota; `grupo` validado como uuid y
 //   buscado CON el tenant de la sesión (uno ajeno es 404); sin las tablas de la 0484 es 409. Prueba: `export/vigia-faqs/route.test.ts`.
-const RUTAS_APP_REVISADAS = 105;
+//
+// 105 → 106 (ola enterprise E1-A, 3-oct-2026): `api/cron/guardia/route.ts` — la guardia de producción pasa de launchd (la Mac de
+//   Javier) al servidor. Su puerta: `puertaCron` (CRON_SECRET, comparación de tiempo constante; sin él 500 y alerta), palanca
+//   `global` fail-closed (ilegible = 500 + aviso) y latido en todo camino de salida. No lee ni devuelve datos de flota: responde
+//   conteos, y los componentes de /estado son un catálogo cerrado de cinco nombres con tres estados. Prueba: `cron/guardia/route.test.ts`.
+const RUTAS_APP_REVISADAS = 106;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

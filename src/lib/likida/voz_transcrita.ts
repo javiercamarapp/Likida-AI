@@ -116,7 +116,7 @@ export async function transcribirNotaDeVoz(args: {
     // escuchar, y esa es la cifra que el tope diario del tenant debe ver.
     await registrarCosto({
       tenantId: args.tenantId, viajeId: null, fase: 'transcripcion',
-      modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.cost,
+      modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.cost, duracionMs: res.ms,
     });
     const texto = res.data.texto?.trim() ?? '';
     if (!res.data.inteligible || !texto) return { ok: false, motivo: 'ilegible' };

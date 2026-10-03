@@ -417,6 +417,7 @@ export async function generateResponse(opts: {
       catch (e) { logger.error('llm.presupuesto_no_liquidado', { runId: opts.budget?.runId, err: e instanceof Error ? e.message : String(e) }); }
     };
     let res: OpenAI.Chat.ChatCompletion;
+    const t0Llamada = Date.now();
     try {
       res = await getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined);
     } catch (e) {
@@ -429,6 +430,8 @@ export async function generateResponse(opts: {
       if (reservation) logger.error('llm.reserva_sin_liquidar_por_error', { runId: opts.budget?.runId, reservaId: reservation.id, err: e instanceof Error ? e.message : String(e) });
       throw e;
     }
+    // E1-A (P1-14): lo que tardó la llamada al proveedor, para `llm_costo.duracion_ms` y el p50/p95 por fase.
+    const ms = Date.now() - t0Llamada;
     const tokensIn = res.usage?.prompt_tokens ?? 0;
     const tokensOut = res.usage?.completion_tokens ?? 0;
     const costo = costoReal(res.usage as { cost?: number } | undefined, m, tokensIn, tokensOut);
@@ -464,7 +467,7 @@ export async function generateResponse(opts: {
     // marca, un consumidor (p.ej. `redactor.ts`) lo escribía en
     // `llm_costo` como si fuera una cifra real.
     return {
-      text: (res.choices[0]?.message?.content ?? '').trim(), model: res.model || m, tokensIn, tokensOut, cost: costoContabilizado,
+      text: (res.choices[0]?.message?.content ?? '').trim(), model: res.model || m, tokensIn, tokensOut, cost: costoContabilizado, ms,
       ...(usageValido ? {} : { noMedido: true as const }),
     };
   };
@@ -648,7 +651,7 @@ export async function generateStructured<T>(opts: {
   temperature?: number;
   /** Reserva dura por corrida/tenant antes de cada intento, incluido fallback. */
   budget?: LlmBudget;
-}): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }> }> {
+}): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>; /** ms en el proveedor, SUMA de todos los intentos del turno (E1-A). */ ms: number }> {
   const model = modelFor(opts.role);
   const fallback = FALLBACK_POR_ROL[opts.role] ?? FALLBACK[model] ?? null;
   const jsonSchema = z.toJSONSchema(opts.schema, { target: 'draft-7' }) as Record<string, unknown>;
@@ -701,6 +704,8 @@ export async function generateStructured<T>(opts: {
    * aquí.
    */
   const costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }> = {};
+  // E1-A: ms acumulados en el proveedor a lo largo de los intentos del turno (lo que el usuario esperó, sin contar la reserva).
+  let msAcumulados = 0;
   const cobrar = (u: { model: string; tokensIn: number; tokensOut: number; cost: number }) => {
     gastado.tokensIn += u.tokensIn;
     gastado.tokensOut += u.tokensOut;
@@ -709,7 +714,7 @@ export async function generateStructured<T>(opts: {
     costoPorModelo[u.model] = { tokensIn: prev.tokensIn + u.tokensIn, tokensOut: prev.tokensOut + u.tokensOut, cost: prev.cost + u.cost };
   };
 
-  const attempt = async (m: string, note?: string, tope?: number): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }> }> => {
+  const attempt = async (m: string, note?: string, tope?: number): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>; ms: number }> => {
     // Si el presupuesto ya se agotó, no se paga una llamada que se va a cortar a
     // media respuesta.
     opts.signal?.throwIfAborted();
@@ -744,15 +749,18 @@ export async function generateStructured<T>(opts: {
       catch (e) { logger.error('llm.presupuesto_no_liquidado', { runId: opts.budget?.runId, err: e instanceof Error ? e.message : String(e) }); }
     };
     let res: OpenAI.Chat.ChatCompletion;
+    const t0Llamada = Date.now();
     try {
       res = await getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined);
     } catch (e) {
+      msAcumulados += Date.now() - t0Llamada;
       // BACKEND-19C2-1: ver el mismo fix en `generateResponse` — no liquidar
       // al monto reservado en error/abort, dejar la fila 'reservado' para
       // que la 0193 (expira_en) la excluya sola del tope diario.
       if (reservation) logger.error('llm.reserva_sin_liquidar_por_error', { runId: opts.budget?.runId, reservaId: reservation.id, err: e instanceof Error ? e.message : String(e) });
       throw e;
     }
+    msAcumulados += Date.now() - t0Llamada;
     const raw = res.choices[0]?.message?.content || '';
     // La llamada se cobra aunque falle: el consumo viaja EN el error para que el
     // contador por liquidación no reporte $0 en los intentos fallidos.
@@ -789,7 +797,7 @@ export async function generateStructured<T>(opts: {
     // Se devuelve el ACUMULADO del turno, no el de este intento: el llamador
     // quiere saber qué costó extraer este comprobante, no qué costó el último
     // reintento.
-    return { data: v.data, raw, model: usage.model, ...gastado, costoPorModelo };
+    return { data: v.data, raw, model: usage.model, ...gastado, costoPorModelo, ms: msAcumulados };
   };
 
   /**

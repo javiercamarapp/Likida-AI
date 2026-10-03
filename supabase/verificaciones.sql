@@ -19577,3 +19577,98 @@ begin
   raise exception E'CP_POR_AVISAR_0695 correo=% whatsapp=% panel=% limpio-no=% una-vez=%   (esperado t / t / t / t / t)',
     r_correo, r_wa, r_panel, r_limpio, r_una;
 end $$;
+
+-- ── 350. Latencias medidas: p50/p95 en SQL, duración de la IA que NO se inventa y retención por tandas (mig. 0700) ──
+-- `latencia_percentiles` calcula con percentile_disc (rango más cercano: un valor que ocurrió) sobre las muestras de la ventana; sobre 1..100 ms da
+-- p50 = 50 y p95 = 95 exactos. `llm_costo.duracion_ms` NULL es «no medido» y NO entra al percentil como cero. `purgar_latencia` borra por tandas (parcial
+-- si queda). La tabla es deny-all y las funciones solo las ejecuta service_role.
+-- Esperado: LATENCIA_0700 checks-rebotan=t percentiles-50-95-max-fallos=t ventana-respetada=t ia-null-no-es-cero=t purga-por-tandas=t sin-grants-abiertos=t
+do $$
+declare
+  ta uuid; r record; checks boolean := true; perc boolean; ventana boolean; ia boolean; purga boolean; grants boolean := true;
+  p jsonb; f text; t text; p_ text;
+begin
+  begin insert into latencia_muestra (tipo, nombre, ms) values ('otro', 'zzz', 1); checks := false; exception when check_violation then null; end;
+  begin insert into latencia_muestra (tipo, nombre, ms) values ('ruta', 'zzz', -1); checks := false; exception when check_violation then null; end;
+  begin insert into latencia_muestra (tipo, nombre, ms) values ('ruta', '', 1); checks := false; exception when check_violation then null; end;
+
+  insert into latencia_muestra (tipo, nombre, ms, ok, creado_en)
+    select 'ruta', 'zzz.0700', g, g <> 100, timestamptz '2031-03-01 12:00:00+00' from generate_series(1, 100) g;
+  insert into latencia_muestra (tipo, nombre, ms, creado_en) values ('ruta', 'zzz.0700', 99999, timestamptz '2031-01-01 12:00:00+00');
+  select * into r from latencia_percentiles('ruta', timestamptz '2031-02-01 00:00:00+00', timestamptz '2031-04-01 00:00:00+00') where nombre = 'zzz.0700';
+  perc := r.p50_ms = 50 and r.p95_ms = 95 and r.max_ms = 100 and r.fallos = 1;
+  ventana := r.muestras = 100;
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0700') returning id into ta;
+  insert into llm_costo (tenant_id, fase, modelo, tokens_in, tokens_out, costo_usd, duracion_ms, created_at)
+    select ta, 'ocr', 'm', 1, 1, 0.001, g * 10, timestamptz '2031-03-01 12:00:00+00' from generate_series(1, 10) g;
+  insert into llm_costo (tenant_id, fase, modelo, tokens_in, tokens_out, costo_usd, created_at)
+    values (ta, 'ocr', 'm', 1, 1, 0.001, timestamptz '2031-03-01 12:00:00+00'), (ta, 'chat', 'm', 1, 1, 0.001, timestamptz '2031-03-01 12:00:00+00');
+  select * into r from llm_costo_percentiles(timestamptz '2031-02-01 00:00:00+00', timestamptz '2031-04-01 00:00:00+00') where fase = 'ocr';
+  ia := r.muestras = 10 and r.sin_duracion = 1 and r.p50_ms = 50 and r.p95_ms = 100;
+  select * into r from llm_costo_percentiles(timestamptz '2031-02-01 00:00:00+00', timestamptz '2031-04-01 00:00:00+00') where fase = 'chat';
+  ia := ia and r.muestras = 0 and r.sin_duracion = 1 and r.p50_ms is null and r.p95_ms is null;
+
+  delete from latencia_muestra where nombre = 'zzz.0700';
+  insert into latencia_muestra (tipo, nombre, ms, creado_en) select 'cron', 'zzz.0700', 5, now() - interval '30 days' from generate_series(1, 1200);
+  p := purgar_latencia(now(), 14, 1000);
+  purga := (p->>'borradas')::int >= 1000 and (p->>'parcial')::boolean and (select count(*) from latencia_muestra where nombre = 'zzz.0700') = 200;
+
+  foreach f in array array['latencia_percentiles(text,timestamptz,timestamptz)', 'llm_costo_percentiles(timestamptz,timestamptz)', 'purgar_latencia(timestamptz,integer,integer)'] loop
+    foreach t in array array['anon', 'authenticated', 'public'] loop
+      if has_function_privilege(t, 'public.' || f, 'execute') then grants := false; end if;
+    end loop;
+    if not has_function_privilege('service_role', 'public.' || f, 'execute') then grants := false; end if;
+  end loop;
+  foreach p_ in array array['select', 'insert', 'update', 'delete'] loop
+    if has_table_privilege('anon', 'public.latencia_muestra', p_) or has_table_privilege('authenticated', 'public.latencia_muestra', p_) then grants := false; end if;
+  end loop;
+  if not (select relrowsecurity from pg_class where oid = 'public.latencia_muestra'::regclass) or exists (select 1 from pg_policies where tablename = 'latencia_muestra') then grants := false; end if;
+
+  raise exception E'LATENCIA_0700 checks-rebotan=% percentiles-50-95-max-fallos=% ventana-respetada=% ia-null-no-es-cero=% purga-por-tandas=% sin-grants-abiertos=%   (esperado t / t / t / t / t / t)',
+    checks, perc, ventana, ia, purga, grants;
+end $$;
+
+-- ── 351. La página de estado pública: contadores por día MX que cuadran, ventana de 30 días sin filas inventadas y guardia en el dominio de cron_latido (mig. 0701) ──
+-- `registrar_estado` suma UNA medición al día MX del componente (ok + degradadas + caídas = muestras siempre; a las 02:00 UTC todavía es el día anterior).
+-- `estado_30_dias` solo devuelve la ventana y no inventa días sin medición. `cron_latido` admite `guardia` (y sigue rechazando un id inventado).
+-- Esperado: ESTADO_0701 contadores=t dia-mexico=t coherencia-rebota=t ventana-30=t guardia-en-dominio=t sin-grants-abiertos=t
+do $$
+declare
+  r record; contadores boolean; dia_mx boolean; coherencia boolean := true; ventana boolean; guardia boolean := true; grants boolean := true; f text; t text; p_ text; n integer;
+begin
+  for i in 1..10 loop perform registrar_estado('app', 'ok', timestamptz '2031-03-03 18:00:00+00'); end loop;
+  for i in 1..3 loop perform registrar_estado('app', 'degradado', timestamptz '2031-03-03 18:05:00+00'); end loop;
+  for i in 1..2 loop perform registrar_estado('app', 'caido', timestamptz '2031-03-03 18:10:00+00'); end loop;
+  select * into r from estado_dia where componente = 'app' and dia = date '2031-03-03';
+  contadores := r.muestras = 15 and r.ok = 10 and r.degradadas = 3 and r.caidas = 2 and (select count(*) from estado_dia where componente = 'app' and dia = date '2031-03-03') = 1;
+  perform registrar_estado('base', 'ok', timestamptz '2031-03-04 02:00:00+00');
+  dia_mx := (select dia from estado_dia where componente = 'base' and dia in (date '2031-03-03', date '2031-03-04')) = date '2031-03-03';
+
+  begin update estado_dia set ok = ok + 1 where componente = 'app' and dia = date '2031-03-03'; coherencia := false; exception when check_violation then null; end;
+  begin perform registrar_estado('app', 'bien', now()); coherencia := false; exception when sqlstate 'PU001' then null; end;
+  begin perform registrar_estado('intruso', 'ok', now()); coherencia := false; exception when check_violation then null; end;
+
+  insert into estado_dia (dia, componente, muestras, ok, degradadas, caidas) values
+    (date '2031-03-04', 'whatsapp', 4, 4, 0, 0), (date '2031-02-03', 'whatsapp', 4, 4, 0, 0), (date '2031-02-02', 'whatsapp', 4, 4, 0, 0);
+  select count(*) into n from estado_30_dias(timestamptz '2031-03-05 00:00:00+00') where componente = 'whatsapp';
+  -- hoy = 4-mar (MX): entran 4-mar y 3-feb (el día 30 de la ventana); 2-feb (el día 31) queda fuera. No hay filas de `correo`: no se inventan.
+  ventana := n = 2 and not exists (select 1 from estado_30_dias(timestamptz '2031-03-05 00:00:00+00') where componente = 'correo');
+
+  insert into cron_latido (id) values ('guardia') on conflict (id) do nothing;
+  begin insert into cron_latido (id) values ('inventado'); guardia := false; exception when check_violation then null; end;
+
+  foreach f in array array['registrar_estado(text,text,timestamptz)', 'estado_30_dias(timestamptz,integer)', 'purgar_estado_dia(timestamptz,integer)'] loop
+    foreach t in array array['anon', 'authenticated', 'public'] loop
+      if has_function_privilege(t, 'public.' || f, 'execute') then grants := false; end if;
+    end loop;
+    if not has_function_privilege('service_role', 'public.' || f, 'execute') then grants := false; end if;
+  end loop;
+  foreach p_ in array array['select', 'insert', 'update', 'delete'] loop
+    if has_table_privilege('anon', 'public.estado_dia', p_) or has_table_privilege('authenticated', 'public.estado_dia', p_) then grants := false; end if;
+  end loop;
+  if not (select relrowsecurity from pg_class where oid = 'public.estado_dia'::regclass) or exists (select 1 from pg_policies where tablename = 'estado_dia') then grants := false; end if;
+
+  raise exception E'ESTADO_0701 contadores=% dia-mexico=% coherencia-rebota=% ventana-30=% guardia-en-dominio=% sin-grants-abiertos=%   (esperado t / t / t / t / t / t)',
+    contadores, dia_mx, coherencia, ventana, guardia, grants;
+end $$;

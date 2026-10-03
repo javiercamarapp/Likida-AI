@@ -108,3 +108,59 @@ export async function getSLOs(): Promise<Slo[]> {
 
   return out;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LATENCIAS MEDIDAS (0700, E1-A/E18) — p50/p95 por ruta, por cron y por fase
+// de IA, calculados EN SQL (`percentile_disc`, el mismo estadístico que el SLO
+// de corridas) sobre `latencia_muestra` y `llm_costo.duracion_ms`.
+//
+// Cada fuente falla POR SEPARADO y lo dice (`null` = no se pudo leer — que NO
+// es «sin datos»). Una lista vacía es un hecho: nadie ha medido todavía.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface FilaLatencia { nombre: string; muestras: number; fallos: number; p50Ms: number; p95Ms: number; maxMs: number }
+export interface FilaLatenciaIa { fase: string; muestras: number; sinDuracion: number; p50Ms: number | null; p95Ms: number | null; maxMs: number | null }
+
+export interface LatenciasMedidas {
+  ventanaDias: number;
+  rutas: FilaLatencia[] | null;
+  crons: FilaLatencia[] | null;
+  ia: FilaLatenciaIa[] | null;
+}
+
+const entero = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0);
+const enteroONulo = (v: unknown): number | null => (v === null || v === undefined ? null : entero(v));
+
+async function percentilesDe(tipo: 'ruta' | 'cron', desde: string): Promise<FilaLatencia[] | null> {
+  try {
+    const { data, error } = await supabaseAdmin().rpc('latencia_percentiles', { p_tipo: tipo, p_desde: desde });
+    if (error) throw new Error(error.message);
+    return (Array.isArray(data) ? data : []).map((f: Record<string, unknown>) => ({
+      nombre: String(f.nombre), muestras: entero(f.muestras), fallos: entero(f.fallos),
+      p50Ms: entero(f.p50_ms), p95Ms: entero(f.p95_ms), maxMs: entero(f.max_ms),
+    }));
+  } catch {
+    return null;
+  }
+}
+
+export async function getLatencias(ventanaDias = 7): Promise<LatenciasMedidas> {
+  const desde = new Date(ahoraMs() - ventanaDias * 86_400_000).toISOString();
+  const [rutas, crons, ia] = await Promise.all([
+    percentilesDe('ruta', desde),
+    percentilesDe('cron', desde),
+    (async (): Promise<FilaLatenciaIa[] | null> => {
+      try {
+        const { data, error } = await supabaseAdmin().rpc('llm_costo_percentiles', { p_desde: desde });
+        if (error) throw new Error(error.message);
+        return (Array.isArray(data) ? data : []).map((f: Record<string, unknown>) => ({
+          fase: String(f.fase), muestras: entero(f.muestras), sinDuracion: entero(f.sin_duracion),
+          p50Ms: enteroONulo(f.p50_ms), p95Ms: enteroONulo(f.p95_ms), maxMs: enteroONulo(f.max_ms),
+        }));
+      } catch {
+        return null;
+      }
+    })(),
+  ]);
+  return { ventanaDias, rutas, crons, ia };
+}

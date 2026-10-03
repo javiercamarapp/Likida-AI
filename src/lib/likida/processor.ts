@@ -2184,7 +2184,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           const imgHash = await hashImagen(dataUrl);
           const ruta = await subirComprobante(op.tenantId, 'sin-viaje', imgHash, dataUrl);
           const ex = await extraerComprobante(dataUrl, reloj.senal(25_000), createLlmBudget(op.tenantId, randomUUID(), 'interactivo'));
-          await registrarCosto({ tenantId: op.tenantId, viajeId: null, fase: 'ocr', modelo: ex.costo.modelo, tokensIn: ex.costo.tokensIn, tokensOut: ex.costo.tokensOut, costoUsd: ex.costo.costoUsd });
+          await registrarCosto({ tenantId: op.tenantId, viajeId: null, fase: 'ocr', modelo: ex.costo.modelo, tokensIn: ex.costo.tokensIn, tokensOut: ex.costo.tokensOut, costoUsd: ex.costo.costoUsd, duracionMs: ex.costo.duracionMs });
           // ── FALLO NUESTRO: AQUÍ TAMPOCO SE PIERDE EL COMPROBANTE ────────────
           //
           // Es la rama GEMELA del `avisar_falla` de más abajo (el camino CON
@@ -2744,7 +2744,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // pagar su propia visión, como antes de la auditoría 8.
         const extraccion = await extraerComprobante(dataUrl, reloj.senal(25_000), createLlmBudget(op.tenantId, randomUUID(), 'interactivo'));
         const { gasto, costo } = extraccion;
-        await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd });
+        await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd, duracionMs: costo.duracionMs });
 
         // Los gastos ya registrados se leen para EMPAREJAR: el acercamiento del
         // protocolo de dos fotos y el voucher de la terminal — y, desde el
