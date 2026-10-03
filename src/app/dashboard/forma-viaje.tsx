@@ -44,10 +44,16 @@ function BotonCrear() {
   );
 }
 
-export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClientes, totalUnidades, puedeCapturarDinero = false }: {
+export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClientes, totalUnidades, puedeCapturarDinero = false, puedeCapturarAnticipo = puedeCapturarDinero, topeAnticipo }: {
   action: AccionCrearViaje;
   /** Sólo visibilidad; la acción vuelve a exigir el permiso de la sesión viva. */
   puedeCapturarDinero?: boolean;
+  /** El anticipo lo captura quien despacha (E1-B), aunque no vea dinero. Por
+   *  defecto sigue a `puedeCapturarDinero` (otros hosts no cambian). */
+  puedeCapturarAnticipo?: boolean;
+  /** Tope de anticipo de la política de la flota, solo para mostrarlo: lo hace
+   *  cumplir la acción del servidor. */
+  topeAnticipo?: number;
   /** La búsqueda de catálogos en el servidor (server action del host, con el
    *  tenant por closure). Una sola referencia para los tres combos. */
   buscarCatalogo: BuscarCatalogo;
@@ -87,10 +93,15 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
           <input id="destino" name="destino" type="text" maxLength={120} placeholder="Monterrey"
             className={CAMPO} style={{ background: 'var(--surface)' }} />
         </div>
-        {puedeCapturarDinero && <div>
+        {puedeCapturarAnticipo && <div>
           <label htmlFor="anticipo" className={ETIQUETA}>Anticipo (MXN)</label>
-          <input id="anticipo" name="anticipo" type="number" min={0} step="0.01" placeholder="8000"
+          <input id="anticipo" name="anticipo" type="number" min={0} max={topeAnticipo} step="0.01" placeholder="8000"
             className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+          {topeAnticipo !== undefined && (
+            <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
+              Tope de la política de tu flota: {topeAnticipo.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })}
+            </p>
+          )}
         </div>}
         <div>
           <label htmlFor="operadorId" className={ETIQUETA}>Operador</label>

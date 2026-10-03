@@ -18,6 +18,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { VistaDespacho } from './vista';
 import { validarIngreso } from '@/lib/likida/ingreso_viaje';
+import { getConfig } from '@/lib/likida/config';
+import { topeAnticipoDe, evaluarAnticipo, TOPE_ANTICIPO_POR_DEFECTO } from '@/lib/likida/crear_viaje_wa';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +50,17 @@ export const dynamic = 'force-dynamic';
  * A nivel de módulo no es una variable capturada, es una referencia del módulo.
  * Las acciones ahora solo cierran sobre `tenantId` y `destino`, dos strings.
  */
+/** El tope de anticipo de la política de la flota (el MISMO que aplica
+ *  WhatsApp). Sin poder leer la política cae al umbral por defecto. */
+async function topeAnticipoDeLaFlota(tenantId: string): Promise<number> {
+  try {
+    return topeAnticipoDe((await getConfig(tenantId)).politica);
+  } catch (err) {
+    logger.warn('despacho.tope_anticipo_no_disponible', { err: err instanceof Error ? err.message : String(err) });
+    return TOPE_ANTICIPO_POR_DEFECTO;
+  }
+}
+
 async function guardiaDespacho(tenantId: string, requiereDinero = false): Promise<string | null> {
   const sesion = await requireSessionTenant('/dashboard/despacho');
   if (!puedeAsignar(sesion.rol)) return 'Tu rol no puede despachar viajes.';
@@ -66,7 +79,9 @@ function safe<T>(fn: () => Promise<T>): Promise<T | null> {
  * operadores sin brincar de página. La foto de solo lectura de la mañana
  * vive en el Resumen del encargado; aquí viven los botones.
  *
- * Área `operacion`: el jefe de tráfico entra y NO hay un peso en pantalla.
+ * Área `operacion`: el jefe de tráfico entra y no ve ingresos ni clientes; la
+ * única cifra que captura es el ANTICIPO, acotado por el tope de la política
+ * de la flota (decisión de Javier, E1-B).
  * Toda action re-verifica sesión y permiso ADENTRO (alcanzables por POST
  * directo), y el tenant viaja por closure del render, nunca del cliente.
  */
@@ -80,6 +95,9 @@ export default async function PaginaDespacho({
   if (!puedeVerRuta(rol, '/dashboard/despacho')) redirect('/dashboard');
 
   const puedeCapturarDinero = puedeVerArea(rol, 'dinero');
+  // Quien despacha (`puedeAsignar`) captura anticipo; ver `crear` abajo.
+  const puedeCapturarAnticipo = puedeAsignar(rol);
+  const topeAnticipo = puedeCapturarAnticipo ? await topeAnticipoDeLaFlota(tenantId) : undefined;
   const sufijo = sufijoTenant(sp);
   const destino = `/dashboard/despacho${sufijo}`;
   // `leerPagina` (repo_paginado.ts) ya clampa a `PAGINA_MAX_VIAJES_EN_CURSO`
@@ -155,7 +173,10 @@ export default async function PaginaDespacho({
     'use server';
     // La presencia se valida antes de leer valores: un POST manual, incluso
     // vacío o con claves repetidas, no concede al encargado captura financiera.
-    const requiereDinero = ['anticipo', 'ingresoFlete', 'clienteId'].some((campo) => fd.has(campo));
+    // E1-B (P0-7, decisión de Javier): el ANTICIPO ya no exige el área `dinero` —
+    // el encargado puede darlo, acotado por el tope de la política (abajo), igual
+    // que por WhatsApp. El ingreso del flete y el cliente siguen siendo dinero.
+    const requiereDinero = ['ingresoFlete', 'clienteId'].some((campo) => fd.has(campo));
     const rechazo = await guardiaDespacho(tenantId, requiereDinero);
     if (rechazo) return { error: rechazo };
 
@@ -165,9 +186,8 @@ export default async function PaginaDespacho({
     };
     const anticipoCrudo = fd.get('anticipo');
     const anticipo = typeof anticipoCrudo === 'string' && anticipoCrudo.trim() !== '' ? Number(anticipoCrudo) : 0;
-    if (!Number.isFinite(anticipo) || anticipo < 0) {
-      return { error: 'El anticipo tiene que ser un monto válido (o dejarse vacío).' };
-    }
+    const veredicto = evaluarAnticipo(anticipo, await topeAnticipoDeLaFlota(tenantId));
+    if (!veredicto.ok) return { error: veredicto.motivo };
     // `viaje.operador_id` es NOT NULL (0001). Sin este guard, elegir "sin
     // operador" llegaba a la base y volvía como un 23502 traducido a "No se
     // pudo crear el viaje": un mensaje que no dice qué arreglar.
@@ -351,6 +371,8 @@ export default async function PaginaDespacho({
   return (
     <VistaDespacho
       puedeCapturarDinero={puedeCapturarDinero}
+      puedeCapturarAnticipo={puedeCapturarAnticipo}
+      topeAnticipo={topeAnticipo}
       tablero={tablero}
       sinAsignar={sinAsignar.filas}
       totalSinAsignar={sinAsignar.total}

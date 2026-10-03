@@ -31,21 +31,34 @@ const datos = () => { const fd = new FormData(); fd.set('operadorId', 'op1'); fd
 
 beforeEach(() => { vi.clearAllMocks(); m.rol = 'encargado'; m.tenant = 't1'; });
 describe('despacho: dinero autorizado por rol vivo', () => {
-  it('encargado no recibe ni consulta conteo comercial y formulario sólo ofrece operación', async () => {
+  it('encargado no recibe ni consulta conteo comercial; el formulario ofrece operación y ANTICIPO, nunca ingreso ni cliente', async () => {
     const p = await props();
     expect(m.contar).not.toHaveBeenCalledWith('t1', 'cliente');
-    const html = renderToStaticMarkup(<FormaViaje action={p.crear} buscarCatalogo={p.buscarCatalogo} totalOperadores={4} totalClientes={p.totalClientes} totalUnidades={4} puedeCapturarDinero={p.puedeCapturarDinero} />);
-    for (const campo of ['anticipo', 'ingresoFlete', 'clienteId']) expect(html).not.toContain(`name="${campo}"`);
+    const html = renderToStaticMarkup(<FormaViaje action={p.crear} buscarCatalogo={p.buscarCatalogo} totalOperadores={4} totalClientes={p.totalClientes} totalUnidades={4} puedeCapturarDinero={p.puedeCapturarDinero} puedeCapturarAnticipo={p.puedeCapturarAnticipo} topeAnticipo={p.topeAnticipo} />);
+    // E1-B (decisión de Javier): el anticipo SÍ, con el tope de la política a la vista.
+    expect(html).toContain('name="anticipo"');
+    expect(html).toContain('Tope de la política');
+    for (const campo of ['ingresoFlete', 'clienteId']) expect(html).not.toContain(`name="${campo}"`);
     expect(html).toContain('name="operadorId"');
   });
-  it.each(['anticipo', 'ingresoFlete', 'clienteId'])('POST manual de encargado con %s se rechaza antes de mutar', async campo => {
+  it.each(['ingresoFlete', 'clienteId'])('POST manual de encargado con %s se rechaza antes de mutar', async campo => {
     const p = await props(); const fd = datos(); fd.set(campo, campo === 'clienteId' ? 'c1' : '8000');
     await expect(p.crear(null, fd)).resolves.toMatchObject({ error: expect.stringMatching(/rol/i) });
     expect(m.crear).not.toHaveBeenCalled();
   });
-  it('campos prohibidos vacíos/duplicados tampoco pasan como operación', async () => {
-    const p = await props(); const fd = datos(); fd.append('anticipo', ''); fd.append('anticipo', '900');
+  it('campos de ingreso vacíos/duplicados tampoco pasan como operación', async () => {
+    const p = await props(); const fd = datos(); fd.append('ingresoFlete', ''); fd.append('ingresoFlete', '900');
     await expect(p.crear(null, fd)).resolves.toHaveProperty('error'); expect(m.crear).not.toHaveBeenCalled();
+  });
+  it('encargado captura anticipo dentro del tope de la política y se crea con ese monto', async () => {
+    const p = await props(); const fd = datos(); fd.set('anticipo', '8000');
+    await expect(p.crear(null, fd)).rejects.toThrow('REDIRECT:');
+    expect(m.crear).toHaveBeenCalledWith('t1', expect.objectContaining({ operadorId: 'op1', anticipo: 8000, clienteId: null, ingresoFlete: null }));
+  });
+  it('encargado con anticipo sobre el tope: se rechaza con el tope a la vista y no se crea nada', async () => {
+    const p = await props(); const fd = datos(); fd.set('anticipo', '100000.01');
+    await expect(p.crear(null, fd)).resolves.toMatchObject({ error: expect.stringMatching(/tope/i) });
+    expect(m.crear).not.toHaveBeenCalled();
   });
   it('encargado sigue creando operación con anticipo por defecto y sin datos comerciales', async () => {
     const p = await props(); await expect(p.crear(null, datos())).rejects.toThrow('REDIRECT:');
@@ -56,9 +69,9 @@ describe('despacho: dinero autorizado por rol vivo', () => {
     expect(m.buscar).not.toHaveBeenCalled(); await p.buscarCatalogo('operador', 'x');
     expect(m.buscar).toHaveBeenCalledWith('t1', 'operador', 'x');
   });
-  it('revocación de dueño a encargado entre render y POST aplica el permiso actual', async () => {
+  it('revocación de dueño a encargado entre render y POST: el ingreso se rechaza con el permiso actual', async () => {
     m.rol = 'flota_admin'; const p = await props(); m.rol = 'encargado';
-    const fd = datos(); fd.set('anticipo', '900'); await expect(p.crear(null, fd)).resolves.toHaveProperty('error');
+    const fd = datos(); fd.set('ingresoFlete', '2000'); await expect(p.crear(null, fd)).resolves.toHaveProperty('error');
     expect(m.crear).not.toHaveBeenCalled();
   });
   it('dueño conserva captura financiera y catálogo de clientes', async () => {
