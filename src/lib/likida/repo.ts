@@ -1989,3 +1989,50 @@ export async function finalizarPollConector(
   if (error) throw new Error(`${recurso}.finalizar: ${error.message}`);
   if (data !== true) throw new Error(`${recurso}.finalizar: lease vencido o ajeno`);
 }
+
+// ── Cobranza SaaS (E1-B, P0-7): lo que la página /admin/cobranza lee ────────
+// Vive aquí y no en la página: la frontera de datos (`frontera_datos_guardiana`)
+// cuenta cada archivo con `.from(` fuera de repo.ts, y esto es lectura pura.
+
+export interface PiezaDunning { titulo: string; estado: string; enviadoEn: string | null; creadoEn: string }
+export interface CorridaDunning { estado: string; fin: string; error: string | null; resumen: Record<string, unknown> | null }
+
+/** Las propuestas de recordatorio del dunning (agente `cobranza_saas`, tipo
+ *  `recordatorio_cobranza`). LANZA si la lectura falla: sin poder leer, la
+ *  página dice que no pudo, no que no hay propuestas. */
+export async function getPiezasDunning(limite = 500): Promise<PiezaDunning[]> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('cola_aprobacion')
+    .select('titulo, estado, enviado_en, creado_en')
+    .eq('agente', 'cobranza_saas')
+    .eq('tipo', 'recordatorio_cobranza')
+    .order('creado_en', { ascending: false })
+    .limit(limite), 'dunning.piezas');
+  if (error) throw new Error(`getPiezasDunning: ${error.message}`);
+  return (data ?? []).map((r) => ({
+    titulo: r.titulo as string,
+    estado: r.estado as string,
+    enviadoEn: (r.enviado_en as string | null) ?? null,
+    creadoEn: r.creado_en as string,
+  }));
+}
+
+/** La última corrida registrada del agente de cobranza SaaS, o `null` si nunca
+ *  corrió (que es un hecho distinto de «no se pudo leer», que lanza). */
+export async function getUltimaCorridaDunning(): Promise<CorridaDunning | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('agente_corrida')
+    .select('estado, fin, error, resumen')
+    .eq('agente', 'cobranza_saas')
+    .order('fin', { ascending: false })
+    .limit(1), 'dunning.corrida');
+  if (error) throw new Error(`getUltimaCorridaDunning: ${error.message}`);
+  const r = data?.[0];
+  if (!r) return null;
+  return {
+    estado: r.estado as string,
+    fin: r.fin as string,
+    error: (r.error as string | null) ?? null,
+    resumen: (r.resumen as Record<string, unknown> | null) ?? null,
+  };
+}
