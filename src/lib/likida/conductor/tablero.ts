@@ -2,7 +2,8 @@ import type { ConfigConductor } from './config';
 import { calcularEstancias, excedeUmbral, type Estancia } from './estadias_anden';
 import { hitoActivo } from './maquina';
 import { anclaDe, textoTiempo } from './planificador';
-import type { AccionOficinaFila, DatosTablero, EpisodioTablero, IndicadoresCrudos, ViajeTablero, VeredictoFila } from './repo_validacion';
+import type { AccionOficinaFila, DatosTablero, IndicadoresCrudos, ViajeTablero, VeredictoFila } from './repo_validacion';
+import type { EpisodioTablero } from './repo';
 import { ETIQUETA, estaResuelto, TIPOS_HITO, type HitoFila, type TipoHito } from './tipos';
 import { llegadaPorConfirmar, llegadaSinSitio, textoVeredicto, type ResultadoValidacion, type Veredicto } from './validacion';
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { episodiosVista } from './tablero';
+import type { EpisodioTablero } from './repo';
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('../presupuesto', () => ({ acotada: (q: unknown) => q }));
@@ -26,7 +27,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-const { leerEpisodiosParaTablero } = await import('./repo_validacion');
+const { leerEpisodiosParaTablero } = await import('./repo');
 const DESDE = new Date('2026-09-25T00:00:00.000Z');
 const UUID_C = '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0a1';
 const fila = (o: Record<string, unknown>) => ({ id: 'e1', viaje_id: 'v1', motivo: 'gps_obsoleto', abierto_en: '2026-10-01T10:00:00Z', nivel_enviado: 0, aviso_1_en: null, aviso_2_en: null, escalado_en: null, cerrado_en: null, cierre_motivo: null, respuesta: null, ...o });
@@ -75,7 +76,7 @@ describe('leerEpisodiosParaTablero', () => {
 });
 
 describe('episodiosVista', () => {
-  const base = { id: 'e1', viajeId: 'v1', folio: 'F-1', operador: 'Ana', motivo: 'gps_obsoleto' as const, abiertoEn: '2026-10-01T10:00:00Z', nivelEnviado: 0 as const, aviso1En: null, aviso2En: null, escaladoEn: null, cerradoEn: null, cierreMotivo: null, respuesta: null };
+  const base: EpisodioTablero = { id: 'e1', viajeId: 'v1', folio: 'F-1', operador: 'Ana', motivo: 'gps_obsoleto', abiertoEn: '2026-10-01T10:00:00Z', nivelEnviado: 0, aviso1En: null, aviso2En: null, escaladoEn: null, cerradoEn: null, cierreMotivo: null, respuesta: null };
 
   it('cuenta la cadena paso por paso: primer aviso, segundo aviso, jefe; el escalado abierto es urgente', () => {
     const [e] = episodiosVista([{ ...base, nivelEnviado: 3, aviso1En: '2026-10-01T10:01:00Z', aviso2En: '2026-10-01T10:21:00Z', escaladoEn: '2026-10-01T10:41:00Z' }]);
@@ -85,7 +86,7 @@ describe('episodiosVista', () => {
   });
 
   it('dice dónde va cada nivel abierto y cómo terminó cada cerrado, con la respuesta del chofer en sus botones', () => {
-    const v = (o: Partial<typeof base> & { nivelEnviado?: 0 | 1 | 2 | 3 }) => episodiosVista([{ ...base, ...o }])[0];
+    const v = (o: Partial<EpisodioTablero>) => episodiosVista([{ ...base, ...o }])[0];
     expect(v({ nivelEnviado: 0 }).estado).toContain('falta mandar el primer aviso');
     expect(v({ nivelEnviado: 1, aviso1En: 'x' }).estado).toBe('Primer aviso mandado, sin respuesta del chofer');
     expect(v({ nivelEnviado: 2 }).urgente).toBe(false);
