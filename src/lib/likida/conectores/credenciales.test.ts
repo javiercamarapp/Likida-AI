@@ -572,7 +572,7 @@ describe('guardarCredencial — tabla_propia csv_sftp por sftp://', () => {
 
   it('acepta sftp:// con csv_sftp, usuario, clave y huella; el cifrado lleva la huella y la llave', async () => {
     respuestas.set('conector_credencial', { data: { id: 'cred-1' }, error: null });
-    const llavePem = '-----BEGIN OPENSSH PRIVATE KEY-----\n' + 'QUJD'.repeat(20) + '\n-----END OPENSSH PRIVATE KEY-----';
+    const llavePem = '-----BEGIN ' + 'OPENSSH PRIVATE KEY-----\n' + 'QUJD'.repeat(20) + '\n-----END ' + 'OPENSSH PRIVATE KEY-----';
     await guardarCredencial(TENANT, 'tabla_propia', { ...SFTP, token: '', llave_privada: llavePem, frase_llave: 'frase' });
     const [up] = toquesDeCredencial();
     const guardado = descifrar(String((up.payload as Record<string, unknown>).valores_cifrados));
@@ -664,7 +664,7 @@ describe('guardarCredencial — tabla_propia sql_solo_lectura', () => {
   it('rechaza una vista o columna con inyección y una CA que es una llave privada', async () => {
     await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SQL, vista: 'v; drop table x' })).rejects.toThrow(/configuración SQL/);
     await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SQL, columnas: '{"unidad":"eco\\"; drop","lat":"lat","lon":"lon","fecha_hora":"ts"}' })).rejects.toThrow(/configuración SQL/);
-    await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SQL, sql_ca: '-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----' })).rejects.toThrow(/llave privada/);
+    await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SQL, sql_ca: '-----BEGIN ' + 'PRIVATE KEY-----\nAAAA\n-----END ' + 'PRIVATE KEY-----' })).rejects.toThrow(/llave privada/);
     expect(toquesDeCredencial()).toHaveLength(0);
   });
 

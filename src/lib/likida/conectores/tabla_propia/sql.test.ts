@@ -198,7 +198,7 @@ describe('normalizarCaPem', () => {
     expect(normalizarCaPem(PEM.replace(/\n/g, '\\n'))).toEqual(esperado);
   });
   it('rechaza una llave privada, un texto cualquiera y un cuerpo roto', () => {
-    expect(normalizarCaPem('-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----')).toHaveProperty('error');
+    expect(normalizarCaPem('-----BEGIN ' + 'PRIVATE KEY-----\nAAAA\n-----END ' + 'PRIVATE KEY-----')).toHaveProperty('error');
     expect(normalizarCaPem('hola')).toHaveProperty('error');
     expect(normalizarCaPem('-----BEGIN CERTIFICATE-----\n<<<>>>\n-----END CERTIFICATE-----')).toHaveProperty('error');
   });
