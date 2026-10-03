@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clasificarBandeja, decidirAvisos, decidirBaseCaida, estadoDeDetalle, claveDeItem, huellaDeClave, lineasDeAviso, estadoTrasAviso, ESTADO_GUARDIA_INICIAL } from './guardia';
+import { clasificarBandeja, decidirAvisos, decidirBaseCaida, estadoDeDetalle, claveDeItem, huellaDeClave, lineasDeAviso, estadoTrasAviso, decidirApp, ESTADO_GUARDIA_INICIAL } from './guardia';
 import type { BandejaEscalaciones, ItemEscalacion, FuenteLeida } from './escalaciones';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -150,8 +150,12 @@ describe('estadoDeDetalle — no confía en la forma del jsonb', () => {
   it('basura → estado inicial; lo válido se conserva; lo inválido se descarta', () => {
     expect(estadoDeDetalle(null)).toEqual(ESTADO_GUARDIA_INICIAL);
     expect(estadoDeDetalle('x')).toEqual(ESTADO_GUARDIA_INICIAL);
-    expect(estadoDeDetalle({ vistos: ['a', 3, null, 'b'], baseCaidaDesde: 'no es fecha' })).toEqual({ vistos: ['a', 'b'], baseCaidaDesde: null });
-    expect(estadoDeDetalle({ vistos: 'x', baseCaidaDesde: '2026-10-03T00:00:00Z' })).toEqual({ vistos: [], baseCaidaDesde: '2026-10-03T00:00:00Z' });
+    expect(estadoDeDetalle({ vistos: ['a', 3, null, 'b'], baseCaidaDesde: 'no es fecha' })).toEqual({ ...ESTADO_GUARDIA_INICIAL, vistos: ['a', 'b'] });
+    expect(estadoDeDetalle({ vistos: 'x', baseCaidaDesde: '2026-10-03T00:00:00Z' })).toEqual({ ...ESTADO_GUARDIA_INICIAL, baseCaidaDesde: '2026-10-03T00:00:00Z' });
+    // A3: la racha y el inicio de la caída de la app viajan en el detalle; basura (negativos, fechas, tipos) se descarta.
+    expect(estadoDeDetalle({ rachaApp: 1, appCaidaDesde: '2026-10-03T00:00:00Z', appAvisada: true, rachaBandeja: 2 }))
+      .toEqual({ ...ESTADO_GUARDIA_INICIAL, rachaApp: 1, appCaidaDesde: '2026-10-03T00:00:00Z', appAvisada: true, rachaBandeja: 2 });
+    expect(estadoDeDetalle({ rachaApp: -3, appCaidaDesde: 'x', appAvisada: 'si', rachaBandeja: 1.5 })).toEqual(ESTADO_GUARDIA_INICIAL);
   });
 });
 
@@ -168,5 +172,26 @@ describe('estadoTrasAviso — «visto» solo si el aviso salió (M5, ronda 19)',
     const d2 = decidirAvisos(clasificarBandeja(bandeja([item('corridas', null)]), AHORA), d.estado);
     expect(d2.nuevos).toHaveLength(0);
     expect(estadoTrasAviso(d2, false).vistos).toHaveLength(1);
+  });
+});
+
+describe('decidirApp — histéresis de la app (A3, ronda 19)', () => {
+  const T1 = '2026-10-03T10:00:00Z';
+  const T2 = '2026-10-03T10:05:00Z';
+
+  it('un fallo aislado: racha 1, ni avisa ni marca caída', () => {
+    expect(decidirApp(ESTADO_GUARDIA_INICIAL, true, T1)).toEqual({ racha: 1, desde: T1, caida: false, avisar: false });
+  });
+  it('dos seguidos: caída y aviso (una vez); el desde es el del PRIMER fallo', () => {
+    const a = decidirApp(ESTADO_GUARDIA_INICIAL, true, T1);
+    const b = decidirApp({ ...ESTADO_GUARDIA_INICIAL, rachaApp: a.racha, appCaidaDesde: a.desde }, true, T2);
+    expect(b).toEqual({ racha: 2, desde: T1, caida: true, avisar: true });
+    // ya avisada: sigue caída pero calla
+    expect(decidirApp({ ...ESTADO_GUARDIA_INICIAL, rachaApp: 2, appCaidaDesde: T1, appAvisada: true }, true, T2)).toMatchObject({ caida: true, avisar: false });
+    // si el aviso no salió, se reintenta
+    expect(decidirApp({ ...ESTADO_GUARDIA_INICIAL, rachaApp: 2, appCaidaDesde: T1, appAvisada: false }, true, T2)).toMatchObject({ avisar: true });
+  });
+  it('un sondeo sano reinicia la racha', () => {
+    expect(decidirApp({ ...ESTADO_GUARDIA_INICIAL, rachaApp: 1, appCaidaDesde: T1 }, false, T2)).toEqual({ racha: 0, desde: null, caida: false, avisar: false });
   });
 });

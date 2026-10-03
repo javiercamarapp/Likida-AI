@@ -137,9 +137,20 @@ export interface EstadoGuardia {
   vistos: string[];
   /** Desde cuándo la base está inalcanzable (aviso una vez por racha); `null` si no lo está. */
   baseCaidaDesde: string | null;
+  /** A3 (ronda 19): sondeos de `/api/health` fallidos SEGUIDOS. Un fallo aislado (arranque en frío, timeout) no avisa ni marca caído. */
+  rachaApp: number;
+  /** Desde cuándo (primer sondeo fallido de la racha). Va en la huella del aviso: una caída nueva NO la silencia el piso de 1 h de la anterior. */
+  appCaidaDesde: string | null;
+  /** ¿Ya salió el aviso de esta caída? (M5: si no salió, se reintenta en la siguiente pasada.) */
+  appAvisada: boolean;
+  /** Pasadas seguidas en que la bandeja de escalaciones no se pudo armar con la base sana (M6). */
+  rachaBandeja: number;
 }
 
-export const ESTADO_GUARDIA_INICIAL: EstadoGuardia = { vistos: [], baseCaidaDesde: null };
+export const ESTADO_GUARDIA_INICIAL: EstadoGuardia = { vistos: [], baseCaidaDesde: null, rachaApp: 0, appCaidaDesde: null, appAvisada: false, rachaBandeja: 0 };
+
+/** Sondeos fallidos seguidos que se exigen antes de avisar o marcar la app caída (histéresis). */
+export const SONDEOS_FALLIDOS_PARA_CAIDA = 2;
 
 /** Un tope al estado persistido: lo urgente no puede crecer sin límite dentro de un jsonb de latido. */
 const TOPE_VISTOS = 200;
@@ -160,7 +171,34 @@ export function estadoDeDetalle(detalle: unknown): EstadoGuardia {
   const d = detalle as Record<string, unknown>;
   const vistos = Array.isArray(d.vistos) ? d.vistos.filter((v): v is string => typeof v === 'string').slice(0, TOPE_VISTOS) : [];
   const caida = typeof d.baseCaidaDesde === 'string' && !Number.isNaN(Date.parse(d.baseCaidaDesde)) ? d.baseCaidaDesde : null;
-  return { vistos, baseCaidaDesde: caida };
+  const entero = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? Math.min(v, 1_000) : 0);
+  const desde = typeof d.appCaidaDesde === 'string' && !Number.isNaN(Date.parse(d.appCaidaDesde)) ? d.appCaidaDesde : null;
+  return { vistos, baseCaidaDesde: caida, rachaApp: entero(d.rachaApp), appCaidaDesde: desde, appAvisada: d.appAvisada === true, rachaBandeja: entero(d.rachaBandeja) };
+}
+
+/**
+ * M4 (ronda 19): el estado de dedup vive en la MISMA base que puede caer. Si la base cae, no se puede leer el latido
+ * previo ni escribir el nuevo: sin esto cada pasada creía partir de cero (un aviso por hora de «base inalcanzable»)
+ * y «base volvió» no se emitía nunca. Esta memoria del PROCESO guarda el último estado y se usa cuando la lectura
+ * falla, y su `baseCaidaDesde` completa el estado de la base al volver. LIMITACIÓN (declarada): es por instancia;
+ * un arranque en frío o otra instancia la pierde (a lo más, un aviso repetido bajo el piso de 1 h; nunca silencio).
+ */
+let memoria: EstadoGuardia | null = null;
+export const memoriaDeEstado = {
+  leer: (): EstadoGuardia | null => memoria,
+  guardar: (e: EstadoGuardia): void => { memoria = e; },
+  /** Solo para pruebas. */
+  olvidar: (): void => { memoria = null; },
+};
+
+export interface DecisionApp { racha: number; desde: string | null; caida: boolean; avisar: boolean }
+
+/** A3: la histéresis de la app. `fallo` = el sondeo no obtuvo respuesta de la app. */
+export function decidirApp(previo: EstadoGuardia, fallo: boolean, ahoraIso: string): DecisionApp {
+  if (!fallo) return { racha: 0, desde: null, caida: false, avisar: false };
+  const racha = previo.rachaApp + 1;
+  const caida = racha >= SONDEOS_FALLIDOS_PARA_CAIDA;
+  return { racha, desde: previo.appCaidaDesde ?? ahoraIso, caida, avisar: caida && !previo.appAvisada };
 }
 
 export interface DecisionGuardia {
@@ -184,6 +222,7 @@ export function decidirAvisos(c: ClasificacionGuardia, previo: EstadoGuardia): D
     urgentes, nuevos, ciegasNuevas,
     baseVolvio: previo.baseCaidaDesde !== null,
     estado: {
+      ...previo,
       vistos: [...urgentes.map((i) => huellaDeClave(claveDeItem(i))), ...c.fuentesCiegas.map((f) => huellaDeClave(`ciega|${f.fuente}`))].slice(0, TOPE_VISTOS),
       baseCaidaDesde: null,
     },

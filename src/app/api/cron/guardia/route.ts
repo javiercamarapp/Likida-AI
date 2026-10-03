@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { clasificacionDeGuardia, decidirAvisos, decidirBaseCaida, estadoDeDetalle, estadoTrasAviso, lineasDeAviso, huellaDeClave } from '@/lib/admin/guardia';
+import { clasificacionDeGuardia, decidirApp, decidirAvisos, decidirBaseCaida, estadoDeDetalle, estadoTrasAviso, lineasDeAviso, huellaDeClave, memoriaDeEstado, ESTADO_GUARDIA_INICIAL, SONDEOS_FALLIDOS_PARA_CAIDA, type EstadoGuardia } from '@/lib/admin/guardia';
 import { COMPONENTES_ESTADO, detalleLatidos, leerLatido, puertaCron, purgarObservabilidad, registrarEstado, registrarLatido, type EstadoLatido } from '@/lib/admin/salud';
-import { componentesDesdeHealth, componentesDesdeLatidos, esVentanaDeMantenimiento, medicionVacia, sondearHealth } from '@/lib/admin/estado';
+import { componentesDesdeHealth, componentesDesdeLatidos, esVentanaDeMantenimiento, medicionVacia, sondearHealth, sondeoCiego } from '@/lib/admin/estado';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { conRelojDuro } from '../_reloj_duro';
 import { appUrl } from '@/lib/env';
@@ -76,38 +76,42 @@ export async function GET(req: Request) {
   }
 
   try {
-    // El estado previo viene del latido anterior. Ilegible = se parte de cero (a lo más repite un aviso: mejor eso que callar).
-    const previo = estadoDeDetalle((await leerLatido('guardia').catch(() => null))?.detalle);
+    // El estado previo viene del latido anterior. Si la LECTURA falla (base caída) se usa la memoria del proceso (M4): sin
+    // ella cada pasada de una caída creía partir de cero y nunca se emitía «base volvió». Si la lectura va bien pero el
+    // latido no trae la caída (porque no se pudo escribir durante ella), la memoria completa `baseCaidaDesde`.
+    const enMemoria = memoriaDeEstado.leer();
+    let previoIlegible = false;
+    let previo: EstadoGuardia;
+    try {
+      previo = estadoDeDetalle((await leerLatido('guardia'))?.detalle);
+      if (previo.baseCaidaDesde === null && enMemoria?.baseCaidaDesde) previo = { ...previo, baseCaidaDesde: enMemoria.baseCaidaDesde };
+    } catch {
+      previoIlegible = true;
+      previo = enMemoria ?? { ...ESTADO_GUARDIA_INICIAL };
+    }
     const vence = inicio + maxDuration * 1000 - MARGEN_MS;
     const ahoraIso = new Date(inicio).toISOString();
 
     // ── 1. La bandeja ──────────────────────────────────────────────────────
+    // M6 (ronda 19): si la bandeja lenta/fallida lanza con la base SANA, no es «base inalcanzable»: se aísla, y se sigue
+    // al sondeo de health y al registro de estado (si no, huecos «sin medición» en /estado y un falso aviso de base).
     const CORTE = Symbol('corte');
-    let clasificacion: Awaited<ReturnType<typeof clasificacionDeGuardia>> | typeof CORTE;
+    let clasificacion: Awaited<ReturnType<typeof clasificacionDeGuardia>> | typeof CORTE | null = null;
+    let bandejaError: string | null = null;
     try {
       clasificacion = await conRelojDuro<Awaited<ReturnType<typeof clasificacionDeGuardia>> | typeof CORTE>(clasificacionDeGuardia(inicio), vence, () => CORTE);
     } catch (e) {
-      // Base inalcanzable (o la bandeja entera no se pudo armar): avisar UNA vez por racha.
-      const error = e instanceof Error ? e.message : String(e);
-      const caida = decidirBaseCaida(previo, ahoraIso);
-      if (caida.avisar) {
-        await alertarOperador('guardia.base_inalcanzable', {
-          error: `La guardia no pudo leer la base de producción: ${error.slice(0, 160)}`,
-          codigo: 'guardia_base_inalcanzable',
-        });
-      }
-      logger.error('cron.guardia.base_inalcanzable', { error, codigo: codigoDeError(e) });
-      await registrarLatido('guardia', 'fallo', { ...caida.estado, error: error.slice(0, 200), codigo: 'guardia_base_inalcanzable' });
-      return NextResponse.json({ corrio: false, error: 'base inalcanzable', codigo: 'guardia_base_inalcanzable' }, { status: 500 });
+      bandejaError = e instanceof Error ? e.message : String(e);
+      logger.error('cron.guardia.bandeja_fallo', { error: bandejaError, codigo: codigoDeError(e) });
     }
 
     let cortadoPorReloj = false;
     let detalleBandeja: Record<string, unknown> = {};
-    let estadoNuevo = previo;
+    let estadoNuevo: EstadoGuardia = { ...previo, rachaBandeja: bandejaError === null ? 0 : previo.rachaBandeja + 1 };
     if (clasificacion === CORTE) {
       cortadoPorReloj = true;
       logger.warn('cron.guardia.cortado_por_reloj', {});
-    } else {
+    } else if (clasificacion !== null) {
       const decision = decidirAvisos(clasificacion, previo);
       for (const f of clasificacion.fuentesCiegas) {
         logger.warn('cron.guardia.fuente_ciega', { fuente: f.fuente, error: (f.error ?? 'sin detalle').slice(0, 160) });
@@ -129,21 +133,60 @@ export async function GET(req: Request) {
         });
       }
       // M5: «visto» solo si el aviso salió (sin canal o con el piso, el incidente nuevo sigue pendiente).
-      estadoNuevo = estadoTrasAviso(decision, avisoSalio);
+      estadoNuevo = { ...estadoTrasAviso(decision, avisoSalio), rachaBandeja: 0 };
       detalleBandeja = {
         urgentes: decision.urgentes.length, nuevos: decision.nuevos.length,
         ciegas: clasificacion.fuentesCiegas.length, porSeveridad: clasificacion.porSeveridad,
       };
+    } else {
+      detalleBandeja = { bandejaFallo: true };
     }
 
     // ── 2. Los componentes de /estado ──────────────────────────────────────
     const medicion = medicionVacia();
     const sondeo = await sondearHealth(`${appUrl()}/api/health`);
     Object.assign(medicion, componentesDesdeHealth(sondeo));
-    if (!sondeo.respondio) {
-      await alertarOperador('guardia.app_sin_respuesta', {
-        error: 'La guardia no obtuvo respuesta de /api/health por la URL pública.',
+
+    // ¿Base inalcanzable? Solo si la bandeja no se pudo armar Y hay otra señal de base (el latido previo ilegible o el
+    // propio /api/health diciendo db=fallo): una bandeja lenta con la base sana no lo es (M6).
+    const baseInalcanzable = bandejaError !== null && (previoIlegible || sondeo.db === 'fallo');
+    if (baseInalcanzable) {
+      const caida = decidirBaseCaida(previo, ahoraIso);
+      if (caida.avisar) {
+        await alertarOperador('guardia.base_inalcanzable', {
+          error: `La guardia no pudo leer la base de producción: ${bandejaError!.slice(0, 160)}`,
+          codigo: 'guardia_base_inalcanzable',
+        });
+      }
+      estadoNuevo = { ...estadoNuevo, baseCaidaDesde: caida.estado.baseCaidaDesde };
+    } else if (bandejaError !== null && estadoNuevo.rachaBandeja === SONDEOS_FALLIDOS_PARA_CAIDA) {
+      // Con la base sana pero la bandeja rota dos pasadas seguidas, la guardia está ciega para los S1/S2: se dice.
+      await alertarOperador('guardia.sin_vista', {
+        error: `La guardia no pudo armar la bandeja de escalaciones: ${bandejaError.slice(0, 160)}`,
+        codigo: 'guardia_bandeja_fallo',
+      });
+    }
+
+    // A3 (ronda 19): histéresis. UN sondeo fallido (timeout de 8 s, arranque en frío) no avisa ni marca la app caída; hacen
+    // falta dos seguidos (la racha vive en el detalle del latido). `cual` (desde cuándo) va en la huella del aviso: una
+    // caída que vuelve y cae de nuevo dentro de la hora es OTRA alarma, y el piso de 1 h de alerta.ts no la silencia.
+    const dApp = decidirApp(previo, medicion.app === 'caido', ahoraIso);
+    if (medicion.app === 'caido' && !dApp.caida) medicion.app = null;
+    let appAvisada = dApp.racha === 0 ? false : previo.appAvisada;
+    if (dApp.avisar) {
+      appAvisada = await alertarOperador('guardia.app_sin_respuesta', {
+        error: 'La guardia no obtuvo respuesta válida de /api/health por la URL pública en dos sondeos seguidos.',
         codigo: 'guardia_app_sin_respuesta',
+        cual: `desde=${dApp.desde}`,
+      });
+    }
+    estadoNuevo = { ...estadoNuevo, rachaApp: dApp.racha, appCaidaDesde: dApp.desde, appAvisada };
+    // A2: un health que contestó algo que NO es JSON de health (firewall, 404, mantenimiento) deja la app sin medir; se dice.
+    if (sondeoCiego(sondeo)) {
+      await alertarOperador('guardia.app_sin_medicion', {
+        error: 'La guardia obtuvo una respuesta que no es el JSON de /api/health (firewall, URL mal puesta o mantenimiento): la app no se está midiendo.',
+        codigo: 'guardia_app_sin_medicion',
+        status: String(sondeo.httpStatus),
       });
     }
     try {
@@ -151,10 +194,17 @@ export async function GET(req: Request) {
     } catch (e) {
       logger.warn('cron.guardia.latidos_ilegibles', { err: e instanceof Error ? e.message : String(e) });
     }
-    let sinEscribir = 0;
-    for (const c of COMPONENTES_ESTADO) {
+    // B2: en paralelo (cada escritura está acotada a ~9.5 s: en serie, con la base lenta, cinco pasaban de maxDuration).
+    const escritas = await Promise.all(COMPONENTES_ESTADO.map(async (c) => {
       const m = medicion[c];
-      if (m !== null && !(await registrarEstado(c, m))) sinEscribir++;
+      return m === null ? true : registrarEstado(c, m);
+    }));
+    const sinEscribir = escritas.filter((ok) => !ok).length;
+    memoriaDeEstado.guardar(estadoNuevo);
+
+    if (baseInalcanzable) {
+      await registrarLatido('guardia', 'fallo', { ...estadoNuevo, error: bandejaError!.slice(0, 200), codigo: 'guardia_base_inalcanzable' });
+      return NextResponse.json({ corrio: false, error: 'base inalcanzable', codigo: 'guardia_base_inalcanzable' }, { status: 500 });
     }
 
     // ── 3. La retención, una vez al día ────────────────────────────────────
@@ -168,7 +218,7 @@ export async function GET(req: Request) {
       }
     }
 
-    const parcial = cortadoPorReloj || sinEscribir > 0 || (mantenimiento !== undefined && 'error' in mantenimiento);
+    const parcial = cortadoPorReloj || bandejaError !== null || sinEscribir > 0 || (mantenimiento !== undefined && 'error' in mantenimiento);
     const estado: EstadoLatido = parcial ? 'parcial' : 'ok';
     // `componentes` va en el latido: es lo que lee /estado para el estado ACTUAL (con la hora del propio latido).
     const detalle = { ...estadoNuevo, ...detalleBandeja, componentes: medicion, ...(mantenimiento ? { mantenimiento } : {}), ...(cortadoPorReloj ? { cortadoPorReloj } : {}) };
