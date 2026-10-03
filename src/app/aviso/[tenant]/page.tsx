@@ -66,14 +66,14 @@ export default async function AvisoIntegral({ params }: { params: Promise<{ tena
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant)) notFound();
 
   const datos = await getDatosResponsable(tenant);
-  // `null` también cuando la flota existe pero le falta la RAZÓN SOCIAL: un
-  // aviso sin responsable no dice a quién reclamarle, que es justamente para
-  // lo que sirve. El domicilio ya NO tumba la página (auditoría 19, legal
-  // C3 / C.16): con responsable nombrado, la sección de la fr. I se pinta
-  // como pendiente —igual que el contacto del art. 29— porque un aviso que
-  // dice qué le falta cumple más que un 404 mudo que deja al operador sin
-  // documento por un dato que le toca capturar a su empresa.
+  // `null` SOLO cuando la flota no existe. Ni el domicilio (auditoría 19, legal
+  // C3 / C.16) ni la RAZÓN SOCIAL (auditoría ola 1, #10) tumban ya la página: la
+  // sección de la fr. I se pinta como pendiente —igual que el contacto del art. 29—
+  // y nombra a la flota por su nombre de alta, porque un aviso que dice qué le
+  // falta cumple más que un 404 mudo que deja al operador sin documento por un
+  // dato que le toca capturar a su empresa.
   if (!datos) notFound();
+  const nombreResponsable = datos.razonSocial || datos.nombreFlota || 'la empresa';
 
   const secciones = avisoIntegral(datos);
   const pendientes = secciones.filter((s) => s.pendiente);
@@ -96,7 +96,7 @@ export default async function AvisoIntegral({ params }: { params: Promise<{ tena
         {/* `break-words`: una razón social larga no puede empujar la página a lo
             ancho. En un teléfono eso deja scroll horizontal en TODO el documento. */}
         <h1 className="mt-2 text-2xl font-semibold break-words" style={{ color: 'var(--ink)' }}>
-          {datos.razonSocial}
+          {nombreResponsable}
         </h1>
         <p className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>
           {/* AUDITORÍA 24 (LEG-12, BAJO, reincidente): esto imprimía
@@ -146,7 +146,7 @@ export default async function AvisoIntegral({ params }: { params: Promise<{ tena
         <p>
           La herramienta con la que se procesan estos datos la opera{' '}
           <strong style={{ color: 'var(--ink)' }}>Likida</strong> como persona encargada, por cuenta
-          y bajo instrucciones de {datos.razonSocial}. Este aviso está alojado aquí por encargo de
+          y bajo instrucciones de {nombreResponsable}. Este aviso está alojado aquí por encargo de
           la empresa; la responsable de tus datos sigue siendo ella.
         </p>
       </footer>

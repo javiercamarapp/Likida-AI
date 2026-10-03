@@ -275,6 +275,20 @@ export function topeDerivadoDelPlan(limiteViajesMes: number, piso = pisoTopeTena
   return Number(Math.min(Math.max(derivado, piso), Math.max(techo, piso)).toFixed(6));
 }
 
+/**
+ * El techo diario de una flota con plan SIN límite de viajes (`limite_viajes_mes`
+ * NULL: 'empresa', 0052). Auditoría ola 1, #17: ese NULL caía al piso de $5/día
+ * —~27 viajes de IA al día para una flota de 250 camiones— porque solo se derivaba
+ * del plan cuando el límite era un número > 0. «Sin límite de viajes» no es «sin
+ * datos»: el techo es el del volumen objetivo de escala (`techoDerivadoPorDefectoUsd`,
+ * ~$138/día) o `LIKIDA_LLM_TENANT_DAILY_BUDGET_MAX_USD` si se fijó, y nunca menos
+ * que el piso. Una flota que necesite más lo declara con `presupuestoLlmUsdDia`.
+ */
+export function topeIlimitadoDelPlan(piso = pisoTopeTenantUsd()): number {
+  const techo = positiveEnv(process.env.LIKIDA_LLM_TENANT_DAILY_BUDGET_MAX_USD, techoDerivadoPorDefectoUsd());
+  return Number(Math.max(techo, piso).toFixed(6));
+}
+
 type LectorTenant = {
   from?: (tabla: string) => {
     select: (cols: string) => {
@@ -322,9 +336,13 @@ export async function topeDiarioDelTenant(tenantId: string): Promise<TopeTenantR
       );
       if (rSus.error) throw new Error(`suscripcion.plan: ${rSus.error.message}`);
       const rel = rSus.data?.plan as { limite_viajes_mes?: unknown } | Array<{ limite_viajes_mes?: unknown }> | null | undefined;
-      const limite = Array.isArray(rel) ? rel[0]?.limite_viajes_mes : rel?.limite_viajes_mes;
+      const planFila = Array.isArray(rel) ? rel[0] : rel;
+      const limite = planFila?.limite_viajes_mes;
       const n = typeof limite === 'number' ? limite : typeof limite === 'string' ? Number(limite) : NaN;
-      if (Number.isFinite(n) && n > 0) {
+      if (planFila && (limite === null || limite === undefined)) {
+        // Plan vivo y sin límite de viajes ('empresa'): ilimitado ≠ sin dato.
+        tope = { topeUsd: topeIlimitadoDelPlan(piso), origen: 'plan' };
+      } else if (Number.isFinite(n) && n > 0) {
         const derivadoUsd = topeDerivadoDelPlan(n, piso);
         // REN-A1 (auditoría 28, mecánico): `topeDerivadoDelPlan` acota con
         // `Math.max(derivado, piso)`, así que un plan chico puede "derivarse"

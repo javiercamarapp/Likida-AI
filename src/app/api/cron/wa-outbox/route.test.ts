@@ -37,6 +37,14 @@ vi.mock('@/lib/admin/salud', () => ({
       : new Response(null, { status: 401 }),
 }));
 
+
+/** El sondeo del token (auditoría ola 1, #27) se controla desde la prueba; por omisión sirve. */
+const sondeoToken = vi.hoisted(() => ({ estado: { estado: 'ok' } as Record<string, unknown> }));
+vi.mock('@/lib/meta/client', async (importar) => ({
+  ...(await importar<typeof import('@/lib/meta/client')>()),
+  sondearTokenWhatsApp: async () => sondeoToken.estado,
+}));
+
 const reclamarSalidasWhatsApp = vi.fn(async () => [
   { id: 'out-1', payload: { messaging_product: 'whatsapp', to: '5215512345678', text: { body: 'Tu liquidación está lista' } } },
 ]);
@@ -62,6 +70,7 @@ const CON_SECRETO = { headers: { authorization: 'Bearer secreto-de-prueba' } };
 describe('cron wa-outbox — el kill switch global (BACK-19-1)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sondeoToken.estado = { estado: 'ok' };
     reconciliarReceiptsWhatsApp.mockResolvedValue(0);
     purgarReceiptsWhatsApp.mockResolvedValue(0);
     interruptor = 'encendido';
@@ -162,5 +171,82 @@ describe('receipts del dominio no ocultan un backstop fallido', () => {
     expect(res.status).toBe(500);
     expect(await res.json()).toMatchObject({ fallosBackstop: ['reconciliacion: reconciliar falló', 'purga: purgar falló'] });
     expect(registrarLatido).toHaveBeenLastCalledWith('wa-outbox', 'parcial', expect.any(Object));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA OLA 1, #25 — ÚLTIMA DEFENSA DEL 132018: filas viejas del outbox con
+// parámetros de plantilla crudos (saltos de línea) salen aplanadas.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cron wa-outbox — parámetros de plantilla con saltos de línea (132018)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    interruptor = 'encendido';
+    process.env.WHATSAPP_ACCESS_TOKEN = 'token-de-prueba';
+    process.env.WHATSAPP_PHONE_NUMBER_ID = '123456';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ messages: [{ id: 'wamid.PRUEBA' }] }), { status: 200 },
+    )));
+  });
+
+  it('una fila encolada con \\n\\n en el parámetro sale sin saltos de línea ni tabs', async () => {
+    reclamarSalidasWhatsApp.mockResolvedValueOnce([{
+      id: 'out-gps',
+      payload: {
+        messaging_product: 'whatsapp', to: '5215512345678', type: 'template',
+        template: {
+          name: 'gps_alerta_critica', language: { code: 'es_MX' },
+          components: [
+            { type: 'body', parameters: [{ type: 'text', text: '🚨 Colisión.\n\nMárcale ahora.\tYa.      Gracias' }] },
+            { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: 'asi_ok:1' }] },
+          ],
+        },
+      },
+    }] as never);
+    await GET(new Request('https://likida.ai/api/cron/wa-outbox', CON_SECRETO));
+    const [, init] = (fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0];
+    const enviado = JSON.parse(String(init.body));
+    expect(enviado.template.components[0].parameters[0].text).toBe('🚨 Colisión. Márcale ahora. Ya. Gracias');
+    // el payload del botón no se toca
+    expect(enviado.template.components[1].parameters[0].payload).toBe('asi_ok:1');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA OLA 1, #27 — EL TOKEN VENCIDO NO MUERE EN SILENCIO NI QUEMA INTENTOS.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cron wa-outbox — token de WhatsApp vencido', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    interruptor = 'encendido';
+    process.env.WHATSAPP_ACCESS_TOKEN = 'token-de-prueba';
+    process.env.WHATSAPP_PHONE_NUMBER_ID = '123456';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ messages: [{ id: 'wamid.PRUEBA' }] }), { status: 200 })));
+  });
+
+  it('con el token vencido: NO reclama nada (no se queman intentos), no manda nada, avisa y late fallo', async () => {
+    sondeoToken.estado = { estado: 'vencido', codigo: 190, status: 400 };
+    const res = await GET(new Request('https://likida.ai/api/cron/wa-outbox', CON_SECRETO));
+    const body = await res.json();
+    expect(res.status).toBe(500);
+    expect(body).toMatchObject({ corrio: false, codigo: 'token_vencido' });
+    expect(reclamarSalidasWhatsApp).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(registrarLatido).toHaveBeenCalledWith('wa-outbox', 'fallo', { codigo: 'token_vencido' });
+    expect(logger.error).toHaveBeenCalledWith('wa.token_vencido', expect.objectContaining({ origen: 'sondeo', codigo: 190 }));
+  });
+
+  it('un sondeo INDETERMINADO (Meta caído, red) no bloquea: no es un veredicto sobre el token', async () => {
+    sondeoToken.estado = { estado: 'indeterminado', detalle: 'HTTP 503' };
+    const res = await GET(new Request('https://likida.ai/api/cron/wa-outbox', CON_SECRETO));
+    expect(res.status).toBe(200);
+    expect(reclamarSalidasWhatsApp).toHaveBeenCalled();
+  });
+
+  it('con el token bueno drena como siempre', async () => {
+    sondeoToken.estado = { estado: 'ok' };
+    const res = await GET(new Request('https://likida.ai/api/cron/wa-outbox', CON_SECRETO));
+    expect(res.status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

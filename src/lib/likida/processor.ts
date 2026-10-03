@@ -33,7 +33,9 @@ import {
   bandejasAbiertas,
 } from '@/lib/likida/intake/rafaga';
 import { versionAvisoVigente, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/likida/privacidad';
-import { interpretarHito, sellarHito, mensajeHito } from '@/lib/likida/hitos_viaje';
+import { mensajeEvidencia } from '@/lib/likida/conductor/evidencia';
+import { atenderPreguntaConvenio } from '@/lib/likida/convenios/pregunta';
+import { atenderConductor, atenderAcuseJefe, atenderPinConductor, hitoParaEvidenciaDelChofer, registrarEvidenciaDelChofer, registrarHitoDesdeFoto } from '@/lib/likida/conductor/atender';
 import {
   interpretarMarcaJornada, interpretarConformidadJornada,
   atenderMarcaJornada, atenderConformidadJornada, resumenParaOperador,
@@ -43,8 +45,13 @@ import { puedeAsignar } from '@/lib/auth/permisos';
 import { atenderDespachoOficina } from '@/lib/likida/despacho_wa';
 import { interpretarTalacha, atenderTalachaChofer, atenderAutorizacionTalacha } from '@/lib/likida/talacha_wa';
 import { atenderCcpOficina } from '@/lib/likida/carta_porte_wa';
+import { esCandidatoCartaPorte, ingerirDesdeWhatsapp as ingerirCartaPorteDoc } from '@/lib/likida/carta_porte_docs/whatsapp';
+import { atenderAcuseLiquidacionExterna } from '@/lib/likida/liquidacion_externa/acuse';
 import { interpretarAsistencia, atenderAsistenciaChofer, atenderReconocimientoAsistencia, atenderAsistenciaOficina, anclarUbicacionIncidencia } from '@/lib/likida/asistencia_wa';
 import { atenderCoordinacionOficina, atenderMensajeProveedor, atenderMedioProveedorSinTexto } from '@/lib/likida/asistencia_coordinacion';
+import { atenderMensajeCliente, atenderDecisionVigia } from './vigia/servicio';
+import { crearDepsVigia } from './vigia/deps';
+import { crearRepoVigia } from './vigia/repo';
 import { esCaptionPod, guardarPodDelChofer, mensajePod } from '@/lib/likida/pod_wa';
 import { atenderInformeOficina } from '@/lib/likida/informes_wa';
 import { pideInformePdf, mandarInformePdf, atenderPreguntaLibre, RESPUESTA_OFICINA_SIN_TIEMPO } from '@/lib/likida/oficina_wa';
@@ -80,7 +87,7 @@ import {
 } from '@/lib/likida/conv';
 import { registrarCosto, registrarCostoWhatsApp, faseDeModelo, vincularCostosALiquidacion } from '@/lib/likida/costos';
 import { descartarCartaMuerta } from '@/lib/likida/wa_pendientes';
-import { sendText, sendButtons, sendDocument, downloadMediaAsDataUrl, downloadMediaAsText, metadatosMedia, MAX_XML_BYTES, ImagenDemasiadoPesadaError, destinatarioEnmascarado } from '@/lib/meta/client';
+import { sendText, sendButtons, sendDocument, enviarSolicitudUbicacion, downloadMediaAsDataUrl, downloadMediaAsText, metadatosMedia, MAX_XML_BYTES, ImagenDemasiadoPesadaError, destinatarioEnmascarado } from '@/lib/meta/client';
 import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
 import {
   decidirAcuse, mensajeConfirmar, mensajeAcuse, mensajeRefoto, esPeticionDeFoto,
@@ -305,7 +312,7 @@ async function pegarCodigoEnEspera(tenantId: string, viajeId: string, gasto: Gas
  * Nunca lanza: dejar sin respuesta a quien ejerce un derecho es peor que
  * cualquier fallo que se pueda registrar.
  */
-async function atenderPrivacidad(tenantId: string, operadorId: string | null, telefono: string, texto: string): Promise<void> {
+async function atenderPrivacidad(tenantId: string, operadorId: string | null, telefono: string, texto: string, titularUserId: string | null = null): Promise<void> {
   try {
     // ── LA CONSTANCIA SE DEJA SIEMPRE, antes de decidir qué contestar ──────
     // AUDITORÍA 12, ALTO (legal): el aviso promete "queda registrada tu
@@ -329,6 +336,7 @@ async function atenderPrivacidad(tenantId: string, operadorId: string | null, te
       await registrarSolicitudArco({
         tenantId,
         operadorId,
+        titularUserId,
         titularRef: telefono,
         tipo,
         canal: 'whatsapp',
@@ -429,20 +437,25 @@ export async function ponerAvisoADisposicion(
   try {
     const datos = await getDatosResponsable(tenantId);
     if (!datos) {
-      // El tenant no tiene razón social, domicilio o liga del aviso integral.
-      // NO se manda un aviso a medias: uno con el responsable equivocado —o sin
-      // él— no dice a quién reclamarle, que es justo para lo que sirve.
+      // La flota NO EXISTE (o su fila no se pudo resolver). Un tenant sin razón
+      // social o domicilio YA NO cae aquí (auditoría ola 1, #10): su aviso sale
+      // con esos datos dichos como pendientes — ver `lineaResponsable`.
       logger.error('privacidad.tenant_sin_datos_responsable', { tenantId });
       return 'sin_datos';
+    }
+    if (!datos.razonSocial?.trim() || !datos.domicilio?.trim()) {
+      // No bloquea al chofer, pero SÍ se grita: la empresa tiene que capturarlos
+      // (/dashboard/legal) y hasta entonces el aviso sale con el hueco dicho.
+      logger.warn('privacidad.aviso_con_datos_pendientes', {
+        tenantId, sinRazonSocial: !datos.razonSocial?.trim(), sinDomicilio: !datos.domicilio?.trim(),
+      });
     }
     // AUDITORÍA 28, LEG-A4: la firma que decide si se reenvía tiene que cubrir
     // los DOS textos que el aviso promete comunicar (art. 15 fr. VI) — el
     // simplificado, que es el que SALE, y el integral, que antes podía
     // cambiar (p. ej. #401/LEG-B1, plazo de borrado de cámara) sin que ningún
     // operador con constancia recibiera nada.
-    const vigente = versionAvisoVigente(datos);
-    if (!vigente) return 'sin_datos';
-    const { texto, version } = vigente;
+    const { texto, version } = versionAvisoVigente(datos);
     // El claim vive en SQL: el primer mensaje puede llegar por dos caminos a la
     // vez, y sin él el operador recibiría el aviso dos o tres veces seguidas.
     // Ya se le puso a disposición antes: se puede tratar, y no se repite.
@@ -691,6 +704,24 @@ async function atenderTextoOficina(
     }
   } catch (e) {
     logger.error('oficina.coordinacion_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
+  }
+
+  // ── VIGÍA DE SERVICIO AL CLIENTE (0400): los botones del gerente ────────
+  // `vig_ok:` / `vig_no:` / `vig_tomo:<uuid>` responden a avisos concretos que el Vigía
+  // le mandó (aprobar la respuesta a un cliente, descartarla o tomar el hilo). El tenant
+  // sale de la CUENTA que escribe; el rol se verifica adentro (solo flota_admin y
+  // encargado). Cualquier otro texto devuelve null y sigue su camino.
+  try {
+    const rVigia = await atenderDecisionVigia(
+      { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId }, texto, crearDepsVigia(),
+    );
+    if (rVigia) {
+      logger.info('oficina.vigia_decision', { user: cuenta.userId, rol: cuenta.rol });
+      await sendText(from, rVigia);
+      return true;
+    }
+  } catch (e) {
+    logger.error('oficina.vigia_error', { user: cuenta.userId, err: e instanceof Error ? e.message : String(e) });
   }
 
   // ── COMANDOS DE ADMINISTRACIÓN DE PLATAFORMA (admin_comandos_wa.ts) ──────
@@ -1593,15 +1624,38 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // consulta, con el id), y solo si no hay operador (cuenta de oficina) se
       // cae al tenant-only.
       const porOperador = await buscarOperadorPorTelefono(msg.from).catch(() => null);
+      // 0442 (auditoría ola 1 #46): la cuenta de oficina se conserva COMPLETA
+      // (no solo su tenant): su `userId` es el titular de la solicitud ARCO, y sin
+      // él la cancelación de un dueño/contador/encargado no tenía sobre quién ejecutarse.
+      const cuentaOficina = porOperador ? null : await resolverCuentaOficina(msg.from).catch(() => null);
       const tenantId = porOperador?.tenantId
-        ?? (await resolverCuentaOficina(msg.from).catch(() => null))?.tenantId
+        ?? cuentaOficina?.tenantId
+        // Un CLIENTE de la flota (Vigía, 0400) también ejerce sus derechos por aquí: la
+        // solicitud queda a nombre de SU flota. El teléfono se guarda como `titularRef`
+        // (igual que con un chofer); la supresión de sus chats la ejecuta la flota desde
+        // el tablero del Vigía.
+        ?? (await crearRepoVigia().contactoPorTelefono(msg.from).catch(() => null))?.tenantId
         ?? null;
       if (tenantId) {
-        await atenderPrivacidad(tenantId, porOperador?.operadorId ?? null, msg.from, msg.text);
+        await atenderPrivacidad(tenantId, porOperador?.operadorId ?? null, msg.from, msg.text, cuentaOficina?.userId ?? null);
       } else {
         await sendText(msg.from, 'Claro. No te tengo identificado con una flota en Likida, así que no sé a qué empresa reclamarle. Si trabajaste con una flota que usa Likida, pídeles que te confirmen qué hicieron con tus datos. 🙏');
       }
       return;
+    }
+
+    // ── «YA LO ATIENDO»: EL ACUSE DEL JEFE O DEL PATIO (Agente 5, 0380) ─────────
+    //
+    // El botón de la escalación llega de un número que puede no ser chofer NI
+    // cuenta de la app (un patio responsable configurado solo por teléfono), así que
+    // se atiende ANTES de resolver al operador. `atenderAcuseJefe` exige que el
+    // teléfono sea de la flota del viaje (contacto de tráfico o cuenta de oficina).
+    if (msg.type === 'text' && msg.text) {
+      const acuseJefe = await atenderAcuseJefe(msg.from, msg.text);
+      if (acuseJefe !== null) {
+        await sendText(msg.from, acuseJefe);
+        return;
+      }
     }
 
     const op = await resolveOperador(msg.from);
@@ -1677,6 +1731,32 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           }
         }
 
+        // ── CARTA PORTE MULTI-FORMATO (Agente 3, mig. 0420) ──────────────────
+        // La oficina reenvía el documento de un cliente grande (PDF, Excel, foto con pie
+        // «carta porte», XML con complemento): entra a la bandeja de revisión de SU flota.
+        // Solo para quien puede despachar y solo en flotas que activaron el agente (su
+        // buzón); un XML que no es Carta Porte, o una foto sin pie, siguen su camino.
+        if (cuenta.tenantId && puedeAsignar(cuenta.rol) && msg.mediaId && esCandidatoCartaPorte(msg)) {
+          const tenantCp = cuenta.tenantId;
+          const liga = `${appUrl()}/dashboard/carta-porte/documentos`;
+          const atendido = await ingerirCartaPorteDoc(
+            { tenantId: tenantCp, userId: cuenta.userId, mensaje: msg, nombreRemitente: cuenta.nombre ?? null, urlBandeja: liga },
+            {
+              metadatos: metadatosMedia,
+              descargar: (id) => downloadMediaAsDataUrl(id).catch(() => null),
+              restanteMs: () => reloj.restante(),
+              senal: (ms) => reloj.senal(ms),
+              responder: async (texto) => {
+                await avisarOficina(msg.from, texto, {
+                  parametros: parametrosAvisoOficina(cuenta.nombre ?? 'Oficina', 'Documento de Carta Porte recibido', liga),
+                  contexto: { tenantId: tenantCp, agente: 'carta_porte_docs' },
+                });
+              },
+            },
+          );
+          if (atendido === 'atendido') return;
+        }
+
         // ── LOS MANDOS DE OFICINA, TODOS EN UN SITIO ─────────────────────────
         //
         // Talacha, despacho, asignación, informe y analista viven en
@@ -1743,13 +1823,27 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         }
       }
 
+      // ── ¿ES UN CLIENTE AUTORIZADO DE LA FLOTA? (Vigía de servicio al cliente, 0400) ──
+      // Último intento ANTES de decirle «no te tengo registrado»: un cliente que la flota
+      // dio de alta (allowlist con consentimiento) tiene su propio camino —clasificación,
+      // respuesta con datos reales y aprobación del gerente—. Quien NO está en esa lista
+      // sigue recibiendo la regla de siempre (`no_es_cliente`). Cualquier falla al
+      // buscarlo también cae ahí (ver `atenderMensajeCliente`): el Vigía no puede
+      // dejar a un desconocido sin su respuesta de siempre.
+      const rCliente = await atenderMensajeCliente(msg, crearDepsVigia()).catch((e) => {
+        logger.error('vigia.mensaje_error', { err: e instanceof Error ? e.message : String(e) });
+        return 'no_es_cliente' as const;
+      });
+      if (rCliente === 'reintentar') { await soltarClaim(); return; }
+      if (rCliente === 'atendido') return;
+
       await sendText(msg.from, 'Hola, no te tengo registrado como operador. Pídele a tu flota que te dé de alta en Likida. 🚛');
       return;
     }
     // ── AUDITORÍA 24, ADM-6: EL INTERRUPTOR POR FLOTA (mig. 0297) ───────────
     //
     // `interruptor` (0110) es global — apagarlo corta a las 800 unidades de
-    // Innovativos junto con las demás flotas del piloto. Esta palanca es por
+    // El cliente de demo junto con las demás flotas del piloto. Esta palanca es por
     // (tenant, pipeline): Javier puede frenar SOLO el pipeline de whatsapp de
     // una flota con un incidente, sin tocar a las otras. Se pregunta aquí
     // —ya hay tenant, todavía no arrancó OCR ni cuadre— y se avisa (a
@@ -1982,6 +2076,25 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       return;
     }
 
+    // ── EL ACUSE DE UNA LIQUIDACIÓN EXTERNA (0370) ─────────────────────────────
+    //
+    // Los dos botones del mensaje con que Likida ENTREGA la liquidación que el
+    // SAP del cliente ya calculó («Recibida» / «No coincide»). Llegan como texto
+    // con el id del botón (webhook) y se atienden AQUÍ, antes del `!viajeId`:
+    // la liquidación llega cuando el viaje ya cerró, o sea que este chofer casi
+    // nunca tiene viaje abierto, y sin esto su respuesta caería en «no tienes
+    // viaje abierto». Va DESPUÉS del aviso de privacidad (arriba): registrar su
+    // respuesta es tratar un dato suyo.
+    if (msg.type === 'text' && msg.text) {
+      const respuestaLiqExterna = await atenderAcuseLiquidacionExterna(
+        { tenantId: op.tenantId, operadorId: op.operadorId }, msg.text,
+      );
+      if (respuestaLiqExterna !== null) {
+        await sendText(msg.from, respuestaLiqExterna);
+        return;
+      }
+    }
+
     if (!viajeId) {
       // ── EL XML QUE PEDIMOS NO SE TIRA, aunque el viaje ya haya cerrado ──────
       // `complemento_no_verificable` NO está en SOLO_CONTRALOR a propósito: su
@@ -2071,7 +2184,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           const imgHash = await hashImagen(dataUrl);
           const ruta = await subirComprobante(op.tenantId, 'sin-viaje', imgHash, dataUrl);
           const ex = await extraerComprobante(dataUrl, reloj.senal(25_000), createLlmBudget(op.tenantId, randomUUID(), 'interactivo'));
-          await registrarCosto({ tenantId: op.tenantId, viajeId: null, fase: 'ocr', modelo: ex.costo.modelo, tokensIn: ex.costo.tokensIn, tokensOut: ex.costo.tokensOut, costoUsd: ex.costo.costoUsd });
+          await registrarCosto({ tenantId: op.tenantId, viajeId: null, fase: 'ocr', modelo: ex.costo.modelo, tokensIn: ex.costo.tokensIn, tokensOut: ex.costo.tokensOut, costoUsd: ex.costo.costoUsd, duracionMs: ex.costo.duracionMs });
           // ── FALLO NUESTRO: AQUÍ TAMPOCO SE PIERDE EL COMPROBANTE ────────────
           //
           // Es la rama GEMELA del `avisar_falla` de más abajo (el camino CON
@@ -2373,6 +2486,66 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         return;
       }
 
+      // ── ¿ES EVIDENCIA DE UN HITO? (sello, andén, sello de recibido — 0385) ──────
+      //
+      // Mismo criterio que el POD: el CAPTION decide qué papel es y sin él la foto sigue como comprobante.
+      // Se resuelve PRIMERO a qué hito pertenece (sin hito no se paga la descarga) y se sube con el mismo
+      // pipeline y bucket que el POD. No es un gasto: no toca el OCR, la liquidación ni la barrera del «listo».
+      const evidenciaPrevia = await hitoParaEvidenciaDelChofer({ tenantId: op.tenantId, operadorId: op.operadorId, viajeId, caption: msg.text });
+      if (evidenciaPrevia) {
+        // Sin hito al cual colgarla y sin que la foto pueda ser el aviso: se le dice, como siempre.
+        if (!evidenciaPrevia.hito && !evidenciaPrevia.comoHito) {
+          await say(mensajeEvidencia('sin_hito', evidenciaPrevia.tipo));
+          return;
+        }
+        try {
+          let dataUrl: string | null;
+          try {
+            dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
+          } catch (e) {
+            if (e instanceof ImagenDemasiadoPesadaError) { await say(MENSAJE_FOTO_PESADA); return; }
+            throw e;
+          }
+          if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
+          const huella = await hashImagen(dataUrl);
+          // El nombre lleva el hito: la misma foto como evidencia de dos hitos son dos archivos, y purgar una no
+          // le quita el archivo a la otra. Cuando la foto ES el aviso (0483) el hito destino es el que la máquina eligió.
+          const hitoDelNombre = evidenciaPrevia.hito ? evidenciaPrevia.hito.id.slice(0, 8) : String(evidenciaPrevia.comoHito);
+          const ruta = await subirComprobante(op.tenantId, viajeId, `ev_${hitoDelNombre}_${huella.slice(0, 24)}`, dataUrl);
+          if (!ruta) {
+            logger.error('conductor.evidencia_sin_guardar', { viaje: viajeId, tenant: op.tenantId });
+            await say(mensajeEvidencia('fallo', evidenciaPrevia.tipo));
+            return;
+          }
+          if (evidenciaPrevia.hito) {
+            await say(await registrarEvidenciaDelChofer({
+              tenantId: op.tenantId, hito: evidenciaPrevia.hito, tipo: evidenciaPrevia.tipo, ruta, sha256: huella, waMessageId: msg.waMessageId ?? null,
+            }));
+          } else {
+            // 0483: LA FOTO ES EL AVISO. La hora es la del MENSAJE (Meta), como en cualquier hito.
+            const salida = await registrarHitoDesdeFoto({
+              tenantId: op.tenantId, operadorId: op.operadorId, telefono: msg.from, viajeId, tipo: evidenciaPrevia.tipo, ruta, sha256: huella,
+              waMessageId: msg.waMessageId ?? null, mensajeEn: msg.timestampMs ? new Date(msg.timestampMs) : null,
+            });
+            for (const m of salida.mensajes) {
+              if (m.botones && m.botones.length > 0) {
+                const id = await sendButtons(msg.from, m.texto, m.botones);
+                if (id) { await registrarCostoWhatsApp(op.tenantId, viajeId); continue; }
+              }
+              await say(m.texto);
+            }
+            if (salida.solicitarUbicacion) {
+              const r = await enviarSolicitudUbicacion(msg.from, salida.solicitarUbicacion).catch(() => ({ ok: false }));
+              if (!r.ok) logger.warn('conductor.solicitud_ubicacion_no_enviada', { viaje: viajeId });
+            }
+          }
+        } catch (e) {
+          logger.error('conductor.evidencia_error', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+          await say(mensajeEvidencia('fallo', evidenciaPrevia.tipo));
+        }
+        return;
+      }
+
       // El +1 de esta foto. El valor devuelto ya NO decide el acuse (ver abajo):
       // decidirlo con "el contador pasó de 0 a 1" mandaba el mensaje una vez por
       // foto. Se conserva la llamada porque su EFECTO —el incremento— es lo que
@@ -2571,7 +2744,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // pagar su propia visión, como antes de la auditoría 8.
         const extraccion = await extraerComprobante(dataUrl, reloj.senal(25_000), createLlmBudget(op.tenantId, randomUUID(), 'interactivo'));
         const { gasto, costo } = extraccion;
-        await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd });
+        await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd, duracionMs: costo.duracionMs });
 
         // Los gastos ya registrados se leen para EMPAREJAR: el acercamiento del
         // protocolo de dos fotos y el voucher de la terminal — y, desde el
@@ -3592,6 +3765,13 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // respuesta creyendo que nadie la vio es peor.
     if (msg.type === 'location' && typeof msg.lat === 'number' && typeof msg.lng === 'number') {
       const avisadoJefe = await registrarUbicacionChofer(op, viajeId, msg.lat, msg.lng);
+      // Agente 5 (0385): el pin se ADJUNTA a la llegada que el chofer acaba de reportar y se compara contra el sitio
+      // del viaje. (Antes esta llamada vivía en el bloque «sin viaje», donde `viajeId` es siempre nulo: nunca corría.)
+      // No registra ningún hito por sí solo. Best-effort: devuelve la línea que se agrega a la respuesta, o nada.
+      const lineaConductor = await atenderPinConductor({
+        tenantId: op.tenantId, operadorId: op.operadorId, viajeId, lat: msg.lat, lng: msg.lng,
+        enviadoEn: msg.timestampMs ? new Date(msg.timestampMs) : null,
+      });
       // c4-6: el pin que el propio bot pide ("mándame tu ubicación") ahora SÍ
       // llega a donde la cascada y el mensaje al proveedor lo van a usar — el
       // expediente de asistencia vivo del chofer, si lo hay. Best-effort.
@@ -3599,9 +3779,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // AGEN-5 / WA-4: «ya se la pasé a tu jefe» solo cuando Meta la aceptó
       // (texto o plantilla). Si no, se dice y se le da la salida.
       const donde = anclada ? 'quedó en tu viaje Y en tu reporte de emergencia' : 'queda registrada en tu viaje';
-      await say(avisadoJefe
+      const respuestaPin = avisadoJefe
         ? `📍 Recibida tu ubicación — ${donde}, y ya se la pasé a tu jefe.`
-        : `📍 Recibida tu ubicación — ${donde}, pero NO pude pasársela a tu jefe por WhatsApp. Si es urgente, márcale directo.`);
+        : `📍 Recibida tu ubicación — ${donde}, pero NO pude pasársela a tu jefe por WhatsApp. Si es urgente, márcale directo.`;
+      await say(lineaConductor ? `${respuestaPin}\n${lineaConductor}` : respuestaPin);
       return;
     }
 
@@ -3703,23 +3884,62 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       }
     }
 
-    // ── ¿HITO DEL VIAJE? "ya llegué" / "descargando" / "de regreso" (0090) ──
+    // ── ¿HITO DEL VIAJE? (0090 → Agente 5 «Conductor», 0380) ─────────────────
+    //
+    // "ya llegué", "ya estoy en andén", "me atiende Juan de recibo", "ya cargué",
+    // "salgo para allá", «voy con retraso», «corrijo»… y los botones de las
+    // solicitudes del agente (`hito_*`, `recordatorio_*`, `pedir_ubicacion`).
     //
     // ANTES del freno de cierre A PROPÓSITO: `pareceCierre` arranca con
-    // ^(listo|ya|...) y se comería "ya llegué" como intento de cerrar. Y
-    // después de botones/consultas, que son respuestas a preguntas nuestras.
-    // La lista de frases es CERRADA y anclada (hitos_viaje.ts): lo que traiga
-    // más contexto sigue su camino al agente.
-    const hito = interpretarHito(msg.text);
-    if (hito) {
-      // DAT-38: la hora del MENSAJE, no la del procesamiento. El acuse dice
-      // «anotado: llegaste a las 14:32» y esa hora tiene que ser la que el
-      // chofer vivió, no la que este servidor tenía cuando le tocó el turno.
-      // Sin timestamp de Meta se cae al reloj local, como siempre.
-      const ahoraHito = msg.timestampMs ? new Date(msg.timestampMs) : new Date();
-      const sello = await sellarHito(op.tenantId, viajeId, hito, ahoraHito);
-      logger.info('hito.viaje', { viaje: viajeId, hito, sello });
-      await say(mensajeHito(hito, sello, ahoraHito));
+    // ^(listo|ya|...) y se comería "ya llegué" como intento de cerrar. Y después
+    // de botones/consultas, que son respuestas a preguntas nuestras.
+    //
+    // QUÉ HITO ES lo decide la máquina de estados mirando lo que el viaje ya tiene
+    // registrado (conductor/maquina.ts): un «ya llegué» en el ORIGEN ya no sella la
+    // llegada al DESTINO, que era el defecto de las tres columnas de la 0090.
+    // El módulo atiende lo que las reglas entienden (o el respaldo con modelo, si
+    // el texto parece hablar de un hito); todo lo demás sigue su camino al agente.
+    //
+    // DAT-38: la hora es la del MENSAJE (Meta), no la del procesamiento; sin ella,
+    // el reloj local.
+    // ── ¿PREGUNTA POR LAS INSTRUCCIONES DEL LUGAR? («¿por dónde entro?», 0580) ──
+    //
+    // El convenio del cliente trae la puerta, con quién reportarse, los documentos y las peculiaridades de la planta:
+    // el operador pregunta y se le responde con ese perfil —solo con lo que el convenio dice; sin datos, lo dice y lo
+    // manda con el jefe de tráfico—. Lista cerrada de frases del oficio, sin modelo: lo demás sigue al agente.
+    const respuestaConvenio = await atenderPreguntaConvenio({
+      tenantId: op.tenantId, operadorId: op.operadorId, viajeAbiertoId: viajeId, texto: msg.text,
+    });
+    if (respuestaConvenio) {
+      await say(respuestaConvenio);
+      return;
+    }
+
+    const rConductor = await atenderConductor({
+      tenantId: op.tenantId,
+      operadorId: op.operadorId,
+      telefono: msg.from,
+      viajeAbiertoId: viajeId,
+      texto: msg.text,
+      mensajeEn: msg.timestampMs ? new Date(msg.timestampMs) : null,
+      waMessageId: msg.waMessageId ?? null,
+      senal: reloj.senal(15_000),
+    });
+    if (rConductor) {
+      for (const m of rConductor.mensajes) {
+        // Con botones (p. ej. «Es en descarga»): si Meta los rechaza, el texto sale solo.
+        if (m.botones && m.botones.length > 0) {
+          const id = await sendButtons(msg.from, m.texto, m.botones);
+          if (id) { await registrarCostoWhatsApp(op.tenantId, viajeId); continue; }
+        }
+        await say(m.texto);
+      }
+      // 0385: la llegada quedó sin ubicación y el viaje tiene un sitio con qué compararla: se le pide el pin,
+      // DESPUÉS del acuse (la ventana de 24 h acaba de abrirse con su mensaje). Best-effort.
+      if (rConductor.solicitarUbicacion) {
+        const r = await enviarSolicitudUbicacion(msg.from, rConductor.solicitarUbicacion).catch(() => ({ ok: false }));
+        if (!r.ok) logger.warn('conductor.solicitud_ubicacion_no_enviada', { viaje: viajeId });
+      }
       return;
     }
 

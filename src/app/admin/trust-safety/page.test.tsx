@@ -49,6 +49,14 @@ describe('/admin/trust-safety — la pantalla dice lo medido', () => {
     expect(html).toContain('detectores están cableados');
   });
 
+  it('una ráfaga agrupada (0681) se pinta con su conteo; una señal única, sin sufijo', async () => {
+    getEventosSeguridad.mockResolvedValue([evento({ repeticiones: 412 }), evento({ id: 'ev-2', tipo: 'rate_limit', repeticiones: 1 })]);
+    resumenEventosSeguridad.mockResolvedValue({ total: 2, d30: { alta: 1, media: 1, info: 0 } });
+    const html = renderToStaticMarkup(await TrustSafetyPage());
+    expect(html).toContain('×412');
+    expect(html).not.toContain('×1<');
+  });
+
   it('con eventos: la lista declara «mostrando N de M» con la M contada en la base', async () => {
     getEventosSeguridad.mockResolvedValue([evento(), evento({ id: 'ev-2', severidad: 'media', tipo: 'rate_limit' })]);
     resumenEventosSeguridad.mockResolvedValue({ total: 137, d30: { alta: 3, media: 20, info: 40 } });

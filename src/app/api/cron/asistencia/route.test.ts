@@ -187,10 +187,28 @@ describe('cron asistencia — el reloj reserva la unidad atómica (REN-31-C1)', 
     demoraInterruptorMs = 0;
 
     const opts = (escalarAsistenciasPendientes.mock.calls[0] as unknown[])[1] as { venceEn: number };
+    // AUDITORÍA 32 (continuación 17-sep), PRU32C-A1, la segunda mitad. Tal como
+    // estaba, esta aserción se reducía a `entrada <= antes` —`venceEn` y el lado
+    // derecho restan el MISMO `margen`—, y `entrada` (`route.ts:42`) se toma
+    // DESPUÉS de este `Date.now()`: holgura CERO, y roja cada vez que el reloj
+    // avanzaba 1 ms entre las dos lecturas.
+    //
+    // Aquí NO se puede congelar Date como en la prueba de abajo: lo que este caso
+    // mide es justamente que el ancla se mueva si alguien la recorre detrás del
+    // prólogo, y con Date congelado ese movimiento sería invisible. Lo que se
+    // acota es el costo de despacho, que es lo único que separa `antes` de
+    // `entrada` cuando el código está bien.
+    //
+    // La tolerancia conserva los dientes porque es MUY inferior a la demora que
+    // este caso inyecta: si `entrada` se recorriera detrás de `leerInterruptor`,
+    // `venceEn` llegaría 60 ms tarde, más del doble del margen que se perdona.
+    const TOLERANCIA_DESPACHO_MS = 25;
+    expect(TOLERANCIA_DESPACHO_MS * 2, 'la tolerancia tiene que quedar MUY por debajo de la demora inyectada, o la prueba deja de ver el defecto')
+      .toBeLessThan(60);
     expect(
       opts.venceEn,
       'el plazo se corrió tanto como tardó el prólogo: en producción son dos consultas, hasta 9.5 s cada una',
-    ).toBeLessThanOrEqual(antes + maxDuration * 1000 - margen);
+    ).toBeLessThanOrEqual(antes + maxDuration * 1000 - margen + TOLERANCIA_DESPACHO_MS);
   });
 
   it('el peor caso REAL cabe entero: 8 consultas —la ventana de cobranza es la octava—, 2 envíos y el latido del cierre', async () => {
@@ -202,14 +220,42 @@ describe('cron asistencia — el reloj reserva la unidad atómica (REN-31-C1)', 
     //    Supabase: cuesta hasta `TECHO_PASO_CONSULTA_MS`, no los 5.0 s que
     //    `COLCHON_LATIDO_CRON_MS` reserva.
     const PEOR_CASO_REAL_MS = 8 * TECHO_PASO_CONSULTA_MS + 2 * TECHO_ENVIO_WHATSAPP_MS;
-    const antes = Date.now();
-    await GET(new Request(URL_CRON, CON_SECRETO));
 
-    const opts = (escalarAsistenciasPendientes.mock.calls[0] as unknown[])[1] as { venceEn: number };
-    expect(
-      opts.venceEn + PEOR_CASO_REAL_MS + TECHO_PASO_CONSULTA_MS,
-      'una escalada ámbar admitida en el último instante, más su latido, tiene que terminar antes del hachazo',
-    ).toBeLessThanOrEqual(antes + maxDuration * 1000);
+    // AUDITORÍA 32 (continuación 17-sep), PRU32C-A1. Esta prueba era una moneda
+    // al aire: medida sobre HEAD pristino, **4 de 10 corridas en rojo** (la 32 la
+    // estimó en 1 de 5 y la dejó anotada sin tocar). No era ruido del runner, y
+    // la aritmética lo dice exacto:
+    //
+    //   margen        = 8·TPC + 2·TEW + EXTRA_LATIDO + COLCHÓN
+    //                 = 8·TPC + 2·TEW + (TPC − COLCHÓN) + COLCHÓN = 9·TPC + 2·TEW
+    //   peor caso aquí= 8·TPC + 2·TEW + TPC                       = 9·TPC + 2·TEW
+    //
+    // Son la MISMA cifra —105,500 ms—, que es justo lo que `route.ts:80-88`
+    // declara («el peor caso queda en 120.0 s exactos contra maxDuration = 120»).
+    // La holgura es CERO, así que comparar contra un `Date.now()` tomado ANTES de
+    // la llamada exige que el reloj no avance ni 1 ms entre ese instante y el
+    // `entrada` de `route.ts:42`. Cuando avanza, la prueba se cae sin que nada
+    // del código esté mal.
+    //
+    // Congelar Date deja δ = 0 y la aserción queda EXACTAMENTE la que era —el
+    // invariante real, `margen ≥ peor caso`, que se cumple con igualdad—, sin
+    // aflojar un solo milisegundo: si alguien baja el margen o sube un techo, se
+    // pone roja igual. Se congela SOLO `Date` (`toFake: ['Date']`), no los
+    // temporizadores: este caso corre con `demoraInterruptorMs = 0` y no usa
+    // ninguno, y falsear los timers colgaría el `await` de la ruta.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const antes = Date.now();
+      await GET(new Request(URL_CRON, CON_SECRETO));
+
+      const opts = (escalarAsistenciasPendientes.mock.calls[0] as unknown[])[1] as { venceEn: number };
+      expect(
+        opts.venceEn + PEOR_CASO_REAL_MS + TECHO_PASO_CONSULTA_MS,
+        'una escalada ámbar admitida en el último instante, más su latido, tiene que terminar antes del hachazo',
+      ).toBeLessThanOrEqual(antes + maxDuration * 1000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('usa el margen DERIVADO de los techos, no un literal que se le parezca', async () => {

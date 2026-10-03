@@ -97,6 +97,9 @@ describe('el contador — su panel volvió, y la operación le sigue cerrada', (
       // Conductores (F4): cero pesos y su usuario diario es el jefe de
       // tráfico — el único agente de operación.
       '/dashboard/agentes/conductores',
+      // Vigía de servicio al cliente (Agente 4, 0400): atiende a los CLIENTES de la
+      // flota; su usuario diario es el gerente de servicio — operación, cero pesos.
+      '/dashboard/agentes/vigia',
       // Peajes (F5): el conciliador del estado de cuenta — dinero.
       '/dashboard/agentes/peajes',
       // Proveedores (F6): la bandeja de facturas del taller — dinero.
@@ -109,7 +112,7 @@ describe('el contador — su panel volvió, y la operación le sigue cerrada', (
       '/dashboard/agentes/liquidacion', '/dashboard/agentes/facturas',
       '/dashboard/agentes/cobranza', '/dashboard/agentes/peajes', '/dashboard/agentes/proveedores',
     ];
-    const OPERACION_AGENTES = ['/dashboard/agentes/conductores', '/dashboard/agentes/carta-porte'];
+    const OPERACION_AGENTES = ['/dashboard/agentes/conductores', '/dashboard/agentes/vigia', '/dashboard/agentes/carta-porte'];
     for (const href of DINERO) expect(puedeVerRuta('contador', href)).toBe(true);
     for (const href of OPERACION_AGENTES) {
       expect(puedeVerRuta('contador', href), href).toBe(false);

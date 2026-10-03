@@ -35,6 +35,10 @@ vi.mock('@/lib/likida/agentes/cobranza', () => ({
 // cero por lo mismo que los relojes: aquí se mide el reparto del reloj y los
 // interruptores de los DOS motores, no el vigilante (que tiene su propia
 // suite, reglas/vigilante.test.ts).
+const correrOrquestadorVivo = vi.fn(async (..._a: unknown[]): Promise<Record<string, unknown>> => ({ barrido: { flotas: 0, abiertas: 0, cerradas: 0, fallos: 0, cortadoPorReloj: false }, avisos: 'no_disponible', fallos: 0 }));
+vi.mock('@/lib/likida/orquestador/correr_vivo', () => ({
+  correrOrquestadorVivo: (...a: unknown[]) => correrOrquestadorVivo(...(a as [])),
+}));
 const vigilarReglas = vi.fn(async () => ({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0 }));
 vi.mock('@/lib/likida/reglas/vigilante', () => ({
   vigilarReglas: (...a: unknown[]) => vigilarReglas(...(a as [])),
@@ -513,5 +517,48 @@ describe('BE-7 — los barridos ven el reloj y la corrida tiene techo duro', () 
     await expect(GET(peticion('Bearer secreto-de-prueba'))).rejects.toThrow();
     expect(registrarLatido).toHaveBeenCalledTimes(1);
     expect(registrarLatido).toHaveBeenCalledWith('escalar', 'fallo', { codigo: 'corrida_sin_cerrar' });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// P6 — el orquestador vivo (barrido de salud de los agentes + aviso de tareas escaladas) corre aquí.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el orquestador vivo (P6) corre aquí, con su claim, y falla como los demás', () => {
+  const ok = { barrido: { flotas: 2, abiertas: 1, cerradas: 0, fallos: 0, cortadoPorReloj: false }, avisos: { revisadas: 1, enviadas: 1, omitidas: 0, reintentables: 0, agotadas: 0, topadas: 0 }, fallos: 0 };
+  beforeEach(() => {
+    escalarViajesSinAceptar.mockReset().mockResolvedValue({ escalados: 0 });
+    ejecutarCobranzaGlobal.mockReset().mockResolvedValue({ tenants: 0, contactados: 0, fallos: [] });
+    alertarOperador.mockClear();
+    estaApagado.mockReset().mockResolvedValue(false);
+    vigilarReglas.mockReset().mockResolvedValue({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0 });
+    correrOrquestadorVivo.mockReset().mockResolvedValue(ok);
+  });
+
+  it('se despacha con el reloj de los barridos y su parte viaja en el cuerpo', async () => {
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(correrOrquestadorVivo).toHaveBeenCalledTimes(1);
+    expect(correrOrquestadorVivo).toHaveBeenCalledWith(expect.objectContaining({ venceEn: expect.any(Number) }));
+    expect((await res.json()).orquestador).toEqual(ok);
+  });
+
+  it('una flota que no se pudo barrer pinta la corrida en 500', async () => {
+    correrOrquestadorVivo.mockResolvedValue({ ...ok, fallos: 1 });
+    expect((await GET(peticion('Bearer secreto-de-prueba'))).status).toBe(500);
+  });
+
+  it('si el ciclo revienta: 500, alerta al operador y los otros motores CORRIERON igual', async () => {
+    correrOrquestadorVivo.mockRejectedValue(new Error('boom'));
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(500);
+    expect(escalarViajesSinAceptar).toHaveBeenCalledTimes(1);
+    expect(vigilarReglas).toHaveBeenCalledTimes(1);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.orquestador', expect.objectContaining({ codigo: expect.stringMatching(/./) }));
+  });
+
+  it('con el interruptor global apagado NO corre', async () => {
+    estaApagado.mockImplementation(async (n: string) => n === 'global');
+    expect((await GET(peticion('Bearer secreto-de-prueba'))).status).toBe(200);
+    expect(correrOrquestadorVivo).not.toHaveBeenCalled();
   });
 });

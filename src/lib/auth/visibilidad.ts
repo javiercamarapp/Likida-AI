@@ -85,6 +85,16 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // `dinero_por_area.test.ts` los escanea).
   '/dashboard/viajes': 'operacion',
   '/dashboard/operadores': 'operacion',
+  // Los PATIOS (W2, 1-oct-2026): crear/editar/borrar los administra el dueño (se
+  // re-comprueba `puedeAdministrar` adentro de cada acción); el jefe de tráfico
+  // los VE para saber cuál es el suyo. Cero pesos en pantalla.
+  '/dashboard/patios': 'operacion',
+  // La puesta en marcha (W2): el checklist guiado con estado real. Cero pesos.
+  '/dashboard/arranque': 'operacion',
+  // La guía de arranque del chofer (W2): el número de WhatsApp de Likida, el
+  // enlace wa.me, el QR y el flujo. No enseña un peso; su lector natural es el
+  // jefe de tráfico.
+  '/dashboard/whatsapp': 'operacion',
   // El registro de jornada (LFT 132 fr. XXXIV, mig. 0241). Es `operacion` y no
   // `dinero` por dos razones: no enseña un peso, y el usuario natural es el
   // jefe de tráfico —él sabe a qué hora salió cada quien y es el único que
@@ -99,14 +109,39 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/unidades': 'operacion',
   // El mapa (F3): viajes vivos sobre México, sin un peso en pantalla.
   '/dashboard/mapa': 'operacion',
+  // Viajes en vivo (Ola 3b, orquestador): todos los viajes en curso con su último hito, la posición del tractor y
+  // su antigüedad, y las excepciones. Es del jefe de tráfico y no enseña un peso. Las tareas que el asistente deja
+  // para una persona se atienden aquí (la acción exige `puedeAsignar`).
+  '/dashboard/viajes-en-vivo': 'operacion',
   // Carta Porte (A3, 14-ago-2026): cero pesos en pantalla, y la declaración
   // de ruta ("¿pisa federal?") es del jefe de tráfico — la regla 2.7.7.2.1
   // exige plena certeza de quien CONOCE la ruta, no del que ve el dinero.
   '/dashboard/carta-porte': 'operacion',
+  // Documentos de clientes grandes (Agente 3, mig. 0420): la bandeja donde una persona revisa lo que el agente
+  // leyó de un PDF/foto/Excel/XML/correo. Mismo criterio que /dashboard/carta-porte: cero pesos del negocio y su
+  // usuario diario es el jefe de tráfico. La revisión (/dashboard/carta-porte/documentos/<uuid>) es dinámica y se
+  // gatea con esta llave.
+  '/dashboard/carta-porte/documentos': 'operacion',
   // El Agente de Conductores (F4) es agente de operación: no toca un peso y
   // su usuario diario es el jefe de tráfico. Sus hermanos
   // (liquidación/facturas/cobranza) siguen en dinero.
   '/dashboard/agentes/conductores': 'operacion',
+  // 0385: el catálogo de sitios y las estadías en andén del Agente 5 — operación, cero pesos en pantalla (el cobro va por el CSV de /v1/estadias).
+  // 0580: los convenios de clientes (perfiles con instrucciones de operación). Operación: el jefe de tráfico las carga y
+  // las exporta; la tarifa y los requisitos de cobro solo se leen y se pintan con el área de dinero (la página y la base
+  // lo comprueban aparte).
+  '/dashboard/convenios': 'operacion',
+  '/dashboard/agentes/conductores/sitios': 'operacion',
+  '/dashboard/agentes/conductores/estadias': 'operacion',
+  // Ola 3: la configuración de flota del Agente 5 (escalera, ventana, tope, contactos, webhook). La ve la operación; solo el
+  // dueño guarda (`puedeAdministrar`, comprobado en la acción de servidor).
+  '/dashboard/agentes/conductores/configuracion': 'operacion',
+  // El Vigía de servicio al cliente (Agente 4, 0400): su usuario diario es el gerente de
+  // servicio (flota_admin y encargado). Cero pesos en pantalla; el contador no atiende
+  // clientes y no ve chats de clientes (la 0400 también se lo niega en la base).
+  '/dashboard/agentes/vigia': 'operacion',
+  // 0484: grupos de clientes críticos, histórico exportado de WhatsApp y su reporte (FAQs, temas, tiempos). Cero pesos; solo el dueño sube/borra.
+  '/dashboard/agentes/vigia/historial': 'operacion',
   // El Agente de Carta Porte (Fases B-C, 25-ago-2026): mismo criterio que su
   // pantalla /dashboard/carta-porte — cero pesos, y la declaración de ruta es
   // del jefe de tráfico. La página del borrador
@@ -137,6 +172,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // AGENTES (13-ago-2026): las ventanas de los dos agentes enseñan montos
   // comprobados y colas de facturación — área dinero.
   '/dashboard/agentes/liquidacion': 'dinero',
+  // 0564: el formato de la liquidación de la flota (columnas de su Excel de muestra, documento por WhatsApp, copia al jefe y aviso de discrepancia). Dinero a la vista; solo el dueño guarda (`administracion`, comprobado en cada acción).
+  '/dashboard/agentes/liquidacion/formato': 'dinero',
   '/dashboard/agentes/facturas': 'dinero',
   // Cobranza de COMPROBANTES (0089): la página no enseña pesos, pero es la
   // cola del cierre contable — el dolor del contador — y opera al bloque
@@ -145,6 +182,13 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/agentes/cobranza': 'dinero',
   // El conciliador (F5): montos del estado de cuenta a la vista — dinero.
   '/dashboard/agentes/peajes': 'dinero',
+  // La configuración del conciliador (Agente 2, 1-oct-2026): TAGs de telepeaje,
+  // catálogo de casetas, geocercas, mapeo de columnas por proveedor y el buzón
+  // firmado. Mismo área que la ventana del agente: dinero. La llave del buzón
+  // se enseña solo con `administracion` (adentro de la página).
+  '/dashboard/agentes/peajes/configuracion': 'dinero',
+  // El reporte de reclamación (Agente 2, ola 3b): los cruces que el GPS no respalda, para pedir al proveedor la revisión del cobro. Montos por cruce — dinero. El desglose va en `?desglose=` (se busca CON el tenant de la sesión).
+  '/dashboard/agentes/peajes/reclamacion': 'dinero',
   // Proveedores (F6): facturas y totales — dinero, y la decisión es del
   // contador/dueño.
   '/dashboard/agentes/proveedores': 'dinero',
@@ -235,6 +279,9 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // quien decide sobre una grúa a las 3 a.m. es el jefe de tráfico o el dueño.
   '/dashboard/asistencia': 'operacion',
   '/dashboard/llaves-api': 'administracion',
+  // Términos, Aviso y MANDATO de autofacturación de la flota (0443, auditoría ola 1
+  // #48): lo acepta y lo otorga quien obliga a la empresa — el dueño.
+  '/dashboard/legal': 'administracion',
   // Sesiones MCP (H3, auditoría de dashboards 29-ago-2026): los accesos que
   // Claude/ChatGPT tienen a los datos de la flota vía OAuth (0260). MISMO
   // criterio que las llaves de API, porque es la MISMA clase de cosa: una

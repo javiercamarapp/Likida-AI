@@ -554,3 +554,121 @@ describe('probarCredencial — el ciclo completo, sin red', () => {
     expect(toquesDeCredencial()).toHaveLength(0);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// P15 (ronda 15, ALTO): `guardarCredencial` rechazaba toda `sftp://` porque
+// exigía https en cualquier campo `*_url`, así que el modo SFTP de tabla_propia
+// era inalcanzable desde Conexiones. Estas pruebas cruzan por la función real.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('guardarCredencial — tabla_propia csv_sftp por sftp://', () => {
+  const HUELLA = 'SHA256:' + 'A'.repeat(43);
+  const SFTP = {
+    modo: 'csv_sftp',
+    base_url: 'sftp://sftp.cliente.mx/gps/posiciones.csv',
+    nombre_campo: 'likida',
+    token: 'clave-sftp-larga',
+    huella_host: HUELLA,
+  };
+
+  it('acepta sftp:// con csv_sftp, usuario, clave y huella; el cifrado lleva la huella y la llave', async () => {
+    respuestas.set('conector_credencial', { data: { id: 'cred-1' }, error: null });
+    const llavePem = '-----BEGIN ' + 'OPENSSH PRIVATE KEY-----\n' + 'QUJD'.repeat(20) + '\n-----END ' + 'OPENSSH PRIVATE KEY-----';
+    await guardarCredencial(TENANT, 'tabla_propia', { ...SFTP, token: '', llave_privada: llavePem, frase_llave: 'frase' });
+    const [up] = toquesDeCredencial();
+    const guardado = descifrar(String((up.payload as Record<string, unknown>).valores_cifrados));
+    expect(guardado.huella_host).toBe(HUELLA);
+    expect(guardado.llave_privada).toBe(llavePem);
+    expect(guardado.frase_llave).toBe('frase');
+  });
+
+  it('acepta posiciones y geocercas en el mismo servidor', async () => {
+    respuestas.set('conector_credencial', { data: { id: 'cred-1' }, error: null });
+    await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SFTP, geocercas_url: 'sftp://sftp.cliente.mx/gps/geocercas.csv' })).resolves.toBe('cred-1');
+  });
+
+  it('rechaza geocercas en OTRO servidor', async () => {
+    await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SFTP, geocercas_url: 'sftp://otro.cliente.mx/g.csv' }))
+      .rejects.toThrow(/mismo servidor/);
+    expect(toquesDeCredencial()).toHaveLength(0);
+  });
+
+  it('rechaza posiciones sftp:// con geocercas https://', async () => {
+    await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SFTP, geocercas_url: 'https://x.cliente.mx/g.csv' }))
+      .rejects.toThrow(DatoInvalido);
+  });
+
+  it('exige la huella del host', async () => {
+    await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SFTP, huella_host: '' })).rejects.toThrow(/huella/);
+    await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SFTP, huella_host: 'SHA256:corta' })).rejects.toThrow(/huella_host/);
+    expect(toquesDeCredencial()).toHaveLength(0);
+  });
+
+  it('rechaza un servidor interno o sin nombre público', async () => {
+    for (const host of ['10.0.0.5', 'localhost', '169.254.169.254', 'servidor-interno']) {
+      await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SFTP, base_url: `sftp://${host}/a.csv` }))
+        .rejects.toThrow(/red interna/);
+    }
+    expect(toquesDeCredencial()).toHaveLength(0);
+  });
+
+  it('rechaza usuario o clave dentro de la dirección', async () => {
+    await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SFTP, base_url: 'sftp://u:p@sftp.cliente.mx/a.csv' }))
+      .rejects.toThrow(DatoInvalido);
+  });
+
+  it('sftp:// solo con csv_sftp: con endpoint o sql sigue rechazado', async () => {
+    await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SFTP, modo: 'endpoint' })).rejects.toThrow(/csv_sftp/);
+    expect(toquesDeCredencial()).toHaveLength(0);
+  });
+
+  it('otro conector con sftp:// sigue rechazado (https-only)', async () => {
+    await expect(guardarCredencial(TENANT, 'sap_b1', { ...VALORES_SAP, base_url: 'sftp://sftp.cliente.mx/a' }))
+      .rejects.toThrow(/https:\/\//);
+  });
+
+  it('el csv_sftp por https sigue igual', async () => {
+    respuestas.set('conector_credencial', { data: { id: 'cred-1' }, error: null });
+    await expect(guardarCredencial(TENANT, 'tabla_propia', { modo: 'csv_sftp', base_url: 'https://su-sistema.com/p.csv' })).resolves.toBe('cred-1');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Ronda 18: el modo sql_solo_lectura (pg real) se guarda con las MISMAS reglas que el lector usará:
+// lo que no podría leerse no se cifra, y un servidor interno nunca llega al cofre.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('guardarCredencial — tabla_propia sql_solo_lectura', () => {
+  const CUERPO_CA = 'QUJD'.repeat(40);
+  const SQL = {
+    modo: 'sql_solo_lectura', sql_host: 'replica.cliente.mx', sql_base: 'flota', sql_usuario: 'likida_lectura', sql_clave: 'clave-sql-larga',
+    vista: 'public.v_posiciones', columnas: '{"unidad":"eco","lat":"lat","lon":"lon","fecha_hora":"ts"}',
+  };
+
+  it('acepta el SQL completo y la CA del cliente cifrada (la CA y la clave no vuelven como pista en claro)', async () => {
+    respuestas.set('conector_credencial', { data: { id: 'cred-1' }, error: null });
+    const ca = `-----BEGIN CERTIFICATE-----\n${CUERPO_CA}\n-----END CERTIFICATE-----`;
+    await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SQL, sql_ca: ca })).resolves.toBe('cred-1');
+    const [up] = toquesDeCredencial();
+    const guardado = descifrar(String((up.payload as Record<string, unknown>).valores_cifrados));
+    expect(guardado.sql_ca).toBe(ca);
+    expect(guardado.sql_clave).toBe('clave-sql-larga');
+    expect(JSON.stringify((up.payload as Record<string, unknown>).pistas)).not.toContain(CUERPO_CA);
+  });
+
+  it('rechaza un servidor interno, loopback o de metadatos', async () => {
+    for (const sql_host of ['10.0.0.5', 'localhost', '169.254.169.254', '127.0.0.1', 'bd-interna']) {
+      await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SQL, sql_host }), sql_host).rejects.toThrow(DatoInvalido);
+    }
+    expect(toquesDeCredencial()).toHaveLength(0);
+  });
+
+  it('rechaza una vista o columna con inyección y una CA que es una llave privada', async () => {
+    await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SQL, vista: 'v; drop table x' })).rejects.toThrow(/configuración SQL/);
+    await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SQL, columnas: '{"unidad":"eco\\"; drop","lat":"lat","lon":"lon","fecha_hora":"ts"}' })).rejects.toThrow(/configuración SQL/);
+    await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SQL, sql_ca: '-----BEGIN ' + 'PRIVATE KEY-----\nAAAA\n-----END ' + 'PRIVATE KEY-----' })).rejects.toThrow(/llave privada/);
+    expect(toquesDeCredencial()).toHaveLength(0);
+  });
+
+  it('rechaza una configuración SQL incompleta (sin usuario) en vez de guardar algo que el poller no podrá leer', async () => {
+    await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SQL, sql_usuario: '' })).rejects.toThrow(/configuración SQL/);
+  });
+});

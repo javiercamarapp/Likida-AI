@@ -5,7 +5,7 @@
 --
 -- ── DAT-10: LA UNICIDAD GLOBAL QUE UNA FLOTA LE ROMPE A OTRA ──────────────
 -- `administracion.ts:275` valida el teléfono en la app, pero el conector ERP y
--- la importación masiva de Innovativos (cientos de operadores, 800 unidades)
+-- la importación masiva del cliente de demo (cientos de operadores, 800 unidades)
 -- NO pasan por esa función. Probado en la auditoría (S10): `operador (tenant A,
 -- telefono 'abc')` entra; y como `uq_operador_telefono_activo` es un único
 -- GLOBAL sobre `telefono_normalizado(telefono)`, todo teléfono sin dígitos

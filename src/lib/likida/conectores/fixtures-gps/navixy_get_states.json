@@ -1,0 +1,4 @@
+{ "success": true, "user_time": "2026-10-01 09:30:00", "states": {
+  "501": { "source_id": 9001, "gps": { "updated": "2026-10-01 09:29:30", "signal_level": 90, "location": { "lat": 19.4326, "lng": -99.1332 }, "heading": 270, "speed": 64, "alt": 2240, "precision": 5, "gsm_lbs": false }, "connection_status": "active", "movement_status": "moving", "ignition": true, "ignition_update": "2026-10-01 09:00:00", "last_update": "2026-10-01 09:29:30" },
+  "502": { "source_id": 9002, "gps": { "updated": null, "signal_level": null, "location": { "lat": 0, "lng": 0 }, "heading": 0, "speed": 0, "alt": 0, "precision": 0, "gsm_lbs": false }, "connection_status": "just_registered", "movement_status": "stopped", "ignition": false, "ignition_update": "2026-10-01 09:00:00", "last_update": null }
+} }

@@ -3,7 +3,7 @@ import {
   LayoutGrid, ScanText, Calculator, MessagesSquare, MessageCircle, UserPlus,
   Settings2, FlaskConical, Truck, LineChart, DollarSign, Receipt, TrendingUp, Presentation,
   Server, Blocks, BookOpen, Megaphone, ShieldAlert, ShieldCheck, Users, Settings,
-  Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, Gauge, Handshake, Inbox,
+  Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, PlugZap, Gauge, Handshake, Inbox,
   Bot, Bug, ListChecks, Sparkles, Hand, Globe2, AlarmClock, Clapperboard,
 } from 'lucide-react';
 
@@ -62,6 +62,8 @@ export const NEGOCIO: Item[] = [
   // deterministas (16-ago-2026). Hermana de Costos: allá el desglose contable,
   // aquí el diagnóstico.
   { href: '/admin/consumo', nombre: 'Consumo de IA', Icono: Cpu },
+  // El techo diario de IA de cada flota, a la vista y editable (Ola 9): de dónde sale y cuánto lleva hoy.
+  { href: '/admin/techo-ia', nombre: 'Techo de IA', Icono: Gauge },
   { href: '/admin/cobranza', nombre: 'Cobranza', Icono: Receipt },
   { href: '/admin/crecimiento', nombre: 'Crecimiento', Icono: TrendingUp },
   // El estudio de marketing (Fase D, 0266): banco de hooks, personajes y
@@ -96,6 +98,7 @@ export const SISTEMA: Item[] = [
   { href: '/admin/salud-sistema', nombre: 'Salud del sistema', Icono: HeartPulse },
   { href: '/admin/actividad-codigo', nombre: 'Actividad de código', Icono: GitCommitHorizontal },
   { href: '/admin/soporte', nombre: 'Soporte', Icono: LifeBuoy },
+  { href: '/admin/mcp-clientes', nombre: 'Clientes MCP', Icono: PlugZap },
   { href: '/admin/capacidad-forecast', nombre: 'Capacidad & Forecast', Icono: Gauge },
 ];
 

@@ -331,7 +331,7 @@ export async function listOperadores(
  * Mismo patrón que los dos hallazgos que se cerraron esta misma ronda: se
  * acota el tenant y se olvida el rol/dueño del segundo id.
  */
-export async function reasignarOperador(tenantId: string, viajeId: string, operadorId: string): Promise<void> {
+export async function reasignarOperador(tenantId: string, viajeId: string, operadorId: string): Promise<{ cambio: boolean; operadorAnteriorId: string | null }> {
   const propio = await getOperador(operadorId, tenantId);
   if (!propio) throw new Error('reasignarOperador: el operador no pertenece a esta flota');
   // AUDITORÍA 20 (H2): y tiene que SEGUIR trabajando aquí. El combo de
@@ -343,12 +343,18 @@ export async function reasignarOperador(tenantId: string, viajeId: string, opera
     throw new Error('reasignarOperador: el operador está dado de baja en esta flota');
   }
 
+  // Quién lo tenía: de eso depende si hay que mandarle las instrucciones del convenio al nuevo (ver `instruccionesAlCambiarOperador`).
+  const previo = await acotada(supabaseAdmin().from('viaje').select('operador_id').eq('id', viajeId).eq('tenant_id', tenantId).maybeSingle(), 'reasignarOperador.previo');
+  const operadorAnteriorId = typeof (previo.data as { operador_id?: unknown } | null)?.operador_id === 'string'
+    ? String((previo.data as { operador_id: string }).operador_id) : null;
+
   const { error } = await acotada(supabaseAdmin()
     .from('viaje')
     .update({ operador_id: operadorId })
     .eq('id', viajeId)
     .eq('tenant_id', tenantId), 'reasignarOperador');
   if (error) throw new Error(`reasignarOperador: ${error.message}`);
+  return { cambio: operadorAnteriorId !== operadorId, operadorAnteriorId };
 }
 
 export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Promise<void> {
@@ -1294,7 +1300,7 @@ export async function getDatosResponsable(
     // renglón: pedirlo aparte sería otro viaje a la base para tres columnas que
     // ya vienen juntas — y la regla del repo es que el acceso a datos no se
     // duplique, que es el hallazgo que lleva cinco rondas subiendo.
-    .select('razon_social, domicilio_fiscal, url_aviso_privacidad, contacto_privacidad')
+    .select('nombre, razon_social, domicilio_fiscal, url_aviso_privacidad, contacto_privacidad')
     .eq('id', tenantId)
     .maybeSingle(), 'getDatosResponsable');
   if (error) throw new Error(`getDatosResponsable: ${error.message}`);
@@ -1321,8 +1327,9 @@ export async function getDatosResponsable(
     ? columna
     : `${appUrl()}/aviso/${tenantId}`;
   const r = {
-    razonSocial: (data.razon_social as string) ?? '',
-    domicilio: (data.domicilio_fiscal as string) ?? '',
+    razonSocial: ((data.razon_social as string) ?? '').trim(),
+    nombreFlota: (data.nombre as string | null) ?? null,
+    domicilio: ((data.domicilio_fiscal as string) ?? '').trim(),
     urlAvisoIntegral,
     contactoPrivacidad: (data.contacto_privacidad as string | null) ?? null,
     // Nunca lanza: sus fallos ya son `no_medible` (caso amplio) adentro.
@@ -1341,7 +1348,13 @@ export async function getDatosResponsable(
   // que hace con el contacto del art. 29. La razón social SÍ se exige: sin
   // ella el aviso no puede decir NI SIQUIERA a quién reclamarle, y eso ya no
   // es un aviso a medias — es un documento sin responsable.
-  return r.razonSocial ? r : null;
+  //
+  // AUDITORÍA OLA 1, #10: LA RAZÓN SOCIAL TAMPOCO SE EXIGE YA. Exigirla dejaba al
+  // chofer sin servicio desde su primer mensaje y a `/aviso/<flota>` en 404 por un
+  // dato que le toca capturar a su EMPRESA (hoy, en /dashboard/legal). Se devuelve
+  // lo que hay —la identidad vacía se DICE como pendiente en el texto del aviso,
+  // `lineaResponsable`— y `null` queda solo para «esta flota no existe».
+  return r;
 }
 
 /**
@@ -1543,6 +1556,9 @@ export async function getAcumuladoCombustible(
 export async function registrarSolicitudArco(opts: {
   tenantId: string;
   operadorId: string | null;
+  /** 0442: el titular cuando NO es operador (cuenta de oficina). Sin esto la
+   *  cancelación de un dueño/contador/encargado no tiene sobre quién ejecutarse. */
+  titularUserId?: string | null;
   titularRef: string;
   tipo: string;
   canal: string;
@@ -1551,6 +1567,8 @@ export async function registrarSolicitudArco(opts: {
   const { data, error } = await acotada(supabaseAdmin().from('solicitud_arco').insert({
     tenant_id: opts.tenantId,
     operador_id: opts.operadorId,
+    // Solo si no es operador: un titular es UNO u otro.
+    titular_user_id: opts.operadorId ? null : (opts.titularUserId ?? null),
     titular_ref: opts.titularRef,
     tipo: opts.tipo,
     canal: opts.canal,
@@ -1789,13 +1807,14 @@ export async function ejecutarOposicionArco(
 
 export async function ejecutarCancelacionArco(
   tenantId: string, solicitudId: string,
-): Promise<{ ok: boolean; motivo?: string; avisada: boolean; errorAviso?: string }> {
+): Promise<{ ok: boolean; motivo?: string; avisada: boolean; errorAviso?: string; errorAuth?: string }> {
   const { data: sol, error: errLee } = await acotada(supabaseAdmin()
-    .from('solicitud_arco').select('titular_ref, tipo').eq('id', solicitudId).eq('tenant_id', tenantId).maybeSingle(),
+    .from('solicitud_arco').select('titular_ref, tipo, titular_user_id').eq('id', solicitudId).eq('tenant_id', tenantId).maybeSingle(),
     'ejecutarCancelacionArco.leer');
   if (errLee) throw new Error(`ejecutarCancelacionArco.leer: ${errLee.message}`);
   if (!sol) throw new Error('ejecutarCancelacionArco: la solicitud no existe en esta flota');
   const telefono = (sol.titular_ref as string | null) ?? null;
+  const titularUserId = (sol.titular_user_id as string | null) ?? null;
 
   const { data, error } = await acotada(supabaseAdmin().rpc('ejecutar_arco_cancelacion', {
     p_tenant: tenantId,
@@ -1810,9 +1829,40 @@ export async function ejecutarCancelacionArco(
     return { ok: false, motivo: r.motivo ?? 'la base no explicó el rechazo', avisada: false };
   }
 
-  if (!telefono) return { ok: true, avisada: false, errorAviso: 'sin teléfono del titular' };
+  // 0442 (cuenta de oficina): la RPC ya seudonimizó la fila y la dio de baja; el
+  // LOGIN vive en Supabase Auth y solo se borra desde aquí. Se hace ANTES del
+  // aviso y su fallo se DICE (no se afirma un borrado que no ocurrió).
+  let errorAuth: string | undefined;
+  if (titularUserId) {
+    // El cliente de Auth Admin se toma UNA vez (no es una consulta de datos: no
+    // lleva `acotada`, y `tope_consulta.test.ts` mira `await supabaseAdmin()` crudo).
+    let authAdmin: ReturnType<typeof supabaseAdmin>['auth']['admin'] | null = null;
+    try {
+      authAdmin = supabaseAdmin().auth.admin;
+      const { error: errDel } = await authAdmin.deleteUser(titularUserId);
+      if (errDel) errorAuth = errDel.message;
+    } catch (e) {
+      errorAuth = e instanceof Error ? e.message : String(e);
+    }
+    if (errorAuth) {
+      logger.error('arco.auth_no_borrado', { tenant: tenantId, usuario: titularUserId, err: errorAuth });
+      // Segunda línea: que al menos no pueda entrar (ban permanente), como la baja normal.
+      try { await authAdmin?.updateUserById(titularUserId, { ban_duration: '876000h' }); } catch { /* ya está logueado arriba */ }
+    }
+  }
+
+  if (!telefono) return { ok: true, avisada: false, errorAviso: errorAuth ? `sin teléfono del titular; además el login de Auth no se pudo borrar (${errorAuth})` : 'sin teléfono del titular', ...(errorAuth ? { errorAuth } : {}) };
   try {
     const { enviarRespuestaArco } = await import('@/lib/meta/client');
+    if (titularUserId) {
+      const aviso = await enviarRespuestaArco(
+        telefono,
+        'Se sustituyeron tu nombre y tu correo de cuenta, se quitó tu teléfono y tu foto, se dio de baja tu acceso y se eliminaron tus conversaciones de WhatsApp, del analista y del copiloto. Se conservan la bitácora de auditoría (el registro de quién hizo qué en la plataforma) y la documentación fiscal de la flota (CFF art. 30).',
+      );
+      return aviso.ok
+        ? { ok: true, avisada: true, ...(errorAuth ? { errorAuth } : {}) }
+        : { ok: true, avisada: false, errorAviso: aviso.error, ...(errorAuth ? { errorAuth } : {}) };
+    }
     // AUDITORÍA 28, LEG-A6 [ALTO]: esta lista era CERRADA y le faltaban tres
     // categorías que `ejecutar_arco_cancelacion` (0286/0290, texto 0340) SÍ
     // deja intactas: los eventos de cámara/telemetría ligados al operador
@@ -1913,6 +1963,8 @@ export async function finalizarPollConector(
     elementos?: number;
     invalidos?: number;
     error?: string;
+    /** 0500: clase de la falla del PROVEEDOR (activa el backoff). Sin ella el poll no se espacia. */
+    falla?: 'credencial' | 'proveedor' | 'formato';
   },
 ): Promise<void> {
   // Los tests legacy que pasaron por el fallback no tienen un lease real.
@@ -1932,7 +1984,72 @@ export async function finalizarPollConector(
     p_elementos: resultado.elementos ?? 0,
     p_invalidos: resultado.invalidos ?? 0,
     p_error: resultado.error?.slice(0, 1000) ?? null,
+    p_falla: resultado.falla ?? null,
   }), `${recurso}.finalizar`);
   if (error) throw new Error(`${recurso}.finalizar: ${error.message}`);
   if (data !== true) throw new Error(`${recurso}.finalizar: lease vencido o ajeno`);
+}
+
+// ── Cobranza SaaS (E1-B, P0-7): lo que la página /admin/cobranza lee ────────
+// Vive aquí y no en la página: la frontera de datos (`frontera_datos_guardiana`)
+// cuenta cada archivo con `.from(` fuera de repo.ts, y esto es lectura pura.
+
+export interface PiezaDunning { titulo: string; estado: string; enviadoEn: string | null; creadoEn: string }
+export interface CorridaDunning { estado: string; fin: string; error: string | null; resumen: Record<string, unknown> | null }
+
+/** Las propuestas de recordatorio del dunning (agente `cobranza_saas`, tipo
+ *  `recordatorio_cobranza`) de los TÍTULOS pedidos (los toques de las facturas
+ *  que la pantalla va a mostrar: una pieza por (factura, hito)). Se consulta por
+ *  título y no «las N más nuevas»: con cinco toques por factura, las facturas más
+ *  viejas perdían su pieza y salían en rojo «sin propuesta» sin que fuera cierto.
+ *  LANZA si la lectura falla: sin poder leer, la página dice que no pudo, no que
+ *  no hay propuestas. */
+export async function getPiezasDunningPlataforma(titulos: string[]): Promise<PiezaDunning[]> {
+  const unicos = [...new Set(titulos)];
+  const lotes: string[][] = [];
+  for (let i = 0; i < unicos.length; i += 40) lotes.push(unicos.slice(i, i + 40));
+  const filas: PiezaDunning[] = [];
+  for (const lote of lotes) {
+    const { data, error } = await acotada(supabaseAdmin()
+      .from('cola_aprobacion')
+      .select('titulo, estado, enviado_en, creado_en')
+      .eq('agente', 'cobranza_saas')
+      .eq('tipo', 'recordatorio_cobranza')
+      .in('titulo', lote)
+      .order('creado_en', { ascending: false })
+      .order('id')
+      .limit(1000), 'dunning.piezas');
+    if (error) throw new Error(`getPiezasDunningPlataforma: ${error.message}`);
+    for (const r of data ?? []) {
+      filas.push({
+        titulo: r.titulo as string,
+        estado: r.estado as string,
+        enviadoEn: (r.enviado_en as string | null) ?? null,
+        creadoEn: r.creado_en as string,
+      });
+    }
+  }
+  // Más nueva primero: `armarEstadoDunning` se queda con la primera por título.
+  return filas.sort((x, y) => (x.creadoEn < y.creadoEn ? 1 : x.creadoEn > y.creadoEn ? -1 : 0));
+}
+
+/** La última corrida registrada del agente de cobranza SaaS, o `null` si nunca
+ *  corrió (que es un hecho distinto de «no se pudo leer», que lanza). */
+export async function getUltimaCorridaDunningPlataforma(): Promise<CorridaDunning | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('agente_corrida')
+    .select('estado, fin, error, resumen')
+    .eq('agente', 'cobranza_saas')
+    .order('fin', { ascending: false })
+    .order('id')
+    .limit(1), 'dunning.corrida');
+  if (error) throw new Error(`getUltimaCorridaDunningPlataforma: ${error.message}`);
+  const r = data?.[0];
+  if (!r) return null;
+  return {
+    estado: r.estado as string,
+    fin: r.fin as string,
+    error: (r.error as string | null) ?? null,
+    resumen: (r.resumen as Record<string, unknown> | null) ?? null,
+  };
 }

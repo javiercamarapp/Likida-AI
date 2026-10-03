@@ -20,6 +20,10 @@
 #   2. las mismas llaves en .env.local, si el archivo existe.
 # El token se usa SOLO en este proceso, nunca se imprime ni se escribe a archivo.
 #
+# ⚠ Los textos de este script se alinearon con el catálogo (src/lib/meta/plantillas_catalogo.ts):
+# Meta rechaza un cuerpo que EMPIEZA con una variable. El catálogo es la fuente de verdad y
+# `scripts/verificar-plantillas-meta.ts` verifica y somete todas las plantillas.
+#
 # Después de correrlo: revisar el estado en Meta Business Manager → WhatsApp
 # Manager → Plantillas de mensaje (queda en PENDING hasta que Meta resuelva).
 # ═══════════════════════════════════════════════════════════════════════════
@@ -61,7 +65,7 @@ mandar() {
 
 mandar \
   "siniestro_reportado_v1" \
-  "{{1}} reportó una incidencia en carretera. Tipo: {{2}}. Última ubicación conocida: {{3}}. Responde este mensaje para coordinar la atención." \
+  "Incidencia en carretera: {{1}} reportó una incidencia. Tipo: {{2}}. Última ubicación conocida: {{3}}. Responde este mensaje para coordinar la atención." \
   '["Juan Pérez", "choque", "Carretera 180, km 45, cerca de Valladolid"]'
 
 mandar \

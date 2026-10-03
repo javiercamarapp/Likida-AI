@@ -50,6 +50,38 @@
     {
       "path": "/api/cron/portales-vivos",
       "schedule": "40 6 * * 1"
+    },
+    {
+      "path": "/api/cron/liquidaciones-externas",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/peajes",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/conductor-hitos",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/vigia",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/buzon-entrega",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/jornada-alertas",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/carta-porte-docs",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/guardia",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

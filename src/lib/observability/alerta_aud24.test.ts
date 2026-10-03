@@ -152,7 +152,7 @@ describe('OP-P5: el canal de WhatsApp para el dinero', () => {
     vi.stubEnv('ALERTA_WA', '5215512345678');
     enviarTexto.mockRejectedValue(new Error('Meta caída'));
     const { alertarOperador } = await cargar();
-    await expect(alertarOperador('stripe.webhook', { error: 'x', codigo: 's' })).resolves.toBeUndefined();
+    await expect(alertarOperador('stripe.webhook', { error: 'x', codigo: 's' })).resolves.toBe(true);
     expect(enviarCorreo).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith('alerta.wa_fallo', expect.objectContaining({ evento: 'stripe.webhook' }));
   });

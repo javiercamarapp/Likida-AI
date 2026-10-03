@@ -1,0 +1,215 @@
+[20/09/2026, 05:00:00] Autopartes Ficticias del Bajío: ‎Los mensajes y las llamadas están cifrados de extremo a extremo. Solo las personas en este chat pueden leerlos, escucharlos o compartirlos.
+[20/09/2026, 08:22:23] Coordinadora Ficticia Silao: Vigilancia pide placas y económico de la unidad que viene
+[20/09/2026, 08:26:23] Despacho Innovativos Demo: Le comparto placas y económico por este medio.
+[20/09/2026, 09:11:23] Coordinadora Ficticia Silao: Falta la carta porte del embarque INN-2518
+[20/09/2026, 09:16:23] Servicio a Cliente Demo A: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+[20/09/2026, 10:01:23] Ing. Ficticio de Compras: Buen día, ¿me confirman la hora estimada de llegada?
+[20/09/2026, 10:01:43] Ing. Ficticio de Compras: <Multimedia omitido>
+[20/09/2026, 10:45:23] Despacho Innovativos Demo: Buen día. La unidad va en ruta; su hora estimada de llegada es 13:30.
+[20/09/2026, 11:34:23] Coordinadora Ficticia Silao: Mándenme la remisión sellada del viaje INN-2419, por favor
+[20/09/2026, 11:37:23] Despacho Innovativos Demo: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+[21/09/2026, 09:52:42] Ing. Ficticio de Compras: ¿Ya tienen el POD? Lo necesita facturación
+[21/09/2026, 10:38:42] Servicio a Cliente Demo A: Enseguida le comparto la remisión sellada.
+[21/09/2026, 11:26:42] Ing. Ficticio de Compras: Vigilancia pide placas y económico de la unidad que viene
+[21/09/2026, 12:03:42] Servicio a Cliente Demo A: Le comparto placas y económico por este medio.
+[21/09/2026, 12:34:42] Coordinadora Ficticia Silao: Necesitamos mover la cita del viaje INN-2064 una hora
+[21/09/2026, 12:36:42] Servicio a Cliente Demo A: Anotado, lo coordinamos con el operador y le confirmo.
+[22/09/2026, 08:21:56] Coordinadora Ficticia Silao: Necesitamos mover la cita del viaje INN-2565 una hora
+[22/09/2026, 08:28:56] Despacho Innovativos Demo: Sin problema, ajustamos la cita y le aviso.
+[22/09/2026, 08:44:56] Ing. Ficticio de Compras: ¿Dónde va la unidad del viaje INN-2375?
+[22/09/2026, 08:45:16] Ing. Ficticio de Compras: <Multimedia omitido>
+[22/09/2026, 08:47:56] Despacho Innovativos Demo: La unidad va por Matehuala, avanzando con normalidad.
+[23/09/2026, 08:30:07] Coordinadora Ficticia Silao: ¿Qué andén nos toca mañana?
+[23/09/2026, 09:13:07] Despacho Innovativos Demo: Sin problema, ajustamos la cita y le aviso.
+[23/09/2026, 09:25:07] Ing. Ficticio de Compras: ¿Cuánto falta para que llegue el viaje INN-2795?
+[23/09/2026, 09:31:07] Servicio a Cliente Demo A: Buen día. La unidad va en ruta; su hora estimada de llegada es 12:45.
+[23/09/2026, 10:36:07] Ing. Ficticio de Compras: Vigilancia pide placas y económico de la unidad que viene
+[23/09/2026, 10:38:07] Despacho Innovativos Demo: Le comparto placas y económico por este medio.
+[24/09/2026, 07:25:54] Ing. Ficticio de Compras: Mándenme la remisión sellada del viaje INN-2208, por favor
+[24/09/2026, 07:53:54] Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
+[24/09/2026, 08:37:54] Ing. Ficticio de Compras: ¿Dónde va la unidad del viaje INN-2453?
+[24/09/2026, 08:39:54] Servicio a Cliente Demo A: La unidad va por Querétaro, avanzando con normalidad.
+[25/09/2026, 08:40:56] Coordinadora Ficticia Silao: ¿Pueden llegar antes de las 8? Hay espacio en andén
+[25/09/2026, 09:11:56] Servicio a Cliente Demo A: Sin problema, ajustamos la cita y le aviso.
+[25/09/2026, 10:10:56] Coordinadora Ficticia Silao: Falta la carta porte del embarque INN-2202
+[25/09/2026, 10:11:36] Coordinadora Ficticia Silao: Mi teléfono por si es urgente: 00 0000 0101 y correo ficticio@demo.invalid
+[25/09/2026, 10:11:56] Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
+[25/09/2026, 11:22:56] Coordinadora Ficticia Silao: ¿Pueden llegar antes de las 8? Hay espacio en andén
+[25/09/2026, 11:30:56] Despacho Innovativos Demo: Sin problema, ajustamos la cita y le aviso.
+[25/09/2026, 12:22:56] Coordinadora Ficticia Silao: Buen día, ¿me confirman la hora estimada de llegada?
+[25/09/2026, 12:26:56] Despacho Innovativos Demo: Buen día. La unidad va en ruta; su hora estimada de llegada es 09:30.
+[25/09/2026, 13:34:56] Coordinadora Ficticia Silao: ¿Me pueden mandar la ubicación del tracto?
+[25/09/2026, 13:40:56] Despacho Innovativos Demo: Está a unos 46 km de su planta; le aviso al llegar.
+[26/09/2026, 07:14:50] Coordinadora Ficticia Silao: ¿A qué hora llega la unidad?
+[26/09/2026, 07:15:50] Despacho Innovativos Demo: Buen día. La unidad va en ruta; su hora estimada de llegada es 08:00.
+[26/09/2026, 07:27:50] Ing. Ficticio de Compras: Necesito el ETA del embarque de hoy
+[26/09/2026, 07:31:50] Despacho Innovativos Demo: Le confirmo: llega aproximadamente a las 11:30.
+[27/09/2026, 07:44:09] Coordinadora Ficticia Silao: Otra vez tarde. Voy a levantar una queja con mi gerente
+[27/09/2026, 07:50:09] Servicio a Cliente Demo A: Lamentamos la demora; ya estoy escalando con el jefe de tráfico y le doy una respuesta en minutos.
+[27/09/2026, 08:54:09] Coordinadora Ficticia Silao: ¿Cuánto falta para que llegue el viaje INN-2815?
+[27/09/2026, 08:55:09] Servicio a Cliente Demo A: Buen día. La unidad va en ruta; su hora estimada de llegada es 08:15.
+[27/09/2026, 09:53:09] Coordinadora Ficticia Silao: ¿Cuánto falta para que llegue el viaje INN-2392?
+[27/09/2026, 09:59:09] Despacho Innovativos Demo: Le confirmo: llega aproximadamente a las 11:00.
+[27/09/2026, 10:26:09] Ing. Ficticio de Compras: Ya pasó la hora de la cita y no sé dónde viene la unidad
+[27/09/2026, 10:30:09] Servicio a Cliente Demo A: Está a unos 92 km de su planta; le aviso al llegar.
+[27/09/2026, 11:35:09] Coordinadora Ficticia Silao: ¿A qué hora llega la unidad?
+[27/09/2026, 11:41:09] Servicio a Cliente Demo A: Le confirmo: llega aproximadamente a las 14:00.
+[27/09/2026, 12:42:09] Coordinadora Ficticia Silao: Necesito el ETA del embarque de hoy
+[27/09/2026, 12:44:09] Servicio a Cliente Demo A: Buen día. La unidad va en ruta; su hora estimada de llegada es 15:30.
+[28/09/2026, 07:21:35] Ing. Ficticio de Compras: Nadie contesta, la línea está parada por falta de material
+[28/09/2026, 07:25:35] Despacho Innovativos Demo: Una disculpa, estamos verificando la unidad ahora mismo.
+[28/09/2026, 08:10:35] Ing. Ficticio de Compras: ¿A qué hora llega la unidad?
+[28/09/2026, 08:23:35] Servicio a Cliente Demo A: Buen día. La unidad va en ruta; su hora estimada de llegada es 10:00.
+[28/09/2026, 08:46:35] Coordinadora Ficticia Silao: Llevamos 2 horas esperando la unidad, esto es inaceptable
+[28/09/2026, 09:02:35] Despacho Innovativos Demo: Una disculpa, estamos verificando la unidad ahora mismo.
+[28/09/2026, 09:56:35] Coordinadora Ficticia Silao: ¿Dónde va la unidad del viaje INN-2570?
+[28/09/2026, 09:58:35] Despacho Innovativos Demo: La unidad va por San Luis Potosí, avanzando con normalidad.
+[28/09/2026, 10:51:35] Coordinadora Ficticia Silao: ¿Me pueden mandar la ubicación del tracto?
+[28/09/2026, 10:54:35] Despacho Innovativos Demo: La unidad va por Matehuala, avanzando con normalidad.
+[29/09/2026, 06:55:56] Coordinadora Ficticia Silao: ¿Pueden llegar antes de las 8? Hay espacio en andén
+[29/09/2026, 06:59:56] Servicio a Cliente Demo A: Sin problema, ajustamos la cita y le aviso.
+[29/09/2026, 07:30:56] Ing. Ficticio de Compras: Mándenme la remisión sellada del viaje INN-2589, por favor
+[29/09/2026, 07:35:56] Despacho Innovativos Demo: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+[29/09/2026, 08:33:56] Coordinadora Ficticia Silao: ¿Me pasan las placas y el nombre del operador?
+[29/09/2026, 08:39:56] Despacho Innovativos Demo: Placas DMGD1107, operador a su nombre en el pase de vigilancia.
+[29/09/2026, 09:29:56] Coordinadora Ficticia Silao: Vigilancia pide placas y económico de la unidad que viene
+[29/09/2026, 09:31:56] Servicio a Cliente Demo A: Le comparto placas y económico por este medio.
+[30/09/2026, 09:02:10] Ing. Ficticio de Compras: Llevamos 2 horas esperando la unidad, esto es inaceptable
+[30/09/2026, 09:25:10] Servicio a Cliente Demo A: Lamentamos la demora; ya estoy escalando con el jefe de tráfico y le doy una respuesta en minutos.
+[30/09/2026, 09:40:10] Ing. Ficticio de Compras: ¿Me pasan las placas y el nombre del operador?
+[30/09/2026, 09:46:10] Servicio a Cliente Demo A: Placas DMBD1168, operador a su nombre en el pase de vigilancia.
+[30/09/2026, 10:54:10] Ing. Ficticio de Compras: ¿Cuánto falta para que llegue el viaje INN-2599?
+[30/09/2026, 10:56:10] Despacho Innovativos Demo: Buen día. La unidad va en ruta; su hora estimada de llegada es 19:30.
+[30/09/2026, 11:07:10] Coordinadora Ficticia Silao: Nadie contesta, la línea está parada por falta de material
+[30/09/2026, 11:11:10] Servicio a Cliente Demo A: Una disculpa, estamos verificando la unidad ahora mismo.
+[01/10/2026, 07:47:16] Ing. Ficticio de Compras: ¿Me pasan las placas y el nombre del operador?
+[01/10/2026, 07:51:16] Servicio a Cliente Demo A: Le comparto placas y económico por este medio.
+[01/10/2026, 08:39:16] Coordinadora Ficticia Silao: Ya pasó la hora de la cita y no sé dónde viene la unidad
+[01/10/2026, 08:47:16] Despacho Innovativos Demo: Está a unos 84 km de su planta; le aviso al llegar.
+[02/10/2026, 07:10:45] Coordinadora Ficticia Silao: Necesitamos mover la cita del viaje INN-2529 una hora
+[02/10/2026, 07:11:05] Coordinadora Ficticia Silao: <Multimedia omitido>
+[02/10/2026, 07:13:45] Despacho Innovativos Demo: Anotado, lo coordinamos con el operador y le confirmo.
+[02/10/2026, 08:27:45] Ing. Ficticio de Compras: Ya pasó la hora de la cita y no sé dónde viene la unidad
+[02/10/2026, 08:35:45] Despacho Innovativos Demo: La unidad va por Matehuala, avanzando con normalidad.
+[03/10/2026, 06:45:54] Coordinadora Ficticia Silao: ¿A qué hora llega la unidad?
+[03/10/2026, 06:53:54] Despacho Innovativos Demo: Buen día. La unidad va en ruta; su hora estimada de llegada es 09:30.
+[03/10/2026, 08:05:54] Ing. Ficticio de Compras: ¿Cuánto falta para que llegue el viaje INN-2763?
+[03/10/2026, 08:08:54] Servicio a Cliente Demo A: Le confirmo: llega aproximadamente a las 14:45.
+[03/10/2026, 08:15:54] Ing. Ficticio de Compras: ¿Ya tienen el POD? Lo necesita facturación
+[03/10/2026, 08:23:54] Servicio a Cliente Demo A: Enseguida le comparto la remisión sellada.
+[04/10/2026, 08:23:45] Coordinadora Ficticia Silao: Llevamos 2 horas esperando la unidad, esto es inaceptable
+[04/10/2026, 08:31:45] Despacho Innovativos Demo: Una disculpa, estamos verificando la unidad ahora mismo.
+[04/10/2026, 09:25:45] Ing. Ficticio de Compras: ¿Me pasan las placas y el nombre del operador?
+[04/10/2026, 09:32:45] Servicio a Cliente Demo A: Placas DMAE1196, operador a su nombre en el pase de vigilancia.
+[04/10/2026, 10:41:45] Ing. Ficticio de Compras: Vigilancia pide placas y económico de la unidad que viene
+[04/10/2026, 10:46:45] Servicio a Cliente Demo A: Le comparto placas y económico por este medio.
+[04/10/2026, 11:09:45] Coordinadora Ficticia Silao: Mándenme la remisión sellada del viaje INN-2401, por favor
+[04/10/2026, 11:16:45] Servicio a Cliente Demo A: Enseguida le comparto la remisión sellada.
+[04/10/2026, 11:46:45] Ing. Ficticio de Compras: ¿Ya tienen el POD? Lo necesita facturación
+[04/10/2026, 11:52:45] Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
+[04/10/2026, 12:05:45] Ing. Ficticio de Compras: Buen día, ¿me confirman la hora estimada de llegada?
+[04/10/2026, 12:09:45] Despacho Innovativos Demo: Le confirmo: llega aproximadamente a las 18:45.
+[05/10/2026, 08:40:52] Coordinadora Ficticia Silao: ¿Dónde va la unidad del viaje INN-2449?
+[05/10/2026, 08:41:52] Despacho Innovativos Demo: Está a unos 254 km de su planta; le aviso al llegar.
+[05/10/2026, 09:00:52] Coordinadora Ficticia Silao: Llevamos 2 horas esperando la unidad, esto es inaceptable
+[05/10/2026, 09:47:52] Servicio a Cliente Demo A: Una disculpa, estamos verificando la unidad ahora mismo.
+[05/10/2026, 10:16:52] Coordinadora Ficticia Silao: ¿Pueden llegar antes de las 8? Hay espacio en andén
+[05/10/2026, 10:17:52] Servicio a Cliente Demo A: Anotado, lo coordinamos con el operador y le confirmo.
+[05/10/2026, 10:34:52] Ing. Ficticio de Compras: ¿A qué hora llega la unidad?
+[05/10/2026, 10:37:52] Servicio a Cliente Demo A: Le confirmo: llega aproximadamente a las 13:45.
+[05/10/2026, 11:42:52] Ing. Ficticio de Compras: Necesitamos mover la cita del viaje INN-2311 una hora
+[05/10/2026, 11:46:52] Servicio a Cliente Demo A: Anotado, lo coordinamos con el operador y le confirmo.
+[06/10/2026, 06:36:54] Ing. Ficticio de Compras: ¿A qué hora llega la unidad?
+[06/10/2026, 07:05:54] Servicio a Cliente Demo A: Le confirmo: llega aproximadamente a las 18:45.
+[06/10/2026, 07:21:54] Coordinadora Ficticia Silao: Vigilancia pide placas y económico de la unidad que viene
+[06/10/2026, 07:24:54] Despacho Innovativos Demo: Le comparto placas y económico por este medio.
+[07/10/2026, 08:27:00] Ing. Ficticio de Compras: ¿Me pasan las placas y el nombre del operador?
+[07/10/2026, 08:32:00] Despacho Innovativos Demo: Le comparto placas y económico por este medio.
+[07/10/2026, 08:43:00] Ing. Ficticio de Compras: ¿Dónde va la unidad del viaje INN-2470?
+[07/10/2026, 09:03:00] Servicio a Cliente Demo A: Está a unos 22 km de su planta; le aviso al llegar.
+[07/10/2026, 09:13:00] Ing. Ficticio de Compras: Nadie contesta, la línea está parada por falta de material
+[07/10/2026, 09:46:00] Servicio a Cliente Demo A: Una disculpa, estamos verificando la unidad ahora mismo.
+[07/10/2026, 10:56:00] Coordinadora Ficticia Silao: ¿Qué andén nos toca mañana?
+[07/10/2026, 10:58:00] Despacho Innovativos Demo: Anotado, lo coordinamos con el operador y le confirmo.
+[08/10/2026, 07:54:36] Coordinadora Ficticia Silao: ¿Ya tienen el POD? Lo necesita facturación
+[08/10/2026, 07:55:36] Despacho Innovativos Demo: Enseguida le comparto la remisión sellada.
+[08/10/2026, 09:07:36] Ing. Ficticio de Compras: Falta la carta porte del embarque INN-2584
+[08/10/2026, 09:11:36] Despacho Innovativos Demo: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+[08/10/2026, 10:17:36] Coordinadora Ficticia Silao: ¿Me pasan las placas y el nombre del operador?
+[08/10/2026, 10:23:36] Despacho Innovativos Demo: Le comparto placas y económico por este medio.
+[08/10/2026, 11:23:36] Ing. Ficticio de Compras: ¿Qué andén nos toca mañana?
+[08/10/2026, 11:30:36] Servicio a Cliente Demo A: Anotado, lo coordinamos con el operador y le confirmo.
+[09/10/2026, 09:08:45] Ing. Ficticio de Compras: ¿Cuánto falta para que llegue el viaje INN-2495?
+[09/10/2026, 09:11:45] Servicio a Cliente Demo A: Le confirmo: llega aproximadamente a las 12:00.
+[09/10/2026, 09:52:45] Coordinadora Ficticia Silao: Necesitamos mover la cita del viaje INN-2136 una hora
+[09/10/2026, 09:54:45] Despacho Innovativos Demo: Sin problema, ajustamos la cita y le aviso.
+[09/10/2026, 10:44:45] Coordinadora Ficticia Silao: ¿A qué hora llega la unidad?
+[09/10/2026, 10:45:45] Servicio a Cliente Demo A: Buen día. La unidad va en ruta; su hora estimada de llegada es 11:00.
+[09/10/2026, 11:12:45] Ing. Ficticio de Compras: Llevamos 2 horas esperando la unidad, esto es inaceptable
+[09/10/2026, 12:00:45] Despacho Innovativos Demo: Una disculpa, estamos verificando la unidad ahora mismo.
+[10/10/2026, 07:58:10] Ing. Ficticio de Compras: Ya pasó la hora de la cita y no sé dónde viene la unidad
+[10/10/2026, 08:00:10] Despacho Innovativos Demo: Está a unos 34 km de su planta; le aviso al llegar.
+[10/10/2026, 08:38:10] Ing. Ficticio de Compras: Falta la carta porte del embarque INN-2086
+[10/10/2026, 09:20:10] Servicio a Cliente Demo A: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+[10/10/2026, 10:01:10] Coordinadora Ficticia Silao: ¿A qué hora llega la unidad?
+[10/10/2026, 10:07:10] Despacho Innovativos Demo: Buen día. La unidad va en ruta; su hora estimada de llegada es 10:45.
+[10/10/2026, 10:30:10] Coordinadora Ficticia Silao: ¿Me pasan las placas y el nombre del operador?
+[10/10/2026, 10:36:10] Servicio a Cliente Demo A: Le comparto placas y económico por este medio.
+[10/10/2026, 11:19:10] Ing. Ficticio de Compras: ¿Me pasan las placas y el nombre del operador?
+[10/10/2026, 11:21:10] Despacho Innovativos Demo: Le comparto placas y económico por este medio.
+[11/10/2026, 06:28:54] Coordinadora Ficticia Silao: ¿Dónde va la unidad del viaje INN-2885?
+[11/10/2026, 06:58:54] Servicio a Cliente Demo A: Está a unos 296 km de su planta; le aviso al llegar.
+[11/10/2026, 07:13:54] Coordinadora Ficticia Silao: Vigilancia pide placas y económico de la unidad que viene
+[11/10/2026, 07:49:54] Servicio a Cliente Demo A: Placas DMFG1069, operador a su nombre en el pase de vigilancia.
+[11/10/2026, 08:23:54] Ing. Ficticio de Compras: Vigilancia pide placas y económico de la unidad que viene
+[11/10/2026, 08:29:54] Servicio a Cliente Demo A: Placas DMFE1136, operador a su nombre en el pase de vigilancia.
+[11/10/2026, 09:38:54] Coordinadora Ficticia Silao: ¿Qué andén nos toca mañana?
+[11/10/2026, 09:45:54] Despacho Innovativos Demo: Anotado, lo coordinamos con el operador y le confirmo.
+[12/10/2026, 08:14:55] Ing. Ficticio de Compras: Ya pasó la hora de la cita y no sé dónde viene la unidad
+[12/10/2026, 08:17:55] Despacho Innovativos Demo: Está a unos 237 km de su planta; le aviso al llegar.
+[12/10/2026, 09:10:55] Coordinadora Ficticia Silao: Necesitamos mover la cita del viaje INN-2565 una hora
+[12/10/2026, 09:17:55] Servicio a Cliente Demo A: Sin problema, ajustamos la cita y le aviso.
+[13/10/2026, 08:40:17] Coordinadora Ficticia Silao: Ya pasó la hora de la cita y no sé dónde viene la unidad
+[13/10/2026, 08:41:17] Servicio a Cliente Demo A: La unidad va por Saltillo, avanzando con normalidad.
+[13/10/2026, 09:38:17] Coordinadora Ficticia Silao: ¿Cuánto falta para que llegue el viaje INN-2175?
+[13/10/2026, 09:54:17] Despacho Innovativos Demo: Le confirmo: llega aproximadamente a las 08:45.
+[13/10/2026, 11:08:17] Coordinadora Ficticia Silao: Nadie contesta, la línea está parada por falta de material
+[13/10/2026, 11:11:17] Despacho Innovativos Demo: Lamentamos la demora; ya estoy escalando con el jefe de tráfico y le doy una respuesta en minutos.
+[14/10/2026, 08:36:23] Coordinadora Ficticia Silao: ¿Dónde va la unidad del viaje INN-2546?
+[14/10/2026, 08:44:23] Despacho Innovativos Demo: Está a unos 180 km de su planta; le aviso al llegar.
+[14/10/2026, 09:09:23] Ing. Ficticio de Compras: Mándenme la remisión sellada del viaje INN-2823, por favor
+[14/10/2026, 09:17:23] Servicio a Cliente Demo A: Enseguida le comparto la remisión sellada.
+[15/10/2026, 07:43:15] Coordinadora Ficticia Silao: ¿Me pasan las placas y el nombre del operador?
+[15/10/2026, 07:43:35] Coordinadora Ficticia Silao: <Multimedia omitido>
+[15/10/2026, 07:44:15] Servicio a Cliente Demo A: Placas DMED1128, operador a su nombre en el pase de vigilancia.
+[15/10/2026, 08:37:15] Coordinadora Ficticia Silao: ¿Pueden llegar antes de las 8? Hay espacio en andén
+[15/10/2026, 08:45:15] Despacho Innovativos Demo: Anotado, lo coordinamos con el operador y le confirmo.
+[16/10/2026, 09:52:24] Coordinadora Ficticia Silao: Necesito el ETA del embarque de hoy
+[16/10/2026, 09:59:24] Despacho Innovativos Demo: Le confirmo: llega aproximadamente a las 11:30.
+[16/10/2026, 10:26:24] Ing. Ficticio de Compras: ¿Cuánto falta para que llegue el viaje INN-2267?
+[16/10/2026, 10:26:44] Ing. Ficticio de Compras: <Multimedia omitido>
+[16/10/2026, 10:34:24] Despacho Innovativos Demo: Buen día. La unidad va en ruta; su hora estimada de llegada es 15:30.
+[16/10/2026, 11:18:24] Coordinadora Ficticia Silao: Mándenme la remisión sellada del viaje INN-2847, por favor
+[16/10/2026, 11:25:24] Servicio a Cliente Demo A: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+[16/10/2026, 12:02:24] Ing. Ficticio de Compras: ¿Me pasan las placas y el nombre del operador?
+[16/10/2026, 12:06:24] Despacho Innovativos Demo: Le comparto placas y económico por este medio.
+[17/10/2026, 07:39:32] Coordinadora Ficticia Silao: ¿Ya tienen el POD? Lo necesita facturación
+[17/10/2026, 07:44:32] Servicio a Cliente Demo A: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+[17/10/2026, 08:04:32] Ing. Ficticio de Compras: Llevamos 2 horas esperando la unidad, esto es inaceptable
+[17/10/2026, 08:54:32] Servicio a Cliente Demo A: Lamentamos la demora; ya estoy escalando con el jefe de tráfico y le doy una respuesta en minutos.
+[17/10/2026, 09:02:32] Ing. Ficticio de Compras: ¿Ya tienen el POD? Lo necesita facturación
+[17/10/2026, 09:08:32] Servicio a Cliente Demo A: Enseguida le comparto la remisión sellada.
+[17/10/2026, 09:53:32] Coordinadora Ficticia Silao: ¿Me pueden mandar la ubicación del tracto?
+[17/10/2026, 09:54:32] Servicio a Cliente Demo A: La unidad va por San Luis Potosí, avanzando con normalidad.
+[18/10/2026, 08:34:34] Coordinadora Ficticia Silao: ¿Me pueden mandar la ubicación del tracto?
+[18/10/2026, 08:39:34] Servicio a Cliente Demo A: La unidad va por León, avanzando con normalidad.
+[18/10/2026, 08:48:34] Ing. Ficticio de Compras: Vigilancia pide placas y económico de la unidad que viene
+[18/10/2026, 08:51:34] Despacho Innovativos Demo: Placas DMBA1173, operador a su nombre en el pase de vigilancia.
+[18/10/2026, 09:43:34] Ing. Ficticio de Compras: Vigilancia pide placas y económico de la unidad que viene
+[18/10/2026, 10:06:34] Despacho Innovativos Demo: Le comparto placas y económico por este medio.
+[19/10/2026, 07:47:19] Coordinadora Ficticia Silao: ¿Me pasan las placas y el nombre del operador?
+[19/10/2026, 07:54:19] Despacho Innovativos Demo: Le comparto placas y económico por este medio.
+[19/10/2026, 09:00:19] Ing. Ficticio de Compras: ¿Ya tienen el POD? Lo necesita facturación
+[19/10/2026, 09:04:19] Despacho Innovativos Demo: El POD está en revisión; se lo envío en cuanto lo tenga firmado.
+[19/10/2026, 09:19:19] Ing. Ficticio de Compras: Vigilancia pide placas y económico de la unidad que viene
+[19/10/2026, 09:41:19] Despacho Innovativos Demo: Le comparto placas y económico por este medio.

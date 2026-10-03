@@ -211,6 +211,25 @@ describe('cuadrarViaje', () => {
     expect(r.estatus).toBe('revisar');
   });
 
+  // AUDITORÍA OLA 1, #7 / criterio P36 del fiscalista: el 602 del SAT es AMBIGUO (un
+  // UUID, un RFC o un total mal leídos devuelven lo mismo que un comprobante que no
+  // existe). El texto que ve el contador y le llega al jefe NO acusa de «inexistente
+  // o fabricado» a un proveedor que puede ser legítimo: dice que NO SE PUDO CONFIRMAR.
+  it('602: el texto dice «no se pudo confirmar» y NO acusa de inexistente/fabricado', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v9b', anticipo: 1000, politica,
+      gastos: [g({ concepto: 'factura', monto: 1000, folio: 'F4', cfdiUuid: 'u4', estadoSat: 'no_encontrado' })],
+    });
+    const d = r.diferencias.find((x) => x.tipo === 'cfdi_no_encontrado')!;
+    expect(d.nota).toMatch(/no pudo confirmar/);
+    expect(d.nota).toMatch(/602/);
+    expect(d.nota).toMatch(/mal le[ií]dos/);
+    expect(d.nota).not.toMatch(/fabricad|inexistente|apócrif|falsific/i);
+    // El veredicto de dinero NO cambia con el texto: sigue sin tomarse como deducible.
+    expect(d.nota).toMatch(/no se toma como deducible/);
+    expect(r.estatus).toBe('revisar');
+  });
+
   // ME-5: un monto ≤ 0 no debe reducir el total ni sesgar la diferencia.
   it('ME-5: monto negativo no reduce el total y se marca monto_invalido', () => {
     const r = cuadrarViaje({
@@ -1106,7 +1125,7 @@ describe('cuadrarViaje — estímulo de IEPS de diésel', () => {
 
   it('NO acredita pesos a partir del IEPS trasladado del CFDI', () => {
     const r = cuadrarViaje({
-      viajeId: 'v1', anticipo: 5000, politica: conIeps, estimulos: est,
+      viajeId: 'v1', anticipo: 5000, politica: conIeps, estimulos: est, tarjetasEmpresa: true,
       gastos: [g({ concepto: 'diesel', monto: 4812, cfdiUuid: 'u1', claveProdServ: '15101514',
                    iepsTraslado: 1200, ocrExtra: { litros: 180 }, xmlVerificado: true, formaPago: '04' })],
     });
@@ -1115,7 +1134,7 @@ describe('cuadrarViaje — estímulo de IEPS de diésel', () => {
 
   it('cuenta los LITROS elegibles, que es el dato que el contador sí puede usar', () => {
     const r = cuadrarViaje({
-      viajeId: 'v1', anticipo: 5000, politica: conIeps, estimulos: est,
+      viajeId: 'v1', anticipo: 5000, politica: conIeps, estimulos: est, tarjetasEmpresa: true,
       gastos: [
         g({ concepto: 'diesel', monto: 4812, cfdiUuid: 'u1', claveProdServ: '15101514', ocrExtra: { litros: 180 }, xmlVerificado: true, formaPago: '04' }),
         g({ concepto: 'diesel', monto: 2000, cfdiUuid: 'u2', claveProdServ: '15101514', ocrExtra: { litros: 75 }, xmlVerificado: true, formaPago: '04' }),
@@ -1126,7 +1145,7 @@ describe('cuadrarViaje — estímulo de IEPS de diésel', () => {
 
   it('sin litros leídos no inventa el dato', () => {
     const r = cuadrarViaje({
-      viajeId: 'v1', anticipo: 5000, politica: conIeps, estimulos: est,
+      viajeId: 'v1', anticipo: 5000, politica: conIeps, estimulos: est, tarjetasEmpresa: true,
       gastos: [g({ concepto: 'diesel', monto: 4812, cfdiUuid: 'u1', claveProdServ: '15101514', xmlVerificado: true, formaPago: '04' })],
     });
     expect(r.litrosDieselAcreditables).toBe(0);
@@ -1136,7 +1155,7 @@ describe('cuadrarViaje — estímulo de IEPS de diésel', () => {
     // LIF 20-A-IV exige monedero, tarjeta, cheque nominativo o transferencia —
     // SIN la válvula del 15% que sí existe para ISR (RFA 2.9).
     const r = cuadrarViaje({
-      viajeId: 'v1', anticipo: 5000, politica: conIeps, estimulos: est,
+      viajeId: 'v1', anticipo: 5000, politica: conIeps, estimulos: est, tarjetasEmpresa: true,
       gastos: [g({ concepto: 'diesel', monto: 4812, cfdiUuid: 'u1', claveProdServ: '15101514',
                    ocrExtra: { litros: 180 }, xmlVerificado: true, formaPago: '01' })],   // 01 = efectivo
     });
@@ -1150,7 +1169,7 @@ describe('cuadrarViaje — estímulo de IEPS de diésel', () => {
   // ═════════════════════════════════════════════════════════════════════════
   it('litros que no cuadran con el monto (un decimal corrido) NO se acreditan, y se marca para revisar', () => {
     const r = cuadrarViaje({
-      viajeId: 'v1', anticipo: 10000, politica: conIeps, estimulos: est,
+      viajeId: 'v1', anticipo: 10000, politica: conIeps, estimulos: est, tarjetasEmpresa: true,
       gastos: [g({ concepto: 'diesel', monto: 5800, cfdiUuid: 'u1', claveProdServ: '15101514',
                    ocrExtra: { litros: 20000 }, xmlVerificado: true, formaPago: '04' })],
     });
@@ -1163,7 +1182,7 @@ describe('cuadrarViaje — estímulo de IEPS de diésel', () => {
     // El mismo caso que ya cubre 'cuenta los LITROS elegibles' de arriba,
     // repetido aquí para dejar el contraste con el de encima en el mismo bloque.
     const r = cuadrarViaje({
-      viajeId: 'v1', anticipo: 10000, politica: conIeps, estimulos: est,
+      viajeId: 'v1', anticipo: 10000, politica: conIeps, estimulos: est, tarjetasEmpresa: true,
       gastos: [g({ concepto: 'diesel', monto: 5800, cfdiUuid: 'u1', claveProdServ: '15101514',
                    ocrExtra: { litros: 215 }, xmlVerificado: true, formaPago: '04' })],   // $5800/215 ≈ $27/L
     });
@@ -1238,7 +1257,7 @@ describe('cuadrarViaje — IVA de gastos parcialmente deducibles (LIVA 5-I)', ()
   it('el viático que excede el tope acredita su IVA EN PROPORCIÓN', () => {
     // $900 con tope $750 → deducible 83.33% → IVA acreditable 83.33% de $144.
     const r = cuadrarViaje({
-      viajeId: 'v1', anticipo: 1000, politica: pol, estimulos: est,
+      viajeId: 'v1', anticipo: 1000, politica: pol, estimulos: est, tarjetasEmpresa: true,
       gastos: [g({ concepto: 'alimentacion', monto: 900, fecha: '2026-05-01', cfdiUuid: 'u1',
                    xmlVerificado: true, ivaTraslado: 144, formaPago: '04' })],
     });
@@ -1248,7 +1267,7 @@ describe('cuadrarViaje — IVA de gastos parcialmente deducibles (LIVA 5-I)', ()
 
   it('un gasto totalmente deducible acredita su IVA completo', () => {
     const r = cuadrarViaje({
-      viajeId: 'v1', anticipo: 1000, politica: pol, estimulos: est,
+      viajeId: 'v1', anticipo: 1000, politica: pol, estimulos: est, tarjetasEmpresa: true,
       gastos: [g({ concepto: 'alimentacion', monto: 700, fecha: '2026-05-01', cfdiUuid: 'u1',
                    xmlVerificado: true, ivaTraslado: 112, formaPago: '04' })],
     });
@@ -1258,7 +1277,7 @@ describe('cuadrarViaje — IVA de gastos parcialmente deducibles (LIVA 5-I)', ()
   it('la proporción se calcula por gasto, no sobre el total del viaje', () => {
     // Uno excede y otro no: el que no excede conserva su IVA íntegro.
     const r = cuadrarViaje({
-      viajeId: 'v1', anticipo: 2000, politica: pol, estimulos: est,
+      viajeId: 'v1', anticipo: 2000, politica: pol, estimulos: est, tarjetasEmpresa: true,
       gastos: [
         g({ concepto: 'alimentacion', monto: 900, fecha: '2026-05-01', cfdiUuid: 'u1', xmlVerificado: true, ivaTraslado: 144, formaPago: '04' }),
         g({ concepto: 'alimentacion', monto: 700, fecha: '2026-05-02', cfdiUuid: 'u2', xmlVerificado: true, ivaTraslado: 112, formaPago: '04' }),
@@ -1293,7 +1312,7 @@ describe('cuadrarViaje — el excedente diario se reparte, no se cuelga de uno',
     // $1,050 en tres comidas, tope $750 → deducible el 71.43% del día.
     // IVA total $168 → acreditable $120.
     const r = cuadrarViaje({
-      viajeId: 'v1', anticipo: 2000, politica: pol, estimulos: est,
+      viajeId: 'v1', anticipo: 2000, politica: pol, estimulos: est, tarjetasEmpresa: true,
       gastos: [comida(600, 96), comida(300, 48), comida(150, 24)],
     });
     expect(r.ivaAcreditable).toBeCloseTo(168 * (750 / 1050), 2);
@@ -1301,7 +1320,7 @@ describe('cuadrarViaje — el excedente diario se reparte, no se cuelga de uno',
 
   it('el excedente total del día es el correcto, se cuelgue donde se cuelgue', () => {
     const r = cuadrarViaje({
-      viajeId: 'v1', anticipo: 2000, politica: pol, estimulos: est,
+      viajeId: 'v1', anticipo: 2000, politica: pol, estimulos: est, tarjetasEmpresa: true,
       gastos: [comida(600, 96), comida(300, 48), comida(150, 24)],
     });
     const exceso = r.diferencias.filter((d) => d.tipo === 'viatico_excede_fiscal').reduce((s, d) => s + (d.monto ?? 0), 0);
@@ -1311,7 +1330,7 @@ describe('cuadrarViaje — el excedente diario se reparte, no se cuelga de uno',
 
   it('con un solo comprobante del día sigue funcionando igual', () => {
     const r = cuadrarViaje({
-      viajeId: 'v1', anticipo: 2000, politica: pol, estimulos: est,
+      viajeId: 'v1', anticipo: 2000, politica: pol, estimulos: est, tarjetasEmpresa: true,
       gastos: [comida(900, 144)],
     });
     expect(r.ivaAcreditable).toBeCloseTo(144 * (750 / 900), 2);
@@ -1328,7 +1347,7 @@ describe('cuadrarViaje — el excedente diario se reparte, no se cuelga de uno',
   // ═══════════════════════════════════════════════════════════════════════
   it('un ticket SIN timbrar del mismo día no diluye la proporción del que sí ampara', () => {
     const r = cuadrarViaje({
-      viajeId: 'v1', anticipo: 5000, politica: pol, estimulos: est,
+      viajeId: 'v1', anticipo: 5000, politica: pol, estimulos: est, tarjetasEmpresa: true,
       gastos: [
         comida(700, 96.55),                                              // CON CFDI, bajo el tope
         g({ concepto: 'alimentacion', monto: 2000, fecha: '2026-05-01', formaPago: '01' }), // SIN CFDI

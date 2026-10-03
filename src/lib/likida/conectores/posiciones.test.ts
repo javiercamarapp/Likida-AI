@@ -191,15 +191,12 @@ describe('los fallos se dicen, no se tragan', () => {
   });
 });
 
-describe('un proveedor sin lector se dice, no se finge', () => {
-  it('Samsara tiene lector', () => { expect(lectorDe('samsara')).toBeTypeOf('function'); });
+describe('qué proveedores tienen lector', () => {
+  it('Samsara, Wialon, Geotab, Navixy y el genérico tienen lector', () => {
+    for (const id of ['samsara', 'wialon', 'geotab', 'navixy', 'gps_generico']) expect(lectorDe(id), id).toBeTypeOf('function');
+  });
 
-  it('Wialon, Geotab y Navixy todavía NO — devuelven null en vez de un método vacío', () => {
-    // Los tres abren sesión antes de leer, y su lector se escribe cuando haya
-    // una cuenta de piloto contra la cual verificarlo. Escribirlo a ciegas es
-    // cómo se consigue un adaptador que parece funcionar y no funciona.
-    expect(lectorDe('wialon')).toBeNull();
-    expect(lectorDe('geotab')).toBeNull();
-    expect(lectorDe('navixy')).toBeNull();
+  it('un proveedor sin lector devuelve null (el poller lo dice) en vez de un método vacío', () => {
+    expect(lectorDe('traccar')).toBeNull();
   });
 });

@@ -5,7 +5,7 @@ import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { InicioContenido } from './inicio-contenido';
 import { InicioOperacion } from './inicio-operacion';
 import { getPerfilCrudo } from '@/lib/likida/repo';
-import { onboardingFiscalListo } from '@/lib/likida/perfil/preguntas';
+import { onboardingFiscalListo, onboardingPospuesto } from '@/lib/likida/perfil/preguntas';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,10 +56,18 @@ export default async function DashboardInicio({
   // fuera: el bache sigue sin cerrar la puerta (`faltaOnboarding` se queda
   // en `false`), pero el redirect ya no tiene quién se lo coma.
   let faltaOnboarding = false;
+  // W2: quien eligió «lo confirmo con mi contador» NO queda sin Resumen (el candado
+  // dejaba inalcanzable el Resumen a un director que no conoce sus ingresos anuales
+  // de memoria). El Resumen se abre con un aviso permanente de que el estímulo de
+  // peaje sigue en $0 hasta declarar — ver `avisoFiscalPospuesto` abajo.
+  let avisoFiscalPospuesto = false;
   if (rol === 'flota_admin' && tenantExiste) {
     try {
       const perfil = await getPerfilCrudo(tenantId);
-      faltaOnboarding = !onboardingFiscalListo(perfil);
+      const listo = onboardingFiscalListo(perfil);
+      const pospuesto = onboardingPospuesto(perfil);
+      faltaOnboarding = !listo && !pospuesto;
+      avisoFiscalPospuesto = !listo && pospuesto;
     } catch { /* sigue al resumen */ }
   }
   if (faltaOnboarding) redirect(`/dashboard/onboarding${sufijo}`);
@@ -68,5 +76,5 @@ export default async function DashboardInicio({
     return <InicioOperacion tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijo} />;
   }
 
-  return <InicioContenido tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijo} />;
+  return <InicioContenido tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijo} avisoFiscalPospuesto={avisoFiscalPospuesto} />;
 }

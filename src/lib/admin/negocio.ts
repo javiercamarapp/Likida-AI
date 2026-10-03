@@ -1019,7 +1019,7 @@ export async function contarLiquidacionesEnRevisar(): Promise<number> {
 // EL MRR (ADM-5, auditoría 24) — antes una constante `0` en `consola.tsx` y
 // `ejecutivo/page.tsx`, aunque `saas/suscripcion.ts` (0052) ya trae
 // `suscripcion.estado` y `plan.precio_mensual` reales. El día 1 del piloto
-// (Innovativos con una suscripción activa) la consola habría seguido
+// (el cliente de demo con una suscripción activa) la consola habría seguido
 // diciendo "$0 MRR" — una cifra que el código nunca calculó, justo lo que la
 // regla #1 del producto prohíbe.
 // ═══════════════════════════════════════════════════════════════════════════

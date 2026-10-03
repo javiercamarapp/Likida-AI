@@ -1,5 +1,10 @@
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { sufijoTenant } from '../sufijo';
+import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { fuentes } from '@/lib/likida/orquestador/fuentes';
+import '@/lib/likida/orquestador/fuentes_reales';
+import { rolPuedeLeerTarea, tareaEsDeDinero } from '@/lib/likida/orquestador/permisos';
+import { TareasAbiertas } from '../viajes-en-vivo/vista';
 import { InicioContador } from './inicio-contador';
 
 export const dynamic = 'force-dynamic';
@@ -28,14 +33,22 @@ export default async function PanelContadorPage({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, tenantNombre, nombre, tenantExiste } = await resolverTenantEfectivo('/dashboard/contador', sp);
+  const { tenantId, tenantNombre, nombre, tenantExiste, rol } = await resolverTenantEfectivo('/dashboard/contador', sp);
   // El MISMO contrato de sufijo que el sidebar y que `/dashboard/page.tsx`:
   // los links que esta página emite cargan el `?tenant=`/`?vista=`/`?rol=`
   // del superadmin; para roles reales queda vacío. `sufijoTenant` es la
   // versión canónica de esa lógica para páginas server.
   const sufijo = sufijoTenant(sp);
 
+  // Las tareas de dinero que el asistente derivó (liquidación, contador): su dueño es quien ve `dinero`, y el contador no
+  // entra a /dashboard/viajes-en-vivo (es de operación), así que las lee aquí. Solo lectura: atenderlas es de quien asigna.
+  const tareas = await fuentes().escalacionesAbiertas(tenantId, 60)
+    .then((l) => l && l.filter((t) => tareaEsDeDinero(t) && rolPuedeLeerTarea(rol, t)).slice(0, 20))
+    .catch(() => null);
+  const hayTareas = puedeVerRuta(rol, '/dashboard/contador') && tareas !== null && tareas.length > 0;
+
   return (
+    <>
     <InicioContador
       tenantId={tenantId}
       tenantNombre={tenantNombre}
@@ -44,5 +57,7 @@ export default async function PanelContadorPage({
       sufijo={sufijo}
       searchParams={sp}
     />
+    {hayTareas && <main className="px-4 md:px-6 pb-6"><TareasAbiertas tareas={tareas} accion={null} ocultos={{}} /></main>}
+    </>
   );
 }

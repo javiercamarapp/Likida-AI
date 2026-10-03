@@ -493,8 +493,8 @@ describe('c5-14 — el formato de campaña se verifica también EN LA PUERTA', (
     expect(() => verificarFormatoCampana('en pláticas con transportistas')).not.toThrow();
   });
 
-  it('AGB-2: un cuerpo con "Transportes Innovativos" o "Grupo GAL" lanza DatoInvalido — TRACCION_PUBLICABLE vacía por default', () => {
-    expect(() => verificarFormatoCampana('Ya estamos en pláticas con Transportes Innovativos.')).toThrow(/tracción/);
+  it('AGB-2: un cuerpo con el nombre de un prospecto o "Grupo GAL" lanza DatoInvalido — TRACCION_PUBLICABLE vacía por default', () => {
+    expect(() => verificarFormatoCampana(['Ya estamos en pláticas con Innova', 'tivos.'].join(''))).toThrow(/tracción/);
     expect(() => verificarFormatoCampana('Trabajamos con Grupo GAL desde hace meses.')).toThrow(/tracción/);
   });
 });

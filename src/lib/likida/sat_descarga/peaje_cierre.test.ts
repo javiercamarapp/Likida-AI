@@ -64,7 +64,18 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: strin
 vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 
 const sendText = vi.fn(async (_t: string, _b: string) => 'wamid-1' as string | null);
-vi.mock('@/lib/meta/client', () => ({ sendText: (t: string, b: string) => sendText(t, b) }));
+// `avisarOficina` (texto con ventana abierta / plantilla con la cerrada) se
+// simula sobre `sendText`: aquí se prueba el contrato del barrido (sello y
+// reintento), no la selección de canal, que tiene sus propias pruebas.
+const avisarOficinaLlamadas: Array<{ parametros: string[]; contexto?: Record<string, unknown> }> = [];
+vi.mock('@/lib/meta/aviso_oficina', () => ({
+  parametrosAvisoOficina: (a: string, b: string, c: string) => [a, b, c],
+  avisarOficina: async (t: string, b: string, o: { parametros: string[]; contexto?: Record<string, unknown> }) => {
+    avisarOficinaLlamadas.push(o);
+    const id = await sendText(t, b);
+    return id ? { ok: true, via: 'texto', id } : { ok: false, motivo: 'rechazado', fueraDeVentana: false };
+  },
+}));
 
 const telefonoParaDineroDe = vi.fn(async (_t: string) => '5215500000000' as string | null);
 vi.mock('../contactos', () => ({ telefonoParaDineroDe: (t: string) => telefonoParaDineroDe(t) }));
@@ -199,9 +210,31 @@ beforeEach(() => {
   gastoFuente = null;
   sendText.mockClear();
   sendText.mockResolvedValue('wamid-1');
+  avisarOficinaLlamadas.length = 0;
   telefonoParaDineroDe.mockClear();
   telefonoParaDineroDe.mockResolvedValue('5215500000000');
   for (const f of Object.values(logger)) f.mockClear();
+});
+
+describe('P0-B · el cierre de casetas sale por avisarOficina (plantilla de respaldo fuera de ventana)', () => {
+  it('manda los parámetros de aviso_operacion_v1 con resumen ≤ 60 y el tenant/periodo/umbral en el contexto', async () => {
+    sembrar();
+    await avisarCierrePeaje(DIA_UMBRAL_7);
+    expect(avisarOficinaLlamadas).toHaveLength(1);
+    const [quien, resumen, liga] = avisarOficinaLlamadas[0].parametros;
+    expect(quien).toBe('Likida');
+    expect(resumen.length).toBeLessThanOrEqual(60);
+    expect(liga).toMatch(/^https:\/\/.+\/dashboard$/);
+    expect(avisarOficinaLlamadas[0].contexto).toMatchObject({ agente: 'peaje_cierre', tenantId: 't-1', umbral: 7 });
+  });
+
+  it('si el aviso NO salió (plantilla sin aprobar y ventana cerrada), el sello se suelta y se reintenta', async () => {
+    sembrar();
+    sendText.mockResolvedValue(null);
+    const r = await avisarCierrePeaje(DIA_UMBRAL_7);
+    expect(r.avisadas).toBe(0);
+    expect(deletesDeSello()).toHaveLength(1);
+  });
 });
 
 describe('c7-17 · el sello se RESERVA antes de mandar: la idempotencia es la PK, no un `if`', () => {

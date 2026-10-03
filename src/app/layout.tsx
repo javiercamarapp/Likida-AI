@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import { connection } from 'next/server';
 import { Inter, Inter_Tight, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
 import { exigirLegalEnProduccion } from '@/lib/legal/config';
+import { SCRIPT_TEMA } from '@/lib/seguridad/script_tema';
 
 // Inter de default en todo el sitio. El 12-ago-2026
 // Javier pidió una tipografía más corporativa para los
@@ -43,15 +45,11 @@ export const metadata: Metadata = {
 // ninguna renderiza.
 export const viewport = { width: 'device-width', initialScale: 1 };
 
-// Aplica el tema guardado ANTES del primer paint — sin esto, quien eligió
-// oscuro ve un flash blanco en cada navegación dura. Corre SOLO en el panel:
-// la landing, el login y el PDF se quedan claros (nunca se diseñaron en
-// oscuro y el naranja de marca vive sobre fondos claros). La misma
-// resolución de "sistema" que selector-tema.tsx, duplicada a propósito:
-// esto tiene que ser un string síncrono sin imports.
-const SCRIPT_TEMA = `(function(){try{if(location.pathname.indexOf('/dashboard')!==0)return;var t=localStorage.getItem('likida-tema');var d=t==='oscuro'||(t==='sistema'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}})()`;
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // CSP con nonce en TODAS las rutas (Ola 9b): Next solo puede estampar el nonce por petición en páginas
+  // dinámicas. `connection()` en el layout raíz las vuelve dinámicas (sin caché de CDN); decisión de Javier
+  // del 2-oct-2026. Ver docs/operacion/csp.md. Las rutas /api y los metadatos (sitemap, robots) no pasan por aquí.
+  await connection();
   exigirLegalEnProduccion();
   return (
     <html lang="es" className={`${inter.variable} ${interTight.variable} ${plexMono.variable}`}>

@@ -68,8 +68,10 @@ export interface ColaConductores {
  * nada, y hasta hoy esperaba detrás de los cuatro `count` de la flota.
  */
 export function VistaAgenteConductores({
-  kpis, cola, eventos, sufijo = '', notificaciones,
+  kpis, cola, eventos, sufijo = '', notificaciones, tablero,
 }: {
+  /** 0385: el tablero de hitos (semáforo, excepciones, línea de tiempo). Ya renderizado en el servidor. */
+  tablero?: React.ReactNode;
   /** FE-5: los cuatro salen de `count` en la base, no de filtrar las 100
    *  filas más recientes en memoria. `null` = no se pudo contar → "—". */
   kpis: Promise<ConteosConductores>;
@@ -89,6 +91,13 @@ export function VistaAgenteConductores({
           titulo="Comunicación con operadores"
         />
         <div className="px-5 py-5 flex-1 space-y-4">
+
+          {tablero}
+          <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12.5px]">
+            <Link href={`/dashboard/agentes/conductores/sitios${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Catálogo de sitios (clientes, plantas y andenes)</Link>
+            <Link href={`/dashboard/agentes/conductores/estadias${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Estadías en andén</Link>
+            <Link href={`/dashboard/agentes/conductores/configuracion${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Configuración (recordatorios, horario, contactos)</Link>
+          </nav>
 
           <Bloque mensaje="No se pudieron leer los conteos de la flota." esqueleto={<EsqConteos />}>
             <BloqueConteos kpis={kpis} />

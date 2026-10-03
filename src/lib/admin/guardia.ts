@@ -27,6 +27,7 @@
 //  futuro — este módulo lo declara en vez de fingir detectarlo.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { createHash } from 'node:crypto';
 import { getBandejaEscalaciones, type BandejaEscalaciones, type ItemEscalacion } from './escalaciones';
 
 export type Severidad = 'S1' | 'S2' | 'S3' | 'no_incidente';
@@ -113,4 +114,157 @@ export function clasificarBandeja(b: BandejaEscalaciones, ahoraMs: number): Clas
 export async function clasificacionDeGuardia(ahoraMs: number): Promise<ClasificacionGuardia> {
   const bandeja = await getBandejaEscalaciones(ahoraMs);
   return clasificarBandeja(bandeja, ahoraMs);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA DECISIÓN DE AVISAR (E1-A, P0-8) — la mitad PURA del vigía de producción.
+//
+// Antes vivía dentro de `scripts/mejora-diaria/vigia-produccion.mts` (launchd,
+// la Mac de Javier: una Mac apagada o dormida era una guardia ausente, punto
+// único de falla). Ahora la misma decisión la comparten el cron del servidor
+// (`/api/cron/guardia`) y ese script, que queda como herramienta manual. Pura:
+// recibe la clasificación y lo ya visto, devuelve qué avisar y el estado nuevo;
+// el llamador decide el canal. El dedup es por CAMBIO, no por estado: el mismo
+// incidente no vuelve a sonar en cada pasada.
+//
+// El estado guarda HUELLAS (sha-1 truncado) y no las claves: la clave lleva el
+// título del item y el nombre de la flota, y el estado del servidor vive en
+// `cron_latido.detalle`, que no tiene por qué cargar texto de negocio.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface EstadoGuardia {
+  /** Huellas de lo urgente ya avisado (más las claves crudas que dejó el script de la Mac, que se siguen reconociendo). */
+  vistos: string[];
+  /** Desde cuándo la base está inalcanzable (aviso una vez por racha); `null` si no lo está. */
+  baseCaidaDesde: string | null;
+  /** A3 (ronda 19): sondeos de `/api/health` fallidos SEGUIDOS. Un fallo aislado (arranque en frío, timeout) no avisa ni marca caído. */
+  rachaApp: number;
+  /** Desde cuándo (primer sondeo fallido de la racha). Va en la huella del aviso: una caída nueva NO la silencia el piso de 1 h de la anterior. */
+  appCaidaDesde: string | null;
+  /** ¿Ya salió el aviso de esta caída? (M5: si no salió, se reintenta en la siguiente pasada.) */
+  appAvisada: boolean;
+  /** Pasadas seguidas en que la bandeja de escalaciones no se pudo armar con la base sana (M6). */
+  rachaBandeja: number;
+}
+
+export const ESTADO_GUARDIA_INICIAL: EstadoGuardia = { vistos: [], baseCaidaDesde: null, rachaApp: 0, appCaidaDesde: null, appAvisada: false, rachaBandeja: 0 };
+
+/** Sondeos fallidos seguidos que se exigen antes de avisar o marcar la app caída (histéresis). */
+export const SONDEOS_FALLIDOS_PARA_CAIDA = 2;
+
+/** Un tope al estado persistido: lo urgente no puede crecer sin límite dentro de un jsonb de latido. */
+const TOPE_VISTOS = 200;
+
+/** Qué incidente ES (no cuándo se miró). */
+export function claveDeItem(i: { fuente: string; titulo: string; flota: string; desde: string }): string {
+  return `${i.fuente}|${i.titulo}|${i.flota}|${i.desde}`;
+}
+
+/** La huella estable de una clave. */
+export function huellaDeClave(clave: string): string {
+  return createHash('sha1').update(clave, 'utf8').digest('hex').slice(0, 16);
+}
+
+/** Lee el estado de un `detalle` de latido sin confiar en su forma: lo que no cuadra se descarta, no revienta. */
+export function estadoDeDetalle(detalle: unknown): EstadoGuardia {
+  if (detalle === null || typeof detalle !== 'object') return { ...ESTADO_GUARDIA_INICIAL };
+  const d = detalle as Record<string, unknown>;
+  const vistos = Array.isArray(d.vistos) ? d.vistos.filter((v): v is string => typeof v === 'string').slice(0, TOPE_VISTOS) : [];
+  const caida = typeof d.baseCaidaDesde === 'string' && !Number.isNaN(Date.parse(d.baseCaidaDesde)) ? d.baseCaidaDesde : null;
+  const entero = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? Math.min(v, 1_000) : 0);
+  const desde = typeof d.appCaidaDesde === 'string' && !Number.isNaN(Date.parse(d.appCaidaDesde)) ? d.appCaidaDesde : null;
+  return { vistos, baseCaidaDesde: caida, rachaApp: entero(d.rachaApp), appCaidaDesde: desde, appAvisada: d.appAvisada === true, rachaBandeja: entero(d.rachaBandeja) };
+}
+
+/**
+ * M4 (ronda 19): el estado de dedup vive en la MISMA base que puede caer. Si la base cae, no se puede leer el latido
+ * previo ni escribir el nuevo: sin esto cada pasada creía partir de cero (un aviso por hora de «base inalcanzable»)
+ * y «base volvió» no se emitía nunca. Esta memoria del PROCESO guarda el último estado y se usa cuando la lectura
+ * falla, y su `baseCaidaDesde` completa el estado de la base al volver. LIMITACIÓN (declarada): es por instancia;
+ * un arranque en frío o otra instancia la pierde (a lo más, un aviso repetido bajo el piso de 1 h; nunca silencio).
+ */
+let memoria: EstadoGuardia | null = null;
+export const memoriaDeEstado = {
+  leer: (): EstadoGuardia | null => memoria,
+  guardar: (e: EstadoGuardia): void => { memoria = e; },
+  /** Solo para pruebas. */
+  olvidar: (): void => { memoria = null; },
+};
+
+export interface DecisionApp { racha: number; desde: string | null; caida: boolean; avisar: boolean }
+
+/** A3: la histéresis de la app. `fallo` = el sondeo no obtuvo respuesta de la app. */
+export function decidirApp(previo: EstadoGuardia, fallo: boolean, ahoraIso: string): DecisionApp {
+  if (!fallo) return { racha: 0, desde: null, caida: false, avisar: false };
+  const racha = previo.rachaApp + 1;
+  const caida = racha >= SONDEOS_FALLIDOS_PARA_CAIDA;
+  return { racha, desde: previo.appCaidaDesde ?? ahoraIso, caida, avisar: caida && !previo.appAvisada };
+}
+
+export interface DecisionGuardia {
+  /** S1/S2 vigentes (nuevos o ya avisados). */
+  urgentes: ItemClasificado[];
+  /** Los que NO estaban en `previo.vistos`: lo que hay que avisar ahora. */
+  nuevos: ItemClasificado[];
+  ciegasNuevas: Array<{ fuente: string; error: string | null }>;
+  /** `true` si la base estaba inalcanzable en la pasada anterior y ahora se leyó. */
+  baseVolvio: boolean;
+  estado: EstadoGuardia;
+}
+
+/** La huella que se persiste de un incidente: lleva su FUENTE (`fuente~hash`) para poder conservarla si esa fuente queda ciega (B1). */
+function huellaDeItem(i: { fuente: string; titulo: string; flota: string; desde: string }): string {
+  return `${i.fuente}~${huellaDeClave(claveDeItem(i))}`;
+}
+
+/** Decide qué avisar. TODO lo vigente queda como visto; lo resuelto sale solo (si reaparece, es incidente nuevo). */
+export function decidirAvisos(c: ClasificacionGuardia, previo: EstadoGuardia): DecisionGuardia {
+  // Se reconoce la huella con fuente (formato actual), la huella pelona (estados viejos) y la clave cruda (script de la Mac).
+  const visto = (i: { fuente: string; titulo: string; flota: string; desde: string }) =>
+    previo.vistos.includes(huellaDeItem(i)) || previo.vistos.includes(huellaDeClave(claveDeItem(i))) || previo.vistos.includes(claveDeItem(i));
+  const urgentes = c.items.filter((i) => i.severidad === 'S1' || i.severidad === 'S2');
+  const nuevos = urgentes.filter((i) => !visto(i));
+  const vistoCiega = (fuente: string) => previo.vistos.includes(huellaDeClave(`ciega|${fuente}`)) || previo.vistos.includes(`ciega|${fuente}`);
+  const ciegasNuevas = c.fuentesCiegas.filter((f) => !vistoCiega(f.fuente));
+  // B1 (ronda 19): una fuente CIEGA no ve sus items, pero lo que ya se avisó de ella NO se olvida: si no, al volver la
+  // fuente sus incidentes se reavisaban como nuevos (flapping). Se conservan las huellas de las fuentes ciegas.
+  const ciegas = new Set(c.fuentesCiegas.map((f) => f.fuente));
+  const deFuentesCiegas = previo.vistos.filter((v) => [...ciegas].some((f) => v.startsWith(`${f}~`) || v.startsWith(`${f}|`)));
+  return {
+    urgentes, nuevos, ciegasNuevas,
+    baseVolvio: previo.baseCaidaDesde !== null,
+    estado: {
+      ...previo,
+      vistos: [...new Set([...urgentes.map(huellaDeItem), ...c.fuentesCiegas.map((f) => huellaDeClave(`ciega|${f.fuente}`)), ...deFuentesCiegas])].slice(0, TOPE_VISTOS),
+      baseCaidaDesde: null,
+    },
+  };
+}
+
+/**
+ * M5 (ronda 19): el dedup anota «ya lo avisé» SOLO si el aviso salió. Sin canal configurado, con el piso de una hora o con
+ * el envío rechazado, un S1 nuevo se quedaba en vistos y no volvía a sonar al arreglar el canal. Si no salió, lo nuevo
+ * se quita de vistos (lo ya avisado antes se conserva) y la siguiente pasada vuelve a intentarlo.
+ */
+export function estadoTrasAviso(d: DecisionGuardia, avisoSalio: boolean): EstadoGuardia {
+  if (avisoSalio || (d.nuevos.length === 0 && d.ciegasNuevas.length === 0)) return d.estado;
+  const sinAvisar = new Set([
+    ...d.nuevos.map(huellaDeItem),
+    ...d.ciegasNuevas.map((f) => huellaDeClave(`ciega|${f.fuente}`)),
+  ]);
+  return { ...d.estado, vistos: d.estado.vistos.filter((h) => !sinAvisar.has(h)) };
+}
+
+/** Una base inalcanzable avisa UNA vez por racha: devuelve si hay que avisar y el estado a guardar. */
+export function decidirBaseCaida(previo: EstadoGuardia, ahoraIso: string): { avisar: boolean; estado: EstadoGuardia } {
+  if (previo.baseCaidaDesde) return { avisar: false, estado: previo };
+  return { avisar: true, estado: { ...previo, baseCaidaDesde: ahoraIso } };
+}
+
+/** Las líneas del aviso (sin canal): el script de la Mac las une para WhatsApp; el cron las manda como datos del correo. */
+export function lineasDeAviso(d: Pick<DecisionGuardia, 'nuevos' | 'ciegasNuevas'>): string[] {
+  return [
+    ...d.nuevos.map((i) => `[${i.severidad}] ${i.titulo} — ${i.flota} (${i.fuente}, regla: ${i.regla})${i.vence ? ` · vence ${i.vence}` : ''}`),
+    ...d.ciegasNuevas.map((f) => `[S2] Fuente CIEGA: ${f.fuente}${f.error ? ` — ${f.error.slice(0, 80)}` : ''}`),
+  ];
 }

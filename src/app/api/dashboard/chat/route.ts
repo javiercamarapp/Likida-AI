@@ -15,7 +15,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSessionTenant } from '@/lib/auth/session';
 import { rechazoMfaSuperadminApi } from '@/lib/auth/api-superadmin';
-import { puedeVerArea } from '@/lib/auth/visibilidad';
+import { rolPuedeConversar } from '@/lib/likida/orquestador/permisos';
 import { registrarCosto, faseDeModelo } from '@/lib/likida/costos';
 import { PartialExecutionError } from '@/lib/llm/openrouter';
 import { guardarIntercambio } from '@/lib/likida/chat/conversaciones';
@@ -29,6 +29,7 @@ import { tenantEfectivoChat } from './tenant';
 import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 import { MAX_CHAT_BYTES } from './limites';
+import { medirRuta } from '@/lib/observability/latencia';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -42,7 +43,12 @@ export const maxDuration = 60;
 // a ver. Mismo patrón que `onboarding-chat`, `ingesta` y `archivo`.
 const TURNOS_POR_MINUTO = 10;
 
-export async function POST(req: NextRequest) {
+/** E1-A: la latencia de esta ruta (p50/p95 en /admin/observabilidad). Muestreada y sin riesgo: ver `medirRuta`. */
+export function POST(req: NextRequest) {
+  return medirRuta('dashboard.chat', () => manejarPOST(req));
+}
+
+async function manejarPOST(req: NextRequest) {
   // Auditoría 21, BAJO-MEDIO: el chequeo CSRF explícito (SEG-9) solo cubría
   // /api/admin/palette y /v1/*. Esta ruta escribe (guarda el intercambio) y
   // gasta dinero de modelo, autenticada solo por la cookie de sesión.
@@ -55,7 +61,7 @@ export async function POST(req: NextRequest) {
   if (!sesion) return NextResponse.json({ error: 'sin sesion' }, { status: 401 });
   const rechazoMfa = await rechazoMfaSuperadminApi(sesion);
   if (rechazoMfa) return rechazoMfa;
-  if (!puedeVerArea(sesion.rol, 'dinero')) {
+  if (!rolPuedeConversar(sesion.rol)) {
     return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
   }
   if (!(await rateLimit(`chat:${sesion.userId}`, TURNOS_POR_MINUTO, 60_000))) {
@@ -120,7 +126,7 @@ export async function POST(req: NextRequest) {
       };
       try {
         const r = await ejecutarAnalista({
-          tenantId, nombreFlota, usuario: { nombre: sesion.nombre, rol: sesion.rol }, documento, mensajes,
+          tenantId, nombreFlota, usuario: { nombre: sesion.nombre, rol: sesion.rol, id: sesion.userId }, documento, mensajes,
           onPaso: (p) => manda({ t: 'paso', fase: p.fase, tool: p.tool }),
         });
         // El costo se registra POR MODELO real (mismo criterio que

@@ -60,6 +60,8 @@ export const ROTULO_DIFERENCIA: Record<TipoDiferencia, string> = {
   factura_por_vencer: 'Factura por vencer',
   comprobante_no_fiscal: 'Comprobante no fiscal',
   diesel_desviacion: 'Desviación de diésel',
+  tarjeta_no_empresa: 'Tarjeta que no es de la empresa',
+  tarjeta_sin_declarar: 'Tarjeta sin declarar si es de la empresa',
   permiso_cre_no_verificable: 'Permiso CRE no verificable',
   combustible_efectivo_dentro15: 'Combustible sin medio admitido (dentro del 15%)',
   efectivo_sobre_15: 'Combustible sin medio admitido, sobre el 15%',

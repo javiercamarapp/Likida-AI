@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CalendarClock, Download, ShieldQuestion } from 'lucide-react';
+import { BellRing, CalendarClock, Download, ShieldQuestion } from 'lucide-react';
 import { numero, TZ_MX } from '@/lib/formato';
 import { EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
 import {
@@ -12,7 +12,9 @@ import {
 import { LEYENDA_NOM_087, LEYENDA_NO_ES_BITACORA_83 } from '@/lib/likida/jornada/topes';
 import type { SemanaEvaluada } from '@/lib/likida/jornada/semanas';
 import { BarraPagina } from '../resumen-visual';
-import { FormasJornada, FormaPolitica, type AccionJornada } from './formas';
+import type { AlertaDeJornada } from '@/lib/likida/jornada/alerta_tope_datos';
+import { ROTULO_NIVEL, horasTexto } from '@/lib/likida/jornada/alerta_tope';
+import { FormasJornada, FormaPolitica, FormaAlertaTope, type AccionJornada, type ConfigAlertaForma } from './formas';
 
 /**
  * LA PANTALLA DEL CONTRALOR — ver, corregir y cerrar el registro de jornada.
@@ -44,6 +46,10 @@ export interface FilaJornada {
   conformeOperadorEn: string | null;
   jornada: JornadaCompuesta;
   riesgo: RiesgoDia;
+  /** ¿Cae dentro del alcance de quien mira? (W2: un jefe con patio solo corrige las
+   *  jornadas de los operadores de su patio.) Lo decide el servidor con el patio
+   *  leído de la base; las acciones lo vuelven a comprobar. */
+  editable: boolean;
 }
 
 const TONO: Record<string, { fondo: string; texto: string }> = {
@@ -61,7 +67,8 @@ function hora(iso: string): string {
 
 export function VistaJornada({
   filas, semanas, motivoIlegible, truncada, politica, desde, hasta, sufijo, operador, operadores, abrir, puedeCorregir,
-  anularMarca, capturarMarca, cerrarElDia, declararPolitica,
+  puedeDeclararPolitica, anularMarca, capturarMarca, cerrarElDia, declararPolitica,
+  alertaConfig, alertaConfigIlegible, alertas, puedeConfigurarAlerta, guardarAlerta,
 }: {
   filas: FilaJornada[] | null;
   /** El eje semanal (tableros al día, 28-ago-2026): solo semanas ENTERAS de
@@ -79,11 +86,23 @@ export function VistaJornada({
    *  leer (el filtro por URL sigue funcionando, solo no hay de dónde elegir). */
   operadores: Array<{ id: string; nombre: string }> | null;
   abrir: string | null;
+  /** El rol puede corregir (dueño y jefe de tráfico); por fila se acota con `editable`. */
   puedeCorregir: boolean;
+  /** Solo el dueño declara los umbrales de la flota. */
+  puedeDeclararPolitica: boolean;
   anularMarca: AccionJornada;
   capturarMarca: AccionJornada;
   cerrarElDia: AccionJornada;
   declararPolitica: AccionJornada;
+  /** La alerta de tope (0502). `null` = la flota no la ha configurado (apagada). */
+  alertaConfig: ConfigAlertaForma | null;
+  /** `true` = no se pudo leer la configuración: se dice, no se pinta como «apagada». */
+  alertaConfigIlegible: boolean;
+  /** Las alertas emitidas a las jornadas de la tabla. `null` = no se pudieron leer (no es «ninguna»). */
+  alertas: AlertaDeJornada[] | null;
+  /** Solo quien administra la flota configura quién recibe los avisos. */
+  puedeConfigurarAlerta: boolean;
+  guardarAlerta: AccionJornada;
 }) {
   const lista = filas ?? [];
 
@@ -255,7 +274,7 @@ export function VistaJornada({
           {abrir !== null && lista.some((f) => f.jornadaId === abrir) && (
             <FormasJornada
               fila={lista.find((f) => f.jornadaId === abrir)!}
-              puedeCorregir={puedeCorregir}
+              puedeCorregir={puedeCorregir && lista.find((f) => f.jornadaId === abrir)!.editable}
               anularMarca={anularMarca}
               capturarMarca={capturarMarca}
               cerrarElDia={cerrarElDia}
@@ -264,9 +283,21 @@ export function VistaJornada({
 
           <PoliticaSeccion
             politica={politica}
-            puedeCorregir={puedeCorregir}
+            puedeCorregir={puedeDeclararPolitica}
             declararPolitica={declararPolitica}
           />
+
+          {motivoIlegible === null && (
+            <AlertaTopeSeccion
+              config={alertaConfig}
+              configIlegible={alertaConfigIlegible}
+              alertas={alertas}
+              filas={lista}
+              truncada={truncada}
+              puedeConfigurar={puedeConfigurarAlerta}
+              guardarAlerta={guardarAlerta}
+            />
+          )}
         </div>
       </div>
     </main>
@@ -480,6 +511,107 @@ function PoliticaSeccion({
       )}
       {puedeCorregir && (
         <FormaPolitica politica={politica} declararPolitica={declararPolitica} />
+      )}
+    </section>
+  );
+}
+
+const ROTULO_ESTADO_ALERTA: Record<string, string> = {
+  reclamada: 'Enviándose', enviada: 'Enviada', parcial: 'Enviada en parte', fallida: 'No llegó', sin_destinatario: 'Sin a quién avisar',
+};
+const ROTULO_ESTADO_DESTINO: Record<string, string> = {
+  pendiente: 'pendiente', enviado: 'enviado', fallido: 'no llegó', sin_destinatario: 'sin destinatario', no_aplica: 'no aplica',
+};
+const FUENTE_ALERTA: Record<string, string> = {
+  declarado_operador: 'lo declaró el operador', hito_viaje: 'un hito del viaje', gps: 'el GPS', capturado_contralor: 'lo capturó el contralor',
+};
+
+/**
+ * LA ALERTA DE TOPE (0502): configuración por flota y lista de lo ya emitido. La lista es de las jornadas que la
+ * tabla de arriba enseña; una lectura caída se dice y nunca se pinta como «ninguna alerta», que sería afirmar que a
+ * nadie se le avisó.
+ */
+export function AlertaTopeSeccion({
+  config, configIlegible, alertas, filas, truncada, puedeConfigurar, guardarAlerta,
+}: {
+  config: ConfigAlertaForma | null;
+  configIlegible: boolean;
+  alertas: AlertaDeJornada[] | null;
+  filas: FilaJornada[];
+  truncada: boolean;
+  puedeConfigurar: boolean;
+  guardarAlerta: AccionJornada;
+}) {
+  const porJornada = new Map(filas.map((f) => [f.jornadaId, f]));
+  const ordenadas = alertas === null ? [] : [...alertas].sort((a, b) => b.creadaEn.localeCompare(a.creadaEn));
+  return (
+    <section className="card p-4 space-y-3">
+      <h2 className="font-display text-[15px] font-semibold flex items-center gap-2">
+        <BellRing width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+        Alerta de tope de jornada
+      </h2>
+      <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        Likida avisa al encargado y al operador cuando una jornada en curso llega a los umbrales que elijas
+        (por omisión 80 % y 95 % del tope) y cuando lo rebasa. Solo cuenta lo registrado: sin hora de inicio no
+        avisa, y si el inicio no lo declaró el operador el aviso dice «al menos». Es un aviso, no un dictamen.
+      </p>
+      {configIlegible ? (
+        <p role="alert" className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+          No se pudo leer la configuración de la alerta. No sabemos si está encendida; vuelve a cargar la pantalla.
+        </p>
+      ) : config === null ? (
+        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+          Todavía no la has configurado: <strong>la alerta está apagada</strong> y nadie recibe avisos.
+        </p>
+      ) : (
+        <p className="text-[12.5px]">
+          <strong>{config.activa ? 'Encendida' : 'Apagada'}</strong>
+          {' · '}tope {config.topeHoras === null ? 'de la ley (12 h)' : `propio de ${numero(config.topeHoras)} h`}
+          {' · '}aviso al {config.umbralAvisoPct} %, crítico al {config.umbralCriticoPct} %
+        </p>
+      )}
+      {puedeConfigurar && !configIlegible && <FormaAlertaTope config={config} guardarAlerta={guardarAlerta} />}
+
+      <h3 className="text-[13px] font-semibold pt-1">Alertas emitidas en este periodo</h3>
+      {alertas === null ? (
+        <p role="alert" className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
+          No se pudieron leer las alertas emitidas. Esto no significa que no haya habido.
+        </p>
+      ) : ordenadas.length === 0 ? (
+        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+          Ninguna alerta emitida para las jornadas que se muestran{truncada ? ' (la lista no cupo completa: acota el periodo)' : ''}.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12.5px]">
+            <thead>
+              <tr style={{ color: 'var(--muted)' }} className="text-left">
+                <Th>Cuándo</Th><Th>Operador y día</Th><Th>Nivel</Th><Th>Horas contra tope</Th><Th>Estado</Th><Th>Encargado</Th><Th>Operador</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {ordenadas.map((a) => {
+                const f = porJornada.get(a.jornadaId);
+                return (
+                  <tr key={`${a.jornadaId}-${a.nivel}`} className="hairline-t align-top">
+                    <Td>{new Intl.DateTimeFormat('es-MX', { timeZone: TZ_MX, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(a.creadaEn))}</Td>
+                    <Td>{f ? `${f.operadorNombre} · ${f.dia}` : 'Jornada fuera de la tabla'}</Td>
+                    <Td><strong>{ROTULO_NIVEL[a.nivel]}</strong></Td>
+                    <Td>
+                      {horasTexto(a.minutos, a.cotaInferior)} de {numero(a.topeMin / 60)} h
+                      <span className="block text-[11px]" style={{ color: 'var(--muted)' }}>
+                        según {FUENTE_ALERTA[a.fuente] ?? a.fuente}
+                      </span>
+                    </Td>
+                    <Td>{ROTULO_ESTADO_ALERTA[a.estado] ?? a.estado}</Td>
+                    <Td>{ROTULO_ESTADO_DESTINO[a.encargadoEstado] ?? a.encargadoEstado}</Td>
+                    <Td>{ROTULO_ESTADO_DESTINO[a.operadorEstado] ?? a.operadorEstado}</Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

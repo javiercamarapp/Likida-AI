@@ -42,6 +42,14 @@ const RUTA: Record<CronId, string> = {
   'descarga-sat': '/api/cron/descarga-sat',
   jornada: '/api/cron/jornada',
   'portales-vivos': '/api/cron/portales-vivos',
+  'liquidaciones-externas': '/api/cron/liquidaciones-externas',
+  peajes: '/api/cron/peajes',
+  'conductor-hitos': '/api/cron/conductor-hitos',
+  vigia: '/api/cron/vigia',
+  'jornada-alertas': '/api/cron/jornada-alertas',
+  'buzon-entrega': '/api/cron/buzon-entrega',
+  'carta-porte-docs': '/api/cron/carta-porte-docs',
+  guardia: '/api/cron/guardia',
 };
 
 /** Qué hace cada reloj, en una línea, para que el rojo se pueda priorizar. */
@@ -57,6 +65,14 @@ const OFICIO: Record<CronId, string> = {
   'descarga-sat': 'recoge del SAT los CFDI que el comercio ya timbró',
   jornada: 'asienta el registro de jornada del día (LFT 132-XXXIV)',
   'portales-vivos': 'comprueba que los portales de facturación sigan en pie',
+  'liquidaciones-externas': 'entrega y concilia las liquidaciones que calcula el sistema del cliente',
+  peajes: 'importa y concilia los desgloses de peaje que el proveedor mandó por el buzón firmado',
+  'conductor-hitos': 'pide, persigue y escala los hitos del viaje (llegada, salida, regreso) a los choferes',
+  vigia: 'vigila el SLA de los clientes finales, escala por niveles y purga lo que ya cumplió su retención',
+  'jornada-alertas': 'avisa al encargado y al operador cuando la jornada en curso se acerca al tope legal (80 %, 95 % y exceso)',
+  'buzon-entrega': 'arma y manda al contador el lote de facturas aprobadas, reintenta con espera y marca lo que Resend no confirma',
+  'carta-porte-docs': 'extrae los documentos de Carta Porte que quedaron en la bandeja, reintenta con espera y avisa a la oficina de los que traen dudas o no se pudieron leer',
+  guardia: 'la guardia de producción: clasifica la bandeja con las reglas del A0, mide los componentes de /estado, avisa al operador de lo nuevo (S1/S2 o fuente ciega) y purga la retención de latencias',
 };
 
 /**

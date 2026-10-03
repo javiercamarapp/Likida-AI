@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // EL DESGLOSE DEL PROVEEDOR DE PEAJE — FASE 5, el PoC del Plaud #2.
 //
-// La recomendación literal de la sesión con Transportes Innovativos: "el
+// La recomendación literal de la sesión con el cliente de demo: "el
 // agente toma el desglose del proveedor [...] y cruza [...] marcando
 // discrepancias automáticamente". El desglose que IAVE/PASE/TeleVía mandan
 // cada corte NO es un CFDI: es una tabla de cruces (fecha, caseta, importe,
@@ -44,6 +44,15 @@ import { leerArchivoUniversal, ArchivoNoSoportado } from './archivo';
 import { diasDeDiferencia, VENTANA_DIAS_FECHA, TOLERANCIA_MONTO_MXN } from './consolidado';
 import { registrarCorrida } from '../agentes/corridas';
 import { contextoEvidenciaGps, llaveUnidadDia } from '../peajes/evidencia_gps';
+import { cargarMapaTags, cargarMapeo, listarCasetas, evaluarGpsDeLineas } from '../peajes/datos';
+import { normalizarTag } from '../peajes/formatos';
+import { matrizDeCsv } from '../peajes/csv';
+import {
+  fechaHoraDeCelda, horaDeCelda, aInstanteMx, montoDeCelda as montoDeCeldaBase,
+} from '../peajes/formatos';
+import {
+  resolverMapeo, sugerirColumnas, listarEncabezados, type ConfigMapeo, type CampoMapeo,
+} from '../peajes/mapeo';
 
 /**
  * La tolerancia del segundo pase: rondeos de centavos entre lo que el
@@ -71,6 +80,9 @@ export interface LineaDesgloseParseada {
   caseta: string | null;
   monto: number;
   tag: string | null;
+  /** HH:MM:SS hora local de México del cobro. AUSENTE (no null) cuando el archivo
+   *  no la trae o no se pudo leer: nunca se inventa medianoche. */
+  hora?: string;
 }
 
 export type ResultadoParseo =
@@ -95,9 +107,13 @@ const PATRON_MONTO = /importe|monto|\btotal\b|cargo|costo|cuota|tarifa|peaje/;
 const PATRON_MONTO_EXCLUIR = /\biva\b|saldo|sub\s*-?\s*total|folio|km|litro|descuento/;
 const PATRON_MONTO_TOTAL = /total/;
 const PATRON_TAG = /\btag\b|etiqueta|dispositivo|telepeaje|medio de pago/;
+// Una columna de HORA propia (no «fecha y hora», que ya es la fecha).
+const PATRON_HORA = /\bhora\b|\bhorario\b/;
 
 export interface ColumnasDetectadas {
   fecha: number; caseta: number; monto: number; tag: number | null;
+  /** Columna de hora SEPARADA de la fecha. Ausente si no hay (o si la fecha ya trae la hora). */
+  hora?: number;
 }
 
 /**
@@ -119,6 +135,7 @@ export function detectarColumnas(encabezados: Celda[]): { ok: true; columnas: Co
   const casetas = idxDe(PATRON_CASETA);
   const montos = idxDe(PATRON_MONTO, PATRON_MONTO_EXCLUIR);
   const tags = idxDe(PATRON_TAG);
+  const horas = idxDe(PATRON_HORA).filter(({ h }) => !PATRON_FECHA.test(h));
 
   const faltantes: string[] = [];
   if (fechas.length === 0) faltantes.push('fecha');
@@ -130,65 +147,30 @@ export function detectarColumnas(encabezados: Celda[]): { ok: true; columnas: Co
   // Una columna no puede ser dos cosas: si "caseta" y "tag" cayeron en el
   // mismo índice ("TAG de la caseta"), el tag se descarta antes que duplicar.
   const tag = tags.find(({ i }) => i !== casetas[0].i && i !== monto.i && i !== fechas[0].i) ?? null;
+  const hora = horas.find(({ i }) => i !== casetas[0].i && i !== monto.i && i !== fechas[0].i && i !== tag?.i);
   return {
     ok: true,
-    columnas: { fecha: fechas[0].i, caseta: casetas[0].i, monto: monto.i, tag: tag ? tag.i : null },
+    columnas: {
+      fecha: fechas[0].i, caseta: casetas[0].i, monto: monto.i, tag: tag ? tag.i : null,
+      ...(hora ? { hora: hora.i } : {}),
+    },
   };
-}
-
-/** Serial de Excel (días desde 1899-12-30) → ISO. El rango acota a fechas
- *  plausibles (1954-2064): un "45892" suelto en una celda de fecha es un
- *  serial; un "189" es un monto perdido y NO se convierte en fecha. */
-const EPOCH_EXCEL_MS = Date.UTC(1899, 11, 30);
-function fechaDeSerialExcel(serial: number): string | null {
-  if (serial < 20_000 || serial > 60_000) return null;
-  return new Date(EPOCH_EXCEL_MS + Math.round(serial) * 86_400_000).toISOString().slice(0, 10);
 }
 
 /**
  * La fecha de una celda, o `null` — nunca una adivinada. Acepta ISO
- * (YYYY-MM-DD), el formato mexicano dd/mm/aaaa (con o sin hora, que se
- * descarta: el cruce es por día) y el serial de Excel. Un dd/mm con "mes" > 12
- * es ilegible, NO se voltea a mm/dd: los desgloses de este dominio son
- * mexicanos y voltear en silencio movería el cruce de día sin que nadie lo vea.
+ * (YYYY-MM-DD), el formato mexicano dd/mm/aaaa (con o sin hora), meses en
+ * español y el serial de Excel. Un dd/mm con "mes" > 12 es ilegible, NO se
+ * voltea a mm/dd: los desgloses de este dominio son mexicanos y voltear en
+ * silencio movería el cruce de día sin que nadie lo vea. La hora que venga en
+ * la misma celda la lee `fechaHoraDeCelda` (peajes/formatos.ts).
  */
 export function fechaDeCelda(v: Celda): string | null {
-  if (typeof v === 'number') return fechaDeSerialExcel(v);
-  const s = String(v ?? '').trim();
-  if (!s) return null;
-
-  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
-  if (iso) {
-    const [, a, m, d] = iso;
-    return validarYmd(Number(a), Number(m), Number(d));
-  }
-
-  const mx = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})(?:\s|$)/.exec(s);
-  if (mx) {
-    const d = Number(mx[1]);
-    const m = Number(mx[2]);
-    let a = Number(mx[3]);
-    if (a < 100) a += 2000; // "05/08/26" — el siglo corto de los reportes
-    return validarYmd(a, m, d);
-  }
-  return null;
+  return fechaHoraDeCelda(v).fecha;
 }
 
-function validarYmd(a: number, m: number, d: number): string | null {
-  if (a < 2000 || a > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return null;
-  const fecha = new Date(Date.UTC(a, m - 1, d));
-  // El 31/02 pasa el rango pero no existe: Date lo recorre a marzo y aquí rebota.
-  if (fecha.getUTCMonth() !== m - 1 || fecha.getUTCDate() !== d) return null;
-  return fecha.toISOString().slice(0, 10);
-}
-
-/** El monto de una celda ("$1,234.56", "MXN 189.00", 189), o `null`. */
-export function montoDeCelda(v: Celda): number | null {
-  if (typeof v === 'number') return Number.isFinite(v) ? round2(v) : null;
-  const s = String(v ?? '').replace(/mxn|\$|,|\s/gi, '');
-  if (!s || !/^-?\d+(\.\d+)?$/.test(s)) return null;
-  return round2(Number(s));
-}
+/** El monto de una celda ("$1,234.56", "MXN 189.00", "189,50", 189), o `null`. */
+export const montoDeCelda = montoDeCeldaBase;
 
 /** ¿Fila de totales/pie? Sin fecha legible y con un rótulo de suma: se salta
  *  y se cuenta en los avisos — un "TOTAL $4,580" importado como cruce
@@ -197,68 +179,156 @@ function esFilaDeTotal(fila: Celda[]): boolean {
   return fila.some((c) => /^\s*(sub)?total(es)?\b/i.test(String(c ?? '')));
 }
 
+export interface OpcionesParseo {
+  /** El mapeo declarado para el proveedor (peaje_mapeo_columnas). Si no
+   *  resuelve contra el archivo, se intenta la detección por nombre y se AVISA. */
+  mapeo?: ConfigMapeo | null;
+  /** Para los mensajes: «PASE», «IAVE»… */
+  proveedor?: string | null;
+}
+
+const NOMBRE_CAMPO: Record<CampoMapeo, string> = {
+  fecha: 'fecha', hora: 'hora', caseta: 'caseta', monto: 'importe', tag: 'TAG',
+};
+
 /**
  * El parseo de una hoja (Excel/CSV ya convertidos a matriz de celdas). Busca
  * el renglón de encabezados en los primeros 15 (los desgloses reales traen
  * título y datos del cliente arriba) y de ahí para abajo lee líneas.
  *
+ * Con `opciones.mapeo` (el declarado para el proveedor) primero intenta
+ * resolver cada columna por el encabezado o la letra declarados; si en ningún
+ * renglón de arriba resuelve, cae a la detección por nombre y lo AVISA — pero
+ * jamás mezcla las dos dentro de un mismo archivo.
+ *
  * Qué entra y qué se avisa:
  *  - fila con monto y sin fecha legible → ENTRA con fecha null (será
  *    `sin_contraparte` con su motivo — visible, no tragada);
+ *  - fila con fecha pero sin hora legible → ENTRA sin hora y se cuenta;
  *  - fila sin monto legible → se salta y SE CUENTA en avisos;
  *  - fila de totales → se salta y se cuenta.
  */
-export function parsearDesgloseHoja(filas: Celda[][]): ResultadoParseo {
+export function parsearDesgloseHoja(filas: Celda[][], opciones: OpcionesParseo = {}): ResultadoParseo {
   const TOPE_BUSQUEDA_ENCABEZADO = 15;
   let columnas: ColumnasDetectadas | null = null;
   let filaEncabezado = -1;
   let mejorIntento: { faltantes: string[]; encabezados: Celda[] } | null = null;
+  const avisos: string[] = [];
 
-  for (let i = 0; i < Math.min(filas.length, TOPE_BUSQUEDA_ENCABEZADO); i++) {
-    const det = detectarColumnas(filas[i]);
-    if (det.ok) {
-      columnas = det.columnas;
-      filaEncabezado = i;
-      break;
+  // 1) El mapeo declarado, si lo hay.
+  let mapeoNoCoincidio: { vistos: Celda[]; noEncontradas: Array<{ campo: CampoMapeo; declarada: string }> } | null = null;
+  if (opciones.mapeo) {
+    for (let i = 0; i < Math.min(filas.length, TOPE_BUSQUEDA_ENCABEZADO); i++) {
+      const conTexto = filas[i].filter((c) => String(c ?? '').trim() !== '');
+      if (conTexto.length < 2) continue;
+      const r = resolverMapeo(filas[i], opciones.mapeo);
+      if (r.ok) {
+        columnas = {
+          fecha: r.columnas.fecha, caseta: r.columnas.caseta, monto: r.columnas.monto,
+          tag: r.columnas.tag ?? null,
+          ...(r.columnas.hora !== undefined ? { hora: r.columnas.hora } : {}),
+        };
+        filaEncabezado = i;
+        break;
+      }
+      if (!mapeoNoCoincidio || r.noEncontradas.length < mapeoNoCoincidio.noEncontradas.length) {
+        mapeoNoCoincidio = { vistos: filas[i], noEncontradas: r.noEncontradas };
+      }
     }
-    const conTexto = filas[i].filter((c) => String(c ?? '').trim() !== '');
-    if (conTexto.length >= 2 && (!mejorIntento || det.faltantes.length < mejorIntento.faltantes.length)) {
-      mejorIntento = { faltantes: det.faltantes, encabezados: conTexto };
+  }
+
+  // 2) La detección por nombre.
+  if (!columnas) {
+    for (let i = 0; i < Math.min(filas.length, TOPE_BUSQUEDA_ENCABEZADO); i++) {
+      const det = detectarColumnas(filas[i]);
+      if (det.ok) {
+        columnas = det.columnas;
+        filaEncabezado = i;
+        break;
+      }
+      const conTexto = filas[i].filter((c) => String(c ?? '').trim() !== '');
+      // Un renglón de DATOS (trae una fecha o una cifra) no es un encabezado
+      // candidato: su «Caseta Ejemplo Norte» casaba con «caseta» y el error
+      // enseñaba la fila 2 como si fueran los encabezados leídos.
+      const pareceDato = conTexto.some((c) => fechaHoraDeCelda(c).fecha !== null || /^\$?\s*-?[\d.,]+\s*$/.test(String(c).trim()));
+      if (!pareceDato && conTexto.length >= 2 && (!mejorIntento || det.faltantes.length < mejorIntento.faltantes.length)) {
+        mejorIntento = { faltantes: det.faltantes, encabezados: conTexto };
+      }
+    }
+    if (columnas && mapeoNoCoincidio) {
+      avisos.push(
+        `El mapeo configurado${opciones.proveedor ? ` para ${opciones.proveedor}` : ''} no coincidió con este archivo `
+        + `(no encontré ${mapeoNoCoincidio.noEncontradas.map((n) => `«${n.declarada}»`).join(', ')}); se usó la detección automática por nombre. `
+        + 'Revisa que las columnas leídas sean las correctas o actualiza el mapeo.',
+      );
     }
   }
 
   if (!columnas) {
     const faltantes = mejorIntento?.faltantes ?? ['fecha', 'caseta', 'importe'];
-    const vistos = mejorIntento
-      ? ` Encabezados leídos: ${mejorIntento.encabezados.slice(0, 8).map((c) => `«${String(c).trim()}»`).join(', ')}.`
+    const encabezadosVistos = mejorIntento?.encabezados ?? mapeoNoCoincidio?.vistos ?? [];
+    const vistos = encabezadosVistos.length > 0
+      ? ` Encabezados leídos: ${listarEncabezados(encabezadosVistos, 8)}.`
+      : '';
+    // Sugerencias: encabezados parecidos a lo que faltó. Solo se ofrecen.
+    const sugerencias: string[] = [];
+    for (const f of faltantes) {
+      const campo: CampoMapeo = f === 'importe' ? 'monto' : (f as CampoMapeo);
+      const sug = sugerirColumnas(campo, encabezadosVistos);
+      if (sug.length > 0) sugerencias.push(`para ${NOMBRE_CAMPO[campo]}, ¿${sug.map((x) => `«${x}»`).join(' o ')}?`);
+    }
+    const hint = sugerencias.length > 0 ? ` Quizá: ${sugerencias.join('; ')}.` : '';
+    const mapeoTxt = mapeoNoCoincidio
+      ? ` El mapeo configurado buscaba ${mapeoNoCoincidio.noEncontradas.map((n) => `«${n.declarada}»`).join(', ')} y no está en el archivo.`
       : '';
     return {
       ok: false,
-      motivo: `No encontré la columna de ${faltantes.join(' ni de ')} en el archivo.${vistos} ` +
-        'El desglose necesita columnas de fecha, caseta e importe (el TAG es opcional) — no voy a adivinar cuál es cuál.',
+      motivo: `No encontré la columna de ${faltantes.join(' ni de ')} en el archivo.${vistos}${hint}${mapeoTxt} `
+        + 'El desglose necesita columnas de fecha, caseta e importe (la hora y el TAG son opcionales) — no voy a adivinar cuál es cuál. '
+        + 'Si es un formato nuevo del proveedor, declara su mapeo de columnas en Configuración de peajes.',
     };
   }
 
   const lineas: LineaDesgloseParseada[] = [];
   let saltadasSinMonto = 0;
   let saltadasTotales = 0;
+  let horasIlegibles = 0;
   for (let i = filaEncabezado + 1; i < filas.length; i++) {
     const fila = filas[i];
     if (fila.every((c) => String(c ?? '').trim() === '')) continue; // renglón en blanco
-    const fecha = fechaDeCelda(fila[columnas.fecha]);
+    const fh = fechaHoraDeCelda(fila[columnas.fecha]);
+    const fecha = fh.fecha;
     if (fecha === null && esFilaDeTotal(fila)) { saltadasTotales++; continue; }
     const monto = montoDeCelda(fila[columnas.monto]);
     if (monto === null) { saltadasSinMonto++; continue; }
-    const caseta = String(fila[columnas.caseta] ?? '').trim() || null;
-    const tag = columnas.tag === null ? null : String(fila[columnas.tag] ?? '').trim() || null;
-    lineas.push({ indice: lineas.length, fecha, caseta, monto, tag });
+    // Acotados: una celda de megabytes en «caseta» o «tag» no debe viajar a la base ni al CSV de salida.
+    const caseta = String(fila[columnas.caseta] ?? '').trim().slice(0, 120) || null;
+    const tag = columnas.tag === null ? null : String(fila[columnas.tag] ?? '').trim().slice(0, 60) || null;
+
+    // La hora: la que traiga la celda de fecha, o la columna propia. Una hora
+    // ilegible NO descarta la línea: entra sin hora y se cuenta.
+    let hora: string | null = fh.hora;
+    if (fecha !== null && hora === null) {
+      if (columnas.hora !== undefined) {
+        const crudo = fila[columnas.hora];
+        hora = horaDeCelda(crudo);
+        if (hora === null && String(crudo ?? '').trim() !== '') horasIlegibles++;
+      } else if (/[:]/.test(String(fila[columnas.fecha] ?? ''))) {
+        horasIlegibles++; // la celda traía algo con forma de hora y no se pudo leer
+      }
+    }
+    lineas.push({ indice: lineas.length, fecha, caseta, monto, tag, ...(hora ? { hora } : {}) });
   }
 
-  const avisos: string[] = [];
   if (saltadasSinMonto > 0) avisos.push(`Se saltaron ${saltadasSinMonto} filas sin importe legible.`);
   if (saltadasTotales > 0) avisos.push(`Se saltaron ${saltadasTotales} filas de totales.`);
   const sinFecha = lineas.filter((l) => l.fecha === null).length;
   if (sinFecha > 0) avisos.push(`${sinFecha} líneas no traen fecha legible: entran, pero el cruce no puede ligarlas solo.`);
+  if (horasIlegibles > 0) avisos.push(`${horasIlegibles} líneas traen una hora que no pude leer: entran sin hora (el cruce con el GPS no las valida por minuto).`);
+  const conFecha = lineas.filter((l) => l.fecha !== null).length;
+  if (conFecha > 0 && horasIlegibles === 0 && !lineas.some((l) => l.hora)) {
+    avisos.push('El archivo no trae hora del cobro: el cruce con el GPS será por día, no por minuto.');
+  }
   return { ok: true, lineas, avisos };
 }
 
@@ -270,7 +340,7 @@ export function parsearDesgloseHoja(filas: Celda[][]): ResultadoParseo {
  * prefiere el Excel/CSV — nunca se importa la mitad de un desglose.
  */
 export function parsearDesgloseTextoPdf(texto: string): ResultadoParseo {
-  const RENGLON = /^(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?\s+(.+?)\s+\$?\s*(-?[\d,]+\.\d{2})\s*$/;
+  const RENGLON = /^(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?\s+(.+?)\s+\$?\s*(-?[\d,]+\.\d{2})\s*$/;
   const TAG_TOKEN = /\b([A-Z]{2,6}\s?\d{6,11})\b/;
 
   const lineas: LineaDesgloseParseada[] = [];
@@ -278,16 +348,17 @@ export function parsearDesgloseTextoPdf(texto: string): ResultadoParseo {
     const m = RENGLON.exec(cruda.trim());
     if (!m) continue;
     const fecha = fechaDeCelda(m[1]);
-    const monto = montoDeCelda(m[3]);
+    const monto = montoDeCelda(m[4]);
     if (monto === null) continue;
-    let caseta = m[2].trim();
+    const hora = m[2] ? horaDeCelda(m[2]) : null;
+    let caseta = m[3].trim();
     let tag: string | null = null;
     const t = TAG_TOKEN.exec(caseta);
     if (t) {
       tag = t[1].replace(/\s/g, '');
       caseta = caseta.replace(t[0], '').replace(/\s{2,}/g, ' ').trim();
     }
-    lineas.push({ indice: lineas.length, fecha, caseta: caseta || null, monto, tag });
+    lineas.push({ indice: lineas.length, fecha, caseta: caseta || null, monto, tag, ...(hora ? { hora } : {}) });
   }
 
   if (lineas.length === 0) {
@@ -315,17 +386,24 @@ const EXT_HOJA = new Set(['xlsx', 'xls', 'csv', 'tsv', 'ods']);
  *   se dice por qué — nunca medio desglose.
  * - XML: se redirige al camino del CFDI consolidado, que ya existe.
  */
-export async function parsearArchivoDesglose(nombre: string, buffer: Buffer): Promise<ResultadoParseo> {
+export async function parsearArchivoDesglose(nombre: string, buffer: Buffer, opciones: OpcionesParseo = {}): Promise<ResultadoParseo> {
   const ext = (/\.([a-z0-9]+)$/i.exec(nombre.trim())?.[1] ?? '').toLowerCase();
 
   if (EXT_HOJA.has(ext)) {
     let filas: Celda[][];
     try {
+      // CSV/TSV con el lector propio: la librería de hojas toma «189,50» de un
+      // CSV con «;» como 18950 (ver peajes/csv.ts). Aquí toda celda llega como
+      // texto y `montoDeCelda` decide.
+      if (ext === 'csv' || ext === 'tsv') {
+        const r = parsearDesgloseHoja(matrizDeCsv(buffer), opciones);
+        return r;
+      }
       const libro = XLSX.read(buffer, { type: 'buffer' });
       const hoja = libro.Sheets[libro.SheetNames[0]];
       if (!hoja) return { ok: false, motivo: 'El archivo no trae ninguna hoja con datos.' };
       filas = XLSX.utils.sheet_to_json<Celda[]>(hoja, { header: 1, raw: true, defval: '' });
-      const r = parsearDesgloseHoja(filas);
+      const r = parsearDesgloseHoja(filas, opciones);
       if (r.ok && libro.SheetNames.length > 1) {
         r.avisos.push(`El archivo trae ${libro.SheetNames.length} hojas; se leyó solo la primera («${libro.SheetNames[0]}»).`);
       }
@@ -376,6 +454,8 @@ export type EstatusLineaDesglose = 'cuadra' | 'no_cuadra' | 'sin_contraparte';
 export interface GastoCaseta {
   id: string;
   viajeId: string;
+  /** Unidad del viaje del gasto (para casarla con la del TAG). Ausente/null = el viaje no tiene unidad. */
+  unidadId?: string | null;
   monto: number;
   /** ISO YYYY-MM-DD. El fondo del cruce ya viene filtrado a con-fecha. */
   fecha: string;
@@ -423,7 +503,8 @@ const resumenCandidato = (c: CandidatoEvaluado) =>
  * archivo (`indice`).
  */
 export function cruzarLineasDesglose(
-  lineas: ReadonlyArray<{ fecha: string | null; monto: number }>,
+  /** `unidadId`: la unidad que `peaje_tag` casa con el TAG de la línea (null/ausente si el TAG no está dado de alta). */
+  lineas: ReadonlyArray<{ fecha: string | null; monto: number; unidadId?: string | null }>,
   gastos: readonly GastoCaseta[],
 ): CruceLinea[] {
   let disponibles = [...gastos];
@@ -445,10 +526,17 @@ export function cruzarLineasDesglose(
     const ventana = evaluar(disponibles);
 
     if (ventana.length === 0) {
-      const habiaEnFondoCompleto = evaluar([...gastos]).length > 0;
+      // «Ya reclamada» solo si lo reclamado HABRÍA cuadrado (monto exacto o en
+      // tolerancia). Un gasto de OTRO monto en la ventana, ya usado por otra
+      // línea, no es la contraparte de esta: decir «su gasto ya lo usó otra
+      // línea» sería afirmar una contraparte que no existe.
+      const habiaEnFondoCompleto = evaluar([...gastos]).some((c) => c.diff <= TOLERANCIA_CENTAVOS_MXN);
       resultados.push({
         estatus: 'sin_contraparte', viajeId: null, gastoId: null, diferencia: null,
-        detalle: { motivo: habiaEnFondoCompleto ? 'contraparte_ya_reclamada' : 'sin_gastos_en_ventana' },
+        // `fondo_gastos`: cuántos gastos de caseta había en TODO el rango del
+        // desglose. Es lo que distingue «no hay ticket de esto» de «ni siquiera
+        // se han cargado tickets»: lo segundo no dice nada de la línea.
+        detalle: { motivo: habiaEnFondoCompleto ? 'contraparte_ya_reclamada' : 'sin_gastos_en_ventana', fondo_gastos: gastos.length },
       });
       continue;
     }
@@ -456,8 +544,20 @@ export function cruzarLineasDesglose(
     const cuadrar = (candidatos: CandidatoEvaluado[], motivoAmbigua: string): CruceLinea | null => {
       // Menor diferencia de monto manda; la fecha más cercana desempata.
       const orden = [...candidatos].sort((a, b) => (a.diff - b.diff) || (a.dias - b.dias));
-      const mejor = orden[0];
-      const empatados = orden.filter((c) => c.diff === mejor.diff && c.dias === mejor.dias);
+      let mejor = orden[0];
+      let empatados = orden.filter((c) => c.diff === mejor.diff && c.dias === mejor.dias);
+      let desempate: 'tag_unidad' | null = null;
+      if (empatados.length > 1 && linea.unidadId) {
+        // El TAG dado de alta rompe el empate: de los candidatos igual de
+        // buenos, el único cuyo viaje es de la unidad del TAG. Si tampoco así
+        // queda UNO, sigue ambigua — no se adivina.
+        const mismos = empatados.filter((c) => c.gasto.unidadId === linea.unidadId);
+        if (mismos.length === 1) {
+          mejor = mismos[0];
+          empatados = mismos;
+          desempate = 'tag_unidad';
+        }
+      }
       if (empatados.length > 1) {
         return {
           estatus: 'no_cuadra', viajeId: null, gastoId: null, diferencia: null,
@@ -465,13 +565,21 @@ export function cruzarLineasDesglose(
         };
       }
       disponibles = disponibles.filter((g) => g.id !== mejor.gasto.id);
+      // El TAG dice una unidad y el viaje del gasto es de OTRA: el monto y el día
+      // cuadran, pero quizá el TAG se prestó o el gasto es de otro camión. Se
+      // marca para revisión humana; no se desfaza el cruce.
+      const unidadDistinta = !!linea.unidadId && !!mejor.gasto.unidadId && linea.unidadId !== mejor.gasto.unidadId;
       return {
         estatus: 'cuadra',
         viajeId: mejor.gasto.viajeId,
         gastoId: mejor.gasto.id,
         // Con signo: positivo = el desglose cobra más que lo comprobado.
         diferencia: round2(linea.monto - mejor.gasto.monto),
-        detalle: { gastoId: mejor.gasto.id, montoGasto: mejor.gasto.monto, fechaGasto: mejor.gasto.fecha },
+        detalle: {
+          gastoId: mejor.gasto.id, montoGasto: mejor.gasto.monto, fechaGasto: mejor.gasto.fecha,
+          ...(desempate ? { desempate } : {}),
+          ...(unidadDistinta ? { alerta: 'unidad_distinta', unidad_tag: linea.unidadId, unidad_gasto: mejor.gasto.unidadId } : {}),
+        },
       };
     };
 
@@ -505,7 +613,9 @@ export function cruzarLineasDesglose(
 
 export type ResultadoImportar =
   | { ok: true; desgloseId: string; totalLineas: number; avisos: string[] }
-  | { ok: false; motivo: string };
+  /** `causa`: `formato` (el archivo no se entiende o no cabe — reintentar no lo arregla; es el default) o
+   *  `infraestructura` (la base no dejó guardar — reintentar sí puede). La cola de ingesta decide con esto. */
+  | { ok: false; motivo: string; causa?: 'formato' | 'infraestructura' };
 
 /**
  * Importa el archivo del proveedor: parsea, mide el periodo (min/max real de
@@ -518,9 +628,44 @@ export type ResultadoImportar =
  */
 export async function importarDesglose(
   tenantId: string,
-  archivo: { nombre: string; buffer: Buffer; proveedor?: string },
+  archivo: {
+    nombre: string; buffer: Buffer; proveedor?: string;
+    /** El archivo de la cola de ingesta del que nace (peaje_ingesta_archivo). Hace idempotente el reproceso. */
+    ingestaArchivoId?: string;
+    /** Mapeo ya resuelto; `undefined` = se busca el del proveedor en la base. */
+    mapeo?: ConfigMapeo | null;
+  },
 ): Promise<ResultadoImportar> {
-  const parseo = await parsearArchivoDesglose(archivo.nombre, archivo.buffer);
+  // El mapeo declarado del proveedor (si lo hay). Lanza ante error de base: caer
+  // a la detección automática sin saberlo leería el archivo con otras reglas.
+  let mapeo: ConfigMapeo | null = null;
+  if (archivo.mapeo !== undefined) mapeo = archivo.mapeo;
+  else if (archivo.proveedor?.trim()) mapeo = await cargarMapeo(tenantId, archivo.proveedor);
+
+  // REPROCESO IDEMPOTENTE: si este archivo de la cola ya generó su desglose, no
+  // se crea otro. Con líneas = ya estaba importado; sin líneas = el worker murió
+  // a medias, se borra la cáscara y se rehace (el unique parcial de la 0376
+  // garantiza que nunca hay dos).
+  if (archivo.ingestaArchivoId) {
+    const { data: previo, error: errPrevio } = await acotada(supabaseAdmin()
+      .from('desglose_peaje').select('id')
+      .eq('tenant_id', tenantId).eq('ingesta_archivo_id', archivo.ingestaArchivoId).maybeSingle(), 'desglose_peaje.previo_ingesta');
+    if (errPrevio) throw new Error(`importarDesglose: ${errPrevio.message}`);
+    if (previo) {
+      const { count, error: errCuenta } = await acotada(supabaseAdmin()
+        .from('desglose_peaje_linea').select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId).eq('desglose_id', previo.id as string), 'desglose_peaje.previo_lineas');
+      if (errCuenta) throw new Error(`importarDesglose: ${errCuenta.message}`);
+      if ((count ?? 0) > 0) {
+        return { ok: true, desgloseId: String(previo.id), totalLineas: count ?? 0, avisos: ['Este archivo ya estaba importado; no se duplicó.'] };
+      }
+      const { error: errBorrar } = await acotada(supabaseAdmin()
+        .from('desglose_peaje').delete().eq('tenant_id', tenantId).eq('id', previo.id as string), 'desglose_peaje.limpiar_cascara');
+      if (errBorrar) throw new Error(`importarDesglose: ${errBorrar.message}`);
+    }
+  }
+
+  const parseo = await parsearArchivoDesglose(archivo.nombre, archivo.buffer, { mapeo, proveedor: archivo.proveedor ?? null });
   if (!parseo.ok) return parseo;
   if (parseo.lineas.length === 0) {
     return { ok: false, motivo: 'El archivo se leyó pero no traía ninguna línea con importe.' };
@@ -541,12 +686,13 @@ export async function importarDesglose(
       periodo_desde: fechas[0] ?? null,
       periodo_hasta: fechas[fechas.length - 1] ?? null,
       archivo_nombre: archivo.nombre,
+      ingesta_archivo_id: archivo.ingestaArchivoId ?? null,
     })
     .select('id')
     .single(), 'desglose_peaje.insertar');
   if (errDesglose || !fila) {
     logger.error('desglose_peaje.insertar_error', { tenant: tenantId, err: errDesglose?.message ?? 'sin id' });
-    return { ok: false, motivo: 'No se pudo guardar el desglose. Inténtalo de nuevo.' };
+    return { ok: false, motivo: 'No se pudo guardar el desglose. Inténtalo de nuevo.', causa: 'infraestructura' };
   }
   const desgloseId = fila.id as string;
 
@@ -558,6 +704,9 @@ export async function importarDesglose(
     caseta: l.caseta,
     monto: l.monto,
     tag: l.tag,
+    // La hora del cobro (0375): nunca inventada — sin hora legible, NULL.
+    hora: l.hora ?? null,
+    cruce_en: aInstanteMx(l.fecha, l.hora ?? null),
   }));
   const LOTE = 500;
   const lotes: typeof filasLinea[] = [];
@@ -575,7 +724,7 @@ export async function importarDesglose(
     // Limpieza best-effort: el cascade borra las líneas que sí entraron.
     const { error: errBorrar } = await supabaseAdmin().from('desglose_peaje').delete().eq('id', desgloseId).eq('tenant_id', tenantId);
     if (errBorrar) logger.error('desglose_peaje.limpieza_error', { tenant: tenantId, desglose: desgloseId, err: errBorrar.message });
-    return { ok: false, motivo: 'No se pudieron guardar las líneas del desglose. No quedó a medias: inténtalo de nuevo.' };
+    return { ok: false, motivo: 'No se pudieron guardar las líneas del desglose. No quedó a medias: inténtalo de nuevo.', causa: 'infraestructura' };
   }
 
   return { ok: true, desgloseId, totalLineas: parseo.lineas.length, avisos: parseo.avisos };
@@ -589,6 +738,10 @@ export interface ResumenCruceDesglose {
   sinContraparte: number;
   /** Líneas cuyo resultado no se pudo escribir (siguen con su estatus previo). */
   noEscritas: number;
+  /** El cruce por caseta con el GPS (0375): cuántas líneas confirma / no coincide / sin datos. */
+  gpsConfirma?: number;
+  gpsNoCoincide?: number;
+  gpsSinDatos?: number;
 }
 
 /**
@@ -612,9 +765,11 @@ export async function conciliarDesglose(
     .select('id')
     .eq('tenant_id', tenantId)
     .eq('id', desgloseId)
+    .is('anulado_en', null)
     .maybeSingle(), 'desglose_peaje.existe');
   if (errExiste) throw new Error(`conciliarDesglose: ${errExiste.message}`);
-  if (!existe) throw new Error('conciliarDesglose: ese desglose no existe en esta flota');
+  // Un desglose ANULADO (0563) se trata como inexistente: no se concilia ni se anota.
+  if (!existe) throw new Error('conciliarDesglose: ese desglose no existe en esta flota (o fue anulado)');
 
   const inicio = new Date();
   try {
@@ -652,21 +807,31 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
   // 1,000 filas y NADA avisa — el cruce corría sobre la quinta parte del
   // archivo. El tope de importación sigue viviendo en la ingesta; aquí se
   // pagina lo que haya.
-  const filas = await traerTodo<{ id: unknown; indice: unknown; fecha: unknown; monto: unknown }>(
+  const filas = await traerTodo<{ id: unknown; indice: unknown; fecha: unknown; monto: unknown; caseta: unknown; tag: unknown; cruce_en: unknown }>(
     (d, h) => acotada(supabaseAdmin()
       .from('desglose_peaje_linea')
-      .select('id, indice, fecha, monto', conteo(d))
+      .select('id, indice, fecha, monto, caseta, tag, cruce_en', conteo(d))
       .eq('tenant_id', tenantId)
       .eq('desglose_id', desgloseId)
       .order('indice').order('id')
       .range(d, h), 'desglose_peaje.leer_lineas'),
     'desglose_peaje.leer_lineas',
   );
-  const lineas = filas.map((f) => ({
-    id: String(f.id),
-    fecha: (f.fecha as string | null) ?? null,
-    monto: Number(f.monto),
-  }));
+
+  // El TAG dado de alta → su unidad (0375). Lanza ante error de base: un mapa a
+  // medias dejaría líneas «sin unidad» que sí la tienen.
+  const unidadPorTag = await cargarMapaTags(tenantId);
+  const lineas = filas.map((f) => {
+    const tagNorm = normalizarTag(f.tag as string | null);
+    return {
+      id: String(f.id),
+      fecha: (f.fecha as string | null) ?? null,
+      monto: Number(f.monto),
+      caseta: (f.caseta as string | null) ?? null,
+      cruceEn: (f.cruce_en as string | null) ?? null,
+      unidadId: tagNorm ? (unidadPorTag.get(tagNorm) ?? null) : null,
+    };
+  });
   const resumen: ResumenCruceDesglose = {
     desgloseId, total: lineas.length, cuadra: 0, noCuadra: 0, sinContraparte: 0, noEscritas: 0,
   };
@@ -704,12 +869,45 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
       }));
   }
 
-  // 3) El cruce puro y 4) la escritura por línea, en lotes (REND-C1: en serie
-  //    un desglose de 1,000 líneas rebasaría maxDuration). Best-effort por
-  //    línea: la que no se pueda escribir conserva su estatus previo y se
-  //    cuenta — el resumen dice lo que quedó EN LA BASE, no lo que se calculó.
+  // La unidad de cada viaje de esos gastos (para casarla con la del TAG) — la
+  // misma lectura `traerPorIds` que usa la evidencia: un `.in()` crudo se recorta
+  // a 1,000 en silencio y marcaría «viaje sin unidad» falsos.
+  const unidadPorViajeGasto = new Map<string, string | null>();
+  const viajeIdsGasto = [...new Set(gastos.map((g) => g.viajeId))];
+  if (viajeIdsGasto.length > 0) {
+    const vs = await traerPorIds<{ id: unknown; unidad_id: unknown }>(
+      viajeIdsGasto,
+      (tanda) => acotada(supabaseAdmin().from('viaje').select('id, unidad_id').eq('tenant_id', tenantId).in('id', tanda), 'desglose_peaje.unidad_viajes'),
+      'desglose_peaje.unidad_viajes',
+    );
+    for (const v of vs) unidadPorViajeGasto.set(String(v.id), (v.unidad_id as string | null) ?? null);
+    gastos = gastos.map((g) => ({ ...g, unidadId: unidadPorViajeGasto.get(g.viajeId) ?? null }));
+  }
+
+  // 3) El cruce puro.
   const cruces = cruzarLineasDesglose(lineas, gastos);
-  const escrituras = await enLotes(cruces.map((c, i) => ({ c, lineaId: lineas[i].id })), 10, async ({ c, lineaId }) => {
+
+  // 4) El cruce por CASETA con el GPS (0375/0376): la unidad a evaluar es la del
+  //    TAG y, si el TAG no está dado de alta, la del viaje que cuadró. Sin
+  //    catálogo de casetas el motor dice `sin_caseta` por línea: no se acusa.
+  const catalogo = await listarCasetas(tenantId, true);
+  const paraGps = lineas.map((l, i) => ({
+    id: l.id,
+    fecha: l.fecha,
+    cruceEn: l.cruceEn,
+    caseta: l.caseta,
+    unidadId: l.unidadId ?? (cruces[i].viajeId ? (unidadPorViajeGasto.get(cruces[i].viajeId as string) ?? null) : null),
+  }));
+  const gps = await evaluarGpsDeLineas(tenantId, paraGps, catalogo);
+  const gpsPorLinea = new Map(gps.map((g) => [g.lineaId, g]));
+
+  // 5) La escritura por línea, en lotes (REND-C1: en serie un desglose de 1,000
+  //    líneas rebasaría maxDuration). Best-effort por línea: la que no se pueda
+  //    escribir conserva su estatus previo y se cuenta — el resumen dice lo que
+  //    quedó EN LA BASE, no lo que se calculó.
+  const escrituras = await enLotes(cruces.map((c, i) => ({ c, i, lineaId: lineas[i].id })), 10, async ({ c, i, lineaId }) => {
+    const g = gpsPorLinea.get(lineaId);
+    const v = g?.veredicto;
     const { error } = await acotada(supabaseAdmin()
       .from('desglose_peaje_linea')
       .update({
@@ -717,13 +915,28 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
         viaje_id: c.viajeId,
         diferencia: c.diferencia,
         detalle: c.detalle,
+        // La unidad que el TAG casa (peaje_tag). La que se usó para el GPS —que
+        // puede venir del viaje del gasto— va en gps_detalle.unidad_origen.
+        unidad_id: lineas[i].unidadId,
+        caseta_id: g?.casetaId ?? null,
+        gps_veredicto: v?.veredicto ?? null,
+        gps_distancia_m: v && v.veredicto !== 'sin_datos' ? v.distanciaM : (v?.distanciaM ?? null),
+        gps_detalle: v ? {
+          ...(v.veredicto === 'sin_datos' ? { motivo: v.motivo } : (v.veredicto === 'confirma' ? { via: v.via } : {})),
+          muestras: v.muestras,
+          // De dónde salió la unidad evaluada: del TAG o del viaje del gasto que cuadró.
+          unidad_origen: lineas[i].unidadId ? 'tag' : (paraGps[i].unidadId ? 'viaje' : null),
+        } : null,
       })
       .eq('id', lineaId)
       .eq('tenant_id', tenantId), 'desglose_peaje.escribir_linea');
     if (error) throw new Error(error.message);
-    return c.estatus;
+    return { estatus: c.estatus, gps: v?.veredicto ?? null };
   });
 
+  let gpsConfirma = 0;
+  let gpsNoCoincide = 0;
+  let gpsSinDatos = 0;
   for (let i = 0; i < escrituras.length; i++) {
     const r = escrituras[i];
     if ('error' in r) {
@@ -734,11 +947,17 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
       });
       continue;
     }
-    if (r.ok === 'cuadra') resumen.cuadra++;
-    else if (r.ok === 'no_cuadra') resumen.noCuadra++;
+    if (r.ok.estatus === 'cuadra') resumen.cuadra++;
+    else if (r.ok.estatus === 'no_cuadra') resumen.noCuadra++;
     else resumen.sinContraparte++;
+    if (r.ok.gps === 'confirma') gpsConfirma++;
+    else if (r.ok.gps === 'no_coincide') gpsNoCoincide++;
+    else gpsSinDatos++;
   }
 
+  resumen.gpsConfirma = gpsConfirma;
+  resumen.gpsNoCoincide = gpsNoCoincide;
+  resumen.gpsSinDatos = gpsSinDatos;
   logger.info('desglose_peaje.cruce', { tenant: tenantId, ...resumen });
   return resumen;
 }
@@ -774,25 +993,34 @@ async function agregarEstatus(tenantId: string, desgloseId: string): Promise<Pic
   // cabe completo» sobre un `.limit(MAX_LINEAS_DESGLOSE)` — y la premisa era
   // FALSA: PostgREST aplica min(limit, max_rows), así que un `.limit(5000)`
   // entrega 1,000 filas sin error. `total` y `pctCuadra` se congelaban en
-  // 1,000 — en el detalle Y EN EL ACUSE que se le manda al cliente. Se pagina
-  // con `traerTodo`, que además exige demostrar que la lectura quedó completa.
-  const filas = await traerTodo<{ estatus: unknown }>(
-    (d, h) => acotada(supabaseAdmin()
+  // 1,000 — en el detalle Y EN EL ACUSE que se le manda al cliente.
+  //
+  // RONDA 16 (carga de 250 camiones): la solución de entonces (`traerTodo`)
+  // traía TODAS las líneas del desglose —con 5,000 viajes al mes y 3 pases por
+  // viaje, un estado de cuenta mensual son decenas de miles de filas— solo para
+  // contar tres estatus. Ahora son CUATRO CONTEOS EN SQL (`head: true`: no viaja
+  // ninguna fila): el total y uno por estatus. Un conteo exacto es exacto sea
+  // cual sea `max_rows`, y un error de lectura sigue LANZANDO (nunca un 0%).
+  const contar = async (estatus?: EstatusLineaDesglose): Promise<number> => {
+    let q = supabaseAdmin()
       .from('desglose_peaje_linea')
-      .select('estatus', conteo(d))
+      .select('id', { count: 'exact', head: true })
       .eq('tenant_id', tenantId)
-      .eq('desglose_id', desgloseId)
-      .order('id').range(d, h), 'desglose_peaje.agregar_estatus'),
-    'desglose_peaje.agregar_estatus',
-  );
-  const cuenta = (e: EstatusLineaDesglose) => filas.filter((f) => f.estatus === e).length;
-  const total = filas.length;
-  const cuadra = cuenta('cuadra');
+      .eq('desglose_id', desgloseId);
+    if (estatus) q = q.eq('estatus', estatus);
+    const { count, error } = await acotada(q, 'desglose_peaje.agregar_estatus');
+    if (error) throw new Error(`desglose_peaje.agregar_estatus: ${error.message}`);
+    if (typeof count !== 'number') throw new Error('desglose_peaje.agregar_estatus: la base no devolvió el conteo');
+    return count;
+  };
+  const [total, cuadra, noCuadra, sinContraparte] = await Promise.all([
+    contar(), contar('cuadra'), contar('no_cuadra'), contar('sin_contraparte'),
+  ]);
   return {
     total,
     cuadra,
-    noCuadra: cuenta('no_cuadra'),
-    sinContraparte: cuenta('sin_contraparte'),
+    noCuadra,
+    sinContraparte,
     pctCuadra: total > 0 ? Math.round((cuadra / total) * 100) : null,
   };
 }
@@ -806,6 +1034,7 @@ export async function resumenConciliacion(tenantId: string, desgloseId: string):
     .select('id, proveedor, archivo_nombre, periodo_desde, periodo_hasta, creado_en')
     .eq('tenant_id', tenantId)
     .eq('id', desgloseId)
+    .is('anulado_en', null)
     .maybeSingle(), 'desglose_peaje.leer_desglose');
   if (error) throw new Error(`resumenConciliacion: ${error.message}`);
   if (!data) return null;
@@ -826,6 +1055,7 @@ export async function listarDesgloses(tenantId: string, limite = 8): Promise<Res
     .from('desglose_peaje')
     .select('id, proveedor, archivo_nombre, periodo_desde, periodo_hasta, creado_en')
     .eq('tenant_id', tenantId)
+    .is('anulado_en', null)
     .order('creado_en', { ascending: false })
     .limit(limite), 'desglose_peaje.listar');
   if (error) throw new Error(`listarDesgloses: ${error.message}`);
@@ -991,6 +1221,7 @@ export async function bitacoraRmf918(tenantId: string, desgloseId: string): Prom
     .select('id, proveedor, periodo_desde, periodo_hasta')
     .eq('tenant_id', tenantId)
     .eq('id', desgloseId)
+    .is('anulado_en', null)
     .maybeSingle(), 'bitacora.desglose');
   if (errDesglose) throw new Error(`bitacoraRmf918: ${errDesglose.message}`);
   if (!desglose) return null;
@@ -1059,6 +1290,9 @@ export async function bitacoraRmf918(tenantId: string, desgloseId: string): Prom
  * enseña como celdas de texto): un CSV que viaja sin su leyenda es una
  * bitácora que afirma de más en cuanto alguien la reenvía.
  */
+/** Antepone «'» a un texto que Excel leería como fórmula. Vacío y números pasan igual. */
+const textoCsvSeguro = (t: string): string => (/^[=+\-@\t\r]/.test(t) ? `'${t}` : t);
+
 export function bitacoraACsv(b: BitacoraRmf918): string {
   const encabezado = [
     ...b.leyendas.map((l) => `# ${l}`),
@@ -1068,12 +1302,13 @@ export function bitacoraACsv(b: BitacoraRmf918): string {
   const tabla = b.filas.length === 0
     ? '# (Sin líneas conciliadas todavía: la bitácora se llena con los cruces que cuadran.)\n'
     : toCsv(b.filas.map((f) => ({
-      viaje: f.viajeFolio,
-      origen: f.origen,
-      destino: f.destino,
+      // Texto del proveedor/del viaje: neutraliza «=…», «+…», «@…» (CSV injection).
+      viaje: textoCsvSeguro(f.viajeFolio),
+      origen: textoCsvSeguro(f.origen),
+      destino: textoCsvSeguro(f.destino),
       fecha_cruce: f.fechaCruce,
-      caseta: f.caseta,
-      tag: f.tag,
+      caseta: textoCsvSeguro(f.caseta),
+      tag: textoCsvSeguro(f.tag),
       monto_conciliado: f.montoConciliado,
       // «sin datos», no 0: un cero se leería como "la unidad no se movió",
       // que es más de lo que sabemos (ver leyenda).

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { puedeExportar, puedeAsignar, puedeAdministrar, puedeTimbrar } from './permisos';
+import { puedeExportar, puedeAsignar, puedeAdministrar, puedeTimbrar, puedeEditarCatalogoOperativo } from './permisos';
 
 // Matriz de docs/superpowers/plans/2026-08-02-roles-flota.md. Son funciones
 // puras a propósito: la misma tabla decide qué botón se pinta en el panel Y
@@ -66,5 +66,22 @@ describe('puedeTimbrar (0227, auditoría Fable c6-3)', () => {
     // Y el contador timbra sin poder asignar un viaje a un chofer.
     expect(puedeAsignar('contador')).toBe(false);
     expect(puedeTimbrar('contador')).toBe(true);
+  });
+});
+
+describe('puedeEditarCatalogoOperativo (W2): operadores, unidades y jornada son del jefe de tráfico, no solo del dueño', () => {
+  it('superadmin, flota_admin y encargado sí', () => {
+    for (const rol of ['superadmin', 'flota_admin', 'encargado']) {
+      expect(puedeEditarCatalogoOperativo(rol), rol).toBe(true);
+    }
+  });
+  it('contador, operador, vendedor, sin_rol y un rol desconocido no — fail closed', () => {
+    for (const rol of ['contador', 'operador', 'vendedor', 'sin_rol', 'quien-sabe', '']) {
+      expect(puedeEditarCatalogoOperativo(rol), rol).toBe(false);
+    }
+  });
+  it('NO ensancha lo que sigue siendo del dueño: dinero y configuración', () => {
+    expect(puedeAdministrar('encargado')).toBe(false);
+    expect(puedeTimbrar('encargado')).toBe(false);
   });
 });

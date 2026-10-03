@@ -1,4 +1,5 @@
 import dns from 'node:dns';
+import http from 'node:http';
 import https from 'node:https';
 import { isIP, type LookupFunction } from 'node:net';
 import type { ClientRequest, IncomingMessage } from 'node:http';
@@ -11,6 +12,23 @@ interface PeticionPublica {
   metodo: 'GET' | 'POST';
   encabezados?: Record<string, string>;
   cuerpo?: string;
+  /**
+   * SSRF del investigador (auditoría ola 1, #3): también acepta `http://` (los
+   * sitios de prospectos a veces no tienen TLS). La garantía es la MISMA: el
+   * `lookup` valida TODAS las direcciones y es el que entrega las IP al socket,
+   * así que no hay una segunda resolución que un DNS con TTL 0 pueda cambiar.
+   * Por omisión solo https, como siempre.
+   */
+  permitirHttp?: boolean;
+  /** Tope de bytes del cuerpo (por omisión y como máximo, 8 MiB). */
+  maxBytes?: number;
+  /** Al llegar a `maxBytes`, entregar lo leído en vez de fallar (para páginas
+   *  web, donde el recorte es lo esperado y no un error). */
+  truncar?: boolean;
+  /** Decide con estado y encabezados si vale la pena leer el cuerpo. `false` →
+   *  se corta la conexión y se devuelve `cuerpo: ''` (p. ej. un PDF o un
+   *  redirect cuyo cuerpo no se quiere). */
+  aceptar?: (estado: number, encabezados: Record<string, string>) => boolean;
 }
 
 /** Sin proxies ni reutilización de sockets: el lookup validado entrega las IP
@@ -22,9 +40,12 @@ interface PeticionPublica {
 export async function httpsPublico(p: PeticionPublica, timeoutMs: number) {
   let url: URL;
   try { url = new URL(p.url); } catch { throw new Error('Dirección del proveedor inválida.'); }
-  if (url.protocol !== 'https:' || url.username || url.password || hostNoPublico(url.hostname)) {
+  const esHttp = url.protocol === 'http:';
+  if ((url.protocol !== 'https:' && !(esHttp && p.permitirHttp)) || url.username || url.password || hostNoPublico(url.hostname)) {
     throw new Error('El proveedor debe usar una dirección HTTPS pública sin credenciales en la URL.');
   }
+  const maxBytes = Math.min(p.maxBytes ?? MAX_RESPUESTA_PUBLICA_BYTES, MAX_RESPUESTA_PUBLICA_BYTES);
+  const truncar = p.truncar === true;
   return new Promise<{ estado: number; cuerpo: string; encabezados: Record<string, string> }>((resolve, reject) => {
     let terminado = false;
     let req: ClientRequest | undefined;
@@ -60,12 +81,10 @@ export async function httpsPublico(p: PeticionPublica, timeoutMs: number) {
       }
       headers['accept-encoding'] = 'identity';
       const hostname = url.hostname.replace(/^\[|\]$/g, '');
-      req = https.request({
-        protocol: 'https:', hostname, port: url.port || 443,
-        path: url.pathname + url.search, method: p.metodo, headers,
-        lookup, agent: false, rejectUnauthorized: true,
-        servername: isIP(hostname) ? undefined : hostname,
-      }, r => {
+      const opciones = {
+        hostname, path: url.pathname + url.search, method: p.metodo, headers, lookup, agent: false as const,
+      };
+      const alResponder = (r: IncomingMessage) => {
         respuesta = r;
         r.on('error', () => fallar('No se pudo leer la respuesta del proveedor.'));
         r.on('aborted', () => fallar('El proveedor interrumpió la respuesta.'));
@@ -75,32 +94,53 @@ export async function httpsPublico(p: PeticionPublica, timeoutMs: number) {
           fallar('El proveedor devolvió una codificación de respuesta no admitida.');
           return;
         }
+        const encabezados: Record<string, string> = {};
+        for (const [clave, valor] of Object.entries(r.headers)) {
+          if (valor !== undefined) encabezados[clave.toLowerCase()] = Array.isArray(valor) ? valor.join(', ') : valor;
+        }
+        const entregar = (cuerpo: string) => {
+          if (terminado) return;
+          terminado = true;
+          clearTimeout(timer);
+          resolve({ estado: r.statusCode ?? 0, cuerpo, encabezados });
+        };
+        if (p.aceptar && !p.aceptar(r.statusCode ?? 0, encabezados)) {
+          entregar('');
+          r.destroy();
+          return;
+        }
         const longitud = Number(r.headers['content-length']);
-        if (Number.isFinite(longitud) && longitud > MAX_RESPUESTA_PUBLICA_BYTES) {
-          fallar('La respuesta del proveedor supera el límite de 8 MiB.');
+        if (!truncar && Number.isFinite(longitud) && longitud > maxBytes) {
+          fallar(`La respuesta del proveedor supera el límite de ${maxBytes / (1024 * 1024)} MiB.`);
           return;
         }
         let total = 0;
         r.on('data', (chunk: Buffer) => {
           if (terminado) return;
-          total += chunk.byteLength;
-          if (total > MAX_RESPUESTA_PUBLICA_BYTES) {
-            fallar('La respuesta del proveedor supera el límite de 8 MiB.');
+          if (total + chunk.byteLength > maxBytes) {
+            if (!truncar) {
+              fallar(`La respuesta del proveedor supera el límite de ${maxBytes / (1024 * 1024)} MiB.`);
+              return;
+            }
+            // Recorte esperado (páginas web): se entrega lo que cabe y se corta
+            // la conexión — el resto nunca se lee a memoria.
+            const cabe = maxBytes - total;
+            if (cabe > 0) { partes.push(chunk.subarray(0, cabe)); total += cabe; }
+            entregar(Buffer.concat(partes, total).toString('utf8'));
+            r.destroy();
             return;
           }
+          total += chunk.byteLength;
           partes.push(chunk);
         });
-        r.on('end', () => {
-          if (terminado) return;
-          terminado = true;
-          clearTimeout(timer);
-          const encabezados: Record<string, string> = {};
-          for (const [clave, valor] of Object.entries(r.headers)) {
-            if (valor !== undefined) encabezados[clave.toLowerCase()] = Array.isArray(valor) ? valor.join(', ') : valor;
-          }
-          resolve({ estado: r.statusCode ?? 0, cuerpo: Buffer.concat(partes, total).toString('utf8'), encabezados });
-        });
-      });
+        r.on('end', () => entregar(Buffer.concat(partes, total).toString('utf8')));
+      };
+      req = esHttp
+        ? http.request({ ...opciones, protocol: 'http:', port: url.port || 80 }, alResponder)
+        : https.request({
+            ...opciones, protocol: 'https:', port: url.port || 443, rejectUnauthorized: true,
+            servername: isIP(hostname) ? undefined : hostname,
+          }, alResponder);
       req.on('error', () => fallar('No se pudo conectar de forma segura con el proveedor.'));
       req.end(p.cuerpo);
     } catch {

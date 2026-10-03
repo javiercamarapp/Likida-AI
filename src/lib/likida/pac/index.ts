@@ -20,7 +20,8 @@
 import { crearProveedorSw } from './sw';
 import type { ProveedorPac } from './tipos';
 
-export type { ProveedorPac, ResultadoTimbre, TimbreOk, TimbreError } from './tipos';
+export type { ProveedorPac, ResultadoTimbre, TimbreOk, TimbreError, ResultadoCancelacion, SolicitudCancelacion, MotivoCancelacion } from './tipos';
+export { MOTIVOS_CANCELACION } from './tipos';
 
 export interface EstadoPac {
   configurado: boolean;

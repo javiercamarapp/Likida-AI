@@ -64,11 +64,14 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
     semanas que no lo eran. El caso de `ticket_mensaje` es el que más costaba:
     tenía dos LECTORES y cero escritores, y por eso la alarma «sin respuesta»
     del agente de Éxito era insatisfacible por construcción.
+  - **`terminal` (patios) ya tiene escritor** (1-oct-2026, W2 «producto»):
+    `/dashboard/patios` crea, edita y borra patios; `terminales.ts` asigna
+    operadores, unidades y jefes de tráfico (`app_user.terminal_id`, 0460) y las
+    plantillas de carga masiva traen la columna «patio». Un jefe con patio solo
+    corrige lo de su patio (`lib/auth/patio.ts`).
   - Siguen SIN escritor: `geocerca` (solo lectores: estadías, briefing,
-    facturación), `terminal` (huérfana desde 0001: la referencian
-    operador/viaje y solo la lee un join en repo.ts), `portal_credencial`,
-    `invitacion`, y las muertas de facto `campania`/`envio_mensaje` (las
-    sustituyó `campana`, 0123).
+    facturación), `portal_credencial`, `invitacion`, y las muertas de facto
+    `campania`/`envio_mensaje` (las sustituyó `campana`, 0123).
   - La base entera está en cero (0 viajes, 14-ago-2026) porque **no hay
     clientes todavía**, no porque falte código. Ver `project_likida_sin_clientes`.
 
@@ -76,6 +79,14 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
   existen" y le prohibía a cada agente construir sobre tablas ya aplicadas;
   después dijo "nadie las escribe" y mandaba a escribir un escritor duplicado.
   Antes de usar cualquiera, mira si tiene filas; si no, la pantalla dice qué falta.
+- **Permisos del catálogo operativo (W2).** Corregir operadores, unidades y
+  jornadas es `puedeEditarCatalogoOperativo` (dueño, soporte y jefe de tráfico),
+  NO `puedeAdministrar` (dinero y configuración, solo dueño). El alcance de un
+  jefe con patio lo decide la BASE por id y tenant (`terminalDeRegistro`/
+  `terminalDeJornada`), nunca el formulario, y falla cerrado si no se pudo leer.
+- **Un solo sistema de avisos/diálogos** (`admin/ui/{aviso-resultado,
+  notificaciones,confirmar}.tsx`, ver DESIGN.md §3): no se escribe un `Aviso`
+  local ni un `confirm()` nuevo.
 - `requireSessionTenant(destino)` arma su redirect a /login con un string fijo,
   así que **pierde el query string** — por eso existe `dashboard/sufijo.ts`.
 

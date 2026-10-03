@@ -67,7 +67,7 @@ export interface ExtraAgenteLiquidacion {
  * consultas, cada una con un esqueleto de su alto.
  */
 export function VistaAgenteLiquidacion({
-  kpis, liquidaciones, cola, extra, sufijo, notificaciones,
+  kpis, liquidaciones, cola, extra, sufijo, notificaciones, externas,
 }: {
   /** Primario: falla CERRADO. Su bloque enseña `EstadoError` — nunca un
    *  "0 por revisar" que nadie midió. */
@@ -85,6 +85,10 @@ export function VistaAgenteLiquidacion({
    *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
    *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
   notificaciones?: React.ReactNode;
+  /** «Liquidaciones externas» (0370): las que calculó el SAP/TMS de la flota y
+   *  Likida solo entrega. Entra ya renderizada (con su `Bloque`) por la misma
+   *  razón que `notificaciones`: la vista no importa el repositorio de datos. */
+  externas?: React.ReactNode;
 }) {
   return (
     <main className="h-full">
@@ -113,6 +117,8 @@ export function VistaAgenteLiquidacion({
           <Bloque mensaje="No se pudo leer la cola de revisión." esqueleto={<EsqTabla filas={5} />}>
             <SeccionCola {...cola} />
           </Bloque>
+
+          {externas}
 
           {/* ── La evidencia de que trabaja ── */}
           <div className="grid lg:grid-cols-3 gap-4">
@@ -431,8 +437,8 @@ function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; not
 
 const ESTATUS: Record<string, { rotulo: string; fg: string; bg: string }> = {
   cuadrada: { rotulo: 'Cuadrada', fg: 'var(--ok)', bg: 'var(--okbg)' },
-  con_diferencias: { rotulo: 'Con diferencias', fg: 'var(--bad)', bg: 'var(--badbg)' },
-  revisar: { rotulo: 'Por revisar', fg: 'var(--warn)', bg: 'var(--warnbg)' },
+  con_diferencias: { rotulo: 'Con diferencias', fg: 'var(--warn)', bg: 'var(--warnbg)' },
+  revisar: { rotulo: 'Por revisar', fg: 'var(--bad)', bg: 'var(--badbg)' },
 };
 
 function TablaLiqs({ filas, sufijo, conVer }: { filas: LiqRow[]; sufijo: string; conVer?: boolean }) {

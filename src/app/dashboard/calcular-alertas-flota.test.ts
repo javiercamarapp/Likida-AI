@@ -202,3 +202,41 @@ describe('cuentaQuePide', () => {
     expect(cuentaQuePide(calcularAlertasFlota({ ...NADA, porRevisar: 40 }))).toBe(0);
   });
 });
+
+describe('P6 — las tareas del asistente y las excepciones del Conductor son notificaciones', () => {
+  it('una tarea abierta es una alerta de atención que lleva a viajes en vivo, y el conteo va en el id (cambia ⇒ vuelve a contar como nueva)', () => {
+    const a = calcularAlertasFlota({ ...NADA, tareasAsistente: 1 });
+    expect(a).toHaveLength(1);
+    expect(a[0]).toMatchObject({ id: 'tareas-asistente:1', tipo: 'atencion', href: '/dashboard/viajes-en-vivo' });
+    expect(a[0].texto).toContain('1 tarea del asistente espera');
+    expect(calcularAlertasFlota({ ...NADA, tareasAsistente: 3 })[0].texto).toContain('3 tareas del asistente esperan');
+    expect(calcularAlertasFlota({ ...NADA, tareasAsistente: 3 })[0].id).not.toBe(a[0].id);
+  });
+
+  it('las excepciones del Conductor son «aviso» y suben a «atención» si hay choferes sin señal de vida', () => {
+    const a = calcularAlertasFlota({ ...NADA, excepcionesConductor: 2, sinSenalDeVida: 0 });
+    expect(a[0]).toMatchObject({ tipo: 'aviso', href: '/dashboard/viajes-en-vivo' });
+    const b = calcularAlertasFlota({ ...NADA, excepcionesConductor: 2, sinSenalDeVida: 1 });
+    expect(b[0].tipo).toBe('atencion');
+    expect(b[0].texto).toContain('1 sin señal de vida');
+    expect(cuentaQuePide(b)).toBe(1);
+    expect(cuentaQuePide(a)).toBe(0);
+  });
+
+  it('cero y «el rol no la ve» (undefined) no inventan renglones; null sí confiesa que no se pudo leer', () => {
+    expect(calcularAlertasFlota({ ...NADA, tareasAsistente: 0, excepcionesConductor: 0 })).toEqual([]);
+    expect(calcularAlertasFlota({ ...NADA })).toEqual([]);
+    const ciega = calcularAlertasFlota({ ...NADA, tareasAsistente: null });
+    expect(ciega[0].texto).toContain('tareas del asistente');
+    expect(ciega[0].texto).toContain('no en cero');
+  });
+
+  it('el gate por rol filtra la alerta entera cuando el rol no abre la pantalla de destino', () => {
+    const a = calcularAlertasFlota({ ...NADA, tareasAsistente: 2 }, '', (href) => href !== '/dashboard/viajes-en-vivo');
+    expect(a).toEqual([]);
+  });
+
+  it('el sufijo de tenant (superadmin viendo como flota) se pega al link', () => {
+    expect(calcularAlertasFlota({ ...NADA, tareasAsistente: 1 }, '?tenant=t-9')[0].href).toBe('/dashboard/viajes-en-vivo?tenant=t-9');
+  });
+});

@@ -11,6 +11,8 @@ import {
   importarDesglose, conciliarDesglose, listarDesgloses, detalleDesglose,
 } from '@/lib/likida/intake/desglose_peaje';
 import { evidenciaGpsDeDesglose } from '@/lib/likida/peajes/evidencia_gps';
+import { anularDesgloseDb } from '@/lib/likida/peajes/datos';
+import { bitacoraConciliada } from '@/lib/likida/peajes/bitacora_conciliada';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../../sufijo';
 import { avisoAgentePeajesApagado } from './apagado';
@@ -21,6 +23,7 @@ import { registrarCorrida, ultimasCorridas } from '@/lib/likida/agentes/corridas
 import { ahoraMs } from '@/lib/saludo';
 import type { EstadoImportar } from './subir-desglose';
 import type { EstadoConciliar } from './conciliar-desglose';
+import type { EstadoAnular } from './anular-desglose';
 import { MAX_ARCHIVO_SUBIDA_BYTES, MENSAJE_ARCHIVO_GRANDE } from '@/lib/http/subidas_formulario';
 
 export const dynamic = 'force-dynamic';
@@ -76,7 +79,7 @@ export default async function PaginaAgentePeajes({
   // FE-33: las dos lecturas de abajo solo dependen de `desgloseSel` — nada
   // de la segunda depende del resultado de la primera —, así que van en
   // paralelo en vez de en serie.
-  const [detalleSel, evidenciaSel] = desgloseSel
+  const [detalleSel, evidenciaSel, verificacionSel] = desgloseSel
     ? await Promise.all([
         safe(() => detalleDesglose(tenantId, desgloseSel.desgloseId)),
         // La evidencia GPS del desglose seleccionado (post-plan-maestro #1).
@@ -88,8 +91,14 @@ export default async function PaginaAgentePeajes({
           // El Map → objeto plano: la vista solo anota las líneas visibles.
           return { resumen: e.resumen, porLinea: Object.fromEntries(e.porLinea) };
         }),
+        // El estado conciliado (cuadra / sin respaldo / por verificar): solo el
+        // resumen viaja a la vista; el detalle línea a línea es el CSV.
+        safe(async () => {
+          const b = await bitacoraConciliada(tenantId, desgloseSel.desgloseId);
+          return b ? { resumen: b.resumen, sinEvaluarGps: b.sinEvaluarGps } : null;
+        }),
       ])
-    : [null, null];
+    : [null, null, null];
 
   async function subirDesglose(
     _prev: { error?: string; resumen?: { totalLineas: number; conciliadas: number; porConciliar: number } } | null,
@@ -196,10 +205,36 @@ export default async function PaginaAgentePeajes({
       // `conciliarDesglose` acota al tenant de la SESIÓN: un id ajeno en el
       // form no alcanza datos de otra flota — truena como "no existe".
       const r = await conciliarDesglose(tenantId, desgloseId, 'manual');
-      return { resumen: { total: r.total, cuadra: r.cuadra, noCuadra: r.noCuadra, sinContraparte: r.sinContraparte, noEscritas: r.noEscritas } };
+      return { resumen: { total: r.total, cuadra: r.cuadra, noCuadra: r.noCuadra, sinContraparte: r.sinContraparte, noEscritas: r.noEscritas, gpsConfirma: r.gpsConfirma, gpsNoCoincide: r.gpsNoCoincide, gpsSinDatos: r.gpsSinDatos } };
     } catch (e) {
       logger.error('peajes.conciliar_desglose_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
       return { error: 'No se pudo correr el cruce. Inténtalo de nuevo.' };
+    }
+  }
+
+  /**
+   * Anular un desglose subido por error (0563). Área `administracion`: quita un dato de la
+   * contabilidad de la flota. No borra: deja quién y por qué, y libera la huella del archivo.
+   * Se repite la puerta ADENTRO (patrón del repo): una action es un endpoint por POST directo.
+   */
+  async function anularDesgloseAhora(_prev: EstadoAnular, fd: FormData): Promise<EstadoAnular> {
+    'use server';
+    const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
+    if (!puedeVerArea(sesion.rol, 'administracion')) return { error: 'Solo quien administra la flota puede anular un desglose.' };
+    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+    const desgloseId = String(fd.get('desglose') ?? '').trim();
+    const motivo = String(fd.get('motivo') ?? '').trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(desgloseId)) return { error: 'Falta el desglose a anular.' };
+    if (!motivo) return { error: 'Escribe el motivo: una anulación sin porqué no se puede defender después.' };
+    if (motivo.length > 500) return { error: 'El motivo pasa de 500 caracteres.' };
+    try {
+      const r = await anularDesgloseDb(tenantId, desgloseId.toLowerCase(), motivo, `panel:${sesion.rol}`);
+      if (r === 'no_encontrado') return { error: 'No encontré ese desglose en tu flota.' };
+      logger.info('peajes.desglose_anulado', { tenantId, desglose: desgloseId, resultado: r });
+      return { ok: r === 'ya_anulado' ? 'Ese desglose ya estaba anulado.' : 'Desglose anulado: ya no cuenta. El archivo correcto puede volver a mandarse.' };
+    } catch (e) {
+      logger.error('peajes.anular_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+      return { error: 'No se pudo anular el desglose. Inténtalo de nuevo.' };
     }
   }
 
@@ -275,8 +310,11 @@ export default async function PaginaAgentePeajes({
       desgloseSeleccionado={desgloseSel}
       detalleSeleccionado={detalleSel}
       evidenciaGps={evidenciaSel}
+      verificacion={verificacionSel}
       importarDesglose={importarYCruzarDesglose}
       conciliarDesglose={conciliarDesgloseAhora}
+      anularDesglose={anularDesgloseAhora}
+      puedeAnular={puedeVerArea(rol, 'administracion')}
       notificaciones={
         <>
           <FichaCorridas corridas={corridas} />

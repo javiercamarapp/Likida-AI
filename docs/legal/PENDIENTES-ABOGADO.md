@@ -1,4 +1,4 @@
-# Pendientes de abogado — antes del piloto con Innovativos
+# Pendientes de abogado — antes del piloto con el cliente de demo
 
 **Estado:** interno. No se publica en ningún sitio ni ruta de la app —
 `grep -rn PENDIENTES-ABOGADO src/` debe seguir dando 0. Es el índice de una

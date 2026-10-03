@@ -1,8 +1,8 @@
 'use client';
 
 import { useActionState } from 'react';
-import { useFormStatus } from 'react-dom';
-import { TriangleAlert } from 'lucide-react';
+import { AvisoResultado } from '../../admin/ui/aviso-resultado';
+import { BotonConfirmar } from '../../admin/ui/confirmar';
 
 /**
  * El botón de cortar accesos MCP. Mismo molde que `FormaRevocar` de
@@ -16,14 +16,9 @@ export type ResultadoForma =
   | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
+/** El error del servidor, VERBATIM, con el aviso único del panel. */
 function AvisoError({ error }: { error: string }) {
-  return (
-    <div className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
-      style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-      <TriangleAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-      {error}
-    </div>
-  );
+  return <AvisoResultado estado={{ ok: false, error }} />;
 }
 
 /**
@@ -45,39 +40,22 @@ export function FormaCortar({ accion, usuarioId, quien, cuantos }: {
   const [estado, despachar] = useActionState(accion, null);
 
   return (
-    <details className="min-w-[15rem]">
-      <summary className="cursor-pointer text-[12px] font-medium select-none list-none inline-flex items-center gap-1"
-        style={{ color: 'var(--bad)' }}>
-        Cortar {cuantos === 1 ? 'el acceso' : `los ${cuantos} accesos`}
-      </summary>
-      <div className="pt-2 space-y-2">
-        <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
-          {cuantos === 1
-            ? `El cliente MCP de ${quien} deja de leer en ese instante.`
-            : `Los ${cuantos} clientes MCP de ${quien} dejan de leer en ese instante.`}{' '}
-          No hay deshacer: para volver a conectar, {quien} tiene que autorizar de nuevo
-          desde su cliente.
-        </p>
-        {estado && !estado.ok && <AvisoError error={estado.error} />}
-        {estado?.ok && (
-          <p className="text-[11.5px]" style={{ color: 'var(--ok)' }}>{estado.mensaje}</p>
-        )}
-        <form action={despachar}>
-          <input type="hidden" name="usuarioId" value={usuarioId} />
-          <BotonCortar />
-        </form>
-      </div>
-    </details>
-  );
-}
-
-function BotonCortar() {
-  const { pending } = useFormStatus();
-  return (
-    <button type="submit" disabled={pending}
-      className="h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 hairline transition-opacity hover:opacity-85 disabled:opacity-50"
-      style={{ color: 'var(--bad)', background: 'var(--badbg)' }}>
-      {pending ? 'Cortando…' : 'Sí, cortar el acceso'}
-    </button>
+    <form action={despachar} className="min-w-[15rem] space-y-2">
+      <input type="hidden" name="usuarioId" value={usuarioId} />
+      <BotonConfirmar
+        etiqueta={cuantos === 1 ? 'Cortar el acceso' : `Cortar los ${cuantos} accesos`} tono="peligro"
+        etiquetaConfirmar="Sí, cortar el acceso"
+        titulo={cuantos === 1 ? `Cortar el acceso de ${quien}` : `Cortar los ${cuantos} accesos de ${quien}`}
+        descripcion={`${cuantos === 1
+          ? `El cliente MCP de ${quien} deja de leer en ese instante.`
+          : `Los ${cuantos} clientes MCP de ${quien} dejan de leer en ese instante.`} No hay deshacer: para volver a conectar, ${quien} tiene que autorizar de nuevo desde su cliente.`}
+        className="text-[12px] font-medium select-none inline-flex items-center gap-1 hover:opacity-70 transition-opacity"
+        style={{ color: 'var(--bad)' }}
+      />
+      {estado && !estado.ok && <AvisoError error={estado.error} />}
+      {estado?.ok && (
+        <p role="status" className="text-[11.5px]" style={{ color: 'var(--ok)' }}>{estado.mensaje}</p>
+      )}
+    </form>
   );
 }

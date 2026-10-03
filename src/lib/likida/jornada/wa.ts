@@ -12,7 +12,7 @@ import {
 //
 // Se reusa el canal y el motor de conversación que Likida ya tiene; esto es
 // otro reconocedor más en la fila del `processor`, con exactamente el mismo
-// contrato que `hitos_viaje.ts` (0090): lista CERRADA, frase COMPLETA, y lo que
+// contrato que tuvo el viejo `hitos_viaje.ts` (0090, retirado): lista CERRADA, frase COMPLETA, y lo que
 // no esté en la lista sigue su camino.
 //
 // ── POR QUÉ TODAS LAS FRASES LLEVAN «JORNADA», «DESCANSO» O «COMER» ──────

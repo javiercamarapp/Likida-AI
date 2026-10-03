@@ -5,8 +5,8 @@ import {
 } from './evidencia_gps';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// EVIDENCIA GPS DE LOS CRUCES (post-plan-maestro #1, el "martirio" de
-// Innovativos). Lo que estas pruebas fijan es la HONESTIDAD del clasificador:
+// EVIDENCIA GPS DE LOS CRUCES (post-plan-maestro #1, el conciliación manual de
+// El cliente de demo). Lo que estas pruebas fijan es la HONESTIDAD del clasificador:
 //
 //  · afirma evidencia SOLO con posiciones de ESA unidad ESE día;
 //  · cada hueco dice su motivo exacto (fail-closed accionable);

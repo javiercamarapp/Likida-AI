@@ -37,7 +37,7 @@ cubre el 90% del caso.
 
 ## 2. API por agente
 
-**Qué es:** el cliente enterprise (Transportes Innovativos tiene TMS propio +
+**Qué es:** el cliente enterprise (el cliente de demo tiene TMS propio +
 SAP B1) lee la cola/bitácora de cada agente desde sus sistemas.
 
 **Prerequisito real:** gestión de llaves por tenant (emitir, rotar, revocar,
@@ -57,6 +57,6 @@ scoping) — hoy no existe tabla de API keys ni pantalla para gestionarlas.
   ("diseñamos el flujo de integración").
 
 **Por qué no hoy:** emitir llaves sin pantalla de revocación es peor que no
-emitirlas; y el primer consumidor real (el TMS de Innovativos) todavía no
+emitirlas; y el primer consumidor real (el TMS del cliente de demo) todavía no
 existe como contraparte. Cuando el PoC avance, esto es ~1 día de trabajo
 con este diseño.

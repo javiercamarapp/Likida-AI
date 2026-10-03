@@ -1,6 +1,6 @@
 # Facturas de proveedor → SAP Business One — el flujo, con la verdad de cada tramo
 
-Material de venta interna (Plaud #3, sesión con Transportes Innovativos).
+Material de venta interna (Plaud #3, sesión con el cliente de demo).
 Regla del documento: cada caja dice si **ya corre hoy** o si es **escalón 3,
 pendiente de credenciales del cliente**. Nada de este diagrama se enseña como
 vivo si aquí no lo dice.

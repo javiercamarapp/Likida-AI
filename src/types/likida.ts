@@ -103,7 +103,7 @@ export type TipoDiferencia =
   | 'cfdi_cancelado'       // CFDI cancelado ante el SAT → no deducible
   | 'cfdi_efos'            // emisor en lista negra 69-B → no deducible
   | 'cfdi_efos_indeterminado' // SAT devolvió código EFOS no concluyente → a bandeja (no fraude)
-  | 'cfdi_no_encontrado'   // el SAT no reconoce el UUID (fabricado/inexistente) → no deducible
+  | 'cfdi_no_encontrado'   // el SAT no pudo confirmar el UUID (602, AMBIGUO: también un UUID/RFC/total mal leído) → no se toma como deducible hasta confirmarlo
   | 'cfdi_pendiente'       // no se pudo validar con el SAT (continuar, revisar después)
   | 'monto_invalido'       // monto ≤ 0 (OCR erróneo / nota de crédito) → revisar a mano
   | 'complemento_hidrocarburos'  // CFDI de combustible SIN el complemento requerido → NO deducible (NIVEL 2, del XML)
@@ -128,6 +128,8 @@ export type TipoDiferencia =
   | 'factura_por_vencer'   // ticket de portal sin timbrar y con la ventana cerrándose
   | 'comprobante_no_fiscal' // el papel dice de sí mismo que no lo es → no ampara deducción (CFF 29-A)
   | 'diesel_desviacion'    // consumo de diésel fuera del rango esperado
+  | 'tarjeta_no_empresa'   // diésel pagado con tarjeta/monedero y la flota DECLARÓ que no es de la empresa (o que el chofer paga y se le reembolsa) → no acredita litros (LIF 20-A fr. IV)
+  | 'tarjeta_sin_declarar'  // lo mismo, pero la flota todavía NO contestó de quién es la tarjeta: se resuelve contestando el perfil, no decidiendo el viaje
   | 'permiso_cre_no_verificable' // CFDI de combustible: el permiso CRE del proveedor no se valida (LISR 27-III / RFA 2026 2.9) → a revisión, no baja la cubeta
   // RFA 2026 regla 2.9 — la facilidad del 15% de combustible en efectivo (deber ser):
   | 'combustible_efectivo_dentro15' // efectivo DENTRO del 15% del ejercicio y flota elegible → deducible, con el contador a la vista

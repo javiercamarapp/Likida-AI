@@ -159,3 +159,15 @@ describe('el spec no se queda atrás de las rutas', () => {
     }
   });
 });
+
+describe('las rutas de la 2.ª entrega del Agente Conductor (0385) están documentadas con su área', () => {
+  it('estadías (dinero), sitios (operación) y asignar sitios (administración)', async () => {
+    const d = await doc();
+    const paths = d.paths as Record<string, Record<string, { 'x-likida-area'?: string; operationId?: string }>>;
+    expect(paths['/v1/estadias'].get['x-likida-area']).toBe('dinero');
+    expect(paths['/v1/sitios'].get['x-likida-area']).toBe('operacion');
+    expect(paths['/v1/viajes/{id}/sitios'].put['x-likida-area']).toBe('administracion');
+    const ids = Object.values(paths).flatMap((p) => Object.values(p).map((o) => o.operationId));
+    expect(new Set(ids.filter(Boolean)).size, 'operationId repetido').toBe(ids.filter(Boolean).length);
+  });
+});

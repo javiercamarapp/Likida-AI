@@ -3,7 +3,7 @@
 -- SEGUNDO CAMINO DE **ESCRITURA** A LA BASE QUE LA APP NO VIGILA.
 --
 -- ── EL ESCENARIO, CON VALORES ─────────────────────────────────────────────
--- Un `contador` de Innovativos abre DevTools, copia el JWT de su propia
+-- Un `contador` del cliente de demo abre DevTools, copia el JWT de su propia
 -- sesión (la anon key ya viaja en el bundle, `browser-storage.ts:27`) y hace:
 --
 --   curl -X PATCH "https://<ref>.supabase.co/rest/v1/liquidacion?id=eq.<uuid>" \

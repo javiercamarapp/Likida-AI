@@ -1,0 +1,35 @@
+{
+ "meta": {
+  "total": 3
+ },
+ "datos": {
+  "cursos": [
+   {
+    "cve": "CUR-E1",
+    "desc": "Ruta de la unidad UN-003",
+    "eco": "UN-003",
+    "paradas": [
+     "Caseta Ejemplo Norte",
+     "Caseta Ejemplo Sur"
+    ],
+    "desde": "2026-10-01",
+    "hasta": null
+   },
+   {
+    "cve": "CUR-E2",
+    "desc": "Convenio",
+    "conv": "Convenio Ficticio Uno",
+    "paradas": [
+     "Caseta Ejemplo Centro"
+    ]
+   },
+   {
+    "cve": "CUR-E3",
+    "desc": "Sin dueño",
+    "paradas": [
+     "Caseta Ejemplo Sur"
+    ]
+   }
+  ]
+ }
+}

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Users, Phone, PhoneOff, IdCard } from 'lucide-react';
+import { Users, Phone, PhoneOff, IdCard, UserPlus } from 'lucide-react';
 import { numero, fechaCorta } from '@/lib/formato';
 import { clasificarVigencia, DIAS_AVISO } from '@/lib/likida/vigencias';
 import type { ConteosOperadores } from '@/lib/likida/administracion';
@@ -7,7 +7,10 @@ import { EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../resumen-visual';
 import { urlRegistro, type PaginaRegistroUI } from '../paginar-registro';
 import { FiltroRegistro } from '../registro-filtro';
-import { FormaOperador, type AccionForma } from './forma';
+import { FormaOperador, FormaAltaOperador, type AccionForma, type PatioOpcion } from './forma';
+import { InvitarPendientes, InvitarUno, type AccionInvitar } from './invitaciones';
+import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
+import type { InvitacionDeOperador } from '@/lib/likida/invitacion_operador';
 
 /** La fila del registro — SIN el dinero que `OperadorDetalle` trae (ver
  *  encabezado de page.tsx: la fuga del 4-ago). `licencia` y `rfc` SÍ viajan:
@@ -26,6 +29,14 @@ export interface FilaOperador {
   licenciaVence: string | null;
   /** RFC del trabajador (mig. 0080, RLISR 57). */
   rfc: string | null;
+  /** El patio (W2): uuid y nombre, o null = sin patio. */
+  terminalId: string | null;
+  terminalNombre: string | null;
+  /** La invitación por WhatsApp (W2); null = no se pudo leer. */
+  invitacion: InvitacionDeOperador | null;
+  /** ¿ESTA fila cae dentro del alcance del usuario? Un jefe con patio solo edita
+   *  los de su patio; lo decide el servidor con el patio leído de la base. */
+  editable: boolean;
 }
 
 /** A cuántos días de hoy vence — comparación lexicográfica de ISO AAAA-MM-DD
@@ -55,6 +66,7 @@ function diasParaVencer(vence: string, hoy: string): number {
  */
 export function VistaOperadores({
   filas, pag, conteos, totalConocido, hoy, puedeEditar, guardarOperador, ilegible = false, sufijo, camposOcultos,
+  patios, patioDelJefe, altaOperador, cargarOperadores, invitar, plantillaCsv, invitaciones, hrefPatios, hrefGuia,
 }: {
   /** Las filas de ESTA página. Ya vienen cortadas por la base. */
   filas: FilaOperador[];
@@ -80,6 +92,19 @@ export function VistaOperadores({
    *  pinta: la pantalla no ofrece un botón que el rol no puede usar. */
   puedeEditar: boolean;
   guardarOperador: AccionForma;
+  /** Los patios de la flota (W2). */
+  patios: PatioOpcion[];
+  /** El nombre del patio de un jefe CON patio (carga y altas caen ahí); null = toda la flota. */
+  patioDelJefe: string | null;
+  altaOperador: AccionForma;
+  cargarOperadores: AccionImportacion;
+  invitar: AccionInvitar;
+  /** El CSV de la plantilla (con BOM), armado en el servidor. */
+  plantillaCsv: string;
+  /** Pendientes de invitar y con fallo, o null si no se pudieron contar. */
+  invitaciones: { pendientes: number; conFallo: number } | null;
+  hrefPatios: string;
+  hrefGuia: string;
 }) {
   // Los KPIs son de la FLOTA ENTERA y los cuenta la base. Contarlos aquí sobre
   // `filas` diría que no hay licencias vencidas porque cayeron en la página 12.
@@ -107,6 +132,36 @@ export function VistaOperadores({
               tono={conteos && conteos.licenciasPorVencer > 0 ? 'warn' : undefined} />
           </div>
 
+          {puedeEditar && invitaciones && (
+            <InvitarPendientes pendientes={invitaciones.pendientes} conFallo={invitaciones.conFallo}
+              accion={invitar} hrefGuia={hrefGuia} />
+          )}
+
+          {puedeEditar && (
+            <>
+              <section id="alta" aria-labelledby="titulo-alta" className="card p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
+                    <UserPlus aria-hidden width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 id="titulo-alta" className="font-display text-[15px] font-semibold">Dar de alta un operador</h2>
+                    <p className="mb-3 mt-0.5 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+                      Uno por uno. Para toda tu flota de una vez, usa la carga desde Excel o CSV de abajo.
+                    </p>
+                    <FormaAltaOperador accion={altaOperador} patios={patios} terminalFijo={patioDelJefe} />
+                  </div>
+                </div>
+              </section>
+              <ImportadorMasivo
+                entidad="operadores" accion={cargarOperadores} plantillaCsv={plantillaCsv}
+                archivoPlantilla="plantilla-operadores.csv"
+                columnas="Obligatorias: nombre y teléfono (el WhatsApp con el que el chofer le escribirá a Likida). Opcionales: número de empleado, RFC, licencia, tipo y vencimiento de licencia, y patio."
+                hrefPatios={hrefPatios} ofrecerInvitacion patioDelJefe={patioDelJefe} tope={2_000}
+              />
+            </>
+          )}
+
           <section className="card p-4">
             <h2 className="font-display text-[15px] font-semibold mb-3">El registro</h2>
             {!ilegible && (pag.filtrados > 0 || hayFiltro) && (
@@ -124,8 +179,11 @@ export function VistaOperadores({
             {ilegible ? (
               <EstadoError mensaje="No pude leer el registro de operadores. No se enseña media lista: media lista se ve igual que la lista entera, solo que más corta." />
             ) : pag.filtrados === 0 && !hayFiltro ? (
-              <EstadoVacio icono={<Users width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                Aún no hay operadores dados de alta — el alta rápida vive en Despacho.
+              <EstadoVacio icono={<Users width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+                accion={puedeEditar ? { href: '#alta', texto: 'Dar de alta al primero' } : undefined}>
+                {puedeEditar
+                  ? 'Aún no hay operadores dados de alta. Dalos de alta uno por uno arriba, o carga a toda tu flota de una vez desde un Excel o CSV.'
+                  : 'Aún no hay operadores dados de alta. Quien administra tu flota los da de alta.'}
               </EstadoVacio>
             ) : (
               <div className="overflow-x-auto">
@@ -134,6 +192,7 @@ export function VistaOperadores({
                     <tr className="text-left" style={{ color: 'var(--faint)' }}>
                       <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Operador</th>
                       <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Teléfono</th>
+                      <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Patio</th>
                       <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pr-6 text-right">Viajes</th>
                       <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Licencia</th>
                       <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Estado</th>
@@ -143,7 +202,8 @@ export function VistaOperadores({
                   <tbody>
                     {filas.map((f) => (
                       <RenglonOperador key={f.operadorId} f={f} hoy={hoy}
-                        puedeEditar={puedeEditar} guardarOperador={guardarOperador}
+                        puedeEditar={puedeEditar && f.editable} guardarOperador={guardarOperador}
+                        patios={patios} patioFijo={patioDelJefe !== null} invitar={invitar}
                         editando={pag.editando === f.operadorId}
                         hrefEditar={urlRegistro('/dashboard/operadores', sufijo, {
                           q: pag.q || null, p: pag.pagina,
@@ -174,11 +234,14 @@ export function VistaOperadores({
  * es falso, en vez de pintarlo deshabilitado, porque el rol de operación no
  * tiene ningún botón que darle.
  */
-function RenglonOperador({ f, hoy, puedeEditar, guardarOperador, editando, hrefEditar }: {
+function RenglonOperador({ f, hoy, puedeEditar, guardarOperador, editando, hrefEditar, patios, patioFijo, invitar }: {
   f: FilaOperador;
   hoy: string;
   puedeEditar: boolean;
   guardarOperador: AccionForma;
+  patios: PatioOpcion[];
+  patioFijo: boolean;
+  invitar: AccionInvitar;
   /** FE-12: solo la fila que `?editar=` nombra trae su formulario. */
   editando: boolean;
   hrefEditar: string;
@@ -203,6 +266,9 @@ function RenglonOperador({ f, hoy, puedeEditar, guardarOperador, editando, hrefE
             </span>
           )}
         </td>
+        <td className="py-2 text-[12.5px]" style={{ color: f.terminalNombre ? 'var(--ink2)' : 'var(--faint)' }}>
+          {f.terminalNombre ?? 'Sin patio'}
+        </td>
         <td className="py-2 pr-6 text-right cifra-mono">{numero(f.viajes)}</td>
         <td className="py-2"><PillLicencia f={f} hoy={hoy} /></td>
         <td className="py-2">
@@ -212,22 +278,28 @@ function RenglonOperador({ f, hoy, puedeEditar, guardarOperador, editando, hrefE
               : { color: 'var(--muted)', background: 'var(--canvas)' }}>
             {f.activo ? 'Activo' : 'Inactivo'}
           </span>
+          {f.activo && f.invitacion && <PillInvitacion i={f.invitacion} />}
         </td>
         {puedeEditar && <td className="py-2" />}
       </tr>
       {puedeEditar && !editando && (
         <tr style={{ borderColor: 'var(--line2)' }}>
-          <td colSpan={6} className="pb-2">
-            <Link href={hrefEditar} className="text-[12px] underline hover:opacity-70 transition-opacity"
-              style={{ color: 'var(--muted)' }}>
-              Editar
-            </Link>
+          <td colSpan={7} className="pb-2">
+            <span className="inline-flex flex-wrap items-center gap-x-4 gap-y-1">
+              <Link href={hrefEditar} className="text-[12px] underline hover:opacity-70 transition-opacity"
+                style={{ color: 'var(--muted)' }}>
+                Editar
+              </Link>
+              {f.activo && f.telefono && f.invitacion && f.invitacion.estado !== 'enviada' && (
+                <InvitarUno operadorId={f.operadorId} nombre={f.nombre} reintento={f.invitacion.estado === 'fallo'} accion={invitar} />
+              )}
+            </span>
           </td>
         </tr>
       )}
       {puedeEditar && editando && (
         <tr style={{ borderColor: 'var(--line2)' }}>
-          <td colSpan={6} className="pb-3">
+          <td colSpan={7} className="pb-3">
             <>
               <FormaOperador
                 accion={guardarOperador}
@@ -246,7 +318,10 @@ function RenglonOperador({ f, hoy, puedeEditar, guardarOperador, editando, hrefE
                   licenciaVence: f.licenciaVence ?? '',
                   rfc: f.rfc ?? '',
                   activo: f.activo,
+                  terminalId: f.terminalId ?? '',
                 }}
+                patios={patios}
+                patioFijo={patioFijo}
               />
               <Link href={hrefEditar} className="inline-block mt-2 text-[12px] underline hover:opacity-70 transition-opacity"
                 style={{ color: 'var(--muted)' }}>
@@ -257,6 +332,23 @@ function RenglonOperador({ f, hoy, puedeEditar, guardarOperador, editando, hrefE
         </tr>
       )}
     </>
+  );
+}
+
+/** El estado de la invitación por WhatsApp. Cada estado dice la verdad: «enviada»
+ *  es que Meta ACEPTÓ el mensaje (no que el chofer lo haya leído). */
+function PillInvitacion({ i }: { i: InvitacionDeOperador }) {
+  const estilo = i.estado === 'enviada'
+    ? { color: 'var(--ok)', background: 'var(--okbg)' }
+    : i.estado === 'fallo'
+      ? { color: 'var(--bad)', background: 'var(--badbg)' }
+      : { color: 'var(--muted)', background: 'var(--canvas)' };
+  const texto = i.estado === 'enviada' ? 'Invitación enviada' : i.estado === 'fallo' ? 'Invitación falló' : 'Sin invitar';
+  return (
+    <span className="ml-1.5 inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={estilo}
+      title={i.estado === 'fallo' && i.fallo ? i.fallo : undefined}>
+      {texto}
+    </span>
   );
 }
 

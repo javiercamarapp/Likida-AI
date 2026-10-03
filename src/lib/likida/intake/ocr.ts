@@ -322,6 +322,8 @@ export interface ExtraerResultado {
      *  `usage`: el costo NO se midió. `costoUsd: 0` aquí no es "gratis" — es
      *  "no se sabe" (auditoría prod, RES-4). */
     noMedido?: true;
+    /** ms de la llamada al proveedor (E1-A, `llm_costo.duracion_ms`). Ausente en los caminos sin llamada medida. */
+    duracionMs?: number;
   };
 }
 
@@ -617,6 +619,10 @@ export async function extraerComprobante(
   }
 
   // Forma de pago leída → c_FormaPago (para la regla de combustible en efectivo).
+  // OJO (E1-B, P0-6): 'tarjeta' → '04' es una PISTA del papel, no una prueba. Ni la
+  // foto ni el XML dicen DE QUIÉN es la tarjeta; el estímulo de litros además
+  // exige que sea de la empresa (`CuadreInput.tarjetasEmpresa`, declarado en el
+  // perfil). El CFDI, cuando llega, reemplaza esta forma por la suya.
   const formaPago = data.forma_pago === 'efectivo' ? '01' : data.forma_pago === 'tarjeta' ? '04' : undefined;
   // Folio: SANEADO (dato no confiable de un ticket/CFDI) — charset + cap. Se
   // conserva el crudo y el normalizado sin ceros a la izquierda (portales).
@@ -772,6 +778,6 @@ export async function extraerComprobante(
     // dijo qué clase de documento es, mientras que `solo_codigo` solo observa
     // que el cuerpo no dio monto, que es lo que le pasa a un voucher.
     motivo: legible ? undefined : soloPago ? 'solo_pago' : soloCodigo ? 'solo_codigo' : 'ilegible',
-    costo: { modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.cost },
+    costo: { modelo: res.model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costoUsd: res.cost, duracionMs: res.ms },
   };
 }

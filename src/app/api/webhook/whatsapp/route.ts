@@ -12,8 +12,10 @@ import { logger } from '@/lib/logger';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { flushObservabilidad, codigoDeError } from '@/lib/observability/sentry';
 import { leerInterruptor } from '@/lib/likida/interruptores';
+import { registrarEntrantesWhatsApp } from '@/lib/likida/wa_ventana';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { avisadosDeApagado, VENTANA_AVISO_APAGADO_MS } from './avisos_apagado';
+import { medirRuta } from '@/lib/observability/latencia';
 import {
   guardarEventosPendientes, pendientesYaConocidos, reclamarPendiente,
   marcarPendienteProcesado, anotarFalloPendiente, devolverIntentoPendiente,
@@ -126,7 +128,12 @@ export async function GET(req: NextRequest) {
 }
 
 // POST — mensajes entrantes. Verifica HMAC, responde 200 rápido y procesa en after().
-export async function POST(req: NextRequest) {
+/** E1-A: la latencia de esta ruta (p50/p95 en /admin/observabilidad). Muestreada y sin riesgo: ver `medirRuta`. */
+export function POST(req: NextRequest) {
+  return medirRuta('webhook.whatsapp', () => manejarPOST(req));
+}
+
+async function manejarPOST(req: NextRequest) {
   // El reloj de la INVOCACIÓN: `maxDuration` corre desde aquí, no desde cada
   // mensaje. Se le pasa a cada `processInbound` del pool para que la foto 6
   // pida lo que queda y no los 120s enteros (auditoría 18, C4).
@@ -150,6 +157,13 @@ export async function POST(req: NextRequest) {
   }
 
   const messages = extractMessages(payload);
+  // ── VENTANA DE 24 H (mig. 0368) ───────────────────────────────────────────
+  // Todo mensaje entrante válido (firma ya verificada) abre/renueva la ventana
+  // de servicio de ESE contacto, con la hora de META y antes de cualquier rate
+  // limit o apagado: la ventana es un hecho de WhatsApp, no del procesamiento.
+  // Idempotente y a prueba de reentregas/desorden (la hora solo avanza); nunca
+  // lanza ni cambia el código de respuesta — es una caché, no un requisito.
+  if (messages.length) await registrarEntrantesWhatsApp(messages);
   // ── RATE LIMIT POR TELÉFONO (no por IP: todo Meta viene de sus IPs) ────────
   //
   // LO QUE PASA DE ESTE TECHO YA NO SE DESCARTA: SE APLAZA. Es el cambio del
@@ -604,6 +618,12 @@ interface WaWebhook {
             type?: string;
             button_reply?: { id?: string; title?: string };
           };
+          // El botón de RESPUESTA RÁPIDA de una PLANTILLA. Meta lo manda como
+          // `type: 'button'` (no `interactive`) con el `payload` que pusimos al
+          // enviar la plantilla. Es el botón que llega cuando la conversación la
+          // inició Likida fuera de la ventana de 24 h (p. ej. la liquidación
+          // externa), y hasta ahora se descartaba como `other`.
+          button?: { payload?: string; text?: string };
         }>;
         // Acuses de ENTREGA. Meta los manda por el mismo webhook y con el mismo
         // `field: 'messages'`, en un arreglo aparte. Ver `extractStatuses`.
@@ -730,6 +750,11 @@ function extractMessages(p: WaWebhook): InboundMessage[] {
         // le llegaría al procesador como un mensaje en blanco del operador.
         else if (m.type === 'interactive' && m.interactive?.type === 'button_reply' && m.interactive.button_reply?.id) {
           out.push({ ...base, type: 'text', text: m.interactive.button_reply.id });
+        }
+        // Mismo trato para el botón de plantilla: el `payload` es el dato (lo
+        // elegimos nosotros), `text` es el rótulo que vio el chofer y no se usa.
+        else if (m.type === 'button' && m.button?.payload) {
+          out.push({ ...base, type: 'text', text: m.button.payload });
         }
         // ── AUDITORÍA 24 · WA-9 (MEDIO): UN 👍 NO ES UN TURNO ──────────────
         //

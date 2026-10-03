@@ -288,7 +288,7 @@ describe('revisarLiquidacion', () => {
   const CUADRE_RECALCULADO = { ...RECALCULO, viajeId: U(9), totalAnticipo: 5000, gastos: [], totalDeducible: 0, totalNoDeducible: 0, totalPorConfirmar: 0 };
 
   it('ajustar RECALCULA el motor sobre los gastos vivos ANTES de llamar a la RPC, y manda el recálculo como p_recalculo', async () => {
-    filaUnica = { viaje_id: U(9) };
+    filaUnica = { viaje_id: U(9), created_at: '2026-09-20T12:00:00Z' };
     recalcularParaAjuste.mockResolvedValueOnce({ recalculo: RECALCULO, cuadre: CUADRE_RECALCULADO });
     rpc.mockResolvedValueOnce({
       data: {
@@ -302,7 +302,8 @@ describe('revisarLiquidacion', () => {
 
     // El recálculo se pidió ANTES de la RPC (viajeId resuelto por fuera) y con
     // los MISMOS ajustes que se le mandan a la base.
-    expect(recalcularParaAjuste).toHaveBeenCalledWith('t', U(9), [{ gastoId: U(3), montoNuevo: 8000 }]);
+    // …y con la fecha de cierre de la liquidación (A2: la regla de tarjeta ajena no es retroactiva).
+    expect(recalcularParaAjuste).toHaveBeenCalledWith('t', U(9), [{ gastoId: U(3), montoNuevo: 8000 }], '2026-09-20T12:00:00Z');
     expect(rpc.mock.calls[0][1]).toMatchObject({
       p_accion: 'ajustar', p_motivo: 'el ticket dice 8,000', p_ajustes: [{ gastoId: U(3), montoNuevo: 8000 }],
       p_recalculo: RECALCULO,

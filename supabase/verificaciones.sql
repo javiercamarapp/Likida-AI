@@ -5779,7 +5779,7 @@ begin
     coalesce(gatea, false), coalesce(tiene_check, false);
 end $$;
 
--- ── 112. TODA FK entre tablas con tenant_id lleva su compuesta (mig. 0145) ──
+-- ── 112. TODA FK entre tablas con tenant_id lleva su compuesta (mig. 0145 + 0600) ──
 -- La 0028 escribió la regla y la aplicó a cuatro relaciones; la 0073 arregló
 -- una más y dejó escrito que el resto seguía abierto. Este bloque es la regla
 -- hecha catálogo: barre pg_constraint y LISTA cada FK simple entre dos tablas
@@ -15775,7 +15775,7 @@ begin
   -- La forma buena SÍ entra.
   begin
     insert into public.interruptor_tenant (tenant_id, pipeline, apagado, motivo)
-      values (ta, 'ocr', true, 'gasto disparado en Innovativos');
+      values (ta, 'ocr', true, 'gasto disparado en el cliente de demo');
     acepta_con_motivo := true;
   exception when others then acepta_con_motivo := false;
   end;
@@ -17038,7 +17038,9 @@ end $$;
 --
 -- Lo que este bloque asevera (la FORMA del contrato, que es lo que la base
 -- puede demostrar; la clasificación sigue viviendo en TS — bloque 220):
---   (a) cada fila trae `version` = 342 (contrato vigente, mig. 0342);
+--   (a) cada fila trae `version` >= 342 (el contrato de la 0342, que sigue
+--       vigente; la 0361 lo AMPLIÓ a 361 sin quitarle nada, y con la igualdad
+--       toda ampliación legítima rompía este bloque);
 --   (b) cada gasto trae `monto`, `folioNorm`, `cfdiUuid` y `formaPago` — lo que
 --       `copiasDeComprobante`, `cubetaDe` y `proporcionesDeducibles` leen —, y
 --       las DOS fotos del mismo ticket vienen las dos (deduplica la ruta con la
@@ -17091,7 +17093,7 @@ begin
     from jsonb_array_elements(public.poliza_datos_tenant(t, current_date - 1, current_date + 1)) x
    limit 1;
 
-  version_vigente   := (fila->>'version')::int = 342;
+  version_vigente   := (fila->>'version')::int >= 342;
   insumos_por_gasto := (fila->'gastos'->0->>'monto')::numeric = 3480
                        and (fila->'gastos'->0->>'folioNorm') = '5461'
                        and (fila->'gastos'->0->>'formaPago') = '01'
@@ -18146,4 +18148,1527 @@ begin
 
   raise exception E'FISCAL_SIN_COPIAS_0355 n=% monto=% iva=% distingue-distinto=%   (esperado t / t / t / t)',
     n_ok, monto_ok, iva_ok, distingue;
+end $$;
+
+-- ── 580. Convenios de cliente: llave única, FK con flota, claim del envío (mig. 0580) ──
+--
+-- W3 «convenios» (flota de demo): el convenio fija A→B y las instrucciones
+-- de operación que el chofer recibe por WhatsApp. Lo que solo la base garantiza:
+--   unico   — (flota, cliente, nombre) es único: el importador CSV es idempotente;
+--   fk_ajena — un convenio de la flota A no cuelga del cliente de la flota B;
+--   claim   — el envío al operador se reclama con UN UPDATE condicionado: de dos
+--             reclamos sobre el mismo viaje gana exactamente uno;
+--   set_null — borrar el convenio deja el viaje y la foto de sus instrucciones.
+-- La batería completa (RLS por rol, CHECKs, cascadas) vive en
+-- supabase/tests/0580_convenios.sql, que corre en ci-postgres.
+-- Esperado: CONVENIOS_0580 unico=t fk_ajena=t claim=t set_null=t
+do $$
+declare
+  ta uuid; tb uuid; ca uuid; cb uuid; oa uuid; va uuid; conv uuid;
+  unico boolean := false; fk_ajena boolean := false; n int; claim boolean; set_null boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0580 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0580 B') returning id into tb;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ cliente A') returning id into ca;
+  insert into cliente (tenant_id, nombre) values (tb, 'ZZZ cliente B') returning id into cb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0580', '5215559990580') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio, estatus) values (ta, oa, 'ZZZ-0580', 'abierto') returning id into va;
+  insert into cliente_convenio (tenant_id, cliente_id, nombre) values (ta, ca, 'A → B') returning id into conv;
+
+  begin
+    insert into cliente_convenio (tenant_id, cliente_id, nombre) values (ta, ca, 'A → B');
+  exception when unique_violation then unico := true;
+  end;
+
+  begin
+    insert into cliente_convenio (tenant_id, cliente_id, nombre) values (ta, cb, 'cliente ajeno');
+  exception when foreign_key_violation then fk_ajena := true;
+  end;
+
+  insert into viaje_convenio (viaje_id, tenant_id, convenio_id, instrucciones)
+  values (va, ta, conv, '[{"categoria":"puerta","texto":"Puerta 3"}]'::jsonb);
+  update viaje_convenio set despacho_reclamado_en = now()
+   where viaje_id = va and despacho_enviado_en is null
+     and (despacho_reclamado_en is null or despacho_reclamado_en < now() - interval '5 minutes');
+  get diagnostics n = row_count;
+  claim := n = 1;
+  update viaje_convenio set despacho_reclamado_en = now()
+   where viaje_id = va and despacho_enviado_en is null
+     and (despacho_reclamado_en is null or despacho_reclamado_en < now() - interval '5 minutes');
+  get diagnostics n = row_count;
+  claim := claim and n = 0;
+
+  delete from cliente_convenio where id = conv;
+  select count(*) = 1 into set_null from viaje_convenio
+   where viaje_id = va and convenio_id is null and jsonb_array_length(instrucciones) = 1;
+
+  raise exception E'CONVENIOS_0580 unico=% fk_ajena=% claim=% set_null=%   (esperado t / t / t / t)',
+    unico, fk_ajena, claim, set_null;
+end $$;
+
+-- ── 268. Orquestador: una sola tarea abierta por incidente y sin cruzar flotas (mig. 0650) ──
+-- La 0650 guarda lo que el asistente del panel le deja a una PERSONA. Lo que solo la base demuestra:
+-- el índice único PARCIAL (una abierta por flota+llave; atendida, el siguiente incidente abre otra),
+-- la FK compuesta (la tarea de A no cuelga del viaje de B), y que borrar el viaje conserva la tarea.
+-- Esperado: ORQ_ESCALACION_0650 abierta-unica=t otra-flota-puede=t tras-atender-nueva=t viaje-ajeno-rebota=t borrar-viaje-conserva=t
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid; va uuid; vb uuid;
+  abierta_unica boolean := false; otra_flota boolean := false; nueva boolean := false; ajeno boolean := false; conserva boolean := false;
+  n int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0650 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0650 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0650A', '5215559990650') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono) values (tb, 'ZZZ 0650B', '5215559990651') returning id into ob;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo) values (ta, oa, 'ZZZ-0650-A', 'abierto', current_date, 0) returning id into va;
+  insert into viaje (tenant_id, operador_id, folio, estatus, fecha_inicio, anticipo) values (tb, ob, 'ZZZ-0650-B', 'abierto', current_date, 0) returning id into vb;
+
+  insert into orquestador_escalacion (tenant_id, destino, motivo, viaje_id, viaje_folio, resumen, pedida_por_rol, dedupe_key)
+    values (ta, 'mesa_de_control', 'posible_emergencia', va, 'ZZZ-0650-A', 'x', 'encargado', 'k');
+  begin
+    insert into orquestador_escalacion (tenant_id, destino, motivo, viaje_id, resumen, pedida_por_rol, dedupe_key)
+      values (ta, 'mesa_de_control', 'posible_emergencia', va, 'x', 'encargado', 'k');
+  exception when unique_violation then abierta_unica := true; end;
+  begin
+    insert into orquestador_escalacion (tenant_id, destino, motivo, viaje_id, resumen, pedida_por_rol, dedupe_key)
+      values (tb, 'mesa_de_control', 'posible_emergencia', vb, 'x', 'encargado', 'k');
+    otra_flota := true;
+  exception when others then otra_flota := false; end;
+  update orquestador_escalacion set estado = 'atendida', atendida_en = now() where tenant_id = ta;
+  begin
+    insert into orquestador_escalacion (tenant_id, destino, motivo, viaje_id, resumen, pedida_por_rol, dedupe_key)
+      values (ta, 'mesa_de_control', 'posible_emergencia', va, 'x', 'encargado', 'k');
+    nueva := true;
+  exception when others then nueva := false; end;
+  begin
+    insert into orquestador_escalacion (tenant_id, destino, motivo, viaje_id, resumen, pedida_por_rol, dedupe_key)
+      values (ta, 'liquidacion', 'diferencia_liquidacion', vb, 'x', 'contador', 'k2');
+  exception when foreign_key_violation then ajeno := true; end;
+  delete from viaje where id = va;
+  select count(*) into n from orquestador_escalacion where tenant_id = ta and viaje_id is null and viaje_folio = 'ZZZ-0650-A';
+  conserva := n = 1;
+
+  raise exception E'ORQ_ESCALACION_0650 abierta-unica=% otra-flota-puede=% tras-atender-nueva=% viaje-ajeno-rebota=% borrar-viaje-conserva=%   (esperado t / t / t / t / t)',
+    abierta_unica, otra_flota, nueva, ajeno, conserva;
+end $$;
+
+-- ── 269. Las RPC de posiciones no cuentan el pin de WhatsApp (mig. 0603) ──
+-- Con un pin más reciente que el GPS, `ultimas_posiciones_tenant` devolvía el pin y la unidad salía
+-- «sin posición» en el tablero; `peaje_posiciones_ventana` contaba pins como evidencia de cruce.
+-- Esperado: POSICIONES_SIN_PIN_0603 unidad-con-pin-sale-por-gps=t solo-pin-fuera=t ventana-sin-pin=t otra-flota-nada=t
+do $$
+declare
+  ta uuid; tb uuid; u1 uuid; u2 uuid;
+  por_gps boolean := false; solo_pin_fuera boolean := false; ventana boolean := false; otra boolean := false;
+  n int; lat_u double precision;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0603 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0603 B') returning id into tb;
+  insert into unidad (tenant_id, numero_economico, activo) values (ta, 'ZZZ-0603-1', true) returning id into u1;
+  insert into unidad (tenant_id, numero_economico, activo) values (ta, 'ZZZ-0603-2', true) returning id into u2;
+  insert into posicion (tenant_id, unidad_id, lat, lng, medida_en, proveedor) values
+    (ta, u1, 19.10, -99.10, now() - interval '30 minutes', 'samsara'),
+    (ta, u1, 25.00, -100.00, now() - interval '5 minutes', 'whatsapp'),
+    (ta, u2, 20.00, -101.00, now() - interval '5 minutes', 'whatsapp');
+
+  select r.lat into lat_u from ultimas_posiciones_tenant(ta) r where r.unidad_id = u1;
+  por_gps := lat_u = 19.10;
+  solo_pin_fuera := not exists (select 1 from ultimas_posiciones_tenant(ta) r where r.unidad_id = u2);
+  select count(*) into n from peaje_posiciones_ventana(ta, jsonb_build_array(jsonb_build_object(
+    'linea_id', gen_random_uuid(), 'unidad_id', u1, 'desde', now() - interval '2 hours', 'hasta', now())));
+  ventana := n = 1;
+  select count(*) into n from ultimas_posiciones_tenant(tb);
+  otra := n = 0;
+
+  raise exception E'POSICIONES_SIN_PIN_0603 unidad-con-pin-sale-por-gps=% solo-pin-fuera=% ventana-sin-pin=% otra-flota-nada=%   (esperado t / t / t / t)',
+    por_gps, solo_pin_fuera, ventana, otra;
+end $$;
+
+-- ── 270. Conductor: «llegada sin confirmar» (clase de aviso y evento) y margen de acercamiento por flota (mig. 0604) ──
+-- La 0604 reescribe ENTEROS los dominios de `viaje_hito_aviso.clase` y `viaje_hito_evento.evento` y agrega dos perillas a la config.
+-- Lo que solo la base demuestra: el claim de la clase nueva es único por (hito, ciclo, clase, nivel), los dominios anteriores
+-- siguen vigentes, y el margen vive entre 0 y 50,000 con la perilla de aviso apagada por omisión.
+-- Esperado: CONDUCTOR_0604 claim-unico=t clase-inventada-rebota=t evento-nuevo-entra=t margen-por-omision=t margen-fuera-rebota=t aviso-apagado=t
+do $$
+declare
+  ta uuid; oa uuid; va uuid; h uuid;
+  claim_unico boolean := false; clase_mala boolean := false; evento_ok boolean := false; margen_ok boolean := false; margen_malo boolean := false; apagado boolean := false;
+  c record;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0604') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0604', '5215559990604') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, oa, 'ZZZ-0604', 'abierto', now() - interval '5 hours', now() - interval '5 hours') returning id into va;
+  perform sembrar_hitos_conductor(10);
+  select id into h from viaje_hito where viaje_id = va and tipo = 'llegada_carga';
+
+  insert into viaje_hito_aviso (tenant_id, viaje_id, viaje_hito_id, ciclo, clase, nivel) values (ta, va, h, 1, 'llegada_sin_confirmar', 1);
+  begin
+    insert into viaje_hito_aviso (tenant_id, viaje_id, viaje_hito_id, ciclo, clase, nivel) values (ta, va, h, 1, 'llegada_sin_confirmar', 1);
+  exception when unique_violation then claim_unico := true; end;
+  begin
+    insert into viaje_hito_aviso (tenant_id, viaje_id, viaje_hito_id, ciclo, clase, nivel) values (ta, va, h, 1, 'inventada', 1);
+  exception when check_violation then clase_mala := true; end;
+  begin
+    insert into viaje_hito_evento (tenant_id, viaje_id, viaje_hito_id, tipo_hito, evento) values (ta, va, h, 'llegada_carga', 'alerta_llegada_sin_confirmar');
+    insert into viaje_hito_evento (tenant_id, viaje_id, viaje_hito_id, tipo_hito, evento) values (ta, va, h, 'llegada_carga', 'alerta_estadia');
+    evento_ok := true;
+  exception when others then evento_ok := false; end;
+
+  insert into agente_conductor_config (tenant_id) values (ta);
+  select avisar_llegada_sin_confirmar a, margen_acercamiento_m m into c from agente_conductor_config where tenant_id = ta;
+  apagado := c.a = false;
+  margen_ok := c.m = 5000;
+  begin
+    update agente_conductor_config set margen_acercamiento_m = 50001 where tenant_id = ta;
+  exception when check_violation then margen_malo := true; end;
+
+  raise exception E'CONDUCTOR_0604 claim-unico=% clase-inventada-rebota=% evento-nuevo-entra=% margen-por-omision=% margen-fuera-rebota=% aviso-apagado=%   (esperado t / t / t / t / t / t)',
+    claim_unico, clase_mala, evento_ok, margen_ok, margen_malo, apagado;
+end $$;
+
+-- ── 271. Copia de la liquidación al jefe: un solo envío por teléfono y reintento solo de faltantes (mig. 0620) ──
+-- La 0620 da el candado atómico de la copia con cifras: una fila por (liquidación, generación, teléfono) que se
+-- RECLAMA antes de mandar el WhatsApp. Lo que solo la base demuestra: el segundo reclamo del mismo teléfono rebota,
+-- otro teléfono sí puede, una copia aceptada no se vuelve a reclamar ni con el arriendo vencido, soltar la deja
+-- reintentable, el token viejo no cierra un reclamo retomado y una liquidación ajena no se reclama.
+-- Esperado: COPIA_JEFE_0620 segundo-rebota=t otro-telefono=t aceptada-no-repite=t soltar-reintenta=t token-viejo-no-cierra=t flota-ajena-null=t
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; liq uuid; t1 uuid; t2 uuid; t3 uuid; t4 uuid;
+  segundo boolean := false; otro boolean := false; no_repite boolean := false; reintenta boolean := false;
+  viejo_no boolean := false; ajena boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0620 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0620 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0620A', '5215559990620') returning id into oa;
+  insert into liquidacion_externa (tenant_id, clave_externa, huella, operador_id, periodo_desde, periodo_hasta, conceptos, total, moneda, pdf_origen, estado)
+    values (ta, 'ZZZ-0620', repeat('f', 64), oa, '2026-09-01', '2026-09-07', '[{"descripcion":"x","tipo":"percepcion","monto":1}]'::jsonb, 1, 'MXN', 'generado', 'enviada')
+    returning id into liq;
+
+  t1 := reclamar_copia_jefe(ta, liq, 1, '525511110001');
+  segundo := t1 is not null and reclamar_copia_jefe(ta, liq, 1, '525511110001') is null;
+  otro := reclamar_copia_jefe(ta, liq, 1, '525511110002') is not null;
+  perform cerrar_copia_jefe(ta, liq, 1, '525511110001', t1, true);
+  no_repite := reclamar_copia_jefe(ta, liq, 1, '525511110001', clock_timestamp() + interval '1 day') is null;
+  t2 := reclamar_copia_jefe(ta, liq, 1, '525511110003');
+  perform cerrar_copia_jefe(ta, liq, 1, '525511110003', t2, false);
+  t3 := reclamar_copia_jefe(ta, liq, 1, '525511110003');
+  reintenta := t3 is not null;
+  t4 := reclamar_copia_jefe(ta, liq, 1, '525511110003', clock_timestamp() + interval '10 minutes');
+  viejo_no := t4 is not null and not cerrar_copia_jefe(ta, liq, 1, '525511110003', t3, true);
+  ajena := reclamar_copia_jefe(tb, liq, 1, '525511110009') is null;
+
+  raise exception E'COPIA_JEFE_0620 segundo-rebota=% otro-telefono=% aceptada-no-repite=% soltar-reintenta=% token-viejo-no-cierra=% flota-ajena-null=%   (esperado t / t / t / t / t / t)',
+    segundo, otro, no_repite, reintenta, viejo_no, ajena;
+end $$;
+
+-- ── 272. Carta Porte, worker de la bandeja: qué se reintenta, qué queda terminal y un solo aviso (mig. 0640 + 0641 + 0642) ──
+-- Las RPC del worker con cifras: `cp_documentos_pendientes` elige recibidos (con gracia), lease vencido y fallidos con espera
+-- creciente, y NUNCA lo agotado (5 intentos = terminal) ni lo purgado; el candado de aviso a la oficina es de UNA vez por
+-- documento y tipo, por flota, y no sube `version`; la 0642 admite el id de cron y los eventos nuevos sin perder los de antes.
+-- Esperado: CP_WORKER_064X pendientes=t agotado-terminal=t aviso-una-vez=t aviso-no-toca-version=t aviso-por-flota=t soltar-reintenta=t latido-admite=t latido-conserva=t evento-nuevo=t
+do $$
+declare
+  ta uuid; tb uuid; d1 uuid; d2 uuid; d3 uuid; d4 uuid; v0 int; v1 int;
+  pend boolean := false; agot boolean := false; una boolean := false; sin_version boolean := false; por_flota boolean := false;
+  suelta boolean := false; lat_nuevo boolean := false; lat_viejo boolean := false; ev boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 064X A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 064X B') returning id into tb;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, storage_ruta, created_at, updated_at)
+    values (ta, 'correo', 'pdf_texto', 'a.pdf', 10, repeat('1', 64), 'recibido', 'r/1', now() - interval '1 hour', now() - interval '1 hour') returning id into d1;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, storage_ruta, intentos, created_at, updated_at)
+    values (ta, 'correo', 'pdf_texto', 'b.pdf', 10, repeat('2', 64), 'fallido', 'r/2', 2, now() - interval '1 day', now() - interval '45 minutes') returning id into d2;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, storage_ruta, intentos, created_at, updated_at)
+    values (ta, 'correo', 'pdf_texto', 'c.pdf', 10, repeat('3', 64), 'fallido', 'r/3', 5, now() - interval '1 day', now() - interval '1 hour') returning id into d3;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, storage_ruta, intentos, created_at, updated_at)
+    values (ta, 'correo', 'pdf_texto', 'd.pdf', 10, repeat('4', 64), 'fallido', 'r/4', 2, now() - interval '1 day', now() - interval '10 minutes') returning id into d4;
+
+  -- d1 (recibido viejo) y d2 (2.º intento, 45 min > 30) entran; d3 (agotado) y d4 (10 min < 30) no.
+  pend := (select array_agg(id order by id) from cp_documentos_pendientes(100, 5, 120) where tenant_id = ta) = (select array_agg(x order by x) from unnest(array[d1, d2]) x);
+  agot := (select array_agg(id) from cp_documentos_agotados(100, 5, 7) where tenant_id = ta) = array[d3]
+          and not exists (select 1 from cp_documentos_pendientes(100, 5, 120) where id = d3);
+
+  select version into v0 from cp_documento where id = d3;
+  una := cp_documento_reclamar_aviso(ta, d3, 'agotado') and not cp_documento_reclamar_aviso(ta, d3, 'agotado')
+         and not exists (select 1 from cp_documentos_agotados(100, 5, 7) where id = d3);
+  select version into v1 from cp_documento where id = d3;
+  sin_version := v0 = v1;
+  por_flota := not cp_documento_reclamar_aviso(tb, d1, 'agotado') and not cp_documento_liberar_aviso(tb, d3, 'agotado');
+  suelta := cp_documento_liberar_aviso(ta, d3, 'agotado') and exists (select 1 from cp_documentos_agotados(100, 5, 7) where id = d3);
+
+  insert into cron_latido (id, estado, ultimo_latido) values ('carta-porte-docs', 'ok', now()) on conflict (id) do nothing;
+  lat_nuevo := exists (select 1 from cron_latido where id = 'carta-porte-docs');
+  insert into cron_latido (id, estado, ultimo_latido) values ('jornada-alertas', 'ok', now()) on conflict (id) do nothing;
+  lat_viejo := true;
+  insert into cp_documento_evento (documento_id, tenant_id, tipo) values (d3, ta, 'aviso_oficina');
+  ev := exists (select 1 from cp_documento_evento where documento_id = d3 and tipo = 'aviso_oficina');
+
+  raise exception E'CP_WORKER_064X pendientes=% agotado-terminal=% aviso-una-vez=% aviso-no-toca-version=% aviso-por-flota=% soltar-reintenta=% latido-admite=% latido-conserva=% evento-nuevo=%   (esperado t / t / t / t / t / t / t / t / t)',
+    pend, agot, una, sin_version, por_flota, suelta, lat_nuevo, lat_viejo, ev;
+end $$;
+
+-- ── 273. La geocerca guarda su polígono nativo y la RPC del catálogo lo valida (mig. 0630) ──
+-- Un patio alargado junto a una carretera ya no se aproxima por un círculo +5 %: la fila trae su polígono y el CHECK
+-- impide uno roto o una fila «aproximada» que además tenga polígono. Lo que solo la base demuestra: la validez del jsonb,
+-- el todo-o-nada de la RPC ante un polígono inválido, que re-importar actualiza sin duplicar y quita la aproximación, y el CHECK
+-- de la tabla fuera de la RPC.
+-- Esperado: GEOCERCA_POLIGONO_0630 valida=t guarda-poligono=t lote-invalido-rebota=t idempotente=t check-tabla=t aprox-con-poligono-rebota=t conservar-activa=t
+do $$
+declare
+  ta uuid; r jsonb; p jsonb; n int;
+  patio jsonb := '[{"lat":20.4998,"lng":-103.3030},{"lat":20.4998,"lng":-103.2970},{"lat":20.5002,"lng":-103.2970},{"lat":20.5002,"lng":-103.3030}]'::jsonb;
+  valida boolean := false; guarda boolean := false; rebota boolean := false; idem boolean := false; chk boolean := false; aprox boolean := false; conserva boolean := false; act boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0630') returning id into ta;
+  valida := geocerca_poligono_valido(patio)
+    and not geocerca_poligono_valido('[{"lat":20,"lng":-103},{"lat":20,"lng":-103.1},{"lat":20,"lng":-103.2}]'::jsonb)
+    and not geocerca_poligono_valido('[{"lat":20,"lng":-103},{"lat":20,"lng":-103.1}]'::jsonb);
+
+  r := importar_sitios_conductor(ta, jsonb_build_array(
+    jsonb_build_object('linea', 2, 'codigo', 'ZZ-PAT', 'nombre', 'ZZZ Patio 0630', 'tipo', 'patio', 'lat', 20.5, 'lng', -103.3, 'radio_m', 340, 'poligono', patio)));
+  select poligono into p from geocerca where tenant_id = ta and codigo = 'ZZ-PAT';
+  guarda := (r->>'ok')::boolean and p = patio;
+
+  r := importar_sitios_conductor(ta, jsonb_build_array(
+    jsonb_build_object('linea', 2, 'codigo', 'ZZ-BUENO', 'nombre', 'ZZZ Bueno', 'tipo', 'patio', 'lat', 20.5, 'lng', -103.3, 'radio_m', 100),
+    jsonb_build_object('linea', 3, 'codigo', 'ZZ-MALO', 'nombre', 'ZZZ Malo', 'tipo', 'patio', 'lat', 20.5, 'lng', -103.3, 'radio_m', 100, 'poligono', '[{"lat":20,"lng":-103}]'::jsonb)));
+  rebota := (r->>'ok')::boolean is false and not exists (select 1 from geocerca where tenant_id = ta and codigo in ('ZZ-BUENO', 'ZZ-MALO'));
+
+  r := importar_sitios_conductor(ta, jsonb_build_array(
+    jsonb_build_object('linea', 2, 'codigo', 'ZZ-PAT', 'nombre', 'ZZZ Patio 0630', 'tipo', 'patio', 'lat', 20.5, 'lng', -103.3, 'radio_m', 340, 'poligono', patio)));
+  select count(*) into n from geocerca where tenant_id = ta and codigo = 'ZZ-PAT';
+  idem := (r->>'actualizados')::int = 1 and (r->>'creados')::int = 0 and n = 1;
+
+  begin
+    insert into geocerca (tenant_id, nombre, tipo, lat, lng, radio_m, poligono) values (ta, 'ZZZ roto', 'patio', 20, -103, 100, '[{"lat":20,"lng":-103}]'::jsonb);
+  exception when check_violation then chk := true; end;
+  begin
+    insert into geocerca (tenant_id, nombre, tipo, lat, lng, radio_m, poligono, aproximada) values (ta, 'ZZZ aprox', 'patio', 20, -103, 100, patio, true);
+  exception when check_violation then aprox := true; end;
+
+  update geocerca set activa = false where tenant_id = ta and codigo = 'ZZ-PAT';
+  perform importar_sitios_conductor(ta, jsonb_build_array(
+    jsonb_build_object('linea', 2, 'codigo', 'ZZ-PAT', 'nombre', 'ZZZ Patio 0630', 'tipo', 'patio', 'lat', 20.5, 'lng', -103.3, 'radio_m', 340, 'poligono', patio, 'conservar_activa', true)));
+  select activa into act from geocerca where tenant_id = ta and codigo = 'ZZ-PAT';
+  conserva := act is false;
+
+  raise exception E'GEOCERCA_POLIGONO_0630 valida=% guarda-poligono=% lote-invalido-rebota=% idempotente=% check-tabla=% aprox-con-poligono-rebota=% conservar-activa=%   (esperado t / t / t / t / t / t / t)',
+    valida, guarda, rebota, idem, chk, aprox, conserva;
+end $$;
+
+-- ── 274. Re-importación diaria de geocercas: un claim por flota y ventana, y la huella solo avanza con un intento bueno (mig. 0631) ──
+-- El cron gps re-importa las geocercas de «mis propias tablas»; dos invocaciones solapadas no deben leer a la vez ni
+-- un fallo «gastar» el cambio pendiente. Lo que solo la base demuestra: el segundo claim de la ventana pierde, otra flota
+-- no espera, un error acorta la ventana a 60 min, el error no pisa la huella buena y los argumentos fuera de dominio rebotan.
+-- Esperado: GEOCERCAS_REIMPORTACION_0631 segundo-pierde=t otra-flota=t error-no-pisa-huella=t reintento-tras-error=t sin-reintento-a-10min=t ventana-bueno-respeta=t dominio-rebota=t lista-solo-activas-y-vencidas=t
+do $$
+declare
+  ta uuid; tb uuid; e record;
+  segundo boolean := false; otra boolean := false; huella boolean := false; reint boolean := false; sin10 boolean := false; ventana boolean := false; dom boolean := false; lista boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0631 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0631 B') returning id into tb;
+
+  segundo := reclamar_importacion_geocercas(ta) and not reclamar_importacion_geocercas(ta);
+  otra := reclamar_importacion_geocercas(tb);
+
+  perform registrar_importacion_geocercas(ta, 'importada', repeat('a', 64), 3, 1, 2, null);
+  perform registrar_importacion_geocercas(ta, 'error', null, null, null, null, 'la tabla no contestó');
+  select * into e from geocerca_importacion_estado where tenant_id = ta;
+  huella := e.huella = repeat('a', 64) and e.ultimo_resultado = 'error' and e.ultimo_ok_en is not null;
+
+  update geocerca_importacion_estado set ultimo_intento_en = clock_timestamp() - interval '2 hours' where tenant_id = ta;
+  reint := reclamar_importacion_geocercas(ta, 1380);
+  perform registrar_importacion_geocercas(ta, 'error', null, null, null, null, 'otra vez');
+  update geocerca_importacion_estado set ultimo_intento_en = clock_timestamp() - interval '10 minutes' where tenant_id = ta;
+  sin10 := not reclamar_importacion_geocercas(ta, 1380);
+
+  perform registrar_importacion_geocercas(ta, 'sin_cambios', repeat('b', 64), null, null, null, null);
+  update geocerca_importacion_estado set ultimo_intento_en = clock_timestamp() - interval '2 hours' where tenant_id = ta;
+  ventana := not reclamar_importacion_geocercas(ta, 1380);
+  update geocerca_importacion_estado set ultimo_intento_en = clock_timestamp() - interval '24 hours' where tenant_id = ta;
+  ventana := ventana and reclamar_importacion_geocercas(ta, 1380);
+
+  begin perform registrar_importacion_geocercas(ta, 'inventado'); exception when sqlstate '22023' then dom := true; end;
+  begin perform reclamar_importacion_geocercas(ta, 0); exception when sqlstate '22023' then dom := dom and true; end;
+
+  insert into conector_credencial (tenant_id, conector_id, valores_cifrados, activo) values (ta, 'tabla_propia', 'x', true), (tb, 'tabla_propia', 'x', false);
+  update geocerca_importacion_estado set ultimo_intento_en = clock_timestamp() - interval '25 hours' where tenant_id = ta;
+  lista := exists (select 1 from flotas_para_reimportar_geocercas(500) f where f.tenant_id = ta)
+    and not exists (select 1 from flotas_para_reimportar_geocercas(500) f where f.tenant_id = tb);
+  update geocerca_importacion_estado set ultimo_intento_en = clock_timestamp() where tenant_id = ta;
+  lista := lista and not exists (select 1 from flotas_para_reimportar_geocercas(500) f where f.tenant_id = ta);
+
+  raise exception E'GEOCERCAS_REIMPORTACION_0631 segundo-pierde=% otra-flota=% error-no-pisa-huella=% reintento-tras-error=% sin-reintento-a-10min=% ventana-bueno-respeta=% dominio-rebota=% lista-solo-activas-y-vencidas=%   (esperado t / t / t / t / t / t / t / t)',
+    segundo, otra, huella, reint, sin10, ventana, dom, lista;
+end $$;
+
+-- ── 275. Conductor: hitos detectados por geocerca — un cruce por (viaje, hito) y las perillas de P2 (mig. 0635) ──
+-- El barrido del cron registra el hito cuando el GPS entra o sale del sitio del viaje. `viaje_cruce_geocerca` es el claim
+-- anti-duplicado y la bitácora de esa detección. Lo que solo la base demuestra: un cruce por (viaje, hito) aunque dos corridas
+-- lo intenten, el dominio del hito (no hay cruce de «regreso») y la pareja hito↔tipo (llegada=entrada, salida=salida), la
+-- cascada al borrar el viaje, el set null al borrar el sitio, y las perillas nuevas (detección encendida, señal de vida apagada).
+-- Esperado: CONDUCTOR_0635 unico=t hito-inventado-rebota=t pareja-rebota=t cascada=t sitio-set-null=t deteccion-encendida=t senal-apagada=t
+do $$
+declare
+  ta uuid; oa uuid; ob uuid; va uuid; g uuid; vb uuid;
+  unico boolean := false; hito_malo boolean := false; pareja_mala boolean := false; cascada boolean := false; set_null boolean := false;
+  encendida boolean := false; apagada boolean := false;
+  c record; sitio uuid;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0635') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0635', '5215559990635') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, oa, 'ZZZ-0635', 'abierto', now() - interval '5 hours', now() - interval '5 hours') returning id into va;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0635 B', '5215559990638') returning id into ob;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, ob, 'ZZZ-0635B', 'abierto', now() - interval '5 hours', now() - interval '5 hours') returning id into vb;
+  insert into geocerca (tenant_id, nombre, tipo, lat, lng, radio_m, catalogo) values (ta, 'ZZZ planta 0635', 'planta', 20.5, -103.3, 300, 'conductor') returning id into g;
+
+  insert into viaje_cruce_geocerca (tenant_id, viaje_id, geocerca_id, hito_tipo, tipo, detectado_en, distancia_m) values (ta, va, g, 'llegada_carga', 'entrada', now(), 40);
+  begin
+    insert into viaje_cruce_geocerca (tenant_id, viaje_id, geocerca_id, hito_tipo, tipo, detectado_en) values (ta, va, g, 'llegada_carga', 'entrada', now());
+  exception when unique_violation then unico := true; end;
+  begin
+    insert into viaje_cruce_geocerca (tenant_id, viaje_id, hito_tipo, tipo, detectado_en) values (ta, va, 'regreso', 'salida', now());
+  exception when check_violation then hito_malo := true; end;
+  begin
+    insert into viaje_cruce_geocerca (tenant_id, viaje_id, hito_tipo, tipo, detectado_en) values (ta, va, 'salida_carga', 'entrada', now());
+  exception when check_violation then pareja_mala := true; end;
+
+  delete from geocerca where id = g;
+  select geocerca_id into sitio from viaje_cruce_geocerca where viaje_id = va and hito_tipo = 'llegada_carga';
+  set_null := sitio is null;
+
+  insert into viaje_cruce_geocerca (tenant_id, viaje_id, hito_tipo, tipo, detectado_en) values (ta, vb, 'salida_descarga', 'salida', now());
+  delete from viaje where id = vb;
+  cascada := not exists (select 1 from viaje_cruce_geocerca where viaje_id = vb);
+
+  insert into agente_conductor_config (tenant_id) values (ta);
+  select detectar_hitos_gps d, avisar_senal_vida s into c from agente_conductor_config where tenant_id = ta;
+  encendida := c.d = true;
+  apagada := c.s = false;
+
+  raise exception E'CONDUCTOR_0635 unico=% hito-inventado-rebota=% pareja-rebota=% cascada=% sitio-set-null=% deteccion-encendida=% senal-apagada=%   (esperado t / t / t / t / t / t / t)',
+    unico, hito_malo, pareja_mala, cascada, set_null, encendida, apagada;
+end $$;
+
+-- ── 276. Conductor: «sin señal de vida» — un episodio abierto por viaje y cada nivel se reclama una sola vez (mig. 0636) ──
+-- Un episodio es la cadena aviso 1 → aviso 2 → jefe de tráfico. Lo que solo la base demuestra: un solo episodio abierto por
+-- viaje (el segundo rebota, y uno cerrado deja abrir otro), el UPDATE condicional `nivel_enviado = k-1` que sirve de claim (el
+-- segundo intento del mismo nivel no gana y no se puede saltar un nivel), los dominios de motivo/respuesta/cierre, que un
+-- cierre exige su motivo, y la cascada al borrar el viaje.
+-- Esperado: CONDUCTOR_0636 un-abierto=t cerrado-deja-abrir=t claim-1=t claim-1-repetido=f claim-salto=f dominios-rebotan=t cierre-exige-motivo=t cascada=t
+do $$
+declare
+  ta uuid; oa uuid; va uuid; e1 uuid; n integer;
+  un_abierto boolean := false; reabre boolean := false; c1 boolean := false; c1b boolean := true; salto boolean := true;
+  dominios boolean := true; cierre boolean := false; cascada boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0636') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0636', '5215559990636') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, oa, 'ZZZ-0636', 'abierto', now() - interval '5 hours', now() - interval '5 hours') returning id into va;
+
+  insert into viaje_senal_vida (tenant_id, viaje_id, motivo) values (ta, va, 'gps_obsoleto') returning id into e1;
+  begin
+    insert into viaje_senal_vida (tenant_id, viaje_id, motivo) values (ta, va, 'gps_detenido');
+  exception when unique_violation then un_abierto := true; end;
+
+  update viaje_senal_vida set nivel_enviado = 1, aviso_1_en = now() where id = e1 and nivel_enviado = 0 and cerrado_en is null;
+  get diagnostics n = row_count; c1 := n = 1;
+  update viaje_senal_vida set nivel_enviado = 1, aviso_1_en = now() where id = e1 and nivel_enviado = 0 and cerrado_en is null;
+  get diagnostics n = row_count; c1b := n = 1;
+  update viaje_senal_vida set nivel_enviado = 3, escalado_en = now() where id = e1 and nivel_enviado = 2 and cerrado_en is null;
+  get diagnostics n = row_count; salto := n = 1;
+
+  begin insert into viaje_senal_vida (tenant_id, viaje_id, motivo) values (ta, va, 'inventado'); dominios := false; exception when check_violation or unique_violation then null; end;
+  begin update viaje_senal_vida set respuesta = 'inventada' where id = e1; dominios := false; exception when check_violation then null; end;
+  begin update viaje_senal_vida set nivel_enviado = 4 where id = e1; dominios := false; exception when check_violation then null; end;
+  begin update viaje_senal_vida set cerrado_en = now(), cierre_motivo = 'inventado' where id = e1; dominios := false; exception when check_violation then null; end;
+
+  begin update viaje_senal_vida set cerrado_en = now() where id = e1; exception when check_violation then cierre := true; end;
+  update viaje_senal_vida set cerrado_en = now(), cierre_motivo = 'respondio', respondido_en = now(), respuesta = 'estoy', silenciado_hasta = now() + interval '2 hours' where id = e1;
+  begin
+    insert into viaje_senal_vida (tenant_id, viaje_id, motivo) values (ta, va, 'gps_detenido');
+    reabre := true;
+  exception when unique_violation then reabre := false; end;
+
+  delete from viaje where id = va;
+  cascada := not exists (select 1 from viaje_senal_vida where viaje_id = va);
+
+  raise exception E'CONDUCTOR_0636 un-abierto=% cerrado-deja-abrir=% claim-1=% claim-1-repetido=% claim-salto=% dominios-rebotan=% cierre-exige-motivo=% cascada=%   (esperado t / t / t / f / f / t / t / t)',
+    un_abierto, reabre, c1, c1b, salto, dominios, cierre, cascada;
+end $$;
+
+-- ── 277. Sitio del viaje derivado: una vez por (viaje, lado) y con su criterio a la vista (mig. 0637) ──
+-- El Conductor asigna solo el sitio a un viaje sin convenio cuando el texto de origen/destino coincide con UN sitio del catálogo.
+-- Lo que solo la base demuestra: una derivación por (viaje, lado) (la oficina que luego cambia el sitio no es pisada por una
+-- segunda), los dominios de lado y criterio, y la cascada al borrar el viaje.
+-- Esperado: CONDUCTOR_0637 unica-por-lado=t otro-lado-entra=t lado-inventado-rebota=t criterio-inventado-rebota=t cascada=t
+do $$
+declare
+  ta uuid; oa uuid; va uuid; g uuid;
+  unica boolean := false; otro boolean := false; lado_malo boolean := false; criterio_malo boolean := false; cascada boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0637') returning id into ta;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0637', '5215559990637') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, oa, 'ZZZ-0637', 'abierto', now() - interval '5 hours', now() - interval '5 hours') returning id into va;
+  insert into geocerca (tenant_id, nombre, tipo, lat, lng, radio_m, catalogo) values (ta, 'ZZZ planta 0637', 'planta', 20.5, -103.3, 300, 'conductor') returning id into g;
+
+  insert into viaje_sitio_derivado (tenant_id, viaje_id, lado, geocerca_id, criterio) values (ta, va, 'origen', g, 'nombre_exacto');
+  begin
+    insert into viaje_sitio_derivado (tenant_id, viaje_id, lado, geocerca_id, criterio) values (ta, va, 'origen', g, 'codigo');
+  exception when unique_violation then unica := true; end;
+  insert into viaje_sitio_derivado (tenant_id, viaje_id, lado, geocerca_id, criterio) values (ta, va, 'destino', g, 'nombre_contenido');
+  otro := true;
+  begin insert into viaje_sitio_derivado (tenant_id, viaje_id, lado, criterio) values (ta, va, 'ambos', 'codigo'); exception when check_violation then lado_malo := true; end;
+  begin insert into viaje_sitio_derivado (tenant_id, viaje_id, lado, criterio) values (ta, va, 'origen', 'adivinado'); exception when check_violation or unique_violation then criterio_malo := true; end;
+
+  delete from viaje where id = va;
+  cascada := not exists (select 1 from viaje_sitio_derivado where viaje_id = va);
+
+  raise exception E'CONDUCTOR_0637 unica-por-lado=% otro-lado-entra=% lado-inventado-rebota=% criterio-inventado-rebota=% cascada=%   (esperado t / t / t / t / t)',
+    unica, otro, lado_malo, criterio_malo, cascada;
+end $$;
+
+-- ── 278. «No coincide» atómico y aviso de discrepancia con reclamo, reintento y rearme (mig. 0643 + 0644) ──
+-- Dos entregas del mismo botón pasaban el chequeo «ya estaba acusada» a la vez y mandaban el aviso dos veces. La 0644 hace la
+-- transición en UNA sentencia condicional que deja el aviso pendiente en la misma transacción; el aviso se reclama con
+-- arriendo, se cierra solo con el token vigente, suma a quién ya le llegó y al agotar intentos queda fallido hasta que alguien
+-- lo rearma. Lo que solo la base demuestra: la segunda llamada rebota sin duplicar el aviso, el operador o la flota ajena no
+-- acusan, cambiar de opinión abre un ciclo nuevo, el segundo reclamo (arriendo vigente) rebota, el token viejo no cierra,
+-- los aceptados se suman sin repetir, el tope deja fallido, rearmar conserva a quién ya le llegó y un enviado no se rearma.
+-- Esperado: AVISO_DISCREPANCIA_0644 segunda-rebota=t un-solo-aviso=t ajeno-rebota=t ciclo-nuevo=t segundo-reclamo-rebota=t token-viejo-no-cierra=t aceptados-suman=t tope-fallido=t rearmar-conserva=t enviado-no-rearma=t
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; oa2 uuid; liq uuid; liq2 uuid; c int; c2 int; n int; t1 uuid; t2 uuid; t3 uuid; r text; ac text[];
+  segunda boolean := false; uno boolean := false; ajeno boolean := false; nuevo boolean := false; segundo boolean := false;
+  viejo_no boolean := false; suman boolean := false; tope boolean := false; conserva boolean := false; no_rearma boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0644 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0644 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0644A', '5215559990644') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0644B', '5215559990645') returning id into oa2;
+  insert into liquidacion_externa (tenant_id, clave_externa, huella, operador_id, periodo_desde, periodo_hasta, conceptos, total, moneda, pdf_origen, estado)
+    values (ta, 'ZZZ-0644', repeat('e', 64), oa, '2026-09-01', '2026-09-07', '[{"descripcion":"x","tipo":"percepcion","monto":1}]'::jsonb, 1, 'MXN', 'generado', 'enviada')
+    returning id into liq;
+  insert into liquidacion_externa (tenant_id, clave_externa, huella, operador_id, periodo_desde, periodo_hasta, conceptos, total, moneda, pdf_origen, estado)
+    values (ta, 'ZZZ-0644B', repeat('d', 64), oa, '2026-09-01', '2026-09-07', '[{"descripcion":"x","tipo":"percepcion","monto":1}]'::jsonb, 1, 'MXN', 'generado', 'enviada')
+    returning id into liq2;
+
+  c := registrar_acuse_no_coincide(ta, liq, oa);
+  segunda := c = 1 and registrar_acuse_no_coincide(ta, liq, oa) is null;
+  select count(*) into n from liquidacion_aviso_discrepancia where liquidacion_externa_id = liq;
+  uno := n = 1;
+  ajeno := registrar_acuse_no_coincide(ta, liq2, oa2) is null and registrar_acuse_no_coincide(tb, liq2, oa) is null;
+
+  update liquidacion_externa set acuse_tipo = 'recibida' where id = liq;
+  nuevo := registrar_acuse_no_coincide(ta, liq, oa) = 2;
+
+  t1 := reclamar_aviso_discrepancia(ta, liq, 1);
+  segundo := t1 is not null and reclamar_aviso_discrepancia(ta, liq, 1) is null;
+  t2 := reclamar_aviso_discrepancia(ta, liq, 1, clock_timestamp() + interval '10 minutes');
+  viejo_no := t2 is not null and cerrar_aviso_discrepancia(ta, liq, 1, t1, 'enviado') is null;
+  perform cerrar_aviso_discrepancia(ta, liq, 1, t2, 'reintentar', array['525511110001'], 'x', null, 3);
+  t3 := reclamar_aviso_discrepancia(ta, liq, 1, clock_timestamp() + interval '1 hour');
+  perform cerrar_aviso_discrepancia(ta, liq, 1, t3, 'reintentar', array['525511110001', '525511110002'], 'y', null, 3);
+  select telefonos_aceptados into ac from liquidacion_aviso_discrepancia where liquidacion_externa_id = liq and ciclo = 1;
+  suman := ac = array['525511110001', '525511110002'];
+  t3 := reclamar_aviso_discrepancia(ta, liq, 1, clock_timestamp() + interval '2 hours');
+  r := cerrar_aviso_discrepancia(ta, liq, 1, t3, 'reintentar', '{}', 'z', null, 3);
+  tope := r = 'fallido';
+
+  c2 := registrar_acuse_no_coincide(ta, liq2, oa);
+  t1 := reclamar_aviso_discrepancia(ta, liq2, c2);
+  perform cerrar_aviso_discrepancia(ta, liq2, c2, t1, 'reintentar', array['525511110003'], 'q', null, 1);
+  select count(*) into n from liquidacion_aviso_discrepancia where liquidacion_externa_id = liq2 and estado = 'fallido';
+  conserva := n = 1 and rearmar_aviso_discrepancia(ta, liq2) = c2;
+  select count(*) into n from liquidacion_aviso_discrepancia
+   where liquidacion_externa_id = liq2 and estado = 'pendiente' and intentos = 0 and telefonos_aceptados = array['525511110003'];
+  conserva := conserva and n = 1;
+  t1 := reclamar_aviso_discrepancia(ta, liq2, c2);
+  perform cerrar_aviso_discrepancia(ta, liq2, c2, t1, 'enviado', array['525511110003']);
+  no_rearma := rearmar_aviso_discrepancia(ta, liq2) is null;
+
+  raise exception E'AVISO_DISCREPANCIA_0644 segunda-rebota=% un-solo-aviso=% ajeno-rebota=% ciclo-nuevo=% segundo-reclamo-rebota=% token-viejo-no-cierra=% aceptados-suman=% tope-fallido=% rearmar-conserva=% enviado-no-rearma=%   (esperado t / t / t / t / t / t / t / t / t / t)',
+    segunda, uno, ajeno, nuevo, segundo, viejo_no, suman, tope, conserva, no_rearma;
+end $$;
+
+-- ── 279. La fila de formato de la flota puede guardar solo los teléfonos (mig. 0645) ──
+-- Una flota con el PDF genérico no tenía dónde decir quién es su jefe de flota ni quién revisa discrepancias. La 0645 permite
+-- `formato` nulo. Lo que solo la base demuestra: la fila sin formato se guarda, los CHECK de teléfonos (forma y tope de 3) y el
+-- de «objeto» para un formato no nulo (0564) siguen vigentes.
+-- Esperado: FORMATO_SIN_FORMATO_0645 fila-sin-formato=t telefono-corto-rebota=t mas-de-tres-rebota=t formato-no-objeto-rebota=t
+do $$
+declare
+  t uuid; n int; fila boolean := false; corto boolean := false; tres boolean := false; objeto boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0645') returning id into t;
+  insert into liquidacion_formato_flota (tenant_id, formato, copia_telefonos, discrepancia_telefonos)
+    values (t, null, array['525512345678'], array['525512345679']);
+  select count(*) into n from liquidacion_formato_flota where tenant_id = t and formato is null;
+  fila := n = 1;
+  begin update liquidacion_formato_flota set copia_telefonos = array['123'] where tenant_id = t; exception when check_violation then corto := true; end;
+  begin update liquidacion_formato_flota set copia_telefonos = array['525512345678','525512345679','525512345670','525512345671'] where tenant_id = t; exception when check_violation then tres := true; end;
+  begin update liquidacion_formato_flota set formato = '[1,2]'::jsonb where tenant_id = t; exception when check_violation then objeto := true; end;
+  raise exception E'FORMATO_SIN_FORMATO_0645 fila-sin-formato=% telefono-corto-rebota=% mas-de-tres-rebota=% formato-no-objeto-rebota=%   (esperado t / t / t / t)',
+    fila, corto, tres, objeto;
+end $$;
+
+-- ── 290. Vigía, respuestas rápidas aprobadas: una por pregunta y flota, corregir no duplica, tope de 200 y uso atómico (mig. 0647) ──
+-- La respuesta que el gerente aprueba para una pregunta frecuente se usa como base del borrador. Lo que solo la base demuestra:
+-- una pregunta (sin importar mayúsculas ni espacios) tiene UNA respuesta aprobada por flota y aprobar de nuevo la CORRIGE sin
+-- duplicar; otra flota no comparte la fila; retirada, la pregunta puede volver a aprobarse; el uso se cuenta solo en una aprobada
+-- de ESA flota; el tope de 200 por flota rebota la 201 nueva pero no frena una corrección; los dominios y el acceso del rol authenticated.
+-- Esperado: VIGIA_RESPUESTA_RAPIDA_0647 una-por-pregunta=t corrige-no-duplica=t por-flota=t reaprobar-tras-retirar=t uso-atomico=t uso-solo-de-su-flota=t dominios=t tope-200=t correccion-no-topa=t solo-lectura=t
+do $$
+declare
+  ta uuid; tb uuid; r1 uuid; r2 uuid; r3 uuid; n int; t text; u int; i int;
+  una boolean := false; corrige boolean := false; por_flota boolean := false; reaprueba boolean := false; uso boolean := false; uso_flota boolean := false;
+  dom boolean := true; tope boolean := false; corr_tope boolean := false; lectura boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0647 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0647 B') returning id into tb;
+
+  r1 := vigia_respuesta_rapida_aprobar(ta, 'cita_anden', '¿A qué hora puedo agendar mi cita?', 'De 8 a 18 h.', null);
+  r2 := vigia_respuesta_rapida_aprobar(ta, 'cita_anden', '  ¿A QUÉ HORA puedo agendar mi cita?  ', 'De 7 a 17 h.', null);
+  select count(*), max(texto) into n, t from vigia_respuesta_rapida where tenant_id = ta and estado = 'aprobada';
+  una := n = 1;
+  corrige := r1 = r2 and t = 'De 7 a 17 h.';
+  r3 := vigia_respuesta_rapida_aprobar(tb, 'cita_anden', '¿A qué hora puedo agendar mi cita?', 'Llama al andén.', null);
+  por_flota := r3 <> r1;
+
+  update vigia_respuesta_rapida set estado = 'retirada' where id = r1;
+  r2 := vigia_respuesta_rapida_aprobar(ta, 'cita_anden', '¿A qué hora puedo agendar mi cita?', 'Texto nuevo.', null);
+  reaprueba := r2 <> r1;
+
+  uso := vigia_respuesta_rapida_usar(ta, r2) and vigia_respuesta_rapida_usar(ta, r2);
+  select usos into u from vigia_respuesta_rapida where id = r2;
+  uso := uso and u = 2;
+  uso_flota := not vigia_respuesta_rapida_usar(tb, r2) and not vigia_respuesta_rapida_usar(ta, r1);
+
+  begin perform vigia_respuesta_rapida_aprobar(ta, 'queja', 'una pregunta cualquiera', 'x', null); dom := false; exception when check_violation then null; end;
+  begin perform vigia_respuesta_rapida_aprobar(ta, 'tarifa', 'ab', 'x', null); dom := false; exception when check_violation then null; end;
+  begin perform vigia_respuesta_rapida_aprobar(ta, 'tarifa', 'cuánto cuesta el flete', repeat('x', 701), null); dom := false; exception when check_violation then null; end;
+
+  delete from vigia_respuesta_rapida where tenant_id = ta;
+  for i in 1..200 loop
+    perform vigia_respuesta_rapida_aprobar(ta, 'otro', 'pregunta numero ' || i, 'respuesta ' || i, null);
+  end loop;
+  begin perform vigia_respuesta_rapida_aprobar(ta, 'otro', 'pregunta numero 201', 'respuesta', null); exception when sqlstate '54000' then tope := true; end;
+  perform vigia_respuesta_rapida_aprobar(ta, 'otro', 'PREGUNTA numero 7', 'corregida', null);
+  select count(*) into n from vigia_respuesta_rapida where tenant_id = ta and estado = 'aprobada';
+  corr_tope := n = 200;
+
+  lectura := not has_table_privilege('authenticated', 'public.vigia_respuesta_rapida', 'insert')
+    and not has_table_privilege('authenticated', 'public.vigia_respuesta_rapida', 'update')
+    and not has_function_privilege('authenticated', 'public.vigia_respuesta_rapida_aprobar(uuid, text, text, text, uuid)', 'execute')
+    and not has_function_privilege('authenticated', 'public.vigia_respuesta_rapida_usar(uuid, uuid)', 'execute');
+
+  raise exception E'VIGIA_RESPUESTA_RAPIDA_0647 una-por-pregunta=% corrige-no-duplica=% por-flota=% reaprobar-tras-retirar=% uso-atomico=% uso-solo-de-su-flota=% dominios=% tope-200=% correccion-no-topa=% solo-lectura=%   (esperado t / t / t / t / t / t / t / t / t / t)',
+    una, corrige, por_flota, reaprueba, uso, uso_flota, dom, tope, corr_tope, lectura;
+end $$;
+
+-- ── 295. Orquestador: el aviso de una tarea sale una sola vez y su estado no se contradice (mig. 0651) ──
+-- La 0651 le da a cada tarea del asistente un estado de aviso (pendiente → enviado | omitido | agotado). Lo que solo la base
+-- demuestra: el dominio del estado, «enviado ⇔ trae su fecha», los intentos acotados y que el claim condicional (UPDATE sobre
+-- pendiente + reclamo vencido) lo gana UNO solo: el segundo proceso no manda otro correo.
+-- Esperado: ORQ_AVISO_0651 agente-existe=t nace-pendiente=t dominio-rebota=t enviado-exige-fecha=t pendiente-sin-fecha=t primer-claim-gana=t segundo-claim-pierde=t intentos-acotados=t
+do $$
+declare
+  ta uuid; id1 uuid; n int;
+  agente boolean := false; nace boolean := false; dominio boolean := false; exige boolean := false; sinfecha boolean := false;
+  gana boolean := false; pierde boolean := false; acotados boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0651 A') returning id into ta;
+  agente := exists (select 1 from agente_definicion where id = 'orquestador');
+  insert into orquestador_escalacion (tenant_id, destino, motivo, resumen, pedida_por_rol, dedupe_key)
+    values (ta, 'mesa_de_control', 'posible_emergencia', 'x', 'encargado', 'k1') returning id into id1;
+  nace := (select aviso_estado = 'pendiente' and aviso_intentos = 0 from orquestador_escalacion where id = id1);
+  begin update orquestador_escalacion set aviso_estado = 'inventado' where id = id1; exception when check_violation then dominio := true; end;
+  begin update orquestador_escalacion set aviso_estado = 'enviado' where id = id1; exception when check_violation then exige := true; end;
+  begin update orquestador_escalacion set avisada_en = now() where id = id1; exception when check_violation then sinfecha := true; end;
+  update orquestador_escalacion set aviso_intentos = aviso_intentos + 1, aviso_reclamado_en = now()
+   where id = id1 and aviso_estado = 'pendiente' and (aviso_reclamado_en is null or aviso_reclamado_en < now() - interval '10 minutes');
+  get diagnostics n = row_count; gana := n = 1;
+  update orquestador_escalacion set aviso_intentos = aviso_intentos + 1, aviso_reclamado_en = now()
+   where id = id1 and aviso_estado = 'pendiente' and (aviso_reclamado_en is null or aviso_reclamado_en < now() - interval '10 minutes');
+  get diagnostics n = row_count; pierde := n = 0;
+  begin update orquestador_escalacion set aviso_intentos = 11 where id = id1; exception when check_violation then acotados := true; end;
+
+  raise exception E'ORQ_AVISO_0651 agente-existe=% nace-pendiente=% dominio-rebota=% enviado-exige-fecha=% pendiente-sin-fecha=% primer-claim-gana=% segundo-claim-pierde=% intentos-acotados=%   (esperado t / t / t / t / t / t / t / t)',
+    agente, nace, dominio, exige, sinfecha, gana, pierde, acotados;
+end $$;
+
+-- ── 296. Orquestador: el barrido de salud reclama cada flota una vez por ventana (mig. 0652) ──
+-- El cron escalar barre la salud de los agentes de cada flota. Dos corridas solapadas no deben barrer la misma flota en la misma
+-- ventana, y un error acorta el reintento. Lo que solo la base demuestra: el claim atómico (la segunda pasada no toma nada),
+-- la ventana, el reintento a 10 min tras un error, el tope por pasada, los argumentos fuera de dominio y que solo service_role ejecuta.
+-- Esperado: ORQ_BARRIDO_0652 primera-toma-todas=t segunda-nada=t ventana-respeta=t ventana-vencida-vuelve=t error-reintenta-10min=t limite-respeta=t dominio-rebota=t solo-service-role=t
+do $$
+declare
+  ta uuid; tb uuid; r1 uuid[]; r2 uuid[]; r3 uuid[]; r4 uuid[]; r5 uuid[];
+  primera boolean := false; segunda boolean := false; ventana boolean := false; vencida boolean := false; err10 boolean := false;
+  limite boolean := false; dom boolean := false; solo boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0652 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0652 B') returning id into tb;
+  select coalesce(array_agg(tenant_id), '{}') into r1 from reclamar_flotas_barrido_orquestador(500, 30);
+  primera := ta = any(r1) and tb = any(r1);
+  select coalesce(array_agg(tenant_id), '{}') into r2 from reclamar_flotas_barrido_orquestador(500, 30);
+  segunda := not (ta = any(r2)) and not (tb = any(r2));
+  perform registrar_barrido_orquestador(ta, 'ok', 2, 1, null);
+  update orquestador_barrido_estado set ultimo_barrido_en = clock_timestamp() - interval '20 minutes' where tenant_id = ta;
+  select coalesce(array_agg(tenant_id), '{}') into r3 from reclamar_flotas_barrido_orquestador(500, 30);
+  ventana := not (ta = any(r3));
+  update orquestador_barrido_estado set ultimo_barrido_en = clock_timestamp() - interval '40 minutes' where tenant_id = ta;
+  select coalesce(array_agg(tenant_id), '{}') into r3 from reclamar_flotas_barrido_orquestador(500, 30);
+  vencida := ta = any(r3);
+  perform registrar_barrido_orquestador(tb, 'error', 0, 0, 'no pudo leer');
+  update orquestador_barrido_estado set ultimo_barrido_en = clock_timestamp() - interval '12 minutes' where tenant_id = tb;
+  select coalesce(array_agg(tenant_id), '{}') into r4 from reclamar_flotas_barrido_orquestador(500, 30);
+  err10 := tb = any(r4);
+  update orquestador_barrido_estado set ultimo_barrido_en = clock_timestamp() - interval '2 days';
+  select coalesce(array_agg(tenant_id), '{}') into r5 from reclamar_flotas_barrido_orquestador(1, 30);
+  limite := cardinality(r5) = 1;
+  begin perform reclamar_flotas_barrido_orquestador(0, 30); exception when sqlstate '22023' then dom := true; end;
+  begin perform registrar_barrido_orquestador(ta, 'inventado'); exception when sqlstate '22023' then dom := dom and true; end;
+  solo := not has_function_privilege('anon', 'public.reclamar_flotas_barrido_orquestador(integer, integer)', 'execute')
+      and not has_function_privilege('authenticated', 'public.reclamar_flotas_barrido_orquestador(integer, integer)', 'execute')
+      and has_function_privilege('service_role', 'public.reclamar_flotas_barrido_orquestador(integer, integer)', 'execute');
+
+  raise exception E'ORQ_BARRIDO_0652 primera-toma-todas=% segunda-nada=% ventana-respeta=% ventana-vencida-vuelve=% error-reintenta-10min=% limite-respeta=% dominio-rebota=% solo-service-role=%   (esperado t / t / t / t / t / t / t / t)',
+    primera, segunda, ventana, vencida, err10, limite, dom, solo;
+end $$;
+
+-- ── 297. Vigía: un ciclo de espera nuevo nace sin la escalera ni la molestia del anterior (mig. 0648) ──
+-- El barrido puede escribir nivel/molestia sobre un hilo que el gerente ya contestó; el ciclo siguiente no debe heredarlos (con nivel 1 el
+-- responsable nunca recibía su aviso, con nivel 2 el hilo salía de la cola). Lo que solo la base demuestra: un segundo mensaje del MISMO
+-- ciclo conserva la escalera, un ciclo nuevo arranca en 0 (nivel, molestia, fechas), y un duplicado no mueve nada.
+-- Esperado: VIGIA_CICLO_0648 mismo-ciclo-conserva=t ciclo-nuevo-limpio=t reloj-arranca=t duplicado-no-mueve=t
+do $$
+declare
+  ta uuid; cl uuid; co uuid; v record;
+  conserva boolean := false; limpio boolean := false; reloj boolean := false; dup boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0648 A') returning id into ta;
+  insert into cliente (tenant_id, nombre) values (ta, 'Cliente 0648') returning id into cl;
+  insert into vigia_contacto (tenant_id, cliente_id, telefono, telefono_hash, nombre, consentimiento_en, consentimiento_origen)
+  values (ta, cl, '525548010002', repeat('b', 64), 'Compras', now(), 'alta_flota') returning id into co;
+  perform * from vigia_recibir_mensaje(ta, co, 'wamid.v0648.1', 'texto', 'hola', now() - interval '20 minutes');
+  update vigia_conversacion set escalamiento_nivel = 1, escalado_en = now(), molestia_nivel = 2, molestia_motivos = '{espera}', molestia_en = now() where contacto_id = co and estado = 'activa';
+  perform * from vigia_recibir_mensaje(ta, co, 'wamid.v0648.2', 'texto', 'alguien', now());
+  select * into v from vigia_conversacion where contacto_id = co and estado = 'activa';
+  conserva := v.escalamiento_nivel = 1 and v.molestia_nivel = 2 and v.escalado_en is not null;
+  update vigia_conversacion set sin_respuesta_desde = null, entradas_sin_respuesta = 0 where id = v.id;
+  update vigia_conversacion set escalamiento_nivel = 2, escalado_en = now(), molestia_nivel = 3, molestia_motivos = '{espera}', molestia_en = now() where id = v.id;
+  perform * from vigia_recibir_mensaje(ta, co, 'wamid.v0648.3', 'texto', 'de nuevo', now());
+  select * into v from vigia_conversacion where id = v.id;
+  limpio := v.escalamiento_nivel = 0 and v.escalado_en is null and v.molestia_nivel = 0 and v.molestia_motivos = '{}' and v.molestia_en is null;
+  reloj := v.sin_respuesta_desde is not null and v.entradas_sin_respuesta = 1;
+  update vigia_conversacion set sin_respuesta_desde = null, escalamiento_nivel = 2 where id = v.id;
+  perform * from vigia_recibir_mensaje(ta, co, 'wamid.v0648.3', 'texto', 'de nuevo', now());
+  select * into v from vigia_conversacion where id = v.id;
+  dup := v.sin_respuesta_desde is null and v.escalamiento_nivel = 2;
+
+  raise exception E'VIGIA_CICLO_0648 mismo-ciclo-conserva=% ciclo-nuevo-limpio=% reloj-arranca=% duplicado-no-mueve=%   (esperado t / t / t / t)',
+    conserva, limpio, reloj, dup;
+end $$;
+
+-- ── 300. Edición de convenios en pantalla: guardado atómico con versión y refresco de viajes en curso (mig. 0656 + 0657) ──
+-- Editar un convenio y su lista de instrucciones eran varias escrituras sueltas: una falla a medias lo dejaba sin instrucciones y
+-- dos jefes editando a la vez se pisaban en silencio. La 0656 hace el guardado en UNA transacción con control de versión (el
+-- trigger la sube en cada UPDATE) y la 0657 lleva la edición a los viajes no liquidados de ese convenio (solo los que cambian).
+-- Lo que solo la base demuestra: la versión vieja da conflicto sin escribir, la lista se reemplaza entera y la repetida es una,
+-- un fallo a media lista revierte todo, el nombre repetido y las referencias de otra flota rebotan, el convenio de otra flota
+-- no existe para quien edita, el refresco no cruza flotas ni toca al liquidado, reabre solo el despacho (no el acercamiento) y es
+-- idempotente.
+-- Esperado: CONVENIO_EDICION_0656 conflicto-sin-escribir=t lista-reemplazada=t fallo-revierte=t duplicado-rebota=t referencia-ajena-rebota=t otra-flota-no-existe=t refresco-solo-abiertos=t reabre-solo-despacho=t idempotente=t
+do $$
+declare
+  ta uuid; tb uuid; ca uuid; cb uuid; oa uuid; oa2 uuid; va uuid; vb uuid; vl uuid; conv uuid; v int; v0 int; n int; r jsonb; foto jsonb;
+  conflicto boolean := false; lista boolean := false; revierte boolean := false; dup boolean := false; ajena boolean := false;
+  otra boolean := false; abiertos boolean := false; solo_despacho boolean := false; idem boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0656 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0656 B') returning id into tb;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ 0656 CA') returning id into ca;
+  insert into cliente (tenant_id, nombre) values (tb, 'ZZZ 0656 CB') returning id into cb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0656A', '5215559990656') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0656B', '5215559990657') returning id into oa2;
+  insert into viaje (tenant_id, operador_id, folio, estatus, cliente_id) values (ta, oa, 'ZZZ-0656-1', 'abierto', ca) returning id into va;
+  insert into viaje (tenant_id, operador_id, folio, estatus, cliente_id) values (ta, oa2, 'ZZZ-0656-2', 'liquidado', ca) returning id into vl;
+
+  r := guardar_convenio(ta, null, ca, 'ZZZ ruta', null, null, null, null, null, null, null, null,
+    '[{"categoria":"puerta","texto":"Puerta 1","orden":1},{"categoria":"reportarse","texto":"Con el guardia","orden":2}]');
+  conv := (r->>'id')::uuid; v0 := (r->>'version')::int;
+  update cliente_convenio set activo = true where id = conv;
+  select version into v from cliente_convenio where id = conv;
+
+  r := guardar_convenio(ta, conv, null, 'ZZZ ruta cambiada', null, null, null, null, null, null, null, v0, '[]');
+  select count(*) into n from cliente_convenio where id = conv and nombre = 'ZZZ ruta';
+  conflicto := r->>'estado' = 'conflicto' and v = v0 + 1 and n = 1 and (select count(*) from convenio_instruccion where convenio_id = conv) = 2;
+
+  r := guardar_convenio(ta, conv, null, 'ZZZ ruta', null, null, null, null, null, null, null, v,
+    '[{"categoria":"puerta","texto":"Puerta 1","momento":"despacho","orden":5},{"categoria":"documentos","texto":"Carta porte","orden":6},{"categoria":"documentos","texto":"Carta porte","orden":7}]');
+  select count(*) into n from convenio_instruccion where convenio_id = conv;
+  lista := r->>'estado' = 'ok' and n = 2
+    and not exists (select 1 from convenio_instruccion where convenio_id = conv and categoria = 'reportarse')
+    and exists (select 1 from convenio_instruccion where convenio_id = conv and texto = 'Puerta 1' and momento = 'despacho' and orden = 5);
+
+  select version into v from cliente_convenio where id = conv;
+  r := guardar_convenio(ta, conv, null, 'ZZZ no debe quedar', null, null, null, null, null, null, null, v,
+    '[{"categoria":"puerta","texto":"Buena"},{"categoria":"inventada","texto":"Mala"}]');
+  revierte := r->>'estado' = 'invalida'
+    and exists (select 1 from cliente_convenio where id = conv and nombre = 'ZZZ ruta' and version = v)
+    and not exists (select 1 from convenio_instruccion where convenio_id = conv and texto = 'Buena')
+    and (select count(*) from convenio_instruccion where convenio_id = conv) = 2;
+
+  dup := (guardar_convenio(ta, null, ca, 'ZZZ ruta', null, null, null, null, null, null, null, null, null))->>'estado' = 'duplicado';
+  ajena := (guardar_convenio(ta, null, cb, 'ZZZ con cliente ajeno', null, null, null, null, null, null, null, null, null))->>'estado' = 'referencia_invalida';
+  otra := (guardar_convenio(tb, conv, null, 'ZZZ robado', null, null, null, null, null, null, null, v, null))->>'estado' = 'no_existe';
+
+  select jsonb_agg(jsonb_build_object('categoria', categoria, 'texto', texto, 'momento', momento, 'lugar', lugar, 'orden', orden) order by orden, id)
+    into foto from convenio_instruccion where convenio_id = conv;
+  insert into viaje_convenio (viaje_id, tenant_id, convenio_id, cliente_id, instrucciones, despacho_enviado_en, despacho_canal, acercamiento_origen_enviado_en, acercamiento_origen_canal)
+    values (va, ta, conv, ca, '[{"categoria":"puerta","texto":"Vieja","momento":"ambos","lugar":"ambos","orden":0}]', now(), 'texto', now(), 'texto');
+  insert into viaje_convenio (viaje_id, tenant_id, convenio_id, cliente_id, instrucciones)
+    values (vl, ta, conv, ca, '[{"categoria":"puerta","texto":"Vieja","momento":"ambos","lugar":"ambos","orden":0}]');
+  select count(*) into n from refrescar_viajes_de_convenio(tb, conv, true);
+  abiertos := n = 0;
+  select count(*) into n from refrescar_viajes_de_convenio(ta, conv, false);
+  abiertos := abiertos and n = 1
+    and exists (select 1 from viaje_convenio where viaje_id = va and instrucciones = foto and despacho_enviado_en is not null)
+    and exists (select 1 from viaje_convenio where viaje_id = vl and instrucciones::text like '%Vieja%');
+  -- (sin p_reenviar el despacho de va sigue sellado; el reenvío se prueba con un segundo cambio de convenio)
+  select version into v from cliente_convenio where id = conv;
+  perform guardar_convenio(ta, conv, null, 'ZZZ ruta', null, null, null, null, null, null, null, v, '[{"categoria":"puerta","texto":"Puerta 9"}]');
+  select count(*) into n from refrescar_viajes_de_convenio(ta, conv, true) x(viaje_id, reenviar) where reenviar and x.viaje_id = va;
+  solo_despacho := n = 1
+    and exists (select 1 from viaje_convenio where viaje_id = va and despacho_enviado_en is null and despacho_canal is null and acercamiento_origen_enviado_en is not null);
+  idem := (select count(*) from refrescar_viajes_de_convenio(ta, conv, true)) = 0;
+
+  raise exception E'CONVENIO_EDICION_0656 conflicto-sin-escribir=% lista-reemplazada=% fallo-revierte=% duplicado-rebota=% referencia-ajena-rebota=% otra-flota-no-existe=% refresco-solo-abiertos=% reabre-solo-despacho=% idempotente=%   (esperado t / t / t / t / t / t / t / t / t)',
+    conflicto, lista, revierte, dup, ajena, otra, abiertos, solo_despacho, idem;
+end $$;
+
+-- ── 305. «Mis reglas»: el aviso se reclama ANTES de mandarse, y un arriendo vencido se retoma (mig. 0660) ──
+-- Dos corridas solapadas del cron leían los mismos casos nuevos y ambas mandaban el WhatsApp (el sello llegaba después del envío). La 0660
+-- hace que insertar la llave sea reclamarla: quien pierde el insert no manda. Lo que solo la base demuestra: el segundo reclamo del mismo
+-- lote gana cero llaves, un arriendo vencido se retoma con otro token (y el viejo ya no confirma), confirmar deja la llave `enviado` sin
+-- token y ya no se reclama, liberar (rechazo de Meta) borra lo suyo y la llave se puede reclamar de nuevo, y el sello anterior a la 0660
+-- nunca se reclama.
+-- Esperado: RECLAMO_REGLAS_0660 segundo-reclamo-rebota=t arriendo-se-retoma=t token-viejo-no-confirma=t confirmar-sella=t sellado-no-se-reclama=t liberar-reabre=t sello-viejo-intacto=t
+do $$
+declare
+  t uuid; r uuid; viejo uuid := gen_random_uuid(); lote jsonb;
+  t1 uuid; t2 uuid; n int;
+  segundo boolean; retoma boolean; viejo_no boolean; sella boolean; no_reclama boolean; reabre boolean; intacto boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0660') returning id into t;
+  insert into regla_vigilancia (tenant_id, plantilla, params, texto_original, frase)
+    values (t, 'gasto_de_concepto_mayor_a', '{"concepto":"caseta","monto":3000}', 'avisa', 'Voy a avisarte…') returning id into r;
+  insert into regla_disparo (tenant_id, regla_id, objeto, objeto_id, clave, evidencia) values (t, r, 'gasto', viejo, '', 'sello viejo');
+  lote := jsonb_build_array(
+    jsonb_build_object('objeto', 'gasto', 'objeto_id', gen_random_uuid(), 'clave', '', 'evidencia', 'uno'),
+    jsonb_build_object('objeto', 'gasto', 'objeto_id', gen_random_uuid(), 'clave', '', 'evidencia', 'dos'),
+    jsonb_build_object('objeto', 'gasto', 'objeto_id', viejo, 'clave', '', 'evidencia', 'sello viejo'));
+
+  select count(*), min(o_token::text)::uuid into n, t1 from reclamar_disparos_regla(t, r, lote);
+  segundo := n = 2 and (select count(*) from reclamar_disparos_regla(t, r, lote)) = 0;
+  select count(*), min(o_token::text)::uuid into n, t2 from reclamar_disparos_regla(t, r, lote, 300, now() + interval '10 minutes');
+  retoma := n = 2 and t2 <> t1;
+  viejo_no := confirmar_disparos_regla(t, r, t1) = 0 and liberar_disparos_regla(t, r, t1) = 0;
+  n := confirmar_disparos_regla(t, r, t2);
+  sella := n = 2
+    and (select count(*) from regla_disparo where regla_id = r and estado = 'enviado' and reclamo_token is null) = 3;
+  no_reclama := (select count(*) from reclamar_disparos_regla(t, r, lote, 300, now() + interval '1 day')) = 0;
+  select count(*), min(o_token::text)::uuid into n, t1 from reclamar_disparos_regla(t, r, jsonb_build_array(
+    jsonb_build_object('objeto', 'gasto', 'objeto_id', gen_random_uuid(), 'clave', 'c2', 'evidencia', 'nuevo')));
+  reabre := n = 1 and liberar_disparos_regla(t, r, t1) = 1;
+  intacto := (select count(*) from regla_disparo where regla_id = r and objeto_id = viejo and estado = 'enviado') = 1;
+
+  raise exception E'RECLAMO_REGLAS_0660 segundo-reclamo-rebota=% arriendo-se-retoma=% token-viejo-no-confirma=% confirmar-sella=% sellado-no-se-reclama=% liberar-reabre=% sello-viejo-intacto=%   (esperado t / t / t / t / t / t / t)',
+    segundo, retoma, viejo_no, sella, no_reclama, reabre, intacto;
+end $$;
+
+-- ── 306. Conductor: el cron reparte sus viajes entre flotas y deja de perseguir los vencidos (mig. 0661) ──
+-- El cron leía los 400 viajes abiertos MÁS VIEJOS de todas las flotas juntas: una flota grande se comía la pasada y las chicas no se
+-- atendían nunca; un viaje abierto hace meses ocupaba lugar para siempre. La 0661 reparte por turnos (el más viejo de cada flota, luego el
+-- segundo de cada una), descarta los de más de 30 días y omite los hitos pendientes de esos viajes sin tocar el viaje.
+-- Esperado: REPARTO_JUSTO_0661 tope-reparte=t vencido-fuera=t hitos-omitidos=t recibido-intacto=t viaje-intacto=t idempotente=t
+do $$
+declare
+  ta uuid; tb uuid; oa uuid; ob uuid; ob2 uuid; va uuid; vv uuid; vb uuid; ids uuid[];
+  reparte boolean; fuera boolean; omitidos boolean; recibido boolean; intacto boolean; idem boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0661 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0661 B') returning id into tb;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'A1', '525500066101') returning id into oa;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'A2', '525500066102') returning id into ob;
+  insert into operador (tenant_id, nombre, telefono) values (tb, 'B1', '525500066103') returning id into ob2;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, oa, 'ZV-A1', 'abierto', now(), now() - interval '10 hours') returning id into va;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, ob, 'ZV-A2', 'abierto', now(), now() - interval '60 days') returning id into vv;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (tb, ob2, 'ZV-B1', 'abierto', now(), now() - interval '2 hours') returning id into vb;
+
+  select array_agg(o_id) into ids from viajes_activos_repartidos(1000);
+  fuera := va = any(ids) and vb = any(ids) and not (vv = any(ids));
+  -- un tope de 2 reparte una por flota aunque la grande tenga más y más viejos
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'A3', '525500066104') returning id into oa;
+  insert into viaje (tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values (ta, oa, 'ZV-A3', 'abierto', now(), now() - interval '20 hours');
+  select array_agg(o_id) into ids from viajes_activos_repartidos(2);
+  reparte := cardinality(ids) = 2 and vb = any(ids) and (select count(*) from viaje where id = any(ids) and tenant_id = ta) = 1;
+
+  perform sembrar_hitos_conductor(10000);
+  update viaje_hito set estado = 'recibido', fuente = 'texto', recibido_en = now() - interval '59 days'
+   where viaje_id = vv and tipo = 'llegada_carga';
+  perform cerrar_hitos_viajes_vencidos();
+  omitidos := (select count(*) from viaje_hito where viaje_id = vv and estado = 'omitido' and omitido_motivo = 'viaje_abierto_vencido') = 4;
+  recibido := (select estado from viaje_hito where viaje_id = vv and tipo = 'llegada_carga') = 'recibido';
+  intacto := (select estatus from viaje where id = vv) = 'abierto'
+    and (select count(*) from viaje_hito where viaje_id = va and estado = 'esperado') = 5;
+  idem := cerrar_hitos_viajes_vencidos() = 0;
+
+  raise exception E'REPARTO_JUSTO_0661 tope-reparte=% vencido-fuera=% hitos-omitidos=% recibido-intacto=% viaje-intacto=% idempotente=%   (esperado t / t / t / t / t / t)',
+    reparte, fuera, omitidos, recibido, intacto, idem;
+end $$;
+
+-- ── 310. Carta Porte: un Excel con N embarques se parte en N documentos, atómico, idempotente y por flota (mig. 0670 + 0671) ──
+-- Antes el archivo se leía por su primer embarque y los demás se perdían. La 0671 los parte de una vez: nacen los N hijos (con su huella,
+-- su ficha de linaje —padre, huella base común, lugar— y su evento) y el original queda `dividido`, o no pasa nada. Un reintento no duplica,
+-- una versión vieja del claim no parte, una huella que ya existía no se pisa ni se le cuelga linaje ajeno, y la ficha es por flota.
+-- Esperado: CP_DIVIDIR_0670 divide=t padre-dividido=t huella-base-comun=t atomica=t idempotente=t version-vieja-no-parte=t huella-existente-no-se-pisa=t por-flota=t dividido-no-se-reclama=t solo-service-role=t
+do $$
+declare
+  ta uuid; tb uuid; pa uuid; pv uuid; pt uuid; pe uuid; pb uuid; ex uuid; r record; sha_padre text;
+  divide boolean := false; padre boolean := false; comun boolean := false; atomica boolean := false; idem boolean := false;
+  vieja boolean := false; existente boolean := false; flota boolean := false; sin_reclamo boolean := false; permisos boolean := false;
+  hijos jsonb; hijos_b jsonb; hijos_c jsonb; n int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0670 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0670 B') returning id into tb;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (ta, 'correo', 'excel', 'plan.xlsx', 1000, repeat('1', 64), 'procesando', 2, 1, now() + interval '2 minutes', 'r/1') returning id into pa;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (ta, 'correo', 'excel', 'viejo.xlsx', 1000, repeat('2', 64), 'procesando', 2, 1, now() + interval '2 minutes', 'r/2') returning id into pv;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (ta, 'correo', 'excel', 'atomico.xlsx', 1000, repeat('3', 64), 'procesando', 2, 1, now() + interval '2 minutes', 'r/3') returning id into pt;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (ta, 'correo', 'excel', 'con-existente.xlsx', 1000, repeat('4', 64), 'procesando', 2, 1, now() + interval '2 minutes', 'r/4') returning id into pe;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (tb, 'correo', 'excel', 'de-b.xlsx', 1000, repeat('5', 64), 'procesando', 2, 1, now() + interval '2 minutes', 'r/5') returning id into pb;
+  sha_padre := repeat('1', 64);
+
+  -- Tres juegos de hijos con huellas DISTINTAS (sufijo a / b / c): el de `pa` (feliz), el del intento atómico y el de la huella existente.
+  hijos := (select jsonb_agg(jsonb_build_object('indice', g, 'clave', 'F-' || g, 'nombre', 'plan · embarque F-' || g || '.csv',
+              'sha256', repeat(g::text, 63) || 'a', 'bytes', 100 + g, 'storage_ruta', 'r/h' || g) order by g) from generate_series(1, 3) g);
+  hijos_b := (select jsonb_agg(jsonb_build_object('indice', g, 'clave', 'F-' || g, 'nombre', 'atomico · embarque F-' || g || '.csv',
+              'sha256', repeat(g::text, 63) || 'b', 'bytes', 100 + g, 'storage_ruta', 'r/b' || g) order by g) from generate_series(1, 3) g);
+  hijos_c := (select jsonb_agg(jsonb_build_object('indice', g, 'clave', 'F-' || g, 'nombre', 'existente · embarque F-' || g || '.csv',
+              'sha256', repeat(g::text, 63) || 'c', 'bytes', 100 + g, 'storage_ruta', 'r/c' || g) order by g) from generate_series(1, 3) g);
+
+  -- divide / padre dividido / huella base común
+  select count(*) filter (where creado) = 3 and count(*) = 3 into divide
+    from cp_documento_dividir(ta, pa, 2, hijos, now() + interval '180 days', now() + interval '90 days');
+  padre := (select estado = 'dividido' and version = 3 and procesando_hasta is null from cp_documento where id = pa);
+  comun := (select count(*) = 3 and count(distinct huella_base) = 1 and min(huella_base) = sha_padre and min(indice) = 1 and max(indice) = 3 and min(total) = 3
+              from cp_documento_embarque where padre_id = pa)
+           and (select count(*) = 3 from cp_documento d join cp_documento_embarque e on e.documento_id = d.id where e.padre_id = pa and d.estado = 'recibido' and d.formato = 'csv' and d.sha256 <> sha_padre);
+
+  -- idempotente: otra llamada devuelve los 3 sin crear
+  select count(*) = 3 and count(*) filter (where creado) = 0 into idem from cp_documento_dividir(ta, pa, 3, hijos, now(), now());
+  idem := idem and (select count(*) = 4 from cp_documento where tenant_id = ta and (id = pa or id in (select documento_id from cp_documento_embarque where padre_id = pa)));
+
+  -- versión vieja del claim: no parte
+  select count(*) = 0 into vieja from cp_documento_dividir(ta, pv, 1, hijos, now(), now());
+  vieja := vieja and (select estado = 'procesando' from cp_documento where id = pv) and not exists (select 1 from cp_documento_embarque where padre_id = pv);
+
+  -- atómica: un hijo con bytes = 0 (viola el CHECK) a la mitad no deja el primero ni parte al padre
+  begin
+    perform * from cp_documento_dividir(ta, pt, 2, jsonb_set(hijos_b, '{1,bytes}', '0'::jsonb), now(), now());
+  exception when check_violation then atomica := true; end;
+  atomica := atomica and (select estado = 'procesando' from cp_documento where id = pt)
+             and not exists (select 1 from cp_documento where tenant_id = ta and sha256 in (repeat('1', 63) || 'b', repeat('2', 63) || 'b', repeat('3', 63) || 'b'));
+
+  -- una huella que ya existe en la flota no se duplica ni se le cuelga linaje ajeno
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, storage_ruta)
+    values (ta, 'manual', 'csv', 'suelto.csv', 50, repeat('9', 64), 'por_revisar', 'r/9') returning id into ex;
+  for r in select * from cp_documento_dividir(ta, pe, 2,
+      jsonb_set(jsonb_set(hijos_c, '{1,sha256}', to_jsonb(repeat('9', 64))), '{0,sha256}', to_jsonb(repeat('7', 64))), now(), now()) loop
+    n := coalesce(n, 0) + 1;
+    if r.indice = 2 then existente := r.documento_id = ex and not r.creado; end if;
+  end loop;
+  existente := existente and n = 3 and not exists (select 1 from cp_documento_embarque where documento_id = ex)
+    and (select estado = 'por_revisar' from cp_documento where id = ex);
+
+  -- por flota: el padre de B no se parte desde A, y la ficha no cuelga de un padre de otra flota
+  begin
+    perform * from cp_documento_dividir(ta, pb, 2, hijos, now(), now());
+  exception when no_data_found then flota := true; end;
+  begin
+    insert into cp_documento_embarque (documento_id, tenant_id, padre_id, huella_base, indice, total)
+      values (ex, ta, pb, repeat('a', 64), 1, 2);
+    flota := false;
+  exception when foreign_key_violation then flota := flota; end;
+
+  -- un `dividido` no lo reclama nadie
+  sin_reclamo := (select count(*) = 0 from cp_documento_reclamar(ta, pa, 120))
+                 and not exists (select 1 from cp_documentos_pendientes(200, 5, 0) where id = pa);
+
+  permisos := not has_function_privilege('anon', 'public.cp_documento_dividir(uuid, uuid, int, jsonb, timestamptz, timestamptz)', 'execute')
+              and not has_function_privilege('authenticated', 'public.cp_documento_dividir(uuid, uuid, int, jsonb, timestamptz, timestamptz)', 'execute')
+              and has_function_privilege('service_role', 'public.cp_documento_dividir(uuid, uuid, int, jsonb, timestamptz, timestamptz)', 'execute')
+              and not has_table_privilege('authenticated', 'public.cp_documento_embarque', 'select');
+
+  raise exception E'CP_DIVIDIR_0670 divide=% padre-dividido=% huella-base-comun=% atomica=% idempotente=% version-vieja-no-parte=% huella-existente-no-se-pisa=% por-flota=% dividido-no-se-reclama=% solo-service-role=%   (esperado t / t / t / t / t / t / t / t / t / t)',
+    divide, padre, comun, atomica, idem, vieja, existente, flota, sin_reclamo, permisos;
+end $$;
+
+-- ── 315. Seguridad Ola 9: retención de ledgers, flood de evento_seguridad y techo de IA por flota (mig. 0680 + 0681 + 0682) ──
+-- Cuatro garantías que solo la base demuestra. (1) La purga de evento_seguridad respeta el plazo POR SEVERIDAD (una alta de 200 días
+-- sobrevive donde una media de 200 ya no) y mantener_ledgers no toca lo vigente. (2) Registrar una ráfaga de la misma señal deja UNA fila con
+-- su conteo y, pasado el tope de filas distintas, el excedente cae en una fila de desborde: la suma de repeticiones iguala SIEMPRE a los eventos
+-- registrados (lo crítico no se pierde, se agrupa). (3) fijar_techo_ia_tenant escribe SOLO su llave de tenant.config, la quita con null y valida
+-- el rango en la base. Esperado: SEGURIDAD_OLA9 purga-por-severidad=t ledgers-vigente-intacto=t agrupa-ventana=t tope-desborde=t suma-intacta=t techo-sin-pisar=t techo-quita=t techo-rango=t
+do $$
+declare
+  t0 timestamptz := timestamptz '2026-10-02 12:00:30+00';
+  r jsonb; i integer; n integer; f record; c jsonb; tid uuid;
+  purga boolean; vigente boolean; agrupa boolean; desborde boolean; suma boolean; sin_pisar boolean; quita boolean; rango boolean;
+begin
+  -- (1) purga por severidad
+  insert into evento_seguridad (origen, tipo, severidad, creado_en, actor) values
+    ('wa_webhook', 'firma_invalida', 'info',  now() - interval '100 days', 'zzv315-info-100'),
+    ('wa_webhook', 'firma_invalida', 'media', now() - interval '200 days', 'zzv315-media-200'),
+    ('api_v1', 'acceso_denegado', 'alta', now() - interval '200 days', 'zzv315-alta-200'),
+    ('api_v1', 'acceso_denegado', 'alta', now() - interval '400 days', 'zzv315-alta-400');
+  perform purgar_evento_seguridad();
+  purga := not exists (select 1 from evento_seguridad where actor in ('zzv315-info-100', 'zzv315-media-200', 'zzv315-alta-400'));
+  vigente := exists (select 1 from evento_seguridad where actor = 'zzv315-alta-200');
+  perform mantener_ledgers();
+  vigente := vigente and exists (select 1 from evento_seguridad where actor = 'zzv315-alta-200');
+  delete from evento_seguridad where actor like 'zzv315-%';
+
+  -- (2) agrupar por ventana + tope + desborde; la suma de repeticiones es exacta
+  for i in 1..20 loop perform registrar_evento_seguridad('copiloto', 'intent_invalido', 'media', null, 'zzv315-misma', null, t0); end loop;
+  select * into f from evento_seguridad where actor = 'zzv315-misma';
+  agrupa := f.repeticiones = 20 and (select count(*) from evento_seguridad where actor = 'zzv315-misma') = 1;
+  for i in 1..130 loop perform registrar_evento_seguridad('ratelimit', 'rate_limit', 'media', null, 'zzv315-rota-' || i, null, t0); end loop;
+  select count(*) into n from evento_seguridad where origen = 'ratelimit' and coalesce((detalle->>'desborde')::boolean, false) = false;
+  desborde := n = 100 and (select repeticiones from evento_seguridad where origen = 'ratelimit' and coalesce((detalle->>'desborde')::boolean, false)) = 30;
+  suma := (select sum(repeticiones) from evento_seguridad where origen = 'ratelimit') = 130;
+  delete from evento_seguridad where origen in ('copiloto', 'ratelimit') and (actor like 'zzv315-%' or detalle->>'desborde' = 'true');
+
+  -- (3) techo por flota
+  insert into tenant (nombre, config) values ('ZZZ VERIF 0682', '{"empresa": {"nombre": "Flota A"}}') returning id into tid;
+  perform fijar_techo_ia_tenant(tid, 25.555);
+  select config into c from tenant where id = tid;
+  sin_pisar := c->'presupuestoLlmUsdDia' = '25.56'::jsonb and c->'empresa'->>'nombre' = 'Flota A';
+  perform fijar_techo_ia_tenant(tid, null);
+  select config into c from tenant where id = tid;
+  quita := not (c ? 'presupuestoLlmUsdDia') and c->'empresa'->>'nombre' = 'Flota A';
+  rango := false;
+  begin perform fijar_techo_ia_tenant(tid, 5000); exception when sqlstate 'PU001' then rango := true; end;
+  rango := rango and (select config from tenant where id = tid) = c;
+
+  raise exception E'SEGURIDAD_OLA9 purga-por-severidad=% ledgers-vigente-intacto=% agrupa-ventana=% tope-desborde=% suma-intacta=% techo-sin-pisar=% techo-quita=% techo-rango=%   (esperado t / t / t / t / t / t / t / t)',
+    purga, vigente, agrupa, desborde, suma, sin_pisar, quita, rango;
+end $$;
+
+-- ── 330. Carta Porte, correctivas de la ronda 15: hijos con huella ya conocida, replay completo, zombis y desborde (mig. 0672 + 0676 + 0683) ──
+-- (1) Un hijo cuya huella era de un documento RECHAZADO o FALLIDO se REABRE como `recibido` con el archivo nuevo y su ficha de linaje bajo el padre
+-- nuevo (antes se «reutilizaba» y el embarque quedaba sin documento legible); uno APROBADO y PURGADO no se toca y se avisa `sin_archivo` para que la
+-- app borre el archivo huérfano; el replay de un padre ya dividido devuelve TODOS los hijos. (2) Un `procesando` con 5 intentos y el lease vencido
+-- (zombi: nadie lo reclamaba ni lo avisaba) pasa a `fallido` terminal y entra a la lista de agotados; lo vivo no se toca. (3) Un `detalle.desborde` no
+-- booleano ya no rompe el alta de eventos de seguridad.
+-- Esperado: CP_R15 reabre-rechazado=t reabre-fallido=t aprobado-purgado-sin-archivo=t replay-completo=t zombi-cerrado=t zombi-avisable=t vivo-intacto=t desborde-no-rompe=t
+do $$
+declare
+  ta uuid; pa uuid; z1 uuid; z2 uuid; r record; acc text[] := '{}';
+  reabre_r boolean := false; reabre_f boolean := false; sin_arch boolean := false; replay boolean := false;
+  zombi boolean := false; avisable boolean := false; vivo boolean := false; desb boolean := false;
+  hijos jsonb; h1 uuid; h2 uuid; h3 uuid; n int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0672') returning id into ta;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (ta, 'correo', 'excel', 'plan.xlsx', 1000, repeat('1', 64), 'procesando', 2, 1, now() + interval '2 minutes', 'r/1') returning id into pa;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, storage_ruta, purgado_en, rechazo_motivo)
+    values (ta, 'correo', 'csv', 'h1.csv', 50, repeat('a', 64), 'rechazado', 3, 1, null, now(), 'duplicado') returning id into h1;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, storage_ruta)
+    values (ta, 'correo', 'csv', 'h2.csv', 50, repeat('b', 64), 'fallido', 3, 5, 'r/viejo-h2') returning id into h2;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, storage_ruta, purgado_en, aprobado_en)
+    values (ta, 'correo', 'csv', 'h3.csv', 50, repeat('c', 64), 'aprobado', 3, 1, null, now(), now()) returning id into h3;
+  hijos := (select jsonb_agg(jsonb_build_object('indice', g, 'clave', 'F-' || g, 'nombre', 'h' || g || '.csv', 'sha256', repeat(chr(96 + g), 64),
+              'bytes', 100 + g, 'storage_ruta', 'r/n' || g) order by g) from generate_series(1, 3) g);
+
+  for r in select * from cp_documento_dividir(ta, pa, 2, hijos, now() + interval '180 days', now() + interval '90 days') order by indice loop
+    acc := acc || (r.indice || ':' || r.accion);
+  end loop;
+  reabre_r := acc[1] = '1:reabierto'
+    and (select estado = 'recibido' and purgado_en is null and storage_ruta = 'r/n1' and rechazo_motivo is null and intentos = 0 from cp_documento where id = h1)
+    and exists (select 1 from cp_documento_embarque where documento_id = h1 and padre_id = pa)
+    and exists (select 1 from cp_documento_evento where documento_id = h1 and tipo = 'reabierto');
+  reabre_f := acc[2] = '2:reabierto'
+    and (select estado = 'recibido' and intentos = 0 and storage_ruta = 'r/n2' from cp_documento where id = h2);
+  sin_arch := acc[3] = '3:sin_archivo'
+    and (select estado = 'aprobado' and purgado_en is not null and storage_ruta is null from cp_documento where id = h3)
+    and exists (select 1 from cp_documento_evento where documento_id = h3 and tipo = 'duplicado_recibido')
+    and not exists (select 1 from cp_documento_embarque where documento_id = h3);
+  select count(*) into n from cp_documento_dividir(ta, pa, 3, hijos, now(), now()) where not creado and accion = 'reutilizado';
+  replay := n = 3 and (select count(*) = 2 from cp_documento_embarque where padre_id = pa);
+
+  -- Zombis
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (ta, 'correo', 'pdf_texto', 'zombi.pdf', 10, repeat('d', 64), 'procesando', 6, 5, now() - interval '10 minutes', 'r/z') returning id into z1;
+  insert into cp_documento (tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta)
+    values (ta, 'correo', 'pdf_texto', 'vivo.pdf', 10, repeat('e', 64), 'procesando', 6, 5, now() + interval '2 minutes', 'r/v') returning id into z2;
+  perform cp_documentos_cerrar_zombis(50, 5, now() + interval '90 days');
+  zombi := (select estado = 'fallido' and version = 7 and procesando_hasta is null and ultimo_error is not null from cp_documento where id = z1)
+           and exists (select 1 from cp_documento_evento where documento_id = z1 and tipo = 'extraccion_fallida');
+  avisable := exists (select 1 from cp_documentos_agotados(200) where id = z1);
+  vivo := (select estado = 'procesando' from cp_documento where id = z2) and not exists (select 1 from cp_documentos_agotados(200) where id = z2);
+
+  -- Desborde no booleano
+  perform registrar_evento_seguridad('otro', 'firma_invalida', 'media', null, 'zz330-a', '{"desborde": "si"}'::jsonb);
+  perform registrar_evento_seguridad('otro', 'firma_invalida', 'media', null, 'zz330-b', '{"desborde": 1}'::jsonb);
+  desb := (select count(*) = 2 from evento_seguridad where actor in ('zz330-a', 'zz330-b') and not (detalle ? 'desborde'));
+  delete from evento_seguridad where actor in ('zz330-a', 'zz330-b');
+
+  raise exception E'CP_R15 reabre-rechazado=% reabre-fallido=% aprobado-purgado-sin-archivo=% replay-completo=% zombi-cerrado=% zombi-avisable=% vivo-intacto=% desborde-no-rompe=%   (esperado t / t / t / t / t / t / t / t)',
+    reabre_r, reabre_f, sin_arch, replay, zombi, avisable, vivo, desb;
+end $$;
+
+-- ── 320. Peajes: los «cursos» (rutas autorizadas) se guardan atómicos, por flota y con la forma sana (mig. 0665) ──
+-- El cliente pidió reclamar los cruces fuera de curso. Un curso es la lista de casetas autorizadas de un convenio A→B o de una
+-- unidad (o, cuando llegue su formato, una polilínea con buffer). Lo que solo la base demuestra: el lote se guarda todo-o-nada
+-- (un curso malo al final no deja escritos los anteriores), re-aplicar actualiza y no duplica y la lista de casetas se reemplaza
+-- entera con el orden del arreglo, la unidad, el convenio o la caseta de OTRA flota rebotan sin escribir nada (también por
+-- escritura directa, por la FK compuesta), el CHECK de forma rechaza un corredor con buffer corto, un curso de casetas con
+-- polilínea y un curso que no aplica a nadie, y las dos tablas son deny-all.
+-- Esperado: CURSOS_PEAJE_0665 lote-atomico=t idempotente=t orden-del-arreglo=t otra-flota-rebota=t fk-directa-rebota=t forma-sana=t deny-all=t
+do $$
+declare
+  ta uuid; tb uuid; ca uuid; cb uuid; va uuid; vb uuid; ua uuid; ub uuid; k1 uuid; k2 uuid; kb uuid; r jsonb; ids uuid[]; n int;
+  atomico boolean := false; idem boolean := false; en_orden boolean := false; ajena boolean := false; directa boolean := false;
+  forma boolean := false; deny boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0665 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0665 B') returning id into tb;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ 0665 CA') returning id into ca;
+  insert into cliente (tenant_id, nombre) values (tb, 'ZZZ 0665 CB') returning id into cb;
+  insert into cliente_convenio (tenant_id, cliente_id, nombre) values (ta, ca, 'ZZZ 0665 conv A') returning id into va;
+  insert into cliente_convenio (tenant_id, cliente_id, nombre) values (tb, cb, 'ZZZ 0665 conv B') returning id into vb;
+  insert into unidad (tenant_id, numero_economico) values (ta, 'ZZZ-0665-A') returning id into ua;
+  insert into unidad (tenant_id, numero_economico) values (tb, 'ZZZ-0665-B') returning id into ub;
+  insert into peaje_caseta (tenant_id, nombre, nombre_norm, lat, lng) values (ta, 'ZZZ K1', 'zzz k1', 19.4, -99.1) returning id into k1;
+  insert into peaje_caseta (tenant_id, nombre, nombre_norm, lat, lng) values (ta, 'ZZZ K2', 'zzz k2', 19.5, -99.2) returning id into k2;
+  insert into peaje_caseta (tenant_id, nombre, nombre_norm, lat, lng) values (tb, 'ZZZ KB', 'zzz kb', 20.0, -100.0) returning id into kb;
+
+  -- orden del arreglo (k2 antes que k1) + idempotencia
+  r := peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-C1', 'nombre', 'Ruta', 'tipo', 'casetas', 'convenio_id', va, 'casetas', jsonb_build_array(k2, k1))));
+  select array_agg(caseta_id order by orden) into ids from peaje_curso_caseta where tenant_id = ta;
+  en_orden := r->>'estado' = 'ok' and ids = array[k2, k1];
+  r := peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-C1', 'nombre', 'Ruta', 'tipo', 'casetas', 'convenio_id', va, 'casetas', jsonb_build_array(k2, k1))));
+  idem := (r->>'actualizados')::int = 1 and (r->>'creados')::int = 0
+    and (select count(*) from peaje_curso where tenant_id = ta) = 1 and (select count(*) from peaje_curso_caseta where tenant_id = ta) = 2;
+
+  -- un curso malo al final del lote revierte el bueno de antes
+  r := peaje_curso_reemplazar(ta, jsonb_build_array(
+    jsonb_build_object('codigo', 'ZZZ-C2', 'nombre', 'Buena', 'tipo', 'casetas', 'unidad_id', ua, 'casetas', jsonb_build_array(k1)),
+    jsonb_build_object('codigo', 'ZZZ-C3', 'nombre', 'Sin casetas', 'tipo', 'casetas', 'unidad_id', ua, 'casetas', '[]'::jsonb)));
+  atomico := r->>'estado' = 'invalida' and not exists (select 1 from peaje_curso where codigo = 'ZZZ-C2');
+
+  -- referencias de otra flota: unidad, convenio y caseta
+  ajena := (peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-X1', 'nombre', 'x', 'tipo', 'casetas', 'unidad_id', ub, 'casetas', jsonb_build_array(k1)))))->>'estado' = 'referencia_invalida'
+    and (peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-X2', 'nombre', 'x', 'tipo', 'casetas', 'convenio_id', vb, 'casetas', jsonb_build_array(k1)))))->>'estado' = 'referencia_invalida'
+    and (peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-X3', 'nombre', 'x', 'tipo', 'casetas', 'unidad_id', ua, 'casetas', jsonb_build_array(kb)))))->>'estado' = 'referencia_invalida'
+    and not exists (select 1 from peaje_curso where codigo like 'ZZZ-X%');
+  begin
+    insert into peaje_curso_caseta (curso_id, caseta_id, tenant_id) select id, kb, tenant_id from peaje_curso where tenant_id = ta and codigo = 'ZZZ-C1';
+  exception when foreign_key_violation then directa := true; end;
+
+  -- la forma sana
+  forma := (peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-F1', 'nombre', 'x', 'tipo', 'corredor', 'unidad_id', ua, 'buffer_m', 5,
+      'corredor', jsonb_build_array(jsonb_build_object('lat', 19.4, 'lng', -99.1), jsonb_build_object('lat', 19.5, 'lng', -99.2))))))->>'estado' = 'invalida'
+    and (peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-F2', 'nombre', 'x', 'tipo', 'casetas', 'casetas', jsonb_build_array(k1)))))->>'estado' = 'invalida'
+    and (peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-F3', 'nombre', 'x', 'tipo', 'corredor', 'unidad_id', ua, 'buffer_m', 300,
+      'corredor', jsonb_build_array(jsonb_build_object('lat', 19.4, 'lng', -99.1), jsonb_build_object('lat', 19.5, 'lng', -99.2)))))) ->>'estado' = 'ok';
+
+  select count(*) into n from pg_policies where tablename in ('peaje_curso', 'peaje_curso_caseta');
+  deny := n = 0 and (select bool_and(relrowsecurity) from pg_class where oid in ('public.peaje_curso'::regclass, 'public.peaje_curso_caseta'::regclass));
+
+  raise exception E'CURSOS_PEAJE_0665 lote-atomico=% idempotente=% orden-del-arreglo=% otra-flota-rebota=% fk-directa-rebota=% forma-sana=% deny-all=%   (esperado t / t / t / t / t / t / t)',
+    atomico, idem, en_orden, ajena, directa, forma, deny;
+end $$;
+
+-- ── 325. Vigía, directores por nivel y respaldo por correo: sin repetidos, tope de 10, un correo por aviso y persona, arriendo y aislamiento (mig. 0673 + 0674) ──
+-- El aviso de escalamiento ya no va a UN teléfono sino a una lista por nivel (teléfono y/o correo), y si el WhatsApp no sale se manda por correo.
+-- Lo que solo la base demuestra: el mismo teléfono o correo (sin importar mayúsculas) no se repite DENTRO de un nivel de una flota pero sí en otro
+-- nivel u otra flota; el tope de 10 por nivel y flota (también al cambiar de nivel); corregir o quitar a un director de OTRA flota no existe; el
+-- reclamo del correo lo gana UNO solo (insertar la llave es reclamarla), un arriendo vencido se retoma con otro token y el viejo ya no cierra, lo
+-- cerrado no se reclama de nuevo; la FK compuesta (la conversación o el director de otra flota no sirven); lo de más de 6 h sin cerrar se abandona;
+-- el dominio de eventos reescrito admite los dos nuevos; el rol authenticated no escribe ni ejecuta nada.
+-- Esperado: VIGIA_CORREO_0673 sin-repetidos=t otro-nivel-y-flota=t tope-10=t tope-cambio-nivel=t ajeno-no-existe=t reclamo-unico=t arriendo-retoma=t token-viejo-no-cierra=t cerrado-no-se-reclama=t fk-compuesta=t abandona-6h=t evento-dominio=t solo-servicio=t
+do $$
+declare
+  ta uuid; tb uuid; cli uuid; con uuid; conv uuid; da uuid; db uuid; r1 record; r2 record; n int; i int; t0 timestamptz := now();
+  sin_rep boolean := false; otro boolean := false; tope boolean := false; tope_nivel boolean := false; ajeno boolean := false;
+  unico boolean := false; retoma boolean := false; viejo boolean := false; cerrado boolean := false; fk boolean := false;
+  abandona boolean := false; evento boolean := false; solo boolean := false;
+  datos constant jsonb := '{"cliente":"C","motivo":"sin_respuesta","minutos":45,"nivel":1}';
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0673 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0673 B') returning id into tb;
+  insert into cliente (tenant_id, nombre) values (ta, 'Cliente A') returning id into cli;
+  insert into vigia_contacto (tenant_id, cliente_id, telefono, telefono_hash, nombre, consentimiento_en, consentimiento_origen)
+    values (ta, cli, '525573990001', repeat('c', 64), 'Compras', now(), 'alta_flota') returning id into con;
+  insert into vigia_conversacion (tenant_id, contacto_id, cliente_id) values (ta, con, cli) returning id into conv;
+
+  da := vigia_director_guardar(ta, null, 1, 'Gerente', '525511113333', 'Gerente@Empresa.mx', null);
+  begin perform vigia_director_guardar(ta, null, 1, 'Otro', '525511113333', null, null); exception when unique_violation then sin_rep := true; end;
+  if sin_rep then
+    sin_rep := false;
+    begin perform vigia_director_guardar(ta, null, 1, 'Otro', null, 'GERENTE@empresa.mx', null); exception when unique_violation then sin_rep := true; end;
+  end if;
+
+  db := vigia_director_guardar(tb, null, 1, 'Gerente B', '525511113333', 'gerente@empresa.mx', null);
+  otro := vigia_director_guardar(ta, null, 2, 'Dueño', '525511113333', 'gerente@empresa.mx', null) is not null and db is not null;
+
+  begin perform vigia_director_guardar(ta, db, 1, 'Cruce', '525511113333', null, null); exception when sqlstate 'P0002' then ajeno := true; end;
+  ajeno := ajeno and not vigia_director_quitar(ta, db) and (select nombre from vigia_director where id = db) = 'Gerente B';
+
+  for i in 1..9 loop perform vigia_director_guardar(ta, null, 1, 'G' || i, '52551100' || lpad(i::text, 4, '0'), null, null); end loop;
+  begin perform vigia_director_guardar(ta, null, 1, 'G11', null, 'g11@empresa.mx', null); exception when sqlstate '54000' then tope := true; end;
+  begin perform vigia_director_guardar(ta, (select id from vigia_director where tenant_id = ta and nivel = 2 limit 1), 1, 'Subir', '525511118888', null, null);
+  exception when sqlstate '54000' then tope_nivel := true; end;
+
+  select * into r1 from vigia_correo_reclamar(ta, conv, 'v:n1:abc', 1, da, 'dir@empresa.mx', datos, 300, t0);
+  select count(*) into n from vigia_correo_reclamar(ta, conv, 'v:n1:abc', 1, da, 'dir@empresa.mx', datos, 300, t0 + interval '1 minute');
+  unico := r1.o_id is not null and n = 0;
+  select * into r2 from vigia_correo_reclamar(ta, conv, 'v:n1:abc', 1, da, 'dir@empresa.mx', datos, 300, t0 + interval '10 minutes');
+  retoma := r2.o_id = r1.o_id and r2.o_token <> r1.o_token;
+  viejo := not vigia_correo_cerrar(ta, r1.o_id, r1.o_token, 'enviado', null, t0 + interval '11 minutes')
+    and vigia_correo_cerrar(ta, r2.o_id, r2.o_token, 'sin_configurar', 'falta la llave', t0 + interval '11 minutes');
+  select count(*) into n from vigia_correo_reclamar(ta, conv, 'v:n1:abc', 1, da, 'dir@empresa.mx', datos, 300, t0 + interval '2 days');
+  cerrado := n = 0 and (select estado from vigia_aviso_correo where id = r1.o_id) = 'sin_configurar';
+
+  begin perform vigia_correo_reclamar(tb, conv, 'v:n1:fk', 1, null, 'x@empresa.mx', datos, 300, t0); exception when foreign_key_violation then fk := true; end;
+  if fk then
+    fk := false;
+    begin perform vigia_correo_reclamar(ta, conv, 'v:n1:fk2', 1, db, 'x@empresa.mx', datos, 300, t0); exception when foreign_key_violation then fk := true; end;
+  end if;
+
+  perform vigia_correo_reclamar(ta, conv, 'v:n1:viejo', 1, null, 'v@empresa.mx', datos, 300, t0);
+  update vigia_aviso_correo set created_at = t0 - interval '7 hours' where tenant_id = ta and clave = 'v:n1:viejo';
+  perform count(*) from vigia_correos_vencidos(50, t0 + interval '2 hours');
+  abandona := (select estado from vigia_aviso_correo where tenant_id = ta and clave = 'v:n1:viejo') = 'red';
+
+  insert into vigia_evento (tenant_id, conversacion_id, tipo) values (ta, conv, 'correo_enviado'), (ta, conv, 'correo_fallo'), (ta, conv, 'entrante');
+  evento := true;
+  begin insert into vigia_evento (tenant_id, conversacion_id, tipo) values (ta, conv, 'inventado'); evento := false; exception when check_violation then null; end;
+
+  solo := not has_table_privilege('authenticated', 'public.vigia_director', 'insert')
+    and not has_table_privilege('authenticated', 'public.vigia_aviso_correo', 'insert')
+    and not has_function_privilege('authenticated', 'public.vigia_director_guardar(uuid, uuid, integer, text, text, text, uuid)', 'execute')
+    and not has_function_privilege('authenticated', 'public.vigia_correo_reclamar(uuid, uuid, text, integer, uuid, text, jsonb, integer, timestamptz)', 'execute')
+    and not has_function_privilege('authenticated', 'public.vigia_correos_vencidos(integer, timestamptz)', 'execute');
+
+  raise exception E'VIGIA_CORREO_0673 sin-repetidos=% otro-nivel-y-flota=% tope-10=% tope-cambio-nivel=% ajeno-no-existe=% reclamo-unico=% arriendo-retoma=% token-viejo-no-cierra=% cerrado-no-se-reclama=% fk-compuesta=% abandona-6h=% evento-dominio=% solo-servicio=%   (esperado t / t / t / t / t / t / t / t / t / t / t / t / t)',
+    sin_rep, otro, tope, tope_nivel, ajeno, unico, retoma, viejo, cerrado, fk, abandona, evento, solo;
+end $$;
+
+-- ── 335. Vigía, la lista de directores y los correos de respaldo solo los lee el dueño de la flota (mig. 0677) ──
+-- La 0673/0674 dejaban leer por PostgREST la lista de directores (teléfonos y correos completos) y los destinos de los correos de respaldo a todo
+-- el que «atiende clientes» (flota_admin y encargado). La pantalla ya los enmascaraba para el encargado, pero con su JWT el encargado los pedía
+-- completos. Lo que solo la base demuestra: el dueño lee los de SU flota y solo esos, el encargado y el contador no leen nada, el dueño de otra
+-- flota no ve los de ésta, y `es_dueno_flota()` no es ejecutable por anon.
+-- Esperado: VIGIA_DUENO_0677 dueno-lee-lo-suyo=t dueno-no-ve-otra-flota=t encargado-no-lee=t contador-no-lee=t anon-sin-funcion=t
+do $$
+declare
+  ta uuid; tb uuid; ca uuid; cb uuid; con_a uuid; con_b uuid; conv_a uuid; conv_b uuid; ua uuid; ue uuid; uc uuid;
+  dueno boolean := false; otra boolean := false; encargado boolean := false; contador boolean := false; anon boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0677 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0677 B') returning id into tb;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ 0677 CA') returning id into ca;
+  insert into cliente (tenant_id, nombre) values (tb, 'ZZZ 0677 CB') returning id into cb;
+  ua := gen_random_uuid(); ue := gen_random_uuid(); uc := gen_random_uuid();
+  insert into app_user (id, tenant_id, email, rol) values (ua, ta, 'dueno-0677@test.invalid', 'flota_admin');
+  insert into app_user (id, tenant_id, email, rol) values (ue, ta, 'encargado-0677@test.invalid', 'encargado');
+  insert into app_user (id, tenant_id, email, rol) values (uc, ta, 'contador-0677@test.invalid', 'contador');
+  insert into vigia_contacto (tenant_id, cliente_id, telefono, telefono_hash, nombre, consentimiento_en, consentimiento_origen)
+    values (ta, ca, '525577990001', repeat('d', 64), 'Compras A', now(), 'alta_flota') returning id into con_a;
+  insert into vigia_contacto (tenant_id, cliente_id, telefono, telefono_hash, nombre, consentimiento_en, consentimiento_origen)
+    values (tb, cb, '525577990002', repeat('e', 64), 'Compras B', now(), 'alta_flota') returning id into con_b;
+  insert into vigia_conversacion (tenant_id, contacto_id, cliente_id) values (ta, con_a, ca) returning id into conv_a;
+  insert into vigia_conversacion (tenant_id, contacto_id, cliente_id) values (tb, con_b, cb) returning id into conv_b;
+  perform vigia_director_guardar(ta, null, 1, 'Ana', '525511110677', 'ana-0677@test.invalid', null);
+  perform vigia_director_guardar(tb, null, 1, 'Beto', '525511110678', 'beto-0677@test.invalid', null);
+  perform vigia_correo_reclamar(ta, conv_a, 'zzz-0677-a', 1, null, 'ana-0677@test.invalid', '{}'::jsonb);
+  perform vigia_correo_reclamar(tb, conv_b, 'zzz-0677-b', 1, null, 'beto-0677@test.invalid', '{}'::jsonb);
+
+  perform set_config('request.jwt.claims', json_build_object('sub', ua, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  dueno := (select count(*) from vigia_director where telefono = '525511110677' and correo = 'ana-0677@test.invalid') = 1
+    and (select count(*) from vigia_aviso_correo where destino_correo = 'ana-0677@test.invalid') = 1;
+  otra := not exists (select 1 from vigia_director where tenant_id = tb) and not exists (select 1 from vigia_aviso_correo where tenant_id = tb);
+  execute 'reset role';
+
+  perform set_config('request.jwt.claims', json_build_object('sub', ue, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  encargado := not exists (select 1 from vigia_director) and not exists (select 1 from vigia_aviso_correo);
+  execute 'reset role';
+
+  perform set_config('request.jwt.claims', json_build_object('sub', uc, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  contador := not exists (select 1 from vigia_director) and not exists (select 1 from vigia_aviso_correo);
+  execute 'reset role';
+
+  anon := not has_function_privilege('anon', 'public.es_dueno_flota()', 'execute') and not has_function_privilege('public', 'public.es_dueno_flota()', 'execute');
+
+  raise exception E'VIGIA_DUENO_0677 dueno-lee-lo-suyo=% dueno-no-ve-otra-flota=% encargado-no-lee=% contador-no-lee=% anon-sin-funcion=%   (esperado t / t / t / t / t)',
+    dueno, otra, encargado, contador, anon;
+end $$;
+
+-- ── 336. Peajes, re-importar un curso no reactiva el que la flota desactivó, y los cursos ya no tienen grants abiertos (mig. 0678) ──
+-- La 0665 hacía `activo = true` en el `on conflict` de `peaje_curso_reemplazar`: el curso que la flota dio de baja a mano volvía a encenderse con el
+-- siguiente import. Ahora el import actualiza los datos y RESPETA `activo` (uno nuevo nace activo). Además `peaje_curso` y `peaje_curso_caseta`
+-- pierden los grants por defecto de Supabase: solo service_role las toca.
+-- Esperado: CURSOS_BAJA_0678 nuevo-nace-activo=t reimport-actualiza=t baja-respetada=t activo-sigue-activo=t sin-grants-abiertos=t
+do $$
+declare
+  ta uuid; ua uuid; k1 uuid; r jsonb; nuevo boolean := false; actualiza boolean := false; baja boolean := false; sigue boolean := false; grants boolean := true; t text; p text;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0678 A') returning id into ta;
+  insert into unidad (tenant_id, numero_economico) values (ta, 'ZZZ-0678-A') returning id into ua;
+  insert into peaje_caseta (tenant_id, nombre, nombre_norm, lat, lng) values (ta, 'ZZZ 0678 K1', 'zzz 0678 k1', 19.4, -99.1) returning id into k1;
+
+  r := peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-C1', 'nombre', 'Ruta vieja', 'tipo', 'casetas', 'unidad_id', ua, 'casetas', jsonb_build_array(k1))));
+  nuevo := r->>'estado' = 'ok' and (select activo from peaje_curso where tenant_id = ta and codigo = 'ZZZ-C1');
+  update peaje_curso set activo = false where tenant_id = ta and codigo = 'ZZZ-C1';
+  r := peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-C1', 'nombre', 'Ruta nueva', 'tipo', 'casetas', 'unidad_id', ua, 'casetas', jsonb_build_array(k1))));
+  actualiza := (r->>'actualizados')::int = 1 and (select nombre from peaje_curso where tenant_id = ta and codigo = 'ZZZ-C1') = 'Ruta nueva';
+  baja := not (select activo from peaje_curso where tenant_id = ta and codigo = 'ZZZ-C1');
+  perform peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-C2', 'nombre', 'Otro', 'tipo', 'casetas', 'unidad_id', ua, 'casetas', jsonb_build_array(k1))));
+  perform peaje_curso_reemplazar(ta, jsonb_build_array(jsonb_build_object('codigo', 'ZZZ-C2', 'nombre', 'Otro 2', 'tipo', 'casetas', 'unidad_id', ua, 'casetas', jsonb_build_array(k1))));
+  sigue := (select activo from peaje_curso where tenant_id = ta and codigo = 'ZZZ-C2');
+
+  foreach t in array array['public.peaje_curso', 'public.peaje_curso_caseta'] loop
+    foreach p in array array['select', 'insert', 'update', 'delete'] loop
+      if has_table_privilege('anon', t, p) or has_table_privilege('authenticated', t, p) or has_table_privilege('public', t, p) then grants := false; end if;
+    end loop;
+  end loop;
+
+  raise exception E'CURSOS_BAJA_0678 nuevo-nace-activo=% reimport-actualiza=% baja-respetada=% activo-sigue-activo=% sin-grants-abiertos=%   (esperado t / t / t / t / t)',
+    nuevo, actualiza, baja, sigue, grants;
+end $$;
+
+-- ── 337. Carta Porte, reabrir un hijo rechazado a mano toma el cliente y el remitente de la llegada nueva (mig. 0679) ──
+-- La 0672 reabría el hijo conservando cliente, remitente, asunto y canal de la llegada ANTERIOR (otro remitente, quizá otro cliente) y las marcas
+-- del documento rechazado. La 0679 los toma del padre que se divide ahora, limpia lo que dependía del rechazo (revisor, apertura, exportación) y
+-- renombra el archivo al nuevo.
+-- Esperado: CP_REABRE_0679 accion-reabierto=t cliente-nuevo=t remitente-asunto-canal-nuevos=t nombre-nuevo=t marcas-limpias=t
+do $$
+declare
+  ta uuid; c_viejo uuid; c_nuevo uuid; padre uuid := gen_random_uuid(); hijo uuid := gen_random_uuid(); sha_h text := encode(sha256(convert_to('0679-v-h1', 'utf8')), 'hex');
+  r record; d cp_documento%rowtype; accion boolean := false; cli boolean := false; rem boolean := false; nom boolean := false; marcas boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0679 A') returning id into ta;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ 0679 anterior') returning id into c_viejo;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ 0679 nuevo') returning id into c_nuevo;
+  insert into cp_documento (id, tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, procesando_hasta, storage_ruta, cliente_id, remitente, asunto, remitente_reconocido)
+    values (padre, ta, 'whatsapp', 'excel', 'plan.xlsx', 1000, encode(sha256(convert_to('0679-v-padre', 'utf8')), 'hex'), 'procesando', 2, 1, now() + interval '2 minutes', 'ruta/p', c_nuevo, 'nuevo@remitente.test.invalid', 'Plan nuevo', true);
+  insert into cp_documento (id, tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, version, intentos, storage_ruta, cliente_id, remitente, asunto, remitente_reconocido, rechazo_motivo, exportado_en, abierto_en, tiempo_revision_seg)
+    values (hijo, ta, 'correo', 'csv', 'h1.csv', 50, sha_h, 'rechazado', 4, 1, 'ruta/viejo', c_viejo, 'viejo@remitente.test.invalid', 'Asunto viejo', false, 'lo rechazó la oficina', now(), now(), 30);
+
+  select * into r from cp_documento_dividir(ta, padre, 2, jsonb_build_array(
+    jsonb_build_object('indice', 1, 'clave', 'F-1', 'nombre', 'h1-nuevo.csv', 'sha256', sha_h, 'bytes', 77, 'storage_ruta', 'ruta/nuevo-1'),
+    jsonb_build_object('indice', 2, 'clave', 'F-2', 'nombre', 'h2.csv', 'sha256', encode(sha256(convert_to('0679-v-h2', 'utf8')), 'hex'), 'bytes', 60, 'storage_ruta', 'ruta/nuevo-2')),
+    now() + interval '180 days', now() + interval '90 days') x where x.indice = 1;
+  select * into d from cp_documento where id = hijo;
+  accion := r.accion = 'reabierto' and d.estado = 'recibido' and d.storage_ruta = 'ruta/nuevo-1';
+  cli := d.cliente_id = c_nuevo;
+  rem := d.remitente = 'nuevo@remitente.test.invalid' and d.asunto = 'Plan nuevo' and d.remitente_reconocido is true and d.canal = 'whatsapp';
+  nom := d.nombre_archivo = 'h1-nuevo.csv';
+  marcas := d.exportado_en is null and d.abierto_en is null and d.revisado_por is null and d.rechazo_motivo is null and d.tiempo_revision_seg is null;
+
+  raise exception E'CP_REABRE_0679 accion-reabierto=% cliente-nuevo=% remitente-asunto-canal-nuevos=% nombre-nuevo=% marcas-limpias=%   (esperado t / t / t / t / t)',
+    accion, cli, rem, nom, marcas;
+end $$;
+
+-- ── 340. Vigía, el tope de 200 respuestas rápidas sigue rebotando la 201 nueva y no frena una corrección, con el candado por flota (mig. 0693) ──
+-- La carrera (dos aprobaciones traslapadas) la prueba supabase/tests/0693_vigia_respuesta_rapida_tope_concurrencia.sh con sesiones reales; aquí,
+-- en una sola sesión, que la función con candado conserva el contrato de la 0647.
+-- Esperado: VIGIA_TOPE_0693 nueva-201-rebota=t correccion-no-topa=t conteo-200=t otra-flota-libre=t
+do $$
+declare
+  ta uuid; tb uuid; i int; n int; rebota boolean := false; corrige boolean := false; otra boolean := false;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0693 A') returning id into ta;
+  insert into tenant (nombre) values ('ZZZ VERIF 0693 B') returning id into tb;
+  for i in 1..200 loop
+    perform vigia_respuesta_rapida_aprobar(ta, 'otro', 'zzz pregunta 0693 ' || i, 'respuesta ' || i, null);
+  end loop;
+  begin perform vigia_respuesta_rapida_aprobar(ta, 'otro', 'zzz pregunta 0693 201', 'respuesta', null);
+  exception when sqlstate '54000' then rebota := true; end;
+  perform vigia_respuesta_rapida_aprobar(ta, 'otro', 'ZZZ PREGUNTA 0693 7', 'corregida', null);
+  corrige := (select texto from vigia_respuesta_rapida where tenant_id = ta and lower(pregunta) = 'zzz pregunta 0693 7' and estado = 'aprobada') = 'corregida';
+  select count(*) into n from vigia_respuesta_rapida where tenant_id = ta and estado = 'aprobada';
+  otra := vigia_respuesta_rapida_aprobar(tb, 'otro', 'zzz pregunta 0693 b', 'respuesta', null) is not null;
+
+  raise exception E'VIGIA_TOPE_0693 nueva-201-rebota=% correccion-no-topa=% conteo-200=% otra-flota-libre=%   (esperado t / t / t / t)',
+    rebota, corrige, n = 200, otra;
+end $$;
+
+-- ── 341. Convenios, llevar una edición a los viajes toca solo los EN CURSO: un viaje en cuadre o liquidado no recibe la foto nueva (mig. 0694) ──
+-- Esperado: CONVENIO_REFRESCO_0694 solo-abierto-refresca=t abierto-reabre-despacho=t cuadre-intacto=t liquidado-intacto=t
+do $$
+declare
+  ta uuid; ca uuid; op1 uuid; op2 uuid; op3 uuid; conv uuid; r jsonb; v int; va uuid; vc uuid; vl uuid;
+  vieja constant jsonb := '[{"categoria":"puerta","texto":"Vieja","momento":"despacho","lugar":"origen","orden":0}]';
+  solo boolean := false; reabre boolean := false; cuadre boolean := false; liquidado boolean := false; hechos int;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0694 A') returning id into ta;
+  insert into cliente (tenant_id, nombre) values (ta, 'ZZZ 0694 cliente') returning id into ca;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0694 op1', '525500069411') returning id into op1;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0694 op2', '525500069412') returning id into op2;
+  insert into operador (tenant_id, nombre, telefono) values (ta, 'ZZZ 0694 op3', '525500069413') returning id into op3;
+  r := guardar_convenio(ta, null, ca, 'ZZZ Ruta 0694', null, null, null, null, null, null, null, null, vieja);
+  conv := (r->>'id')::uuid;
+  insert into viaje (tenant_id, operador_id, folio, estatus, cliente_id) values (ta, op1, 'ZZZ-A', 'abierto', ca) returning id into va;
+  insert into viaje (tenant_id, operador_id, folio, estatus, cliente_id) values (ta, op2, 'ZZZ-C', 'en_cuadre', ca) returning id into vc;
+  insert into viaje (tenant_id, operador_id, folio, estatus, cliente_id) values (ta, op3, 'ZZZ-L', 'liquidado', ca) returning id into vl;
+  insert into viaje_convenio (viaje_id, tenant_id, convenio_id, cliente_id, instrucciones, despacho_enviado_en, despacho_canal)
+    select x, ta, conv, ca, vieja, now(), 'texto' from unnest(array[va, vc, vl]) x;
+  select version into v from cliente_convenio where id = conv;
+  perform guardar_convenio(ta, conv, null, 'ZZZ Ruta 0694', null, null, null, null, null, null, null, v,
+    '[{"categoria":"puerta","texto":"Puerta nueva","momento":"despacho","lugar":"origen","orden":0}]');
+  select count(*) into hechos from refrescar_viajes_de_convenio(ta, conv, true);
+  solo := hechos = 1;
+  reabre := (select instrucciones::text like '%Puerta nueva%' and despacho_enviado_en is null from viaje_convenio where viaje_id = va);
+  cuadre := (select instrucciones::text like '%Vieja%' and despacho_enviado_en is not null from viaje_convenio where viaje_id = vc);
+  liquidado := (select instrucciones::text like '%Vieja%' and despacho_enviado_en is not null from viaje_convenio where viaje_id = vl);
+
+  raise exception E'CONVENIO_REFRESCO_0694 solo-abierto-refresca=% abierto-reabre-despacho=% cuadre-intacto=% liquidado-intacto=%   (esperado t / t / t / t)',
+    solo, reabre, cuadre, liquidado;
+end $$;
+
+-- ── 342. Carta Porte, el aviso de dudas a la oficina cubre correo, WhatsApp y panel, y sigue siendo una vez por documento (mig. 0695) ──
+-- Esperado: CP_POR_AVISAR_0695 correo=t whatsapp=t panel=t limpio-no=t una-vez=t
+do $$
+declare
+  ta uuid; ids uuid[]; c1 uuid := gen_random_uuid(); c2 uuid := gen_random_uuid(); c3 uuid := gen_random_uuid(); c4 uuid := gen_random_uuid();
+  v_mal constant jsonb := '{"hallazgos":[],"bloqueos":1,"porConfirmar":0,"listoParaAprobar":false}';
+  v_ok constant jsonb := '{"hallazgos":[],"bloqueos":0,"porConfirmar":0,"listoParaAprobar":true}';
+  r_correo boolean; r_wa boolean; r_panel boolean; r_limpio boolean; r_una boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0695 A') returning id into ta;
+  insert into cp_documento (id, tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, storage_ruta, validacion, confianza_min) values
+    (c1, ta, 'correo',   'pdf_texto', 'zzz1.pdf', 10, encode(sha256(convert_to('0695-v-1', 'utf8')), 'hex'), 'por_revisar', 'r/1', v_mal, 0.95),
+    (c2, ta, 'whatsapp', 'pdf_texto', 'zzz2.pdf', 10, encode(sha256(convert_to('0695-v-2', 'utf8')), 'hex'), 'por_revisar', 'r/2', v_mal, 0.95),
+    (c3, ta, 'manual',   'pdf_texto', 'zzz3.pdf', 10, encode(sha256(convert_to('0695-v-3', 'utf8')), 'hex'), 'por_revisar', 'r/3', v_mal, 0.95),
+    (c4, ta, 'whatsapp', 'pdf_texto', 'zzz4.pdf', 10, encode(sha256(convert_to('0695-v-4', 'utf8')), 'hex'), 'por_revisar', 'r/4', v_ok, 0.99);
+  select array_agg(id) into ids from cp_documentos_por_avisar(200, 0.85, 3) where tenant_id = ta;
+  r_correo := c1 = any(ids); r_wa := c2 = any(ids); r_panel := c3 = any(ids); r_limpio := not (c4 = any(ids));
+  perform cp_documento_reclamar_aviso(ta, c2, 'hallazgos');
+  select array_agg(id) into ids from cp_documentos_por_avisar(200, 0.85, 3) where tenant_id = ta;
+  r_una := not (c2 = any(ids)) and c1 = any(ids);
+
+  raise exception E'CP_POR_AVISAR_0695 correo=% whatsapp=% panel=% limpio-no=% una-vez=%   (esperado t / t / t / t / t)',
+    r_correo, r_wa, r_panel, r_limpio, r_una;
+end $$;
+
+-- ── 350. Latencias medidas: p50/p95 en SQL, duración de la IA que NO se inventa y retención por tandas (mig. 0700) ──
+-- `latencia_percentiles` calcula con percentile_disc (rango más cercano: un valor que ocurrió) sobre las muestras de la ventana; sobre 1..100 ms da
+-- p50 = 50 y p95 = 95 exactos. `llm_costo.duracion_ms` NULL es «no medido» y NO entra al percentil como cero. `purgar_latencia` borra por tandas (parcial
+-- si queda). La tabla es deny-all y las funciones solo las ejecuta service_role.
+-- Esperado: LATENCIA_0700 checks-rebotan=t percentiles-50-95-max-fallos=t ventana-respetada=t ia-null-no-es-cero=t purga-por-tandas=t sin-grants-abiertos=t
+do $$
+declare
+  ta uuid; r record; checks boolean := true; perc boolean; ventana boolean; ia boolean; purga boolean; grants boolean := true;
+  p jsonb; f text; t text; p_ text;
+begin
+  begin insert into latencia_muestra (tipo, nombre, ms) values ('otro', 'zzz', 1); checks := false; exception when check_violation then null; end;
+  begin insert into latencia_muestra (tipo, nombre, ms) values ('ruta', 'zzz', -1); checks := false; exception when check_violation then null; end;
+  begin insert into latencia_muestra (tipo, nombre, ms) values ('ruta', '', 1); checks := false; exception when check_violation then null; end;
+
+  insert into latencia_muestra (tipo, nombre, ms, ok, creado_en)
+    select 'ruta', 'zzz.0700', g, g <> 100, timestamptz '2031-03-01 12:00:00+00' from generate_series(1, 100) g;
+  insert into latencia_muestra (tipo, nombre, ms, creado_en) values ('ruta', 'zzz.0700', 99999, timestamptz '2031-01-01 12:00:00+00');
+  select * into r from latencia_percentiles('ruta', timestamptz '2031-02-01 00:00:00+00', timestamptz '2031-04-01 00:00:00+00') where nombre = 'zzz.0700';
+  perc := r.p50_ms = 50 and r.p95_ms = 95 and r.max_ms = 100 and r.fallos = 1;
+  ventana := r.muestras = 100;
+
+  insert into tenant (nombre) values ('ZZZ VERIF 0700') returning id into ta;
+  insert into llm_costo (tenant_id, fase, modelo, tokens_in, tokens_out, costo_usd, duracion_ms, created_at)
+    select ta, 'ocr', 'm', 1, 1, 0.001, g * 10, timestamptz '2031-03-01 12:00:00+00' from generate_series(1, 10) g;
+  insert into llm_costo (tenant_id, fase, modelo, tokens_in, tokens_out, costo_usd, created_at)
+    values (ta, 'ocr', 'm', 1, 1, 0.001, timestamptz '2031-03-01 12:00:00+00'), (ta, 'chat', 'm', 1, 1, 0.001, timestamptz '2031-03-01 12:00:00+00');
+  select * into r from llm_costo_percentiles(timestamptz '2031-02-01 00:00:00+00', timestamptz '2031-04-01 00:00:00+00') where fase = 'ocr';
+  ia := r.muestras = 10 and r.sin_duracion = 1 and r.p50_ms = 50 and r.p95_ms = 100;
+  select * into r from llm_costo_percentiles(timestamptz '2031-02-01 00:00:00+00', timestamptz '2031-04-01 00:00:00+00') where fase = 'chat';
+  ia := ia and r.muestras = 0 and r.sin_duracion = 1 and r.p50_ms is null and r.p95_ms is null;
+
+  delete from latencia_muestra where nombre = 'zzz.0700';
+  insert into latencia_muestra (tipo, nombre, ms, creado_en) select 'cron', 'zzz.0700', 5, now() - interval '30 days' from generate_series(1, 1200);
+  p := purgar_latencia(now(), 14, 1000);
+  purga := (p->>'borradas')::int >= 1000 and (p->>'parcial')::boolean and (select count(*) from latencia_muestra where nombre = 'zzz.0700') = 200;
+
+  foreach f in array array['latencia_percentiles(text,timestamptz,timestamptz)', 'llm_costo_percentiles(timestamptz,timestamptz)', 'purgar_latencia(timestamptz,integer,integer)'] loop
+    foreach t in array array['anon', 'authenticated', 'public'] loop
+      if has_function_privilege(t, 'public.' || f, 'execute') then grants := false; end if;
+    end loop;
+    if not has_function_privilege('service_role', 'public.' || f, 'execute') then grants := false; end if;
+  end loop;
+  foreach p_ in array array['select', 'insert', 'update', 'delete'] loop
+    if has_table_privilege('anon', 'public.latencia_muestra', p_) or has_table_privilege('authenticated', 'public.latencia_muestra', p_) then grants := false; end if;
+  end loop;
+  if not (select relrowsecurity from pg_class where oid = 'public.latencia_muestra'::regclass) or exists (select 1 from pg_policies where tablename = 'latencia_muestra') then grants := false; end if;
+
+  raise exception E'LATENCIA_0700 checks-rebotan=% percentiles-50-95-max-fallos=% ventana-respetada=% ia-null-no-es-cero=% purga-por-tandas=% sin-grants-abiertos=%   (esperado t / t / t / t / t / t)',
+    checks, perc, ventana, ia, purga, grants;
+end $$;
+
+-- ── 351. La página de estado pública: contadores por día MX que cuadran, ventana de 30 días sin filas inventadas y guardia en el dominio de cron_latido (mig. 0701) ──
+-- `registrar_estado` suma UNA medición al día MX del componente (ok + degradadas + caídas = muestras siempre; a las 02:00 UTC todavía es el día anterior).
+-- `estado_30_dias` solo devuelve la ventana y no inventa días sin medición. `cron_latido` admite `guardia` (y sigue rechazando un id inventado).
+-- Esperado: ESTADO_0701 contadores=t dia-mexico=t coherencia-rebota=t ventana-30=t guardia-en-dominio=t sin-grants-abiertos=t
+do $$
+declare
+  r record; contadores boolean; dia_mx boolean; coherencia boolean := true; ventana boolean; guardia boolean := true; grants boolean := true; f text; t text; p_ text; n integer;
+begin
+  for i in 1..10 loop perform registrar_estado('app', 'ok', timestamptz '2031-03-03 18:00:00+00'); end loop;
+  for i in 1..3 loop perform registrar_estado('app', 'degradado', timestamptz '2031-03-03 18:05:00+00'); end loop;
+  for i in 1..2 loop perform registrar_estado('app', 'caido', timestamptz '2031-03-03 18:10:00+00'); end loop;
+  select * into r from estado_dia where componente = 'app' and dia = date '2031-03-03';
+  contadores := r.muestras = 15 and r.ok = 10 and r.degradadas = 3 and r.caidas = 2 and (select count(*) from estado_dia where componente = 'app' and dia = date '2031-03-03') = 1;
+  perform registrar_estado('base', 'ok', timestamptz '2031-03-04 02:00:00+00');
+  dia_mx := (select dia from estado_dia where componente = 'base' and dia in (date '2031-03-03', date '2031-03-04')) = date '2031-03-03';
+
+  begin update estado_dia set ok = ok + 1 where componente = 'app' and dia = date '2031-03-03'; coherencia := false; exception when check_violation then null; end;
+  begin perform registrar_estado('app', 'bien', now()); coherencia := false; exception when sqlstate 'PU001' then null; end;
+  begin perform registrar_estado('intruso', 'ok', now()); coherencia := false; exception when check_violation then null; end;
+
+  insert into estado_dia (dia, componente, muestras, ok, degradadas, caidas) values
+    (date '2031-03-04', 'whatsapp', 4, 4, 0, 0), (date '2031-02-03', 'whatsapp', 4, 4, 0, 0), (date '2031-02-02', 'whatsapp', 4, 4, 0, 0);
+  select count(*) into n from estado_30_dias(timestamptz '2031-03-05 00:00:00+00') where componente = 'whatsapp';
+  -- hoy = 4-mar (MX): entran 4-mar y 3-feb (el día 30 de la ventana); 2-feb (el día 31) queda fuera. No hay filas de `correo`: no se inventan.
+  ventana := n = 2 and not exists (select 1 from estado_30_dias(timestamptz '2031-03-05 00:00:00+00') where componente = 'correo');
+
+  insert into cron_latido (id) values ('guardia') on conflict (id) do nothing;
+  begin insert into cron_latido (id) values ('inventado'); guardia := false; exception when check_violation then null; end;
+
+  foreach f in array array['registrar_estado(text,text,timestamptz)', 'estado_30_dias(timestamptz,integer)', 'purgar_estado_dia(timestamptz,integer)'] loop
+    foreach t in array array['anon', 'authenticated', 'public'] loop
+      if has_function_privilege(t, 'public.' || f, 'execute') then grants := false; end if;
+    end loop;
+    if not has_function_privilege('service_role', 'public.' || f, 'execute') then grants := false; end if;
+  end loop;
+  foreach p_ in array array['select', 'insert', 'update', 'delete'] loop
+    if has_table_privilege('anon', 'public.estado_dia', p_) or has_table_privilege('authenticated', 'public.estado_dia', p_) then grants := false; end if;
+  end loop;
+  if not (select relrowsecurity from pg_class where oid = 'public.estado_dia'::regclass) or exists (select 1 from pg_policies where tablename = 'estado_dia') then grants := false; end if;
+
+  raise exception E'ESTADO_0701 contadores=% dia-mexico=% coherencia-rebota=% ventana-30=% guardia-en-dominio=% sin-grants-abiertos=%   (esperado t / t / t / t / t / t)',
+    contadores, dia_mx, coherencia, ventana, guardia, grants;
 end $$;

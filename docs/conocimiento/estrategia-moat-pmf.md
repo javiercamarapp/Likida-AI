@@ -291,8 +291,8 @@ honestidad que este documento debe tener:
 
 ### Lo que NO es evidencia — el producto, cero
 
-- **Cero clientes pagando.** Grupo GAL y Transportes Innovativos son
-  **prospectos** — Grupo GAL con cita, Transportes Innovativos con una
+- **Cero clientes pagando.** Grupo GAL son
+  **prospectos** — Grupo GAL con cita, el cliente de demo con una
   llamada de descubrimiento realizada. Ninguno ha pagado un peso.
 - **Cero corridas reales con datos de cliente.** `viaje`, `cliente`,
   `factura_emitida` — todo en cero por falta de clientes, no de código
@@ -390,7 +390,7 @@ el producto YA registra hoy (no lo que "se podría construir"):
   solo — es Javier probándose a sí mismo. La trampa se cierra el día que el
   número quede verificado y un chofer real, sin que Javier lo asista, le
   escriba al bot por su cuenta.
-- **Un cliente que no paga.** Grupo GAL y Transportes Innovativos hoy son
+- **Un cliente que no paga.** Grupo GAL hoy son
   exactamente esto — interés real, cero compromiso de dinero. Interés no es
   PMF; es la etapa anterior a poder medir PMF.
 

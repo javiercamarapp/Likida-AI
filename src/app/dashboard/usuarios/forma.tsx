@@ -2,12 +2,14 @@
 
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { UserPlus, TriangleAlert, CheckCircle2 } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 // SOLO TIPOS: el catálogo `ROLES_INVITABLES` viaja como PROP desde la página
 // (mismo patrón que `MODOS_TARIFA` en /dashboard/clientes). `invitar.ts` hoy
 // no importa `supabaseAdmin`, pero importa `errores.ts` → `logger`, y un
 // import de valor ataría este bundle a lo que ese árbol importe mañana.
 import type { OpcionRol } from '@/lib/auth/invitar';
+import { AvisoResultado } from '../../admin/ui/aviso-resultado';
+import { BotonConfirmar } from '../../admin/ui/confirmar';
 
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
@@ -28,24 +30,9 @@ function Boton() {
   );
 }
 
-/** El aviso del resultado. El error sale VERBATIM: los `DatoInvalido` están
- *  escritos para leerse aquí y son lo único que dice QUÉ corregir. */
-function Aviso({ estado }: { estado: ResultadoForma }) {
-  if (!estado) return null;
-  return estado.ok ? (
-    <div className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
-      style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
-      <CheckCircle2 width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-      {estado.mensaje}
-    </div>
-  ) : (
-    <div className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
-      style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-      <TriangleAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-      {estado.error}
-    </div>
-  );
-}
+/** El aviso del resultado: el UNICO del panel (`admin/ui/aviso-resultado`). El error
+ *  del servidor se enseña VERBATIM: los `DatoInvalido` están escritos para leerse aquí. */
+const Aviso = AvisoResultado;
 
 /**
  * Invitar a alguien del equipo. Solo ALTA, sin `id` oculto: cambiar rol, dar
@@ -171,9 +158,8 @@ export function FormaCambiarRol({ accion, id, rolActual, roles }: {
 }
 
 /**
- * Dar de baja, con confirmación en DOS pasos pero SIN `confirm()`: el
- * diálogo nativo bloquea headless y no se puede mirar en un screenshot. Un
- * `<details>` deja el botón real detrás de un clic explícito.
+ * Dar de baja, con el diálogo de confirmación ÚNICO del panel (W2): dice qué
+ * pasa con la sesión y con el historial antes de que se confirme.
  */
 export function FormaDarDeBaja({ accion, id, nombre }: {
   accion: AccionForma;
@@ -182,24 +168,17 @@ export function FormaDarDeBaja({ accion, id, nombre }: {
 }) {
   const [estado, despachar] = useActionState(accion, null);
   return (
-    <details>
-      <summary className="cursor-pointer text-[12px] font-medium select-none list-none inline-flex items-center gap-1"
-        style={{ color: 'var(--bad)' }}>
-        Dar de baja
-      </summary>
-      <div className="pt-2 space-y-2">
-        <p className="text-[11.5px] m-0" style={{ color: 'var(--muted)' }}>
-          &ldquo;{nombre}&rdquo; deja de entrar al panel en su siguiente clic y su
-          sesión se revoca. No se borra nada: queda en la lista como dada de baja
-          y se puede reactivar.
-        </p>
-        <Aviso estado={estado} />
-        <form action={despachar}>
-          <input type="hidden" name="id" value={id} />
-          <BotonChico etiqueta="Sí, dar de baja" ocupado="Dando de baja…" tono="bad" />
-        </form>
-      </div>
-    </details>
+    <form action={despachar} className="space-y-1.5">
+      <input type="hidden" name="id" value={id} />
+      <BotonConfirmar
+        etiqueta="Dar de baja" tono="peligro" etiquetaConfirmar="Sí, dar de baja"
+        titulo={`Dar de baja a ${nombre}`}
+        descripcion="Deja de entrar al panel en su siguiente clic y su sesión se revoca. No se borra nada: queda en la lista como dada de baja y se puede reactivar."
+        className="text-[12px] font-medium select-none inline-flex items-center gap-1 hover:opacity-70 transition-opacity"
+        style={{ color: 'var(--bad)' }}
+      />
+      <Aviso estado={estado} />
+    </form>
   );
 }
 

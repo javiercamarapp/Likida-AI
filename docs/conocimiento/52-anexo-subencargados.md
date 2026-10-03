@@ -281,7 +281,7 @@ y no se vuelvan a inventar.
 | Dato | Columna | Por qué no se puede inventar |
 |---|---|---|
 | URL del aviso integral, **publicada y abierta** | `url_aviso_privacidad` | Art. 16 fr. II obliga a señalar el sitio; y ahí viven las fr. V (procedimiento ARCO), VI (cómo se comunican cambios), el art. 35 (cláusula de transferencias) y el art. 7 último párrafo (revocación). Sin ella el titular no puede ejercer nada. |
-| Razón social exacta del responsable | `razon_social` | Art. 15 fr. I. Hoy dice *TRANSPORTES INNOVATIVOS SA DE CV*, un prospecto sin contrato al que se le está atribuyendo una calidad jurídica que no aceptó. |
+| Razón social exacta del responsable | `razon_social` | Art. 15 fr. I. Hoy dice *TRANSPORTES CLIENTE DEMO SA DE CV*, un prospecto sin contrato al que se le está atribuyendo una calidad jurídica que no aceptó. |
 | Domicilio del responsable | `domicilio_fiscal` | Art. 15 fr. I. La fracción existe para que el titular sepa **dónde emplazar**; un domicilio inventado cumple la forma y falla en lo único que persigue. |
 | Nombre y correo de la persona o departamento de datos personales | (no hay columna) | Art. 29. Va en el integral. |
 
@@ -329,7 +329,7 @@ llega el dato.
 ## Lo que NO está cerrado y este documento llegó a dar por cerrado
 
 - **El aviso integral no existe.** `url_aviso_privacidad` del tenant de
-  producción apunta a `https://transportesinnovativos.mx/aviso-de-privacidad`, un
+  producción apunta a `https://ejemplo.com/aviso-de-privacidad`, un
   dominio **sin zona DNS** (NXDOMAIN, comprobado con `host`). El art. 16 obliga a
   *poner a disposición* el aviso; una liga que no abre no lo pone, y esa misma
   liga era la única respuesta al ejercicio de un derecho ARCO.

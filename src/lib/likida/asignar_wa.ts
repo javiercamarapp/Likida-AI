@@ -10,6 +10,7 @@ import {
 import { VIGENCIA_PENDIENTE_MS } from './despacho_wa';
 import { asignarUnidad, avisarAlChofer } from './operacion';
 import { reasignarOperador } from './repo';
+import { instruccionesAlCambiarOperador } from './convenios/envio';
 import { violaIndice } from './pg_errores';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import type { RolOficina } from './contactos';
@@ -338,7 +339,7 @@ export async function atenderAsignacionOficina(
           await asignarUnidad(cuenta.tenantId, pendiente.viajeId, pendiente.unidadId!);
           return `Unidad *${pendiente.unidadEco}* asignada a ${pendiente.viajeEtiqueta} ✅.`;
         }
-        await reasignarOperador(cuenta.tenantId, pendiente.viajeId, pendiente.nuevoOperadorId!);
+        const cambio = await reasignarOperador(cuenta.tenantId, pendiente.viajeId, pendiente.nuevoOperadorId!);
         // El aviso al chofer NUEVO es best-effort: la reasignación YA quedó, y
         // el resultado del envío no se puede afirmar (avisarAlChofer no lo
         // devuelve) — por eso el texto promete el intento, no la entrega.
@@ -349,6 +350,10 @@ export async function atenderAsignacionOficina(
           logger.error('asignar_wa.aviso_fallo', { viaje: pendiente.viajeId, err: e instanceof Error ? e.message : String(e) });
           lineaAviso = `⚠️ El aviso a ${pendiente.nuevoOperadorNombre} NO salió — mándalo desde Despacho.`;
         }
+        // Y sus instrucciones del convenio del cliente (puerta, con quién reportarse…): en la primera asignación y en el cambio
+        // de chofer. Nunca lanza; solo se cuenta si de verdad salieron.
+        const instrucciones = await instruccionesAlCambiarOperador(cuenta.tenantId, pendiente.viajeId, cambio);
+        if (instrucciones.estado === 'enviado') lineaAviso += ' También le mandé las instrucciones del convenio del cliente.';
         return `${pendiente.viajeEtiqueta.replace(/^el viaje/, 'El viaje')} quedó reasignado a *${pendiente.nuevoOperadorNombre}* ✅.\n${lineaAviso}`;
       } catch (e) {
         // El choque PERMANENTE del reasignar: el nuevo chofer ya trae un viaje

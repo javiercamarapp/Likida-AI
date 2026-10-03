@@ -54,6 +54,24 @@ function leeNotasDeProspecto(fuente: string): boolean {
   if (!/\.from\(\s*['"]prospecto['"]\s*\)/.test(fuente)) return false;
   return /\.select\(\s*['"`][^'"`]*\bnotas\b[^'"`]*['"`]/.test(fuente);
 }
+/**
+ * LEG-32C5-A1 (auditoría 32 c5, ALTO): LA SEGUNDA COLUMNA.
+ *
+ * Esta prueba vigilaba `prospecto.notas` y nada más. El dossier del
+ * investigador entra por otra tabla —`prospecto_dossier`— y llevaba al prompt
+ * del Redactor los correos de dominio ajeno que `investigador.ts:447-456`
+ * escribe CON LA DIRECCIÓN DENTRO DEL TEXTO, a propósito, para revisión
+ * humana. Mismo daño, misma ley, otro campo: el aviso promete que esa
+ * redacción va «sin tus datos de contacto» (`privacidad.ts:1085`).
+ *
+ * La lección de la auditoría 19 era «una protección pegada a UN llamador se
+ * queda en ese llamador». Esta es su gemela: una vigilancia pegada a UN campo
+ * se queda en ese campo.
+ */
+function leeDossierDeProspecto(fuente: string): boolean {
+  return /\.from\(\s*['"]prospecto_dossier['"]\s*\)/.test(fuente);
+}
+
 /** Interpolación directa de notas en un template — el patrón exacto de la
  *  fuga de las seis pasadas (`${prospecto.notas...}`, `${p.notas...}`). */
 const NOTAS_CRUDAS_EN_TEMPLATE = /\$\{\s*\w+\.notas\b/;
@@ -68,6 +86,14 @@ const NOTAS_CRUDAS_EN_TEMPLATE = /\$\{\s*\w+\.notas\b/;
  *   `correosVerificados`, que no salen del proceso). El candado de
  *   interpolación cruda (`${*.notas}`) le sigue aplicando: si algún día sus
  *   notas entran a un template, esta prueba truena igual.
+ *
+ * · investigador.ts, también para `prospecto_dossier` (MEDIDO el 26-sep-2026,
+ *   LEG-32C5-A1): lo ESCRIBE (`:459-469`, el upsert) y no lo lee para armar
+ *   ningún prompt — su `messages` sigue llevando sólo `prospecto.empresa` más
+ *   el texto de las páginas públicas. Es el productor del dato, no un
+ *   consumidor hacia el modelo, y por eso puede guardar la dirección completa:
+ *   la revisión humana la necesita. Quien tiene que limpiar es quien manda al
+ *   modelo.
  *
  * Añadir un archivo aquí exige repetir esa medición y escribirla — un
  * renglón sin medición en este arreglo es exactamente el agujero que esta
@@ -105,6 +131,27 @@ describe('la puerta única de datos de prospecto hacia el modelo', () => {
         violaciones.push(`${ruta.replace(RAIZ, '')}: interpola \${*.notas} crudo en un template — las notas tienen que pasar por notasSinPersona ANTES`);
       }
     }
+    expect(violaciones, violaciones.join('\n')).toEqual([]);
+  });
+
+  it('LEG-32C5-A1: todo archivo que llama al modelo y lee prospecto_dossier importa la puerta', () => {
+    const violaciones: string[] = [];
+    let vigilados = 0;
+    for (const ruta of archivos) {
+      const fuente = readFileSync(ruta, 'utf8');
+      if (!LLAMA_AL_MODELO.test(fuente) || !leeDossierDeProspecto(fuente)) continue;
+      vigilados += 1;
+      const importaPuerta = /from\s+['"](?:@\/lib\/likida\/prospectos\/seudonimo|\.{1,2}\/(?:\.\.\/)*(?:likida\/)?prospectos\/seudonimo)['"]/.test(fuente)
+        && /\bnotasSinPersona\b/.test(fuente);
+      const exento = EXENTOS_DE_IMPORTAR.some((e) => ruta.replace(RAIZ, '') === e);
+      if (!importaPuerta && !exento) {
+        violaciones.push(`${ruta.replace(RAIZ, '')}: llama al modelo y lee prospecto_dossier SIN importar notasSinPersona de lib/likida/prospectos/seudonimo`);
+      }
+    }
+    // El autotest de la vigilancia, igual que arriba: si un refactor mueve a
+    // los lectores del dossier y esta lista queda vacía, la prueba estaría
+    // "pasando" por no vigilar nada.
+    expect(vigilados).toBeGreaterThan(0);
     expect(violaciones, violaciones.join('\n')).toEqual([]);
   });
 

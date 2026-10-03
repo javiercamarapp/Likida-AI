@@ -65,17 +65,17 @@ describe('renglonRastreo — cuatro estados, y ninguno se pinta verde de adorno'
   });
 
   it('un proveedor SIN lector de posiciones se dice, aunque su credencial esté probada', () => {
-    // `wialon` tiene `probar()` verificado contra la documentación y NO tiene
-    // lector en `LECTORES_POSICION`: su credencial se prueba y no sincroniza.
+    // `traccar` está en el dominio de la tabla y NO tiene lector en
+    // `LECTORES_POSICION`: su credencial se prueba y no sincroniza.
     // Callarlo dejaría al dueño esperando un mapa que nunca se va a llenar.
-    const r = renglonRastreo({ conectores: ['wialon'], ligadas: 2, vistas: 0 });
-    expect(r.falta.join(' ')).toMatch(/wialon todavía no tiene lector de posiciones/);
+    const r = renglonRastreo({ conectores: ['traccar'], ligadas: 2, vistas: 0 });
+    expect(r.falta.join(' ')).toMatch(/traccar todavía no tiene lector de posiciones/);
   });
 
   it('el aviso del lector faltante sobrevive incluso cuando ya entran posiciones de otro', () => {
-    const r = renglonRastreo({ conectores: ['samsara', 'wialon'], ligadas: 5, vistas: 3 });
+    const r = renglonRastreo({ conectores: ['samsara', 'traccar'], ligadas: 5, vistas: 3 });
     expect(r.estado).toBe('listo');
-    expect(r.falta.join(' ')).toMatch(/wialon/);
+    expect(r.falta.join(' ')).toMatch(/traccar/);
     expect(r.falta.join(' ')).not.toMatch(/samsara todavía no tiene lector/);
   });
 

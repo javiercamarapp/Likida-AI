@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { crearMemoriaControl } from '../autofactura/control.fixture';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FACTURAR AL VUELO — el único módulo del repo que puede hacer algo
@@ -43,8 +44,24 @@ vi.mock('./agente', async (importOriginal) => ({
   facturarConAgente, adaptadorDe, facturarLoteConAgente,
 }));
 
+/** 0542: el control de la emisión real. Por omisión TODO abierto (flota encendida, portal verificado, fase autónoma):
+ *  estas pruebas miden el candado del mandato y el camino del portal; el control tiene su describe al final. */
+let memoria = crearMemoriaControl();
+function abrirControl() {
+  memoria = crearMemoriaControl();
+  memoria.encender('t-1');
+  for (const c of ['enerser', 'capufe', 'g500', 'oxxo_gas']) memoria.ponerFase('t-1', c, 'autonoma', 5);
+  memoria.deps.verificacionDe = () => 'verificado';
+}
+vi.mock('../autofactura/control_emision_repo', () => ({ crearDepsControl: () => memoria.deps }));
+
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
+
+/** 0443: el mandato POR FLOTA. Por omisión vigente (las pruebas de abajo ejercen
+ *  el candado GLOBAL de la auditoría 10); la sección del final lo apaga. */
+const mandatoFlotaVigente = vi.fn(async (_t: string) => true);
+vi.mock('@/lib/legal/aceptacion', () => ({ mandatoFlotaVigente: (t: string) => mandatoFlotaVigente(t) }));
 
 /**
  * Lo que devuelve el SELECT del gasto. `facturarAlVuelo` lee UNA fila
@@ -193,6 +210,7 @@ beforeEach(() => {
   // que sigan probando lo que ya probaban: si `modo:'emitir'` llega o no llega
   // al agente, no si el mandato está firmado.
   process.env.FACTURACION_MANDATO_ACEPTADO = 'si';
+  abrirControl();
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1031,5 +1049,124 @@ describe('facturarLoteAlVuelo · el vínculo con el portal', () => {
       modo: 'ensayo', ok: true, capturado: {}, porGasto: [{ gastoId: 'g-1', incluido: true }],
     });
     expect((await correr()).vinculo).toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA OLA 1, #48 — EL MANDATO ES POR FLOTA, NO UNA VARIABLE GLOBAL.
+//
+// Además de FACTURACION_MANDATO_ACEPTADO=si (el interruptor de Javier), `emitir`
+// exige que ESTA flota tenga el mandato vigente en `aceptacion_legal` (0443).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('facturarAlVuelo · el mandato por flota (aceptacion_legal)', () => {
+  it('con el interruptor global puesto pero SIN el mandato de la flota, `emitir` baja a `ensayo` y se grita', async () => {
+    process.env.FACTURACION_MANDATO_ACEPTADO = 'si';
+    mandatoFlotaVigente.mockResolvedValueOnce(false);
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-sin-mandato', modo: 'emitir', hoy: HOY });
+    const [llamada] = facturarConAgente.mock.calls[0] as [{ modo: string }];
+    expect(llamada.modo).toBe('ensayo');
+    expect(mandatoFlotaVigente).toHaveBeenCalledWith('t-sin-mandato');
+    expect(logger.error).toHaveBeenCalledWith('autofactura.mandato_flota_no_otorgado', expect.objectContaining({ tenantId: 't-sin-mandato' }));
+  });
+
+  it('con interruptor global Y mandato de la flota, `emitir` llega como `emitir`', async () => {
+    process.env.FACTURACION_MANDATO_ACEPTADO = 'si';
+    mandatoFlotaVigente.mockResolvedValueOnce(true);
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    const [llamada] = facturarConAgente.mock.calls[0] as [{ modo: string }];
+    expect(llamada.modo).toBe('emitir');
+  });
+
+  it('el mandato de la flota NO sustituye al interruptor global: sin él, `ensayo` aunque la flota lo tenga', async () => {
+    delete process.env.FACTURACION_MANDATO_ACEPTADO;
+    mandatoFlotaVigente.mockResolvedValue(true);
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    const [llamada] = facturarConAgente.mock.calls[0] as [{ modo: string }];
+    expect(llamada.modo).toBe('ensayo');
+  });
+
+  it('`ensayo` no consulta el mandato (no hay nada que autorizar)', async () => {
+    mandatoFlotaVigente.mockClear();
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'ensayo', hoy: HOY });
+    expect(mandatoFlotaVigente).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 0542 — EL CONTROL DE LA EMISIÓN REAL: la tercera llave, por flota, con la base como árbitro.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('facturarAlVuelo · el control de la emisión real (0542)', () => {
+  const llamada = () => (facturarConAgente.mock.calls[0] as [{ modo: string }])[0];
+
+  it('con la bandera de la flota apagada, `emitir` baja a `ensayo` aunque el mandato esté', async () => {
+    memoria.controles.clear();
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    expect(llamada().modo).toBe('ensayo');
+    expect(logger.warn).toHaveBeenCalledWith('autofactura.control_ensayo', expect.objectContaining({ razon: 'bandera_flota_apagada' }));
+  });
+
+  it('un portal sin corrida supervisada vigente no emite', async () => {
+    memoria.deps.verificacionDe = () => 'no_verificado';
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    expect(llamada().modo).toBe('ensayo');
+  });
+
+  it('fase supervisada: la primera vez NO abre el portal, propone el lote y el ticket espera', async () => {
+    memoria.ponerFase('t-1', 'enerser', 'supervisada', 0);
+    const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    expect(facturarConAgente).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ intentado: false, facturado: false, motivo: 'espera_control' });
+    expect(memoria.lotes).toHaveLength(1);
+  });
+
+  it('con el lote confirmado por una persona emite UNA vez, cuenta la emisión y gasta cupo', async () => {
+    memoria.ponerFase('t-1', 'enerser', 'supervisada', 0);
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    memoria.confirmarLote('t-1', 'enerser');
+    const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    expect(llamada().modo).toBe('emitir');
+    expect(r.facturado).toBe(true);
+    expect(memoria.fases.get('t-1|enerser')?.emisionesConfirmadas).toBe(1);
+    expect(memoria.cupos.get(`t-1|${memoria.hoy}`)).toEqual({ tickets: 1, monto: 400 });
+  });
+
+  it('un ticket sobre el límite de monto lo emite una persona: no llega al portal', async () => {
+    lectura = { data: g({ monto: 9000 }), error: null };
+    const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    expect(facturarConAgente).not.toHaveBeenCalled();
+    expect(r.motivo).toBe('espera_control');
+  });
+
+  it('si el portal falla limpio, el cupo reservado se devuelve', async () => {
+    facturarConAgente.mockResolvedValueOnce({ modo: 'emitir', ok: false, capturado: {}, error: 'el portal no cargó' });
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY });
+    expect(memoria.cupos.get(`t-1|${memoria.hoy}`)).toEqual({ tickets: 0, monto: 0 });
+  });
+
+  it('el control NO se consulta en `ensayo`', async () => {
+    memoria.falla.control = true;
+    await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'ensayo', hoy: HOY });
+    expect(llamada().modo).toBe('ensayo');
+  });
+
+  it('LOTE: solo viaja al portal lo que el control deja pasar; el resto espera sin abrir sesión', async () => {
+    memoria.encender('t-1', { maxTicketsLote: 2 });
+    lectura = { data: [g({ id: 'g-1' }), g({ id: 'g-2' }), g({ id: 'g-3' })], error: null };
+    facturarLoteConAgente.mockResolvedValueOnce({
+      modo: 'emitir', ok: true, capturado: {},
+      porGasto: [{ gastoId: 'g-1', incluido: true, cfdiUuid: 'U1' }, { gastoId: 'g-2', incluido: true, cfdiUuid: 'U1' }],
+    });
+    const r = await facturarLoteAlVuelo({ tenantId: 't-1', comercio: 'enerser', gastoIds: ['g-1', 'g-2', 'g-3'], modo: 'emitir', hoy: HOY });
+    const [enviado] = facturarLoteConAgente.mock.calls[0] as [{ tickets: Array<{ gastoId: string }> }];
+    expect(enviado.tickets.map((x) => x.gastoId)).toEqual(['g-1', 'g-2']);
+    expect(r.porGasto.find((p) => p.gastoId === 'g-3')).toMatchObject({ intentado: false, motivo: 'espera_control' });
+  });
+
+  it('LOTE: bandera apagada → todo el lote en ensayo', async () => {
+    memoria.controles.clear();
+    lectura = { data: [g()], error: null };
+    facturarLoteConAgente.mockResolvedValueOnce({ modo: 'ensayo', ok: true, capturado: {}, porGasto: [{ gastoId: 'g-1', incluido: true }] });
+    await facturarLoteAlVuelo({ tenantId: 't-1', comercio: 'enerser', gastoIds: ['g-1'], modo: 'emitir', hoy: HOY });
+    expect((facturarLoteConAgente.mock.calls[0] as [{ modo: string }])[0].modo).toBe('ensayo');
   });
 });

@@ -2,11 +2,13 @@
 
 import { useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { KeyRound, TriangleAlert, Check, Copy, ShieldAlert } from 'lucide-react';
+import { KeyRound, Check, Copy, ShieldAlert } from 'lucide-react';
 // SOLO TIPOS de `llave-api-escritura.ts`: ese módulo importa `supabaseAdmin`,
 // que no puede acabar en el bundle del navegador. El catálogo de áreas viaja
 // como PROP desde la página, igual que `MODOS_TARIFA` en /dashboard/clientes.
 import type { OpcionArea } from '@/lib/auth/llave-api-escritura';
+import { AvisoResultado } from '../../admin/ui/aviso-resultado';
+import { BotonConfirmar } from '../../admin/ui/confirmar';
 
 /** El resultado del alta trae el SECRETO — es el único momento en que existe
  *  fuera de la base (y en la base solo vive su hash). */
@@ -32,16 +34,9 @@ function Boton({ etiqueta, ocupado }: { etiqueta: string; ocupado: string }) {
   );
 }
 
-/** El error del servidor, VERBATIM: los `DatoInvalido` del motor son lo único
- *  que dice QUÉ corregir. */
+/** El error del servidor, VERBATIM, con el aviso único del panel. */
 function AvisoError({ error }: { error: string }) {
-  return (
-    <div className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
-      style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-      <TriangleAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-      {error}
-    </div>
-  );
+  return <AvisoResultado estado={{ ok: false, error }} />;
 }
 
 /**
@@ -165,33 +160,16 @@ export function FormaRevocar({ accion, id, nombre }: {
   const [estado, despachar] = useActionState(accion, null);
 
   return (
-    <details>
-      <summary className="cursor-pointer text-[12px] font-medium select-none list-none inline-flex items-center gap-1"
-        style={{ color: 'var(--bad)' }}>
-        Revocar
-      </summary>
-      <div className="pt-2 space-y-2">
-        <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
-          El sistema que use &ldquo;{nombre}&rdquo; deja de poder leer en ese instante,
-          y no hay deshacer: si hace falta otra vez, se emite una llave nueva.
-        </p>
-        {estado && !estado.ok && <AvisoError error={estado.error} />}
-        <form action={despachar}>
-          <input type="hidden" name="id" value={id} />
-          <BotonRevocar />
-        </form>
-      </div>
-    </details>
-  );
-}
-
-function BotonRevocar() {
-  const { pending } = useFormStatus();
-  return (
-    <button type="submit" disabled={pending}
-      className="h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 hairline transition-opacity hover:opacity-85 disabled:opacity-50"
-      style={{ color: 'var(--bad)', background: 'var(--badbg)' }}>
-      {pending ? 'Revocando…' : 'Sí, revocar esta llave'}
-    </button>
+    <form action={despachar} className="space-y-2">
+      <input type="hidden" name="id" value={id} />
+      <BotonConfirmar
+        etiqueta="Revocar" tono="peligro" etiquetaConfirmar="Sí, revocar esta llave"
+        titulo={`Revocar la llave «${nombre}»`}
+        descripcion="El sistema que use esta llave deja de poder leer en ese instante, y no hay deshacer: si hace falta otra vez, se emite una llave nueva."
+        className="text-[12px] font-medium select-none inline-flex items-center gap-1 hover:opacity-70 transition-opacity"
+        style={{ color: 'var(--bad)' }}
+      />
+      {estado && !estado.ok && <AvisoError error={estado.error} />}
+    </form>
   );
 }

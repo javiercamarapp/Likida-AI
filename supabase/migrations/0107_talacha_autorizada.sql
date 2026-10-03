@@ -1,7 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0107 — La talacha autorizada por WhatsApp (14-ago-2026, F4 del plan).
 --
--- El circuito que Transportes Innovativos describió: el chofer reporta
+-- El circuito que el cliente de demo describió: el chofer reporta
 -- "se me ponchó una llanta" con la foto de la nota, el JEFE autoriza o
 -- rechaza respondiendo por WhatsApp, y el gasto llega a la liquidación con
 -- su incidencia ya decidida — con QUIÉN y CUÁNDO, porque el agente prepara

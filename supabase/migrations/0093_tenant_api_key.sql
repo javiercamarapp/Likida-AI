@@ -8,7 +8,7 @@
 -- qué TMS uses hoy ni dentro de dos años, Likida es una capa encima"— no se
 -- podía ni demostrar en una llamada.
 --
--- Esta tabla la habilita. El caso concreto: Transportes Innovativos está
+-- Esta tabla la habilita. El caso concreto: el cliente de demo está
 -- reescribiendo su TMS (1 a 1.5 años) y necesita leer de Likida desde su propio
 -- código.
 --

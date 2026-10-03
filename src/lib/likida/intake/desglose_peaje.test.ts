@@ -152,7 +152,10 @@ describe('parsearDesgloseTextoPdf — la capa de texto de un PDF', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.lineas).toHaveLength(2);
-    expect(r.lineas[0]).toEqual({ indice: 0, fecha: '2026-08-05', caseta: 'Tepotzotlán', monto: 189, tag: 'IMDM12345678' });
+    // La hora del cobro ya NO se descarta (0375): es lo que usa el cruce por caseta con el GPS.
+    expect(r.lineas[0]).toEqual({ indice: 0, fecha: '2026-08-05', caseta: 'Tepotzotlán', monto: 189, tag: 'IMDM12345678', hora: '10:21:00' });
+    // La línea sin hora NO inventa una: la clave queda ausente.
+    expect(r.lineas[1]).not.toHaveProperty('hora');
   });
 
   it('un PDF sin renglones reconocibles se rechaza pidiendo el Excel/CSV', () => {
@@ -390,5 +393,20 @@ describe('bitacoraACsv', () => {
   it('sin líneas conciliadas el CSV lo dice — no manda una tabla vacía muda', () => {
     const csv = bitacoraACsv({ ...bitacora, filas: [] });
     expect(csv).toContain('Sin líneas conciliadas todavía');
+  });
+});
+
+describe('bitacoraACsv — texto del proveedor no se abre como fórmula en Excel', () => {
+  it('neutraliza =, +, - y @ en caseta, tag, folio, origen y destino; los montos no se tocan', () => {
+    const b: BitacoraRmf918 = {
+      desgloseId: 'd1', proveedor: 'PASE', periodoDesde: '2026-08-01', periodoHasta: '2026-08-02', leyendas: LEYENDAS_BITACORA_RMF_918,
+      filas: [{
+        viajeFolio: '=1+1', origen: '+52 55', destino: '@SUM(A1)', fechaCruce: '2026-08-01', caseta: '-cmd|calc', tag: 'IMDM1',
+        montoConciliado: -189.5, posicionesGpsDia: null,
+      }],
+    };
+    const csv = bitacoraACsv(b);
+    const fila = csv.trim().split('\n').pop()!;
+    expect(fila).toBe("'=1+1,'+52 55,'@SUM(A1),2026-08-01,'-cmd|calc,IMDM1,-189.5,sin datos");
   });
 });

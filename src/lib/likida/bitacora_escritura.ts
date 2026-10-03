@@ -95,6 +95,9 @@ export type EntidadBitacora =
   // revocar una `tenant_api_key`— y quién lo cortó no tiene columna en
   // `mcp_oauth_token`: esta anotación es su única memoria.
   | 'mcp_oauth_token'
+  // 0440: la aprobación o el rechazo de un cliente OAuth desconocido por el
+  // superadmin (/admin/mcp-clientes): decide qué dominios pueden recibir accesos.
+  | 'mcp_oauth_cliente'
   // Auditoría 20 (H4): el estado operativo de una unidad. Mandarla a taller o
   // DARLA DE BAJA son actos sobre un activo de la empresa —un camión vendido,
   // chocado o siniestrado— que cambian lo que el despacho puede ofrecer y el
@@ -107,7 +110,28 @@ export type EntidadBitacora =
   // es 'csv' (no hay una fila de prospecto singular que nombrar — es la
   // cartera filtrada completa); `detalle` lleva el conteo y los filtros
   // elegidos, nunca datos de un prospecto.
-  | 'prospecto';
+  | 'prospecto'
+  // W2 «producto»: los patios. Crear, editar y BORRAR uno cambia dónde caen
+  // operadores, unidades y jefes (borrarlo los deja sin patio), y quién lo hizo
+  // es lo que hay que poder reconstruir. Hasta hoy `crearTerminal` firmaba como
+  // `tenant`; el id del patio vive en `entidadId`.
+  | 'terminal'
+  // Ola 3, Agente 5 «Conductor»: quién cambió la estrategia de recordatorios, la ventana, el tope diario o a quién
+  // se escala (cambia CUÁNDO se le insiste a cada chofer y a quién se despierta) y quién dio de alta, rotó o
+  // apagó el webhook hacia el sistema del cliente. Solo nombres de llaves y conteos: nunca teléfonos ni secretos.
+  | 'conductor_config'
+  | 'conductor_webhook'
+  // Ola 3, Vigía: grupos de clientes (críticos o no) y el histórico exportado que se importó. Ids y conteos: nunca texto del chat.
+  | 'vigia_grupo'
+  | 'vigia_historial'
+  // Ronda 08, P5: quién aprobó o retiró una respuesta rápida del Vigía (0647). Id, tema y largos: nunca el texto.
+  | 'vigia_respuesta_rapida'
+  // W3 «autofacturación» (agente 6): la vinculación asistida de un portal (quién la
+  // pidió, cuándo se reclamó y cerró), la bandera ensayo→real por flota, los límites,
+  // la confirmación humana de cada lote y las reversas. `entidadId` es el comercio, el
+  // lote o el gasto según la acción; el detalle nunca lleva cookies, códigos ni RFC.
+  | 'portal_vinculacion'
+  | 'autofactura';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una

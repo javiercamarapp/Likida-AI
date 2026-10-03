@@ -6,6 +6,10 @@ import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { registrarLatido, puertaCron } from '@/lib/admin/salud';
+import { purgarDocumentosVencidos } from '@/lib/likida/carta_porte_docs/retencion';
+import { mantenerDatosAgentes } from '@/lib/likida/retencion_agentes';
+import { mantenerLedgers } from '@/lib/likida/retencion_ledgers';
+import { purgarRecepcionesVencidas } from '@/lib/likida/buzon/repo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -374,6 +378,95 @@ export async function GET(req: Request) {
       await alertarOperador('cron.purgar.mcp_oauth', { error });
     }
 
+    // ── PRESUPUESTO DE IA: reservas liquidadas viejas y reservas vencidas ────
+    // (0441, auditoría ola 1 #18). `llm_presupuesto_reserva` crece ~55 mil filas
+    // al mes por flota y nada la purgaba. RPC hermana, mismo patrón que arriba.
+    // Su fallo no tumba la corrida, pero se grita y se alerta.
+    let llmPresupuesto: Record<string, unknown> | null = null;
+    try {
+      const lp = await supabaseAdmin().rpc('mantener_llm_presupuesto', {
+        p_dias: 35,
+        p_ahora: ahoraRetencion,
+        p_vence: new Date(venceRetencionMs).toISOString(),
+      });
+      if (lp.error) {
+        const codigo = codigoDeError(lp.error);
+        logger.error('cron.purgar.llm_presupuesto_falló', { error: lp.error.message, codigo });
+        await alertarOperador('cron.purgar.llm_presupuesto', { error: lp.error.message, codigo });
+      } else {
+        llmPresupuesto = (lp.data ?? {}) as Record<string, unknown>;
+      }
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      logger.error('cron.purgar.llm_presupuesto_excepcion', { error });
+      await alertarOperador('cron.purgar.llm_presupuesto', { error });
+    }
+
+    // ── CARTA PORTE MULTI-FORMATO (mig. 0420): documentos de clientes vencidos ──
+    // El archivo y el texto del documento (datos personales de terceros) se borran al vencer
+    // `retener_hasta`; la fila queda de constancia. Su fallo NO tumba la corrida —las purgas de arriba
+    // ya corrieron— y se queda en el log: la corrida de mañana lo reintenta (si el archivo no se pudo
+    // borrar, la fila NO se marca purgada). `null` en el cuerpo = no se pudo, dicho; jamás un 0 inventado.
+    let cartaPorteDocs: Awaited<ReturnType<typeof purgarDocumentosVencidos>> | null = null;
+    try {
+      cartaPorteDocs = await purgarDocumentosVencidos(100);
+      if (cartaPorteDocs.fallidos > 0) logger.warn('cron.purgar.carta_porte_docs_con_fallos', { ...cartaPorteDocs });
+    } catch (e) {
+      logger.error('cron.purgar.carta_porte_docs_excepcion', { error: e instanceof Error ? e.message : String(e) });
+    }
+
+    // ── AGENTES 1 Y 2 (mig. 0562): ventana de WhatsApp, registro de envíos, liquidaciones externas
+    // terminales con más de 60 meses y contenido de archivos de peajes fallidos. Cada purga es
+    // independiente: una que falla se grita y se avisa, pero no tumba a las demás ni la corrida.
+    let agentesDatos: Awaited<ReturnType<typeof mantenerDatosAgentes>> | null = null;
+    try {
+      agentesDatos = await mantenerDatosAgentes(new Date(inicio));
+      const fallidas = agentesDatos.filter((p) => !p.ok);
+      if (fallidas.length > 0) {
+        await alertarOperador('cron.purgar.agentes_datos', { error: fallidas.map((p) => `${p.nombre}: ${p.error}`).join(' · ').slice(0, 500) });
+      }
+    } catch (e) {
+      logger.error('cron.purgar.agentes_datos_excepcion', { error: e instanceof Error ? e.message : String(e) });
+    }
+
+    // ── BUZÓN DE FACTURAS (mig. 0530): bitácora de archivos recibidos que no cuelgan de una factura ──
+    // 365 días; los PDF guardados se encolan en `storage_huerfano_candidato` y el borrado de Storage de
+    // arriba los vacía en la corrida siguiente. `null` = la base aún no trae la 0530 (dicho, no un 0).
+    let buzonRecepcionesPurgadas: number | null = null;
+    try {
+      buzonRecepcionesPurgadas = await purgarRecepcionesVencidas(new Date(inicio));
+    } catch (e) {
+      logger.error('cron.purgar.buzon_recepcion_excepcion', { error: e instanceof Error ? e.message : String(e) });
+    }
+
+    // ── AUTOFACTURA (mig. 0540): solicitudes de vinculación de portal ya cerradas ──
+    // Cierra las vivas vencidas y borra las cerradas de más de 90 días (sin datos personales:
+    // solo ids). Su fallo no tumba la corrida; `null` en el cuerpo = no se pudo, jamás un 0 inventado.
+    let vinculacionPortal: number | null = null;
+    try {
+      const vp = await supabaseAdmin().rpc('purgar_vinculacion_portal', { p_dias: 90 });
+      if (vp.error) logger.error('cron.purgar.vinculacion_portal_falló', { error: vp.error.message, codigo: codigoDeError(vp.error) });
+      else vinculacionPortal = typeof vp.data === 'number' ? vp.data : null;
+    } catch (e) {
+      logger.error('cron.purgar.vinculacion_portal_excepcion', { error: e instanceof Error ? e.message : String(e) });
+    }
+
+    // ── LEDGERS SIN PURGA (mig. 0680) Y AUTOFACTURA (mig. 0542) ────────────────────────────────────
+    // evento_seguridad, evento_stripe, vigia_evento, cp_documento_evento y buzon_entrega_evento solo se
+    // escribían (auditoría ola 1 #23); `purgar_autofactura` existía desde la 0542 sin que ningún cron la
+    // llamara. Cada tabla es independiente: una que falla se grita y se avisa, pero no tumba a las demás ni
+    // la corrida. `parcial` = quedó trabajo para la corrida de mañana (no cambia el estado de la corrida).
+    let ledgers: Awaited<ReturnType<typeof mantenerLedgers>> | null = null;
+    try {
+      ledgers = await mantenerLedgers(new Date(inicio), new Date(venceRetencionMs));
+      const fallidasLedgers = ledgers.filter((p) => !p.ok);
+      if (fallidasLedgers.length > 0) {
+        await alertarOperador('cron.purgar.ledgers', { error: fallidasLedgers.map((p) => `${p.nombre}: ${p.error}`).join(' · ').slice(0, 500) });
+      }
+    } catch (e) {
+      logger.error('cron.purgar.ledgers_excepcion', { error: e instanceof Error ? e.message : String(e) });
+    }
+
     // 0332 separa la señal de las purgas restantes: si conversación/códigos
     // ya se drenaron fuera de la RPC, no conservamos un `parcial` obsoleto de
     // la última tanda de mantenimiento. En rollout sobre una BD anterior se
@@ -383,7 +476,7 @@ export async function GET(req: Request) {
     const estado = erroresRetencion0104.length > 0 || productoEventoError !== null
       ? 'fallo'
       : parcialGlobal ? 'parcial' : 'ok';
-    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth };
+    const detalleFinal = { ...data, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers };
     if (estado === 'fallo') logger.error('cron.purgar.retencion_0104_incompleta', detalleFinal);
     else if (estado === 'parcial') logger.warn('cron.purgar.incompleta', detalleFinal);
     else logger.info('cron.purgar.ok', detalleFinal);
@@ -396,7 +489,7 @@ export async function GET(req: Request) {
       productoEventoError,
     });
     return NextResponse.json(
-      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth },
+      { corrio: true, ...data, parcial: parcialGlobal, estado, vueltas, retencion0104, erroresRetencion0104, storage, productoEvento, productoEventoError, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers },
       { status: estado === 'fallo' ? 500 : 200 },
     );
   } catch (e) {

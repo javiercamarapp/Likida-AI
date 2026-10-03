@@ -28,15 +28,37 @@ export interface EventoSeguridad {
   detalle?: Record<string, unknown>;
 }
 
+/**
+ * FLOOD (0681, auditoría ola 1 #20): el registro pasa por la RPC `registrar_evento_seguridad`, que AGRUPA
+ * por ventana (misma señal = una fila con `repeticiones`) y acota las filas distintas por (origen, tipo,
+ * severidad); el excedente se cuenta en una fila de desborde. Lo `alta` jamás se descarta: se agrupa o se
+ * cuenta. Si la base aún no trae la 0681 (rollout con código adelante), cae al insert directo de siempre.
+ */
 export async function registrarEventoSeguridad(ev: EventoSeguridad): Promise<void> {
   try {
     const { supabaseAdmin } = await import('@/lib/supabase/admin');
-    const { error } = await supabaseAdmin().from('evento_seguridad').insert({
+    const sb = supabaseAdmin();
+    const severidad = ev.severidad ?? 'media';
+    const actor = ev.actor?.slice(0, 120) ?? null;
+    const r = await sb.rpc('registrar_evento_seguridad', {
+      p_origen: ev.origen,
+      p_tipo: ev.tipo,
+      p_severidad: severidad,
+      p_tenant: ev.tenantId ?? null,
+      p_actor: actor,
+      p_detalle: ev.detalle ?? null,
+    });
+    if (!r.error) return;
+    if (!rpcAusente(r.error)) {
+      logger.warn('seguridad.registro_fallo', { tipo: ev.tipo, err: r.error.message });
+      return;
+    }
+    const { error } = await sb.from('evento_seguridad').insert({
       origen: ev.origen,
       tipo: ev.tipo,
-      severidad: ev.severidad ?? 'media',
+      severidad,
       tenant_id: ev.tenantId ?? null,
-      actor: ev.actor?.slice(0, 120) ?? null,
+      actor,
       detalle: ev.detalle ?? null,
     });
     if (error) logger.warn('seguridad.registro_fallo', { tipo: ev.tipo, err: error.message });
@@ -45,10 +67,17 @@ export async function registrarEventoSeguridad(ev: EventoSeguridad): Promise<voi
   }
 }
 
+/** ¿La RPC no existe todavía en la base (0681 sin aplicar)? PostgREST: PGRST202; Postgres: 42883. */
+function rpcAusente(e: { message?: string; code?: string }): boolean {
+  return e.code === 'PGRST202' || e.code === '42883' || /registrar_evento_seguridad/.test(e.message ?? '') && /could not find|does not exist|no existe/i.test(e.message ?? '');
+}
+
 export interface FilaSeguridad {
   id: string; origen: string; tipo: string; severidad: string;
   tenantId: string | null; actor: string | null;
   detalle: Record<string, unknown> | null; creadoEn: string;
+  /** Cuántas veces se vio la misma señal en la ventana (0681). 1 = una sola. */
+  repeticiones: number;
 }
 
 export interface ResumenSeguridad {
@@ -91,12 +120,14 @@ export async function getEventosSeguridad(limite = 50): Promise<FilaSeguridad[]>
   const { supabaseAdmin } = await import('@/lib/supabase/admin');
   const { data, error } = await supabaseAdmin()
     .from('evento_seguridad')
-    .select('id, origen, tipo, severidad, tenant_id, actor, detalle, creado_en')
+    // `*` y no la lista: `repeticiones` nace en la 0681 y el panel no debe caer en un rollout con código adelante.
+    .select('*')
     .order('creado_en', { ascending: false })
     .limit(limite);
   if (error) throw new Error(`getEventosSeguridad: ${error.message}`);
   return (data ?? []).map((f) => ({
     id: f.id, origen: f.origen, tipo: f.tipo, severidad: f.severidad,
     tenantId: f.tenant_id, actor: f.actor, detalle: f.detalle, creadoEn: f.creado_en,
+    repeticiones: typeof f.repeticiones === 'number' && f.repeticiones >= 1 ? f.repeticiones : 1,
   }));
 }

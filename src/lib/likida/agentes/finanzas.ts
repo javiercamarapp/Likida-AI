@@ -178,6 +178,8 @@ const ROL_POR_FASE: Record<string, ModelRole> = {
   chat: 'chat',
   escalacion: 'cuadre_fallback',
   transcripcion: 'transcripcion',
+  vigia: 'vigia_cliente',
+  conductor: 'conductor_hito',
 };
 
 /** El piso de U2: un 30% de salto sobre menos de $5 USD/semana es ruido de

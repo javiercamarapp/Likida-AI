@@ -1,4 +1,20 @@
 -- PostgreSQL efímero, datos sintéticos propios, rollback completo.
+--
+-- PRU-32C11-C1 (auditoría 32 c11, CRÍTICO): `vence_en` venía con la fecha FIJA
+-- '2026-10-01', y el CHECK `arco_vence_despues_de_recibida` (0291:64) exige
+-- `vence_en >= recibida_en::date`, con `recibida_en` por default `now()`. El
+-- 2-oct-2026 el primer INSERT empezó a morir con exit 3 — y este arnés vive en
+-- un `run:` de `bash -e` (`ci-postgres.yml:185`) con VEINTICINCO invocaciones de
+-- arnés detrás, la 0366 del dedup del dinero entre ellas, más la capa 0 de pgTAP
+-- y los bloques de la capa 1. Un arnés con fecha de caducidad no se cae solo:
+-- se lleva a los que corren después, y la «batería de 27 arneses en PASS» que
+-- tres commits consecutivos citan como evidencia deja de ejecutarse sin que
+-- nada lo diga.
+--
+-- Los 20 días son el plazo del art. 32 de la LFPDPPP para responder una
+-- solicitud ARCO, que es lo que la aplicación calcularía. `vence_en` no
+-- participa en ninguna aserción de este archivo: sólo tiene que existir y
+-- respetar el CHECK.
 \set ON_ERROR_STOP on
 begin;
 insert into public.tenant(id,nombre) values
@@ -13,9 +29,9 @@ insert into public.wa_conversacion(id,tenant_id,operador_id,telefono,estado) val
  ('34000000-0000-4000-8000-000000000031','34000000-0000-4000-8000-000000000001','34000000-0000-4000-8000-000000000011','529999903401','{"texto":"Sintético A"}'),
  ('34000000-0000-4000-8000-000000000032','34000000-0000-4000-8000-000000000002','34000000-0000-4000-8000-000000000012','529999903402','{"texto":"Sintético B"}');
 insert into public.solicitud_arco(id,tenant_id,operador_id,titular_ref,tipo,vence_en,estado,resuelta_en,resolucion) values
- ('34000000-0000-4000-8000-000000000041','34000000-0000-4000-8000-000000000001','34000000-0000-4000-8000-000000000011','529999903401','cancelacion','2026-10-01','recibida',null,null),
- ('34000000-0000-4000-8000-000000000042','34000000-0000-4000-8000-000000000002','34000000-0000-4000-8000-000000000012','529999903402','cancelacion','2026-10-01','recibida',null,null),
- ('34000000-0000-4000-8000-000000000043','34000000-0000-4000-8000-000000000001','34000000-0000-4000-8000-000000000011','529999903401','cancelacion','2026-10-01','resuelta',now(),'Constancia histórica sintética: conservar literalmente');
+ ('34000000-0000-4000-8000-000000000041','34000000-0000-4000-8000-000000000001','34000000-0000-4000-8000-000000000011','529999903401','cancelacion',current_date + 30,'recibida',null,null),
+ ('34000000-0000-4000-8000-000000000042','34000000-0000-4000-8000-000000000002','34000000-0000-4000-8000-000000000012','529999903402','cancelacion',current_date + 30,'recibida',null,null),
+ ('34000000-0000-4000-8000-000000000043','34000000-0000-4000-8000-000000000001','34000000-0000-4000-8000-000000000011','529999903401','cancelacion',current_date + 30,'resuelta',now(),'Constancia histórica sintética: conservar literalmente');
 insert into public.cfdi_xml(id,tenant_id,cfdi_uuid,xml) values
  ('34000000-0000-4000-8000-000000000051','34000000-0000-4000-8000-000000000001','34000000-0000-4000-8000-000000000061','<Fiscal sintetico="true">Titular sintético A</Fiscal>');
 

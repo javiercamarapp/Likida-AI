@@ -389,6 +389,41 @@ describe('mxnCompacto — la cifra que no cabe en la tarjeta', () => {
     expect(mxnCompacto(1_234_567)).toBe('$1.2\u00a0M');
     expect(mxnCompacto(-1_234_567)).toContain('-');
   });
+
+  // ORQ-32C10-A1 (AUDITORÍA 32 c10, ALTO). Estas dos aserciones son las que
+  // fijan la POSICIÓN del símbolo, y son las que esta ronda encontró rojas sobre
+  // un árbol sin un solo commit de código: la imagen trae Node 22.22 con ICU
+  // 77.1 / CLDR 47, y en ese CLDR el patrón de moneda COMPACTA de es-MX pone el
+  // símbolo AL FINAL. `mxnCompacto` delegaba la posición a CLDR, así que el
+  // render del panel cambiaba bajo los pies del producto al actualizarse el
+  // runtime — y ya había cambiado. Medido con la implementación anterior:
+  //
+  //        999,999  →  "$999,999.00"   símbolo al INICIO
+  //      1,000,000  →  "1 M$"          símbolo al FINAL
+  //      1,234,567  →  "1.2 M$"        símbolo al FINAL
+  //  9,000,000,000  →  "9,000 M$"      símbolo al FINAL
+  //
+  // En una misma fila de tarjetas de KPI, la de $999,999 imprimía el símbolo
+  // delante y la de al lado detrás: el `$` SALTABA DE LADO al cruzar el millón,
+  // dentro del único archivo que el repo autoriza a formatear dinero. Nada
+  // sujetaba el menor de Node (`node-version: 22` en CI, `engines: ">=22"`).
+  it('el símbolo va DELANTE, cruce el millón o no — no lo decide el ICU del runtime', () => {
+    // El invariante que importa, dicho sobre el borde: las dos tarjetas
+    // contiguas tienen que leerse igual.
+    expect(mxn(999_999).startsWith('$')).toBe(true);
+    expect(mxnCompacto(1_000_000).startsWith('$')).toBe(true);
+    expect(mxnCompacto(1_234_567).startsWith('$')).toBe(true);
+    expect(mxnCompacto(9_000_000_000).startsWith('$')).toBe(true);
+    // Y ninguno lo lleva al final.
+    for (const n of [1_000_000, 1_234_567, 9_000_000_000])
+      expect(mxnCompacto(n).endsWith('$'), String(n)).toBe(false);
+  });
+
+  it('el signo negativo va ANTES del símbolo, como en `mxn()`', () => {
+    expect(mxn(-1_234_567).startsWith('-$')).toBe(true);
+    expect(mxnCompacto(-1_234_567).startsWith('-$')).toBe(true);
+    expect(mxnCompacto(-9_000_000_000)).toBe('-$9,000\u00a0M');
+  });
 });
 
 describe('hoyMx', () => {

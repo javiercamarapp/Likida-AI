@@ -19,6 +19,7 @@ import { sufijoTenant } from '../../sufijo';
 import { BarraPagina, TituloSeccion } from '../../resumen-visual';
 import { EstadoVacio } from '../../../admin/ui/kit';
 import { FilaComprobante, type ResultadoFila } from './fila';
+import { EnlacePagina, NavPaginas } from '../../paginador';
 
 /**
  * LA BANDEJA DE CONCILIACIÓN DEL SAT (0243) — donde el contralor decide.
@@ -315,19 +316,11 @@ export async function PanelBandeja({
                       : numero(bandeja.total)}
                     {paginas !== null && ` · página ${numero(bandeja.pagina)} de ${numero(paginas)}`}
                   </span>
-                  <span className="ml-auto flex items-center gap-2">
-                    {bandeja.pagina > 1 && (
-                      <Link href={enlace(searchParams, { pag: String(bandeja.pagina - 1), buscar: null })}
-                        className="px-2.5 py-1 rounded-full hairline hover:opacity-70 transition-opacity">
-                        ← Anterior
-                      </Link>
-                    )}
-                    {paginas !== null && bandeja.pagina < paginas && (
-                      <Link href={enlace(searchParams, { pag: String(bandeja.pagina + 1), buscar: null })}
-                        className="px-2.5 py-1 rounded-full hairline hover:opacity-70 transition-opacity">
-                        Siguiente →
-                      </Link>
-                    )}
+                  <span className="ml-auto">
+                    <NavPaginas>
+                      {bandeja.pagina > 1 && <EnlacePagina href={enlace(searchParams, { pag: String(bandeja.pagina - 1), buscar: null })} direccion="anterior" />}
+                      {paginas !== null && bandeja.pagina < paginas && <EnlacePagina href={enlace(searchParams, { pag: String(bandeja.pagina + 1), buscar: null })} direccion="siguiente" />}
+                    </NavPaginas>
                   </span>
                 </div>
 

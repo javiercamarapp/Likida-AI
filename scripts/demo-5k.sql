@@ -52,7 +52,7 @@ begin
   --     elegible (`"regimenElegible":false`).
   insert into tenant (id, nombre, rfc, ciudad, plan, razon_social, domicilio_fiscal,
                       url_aviso_privacidad, contacto_privacidad, regimen_fiscal,
-                      codigo_postal_fiscal, uso_cfdi, config)
+                      codigo_postal_fiscal, uso_cfdi, config, perfil)
   values (t, 'Transportes Peninsulares, S.A. de C.V.', 'TPE150812AB3', 'Monterrey, NL', 'demo',
           'TRANSPORTES PENINSULARES SA DE CV',
           'Av. Ruiz Cortines 3200, Parque Industrial Apodaca, 66600 Apodaca, Nuevo León',
@@ -69,7 +69,14 @@ begin
                         {"concepto":"otro","topeMonto":1500}],
             "tabulador":{"rendimientoPorDefecto":2.2,"precioDieselPorDefecto":24,"umbralDesviacion":0.06},
             "estimulos":{"efectivoTopeMxn":2000,"viaticosTopeFiscalDiarioMxn":750},
-            "facilidadCombustibleEfectivo":{"dedicacionExclusivaCarga":true,"regimenElegible":false}}'::jsonb);
+            "facilidadCombustibleEfectivo":{"dedicacionExclusivaCarga":true,"regimenElegible":false}}'::jsonb,
+          -- E1-B (A2): el diésel sembrado va con tarjeta (forma de pago 04/28, 75 %) y CFDI verificado. Sin
+          -- esta declaración el motor aplica el fail-closed de `tarjeta_no_empresa` (LIF 20-A fr. IV): no
+          -- acredita los litros y manda a revisión CADA viaje con diésel pagado con tarjeta. El demo
+          -- representa una flota que ya contestó que sus tarjetas son de la empresa y que ella paga en la
+          -- bomba (`tarjetasDeLaEmpresa(perfil) === true`).
+          '{"tarjetasANombreEmpresa":{"valor":true,"procedencia":"declarado"},
+            "pagoEnBomba":{"valor":"empresa","procedencia":"declarado"}}'::jsonb);
 
   for i in 1..25 loop
     insert into terminal (id, tenant_id, nombre, ciudad)

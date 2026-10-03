@@ -1,14 +1,10 @@
-import Link from 'next/link';
-import {
-  ChartNoAxesCombined, Banknote, ReceiptText, TrendingUp, Wallet, CalendarClock,
-  ChevronLeft, ChevronRight,
-} from 'lucide-react';
+import { ChartNoAxesCombined, Banknote, ReceiptText, TrendingUp, Wallet, CalendarClock } from 'lucide-react';
 import type { Rentabilidad, Cobranza } from '@/lib/likida/comercial';
 import { StatCard, EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
 import { mxn, fechaCorta, numero, porcentaje } from '@/lib/formato';
 import { BarraPagina } from '../resumen-visual';
+import { EnlacePagina, NavPaginas } from '../paginador';
 
-const BTN_PAGINA = 'inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-medium hairline transition-colors hover:bg-[var(--canvas)]';
 
 /** El href de otra página de la cartera, conservando el sufijo de
  *  previsualización (`?tenant=`/`?vista=`/`?rol=`): si un link lo pierde, el
@@ -195,18 +191,10 @@ export function VistaRentabilidad({
                       {'las vencidas primero. Por cobrar y vencido de arriba son de la cartera completa.'}
                     </span>
                     {(cobranza.pagina > 1 || hayMas) && (
-                      <div className="flex items-center gap-1.5">
-                        {cobranza.pagina > 1 && (
-                          <Link href={hrefPagina(sufijo, cobranza.pagina - 1)} className={BTN_PAGINA} style={{ background: 'var(--surface)' }}>
-                            <ChevronLeft width={13} height={13} strokeWidth={1.75} aria-hidden /> Anteriores
-                          </Link>
-                        )}
-                        {hayMas && (
-                          <Link href={hrefPagina(sufijo, cobranza.pagina + 1)} className={BTN_PAGINA} style={{ background: 'var(--surface)' }}>
-                            Siguientes <ChevronRight width={13} height={13} strokeWidth={1.75} aria-hidden />
-                          </Link>
-                        )}
-                      </div>
+                      <NavPaginas>
+                        {cobranza.pagina > 1 && <EnlacePagina href={hrefPagina(sufijo, cobranza.pagina - 1)} direccion="anterior" />}
+                        {hayMas && <EnlacePagina href={hrefPagina(sufijo, cobranza.pagina + 1)} direccion="siguiente" />}
+                      </NavPaginas>
                     )}
                   </div>
                 </section>

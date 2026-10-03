@@ -32,23 +32,50 @@ let respGastoUpdate: Resp;
 let respLineaUpdate: Resp;
 
 /** Cada UPDATE a `gasto` (el sello de `ligarLineaAGasto`): payload y filtros. */
+/** `range(desde > 0)` pedidos: OFFSETS. El fondo de gastos del barrido ya no debe usar ninguno (ronda 16). */
+let offsetsPedidos: number[];
 let sellos: Array<{ fila: Record<string, unknown>; por: Array<[string, unknown]> }>;
 /** Cada UPDATE a `cfdi_consolidado_linea` (marcar o refrescar): payload y filtros. */
 let escriturasLinea: Array<{ fila: Record<string, unknown>; por: Array<[string, unknown]> }>;
 
 function lecturable(resp: () => Resp) {
   const nodo: Record<string, unknown> = {};
-  for (const m of ['eq', 'is', 'in', 'gte', 'lte', 'limit', 'order']) nodo[m] = () => nodo;
+  // Cursor por FILA `(fecha, id)` y tope de página: `traerTodoPorLlave` pide
+  // `.or(…).order('fecha').order('id').limit(PAGINA)`; el mock filtra, ordena y rebana como el servidor.
+  let cursor: { fecha: string; id: string } | null = null;
+  let tope = Number.POSITIVE_INFINITY;
+  let ordenaPorFecha = false;
+  for (const m of ['eq', 'is', 'in', 'lte']) nodo[m] = () => nodo;
+  nodo.order = (col: string) => { if (col === 'fecha') ordenaPorFecha = true; return nodo; };
+  nodo.gte = () => nodo;
+  // `.or('fecha.gt.F,and(fecha.eq.F,id.gt.I)')`: el cursor `(fecha, id)` de `traerTodoPorLlave`.
+  nodo.or = (expr: string) => {
+    const m = /^fecha\.gt\.([\d-]+),and\(fecha\.eq\.\1,id\.gt\.(.+)\)$/.exec(expr);
+    if (!m) throw new Error(`filtro or inesperado: ${expr}`);
+    cursor = { fecha: m[1], id: m[2] };
+    return nodo;
+  };
+  nodo.limit = (n: number) => { tope = n; return nodo; };
   // `traerTodo` pagina con `.range(d, h)`: el mock rebana como lo haría el
   // servidor, y la página que empieza más allá del final llega vacía — que es
   // la prueba de término que `traerTodo` acepta cuando no hay `count`.
-  nodo.range = (d: number, h: number) =>
-    Promise.resolve(resp()).then((r) => ({
+  nodo.range = (d: number, h: number) => {
+    if (d > 0) offsetsPedidos.push(d);
+    return Promise.resolve(resp()).then((r) => ({
       ...r,
       data: Array.isArray(r.data) ? (r.data as unknown[]).slice(d, h + 1) : r.data,
     }));
+  };
   nodo.then = (ok: (v: unknown) => unknown, err?: (e: unknown) => unknown) =>
-    Promise.resolve(resp()).then(ok, err);
+    Promise.resolve(resp()).then((r) => {
+      if (!Array.isArray(r.data)) return r;
+      let filas = r.data as Array<{ id?: string; fecha?: string }>;
+      const c = cursor as { fecha: string; id: string } | null;
+      if (c !== null) filas = filas.filter((f) => typeof f.id === 'string' && ((f.fecha ?? '') > c.fecha || (f.fecha === c.fecha && f.id > c.id)));
+      // El servidor entrega en el orden pedido (`fecha`, `id`).
+      if (ordenaPorFecha) filas = [...filas].sort((a, b) => ((a.fecha ?? '') < (b.fecha ?? '') ? -1 : (a.fecha ?? '') > (b.fecha ?? '') ? 1 : (a.id ?? '') < (b.id ?? '') ? -1 : 1));
+      return { ...r, data: filas.slice(0, tope) };
+    }).then(ok, err);
   return nodo;
 }
 
@@ -108,6 +135,7 @@ beforeEach(() => {
   respLineaUpdate = { data: [{ id: 'l' }], error: null };
   sellos = [];
   escriturasLinea = [];
+  offsetsPedidos = [];
   for (const f of Object.values(logger)) f.mockReset();
 });
 
@@ -158,6 +186,24 @@ describe('barrerPorConciliar', () => {
     expect(escriturasLinea[0].por).toContainEqual(['id', 'l-1']);
     expect(escriturasLinea[0].por).toContainEqual(['tenant_id', 't1']);
     expect(escriturasLinea[0].por).toContainEqual(['estatus', 'por_conciliar']);
+  });
+
+  // RONDA 16 (carga de 250 camiones): el fondo de gastos sin CFDI del rango pasó de `traerTodo` por
+  // OFFSET a cursor por `id` (la misma lectura que `consolidado.candidatos_gasto`). Con 2,300 candidatos
+  // el que casa es el ÚLTIMO por id: si el barrido se quedara en la primera página, no lo vería.
+  it('lee el fondo completo por CURSOR de id (sin offsets) y liga el gasto de la última página', async () => {
+    respLineas = { data: [filaPendiente()], error: null };
+    respGastos = {
+      data: [
+        ...Array.from({ length: 2_299 }, (_, i) => gasto(`g-${String(i).padStart(5, '0')}`, 100)),
+        gasto('g-99999', 500),
+      ],
+      error: null,
+    };
+    const r = await barrerPorConciliar('t1');
+    expect(r.conciliadas).toBe(1);
+    expect(sellos[0].por).toContainEqual(['id', 'g-99999']);
+    expect(offsetsPedidos).toEqual([]);
   });
 
   it('el guardia niega el gasto (otro lo reclamó): la línea SE QUEDA pendiente, sin marcar', async () => {

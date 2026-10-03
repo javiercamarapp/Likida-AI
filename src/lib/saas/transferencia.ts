@@ -436,17 +436,21 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
   return { uuid: cfdi.uuid };
 }
 
-/** Lo que está por cobrarse, para la pantalla de Javier. */
-export async function getPorCobrar(): Promise<FacturaPorCobrar[]> {
-  const { data, error } = await supabaseAdmin()
+/** Techo de filas de la lectura «completa» para los totales de la pantalla.
+ *  Las mensualidades pendientes o fallidas son pocas; si algún día superan esto,
+ *  `total` (conteo exacto de la base) lo delata y la pantalla lo dice. */
+const TECHO_POR_COBRAR_TOTAL = 1000;
+
+async function leerPorCobrar(limite: number): Promise<{ facturas: FacturaPorCobrar[]; total: number }> {
+  const { data, error, count } = await supabaseAdmin()
     .from('factura_saas')
-    .select('id, tenant_id, periodo_inicio, periodo_fin, monto, subtotal, iva, moneda, estado, referencia, cfdi_uuid, tenant(nombre)')
+    .select('id, tenant_id, periodo_inicio, periodo_fin, monto, subtotal, iva, moneda, estado, referencia, cfdi_uuid, tenant(nombre)', { count: 'exact' })
     .in('estado', ['pendiente', 'fallida'])
     .order('periodo_fin', { ascending: false })
-    .limit(50);
+    .limit(limite);
 
   if (error) throw new Error(`getPorCobrar: ${error.message}`);
-  return (data ?? []).map((f) => {
+  const facturas = (data ?? []).map((f) => {
     const t = f.tenant as { nombre?: string } | Array<{ nombre?: string }> | null;
     const nombre = Array.isArray(t) ? t[0]?.nombre : t?.nombre;
     return {
@@ -464,4 +468,16 @@ export async function getPorCobrar(): Promise<FacturaPorCobrar[]> {
       cfdiUuid: (f.cfdi_uuid as string) || null,
     };
   });
+  return { facturas, total: count ?? facturas.length };
+}
+
+/** Lo que está por cobrarse, para la pantalla de Javier (las 50 más recientes). */
+export async function getPorCobrar(): Promise<FacturaPorCobrar[]> {
+  return (await leerPorCobrar(50)).facturas;
+}
+
+/** TODAS las pendientes o fallidas (hasta el techo) más el conteo exacto de la base:
+ *  para que los totales de /admin/cobranza no se calculen sobre una página. */
+export async function getPorCobrarTodas(): Promise<{ facturas: FacturaPorCobrar[]; total: number }> {
+  return leerPorCobrar(TECHO_POR_COBRAR_TOTAL);
 }
