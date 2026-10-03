@@ -311,7 +311,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 287;
 // RONDA 18, paquete «cierre-reauditoria»: 0 archivos y +5 llamadas (1,905 → 1,910), todas en `repo.ts` de su módulo (ya contaban; cada una va por `acotada` con el
 // `tenant_id` anclado): `conductor/repo.ts` +4 (los episodios de «sin señal de vida» para el tablero: filtro por viajes, episodios, folios y choferes) y `reglas/repo.ts` +1
 // (¿hay otra corrida mandando el aviso de esta regla?, R10-6). Funcionalidad nueva, no código migrado. Medido con el barrido real: base 3e61ee1d = 1,905; con el paquete = 1,910.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_910;
+// Ronda 18 (integración): cierre +5 (→ 1,910), pg +0, carga −4 (lo medido en el árbol fusionado: 1,906; la rama de carga declaraba −3). CONFIRMADO con el barrido real:
+// con el techo en 1,905 la prueba dice «subió de 1905 a 1906». Archivos: 287, sin cambio.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_906;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)
