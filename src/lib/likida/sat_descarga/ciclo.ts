@@ -21,7 +21,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { traerTodo, conteo, LecturaCortadaPorReloj } from '@/lib/likida/pg';
+import { traerTodoDesdeId, LecturaCortadaPorReloj, PAGINA } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
 import type { Gasto } from '@/types/likida';
@@ -172,27 +172,33 @@ export function rangoPendiente(
  * gastos sin comprobante en el mes, `decidirCruce` solo veía la mitad del
  * fondo: los CFDI cuyo ticket cayó fuera del corte se marcaban `disponible`
  * en vez de `casado`, y el sello de dedup impide una segunda oportunidad
- * automática. `traerTodo` trae el fondo COMPLETO o lanza.
+ * automática. `traerTodoDesdeId` trae el fondo COMPLETO o lanza.
  */
 export async function gastosSinCfdi(
   tenantId: string, desde: string, hasta: string, venceEn?: number,
 ): Promise<Gasto[]> {
-  const data = await traerTodo<{
+  const data = await traerTodoDesdeId<{
     id: string; concepto: unknown; monto: unknown; fecha: unknown;
     rfc_emisor: unknown; cfdi_uuid: unknown; ocr_extra: unknown;
   }>(
-    (d, h) => acotada(supabaseAdmin()
-      .from('gasto')
-      .select('id, concepto, monto, fecha, rfc_emisor, cfdi_uuid, ocr_extra', conteo(d))
-      .eq('tenant_id', tenantId)
-      .is('cfdi_uuid', null)
-      // Un día de holgura a cada lado: la fecha del ticket (OCR) y la del
-      // timbrado pueden diferir en uno, igual que en la conciliación de
-      // consolidados (VENTANA_DIAS_FECHA, 0076).
-      .gte('fecha', sumarDias(desde, -1))
-      .lte('fecha', sumarDias(hasta, 1))
-      .order('id')
-      .range(d, h), 'sat_descarga.gastos_sin_cfdi'),
+    (despuesDe) => {
+      let q = supabaseAdmin()
+        .from('gasto')
+        .select('id, concepto, monto, fecha, rfc_emisor, cfdi_uuid, ocr_extra', despuesDe === null ? { count: 'exact' as const } : {})
+        .eq('tenant_id', tenantId)
+        .is('cfdi_uuid', null)
+        // Un día de holgura a cada lado: la fecha del ticket (OCR) y la del
+        // timbrado pueden diferir en uno, igual que en la conciliación de
+        // consolidados (VENTANA_DIAS_FECHA, 0076).
+        .gte('fecha', sumarDias(desde, -1))
+        .lte('fecha', sumarDias(hasta, 1));
+      // RONDA 16 (carga de 250 camiones): cursor por `id` y no `range(d, h)`.
+      // Con 10-23k tickets sin CFDI en el rango son hasta 23 páginas; por offset
+      // cada una cuesta más (O(n²)) y un ticket nuevo mientras se pagina corre
+      // las posiciones. El resultado es el mismo conjunto, ordenado por `id`.
+      if (despuesDe !== null) q = q.gt('id', despuesDe);
+      return acotada(q.order('id').limit(PAGINA), 'sat_descarga.gastos_sin_cfdi');
+    },
     'sat_descarga.gastos_sin_cfdi',
     { venceEn },
   );

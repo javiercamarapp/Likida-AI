@@ -297,7 +297,7 @@ export async function traerTodoDesdeId<T extends { id: string }>(
   // techos, contra el `maxDuration = 300` de la ruta más larga del repo. El
   // reloj es OPCIONAL para no cambiarle el comportamiento a nadie más: quien no
   // lo pasa se comporta exactamente como antes.
-  const venceEn = opts.venceEn ?? Number.POSITIVE_INFINITY;
+  const { venceEn } = opts;
   const filas: T[] = [];
   let esperadas: number | null = null;
   let cursor: string | null = null;
@@ -305,7 +305,9 @@ export async function traerTodoDesdeId<T extends { id: string }>(
   for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
     // Antes de pedir la página, no después: con el reloj ya agotado la primera
     // consulta tampoco debe salir.
-    if (Date.now() >= venceEn) {
+    // `venceEn !== undefined` ANTES del `Date.now()`, igual que `traerTodo`: sin reloj pedido no se
+    // mira la hora (una llamada de más corre la secuencia de `Date.now` de quien la maneja a mano).
+    if (venceEn !== undefined && Date.now() >= venceEn) {
       logger.error('pg.lectura_cortada_por_reloj', { consulta, leidas: filas.length, paginas: pagina });
       throw new LecturaCortadaPorReloj(consulta, filas.length, pagina);
     }
