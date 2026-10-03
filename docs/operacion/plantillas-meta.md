@@ -561,7 +561,7 @@ El cuerpo exacto, las variables con su ejemplo y los botones de cada una están 
 | --- | --- | --- |
 | `{{1}}` | nombre del chofer | Juan |
 | `{{2}}` | folio | F-1042 |
-| `{{3}}` | qué se ve (una línea, con «segundo aviso:» al principio en el segundo) | no recibimos la señal del GPS de tu unidad desde hace 1 hora |
+| `{{3}}` | qué se ve (una línea; en el segundo aviso empieza con «segundo aviso:» y termina con «Si no contestas, aviso al jefe de tráfico») | no recibimos la señal del GPS de tu unidad desde hace 1 hora |
 
 - **Botones:** «Sí, estoy» (respuesta rápida, payload `senal_vida_estoy:<viaje_id>`); «Voy a cargar» (respuesta rápida, payload `senal_vida_cargar:<viaje_id>`); «Estoy bien» (respuesta rápida, payload `senal_vida_bien:<viaje_id>`)
 
