@@ -526,7 +526,7 @@ describe('verificarFormatoCampana — los guardarraíles son código, no prompt'
   it('AGB-2: rechaza nombrar al prospecto del piloto o a Grupo GAL como tracción, aunque la plática sea real', async () => {
     const { verificarFormatoCampana } = await import('./redactor');
     expect(() => verificarFormatoCampana('Estamos en pláticas con transportistas como Grupo GAL.')).toThrow(/tracción/);
-    expect(() => verificarFormatoCampana('Ya trabajamos con Innova' + 'tivos.')).toThrow(DatoInvalido);
+    expect(() => verificarFormatoCampana(['Ya trabajamos con Innova', 'tivos.'].join(''))).toThrow(DatoInvalido);
   });
 
   it('un correo del modelo que viole el formato NO entra a la cola y la corrida queda en fallo', async () => {

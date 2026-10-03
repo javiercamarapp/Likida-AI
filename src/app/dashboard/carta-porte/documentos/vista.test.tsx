@@ -87,7 +87,7 @@ describe('VistaDocumentos', () => {
     expect(html(<VistaDocumentos datos={datos()} acciones={todas} />)).toMatch(/Activar buzón/);
     const con = html(<VistaDocumentos datos={datos([], { buzon: { direccion: 'cp-abc@mail.likida.ai', activo: true, remitentes: ['cliente.com'], dominioConfigurado: true } })} acciones={todas} />);
     expect(con).toMatch(/cp-abc@mail\.likida\.ai/);
-    expect(con).toMatch(/cliente\.com/);
+    expect(con).toContain('cliente.com');
     expect(con).not.toMatch(/Activar buzón/);
     expect(html(<VistaDocumentos datos={datos([], { buzon: { direccion: null, activo: true, remitentes: [], dominioConfigurado: false } })} acciones={todas} />)).toMatch(/dominio de correo de Likida no está configurado/);
   });

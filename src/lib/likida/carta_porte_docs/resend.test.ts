@@ -11,7 +11,7 @@ describe('descargadorResend', () => {
     const llamadas: Array<[string, RequestInit | undefined]> = [];
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
       llamadas.push([url, init]);
-      return url.includes('api.resend.com') ? respuesta({ download_url: 'https://cdn.resend.test/x' }) : respuesta(new Uint8Array([1, 2, 3]));
+      return new URL(url).hostname === 'api.resend.com' ? respuesta({ download_url: 'https://cdn.resend.test/x' }) : respuesta(new Uint8Array([1, 2, 3]));
     }));
     const r = await descargadorResend('re_llave', () => 60_000)('em 1', 'a/1');
     expect(r).toEqual({ ok: true, bytes: new Uint8Array([1, 2, 3]) });
@@ -40,11 +40,11 @@ describe('descargadorResend', () => {
   });
 
   it('el tamaño se comprueba DECLARADO y REAL: pasarse es permanente', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.includes('api.resend.com')
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (new URL(url).hostname === 'api.resend.com'
       ? respuesta({ download_url: 'https://cdn.test/x' })
       : respuesta(new Uint8Array(10), { headers: { 'content-length': String(MAX_ADJUNTO_BYTES + 1) } }))));
     expect(await descargadorResend('k', () => 60_000)('e', 'a')).toEqual({ ok: false, transitorio: false });
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.includes('api.resend.com')
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (new URL(url).hostname === 'api.resend.com'
       ? respuesta({ download_url: 'https://cdn.test/x' })
       : respuesta(new Uint8Array(MAX_ADJUNTO_BYTES + 5)))));
     expect(await descargadorResend('k', () => 60_000)('e', 'a')).toEqual({ ok: false, transitorio: false });

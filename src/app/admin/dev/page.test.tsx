@@ -107,7 +107,7 @@ it('eventos de seguridad: null (no se pudo leer) es distinto de [] (de verdad si
 it('un evento de seguridad real se pinta con su tipo y origen', async () => {
   dobles.getEventosSeguridad.mockResolvedValue([{ id: 'e-1', tipo: 'firma_invalida', origen: 'webhook_meta', actor: null, severidad: 'alta', creadoEn: '2026-01-01T00:00:00Z' }]);
   const html = await renderizar();
-  expect(html).toContain('firma invalida'.replace('invalida', 'invalida')); // el guion bajo se reemplaza por espacio
+  expect(html).toContain('firma invalida'); // el guion bajo se reemplaza por espacio
   expect(html).toContain('webhook_meta');
 });
 
