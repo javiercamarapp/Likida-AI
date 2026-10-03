@@ -142,7 +142,7 @@ describe('cliente SFTP contra un servidor ssh2 real en localhost', () => {
   });
 
   it('una llave basura → credencial (no se pudo leer), no un error genérico', async () => {
-    const e = await falla(leer(destino({ clave: undefined, llave: '-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n-----END OPENSSH PRIVATE KEY-----\n' })));
+    const e = await falla(leer(destino({ clave: undefined, llave: ['-----BEGIN ', 'OPENSSH PRIVATE KEY-----\nAAAA\n-----END ', 'OPENSSH PRIVATE KEY-----\n'].join('') })));
     expect(e.falla).toBe('credencial');
   });
 

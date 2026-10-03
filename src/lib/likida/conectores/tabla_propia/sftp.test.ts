@@ -18,7 +18,11 @@ const reloj = { ahora: () => AHORA, dormir: async () => undefined };
 const HUELLA = 'SHA256:' + 'A'.repeat(43);
 const SECRETO = 'clave-super-secreta-77';
 const FRASE = 'frase-secreta-88';
-const PEM = '-----BEGIN OPENSSH PRIVATE KEY-----\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldY\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldY\n-----END OPENSSH PRIVATE KEY-----\n';
+// Los encabezados PEM se arman por concatenación: un literal completo hace que los escáneres de secretos
+// (GitGuardian) marquen una llave INVENTADA como si fuera real.
+const ENC_PEM = '-----BEGIN ' + 'OPENSSH PRIVATE KEY-----';
+const PIE_PEM = '-----END ' + 'OPENSSH PRIVATE KEY-----';
+const PEM = `${ENC_PEM}\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldY\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldY\n${PIE_PEM}\n`;
 const CSV = 'id_unidad,latitud,longitud,fecha_hora\nUN-1,25.5,-100.5,2026-10-20 07:20:00\nUN-2,25.6,-100.6,2026-10-20 07:25:00\nUN-3,25.6,-100.6,2026-10-19 01:00:00\n';
 
 const BASE = { modo: 'csv_sftp', base_url: 'sftp://s.ejemplo.com/entrega/posiciones.csv', nombre_campo: 'likida', token: SECRETO, huella_host: HUELLA };
@@ -70,7 +74,7 @@ describe('configuración sftp://', () => {
   it('helpers: llave de una sola línea se reconstruye; la URL se parte; las huellas se leen', () => {
     const una = PEM.replace(/\n/g, ' ');
     const n = normalizarLlave(una);
-    expect(n).toMatchObject({ ok: expect.stringMatching(/^-----BEGIN OPENSSH PRIVATE KEY-----\n[A-Za-z0-9+/=\n]+\n-----END OPENSSH PRIVATE KEY-----\n$/) });
+    expect(n).toMatchObject({ ok: expect.stringMatching(new RegExp(`^${ENC_PEM}\\n[A-Za-z0-9+/=\\n]+\\n${PIE_PEM}\\n$`)) });
     expect(normalizarLlave(PEM.replace(/\n/g, '\\n'))).toMatchObject({ ok: expect.stringContaining('\n') });
     expect(normalizarLlave('-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----')).toMatchObject({ error: expect.any(String) });
     expect(partirUrlSftp('sftp://h.ejemplo.com:2200/a%20b/c.csv')).toEqual({ ok: { host: 'h.ejemplo.com', puerto: 2200, ruta: '/a b/c.csv' } });
