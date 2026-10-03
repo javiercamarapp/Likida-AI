@@ -271,7 +271,7 @@ export async function ejecutarCobranza(
   // fusionado por chofer y su tope diario. La cobranza por viaje que sigue NO le duplica el día: se salta
   // los viajes que ya tienen gastos pendientes (esos los cobra el gasto) y a los choferes a los que ya se
   // les escribió hoy. Con la flota sin encenderla esto es un no-op y la conducta de siempre no cambia.
-  let gasto: ResultadoCobranzaGasto = resultadoGastoVacio('la cobranza por gasto está apagada');
+  let gasto: ResultadoCobranzaGasto;
   try {
     gasto = await ejecutarCobranzaGastos(tenantId, ahora, {
       venceEn: opts.venceEn, firma: config.firma, instrucciones: config.instrucciones,
