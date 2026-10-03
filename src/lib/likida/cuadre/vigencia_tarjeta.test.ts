@@ -2,7 +2,7 @@
 // Una liquidación cerrada ANTES de la regla no trae el tipo persistido; al
 // reabrirla/recalcularla el motor no puede agregarlo, o el detalle se apagaría
 // (`derivoLaConfig`) y un ajuste firmado bajaría los litros acreditables a 0.
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { cuadrarViaje, type PoliticaGasto } from './engine';
 import { derivoLaConfig } from '../analytics';
 import { reglaTarjetaRigeParaCierre, TARJETA_NO_EMPRESA_VIGENTE_DESDE } from './vigencia_tarjeta';
