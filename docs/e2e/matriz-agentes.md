@@ -31,7 +31,7 @@ La numeración histórica del inventario (agentes 5–12) se corrió en uno cuan
 | 9 | Buzón de facturas de proveedores | correo Resend firmado → bandeja → aprobación → export SAP/CONTPAQi; entrega al contador | `buzon-facturas.md` |
 | 10 | GPS (mapa y lectores) | poll/push → asentador → `posicion` → barrido de validación del Conductor | `gps-proveedores.md` |
 | 11 | Comunicación con operadores | aviso de asignación, aceptación, acuse por selector de WhatsApp, hitos (motor del Conductor) | `comunicacion-operadores.md` |
-| 12 | Jornada | marcas + GPS → tope → alerta | sin doc todavía (paquete P10) |
+| 12 | Jornada | marcas + GPS → tope → alerta | `jornada-alerta-tope.md` |
 | 13 | Mis reglas | español libre → confirmación humana → vigilante SQL → WhatsApp | `mis-reglas.md` |
 | — | Convenios / perfiles de cliente | archivo → despacho → acercamiento a la planta → pregunta → exportación | `convenios-clientes.md` |
 | — | Orquestador / tablero en vivo | pregunta por rol → herramientas de solo lectura → escalar a una persona → barrido de salud y aviso | `orquestador.md` |
