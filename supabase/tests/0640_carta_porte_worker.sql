@@ -7,7 +7,7 @@
 --       creciente según los intentos; NUNCA lo agotado, lo purgado, lo aprobado ni lo que otro tiene con lease vivo;
 --   (b) el estado terminal: `cp_documentos_agotados` lista fallidos con los intentos agotados UNA vez
 --       (el candado de aviso) y se puede soltar si el aviso no salió;
---   (c) `cp_documentos_por_avisar`: solo correo, por revisar, con bloqueo o confianza baja, y una vez;
+--   (c) `cp_documentos_por_avisar`: por revisar, con bloqueo o confianza baja, y una vez (desde la 0692, de CUALQUIER canal: correo, WhatsApp o panel);
 --   (d) el candado de aviso no sube `version` ni `updated_at` (no estorba al revisor ni reinicia la espera),
 --       es por flota y rechaza un tipo inventado;
 --   (e) permisos: ninguna RPC del worker es ejecutable por anon/authenticated;
@@ -125,19 +125,19 @@ select x.id::uuid, '64000000-0000-4000-8000-0000000000a1', x.canal, 'pdf_texto',
     (1, '64000000-0000-4000-8000-0000000000c1', 'correo', '{"hallazgos":[],"bloqueos":1,"porConfirmar":0,"listoParaAprobar":false}', 0.95::numeric),   -- bloqueo
     (2, '64000000-0000-4000-8000-0000000000c2', 'correo', '{"hallazgos":[],"bloqueos":0,"porConfirmar":1,"listoParaAprobar":false}', 0.50::numeric),   -- confianza baja
     (3, '64000000-0000-4000-8000-0000000000c3', 'correo', '{"hallazgos":[],"bloqueos":0,"porConfirmar":0,"listoParaAprobar":true}',  0.99::numeric),   -- limpio
-    (4, '64000000-0000-4000-8000-0000000000c4', 'manual', '{"hallazgos":[],"bloqueos":2,"porConfirmar":0,"listoParaAprobar":false}', 0.20::numeric)    -- no es de correo
+    (4, '64000000-0000-4000-8000-0000000000c4', 'manual', '{"hallazgos":[],"bloqueos":2,"porConfirmar":0,"listoParaAprobar":false}', 0.20::numeric)    -- del panel: desde la 0692 también se avisa
   ) as x(n, id, canal, validacion, conf);
 
 do $$
 declare ids uuid[];
 begin
   select array_agg(id order by id) into ids from public.cp_documentos_por_avisar(100, 0.85, 3);
-  if ids is distinct from array['64000000-0000-4000-8000-0000000000c1', '64000000-0000-4000-8000-0000000000c2']::uuid[] then
+  if ids is distinct from array['64000000-0000-4000-8000-0000000000c1', '64000000-0000-4000-8000-0000000000c2', '64000000-0000-4000-8000-0000000000c4']::uuid[] then
     raise exception '0641: por_avisar inesperados: %', ids;
   end if;
   perform public.cp_documento_reclamar_aviso('64000000-0000-4000-8000-0000000000a1', '64000000-0000-4000-8000-0000000000c1', 'hallazgos');
   select array_agg(id) into ids from public.cp_documentos_por_avisar(100, 0.85, 3);
-  if ids is distinct from array['64000000-0000-4000-8000-0000000000c2']::uuid[] then raise exception '0641: lo ya avisado volvió a listarse: %', ids; end if;
+  if ids is distinct from array['64000000-0000-4000-8000-0000000000c2', '64000000-0000-4000-8000-0000000000c4']::uuid[] then raise exception '0641: lo ya avisado volvió a listarse: %', ids; end if;
   begin perform * from public.cp_documentos_por_avisar(10, 0, 3); raise exception '0641: umbral 0 debía rebotar';
   exception when raise_exception then if sqlerrm like '0641:%' then raise; end if; end;
 end $$;

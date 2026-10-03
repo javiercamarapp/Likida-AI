@@ -19552,3 +19552,28 @@ begin
   raise exception E'CONVENIO_REFRESCO_0691 solo-abierto-refresca=% abierto-reabre-despacho=% cuadre-intacto=% liquidado-intacto=%   (esperado t / t / t / t)',
     solo, reabre, cuadre, liquidado;
 end $$;
+
+-- ── 342. Carta Porte, el aviso de dudas a la oficina cubre correo, WhatsApp y panel, y sigue siendo una vez por documento (mig. 0692) ──
+-- Esperado: CP_POR_AVISAR_0692 correo=t whatsapp=t panel=t limpio-no=t una-vez=t
+do $$
+declare
+  ta uuid; ids uuid[]; c1 uuid := gen_random_uuid(); c2 uuid := gen_random_uuid(); c3 uuid := gen_random_uuid(); c4 uuid := gen_random_uuid();
+  v_mal constant jsonb := '{"hallazgos":[],"bloqueos":1,"porConfirmar":0,"listoParaAprobar":false}';
+  v_ok constant jsonb := '{"hallazgos":[],"bloqueos":0,"porConfirmar":0,"listoParaAprobar":true}';
+  r_correo boolean; r_wa boolean; r_panel boolean; r_limpio boolean; r_una boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF 0692 A') returning id into ta;
+  insert into cp_documento (id, tenant_id, canal, formato, nombre_archivo, bytes, sha256, estado, storage_ruta, validacion, confianza_min) values
+    (c1, ta, 'correo',   'pdf_texto', 'zzz1.pdf', 10, encode(sha256(convert_to('0692-v-1', 'utf8')), 'hex'), 'por_revisar', 'r/1', v_mal, 0.95),
+    (c2, ta, 'whatsapp', 'pdf_texto', 'zzz2.pdf', 10, encode(sha256(convert_to('0692-v-2', 'utf8')), 'hex'), 'por_revisar', 'r/2', v_mal, 0.95),
+    (c3, ta, 'manual',   'pdf_texto', 'zzz3.pdf', 10, encode(sha256(convert_to('0692-v-3', 'utf8')), 'hex'), 'por_revisar', 'r/3', v_mal, 0.95),
+    (c4, ta, 'whatsapp', 'pdf_texto', 'zzz4.pdf', 10, encode(sha256(convert_to('0692-v-4', 'utf8')), 'hex'), 'por_revisar', 'r/4', v_ok, 0.99);
+  select array_agg(id) into ids from cp_documentos_por_avisar(200, 0.85, 3) where tenant_id = ta;
+  r_correo := c1 = any(ids); r_wa := c2 = any(ids); r_panel := c3 = any(ids); r_limpio := not (c4 = any(ids));
+  perform cp_documento_reclamar_aviso(ta, c2, 'hallazgos');
+  select array_agg(id) into ids from cp_documentos_por_avisar(200, 0.85, 3) where tenant_id = ta;
+  r_una := not (c2 = any(ids)) and c1 = any(ids);
+
+  raise exception E'CP_POR_AVISAR_0692 correo=% whatsapp=% panel=% limpio-no=% una-vez=%   (esperado t / t / t / t / t)',
+    r_correo, r_wa, r_panel, r_limpio, r_una;
+end $$;

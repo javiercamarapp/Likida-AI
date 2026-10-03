@@ -13,8 +13,8 @@
 //      (15, 30, 60, 120 min); el presupuesto agotado además no gasta un intento. A los 5 intentos el documento
 //      es TERMINAL (`fallido`, intentos = 5): nadie lo reclama más y la oficina se entera UNA vez.
 //   3. AVISA a la oficina (jefe de tráfico) UNA vez por documento y tipo, con el candado de la 0641:
-//        · `hallazgos`: un documento que entró por correo quedó por revisar con un bloqueo o con lectura poco
-//          segura — el «marcar dudas y mandar al equipo» que pidió el cliente;
+//        · `hallazgos`: un documento (llegó por correo, WhatsApp o el panel: 0692) quedó por revisar con un bloqueo o con
+//          lectura poco segura — el «marcar dudas y mandar al equipo» que pidió el cliente;
 //        · `agotado`: no se pudo leer tras todos los intentos.
 //
 // ── LA REGLA DEL OUTBOX (la de la ronda 06, `aadb8a7a` y `3d9dee7c`) ───────────────────────────────────────
@@ -347,13 +347,18 @@ async function avisarOficinaDe(deps: DepsWorker, opts: OpcionesWorker, r: Result
   }
 }
 
+/** Cómo llegó el documento, para el aviso (el aviso de dudas cubre los tres canales, 0692). */
+function canalTexto(canal: DocumentoFila['canal']): string {
+  return canal === 'correo' ? 'correo' : canal === 'whatsapp' ? 'WhatsApp' : 'el panel';
+}
+
 /** El texto para la oficina: corto, accionable y SIN datos de los campos extraídos (solo conteos y el nombre del archivo). */
 export function armarAviso(tipo: TipoAvisoDoc, doc: DocumentoFila, liga: string): { texto: string; resumen: string } {
   const nombre = doc.nombreArchivo.length > 60 ? `${doc.nombreArchivo.slice(0, 59)}…` : doc.nombreArchivo;
   if (tipo === 'agotado') {
     return {
       texto: [
-        `⚠️ No pude leer el documento «${nombre}» que llegó por ${doc.canal === 'correo' ? 'correo' : doc.canal === 'whatsapp' ? 'WhatsApp' : 'el panel'}.`,
+        `⚠️ No pude leer el documento «${nombre}» que llegó por ${canalTexto(doc.canal)}.`,
         'Pide el archivo de nuevo o captura el viaje a mano.',
         `Detalle: ${liga}`,
       ].join(' '),
@@ -366,7 +371,7 @@ export function armarAviso(tipo: TipoAvisoDoc, doc: DocumentoFila, liga: string)
   if (doc.confianzaMin !== null && doc.confianzaMin < UMBRAL_CRITICO) dudas.push('hay datos con lectura poco segura');
   return {
     texto: [
-      `📄 Llegó por correo el documento «${nombre}» y necesita tu revisión antes de crear el viaje:`,
+      `📄 Llegó por ${canalTexto(doc.canal)} el documento «${nombre}» y necesita tu revisión antes de crear el viaje:`,
       `${dudas.join(' y ') || 'tiene datos por confirmar'}.`,
       `Revísalo aquí: ${liga}`,
     ].join(' '),
