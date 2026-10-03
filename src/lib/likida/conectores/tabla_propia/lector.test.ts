@@ -167,7 +167,7 @@ describe('el conector del catálogo', () => {
   it('es honesto: requiere piloto, sin fuente, solo lee posiciones, secretos marcados', () => {
     expect(TABLA_PROPIA).toMatchObject({ id: 'tabla_propia', formaDeConectar: 'requiere_piloto', fuente: null });
     expect(TABLA_PROPIA.capacidades).toEqual(['leer_posiciones']);
-    expect(TABLA_PROPIA.credenciales.filter((c) => c.forma === 'secreto').map((c) => c.clave).sort()).toEqual(['frase_llave', 'llave_privada', 'sql_clave', 'token']);
+    expect(TABLA_PROPIA.credenciales.filter((c) => c.forma === 'secreto').map((c) => c.clave).sort()).toEqual(['frase_llave', 'llave_privada', 'sql_ca', 'sql_clave', 'token']);
   });
   it('probar: sin «modo» no intenta; con mapeo roto dice cuál; con lectura buena cuenta filas', async () => {
     expect(await TABLA_PROPIA.probar({}, httpDe([]).http)).toMatchObject({ ok: false, verificadoContra: null });

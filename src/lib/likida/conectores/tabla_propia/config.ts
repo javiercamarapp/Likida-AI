@@ -3,7 +3,7 @@ import type { ValoresCredencial } from '../tipos';
 import { RUTA } from '../posiciones_proveedores';
 import { jsonCualquiera } from '../posiciones_comun';
 import { MODOS_TABLA_PROPIA, type ModoTablaPropia } from './contrato';
-import { LIMITE_FILAS_MAXIMO, LIMITE_FILAS_POR_OMISION, identificadorValido, vistaValida, type ColumnasCurso, type ColumnasGeocerca, type ColumnasPosicion, type ConexionSql } from './sql';
+import { LIMITE_FILAS_MAXIMO, LIMITE_FILAS_POR_OMISION, identificadorValido, normalizarCaPem, vistaValida, type ColumnasCurso, type ColumnasGeocerca, type ColumnasPosicion, type ConexionSql } from './sql';
 import { leerHuellas, normalizarLlave, partirUrlSftp } from './sftp';
 import { ZONA_POR_OMISION, zonaValida } from './tiempo';
 
@@ -234,7 +234,14 @@ export function leerConfigTablaPropia(v: ValoresCredencial): ResultadoConfig {
       if (!cc.ok.casetas && !(cc.ok.corredor_wkt && cc.ok.buffer_m)) return no('los cursos necesitan la columna de casetas, o corredor_wkt con buffer_m');
       vistaCur = v.vista_cursos!.trim(); colsCur = cc.ok;
     }
-    return { ok: true, config: { ...comun, modo, conexion: { host, puerto, base, usuario, clave, ssl }, vista: v.vista!.trim(), columnas: cols.ok, vistaGeocercas: vistaGeo, columnasGeocercas: colsGeo, vistaCursos: vistaCur, columnasCursos: colsCur } };
+    let ca: string | undefined;
+    if ((v.sql_ca ?? '').trim() !== '') {
+      const n = normalizarCaPem(v.sql_ca!);
+      if ('error' in n) return no(n.error);
+      ca = n.ok;
+    }
+    if (ca && ssl === 'sin_verificar') return no('sql_ca no se combina con «sin_verificar»: con una CA propia el certificado se verifica contra ella (déjalo en «verificar»)');
+    return { ok: true, config: { ...comun, modo, conexion: { host, puerto, base, usuario, clave, ssl, ...(ca ? { ca } : {}) }, vista: v.vista!.trim(), columnas: cols.ok, vistaGeocercas: vistaGeo, columnasGeocercas: colsGeo, vistaCursos: vistaCur, columnasCursos: colsCur } };
   }
 
   const esSftp = (t: string | undefined) => (t ?? '').trim().toLowerCase().startsWith('sftp:');

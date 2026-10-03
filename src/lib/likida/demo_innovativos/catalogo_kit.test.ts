@@ -188,6 +188,14 @@ describe('estructura del guion: cada agente en su sección y cada cosa con su et
       expect(t).not.toMatch(/SFTP (necesita )?un cliente|SFTP pendientes? de dependencia|y SFTP pendientes/);
     }
   });
+  it('el lector SQL de la tabla propia YA existe con pg (ronda 18): el kit y el guion no dicen que falta un controlador', () => {
+    expect(existsSync(`${RAIZ}src/lib/likida/conectores/tabla_propia/sql.ts`)).toBe(true);
+    expect(existsSync(`${RAIZ}node_modules/pg/package.json`)).toBe(true);
+    expect(readFileSync(`${RAIZ}package.json`, 'utf8')).toMatch(/"pg": "8\.\d+\.\d+"/);
+    for (const t of [guion, doc]) {
+      expect(t).not.toMatch(/SQL directo (necesita|pendiente de dependencia)|controlador que aún no instalamos|falta el controlador de PostgreSQL/);
+    }
+  });
   it('el alta y la edición de convenios en pantalla ya existen (P7) y el guion lo dice como «corre hoy»', () => {
     expect(existsSync(`${RAIZ}src/lib/likida/convenios/edicion.ts`)).toBe(true);
     const g = guion.replace(/\*\*/g, '');
