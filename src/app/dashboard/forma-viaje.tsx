@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Plus } from 'lucide-react';
 import { ComboCatalogo, type BuscarCatalogo } from './combo-catalogo';
+import { mxn } from '@/lib/formato';
 
 /**
  * El formulario de NUEVO VIAJE — pieza REUSABLE a propósito (12-ago-2026):
@@ -99,7 +100,7 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
             className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
           {topeAnticipo !== undefined && (
             <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
-              Tope de la política de tu flota: {topeAnticipo.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })}
+              Tope de la política de tu flota: {mxn(topeAnticipo)}
             </p>
           )}
         </div>}

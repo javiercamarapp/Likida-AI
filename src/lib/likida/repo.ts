@@ -2007,6 +2007,7 @@ export async function getPiezasDunning(limite = 500): Promise<PiezaDunning[]> {
     .eq('agente', 'cobranza_saas')
     .eq('tipo', 'recordatorio_cobranza')
     .order('creado_en', { ascending: false })
+    .order('id')
     .limit(limite), 'dunning.piezas');
   if (error) throw new Error(`getPiezasDunning: ${error.message}`);
   return (data ?? []).map((r) => ({
@@ -2025,6 +2026,7 @@ export async function getUltimaCorridaDunning(): Promise<CorridaDunning | null> 
     .select('estado, fin, error, resumen')
     .eq('agente', 'cobranza_saas')
     .order('fin', { ascending: false })
+    .order('id')
     .limit(1), 'dunning.corrida');
   if (error) throw new Error(`getUltimaCorridaDunning: ${error.message}`);
   const r = data?.[0];
