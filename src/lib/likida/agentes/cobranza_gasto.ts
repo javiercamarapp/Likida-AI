@@ -444,6 +444,8 @@ export async function ejecutarCobranzaGastos(
         plantilla: { nombre: PLANTILLA.cobranzaGastos, parametros: parametrosPlantillaGastos(grupo.operador.nombre, grupo.items) },
         contexto: 'cobranza.gastos',
         tenantId,
+        // La ventana de 24 h se evalúa al reloj lógico de la corrida (el mismo `ahora` del tier), no al del proceso.
+        ahora,
       });
       if (envio.ok) {
         enviado = true;
