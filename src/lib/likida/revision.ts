@@ -421,14 +421,14 @@ export function normalizarAjustes(crudos: Array<{ gastoId: string; montoNuevo: u
  * liquidación no existe en esta flota: la RPC lo iba a rechazar con LR002 de
  * todos modos, mejor no gastar el recálculo del motor para nada.
  */
-async function viajeIdDeLiquidacion(tenantId: string, liquidacionId: string): Promise<string | null> {
+async function viajeIdDeLiquidacion(tenantId: string, liquidacionId: string): Promise<{ viajeId: string; cerradaEn: string | null } | null> {
   const res = await acotada(
-    supabaseAdmin().from('liquidacion').select('viaje_id')
+    supabaseAdmin().from('liquidacion').select('viaje_id, created_at')
       .eq('tenant_id', tenantId).eq('id', liquidacionId).maybeSingle(),
     'revision.viajeIdDeLiquidacion',
   );
-  const fila = exigir(res, 'revision.viajeIdDeLiquidacion') as { viaje_id: unknown } | null;
-  return fila?.viaje_id ? String(fila.viaje_id) : null;
+  const fila = exigir(res, 'revision.viajeIdDeLiquidacion') as { viaje_id: unknown; created_at?: unknown } | null;
+  return fila?.viaje_id ? { viajeId: String(fila.viaje_id), cerradaEn: typeof fila.created_at === 'string' ? fila.created_at : null } : null;
 }
 
 export async function revisarLiquidacion(p: PeticionRevision): Promise<ResultadoRevision> {
@@ -454,10 +454,11 @@ export async function revisarLiquidacion(p: PeticionRevision): Promise<Resultado
   let recalculo: RecalculoAjuste | undefined;
   let cuadreRecalculado: Awaited<ReturnType<typeof recalcularParaAjuste>>['cuadre'] | undefined;
   if (p.accion === 'ajustar') {
-    const viajeId = await viajeIdDeLiquidacion(p.tenantId, p.liquidacionId);
-    if (!viajeId) throw new DatoInvalido('Esa liquidación no existe en esta flota.');
+    const previa = await viajeIdDeLiquidacion(p.tenantId, p.liquidacionId);
+    if (!previa) throw new DatoInvalido('Esa liquidación no existe en esta flota.');
+    const viajeId = previa.viajeId;
     try {
-      const r = await recalcularParaAjuste(p.tenantId, viajeId, p.ajustes!);
+      const r = await recalcularParaAjuste(p.tenantId, viajeId, p.ajustes!, previa.cerradaEn);
       recalculo = r.recalculo;
       cuadreRecalculado = r.cuadre;
       await conservarPdfAntesDeAjuste(p.tenantId, p.liquidacionId);
