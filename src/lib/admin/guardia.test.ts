@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clasificarBandeja, decidirAvisos, decidirBaseCaida, estadoDeDetalle, claveDeItem, huellaDeClave, lineasDeAviso, ESTADO_GUARDIA_INICIAL } from './guardia';
+import { clasificarBandeja, decidirAvisos, decidirBaseCaida, estadoDeDetalle, claveDeItem, huellaDeClave, lineasDeAviso, estadoTrasAviso, ESTADO_GUARDIA_INICIAL } from './guardia';
 import type { BandejaEscalaciones, ItemEscalacion, FuenteLeida } from './escalaciones';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -152,5 +152,21 @@ describe('estadoDeDetalle — no confía en la forma del jsonb', () => {
     expect(estadoDeDetalle('x')).toEqual(ESTADO_GUARDIA_INICIAL);
     expect(estadoDeDetalle({ vistos: ['a', 3, null, 'b'], baseCaidaDesde: 'no es fecha' })).toEqual({ vistos: ['a', 'b'], baseCaidaDesde: null });
     expect(estadoDeDetalle({ vistos: 'x', baseCaidaDesde: '2026-10-03T00:00:00Z' })).toEqual({ vistos: [], baseCaidaDesde: '2026-10-03T00:00:00Z' });
+  });
+});
+
+describe('estadoTrasAviso — «visto» solo si el aviso salió (M5, ronda 19)', () => {
+  const uno = () => decidirAvisos(clasificarBandeja(bandeja([item('corridas', null)]), AHORA), ESTADO_GUARDIA_INICIAL);
+
+  it('con el aviso enviado, todo lo vigente queda visto', () => {
+    const d = uno();
+    expect(estadoTrasAviso(d, true).vistos).toHaveLength(1);
+  });
+  it('sin aviso, lo NUEVO no se anota (se reintenta); lo ya avisado antes se conserva', () => {
+    const d = uno();
+    expect(estadoTrasAviso(d, false).vistos).toHaveLength(0);
+    const d2 = decidirAvisos(clasificarBandeja(bandeja([item('corridas', null)]), AHORA), d.estado);
+    expect(d2.nuevos).toHaveLength(0);
+    expect(estadoTrasAviso(d2, false).vistos).toHaveLength(1);
   });
 });

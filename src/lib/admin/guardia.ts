@@ -190,6 +190,20 @@ export function decidirAvisos(c: ClasificacionGuardia, previo: EstadoGuardia): D
   };
 }
 
+/**
+ * M5 (ronda 19): el dedup anota «ya lo avisé» SOLO si el aviso salió. Sin canal configurado, con el piso de una hora o con
+ * el envío rechazado, un S1 nuevo se quedaba en vistos y no volvía a sonar al arreglar el canal. Si no salió, lo nuevo
+ * se quita de vistos (lo ya avisado antes se conserva) y la siguiente pasada vuelve a intentarlo.
+ */
+export function estadoTrasAviso(d: DecisionGuardia, avisoSalio: boolean): EstadoGuardia {
+  if (avisoSalio || (d.nuevos.length === 0 && d.ciegasNuevas.length === 0)) return d.estado;
+  const sinAvisar = new Set([
+    ...d.nuevos.map((i) => huellaDeClave(claveDeItem(i))),
+    ...d.ciegasNuevas.map((f) => huellaDeClave(`ciega|${f.fuente}`)),
+  ]);
+  return { ...d.estado, vistos: d.estado.vistos.filter((h) => !sinAvisar.has(h)) };
+}
+
 /** Una base inalcanzable avisa UNA vez por racha: devuelve si hay que avisar y el estado a guardar. */
 export function decidirBaseCaida(previo: EstadoGuardia, ahoraIso: string): { avisar: boolean; estado: EstadoGuardia } {
   if (previo.baseCaidaDesde) return { avisar: false, estado: previo };

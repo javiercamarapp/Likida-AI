@@ -51,7 +51,8 @@ vi.mock('@/lib/admin/estado', async () => {
 });
 vi.mock('@/lib/correo/enviar', () => ({ correoConfigurado: () => true }));
 vi.mock('@/lib/env', () => ({ appUrl: () => 'https://app.likida.ai' }));
-const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
+let avisoSale = true;
+const alertarOperador = vi.fn(async (..._a: unknown[]) => avisoSale);
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...a) }));
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'cod' }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -65,7 +66,7 @@ beforeEach(() => {
   autorizado = 'si'; global = 'encendido'; clasificacion = vacia; latidoPrevio = null;
   sondeo = { respondio: true, httpStatus: 200, status: 'ok', db: 'ok', crons: 'ok', migracionAlDia: true };
   latidos = { 'wa-pendientes': ok, 'wa-outbox': ok, 'buzon-entrega': ok };
-  registrarLatido.mockClear(); registrarEstado.mockClear(); alertarOperador.mockClear(); purgarObservabilidad.mockClear();
+  avisoSale = true; registrarLatido.mockClear(); registrarEstado.mockClear(); alertarOperador.mockClear(); purgarObservabilidad.mockClear();
   vi.useRealTimers();
 });
 
@@ -117,6 +118,19 @@ describe('avisar solo lo NUEVO', () => {
     alertarOperador.mockClear();
     await llamar();
     expect(alertarOperador).not.toHaveBeenCalledWith('guardia.incidente_nuevo', expect.anything());
+  });
+
+  it('M5: si el aviso NO salió (sin canal, piso, envío rechazado) el incidente nuevo NO queda en vistos y se reintenta', async () => {
+    clasificacion = { ...vacia, items: [incidente], porSeveridad: { ...vacia.porSeveridad, S2: 1 } };
+    avisoSale = false;
+    await llamar();
+    const guardado = registrarLatido.mock.calls.find((c) => c[0] === 'guardia')?.[2] as { vistos: string[] };
+    expect(guardado.vistos).toHaveLength(0);
+    // al configurar el canal, la siguiente pasada SÍ avisa
+    latidoPrevio = { ultimoLatido: new Date().toISOString(), estado: 'ok', detalle: guardado };
+    avisoSale = true; alertarOperador.mockClear();
+    await llamar();
+    expect(alertarOperador).toHaveBeenCalledWith('guardia.incidente_nuevo', expect.anything());
   });
 
   it('bandeja vacía: ningún aviso y latido ok', async () => {

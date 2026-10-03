@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { clasificacionDeGuardia, decidirAvisos, decidirBaseCaida, estadoDeDetalle, lineasDeAviso, huellaDeClave } from '@/lib/admin/guardia';
+import { clasificacionDeGuardia, decidirAvisos, decidirBaseCaida, estadoDeDetalle, estadoTrasAviso, lineasDeAviso, huellaDeClave } from '@/lib/admin/guardia';
 import { COMPONENTES_ESTADO, detalleLatidos, leerLatido, puertaCron, purgarObservabilidad, registrarEstado, registrarLatido, type EstadoLatido } from '@/lib/admin/salud';
 import { componentesDesdeHealth, componentesDesdeLatidos, esVentanaDeMantenimiento, medicionVacia, sondearHealth } from '@/lib/admin/estado';
 import { leerInterruptor } from '@/lib/likida/interruptores';
@@ -115,11 +115,12 @@ export async function GET(req: Request) {
       if (decision.baseVolvio) {
         await alertarOperador('guardia.base_volvio', { error: 'La base volvió: la guardia vuelve a ver producción.', codigo: 'guardia_base_volvio' });
       }
+      let avisoSalio = true;
       if (decision.nuevos.length > 0 || decision.ciegasNuevas.length > 0) {
         const lineas = lineasDeAviso(decision);
         // `cual`: la huella de lo nuevo — dos tandas distintas de incidentes son dos alarmas aunque caigan en la misma hora
         // (el piso por evento del correo se parte por huella; sin esto el segundo grupo se descartaba).
-        await alertarOperador('guardia.incidente_nuevo', {
+        avisoSalio = await alertarOperador('guardia.incidente_nuevo', {
           codigo: 'guardia_incidente_nuevo',
           cual: huellaDeClave(lineas.join('\n')),
           resumen: `${decision.nuevos.length} incidente(s) nuevo(s) y ${decision.ciegasNuevas.length} fuente(s) ciega(s)`,
@@ -127,7 +128,8 @@ export async function GET(req: Request) {
           ...(lineas.length > 6 ? { y_mas: `${lineas.length - 6} más: abre /admin/escalaciones` } : {}),
         });
       }
-      estadoNuevo = decision.estado;
+      // M5: «visto» solo si el aviso salió (sin canal o con el piso, el incidente nuevo sigue pendiente).
+      estadoNuevo = estadoTrasAviso(decision, avisoSalio);
       detalleBandeja = {
         urgentes: decision.urgentes.length, nuevos: decision.nuevos.length,
         ciegas: clasificacion.fuentesCiegas.length, porSeveridad: clasificacion.porSeveridad,
