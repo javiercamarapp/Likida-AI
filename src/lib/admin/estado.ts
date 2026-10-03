@@ -24,6 +24,7 @@
 //                buzón del destinatario.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { TZ_MX, hoyMx } from '@/lib/formato';
 import type { ComponenteEstado, DiaEstado, EstadoMedido, LatidoDetallado, CronId } from './salud';
 
 /** Lo que el sondeo a `/api/health` logró leer. `null` en un campo = el cuerpo no lo traía (no se inventa). */
@@ -123,7 +124,7 @@ export function medicionVacia(): MedicionComponentes {
 
 /** ¿Toca el mantenimiento diario (retención)? Entre las 3:00 y las 3:04 de la Ciudad de México: una corrida de la guardia al día. */
 export function esVentanaDeMantenimiento(ahoraMs: number): boolean {
-  const partes = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(ahoraMs));
+  const partes = new Intl.DateTimeFormat('en-GB', { timeZone: TZ_MX, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(ahoraMs));
   const hora = Number(partes.find((p) => p.type === 'hour')?.value);
   const minuto = Number(partes.find((p) => p.type === 'minute')?.value);
   return hora === 3 && minuto < 5;
@@ -155,7 +156,7 @@ export function ultimosDias(hoy: string, n = 30): string[] {
 
 /** El día MX de un instante, como YYYY-MM-DD. */
 export function diaMx(ahoraMs: number): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ahoraMs));
+  return hoyMx(new Date(ahoraMs));
 }
 
 /** Los renglones de `estado_30_dias` → un resumen por componente. Los días SIN fila quedan `sin_medicion`: nunca en verde. */

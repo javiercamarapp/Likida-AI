@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { fechaHoraMx, numero } from '@/lib/formato';
 import Link from 'next/link';
 import { cargarEstadoPublico, type EstadoPublico } from './datos';
 import type { ComponenteEstado, EstadoMedido } from '@/lib/admin/salud';
@@ -59,7 +60,7 @@ function Etiqueta({ estado }: { estado: EstadoMedido | 'sin_medicion' }) {
 }
 
 function fechaLegible(iso: string): string {
-  return new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
+  return fechaHoraMx(iso);
 }
 
 export default async function PaginaEstado() {
@@ -131,7 +132,7 @@ export default async function PaginaEstado() {
                     ? 'No se pudo leer el historial.'
                     : r.disponibilidadPct === null
                       ? 'Sin mediciones en los últimos 30 días.'
-                      : `Disponibilidad medida: ${r.disponibilidadPct.toFixed(2)} % · ${r.muestras.toLocaleString('es-MX')} mediciones en ${r.diasMedidos} de 30 días.`}
+                      : `Disponibilidad medida: ${r.disponibilidadPct.toFixed(2)} % · ${numero(r.muestras)} mediciones en ${r.diasMedidos} de 30 días.`}
                 </p>
               </section>
             );
