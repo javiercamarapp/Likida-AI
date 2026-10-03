@@ -14,6 +14,8 @@ import { Mundo } from './mundo.fixture';
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 const wa: Array<{ telefono: string; texto: string; plantilla: string }> = [];
+// Lo que responde Meta al siguiente envío: por omisión sale bien; un caso lo cambia para simular rechazo.
+let respuestaMeta: Record<string, unknown> | null = null;
 vi.mock('../notificar', () => ({ notificarAsignacion: vi.fn(async () => ({ enviado: true })) }));
 vi.mock('../carta_porte_wa', () => ({ evaluarYAvisarCcpDespacho: vi.fn(async () => {}) }));
 vi.mock('../briefing_inicio_wa', () => ({ enviarBriefingInicio: vi.fn(async () => {}) }));
@@ -21,6 +23,7 @@ vi.mock('../bitacora_escritura', () => ({ anotarBitacora: vi.fn(async () => {}) 
 vi.mock('@/lib/meta/enviar_con_fallback', () => ({
   enviarConFallback: vi.fn(async (telefono: string, o: { texto: string; plantilla: { nombre: string } }) => {
     wa.push({ telefono, texto: o.texto, plantilla: o.plantilla.nombre });
+    if (respuestaMeta) return respuestaMeta;
     return { ok: true, via: 'texto', id: 'w', motivo: 'ventana_abierta', ventana: 'abierta' };
   }),
 }));
@@ -56,6 +59,7 @@ const posicion = (p: { lat: number; lng: number }, minAtras = 1) => mundo.poner(
 beforeEach(() => {
   mundo = new Mundo();
   wa.length = 0;
+  respuestaMeta = null;
   clienteId = String(mundo.poner('cliente', { tenant_id: T, nombre: 'Cliente Uno' }).id);
   operadorId = String(mundo.poner('operador', { tenant_id: T, nombre: 'Juan Pérez', telefono: '5213312345678', activo: true }).id);
   unidadId = String(mundo.poner('unidad', { tenant_id: T, numero_economico: 'T-12' }).id);
@@ -65,6 +69,32 @@ beforeEach(() => {
 });
 
 describe('el ciclo completo de un convenio', () => {
+  it('FALLO: Meta rechaza (plantilla sin aprobar) → el viaje se crea igual, el reclamo se queda y no se repite; si es reintentable, la siguiente corrida lo manda', async () => {
+    await importarArchivoDelPanel({ tenantId: T, rol: 'flota_admin' }, { bytes: null, texto: ARCHIVO });
+    // Rechazo NO reintentable (plantilla sin aprobar): crearViaje no lanza y el despacho queda reclamado sin sellar.
+    respuestaMeta = { ok: false, motivo: 'plantilla_rechazada', mensaje: 'plantilla sin aprobar', fueraDeVentana: true, reintentable: false, ventana: 'cerrada' };
+    const viajeId = String(await crearViaje(T, { operadorId, unidadId, clienteId, origen: 'Planta Zapopan', destino: 'CEDIS Tlaquepaque', folio: 'F-2003' }));
+    mundo.tablas.viaje.find((v) => v.id === viajeId)!.aceptado_en = AHORA.toISOString();
+    expect(viajeId).toBeTruthy();
+    expect(wa).toHaveLength(1); // se intentó una vez
+    expect(mundo.tablas.viaje_convenio[0].despacho_enviado_en ?? null).toBeNull(); // no se selló como enviado
+    // Aunque el cron corra otra vez no se repite el mismo fallo (el reclamo quedó puesto).
+    expect(await despacharInstrucciones(T, viajeId)).toEqual({ estado: 'perdido' });
+    expect(wa).toHaveLength(1);
+    // El acercamiento también falla igual, sin tumbar el barrido ni mandar de más.
+    posicion(ORIGEN);
+    await expect(barridoAcercamiento(undefined, AHORA)).resolves.toMatchObject({ enviados: 0 });
+    expect(wa).toHaveLength(2);
+    expect(await atenderPreguntaConvenio({ tenantId: T, operadorId, viajeAbiertoId: viajeId, texto: '¿Por dónde entro?' })).toContain('Entra por la puerta 1 de carga'); // la pregunta sigue respondiendo
+    // Rechazo REINTENTABLE (límite de tasa) en otro viaje: libera el reclamo y la corrida siguiente lo manda.
+    const otroOp = String(mundo.poner('operador', { tenant_id: T, nombre: 'Ana López', telefono: '5213398765432', activo: true }).id);
+    respuestaMeta = { ok: false, motivo: 'rechazo_no_ventana', mensaje: 'límite de tasa', fueraDeVentana: false, reintentable: true, ventana: 'abierta' };
+    const v2 = String(await crearViaje(T, { operadorId: otroOp, unidadId, clienteId, origen: 'Planta Zapopan', destino: 'CEDIS Tlaquepaque', folio: 'F-2004' }));
+    respuestaMeta = null;
+    expect(await despacharInstrucciones(T, v2)).toMatchObject({ estado: 'enviado' });
+    expect(wa.at(-1)!.telefono).toBe('5213398765432');
+  });
+
   it('archivo → despacho → acercamiento a carga → pregunta → carga → acercamiento a descarga → exportación sin dinero', async () => {
     // 1. El dueño sube el archivo (con tarifa: es finanzas).
     const imp = await importarArchivoDelPanel({ tenantId: T, rol: 'flota_admin' }, { bytes: null, texto: ARCHIVO });
