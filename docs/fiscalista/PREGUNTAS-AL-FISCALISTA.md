@@ -200,6 +200,25 @@ con un XML real** de alguno de los 13 emisores de monedero — no con más lectu
 
 ---
 
+### C5 · Tarjetas o monederos que no son de la empresa (chofer con la suya y reembolso)
+**CÓDIGO.** Ya implementado lo determinístico (E1-B, P0-6): si la flota no declaró
+que las tarjetas son suyas —o declaró que el chofer paga con la suya y se le
+reembolsa— el diésel pagado con tarjeta/monedero (04, 05, 28, 29) **no acredita
+litros del estímulo** (LIF 2026 art. 20-A fr. IV: «cuentas abiertas a nombre de
+la persona contribuyente») y se manda a revisión humana con el motivo a la vista.
+
+**Pendiente del fiscalista (no se inventó ningún criterio):**
+1. ¿La tarjeta del chofer reembolsada por la empresa afecta TAMBIÉN la
+   deducción de ISR (LISR 27-III) y el acreditamiento de IVA del mismo CFDI?
+   Hoy el motor solo corta el estímulo; ISR e IVA siguen como antes.
+2. ¿Hay forma de documentar el reembolso para que el estímulo proceda?
+3. ¿Una tarjeta adicional/de un tercero autorizado cuenta como «de la empresa»?
+
+**Dónde vive:** `src/lib/likida/cuadre/engine.ts` (`tarjeta_no_empresa`),
+`src/lib/likida/perfil/preguntas.ts` (`tarjetasDeLaEmpresa`).
+
+---
+
 ### C3 · ¿El nuevo plazo de cancelación aplica a CFDI expedidos en 2025?
 **CÓDIGO.** El Transitorio Segundo del Decreto (DOF 07-11-2025) habla de
 «procedimientos iniciados», no de comprobantes. La lectura literal del 29-A

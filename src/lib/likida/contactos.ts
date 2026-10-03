@@ -135,6 +135,10 @@ export async function telefonoJefeDe(tenantId: string): Promise<string | null> {
  * `avisar_cierre.test.ts` lo comprueba contra la matriz real.
  */
 export const ORDEN_AVISO_DINERO: RolOficina[] = ['flota_admin', 'contador'];
+// E1-B (P0-7): el encargado NO entra aquí a propósito. Se entera del cierre por
+// el acuse «solo folio» (`acuse_folio.ts`: folio, operador y fecha, cero cifras)
+// que sale al primero de `ORDEN_AVISO` (`telefonoJefeDe`).
+
 
 /** A quién se le mandan las CIFRAS de un cierre. `null` si nadie que vea
  *  dinero tiene teléfono capturado — y entonces no se manda a nadie, nunca

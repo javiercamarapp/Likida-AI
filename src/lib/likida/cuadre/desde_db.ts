@@ -6,7 +6,8 @@ import { cuadrarViaje, medioNoAdmitidoCombustible, formaPagoJuzgableDe, copiasDe
 import { ventanaDelViaje } from './fecha_dudosa';
 import { getViaje, getGastos, getOperador, getAcumuladoCombustible, getPerfilCrudo } from '../repo';
 import { getConfig } from '../config';
-import { calificaEstimuloPeaje, facilidad15Vigente } from '../perfil/preguntas';
+import { reglaTarjetaRigeParaCierre } from './vigencia_tarjeta';
+import { calificaEstimuloPeaje, facilidad15Vigente, tarjetasDeLaEmpresa } from '../perfil/preguntas';
 import { logger } from '@/lib/logger';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
@@ -53,7 +54,13 @@ export async function cuadrarDesdeDB(
    * el resto de este contador.
    */
   gastosOverride?: Gasto[],
-  opciones: { modo?: 'best_effort' | 'cierre' } = {},
+  opciones: {
+    modo?: 'best_effort' | 'cierre';
+    /** Fecha de cierre de la liquidación que se REABRE o se recalcula (su
+     *  `created_at`). Si es anterior a la vigencia de `tarjeta_no_empresa`, esa
+     *  regla no se aplica: el fail-closed no es retroactivo (A2). Ausente = cierre nuevo. */
+    cerradaEn?: string | null;
+  } = {},
 ): Promise<Omit<Liquidacion, 'id' | 'creadaEn'>> {
   const cierreEstricto = opciones.modo === 'cierre';
   const [viaje, gastosDb, config, perfilCrudo] = await Promise.all([
@@ -219,6 +226,9 @@ export async function cuadrarDesdeDB(
     oposicionTitular,
     facilidad15,
     elegiblePeaje,
+    // P0-6 (no retroactivo, A2: ver vigencia_tarjeta.ts): sin declaración positiva de que las tarjetas son de la empresa, el
+    // diésel pagado con tarjeta no acredita litros (el motor lo explica).
+    tarjetasEmpresa: reglaTarjetaRigeParaCierre(opciones.cerradaEn) ? tarjetasDeLaEmpresa(perfilCrudo) : true,
     lineasEcc: cierreEstricto
       ? await lineasEccParaCuadre(tenantId, gastos)
       : await lineasEccParaCuadre(tenantId, gastos).catch((e) => {

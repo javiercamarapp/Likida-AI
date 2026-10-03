@@ -118,6 +118,32 @@ export const PASOS_CIERRE: ReadonlyArray<PasoCierre> = [
   { paso: 'releaseViajeLock',                      donde: 'processor.ts:814',  ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
 ];
 
+/**
+ * Lo que corre DESPUÉS del cierre y FUERA del margen (E1-B, P0-7): el acuse
+ * «solo folio» al encargado (`acuse_folio.ts`). Es accesorio —ningún sello ni
+ * resultado depende de él y falla hacia adelante— y su costo (≈4 s nominales)
+ * no se suma a `MARGEN_CIERRE_MS`: el margen ya está en el límite del
+ * presupuesto de 60 s del webhook (39.6 s de 40 s) y meter aquí cuatro pasos
+ * más lo dejaría negativo. Está escrito para que se vea, no para que se
+ * olvide; `presupuesto.test.ts` fija su suma.
+ *
+ * M2 (ronda 20): además NO se espera. `avisar_cierre.ts#enSegundoPlano` lo programa
+ * con `after()` y devuelve de inmediato, así que ni siquiera los ~4.7 s nominales
+ * retrasan el sello de entrega; solo sin ámbito de petición (cron, reintentos) se
+ * espera, con un techo duro de `TECHO_ACCESORIOS_SIN_AFTER_MS` (6 s) — el peor caso
+ * encadenado de techos (~48 s) ya no puede colgar el cierre del chofer.
+ */
+export const PASOS_POST_CIERRE: Array<{ paso: string; donde: string; ms: number; techoMs: number }> = [
+  { paso: 'telefonoJefeDe (encargado)',                     donde: 'contactos.ts',   ms: 600,   techoMs: 2 * TECHO_PASO_CONSULTA_MS },
+  { paso: 'createSignedUrl del sello de entrega del acuse', donde: 'acuse_folio.ts', ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
+  { paso: 'upload del PDF solo folio',                      donde: 'acuse_folio.ts', ms: 500,   techoMs: TECHO_PASO_CONSULTA_MS },
+  { paso: 'createSignedUrl del PDF solo folio',             donde: 'acuse_folio.ts', ms: 500,   techoMs: TECHO_PASO_CONSULTA_MS },
+  { paso: 'sendDocument del acuse solo folio al encargado', donde: 'acuse_folio.ts', ms: 2_500, techoMs: TECHO_ENVIO_WHATSAPP_MS },
+  { paso: 'upload del sello de entrega del acuse',          donde: 'acuse_folio.ts', ms: 300,   techoMs: TECHO_PASO_CONSULTA_MS },
+  // Solo si Meta rechaza el documento por ventana de 24 h (131047): ruta de excepción, 0 en el nominal.
+  { paso: 'sendText (plantilla) del acuse fuera de ventana', donde: 'acuse_folio.ts', ms: 0,      techoMs: TECHO_ENVIO_WHATSAPP_MS },
+];
+
 /** Suma nominal de la tabla de arriba. 14.0s con los costos unitarios de este archivo. */
 export const COSTO_CIERRE_MS = PASOS_CIERRE.reduce((s, p) => s + p.ms, 0);
 

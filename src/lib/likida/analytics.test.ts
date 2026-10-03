@@ -176,6 +176,11 @@ describe('los renglones del panel son los mismos que los del PDF', () => {
     cuadrarDesdeDB.mockResolvedValue(LIQ_RECONSTRUIDA);
   });
 
+  it('A2: reconstruye con la fecha de cierre de la liquidación (la regla de tarjeta ajena no es retroactiva)', async () => {
+    await getLiquidacionDetalle('liq-1', TENANT);
+    expect(cuadrarDesdeDB.mock.calls[0][3]).toEqual({ cerradaEn: '2026-07-31T02:00:00Z' });
+  });
+
   it('la suma de los renglones es EXACTAMENTE el total comprobado', async () => {
     const d = await getLiquidacionDetalle('liq-1', TENANT);
     const suma = d!.gastos.reduce((s, g) => s + g.monto, 0);
