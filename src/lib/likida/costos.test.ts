@@ -85,6 +85,35 @@ describe('registrarCosto — un insert que rebota no puede pasar callado', () =>
     expect(logger.error).not.toHaveBeenCalled();
   });
 
+  it('A1 (ronda 19): sin la columna `duracion_ms` (0700 aún no aplicada) reintenta SIN ella y el costo se registra', async () => {
+    insert.mockResolvedValueOnce({ error: { message: 'column "duracion_ms" of relation "llm_costo" does not exist', code: '42703' } });
+    await registrarCosto({ ...costo, duracionMs: 850 });
+    expect(insert).toHaveBeenCalledTimes(2);
+    expect(insert.mock.calls[0][0]).toHaveProperty('duracion_ms', 850);
+    expect(insert.mock.calls[1][0]).not.toHaveProperty('duracion_ms');
+    expect(insert.mock.calls[1][0]).toMatchObject({ tenant_id: costo.tenantId, costo_usd: 0.0451 });
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('A1: PGRST204 (caché de esquema de PostgREST sin la columna) también reintenta sin ella', async () => {
+    insert.mockResolvedValueOnce({ error: { message: "Could not find the 'duracion_ms' column of 'llm_costo' in the schema cache", code: 'PGRST204' } });
+    await registrarCosto({ ...costo, duracionMs: 10 });
+    expect(insert).toHaveBeenCalledTimes(2);
+    expect(insert.mock.calls[1][0]).not.toHaveProperty('duracion_ms');
+  });
+
+  it('A1: un error de columna AJENA a duracion_ms, o sin duración que quitar, no reintenta (sigue siendo ruidoso)', async () => {
+    insert.mockResolvedValue({ error: { message: 'column "otra" does not exist', code: '42703' } });
+    await registrarCosto({ ...costo, duracionMs: 5 });
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    insert.mockClear(); logger.error.mockClear();
+    insert.mockResolvedValue({ error: { message: 'column "duracion_ms" does not exist', code: '42703' } });
+    await registrarCosto(costo);
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledTimes(1);
+  });
+
   it('un error de la base deja línea CON los identificadores, no solo `err`', async () => {
     // ANTES: supabase-js resuelve con `{ error }` en vez de lanzar, así que el
     // `catch` no se disparaba nunca y no había ni una línea. El costo del viaje

@@ -51,6 +51,13 @@ describe('puertaCron', () => {
 });
 
 describe('registrarLatido', () => {
+  it("A1 (ronda 19): el latido 'guardia' sin la 0701 (CHECK 23514) degrada con UN log claro, no lanza ni repite en bucle", async () => {
+    upsert.mockResolvedValueOnce({ error: { message: 'new row for relation "cron_latido" violates check constraint "cron_latido_id_dominio"', code: '23514' } as unknown as { message: string } });
+    await expect(registrarLatido('guardia', 'ok', {})).resolves.toBeUndefined();
+    expect(logger.error).toHaveBeenCalledWith('cron.latido_migracion_pendiente', expect.objectContaining({ cron: 'guardia', codigo: 'migracion_0701_pendiente' }));
+    expect(alertarOperador).not.toHaveBeenCalled();
+  });
+
   it('escribe el upsert por id y no lanza ni con la base caída', async () => {
     await registrarLatido('wa-pendientes', 'ok', { procesados: 3 });
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ id: 'wa-pendientes', estado: 'ok' }), { onConflict: 'id' });

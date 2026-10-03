@@ -112,6 +112,11 @@ export function faseDeModelo(modelo: string, base: FaseCosto): FaseCosto {
   return base;
 }
 
+/** ¿El error dice que falta ESA columna? (Postgres 42703 o PostgREST PGRST204, y el mensaje nombra la columna.) */
+function esColumnaAusente(error: { message?: string; code?: string }, columna: string): boolean {
+  return (error.code === '42703' || error.code === 'PGRST204') && (error.message ?? '').includes(columna);
+}
+
 function entero(n: number): number {
   return Number.isFinite(n) ? Math.round(n) : 0;
 }
@@ -136,7 +141,7 @@ export async function registrarCosto(c: CostoLLM): Promise<void> {
   try {
     // `{ error }`, como las 19 funciones de repo.ts: supabase-js NO lanza ante un
     // error de la base. El `catch` de abajo solo cubre que reviente el `fetch`.
-    const { error } = await acotada(supabaseAdmin().from('llm_costo').insert({
+    const fila = {
       tenant_id: c.tenantId,
       viaje_id: c.viajeId ?? null,
       liquidacion_id: c.liquidacionId ?? null,
@@ -145,9 +150,17 @@ export async function registrarCosto(c: CostoLLM): Promise<void> {
       tokens_in: entero(c.tokensIn),
       tokens_out: entero(c.tokensOut),
       costo_usd: Number(c.costoUsd.toFixed(6)),
-      // E1-A (0700): solo una duración creíble; sin ella la columna queda NULL (no medido), nunca un 0 inventado.
-      ...(c.duracionMs !== undefined && Number.isFinite(c.duracionMs) && c.duracionMs >= 0 && c.duracionMs <= 3_600_000 ? { duracion_ms: Math.round(c.duracionMs) } : {}),
-    }), 'registrarCosto');
+    };
+    // E1-A (0700): solo una duración creíble; sin ella la columna queda NULL (no medido), nunca un 0 inventado.
+    const duracion = c.duracionMs !== undefined && Number.isFinite(c.duracionMs) && c.duracionMs >= 0 && c.duracionMs <= 3_600_000 ? Math.round(c.duracionMs) : null;
+    let { error } = await acotada(supabaseAdmin().from('llm_costo').insert(duracion === null ? fila : { ...fila, duracion_ms: duracion }), 'registrarCosto');
+    // A1 (ronda 19): si el código sale antes que la 0700, la columna no existe y CADA insert fallaría: se perdería toda la
+    // contabilidad de IA. 42703 = columna indefinida; PGRST204 = columna fuera del caché de esquema de PostgREST. Se
+    // reintenta UNA vez sin la duración (el costo importa más que la métrica). El orden correcto sigue siendo 0700 antes del deploy.
+    if (error && duracion !== null && esColumnaAusente(error, 'duracion_ms')) {
+      logger.warn('costo.duracion_columna_ausente', { codigo: 'migracion_0700_pendiente' });
+      ({ error } = await acotada(supabaseAdmin().from('llm_costo').insert(fila), 'registrarCosto'));
+    }
     if (error) fallo(c, error.message, (error as { code?: string }).code);
   } catch (e) {
     fallo(c, e instanceof Error ? e.message : String(e));

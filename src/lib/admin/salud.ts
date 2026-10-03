@@ -153,7 +153,12 @@ export async function registrarLatido(cron: CronId, estado: EstadoLatido, detall
     const { error } = await acotada(supabaseAdmin()
       .from('cron_latido')
       .upsert({ id: cron, ultimo_latido: new Date().toISOString(), estado, detalle }, { onConflict: 'id' }), 'registrarLatido');
-    if (error) logger.warn('cron.latido_sin_escribir', { cron, err: error.message });
+    if (error) {
+      // A1 (ronda 19): el código salió antes que la 0701 → el CHECK de cron_latido no admite 'guardia' (23514). Se dice
+      // una vez, con código estable, y se sigue: la guardia no lanza en bucle (el aviso de /api/health es el respaldo).
+      if ((error as { code?: string }).code === '23514') logger.error('cron.latido_migracion_pendiente', { cron, codigo: 'migracion_0701_pendiente', err: error.message });
+      else logger.warn('cron.latido_sin_escribir', { cron, err: error.message });
+    }
   } catch (e) {
     logger.warn('cron.latido_sin_escribir', { cron, err: e instanceof Error ? e.message : String(e) });
   }
