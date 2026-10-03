@@ -43,7 +43,7 @@ function bloque(p: PlantillaCatalogo): string {
     l.push('');
     l.push('| Variable | Qué es | Ejemplo para Meta |');
     l.push('| --- | --- | --- |');
-    p.variables.forEach((v, i) => l.push(`| \`{{${i + 1}}}\` | ${v} | ${p.ejemplos[i].replace(/\|/g, '\\|')} |`));
+    p.variables.forEach((v, i) => l.push(`| \`{{${i + 1}}}\` | ${v} | ${p.ejemplos[i].replace(/\\/g, '\\\\').replace(/\|/g, '\\|')} |`));
   }
   l.push('');
   l.push(`- **Botones:** ${p.botones.length === 0 ? 'ninguno' : p.botones.map(botonTexto).join('; ')}`);

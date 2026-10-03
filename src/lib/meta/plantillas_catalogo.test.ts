@@ -167,3 +167,12 @@ describe('docs/operacion/plantillas-meta.md', () => {
     expect(readdirSync(join(RAIZ, 'docs/operacion'))).toContain('plantillas-meta.md');
   });
 });
+
+describe('renderizarDocPlantillas: escapado de la tabla markdown', () => {
+  it('un ejemplo con backslash y barra vertical no rompe la celda (el backslash se escapa primero)', () => {
+    const base = CATALOGO_PLANTILLAS.find((p) => p.variables.length > 0)!;
+    const ejemplos = base.ejemplos.map((e, i) => (i === 0 ? 'a\\|b' : e));
+    const md = renderizarDocPlantillas([{ ...base, ejemplos }]);
+    expect(md).toContain('a\\\\\\|b');
+  });
+});

@@ -134,7 +134,7 @@ export async function GET(req: Request) {
     return new NextResponse(csvLiquidacionesExternas(filas), {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="liquidaciones_externas_${periodo.etiqueta.replace('..', '_a_')}.csv"`,
+        'Content-Disposition': `attachment; filename="liquidaciones_externas_${periodo.etiqueta.replaceAll('..', '_a_')}.csv"`,
         'Cache-Control': 'no-store',
         'X-Content-Type-Options': 'nosniff',
       },
