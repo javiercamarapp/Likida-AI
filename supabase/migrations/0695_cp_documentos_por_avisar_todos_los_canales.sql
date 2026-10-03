@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- 0692 — Carta Porte: el aviso de «dudas» a la oficina cubre TODOS los canales (nota S de la re-auditoría, ronda 18).
+-- 0695 — Carta Porte: el aviso de «dudas» a la oficina cubre TODOS los canales (nota S de la re-auditoría, ronda 18).
 --
 -- La 0641 listaba para avisar solo los documentos con `canal = 'correo'`. El cliente pidió «marcar dudas y mandar al equipo» sin
 -- distinguir cómo llegó el documento: uno que entró por WhatsApp o por el panel (`manual`) y quedó por revisar con un bloqueo o con

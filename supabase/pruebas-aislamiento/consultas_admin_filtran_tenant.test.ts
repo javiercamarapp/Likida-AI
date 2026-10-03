@@ -299,7 +299,7 @@ const CALCOM_LOOKUP = ".from('prospecto').select('id,estado,calcom_booking_id,ca
 // que cruzan flotas a propósito; el resto del archivo (≈50 consultas) sigue vigilado por esta prueba.
 const VIGIA_CONTACTO_POR_TELEFONO = ".from('vigia_contacto').select(COLS_CONTACTO).eq('telefono', normalizarTelefonoWa(telefono)).in('estado', ['activo', 'baja']).order('id').limit(5)";
 // Ola 4d (P5): la cola va por tandas de flotas con `or(and(tenant_id.eq.<flota>, <vencimiento>)…)` armado en `alcance` (cada rama ancla su flota), sin el nivel 2 y ordenada por próximo vencimiento.
-const VIGIA_EN_ESPERA = ".from('vigia_conversacion').select(COLS_CONV).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).lt('escalamiento_nivel', 2).or(alcance).order('sin_respuesta_desde', { ascending: true }).order('id').limit(Math.max(1, limite) * 3)";
+const VIGIA_EN_ESPERA = ".from('vigia_conversacion').select(COLS_CONV).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).lt('escalamiento_nivel', 2).or(alcance).order('sin_respuesta_desde', { ascending: true }).order('id').range(pagina * tamano, (pagina + 1) * tamano - 1)"; // R09-1 (ronda 18): por páginas hasta agotar, en vez de un corte único en limite*3
 // Exención por cadena exacta de «Mis reglas» (Agente 13, 0520): la purga de retención del historial de avisos.
 const REGLAS_PURGA_AVISOS = ".from('regla_aviso').delete().lt('enviado_en', corte).select('id')";
 // Exención por cadena exacta del buzón (Agente 9, 0531): la lista de trabajo del cron de entrega al contador.

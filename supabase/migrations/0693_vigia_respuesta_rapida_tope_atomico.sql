@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- 0690 — Vigía: el tope de 200 respuestas rápidas aprobadas por flota deja de ser una carrera (R09-6, adversarial de la ronda 09,
+-- 0693 — Vigía: el tope de 200 respuestas rápidas aprobadas por flota deja de ser una carrera (R09-6, adversarial de la ronda 09,
 -- re-auditoría de la ronda 18).
 --
 -- La 0647 contaba (`select count(*)`) y luego insertaba, sin candado: con 199 aprobadas, dos aprobaciones simultáneas de preguntas
