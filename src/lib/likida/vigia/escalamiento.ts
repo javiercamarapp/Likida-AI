@@ -107,7 +107,7 @@ export function evaluarEscalamiento(e: EntradaEscalamiento): AccionEscalamiento 
 // ═══════════════════════════════════════════════════════════════════════════
 
 type ConvParaCola = Pick<Conversacion, 'sinRespuestaDesde' | 'escalamientoNivel' | 'molestiaNivel' | 'atendidaEn' | 'entradasSinRespuesta'>;
-type ConfigParaCola = Pick<ConfigVigia, 'slaRespuestaMin' | 'escalarNivel2Min'>;
+type ConfigParaCola = Pick<ConfigVigia, 'slaRespuestaMin' | 'escalarNivel2Min'> & Partial<Pick<ConfigVigia, 'molestiaAvisoNivel'>>;
 
 /**
  * El instante (ms) en que a esta conversación le toca su próximo aviso, o `null` si ya no tiene ninguno que dar. PURA.
@@ -119,7 +119,12 @@ export function proximoVencimientoMs(c: ConvParaCola, config: ConfigParaCola): n
   if (Number.isNaN(inicio)) return null;
   const sla = config.slaRespuestaMin * 60_000;
   const n2 = (config.slaRespuestaMin + config.escalarNivel2Min) * 60_000;
-  const urgente = c.escalamientoNivel < 1 && !c.atendidaEn && (c.molestiaNivel >= 2 || c.entradasSinRespuesta >= 5);
+  // «Urgente» es exactamente lo que `evaluarEscalamiento` convertiría en acción YA, ni más ni menos (R09-2): molestia 3 sube al
+  // nivel 2 aunque haya un nivel 1 o una persona; molestia desde el umbral de la flota (mínimo 2) sube al 1 si nadie lo avisó ni lo tomó.
+  // Las entradas sin respuesta NO cuentan: `evaluarEscalamiento` no las mira, y un hilo «urgente» que no genera acción se quedaría
+  // en la cabeza de la cola sin avisar nada (bloqueo en cabeza).
+  const umbralMolestia = Math.max(2, config.molestiaAvisoNivel ?? 2);
+  const urgente = c.molestiaNivel >= 3 || (c.escalamientoNivel < 1 && !c.atendidaEn && c.molestiaNivel >= umbralMolestia);
   if (urgente) return inicio;
   if (c.escalamientoNivel >= 1 || c.atendidaEn) return inicio + n2;
   return inicio + sla;

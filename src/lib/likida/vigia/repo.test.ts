@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // el aislamiento por tenant en TODA consulta, el mapeo de filas, el reclamo
 // condicional, la idempotencia por clave y las validaciones de las acciones.
 
-interface Llamada { tabla: string; op: string; filtros: Array<[string, string, unknown]>; valores?: unknown }
+interface Llamada { tabla: string; op: string; filtros: Array<[string, string, unknown]>; valores?: unknown; rango?: [number, number] }
 let llamadas: Llamada[] = [];
 let respuesta: (l: Llamada) => { data: unknown; error: { message: string; code?: string } | null } = () => ({ data: [], error: null });
 
@@ -14,6 +14,7 @@ function constructor(tabla: string) {
   const b: Record<string, unknown> = {};
   const encadenar = (nombre: string) => (...a: unknown[]) => {
     if (['eq', 'neq', 'in', 'is', 'not', 'gte', 'lt', 'or'].includes(nombre)) l.filtros.push([nombre, String(a[0]), a[1]]);
+    if (nombre === 'range') l.rango = [Number(a[0]), Number(a[1])];
     return b;
   };
   for (const m of ['select', 'eq', 'neq', 'in', 'is', 'not', 'gte', 'lt', 'or', 'order', 'limit', 'range']) b[m] = encadenar(m);
@@ -381,6 +382,43 @@ describe('conversacionesEnEspera / expirarCiclosInactivos: la cola no se tapa', 
     // El corte de la flota A es su plazo corto (10 min, el crítico), el de la B su plazo de 24 h menos nada: min(1440, 10) = 10.
     expect(alcance).toContain('sin_respuesta_desde.lte.2026-10-01T17:50:00.000Z');
     expect(alcance).toContain('molestia_nivel.gte.2');
+  });
+
+  it('R09-1: lee la cola por PÁGINAS hasta agotarla: una crítica más nueva que llena de hilos viejos del plazo largo sí entra', async () => {
+    const conv = (id: string, tenant: string, desde: string, contacto: string) => ({ id, tenant_id: tenant, contacto_id: contacto, cliente_id: 'c', estado: 'activa', sin_respuesta_desde: desde, escalamiento_nivel: 0, entradas_sin_respuesta: 1, molestia_nivel: 0 });
+    const contactos = [{ id: 'k1', tenant_id: T1, cliente_id: 'c', telefono: '525511110001', estado: 'activo' }, { id: 'k2', tenant_id: T2, cliente_id: 'c', telefono: '525511110002', estado: 'activo' }];
+    // limite = 1 → páginas de 3. Pág. 0 y 1: seis hilos viejos de la flota de plazo largo (aún no vencen). Pág. 2: la crítica vencida de la flota A.
+    const paginas = [
+      [conv('l1', T2, '2026-10-01T01:00:00Z', 'k2'), conv('l2', T2, '2026-10-01T01:01:00Z', 'k2'), conv('l3', T2, '2026-10-01T01:02:00Z', 'k2')],
+      [conv('l4', T2, '2026-10-01T01:03:00Z', 'k2'), conv('l5', T2, '2026-10-01T01:04:00Z', 'k2'), conv('l6', T2, '2026-10-01T01:05:00Z', 'k2')],
+      [conv('critica', T1, '2026-10-01T17:20:00Z', 'k1')],
+    ];
+    respuesta = (l) => {
+      if (l.tabla === 'vigia_config') return { data: [cfg(T1, 30), cfg(T2, 1440)], error: null };
+      if (l.tabla === 'vigia_conversacion') return { data: paginas[(l.rango?.[0] ?? 0) / 3] ?? [], error: null };
+      if (l.tabla === 'vigia_contacto') return { data: contactos, error: null };
+      return { data: [], error: null };
+    };
+    const filas = await crearRepoVigia().conversacionesEnEspera(1, ahora);
+    expect(filas.map((f) => f.conversacion.id)).toEqual(['critica']);
+    expect(llamadas.filter((l) => l.tabla === 'vigia_conversacion').map((l) => l.rango)).toEqual([[0, 2], [3, 5], [6, 8]]);
+  });
+
+  it('R09-7: las flotas encendidas se leen por páginas (más de 1,000 no se quedan sin barrer)', async () => {
+    const flota = (n: number) => cfg(`f-${String(n).padStart(5, '0')}`, 30);
+    respuesta = (l) => {
+      if (l.tabla === 'vigia_config') {
+        const [a, b] = l.rango ?? [0, 0];
+        return { data: Array.from({ length: Math.max(0, Math.min(b, 1199) - a + 1) }, (_, i) => flota(a + i)), error: null }; // 1,200 flotas encendidas
+      }
+      return { data: [], error: null };
+    };
+    await crearRepoVigia().conversacionesEnEspera(10, ahora);
+    expect(llamadas.filter((l) => l.tabla === 'vigia_config').map((l) => l.rango)).toEqual([[0, 499], [500, 999], [1000, 1499]]);
+    // y las 1,200 llegaron a la consulta de conversaciones: 30 tandas de 40 flotas
+    expect(llamadas.filter((l) => l.tabla === 'vigia_conversacion')).toHaveLength(30);
+    const ultima = String(llamadas.filter((l) => l.tabla === 'vigia_conversacion').at(-1)!.filtros.find(([o]) => o === 'or')?.[1]);
+    expect(ultima).toContain('tenant_id.eq.f-01199');
   });
 
   it('sin ninguna flota con el agente encendido no consulta conversaciones', async () => {

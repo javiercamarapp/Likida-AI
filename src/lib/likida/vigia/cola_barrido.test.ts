@@ -61,7 +61,22 @@ describe('proximoVencimientoMs · cuándo le toca su aviso a un hilo', () => {
 
   it('molestia sin avisar: vencida desde que empezó la espera (no se queda esperando al SLA)', () => {
     expect(proximoVencimientoMs({ ...base, molestiaNivel: 2 }, cfg)).toBe(Date.parse(base.sinRespuestaDesde));
-    expect(proximoVencimientoMs({ ...base, entradasSinRespuesta: 5 }, cfg)).toBe(Date.parse(base.sinRespuestaDesde));
+  });
+
+  it('R09-2: «urgente» coincide con lo que evaluarEscalamiento convierte en acción: con aviso en molestia 3, el 2 NO es urgente; las entradas tampoco cuentan', () => {
+    const t0 = Date.parse(base.sinRespuestaDesde);
+    const cfg3 = { ...cfg, molestiaAvisoNivel: 3 as const };
+    expect(proximoVencimientoMs({ ...base, molestiaNivel: 2 }, cfg3)).toBe(t0 + min(30)); // evaluarEscalamiento no hace nada con molestia 2 y umbral 3
+    expect(proximoVencimientoMs({ ...base, molestiaNivel: 3 }, cfg3)).toBe(t0);
+    expect(proximoVencimientoMs({ ...base, molestiaNivel: 3, escalamientoNivel: 1 }, cfg3)).toBe(t0); // molestia 3 sube al nivel 2 aunque ya haya un nivel 1
+    expect(proximoVencimientoMs({ ...base, entradasSinRespuesta: 9 }, cfg)).toBe(t0 + min(30)); // 5+ entradas no generan acción por sí solas
+  });
+
+  it('R09-2: con umbral 3, hilos con molestia 2 NO se interponen a una crítica vencida en la cola', () => {
+    const cfg3 = { slaRespuestaMin: 30, escalarNivel2Min: 60, molestiaAvisoNivel: 3 as const };
+    const f = (id: string, c: Partial<typeof base>, config = cfg3) => ({ conversacion: { ...base, id, ...c }, config });
+    const filas = [f('molesta-2-a', { sinRespuestaDesde: hace(25), molestiaNivel: 2 }), f('molesta-2-b', { sinRespuestaDesde: hace(26), molestiaNivel: 2 }), f('vencida', { sinRespuestaDesde: hace(31) })];
+    expect(seleccionarEnEspera(filas, 1).map((x) => x.conversacion.id)).toEqual(['vencida']);
   });
 
   it('seleccionarEnEspera: quita el nivel 2, ordena por vencimiento y respeta el límite', () => {
