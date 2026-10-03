@@ -41,7 +41,7 @@ vi.mock('@/lib/supabase/admin', () => ({
         single: () => Promise.resolve(resolver()),
         then: (res: (v: unknown) => unknown) => Promise.resolve(resolver()).then(res),
       };
-      for (const m of ['select', 'eq', 'in', 'order', 'limit', 'gte', 'lt']) {
+      for (const m of ['select', 'eq', 'neq', 'gt', 'in', 'order', 'limit', 'gte', 'lt']) {
         api[m] = (...args: unknown[]) => { estado.llamadas.push({ tabla, metodo: m, args }); return api; };
       }
       for (const m of ['insert', 'update', 'delete', 'upsert']) {
@@ -59,7 +59,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 const repo = await import('./repo');
 const {
   desdeFila, crearReglaPendiente, confirmarRegla, alternarPausa, borrarRegla,
-  listarReglas, reglasActivas, sellosDe, sellarDisparos, anotarCorrida, llaveSello,
+  listarReglas, hayEnvioAjenoEnVuelo, reglasActivas, sellosDe, sellarDisparos, anotarCorrida, llaveSello,
   TOPE_REGLAS_POR_FLOTA, actualizarFrecuencia, avisosEnviadosDesde, registrarAviso, purgarAvisosViejos,
 } = repo;
 
@@ -269,6 +269,34 @@ describe('listar y barrer', () => {
     expect(r[0].ultimosAvisos.map((a) => [a.resultado, a.via, a.casos])).toEqual([
       ['fallido', null, 2], ['enviado', 'plantilla', 1],
     ]);
+  });
+
+  it('R10-7: «lo último que sonó» pide SOLO las llaves enviadas (una `enviando` huérfana no aparece como sonó)', async () => {
+    pon('regla_vigilancia:select', { data: [FILA] });
+    pon('regla_disparo:select', { data: [{ regla_id: 'r-1', evidencia: 'e1', disparado_en: '2026-08-26T10:00:00Z' }] });
+    await listarReglas(TENANT);
+    expect(llamadas('regla_disparo', 'eq')).toContainEqual(['estado', 'enviado']);
+  });
+
+  it('R10-7: sin la 0660 (sin columna estado) reintenta sin el filtro y la lista sigue', async () => {
+    pon('regla_vigilancia:select', { data: [FILA] });
+    pon('regla_disparo:select', { error: { message: 'column regla_disparo.estado does not exist', code: '42703' } });
+    await expect(listarReglas(TENANT)).rejects.toThrow(/listarReglas.sellos/); // con la columna ausente y la base cayendo igual en el reintento, lanza
+    expect(llamadas('regla_disparo', 'eq').filter((a) => (a as unknown[])[0] === 'estado')).toHaveLength(1); // el reintento ya no la pide
+  });
+
+  it('R10-6: hayEnvioAjenoEnVuelo mira solo llaves `enviando` de ESA regla con OTRO token y arriendo vigente', async () => {
+    pon('regla_disparo:select', { data: [{ objeto_id: 'g-9' }] });
+    expect(await hayEnvioAjenoEnVuelo(TENANT, 'r-1', 'tok-mio', new Date('2026-10-02T18:00:00Z'))).toBe(true);
+    expect(llamadas('regla_disparo', 'eq')).toEqual(expect.arrayContaining([['tenant_id', TENANT], ['regla_id', 'r-1'], ['estado', 'enviando']]));
+    expect(llamadas('regla_disparo', 'neq')).toContainEqual(['reclamo_token', 'tok-mio']);
+    expect(llamadas('regla_disparo', 'gt')).toContainEqual(['reclamo_expira_en', '2026-10-02T18:00:00.000Z']);
+    pon('regla_disparo:select', { data: [] });
+    expect(await hayEnvioAjenoEnVuelo(TENANT, 'r-1', 'tok-mio')).toBe(false);
+    pon('regla_disparo:select', { error: { message: 'column regla_disparo.reclamo_token does not exist', code: '42703' } });
+    expect(await hayEnvioAjenoEnVuelo(TENANT, 'r-1', 'tok-mio')).toBe(false); // sin la 0660 no hay reclamos
+    pon('regla_disparo:select', { error: { message: 'connection reset' } });
+    await expect(hayEnvioAjenoEnVuelo(TENANT, 'r-1', 'tok-mio')).rejects.toThrow(/connection reset/);
   });
 
   it('sin reglas no consulta sellos', async () => {
