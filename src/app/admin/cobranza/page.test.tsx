@@ -1,15 +1,16 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 
-const dobles = vi.hoisted(() => ({ getPorCobrar: vi.fn(), getPiezasDunning: vi.fn(), getUltimaCorridaDunning: vi.fn() }));
+const dobles = vi.hoisted(() => ({ requireSuperadmin: vi.fn(), getPorCobrar: vi.fn(), getPiezasDunningPlataforma: vi.fn(), getUltimaCorridaDunningPlataforma: vi.fn() }));
+vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
 vi.mock('@/lib/saas/transferencia', async (importar) => ({
   ...(await importar<typeof import('@/lib/saas/transferencia')>()),
   getPorCobrar: dobles.getPorCobrar,
 }));
 vi.mock('@/lib/likida/repo', async (importar) => ({
   ...(await importar<typeof import('@/lib/likida/repo')>()),
-  getPiezasDunning: dobles.getPiezasDunning,
-  getUltimaCorridaDunning: dobles.getUltimaCorridaDunning,
+  getPiezasDunningPlataforma: dobles.getPiezasDunningPlataforma,
+  getUltimaCorridaDunningPlataforma: dobles.getUltimaCorridaDunningPlataforma,
 }));
 vi.mock('@/lib/formato', async (importar) => ({ ...(await importar<typeof import('@/lib/formato')>()), hoyMx: () => '2026-09-13' }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -24,9 +25,10 @@ const factura = {
 const html = async () => renderToStaticMarkup(await CobranzaPage());
 
 beforeEach(() => {
+  dobles.requireSuperadmin.mockReset().mockResolvedValue({ nombre: 'Javier' });
   dobles.getPorCobrar.mockReset().mockResolvedValue([factura]);
-  dobles.getPiezasDunning.mockReset().mockResolvedValue([]);
-  dobles.getUltimaCorridaDunning.mockReset().mockResolvedValue(null);
+  dobles.getPiezasDunningPlataforma.mockReset().mockResolvedValue([]);
+  dobles.getUltimaCorridaDunningPlataforma.mockReset().mockResolvedValue(null);
 });
 
 it('ya no dice que el dunning es «por venir»: explica que corre y que produce propuestas, no envíos', async () => {
@@ -53,9 +55,18 @@ it('sin facturas dice 0 por cobrar como estado real, no como error', async () =>
 
 it('si no se pudo leer algo, lo dice y NO afirma que no hay facturas ni propuestas', async () => {
   dobles.getPorCobrar.mockRejectedValue(new Error('base caída'));
-  dobles.getPiezasDunning.mockRejectedValue(new Error('base caída'));
+  dobles.getPiezasDunningPlataforma.mockRejectedValue(new Error('base caída'));
   const h = await html();
   expect(h).toContain('No se pudo leer todo el estado del dunning');
   expect(h).not.toContain('0 mensualidades por cobrar');
   expect(h).not.toContain('· sin propuesta');
+});
+
+it('A1: la propia página exige superadmin (no descansa solo en el layout) y sin sesión no lee ningún dato', async () => {
+  dobles.requireSuperadmin.mockRejectedValue(new Error('NEXT_REDIRECT'));
+  await expect(CobranzaPage()).rejects.toThrow('NEXT_REDIRECT');
+  expect(dobles.requireSuperadmin).toHaveBeenCalled();
+  expect(dobles.getPorCobrar).not.toHaveBeenCalled();
+  expect(dobles.getPiezasDunningPlataforma).not.toHaveBeenCalled();
+  expect(dobles.getUltimaCorridaDunningPlataforma).not.toHaveBeenCalled();
 });
