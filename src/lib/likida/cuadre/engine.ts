@@ -512,11 +512,152 @@ export function cubetaDe(
  * copias suyas.
  */
 export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
-  const vistoUuid = new Map<string, string>();
-  const vistoFolio = new Map<string, string>();
   /** copia → el gasto original del que es copia. */
   const originalDe = new Map<string, string>();
+
+  // FIS-C3 / ARQ32C3-C2 (auditoría 32 c3, CRÍTICO): EL ESPEJO DE LA 0358.
+  //
+  // El folio lo numera cada estación y se reinicia por emisor, así que dos
+  // tickets legítimos de $2,500 con folio 1234 de gasolineras distintas son DOS
+  // comprobantes. Las migraciones 0357/0358/0359 se lo enseñaron al SQL y esta
+  // función se quedó atrás: sobre las mismas dos filas `/dashboard/fiscal`
+  // decía 2 / $5,000 / $689.66 de IVA y el PDF decía 1 / $2,500 con un renglón
+  // «duplicado» encima de un ticket real.
+  //
+  // SE ESPEJA LA 0358, NO LA 0357. El emisor discrimina SÓLO CUANDO SE CONOCE,
+  // porque es el único campo de esta llave que el OCR puede perder entero: la
+  // 0357 lo metió a secas y con eso dos fotos del MISMO ticket —una con el RFC
+  // leído y otra sin él— volvían a sumar $5,000. La fila sin emisor hereda el
+  // del grupo, y un grupo entero sin emisor se comporta como antes de la 0357.
+  //
+  // `min()` sobre los conocidos, igual que `0358:80-82`: ignora los ausentes y
+  // sale vacío sólo cuando NINGUNA fila del grupo trae emisor. Se calcula sobre
+  // todas las filas con folio —también las que traen UUID— porque ésa es la
+  // partición que la ventana de la 0358 abre sobre `candidatos`.
+  const grupoDeFolio = (g: Gasto): string =>
+    `${strip_accents(g.concepto.toLowerCase())}|${g.folioNorm || g.folio}|${g.monto}`;
+  const emisorDelGrupo = new Map<string, string>();
   for (const g of gastos) {
+    if (!g.folio || !g.rfcEmisor) continue;
+    const k = grupoDeFolio(g);
+    const previo = emisorDelGrupo.get(k);
+    if (previo === undefined || g.rfcEmisor < previo) emisorDelGrupo.set(k, g.rfcEmisor);
+  }
+
+  // FIS/BE/ARQ/DAT-32C11-C1 (auditoría 32 c11, CRÍTICO): EL ESPEJO DE LA
+  // 0365/0366 POR EL EJE DEL PAR MIXTO.
+  //
+  // El par mixto —la foto que quedó ligada a su CFDI y la que no, del MISMO
+  // ticket— recibía llaves distintas POR CONSTRUCCIÓN: la fila con UUID salía
+  // por el `continue` de la rama de abajo sin consultar nunca `vistoFolio`, y
+  // la fila sin UUID nunca consultaba `vistoUuid`. Ninguna veía a la otra, así
+  // que el ticket contaba DOS veces, en los dos órdenes de llegada.
+  //
+  // Y es la única forma que puede tomar una copia de un comprobante con folio
+  // fiscal: `uq_gasto_cfdi_uuid` prohíbe que las dos filas traigan el UUID y
+  // `uq_gasto_img_hash` deja entrar la segunda foto.
+  //
+  // LO QUE LO VUELVE CRÍTICO Y NO UNA DIVERGENCIA INTERNA: la 0365 se lo
+  // enseñó al ejercicio y la 0366 al cierre, pero el guardia de
+  // `guardar_liquidacion_tx` es un contrato de IGUALDAD. Con el SQL en 10000 y
+  // este motor en 20000 el cierre rebotaba con CU007, `insumosDeCierreCambiaron`
+  // (`repo.ts:1067-1070`) sólo reconoce CU003/CU006, y el viaje se quedaba en
+  // `en_cuadre` PARA SIEMPRE — con `uq_viaje_abierto_por_operador` dejando
+  // además al operador sin poder abrir el siguiente. Cinco auditores
+  // convergieron; medido con un ticket de $10,000 en dos filas.
+  //
+  // Con DOS O MÁS UUID en el grupo de folio no se toca nada: dos CFDI
+  // DISTINTOS que comparten concepto, folio, monto y emisor son dos
+  // comprobantes, no copias.
+  //
+  // Y el UUID COMPARTIDO sigue mandando sobre el folio, antes que todo lo
+  // demás: dos filas con el mismo `(uuid, orden)` son el mismo comprobante
+  // aunque el OCR les haya leído emisores distintos. La base no puede contener
+  // ese estado (`uq_gasto_cfdi_uuid`), y por eso la 0366 no necesita la
+  // condición; aquí se conserva porque el contrato de esta función sí la
+  // declaraba y no cuesta nada sostenerla.
+  const uuidConOrden = (g: Gasto): string | null =>
+    g.cfdiUuid ? `${g.cfdiUuid.toLowerCase()}#${g.cfdiOrden ?? 1}` : null;
+  const llaveDeFolioDe = (g: Gasto): string | null => {
+    if (!g.folio) return null;
+    const grupo = grupoDeFolio(g);
+    return `${grupo}|${g.rfcEmisor ?? emisorDelGrupo.get(grupo) ?? ''}`;
+  };
+  const filasPorUuid = new Map<string, number>();
+  const uuidsEnGrupo = new Map<string, number>();
+  for (const g of gastos) {
+    const u = uuidConOrden(g);
+    if (u !== null) filasPorUuid.set(u, (filasPorUuid.get(u) ?? 0) + 1);
+    const k = llaveDeFolioDe(g);
+    if (k === null) continue;
+    uuidsEnGrupo.set(k, (uuidsEnGrupo.get(k) ?? 0) + (u !== null ? 1 : 0));
+  }
+
+  // FIS/DAT/ARQ-32C12-C1 (auditoría 32 c12, CRÍTICO): EL EJE DEL SOBREVIVIENTE.
+  //
+  // Hasta aquí esta función se quedaba con la PRIMERA fila de cada grupo, igual
+  // que `0367:206` con su `order by created_at, id`. La 0364 ya había decidido
+  // lo contrario para el ejercicio (`0365:165`, `order by sin_forma_pago_util,
+  // created_at, id`), y el eje quedó divergente 1 sede contra 3.
+  //
+  // Y la copia ilegible es SIEMPRE la de `created_at` menor, porque el producto
+  // guarda la foto ANTES de pedir la refoto (`processor.ts:3163` +
+  // `acuse_ticket.ts:202`). Así que «la primera» es «la peor», siempre.
+  //
+  // LA FILA QUE SOBREVIVE NO APORTA SÓLO EL MONTO: aporta `cfdiUuid`,
+  // `ivaTraslado`, `subTotal`, `formaPago` y `claveProdServ`. Medido contra
+  // PostgreSQL 16.14 con las 344 migraciones sobre base virgen, con el par que
+  // el producto de verdad produce (un ticket de $2,500 timbrado, IVA $344.83):
+  // el panel del contador publicaba `iva 0 · ivaEstado 'nulo' · tieneCfdi
+  // false · sobreTopeEfectivo true` mientras el ejercicio leía la legible.
+  //
+  // EL CRITERIO ES EL DE LA 0364 Y NO SE REABRE: las dos copias son fotos del
+  // MISMO pago; que una no se haya podido leer no cambia cómo se pagó, sólo
+  // dice que trae menos información. Sobrevive la que más información trae.
+  //
+  // `Gasto` NO tiene `createdAt`, así que se espeja el PRIMER criterio
+  // (`sin_forma_pago_util`) y el orden del arreglo queda como desempate
+  // residual, exactamente donde el SQL pone `created_at, id`.
+  //
+  // SE RESUELVE EN DOS PASADAS, no eligiendo al vuelo: con TRES o más copias,
+  // cambiar de sobreviviente sobre la marcha deja a las copias ya anotadas
+  // apuntando a una fila que acaba de volverse copia ella misma, y
+  // `originalDe` dejaría de apuntar siempre a un sobreviviente.
+
+  /**
+   * La negación exacta del `case` de `forma_pago_efectiva` de la 0364
+   * (`0364:109-113`): 0 = de esta copia SÍ se puede derivar el numerador del
+   * 15 %; 1 = no. Un CFDI PPD trae `99` sin `pagadoEn` por construcción.
+   */
+  const sinFormaPagoUtil = (g: Gasto): 0 | 1 => {
+    if (!g.formaPago) return 1;
+    if (g.formaPago === '99' && !g.pagadoEn) return 1;
+    return 0;
+  };
+
+  /** Miembros de cada grupo, en el orden en que llegaron. */
+  const miembros = new Map<string, Gasto[]>();
+  const anotar = (ns: string, key: string, g: Gasto): void => {
+    const k = `${ns}${key}`;
+    const ya = miembros.get(k);
+    if (ya) ya.push(g);
+    else miembros.set(k, [g]);
+  };
+
+  for (const g of gastos) {
+    const u = uuidConOrden(g);
+    const llaveDeFolio = llaveDeFolioDe(g);
+    // La llave del FOLIO manda para TODAS las filas del grupo —la del UUID
+    // incluida— cuando el grupo trae UNA sola fila con UUID y ese UUID no está
+    // repetido en otra fila.
+    if (
+      llaveDeFolio !== null &&
+      (uuidsEnGrupo.get(llaveDeFolio) ?? 0) <= 1 &&
+      (u === null || (filasPorUuid.get(u) ?? 0) <= 1)
+    ) {
+      anotar('f|', llaveDeFolio, g);
+      continue;
+    }
     if (g.cfdiUuid) {
       // POR `(uuid, orden)`, NO POR EL UUID SOLO.
       //
@@ -532,9 +673,7 @@ export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
       // mismo comprobante no traen orden, caen ambas en 1, y siguen siendo
       // copias.
       const u = `${g.cfdiUuid.toLowerCase()}#${g.cfdiOrden ?? 1}`;
-      const previo = vistoUuid.get(u);
-      if (previo) originalDe.set(g.id, previo);
-      else vistoUuid.set(u, g.id);
+      anotar('u|', u, g);
       continue;
     }
     if (g.folio) {
@@ -553,11 +692,25 @@ export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
       // solo difieran en ceros a la izquierda, con el mismo concepto y el mismo
       // total al centavo— es justo la definición de un duplicado, no un caso
       // legítimo que se pierda.
-      const llaveFolio = g.folioNorm || g.folio;
-      const key = `${strip_accents(g.concepto.toLowerCase())}|${llaveFolio}|${g.monto}`;
-      const previo = vistoFolio.get(key);
-      if (previo) originalDe.set(g.id, previo);
-      else vistoFolio.set(key, g.id);
+      // El `''` final es el caso «todo el grupo sin emisor», que conserva
+      // intacta la regla anterior a la 0357.
+      const grupo = grupoDeFolio(g);
+      const emisor = g.rfcEmisor ?? emisorDelGrupo.get(grupo) ?? '';
+      anotar('f|', `${grupo}|${emisor}`, g);
+    }
+  }
+
+  // SEGUNDA PASADA: por cada grupo, sobrevive la copia que más información
+  // trae; el orden de llegada queda de desempate. Todas las demás quedan
+  // apuntando a ESE sobreviviente, nunca a otra copia.
+  for (const grupo of miembros.values()) {
+    if (grupo.length < 2) continue;
+    let sobreviviente = grupo[0];
+    for (const g of grupo) {
+      if (sinFormaPagoUtil(g) < sinFormaPagoUtil(sobreviviente)) sobreviviente = g;
+    }
+    for (const g of grupo) {
+      if (g.id !== sobreviviente.id) originalDe.set(g.id, sobreviviente.id);
     }
   }
   return originalDe;

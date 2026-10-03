@@ -43,8 +43,14 @@ begin
  datos := public.poliza_datos_tenant(t,current_date-1,current_date+1);
  if jsonb_array_length(datos)<>6 then raise exception '0342: omitió pendientes o incluyó rechazadas: %',datos; end if;
  for fila in select value from jsonb_array_elements(datos) loop
-   if (fila->>'version')::integer is distinct from 342 or not(fila ? 'revision') then
-     raise exception '0342: contrato no incluye firma/version342: %',fila->>'folioViaje';
+   -- AUDITORÍA 32 c5: el MÍNIMO, no la igualdad. Este archivo fija el
+   -- contrato de la 0342 —firma humana y tributos por comprobante—, y ese
+   -- contrato sigue vigente cuando una migración posterior AMPLÍA la RPC y
+   -- sube su `version` (la 0361 le agregó `rfcEmisor`). Con la igualdad,
+   -- toda ampliación legítima rompía este arnés sin que nada estuviera mal.
+   -- Lo que la 0361 sí exige está en su propio archivo.
+   if coalesce((fila->>'version')::integer, 0) < 342 or not(fila ? 'revision') then
+     raise exception '0342: contrato no incluye firma/version>=342: %',fila->>'folioViaje';
    end if;
    if (fila->'gastos'->0->>'ivaTraslado')::numeric is distinct from 480 or
       (fila->'gastos'->0->>'iepsTraslado')::numeric is distinct from 0 then

@@ -17038,7 +17038,9 @@ end $$;
 --
 -- Lo que este bloque asevera (la FORMA del contrato, que es lo que la base
 -- puede demostrar; la clasificación sigue viviendo en TS — bloque 220):
---   (a) cada fila trae `version` = 342 (contrato vigente, mig. 0342);
+--   (a) cada fila trae `version` >= 342 (el contrato de la 0342, que sigue
+--       vigente; la 0361 lo AMPLIÓ a 361 sin quitarle nada, y con la igualdad
+--       toda ampliación legítima rompía este bloque);
 --   (b) cada gasto trae `monto`, `folioNorm`, `cfdiUuid` y `formaPago` — lo que
 --       `copiasDeComprobante`, `cubetaDe` y `proporcionesDeducibles` leen —, y
 --       las DOS fotos del mismo ticket vienen las dos (deduplica la ruta con la
@@ -17091,7 +17093,7 @@ begin
     from jsonb_array_elements(public.poliza_datos_tenant(t, current_date - 1, current_date + 1)) x
    limit 1;
 
-  version_vigente   := (fila->>'version')::int = 342;
+  version_vigente   := (fila->>'version')::int >= 342;
   insumos_por_gasto := (fila->'gastos'->0->>'monto')::numeric = 3480
                        and (fila->'gastos'->0->>'folioNorm') = '5461'
                        and (fila->'gastos'->0->>'formaPago') = '01'

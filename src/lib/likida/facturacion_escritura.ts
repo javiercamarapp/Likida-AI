@@ -346,6 +346,50 @@ export function sumarDias(fecha: string, dias: number): string {
  * ya emitidas conservan el vencimiento con el que nacieron, que es como
  * funciona el papel.
  */
+/**
+ * La fila de `factura_emitida`, como dato puro.
+ *
+ * PRU-32C7-C1 (AUDITORÍA 32, CRÍTICO en su 3ª aparición). Este mapeo vivía
+ * dentro de la llamada a `insert()` y por eso ninguna prueba lo miraba:
+ * intercambiar `subtotal` con `iva` dejaba **37 archivos / 703 pruebas / 0
+ * fallos**. Es el mapeo de las CUATRO cifras fiscales de un CFDI a sus columnas;
+ * equivocar una escribe el IVA en la base gravable de un comprobante emitido, y
+ * el contador lo encuentra en la primera revisión.
+ *
+ * Se extrae en vez de probar el insert contra un doble de Supabase a propósito,
+ * porque la cabecera de `facturacion_escritura.test.ts` tiene razón en lo que
+ * dice —probar la escritura contra un mock demuestra que el mock funciona— y no
+ * en lo que se concluía de ahí: que entonces el mapeo no se prueba. Puro, se
+ * prueba sin mock y sin ceder el argumento.
+ */
+export function filaFacturaEmitida(
+  tenantId: string,
+  f: FacturaValida,
+  venceEn: string | null,
+): Record<string, unknown> {
+  return {
+    tenant_id: tenantId,
+    cliente_id: f.clienteId,
+    // La liga fina vive en `factura_viaje`; la columna directa solo se llena
+    // cuando la factura ampara EXACTAMENTE un viaje (el caso común y el que
+    // `libro_viaje.ts:599` lee directo).
+    viaje_id: f.viajeIds.length === 1 ? f.viajeIds[0] : null,
+    // RES-22 (0166): la serie es la mitad que le faltaba al folio. NULL cuando
+    // la flota no usa series, y así entra al índice como `coalesce(serie,'')`.
+    serie: f.serie,
+    folio: f.folio,
+    cfdi_uuid: f.cfdiUuid,
+    fecha: f.fecha,
+    subtotal: f.subtotal,
+    iva: f.iva,
+    retencion_iva: f.retencion,
+    total: f.total,
+    moneda: 'MXN',
+    estatus: f.estatus,
+    vence_en: venceEn,
+  };
+}
+
 export async function crearFactura(
   tenantId: string,
   f: FacturaValida,
@@ -375,28 +419,12 @@ export async function crearFactura(
     }
   }
 
-  const { data, error } = await acotada(supabaseAdmin().from('factura_emitida').insert({
-    // El tenant viene por argumento desde la sesión, NUNCA del formulario.
-    tenant_id: tenantId,
-    cliente_id: f.clienteId,
-    // La liga fina vive en `factura_viaje`; la columna directa solo se llena
-    // cuando la factura ampara EXACTAMENTE un viaje (el caso común y el que
-    // `libro_viaje.ts:599` lee directo).
-    viaje_id: f.viajeIds.length === 1 ? f.viajeIds[0] : null,
-    // RES-22 (0166): la serie es la mitad que le faltaba al folio. NULL cuando
-    // la flota no usa series, y así entra al índice como `coalesce(serie,'')`.
-    serie: f.serie,
-    folio: f.folio,
-    cfdi_uuid: f.cfdiUuid,
-    fecha: f.fecha,
-    subtotal: f.subtotal,
-    iva: f.iva,
-    retencion_iva: f.retencion,
-    total: f.total,
-    moneda: 'MXN',
-    estatus: f.estatus,
-    vence_en: venceEn,
-  }).select('id').single(), 'crearFactura');
+  const { data, error } = await acotada(
+    supabaseAdmin().from('factura_emitida')
+      .insert(filaFacturaEmitida(tenantId, f, venceEn))
+      .select('id').single(),
+    'crearFactura',
+  );
 
   if (error) {
     const choque = traducirChoque(error.message, { serie: f.serie, folio: f.folio, fecha: f.fecha });
