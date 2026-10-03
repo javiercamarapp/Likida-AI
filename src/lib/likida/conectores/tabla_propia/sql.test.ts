@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ErrorTablaPropia } from './contrato';
-import { afirmarSelectSeguro, construirSelect, crearEjecutorPg, frasePorCodigo, normalizarCaPem, resolverHostPublico, vistaValida } from './sql';
+import { afirmarSelectSeguro, construirSelect, crearEjecutorPg, type ConexionSql, frasePorCodigo, normalizarCaPem, resolverHostPublico, vistaValida } from './sql';
 
 const COLS = { unidad: 'eco', lat: 'latitud', lon: 'longitud', fecha_hora: 'ts', velocidad_kmh: 'vel', ignicion: 'motor' };
 
@@ -59,7 +59,7 @@ describe('SSRF: el servidor SQL debe ser público', () => {
 });
 
 describe('el ejecutor real (pg inyectado): solo lectura, con tiempo y sin filtrar el texto del servidor', () => {
-  const conn = { host: 'bd.ejemplo.com', puerto: 5432, base: 'flota', usuario: 'lectura', clave: 'secreta-123', ssl: 'verificar' as const };
+  const conn: ConexionSql = { host: 'bd.ejemplo.com', puerto: 5432, base: 'flota', usuario: 'lectura', clave: 'secreta-123', ssl: 'verificar' };
   const resolver = (async () => [{ address: '8.8.8.8', family: 4 }]) as never;
   const consulta = construirSelect('v', COLS, { limite: 5 });
   /** `fetch` devuelve los lotes de `lotes` en orden y luego vacío. */
