@@ -18,7 +18,7 @@ reclamación de peajes (`peaje_posiciones_ventana`) lo excluyen en la base, y la
 solo nunca valida. Código seguro contra la base sin la 0603 (la aplicación ya lo descarta en TS).
 
 **Qué falta para que sea de punta a punta:** el acceso real de la flota (vista/CSV/endpoint de posiciones y geocercas), aplicar las migraciones en la base real y,
-para el modo SQL, la decisión de dependencia que está más abajo (el cliente SFTP ya está instalado: `ssh2`). El E2E del ciclo (poll → asentador → `posicion` → barrido de validación del Conductor, con
+para el modo SQL, la salida de red (IP fija o permiso en su Zero Trust; ver «SQL de solo lectura», abajo). El controlador de PostgreSQL ya está instalado (`pg` 8.23.1, ronda 18) y el cliente SFTP también (`ssh2`). El E2E del ciclo (poll → asentador → `posicion` → barrido de validación del Conductor, con
 falla de credencial, lote duplicado, muestra atrasada y otra flota) vive en `src/lib/likida/e2e/agente-10-gps.e2e.test.ts`.
 
 ## Tabla propia (`tabla_propia`)
@@ -31,9 +31,11 @@ Tres modos, mismo contrato (`LectorTablaPropia`, `src/lib/likida/conectores/tabl
    declara la vista y el mapeo `unidad, lat, lon, fecha_hora, velocidad_kmh?, ignicion?` y Likida arma un único
    `SELECT` con identificadores validados y entrecomillados y los valores como parámetros. Defensas: lista
    cerrada de forma de identificadores, esquemas de sistema vetados, `afirmarSelectSeguro` (una sentencia, sin
-   `;`, comentarios, literales, `into`, `for update` ni palabras de escritura), transacción `READ ONLY`,
-   `statement_timeout`, `LIMIT`, TLS verificado (nunca en claro) y servidor **público** (se resuelve y se rechaza
+   `;`, comentarios, literales, `into`, `for update` ni palabras de escritura), `SET TRANSACTION READ ONLY`,
+   `statement_timeout` e `idle_in_transaction_session_timeout`, `LIMIT`, tope de filas y de bytes, TLS verificado (nunca en
+   claro, con la CA del cliente si la da) y servidor **público** (se resuelve y se rechaza
    si cualquier dirección es privada/loopback/enlace local/metadatos; el socket se abre contra la IP ya validada).
+   Detalle, bloque SQL para el cliente y errores en «SQL de solo lectura» más abajo.
 2. **`csv_sftp`**: un CSV en una dirección **https** pública (`base_url`; opcional `geocercas_url`) **o en un servidor SFTP**
    (`sftp://servidor[:puerto]/ruta/archivo.csv`, ver «SFTP» abajo).
 3. **`endpoint`**: una dirección https que devuelve JSON, con mapeo de campos (`mapeo_posiciones`), paginación por
@@ -108,6 +110,83 @@ satisface el del demo y al revés. La referencia CSV del demo y este lector usan
 lat_centro, lon_centro, radio_m, poligono_wkt, cliente`). Lo extra de aquí: zona configurable por flota y los
 tres modos con su seguridad.
 
+### SQL de solo lectura (`sql_solo_lectura`, controlador `pg`) — ronda 18
+
+El cliente dijo: «tenemos en nuestras tablas las posiciones de todos los GPS al momento». Este modo las lee directo de su
+PostgreSQL, **solo** desde vistas que él crea. Código: `tabla_propia/sql.ts` (consulta, validación y ejecutor), `config.ts`
+(campos) y `credenciales.ts` (`guardarCredencial` aplica las mismas reglas del lector y rechaza servidores internos).
+
+**Qué hace el ejecutor en cada pasada** (un cliente `pg` por pasada, siempre cerrado: sin pool, apto para funciones serverless):
+1. `afirmarSelectSeguro` sobre el texto y resolución del host: toda dirección debe ser pública (guardián compartido con SFTP,
+   `esIpPublica`); el socket va contra la IP ya validada.
+2. TLS siempre. `sql_ssl=verificar` (por omisión) verifica el certificado y el nombre; con `sql_ca` (certificado de la CA del
+   cliente, PEM) se verifica contra ESA CA; `sin_verificar` equivale a `sslmode=require` (cifra, no verifica). Si el servidor no
+   ofrece TLS no se conecta: no hay retroceso a texto claro.
+3. `begin` → `set transaction read only` → `statement_timeout`, `idle_in_transaction_session_timeout` y `TimeZone` locales.
+4. El `SELECT` (con `LIMIT`) se abre como cursor del servidor y se trae en lotes de 1,000 con tope de **200,000 filas** y **32 MB**:
+   se corta mientras trae, no después de cargarlo todo en memoria.
+5. `rollback` y cierre del cliente (`finally`).
+
+**Errores** (frases fijas, jamás el texto del driver ni secretos): `credencial` (usuario o contraseña, o sin permiso sobre la vista),
+`proveedor` (red: no contestó, tiempo máximo) y `formato` (vista o columna inexistente, TLS ausente o certificado no verificable,
+tope de bytes o filas, configuración).
+
+**Bloque SQL que se le entrega al cliente** (lo corre su administrador; ajusta los nombres de SUS tablas y columnas; nada de esto
+toca datos, solo crea un usuario y vistas). Después nos pasa: servidor, puerto, base, usuario, contraseña, la vista y el mapeo de columnas, y
+—si su certificado es de una CA propia— el certificado de esa CA.
+
+```sql
+-- 1) Usuario de SOLO LECTURA (contraseña larga y aleatoria; guárdela solo para dárnosla por el canal seguro).
+create role likida_lectura login password '<contraseña-larga-generada>'
+  nosuperuser nocreatedb nocreaterole noinherit connection limit 3;
+alter role likida_lectura set default_transaction_read_only = on;
+alter role likida_lectura set statement_timeout = '20s';
+alter role likida_lectura set idle_in_transaction_session_timeout = '30s';
+
+-- 2) Esquema y vistas propias: Likida solo ve lo que usted expone aquí (ni la tabla base ni otras columnas).
+create schema if not exists likida;
+
+-- Posiciones «al momento» (o la historia reciente): una fila por punto. Adapte los nombres de su tabla y columnas.
+create or replace view likida.v_posiciones as
+  select eco        as unidad,       -- número económico de la unidad
+         latitud    as lat,
+         longitud   as lon,
+         fecha_hora as fecha_hora,   -- timestamp; si no lleva zona, dígannos en qué zona se escribe
+         velocidad  as velocidad_kmh,
+         ignicion   as ignicion
+    from public.posiciones_gps;      -- <- su tabla
+
+-- Opcionales: geocercas y cursos (rutas autorizadas).
+-- create or replace view likida.v_geocercas as select codigo, nombre, lat_centro, lon_centro, radio_m /* o poligono_wkt */ from public.geocercas;
+-- create or replace view likida.v_cursos as select codigo, nombre, unidad, casetas /* o corredor_wkt, buffer_m */ from public.cursos;
+
+-- 3) Permisos mínimos: conectar, ver el esquema y SELECT sobre las vistas. Nada más.
+grant connect on database <su_base> to likida_lectura;
+grant usage on schema likida to likida_lectura;
+grant select on likida.v_posiciones to likida_lectura;
+-- grant select on likida.v_geocercas, likida.v_cursos to likida_lectura;
+-- NO se concede acceso a public ni a las tablas base; las vistas leen con los permisos de su dueño.
+
+-- 4) Solo con cifrado y solo desde la IP de Likida (pg_hba.conf, ajuste la IP de salida que le demos):
+--    hostssl  <su_base>  likida_lectura  <IP-de-salida-de-Likida>/32  scram-sha-256
+-- En un servicio administrado (RDS, Cloud SQL, Azure…) active «forzar SSL» y deje esa IP en el grupo de seguridad.
+```
+
+La propia Likida **no confía en que el usuario esté bien creado**: aunque tuviera permiso de escribir, cada lectura corre en una
+transacción de solo lectura y el texto de la consulta lo arma Likida (no hay SQL libre).
+
+**Pruebas:** `sql.test.ts` (construcción, validación, SSRF, ejecutor con doble de `pg`: caso feliz, credencial inválida, timeout,
+tope de filas y de bytes, identificador malicioso, TLS ausente, destino privado), `sql_asentar.test.ts` (camino completo hasta el
+asentador, incluida una unidad de otra flota) y `sql.integracion.test.ts` (**PostgreSQL 17 real y efímero** en 127.0.0.1 con TLS de una
+CA de prueba: lectura, intento de escritura rechazado por READ ONLY, `statement_timeout` que corta, tope de bytes, contraseña
+mala, TLS con CA propia, CA ajena, nombre que no cuadra y servidor sin TLS; se omite si no hay `initdb`/`openssl` y borra el cluster
+al terminar). **No se ha probado contra la base de ninguna flota real.**
+
+**Pendiente externo (no se simula):** el usuario y la vista reales del cliente, y la **salida de red**: las funciones de Vercel no salen
+con IP fija, y la base del cliente está (según dijo) detrás de su Zero Trust. Hace falta una de: IP de salida fija de Likida (IP estática
+del proveedor o un proxy de salida propio) que el cliente permita, o que el cliente abra la regla en su Zero Trust para el origen que
+acordemos. Hasta entonces el modo SQL se queda en `requiere_piloto`.
+
 ### SFTP (`csv_sftp` con `sftp://`)
 
 Cliente: `ssh2` 1.17.0 (JS puro; sus binarios nativos son opcionales y por eso va en `serverExternalPackages`). Se eligió `ssh2`
@@ -156,11 +235,9 @@ sin permiso, enorme, stat mentiroso, timeout, puerto cerrado). No se ha probado 
 
 ### BLOQUEOS EXTERNOS (nada se simula como hecho)
 
-- **Controlador de PostgreSQL (`pg`):** no está entre las dependencias del repositorio y agregarlo cambia
-  `package-lock.json`; lo decide el integrador. Hasta entonces el modo SQL contesta «El lector SQL no está
-  habilitado en este despliegue» (falla de formato, backoff largo, visible en el panel). El constructor de la
-  consulta, la validación, el SSRF y el ejecutor están probados con un `pg` de contrato; al instalar `pg` funciona
-  sin tocar más código.
+- **SQL, base real y salida de red del cliente:** el controlador `pg` 8.23.1 ya está instalado y probado contra un PostgreSQL real
+  efímero (ver «SQL de solo lectura»). Falta el usuario y la vista reales de la flota y una IP de salida fija (o permiso en su Zero
+  Trust); sin eso no se ha leído una sola fila de su base.
 - **SFTP, credenciales reales del cliente:** el lector está construido y probado (contra un servidor SFTP de prueba en
   localhost), pero ninguna flota nos ha dado todavía un servidor, usuario (contraseña o llave) y la huella de su llave de
   host. Hasta tenerlos el modo se queda en `requiere_piloto`.
