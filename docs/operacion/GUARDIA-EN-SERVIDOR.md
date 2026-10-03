@@ -52,9 +52,19 @@ Del mismo modo, mientras la base esté caída la guardia sí avisa (por `ALERTA_
 - `LIKIDA_LATENCIA_MUESTREO` (opcional, 0..1, default 0.1): fracción de peticiones medidas en las rutas instrumentadas.
 - `SENTRY_DSN`: independiente de este paquete; sin él los errores no llegan a Sentry (`/admin/observabilidad` lo marca «ciego»).
 
+## Cómo decide avisar (ronda 19)
+
+- **Histéresis de la app:** hacen falta DOS sondeos fallidos seguidos de `/api/health` para avisar y para marcar la app «caída» en `/estado`; un fallo aislado (arranque en frío, timeout de 8 s) no hace nada. La racha y el inicio de la caída viajan en el `detalle` del latido; el inicio va en la huella del aviso, así el piso de 1 h de `alerta.ts` no silencia una caída nueva que llegue tras una recuperación.
+- **Un health que no es health** (401/403 de firewall, 404, redirección, HTML de mantenimiento) deja la app «sin medición» y avisa `guardia.app_sin_medicion`; nunca la pinta operativa.
+- **El dedup solo anota «ya avisé» si el aviso salió** (canal configurado, fuera del piso y sin rechazo del proveedor).
+- **Bandeja rota con la base sana** no es «base inalcanzable»: se aísla, el latido queda `parcial` y se sigue midiendo; a la segunda pasada seguida avisa `guardia.sin_vista`.
+- **Limitación declarada (M4):** el estado de dedup vive en la base. Con la base caída se usa la memoria del proceso (un aviso por racha, y «base volvió» al primer latido sano de la MISMA instancia); un arranque en frío u otra instancia la pierde: a lo más un aviso repetido bajo el piso de 1 h, nunca silencio.
+- **Latencias:** `webhook.whatsapp` y `dashboard.chat` miden hasta el acuse / primer byte, no el procesamiento posterior. La escritura de la muestra va en `after()` y nunca retrasa la respuesta. La purga corre solo en la ventana 3:00-3:04 MX (si ese tick falla se pospone 24 h; la capacidad sobra).
+
 ## Al desplegar
 
 1. Aplicar las migraciones 0700 y 0701 ANTES del código (la guardia escribe en tablas nuevas y el CHECK de `cron_latido` debe admitir `guardia`).
+   Si el código sale antes (error de orden), degrada sin perder lo importante: `registrarCosto` reintenta sin `duracion_ms` (el costo de IA no se pierde) y el latido `guardia` deja `cron.latido_migracion_pendiente` en el log en vez de lanzar; pero `/api/health` verá `guardia` sin latido. `scripts/ci/compuerta-deploy.mjs` ya frena el build si la base va atrás de la última migración.
 2. Después de desplegar, `/api/health` queda `degraded` hasta el primer latido de `guardia` (≤ 5 min), como cualquier cron nuevo (OP-P4). La compuerta de despliegue y `salud-produccion.yml` leen ese campo: no re-disparar un `[deploy]` en esa ventana.
 3. Retirar el `launchd` de la Mac cuando se confirme el primer latido: `launchctl bootout gui/$(id -u)/com.likida.vigia-produccion` (y quitar el plist de `~/Library/LaunchAgents`). Dos vigías avisando lo mismo por canales distintos es ruido. El script `scripts/mejora-diaria/vigia-produccion.mts` queda como herramienta manual.
 

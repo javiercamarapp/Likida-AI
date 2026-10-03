@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
-  leerCuerpoHealth, componentesDesdeHealth, componentesDesdeLatidos, sondearHealth,
+  leerCuerpoHealth, componentesDesdeHealth, sondeoCiego, componentesDesdeLatidos, sondearHealth,
   esVentanaDeMantenimiento, resumirEstado, ultimosDias, diaMx, medicionVacia,
 } from './estado';
 import type { DiaEstado } from './salud';
@@ -50,7 +50,30 @@ describe('leerCuerpoHealth / componentesDesdeHealth', () => {
   it('un cuerpo con forma rara no revienta ni inventa: lo que no se lee queda null', () => {
     const h = leerCuerpoHealth(200, { status: 7, checks: 'x', migracion: [] });
     expect(h).toMatchObject({ status: null, db: null, crons: null, migracionAlDia: null });
-    expect(componentesDesdeHealth(h)).toEqual({ app: 'ok', base: null, crons: null });
+    // A2: sin un status de health válido NO hay medición de la app (antes: 'ok').
+    expect(componentesDesdeHealth(h)).toEqual({ app: null, base: null, crons: null });
+  });
+
+  // A2 (ronda 19): «respondió» no es «la app está sana». Solo un JSON de health válido mide la app.
+  it.each([
+    ['401 (challenge o deployment protection)', 401, null],
+    ['403 (firewall)', 403, { error: 'blocked' }],
+    ['404 (URL mal puesta)', 404, null],
+    ['301 (redirección)', 301, null],
+    ['200 con HTML de mantenimiento (cuerpo no JSON)', 200, null],
+    ['200 con JSON que no es de health', 200, { hola: 'mundo' }],
+  ])('%s NUNCA da app ok: queda sin medición', (_n, codigo, cuerpo) => {
+    const r = componentesDesdeHealth(leerCuerpoHealth(codigo, cuerpo));
+    expect(r.app).not.toBe('ok');
+    expect(r).toEqual({ app: null, base: null, crons: null });
+    expect(sondeoCiego(leerCuerpoHealth(codigo, cuerpo))).toBe(true);
+  });
+
+  it('sondeoCiego: ni una caída (sin respuesta, 5xx sin cuerpo) ni el 429 ni un health válido son «ciegos»', () => {
+    expect(sondeoCiego(leerCuerpoHealth(502, null))).toBe(false);
+    expect(sondeoCiego(leerCuerpoHealth(429, { ok: false }))).toBe(false);
+    expect(sondeoCiego(leerCuerpoHealth(200, cuerpoOk))).toBe(false);
+    expect(sondeoCiego({ respondio: false, httpStatus: null, status: null, db: null, crons: null, migracionAlDia: null })).toBe(false);
   });
 });
 
@@ -59,7 +82,7 @@ describe('sondearHealth', () => {
     const f = vi.fn(async () => new Response(JSON.stringify(cuerpoOk), { status: 200 }));
     const s = await sondearHealth('https://app.likida.ai/api/health', f as unknown as typeof fetch);
     expect(s).toMatchObject({ respondio: true, httpStatus: 200, db: 'ok', crons: 'ok', migracionAlDia: true });
-    expect(f).toHaveBeenCalledWith('https://app.likida.ai/api/health', expect.objectContaining({ cache: 'no-store', signal: expect.anything() }));
+    expect(f).toHaveBeenCalledWith('https://app.likida.ai/api/health', expect.objectContaining({ cache: 'no-store', redirect: 'manual', signal: expect.anything() }));
   });
   it('un fetch que lanza NO lanza: es un dato (respondio false)', async () => {
     const f = vi.fn(async () => { throw new Error('ETIMEDOUT'); });

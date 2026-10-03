@@ -19,6 +19,10 @@ import { diaMx, resumirEstado, type ResumenComponente } from '@/lib/admin/estado
 /** Un estado actual más viejo que tres cadencias de la guardia ya no es «actual». */
 export const VIGENCIA_MEDICION_MS = 3 * CADENCIA_MS.guardia;
 const TTL_MS = 60_000;
+/** M3 (ronda 19): una lectura ROTA también se memoiza, pero poco: en una caída de la base todos refrescan la página y cada
+ *  visita lanzaba dos consultas que colgaban ~8 s (amplificando la carga sobre la base degradada). 12 s: la página se
+ *  recupera sola en cuanto la base vuelve y, mientras tanto, la carga es de 2 consultas por ventana y no por visita. */
+export const TTL_FALLO_MS = 12_000;
 
 export interface EstadoPublico {
   /** `true` si la medición más reciente cabe en la vigencia. */
@@ -68,17 +72,22 @@ export function armarEstadoPublico(
   };
 }
 
-let memo: { en: number; valor: EstadoPublico } | null = null;
+let memo: { en: number; valor: EstadoPublico; ttl: number } | null = null;
+
+/** Lo último que se leyó (bueno o roto), SIN tocar la base y sin importar su edad; `null` si nada. Para cuando no se debe consultar (rate limit). */
+export function estadoMemoizado(): EstadoPublico | null {
+  return memo ? memo.valor : null;
+}
 
 export async function cargarEstadoPublico(ahoraMs: number = Date.now()): Promise<EstadoPublico> {
-  if (memo && ahoraMs - memo.en < TTL_MS && ahoraMs >= memo.en) return memo.valor;
+  if (memo && ahoraMs - memo.en < memo.ttl && ahoraMs >= memo.en) return memo.valor;
   const [latido, historial] = await Promise.all([
     leerLatido('guardia').catch(() => undefined),
     leerEstado30Dias().catch(() => null),
   ]);
   const valor = armarEstadoPublico(latido, historial, ahoraMs);
-  // Una lectura rota no se memoiza: el siguiente visitante reintenta en vez de heredar el error 60 s.
-  if (!valor.latidoIlegible && !valor.historialIlegible) memo = { en: ahoraMs, valor };
+  // Una lectura sana vale 60 s; una rota, 12 s (M3): se DICE que está rota (no se vuelve verde), pero no se reintenta por visita.
+  memo = { en: ahoraMs, valor, ttl: valor.latidoIlegible || valor.historialIlegible ? TTL_FALLO_MS : TTL_MS };
   return valor;
 }
 

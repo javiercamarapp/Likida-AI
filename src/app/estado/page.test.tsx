@@ -18,7 +18,12 @@ const resumen = (componente: EstadoPublico['resumen'][number]['componente'], cel
 });
 
 let estado: EstadoPublico | Error;
-vi.mock('./datos', () => ({ cargarEstadoPublico: async () => { if (estado instanceof Error) throw estado; return estado; } }));
+let dentro = true;
+const cargar = vi.fn(async () => { if (estado instanceof Error) throw estado; return estado; });
+vi.mock('./datos', () => ({ cargarEstadoPublico: () => cargar(), estadoMemoizado: () => (estado instanceof Error ? null : estado) }));
+vi.mock('next/headers', () => ({ headers: async () => new Headers({ 'x-forwarded-for': '203.0.113.9' }) }));
+const rateLimit = vi.fn(async (..._a: unknown[]) => dentro);
+vi.mock('@/lib/ratelimit', async () => ({ ...(await vi.importActual<typeof import('@/lib/ratelimit')>('@/lib/ratelimit')), rateLimit: (...a: unknown[]) => rateLimit(...a) }));
 
 const { default: PaginaEstado } = await import('./page');
 const html = async () => renderToStaticMarkup(await PaginaEstado());
@@ -29,7 +34,21 @@ const sano = (): EstadoPublico => ({
   resumen: [resumen('app', 'ok', 100), resumen('base', 'ok', 99.65), resumen('crons', 'ok', 100), resumen('whatsapp', 'ok', 100), resumen('correo', 'sin_medicion', null)],
 });
 
-beforeEach(() => { estado = sano(); });
+beforeEach(() => { estado = sano(); dentro = true; cargar.mockClear(); rateLimit.mockClear(); });
+
+describe('M3 (ronda 19): rate limit por IP como /api/health', () => {
+  it('dentro del límite carga normal, con la llave por IP y SIN fallar cerrado', async () => {
+    await html();
+    expect(rateLimit).toHaveBeenCalledWith('estado:203.0.113.9', 30, 60_000, { fallaCerrado: false });
+    expect(cargar).toHaveBeenCalledTimes(1);
+  });
+  it('pasado el límite NO consulta la base: sirve lo memoizado', async () => {
+    dentro = false;
+    const h = await html();
+    expect(cargar).not.toHaveBeenCalled();
+    expect(h).toContain('Aplicación');
+  });
+});
 
 describe('la página pública de estado', () => {
   it('muestra los cinco componentes, su disponibilidad medida y 30 celdas por componente', async () => {

@@ -15,7 +15,7 @@ import { AreaChartSimple } from '../charts';
 import { StatusPill, EstadoVacio, EstadoError, type Estado } from '../ui/kit';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { SeccionInterruptores, type InterruptorParaUi } from './interruptores-ui';
-import { etiquetaInterruptor } from './etiquetas';
+import { etiquetaInterruptor, notaDeLatenciaRuta } from './etiquetas';
 import type { ResultadoAccion } from '../ui/forma';
 
 export const dynamic = 'force-dynamic';
@@ -43,7 +43,7 @@ function msLegible(ms: number | null): string {
 }
 
 /** La tabla p50/p95 de rutas o crons. Sin filas NO se pinta una tabla vacía: la sección dice por qué no hay. */
-function TablaLatencia({ filas, etiqueta }: { filas: FilaLatencia[]; etiqueta: string }) {
+function TablaLatencia({ filas, etiqueta, notas }: { filas: FilaLatencia[]; etiqueta: string; notas?: (nombre: string) => string | null }) {
   return (
     <div className="overflow-x-auto mt-1">
       <table className="w-full text-sm">
@@ -60,7 +60,9 @@ function TablaLatencia({ filas, etiqueta }: { filas: FilaLatencia[]; etiqueta: s
         <tbody>
           {filas.map((f) => (
             <tr key={f.nombre} className="border-t" style={{ borderColor: 'var(--line2)' }}>
-              <td className="px-3 py-2 font-medium whitespace-nowrap"><code className="font-mono text-xs">{f.nombre}</code></td>
+              <td className="px-3 py-2 font-medium whitespace-nowrap"><code className="font-mono text-xs">{f.nombre}</code>
+                {notas?.(f.nombre) ? <span className="block text-[11px] font-normal" style={{ color: 'var(--muted)' }}>mide {notas(f.nombre)}</span> : null}
+              </td>
               <td className="px-3 py-2 tabular text-right" style={{ color: 'var(--muted)' }}>{f.muestras}</td>
               <td className="px-3 py-2 tabular text-right whitespace-nowrap">{msLegible(f.p50Ms)}</td>
               <td className="px-3 py-2 tabular text-right whitespace-nowrap">{msLegible(f.p95Ms)}</td>
@@ -347,7 +349,8 @@ export default async function ObservabilidadPage({
             <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
               Percentiles calculados en la base (rango más cercano: un valor que de verdad ocurrió). Solo se mide una
               de cada diez peticiones (muestreo uniforme, sin sesgo hacia lo lento): el p95 de pocas muestras es una
-              estimación, no una garantía.
+              estimación, no una garantía. Cada ruta mide hasta que devuelve su respuesta: en las que contestan antes de
+              terminar su trabajo (WhatsApp, chat) la nota junto al nombre dice hasta dónde.
             </p>
             {latencias === null || latencias.rutas === null ? (
               <div className="mt-2">
@@ -361,7 +364,7 @@ export default async function ObservabilidadPage({
                 </EstadoVacio>
               </div>
             ) : (
-              <TablaLatencia filas={latencias.rutas} etiqueta="Ruta" />
+              <TablaLatencia filas={latencias.rutas} etiqueta="Ruta" notas={notaDeLatenciaRuta} />
             )}
           </div>
 
