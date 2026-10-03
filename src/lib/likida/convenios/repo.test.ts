@@ -97,6 +97,17 @@ describe('listarConvenios', () => {
     expect(l[0]).toMatchObject({ cliente: 'Cliente Uno', sitioDestinoNombre: 'CEDIS Tlaquepaque' });
   });
 
+  it('R10-4: la versión se lee ANTES que las instrucciones (una edición en medio nunca deja instrucciones viejas con la versión nueva)', async () => {
+    mundo.consultas.length = 0;
+    await repo.listarConvenios(A, { conFinanzas: false });
+    const tablas = mundo.consultas.map((c) => c.tabla);
+    const primeraInstruccion = tablas.indexOf('convenio_instruccion');
+    expect(primeraInstruccion).toBeGreaterThan(0);
+    // ninguna lectura de cliente_convenio (ni la versión ni las filas) ocurre DESPUÉS de pedir las instrucciones
+    expect(tablas.slice(primeraInstruccion)).not.toContain('cliente_convenio');
+    expect(tablas.slice(0, primeraInstruccion).filter((t) => t === 'cliente_convenio').length).toBeGreaterThanOrEqual(2);
+  });
+
   it('el dinero solo sale con finanzas, y ni siquiera se consulta sin ellas', async () => {
     mundo.consultas.length = 0;
     const sin = await repo.listarConvenios(A, { conFinanzas: false });
