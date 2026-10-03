@@ -269,6 +269,11 @@ async function clientesCriticos(tenants: string[]): Promise<Set<string>> {
 
 /** Cuántas flotas caben en un filtro `or` de la cola del barrido. */
 const FLOTAS_POR_CONSULTA = 40;
+/** Cuántas flotas encendidas se leen por página y el fusible total (una pasada del cron no recorre más). */
+const PAGINA_CONFIG = 500;
+const MAX_FLOTAS_EN_ESPERA = 20_000;
+/** Páginas de `limite*3` conversaciones por tanda de flotas en una pasada del barrido (fusible). */
+const MAX_PAGINAS_EN_ESPERA = 10;
 
 /** La 0647 (y la 0673/0674) aún no están en la base: no hay tabla ni función. */
 const SIN_0647 = new Set(['42P01', 'PGRST205', '42883', 'PGRST202']);
@@ -616,8 +621,16 @@ export function crearRepoVigia(): RepoVigia {
     // próximo vencimiento. Sin esto, 100 hilos viejos tapaban a la crítica nueva y su alerta de 10 min no salía.
     async conversacionesEnEspera(limite, ahora): Promise<FilaEnEspera[]> {
       const db = supabaseAdmin();
-      const configs = (exigir('en_espera_config', await acotada(db.from('vigia_config')
-        .select('*').eq('habilitado', true).order('tenant_id').limit(1000), 'vigia.en_espera_config')) as Fila[] | null ?? []).map(aConfig);
+      // R09-7: TODAS las flotas encendidas, por páginas. Con un solo `limit(1000)` ordenado por tenant, a partir de la flota 1,001 el
+      // agente nunca las miraba (sus clientes esperaban sin aviso). Fusible: `MAX_FLOTAS_EN_ESPERA`.
+      const filasConfig: Fila[] = [];
+      for (let desde = 0; desde < MAX_FLOTAS_EN_ESPERA; desde += PAGINA_CONFIG) {
+        const pagina = (exigir('en_espera_config', await acotada(db.from('vigia_config')
+          .select('*').eq('habilitado', true).order('tenant_id').range(desde, desde + PAGINA_CONFIG - 1), 'vigia.en_espera_config')) as Fila[] | null) ?? [];
+        filasConfig.push(...pagina);
+        if (pagina.length < PAGINA_CONFIG) break;
+      }
+      const configs = filasConfig.map(aConfig);
       if (configs.length === 0) return [];
       // Por tandas de flotas: el filtro `or` viaja en la URL y no debe crecer con el número de flotas.
       const convs: Conversacion[] = [];
@@ -626,10 +639,17 @@ export function crearRepoVigia(): RepoVigia {
           const corte = new Date(ahora.getTime() - Math.min(c.slaRespuestaMin, c.slaCriticoMin) * 60_000).toISOString();
           return `and(tenant_id.eq.${c.tenantId},or(sin_respuesta_desde.lte.${corte},molestia_nivel.gte.2,entradas_sin_respuesta.gte.5))`;
         }).join(',');
-        const f = exigir('en_espera', await acotada(db.from('vigia_conversacion')
-          .select(COLS_CONV).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).lt('escalamiento_nivel', 2).or(alcance)
-          .order('sin_respuesta_desde', { ascending: true }).order('id').limit(Math.max(1, limite) * 3), 'vigia.en_espera')) as Fila[] | null ?? [];
-        convs.push(...f.map(aConversacion));
+        // R09-1: por páginas, no un corte único en `limite*3` por antigüedad. El orden de la consulta es por antigüedad y el que manda es
+        // el próximo vencimiento (`seleccionarEnEspera`): con un solo corte, las primeras filas más viejas de una flota con plazo largo
+        // podían llenar el cupo y dejar fuera a una crítica más nueva. Se lee hasta agotar (con fusible) y se elige después.
+        const tamano = Math.max(1, limite) * 3;
+        for (let pagina = 0; pagina < MAX_PAGINAS_EN_ESPERA; pagina++) {
+          const f = exigir('en_espera', await acotada(db.from('vigia_conversacion')
+            .select(COLS_CONV).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).lt('escalamiento_nivel', 2).or(alcance)
+            .order('sin_respuesta_desde', { ascending: true }).order('id').range(pagina * tamano, (pagina + 1) * tamano - 1), 'vigia.en_espera')) as Fila[] | null ?? [];
+          convs.push(...f.map(aConversacion));
+          if (f.length < tamano) break;
+        }
       }
       if (convs.length === 0) return [];
       const tenants = [...new Set(convs.map((c) => c.tenantId))];
