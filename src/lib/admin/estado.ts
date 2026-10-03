@@ -60,7 +60,7 @@ export function leerCuerpoHealth(httpStatus: number, cuerpo: unknown): SondeoHea
 /** Pega a `/api/health` por la URL pública. Nunca lanza: una caída es un dato (`respondio: false`), no una excepción. */
 export async function sondearHealth(url: string, f: typeof fetch = fetch, timeoutMs = 8_000): Promise<SondeoHealth> {
   try {
-    const r = await f(url, { cache: 'no-store', signal: AbortSignal.timeout(timeoutMs), headers: { 'user-agent': 'likida-guardia/1' } });
+    const r = await f(url, { cache: 'no-store', signal: AbortSignal.timeout(timeoutMs), redirect: 'manual', headers: { 'user-agent': 'likida-guardia/1' } });
     let cuerpo: unknown = null;
     try { cuerpo = await r.json(); } catch { /* una respuesta que no es JSON se juzga por su status */ }
     return leerCuerpoHealth(r.status, cuerpo);
@@ -70,6 +70,11 @@ export async function sondearHealth(url: string, f: typeof fetch = fetch, timeou
 }
 
 export type MedicionComponentes = Record<ComponenteEstado, EstadoMedido | null>;
+
+/** ¿Contestó algo que NO es un health válido (ni una caída ni el rate limit)? La guardia está ciega para la app. */
+export function sondeoCiego(h: SondeoHealth): boolean {
+  return h.respondio && h.status === null && h.httpStatus !== 429 && !(h.httpStatus !== null && h.httpStatus >= 500);
+}
 
 const SIN_MEDIR: MedicionComponentes = { app: null, base: null, crons: null, whatsapp: null, correo: null };
 
@@ -81,7 +86,10 @@ export function componentesDesdeHealth(h: SondeoHealth): Pick<MedicionComponente
   }
   // 429 (el health tiene rate limit por IP): no es una medición, es un límite.
   if (h.httpStatus === 429) return { app: null, base: null, crons: null };
-  // Sirvió JSON de salud: la app está arriba. Un esquema desfasado la deja degradada.
+  // A2 (ronda 19): «respondió» NO es «sirve». Un 401/403 (firewall, deployment protection), un 404, un 3xx o un 200 con
+  // HTML de mantenimiento sin cuerpo de health no son una medición de la app: sin medición, nunca 'ok'.
+  if (h.status === null) return { app: null, base: null, crons: null };
+  // Sirvió JSON de salud: la app está arriba. Un esquema desfasado la deja degradada (un health en `fail` por la base lo dice el componente «base»).
   const app: EstadoMedido = h.migracionAlDia === false ? 'degradado' : 'ok';
   const base: EstadoMedido | null = h.db === 'ok' ? 'ok' : h.db === 'fallo' ? 'caido' : null;
   const crons: EstadoMedido | null =
