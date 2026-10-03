@@ -20,7 +20,7 @@ import { estadoLatidos } from '@/lib/admin/salud';
 import { registrarFuentesReales, type Fuentes, type ResultadoCrearEscalacion } from './fuentes';
 import { AGENTES_VIGILADOS, type CorridaVista, type EntradaSalud, type LatidoVisto } from './salud_agentes';
 import { PATRON_FOLIO, llaveDedupe, type Destino, type Motivo, type TareaAbierta } from './escalamiento';
-import { MAX_INTENTOS_AVISO, REINTENTO_AVISO_MIN, avisarEscalacion, depsDeCorreo, type DepsAvisoEscalacion, type TareaParaAviso } from './aviso_escalacion';
+import { MAX_INTENTOS_AVISO, REINTENTO_AVISO_MIN, TOPE_AVISOS_POR_FLOTA_Y_CORRIDA, avisarEscalacion, depsDeCorreo, type DepsAvisoEscalacion, type TareaParaAviso } from './aviso_escalacion';
 import { NOTA_RESUELTO_SOLO, PREFIJO_BARRIDO, type DepsBarrido } from './barrido_salud';
 import type { PuertoCicloVivo } from './ciclo_cron';
 import { posicionesDeGps } from './tablero_viajes';
@@ -335,11 +335,29 @@ export function puertoCicloVivoReal(): PuertoCicloVivo {
       if (r.error && !esSinTabla(r.error)) throw new Error(`orquestador.barrido_registrar: ${r.error.message}`);
     },
     async pendientesDeAviso(limite) {
-      const r = await acotada(supabaseAdmin().from('orquestador_escalacion').select('tenant_id, id')
-        .eq('estado', 'abierta').eq('aviso_estado', 'pendiente').order('creada_en').order('id').limit(limite), 'orquestador.aviso_pendientes');
-      if (esSinTabla(r.error)) return null;
-      if (r.error) throw new Error(`orquestador.aviso_pendientes: ${r.error.message}`);
-      return ((r.data ?? []) as Array<{ tenant_id: string; id: string }>).map((f) => ({ tenantId: String(f.tenant_id), id: String(f.id) }));
+      // R09-4: las más viejas primero, PERO con el mismo tope por flota que luego aplica el aviso. Con un solo `limit(limite)` una flota con
+      // `limite` tareas pendientes acaparaba toda la lectura y las demás no recibían aviso hasta que ella se vaciara. Se lee por páginas
+      // y se descartan las que sobran de cada flota (esas esperan a la corrida siguiente, sin perderse).
+      const PAGINA = Math.max(1, limite) * 5;
+      const MAX_PAGINAS = 5;
+      const porFlota = new Map<string, number>();
+      const elegidas: Array<{ tenantId: string; id: string }> = [];
+      for (let p = 0; p < MAX_PAGINAS && elegidas.length < limite; p++) {
+        const r = await acotada(supabaseAdmin().from('orquestador_escalacion').select('tenant_id, id')
+          .eq('estado', 'abierta').eq('aviso_estado', 'pendiente').order('creada_en').order('id').range(p * PAGINA, (p + 1) * PAGINA - 1), 'orquestador.aviso_pendientes');
+        if (esSinTabla(r.error)) return null;
+        if (r.error) throw new Error(`orquestador.aviso_pendientes: ${r.error.message}`);
+        const filas = (r.data ?? []) as Array<{ tenant_id: string; id: string }>;
+        for (const f of filas) {
+          const t = String(f.tenant_id);
+          if ((porFlota.get(t) ?? 0) >= TOPE_AVISOS_POR_FLOTA_Y_CORRIDA) continue;
+          porFlota.set(t, (porFlota.get(t) ?? 0) + 1);
+          elegidas.push({ tenantId: t, id: String(f.id) });
+          if (elegidas.length >= limite) break;
+        }
+        if (filas.length < PAGINA) break;
+      }
+      return elegidas;
     },
   };
 }
