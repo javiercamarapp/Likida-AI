@@ -90,6 +90,15 @@ export interface CuadreInput {
    *  `false` = el perfil YA CONFIRMÓ que no califica: deja de acreditarse,
    *  no solo de avisarse. */
   elegiblePeaje?: boolean;
+  /** P0-6 (LIF 2026 art. 20-A fr. IV): las tarjetas y monederos con que se paga
+   *  el combustible son de la EMPRESA. El estímulo de litros de diésel exige que
+   *  el medio electrónico sea de la cuenta del contribuyente. `true` = declarado
+   *  por la flota; `false` = declaró que NO (o que el chofer paga con la suya y
+   *  se le reembolsa); `undefined` = sin declarar. Solo `true` acredita: un
+   *  estímulo no se concede por omisión (mismo criterio que `elegiblePeaje`).
+   *  Solo afecta pagos con tarjeta/monedero (04, 05, 28, 29): transferencia y
+   *  cheque nominativo salen de la cuenta de quien los emite. */
+  tarjetasEmpresa?: boolean;
   /** Total pagado por combustible de la flota en el EJERCICIO (incluido este
    *  viaje) — la base del 15%. Lo calcula `desde_db.ts` (RFA 2.9). */
   totalCombustibleEjercicio?: number;
@@ -124,6 +133,10 @@ export type Cubeta = 'deducible' | 'no_deducible' | 'por_confirmar';
 // no sea 01 efectivo": eso dejaba pasar 06 dinero electrónico, 08 vales, 30/31 y
 // sobre todo '99 Por definir', que la RMF 2.7.1.29 fr. II define como NO PAGADO.
 export const MEDIOS_LISR_27_III = ['02', '03', '04', '05', '28', '29'] as const;
+/** Los medios de LISR 27-III que son un instrumento con titular (tarjeta de
+ *  crédito, monedero, débito, servicios): el estímulo del diésel exige que sea
+ *  de la empresa (LIF 2026 art. 20-A fr. IV). Cheque y transferencia no entran. */
+export const MEDIOS_CON_TITULAR_TARJETA = ['04', '05', '28', '29'] as const;
 /** '99 Por definir' = la contraprestación no se ha pagado (RMF 2.7.1.29 fr. II). */
 export const FORMA_PAGO_SIN_PAGAR = '99';
 /**
@@ -427,7 +440,7 @@ export const SIN_ESTIMULO: TipoDiferencia[] = [...SIN_IVA_ACREDITABLE, 'combusti
  * en el renglón de deducibilidad, ver `liquidacion/deducibilidad.ts`— pero ya
  * no puede bajar un estatus que nunca podría volver a subir.
  */
-export const REVISAR_OPERATIVO: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'monto_invalido', 'complemento_no_verificable', 'efectivo_sobre_15', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'iva_mes_del_pago', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'oposicion_titular'];
+export const REVISAR_OPERATIVO: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'monto_invalido', 'complemento_no_verificable', 'efectivo_sobre_15', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'iva_mes_del_pago', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'tarjeta_no_empresa', 'oposicion_titular'];
 
 /**
  * Lo que baja una liquidación a «Por revisar». DERIVADA, no copiada.
@@ -1851,7 +1864,20 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       // AUDITORÍA 2 (fiscal): lista CERRADA de la LIF 20-A-IV, no "cualquiera !=
       // 01". Antes admitía 06, 08, 30, 31 y 99 (no pagado), que la ley no cubre.
       const pagoElectronico = !!formaPagoEfectiva && (MEDIOS_LISR_27_III as readonly string[]).includes(formaPagoEfectiva);
-      if (pagoElectronico && Number.isFinite(litros) && litros > 0) {
+      // P0-6: el instrumento con titular (tarjeta, monedero) tiene que ser de la
+      // empresa. Sin declaración positiva NO se acreditan litros y se avisa por
+      // qué (revisión humana); no se afirma que sea deducible ni que se pierda.
+      const tarjetaConTitular = !!formaPagoEfectiva && (MEDIOS_CON_TITULAR_TARJETA as readonly string[]).includes(formaPagoEfectiva);
+      if (pagoElectronico && tarjetaConTitular && input.tarjetasEmpresa !== true && Number.isFinite(litros) && litros > 0) {
+        const motivo = input.tarjetasEmpresa === false
+          ? 'la flota declaró que la tarjeta o monedero NO es de la empresa (o que el chofer paga con la suya y se le reembolsa)'
+          : 'la flota no ha declarado que sus tarjetas y monederos estén a nombre de la empresa';
+        diferencias.push({
+          tipo: 'tarjeta_no_empresa', concepto: g.concepto, monto: 0,
+          nota: `Los ${litros} L de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} se pagaron con forma «${formaPagoEfectiva}» (tarjeta o monedero), pero ${motivo}. El medio de pago electrónico del estímulo debe ser de la cuenta del contribuyente (LIF 2026 art. 20-A fr. IV): no se acreditan esos litros hasta que una persona lo confirme.`,
+          gastoId: g.id,
+        });
+      } else if (pagoElectronico && Number.isFinite(litros) && litros > 0) {
         // AUDITORÍA 8, CRÍTICO: los litros salen del OCR y nada los cotejaba —
         // ni contra el XML (no siempre trae la cantidad desglosada), ni contra
         // precio×litros≈monto. Un decimal corrido en la lectura (200.00 L visto
