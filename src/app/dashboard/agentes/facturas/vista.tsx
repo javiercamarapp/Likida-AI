@@ -8,6 +8,7 @@ import { BarraPagina } from '../../resumen-visual';
 import { ColaJefe, type FilaJefe, type AccionMarcarFacturada } from './cola-jefe';
 import { SeccionPortales, type FilaPortal } from './portales-vinculo';
 import type { AccionRelogin } from './relogin-controles';
+import { SeccionControlEmision, type DatosControl } from './control-emision';
 
 /** Topes de las listas — declarados en pantalla cuando recortan, nunca en
  *  silencio (los encabezados suman la lista COMPLETA). */
@@ -33,7 +34,7 @@ export interface ExtraAgenteFacturas {
  * Nada se pinta que no salga de un ticket real; el modo de emisión se
  * declara (en ensayo no se promete emisión).
  */
-export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificaciones, portalesConAdaptador, portales, vinculosLeidos, autorizarRelogin, revocarRelogin }: {
+export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificaciones, portalesConAdaptador, portales, vinculosLeidos, autorizarRelogin, revocarRelogin, control }: {
   tickets: TicketPorFacturar[];
   extra: ExtraAgenteFacturas;
   /**
@@ -51,6 +52,8 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
    */
   autorizarRelogin: AccionRelogin;
   revocarRelogin: AccionRelogin;
+  /** El control de la emisión real (0542), ya leído en la página. */
+  control: DatosControl;
   /** Server action de la puerta: escribe el CFDI capturado y re-verifica
    *  sesión/rol/tenant ADENTRO — la vista solo la pasa a la cola. */
   marcarFacturada: AccionMarcarFacturada;
@@ -202,6 +205,9 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
           <SeccionPortales filas={portales} vinculos={vinculosLeidos}
             autorizarRelogin={autorizarRelogin} revocarRelogin={revocarRelogin} />
 
+          {/* ── La emisión real: encender, límites, lotes por confirmar, fase por portal (0542) ── */}
+          <SeccionControlEmision datos={control} />
+
           <div className="grid lg:grid-cols-3 gap-4">
             {/* ── Monitoreo: lo que NO tienes que hacer ── */}
             <section className="card p-4 flex flex-col">
@@ -209,7 +215,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
               <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
                 {extra.emite
                   ? 'Sin cuenta y con todo leído: los factura sola en la próxima corrida'
-                  : 'La emisión hoy está en ensayo (llena el portal sin emitir) — puedes capturarlos tú con los datos ya listos'}
+                  : 'La emisión hoy está en ensayo (llena el portal sin emitir): si tu empresa aún no otorgó el mandato, el dueño lo hace en Términos y mandato. Mientras tanto puedes capturarlos tú con los datos ya listos'}
               </p>
               {maquina.length === 0 ? (
                 <Leyenda>Nada en la cola automática ahora mismo.</Leyenda>

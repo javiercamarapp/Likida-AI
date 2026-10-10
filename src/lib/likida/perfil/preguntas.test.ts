@@ -122,3 +122,15 @@ describe('declararUmbralPeaje', () => {
     expect(patch).not.toHaveProperty('ingresosAnualesMxn');
   });
 });
+
+describe('onboardingPospuesto (W2): «lo confirmo con mi contador» NO es declarar', () => {
+  it('lee la fecha que dejó la decisión; cualquier otra cosa no cuenta', async () => {
+    const { onboardingPospuesto, onboardingFiscalListo, LLAVE_ONBOARDING_POSPUESTO } = await import('./preguntas');
+    expect(onboardingPospuesto({ [LLAVE_ONBOARDING_POSPUESTO]: '2026-10-01T18:00:00.000Z' })).toBe(true);
+    for (const v of [{}, null, undefined, 'x', { [LLAVE_ONBOARDING_POSPUESTO]: 'no es fecha' }, { [LLAVE_ONBOARDING_POSPUESTO]: true }, { [LLAVE_ONBOARDING_POSPUESTO]: 123 }]) {
+      expect(onboardingPospuesto(v as never)).toBe(false);
+    }
+    // Y posponer NO vuelve «listo» el perfil: el motor sigue fail-closed (estímulo en $0).
+    expect(onboardingFiscalListo({ [LLAVE_ONBOARDING_POSPUESTO]: '2026-10-01T18:00:00.000Z' })).toBe(false);
+  });
+});

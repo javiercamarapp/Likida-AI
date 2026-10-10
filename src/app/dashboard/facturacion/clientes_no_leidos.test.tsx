@@ -47,8 +47,8 @@ describe('FE-1: el catálogo de clientes distingue «no leí» de «no hay»', (
   });
 
   it('con clientes leídos pinta el selector y no ninguno de los dos avisos', () => {
-    const html = pintar([{ id: 'c1', nombre: 'Transportes Innovativos', diasCredito: 30 }]);
-    expect(html).toContain('Transportes Innovativos');
+    const html = pintar([{ id: 'c1', nombre: 'el cliente de demo', diasCredito: 30 }]);
+    expect(html).toContain('el cliente de demo');
     expect(html).toContain('Elige al cliente');
     expect(html).not.toContain('No tienes clientes dados de alta');
     expect(html).not.toContain('no se pudo leer');

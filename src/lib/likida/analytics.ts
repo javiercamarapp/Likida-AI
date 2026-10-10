@@ -8,6 +8,7 @@ import type { Anomalia } from './duplicados';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { cuadrarDesdeDB } from './cuadre/desde_db';
 import { cubetaDe, copiasDeComprobante } from './cuadre/engine';
+import { reglaTarjetaRigeParaCierre, TIPOS_DE_TARJETA_AJENA } from './cuadre/vigencia_tarjeta';
 import { resumenLaboral, type ResumenLaboral } from './laboral/pagadero';
 // La agregación de `llm_costo` de una flota vive en el módulo que ESCRIBE esa
 // tabla (`costos.ts`), y se importa en vez de reescribirse: `getResumenCosto` y
@@ -901,8 +902,7 @@ export interface ViajeRow {
 /** Los viajes de la flota, el más reciente primero. `viaje.unidad_id` existe
  *  desde la 0047 y aquí se trae con su número económico (el comentario viejo
  *  decía que no había columna de unidad — dejó de ser verdad ese día). De POD
- *  sigue sin haber columna en `viaje`: esa evidencia vive en su tabla y se
- *  cruza en `getPods`. */
+ *  sigue sin haber columna en `viaje`: esa evidencia vive en su tabla (`pod`). */
 /**
  * Cuántos viajes tiene la flota EN TOTAL.
  *
@@ -1383,6 +1383,8 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
     // `resumenLaboral` trata igual que false — la obligación del 263-I solo
     // nace de la declaración explícita, jamás de un default.
     (data.viaje as { demora_no_imputable?: boolean | null } | null)?.demora_no_imputable ?? undefined,
+    // A2: la fecha de cierre decide si la regla de tarjeta ajena rige para esta liquidación.
+    (data.created_at as string | null) ?? null,
   );
   // Solo se consulta `gasto` cuando el motor no pudo reconstruir: en el camino
   // normal las filas salen de la reconstrucción, que ya trae los gastos.
@@ -1567,9 +1569,10 @@ async function reconstruir(
   totalPersistido: number,
   diferenciasPersistidas: unknown,
   demoraNoImputable?: boolean,
+  cerradaEn?: string | null,
 ) {
   try {
-    const liq = await cuadrarDesdeDB(tenantId, viajeId);
+    const liq = await cuadrarDesdeDB(tenantId, viajeId, undefined, { cerradaEn });
     if (Math.abs(liq.totalComprobado - totalPersistido) > 0.015) return null;
     // ── EL PORTÓN DE ARRIBA NO PUEDE VER UN CAMBIO DE CONFIG ────────────────
     //
@@ -1605,7 +1608,7 @@ async function reconstruir(
     // se marca como "puede no sumar". Callar es lo que este archivo ya hace
     // cuando no puede sostener una cifra, y contradecir el PDF archivado sin
     // avisar es peor que no enseñar el desglose.
-    if (derivoLaConfig(diferenciasPersistidas, liq.diferencias)) return null;
+    if (derivoLaConfig(diferenciasPersistidas, liq.diferencias, { cerradaEn })) return null;
     const { filas, duplicados } = filasImprimibles(liq);
     // ── DEDUCIBLE ≠ PAGADERO, con las MISMAS funciones que el PDF ──────────
     // (tableros al día, 28-ago-2026). Copiado del contrato de pdf.ts:425, no
@@ -1699,8 +1702,15 @@ async function reconstruir(
 export function derivoLaConfig(
   persistidas: unknown,
   actuales: Array<{ tipo?: string; esperado?: number }>,
+  /** `cerradaEn`: fecha de cierre de la liquidación. Si es anterior a la vigencia
+   *  de `tarjeta_no_empresa`, esos tipos NO cuentan como deriva (A2): la regla es
+   *  posterior al cierre y no estaba persistida, no hubo cambio de config. */
+  opciones: { cerradaEn?: string | null } = {},
 ): boolean {
   if (!Array.isArray(persistidas)) return false;
+  if (!reglaTarjetaRigeParaCierre(opciones.cerradaEn)) {
+    actuales = (actuales ?? []).filter((d) => !TIPOS_DE_TARJETA_AJENA.includes(d?.tipo ?? ''));
+  }
   const llaves = (xs: Array<{ tipo?: string; esperado?: number }>) =>
     new Set(
       xs

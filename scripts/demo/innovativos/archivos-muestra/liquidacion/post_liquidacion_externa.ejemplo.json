@@ -1,0 +1,49 @@
+{
+  "claveExterna": "SAP-LIQ-DEMO-0002-261018",
+  "sistemaOrigen": "SAP (demo)",
+  "operador": {
+    "numeroEmpleado": "DEMO-0002"
+  },
+  "viajes": [
+    "INN-23180",
+    "INN-23105"
+  ],
+  "periodo": {
+    "desde": "2026-10-14",
+    "hasta": "2026-10-18"
+  },
+  "conceptos": [
+    {
+      "clave": "P001",
+      "descripcion": "Pago por viaje (2)",
+      "tipo": "percepcion",
+      "monto": 7444.91
+    },
+    {
+      "clave": "P010",
+      "descripcion": "Bono de puntualidad",
+      "tipo": "percepcion",
+      "monto": 300
+    },
+    {
+      "clave": "P020",
+      "descripcion": "Viáticos",
+      "tipo": "percepcion",
+      "monto": 640
+    },
+    {
+      "clave": "D001",
+      "descripcion": "ISR retenido",
+      "tipo": "deduccion",
+      "monto": 503.09
+    },
+    {
+      "clave": "D002",
+      "descripcion": "Cuota IMSS",
+      "tipo": "deduccion",
+      "monto": 167.7
+    }
+  ],
+  "total": 7714.12,
+  "moneda": "MXN"
+}

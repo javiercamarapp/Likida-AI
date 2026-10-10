@@ -182,7 +182,7 @@ export async function GET(req: Request) {
 //
 // Es la otra mitad del argumento de venta: hasta aquí Likida podía LEERSE
 // desde un sistema ajeno, pero los viajes seguían capturándose a mano en el
-// panel. Transportes Innovativos está reescribiendo su TMS y quiere que sus
+// panel. el cliente de demo está reescribiendo su TMS y quiere que sus
 // viajes entren aquí sin que nadie los vuelva a teclear.
 //
 // ── ÁREA `administracion`, NO `operacion` ────────────────────────────────

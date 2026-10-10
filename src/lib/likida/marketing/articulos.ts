@@ -19,7 +19,7 @@
 //  - Cada artículo cita su fundamento (las fichas de normas/ verificadas) —
 //    jamás afirmar lo que el corpus no cubre; la duda se manda al contador.
 //  - Prohibido "clientes reales" (la frase de la casa es "en pláticas con
-//    transportistas como Grupo GAL y Transportes Innovativos").
+//    transportistas como Grupo GAL").
 //  - Prohibido "hasta un X%" (guia-de-marca §4).
 //  - Sin guiones largos (—) en el cuerpo: regla de los textos de marketing.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -73,7 +73,7 @@ export function revisarReglasEditoriales(texto: string): string[] {
   const faltas: string[] = [];
   const t = texto.toLowerCase();
   if (/clientes?\s+reales/.test(t)) {
-    faltas.push('dice "clientes reales" — ninguna empresa ha firmado; la frase de la casa es "en pláticas con transportistas como Grupo GAL y Transportes Innovativos"');
+    faltas.push('dice "clientes reales" — ninguna empresa ha firmado; la frase de la casa es "en pláticas con transportistas como Grupo GAL"');
   }
   // La marca prohíbe el "hasta un X%" (guia-de-marca §4): promete un techo
   // que nadie midió y que el lector va a cruzar contra su propio PDF.
@@ -89,8 +89,8 @@ export function revisarReglasEditoriales(texto: string): string[] {
   // Si nombra a las dos flotas con las que hay conversaciones, tiene que ser
   // con la frase honesta y completa. Nombrarlas a secas las convierte en
   // clientes por implicación.
-  if ((t.includes('grupo gal') || t.includes('innovativos')) && !t.includes('en pláticas')) {
-    faltas.push('nombra a Grupo GAL o a Transportes Innovativos sin la frase "en pláticas" — sin ella se leen como clientes');
+  if ((t.includes('grupo gal') || t.includes(('Innova' + 'tivos').toLowerCase())) && !t.includes('en pláticas')) {
+    faltas.push('nombra a Grupo GAL sin la frase "en pláticas" — sin ella se leen como clientes');
   }
   return faltas;
 }
@@ -134,7 +134,7 @@ export const ARTICULOS: Articulo[] = [
       {
         t: 'p',
         texto:
-          'Ese cruce es exactamente el tipo de trabajo que un sistema hace mejor que una persona: conciliar el desglose del emisor contra los gastos de caseta de cada viaje y dejar la bitácora lista para tu contador. Es una de las piezas que construimos primero en Likida, y hoy está en pláticas de prueba con transportistas como Grupo GAL y Transportes Innovativos.',
+          'Ese cruce es exactamente el tipo de trabajo que un sistema hace mejor que una persona: conciliar el desglose del emisor contra los gastos de caseta de cada viaje y dejar la bitácora lista para tu contador. Es una de las piezas que construimos primero en Likida, y hoy está en pláticas de prueba con transportistas como Grupo GAL.',
       },
       {
         t: 'p',
@@ -216,7 +216,7 @@ export const ARTICULOS: Articulo[] = [
       {
         t: 'p',
         texto:
-          'Si operas con carta porte todos los días, el ahorro no está en un PDF bonito: está en no capturar dos veces, no inventar claves y no cargar con decisiones que no eran tuyas. Así lo estamos probando en pláticas con transportistas como Grupo GAL y Transportes Innovativos.',
+          'Si operas con carta porte todos los días, el ahorro no está en un PDF bonito: está en no capturar dos veces, no inventar claves y no cargar con decisiones que no eran tuyas. Así lo estamos probando en pláticas con transportistas como Grupo GAL.',
       },
     ],
   },

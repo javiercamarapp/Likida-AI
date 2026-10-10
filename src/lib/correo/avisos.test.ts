@@ -6,7 +6,7 @@ import {
 import { armarHtml, aTextoPlano } from './plantilla';
 
 const VIG = {
-  flota: 'Transportes Innovativos',
+  flota: 'el cliente de demo',
   vencidos: 1, porVencer: 2, enRegla: 9, total: 12,
   detalle: [
     { unidad: 'T-042', estado: 'Verificación vencida hace 8 días' },
@@ -218,7 +218,7 @@ describe('la invitación es el único que NO es alerta', () => {
 
 describe('el pie dice de qué flota y cómo apagarlo', () => {
   it('nombra la flota cuando se conoce', () => {
-    expect(avisoVigencias(VIG).porQueLoRecibes).toContain('Transportes Innovativos');
+    expect(avisoVigencias(VIG).porQueLoRecibes).toContain('el cliente de demo');
   });
 
   it('sin nombre de flota no queda cojo', () => {
@@ -278,7 +278,7 @@ describe('la cola atorada — el aviso que estrenó emisor con Facturas (B2)', (
 });
 
 describe('la prueba de avisos confirma la entrega sin inventar un problema', () => {
-  const P = { flota: 'Transportes Innovativos', agente: 'Agente de Cobranza' };
+  const P = { flota: 'el cliente de demo', agente: 'Agente de Cobranza' };
 
   it('el asunto se reconoce como prueba y nombra al agente', () => {
     const a = avisoDePrueba(P);
@@ -312,7 +312,7 @@ describe('la prueba de avisos confirma la entrega sin inventar un problema', () 
   });
 
   it('de la flota solo viaja el nombre, y sin nombre no queda cojo', () => {
-    expect(avisoDePrueba(P).porQueLoRecibes).toContain('Transportes Innovativos');
+    expect(avisoDePrueba(P).porQueLoRecibes).toContain('el cliente de demo');
     const sin = avisoDePrueba({ ...P, flota: null });
     expect(JSON.stringify(sin)).not.toContain('null');
     expect(sin.porQueLoRecibes).toContain('Agente de Cobranza');

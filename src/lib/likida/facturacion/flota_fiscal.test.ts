@@ -150,9 +150,9 @@ describe('cuando falta algo, NO se arma una flota a medias', () => {
 // contactos.ts): `desactivarUsuario` escribe `activo=false` y NO borra
 // `app_user.email`, así que esta consulta lo seguía encontrando.
 //
-// Escenario medido: Innovativos da de baja a Marisol, su contadora. El panel
+// Escenario medido: El cliente de demo da de baja a Marisol, su contadora. El panel
 // la echa, la RLS la echa, el WhatsApp también — pero el cron de facturación
-// seguía resolviendo `correoDeFacturacion('innovativos')` a
+// seguía resolviendo `correoDeFacturacion('flota-demo')` a
 // `marisol@despacho-anterior.mx`, y el portal le mandaba el CFDI de la flota:
 // RFC, razón social e importe, a un despacho que ya no es el suyo.
 // ═══════════════════════════════════════════════════════════════════════════

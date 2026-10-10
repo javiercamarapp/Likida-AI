@@ -158,7 +158,7 @@ const LOTE_POR_FLOTA = 20;
  *
  * AUDITORÍA 24, REN-5: esto era «flotas por corrida» y el mensaje de QStash
  * iba por FLOTA. ESC-5 lo diseñó para muchas flotas chicas; una flota grande
- * (Innovativos: 15,000 viajes/mes ⇒ ~500 tickets/día) necesita paralelismo
+ * (el cliente de demo: 15,000 viajes/mes ⇒ ~500 tickets/día) necesita paralelismo
  * DENTRO de la flota. Con un mensaje por flota, sus 20 tickets de tres
  * portales iban en UN navegador que abre las sesiones en serie y corta a los
  * 150 s: 2-5 tickets reales por corrida ⇒ 192-480/día contra 500 — la cola

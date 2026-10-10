@@ -70,6 +70,7 @@ function liquidar(gastos: Gasto[]) {
     politica: [{ concepto: 'diesel', topeMonto: 4000 }],
     ruta: 'prueba',
     hoy: '2026-08-04',
+    tarjetasEmpresa: true,
     estimulos: DEMO_CONFIG.estimulos,
     hidrocarburos: DEMO_CONFIG.hidrocarburos,
   });

@@ -63,13 +63,19 @@ export function TableroCifras({ t }: { t: TableroOperacion }) {
   );
 }
 
-export function TablaCarga({ carga }: { carga: CargaOperador[] }) {
+export function TablaCarga({ carga, sufijo = '' }: { carga: CargaOperador[]; sufijo?: string }) {
   if (carga.length === 0) {
     return (
       <div className="px-5 pb-5">
-        <EstadoVacio icono={<UserCog width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-          Todavía no hay operadores en esta flota. Se dan de alta solos cuando el chofer manda su primer mensaje por
-          WhatsApp.
+        {/* W2 (auditoría de producto): este vacío prometía que los operadores «se dan
+            de alta solos cuando el chofer manda su primer mensaje». Es FALSO: un número
+            desconocido no crea un operador (sus fotos quedan como comprobantes sin
+            dueño). Los da de alta el dueño o el jefe de tráfico, y el vacío ahora dice
+            cómo, con un enlace real. */}
+        <EstadoVacio icono={<UserCog width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+          accion={{ href: `/dashboard/operadores${sufijo}#alta`, texto: 'Dar de alta operadores' }}>
+          Todavía no hay operadores en esta flota. Se dan de alta en Operadores, uno por uno o desde un Excel o CSV: con su
+          número de WhatsApp, el bot sabe de quién es cada comprobante.
         </EstadoVacio>
       </div>
     );

@@ -6,7 +6,7 @@ import type { ConteosEscalaciones } from '@/lib/admin/escalaciones';
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 24, ADM-5 (MEDIO) — "Likida sigue con solo el tenant demo" se
 // disparaba con `r.tenants <= 1`: con el PRIMER cliente real dado de alta
-// (1 tenant, pero NO el demo) la alerta seguía sonando como si Innovativos
+// (1 tenant, pero NO el demo) la alerta seguía sonando como si el cliente de demo
 // no existiera. El criterio correcto es el mismo que `esSoloDemo` en
 // consola.tsx: el ÚNICO tenant que hay es, de verdad, el tenant demo.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -34,7 +34,7 @@ const ID_DEMO = '11111111-1111-1111-1111-111111111111';
 describe('calcularAlertas — "solo el tenant demo" ya no se dispara con el primer cliente real', () => {
   it('con 1 tenant REAL (no el demo) NO alerta "solo el tenant demo"', () => {
     const r = resumen([
-      { id: 'innovativos', nombre: 'Innovativos', plan: 'pro', viajes: 10, costoIaUsd: 1, politicaPropia: true },
+      { id: 'flota-demo', nombre: 'Cliente demo', plan: 'pro', viajes: 10, costoIaUsd: 1, politicaPropia: true },
     ]);
     const alertas = calcularAlertas(r, SIN_CONVERSACIONES, SIN_ESCALACIONES);
     expect(alertas.some((a) => a.texto.includes('solo el tenant demo'))).toBe(false);

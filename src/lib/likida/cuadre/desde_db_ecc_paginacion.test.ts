@@ -41,6 +41,7 @@ vi.mock('../perfil/preguntas', () => ({
   // de getConfig sin facilidadCombustibleEfectivo, la función real devolvería
   // undefined — se replica aquí en vez de solo silenciar el mock.
   facilidad15Vigente: () => undefined,
+  tarjetasDeLaEmpresa: () => true,
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('../presupuesto', () => ({ acotada: (q: unknown) => q }));

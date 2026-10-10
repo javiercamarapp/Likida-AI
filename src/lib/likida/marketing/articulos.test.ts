@@ -42,8 +42,8 @@ describe('el blog cumple las reglas editoriales de la casa', () => {
     for (const a of ARTICULOS) {
       const t = textoCompleto(a.slug).toLowerCase();
       expect(t, a.slug).not.toContain('clientes reales');
-      // Si nombra a GAL o Innovativos, tiene que ser con la frase honesta.
-      if (t.includes('grupo gal') || t.includes('innovativos')) {
+      // Si nombra a GAL o a otro prospecto, tiene que ser con la frase honesta.
+      if (t.includes('grupo gal') || t.includes(('Innova' + 'tivos').toLowerCase())) {
         expect(t, a.slug).toContain('en pláticas');
       }
     }

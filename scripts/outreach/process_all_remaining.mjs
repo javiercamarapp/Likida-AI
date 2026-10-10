@@ -73,7 +73,7 @@ Para cada empresa busca:
   * Presentación de Likida (liquidar por WhatsApp en tiempo real, cuadre de anticipos de diésel y casetas)
   * Sin em‑dashes, usando viñetas (•) o comas
   * 6 agentes Likida (Liquidación, Facturas, Cobranza, Conductores, Peajes, Proveedores)
-  * Prueba social: Grupo GAL y Transportes Innovativos
+  * Prueba social: Grupo GAL
   * Sin riesgo: levantamiento gratis, mes 1 gratis, pago a partir del mes 3
   * Cierre: "¿Tendrían 30 minutos esta semana o la próxima para platicarlo?"
 Guarda el JSON resultante en ${path.join(STAGING, resultFile)} con {id, empresa, …, correo_venta, fecha, lote}`.trim();

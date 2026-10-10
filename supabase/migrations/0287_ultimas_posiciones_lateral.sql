@@ -8,7 +8,7 @@
 -- lee TODAS las entradas del índice del tenant y descarta todas menos 800.
 -- Medido por el auditor con 6.9 M filas (800 unidades × 288 lecturas/día × 30
 -- días — la retención de 90 días acumula 20.7 M): 4,515 ms. `/dashboard/mapa`
--- es la pantalla que Innovativos tiene abierta todo el día, y con el
+-- es la pantalla que el cliente de demo tiene abierta todo el día, y con el
 -- `statement_timeout` de PostgREST (8 s) se cae a timeout al mes de GPS.
 --
 -- `estado_rastreo_tenant` (0162) hacía lo mismo con `count(distinct unidad_id)`

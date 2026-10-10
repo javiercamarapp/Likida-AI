@@ -1,0 +1,14 @@
+tipo,folio,economico,tag,caseta,cruce_local,monto,gps_veredicto,gps_distancia_m
+fuera_de_ruta,INN-24091,IN-091,PSD000000091,Caseta Demo Encarnacion,2026-10-20 02:36:34,809.00,no_coincide,351179.0
+duplicado,INN-24123,IN-123,PSD000000123,Caseta Demo Encarnacion,2026-10-20 02:44:35,809.00,confirma,58.0
+fuera_de_ruta,INN-24030,IN-030,PSD000000030,Caseta Demo Encarnacion,2026-10-20 03:22:26,809.00,no_coincide,140255.0
+fuera_de_ruta,INN-24061,IN-061,PSD000000061,Caseta Demo Los Chorros,2026-10-20 03:41:05,603.00,no_coincide,628345.0
+duplicado,INN-24030,IN-030,PSD000000030,Caseta Demo Villa de Reyes,2026-10-20 04:39:04,1008.00,confirma,32.0
+fuera_de_ruta,INN-24133,IN-133,PSD000000133,Caseta Demo Los Chorros,2026-10-20 06:11:25,603.00,no_coincide,628345.0
+fuera_de_ruta,INN-24110,IN-110,PSD000000110,Caseta Demo Matehuala,2026-10-20 06:18:27,264.00,no_coincide,555534.0
+fuera_de_ruta,INN-24095,IN-095,PSD000000095,Caseta Demo Villa de Reyes,2026-10-20 07:09:28,1008.00,no_coincide,140345.0
+fuera_de_ruta,INN-24116,IN-116,PSD000000116,Caseta Demo Villa de Reyes,2026-10-20 07:22:14,1008.00,no_coincide,140345.0
+fuera_de_ruta,INN-24035,IN-035,PSD000000035,Caseta Demo Villa de Reyes,2026-10-20 07:51:48,1008.00,no_coincide,324155.0
+fuera_de_ruta,INN-24073,IN-073,PSD000000073,Caseta Demo Santa Catarina,2026-10-20 07:55:00,262.00,no_coincide,359045.0
+duplicado,INN-24050,IN-050,PSD000000050,Caseta Demo Tepatitlan,2026-10-20 08:31:12,315.00,confirma,23.0
+duplicado,INN-24047,IN-047,PSD000000047,Caseta Demo Saltillo Norte,2026-10-20 08:45:08,593.00,confirma,66.0

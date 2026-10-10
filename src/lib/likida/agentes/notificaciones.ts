@@ -53,7 +53,7 @@ import type { Correo } from '@/lib/correo/plantilla';
 
 export type AgenteId =
   | 'liquidacion' | 'facturas' | 'cobranza' | 'conductores' | 'peajes' | 'proveedores'
-  | 'carta_porte';
+  | 'carta_porte' | 'orquestador';
 
 export type EventoId = 'corrida_fallida' | 'cola_atorada' | 'escalado';
 
@@ -119,6 +119,14 @@ export const AGENTES_NOTIFICABLES: readonly AgenteNotificable[] = [
     // `cola_atorada` sin emisor sería el bug original de la pestaña.
     id: 'carta_porte', nombre: 'Agente de Carta Porte', ruta: '/dashboard/agentes/carta-porte',
     eventos: ['corrida_fallida'],
+  },
+  {
+    // El asistente del panel (orquestador, mig. 0651). Solo declara `escalado`: cuando deja una tarea para una
+    // PERSONA (una emergencia, una diferencia de liquidación, la falla de un agente que detectó el barrido de salud),
+    // este es el aviso saliente. NO emite `corrida_fallida` (no tiene corridas propias: la salud de los demás la
+    // reporta como tareas) y nace APAGADO: el default sin fila (`CONFIG_NOTIF_DEFAULT`) solo enciende `corrida_fallida`.
+    id: 'orquestador', nombre: 'Asistente del panel', ruta: '/dashboard/viajes-en-vivo',
+    eventos: ['escalado'],
   },
 ];
 
@@ -211,6 +219,10 @@ const CON_EMISOR: ReadonlySet<string> = new Set([
   // (escalar_viaje.ts): una llamada por flota con viajes escalados en la
   // corrida, con la magnitud medida y sus folios (`avisoEscalados`).
   'conductores:escalado',
+  // `avisarEscalacionesPendientes` (orquestador/aviso_escalacion.ts), desde `crearEscalacion` y desde el cron escalar:
+  // un correo por TAREA (no por marca de insistencia: una emergencia nueva no puede callarse porque ya hubo un aviso
+  // hoy), con claim por tarea y tope por flota y por corrida.
+  'orquestador:escalado',
 ]);
 
 export function tieneEmisor(agente: AgenteNotificable, evento: EventoId): boolean {

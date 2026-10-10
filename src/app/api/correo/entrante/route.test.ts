@@ -53,15 +53,24 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-// `estadoSatDeCfdi` devuelve null en el doble: aquí se prueba el ORDEN del
-// webhook, no la consulta al SAT (esa vive en intake/sat y jamás lanza).
-vi.mock('@/lib/likida/proveedores', () => ({
-  guardarFacturaProveedor: async () => ({ ok: true }),
-  estadoSatDeCfdi: async () => null,
+// La INGESTA (xml/pdf/zip, `buzon/ingesta.ts`) tiene su propia prueba E2E con dobles; aquí se prueba el
+// WEBHOOK (firma, flota por destinatario, descarga con topes, claim del correo). El doble clasifica por
+// contenido, como lo haría la ingesta de verdad: un CFDI se guarda, un archivo desconocido se ignora, y
+// un fallo transitorio (`caidas`) se programa por prueba.
+let caidasDeIngesta = 0;
+const recibidosPorIngesta: Array<{ nombre: string; bytes: number }> = [];
+vi.mock('@/lib/likida/buzon/servicio', () => ({
+  atenderAdjuntosBuzon: async (_ctx: unknown, adjuntos: Array<{ nombre: string; bytes: Uint8Array }>) => {
+    const r = { guardadas: 0, duplicadas: 0, revision: 0, rechazadas: 0, ignoradas: 0, caidas: caidasDeIngesta, documentos: [] };
+    for (const a of adjuntos) {
+      recibidosPorIngesta.push({ nombre: a.nombre, bytes: a.bytes.length });
+      if (Buffer.from(a.bytes).toString('utf8').includes('Comprobante')) r.guardadas++; else r.ignoradas++;
+    }
+    return r;
+  },
 }));
 // La bitácora se anota best-effort al final; el doble solo registra que se llamó.
 vi.mock('@/lib/likida/agentes/corridas', () => ({ registrarCorrida: vi.fn(async () => {}) }));
-vi.mock('@/lib/likida/intake/cfdi_xml', () => ({ parseCfdiXml: (t: string) => (t.includes('Comprobante') ? { uuid: 'U-1', total: 100 } : null) }));
 
 const { POST } = await import('./route');
 const { logger } = await import('@/lib/logger');
@@ -106,6 +115,8 @@ beforeEach(async () => {
   errorFlota = null; errorDedup = null; errorBorrado = null;
   interruptorResp = { data: null, error: null }; // sin fila = ENCENDIDO
   tablasTocadas.length = 0;
+  caidasDeIngesta = 0;
+  recibidosPorIngesta.length = 0;
   rpcs.length = 0;
   correosRegistrados.clear();
   borrados.length = 0;
@@ -249,6 +260,50 @@ describe('los adjuntos', () => {
     }));
     const r = await POST(pedir(evento()));
     expect(await r.json()).toMatchObject({ guardadas: 0, ignoradas: 1 });
+  });
+});
+
+describe('0530 — PDF y zip entran al buzón, con su propio tope', () => {
+  const adjuntos = (...n: string[]) => ({ attachments: n.map((filename, i) => ({ id: `att_${i}`, filename })) });
+  const stub = (cuerpoDe: (id: string) => Response) => vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const m = String(url).match(/att_(\d)/);
+    if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: `https://x/d${m ? m[1] : '0'}` }), { status: 200 });
+    return cuerpoDe(String(url));
+  }));
+
+  it('un PDF y un zip ya no se descartan por extensión: llegan a la ingesta como BYTES', async () => {
+    stub(() => new Response(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0xff, 0xfe]), { status: 200 }));
+    const r = await POST(pedir(evento(adjuntos('a.pdf', 'b.zip'))));
+    expect(r.status).toBe(200);
+    expect(recibidosPorIngesta.map((x) => [x.nombre, x.bytes])).toEqual([['a.pdf', 6], ['b.zip', 6]]);
+  });
+
+  it('un PDF de 8 MB pasa (el tope de pdf/zip es 12 MB); un XML de 8 MB no (el suyo sigue en 4 MB)', async () => {
+    stub(() => new Response(new Uint8Array(8 * 1024 * 1024), { status: 200, headers: { 'content-length': String(8 * 1024 * 1024) } }));
+    const r = await POST(pedir(evento(adjuntos('grande.pdf', 'grande.xml'))));
+    expect(r.status).toBe(200);
+    expect(recibidosPorIngesta.map((x) => x.nombre)).toEqual(['grande.pdf']);
+    expect(await r.json()).toMatchObject({ ignoradas: 2 });
+  });
+
+  it('el total del correo está acotado (30 MB): el adjunto que lo pasa se ignora, no se materializa', async () => {
+    stub(() => new Response(new Uint8Array(11 * 1024 * 1024), { status: 200 }));
+    await POST(pedir(evento(adjuntos('1.zip', '2.zip', '3.zip', '4.zip'))));
+    expect(recibidosPorIngesta).toHaveLength(2);
+    expect(logger.warn).toHaveBeenCalledWith('correo_entrante.correo_gigante', expect.anything());
+  });
+
+  it('un fallo TRANSITORIO de la ingesta (base, visión) = 503 y el correo se libera para reintentar', async () => {
+    stub(() => new Response('<Comprobante/>', { status: 200 }));
+    caidasDeIngesta = 1;
+    const r = await POST(pedir(evento()));
+    expect(r.status).toBe(503);
+    expect(borrados).toEqual(['em_1']);
+  });
+
+  it('la respuesta trae el desglose nuevo (duplicadas, revisión, rechazadas) además de guardadas e ignoradas', async () => {
+    const r = await POST(pedir(evento()));
+    expect(await r.json()).toMatchObject({ ok: true, guardadas: 1, ignoradas: 0, duplicadas: 0, revision: 0, rechazadas: 0 });
   });
 });
 

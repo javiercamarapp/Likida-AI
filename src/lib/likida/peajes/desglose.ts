@@ -3,7 +3,7 @@ import { leerCifraImportada, leerFechaImportada } from '../importar_viajes';
 // ═══════════════════════════════════════════════════════════════════════════
 // LECTOR GENÉRICO DE DESGLOSES DE PEAJE (kit del PoC, 14-ago-2026).
 //
-// El "martirio" de Transportes Innovativos llega como archivo del proveedor
+// La conciliación manual de peajes del cliente de demo llega como archivo del proveedor
 // de peaje cada ~10 días: filas de cruces con fecha, caseta, importe y tag.
 // Este módulo es el ANDAMIAJE puro: detecta las columnas por nombre y
 // normaliza cada fila. Se calibra el día 1 del PoC contra el archivo REAL

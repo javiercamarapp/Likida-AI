@@ -560,7 +560,7 @@ describe('alianzas: el siguiente toque, sin inventar un solo contacto', () => {
   it('la tracción se cuenta con la frase honesta de la casa, no con clientes', () => {
     const aliado = { id: 'anpact', nombre: 'ANPACT', tipo: 'gremio', estado: 'sin_contacto', ultimoToqueEn: null, contactoNota: 'mesa de afiliación publicada', notas: 'nota' };
     const cuerpo = armarParteAlianzas([aliado], aliado, { total: 5, sinCiudad: 1, top: [{ ciudad: 'CDMX', n: 4 }], truncado: false }, LUNES);
-    expect(cuerpo).toContain('en pláticas con transportistas como Grupo GAL y Transportes Innovativos');
+    expect(cuerpo).toContain('en pláticas con transportistas como Grupo GAL');
     expect(cuerpo).toContain('NINGUNA empresa ha firmado');
     expect(cuerpo).toContain('mesa de afiliación publicada');
   });

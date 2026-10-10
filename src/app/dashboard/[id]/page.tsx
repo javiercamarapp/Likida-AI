@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getLiquidacionDetalle } from '@/lib/likida/analytics';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { puedeExportar, puedeAsignar, puedeAdministrar } from '@/lib/auth/permisos';
+import { instruccionesAlCambiarOperador } from '@/lib/likida/convenios/envio';
 import { reasignarOperador, buscarCatalogo, contarCatalogo, type OpcionCatalogo, type TipoCatalogo } from '@/lib/likida/repo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantPedido } from '@/lib/auth/tenant-api';
@@ -158,7 +159,9 @@ export default async function Detalle({
       return { error: 'Elige un chofer de la lista: escribir un nombre a medias no basta, y adivinar a quién te referías no es cosa de este panel.' };
     }
     try {
-      await reasignarOperador(t, d!.viajeId, operadorId);
+      const cambio = await reasignarOperador(t, d!.viajeId, operadorId);
+      // El chofer nuevo recibe las instrucciones del convenio del cliente (nunca lanza ni deshace la reasignación).
+      await instruccionesAlCambiarOperador(t, d!.viajeId, cambio);
       revalidatePath(`/dashboard/${id}`);
       return { ok: 'Listo: el viaje quedó a nombre del chofer que elegiste.' };
     } catch (err) {

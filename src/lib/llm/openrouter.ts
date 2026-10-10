@@ -90,7 +90,11 @@ const FALLBACK: Record<string, string> = {
   // pasar por aquí: no hay error, no hay log, solo deja de haber plan B.
   'google/gemini-3.1-flash-lite': 'anthropic/claude-haiku-4.5',
   'google/gemini-3.6-flash': 'anthropic/claude-haiku-4.5',
+  // Carta Porte (visión): el escalón 1 (3.8 Flash) cae a Haiku 4.5 (Anthropic, lee
+  // imagen) y el escalón 2 (Sonnet 5.5) a Luna (otro proveedor) si Anthropic cae.
   'google/gemini-3.5-flash-lite': 'openai/gpt-5.6-luna',
+  'google/gemini-3.8-flash': 'anthropic/claude-haiku-4.5',
+  'anthropic/claude-sonnet-5.5': 'openai/gpt-5.6-luna',
   // El conserje del chat del panel (chat_ligero): si OpenAI se cae, el
   // saludo lo contesta flash-lite — cruce de proveedor, texto puro.
   'openai/gpt-5-nano': 'google/gemini-3.5-flash-lite',
@@ -113,6 +117,19 @@ const FALLBACK: Record<string, string> = {
   'openai/gpt-5.6-luna': 'google/gemini-3.5-flash-lite',
   'openai/gpt-oss-120b': 'google/gemini-3.5-flash-lite',
   'openai/gpt-oss-20b': 'google/gemini-3.5-flash-lite',
+  // GPT-6 Luna: respaldo cruzado del rol `conductor_hito` (ver FALLBACK_POR_ROL);
+  // su propio respaldo regresa a Google.
+  'openai/gpt-6-luna': 'google/gemini-3.5-flash-lite',
+};
+
+/**
+ * Respaldo POR ROL, que manda sobre `FALLBACK[modelo]`. Existe para que un rol
+ * nuevo elija su plan B sin cambiar el de los demás roles que comparten modelo
+ * (`gemini-3.5-flash-lite` es también el de `chat` y `transcripcion`).
+ * Solo lo lee `generateStructured`.
+ */
+const FALLBACK_POR_ROL: Partial<Record<ModelRole, string>> = {
+  conductor_hito: 'openai/gpt-6-luna',
 };
 
 /**
@@ -192,6 +209,10 @@ const PRICES: Record<string, [number, number]> = {
   // Verificado contra el catálogo público de OpenRouter el 12-ago-2026.
   'openai/gpt-5-nano': [0.05, 0.4],
   'google/gemini-3.5-flash-lite': [0.3, 2.5],
+  // Escalones del extractor de Carta Porte (modelos-precios.md, 1-oct-2026). 3.8 Flash
+  // duplica precio el 1-ene-2027: re-verificar entonces.
+  'google/gemini-3.8-flash': [0.75, 3.75],
+  'anthropic/claude-sonnet-5.5': [2, 10],
   // Añadidos el 4-ago-2026 al medir OCR: sin ellos, `calcCost` caía a la red de
   // seguridad (tarifa más cara) y reportaba ~$0.030 por comprobante donde el
   // costo real es ~$0.0016. La red hizo su trabajo —salió alto y por eso se
@@ -215,6 +236,10 @@ const PRICES: Record<string, [number, number]> = {
   // contra el catálogo público de OpenRouter el 16-ago-2026.
   'openai/gpt-oss-120b': [0.03, 0.17],
   'openai/gpt-oss-20b': [0.03, 0.13],
+  // GPT-6 Luna (22-sep-2026), estándar: $0.10/$0.50 por M (catálogo de OpenRouter
+  // y developers.openai.com/api/docs/pricing, 1-oct-2026). Mide el respaldo del
+  // rol `conductor_hito`.
+  'openai/gpt-6-luna': [0.10, 0.50],
 };
 
 /**
@@ -392,6 +417,7 @@ export async function generateResponse(opts: {
       catch (e) { logger.error('llm.presupuesto_no_liquidado', { runId: opts.budget?.runId, err: e instanceof Error ? e.message : String(e) }); }
     };
     let res: OpenAI.Chat.ChatCompletion;
+    const t0Llamada = Date.now();
     try {
       res = await getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined);
     } catch (e) {
@@ -404,6 +430,8 @@ export async function generateResponse(opts: {
       if (reservation) logger.error('llm.reserva_sin_liquidar_por_error', { runId: opts.budget?.runId, reservaId: reservation.id, err: e instanceof Error ? e.message : String(e) });
       throw e;
     }
+    // E1-A (P1-14): lo que tardó la llamada al proveedor, para `llm_costo.duracion_ms` y el p50/p95 por fase.
+    const ms = Date.now() - t0Llamada;
     const tokensIn = res.usage?.prompt_tokens ?? 0;
     const tokensOut = res.usage?.completion_tokens ?? 0;
     const costo = costoReal(res.usage as { cost?: number } | undefined, m, tokensIn, tokensOut);
@@ -439,7 +467,7 @@ export async function generateResponse(opts: {
     // marca, un consumidor (p.ej. `redactor.ts`) lo escribía en
     // `llm_costo` como si fuera una cifra real.
     return {
-      text: (res.choices[0]?.message?.content ?? '').trim(), model: res.model || m, tokensIn, tokensOut, cost: costoContabilizado,
+      text: (res.choices[0]?.message?.content ?? '').trim(), model: res.model || m, tokensIn, tokensOut, cost: costoContabilizado, ms,
       ...(usageValido ? {} : { noMedido: true as const }),
     };
   };
@@ -623,9 +651,9 @@ export async function generateStructured<T>(opts: {
   temperature?: number;
   /** Reserva dura por corrida/tenant antes de cada intento, incluido fallback. */
   budget?: LlmBudget;
-}): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }> }> {
+}): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>; /** ms en el proveedor, SUMA de todos los intentos del turno (E1-A). */ ms: number }> {
   const model = modelFor(opts.role);
-  const fallback = FALLBACK[model] ?? null;
+  const fallback = FALLBACK_POR_ROL[opts.role] ?? FALLBACK[model] ?? null;
   const jsonSchema = z.toJSONSchema(opts.schema, { target: 'draft-7' }) as Record<string, unknown>;
 
   // OpenRouter/OpenAI json_schema exige additionalProperties:false en cada objeto.
@@ -676,6 +704,8 @@ export async function generateStructured<T>(opts: {
    * aquí.
    */
   const costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }> = {};
+  // E1-A: ms acumulados en el proveedor a lo largo de los intentos del turno (lo que el usuario esperó, sin contar la reserva).
+  let msAcumulados = 0;
   const cobrar = (u: { model: string; tokensIn: number; tokensOut: number; cost: number }) => {
     gastado.tokensIn += u.tokensIn;
     gastado.tokensOut += u.tokensOut;
@@ -684,7 +714,7 @@ export async function generateStructured<T>(opts: {
     costoPorModelo[u.model] = { tokensIn: prev.tokensIn + u.tokensIn, tokensOut: prev.tokensOut + u.tokensOut, cost: prev.cost + u.cost };
   };
 
-  const attempt = async (m: string, note?: string, tope?: number): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }> }> => {
+  const attempt = async (m: string, note?: string, tope?: number): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>; ms: number }> => {
     // Si el presupuesto ya se agotó, no se paga una llamada que se va a cortar a
     // media respuesta.
     opts.signal?.throwIfAborted();
@@ -719,15 +749,18 @@ export async function generateStructured<T>(opts: {
       catch (e) { logger.error('llm.presupuesto_no_liquidado', { runId: opts.budget?.runId, err: e instanceof Error ? e.message : String(e) }); }
     };
     let res: OpenAI.Chat.ChatCompletion;
+    const t0Llamada = Date.now();
     try {
       res = await getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined);
     } catch (e) {
+      msAcumulados += Date.now() - t0Llamada;
       // BACKEND-19C2-1: ver el mismo fix en `generateResponse` — no liquidar
       // al monto reservado en error/abort, dejar la fila 'reservado' para
       // que la 0193 (expira_en) la excluya sola del tope diario.
       if (reservation) logger.error('llm.reserva_sin_liquidar_por_error', { runId: opts.budget?.runId, reservaId: reservation.id, err: e instanceof Error ? e.message : String(e) });
       throw e;
     }
+    msAcumulados += Date.now() - t0Llamada;
     const raw = res.choices[0]?.message?.content || '';
     // La llamada se cobra aunque falle: el consumo viaja EN el error para que el
     // contador por liquidación no reporte $0 en los intentos fallidos.
@@ -764,7 +797,7 @@ export async function generateStructured<T>(opts: {
     // Se devuelve el ACUMULADO del turno, no el de este intento: el llamador
     // quiere saber qué costó extraer este comprobante, no qué costó el último
     // reintento.
-    return { data: v.data, raw, model: usage.model, ...gastado, costoPorModelo };
+    return { data: v.data, raw, model: usage.model, ...gastado, costoPorModelo, ms: msAcumulados };
   };
 
   /**

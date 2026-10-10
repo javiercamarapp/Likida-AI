@@ -46,6 +46,17 @@ export interface TimbreVigente {
   modo: 'sandbox' | 'produccion';
   proveedor: string;
   selloSat: string | null;
+  /** 0541: el estado de una cancelación pedida desde Likida; null = ninguna. */
+  cancelacion: CancelacionTimbre | null;
+}
+
+/** 0541: lo que la pantalla necesita saber de una cancelación en curso. */
+export interface CancelacionTimbre {
+  estado: 'solicitada' | 'en_proceso' | 'rechazada' | 'confirmada';
+  motivo: string | null;
+  codigoSat: string | null;
+  error: string | null;
+  solicitadaEn: string | null;
 }
 
 /**
@@ -92,7 +103,7 @@ export async function leerContextoTimbre(tenantId: string, viajeId: string): Pro
     // así que `maybeSingle` sigue siendo correcto — y leer las dos en la misma
     // pasada evita que la pantalla enseñe "sin timbre" durante una reserva.
     acotada(admin.from('ccp_timbre')
-      .select('uuid_fiscal, fecha_timbrado, modo, proveedor, sello_sat, estado, reservado_en')
+      .select('uuid_fiscal, fecha_timbrado, modo, proveedor, sello_sat, estado, reservado_en, cancelacion_estado, cancelacion_motivo, cancelacion_codigo, cancelacion_error, cancelacion_solicitada_en')
       .eq('tenant_id', tenantId).eq('viaje_id', viajeId)
       .in('estado', ['vigente', 'pendiente']).maybeSingle(), 'timbre.vigente'),
   ]);
@@ -126,6 +137,13 @@ export async function leerContextoTimbre(tenantId: string, viajeId: string): Pro
       modo: t.modo === 'produccion' ? 'produccion' : 'sandbox',
       proveedor: String(t.proveedor),
       selloSat: txt(t.sello_sat),
+      cancelacion: txt(t.cancelacion_estado) === null ? null : {
+        estado: String(t.cancelacion_estado) as CancelacionTimbre['estado'],
+        motivo: txt(t.cancelacion_motivo),
+        codigoSat: txt(t.cancelacion_codigo),
+        error: txt(t.cancelacion_error),
+        solicitadaEn: txt(t.cancelacion_solicitada_en),
+      },
     },
     reservaPendiente: reserva === null ? null : {
       reservadoEn: txt(reserva.reservado_en),
@@ -419,6 +437,76 @@ export async function timbrarViaje(
   );
   logger.info('timbre.ok', { viajeId, uuid: r.uuid, modo: ctx.emisor.modo, fechaOrigen: origen });
   return { ok: true, uuid: r.uuid, fechaTimbrado: fecha, modo: ctx.emisor.modo, yaExistia: false };
+}
+
+/** Minutos mínimos que una reserva ambigua debe llevar puesta antes de poder
+ *  liberarla: un timbrado en curso normal tarda segundos (20 s de auth + 20 s de
+ *  timbrado como máximo, pac/sw.ts); pasada media hora, nadie va a contestar. */
+export const MINUTOS_MIN_LIBERAR_RESERVA = 30;
+
+export type ResultadoLiberarReserva =
+  | { ok: true }
+  | { ok: false; motivo: string };
+
+/**
+ * LIBERA UNA RESERVA 'pendiente' AMBIGUA (auditoría ola 1, #26).
+ *
+ * Cuando el PAC no contesta (clase 'red') la reserva se QUEDA puesta a propósito
+ * —el CFDI pudo haberse emitido— y bloquea el viaje. Hasta hoy el mensaje decía
+ * «soporte libera el bloqueo» y NADA lo liberaba: ni función, ni cron, ni pantalla,
+ * ni TTL. Esta es la salida, y es deliberadamente estrecha:
+ *
+ *   · exige que quien la pide DECLARE que verificó en el panel del PAC que NO existe
+ *     un CFDI de este viaje (`verificadoEnPac`): liberar a ciegas es cómo se emite
+ *     un segundo CFDI real;
+ *   · solo libera una reserva SIN uuid (con uuid el CFDI existe ante el SAT: hay que
+ *     registrarlo, no soltarlo) y con al menos `MINUTOS_MIN_LIBERAR_RESERVA` puestos;
+ *   · el DELETE lleva esas mismas condiciones EN LA BASE (no solo en la lectura), y
+ *     deja bitácora con quién la liberó.
+ *
+ * NO consulta al PAC ni lo concilia solo: eso exige el contrato de consulta por uuid
+ * de SW Sapien, que no está verificado (ver docs/operacion/pendientes-seguridad-w2.md).
+ */
+export async function liberarReservaTimbre(
+  tenantId: string,
+  viajeId: string,
+  actor: { id?: string; email?: string },
+  verificadoEnPac: boolean,
+  ahora: Date = new Date(),
+): Promise<ResultadoLiberarReserva> {
+  if (verificadoEnPac !== true) {
+    return { ok: false, motivo: 'Confirma que verificaste en el panel de tu PAC que NO existe un CFDI de este viaje: liberar a ciegas puede emitir un segundo CFDI real.' };
+  }
+  const { data: fila, error: errLee } = await acotada(supabaseAdmin().from('ccp_timbre')
+    .select('id, uuid_fiscal, reservado_en')
+    .eq('tenant_id', tenantId).eq('viaje_id', viajeId).eq('estado', 'pendiente').maybeSingle(), 'timbre.liberar_leer');
+  if (errLee) throw new Error(`liberarReservaTimbre/leer: ${errLee.message}`);
+  if (!fila) return { ok: false, motivo: 'Este viaje no tiene una reserva de timbrado pendiente.' };
+  const reserva = fila as { id: string; uuid_fiscal: string | null; reservado_en: string | null };
+  if (reserva.uuid_fiscal) {
+    return { ok: false, motivo: `Esa reserva ya tiene un folio fiscal (${reserva.uuid_fiscal}): el CFDI EXISTE ante el SAT. No se libera; avisa a soporte para registrarlo.` };
+  }
+  const reservadoMs = reserva.reservado_en ? Date.parse(reserva.reservado_en) : NaN;
+  const corte = new Date(ahora.getTime() - MINUTOS_MIN_LIBERAR_RESERVA * 60_000);
+  if (!Number.isFinite(reservadoMs) || reservadoMs > corte.getTime()) {
+    return { ok: false, motivo: `La reserva lleva menos de ${MINUTOS_MIN_LIBERAR_RESERVA} minutos: puede haber un timbrado en curso. Espera y vuelve a intentar.` };
+  }
+
+  const borrada = await acotada(supabaseAdmin().from('ccp_timbre').delete()
+    .eq('tenant_id', tenantId).eq('id', reserva.id).eq('estado', 'pendiente')
+    .is('uuid_fiscal', null).lt('reservado_en', corte.toISOString())
+    .select('id'), 'timbre.liberar');
+  if (borrada.error) throw new Error(`liberarReservaTimbre: ${borrada.error.message}`);
+  if (!Array.isArray(borrada.data) || borrada.data.length === 0) {
+    return { ok: false, motivo: 'La reserva cambió mientras tanto (se consolidó o ya se había liberado). Recarga la pantalla.' };
+  }
+  await anotarBitacora(
+    { tenantId, actor, accion: 'ccp.reserva_liberada', entidad: 'viaje', entidadId: viajeId,
+      detalle: { reserva: reserva.id, reservado_en: reserva.reservado_en, verificado_en_pac: true } },
+    { evento: 'timbre.bitacora_no_escribio' },
+  );
+  logger.warn('timbre.reserva_liberada', { viajeId, reservaId: reserva.id, por: actor.id ?? null });
+  return { ok: true };
 }
 
 /** Lo que la pantalla lee cuando hay una reserva viva. Dos verdades muy

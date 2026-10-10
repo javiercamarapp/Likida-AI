@@ -243,7 +243,71 @@ const DISPARADOR = new RegExp(
  * holgura sobre el máximo observado. Si una flota despacha anticipos mayores,
  * lo que se sube es esta constante — no se quita la revisión.
  */
-const TOPE_ANTICIPO = 100_000;
+export const TOPE_ANTICIPO_POR_DEFECTO = 100_000;
+
+/**
+ * LA REGLA DE ANTICIPO, UNA SOLA PARA PANEL Y WHATSAPP (E1-B, P0-7).
+ *
+ * Decisión de Javier (default sí): el encargado puede dar anticipo en el panel,
+ * igual que ya podía por WhatsApp (`puedeAsignar`). Lo que lo acota es el tope de
+ * la política de la flota (`config.politica`, concepto `anticipo`, `topeMonto`) y,
+ * si la flota no declaró uno, el umbral de revisión de arriba. Esto es política
+ * INTERNA de la flota, no ley: ni el panel ni el chat lo presentan como
+ * obligación fiscal. Quien pueda mutar `anticipo` por otra puerta (la API v1 tiene
+ * su propio techo de $1,000,000) no pasa por aquí.
+ *
+ * QUIÉN QUEDA TOPADO (ronda 20, M3):
+ *  - TOPE EXPLÍCITO de la política (`origen: 'politica'`): todos, dueño incluido
+ *    (la política lo dice). No hay UI para editarlo: se cambia actualizando la
+ *    política de la flota.
+ *  - SIN tope declarado: el UMBRAL de revisión (`origen: 'umbral_revision'`) acota a
+ *    quien NO ve dinero (el encargado) y al chat; quien ve `dinero` en el panel no
+ *    queda topado —como antes de E1-B— porque el umbral es un guardia contra el dedo
+ *    pesado de quien no es el dueño, no una política que el dueño haya escrito.
+ */
+export interface TopeAnticipo { tope: number; origen: 'politica' | 'umbral_revision' }
+
+export function topeAnticipoDetalle(politica: ReadonlyArray<{ concepto: string; topeMonto?: number }> | null | undefined): TopeAnticipo {
+  const p = (politica ?? []).find((x) => x.concepto === 'anticipo');
+  const t = p?.topeMonto;
+  return typeof t === 'number' && Number.isFinite(t) && t > 0
+    ? { tope: t, origen: 'politica' }
+    : { tope: TOPE_ANTICIPO_POR_DEFECTO, origen: 'umbral_revision' };
+}
+
+export function topeAnticipoDe(politica: ReadonlyArray<{ concepto: string; topeMonto?: number }> | null | undefined): number {
+  return topeAnticipoDetalle(politica).tope;
+}
+
+/** El tope que aplica el PANEL a quien captura: `null` = sin tope (dueño sin política explícita). */
+export function topeAnticipoParaPanel(
+  politica: ReadonlyArray<{ concepto: string; topeMonto?: number }> | null | undefined,
+  puedeVerDinero: boolean,
+): TopeAnticipo | null {
+  const d = topeAnticipoDetalle(politica);
+  return d.origen === 'umbral_revision' && puedeVerDinero ? null : d;
+}
+
+/** La política no se pudo leer: no se inventa un tope (el respaldo «100 mil» era MÁS holgado que una política de 20 mil). */
+export const MENSAJE_POLITICA_ILEGIBLE =
+  'No pude leer la política de tu flota para validar el tope del anticipo. No se creó el viaje: inténtalo de nuevo en un momento, o créalo sin anticipo y captúralo después.';
+
+export type VeredictoAnticipo = { ok: true } | { ok: false; motivo: string };
+
+/** ¿Este monto de anticipo se puede capturar? Misma respuesta en panel y chat. */
+export function evaluarAnticipo(monto: number, tope: number | TopeAnticipo): VeredictoAnticipo {
+  if (!Number.isFinite(monto) || monto < 0) return { ok: false, motivo: 'El anticipo tiene que ser un monto válido (o dejarse vacío).' };
+  const t = typeof tope === 'number' ? { tope, origen: 'politica' as const } : tope;
+  if (monto > t.tope) {
+    return {
+      ok: false,
+      motivo: t.origen === 'politica'
+        ? `El anticipo de ${mxn(monto)} rebasa el tope de ${mxn(t.tope)} que fija la política de tu flota (concepto «anticipo»). Para darlo hay que cambiar ese tope actualizando la política de la flota.`
+        : `El anticipo de ${mxn(monto)} rebasa el umbral de revisión de ${mxn(t.tope)}. Si de verdad se necesita, que el dueño lo capture desde el panel de Despacho.`,
+    };
+  }
+  return { ok: true };
+}
 
 const NUM = String.raw`\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?`;
 const SUF = String.raw`(?:\s*(?:mil|millones|millon|mdp|k|mxn|pesos))?`;
@@ -279,7 +343,7 @@ type Cifra = { ok: true; valor: number } | { ok: false };
  *   `anticipo ?? 0`, así que en la base un 0 dicho y un 0 por omisión son la
  *   misma fila. La diferencia solo existe aquí y en el resumen, que la dice.
  */
-function leerCifra(bruto: string): Cifra {
+function leerCifra(bruto: string, tope: number = TOPE_ANTICIPO_POR_DEFECTO): Cifra {
   const t = bruto.trim().replace(/^\$\s*/, '').trim();
   const conSufijo = /^(.*?)\s*(mil|millones|millon|mdp|k|mxn|pesos)$/.exec(t);
   const cuerpo = (conSufijo ? conSufijo[1] : t).trim();
@@ -302,7 +366,7 @@ function leerCifra(bruto: string): Cifra {
   const valor = Math.round(base * factor * 100) / 100;
 
   if (!Number.isFinite(valor) || valor < 0) return { ok: false };
-  if (valor > TOPE_ANTICIPO) return { ok: false };
+  if (valor > tope) return { ok: false };
   return { ok: true, valor };
 }
 
@@ -327,7 +391,7 @@ interface LecturaAnticipo {
   plano: string;
 }
 
-function leerAnticipo(plano: string): LecturaAnticipo {
+function leerAnticipo(plano: string, tope: number): LecturaAnticipo {
   const menciones = (plano.match(RE_MENCION_ANTICIPO) ?? []).length;
 
   // DOS "anticipo" EN EL MISMO MENSAJE no se desempatan: puede ser una
@@ -346,7 +410,7 @@ function leerAnticipo(plano: string): LecturaAnticipo {
     const iniGrupo = m.index + m[0].indexOf(grupo);
     if (signoRaro(plano, iniGrupo)) return { valor: null, dudoso: true, plano };
 
-    const c = leerCifra(grupo);
+    const c = leerCifra(grupo, tope);
     if (!c.ok) return { valor: null, dudoso: true, plano };
     return { valor: c.valor, dudoso: false, plano: tapar(plano, m.index, m.index + m[0].length) };
   }
@@ -360,7 +424,7 @@ function leerAnticipo(plano: string): LecturaAnticipo {
 
   const p = pesos[0];
   if (signoRaro(plano, p.index)) return { valor: null, dudoso: true, plano };
-  const c = leerCifra(p[0]);
+  const c = leerCifra(p[0], tope);
   if (!c.ok) return { valor: null, dudoso: true, plano };
   return { valor: c.valor, dudoso: false, plano: tapar(plano, p.index, p.index + p[0].length) };
 }
@@ -538,7 +602,7 @@ function leerOperador(plano: string): [number, number] | null {
  * texto tal como lo escribió el jefe — el nombre del operador y el número
  * económico quedan SIN resolver a propósito.
  */
-export function interpretarPeticionViaje(texto: string): IntencionViaje {
+export function interpretarPeticionViaje(texto: string, opciones: { topeAnticipo?: number } = {}): IntencionViaje {
   if (typeof texto !== 'string') return null;
 
   // NFC de una vez, y a partir de aquí ÉSTE es el original: `aplanar` conserva
@@ -564,7 +628,7 @@ export function interpretarPeticionViaje(texto: string): IntencionViaje {
   const restoOrig = original.slice(inicio);
   let resto = plano0.slice(inicio);
 
-  const anticipo = leerAnticipo(resto);
+  const anticipo = leerAnticipo(resto, opciones.topeAnticipo ?? TOPE_ANTICIPO_POR_DEFECTO);
   resto = anticipo.plano;
 
   let unidad: string | null = null;
@@ -625,7 +689,7 @@ const DICE_FALTA: Readonly<Record<string, string>> = {
   ruta: 'la ruta (de dónde a dónde)',
   origen: 'de dónde sale',
   destino: 'a dónde va',
-  anticipo: 'el anticipo — dijiste una cifra y no la pude leer con seguridad',
+  anticipo: 'el anticipo — dijiste una cifra y no la pude leer con seguridad (o rebasa el tope de anticipo de la política de tu flota o su umbral de revisión; si es correcto, que el dueño lo capture desde el panel de Despacho)',
   cifra: 'hay un número en tu mensaje que no supe a qué corresponde',
 };
 

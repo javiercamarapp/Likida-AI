@@ -39,7 +39,7 @@ const redirect = vi.fn((destino: string) => { throw new ErrorDeRedirect(destino)
 vi.mock('next/navigation', () => ({ redirect: (d: string) => redirect(d) }));
 
 const resolverTenantEfectivo = vi.fn(async () => ({
-  tenantId: 'tenant-1', tenantNombre: 'Transportes Innovativos',
+  tenantId: 'tenant-1', tenantNombre: 'el cliente de demo',
   nombre: 'Javier', rol: 'flota_admin' as string, tenantExiste: true,
 }));
 vi.mock('@/lib/auth/tenant-efectivo', () => ({
@@ -50,7 +50,11 @@ const getPerfilCrudo = vi.fn(async (): Promise<unknown> => ({}));
 vi.mock('@/lib/likida/repo', () => ({ getPerfilCrudo: (...a: unknown[]) => getPerfilCrudo(...(a as [])) }));
 
 const onboardingFiscalListo = vi.fn(() => false);
-vi.mock('@/lib/likida/perfil/preguntas', () => ({ onboardingFiscalListo: (...a: unknown[]) => onboardingFiscalListo(...(a as [])) }));
+const onboardingPospuesto = vi.fn(() => false);
+vi.mock('@/lib/likida/perfil/preguntas', () => ({
+  onboardingFiscalListo: (...a: unknown[]) => onboardingFiscalListo(...(a as [])),
+  onboardingPospuesto: (...a: unknown[]) => onboardingPospuesto(...(a as [])),
+}));
 
 vi.mock('./inicio-contenido', () => ({ InicioContenido: () => null }));
 vi.mock('./inicio-operacion', () => ({ InicioOperacion: () => null }));
@@ -64,6 +68,7 @@ describe('/dashboard — la compuerta de onboarding (FE-19-1)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     onboardingFiscalListo.mockReturnValue(false);
+    onboardingPospuesto.mockReturnValue(false);
     getPerfilCrudo.mockResolvedValue({});
   });
 
@@ -89,6 +94,22 @@ describe('/dashboard — la compuerta de onboarding (FE-19-1)', () => {
     expect(redirect).not.toHaveBeenCalled();
   });
 
+  it('«lo confirmo con mi contador»: el Resumen SE ABRE (no rebota al onboarding) y lleva el aviso permanente', async () => {
+    // W2: el candado dejaba inalcanzable el Resumen a un director que no conoce de
+    // memoria sus ingresos anuales. Pospuesto ≠ declarado: el aviso sigue ahí.
+    onboardingPospuesto.mockReturnValue(true);
+    const r = await DashboardInicio({ searchParams: SIN_PARAMS }) as { props: { avisoFiscalPospuesto?: boolean } };
+    expect(redirect).not.toHaveBeenCalled();
+    expect(r.props.avisoFiscalPospuesto).toBe(true);
+  });
+
+  it('pospuesto PERO ya declarado: sin aviso (el aviso solo vive mientras el estímulo siga en $0)', async () => {
+    onboardingPospuesto.mockReturnValue(true);
+    onboardingFiscalListo.mockReturnValue(true);
+    const r = await DashboardInicio({ searchParams: SIN_PARAMS }) as { props: { avisoFiscalPospuesto?: boolean } };
+    expect(r.props.avisoFiscalPospuesto).toBe(false);
+  });
+
   it('un bache leyendo el perfil NO encierra al dueño fuera de su panel', async () => {
     getPerfilCrudo.mockRejectedValue(new Error('supabase caído'));
     await expect(DashboardInicio({ searchParams: SIN_PARAMS })).resolves.toBeTruthy();
@@ -97,7 +118,7 @@ describe('/dashboard — la compuerta de onboarding (FE-19-1)', () => {
 
   it('el encargado no pasa por la compuerta: no es su onboarding', async () => {
     resolverTenantEfectivo.mockResolvedValue({
-      tenantId: 'tenant-1', tenantNombre: 'Transportes Innovativos',
+      tenantId: 'tenant-1', tenantNombre: 'el cliente de demo',
       nombre: 'Ana', rol: 'encargado', tenantExiste: true,
     });
     await expect(DashboardInicio({ searchParams: SIN_PARAMS })).resolves.toBeTruthy();

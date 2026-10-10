@@ -20,11 +20,12 @@ import { readFileSync } from 'node:fs';
 // los volvería invisibles al leer el diff.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const FUENTE = readFileSync('src/lib/likida/liquidacion/pdf.ts', 'utf8');
+// El saneador vive en `winansi.ts` (lo comparten el PDF de liquidación y el acuse «solo folio»).
+const FUENTE = readFileSync('src/lib/likida/liquidacion/winansi.ts', 'utf8');
 
-/** Los `.replace(...)` del saneador `wa` del módulo, aplicados en su orden. */
+/** Los `.replace(...)` de `sanearWinAnsi`, aplicados en su orden. */
 function sanearComoElModulo(s: string): string {
-  const cuerpo = FUENTE.slice(FUENTE.indexOf('const wa ='), FUENTE.indexOf('const text = (s: string'));
+  const cuerpo = FUENTE.slice(FUENTE.indexOf('export function sanearWinAnsi'));
   const reglas = [...cuerpo.matchAll(/\.replace\((\/[^/]+\/[gu]*), '([^']*)'\)/g)];
   // Si el saneador se reescribe de otra forma, esta prueba tiene que romperse
   // ruidosamente en vez de pasar por vacío sobre cero reglas.

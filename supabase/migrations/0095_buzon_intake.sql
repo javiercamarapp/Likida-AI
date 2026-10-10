@@ -1,7 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- EL BUZÓN DE INTAKE — la dirección de correo propia de cada flota
 --
--- Los tres agentes que pidió Transportes Innovativos dependen de esto: las
+-- Los tres agentes que pidió el cliente de demo dependen de esto: las
 -- facturas de talleres, refaccionarias y diésel llegan POR CORREO, no por
 -- WhatsApp. Hasta hoy se subían a mano desde la bandeja del Agente de
 -- Proveedores.

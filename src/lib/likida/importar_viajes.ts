@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
-import { traerTodo } from './pg';
+import { traerPorIds, traerTodo } from './pg';
 import { elegirOperadorPorNombre, OperadorNombreAmbiguo } from './crear_viaje_wa';
 import { validarIngreso } from './ingreso_viaje';
 import { numero } from '@/lib/formato';
@@ -337,10 +337,17 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
   });
   if (!filas.length) return vacio();
 
+  // Solo los folios DEL ARCHIVO, en tandas (`traerPorIds`): cada tanda es un lookup
+  // por `viaje_folio_unico (tenant_id, folio)` que devuelve a lo más su tamaño.
+  // Antes se leía TODO folio del tenant paginando por offset: 60,000 filas a los
+  // 12 meses de una flota de 5,000 viajes/mes, y `LecturaIncompleta` al pasar de
+  // 100,000 (mes ~20) — la importación dejaba de funcionar (ronda 16, carga 250).
+  const foliosDelArchivo = [...new Set(filas.map((f) => f.folio))];
   const existentes = new Set(
-    (await traerTodo<{ folio: unknown }>(
-      (d, h) => acotada(supabaseAdmin().from('viaje').select('folio')
-        .eq('tenant_id', tenantId).not('folio', 'is', null).order('id').range(d, h), 'importarViajes.folios'),
+    (await traerPorIds<{ folio: unknown }>(
+      foliosDelArchivo,
+      (tanda) => acotada(supabaseAdmin().from('viaje').select('folio')
+        .eq('tenant_id', tenantId).in('folio', tanda), 'importarViajes.folios'),
       'importarViajes.folios',
     )).map((v) => String(v.folio)),
   );

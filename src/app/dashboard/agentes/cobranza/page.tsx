@@ -7,10 +7,12 @@ import {
   colaCobranza, bitacoraCobranza, leerConfigCobranza, guardarConfigCobranza,
   ejecutarCobranza, dentroDeVentana, corridaDeCobranza,
 } from '@/lib/likida/agentes/cobranza';
+import { colaPorGasto, tableroGastos, guardarConfigGasto } from '@/lib/likida/agentes/cobranza_gasto';
 import { logger } from '@/lib/logger';
 import { ahoraMs } from '@/lib/saludo';
 import { registrarCorrida, ultimasCorridas, type CorridaRegistrada } from '@/lib/likida/agentes/corridas';
 import { VistaAgenteCobranza } from './vista';
+import { SeccionPorGasto } from './seccion-por-gasto';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
 
@@ -52,12 +54,16 @@ export default async function PaginaAgenteCobranza({
 
   const sufijo = sufijoTenant(sp);
 
-  const [cola, config, bitacora, corridas] = await Promise.all([
+  const [cola, config, bitacora, corridas, porGasto, tableroPorGasto] = await Promise.all([
     colaCobranza(tenantId),
     leerConfigCobranza(tenantId),
     safe(() => bitacoraCobranza(tenantId)),
     // `null` = no se pudo leer, y la ficha lo DICE (no pinta "sin corridas").
     safe<CorridaRegistrada[]>(() => ultimasCorridas(tenantId, 'cobranza')),
+    // La cobranza por gasto (0525): una lectura que falla se DICE en su sección, no tumba la página ni se
+    // pinta como «ningún gasto pendiente».
+    safe(() => colaPorGasto(tenantId)),
+    safe(() => tableroGastos(tenantId)),
   ]);
 
   async function guardarEstrategia(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
@@ -79,6 +85,23 @@ export default async function PaginaAgenteCobranza({
     });
     if (r.error) return { error: r.error };
     logger.info('agente_cobranza.config_guardada', { tenantId });
+    redirect(`/dashboard/agentes/cobranza${sufijo}`);
+  }
+
+  async function guardarPorGasto(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
+    'use server';
+    const negado = await exigirPermiso(tenantId);
+    if (negado) return { error: negado };
+
+    const r = await guardarConfigGasto(tenantId, {
+      porGasto: fd.get('porGasto') === 'on',
+      tiersGasto: String(fd.get('tiersGasto') ?? '').split(/[,\s]+/).filter(Boolean).map(Number),
+      maxMensajesDia: Number(fd.get('maxMensajesDia')),
+      umbralFoto: Number(fd.get('umbralFoto')),
+      conceptosCfdi: fd.getAll('conceptosCfdi').map(String),
+    });
+    if (r.error) return { error: r.error };
+    logger.info('agente_cobranza.config_gasto_guardada', { tenantId });
     redirect(`/dashboard/agentes/cobranza${sufijo}`);
   }
 
@@ -145,6 +168,19 @@ export default async function PaginaAgenteCobranza({
           : null,
       }}
       acciones={{ guardarEstrategia, alternarPausa, ejecutarAhora }}
+      gastosParaContactar={porGasto ? porGasto.plan.paraContactar.length : 0}
+      porGasto={porGasto
+        ? <SeccionPorGasto config={porGasto.config} plan={porGasto.plan} tablero={tableroPorGasto}
+            firma={config.firma} instrucciones={config.instrucciones} guardar={guardarPorGasto} />
+        : (
+          <section className="card p-4">
+            <h2 className="font-display text-[15px] font-semibold">Cobranza por gasto</h2>
+            <p className="text-[12.5px] mt-1" style={{ color: 'var(--bad)' }}>
+              No se pudo leer la cobranza por gasto ahora mismo. No se muestra una lista a medias: media lista se
+              ve igual que la lista entera.
+            </p>
+          </section>
+        )}
       notificaciones={
         <>
           {/* La ficha de corridas (B3) comparte el slot: es la otra mitad de

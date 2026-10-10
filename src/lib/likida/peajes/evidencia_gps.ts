@@ -3,11 +3,11 @@ import { acotada } from '../presupuesto';
 import { traerTodo, traerPorIds, conteo } from '../pg';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// EVIDENCIA GPS DE LOS CRUCES DE PEAJE — el "martirio" de Innovativos.
+// EVIDENCIA GPS DE LOS CRUCES DE PEAJE — la conciliación manual de peajes del cliente de demo.
 //
 // El conciliador v1 (0106/desglose_peaje.ts) contesta "¿este cruce del
 // proveedor coincide con un gasto de caseta de un viaje?". Esta pieza añade
-// la pregunta que Innovativos hoy contesta a mano contra su GPS cada 10
+// la pregunta que el cliente de demo hoy contesta a mano contra su GPS cada 10
 // días: "¿la UNIDAD de ese viaje de verdad anduvo en carretera el día del
 // cruce?" — con las posiciones que el conector GPS (Samsara/Wialon/Geotab/
 // Navixy, o el pin de WhatsApp) ya escribe en `posicion`.
@@ -16,6 +16,12 @@ import { traerTodo, traerPorIds, conteo } from '../pg';
 //
 // SÍ afirma: «hay N posiciones de esa unidad el día del cruce» (evidencia a
 // favor) o «no hay ninguna» (hueco de datos, CON su motivo exacto).
+//
+// (ACTUALIZACIÓN 1-oct-2026: el escalón espacial YA existe, aparte, en
+// `cruce_gps.ts` — Haversine contra el catálogo `peaje_caseta` en una ventana
+// de minutos alrededor de la hora del cobro, que desde la 0375 sí se guarda.
+// Esta pieza sigue siendo la evidencia POR DÍA y conserva su doctrina: no
+// acusa. Lo que sigue describe su alcance propio.)
 //
 // NO afirma «la unidad estuvo LEJOS de la caseta» — la cubeta
 // "inconsistente" del diseño (tag prestado/clonado) EXIGE la posición de la

@@ -102,7 +102,7 @@ landing (con la advertencia del ingreso acumulable — la honestidad ES el
 diferenciador), las 10 piezas de contenido (la rutina semanal ya existe),
 demo grabado + capturas, enriquecedor del censo (829 empresas, 0 teléfonos —
 TODO el pipeline está detrás de esa casilla; DENUE→Maps, <$50 USD), y la
-propuesta preliminar para reactivar Innovativos antes de que su consultor
+propuesta preliminar para reactivar el cliente de demo antes de que su consultor
 cierre la puerta.
 
 ## FASE D · El centro de mando visual (semanas 3-5 — agentes; necesita C.1)

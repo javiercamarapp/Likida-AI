@@ -34,6 +34,12 @@ pruebas-manuales/imagenes/
 # reales de prospectos. Vive fuera del repo, en likida-archivo-privado/
 # (16-ago-2026, para lectura externa tipo VC/diligence).
 docs/auditoria-*/
+# Cartera de prospectos de la fase de outreach (correos, teléfonos y nombres de
+# terceros, LFPDPPP). NUNCA se rastrea: sin consentimiento de esas personas no
+# puede vivir en un repo público. Prueba de CI: sin_datos_privados_rastreados.test.ts.
+staging_canacar/
+# Salida cruda de la cosecha de prospectos (~200 JSON con correos y teléfonos de terceros): misma regla.
+scripts/cosecha/salida-prospectos/
 docs/comercial/
 docs/REPORTE-ESTADO.md
 PROMPT-SESION-NUEVA.md
@@ -78,7 +84,7 @@ pruebas-navegador/.reporte/
 pruebas-navegador/.artefactos/
 
 # Bytecode de los 9 scripts Python del repo (scripts/mejora-diaria/,
-# scripts/ci/innovativos-capacidad/). Correr cualquiera deja un __pycache__
+# scripts/ci/capacidad-flota/). Correr cualquiera deja un __pycache__
 # sin rastrear; sin esta regla, acaba commiteado como .pyc.
 __pycache__/
 *.py[cod]

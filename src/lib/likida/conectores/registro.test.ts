@@ -17,7 +17,7 @@ import {
 // afirme más de lo que puede sostener.
 //
 // El modo de falla que persiguen tiene nombre y fecha: el demo de Transportes
-// Innovativos. Alguien agrega un conector, le pone `api_en_vivo` porque suena
+// El cliente de demo. Alguien agrega un conector, le pone `api_en_vivo` porque suena
 // bien, se le olvida la fuente, y en el demo el "Probar conexión" truena. Estas
 // pruebas hacen que ese commit no compile la suite.
 // ═══════════════════════════════════════════════════════════════════════════

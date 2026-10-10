@@ -1,6 +1,6 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0205 — EL AGREGADO QUE ALIMENTA LA EVIDENCIA GPS DE LOS CRUCES DE PEAJE
--- (orden post-plan-maestro #1: el "martirio" de Innovativos, conciliar
+-- (orden post-plan-maestro #1: la conciliación manual de peajes del cliente de demo, conciliar
 -- peajes contra GPS cada 10 días).
 --
 -- El cruce de evidencia pregunta, por cada línea del desglose del proveedor:

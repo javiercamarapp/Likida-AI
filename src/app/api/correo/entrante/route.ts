@@ -3,11 +3,12 @@ import { logger } from '@/lib/logger';
 import { cuerpoAcotado } from '../_cuerpo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { verificarFirma, mensajeDeRechazo } from '@/lib/correo/firma_entrante';
-import { tokenDeDestinatarios } from '@/lib/correo/buzon';
+import { tokenDeDestinatarios, dominioBuzon } from '@/lib/correo/buzon';
+import { atenderCorreoCartaPorte, tokenCpDeDestinatarios } from '@/lib/likida/carta_porte_docs/correo_entrante';
+import { atenderCorreoPeajes, tokenPjDeDestinatarios } from '@/lib/likida/peajes/correo_entrante';
+import { descargadorResend } from '@/lib/likida/carta_porte_docs/resend';
 import { direccionDeCampana, esRespuestaACampana, procesarRespuestaCampana } from '@/lib/correo/respuesta_campana';
-import { parseCfdiXml } from '@/lib/likida/intake/cfdi_xml';
-import { parseRepXml, ingerirRep } from '@/lib/likida/intake/rep';
-import { guardarFacturaProveedor, estadoSatDeCfdi } from '@/lib/likida/proveedores';
+import { atenderAdjuntosBuzon, type AdjuntoBuzon } from '@/lib/likida/buzon/servicio';
 import { estaApagado } from '@/lib/likida/interruptores';
 import { registrarCorrida } from '@/lib/likida/agentes/corridas';
 import { sanitizarTexto } from '@/lib/likida/intake/sanitizar';
@@ -20,7 +21,7 @@ export const dynamic = 'force-dynamic';
 //
 // Las facturas de talleres, refaccionarias y diésel llegan POR CORREO, no por
 // WhatsApp. Es la pieza que multiplica a los agentes de Peajes y Proveedores, y
-// la que Transportes Innovativos pidió con todas sus letras.
+// la que el cliente de demo pidió con todas sus letras.
 //
 // ── EL ORDEN DE LAS COMPROBACIONES NO ES ARBITRARIO ──────────────────────
 //
@@ -65,17 +66,18 @@ interface EventoCorreo {
   };
 }
 
-/** Los tipos que sabemos leer. Un CFDI es XML; el PDF entra porque muchos
- *  proveedores mandan los dos y el XML a veces viene dentro de un zip que
- *  todavía no abrimos. Cualquier otra cosa se ignora sin ruido. */
-const PROCESABLES = /\.(xml|pdf)$/i;
+/** Los tipos que el buzón lee (Agente 9, 0530): XML (el CFDI), PDF (solo, o pareja del XML) y ZIP (con los
+ *  límites de `buzon/zip_seguro.ts`). Cualquier otra cosa se ignora sin ruido. */
+const PROCESABLES = /\.(xml|pdf|zip)$/i;
 
-/** El adjunto más grande que se descarga. El mismo tope que el panel le pone
- *  al XML por pantalla (`MAX_XML_BYTES`, dashboard/agentes/peajes/page.tsx):
- *  un CFDI pesa decenas de KB — 4 MB ya es un archivo equivocado, no una
- *  factura grande. Sin esto, un correo hostil con un adjunto gigante se
- *  materializaría entero en memoria. */
+/** El adjunto más grande que se descarga. Un XML pesa decenas de KB — 4 MB ya es un archivo equivocado, no
+ *  una factura grande; un PDF o un zip de varias facturas sí puede pesar más, hasta 12 MB. Sin tope, un
+ *  correo hostil con un adjunto gigante se materializaría entero en memoria. */
 const MAX_ADJUNTO_BYTES = 4 * 1024 * 1024;
+const MAX_ADJUNTO_PDF_ZIP_BYTES = 12 * 1024 * 1024;
+/** Lo que un solo correo puede acumular en memoria entre todos sus adjuntos. */
+const MAX_BYTES_CORREO = 30 * 1024 * 1024;
+const topeDe = (nombre: string): number => (/\.xml$/i.test(nombre) ? MAX_ADJUNTO_BYTES : MAX_ADJUNTO_PDF_ZIP_BYTES);
 /** El webhook no necesita un JSON enorme: Resend solo entrega metadatos y la
  * descarga de los adjuntos va por otra URL. Limitarlo ANTES de verificar HMAC
  * evita que un POST sin firma nos haga materializar decenas de MB. */
@@ -137,6 +139,36 @@ export async function POST(req: Request) {
   // Del DESTINATARIO, jamás del remitente. Y se miran `to` y `cc` porque un
   // reenvío suele poner nuestro buzón en copia.
   const destinatarios = [...(d.to ?? []), ...(d.cc ?? [])];
+
+  // ── CARTA PORTE MULTI-FORMATO (Agente 3, mig. 0420) ──────────────────────
+  // El buzón `cp-<token>@…` es OTRO canal que comparte este webhook (mismo dominio, misma firma
+  // Svix, ya verificada arriba). La flota sale del token del DESTINATARIO, igual que en el buzón de
+  // facturas. Va ANTES del buzón de facturas: un correo a `cp-…` jamás se lee como factura.
+  const tokenCp = tokenCpDeDestinatarios(destinatarios, dominioBuzon());
+  if (tokenCp) {
+    const finCp = Date.now() + (maxDuration * 1000 - 3_000);
+    const restanteCp = () => finCp - Date.now();
+    const r = await atenderCorreoCartaPorte(
+      tokenCp,
+      { emailId, from: d.from, subject: d.subject, text: d.text, html: d.html, attachments: d.attachments },
+      { descargar: descargadorResend(process.env.RESEND_API_KEY ?? '', restanteCp), restanteMs: restanteCp },
+    );
+    return NextResponse.json(r.cuerpo, { status: r.status });
+  }
+  // ── PEAJES (Agente 2, mig. 0563) ─────────────────────────────────────────
+  // El buzón `pj-<token>@…` recibe el desglose del proveedor de telepeaje: mismo dominio, misma firma
+  // Svix ya verificada, y la flota sale del token del DESTINATARIO. Va antes del buzón de facturas.
+  const tokenPj = tokenPjDeDestinatarios(destinatarios, dominioBuzon());
+  if (tokenPj) {
+    const finPj = Date.now() + (maxDuration * 1000 - 3_000);
+    const restantePj = () => finPj - Date.now();
+    const r = await atenderCorreoPeajes(
+      tokenPj,
+      { emailId, from: d.from, subject: d.subject, text: d.text, html: d.html, attachments: d.attachments },
+      { descargar: descargadorResend(process.env.RESEND_API_KEY ?? '', restantePj) },
+    );
+    return NextResponse.json(r.cuerpo, { status: r.status });
+  }
   const token = tokenDeDestinatarios(destinatarios);
   if (!token) {
     // ── LA RESPUESTA DE CAMPAÑA (c5-2) ─────────────────────────────────────
@@ -259,7 +291,6 @@ export async function POST(req: Request) {
   //  · PERMANENTE (no es XML, no es CFDI, pasa del tope): el contenido llegó
   //    y no sirve. El reintento trae el mismo archivo — se cuenta como
   //    ignorado y el correo cierra en 200, como siempre.
-  let guardadas = 0;
   let ignoradas = 0;
   // Adjuntos cuya DESCARGA se cayó: ni guardados ni descartados. Si este
   // correo quedara marcado como procesado, estarían perdidos para siempre.
@@ -286,6 +317,9 @@ export async function POST(req: Request) {
   /** Lo que queda, acotado: nunca más de 8 s por descarga ni menos de 0. */
   const restanteMs = () => Math.max(0, Math.min(8_000, finPresupuesto - Date.now()));
 
+  // ── 1. DESCARGAR (bytes, no texto: un PDF o un zip no son UTF-8) ──────────
+  const descargados: AdjuntoBuzon[] = [];
+  let bytesCorreo = 0;
   for (const adj of adjuntos) {
     // Sin id no hay qué pedirle a Resend, y el reintento trae el MISMO
     // payload: permanente.
@@ -315,63 +349,44 @@ export async function POST(req: Request) {
       // nada. Pasarse es fallo PERMANENTE — el reintento trae el mismo
       // archivo—, se loguea con nombre (saneado: lo escribió el emisor) y
       // tamaño para que sea visible, y los demás adjuntos siguen.
+      const tope = topeDe(adj.filename ?? '');
       const declarado = Number(bin.headers.get('content-length') || 0);
-      if (declarado > MAX_ADJUNTO_BYTES) {
+      if (declarado > tope) {
         logger.warn('correo_entrante.adjunto_gigante', {
           emailId, archivo: sanitizarTexto(adj.filename), bytes: declarado,
         });
         ignoradas++; continue;
       }
-      const texto = await bin.text();
-      if (texto.length > MAX_ADJUNTO_BYTES) {
+      const bytes = new Uint8Array(await bin.arrayBuffer());
+      if (bytes.length > tope) {
         logger.warn('correo_entrante.adjunto_gigante', {
-          emailId, archivo: sanitizarTexto(adj.filename), bytes: texto.length,
+          emailId, archivo: sanitizarTexto(adj.filename), bytes: bytes.length,
         });
         ignoradas++; continue;
       }
-
-      // Solo el XML se puede leer como CFDI. Un PDF llega, se cuenta y se
-      // ignora: extraerle el CFDI es OCR, y eso ya tiene su propio camino.
-      const xml = parseCfdiXml(texto);
-      if (!xml) { ignoradas++; continue; }
-
-      // ── FASE 7 (mig. 0199): un REP adjunto en el correo no es una factura
-      // de proveedor — es el complemento que libera el IVA a crédito de un
-      // gasto ya capturado. Sin este corte entraba a `guardarFacturaProveedor`
-      // con Total=0 y se perdía su único propósito.
-      if (xml.tipoComprobante === 'P') {
-        const rep = parseRepXml(texto);
-        if (rep) {
-          // AUDITORÍA 28 (AG-C1/REN-C1): `finPresupuesto` como tope — un
-          // consolidado con muchos doctos ya no se corta a la mitad sin
-          // avisar. Registrar en `cfdi_pago` es idempotente: si quedan
-          // `pendientes`, contarlo como caída hace que Resend reintente CON
-          // EL MISMO adjunto y retome justo donde se cortó, sin duplicar.
-          const resumen = await ingerirRep(flota.id as string, rep, texto, finPresupuesto);
-          logger.info('correo_entrante.rep', { emailId, tenantId: flota.id, rep: rep.uuid, ...resumen });
-          if (resumen.pendientes > 0) { caidas++; } else { guardadas++; }
-        } else {
-          logger.warn('correo_entrante.rep_ilegible', { emailId, tenantId: flota.id });
-          ignoradas++;
-        }
-        continue;
+      if (bytesCorreo + bytes.length > MAX_BYTES_CORREO) {
+        logger.warn('correo_entrante.correo_gigante', { emailId, archivo: sanitizarTexto(adj.filename), bytes: bytesCorreo + bytes.length });
+        ignoradas++; continue;
       }
-
-      // El estatus SAT se consulta AQUÍ, con el adjunto ya en la mano:
-      // `consultarCFDI` jamás lanza (timeout 4s → 'pendiente'), así que un
-      // SAT caído no convierte este adjunto en `caida` ni frena el correo.
-      const estadoSat = await estadoSatDeCfdi(xml);
-      const r = await guardarFacturaProveedor(flota.id as string, xml, texto, (flota.rfc as string) ?? null, 'correo', estadoSat);
-      if (r.ok) guardadas++; else ignoradas++;
+      bytesCorreo += bytes.length;
+      descargados.push({ nombre: adj.filename ?? 'sin nombre', bytes });
     } catch (e) {
-      // Aquí solo pueden lanzar los fetch y sus lecturas (`parseCfdiXml`
-      // atrapa adentro y devuelve null; `guardarFacturaProveedor` reporta por
-      // valor): es la red — transitorio. Un adjunto caído NO tumba a los
-      // demás: el resto del correo se sigue intentando.
+      // Aquí solo pueden lanzar los fetch y sus lecturas: es la red — transitorio. Un adjunto caído NO tumba
+      // a los demás: el resto del correo se sigue intentando.
       logger.warn('correo_entrante.adjunto', { emailId, err: e instanceof Error ? e.message : String(e) });
       caidas++;
     }
   }
+
+  // ── 2. PROCESAR: XML, PDF solo, ZIP y parejas (buzon/ingesta.ts) ───────────
+  // Los fallos transitorios de la ingesta (base, visión, reloj) suman a `caidas`; lo permanente (zip bomba, XXE,
+  // PDF corrupto) queda registrado por archivo en `buzon_recepcion` y NO reintenta.
+  const resumen = descargados.length > 0
+    ? await atenderAdjuntosBuzon({ tenantId: flota.id as string, emailId, rfcFlota: (flota.rfc as string) ?? null, finPresupuesto }, descargados)
+    : { guardadas: 0, duplicadas: 0, revision: 0, rechazadas: 0, ignoradas: 0, caidas: 0, documentos: [] };
+  caidas += resumen.caidas;
+  ignoradas += resumen.ignoradas;
+  const guardadas = resumen.guardadas;
 
   if (caidas > 0) {
     // Libera el claim que NOS pertenece. A diferencia del DELETE anterior, si
@@ -396,7 +411,10 @@ export async function POST(req: Request) {
     disparo: 'correo',
     tareasHechas: guardadas,
     tareasTotal: adjuntos.length,
-    resumen: { accion: 'correo_entrante', guardadas, ignoradas },
+    resumen: {
+      accion: 'correo_entrante', guardadas, ignoradas,
+      duplicadas: resumen.duplicadas, revision: resumen.revision, rechazadas: resumen.rechazadas,
+    },
   });
 
   // Sellar después de todos los efectos. Si el proceso muere antes, el lease
@@ -407,8 +425,11 @@ export async function POST(req: Request) {
   }
 
   logger.info('correo_entrante.procesado', {
-    emailId, tenantId: flota.id, guardadas, ignoradas, total: adjuntos.length,
+    emailId, tenantId: flota.id, guardadas, ignoradas, duplicadas: resumen.duplicadas,
+    revision: resumen.revision, rechazadas: resumen.rechazadas, total: adjuntos.length,
   });
 
-  return NextResponse.json({ ok: true, guardadas, ignoradas });
+  return NextResponse.json({
+    ok: true, guardadas, ignoradas, duplicadas: resumen.duplicadas, revision: resumen.revision, rechazadas: resumen.rechazadas,
+  });
 }

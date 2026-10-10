@@ -49,6 +49,10 @@ vi.mock('@/lib/supabase/admin', () => ({
     },
   }),
 }));
+/** Cómo rechaza Meta el texto cuando `sendText` devuelve null (por defecto: ventana cerrada). */
+let rechazoTexto: { codigo?: number; status: number } = { codigo: 131047, status: 400 };
+/** Lo que dice la caché de la ventana (mig. 0368). */
+let estadoVentana: 'abierta' | 'cerrada' | 'desconocida' = 'desconocida';
 const sendText = vi.fn<(...a: unknown[]) => Promise<string | null>>();
 const sendTemplate = vi.fn<(...a: unknown[]) => Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }>>();
 vi.mock('@/lib/meta/client', async (original) => ({
@@ -62,10 +66,18 @@ vi.mock('@/lib/meta/client', async (original) => ({
   // está el plan B de la plantilla.
   enviarTexto: async (to: string, body: string) => {
     const id = await sendText(to, body);
-    return id ? { ok: true, id } : { ok: false, error: 'rechazado', codigo: 131047, status: 400 };
+    return id ? { ok: true, id } : { ok: false, error: 'rechazado', ...rechazoTexto };
   },
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+// El selector (enviarConFallback) lee la caché de la ventana y registra su
+// decisión por la base: aquí no interesa, y sus inserts contaminarían los
+// conteos de `claims`. Sin registro de ventana → «desconocida»: texto primero y
+// plantilla si Meta lo rechaza por ventana (el comportamiento que estas pruebas fijan).
+vi.mock('@/lib/likida/wa_ventana', () => ({
+  ventanaDeContacto: async () => ({ estado: estadoVentana, ultimoEntranteEn: null, expiraEn: null }),
+  registrarDecisionEnvio: async () => {},
+}));
 
 const { ejecutarCobranza } = await import('./cobranza');
 const AHORA = new Date('2026-08-14T17:00:00Z');
@@ -77,6 +89,7 @@ beforeEach(() => {
   sendText.mockReset();
   sendText.mockResolvedValue('wamid.OK');
   sendTemplate.mockReset();
+  rechazoTexto = { codigo: 131047, status: 400 }; estadoVentana = 'desconocida';
   sendTemplate.mockResolvedValue({ ok: true, id: 'wamid.PLANTILLA' });
 });
 
@@ -170,5 +183,36 @@ describe('un rechazo REINTENTABLE no consume el tier (RES-1)', () => {
     // El resultado se anota (enviado=false con el motivo) y el tier no se
     // reintenta: la alternativa es insistir para siempre en un número roto.
     expect(updates.some((u) => u.tabla === 'cobranza_contacto')).toBe(true);
+  });
+});
+
+describe('ejecutarCobranza — con el registro de la ventana (P0-B)', () => {
+  it('ventana CERRADA: va directo a la plantilla, SIN el intento de texto que Meta rechazaría', async () => {
+    estadoVentana = 'cerrada';
+    const r = await ejecutarCobranza('t1', AHORA, { ignorarVentana: true });
+    expect(r.contactados).toBe(2);
+    expect(sendText).not.toHaveBeenCalled();
+    expect(sendTemplate).toHaveBeenCalledTimes(2);
+    const resultados = updates.filter((u) => u.tabla === 'cobranza_contacto').map((u) => u.fila);
+    for (const fila of resultados) expect(fila).toMatchObject({ enviado: true, detalle: 'plantilla recordatorio_cierre (ventana de 24 h cerrada)' });
+  });
+
+  it('ventana ABIERTA: texto y ninguna plantilla', async () => {
+    estadoVentana = 'abierta';
+    const r = await ejecutarCobranza('t1', AHORA, { ignorarVentana: true });
+    expect(r.contactados).toBe(2);
+    expect(sendText).toHaveBeenCalledTimes(2);
+    expect(sendTemplate).not.toHaveBeenCalled();
+  });
+
+  it('un 429 del TEXTO ya no manda además la plantilla (el texto quedó en wa_outbox: duplicaría) y el tier no se consume', async () => {
+    estadoVentana = 'abierta';
+    sendText.mockResolvedValue(null);
+    rechazoTexto = { codigo: undefined, status: 429 };
+    const r = await ejecutarCobranza('t1', AHORA, { ignorarVentana: true });
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(r.contactados).toBe(0);
+    expect(r.rechazosReintentables).toBe(2);
+    expect(r.fallos[0]).toMatch(/se reintenta en la siguiente corrida/);
   });
 });

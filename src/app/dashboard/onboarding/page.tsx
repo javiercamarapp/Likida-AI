@@ -6,8 +6,9 @@ import { CONECTORES } from '@/lib/likida/conectores/registro';
 import type { CategoriaConector } from '@/lib/likida/conectores/tipos';
 import {
   onboardingFiscalListo, umbralPeajeDeclarado, stackDeclarado,
-  declararOnboarding, facilidad15Declarada,
+  declararOnboarding, facilidad15Declarada, LLAVE_ONBOARDING_POSPUESTO,
 } from '@/lib/likida/perfil/preguntas';
+import { puedeAdministrar } from '@/lib/auth/permisos';
 import { parseOnboarding } from '@/lib/likida/perfil/onboarding';
 import { getPerfilCrudo, guardarPerfilPatch, actualizarFacilidad15 } from '@/lib/likida/repo';
 import { subirPoliticaPerfil } from '@/lib/likida/perfil/documentos';
@@ -78,6 +79,22 @@ export default async function OnboardingFlotaPage({
     redirect(`/dashboard${sufijoTenant(sp)}`);
   }
 
+  /** «Lo confirmo con mi contador» (W2): deja el Resumen abierto con un aviso
+   *  permanente. NO declara nada: el estímulo de peaje sigue en $0. Solo el dueño
+   *  —el candado del Resumen es de él— y se vuelve a comprobar aquí adentro. */
+  async function posponer(): Promise<void> {
+    'use server';
+    const ses = await resolverTenantEfectivo('/dashboard/onboarding', sp);
+    if (!puedeVerRuta(ses.rol, '/dashboard/onboarding') || !puedeAdministrar(ses.rol)) return;
+    try {
+      await guardarPerfilPatch(ses.tenantId, { [LLAVE_ONBOARDING_POSPUESTO]: new Date().toISOString() }, ses.userId);
+    } catch {
+      return; // no se pudo guardar: se queda en esta pantalla, que sigue funcionando
+    }
+    revalidatePath('/dashboard');
+    redirect(`/dashboard${sufijoTenant(sp)}`);
+  }
+
   const gps = opciones('Rastreo GPS');
   const erp = opciones('ERP y contabilidad');
   const tag = opciones('Peaje y monederos').filter((o) => o.valor !== 'monedero_diesel' && o.valor !== 'powergas');
@@ -121,6 +138,13 @@ export default async function OnboardingFlotaPage({
     <main className="h-full">
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
         <div className="flex-1 flex flex-col">
+          {puedeAdministrar(s.rol) && !onboardingFiscalListo(perfil) && (
+            <form action={posponer} className="px-5 pt-4 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+              ¿No tienes a la mano tus ingresos anuales o no sabes si eres parte relacionada?{' '}
+              <button type="submit" className="underline font-medium" style={{ color: 'var(--ink)' }}>Lo confirmo con mi contador</button>
+              {' '}— el Resumen se abre con un aviso permanente: el estímulo de peaje queda en $0 hasta que lo declares.
+            </form>
+          )}
           <ChatEntrevista
             preguntaInicial={preguntaInicial}
             chipsIniciales={bien.chips}

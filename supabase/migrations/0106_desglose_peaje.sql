@@ -1,7 +1,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0106 — EL DESGLOSE DEL PROVEEDOR DE PEAJE (FASE 5, PoC del Plaud #2).
 --
--- "El martirio" de Transportes Innovativos: el proveedor del TAG (IAVE, PASE,
+-- "El martirio" el cliente de demo: el proveedor del TAG (IAVE, PASE,
 -- TeleVía o el convenio directo) manda cada corte un desglose de cruces en
 -- Excel/CSV/PDF, y hoy alguien lo coteja a mano contra los viajes. El CFDI
 -- consolidado ya tiene su camino (`cfdi_consolidado_linea`, 0065/0077), pero

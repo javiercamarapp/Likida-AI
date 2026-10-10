@@ -38,7 +38,8 @@ import { acotada } from '@/lib/likida/presupuesto';
 import { traerTodo, conteo } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 import { hoyMx, mxn } from '@/lib/formato';
-import { sendText } from '@/lib/meta/client';
+import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
+import { appUrl } from '@/lib/env';
 import { telefonoParaDineroDe } from '../contactos';
 
 /** Con cuántos días de anticipación se avisa cuando la flota no declaró otra
@@ -371,9 +372,15 @@ export async function avisarCierrePeaje(
       } else {
         const total = lista.reduce((s, g) => s + g.monto, 0);
         const ordenados = [...lista].sort((a, b) => a.fecha.localeCompare(b.fecha));
-        // `sendText` devuelve el id del mensaje o `null`; lo que importa aquí
-        // es si salió, y `null` es exactamente «no salió».
-        entregado = (await sendText(telefono, mensajeCierrePeaje(ordenados, faltan, total))) !== null;
+        // P0-B (0360): `avisarOficina` = texto con la ventana abierta y plantilla
+        // `aviso_operacion_v1` con la cerrada (antes `sendText` a secas: el contador
+        // sin conversación reciente nunca recibía el cierre y el sello se soltaba
+        // en cada corrida). `ok` = Meta ACEPTÓ el mensaje; lo demás es «no salió».
+        const envio = await avisarOficina(telefono, mensajeCierrePeaje(ordenados, faltan, total), {
+          parametros: parametrosAvisoOficina('Likida', 'cierre de casetas del periodo', `${appUrl()}/dashboard`),
+          contexto: { agente: 'peaje_cierre', tenantId, periodo, umbral },
+        });
+        entregado = envio.ok;
         if (!entregado) logger.warn('peaje_cierre.no_enviado', { tenantId, periodo, umbral });
       }
     } catch (e) {

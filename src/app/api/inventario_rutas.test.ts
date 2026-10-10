@@ -72,6 +72,15 @@ import { join, relative, sep } from 'node:path';
  * para no tenerlos (como las cuatro públicas de arriba) — ANTES de procesar
  * nada. Ni el proxy ni este inventario la van a salvar.
  */
+// 1-oct-2026 (loop punta a punta, Agente 1 «liquidación externa», 0370): +3.
+//   · `v1/liquidaciones-externas/route.ts` — llave API por área (`abrir(req,
+//     'administracion')` para el POST, `'dinero'` para el GET) antes de leer el
+//     cuerpo; tenant de la credencial (un `tenant_id` en el cuerpo es 400);
+//     idempotencia por `claveExterna` y 409 ante otro contenido.
+//   · `export/liquidaciones-externas/route.ts` — sesión → flota → área `dinero`
+//     → `puedeExportar`; el PDF se busca CON el tenant de la sesión.
+//   · `cron/liquidaciones-externas/route.ts` — secreto de cron (`puertaCron`),
+//     palanca global y del agente, latido en todo camino de salida.
 // 1-sep-2026 (auditoría 24, BLOQ-6): +1 por `v1/liquidaciones/route.ts`.
 // Su puerta: `abrir(req, 'dinero')` —llave API por área o cookie+CSRF— antes
 // de tocar la base, y `.eq('tenant_id', acceso.tenantId)` en la única consulta.
@@ -87,7 +96,146 @@ import { join, relative, sep } from 'node:path';
 // 7-sep-2026 (auditoría 28, SEG-B1): 67 → 72. El escaneo deja de limitarse a
 // `src/app/api` y cubre `src/app` entero (ver el comentario de arriba con el
 // detalle de las cinco rutas que aparecen).
-const RUTAS_APP_REVISADAS = 72;
+//
+// 75 → 78 (loop punta a punta, Agente 2, 1-oct-2026): tres rutas de la
+// conciliación de peajes, cada una con su propia puerta —
+//   · `api/peajes/ingesta/route.ts` — SIN sesión a propósito (la llama el
+//     sistema del proveedor/cliente): su puerta es la firma HMAC por flota
+//     (cuerpo crudo + timestamp ±5 min + comparación en tiempo constante),
+//     fail-closed sin PEAJES_INGESTA_SECRETO o con la flota sin activar, tope de
+//     cuerpo, rate limit y cola con tope de pendientes;
+//   · `api/cron/peajes/route.ts` — puertaCron (CRON_SECRET) y palancas global y
+//     `agente:peajes`;
+//   · `api/export/bitacora-conciliada/route.ts` — sesión + área dinero +
+//     puedeExportar, rate limit y siempre acotada al tenant de la sesión.
+//
+// 78 → 83 (loop punta a punta, Agente 5 «Conductor», 2-oct-2026): cinco rutas,
+// cada una con su propia puerta —
+//   · `api/cron/conductor-hitos/route.ts` — puertaCron (CRON_SECRET), palancas
+//     global y `agente:conductores` (ambas fail-closed) y latido en todo camino
+//     de salida;
+//   · `api/v1/hitos/route.ts` y `api/v1/hitos/eventos/route.ts` — llave API por
+//     área o cookie, área `operacion` (`abrir(req, 'operacion')`) antes de leer;
+//     SIEMPRE acotadas al tenant de la credencial (`.eq('tenant_id', …)`);
+//   · `api/v1/viajes/[id]/citas/route.ts` — `abrir(req, 'administracion')` +
+//     CSRF para la cookie; el UPDATE lleva `.eq('tenant_id', …)` y «no existe» y
+//     «no es de tu flota» contestan lo mismo (404);
+//   · `api/v1/conductor/config/route.ts` — `abrir(req, 'administracion')` también
+//     para LEER (trae teléfonos de personas); el PUT fusiona con la config de la
+//     flota de la credencial, un `tenant_id` en el cuerpo es 400 y la terminal
+//     de otra flota la rechaza la FK compuesta.
+//
+// 83 → 86 (loop punta a punta, Agente 5 «Conductor», 2.ª entrega, 2-oct-2026): tres rutas, cada una
+// con su propia puerta (`abrir()` resuelve credencial → flota → ÁREA antes de tocar un dato) —
+//   · `api/v1/estadias/route.ts` — área `dinero` (trae el monto propuesto de cobro: el jefe de tráfico,
+//     que ve operación y nada de pesos, no la lee); fechas validadas (días de México, máx. 93), filtros
+//     uuid, CSV con neutralización de fórmulas; SIEMPRE acotada al tenant de la credencial (`?tenant=` se borra
+//     en el borde) y la lectura truncada se declara;
+//   · `api/v1/sitios/route.ts` — área `operacion`, solo lectura del catálogo de la flota de la credencial;
+//   · `api/v1/viajes/[id]/sitios/route.ts` — área `administracion` + CSRF para la cookie; el sitio se resuelve
+//     (código o id) DENTRO de la flota de la credencial y el UPDATE lleva `.eq('tenant_id', …)`; «no existe» y «no es
+//     de tu flota» contestan lo mismo (404); un `tenant_id` en el cuerpo es 400.
+//
+// 86 → 87 (misma entrega): `api/v1/evidencias/[id]/route.ts` — `abrir(req, 'operacion')`; busca la evidencia SIEMPRE
+//   con `.eq('tenant_id', …)` de la credencial, firma solo rutas que cuelgan del prefijo de esa flota y redirige (302) a una
+//   URL de 10 minutos del bucket privado: el archivo nunca se sirve ni es público.
+// 87 → 88 (loop punta a punta, Agente 4 «Vigía de servicio al cliente», 1-oct-2026):
+//   · `api/cron/vigia/route.ts` — puertaCron (CRON_SECRET, comparación en tiempo
+//     constante) y palanca `global` (falla cerrado si no se puede leer); latido en
+//     todo camino de salida. Barre el SLA de TODAS las flotas con el agente
+//     encendido (`vigia_config.habilitado`, apagado por omisión) y cada acción
+//     usa el tenant de la propia conversación. No acepta cuerpo ni parámetros.
+//     El tablero del Vigía NO añade rutas: sus acciones son server actions de la
+//     página, con la sesión, el rol y el tenant de la cookie.
+// 88 → 89 (loop punta a punta, Agente 3 «Carta Porte multi-formato», 1-oct-2026): una ruta,
+//   · `api/export/carta-porte-docs/route.ts` — rate limit por IP y por flota,
+//     `resolverTenantApi` (sesión → flota), área `operacion` de la bandeja de documentos
+//     + `puedeExportar`, y todas las lecturas acotadas al tenant de la sesión (un `?ids=`
+//     de otra flota no exporta nada de ella). Solo exporta documentos APROBADOS; no emite
+//     ni timbra nada. El correo `cp-<token>@…` NO suma ruta: comparte el webhook firmado de
+//     `api/correo/entrante/route.ts`, que verifica la firma Svix antes de leer el cuerpo.
+//
+// Conteo de la integración de la ola 2: 78 + 9 (Conductor) + 1 (Vigía) + 1 (Carta Porte) = 89.
+// 89 → 92 (loop punta a punta, ola 3, Agente 1 «liquidación externa», salida hacia SAP/TMS por pull):
+//   · `api/v1/liquidaciones-externas/acuses/route.ts` — `abrir(req, 'dinero')` antes de leer; SIEMPRE acotada al
+//     tenant de la credencial; solo trae acuses del propio tenant aún no confirmados;
+//   · `api/v1/liquidaciones-externas/acuses/confirmar/route.ts` — `abrir(req, 'administracion')`; ids validados
+//     como uuid (≤ 200), la confirmación lleva `.eq('tenant_id', …)` y un id ajeno cae en `noAplican`;
+//   · `api/v1/liquidaciones-externas/exportacion/route.ts` — `abrir(req, 'dinero')`; layout por catálogo cerrado
+//     de columnas, texto neutralizado contra inyección de fórmulas, tope duro que falla en vez de entregar un
+//     archivo parcial, y `?tenant=` ignorado (el tenant sale de la credencial).
+// 92 → 95 (ola 3, Agente 2 «conciliación de peajes», salida hacia SAP/ERP y anulación), tres rutas con puerta propia
+// (`abrir()` resuelve credencial → flota → ÁREA antes de tocar un dato; el tenant sale SIEMPRE de la credencial):
+//   · `api/v1/peajes/desgloses/route.ts` — área `dinero`, solo lectura de los desgloses de la flota (los anulados no salen);
+//   · `api/v1/peajes/desgloses/[id]/anular/route.ts` — área `administracion`; motivo obligatorio, la anulación lleva
+//     `.eq('tenant_id', …)` y «no existe»/«no es de tu flota» contestan lo mismo (404); no borra nada;
+//   · `api/v1/peajes/exportacion/route.ts` — área `dinero`; el desglose se busca CON el tenant de la credencial, layout por
+//     catálogo cerrado de columnas, texto neutralizado contra fórmulas.
+// El correo `pj-<token>@…` NO suma ruta: comparte el webhook firmado de `api/correo/entrante/route.ts`, que verifica la firma
+// Svix antes de leer el cuerpo y resuelve la flota por el token del destinatario.
+//
+// (Lo anterior, 89 → 95, es de la rama de los Agentes 1 y 2; lo siguiente, 89 → 93, de la rama integrada; la suma de ambas es 99.)
+// 89 → 90 (loop punta a punta, ola 3, Agente 9 «Buzón de facturas», 2-oct-2026): una ruta,
+//   · `api/cron/buzon-entrega/route.ts` — puertaCron (CRON_SECRET, comparación en tiempo
+//     constante) y palanca `global` (falla cerrado si no se puede leer); latido en todo camino de
+//     salida. Arma el lote del día y envía los vencidos de las flotas que ENCENDIERON la entrega
+//     (`buzon_entrega_config.activo`, apagada por omisión); cada acción usa el tenant del propio
+//     lote. No acepta cuerpo ni parámetros. La confirmación (entregada/rebotada) NO suma ruta:
+//     comparte el webhook firmado `api/correo/eventos/route.ts` (firma Svix antes de leer).
+// 90 → 92 (ola 3, Agente 6 «autofacturación», 0540): dos rutas SIN sesión de Likida a propósito — las llama
+//   el script de la máquina con pantalla del contralor, que no tiene cookie del panel. Su ÚNICA credencial es
+//   el código de un solo uso que el dueño genera en el panel (80 bits, 15 min, se consume al reclamarlo; en la
+//   base solo vive su SHA-256), y TODO lo decide el código: el tenant y el portal salen de la solicitud, jamás
+//   del cuerpo (un `tenant_id`/`comercio` en el cuerpo se ignora). Antes de leer nada: rate limit por IP
+//   (20/10 min) y cuerpo acotado en streaming (200 KB). La sesión que suben se vuelve a recortar al dominio del
+//   portal y se cifra en el cofre; si el cofre no está configurado, no se guarda ni se anota «vinculado».
+//   · `api/vinculacion-portal/reclamar/route.ts` — consume el código y devuelve QUÉ portal abrir (nunca tenant ni id).
+//   · `api/vinculacion-portal/completar/route.ts` — sube la sesión ya iniciada (o avisa del fallo).
+//
+// 92 → 93 en la integración de la ola 3 (ronda-03): `api/v1/hitos/[id]/validar/route.ts` (W3 Conductor,
+//   POST con llave de API de la flota: valida el hito DE ESA flota con la RPC atómica; la rama de Conductor
+//   no subió esta constante) más las 2 de autofactura (vinculación de portal) y la de cron buzon-entrega.
+// 99 → 100 (ola 3b, Agente 2, reporte de reclamación): `api/export/peajes-reclamacion/route.ts` — las dos puertas de todo export de
+//   dinero (área `dinero` Y `puedeExportar`), rate limit por IP y por flota, formato `xlsx|pdf` validado, y el desglose se busca CON el
+//   tenant de la sesión (`reporteReclamacion(t.tenantId, …)`): un uuid de otra flota es 404, nunca datos ajenos. Una lectura incompleta no
+//   sale como archivo corto. Mismo molde que `api/export/bitacora-conciliada`.
+
+//
+// 93 → 95 (ola 3, W3 «GPS/Jornada»): dos rutas,
+//   · `api/gps/push/[flota]/route.ts` — SIN sesión a propósito: es el endpoint al que un GPS
+//     propio hace POST. Su puerta es la firma HMAC-SHA256 por flota (secreto cifrado en la
+//     base, rotable con ventana de 24 h, tiempo constante, timestamp firmado ±5 min); el
+//     límite de tasa (por IP y por flota) corre ANTES de leer el cuerpo, el cuerpo está
+//     acotado (256 KiB / 500 lecturas), flota inexistente, push apagado y firma mala
+//     responden igual (401) y todo se asienta con el tenant del PATH ya autenticado por su
+//     secreto — nunca con un dato del cuerpo.
+//   · `api/cron/jornada-alertas/route.ts` — cron: `puertaCron` (CRON_SECRET o 401/500) y la
+//     palanca global fail-closed; lee jornadas en curso solo de las flotas con la alerta
+//     ENCENDIDA (apagada por omisión) y manda WhatsApp/correo al encargado y al operador de ESA
+//     flota; claim por (jornada, nivel) en la base y latido en todo camino de salida.
+
+// Integración ola 3b: 100 (peajes-reclamacion) + 2 de GPS/jornada (gps push, cron jornada-alertas).
+//
+// 93 → 94 en la ola 3, W3 «convenios» (0580): `api/export/convenios/route.ts` — GET de la flota de la SESIÓN (`resolverTenantApi`,
+//   `?tenant=` solo lo vale el superadmin ya validado): puerta del dato (área `operacion`), del verbo (`puedeExportar`) y, para el
+//   tipo `completo` (tarifa y requisitos de cobro), del DINERO (área `dinero`); rate limit por IP y por flota. Las instrucciones
+//   salen sin dinero (ni siquiera se consulta la tabla comercial). Prueba: `export/convenios/route.test.ts`.
+// Integración ola 3b: 102 (peajes-reclamacion, gps push, cron jornada-alertas) + 1 (export/convenios).
+// 103 → 104 (ronda 07, P3 «carta-porte-worker», 0640-0642): una ruta,
+//   · `api/cron/carta-porte-docs/route.ts` — cron: `puertaCron` (CRON_SECRET o 401/500) y las palancas `global` y
+//     `agente:carta_porte`, ambas fail-closed; latido en todo camino de salida. Reclama con la RPC existente
+//     (`cp_documento_reclamar`: lease + tope de 5 intentos) los documentos de CADA flota recibidos, de lease vencido o
+//     de fallo reintentable, y cada acción posterior usa el tenant de la propia fila; el aviso a la oficina sale al
+//     teléfono de ESA flota, una vez por documento (candado de la 0641). No acepta cuerpo ni parámetros.
+// 104 → 105 (ronda 08, P5 «vigia-cierre»): `api/export/vigia-faqs/route.ts` — GET de la flota de la SESIÓN (`resolverTenantApi`): puerta del dato
+//   (área `operacion`, la de la pantalla del Vigía), del verbo (`puedeExportar`), rate limit por IP y por flota; `grupo` validado como uuid y
+//   buscado CON el tenant de la sesión (uno ajeno es 404); sin las tablas de la 0484 es 409. Prueba: `export/vigia-faqs/route.test.ts`.
+//
+// 105 → 106 (ola enterprise E1-A, 3-oct-2026): `api/cron/guardia/route.ts` — la guardia de producción pasa de launchd (la Mac de
+//   Javier) al servidor. Su puerta: `puertaCron` (CRON_SECRET, comparación de tiempo constante; sin él 500 y alerta), palanca
+//   `global` fail-closed (ilegible = 500 + aviso) y latido en todo camino de salida. No lee ni devuelve datos de flota: responde
+//   conteos, y los componentes de /estado son un catálogo cerrado de cinco nombres con tres estados. Prueba: `cron/guardia/route.test.ts`.
+const RUTAS_APP_REVISADAS = 106;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

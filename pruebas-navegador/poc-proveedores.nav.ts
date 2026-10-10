@@ -10,7 +10,7 @@ const sello = Date.now();
 const id = (n: number) => `ffffffff-1000-4000-8000-${(sello + n).toString(16).padStart(12, '0')}`;
 const APROBADA = id(0), RECHAZADA = id(1), PENDIENTE = id(2);
 const IDS = [APROBADA, RECHAZADA, PENDIENTE];
-const DESCRIPCION = `PoC Innovativos proveedor ${sello}`;
+const DESCRIPCION = `PoC el cliente de demo proveedor ${sello}`;
 let admin: APIRequestContext;
 let corridasPrevias = new Set<string>();
 let puedeLimpiarCorridas = false;
@@ -51,7 +51,7 @@ test.describe('PoC B: decisión humana de proveedor y CSV SAP con marca de expor
     puedeLimpiarCorridas = true;
     const r = await admin.post('factura_proveedor', { data: IDS.map((facturaId, i) => ({
       id: facturaId, tenant_id: TENANT, cfdi_uuid: facturaId,
-      emisor_rfc: 'AAA010101AAA', emisor_nombre: 'Proveedor sintético Innovativos', receptor_rfc: 'XAXX010101000', receptor_es_flota: null,
+      emisor_rfc: 'AAA010101AAA', emisor_nombre: 'Proveedor sintético el cliente de demo', receptor_rfc: 'XAXX010101000', receptor_es_flota: null,
       fecha: '2026-06-15', sub_total: 1000 + i * 100, iva: 160 + i * 16, total: 1160 + i * 116,
       descripcion: `${DESCRIPCION} ${i}`, conceptos: 1, estado: 'pendiente', origen: 'subida', estado_sat: null,
       xml_crudo: `<Comprobante sintetico="true" UUID="${facturaId}"/>`,
@@ -122,7 +122,7 @@ test.describe('PoC B: decisión humana de proveedor y CSV SAP con marca de expor
     const registros = XLSX.utils.sheet_to_json<Record<string, unknown>>(libro.Sheets[libro.SheetNames[0]], { defval: '', raw: false });
     expect(registros).toHaveLength(1);
     expect(registros[0]).toEqual({
-      DocDate: '20260615', DocDueDate: '', CardCode: '', CardName: 'Proveedor sintético Innovativos', FederalTaxID: 'AAA010101AAA',
+      DocDate: '20260615', DocDueDate: '', CardCode: '', CardName: 'Proveedor sintético el cliente de demo', FederalTaxID: 'AAA010101AAA',
       NumAtCard: APROBADA, Comments: `${DESCRIPCION} 0`, DocTotal: '1160', ItemDescription: `${DESCRIPCION} 0`, LineTotal: '1000', TaxCode: '',
     });
     expect(csv).not.toContain(RECHAZADA);

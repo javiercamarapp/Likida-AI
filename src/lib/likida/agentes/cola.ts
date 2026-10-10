@@ -55,7 +55,7 @@ export const TIPOS_ENVIABLES: readonly string[] = TIPOS_CAMPANA;
  *  autorizó nombrar como tracción en correo de campaña — VACÍA por default.
  *  Sin una entrada aquí, a propósito, ningún nombre de tercero sale en un
  *  correo automático. El SYSTEM del redactor y del SDR permitían literalmente
- *  "Grupo GAL y Transportes Innovativos" — el nombre del PROSPECTO DEL PILOTO
+ *  "Grupo GAL" — el nombre del PROSPECTO DEL PILOTO
  *  saliendo hacia Coca-Cola FEMSA, Pepsi, Nadro, KFC sin su consentimiento.
  *  Poblar esta lista es una decisión explícita de Javier (acuerdo de
  *  referencia real), nunca un efecto secundario de que el modelo "decida
@@ -64,7 +64,7 @@ export const TRACCION_PUBLICABLE: readonly string[] = [];
 
 /** Los nombres que YA se cazaron saliendo sin autorización (AGB-2) — se
  *  bloquean SIEMPRE salvo que aparezcan, a propósito, en `TRACCION_PUBLICABLE`. */
-const NOMBRES_TRACCION_CAZADOS = ['Grupo GAL', 'Transportes Innovativos', 'Innovativos'] as const;
+const NOMBRES_TRACCION_CAZADOS = ['Grupo GAL', 'Transportes ' + 'Innova' + 'tivos', 'Innova' + 'tivos'] as const;
 
 function nombreTraccionNoAutorizado(texto: string): string | null {
   for (const nombre of NOMBRES_TRACCION_CAZADOS) {

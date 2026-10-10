@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto';
 //
 // Las facturas de talleres, refaccionarias y diésel llegan POR CORREO. Es el
 // canal que multiplica a los agentes de Peajes y Proveedores, y el que pidió
-// Transportes Innovativos con todas sus letras.
+// el cliente de demo con todas sus letras.
 //
 // Este módulo es la mitad PURA: armar la dirección, sacarle el token a una que
 // llega, y generar uno nuevo. La resolución contra la base vive aparte para que

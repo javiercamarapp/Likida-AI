@@ -75,7 +75,7 @@ function Seccion({ titulo, items, sufijo, pathname, abierta, onAbrir }: {
  *  H1 (auditoría 24): aquí se INVENTABA `?vista=demo` para un superadmin sin
  *  parámetros. El supuesto («un superadmin sin sufijo está en la demo») dejó
  *  de ser cierto el 16-ago-2026, cuando nació /admin/elegir-flota: quien
- *  eligiera Innovativos y aterrizara en `/dashboard` a secas veía SU panel,
+ *  eligiera el cliente de demo y aterrizara en `/dashboard` a secas veía SU panel,
  *  y el primer clic del menú lo mandaba —con un parámetro que nadie
  *  escribió— al panel de la demo, sin cinta que lo dijera. Sin sufijo, el
  *  link va pelón y la cookie firmada decide: exactamente lo que hace el

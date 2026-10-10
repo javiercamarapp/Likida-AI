@@ -123,7 +123,7 @@ Estado actual y a dónde va cada paso de la FASE 1:
 
 ## RECOMMENDATIONS
 
-### Plan FASE 1 quirúrgica — 12 días, demo Transportes Innovativos 6-ago-2026
+### Plan FASE 1 quirúrgica — 12 días, demo el cliente de demo 6-ago-2026
 Construir en este orden:
 1. Webhook WhatsApp + HMAC + idempotencia (2.1). ✅
 2. OCR Gemini → JSON (2.2); el LLM solo extrae. ✅

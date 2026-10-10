@@ -3,7 +3,7 @@
 --
 -- Nace de la pregunta de PMF del 15-ago-2026, con las primeras citas ya
 -- agendadas (Grupo GAL, TL del Sur, Súper Akí, Tresguerras) y el envío a
--- Transportes Innovativos. De las tres señales que probarían que el producto
+-- el cliente de demo. De las tres señales que probarían que el producto
 -- se usa de verdad, dos YA se podían medir con lo que el esquema guarda:
 --
 --   1. El chofer manda comprobantes sin que se lo recuerden

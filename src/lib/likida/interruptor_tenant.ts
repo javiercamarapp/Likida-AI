@@ -3,7 +3,7 @@
 // de UNA sola flota, apagable sin tocar las otras 799.
 //
 // `interruptores.ts` (0110) es GLOBAL por agente: apagar `global` para
-// Innovativos apagaría también a las demás flotas del piloto. La tabla
+// El cliente de demo apagaría también a las demás flotas del piloto. La tabla
 // `interruptor_tenant` (mig. 0297) vive por (tenant_id, pipeline) — la
 // pantalla que la escribe está en `lib/admin/negocio.ts`
 // (`getInterruptoresPipelineDeTenant`/`apagar`/`encender`); este archivo es

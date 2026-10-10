@@ -86,7 +86,7 @@ export async function requireSessionTenant(
       // "ver el panel con los ojos de otro rol", no "cambiar de flota". Antes
       // se resolvía arriba junto a los otros dos y devolvía la demo AUNQUE
       // hubiera flota elegida: un link con solo `?rol=contador` te sacaba de
-      // Innovativos a la demo sin cinta que lo dijera. Ahora la cookie manda,
+      // El cliente de demo a la demo sin cinta que lo dijera. Ahora la cookie manda,
       // y `?rol=` sin cookie sigue cayendo a la demo — que es de dónde
       // vienen esos links (`/admin/selector-vista.tsx`).
       if (sp?.rol) return { ...s, tenantId: tenantDemo() };

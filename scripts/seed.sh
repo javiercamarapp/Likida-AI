@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════════════
-# Levanta la base de Cuadra con datos de Innovativos en UN comando: `npm run
+# Levanta la base de Cuadra con datos del cliente de demo en UN comando: `npm run
 # setup`. Dos caminos, cualquiera sirve:
 #
 #   A) LOCAL NUEVA Y DESECHABLE — necesita Docker, Supabase CLI y psql:
@@ -181,11 +181,11 @@ echo "▸ Creando bucket privado 'liquidaciones'…"
 psql "$DB" -q -c "insert into storage.buckets (id, name, public) values ('liquidaciones','liquidaciones', false) on conflict (id) do nothing;" \
   || echo "  ⚠ No se pudo crear el bucket por SQL — créalo a mano en Supabase → Storage (privado)."
 
-echo "▸ Sembrando datos de Innovativos (🔴 valores INVENTADOS marcados en seed.sql)…"
+echo "▸ Sembrando datos del cliente de demo (🔴 valores INVENTADOS marcados en seed.sql)…"
 psql "$DB" -v ON_ERROR_STOP=1 -q -f supabase/seed.sql
 
 echo ""
-echo "✅ Listo. Datos de Innovativos cargados."
+echo "✅ Listo. Datos del cliente de demo cargados."
 echo "   • 3 terminales (Silao, Guadalajara, Nuevo Laredo)"
 echo "   • 5 operadores (🔴 teléfonos INVENTADOS — pon el número de prueba de Meta)"
 echo "   • Política de gastos (🔴 topes INVENTADOS — ajústalos en seed.sql)"

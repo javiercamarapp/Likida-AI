@@ -14,7 +14,7 @@ Corre **en local**, no en la nube: necesita el `.env` con WhatsApp, OpenRouter, 
 - **Se mira, no se mide.** Una captura que nadie abrió es un test que siempre pasa. El paso final de esta skill es abrir las imágenes y verlas, y si no se hizo, el ensayo no ocurrió.
 - **El guion manda, no el código.** `GUION_DEMO.md` define el arco de 6 a 8 minutos. Si el guion pide algo que el código ya no hace, eso es un hallazgo del guion, no un error del ensayo — y hay que decidir cuál de los dos se mueve.
 - **Diferencia contra el ensayo de ayer, no contra la idea del ideal.** Lo valioso es *"esto se veía distinto ayer"*, porque eso apunta a un commit concreto. "Podría verse mejor" es otra conversación y no va aquí.
-- **Nada de datos de Innovativos.** Los datos del demo son DEMO. Ver `GUION_DEMO.md` §Datos.
+- **Nada de datos del cliente de demo.** Los datos del demo son DEMO. Ver `GUION_DEMO.md` §Datos.
 
 ## El recorrido
 

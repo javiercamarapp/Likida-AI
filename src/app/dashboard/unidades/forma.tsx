@@ -2,7 +2,8 @@
 
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { Save, TriangleAlert, CheckCircle2 } from 'lucide-react';
+import { Save } from 'lucide-react';
+import { AvisoResultado } from '../../admin/ui/aviso-resultado';
 // SOLO TIPOS de `operacion.ts` — misma restricción real que clientes/forma.tsx:
 // ese módulo importa `supabaseAdmin`, cuyo encabezado prohíbe acabar en código
 // de cliente. Un import de VALOR arrastraría la llave de servicio al bundle
@@ -28,24 +29,13 @@ function Boton({ etiqueta }: { etiqueta: string }) {
   );
 }
 
-/** El aviso del resultado del servidor. El de error se enseña VERBATIM: los
- *  `DatoInvalido` de `validarUnidad` están escritos para leerse aquí. */
-function Aviso({ estado }: { estado: ResultadoForma }) {
-  if (!estado) return null;
-  return estado.ok ? (
-    <div className="flex items-center gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
-      style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
-      <CheckCircle2 width={15} height={15} strokeWidth={1.75} />
-      {estado.mensaje}
-    </div>
-  ) : (
-    <div className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
-      style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-      <TriangleAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-      {estado.error}
-    </div>
-  );
-}
+/** El aviso del resultado: el UNICO del panel (`admin/ui/aviso-resultado`). El
+ *  error se enseña VERBATIM: los `DatoInvalido` de `validarUnidad` están escritos
+ *  para leerse aquí. */
+const Aviso = AvisoResultado;
+
+/** Un patio, como llega del servidor: solo id y nombre. */
+export interface PatioOpcion { id: string; nombre: string }
 
 /**
  * Alta y edición de una unidad, EL MISMO formulario (patrón de clientes).
@@ -64,7 +54,7 @@ function Aviso({ estado }: { estado: ResultadoForma }) {
  *  — misma decisión que `GrupoCaptura` en la pantalla de Conexiones. */
 export interface ProveedorGps { id: string; nombre: string }
 
-export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGps, gpsVistoEn = null }: {
+export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGps, gpsVistoEn = null, patios = [], terminalId = '', patioFijo = false }: {
   accion: AccionForma;
   id?: string;
   inicial: UnidadCruda;
@@ -75,6 +65,13 @@ export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGp
   /** Cuándo entró la última posición de ESTA unidad, o `null` si nunca. Se
    *  enseña junto al amarre porque es lo único que prueba que funciona. */
   gpsVistoEn?: string | null;
+  /** Los patios de la flota (W2). Vacío = ninguno creado: el selector no se pinta. */
+  patios?: PatioOpcion[];
+  /** El patio actual de la unidad (uuid), o `''` = sin patio. */
+  terminalId?: string;
+  /** Un jefe con patio no mueve unidades a otro patio: el selector se enseña
+   *  bloqueado (el servidor lo vuelve a exigir). En el ALTA se crea en su patio. */
+  patioFijo?: boolean;
 }) {
   const [estado, despachar] = useActionState(accion, null);
   const campo = (n: string) => `${idPrefijo}-${n}`;
@@ -114,6 +111,21 @@ export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGp
             defaultValue={inicial.modelo} placeholder="T680"
             className={CAMPO} style={{ background: 'var(--surface)' }} />
         </div>
+
+        {patios.length > 0 && (
+          <div>
+            <label htmlFor={campo('terminalId')} className={ETIQUETA}>Patio</label>
+            <select id={campo('terminalId')} name="terminalId" defaultValue={terminalId} disabled={patioFijo}
+              className={CAMPO} style={{ background: 'var(--surface)' }}>
+              <option value="">Sin patio</option>
+              {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </select>
+            {patioFijo && <input type="hidden" name="terminalId" value={terminalId} />}
+            <p className={AYUDA} style={{ color: 'var(--faint)' }}>
+              {patioFijo ? 'Solo quien administra la flota mueve una unidad de patio.' : 'Con el patio, su jefe de tráfico la ve y la corrige.'}
+            </p>
+          </div>
+        )}
 
         <div>
           <label htmlFor={campo('anio')} className={ETIQUETA}>Año</label>

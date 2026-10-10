@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //    no es permiso para rastrear.
 //
 //  · REN-2 (ALTO) — el tope de 500 lecturas por flota era un `.slice()` mudo.
-//    Con las 800 unidades de Innovativos, las MISMAS 300 quedaban fuera en las
+//    Con las 800 unidades del cliente de demo, las MISMAS 300 quedaban fuera en las
 //    288 corridas del día y el cron latía «ok». Ahora el recorte se cuenta, se
 //    loguea como error y el cron lo pinta `parcial`.
 //

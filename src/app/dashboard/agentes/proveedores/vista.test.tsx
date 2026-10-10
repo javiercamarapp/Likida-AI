@@ -99,6 +99,7 @@ const BASE: FacturaProveedor = {
   conceptos: 1, estado: 'pendiente', decididoPor: null, decididoEn: null,
   creadoEn: '2026-08-14T16:00:00Z',
   origen: 'correo', ocrConfianza: null, estadoSat: 'vigente', exportadaEn: null,
+  requiereRevision: false, revisionMotivo: null, fuenteDatos: 'xml', tienePdf: false, entregaId: null, entregadaEn: null,
 };
 
 function pintarVista(facturas: FacturaProveedor[]) {

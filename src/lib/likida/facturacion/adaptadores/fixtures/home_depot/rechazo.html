@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Fixture home_depot — sintético, NO es el portal real</title></head>
+<body>
+<!-- FIXTURE sintetico_desde_guion: derivado de los selectores de home_depot. No es el DOM del portal real. -->
+<form onsubmit="return false" id="fx-form">
+<div class="fx-campo"><input type="text" id="rfc"></div>
+<div class="fx-campo"><input type="text" id="ticket"></div>
+<button data-fx="buscar" type="button">Continuar</button>
+<button data-fx="emitir" type="button">Facturar</button>
+</form>
+<div id="fx-salida"></div>
+<script>
+  var DESPUES_DE_BUSCAR = "<div class=\"resultado\">Resultado</div>";
+  var AL_EMITIR = "<div class=\"alert-danger\">El RFC capturado no es válido (fixture)</div>";
+  var XML = "";
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest ? e.target.closest('[data-fx]') : null;
+    if (!el) return;
+    e.preventDefault();
+    var salida = document.getElementById('fx-salida');
+    if (el.getAttribute('data-fx') === 'buscar') salida.insertAdjacentHTML('beforeend', DESPUES_DE_BUSCAR);
+    if (el.getAttribute('data-fx') === 'emitir') salida.insertAdjacentHTML('beforeend', AL_EMITIR + XML);
+    if (el.getAttribute('data-fx') === 'xml') {
+      var blob = new Blob(['<?xml version="1.0"?><fixture UUID="00000000-0000-4000-8000-000000000001"/>'], { type: 'text/xml' });
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'fixture.xml';
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+  });
+</script>
+</body></html>
