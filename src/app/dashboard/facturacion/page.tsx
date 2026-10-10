@@ -117,6 +117,12 @@ export default async function PaginaFacturacion({
         fecha: String(fd.get('fecha') ?? ''),
         subtotal: String(fd.get('subtotal') ?? ''),
         iva: String(fd.get('iva') ?? ''),
+        // FIS-32C13-C1: `carta_porte_cfdi.ts:199-201` timbra la retención del
+        // 4% a personas morales y la descuenta del Total. Sin este campo el
+        // único escritor de `factura_emitida` guardaba siempre 0 y la cartera
+        // —y el portal donde paga el cliente de la flota— quedaban 4% arriba
+        // del CFDI, con un saldo que nadie podía abonar.
+        retencion: String(fd.get('retencion') ?? ''),
         serie: String(fd.get('serie') ?? ''),
         folio: String(fd.get('folio') ?? ''),
         cfdiUuid: String(fd.get('cfdiUuid') ?? ''),

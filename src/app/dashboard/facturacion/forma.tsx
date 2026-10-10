@@ -151,8 +151,19 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
           <input id="ff-iva" name="iva" type="text" inputMode="decimal" required
             placeholder="1,600.00" className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            Tal como quedó en el CFDI. El total lo calculamos nosotros: subtotal + IVA, sin
-            oportunidad de descuadre. Si la factura es tasa 0% o exenta, teclea 0.
+            Tal como quedó en el CFDI. Si la factura es tasa 0% o exenta, teclea 0.
+          </p>
+        </div>
+
+        <div>
+          <label htmlFor="ff-retencion" className={ETIQUETA}>Retención de IVA (MXN)</label>
+          <input id="ff-retencion" name="retencion" type="text" inputMode="decimal"
+            placeholder="0.00 (opcional)" className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+          <p className={AYUDA} style={{ color: 'var(--faint)' }}>
+            Tal como quedó en el CFDI. Si tu cliente es persona moral, la retiene al 4% del
+            subtotal (RLIVA 3-II) y el total del CFDI ya viene con ese descuento. El total lo
+            calculamos nosotros: subtotal + IVA − retención, y tiene que dar el mismo número
+            que el CFDI. Si lo dejas vacío contamos 0.
           </p>
         </div>
 
