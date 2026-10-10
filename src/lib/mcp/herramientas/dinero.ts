@@ -82,7 +82,22 @@ async function ejecutarCuadre(tenantId: string, args: z.infer<typeof esquemaCuad
   if (!renglon) {
     return { texto: `No encontré ningún viaje «${args.viaje}» en tu flota.` };
   }
-  return { texto: contarRenglon(renglon), estructurado: { viaje: renglon } };
+  // TOO-32C13-A1 (auditoría 32 c13, ALTO): MINIMIZACIÓN. `renglon` es el
+  // `RenglonLibro` completo y `libro_viaje.ts:704` lo llena con
+  // `operador: operador?.nombre`. `contarRenglon` nunca imprime al operador —
+  // para contestar «cómo quedó el viaje F-0123» no hace falta— pero
+  // `estructurado` viaja ENTERO al cliente MCP, que es un tercero
+  // (OpenAI/Anthropic), en un campo que la respuesta en pantalla no muestra.
+  //
+  // Es la MISMA regla que el módulo hermano ya declara: «el nombre del operador
+  // NO se devuelve … un cliente MCP es un tercero» (`viajes.ts:9-12`), y que
+  // `busqueda.ts:100-106` aplica a mano sobre este mismo `getLibroViaje`.
+  //
+  // El campo se deja EN NULL en vez de borrarse: un cliente que lo lee no se
+  // rompe, simplemente no recibe el dato. `viajeId` y `liquidacionId` SÍ se
+  // conservan: identifican documentos, no personas — la misma distinción que
+  // `alerta.ts` hace con `LLAVES_SIN_REDACTAR`.
+  return { texto: contarRenglon(renglon), estructurado: { viaje: { ...renglon, operador: null } } };
 }
 
 export const herramientaCuadreViaje: Herramienta<z.infer<typeof esquemaCuadre>> = {
