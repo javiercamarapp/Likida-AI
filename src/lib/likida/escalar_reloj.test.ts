@@ -9,10 +9,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //    `escalado_en` y antes de avisarle al jefe. Contrato: el corte va ANTES
 //    del claim, lo no intentado queda intacto y SE DICE en `cortadosPorReloj`.
 //
-//  · RES-1 (CRÍTICO) — un 429 de Meta no es un viaje escalado. El sello no
-//    expira: marcarlo ante un rate limit saca al viaje de la consulta PARA
-//    SIEMPRE. Contrato: el claim se LIBERA ante un código reintentable, y a
-//    los cinco rechazos seguidos la corrida se detiene y grita.
+//  · RES-1 (REVISADO, ronda 07) — un 429 de Meta YA dejó el mensaje en
+//    `wa_outbox`, que lo entrega con su backoff. Soltar el sello hacía que la
+//    corrida siguiente mandara OTRO recordatorio al chofer y OTRO aviso al
+//    jefe (aviso doble). Contrato: el sello se CONSERVA ante un código
+//    reintentable (el aviso está en cola, no se reenvía), y a los cinco
+//    rechazos seguidos la corrida se detiene y grita.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const { sendText, sendTemplate, avisarAlChofer, telefonosJefe, avisar, avisarCorridasPorFlota, registrarCorrida, alertarOperador } = vi.hoisted(() => ({
@@ -105,19 +107,27 @@ describe('el reloj corta ANTES del claim (ESC-3)', () => {
   });
 });
 
-describe('un rechazo REINTENTABLE de Meta no consume el sello (RES-1)', () => {
-  it('la plantilla rebota con 429: se LIBERA el escalado_en y el viaje vuelve a la cola', async () => {
+describe('un rechazo REINTENTABLE de Meta YA está en wa_outbox: el sello se conserva y no se reenvía (RES-1 revisado)', () => {
+  it('la plantilla rebota con 429: NO se libera el escalado_en y la corrida siguiente no reenvía nada', async () => {
     viajes = [viaje(1)];
     sendText.mockResolvedValue(null);                                  // texto rechazado
     sendTemplate.mockResolvedValue({ ok: false, error: 'rate limit', codigo: 130429 });
     const r = await escalarViajesSinAceptar({ ahora: AHORA });
 
     expect(r.rechazosReintentables).toBe(1);
-    expect(r.escalados).toBe(0);                                       // NO cuenta como escalado
-    // Dos escrituras: el claim y su liberación — la segunda deja el sello en null.
-    expect(updates).toHaveLength(2);
-    expect(updates[1].fila.escalado_en).toBeNull();
-    expect(r.fallos[0]).toMatch(/se reintenta en la siguiente corrida/);
+    expect(r.escalados).toBe(1);                                       // el aviso está en cola del outbox
+    // Una sola escritura: el claim. Ninguna que deje el sello en null.
+    expect(updates).toHaveLength(1);
+    expect(updates.some((u) => u.fila.escalado_en === null)).toBe(false);
+    expect(r.fallos[0]).toMatch(/no se reenvía/);
+
+    // La corrida siguiente ya no ve el viaje (sellado): no hay un solo envío más.
+    const textos = sendText.mock.calls.length;
+    const plantillas = sendTemplate.mock.calls.length;
+    viajes = [];
+    await escalarViajesSinAceptar({ ahora: AHORA });
+    expect(sendText.mock.calls.length).toBe(textos);
+    expect(sendTemplate.mock.calls.length).toBe(plantillas);
   });
 
   it('un fallo NO reintentable (plantilla sin aprobar) sí consume el sello', async () => {

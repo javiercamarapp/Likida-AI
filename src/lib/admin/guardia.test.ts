@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clasificarBandeja } from './guardia';
+import { clasificarBandeja, decidirAvisos, decidirBaseCaida, estadoDeDetalle, claveDeItem, huellaDeClave, lineasDeAviso, estadoTrasAviso, decidirApp, ESTADO_GUARDIA_INICIAL } from './guardia';
 import type { BandejaEscalaciones, ItemEscalacion, FuenteLeida } from './escalaciones';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -73,5 +73,154 @@ describe('las fuentes ciegas y los límites', () => {
     const c = clasificarBandeja(bandeja([]), AHORA);
     expect(c.porSeveridad.S1).toBe(0);
     expect(c.limites.join(' ')).toMatch(/S1.*no se deriva/i);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// E1-A (P0-8): la decisión de AVISAR vive en `guardia.ts` y la comparten el
+// cron del servidor y el script de la Mac. Pura: se prueba sin base.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('decidirAvisos — se avisa el CAMBIO, no el estado', () => {
+  const corrida = bandeja([item('corridas', null)]);
+  const clasif = clasificarBandeja(corrida, AHORA);
+
+  it('un S2 nuevo se avisa y queda como visto (por huella, sin guardar el título ni la flota)', () => {
+    const d = decidirAvisos(clasif, ESTADO_GUARDIA_INICIAL);
+    expect(d.nuevos).toHaveLength(1);
+    // la huella lleva su fuente (`fuente~hash`, B1) y nunca el título ni la flota
+    expect(d.estado.vistos).toEqual([`corridas~${huellaDeClave(claveDeItem(clasif.items[0]))}`]);
+    expect(JSON.stringify(d.estado)).not.toMatch(/Flota X|item de corridas/);
+  });
+
+  it('el mismo incidente en la pasada siguiente NO vuelve a sonar (y sigue como visto)', () => {
+    const d1 = decidirAvisos(clasif, ESTADO_GUARDIA_INICIAL);
+    const d2 = decidirAvisos(clasif, d1.estado);
+    expect(d2.nuevos).toHaveLength(0);
+    expect(d2.urgentes).toHaveLength(1);
+    expect(d2.estado.vistos).toEqual(d1.estado.vistos);
+  });
+
+  it('lo resuelto sale del estado: si reaparece, es incidente NUEVO y vuelve a sonar', () => {
+    const d1 = decidirAvisos(clasif, ESTADO_GUARDIA_INICIAL);
+    const vacio = decidirAvisos(clasificarBandeja(bandeja([]), AHORA), d1.estado);
+    expect(vacio.estado.vistos).toEqual([]);
+    expect(decidirAvisos(clasif, vacio.estado).nuevos).toHaveLength(1);
+  });
+
+  it('reconoce las claves CRUDAS que dejó el script de la Mac: migrar al cron no repite lo ya avisado', () => {
+    const cruda = claveDeItem(clasif.items[0]);
+    expect(decidirAvisos(clasif, { ...ESTADO_GUARDIA_INICIAL, vistos: [cruda] }).nuevos).toHaveLength(0);
+  });
+
+  it('S3 no interrumpe: lo que espera decisión humana no es un aviso', () => {
+    const d = decidirAvisos(clasificarBandeja(bandeja([item('talachas', null)]), AHORA), ESTADO_GUARDIA_INICIAL);
+    expect(d.nuevos).toHaveLength(0);
+    expect(d.urgentes).toHaveLength(0);
+  });
+
+  it('una fuente ciega nueva se avisa UNA vez y su huella queda como vista', () => {
+    const c = clasificarBandeja(bandeja([], { tickets: ciega('db down') }), AHORA);
+    const d1 = decidirAvisos(c, ESTADO_GUARDIA_INICIAL);
+    expect(d1.ciegasNuevas).toHaveLength(1);
+    expect(decidirAvisos(c, d1.estado).ciegasNuevas).toHaveLength(0);
+    expect(lineasDeAviso(d1)[0]).toMatch(/Fuente CIEGA: tickets.*db down/);
+  });
+
+  it('si la base estaba caída en la pasada anterior, avisa que volvió y limpia la racha', () => {
+    const d = decidirAvisos(clasificarBandeja(bandeja([]), AHORA), { ...ESTADO_GUARDIA_INICIAL, baseCaidaDesde: '2026-10-03T00:00:00Z' });
+    expect(d.baseVolvio).toBe(true);
+    expect(d.estado.baseCaidaDesde).toBeNull();
+  });
+
+  it('el estado persistido tiene tope: no crece sin límite dentro del jsonb del latido', () => {
+    const muchos = Array.from({ length: 300 }, (_, i) => ({ ...item('corridas', null), titulo: `c${i}` }));
+    expect(decidirAvisos(clasificarBandeja(bandeja(muchos), AHORA), ESTADO_GUARDIA_INICIAL).estado.vistos.length).toBeLessThanOrEqual(200);
+  });
+});
+
+describe('decidirBaseCaida — una vez por racha', () => {
+  it('la primera pasada ciega avisa y marca desde cuándo; las siguientes callan', () => {
+    const a = decidirBaseCaida(ESTADO_GUARDIA_INICIAL, '2026-10-03T00:00:00Z');
+    expect(a).toMatchObject({ avisar: true, estado: { baseCaidaDesde: '2026-10-03T00:00:00Z' } });
+    expect(decidirBaseCaida(a.estado, '2026-10-03T00:05:00Z')).toMatchObject({ avisar: false, estado: { baseCaidaDesde: '2026-10-03T00:00:00Z' } });
+  });
+});
+
+describe('estadoDeDetalle — no confía en la forma del jsonb', () => {
+  it('basura → estado inicial; lo válido se conserva; lo inválido se descarta', () => {
+    expect(estadoDeDetalle(null)).toEqual(ESTADO_GUARDIA_INICIAL);
+    expect(estadoDeDetalle('x')).toEqual(ESTADO_GUARDIA_INICIAL);
+    expect(estadoDeDetalle({ vistos: ['a', 3, null, 'b'], baseCaidaDesde: 'no es fecha' })).toEqual({ ...ESTADO_GUARDIA_INICIAL, vistos: ['a', 'b'] });
+    expect(estadoDeDetalle({ vistos: 'x', baseCaidaDesde: '2026-10-03T00:00:00Z' })).toEqual({ ...ESTADO_GUARDIA_INICIAL, baseCaidaDesde: '2026-10-03T00:00:00Z' });
+    // A3: la racha y el inicio de la caída de la app viajan en el detalle; basura (negativos, fechas, tipos) se descarta.
+    expect(estadoDeDetalle({ rachaApp: 1, appCaidaDesde: '2026-10-03T00:00:00Z', appAvisada: true, rachaBandeja: 2 }))
+      .toEqual({ ...ESTADO_GUARDIA_INICIAL, rachaApp: 1, appCaidaDesde: '2026-10-03T00:00:00Z', appAvisada: true, rachaBandeja: 2 });
+    expect(estadoDeDetalle({ rachaApp: -3, appCaidaDesde: 'x', appAvisada: 'si', rachaBandeja: 1.5 })).toEqual(ESTADO_GUARDIA_INICIAL);
+  });
+});
+
+describe('estadoTrasAviso — «visto» solo si el aviso salió (M5, ronda 19)', () => {
+  const uno = () => decidirAvisos(clasificarBandeja(bandeja([item('corridas', null)]), AHORA), ESTADO_GUARDIA_INICIAL);
+
+  it('con el aviso enviado, todo lo vigente queda visto', () => {
+    const d = uno();
+    expect(estadoTrasAviso(d, true).vistos).toHaveLength(1);
+  });
+  it('sin aviso, lo NUEVO no se anota (se reintenta); lo ya avisado antes se conserva', () => {
+    const d = uno();
+    expect(estadoTrasAviso(d, false).vistos).toHaveLength(0);
+    const d2 = decidirAvisos(clasificarBandeja(bandeja([item('corridas', null)]), AHORA), d.estado);
+    expect(d2.nuevos).toHaveLength(0);
+    expect(estadoTrasAviso(d2, false).vistos).toHaveLength(1);
+  });
+});
+
+describe('decidirApp — histéresis de la app (A3, ronda 19)', () => {
+  const T1 = '2026-10-03T10:00:00Z';
+  const T2 = '2026-10-03T10:05:00Z';
+
+  it('un fallo aislado: racha 1, ni avisa ni marca caída', () => {
+    expect(decidirApp(ESTADO_GUARDIA_INICIAL, true, T1)).toEqual({ racha: 1, desde: T1, caida: false, avisar: false });
+  });
+  it('dos seguidos: caída y aviso (una vez); el desde es el del PRIMER fallo', () => {
+    const a = decidirApp(ESTADO_GUARDIA_INICIAL, true, T1);
+    const b = decidirApp({ ...ESTADO_GUARDIA_INICIAL, rachaApp: a.racha, appCaidaDesde: a.desde }, true, T2);
+    expect(b).toEqual({ racha: 2, desde: T1, caida: true, avisar: true });
+    // ya avisada: sigue caída pero calla
+    expect(decidirApp({ ...ESTADO_GUARDIA_INICIAL, rachaApp: 2, appCaidaDesde: T1, appAvisada: true }, true, T2)).toMatchObject({ caida: true, avisar: false });
+    // si el aviso no salió, se reintenta
+    expect(decidirApp({ ...ESTADO_GUARDIA_INICIAL, rachaApp: 2, appCaidaDesde: T1, appAvisada: false }, true, T2)).toMatchObject({ avisar: true });
+  });
+  it('un sondeo sano reinicia la racha', () => {
+    expect(decidirApp({ ...ESTADO_GUARDIA_INICIAL, rachaApp: 1, appCaidaDesde: T1 }, false, T2)).toEqual({ racha: 0, desde: null, caida: false, avisar: false });
+  });
+});
+
+describe('B1 (ronda 19): una fuente ciega no hace flapping de sus incidentes', () => {
+  it('lo ya avisado de una fuente que queda ciega se CONSERVA; al volver no se reavisa como nuevo', () => {
+    const conIncidente = bandeja([item('corridas', null)]);
+    const d1 = decidirAvisos(clasificarBandeja(conIncidente, AHORA), ESTADO_GUARDIA_INICIAL);
+    expect(d1.nuevos).toHaveLength(1);
+    // la fuente de corridas queda ciega: sus items desaparecen de la bandeja
+    const ciegaYa = bandeja([], { corridas: ciega('timeout') });
+    const d2 = decidirAvisos(clasificarBandeja(ciegaYa, AHORA), d1.estado);
+    expect(d2.ciegasNuevas).toHaveLength(1);
+    // vuelve la fuente con el MISMO incidente: ya estaba avisado, no suena otra vez
+    const d3 = decidirAvisos(clasificarBandeja(conIncidente, AHORA), d2.estado);
+    expect(d3.nuevos).toHaveLength(0);
+  });
+  it('lo que NO es de una fuente ciega y ya no está vigente sí sale de vistos (si reaparece, es nuevo)', () => {
+    const d1 = decidirAvisos(clasificarBandeja(bandeja([item('corridas', null)]), AHORA), ESTADO_GUARDIA_INICIAL);
+    const d2 = decidirAvisos(clasificarBandeja(bandeja([]), AHORA), d1.estado); // resuelto, fuente sana
+    expect(d2.estado.vistos).toHaveLength(0);
+    expect(decidirAvisos(clasificarBandeja(bandeja([item('corridas', null)]), AHORA), d2.estado).nuevos).toHaveLength(1);
+  });
+  it('sigue reconociendo los estados viejos: huella pelona y clave cruda (script de la Mac)', () => {
+    const it0 = item('corridas', null);
+    const c = clasificarBandeja(bandeja([it0]), AHORA);
+    const clave = claveDeItem(c.items[0]);
+    expect(decidirAvisos(c, { ...ESTADO_GUARDIA_INICIAL, vistos: [huellaDeClave(clave)] }).nuevos).toHaveLength(0);
+    expect(decidirAvisos(c, { ...ESTADO_GUARDIA_INICIAL, vistos: [clave] }).nuevos).toHaveLength(0);
   });
 });

@@ -1,0 +1,8 @@
+{
+  "_fuente": "https://developers.sw.com.mx/knowledge-base/cancelacion-cfdi-con-estatus/ (códigos por UUID: 202 = previamente cancelado); estructura de la respuesta 200 de la doc.",
+  "data": {
+    "acuse": "<?xml version=\"1.0\" encoding=\"utf-8\"?><Acuse><Folios><UUID>FE4E71B0-8959-4FB9-8091-F5AC4FB0FEF8</UUID><EstatusUUID>202</EstatusUUID></Folios></Acuse>",
+    "uuid": { "FE4E71B0-8959-4FB9-8091-F5AC4FB0FEF8": "202" }
+  },
+  "status": "success"
+}

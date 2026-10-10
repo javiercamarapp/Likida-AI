@@ -6,7 +6,10 @@ import { registrarCorrida } from './agentes/corridas';
 import { avisoEscalados } from '@/lib/correo/avisos';
 import { avisarAlChofer } from './operacion';
 import { telefonosJefe } from './contactos';
-import { enviarTexto, sendText, sendTemplate, motivoDeFalloWhatsApp, esReintentableMeta } from '@/lib/meta/client';
+import { enviarTexto } from '@/lib/meta/client';
+import { enviarConFallback, fueEncoladoPorMeta } from '@/lib/meta/enviar_con_fallback';
+import { PLANTILLA } from '@/lib/meta/plantillas_catalogo';
+import { ventanaDeContacto } from './wa_ventana';
 import { alertarOperador } from '@/lib/observability/alerta';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -70,7 +73,7 @@ export const HORAS_MINIMAS_ESCALACION = 1;
  * `sendText`; esta plantilla queda para cuando ese texto no puede salir, que es
  * lo único que WhatsApp permite fuera de la ventana de 24 h.
  */
-const PLANTILLA_JEFE = 'recordatorio_cierre';
+const PLANTILLA_JEFE = PLANTILLA.recordatorioCierre;
 
 export interface ViajeSinAceptar {
   id: string;
@@ -176,8 +179,8 @@ export interface ResultadoEscalacion {
   /** Viajes que el reloj de la corrida dejó SIN intentar (ESC-3). No se
    *  pierden: nada se les marcó, y la corrida siguiente los encabeza. */
   cortadosPorReloj: number;
-  /** Escalaciones que Meta rechazó por un motivo REINTENTABLE (RES-1) y cuyo
-   *  sello se liberó: el viaje vuelve a la cola intacto. */
+  /** Escalaciones que Meta rechazó por un motivo REINTENTABLE: el aviso YA quedó en
+   *  `wa_outbox` (que lo entrega) y el sello se conserva; no se reenvía. */
   rechazosReintentables: number;
 }
 
@@ -257,8 +260,7 @@ export async function escalarViajesSinAceptar(args: {
   const inicioCorrida = new Date();
   const admin = supabaseAdmin();
   // El instante del sello se FIJA aquí (antes era `new Date()` dentro del
-  // claim, distinto para cada viaje): `liberarEscalacion` ancla el UPDATE a
-  // este valor para no soltar el sello de otra corrida (RES-1).
+  // claim, distinto para cada viaje).
   const ahoraIso = (args.ahora ?? new Date()).toISOString();
 
   // ── CÓMO LE FUE A CADA FLOTA, PARA EL CIERRE DE CORRIDA ─────────────────
@@ -338,8 +340,17 @@ export async function escalarViajesSinAceptar(args: {
     if (v.operadorId) {
       try {
         let recordado = false;
-        if (v.operadorTelefono) {
-          recordado = Boolean(await sendText(v.operadorTelefono, armarRecordatorioChofer(v, horasDe(v.tenantId))));
+        // P0-B (0368): si el registro dice que la ventana del chofer está CERRADA no
+        // se gasta el intento de texto que Meta rechazaría con 131047: va directo a
+        // la plantilla de asignación. Con la ventana abierta o sin dato, el texto
+        // primero, como siempre.
+        if (v.operadorTelefono && (await ventanaDeContacto(v.operadorTelefono, args.ahora)).estado !== 'cerrada') {
+          const t = await enviarTexto(v.operadorTelefono, armarRecordatorioChofer(v, horasDe(v.tenantId)));
+          // Lo que el cliente de Meta YA dejó en `wa_outbox` (un rechazo reintentable —timeout, 429, 5xx— Y el token vencido
+          // 190/401, que no es «vuelve más tarde» pero sí se encola: es la regla del campo `encolado`) lo entrega el outbox con
+          // su backoff: caer a la plantilla de asignación mandaría un segundo aviso al chofer (con el token vencido, dos
+          // mensajes encolados). Solo el rechazo definitivo (p. ej. ventana cerrada) pasa a la plantilla.
+          recordado = t.ok || fueEncoladoPorMeta(t.codigo, t.status);
         }
         // Sin teléfono en la fila o con el texto rechazado: la plantilla. Ella
         // resuelve el teléfono por su cuenta y marca lo que tenga que marcar.
@@ -372,38 +383,37 @@ export async function escalarViajesSinAceptar(args: {
         // La plantilla se conserva como plan B porque fuera de la ventana de
         // 24 h es lo único que WhatsApp entrega — y el jefe puede llevar días
         // sin escribirle al número.
-        const envio = await enviarTexto(tel, armarAvisoJefe(v, horasDe(v.tenantId)));
+        // P0-B (0368): el selector decide el canal con el registro de la ventana
+        // del jefe y deja constancia del motivo. Un rechazo que NO es de ventana
+        // (429, bloqueo) ya no cae a plantilla: el texto reintentable quedó en
+        // `wa_outbox` y la plantilla duplicaba el aviso.
+        const envio = await enviarConFallback(tel, {
+          texto: armarAvisoJefe(v, horasDe(v.tenantId)),
+          plantilla: { nombre: PLANTILLA_JEFE, parametros: [v.operadorNombre ?? 'Tu chofer', v.folio ?? 'sin folio'] },
+          contexto: 'escalacion.viaje_sin_aceptar',
+          tenantId: v.tenantId,
+          // La ventana de 24 h se evalúa al reloj de la corrida (en producción es el reloj real).
+          ahora: args.ahora,
+        });
         if (envio.ok) {
           rechazosSeguidos = 0;
           anota(v.tenantId, null, folioAviso);
+        // ── UN RECHAZO REINTENTABLE YA ESTÁ EN `wa_outbox` (RES-1, revisado) ──
+        // Si el envío rebotó por un motivo REINTENTABLE (rate limit, bloqueo temporal, 5xx), el cliente de Meta
+        // YA dejó el mensaje en `wa_outbox`, que lo entrega con su backoff. Soltar el sello hacía que la
+        // corrida siguiente volviera a tomar el viaje y le mandara OTRO recordatorio al chofer y OTRO aviso al
+        // jefe, además del que el outbox entrega: avisos dobles. El sello se queda (el viaje cuenta como
+        // escalado: el aviso está en cola) y el outbox es quien reintenta. Sigue contando para el corte masivo.
+        } else if (envio.reintentable || envio.encolado === true) {
+          r.rechazosReintentables++;
+          rechazosSeguidos++;
+          anota(v.tenantId, null, folioAviso);
+          logger.warn('escalacion.rechazo_reintentable_en_cola', { viaje: v.id, codigo: envio.codigo });
+          r.fallos.push(`jefe ${v.folio ?? v.id}: ${envio.mensaje} (queda en la cola de WhatsApp; no se reenvía)`);
         } else {
-          const env = await sendTemplate(tel, PLANTILLA_JEFE, {
-            parametros: [v.operadorNombre ?? 'Tu chofer', v.folio ?? 'sin folio'],
-          });
-          if (env.ok) {
-            rechazosSeguidos = 0;
-            anota(v.tenantId, null, folioAviso);
-          // ── RES-1: UN 429 NO ES UN VIAJE ESCALADO ────────────────────────
-          // Si los dos caminos rebotaron por un motivo REINTENTABLE (rate
-          // limit, bloqueo temporal, plantilla pausada), el jefe no se enteró
-          // y el problema no es este viaje: es Meta. Sellar `escalado_en` de
-          // todas formas lo saca de la consulta PARA SIEMPRE —el sello no
-          // expira— y ese viaje no se escala nunca. Se libera el claim y la
-          // corrida siguiente lo vuelve a tomar entero.
-          } else if (esReintentableMeta(env.codigo) || esReintentableMeta(undefined, envio.status)) {
-            const motivo = motivoDeFalloWhatsApp(env.error, env.codigo);
-            const liberado = await liberarEscalacion(admin, v, ahoraIso);
-            r.rechazosReintentables++;
-            r.escalados--;
-            rechazosSeguidos++;
-            logger.warn('escalacion.rechazo_reintentable', { viaje: v.id, codigo: env.codigo, liberado });
-            r.fallos.push(`jefe ${v.folio ?? v.id}: ${motivo} (se reintenta en la siguiente corrida)`);
-          } else {
-            const motivo = motivoDeFalloWhatsApp(env.error, env.codigo);
-            r.fallos.push(`jefe ${v.folio ?? v.id}: ${motivo}`);
-            // Los DOS caminos fallaron: el jefe no se enteró de este viaje.
-            anota(v.tenantId, new Error(motivo), folioAviso);
-          }
+          r.fallos.push(`jefe ${v.folio ?? v.id}: ${envio.mensaje}`);
+          // El jefe no se enteró de este viaje.
+          anota(v.tenantId, new Error(envio.mensaje), folioAviso);
         }
 
         // ── EL CORTE POR RECHAZO MASIVO (RES-1) ──────────────────────────
@@ -416,7 +426,7 @@ export async function escalarViajesSinAceptar(args: {
           r.cortadosPorReloj = viajes.length - intentados;
           logger.error('escalacion.rechazo_masivo', { rechazosSeguidos, pendientes: r.cortadosPorReloj });
           await alertarOperador('wa.rechazo_masivo', {
-            error: `WhatsApp rechazó ${rechazosSeguidos} escalaciones seguidas por un motivo reintentable (rate limit o bloqueo). La corrida se detuvo; los viajes quedaron sin marcar.`,
+            error: `WhatsApp rechazó ${rechazosSeguidos} escalaciones seguidas por un motivo reintentable (rate limit o bloqueo). La corrida se detuvo; los avisos de esos viajes quedaron en la cola de WhatsApp.`,
             codigo: 'wa_rechazo_masivo',
           });
           break;
@@ -546,33 +556,6 @@ export async function escalarViajesSinAceptar(args: {
  * saber si el sello quedó puesto es exactamente el riesgo que esto existe
  * para cerrar.
  */
-/**
- * Suelta el sello que ESTA corrida puso, cuando el rechazo de Meta fue
- * "vuelve más tarde" (RES-1). Anclado al valor exacto que escribimos: si otra
- * corrida ya lo movió, esta no le quita nada. Devuelve si lo soltó.
- *
- * Best-effort CON GRITO: no soltarlo significa un viaje que nunca se escala, y
- * eso tiene que quedar en el log aunque no haya nada que hacer al respecto.
- */
-async function liberarEscalacion(
-  admin: ReturnType<typeof supabaseAdmin>,
-  v: ViajeSinAceptar,
-  ahora: string,
-): Promise<boolean> {
-  const { data, error } = await acotada(admin
-    .from('viaje')
-    .update({ escalado_en: null, avisos_enviados: v.avisosEnviados })
-    .eq('id', v.id)
-    .eq('tenant_id', v.tenantId)
-    .eq('escalado_en', ahora)
-    .select('id'), 'liberarEscalacion');
-  if (error) {
-    logger.error('escalacion.claim_no_liberado', { viaje: v.id, err: error.message });
-    return false;
-  }
-  return (data ?? []).length > 0;
-}
-
 async function reclamarEscalacion(
   admin: ReturnType<typeof supabaseAdmin>,
   v: ViajeSinAceptar,

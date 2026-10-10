@@ -57,10 +57,22 @@ export interface SenalesFlota {
   escalados: number | null;
   /** El chasis: conectores con su estado medido. */
   conectores: Conector[] | null;
+  /**
+   * Tareas que el asistente del panel dejó para una persona y siguen abiertas (orquestador, 0650), ya filtradas por lo que ESTE rol puede
+   * leer (una tarea de dinero no la cuenta quien no ve dinero). Opcional: quien no la lee no la manda y la alerta simplemente no existe;
+   * `null` sí es «no se pudo leer».
+   */
+  tareasAsistente?: number | null;
+  /** Viajes con excepciones del Conductor (sin señal de vida, llegada sin confirmar, estadía excedida, escalados…). Mismo criterio que `tareasAsistente`. */
+  excepcionesConductor?: number | null;
+  /** De los anteriores, cuántos están sin señal de vida (sube la urgencia del texto). */
+  sinSenalDeVida?: number | null;
 }
 
 /** Cómo se llama cada señal cuando hay que confesar que no se pudo leer. */
-const ROTULO: Record<keyof Omit<SenalesFlota, 'conectores'> | 'conectores', string> = {
+const ROTULO: Record<keyof Omit<SenalesFlota, 'sinSenalDeVida'>, string> = {
+  tareasAsistente: 'tareas del asistente',
+  excepcionesConductor: 'excepciones de viajes en vivo',
   porRevisar: 'liquidaciones por revisar',
   duplicados: 'comprobantes repetidos',
   huerfanos: 'comprobantes sin viaje',
@@ -96,7 +108,7 @@ export function calcularAlertasFlota(
   // significado de todo lo de abajo: con una señal caída, "sin novedades" ya
   // no quiere decir "todo en orden", quiere decir "no sé". Callarlo sería la
   // afirmación más cara que puede hacer este producto.
-  const ciegas = (Object.keys(ROTULO) as Array<keyof SenalesFlota>)
+  const ciegas = (Object.keys(ROTULO) as Array<keyof typeof ROTULO>)
     .filter((k) => s[k] === null)
     .map((k) => ROTULO[k]);
   if (ciegas.length > 0) {
@@ -124,6 +136,26 @@ export function calcularAlertasFlota(
         ? `${rotos[0].nombre} está a medias: ${rotos[0].falta[0] ?? 'le falta un dato'}.`
         : `${rotos.length} conexiones están a medias (${rotos.map((c) => c.nombre).join(', ')}).`,
       href: '/dashboard/conexiones',
+    });
+  }
+
+  // 1b — Lo que el asistente derivó a una persona y el Conductor marcó como excepción (P6, orquestador vivo): las dos entran a las
+  // notificaciones del panel además del tablero. Llevan al tablero de viajes en vivo, que es donde se atienden.
+  if (s.tareasAsistente != null && s.tareasAsistente > 0) {
+    alertas.push({
+      id: `tareas-asistente:${s.tareasAsistente}`,
+      tipo: 'atencion',
+      texto: `${s.tareasAsistente} ${plural(s.tareasAsistente, 'tarea del asistente espera', 'tareas del asistente esperan')} a una persona — algo delicado que la IA no decide.`,
+      href: '/dashboard/viajes-en-vivo',
+    });
+  }
+  if (s.excepcionesConductor != null && s.excepcionesConductor > 0) {
+    const sinSenal = s.sinSenalDeVida != null && s.sinSenalDeVida > 0 ? ` (${s.sinSenalDeVida} sin señal de vida)` : '';
+    alertas.push({
+      id: `excepciones-conductor:${s.excepcionesConductor}:${s.sinSenalDeVida ?? 0}`,
+      tipo: s.sinSenalDeVida != null && s.sinSenalDeVida > 0 ? 'atencion' : 'aviso',
+      texto: `${s.excepcionesConductor} ${plural(s.excepcionesConductor, 'viaje en curso tiene', 'viajes en curso tienen')} excepciones del Conductor${sinSenal}.`,
+      href: '/dashboard/viajes-en-vivo',
     });
   }
 

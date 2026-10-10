@@ -52,7 +52,56 @@ export interface ProveedorPac {
   /** Timbra un CFDI SIN sellar (Sello/NoCertificado/Certificado ausentes —
    *  el PAC sella con el CSD de su bóveda). */
   timbrar(xmlSinSellar: string): Promise<ResultadoTimbre>;
-  /** La cancelación existe como contrato desde hoy; el flujo que la usa es
-   *  fase posterior (exige motivo SAT y ventana). */
-  cancelar(uuid: string, motivo: string): Promise<{ ok: boolean; mensaje: string }>;
+  /**
+   * Cancela un CFDI ya timbrado ante el SAT, a través del PAC.
+   *
+   * El motivo es el catálogo SAT c_MotivoCancelacion (01-04). Con '01' el SAT
+   * exige el UUID del comprobante que lo sustituye (`folioSustitucion`); con
+   * los demás NO debe ir.
+   */
+  cancelar(solicitud: SolicitudCancelacion): Promise<ResultadoCancelacion>;
 }
+
+/** c_MotivoCancelacion del SAT (CFDI 4.0). */
+export type MotivoCancelacion = '01' | '02' | '03' | '04';
+
+export const MOTIVOS_CANCELACION: Record<MotivoCancelacion, string> = {
+  '01': 'Comprobante emitido con errores con relación (se sustituye por otro)',
+  '02': 'Comprobante emitido con errores sin relación',
+  '03': 'No se llevó a cabo la operación',
+  '04': 'Operación nominativa relacionada en una factura global',
+};
+
+export interface SolicitudCancelacion {
+  /** RFC del EMISOR (el CSD del emisor está en la bóveda del PAC). */
+  rfcEmisor: string;
+  uuid: string;
+  motivo: MotivoCancelacion;
+  /** UUID del CFDI sustituto. Obligatorio con motivo 01; prohibido con los demás. */
+  folioSustitucion?: string;
+}
+
+/**
+ * El resultado de pedir una cancelación. `en_proceso` NO es «cancelado»: el SAT
+ * recibió la solicitud (SW código 201) y la cancelación puede quedar a la espera
+ * de la aceptación del receptor; hasta ver el acuse/estatus en el SAT o el panel
+ * del PAC, el CFDI se sigue tratando como vigente.
+ */
+export type ResultadoCancelacion =
+  | {
+      ok: true;
+      estado: 'cancelado' | 'en_proceso';
+      /** Código SAT/PAC por UUID (201, 202…), tal cual. */
+      codigoSat: string;
+      /** El acuse XML del SAT, si el PAC lo devolvió. */
+      acuse: string | null;
+      /** El SAT ya lo tenía cancelado (202): la petición repetida es inocua. */
+      yaEstaba: boolean;
+    }
+  | {
+      ok: false;
+      clase: 'rechazado' | 'red' | 'auth' | 'no_configurado';
+      codigo: string | null;
+      /** El mensaje del PAC TAL CUAL. */
+      mensaje: string;
+    };

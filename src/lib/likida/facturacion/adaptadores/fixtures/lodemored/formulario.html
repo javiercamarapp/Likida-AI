@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Fixture lodemored — sintético, NO es el portal real</title></head>
+<body>
+<!-- FIXTURE sintetico_desde_guion: derivado de los selectores de lodemored. No es el DOM del portal real. -->
+<form onsubmit="return false" id="fx-form">
+<div class="fx-campo"><input type="text" id="txtRFC"></div>
+<div class="fx-campo"><input type="text" id="txtRazonSocial"></div>
+<div class="fx-campo"><input type="text" id="txtEmailFac"></div>
+<div class="fx-campo"><input type="text" id="txtCP"></div>
+<div class="fx-campo"><select id="ddlRegimenFiscal"><option value="">Selecciona</option><option value="601">601</option><option value="603">603</option><option value="605">605</option><option value="606">606</option><option value="607">607</option><option value="608">608</option><option value="610">610</option><option value="611">611</option><option value="612">612</option><option value="614">614</option><option value="615">615</option><option value="616">616</option><option value="620">620</option><option value="621">621</option><option value="622">622</option><option value="623">623</option><option value="624">624</option><option value="625">625</option><option value="626">626</option><option value="G01">G01</option><option value="G02">G02</option><option value="G03">G03</option><option value="S01">S01</option><option value="CP01">CP01</option><option value="P01">P01</option></select></div>
+<div class="fx-campo"><select id="ddlUsoCFDI"><option value="">Selecciona</option><option value="601">601</option><option value="603">603</option><option value="605">605</option><option value="606">606</option><option value="607">607</option><option value="608">608</option><option value="610">610</option><option value="611">611</option><option value="612">612</option><option value="614">614</option><option value="615">615</option><option value="616">616</option><option value="620">620</option><option value="621">621</option><option value="622">622</option><option value="623">623</option><option value="624">624</option><option value="625">625</option><option value="626">626</option><option value="G01">G01</option><option value="G02">G02</option><option value="G03">G03</option><option value="S01">S01</option><option value="CP01">CP01</option><option value="P01">P01</option></select></div>
+<div class="fx-campo"><input type="text" id="txtTicket"></div>
+<div class="fx-campo"><input type="text" id="txtFechaIni"></div>
+<div class="fx-campo"><input type="text" id="txtImporte"></div>
+<button data-fx="buscar" type="button" id="lnkBtnTicket">Continuar</button>
+<button data-fx="emitir" type="button" id="lnkBtnFacturar">Continuar</button>
+</form>
+<div id="fx-salida"></div>
+<script>
+  var DESPUES_DE_BUSCAR = "<table><tbody><tr><td>Resultado</td></tr></tbody></table>";
+  var AL_EMITIR = "<div class=\"uuid\">00000000-0000-4000-8000-000000000001</div>";
+  var XML = "";
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest ? e.target.closest('[data-fx]') : null;
+    if (!el) return;
+    e.preventDefault();
+    var salida = document.getElementById('fx-salida');
+    if (el.getAttribute('data-fx') === 'buscar') salida.insertAdjacentHTML('beforeend', DESPUES_DE_BUSCAR);
+    if (el.getAttribute('data-fx') === 'emitir') salida.insertAdjacentHTML('beforeend', AL_EMITIR + XML);
+    if (el.getAttribute('data-fx') === 'xml') {
+      var blob = new Blob(['<?xml version="1.0"?><fixture UUID="00000000-0000-4000-8000-000000000001"/>'], { type: 'text/xml' });
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'fixture.xml';
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+  });
+</script>
+</body></html>

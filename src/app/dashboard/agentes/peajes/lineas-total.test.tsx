@@ -41,6 +41,7 @@ function pintar(lineas: ColaPorConciliar) {
       desgloseSeleccionado={null}
       detalleSeleccionado={null}
       evidenciaGps={null}
+      verificacion={null}
       importarDesglose={accionOk}
       conciliarDesglose={accionOk}
     />,

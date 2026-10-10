@@ -36,7 +36,7 @@ function rotuloDias(dias: number[]): string {
  * Sus cifras son días y contactos, todas medidas.
  */
 export function VistaAgenteCobranza({
-  cola, config, bitacora, extra, acciones, notificaciones,
+  cola, config, bitacora, extra, acciones, notificaciones, porGasto, gastosParaContactar = 0,
 }: {
   cola: ColaCobranza;
   config: ConfigCobranza;
@@ -47,6 +47,10 @@ export function VistaAgenteCobranza({
    *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
    *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
   notificaciones?: React.ReactNode;
+  /** La sección de cobranza POR GASTO (0525), ya renderizada en el servidor. */
+  porGasto?: React.ReactNode;
+  /** Choferes con gastos en tier hoy: «Ejecutar ahora» también los cubre. */
+  gastosParaContactar?: number;
 }) {
   const ventana = `${rotuloDias(config.diasSemana)} · ${config.horaInicio}–${config.horaFin} h`;
 
@@ -84,7 +88,7 @@ export function VistaAgenteCobranza({
               </div>
               <BotonEjecutar
                 ejecutarAhora={acciones.ejecutarAhora}
-                enCola={cola.paraContactar.length}
+                enCola={cola.paraContactar.length + gastosParaContactar}
                 activo={config.activo}
               />
             </div>
@@ -154,6 +158,8 @@ export function VistaAgenteCobranza({
               )}
             </section>
           </div>
+
+          {porGasto}
 
           {/* ── La estrategia del cliente, con vista previa (las "Pruebas") ── */}
           <section className="card p-4">

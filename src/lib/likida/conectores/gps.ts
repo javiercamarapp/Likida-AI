@@ -1,3 +1,4 @@
+import { TABLA_PROPIA } from './tabla_propia/conector';
 import {
   probarConGuardas, veredictoHttp, sinApiQueProbar,
   type Conector, type Http, type ResultadoPrueba, type ValoresCredencial,
@@ -467,6 +468,16 @@ export const GPS_GENERICO: Conector = {
       requerida: true,
       ayuda: 'La credencial que te dio tu proveedor de rastreo.',
     },
+    {
+      clave: 'mapeo_posiciones',
+      rotulo: 'Mapeo de campos de posiciones (JSON)',
+      forma: 'texto',
+      // Opcional para PROBAR la credencial; sin él no se leen posiciones. No se
+      // adivina el formato de un proveedor que no hemos visto.
+      requerida: false,
+      ayuda: 'Dónde está la lista y cómo se llama cada campo en la respuesta de tu proveedor: lista, id, lat, lng, fecha (más velocidad, rumbo, ignicion, formato_fecha iso|epoch_s|epoch_ms, unidad_velocidad kmh|mph|ms|nudos y paginacion). Solo GET y solo el mismo servidor de la dirección de prueba.',
+      ejemplo: '{"lista":"data","id":"id","lat":"lat",...}',
+    },
   ],
   probar: (v, http) => probarConGuardas(GPS_GENERICO, v, async () => {
     const patron = (v.patron ?? '').trim().toLowerCase();
@@ -511,6 +522,7 @@ export const CONECTORES_GPS: readonly Conector[] = [
   // piden GPS sin marca contra 9 que nombran Samsara. La lista ordenada por
   // fama de marca describiría un mercado que no es el mexicano.
   GPS_GENERICO,
+  TABLA_PROPIA,
   SAMSARA,
   WIALON,
   GEOTAB,

@@ -4,6 +4,7 @@ import {
   // `Blocks` se fue con la entrada de «Integraciones», fusionada en Conexiones.
   ChartNoAxesCombined, UserRound, BookOpen, Container, Handshake, FileText, KeyRound,
   ScrollText,
+  FileInput,
   UsersRound,
   ShieldCheck,
   Siren,
@@ -15,6 +16,10 @@ import {
   CalendarClock,
   Scale3d,
   PlugZap,
+  MapPin,
+  QrCode,
+  ListChecks,
+  Activity,
 } from 'lucide-react';
 
 /**
@@ -43,6 +48,9 @@ export const AUTOMATIZACIONES: Item[] = [
   { href: '/dashboard/agentes/cobranza', nombre: 'Seguimiento de comprobantes', Icono: BellRing },
   // F4: habla con los choferes — avisos, hitos, despacho por WA.
   { href: '/dashboard/agentes/conductores', nombre: 'Comunicación con operadores', Icono: MessagesSquare },
+  // Agente 4 (0400): atiende a los CLIENTES de la flota — clasifica, responde con datos reales,
+  // el gerente aprueba con un toque y lo molesto o sin respuesta escala.
+  { href: '/dashboard/agentes/vigia', nombre: 'Servicio al cliente', Icono: UsersRound },
   // F5: el conciliador del "martirio" — estado de cuenta del TAG/monedero
   // contra los gastos reales de los viajes.
   { href: '/dashboard/agentes/peajes', nombre: 'Conciliación de peajes', Icono: Scale },
@@ -54,7 +62,12 @@ export const AUTOMATIZACIONES: Item[] = [
 ];
 
 export const OPERACION: Item[] = [
+  // La puesta en marcha (W2): el checklist guiado de una flota nueva, con estado
+  // real de cada paso. Va primero: es lo que se abre el día uno.
+  { href: '/dashboard/arranque', nombre: 'Puesta en marcha', Icono: ListChecks },
   { href: '/dashboard/despacho', nombre: 'Despacho', Icono: ClipboardList },
+  // 0580: el perfil del cliente — de aquí salen las instrucciones (puerta, con quién reportarse, documentos) que el operador recibe.
+  { href: '/dashboard/convenios', nombre: 'Convenios de clientes', Icono: BookOpen },
   // El Registro (F2): la fuente de verdad navegable. Acción en Despacho;
   // aquí se consulta y se cruza.
   { href: '/dashboard/viajes', nombre: 'Viajes', Icono: Truck },
@@ -65,20 +78,31 @@ export const OPERACION: Item[] = [
   { href: '/dashboard/jornada', nombre: 'Jornada', Icono: CalendarClock },
   // El activo que produce el dinero, con sus vigencias de ley (14-ago-2026).
   { href: '/dashboard/unidades', nombre: 'Unidades', Icono: Container },
+  // Los patios (W2): de dónde salen las unidades; con ellos cada jefe de tráfico
+  // ve y corrige lo suyo.
+  { href: '/dashboard/patios', nombre: 'Patios', Icono: MapPin },
   // F3: los viajes vivos sobre México — trayecto ilustrativo, sin GPS, y la
   // página lo declara. La /dashboard/mapa vieja (borrada el 10-ago) no
   // dibujaba nada; esta dibuja lo que SÍ es verdad.
   { href: '/dashboard/mapa', nombre: 'Mapa', Icono: Map },
+  // Ola 3b: el tablero de todos los viajes en curso con hito, posición y excepciones (y las tareas del asistente).
+  { href: '/dashboard/viajes-en-vivo', nombre: 'Viajes en vivo', Icono: Activity },
   // A3 (auditoría 4, 14-ago-2026): por viaje en curso, si necesita el
   // complemento y qué dato falta — partido 19 del cliente / 18 del
   // transportista, que es como la ley parte la responsabilidad.
   { href: '/dashboard/carta-porte', nombre: 'Carta Porte', Icono: ScrollText },
+  // Agente 3 (0420): los documentos que mandan los clientes grandes, para revisar y aprobar lado a lado.
+  { href: '/dashboard/carta-porte/documentos', nombre: 'Documentos de clientes', Icono: FileInput },
   // Fase 5: el directorio que el escalamiento de emergencias consulta — la
   // grúa, la póliza con su 800 de siniestros y los contactos del operador.
   { href: '/dashboard/emergencias', nombre: 'Emergencias', Icono: Siren },
   // Capa F del agente de ayuda en ruta: las incidencias vivas con su timeline
   // y los botones de intervención — el humano siempre puede tomar el control.
   { href: '/dashboard/asistencia', nombre: 'Mesa de control', Icono: RadioTower },
+  // La guía de arranque del chofer (W2): a qué número de WhatsApp escribe, el
+  // enlace, el QR y qué pasa después. Al final de OPERACIÓN: es lo que se abre
+  // una vez, el día que se da de alta a la gente.
+  { href: '/dashboard/whatsapp', nombre: 'WhatsApp del operador', Icono: QrCode },
 ];
 
 export const DINERO_FISCAL: Item[] = [
@@ -149,6 +173,8 @@ export const SISTEMA: Item[] = [
   { href: '/dashboard/onboarding', nombre: 'Perfil de la flota', Icono: ClipboardList },
   { href: '/dashboard/politicas', nombre: 'Políticas de gasto', Icono: Scale },
   { href: '/dashboard/arco', nombre: 'Solicitudes ARCO', Icono: ShieldCheck },
+  // 0443: aceptación de Términos/Aviso y mandato de autofacturación, con evidencia.
+  { href: '/dashboard/legal', nombre: 'Términos y mandato', Icono: Scale3d },
   // AUDITORÍA 20 (H6, 29-ago-2026): los hilos bot↔chofer de ESTA flota. Se
   // leían solo desde /admin —el proveedor veía la conversación de cualquier
   // flota y el dueño no veía la de su propio chofer—. Va en SISTEMA y no en

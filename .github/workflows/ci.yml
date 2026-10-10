@@ -35,7 +35,9 @@ permissions:
 jobs:
   verificar:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # 25 (antes 15): el run de PR 37138339444 se canceló a los 15m17s y el de push pasó en
+    # 14m43s — el margen era de segundos y la suite crece. Repo público: minutos sin costo.
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

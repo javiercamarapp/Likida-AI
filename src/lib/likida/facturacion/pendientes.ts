@@ -1,4 +1,4 @@
-import { traerTodo, conteo } from '../pg';
+import { traerTodoPorLlave, llaveFechaId, despuesDeFechaId, PAGINA, type LlaveFechaId } from '../pg';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
@@ -153,22 +153,41 @@ export async function getPorFacturar(
   const fechaMinima = desdeVentana(hoy);
   // AUDITORÍA 13, MEDIO: `.limit(500)` recortaba en silencio la pantalla "por
   // facturar" y el aviso de WhatsApp (506 tickets → "Tienes 500 comprobantes
-  // sin factura"). `traerTodo` pagina hasta probar que trajo TODO y lanza
+  // sin factura"). `traerTodoPorLlave` pagina hasta probar que trajo TODO y lanza
   // LecturaIncompleta si no puede; el llamador muestra el error en vez de una
   // cifra baja.
-  const filas = await traerTodo<FilaGasto>(
-    (desde, hasta) => supabaseAdmin()
-      .from('gasto')
-      .select('id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, ocr_extra, autofactura_bloqueada_en, autofactura_bloqueo', conteo(desde))
-      .eq('tenant_id', tenantId)
-      .is('cfdi_uuid', null)
-      // ESC-12: acotado en PERIODO y en concepto. `fecha` es la del ticket
-      // (la que manda en el portal); `factura` ya ES un CFDI, no hay qué pedir.
-      .gte('fecha', fechaMinima)
-      .neq('concepto', 'factura')
-      .order('fecha', { ascending: true, nullsFirst: false })
-      .order('id', { ascending: true })
-      .range(desde, hasta),
+  //
+  // RONDA 16 (carga de 250 camiones): era `traerTodo` por OFFSET (`range(desde,
+  // hasta)`) con orden (fecha, id). A 5,000 viajes al mes los tickets sin CFDI de
+  // 45 días son 10-23k filas (hasta 23 páginas): cada una con offset mayor cuesta
+  // más en el servidor (O(n²)) y un ticket que entra por WhatsApp a media lectura
+  // corre las posiciones (una fila repetida o una saltada). Ahora pagina por
+  // CURSOR `(fecha, id)` — el MISMO orden de la pantalla, así que no hay que
+  // reordenar nada — y no por `id` solo: con la ventana de 45 días (6% de la
+  // flota) y un UUID sin correlación con la fecha, `id > último` recorre el índice
+  // de `id` de toda la flota (medido 1.8 s la lectura de 15k filas contra 0.24 s
+  // por `(fecha, id)`; scripts/carga/250-camiones/07-offset-vs-cursor.sql).
+  const filas = await traerTodoPorLlave<FilaGasto, LlaveFechaId>(
+    (despuesDe) => {
+      let q = supabaseAdmin()
+        .from('gasto')
+        .select(
+          'id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, ocr_extra, autofactura_bloqueada_en, autofactura_bloqueo',
+          despuesDe === null ? { count: 'exact' as const } : {},
+        )
+        .eq('tenant_id', tenantId)
+        .is('cfdi_uuid', null)
+        // ESC-12: acotado en PERIODO y en concepto. `fecha` es la del ticket
+        // (la que manda en el portal); `factura` ya ES un CFDI, no hay qué pedir.
+        .gte('fecha', fechaMinima)
+        .neq('concepto', 'factura');
+      if (despuesDe !== null) q = q.gte('fecha', despuesDe.fecha).or(despuesDeFechaId(despuesDe));
+      return q
+        .order('fecha', { ascending: true })
+        .order('id', { ascending: true })
+        .limit(PAGINA);
+    },
+    (f) => llaveFechaId({ fecha: f.fecha, id: f.id }),
     'getPorFacturar',
   );
   return filas.map((g) => armar(g, hoy));

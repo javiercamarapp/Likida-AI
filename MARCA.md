@@ -32,7 +32,7 @@ por tonos "parecidos"): fondo `#fbfbfd`, superficie `#ffffff`, tinta `#17100d`, 
 hairlines `#ececef/#e4e4e7`, **naranja de marca `#c2410c`** (5.18:1 — un naranja vivo tipo
 #f97316 NO pasa), rampa de gráficas `#fdebd9→#c2410c`, ok `#137a38`, warn ÁMBAR `#9a5c00`
 (la marca ya es naranja: un aviso naranja deja de avisar), bad `#b91c1c`. Un solo acento;
-neutros fríos; hairlines 1px; **sin modo oscuro**; sin emojis como iconos.
+neutros fríos; hairlines 1px; sin emojis como iconos. **Modo oscuro**: existe en el panel (selector claro / sistema / oscuro, decisión del 13-ago-2026; tokens `[data-theme="dark"]` en `globals.css`, contrastes medidos en `contraste.test.ts`) — solo el panel: la landing, los documentos y el contenido social van en claro.
 → Para: producto, landing, demos, capturas, contenido social, calculadora.
 
 **2.2 DOCUMENTOS EJECUTIVOS** (pedido explícito de Javier: cero color, ni el naranja):

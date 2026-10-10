@@ -15,6 +15,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { notificarAsignacion } from './notificar';
 import { evaluarYAvisarCcpDespacho } from './carta_porte_wa';
+import { despacharInstrucciones } from './convenios/envio';
 import { enviarBriefingInicio } from './briefing_inicio_wa';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
@@ -23,11 +24,12 @@ import { DatoInvalido } from './errores';
 import { esNumero, esNumeroONulo, esObjeto, esTextoONulo, formaInesperada } from './comercial';
 import { CONECTORES_GPS } from './conectores/gps';
 import { papelMasProximo } from './administracion';
+import { resolverTerminalDeFlota } from './terminales';
+import { anotarBitacora } from './bitacora_escritura';
 import { hoyMx } from '@/lib/formato';
 
 /** Los tres estatus que `viaje` de verdad admite (`viaje_estatus_dominio`,
  *  0025). Un cuarto valor no se traduce ni se esconde: se cuenta aparte. */
-const SIN_CERRAR = new Set(['abierto', 'en_cuadre']);
 
 // ── Carga por operador: "ve cuántos trae cada quien" ───────────────────────
 
@@ -102,24 +104,50 @@ export interface ViajeSinAsignar {
   estatus: string;
 }
 
-/** Lo primero que el encargado abre en la mañana: qué está sin repartir. */
-export async function getViajesSinAsignar(tenantId: string): Promise<ViajeSinAsignar[]> {
-  const filas = await traerTodo<Record<string, unknown>>(
-    (d, h) => acotada(supabaseAdmin().from('viaje')
-      .select('id, folio, origen, destino, fecha_inicio, estatus', conteo(d))
-      .eq('tenant_id', tenantId).is('operador_id', null)
-      .neq('estatus', 'liquidado')
-      .order('id').range(d, h), 'getViajesSinAsignar'),
-    'getViajesSinAsignar',
-  );
-  return filas.map((v) => ({
-    id: v.id as string,
-    folio: (v.folio as string) || null,
-    origen: (v.origen as string) || null,
-    destino: (v.destino as string) || null,
-    fechaInicio: (v.fecha_inicio as string) || null,
-    estatus: v.estatus as string,
-  }));
+/** Cuántos viajes sin chofer se listan de una vez (el resto se cuenta, no se trae). */
+export const TOPE_SIN_ASIGNAR = 50;
+
+export interface ViajesSinAsignar {
+  /** A lo más `limite` viajes, los más viejos primero (los que más urge repartir). */
+  filas: ViajeSinAsignar[];
+  /** El total REAL de viajes sin chofer — exacto, no `filas.length`. */
+  total: number;
+}
+
+/**
+ * Lo primero que el encargado abre en la mañana: qué está sin repartir.
+ *
+ * RONDA 16 (carga de 250 camiones): antes `traerTodo` paginaba TODOS los viajes
+ * sin operador y las dos pantallas (Inicio y Despacho) solo pintaban un puñado
+ * (Despacho mostraba 12) o contaban. Ahora UNA consulta trae las primeras
+ * `limite` filas Y el conteo exacto (`count: 'exact'` con `limit`: PostgREST
+ * devuelve el total completo junto con la página recortada), de modo que el
+ * encabezado «N viajes sin chofer» sigue siendo exacto sin cargar los N.
+ */
+export async function getViajesSinAsignar(tenantId: string, limite = TOPE_SIN_ASIGNAR): Promise<ViajesSinAsignar> {
+  const { data, error, count } = await acotada(supabaseAdmin().from('viaje')
+    .select('id, folio, origen, destino, fecha_inicio, estatus', { count: 'exact' })
+    .eq('tenant_id', tenantId).is('operador_id', null)
+    .neq('estatus', 'liquidado')
+    .order('fecha_inicio', { ascending: true, nullsFirst: false })
+    .order('id')
+    .limit(limite), 'getViajesSinAsignar');
+  if (error) throw new Error(`getViajesSinAsignar: ${error.message}`);
+  const filas = (data ?? []) as Array<Record<string, unknown>>;
+  // Un conteo ausente no se inventa con `filas.length`: con el tope puesto sería
+  // una cifra baja presentada como total.
+  if (typeof count !== 'number') throw new Error('getViajesSinAsignar: la base no devolvió el conteo');
+  return {
+    filas: filas.map((v) => ({
+      id: v.id as string,
+      folio: (v.folio as string) || null,
+      origen: (v.origen as string) || null,
+      destino: (v.destino as string) || null,
+      fechaInicio: (v.fecha_inicio as string) || null,
+      estatus: v.estatus as string,
+    })),
+    total: count,
+  };
 }
 
 // ── Unidades ───────────────────────────────────────────────────────────────
@@ -295,79 +323,11 @@ export async function getIncidencias(tenantId: string, ahora = new Date()): Prom
 }
 
 // ── POD (evidencia de entrega) ─────────────────────────────────────────────
-
-export interface PodRow {
-  viajeId: string;
-  folio: string | null;
-  operadorId: string | null;
-  operadorNombre: string | null;
-  telefono: string | null;
-  /** `null` cuando NADIE ha creado el registro — el caso más común y el que
-   *  más se persigue. No es lo mismo que 'pendiente', que ya se pidió. */
-  estado: string | null;
-  podId: string | null;
-  nota: string | null;
-  capturadoEn: string | null;
-}
-
-/**
- * Los viajes EN CURSO y qué evidencia de entrega traen.
- *
- * Se parte de los VIAJES y no de la tabla `pod`: un viaje del que nadie creó
- * el registro es exactamente el que hay que perseguir, y recorrer `pod` lo
- * dejaría fuera. Es el mismo error que `getTableroOperacion` evita al contar.
- */
-export async function getPods(tenantId: string): Promise<PodRow[]> {
-  const admin = supabaseAdmin();
-  const [viajes, pods, operadores] = await Promise.all([
-    traerTodo<{ id: unknown; folio: unknown; operador_id: unknown; estatus: unknown }>(
-      (d, h) => acotada(admin.from('viaje').select('id, folio, operador_id, estatus', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h), 'getPods.viaje'),
-      'getPods.viaje',
-    ),
-    traerTodo<Record<string, unknown>>(
-      (d, h) => acotada(admin.from('pod').select('id, viaje_id, estado, nota, capturado_en', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h), 'getPods.pod'),
-      'getPods.pod',
-    ),
-    traerTodo<{ id: unknown; nombre: unknown; telefono: unknown }>(
-      (d, h) => acotada(admin.from('operador').select('id, nombre, telefono', conteo(d))
-        .eq('tenant_id', tenantId).order('id').range(d, h), 'getPods.operador'),
-      'getPods.operador',
-    ),
-  ]);
-
-  const porViaje = new Map(pods.map((p) => [p.viaje_id as string, p]));
-  const opPorId = new Map(operadores.map((o) => [o.id as string, o]));
-
-  return viajes
-    .filter((v) => SIN_CERRAR.has(v.estatus as string))
-    .map((v) => {
-      const p = porViaje.get(v.id as string);
-      const op = v.operador_id ? opPorId.get(v.operador_id as string) : undefined;
-      return {
-        viajeId: v.id as string,
-        folio: (v.folio as string) || null,
-        operadorId: (v.operador_id as string) || null,
-        operadorNombre: op ? (op.nombre as string) : null,
-        telefono: op ? ((op.telefono as string) || null) : null,
-        estado: p ? (p.estado as string) : null,
-        podId: p ? (p.id as string) : null,
-        nota: p ? ((p.nota as string) || null) : null,
-        capturadoEn: p ? ((p.capturado_en as string) || null) : null,
-      };
-    })
-    // Primero lo que falta: sin registro, luego pedido, luego rechazado, y al
-    // final lo que ya llegó. El encargado abre esto para ver qué perseguir.
-    .sort((a, b) => orden(a.estado) - orden(b.estado));
-}
-
-function orden(estado: string | null): number {
-  if (estado === null) return 0;
-  if (estado === 'pendiente') return 1;
-  if (estado === 'rechazado') return 2;
-  return 3;
-}
+//
+// `getPods` (la lista de viajes en curso con su evidencia, ~120k filas de viaje +
+// pod por llamada) se BORRÓ en la ronda 16 (carga de 250 camiones): no tenía ningún
+// llamador en src/ ni en scripts/, y leer los viajes y los pods enteros de la flota
+// en memoria no escala. Si una pantalla la necesita, que sea una consulta acotada.
 
 /**
  * Deja constancia de que ya se pidió la evidencia.
@@ -684,6 +644,11 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
   // panel.
   if (v.operadorId) await avisarAlChofer(tenantId, v.operadorId, id as string).catch(() => {});
 
+  // LAS INSTRUCCIONES DEL CONVENIO (0580): se liga el convenio del cliente al viaje (foto de la «calle de instrucciones»)
+  // y se le mandan al operador —puerta, con quién reportarse, documentos—. Después del aviso del viaje, para que llegue
+  // en ese orden. NUNCA LANZA (un convenio mal capturado o una base sin migrar no deshacen el despacho) y lleva su claim.
+  if (v.operadorId) await despacharInstrucciones(tenantId, id as string);
+
   // EL DISPARO DE CARTA PORTE (Fase B, hueco H1): en cuanto el viaje existe se
   // corre el clasificador legal y el jefe recibe lo que falta declarar (o el
   // veredicto con fundamento). Mismo best-effort que el aviso al chofer: el
@@ -926,6 +891,9 @@ export interface NuevaUnidad {
   gpsProveedor?: string | null;
   /** El id del dispositivo EN EL SISTEMA DEL PROVEEDOR. */
   gpsDeviceId?: string | null;
+  /** Patio (0298, W2). `undefined` = no se toca (en la edición) / sin patio (en
+   *  el alta); `null` o `''` = sin patio. Se comprueba que sea de la flota. */
+  terminalId?: string | null;
 }
 
 /** Lo que llega del formulario de unidades: puros strings. `''` = sin dato. */
@@ -1082,13 +1050,20 @@ function aCruda(u: NuevaUnidad): UnidadCruda {
   };
 }
 
-export async function crearUnidad(tenantId: string, u: NuevaUnidad): Promise<string> {
+export async function crearUnidad(
+  tenantId: string,
+  u: NuevaUnidad,
+  actor?: { id?: string; email?: string },
+): Promise<string> {
   // TODO camino pasa por `validarUnidad`, aunque el llamador ya haya validado
   // (el panel valida en su server action; `POST /v1/unidades` normaliza en su
   // borde con los MISMOS topes). Este es el único cuello por el que se escribe
   // `unidad`: re-validar aquí garantiza que el llamador nuevo de mañana no
   // inserte sin reglas. Antes esta función no validaba nada.
   const v = validarUnidad(aCruda(u));
+  // El patio se comprueba contra la flota ANTES de insertar (la FK compuesta de la
+  // 0298 es la última red, pero su mensaje no dice nada a quien captura).
+  const terminalId = await resolverTerminalDeFlota(tenantId, u.terminalId);
   // El choque contra `unidad_economico_unico` NO se traduce aquí a propósito:
   // `POST /v1/unidades` reconoce ese nombre en el mensaje (`chocoContra`) para
   // resolver la carrera de dos peticiones en paralelo. El panel lo traduce él.
@@ -1104,18 +1079,33 @@ export async function crearUnidad(tenantId: string, u: NuevaUnidad): Promise<str
     verificacion_vence: v.verificacionVence,
     gps_proveedor: v.gpsProveedor,
     gps_device_id: v.gpsDeviceId,
+    ...(terminalId !== null ? { terminal_id: terminalId } : {}),
   }).select('id').single(), 'crearUnidad');
   if (error) throw new Error(`crearUnidad: ${error.message}`);
   const id = (data as { id?: unknown } | null)?.id;
   if (!id) throw new Error('crearUnidad: el insert no devolvió id');
+  // Con actor (el panel) se firma; la API por llave no trae persona y no escribe.
+  if (actor) {
+    await anotarBitacora({
+      tenantId, actor, accion: 'unidad.creada', entidad: 'unidad', entidadId: id as string,
+      detalle: { numeroEconomico: v.numeroEconomico, terminalId },
+    });
+  }
   return id as string;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function editarUnidad(tenantId: string, unidadId: string, u: NuevaUnidad): Promise<void> {
+export async function editarUnidad(
+  tenantId: string,
+  unidadId: string,
+  u: NuevaUnidad,
+  actor?: { id?: string; email?: string },
+): Promise<void> {
   if (!UUID_RE.test(unidadId)) throw new DatoInvalido('No se reconoce esa unidad. Vuelve a abrir la pantalla.');
   const v = validarUnidad(aCruda(u));
+  // Solo se toca el patio si la edición lo mandó (`undefined` = no se toca).
+  const terminalId = u.terminalId === undefined ? undefined : await resolverTerminalDeFlota(tenantId, u.terminalId);
 
   // Mismo candado que `editarCliente`: el UPDATE anclado a tenant toca cero
   // filas ante un id ajeno y Postgres no lo llama error — se mira lo devuelto.
@@ -1130,6 +1120,7 @@ export async function editarUnidad(tenantId: string, unidadId: string, u: NuevaU
     verificacion_vence: v.verificacionVence,
     gps_proveedor: v.gpsProveedor,
     gps_device_id: v.gpsDeviceId,
+    ...(terminalId !== undefined ? { terminal_id: terminalId } : {}),
   }).eq('id', unidadId).eq('tenant_id', tenantId).select('id'), 'editarUnidad');
 
   if (error) {
@@ -1149,6 +1140,12 @@ export async function editarUnidad(tenantId: string, unidadId: string, u: NuevaU
   }
   if (!Array.isArray(data) || data.length === 0) {
     throw new DatoInvalido('No se encontró esa unidad en tu flota. Puede que alguien la haya borrado — recarga la pantalla.');
+  }
+  if (actor) {
+    await anotarBitacora({
+      tenantId, actor, accion: 'unidad.editada', entidad: 'unidad', entidadId: unidadId,
+      detalle: { numeroEconomico: v.numeroEconomico, ...(terminalId !== undefined ? { terminalId } : {}) },
+    });
   }
 }
 

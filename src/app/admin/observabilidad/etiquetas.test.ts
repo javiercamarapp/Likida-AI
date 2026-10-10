@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { INTERRUPTORES } from '@/lib/likida/interruptores';
-import { ETIQUETA_INTERRUPTOR, etiquetaInterruptor } from './etiquetas';
+import { ETIQUETA_INTERRUPTOR, etiquetaInterruptor, notaDeLatenciaRuta } from './etiquetas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL MAPA DE RÓTULOS NO PUEDE QUEDARSE ATRÁS DEL CATÁLOGO DE PALANCAS.
@@ -38,5 +38,13 @@ describe('ETIQUETA_INTERRUPTOR cubre el catálogo', () => {
   it('etiquetaInterruptor cae al id crudo ante una palanca desconocida', () => {
     // La red de seguridad sigue viva: visible, no rota.
     expect(etiquetaInterruptor('agente:inventado')).toBe('agente:inventado');
+  });
+});
+
+describe('notaDeLatenciaRuta (B3, ronda 19)', () => {
+  it('las rutas que responden antes de terminar su trabajo dicen hasta dónde miden; el resto no', () => {
+    expect(notaDeLatenciaRuta('webhook.whatsapp')).toMatch(/hasta el acuse/);
+    expect(notaDeLatenciaRuta('dashboard.chat')).toMatch(/primer byte/);
+    expect(notaDeLatenciaRuta('health')).toBeNull();
   });
 });

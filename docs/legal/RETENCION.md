@@ -26,8 +26,16 @@ si lo hiciera — por eso hay dos bloques, no uno con una columna optimista.
 | Costo de LLM por llamada (se consolida antes) | `llm_costo` | 13 meses | `purgar_llm_costo` |
 | Bitácora de auditoría | `bitacora_auditoria` | 365 días | `purgar_bitacora_auditoria` |
 | Contacto de cobranza | `cobranza_contacto` | 180 días | `purgar_cobranza_contacto` |
+| **Evento de Trust & Safety** (actor, detalle de lo detectado) | `evento_seguridad` | info 90 / media 180 / alta 365 días | `purgar_evento_seguridad` vía `mantener_ledgers` (0680; cron `purgar`) |
+| Eventos de Stripe ya aplicados (payload) | `evento_stripe` | 400 días | `mantener_ledgers` (0680) |
+| Bitácora de la conversación del Vigía (huella del destinatario) | `vigia_evento` | 365 días | `mantener_ledgers` (0680) |
+| Historia de auditoría de documentos de Carta Porte (el documento caduca por `retener_hasta`) | `cp_documento_evento` | 730 días | `mantener_ledgers` (0680) |
+| Intentos de entrega del buzón al contador | `buzon_entrega_evento` | 365 días | `mantener_ledgers` (0680) |
+| Lotes de emisión de autofactura ya cerrados y cupos diarios (solo ids y montos) | `autofactura_lote`, `autofactura_cupo_dia` | 180 días | `purgar_autofactura` (0542; cron `purgar` desde la Ola 9) |
 | Archivo de Storage huérfano (sin gasto que lo respalde) | Storage (marcado en `storage_huerfano_candidato`) | 7 días desde que se marca | `limpiar_storage_huerfano` |
 | Fotos de comprobantes que SÍ respaldan un gasto | Storage (bucket `comprobantes`) | **No se borran** — CFF art. 30 obliga a conservarlas ≥5 años; la cancelación ARCO las desliga del titular, no las elimina | El ejecutor ARCO (`ejecutar_arco_cancelacion`), no `mantenimiento_de_datos` |
+
+> **Plazos de la Ola 9 (0680):** son defaults técnicos con piso de 30 días, no una decisión legal. Si el abogado fija otro plazo se cambia en `src/lib/likida/retencion_ledgers.ts` (`PLAZOS_LEDGERS`) y en la cabecera de la 0680 en el mismo cambio.
 
 ## Sin purga (hueco medido — dueño del código: `datos`, salvo donde se anota otro)
 
@@ -36,7 +44,7 @@ si lo hiciera — por eso hay dos bloques, no uno con una columna optimista.
 | Coordenadas del pin de asistencia | `incidencia.lat`, `incidencia.lng` | El aviso dice "90 días" para la ubicación del chat (`privacidad.ts`, categoría GPS) | `anclarUbicacionIncidencia` las escribe y ninguna purga las toca | LEG-6 (dueño: `datos`) |
 | Texto libre del reporte de un evento | `incidencia_evento.detalle` | — | Sin purga | LEG-6 (dueño: `datos`) |
 | Eventos de cámara/telemetría (todos, no solo los graves) | `evento_seguridad_flota` | Antes de esta auditoría: ningún aviso los mencionaba (LEG-3, cerrado en este ciclo — ver `avisoIntegral` en `privacidad.ts`). El aviso ahora declara la categoría y su finalidad, **sin prometer un plazo de borrado**, precisamente porque esta fila sigue sin purga | Sin purga; `sincronizar_eventos.ts` guarda TODO evento reportado, no solo los `grave` | LEG-3 (texto, cerrado por `legal`) / purga pendiente (dueño: `datos` o quien tome `conectores/`) |
-| Registro de jornada laboral derivado del GPS | `jornada_dia`, `jornada_asiento` | Sin plazo declarado | Sin purga | LEG-6 (dueño: `datos`) |
+| Registro de jornada laboral derivado del GPS | `jornada_dia`, `jornada_asiento`, `jornada_revision_historial` | Sin plazo declarado | Sin purga — **a propósito**: el plazo laboral lo fija el abogado (la 0680 NO la incluye para no decidir política desde una migración) | LEG-6 (dueño: `datos`) |
 | Contacto de emergencia del operador (nombre, teléfono, parentesco de un familiar) | `contacto_emergencia` | Antes de esta auditoría: 0 menciones. El aviso integral ahora lo declara (LEG-8, cerrado en este ciclo) | Sin purga; no se borra al dar de baja al operador | LEG-8 (texto, cerrado por `legal`) / purga pendiente (dueño: `datos`) |
 | Parte de incidente hacia la bandeja de aprobación de Likida — incluye descripción cruda (con datos de salud) y teléfonos de contactos de emergencia | `cola_aprobacion` (tipo `parte_incidente`) | El aviso dice "se guarda para escalarlo a tu empresa" (categoría salud) | Sin purga (la única purga de `cola_aprobacion` es para piezas de tipo `correo_frio`/`correo_seguimiento`, 0258:188); no entra al alcance de la cancelación ARCO | LEG-5 — **NO CERRADO por `legal`**: el código vive en `src/lib/likida/agentes/direccion.ts` y `cola.ts`, fuera de los archivos asignados a este agente. Ver `CIERRE.md` para el diff propuesto (dueño: `agentes`) |
 | Mensajes de tickets de soporte | `ticket_mensaje` | — | Sin purga (0 filas en prod al medir, 28-ago-2026) | LEG-6 (dueño: `datos`) |

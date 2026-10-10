@@ -20,6 +20,7 @@ const dobles = vi.hoisted(() => ({
   alternarPausa: vi.fn(),
   borrarRegla: vi.fn(),
   listarReglas: vi.fn(),
+  actualizarFrecuencia: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
@@ -37,6 +38,7 @@ vi.mock('@/lib/likida/reglas/repo', async (importar) => ({
   alternarPausa: dobles.alternarPausa,
   borrarRegla: dobles.borrarRegla,
   listarReglas: dobles.listarReglas,
+  actualizarFrecuencia: dobles.actualizarFrecuencia,
 }));
 
 import { FormaEscribirRegla, FormaElegirAMano, type AccionForma } from './forma';
@@ -122,6 +124,28 @@ it('confirmar/pausar/reanudar/borrar: manda tenant/usuario de la SESIÓN, id por
 
   await borrar(null, fd({ id: 'r-1' }));
   expect(dobles.borrarRegla).toHaveBeenCalledWith('t-1', 'r-1', { id: 'u-1' });
+});
+
+it('frecuencia: el tenant y el usuario salen de la SESIÓN, los límites del formulario, y un error se pinta', async () => {
+  dobles.actualizarFrecuencia.mockResolvedValue({ ok: true, valor: { maxAvisosDia: 2, minHorasEntreAvisos: 6 } });
+  const pagina = await PaginaReglas({ searchParams: SP });
+  const { frecuencia } = buscar(pagina, ListaReglas)[0].props.acciones as Record<string, AccionForma>;
+  const ok = await frecuencia(null, fd({ id: 'r-1', maxAvisosDia: '2', minHorasEntreAvisos: '6', tenantId: 'OTRO' }));
+  expect(dobles.actualizarFrecuencia).toHaveBeenCalledWith('t-1', 'r-1', { maxAvisosDia: '2', minHorasEntreAvisos: '6' }, { id: 'u-1' });
+  expect(ok).toEqual({ ok: true, mensaje: 'Límite guardado.' });
+  expect(dobles.revalidatePath).toHaveBeenCalled();
+
+  dobles.actualizarFrecuencia.mockResolvedValue({ ok: false, error: 'El máximo de avisos al día va de 1 a 24.' });
+  expect(await frecuencia(null, fd({ id: 'r-1', maxAvisosDia: '99', minHorasEntreAvisos: '1' })))
+    .toEqual({ ok: false, error: 'El máximo de avisos al día va de 1 a 24.' });
+});
+
+it('frecuencia: un encargado o vendedor que la invoque directo es rechazado sin tocar la base', async () => {
+  const pagina = await PaginaReglas({ searchParams: SP });
+  const { frecuencia } = buscar(pagina, ListaReglas)[0].props.acciones as Record<string, AccionForma>;
+  sesion = { tenantId: 't-1', rol: 'encargado', userId: 'u-1' };
+  expect(await frecuencia(null, fd({ id: 'r-1', maxAvisosDia: '2', minHorasEntreAvisos: '1' }))).toEqual(NEGADO);
+  expect(dobles.actualizarFrecuencia).not.toHaveBeenCalled();
 });
 
 it.each(['encargado', 'vendedor'])('las seis acciones rechazan a %s aunque se invoquen directo (sesión re-resuelta en el momento)', async (rol) => {

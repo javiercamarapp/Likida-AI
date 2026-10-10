@@ -858,6 +858,26 @@ export async function guardarPolitica(
 }
 
 /**
+ * ¿La flota declaró SU política de gastos (`tenant.config.politica` es una lista),
+ * o sigue con la que hereda de la base? `null` = no se pudo leer — que NO es «no
+ * la declaró». La usa la guía de puesta en marcha (W2) para no palomear «Políticas»
+ * con la política heredada, ni marcarla pendiente porque la base no contestó.
+ */
+export async function politicaPropiaDeclarada(tenantId: string): Promise<boolean | null> {
+  const { data, error } = await acotada(
+    supabaseAdmin().from('tenant').select('config').eq('id', tenantId).maybeSingle(),
+    'politicaPropiaDeclarada',
+  );
+  if (error) {
+    logger.warn('politicaPropiaDeclarada', { tenantId, err: error.message });
+    return null;
+  }
+  if (!data) return null;
+  const cfg = (data as { config?: { politica?: unknown } | null }).config;
+  return Array.isArray(cfg?.politica);
+}
+
+/**
  * Guarda los ajustes OPERATIVOS de la flota (tabulador, catálogo de cuentas y
  * formato de salida) en `tenant.config`.
  *

@@ -3,7 +3,7 @@
 import { useActionState } from 'react';
 import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
 import { useFormStatus } from 'react-dom';
-import { Save, TriangleAlert, CheckCircle2 } from 'lucide-react';
+import { Save } from 'lucide-react';
 // SOLO TIPOS DE `clientes.ts`, y es una restricción real, no un gusto: ese
 // módulo importa `supabaseAdmin`, cuyo encabezado dice textualmente "NUNCA
 // importar en código de cliente". Un `import` de valor (por ejemplo del
@@ -11,6 +11,7 @@ import { Save, TriangleAlert, CheckCircle2 } from 'lucide-react';
 // navegador aunque el componente no la use. Los `import type` se borran al
 // compilar; el catálogo viaja como PROP desde la página, que sí es servidor.
 import type { ClienteCrudo, TarifaCruda } from '@/lib/likida/clientes';
+import { AvisoResultado } from '../../admin/ui/aviso-resultado';
 
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
@@ -31,25 +32,9 @@ function Boton({ etiqueta }: { etiqueta: string }) {
   );
 }
 
-/** El aviso del resultado del servidor. El de error se enseña VERBATIM: los
- *  `DatoInvalido` del motor están escritos para leerse aquí y son lo único que
- *  dice QUÉ corregir. */
-function Aviso({ estado }: { estado: ResultadoForma }) {
-  if (!estado) return null;
-  return estado.ok ? (
-    <div className="flex items-center gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
-      style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
-      <CheckCircle2 width={15} height={15} strokeWidth={1.75} />
-      {estado.mensaje}
-    </div>
-  ) : (
-    <div className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg"
-      style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-      <TriangleAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-      {estado.error}
-    </div>
-  );
-}
+/** El aviso del resultado: el UNICO del panel (`admin/ui/aviso-resultado`). El error
+ *  del servidor se enseña VERBATIM: los `DatoInvalido` están escritos para leerse aquí. */
+const Aviso = AvisoResultado;
 
 /**
  * Un bloque que se abre. `<details>` nativo y no `useState` a propósito: sin

@@ -41,6 +41,7 @@ vi.mock('../config', () => ({ getConfig: (...a: unknown[]) => getConfig(...a) })
 vi.mock('../perfil/preguntas', () => ({
   calificaEstimuloPeaje: () => ({ elegible: undefined }),
   facilidad15Vigente: () => ({ dedicacionExclusivaCarga: true, regimenElegible: true }),
+  tarjetasDeLaEmpresa: () => true,
 }));
 vi.mock('./engine', async (original) => ({
   ...(await original<Record<string, unknown>>()),

@@ -16,6 +16,13 @@ vi.mock('@/lib/likida/wa_outbox', () => ({
   RETRASO_AMBIGUO_SEGUNDOS: 300,
 }));
 
+// La caché de la ventana (mig. 0368) la lee el selector; aquí se controla.
+let estadoVentana: 'abierta' | 'cerrada' | 'desconocida' = 'desconocida';
+vi.mock('@/lib/likida/wa_ventana', () => ({
+  ventanaDeContacto: async () => ({ estado: estadoVentana, ultimoEntranteEn: null, expiraEn: null }),
+  registrarDecisionEnvio: async () => {},
+}));
+
 type Salida = { type: string; template?: { name: string; components?: Array<{ parameters: Array<{ text: string }> }> } };
 const salientes: Salida[] = [];
 /** Respuestas de Meta en orden, una por POST. */
@@ -30,7 +37,7 @@ const rechazo = (code: number) => ({ status: 400, body: { error: { code, message
 const { avisarOficina, parametrosAvisoOficina, esFueraDeVentana } = await import('./aviso_oficina');
 
 beforeEach(() => {
-  salientes.length = 0; respuestas = [];
+  salientes.length = 0; respuestas = []; estadoVentana = 'desconocida';
   encolar.mockClear(); logger.error.mockReset(); logger.info.mockReset();
   vi.stubGlobal('fetch', fetchSpy);
   process.env.WHATSAPP_ACCESS_TOKEN = 'tok'; process.env.WHATSAPP_PHONE_NUMBER_ID = '1';
@@ -107,5 +114,21 @@ describe('parametrosAvisoOficina', () => {
     expect(esFueraDeVentana(131047)).toBe(true);
     expect(esFueraDeVentana(130429)).toBe(false);
     expect(esFueraDeVentana(undefined)).toBe(false);
+  });
+});
+
+describe('con el registro de ventana (0368)', () => {
+  it('ventana CERRADA: sale la plantilla directa, sin el POST de texto que Meta rechazaría', async () => {
+    estadoVentana = 'cerrada';
+    const r = await avisarOficina('5219990000001', 'texto largo', { parametros: params });
+    expect(r).toMatchObject({ ok: true, via: 'plantilla' });
+    expect(salientes.map((x) => x.type)).toEqual(['template']);
+    expect(salientes[0].template?.name).toBe('aviso_operacion_v1');
+  });
+  it('ventana ABIERTA: un solo POST de texto', async () => {
+    estadoVentana = 'abierta';
+    const r = await avisarOficina('5219990000001', 'texto largo', { parametros: params });
+    expect(r).toMatchObject({ ok: true, via: 'texto' });
+    expect(salientes.map((x) => x.type)).toEqual(['text']);
   });
 });

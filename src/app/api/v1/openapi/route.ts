@@ -51,6 +51,11 @@ import {
   errorApi,
 } from '../_comun';
 
+import {
+  MAX_CONCEPTOS, MAX_VIAJES, MAX_PDF_BYTES, MAX_DIAS_PERIODO, MONEDAS, TIPOS_CONCEPTO,
+  ESTADOS as ESTADOS_LIQ_EXTERNA,
+} from '@/lib/likida/liquidacion_externa/esquema';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -601,6 +606,86 @@ function documento(servidor: string) {
       },
       schemas: {
         Error: cuerpoError,
+        // ── 0370: la liquidación que calculó el SAP/TMS del cliente ────────
+        LiquidacionExternaAlta: {
+          type: 'object',
+          description:
+            'La liquidación YA CALCULADA en tu SAP/TMS. Likida no la recalcula: solo verifica que `total` sea la suma de tus renglones (percepciones − deducciones, en centavos) y la entrega al chofer por WhatsApp. '
+            + 'Todo campo que el contrato no declare es 400 (un `totl` no se vuelve una liquidación sin total), y mandar la flota en el cuerpo también es 400: la flota sale de la credencial.',
+          properties: {
+            claveExterna: { type: 'string', maxLength: 120, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/#-]*$', description: 'El folio de ESTA liquidación en tu sistema. Es la llave de idempotencia.' },
+            sistemaOrigen: { type: 'string', maxLength: 40, description: 'Cómo se llama tu sistema (p. ej. `SAP`); aparece en el mensaje y en el PDF.' },
+            operador: {
+              type: 'object',
+              description: 'Al menos UNO de los tres. Si mandas varios, TODOS tienen que apuntar al mismo chofer, o es 400: no se adivina a quién va un pago.',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                telefono: { type: 'string', description: 'Celular mexicano; se normaliza a `52` + 10 dígitos.' },
+                numeroEmpleado: { type: 'string', maxLength: 40 },
+              },
+            },
+            viajes: { type: 'array', minItems: 1, maxItems: MAX_VIAJES, items: { type: 'string', maxLength: 40 }, description: 'Folios de los viajes que cubre. No tienen que existir en Likida (`viajesEnLikida` te dice cuántos sí).' },
+            periodo: {
+              type: 'object',
+              properties: { desde: { type: 'string', format: 'date' }, hasta: { type: 'string', format: 'date' } },
+              required: ['desde', 'hasta'],
+              description: `\`AAAA-MM-DD\`, sin hora; de a lo más ${MAX_DIAS_PERIODO} días.`,
+            },
+            conceptos: {
+              type: 'array', minItems: 1, maxItems: MAX_CONCEPTOS,
+              items: {
+                type: 'object',
+                properties: {
+                  clave: { type: 'string', maxLength: 40 },
+                  descripcion: { type: 'string', maxLength: 120 },
+                  tipo: { type: 'string', enum: [...TIPOS_CONCEPTO], description: 'El signo lo da el tipo; el monto va SIEMPRE positivo.' },
+                  monto: { type: 'number', minimum: 0, maximum: 9999999.99, description: 'Hasta dos decimales (más se rechaza, no se redondea). Un renglón sin monto NO es un renglón de cero: manda 0 si de verdad es cero.' },
+                },
+                required: ['descripcion', 'tipo', 'monto'],
+              },
+            },
+            total: { type: 'number', minimum: -9999999.99, maximum: 9999999.99, description: 'Puede ser negativo (el chofer debe). Tiene que cuadrar con los conceptos al centavo.' },
+            moneda: { type: 'string', enum: [...MONEDAS] },
+            pdf: {
+              type: 'object',
+              description: 'OPCIONAL. Sin él, Likida genera un PDF con tus cifras. Con él, se entrega EL TUYO, tal cual. Se comprueba por sus bytes (`%PDF-`, `%%EOF`, sin JavaScript ni archivos incrustados).',
+              properties: {
+                base64: { type: 'string', description: `Base64 estándar; hasta ${MAX_PDF_BYTES} bytes ya decodificado.` },
+                nombre: { type: 'string', maxLength: 80 },
+              },
+              required: ['base64'],
+            },
+          },
+          required: ['claveExterna', 'operador', 'viajes', 'periodo', 'conceptos', 'total', 'moneda'],
+        },
+        LiquidacionExterna: {
+          type: 'object',
+          description: 'Una liquidación externa y su estado de ENTREGA. Las cifras son las de tu sistema, tal cual llegaron.',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            claveExterna: { type: 'string' },
+            sistemaOrigen: anulable('string', 'El que mandaste.'),
+            operador: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, nombre: anulable('string', 'Nombre del chofer.') } },
+            viajes: { type: 'array', items: { type: 'string' } },
+            viajesEnLikida: { type: 'integer', description: 'Cuántos de esos folios existen como viaje en Likida. Menos que `viajes.length` NO es un error.' },
+            periodo: { type: 'object', properties: { desde: { type: 'string', format: 'date' }, hasta: { type: 'string', format: 'date' } } },
+            conceptos: { type: 'array', items: { type: 'object' } },
+            total: { type: 'number' },
+            moneda: { type: 'string', enum: [...MONEDAS] },
+            pdfOrigen: { type: 'string', enum: ['adjunto', 'generado'] },
+            estado: {
+              type: 'string', enum: [...ESTADOS_LIQ_EXTERNA],
+              description: '`pendiente` (recibida, aún sin encolar) → `en_cola` (en la cola de WhatsApp, que reintenta sola) → `enviada` (WhatsApp aceptó el mensaje) → `acusada` (el chofer apretó un botón). `fallida`: no se pudo entregar; se reintenta desde el panel.',
+            },
+            via: anulable('string', '`sesion` (dentro de las 24 h del último mensaje del chofer) o `plantilla` (fuera de ellas, requiere plantilla aprobada en Meta). `null` = todavía no se sabe.'),
+            fallo: anulable('object', 'Por qué falló o se está reintentando: `{ codigo, texto }`. El cuerpo crudo del error de WhatsApp NO cruza.'),
+            enviadaEn: anulable('string', 'Cuándo aceptó WhatsApp el mensaje.'),
+            respuestaChofer: anulable('string', '`recibida` o `no_coincide`. `null` = no ha contestado. **`no_coincide` pide que una persona de tu oficina revise la liquidación con el chofer.**'),
+            respuestaEn: anulable('string', 'Cuándo contestó.'),
+            creadaEn: { type: 'string', format: 'date-time' },
+          },
+          required: ['id', 'claveExterna', 'operador', 'viajes', 'viajesEnLikida', 'periodo', 'conceptos', 'total', 'moneda', 'pdfOrigen', 'estado', 'creadaEn'],
+        },
         // ── BLOQ-6 (mig. 0299): el CIERRE de un viaje, con su firma ────────
         Liquidacion: {
           type: 'object',
@@ -675,6 +760,48 @@ function documento(servidor: string) {
             avisosEnviados: { type: 'integer' },
           },
           required: ['id', 'folio', 'origen', 'destino', 'estatus', 'fechaInicio', 'operador', 'intakePendientes', 'avisadoEn', 'aceptadoEn', 'escaladoEn', 'avisosEnviados'],
+        },
+        Hito: {
+          type: 'object',
+          description: 'Un hito del viaje que el Agente 5 «Conductor» pide al chofer por WhatsApp. La hora es la del MENSAJE del chofer (Meta), no telemetría del evento físico.',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            viajeId: { type: 'string', format: 'uuid' },
+            folio: { type: 'string', nullable: true },
+            tipo: { type: 'string', enum: ['llegada_carga', 'salida_carga', 'llegada_descarga', 'salida_descarga', 'regreso'] },
+            estado: { type: 'string', enum: ['esperado', 'recibido', 'validado', 'omitido', 'escalado'], description: '`omitido` = se infirió por un hito posterior y no trae hora; `escalado` = se agotaron los recordatorios y sigue pendiente.' },
+            fuente: { type: 'string', nullable: true, enum: ['texto', 'boton', 'ubicacion', 'foto', 'sistema', null] },
+            interpretacion: { type: 'string', nullable: true, enum: ['regla', 'boton', 'llm', 'ubicacion', 'foto', 'sistema', null] },
+            horaMensaje: { type: 'string', format: 'date-time', nullable: true, description: 'Cuándo escribió el chofer, según Meta.' },
+            recibidoEn: { type: 'string', format: 'date-time', nullable: true, description: 'Cuándo lo recibió Likida.' },
+            validadoEn: { type: 'string', format: 'date-time', nullable: true },
+            validadoPor: { type: 'string', nullable: true, enum: ['oficina', 'gps', 'sistema', null] },
+            contacto: { type: 'object', nullable: true, properties: { nombre: { type: 'string' }, area: { type: 'string', nullable: true } }, description: 'Con quién se reportó en el andén (datos de un tercero; se retiran con la retención y la cancelación ARCO).' },
+            sinContacto: { type: 'boolean', description: 'El chofer dijo que no tiene contacto.' },
+            coordenadas: { type: 'object', nullable: true, properties: { lat: { type: 'number' }, lng: { type: 'number' } } },
+            omitidoMotivo: { type: 'string', nullable: true },
+            recordatoriosEnviados: { type: 'integer' },
+            escaladoEn: { type: 'string', format: 'date-time', nullable: true },
+            escalacionNivel: { type: 'integer', description: '0 = no escalado; 1 = patio responsable; 2 = jefe general.' },
+            atendidaEn: { type: 'string', format: 'date-time', nullable: true, description: 'Cuando el jefe tocó «Ya lo atiendo».' },
+            correcciones: { type: 'integer' },
+            ciclo: { type: 'integer', description: 'Sube cada vez que el hito se retira o se pospone.' },
+          },
+          required: ['id', 'viajeId', 'folio', 'tipo', 'estado', 'fuente', 'interpretacion', 'horaMensaje', 'recibidoEn', 'validadoEn', 'validadoPor', 'contacto', 'sinContacto', 'coordenadas', 'omitidoMotivo', 'recordatoriosEnviados', 'escaladoEn', 'escalacionNivel', 'atendidaEn', 'correcciones', 'ciclo'],
+        },
+        HitoEvento: {
+          type: 'object',
+          description: 'Un evento del feed incremental. Sin datos personales: ids, estados y fuentes.',
+          properties: {
+            id: { type: 'integer', description: 'Solo crece. Guarda el último que procesaste y pídelo en `?despues=`.' },
+            viajeId: { type: 'string', format: 'uuid' },
+            hitoId: { type: 'string', format: 'uuid' },
+            tipoHito: { type: 'string', enum: ['llegada_carga', 'salida_carga', 'llegada_descarga', 'salida_descarga', 'regreso'] },
+            evento: { type: 'string', enum: ['solicitado', 'recibido', 'validado', 'omitido', 'escalado', 'corregido', 'pospuesto', 'atendido', 'contacto'] },
+            detalle: { type: 'object' },
+            creadoEn: { type: 'string', format: 'date-time' },
+          },
+          required: ['id', 'viajeId', 'hitoId', 'tipoHito', 'evento', 'detalle', 'creadoEn'],
         },
         ViajeDetalle: {
           type: 'object',
@@ -1156,6 +1283,390 @@ function documento(servidor: string) {
             },
             ...respuestasError,
           },
+        },
+      },
+      '/v1/liquidaciones-externas': {
+        post: {
+          operationId: 'crearLiquidacionExterna',
+          'x-likida-area': 'administracion',
+          summary: 'Entrega al chofer, por WhatsApp, una liquidación que ya calculó tu SAP/TMS.',
+          description:
+            'Requiere el área `administracion`: termina en el teléfono de una persona con la firma de su patrón.\n\n'
+            + 'LIKIDA NO RECALCULA TU LIQUIDACIÓN. Es el modo opuesto al de fotos: aquí la cifra es tuya. Lo único que se verifica es que `total` sea la suma de tus conceptos; si no cuadra es 400 con la diferencia, porque un total que no coincide con los renglones que el chofer lee es exactamente el documento que genera una queja de nómina.\n\n'
+            + 'IDEMPOTENCIA POR `claveExterna`. El mismo folio con el MISMO contenido es 200 `idempotente: true` (un reintento tras un timeout). El mismo folio con OTRO contenido es 409 `conflicto`: NO se sobrescribe, porque el chofer pudo haber visto la primera; una corrección se manda con una `claveExterna` nueva. `Idempotency-Key` es opcional aquí: si no la mandas se deriva de la clave externa.\n\n'
+            + 'EL 201 SIGNIFICA «RECIBIDA», NO «ENTREGADA». La entrega es asíncrona (cola de WhatsApp con reintentos): consulta `estado` con GET, o míralo en el tablero de Liquidación del panel. Un fallo de entrega NO convierte la recepción en error.\n\n'
+            + 'FUERA DE LAS 24 H. WhatsApp solo deja iniciar una conversación con una plantilla aprobada. Likida prueba primero el mensaje de sesión y, si WhatsApp contesta «ventana cerrada», cae a la plantilla `liquidacion_externa_v1` (ver `docs/operacion/liquidacion-externa.md`): hasta que esté aprobada en Meta, esas liquidaciones quedan `fallida` con `fallo.codigo = plantilla_no_aprobada`.\n\n'
+            + 'LO QUE NO SALE EN LA RESPUESTA: ni la ruta del PDF, ni URLs firmadas, ni el teléfono del chofer.',
+          tags: ['liquidaciones', 'dinero'],
+          parameters: [{
+            name: CABECERA_IDEMPOTENCIA, in: 'header', required: false,
+            description: `Opcional. Si la mandas, repítela EXACTA al reintentar (entre ${LARGO_MIN_LLAVE} y ${LARGO_MAX_LLAVE} caracteres ASCII imprimibles).`,
+            schema: { type: 'string', minLength: LARGO_MIN_LLAVE, maxLength: LARGO_MAX_LLAVE },
+          }],
+          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/LiquidacionExternaAlta' } } } },
+          responses: {
+            '201': seCreo('La liquidación', { $ref: '#/components/schemas/LiquidacionExterna' }),
+            '200': yaExistia('La liquidación', { $ref: '#/components/schemas/LiquidacionExterna' }),
+            ...respuestasError,
+            '409': conflictoNatural('una liquidación', '`claveExterna`'),
+          },
+        },
+        get: {
+          operationId: 'listarLiquidacionesExternas',
+          'x-likida-area': 'dinero',
+          summary: 'Las liquidaciones externas y su estado de entrega.',
+          description:
+            'Área `dinero`. De la más nueva a la más vieja, SOLO por cursor (`despues`): `desplazamiento` es 400 en esta ruta. El filtro aplicado viaja en `filtro`.\n\n'
+            + '`respuestaChofer=no_coincide` trae las que el chofer marcó como incorrectas: son las que piden a una persona.',
+          tags: ['liquidaciones', 'dinero'],
+          parameters: [
+            parametrosPagina[0], ...parametrosCursor,
+            { name: 'estado', in: 'query', required: false, description: 'Un valor desconocido es 400.', schema: { type: 'string', enum: [...ESTADOS_LIQ_EXTERNA] } },
+            { name: 'respuestaChofer', in: 'query', required: false, schema: { type: 'string', enum: ['recibida', 'no_coincide'] } },
+            { name: 'operadorId', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+            { name: 'claveExterna', in: 'query', required: false, schema: { type: 'string', maxLength: 120 } },
+            { name: 'desde', in: 'query', required: false, description: 'Día de México (`AAAA-MM-DD`) de carga, inclusivo.', schema: { type: 'string', format: 'date' } },
+            { name: 'hasta', in: 'query', required: false, description: 'Día de México (`AAAA-MM-DD`) de carga, inclusivo.', schema: { type: 'string', format: 'date' } },
+          ],
+          responses: {
+            '200': {
+              description: 'Página de liquidaciones externas.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      datos: { type: 'array', items: { $ref: '#/components/schemas/LiquidacionExterna' } },
+                      pagina: paginaSobre,
+                      filtro: { type: 'object', description: 'Lo que se aplicó (cada campo `null` = sin filtrar por él).' },
+                    },
+                    required: ['datos', 'pagina', 'filtro'],
+                  },
+                },
+              },
+            },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/liquidaciones-externas/acuses': {
+        get: {
+          operationId: 'listarAcusesLiquidacionesExternas',
+          'x-likida-area': 'dinero',
+          summary: 'Lo que contestaron los choferes (Recibida / No coincide), para registrarlo en tu SAP/TMS.',
+          description:
+            'Área `dinero`. SALIDA POR PULL hacia tu sistema: devuelve solo los acuses que tu sistema AÚN NO CONFIRMÓ haber leído, del más viejo al más nuevo, paginados por cursor (`despues`; `desplazamiento` es 400).\n\n'
+            + 'CICLO: 1) lees esta lista, 2) registras cada acuse en tu sistema, 3) confirmas los `id` con `POST /v1/liquidaciones-externas/acuses/confirmar`. Lo no confirmado vuelve a salir en la siguiente lectura (una caída a mitad de tu proceso no pierde ninguno). Si el chofer cambia su respuesta, el acuse nuevo vuelve a salir.',
+          tags: ['liquidaciones', 'dinero'],
+          parameters: [parametrosPagina[0], ...parametrosCursor],
+          responses: {
+            '200': {
+              description: 'Página de acuses por leer.',
+              content: { 'application/json': { schema: { type: 'object', properties: {
+                datos: { type: 'array', items: { type: 'object', properties: {
+                  id: { type: 'string', format: 'uuid', description: 'El id de Likida: es el que se manda a `acuses/confirmar`.' },
+                  claveExterna: { type: 'string' }, sistemaOrigen: { type: 'string', nullable: true },
+                  operador: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, nombre: { type: 'string', nullable: true } } },
+                  respuestaChofer: { type: 'string', enum: ['recibida', 'no_coincide'] },
+                  respuestaEn: { type: 'string', format: 'date-time' },
+                  total: { type: 'number' }, moneda: { type: 'string', enum: ['MXN', 'USD'] },
+                }, required: ['id', 'claveExterna', 'respuestaChofer', 'respuestaEn'] } },
+                pagina: paginaSobre,
+              }, required: ['datos', 'pagina'] } } },
+            },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/liquidaciones-externas/acuses/confirmar': {
+        post: {
+          operationId: 'confirmarAcusesLiquidacionesExternas',
+          'x-likida-area': 'administracion',
+          summary: 'Confirma que tu sistema ya leyó estos acuses (deja de devolverlos).',
+          description:
+            'Área `administracion`. Cuerpo `{ "ids": [uuid, …] }` (1 a 200). IDEMPOTENTE: repetirlo deja las ya confirmadas en `yaConfirmadas`. `noAplican` agrupa lo que no existe en tu flota o aún no tiene acuse del chofer (no se distingue cuál para no revelar liquidaciones ajenas).',
+          tags: ['liquidaciones', 'dinero'],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { ids: { type: 'array', minItems: 1, maxItems: 200, items: { type: 'string', format: 'uuid' } } }, required: ['ids'], additionalProperties: false } } } },
+          responses: {
+            '200': { description: 'Qué pasó con cada id.', content: { 'application/json': { schema: { type: 'object', properties: { datos: { type: 'object', properties: {
+              confirmadas: { type: 'array', items: { type: 'string', format: 'uuid' } },
+              yaConfirmadas: { type: 'array', items: { type: 'string', format: 'uuid' } },
+              noAplican: { type: 'array', items: { type: 'string', format: 'uuid' } },
+            }, required: ['confirmadas', 'yaConfirmadas', 'noAplican'] } }, required: ['datos'] } } } },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/liquidaciones-externas/exportacion': {
+        get: {
+          operationId: 'exportarLiquidacionesExternas',
+          'x-likida-area': 'dinero',
+          summary: 'Archivo CSV/TSV configurable para tu SAP/TMS (columnas, separador, decimal, fechas).',
+          description:
+            'Área `dinero`. Devuelve un archivo, no JSON. Layout por parámetros: `columnas` (lista ordenada de un catálogo cerrado), `granularidad` (`liquidacion` = una fila por liquidación; `concepto` = una fila por renglón, con `conceptoMontoFirmado`: deducciones en negativo), `separador` (`coma`|`punto_y_coma`|`tab`), `decimal` (`punto`|`coma`; con `coma` el separador no puede ser `coma`), `fechas` (`iso`|`dmy`|`sap` = AAAAMMDD), `bom=1` (marca UTF-8 para Excel) y `encabezado=0`. Los mismos filtros del listado y `sinConfirmar=1` (solo acuses que tu sistema aún no confirmó).\n\n'
+            + 'COMPLETO O NADA: si el filtro trae más de 900 liquidaciones responde `lectura_incompleta` y pide acotar el rango. Las celdas de texto que empiezan con `=`, `+`, `-`, `@` se neutralizan (inyección de fórmulas); nunca sale el error crudo de entrega, solo `falloCodigo`.',
+          tags: ['liquidaciones', 'dinero'],
+          parameters: [
+            { name: 'columnas', in: 'query', required: false, description: 'Nombres separados por coma, p. ej. `claveExterna,total,moneda,respuestaChofer`. Un nombre desconocido es 400 y se listan los válidos.', schema: { type: 'string' } },
+            { name: 'granularidad', in: 'query', required: false, schema: { type: 'string', enum: ['liquidacion', 'concepto'], default: 'liquidacion' } },
+            { name: 'separador', in: 'query', required: false, schema: { type: 'string', enum: ['coma', 'punto_y_coma', 'tab'], default: 'coma' } },
+            { name: 'decimal', in: 'query', required: false, schema: { type: 'string', enum: ['punto', 'coma'], default: 'punto' } },
+            { name: 'fechas', in: 'query', required: false, schema: { type: 'string', enum: ['iso', 'dmy', 'sap'], default: 'iso' } },
+            { name: 'bom', in: 'query', required: false, schema: { type: 'string', enum: ['0', '1'], default: '0' } },
+            { name: 'encabezado', in: 'query', required: false, schema: { type: 'string', enum: ['0', '1'], default: '1' } },
+            { name: 'sinConfirmar', in: 'query', required: false, schema: { type: 'string', enum: ['0', '1'] } },
+            { name: 'estado', in: 'query', required: false, schema: { type: 'string', enum: [...ESTADOS_LIQ_EXTERNA] } },
+            { name: 'respuestaChofer', in: 'query', required: false, schema: { type: 'string', enum: ['recibida', 'no_coincide'] } },
+            { name: 'operadorId', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+            { name: 'claveExterna', in: 'query', required: false, schema: { type: 'string', maxLength: 120 } },
+            { name: 'desde', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
+            { name: 'hasta', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
+          ],
+          responses: {
+            '200': { description: 'El archivo (`text/csv` o `text/tab-separated-values`, UTF-8). `X-Likida-Filas` trae cuántas liquidaciones incluye.', content: { 'text/csv': { schema: { type: 'string' } } } },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/peajes/desgloses': {
+        get: {
+          operationId: 'listarDesglosesPeaje',
+          'x-likida-area': 'dinero',
+          summary: 'Los desgloses del proveedor de peaje de la flota y su conciliación medida.',
+          description: 'Área `dinero`. Del más nuevo al más viejo; los ANULADOS no salen. Cada uno trae cuántas líneas cuadran, no cuadran o no tienen contraparte (conteos medidos, nunca un 0 inventado). El `id` es el que se pasa a `GET /v1/peajes/exportacion`. `limite` de 1 a 50; `desplazamiento` es 400.',
+          tags: ['peajes', 'dinero'],
+          parameters: [parametrosPagina[0]],
+          responses: {
+            '200': {
+              description: 'Desgloses vigentes.',
+              content: { 'application/json': { schema: { type: 'object', properties: {
+                datos: { type: 'array', items: { type: 'object', properties: {
+                  id: { type: 'string', format: 'uuid' }, proveedor: { type: 'string', nullable: true }, archivo: { type: 'string', nullable: true },
+                  periodo: { type: 'object', properties: { desde: { type: 'string', format: 'date', nullable: true }, hasta: { type: 'string', format: 'date', nullable: true } } },
+                  recibidoEn: { type: 'string', format: 'date-time' },
+                  resumen: { type: 'object', properties: { total: { type: 'integer' }, cuadra: { type: 'integer' }, noCuadra: { type: 'integer' }, sinContraparte: { type: 'integer' }, pctCuadra: { type: 'integer', nullable: true } } },
+                }, required: ['id', 'recibidoEn', 'resumen'] } },
+                pagina: paginaSobre,
+              }, required: ['datos', 'pagina'] } } },
+            },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/peajes/desgloses/{id}/anular': {
+        post: {
+          operationId: 'anularDesglosePeaje',
+          'x-likida-area': 'administracion',
+          summary: 'Anula un desglose subido por error (no se borra: queda de constancia).',
+          description: 'Área `administracion`. Cuerpo `{ "motivo": "…" }` (1 a 500 caracteres, obligatorio). El desglose deja de aparecer, de contar en la bitácora RMF 9.1.8, de exportarse y de avisar a la oficina, y su archivo libera la huella para que el correcto pueda volver a mandarse. IDEMPOTENTE (`yaAnulado: true`). «No existe» y «no es de tu flota» contestan 404.',
+          tags: ['peajes', 'dinero'],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { motivo: { type: 'string', minLength: 1, maxLength: 500 } }, required: ['motivo'], additionalProperties: false } } } },
+          responses: {
+            '200': { description: 'Anulado.', content: { 'application/json': { schema: { type: 'object', properties: { datos: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, anulado: { type: 'boolean' }, yaAnulado: { type: 'boolean' } }, required: ['id', 'anulado', 'yaAnulado'] } }, required: ['datos'] } } } },
+            '404': noEncontrado,
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/peajes/exportacion': {
+        get: {
+          operationId: 'exportarBitacoraPeajes',
+          'x-likida-area': 'dinero',
+          summary: 'La bitácora conciliada de un desglose, en el layout que pida tu SAP/ERP.',
+          description: 'Área `dinero`. Devuelve un archivo, no JSON. `desglose` (uuid, de `GET /v1/peajes/desgloses`) es obligatorio; un desglose anulado o de otra flota es 404. Layout: `columnas` (catálogo cerrado), `separador` (`coma`|`punto_y_coma`|`tab`), `decimal` (`punto`|`coma`; con `coma` el separador no puede ser `coma`), `fechas` (`iso`|`dmy`|`sap`), `bom`, `encabezado`. Cada fila trae `estado` (cuadra / sin respaldo / por verificar), `motivo` y `explicacion`: «sin respaldo» es un hecho sobre los datos de Likida, NO una acusación (la leyenda viaja en `X-Likida-Leyenda`, URL-encoded).',
+          tags: ['peajes', 'dinero'],
+          parameters: [
+            { name: 'desglose', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } },
+            { name: 'columnas', in: 'query', required: false, description: 'Nombres separados por coma. Un nombre desconocido es 400 y se listan los válidos.', schema: { type: 'string' } },
+            { name: 'separador', in: 'query', required: false, schema: { type: 'string', enum: ['coma', 'punto_y_coma', 'tab'], default: 'coma' } },
+            { name: 'decimal', in: 'query', required: false, schema: { type: 'string', enum: ['punto', 'coma'], default: 'punto' } },
+            { name: 'fechas', in: 'query', required: false, schema: { type: 'string', enum: ['iso', 'dmy', 'sap'], default: 'iso' } },
+            { name: 'bom', in: 'query', required: false, schema: { type: 'string', enum: ['0', '1'], default: '0' } },
+            { name: 'encabezado', in: 'query', required: false, schema: { type: 'string', enum: ['0', '1'], default: '1' } },
+          ],
+          responses: {
+            '200': { description: 'El archivo (`text/csv` o `text/tab-separated-values`, UTF-8). `X-Likida-Filas` trae cuántas líneas incluye.', content: { 'text/csv': { schema: { type: 'string' } } } },
+            '404': noEncontrado,
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/hitos': {
+        get: {
+          operationId: 'listarHitos',
+          'x-likida-area': 'operacion',
+          summary: 'Los hitos del viaje (llegada/salida de carga y descarga, regreso) que el Agente Conductor pide por WhatsApp.',
+          description:
+            'Área `operacion`. Más reciente primero. `desde` (fecha-hora ISO) trae solo lo actualizado desde entonces: sincronización incremental; para un feed sin huecos usa `/v1/hitos/eventos`.\n\n'
+            + 'LA HORA ES LA DEL MENSAJE del chofer (`horaMensaje`), no la del evento físico. Aquí NO sale el texto que escribió el chofer.',
+          tags: ['hitos'],
+          parameters: [
+            ...parametrosPagina,
+            { name: 'viajeId', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+            { name: 'folio', in: 'query', required: false, schema: { type: 'string', maxLength: 64 } },
+            { name: 'estado', in: 'query', required: false, schema: { type: 'string', enum: ['esperado', 'recibido', 'validado', 'omitido', 'escalado'] } },
+            { name: 'tipo', in: 'query', required: false, schema: { type: 'string', enum: ['llegada_carga', 'salida_carga', 'llegada_descarga', 'salida_descarga', 'regreso'] } },
+            { name: 'desde', in: 'query', required: false, schema: { type: 'string', format: 'date-time' } },
+          ],
+          responses: {
+            '200': {
+              description: 'Página de hitos.',
+              content: { 'application/json': { schema: { type: 'object', properties: { datos: { type: 'array', items: { $ref: '#/components/schemas/Hito' } }, pagina: paginaSobre }, required: ['datos', 'pagina'] } } },
+            },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/hitos/eventos': {
+        get: {
+          operationId: 'listarEventosDeHitos',
+          'x-likida-area': 'operacion',
+          summary: 'Feed incremental de eventos de hitos.',
+          description: 'Área `operacion`. Del más viejo al más nuevo, con id creciente: pide `?despues=<último id que procesaste>`. `pagina.siguiente` es el id con el que seguir (si no hay eventos nuevos, el mismo que mandaste). Es PULL: no hay webhook saliente.',
+          tags: ['hitos'],
+          parameters: [
+            { name: 'despues', in: 'query', required: false, schema: { type: 'integer', minimum: 0 } },
+            { name: 'limite', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 200, default: 50 } },
+          ],
+          responses: {
+            '200': {
+              description: 'Eventos nuevos.',
+              content: { 'application/json': { schema: { type: 'object', properties: { datos: { type: 'array', items: { $ref: '#/components/schemas/HitoEvento' } }, pagina: { type: 'object', properties: { limite: { type: 'integer' }, devueltos: { type: 'integer' }, hayMas: { type: 'boolean' }, siguiente: { type: 'string' } } } }, required: ['datos', 'pagina'] } } },
+            },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/hitos/{id}/validar': {
+        post: {
+          operationId: 'validarHito',
+          'x-likida-area': 'administracion',
+          summary: 'Marca un hito como validado (confirmado por tu sistema u oficina).',
+          description: 'Área `administracion` y SOLO con llave de API (la bitácora firma «llave-api:<prefijo>»). Es la misma acción que el botón «Validar» del tablero del Agente Conductor. `motivo` es obligatorio (5 a 200 caracteres) y queda en la bitácora con la llave y la hora, en la misma transacción que el cambio. Solo se valida un hito ya reportado por el chofer (`recibido`): uno `esperado`, `omitido` o `escalado` es 409. Un reintento sobre uno ya validado es 200 con `idempotente: true`. Validar no mueve la hora del mensaje del chofer. «No existe» y «no es de tu flota» contestan lo mismo (404).',
+          tags: ['hitos'],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'El id del hito (de `GET /v1/hitos`).' }],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { type: 'object', properties: { motivo: { type: 'string', minLength: 5, maxLength: 200 } }, required: ['motivo'], additionalProperties: false } } },
+          },
+          responses: {
+            '200': { description: 'El hito quedó validado (o ya lo estaba).', content: { 'application/json': { schema: { type: 'object' } } } },
+            '404': noEncontrado,
+            '409': { description: 'El hito no está en un estado validable, o cambió entre la lectura y la acción.', content: { 'application/json': { schema: { type: 'object' } } } },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/viajes/{id}/citas': {
+        put: {
+          operationId: 'fijarCitasDeViaje',
+          'x-likida-area': 'administracion',
+          summary: 'La cita y la ETA de origen y destino de un viaje.',
+          description: 'Área `administracion`. Le dice al Agente Conductor CUÁNDO pedir cada hito. Todas las llaves son opcionales (al menos una); `null` borra el valor. Fecha-hora ISO CON zona horaria. PUT es idempotente. «No existe» y «no es de tu flota» contestan lo mismo (404).',
+          tags: ['hitos', 'viajes'],
+          parameters: [parametroIdViaje],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { type: 'object', properties: {
+              citaOrigen: { type: 'string', format: 'date-time', nullable: true },
+              citaDestino: { type: 'string', format: 'date-time', nullable: true },
+              etaOrigen: { type: 'string', format: 'date-time', nullable: true },
+              etaDestino: { type: 'string', format: 'date-time', nullable: true },
+            }, additionalProperties: false } } },
+          },
+          responses: {
+            '200': { description: 'Lo guardado.', content: { 'application/json': { schema: { type: 'object' } } } },
+            '404': noEncontrado,
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/viajes/{id}/sitios': {
+        put: {
+          operationId: 'asignarSitiosDeViaje',
+          'x-likida-area': 'administracion',
+          summary: 'Qué sitio espera cada hito de un viaje: el de carga y el de descarga.',
+          description: 'Área `administracion`. Cada lado es el CÓDIGO del sitio (el del sistema del cliente) o su id, resuelto DENTRO de la flota de la credencial; `null` desasigna. Sin sitio asignado, las llegadas del viaje quedan «sin dato» al validarlas contra la ubicación (nunca «no coincide»). PUT es idempotente. «No existe» y «no es de tu flota» contestan lo mismo (404).',
+          tags: ['hitos', 'viajes'],
+          parameters: [parametroIdViaje],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { type: 'object', properties: {
+              origen: { type: 'string', nullable: true, maxLength: 40, description: 'Sitio de CARGA (código o uuid).' },
+              destino: { type: 'string', nullable: true, maxLength: 40, description: 'Sitio de DESCARGA (código o uuid).' },
+            }, additionalProperties: false } } },
+          },
+          responses: {
+            '200': { description: 'Lo guardado.', content: { 'application/json': { schema: { type: 'object' } } } },
+            '404': noEncontrado,
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/sitios': {
+        get: {
+          operationId: 'listarSitios',
+          'x-likida-area': 'operacion',
+          summary: 'El catálogo de sitios (clientes, plantas y andenes) con su centro y su radio.',
+          description: 'Área `operacion`. Hasta 200 sitios; `hayMas` dice si faltan. `fuente` es de dónde salió la coordenada: `manual` (captura humana) o `csv` (importación). Ninguna coordenada se calcula ni se inventa.',
+          tags: ['hitos'],
+          parameters: [
+            { name: 'q', in: 'query', required: false, schema: { type: 'string', maxLength: 60 } },
+            { name: 'tipo', in: 'query', required: false, schema: { type: 'string', enum: ['cliente', 'planta', 'anden', 'patio', 'punto_interes'] } },
+          ],
+          responses: { '200': { description: 'Sitios de la flota.', content: { 'application/json': { schema: { type: 'object' } } } }, ...respuestasError },
+        },
+      },
+      '/v1/evidencias/{id}': {
+        get: {
+          operationId: 'abrirEvidenciaDeHito',
+          'x-likida-area': 'operacion',
+          summary: 'Abre la foto de evidencia de un hito (sello, andén, sello de recibido).',
+          description: 'Área `operacion`. Contesta 302 a una URL FIRMADA de 10 minutos (el bucket es privado): no sigas el enlace para guardarlo, vuelve a pedirlo. La evidencia se busca dentro de la flota de la credencial; «no existe», «es de otra flota» y «ya se purgó por retención» contestan lo mismo (404).',
+          tags: ['hitos'],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: { '302': { description: 'Redirige a la URL firmada.' }, '404': noEncontrado, ...respuestasError },
+        },
+      },
+      '/v1/estadias': {
+        get: {
+          operationId: 'listarEstadias',
+          'x-likida-area': 'dinero',
+          summary: 'Las estadías en andén (llegada→salida de cada carga y descarga) para el cobro de estadías.',
+          description: 'Área `dinero` (trae el monto propuesto). `desde`/`hasta`: días de México inclusive (por defecto los últimos 7, máximo 93). `formato=csv` devuelve UTF-8 con BOM listo para Excel. Cada fila lleva la hora EXACTA del mensaje del chofer (o la declarada por la oficina) y de dónde salió, si la ubicación la validó y cuántas fotos la respaldan. El monto es una PROPUESTA: sin horas libres pactadas no hay «excedido», sin tarifa no hay monto, y una parada que sigue corriendo (`en_curso`) no es cobrable. Si hay más viajes de los que una lectura trae, `truncada` es `true` (y el encabezado `X-Estadias-Truncada` en el CSV).',
+          tags: ['hitos', 'dinero'],
+          parameters: [
+            { name: 'desde', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
+            { name: 'hasta', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
+            { name: 'formato', in: 'query', required: false, schema: { type: 'string', enum: ['json', 'csv'], default: 'json' } },
+            { name: 'terminalId', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+            { name: 'clienteId', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+            { name: 'operadorId', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+          ],
+          responses: {
+            '200': { description: 'Estadías del periodo.', content: { 'application/json': { schema: { type: 'object' } }, 'text/csv': { schema: { type: 'string' } } } },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/conductor/config': {
+        get: {
+          operationId: 'obtenerConfigConductor',
+          'x-likida-area': 'administracion',
+          summary: 'La estrategia del Agente Conductor de la flota y sus contactos de escalamiento.',
+          description: 'Área `administracion` (trae teléfonos de personas). Sin fila guardada, los defaults: escalera 0/+15/+30/+45 min, escalación a los 90, ventana 06:00–22:00.',
+          tags: ['hitos'],
+          responses: { '200': { description: 'Config y contactos.', content: { 'application/json': { schema: { type: 'object' } } } }, ...respuestasError },
+        },
+        put: {
+          operationId: 'guardarConfigConductor',
+          'x-likida-area': 'administracion',
+          summary: 'Cambia la estrategia del Agente Conductor y, si mandas `contactos`, REEMPLAZA los contactos de escalamiento.',
+          description: 'Requiere el área `administracion`. Manda SOLO lo que cambia; se fusiona con la config actual y se valida entera. Una llave desconocida es 400 (la flota sale de la credencial, nunca del cuerpo). `contactos[]`: `{ nivel: 1|2, nombre, telefono (10 dígitos o 52+10), terminalId? }`; nivel 1 = patio responsable de esa terminal, nivel 2 = jefe general.',
+          tags: ['hitos'],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } },
+          responses: { '200': { description: 'Lo guardado.', content: { 'application/json': { schema: { type: 'object' } } } }, ...respuestasError },
         },
       },
       '/v1/openapi': {

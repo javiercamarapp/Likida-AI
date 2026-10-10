@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, ArrowRight, Info } from 'lucide-react';
 import { Sparkline, Tendencia } from '../charts';
@@ -348,14 +349,29 @@ export function ChartCard({
 /** El mismo bloque "sin datos suficientes" que ya se repetía a mano en
  *  cada página — consolidado aquí (§H: "no gráficas/widgets ad-hoc por
  *  página"). Nunca rellena con datos de ejemplo. */
-export function EstadoVacio({ icono, children }: { icono?: React.ReactNode; children: React.ReactNode }) {
+export function EstadoVacio({ icono, children, accion }: {
+  icono?: React.ReactNode;
+  children: React.ReactNode;
+  /** El siguiente paso, como enlace REAL. Un vacío que dice «no hay nada» sin
+   *  decir cómo se llena es un callejón (auditoría de producto: «el alta rápida
+   *  vive en Despacho» sin enlace). */
+  accion?: { href: string; texto: string };
+}) {
   return (
     <div className="card p-4">
       <div className="flex items-start gap-3">
         <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
           {icono ?? <Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
         </div>
-        <p className="text-sm pt-1">{children}</p>
+        <div className="pt-1">
+          <p className="text-sm">{children}</p>
+          {accion && (
+            <Link href={accion.href}
+              className="mt-2 inline-block text-xs font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
+              {accion.texto}
+            </Link>
+          )}
+        </div>
       </div>
     </div>
   );

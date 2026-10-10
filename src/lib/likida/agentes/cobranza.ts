@@ -4,12 +4,14 @@ import { acotada } from '../presupuesto';
 import { traerTodo, traerPorIds, conteo } from '../pg';
 import { avisarCorridasPorFlota } from './notificaciones';
 import { registrarCorrida } from './corridas';
-import { enviarTexto, sendTemplate, motivoDeFalloWhatsApp, esReintentableMeta } from '@/lib/meta/client';
+import { enviarConFallback } from '@/lib/meta/enviar_con_fallback';
+import { PLANTILLA } from '@/lib/meta/plantillas_catalogo';
 import { alertarOperador } from '@/lib/observability/alerta';
 import {
   CONFIG_COBRANZA_DEFAULT, validarConfigCobranza, dentroDeVentana,
   tierPendiente, armarMensajeCobranza, type ConfigCobranza,
 } from './cobranza_pura';
+import { ejecutarCobranzaGastos, resultadoGastoVacio, type ResultadoCobranzaGasto } from './cobranza_gasto';
 import { getPerfilCrudo } from '../repo';
 import { ventanaCobranzaDeclarada } from '../perfil/preguntas';
 
@@ -216,6 +218,8 @@ export interface ResultadoCobranza {
   /** WhatsApp rechazó tantos seguidos que la corrida se detuvo (RES-1). La
    *  corrida global lo lee para no seguir quemando flotas contra una pared. */
   rechazoMasivo?: boolean;
+  /** La cobranza por GASTO (0525), cuando la flota la encendió: mensajes, gastos avisados, topes, etc. */
+  gasto?: Omit<ResultadoCobranzaGasto, 'fallos' | 'telefonosHoy' | 'viajesConGastoPendiente'> & { fallos: number };
 }
 
 /** Rechazos reintentables SEGUIDOS que detienen la corrida (RES-1). Un solo
@@ -262,7 +266,30 @@ export async function ejecutarCobranza(
       if (error) logger.warn('cobranza.rescate_claims_fallo', { tenantId, err: error.message });
     });
 
+  // ── LA COBRANZA POR GASTO (0525), ANTES que la de por viaje ─────────────────
+  // Encendida por la flota (`por_gasto`), cobra QUÉ comprobante falta de QUÉ gasto, con un solo mensaje
+  // fusionado por chofer y su tope diario. La cobranza por viaje que sigue NO le duplica el día: se salta
+  // los viajes que ya tienen gastos pendientes (esos los cobra el gasto) y a los choferes a los que ya se
+  // les escribió hoy. Con la flota sin encenderla esto es un no-op y la conducta de siempre no cambia.
+  let gasto: ResultadoCobranzaGasto;
+  try {
+    gasto = await ejecutarCobranzaGastos(tenantId, ahora, {
+      venceEn: opts.venceEn, firma: config.firma, instrucciones: config.instrucciones,
+    });
+  } catch (e) {
+    // Un fallo de la cobranza por gasto no deja sin cobrar por viaje: se dice y se sigue.
+    logger.error('cobranza.gasto_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    gasto = { ...resultadoGastoVacio(), fallos: [`cobranza por gasto: ${e instanceof Error ? e.message : 'corrida fallida'}`] };
+  }
+  const gastoActivo = gasto.omitido === undefined;
+
   const cola = await colaCobranza(tenantId, ahora);
+  if (gastoActivo) {
+    const viajesDelGasto = new Set(gasto.viajesConGastoPendiente);
+    const yaEscritos = new Set(gasto.telefonosHoy);
+    cola.paraContactar = cola.paraContactar.filter((f) => !viajesDelGasto.has(f.viajeId) && !(f.operadorTelefono && yaEscritos.has(f.operadorTelefono)));
+    cola.sinTelefono = cola.sinTelefono.filter((f) => !viajesDelGasto.has(f.viajeId));
+  }
   const r: ResultadoCobranza = {
     revisados: cola.paraContactar.length + cola.sinTelefono.length,
     contactados: 0,
@@ -271,6 +298,23 @@ export async function ejecutarCobranza(
     cortadosPorReloj: 0,
     rechazosReintentables: 0,
   };
+  if (gastoActivo) {
+    const { fallos, telefonosHoy: _t, viajesConGastoPendiente: _v, ...resto } = gasto;
+    void _t; void _v;
+    r.gasto = { ...resto, fallos: fallos.length };
+    r.contactados += gasto.mensajes;
+    r.revisados += gasto.mensajes + gasto.pospuestosPorTope;
+    r.sinTelefono += gasto.sinTelefono;
+    r.fallos.push(...fallos);
+    r.cortadosPorReloj += gasto.cortadosPorReloj;
+    r.rechazosReintentables = (r.rechazosReintentables ?? 0) + gasto.rechazosReintentables;
+    if (gasto.rechazoMasivo) {
+      // WhatsApp rechaza en masa: la corrida entera se detiene (el problema es del número, no de la flota).
+      r.rechazoMasivo = true;
+      logger.info('agente_cobranza.corrida', { tenantId, ...r, fallos: r.fallos.length });
+      return r;
+    }
+  }
   let rechazosSeguidos = 0;
 
   // Los sin teléfono TAMBIÉN quedan en bitácora (enviado=false, con el
@@ -309,39 +353,36 @@ export async function ejecutarCobranza(
     /** RES-1: el rechazo fue "vuelve más tarde" y el tier NO debe consumirse. */
     let reintentable = false;
     try {
-      // `enviarTexto` (RES-1): el mismo envío que `sendText`, con el código de
-      // Meta — que es lo único que distingue "este teléfono no sirve" de "vas
-      // demasiado rápido", y de eso depende si el tier se quema o no.
-      const envio = await enviarTexto(v.operadorTelefono as string, armarMensajeCobranza(v.folio, v.dias, config));
-      enviado = envio.ok;
-      if (!enviado) {
-        // LA PLANTILLA CUANDO EL TEXTO NO PUEDE SALIR (auditoría 3, AG-A2).
-        // La población objetivo de este agente es el chofer que lleva DÍAS
-        // sin escribir — exactamente el que trae la ventana de 24 h cerrada,
-        // donde Meta rechaza todo texto libre. Sin este fallback el agente
-        // era mudo para quien existe: el claim consumía el tier en bitácora
-        // y el chofer no recibía NI UNO de los tres contactos. Mismo patrón
-        // que la escalación (escalar_viaje.ts): el texto bueno primero, la
-        // plantilla aprobada solo cuando Meta lo rechaza. El cuerpo de
-        // `recordatorio_cierre` se escribió para el cierre de liquidación —
-        // menos preciso que el texto con los días y la firma, pero es lo
-        // ÚNICO que WhatsApp entrega con la ventana cerrada, y habla del
-        // mismo pendiente: cerrar el viaje.
-        const env = await sendTemplate(v.operadorTelefono as string, 'recordatorio_cierre', {
-          parametros: [v.operadorNombre ?? 'Operador', v.folio ?? 'sin folio'],
-        });
-        if (env.ok) {
-          enviado = true;
-          detalle = 'plantilla recordatorio_cierre (ventana de 24 h cerrada)';
-        } else {
-          detalle = `WhatsApp rechazó el texto libre y la plantilla también falló: ${motivoDeFalloWhatsApp(env.error, env.codigo)}`;
-          // ── RES-1: UN 429 NO ES UN TIER GASTADO ────────────────────────
-          // El claim es el INSERT con unique(viaje, tier): si se queda ahí
-          // ante un rate limit, ese tier NO SE REINTENTA NUNCA (`tierPendiente`
-          // lo cuenta como contacto hecho) y el chofer se queda sin uno de sus
-          // tres avisos sin que nadie haya podido mandárselo.
-          reintentable = esReintentableMeta(env.codigo) || esReintentableMeta(undefined, (envio as { status?: number }).status);
-        }
+      // `enviarConFallback` (P0-B, 0360): el texto con los días y la firma cuando
+      // la ventana de 24 h está abierta, y la plantilla `recordatorio_cierre`
+      // cuando no — decidido por el registro de la ventana del chofer, sin gastar
+      // una llamada de texto que Meta rechazaría con 131047.
+      //
+      // LA POBLACIÓN OBJETIVO de este agente es el chofer que lleva DÍAS sin
+      // escribir (auditoría 3, AG-A2): exactamente el de la ventana cerrada. El
+      // cuerpo de `recordatorio_cierre` es menos preciso que el texto, pero es lo
+      // ÚNICO que WhatsApp entrega ahí y habla del mismo pendiente: cerrar el viaje.
+      //
+      // RES-1: `reintentable` dice si fue «vuelve más tarde» (429, bloqueo): en ese
+      // caso el tier NO se consume. Un rechazo que no es de ventana ya no cae a
+      // plantilla (el texto reintentable ya quedó en `wa_outbox`; mandar además la
+      // plantilla duplicaba el aviso al reintentarse).
+      const envio = await enviarConFallback(v.operadorTelefono as string, {
+        texto: armarMensajeCobranza(v.folio, v.dias, config),
+        plantilla: { nombre: PLANTILLA.recordatorioCierre, parametros: [v.operadorNombre ?? 'Operador', v.folio ?? 'sin folio'] },
+        contexto: 'cobranza.comprobantes',
+        tenantId,
+        // La ventana de 24 h se evalúa al reloj lógico de la corrida (el mismo `ahora` del tier), no al del proceso.
+        ahora,
+      });
+      if (envio.ok) {
+        enviado = true;
+        if (envio.via === 'plantilla') detalle = 'plantilla recordatorio_cierre (ventana de 24 h cerrada)';
+      } else {
+        detalle = envio.fueraDeVentana
+          ? `WhatsApp rechazó el texto libre y la plantilla también falló: ${envio.mensaje}`
+          : `WhatsApp rechazó el mensaje: ${envio.mensaje}`;
+        reintentable = envio.reintentable;
       }
     } catch (e) {
       detalle = e instanceof Error ? e.message : 'error inesperado al enviar';

@@ -1,5 +1,7 @@
-import { enviarTexto, sendTemplate, motivoDeFalloWhatsApp } from './client';
 import { logger } from '@/lib/logger';
+import { enviarConFallback, CODIGOS_FUERA_VENTANA, esFueraDeVentana } from './enviar_con_fallback';
+
+export { CODIGOS_FUERA_VENTANA, esFueraDeVentana };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LO QUE LIKIDA INICIA HACIA LA OFICINA sale por AQUÍ, no por `sendText`.
@@ -38,15 +40,6 @@ import { logger } from '@/lib/logger';
 // a propósito — reintentar texto fuera de ventana falla igual siempre.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Rechazos de Meta que significan «fuera de la ventana de 24 h / el
- *  destinatario no abrió conversación»: solo una plantilla los atraviesa.
- *  Mismo trío que ya usa `enviarRespuestaArco` (`client.ts`). */
-export const CODIGOS_FUERA_VENTANA: readonly number[] = [131047, 131026, 131042];
-
-export function esFueraDeVentana(codigo?: number): boolean {
-  return codigo !== undefined && CODIGOS_FUERA_VENTANA.includes(codigo);
-}
-
 export const PLANTILLA_AVISO_OFICINA_DEFAULT = 'aviso_operacion_v1';
 
 export function plantillaAvisoOficina(): string {
@@ -67,35 +60,49 @@ export function parametrosAvisoOficina(chofer: string, resumen: string, liga: st
 
 export type ResultadoAvisoOficina =
   | { ok: true; via: 'texto' | 'plantilla'; id: string | null }
-  | { ok: false; motivo: string; codigo?: number; fueraDeVentana: boolean };
+  | {
+    ok: false; motivo: string; codigo?: number; fueraDeVentana: boolean;
+    /** El rechazo fue transitorio (timeout, 429, 5xx): el cliente de Meta YA dejó el mensaje en `wa_outbox`,
+     *  que lo entrega solo. Reenviarlo desde afuera lo duplica: quien reclama un «una sola vez» NO debe soltar el reclamo. */
+    reintentable: boolean;
+    /** El cliente de Meta YA lo dejó en `wa_outbox` (también con el token vencido 190/401, que no es reintentable
+     *  pero se encola): un reclamo «una sola vez» no debe soltarse ni reenviarse. Implica o amplía `reintentable`. */
+    encolado?: boolean;
+  };
 
 /**
- * Texto libre al jefe; si Meta lo rechaza por ventana cerrada, la plantilla.
+ * Texto libre al jefe; si la ventana de 24 h está cerrada (según el registro de
+ * la 0368) o Meta lo rechaza por ventana, la plantilla — todo vía
+ * `enviarConFallback`, que además deja constancia del motivo.
  *
  * `parametros` son los de `parametrosAvisoOficina`. `plantilla` se puede
- * sobrescribir para los caminos que ya tienen la suya aprobada.
+ * sobrescribir para los caminos que ya tienen la suya aprobada. `contexto`
+ * viaja a los logs; si trae `tenantId` (string) y/o `agente` (string) también al
+ * registro del selector.
  */
 export async function avisarOficina(
   telefono: string,
   texto: string,
-  opciones: { parametros: [string, string, string]; plantilla?: string; contexto?: Record<string, unknown> },
+  opciones: { parametros: [string, string, string]; plantilla?: string; contexto?: Record<string, unknown>; ahora?: Date },
 ): Promise<ResultadoAvisoOficina> {
   const ctx = opciones.contexto ?? {};
-  const t = await enviarTexto(telefono, texto);
-  if (t.ok) return { ok: true, via: 'texto', id: t.id };
-
-  if (!esFueraDeVentana(t.codigo)) {
+  const plantilla = opciones.plantilla ?? plantillaAvisoOficina();
+  const r = await enviarConFallback(telefono, {
+    texto,
+    plantilla: { nombre: plantilla, parametros: opciones.parametros },
+    contexto: typeof ctx.agente === 'string' ? `aviso_oficina.${ctx.agente}` : 'aviso_oficina',
+    tenantId: typeof ctx.tenantId === 'string' ? ctx.tenantId : null,
+    ahora: opciones.ahora,
+  });
+  if (r.ok) {
+    if (r.via === 'plantilla') logger.info('aviso_oficina.fuera_de_ventana', { ...ctx, motivo: r.motivo, plantilla });
+    return { ok: true, via: r.via === 'plantilla' ? 'plantilla' : 'texto', id: r.id };
+  }
+  if (!r.fueraDeVentana) {
     // Rechazo que NO es de ventana (rate limit, número inválido, red): si es
     // reintentable ya quedó en el outbox; una plantilla no lo arreglaría.
-    return { ok: false, motivo: t.codigo !== undefined ? motivoDeFalloWhatsApp(t.error, t.codigo) : t.error, codigo: t.codigo, fueraDeVentana: false };
+    return { ok: false, motivo: r.mensaje, codigo: r.codigo, fueraDeVentana: false, reintentable: r.reintentable, encolado: r.encolado };
   }
-
-  const plantilla = opciones.plantilla ?? plantillaAvisoOficina();
-  logger.info('aviso_oficina.fuera_de_ventana', { ...ctx, codigo: t.codigo, plantilla });
-  const p = await sendTemplate(telefono, plantilla, { parametros: opciones.parametros });
-  if (p.ok) return { ok: true, via: 'plantilla', id: p.id };
-
-  const motivo = motivoDeFalloWhatsApp(p.error, p.codigo);
-  logger.error('aviso_oficina.no_entregado', { ...ctx, codigoTexto: t.codigo, codigoPlantilla: p.codigo, plantilla, motivo });
-  return { ok: false, motivo, codigo: p.codigo, fueraDeVentana: true };
+  logger.error('aviso_oficina.no_entregado', { ...ctx, codigoTexto: r.codigoTexto, codigoPlantilla: r.codigo, plantilla, motivo: r.mensaje });
+  return { ok: false, motivo: r.mensaje, codigo: r.codigo, fueraDeVentana: true, reintentable: r.reintentable, encolado: r.encolado };
 }

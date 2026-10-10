@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   crearPresupuesto, MARGEN_CIERRE_MS, PRESUPUESTO_WEBHOOK_MS,
-  PASOS_CIERRE, COSTO_CIERRE_MS, TOPE_CONSULTA_MS,
+  PASOS_CIERRE, PASOS_POST_CIERRE, COSTO_CIERRE_MS, TOPE_CONSULTA_MS,
   TECHO_ENVIO_WHATSAPP_MS, TECHO_PASO_CONSULTA_MS, TECHO_CIERRE_MS,
   margenUnidadAtomicaMs, COLCHON_LATIDO_CRON_MS,
 } from './presupuesto';
@@ -328,5 +328,23 @@ describe('presupuesto.senal', () => {
     const p = crearPresupuesto(120_000, () => 0);
     expect(p.senal(25_000).aborted).toBe(false);
     expect(p.restante()).toBeGreaterThan(25_000);
+  });
+});
+
+
+// E1-B (P0-7): el acuse «solo folio» corre después del cierre y FUERA del margen
+// (que ya está al límite del presupuesto de 60 s). Se fija aquí para que no
+// crezca en silencio y para que cada envío de `acuse_folio.ts` tenga su renglón.
+describe('PASOS_POST_CIERRE (acuse solo folio)', () => {
+  it('cada envío de acuse_folio.ts tiene su renglón y la suma nominal cabe en 5 s', () => {
+    const fuente = readFileSync('src/lib/likida/acuse_folio.ts', 'utf8')
+      .split('\n').filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n');
+    const envios = (fuente.match(/\b(sendText|sendDocument|avisarOficina)\(/g) ?? []).length;
+    const renglones = PASOS_POST_CIERRE.filter((p) => p.donde === 'acuse_folio.ts' && /send(Text|Document)/.test(p.paso));
+    expect(renglones.length).toBeGreaterThanOrEqual(envios);
+    expect(PASOS_POST_CIERRE.reduce((s, p) => s + p.ms, 0)).toBeLessThanOrEqual(5_000);
+  });
+  it('no está dentro del margen: PASOS_CIERRE sigue sin renglones del acuse', () => {
+    expect(PASOS_CIERRE.some((p) => /solo folio/.test(p.paso))).toBe(false);
   });
 });
