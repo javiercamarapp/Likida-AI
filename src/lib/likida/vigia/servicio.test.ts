@@ -140,6 +140,54 @@ describe('una pregunta con datos reales (modo «siempre aprobar»)', () => {
     expect([...repo.contactos.values()][0].avisoPrivacidadEn).not.toBeNull();
   });
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // LEG-32C13-C1 (auditoría 32 c13, CRÍTICO): el pie del PRIMER CONTACTO con
+  // un cliente de la flota caía a la política de privacidad de LIKIDA cuando
+  // la flota no había capturado la suya (`servicio.ts:263`,
+  // `config.avisoPrivacidadUrl ?? `${appUrl()}/privacidad``).
+  //
+  // `src/app/privacidad/page.tsx:7-18` declara en su propia cabecera que ése
+  // es el documento de quien CONTRATA Likida —el contralor— con Likida como
+  // responsable, que NO es el mismo que el de la flota, y que «servir uno como
+  // el otro dejaría a un grupo entero sin aviso». Doña Marisol, embarcadora
+  // del cliente de la flota, recibía esa liga: un documento donde ni ella es
+  // titular ni la flota es responsable. Es la regla del repo —un rótulo tiene
+  // que ser verdad— sobre el dato de un tercero.
+  //
+  // Lo que esta prueba fija es sólo eso: que NO se sustituye. Que el aviso
+  // simplificado del art. 16 fr. II tenga las fracciones I a IV, y que el
+  // texto del cliente no salga al modelo antes del aviso, es una decisión de
+  // producto que queda PROPUESTA, no arreglada aquí.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('LEG-32C13-C1: sin URL de la flota, el primer contacto NO cita la política de privacidad de Likida', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus());
+    // `habilitar` sin parche deja `avisoPrivacidadUrl: null`, que es el caso de
+    // una flota recién encendida — el default de `configApagada`.
+    const { deps, alCliente } = armar(repo);
+    await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), deps);
+    const [borrador] = repo.salientes();
+    await atenderDecisionVigia(cuentaGerente, `vig_ok:${borrador.id}`, deps);
+    expect(alCliente).toHaveLength(1);
+    // El pie sigue estando (el asistente automatizado y la baja se declaran)…
+    expect(alCliente[0].texto).toContain('asistente automatizado');
+    expect(alCliente[0].texto).toContain('escribe BAJA');
+    // …y NO manda al titular al documento de otro responsable.
+    expect(alCliente[0].texto).not.toContain('/privacidad');
+    expect(alCliente[0].texto).not.toContain('Aviso de privacidad:');
+  });
+
+  it('LEG-32C13-C1 (el contraste): con la URL de la flota capturada, el pie SÍ la cita', async () => {
+    const { repo } = escenario();
+    repo.habilitar(T1, { avisoPrivacidadUrl: 'https://cementosdelbajio-transportes.mx/aviso' });
+    repo.estatus.agregar(T1, CLIENTE_A, estatus());
+    const { deps, alCliente } = armar(repo);
+    await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), deps);
+    const [borrador] = repo.salientes();
+    await atenderDecisionVigia(cuentaGerente, `vig_ok:${borrador.id}`, deps);
+    expect(alCliente[0].texto).toContain('https://cementosdelbajio-transportes.mx/aviso');
+  });
+
   it('IDEMPOTENCIA: dos toques (o botón + tablero) NO duplican el envío', async () => {
     const { repo } = escenario();
     repo.estatus.agregar(T1, CLIENTE_A, estatus());

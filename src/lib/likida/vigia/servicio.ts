@@ -257,10 +257,31 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
     try { respuestaRapida = elegirRespuestaRapida(c.texto, await repo.respuestasRapidas(tenantId)); }
     catch (e) { logger.warn('vigia.respuestas_rapidas_no_leidas', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) }); }
   }
+  // LEG-32C13-C1: el hueco tiene dueño. Si la flota no capturó su aviso, el
+  // pie sale sin liga y el operador se entera por aquí, en vez de que el
+  // producto lo tape con un documento de otro responsable.
+  if (!contacto.avisoPrivacidadEn && !config.avisoPrivacidadUrl) {
+    logger.warn('vigia.aviso_privacidad_sin_url', { tenant: tenantId, conversacion: conv.id });
+  }
   let borrador = redactarBorrador({
     clasificacion: { intencion: cl.intencion, secundarias: cl.secundarias, senales },
     nombreContacto: contacto.nombre, nombreFlota, viaje, ahora,
-    primerContacto: !contacto.avisoPrivacidadEn, avisoPrivacidadUrl: config.avisoPrivacidadUrl ?? `${appUrl()}/privacidad`,
+    // LEG-32C13-C1 (auditoría 32 c13, CRÍTICO): aquí había un
+    // `?? `${appUrl()}/privacidad``. Esa página es la política de LIKIDA, y su
+    // propia cabecera (`src/app/privacidad/page.tsx:7-18`) declara que es el
+    // documento de quien CONTRATA Likida —el contralor—, con Likida como
+    // responsable, y que «servir uno como el otro dejaría a un grupo entero sin
+    // aviso». Quien recibe este pie es el contacto del CLIENTE de la flota: ni
+    // es titular de ese documento ni Likida es la responsable de sus datos. Se
+    // le estaba dando una liga falsa a un tercero.
+    //
+    // Sin URL de la flota el pie OMITE la liga (`redactor.ts:209` ya lo
+    // contempla) y se avisa, porque el hueco tiene dueño —la flota captura su
+    // aviso en la configuración del Vigía— y callarlo es lo que dejó esto vivo.
+    // Lo que esto NO arregla, y queda propuesto: que el aviso simplificado
+    // traiga las fracciones I a IV del art. 15 LFPDPPP, y que el texto del
+    // cliente no salga al modelo (`:186`) antes de que el aviso exista.
+    primerContacto: !contacto.avisoPrivacidadEn, avisoPrivacidadUrl: config.avisoPrivacidadUrl,
     respuestaRapida,
   });
   const folio = viaje.tipo === 'uno' ? viaje.estatus.folio : null;
