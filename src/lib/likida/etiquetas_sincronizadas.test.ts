@@ -40,7 +40,25 @@ function etiquetas(ruta: string, ancla: string): Record<string, string> {
 // mapa de conceptos que aparezca se compara contra el motor; el que no quiera
 // compararse no puede existir.
 const RAIZ_SRC = new URL('../../', import.meta.url).pathname;
-const PATRON_MAPA = /const (CONCEPTO(?:_LABEL)?)\s*(?::\s*Record<string,\s*string>)?\s*=\s*\{/;
+// ARQ-32C14-A1 (auditoría 32 c14, 4ª reincidencia): el patrón anclaba el NOMBRE
+// en `CONCEPTO`/`CONCEPTO_LABEL`, así que `ROTULO_CONCEPTO_COBRANZA`
+// (`agentes/cobranza_gasto_pura.ts`, 0525) entró al repo por fuera del radar y
+// ya divergía en tres valores y omitía `viaticos` entero, con la suite en verde.
+// Es el mismo modo de falla que el barrido de la auditoría 18 vino a cerrar,
+// una vuelta más arriba: antes se escapaba un ARCHIVO nuevo, ahora un NOMBRE
+// nuevo. Se ancla el patrón en que el nombre MENCIONE el concepto, no en que se
+// llame así. El `, string>` del anotador excluye los mapas que no son de
+// etiquetas (`NORMA_POR_CONCEPTO` es `Record<string, string[]>`).
+const PATRON_MAPA = /const (\w*CONCEPTO\w*)\s*(?::\s*Record<[^>]*,\s*string>)?\s*=\s*\{/;
+
+// LA ÚNICA EXCEPCIÓN, con su razón escrita (misma forma que el guardia de
+// invariante del dedup). `reglas/catalogo.ts` no es una copia desincronizada:
+// es OTRO REGISTRO a propósito —minúsculas y en frase, porque va DENTRO de una
+// oración («cuando entre un comprobante de casetas por más de $500»)— y su
+// propio comentario lo declara: «Cómo se lee cada concepto en una frase». Se le
+// exige COBERTURA de los mismos conceptos, no el mismo texto; si algún día se
+// quiere igualar el texto, se quita de aquí y el test lo exige solo.
+const OTRO_REGISTRO = new Set(['lib/likida/reglas/catalogo.ts']);
 
 function fuentes(dir: string, acc: string[] = []): string[] {
   for (const e of readdirSync(dir)) {
@@ -74,14 +92,22 @@ describe('etiquetas de concepto — TODAS las copias del árbol dicen lo mismo q
     const rutas = copias.map((c) => c.ruta);
     expect(rutas).toContain('app/dashboard/[id]/page.tsx');
     expect(rutas).toContain('app/dashboard/gasto-semanal-chart.tsx');
+    // Las dos que el patrón viejo no veía (c14): si el barrido vuelve a anclar
+    // por nombre, estas dos desaparecen del censo y el test lo dice.
+    expect(rutas).toContain('lib/likida/agentes/cobranza_gasto_pura.ts');
+    expect(rutas).toContain('lib/likida/reglas/catalogo.ts');
   });
 
   it('cada copia cubre los mismos conceptos que el motor, con la MISMA etiqueta', () => {
     expect(copias.length).toBeGreaterThan(0);
     for (const { ruta, mapa } of copias) {
+      // La cobertura se exige a TODAS, incluida la de otro registro: un concepto
+      // que falta sale crudo por WhatsApp («· viaticos $1,200.00»).
       expect(Object.keys(mapa).sort(), `${ruta} no cubre los mismos conceptos que el motor`).toEqual(Object.keys(motor).sort());
+      if (OTRO_REGISTRO.has(ruta)) continue;
       for (const k of Object.keys(motor)) {
-        // Aquí se cazó 'Casetas'/'Facturas'/'Otros' en la gráfica del Resumen.
+        // Aquí se cazó 'Casetas'/'Facturas'/'Otros' en la gráfica del Resumen, y
+        // 'Casetas'/'Alimentos'/'Otro gasto' en la sede de cobranza (c14).
         expect(mapa[k], `"${k}" difiere entre el motor y ${ruta}`).toBe(motor[k]);
       }
     }

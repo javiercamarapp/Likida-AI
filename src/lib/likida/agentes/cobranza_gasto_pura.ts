@@ -131,9 +131,23 @@ export function diasDesde(creadoEn: string, ahora: Date): number {
   return Math.max(0, Math.floor((ahora.getTime() - t) / 86_400_000));
 }
 
+// ARQ-32C14-A1: estas etiquetas tienen que decir lo MISMO que el motor
+// (`cuadre/engine.ts`, `label()`), porque el mismo gasto se nombra aquí en el
+// WhatsApp de cobranza y allá en el PDF y el dashboard. Decían 'Casetas',
+// 'Alimentos' y 'Otro gasto' contra 'Caseta', 'Alimentación' y 'Otro', y
+// omitían `viaticos` entero. No se importa `etiquetaConcepto` porque este
+// módulo es PURO y la página lo corre en el NAVEGADOR: traerse el motor de
+// dinero al bundle del cliente es peor que la copia. Lo que sostiene la copia
+// es `etiquetas_sincronizadas.test.ts`, que desde la c14 la encuentra por
+// mención de «CONCEPTO» en el nombre y no por el nombre exacto.
+//
+// `viaticos` NO entra a `CONCEPTOS_VALIDOS` (la lista configurable del
+// formulario sigue siendo de 8): entra aquí porque `armarMensajeGastos` rotula
+// el concepto REAL del gasto, y un gasto `viaticos` sí existe en la base.
 export const ROTULO_CONCEPTO_COBRANZA: Record<string, string> = {
-  diesel: 'Diésel', caseta: 'Casetas', factura: 'Factura', alimentacion: 'Alimentos',
-  hospedaje: 'Hospedaje', transporte: 'Transporte', flete: 'Flete', otro: 'Otro gasto',
+  diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura', alimentacion: 'Alimentación',
+  hospedaje: 'Hospedaje', transporte: 'Transporte', flete: 'Flete', viaticos: 'Viáticos',
+  otro: 'Otro',
 };
 
 export interface ItemCobro {
