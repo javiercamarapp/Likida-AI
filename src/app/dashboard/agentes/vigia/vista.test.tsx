@@ -194,6 +194,16 @@ describe('configuración, bitácora y contactos', () => {
     expect(otro).toContain('Solo el dueño de la flota cambia esto');
   });
 
+  // LEG-32C14-A3 (auditoría 32 c14): el arreglo LEG-32C13-C1 quitó el fallback a
+  // `/privacidad` y dejó la etiqueta diciendo que el fallback sigue ahí. La pantalla
+  // que tiene el dueño del hueco le afirmaba que no hay hueco.
+  it('sin liga de aviso, la ayuda NO promete la de Likida y dice qué pasa de verdad', async () => {
+    const html = await pintar(BloqueConfiguracion({ datos: Promise.resolve(base()), puedeAdministrar: true, acciones }));
+    expect(html).toContain('name="avisoPrivacidadUrl"');
+    expect(html).not.toContain('se manda la de Likida');
+    expect(html).toMatch(/sale sin aviso/);
+  });
+
   it('la bitácora nombra los eventos y declara que no guarda textos ni teléfonos', async () => {
     const html = await pintar(BloqueBitacora({ datos: Promise.resolve(base({ eventos: [
       { id: 2, tipo: 'escalada', nivel: 2, creadoEn: hace(3), conversacionId: null }, { id: 1, tipo: 'optout', nivel: null, creadoEn: hace(9), conversacionId: null },

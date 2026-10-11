@@ -153,7 +153,7 @@ export function FormaConfig({ accion, valores }: {
         <div>
           <label htmlFor="cfg-aviso" className={ETIQUETA}>Liga de tu aviso de privacidad para clientes (https)</label>
           <input id="cfg-aviso" name="avisoPrivacidadUrl" type="url" defaultValue={valores.avisoPrivacidadUrl ?? ''} placeholder="https://tu-empresa.mx/privacidad" className={CAMPO} style={{ background: 'var(--surface)' }} />
-          <p className={AYUDA} style={{ color: 'var(--faint)' }}>Va en el primer mensaje que recibe cada cliente. Sin liga, se manda la de Likida.</p>
+          <p className={AYUDA} style={{ color: 'var(--faint)' }}>Va en el primer mensaje que recibe cada cliente. Sin liga, ese mensaje sale sin aviso: la de Likida es de otro responsable y no cubre a tus clientes.</p>
         </div>
       </div>
       <label className="flex items-start gap-2 text-[12.5px]">
