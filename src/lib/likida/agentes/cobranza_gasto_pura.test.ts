@@ -107,7 +107,7 @@ describe('el mensaje fusionado y la plantilla de respaldo', () => {
     expect(t).toContain('Te faltan comprobantes de 2 gastos');
     expect(t).toContain('· Diésel $1,200.00');
     expect(t).toContain('(viaje F-1042): falta la factura (CFDI)');
-    expect(t).toContain('· Casetas $85.50');
+    expect(t).toContain('· Caseta $85.50');
     expect(t).toContain('falta la foto del ticket');
     expect(t).toContain('Hazlo hoy.');
     expect(t).toContain('— Tráfico Norte');

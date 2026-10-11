@@ -147,7 +147,7 @@ describe('el ciclo feliz: qué comprobante falta de qué gasto, un mensaje por c
     expect(texto).toContain('Te faltan comprobantes de 2 gastos');
     expect(texto).toContain('· Diésel $1,200.00');
     expect(texto).toContain('falta la factura (CFDI)');
-    expect(texto).toContain('· Casetas $85.50');
+    expect(texto).toContain('· Caseta $85.50');
     expect(texto).toContain('falta la foto del ticket');
     expect(texto).toContain('— Tráfico Norte');
     expect(contactos().every((c) => c.via === 'texto')).toBe(true);
