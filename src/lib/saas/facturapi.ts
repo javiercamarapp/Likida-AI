@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger';
+import { alertarOperador } from '@/lib/observability/alerta';
 import { DatoInvalido } from '@/lib/likida/errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -232,6 +233,21 @@ export async function timbrarMensualidad(datos: {
     logger.error('facturapi.total_no_cuadra', {
       uuid: factura.uuid, referencia: datos.referencia,
       totalCfdi: factura.total, totalCobrado: datos.totalEsperado, subtotalEnviado: subtotal,
+    });
+    // ── AUDITORÍA 32 c15, OPE-32C15-C1 (CRÍTICO) ─────────────────────────
+    // El `logger.error` de arriba NO despierta a nadie: el único camino a las
+    // 3 a.m. es Sentry, y el fingerprint de este meta es
+    // `['facturapi.total_no_cuadra','error']` —`discriminadores` solo lee
+    // `tenant`/`tenantId` y `codigo`/`status`—, así que el segundo incidente,
+    // y el de la flota siguiente, caen en el issue viejo. El plazo de 24 h que
+    // el comentario de arriba declara exige el canal del operador.
+    // `finanzas.` está en EVENTOS_DE_DINERO: correo Y WhatsApp.
+    // El `uuid` va como llave aparte, no dentro del texto: `LLAVES_SIN_REDACTAR`
+    // lo conserva íntegro, y el carve-out por texto solo cubre `^timbre\.`.
+    await alertarOperador('finanzas.cfdi_total_no_cuadra', {
+      error: `El PAC timbró un CFDI por ${factura.total} y a la flota se le cobraron ${datos.totalEsperado} (referencia ${datos.referencia ?? 'sin referencia'}, subtotal enviado ${subtotal}). El CFDI YA EXISTE ante el SAT: hay ~24 h de plazo cómodo para cancelarlo, después la cancelación requiere aceptación del receptor.`,
+      uuid: factura.uuid,
+      codigo: 'cfdi_total_no_cuadra',
     });
   }
 
