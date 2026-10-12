@@ -59,7 +59,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",
-    "@playwright/test": "1.63.0",
+    "@playwright/test": "1.64.0",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.20.4",
     "@types/pg": "8.23.1",
