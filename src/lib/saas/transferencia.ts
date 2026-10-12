@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
+import { alertarOperador } from '@/lib/observability/alerta';
 import { facturapiConfigurado, timbrarMensualidad, enviarPorCorreo } from './facturapi';
 import { getDatosFiscales, estanCompletos } from './fiscal';
 import { desglosarPrecio, desgloseCuadra } from './iva';
@@ -425,6 +426,21 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
     .eq('id', facturaId);
   if (errGuardar) {
     logger.error('facturapi.uuid_sin_guardar', { facturaId, uuid: cfdi.uuid, err: errGuardar.message });
+    // ── AUDITORÍA 32 c15, OPE-32C15-C2 (CRÍTICO) ─────────────────────────
+    // El log de arriba NO sirve para reconstruir esto: `redactMeta` pasa todo
+    // el meta por `redact` y `CLAVES_NO_PII` contiene solo `'digest'`, así que
+    // el folio sale huellado (`id:<huella>`); y Sentry recibe `redactado`, no
+    // `meta`, de modo que su lista blanca de folios no tiene nada que
+    // conservar. El único camino del repo donde el folio sobrevive es
+    // `LLAVES_SIN_REDACTAR`, dentro de `alertarOperador`, y exige que `uuid`
+    // viaje como llave de primer nivel — no dentro del texto (el carve-out por
+    // texto solo cubre `^timbre\.`). Es el escenario que `alerta.ts` documenta
+    // como OP-A2: un CFDI vivo ante el SAT que Likida no puede nombrar.
+    await alertarOperador('finanzas.cfdi_uuid_sin_guardar', {
+      error: `El PAC timbró la factura ${facturaId} y el folio fiscal NO se pudo guardar (${errGuardar.message}). Ese CFDI existe ante el SAT y la base no lo conoce: hay que registrarlo a mano o cancelarlo en el panel del PAC. Un reintento del cobro timbraría el mismo periodo dos veces.`,
+      uuid: cfdi.uuid,
+      codigo: 'cfdi_uuid_sin_guardar',
+    });
   }
 
   // Se manda al correo DE LA FLOTA, explícito. Antes iba sin destinatario y
