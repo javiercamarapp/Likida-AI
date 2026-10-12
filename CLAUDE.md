@@ -9,7 +9,7 @@ entrega la liquidación en PDF.
 - `/admin` — la consola de Javier (superadmin). Costo de IA, flotas, agentes.
   Cruza TODOS los tenants a propósito (`lib/admin/negocio.ts` es la única
   función con ese permiso).
-- `/dashboard` — el panel del CLIENTE (flota_admin, contador, encargado). ~31
+- `/dashboard` — el panel del CLIENTE (flota_admin, contador, encargado). ~63
   páginas,
   todas filtradas al tenant. Reusa los componentes de `/admin` (`ui/kit`,
   `ui/graficas`, `charts`) — no hay una segunda librería de UI.
@@ -18,7 +18,7 @@ entrega la liquidación en PDF.
 
 **Nunca inventar una cifra.** Es la regla que define al producto: el contralor
 va a cruzar lo que ve contra su PDF y su contador. Si no hay dato real:
-- se dice qué falta y por qué (`dashboard/pendiente.tsx`, `EstadoVacio`),
+- se dice qué falta y por qué (`EstadoVacio` en `admin/ui/kit.tsx`),
 - no se rellena con datos de ejemplo, ni con ceros que parezcan medición.
 Una estimación se puede mostrar, pero declarada y con su supuesto a la vista
 (ver `MINUTOS_CAPTURA_MANUAL` en `lib/likida/analytics.ts`).
@@ -69,9 +69,15 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
     operadores, unidades y jefes de tráfico (`app_user.terminal_id`, 0460) y las
     plantillas de carga masiva traen la columna «patio». Un jefe con patio solo
     corrige lo de su patio (`lib/auth/patio.ts`).
-  - Siguen SIN escritor: `geocerca` (solo lectores: estadías, briefing,
-    facturación), `portal_credencial`, `invitacion`, y las muertas de facto
-    `campania`/`envio_mensaje` (las sustituyó `campana`, 0123).
+  - **`geocerca` también ya tiene escritor** (desde la 0385, con dos
+    escritores hoy: `guardarSitio`/`cambiarEstadoSitio` en
+    `conductor/repo_validacion.ts`, cableado a
+    `/dashboard/agentes/conductores/sitios`, y `guardarGeocerca`/
+    `cambiarEstadoGeocerca` en `peajes/datos.ts`, cableado a
+    `/dashboard/agentes/peajes/configuracion`. La 0480 ya documenta que estos
+    dos escritores se pueden pisar entre sí — no asumas que uno es el dueño).
+  - Siguen SIN escritor: `portal_credencial`, `invitacion`, y las muertas de
+    facto `campania`/`envio_mensaje` (las sustituyó `campana`, 0123).
   - La base entera está en cero (0 viajes, 14-ago-2026) porque **no hay
     clientes todavía**, no porque falte código. Ver `project_likida_sin_clientes`.
 
@@ -93,7 +99,7 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
 ## Cómo se verifica
 
 1. `npx tsc --noEmit -p .` y `npx eslint src/` — limpios.
-2. `npx vitest run` — ~2,880 pruebas (la cifra crece; no la cites de memoria).
+2. `npx vitest run` — ~19,200 pruebas (la cifra crece; no la cites de memoria).
 3. **Mirar el render.** Medir no sustituye a mirar. Las páginas están detrás de
    sesión, así que para verlas: `npm run build` compila todas, y para un
    screenshot se levanta un preview temporal bajo `src/app/zzz-preview-*` que

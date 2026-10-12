@@ -142,7 +142,7 @@ its own budget, kill switch, and audit trail.
   (content, SEO, video, partnerships), and **Engineering** (migration
   drift, security posture, performance, release tracking — the platform
   auditing itself).
-- **~225 versioned, tested database migrations**, every one enforcing
+- **~438 versioned, tested database migrations**, every one enforcing
   tenant isolation at the row level so one fleet's data is architecturally
   incapable of leaking into another's.
 - **8,500+ automated tests, zero mocked reality on the money path.** Every
@@ -154,7 +154,7 @@ its own budget, kill switch, and audit trail.
   each fix shipped with the regression test that would have caught it. The
   engineering process treats "the test suite is green" as a starting
   hypothesis to attack, not a finished state.
-- **37 invoicing portals mapped and field-verified against the live pages**
+- **60 invoicing portals mapped and field-verified against the live pages**
   (not against three-week-old documentation) — merchant by merchant, form
   field by form field, CAPTCHA by CAPTCHA. Five are fully automated
   end-to-end today on a declarative adapter engine built so that adding the
