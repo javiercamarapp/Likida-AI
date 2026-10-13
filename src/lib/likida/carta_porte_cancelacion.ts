@@ -23,6 +23,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
+import { alertarOperador } from '@/lib/observability/alerta';
 import { leerContextoTimbre } from './carta_porte_timbre';
 import { resolverPac, type MotivoCancelacion, type ProveedorPac } from './pac';
 
@@ -131,6 +132,32 @@ export async function solicitarCancelacionTimbre(
   if (up.error) {
     // El SAT YA recibió la solicitud: se grita con el UUID para que nadie la repita a ciegas.
     logger.error('timbre.cancelar_ok_sin_guardar', { viajeId, uuid: tv.uuidFiscal, codigo: r.codigoSat, error: up.error.message });
+    // ── AUDITORÍA 32 c16, OPE-32C16-A1 (ALTO, reincidente) ───────────────
+    // Tercera instancia del patrón que la c15 cerró dos veces
+    // (`facturapi.ts:247`, `transferencia.ts:439`), y la peor: el
+    // `logger.error` de arriba no despierta a nadie a las 3 a.m. —el único
+    // camino es Sentry, no-op sin `SENTRY_DSN`— y, además, la fila se queda
+    // `estado = 'vigente'` mientras el `return` de abajo le dice al contador
+    // que «el viaje queda libre para timbrar la corrección». Si re-timbra,
+    // quedan dos CFDI del mismo viaje con uno cancelado que la base cree
+    // vigente; y `timbrarViaje` lee esa misma fila por su puerta de
+    // idempotencia (`carta_porte_timbre.ts:273-276`) y devuelve
+    // `yaExistia: true` con el UUID que el SAT ya canceló.
+    //
+    // El `uuid` va como llave APARTE y no dentro del texto: `CLAVES_NO_PII`
+    // (`logger.ts:146`) es `new Set(['digest'])`, así que por el log el folio
+    // sale huellado, y Sentry recibe `redactado` en vez de `meta`. El único
+    // camino del repo que lo conserva íntegro es `LLAVES_SIN_REDACTAR`
+    // (`alerta.ts:268-270`), dentro de esta función. Es el defecto que la
+    // auditoría 24 ancló como M17/PRU-A3.
+    //
+    // `timbre.` está en `EVENTOS_DE_DINERO` (`alerta.ts:191`): correo Y
+    // WhatsApp. Corregir la fila es trabajo manual y hay que saber cuál.
+    await alertarOperador('timbre.cancelar_ok_sin_guardar', {
+      error: `El SAT aceptó la cancelación de la Carta Porte del viaje ${viajeId} (código ${r.codigoSat ?? 'sin código'}) y la base NO la pudo guardar: ${up.error.message}. La fila de \`ccp_timbre\` se quedó en estado «vigente», así que el panel va a decir que el viaje está libre para re-timbrar y la puerta de idempotencia del timbrado va a devolver este mismo folio. Hay que corregir la fila a mano ANTES de que alguien re-timbre.`,
+      uuid: tv.uuidFiscal,
+      codigo: 'cancelar_ok_sin_guardar',
+    });
   }
   await anotarBitacora({ tenantId, actor, accion: yaCancelado ? 'ccp.cancelacion_confirmada' : 'ccp.cancelacion_en_proceso',
     entidad: 'viaje', entidadId: viajeId, detalle: { motivo, codigo: r.codigoSat, ya_estaba: r.yaEstaba } },
