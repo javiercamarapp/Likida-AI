@@ -2,16 +2,18 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { Fuel, Route as RouteIcon, Receipt, Copy, FileStack, CircleCheck } from 'lucide-react';
 import {
-  getGastoPorConcepto, getAcreditables, detectarAnomalias, getDocumentos, getConciliacionConsolidado,
+  getAcreditables, detectarAnomalias, getDocumentos, getConciliacionConsolidado,
   getLineasPorConciliar,
-  type GastoPorConcepto, type Acreditables, type Anomalia, type DocumentoRow, type ConciliacionConsolidado,
+  type Acreditables, type Anomalia, type DocumentoRow, type ConciliacionConsolidado,
   type LineaPorConciliar,
 } from '@/lib/likida/analytics';
 import { resolverLineaAMano, type ResolucionLineaManual } from '@/lib/likida/intake/consolidado';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { mxn } from '@/lib/utils';
 import { numero, hoyMx } from '@/lib/formato';
-import { ventanaLitrosElegibles } from '@/lib/likida/fiscal';
+import {
+  ventanaLitrosElegibles, getGastosFiscales, gastoPorConceptoFiscal, resolverPeriodo,
+} from '@/lib/likida/fiscal';
 import { ahoraMs } from '@/lib/saludo';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { requireSessionTenant } from '@/lib/auth/guard';
@@ -145,7 +147,16 @@ export default async function CombustibleCasetasPage({
   const vl = ventanaLitrosElegibles(hoy);
 
   const [porConcepto, acred, anomalias, docs, conciliacion, lineasPendientes] = await Promise.all([
-    safe<GastoPorConcepto[]>(() => getGastoPorConcepto(tenantId)),
+    // ARQ-A3 (auditoría 32 c16): la MISMA sede que el PDF, la póliza, WhatsApp
+    // y /dashboard/contador — `getGastosFiscales` sale de la 0702, que
+    // deduplica las dos fotos del mismo ticket; `gasto_por_concepto_tenant`
+    // (0150) suma `gasto` crudo y pintaba $5,000 · 2 cargas donde el PDF de
+    // ese mismo contralor dice $2,500 · 1 comprobante. `resolverPeriodo('todo')`
+    // es `{desde: null, hasta: null}`: el rótulo «histórico» sigue siendo
+    // verdad, y es la MISMA ventana que `getGastosFiscalesSeries` ya lee en
+    // producción para el panel del contador.
+    safe<{ concepto: string; n: number; total: number }[]>(async () =>
+      gastoPorConceptoFiscal(await getGastosFiscales(tenantId, resolverPeriodo('todo', hoy), hoy))),
     safe<Acreditables>(() => getAcreditables(tenantId, vl.dias)),
     safe<Anomalia[]>(() => detectarAnomalias(tenantId)),
     safe<DocumentoRow[]>(() => getDocumentos(tenantId, VENTANA_DOCUMENTOS)),
@@ -207,11 +218,13 @@ export default async function CombustibleCasetasPage({
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
               <KpiTile icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                // FE-9: `getGastoPorConcepto` no tiene ventana (histórico
-                // completo) — junto al tile vecino, que sí declara la suya
-                // ("últimos 100 comprobantes"), esto se leía como "del mes".
-                // A 15k viajes/mes este acumulado crece sin fin, y ES la
-                // pantalla que el contador abre para el cierre.
+                // FE-9: la cifra es el histórico COMPLETO (no "del mes") —
+                // junto al tile vecino, que sí declara la suya ("últimos 100
+                // comprobantes"), esto se leía como "del mes". A 15k
+                // viajes/mes este acumulado crece sin fin, y ES la pantalla
+                // que el contador abre para el cierre.
+                // ARQ-A3 (c16): el número viene de la sede DEDUPLICADA, así
+                // que «N cargas registradas» cuenta comprobantes y no fotos.
                 etiqueta="Gastado en combustible" valor={diesel?.total ?? 0} formato="mxn"
                 nota={diesel ? `histórico · ${numero(diesel.n)} cargas registradas` : 'Sin cargas registradas todavía'} />
               <KpiTile icono={<RouteIcon width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}

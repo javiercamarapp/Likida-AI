@@ -240,6 +240,7 @@ jobs:
           PGUSER=postgres bash supabase/tests/0375_peajes_claim_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0702_panel_fiscal_copia_legible.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0703_cierre_contrato_columnas.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0704_gasto_por_concepto_dedup.sql
           PGUSER=postgres bash supabase/tests/0341_gps_alerta_minima_concurrencia.sh localhost 5432 postgres
           PGUSER=postgres bash supabase/tests/0368_ventana_wa.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0520_reglas_frecuencia.sql
