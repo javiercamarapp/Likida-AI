@@ -1,36 +1,43 @@
----
-fecha_corrida: 2026-09-20 (domingo)
+fecha_corrida: 2026-10-13 (martes)
 ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-19 (9 días, incluye 3 viernes:
-  11, 18-sep, y el 12 previamente reportado) sin barrer. Sigue
-  arrancando en 09-11 para la próxima corrida.
+rango_pendiente: 2026-09-11 — 2026-10-12 (32 días, incluye 5 viernes de
+  cuota de diésel: 11 y 18 y 25-sep, 02 y 09-oct; 5 lunes de ETag del SAT:
+  14, 21, 28-sep, 05 y 12-oct; y el corte trimestral de deriva de ley del
+  01-oct-2026, que no se pudo correr). Sigue arrancando en 09-11 para la
+  próxima corrida.
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
   no hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes, y las cuotas de los
-  viernes 11 y 18-sep tampoco se pudieron verificar (mismo bloqueo).
-  Sigue sin verificar desde el 05-sep.
-etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
+cuota_diesel: no_evaluable — 5 viernes sin verificar (11, 18, 25-sep, 02,
+  09-oct), además de los 3 viernes ya represados desde la corrida
+  anterior (05, 12-sep). Sin verificar desde el 05-sep (más de un mes).
+etag_sat: no_evaluable — 5 lunes represados (14, 21, 28-sep, 05, 12-oct)
+  sin poder comparar ETag contra el guardado.
+deriva_ley_check: no_evaluable — el corte trimestral del 01-oct-2026 cayó
+  dentro de la ventana bloqueada; no se pudo hacer HEAD a los PDFs de
+  CFF/LISR/LIVA/LFPDPPP en diputados.gob.mx.
 estado: >
-  INFRA — TERCERA corrida consecutiva bloqueada (12-sep y 15-sep
-  reportaron el mismo corte; ver latido anterior). Probado con dos rutas
-  de red independientes: curl directo por HTTPS_PROXY y la herramienta
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la
-  sesión) — AMBAS devuelven bloqueo de política de egreso, no timeout ni
-  reset. curl: "CONNECT tunnel failed, response 403" contra
-  sidofqa.segob.gob.mx (notas y diarios/porFecha) y www.google.com como
-  control (también 403 — confirma que el bloqueo cubre dominios no
-  permitidos en general, no que el sitio del SIDOF esté caído). WebFetch:
-  {"error_type":"EGRESS_BLOCKED","domain":"sidofqa.segob.gob.mx"} contra
-  el mismo endpoint. /root/.ccr/__agentproxy/status muestra
-  recentRelayFailures vacío, o sea no es una caída de conexión sino un
-  rechazo de política. Per README del proxy: un 403 de política no se
-  reintenta ni se rodea, se reporta. No se leyó ninguna nota del DOF en
-  esta corrida ni en las dos anteriores. No se tocó ninguna ficha de
-  normas/. El rango sin verificar ya cubre 9 días hábiles y 3 viernes de
-  cuota de diésel. Requiere intervención humana: permitir
-  sidofqa.segob.gob.mx (y el resto de references/fuentes.md) en la
+  INFRA — CUARTA corrida consecutiva bloqueada (12-sep, 15-sep y 20-sep
+  reportaron el mismo corte; ver latido anterior). Un mes después, el
+  bloqueo sigue intacto y sin intervención. Probado de nuevo con dos
+  rutas independientes: curl directo por HTTPS_PROXY y WebFetch
+  (infraestructura propia de Anthropic, no el proxy de la sesión).
+  curl: "CONNECT tunnel failed, response 403" / connect_rejected contra
+  sidofqa.segob.gob.mx — y contra www.google.com como control, que
+  también falló con 403 (confirma bloqueo de política de egreso general,
+  no una caída puntual de sidofqa). WebFetch: "getaddrinfo ENOTFOUND
+  sidofqa.segob.gob.mx" — no resuelve el dominio, consistente con el
+  mismo bloqueo de política visto desde otra ruta de red.
+  /root/.ccr/__agentproxy/status muestra recentRelayFailures vacío: no es
+  una caída de conexión, es un rechazo de política de egreso.
+  No se leyó ninguna nota del DOF en esta corrida ni en las tres
+  anteriores. No se tocó ninguna ficha de normas/. El rango sin verificar
+  ya cubre 32 días, 5 viernes de cuota de diésel, 5 lunes de ETag del SAT,
+  y el corte trimestral completo de octubre.
+  Requiere intervención humana: permitir sidofqa.segob.gob.mx,
+  www.sat.gob.mx y diputados.gob.mx (ver references/fuentes.md) en la
   política de egreso de este entorno programado, o correr esta rutina
-  desde un entorno con esos dominios permitidos.
+  desde un entorno con esos dominios permitidos. Mientras no se resuelva,
+  cada corrida futura solo va a alargar el rango pendiente — este latido
+  no debe leerse como "mes tranquilo".
