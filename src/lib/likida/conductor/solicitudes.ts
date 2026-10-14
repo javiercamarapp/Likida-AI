@@ -127,7 +127,7 @@ export function armarRecordatorio(hito: HitoFila, v: ViajeContexto, nivel: numbe
 export type MotivoEscalacion = 'sin_respuesta' | 'sin_telefono' | 'problema_reportado';
 
 const TEXTO_MOTIVO: Record<MotivoEscalacion, (n: number) => string> = {
-  sin_respuesta: (n) => `sin respuesta a ${n} ${n === 1 ? 'aviso' : 'avisos'}`,
+  sin_respuesta: (n) => (n === 0 ? 'no se le pudo avisar por WhatsApp' : `sin respuesta a ${n} ${n === 1 ? 'aviso' : 'avisos'}`),
   sin_telefono: () => 'el chofer no tiene teléfono registrado',
   problema_reportado: () => 'el chofer reportó un problema',
 };
