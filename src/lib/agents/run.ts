@@ -3,14 +3,64 @@
 
 import type OpenAI from 'openai';
 import { randomUUID } from 'crypto';
-import { generateWithTools, type ToolCallRecord } from '@/lib/llm/openrouter';
+import { generateWithTools, type ToolCallRecord, type ToolExecutor } from '@/lib/llm/openrouter';
 import { ROLE_PARAMS } from '@/lib/llm/models';
 import { toolSchemas, makeExecutor, type ToolContext } from '@/lib/llm/tool-executor';
+import { logger } from '@/lib/logger';
 import { combineAbortSignals } from '@/lib/llm/runtime-signal';
 import { createLlmBudget } from '@/lib/llm/budget';
 import { AGENT_REGISTRY } from './registry';
 import { getSystemPrompt } from './prompts';
 import type { AgentName, TenantContext } from './types';
+
+/**
+ * TOO-C17-C1 (auditoría 32) — OFRECER NO ES ACOTAR.
+ *
+ * `toolSchemas(config.tools)` decide lo que el modelo VE, pero `executeTool`
+ * resuelve el nombre contra el `REGISTRY` global del módulo, así que el
+ * ejecutor crudo corre cualquier tool que alguien haya registrado en el
+ * proceso. Y en el proceso de WhatsApp hay muchas: `processor.ts` importa
+ * `vigia/servicio` → `enviar` → `redactor` → `agents/analista`, cuya línea 35
+ * es `import './chat-tools'` — un import de puro efecto que registra las 12
+ * tools de lectura del PANEL. Medido: el agente del chofer alcanzaba
+ * `viajes_flota` (nombre completo de los otros operadores + anticipo de cada
+ * viaje de la flota), `motor_fiscal`, `liquidaciones_flota` y `top_rutas`,
+ * todas del área `dinero` que un jefe de tráfico del propio panel no puede ver.
+ *
+ * El repo ya tenía la forma escrita: `conPermisos`
+ * (`orquestador/herramientas.ts`) envuelve al analista «para que una tool
+ * registrada para otro agente, una inventada, una de otra área, se rechace SIN
+ * ejecutarse». Faltaba el equivalente del ciclo del cuadre, donde el criterio
+ * no es el rol sino el catálogo declarado del agente.
+ *
+ * Falla CERRADO y se DERIVA de `config.tools`: agregar una tool al agente la
+ * habilita sin tocar esto; quitarla la cierra. No hay segunda lista que
+ * mantener sincronizada.
+ */
+export function soloOfrecidas(
+  ofrecidas: readonly string[],
+  base: ToolExecutor,
+  agente: string,
+): ToolExecutor {
+  const permitidas = new Set(ofrecidas);
+  return async (name, args, signal) => {
+    if (!permitidas.has(name)) {
+      // `error` y no `warn`: que el modelo pida una tool que no se le ofreció
+      // es, en el camino del chofer, la firma de una inyección por WhatsApp.
+      logger.error('tool.fuera_del_catalogo', { agente, herramienta: name, ofrecidas: ofrecidas.length });
+      return {
+        success: true,
+        result: {
+          error: 'fuera_del_catalogo',
+          mensaje: `La herramienta "${name}" no es parte de este agente y no se ejecutó. No inventes ni deduzcas su resultado: contesta con lo que sí puedes consultar.`,
+          herramienta: name,
+        },
+        durationMs: 0,
+      };
+    }
+    return base(name, args, signal);
+  };
+}
 
 export interface RunAgentResult {
   finalText: string;
@@ -74,7 +124,7 @@ export async function runAgent(opts: {
       system,
       messages: opts.history,
       tools,
-      toolExecutor: makeExecutor(ctx),
+      toolExecutor: soloOfrecidas(config.tools, makeExecutor(ctx), config.name),
       temperature: params.temperature,
       reasoning: params.reasoning,
       signal,
