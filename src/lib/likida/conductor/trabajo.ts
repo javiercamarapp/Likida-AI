@@ -121,13 +121,19 @@ export async function leerHitosDeViajes(viajeIds: string[]): Promise<HitoFila[]>
   return salida;
 }
 
-export async function leerAvisosDeHitos(hitoIds: string[]): Promise<Array<AvisoReclamado & { hitoId: string }>> {
-  const salida: Array<AvisoReclamado & { hitoId: string }> = [];
+export async function leerAvisosDeHitos(hitoIds: string[]): Promise<Array<AvisoReclamado & { hitoId: string; entregado: boolean | null }>> {
+  const salida: Array<AvisoReclamado & { hitoId: string; entregado: boolean | null }> = [];
   for (const ids of trozos(hitoIds, 150)) {
     const filas = await traerTodo<Fila>((desde, hasta) => acotada(supabaseAdmin()
-      .from('viaje_hito_aviso').select('viaje_hito_id, ciclo, clase, nivel').in('viaje_hito_id', ids).order('id').range(desde, hasta), 'conductor.avisos_lote') as never, 'conductor.avisos_lote');
+      .from('viaje_hito_aviso').select('viaje_hito_id, ciclo, clase, nivel, ok').in('viaje_hito_id', ids).order('id').range(desde, hasta), 'conductor.avisos_lote') as never, 'conductor.avisos_lote');
     for (const f of filas) {
-      salida.push({ hitoId: String(f.viaje_hito_id), ciclo: Number(f.ciclo), clase: f.clase as AvisoReclamado['clase'], nivel: Number(f.nivel) });
+      // AGE-C17-A1: `ok` no se proyectaba, así que quien contaba estas filas
+      // contaba intentos y las reportaba como mensajes entregados.
+      salida.push({
+        hitoId: String(f.viaje_hito_id), ciclo: Number(f.ciclo),
+        clase: f.clase as AvisoReclamado['clase'], nivel: Number(f.nivel),
+        entregado: f.ok == null ? null : Boolean(f.ok),
+      });
     }
   }
   return salida;
