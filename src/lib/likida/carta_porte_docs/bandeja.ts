@@ -28,7 +28,7 @@ import { aprender, claveDePerfil, dominioDe, firmaDe } from './perfiles';
 import { MENSAJE_FUNCION_NO_DISPONIBLE, flotaBajoPerfil, prepararEnvioTms, type ResultadoEnvio } from './envio';
 import { aplicarSalidaViaje, type ResultadoSalida } from './salida';
 import { DIAS_RETENCION, validarDocumento } from './servicio';
-import { confianzaMinimaCritica, conservarHallazgosTms, type Hallazgo, type ResultadoValidacion } from './validacion';
+import { CODIGOS_SUMA, confianzaMinimaCritica, conservarHallazgosTms, type Hallazgo, type ResultadoValidacion } from './validacion';
 import * as repo from './repo';
 import type { CorreccionFila, DocumentoFila } from './repo';
 
@@ -184,7 +184,14 @@ export interface ResultadoAprobacion {
 export function motivosDeBloqueo(d: DocumentoFila): string[] {
   const v = d.validacion;
   if (!v) return ['El documento todavía no se ha validado.'];
-  return v.hallazgos.filter((h) => h.severidad !== 'aviso').map((h) => h.mensaje).slice(0, 5);
+  // `peso_suma` (confirmar) dice lo mismo que el bloqueo `suma_peso`: se muestra una sola vez.
+  const haySumaPeso = v.hallazgos.some((h) => h.codigo === 'suma_peso');
+  return v.hallazgos.filter((h) => h.severidad !== 'aviso' && !(haySumaPeso && h.codigo === 'peso_suma')).map((h) => h.mensaje).slice(0, 5);
+}
+
+/** `suma_no_cuadra` si el documento tiene abierto un bloqueo de suma (piezas, kg o m³); si no, `null`. Es una sugerencia. */
+export function causaSugeridaDeRechazo(d: DocumentoFila): 'suma_no_cuadra' | null {
+  return d.validacion?.hallazgos.some((h) => h.severidad === 'bloqueo' && CODIGOS_SUMA.includes(h.codigo)) ? 'suma_no_cuadra' : null;
 }
 
 async function contenidoDeDocumento(d: DocumentoFila): Promise<ContenidoDoc | null> {
@@ -318,8 +325,10 @@ export async function rechazarDocumento(
   const d = await cargar(tenantId, id);
   if (d.estado !== 'por_revisar' && d.estado !== 'fallido') throw new DatoInvalido(`Un documento «${d.estado}» no se rechaza.`);
   if (d.version !== versionVista) throw new ConflictoDeVersion();
+  const causa = causaSugeridaDeRechazo(d);
   const r = await repo.actualizarDocumento(tenantId, id, versionVista, {
     estado: 'rechazado', rechazo_motivo: m, revisado_por: actorId, retener_hasta: new Date(ahora.getTime() + DIAS_RETENCION.cerrado * 86_400_000).toISOString(),
+    ...(causa ? { rechazo_causa: causa } : {}),
   });
   if (!r) throw new ConflictoDeVersion();
   await repo.registrarEvento(tenantId, id, 'rechazado', actorId, { motivo: m });
