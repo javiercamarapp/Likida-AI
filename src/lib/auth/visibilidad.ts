@@ -583,6 +583,7 @@ export const CRONS_PERFIL_CINCO_AGENTES: readonly string[] = [
   // `escalar` es MIXTO: la escalación del conductor (A5, «próximamente»), la cobranza, los relojes
   // legales de incidencias y las reglas (stand-by) se saltan flotas con perfil por sección.
   'escalar',
+  'tms',                     // el conector al sistema del cliente: solo corre para flotas que lo activaron (credencial probada + mapeo)
   'wa-pendientes', 'wa-outbox', 'purgar', 'guardia', // plomería compartida
 ];
 

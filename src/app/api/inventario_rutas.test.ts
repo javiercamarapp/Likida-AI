@@ -246,7 +246,12 @@ import { join, relative, sep } from 'node:path';
 //   Prueba: `export/peajes-revision/route.test.ts`.
 // INTEGRACIÓN (INT-RAMAS): Peajes (`api/export/peajes-revision`) y Liquidación (`api/v1/liquidaciones-externas/desgloses`) declararon cada una 106 → 107
 // contra la misma base; juntas son 106 + 2 = 108. Las dos rutas ya están revisadas arriba; el conteo es la suma de los tramos.
-const RUTAS_APP_REVISADAS = 108;
+// 108 → 109 (T-TMS-12, 15-oct-2026): `api/cron/tms/route.ts` — el sincronizador del sistema de transporte del cliente. Su puerta:
+//   `puertaCron` (CRON_SECRET, comparación de tiempo constante; sin él 500 y alerta), palanca `global` fail-closed (ilegible = 500 + latido
+//   `fallo`) y latido en todo camino de salida. No acepta cuerpo ni parámetros; no devuelve credenciales ni datos de la flota (solo conteos y
+//   frases propias). Opt-in: solo recorre flotas con credencial `tms_api_lectura` activa, probada y con mapeo activo. Prueba: `cron/tms/route.test.ts`.
+// Reanclado sobre master: 108 de la integración + 1 (cron/tms) = 109.
+const RUTAS_APP_REVISADAS = 109;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
