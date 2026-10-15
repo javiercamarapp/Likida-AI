@@ -43,7 +43,7 @@ import { claveCorreo, debeRespaldarPorCorreo, hashCorreo, reintentarCorreosVenci
 import { pulirBorrador, redactarBorrador, type ViajeParaRedactar } from './redactor';
 import { elegirRespuestaRapida } from './respuestas_rapidas';
 import type { DepsVigia, GuardaConversacion, RepoVigia } from './puertos';
-import { configParaCliente } from './tipos';
+import { configParaCliente, INTENCIONES_DE_DATO, INTENCIONES_DESDE_0798 } from './tipos';
 import type {
   AdjuntoRef, Clasificacion, ConfigVigia, Contacto, Conversacion, DatosAvisoCorreo, DestinatarioAviso, MensajeVigia, MotivoEscalamiento, NivelDirector,
 } from './tipos';
@@ -185,6 +185,16 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
   } else {
     cl = await clasificar(c.texto, deps.modelo, tenantId);
   }
+  // 0798: «datos de la unidad» solo existe en la base desde esa migración. Mientras `deps.datosUnidad` no diga que ya está
+  // aplicada, guardarla violaría el CHECK de `vigia_mensaje.intencion` y se perdería el mensaje del cliente: se degrada a
+  // `otro` (lo ve una persona) y la pregunta no se pierde.
+  if (!deps.datosUnidad) {
+    if (INTENCIONES_DESDE_0798.includes(cl.intencion)) {
+      cl = { ...cl, intencion: 'otro', secundarias: [], confianza: 0, senales: [...cl.senales, 'datos_unidad_sin_0798'] };
+    } else if (cl.secundarias.some((i) => INTENCIONES_DESDE_0798.includes(i))) {
+      cl = { ...cl, secundarias: cl.secundarias.filter((i) => !INTENCIONES_DESDE_0798.includes(i)) };
+    }
+  }
   await repo.anotarClasificacion(tenantId, recibido.mensajeId, cl);
   await repo.evento(tenantId, { conversacionId: conv.id, tipo: 'entrante', detalle: { intencion: cl.intencion, clasificador: cl.clasificador } });
   if (cl.senales.includes('inyeccion')) {
@@ -229,12 +239,13 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
   let viaje: ViajeParaRedactar = { tipo: 'ninguno' };
   const senales = [...cl.senales];
   let viajeEnFoco: string | null = conv.viajeId;
-  const pideDato = ['ubicacion', 'eta', 'documentos', 'factura_pod'].includes(cl.intencion);
+  const pideDato = INTENCIONES_DE_DATO.includes(cl.intencion);
+  const pideDatosUnidad = cl.intencion === 'datos_unidad' || cl.secundarias.includes('datos_unidad');
   if (pideDato) {
     const viajes: ResumenViaje[] = await repo.estatus.viajesEnCurso({ tenantId, clienteId: contacto.clienteId });
     const res = resolverViaje(c.texto, viajes, conv.viajeId);
     if (res.tipo === 'uno') {
-      const est = await repo.estatus.estatus({ tenantId, clienteId: contacto.clienteId, viajeId: res.viajeId });
+      const est = await repo.estatus.estatus({ tenantId, clienteId: contacto.clienteId, viajeId: res.viajeId, ...(pideDatosUnidad ? { datosUnidad: true } : {}) });
       viaje = est ? { tipo: 'uno', estatus: est } : { tipo: 'ninguno' };
       viajeEnFoco = est ? est.viajeId : null;
     } else if (res.tipo === 'ambiguo') {

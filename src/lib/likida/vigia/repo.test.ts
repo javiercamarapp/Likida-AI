@@ -728,3 +728,112 @@ describe('P14 · directores y correos de respaldo (0673/0674)', () => {
     await expect(guardarConfigVigia(T1, 'u', { ...v, respaldoCorreo: false })).resolves.toBeUndefined();
   });
 });
+
+describe('leerDatosUnidad (T-A4-24): unidad, caja y operador de UN viaje de UN cliente', () => {
+  const { leerDatosUnidad } = repoMod;
+  const U = 'uuuuuuuu-uuuu-4uuu-8uuu-uuuuuuuuuuu1';
+  const OP = 'oooooooo-oooo-4ooo-8ooo-ooooooooooo1';
+  const AHORA_ = new Date('2026-10-01T18:00:00Z');
+  const pedir = () => leerDatosUnidad({ tenantId: T1, clienteId: CLIENTE_A, viajeId: VIAJE_1, unidadId: U, ahora: AHORA_ });
+
+  const mundo = (parche: Partial<Record<string, unknown>> = {}) => {
+    const t: Record<string, unknown> = {
+      viaje: { id: VIAJE_1, operador_id: OP, unidad_id: U },
+      unidad: { numero_economico: 'C2-08', placas: 'XYZ789' },
+      operador: { nombre: 'Operador Uno' },
+      cliente: { nombre: 'Cliente Uno S.A.' },
+      programa_despacho_fila: [{ id: 'f1', fecha: '2026-10-01', cliente: 'cliente  uno s.a.', caja: 'CJ-100', unidad: 'c2-08' }],
+      vigia_caja: [{ numero: 'cj-100', placas: 'ABC123', estado: 'cargada' }],
+      vigia_dato_viaje_manual: null,
+      ...parche,
+    };
+    respuesta = (l) => ({ data: t[l.tabla] ?? [], error: null });
+  };
+
+  it('feliz: junta unidad, caja, placas, estado y operador de las fuentes del propio viaje', async () => {
+    mundo();
+    expect(await pedir()).toEqual({ caja: 'CJ-100', placasCaja: 'ABC123', estadoCaja: 'cargada', unidad: 'C2-08', placasUnidad: 'XYZ789', operador: 'Operador Uno' });
+  });
+
+  it('AISLAMIENTO: TODA consulta lleva tenant_id, y el viaje además el cliente', async () => {
+    mundo();
+    await pedir();
+    expect(llamadas.map((l) => l.tabla).sort()).toEqual(['cliente', 'operador', 'programa_despacho_fila', 'unidad', 'viaje', 'vigia_caja', 'vigia_dato_viaje_manual'].sort());
+    for (const l of llamadas) expect(tiene(l, 'eq', 'tenant_id', T1), `${l.tabla} sin tenant`).toBe(true);
+    const v = llamadas.find((l) => l.tabla === 'viaje')!;
+    expect(tiene(v, 'eq', 'cliente_id', CLIENTE_A)).toBe(true);
+    expect(tiene(v, 'eq', 'id', VIAJE_1)).toBe(true);
+  });
+
+  it('un viaje que no es de ese cliente en esa flota: no lee nada más y no devuelve nada', async () => {
+    mundo({ viaje: null });
+    const r = await pedir();
+    expect(Object.values(r).every((x) => x === null)).toBe(true);
+    expect(llamadas.map((l) => l.tabla)).toEqual(['viaje']);
+  });
+
+  it('la fila del programa es de OTRO cliente (mismo número de unidad): NO se da su caja', async () => {
+    mundo({ programa_despacho_fila: [{ id: 'f9', fecha: '2026-10-01', cliente: 'Cliente Dos', caja: 'CJ-AJENA', unidad: 'C2-08' }] });
+    const r = await pedir();
+    expect(r.caja).toBeNull();
+    expect(r.placasCaja).toBeNull();
+    expect(r.unidad).toBe('C2-08');
+    expect(r.operador).toBe('Operador Uno');
+    expect(llamadas.some((l) => l.tabla === 'vigia_caja')).toBe(false);
+  });
+
+  it('un cliente «casi igual» NO cuenta (solo la igualdad del texto normalizado)', async () => {
+    mundo({ programa_despacho_fila: [{ id: 'f9', fecha: '2026-10-01', cliente: 'Cliente Uno Norte', caja: 'CJ-DUDOSA', unidad: 'C2-08' }] });
+    expect((await pedir()).caja).toBeNull();
+  });
+
+  it('dos cajas distintas para la misma unidad y cliente el mismo día: no se adivina', async () => {
+    mundo({ programa_despacho_fila: [
+      { id: 'f1', fecha: '2026-10-01', cliente: 'Cliente Uno S.A.', caja: 'CJ-100', unidad: 'C2-08' },
+      { id: 'f2', fecha: '2026-10-01', cliente: 'Cliente Uno S.A.', caja: 'CJ-200', unidad: 'C2-08' },
+    ] });
+    expect((await pedir()).caja).toBeNull();
+  });
+
+  it('la captura manual de la fila manda sobre el catálogo para placas y estado', async () => {
+    mundo({ vigia_dato_viaje_manual: { operador_nombre: 'Otro Nombre', placas_unidad: 'MAN111', placas_caja: 'MAN222', estado_caja: 'en_patio' } });
+    const r = await pedir();
+    expect(r).toMatchObject({ placasCaja: 'MAN222', estadoCaja: 'en_patio', placasUnidad: 'MAN111', operador: 'Operador Uno' });
+    const m = llamadas.find((l) => l.tabla === 'vigia_dato_viaje_manual')!;
+    expect(tiene(m, 'eq', 'fila_id', 'f1')).toBe(true);
+  });
+
+  it('sin operador en el sistema, usa el capturado a mano', async () => {
+    mundo({ operador: null, vigia_dato_viaje_manual: { operador_nombre: 'Capturado A Mano', placas_unidad: null, placas_caja: null, estado_caja: null } });
+    expect((await pedir()).operador).toBe('Capturado A Mano');
+  });
+
+  it('las tablas de la 0795/0796 que aún no existen no aportan dato, pero tampoco rompen', async () => {
+    mundo();
+    const base = respuesta;
+    respuesta = (l) => (['programa_despacho_fila', 'vigia_caja', 'vigia_dato_viaje_manual'].includes(l.tabla)
+      ? { data: null, error: { message: 'no existe', code: '42P01' } } : base(l));
+    const r = await pedir();
+    expect(r).toEqual({ caja: null, placasCaja: null, estadoCaja: null, unidad: 'C2-08', placasUnidad: 'XYZ789', operador: 'Operador Uno' });
+  });
+
+  it('un error real de la base LANZA (no se lee como «no hay nada»)', async () => {
+    mundo();
+    const base = respuesta;
+    respuesta = (l) => (l.tabla === 'unidad' ? { data: null, error: { message: 'caída', code: '57014' } } : base(l));
+    await expect(pedir()).rejects.toThrow(/datos_unidad_unidad/);
+  });
+
+  it('el estatus real NO lee datos de la unidad si nadie los pidió, y si fallan devuelve el estatus con la unidad vacía', async () => {
+    const { crearEstatusViajeReal } = repoMod;
+    respuesta = (l) => (l.tabla === 'viaje' ? { data: [{ id: VIAJE_1, folio: 'F-1', origen: 'A', destino: 'B', estatus: 'abierto', unidad_id: U, llegada_en: null, descarga_en: null, regreso_en: null }], error: null } : { data: [], error: null });
+    const lector = vi.fn(async () => { throw new Error('boom'); });
+    const real = crearEstatusViajeReal({ conductor: async () => null, datosUnidad: lector });
+    const sin = await real.estatus({ tenantId: T1, clienteId: CLIENTE_A, viajeId: VIAJE_1 });
+    expect(lector).not.toHaveBeenCalled();
+    expect(sin).not.toHaveProperty('caja');
+    const con = await real.estatus({ tenantId: T1, clienteId: CLIENTE_A, viajeId: VIAJE_1, datosUnidad: true });
+    expect(lector).toHaveBeenCalledWith({ tenantId: T1, clienteId: CLIENTE_A, viajeId: VIAJE_1, unidadId: U });
+    expect(con).toMatchObject({ caja: null, unidad: null, operador: null });
+  });
+});
