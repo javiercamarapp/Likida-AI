@@ -48,7 +48,7 @@ export const MATRIZ_DORADA: Readonly<Record<IdMuestra, ReadonlyArray<CampoEspera
   M2: [
     falta('folio_cliente', null, '08 §2 marca ◐ («Load/Pro Number» vacío): la celda viene vacía, así que no hay nada que leer.'),
     ok('origen_rfc', RFC_DORADO.m2Remitente),
-    rev('destino_rfc', '581234567'), // ID fiscal de EE. UU., no un RFC: se conserva y se bloquea por forma
+    rev('destino_rfc', '58-1234567'), // ID fiscal de EE. UU. con su guion (T-A3-49); sin país declarado en la hoja sigue el rigor mexicano y se bloquea por forma
     rev('distancia_km', '812.35'), // «812,35 km»: coma decimal y unidad pegada
     ok('peso_bruto_total', '13020'),
     ok(m0('bienes_transp'), M2.clave),

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { campoDoc, campoMercancia } from './campos';
-import { codigoEstado, claveUnidadDeTexto, estadoDeCp } from './catalogos';
+import { codigoEstado, codigoEstadoEeuu, claveUnidadDeTexto, estadoDeCp } from './catalogos';
 import { normalizarFecha, normalizarNumero, normalizarValor, normalizarIdDestino, limpiarTexto } from './normalizar';
 
 const doc = (k: string) => campoDoc(k)!;
@@ -294,5 +294,20 @@ describe('T-A3-48: ceros a la izquierda y tipos de celda en claves SAT', () => {
     expect(normalizarIdDestino('x')).toBeNull();
     expect(normalizarIdDestino(0)).toBeNull();
     expect(normalizarIdDestino(null)).toBeNull();
+  });
+});
+
+describe('Tax ID y estado de EE. UU. (T-A3-49)', () => {
+  it('el EIN conserva su guion; el RFC mexicano sigue normalizándose sin guiones ni espacios', () => {
+    expect(normalizarValor(doc('destino_rfc'), ' 12-3456789 ').valor).toBe('12-3456789');
+    expect(normalizarValor(doc('destino_rfc'), 'abc-010101-xxx').valor).toBe('ABC010101XXX'); // grep-limpio:ok
+    expect(normalizarValor(doc('destino_rfc'), 'abc 010101 xxx').valor).toBe('ABC010101XXX'); // grep-limpio:ok
+  });
+  it('el estado de EE. UU. se conserva o se traduce a su clave; un estado mexicano sigue igual', () => {
+    expect(normalizarValor(doc('destino_estado'), 'tx').valor).toBe('TX');
+    expect(normalizarValor(doc('destino_estado'), 'Texas').valor).toBe('TX');
+    expect(normalizarValor(doc('destino_estado'), 'Nuevo León').valor).toBe('NLE');
+    expect(codigoEstadoEeuu('New Mexico')).toBe('NM');
+    expect(codigoEstadoEeuu('Jalisco')).toBeNull();
   });
 });

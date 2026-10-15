@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type { CampoDoc } from './campos';
-import { codigoEstado, claveUnidadDeTexto, CLAVES_UNIDAD } from './catalogos';
+import { codigoEstado, codigoEstadoEeuu, claveUnidadDeTexto, CLAVES_UNIDAD } from './catalogos';
 
 export interface Normalizado {
   valor: string | null;
@@ -291,6 +291,12 @@ export function normalizarValor(campo: CampoDoc, crudo: unknown, opciones: { mil
 
   switch (campo.tipo) {
     case 'rfc': {
+      // Un Tax ID de EE. UU. (EIN `NN-NNNNNNN`) conserva su guion: ningún RFC mexicano tiene esa forma (T-A3-49).
+      const bruto = String(texto).trim().toUpperCase();
+      if (/^\d{2}-\d{7}$/.test(bruto)) {
+        if (bruto !== String(texto)) notas.push('Tax ID normalizado (mayúsculas, sin espacios); se conserva el guion.');
+        return out(bruto);
+      }
       const r = String(texto).toUpperCase().replace(/[\s.\-_]/g, '');
       if (r !== String(texto)) notas.push('RFC normalizado (mayúsculas, sin espacios ni guiones).');
       return out(r);
@@ -347,6 +353,8 @@ export function normalizarValor(campo: CampoDoc, crudo: unknown, opciones: { mil
       const t = String(texto).trim();
       const c = codigoEstado(t);
       if (c) { if (c !== t.toUpperCase()) notas.push(`«${t}» se tradujo a la clave de estado ${c}.`); return out(c); }
+      const us = codigoEstadoEeuu(t);
+      if (us) { if (us !== t.toUpperCase()) notas.push(`«${t}» se tradujo a la clave de estado de EE. UU. ${us}.`); return out(us); }
       return out(t.toUpperCase());
     }
     case 'booleano': {

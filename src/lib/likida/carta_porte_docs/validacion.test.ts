@@ -546,3 +546,67 @@ describe('reglas de la Guía de llenado (T-A3-45)', () => {
     });
   });
 });
+
+describe('extremos en EE. UU. y Tax ID extranjero (T-A3-49)', () => {
+  // Forma sintética: EIN `NN-NNNNNNN`, estado de dos letras, CP de 5 dígitos, país USA. Nada de esto es un dato real.
+  const CODIGOS_BLOQUEO_EEUU = ['rfc_forma', 'estado_no_catalogo', 'cp_estado', 'cp_inexistente', 'cp_forma', 'cp_no_catalogo', 'taxid_forma'];
+  const conExtremoEeuu = (rfc: string, pais = 'USA'): Extraccion => {
+    const e = extraccionAtlasOk();
+    e.campos.destino_rfc = cv(rfc); e.campos.destino_cp = cv('78041'); e.campos.destino_estado = cv('TX'); e.campos.destino_pais = cv(pais);
+    return e;
+  };
+  const sinCodigosEeuu = (e: Extraccion) => {
+    const c = validar(e).hallazgos.map((h) => h.codigo);
+    for (const k of CODIGOS_BLOQUEO_EEUU) expect(c).not.toContain(k);
+  };
+
+  it('Tax ID con guion, estado TX y CP de 5 dígitos con país USA no producen rfc_forma, estado_no_catalogo ni cp_estado', () => {
+    const e = conExtremoEeuu('12-3456789');
+    sinCodigosEeuu(e);
+    expect(validar(e).listoParaAprobar).toBe(true);
+  });
+  it('el RFC genérico extranjero también pasa', () => {
+    sinCodigosEeuu(conExtremoEeuu('XEXX010101000')); // grep-limpio:ok
+  });
+  it('el CP de EE. UU. no se cruza con un estado mexicano aunque su prefijo caiga en uno', () => {
+    // 78xxx sería San Luis Potosí; con TX y país USA no hay discrepancia que mostrar.
+    const e = conExtremoEeuu('12-3456789');
+    expect(codigos(e).some((c) => c.includes('cp_estado'))).toBe(false);
+  });
+  it('un estado que no es de EE. UU. con país USA sigue pidiendo confirmar', () => {
+    const e = conExtremoEeuu('12-3456789'); e.campos.destino_estado = cv('NLE');
+    expect(codigos(e)).toContain('confirmar:estado_no_catalogo:destino_estado');
+  });
+  it('un Tax ID imposible (con espacios o símbolos) sigue bloqueando', () => {
+    const e = conExtremoEeuu('12 345%789');
+    expect(codigos(e)).toContain('bloqueo:taxid_forma:destino_rfc');
+  });
+  it('no se exigen claves de colonia, localidad ni municipio fuera de México', () => {
+    const c = validar(conExtremoEeuu('12-3456789')).hallazgos.map((h) => h.codigo);
+    expect(c.filter((k) => /colonia|localidad|municipio/.test(k) && !k.startsWith('guia_'))).toEqual([]);
+  });
+  it('país MEX conserva todo el rigor: un RFC mexicano malo sigue bloqueando', () => {
+    const e = extraccionAtlasOk(); e.campos.destino_pais = cv('MEX'); e.campos.destino_rfc = cv('12-3456789');
+    expect(codigos(e)).toContain('bloqueo:rfc_forma:destino_rfc');
+    const f = extraccionAtlasOk(); f.campos.destino_pais = cv('México'); f.campos.destino_rfc = cv('ABC');
+    expect(codigos(f)).toContain('bloqueo:rfc_forma:destino_rfc');
+  });
+  it('país MEX: el estado fuera de catálogo y el CP incoherente siguen pidiendo confirmar', () => {
+    const e = extraccionAtlasOk(); e.campos.origen_pais = cv('MEX'); e.campos.origen_estado = cv('TX');
+    expect(codigos(e)).toContain('confirmar:estado_no_catalogo:origen_estado');
+    e.campos.origen_estado = cv('NLE');
+    expect(codigos(e)).toContain('confirmar:cp_estado:origen_cp');
+  });
+  it('país vacío conserva el rigor mexicano: el Tax ID de EE. UU. sigue bloqueando hasta que se declare el país', () => {
+    const e = extraccionAtlasOk();
+    e.campos.destino_rfc = cv('12-3456789'); e.campos.destino_estado = cv('TX');
+    const c = codigos(e);
+    expect(c).toContain('bloqueo:rfc_forma:destino_rfc');
+    expect(c).toContain('confirmar:estado_no_catalogo:destino_estado');
+    expect(validar(e).listoParaAprobar).toBe(false);
+  });
+  it('un país de otro lugar (CAN) acepta Tax ID y no cruza el CP', () => {
+    const e = conExtremoEeuu('123456789', 'CAN'); e.campos.destino_estado = cv('ON'); e.campos.destino_cp = cv('M5V');
+    sinCodigosEeuu(e);
+  });
+});
