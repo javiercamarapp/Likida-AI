@@ -7,6 +7,7 @@ import { ahoraMs } from '@/lib/saludo';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { crearDepsVigia } from '@/lib/likida/vigia/deps';
+import { crearRepoBandeja } from '@/lib/likida/vigia/aviso/bandeja';
 import {
   cargarTablero, validarConfig, guardarConfigVigia, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, guardarDirectorVigia, quitarDirectorVigia,
   validarServicio, guardarServicioVigia, quitarServicioVigia,
@@ -65,6 +66,8 @@ export default async function PaginaAgenteVigia({
 
   // FE-14: se lanza UNA vez y se pasa la PROMESA; cada tarjeta espera la suya.
   const datos = vigilar(cargarTablero(tenantId));
+  // T-A4-22: cuántos avisos de viaje esperan a una persona; si no se puede contar (p. ej. 0797 sin aplicar) el enlace va sin número.
+  const avisosPendientes = vigilar(crearRepoBandeja().contarPendientes(tenantId).catch((): number | null => null));
 
   async function decidir(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
@@ -248,6 +251,7 @@ export default async function PaginaAgenteVigia({
       puedeAdministrar={rol === 'flota_admin'}
       acciones={{ decidir, conversacion, config, alta, contacto, director, servicio }}
       sufijo={sufijoTenant(sp)}
+      avisosPendientes={avisosPendientes}
     />
   );
 }

@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { UsersRound, Hand, Clock, Flame, Inbox, ShieldCheck, History, Settings2, AlertTriangle, Mail } from 'lucide-react';
 import { numero, fechaHoraMx } from '@/lib/formato';
@@ -18,6 +19,18 @@ export interface AccionesVigia {
   director: AccionVigia;
   /** 0798: alta, corrección y baja de una persona de «servicio al cliente» (solo el dueño). */
   servicio?: AccionVigia;
+}
+
+const ENLACE = 'hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]';
+
+/** T-A4-22: el acceso a la bandeja de avisos de viaje, con cuántos esperan a una persona. Si no se pudo contar, el enlace va sin número. */
+export async function EnlaceAvisos({ sufijo, pendientes }: { sufijo: string; pendientes?: Promise<number | null> }) {
+  const n = pendientes ? await pendientes.catch(() => null) : null;
+  return (
+    <Link href={`/dashboard/agentes/vigia/avisos${sufijo}`} className={ENLACE}>
+      Avisos de viaje{typeof n === 'number' && n > 0 ? ` (${n} por revisar)` : ''}
+    </Link>
+  );
 }
 
 /** Minutos enteros que lleva esperando una conversación (0 si nadie espera). */
@@ -71,9 +84,11 @@ export const TEXTO_ESTADO_CORREO: Record<string, string> = {
   red: 'No se pudo mandar por correo: falla de red o sin confirmar',
 };
 
-export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministrar, acciones, sufijo = '' }: {
+export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministrar, acciones, sufijo = '', avisosPendientes }: {
   datos: Promise<DatosTablero>;
   sufijo?: string;
+  /** T-A4-22: cuántos avisos de viaje esperan a una persona (`null` = no se pudo contar). Opcional: sin él el enlace va sin número. */
+  avisosPendientes?: Promise<number | null>;
   ahoraMs: number;
   /** flota_admin y encargado deciden por los clientes; el resto solo mira. */
   puedeDecidir: boolean;
@@ -93,6 +108,9 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
             <Link href={`/dashboard/agentes/vigia/historial${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Grupos críticos e histórico (FAQs y tendencias)</Link>
             <Link href={`/dashboard/agentes/vigia/programa${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Programa de despacho (subir el archivo del día)</Link>
             <Link href={`/dashboard/agentes/vigia/importacion${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Estatus de importación (derivado del programa)</Link>
+            <Suspense fallback={<Link href={`/dashboard/agentes/vigia/avisos${sufijo}`} className={ENLACE}>Avisos de viaje</Link>}>
+              <EnlaceAvisos sufijo={sufijo} pendientes={avisosPendientes} />
+            </Suspense>
           </nav>
           <Bloque mensaje="No se pudo leer el tablero del Vigía." esqueleto={<EsqKpis />}>
             <BloqueEstadoYKpis datos={datos} ahoraMs={ahoraMs} />
