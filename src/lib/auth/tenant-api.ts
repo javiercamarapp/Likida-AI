@@ -2,6 +2,7 @@ import { logger } from '@/lib/logger';
 import { getSessionTenant } from './session';
 import { tenantDemo } from './tenant-demo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from '@/lib/likida/presupuesto';
 import { mfaSuperadminObligatorio, veredictoMfaSuperadmin } from './mfa';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -78,7 +79,10 @@ export async function resolverTenantApi(url: string): Promise<ResultadoTenantApi
     // `data` es null en los dos — y el superadmin escribe en el tenant de su
     // sesión en silencio. Un parpadeo de lectura con escritura posterior
     // exitosa alcanza a escribir en la flota equivocada.
-    const { data, error } = await supabaseAdmin().from('tenant').select('id').eq('id', pedido).maybeSingle();
+    const { data, error } = await acotada(
+      supabaseAdmin().from('tenant').select('id').eq('id', pedido).maybeSingle(),
+      'resolverTenantApi.pedido',
+    );
     if (error) {
       logger.error('tenant.api_pedido', { err: error.message });
       return { ok: false, status: 503, motivo: 'No se pudo verificar la flota pedida. Intenta de nuevo.' };
@@ -107,7 +111,10 @@ export async function resolverTenantPedido(
   pedido: string | null | undefined,
 ): Promise<string> {
   if (!pedido) return tenantDeSesion;
-  const { data, error } = await admin.from('tenant').select('id').eq('id', pedido).maybeSingle();
+  const { data, error } = await acotada(
+    admin.from('tenant').select('id').eq('id', pedido).maybeSingle(),
+    'resolverTenantPedido',
+  );
   if (error) {
     // Fail-loud: un parpadeo de red no puede convertirse en escribir en la
     // flota equivocada. El error llega a la UI, no a la base.

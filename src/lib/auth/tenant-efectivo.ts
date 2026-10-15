@@ -24,6 +24,7 @@ import { requireSessionTenant } from './guard';
 import { tenantDemo } from './tenant-demo';
 import { puedeVerRuta, inicioDe, rolEfectivo } from './visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from '@/lib/likida/presupuesto';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
@@ -113,13 +114,16 @@ function diaMx(): string {
 async function firmarImpersonacion(actorId: string, tenantId: string): Promise<void> {
   try {
     const dia = diaMx();
-    const { data, error } = await supabaseAdmin()
-      .from('impersonacion_dia')
-      .upsert(
-        { actor_id: actorId, tenant_id: tenantId, dia },
-        { onConflict: 'actor_id,tenant_id,dia', ignoreDuplicates: true },
-      )
-      .select('dia');
+    const { data, error } = await acotada(
+      supabaseAdmin()
+        .from('impersonacion_dia')
+        .upsert(
+          { actor_id: actorId, tenant_id: tenantId, dia },
+          { onConflict: 'actor_id,tenant_id,dia', ignoreDuplicates: true },
+        )
+        .select('dia'),
+      'firmarImpersonacion',
+    );
     if (error) {
       logger.warn('impersonacion.no_firmada', { tenant: tenantId, err: error.message });
       return;
@@ -176,7 +180,10 @@ export async function resolverTenantEfectivo(
   let tenantNombre: string | null = null;
   let tenantExiste = true;
   if (sesionReal.rol === 'superadmin' && sp?.tenant) {
-    const { data: t, error } = await supabaseAdmin().from('tenant').select('id, nombre').eq('id', sp.tenant).maybeSingle();
+    const { data: t, error } = await acotada(
+      supabaseAdmin().from('tenant').select('id, nombre').eq('id', sp.tenant).maybeSingle(),
+      'tenantEfectivo.pedido',
+    );
     // H2 (auditoría 24): sin leer `error`, un parpadeo de Supabase convertía
     // `?tenant=<Flota B>` en «me quedo con el tenant de la sesión» — es decir,
     // la DEMO— y la página seguía pintando bajo el mismo encabezado. Una
@@ -212,7 +219,10 @@ export async function resolverTenantEfectivo(
     && !sp?.tenant && sp?.vista !== 'demo'
     && tenantId !== tenantDemo();
   if (esSeleccionExplicita) {
-    const { data: t, error } = await supabaseAdmin().from('tenant').select('id, nombre').eq('id', tenantId).maybeSingle();
+    const { data: t, error } = await acotada(
+      supabaseAdmin().from('tenant').select('id, nombre').eq('id', tenantId).maybeSingle(),
+      'tenantEfectivo.seleccion',
+    );
     if (t) {
       tenantNombre = t.nombre as string;
       await firmarImpersonacion(sesionReal.userId, tenantId);
@@ -230,7 +240,10 @@ export async function resolverTenantEfectivo(
     // apuntar a una fila viva. Preguntarlo para todos sería una consulta de más
     // en cada carga de cada cliente para responder algo que el esquema ya
     // garantiza.
-    const { data, error } = await supabaseAdmin().from('tenant').select('id').eq('id', tenantId).maybeSingle();
+    const { data, error } = await acotada(
+      supabaseAdmin().from('tenant').select('id').eq('id', tenantId).maybeSingle(),
+      'tenantEfectivo.existe',
+    );
     if (!error) tenantExiste = data !== null;
   }
 
