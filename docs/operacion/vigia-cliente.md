@@ -92,6 +92,7 @@ Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`* * * * *`).
 - **Lo que NO hace**: leer un grupo de WhatsApp **en vivo**. Eso depende de la API de grupos de Meta (elegibilidad y alta del WABA) y no está simulado:
   la API de Business no lee los grupos de un WhatsApp común. Hoy el grupo se alimenta del **histórico exportado**; el camino en vivo exige que los
   grupos críticos migren a un número Business. Verificar la API de grupos de Meta antes de prometer grupos en vivo.
+- **Hoy no se promete** lectura de grupos. Las opciones, los costos, lo no verificado y las preguntas pendientes están en [vigia-grupos-decision.md](vigia-grupos-decision.md).
 - **Copiloto**: el agente solo sugiere; un humano aprueba y envía. Ningún flujo depende de leer grupos.
 
 ## Histórico exportado → preguntas frecuentes y tendencias (0484)
