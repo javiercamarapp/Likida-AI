@@ -55,12 +55,14 @@ export const estado = {
   llamadas: [] as string[],
   /** 0790: configuración de salida por flota. */
   salidaConfigs: new Map<string, Real.SalidaConfigFila>(),
+  /** 0790: envíos al TMS. */
+  envios: [] as Real.EnvioTmsFila[],
 };
 
 export function reset(): void {
   estado.docs.clear(); estado.archivos.clear(); estado.eventos.length = 0; estado.correcciones.length = 0; estado.buzones.clear();
   estado.perfiles.clear(); estado.versiones.length = 0; estado.exportConfigs.length = 0; estado.viajes.length = 0; estado.mercancias.length = 0;
-  estado.catalogoNumeros.length = 0; estado.catalogoProductos.length = 0; estado.catalogoPartes.length = 0; estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0; estado.salidaConfigs.clear();
+  estado.catalogoNumeros.length = 0; estado.catalogoProductos.length = 0; estado.catalogoPartes.length = 0; estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0; estado.salidaConfigs.clear(); estado.envios.length = 0;
   estado.seq = 0; estado.reloj.ahora = () => new Date();
 }
 
@@ -503,4 +505,25 @@ export const api: typeof Real = {
   },
   async leerSalidaConfig(tenantId) { falla('leerSalidaConfig'); const c = estado.salidaConfigs.get(tenantId); return c ? clon(c) : null; },
   async guardarSalidaConfig(tenantId, c) { falla('guardarSalidaConfig'); estado.salidaConfigs.set(tenantId, clon(c)); },
+  async envioPorLlave(tenantId, llave) { falla('envioPorLlave'); const e = estado.envios.find((x) => x.tenantId === tenantId && x.idempotencyKey === llave); return e ? clon(e) : null; },
+  async enviosDeDocumento(tenantId, documentoId) { return estado.envios.filter((x) => x.tenantId === tenantId && x.documentoId === documentoId).reverse().map(clon); },
+  async insertarEnvioTms(tenantId, e) {
+    falla('insertarEnvioTms');
+    const previo = estado.envios.find((x) => x.tenantId === tenantId && x.idempotencyKey === e.idempotencyKey);
+    if (previo) return { envio: clon(previo), creado: false };
+    const d = estado.docs.get(e.documentoId);
+    if (!d || d.tenantId !== tenantId) throw new Error('repo falso: FK compuesta (envío de otra flota)');
+    // Índice parcial único de la 0790: un solo envío ACTIVO por documento.
+    const activo = estado.envios.some((x) => x.tenantId === tenantId && x.documentoId === e.documentoId && !['descartado', 'rechazado_tms', 'subido_a_mano', 'enviado'].includes(x.estado));
+    if (activo) return null;
+    const envio: Real.EnvioTmsFila = { id: `envio-${++estado.seq}`, tenantId, documentoId: e.documentoId, versionDoc: e.versionDoc, idempotencyKey: e.idempotencyKey, estado: 'pendiente_prechequeo', plantilla: e.plantilla, intentos: 0 };
+    estado.envios.push(envio);
+    return { envio: clon(envio), creado: true };
+  },
+  async descartarEnvioTms(tenantId, id, desde) {
+    const e = estado.envios.find((x) => x.tenantId === tenantId && x.id === id);
+    if (!e || !desde.includes(e.estado)) return false;
+    e.estado = 'descartado';
+    return true;
+  },
 };
