@@ -269,6 +269,10 @@ export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios }: {
         <span className="ml-auto text-[12px]" style={{ color: 'var(--muted)' }}>{v.origen ?? '—'} → {v.destino ?? '—'}</span>
       </div>
       <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{f.motivo}</p>
+      <p className="text-[12px] flex items-center gap-1.5" style={{ color: f.ubicacion.obsoleta ? 'var(--warn)' : 'var(--muted)' }}>
+        {f.ubicacion.fuente === 'sin_dato' ? <MapPinOff size={13} aria-hidden /> : <MapPin size={13} aria-hidden />}
+        {f.ubicacion.texto}
+      </p>
       {(f.sitioCarga || f.sitioDescarga) ? (
         <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Se valida contra: {f.sitioCarga ?? 'carga sin sitio asignado'} → {f.sitioDescarga ?? 'descarga sin sitio asignado'}</p>
       ) : (
