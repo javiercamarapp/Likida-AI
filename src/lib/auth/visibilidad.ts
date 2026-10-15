@@ -480,8 +480,11 @@ export const CRONS_PERFIL_CINCO_AGENTES: readonly string[] = [
   'peajes',                  // A2
   'carta-porte-docs',        // A3
   'vigia',                   // A4
-  'conductor-hitos', 'escalar', 'gps', // A5
-  'wa-pendientes', 'wa-outbox', 'buzon-entrega', 'purgar', 'guardia', 'runner', // plomería compartida
+  'conductor-hitos', 'gps',  // A5
+  // `escalar` es MIXTO: lleva la escalación del conductor (sigue) y, además, la cobranza, los relojes
+  // legales de incidencias y las reglas (stand-by), que se saltan flotas con perfil por sección.
+  'escalar',
+  'wa-pendientes', 'wa-outbox', 'purgar', 'guardia', // plomería compartida
 ];
 
 /** Toda ruta que el mapa de áreas conoce — para las pruebas que exigen que cada una esté clasificada en el perfil. */

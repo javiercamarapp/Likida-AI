@@ -22,6 +22,7 @@
 // unos segundos, nunca enseña de más. Los errores no se cachean.
 // ═══════════════════════════════════════════════════════════════════════════
 import { redirect } from 'next/navigation';
+import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import {
@@ -128,6 +129,16 @@ export async function apiDenegadaPorPerfil(tenantId: string | null | undefined, 
 /** Respuesta estándar de una API negada por el perfil. */
 export const MOTIVO_PERFIL_API = 'Esta parte del producto no está incluida en el plan de tu cuenta.';
 
+/**
+ * Para los endpoints que arman su propia respuesta (`/api/dashboard/*`, chat):
+ * devuelve la 403 lista para regresar, o `null` si el perfil no niega la ruta.
+ * `url` es la de la petición (`req.url`).
+ */
+export async function respuestaSiPerfilNiegaApi(tenantId: string | null | undefined, url: string): Promise<NextResponse | null> {
+  if (!(await apiDenegadaPorPerfil(tenantId, new URL(url).pathname))) return null;
+  return NextResponse.json({ error: MOTIVO_PERFIL_API }, { status: 403 });
+}
+
 // ── Crons ──────────────────────────────────────────────────────────────────
 
 /** El nombre de un cron a partir de su ruta (`/api/cron/vigia` → `vigia`; `/api/cron/facturar/cola` → `facturar`). */
@@ -150,7 +161,19 @@ export function cronAplicaAPerfil(nombreCron: string): boolean {
  */
 export async function tenantsConPerfilASaltar(nombreCron: string): Promise<Set<string>> {
   if (cronAplicaAPerfil(nombreCron)) return new Set();
+  return tenantsConPerfil();
+}
+
+/**
+ * TODAS las flotas con perfil, sin mirar el nombre del cron: para los crons
+ * MIXTOS (`escalar` corre la escalación del conductor, que sigue viva, y la
+ * cobranza y las reglas, que no) — ahí cada sección de stand-by pide esta lista
+ * y se salta a esas flotas. Lanza si no puede leer la tabla (falla cerrado). Una
+ * tabla que aún no existe (0770 sin aplicar) es "ninguna flota con perfil".
+ */
+export async function tenantsConPerfil(): Promise<Set<string>> {
   const { data, error } = await supabaseAdmin().from('tenant_perfil').select('tenant_id');
+  if (error && (error.code === '42P01' || error.code === 'PGRST205')) return new Set();
   if (error) throw new Error(`perfil_tenant: no se pudo leer la lista de flotas con perfil (${error.message})`);
   return new Set((data ?? []).map((f) => String(f.tenant_id)));
 }
