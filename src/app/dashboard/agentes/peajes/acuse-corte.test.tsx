@@ -57,7 +57,7 @@ function acuse(resumen: ResumenBarrido): string {
  *     aparentaba;
  *   · se investigó como candidato al rojo de CodeQL en este PR y **quedó
  *     descartado**: ese mismo patrón vive desde antes en `investigador.ts`,
- *     `respuesta_campana.ts` y `scripts/cosecha/*.mjs`, sobre corridas verdes.
+ *     `respuesta_campana.ts` y herramientas locales de cosecha, sobre corridas verdes.
  *     No es el hallazgo.
  */
 const cifra = (n: number) => `>${n}<`;
