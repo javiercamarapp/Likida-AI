@@ -24,7 +24,8 @@ vi.mock('@/lib/likida/conductor/ejecutor', () => ({ correrConductor: (...a: unkn
 let horaMx = 12;
 vi.mock('@/lib/likida/conductor/config', () => ({ horaYDiaMx: () => ({ hora: horaMx, dia: 5 }) }));
 const mantenimiento = vi.fn(async (): Promise<Record<string, number | string>> => ({ anonimizar_conductor_hitos: 3, purgar_conductor_auditoria: 3 }));
-vi.mock('@/lib/likida/conductor/repo', () => ({ correrMantenimientoConductor: () => mantenimiento(), leerConfigConductor: async () => ({}), asignarSitioDerivado: async () => 'ok' }));
+let voluntarios: number | Error = 0;
+vi.mock('@/lib/likida/conductor/repo', () => ({ contarVoluntariosActivos: async () => { if (voluntarios instanceof Error) throw voluntarios; return voluntarios; }, correrMantenimientoConductor: () => mantenimiento(), leerConfigConductor: async () => ({}), asignarSitioDerivado: async () => 'ok' }));
 const alertasEstadia = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisadas: 1, alertas: 1, yaReclamadas: 0, sinDestinatario: 0, fueraDeVentana: 0, rechazosReintentables: 0, fallos: [] }));
 vi.mock('@/lib/likida/conductor/alertas_estadia', () => ({ correrAlertasEstadia: () => alertasEstadia() }));
 const llegadas = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisadas: 1, avisos: 1, yaReclamados: 0, sinDestinatario: 0, fueraDeVentana: 0, rechazosReintentables: 0, fallos: [] }));
@@ -54,7 +55,7 @@ const llamar = () => GET(new Request('https://app.likida.ai/api/cron/conductor-h
 const j = async (r: Response) => (await r.json()) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 beforeEach(() => {
-  autorizado = 'si'; interruptores = {}; horaMx = 12;
+  autorizado = 'si'; interruptores = {}; horaMx = 12; voluntarios = 0;
   correr.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); mantenimiento.mockClear(); alertasEstadia.mockClear(); llegadas.mockClear(); barrido.mockClear(); acercamiento.mockClear(); ciclo.mockClear(); sitios.mockClear(); senal.mockClear();
 });
 
@@ -276,5 +277,51 @@ describe('P2: el ciclo por geocerca, el sitio derivado y la señal de vida', () 
     expect(ciclo).not.toHaveBeenCalled();
     expect(sitios).not.toHaveBeenCalled();
     expect(senal).not.toHaveBeenCalled();
+  });
+});
+
+describe('T-A5-27: observabilidad mínima en el latido', () => {
+  const PII = /\d{7,}|-?\d{1,3}\.\d{3,}/;
+  it('el latido y el cuerpo traen los contadores y ningún teléfono ni coordenada', async () => {
+    voluntarios = 4;
+    correr.mockResolvedValueOnce({ sembrados: 0, viajes: 3, viajesPorOrigen: { chofer: 1, importacion: 2, otro: 0 }, solicitudes: 1, recordatorios: 1, escalaciones: 0, rechazosReintentables: 1, configIlegible: 0, sinDestinatario: 0, cortadosPorReloj: 0, cortadaPorRechazoMasivo: false, fallos: [], saltados: {} });
+    ciclo.mockResolvedValueOnce({ viajes: 3, detectados: 2, sinSitio: 1, sinMuestras: 1, detectadosViaDespacho: 1, detectadosViaUnidadVentana: 1, unidadesConsultadas: 4, unidadesSinPosicion: 1, fallos: [] });
+    const r = await j(await llamar());
+    const esperado = {
+      viajesEnSeguimiento: 3, viajesPorOrigen: { chofer: 1, importacion: 2, otro: 0 }, rechazosMeta: 1, hitosPorGps: 2, hitosViaDespacho: 1, hitosViaUnidadVentana: 1,
+      viajesSinSitio: 1, viajesSinGps: 1, voluntariosActivos: 4, unidadesEnTransito: 4, unidadesSinPosicion: 1,
+    };
+    expect(r.observabilidad).toMatchObject(esperado);
+    expect(r.alarmas).toEqual([]);
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'ok', expect.objectContaining({ observabilidad: expect.objectContaining(esperado), alarmas: [] }));
+    const detalle = registrarLatido.mock.calls[0][2];
+    expect(JSON.stringify(detalle)).not.toMatch(PII);
+  });
+
+  it('alarma: voluntarios activos y 0 viajes en seguimiento → warn y latido parcial con la alarma en el estado', async () => {
+    voluntarios = 2;
+    correr.mockResolvedValueOnce({ sembrados: 0, viajes: 0, solicitudes: 0, recordatorios: 0, escalaciones: 0, rechazosReintentables: 0, configIlegible: 0, sinDestinatario: 0, cortadosPorReloj: 0, cortadaPorRechazoMasivo: false, fallos: [], saltados: {} });
+    const { logger } = await import('@/lib/logger');
+    vi.mocked(logger.warn).mockClear();
+    await llamar();
+    expect(logger.warn).toHaveBeenCalledWith('conductor.alarma', expect.objectContaining({ codigo: 'sin_viajes_con_voluntarios' }));
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'parcial', expect.objectContaining({ alarmas: ['sin_viajes_con_voluntarios'] }));
+    for (const l of vi.mocked(logger.warn).mock.calls) expect(JSON.stringify(l)).not.toMatch(PII);
+  });
+
+  it('alarma: más de la mitad de las unidades en tránsito sin posición en 45 min', async () => {
+    ciclo.mockResolvedValueOnce({ viajes: 4, detectados: 0, sinSitio: 0, sinMuestras: 0, unidadesConsultadas: 4, unidadesSinPosicion: 3, fallos: [] });
+    const r = await j(await llamar());
+    expect(r.alarmas).toEqual(['flota_sin_posicion']);
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'parcial', expect.objectContaining({ alarmas: ['flota_sin_posicion'] }));
+  });
+
+  it('si no se puede contar a los voluntarios (base sin 0800) no se alarma ni se rompe la corrida', async () => {
+    voluntarios = new Error('sin 0800');
+    correr.mockResolvedValueOnce({ sembrados: 0, viajes: 0, solicitudes: 0, recordatorios: 0, escalaciones: 0, rechazosReintentables: 0, configIlegible: 0, sinDestinatario: 0, cortadosPorReloj: 0, cortadaPorRechazoMasivo: false, fallos: [], saltados: {} });
+    const r = await j(await llamar());
+    expect(r.alarmas).toEqual([]);
+    expect(r.observabilidad.voluntariosActivos).toBeNull();
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'ok', expect.anything());
   });
 });

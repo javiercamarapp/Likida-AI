@@ -93,6 +93,8 @@ export interface ResultadoConductor {
   /** `true` = la lista de trabajo llegó al tope: había más viajes que atender (se atienden en pasadas siguientes, repartidos). */
   viajesTruncados?: boolean;
   viajes: number;
+  /** T-A5-27: los viajes en seguimiento de esta pasada según quién los aceptó (solo conteos). */
+  viajesPorOrigen?: { chofer: number; importacion: number; otro: number };
   solicitudes: number;
   recordatorios: number;
   escalaciones: number;
@@ -139,6 +141,11 @@ export async function correrConductor(
 
   const viajes = await p.viajesActivos(TOPE_VIAJES_POR_PASADA);
   r.viajes = viajes.length;
+  r.viajesPorOrigen = { chofer: 0, importacion: 0, otro: 0 };
+  for (const v of viajes) {
+    const o = v.aceptadoOrigen === 'importacion' ? 'importacion' : v.aceptadoOrigen === 'chofer' ? 'chofer' : 'otro';
+    r.viajesPorOrigen[o]++;
+  }
   if (viajes.length >= TOPE_VIAJES_POR_PASADA) {
     // El «tope mudo»: antes la lista se cortaba sin decirlo. Ahora el corte es un reparto entre flotas y además se avisa.
     r.viajesTruncados = true;
