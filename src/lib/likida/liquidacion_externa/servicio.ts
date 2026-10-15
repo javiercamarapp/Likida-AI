@@ -34,6 +34,7 @@ import { trabajoPendiente, avisosPendientes } from './trabajo';
 import { avisarNoCoincidePorOmision, tareaDeDiferencia, type AvisarNoCoincide } from './aviso_no_coincide';
 import { copiarAJefePorOmision, type CopiarAJefe, type ResultadoCopia } from './copia_jefe';
 import type { LiquidacionExternaNormalizada } from './esquema';
+import { leerConfigCorreo, type CanalEntrega } from './repo_correo';
 
 /** Cuántas veces el cron intenta ENCOLAR (fallos nuestros, transitorios) antes
  *  de darla por fallida y pedirle a una persona que mire. */
@@ -57,6 +58,30 @@ export interface Dependencias {
   subirArchivo: (ruta: string, bytes: Uint8Array, tipo: string) => Promise<void>;
   /** Copia de la liquidación entregada al jefe de flota. */
   copiarAJefe: CopiarAJefe;
+  /** El canal de entrega de la flota (`whatsapp` por defecto). Con `correo` el camino WhatsApp no corre. Opcional: sin ella, la real con caché corta. */
+  canalDeEntrega?: (tenantId: string) => Promise<CanalEntrega>;
+}
+
+/** Cuánto se recuerda el canal de una flota: el cron y el POST consultan lo mismo muchas veces por minuto. */
+const CANAL_TTL_MS = 30_000;
+const canalRecordado = new Map<string, { canal: CanalEntrega; hasta: number }>();
+
+/** Lee el canal de la flota. Sin config, sin la migración o si la base no responde ⇒ `whatsapp` (comportamiento idéntico al de siempre;
+ *  el fallo no se recuerda, se reintenta en la siguiente llamada). El cron ya filtra por canal en `trabajoPendiente`, que sí LANZA ante un fallo de base. */
+async function canalDeEntregaPorOmision(tenantId: string): Promise<CanalEntrega> {
+  const ahora = Date.now();
+  const r = canalRecordado.get(tenantId);
+  if (r && r.hasta > ahora) return r.canal;
+  let lectura: Awaited<ReturnType<typeof leerConfigCorreo>>;
+  try {
+    lectura = await leerConfigCorreo(tenantId);
+  } catch (e) {
+    logger.warn('liqext.canal_no_leido', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    return 'whatsapp';
+  }
+  const canal: CanalEntrega = lectura.ok ? lectura.valor.canal : 'whatsapp';
+  canalRecordado.set(tenantId, { canal, hasta: ahora + CANAL_TTL_MS });
+  return canal;
 }
 
 export type CrearTareaDiferencia = (tenantId: string, liquidacionId: string, t: TareaDiferencia) => ReturnType<typeof crearTareaDiferenciaLiquidacion>;
@@ -71,6 +96,7 @@ export const dependenciasPorOmision: Required<Dependencias> = {
   formato: (t) => leerFormatoFlota(t),
   subirArchivo: (r, b, t) => subirArchivoExterno(r, b, t),
   copiarAJefe: copiarAJefePorOmision,
+  canalDeEntrega: canalDeEntregaPorOmision,
 };
 
 // ── recibir ─────────────────────────────────────────────────────────────────
@@ -165,6 +191,16 @@ export async function intentarEntrega(
   try {
     // Solo se empuja lo que no terminó: una acusada o fallida no se toca.
     if (liq.estado !== 'pendiente' && liq.estado !== 'en_cola') return 'sin_cambio';
+    // Gate por canal: si la flota recibe el desglose por correo, el camino WhatsApp no corre (ni el teléfono ni el PDF se piden).
+    // Un lector inyectado que falla ⇒ no se manda nada: la siguiente pasada del cron lo reintenta sin gastar intento.
+    let canal: CanalEntrega;
+    try {
+      canal = await (deps.canalDeEntrega ?? canalDeEntregaPorOmision)(tenantId);
+    } catch (e) {
+      logger.warn('liqext.canal_no_leido', { id: liq.id, err: e instanceof Error ? e.message : String(e) });
+      return 'sin_cambio';
+    }
+    if (canal === 'correo') return 'sin_cambio';
     if (!liq.pdfRuta) throw new Error('la liquidación no tiene PDF en Storage');
     if (!liq.operadorTelefono) throw new Error('el operador no tiene teléfono');
 

@@ -15,15 +15,31 @@ import { acotada } from '../presupuesto';
 import { exigir } from '../pg';
 import { COLUMNAS, aLiquidacionExterna, aAvisoDiscrepancia, type Fila, type LiquidacionExterna, type AvisoDiscrepancia } from './repo';
 
+/** Las flotas con `canal='correo'` (0785). Sin la tabla (base sin esa migración): ninguna, y todo sigue por WhatsApp como antes.
+ *  Cualquier otro error LANZA: leerlo como «ninguna» mandaría por WhatsApp lo que la flota pidió por correo. */
+async function tenantsSoloCorreo(): Promise<string[]> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
+    .select('tenant_id, canal').or('canal.eq.correo').limit(1000), 'liqext.trabajo_canal');
+  if (res.error) {
+    if (res.error.code === '42P01' || res.error.code === 'PGRST205' || /does not exist|schema cache/i.test(res.error.message ?? '')) return [];
+    throw new Error(`liqext.trabajo_canal: ${res.error.message}`);
+  }
+  return ((res.data ?? []) as unknown as Array<{ tenant_id: string; canal: string }>)
+    .filter((r) => r.canal === 'correo' && /^[0-9a-f-]{36}$/i.test(String(r.tenant_id))).map((r) => r.tenant_id);
+}
+
 /** Las que el cron tiene que mover: pendientes cuyo reintento ya toca y las que
  *  esperan al outbox. Acotado a un lote: lo demás es de la siguiente pasada.
  *  Cada fila trae su `tenant_id`, y todo lo que se haga con ella después va
  *  acotado a ESE tenant. */
 export async function trabajoPendiente(limite: number, ahoraIso: string): Promise<LiquidacionExterna[]> {
-  const res = await acotada(supabaseAdmin().from('liquidacion_externa')
+  const soloCorreo = await tenantsSoloCorreo();
+  let consulta = supabaseAdmin().from('liquidacion_externa')
     .select(COLUMNAS)
-    .or(`estado.eq.en_cola,and(estado.eq.pendiente,proximo_intento_en.lte.${ahoraIso})`)
-    .order('proximo_intento_en', { ascending: true }).order('id').limit(limite), 'liqext.trabajo');
+    .or(`estado.eq.en_cola,and(estado.eq.pendiente,proximo_intento_en.lte.${ahoraIso})`);
+  // Gate por canal: las flotas que reciben el desglose por correo no entran al lote de WhatsApp. `ambos` y sin config, sí.
+  if (soloCorreo.length > 0) consulta = consulta.not('tenant_id', 'in', `(${soloCorreo.join(',')})`);
+  const res = await acotada(consulta.order('proximo_intento_en', { ascending: true }).order('id').limit(limite), 'liqext.trabajo');
   return ((exigir(res, 'liqext.trabajo') ?? []) as unknown as Fila[]).map(aLiquidacionExterna);
 }
 
