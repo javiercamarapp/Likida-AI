@@ -26,6 +26,9 @@ export function normalizarDespachoRef(v: unknown): string | null {
   return t === '' ? null : t.slice(0, MAX_DESPACHO_REF);
 }
 
+/** Tope del punto de interés: más largo que cualquier nombre de sitio razonable; lo que exceda se recorta. */
+const MAX_PUNTO_INTERES = 120;
+
 const str = (v: unknown): string => (typeof v === 'string' ? v : v === null || v === undefined ? '' : typeof v === 'object' ? '' : String(v));
 
 export function registroAPosicion(
@@ -44,10 +47,17 @@ export function registroAPosicion(
   if (r.velocidad_kmh !== undefined && r.velocidad_kmh !== null && str(r.velocidad_kmh).trim() !== '' && vel === null) return rech('velocidad ilegible');
   if (vel !== null && (vel < 0 || vel >= 250)) return rech('velocidad fuera de rango (0–250 km/h)');
   const despacho = normalizarDespachoRef(r.despacho);
+  // T-A5-15: «fecha de recibido» y «punto de interés» son OPCIONALES y de diagnóstico: si no se entienden, la fila NO se rechaza
+  // (la posición es buena); simplemente la llave queda ausente, como si la tabla no la trajera.
+  const recibidaCruda = r.fecha_recibida instanceof Date ? r.fecha_recibida.toISOString() : str(r.fecha_recibida).trim();
+  const recibida = recibidaCruda === '' ? null : normalizarFechaLocal(recibidaCruda, opciones.zona ?? ZONA_POR_OMISION);
+  const puntoInteres = str(r.punto_interes).trim().slice(0, MAX_PUNTO_INTERES);
   return {
     ok: {
       unidad, lat: lat as number, lon: lon as number, fechaHoraLocal: f.ok, velocidadKmh: vel, ignicion: r.ignicion === undefined ? null : leerIgnicion(r.ignicion),
       ...(despacho !== null ? { despacho } : {}),
+      ...(recibida && 'ok' in recibida ? { fechaRecibidaLocal: recibida.ok } : {}),
+      ...(puntoInteres !== '' ? { puntoInteres } : {}),
     },
   };
 }
@@ -237,7 +247,7 @@ export function registrosACursos(
 }
 
 // ── Nombres de columna de SU archivo → nombres del contrato ─────────────────
-export const ALIAS_POSICION: Record<'unidad' | 'lat' | 'lon' | 'fecha_hora' | 'velocidad_kmh' | 'ignicion' | 'despacho', string[]> = {
+export const ALIAS_POSICION: Record<'unidad' | 'lat' | 'lon' | 'fecha_hora' | 'velocidad_kmh' | 'ignicion' | 'despacho' | 'fecha_recibida' | 'punto_interes', string[]> = {
   unidad: ['id_unidad', 'unidad', 'economico', 'numero_economico', 'no_economico', 'num_economico', 'vehiculo', 'id_vehiculo'],
   lat: ['latitud', 'lat', 'latitude'],
   lon: ['longitud', 'lon', 'lng', 'long', 'longitude'],
@@ -245,6 +255,8 @@ export const ALIAS_POSICION: Record<'unidad' | 'lat' | 'lon' | 'fecha_hora' | 'v
   velocidad_kmh: ['velocidad_kmh', 'velocidad', 'speed', 'km_h', 'kmh'],
   ignicion: ['ignicion', 'ignition', 'encendido', 'motor'],
   despacho: ['despacho', 'icident', 'incident', 'viaje', 'no_viaje'],
+  fecha_recibida: ['fecha_recibida', 'fecha_recibido', 'fecha_de_recibido', 'fecha_de_recibida', 'recibido', 'recibida', 'fecha_recepcion', 'received_at'],
+  punto_interes: ['punto_interes', 'punto_de_interes', 'poi', 'point_of_interest'],
 };
 export const ALIAS_GEOCERCA: Record<'codigo' | 'nombre' | 'lat_centro' | 'lon_centro' | 'radio_m' | 'poligono_wkt' | 'cliente', string[]> = {
   codigo: ['codigo', 'clave', 'id', 'code', 'codigo_geocerca', 'clave_geocerca', 'id_geocerca', 'codigo_sitio', 'clave_sitio'],
