@@ -12,6 +12,8 @@ import { PEDIMENTO_PARCIAL, normalizarNumero } from './normalizar';
 import { tipoOperacion } from './validacion';
 
 const num = (c: CampoValor | undefined): number | null => (c?.valor != null ? normalizarNumero(c.valor).valor : null);
+/** Nota fija (y por eso idempotente) cuando solo hay peso neto o «peso por embalaje» y se usa como bruto. */
+export const NOTA_NETO_COMO_BRUTO = 'El documento solo da el peso neto (o «peso por embalaje»): se usó como peso bruto por defecto. Pendiente de confirmar con el cliente.';
 const redondea = (n: number): string => String(Math.round(n * 1000) / 1000);
 
 /** Lo que el llamador sabe de FUERA del documento (T-A3-46). Sin él, los derivados de aduana no actúan. */
@@ -87,6 +89,12 @@ export function completarDerivados(e: Extraccion, ctx: ContextoDerivar = {}): Ex
         };
         fila.peso_unidad = { ...fila.peso_unidad!, valor: 'KGM' };
       }
+    }
+    // 1a. El documento solo da el peso NETO (o el «peso por embalaje»): el complemento pide el BRUTO. Por defecto se usa
+    //     ese número como bruto y se deja la nota (decisión pendiente del cliente, pregunta 10); nunca se descarta en silencio.
+    const tipoPeso = (fila.peso_tipo?.valor ?? '').trim().toLowerCase();
+    if (fila.peso_kg?.valor && fila.peso_kg.origen !== 'humano' && /^(neto|peso neto|por embalaje|peso por embalaje|embalaje)$/.test(tipoPeso) && !(fila.peso_kg.notas ?? []).includes(NOTA_NETO_COMO_BRUTO)) {
+      fila.peso_kg = { ...fila.peso_kg, notas: [...(fila.peso_kg.notas ?? []), NOTA_NETO_COMO_BRUTO] };
     }
     // 1b. Una «clave» numérica de 1 o 2 dígitos («20», «1») no es del SAT: el valor se conserva como texto de la unidad
     //     (sin pisar uno existente) y la validación pide confirmar la clave.

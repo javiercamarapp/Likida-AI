@@ -162,6 +162,33 @@ export function normalizarNumero(crudo: string | number, miles?: ',' | '.'): { v
   return { valor: Math.round(n * 1000) / 1000, ambiguo };
 }
 
+/**
+ * Peso: `normalizarNumero` más la regla explícita de los separadores y sus notas (T-A3-52). Nada ambiguo pasa sin nota.
+ *   · `3,002.00` → 3002 (coma de miles + punto decimal: inequívoco, sin nota).
+ *   · `1999.350` → 1999.35 (el grupo previo tiene más de 3 dígitos: el punto NO puede ser de miles; se anota).
+ *   · `14.029` / `6,578` → ambiguo: se lee con la regla de México (punto decimal; coma de miles) y la nota trae la OTRA
+ *     lectura para que quien tiene el documento decida. `alternativa` es esa otra lectura.
+ * Si el perfil del cliente ya fijó su separador de miles (`miles`), no hay ambigüedad.
+ */
+export function normalizarPeso(crudo: string | number, miles?: ',' | '.'): { valor: number | null; ambiguo: boolean; alternativa: number | null; notas: string[] } {
+  const n = normalizarNumero(crudo, miles);
+  const notas: string[] = [];
+  if (n.valor === null || typeof crudo === 'number') return { valor: n.valor, ambiguo: n.ambiguo, alternativa: null, notas };
+  const m = /([+-]?\d[\d.,]*)\s*[a-z.]{0,12}$/i.exec(crudo.trim());
+  const t = m ? m[1] : '';
+  let alternativa: number | null = null;
+  if (n.ambiguo && /^[+-]?\d{1,3}[.,]\d{3}$/.test(t)) {
+    const enteros = Number(t.replace(/^[+-]/, '').replace(/[.,]/, ''));
+    const decimal = Number(t.replace(',', '.'));
+    alternativa = n.valor === decimal ? enteros : decimal;
+    const como = t.includes('.') ? 'punto decimal' : 'coma de miles';
+    notas.push(`«${t}» es ambiguo: se leyó ${n.valor} kg (${como}); si fuera la otra lectura serían ${alternativa} kg. Confírmalo: confirma la cifra contra el documento.`);
+  } else if (!miles && /^[+-]?\d{4,}\.\d{3}$/.test(t)) {
+    notas.push(`«${t}»: el punto se leyó como decimal (${n.valor} kg) porque el grupo previo tiene más de 3 dígitos y no puede ser un separador de miles.`);
+  }
+  return { valor: n.valor, ambiguo: n.ambiguo, alternativa, notas };
+}
+
 /** Ancho fijo de las claves SAT numéricas de domicilio y aduana (colonia 4, localidad 2, municipio 3, tipo de materia 2). */
 function anchoClaveNumerica(clave: string): number | undefined {
   if (/_colonia_clave$/.test(clave)) return 4;
@@ -284,6 +311,13 @@ export function normalizarValor(campo: CampoDoc, crudo: unknown, opciones: { mil
       return out(f.valor);
     }
     case 'numero': {
+      if (campo.clave === 'peso_kg' || campo.clave === 'peso_bruto_total') {
+        const p = normalizarPeso(texto, opciones.miles);
+        if (p.valor === null) { notas.push('No se reconoció como número.'); penalizacion = 0.3; return out(String(texto)); }
+        notas.push(...p.notas);
+        if (p.ambiguo) penalizacion = 0.2;
+        return out(aTexto(p.valor));
+      }
       const n = normalizarNumero(texto, opciones.miles);
       if (n.valor === null) { notas.push('No se reconoció como número.'); penalizacion = 0.3; return out(String(texto)); }
       if (n.ambiguo) { notas.push('Número ambiguo (punto/coma de miles o decimal): confirma la cifra.'); penalizacion = 0.2; }
