@@ -3,7 +3,9 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { cuerpoDesdeFormulario, llavesCambiadas, mismosContactos } from './config_forma';
 import { validarCambioConfig } from './lectura';
-import { cargarContactosTrafico, guardarConfigConductor, leerConfigConductor } from './repo';
+import type { ConfigConductor } from './config';
+import { evaluarPreflight, mensajeBloqueoSenalVida, type ResultadoPreflight } from './preflight_piloto';
+import { cargarContactosTrafico, guardarConfigConductor, leerConfigConductor, leerDatosPreflight } from './repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GUARDAR LA CONFIGURACIÓN DE FLOTA DEL AGENTE 5 desde el panel — la lógica de la acción de servidor, con
@@ -23,6 +25,12 @@ import { cargarContactosTrafico, guardarConfigConductor, leerConfigConductor } f
 // ── BITÁCORA ───────────────────────────────────────────────────────────────
 // Quién cambió qué llaves y cuántos contactos quedaron. Nombres de llaves y conteos: nunca teléfonos ni
 // nombres de personas (la bitácora sobrevive a un borrado ARCO).
+//
+// ── COMPUERTA DE LA SEÑAL DE VIDA (T-A5-25) ────────────────────────────────
+// `avisarSenalVida` manda mensajes a personas y nace apagado. Pasarlo de apagado a encendido exige que el preflight del piloto
+// no tenga bloqueos (`preflight_piloto.ts`); si los tiene, se rechaza con «Aún no se puede encender: falta X.». Solo el
+// soporte de Likida (`superadmin`) puede forzarlo, para QA, con la casilla `forzarPreflight`; queda en la bitácora. Si ya estaba
+// encendido, guardar otros cambios no vuelve a pasar por la compuerta. El preflight solo LEE: no manda mensajes.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type ResultadoConfigPanel = { ok: true; mensaje: string } | { ok: false; error: string };
@@ -32,9 +40,17 @@ export interface DepsConfigPanel {
   contactos: typeof cargarContactosTrafico;
   guardar: typeof guardarConfigConductor;
   bitacora: typeof anotarBitacora;
+  /** Evalúa el preflight de la flota con la config que se quiere guardar. Opcional: solo se usa al ENCENDER la señal de vida. */
+  preflight?: (tenantId: string, config: ConfigConductor) => Promise<ResultadoPreflight>;
+}
+
+/** El preflight real: lee la flota y juzga con la config que se pretende guardar (no con la guardada). */
+export async function preflightReal(tenantId: string, config: ConfigConductor): Promise<ResultadoPreflight> {
+  const datos = await leerDatosPreflight(tenantId);
+  return evaluarPreflight({ ...datos, config: { activo: config.activo, perfilSeguimiento: config.perfilSeguimiento, solicitudesMin: config.solicitudesMin } });
 }
 export const depsConfigReales: DepsConfigPanel = {
-  leer: leerConfigConductor, contactos: cargarContactosTrafico, guardar: guardarConfigConductor, bitacora: anotarBitacora,
+  leer: leerConfigConductor, contactos: cargarContactosTrafico, guardar: guardarConfigConductor, bitacora: anotarBitacora, preflight: preflightReal,
 };
 
 export interface ContextoConfigPanel { tenantId: string; rol: string; usuarioId: string | null; email: string | null }
@@ -49,13 +65,20 @@ export async function guardarConfigDelPanel(
     const [actual, contactosActuales] = await Promise.all([d.leer(ctx.tenantId), d.contactos(ctx.tenantId)]);
     const v = validarCambioConfig(cuerpo.ok, actual);
     if ('error' in v) return { ok: false, error: v.error };
+    // La compuerta: solo al pasar de apagado a encendido, y solo el soporte puede saltársela.
+    const enciendeSenalVida = v.ok.config.avisarSenalVida && !actual.avisarSenalVida;
+    const forzado = enciendeSenalVida && ctx.rol === 'superadmin' && fd.get('forzarPreflight') === 'si';
+    if (enciendeSenalVida && !forzado) {
+      const pf = await (d.preflight ?? preflightReal)(ctx.tenantId, v.ok.config);
+      if (!pf.lista) return { ok: false, error: mensajeBloqueoSenalVida(pf) };
+    }
     const r = await d.guardar(ctx.tenantId, v.ok.config, v.ok.contactos);
     if (r === 'terminal_ajena') return { ok: false, error: 'Alguno de los patios elegidos no es de tu flota.' };
     const cambiadas = llavesCambiadas(actual, v.ok.config);
     const contactosCambiaron = v.ok.contactos !== undefined && !mismosContactos(contactosActuales, v.ok.contactos);
     await d.bitacora({
       tenantId: ctx.tenantId, actor: { id: ctx.usuarioId, email: ctx.email }, accion: 'conductor.config_guardada', entidad: 'conductor_config', entidadId: ctx.tenantId,
-      detalle: { llaves: cambiadas, contactos: v.ok.contactos?.length ?? contactosActuales.length, contactosCambiaron },
+      detalle: { llaves: cambiadas, contactos: v.ok.contactos?.length ?? contactosActuales.length, contactosCambiaron, ...(forzado ? { preflightForzado: true } : {}) },
     });
     return { ok: true, mensaje: cambiadas.length === 0 && !contactosCambiaron ? 'No había cambios: la configuración ya estaba así.' : 'Configuración guardada. Aplica desde la próxima corrida del agente (cada 5 minutos).' };
   } catch (e) {

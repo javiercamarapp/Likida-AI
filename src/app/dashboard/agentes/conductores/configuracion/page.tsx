@@ -7,7 +7,8 @@ import { logger } from '@/lib/logger';
 import { valoresDeForma } from '@/lib/likida/conductor/config_forma';
 import { guardarConfigDelPanel } from '@/lib/likida/conductor/acciones_config';
 import { altaVoluntarioDelPanel, bajaVoluntarioDelPanel, telefonoDePilotoValido } from '@/lib/likida/conductor/acciones_voluntarios';
-import { buscarCandidatosVoluntarios, cargarContactosTrafico, leerConfigConductor, leerTopeVoluntarios, listarVoluntarios } from '@/lib/likida/conductor/repo';
+import { buscarCandidatosVoluntarios, cargarContactosTrafico, leerConfigConductor, leerDatosPreflight, leerTopeVoluntarios, listarVoluntarios } from '@/lib/likida/conductor/repo';
+import { evaluarPreflight } from '@/lib/likida/conductor/preflight_piloto';
 import { emailDeUsuario } from '@/lib/likida/conductor/trabajo';
 import { leerCatalogosFiltro } from '@/lib/likida/conductor/repo_validacion';
 import { sufijoTenant } from '../../../sufijo';
@@ -47,6 +48,9 @@ export default async function PaginaConfigConductor({ searchParams }: { searchPa
     cargarContactosTrafico(tenantId).catch(() => null),
     leerCatalogosFiltro(tenantId).catch(() => null),
   ]);
+  // T-A5-25: el preflight del piloto (solo lectura). `null` = no se pudo leer.
+  const preflight = await leerDatosPreflight(tenantId).then(evaluarPreflight)
+    .catch((e) => { logger.warn('conductor.preflight_no_leido', { tenantId, err: e instanceof Error ? e.message : String(e) }); return null; });
   const busqueda = typeof sp.q === 'string' ? sp.q.slice(0, 40) : '';
   const voluntarios: DatosVoluntarios | null = await Promise.all([
     leerTopeVoluntarios(tenantId), listarVoluntarios(tenantId), buscarCandidatosVoluntarios(tenantId, busqueda),
@@ -80,6 +84,7 @@ export default async function PaginaConfigConductor({ searchParams }: { searchPa
       sufijo={sufijoTenant(sp)} config={config} valores={config ? valoresDeForma(config) : null} contactos={contactos}
       patios={catalogos?.terminales ?? []} puedeEditar={puedeAdministrar(rol)} accionGuardar={accionGuardar}
       voluntarios={voluntarios} accionAlta={accionAlta} accionBaja={accionBaja}
+      preflight={preflight} puedeForzarPreflight={rol === 'superadmin'}
     />
   );
 }

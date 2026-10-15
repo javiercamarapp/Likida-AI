@@ -330,7 +330,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 288;
 // T-A5-03 (Conductor, 0800): 0 archivos y +7 llamadas (1,917 → 1,924), todas en `conductor/repo.ts` (alta y baja de voluntarios del piloto: leer un operador de la flota,
 // listar voluntarios, buscar candidatos, contarlos, leer el tope, marcar la marca y la RPC `retirar_voluntario`; todas por `acotada` con el tenant anclado). La frontera
 // declarada es solo `lib/likida/repo.ts`/`pg.ts`, así que `conductor/repo.ts` cuenta como cualquier módulo. Funcionalidad nueva, no código migrado; medido con el barrido real.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_936;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_938;
+// LOOP CINCO AGENTES, T-A5-25 (preflight del piloto): 1,936 → 1,938 (0 archivos, +2 llamadas, medido con el barrido real), ambas en `conductor/repo.ts`
+// (`leerDatosPreflight`: los viajes abiertos y aceptados de los voluntarios y sus posiciones de las últimas 2 h; por `acotada`, ancladas a `tenant_id`, solo lectura).
+// Funcionalidad nueva, no código migrado.
 // LOOP CINCO AGENTES, T-A5-17 (equivalencias texto→sitio, 0803): 1,924 → 1,936 (0 archivos, +12 llamadas, medido con el barrido completo), todas en
 // `conductor/repo_validacion.ts`, que ya contaba: el diccionario de la flota (leer), el importador (resolver códigos de sitio, insertar por lotes,
 // actualizar), la asignación a mano desde la lista (comprobar sitio, buscar la previa, crear o editar) y los viajes abiertos de 14 días para la lista de

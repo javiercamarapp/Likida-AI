@@ -19,7 +19,9 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { revalidatePath } from 'next/cache';
 import { FormaEstrategiaConductores, type ResultadoEstrategia } from '../estrategia-forma';
 import { Bloque, EsqTabla, vigilar } from '../../bloque';
-import { leerConfigConductor, leerEpisodiosParaTablero } from '@/lib/likida/conductor/repo';
+import { leerConfigConductor, leerDatosPreflight, leerEpisodiosParaTablero } from '@/lib/likida/conductor/repo';
+import { evaluarPreflight } from '@/lib/likida/conductor/preflight_piloto';
+import { BannerPreflight } from './configuracion/preflight';
 import { leerCatalogosFiltro, leerDatosTablero, leerIndicadores, listarSitios, type FiltrosTablero } from '@/lib/likida/conductor/repo_validacion';
 import { asignarSitiosDelPanel } from '@/lib/likida/conductor/acciones_sitios';
 import { armarTablero, episodiosVista, filtrarPorSemaforo, indicadoresVista, type EpisodioVista, type Semaforo } from '@/lib/likida/conductor/tablero';
@@ -181,6 +183,8 @@ export default async function PaginaAgenteConductores({
   });
   // Los sitios que se pueden asignar a un viaje (solo los activos; hasta 500). Sin lectura, la forma de asignar no ofrece nada.
   const pSitios = safe(async () => (await listarSitios(tenantId, { limite: 500 })).sitios.filter((x) => x.activa).map((x) => ({ id: x.id, nombre: x.nombre, tipo: x.tipo })));
+  // T-A5-25: «¿está lista la flota?». `null` = no se pudo leer → no se pinta nada (el detalle vive en la configuración).
+  const pPreflight = safe(() => leerDatosPreflight(tenantId).then(evaluarPreflight));
   const ocultos: Record<string, string> = {};
   if (sp.tenant) ocultos.tenant = sp.tenant; else if (sp.vista) ocultos.vista = sp.vista;
   if (sp.rol) ocultos.rol = sp.rol;
@@ -229,12 +233,17 @@ export default async function PaginaAgenteConductores({
   return (
     <VistaAgenteConductores
       tablero={
-        <Bloque mensaje="No se pudo leer el tablero de hitos." esqueleto={<EsqTabla filas={6} />}>
-          <BloqueTableroHitos
-            pTablero={pTablero} pIndicadores={pIndicadores} pCatalogos={pCatalogos} pSitios={pSitios} pEpisodios={pEpisodios} filtros={filtrosVista} ocultos={ocultos}
-            accionUrl="/dashboard/agentes/conductores" puedeActuar={puedeActuar} accion={accionOficina} accionSitios={accionSitios}
-          />
-        </Bloque>
+        <>
+          <Bloque mensaje="No se pudo revisar si la flota está lista." esqueleto={null}>
+            <BloqueBannerPreflight pPreflight={pPreflight} sufijo={sufijoTenant(sp)} />
+          </Bloque>
+          <Bloque mensaje="No se pudo leer el tablero de hitos." esqueleto={<EsqTabla filas={6} />}>
+            <BloqueTableroHitos
+              pTablero={pTablero} pIndicadores={pIndicadores} pCatalogos={pCatalogos} pSitios={pSitios} pEpisodios={pEpisodios} filtros={filtrosVista} ocultos={ocultos}
+              accionUrl="/dashboard/agentes/conductores" puedeActuar={puedeActuar} accion={accionOficina} accionSitios={accionSitios}
+            />
+          </Bloque>
+        </>
       }
       kpis={pConteos}
       cola={pCola}
@@ -261,6 +270,10 @@ export default async function PaginaAgenteConductores({
       }
     />
   );
+}
+
+async function BloqueBannerPreflight({ pPreflight, sufijo }: { pPreflight: Promise<ReturnType<typeof evaluarPreflight> | null>; sufijo: string }) {
+  return <BannerPreflight preflight={await pPreflight} sufijo={sufijo} />;
 }
 
 async function BloqueTableroHitos({ pTablero, pIndicadores, pCatalogos, pSitios, pEpisodios, filtros, ocultos, accionUrl, puedeActuar, accion, accionSitios }: {
