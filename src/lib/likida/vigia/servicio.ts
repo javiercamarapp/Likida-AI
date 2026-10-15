@@ -27,6 +27,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { createHash } from 'node:crypto';
 import { logger } from '@/lib/logger';
+import { codigoDeError } from '@/lib/observability/sentry';
 import { appUrl } from '@/lib/env';
 import { normalizarTelefonoWa } from '@/lib/likida/wa_ventana';
 import { sendDocument } from '@/lib/meta/client';
@@ -35,6 +36,7 @@ import { nombreDeAdjunto } from './adjuntos';
 import { avisarAprobacion, avisarEscalamiento, interpretarBoton, type DecisionBoton } from './avisos';
 import { generarAvisos } from './aviso/generar';
 import { entregarAviso } from './aviso/entrega';
+import { contarPendientesViejos, TOPE_PENDIENTES_LEIDOS } from './aviso/cola';
 import { clasificar } from './clasificador';
 import { esSpam, limpiarTexto } from './entrada';
 import { DIAS_CICLO_INACTIVO, evaluarEscalamiento, minutosEsperando, type AccionEscalamiento } from './escalamiento';
@@ -45,7 +47,7 @@ import { decidirEnvio } from './politica';
 import { claveCorreo, debeRespaldarPorCorreo, hashCorreo, reintentarCorreosVencidos, respaldarPorCorreo, unirDestinatarios } from './respaldo_correo';
 import { pulirBorrador, redactarBorrador, type ViajeParaRedactar } from './redactor';
 import { elegirRespuestaRapida } from './respuestas_rapidas';
-import type { DepsVigia, GuardaConversacion, RepoVigia } from './puertos';
+import type { ContextoAvisosFlota, DepsVigia, GuardaConversacion, RepoVigia } from './puertos';
 import { configParaCliente, INTENCIONES_DE_DATO, INTENCIONES_DESDE_0798 } from './tipos';
 import type {
   AdjuntoRef, Clasificacion, ConfigVigia, Contacto, Conversacion, DatosAvisoCorreo, DestinatarioAviso, MensajeVigia, MotivoEscalamiento, NivelDirector,
@@ -807,6 +809,8 @@ export interface ResultadoBarrido {
   avisosEnviados: number;
   avisosFallidos: number;
   avisosOmitidos: number;
+  /** T-A4-42: avisos en `pendiente_confirmacion` con más de 2 h cuya cita aún no pasa (cola atorada esperando a un humano). */
+  avisosPendientesViejos: number;
   /** El módulo de avisos lanzó (una flota o toda la pasada): el barrido de escalamiento NO se tumba, pero el latido es `parcial`. */
   avisosConError: boolean;
   cortadoPorReloj: boolean;
@@ -822,7 +826,7 @@ export const MINUTOS_APROBADO_ATORADO = 5;
 export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number; vencePorReloj?: number; mantenimiento?: boolean } = {}): Promise<ResultadoBarrido> {
   const { repo } = deps;
   const ahora = ahoraDe(deps);
-  const r: ResultadoBarrido = { revisadas: 0, escaladas: 0, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, expiradas: 0, correosRetomados: 0, avisosCreados: 0, avisosEnviados: 0, avisosFallidos: 0, avisosOmitidos: 0, avisosConError: false, cortadoPorReloj: false };
+  const r: ResultadoBarrido = { revisadas: 0, escaladas: 0, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, expiradas: 0, correosRetomados: 0, avisosCreados: 0, avisosEnviados: 0, avisosFallidos: 0, avisosOmitidos: 0, avisosPendientesViejos: 0, avisosConError: false, cortadoPorReloj: false };
 
   // La selección (quién entra y los umbrales) ya viene decidida por vencimiento; la prioridad alta solo adelanta el ORDEN de revisión.
   // `sort` es estable: dentro de cada grupo se conserva el orden por vencimiento.
@@ -917,16 +921,30 @@ async function pasadaAvisos(deps: DepsVigia, ahora: Date, r: ResultadoBarrido, v
             else r.avisosOmitidos += 1;
           } catch (err) {
             r.avisosFallidos += 1; r.avisosConError = true;
-            logger.error('vigia.aviso_entrega_fallo', { err: err instanceof Error ? err.message : String(err) });
+            // Solo el código: el mensaje de un error de base puede traer la fila (texto, teléfono) que no se pudo escribir.
+            logger.error('vigia.aviso.entrega_fallo', { tenant: f.tenantId, codigo: codigoDeError(err) });
           }
         }
+        r.avisosPendientesViejos += await contarCola(f, ahora);
       } catch (err) {
         r.avisosConError = true;
-        logger.error('vigia.aviso_flota_fallo', { err: err instanceof Error ? err.message : String(err) });
+        logger.error('vigia.aviso.flota_fallo', { tenant: f.tenantId, codigo: codigoDeError(err) });
       }
     }
   } catch (err) {
     r.avisosConError = true;
-    logger.error('vigia.avisos_fallo', { err: err instanceof Error ? err.message : String(err) });
+    logger.error('vigia.aviso.pasada_fallo', { codigo: codigoDeError(err) });
+  }
+}
+
+/** T-A4-42: la cola atorada de UNA flota. Un fallo al contarla no tumba la pasada: se registra por código y cuenta como cero. */
+async function contarCola(f: ContextoAvisosFlota, ahora: Date): Promise<number> {
+  const repo = f.generar.repo as ContextoAvisosFlota['generar']['repo'] | undefined;
+  if (!repo?.pendientesConfirmacion) return 0;
+  try {
+    return contarPendientesViejos(await repo.pendientesConfirmacion(f.tenantId, TOPE_PENDIENTES_LEIDOS), ahora);
+  } catch (err) {
+    logger.error('vigia.aviso.cola_fallo', { tenant: f.tenantId, codigo: codigoDeError(err) });
+    return 0;
   }
 }

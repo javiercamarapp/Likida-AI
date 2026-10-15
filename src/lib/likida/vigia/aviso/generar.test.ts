@@ -1,4 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+const registros: Array<{ nivel: string; evento: string; datos: unknown }> = [];
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    info: (evento: string, datos: unknown) => registros.push({ nivel: 'info', evento, datos }),
+    warn: (evento: string, datos: unknown) => registros.push({ nivel: 'warn', evento, datos }),
+    error: (evento: string, datos: unknown) => registros.push({ nivel: 'error', evento, datos }),
+  },
+}));
 import {
   TOPE_FILAS_POR_PASADA, configListoDe, evaluarTiempo, fechaLocal, generarAvisos, type DepsGenerar,
 } from './generar';
@@ -355,5 +364,25 @@ describe('generarAvisos · tope de la pasada', () => {
     const r = await generarAvisos(T1, AHORA, { repo: m2.repo, resolver: resolver() });
     expect(r.creados).toBe(5);
     expect(r.yaTenian).toBe(300);
+  });
+});
+
+describe('generarAvisos · log estructurado sin PII (T-A4-42)', () => {
+  it('con novedad escribe UN resumen `vigia.aviso.generado` de solo contadores; ni el texto, ni el cliente, ni el operador', async () => {
+    registros.length = 0;
+    const m = armar([fila()]);
+    await generarAvisos(T1, AHORA, m.deps);
+    const g = registros.filter((x) => x.evento.startsWith('vigia.aviso.'));
+    expect(g).toHaveLength(1);
+    expect(g[0]).toMatchObject({ nivel: 'info', evento: 'vigia.aviso.generado', datos: { tenant: T1, creados: 1, pendientesConfirmacion: 1 } });
+    const volcado = JSON.stringify(registros);
+    for (const s of ['Operador Sintético', 'LIC-0001', '5252899900009', '5252899900001', 'Cliente Uno', 'U-101', m.avisos[0].texto]) {
+      expect(volcado).not.toContain(s);
+    }
+  });
+  it('una pasada sin novedad no escribe nada', async () => {
+    registros.length = 0;
+    await generarAvisos(T1, AHORA, armar([]).deps);
+    expect(registros).toEqual([]);
   });
 });

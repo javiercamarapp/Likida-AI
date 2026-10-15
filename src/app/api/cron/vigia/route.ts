@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
+import { UMBRAL_FALLIDOS_ALERTA } from '@/lib/likida/vigia/aviso/cola';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -66,8 +67,13 @@ export async function GET(req: Request) {
     });
     logger.info('cron.vigia.ok', { ...r });
     // Trabajo que NO terminó (corte por reloj, envíos fallidos, atorados) no es «ok» limpio.
-    const parcial = r.cortadoPorReloj || r.fallosEnvio > 0 || r.atorados > 0 || r.avisosConError || r.avisosFallidos > 0;
+    const parcial = r.cortadoPorReloj || r.fallosEnvio > 0 || r.atorados > 0 || r.avisosConError || r.avisosFallidos > 0 || r.avisosPendientesViejos > 0;
     await registrarLatido('vigia', parcial ? 'parcial' : 'ok', { ...r });
+    // T-A4-42: una racha de avisos fallidos en la misma pasada sí es para el operador (un fallo suelto ya queda en el latido
+    // `parcial` y en la bandeja). Sin datos del aviso: solo la cuenta. `alertarOperador` manda a lo más un correo por hora.
+    if (r.avisosFallidos >= UMBRAL_FALLIDOS_ALERTA) {
+      await alertarOperador('cron.vigia.avisos_fallidos', { avisosFallidos: r.avisosFallidos, avisosEnviados: r.avisosEnviados });
+    }
     return NextResponse.json({ corrio: true, ...r });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);

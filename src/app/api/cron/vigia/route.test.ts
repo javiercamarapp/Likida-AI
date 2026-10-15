@@ -18,7 +18,7 @@ vi.mock('@/lib/admin/salud', () => ({
 let global: 'encendido' | 'apagado' | 'ilegible' = 'encendido';
 vi.mock('@/lib/likida/interruptores', () => ({ leerInterruptor: async () => global }));
 const base = { revisadas: 3, escaladas: 1, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, cortadoPorReloj: false };
-const barrido = vi.fn(async (..._a: unknown[]) => ({ ...base }));
+const barrido = vi.fn(async (..._a: unknown[]): Promise<Record<string, unknown>> => ({ ...base }));
 vi.mock('@/lib/likida/vigia/servicio', () => ({ barridoVigia: (...a: unknown[]) => barrido(...a) }));
 vi.mock('@/lib/likida/vigia/deps', () => ({ crearDepsVigia: () => ({ repo: 'repo' }) }));
 const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
@@ -27,6 +27,7 @@ vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'cod' }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const { GET } = await import('./route');
+import { UMBRAL_FALLIDOS_ALERTA } from '@/lib/likida/vigia/aviso/cola';
 const llamar = () => GET(new Request('https://app.likida.ai/api/cron/vigia'));
 const j = async (r: Response) => (await r.json()) as Record<string, unknown>;
 
@@ -119,5 +120,34 @@ describe('la pasada de avisos de viaje (T-A4-21)', () => {
       expect(registrarLatido).toHaveBeenCalledWith('vigia', 'parcial', expect.anything());
       expect(alertarOperador).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe('observabilidad de la cola de avisos (T-A4-42)', () => {
+  const sano = { avisosCreados: 0, avisosEnviados: 0, avisosFallidos: 0, avisosOmitidos: 0, avisosConError: false, avisosPendientesViejos: 0 };
+  it('un aviso viejo esperando confirmación: latido `parcial` con el contador, sin correo al operador', async () => {
+    barrido.mockResolvedValue({ ...base, ...sano, avisosPendientesViejos: 1 });
+    const r = await llamar();
+    expect(r.status).toBe(200);
+    expect(await j(r)).toMatchObject({ corrio: true, avisosPendientesViejos: 1 });
+    expect(registrarLatido).toHaveBeenCalledWith('vigia', 'parcial', expect.objectContaining({ avisosPendientesViejos: 1 }));
+    expect(alertarOperador).not.toHaveBeenCalled();
+  });
+  it('sin cola atorada ni fallidos el latido sigue `ok` y no hay alerta', async () => {
+    barrido.mockResolvedValue({ ...base, ...sano });
+    await llamar();
+    expect(registrarLatido).toHaveBeenCalledWith('vigia', 'ok', expect.objectContaining({ avisosPendientesViejos: 0 }));
+    expect(alertarOperador).not.toHaveBeenCalled();
+  });
+  it('fallidos sueltos (bajo el umbral): `parcial` pero SIN correo; una racha: correo con solo las cuentas', async () => {
+    barrido.mockResolvedValue({ ...base, ...sano, avisosFallidos: UMBRAL_FALLIDOS_ALERTA - 1 });
+    await llamar();
+    expect(alertarOperador).not.toHaveBeenCalled();
+    expect(registrarLatido).toHaveBeenLastCalledWith('vigia', 'parcial', expect.anything());
+
+    barrido.mockResolvedValue({ ...base, ...sano, avisosFallidos: UMBRAL_FALLIDOS_ALERTA, avisosEnviados: 2 });
+    await llamar();
+    expect(alertarOperador).toHaveBeenCalledTimes(1);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.vigia.avisos_fallidos', { avisosFallidos: UMBRAL_FALLIDOS_ALERTA, avisosEnviados: 2 });
   });
 });

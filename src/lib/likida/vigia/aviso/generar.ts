@@ -20,8 +20,10 @@
 // Acotada: a lo sumo `TOPE_FILAS_POR_PASADA` filas se procesan (resolver + componer + insertar) por pasada; las listas
 // de más se cuentan en `omitidas` y `acotada=true` (la siguiente pasada las toma). El recorrido de lectura también
 // tiene tope (`TOPE_FILAS_LEIDAS`) y se declara si lo alcanza.
-// Módulo sin logs: nada del programa ni de los avisos sale a ningún registro.
+// Logs: solo un resumen de contadores `vigia.aviso.generado` (T-A4-42). Nada del programa ni de los avisos (texto, cliente,
+// operador, teléfono, placas) sale a ningún registro.
 
+import { logger } from '@/lib/logger';
 import { componerAviso, type ConfigCompositor } from './compositor';
 import {
   evaluarListo, type ConfigListo, type FilaParaListo, type TipoSeccionAviso,
@@ -276,6 +278,13 @@ export async function generarAvisos(tenantId: string, ahora: Date, deps: DepsGen
       else r.pendientesConfirmacion++;
     }
     if (pagina.length < PAGINA_FILAS) break;
+  }
+  // Una pasada sin novedad (lo normal, cada 5 min) no escribe nada; con novedad, solo números.
+  if (r.creados > 0 || r.duplicados > 0 || r.omitidas > 0 || r.acotada) {
+    logger.info('vigia.aviso.generado', {
+      tenant: tenantId, creados: r.creados, pendientesConfirmacion: r.pendientesConfirmacion, aprobados: r.aprobados,
+      sinDestinatario: r.sinDestinatario, duplicados: r.duplicados, omitidas: r.omitidas, acotada: r.acotada,
+    });
   }
   return r;
 }

@@ -2,6 +2,7 @@ import { AlarmClock, Power, TriangleAlert } from 'lucide-react';
 import { fechaHoraMx } from '@/lib/formato';
 import { CRONS, TOLERANCIA_LATIDO_MS, type CronId, type LatidoDetallado } from '@/lib/admin/salud';
 import { StatusPill, EstadoError, type Estado } from '../ui/kit';
+import { etiquetaContadorVigia } from '../observabilidad/etiquetas';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 
 /**
@@ -125,10 +126,11 @@ export function resumenDetalle(detalle: Record<string, unknown>): string | null 
   const partes = Object.entries(detalle)
     .filter(([clave, valor]) => clave !== 'codigo' && valor !== undefined && valor !== null)
     .map(([clave, valor]): string | null => {
-      if (Array.isArray(valor)) return valor.length > 0 ? `${clave}: ${valor.length}` : null;
-      if (typeof valor === 'number') return valor > 0 ? `${clave}: ${valor}` : null;
-      if (typeof valor === 'string') return valor.trim() !== '' ? `${clave}: ${valor}` : null;
-      if (typeof valor === 'boolean') return valor ? clave : null;
+      const nombre = etiquetaContadorVigia(clave);
+      if (Array.isArray(valor)) return valor.length > 0 ? `${nombre}: ${valor.length}` : null;
+      if (typeof valor === 'number') return valor > 0 ? `${nombre}: ${valor}` : null;
+      if (typeof valor === 'string') return valor.trim() !== '' ? `${nombre}: ${valor}` : null;
+      if (typeof valor === 'boolean') return valor ? nombre : null;
       return null;
     })
     .filter((x): x is string => x !== null);

@@ -91,6 +91,11 @@ export interface RepoAviso {
   avisosDeFilas(tenantId: string, filaIds: string[]): Promise<AvisoExistente[]>;
   /** `duplicado` = ya existía (misma huella o misma versión de esa fila): no es un error. */
   insertarAviso(tenantId: string, aviso: NuevoAviso): Promise<'creado' | 'duplicado'>;
+  /**
+   * T-A4-42: los `pendiente_confirmacion` más antiguos (solo cuándo nacieron y su cita; nada del texto ni del cliente), a lo más
+   * `limite`. Opcional: sin él la pasada no cuenta la cola atorada (no inventa un cero).
+   */
+  pendientesConfirmacion?(tenantId: string, limite: number): Promise<Array<{ creadoEn: string; cita: string | null }>>;
 }
 
 export const PAGINA_FILAS = 500;
@@ -165,6 +170,14 @@ export function crearRepoAviso(): RepoAviso {
       if (error?.code === '23505') return 'duplicado';
       exigir('insertar', error);
       return 'creado';
+    },
+
+    async pendientesConfirmacion(tenantId, limite) {
+      const { data, error } = await acotada(supabaseAdmin().from('vigia_aviso')
+        .select('creado_en, cita:datos->>cita').eq('tenant_id', tenantId).eq('estado', 'pendiente_confirmacion')
+        .order('creado_en').range(0, limite - 1), 'aviso.pendientes_confirmacion');
+      exigir('pendientes_confirmacion', error);
+      return ((data ?? []) as Record<string, unknown>[]).map((r) => ({ creadoEn: String(r.creado_en), cita: str(r.cita) }));
     },
   };
 }
