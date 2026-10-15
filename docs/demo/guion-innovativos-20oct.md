@@ -181,9 +181,9 @@ leído por el importador real; **2 respuestas rápidas aprobadas**; y la **lista
 
 | Grupo | Mensajes leídos | De cliente | Respuestas >10 min | Mediana / p90 (min) | Quejas | Temas más frecuentes |
 |---|---|---|---|---|---|---|
-| Autopartes (iOS) | 210 | 106 | 17 | 6 / 30 | 11 | Otros 24 · Hora de llegada 22 · Ubicación 17 · Citas y andén 15 |
-| Armadora (Android) | 225 | 114 | 23 | 5 / 34 | 20 | Hora de llegada 20 · Quejas 20 · Otros 18 · Ubicación 17 |
-| Cervecería (iOS, .zip) | 207 | 104 | 19 | 5 / 23 | 8 | Otros 27 · Citas y andén 20 · Hora de llegada 19 · Documentos 11 |
+| Autopartes (iOS) | 210 | 106 | 21 | 6 / 31 | 11 | Hora de llegada 22 · Datos de la unidad 22 · Ubicación 17 · Citas y andén 15 |
+| Armadora (Android) | 225 | 114 | 24 | 5 / 34 | 20 | Hora de llegada 20 · Quejas 20 · Ubicación 17 · Datos de la unidad 15 |
+| Cervecería (iOS, .zip) | 207 | 104 | 21 | 6 / 23 | 8 | Datos de la unidad 26 · Citas y andén 20 · Hora de llegada 19 · Documentos 11 |
 
 *(Son números de los chats sintéticos que lee el importador real, con los nombres del equipo declarados: no son
 estadística de ningún cliente.)*

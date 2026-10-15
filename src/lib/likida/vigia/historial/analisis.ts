@@ -12,16 +12,34 @@ import { normalizar } from '../entrada';
 import { clasificarPorReglas } from '../intencion';
 import type { MensajeHistorial } from './export_whatsapp';
 
-export const TEMAS = ['ubicacion', 'eta', 'documentos', 'factura_pod', 'cita_anden', 'tarifa', 'queja', 'pide_humano', 'otro'] as const;
-export type Tema = (typeof TEMAS)[number];
+/** Temas de servicio: los que el equipo atiende y de los que se pueden preparar respuestas rápidas. */
+export const TEMAS = ['ubicacion', 'eta', 'datos_unidad', 'documentos', 'factura_pod', 'cita_anden', 'tarifa', 'queja', 'pide_humano', 'otro'] as const;
+/** Temas IGNORABLES: mensajes que no piden nada (el cliente agradece, o el equipo/monitoreo avisa que sigue en ruta). No cuentan como
+ * «otros», ni como pregunta frecuente, ni como mensaje sin contestar. */
+export const TEMAS_IGNORABLES = ['monitoreo', 'agradecimiento'] as const;
+export type Tema = (typeof TEMAS)[number] | (typeof TEMAS_IGNORABLES)[number];
+export const esTemaIgnorable = (t: Tema): boolean => (TEMAS_IGNORABLES as readonly string[]).includes(t);
 
 export const ETIQUETA_TEMA: Record<Tema, string> = {
-  ubicacion: 'Ubicación del viaje', eta: 'Hora de llegada / entrega', documentos: 'Documentos', factura_pod: 'Factura y comprobante de entrega',
+  ubicacion: 'Ubicación del viaje', eta: 'Hora de llegada / entrega', datos_unidad: 'Datos de la unidad (caja, placas, operador)', documentos: 'Documentos', factura_pod: 'Factura y comprobante de entrega',
   cita_anden: 'Citas y andén', tarifa: 'Tarifas y cotizaciones', queja: 'Quejas e inconformidades', pide_humano: 'Pide hablar con alguien', otro: 'Otros',
+  monitoreo: 'Avisos de monitoreo (ignorado)', agradecimiento: 'Agradecimientos y acuses (ignorado)',
 };
 
 const CITA = /\b(cita|citas|anden|andenes|agendar|agenda|reprogramar|reprogramacion|turno|hora de carga|hora de descarga|programar|programen|programado)\b/;
 const TARIFA = /\b(tarifa|tarifas|precio|precios|cotizacion|cotizar|cotizan|costo|cuanto cuesta|cuanto sale|presupuesto)\b/;
+
+// Avisos de seguimiento que no son una petición («sigo en ruta», «monitoreo sin novedad»).
+const MONITOREO = /\b(monitoreo|monitoreando|monitoreado|sin novedad|sin novedades|sigo en ruta|seguimos en ruta|continua en ruta|reporte de ruta|en camino sin)\b/;
+// Acuses de recibo y agradecimientos: la parte de `SALUDOS` de intencion.ts que no es un saludo de apertura.
+const AGRADECIMIENTO = /^(muchas )?gracias\b|^(ok|enterado|enterada|listo|perfecto|de acuerdo|vale|excelente|muy bien|recibido)\b/;
+
+/** ¿El mensaje pide los datos de la unidad (caja, placas, operador), aunque otra intención (ubicación, ETA) sea la principal?
+ * Es la cifra de la línea base de las 4 h: usa las MISMAS reglas que el Vigía en vivo. */
+export function pideDatosUnidad(texto: string): boolean {
+  const c = clasificarPorReglas(texto);
+  return !!c && (c.intencion === 'datos_unidad' || c.secundarias.includes('datos_unidad'));
+}
 
 /** El tema de un mensaje DEL CLIENTE. */
 export function temaDe(texto: string): Tema {
@@ -30,9 +48,11 @@ export function temaDe(texto: string): Tema {
   const c = clasificarPorReglas(texto);
   if (c) {
     if (c.intencion === 'queja' || c.intencion === 'pide_humano') return c.intencion;
-    if (c.intencion === 'ubicacion' || c.intencion === 'eta' || c.intencion === 'documentos' || c.intencion === 'factura_pod') return c.intencion;
-    return 'otro'; // saludo / baja: no es un tema de servicio
+    if (c.intencion === 'ubicacion' || c.intencion === 'eta' || c.intencion === 'datos_unidad' || c.intencion === 'documentos' || c.intencion === 'factura_pod') return c.intencion;
+    if (c.intencion === 'saludo' && AGRADECIMIENTO.test(n)) return 'agradecimiento';
+    return 'otro'; // saludo de apertura / baja: no es un tema de servicio
   }
+  if (MONITOREO.test(n)) return 'monitoreo';
   if (CITA.test(n)) return 'cita_anden';
   if (TARIFA.test(n)) return 'tarifa';
   return 'otro';
@@ -97,6 +117,22 @@ export interface TiemposRespuesta {
   umbralMin: number;
 }
 
+/** Cuántas peticiones de «datos de unidad» llegan: la cifra MEDIBLE para la línea base del ahorro (las ~4 h/día del equipo).
+ * Es un conteo de peticiones, NO un ahorro: las horas ahorradas se calculan solo cuando exista el tiempo real por petición. */
+export interface DatosUnidadReporte {
+  total: number;
+  /** Días calendario (UTC) que cubre el histórico, ambos extremos incluidos; 0 si no hay mensajes. */
+  diasDelPeriodo: number;
+  /** Peticiones por día del periodo en promedio (1 decimal); null sin histórico. */
+  promedioPorDia: number | null;
+  porDia: Array<{ dia: string; mensajes: number }>;
+  porSemana: Array<{ semana: string; mensajes: number }>;
+  /** Las preguntas de este tema que más se repiten, con lo que contestó el equipo. */
+  preguntas: FaqItem[];
+}
+
+export const NOTA_LINEA_BASE = 'Esta cifra cuenta cuántas peticiones de datos de la unidad llegan; no es un ahorro. Las horas ahorradas se calculan solo cuando se conozca el tiempo real que toma cada una.';
+
 export interface ReporteHistorial {
   mensajes: number;
   mensajesCliente: number;
@@ -104,6 +140,11 @@ export interface ReporteHistorial {
   desde: string | null;
   hasta: string | null;
   porTema: Array<{ tema: Tema; etiqueta: string; mensajes: number }>;
+  /** Mensajes de agradecimiento / monitoreo que se dejaron fuera de los temas y de las esperas. */
+  ignorados: number;
+  /** Mensajes en «Otros» que ninguna regla reconoce (sin contar saludos): se reportan tal cual, sin inventarles tema. */
+  sinClasificar: { mensajes: number; porcentaje: number | null };
+  datosUnidad: DatosUnidadReporte;
   faqs: FaqItem[];
   tendencias: TendenciaTema[];
   tiempos: TiemposRespuesta;
@@ -149,7 +190,8 @@ export function analizarHistorial(
   msgs.forEach((m, i) => {
     if (m.rol !== 'cliente') return;
     // Los mensajes de saludo/agradecimiento no esperan respuesta: contarlos como «sin respuesta» inflaría el problema.
-    const sustantivo = temaPorMensaje.get(m) !== 'otro' || esPregunta(m.texto);
+    const tema = temaPorMensaje.get(m)!;
+    const sustantivo = !esTemaIgnorable(tema) && (tema !== 'otro' || esPregunta(m.texto));
     let r: (typeof msgs)[number] | null = null;
     for (let j = i + 1; j < msgs.length; j++) {
       if (msgs[j].rol !== 'equipo') continue;
@@ -176,6 +218,7 @@ export function analizarHistorial(
   const grupos: Grupo[] = [];
   for (const m of cliente) {
     const tema = temaPorMensaje.get(m)!;
+    if (esTemaIgnorable(tema)) continue;
     if (!esPregunta(m.texto) && tema === 'otro') continue;
     if (tema === 'queja' || tema === 'pide_humano') continue; // una queja no es una pregunta frecuente: va en tendencias
     const f = new Set(fichas(m.texto));
@@ -183,7 +226,7 @@ export function analizarHistorial(
     const g = grupos.find((x) => jaccard(x.fichas, f) >= 0.5);
     if (g) { g.miembros.push(m); for (const t of f) g.fichas.add(t); } else grupos.push({ fichas: f, miembros: [m] });
   }
-  const faqs: FaqItem[] = grupos
+  const todasLasFaqs: FaqItem[] = grupos
     .filter((g) => g.miembros.length >= 2)
     .map((g) => {
       const representante = [...g.miembros].sort((a, b) => a.texto.length - b.texto.length)[0];
@@ -206,8 +249,8 @@ export function analizarHistorial(
         respuestasEncontradas: [...respuestas.values()].reduce((s, r) => s + r.n, 0),
       };
     })
-    .sort((a, b) => b.veces - a.veces || a.pregunta.localeCompare(b.pregunta))
-    .slice(0, maxFaqs);
+    .sort((a, b) => b.veces - a.veces || a.pregunta.localeCompare(b.pregunta));
+  const faqs = todasLasFaqs.slice(0, maxFaqs);
 
   // ── Tendencias por tema y semana ──
   const hasta = msgs.length ? msgs[msgs.length - 1].enviadoEn : null;
@@ -233,9 +276,36 @@ export function analizarHistorial(
     };
   }).sort((a, b) => b.total - a.total);
 
+  // ── Datos de unidad por día y semana (línea base) ──
+  const pidenUnidad = cliente.filter((m) => pideDatosUnidad(m.texto));
+  const porDiaMapa = new Map<string, number>();
+  const porSemanaMapa = new Map<string, number>();
+  for (const m of pidenUnidad) {
+    const d = m.enviadoEn.slice(0, 10);
+    porDiaMapa.set(d, (porDiaMapa.get(d) ?? 0) + 1);
+    const s = semanaDe(m.enviadoEn);
+    porSemanaMapa.set(s, (porSemanaMapa.get(s) ?? 0) + 1);
+  }
+  const diasDelPeriodo = desde && hasta ? Math.floor((Date.parse(hasta.slice(0, 10)) - Date.parse(desde.slice(0, 10))) / 86_400_000) + 1 : 0;
+  const ordenado = (mapa: Map<string, number>) => [...mapa.entries()].sort(([a], [b]) => a.localeCompare(b));
+  const datosUnidad: DatosUnidadReporte = {
+    total: pidenUnidad.length,
+    diasDelPeriodo,
+    promedioPorDia: diasDelPeriodo > 0 ? Math.round((pidenUnidad.length / diasDelPeriodo) * 10) / 10 : null,
+    porDia: ordenado(porDiaMapa).map(([dia, mensajes]) => ({ dia, mensajes })),
+    porSemana: ordenado(porSemanaMapa).map(([semana, mensajes]) => ({ semana, mensajes })),
+    preguntas: todasLasFaqs.filter((f) => f.tema === 'datos_unidad').slice(0, 5),
+  };
+  const ignorados = cliente.filter((m) => esTemaIgnorable(temaPorMensaje.get(m)!)).length;
+  const sinClasificarN = cliente.filter((m) => temaPorMensaje.get(m) === 'otro' && clasificarPorReglas(m.texto)?.intencion !== 'saludo').length;
+  const evaluables = cliente.length - ignorados;
+
   return {
     mensajes: msgs.length, mensajesCliente: cliente.length, mensajesEquipo: msgs.length - cliente.length, desde, hasta,
     porTema: TEMAS.filter((t) => (conteoTema.get(t) ?? 0) > 0).map((t) => ({ tema: t, etiqueta: ETIQUETA_TEMA[t], mensajes: conteoTema.get(t) ?? 0 })).sort((a, b) => b.mensajes - a.mensajes),
+    ignorados,
+    sinClasificar: { mensajes: sinClasificarN, porcentaje: evaluables > 0 ? Math.round((sinClasificarN / evaluables) * 100) : null },
+    datosUnidad,
     faqs, tendencias, tiempos,
   };
 }
