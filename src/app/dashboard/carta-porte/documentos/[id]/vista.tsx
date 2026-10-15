@@ -3,6 +3,7 @@ import { ArrowLeft, Check, Download, CircleHelp, FileSearch, Send, ShieldAlert, 
 import { fechaHoraMx, numero, pesoArchivo, usd4 } from '@/lib/formato';
 import { ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO, ROTULO_ORIGEN, ROTULO_ORIGEN_HALLAZGO, type FilaCampo, type Revision } from '@/lib/likida/carta_porte_docs/presentacion';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
+import { FRASE_ENVIADO_SIMULADO, ROTULO_SIMULADO } from '@/lib/likida/carta_porte_docs/salida_simulada';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../forma_accion';
 
 /**
@@ -43,7 +44,7 @@ function color(sev: 'bloqueo' | 'confirmar' | 'aviso'): string {
 }
 
 /** El envío al TMS tal como lo ve la pantalla: el estado más la fecha del próximo reintento y la ubicación del rechazo (nunca valores). */
-export interface EnvioVista { estado: EstadoEnvioTms; proximaRevision?: string | null; motivo?: string | null }
+export interface EnvioVista { estado: EstadoEnvioTms; proximaRevision?: string | null; motivo?: string | null; /** La flota sale por el simulador (T-A3-42): todo se rotula «Simulado». */ simulado?: boolean }
 
 /** Lo que dice la tarjeta «Envío al sistema del cliente» en lenguaje llano. Sin envío = todavía no se ha enviado nada. */
 export function fraseEnvio(e: EnvioVista | null): string {
@@ -54,7 +55,7 @@ export function fraseEnvio(e: EnvioVista | null): string {
     case 'enviando': return 'Enviándose al sistema del cliente…';
     case 'pendiente_reque': return `Esperando que exista el requerimiento${cuando ? ` — se reintentará el ${cuando}` : ''}.`;
     case 'error_transitorio': return `El sistema del cliente no contestó${cuando ? ` — se reintentará el ${cuando}` : ' — se reintentará'}.`;
-    case 'enviado': return 'Enviado.';
+    case 'enviado': return e.simulado ? FRASE_ENVIADO_SIMULADO : 'Enviado.';
     case 'rechazado_tms': return `El sistema del cliente lo rechazó${e.motivo ? `: ${e.motivo}` : ''} — corrige y vuelve a aprobar.`;
     case 'subido_a_mano': return 'Subido a mano.';
   }
@@ -266,6 +267,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                     <div className="space-y-1" aria-label="Envío al sistema del cliente">
                       <p className="text-[12.5px] font-medium flex items-center gap-1.5">
                         <Send width={14} height={14} strokeWidth={1.75} style={{ color: envio?.estado === 'rechazado_tms' ? 'var(--bad)' : envio?.estado === 'enviado' ? 'var(--ok)' : 'var(--muted)' }} />Envío al sistema del cliente
+                        {envio?.simulado && <span className="text-[10.5px] font-medium px-1.5 py-0.5 rounded" style={{ color: 'var(--warn)', border: '1px solid var(--warn)' }} data-testid="rotulo-simulado">{ROTULO_SIMULADO}</span>}
                       </p>
                       <p className="text-[12.5px]" role="status">{fraseEnvio(envio)}</p>
                     </div>

@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger';
 import { DatoInvalido, mensajeParaPantalla } from '@/lib/likida/errores';
 import { aprobarDocumento, abrirRevision, corregirCampos, crearViajeDeDocumento, eliminarDocumento, quitarRenglon, rechazarDocumento, reabrirDocumento } from '@/lib/likida/carta_porte_docs/bandeja';
 import { flotaBajoPerfil, marcarSubidoAMano, MENSAJE_FUNCION_NO_DISPONIBLE } from '@/lib/likida/carta_porte_docs/envio';
+import { esFlotaSimulada } from '@/lib/likida/carta_porte_docs/salida_simulada';
 import { repoEnvios, type ErrorEnvio } from '@/lib/likida/carta_porte_docs/repo_envios';
 import { detectarFormato, prepararContenido } from '@/lib/likida/carta_porte_docs/contenido';
 import { cambiosDeFormulario } from '@/lib/likida/carta_porte_docs/formulario';
@@ -192,7 +193,7 @@ export default async function PaginaRevision({
       eventos={eventos.map((e) => ({ tipo: e.tipo, creadoEn: e.creadoEn }))}
       acciones={{ revisar }}
       sufijo={sufijoTenant(sp)}
-      envio={envio ? { estado: envio.estado, proximaRevision: envio.proximaRevision, motivo: motivoDeRechazo(envio.ultimoError) } : null}
+      envio={envio ? { estado: envio.estado, proximaRevision: envio.proximaRevision, motivo: motivoDeRechazo(envio.ultimoError), ...(esFlotaSimulada(tenantId) ? { simulado: true } : {}) } : null}
       perfilRestringido={restringido}
       salida={viaje ? { folio: viaje.folio ?? viaje.id.slice(0, 8) } : null}
       puedeEliminar={puedeAdministrar(rol)}
