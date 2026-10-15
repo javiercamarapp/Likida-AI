@@ -7,6 +7,7 @@ import { normalizarNombre, normalizarTag } from './formatos';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../conductor/geometria_datos';
 import { matrizDeArchivoCatalogo } from './archivo';
 import { parsearCasetasMatriz, type CasetaCatalogo } from './casetas';
+import { parsearTarifasMatriz, planificarTarifa, type OrigenTarifa, type TarifaEntrada, type TarifaExistente } from './tarifario_archivo';
 import { parsearTagsMatriz, resolverUnidadesDeTags, validarBajaTag, type VigenciaTag } from './tags';
 import { validarMapeo, type ConfigMapeo } from './mapeo';
 import { planificarGps, evaluarCruceGps, type LineaParaGps, type VeredictoGps, type Muestra } from './cruce_gps';
@@ -305,6 +306,154 @@ export async function cambiarEstadoCaseta(tenantId: string, casetaId: string, ac
   const { error } = await acotada(supabaseAdmin().from('peaje_caseta').update({ activa }).eq('tenant_id', tenantId).eq('id', casetaId), 'peajes.estado_caseta');
   if (error) logger.error('peajes.estado_caseta', { tenant: tenantId, err: error.message });
   return !error;
+}
+
+// ── Tarifario por caseta y clase (migración 0811) ───────────────────────────
+// Las reglas (traslapes, confirmación) viven en `tarifario_archivo.ts`; aquí solo se lee y se escribe.
+// Ninguna tarifa se crea confirmada salvo una carga marcada «proveedor»; confirmar es `confirmarTarifa`.
+export interface TarifaVista extends TarifaExistente { id: string; creadaEn: string | null }
+
+const COLUMNAS_TARIFA = 'id, caseta_norm, clase, importe, vigente_desde, vigente_hasta, origen, confirmada, confirmada_por, created_at';
+
+type FilaTarifa = { id: unknown; caseta_norm: unknown; clase: unknown; importe: unknown; vigente_desde: unknown; vigente_hasta: unknown; origen: unknown; confirmada: unknown; confirmada_por: unknown; created_at: unknown };
+
+function tarifaDeFila(f: FilaTarifa): TarifaVista {
+  return {
+    id: String(f.id), casetaNorm: String(f.caseta_norm), clase: Number(f.clase), importe: Number(f.importe),
+    vigenteDesde: String(f.vigente_desde), vigenteHasta: f.vigente_hasta === null || f.vigente_hasta === undefined ? null : String(f.vigente_hasta),
+    origen: f.origen as OrigenTarifa, confirmada: f.confirmada === true,
+    confirmadaPor: f.confirmada_por === null || f.confirmada_por === undefined ? null : String(f.confirmada_por),
+    creadaEn: f.created_at === null || f.created_at === undefined ? null : String(f.created_at),
+  };
+}
+
+export async function listarTarifas(tenantId: string, filtro: { caseta?: string; clase?: number } = {}): Promise<TarifaVista[]> {
+  const casetaNorm = filtro.caseta === undefined ? null : normalizarNombre(filtro.caseta);
+  const filas = await traerTodo<FilaTarifa>(
+    (d, h) => {
+      let q = supabaseAdmin().from('peaje_tarifa').select(COLUMNAS_TARIFA, conteo(d)).eq('tenant_id', tenantId);
+      if (casetaNorm !== null) q = q.eq('caseta_norm', casetaNorm);
+      if (filtro.clase !== undefined) q = q.eq('clase', filtro.clase);
+      return acotada(q.order('caseta_norm').order('clase').order('vigente_desde').order('id').range(d, h), 'peajes.tarifas');
+    },
+    'peajes.tarifas',
+  );
+  return filas.map(tarifaDeFila);
+}
+
+/** Día de hoy en la zona de la flota (America/Mexico_City), «aaaa-mm-dd». */
+function hoyMx(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+
+const filaParaEscribir = (tenantId: string, t: TarifaExistente) => ({
+  tenant_id: tenantId, caseta_norm: t.casetaNorm, clase: t.clase, importe: t.importe,
+  vigente_desde: t.vigenteDesde, vigente_hasta: t.vigenteHasta, origen: t.origen,
+  confirmada: t.confirmada, confirmada_por: t.confirmadaPor,
+});
+
+export type ResultadoGuardarTarifa =
+  | { ok: true; accion: 'creada' | 'actualizada' | 'sin_cambios'; confirmada: boolean }
+  | { ok: false; motivo: string };
+
+/** Guarda (crea o actualiza por caseta+clase+inicio) UNA tarifa. `origen` por omisión: «declarada» (nunca nace confirmada). */
+export async function guardarTarifa(tenantId: string, entrada: TarifaEntrada, origen: OrigenTarifa = 'declarada'): Promise<ResultadoGuardarTarifa> {
+  let existentes: TarifaVista[];
+  try {
+    existentes = await listarTarifas(tenantId, { caseta: entrada.caseta, clase: entrada.clase });
+  } catch (e) {
+    logger.error('peajes.guardar_tarifa_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, motivo: 'No se pudo leer el tarifario actual. Inténtalo de nuevo.' };
+  }
+  const plan = planificarTarifa(existentes, entrada, origen);
+  if (plan.tipo === 'rechazada') return { ok: false, motivo: plan.motivo };
+  if (plan.tipo === 'igual') return { ok: true, accion: 'sin_cambios', confirmada: plan.fila.confirmada };
+  const { error } = await acotada(
+    supabaseAdmin().from('peaje_tarifa').upsert(filaParaEscribir(tenantId, plan.fila), { onConflict: 'tenant_id,caseta_norm,clase,vigente_desde' }),
+    'peajes.guardar_tarifa',
+  );
+  if (error) {
+    logger.error('peajes.guardar_tarifa', { tenant: tenantId, err: error.message });
+    return { ok: false, motivo: 'No se pudo guardar la tarifa. Inténtalo de nuevo.' };
+  }
+  return { ok: true, accion: plan.tipo === 'crear' ? 'creada' : 'actualizada', confirmada: plan.fila.confirmada };
+}
+
+export type ResultadoConfirmarTarifa = { ok: true; yaConfirmada: boolean } | { ok: false; motivo: string };
+
+/** La acción humana que vuelve «confirmada» una tarifa: queda quién la confirmó. */
+export async function confirmarTarifa(tenantId: string, tarifaId: string, por: string): Promise<ResultadoConfirmarTarifa> {
+  const quien = por.trim().replace(/\s+/g, ' ');
+  if (!quien) return { ok: false, motivo: 'Indica quién confirma la tarifa.' };
+  if (quien.length > 120) return { ok: false, motivo: 'El nombre de quien confirma pasa de 120 caracteres.' };
+  const { data, error } = await acotada(
+    supabaseAdmin().from('peaje_tarifa').select(COLUMNAS_TARIFA).eq('tenant_id', tenantId).eq('id', tarifaId).maybeSingle(),
+    'peajes.confirmar_tarifa_lectura',
+  );
+  if (error) {
+    logger.error('peajes.confirmar_tarifa_lectura', { tenant: tenantId, err: error.message });
+    return { ok: false, motivo: 'No se pudo leer la tarifa. Inténtalo de nuevo.' };
+  }
+  if (!data) return { ok: false, motivo: 'No encontré esa tarifa.' };
+  if ((data as FilaTarifa).confirmada === true) return { ok: true, yaConfirmada: true };
+  const upd = await acotada(
+    supabaseAdmin().from('peaje_tarifa').update({ confirmada: true, confirmada_por: quien }).eq('tenant_id', tenantId).eq('id', tarifaId),
+    'peajes.confirmar_tarifa',
+  );
+  if (upd.error) {
+    logger.error('peajes.confirmar_tarifa', { tenant: tenantId, err: upd.error.message });
+    return { ok: false, motivo: 'No se pudo confirmar la tarifa. Inténtalo de nuevo.' };
+  }
+  return { ok: true, yaConfirmada: false };
+}
+
+/**
+ * Importa un CSV/Excel de tarifas (`caseta;clase;importe;desde;hasta`). `origen` es lo que el llamador
+ * DECLARA del archivo: solo «proveedor» deja las tarifas confirmadas. Si el archivo no trae «desde», la
+ * vigencia empieza hoy (hora de México). Repetirlo es seguro.
+ */
+export async function importarTarifasArchivo(
+  tenantId: string, nombre: string, buffer: Uint8Array, origen: OrigenTarifa = 'declarada',
+): Promise<ResultadoImportacionCatalogo> {
+  const falla = (error: string): ResultadoImportacionCatalogo => ({ ok: false, guardadas: 0, actualizadas: 0, rechazadas: [], error });
+  const m = matrizDeArchivoCatalogo(nombre, buffer);
+  if (!m.ok) return falla(m.motivo);
+  const lectura = parsearTarifasMatriz(m.matriz, { desdePorDefecto: hoyMx() });
+  if (lectura.error) return falla(lectura.error);
+  if (lectura.tarifas.length === 0) return { ok: true, guardadas: 0, actualizadas: 0, rechazadas: lectura.rechazadas };
+
+  let vigentes: TarifaExistente[];
+  try {
+    vigentes = await listarTarifas(tenantId);
+  } catch (e) {
+    logger.error('peajes.importar_tarifas_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return falla('No se pudo leer el tarifario actual. Inténtalo de nuevo.');
+  }
+  const rechazadas = [...lectura.rechazadas];
+  const aEscribir: TarifaExistente[] = [];
+  let guardadas = 0;
+  let actualizadas = 0;
+  for (const t of lectura.tarifas) {
+    // Se planifica contra lo guardado MÁS lo ya aceptado de este mismo archivo.
+    const plan = planificarTarifa(vigentes, t, origen);
+    if (plan.tipo === 'rechazada') { rechazadas.push({ fila: t.fila, motivo: plan.motivo }); continue; }
+    guardadas++;
+    if (plan.tipo === 'actualizar') actualizadas++;
+    if (plan.tipo !== 'igual') aEscribir.push(plan.fila);
+    vigentes = [...vigentes.filter((v) => !(v.casetaNorm === plan.fila.casetaNorm && v.clase === plan.fila.clase && v.vigenteDesde === plan.fila.vigenteDesde)), plan.fila];
+  }
+  rechazadas.sort((a, b) => a.fila - b.fila);
+  for (const lote of lotes(aEscribir)) {
+    const { error } = await acotada(
+      supabaseAdmin().from('peaje_tarifa').upsert(lote.map((t) => filaParaEscribir(tenantId, t)), { onConflict: 'tenant_id,caseta_norm,clase,vigente_desde' }),
+      'peajes.importar_tarifas',
+    );
+    if (error) {
+      logger.error('peajes.importar_tarifas', { tenant: tenantId, err: error.message });
+      return { ok: false, guardadas: 0, actualizadas: 0, rechazadas, error: 'No se pudo guardar el tarifario y no se aplicó ninguna fila de este lote. Vuelve a subir el archivo: es seguro repetirlo.' };
+    }
+  }
+  return { ok: true, guardadas, actualizadas, rechazadas };
 }
 
 // ── Geocercas (la tabla de la 0050; nadie creaba filas) ─────────────────────
