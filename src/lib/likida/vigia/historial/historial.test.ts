@@ -156,6 +156,11 @@ describe('temas y análisis', () => {
     expect(r.tiempos.medianaMin).toBeNull();
   });
 
+  it('semanaDe usa la hora de México: el domingo 19:30 MX (ya lunes en UTC) sigue en su semana', () => {
+    expect(semanaDe('2026-10-18T19:30:00-06:00')).toBe('2026-10-12');
+    expect(semanaDe('2026-10-19T00:30:00-06:00')).toBe('2026-10-19');   // lunes 00:30 MX = lunes
+  });
+
   it('semanaDe devuelve el lunes', () => {
     expect(semanaDe('2026-09-03T12:00:00Z')).toBe('2026-08-31');
   });

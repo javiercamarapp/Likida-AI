@@ -36,6 +36,7 @@ import { estatusViaje as estatusDelConductor } from '../conductor/servicios';
 import type { EstatusViaje as EstatusConductor } from '../conductor/estatus_viaje';
 import { mezclarEstatus, parteDelConductor } from './desde_conductor';
 import { adjuntosDeRespaldo, nombreDeAdjunto, nombreDeArchivo, pieDeAdjunto, rutaEsDeLaFlota, SEGUNDOS_URL_ADJUNTO, type ArchivoParaEnviar } from './adjuntos';
+import { hoyMx } from '@/lib/formato';
 import type {
   CambioReclamo, CorreoVencido, Destinatario, FilaEnEspera, NuevoEvento, NuevoSaliente, RepoVigia, ResultadoRecibir,
 } from './puertos';
@@ -267,7 +268,7 @@ const DATOS_UNIDAD_VACIOS: DatosUnidadViaje = { caja: null, placasCaja: null, es
 
 const mayus = (v: string) => v.trim().toUpperCase();
 const variantes = (v: string) => [...new Set([v, v.trim(), v.trim().toUpperCase()])];
-const diaIso = (d: Date) => d.toISOString().slice(0, 10);
+const diaIso = (d: Date) => hoyMx(d);   // día calendario de México (el programa de despacho se escribe en hora local)
 
 /**
  * Qué unidad, caja y operador lleva UN viaje de UN cliente, listo para decírselo (ya filtrado por privacidad).
