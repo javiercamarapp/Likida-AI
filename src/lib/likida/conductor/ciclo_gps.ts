@@ -4,6 +4,7 @@ import type { ConfigConductor } from './config';
 import { aplicarPerfil, estaFueraDePerfil } from './perfil';
 import { estaPendiente, estaResuelto, type HitoFila, type TipoHito } from './tipos';
 import type { ViajeContexto } from './repo';
+import { MINUTOS_SIN_POSICION } from './observabilidad';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CICLO POR GEOCERCA — que el sistema se entere solo de que el tractor llegó o salió (P2, ola 4c).
@@ -287,6 +288,12 @@ export interface ResultadoCicloGps {
   sinMuestras: number;
   /** Viajes con algo pendiente que esperaron porque otro viaje de la misma unidad es el vigente. */
   cedidosAOtroViaje: number;
+  /** T-A5-27: hitos detectados ligando el GPS por referencia de despacho vs por unidad + ventana (el respaldo). */
+  detectadosViaDespacho?: number;
+  detectadosViaUnidadVentana?: number;
+  /** T-A5-27: unidades cuyas muestras se leyeron y cuántas de ellas no traen posición en los últimos `MINUTOS_SIN_POSICION`. */
+  unidadesConsultadas?: number;
+  unidadesSinPosicion?: number;
   fallos: string[];
   cortadosPorReloj: number;
 }
@@ -295,7 +302,8 @@ const TIPOS: readonly TipoDeteccion[] = ['llegada_carga', 'salida_carga', 'llega
 
 export async function barridoCicloGps(p: PuertosCicloGps, ahora: Date = new Date(), venceEn?: number): Promise<ResultadoCicloGps> {
   const r: ResultadoCicloGps = {
-    viajes: 0, evaluados: 0, detectados: 0, llegadas: 0, salidas: 0, fueraDeOrden: 0, yaDetectados: 0, sinSitio: 0, sinMuestras: 0, cedidosAOtroViaje: 0, fallos: [], cortadosPorReloj: 0,
+    viajes: 0, evaluados: 0, detectados: 0, llegadas: 0, salidas: 0, fueraDeOrden: 0, yaDetectados: 0, sinSitio: 0, sinMuestras: 0, cedidosAOtroViaje: 0,
+    detectadosViaDespacho: 0, detectadosViaUnidadVentana: 0, unidadesConsultadas: 0, unidadesSinPosicion: 0, fallos: [], cortadosPorReloj: 0,
   };
   const viajes = await p.viajes(TOPE_VIAJES_CICLO_GPS);
   r.viajes = viajes.length;
@@ -343,6 +351,15 @@ export async function barridoCicloGps(p: PuertosCicloGps, ahora: Date = new Date
   for (const v of [...candidatos, ...cedidos.filter((c) => c.despachoRef)]) unidades.set(`${v.tenantId}|${v.unidadId}`, { tenantId: v.tenantId, unidadId: v.unidadId! });
   const muestrasPorUnidad = await p.muestras([...unidades.values()], desde);
   const limite = ahora.getTime() + MINUTOS_FUTURO_TOLERADO * 60_000;
+  // T-A5-27: unidades en tránsito sin una sola posición reciente (dato de la unidad, no del viaje).
+  const frescas = ahora.getTime() - MINUTOS_SIN_POSICION * 60_000;
+  let sinPosicion = 0;
+  for (const k of unidades.keys()) {
+    const ms = muestrasPorUnidad.get(k) ?? [];
+    if (!ms.some((m) => m.medidaEn.getTime() >= frescas && m.medidaEn.getTime() <= limite)) sinPosicion++;
+  }
+  r.unidadesConsultadas = unidades.size;
+  r.unidadesSinPosicion = sinPosicion;
   const rescatados = cedidos.filter((c) => c.despachoRef
     && muestrasDeViaje(c.despachoRef, muestrasPorUnidad.get(`${c.tenantId}|${c.unidadId}`) ?? []).via === 'despacho');
   r.cedidosAOtroViaje = cedidos.length - rescatados.length;
@@ -382,6 +399,7 @@ export async function barridoCicloGps(p: PuertosCicloGps, ahora: Date = new Date
         await p.completar(claim, ahora);
         if (res === 'carrera') break; // otro (el chofer, la oficina, otra corrida) lo registró primero: la siguiente pasada relee
         r.detectados++;
+        if (via === 'despacho') r.detectadosViaDespacho = (r.detectadosViaDespacho ?? 0) + 1; else r.detectadosViaUnidadVentana = (r.detectadosViaUnidadVentana ?? 0) + 1;
         // La vía queda en el log (no en `viaje_cruce_geocerca`: no hay columna libre y no se migra): audita cuándo se usó el respaldo.
         logger.info('conductor.ciclo_gps_deteccion', { viaje: v.id, hito: det.tipo, via });
         if (det.entrada) r.llegadas++; else r.salidas++;

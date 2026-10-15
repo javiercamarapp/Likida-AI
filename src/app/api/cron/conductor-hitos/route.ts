@@ -12,8 +12,9 @@ import { barridoSenalVida, type ResultadoSenalVida } from '@/lib/likida/conducto
 import { puertosSenalVidaReales } from '@/lib/likida/conductor/senal_vida_real';
 import { barridoAcercamiento, type ResultadoAcercamiento } from '@/lib/likida/convenios/acercamiento';
 import { ConveniosNoDisponibles } from '@/lib/likida/convenios/repo';
+import { alarmasConductor, contadoresConductor } from '@/lib/likida/conductor/observabilidad';
 import { horaYDiaMx } from '@/lib/likida/conductor/config';
-import { correrMantenimientoConductor, leerConfigConductor } from '@/lib/likida/conductor/repo';
+import { contarVoluntariosActivos, correrMantenimientoConductor, leerConfigConductor } from '@/lib/likida/conductor/repo';
 import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
@@ -168,7 +169,15 @@ export async function GET(req: Request) {
       mantenimiento = await correrMantenimientoConductor();
     }
 
-    const huboFallo = r.fallos.length > 0 || r.configIlegible > 0 || r.sinDestinatario > 0 || extras.length > 0;
+    // T-A5-27: contadores sin PII y dos alarmas (en el log y en el estado del latido). Contar voluntarios es lectura: si la base no
+    // tiene la 0800 o no contesta, el dato queda en `null` y no se alarma con lo que no se sabe.
+    let voluntariosActivos: number | null = null;
+    try { voluntariosActivos = await contarVoluntariosActivos(); } catch { voluntariosActivos = null; }
+    const observabilidad = contadoresConductor({ motor: r, gps: ciclo, senalVida, voluntariosActivos });
+    const alarmas = alarmasConductor(observabilidad);
+    for (const codigo of alarmas) logger.warn('conductor.alarma', { codigo, ...observabilidad });
+
+    const huboFallo = alarmas.length > 0 || r.fallos.length > 0 || r.configIlegible > 0 || r.sinDestinatario > 0 || extras.length > 0;
     const incompleto = r.cortadosPorReloj > 0 || r.cortadaPorRechazoMasivo || Boolean(senalVida?.cortadaPorRechazoMasivo);
     logger.info('cron.conductor_hitos.ok', { ...r, fallos: r.fallos.length });
     const estado: EstadoLatido = huboFallo || incompleto ? 'parcial' : 'ok';
@@ -182,6 +191,7 @@ export async function GET(req: Request) {
         acercamientos: acercamiento?.enviados ?? null,
         hitosPorGps: ciclo?.detectados ?? null, sitiosDerivados: sitios?.derivados ?? null,
         senalVidaAvisos: senalVida?.avisosChofer ?? null, senalVidaEscalaciones: senalVida?.escalaciones ?? null,
+        observabilidad, alarmas,
       },
     };
     if (r.cortadaPorRechazoMasivo) {
@@ -191,7 +201,7 @@ export async function GET(req: Request) {
       });
     }
     return NextResponse.json({
-      corrio: true, ...r, fallos: [...r.fallos, ...extras].slice(0, 20), alertasEstadia: alertas, llegadasSinConfirmar: llegadas, validacion, acercamiento, cicloGps: ciclo, sitiosDerivados: sitios, senalVida,
+      corrio: true, ...r, fallos: [...r.fallos, ...extras].slice(0, 20), alertasEstadia: alertas, llegadasSinConfirmar: llegadas, validacion, acercamiento, cicloGps: ciclo, sitiosDerivados: sitios, senalVida, observabilidad, alarmas,
       ...(mantenimiento ? { mantenimiento } : {}),
     });
   } catch (e) {

@@ -1114,6 +1114,13 @@ export async function contarVoluntarios(tenantId: string): Promise<number> {
   return (res as { count: number | null }).count ?? 0;
 }
 
+/** T-A5-27: voluntarios activos de TODAS las flotas (solo el número, para el latido). Lanza si la base no tiene la 0800. */
+export async function contarVoluntariosActivos(): Promise<number> {
+  const res = await acotada(supabaseAdmin().from('operador').select('id', { count: 'exact', head: true }).eq('agente_voluntario', true).eq('activo', true), 'conductor.contarVoluntariosActivos');
+  exigirPiloto(res as never, 'conductor.contarVoluntariosActivos');
+  return (res as { count: number | null }).count ?? 0;
+}
+
 /** `piloto_max_voluntarios` de la flota (6 si todavía no tiene fila de configuración). */
 export async function leerTopeVoluntarios(tenantId: string): Promise<number> {
   const res = await acotada(supabaseAdmin().from('agente_conductor_config').select('piloto_max_voluntarios').eq('tenant_id', tenantId).maybeSingle(), 'conductor.topeVoluntarios');
