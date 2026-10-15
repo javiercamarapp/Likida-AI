@@ -27,6 +27,7 @@ import { normalizarTelefonoWa } from '../wa_ventana';
 import { textoDeMotivoEscalamiento } from './avisos';
 import type { ResultadoEnvioConFallback } from '@/lib/meta/enviar_con_fallback';
 import type { DepsVigia } from './puertos';
+import { sinTenantsDePerfil } from './sin_flotas';
 import type { DatosAvisoCorreo, DestinatarioAviso, Director, NivelDirector } from './tipos';
 
 export const TEXTO_SIN_CONFIGURAR = 'No se pudo mandar por correo: falta configuración (llave o dominio de Resend).';
@@ -160,11 +161,12 @@ export async function respaldarPorCorreo(e: EntradaRespaldo, deps: DepsVigia): P
  * El cron retoma los correos cuyo arriendo venció sin cerrarse (la corrida que los llevaba murió entre reclamar y cerrar). Pasa
  * por el MISMO reclamo: si otra corrida ya lo retomó, pierde y no manda nada. Devuelve cuántos retomó. Nunca lanza.
  */
-export async function reintentarCorreosVencidos(deps: DepsVigia, limite = 20): Promise<number> {
+export async function reintentarCorreosVencidos(deps: DepsVigia, limite = 20, saltar: ReadonlySet<string> = new Set()): Promise<number> {
   const ahora = deps.ahora ? deps.ahora() : new Date();
   let filas;
   try {
-    filas = await deps.repo.correosVencidos(limite, ahora);
+    // Las flotas con perfil (A4 en «Próximamente») no reciben correos del Vigía, ni siquiera el reintento de respaldo.
+    filas = sinTenantsDePerfil(await deps.repo.correosVencidos(limite, ahora), saltar, (f) => f.tenantId);
   } catch (err) {
     logger.error('vigia.correos_vencidos_fallo', { err: err instanceof Error ? err.message : String(err) });
     return 0;

@@ -822,10 +822,13 @@ export function crearRepoVigia(): RepoVigia {
       return seleccionarEnEspera(candidatas, limite);
     },
 
-    async expirarCiclosInactivos(antesDe, limite, ahora) {
+    async expirarCiclosInactivos(antesDe, limite, ahora, excluirTenants = []) {
       const db = supabaseAdmin();
+      // Flotas con perfil (A4 en «Próximamente»): el cron no les cierra nada. Sin flotas a excluir se excluye el uuid nulo (no existe).
+      const excluidas = `(${(excluirTenants.length > 0 ? excluirTenants : ['00000000-0000-0000-0000-000000000000']).join(',')})`;
       const f = exigir('expirar_ciclos', await acotada(db.from('vigia_conversacion')
         .select('id, tenant_id').eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).lt('sin_respuesta_desde', antesDe.toISOString())
+        .not('tenant_id', 'in', excluidas)
         .order('sin_respuesta_desde', { ascending: true }).order('id').limit(limite), 'vigia.expirar_ciclos')) as Fila[] | null ?? [];
       const cerradas: Array<{ tenantId: string; id: string }> = [];
       for (const x of f) {

@@ -76,6 +76,7 @@ export async function GET(req: Request) {
     const r = await barridoVigia(deps, {
       vencePorReloj: inicio + maxDuration * 1000 - MARGEN_MS,
       mantenimiento: new Date(inicio).getUTCMinutes() % 5 === 0,
+      saltar,   // y TODAS las demás pasadas (correos de respaldo, atorados, ciclos muertos, avisos) también las saltan
     });
     logger.info('cron.vigia.ok', { ...r });
     // Trabajo que NO terminó (corte por reloj, envíos fallidos, atorados) no es «ok» limpio.

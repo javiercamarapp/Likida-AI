@@ -38,6 +38,7 @@ import { generarAvisos } from './aviso/generar';
 import { entregarAviso } from './aviso/entrega';
 import { contarPendientesViejos, TOPE_PENDIENTES_LEIDOS } from './aviso/cola';
 import { clasificar } from './clasificador';
+import { sinTenantsDePerfil } from './sin_flotas';
 import { esSpam, limpiarTexto } from './entrada';
 import { DIAS_CICLO_INACTIVO, evaluarEscalamiento, minutosEsperando, type AccionEscalamiento } from './escalamiento';
 import { resolverViaje, type ResumenViaje } from './estatus_viaje';
@@ -96,6 +97,14 @@ export async function atenderMensajeCliente(msg: MensajeEntrante, deps: DepsVigi
     return 'no_es_cliente';
   }
   if (!contacto) return 'no_es_cliente';
+
+  // PERFIL DE LA FLOTA (fase 1): el Vigía está en «Próximamente». Un cliente conocido NO recibe respuesta ni se guarda su
+  // mensaje ni se escala a nadie (y tampoco se le dice «no te tengo registrado», que sería falso). Si el perfil no se
+  // puede leer se falla cerrado (`perfilDeTenant`).
+  if (deps.enStandBy && (await deps.enStandBy(contacto.tenantId).catch(() => true))) {
+    logger.info('vigia.stand_by_perfil', { tenant: contacto.tenantId });
+    return 'atendido';
+  }
 
   // Ya es un cliente conocido: desde aquí, si la base falla, se REINTENTA (no se le
   // dice «no te tengo registrado» a quien sí tenemos).
@@ -774,6 +783,12 @@ export async function atenderDecisionVigia(cuenta: CuentaGerente, texto: string,
   if (!cuenta.tenantId || !ROLES_QUE_DECIDEN.includes(cuenta.rol)) {
     return 'Tu rol no puede aprobar respuestas a clientes. Pídeselo al encargado o al dueño de la flota.';
   }
+  // PERFIL DE LA FLOTA (fase 1): botón de un módulo en «Próximamente» (un aviso viejo): se consume sin tocar nada.
+  // '' = no contestar (el processor no envía cadenas vacías).
+  if (deps.enStandBy && (await deps.enStandBy(cuenta.tenantId).catch(() => true))) {
+    logger.info('vigia.decision_stand_by_perfil', { tenant: cuenta.tenantId });
+    return '';
+  }
   const actor: Actor = { tenantId: cuenta.tenantId, userId: cuenta.userId };
   try {
     if (b.accion === 'aprobar') return (await aprobarMensaje(actor, b.id, deps)).mensaje;
@@ -823,14 +838,19 @@ export const MINUTOS_APROBADO_ATORADO = 5;
  * `mantenimiento: false` salta lo que no corre contra el reloj de un cliente (atorados, expiración, retención): el cron pasa cada
  * minuto para que la alerta de 10 min salga a tiempo, y eso solo hace falta cada pocos minutos.
  */
-export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number; vencePorReloj?: number; mantenimiento?: boolean } = {}): Promise<ResultadoBarrido> {
+export async function barridoVigia(deps: DepsVigia, opciones: {
+  limite?: number; vencePorReloj?: number; mantenimiento?: boolean;
+  /** Flotas con perfil (A4 en «Próximamente», fase 1): NINGUNA pasada del barrido las mira, les manda ni les cierra nada. */
+  saltar?: ReadonlySet<string>;
+} = {}): Promise<ResultadoBarrido> {
   const { repo } = deps;
+  const saltar: ReadonlySet<string> = opciones.saltar ?? new Set<string>();
   const ahora = ahoraDe(deps);
   const r: ResultadoBarrido = { revisadas: 0, escaladas: 0, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, expiradas: 0, correosRetomados: 0, avisosCreados: 0, avisosEnviados: 0, avisosFallidos: 0, avisosOmitidos: 0, avisosPendientesViejos: 0, avisosConError: false, cortadoPorReloj: false };
 
   // La selección (quién entra y los umbrales) ya viene decidida por vencimiento; la prioridad alta solo adelanta el ORDEN de revisión.
   // `sort` es estable: dentro de cada grupo se conserva el orden por vencimiento.
-  const filas = (await repo.conversacionesEnEspera(opciones.limite ?? 100, ahora))
+  const filas = sinTenantsDePerfil(await repo.conversacionesEnEspera(opciones.limite ?? 100, ahora), saltar, (f) => f.config.tenantId)
     .sort((a, b) => Number((b.conversacion.prioridad ?? 0) >= 2) - Number((a.conversacion.prioridad ?? 0) >= 2));
   for (const f of filas) {
     if (opciones.vencePorReloj && Date.now() >= opciones.vencePorReloj) { r.cortadoPorReloj = true; break; }
@@ -870,16 +890,16 @@ export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number;
   if (opciones.mantenimiento === false) return r;
 
   // 0674: los correos de respaldo que la corrida anterior dejó a medias (arriendo vencido). Mismo reclamo: si otra corrida los retomó, no se repiten.
-  r.correosRetomados = await reintentarCorreosVencidos(deps, 20);
+  r.correosRetomados = await reintentarCorreosVencidos(deps, 20, saltar);
 
-  const atorados = await repo.aprobadosAtorados(new Date(ahora.getTime() - MINUTOS_APROBADO_ATORADO * 60_000), 50);
+  const atorados = sinTenantsDePerfil(await repo.aprobadosAtorados(new Date(ahora.getTime() - MINUTOS_APROBADO_ATORADO * 60_000), 50), saltar, (a) => a.tenantId);
   for (const a of atorados) {
     await repo.marcarFallido(a.tenantId, a.id, 'envío interrumpido: no se sabe si salió, revísalo antes de reenviar').catch(() => {});
     r.atorados += 1;
   }
   // Ciclos muertos: cerrados con su huella en la bitácora (sin texto ni teléfono). Una falla aquí no tira el barrido.
   try {
-    const cerradas = await repo.expirarCiclosInactivos(new Date(ahora.getTime() - DIAS_CICLO_INACTIVO * 86_400_000), 100, ahora);
+    const cerradas = await repo.expirarCiclosInactivos(new Date(ahora.getTime() - DIAS_CICLO_INACTIVO * 86_400_000), 100, ahora, [...saltar]);
     for (const x of cerradas) {
       await repo.evento(x.tenantId, { conversacionId: x.id, tipo: 'cerrada', detalle: { motivo: 'ciclo_inactivo', dias: DIAS_CICLO_INACTIVO } }).catch(() => false);
     }
@@ -893,7 +913,7 @@ export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number;
   });
   // T-A4-21: la pasada de avisos va AL FINAL (después del escalamiento, que es lo que corre contra el reloj de un cliente) y
   // respeta el mismo reloj. Aislada: un error aquí no tumba nada de lo anterior.
-  await pasadaAvisos(deps, ahora, r, opciones.vencePorReloj);
+  await pasadaAvisos(deps, ahora, r, opciones.vencePorReloj, saltar);
   return r;
 }
 
@@ -901,11 +921,11 @@ export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number;
 export const MAX_AVISOS_ENTREGADOS_POR_FLOTA = 50;
 const MAX_FLOTAS_AVISOS = 100;
 
-async function pasadaAvisos(deps: DepsVigia, ahora: Date, r: ResultadoBarrido, vencePorReloj?: number): Promise<void> {
+async function pasadaAvisos(deps: DepsVigia, ahora: Date, r: ResultadoBarrido, vencePorReloj?: number, saltar: ReadonlySet<string> = new Set()): Promise<void> {
   if (!deps.avisos) return;
   const sinTiempo = () => !!vencePorReloj && Date.now() >= vencePorReloj;
   try {
-    const flotas = await deps.avisos.flotas(MAX_FLOTAS_AVISOS);
+    const flotas = sinTenantsDePerfil(await deps.avisos.flotas(MAX_FLOTAS_AVISOS), saltar, (f) => f.tenantId);
     for (const f of flotas) {
       if (sinTiempo()) { r.cortadoPorReloj = true; return; }
       try {
