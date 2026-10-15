@@ -59,7 +59,11 @@ export const TOPE_VIAJES_CICLO_GPS = 400;
 export const HORAS_VIAJE_SIN_ACTIVIDAD = 24;
 
 /** `ignicion`: la que reporta el proveedor (0500); `null`/ausente = no la reporta (no es lo mismo que apagada). */
-export interface MuestraGps { lat: number; lng: number; medidaEn: Date; ignicion?: boolean | null }
+export interface MuestraGps {
+  lat: number; lng: number; medidaEn: Date; ignicion?: boolean | null;
+  /** T-A5-14: referencia de despacho (0802, ya normalizada) con la que el proveedor etiquetó la posición; ausente/`null` = no la trae. */
+  despachoRef?: string | null;
+}
 
 export interface SitioGps extends GeocercaGeom { id: string; nombre: string }
 
@@ -164,6 +168,22 @@ export function elegirViajesVigentes<V extends Pick<ViajeContexto, 'id' | 'tenan
     for (const v of orden) (v === elegido ? vigentes : cedidos).push(v);
   }
   return { vigentes, cedidos };
+}
+
+/**
+ * T-A5-14: las muestras que le tocan a un viaje. Si el viaje trae `despachoRef` Y la unidad reportó posiciones con ESA referencia,
+ * solo valen esas (dos viajes seguidos del mismo tractor ya no se mezclan). Si el viaje no trae referencia, o la unidad no
+ * reportó ninguna posición con ella, se cae a «unidad + ventana» (todas las muestras de la unidad): es el comportamiento de antes
+ * y el único posible mientras el proveedor no etiquete las posiciones, así que una flota sin `despacho_ref` no cambia.
+ */
+export function muestrasDeViaje(
+  despachoRef: string | null | undefined, muestrasUnidad: readonly MuestraGps[],
+): { muestras: readonly MuestraGps[]; via: 'despacho' | 'unidad_ventana' } {
+  if (despachoRef) {
+    const propias = muestrasUnidad.filter((m) => m.despachoRef === despachoRef);
+    if (propias.length > 0) return { muestras: propias, via: 'despacho' };
+  }
+  return { muestras: muestrasUnidad, via: 'unidad_ventana' };
 }
 
 export interface EntradaProxima {
@@ -315,18 +335,24 @@ export async function barridoCicloGps(p: PuertosCicloGps, ahora: Date = new Date
   // El GPS es de la unidad: solo el viaje vigente de cada unidad lo recibe (ver `elegirViajesVigentes`).
   const { vigentes: candidatos, cedidos } = elegirViajesVigentes(conPendiente, (id) => porViaje.get(id) ?? [], ahora);
   r.cedidosAOtroViaje = cedidos.length;
-  if (candidatos.length === 0) return r;
+  if (candidatos.length === 0 && !cedidos.some((c) => c.despachoRef)) return r;
 
   const desde = new Date(ahora.getTime() - HORAS_VENTANA_GPS * 3_600_000);
+  // T-A5-14: un viaje cedido con referencia de despacho también puede recibir las muestras que son SUYAS; se leen las de su unidad.
   const unidades = new Map<string, UnidadDeViaje>();
-  for (const v of candidatos) unidades.set(`${v.tenantId}|${v.unidadId}`, { tenantId: v.tenantId, unidadId: v.unidadId! });
+  for (const v of [...candidatos, ...cedidos.filter((c) => c.despachoRef)]) unidades.set(`${v.tenantId}|${v.unidadId}`, { tenantId: v.tenantId, unidadId: v.unidadId! });
   const muestrasPorUnidad = await p.muestras([...unidades.values()], desde);
   const limite = ahora.getTime() + MINUTOS_FUTURO_TOLERADO * 60_000;
+  const rescatados = cedidos.filter((c) => c.despachoRef
+    && muestrasDeViaje(c.despachoRef, muestrasPorUnidad.get(`${c.tenantId}|${c.unidadId}`) ?? []).via === 'despacho');
+  r.cedidosAOtroViaje = cedidos.length - rescatados.length;
+  const aEvaluar = [...candidatos, ...rescatados];
 
-  for (const [i, v] of candidatos.entries()) {
-    if (venceEn !== undefined && Date.now() >= venceEn) { r.cortadosPorReloj = candidatos.length - i; break; }
+  for (const [i, v] of aEvaluar.entries()) {
+    if (venceEn !== undefined && Date.now() >= venceEn) { r.cortadosPorReloj = aEvaluar.length - i; break; }
     const config = configs.get(v.tenantId)!;
-    const muestras = (muestrasPorUnidad.get(`${v.tenantId}|${v.unidadId}`) ?? []).filter((m) => m.medidaEn.getTime() <= limite);
+    const { muestras: delViaje, via } = muestrasDeViaje(v.despachoRef, muestrasPorUnidad.get(`${v.tenantId}|${v.unidadId}`) ?? []);
+    const muestras = delViaje.filter((m) => m.medidaEn.getTime() <= limite);
     if (muestras.length === 0) { r.sinMuestras++; continue; }
     r.evaluados++;
 
@@ -356,6 +382,8 @@ export async function barridoCicloGps(p: PuertosCicloGps, ahora: Date = new Date
         await p.completar(claim, ahora);
         if (res === 'carrera') break; // otro (el chofer, la oficina, otra corrida) lo registró primero: la siguiente pasada relee
         r.detectados++;
+        // La vía queda en el log (no en `viaje_cruce_geocerca`: no hay columna libre y no se migra): audita cuándo se usó el respaldo.
+        logger.info('conductor.ciclo_gps_deteccion', { viaje: v.id, hito: det.tipo, via });
         if (det.entrada) r.llegadas++; else r.salidas++;
         if (det.fueraDeOrden) r.fueraDeOrden++;
         local.set(det.tipo, { ...hito, estado: 'validado', fuente: 'sistema', mensajeEn: det.detectadoEn.toISOString(), recibidoEn: ahora.toISOString() });

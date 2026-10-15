@@ -254,17 +254,23 @@ export async function leerMuestrasGps(unidades: UnidadDeViaje[], desde: Date): P
     const traer = (columnas: string) => traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('posicion').select(columnas)
       .in('tenant_id', tenants).in('unidad_id', ids).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString())
       .order('medida_en', { ascending: true }).order('id').range(d, h), 'conductor.ciclo_muestras') as never, 'conductor.ciclo_muestras');
-    // La ignición (0500) sirve a la señal de vida; una base sin la columna sigue funcionando sin ella.
+    // La ignición (0500) sirve a la señal de vida y `despacho_ref` (0802) liga la muestra a su viaje; una base sin alguna de las
+    // columnas sigue funcionando sin ella (sin `despacho_ref` todo cae a «unidad + ventana», como antes).
     let filas: Fila[];
-    try { filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion'); } catch (e) {
-      if (!/ignicion/i.test(e instanceof Error ? e.message : String(e))) throw e;
-      filas = await traer('tenant_id, unidad_id, lat, lng, medida_en');
+    try { filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion, despacho_ref'); } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      if (!/ignicion|despacho_ref/i.test(m)) throw e;
+      try { filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion'); } catch (e2) {
+        if (!/ignicion/i.test(e2 instanceof Error ? e2.message : String(e2))) throw e2;
+        filas = await traer('tenant_id, unidad_id, lat, lng, medida_en');
+      }
     }
     for (const f of filas) {
       const llave = `${String(f.tenant_id)}|${String(f.unidad_id)}`;
       if (!pedidas.has(llave)) continue; // la combinación flota/unidad que no se pidió no es de esta corrida
       salida.set(llave, [...(salida.get(llave) ?? []), {
         lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(String(f.medida_en)), ignicion: typeof f.ignicion === 'boolean' ? f.ignicion : null,
+        despachoRef: typeof f.despacho_ref === 'string' && f.despacho_ref !== '' ? f.despacho_ref : null,
       }]);
     }
   }

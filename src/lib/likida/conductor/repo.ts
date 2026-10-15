@@ -130,10 +130,12 @@ export interface ViajeContexto {
   citaDestinoEn: string | null;
   etaOrigenEn: string | null;
   etaDestinoEn: string | null;
+  /** T-A5-14 (0802): referencia de despacho del TMS, normalizada; con ella el GPS se liga al viaje sin adivinar por unidad + ventana. */
+  despachoRef?: string | null;
 }
 
 export const COLUMNAS_VIAJE_CTX =
-  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, aceptado_origen, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, operador:operador_id(nombre, telefono)';
+  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, aceptado_origen, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, despacho_ref, operador:operador_id(nombre, telefono)';
 
 export function filaAViajeCtx(f: Fila): ViajeContexto {
   const rel = f.operador as { nombre?: string; telefono?: string } | Array<{ nombre?: string; telefono?: string }> | null;
@@ -156,6 +158,7 @@ export function filaAViajeCtx(f: Fila): ViajeContexto {
     citaDestinoEn: s(f.cita_destino_en),
     etaOrigenEn: s(f.eta_origen_en),
     etaDestinoEn: s(f.eta_destino_en),
+    despachoRef: s(f.despacho_ref),
   };
 }
 
