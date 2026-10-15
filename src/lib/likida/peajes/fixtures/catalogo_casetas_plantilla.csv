@@ -1,0 +1,6 @@
+nombre;alias;lat;lng;radio_m;fuente;tarifa_por_pasada
+Caseta Ejemplo Norte;Ej Norte|Norte Ej;19.5000;-99.2000;300;captura propia;no
+Caseta Ejemplo Sur;Ej Sur;19.0000;-99.0000;250;captura propia;no
+Caseta Ejemplo Este;;19.3000;-98.7000;;punto de interes del GPS;si
+Caseta Ejemplo Oeste;Ej Oeste;19.4000;-99.6000;400;captura propia;no
+Caseta Ejemplo Centro;;19.2500;-99.1000;;captura propia;no
