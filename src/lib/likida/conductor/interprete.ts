@@ -1,6 +1,7 @@
 import {
   PREFIJO_BOTON, leerBotonConductor, type Contacto, type Lugar, type RespuestaSenalVida, type TipoHito,
 } from './tipos';
+import { leerBotonParada, type MotivoParada } from './paradas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // QUÉ QUISO DECIR EL CHOFER — reglas deterministas, español de México.
@@ -280,4 +281,95 @@ export function pareceHablarDeHito(texto: string | undefined): boolean {
   const n = normalizar(texto);
   if (OTRO_TEMA.test(n)) return false;
   return /\b(llegu\w*|llego|llegando|anden\w*|sali\w*|salgo|salida|cargu\w*|carg\w*|descarg\w*|regres\w*|retras\w*|atras\w*|atiend\w*|recib\w*|planta|cedis|porteria|garita|patio|libre|liberar\w*|entreg\w*|formad\w*|fila|espera\w*)\b/.test(n);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA PARADA QUE INICIA EL CHOFER (T-A5-38) — «parada», «me detuve por tráfico», «ya continúo» y sus botones.
+//
+// Va APARTE de `Intencion` a propósito: la parada no es un hito y `decidir` (maquina.ts, protegida) no la conoce; meterla en la
+// unión obligaría a esa máquina a tratarla. Quien atiende al chofer (atender.ts; el cableado es de T-A5-39) debe preguntar por la
+// parada ANTES que por el hito: «parada por tráfico» contiene «tráfico», que para `interpretarTexto` es un retraso.
+//
+// Mismos candados que el intérprete de hitos: nada de preguntas, palabras de OTRO tema (avería, choque, diésel…: una avería es un
+// problema para el jefe, no una parada) y más de dos palabras ajenas dejan pasar el mensaje; y si el mensaje habla de un hito
+// («ya llegué a la parada») NO es una parada.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type IntencionParada =
+  /** `motivo` null = no lo dijo: se le muestra la lista de motivos. */
+  | { clase: 'parada'; motivo: MotivoParada | null }
+  | { clase: 'continuo' };
+
+export interface InterpretacionParada {
+  intencion: IntencionParada;
+  via: 'regla' | 'boton';
+  confianza: number;
+  /** Solo botones: el viaje del payload (el llamador comprueba que sea del chofer). */
+  viajeId?: string;
+}
+
+const RE_PARADA = /\b(parada|paradita|detencion|me detuve|me pare|me estoy deteniendo|me voy a detener|nos detuvimos|nos paramos|estoy detenido|estoy parado|estamos parados|estamos detenidos|voy a parar|voy a descansar|pernocto|pernocta|pernoctando|pernoctar)\b/;
+const RE_CONTINUO = /\b(continuo|continue|continuamos|reanudo|reanude|reanudamos|sigo mi camino|sigo mi ruta|ya sigo|ya seguimos|ya arranque|ya voy en camino|ya voy de nuevo|ya estoy en marcha)\b/;
+/** Cualquier cosa que SÍ es un hito del ciclo (no se incluye el retraso: «parada por tráfico» lo trae). */
+const RE_HITO_DEL_CICLO = [
+  RE_LLEGADA, RE_SALIDA, RE_SALIDA_CARGA, RE_SALIDA_DESCARGA, RE_EN_PROCESO_CARGA, RE_EN_PROCESO_DESCARGA, RE_REGRESO, RE_SIN_CONTACTO,
+  ...RE_CORRECCION,
+];
+const RE_MOTIVO_PERNOCTA = /\b(pernocto|pernocta|pernoctando|pernoctar|dormir|dormire)\b/;
+const RE_MOTIVO_TRAFICO = /\b(trafico|transito|embotellamiento|congestion|congestionado)\b/;
+const RE_MOTIVO_DESCANSO = /\b(descanso|descansar|descansando|descanse)\b/;
+const RE_MOTIVO_RETEN = /\b(reten|inspeccion|revision|operativo)\b/;
+
+const VOCABULARIO_PARADA = new Set((
+  'parada paradita detencion detuve pare deteniendo detener detuvimos paramos detenido parado parados detenidos parar descansar ' +
+  'descanso descansando descanse pernocto pernocta pernoctando pernoctar dormir dormire trafico transito embotellamiento congestion ' +
+  'congestionado reten inspeccion revision operativo motivo continuo continue continuamos reanudo reanude reanudamos sigo mi ruta ' +
+  'seguimos arranque marcha camino de nuevo'
+).split(' '));
+
+function motivoDeTexto(n: string): MotivoParada | null {
+  if (RE_MOTIVO_PERNOCTA.test(n)) return 'pernocta';
+  if (RE_MOTIVO_RETEN.test(n)) return 'reten';
+  if (RE_MOTIVO_TRAFICO.test(n)) return 'trafico';
+  if (RE_MOTIVO_DESCANSO.test(n)) return 'descanso';
+  return null;
+}
+
+/** El texto libre → parada/continuo, o `null` si no lo es (sigue su camino). Pura y sin I/O. */
+export function interpretarParadaTexto(texto: string | undefined): InterpretacionParada | null {
+  if (typeof texto !== 'string' || !texto.trim()) return null;
+  if (texto.length > MAX_LARGO_REGLAS) return null;
+  if (/[?¿]/.test(texto)) return null;
+  const n = normalizar(texto);
+  if (!n) return null;
+  if (OTRO_TEMA.test(n)) return null;
+  if (RE_HITO_DEL_CICLO.some((re) => re.test(n))) return null;
+  const ajenas = n.split(' ').filter((t) => !VOCABULARIO.has(t) && !VOCABULARIO_PARADA.has(t) && !/^\d+$/.test(t));
+  if (ajenas.length > 2) return null;
+
+  // «ya continúo» gana si vienen las dos («ya continúo después de la parada»). «Sigo cargando» es del ciclo: no entra aquí.
+  if (RE_CONTINUO.test(n) && !/\b(carg\w*|descarg\w*)\b/.test(n)) {
+    return { intencion: { clase: 'continuo' }, via: 'regla', confianza: 0.9 };
+  }
+  if (RE_PARADA.test(n)) {
+    return { intencion: { clase: 'parada', motivo: motivoDeTexto(n) }, via: 'regla', confianza: 0.9 };
+  }
+  return null;
+}
+
+/** El payload de un botón de la parada → intención. El motivo del botón es el del vocabulario cerrado (no se interpreta). */
+export function interpretarBotonParada(texto: string | undefined): InterpretacionParada | null {
+  const b = leerBotonParada(texto);
+  if (!b) return null;
+  const base = (intencion: IntencionParada): InterpretacionParada => ({ intencion, via: 'boton', confianza: 1, viajeId: b.viajeId });
+  switch (b.accion) {
+    case 'abrir': return base({ clase: 'parada', motivo: null });
+    case 'motivo': return base({ clase: 'parada', motivo: b.motivo });
+    case 'continuo': return base({ clase: 'continuo' });
+  }
+}
+
+/** Botón primero, texto después (el botón no pasa por reglas). */
+export function interpretarParada(texto: string | undefined): InterpretacionParada | null {
+  return interpretarBotonParada(texto) ?? interpretarParadaTexto(texto);
 }

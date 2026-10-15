@@ -16,6 +16,7 @@ import type { ContactoTrafico } from './escalamiento';
 import type { EpisodioFila } from './senal_vida';
 import type { EstadoTransito } from './estados_transito';
 import type { MotivoSenalVida } from './solicitudes';
+import { esMotivoParada, type MotivoParada, type ParadaFila } from './paradas';
 import type { RespuestaSenalVida } from './tipos';
 import type { FiltrosTablero } from './repo_validacion';
 import type { CriterioSitio } from './sitio_derivado';
@@ -1274,4 +1275,71 @@ export async function leerSalidasTms(tenantId: string, viajeIds: readonly string
     logger.warn('conductor.salida_tms_no_leida', { err: e instanceof Error ? e.message : String(e) });
     return undefined;
   }
+}
+
+// ── T-A5-38: la parada que inicia el chofer (0806) ──────────────────────────
+//
+// Una parada abierta por viaje como máximo (índice único parcial, 0806): abrir es insertar y la carrera la gana el índice, no esta
+// lectura. Cerrar es un UPDATE condicional `fin is null`. Al liquidar el viaje la cierra un trigger de la base (origen `sistema`).
+// Una base sin la 0806 (`sin_tabla`) no rompe nada: el chofer recibe «no pude anotarlo» y el módulo sigue como siempre.
+
+const COLUMNAS_PARADA = 'id, tenant_id, viaje_id, inicio, fin, motivo, origen';
+
+export function filaAParada(f: Fila): ParadaFila | null {
+  if (!esMotivoParada(f.motivo)) return null;
+  return {
+    id: String(f.id), tenantId: String(f.tenant_id), viajeId: String(f.viaje_id), inicio: String(f.inicio),
+    fin: s(f.fin), motivo: f.motivo, origen: f.origen === 'sistema' ? 'sistema' : 'chofer',
+  };
+}
+
+/** La parada abierta del viaje, o `null` (no hay, o la base aún no tiene la 0806). Lanza si la base falla por otra causa. */
+export async function leerParadaAbierta(tenantId: string, viajeId: string): Promise<ParadaFila | null> {
+  const { data, error } = await acotada(supabaseAdmin().from('viaje_parada').select(COLUMNAS_PARADA)
+    .eq('tenant_id', tenantId).eq('viaje_id', viajeId).is('fin', null).maybeSingle(), 'conductor.parada_leer');
+  if (error) {
+    if (faltaEsquema(error, /viaje_parada/i)) return null;
+    throw new Error(`conductor.parada_leer: ${error.message}`);
+  }
+  return data ? filaAParada(data as unknown as Fila) : null;
+}
+
+/** Abre la parada. `duplicada` = ya había una abierta en el viaje (el índice único): no se abre otra. */
+export async function abrirParada(
+  tenantId: string, viajeId: string, motivo: MotivoParada, ahora: Date,
+): Promise<'ok' | 'duplicada' | 'sin_tabla' | 'fallo'> {
+  const { error } = await acotada(supabaseAdmin().from('viaje_parada')
+    .insert({ tenant_id: tenantId, viaje_id: viajeId, motivo, inicio: ahora.toISOString(), origen: 'chofer' }), 'conductor.parada_abrir');
+  if (!error) return 'ok';
+  if ((error as { code?: string }).code === '23505') return 'duplicada';
+  if (faltaEsquema(error, /viaje_parada/i)) return 'sin_tabla';
+  logger.error('conductor.parada_abrir_fallo', { viaje: viajeId, err: error.message });
+  return 'fallo';
+}
+
+/**
+ * Cierra la parada abierta del viaje con `fin` (nunca antes de su `inicio`: el CHECK `fin >= inicio`) y deja `origen`.
+ * `sin_parada` = no había una abierta o otro mensaje la cerró primero.
+ */
+export async function cerrarParada(
+  tenantId: string, viajeId: string, fin: Date, origen: 'chofer' | 'sistema',
+): Promise<'cerrada' | 'sin_parada' | 'sin_tabla' | 'fallo'> {
+  let abierta: ParadaFila | null;
+  try {
+    abierta = await leerParadaAbierta(tenantId, viajeId);
+  } catch (e) {
+    logger.error('conductor.parada_cerrar_lectura_fallo', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+    return 'fallo';
+  }
+  if (!abierta) return 'sin_parada';
+  const finSeguro = new Date(Math.max(fin.getTime(), Date.parse(abierta.inicio) || 0));
+  const { data, error } = await acotada(supabaseAdmin().from('viaje_parada')
+    .update({ fin: finSeguro.toISOString(), origen })
+    .eq('id', abierta.id).eq('tenant_id', tenantId).is('fin', null).select('id'), 'conductor.parada_cerrar');
+  if (error) {
+    if (faltaEsquema(error, /viaje_parada/i)) return 'sin_tabla';
+    logger.error('conductor.parada_cerrar_fallo', { viaje: viajeId, err: error.message });
+    return 'fallo';
+  }
+  return data && data.length > 0 ? 'cerrada' : 'sin_parada';
 }
