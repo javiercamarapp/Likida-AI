@@ -21,6 +21,10 @@ vi.mock('./mfa', async (original) => ({
   veredictoMfaSuperadmin: () => veredictoMfa(),
 }));
 vi.mock('@/lib/supabase/server', () => ({ supabaseServer: async () => ({}) }));
+// Sin perfil de tenant (0770): este archivo prueba las puertas de siempre; el perfil
+// tiene su propia prueba (perfil_tenant.test.ts + perfil_integracion.test.ts).
+const exigirRutaDePerfil = vi.fn(async (_t: unknown, _d: string) => {});
+vi.mock('./perfil_tenant', () => ({ exigirRutaDePerfil: (t: unknown, d: string) => exigirRutaDePerfil(t, d) }));
 
 const { requireSessionTenant, requireSuperadmin } = await import('./guard');
 
