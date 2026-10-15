@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CONFIG_CONDUCTOR_DEFAULT } from './config';
-import { cuerpoDesdeFormulario, leerEscalera, leerFilasContacto, llavesCambiadas, mismosContactos, valoresDeForma } from './config_forma';
+import { avisoZona, cuerpoDesdeFormulario, leerEscalera, leerFilasContacto, llavesCambiadas, mismosContactos, valoresDeForma } from './config_forma';
 import { validarCambioConfig } from './lectura';
 
 /** Un FormData de verdad (lo que llega a la acción de servidor) con los valores por omisión de la pantalla. */
@@ -128,5 +128,44 @@ describe('qué cambió (para la bitácora: llaves, nunca valores personales)', (
     const despues = { ...CONFIG_CONDUCTOR_DEFAULT, topeDiarioChofer: 8, solicitudesMin: [0, 10, 20, 30], avisarOficinaLlegada: true };
     expect(llavesCambiadas({ ...CONFIG_CONDUCTOR_DEFAULT }, despues)).toEqual(['avisarOficinaLlegada', 'solicitudesMin', 'topeDiarioChofer']);
     expect(llavesCambiadas({ ...CONFIG_CONDUCTOR_DEFAULT }, { ...CONFIG_CONDUCTOR_DEFAULT })).toEqual([]);
+  });
+});
+
+describe('contactos con teléfono de demostración (T-A5-23)', () => {
+  it('la marca 28999 no entra como contacto de escalamiento', () => {
+    for (const tel of ['289991234567', '+28999 123 4567', '5228999123456']) {
+      const c = cuerpoDesdeFormulario(formulario({}, [['1', 'Patio', tel, '']]));
+      expect(validarCambioConfig((c as { ok: Record<string, unknown> }).ok, { ...CONFIG_CONDUCTOR_DEFAULT }), tel).toMatchObject({ error: expect.stringContaining('contactos[0].telefono') });
+    }
+  });
+});
+
+describe('perfil, umbrales y zona en la pantalla (T-A5-10)', () => {
+  const cuerpo = (fd: FormData) => (cuerpoDesdeFormulario(fd) as { ok: Record<string, unknown> }).ok;
+
+  it('round-trip: perfil, umbrales y casillas del perfil guardados vuelven iguales por FormData', () => {
+    const base = { ...CONFIG_CONDUCTOR_DEFAULT, perfilSeguimiento: 'esenciales' as const, gpsObsoletoMin: 30, detenidoMin: 90, segundoAvisoMin: 15, escalarSenalMin: 25, silencioRespuestaMin: 60, mostrarEstadosFrontera: true, aplicarSalidaDelTms: true };
+    const fd = formulario(Object.fromEntries(Object.entries(valoresDeForma(base)).map(([k, v]) => [`f_${k}`, v])));
+    fd.set('f_mostrarEstadosFrontera', 'si'); fd.set('f_aplicarSalidaDelTms', 'si');
+    const r = validarCambioConfig(cuerpo(fd), { ...CONFIG_CONDUCTOR_DEFAULT });
+    expect(r).toMatchObject({ ok: { config: expect.objectContaining({ perfilSeguimiento: 'esenciales', gpsObsoletoMin: 30, detenidoMin: 90, segundoAvisoMin: 15, escalarSenalMin: 25, silencioRespuestaMin: 60, mostrarEstadosFrontera: true, aplicarSalidaDelTms: true }) } });
+  });
+
+  it('las casillas del perfil sin marcar son apagadas', () => {
+    const c = cuerpo(formulario());
+    expect(c.mostrarEstadosFrontera).toBe(false);
+    expect(c.aplicarSalidaDelTms).toBe(false);
+  });
+
+  it('un umbral fuera de rango o un perfil inventado se rechazan con el mensaje del servidor, tal cual', () => {
+    expect(validarCambioConfig(cuerpo(formulario({ f_gpsObsoletoMin: '2' })), { ...CONFIG_CONDUCTOR_DEFAULT }))
+      .toMatchObject({ error: 'Los minutos para dar el GPS por obsoleto van de 5 a 720.' });
+    expect(validarCambioConfig(cuerpo(formulario({ f_perfilSeguimiento: 'todo' })), { ...CONFIG_CONDUCTOR_DEFAULT }))
+      .toMatchObject({ error: expect.stringContaining('El perfil de seguimiento es') });
+  });
+
+  it('avisoZona: nada si es la esperada; texto llano si es otra', () => {
+    expect(avisoZona('America/Mexico_City')).toBeNull();
+    expect(avisoZona('America/Matamoros')).toContain('America/Matamoros');
   });
 });

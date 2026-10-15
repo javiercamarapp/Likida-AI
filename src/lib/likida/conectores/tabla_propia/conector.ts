@@ -1,6 +1,7 @@
 import { probarConGuardas, type CampoCredencial, type Conector, type Http, type ResultadoPrueba, type ValoresCredencial } from '../tipos';
 import { ErrorTablaPropia, MODOS_TABLA_PROPIA, PROVEEDOR_TABLA_PROPIA } from './contrato';
 import { crearLectorTablaPropia } from './lector';
+import { resumirTablaCombinada } from './calidad';
 import type { ClienteSftp } from './sftp';
 import type { EjecutorSql } from './sql';
 
@@ -56,18 +57,21 @@ const mostrable = (url: string | undefined): string | null => {
  * Prueba la configuración LEYENDO de verdad (solo lectura): valida el mapeo, lee la ventana y dice cuántas filas
  * entendió y cuántas rechazó. Un mapeo roto o una vista sin la columna salen aquí, antes del primer poll.
  */
-export async function probarTablaPropia(valores: ValoresCredencial, http: Http, ejecutor?: EjecutorSql, sftp?: ClienteSftp): Promise<ResultadoPrueba> {
+export async function probarTablaPropia(valores: ValoresCredencial, http: Http, ejecutor?: EjecutorSql, sftp?: ClienteSftp, ahora: () => number = Date.now): Promise<ResultadoPrueba> {
   const c = crearLectorTablaPropia(valores, { http, ejecutor, sftp });
   if (!c.ok) return { ok: false, detalle: `La configuración no es válida: ${c.motivo}.`, verificadoContra: null, sobreLaCredencial: 'no_se_sabe' };
   const contra = c.config.modo === 'sql_solo_lectura'
     ? `${c.config.conexion.host}:${c.config.conexion.puerto}/${c.config.conexion.base}`
     : mostrable(c.config.url);
   try {
-    const r = await c.lector.leerPosiciones({ desdeUtc: new Date(Date.now() - c.config.ventanaMinutos * 60_000) });
+    // Al menos la última hora: el chequeo de «¿trae posiciones continuas o solo eventos?» mira esa hora (T-A5-15).
+    const minutosLeidos = Math.max(c.config.ventanaMinutos, 60);
+    const r = await c.lector.leerPosiciones({ desdeUtc: new Date(ahora() - minutosLeidos * 60_000) });
+    const resumen = resumirTablaCombinada(r.filas, c.config.zona, ahora());
     const motivos = [...new Set(r.rechazadas.map((x) => x.motivo))].slice(0, 3).join('; ');
     return {
       ok: true,
-      detalle: `Se leyó su tabla: ${r.filas.length} posición(es) válida(s) en los últimos ${c.config.ventanaMinutos} min${r.rechazadas.length ? ` y ${r.rechazadas.length} fila(s) rechazada(s) (${motivos})` : ''}.${r.filas.length === 0 ? ' Cero filas no es error, pero confirma que la vista trae datos recientes.' : ''}`,
+      detalle: `Se leyó su tabla: ${r.filas.length} posición(es) válida(s) en los últimos ${minutosLeidos} min${r.rechazadas.length ? ` y ${r.rechazadas.length} fila(s) rechazada(s) (${motivos})` : ''}.${r.filas.length === 0 ? ' Cero filas no es error, pero confirma que la vista trae datos recientes.' : ''}${resumen.frases.length ? ` ${resumen.frases.join(' ')}` : ''}`,
       verificadoContra: contra,
       sobreLaCredencial: 'sirve',
     };

@@ -1,6 +1,7 @@
 import { estaResuelto, TIPOS_HITO, indiceHito, type HitoFila, type TipoHito } from './tipos';
 import { dentroDeVentana, type ConfigConductor } from './config';
 import { hitoActivo } from './maquina';
+import { aplicarPerfil, estaFueraDePerfil } from './perfil';
 import type { ViajeContexto } from './repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -31,7 +32,9 @@ export interface AvisoReclamado {
 
 export type MotivoNada =
   | 'viaje_no_aplica' | 'flota_apagada' | 'completo' | 'sin_ancla' | 'no_toca'
-  | 'espera' | 'fuera_de_ventana' | 'tope_diario' | 'atendido' | 'ya_escalado';
+  | 'espera' | 'fuera_de_ventana' | 'tope_diario' | 'atendido' | 'ya_escalado'
+  /** T-A5-05: viaje de importación, hito de llegada a carga y el archivo no trajo cita: no hay de dónde colgar el aviso. */
+  | 'sin_cita_importada';
 
 export type AccionPlan =
   | { tipo: 'chofer'; hito: HitoFila; clase: 'solicitud' | 'recordatorio'; nivel: number; minutosPendiente: number; ancla: Date }
@@ -73,11 +76,14 @@ function horaPrevia(hitos: readonly HitoFila[], tipo: TipoHito): { tipo: TipoHit
  */
 export function anclaDe(
   hito: HitoFila,
-  viaje: Pick<ViajeContexto, 'aceptadoEn' | 'citaOrigenEn' | 'citaDestinoEn' | 'etaOrigenEn' | 'etaDestinoEn'>,
+  viaje: Pick<ViajeContexto, 'aceptadoEn' | 'aceptadoOrigen' | 'citaOrigenEn' | 'citaDestinoEn' | 'etaOrigenEn' | 'etaDestinoEn'>,
   hitos: readonly HitoFila[], config: ConfigConductor,
 ): Date | null {
   const min = 60_000;
   const aceptado = ms(viaje.aceptadoEn);
+  // Un viaje de importación se acepta por el sistema, no porque el chofer haya hecho nada: su `aceptado_en` no es
+  // evidencia de dónde va el camión, así que NO ancla la carga (solo la cita del archivo lo hace).
+  const importado = viaje.aceptadoOrigen === 'importacion';
   const previa = horaPrevia(hitos, hito.tipo);
   let ancla: number | null = null;
 
@@ -85,13 +91,27 @@ export function anclaDe(
     case 'llegada_carga': {
       const cita = ms(viaje.citaOrigenEn) ?? ms(viaje.etaOrigenEn);
       if (cita !== null) ancla = cita - config.anticipoCitaMin * min;
-      else if (aceptado !== null) ancla = aceptado + config.esperaSinCitaMin * min;
+      else if (aceptado !== null && !importado) ancla = aceptado + config.esperaSinCitaMin * min;
       if (ancla !== null && aceptado !== null) ancla = Math.max(ancla, aceptado);
       break;
     }
-    case 'salida_carga':
-      if (previa) ancla = previa.t + config.esperaCargaMin * min;
+    case 'salida_carga': {
+      // Perfil `esenciales`: la llegada a carga no se sigue, así que no hay hora previa; la cita de carga (o su ETA) ancla la
+      // espera de carga. Sin cita, sigue el ancla de siempre (la aceptación más el plazo por omisión).
+      const llegada = hitos.find((x) => x.tipo === 'llegada_carga');
+      if (!previa && llegada && estaFueraDePerfil(llegada)) {
+        const cita = ms(viaje.citaOrigenEn) ?? ms(viaje.etaOrigenEn);
+        if (cita !== null) ancla = cita + config.esperaCargaMin * min;
+        else if (importado) return null; // el motor no inventa anclas para un viaje importado sin cita
+      } else if (previa) ancla = previa.t + config.esperaCargaMin * min;
+      else if (importado) {
+        // Importado y sin llegada registrada: la cita de carga más la espera de carga; sin cita no hay ancla.
+        const cita = ms(viaje.citaOrigenEn);
+        if (cita !== null) ancla = cita + config.esperaCargaMin * min;
+        else return null;
+      }
       break;
+    }
     case 'llegada_descarga': {
       const cita = ms(viaje.citaDestinoEn) ?? ms(viaje.etaDestinoEn);
       if (cita !== null) ancla = cita - config.anticipoCitaMin * min;
@@ -108,7 +128,7 @@ export function anclaDe(
       break;
   }
   // Sin hito previo registrado y sin cita (p. ej. el primero se omitió): se cuelga de la aceptación.
-  if (ancla === null && aceptado !== null) {
+  if (ancla === null && aceptado !== null && !(importado && hito.tipo === 'llegada_carga')) {
     const base = hito.tipo === 'llegada_carga' ? config.esperaSinCitaMin : config.trayectoSinEtaMin;
     ancla = aceptado + base * min;
   }
@@ -130,13 +150,19 @@ export function textoTiempo(minutos: number): string {
 
 /** Qué hacer ahora con un viaje. Pura y determinista. */
 export function planificar(e: EntradaPlan): AccionPlan {
-  const { viaje, hitos, config, ahora } = e;
+  const { viaje, config, ahora } = e;
+  // T-A5-08: con el perfil `esenciales` lo que el perfil no sigue se lee como omitido (la base puede traerlo aún `esperado`).
+  const hitos = aplicarPerfil(e.hitos, config.perfilSeguimiento);
   if (!config.activo) return { tipo: 'nada', motivo: 'flota_apagada' };
   if (viaje.estatus !== 'abierto') return { tipo: 'nada', motivo: 'viaje_no_aplica' };
 
   const hito = hitoActivo(hitos);
   if (!hito) return { tipo: 'nada', motivo: 'completo' };
 
+  if (viaje.aceptadoOrigen === 'importacion' && hito.tipo === 'llegada_carga'
+    && ms(viaje.citaOrigenEn) === null && ms(viaje.etaOrigenEn) === null) {
+    return { tipo: 'nada', motivo: 'sin_cita_importada' };
+  }
   const ancla = anclaDe(hito, viaje, hitos, config);
   if (!ancla) return { tipo: 'nada', motivo: 'sin_ancla' };
   if (ahora.getTime() < ancla.getTime()) return { tipo: 'nada', motivo: 'no_toca' };

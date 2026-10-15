@@ -1,7 +1,7 @@
 import { logger } from '@/lib/logger';
 import { enviarConFallback, type ResultadoEnvioConFallback } from '@/lib/meta/enviar_con_fallback';
 import { normalizarTelefonoWa } from '../wa_ventana';
-import { inicioDiaMx, type ConfigConductor } from './config';
+import { CONFIG_CONDUCTOR_DEFAULT, inicioDiaMx, type ConfigConductor } from './config';
 import {
   destinatariosEscalacion, ubicacionConocida, type Destino,
 } from './escalamiento';
@@ -93,6 +93,8 @@ export interface ResultadoConductor {
   /** `true` = la lista de trabajo llegó al tope: había más viajes que atender (se atienden en pasadas siguientes, repartidos). */
   viajesTruncados?: boolean;
   viajes: number;
+  /** T-A5-27: los viajes en seguimiento de esta pasada según quién los aceptó (solo conteos). */
+  viajesPorOrigen?: { chofer: number; importacion: number; otro: number };
   solicitudes: number;
   recordatorios: number;
   escalaciones: number;
@@ -139,6 +141,11 @@ export async function correrConductor(
 
   const viajes = await p.viajesActivos(TOPE_VIAJES_POR_PASADA);
   r.viajes = viajes.length;
+  r.viajesPorOrigen = { chofer: 0, importacion: 0, otro: 0 };
+  for (const v of viajes) {
+    const o = v.aceptadoOrigen === 'importacion' ? 'importacion' : v.aceptadoOrigen === 'chofer' ? 'chofer' : 'otro';
+    r.viajesPorOrigen[o]++;
+  }
   if (viajes.length >= TOPE_VIAJES_POR_PASADA) {
     // El «tope mudo»: antes la lista se cortaba sin decirlo. Ahora el corte es un reparto entre flotas y además se avisa.
     r.viajesTruncados = true;
@@ -151,7 +158,6 @@ export async function correrConductor(
   for (const h of hitos) porViaje.set(h.viajeId, [...(porViaje.get(h.viajeId) ?? []), h]);
 
   const avisos = await p.avisosDe(hitos.map((h) => h.id));
-  const enviadosHoy = await p.enviadosHoyPorChofer([...new Set(viajes.map((v) => v.operadorId))], inicioDiaMx(ahora));
 
   // La config se lee UNA vez por flota. Si no se puede leer, SUS viajes se saltan
   // esta pasada: operar contra una estrategia que no se pudo consultar es operar
@@ -164,6 +170,18 @@ export async function correrConductor(
       configs.set(t, null);
       logger.error('conductor.config_ilegible', { tenant: t, err: e instanceof Error ? e.message : String(e) });
     }
+  }
+
+  // El «día» del tope diario por chofer es el de la zona de SU flota (config.zonaHoraria). Con una sola
+  // zona (lo normal) es UNA consulta con todos los choferes, igual que antes; con varias, una por zona.
+  const choferesPorZona = new Map<string, Set<string>>();
+  for (const v of viajes) {
+    const zona = configs.get(v.tenantId)?.zonaHoraria ?? CONFIG_CONDUCTOR_DEFAULT.zonaHoraria;
+    choferesPorZona.set(zona, (choferesPorZona.get(zona) ?? new Set<string>()).add(v.operadorId));
+  }
+  const enviadosHoy: Record<string, number> = {};
+  for (const [zona, choferes] of choferesPorZona) {
+    Object.assign(enviadosHoy, await p.enviadosHoyPorChofer([...choferes], inicioDiaMx(ahora, zona)));
   }
 
   let rechazosSeguidos = 0;
@@ -192,7 +210,7 @@ export async function correrConductor(
         if (gano === 'fallo') { r.fallos.push(`reclamo ${v.id}`); continue; }
 
         const msg = accion.nivel === 0
-          ? armarSolicitud(accion.hito, v, ahora)
+          ? armarSolicitud(accion.hito, v, ahora, config.zonaHoraria)
           : armarRecordatorio(accion.hito, v, accion.nivel, accion.minutosPendiente);
         const envio = await p.enviar(v.operadorTelefono!, msg, `conductor.${accion.clase}`, v.tenantId, ahora);
 

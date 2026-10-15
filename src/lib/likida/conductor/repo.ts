@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { getZonaHorariaTenant } from '../repo';
 import { acotada } from '../presupuesto';
 import { exigir, traerPorIds } from '../pg';
 import {
@@ -7,14 +8,18 @@ import {
   type Contacto, type FuenteHito, type HitoFila, type InterpretacionHito, type TipoHito,
 } from './tipos';
 import type { LegadoSello } from './maquina';
-import { CONFIG_CONDUCTOR_DEFAULT, validarConfigConductor, type ConfigConductor } from './config';
+import { CONFIG_CONDUCTOR_DEFAULT, validarConfigConductor, zonaOCdmx, type ConfigConductor, type PerfilSeguimiento } from './config';
+import { MOTIVO_FUERA_DE_PERFIL, hitoEnPerfil } from './perfil';
 import { aHitoApi, type EventoApi, type FiltrosHitos, type HitoApi, type CambioCitas } from './lectura';
 import type { AvisoReclamado } from './planificador';
 import type { ContactoTrafico } from './escalamiento';
 import type { EpisodioFila } from './senal_vida';
+import type { EstadoTransito } from './estados_transito';
 import type { MotivoSenalVida } from './solicitudes';
 import type { RespuestaSenalVida } from './tipos';
 import type { FiltrosTablero } from './repo_validacion';
+import type { CriterioSitio } from './sitio_derivado';
+import { HORAS_GPS_RECIENTE, type DatosPreflight } from './preflight_piloto';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL ACCESO A DATOS DEL AGENTE 5 (viaje_hito y sus bitácoras, 0380).
@@ -82,14 +87,28 @@ export async function cargarHitos(tenantId: string, viajeId: string): Promise<Hi
   return ordenar(filas.map(filaAHito));
 }
 
+/** El perfil de la flota. Sin fila, sin la columna (0801 sin aplicar) o con un valor desconocido: `completo`, el comportamiento de siempre. */
+async function leerPerfilSeguimiento(tenantId: string): Promise<PerfilSeguimiento> {
+  const res = await acotada(supabaseAdmin()
+    .from('agente_conductor_config').select('perfil_seguimiento').eq('tenant_id', tenantId).maybeSingle(), 'conductor.perfil');
+  if (res.error) return 'completo';
+  const v = (res.data as { perfil_seguimiento?: string | null } | null)?.perfil_seguimiento;
+  return v === 'esenciales' ? 'esenciales' : 'completo';
+}
+
 /** Los cinco hitos del viaje, creándolos si faltan (idempotente: unique (viaje, tipo)). */
 export async function asegurarHitos(tenantId: string, viajeId: string): Promise<HitoFila[]> {
   const actuales = await cargarHitos(tenantId, viajeId);
   if (actuales.length >= TIPOS_HITO.length) return actuales;
   const faltan = TIPOS_HITO.filter((t) => !actuales.some((h) => h.tipo === t));
+  // T-A5-08: los hitos que el perfil de la flota no sigue nacen omitidos (igual que la siembra de SQL, 0801).
+  const perfil = await leerPerfilSeguimiento(tenantId);
   const res = await acotada(supabaseAdmin()
     .from('viaje_hito')
-    .upsert(faltan.map((tipo) => ({ tenant_id: tenantId, viaje_id: viajeId, tipo })), { onConflict: 'viaje_id,tipo', ignoreDuplicates: true }), 'conductor.asegurar');
+    .upsert(faltan.map((tipo) => (hitoEnPerfil(perfil, tipo)
+      ? { tenant_id: tenantId, viaje_id: viajeId, tipo }
+      : { tenant_id: tenantId, viaje_id: viajeId, tipo, estado: 'omitido', omitido_motivo: MOTIVO_FUERA_DE_PERFIL })),
+    { onConflict: 'viaje_id,tipo', ignoreDuplicates: true }), 'conductor.asegurar');
   if (res.error) throw new Error(`conductor.asegurar: ${res.error.message}`);
   return cargarHitos(tenantId, viajeId);
 }
@@ -107,14 +126,18 @@ export interface ViajeContexto {
   terminalId: string | null;
   unidadId: string | null;
   aceptadoEn: string | null;
+  /** 'importacion' = el viaje entró por archivo/TMS y lo acepta el sistema (T-A5-05: el motor no inventa anclas para él). */
+  aceptadoOrigen?: string | null;
   citaOrigenEn: string | null;
   citaDestinoEn: string | null;
   etaOrigenEn: string | null;
   etaDestinoEn: string | null;
+  /** T-A5-14 (0802): referencia de despacho del TMS, normalizada; con ella el GPS se liga al viaje sin adivinar por unidad + ventana. */
+  despachoRef?: string | null;
 }
 
 export const COLUMNAS_VIAJE_CTX =
-  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, operador:operador_id(nombre, telefono)';
+  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, aceptado_origen, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, despacho_ref, operador:operador_id(nombre, telefono)';
 
 export function filaAViajeCtx(f: Fila): ViajeContexto {
   const rel = f.operador as { nombre?: string; telefono?: string } | Array<{ nombre?: string; telefono?: string }> | null;
@@ -132,10 +155,12 @@ export function filaAViajeCtx(f: Fila): ViajeContexto {
     terminalId: s(f.terminal_id),
     unidadId: s(f.unidad_id),
     aceptadoEn: s(f.aceptado_en),
+    aceptadoOrigen: s(f.aceptado_origen),
     citaOrigenEn: s(f.cita_origen_en),
     citaDestinoEn: s(f.cita_destino_en),
     etaOrigenEn: s(f.eta_origen_en),
     etaDestinoEn: s(f.eta_destino_en),
+    despachoRef: s(f.despacho_ref),
   };
 }
 
@@ -378,12 +403,23 @@ const copiaDefaults = (): ConfigConductor => ({
   diasSemana: [...CONFIG_CONDUCTOR_DEFAULT.diasSemana],
 });
 
+/** 0801: un umbral numérico de la fila, o su valor de partida si la columna no existe (base sin migrar). */
+const umbralOPartida = (v: unknown, partida: number): number => (v === undefined || v === null ? partida : Number(v));
+
 /** La config de una flota. Sin fila = defaults. LANZA si la base no contesta: «no pude leer» no es «defaults». */
 export async function leerConfigConductor(tenantId: string): Promise<ConfigConductor> {
-  const res = await acotada(supabaseAdmin()
-    .from('agente_conductor_config').select('*').eq('tenant_id', tenantId).maybeSingle(), 'conductor.config');
+  const [res, zonaCruda] = await Promise.all([
+    acotada(supabaseAdmin()
+      .from('agente_conductor_config').select('*').eq('tenant_id', tenantId).maybeSingle(), 'conductor.config'),
+    getZonaHorariaTenant(tenantId),
+  ]);
   const f = exigir(res as never, 'conductor.config') as Fila | null;
-  if (!f) return copiaDefaults();
+  // La zona es de la flota (tenant.zona_horaria), no de esta tabla. Inválida o ausente → la de México, con aviso (no truena el cron).
+  const zonaHoraria = zonaOCdmx(zonaCruda);
+  if (zonaCruda !== null && zonaCruda !== zonaHoraria) {
+    logger.warn('conductor.zona_invalida', { tenant: tenantId, zona: String(zonaCruda).slice(0, 60) });
+  }
+  if (!f) return { ...copiaDefaults(), zonaHoraria };
   const v = validarConfigConductor({
     activo: f.activo as boolean,
     solicitudesMin: f.solicitudes_min as number[],
@@ -419,13 +455,25 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     // 0635: la base sin migrar no trae las columnas; la detección sigue en su valor de partida (encendida) y la señal de vida apagada.
     detectarHitosGps: f.detectar_hitos_gps !== false,
     avisarSenalVida: f.avisar_senal_vida === true,
+    // 0801: la base sin migrar no trae las columnas; cada una cae en su valor de partida (el comportamiento de siempre).
+    perfilSeguimiento: (f.perfil_seguimiento ?? CONFIG_CONDUCTOR_DEFAULT.perfilSeguimiento) as ConfigConductor['perfilSeguimiento'],
+    gpsObsoletoMin: umbralOPartida(f.gps_obsoleto_min, CONFIG_CONDUCTOR_DEFAULT.gpsObsoletoMin),
+    detenidoMin: umbralOPartida(f.detenido_min, CONFIG_CONDUCTOR_DEFAULT.detenidoMin),
+    segundoAvisoMin: umbralOPartida(f.segundo_aviso_min, CONFIG_CONDUCTOR_DEFAULT.segundoAvisoMin),
+    escalarSenalMin: umbralOPartida(f.escalar_senal_min, CONFIG_CONDUCTOR_DEFAULT.escalarSenalMin),
+    silencioRespuestaMin: umbralOPartida(f.silencio_respuesta_min, CONFIG_CONDUCTOR_DEFAULT.silencioRespuestaMin),
+    mostrarEstadosFrontera: f.mostrar_estados_frontera === true,
+    aplicarSalidaDelTms: f.aplicar_salida_del_tms === true,
+    lineaBaseLlamadasPorViaje: f.linea_base_llamadas_por_viaje === undefined || f.linea_base_llamadas_por_viaje === null ? null : Number(f.linea_base_llamadas_por_viaje),
+    lineaBaseRegistradaEn: typeof f.linea_base_registrada_en === 'string' ? f.linea_base_registrada_en.slice(0, 10) : null,
+    zonaHoraria,
   });
   if ('error' in v) {
     // La base tiene CHECKs equivalentes; llegar aquí es una fila corrupta. Se grita y se opera
     // con defaults, pero un `activo = false` explícito se respeta: encender por error un agente
     // que manda WhatsApp es peor que operar con la escalera de siempre.
     logger.error('conductor.config_invalida', { tenant: tenantId, err: v.error });
-    return { ...copiaDefaults(), activo: f.activo !== false };
+    return { ...copiaDefaults(), activo: f.activo !== false, zonaHoraria };
   }
   return v.ok;
 }
@@ -621,6 +669,17 @@ export async function guardarConfigConductor(
   // partida; si el dueño pidió algo distinto (aviso encendido, otro margen, detección apagada) se dice que falta la migración
   // en vez de callarlo. Cada grupo se retira solo cuando el error de la base nombra una de SUS columnas.
   const grupos: Array<{ mig: string; cols: Record<string, unknown>; esDePartida: boolean }> = [
+    {
+      mig: '0801',
+      cols: {
+        perfil_seguimiento: c.perfilSeguimiento, gps_obsoleto_min: c.gpsObsoletoMin, detenido_min: c.detenidoMin,
+        segundo_aviso_min: c.segundoAvisoMin, escalar_senal_min: c.escalarSenalMin, silencio_respuesta_min: c.silencioRespuestaMin,
+        mostrar_estados_frontera: c.mostrarEstadosFrontera, aplicar_salida_del_tms: c.aplicarSalidaDelTms,
+        linea_base_llamadas_por_viaje: c.lineaBaseLlamadasPorViaje, linea_base_registrada_en: c.lineaBaseRegistradaEn,
+      },
+      esDePartida: (['perfilSeguimiento', 'gpsObsoletoMin', 'detenidoMin', 'segundoAvisoMin', 'escalarSenalMin', 'silencioRespuestaMin', 'mostrarEstadosFrontera', 'aplicarSalidaDelTms', 'lineaBaseLlamadasPorViaje', 'lineaBaseRegistradaEn'] as const)
+        .every((k) => c[k] === CONFIG_CONDUCTOR_DEFAULT[k]),
+    },
     { mig: '0635', cols: { detectar_hitos_gps: c.detectarHitosGps, avisar_senal_vida: c.avisarSenalVida }, esDePartida: c.detectarHitosGps === CONFIG_CONDUCTOR_DEFAULT.detectarHitosGps && c.avisarSenalVida === CONFIG_CONDUCTOR_DEFAULT.avisarSenalVida },
     { mig: '0604', cols: { avisar_llegada_sin_confirmar: c.avisarLlegadaSinConfirmar, margen_acercamiento_m: c.margenAcercamientoM }, esDePartida: !c.avisarLlegadaSinConfirmar && c.margenAcercamientoM === CONFIG_CONDUCTOR_DEFAULT.margenAcercamientoM },
   ];
@@ -631,7 +690,9 @@ export async function guardarConfigConductor(
     const faltante = error ? vigentes.find((g) => Object.keys(g.cols).some((col) => error!.message.includes(col))) : undefined;
     if (!faltante) break;
     if (!faltante.esDePartida) {
-      throw new Error(faltante.mig === '0604'
+      throw new Error(faltante.mig === '0801'
+        ? 'v1.conductor_config: el perfil de seguimiento, los umbrales de señal de vida y las perillas de frontera y TMS necesitan la migración 0801 (aún no aplicada en esta base).'
+        : faltante.mig === '0604'
         ? 'v1.conductor_config: el aviso por llegada sin confirmar y el margen de acercamiento necesitan la migración 0604 (aún no aplicada en esta base).'
         : 'v1.conductor_config: la detección de hitos por GPS y el aviso de señal de vida necesitan la migración 0635 (aún no aplicada en esta base).');
     }
@@ -684,6 +745,37 @@ export interface DatosCruce {
   tipo: 'entrada' | 'salida';
   detectadoEn: Date;
   distanciaM: number;
+}
+
+export type ResultadoAceptarImportados =
+  | { ok: true; aceptados: number }
+  | { ok: false; motivo: 'sin_funcion' | 'fallo' };
+
+/**
+ * Pasa a «aceptados por importación» los viajes recién importados cuyo operador es voluntario del piloto (0800). Un solo
+ * UPDATE en la base: falla cerrado (sin voluntario no escribe nada) y no toca un viaje que el chofer ya aceptó. `sin_funcion`
+ * = base sin la 0800 (el import ya ocurrió: solo se queda sin seguimiento); `fallo` = cualquier otro error, también sin
+ * seguimiento. Nunca lanza: el importador no debe caerse por el seguimiento.
+ */
+export async function aceptarViajesImportados(tenantId: string, viajeIds: string[], ahora?: Date): Promise<ResultadoAceptarImportados> {
+  if (viajeIds.length === 0) return { ok: true, aceptados: 0 };
+  try {
+    const { data, error } = await acotada(
+      supabaseAdmin().rpc('aceptar_viajes_importados', {
+        p_tenant: tenantId, p_viaje_ids: viajeIds, ...(ahora ? { p_ahora: ahora.toISOString() } : {}),
+      }),
+      'conductor.aceptarViajesImportados',
+    );
+    if (error) {
+      const sinFuncion = error.code === 'PGRST202' || error.code === '42883' || (/aceptar_viajes_importados/.test(error.message ?? '') && /does not exist|schema cache|could not find/i.test(error.message ?? ''));
+      logger.warn('conductor.aceptar_importados_error', { tenantId, sinFuncion, err: error.message });
+      return { ok: false, motivo: sinFuncion ? 'sin_funcion' : 'fallo' };
+    }
+    return { ok: true, aceptados: Array.isArray(data) ? data.length : 0 };
+  } catch (e) {
+    logger.warn('conductor.aceptar_importados_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, motivo: 'fallo' };
+  }
 }
 
 /** El error es «esa tabla o columna no existe» (base sin la migración), no otro fallo cualquiera. */
@@ -748,7 +840,7 @@ export async function liberarCruce(d: Pick<DatosCruce, 'tenantId' | 'viajeId' | 
  * la 0637 se asigna igual, sin constancia (el UPDATE condicional «sigue sin sitio» es el candado).
  */
 export async function asignarSitioDerivado(
-  tenantId: string, viajeId: string, lado: 'origen' | 'destino', sitioId: string, criterio: 'codigo' | 'nombre_exacto' | 'nombre_contenido', ahora: Date,
+  tenantId: string, viajeId: string, lado: 'origen' | 'destino', sitioId: string, criterio: CriterioSitio, ahora: Date,
 ): Promise<'ok' | 'ya' | 'fallo'> {
   const claim = await acotada(supabaseAdmin().from('viaje_sitio_derivado').insert({
     tenant_id: tenantId, viaje_id: viajeId, lado, geocerca_id: sitioId, criterio, derivado_en: ahora.toISOString(),
@@ -771,6 +863,22 @@ export async function asignarSitioDerivado(
   // Cero filas: alguien le puso sitio entre la lectura y este UPDATE. La constancia se queda (la derivación ya no aplica).
   if (!data || data.length === 0) return 'ya';
   return 'ok';
+}
+
+/**
+ * La oficina declaró (equivalencia `sin_sitio`/`ignorar`, 0803) que el texto de ese lado NO es un lugar («VACIO …», «SALIR A RUTA …»).
+ * Se deja constancia en la misma tabla de la 0637 con `geocerca_id` nulo y criterio `equivalencia_sin_sitio`: el viaje queda
+ * «sin sitio, por decisión» y el barrido no lo vuelve a evaluar. No toca el viaje. Una base sin la 0803 (el CHECK no admite el
+ * criterio) devuelve `fallo`: se reintenta cuando exista, sin inventar nada.
+ */
+export async function marcarSinSitioPorDecision(tenantId: string, viajeId: string, lado: 'origen' | 'destino', ahora: Date): Promise<'ok' | 'ya' | 'fallo'> {
+  const { error } = await acotada(supabaseAdmin().from('viaje_sitio_derivado').insert({
+    tenant_id: tenantId, viaje_id: viajeId, lado, geocerca_id: null, criterio: 'equivalencia_sin_sitio', derivado_en: ahora.toISOString(),
+  }), 'conductor.sitio_sin_sitio_marcar');
+  if (!error) return 'ok';
+  if ((error as { code?: string }).code === '23505') return 'ya';
+  logger.error('conductor.sitio_sin_sitio_marcar_fallo', { viaje: viajeId, err: error.message });
+  return 'fallo';
 }
 
 // ── 0636: los episodios de «sin señal de vida» ───────────────────────────────
@@ -944,4 +1052,226 @@ export async function leerEpisodiosParaTablero(
       };
     }),
   };
+}
+
+// ── T-A5-32: lo que leen los insights de la pantalla ─────────────────────────
+// Solo LECTURA y acotada por tenant, con los mismos filtros (patio, cliente, chofer) que el tablero. Una base caída LANZA; una tabla
+// que aún no existe (cruces / señal de vida) deja esa parte vacía, nunca un error. `hayMas` declara que el tope recortó la lectura.
+
+const TOPE_INSIGHTS = 5000;
+
+export async function leerEntradaInsights(
+  tenantId: string, desde: Date, f: FiltrosTablero = {},
+): Promise<{ hitos: HitoFila[]; cruces: Array<{ detectadoEn: string; registradoEn: string }>; episodios: EpisodioTablero[]; hayMas: boolean }> {
+  let viajeIds: string[] | null = null;
+  if ((f.terminalId && UUID_FILTRO.test(f.terminalId)) || (f.clienteId && UUID_FILTRO.test(f.clienteId)) || (f.operadorId && UUID_FILTRO.test(f.operadorId))) {
+    let q = supabaseAdmin().from('viaje').select('id').eq('tenant_id', tenantId);
+    if (f.terminalId && UUID_FILTRO.test(f.terminalId)) q = q.eq('terminal_id', f.terminalId);
+    if (f.clienteId && UUID_FILTRO.test(f.clienteId)) q = q.eq('cliente_id', f.clienteId);
+    if (f.operadorId && UUID_FILTRO.test(f.operadorId)) q = q.eq('operador_id', f.operadorId);
+    const rv = await acotada(q.gte('created_at', new Date(desde.getTime() - 45 * 86_400_000).toISOString()).order('id').limit(2000), 'insights.viajes');
+    viajeIds = ((exigir(rv as never, 'insights.viajes') ?? []) as unknown as Fila[]).map((x) => String(x.id)).slice(0, 1000);
+    if (viajeIds.length === 0) return { hitos: [], cruces: [], episodios: [], hayMas: false };
+  }
+  let qh = supabaseAdmin().from('viaje_hito').select(COLUMNAS_HITO).eq('tenant_id', tenantId).gte('updated_at', desde.toISOString());
+  let qc = supabaseAdmin().from('viaje_cruce_geocerca').select('detectado_en, registrado_en').eq('tenant_id', tenantId).gte('registrado_en', desde.toISOString());
+  if (viajeIds) { qh = qh.in('viaje_id', viajeIds); qc = qc.in('viaje_id', viajeIds); }
+  const [rh, rc, ep] = await Promise.all([
+    acotada(qh.order('updated_at', { ascending: false }).order('id').limit(TOPE_INSIGHTS + 1), 'insights.hitos'),
+    acotada(qc.order('registrado_en', { ascending: false }).limit(TOPE_INSIGHTS + 1), 'insights.cruces'),
+    leerEpisodiosParaTablero(tenantId, desde, f, 500),
+  ]);
+  const filasH = (exigir(rh as never, 'insights.hitos') ?? []) as unknown as Fila[];
+  let filasC: Fila[] = [];
+  if (rc.error) {
+    if (!faltaEsquema(rc.error, /viaje_cruce_geocerca/i)) throw new Error(`insights.cruces: ${rc.error.message}`);
+  } else filasC = (rc.data ?? []) as unknown as Fila[];
+  const hayMas = filasH.length > TOPE_INSIGHTS || filasC.length > TOPE_INSIGHTS || (ep?.hayMas ?? false);
+  return {
+    hitos: filasH.slice(0, TOPE_INSIGHTS).map(filaAHito),
+    cruces: filasC.slice(0, TOPE_INSIGHTS).map((c) => ({ detectadoEn: String(c.detectado_en), registradoEn: String(c.registrado_en) })),
+    episodios: ep?.episodios ?? [],
+    hayMas,
+  };
+}
+
+// ── 0800: los operadores voluntarios del piloto ──────────────────────────────
+// Todo acotado por tenant. El tope y la marca viven en la base (0800); la REGLA (tope, teléfono, permiso) vive en
+// `acciones_voluntarios.ts`, que usa estas primitivas. Sin la 0800 aplicada las lecturas lanzan un error en palabras.
+
+export interface OperadorPiloto {
+  id: string;
+  nombre: string;
+  /** Tal como está guardado en `operador.telefono`. */
+  telefono: string;
+  activo: boolean;
+  voluntario: boolean;
+  voluntarioDesde: string | null;
+}
+
+const COLUMNAS_PILOTO = 'id, nombre, telefono, activo, agente_voluntario, agente_voluntario_desde';
+const SIN_0800 = 'El alta de voluntarios necesita la migración 0800 (aún no aplicada en esta base).';
+
+function filaAOperadorPiloto(f: Fila): OperadorPiloto {
+  return {
+    id: String(f.id), nombre: String(f.nombre ?? ''), telefono: String(f.telefono ?? ''),
+    activo: f.activo !== false, voluntario: f.agente_voluntario === true, voluntarioDesde: s(f.agente_voluntario_desde),
+  };
+}
+
+function exigirPiloto(res: { error: { code?: string | null; message?: string | null } | null }, contexto: string): void {
+  if (!res.error) return;
+  if (faltaEsquema(res.error, /agente_voluntario|piloto_max_voluntarios|retirar_voluntario/) || res.error.code === 'PGRST202') throw new Error(SIN_0800);
+  throw new Error(`${contexto}: ${res.error.message ?? 'error'}`);
+}
+
+/** Un operador DE ESTA flota (otra flota = `null`, como si no existiera). */
+export async function leerOperadorPiloto(tenantId: string, operadorId: string): Promise<OperadorPiloto | null> {
+  const res = await acotada(supabaseAdmin().from('operador').select(COLUMNAS_PILOTO).eq('tenant_id', tenantId).eq('id', operadorId).maybeSingle(), 'conductor.operadorPiloto');
+  exigirPiloto(res as never, 'conductor.operadorPiloto');
+  const f = (res as { data: Fila | null }).data;
+  return f ? filaAOperadorPiloto(f) : null;
+}
+
+export async function listarVoluntarios(tenantId: string): Promise<OperadorPiloto[]> {
+  const res = await acotada(supabaseAdmin().from('operador').select(COLUMNAS_PILOTO)
+    .eq('tenant_id', tenantId).eq('agente_voluntario', true).order('agente_voluntario_desde', { ascending: true }).limit(200), 'conductor.voluntarios');
+  exigirPiloto(res as never, 'conductor.voluntarios');
+  return (((res as { data: Fila[] | null }).data) ?? []).map(filaAOperadorPiloto);
+}
+
+/** Operadores ACTIVOS que todavía no son voluntarios, por nombre o teléfono (el filtro de teléfono válido lo aplica quien llama). */
+export async function buscarCandidatosVoluntarios(tenantId: string, texto: string, limite = 200): Promise<OperadorPiloto[]> {
+  const t = texto.replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+  let q = supabaseAdmin().from('operador').select(COLUMNAS_PILOTO).eq('tenant_id', tenantId).eq('activo', true).eq('agente_voluntario', false);
+  if (t !== '') q = q.or(`nombre.ilike.%${t}%,telefono.ilike.%${t}%`);
+  const res = await acotada(q.order('nombre', { ascending: true }).limit(limite), 'conductor.candidatosVoluntarios');
+  exigirPiloto(res as never, 'conductor.candidatosVoluntarios');
+  return (((res as { data: Fila[] | null }).data) ?? []).map(filaAOperadorPiloto);
+}
+
+export async function contarVoluntarios(tenantId: string): Promise<number> {
+  const res = await acotada(supabaseAdmin().from('operador').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('agente_voluntario', true), 'conductor.contarVoluntarios');
+  exigirPiloto(res as never, 'conductor.contarVoluntarios');
+  return (res as { count: number | null }).count ?? 0;
+}
+
+/** T-A5-27: voluntarios activos de TODAS las flotas (solo el número, para el latido). Lanza si la base no tiene la 0800. */
+export async function contarVoluntariosActivos(): Promise<number> {
+  const res = await acotada(supabaseAdmin().from('operador').select('id', { count: 'exact', head: true }).eq('agente_voluntario', true).eq('activo', true), 'conductor.contarVoluntariosActivos');
+  exigirPiloto(res as never, 'conductor.contarVoluntariosActivos');
+  return (res as { count: number | null }).count ?? 0;
+}
+
+/** `piloto_max_voluntarios` de la flota (6 si todavía no tiene fila de configuración). */
+export async function leerTopeVoluntarios(tenantId: string): Promise<number> {
+  const res = await acotada(supabaseAdmin().from('agente_conductor_config').select('piloto_max_voluntarios').eq('tenant_id', tenantId).maybeSingle(), 'conductor.topeVoluntarios');
+  exigirPiloto(res as never, 'conductor.topeVoluntarios');
+  const v = ((res as { data: Fila | null }).data)?.piloto_max_voluntarios;
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 ? v : 6;
+}
+
+/** Enciende la marca SOLO si el operador es de la flota, está activo y aún no era voluntario. `false` = nada cambió. */
+export async function marcarVoluntario(tenantId: string, operadorId: string, porUsuarioId: string | null, ahora: Date): Promise<boolean> {
+  const res = await acotada(supabaseAdmin().from('operador')
+    .update({ agente_voluntario: true, agente_voluntario_desde: ahora.toISOString(), agente_voluntario_por: porUsuarioId })
+    .eq('tenant_id', tenantId).eq('id', operadorId).eq('activo', true).eq('agente_voluntario', false).select('id'), 'conductor.marcarVoluntario');
+  exigirPiloto(res as never, 'conductor.marcarVoluntario');
+  return (((res as { data: unknown[] | null }).data) ?? []).length > 0;
+}
+
+/** Apaga la marca y devuelve a «sin aceptar» los viajes abiertos importados de ese operador (función atómica de la 0800). Devuelve cuántos viajes dejaron de seguirse. */
+export async function retirarVoluntario(tenantId: string, operadorId: string): Promise<number> {
+  const res = await acotada(supabaseAdmin().rpc('retirar_voluntario', { p_tenant: tenantId, p_operador: operadorId }), 'conductor.retirarVoluntario');
+  exigirPiloto(res as never, 'conductor.retirarVoluntario');
+  const d = (res as { data: unknown }).data;
+  return typeof d === 'number' ? d : 0;
+}
+
+// ── T-A5-25: los datos del preflight del piloto (solo lectura) ───────────────
+
+/** Lo que el preflight necesita de la base, de UNA flota. Solo LEE: no manda nada ni escribe. Lanza si la base no contesta. */
+export async function leerDatosPreflight(tenantId: string, ahora: Date = new Date()): Promise<DatosPreflight> {
+  const [config, zonaDeclarada, voluntarios, contactos] = await Promise.all([
+    leerConfigConductor(tenantId), getZonaHorariaTenant(tenantId), listarVoluntarios(tenantId), cargarContactosTrafico(tenantId),
+  ]);
+  const ids = voluntarios.map((o) => o.id);
+  let viajes: DatosPreflight['viajes'] = [];
+  const posicionesPorUnidad: DatosPreflight['posicionesPorUnidad'] = {};
+  if (ids.length > 0) {
+    // El piloto solo sigue viajes abiertos y aceptados de sus voluntarios.
+    const rv = await acotada(supabaseAdmin().from('viaje').select('terminal_id, unidad_id, origen_geocerca_id, destino_geocerca_id')
+      .eq('tenant_id', tenantId).eq('estatus', 'abierto').not('aceptado_en', 'is', null).in('operador_id', ids).order('id').limit(1000), 'conductor.preflight_viajes');
+    const filas = (exigir(rv as never, 'conductor.preflight_viajes') ?? []) as unknown as Fila[];
+    viajes = filas.map((f) => ({ terminalId: s(f.terminal_id), unidadId: s(f.unidad_id), conSitio: typeof f.origen_geocerca_id === 'string' && typeof f.destino_geocerca_id === 'string' }));
+    const unidades = [...new Set(viajes.map((v) => v.unidadId).filter((u): u is string => u !== null))];
+    if (unidades.length > 0) {
+      const desde = new Date(ahora.getTime() - HORAS_GPS_RECIENTE * 3_600_000);
+      const haceUnaHora = ahora.getTime() - 3_600_000;
+      const rp = await acotada(supabaseAdmin().from('posicion').select('unidad_id, medida_en')
+        .eq('tenant_id', tenantId).in('unidad_id', unidades).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString()).order('medida_en', { ascending: false }).limit(5000), 'conductor.preflight_posiciones');
+      const ps = (exigir(rp as never, 'conductor.preflight_posiciones') ?? []) as unknown as Fila[];
+      const mut = posicionesPorUnidad as Record<string, { ultimas2h: number; ultimaHora: number }>;
+      for (const p of ps) {
+        const u = String(p.unidad_id);
+        const c = mut[u] ?? (mut[u] = { ultimas2h: 0, ultimaHora: 0 });
+        c.ultimas2h += 1;
+        if (new Date(String(p.medida_en)).getTime() > haceUnaHora) c.ultimaHora += 1;
+      }
+    }
+  }
+  return {
+    config: { activo: config.activo, perfilSeguimiento: config.perfilSeguimiento, solicitudesMin: config.solicitudesMin },
+    zonaDeclarada, voluntarios: voluntarios.map((o) => ({ telefono: o.telefono })), viajes, posicionesPorUnidad, contactos,
+  };
+}
+
+// ── T-A5-21: estado de tránsito (frontera) del tablero ──────────────────────
+
+export interface TransitoViaje { estado: EstadoTransito; textoOrigen: string | null; actualizadoEn: string | null }
+
+const ESTADOS_TRANSITO: readonly string[] = ['en_patio', 'en_ruta', 'pendiente_cruce', 'otro'];
+
+/**
+ * T-A5-21: lee el estado de tránsito de los viajes (columnas de la 0804). Solo se llama con la casilla encendida.
+ * Si la lectura falla devuelve `undefined` (nunca inventa «sin estado»): la fila simplemente no pinta la columna.
+ */
+export async function leerTransitoViajes(tenantId: string, viajeIds: readonly string[]): Promise<Map<string, TransitoViaje> | undefined> {
+  try {
+    const filas = viajeIds.length === 0 ? [] : await traerPorIds<Fila>([...viajeIds], (t) => acotada(supabaseAdmin()
+      .from('viaje').select('id, transito_estado, transito_actualizado_en, transito_texto_origen').eq('tenant_id', tenantId).in('id', t), 'tablero.transito') as never, 'tablero.transito');
+    const m = new Map<string, TransitoViaje>();
+    for (const f of filas) {
+      const e = String(f.transito_estado ?? '');
+      if (!ESTADOS_TRANSITO.includes(e)) continue;
+      m.set(String(f.id), { estado: e as EstadoTransito, textoOrigen: s(f.transito_texto_origen), actualizadoEn: s(f.transito_actualizado_en) });
+    }
+    return m;
+  } catch (e) {
+    logger.warn('conductor.tablero_transito_no_leido', { err: e instanceof Error ? e.message : String(e) });
+    return undefined;
+  }
+}
+
+// ── T-A5-22: «Fecha Salida» sellada por el TMS (candidato a hito) ───────────
+
+/**
+ * T-A5-22: la marca de salida que el TMS selló en cada viaje (`viaje.tms_salida_en`, 0804), por id de viaje (ISO).
+ * Solo trae los viajes que SÍ tienen marca. Si la lectura falla (p. ej. la 0804 aún no está aplicada) devuelve `undefined`:
+ * el llamador no afirma nada y no registra nada.
+ */
+export async function leerSalidasTms(tenantId: string, viajeIds: readonly string[]): Promise<Map<string, string> | undefined> {
+  try {
+    const filas = viajeIds.length === 0 ? [] : await traerPorIds<Fila>([...viajeIds], (t) => acotada(supabaseAdmin()
+      .from('viaje').select('id, tms_salida_en').eq('tenant_id', tenantId).in('id', t).not('tms_salida_en', 'is', null), 'conductor.salida_tms') as never, 'conductor.salida_tms');
+    const m = new Map<string, string>();
+    for (const f of filas) {
+      const iso = s(f.tms_salida_en);
+      if (iso && Number.isFinite(Date.parse(iso))) m.set(String(f.id), iso);
+    }
+    return m;
+  } catch (e) {
+    logger.warn('conductor.salida_tms_no_leida', { err: e instanceof Error ? e.message : String(e) });
+    return undefined;
+  }
 }

@@ -63,13 +63,13 @@ type Motivo = 'sin_sitio' | 'sin_coincidencia' | 'sin_ubicacion';
 const una = (t: string, n: number): string => t.replace(/\s+/g, ' ').trim().slice(0, n);
 
 /** El texto y la plantilla del aviso. Texto con la hora exacta; la plantilla lleva los cuatro datos en una línea. */
-export function armarAvisoLlegadaSinConfirmar(v: ViajeContexto, h: HitoFila, motivo: Motivo, ahora: Date): MensajeSaliente {
+export function armarAvisoLlegadaSinConfirmar(v: ViajeContexto, h: HitoFila, motivo: Motivo, ahora: Date, zona?: string): MensajeSaliente {
   const chofer = una(v.operadorNombre ?? 'El chofer', 60) || 'El chofer';
   const folio = v.folio || v.id.slice(0, 8);
   const esCarga = h.tipo === 'llegada_carga';
   const sitio = una((esCarga ? v.origen : v.destino) ?? '', 60);
   const lugar = `${esCarga ? 'la carga' : 'la descarga'}${sitio ? ` de ${sitio}` : ''}`;
-  const cuando = horaYDiaMx(new Date(h.mensajeEn ?? h.recibidoEn ?? ahora.toISOString()), ahora);
+  const cuando = horaYDiaMx(new Date(h.mensajeEn ?? h.recibidoEn ?? ahora.toISOString()), ahora, zona);
   const porQue: Record<Motivo, { largo: string; corto: string }> = {
     sin_sitio: { largo: 'el viaje no tiene sitio asignado y no hay con qué compararlo contra el GPS', corto: 'el viaje no tiene sitio asignado para compararlo con el GPS' },
     sin_coincidencia: { largo: 'la posición que se comparó cae fuera del sitio (puede ser una muestra vieja: revísalo antes de dar por mala la llegada)', corto: 'la posición comparada cae fuera del sitio' },
@@ -155,7 +155,7 @@ export async function correrAlertasLlegadaSinConfirmar(
           await p.cerrarAviso(claim, { ok: false, canal: 'ninguno', motivo: 'sin_destinatario', ult4: null });
           continue;
         }
-        const msg = armarAvisoLlegadaSinConfirmar(v, h, motivo, ahora);
+        const msg = armarAvisoLlegadaSinConfirmar(v, h, motivo, ahora, config.zonaHoraria);
         let entregados = 0;
         let reintentables = 0;
         let ultimoError = '';

@@ -1,14 +1,14 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { contarEscalados, getEventosConductores } from '@/lib/likida/analytics';
+import { contarEscalados, getEventosConductores, getTiempoAceptacionChofer } from '@/lib/likida/analytics';
 import { viajesEsperandoAceptarPaginados } from '@/lib/likida/repo_paginado';
 import { acotada } from '@/lib/likida/presupuesto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { ahoraMs } from '@/lib/saludo';
 import { sufijoTenant } from '../../sufijo';
-import { VistaAgenteConductores, type EsperaAceptar, type ConteosConductores, type ColaConductores } from './vista';
+import { VistaAgenteConductores, TarjetaInsights, type EsperaAceptar, type ConteosConductores, type ColaConductores } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
 import { ultimasCorridas } from '@/lib/likida/agentes/corridas';
@@ -19,7 +19,10 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { revalidatePath } from 'next/cache';
 import { FormaEstrategiaConductores, type ResultadoEstrategia } from '../estrategia-forma';
 import { Bloque, EsqTabla, vigilar } from '../../bloque';
-import { leerConfigConductor, leerEpisodiosParaTablero } from '@/lib/likida/conductor/repo';
+import { calcularInsights } from '@/lib/likida/conductor/insights';
+import { leerConfigConductor, leerEntradaInsights, leerDatosPreflight, leerEpisodiosParaTablero, leerSalidasTms, leerTransitoViajes } from '@/lib/likida/conductor/repo';
+import { evaluarPreflight } from '@/lib/likida/conductor/preflight_piloto';
+import { BannerPreflight } from './configuracion/preflight';
 import { leerCatalogosFiltro, leerDatosTablero, leerIndicadores, listarSitios, type FiltrosTablero } from '@/lib/likida/conductor/repo_validacion';
 import { asignarSitiosDelPanel } from '@/lib/likida/conductor/acciones_sitios';
 import { armarTablero, episodiosVista, filtrarPorSemaforo, indicadoresVista, type EpisodioVista, type Semaforo } from '@/lib/likida/conductor/tablero';
@@ -108,7 +111,21 @@ export default async function PaginaAgenteConductores({
   const pConfig = safe(() => getConfig(tenantId));
   // Los cuatro conteos REALES de la flota (FE-5) — ver `contarVivos`.
   const pVivos = contarVivos(tenantId, (q) => q, 'conductores.vivos');
-  const pAceptados = contarVivos(tenantId, (q) => q.not('aceptado_en', 'is', null), 'conductores.aceptados');
+  // T-A5-06: dos cifras rotuladas. «Aceptados» = los que dijo el chofer
+  // (`aceptado_origen` distinto de 'importacion', incluye nulo de filas viejas);
+  // «en seguimiento por importación» = los que escribió una carga de archivo.
+  const pAceptados = contarVivos(
+    tenantId,
+    (q) => q.not('aceptado_en', 'is', null).or('aceptado_origen.is.null,aceptado_origen.neq.importacion'),
+    'conductores.aceptados',
+  );
+  const pImportados = contarVivos(
+    tenantId,
+    (q) => q.not('aceptado_en', 'is', null).eq('aceptado_origen', 'importacion'),
+    'conductores.importados',
+  );
+  // T-A5-06: el tiempo medio en aceptar, SIN los viajes que escribió la importación.
+  const pTiempoAceptacion = safe(() => getTiempoAceptacionChofer(tenantId));
   const pEsperan = contarVivos(
     tenantId,
     (q) => q.not('avisado_en', 'is', null).is('aceptado_en', null).is('escalado_en', null),
@@ -117,8 +134,8 @@ export default async function PaginaAgenteConductores({
   const pSinAvisar = contarVivos(tenantId, (q) => q.is('avisado_en', null), 'conductores.sin_avisar');
 
   const pConteos: Promise<ConteosConductores> = vigilar(
-    Promise.all([pVivos, pAceptados, pEsperan, pEscalados]).then(([vivos, aceptados, esperan, escalados]) =>
-      ({ vivos, aceptados, esperan, escalados })));
+    Promise.all([pVivos, pAceptados, pImportados, pTiempoAceptacion, pEsperan, pEscalados]).then(([vivos, aceptados, importados, tiempoAceptacion, esperan, escalados]) =>
+      ({ vivos, aceptados, importados, tiempoAceptacion, esperan, escalados })));
 
   const ahora = ahoraMs();
   // FE-6: la cola honesta ya NO sale de `getViajes(tenantId)` (los 100 viajes
@@ -153,10 +170,30 @@ export default async function PaginaAgenteConductores({
   };
   const puedeActuar = puedeAsignar(rol);
   const pTablero = vigilar(Promise.all([leerDatosTablero(tenantId, filtrosRepo), leerConfigConductor(tenantId)])
-    .then(([datos, config]) => filtrarPorSemaforo(armarTablero(datos, config, new Date()), filtrosVista.semaforo || null)));
+    .then(async ([datos, config]) => {
+      // T-A5-21: los estados de frontera solo se leen con la casilla encendida (informativos; no avisan a nadie).
+      if (config.mostrarEstadosFrontera) datos.transito = await leerTransitoViajes(tenantId, datos.viajes.map((v) => v.id));
+      // T-A5-22: la «Fecha Salida» del TMS se muestra como candidato aunque la casilla esté apagada; si no se puede leer, no se afirma nada.
+      datos.salidasTms = await leerSalidasTms(tenantId, datos.viajes.map((v) => v.id));
+      return filtrarPorSemaforo(armarTablero(datos, config, new Date()), filtrosVista.semaforo || null);
+    }));
   const pIndicadores = safe(async () => {
     const hasta = new Date();
     return indicadoresVista(await leerIndicadores(tenantId, new Date(hasta.getTime() - filtrosVista.dias * 86_400_000), new Date(hasta.getTime() + 60_000), filtrosRepo));
+  });
+  // T-A5-32: la tarjeta «qué pasó · qué significa · qué hacer». `null` = no se pudo leer → la tarjeta lo dice.
+  const pInsights = safe(async () => {
+    const [entrada, config] = await Promise.all([
+      leerEntradaInsights(tenantId, new Date(Date.now() - filtrosVista.dias * 86_400_000), filtrosRepo),
+      leerConfigConductor(tenantId),
+    ]);
+    return {
+      recortada: entrada.hayMas,
+      insights: calcularInsights({
+        hitos: entrada.hitos, cruces: entrada.cruces, episodios: entrada.episodios, viajesSinSitio: null,
+        lineaBase: { llamadasPorViaje: config.lineaBaseLlamadasPorViaje, registradaEn: config.lineaBaseRegistradaEn },
+      }),
+    };
   });
   const pCatalogos = safe(() => leerCatalogosFiltro(tenantId));
   // Los episodios de «sin señal de vida» del mismo periodo y con los mismos filtros. `null` = no se pudo leer; `{ episodios: [] }` = ninguno.
@@ -167,6 +204,8 @@ export default async function PaginaAgenteConductores({
   });
   // Los sitios que se pueden asignar a un viaje (solo los activos; hasta 500). Sin lectura, la forma de asignar no ofrece nada.
   const pSitios = safe(async () => (await listarSitios(tenantId, { limite: 500 })).sitios.filter((x) => x.activa).map((x) => ({ id: x.id, nombre: x.nombre, tipo: x.tipo })));
+  // T-A5-25: «¿está lista la flota?». `null` = no se pudo leer → no se pinta nada (el detalle vive en la configuración).
+  const pPreflight = safe(() => leerDatosPreflight(tenantId).then(evaluarPreflight));
   const ocultos: Record<string, string> = {};
   if (sp.tenant) ocultos.tenant = sp.tenant; else if (sp.vista) ocultos.vista = sp.vista;
   if (sp.rol) ocultos.rol = sp.rol;
@@ -215,12 +254,20 @@ export default async function PaginaAgenteConductores({
   return (
     <VistaAgenteConductores
       tablero={
-        <Bloque mensaje="No se pudo leer el tablero de hitos." esqueleto={<EsqTabla filas={6} />}>
-          <BloqueTableroHitos
-            pTablero={pTablero} pIndicadores={pIndicadores} pCatalogos={pCatalogos} pSitios={pSitios} pEpisodios={pEpisodios} filtros={filtrosVista} ocultos={ocultos}
-            accionUrl="/dashboard/agentes/conductores" puedeActuar={puedeActuar} accion={accionOficina} accionSitios={accionSitios}
-          />
-        </Bloque>
+        <>
+          <Bloque mensaje="No se pudo revisar si la flota está lista." esqueleto={null}>
+            <BloqueBannerPreflight pPreflight={pPreflight} sufijo={sufijoTenant(sp)} />
+          </Bloque>
+          <Bloque mensaje="No se pudieron leer los insights." esqueleto={null}>
+            <BloqueInsights pInsights={pInsights} pIndicadores={pIndicadores} dias={filtrosVista.dias} />
+          </Bloque>
+          <Bloque mensaje="No se pudo leer el tablero de hitos." esqueleto={<EsqTabla filas={6} />}>
+            <BloqueTableroHitos
+              pTablero={pTablero} pIndicadores={pIndicadores} pCatalogos={pCatalogos} pSitios={pSitios} pEpisodios={pEpisodios} filtros={filtrosVista} ocultos={ocultos}
+              accionUrl="/dashboard/agentes/conductores" puedeActuar={puedeActuar} accion={accionOficina} accionSitios={accionSitios}
+            />
+          </Bloque>
+        </>
       }
       kpis={pConteos}
       cola={pCola}
@@ -247,6 +294,19 @@ export default async function PaginaAgenteConductores({
       }
     />
   );
+}
+
+async function BloqueBannerPreflight({ pPreflight, sufijo }: { pPreflight: Promise<ReturnType<typeof evaluarPreflight> | null>; sufijo: string }) {
+  return <BannerPreflight preflight={await pPreflight} sufijo={sufijo} />;
+}
+
+async function BloqueInsights({ pInsights, pIndicadores, dias }: {
+  pInsights: Promise<{ insights: ReturnType<typeof calcularInsights>; recortada: boolean } | null>;
+  pIndicadores: Promise<ReturnType<typeof indicadoresVista> | null>;
+  dias: number;
+}) {
+  const [r, ind] = await Promise.all([pInsights, pIndicadores]);
+  return <TarjetaInsights insights={r?.insights ?? null} dias={dias} discrepancias={ind?.sinCoincidencia ?? null} recortada={r?.recortada ?? false} />;
 }
 
 async function BloqueTableroHitos({ pTablero, pIndicadores, pCatalogos, pSitios, pEpisodios, filtros, ocultos, accionUrl, puedeActuar, accion, accionSitios }: {
