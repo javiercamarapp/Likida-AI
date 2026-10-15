@@ -27,8 +27,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import {
   PERFILES_TENANT, rutaPermitidaEnPerfil, apiPermitidaEnPerfil, CRONS_PERFIL_CINCO_AGENTES,
-  moduloProximamenteDeRuta, rutaProximamente,
-  type PerfilTenant,
+  moduloProximamenteDeRuta, rutaProximamente, MODULOS_PROXIMAMENTE_PERFIL,
+  type PerfilTenant, type ModuloPerfil,
 } from './visibilidad';
 
 export type { PerfilTenant };
@@ -103,6 +103,17 @@ export async function perfilDeTenant(
 
 /** ¿La flota tiene un perfil que la restringe? (chat, MCP y demás superficies de "todo o nada".) */
 export async function perfilRestringido(tenantId: string | null | undefined): Promise<boolean> {
+  return (await perfilDeTenant(tenantId)) !== null;
+}
+
+/**
+ * ¿El módulo (`vigia` | `conductor`) está en «Próximamente» para esta flota? Es la puerta de las superficies que NO son
+ * una ruta (el WhatsApp del chofer y del cliente): con perfil y módulo en fase 2, NADA se envía, se escribe ni se lee de
+ * ese módulo. Sin perfil: `false` (comportamiento de siempre). Si el perfil no se puede leer, falla CERRADO (lo mismo
+ * que `perfilDeTenant`: sin valor previo se asume el perfil restringido).
+ */
+export async function moduloEnStandBy(tenantId: string | null | undefined, modulo: ModuloPerfil): Promise<boolean> {
+  if (!MODULOS_PROXIMAMENTE_PERFIL.includes(modulo)) return false;
   return (await perfilDeTenant(tenantId)) !== null;
 }
 
