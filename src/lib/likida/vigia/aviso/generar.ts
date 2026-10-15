@@ -33,6 +33,7 @@ import {
   AvisoSinMigrar, PAGINA_FILAS, type ConfigAviso, type FilaDelPrograma, type NuevoAviso, type RepoAviso,
 } from './repo';
 import { resolverFila, type DepsResolver, type FilaResuelta, type OperadorResuelto } from './resolver';
+import type { ContextoAutonomia } from './politica';
 import type { Ccp, Transito } from '../programa/normalizar';
 
 export const TOPE_FILAS_POR_PASADA = 200;
@@ -49,10 +50,11 @@ export interface DepsGenerar {
   politica?: PoliticaPrivacidad | null;
   compositor?: ConfigCompositor;
   /**
-   * ¿Puede esta flota salir sola? Lo decide T-A4-20 (mínimo de avisos confirmados a mano). Mientras no exista,
-   * el valor por defecto es «no»: aun con `modo='autonomo'` el aviso queda pendiente de confirmación.
+   * ¿Puede ESTE aviso salir solo? Lo decide la política de T-A4-20 (`crearAutonomoPermitido` en `politica.ts`):
+   * confirmaciones sin editar por cliente, aviso completo, kill switches. Sin esta función el valor es «no»: aun con
+   * `modo='autonomo'` el aviso queda pendiente de confirmación.
    */
-  autonomoPermitido?: (tenantId: string) => Promise<boolean>;
+  autonomoPermitido?: (tenantId: string, ctx?: ContextoAutonomia) => Promise<boolean>;
 }
 
 export interface ResultadoGeneracion {
@@ -172,9 +174,10 @@ export function valoresDeAviso(
  */
 export async function estadoSegunModo(
   tenantId: string, config: ConfigAviso, hayDestinatario: boolean, deps: Pick<DepsGenerar, 'autonomoPermitido'>,
+  ctx?: ContextoAutonomia,
 ): Promise<NuevoAviso['estado']> {
   if (!hayDestinatario) return 'sin_destinatario';
-  if (config.modo === 'autonomo' && deps.autonomoPermitido && (await deps.autonomoPermitido(tenantId))) return 'aprobado';
+  if (config.modo === 'autonomo' && deps.autonomoPermitido && (await deps.autonomoPermitido(tenantId, ctx))) return 'aprobado';
   return 'pendiente_confirmacion';
 }
 
@@ -195,7 +198,9 @@ async function armarAviso(
   });
 
   const destinatario = resuelto.estadoCliente === 'resuelto' && resuelto.clienteId !== null && resuelto.contacto !== null;
-  const estado = await estadoSegunModo(tenantId, config, destinatario, deps);
+  const estado = await estadoSegunModo(tenantId, config, destinatario, deps, {
+    clienteId: resuelto.clienteId, completo: c.pendientes.length === 0, esReenvio: false, cambioOperador: false,
+  });
 
   const motivo = destinatario
     ? motivoListo
