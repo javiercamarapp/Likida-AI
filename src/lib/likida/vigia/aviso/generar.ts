@@ -26,11 +26,13 @@ import { componerAviso, type ConfigCompositor } from './compositor';
 import {
   evaluarListo, type ConfigListo, type FilaParaListo, type TipoSeccionAviso,
 } from './listo';
-import { camposVisibles, filtrarOperador, type CampoAviso, type PoliticaPrivacidad } from './privacidad';
+import {
+  CAMPOS_SENSIBLES, camposVisibles, filtrarOperador, type CampoAviso, type PoliticaPrivacidad,
+} from './privacidad';
 import {
   AvisoSinMigrar, PAGINA_FILAS, type ConfigAviso, type FilaDelPrograma, type NuevoAviso, type RepoAviso,
 } from './repo';
-import { resolverFila, type DepsResolver, type FilaResuelta } from './resolver';
+import { resolverFila, type DepsResolver, type FilaResuelta, type OperadorResuelto } from './resolver';
 import type { Ccp, Transito } from '../programa/normalizar';
 
 export const TOPE_FILAS_POR_PASADA = 200;
@@ -130,6 +132,52 @@ function fuentes(r: FilaResuelta): Record<string, string> {
   return o;
 }
 
+/** Valor de una sola línea; `null` si queda vacío. */
+function limpio(v: string | null | undefined): string | null {
+  if (v == null) return null;
+  const t = v.replace(/\s+/g, ' ').trim();
+  return t === '' ? null : t;
+}
+
+/**
+ * Lo que el cliente VE en el aviso, campo por campo (T-A4-18): es la base contra la que se detecta que algo cambió y el
+ * «antes» de un reenvío. Solo campos visibles y nunca los sensibles (licencia, vigencia, teléfono): esos no se guardan
+ * en `datos` aunque una política los habilite. `operador` ya viene filtrado por privacidad.
+ */
+export function valoresDeAviso(
+  fila: { caja?: string | null; unidad?: string | null },
+  resuelto: Pick<FilaResuelta, 'unidad' | 'caja'>,
+  operador: OperadorResuelto | null,
+  visibles: ReadonlySet<CampoAviso>,
+): Partial<Record<CampoAviso, string | null>> {
+  const todos: Partial<Record<CampoAviso, string | null>> = {
+    caja: limpio(resuelto.caja?.numero) ?? limpio(fila.caja),
+    placas_caja: limpio(resuelto.caja?.placas),
+    estado_caja: limpio(resuelto.caja?.estado),
+    unidad: limpio(resuelto.unidad?.numero) ?? limpio(fila.unidad),
+    placas_unidad: limpio(resuelto.unidad?.placas),
+    operador_nombre: limpio(operador?.nombre),
+  };
+  const out: Partial<Record<CampoAviso, string | null>> = {};
+  for (const [campo, v] of Object.entries(todos) as Array<[CampoAviso, string | null]>) {
+    if (visibles.has(campo) && !CAMPOS_SENSIBLES.includes(campo)) out[campo] = v;
+  }
+  return out;
+}
+
+/**
+ * Estado con el que nace un aviso (o un reenvío). Sin destinatario → `sin_destinatario`. Con destinatario →
+ * `pendiente_confirmacion`, salvo modo autónomo Y permiso de T-A4-20: solo entonces `aprobado`. El modo `confirmar`
+ * jamás aprueba.
+ */
+export async function estadoSegunModo(
+  tenantId: string, config: ConfigAviso, hayDestinatario: boolean, deps: Pick<DepsGenerar, 'autonomoPermitido'>,
+): Promise<NuevoAviso['estado']> {
+  if (!hayDestinatario) return 'sin_destinatario';
+  if (config.modo === 'autonomo' && deps.autonomoPermitido && (await deps.autonomoPermitido(tenantId))) return 'aprobado';
+  return 'pendiente_confirmacion';
+}
+
 async function armarAviso(
   tenantId: string, fila: FilaDelPrograma, config: ConfigAviso, motivoListo: string, deps: DepsGenerar, ahora: Date,
 ): Promise<NuevoAviso> {
@@ -147,11 +195,7 @@ async function armarAviso(
   });
 
   const destinatario = resuelto.estadoCliente === 'resuelto' && resuelto.clienteId !== null && resuelto.contacto !== null;
-  let estado: NuevoAviso['estado'] = 'sin_destinatario';
-  if (destinatario) {
-    estado = 'pendiente_confirmacion';
-    if (config.modo === 'autonomo' && deps.autonomoPermitido && (await deps.autonomoPermitido(tenantId))) estado = 'aprobado';
-  }
+  const estado = await estadoSegunModo(tenantId, config, destinatario, deps);
 
   const motivo = destinatario
     ? motivoListo
@@ -168,6 +212,8 @@ async function armarAviso(
     // Solo QUÉ campos entraron y de dónde salió cada uno; ni teléfonos ni licencias.
     datos: {
       via: 'proxy',
+      tipo: 'inicial',
+      valores: valoresDeAviso(fila, resuelto, operador, visibles),
       seccion: fila.tipo,
       cita: fila.citaEn,
       campos: [...visibles].sort(),
