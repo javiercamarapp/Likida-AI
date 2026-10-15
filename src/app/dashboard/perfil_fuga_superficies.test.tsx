@@ -56,9 +56,16 @@ const { default: PaginaNotificaciones } = await import('./notificaciones/page');
 const { calcularAlertasFlota } = await import('./calcular-alertas-flota');
 const { default: DashboardChrome } = await import('./chrome');
 const { SidebarAbajo } = await import('./sidebar-nav');
-const { puedeVerRuta, RUTAS_PERFIL_CINCO_AGENTES } = await import('@/lib/auth/visibilidad');
+const { puedeVerRuta, RUTAS_PERFIL_CINCO_AGENTES, MODULOS_PROXIMAMENTE_PERFIL, moduloProximamenteDeRuta, rutaProximamente } = await import('@/lib/auth/visibilidad');
 
-const PERMITIDAS = Object.keys(RUTAS_PERFIL_CINCO_AGENTES);
+// «Próximamente» (fase 1): vigia y conductor se enlazan a su pantalla única, que gatea con /dashboard (siempre permitido).
+const PANTALLAS_PROXIMAMENTE = MODULOS_PROXIMAMENTE_PERFIL.map((m) => rutaProximamente(m));
+const PERMITIDAS = [...Object.keys(RUTAS_PERFIL_CINCO_AGENTES), ...PANTALLAS_PROXIMAMENTE];
+/** A dónde apunta la tarjeta de una ficha bajo el perfil: su pantalla «Próximamente» si el módulo aún no se opera. */
+const destinoDeFicha = (href: string) => {
+  const m = moduloProximamenteDeRuta('cinco_agentes', href);
+  return m ? rutaProximamente(m) : href;
+};
 const hrefsDe = (html: string) => [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
 const texto = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
@@ -116,7 +123,7 @@ describe('(c) Resumen: nada de dinero ni de fiscal bajo el perfil', () => {
   it('muestra los cinco agentes, cada uno con su enlace permitido, y ningún enlace fuera de la lista cerrada', async () => {
     const html = await aHtml(<InicioCincoAgentes tenantId="t-1" tenantNombre={null} nombre="Ana" />);
     const hrefs = hrefsDe(html);
-    for (const f of FICHAS_CINCO_AGENTES) expect(hrefs, f.nombre).toContain(f.href);
+    for (const f of FICHAS_CINCO_AGENTES) expect(hrefs, f.nombre).toContain(destinoDeFicha(f.href));
     expect(FICHAS_CINCO_AGENTES.map((f) => f.clave)).toEqual(['liquidacion', 'peajes', 'carta_porte', 'vigia', 'conductor']);
     for (const h of hrefs) expect(PERMITIDAS, h).toContain(h);
   });

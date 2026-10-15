@@ -46,16 +46,20 @@ vi.mock('next/navigation', () => ({ redirect: vi.fn() }));
 const {
   tenantsConPerfilASaltar, tenantsConPerfil, sinTenantsDePerfil, cronAplicaAPerfil, nombreDeCron, reiniciarCachePerfil,
 } = await import('@/lib/auth/perfil_tenant');
-const { CRONS_PERFIL_CINCO_AGENTES } = await import('@/lib/auth/visibilidad');
+const { CRONS_PERFIL_CINCO_AGENTES, CRONS_PROXIMAMENTE_PERFIL } = await import('@/lib/auth/visibilidad');
 
 // ── La clasificación (la ficha T-PER-06 + B1) ───────────────────────────────
-/** Stand-by: el motor recibe `excluirTenants` de `tenantsConPerfilASaltar(<cron>)`. */
-const STANDBY = ['facturar', 'descarga-sat', 'jornada', 'jornada-alertas', 'asistencia', 'buzon-entrega'] as const;
+/**
+ * Stand-by: el motor recibe `excluirTenants` de `tenantsConPerfilASaltar(<cron>)`.
+ * `vigia` y `conductor-hitos` son los crons de los módulos «Próximamente» (fase 1, decisión del 15-oct-2026):
+ * la flota con perfil los salta igual que a un stand-by (`CRONS_PROXIMAMENTE_PERFIL`).
+ */
+const STANDBY = ['facturar', 'descarga-sat', 'jornada', 'jornada-alertas', 'asistencia', 'buzon-entrega', 'vigia', 'conductor-hitos'] as const;
 /** MIXTO: sigue para el Conductor, y sus secciones de stand-by piden `tenantsConPerfil()`. */
 const MIXTOS = ['escalar'] as const;
 /** Sirven a los cinco agentes o son plomería compartida: NO se saltan a nadie. */
 const PERMITIDOS = [
-  'gps', 'peajes', 'conductor-hitos', 'vigia', 'carta-porte-docs', 'liquidaciones-externas',
+  'gps', 'peajes', 'carta-porte-docs', 'liquidaciones-externas',
   'wa-outbox', 'wa-pendientes', 'guardia', 'purgar',
 ] as const;
 /**
@@ -86,6 +90,14 @@ describe('T-PER-06 · el inventario de crons está clasificado', () => {
   it('la lista de permitidos del perfil (visibilidad.ts) es exactamente permitidos + mixtos; ninguno de stand-by ni plataforma', () => {
     expect([...CRONS_PERFIL_CINCO_AGENTES].sort()).toEqual([...PERMITIDOS, ...MIXTOS].sort());
     for (const c of [...STANDBY, ...PLATAFORMA]) expect(cronAplicaAPerfil(c)).toBe(false);
+  });
+
+  it('los crons de los módulos «Próximamente» (vigia, conductor-hitos) están declarados aparte y no figuran entre los permitidos', () => {
+    expect([...CRONS_PROXIMAMENTE_PERFIL].sort()).toEqual(['conductor-hitos', 'vigia']);
+    for (const c of CRONS_PROXIMAMENTE_PERFIL) {
+      expect(CRONS_PERFIL_CINCO_AGENTES, c).not.toContain(c);
+      expect(STANDBY as readonly string[], c).toContain(c);
+    }
   });
 
   it('cada ruta de cron del disco está en vercel.json (no hay cron huérfano sin clasificar)', () => {
