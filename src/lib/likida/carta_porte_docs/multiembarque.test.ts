@@ -169,3 +169,85 @@ describe('derivarHijos: el archivo de cada embarque', () => {
     expect(nombreDeHijo('a'.repeat(400) + '.xlsx', 'F'.repeat(90)).length).toBeLessThanOrEqual(200);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A3-14: libros multipestaña. M5 = 2 pestañas = 2 productos de UN mismo embarque (mismo delivery y caja); varios
+// deliveries en pestañas distintas = varios embarques. Todo sintético con la misma forma.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('libros multipestaña (T-A3-14)', () => {
+  const ENC = ['Delivery', 'Caja', 'Producto', 'Cantidad', 'Peso (kg)'];
+  const libroHojas = (hojas: Array<[string, string[][]]>): Buffer => {
+    const wb = XLSX.utils.book_new();
+    for (const [nombre, aoa] of hojas) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), nombre);
+    return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+  };
+  const m5 = (d1 = 'DLV-5001', d2 = 'DLV-5001'): Buffer => libroHojas([
+    ['Producto A', [ENC, [d1, 'CAJA-77', 'Botellas de vidrio', '1308', '9800']]],
+    ['Producto B', [ENC, [d2, 'CAJA-77', 'Tapas metálicas', '795', '4100']]],
+  ]);
+
+  it('M5: 2 pestañas con el mismo delivery y caja son UN embarque: no se parte y se leen las dos hojas', async () => {
+    const c = await contenido(m5());
+    const ev = evaluarDivision(c, null);
+    expect(ev.plan).toBeNull();
+    expect(ev.mismoEmbarque).toMatchObject({ hojas: ['Producto A', 'Producto B'], motivo: 'identificador_comun' });
+    expect(ev.mismoEmbarque?.aviso).toBe('El libro tiene 2 pestañas: se leyeron como un solo embarque con 2 renglones.');
+    expect(c.texto).toContain('Hoja: Producto A');
+    expect(c.texto).toContain('Hoja: Producto B');
+    expect(c.texto).toContain('1308');
+    expect(c.texto).toContain('795');
+  });
+
+  it('el identificador se compara sin importar mayúsculas ni espacios', async () => {
+    const c = await contenido(m5('DLV-5001', ' dlv-5001 '));
+    expect(evaluarDivision(c, null).mismoEmbarque?.motivo).toBe('identificador_comun');
+  });
+
+  it('2 deliveries distintos en 2 pestañas se dividen en 2 hijos, cada uno con la cabecera y la fila de SU pestaña', async () => {
+    const c = await contenido(m5('DLV-5001', 'DLV-5002'));
+    const ev = evaluarDivision(c, null);
+    expect(ev.mismoEmbarque).toBeUndefined();
+    expect(ev.plan?.embarques.map((e) => [e.indice, e.clave, e.filas.length])).toEqual([[1, 'DLV-5001', 1], [2, 'DLV-5002', 1]]);
+    const hijos = derivarHijos(ev.plan!, 'libro.xlsx');
+    expect(hijos).toHaveLength(2);
+    expect(hijos.map((h) => h.nombre)).toEqual(['libro · embarque DLV-5001.csv', 'libro · embarque DLV-5002.csv']);
+    const t = tablasDe(await prepararContenido(hijos[1].bytes, 'csv'))[0];
+    expect(t.encabezados).toEqual(ENC);
+    expect(t.filas).toEqual([['DLV-5002', 'CAJA-77', 'Tapas metálicas', '795', '4100']]);
+  });
+
+  it('el perfil con hojas:mismo_embarque manda aunque los identificadores difieran', async () => {
+    const c = await contenido(m5('DLV-5001', 'DLV-5002'));
+    const ev = evaluarDivision(c, null, { hojas: 'mismo_embarque' });
+    expect(ev.plan).toBeNull();
+    expect(ev.mismoEmbarque).toMatchObject({ motivo: 'perfil', hojas: ['Producto A', 'Producto B'] });
+  });
+
+  it('sin columna de identificador en alguna pestaña no se decide nada (se lee como hasta ahora)', async () => {
+    const c = await contenido(libroHojas([
+      ['Producto A', [ENC, ['DLV-5001', 'CAJA-77', 'Botellas', '1308', '9800']]],
+      ['Notas', [['Concepto', 'Detalle'], ['Observación', 'frágil']]],
+    ]));
+    expect(evaluarDivision(c, null)).toEqual({ plan: null, exceso: null, variasHojas: null });
+  });
+
+  it('una pestaña con DOS identificadores o ids repetidos solo en algunas pestañas no se decide', async () => {
+    const dos = await contenido(libroHojas([
+      ['A', [ENC, ['DLV-1', 'CAJA-77', 'Botellas', '1', '1'], ['DLV-2', 'CAJA-77', 'Tapas', '1', '1']]],
+      ['B', [ENC, ['DLV-1', 'CAJA-77', 'Cajas', '1', '1']]],
+    ]));
+    // la primera pestaña trae 2 deliveries → esta ruta existente (variasHojas) sigue mandando; no aparece mismoEmbarque
+    expect(evaluarDivision(dos, null).mismoEmbarque).toBeUndefined();
+    const parcial = await contenido(libroHojas([
+      ['A', [ENC, ['DLV-1', 'CAJA-77', 'Botellas', '1', '1']]],
+      ['B', [ENC, ['DLV-1', 'CAJA-77', 'Cajas', '1', '1']]],
+      ['C', [ENC, ['DLV-9', 'CAJA-77', 'Tapas', '1', '1']]],
+    ]));
+    expect(evaluarDivision(parcial, null)).toEqual({ plan: null, exceso: null, variasHojas: null });
+  });
+
+  it('una sola pestaña con datos no activa nada de esto', async () => {
+    const c = await contenido(libroHojas([['A', [ENC, ['DLV-1', 'CAJA-77', 'Botellas', '1', '1']]], ['Vacía', [[]]]]));
+    expect(evaluarDivision(c, null)).toEqual({ plan: null, exceso: null, variasHojas: null });
+  });
+});

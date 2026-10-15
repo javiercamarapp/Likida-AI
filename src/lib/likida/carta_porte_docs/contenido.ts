@@ -43,6 +43,8 @@ export interface ContenidoDoc {
   tabla: Hoja[] | null;
   /** El árbol del XML ya parseado (sin prefijos de namespace), si es XML. En `json` es el árbol del JSON ya limpio (sin claves prohibidas). */
   xml: unknown | null;
+  /** T-A3-14: las pestañas de un libro que son UN mismo embarque (una mercancía por pestaña); la pone el servicio, el modelo lo lee. */
+  hojasMismoEmbarque?: string[];
   /** Avisos de la lectura (hojas recortadas, PDF con muchas páginas…). */
   avisos: string[];
   /** Solo para correo: lo que declara la cabecera. */
