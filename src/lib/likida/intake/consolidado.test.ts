@@ -546,9 +546,8 @@ describe('FASE 1 — equivalencia sobre un ECC12 SINTÉTICO: los litros sobreviv
   // ESTRUCTURA: los RFC son de relleno (`edn010101aa1`, `EST010101AAA`), el
   // UUID es `1111…5555` y el comprobante ni siquiera declara `FormaPago`.
   // El repo NO tiene —ni ha tenido nunca— un CFDI con complemento ECC emitido
-  // de verdad: no hay un solo archivo `.xml` en el árbol y los otros dos
-  // fixtures ECC (`cfdi_xml.test.ts`, `pruebas-manuales/consolidado-real.
-  // prueba.ts`) son este mismo, con otro nombre.
+  // de verdad: no hay un solo archivo `.xml` en el árbol y los otro
+  // fixture ECC (`cfdi_xml.test.ts`) es este mismo, con otro nombre.
   //
   // Importa decirlo aquí porque el plan de cierre del ciclo pide "prueba de
   // equivalencia contra un ECC real" Y, con el MISMO documento en la mano,

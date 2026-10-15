@@ -105,9 +105,8 @@ export function rangoFechasLineas(lineas: CfdiLineaXml[]): { desde: string; hast
  *
  * Hasta hoy la comparación era `l.tipoCombustible === 'Diesel'`, EXACTA:
  * mayúscula inicial, sin acento, sin espacios. El repo no tiene —ni ha
- * tenido nunca— un solo CFDI con complemento ECC emitido de verdad (los tres
- * fixtures del repo son strings sintéticos; ver `pruebas-manuales/
- * consolidado-real.prueba.ts`, que dice literal "real en estructura"), así
+ * tenido nunca— un solo CFDI con complemento ECC emitido de verdad (los
+ * fixtures del repo son strings sintéticos, p. ej. `cfdi_xml.test.ts`), así
  * que nadie ha visto con qué exactitud tipográfica timbra un emisor real ese
  * atributo. Un `"DIESEL"`, un `"Diésel"` o un `" Diesel "` —las tres formas
  * en que un emisor puede escribir LA MISMA PALABRA— devolvían `undefined`, y
