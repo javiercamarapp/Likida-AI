@@ -185,3 +185,62 @@ describe('catálogos', () => {
     expect(claveUnidadDeTexto('tarima')).toBeNull();
   });
 });
+
+// ── T-A3-17 · formas reales de las muestras M2–M5 (todo sintético) ─────────────
+describe('normalizarNumero: formas de M2–M5', () => {
+  it('M2: coma decimal con unidad km pegada («874,11 km») → 874.11', () => {
+    const r = normalizarNumero('874,11 km');
+    expect(r.valor).toBe(874.11);
+    expect(r.ambiguo).toBe(false);
+  });
+  it('M2: «874.11 KM» y «1 874,11 kms» también', () => {
+    expect(normalizarNumero('874.11 KM').valor).toBe(874.11);
+    expect(normalizarNumero('1 874,11 kms').valor).toBe(1874.11);
+  });
+  it('M3: punto decimal en la fila («1999.350») se lee 1999.35', () => {
+    const r = normalizarNumero('1999.350');
+    expect(r.valor).toBe(1999.35);
+    expect(r.ambiguo).toBe(false);
+  });
+  it('M3: punto de miles en el total («14.029») con perfil miles «.» → 14029 sin ambigüedad', () => {
+    const r = normalizarNumero('14.029', '.');
+    expect(r.valor).toBe(14029);
+    expect(r.ambiguo).toBe(false);
+  });
+  it('M3: «14.029» sin perfil es ambiguo (nunca se resuelve en silencio)', () => {
+    expect(normalizarNumero('14.029').ambiguo).toBe(true);
+  });
+  it('M3: «1999.350» con perfil miles «.» no se confunde con miles (tiene 4 dígitos antes del punto)', () => {
+    expect(normalizarNumero('1999.350', '.').valor).toBe(1999.35);
+  });
+  it('M4: «14 502 lb» → 14502 (la unidad se quita; la conversión es de derivar)', () => {
+    expect(normalizarNumero('14 502 lb').valor).toBe(14502);
+  });
+  it('regresión: «1,234.50» y «1.234,50» valen lo mismo', () => {
+    expect(normalizarNumero('1,234.50').valor).toBe(1234.5);
+    expect(normalizarNumero('1.234,50').valor).toBe(1234.5);
+  });
+  it('un número ambiguo en un campo de peso deja la nota que dispara «confirmar»', () => {
+    const n = normalizarValor(merc('peso_kg'), '14.029');
+    expect(n.notas.join(' ')).toMatch(/confirma la cifra/);
+    expect(n.penalizacion).toBeGreaterThan(0);
+  });
+  it('con perfil miles «.» el mismo campo queda sin nota ni penalización', () => {
+    const n = normalizarValor(merc('peso_kg'), '14.029', { miles: '.' });
+    expect(n.valor).toBe('14029');
+    expect(n.notas).toEqual([]);
+    expect(n.penalizacion).toBe(0);
+  });
+});
+
+describe('unidades: PZA y claves que no son del SAT', () => {
+  it('M3: «PZA» y «PIEZA» → H87', () => {
+    expect(claveUnidadDeTexto('PZA')).toBe('H87');
+    expect(claveUnidadDeTexto('PIEZA')).toBe('H87');
+    expect(normalizarValor(merc('clave_unidad'), 'PZA').valor).toBe('H87');
+  });
+  it('«20» y «1» no se traducen a ninguna clave (no se adivina)', () => {
+    expect(claveUnidadDeTexto('20')).toBeNull();
+    expect(claveUnidadDeTexto('1')).toBeNull();
+  });
+});

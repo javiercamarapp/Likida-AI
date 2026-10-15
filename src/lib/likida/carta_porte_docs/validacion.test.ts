@@ -258,6 +258,56 @@ describe('derivados', () => {
   });
 });
 
+describe('T-A3-17 · formas reales de M2–M5', () => {
+  it('M4: 14 502 lb → 6 577.997 kg (≈ 6 578) con la nota «Convertido de libras»', () => {
+    const e = extraccionAtlasOk();
+    e.mercancias[0].peso_kg = cv('14 502'); e.mercancias[0].peso_unidad = cv('lb');
+    e.mercancias[0].cantidad = cv('26'); e.mercancias[0].clave_unidad = cv('H87'); delete e.campos.peso_bruto_total;
+    completarDerivados(e);
+    expect(e.mercancias[0].peso_kg.valor).toBe('6577.997');
+    expect(e.mercancias[0].peso_unidad.valor).toBe('KGM');
+    expect(e.mercancias[0].peso_kg.notas?.join(' ')).toMatch(/Convertido de libras/);
+  });
+  it('M4: la conversión de libras es idempotente', () => {
+    const e = extraccionAtlasOk();
+    e.mercancias[0].peso_kg = cv('14502'); e.mercancias[0].peso_unidad = cv('LBS');
+    completarDerivados(e); completarDerivados(e);
+    expect(e.mercancias[0].peso_kg.valor).toBe('6577.997');
+  });
+  it('unidad «20» como clave: no se acepta (confirmar) y el valor queda en unidad_texto', () => {
+    const e = extraccionAtlasOk();
+    e.mercancias[0].clave_unidad = cv('20'); delete e.mercancias[0].unidad_texto;
+    completarDerivados(e);
+    expect(e.mercancias[0].unidad_texto.valor).toBe('20');
+    expect(codigos(e)).toContain('confirmar:unidad_no_sat:clave_unidad#0');
+    expect(validar(e).listoParaAprobar).toBe(false);
+  });
+  it('unidad «1» igual; si ya había unidad_texto no se pisa', () => {
+    const e = extraccionAtlasOk();
+    e.mercancias[0].clave_unidad = cv('1'); e.mercancias[0].unidad_texto = cv('Bulto');
+    completarDerivados(e);
+    expect(e.mercancias[0].unidad_texto.valor).toBe('Bulto');
+    expect(codigos(e)).toContain('confirmar:unidad_no_sat:clave_unidad#0');
+  });
+  it('unidad «20» que un humano confirmó deja de estorbar', () => {
+    const e = extraccionAtlasOk();
+    e.mercancias[0].clave_unidad = cv('20', 1, 'humano');
+    expect(codigos(e)).not.toContain('confirmar:unidad_no_sat:clave_unidad#0');
+  });
+  it('unidad PZA (texto) se traduce a H87 y queda lista', () => {
+    const e = extraccionAtlasOk();
+    delete e.mercancias[0].clave_unidad; e.mercancias[0].unidad_texto = cv('PZA');
+    completarDerivados(e);
+    expect(e.mercancias[0].clave_unidad.valor).toBe('H87');
+    expect(codigos(e)).not.toContain('confirmar:unidad_no_sat:clave_unidad#0');
+  });
+  it('M3: el total ambiguo «14.029» sin perfil pide confirmar la cifra', () => {
+    const e = extraccionAtlasOk();
+    e.campos.peso_bruto_total = { ...cv('14029'), notas: ['Número ambiguo (punto/coma de miles o decimal): confirma la cifra.'] };
+    expect(codigos(e)).toContain('confirmar:normalizacion_dudosa:peso_bruto_total');
+  });
+});
+
 describe('confianzaMinimaCritica', () => {
   it('es la menor entre los críticos presentes', () => {
     const e = extraccionAtlasOk(); e.campos.origen_rfc = cv(RFC.atlas, 0.4); e.campos.origen_nombre = cv('x', 0.1);

@@ -24,10 +24,16 @@ export function completarDerivados(e: Extraccion): Extraccion {
         fila.peso_kg = {
           ...peso,
           valor: redondea(n * FACTOR_A_KG[unidadPeso]),
-          notas: [...(peso.notas ?? []), `El documento da el peso en ${unidadPeso}: se convirtió a kilogramos (×${FACTOR_A_KG[unidadPeso]}).`],
+          notas: [...(peso.notas ?? []), `${unidadPeso === 'LBR' ? 'Convertido de libras' : `El documento da el peso en ${unidadPeso}`}: se convirtió a kilogramos (×${FACTOR_A_KG[unidadPeso]}).`],
         };
         fila.peso_unidad = { ...fila.peso_unidad!, valor: 'KGM' };
       }
+    }
+    // 1b. Una «clave» numérica de 1 o 2 dígitos («20», «1») no es del SAT: el valor se conserva como texto de la unidad
+    //     (sin pisar uno existente) y la validación pide confirmar la clave.
+    const claveCruda = fila.clave_unidad?.valor;
+    if (claveCruda && /^\d{1,2}$/.test(claveCruda) && fila.clave_unidad.origen !== 'humano' && !fila.unidad_texto?.valor) {
+      fila.unidad_texto = { ...fila.clave_unidad, notas: [...(fila.clave_unidad.notas ?? []), `«${claveCruda}» venía como clave de unidad pero no es una clave SAT; se conserva como texto.`] };
     }
     // 2. La clave de unidad sale del texto de la unidad cuando es inequívoco.
     if (!fila.clave_unidad?.valor && fila.unidad_texto?.valor) {
