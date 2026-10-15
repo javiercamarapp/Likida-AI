@@ -12,6 +12,7 @@
 import { ESTADOS_SAT } from './catalogos';
 import type { CampoValor, Extraccion } from './campos';
 import { normalizarNumero } from './normalizar';
+import { aplicarReglasGuia, type ReglasGuia } from './validacion';
 import { LAYOUT_NORMAL, layoutDe, layoutPuedeEnviarse, type ColumnaTabla, type EntradaCelda, type LayoutPlantilla, type TablaLayout, type TransformacionPlantilla } from './plantilla_tms.layout';
 
 export type ValorCelda = string | number | null;
@@ -34,6 +35,12 @@ export interface ContextoPlantilla {
   uso?: 'descarga' | 'envio';
   /** Avisos de la elección de plantilla (ver `elegirPlantilla`), que se suman a los del armado. */
   avisos?: string[];
+  /**
+   * Reglas de dependencia de la Guía de llenado (T-A3-45): no se escribe lo que la Guía dice vacío (embalaje sin material
+   * peligroso, pedimento en exportación…) y se limpian descripción y razón social, con aviso de lo cambiado. Ausente = las
+   * reglas de la Guía; `false` = ninguna; un objeto ajusta o apaga reglas sueltas.
+   */
+  reglasGuia?: Partial<ReglasGuia> | false;
 }
 
 export interface PlantillaConstruida {
@@ -164,8 +171,11 @@ function ponerIdDestino(sal: PlantillaConstruida, hoja: string, celda: string, c
  * La plantilla «nueva» aún no está especificada (bloqueo B-2): su layout no está verificado, así que solo se usa para
  * DESCARGAR (`ctx.uso:'descarga'`); para enviar se genera la normal y se avisa.
  */
-export function construirPlantilla(ext: Extraccion, ctx: ContextoPlantilla, layoutExplicito?: LayoutPlantilla): PlantillaConstruida {
+export function construirPlantilla(extOriginal: Extraccion, ctx: ContextoPlantilla, layoutExplicito?: LayoutPlantilla): PlantillaConstruida {
   const sal: PlantillaConstruida = { hojas: {}, faltantes: [], avisos: [...(ctx.avisos ?? [])] };
+  const guia = aplicarReglasGuia(extOriginal, ctx.reglasGuia);
+  const ext = guia.extraccion;
+  sal.avisos.push(...guia.avisos);
   let layout = layoutExplicito ?? layoutDe(ctx.plantilla);
   if (!layoutPuedeEnviarse(layout) && (ctx.uso ?? 'envio') === 'envio') {
     layout = LAYOUT_NORMAL;

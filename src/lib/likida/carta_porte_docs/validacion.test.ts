@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import type { Extraccion } from './campos';
 import { completarDerivados } from './derivar';
-import { CODIGOS_SUMA, confianzaMinimaCritica, problemaRfc, validarExtraccion } from './validacion';
+import {
+  CODIGOS_SUMA, aplicarReglasGuia, confianzaMinimaCritica, limpiarRazonSocial, problemaRfc, quitarCaracteresEspeciales, reglaDescripcionSinEspeciales, reglaDomicilioSoloMexico, reglaEmbalajeSoloPeligroso, reglaLongitudes, reglaPedimentoSoloImportacion,
+  reglaRazonSocialSinPuntuacion, reglaTipoMateria, tipoOperacion, validarExtraccion,
+} from './validacion';
 import { cv, extraccionAtlasOk, RFC, rfcValido } from './documentos_sinteticos.fixture';
 
 const AHORA = new Date('2026-10-01T12:00:00Z');
@@ -384,5 +387,162 @@ describe('verificación de sumas (piezas / kg / m³)', () => {
   it('el hallazgo viejo peso_suma conserva su severidad (confirmar)', () => {
     const e = extraccionAtlasOk(); e.campos.peso_bruto_total = cv('9000');
     expect(codigos(e)).toContain('confirmar:peso_suma:peso_bruto_total');
+  });
+});
+
+// ── T-A3-45 · reglas de dependencia de la Guía de llenado (una prueba por regla, filas sintéticas) ────────────────────
+describe('reglas de la Guía de llenado (T-A3-45)', () => {
+  /** Documento limpio al que se le pone lo que cada prueba necesita. */
+  const base = (campos: Record<string, string> = {}, merc: Record<string, string> = {}): Extraccion => {
+    const e = extraccionAtlasOk();
+    for (const [k, v] of Object.entries(campos)) e.campos[k] = cv(v);
+    for (const [k, v] of Object.entries(merc)) e.mercancias[0][k] = cv(v);
+    return e;
+  };
+  const guia = (e: Extraccion, op = {}) => validar(e, op).hallazgos.filter((h) => h.codigo.startsWith('guia_')).map((h) => `${h.severidad}:${h.codigo}:${h.campo}${h.renglon === null ? '' : '#' + h.renglon}`);
+
+  it('el documento limpio no dispara ninguna regla nueva', () => {
+    expect(guia(extraccionAtlasOk())).toEqual([]);
+  });
+
+  describe('tipoOperacion', () => {
+    it('del régimen (documento o primera mercancía) y, sin régimen, de transp_internac', () => {
+      expect(tipoOperacion(base({}, { regimen_aduanero: 'EXD' }))).toBe('exportacion');
+      expect(tipoOperacion(base({ regimen_aduanero: 'IMD' }))).toBe('importacion');
+      expect(tipoOperacion(base({}, { regimen_aduanero: 'itr' }))).toBe('importacion');
+      expect(tipoOperacion(base({ transp_internac: 'false' }))).toBe('nacional');
+      expect(tipoOperacion(base())).toBe('desconocida'); // sin dato no se adivina
+      expect(tipoOperacion(base({ transp_internac: 'false' }, { regimen_aduanero: 'EXD' }))).toBe('exportacion');
+    });
+  });
+
+  describe('1 · embalaje solo si hay material peligroso', () => {
+    it('NO peligroso con embalaje o su descripción → aviso; peligroso o sin embalaje → nada', () => {
+      expect(reglaEmbalajeSoloPeligroso(base({}, { embalaje: '4G', material_peligroso: 'false' }))).toMatchObject([{ severidad: 'aviso', codigo: 'guia_embalaje_sin_peligroso', campo: 'embalaje', renglon: 0 }]);
+      expect(reglaEmbalajeSoloPeligroso(base({}, { embalaje_descripcion: 'Caja de carton' }))).toMatchObject([{ campo: 'embalaje_descripcion' }]);
+      expect(reglaEmbalajeSoloPeligroso(base({}, { embalaje: '4G', material_peligroso: 'true' }))).toEqual([]);
+      expect(reglaEmbalajeSoloPeligroso(base({}, { material_peligroso: 'false' }))).toEqual([]);
+    });
+    it('el aviso no frena la aprobación', () => {
+      const r = validar(base({}, { embalaje: '1A', material_peligroso: 'false' }));
+      expect(r.listoParaAprobar).toBe(true);
+    });
+  });
+
+  describe('2 · pedimento y RFC importador solo en importación', () => {
+    it('exportación y nacional con pedimento → aviso; importación o sin dato → nada', () => {
+      const ped = { pedimento: '24 16 3456 4000123' }; // grep-limpio:ok
+      expect(reglaPedimentoSoloImportacion(base({}, { ...ped, regimen_aduanero: 'EXD' }))).toMatchObject([{ severidad: 'aviso', codigo: 'guia_pedimento_sin_importacion', renglon: 0 }]);
+      expect(reglaPedimentoSoloImportacion(base({ transp_internac: 'false' }, ped))).toHaveLength(1);
+      expect(reglaPedimentoSoloImportacion(base({}, { ...ped, regimen_aduanero: 'IMD' }))).toEqual([]);
+      expect(reglaPedimentoSoloImportacion(base({}, ped))).toEqual([]);
+    });
+    it('el RFC del importador en exportación también avisa', () => {
+      const h = reglaPedimentoSoloImportacion(base({}, { regimen_aduanero: 'EXD', rfc_importador: RFC.destino2 }));
+      expect(h).toMatchObject([{ codigo: 'guia_rfc_importador_sin_importacion', campo: 'rfc_importador' }]);
+    });
+  });
+
+  describe('3 · tipo de materia 01–05; con 05 hace falta la descripción', () => {
+    it('01 a 05 válidos; fuera de rango o mal formado → bloqueo', () => {
+      for (const t of ['01', '02', '03', '04']) expect(reglaTipoMateria(base({}, { tipo_materia: t }))).toEqual([]);
+      for (const t of ['00', '06', '5', 'AB', '10']) expect(reglaTipoMateria(base({}, { tipo_materia: t }))).toMatchObject([{ severidad: 'bloqueo', codigo: 'guia_tipo_materia' }]);
+      expect(validar(base({}, { tipo_materia: '06' })).listoParaAprobar).toBe(false);
+    });
+    it('05 sin descripción de la materia → por confirmar; con descripción → nada; sin tipo → nada', () => {
+      expect(reglaTipoMateria(base({}, { tipo_materia: '05' }))).toMatchObject([{ severidad: 'confirmar', codigo: 'guia_materia_05_sin_descripcion' }]);
+      expect(reglaTipoMateria(base({}, { tipo_materia: '05', descripcion_materia: 'Equipo de computo' }))).toEqual([]);
+      expect(reglaTipoMateria(base())).toEqual([]);
+    });
+  });
+
+  describe('4 · cantidad y peso mayores que cero', () => {
+    it('cero o negativo bloquea (regla ya existente, probada contra la Guía)', () => {
+      expect(codigos(base({}, { cantidad: '0' }))).toContain('bloqueo:numero_no_positivo:cantidad#0');
+      expect(codigos(base({}, { peso_kg: '-5' }))).toContain('bloqueo:numero_no_positivo:peso_kg#0');
+      expect(codigos(base({}, { peso_kg: '0' }))).toContain('bloqueo:numero_no_positivo:peso_kg#0');
+      expect(codigos(base())).not.toContain('bloqueo:numero_no_positivo:cantidad#0');
+    });
+  });
+
+  describe('5 · caja hasta 15 caracteres y referencia hasta 30', () => {
+    it('en el límite pasa; uno más bloquea', () => {
+      expect(reglaLongitudes(base({ caja_numero: 'A'.repeat(15), folio_cliente: 'B'.repeat(30) }))).toEqual([]);
+      expect(reglaLongitudes(base({ caja_numero: 'A'.repeat(16) }))).toMatchObject([{ severidad: 'bloqueo', codigo: 'guia_caja_larga', campo: 'caja_numero', renglon: null }]);
+      expect(reglaLongitudes(base({ folio_cliente: 'B'.repeat(31) }))).toMatchObject([{ severidad: 'bloqueo', codigo: 'guia_referencia_larga', campo: 'folio_cliente' }]);
+      expect(guia(base({ caja_numero: 'A'.repeat(16) }))).toContain('bloqueo:guia_caja_larga:caja_numero');
+    });
+    it('los límites son parámetros del perfil', () => {
+      expect(reglaLongitudes(base({ caja_numero: 'A'.repeat(20) }), 25, 30)).toEqual([]);
+      expect(guia(base({ caja_numero: 'A'.repeat(20) }), { reglasGuia: { maxCaja: 25 } })).toEqual([]);
+    });
+  });
+
+  describe('6 · descripción sin caracteres especiales', () => {
+    it('detecta y nombra los signos; el saneo los quita', () => {
+      const e = base({}, { descripcion: 'Tubo 5" #12 & cia' });
+      expect(reglaDescripcionSinEspeciales(e)).toMatchObject([{ severidad: 'aviso', codigo: 'guia_descripcion_especiales' }]);
+      expect(reglaDescripcionSinEspeciales(e)[0].mensaje).toContain('«"»');
+      expect(quitarCaracteresEspeciales('Tubo 5" #12 & cia')).toBe('Tubo 5 12 cia');
+      expect(quitarCaracteresEspeciales('Pieza (nº 3), tamaño 10/12 - año.')).toBe('Pieza (nº 3), tamaño 10/12 - año.'); // acentos, ñ y .,-/() se conservan
+      expect(reglaDescripcionSinEspeciales(base({}, { descripcion: 'Botellas de vidrio vacías' }))).toEqual([]);
+    });
+    it('los signos permitidos son parámetro del perfil', () => {
+      expect(reglaDescripcionSinEspeciales(base({}, { descripcion: 'Tubo 5"' }), '"')).toEqual([]);
+    });
+  });
+
+  describe('7 · razón social sin puntos ni comas', () => {
+    it('avisa por cada nombre con . o ,; el saneo los quita', () => {
+      const e = base({ origen_nombre: 'Atlas, S.A. de C.V.', destino_nombre: 'Monterrey SA de CV' });
+      expect(reglaRazonSocialSinPuntuacion(e)).toMatchObject([{ severidad: 'aviso', codigo: 'guia_razon_social_puntuacion', campo: 'origen_nombre' }]);
+      expect(limpiarRazonSocial('Atlas, S.A. de C.V.')).toBe('Atlas SA de CV');
+      expect(reglaRazonSocialSinPuntuacion(base())).toEqual([]);
+    });
+    it('cubre también los destinos 2..4', () => {
+      expect(reglaRazonSocialSinPuntuacion(base({ destino_2_nombre: 'Otro S.A.' }))).toMatchObject([{ campo: 'destino_2_nombre' }]);
+    });
+  });
+
+  describe('8 · país distinto de MEX ⇒ sin claves de colonia, localidad ni municipio', () => {
+    it('país extranjero con claves → aviso por clave; MEX o sin país → nada', () => {
+      const claves = { destino_colonia_clave: '0001', destino_localidad_clave: '01', destino_municipio_clave: '039' };
+      expect(reglaDomicilioSoloMexico(base({ destino_pais: 'USA', ...claves })).map((h) => h.campo)).toEqual(['destino_colonia_clave', 'destino_localidad_clave', 'destino_municipio_clave']);
+      expect(reglaDomicilioSoloMexico(base({ destino_pais: 'MEX', ...claves }))).toEqual([]);
+      expect(reglaDomicilioSoloMexico(base(claves))).toEqual([]); // país vacío: no se adivina
+      expect(reglaDomicilioSoloMexico(base({ destino_pais: 'USA', destino_colonia: 'Zona Dos' }))).toEqual([]); // el nombre sí puede ir
+    });
+  });
+
+  describe('integración y parámetros por perfil', () => {
+    it('reglasGuia:false apaga todo; un objeto apaga reglas sueltas', () => {
+      const e = base({ caja_numero: 'A'.repeat(20), origen_nombre: 'A, SA' }, { embalaje: '4G' });
+      expect(guia(e).length).toBeGreaterThanOrEqual(3);
+      expect(guia(e, { reglasGuia: false })).toEqual([]);
+      const sin = guia(e, { reglasGuia: { longitudes: false, razonSocialSinPuntuacion: false } });
+      expect(sin).toEqual(['aviso:guia_embalaje_sin_peligroso:embalaje#0']);
+    });
+  });
+
+  describe('aplicarReglasGuia (lo que consume la exportación)', () => {
+    it('devuelve una copia saneada con avisos en llano y no toca la original', () => {
+      const e = base({ origen_nombre: 'Atlas, S.A.', destino_pais: 'USA', destino_colonia_clave: '0001' }, { embalaje: '4G', embalaje_descripcion: 'Caja', descripcion: 'Tubo 5"', regimen_aduanero: 'EXD', pedimento: '24 16 3456 4000123' }); // grep-limpio:ok
+      const antes = JSON.stringify(e);
+      const { extraccion, avisos } = aplicarReglasGuia(e, undefined);
+      expect(JSON.stringify(e)).toBe(antes);
+      expect(extraccion.mercancias[0].embalaje.valor).toBeNull();
+      expect(extraccion.mercancias[0].embalaje_descripcion.valor).toBeNull();
+      expect(extraccion.mercancias[0].pedimento.valor).toBeNull();
+      expect(extraccion.mercancias[0].descripcion.valor).toBe('Tubo 5');
+      expect(extraccion.campos.origen_nombre.valor).toBe('Atlas SA');
+      expect(extraccion.campos.destino_colonia_clave.valor).toBeNull();
+      expect(avisos.length).toBe(5);
+      expect(avisos.join(' ')).toMatch(/embalaje.*no es material peligroso/);
+    });
+    it('sin nada que corregir no avisa y devuelve lo mismo; con false, tampoco', () => {
+      const e = extraccionAtlasOk();
+      expect(aplicarReglasGuia(e, undefined)).toEqual({ extraccion: e, avisos: [] });
+      expect(aplicarReglasGuia(base({}, { embalaje: '4G' }), false).avisos).toEqual([]);
+    });
   });
 });

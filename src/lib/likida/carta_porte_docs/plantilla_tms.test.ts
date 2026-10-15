@@ -36,7 +36,8 @@ function extraccion(sobre: Record<string, string | null> = {}, merc: Record<stri
   return { campos: conv(campos), mercancias: [conv(m)] };
 }
 
-const ctx = { clienteInterno: null, plantilla: 'normal' as const };
+// Las pruebas de mapeo celda a celda miden DÓNDE cae cada dato, no las reglas de la Guía (T-A3-45, más abajo): sin reglas.
+const ctx = { clienteInterno: null, plantilla: 'normal' as const, reglasGuia: false as const };
 const hoja = (r: ReturnType<typeof construirPlantilla>, n: string) => r.hojas[n];
 
 describe('construirPlantilla', () => {
@@ -417,5 +418,61 @@ describe('LAYOUT_NORMAL contra la forma real de la plantilla (T-A3-43)', () => {
     expect(layoutPuedeEnviarse(LAYOUT_NORMAL)).toBe(true);
     expect(LAYOUT_NUEVA.provisional).toBe(true);
     expect(layoutPuedeEnviarse(LAYOUT_NUEVA)).toBe(false);
+  });
+});
+
+// ── T-A3-45 · reglas de dependencia de la Guía de llenado en el libro exportado ─────────────────────────────────────
+describe('plantilla del TMS con las reglas de la Guía de llenado (T-A3-45)', () => {
+  const ctxGuia = { clienteInterno: null, plantilla: 'normal' as const }; // sin `reglasGuia`: rigen las de la Guía
+  const merc = (r: ReturnType<typeof construirPlantilla>) => hoja(r, 'Mercancias');
+  const leer = (r: ReturnType<typeof construirPlantilla>) => XLSX.read(aXlsxPlantillaTms(r), { type: 'array' });
+
+  it('NO peligroso: el libro no trae embalaje ni su descripción; peligroso: sí', () => {
+    const no = construirPlantilla(extraccion(), ctxGuia);
+    expect(merc(no).G22.valor).toBeNull();
+    expect(merc(no).H22.valor).toBeNull();
+    const l = leer(no);
+    expect(l.Sheets.Mercancias.G22).toBeUndefined();
+    expect(l.Sheets.Mercancias.H22).toBeUndefined();
+    expect(no.avisos.join(' ')).toMatch(/embalaje.*no es material peligroso.*mercancía 1/);
+    const si = construirPlantilla(extraccion({}, { material_peligroso: 'true', clave_material_peligroso: '1203' }), ctxGuia);
+    expect(merc(si).G22.valor).toBe('4G');
+    expect(merc(si).H22.valor).toBe('Caja de carton');
+    expect(merc(si).L22.valor).toBe('SI');
+  });
+
+  it('exportación: pedimento vacío; importación: se conserva', () => {
+    const expo = construirPlantilla(extraccion(), ctxGuia);
+    expect(merc(expo).K22.valor).toBeNull();
+    expect(leer(expo).Sheets.Mercancias.K22).toBeUndefined();
+    expect(expo.avisos.join(' ')).toMatch(/pedimento.*exportación/);
+    const impo = construirPlantilla(extraccion({}, { regimen_aduanero: 'IMD' }), ctxGuia);
+    expect(merc(impo).K22.valor).toBe('24 16 3456 4000123');
+    expect(impo.avisos.join(' ')).not.toMatch(/pedimento/);
+  });
+
+  it('descripción y razón social salen limpias, con aviso de lo cambiado', () => {
+    const r = construirPlantilla(extraccion({ origen_nombre: 'Origen, S.A. de C.V.' }, { descripcion: 'Equipo "X" #5' }), ctxGuia);
+    expect(merc(r).C22.valor).toBe('Equipo X 5');
+    expect(hoja(r, 'RemintenteDestinatario').C11.valor).toBe('Origen SA de CV');
+    expect(r.avisos.join(' ')).toMatch(/caracteres especiales de la descripción/);
+    expect(r.avisos.join(' ')).toMatch(/puntos y comas de la razón social/);
+  });
+
+  it('país ≠ MEX: sin claves de colonia, localidad ni municipio del destino; MEX conserva las del origen', () => {
+    const r = construirPlantilla(extraccion({ destino_colonia_clave: '0009', destino_localidad_clave: '05', destino_municipio_clave: '012' }), ctxGuia);
+    const rd = hoja(r, 'RemintenteDestinatario');
+    expect(rd.H50.valor).toBeNull(); expect(rd.K50.valor).toBeNull(); expect(rd.M50.valor).toBeNull();
+    expect(rd.I50.valor).toBe('Zona Dos'); // los nombres sí
+    expect(rd.C17.valor).toBe('0001'); expect(rd.C20.valor).toBe('01'); expect(rd.C22.valor).toBe('039'); // origen MEX intacto
+  });
+
+  it('con `reglasGuia: false` el libro sale como antes, y la extracción original no se modifica', () => {
+    const e = extraccion();
+    const antes = JSON.stringify(e);
+    construirPlantilla(e, ctxGuia);
+    expect(JSON.stringify(e)).toBe(antes);
+    expect(merc(construirPlantilla(e, { ...ctxGuia, reglasGuia: false })).K22.valor).toBe('24 16 3456 4000123');
+    expect(merc(construirPlantilla(e, { ...ctxGuia, reglasGuia: { pedimentoSoloImportacion: false } })).K22.valor).toBe('24 16 3456 4000123');
   });
 });
