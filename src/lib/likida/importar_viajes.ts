@@ -57,6 +57,8 @@ export interface FilaViajeImportada {
   despachoRef?: string;
   /** T-A5-20: estado de tránsito (patio / en ruta / pendiente de cruce) normalizado; solo existe si la celda trae algo que no sea vacío ni «OK». Va a `viaje.transito_*` (0804). */
   transito?: ResultadoTransito;
+  /** T-A5-22: «Fecha Salida» que sella el TMS, con hora, como instante UTC (ISO). Solo existe si la celda trae fecha CON hora (la fecha sola no es una marca). Va a `viaje.tms_salida_en` (0804): es un candidato a hito, no un hito. */
+  tmsSalidaEn?: string;
 }
 
 export interface LecturaImportacion {
@@ -71,7 +73,7 @@ export interface LecturaImportacion {
 /** Encabezados que el mundo real usa. Minúsculas, sin acentos. */
 const COLUMNAS: Record<
   'folio' | 'origen' | 'destino' | 'fecha' | 'anticipo' | 'operadorNombre'
-  | 'unidad' | 'cliente' | 'ingreso' | 'km' | 'citaOrigen' | 'citaDestino' | 'despachoRef' | 'transito',
+  | 'unidad' | 'cliente' | 'ingreso' | 'km' | 'citaOrigen' | 'citaDestino' | 'despachoRef' | 'transito' | 'tmsSalida',
   string[]
 > = {
   folio: ['folio', 'viaje', 'no viaje', 'no. viaje', 'numero de viaje', 'id viaje', 'referencia'],
@@ -91,6 +93,9 @@ const COLUMNAS: Record<
   despachoRef: ['despacho', 'icident', 'incident', 'no despacho', 'no. despacho', 'numero de despacho', 'referencia de despacho'],
   // T-A5-20: el estado de tránsito que la flota mantiene a mano. «estado» a secas NO va: es ambiguo.
   transito: ['transito', 'estatus transito', 'estatus de transito', 'estado transito', 'estado de transito'],
+  // T-A5-22: la salida que sella el TMS (con segundos). «fecha salida» TAMBIÉN alimenta `fecha` (la fecha del viaje, como siempre):
+  // la misma celda se lee dos veces, una como día y otra —solo si trae hora— como marca del TMS.
+  tmsSalida: ['fecha salida', 'fecha de salida', 'fecha y hora de salida', 'salida tms', 'fecha salida tms'],
 };
 
 function normalizarEncabezado(v: unknown): string {
@@ -149,7 +154,7 @@ export function leerFechaImportada(v: unknown): string | null | 'ilegible' {
 /** ¿El archivo trae columnas de cita? Solo entonces hace falta conocer la zona de la flota (T-A5-05). */
 export function archivoTraeCitas(matriz: unknown[][]): boolean {
   const enc = (matriz[0] ?? []).map(normalizarEncabezado);
-  return enc.some((e) => COLUMNAS.citaOrigen.includes(e) || COLUMNAS.citaDestino.includes(e));
+  return enc.some((e) => COLUMNAS.citaOrigen.includes(e) || COLUMNAS.citaDestino.includes(e) || COLUMNAS.tmsSalida.includes(e));
 }
 
 /**
@@ -280,6 +285,8 @@ export function interpretarFilasViajes(
     const citaDestino = leerCita('citaDestino', 'cita descarga');
     const despachoRef = normalizarDespachoRef(celda('despachoRef'));
     const transito = normalizarEstadoTransito(celda('transito'), opciones.diccionarioTransito);
+    // T-A5-22: solo una fecha CON hora es una marca del TMS; el día solo ya quedó en `fechaInicio` y aquí no se inventa una hora.
+    const tmsSalida = leerFechaHoraImportada(celda('tmsSalida'), opciones.zona);
 
     viajes.push({
       folio,
@@ -296,6 +303,7 @@ export function interpretarFilasViajes(
       ...(citaDestino !== null ? { citaDestino } : {}),
       ...(despachoRef !== null ? { despachoRef } : {}),
       ...(transito !== null ? { transito } : {}),
+      ...(tmsSalida !== null && tmsSalida !== 'ilegible' ? { tmsSalidaEn: tmsSalida } : {}),
     });
   }
 
@@ -609,6 +617,8 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
       ...(f.despachoRef ? { despacho_ref: f.despachoRef } : {}),
       // T-A5-20: solo lo declarado en el archivo; nunca se infiere. La marca de tiempo es la de la importación.
       ...(f.transito ? { transito_estado: f.transito.estado, transito_texto_origen: f.transito.textoOrigen, transito_actualizado_en: new Date().toISOString() } : {}),
+      // T-A5-22: la marca del TMS es informativa (candidato a hito); la clave ausente no toca la columna.
+      ...(f.tmsSalidaEn ? { tms_salida_en: f.tmsSalidaEn } : {}),
       estatus: 'abierto',
     }));
     // Upsert que IGNORA duplicados contra `viaje_folio_unico` (0092): el que

@@ -4,7 +4,7 @@ import { MINUTOS_CLAIM_VENCIDO, type Deteccion, type PuertosCicloGps, type Resul
 import type { ConfigConductor } from './config';
 import { completarCruce, leerConfigConductor, liberarCruce, registrarEvento, registrarHito, reclamarCruce, sincronizarLegado, validarHito, type ViajeContexto } from './repo';
 import { aplicarVeredicto } from './repo_validacion';
-import { leerHitosDeViajes, leerMuestrasGps, leerSitiosGeometriaDeViajes, leerViajesActivos } from './trabajo';
+import { leerHitosDeViajes, leerMuestrasGps, leerSalidasTmsDeViajes, leerSitiosGeometriaDeViajes, leerViajesActivos } from './trabajo';
 import type { HitoFila } from './tipos';
 import type { Veredicto } from './validacion';
 
@@ -71,6 +71,31 @@ export async function aplicarDeteccion(
   return 'ok';
 }
 
+/**
+ * T-A5-22: registra `salida_carga` con la «Fecha Salida» del TMS. Misma escritura condicional que el chofer y el GPS
+ * (`esperado|escalado → recibido`): si otro llegó primero, `carrera` y no se toca nada. La hora del hito es la del sello del TMS.
+ * Validación `sistema` (no `gps`: el GPS no probó nada, solo no contradijo). Una salida no se sincroniza al legado.
+ */
+export async function aplicarSalidaTms(
+  v: ViajeContexto, h: HitoFila, marca: Date, config: ConfigConductor, ahora: Date, deps: DepsAplicarDeteccion = depsAplicarReales,
+): Promise<ResultadoAplicar> {
+  const r = await deps.registrarHito({
+    hito: h, fuente: 'sistema', interpretacion: 'sistema', confianza: null, waMessageId: null,
+    mensajeEn: marca, ahora, texto: null, contacto: null, omitir: [],
+  });
+  if (r !== 'ok') return r === 'carrera' ? 'carrera' : 'fallo';
+  const registrado: HitoFila = { ...h, estado: 'recibido', fuente: 'sistema', interpretacion: 'sistema', mensajeEn: marca.toISOString(), recibidoEn: ahora.toISOString() };
+  await deps.evento(registrado, 'recibido', { fuente: 'sistema', por: 'tms' });
+  const a = await deps.validarHito(registrado, 'sistema', ahora);
+  if (a === 'fallo') logger.warn('conductor.salida_tms_sin_validar', { viaje: v.id });
+  if (config.avisarOficinaSalida) {
+    try { await deps.avisarOficina({ viaje: v, hito: registrado, mensajeEn: marca, contacto: null, ahora }); } catch (e) {
+      logger.warn('conductor.salida_tms_aviso_oficina_fallo', { viaje: v.id, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return 'ok';
+}
+
 export function puertosCicloGpsReales(): PuertosCicloGps {
   return {
     viajes: leerViajesActivos,
@@ -82,5 +107,7 @@ export function puertosCicloGpsReales(): PuertosCicloGps {
     completar: (c, ahora) => completarCruce(c, ahora),
     liberar: (c) => liberarCruce(c),
     aplicar: (v, h, d, config, ahora) => aplicarDeteccion(v, h, d, config, ahora),
+    salidasTms: (ids) => leerSalidasTmsDeViajes(ids),
+    aplicarSalidaTms: (v, h, marca, config, ahora) => aplicarSalidaTms(v, h, marca, config, ahora),
   };
 }

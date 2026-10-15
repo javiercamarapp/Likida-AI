@@ -1212,3 +1212,25 @@ export async function leerTransitoViajes(tenantId: string, viajeIds: readonly st
   }
 }
 
+// ── T-A5-22: «Fecha Salida» sellada por el TMS (candidato a hito) ───────────
+
+/**
+ * T-A5-22: la marca de salida que el TMS selló en cada viaje (`viaje.tms_salida_en`, 0804), por id de viaje (ISO).
+ * Solo trae los viajes que SÍ tienen marca. Si la lectura falla (p. ej. la 0804 aún no está aplicada) devuelve `undefined`:
+ * el llamador no afirma nada y no registra nada.
+ */
+export async function leerSalidasTms(tenantId: string, viajeIds: readonly string[]): Promise<Map<string, string> | undefined> {
+  try {
+    const filas = viajeIds.length === 0 ? [] : await traerPorIds<Fila>([...viajeIds], (t) => acotada(supabaseAdmin()
+      .from('viaje').select('id, tms_salida_en').eq('tenant_id', tenantId).in('id', t).not('tms_salida_en', 'is', null), 'conductor.salida_tms') as never, 'conductor.salida_tms');
+    const m = new Map<string, string>();
+    for (const f of filas) {
+      const iso = s(f.tms_salida_en);
+      if (iso && Number.isFinite(Date.parse(iso))) m.set(String(f.id), iso);
+    }
+    return m;
+  } catch (e) {
+    logger.warn('conductor.salida_tms_no_leida', { err: e instanceof Error ? e.message : String(e) });
+    return undefined;
+  }
+}
