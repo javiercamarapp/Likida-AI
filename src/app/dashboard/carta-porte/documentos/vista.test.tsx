@@ -353,3 +353,75 @@ describe('VistaDocumentos · filtro por estado de envío', () => {
     expect(pasaFiltroEnvio({ id: 'p1', estado: 'por_revisar' }, envios, 'sin_envio')).toBe(false);
   });
 });
+
+describe('VistaRevision · perfil restringido (envío al TMS, sin viaje)', () => {
+  const aprobado = () => doc({ id: 'd9', estado: 'aprobado', aprobadoEn: 'x' });
+  const montar = (d: DocumentoFila, perfilRestringido: boolean, envio: React.ComponentProps<typeof VistaRevision>['envio'] = null) => html(
+    <VistaRevision doc={d} revision={revisionDe(d)} original={{ tipo: 'texto', texto: 'x' }} operadores={[{ id: 'o1', nombre: 'Operador Uno' }]} eventos={[]} acciones={{ revisar: accion }}
+      envio={envio} perfilRestringido={perfilRestringido} salida={{ folio: 'F-1' }} />,
+  );
+
+  it('por revisar con perfil: no hay selector de operador ni «crea o completa el viaje»; sí «No timbra nada»', () => {
+    const h = montar(doc(), true);
+    expect(h).not.toMatch(/Operador del viaje/);
+    expect(h).not.toMatch(/crea o completa el viaje/);
+    expect(h).toMatch(/prepara el envío al sistema del cliente/);
+    expect(h).toMatch(/No timbra nada/);
+  });
+
+  it('aprobado con perfil: ni «Crear el viaje», ni operador, ni enlace al borrador, aunque el documento tenga viaje', () => {
+    for (const d of [aprobado(), doc({ id: 'd9', estado: 'aprobado', aprobadoEn: 'x', viajeId: 'v1' })]) {
+      const h = montar(d, true, { estado: 'listo' });
+      expect(h).not.toMatch(/Crear el viaje|Actualizar el viaje/);
+      expect(h).not.toMatch(/cp-operador|Operador Uno/);
+      expect(h).not.toMatch(/\/borrador\//);
+      expect(conIntencion(h, 'viaje')).toBe(false);
+      expect(h).toMatch(/Envío al sistema del cliente/);
+    }
+  });
+
+  it('sin perfil todo sigue igual: operador, «Crear el viaje» y enlace al borrador', () => {
+    const sinViaje = montar(aprobado(), false);
+    expect(sinViaje).toMatch(/Crear el viaje/);
+    expect(sinViaje).toMatch(/cp-operador2/);
+    expect(conIntencion(sinViaje, 'viaje')).toBe(true);
+    expect(sinViaje).not.toMatch(/Envío al sistema del cliente/);
+    expect(montar(doc({ id: 'd9', estado: 'aprobado', aprobadoEn: 'x', viajeId: 'v1' }), false)).toMatch(/\/borrador\/v1/);
+    expect(montar(doc(), false)).toMatch(/Operador del viaje/);
+  });
+
+  it('cada estado del envío pinta su frase en lenguaje llano', () => {
+    const f = (envio: React.ComponentProps<typeof VistaRevision>['envio']) => montar(aprobado(), true, envio);
+    expect(f(null)).toMatch(/Aún no se ha enviado nada/);
+    expect(f({ estado: 'descartado' })).toMatch(/Aún no se ha enviado nada/);
+    expect(f({ estado: 'pendiente_prechequeo' })).toMatch(/Listo para enviar/);
+    expect(f({ estado: 'listo' })).toMatch(/Listo para enviar/);
+    expect(f({ estado: 'enviando' })).toMatch(/Enviándose al sistema del cliente/);
+    expect(f({ estado: 'enviado' })).toMatch(/Enviado\./);
+    expect(f({ estado: 'subido_a_mano' })).toMatch(/Subido a mano/);
+    const espera = f({ estado: 'pendiente_reque', proximaRevision: '2026-10-20T15:00:00.000Z' });
+    expect(espera).toMatch(/Esperando que exista el requerimiento — se reintentará el /);
+    expect(espera).toMatch(/2026|20/);
+    expect(f({ estado: 'pendiente_reque' })).toMatch(/Esperando que exista el requerimiento\./);
+    expect(f({ estado: 'error_transitorio' })).toMatch(/no contestó — se reintentará/);
+    const rechazo = f({ estado: 'rechazado_tms', motivo: 'hoja Mercancias, fila 22, campo Cantidad' });
+    expect(rechazo).toMatch(/lo rechazó: hoja Mercancias, fila 22, campo Cantidad — corrige y vuelve a aprobar/);
+  });
+
+  it('conserva los botones del modo manual (descargar plantilla y marcar subido a mano)', () => {
+    const h = montar(aprobado(), true, { estado: 'listo' });
+    expect(h).toMatch(/Descargar plantilla del TMS/);
+    expect(conIntencion(h, 'subido_a_mano')).toBe(true);
+  });
+});
+
+describe('VistaDocumentos · perfil restringido', () => {
+  const a = doc({ id: 'a1', estado: 'aprobado', nombreArchivo: 'uno.xlsx', viajeId: null });
+  it('la bandeja habla del envío al TMS y no de viajes; sin perfil, igual que siempre', () => {
+    const con = html(<VistaDocumentos datos={datos([a], { envios: { a1: 'listo' } })} acciones={ninguna} perfilRestringido />);
+    expect(con).toMatch(/Envío al TMS: En curso/);
+    expect(con).not.toMatch(/Sin viaje todavía|Con viaje/);
+    const sin = html(<VistaDocumentos datos={datos([a], { envios: { a1: 'listo' } })} acciones={ninguna} />);
+    expect(sin).toMatch(/Sin viaje todavía/);
+  });
+});

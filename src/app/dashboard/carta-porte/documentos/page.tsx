@@ -8,6 +8,7 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { dominioBuzon } from '@/lib/correo/buzon';
 import { direccionCp, generarTokenCp } from '@/lib/likida/carta_porte_docs/correo_entrante';
 import { validarConfigExport } from '@/lib/likida/carta_porte_docs/exportacion';
+import { flotaBajoPerfil } from '@/lib/likida/carta_porte_docs/envio';
 import { calcularMetricas } from '@/lib/likida/carta_porte_docs/metricas';
 import * as repo from '@/lib/likida/carta_porte_docs/repo';
 import { procesarDocumento, recibirDocumento } from '@/lib/likida/carta_porte_docs/servicio';
@@ -84,7 +85,7 @@ export default async function PaginaDocumentos({
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
 
   // Una base que no contesta NO se pinta como bandeja vacía.
-  const datos = await cargarDatos(tenantId);
+  const [datos, restringido] = await Promise.all([cargarDatos(tenantId), flotaBajoPerfil(tenantId)]);
 
   async function subir(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
@@ -217,6 +218,7 @@ export default async function PaginaDocumentos({
       datos={datos}
       sufijo={sufijoTenant(sp)}
       filtroEnvio={filtroEnvioDe(sp.envio)}
+      perfilRestringido={restringido}
       apiSufijo={sufijoTenant(sp) ? `&${sufijoTenant(sp).slice(1)}` : ''}
       acciones={{ subir, procesar, activarBuzon, guardarRemitentes, guardarExport, borrarExport, volverVersion }}
     />
