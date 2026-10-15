@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { BloqueCola, BloqueConteos, type ColaConductores, type ConteosConductores } from './vista';
+import { BloqueCola, BloqueConteos, TarjetaInsights, type ColaConductores, type ConteosConductores } from './vista';
+import { calcularInsights, type EntradaInsights, type HitoParaInsights } from '@/lib/likida/conductor/insights';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FE-6 (auditoría 24): "Esperan aceptar" salía de `getViajes(tenantId)` (los
@@ -156,5 +157,82 @@ describe('Conductores — datos de demostración rotulados y sin texto técnico 
         expect(visible, String(re)).not.toMatch(re);
       }
     }
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A5-32: la tarjeta de insights — qué pasó · qué significa · qué hacer, y la fuente de cada número.
+// Datos 100 % sintéticos: 20 hitos (14 por GPS, 4 por botón, 2 de oficina).
+// ═══════════════════════════════════════════════════════════════════════════
+
+const T0 = Date.parse('2026-03-02T12:00:00.000Z');
+const iso = (min: number) => new Date(T0 + min * 60_000).toISOString();
+const hitoI = (p: Partial<HitoParaInsights>): HitoParaInsights => ({ estado: 'recibido', fuente: 'sistema', mensajeEn: null, recibidoEn: null, ...p });
+
+function entradaI(p: Partial<EntradaInsights> = {}): EntradaInsights {
+  const hitos: HitoParaInsights[] = [];
+  const cruces: Array<{ detectadoEn: string; registradoEn: string }> = [];
+  for (let i = 0; i < 14; i++) {
+    hitos.push(hitoI({ fuente: 'sistema', estado: 'validado' }));
+    cruces.push({ detectadoEn: iso(i * 10), registradoEn: iso(i * 10 + (i + 1)) });
+  }
+  for (const r of [2, 4, 6, 8]) hitos.push(hitoI({ fuente: 'boton', mensajeEn: iso(0), recibidoEn: iso(r) }));
+  for (let i = 0; i < 2; i++) hitos.push(hitoI({ fuente: 'oficina', estado: 'validado' }));
+  return { hitos, cruces, episodios: [], viajesSinSitio: 0, lineaBase: { llamadasPorViaje: 2, registradaEn: '2026-02-20' }, ...p };
+}
+
+const pintarI = (e: EntradaInsights, discrepancias: number | null = null) =>
+  renderToStaticMarkup(<TarjetaInsights insights={calcularInsights(e)} dias={7} discrepancias={discrepancias} />);
+
+describe('Conductores — tarjeta de insights (T-A5-32)', () => {
+  it('todo verde: las tres secciones, la frase de la ficha y la fuente de cada número', () => {
+    const html = pintarI(entradaI());
+    expect(html).toContain('Qué pasó');
+    expect(html).toContain('Qué significa');
+    expect(html).toContain('Qué hacer');
+    expect(html).toContain('18 de 20 hitos se registraron sin que nadie los capturara');
+    expect(html).toContain('Tu equipo dejó de teclear esos 18 registros');
+    expect(html).toContain('Revisa los 2 que corrigió la oficina');
+    // llamadas evitadas = 18 × 2 = 36, rotulada como estimación con la fecha de la línea base
+    expect(html).toContain('36');
+    expect(html).toContain('Estimación con tu línea base de 2026-02-20');
+    // cada número trae fuente y rótulo
+    expect(html).toContain('fuente: viaje_hito.fuente');
+    expect(html).toContain('fuente: viaje_cruce_geocerca.registrado_en − detectado_en');
+    expect(html).toContain('medido');
+    expect(html).toContain('estimación');
+    // el tiempo del chofer no se presenta como la hora del evento físico
+    expect(html).toContain('no cuándo ocurrió el evento físico');
+  });
+
+  it('con excepciones y discrepancias GPS vs chofer: las dice y manda a atenderlas', () => {
+    const html = pintarI(entradaI({
+      hitos: [...entradaI().hitos, hitoI({ estado: 'escalado', fuente: null })],
+      episodios: [{ motivo: 'gps_obsoleto', aviso1En: iso(1), aviso2En: iso(21), escaladoEn: iso(41) }, { motivo: 'gps_detenido', aviso1En: iso(5), aviso2En: null, escaladoEn: null }],
+      viajesSinSitio: 3,
+    }), 4);
+    expect(html).toContain('Hay 4 hitos donde lo que dijo el chofer no coincide con la ubicación del GPS');
+    expect(html).toContain('Atiende 1 hitos escalados por falta de respuesta');
+    expect(html).toContain('Revisa 2 episodios');
+    expect(html).toContain('Asigna sitio a 3 viajes');
+    expect(html).toContain('Chofer vs GPS sin coincidir');
+    expect(html).toContain('viaje_senal_vida');
+  });
+
+  it('sin línea base: no inventa ahorro y pide la línea base', () => {
+    const html = pintarI(entradaI({ lineaBase: null }));
+    expect(html).toContain('Falta tu línea base: cuántas llamadas hacen hoy tus supervisores por viaje');
+    expect(html).toContain('No se puede estimar cuántas llamadas se evitaron sin tu línea base');
+    expect(html).not.toContain('Estimación con tu línea base');
+    expect(html).not.toContain('llamadas evitadas (estimación, no medición)');
+    // lo medido sigue ahí
+    expect(html).toContain('18 de 20 hitos');
+  });
+
+  it('lectura caída: lo dice, no pinta ceros', () => {
+    const html = renderToStaticMarkup(<TarjetaInsights insights={null} dias={7} />);
+    expect(html).toContain('No se pudieron leer los insights');
+    expect(html).not.toContain('Qué pasó');
   });
 });

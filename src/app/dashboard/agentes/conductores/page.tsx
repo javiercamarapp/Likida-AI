@@ -8,7 +8,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { ahoraMs } from '@/lib/saludo';
 import { sufijoTenant } from '../../sufijo';
-import { VistaAgenteConductores, type EsperaAceptar, type ConteosConductores, type ColaConductores } from './vista';
+import { VistaAgenteConductores, TarjetaInsights, type EsperaAceptar, type ConteosConductores, type ColaConductores } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
 import { ultimasCorridas } from '@/lib/likida/agentes/corridas';
@@ -19,7 +19,8 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { revalidatePath } from 'next/cache';
 import { FormaEstrategiaConductores, type ResultadoEstrategia } from '../estrategia-forma';
 import { Bloque, EsqTabla, vigilar } from '../../bloque';
-import { leerConfigConductor, leerDatosPreflight, leerEpisodiosParaTablero, leerSalidasTms, leerTransitoViajes } from '@/lib/likida/conductor/repo';
+import { calcularInsights } from '@/lib/likida/conductor/insights';
+import { leerConfigConductor, leerEntradaInsights, leerDatosPreflight, leerEpisodiosParaTablero, leerSalidasTms, leerTransitoViajes } from '@/lib/likida/conductor/repo';
 import { evaluarPreflight } from '@/lib/likida/conductor/preflight_piloto';
 import { BannerPreflight } from './configuracion/preflight';
 import { leerCatalogosFiltro, leerDatosTablero, leerIndicadores, listarSitios, type FiltrosTablero } from '@/lib/likida/conductor/repo_validacion';
@@ -180,6 +181,20 @@ export default async function PaginaAgenteConductores({
     const hasta = new Date();
     return indicadoresVista(await leerIndicadores(tenantId, new Date(hasta.getTime() - filtrosVista.dias * 86_400_000), new Date(hasta.getTime() + 60_000), filtrosRepo));
   });
+  // T-A5-32: la tarjeta «qué pasó · qué significa · qué hacer». `null` = no se pudo leer → la tarjeta lo dice.
+  const pInsights = safe(async () => {
+    const [entrada, config] = await Promise.all([
+      leerEntradaInsights(tenantId, new Date(Date.now() - filtrosVista.dias * 86_400_000), filtrosRepo),
+      leerConfigConductor(tenantId),
+    ]);
+    return {
+      recortada: entrada.hayMas,
+      insights: calcularInsights({
+        hitos: entrada.hitos, cruces: entrada.cruces, episodios: entrada.episodios, viajesSinSitio: null,
+        lineaBase: { llamadasPorViaje: config.lineaBaseLlamadasPorViaje, registradaEn: config.lineaBaseRegistradaEn },
+      }),
+    };
+  });
   const pCatalogos = safe(() => leerCatalogosFiltro(tenantId));
   // Los episodios de «sin señal de vida» del mismo periodo y con los mismos filtros. `null` = no se pudo leer; `{ episodios: [] }` = ninguno.
   const pEpisodios = safe(async () => {
@@ -243,6 +258,9 @@ export default async function PaginaAgenteConductores({
           <Bloque mensaje="No se pudo revisar si la flota está lista." esqueleto={null}>
             <BloqueBannerPreflight pPreflight={pPreflight} sufijo={sufijoTenant(sp)} />
           </Bloque>
+          <Bloque mensaje="No se pudieron leer los insights." esqueleto={null}>
+            <BloqueInsights pInsights={pInsights} pIndicadores={pIndicadores} dias={filtrosVista.dias} />
+          </Bloque>
           <Bloque mensaje="No se pudo leer el tablero de hitos." esqueleto={<EsqTabla filas={6} />}>
             <BloqueTableroHitos
               pTablero={pTablero} pIndicadores={pIndicadores} pCatalogos={pCatalogos} pSitios={pSitios} pEpisodios={pEpisodios} filtros={filtrosVista} ocultos={ocultos}
@@ -280,6 +298,15 @@ export default async function PaginaAgenteConductores({
 
 async function BloqueBannerPreflight({ pPreflight, sufijo }: { pPreflight: Promise<ReturnType<typeof evaluarPreflight> | null>; sufijo: string }) {
   return <BannerPreflight preflight={await pPreflight} sufijo={sufijo} />;
+}
+
+async function BloqueInsights({ pInsights, pIndicadores, dias }: {
+  pInsights: Promise<{ insights: ReturnType<typeof calcularInsights>; recortada: boolean } | null>;
+  pIndicadores: Promise<ReturnType<typeof indicadoresVista> | null>;
+  dias: number;
+}) {
+  const [r, ind] = await Promise.all([pInsights, pIndicadores]);
+  return <TarjetaInsights insights={r?.insights ?? null} dias={dias} discrepancias={ind?.sinCoincidencia ?? null} recortada={r?.recortada ?? false} />;
 }
 
 async function BloqueTableroHitos({ pTablero, pIndicadores, pCatalogos, pSitios, pEpisodios, filtros, ocultos, accionUrl, puedeActuar, accion, accionSitios }: {

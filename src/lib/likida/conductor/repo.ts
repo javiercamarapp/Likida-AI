@@ -1054,6 +1054,47 @@ export async function leerEpisodiosParaTablero(
   };
 }
 
+// ── T-A5-32: lo que leen los insights de la pantalla ─────────────────────────
+// Solo LECTURA y acotada por tenant, con los mismos filtros (patio, cliente, chofer) que el tablero. Una base caída LANZA; una tabla
+// que aún no existe (cruces / señal de vida) deja esa parte vacía, nunca un error. `hayMas` declara que el tope recortó la lectura.
+
+const TOPE_INSIGHTS = 5000;
+
+export async function leerEntradaInsights(
+  tenantId: string, desde: Date, f: FiltrosTablero = {},
+): Promise<{ hitos: HitoFila[]; cruces: Array<{ detectadoEn: string; registradoEn: string }>; episodios: EpisodioTablero[]; hayMas: boolean }> {
+  let viajeIds: string[] | null = null;
+  if ((f.terminalId && UUID_FILTRO.test(f.terminalId)) || (f.clienteId && UUID_FILTRO.test(f.clienteId)) || (f.operadorId && UUID_FILTRO.test(f.operadorId))) {
+    let q = supabaseAdmin().from('viaje').select('id').eq('tenant_id', tenantId);
+    if (f.terminalId && UUID_FILTRO.test(f.terminalId)) q = q.eq('terminal_id', f.terminalId);
+    if (f.clienteId && UUID_FILTRO.test(f.clienteId)) q = q.eq('cliente_id', f.clienteId);
+    if (f.operadorId && UUID_FILTRO.test(f.operadorId)) q = q.eq('operador_id', f.operadorId);
+    const rv = await acotada(q.gte('created_at', new Date(desde.getTime() - 45 * 86_400_000).toISOString()).order('id').limit(2000), 'insights.viajes');
+    viajeIds = ((exigir(rv as never, 'insights.viajes') ?? []) as unknown as Fila[]).map((x) => String(x.id)).slice(0, 1000);
+    if (viajeIds.length === 0) return { hitos: [], cruces: [], episodios: [], hayMas: false };
+  }
+  let qh = supabaseAdmin().from('viaje_hito').select(COLUMNAS_HITO).eq('tenant_id', tenantId).gte('updated_at', desde.toISOString());
+  let qc = supabaseAdmin().from('viaje_cruce_geocerca').select('detectado_en, registrado_en').eq('tenant_id', tenantId).gte('registrado_en', desde.toISOString());
+  if (viajeIds) { qh = qh.in('viaje_id', viajeIds); qc = qc.in('viaje_id', viajeIds); }
+  const [rh, rc, ep] = await Promise.all([
+    acotada(qh.order('updated_at', { ascending: false }).order('id').limit(TOPE_INSIGHTS + 1), 'insights.hitos'),
+    acotada(qc.order('registrado_en', { ascending: false }).limit(TOPE_INSIGHTS + 1), 'insights.cruces'),
+    leerEpisodiosParaTablero(tenantId, desde, f, 500),
+  ]);
+  const filasH = (exigir(rh as never, 'insights.hitos') ?? []) as unknown as Fila[];
+  let filasC: Fila[] = [];
+  if (rc.error) {
+    if (!faltaEsquema(rc.error, /viaje_cruce_geocerca/i)) throw new Error(`insights.cruces: ${rc.error.message}`);
+  } else filasC = (rc.data ?? []) as unknown as Fila[];
+  const hayMas = filasH.length > TOPE_INSIGHTS || filasC.length > TOPE_INSIGHTS || (ep?.hayMas ?? false);
+  return {
+    hitos: filasH.slice(0, TOPE_INSIGHTS).map(filaAHito),
+    cruces: filasC.slice(0, TOPE_INSIGHTS).map((c) => ({ detectadoEn: String(c.detectado_en), registradoEn: String(c.registrado_en) })),
+    episodios: ep?.episodios ?? [],
+    hayMas,
+  };
+}
+
 // ── 0800: los operadores voluntarios del piloto ──────────────────────────────
 // Todo acotado por tenant. El tope y la marca viven en la base (0800); la REGLA (tope, teléfono, permiso) vive en
 // `acciones_voluntarios.ts`, que usa estas primitivas. Sin la 0800 aplicada las lecturas lanzan un error en palabras.
