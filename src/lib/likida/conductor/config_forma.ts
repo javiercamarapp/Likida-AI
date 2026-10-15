@@ -23,6 +23,10 @@ export const NUMEROS: ReadonlyArray<keyof ConfigConductor> = [
   'trayectoSinEtaMin', 'esperaDescargaMin', 'regresoMin', 'posponerMin', 'ventanaCorreccionMin', 'toleranciaUbicacionM', 'ventanaUbicacionMin', 'margenAcercamientoM',
 ];
 
+/** 0801: las perillas del perfil y los umbrales. Solo viajan si el formulario trae la sección (marca `f_perfilSeguimiento`). */
+export const CASILLAS_PERFIL: ReadonlyArray<keyof ConfigConductor> = ['mostrarEstadosFrontera', 'aplicarSalidaDelTms'];
+export const NUMEROS_UMBRALES: ReadonlyArray<keyof ConfigConductor> = ['gpsObsoletoMin', 'detenidoMin', 'segundoAvisoMin', 'escalarSenalMin', 'silencioRespuestaMin'];
+
 /** Alertas de estadía: vacío = apagada (null), no 0. */
 export const NUMEROS_OPCIONALES: ReadonlyArray<keyof ConfigConductor> = ['estadiaAlertaCargaMin', 'estadiaAlertaDescargaMin'];
 
@@ -65,6 +69,13 @@ export function cuerpoDesdeFormulario(fd: Origen): { ok: Record<string, unknown>
     const t = texto(fd, `f_${k}`);
     cuerpo[k] = t === '' ? null : t;
   }
+  // 0801: un formulario sin la sección del perfil (el de hoy) NO toca esas llaves: se conservan las vigentes al fusionar.
+  const perfil = texto(fd, 'f_perfilSeguimiento');
+  if (perfil !== '') {
+    cuerpo.perfilSeguimiento = perfil;
+    for (const k of CASILLAS_PERFIL) cuerpo[k] = fd.get(`f_${k}`) !== null && fd.get(`f_${k}`) !== undefined && fd.get(`f_${k}`) !== 'no';
+    for (const k of NUMEROS_UMBRALES) cuerpo[k] = texto(fd, `f_${k}`);
+  }
   const esc = leerEscalera(texto(fd, 'f_solicitudesMin'));
   if ('error' in esc) return { error: esc.error };
   cuerpo.solicitudesMin = esc.ok;
@@ -80,6 +91,8 @@ export function valoresDeForma(c: ConfigConductor): Record<string, string> {
   const v: Record<string, string> = { solicitudesMin: c.solicitudesMin.join(', ') };
   for (const k of NUMEROS) v[k] = String(c[k] as number);
   for (const k of NUMEROS_OPCIONALES) v[k] = c[k] === null ? '' : String(c[k]);
+  v.perfilSeguimiento = c.perfilSeguimiento;
+  for (const k of NUMEROS_UMBRALES) v[k] = String(c[k] as number);
   return v;
 }
 
