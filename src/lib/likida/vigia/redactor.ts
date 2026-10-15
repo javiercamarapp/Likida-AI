@@ -106,6 +106,32 @@ function haceCuanto(min: number): string {
   return h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`;
 }
 
+/** Antigüedad máxima de la posición para decir «va por…» (T-A4-39). Más vieja: solo se dice cuándo fue y la liga. */
+export const VIGENCIA_AVANCE_MIN = 30;
+
+function duracionAprox(min: number): string {
+  return min >= 60 ? `~${Math.round(min / 60)} h` : `~${Math.max(1, Math.round(min))} min`;
+}
+
+/**
+ * T-A4-39: «va por <lugar>, le faltan ~<km> / ~<tiempo>», el mismo mensaje que hoy manda el ejecutivo. Solo con posición
+ * vigente, destino conocido y cifras finitas y no negativas; si algo no cuadra devuelve `null` y no se inventa nada.
+ * Es una estimación de distancia/tiempo, no una hora de llegada comprometida (esa sigue siendo la cita capturada).
+ */
+function frasesAvance(e: EstatusViaje, minPosicion: number, respaldo: Record<string, unknown>): string | null {
+  const a = e.avance;
+  if (!a || !e.destino || minPosicion > VIGENCIA_AVANCE_MIN) return null;
+  const lugar = a.cercaDe ? a.cercaDe.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
+  const km = typeof a.kmRestantes === 'number' && Number.isFinite(a.kmRestantes) && a.kmRestantes >= 0 ? Math.round(a.kmRestantes) : null;
+  const t = typeof a.minRestantes === 'number' && Number.isFinite(a.minRestantes) && a.minRestantes >= 0 ? a.minRestantes : null;
+  const falta = [km !== null ? `~${km} km` : null, t !== null ? duracionAprox(t) : null].filter((x): x is string => x !== null);
+  if (!lugar && falta.length === 0) return null;
+  respaldo.avance = { cercaDe: lugar || null, kmRestantes: km, minRestantes: t };
+  const va = lugar ? `Va por ${lugar}` : 'Va en camino';
+  const resto = falta.length > 0 ? `, le faltan ${falta.join(' / ')}` : '';
+  return `${va}${resto} a ${e.destino} (estimado por GPS, no es hora de llegada).`;
+}
+
 function seccionUbicacion(e: EstatusViaje, ahora: Date, faltantes: string[], respaldo: Record<string, unknown>): string {
   const partes: string[] = [`${etiquetaViaje(e)}: ${ETAPAS[e.etapa]}.`];
   if (e.ultimoHito) {
@@ -128,6 +154,8 @@ function seccionUbicacion(e: EstatusViaje, ahora: Date, faltantes: string[], res
     } else if (min > 120) {
       partes.push(`La última posición del GPS es ${haceCuanto(min)}, no es actual: ${liga}`);
     } else {
+      const avance = frasesAvance(e, min, respaldo);
+      if (avance) partes.push(avance);
       partes.push(`Última posición del GPS (${haceCuanto(min)}): ${liga}`);
     }
   } else {
