@@ -1,6 +1,7 @@
 import { estaResuelto, TIPOS_HITO, indiceHito, type HitoFila, type TipoHito } from './tipos';
 import { dentroDeVentana, type ConfigConductor } from './config';
 import { hitoActivo } from './maquina';
+import { aplicarPerfil, estaFueraDePerfil } from './perfil';
 import type { ViajeContexto } from './repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -94,8 +95,15 @@ export function anclaDe(
       if (ancla !== null && aceptado !== null) ancla = Math.max(ancla, aceptado);
       break;
     }
-    case 'salida_carga':
-      if (previa) ancla = previa.t + config.esperaCargaMin * min;
+    case 'salida_carga': {
+      // Perfil `esenciales`: la llegada a carga no se sigue, así que no hay hora previa; la cita de carga (o su ETA) ancla la
+      // espera de carga. Sin cita, sigue el ancla de siempre (la aceptación más el plazo por omisión).
+      const llegada = hitos.find((x) => x.tipo === 'llegada_carga');
+      if (!previa && llegada && estaFueraDePerfil(llegada)) {
+        const cita = ms(viaje.citaOrigenEn) ?? ms(viaje.etaOrigenEn);
+        if (cita !== null) ancla = cita + config.esperaCargaMin * min;
+        else if (importado) return null; // el motor no inventa anclas para un viaje importado sin cita
+      } else if (previa) ancla = previa.t + config.esperaCargaMin * min;
       else if (importado) {
         // Importado y sin llegada registrada: la cita de carga más la espera de carga; sin cita no hay ancla.
         const cita = ms(viaje.citaOrigenEn);
@@ -103,6 +111,7 @@ export function anclaDe(
         else return null;
       }
       break;
+    }
     case 'llegada_descarga': {
       const cita = ms(viaje.citaDestinoEn) ?? ms(viaje.etaDestinoEn);
       if (cita !== null) ancla = cita - config.anticipoCitaMin * min;
@@ -141,7 +150,9 @@ export function textoTiempo(minutos: number): string {
 
 /** Qué hacer ahora con un viaje. Pura y determinista. */
 export function planificar(e: EntradaPlan): AccionPlan {
-  const { viaje, hitos, config, ahora } = e;
+  const { viaje, config, ahora } = e;
+  // T-A5-08: con el perfil `esenciales` lo que el perfil no sigue se lee como omitido (la base puede traerlo aún `esperado`).
+  const hitos = aplicarPerfil(e.hitos, config.perfilSeguimiento);
   if (!config.activo) return { tipo: 'nada', motivo: 'flota_apagada' };
   if (viaje.estatus !== 'abierto') return { tipo: 'nada', motivo: 'viaje_no_aplica' };
 
