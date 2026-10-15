@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { analizarHistorial } from '@/lib/likida/vigia/historial/analisis';
+import { pendientesDeHistorial } from '@/lib/likida/vigia/historial/pendientes';
 import { VistaHistorialVigia } from './vista';
 
 const accion = async () => null;
@@ -98,6 +99,30 @@ describe('grupos e histórico del Vigía (pantalla)', () => {
       expect(html).toContain('/api/export/vigia-faqs?grupo=g1&amp;formato=pdf');
       expect(pintar({ grupos: [], reporte })).toContain('/api/export/vigia-faqs?formato=xlsx');
       expect(pintar({ grupos: [], reporte: null })).not.toContain('/api/export/vigia-faqs');
+    });
+  });
+  describe('pendientes del chat exportado (T-A4-34)', () => {
+    const m = (iso: string, rol: 'cliente' | 'equipo', texto: string, grupo?: string) => ({ enviadoEn: iso, rol, texto, grupo });
+    const datos = [
+      m('2026-09-01T15:00:00Z', 'cliente', 'Necesito la factura', 'Grupo A'),
+      m('2026-09-01T15:10:00Z', 'cliente', 'Es URGENTE el comprobante ASAP', 'Grupo A'),
+      m('2026-09-01T15:20:00Z', 'cliente', 'gracias', 'Grupo A'),
+    ];
+    const reporte = analizarHistorial(datos);
+
+    it('lista los pendientes con el alto primero, la antigüedad y el rótulo de que es una foto, no en vivo', () => {
+      const html = pintar({ grupos: [], reporte, pendientes: pendientesDeHistorial(datos) });
+      expect(html).toContain('Pendientes de contestar');
+      expect(html).toContain('no en vivo');
+      expect(html.indexOf('URGENTE')).toBeLessThan(html.indexOf('Necesito la factura'));
+      expect(html).toContain('Alta');
+      expect(html).toContain('Grupo A');
+      expect(html).not.toMatch(/<li[^>]*>(?:(?!<\/li>)[\s\S])*gracias/);
+    });
+
+    it('sin pendientes: estado vacío; sin calcularlos (omitido): la sección no aparece', () => {
+      expect(pintar({ grupos: [], reporte, pendientes: pendientesDeHistorial([m('2026-09-01T15:00:00Z', 'cliente', 'gracias')]) })).toContain('No quedó ningún mensaje de cliente sin contestar');
+      expect(pintar({ grupos: [], reporte })).not.toContain('Pendientes de contestar');
     });
   });
 });
