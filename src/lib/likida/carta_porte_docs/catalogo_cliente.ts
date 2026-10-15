@@ -120,7 +120,7 @@ function poner(
   acum.aplicados.push(ruta);
 }
 
-function productosQueCoinciden(descripcion: string, productos: ProductoCat[]): ProductoCat[] {
+export function productosQueCoinciden(descripcion: string, productos: ProductoCat[]): ProductoCat[] {
   const toks = tokens(descripcion);
   const plano = llaveTexto(descripcion);
   return productos.filter((p) => {
