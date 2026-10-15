@@ -299,7 +299,7 @@ const CALCOM_LOOKUP = ".from('prospecto').select('id,estado,calcom_booking_id,ca
 // que cruzan flotas a propósito; el resto del archivo (≈50 consultas) sigue vigilado por esta prueba.
 const VIGIA_CONTACTO_POR_TELEFONO = ".from('vigia_contacto').select(COLS_CONTACTO).eq('telefono', normalizarTelefonoWa(telefono)).in('estado', ['activo', 'baja']).order('id').limit(5)";
 // Ola 4d (P5): la cola va por tandas de flotas con `or(and(tenant_id.eq.<flota>, <vencimiento>)…)` armado en `alcance` (cada rama ancla su flota), sin el nivel 2 y ordenada por próximo vencimiento.
-const VIGIA_EN_ESPERA = ".from('vigia_conversacion').select(COLS_CONV).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).lt('escalamiento_nivel', 2).or(alcance).order('sin_respuesta_desde', { ascending: true }).order('id').range(pagina * tamano, (pagina + 1) * tamano - 1)"; // R09-1 (ronda 18): por páginas hasta agotar, en vez de un corte único en limite*3
+const VIGIA_EN_ESPERA = ".from('vigia_conversacion').select(colsConv()).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).lt('escalamiento_nivel', 2).or(alcance).order('sin_respuesta_desde', { ascending: true }).order('id').range(pagina * tamano, (pagina + 1) * tamano - 1)"; // R09-1 (ronda 18): por páginas hasta agotar, en vez de un corte único en limite*3
 // Exención por cadena exacta de «Mis reglas» (Agente 13, 0520): la purga de retención del historial de avisos.
 const REGLAS_PURGA_AVISOS = ".from('regla_aviso').delete().lt('enviado_en', corte).select('id')";
 // Exención por cadena exacta del buzón (Agente 9, 0531): la lista de trabajo del cron de entrega al contador.
@@ -307,7 +307,17 @@ const BUZON_LOTES_PARA_ENVIAR = ".from('buzon_entrega').select(COLUMNAS_ENTREGA)
 // E1-B (P0-7): las dos lecturas de /admin/cobranza sobre la bandeja y las corridas del agente `cobranza_saas` (el dunning de las mensualidades DE LIKIDA).
 const DUNNING_PIEZAS = ".from('cola_aprobacion').select('titulo, estado, enviado_en, creado_en').eq('agente', 'cobranza_saas').eq('tipo', 'recordatorio_cobranza').in('titulo', lote).order('creado_en', { ascending: false }).order('id').limit(1000)";
 const DUNNING_CORRIDA = ".from('agente_corrida').select('estado, fin, error, resumen').eq('agente', 'cobranza_saas').order('fin', { ascending: false }).order('id').limit(1)";
+// Perfil de tenant (0770): el ÚNICO punto de acceso a la tabla es `tablaPerfil()`; cada llamador le añade su propio filtro (`.eq('tenant_id', …)` o, en el cron, `.select('tenant_id')` de todas las flotas con perfil).
+const PERFIL_PUNTO_DE_ACCESO = ".from('tenant_perfil')";
+// Piloto de conductores (0800): cuenta voluntarios activos de TODAS las flotas para el latido de la plataforma.
+const CONDUCTOR_VOLUNTARIOS_ACTIVOS = ".from('operador').select('id', { count: 'exact', head: true }).eq('agente_voluntario', true).eq('activo', true)";
 const EXENCIONES_CONSULTA = [{
+  archivo: 'src/lib/auth/perfil_tenant.ts', tabla: 'tenant_perfil', cadena: PERFIL_PUNTO_DE_ACCESO,
+  razon: 'Es la definición del único punto de acceso a tenant_perfil (`tablaPerfil`, tope de frontera_datos_guardiana): no ejecuta nada por sí misma. Sus dos usos filtran por flota (`perfilDeTenant` con `.eq(tenant_id)`) o barren a propósito todas las flotas con perfil para el cron (`tenantsSinPerfilParaCron` con `.select(tenant_id)`), y esos dos usos sí pasan por esta misma prueba. No exime otro archivo ni otra consulta.',
+}, {
+  archivo: 'src/lib/likida/conductor/repo.ts', tabla: 'operador', cadena: CONDUCTOR_VOLUNTARIOS_ACTIVOS,
+  razon: 'Cuenta (head:true, sin devolver filas ni datos de nadie) los voluntarios activos de TODAS las flotas para el latido de la plataforma (T-A5-27); solo la llama el cron del piloto tras puertaCron y la palanca global. Lo que se calcula por flota (contarVoluntarios, listarVoluntarios) sí filtra tenant_id y sigue vigilado por esta prueba.',
+}, {
   archivo: 'src/lib/likida/repo.ts', tabla: 'cola_aprobacion', cadena: DUNNING_PIEZAS,
   razon: 'Las propuestas de recordatorio del dunning de Likida (agente cobranza_saas, 0218) son de LIKIDA, no de una flota: las piezas se encolan con tenant NULL o con el de la factura, y la bandeja es deny-all del superadmin (0117). La leen solo /admin/cobranza (`await requireSuperadmin()` DENTRO de la página, no solo en el layout: un layout no se re-ejecuta si la petición RSC declara que el cliente ya lo tiene) y filtra por agente y tipo exactos. No exime ninguna otra consulta de repo.ts.',
 }, {
