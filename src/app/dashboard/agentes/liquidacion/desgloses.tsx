@@ -5,6 +5,7 @@ import { EstadoVacio } from '@/app/admin/ui/kit';
 import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
 import { dinero } from '@/lib/likida/liquidacion_externa/presentacion';
 import { BotonConfirmar } from '@/app/admin/ui/confirmar';
+import { calcularInsightsA1, entradaDesdeFichas, type InsightA1 } from '@/lib/likida/liquidacion_externa/insights_a1';
 import type { EntregaCorreo, EstadoEntregaCorreo, Excepcion, TipoExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
 import type { DetalleDesglose, LecturaDetalle, RolDetalle } from './detalle_desglose';
 import { BarraPagina } from '../../resumen-visual';
@@ -68,7 +69,9 @@ const FILTROS: readonly FiltroDesglose[] = ['enviado', 'entregado', 'rebotado', 
 
 export type LecturaDesgloses =
   | { ok: false }
-  | { ok: true; fichas: FichasDesgloses; filas: FilaDesglose[]; sinPoliza: FilaSinPoliza[]; siguiente: string | null };
+  | { ok: true; fichas: FichasDesgloses; filas: FilaDesglose[]; sinPoliza: FilaSinPoliza[]; siguiente: string | null;
+      /** Insights ya calculados con más datos que las fichas; sin ellos se calculan de las fichas. */
+      insights?: InsightA1[] };
 
 export interface DesglosesProps {
   lectura: Promise<LecturaDesgloses>;
@@ -272,6 +275,8 @@ export async function SeccionDesgloses(p: DesglosesProps) {
           href={query(p.contexto, [['des_estado', 'sin_poliza']])} />
       </div>
 
+      <BloqueInsights insights={lectura.insights ?? calcularInsightsA1(entradaDesdeFichas(fichas))} />
+
       <form method="get" className="flex flex-wrap items-end gap-2 mb-3">
         {p.contexto.map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
         <label className="flex flex-col gap-1">
@@ -384,6 +389,28 @@ function Fila({ f, href }: { f: FilaDesglose; href: string }) {
         <Link href={href} className="text-[12px] font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--marca)' }}>Ver detalle</Link>
       </td>
     </tr>
+  );
+}
+
+const COLOR_INSIGHT: Record<InsightA1['tono'], string> = { ok: 'var(--ok)', warn: 'var(--warn)', bad: 'var(--bad)', muted: 'var(--faint)' };
+
+/** «Qué pasó · qué significa · qué hacer»: frases calculadas por reglas (sin IA), cada una con la fuente de su cifra. */
+export function BloqueInsights({ insights }: { insights: InsightA1[] }) {
+  if (insights.length === 0) return null;
+  return (
+    <div className="mb-3" id="insights-desgloses" aria-label="Lectura de los desgloses">
+      <p className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Qué pasó · qué significa · qué hacer</p>
+      <ul className="space-y-2">
+        {insights.map((i) => (
+          <li key={i.id} data-insight={i.id} className="rounded-lg hairline px-3 py-2" style={{ borderLeft: `3px solid ${COLOR_INSIGHT[i.tono]}` }}>
+            <p className="text-[13px] font-medium">{i.quePaso}</p>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{i.queSignifica}</p>
+            <p className="text-[12px]">{i.queHacer}</p>
+            <p className="text-[10px] mt-1" style={{ color: 'var(--faint)' }}>Fuente: {i.fuente}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
