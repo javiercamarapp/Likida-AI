@@ -549,6 +549,13 @@ describe('suma que no cuadra', () => {
     const r = await rechazarDocumento(A, id, doc().version, 'La suma de pesos no cuadra', ACTOR.id);
     expect(r.rechazoCausa).toBe('suma_no_cuadra');
   });
+  it('T-A3-37: la causa elegida por la persona se guarda y manda sobre la sugerida; una causa fuera del dominio se rechaza', async () => {
+    const { id, doc } = await documentoBoreal();
+    await expect(rechazarDocumento(A, id, doc().version, 'Es un duplicado', ACTOR.id, new Date(), 'inventada')).rejects.toThrow(/causa de rechazo/);
+    expect(doc().estado).not.toBe('rechazado');
+    const r = await rechazarDocumento(A, id, doc().version, 'Es un duplicado', ACTOR.id, new Date(), 'duplicado');
+    expect(r.rechazoCausa).toBe('duplicado');
+  });
   it('un rechazo sin bloqueo de suma no inventa causa', async () => {
     const { id, doc } = await documentoBoreal();
     const r = await rechazarDocumento(A, id, doc().version, 'No es un embarque nuestro', ACTOR.id);

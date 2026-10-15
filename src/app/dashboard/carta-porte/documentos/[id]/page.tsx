@@ -191,7 +191,7 @@ export default async function PaginaRevision({
         return { ok: true, mensaje: 'Documento aprobado.', detalles };
       }
       if (intencion === 'rechazar') {
-        await rechazarDocumento(s.tenantId, id, version, String(fd.get('motivo') ?? ''), s.userId);
+        await rechazarDocumento(s.tenantId, id, version, String(fd.get('motivo') ?? ''), s.userId, new Date(), String(fd.get('causa') ?? ''));
         revalidatePath(ruta); revalidatePath(RUTA_PADRE);
         return { ok: true, mensaje: 'Documento rechazado.' };
       }
