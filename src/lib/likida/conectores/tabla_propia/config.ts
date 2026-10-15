@@ -19,6 +19,7 @@ export const PATRONES_HTTP = ['ninguna', 'bearer', 'cabecera', 'query', 'basic']
 
 const CAMPOS_POSICION = z.object({
   unidad: RUTA, lat: RUTA, lon: RUTA, fecha_hora: RUTA, velocidad_kmh: RUTA.optional(), ignicion: RUTA.optional(), despacho: RUTA.optional(),
+  fecha_recibida: RUTA.optional(), punto_interes: RUTA.optional(),
 }).strict();
 const CAMPOS_GEOCERCA = z.object({
   codigo: RUTA, nombre: RUTA, lat_centro: RUTA.optional(), lon_centro: RUTA.optional(), radio_m: RUTA.optional(), poligono_wkt: RUTA.optional(), cliente: RUTA.optional(),
@@ -50,6 +51,7 @@ const COLUMNAS_CURSO_SQL = z.object({
 }).strict();
 const COLUMNAS_POSICION_SQL = z.object({
   unidad: z.string(), lat: z.string(), lon: z.string(), fecha_hora: z.string(), velocidad_kmh: z.string().optional(), ignicion: z.string().optional(), despacho: z.string().optional(),
+  fecha_recibida: z.string().optional(), punto_interes: z.string().optional(),
 }).strict();
 const COLUMNAS_GEOCERCA_SQL = z.object({
   codigo: z.string(), nombre: z.string(), lat_centro: z.string().optional(), lon_centro: z.string().optional(), radio_m: z.string().optional(), poligono_wkt: z.string().optional(), cliente: z.string().optional(),
