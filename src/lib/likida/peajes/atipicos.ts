@@ -109,6 +109,7 @@ function offsetZonaMs(utc: number): number {
 /** Instante UTC (ms) de una fecha/hora de reloj MX, o null si no es una fecha/hora válida. */
 export function instanteMx(fecha: string | null, hora: string | null): number | null {
   const f = /^(\d{4})-(\d{2})-(\d{2})$/.exec((fecha ?? '').trim());
+  // eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de una celda o campo
   const h = /^(\d{1,2}):(\d{2}):?(\d{2})?/.exec((hora ?? '').trim());
   if (!f || !h) return null;
   const [y, mo, d, hh, mi, ss] = [Number(f[1]), Number(f[2]), Number(f[3]), Number(h[1]), Number(h[2]), Number(h[3] ?? 0)];

@@ -330,6 +330,7 @@ export function tramosJson(ruta: string): TramoJson[] | null {
   if (partes.length === 0 || partes.length > 12) return null;
   const tramos: TramoJson[] = [];
   for (const p of partes) {
+    // eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de una celda o campo
     const m = /^([^[\]]{1,80})(?:\[(\*|\d{1,3})\])?$/.exec(p);
     if (!m || CLAVES_PROHIBIDAS_JSON.has(m[1])) return null;
     tramos.push({ clave: m[1], indice: m[2] === undefined ? null : m[2] === '*' ? '*' : Number(m[2]) });

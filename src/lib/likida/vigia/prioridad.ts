@@ -61,6 +61,7 @@ const PALABRAS_CORTESIA = new Set([
   'perfecto', 'recibido', 'de', 'acuerdo', 'entendido', 'sip', 'si', 'va', 'excelente', 'bien', 'buen', 'dia',
   'dias', 'tardes', 'noches', 'saludos', 'por', 'favor', 'sale', 'claro',
 ]);
+// eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de una celda o campo
 const SOLO_EMOJI_CORTESIA = /^[\s\u{1F44D}\u{1F44C}\u{1F64F}\u{1F44F}\u{2705}\u{1F197}\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}]+$/u;
 
 // Monitoreo: «UNIDAD … DETENIDA» (una o varias líneas), formato de los grupos de alerta.

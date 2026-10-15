@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- prueba que lee/escribe rutas del propio repo o de un directorio temporal; ninguna ruta ni patrón viene de entrada de usuario. */
 import { describe, it, expect } from 'vitest';
 import * as XLSX from 'xlsx';
 import * as fs from 'node:fs';

@@ -76,7 +76,6 @@ function remitente(local = 'avisos', nombre = 'Likida'): string | null {
  */
 export function sanearNombreRemitente(nombre: string | undefined): string | null {
   if (!nombre) return null;
-  // eslint-disable-next-line no-control-regex
   const limpio = nombre.replace(/[\u0000-\u001f\u007f<>"\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60).trim();
   return limpio.length > 0 ? limpio : null;
 }

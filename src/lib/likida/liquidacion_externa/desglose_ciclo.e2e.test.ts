@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- prueba que lee/escribe rutas del propio repo o de un directorio temporal; ninguna ruta ni patrón viene de entrada de usuario. */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import crypto from 'node:crypto';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';

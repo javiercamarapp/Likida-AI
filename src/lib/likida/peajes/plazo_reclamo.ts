@@ -59,12 +59,14 @@ export function fechaLocalMX(valor: string | Date): string {
   }
   const t = valor.trim();
   if (fechaValida(t)) return t;
+  // eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de una celda o campo
   const conZona = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i.test(t);
   if (conZona) {
     const d = new Date(t.replace(' ', 'T'));
     if (Number.isNaN(d.getTime())) throw new Error('fecha_invalida');
     return hoyMx(d);
   }
+  // eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de una celda o campo
   const sinZona = /^(\d{4}-\d{2}-\d{2})[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.exec(t);
   if (sinZona && fechaValida(sinZona[1])) return sinZona[1];
   throw new Error('fecha_invalida');
