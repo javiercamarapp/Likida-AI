@@ -90,6 +90,8 @@ begin
        and v.aceptado_en is not null
        and coalesce((select c.activo from public.agente_conductor_config c where c.tenant_id = v.tenant_id), true)
        and not exists (select 1 from public.viaje_hito h where h.viaje_id = v.id)
+       -- Perfil de módulos (0770), fase 1: el Conductor está en «Próximamente» para las flotas con perfil: no se les siembra nada.
+       and not exists (select 1 from public.tenant_perfil tp where tp.tenant_id = v.tenant_id)
      order by v.aceptado_en
      limit p_limite
   ), tipos(tipo) as (
@@ -115,6 +117,7 @@ begin
         and v.estatus = 'abierto' and v.aceptado_en is not null
         and h2.tipo <> 'salida_carga'
         and h2.estado in ('esperado', 'escalado')
+        and not exists (select 1 from public.tenant_perfil tp where tp.tenant_id = v.tenant_id)
       order by v.aceptado_en, h2.id
       limit p_limite
    );
@@ -139,6 +142,7 @@ begin
          and v.estatus = 'abierto' and v.aceptado_en is not null
          and coalesce((select c.perfil_seguimiento from public.agente_conductor_config c where c.tenant_id = v.tenant_id), 'completo') = 'completo'
          and coalesce((select c.activo from public.agente_conductor_config c where c.tenant_id = v.tenant_id), true)
+         and not exists (select 1 from public.tenant_perfil tp where tp.tenant_id = v.tenant_id)
        order by v.aceptado_en, h2.id
        limit p_limite
     ) p
@@ -150,4 +154,4 @@ revoke all on function public.sembrar_hitos_conductor(integer) from public, anon
 grant execute on function public.sembrar_hitos_conductor(integer) to service_role;
 
 comment on function public.sembrar_hitos_conductor(integer) is
-  '0801: siembra los hitos de los viajes abiertos y aceptados según el perfil de seguimiento de la flota (esenciales: solo salida_carga esperado, el resto omitido/fuera_de_perfil) y concilia los viajes que ya tenían hitos al cambiar el perfil. Devuelve los hitos sembrados.';
+  '0801: siembra los hitos de los viajes abiertos y aceptados según el perfil de seguimiento de la flota (esenciales: solo salida_carga esperado, el resto omitido/fuera_de_perfil) y concilia los viajes que ya tenían hitos al cambiar el perfil. Las flotas con fila en tenant_perfil (0770, Conductor en «Próximamente») se saltan por completo. Devuelve los hitos sembrados.';
