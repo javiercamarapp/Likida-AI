@@ -64,7 +64,13 @@ function comoPerfil(valor: unknown): PerfilTenant | null {
  * El perfil de una flota, o `null` si no tiene (comportamiento de siempre).
  * Cacheado por tenant (`TTL_PERFIL_MS`). Nunca lanza.
  */
-export async function perfilDeTenant(tenantId: string | null | undefined, ahora: number = Date.now()): Promise<PerfilTenant | null> {
+export async function perfilDeTenant(
+  tenantId: string | null | undefined,
+  ahora: number = Date.now(),
+  /** Qué asumir si la tabla no se puede leer y nunca se leyó: `restringir` (default: falla cerrado) o `permitir`
+   *  (solo para el pipeline del chofer, cuya palanca es operativa y NO debe tumbarse por un bache — ver `interruptor_tenant.ts`). */
+  siNoSePuedeLeer: 'restringir' | 'permitir' = 'restringir',
+): Promise<PerfilTenant | null> {
   if (!tenantId) return null;
   const hit = cache.get(tenantId);
   if (hit && hit.hasta > ahora) return hit.perfil;
@@ -89,7 +95,8 @@ export async function perfilDeTenant(tenantId: string | null | undefined, ahora:
   } catch (e) {
     logger.warn('perfil_tenant.ilegible', { tenantId, err: e instanceof Error ? e.message : String(e) });
     // Sin caché del error: el siguiente request reintenta.
-    return ultimoConocido.has(tenantId) ? (ultimoConocido.get(tenantId) ?? null) : PERFIL_SI_NO_SE_PUDO_LEER;
+    if (ultimoConocido.has(tenantId)) return ultimoConocido.get(tenantId) ?? null;
+    return siNoSePuedeLeer === 'permitir' ? null : PERFIL_SI_NO_SE_PUDO_LEER;
   }
 }
 
