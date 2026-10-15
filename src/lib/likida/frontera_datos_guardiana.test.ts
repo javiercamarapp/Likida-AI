@@ -258,7 +258,10 @@ import { join, relative } from 'node:path';
 // E1-B «cuadre-tarjetas-cobranza»: +1 archivo y +3 llamadas (287 → 288 y 1,906 → 1,909), medidos con el barrido real contra la base ec78640f. El módulo
 // nuevo es `acuse_folio.ts` (el acuse «solo folio» del cierre al encargado: sube el PDF al bucket `liquidaciones` y firma su URL). La lectura de la página
 // /admin/cobranza SÍ se puso en `repo.ts` (frontera: 0). CHOQUE ESPERABLE con E1-A: los dos paquetes suben estos techos; al integrar, el techo es la SUMA de los tramos.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 288;
+// CARTA PORTE, T-A3-27 (repositorio de envíos al TMS): +1 archivo, `carta_porte_docs/repo_envios.ts` (288 → 289), que junta en UNO el acceso a la cola
+// `cp_envio_tms` de la 0790 (leer, actualizar condicional, listar, conteo por estado y las 3 RPC de reclamo y alerta única) y se prueba con un doble en memoria.
+// Funcionalidad nueva, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 289;
 // Integración ronda 20: 287 (E1-A, +0) + 1 (E1-B, acuse_folio.ts) = 288.
 // INTEGRACIÓN ola 4a (A + B): 1,805 → 1,807. El paquete B (M3/M4, copia al jefe) suma +2 llamadas RPC en un archivo que ya contaba
 // (`reclamar_copia_jefe` y `cerrar_copia_jefe`, el reclamo atómico de la copia); cada paquete midió contra su propia base, por eso
@@ -325,7 +328,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 288;
 // Ronda 19 (integración): 1,906 (ronda 18) + 7 (E1-A) = 1,913 esperado; el valor final es el del barrido real de la prueba.
 
 // E1-B: +3 llamadas (acuse_folio.ts: storage). Ronda 20 (integración): 1,913 (E1-A integrado) + 3 = 1,916 esperado; el valor final es el del barrido real.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_916;
+// CARTA PORTE (frente A3), medido con el barrido real: 1,916 → 1,934 (+18). +7 son de T-A3-27 (`carta_porte_docs/repo_envios.ts`: 1 select por id, 1 update, 1 select por
+// documento, 1 conteo y 3 RPC). Las otras +11 ya estaban en `carta_porte_docs/repo.ts` en la rama del frente (T-A3-03/04/09/20: configuración de salida, preparar el envío, catálogo del cliente,
+// marcar subido a mano y estado por documento) y el techo no se había subido; la prueba estaba roja ANTES de esta tarea (1,927 > 1,916). Funcionalidad nueva, no código migrado.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_934;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)
