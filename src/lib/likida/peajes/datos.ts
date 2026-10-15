@@ -13,6 +13,8 @@ import { createHash } from 'node:crypto';
 import { generarToken, esTokenValido } from '@/lib/correo/buzon';
 import { hostNoPublico } from '@/lib/http/destino_publico';
 import { cifrar, cofreConfigurado } from '../conectores/cofre';
+import type { HallazgoAtipico, ConfigAtipicos } from './atipicos';
+import { validarConfigAtipicos, configAtipicosEfectiva, esEstadoAtipico, puedeCambiarEstado, exigeRevisor, type EstadoAtipico } from './atipicos_config';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL I/O DE LOS CATÁLOGOS DE PEAJES: TAGs, casetas, geocercas, mapeos.
@@ -889,4 +891,124 @@ export async function cambiarEstadoCurso(tenantId: string, cursoId: string, acti
   const { error } = await acotada(supabaseAdmin().from('peaje_curso').update({ activo, actualizado_en: new Date().toISOString() }).eq('tenant_id', tenantId).eq('id', cursoId), 'peajes.estado_curso');
   if (error) logger.error('peajes.estado_curso', { tenant: tenantId, err: error.message });
   return !error;
+}
+
+// ── Cruces atípicos: umbrales y hallazgos (T-A2-12, migración 0779) ─────────
+
+export interface ConfigAtipicosFlota {
+  /** El detector corre SOLO si la flota lo activó. Apagado de origen. */
+  activo: boolean;
+  /** Umbrales vigentes (guardados y válidos, o los defaults). */
+  umbrales: ConfigAtipicos;
+}
+
+/** La configuración de la flota. Sin fila = apagado y defaults. Lanza ante error de base. */
+export async function leerConfigAtipicos(tenantId: string): Promise<ConfigAtipicosFlota> {
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_atipico_config')
+    .select('activo, umbrales').eq('tenant_id', tenantId).maybeSingle(), 'peajes.config_atipicos');
+  if (error) throw new Error(`leerConfigAtipicos: ${error.message}`);
+  return { activo: data?.activo === true, umbrales: configAtipicosEfectiva(data?.umbrales) };
+}
+
+/** Valida y guarda los umbrales (y si el detector está activo). Un umbral inválido se rechaza con mensaje llano y no se guarda nada. */
+export async function guardarConfigAtipicos(
+  tenantId: string, entrada: { activo: boolean; umbrales?: unknown },
+): Promise<{ ok: true; config: ConfigAtipicosFlota } | { ok: false; motivo: string }> {
+  if (typeof entrada.activo !== 'boolean') return { ok: false, motivo: 'Indica si el detector está activo (sí o no).' };
+  const v = validarConfigAtipicos(entrada.umbrales);
+  if (!v.ok) return { ok: false, motivo: v.motivo };
+  const { error } = await acotada(supabaseAdmin().from('peaje_atipico_config').upsert({
+    tenant_id: tenantId, activo: entrada.activo, umbrales: v.valor, actualizado_en: new Date().toISOString(),
+  }, { onConflict: 'tenant_id' }), 'peajes.guardar_config_atipicos');
+  if (error) {
+    logger.error('peajes.guardar_config_atipicos', { tenant: tenantId, err: error.message });
+    return { ok: false, motivo: 'No se pudo guardar la configuración. Intenta de nuevo.' };
+  }
+  return { ok: true, config: { activo: entrada.activo, umbrales: v.valor } };
+}
+
+const LOTE_ATIPICOS = 200;
+
+export interface ResultadoUpsertAtipicos { nuevos: number; yaExistian: number }
+
+/**
+ * Guarda los hallazgos de un desglose de forma IDEMPOTENTE: la `llave` (única por flota)
+ * identifica la situación; re-correr el mismo desglose no duplica ni toca lo ya guardado
+ * (el estado, la nota y quién revisó se conservan). `unidadIds` liga la unidad del archivo
+ * con la unidad del sistema cuando se conoce. Lanza ante error de base.
+ */
+export async function upsertAtipicos(
+  tenantId: string, desgloseId: string | null, hallazgos: readonly HallazgoAtipico[],
+  unidadIds: ReadonlyMap<string, string> = new Map(),
+): Promise<ResultadoUpsertAtipicos> {
+  const unicos = [...new Map(hallazgos.map((h) => [h.llave, h])).values()];
+  const existentes = new Set<string>();
+  for (let i = 0; i < unicos.length; i += LOTE_ATIPICOS) {
+    const llaves = unicos.slice(i, i + LOTE_ATIPICOS).map((h) => h.llave);
+    const { data, error } = await acotada(supabaseAdmin().from('peaje_atipico')
+      .select('llave').eq('tenant_id', tenantId).in('llave', llaves), 'peajes.atipicos_existentes');
+    if (error) throw new Error(`upsertAtipicos: ${error.message}`);
+    for (const f of (data ?? []) as Array<{ llave: unknown }>) existentes.add(String(f.llave));
+  }
+  const faltan = unicos.filter((h) => !existentes.has(h.llave));
+  for (let i = 0; i < faltan.length; i += LOTE_ATIPICOS) {
+    const filas = faltan.slice(i, i + LOTE_ATIPICOS).map((h) => ({
+      tenant_id: tenantId,
+      llave: h.llave,
+      desglose_id: desgloseId,
+      unidad_id: unidadIds.get(h.unidad) ?? null,
+      unidad_archivo: h.unidad,
+      regla: h.regla,
+      monto: Math.round(h.monto * 100) / 100,
+      estado: 'nuevo',
+      detalle: {
+        casetas: h.casetas, desde: h.desde, hasta: h.hasta, desdeLocal: h.desdeLocal, hastaLocal: h.hastaLocal,
+        nCruces: h.nCruces, quePaso: h.quePaso, queSignifica: h.queSignifica, queHacer: h.queHacer,
+      },
+    }));
+    // ignoreDuplicates = ON CONFLICT DO NOTHING: una carrera con otra corrida tampoco pisa un estado.
+    const { error } = await acotada(supabaseAdmin().from('peaje_atipico')
+      .upsert(filas, { onConflict: 'tenant_id,llave', ignoreDuplicates: true }), 'peajes.upsert_atipicos');
+    if (error) throw new Error(`upsertAtipicos: ${error.message}`);
+  }
+  return { nuevos: faltan.length, yaExistian: unicos.length - faltan.length };
+}
+
+export type ResultadoMarcarAtipico = { ok: true; estado: EstadoAtipico } | { ok: false; motivo: string };
+
+/**
+ * Cambia el estado de un hallazgo (nuevo → avisado → revisado → justificado). El estado NO retrocede
+ * (un hallazgo justificado nunca vuelve a «nuevo»). «Revisado» y «justificado» exigen quién revisa.
+ */
+export async function marcarAtipico(
+  tenantId: string, id: string, cambio: { estado: EstadoAtipico; por?: string | null; nota?: string | null },
+): Promise<ResultadoMarcarAtipico> {
+  if (!esEstadoAtipico(cambio.estado)) return { ok: false, motivo: 'El estado no es válido.' };
+  const por = typeof cambio.por === 'string' ? cambio.por.trim().slice(0, 120) : '';
+  if (exigeRevisor(cambio.estado) && !por) return { ok: false, motivo: 'Indica quién revisó el hallazgo.' };
+  const nota = typeof cambio.nota === 'string' && cambio.nota.trim() ? cambio.nota.trim().slice(0, 300) : null;
+  if (cambio.estado === 'justificado' && !nota) return { ok: false, motivo: 'Escribe el motivo por el que queda justificado.' };
+
+  const { data: previa, error: e1 } = await acotada(supabaseAdmin().from('peaje_atipico')
+    .select('estado, avisado_en').eq('tenant_id', tenantId).eq('id', id).maybeSingle(), 'peajes.atipico_previo');
+  if (e1) throw new Error(`marcarAtipico: ${e1.message}`);
+  if (!previa) return { ok: false, motivo: 'No se encontró el hallazgo.' };
+  const actual = String(previa.estado);
+  if (!esEstadoAtipico(actual)) return { ok: false, motivo: 'El hallazgo tiene un estado desconocido.' };
+  if (!puedeCambiarEstado(actual, cambio.estado)) {
+    return { ok: false, motivo: `El hallazgo ya está «${actual}»: no puede volver a «${cambio.estado}».` };
+  }
+
+  const ahora = new Date().toISOString();
+  const parche: Record<string, unknown> = { estado: cambio.estado, actualizado_en: ahora };
+  if (nota !== null) parche.nota = nota;
+  if (cambio.estado === 'avisado' && !previa.avisado_en) parche.avisado_en = ahora;
+  if (exigeRevisor(cambio.estado)) { parche.revisado_en = ahora; parche.revisado_por = por; if (!previa.avisado_en) parche.avisado_en = ahora; }
+  const { error: e2 } = await acotada(supabaseAdmin().from('peaje_atipico')
+    .update(parche).eq('tenant_id', tenantId).eq('id', id).eq('estado', actual), 'peajes.marcar_atipico');
+  if (e2) {
+    logger.error('peajes.marcar_atipico', { tenant: tenantId, err: e2.message });
+    return { ok: false, motivo: 'No se pudo guardar el cambio. Intenta de nuevo.' };
+  }
+  return { ok: true, estado: cambio.estado };
 }
