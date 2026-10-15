@@ -2,7 +2,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { exigir, traerPorIds } from '../pg';
-import { COLUMNAS_HITO, filaAHito } from './repo';
+import { COLUMNAS_HITO, cargarContactosTrafico, filaAHito } from './repo';
+import type { NivelSinDestino } from './escalamiento';
 import { coordenadasValidas } from './geo';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from './geometria_datos';
 import type { ErrorCsv, SitioCsv, TipoSitio } from './sitios';
@@ -429,6 +430,8 @@ export interface DatosTablero {
   evidencias: EvidenciaFila[];
   acciones: AccionOficinaFila[];
   sitios: Map<string, string>;
+  /** Niveles de escalamiento sin a quién avisar, por terminal de los viajes listados. Ausente = no se pudo leer: el tablero no inventa una alerta. */
+  sinDestino?: NivelSinDestino[];
 }
 
 /** Los viajes activos de la flota con todo lo que el tablero necesita. Un solo tenant, siempre. */
@@ -454,7 +457,18 @@ export async function leerDatosTablero(tenantId: string, f: FiltrosTablero = {})
     const rs = await traerPorIds<Fila>(sitioIds, (t) => acotada(supabaseAdmin().from('geocerca').select('id, nombre').eq('tenant_id', tenantId).in('id', t), 'tablero.sitios') as never, 'tablero.sitios');
     for (const g of rs) sitios.set(String(g.id), String(g.nombre));
   }
-  return { viajes, hayMas, hitos: hitosCrudos.map(filaAHito), veredictos, evidencias, acciones, sitios };
+  let sinDestino: NivelSinDestino[] | undefined;
+  try {
+    // Import diferido: `contactos` arrastra `conv`; el tablero no debe pagarlo (ni romperse) cuando esa lectura no hace falta.
+    const [{ telefonosJefe }, { nivelesSinDestino }] = await Promise.all([import('../contactos'), import('./escalamiento')]);
+    const [contactos, jefes] = await Promise.all([cargarContactosTrafico(tenantId), telefonosJefe([tenantId])]);
+    const terminales = new Map<string, { id: string | null; nombre: string | null }>();
+    for (const v of viajes) terminales.set(v.terminalId ?? '', { id: v.terminalId, nombre: v.terminalNombre });
+    sinDestino = [...terminales.values()].flatMap((t) => nivelesSinDestino(contactos, jefes[tenantId] ?? null, t.id, t.nombre));
+  } catch (e) {
+    logger.warn('conductor.tablero_escalamiento_no_leido', { err: e instanceof Error ? e.message : String(e) });
+  }
+  return { viajes, hayMas, hitos: hitosCrudos.map(filaAHito), veredictos, evidencias, acciones, sitios, sinDestino };
 }
 
 export interface CatalogosFiltro {

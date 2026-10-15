@@ -130,3 +130,12 @@ describe('qué cambió (para la bitácora: llaves, nunca valores personales)', (
     expect(llavesCambiadas({ ...CONFIG_CONDUCTOR_DEFAULT }, { ...CONFIG_CONDUCTOR_DEFAULT })).toEqual([]);
   });
 });
+
+describe('contactos con teléfono de demostración (T-A5-23)', () => {
+  it('la marca 28999 no entra como contacto de escalamiento', () => {
+    for (const tel of ['289991234567', '+28999 123 4567', '5228999123456']) {
+      const c = cuerpoDesdeFormulario(formulario({}, [['1', 'Patio', tel, '']]));
+      expect(validarCambioConfig((c as { ok: Record<string, unknown> }).ok, { ...CONFIG_CONDUCTOR_DEFAULT }), tel).toMatchObject({ error: expect.stringContaining('contactos[0].telefono') });
+    }
+  });
+});

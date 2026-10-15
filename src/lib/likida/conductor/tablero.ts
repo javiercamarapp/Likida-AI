@@ -57,7 +57,7 @@ export interface HitoVista {
 }
 
 export type TipoExcepcion =
-  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'llegada_sin_confirmar' | 'llegada_sin_sitio' | 'estadia_excedida' | 'horas_incoherentes';
+  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'llegada_sin_confirmar' | 'llegada_sin_sitio' | 'estadia_excedida' | 'horas_incoherentes' | 'sin_a_quien_escalar';
 
 export interface Excepcion {
   tipo: TipoExcepcion;
@@ -266,6 +266,16 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
         });
       }
     }
+  }
+
+  // ── Terminales con un nivel de escalamiento sin a quién avisar: se ve ANTES de que haga falta, no en silencio ──
+  for (const f of datos.sinDestino ?? []) {
+    const viaje = datos.viajes.find((v) => v.terminalId === f.terminalId);
+    if (!viaje) continue;
+    excepciones.push({
+      viajeId: viaje.id, folio: viaje.folio, chofer: null, hitoId: null, hitoTipo: null,
+      tipo: 'sin_a_quien_escalar', gravedad: f.nivel === 1 ? 3 : 2, desde: null, texto: f.texto,
+    });
   }
 
   excepciones.sort((a, b) => b.gravedad - a.gravedad || (a.desde ?? '').localeCompare(b.desde ?? ''));
