@@ -327,7 +327,8 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   };
 
   // 1. XML con Carta Porte: sin modelo, y no se le pregunta a nadie lo que el XML no dice.
-  if (c.xml) {
+  // Solo un XML de verdad: un JSON de cliente con una clave «CartaPorte» no es un CFDI con 0.99 de confianza.
+  if (c.xml && c.formato !== 'json') {
     const ccp = extraerCartaPorteXml(c.xml);
     if (ccp) { r.extraccion = completarDerivados(ccp); r.origen = 'xml'; return r; }
   }
