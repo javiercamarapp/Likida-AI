@@ -32,6 +32,21 @@ export const NUMEROS_OPCIONALES: ReadonlyArray<keyof ConfigConductor> = ['estadi
 
 export const NOMBRES_DIA = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'] as const;
 
+/** Los dos perfiles de seguimiento, con las palabras con que se le presentan al dueño de la flota. */
+export const OPCIONES_PERFIL: ReadonlyArray<{ valor: 'esenciales' | 'completo'; etiqueta: string; ayuda: string }> = [
+  { valor: 'esenciales', etiqueta: 'Solo lo esencial', ayuda: 'Salida de carga, dónde está y no se ha reportado.' },
+  { valor: 'completo', etiqueta: 'Ciclo completo', ayuda: 'Todos los hitos del viaje, de la aceptación al regreso.' },
+];
+
+/**
+ * La zona horaria de la flota es de solo lectura en la pantalla. Si no es la de México (la que se espera por omisión),
+ * se avisa en palabras para que nadie lea la ventana horaria como hora de México sin serlo. `null` = es la esperada.
+ */
+export function avisoZona(zona: string, esperada: string = 'America/Mexico_City'): string | null {
+  if (zona === esperada) return null;
+  return `La zona horaria de tu flota es ${zona}, distinta de la esperada (${esperada}). La ventana horaria y los días se leen en ${zona}. Si no es la correcta, avísanos: no se cambia desde esta pantalla.`;
+}
+
 type Origen = { get(k: string): unknown };
 const texto = (fd: Origen, k: string): string => (typeof fd.get(k) === 'string' ? (fd.get(k) as string).trim() : '');
 
