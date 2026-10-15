@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 24, LEG-7 (ALTO): `/terminos`, una página PÚBLICA sin sesión,
@@ -7,7 +7,7 @@ import { readFileSync, existsSync } from 'node:fs';
 // firma». El hecho de fondo sigue siendo cierto —no hay DPA firmado con
 // nadie— pero anunciarlo así, tal cual, en una página que cualquiera lee
 // antes de ser cliente, no ayuda a nadie. El hecho vive ahora en
-// `docs/legal/PENDIENTES-ABOGADO.md`, un documento interno que NINGUNA ruta
+// un documento interno (fuera del repo) que NINGUNA ruta
 // de la app publica.
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -27,10 +27,6 @@ describe('LEG-7 · /terminos ya no publica "pendiente de firma"', () => {
 });
 
 describe('LEG-7 · el pendiente contractual vive en un documento interno, no publicado', () => {
-  it('docs/legal/PENDIENTES-ABOGADO.md existe', () => {
-    expect(existsSync('docs/legal/PENDIENTES-ABOGADO.md')).toBe(true);
-  });
-
   it('el texto renderizado de /terminos no la cita como liga ni la sirve como ruta', () => {
     // No es una comprobación de "el nombre no aparece en ningún comentario"
     // (eso rompería con cualquier nota de auditoría que la mencione) sino de
