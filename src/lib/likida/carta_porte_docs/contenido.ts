@@ -175,6 +175,18 @@ export function detectarFormato(bytes: Uint8Array): DeteccionFormato {
   return { ok: false, motivo: 'El archivo no trae contenido legible.' };
 }
 
+/**
+ * T-A3-58 · ¿Un adjunto SIN extensión se acepta? Solo si sus BYTES son JSON, PDF o Excel (y una foto cuando el correo la
+ * declara `image/*`: las imágenes pegadas llegan sin nombre). Cualquier otra cosa —texto, XML, CSV, zip, ejecutable,
+ * binario desconocido— se descarta sin leerla ni interpretarla: sin extensión no hay ninguna pista de que sea un documento.
+ */
+export function aceptableSinExtension(bytes: Uint8Array, contentType?: string | null): boolean {
+  const d = detectarFormato(bytes);
+  if (!d.ok) return false;
+  if (d.clase === 'json' || d.clase === 'pdf' || d.clase === 'excel') return true;
+  return d.clase === 'imagen' && /^image\//i.test((contentType ?? '').trim());
+}
+
 const recortar = (s: string, max: number): string => (s.length > max ? s.slice(0, max) : s);
 
 /** Quita el ruido que pdf-parse agrega entre páginas. */
