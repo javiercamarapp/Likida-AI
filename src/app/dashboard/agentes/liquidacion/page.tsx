@@ -247,7 +247,7 @@ export default async function PaginaAgenteLiquidacion({
     if (!id || !['operador', 'coordinador', 'rh', 'todos'].includes(a) || !['reclamo', 'correccion_de_correo', 'manual'].includes(motivo)) {
       return volverAlDetalle(contexto, id, 'r_entrada');
     }
-    let codigo = 'r_error';
+    let codigo: string;
     try {
       const r = await reenviarDesglose(s.tenantId, id, {
         a: a as DestinoReenvio, motivo: motivo as MotivoReenvio, actor: { userId: s.userId, rol: s.rol },
@@ -267,7 +267,7 @@ export default async function PaginaAgenteLiquidacion({
     if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
     const id = leerIdDetalle(String(fd.get('id') ?? ''));
     if (!id) return volverAlDetalle(contexto, null, 'r_entrada');
-    let codigo = 'r_error';
+    let codigo: string;
     try {
       const r = await liberarEnvio(s.tenantId, id, { userId: s.userId, rol: s.rol });
       codigo = r.estado === 'liberado' ? 'liberado_ok' : `r_${r.motivo}`;
