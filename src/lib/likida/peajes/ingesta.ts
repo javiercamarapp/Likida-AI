@@ -1,10 +1,12 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { codigoDeError } from '@/lib/observability/sentry';
 import { acotada } from '../presupuesto';
 import { importarDesglose, conciliarDesglose } from '../intake/desglose_peaje';
 import { registrarCorrida } from '../agentes/corridas';
 import { avisarDesgloseConciliado } from './aviso_oficina';
+import { revisarAtipicosDeDesglose } from './revision_atipicos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA INGESTA AUTOMÁTICA DEL DESGLOSE DE PEAJE (0376).
@@ -179,6 +181,8 @@ export interface ResumenCola {
   reintentar: number;
   /** El token del claim ya no era el nuestro al cerrar: lo cerró otro. */
   claimPerdido: number;
+  /** Los cruces atípicos (T-A2-13) de los archivos procesados: solo conteos, nunca tags ni importes. `fallidos` vuelve «parcial» al latido. */
+  atipicos?: { revisados: number; hallazgos: number; fallidos: number };
 }
 
 const minutos = (n: number) => new Date(Date.now() + n * 60_000).toISOString();
@@ -232,7 +236,7 @@ export async function procesarColaPeajes(
           r.fallidos++;
           await registrarCorrida(a.tenant_id, 'peajes', {
             inicio, fin: new Date(), estado: 'fallo', disparo: 'cron',
-            error: `No se pudo leer «${a.nombre}»: ${imp.motivo}`.slice(0, 500),
+            error: `${`No se pudo leer «${a.nombre}»: ${imp.motivo}`.slice(0, 420)} Corrige el archivo y vuelve a subirlo.`,
           });
         }
         continue;
@@ -243,6 +247,19 @@ export async function procesarColaPeajes(
         ultimo_error: null, reclamo: null, reclamado_hasta: null,
       })) {
         r.procesados++;
+        // Los cruces atípicos (T-A2-13): solo si la flota los activó, sobre este desglose + las decenas previas del
+        // mes. Va DESPUÉS de cerrar: su fallo nunca reabre ni tumba un archivo ya procesado (queda `parcial` en el latido).
+        // `revisarAtipicosDeDesglose` no lanza: devuelve `fallo` y ya dejó el log `cron.peajes.atipicos_fallo`; aquí solo se cuenta.
+        try {
+          const rev = await revisarAtipicosDeDesglose(a.tenant_id, imp.desgloseId, 'cron');
+          // Solo existe cuando el detector corrió (activado por la flota): apagado no ensucia el resumen.
+          if (rev.estado === 'ok') { r.atipicos ??= { revisados: 0, hallazgos: 0, fallidos: 0 }; r.atipicos.revisados++; r.atipicos.hallazgos += rev.hallazgos; }
+          else if (rev.estado === 'fallo') { r.atipicos ??= { revisados: 0, hallazgos: 0, fallidos: 0 }; r.atipicos.fallidos++; }
+        } catch (e) {
+          r.atipicos ??= { revisados: 0, hallazgos: 0, fallidos: 0 };
+          r.atipicos.fallidos++;
+          logger.error('cron.peajes.atipicos_fallo', { archivo: a.id, codigo: codigoDeError(e) });
+        }
         // El aviso a la oficina (0563) va DESPUÉS de cerrar: su fallo nunca reabre ni tumba un archivo ya
         // procesado (el barrido del cron lo reintenta). Nunca lanza, pero se blinda de todos modos.
         try { await avisar(a.tenant_id, imp.desgloseId); } catch (e) {
@@ -251,7 +268,7 @@ export async function procesarColaPeajes(
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      logger.error('peajes.cola.fallo', { archivo: a.id, tenant: a.tenant_id, intentos: a.intentos, err: msg });
+      logger.error('peajes.cola.fallo', { archivo: a.id, tenant: a.tenant_id, intentos: a.intentos, codigo: codigoDeError(e) });
       const agotado = a.intentos >= MAX_INTENTOS;
       const cambios = agotado
         ? { estado: 'fallida', ultimo_error: `Se agotaron ${MAX_INTENTOS} intentos: ${msg}`.slice(0, 1000), reclamado_hasta: null }
@@ -261,8 +278,14 @@ export async function procesarColaPeajes(
         };
       try {
         if (await cerrar(cambios)) {
-          if (agotado) r.fallidos++;
-          else r.reintentar++;
+          if (agotado) {
+            r.fallidos++;
+            // Quien ve la bitácora no lee el error de la base: causa + qué hacer, sin el mensaje técnico.
+            await registrarCorrida(a.tenant_id, 'peajes', {
+              inicio, fin: new Date(), estado: 'fallo', disparo: 'cron',
+              error: `No se pudo procesar «${a.nombre}» después de ${MAX_INTENTOS} intentos por un problema temporal del sistema. Vuelve a subirlo; si se repite, avisa a soporte.`.slice(0, 500),
+            });
+          } else r.reintentar++;
         }
       } catch (e2) {
         // Ni siquiera se pudo anotar: el lease vence solo y el siguiente cron lo recupera.

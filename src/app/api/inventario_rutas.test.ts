@@ -235,7 +235,12 @@ import { join, relative, sep } from 'node:path';
 //   Javier) al servidor. Su puerta: `puertaCron` (CRON_SECRET, comparación de tiempo constante; sin él 500 y alerta), palanca
 //   `global` fail-closed (ilegible = 500 + aviso) y latido en todo camino de salida. No lee ni devuelve datos de flota: responde
 //   conteos, y los componentes de /estado son un catálogo cerrado de cinco nombres con tres estados. Prueba: `cron/guardia/route.test.ts`.
-const RUTAS_APP_REVISADAS = 106;
+//
+// 106 → 107 (frente A2 Peajes, revisión de cobros): `api/export/peajes-revision/route.ts` — GET de la flota de la SESIÓN
+//   (`resolverTenantApi`): puerta del dato (área `dinero`), del verbo (`puedeExportar`), rate limit por IP y por flota; el desglose se busca CON
+//   el tenant de la sesión (uno ajeno es 404) y una lectura incompleta no sale como archivo corto. Mismo molde que `peajes-reclamacion`.
+//   Prueba: `export/peajes-revision/route.test.ts`.
+const RUTAS_APP_REVISADAS = 107;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

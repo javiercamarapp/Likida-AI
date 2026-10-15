@@ -212,7 +212,7 @@ describe('importarDesglose: guarda la hora y el instante del cobro', () => {
 
   it('el tope de líneas se dice, no se importa a medias', async () => {
     db = crearDbFalsa({});
-    const filas = ['Fecha,Caseta,Importe'].concat(Array.from({ length: 5001 }, () => '05/08/2026,Caseta Ejemplo Norte,10.00')).join('\n');
+    const filas = ['Fecha,Caseta,Importe'].concat(Array.from({ length: 60_001 }, () => '05/08/2026,Caseta Ejemplo Norte,10.00')).join('\n');
     const r = await importarDesglose(T, { nombre: 'enorme.csv', buffer: Buffer.from(filas) });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.motivo).toMatch(/tope/);

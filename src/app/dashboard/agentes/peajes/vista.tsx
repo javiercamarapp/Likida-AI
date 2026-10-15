@@ -293,6 +293,11 @@ export function VistaAgentePeajes({
                         style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                         <FileDown width={13} height={13} strokeWidth={2} /> Reporte de reclamación
                       </Link>
+                      <Link href={`/dashboard/agentes/peajes/reclamacion${sufijo}${sufijo ? '&' : '?'}desglose=${desgloseSeleccionado.desgloseId}#revision-cobros`}
+                        className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg hairline transition-colors hover:bg-[var(--canvas)]"
+                        style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+                        Revisión de cobros (candidatos)
+                      </Link>
                     </div>
                     <EstadoConciliado v={verificacion} />
                     {detalleSeleccionado === null ? (

@@ -6,13 +6,15 @@ import { normalizarNombre, normalizarTag } from './formatos';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../conductor/geometria_datos';
 import { matrizDeArchivoCatalogo } from './archivo';
 import { parsearCasetasMatriz, type CasetaCatalogo } from './casetas';
-import { parsearTagsMatriz, resolverUnidadesDeTags } from './tags';
+import { parsearTagsMatriz, resolverUnidadesDeTags, validarBajaTag, type VigenciaTag } from './tags';
 import { validarMapeo, type ConfigMapeo } from './mapeo';
 import { planificarGps, evaluarCruceGps, type LineaParaGps, type VeredictoGps, type Muestra } from './cruce_gps';
 import { createHash } from 'node:crypto';
 import { generarToken, esTokenValido } from '@/lib/correo/buzon';
 import { hostNoPublico } from '@/lib/http/destino_publico';
 import { cifrar, cofreConfigurado } from '../conectores/cofre';
+import type { HallazgoAtipico, ConfigAtipicos } from './atipicos';
+import { validarConfigAtipicos, configAtipicosEfectiva, esEstadoAtipico, puedeCambiarEstado, exigeRevisor, type EstadoAtipico } from './atipicos_config';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL I/O DE LOS CATÁLOGOS DE PEAJES: TAGs, casetas, geocercas, mapeos.
@@ -42,7 +44,9 @@ export async function listarUnidades(tenantId: string): Promise<Array<{ id: stri
 }
 
 // ── TAGs ────────────────────────────────────────────────────────────────────
-export interface TagVista { id: string; tag: string; tagOriginal: string | null; unidadId: string; unidadEconomico: string | null; proveedor: string | null; activo: boolean }
+export interface TagVista { id: string; tag: string; tagOriginal: string | null; unidadId: string; unidadEconomico: string | null; proveedor: string | null; activo: boolean;
+  /** Último día vigente, si el TAG se dio de baja (`peaje_tag_baja`). */
+  bajaEn?: string | null; bajaMotivo?: string | null }
 
 export async function listarTags(tenantId: string): Promise<TagVista[]> {
   const filas = await traerTodo<{ id: unknown; tag: unknown; tag_original: unknown; unidad_id: unknown; proveedor: unknown; activo: unknown }>(
@@ -53,11 +57,43 @@ export async function listarTags(tenantId: string): Promise<TagVista[]> {
   );
   const unidades = await listarUnidades(tenantId);
   const eco = new Map(unidades.map((u) => [u.id, u.numeroEconomico]));
-  return filas.map((f) => ({
-    id: String(f.id), tag: String(f.tag), tagOriginal: (f.tag_original as string | null) ?? null,
-    unidadId: String(f.unidad_id), unidadEconomico: eco.get(String(f.unidad_id)) ?? null,
-    proveedor: (f.proveedor as string | null) ?? null, activo: f.activo !== false,
-  }));
+  const bajas = await leerBajas(tenantId);
+  return filas.map((f) => {
+    const baja = bajas.get(String(f.tag));
+    return {
+      id: String(f.id), tag: String(f.tag), tagOriginal: (f.tag_original as string | null) ?? null,
+      unidadId: String(f.unidad_id), unidadEconomico: eco.get(String(f.unidad_id)) ?? null,
+      proveedor: (f.proveedor as string | null) ?? null, activo: f.activo !== false,
+      bajaEn: baja?.bajaEn ?? null, bajaMotivo: baja?.motivo ?? null,
+    };
+  });
+}
+
+/** TAG normalizado → su baja registrada (`peaje_tag_baja`, 0776). */
+async function leerBajas(tenantId: string): Promise<Map<string, { bajaEn: string; motivo: string | null }>> {
+  const filas = await traerTodo<{ tag: unknown; baja_en: unknown; motivo: unknown }>(
+    (d, h) => acotada(supabaseAdmin()
+      .from('peaje_tag_baja').select('tag, baja_en, motivo', conteo(d))
+      .eq('tenant_id', tenantId).order('tag').range(d, h), 'peajes.tags_baja'),
+    'peajes.tags_baja',
+  );
+  return new Map(filas.map((f) => [String(f.tag), { bajaEn: String(f.baja_en).slice(0, 10), motivo: (f.motivo as string | null) ?? null }]));
+}
+
+/**
+ * TODOS los TAGs (activos o dados de baja) con la unidad que los tuvo y su baja, si la hay.
+ * Es lo que necesita `resolverTagEnFecha` para que un cruce ANTERIOR a la baja conserve su
+ * unidad y uno POSTERIOR no. Lanza ante error de base (un mapa a medias daría «sin alta» falsos).
+ */
+export async function cargarVigenciaTags(tenantId: string): Promise<Map<string, VigenciaTag>> {
+  const filas = await traerTodo<{ tag: unknown; unidad_id: unknown }>(
+    (d, h) => acotada(supabaseAdmin()
+      .from('peaje_tag').select('tag, unidad_id', conteo(d))
+      .eq('tenant_id', tenantId).order('tag').range(d, h), 'peajes.vigencia_tags'),
+    'peajes.vigencia_tags',
+  );
+  const bajas = await leerBajas(tenantId);
+  return new Map(filas.map((f) => [String(f.tag), { unidadId: String(f.unidad_id), bajaEn: bajas.get(String(f.tag))?.bajaEn ?? null }]));
 }
 
 /** TAG normalizado → unidad, solo los activos. Lanza ante error de base: un mapa a medias dejaría líneas «sin unidad» falsas. */
@@ -71,7 +107,7 @@ export async function cargarMapaTags(tenantId: string): Promise<Map<string, stri
   return new Map(filas.map((f) => [String(f.tag), String(f.unidad_id)]));
 }
 
-export type ResultadoAltaTag = { ok: true } | { ok: false; motivo: string };
+export type ResultadoAltaTag = { ok: true; /** El TAG estaba de baja y volvió a darse de alta: la baja se retira. */ reactivadoDesdeBaja?: string } | { ok: false; motivo: string };
 
 export async function altaTag(tenantId: string, entrada: { tag: string; unidadId: string; proveedor?: string | null }): Promise<ResultadoAltaTag> {
   const tag = normalizarTag(entrada.tag);
@@ -86,13 +122,52 @@ export async function altaTag(tenantId: string, entrada: { tag: string; unidadId
     logger.error('peajes.alta_tag', { tenant: tenantId, err: error.message });
     return { ok: false, motivo: 'No se pudo guardar el TAG. Inténtalo de nuevo.' };
   }
-  return { ok: true };
+  return quitarBajasDeTags(tenantId, [tag]);
 }
 
-export async function bajaTag(tenantId: string, tagId: string): Promise<boolean> {
-  const { error } = await acotada(supabaseAdmin().from('peaje_tag').delete().eq('tenant_id', tenantId).eq('id', tagId), 'peajes.baja_tag');
-  if (error) logger.error('peajes.baja_tag', { tenant: tenantId, err: error.message });
-  return !error;
+/** Dar de alta otra vez un TAG dado de baja lo reactiva: se retira su baja para que sus cruces nuevos no se marquen. */
+async function quitarBajasDeTags(tenantId: string, tags: readonly string[]): Promise<ResultadoAltaTag> {
+  let desde: string | undefined;
+  for (const lote of lotes(tags)) {
+    const { data: previas, error: eLeer } = await acotada(
+      supabaseAdmin().from('peaje_tag_baja').select('tag, baja_en').eq('tenant_id', tenantId).in('tag', lote), 'peajes.reactivar_leer');
+    if (eLeer) { logger.error('peajes.reactivar_leer', { tenant: tenantId, err: eLeer.message }); return { ok: false, motivo: 'El TAG se guardó, pero no se pudo comprobar si estaba de baja. Vuelve a guardarlo.' }; }
+    if (!previas || previas.length === 0) continue;
+    desde = String((previas[0] as { baja_en: unknown }).baja_en).slice(0, 10);
+    const { error } = await acotada(supabaseAdmin().from('peaje_tag_baja').delete().eq('tenant_id', tenantId).in('tag', lote), 'peajes.reactivar');
+    if (error) { logger.error('peajes.reactivar', { tenant: tenantId, err: error.message }); return { ok: false, motivo: 'El TAG se guardó, pero no se pudo retirar su baja. Vuelve a guardarlo.' }; }
+  }
+  return desde ? { ok: true, reactivadoDesdeBaja: desde } : { ok: true };
+}
+
+/**
+ * BAJA LÓGICA (ya no borra la fila). Registra la fecha y el motivo en `peaje_tag_baja` y, si la
+ * baja ya rige (`fecha` ≤ hoy), deja el TAG en `activo=false`. El historial de cruces anteriores
+ * sigue resolviendo su unidad (`cargarVigenciaTags` + `resolverTagEnFecha`) y la regla
+ * `tag_dado_de_baja` marca los cruces posteriores. Es idempotente: repetirla actualiza fecha y motivo.
+ */
+export async function bajaTag(
+  tenantId: string,
+  tagId: string,
+  baja: { fecha: unknown; motivo?: unknown },
+  hoy: string = new Date().toISOString().slice(0, 10),
+): Promise<ResultadoAltaTag> {
+  const v = validarBajaTag(baja, hoy);
+  if (!v.ok) return v;
+  const { data: fila, error: eLeer } = await acotada(
+    supabaseAdmin().from('peaje_tag').select('id, tag, tag_original').eq('tenant_id', tenantId).eq('id', tagId).maybeSingle(), 'peajes.baja_tag_leer');
+  if (eLeer) { logger.error('peajes.baja_tag_leer', { tenant: tenantId, err: eLeer.message }); return { ok: false, motivo: 'No se pudo leer el TAG. Inténtalo de nuevo.' }; }
+  if (!fila) return { ok: false, motivo: 'Ese TAG ya no existe en tu flota.' };
+  const f = fila as { tag: unknown; tag_original: unknown };
+  const { error: eBaja } = await acotada(supabaseAdmin().from('peaje_tag_baja').upsert({
+    tenant_id: tenantId, tag: String(f.tag), tag_original: (f.tag_original as string | null) ?? null, baja_en: v.fecha, motivo: v.motivo,
+  }, { onConflict: 'tenant_id,tag' }), 'peajes.baja_tag');
+  if (eBaja) { logger.error('peajes.baja_tag', { tenant: tenantId, err: eBaja.message }); return { ok: false, motivo: 'No se pudo registrar la baja del TAG. Inténtalo de nuevo.' }; }
+  // Una baja programada (fecha futura) no apaga el TAG hoy; una vencida o de hoy sí.
+  const { error: eAct } = await acotada(
+    supabaseAdmin().from('peaje_tag').update({ activo: !v.vigente }).eq('tenant_id', tenantId).eq('id', tagId), 'peajes.baja_tag_activo');
+  if (eAct) { logger.error('peajes.baja_tag_activo', { tenant: tenantId, err: eAct.message }); return { ok: false, motivo: 'La baja quedó registrada, pero no se pudo apagar el TAG. Repite la baja.' }; }
+  return { ok: true };
 }
 
 export interface ResultadoImportacionCatalogo {
@@ -138,6 +213,9 @@ export async function importarTagsArchivo(tenantId: string, nombre: string, buff
       logger.error('peajes.importar_tags', { tenant: tenantId, err: error.message });
       return { ok: false, guardadas, actualizadas, rechazadas: todasRechazadas, error: `Se guardaron ${guardadas} TAGs y el resto falló. Vuelve a subir el archivo: es seguro repetirlo.` };
     }
+    // El importador reactiva (activo=true): un TAG que estaba de baja deja de estarlo.
+    const reactivadas = await quitarBajasDeTags(tenantId, lote.map((a) => a.tag));
+    if (!reactivadas.ok) return { ok: false, guardadas, actualizadas, rechazadas: todasRechazadas, error: reactivadas.motivo };
     for (const a of lote) {
       guardadas++;
       const previa = existentes.get(a.tag);
@@ -813,4 +891,149 @@ export async function cambiarEstadoCurso(tenantId: string, cursoId: string, acti
   const { error } = await acotada(supabaseAdmin().from('peaje_curso').update({ activo, actualizado_en: new Date().toISOString() }).eq('tenant_id', tenantId).eq('id', cursoId), 'peajes.estado_curso');
   if (error) logger.error('peajes.estado_curso', { tenant: tenantId, err: error.message });
   return !error;
+}
+
+// ── Cruces atípicos: umbrales y hallazgos (T-A2-12, migración 0779) ─────────
+
+export interface ConfigAtipicosFlota {
+  /** El detector corre SOLO si la flota lo activó. Apagado de origen. */
+  activo: boolean;
+  /** Umbrales vigentes (guardados y válidos, o los defaults). */
+  umbrales: ConfigAtipicos;
+}
+
+/** La configuración de la flota. Sin fila = apagado y defaults. Lanza ante error de base. */
+export async function leerConfigAtipicos(tenantId: string): Promise<ConfigAtipicosFlota> {
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_atipico_config')
+    .select('activo, umbrales').eq('tenant_id', tenantId).maybeSingle(), 'peajes.config_atipicos');
+  if (error) throw new Error(`leerConfigAtipicos: ${error.message}`);
+  return { activo: data?.activo === true, umbrales: configAtipicosEfectiva(data?.umbrales) };
+}
+
+/** Valida y guarda los umbrales (y si el detector está activo). Un umbral inválido se rechaza con mensaje llano y no se guarda nada. */
+export async function guardarConfigAtipicos(
+  tenantId: string, entrada: { activo: boolean; umbrales?: unknown },
+): Promise<{ ok: true; config: ConfigAtipicosFlota } | { ok: false; motivo: string }> {
+  if (typeof entrada.activo !== 'boolean') return { ok: false, motivo: 'Indica si el detector está activo (sí o no).' };
+  const v = validarConfigAtipicos(entrada.umbrales);
+  if (!v.ok) return { ok: false, motivo: v.motivo };
+  // El destinatario del aviso (`umbrales.aviso`, T-A2-14) no es un umbral: guardar umbrales no lo borra.
+  const previa = await acotada(supabaseAdmin().from('peaje_atipico_config').select('umbrales').eq('tenant_id', tenantId).maybeSingle(), 'peajes.guardar_config_atipicos_previa');
+  if (previa.error) {
+    logger.error('peajes.guardar_config_atipicos', { tenant: tenantId, err: previa.error.message });
+    return { ok: false, motivo: 'No se pudo guardar la configuración. Intenta de nuevo.' };
+  }
+  const aviso = (previa.data?.umbrales as { aviso?: unknown } | null | undefined)?.aviso;
+  const { error } = await acotada(supabaseAdmin().from('peaje_atipico_config').upsert({
+    tenant_id: tenantId, activo: entrada.activo, umbrales: aviso === undefined ? v.valor : { ...v.valor, aviso }, actualizado_en: new Date().toISOString(),
+  }, { onConflict: 'tenant_id' }), 'peajes.guardar_config_atipicos');
+  if (error) {
+    logger.error('peajes.guardar_config_atipicos', { tenant: tenantId, err: error.message });
+    return { ok: false, motivo: 'No se pudo guardar la configuración. Intenta de nuevo.' };
+  }
+  return { ok: true, config: { activo: entrada.activo, umbrales: v.valor } };
+}
+
+const LOTE_ATIPICOS = 200;
+
+export interface ResultadoUpsertAtipicos { nuevos: number; yaExistian: number }
+
+/**
+ * Guarda los hallazgos de un desglose de forma IDEMPOTENTE: la `llave` (única por flota)
+ * identifica la situación; re-correr el mismo desglose no duplica ni toca lo ya guardado
+ * (el estado, la nota y quién revisó se conservan). `unidadIds` liga la unidad del archivo
+ * con la unidad del sistema cuando se conoce. Lanza ante error de base.
+ */
+export async function upsertAtipicos(
+  tenantId: string, desgloseId: string | null, hallazgos: readonly HallazgoAtipico[],
+  unidadIds: ReadonlyMap<string, string> = new Map(),
+): Promise<ResultadoUpsertAtipicos> {
+  const unicos = [...new Map(hallazgos.map((h) => [h.llave, h])).values()];
+  const existentes = new Set<string>();
+  for (let i = 0; i < unicos.length; i += LOTE_ATIPICOS) {
+    const llaves = unicos.slice(i, i + LOTE_ATIPICOS).map((h) => h.llave);
+    const { data, error } = await acotada(supabaseAdmin().from('peaje_atipico')
+      .select('llave').eq('tenant_id', tenantId).in('llave', llaves), 'peajes.atipicos_existentes');
+    if (error) throw new Error(`upsertAtipicos: ${error.message}`);
+    for (const f of (data ?? []) as Array<{ llave: unknown }>) existentes.add(String(f.llave));
+  }
+  const faltan = unicos.filter((h) => !existentes.has(h.llave));
+  for (let i = 0; i < faltan.length; i += LOTE_ATIPICOS) {
+    const filas = faltan.slice(i, i + LOTE_ATIPICOS).map((h) => ({
+      tenant_id: tenantId,
+      llave: h.llave,
+      desglose_id: desgloseId,
+      unidad_id: unidadIds.get(h.unidad) ?? null,
+      unidad_archivo: h.unidad,
+      regla: h.regla,
+      monto: Math.round(h.monto * 100) / 100,
+      estado: 'nuevo',
+      detalle: {
+        casetas: h.casetas, desde: h.desde, hasta: h.hasta, desdeLocal: h.desdeLocal, hastaLocal: h.hastaLocal,
+        nCruces: h.nCruces, quePaso: h.quePaso, queSignifica: h.queSignifica, queHacer: h.queHacer,
+      },
+    }));
+    // ignoreDuplicates = ON CONFLICT DO NOTHING: una carrera con otra corrida tampoco pisa un estado.
+    const { error } = await acotada(supabaseAdmin().from('peaje_atipico')
+      .upsert(filas, { onConflict: 'tenant_id,llave', ignoreDuplicates: true }), 'peajes.upsert_atipicos');
+    if (error) throw new Error(`upsertAtipicos: ${error.message}`);
+  }
+  return { nuevos: faltan.length, yaExistian: unicos.length - faltan.length };
+}
+
+export type ResultadoMarcarAtipico = { ok: true; estado: EstadoAtipico } | { ok: false; motivo: string };
+
+/**
+ * Cambia el estado de un hallazgo (nuevo → avisado → revisado → justificado). El estado NO retrocede
+ * (un hallazgo justificado nunca vuelve a «nuevo»). «Revisado» y «justificado» exigen quién revisa.
+ */
+export async function marcarAtipico(
+  tenantId: string, id: string, cambio: { estado: EstadoAtipico; por?: string | null; nota?: string | null },
+): Promise<ResultadoMarcarAtipico> {
+  if (!esEstadoAtipico(cambio.estado)) return { ok: false, motivo: 'El estado no es válido.' };
+  const por = typeof cambio.por === 'string' ? cambio.por.trim().slice(0, 120) : '';
+  if (exigeRevisor(cambio.estado) && !por) return { ok: false, motivo: 'Indica quién revisó el hallazgo.' };
+  const nota = typeof cambio.nota === 'string' && cambio.nota.trim() ? cambio.nota.trim().slice(0, 300) : null;
+  if (cambio.estado === 'justificado' && !nota) return { ok: false, motivo: 'Escribe el motivo por el que queda justificado.' };
+
+  const { data: previa, error: e1 } = await acotada(supabaseAdmin().from('peaje_atipico')
+    .select('estado, avisado_en').eq('tenant_id', tenantId).eq('id', id).maybeSingle(), 'peajes.atipico_previo');
+  if (e1) throw new Error(`marcarAtipico: ${e1.message}`);
+  if (!previa) return { ok: false, motivo: 'No se encontró el hallazgo.' };
+  const actual = String(previa.estado);
+  if (!esEstadoAtipico(actual)) return { ok: false, motivo: 'El hallazgo tiene un estado desconocido.' };
+  if (!puedeCambiarEstado(actual, cambio.estado)) {
+    return { ok: false, motivo: `El hallazgo ya está «${actual}»: no puede volver a «${cambio.estado}».` };
+  }
+
+  const ahora = new Date().toISOString();
+  const parche: Record<string, unknown> = { estado: cambio.estado, actualizado_en: ahora };
+  if (nota !== null) parche.nota = nota;
+  if (cambio.estado === 'avisado' && !previa.avisado_en) parche.avisado_en = ahora;
+  if (exigeRevisor(cambio.estado)) { parche.revisado_en = ahora; parche.revisado_por = por; if (!previa.avisado_en) parche.avisado_en = ahora; }
+  const { error: e2 } = await acotada(supabaseAdmin().from('peaje_atipico')
+    .update(parche).eq('tenant_id', tenantId).eq('id', id).eq('estado', actual), 'peajes.marcar_atipico');
+  if (e2) {
+    logger.error('peajes.marcar_atipico', { tenant: tenantId, err: e2.message });
+    return { ok: false, motivo: 'No se pudo guardar el cambio. Intenta de nuevo.' };
+  }
+  return { ok: true, estado: cambio.estado };
+}
+
+/** Reclamos enviados con saldo por acreditar: contra ellos se casa una nota de crédito (`notas_credito.ts`). Solo lectura; lanza ante error de base. */
+export async function reclamosParaCasar(tenantId: string): Promise<import('./notas_credito').ReclamoParaCasar[]> {
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin().from('peaje_reclamo')
+      .select('id, estado, monto_reclamado, monto_acreditado, fecha_cobro_mas_antiguo', conteo(d))
+      .eq('tenant_id', tenantId).in('estado', ['enviado', 'acreditado_parcial'])
+      .order('fecha_cobro_mas_antiguo').order('id').range(d, h), 'peajes.reclamos_para_casar'),
+    'peajes.reclamos_para_casar',
+  );
+  return filas
+    .map((f) => ({
+      id: String(f.id), estado: String(f.estado) as import('./reclamos_seguimiento').EstadoReclamo,
+      montoReclamable: Math.round((Number(f.monto_reclamado ?? 0) - Number(f.monto_acreditado ?? 0)) * 100) / 100,
+      fechaCobroMasAntiguo: String(f.fecha_cobro_mas_antiguo).slice(0, 10),
+    }))
+    .filter((r) => r.montoReclamable > 0);
 }
