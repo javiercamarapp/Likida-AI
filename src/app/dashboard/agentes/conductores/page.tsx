@@ -184,7 +184,7 @@ export default async function PaginaAgenteConductores({
   // T-A5-32: la tarjeta «qué pasó · qué significa · qué hacer». `null` = no se pudo leer → la tarjeta lo dice.
   const pInsights = safe(async () => {
     const [entrada, config] = await Promise.all([
-      leerEntradaInsights(tenantId, new Date(Date.now() - filtrosVista.dias * 86_400_000), filtrosRepo),
+      leerEntradaInsights(tenantId, new Date(ahoraMs() - filtrosVista.dias * 86_400_000), filtrosRepo),
       leerConfigConductor(tenantId),
     ]);
     return {
