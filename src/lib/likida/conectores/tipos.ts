@@ -87,7 +87,7 @@ export const CATEGORIAS: readonly CategoriaConector[] = [
 /**
  * DE DÓNDE SALE EL ORDEN DE ESTE CATÁLOGO. No de intuición.
  *
- * Censo de vacantes de autotransporte en México (`~/javiercamarapp/censo-liquidacion`),
+ * Censo de vacantes de autotransporte en México (carpeta local fuera del repo),
  * 5,056 vacantes de 1,987 empresas distintas, minado el 14-ago-2026. Cuenta
  * cuántas EMPRESAS nombran cada software en sus ofertas de trabajo:
  *

@@ -7,7 +7,7 @@ import { execSync } from 'node:child_process';
 // `c311997` commiteó, sin querer, el enlace simbólico que apuntaba al
 // `node_modules` de la laptop del autor:
 //
-//     120000 blob 9ae56bb  node_modules -> /Users/javiercamaraportepetit/likida/node_modules
+//     120000 blob 9ae56bb  node_modules -> /ruta/absoluta/al/proyecto/node_modules
 //
 // `.gitignore` decía `node_modules/` —con diagonal— y esa forma solo casa
 // DIRECTORIOS. Un enlace simbólico llamado `node_modules` no es un directorio
