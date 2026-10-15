@@ -156,7 +156,7 @@ export const almacenAvisoAtipicos: AlmacenAvisoAtipicos = {
     const { data, error } = await acotada(supabaseAdmin().from('peaje_atipico')
       .select('tenant_id, desglose_id, detalle')
       .eq('estado', 'nuevo').is('avisado_en', null).not('desglose_id', 'is', null)
-      .order('creado_en').limit(LOTE_BARRIDO), 'peajes.atipicos_aviso_barrido');
+      .order('creado_en').order('id').limit(LOTE_BARRIDO), 'peajes.atipicos_aviso_barrido');
     if (error) throw new Error(`avisoAtipicos.desglosesPendientes: ${error.message}`);
     const vistos = new Map<string, { tenantId: string; desgloseId: string }>();
     for (const f of (data ?? []) as Array<Record<string, unknown>>) {

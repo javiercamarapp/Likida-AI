@@ -263,7 +263,7 @@ const aCoordinador = (r: Fila): Coordinador => ({
 
 export async function listarCoordinadores(tenantId: string): Promise<Lectura<Coordinador[]>> {
   const res = await acotada(supabaseAdmin().from('liquidacion_coordinador')
-    .select('id, nombre, correo, activo').eq('tenant_id', tenantId).order('correo').limit(500), 'liqcorreo.coordinadores_listar');
+    .select('id, nombre, correo, activo').eq('tenant_id', tenantId).order('correo').order('id').limit(500), 'liqcorreo.coordinadores_listar');
   const l = leer(res as unknown as { data: Fila[] | null; error: ErrorPg }, 'liqcorreo.coordinadores_listar');
   if (!l.ok) return l;
   return { ok: true, valor: (l.valor ?? []).map(aCoordinador) };
@@ -529,7 +529,7 @@ export async function confirmarEntregaCorreo(
 export async function entregasDe(tenantId: string, liquidacionId: string): Promise<Lectura<EntregaCorreo[]>> {
   const res = await acotada(supabaseAdmin().from('liquidacion_entrega_correo').select(COLS_ENTREGA)
     .eq('tenant_id', tenantId).eq('liquidacion_externa_id', liquidacionId)
-    .order('generacion').order('rol').order('correo').limit(200), 'liqcorreo.entregas_de');
+    .order('generacion').order('rol').order('correo').order('id').limit(200), 'liqcorreo.entregas_de');
   const l = leer(res as unknown as { data: Fila[] | null; error: ErrorPg }, 'liqcorreo.entregas_de');
   if (!l.ok) return l;
   return { ok: true, valor: (l.valor ?? []).map(aEntrega) };
@@ -585,7 +585,7 @@ export async function listarExcepciones(
   if (opts.soloAbiertas !== false) q = q.is('resuelta_en', null);
   if (opts.tipo) q = q.eq('tipo', opts.tipo);
   if (opts.clave) q = q.eq('clave_externa', opts.clave);
-  const res = await acotada(q.order('ultima_vez', { ascending: false }).limit(Math.min(Math.max(Math.trunc(opts.limite ?? 100), 1), 500)), 'liqcorreo.excepciones_listar');
+  const res = await acotada(q.order('ultima_vez', { ascending: false }).order('id').limit(Math.min(Math.max(Math.trunc(opts.limite ?? 100), 1), 500)), 'liqcorreo.excepciones_listar');
   const l = leer(res as unknown as { data: Fila[] | null; error: ErrorPg }, 'liqcorreo.excepciones_listar');
   if (!l.ok) return l;
   return { ok: true, valor: (l.valor ?? []).map(aExcepcion) };

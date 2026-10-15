@@ -18,6 +18,7 @@ import { COLUMNAS, aLiquidacionExterna, aAvisoDiscrepancia, type Fila, type Liqu
 /** Las flotas con `canal='correo'` (0785). Sin la tabla (base sin esa migración): ninguna, y todo sigue por WhatsApp como antes.
  *  Cualquier otro error LANZA: leerlo como «ninguna» mandaría por WhatsApp lo que la flota pidió por correo. */
 async function tenantsSoloCorreo(): Promise<string[]> {
+  // orden-no-importa: la tabla tiene una fila por flota (llave tenant_id) y se lee completa para repartir por canal
   const res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
     .select('tenant_id, canal').or('canal.eq.correo').limit(1000), 'liqext.trabajo_canal');
   if (res.error) {

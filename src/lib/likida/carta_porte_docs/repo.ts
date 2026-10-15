@@ -492,10 +492,10 @@ export async function cargarCatalogoCliente(tenantId: string, clienteId: string)
     acotada(supabaseAdmin().from('cp_cliente_numero').select('numero_interno, numero_pagador, activo').eq('tenant_id', tenantId).eq('cliente_id', clienteId).maybeSingle(), 'cpdocs.catalogo_numero'),
     acotada(supabaseAdmin().from('cp_catalogo_producto')
       .select('sku, descripcion_patron, bienes_transp, clave_unidad, embalaje, fraccion, tipo_materia, material_peligroso, clave_material_peligroso')
-      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('sku').limit(TOPE_FILAS_CATALOGO), 'cpdocs.catalogo_productos'),
+      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('sku').order('id').limit(TOPE_FILAS_CATALOGO), 'cpdocs.catalogo_productos'),
     acotada(supabaseAdmin().from('cp_catalogo_parte')
       .select('rol, alias, razon_social, rfc, id_fiscal_extranjero, calle, num_ext, num_int, colonia_clave, colonia, cp, localidad_clave, localidad, municipio_clave, municipio, estado, pais, contacto, telefono, correo')
-      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('rol').order('alias').limit(TOPE_FILAS_CATALOGO), 'cpdocs.catalogo_partes'),
+      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('rol').order('alias').order('id').limit(TOPE_FILAS_CATALOGO), 'cpdocs.catalogo_partes'),
   ]);
   if (tablaAusente(n.error) || tablaAusente(p.error) || tablaAusente(q.error)) {
     logger.warn('cartaporte_docs.catalogo_sin_migracion', { tenantId });
@@ -912,7 +912,7 @@ export async function envioPorLlave(tenantId: string, idempotencyKey: string): P
 /** Los envíos de un documento, el más nuevo primero. */
 export async function enviosDeDocumento(tenantId: string, documentoId: string): Promise<EnvioTmsFila[]> {
   const r = await acotada(supabaseAdmin().from('cp_envio_tms').select(COLUMNAS_ENVIO)
-    .eq('tenant_id', tenantId).eq('documento_id', documentoId).order('created_at', { ascending: false }).limit(50), 'cpdocs.envios_doc');
+    .eq('tenant_id', tenantId).eq('documento_id', documentoId).order('created_at', { ascending: false }).order('id').limit(50), 'cpdocs.envios_doc');
   return ((exigir(r, 'cpdocs.envios_doc') ?? []) as unknown as Fila[]).map(aEnvio);
 }
 
@@ -958,7 +958,7 @@ export async function marcarEnvioSubidoAMano(tenantId: string, id: string, desde
 export async function estadoEnvioPorDocumento(tenantId: string, documentoIds: string[]): Promise<Record<string, EstadoEnvioTms>> {
   if (documentoIds.length === 0) return {};
   const r = await acotada(supabaseAdmin().from('cp_envio_tms').select('documento_id, estado')
-    .eq('tenant_id', tenantId).in('documento_id', documentoIds).neq('estado', 'descartado').order('created_at', { ascending: false }).limit(2000), 'cpdocs.envios_lista');
+    .eq('tenant_id', tenantId).in('documento_id', documentoIds).neq('estado', 'descartado').order('created_at', { ascending: false }).order('id').limit(2000), 'cpdocs.envios_lista');
   const salida: Record<string, EstadoEnvioTms> = {};
   for (const f of (exigir(r, 'cpdocs.envios_lista') ?? []) as unknown as Fila[]) {
     const id = String(f.documento_id);

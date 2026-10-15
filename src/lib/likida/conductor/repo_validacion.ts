@@ -710,7 +710,7 @@ export async function guardarEquivalencia(
   if (d.geocercaId !== null) {
     if (!UUID.test(d.geocercaId)) return 'datos_invalidos';
     const r = await acotada(supabaseAdmin().from('geocerca').select('id').eq('tenant_id', tenantId).eq('catalogo', 'conductor')
-      .eq('activa', true).eq('id', d.geocercaId).limit(1), 'equivalencias.sitio');
+      .eq('activa', true).eq('id', d.geocercaId).order('id').limit(1), 'equivalencias.sitio');
     if (((exigir(r as never, 'equivalencias.sitio') ?? []) as unknown[]).length === 0) return 'sitio_no_encontrado';
   }
   const previas = await acotada(supabaseAdmin().from('sitio_equivalencia').select('id').eq('tenant_id', tenantId)

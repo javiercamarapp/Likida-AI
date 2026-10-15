@@ -204,7 +204,7 @@ export const repoEnvios: RepoEnvios = {
 
   async listarPorDocumento(tenantId, documentoId) {
     const r = await acotada(supabaseAdmin().from('cp_envio_tms').select(COLUMNAS_DETALLE)
-      .eq('tenant_id', tenantId).eq('documento_id', documentoId).order('created_at', { ascending: false }).limit(50), 'cpdocs.envios_doc_detalle');
+      .eq('tenant_id', tenantId).eq('documento_id', documentoId).order('created_at', { ascending: false }).order('id').limit(50), 'cpdocs.envios_doc_detalle');
     return ((exigir(r, 'cpdocs.envios_doc_detalle') ?? []) as unknown as Fila[]).map(aDetalle);
   },
 
