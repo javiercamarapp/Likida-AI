@@ -7,6 +7,8 @@ import { HORAS_PARA_ESCALAR } from '@/lib/likida/escalar_viaje';
 import { numero, fechaCorta } from '@/lib/formato';
 import { BarraPagina } from '../../resumen-visual';
 import { Bloque, Barra, EsqTabla } from '../../bloque';
+import { esFolioSimulado } from '@/lib/likida/conductor/tablero';
+import { EtiquetaSimulado } from './tablero-hitos';
 
 export interface EsperaAceptar {
   id: string;
@@ -244,6 +246,7 @@ export async function BloqueCola({ cola, sufijo }: {
           {esperan.map((v) => (
             <div key={v.id} className="flex items-center gap-2.5 text-[12.5px]">
               <span className="font-medium">{v.folio}</span>
+              {esFolioSimulado(v.folio) && <EtiquetaSimulado />}
               <span className="truncate" style={{ color: 'var(--muted)' }}>{v.operadorNombre ?? 'Sin operador'}</span>
               <span className="ml-auto shrink-0 cifra-mono" style={{ color: v.horasDesdeAviso >= HORAS_PARA_ESCALAR ? 'var(--warn)' : 'var(--muted)' }}>
                 {v.horasDesdeAviso === 0 ? 'hace menos de 1 h' : `hace ${numero(v.horasDesdeAviso)} h`}
@@ -314,6 +317,7 @@ async function BloqueBitacora({ eventos: p }: { eventos: Promise<EventoConductor
                 <cfg.Icono width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: cfg.color }} />
                 <div className="min-w-0">
                   <span>{cfg.texto(e)}</span>
+                  {esFolioSimulado(e.folio) && <> <EtiquetaSimulado /></>}
                   <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaCorta(e.cuando)}</span>
                 </div>
               </div>

@@ -131,3 +131,30 @@ describe('Conductores — tarjeta «Tiempo en aceptar» (T-A5-06)', () => {
     expect(await pintarConteos(base)).not.toContain('Tiempo en aceptar');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A5-26: lo simulado se rotula; nada técnico a la vista.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Conductores — datos de demostración rotulados y sin texto técnico (T-A5-26)', () => {
+  it('en la cola, el folio DEMO- lleva SIMULADO y el real no', async () => {
+    const html = await pintar({
+      esperan: [
+        { id: 'a', folio: 'DEMO-24001', operadorNombre: 'Op A', horasDesdeAviso: 2, avisos: 1 },
+        { id: 'b', folio: 'F-9', operadorNombre: null, horasDesdeAviso: 1, avisos: 1 },
+      ],
+      totalEsperan: 2, sinAvisar: 1, error: null,
+    });
+    expect(html.match(/SIMULADO/g)?.length).toBe(1);
+    expect(html).toContain('Sin operador');
+  });
+
+  it('la cola y los conteos no muestran identificadores internos', async () => {
+    const cola = (await pintar({ esperan: [{ id: '3f2b8c1e-5d4a-4b6f-9a7e-1c2d3e4f5a6b', folio: 'F-1', operadorNombre: 'Op', horasDesdeAviso: 7, avisos: 2 }], totalEsperan: 90, sinAvisar: 2, error: null, truncada: true })).replace(/<[^>]*>/g, ' ');
+    const conteos = renderToStaticMarkup(await BloqueConteos({ kpis: Promise.resolve({ vivos: 1, aceptados: 1, importados: 0, tiempoAceptacion: { minutos: 5, n: 1, excluidosImportados: 0 }, esperan: 1, escalados: 0 }) })).replace(/<[^>]*>/g, ' ');
+    for (const visible of [cola, conteos]) {
+      for (const re of [/aceptado_en/, /aceptado_origen/, /[a-z]{2,}_[a-z_]{2,}/, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /\bundefined\b/, /\bNaN\b/]) {
+        expect(visible, String(re)).not.toMatch(re);
+      }
+    }
+  });
+});

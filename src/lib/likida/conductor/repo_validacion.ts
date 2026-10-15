@@ -11,6 +11,7 @@ import {
   type EquivalenciaCsv, type EquivalenciaGuardada, type ErrorCsv, type LadoEquivalencia, type SitioCsv, type TextoSinSitio, type TipoEquivalencia, type TipoSitio, type ViajeParaTextos,
 } from './sitios';
 import type { PosicionComparada, SitioValidable, Veredicto, ResultadoValidacion, MotivoSinDato, FuenteUbicacion } from './validacion';
+import { telefonoAlcanzable } from './preflight_piloto';
 import { TIPOS_HITO, type HitoFila, type TipoEvidencia, type TipoHito } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -401,16 +402,26 @@ export interface ViajeTablero {
   etaDestinoEn: string | null;
   origenSitioId: string | null;
   destinoSitioId: string | null;
+  /** T-A5-26: `true` si el operador no tiene un teléfono al que se pueda escribir; ausente = no se leyó (no se afirma nada). */
+  operadorSinTelefono?: boolean;
 }
 
 const COLUMNAS_VIAJE_TABLERO =
   'id, folio, origen, destino, estatus, operador_id, terminal_id, cliente_id, unidad_id, aceptado_en, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, origen_geocerca_id, destino_geocerca_id, ' +
-  'operador:operador_id(nombre), terminal:terminal_id(nombre), cliente:cliente_id(nombre)';
+  'operador:operador_id(nombre, telefono), terminal:terminal_id(nombre), cliente:cliente_id(nombre)';
 
 const nombreDe = (rel: unknown): string | null => {
   const r = Array.isArray(rel) ? rel[0] : rel;
   return r && typeof r === 'object' && typeof (r as { nombre?: unknown }).nombre === 'string' ? (r as { nombre: string }).nombre : null;
 };
+
+/** `true`/`false` si la fila trae al operador con su teléfono; `undefined` si no se leyó (nunca se asume «sin teléfono»). */
+function sinTelefonoDe(rel: unknown): boolean | undefined {
+  const r = Array.isArray(rel) ? rel[0] : rel;
+  if (!r || typeof r !== 'object' || !('telefono' in r)) return undefined;
+  const tel = (r as { telefono?: unknown }).telefono;
+  return typeof tel !== 'string' || !telefonoAlcanzable(tel);
+}
 
 export function filaAViajeTablero(f: Fila): ViajeTablero {
   return {
@@ -419,6 +430,7 @@ export function filaAViajeTablero(f: Fila): ViajeTablero {
     clienteId: s(f.cliente_id), clienteNombre: nombreDe(f.cliente), unidadId: s(f.unidad_id), aceptadoEn: s(f.aceptado_en),
     citaOrigenEn: s(f.cita_origen_en), citaDestinoEn: s(f.cita_destino_en), etaOrigenEn: s(f.eta_origen_en), etaDestinoEn: s(f.eta_destino_en),
     origenSitioId: s(f.origen_geocerca_id), destinoSitioId: s(f.destino_geocerca_id),
+    ...(sinTelefonoDe(f.operador) === undefined ? {} : { operadorSinTelefono: sinTelefonoDe(f.operador) }),
   };
 }
 
