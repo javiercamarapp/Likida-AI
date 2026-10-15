@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
-import { aCsv, aXlsx, MIME_XLSX, aJson, celdaCsv, configEstandar, construirFilas, exportarDocumentos, nombreSeguro, resolverRuta, validarConfigExport, aExportable, type ExportConfig } from './exportacion';
+import { aCsv, aXlsx, aXlsxPlantillaTms, MIME_XLSX, aJson, celdaCsv, configEstandar, construirFilas, exportarDocumentos, nombreSeguro, resolverRuta, validarConfigExport, aExportable, type ExportConfig } from './exportacion';
 import { cv, extraccionAtlasOk } from './documentos_sinteticos.fixture';
 import type { DocumentoFila } from './repo';
+import { construirPlantilla } from './plantilla_tms';
+import { HOJAS_PLANTILLA, plantillaEnBlancoSintetica } from './plantilla_xlsx.fixture';
+import type { Extraccion } from './campos';
 
 const docAprobado = (over: Partial<DocumentoFila> = {}, ext = extraccionAtlasOk()): DocumentoFila => ({
   id: 'doc-1', tenantId: 't', canal: 'manual', formato: 'excel', nombreArchivo: 'atlas.xlsx', mime: null, bytes: 1, sha256: 'a'.repeat(64), storageRuta: null, estado: 'aprobado', version: 3,
@@ -183,5 +186,72 @@ describe('exportarDocumentos: solo lo aprobado', () => {
   it('nombreSeguro nunca devuelve rutas ni vacío', () => {
     expect(nombreSeguro('../../etc/passwd')).toBe('etc-passwd');
     expect(nombreSeguro('///')).toBe('exportacion');
+  });
+});
+
+describe('aXlsxPlantillaTms: plantilla multi-hoja del TMS', () => {
+  const ctx = { clienteInterno: null, plantilla: 'normal' as const };
+  const ext = (): Extraccion => {
+    const e = extraccionAtlasOk();
+    e.campos.origen_calle = cv('Calle Uno'); e.campos.origen_pais = cv('MEX');
+    return e;
+  };
+  const leer = (b: Uint8Array) => XLSX.read(b, { type: 'array' });
+  const v = (l: XLSX.WorkBook, hoja: string, c: string) => l.Sheets[hoja]?.[c]?.v;
+
+  it('hojas en orden y valores en sus coordenadas', () => {
+    const p = construirPlantilla(ext(), ctx);
+    const l = leer(aXlsxPlantillaTms(p));
+    expect(l.SheetNames).toEqual([...HOJAS_PLANTILLA]);
+    expect(v(l, 'RemintenteDestinatario', 'C12')).toBe(p.hojas.RemintenteDestinatario.C12.valor);
+    expect(v(l, 'RemintenteDestinatario', 'C19')).toBe('44100');
+    expect(v(l, 'Mercancias', 'B22')).toBe('24131500');
+    expect(v(l, 'Mercancias', 'C22')).toBe('Botellas de vidrio vacías');
+    expect(v(l, 'Mercancias', 'A21')).toBe('Id Destino');
+    // numero donde el layout dice numero; texto donde no
+    expect(l.Sheets.Mercancias.I22.t).toBe('n');
+    expect(l.Sheets.Mercancias.I22.v).toBe(8400);
+    expect(l.Sheets.RemintenteDestinatario.C19.t).toBe('s');
+    // etiquetas legibles en la columna A (solo sin base)
+    expect(v(l, 'RemintenteDestinatario', 'A12')).toBe('Origen rfc');
+  });
+
+  it('una descripcion con formula sale como TEXTO neutralizado', () => {
+    const e = ext(); e.mercancias[0].descripcion = cv('=HYPERLINK("x")');
+    const l = leer(aXlsxPlantillaTms(construirPlantilla(e, ctx)));
+    expect(v(l, 'Mercancias', 'C22')).toBe('\'=HYPERLINK("x")');
+    expect(l.Sheets.Mercancias.C22.t).toBe('s');
+    expect(l.Sheets.Mercancias.C22.f).toBeUndefined();
+  });
+
+  it('determinista: dos corridas dan los mismos bytes, y sin metadatos de usuario', () => {
+    const p = construirPlantilla(ext(), ctx);
+    const a = aXlsxPlantillaTms(p); const b = aXlsxPlantillaTms(p);
+    expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
+    const props = leer(a).Props ?? {};
+    expect(props.Author ?? '').toBe('');
+    expect(props.LastAuthor ?? '').toBe('');
+    expect(props.CreatedDate).toBeUndefined();
+  });
+
+  it('con base en blanco: mismas celdas, hojas y encabezados de la base, y Error intacta', () => {
+    const p = construirPlantilla(ext(), ctx);
+    const sin = leer(aXlsxPlantillaTms(p));
+    const con = leer(aXlsxPlantillaTms(p, plantillaEnBlancoSintetica()));
+    expect(con.SheetNames).toEqual([...HOJAS_PLANTILLA]);
+    for (const [hoja, celdas] of Object.entries(p.hojas)) {
+      for (const [coord, c] of Object.entries(celdas)) {
+        if (c.valor === null) continue;
+        expect(v(con, hoja, coord), `${hoja}!${coord}`).toBe(v(sin, hoja, coord));
+      }
+    }
+    expect(v(con, 'Error', 'A1')).toBe('Descripcion del error');
+    expect(v(con, 'RemintenteDestinatario', 'A6')).toBe('Datos del remitente');
+    expect(v(con, 'RemintenteDestinatario', 'A12')).toBeUndefined(); // sin etiquetas propias: la base manda
+  });
+
+  it('aXlsx (hoja plana) sigue igual', () => {
+    const l = XLSX.read(aXlsx([{ A: 'x' }], cfg({ columnas: [{ encabezado: 'A', campo: 'folio_cliente' }] })), { type: 'array' });
+    expect(l.SheetNames).toEqual(['Carta Porte']);
   });
 });

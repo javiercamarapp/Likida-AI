@@ -5,7 +5,7 @@ import { BarraPagina } from '../../resumen-visual';
 import { fechaHoraMx, numero, pesoArchivo, porcentaje, usd4 } from '@/lib/formato';
 import { prioridadEstado, ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO } from '@/lib/likida/carta_porte_docs/presentacion';
 import { MINUTOS_CAPTURA_MANUAL_EMBARQUE, type MetricasAgente } from '@/lib/likida/carta_porte_docs/metricas';
-import type { DocumentoFila } from '@/lib/likida/carta_porte_docs/repo';
+import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from './forma_accion';
 
 /**
@@ -30,8 +30,33 @@ export interface ConfigVista { id: string; nombre: string; formato: 'csv' | 'jso
 /** De dónde viene un documento que nació de partir un archivo con varios embarques (0670), o cuántos hijos tiene el que se partió. */
 export interface LinajeVista { rol: 'hijo' | 'padre'; indice: number | null; total: number; clave: string | null }
 
+/** Los grupos del filtro «estado de envío» de la bandeja. `sin_envio` = aprobado que todavía no tiene envío al TMS. */
+export type FiltroEnvio = 'todos' | 'sin_envio' | 'en_curso' | 'enviado' | 'rechazado_tms' | 'subido_a_mano';
+export const FILTROS_ENVIO: ReadonlyArray<{ clave: FiltroEnvio; rotulo: string }> = [
+  { clave: 'todos', rotulo: 'Todos' }, { clave: 'sin_envio', rotulo: 'Sin envío' }, { clave: 'en_curso', rotulo: 'En curso' },
+  { clave: 'enviado', rotulo: 'Enviados' }, { clave: 'rechazado_tms', rotulo: 'Rechazados por el TMS' }, { clave: 'subido_a_mano', rotulo: 'Subidos a mano' },
+];
+export function filtroEnvioDe(crudo: string | undefined): FiltroEnvio {
+  return FILTROS_ENVIO.some((f) => f.clave === crudo) ? (crudo as FiltroEnvio) : 'todos';
+}
+const ROTULO_ENVIO: Record<EstadoEnvioTms, string> = {
+  pendiente_prechequeo: 'En curso', pendiente_reque: 'En curso', listo: 'En curso', enviando: 'En curso', error_transitorio: 'En curso',
+  enviado: 'Enviado', rechazado_tms: 'Rechazado por el TMS', subido_a_mano: 'Subido a mano', descartado: 'Sin envío',
+};
+/** ¿La fila entra en el filtro? Solo los aprobados tienen envío: con un filtro activo, el resto no se muestra. */
+export function pasaFiltroEnvio(d: Pick<DocumentoFila, 'id' | 'estado'>, envios: Record<string, EstadoEnvioTms> | undefined, f: FiltroEnvio): boolean {
+  if (f === 'todos') return true;
+  if (d.estado !== 'aprobado') return false;
+  const e = envios?.[d.id];
+  if (f === 'sin_envio') return !e;
+  if (!e) return false;
+  return f === 'en_curso' ? ROTULO_ENVIO[e] === 'En curso' : e === f;
+}
+
 export interface DatosDocumentos {
   filas: DocumentoFila[];
+  /** Estado del envío al TMS por id de documento aprobado (sin clave = sin envío). */
+  envios?: Record<string, EstadoEnvioTms>;
   /** Por id de documento. Vacío/ausente = nada se partió (o la base aún no tiene la 0670). */
   linaje?: Record<string, LinajeVista>;
   total: number;
@@ -72,10 +97,14 @@ function Cifra({ rotulo, valor, nota }: { rotulo: string; valor: string; nota?: 
   );
 }
 
-export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '' }: {
+export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', filtroEnvio = 'todos', perfilRestringido = false }: {
   datos: DatosDocumentos | null; acciones: AccionesDocumentos; sufijo?: string;
+  /** El filtro «estado de envío» de la bandeja (viene de `?envio=`). */
+  filtroEnvio?: FiltroEnvio;
   /** El `?tenant=…` para las descargas (que son GET a /api). */
   apiSufijo?: string;
+  /** Flota bajo el perfil restringido: la bandeja habla del envío al TMS, no de viajes. */
+  perfilRestringido?: boolean;
 }) {
   return (
     <main className="h-full">
@@ -99,7 +128,7 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '' }
             <>
               <Metricas m={datos.metricas} />
               {acciones.subir && <Subir accion={acciones.subir} clientes={datos.clientes} />}
-              <Bandeja datos={datos} acciones={acciones} sufijo={sufijo} />
+              <Bandeja datos={datos} acciones={acciones} sufijo={sufijo} filtroEnvio={filtroEnvio} perfilRestringido={perfilRestringido} />
               <Canales buzon={datos.buzon} acciones={acciones} />
               <Perfiles perfiles={datos.perfiles} acciones={acciones} />
               <Exportacion configs={datos.configs} acciones={acciones} apiSufijo={apiSufijo} />
@@ -163,15 +192,25 @@ function Subir({ accion, clientes }: { accion: AccionDoc; clientes: Array<{ id: 
   );
 }
 
-function Bandeja({ datos, acciones, sufijo }: { datos: DatosDocumentos; acciones: AccionesDocumentos; sufijo: string }) {
-  const orden = [...datos.filas].sort((a, b) => prioridadEstado(a.estado) - prioridadEstado(b.estado) || (a.createdAt < b.createdAt ? 1 : -1));
+function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido }: { datos: DatosDocumentos; acciones: AccionesDocumentos; sufijo: string; filtroEnvio: FiltroEnvio; perfilRestringido: boolean }) {
+  const orden = datos.filas.filter((d) => pasaFiltroEnvio(d, datos.envios, filtroEnvio)).sort((a, b) => prioridadEstado(a.estado) - prioridadEstado(b.estado) || (a.createdAt < b.createdAt ? 1 : -1));
   const cliente = new Map(datos.clientes.map((c) => [c.id, c.nombre]));
   return (
     <section className="space-y-2">
       <h2 className="text-[13px] font-medium">Bandeja de revisión</h2>
+      <nav aria-label="Filtrar por estado de envío al TMS" className="flex flex-wrap items-center gap-1.5 text-[12px]">
+        <span style={{ color: 'var(--muted)' }}>Envío al TMS:</span>
+        {FILTROS_ENVIO.map((f) => (
+          <Link key={f.clave} href={f.clave === 'todos' ? `/dashboard/carta-porte/documentos${sufijo}` : `/dashboard/carta-porte/documentos${sufijo}${sufijo ? '&' : '?'}envio=${f.clave}`}
+            aria-current={filtroEnvio === f.clave ? 'page' : undefined} className="px-2 py-0.5 rounded-full hairline hover:opacity-80"
+            style={filtroEnvio === f.clave ? { background: 'var(--marca)', color: 'var(--surface)' } : { color: 'var(--muted)' }}>{f.rotulo}</Link>
+        ))}
+      </nav>
       {orden.length === 0 ? (
         <EstadoVacio icono={<FileInput width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-          Todavía no ha llegado ningún documento. Sube uno arriba, mándalo al correo de tu flota o reenvíalo por WhatsApp.
+          {filtroEnvio === 'todos'
+            ? 'Todavía no ha llegado ningún documento. Sube uno arriba, mándalo al correo de tu flota o reenvíalo por WhatsApp.'
+            : 'Ningún documento aprobado tiene ese estado de envío al TMS.'}
         </EstadoVacio>
       ) : (
         <div className="card overflow-x-auto">
@@ -214,7 +253,11 @@ function Bandeja({ datos, acciones, sufijo }: { datos: DatosDocumentos; acciones
                       ) : d.estado === 'fallido' ? (
                         <span style={{ color: 'var(--bad)' }}>{d.ultimoError ?? 'No se pudo leer.'}</span>
                       ) : d.estado === 'aprobado' ? (
-                        <span style={{ color: d.viajeId ? 'var(--ok)' : 'var(--warn)' }}>{d.viajeId ? 'Con viaje' : 'Sin viaje todavía'}</span>
+                        perfilRestringido ? (
+                          <span style={{ color: 'var(--muted)' }}>Envío al TMS: {datos.envios?.[d.id] ? ROTULO_ENVIO[datos.envios[d.id]] : 'sin envío'}</span>
+                        ) : (
+                          <span style={{ color: d.viajeId ? 'var(--ok)' : 'var(--warn)' }}>{d.viajeId ? 'Con viaje' : 'Sin viaje todavía'}<span style={{ color: 'var(--muted)' }}> · TMS: {datos.envios?.[d.id] ? ROTULO_ENVIO[datos.envios[d.id]] : 'sin envío'}</span></span>
+                        )
                       ) : d.estado === 'rechazado' ? (
                         <span style={{ color: 'var(--muted)' }}>{d.rechazoMotivo}</span>
                       ) : d.estado === 'dividido' ? (

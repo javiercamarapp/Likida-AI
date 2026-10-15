@@ -12,7 +12,16 @@ vi.mock('@/lib/likida/bitacora_escritura', () => ({ anotarBitacora: vi.fn(async 
 vi.mock('@/lib/likida/carta_porte_datos', async (orig) => ({ ...(await orig<typeof import('@/lib/likida/carta_porte_datos')>()), getBorradorViaje: async () => null }));
 vi.mock('@/lib/likida/carta_porte_docs/repo', async () => (await import('@/lib/likida/carta_porte_docs/repo_falso.fixture')).api);
 
+// Solo la lectura que usa la pantalla (el doble completo importa repo_envios y se bloquearía a sí mismo como mock): sale de los
+// envíos del repo falso + los campos de detalle que el repo falso no tiene (próxima revisión y ubicación del error), por id.
+const { extrasEnvio } = vi.hoisted(() => ({ extrasEnvio: new Map<string, { proximaRevision?: string | null; ultimoError?: Record<string, unknown> | null }>() }));
+vi.mock('@/lib/likida/carta_porte_docs/repo_envios', async () => {
+  const { api } = await import('@/lib/likida/carta_porte_docs/repo_falso.fixture');
+  return { repoEnvios: { listarPorDocumento: async (t: string, d: string) => (await api.enviosDeDocumento(t, d)).map((e) => ({ proximaRevision: null, ultimoError: null, ...extrasEnvio.get(e.id), ...e })) } };
+});
+
 import { estado, reset } from '@/lib/likida/carta_porte_docs/repo_falso.fixture';
+import { fijarGuardiaPerfil, MENSAJE_FUNCION_NO_DISPONIBLE } from '@/lib/likida/carta_porte_docs/envio';
 import { extraccionAtlasOk, cv } from '@/lib/likida/carta_porte_docs/documentos_sinteticos.fixture';
 import { validarExtraccion } from '@/lib/likida/carta_porte_docs/validacion';
 import { sembrarFlotas } from '@/lib/likida/carta_porte_docs/escenario.fixture';
@@ -40,7 +49,7 @@ function sembrarDoc(over: Partial<DocumentoFila> = {}, ext = extraccionAtlasOk()
 const ver = (): string => String(estado.docs.get(ID)!.version);
 const montar = async () => (await PaginaRevision({ params: Promise.resolve({ id: ID }), searchParams: SP })) as unknown as { props: { doc: DocumentoFila; acciones: { revisar: Accion }; revision: { bloqueos: number } | null; original: { tipo: string }; operadores: unknown[] } };
 
-beforeEach(() => { vi.clearAllMocks(); reset(); sembrarFlotas(); sesion = { tenantId: A, rol: 'flota_admin', userId: 'u-1' }; });
+beforeEach(() => { vi.clearAllMocks(); reset(); extrasEnvio.clear(); fijarGuardiaPerfil(); sembrarFlotas(); sesion = { tenantId: A, rol: 'flota_admin', userId: 'u-1' }; });
 
 it('un rol sin el área rebota; un id que no es uuid o de otra flota es 404', async () => {
   sembrarDoc();
@@ -208,4 +217,56 @@ it('un embarque HIJO sabe de qué archivo nació (para el enlace de regreso)', a
   const p = (await PaginaRevision({ params: Promise.resolve({ id: hijoId }), searchParams: SP })) as unknown as { props: { embarque: unknown; hijos: unknown[] } };
   expect(p.props.embarque).toEqual({ indice: 1, total: 2, clave: 'ATL-1', padreId: padre.id, padreNombre: 'plan.xlsx' });
   expect(p.props.hijos).toEqual([]);
+});
+
+it('«Ya la subí a mano»: marca el envío, es idempotente y respeta el candado de versión', async () => {
+  sembrarDoc({ estado: 'aprobado', aprobadoEn: '2026-10-02T00:00:00.000Z', version: 5 });
+  estado.envios.push({ id: 'envio-x', tenantId: A, documentoId: ID, versionDoc: 5, idempotencyKey: 'k'.repeat(64), estado: 'pendiente_reque', plantilla: 'normal', intentos: 2 });
+  const p = await montar();
+  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '4', intencion: 'subido_a_mano' }))).toMatchObject({ ok: false, error: expect.stringMatching(/Otra persona cambió/) });
+  expect(estado.envios[0].estado).toBe('pendiente_reque');
+  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '5', intencion: 'subido_a_mano' }))).toMatchObject({ ok: true, mensaje: expect.stringMatching(/subió a mano/) });
+  expect(estado.envios[0].estado).toBe('subido_a_mano');
+  expect(estado.eventos.filter((e) => e.documentoId === ID && e.tipo === 'envio_subido_a_mano')).toHaveLength(1);
+  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '5', intencion: 'subido_a_mano' }))).toMatchObject({ ok: true, mensaje: expect.stringMatching(/Ya estaba/) });
+  expect(estado.eventos.filter((e) => e.documentoId === ID && e.tipo === 'envio_subido_a_mano')).toHaveLength(1);
+  // La pantalla recibe el estado del envío de la versión vigente.
+  expect((await montar()).props).toMatchObject({ envio: { estado: 'subido_a_mano' } });
+});
+
+it('«Ya la subí a mano» con un rol sin el área: rechazado aunque se invoque la acción directo', async () => {
+  sembrarDoc({ estado: 'aprobado', aprobadoEn: '2026-10-02T00:00:00.000Z', version: 5 });
+  const p = await montar();
+  sesion = { ...sesion, rol: 'vendedor' };
+  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '5', intencion: 'subido_a_mano' }))).toEqual({ ok: false, error: 'Tu rol no puede revisar documentos de Carta Porte.' });
+  expect(estado.envios).toHaveLength(0);
+});
+
+// ── T-A3-05: bajo el perfil restringido la pantalla no ofrece viaje y la acción lo NIEGA (doble defensa) ──
+it('perfil restringido: la acción «viaje» se niega con el mensaje de siempre y no toca nada', async () => {
+  sembrarDoc({ estado: 'aprobado', aprobadoEn: '2026-10-02T00:00:00.000Z' });
+  fijarGuardiaPerfil(async () => true);
+  const p = await montar();
+  const antes = estado.viajes.length;
+  const r = await p.props.acciones.revisar(null, fd({ documentoId: ID, version: ver(), intencion: 'viaje', operadorId: 'cualquiera' }));
+  expect(r).toEqual({ ok: false, error: MENSAJE_FUNCION_NO_DISPONIBLE });
+  expect(estado.viajes).toHaveLength(antes);
+  expect(estado.docs.get(ID)!.viajeId).toBeNull();
+});
+
+it('perfil restringido: la página pasa perfilRestringido, sin operadores, y el envío con su fecha y motivo', async () => {
+  sembrarDoc({ estado: 'aprobado', aprobadoEn: '2026-10-02T00:00:00.000Z' });
+  estado.envios.push({ id: 'envio-y', tenantId: A, documentoId: ID, versionDoc: 3, idempotencyKey: 'j'.repeat(64), estado: 'rechazado_tms', plantilla: 'normal', intentos: 1 });
+  extrasEnvio.set('envio-y', { ultimoError: { hoja: 'Mercancias', fila: 22, campo: 'Cantidad' }, proximaRevision: '2026-10-20T15:00:00.000Z' });
+  fijarGuardiaPerfil(async () => true);
+  const props = (await montar()).props as unknown as { perfilRestringido: boolean; operadores: unknown[]; envio: { estado: string; motivo: string | null; proximaRevision: string | null } | null };
+  expect(props.perfilRestringido).toBe(true);
+  expect(props.operadores).toEqual([]);
+  expect(props.envio).toEqual({ estado: 'rechazado_tms', motivo: 'hoja Mercancias, fila 22, campo Cantidad', proximaRevision: '2026-10-20T15:00:00.000Z' });
+});
+
+it('sin perfil la página no cambia: perfilRestringido falso y «viaje» sigue funcionando como siempre', async () => {
+  sembrarDoc();
+  const props = (await montar()).props as unknown as { perfilRestringido: boolean };
+  expect(props.perfilRestringido).toBe(false);
 });

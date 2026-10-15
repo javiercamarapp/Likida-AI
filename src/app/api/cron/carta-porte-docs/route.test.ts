@@ -23,6 +23,17 @@ const base = () => ({
 const motor = vi.fn(async (..._a: unknown[]): Promise<Record<string, unknown>> => base());
 vi.mock('@/lib/likida/carta_porte_docs/worker', () => ({ correrWorkerCartaPorte: (...a: unknown[]) => motor(...a) }));
 vi.mock('@/lib/likida/carta_porte_docs/worker_deps', () => ({ depsWorkerReales: () => ({ doble: true }) }));
+// La salida al TMS (T-A3-28): la segunda pasada del mismo cron. Su motor se prueba en `worker_envios.test.ts`; aquí, su integración.
+const cifrasEnvios = () => ({
+  sinMigracion: false, reclamados: 2, enviados: 2, duplicados: 0, pendientesReque: 0, enEsperaManual: 0, reintentos: 0, rechazados: 0, descartados: 0, devueltosARevision: 0,
+  alertas: 0, alertasFallidas: 0, circuitosAbiertos: 0, credencialesCaducadas: 0, soltados: 0, cortadosPorReloj: 0, conflictos: 0, errores: 0, fallos: [] as string[],
+});
+const envios = vi.fn(async (..._a: unknown[]): Promise<Record<string, unknown>> => cifrasEnvios());
+vi.mock('@/lib/likida/carta_porte_docs/worker_envios', () => ({
+  correrWorkerEnvios: (...a: unknown[]) => envios(...a),
+  resultadoEnviosVacio: () => ({ ...cifrasEnvios(), reclamados: 0, enviados: 0 }),
+}));
+vi.mock('@/lib/likida/carta_porte_docs/worker_envios_deps', () => ({ depsEnviosReales: () => ({ dobleEnvios: true }) }));
 const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...a) }));
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'cod' }));
@@ -37,6 +48,7 @@ beforeEach(() => {
   autorizado = 'si'; interruptores = {};
   motor.mockReset(); motor.mockImplementation(async () => base());
   registrarLatido.mockClear(); alertarOperador.mockClear();
+  envios.mockReset(); envios.mockImplementation(async () => cifrasEnvios());
 });
 
 describe('la puerta y las palancas', () => {
@@ -126,5 +138,93 @@ describe('la corrida', () => {
     motor.mockResolvedValueOnce({ ...base(), fallidos: 30, fallos: Array.from({ length: 30 }, (_, i) => `f${i}`) });
     const r = await j(await llamar());
     expect(r.fallos).toHaveLength(20);
+  });
+});
+
+describe('la salida al TMS: segunda pasada del mismo cron (T-A3-28)', () => {
+  it('corre DESPUÉS de la extracción, con el mismo reloj, y su parte va en la respuesta y en el latido', async () => {
+    const orden: string[] = [];
+    motor.mockImplementation(async () => { orden.push('extraccion'); return base(); });
+    envios.mockImplementation(async () => { orden.push('salida'); return cifrasEnvios(); });
+    const antes = Date.now();
+    const r = await j(await llamar());
+    expect(orden).toEqual(['extraccion', 'salida']);
+    const [deps, opts] = envios.mock.calls[0] as [unknown, { venceEn: number }];
+    expect(deps).toEqual({ dobleEnvios: true });
+    const [, optsExtraccion] = motor.mock.calls[0] as [unknown, { venceEn: number }];
+    expect(opts.venceEn).toBe(optsExtraccion.venceEn);
+    expect(opts.venceEn).toBeLessThan(antes + maxDuration * 1000);
+    expect(r.envios).toMatchObject({ corrio: true, reclamados: 2, enviados: 2 });
+    expect(registrarLatido).toHaveBeenCalledWith('carta-porte-docs', 'ok', expect.objectContaining({ envios: expect.objectContaining({ corrio: true, enviados: 2, fallos: 0 }) }));
+  });
+
+  it('la palanca de la salida APAGADA salta solo la salida: la extracción corre y el latido sale ok', async () => {
+    interruptores = { 'agente:carta_porte_salida_tms': 'apagado' };
+    const r = await llamar();
+    expect(r.status).toBe(200);
+    expect(await j(r)).toMatchObject({ corrio: true, procesados: 3, envios: { corrio: false } });
+    expect(motor).toHaveBeenCalledTimes(1);
+    expect(envios).not.toHaveBeenCalled();
+    expect(registrarLatido).toHaveBeenCalledWith('carta-porte-docs', 'ok', expect.objectContaining({ envios: { corrio: false, saltado: 'apagada' } }));
+  });
+
+  it('la palanca de la salida ILEGIBLE falla CERRADO solo para la salida: no sube nada y el latido queda `parcial`', async () => {
+    interruptores = { 'agente:carta_porte_salida_tms': 'ilegible' };
+    const r = await llamar();
+    expect(r.status).toBe(200);
+    expect(await j(r)).toMatchObject({ corrio: true, procesados: 3, envios: { corrio: false, codigo: 'interruptor_ilegible' } });
+    expect(envios).not.toHaveBeenCalled();
+    expect(registrarLatido).toHaveBeenCalledWith('carta-porte-docs', 'parcial', expect.anything());
+  });
+
+  it.each(['global', 'agente:carta_porte'])('la palanca %s apagada también detiene la salida (ni extracción ni envíos)', async (p) => {
+    interruptores = { [p]: 'apagado' };
+    await llamar();
+    expect(motor).not.toHaveBeenCalled();
+    expect(envios).not.toHaveBeenCalled();
+  });
+
+  it('si la salida LANZA, lo ya extraído se conserva: 200, alerta al operador y latido `parcial`', async () => {
+    envios.mockRejectedValueOnce(new Error('base de envíos caída'));
+    const r = await llamar();
+    expect(r.status).toBe(200);
+    expect(await j(r)).toMatchObject({ corrio: true, procesados: 3, envios: { corrio: false, error: 'base de envíos caída' } });
+    expect(alertarOperador).toHaveBeenCalledTimes(1);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.carta_porte_docs.salida', expect.objectContaining({ error: 'base de envíos caída' }));
+    expect(registrarLatido).toHaveBeenCalledWith('carta-porte-docs', 'parcial', expect.anything());
+  });
+
+  it.each([
+    ['un error de infraestructura en un envío', { errores: 1 }],
+    ['un aviso de envío que no salió', { alertasFallidas: 1 }],
+    ['el circuito del TMS se abrió', { circuitosAbiertos: 1 }],
+    ['la credencial del TMS caducó', { credencialesCaducadas: 1 }],
+    ['el reloj cortó la salida', { cortadosPorReloj: 1 }],
+    ['la base sin la 0790', { sinMigracion: true }],
+  ])('%s deja el latido PARCIAL', async (_n, cambio) => {
+    envios.mockResolvedValueOnce({ ...cifrasEnvios(), ...cambio });
+    await llamar();
+    expect(registrarLatido).toHaveBeenCalledWith('carta-porte-docs', 'parcial', expect.anything());
+  });
+
+  it('envíos que esperan (reque, descarga manual) o rechazados por el TMS NO son un fallo del cron: el latido sale ok', async () => {
+    envios.mockResolvedValueOnce({ ...cifrasEnvios(), pendientesReque: 3, enEsperaManual: 2, rechazados: 1, reintentos: 1 });
+    await llamar();
+    expect(registrarLatido).toHaveBeenCalledWith('carta-porte-docs', 'ok', expect.anything());
+  });
+
+  it('el reloj duro de la extracción no deja a la salida sin su techo: si la salida se cuelga, el cron responde igual', async () => {
+    envios.mockImplementation(() => new Promise(() => {})); // nunca resuelve
+    vi.useFakeTimers();
+    try {
+      const pendiente = llamar();
+      await vi.advanceTimersByTimeAsync(maxDuration * 1000);
+      const r = await pendiente;
+      expect(r.status).toBe(200);
+      expect((await j(r)).envios).toMatchObject({ corrio: true, errores: 1 });
+      expect(registrarLatido).toHaveBeenCalledWith('carta-porte-docs', 'parcial', expect.anything());
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

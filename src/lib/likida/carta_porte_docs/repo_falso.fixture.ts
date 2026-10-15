@@ -10,6 +10,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type * as Real from './repo';
+import type { CatalogoCliente, NumeroClienteCat, ParteCat, ProductoCat } from './catalogo_cliente';
 import type { DocumentoFila, MercanciaInsertar, OperadorMin, PerfilFila, ViajeMin } from './repo';
 
 interface Viaje extends ViajeMin { tenantId: string }
@@ -32,6 +33,10 @@ export const estado = {
   operadores: [] as Array<OperadorMin & { tenantId: string }>,
   unidades: [] as Array<{ tenantId: string; id: string; placas: string; activo: boolean }>,
   clientes: [] as Array<{ tenantId: string; id: string; nombre: string }>,
+  /** 0792: catálogo por cliente (cada fila trae su tenantId y clienteId). */
+  catalogoNumeros: [] as NumeroClienteCat[],
+  catalogoProductos: [] as ProductoCat[],
+  catalogoPartes: [] as ParteCat[],
   correos: new Map<string, { estado: 'claimed' | 'applied'; token: string }>(),
   /** 0640: avisos a la oficina reclamados por documento ({tipo: instante}). */
   avisos: new Map<string, Record<string, string>>(),
@@ -48,12 +53,16 @@ export const estado = {
   reloj: { ahora: () => new Date() },
   seq: 0,
   llamadas: [] as string[],
+  /** 0790: configuración de salida por flota. */
+  salidaConfigs: new Map<string, Real.SalidaConfigFila>(),
+  /** 0790: envíos al TMS. */
+  envios: [] as Real.EnvioTmsFila[],
 };
 
 export function reset(): void {
   estado.docs.clear(); estado.archivos.clear(); estado.eventos.length = 0; estado.correcciones.length = 0; estado.buzones.clear();
   estado.perfiles.clear(); estado.versiones.length = 0; estado.exportConfigs.length = 0; estado.viajes.length = 0; estado.mercancias.length = 0;
-  estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0;
+  estado.catalogoNumeros.length = 0; estado.catalogoProductos.length = 0; estado.catalogoPartes.length = 0; estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0; estado.salidaConfigs.clear(); estado.envios.length = 0;
   estado.seq = 0; estado.reloj.ahora = () => new Date();
 }
 
@@ -244,6 +253,16 @@ export const api: typeof Real = {
     return v ? { id: v.id, folio: v.folio } : null;
   },
   async clientePropio(tenantId, clienteId) { return estado.clientes.some((c) => c.tenantId === tenantId && c.id === clienteId); },
+  async cargarCatalogoCliente(tenantId, clienteId): Promise<CatalogoCliente> {
+    falla('cargarCatalogoCliente');
+    const propio = (f: { tenantId: string; clienteId: string }) => f.tenantId === tenantId && f.clienteId === clienteId;
+    return clon({
+      numero: estado.catalogoNumeros.find(propio) ?? null,
+      productos: estado.catalogoProductos.filter(propio),
+      partes: estado.catalogoPartes.filter(propio),
+      truncado: false,
+    });
+  },
   async listarClientes(tenantId) { return estado.clientes.filter((c) => c.tenantId === tenantId).map(({ tenantId: _t, ...c }) => c); },
   async insertarViaje(tenantId, v) {
     falla('insertarViaje');
@@ -332,6 +351,7 @@ export const api: typeof Real = {
   TOPE_INTENTOS_DOC: 5,
   GRACIA_RECIBIDO_SEG: 120,
   esperaFallidoMin: (intentos) => 15 * 2 ** Math.max(Math.min(intentos, 6) - 1, 0),
+  tablaAusente: (e) => Boolean(e && (e.code === 'PGRST205' || e.code === '42P01')),
   funcionAusente: (e) => Boolean(e && (e.code === 'PGRST202' || e.code === '42883')),
   async documentosPendientes(limite = 25) {
     falla('documentosPendientes');
@@ -482,5 +502,42 @@ export const api: typeof Real = {
   async hijosDeDocumento(tenantId, padreId) {
     return estado.embarques.filter((e) => e.tenantId === tenantId && e.padreId === padreId).sort((a, b) => a.indice - b.indice)
       .flatMap((e) => { const d = estado.docs.get(e.documentoId); return d ? [{ documento: clon(d), indice: e.indice, total: e.total, clave: e.clave }] : []; });
+  },
+  async leerSalidaConfig(tenantId) { falla('leerSalidaConfig'); const c = estado.salidaConfigs.get(tenantId); return c ? clon(c) : null; },
+  async guardarSalidaConfig(tenantId, c) { falla('guardarSalidaConfig'); estado.salidaConfigs.set(tenantId, clon(c)); },
+  async envioPorLlave(tenantId, llave) { falla('envioPorLlave'); const e = estado.envios.find((x) => x.tenantId === tenantId && x.idempotencyKey === llave); return e ? clon(e) : null; },
+  async enviosDeDocumento(tenantId, documentoId) { return estado.envios.filter((x) => x.tenantId === tenantId && x.documentoId === documentoId).reverse().map(clon); },
+  async insertarEnvioTms(tenantId, e) {
+    falla('insertarEnvioTms');
+    const previo = estado.envios.find((x) => x.tenantId === tenantId && x.idempotencyKey === e.idempotencyKey);
+    if (previo) return { envio: clon(previo), creado: false };
+    const d = estado.docs.get(e.documentoId);
+    if (!d || d.tenantId !== tenantId) throw new Error('repo falso: FK compuesta (envío de otra flota)');
+    // Índice parcial único de la 0790: un solo envío ACTIVO por documento.
+    const activo = estado.envios.some((x) => x.tenantId === tenantId && x.documentoId === e.documentoId && !['descartado', 'rechazado_tms', 'subido_a_mano', 'enviado'].includes(x.estado));
+    if (activo) return null;
+    const envio: Real.EnvioTmsFila = { id: `envio-${++estado.seq}`, tenantId, documentoId: e.documentoId, versionDoc: e.versionDoc, idempotencyKey: e.idempotencyKey, estado: 'pendiente_prechequeo', plantilla: e.plantilla, intentos: 0 };
+    estado.envios.push(envio);
+    return { envio: clon(envio), creado: true };
+  },
+  async descartarEnvioTms(tenantId, id, desde) {
+    const e = estado.envios.find((x) => x.tenantId === tenantId && x.id === id);
+    if (!e || !desde.includes(e.estado)) return false;
+    e.estado = 'descartado';
+    return true;
+  },
+  async marcarEnvioSubidoAMano(tenantId, id, desde) {
+    falla('marcarEnvioSubidoAMano');
+    const e = estado.envios.find((x) => x.tenantId === tenantId && x.id === id);
+    if (!e || !desde.includes(e.estado)) return false;
+    e.estado = 'subido_a_mano';
+    return true;
+  },
+  async estadoEnvioPorDocumento(tenantId, documentoIds) {
+    const salida: Record<string, Real.EstadoEnvioTms> = {};
+    for (const e of [...estado.envios].reverse()) {
+      if (e.tenantId === tenantId && documentoIds.includes(e.documentoId) && e.estado !== 'descartado' && !(e.documentoId in salida)) salida[e.documentoId] = e.estado;
+    }
+    return salida;
   },
 };

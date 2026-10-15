@@ -335,3 +335,16 @@ describe('perfil: el segundo documento del mismo cliente no usa modelo', () => {
     expect(llm.llamadas[0].texto).toContain('<Embarque folio="XP-300">');
   });
 });
+
+describe('construirUsuario: libro de pestañas de un mismo embarque (T-A3-14)', () => {
+  const base = { formato: 'excel' as const, texto: '### Hoja: A\nx', imagenes: [], ejemplos: [], nivel: 1 as const, marcador: 'm1' };
+  it('con hojasMismoEmbarque pide UNA mercancía por hoja y no "solo el primero"', () => {
+    const u = construirUsuario({ ...base, hojasMismoEmbarque: ['Producto A', 'Producto B'] });
+    expect(u).toContain('HOJA Producto A, HOJA Producto B');
+    expect(u).toMatch(/MISMO embarque/);
+    expect(u).toMatch(/UNA mercancía por pestaña/);
+  });
+  it('sin la opción el prompt de usuario no cambia', () => {
+    expect(construirUsuario(base)).not.toMatch(/pestañas/);
+  });
+});
