@@ -1,7 +1,7 @@
 # Carta Porte multi-formato (Agente 3)
 
 Estado: construido y probado con documentos **sintéticos** y dobles del modelo. NO está probado con documentos reales de clientes (bloqueo externo, ver el final).
-Migraciones: `0420` (tablas, bucket, claim, retención), `0421` (roles de modelo), `0640`-`0642` (worker) y `0670`-`0671` (partir un Excel con varios embarques). Código: `src/lib/likida/carta_porte_docs/`. Pantallas: `/dashboard/carta-porte/documentos`.
+Migraciones: `0420` (tablas, bucket, claim, retención), `0421` (roles de modelo), `0640`-`0642` (worker) `0670`-`0671` (partir un Excel con varios embarques) y `0790`-`0793` (salida al TMS, formato JSON, catálogo del cliente y catálogos SAT). Código: `src/lib/likida/carta_porte_docs/`. Pantallas: `/dashboard/carta-porte/documentos`.
 
 ## Qué hace
 
@@ -39,7 +39,7 @@ El formato se decide por los bytes, nunca por la extensión ni el `mime` declara
 
 ## El extractor
 
-Orden de preferencia, de barato a caro: **XML → perfil del cliente → modelo nivel 1 → escalamiento**. Roles en `models.ts`: `cartaporte_extractor` (Gemini 3.5 Flash-Lite) → `cartaporte_extractor_escala` (Gemini 3.8 Flash) → `cartaporte_extractor_escala2` (Sonnet 5.5), todos por env (`LIKIDA_MODEL_CARTAPORTE_*`), con precio en `PRICES` y respaldo cruzado de proveedor.
+Orden de preferencia, de barato a caro: **XML → perfil del cliente → modelo nivel 1 → escalamiento**. Roles en `models.ts`: `cartaporte_extractor` (Gemini 3.5 Flash-Lite) → `cartaporte_extractor_escala` (Gemini 3.8 Flash) → `cartaporte_extractor_escala2` (Sonnet 5.5), todos por env (`LIKIDA_MODEL_CARTAPORTE_*`), con precio en `PRICES` y proveedor alterno cruzado.
 
 - Salida estructurada validada con zod (claves cerradas = los campos del complemento; confianza 0-1; evidencia literal).
 - **Confianza por campo.** Se escala si un campo crítico sale < 0.80, si faltan dos o más críticos o si no hay mercancías. Dos modelos que coinciden **suben** la confianza (+0.05); si discrepan, **baja** a ≤ 0.6 y el campo cae a revisión.
@@ -92,6 +92,12 @@ Documento al lado de lo leído (imagen, páginas del escaneo o texto), todos los
 
 Crea el viaje (folio del cliente o `CP-<huella>`) o, si ya existe con ese folio, **solo le llena los huecos** (lo capturado no se pisa; lo que difiere se advierte) y reemplaza únicamente los renglones que nacieron de ese documento. Un viaje nuevo exige operador (`viaje.operador_id` NOT NULL) por nombre **exacto y único** o elegido por la persona, y que no tenga otro viaje abierto (0029); si no, el documento queda aprobado **sin viaje** y se dice qué falta. No avisa al chofer (no es despacho). Luego evalúa el borrador con `getBorradorViaje` (checklist de 37 campos + validadores SAT).
 
+## Salida al sistema del cliente (TMS)
+
+Tras aprobar, además del viaje, el documento puede salir como **plantilla del TMS del cliente**. El flujo completo es: entrada → revisión → plantilla → envío → requerimiento → enviado. Se puede descargar y subir a mano (modo `descarga`, el de arranque) o subir por conector (modo `api`). Un documento sin requerimiento en el TMS queda en espera y se reintenta; un rechazo vuelve a la bandeja como hallazgos en lenguaje llano; un solo aviso a la oficina por motivo. La salida tiene su propio interruptor, `agente:carta_porte_salida_tms`: apagada, la extracción y la bandeja siguen y los envíos quedan listos para bajarse a mano.
+
+Detalle, parámetros, estados, errores en llano y paso de prueba con el equipo del cliente: `carta-porte-salida-tms.md`. Cómo apagar o deshacer: `carta-porte-salida-tms-rollback.md`.
+
 ## Exportación
 
 `/api/export/carta-porte-docs?config=estandar|<id>&formato=csv|json|xlsx[&ids=…]` (el `.xlsx` es el que se abre directo en Excel, con las mismas columnas y la misma neutralización de fórmulas; hay un botón por formato en la bandeja). El formato real del cliente de demo **se desconoce**: cada flota declara el mapeo (`cp_export_config`; columnas = campo del complemento / de mercancía / de sistema / constante; una fila por mercancía o por documento). Solo documentos aprobados. El texto que empieza con `= + - @` sale con apóstrofo (inyección de fórmulas en Excel).
@@ -113,4 +119,4 @@ Unitarias con documentos sintéticos de 7 formatos (PDF texto, PDF escaneado, fo
 1. **Documentos reales de 2-3 clientes del cliente de demo** — todo se probó con fixtures sintéticos; la exactitud real (≥ 95 % por campo) no está medida. Hace falta un banco de ≥ 100 documentos reales para fijar umbrales y elegir modelo.
 2. **El formato destino del cliente de demo** — se resuelve por configuración (`cp_export_config`) cuando lo entreguen; si es un sistema (SAP/TMS) y no un archivo, la integración depende de su acceso Zero Trust.
 3. **Slugs de modelos** `google/gemini-3.8-flash` y `anthropic/claude-sonnet-5.5` sin verificar contra OpenRouter; Gemini 3.8 Flash duplica precio el 1-ene-2027.
-4. Aplicar las migraciones 0420/0421 (y 0640-0642, 0670-0671) a la base real y correr `ci-postgres` (requiere autorización); `RESEND_EMAIL_DOMAIN` y el webhook de Resend en producción para el canal de correo; número real de WhatsApp para el canal de WhatsApp.
+4. Aplicar las migraciones 0420/0421 (y 0640-0642, 0670-0671, 0790-0793) a la base real y correr `ci-postgres` (requiere autorización); `RESEND_EMAIL_DOMAIN` y el webhook de Resend en producción para el canal de correo; número real de WhatsApp para el canal de WhatsApp.
