@@ -21,6 +21,8 @@ import type {
   MensajeVigia, NivelDirector, Riesgo, TipoEvento,
 } from './tipos';
 import type { enviarCorreo } from '@/lib/correo/enviar';
+import type { DepsGenerar } from './aviso/generar';
+import type { AvisoParaEntrega, DepsEntrega } from './aviso/entrega';
 
 export interface ResultadoRecibir {
   mensajeId: string;
@@ -180,8 +182,24 @@ export interface RepoVigia {
   archivoAdjunto(a: { tenantId: string; clienteId: string; viajeId: string; clave: AdjuntoRef['clave'] }): Promise<ArchivoParaEnviar | null>;
 }
 
+/** Lo que la pasada de avisos del cron necesita de UNA flota con el aviso encendido (T-A4-21). */
+export interface ContextoAvisosFlota {
+  tenantId: string;
+  generar: DepsGenerar;
+  entrega: DepsEntrega;
+  /** Avisos `aprobado` listos para entregar (a lo más `limite`); la entrega vuelve a verificar el estado. */
+  aprobados(limite: number): Promise<AvisoParaEntrega[]>;
+}
+
+/** Puerto de la pasada de avisos: las flotas con el aviso encendido, ya con sus accesos. Sin él, el cron no corre avisos. */
+export interface PuertoAvisosCron {
+  flotas(limite: number): Promise<ContextoAvisosFlota[]>;
+}
+
 export interface DepsVigia {
   repo: RepoVigia;
+  /** T-A4-21: pasada de avisos de viaje dentro del cron (solo en minutos múltiplo de 5, después del escalamiento). */
+  avisos?: PuertoAvisosCron | null;
   modelo?: PuertoModelo | null;
   pulir?: PuertoPulir | null;
   enviar?: Enviador;
