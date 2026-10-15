@@ -175,6 +175,10 @@ import { join, relative, sep } from 'node:path';
 // Svix antes de leer el cuerpo y resuelve la flota por el token del destinatario.
 //
 // (Lo anterior, 89 → 95, es de la rama de los Agentes 1 y 2; lo siguiente, 89 → 93, de la rama integrada; la suma de ambas es 99.)
+// 106 → 107 (cinco agentes, A1 T-A1-21, plan B del desglose): `api/v1/liquidaciones-externas/desgloses/route.ts` — `abrir(req,
+//   'administracion')` antes de leer el cuerpo; el tenant sale SIEMPRE de la credencial (un `tenant_id` es 400); cuerpo acotado a
+//   2 MB y ≤ 100 desgloses; estricta y todo-o-nada (se valida todo antes de escribir); idempotente por bitácora y sin sobrescribir
+//   (otra huella = excepción `correccion_pendiente`); no entrega nada ni acepta credenciales.
 // 89 → 90 (loop punta a punta, ola 3, Agente 9 «Buzón de facturas», 2-oct-2026): una ruta,
 //   · `api/cron/buzon-entrega/route.ts` — puertaCron (CRON_SECRET, comparación en tiempo
 //     constante) y palanca `global` (falla cerrado si no se puede leer); latido en todo camino de
@@ -235,7 +239,7 @@ import { join, relative, sep } from 'node:path';
 //   Javier) al servidor. Su puerta: `puertaCron` (CRON_SECRET, comparación de tiempo constante; sin él 500 y alerta), palanca
 //   `global` fail-closed (ilegible = 500 + aviso) y latido en todo camino de salida. No lee ni devuelve datos de flota: responde
 //   conteos, y los componentes de /estado son un catálogo cerrado de cinco nombres con tres estados. Prueba: `cron/guardia/route.test.ts`.
-const RUTAS_APP_REVISADAS = 106;
+const RUTAS_APP_REVISADAS = 107;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
