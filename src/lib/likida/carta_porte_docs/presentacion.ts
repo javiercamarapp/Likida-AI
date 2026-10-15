@@ -86,7 +86,7 @@ export const ROTULO_ESTADO: Record<EstadoDoc, string> = {
   dividido: 'Dividido en embarques',
 };
 
-export const ROTULO_ORIGEN: Record<Origen, string> = { xml: 'XML', perfil: 'Perfil del cliente', llm: 'Modelo', humano: 'Persona', derivado: 'Calculado' };
+export const ROTULO_ORIGEN: Record<Origen, string> = { xml: 'XML', perfil: 'Perfil del cliente', llm: 'Modelo', humano: 'Persona', derivado: 'Calculado', catalogo: 'Catálogo' };
 
 export const ROTULO_FORMATO: Record<string, string> = {
   pdf_texto: 'PDF con texto', pdf_escaneado: 'PDF escaneado', imagen: 'Foto', excel: 'Excel', csv: 'CSV', xml: 'XML', correo: 'Correo',

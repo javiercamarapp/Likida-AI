@@ -27,7 +27,7 @@
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import {
-  CAMPOS_DOC, CAMPOS_MERCANCIA, CLAVES_DOC, CLAVES_MERCANCIA, MAX_MERCANCIAS, UMBRAL_ESCALA,
+  CAMPOS_DOC, CAMPOS_DOC_LLM, CAMPOS_MERCANCIA, CAMPOS_MERCANCIA_LLM, CLAVES_DOC, CLAVES_DOC_LLM, CLAVES_MERCANCIA, CLAVES_MERCANCIA_LLM, MAX_MERCANCIAS, UMBRAL_ESCALA,
   campoDoc, campoMercancia, extraccionVacia, type CampoDoc, type CampoValor, type Extraccion,
 } from './campos';
 import { llaveTexto } from './catalogos';
@@ -41,13 +41,13 @@ import { extraerCartaPorteXml } from './xml_ccp';
 // ── El contrato con el modelo ───────────────────────────────────────────────
 
 const ItemDoc = z.object({
-  clave: z.enum(CLAVES_DOC as [string, ...string[]]),
+  clave: z.enum(CLAVES_DOC_LLM as [string, ...string[]]),
   valor: z.string().max(600).nullable(),
   confianza: z.number().min(0).max(1),
   evidencia: z.string().max(300).nullable(),
 });
 const ItemMerc = z.object({
-  clave: z.enum(CLAVES_MERCANCIA as [string, ...string[]]),
+  clave: z.enum(CLAVES_MERCANCIA_LLM as [string, ...string[]]),
   valor: z.string().max(600).nullable(),
   confianza: z.number().min(0).max(1),
   evidencia: z.string().max(300).nullable(),
@@ -107,10 +107,10 @@ export function construirSistema(): string {
     '- Si el documento trae varios embarques, extrae solo el PRIMERO y dilo en «notas».',
     '',
     'CAMPOS DEL DOCUMENTO:',
-    describirCampos(CAMPOS_DOC),
+    describirCampos(CAMPOS_DOC_LLM),
     '',
     'CAMPOS DE CADA MERCANCÍA:',
-    describirCampos(CAMPOS_MERCANCIA),
+    describirCampos(CAMPOS_MERCANCIA_LLM),
   ].join('\n');
 }
 
