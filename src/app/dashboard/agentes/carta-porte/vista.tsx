@@ -1,9 +1,10 @@
 import Link from 'next/link';
-import { ScrollText, TriangleAlert, Sparkles } from 'lucide-react';
+import { ScrollText, TriangleAlert, Sparkles, Mail, MessageCircle, LayoutDashboard } from 'lucide-react';
 import type { EstadoCartaPorte } from '@/lib/likida/carta_porte_datos';
 import { numero } from '@/lib/formato';
 import { BarraPagina } from '../../resumen-visual';
 import { EstadoError, EstadoVacio } from '@/app/admin/ui/kit';
+import { DireccionBuzon } from '../proveedores/controles';
 
 /**
  * La ventana del Agente de Carta Porte (Fases B-C del blueprint): los conteos
@@ -14,10 +15,21 @@ import { EstadoError, EstadoVacio } from '@/app/admin/ui/kit';
  * Área `operacion` como su pantalla hermana /dashboard/carta-porte: cero
  * pesos, y su usuario diario es el jefe de tráfico. Pura props.
  */
-export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones }: {
+/** El buzón de correo de la flota tal como lo pinta el bloque «Cómo mandarme documentos». */
+export interface BuzonCartaPorteVista { direccion: string | null; activo: boolean; remitentes: string[]; dominioConfigurado: boolean }
+
+/**
+ * La frase que dice que los grupos NO son un canal. Exportada para que la prueba
+ * la distinga de cualquier otra mención: «grupo» solo puede aparecer aquí.
+ */
+export const FRASE_SIN_GRUPOS = 'Los grupos de WhatsApp no se pueden leer: pide a tus clientes que escriban al correo o reenvíalos tú.';
+
+export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzon = null }: {
   datos: EstadoCartaPorte | null;
   sufijo?: string;
   notificaciones?: React.ReactNode;
+  /** `null` = la flota aún no activa su buzón; `'no_leido'` = la lectura falló (no se finge «sin buzón»). */
+  buzon?: BuzonCartaPorteVista | null | 'no_leido';
 }) {
   const conteo = (n: 'si' | 'no' | 'falta_declarar') =>
     datos === null ? null : datos.viajes.filter((v) => v.decision.necesita === n).length;
@@ -87,6 +99,8 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones }: {
             </>
           )}
 
+          <ComoMandarDocumentos buzon={buzon} sufijo={sufijo} />
+
           <section className="card p-4">
             <div className="flex items-center gap-2 mb-3">
               <Sparkles width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
@@ -135,5 +149,70 @@ function Tarjeta({ rotulo, valor, tono }: { rotulo: string; valor: number | null
         {valor === null ? '—' : numero(valor)}
       </div>
     </div>
+  );
+}
+
+/**
+ * Los tres caminos por los que llega un documento (el correo oficial del cliente
+ * es el principal; el WhatsApp es 1:1 con la oficina, nunca un grupo) y, con el
+ * buzón sin activar, el estado vacío que dice cómo empezar.
+ */
+function ComoMandarDocumentos({ buzon, sufijo }: { buzon: BuzonCartaPorteVista | null | 'no_leido'; sufijo: string }) {
+  const panel = `/dashboard/carta-porte/documentos${sufijo}`;
+  return (
+    <section className="card p-4 space-y-3" aria-labelledby="cp-como-mandar">
+      <h2 id="cp-como-mandar" className="font-display text-[15px] font-semibold">Cómo mandarme documentos</h2>
+      <div className="grid md:grid-cols-3 gap-4 text-[12.5px]">
+        <div className="space-y-1.5">
+          <div className="etiqueta-mono text-[10px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
+            <Mail width={12} height={12} strokeWidth={1.75} /> 1 · Correo (el medio oficial)
+          </div>
+          {buzon === 'no_leido' ? (
+            <EstadoError mensaje="No se pudo leer el buzón de tu flota. Sin lectura no se enseña una dirección: una inventada se perdería." />
+          ) : buzon === null ? (
+            <EstadoVacio icono={<Mail width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+              Aún no tienes buzón. Actívalo en el panel de documentos y aquí verás la dirección para
+              que tus clientes (o tú) reenvíen los embarques.
+            </EstadoVacio>
+          ) : buzon.direccion ? (
+            <>
+              <DireccionBuzon direccion={buzon.direccion} />
+              {!buzon.activo && <p style={{ color: 'var(--warn)' }}>El buzón está apagado: lo que llegue no se leerá hasta encenderlo en el panel.</p>}
+              <p style={{ color: 'var(--muted)' }}>
+                Los adjuntos (PDF, Excel, XML, foto) y el texto del correo entran solos a la bandeja.
+              </p>
+              <p style={{ color: 'var(--muted)' }}>
+                {buzon.remitentes.length > 0
+                  ? `Remitentes de tus clientes reconocidos: ${buzon.remitentes.join(', ')}. Uno distinto entra igual, marcado «remitente no reconocido».`
+                  : 'Remitentes reconocidos: cualquiera (puedes limitarlos a los correos de tus clientes en el panel).'}
+              </p>
+            </>
+          ) : (
+            <p style={{ color: 'var(--warn)' }}>
+              {buzon.dominioConfigurado ? 'La dirección no se pudo armar.' : 'El dominio de correo de Likida no está configurado en este entorno: el buzón existe pero no hay dirección que dar.'}
+            </p>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <div className="etiqueta-mono text-[10px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
+            <MessageCircle width={12} height={12} strokeWidth={1.75} /> 2 · WhatsApp 1:1 de la oficina
+          </div>
+          <p style={{ color: 'var(--muted)' }}>
+            Quien despacha reenvía el archivo al número de Likida, o pega el texto del embarque empezando
+            con la palabra «carta porte». Una foto debe llevar ese mismo pie.
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <div className="etiqueta-mono text-[10px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
+            <LayoutDashboard width={12} height={12} strokeWidth={1.75} /> 3 · El panel
+          </div>
+          <p style={{ color: 'var(--muted)' }}>Sube el archivo a mano en la bandeja de documentos.</p>
+          <Link href={panel} className="inline-block text-[12px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>
+            Abrir la bandeja de documentos →
+          </Link>
+        </div>
+      </div>
+      <p className="text-[12px] font-medium">{FRASE_SIN_GRUPOS}</p>
+    </section>
   );
 }
