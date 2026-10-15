@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { CONFIG_CONDUCTOR_DEFAULT, dentroDeVentana, horaYDiaMx, inicioDiaMx, validarConfigConductor, zonaOCdmx } from './config';
 import { TZ_MX } from '@/lib/formato';
 
@@ -179,5 +181,20 @@ describe('la ventana es de la zona de la flota (T-A5-01)', () => {
     expect(inicioDiaMx(ahora, MATAMOROS).toISOString()).toBe('2026-10-30T05:00:00.000Z');
     expect(inicioDiaMx(ahora, TZ_MX).toISOString()).toBe('2026-10-29T06:00:00.000Z');
     expect(inicioDiaMx(ahora).toISOString()).toBe('2026-10-29T06:00:00.000Z');
+  });
+});
+
+describe('defaults de las perillas del Conductor (contrato con la documentación)', () => {
+  it('detectarHitosGps nace encendido y avisarSenalVida nace apagado', () => {
+    expect(CONFIG_CONDUCTOR_DEFAULT.detectarHitosGps).toBe(true);
+    expect(CONFIG_CONDUCTOR_DEFAULT.avisarSenalVida).toBe(false);
+    const v = validarConfigConductor({});
+    expect('ok' in v && v.ok).toMatchObject({ detectarHitosGps: true, avisarSenalVida: false });
+  });
+
+  it('el doc operativo declara esos mismos defaults', () => {
+    const doc = readFileSync(join(process.cwd(), 'docs/operacion/agente-conductor.md'), 'utf8');
+    expect(doc).toMatch(/`detectar_hitos_gps` nace ENCENDIDO \(`true`\)/);
+    expect(doc).toMatch(/`avisar_senal_vida` nace APAGADO \(`false`\)/);
   });
 });
