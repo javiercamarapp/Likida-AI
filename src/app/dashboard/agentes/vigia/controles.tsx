@@ -4,7 +4,8 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Check, X, Hand, Send, Save, UserPlus, TriangleAlert, CheckCircle2, RotateCcw, Archive, Trash2, UserX } from 'lucide-react';
 import type { Director, ModoAprobacion } from '@/lib/likida/vigia/tipos';
-import type { ContactoServicio } from '@/lib/likida/vigia/repo';
+import type { ContactoServicio, FestivoFlota } from '@/lib/likida/vigia/repo';
+import { TURNOS_DIRECTOR, type TurnoDirector, type FestivoSugerido } from '@/lib/likida/vigia/turnos';
 
 export type ResultadoVigia = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionVigia = (previo: ResultadoVigia, fd: FormData) => Promise<ResultadoVigia>;
@@ -315,6 +316,73 @@ export function AccionesContacto({ accion, id, activo }: { accion: AccionVigia; 
       </label>
       <Boton name="accion" value="suprimir" tono="peligro" Icono={Trash2}>Suprimir sus datos (ARCO)</Boton>
       {estado && <span className="text-[11px]" style={{ color: estado.ok ? 'var(--ok)' : 'var(--bad)' }}>{estado.ok ? estado.mensaje : estado.error}</span>}
+    </form>
+  );
+}
+
+/** T-A4-31: las etiquetas de cada turno, en el lenguaje de la flota. Una por valor de `TURNOS_DIRECTOR` (una prueba lo exige). */
+export const ETIQUETA_TURNO: Record<TurnoDirector, string> = {
+  siempre: 'Siempre (como hasta hoy)',
+  noche: 'Solo de noche (20:00 a 07:00)',
+  festivos_y_fin_de_semana: 'Solo festivos y fin de semana',
+};
+
+/**
+ * T-A4-31: cuándo recibe la alerta una persona de la lista. Si en un momento nadie del nivel tiene ese turno, el aviso llega
+ * a todo el nivel: un cliente crítico nunca se queda sin aviso.
+ */
+export function FormaTurnoDirector({ accion, directorId, turno }: { accion: AccionVigia; directorId: string; turno: TurnoDirector }) {
+  const [estado, despachar] = useActionState(accion, null);
+  return (
+    <form action={despachar} className="flex flex-wrap items-end gap-2">
+      <input type="hidden" name="id" value={directorId} />
+      <div>
+        <label htmlFor={`dir-turno-${directorId}`} className={ETIQUETA}>Recibe la alerta</label>
+        <select id={`dir-turno-${directorId}`} name="turno" defaultValue={turno} className={CAMPO} style={{ background: 'var(--surface)' }}>
+          {TURNOS_DIRECTOR.map((t) => <option key={t} value={t}>{ETIQUETA_TURNO[t]}</option>)}
+        </select>
+      </div>
+      <Boton name="accion" value="turno" tono="marca" Icono={Save}>Guardar turno</Boton>
+      <div className="basis-full"><Aviso estado={estado} /></div>
+    </form>
+  );
+}
+
+/**
+ * T-A4-31: el calendario de festivos de la flota. Los oficiales de México se ofrecen como SUGERENCIA (un botón los agrega);
+ * nada se guarda solo y cada fecha se puede quitar o cambiar.
+ */
+export function FormaFestivos({ accion, festivos, sugeridos }: { accion: AccionVigia; festivos: FestivoFlota[]; sugeridos: FestivoSugerido[] }) {
+  const [estado, despachar] = useActionState(accion, null);
+  const propios = new Set(festivos.map((f) => f.fecha));
+  const faltan = sugeridos.filter((s) => !propios.has(s.fecha));
+  return (
+    <form action={despachar} className="space-y-3">
+      <ul className="space-y-1.5">
+        {festivos.length === 0 && <li className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún no hay festivos: solo cuentan los sábados y domingos.</li>}
+        {festivos.map((f) => (
+          <li key={f.id} className="flex items-center justify-between gap-2 text-[12.5px]">
+            <span>{f.fecha} · {f.nombre}</span>
+            <Boton name="quitar" value={f.id} tono="peligro" Icono={Trash2}>Quitar</Boton>
+          </li>
+        ))}
+      </ul>
+      <div className="grid sm:grid-cols-3 gap-2">
+        <div>
+          <label htmlFor="festivo-fecha" className={ETIQUETA}>Fecha</label>
+          <input id="festivo-fecha" name="fecha" type="date" className={CAMPO} style={{ background: 'var(--surface)' }} />
+        </div>
+        <div className="sm:col-span-2">
+          <label htmlFor="festivo-nombre" className={ETIQUETA}>Nombre</label>
+          <input id="festivo-nombre" name="nombre" type="text" maxLength={120} className={CAMPO} style={{ background: 'var(--surface)' }} />
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Boton name="accion" value="festivo" tono="marca" Icono={Save}>Agregar festivo</Boton>
+        {faltan.length > 0 && <Boton name="accion" value="sugeridos" Icono={Archive}>Agregar los {faltan.length} oficiales que faltan</Boton>}
+      </div>
+      <p className={AYUDA} style={{ color: 'var(--muted)' }}>Los oficiales son una sugerencia: revísalos y quita o agrega los de tu flota.</p>
+      <Aviso estado={estado} />
     </form>
   );
 }

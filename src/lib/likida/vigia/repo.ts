@@ -26,6 +26,7 @@ import { normalizarTelefonoWa } from '../wa_ventana';
 import { hashTelefono } from './servicio';
 import { MAX_DIRECTORES_POR_NIVEL, unirDestinatarios, type ValoresDirector } from './respaldo_correo';
 import { seleccionarEnEspera } from './escalamiento';
+import { aTurnoDirector, esFechaValida, esTurnoDirector, filtrarPorTurno, ZONA_POR_OMISION } from './turnos';
 import type { RespuestaRapida } from './respuestas_rapidas';
 import {
   datosUnidadVisibles, etapaDeViaje, ultimoHitoDe, type DatosUnidadCrudos, type DatosUnidadViaje, type EstatusViaje, type ResumenViaje, type ServicioEstatusViaje,
@@ -442,15 +443,41 @@ export function aDirector(f: Fila): Director {
   };
 }
 
-/** La lista de directores de un nivel (0673). Sin la tabla (base sin migrar) es lista vacía: queda el destino de siempre. */
-async function directoresDeNivel(tenantId: string, nivel: NivelDirector): Promise<Director[]> {
-  const r = await acotada(supabaseAdmin().from('vigia_director')
-    .select('id, nivel, nombre, telefono, correo').eq('tenant_id', tenantId).eq('nivel', nivel).order('created_at').order('id').limit(20), 'vigia.directores_nivel');
+/** La columna `turno` (0798) aún no existe en la base: se lee la lista como antes (todos «siempre»). */
+const sinColumna = (e: { code?: string } | null | undefined): boolean => e?.code === '42703' || e?.code === 'PGRST204';
+
+/** 0798: la zona IANA y los festivos de la flota para decidir turnos. Sin tabla/columna (base sin 0798) es la zona de omisión y sin festivos. */
+async function contextoDeTurnos(tenantId: string): Promise<{ zona: string; festivos: string[] }> {
+  const z = await acotada(supabaseAdmin().from('tenant').select('zona_horaria').eq('id', tenantId).maybeSingle(), 'vigia.turnos_zona');
+  if (z.error && !sinMigrar(z.error) && !sinColumna(z.error)) throw new Error(`vigia.turnos_zona: ${z.error.message}`);
+  const zona = str((z.data as Fila | null)?.zona_horaria) ?? ZONA_POR_OMISION;
+  const f = await acotada(supabaseAdmin().from('vigia_festivo').select('fecha').eq('tenant_id', tenantId).limit(400), 'vigia.turnos_festivos');
+  if (f.error && !sinMigrar(f.error)) throw new Error(`vigia.turnos_festivos: ${f.error.message}`);
+  const festivos = ((f.error ? [] : f.data ?? []) as Fila[]).map((x) => String(x.fecha ?? '').slice(0, 10)).filter(esFechaValida);
+  return { zona, festivos };
+}
+
+/**
+ * La lista de directores de un nivel (0673). Sin la tabla (base sin migrar) es lista vacía: queda el destino de siempre.
+ * 0798: quien tiene turno `noche` o `festivos_y_fin_de_semana` solo entra en su turno (hora local de la flota). Si el filtro deja
+ * el nivel vacío, caen TODOS: nunca se queda un nivel sin destinatario por la sobrescritura de turnos. `ahora` solo lo cambian las pruebas.
+ */
+async function directoresDeNivel(tenantId: string, nivel: NivelDirector, ahora: Date = new Date()): Promise<Director[]> {
+  const consulta = (columnas: string) => acotada(supabaseAdmin().from('vigia_director')
+    .select(columnas).eq('tenant_id', tenantId).eq('nivel', nivel).order('created_at').order('id').limit(20), 'vigia.directores_nivel');
+  let r = await consulta('id, nivel, nombre, telefono, correo, turno');
+  if (r.error && sinColumna(r.error)) r = await consulta('id, nivel, nombre, telefono, correo');   // base sin 0798: todos «siempre»
   if (r.error) {
     if (!sinMigrar(r.error)) throw new Error(`vigia.directores_nivel: ${r.error.message}`);
     return [];
   }
-  return ((r.data ?? []) as Fila[]).map(aDirector);
+  const filas = (r.data ?? []) as unknown as Fila[];
+  const conTurno = filas.map((f) => ({ director: aDirector(f), turno: aTurnoDirector(f.turno) }));
+  if (conTurno.every((d) => d.turno === 'siempre')) return conTurno.map((d) => d.director);
+  const { zona, festivos } = await contextoDeTurnos(tenantId);
+  const { lista, cayoATodos } = filtrarPorTurno(conTurno, ahora, zona, festivos);
+  if (cayoATodos) logger.warn('vigia.turnos_nivel_sin_turno', { tenant: tenantId, nivel });
+  return lista.map((d) => d.director);
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1150,6 +1177,50 @@ export async function quitarDirectorVigia(tenantId: string, id: string): Promise
   const r = await acotada(supabaseAdmin().rpc('vigia_director_quitar', { p_tenant: tenantId, p_id: id }), 'vigia.director_quitar');
   if (r.error) throw new Error(`vigia.director_quitar: ${r.error.message}`);
   return r.data === true;
+}
+
+// ── 0798/T-A4-31: turno de cada director y calendario de festivos ───────────
+
+export interface FestivoFlota { id: string; fecha: string; nombre: string }
+
+/** Fija el turno de un director (0798: UPDATE directo del servicio, sin RPC). `false` = no es de esta flota o no existe. */
+export async function fijarTurnoDirector(tenantId: string, id: string, turno: unknown): Promise<Validacion<{ id: string }>> {
+  if (!esTurnoDirector(turno)) return { ok: false, error: 'Elige un turno de la lista: siempre, noche o festivos y fin de semana.' };
+  const r = await acotada(supabaseAdmin().from('vigia_director').update({ turno }).eq('id', id).eq('tenant_id', tenantId).select('id'), 'vigia.director_turno');
+  if (r.error) {
+    if (sinMigrar(r.error) || sinColumna(r.error)) return { ok: false, error: 'Los turnos necesitan la migración 0798, que aún no está aplicada en la base.' };
+    throw new Error(`vigia.director_turno: ${r.error.message}`);
+  }
+  return ((r.data ?? []) as Fila[]).length > 0 ? { ok: true, valor: { id } } : { ok: false, error: 'No encontré a esa persona en tu flota.' };
+}
+
+/** Los festivos de la flota, por fecha. Sin la tabla (base sin 0798) es lista vacía. */
+export async function listarFestivos(tenantId: string): Promise<FestivoFlota[]> {
+  const r = await acotada(supabaseAdmin().from('vigia_festivo').select('id, fecha, nombre').eq('tenant_id', tenantId).order('fecha').limit(400), 'vigia.festivos');
+  if (r.error) {
+    if (sinMigrar(r.error)) return [];
+    throw new Error(`vigia.festivos: ${r.error.message}`);
+  }
+  return ((r.data ?? []) as Fila[]).map((f) => ({ id: String(f.id), fecha: String(f.fecha).slice(0, 10), nombre: String(f.nombre ?? '') }));
+}
+
+/** Alta de un festivo (misma fecha = se actualiza el nombre). La base repite las reglas. */
+export async function guardarFestivo(tenantId: string, fecha: unknown, nombre: unknown): Promise<Validacion<{ fecha: string }>> {
+  if (!esFechaValida(fecha)) return { ok: false, error: 'Escribe una fecha válida (año-mes-día).' };
+  const n = String(nombre ?? '').replace(/\s+/g, ' ').trim();
+  if (n.length < 1 || n.length > 120) return { ok: false, error: 'Ponle un nombre al festivo (hasta 120 letras).' };
+  const r = await acotada(supabaseAdmin().from('vigia_festivo').upsert({ tenant_id: tenantId, fecha, nombre: n }, { onConflict: 'tenant_id,fecha' }), 'vigia.festivo_guardar');
+  if (r.error) {
+    if (sinMigrar(r.error)) return { ok: false, error: 'El calendario de festivos necesita la migración 0798, que aún no está aplicada en la base.' };
+    throw new Error(`vigia.festivo_guardar: ${r.error.message}`);
+  }
+  return { ok: true, valor: { fecha } };
+}
+
+export async function quitarFestivo(tenantId: string, id: string): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().from('vigia_festivo').delete().eq('id', id).eq('tenant_id', tenantId).select('id'), 'vigia.festivo_quitar');
+  if (r.error) throw new Error(`vigia.festivo_quitar: ${r.error.message}`);
+  return ((r.data ?? []) as Fila[]).length > 0;
 }
 
 // ── 0798: la lista de «servicio al cliente» ─────────────────────────────────

@@ -46,7 +46,7 @@ vi.mock('../contactos', () => ({
 }));
 
 const repoMod = await import('./repo');
-const { crearRepoVigia, estatusViajeReal, aConfig, aContacto, validarConfig, telefonoDeAllowlist, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, cargarTablero, guardarDirectorVigia, quitarDirectorVigia, guardarConfigVigia, validarServicio, guardarServicioVigia, quitarServicioVigia } = repoMod;
+const { crearRepoVigia, estatusViajeReal, aConfig, aContacto, validarConfig, telefonoDeAllowlist, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, cargarTablero, guardarDirectorVigia, quitarDirectorVigia, guardarConfigVigia, validarServicio, guardarServicioVigia, quitarServicioVigia, fijarTurnoDirector, listarFestivos, guardarFestivo } = repoMod;
 const { T1, T2, CLIENTE_A, VIAJE_1 } = await import('./datos.fixture');
 
 const tiene = (l: Llamada, op: string, col: string, valor?: unknown) =>
@@ -946,5 +946,132 @@ describe('T-A4-26 · destinatario de «servicio al cliente» (0798)', () => {
     expect(await quitarServicioVigia(T1, 'id1')).toBe(false);
     respuesta = () => ({ data: null, error: { message: 'caída' } });
     await expect(quitarServicioVigia(T1, 'id1')).rejects.toThrow(/caída/);
+  });
+});
+
+describe('T-A4-31 · turnos de los directores (0798)', () => {
+  const base = { id: 'c', tenantId: T1, clienteId: CLIENTE_A, telefono: 'sin-telefono', nombre: null, estado: 'activo' as const, consentimientoEn: 'x', optoutEn: null, avisoPrivacidadEn: null, gerenteUserId: null };
+  const fila = (id: string, turno?: string) => ({ id, nivel: 2, nombre: `P-${id}`, telefono: null, correo: `${id}@flota.mx`, ...(turno ? { turno } : {}) });
+  const MIERCOLES_MEDIODIA = new Date('2026-10-14T18:00:00Z');   // 12:00 en America/Mexico_City
+  const MIERCOLES_NOCHE = new Date('2026-10-15T03:00:00Z');      // 21:00 en America/Mexico_City
+  const SABADO_MEDIODIA = new Date('2026-10-17T18:00:00Z');
+
+  const conLista = (filas: unknown[], extra?: { zona?: string | null; festivos?: string[] }) => {
+    respuesta = (l) => {
+      if (l.tabla === 'vigia_director') return { data: filas, error: null };
+      if (l.tabla === 'tenant') return { data: [{ zona_horaria: extra?.zona ?? 'America/Mexico_City' }], error: null };
+      if (l.tabla === 'vigia_festivo') return { data: (extra?.festivos ?? []).map((fecha) => ({ fecha })), error: null };
+      return { data: [], error: null };
+    };
+  };
+  const ids = async (ahora: Date) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(ahora);
+    try { return (await crearRepoVigia().destinatariosNivel(T1, base, 2)).map((d) => d.directorId); } finally { vi.useRealTimers(); }
+  };
+
+  it('todos «siempre» (o sin la columna): igual que hoy, sin consultar zona ni festivos', async () => {
+    conLista([fila('a'), fila('b', 'siempre')]);
+    expect(await ids(MIERCOLES_NOCHE)).toEqual(['a', 'b']);
+    expect(llamadas.some((l) => l.tabla === 'tenant' || l.tabla === 'vigia_festivo')).toBe(false);
+  });
+
+  it('pide la columna turno y, si la base no la tiene (sin 0798), relee la lista de siempre', async () => {
+    let intentos = 0;
+    respuesta = (l) => {
+      if (l.tabla !== 'vigia_director') return { data: [], error: null };
+      intentos += 1;
+      return intentos === 1 ? { data: null, error: { message: 'column vigia_director.turno does not exist', code: '42703' } } : { data: [fila('a')], error: null };
+    };
+    expect(await ids(MIERCOLES_MEDIODIA)).toEqual(['a']);
+    expect(intentos).toBe(2);
+  });
+
+  it('un director de noche solo recibe de noche; de día quedan los «siempre»', async () => {
+    conLista([fila('a', 'siempre'), fila('b', 'noche')]);
+    expect(await ids(MIERCOLES_MEDIODIA)).toEqual(['a']);
+    conLista([fila('a', 'siempre'), fila('b', 'noche')]);
+    expect(await ids(MIERCOLES_NOCHE)).toEqual(['a', 'b']);
+  });
+
+  it('festivos del calendario de la flota y fin de semana activan el turno festivos_y_fin_de_semana', async () => {
+    const lista = [fila('a', 'siempre'), fila('c', 'festivos_y_fin_de_semana')];
+    conLista(lista, { festivos: [] });
+    expect(await ids(MIERCOLES_MEDIODIA)).toEqual(['a']);
+    conLista(lista, { festivos: ['2026-10-14'] });
+    expect(await ids(MIERCOLES_MEDIODIA)).toEqual(['a', 'c']);
+    conLista(lista, { festivos: [] });
+    expect(await ids(SABADO_MEDIODIA)).toEqual(['a', 'c']);
+  });
+
+  it('consulta zona y festivos SOLO de esa flota', async () => {
+    conLista([fila('b', 'noche')]);
+    await ids(MIERCOLES_NOCHE);
+    const t = llamadas.find((l) => l.tabla === 'tenant')!;
+    const f = llamadas.find((l) => l.tabla === 'vigia_festivo')!;
+    expect(tiene(t, 'eq', 'id', T1)).toBe(true);
+    expect(tiene(f, 'eq', 'tenant_id', T1)).toBe(true);
+  });
+
+  it('la zona de la flota manda: 21:00 en México es mediodía en Tokio', async () => {
+    conLista([fila('a', 'siempre'), fila('b', 'noche')], { zona: 'Asia/Tokyo' });
+    expect(await ids(new Date('2026-10-14T03:00:00Z'))).toEqual(['a']);
+  });
+
+  it('si el filtro deja el nivel vacío, caen TODOS (nunca sin destinatario) y no se cae al «destino de siempre»', async () => {
+    conLista([fila('b', 'noche'), fila('c', 'festivos_y_fin_de_semana')]);
+    expect(await ids(MIERCOLES_MEDIODIA)).toEqual(['b', 'c']);
+  });
+
+  it('sin tabla de festivos o sin zona (base sin 0798) no rompe: fin de semana y noche siguen funcionando', async () => {
+    respuesta = (l) => {
+      if (l.tabla === 'vigia_director') return { data: [fila('a', 'siempre'), fila('c', 'festivos_y_fin_de_semana')], error: null };
+      if (l.tabla === 'vigia_festivo') return { data: null, error: { message: 'x', code: '42P01' } };
+      if (l.tabla === 'tenant') return { data: null, error: { message: 'x', code: '42703' } };
+      return { data: [], error: null };
+    };
+    expect(await ids(SABADO_MEDIODIA)).toEqual(['a', 'c']);
+  });
+
+  it('un error real de la base al leer festivos LANZA (fallar cerrado), no se lee como «sin festivos»', async () => {
+    respuesta = (l) => {
+      if (l.tabla === 'vigia_director') return { data: [fila('a', 'siempre'), fila('b', 'noche')], error: null };
+      if (l.tabla === 'vigia_festivo') return { data: null, error: { message: 'caída', code: 'XX000' } };
+      return { data: [{ zona_horaria: 'America/Mexico_City' }], error: null };
+    };
+    await expect(ids(MIERCOLES_NOCHE)).rejects.toThrow(/caída/);
+  });
+});
+
+describe('T-A4-31 · turno y festivos: escritura', () => {
+  it('fijarTurnoDirector: valida el turno, filtra por flota y reporta si no existe', async () => {
+    expect((await fijarTurnoDirector(T1, 'd1', 'quincena')).ok).toBe(false);
+    expect(llamadas).toHaveLength(0);
+    respuesta = () => ({ data: [{ id: 'd1' }], error: null });
+    expect(await fijarTurnoDirector(T1, 'd1', 'noche')).toEqual({ ok: true, valor: { id: 'd1' } });
+    const u = llamadas.find((l) => l.op === 'update')!;
+    expect(u.tabla).toBe('vigia_director');
+    expect(u.valores).toEqual({ turno: 'noche' });
+    expect(tiene(u, 'eq', 'tenant_id', T1) && tiene(u, 'eq', 'id', 'd1')).toBe(true);
+    respuesta = () => ({ data: [], error: null });
+    expect((await fijarTurnoDirector(T1, 'otro-tenant', 'noche')).ok).toBe(false);
+    respuesta = () => ({ data: null, error: { message: 'x', code: '42703' } });
+    expect(await fijarTurnoDirector(T1, 'd1', 'noche')).toMatchObject({ ok: false, error: expect.stringContaining('0798') });
+  });
+
+  it('guardarFestivo valida fecha y nombre; listarFestivos y quitarFestivo van acotados a la flota', async () => {
+    expect((await guardarFestivo(T1, '2026-02-30', 'x')).ok).toBe(false);
+    expect((await guardarFestivo(T1, '2026-09-16', '   ')).ok).toBe(false);
+    expect(llamadas).toHaveLength(0);
+    respuesta = () => ({ data: null, error: null });
+    expect(await guardarFestivo(T1, '2026-09-16', ' Día  de la Independencia ')).toEqual({ ok: true, valor: { fecha: '2026-09-16' } });
+    const up = llamadas.find((l) => l.op === 'upsert')!;
+    expect(up.valores).toEqual({ tenant_id: T1, fecha: '2026-09-16', nombre: 'Día de la Independencia' });
+    llamadas = [];
+    respuesta = () => ({ data: [{ id: 'f1', fecha: '2026-09-16', nombre: 'X' }], error: null });
+    expect(await listarFestivos(T1)).toEqual([{ id: 'f1', fecha: '2026-09-16', nombre: 'X' }]);
+    expect(tiene(llamadas[0], 'eq', 'tenant_id', T1)).toBe(true);
+    respuesta = () => ({ data: null, error: { message: 'x', code: '42P01' } });
+    expect(await listarFestivos(T1)).toEqual([]);
   });
 });
