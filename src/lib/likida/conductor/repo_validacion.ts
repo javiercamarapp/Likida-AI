@@ -452,11 +452,13 @@ export interface DatosTablero {
   acciones: AccionOficinaFila[];
   sitios: Map<string, string>;
   /** T-A5-11: coordenadas de los sitios de los viajes listados (para «a 3.2 km de …»). Ausente = no se leyeron. */
-  sitiosCoords?: Map<string, { nombre: string; lat: number; lng: number }>;
+  sitiosCoords?: Map<string, { nombre: string; lat: number; lng: number; radioM?: number }>;
   /** T-A5-11: la última posición conocida por unidad (últimas 12 h). Ausente = no se pudo leer: el tablero no afirma «sin GPS». */
   posiciones?: Map<string, PosicionTablero>;
   /** T-A5-21: estado de tránsito (frontera) por viaje. Ausente = no se leyó (casilla apagada o lectura caída): no se afirma nada. */
   transito?: Map<string, TransitoViaje>;
+  /** T-A5-22: la «Fecha Salida» (ISO) que el TMS selló, por viaje. Ausente = no se leyó: el tablero no afirma nada. */
+  salidasTms?: Map<string, string>;
   /** Niveles de escalamiento sin a quién avisar, por terminal de los viajes listados. Ausente = no se pudo leer: el tablero no inventa una alerta. */
   sinDestino?: NivelSinDestino[];
 }
@@ -480,13 +482,14 @@ export async function leerDatosTablero(tenantId: string, f: FiltrosTablero = {})
   ]);
   const sitioIds = [...new Set(viajes.flatMap((v) => [v.origenSitioId, v.destinoSitioId]).filter((x): x is string => !!x))];
   const sitios = new Map<string, string>();
-  const sitiosCoords = new Map<string, { nombre: string; lat: number; lng: number }>();
+  const sitiosCoords = new Map<string, { nombre: string; lat: number; lng: number; radioM?: number }>();
   if (sitioIds.length > 0) {
-    const rs = await traerPorIds<Fila>(sitioIds, (t) => acotada(supabaseAdmin().from('geocerca').select('id, nombre, lat, lng').eq('tenant_id', tenantId).in('id', t), 'tablero.sitios') as never, 'tablero.sitios');
+    const rs = await traerPorIds<Fila>(sitioIds, (t) => acotada(supabaseAdmin().from('geocerca').select('id, nombre, lat, lng, radio_m').eq('tenant_id', tenantId).in('id', t), 'tablero.sitios') as never, 'tablero.sitios');
     for (const g of rs) {
       sitios.set(String(g.id), String(g.nombre));
       const lat = Number(g.lat), lng = Number(g.lng);
-      if (Number.isFinite(lat) && Number.isFinite(lng)) sitiosCoords.set(String(g.id), { nombre: String(g.nombre), lat, lng });
+      const radioM = Number(g.radio_m);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) sitiosCoords.set(String(g.id), { nombre: String(g.nombre), lat, lng, ...(Number.isFinite(radioM) && radioM > 0 ? { radioM } : {}) });
     }
   }
   // T-A5-11 «dónde está»: la última posición por unidad. Si la lectura falla NO se inventa «sin GPS»: queda ausente y la fila lo dice.

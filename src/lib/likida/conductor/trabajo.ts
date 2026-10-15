@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { exigir, traerTodo } from '../pg';
@@ -119,6 +120,28 @@ export async function leerHitosDeViajes(viajeIds: string[]): Promise<HitoFila[]>
     salida.push(...filas.map(filaAHito));
   }
   return salida;
+}
+
+/**
+ * T-A5-22: la «Fecha Salida» (ISO) que el TMS selló en cada viaje (0804), solo de los que la traen. Para el barrido: los ids vienen de
+ * viajes ya leídos por tenant. Si la lectura falla (p. ej. la 0804 sin aplicar) devuelve `undefined`: el barrido no registra nada.
+ */
+export async function leerSalidasTmsDeViajes(viajeIds: string[]): Promise<Map<string, string> | undefined> {
+  try {
+    const m = new Map<string, string>();
+    for (const ids of trozos(viajeIds, 150)) {
+      const filas = await traerTodo<Fila>((desde, hasta) => acotada(supabaseAdmin()
+        .from('viaje').select('id, tms_salida_en').in('id', ids).not('tms_salida_en', 'is', null).order('id').range(desde, hasta), 'conductor.salidas_tms_lote') as never, 'conductor.salidas_tms_lote');
+      for (const f of filas) {
+        const iso = typeof f.tms_salida_en === 'string' ? f.tms_salida_en : null;
+        if (iso && Number.isFinite(Date.parse(iso))) m.set(String(f.id), iso);
+      }
+    }
+    return m;
+  } catch (e) {
+    logger.warn('conductor.salidas_tms_lote_no_leidas', { err: e instanceof Error ? e.message : String(e) });
+    return undefined;
+  }
 }
 
 export async function leerAvisosDeHitos(hitoIds: string[]): Promise<Array<AvisoReclamado & { hitoId: string }>> {

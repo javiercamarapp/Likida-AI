@@ -4,6 +4,7 @@ import { calcularEstancias, excedeUmbral, type Estancia } from './estadias_anden
 import { hitoActivo } from './maquina';
 import { haversineM } from './geo';
 import { aplicarPerfil } from './perfil';
+import { evaluarSalidaTms, textoSalidaTms } from './salida_tms';
 import { anclaDe, textoTiempo } from './planificador';
 import type { AccionOficinaFila, DatosTablero, IndicadoresCrudos, ViajeTablero, VeredictoFila } from './repo_validacion';
 import type { EpisodioTablero } from './repo';
@@ -60,7 +61,7 @@ export interface HitoVista {
 }
 
 export type TipoExcepcion =
-  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'llegada_sin_confirmar' | 'llegada_sin_sitio' | 'estadia_excedida' | 'horas_incoherentes' | 'sin_a_quien_escalar' | 'pendiente_cruce_largo';
+  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'llegada_sin_confirmar' | 'llegada_sin_sitio' | 'estadia_excedida' | 'horas_incoherentes' | 'sin_a_quien_escalar' | 'pendiente_cruce_largo' | 'salida_tms_discrepante';
 
 export interface Excepcion {
   tipo: TipoExcepcion;
@@ -90,6 +91,16 @@ export interface FilaTablero {
   ubicacion: UbicacionFila;
   /** T-A5-21: estado de tránsito (frontera) informativo. `null` con la casilla apagada o sin dato: la columna no se pinta. */
   transito: TransitoFila | null;
+  /** T-A5-22: la «Fecha Salida» del TMS como candidato a `salida_carga` o como discrepancia con el GPS. `null` = sin marca, o el hito ya está registrado. Solo se lee: el tablero no registra nada. */
+  salidaTms: SalidaTmsFila | null;
+}
+
+/** T-A5-22: lo que pinta la línea «TMS». */
+export interface SalidaTmsFila {
+  estado: 'candidato' | 'discrepancia';
+  texto: string;
+  /** La marca del TMS (ISO). */
+  marca: string;
 }
 
 /** T-A5-21: lo que pinta la columna «Tránsito». Solo se lee: NO genera avisos al chofer ni escalamiento. */
@@ -210,6 +221,24 @@ export function transitoDeFila(
   return { estado: d.estado, texto: `${etiqueta} ${haceTexto(minutos).replace('hace ', 'desde hace ')}`, minutos };
 }
 
+/** T-A5-22: la marca de salida del TMS de UNA fila. Contradice solo con la última posición GPS (no con pines de WhatsApp) y un sitio con radio conocido. */
+export function salidaTmsDeFila(viaje: ViajeTablero, hs: readonly HitoFila[], datos: DatosTablero, config: ConfigConductor, ahora: Date): SalidaTmsFila | null {
+  const iso = datos.salidasTms?.get(viaje.id);
+  if (!iso) return null;
+  const sitio = viaje.origenSitioId ? datos.sitiosCoords?.get(viaje.origenSitioId) : undefined;
+  const p = viaje.unidadId ? datos.posiciones?.get(viaje.unidadId) : undefined;
+  const geom = sitio && sitio.radioM ? { lat: sitio.lat, lng: sitio.lng, radioM: sitio.radioM } : null;
+  const posiciones = p && p.fuente === 'gps' ? [{ lat: p.lat, lng: p.lng, medidaEn: new Date(p.medidaEn) }] : [];
+  const d = evaluarSalidaTms({
+    tmsSalidaEn: iso, hito: hs.find((h) => h.tipo === 'salida_carga'), aplicar: config.aplicarSalidaDelTms,
+    sitioCarga: geom, toleranciaM: config.toleranciaUbicacionM, posiciones, ahora,
+  });
+  if (!d.marca || (d.estado !== 'candidato' && d.estado !== 'aplicar' && d.estado !== 'discrepancia')) return null;
+  // `aplicar` (casilla encendida) todavía no se registró: mientras tanto se ve como candidato.
+  const estado = d.estado === 'discrepancia' ? 'discrepancia' : 'candidato';
+  return { estado, texto: textoSalidaTms(estado, d.marca, config.zonaHoraria, sitio?.nombre ?? null), marca: d.marca.toISOString() };
+}
+
 export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora: Date): Tablero {
   const hitosPorViaje = new Map<string, HitoFila[]>();
   for (const h of datos.hitos) hitosPorViaje.set(h.viajeId, [...(hitosPorViaje.get(h.viajeId) ?? []), h]);
@@ -296,12 +325,16 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
     const dt = config.mostrarEstadosFrontera ? datos.transito?.get(viaje.id) : undefined;
     const transito = dt ? transitoDeFila(dt, ahora) : null;
 
+    // T-A5-22: informativo. La marca del TMS se propone o se señala como discrepancia; registrar el hito es del barrido (con la casilla).
+    const salidaTms = salidaTmsDeFila(viaje, hs, datos, config, ahora);
+
     filas.push({
       viaje, hitos: vistas, semaforo, motivo, hitoActivo: activo?.tipo ?? null, minutosVencido, estancias,
       sitioCarga: viaje.origenSitioId ? datos.sitios.get(viaje.origenSitioId) ?? null : null,
       sitioDescarga: viaje.destinoSitioId ? datos.sitios.get(viaje.destinoSitioId) ?? null : null,
       ubicacion: ubicacionDeFila(viaje, datos, ahora),
       transito,
+      salidaTms,
     });
 
     // ── La cola de excepciones ───────────────────────────────────────────
@@ -353,6 +386,11 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
           texto: `${nombreChofer(viaje)} no ha contestado por «${ETIQUETA[activo.tipo].corta}» (${textoTiempo(minutosVencido ?? 0)}).`,
         });
       }
+    }
+    if (salidaTms?.estado === 'discrepancia') {
+      excepciones.push({
+        ...base, tipo: 'salida_tms_discrepante', hitoId: null, hitoTipo: 'salida_carga', gravedad: 1, desde: salidaTms.marca, texto: salidaTms.texto,
+      });
     }
     const umbralH = config.umbralPendienteCruceH ?? null;
     if (transito && transito.estado === 'pendiente_cruce' && umbralH !== null && transito.minutos !== null && transito.minutos >= umbralH * 60) {

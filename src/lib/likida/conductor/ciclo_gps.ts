@@ -5,6 +5,7 @@ import { aplicarPerfil, estaFueraDePerfil } from './perfil';
 import { estaPendiente, estaResuelto, type HitoFila, type TipoHito } from './tipos';
 import type { ViajeContexto } from './repo';
 import { MINUTOS_SIN_POSICION } from './observabilidad';
+import { evaluarSalidaTms } from './salida_tms';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CICLO POR GEOCERCA — que el sistema se entere solo de que el tractor llegó o salió (P2, ola 4c).
@@ -274,6 +275,10 @@ export interface PuertosCicloGps {
   liberar(c: ClaimCruce): Promise<void>;
   /** Registra el hito (fuente `sistema`), lo valida por GPS, sella los legados y avisa a la oficina si la flota lo pidió. */
   aplicar(v: ViajeContexto, h: HitoFila, d: Deteccion, config: ConfigConductor, ahora: Date): Promise<ResultadoAplicar>;
+  /** T-A5-22: la «Fecha Salida» (ISO) que el TMS selló, por viaje (solo los que la traen). `undefined` = no se pudo leer: no se registra nada. Ausente = no hay TMS. */
+  salidasTms?(viajeIds: string[]): Promise<Map<string, string> | undefined>;
+  /** T-A5-22: registra `salida_carga` con la marca del TMS (fuente, interpretación y validación `sistema`). Misma escritura condicional que el chofer: si ya lo registraron, `carrera`. */
+  aplicarSalidaTms?(v: ViajeContexto, h: HitoFila, marca: Date, config: ConfigConductor, ahora: Date): Promise<ResultadoAplicar>;
 }
 
 export interface ResultadoCicloGps {
@@ -294,6 +299,9 @@ export interface ResultadoCicloGps {
   /** T-A5-27: unidades cuyas muestras se leyeron y cuántas de ellas no traen posición en los últimos `MINUTOS_SIN_POSICION`. */
   unidadesConsultadas?: number;
   unidadesSinPosicion?: number;
+  /** T-A5-22: salidas de carga registradas desde la marca del TMS (casilla `aplicarSalidaDelTms`) y marcas que el GPS contradijo (no se registraron). */
+  salidasTmsAplicadas?: number;
+  salidasTmsDiscrepantes?: number;
   fallos: string[];
   cortadosPorReloj: number;
 }
@@ -303,7 +311,7 @@ const TIPOS: readonly TipoDeteccion[] = ['llegada_carga', 'salida_carga', 'llega
 export async function barridoCicloGps(p: PuertosCicloGps, ahora: Date = new Date(), venceEn?: number): Promise<ResultadoCicloGps> {
   const r: ResultadoCicloGps = {
     viajes: 0, evaluados: 0, detectados: 0, llegadas: 0, salidas: 0, fueraDeOrden: 0, yaDetectados: 0, sinSitio: 0, sinMuestras: 0, cedidosAOtroViaje: 0,
-    detectadosViaDespacho: 0, detectadosViaUnidadVentana: 0, unidadesConsultadas: 0, unidadesSinPosicion: 0, fallos: [], cortadosPorReloj: 0,
+    detectadosViaDespacho: 0, detectadosViaUnidadVentana: 0, unidadesConsultadas: 0, unidadesSinPosicion: 0, salidasTmsAplicadas: 0, salidasTmsDiscrepantes: 0, fallos: [], cortadosPorReloj: 0,
   };
   const viajes = await p.viajes(TOPE_VIAJES_CICLO_GPS);
   r.viajes = viajes.length;
@@ -332,12 +340,28 @@ export async function barridoCicloGps(p: PuertosCicloGps, ahora: Date = new Date
     if (hs) porViaje.set(v.id, [...aplicarPerfil(hs, configs.get(v.tenantId)!.perfilSeguimiento)]);
   }
 
+  // T-A5-22: la «Fecha Salida» del TMS solo se lee para las flotas que encendieron `aplicarSalidaDelTms` (el tablero la muestra aparte).
+  // Si no se puede leer, no se registra nada: nunca se actúa sobre una marca que no se consultó.
+  let marcasTms = new Map<string, string>();
+  const conCasillaTms = aptos.filter((v) => configs.get(v.tenantId)!.aplicarSalidaDelTms);
+  if (p.salidasTms && p.aplicarSalidaTms && conCasillaTms.length > 0) {
+    try { marcasTms = (await p.salidasTms(conCasillaTms.map((v) => v.id))) ?? new Map(); } catch (e) {
+      logger.warn('conductor.ciclo_gps_salida_tms_no_leida', { err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  const tmsAplicable = (v: ViajeContexto): boolean => {
+    if (!p.aplicarSalidaTms || !marcasTms.has(v.id) || !configs.get(v.tenantId)!.aplicarSalidaDelTms) return false;
+    const h = (porViaje.get(v.id) ?? []).find((x) => x.tipo === 'salida_carga');
+    return Boolean(h) && estaPendiente(h as HitoFila);
+  };
+
   // Solo los viajes con algo detectable pendiente y un sitio con qué compararlo piden muestras.
   const sitios = await p.sitiosDe(aptos);
   const conPendiente = aptos.filter((v) => {
     const hs = porViaje.get(v.id) ?? [];
     const s = sitios.get(v.id);
-    if (!s || (!s.origen && !s.destino)) { r.sinSitio++; return false; }
+    // Sin sitio no hay geocerca que detecte, pero la marca del TMS sí puede proponer la salida (la flota sin sitios es la que más la necesita).
+    if (!s || (!s.origen && !s.destino)) { if (!tmsAplicable(v)) { r.sinSitio++; return false; } }
     return hs.some((h) => estaPendiente(h) && (TIPOS as readonly string[]).includes(h.tipo));
   });
   // El GPS es de la unidad: solo el viaje vigente de cada unidad lo recibe (ver `elegirViajesVigentes`).
@@ -370,8 +394,9 @@ export async function barridoCicloGps(p: PuertosCicloGps, ahora: Date = new Date
     const config = configs.get(v.tenantId)!;
     const { muestras: delViaje, via } = muestrasDeViaje(v.despachoRef, muestrasPorUnidad.get(`${v.tenantId}|${v.unidadId}`) ?? []);
     const muestras = delViaje.filter((m) => m.medidaEn.getTime() <= limite);
-    if (muestras.length === 0) { r.sinMuestras++; continue; }
-    r.evaluados++;
+    const aplicaTms = tmsAplicable(v);
+    const sitiosViaje: SitiosViaje = sitios.get(v.id) ?? { origen: null, destino: null };
+    if (muestras.length === 0) { r.sinMuestras++; if (!aplicaTms) continue; } else r.evaluados++;
 
     const local = new Map<TipoDeteccion, HitoFila>();
     for (const h of porViaje.get(v.id) ?? []) if ((TIPOS as readonly string[]).includes(h.tipo)) local.set(h.tipo as TipoDeteccion, h);
@@ -379,10 +404,10 @@ export async function barridoCicloGps(p: PuertosCicloGps, ahora: Date = new Date
     const desdeViaje = aceptadoEn && aceptadoEn.getTime() > desde.getTime() ? aceptadoEn : desde;
 
     // Hasta cuatro detecciones por viaje y pasada (la llegada y la salida pueden haber ocurrido entre dos barridos).
-    for (let vuelta = 0; vuelta < TIPOS.length; vuelta++) {
+    for (let vuelta = 0; vuelta < (muestras.length === 0 ? 0 : TIPOS.length); vuelta++) {
       const det = proximaDeteccion({
         hitos: Object.fromEntries(TIPOS.map((t) => [t, local.get(t)])) as EntradaProxima['hitos'],
-        sitios: sitios.get(v.id)!, muestras: muestras.filter((m) => m.medidaEn.getTime() >= desdeViaje.getTime()), config, aceptadoEn,
+        sitios: sitiosViaje, muestras: muestras.filter((m) => m.medidaEn.getTime() >= desdeViaje.getTime()), config, aceptadoEn,
       });
       if (!det) break;
       const hito = local.get(det.tipo)!;
@@ -410,6 +435,33 @@ export async function barridoCicloGps(p: PuertosCicloGps, ahora: Date = new Date
         r.fallos.push(`${v.folio ?? v.id}: ${e instanceof Error ? e.message : 'error inesperado'}`);
         logger.error('conductor.ciclo_gps_viaje_fallo', { viaje: v.id, err: e instanceof Error ? e.message : String(e) });
         break;
+      }
+    }
+
+    // T-A5-22: lo que el GPS no pudo probar, la marca del TMS lo propone — y se registra solo si el GPS no la contradice. Va DESPUÉS de
+    // la detección por geocerca: si el GPS ya registró la salida, `evaluarSalidaTms` la ve resuelta y no hace nada (el hito del TMS
+    // nunca pisa uno del chofer, la oficina o el GPS).
+    if (aplicaTms && p.aplicarSalidaTms) {
+      const hitoSalida = local.get('salida_carga');
+      const dec = evaluarSalidaTms({
+        tmsSalidaEn: marcasTms.get(v.id), hito: hitoSalida, aplicar: true, sitioCarga: sitiosViaje.origen,
+        toleranciaM: config.toleranciaUbicacionM, posiciones: muestras, ahora,
+      });
+      if (dec.estado === 'discrepancia') {
+        r.salidasTmsDiscrepantes = (r.salidasTmsDiscrepantes ?? 0) + 1;
+      } else if (dec.estado === 'aplicar' && hitoSalida && dec.marca) {
+        try {
+          const res = await p.aplicarSalidaTms(v, hitoSalida, dec.marca, config, ahora);
+          if (res === 'fallo') r.fallos.push(`${v.folio ?? v.id}: no se pudo registrar salida_carga desde el TMS`);
+          else if (res === 'ok') {
+            r.salidasTmsAplicadas = (r.salidasTmsAplicadas ?? 0) + 1;
+            logger.info('conductor.ciclo_gps_salida_tms', { viaje: v.id });
+            local.set('salida_carga', { ...hitoSalida, estado: 'validado', fuente: 'sistema', mensajeEn: dec.marca.toISOString(), recibidoEn: ahora.toISOString() });
+          }
+        } catch (e) {
+          r.fallos.push(`${v.folio ?? v.id}: ${e instanceof Error ? e.message : 'error inesperado'}`);
+          logger.error('conductor.ciclo_gps_salida_tms_fallo', { viaje: v.id, err: e instanceof Error ? e.message : String(e) });
+        }
       }
     }
   }
