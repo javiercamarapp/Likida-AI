@@ -342,11 +342,6 @@ export async function listarTarifas(tenantId: string, filtro: { caseta?: string;
   return filas.map(tarifaDeFila);
 }
 
-/** Día de hoy en la zona de la flota (America/Mexico_City), «aaaa-mm-dd». */
-function hoyMx(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-}
-
 const filaParaEscribir = (tenantId: string, t: TarifaExistente) => ({
   tenant_id: tenantId, caseta_norm: t.casetaNorm, clase: t.clase, importe: t.importe,
   vigente_desde: t.vigenteDesde, vigente_hasta: t.vigenteHasta, origen: t.origen,
