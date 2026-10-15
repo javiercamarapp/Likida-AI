@@ -48,6 +48,7 @@ const ARCHIVOS: Record<string, Clase> = {
   'agentes/conductores/page.tsx': 'permitido',
   'agentes/conductores/sitios/page.tsx': 'permitido',
   'agentes/carta-porte/catalogo/actions.ts': 'permitido',  // importación CSV del catálogo por cliente (A3, T-A3-21)
+  'agentes/carta-porte/configuracion/actions.ts': 'permitido',  // configuración de la salida al TMS (A3, T-A3-32)
   'carta-porte/documentos/[id]/page.tsx': 'permitido',
   'carta-porte/documentos/page.tsx': 'permitido',
   'carta-porte/page.tsx': 'permitido',

@@ -157,6 +157,9 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // El catálogo del cliente del Agente de Carta Porte (T-A3-22): productos (SKU → clave SAT), remitentes/destinatarios y el
   // número interno del cliente. Misma área que su agente: cero pesos, lo usa el jefe de tráfico.
   '/dashboard/agentes/carta-porte/catalogo': 'operacion',
+  // La configuración de la salida del Agente de Carta Porte (T-A3-32): modo, reintentos, frecuencia, destinatarios y plantilla.
+  // Cambia a quién se avisa y cómo sale lo que el agente arma: solo dueño/administrador, como las demás configuraciones.
+  '/dashboard/agentes/carta-porte/configuracion': 'administracion',
   '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',
   // Notificaciones (14-ago-2026) — el "alertas primero". Su VISIBILIDAD la
@@ -379,6 +382,7 @@ export const RUTAS_PERFIL_CINCO_AGENTES: Readonly<Record<string, ModuloPerfil>> 
   // dos llaves: sus páginas dinámicas gatean con la de su padre).
   '/dashboard/agentes/carta-porte': 'carta_porte',
   '/dashboard/agentes/carta-porte/catalogo': 'carta_porte',
+  '/dashboard/agentes/carta-porte/configuracion': 'carta_porte',
   '/dashboard/carta-porte': 'carta_porte',
   '/dashboard/carta-porte/documentos': 'carta_porte',
   // A4 · Vigía de servicio al cliente.
