@@ -158,12 +158,25 @@ grant select, insert, update, delete on table public.vigia_festivo to service_ro
 
 -- ── (c) prioridad ─────────────────────────────────────────────────────────
 alter table public.vigia_conversacion
-  add column if not exists prioridad smallint not null default 0
-  constraint vigia_conversacion_prioridad_rango check (prioridad between 0 and 2);
+  add column if not exists prioridad smallint not null default 0;
+-- Las restricciones nuevas van `not valid` + validate (la columna recién creada vale 0 en todas las filas): no recorren la tabla bloqueando.
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conrelid = 'public.vigia_conversacion'::regclass and conname = 'vigia_conversacion_prioridad_rango') then
+    alter table public.vigia_conversacion add constraint vigia_conversacion_prioridad_rango check (prioridad between 0 and 2) not valid;
+  end if;
+end $$;
+alter table public.vigia_conversacion validate constraint vigia_conversacion_prioridad_rango;
 comment on column public.vigia_conversacion.prioridad is '0798: 0 normal, 1 alta, 2 urgente. La fija el código; 0 = sin priorizar.';
 alter table public.vigia_mensaje
-  add column if not exists prioridad smallint not null default 0
-  constraint vigia_mensaje_prioridad_rango check (prioridad between 0 and 2);
+  add column if not exists prioridad smallint not null default 0;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conrelid = 'public.vigia_mensaje'::regclass and conname = 'vigia_mensaje_prioridad_rango') then
+    alter table public.vigia_mensaje add constraint vigia_mensaje_prioridad_rango check (prioridad between 0 and 2) not valid;
+  end if;
+end $$;
+alter table public.vigia_mensaje validate constraint vigia_mensaje_prioridad_rango;
 comment on column public.vigia_mensaje.prioridad is '0798: 0 normal, 1 alta, 2 urgente, del mensaje (p. ej. «urgente», «ASAP»).';
 
 -- ── (d) intención «datos_unidad» ──────────────────────────────────────────
@@ -171,7 +184,8 @@ alter table public.vigia_mensaje drop constraint if exists vigia_mensaje_intenci
 alter table public.vigia_mensaje add constraint vigia_mensaje_intencion_dominio check (
   intencion is null or intencion in
     ('ubicacion', 'eta', 'documentos', 'factura_pod', 'queja', 'pide_humano', 'baja', 'saludo', 'otro', 'datos_unidad')
-);
+) not valid;
+alter table public.vigia_mensaje validate constraint vigia_mensaje_intencion_dominio;
 
 -- ── (e) alcance: solo avisar ──────────────────────────────────────────────
 alter table public.vigia_config
