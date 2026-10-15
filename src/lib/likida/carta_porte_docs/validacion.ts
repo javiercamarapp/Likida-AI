@@ -67,6 +67,11 @@ export interface OpcionesValidacion {
    */
   catalogosSat?: ResolvedorSat;
   /**
+   * Peso total (kg) del documento HERMANO del mismo embarque, ya convertido a kg (p. ej. el BOL en libras del libro de
+   * Excel que se está revisando) (T-A3-52). Ausente = no hay con qué cruzar.
+   */
+  pesoReferencia?: { kg: number; fuente: string };
+  /**
    * Reglas de dependencia de la Guía de llenado de la plantilla del TMS (T-A3-45). Ausente = todas con los valores de la
    * Guía; `false` = ninguna (un perfil que no use esa plantilla). Parametrizable por perfil: la preferencia de un cliente
    * no se codifica aquí.
@@ -234,6 +239,41 @@ function verificarSumas(e: Extraccion, reg: Registrar): void {
   if (enPiezas) comprobar('piezas_total', 'cantidad', 'suma_piezas', TOLERANCIA_SUMA_MIN_PIEZAS, 'Las piezas', '');
   comprobar('peso_bruto_total', 'peso_kg', 'suma_peso', TOLERANCIA_SUMA_MIN_KG, 'Los pesos', ' kg');
   comprobar('volumen_total', 'volumen', 'suma_volumen', TOLERANCIA_SUMA_MIN_M3, 'Los volúmenes', ' m³');
+}
+
+/** Diferencia máxima entre dos lecturas del peso del mismo embarque antes de bloquear (T-A3-52): 1 %. */
+export const TOLERANCIA_PESO_CRUZADO_PCT = 0.01;
+
+/** `a` es ≈ 1000× `b` (o 1/1000×) dentro de la tolerancia: el error típico de coma/punto de miles o de toneladas↔kg. */
+function esFactorMil(a: number, b: number): boolean {
+  if (!(a > 0) || !(b > 0)) return false;
+  const r = a / b;
+  return Math.abs(r / 1000 - 1) <= TOLERANCIA_PESO_CRUZADO_PCT || Math.abs(r * 1000 - 1) <= TOLERANCIA_PESO_CRUZADO_PCT;
+}
+
+/**
+ * Cuadre del peso entre lecturas (T-A3-52). BLOQUEA (lo ambiguo no se adivina) cuando:
+ *   · el total del documento y la suma de sus renglones difieren por un factor de 1000;
+ *   · el peso del documento difiere más de 1 % del peso del documento hermano del mismo embarque (`pesoReferencia`),
+ *     o cambia por un factor de 1000.
+ * La suma de renglones ≠ total (otro factor) ya la bloquea `verificarSumas`.
+ */
+function verificarPesoCruzado(e: Extraccion, ref: OpcionesValidacion['pesoReferencia'], reg: Registrar): void {
+  const redondeo = (n: number) => Math.round(n * 1000) / 1000;
+  const valores = e.mercancias.map((f) => numeroDe(f.peso_kg));
+  const suma = valores.length > 0 && valores.every((v): v is number => v !== null) ? valores.reduce((s, v) => s + v, 0) : null;
+  const campo = e.campos.peso_bruto_total;
+  const total = campo && campo.origen !== 'derivado' ? numeroDe(campo) : null;
+  if (total !== null && suma !== null && esFactorMil(total, suma)) {
+    reg({ campo: 'peso_bruto_total', renglon: null, severidad: 'bloqueo', codigo: 'peso_factor_1000', mensaje: `El peso total del documento (${redondeo(total)} kg) y la suma de sus renglones (${redondeo(suma)} kg) difieren por un factor de 1000: revisa coma/punto de miles o toneladas contra kilos.`, relacionados: e.mercancias.map((_, i) => ({ campo: 'peso_kg', renglon: i })) });
+  }
+  const propio = total ?? suma;
+  if (!ref || !(ref.kg > 0) || propio === null || !(propio > 0)) return;
+  if (esFactorMil(propio, ref.kg)) {
+    reg({ campo: total !== null ? 'peso_bruto_total' : 'peso_kg', renglon: null, severidad: 'bloqueo', codigo: 'peso_factor_1000', mensaje: `El peso del documento (${redondeo(propio)} kg) y el de ${ref.fuente} (${redondeo(ref.kg)} kg) difieren por un factor de 1000: revisa coma/punto de miles o toneladas contra kilos.` });
+  } else if (Math.abs(propio - ref.kg) / ref.kg > TOLERANCIA_PESO_CRUZADO_PCT) {
+    reg({ campo: total !== null ? 'peso_bruto_total' : 'peso_kg', renglon: null, severidad: 'bloqueo', codigo: 'peso_fuentes_difieren', mensaje: `El peso del documento (${redondeo(propio)} kg) difiere más de 1 % del de ${ref.fuente} (${redondeo(ref.kg)} kg). Confirma cuál es el correcto.` });
+  }
 }
 
 const EMBALAJE_SACO = /^5[HLM]/; // c_TipoEmbalaje: bolsas/sacos (5H tejida, 5L textil, 5M papel)
@@ -670,6 +710,8 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
   verificarCatalogosSat(e, op.catalogosSat, reg);
   // Verificación de sumas con rechazo (T-A3-18): piezas, kg y m³ contra el total que declara el documento.
   verificarSumas(e, reg);
+  // Cuadre del peso entre lecturas y contra el documento hermano (T-A3-52).
+  verificarPesoCruzado(e, op.pesoReferencia, reg);
   // Reglas de dependencia de la Guía de llenado del TMS (T-A3-45).
   for (const h of validarReglasGuia(e, op.reglasGuia)) reg(h);
   // Cantidad vs peso cuando la unidad es de masa.

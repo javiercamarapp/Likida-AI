@@ -107,6 +107,7 @@ export const CAMPOS_MERCANCIA: ReadonlyArray<CampoDoc> = [
   { clave: 'unidad_texto', rotulo: 'Unidad (como la escribe el cliente)', grupo: 'carga', tipo: 'texto', critico: false, max: 40 },
   { clave: 'peso_kg', rotulo: 'Peso (kg)', grupo: 'carga', tipo: 'numero', critico: true, max: 14 },
   { clave: 'peso_unidad', rotulo: 'Unidad del peso en el documento', grupo: 'carga', tipo: 'texto', critico: false, max: 10 },
+  { clave: 'peso_tipo', rotulo: 'Qué peso trae el documento (bruto, neto o por embalaje)', grupo: 'carga', tipo: 'texto', critico: false, max: 30, soloEnriquecimiento: true },
   { clave: 'embalaje', rotulo: 'Embalaje (c_TipoEmbalaje)', grupo: 'carga', tipo: 'embalaje', critico: false, max: 3 },
   { clave: 'valor_mercancia', rotulo: 'Valor de la mercancía', grupo: 'carga', tipo: 'numero', critico: false, max: 16 },
   { clave: 'moneda', rotulo: 'Moneda del valor', grupo: 'carga', tipo: 'moneda', critico: false, max: 3 },
