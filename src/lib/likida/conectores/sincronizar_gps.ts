@@ -27,6 +27,7 @@ import { lectorDe, LECTORES_POSICION } from './posiciones';
 import { httpReal as crearHttpReal, type Http } from './tipos';
 import { conPool } from '../lotes';
 import { llaveEconomico } from './tabla_propia/validar';
+import { normalizarDespachoRef } from './tabla_propia/filas';
 import { PROVEEDOR_TABLA_PROPIA } from './tabla_propia/contrato';
 import { unidadesSinAvisoPrevio } from '../privacidad';
 import { finalizarPoll, reclamarPolls } from './poll_durable';
@@ -96,7 +97,7 @@ export interface ResultadoSync {
   sinPosicion?: number;
 }
 
-export type Lectura = { deviceId: string; lat: number; lng: number; medidaEn: string; velocidad: number | null; rumbo: number | null; ignicion?: boolean | null };
+export type Lectura = { deviceId: string; lat: number; lng: number; medidaEn: string; velocidad: number | null; rumbo: number | null; ignicion?: boolean | null; despachoRef?: string | null };
 
 /** La frontera entre un proveedor ajeno y nuestra tabla es estricta: un id
  * vacío, una fecha inválida o números fuera de dominio no llegan a Postgres.
@@ -328,12 +329,13 @@ export async function asentarLecturas(
     }
   }
 
-  let filas: Array<{ tenant_id: string; unidad_id: string; lat: number; lng: number; velocidad: number | null; rumbo: number | null; ignicion: boolean | null; medida_en: string; proveedor: string }> = [];
+  let filas: Array<{ tenant_id: string; unidad_id: string; lat: number; lng: number; velocidad: number | null; rumbo: number | null; ignicion: boolean | null; medida_en: string; proveedor: string; despacho_ref?: string }> = [];
   const unidadesVistas = new Set<string>();
   for (const p of posiciones) {
     const unidadId = porDevice.get(p.deviceId);
     if (!unidadId) { base.huerfanas += 1; continue; }
     unidadesVistas.add(unidadId);
+    const despachoRef = normalizarDespachoRef(p.despachoRef);
     filas.push({
       tenant_id: tenantId,
       unidad_id: unidadId,
@@ -344,6 +346,8 @@ export async function asentarLecturas(
       ignicion: p.ignicion ?? null,
       medida_en: p.medidaEn,
       proveedor: conectorId,
+      // T-A5-13: la clave solo viaja cuando la fuente trae despacho (ausente = no toca la columna, igual que hoy).
+      ...(despachoRef !== null ? { despacho_ref: despachoRef } : {}),
     });
   }
 
