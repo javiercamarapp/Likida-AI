@@ -46,7 +46,7 @@ vi.mock('../contactos', () => ({
 }));
 
 const repoMod = await import('./repo');
-const { crearRepoVigia, estatusViajeReal, aConfig, aContacto, validarConfig, telefonoDeAllowlist, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, cargarTablero, guardarDirectorVigia, quitarDirectorVigia, guardarConfigVigia } = repoMod;
+const { crearRepoVigia, estatusViajeReal, aConfig, aContacto, validarConfig, telefonoDeAllowlist, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, cargarTablero, guardarDirectorVigia, quitarDirectorVigia, guardarConfigVigia, validarServicio, guardarServicioVigia, quitarServicioVigia } = repoMod;
 const { T1, T2, CLIENTE_A, VIAJE_1 } = await import('./datos.fixture');
 
 const tiene = (l: Llamada, op: string, col: string, valor?: unknown) =>
@@ -55,7 +55,7 @@ const tiene = (l: Llamada, op: string, col: string, valor?: unknown) =>
 beforeEach(() => { llamadas = []; respuesta = () => ({ data: [], error: null }); });
 
 describe('AISLAMIENTO: toda consulta a una tabla con tenant filtra por él', () => {
-  const TABLAS_CON_TENANT = ['vigia_config', 'vigia_contacto', 'vigia_conversacion', 'vigia_mensaje', 'vigia_evento', 'viaje', 'posicion', 'pod', 'factura_emitida', 'cliente', 'app_user', 'tenant', 'vigia_director', 'vigia_aviso_correo'];
+  const TABLAS_CON_TENANT = ['vigia_config', 'vigia_contacto', 'vigia_conversacion', 'vigia_mensaje', 'vigia_evento', 'viaje', 'posicion', 'pod', 'factura_emitida', 'cliente', 'app_user', 'tenant', 'vigia_director', 'vigia_aviso_correo', 'vigia_servicio_cliente'];
 
   /** Las únicas dos que cruzan flotas A PROPÓSITO (rotuladas en el código). */
   const EXENTAS = new Set(['contactoPorTelefono', 'conversacionesEnEspera', 'aprobadosAtorados', 'correosVencidos']);
@@ -97,10 +97,13 @@ describe('AISLAMIENTO: toda consulta a una tabla con tenant filtra por él', () 
       ['destinatarioNivel2', () => repo.destinatarioNivel(T1, contacto, 2)],
       ['destinatariosNivel1', () => repo.destinatariosNivel(T1, contacto, 1)],
       ['destinatariosNivel2', () => repo.destinatariosNivel(T1, contacto, 2)],
+      ['servicioCliente', () => repo.destinatariosServicioCliente(T1, CLIENTE_A)],
       ['reclamarCorreo', () => repo.reclamarCorreo(T1, { conversacionId: id, clave: 'k', nivel: 1, directorId: null, destino: 'a@b.mx', datos: { cliente: 'x', motivo: 'sin_respuesta', minutos: 1, nivel: 1 } })],
       ['cerrarCorreo', () => repo.cerrarCorreo(T1, id, id, 'enviado', null)],
       ['guardarDirector', () => guardarDirectorVigia(T1, 'u', null, { nivel: 1, nombre: 'x', telefono: null, correo: 'a@b.mx' })],
       ['quitarDirector', () => quitarDirectorVigia(T1, id)],
+      ['guardarServicio', () => guardarServicioVigia(T1, 'u', null, { clienteId: null, nombre: 'x', telefono: null, correo: 'a@b.example', activo: true })],
+      ['quitarServicio', () => quitarServicioVigia(T1, id)],
       ['viajesEnCurso', () => estatusViajeReal.viajesEnCurso({ tenantId: T1, clienteId: CLIENTE_A })],
       ['estatus', () => estatusViajeReal.estatus({ tenantId: T1, clienteId: CLIENTE_A, viajeId: id })],
       ['altaContacto', () => altaContactoVigia(T1, 'u', { clienteId: CLIENTE_A, telefono: '5511110001', nombre: null, gerenteUserId: 'u-ger', consentimiento: true })],
@@ -835,5 +838,113 @@ describe('leerDatosUnidad (T-A4-24): unidad, caja y operador de UN viaje de UN c
     const con = await real.estatus({ tenantId: T1, clienteId: CLIENTE_A, viajeId: VIAJE_1, datosUnidad: true });
     expect(lector).toHaveBeenCalledWith({ tenantId: T1, clienteId: CLIENTE_A, viajeId: VIAJE_1, unidadId: U });
     expect(con).toMatchObject({ caja: null, unidad: null, operador: null });
+  });
+});
+
+describe('T-A4-26 · destinatario de «servicio al cliente» (0798)', () => {
+  const FILAS = [
+    { id: 's1', nombre: 'Servicio Uno', telefono: '522899900001', correo: 'uno@flota.example' },
+    { id: 's2', nombre: 'Servicio Dos', telefono: null, correo: 'dos@flota.example' },
+  ];
+
+  it('consulta con tenant_id, solo activos y los de ese cliente o «para todos»; devuelve teléfono y/o correo', async () => {
+    respuesta = (l) => (l.tabla === 'vigia_servicio_cliente' ? { data: FILAS, error: null } : { data: [], error: null });
+    const r = await crearRepoVigia().destinatariosServicioCliente(T1, CLIENTE_A);
+    expect(r).toEqual([
+      { userId: null, directorId: null, nombre: 'Servicio Uno', telefono: '522899900001', correo: 'uno@flota.example' },
+      { userId: null, directorId: null, nombre: 'Servicio Dos', telefono: null, correo: 'dos@flota.example' },
+    ]);
+    const q = llamadas.find((l) => l.tabla === 'vigia_servicio_cliente')!;
+    expect(tiene(q, 'eq', 'tenant_id', T1)).toBe(true);
+    expect(tiene(q, 'eq', 'activo', true)).toBe(true);
+    expect(tiene(q, 'or', 'cliente_id.is.null,cliente_id.eq.' + CLIENTE_A)).toBe(true);
+  });
+
+  it('no toca los niveles: no consulta vigia_director ni app_user', async () => {
+    respuesta = () => ({ data: [], error: null });
+    await crearRepoVigia().destinatariosServicioCliente(T1, CLIENTE_A);
+    expect(llamadas.map((l) => l.tabla)).toEqual(['vigia_servicio_cliente']);
+  });
+
+  it('sin lista devuelve vacío (el llamador sigue con gerente/director); sin la migración también; un fallo real lanza', async () => {
+    respuesta = () => ({ data: [], error: null });
+    expect(await crearRepoVigia().destinatariosServicioCliente(T1, CLIENTE_A)).toEqual([]);
+    for (const code of ['42P01', 'PGRST205']) {
+      respuesta = () => ({ data: null, error: { message: 'x', code } });
+      expect(await crearRepoVigia().destinatariosServicioCliente(T1, CLIENTE_A)).toEqual([]);
+    }
+    respuesta = () => ({ data: null, error: { message: 'caída', code: 'XX000' } });
+    await expect(crearRepoVigia().destinatariosServicioCliente(T1, CLIENTE_A)).rejects.toThrow(/caída/);
+  });
+
+  it('un clienteId que no es uuid (o nulo) no entra al filtro: solo los «para todos»', async () => {
+    respuesta = () => ({ data: [], error: null });
+    for (const malo of ["x',cliente_id.neq.y", null]) {
+      llamadas = [];
+      await crearRepoVigia().destinatariosServicioCliente(T1, malo);
+      const q = llamadas[0];
+      expect(tiene(q, 'is', 'cliente_id', null)).toBe(true);
+      expect(q.filtros.some(([o]) => o === 'or')).toBe(false);
+    }
+  });
+
+  it('un contacto sin teléfono ni correo no cuenta, y el mismo WhatsApp repetido es una sola persona', async () => {
+    respuesta = () => ({ data: [
+      { id: 'a', nombre: 'A', telefono: '522899900001', correo: null },
+      { id: 'b', nombre: 'B', telefono: '522899900001', correo: null },
+      { id: 'c', nombre: 'C', telefono: null, correo: null },
+    ], error: null });
+    const r = await crearRepoVigia().destinatariosServicioCliente(T1, CLIENTE_A);
+    expect(r).toHaveLength(1);
+    expect(r[0].telefono).toBe('522899900001');
+  });
+
+  it('el tablero trae la lista (tolerante a una base sin 0798)', async () => {
+    respuesta = (l) => (l.tabla === 'vigia_servicio_cliente'
+      ? { data: [{ id: 's1', nombre: 'Servicio Uno', telefono: '522899900001', correo: null, cliente_id: null, activo: true }], error: null }
+      : { data: [], error: null });
+    const d = await cargarTablero(T1);
+    expect(d.servicio).toEqual([{ id: 's1', nombre: 'Servicio Uno', telefono: '522899900001', correo: null, clienteId: null, activo: true }]);
+    const q = llamadas.find((l) => l.tabla === 'vigia_servicio_cliente')!;
+    expect(tiene(q, 'eq', 'tenant_id', T1)).toBe(true);
+    respuesta = (l) => (l.tabla === 'vigia_servicio_cliente' ? { data: null, error: { message: 'x', code: '42P01' } } : { data: [], error: null });
+    expect((await cargarTablero(T1)).servicio).toEqual([]);
+  });
+
+  it('validarServicio: nombre, al menos un canal, WhatsApp de 10 dígitos, correo, cliente uuid o vacío', () => {
+    const ok = { clienteId: '', nombre: ' Ana  Pérez ', telefono: '28 9990 0001', correo: '', activo: true };
+    expect(validarServicio(ok)).toEqual({ ok: true, valor: { clienteId: null, nombre: 'Ana Pérez', telefono: '522899900001', correo: null, activo: true } });
+    expect(validarServicio({ ...ok, clienteId: CLIENTE_A })).toMatchObject({ ok: true, valor: { clienteId: CLIENTE_A } });
+    expect(validarServicio({ ...ok, telefono: '', correo: '' })).toMatchObject({ ok: false });
+    expect(validarServicio({ ...ok, telefono: '123' })).toMatchObject({ ok: false });
+    expect(validarServicio({ ...ok, telefono: '', correo: 'sin-arroba' })).toMatchObject({ ok: false });
+    expect(validarServicio({ ...ok, nombre: '   ' })).toMatchObject({ ok: false });
+    expect(validarServicio({ ...ok, clienteId: "1'; drop" })).toMatchObject({ ok: false });
+    expect(validarServicio({ ...ok, activo: false })).toMatchObject({ ok: true, valor: { activo: false } });
+  });
+
+  it('guardar llama a la RPC con el tenant de la sesión; el tope de 10 (54000) y el duplicado (23505) dan mensaje para la pantalla', async () => {
+    respuesta = () => ({ data: 'nuevo-id', error: null });
+    const v = { clienteId: null, nombre: 'Ana', telefono: '522899900001', correo: null, activo: true };
+    expect(await guardarServicioVigia(T1, 'u1', null, v)).toEqual({ ok: true, valor: { id: 'nuevo-id' } });
+    expect(llamadas[0]).toMatchObject({ tabla: 'rpc:vigia_servicio_guardar', valores: { p_tenant: T1, p_id: null, p_telefono: '522899900001', p_usuario: 'u1' } });
+    respuesta = () => ({ data: null, error: { message: 'x', code: '54000' } });
+    expect(await guardarServicioVigia(T1, 'u1', null, v)).toMatchObject({ ok: false, error: expect.stringContaining('10') });
+    respuesta = () => ({ data: null, error: { message: 'x', code: '23505' } });
+    expect(await guardarServicioVigia(T1, 'u1', null, v)).toMatchObject({ ok: false, error: expect.stringContaining('ya está') });
+    respuesta = () => ({ data: null, error: { message: 'x', code: '42883' } });
+    expect(await guardarServicioVigia(T1, 'u1', null, v)).toMatchObject({ ok: false, error: expect.stringContaining('0798') });
+    respuesta = () => ({ data: null, error: { message: 'caída', code: 'XX000' } });
+    await expect(guardarServicioVigia(T1, 'u1', null, v)).rejects.toThrow(/caída/);
+  });
+
+  it('quitar llama a la RPC con el tenant; false si no existe; un error lanza', async () => {
+    respuesta = () => ({ data: true, error: null });
+    expect(await quitarServicioVigia(T1, 'id1')).toBe(true);
+    expect(llamadas[0]).toMatchObject({ tabla: 'rpc:vigia_servicio_quitar', valores: { p_tenant: T1, p_id: 'id1' } });
+    respuesta = () => ({ data: false, error: null });
+    expect(await quitarServicioVigia(T1, 'id1')).toBe(false);
+    respuesta = () => ({ data: null, error: { message: 'caída' } });
+    await expect(quitarServicioVigia(T1, 'id1')).rejects.toThrow(/caída/);
   });
 });

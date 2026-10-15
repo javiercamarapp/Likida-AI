@@ -5,7 +5,7 @@ import type { DatosTablero, ConversacionTablero } from '@/lib/likida/vigia/repo'
 import { BarraPagina } from '../../resumen-visual';
 import { Bloque, Barra, EsqTabla } from '../../bloque';
 import {
-  FormaBorrador, BotonConversacion, FormaResponder, FormaConfig, FormaAlta, FormaDirector, AccionesContacto, type AccionVigia,
+  FormaBorrador, BotonConversacion, FormaResponder, FormaConfig, FormaAlta, FormaDirector, FormaServicio, AccionesContacto, type AccionVigia,
 } from './controles';
 
 export interface AccionesVigia {
@@ -16,6 +16,8 @@ export interface AccionesVigia {
   contacto: AccionVigia;
   /** 0673: alta, corrección y baja de un director de la lista de avisos (solo el dueño). */
   director: AccionVigia;
+  /** 0798: alta, corrección y baja de una persona de «servicio al cliente» (solo el dueño). */
+  servicio?: AccionVigia;
 }
 
 /** Minutos enteros que lleva esperando una conversación (0 si nadie espera). */
@@ -119,6 +121,10 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
 
           <Bloque mensaje="No se pudo leer la lista de directores." esqueleto={<EsqTabla filas={3} />}>
             <BloqueDirectores datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
+          </Bloque>
+
+          <Bloque mensaje="No se pudo leer la lista de servicio al cliente." esqueleto={<EsqTabla filas={3} />}>
+            <BloqueServicio datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
           </Bloque>
 
           <Bloque mensaje="No se pudieron leer los correos de respaldo." esqueleto={<EsqTabla filas={3} />}>
@@ -495,6 +501,58 @@ export async function BloqueDirectores({ datos: p, puedeAdministrar, acciones }:
         <div className="pt-3 border-t" style={{ borderColor: 'var(--line2)' }}>
           <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>Agregar a la lista</h3>
           <FormaDirector accion={acciones.director} />
+        </div>
+      ) : (
+        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esta lista.</p>
+      )}
+    </section>
+  );
+}
+
+/**
+ * 0798: «A quién avisa cuando no hay dato». Las personas de servicio al cliente a quienes el Vigía avisa primero cuando no tiene el dato
+ * que el cliente pide (p. ej. la caja de una unidad). Solo el dueño la edita; quien solo mira ve el teléfono enmascarado y ningún correo.
+ */
+export async function BloqueServicio({ datos: p, puedeAdministrar, acciones }: { datos: Promise<DatosTablero>; puedeAdministrar: boolean; acciones: AccionesVigia }) {
+  const d = await p;
+  const lista = d.servicio ?? [];
+  const nombreCliente = new Map(d.clientes.map((c) => [c.id, c.nombre]));
+  const accion = acciones.servicio;
+  return (
+    <section className="card p-4" aria-labelledby="h-srv">
+      <div className="flex items-center gap-2 mb-1">
+        <UsersRound width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+        <h2 id="h-srv" className="font-display text-[15px] font-semibold">A quién avisa cuando no hay dato</h2>
+      </div>
+      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+        Cuando un cliente pregunta algo que el sistema no tiene (por ejemplo, la caja de una unidad), el Vigía avisa en privado a estas personas de servicio al cliente.
+        {' '}Sin lista, se avisa como siempre: al responsable del cliente o al jefe de la flota. Hasta 10 personas.
+      </p>
+      {lista.length === 0 ? (
+        <p className="text-[12.5px] mb-3" style={{ color: 'var(--muted)' }}>Nadie en la lista: se avisa como siempre.</p>
+      ) : (
+        <div className="space-y-3 mb-3">
+          {lista.map((x) => (
+            <div key={x.id} className="hairline rounded-xl p-3" style={{ background: 'var(--surface)' }}>
+              {puedeAdministrar && accion ? (
+                <FormaServicio accion={accion} contacto={x} clientes={d.clientes} />
+              ) : (
+                <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+                  <strong>{x.nombre}</strong>
+                  <Chip>{x.clienteId ? (nombreCliente.get(x.clienteId) ?? 'Un cliente') : 'Todos los clientes'}</Chip>
+                  {x.telefono && <Chip>WhatsApp …{x.telefono.slice(-4)}</Chip>}
+                  {x.correo && <Chip>Correo</Chip>}
+                  {!x.activo && <Chip>Pausado</Chip>}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {puedeAdministrar && accion ? (
+        <div className="pt-3 border-t" style={{ borderColor: 'var(--line2)' }}>
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>Agregar a servicio al cliente</h3>
+          <FormaServicio accion={accion} clientes={d.clientes} />
         </div>
       ) : (
         <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esta lista.</p>
