@@ -26,9 +26,12 @@ begin
     where conrelid = 'public.viaje'::regclass and conname = 'viaje_aceptado_origen_dominio'
   ) then
     alter table public.viaje add constraint viaje_aceptado_origen_dominio
-      check (aceptado_origen is null or aceptado_origen in ('chofer', 'importacion', 'oficina'));
+      check (aceptado_origen is null or aceptado_origen in ('chofer', 'importacion', 'oficina'))
+      not valid;
   end if;
 end $$;
+-- `not valid` + validate: `viaje` es una tabla caliente y la columna es nueva (todo NULL); así el alta de la restricción no la recorre bloqueando.
+alter table public.viaje validate constraint viaje_aceptado_origen_dominio;
 
 alter table public.agente_conductor_config add column if not exists piloto_max_voluntarios smallint not null default 6;
 

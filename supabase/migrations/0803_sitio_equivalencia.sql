@@ -56,4 +56,5 @@ grant select, insert, update, delete on table public.sitio_equivalencia to servi
 -- 0637: dos criterios nuevos en la constancia de qué derivó el sistema (reaplicable).
 alter table public.viaje_sitio_derivado drop constraint if exists viaje_sitio_derivado_criterio_dominio;
 alter table public.viaje_sitio_derivado add constraint viaje_sitio_derivado_criterio_dominio
-  check (criterio in ('codigo', 'nombre_exacto', 'nombre_contenido', 'equivalencia', 'equivalencia_sin_sitio'));
+  check (criterio in ('codigo', 'nombre_exacto', 'nombre_contenido', 'equivalencia', 'equivalencia_sin_sitio')) not valid;
+alter table public.viaje_sitio_derivado validate constraint viaje_sitio_derivado_criterio_dominio;

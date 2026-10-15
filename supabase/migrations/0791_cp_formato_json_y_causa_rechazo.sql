@@ -15,11 +15,13 @@
 
 alter table public.cp_documento drop constraint if exists cp_documento_formato_dominio;
 alter table public.cp_documento add constraint cp_documento_formato_dominio
-  check (formato in ('pdf_texto', 'pdf_escaneado', 'imagen', 'excel', 'csv', 'xml', 'correo', 'json'));
+  check (formato in ('pdf_texto', 'pdf_escaneado', 'imagen', 'excel', 'csv', 'xml', 'correo', 'json')) not valid;
+alter table public.cp_documento validate constraint cp_documento_formato_dominio;
 
 alter table public.cp_perfil drop constraint if exists cp_perfil_formato_dominio;
 alter table public.cp_perfil add constraint cp_perfil_formato_dominio
-  check (formato in ('pdf_texto', 'pdf_escaneado', 'imagen', 'excel', 'csv', 'xml', 'correo', 'json'));
+  check (formato in ('pdf_texto', 'pdf_escaneado', 'imagen', 'excel', 'csv', 'xml', 'correo', 'json')) not valid;
+alter table public.cp_perfil validate constraint cp_perfil_formato_dominio;
 
 alter table public.cp_documento add column if not exists rechazo_causa text;
 
@@ -27,7 +29,8 @@ alter table public.cp_documento drop constraint if exists cp_documento_rechazo_c
 alter table public.cp_documento add constraint cp_documento_rechazo_causa_dominio
   check (rechazo_causa is null or rechazo_causa in (
     'suma_no_cuadra', 'falta_dato_critico', 'formato_ilegible', 'no_es_embarque',
-    'duplicado', 'cliente_desconocido', 'tms_rechazo', 'otra'));
+    'duplicado', 'cliente_desconocido', 'tms_rechazo', 'otra')) not valid;
+alter table public.cp_documento validate constraint cp_documento_rechazo_causa_dominio;
 
 comment on column public.cp_documento.rechazo_causa is
   'Causa clasificada del rechazo (dominio cerrado, nullable). rechazo_motivo sigue siendo el texto libre.';

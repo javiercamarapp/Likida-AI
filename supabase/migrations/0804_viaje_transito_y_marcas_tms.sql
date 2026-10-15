@@ -24,9 +24,12 @@ begin
   ) then
     alter table public.viaje
       add constraint viaje_transito_estado_check
-      check (transito_estado is null or transito_estado in ('en_patio', 'en_ruta', 'pendiente_cruce', 'otro'));
+      check (transito_estado is null or transito_estado in ('en_patio', 'en_ruta', 'pendiente_cruce', 'otro'))
+      not valid;
   end if;
 end $$;
+-- `not valid` + validate: `viaje` es una tabla caliente y la columna es nueva (todo NULL).
+alter table public.viaje validate constraint viaje_transito_estado_check;
 
 comment on column public.viaje.transito_estado is
   'Estado de tránsito normalizado: en_patio | en_ruta | pendiente_cruce | otro (texto no reconocido, ver transito_texto_origen). Null = sin dato.';
