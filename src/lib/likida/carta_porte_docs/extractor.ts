@@ -75,6 +75,8 @@ export interface EntradaLlm {
   imagenes: string[];
   ejemplos: EjemploPerfil[];
   nivel: NivelModelo;
+  /** T-A3-14: nombres de las pestañas que son UN mismo embarque (una mercancía por pestaña). */
+  hojasMismoEmbarque?: string[];
   /** Marcador aleatorio con el que se delimita el documento dentro del prompt. */
   marcador: string;
 }
@@ -120,6 +122,13 @@ export function construirUsuario(e: EntradaLlm): string {
     partes.push(
       'Así escribe ESTE cliente sus datos (ejemplos ya confirmados por una persona; son referencia de formato, no de valores):',
       ...e.ejemplos.slice(-3).flatMap((ej) => ej.evidencias.slice(0, 8).map((x) => `  · ${x.campo} ← «${limpiarTexto(x.linea, 160) ?? ''}»`)),
+    );
+  }
+  if (e.hojasMismoEmbarque && e.hojasMismoEmbarque.length > 1) {
+    const rotulos = e.hojasMismoEmbarque.map((n) => `HOJA ${n}`).join(', ');
+    partes.push(
+      `Este libro trae ${e.hojasMismoEmbarque.length} pestañas (${rotulos}) y TODAS son el MISMO embarque: no es "varios embarques", así que NO extraigas solo el primero.`,
+      'Lee todas las pestañas: los datos del embarque (remitente, destinatario, caja, folio) son comunes y cada pestaña aporta su propia mercancía. Devuelve UNA mercancía por pestaña (o por renglón de mercancía, si una pestaña trae varios), sin omitir ninguna.',
     );
   }
   if (e.texto) {
@@ -359,7 +368,7 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   let acumulado: Extraccion | null = null;
   for (let nivel: NivelModelo = 1; nivel <= tope; nivel = (nivel + 1) as NivelModelo) {
     ctx.signal?.throwIfAborted();
-    const s = await ctx.llm({ formato: c.formato, texto: c.texto, imagenes: c.imagenes, ejemplos, nivel, marcador }, ctx.signal);
+    const s = await ctx.llm({ formato: c.formato, texto: c.texto, imagenes: c.imagenes, ejemplos, nivel, marcador, ...(c.hojasMismoEmbarque ? { hojasMismoEmbarque: c.hojasMismoEmbarque } : {}) }, ctx.signal);
     r.nivel = nivel; r.modelo = s.modelo;
     r.tokensIn += s.tokensIn; r.tokensOut += s.tokensOut; r.costoUsd += s.costoUsd;
     if (s.notas) r.notasModelo.push(s.notas);
