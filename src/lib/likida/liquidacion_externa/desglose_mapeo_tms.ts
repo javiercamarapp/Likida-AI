@@ -80,6 +80,7 @@ const TIPOS_VIATICO_DEFECTO = ['V', 'UV'];
 /** Lee una ruta `a.b[0].c`. `undefined` si algo del camino falta. */
 export function leerRuta(raiz: unknown, ruta: RutaJson): unknown {
   const pasos = ruta.split('.').flatMap((p) => {
+    // eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de una celda o campo
     const m = /^([^[\]]*)((?:\[\d+\])*)$/.exec(p);
     if (!m) return [p];
     const idx = [...m[2].matchAll(/\[(\d+)\]/g)].map((x) => Number(x[1]));
@@ -111,6 +112,7 @@ function montoTms(v: unknown, campo: string): number {
   else if (typeof v === 'string') {
     const t = v.trim();
     if (t === '') return 0;
+    // eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de una celda o campo
     if (!/^-?\d+(\.\d+)?$/.test(t)) throw new CampoInvalido(campo, `\`${campo}\` no es un número válido (se espera punto decimal, sin separador de millares).`);
     n = Number(t);
   } else throw new CampoInvalido(campo, `\`${campo}\` tiene que ser un número.`);
@@ -128,6 +130,7 @@ function fechaIso(v: unknown, campo: string): string | undefined {
   const t = textoOpt(v, campo);
   if (t === undefined) return undefined;
   // SUPUESTO-API: la fecha puede venir como AAAA-MM-DD o con hora; se toma el día tal como viene (sin zona).
+  // eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de una celda o campo
   const m = /^(\d{4}-\d{2}-\d{2})(?:[T ].*)?$/.exec(t);
   if (!m) throw new CampoInvalido(campo, `\`${campo}\` tiene que ser una fecha AAAA-MM-DD.`);
   return m[1];
@@ -244,6 +247,7 @@ export function mapearBitacoraTms(raw: unknown, mapeo: MapeoTms): ResultadoMapeo
     if (v !== undefined && v !== null && !(typeof v === 'string' && v.trim() === '')) {
       // El neto sí puede ser negativo (retenido por neto negativo): se lee aparte de los montos de renglón.
       if (typeof v === 'number') neto = v;
+      // eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de una celda o campo
       else if (typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v.trim())) neto = Number(v.trim());
       else throw new CampoInvalido('neto', '`neto` no es un número válido (se espera punto decimal).');
     }

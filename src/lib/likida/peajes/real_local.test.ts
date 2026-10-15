@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- prueba que lee/escribe rutas del propio repo o de un directorio temporal; ninguna ruta ni patrón viene de entrada de usuario. */
 // ═══════════════════════════════════════════════════════════════════════════
 // ARNÉS LOCAL: verifica el importador de peajes contra los xlsx REALES del mes.
 //
@@ -82,10 +83,8 @@ describe.skipIf(!hay)('arnés local: peajes con los xlsx reales', () => {
     if ('error' in c) throw new Error(c.error);
     cierre = c;
     // Resumen sin tags ni unidades.
-    // eslint-disable-next-line no-console
     console.log(`[real_local] archivos=${leidos.length} cruces=${agg.cruces} monto=${r2(agg.monto)} unidades=${agg.unidades.size} extemporaneos=${agg.ext}/${r2(agg.extMonto)} (mes anterior ${agg.extMesAnt}) clasesCandidatas=${agg.clasesCand}/${r2(agg.clasesCandMonto)} duplicadosExactos=${agg.dup} repetidosEntreArchivos=${cierre.repetidosEntreArchivos.length}`);
     for (const l of leidos) {
-      // eslint-disable-next-line no-console
       console.log(`[real_local] ${l.nombre}: cruces=${l.lineas.length} monto=${r2(l.lineas.reduce((s, x) => s + x.monto, 0))} hoja=${l.calidad.hojaLeida} ignoradas=${l.calidad.hojasIgnoradas.length}`);
     }
   }, 180_000);
@@ -165,7 +164,6 @@ describe.skipIf(!hay)('arnés local: peajes con los xlsx reales', () => {
         grupos.set(k, (grupos.get(k) ?? 0) + 1);
       }
       for (const n of grupos.values()) if (n >= 6) mismaCasetaSeisOMasEnUnDia++;
-      // eslint-disable-next-line no-console
       console.log(`[real_local] atipicos defaults: cruces=${cruces} hallazgos=${total} porRegla=${JSON.stringify(POR_REGLA)} filasOmitidas=${omitidas} reglasNoAplicadas=${JSON.stringify(noAplicadas)} unidadCasetaDia>=6=${mismaCasetaSeisOMasEnUnDia} hallazgosPorMilCruces=${r2((total / Math.max(cruces, 1)) * 1000)}`);
     });
 

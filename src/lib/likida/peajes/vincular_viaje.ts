@@ -127,6 +127,7 @@ export interface OpcionesIcident extends OpcionesVincular {
   casetaEquivalente?: (caseta: string, puntoInteres: string) => boolean;
 }
 
+// eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de una celda o campo
 const HORA = /^(\d{2}):(\d{2})(?::\d{2})?$/;
 
 function minutosDe(fecha: string, hora: string): number | null {

@@ -210,6 +210,7 @@ export function transitoDeFila(
   const crudo = (d.textoOrigen ?? '').replace(/\s+/g, ' ').trim().slice(0, TOPE_TEXTO_TRANSITO);
   let etiqueta: string;
   if (d.estado === 'en_patio') {
+    // eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de una celda o campo
     const resto = /^(?:en\s+)?patio\s+(.+)$/i.exec(crudo)?.[1];
     etiqueta = resto ? `En patio ${resto}` : 'En patio';
   } else if (d.estado === 'en_ruta') etiqueta = 'En ruta';

@@ -48,6 +48,7 @@ export interface FuenteTms {
 }
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
+// eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de una celda o campo
 const FECHA_HORA = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
 
 const fechaReal = (s: string): boolean => {
