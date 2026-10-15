@@ -28,6 +28,15 @@ import { leerFormatoFlota, leerTelefonosFlota } from '@/lib/likida/liquidacion_e
 import { importarLiquidacionesDeArchivo } from '@/lib/likida/liquidacion_externa/importar_archivo';
 import { decodificarCursor, codificarCursor } from '@/app/api/v1/_comun';
 import { SeccionExternas, leerFiltroExterno, leerMensajeExterno } from './externas';
+import {
+  SeccionDesgloses, VistaDesgloses, leerFiltroDesglose, leerDia, destinosDe, cumpleFiltro,
+  type FiltroDesglose, type FilaDesglose, type FilaSinPoliza, type FichasDesgloses, type LecturaDesgloses,
+} from './desgloses';
+import {
+  leerConfigCorreo, listarDesgloses, entregasDe, contarParaInsights, listarExcepciones, type CursorLista,
+} from '@/lib/likida/liquidacion_externa/repo_correo';
+import { leerPorId } from '@/lib/likida/liquidacion_externa/repo';
+import { hoyMx, inicioDiaMx, finDiaMx } from '@/lib/formato';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +45,117 @@ export const dynamic = 'force-dynamic';
  *  página, pero TAMPOCO pinta un cero sin medir. */
 function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   return fn().catch(() => null);
+}
+
+
+const PAGINA_DESGLOSES = 20;
+const LOTE_FILTRADO = 40;
+const MAX_LOTES = 5;
+const DIA_MS = 24 * 3600 * 1000;
+
+/** El canal del desglose de la flota. Sin fila de configuración, o si no se puede leer, es el de siempre (`whatsapp`): jamás se cambia la
+ *  pantalla de una flota por una lectura que falló. */
+async function canalDeLaFlota(tenantId: string): Promise<'whatsapp' | 'correo' | 'ambos'> {
+  try {
+    const c = await leerConfigCorreo(tenantId);
+    return c.ok ? c.valor.canal : 'whatsapp';
+  } catch {
+    return 'whatsapp';
+  }
+}
+
+/** Un conteo medido o `null`: la tabla ausente o una lectura caída no son un cero. */
+async function medir(fn: () => Promise<number | null>): Promise<number | null> {
+  try { return await fn(); } catch { return null; }
+}
+
+async function fichasDesgloses(tenantId: string): Promise<FichasDesgloses> {
+  const hoy = hoyMx();
+  const manana = new Date(Date.parse(inicioDiaMx(hoy)) + DIA_MS);
+  const hace30 = new Date(Date.parse(inicioDiaMx(hoy)) - 29 * DIA_MS);
+  const [deHoy, de30, retenidos, sinPoliza] = await Promise.all([
+    contarParaInsights(tenantId, new Date(inicioDiaMx(hoy)), manana).catch(() => null),
+    contarParaInsights(tenantId, hace30, manana).catch(() => null),
+    medir(async () => {
+      const r = await listarDesgloses(tenantId, { soloRetenidos: true, limite: 200 });
+      return r.ok && !r.valor.siguiente ? r.valor.items.length : null;
+    }),
+    medir(async () => {
+      const r = await listarExcepciones(tenantId, { tipo: 'sin_poliza', limite: 500 });
+      return r.ok && r.valor.length < 500 ? r.valor.length : null;
+    }),
+  ]);
+  const e = de30 && de30.ok ? de30.valor.entregasPorEstado : null;
+  return {
+    recibidosHoy: deHoy && deHoy.ok ? deHoy.valor.desgloses : null,
+    enviados: e ? (e.enviada ?? 0) : null,
+    entregados: e ? (e.entregada ?? 0) : null,
+    rebotados: e ? (e.rebotada ?? 0) + (e.queja ?? 0) + (e.fallida ?? 0) : null,
+    retenidos,
+    sinPoliza,
+  };
+}
+
+/**
+ * La lista de desgloses con el estado de cada destinatario. Con un filtro por estado o por fecha, el estado de entrega vive en otra
+ * tabla: se leen lotes acotados (máximo `MAX_LOTES`) hasta juntar una página, y el cursor continúa donde se dejó de mirar. Si algo de
+ * la lectura falla, devuelve `ok: false` — nunca una lista parcial presentada como completa.
+ */
+async function cargarDesgloses(
+  tenantId: string, filtro: FiltroDesglose | null, desde: string | null, hasta: string | null, cursor: CursorLista | null,
+): Promise<LecturaDesgloses> {
+  try {
+    const fichas = await fichasDesgloses(tenantId);
+    if (filtro === 'sin_poliza') {
+      const ex = await listarExcepciones(tenantId, { tipo: 'sin_poliza', limite: 200 });
+      if (!ex.ok) return { ok: false };
+      const sinPoliza: FilaSinPoliza[] = ex.valor.map((x) => ({ bitacora: x.claveExterna, desde: x.primeraVez, ultimaVez: x.ultimaVez }));
+      return { ok: true, fichas, filas: [], sinPoliza, siguiente: null };
+    }
+    const cota = { desde: desde ? Date.parse(inicioDiaMx(desde)) : null, hasta: hasta ? Date.parse(finDiaMx(hasta)) : null };
+    const filtrando = !!(filtro || desde || hasta);
+    const limite = filtrando ? LOTE_FILTRADO : PAGINA_DESGLOSES;
+    const filas: FilaDesglose[] = [];
+    let ultimaIncluida: CursorLista | null = null;
+    let siguiente: CursorLista | null = null;
+    let actual = cursor;
+    for (let lote = 0; lote < MAX_LOTES; lote++) {
+      const l = await listarDesgloses(tenantId, { soloRetenidos: filtro === 'retenido', limite }, actual);
+      if (!l.ok) return { ok: false };
+      const { items, siguiente: masAdelante } = l.valor;
+      const dentro = items.filter((d) => {
+        const t = Date.parse(d.creadoEn);
+        return (cota.hasta === null || t <= cota.hasta) && (cota.desde === null || t >= cota.desde);
+      });
+      const enriquecidos = await Promise.all(dentro.map(async (d) => {
+        const [liq, ent] = await Promise.all([leerPorId(tenantId, d.liquidacionExternaId).catch(() => null), entregasDe(tenantId, d.liquidacionExternaId)]);
+        if (!ent.ok) throw new Error('entregas no disponibles');
+        const fila: FilaDesglose = {
+          liquidacionId: d.liquidacionExternaId, bitacora: d.bitacora, operador: liq?.operadorNombre ?? null,
+          periodoDesde: liq?.periodoDesde ?? null, periodoHasta: liq?.periodoHasta ?? null, neto: liq?.total ?? null,
+          moneda: liq?.moneda ?? 'MXN', terminal: d.terminal || null, destinos: destinosDe(ent.valor, d.retenidaMotivo),
+        };
+        return { d, fila };
+      }));
+      let hayMas = false;
+      for (const { d, fila } of enriquecidos) {
+        if (!cumpleFiltro(fila.destinos, filtro)) continue;
+        if (filas.length === PAGINA_DESGLOSES) { hayMas = true; break; }
+        filas.push(fila);
+        ultimaIncluida = { creadoEn: d.creadoEn, id: d.liquidacionExternaId };
+      }
+      if (hayMas) { siguiente = ultimaIncluida; break; }
+      const ultimaVista = items[items.length - 1];
+      const pasoLaCota = cota.desde !== null && !!ultimaVista && Date.parse(ultimaVista.creadoEn) < cota.desde;
+      if (!masAdelante || pasoLaCota) break;
+      actual = masAdelante;
+      // Se agotó el presupuesto de lotes: se ofrece continuar desde donde se dejó de mirar.
+      if (lote === MAX_LOTES - 1) siguiente = masAdelante;
+    }
+    return { ok: true, fichas, filas, sinPoliza: [], siguiente: siguiente ? codificarCursor(siguiente) : null };
+  } catch {
+    return { ok: false };
+  }
 }
 
 /**
@@ -71,6 +191,8 @@ export default async function PaginaAgenteLiquidacion({
     // La sección «Liquidaciones externas» (0370) tiene SUS parámetros, con
     // prefijo, para que su filtro no pise a los de la cola de arriba.
     ext_estado?: string; ext_cursor?: string; ext_msg?: string; ext_imp?: string; ext_det?: string;
+    // La lista de desgloses por correo (T-A1-28) tiene los suyos, con prefijo `des_`.
+    des_estado?: string; des_desde?: string; des_hasta?: string; des_cursor?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -79,6 +201,39 @@ export default async function PaginaAgenteLiquidacion({
 
   const base = sp.tenant ? `?tenant=${sp.tenant}` : sp.vista ? `?vista=${sp.vista}` : '';
   const sufijo = sp.rol ? `${base}${base ? '&' : '?'}rol=${sp.rol}` : base;
+
+  // Lo que hay que conservar en cada link y en el submit del filtro: el mismo
+  // contrato de sufijo del resto del panel.
+  const contexto: Array<[string, string]> = [
+    ...(sp.tenant ? [['tenant', sp.tenant] as [string, string]] : []),
+    ...(sp.vista ? [['vista', sp.vista] as [string, string]] : []),
+    ...(sp.rol ? [['rol', sp.rol] as [string, string]] : []),
+  ];
+
+  // ── DESGLOSE POR CORREO (T-A1-28) ───────────────────────────────────────
+  // Una flota con el canal en correo ve la lista de desgloses EN LUGAR de los KPIs, la cola y la estrategia del flujo de fotos (se
+  // ocultan, no se borran: otras flotas siguen igual). Sin configuración guardada el canal es `whatsapp` y todo queda como hoy.
+  if ((await canalDeLaFlota(tenantId)) !== 'whatsapp') {
+    const filtroDes: FiltroDesglose | null = leerFiltroDesglose(sp.des_estado);
+    const desdeDes = leerDia(sp.des_desde);
+    const hastaDes = leerDia(sp.des_hasta);
+    const cursorDes = sp.des_cursor ? decodificarCursor(sp.des_cursor) : null;
+    const lectura = cargarDesgloses(tenantId, filtroDes, desdeDes, hastaDes, cursorDes);
+    return (
+      <VistaDesgloses
+        desgloses={
+          <Bloque mensaje="No se pudieron leer los desgloses." esqueleto={<EsqTabla filas={5} />}>
+            <SeccionDesgloses lectura={lectura} filtro={filtroDes} desde={desdeDes} hasta={hastaDes} contexto={contexto} />
+          </Bloque>
+        }
+        notificaciones={
+          <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTabla filas={4} />}>
+            <SeccionNotificaciones tenantId={tenantId} agenteId="liquidacion" />
+          </Bloque>
+        }
+      />
+    );
+  }
 
   // Las trece, lanzadas de una. `vigilar` sobre las que PUEDEN rechazar: una
   // promesa sin oyente que revienta antes de que su bloque la espere se
@@ -122,14 +277,6 @@ export default async function PaginaAgenteLiquidacion({
     if (tipo !== 'operador' && tipo !== 'unidad') throw new Error('Catálogo desconocido.');
     return buscarCatalogo(s.tenantId, tipo, typeof q === 'string' ? q : '');
   }
-
-  // Lo que hay que conservar en cada link y en el submit del filtro: el mismo
-  // contrato de sufijo del resto del panel.
-  const contexto: Array<[string, string]> = [
-    ...(sp.tenant ? [['tenant', sp.tenant] as [string, string]] : []),
-    ...(sp.vista ? [['vista', sp.vista] as [string, string]] : []),
-    ...(sp.rol ? [['rol', sp.rol] as [string, string]] : []),
-  ];
 
   // ── LIQUIDACIONES EXTERNAS (0370) ───────────────────────────────────────
   // Su propia consulta y su propio `Bloque`: primarias (sin `safe`) — una
