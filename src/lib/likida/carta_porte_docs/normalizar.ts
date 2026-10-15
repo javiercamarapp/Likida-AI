@@ -162,6 +162,31 @@ export function normalizarNumero(crudo: string | number, miles?: ',' | '.'): { v
   return { valor: Math.round(n * 1000) / 1000, ambiguo };
 }
 
+/** Ancho fijo de las claves SAT numéricas de domicilio y aduana (colonia 4, localidad 2, municipio 3, tipo de materia 2). */
+function anchoClaveNumerica(clave: string): number | undefined {
+  if (/_colonia_clave$/.test(clave)) return 4;
+  if (/_localidad_clave$/.test(clave)) return 2;
+  if (/_municipio_clave$/.test(clave)) return 3;
+  if (clave === 'tipo_materia') return 2;
+  return undefined;
+}
+
+/**
+ * Completa con ceros a la izquierda una clave que llegó como celda numérica (`6`, `876`, `3`, `'6.0'`).
+ * `null` si ya está bien, si no son solo dígitos o si es más larga que el ancho (no se adivina).
+ */
+function completarCeros(crudo: string | number, ancho: number): { valor: string; original: string } | null {
+  const t = typeof crudo === 'number' ? (Number.isInteger(crudo) && crudo >= 0 ? String(crudo) : '') : crudo.trim().replace(/^(\d+)\.0+$/, '$1');
+  if (!/^\d+$/.test(t) || t.length >= ancho) return null;
+  return { valor: t.padStart(ancho, '0'), original: String(crudo).trim() };
+}
+
+/** Id de destino de la plantilla del TMS: texto («1», « 2 ») o número (1, 2.0) → entero en texto. `null` si no es un entero positivo. */
+export function normalizarIdDestino(crudo: unknown): string | null {
+  const t = typeof crudo === 'number' ? (Number.isInteger(crudo) ? String(crudo) : '') : String(crudo ?? '').trim().replace(/^(\d+)\.0+$/, '$1');
+  return /^\d+$/.test(t) && Number(t) > 0 ? String(Number(t)) : null;
+}
+
 const aTexto = (n: number): string => String(n);
 
 export function normalizarBooleano(v: unknown): 'true' | 'false' | null {
@@ -194,10 +219,10 @@ export function normalizarValor(campo: CampoDoc, crudo: unknown, opciones: { mil
     }
     case 'cp': {
       const d = String(texto).replace(/\s+/g, '').replace(/^c\.?p\.?:?/i, '');
-      if (/^\d{4}$/.test(d)) {
-        notas.push('El CP traía 4 dígitos (probable cero inicial perdido en Excel): se completó a 5. Confírmalo.');
+      if (/^\d{1,4}$/.test(d)) {
+        notas.push(`El CP traía ${d.length} dígito${d.length === 1 ? '' : 's'} (probable cero inicial perdido en Excel): se completó a 5. Confírmalo.`);
         penalizacion = 0.25;
-        return out(`0${d}`);
+        return out(d.padStart(5, '0'));
       }
       return out(d);
     }
@@ -254,7 +279,18 @@ export function normalizarValor(campo: CampoDoc, crudo: unknown, opciones: { mil
     case 'placa':
       return out(String(texto).toUpperCase().replace(/[^A-Z0-9]/g, ''));
     case 'texto':
-    default:
+    default: {
+      // Claves del SAT que Excel guarda como número y pierde el cero inicial.
+      const ancho = anchoClaveNumerica(campo.clave);
+      if (ancho !== undefined) {
+        const c = completarCeros(texto, ancho);
+        if (c) {
+          notas.push(`Se completó el cero a la izquierda (${c.original} → ${c.valor}). Confírmalo.`);
+          penalizacion = 0.1;
+          return out(c.valor);
+        }
+      }
       return out(limpiarTexto(texto, campo.max));
+    }
   }
 }
