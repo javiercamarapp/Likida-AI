@@ -246,7 +246,12 @@ import { join, relative, sep } from 'node:path';
 //   Prueba: `export/peajes-revision/route.test.ts`.
 // INTEGRACIÓN (INT-RAMAS): Peajes (`api/export/peajes-revision`) y Liquidación (`api/v1/liquidaciones-externas/desgloses`) declararon cada una 106 → 107
 // contra la misma base; juntas son 106 + 2 = 108. Las dos rutas ya están revisadas arriba; el conteo es la suma de los tramos.
-const RUTAS_APP_REVISADAS = 108;
+//
+// 108 → 109 (reanclado sobre master) (frente A2 Peajes, T-A2-25): `api/export/peajes-candidatos/route.ts` — GET de la flota de la SESIÓN (`resolverTenantApi`): puerta del
+//   dato (área `dinero`), del verbo (`puedeExportar`), rate limit por IP y por flota; el desglose y todas las lecturas (líneas, tarifas, reclamos)
+//   usan el tenant de la sesión (uno ajeno es 404 sin leer nada más) y una lectura incompleta no sale como archivo corto. Mismo molde que
+//   `peajes-revision`. Prueba: `export/peajes-candidatos/route.test.ts`.
+const RUTAS_APP_REVISADAS = 109;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

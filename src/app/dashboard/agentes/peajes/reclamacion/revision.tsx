@@ -148,6 +148,15 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
         <a href={`/api/export/peajes-revision?desglose=${desglose}${ctx}`} className={CSS_BOTON} style={ESTILO_PRIMARIO}>
           <FileDown width={13} height={13} strokeWidth={2} /> Excel de la revisión
         </a>
+        <a href={`/api/export/peajes-candidatos?desglose=${desglose}${ctx}`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>
+          <FileDown width={13} height={13} strokeWidth={2} className="inline mr-1" /> Reporte para el portal del proveedor
+        </a>
+        <a href={`/api/export/peajes-candidatos?desglose=${desglose}&excluirReclamados=1${ctx}`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>
+          Sin lo que ya reclamaste
+        </a>
+        <a href={`/api/export/peajes-candidatos?desglose=${desglose}&formato=csv${ctx}`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>
+          CSV
+        </a>
       </div>
 
       <p className="text-[11.5px] mt-3" style={{ color: 'var(--muted)' }}>
