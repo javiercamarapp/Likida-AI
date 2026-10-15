@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename, security/detect-unsafe-regex -- pruebas que leen el árbol de FUENTE del propio repo; ninguna ruta ni patrón viene de entrada de usuario. */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -100,13 +101,10 @@ const RAIZ = join(process.cwd(), 'src/app/dashboard');
 const PUERTA = /\b(resolverTenantEfectivo|requireSessionTenant|exigirVerRuta)\(\s*([^,)]+)/g;
 
 function conUseServer(dir: string, salida: string[] = []): string[] {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- recorre el árbol de FUENTE del propio repo en tiempo de prueba.
   for (const nombre of readdirSync(dir)) {
     const ruta = join(dir, nombre);
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- ídem.
     if (statSync(ruta).isDirectory()) conUseServer(ruta, salida);
     else if (/\.(ts|tsx)$/.test(nombre) && !/\.test\./.test(nombre)) {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- ídem.
       if (/['"]use server['"]/.test(readFileSync(ruta, 'utf8'))) salida.push(relative(RAIZ, ruta));
     }
   }
@@ -217,7 +215,6 @@ describe('escaneo de server actions bajo el perfil cinco_agentes', () => {
   it('ninguna acción lee la sesión por otro camino que las puertas con perfil (y las de stand-by no tocan ni la sesión de Supabase)', () => {
     const culpables = ENCONTRADOS.filter((a) => {
       if (ARCHIVOS[a] === 'sin_datos') return false;
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- ídem.
       const fuente = readFileSync(join(RAIZ, a), 'utf8');
       // mi-perfil usa supabaseServer para el segundo factor y las sesiones PROPIAS, después de su puerta.
       return /\bgetSessionTenant\s*\(/.test(fuente) || (ARCHIVOS[a] === 'standby' && /\bsupabaseServer\s*\(/.test(fuente));
@@ -226,13 +223,11 @@ describe('escaneo de server actions bajo el perfil cinco_agentes', () => {
   });
 
   it.each(ENCONTRADOS.filter((a) => ARCHIVOS[a] !== 'sin_datos'))('%s: cada acción pasa por una puerta con perfil', (a) => {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- ídem.
     const fuente = readFileSync(join(RAIZ, a), 'utf8');
     expect(accionesSinPuerta(fuente), `acciones sin puerta en ${a}`).toEqual([]);
   });
 
   it.each(ENCONTRADOS.filter((a) => ARCHIVOS[a] === 'permitido' || ARCHIVOS[a] === 'standby'))('%s: la ruta que gatea coincide con su clase', (a) => {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- ídem.
     const { rutas, dinamicas } = rutasDePuertas(readFileSync(join(RAIZ, a), 'utf8'));
     if (a === 'agentes/seccion-notificaciones.tsx') {
       // Gatea con la ruta del agente del que se configuran los avisos: se prueba abajo contra el catálogo.
@@ -258,7 +253,6 @@ describe('escaneo de server actions bajo el perfil cinco_agentes', () => {
     const standby = ENCONTRADOS.filter((a) => ARCHIVOS[a] === 'standby');
     const permitidasRutas = Object.keys(RUTAS_PERFIL_CINCO_AGENTES);
     for (const a of standby) {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- ídem.
       for (const r of rutasDePuertas(readFileSync(join(RAIZ, a), 'utf8')).rutas) expect(permitidasRutas).not.toContain(r);
     }
   });

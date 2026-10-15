@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- pruebas que leen el árbol de FUENTE del propio repo; ninguna ruta ni patrón viene de entrada de usuario. */
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -48,10 +49,8 @@ describe('clasificación de rutas', () => {
     const raiz = join(process.cwd(), 'src/app/dashboard');
     const rutas: string[] = [];
     const recorre = (dir: string, ruta: string) => {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- recorre el árbol de FUENTE del propio repo en tiempo de prueba.
       for (const nombre of readdirSync(dir)) {
         const p = join(dir, nombre);
-        // eslint-disable-next-line security/detect-non-literal-fs-filename -- ídem.
         if (statSync(p).isDirectory()) {
           if (nombre.startsWith('[')) continue; // dinámicas: se gatean con la llave de su padre
           recorre(p, `${ruta}/${nombre}`);

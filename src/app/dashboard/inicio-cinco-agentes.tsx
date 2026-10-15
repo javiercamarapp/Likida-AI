@@ -123,7 +123,7 @@ export async function InicioCincoAgentes({
           icono={<LayoutGrid {...ICONO_BARRA} />}
           titulo="Resumen"
           derecha={tenantNombre && (
-            <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0" style={{ color: 'var(--accent-fg)', background: 'var(--accent-bg)' }}>
+            <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
               viendo como superadmin · {tenantNombre}
             </span>
           )}

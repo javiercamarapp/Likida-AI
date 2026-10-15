@@ -169,3 +169,25 @@ describe('exports y sesión de API', () => {
     expect(await resolverTenantApi('http://x.test/api/export/reporte-nuevo')).toMatchObject({ ok: false, status: 403 });
   });
 });
+
+describe('autorización MCP (/mcp/autorizar)', () => {
+  it('bajo el perfil no ofrece el consentimiento: muestra que la cuenta no incluye MCP', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/auth/session', () => ({
+      getSessionTenant: async () => ({ userId: 'u1', tenantId: CON, rol: 'flota_admin', nombre: 'Ana', operadorId: null, avatarUrl: null }),
+      SIN_ROL: 'sin_rol',
+    }));
+    vi.doMock('@/lib/mcp/oauth', async (orig) => ({
+      ...(await orig<Record<string, unknown>>()),
+      leerCliente: async () => ({ ok: true, cliente: { clientId: 'c1', nombre: 'Claude', redirectUris: ['https://claude.ai/api/mcp/callback'], estado: 'aprobado' } }),
+    }));
+    vi.doMock('next/navigation', () => ({ redirect: (d: string) => { throw new Error(`REDIRECT:${d}`); } }));
+    const { default: Pagina } = await import('@/app/mcp/autorizar/page');
+    const sp = Promise.resolve({
+      client_id: 'c1', redirect_uri: 'https://claude.ai/api/mcp/callback', response_type: 'code', state: 's',
+      code_challenge: 'a'.repeat(43), code_challenge_method: 'S256',
+    });
+    const el = await (Pagina as unknown as (p: { searchParams: Promise<Record<string, string>> }) => Promise<{ props: { titulo?: string } }>)({ searchParams: sp });
+    expect(JSON.stringify(el)).toContain('no incluye acceso MCP');
+  });
+});
