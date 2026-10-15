@@ -21,6 +21,7 @@ import { parsearArchivoDesglose, type LineaDesgloseParseada, type CalidadArchivo
 import { revisarCobros, CLASES_VALIDAS_DEFAULT } from './reglas_cobro';
 import { periodoDeNombreArchivo } from './periodo';
 import { cierreMensual, type CierreMensual } from './cierre_mensual';
+import { detectarAtipicos, type ReglaAtipica } from './atipicos';
 
 const DIR = process.env.PEAJES_REAL_DIR ?? '';
 const ESPERADO_RUTA = process.env.PEAJES_REAL_ESPERADO
@@ -133,5 +134,48 @@ describe.skipIf(!hay)('arnés local: peajes con los xlsx reales', () => {
 
   it('claves repetidas entre archivos = lo esperado', () => {
     expect(cierre.repetidosEntreArchivos.length).toBe(esperado.total.repetidosEntreArchivos);
+  });
+
+  // T-A2-15: calibración del detector de cruces atípicos con los defaults. Solo agregados:
+  // sin tags, unidades ni nombres de caseta. Umbral operativo (a validar con finanzas):
+  // no más de ~1 hallazgo por cada 1 000 cruces.
+  describe('calibración del detector de cruces atípicos (defaults)', () => {
+    const POR_REGLA: Record<ReglaAtipica, number> = { repeticion_caseta: 0, ida_y_vuelta_madrugada: 0, secuencia_imposible: 0 };
+    let total = 0;
+    let cruces = 0;
+    let omitidas = 0;
+    let noAplicadas: string[] = [];
+    let mismaCasetaSeisOMasEnUnDia = 0;
+
+    beforeAll(() => {
+      const entrada = leidos.flatMap((l) => l.lineas.map((x) => ({
+        unidad_archivo: x.unidad ?? null, caseta: x.caseta, fecha: x.fecha, hora: x.hora ?? null, monto: x.monto,
+      })));
+      cruces = entrada.length;
+      const res = detectarAtipicos(entrada);
+      total = res.hallazgos.length;
+      omitidas = res.filasOmitidas;
+      noAplicadas = res.reglasNoAplicadas.map((r) => r.regla);
+      for (const h of res.hallazgos) POR_REGLA[h.regla]++;
+      // Patrón «misma caseta 6 veces el mismo día» por unidad (caseta de cruce frecuente).
+      const grupos = new Map<string, number>();
+      for (const e of entrada) {
+        if (!e.unidad_archivo || !e.caseta || !e.fecha) continue;
+        const k = `${e.unidad_archivo}|${e.caseta}|${e.fecha}`;
+        grupos.set(k, (grupos.get(k) ?? 0) + 1);
+      }
+      for (const n of grupos.values()) if (n >= 6) mismaCasetaSeisOMasEnUnDia++;
+      // eslint-disable-next-line no-console
+      console.log(`[real_local] atipicos defaults: cruces=${cruces} hallazgos=${total} porRegla=${JSON.stringify(POR_REGLA)} filasOmitidas=${omitidas} reglasNoAplicadas=${JSON.stringify(noAplicadas)} unidadCasetaDia>=6=${mismaCasetaSeisOMasEnUnDia} hallazgosPorMilCruces=${r2((total / Math.max(cruces, 1)) * 1000)}`);
+    });
+
+    it('no inunda: a lo más ~1 hallazgo por cada 1 000 cruces con los defaults', () => {
+      expect(cruces).toBeGreaterThan(0);
+      expect(total).toBeLessThanOrEqual(Math.ceil(cruces / 1000));
+    });
+
+    it('la regla de madrugada (apagada por defecto) no aporta hallazgos', () => {
+      expect(POR_REGLA.ida_y_vuelta_madrugada).toBe(0);
+    });
   });
 });
