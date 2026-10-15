@@ -417,7 +417,7 @@ const MENSAJES: Record<string, MensajeDesglose> = {
   r_sin_permiso: { texto: 'Solo quien administra la flota puede hacer esto.', tono: 'bad' },
   r_no_encontrada: { texto: 'No encontré ese desglose en tu flota.', tono: 'bad' },
   r_correo_invalido: { texto: 'El correo nuevo no parece un correo. Revísalo (por ejemplo, que tenga @ y un dominio).', tono: 'bad' },
-  r_correo_nuevo_no_aplica: { texto: 'El correo nuevo es del operador: usa el botón «Corregir correo y reenviar».', tono: 'bad' },
+  r_correo_nuevo_no_aplica: { texto: 'El correo nuevo es del operador: usa la acción «Corregir correo y reenviar».', tono: 'bad' },
   r_en_curso: { texto: 'La entrega anterior todavía se está enviando. Espera a que termine antes de reenviar.', tono: 'bad' },
   r_limite_diario: { texto: 'Ya se reenvió este desglose el máximo de veces hoy. Intenta mañana o revisa por qué no llega.', tono: 'bad' },
   r_sin_destinatarios: { texto: 'No hay a quién enviarlo: falta el correo de ese destinatario.', tono: 'bad' },

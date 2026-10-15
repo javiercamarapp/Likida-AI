@@ -2,7 +2,7 @@
 // RECIBIR UN DESGLOSE DE BITÁCORA (T-A1-15): validar → idempotencia → operador → reglas y guardas → Excel → Storage →
 // insertar → programar los correos.
 //
-// Es el equivalente, para el canal CORREO, de `recibirLiquidacionExterna` (PDF/WhatsApp, que NO se toca). Un desglose por
+// Es el equivalente, para el canal CORREO, de `recibirLiquidacionExterna` (flujo PDF anterior, que NO se toca). Un desglose por
 // bitácora; la clave de idempotencia sale de la bitácora (`claveDeBitacora`).
 //
 // Reglas que este servicio garantiza:
@@ -61,7 +61,7 @@ export interface DependenciasDesglose {
 
 export const dependenciasDesglosePorOmision: DependenciasDesglose = {
   ahora: () => new Date(),
-  // Sin las migraciones 0785-0787 la lectura no está disponible: se usa el defecto (canal whatsapp, sin reglas).
+  // Sin las migraciones 0785-0787 la lectura no está disponible: se usa el defecto (canal anterior, sin reglas).
   leerConfig: async (t) => {
     const l = await leerConfigCorreo(t);
     return l.ok ? l.valor : CONFIG_CORREO_POR_DEFECTO;

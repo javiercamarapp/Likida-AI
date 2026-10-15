@@ -1,4 +1,18 @@
-# Liquidación externa (Agente 1, modo «solo entrega»)
+# Liquidación externa (Agente 1, «desglose por correo»)
+
+**Qué es.** El cliente ya calcula la liquidación de su chofer en su SAP/TMS. Likida **no la recalcula**: toma el desglose
+de cada bitácora y lo **entrega por correo** en un Excel con valores (no fórmulas), con el mismo formato que el cliente
+usa hoy, al operador y a su coordinador, con copia a recursos humanos. El correo es sobrio y el archivo no lleva pie ni
+razón social de Likida: es un documento del cliente, y Likida solo lo entrega. La carpeta «Enviados» del buzón sirve de archivo.
+
+- Likida verifica al recibir que `total` sea la suma de los renglones (percepciones − deducciones, en centavos).
+- Vive en tablas propias (`liquidacion_externa`). **No se mezcla** con `liquidacion` (el cierre que cuadró el motor).
+- El modo de fotos no se toca.
+
+## Canal alterno (stand-by): WhatsApp
+
+Lo que sigue sobre entrega y estados describe el canal anterior (PDF por WhatsApp, botones, plantilla, copia al jefe, aviso de discrepancia y cobro
+por liquidación). Sigue intacto, pero queda **oculto y apagado** mientras la flota use el canal correo; no se borra.
 
 **Qué es.** El cliente de demo ya calcula la liquidación de su chofer en su
 SAP/TMS. Lo que pidió (llamada del 31-ago) es que Likida **la entregue** al
