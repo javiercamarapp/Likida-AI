@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { logger } from '@/lib/logger';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from '@/lib/likida/presupuesto';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LLAVES DE API — lo que vuelve consumible a /v1 desde un sistema ajeno.
@@ -137,12 +138,22 @@ export async function resolverLlave(enClaro: string): Promise<ResultadoLlave> {
   // gastar el presupuesto de lecturas.
   if (!prefijo) return { ok: false, status: 401, motivo: 'Llave inválida.' };
 
-  const { data, error } = await supabaseAdmin()
-    .from('tenant_api_key')
-    .select('id, tenant_id, area, hash, expira_en')
-    .eq('prefijo', prefijo)
-    .is('revocada_en', null)
-    .limit(20);
+  // REN-C18-A1: esta es la lectura que autentica CADA `Bearer` de /v1, y era
+  // el único eslabón del presupuesto sin techo: 25 s de los 30 de
+  // `maxDuration` en seis rutas (83 % del presupuesto) contra los 9.5 s que
+  // deja `acotada`. Agotar el tope entra por `{data:null,error}`, que es
+  // justo el camino que esta función ya mapea a **503 y nunca 401** — ver la
+  // cabecera: un 401 haría que el TMS del cliente borrara su llave creyéndola
+  // inválida.
+  const { data, error } = await acotada(
+    supabaseAdmin()
+      .from('tenant_api_key')
+      .select('id, tenant_id, area, hash, expira_en')
+      .eq('prefijo', prefijo)
+      .is('revocada_en', null)
+      .limit(20),
+    'resolverLlave',
+  );
 
   if (error) {
     logger.error('llave_api.lectura', { err: error.message });
@@ -180,10 +191,12 @@ export async function resolverLlave(enClaro: string): Promise<ResultadoLlave> {
   // pero si la escritura falla NO se cae la petición — el cliente ya se
   // autenticó y negarle la lectura por no poder anotar la fecha sería el peor
   // intercambio.
-  void supabaseAdmin().from('tenant_api_key')
-    .update({ ultimo_uso_en: new Date().toISOString() })
-    .eq('id', hallada.id)
-    .then(({ error: e }) => { if (e) logger.warn('llave_api.sello', { err: e.message }); });
+  void acotada(
+    supabaseAdmin().from('tenant_api_key')
+      .update({ ultimo_uso_en: new Date().toISOString() })
+      .eq('id', hallada.id),
+    'resolverLlave.sello',
+  ).then(({ error: e }) => { if (e) logger.warn('llave_api.sello', { err: e.message }); });
 
   return { ok: true, tenantId: hallada.tenant_id, area: hallada.area, llaveId: hallada.id };
 }
