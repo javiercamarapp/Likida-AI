@@ -393,6 +393,8 @@ const MAX_PAGINAS_EN_ESPERA = 10;
 
 /** La 0647 (y la 0673/0674) aún no están en la base: no hay tabla ni función. */
 const SIN_0647 = new Set(['42P01', 'PGRST205', '42883', 'PGRST202']);
+/** Tope de contactos de «servicio al cliente» por flota (el mismo de la RPC de 0798). */
+export const MAX_SERVICIO_CLIENTE = 10;
 const sinMigrar = (e: { code?: string } | null | undefined): boolean => !!e?.code && SIN_0647.has(e.code);
 
 /** El destino de SIEMPRE (antes de la lista de directores): nivel 1 el gerente del cliente o el jefe de la flota, nivel 2 el dueño. */
@@ -437,6 +439,27 @@ async function directoresDeNivel(tenantId: string, nivel: NivelDirector): Promis
     return [];
   }
   return ((r.data ?? []) as Fila[]).map(aDirector);
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * 0798: a quién avisar como «servicio al cliente» para un cliente: los contactos activos de la flota que son para ese cliente
+ * o para todos (`cliente_id` null). Sin lista (o sin la migración 0798) es vacío: quien llama sigue con gerente/director como hoy.
+ * Un `clienteId` que no es un uuid no entra al filtro: solo se consideran los contactos «para todos».
+ */
+async function servicioDeCliente(tenantId: string, clienteId: string | null): Promise<DestinatarioAviso[]> {
+  let q = supabaseAdmin().from('vigia_servicio_cliente')
+    .select('id, nombre, telefono, correo').eq('tenant_id', tenantId).eq('activo', true);
+  q = clienteId && UUID_RE.test(clienteId) ? q.or(`cliente_id.is.null,cliente_id.eq.${clienteId}`) : q.is('cliente_id', null);
+  const r = await acotada(q.order('created_at').order('id').limit(MAX_SERVICIO_CLIENTE), 'vigia.servicio_cliente');
+  if (r.error) {
+    if (!sinMigrar(r.error)) throw new Error(`vigia.servicio_cliente: ${r.error.message}`);
+    return [];
+  }
+  return unirDestinatarios(((r.data ?? []) as Fila[])
+    .map((f): DestinatarioAviso => ({ userId: null, directorId: null, nombre: str(f.nombre), telefono: str(f.telefono), correo: str(f.correo) }))
+    .filter((d) => d.telefono || d.correo));
 }
 
 /** Teléfono y correo del gerente asignado a un cliente (solo si es de ESTA flota y está activo). */
@@ -700,6 +723,11 @@ export function crearRepoVigia(): RepoVigia {
       return unirDestinatarios(lista);
     },
 
+    // 0798: la lista de «servicio al cliente» (no toca los niveles). Vacía = el llamador usa gerente/director como siempre.
+    async destinatariosServicioCliente(tenantId, clienteId): Promise<DestinatarioAviso[]> {
+      return servicioDeCliente(tenantId, clienteId);
+    },
+
     // 0674: el reclamo del correo de respaldo. Insertar la llave ES reclamarla; sin filas = otro lo lleva o ya salió.
     async reclamarCorreo(tenantId, a) {
       const r = await acotada(supabaseAdmin().rpc('vigia_correo_reclamar', {
@@ -863,6 +891,9 @@ export interface CorreoTablero { id: string; nivel: number; estado: string; deta
 
 export interface EventoTablero { id: number; tipo: string; nivel: number | null; creadoEn: string; conversacionId: string | null }
 
+/** 0798: un contacto de «servicio al cliente». `clienteId` null = para todos los clientes de la flota. */
+export interface ContactoServicio { id: string; nombre: string; telefono: string | null; correo: string | null; clienteId: string | null; activo: boolean }
+
 export interface DatosTablero {
   config: ConfigVigia;
   conversaciones: ConversacionTablero[];
@@ -878,6 +909,8 @@ export interface DatosTablero {
   directores?: Director[];
   /** 0674: los últimos correos de respaldo y su resultado (vacío si la base no tiene la migración). */
   correos?: CorreoTablero[];
+  /** 0798: la lista de «servicio al cliente» (vacía si la base no tiene la migración). */
+  servicio?: ContactoServicio[];
 }
 
 function recorta(t: unknown, n: number): string | null {
@@ -986,8 +1019,15 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
     .select('id, nivel, estado, detalle, created_at, conversacion_id').eq('tenant_id', tenantId).order('created_at', { ascending: false }).order('id').limit(15), 'vigia.tablero_correos');
   if (cors.error && !sinMigrar(cors.error)) throw new Error(`vigia.tablero_correos: ${cors.error.message}`);
 
+  const serv = await acotada(db.from('vigia_servicio_cliente')
+    .select('id, nombre, telefono, correo, cliente_id, activo').eq('tenant_id', tenantId).order('created_at').order('id').limit(MAX_SERVICIO_CLIENTE), 'vigia.tablero_servicio');
+  if (serv.error && !sinMigrar(serv.error)) throw new Error(`vigia.tablero_servicio: ${serv.error.message}`);
+
   return {
     config, conversaciones, pendientes, fallidos, eventos, respuesta, clientes: clientesRows, gerentes,
+    servicio: ((serv.data ?? []) as Fila[]).map((f): ContactoServicio => ({
+      id: String(f.id), nombre: String(f.nombre ?? ''), telefono: str(f.telefono), correo: str(f.correo), clienteId: str(f.cliente_id), activo: f.activo !== false,
+    })),
     directores: ((dirs.data ?? []) as Fila[]).map(aDirector),
     correos: ((cors.data ?? []) as Fila[]).map((f): CorreoTablero => ({
       id: String(f.id), nivel: num(f.nivel), estado: String(f.estado), detalle: str(f.detalle), creadoEn: String(f.created_at), conversacionId: String(f.conversacion_id),
@@ -1091,6 +1131,55 @@ export async function guardarDirectorVigia(tenantId: string, userId: string, id:
 export async function quitarDirectorVigia(tenantId: string, id: string): Promise<boolean> {
   const r = await acotada(supabaseAdmin().rpc('vigia_director_quitar', { p_tenant: tenantId, p_id: id }), 'vigia.director_quitar');
   if (r.error) throw new Error(`vigia.director_quitar: ${r.error.message}`);
+  return r.data === true;
+}
+
+// ── 0798: la lista de «servicio al cliente» ─────────────────────────────────
+
+export interface EntradaServicio { clienteId: unknown; nombre: unknown; telefono: unknown; correo: unknown; activo: unknown }
+export interface ValoresServicio { clienteId: string | null; nombre: string; telefono: string | null; correo: string | null; activo: boolean }
+
+/** Valida lo que escribe el dueño (la base repite las mismas reglas). PURA. `clienteId` vacío = para todos los clientes. */
+export function validarServicio(e: EntradaServicio): { ok: true; valor: ValoresServicio } | { ok: false; error: string } {
+  const clienteCrudo = String(e.clienteId ?? '').trim();
+  if (clienteCrudo && !UUID_RE.test(clienteCrudo)) return { ok: false, error: 'Elige un cliente de la lista, o «Todos los clientes».' };
+  const nombre = String(e.nombre ?? '').replace(/\s+/g, ' ').trim();
+  if (nombre.length < 1 || nombre.length > 120) return { ok: false, error: 'Escribe el nombre de la persona (hasta 120 letras).' };
+  const telCrudo = String(e.telefono ?? '').trim();
+  const correoCrudo = String(e.correo ?? '').trim();
+  if (!telCrudo && !correoCrudo) return { ok: false, error: 'Escribe un WhatsApp, un correo o los dos: sin ninguno no hay a dónde avisar.' };
+  let telefono: string | null = null;
+  if (telCrudo) {
+    telefono = telefonoDeAllowlist(telCrudo);
+    if (!telefono) return { ok: false, error: 'El WhatsApp debe ser de 10 dígitos (o con 52).' };
+  }
+  let correo: string | null = null;
+  if (correoCrudo) {
+    if (correoCrudo.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(correoCrudo)) return { ok: false, error: 'El correo no parece válido.' };
+    correo = correoCrudo;
+  }
+  return { ok: true, valor: { clienteId: clienteCrudo || null, nombre, telefono, correo, activo: e.activo !== false && String(e.activo ?? '') !== 'off' } };
+}
+
+/** Alta (`id` null) o corrección de un contacto de servicio al cliente. `ok:false` con un mensaje para la pantalla. */
+export async function guardarServicioVigia(tenantId: string, userId: string, id: string | null, v: ValoresServicio): Promise<Validacion<{ id: string }>> {
+  const r = await acotada(supabaseAdmin().rpc('vigia_servicio_guardar', {
+    p_tenant: tenantId, p_id: id, p_cliente: v.clienteId, p_nombre: v.nombre, p_telefono: v.telefono, p_correo: v.correo, p_activo: v.activo, p_usuario: userId,
+  }), 'vigia.servicio_guardar');
+  if (r.error) {
+    if (r.error.code === '54000') return { ok: false, error: `Ya hay ${MAX_SERVICIO_CLIENTE} personas en servicio al cliente: quita a alguien antes de agregar a otra.` };
+    if (r.error.code === '23505') return { ok: false, error: 'Esa persona (mismo WhatsApp o mismo correo) ya está en la lista.' };
+    if (r.error.code === '23503') return { ok: false, error: 'Ese cliente no es de tu flota.' };
+    if (r.error.code === 'P0002') return { ok: false, error: 'No encontré a esa persona en tu flota.' };
+    if (sinMigrar(r.error)) return { ok: false, error: 'La lista de servicio al cliente necesita la migración 0798, que aún no está aplicada en la base.' };
+    throw new Error(`vigia.servicio_guardar: ${r.error.message}`);
+  }
+  return { ok: true, valor: { id: String(r.data) } };
+}
+
+export async function quitarServicioVigia(tenantId: string, id: string): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().rpc('vigia_servicio_quitar', { p_tenant: tenantId, p_id: id }), 'vigia.servicio_quitar');
+  if (r.error) throw new Error(`vigia.servicio_quitar: ${r.error.message}`);
   return r.data === true;
 }
 

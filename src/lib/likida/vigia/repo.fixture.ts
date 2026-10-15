@@ -278,6 +278,19 @@ export class RepoEnMemoria implements RepoVigia {
     }
     return lista;
   }
+  /** 0798: la lista de «servicio al cliente» por flota; `clienteId` null = para todos. Solo activos, como la base. */
+  servicio = new Map<string, Array<DestinatarioAviso & { clienteId: string | null; activo: boolean }>>();
+  agregarServicio(tenantId: string, d: Partial<DestinatarioAviso> & { clienteId?: string | null; activo?: boolean } & ({ telefono: string } | { correo: string })): void {
+    const lista = this.servicio.get(tenantId) ?? [];
+    lista.push({ userId: null, directorId: null, nombre: 'Servicio', telefono: null, correo: null, clienteId: null, activo: true, ...d });
+    this.servicio.set(tenantId, lista);
+  }
+  async destinatariosServicioCliente(tenantId: string, clienteId: string | null): Promise<DestinatarioAviso[]> {
+    this.verifica('destinatariosServicioCliente');
+    return (this.servicio.get(tenantId) ?? [])
+      .filter((x) => x.activo && (x.clienteId === null || x.clienteId === clienteId))
+      .map(({ clienteId: _c, activo: _a, ...d }) => d);
+  }
   /** Los correos de respaldo: llave única (flota, clave), con arriendo, como `vigia_aviso_correo`. */
   correos: Array<{
     tenantId: string; id: string; conversacionId: string; clave: string; nivel: 1 | 2; directorId: string | null; destino: string; datos: DatosAvisoCorreo;

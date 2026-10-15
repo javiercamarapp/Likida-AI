@@ -145,6 +145,11 @@ export interface RepoVigia {
    */
   destinatariosNivel(tenantId: string, contacto: Contacto, nivel: NivelDirector): Promise<DestinatarioAviso[]>;
   /**
+   * 0798: a quién avisar como «servicio al cliente» para ese cliente: los contactos activos de la flota para él o para todos.
+   * Vacío si no hay lista (o la base no tiene la migración): quien llama sigue con gerente/director como siempre. No modifica los niveles.
+   */
+  destinatariosServicioCliente(tenantId: string, clienteId: string | null): Promise<DestinatarioAviso[]>;
+  /**
    * 0674: reclama el correo de respaldo de (aviso, persona). Insertar la llave ES reclamarla: `null` = otro lo lleva o ya salió.
    * Un arriendo vencido (la corrida que lo llevaba murió) se retoma. Lanza si la base no puede responder.
    */

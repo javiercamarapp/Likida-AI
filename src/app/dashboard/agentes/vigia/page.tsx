@@ -9,6 +9,7 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { crearDepsVigia } from '@/lib/likida/vigia/deps';
 import {
   cargarTablero, validarConfig, guardarConfigVigia, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, guardarDirectorVigia, quitarDirectorVigia,
+  validarServicio, guardarServicioVigia, quitarServicioVigia,
 } from '@/lib/likida/vigia/repo';
 import { validarDirector } from '@/lib/likida/vigia/respaldo_correo';
 import {
@@ -162,6 +163,35 @@ export default async function PaginaAgenteVigia({
     }
   }
 
+  async function servicio(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
+    'use server';
+    const a = await actor(sp, 'administra');
+    if (!a) return { ok: false, error: 'Solo el dueño de la flota cambia a quién avisa el Vigía.' };
+    const id = texto(fd, 'id');
+    if (id && !UUID.test(id)) return { ok: false, error: 'Persona no válida.' };
+    const que = texto(fd, 'accion');
+    try {
+      if (que === 'quitar') {
+        if (!id) return { ok: false, error: 'Elige a quién quitar.' };
+        const ok = await quitarServicioVigia(a.tenantId, id);
+        revalidatePath(RUTA);
+        return ok ? { ok: true, mensaje: 'Quitado de servicio al cliente.' } : { ok: false, error: 'No encontré a esa persona en tu flota.' };
+      }
+      if (que !== 'guardar') return { ok: false, error: 'Acción no válida.' };
+      const v = validarServicio({
+        clienteId: texto(fd, 'clienteId'), nombre: texto(fd, 'nombre'), telefono: texto(fd, 'telefono'), correo: texto(fd, 'correo'), activo: fd.get('activo') === 'on',
+      });
+      if (!v.ok) return { ok: false, error: v.error };
+      const r = await guardarServicioVigia(a.tenantId, a.userId, id || null, v.valor);
+      if (!r.ok) return { ok: false, error: r.error };
+      revalidatePath(RUTA);
+      return { ok: true, mensaje: id ? 'Cambios guardados.' : 'Agregado a servicio al cliente.' };
+    } catch (e) {
+      logger.error('vigia.accion_servicio_fallo', { tenant: a.tenantId, err: e instanceof Error ? e.message : String(e) });
+      return { ok: false, error: mensajeParaPantalla(e, 'guardar la lista de servicio al cliente') };
+    }
+  }
+
   async function alta(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
     const a = await actor(sp, 'administra');
@@ -216,7 +246,7 @@ export default async function PaginaAgenteVigia({
       ahoraMs={ahoraMs()}
       puedeDecidir={DECIDE.includes(rol)}
       puedeAdministrar={rol === 'flota_admin'}
-      acciones={{ decidir, conversacion, config, alta, contacto, director }}
+      acciones={{ decidir, conversacion, config, alta, contacto, director, servicio }}
       sufijo={sufijoTenant(sp)}
     />
   );
