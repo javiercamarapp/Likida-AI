@@ -80,6 +80,18 @@ export interface ConfigConductor {
    * Ausente o null = desactivado (por omisión). Aún sin columna propia: se fija al armar la configuración hasta que exista.
    */
   umbralPendienteCruceH?: number | null;
+  /**
+   * T-A5-36: compuerta «unidad detenida». Encendida, NINGÚN mensaje proactivo al chofer sale si el GPS no confirma la unidad detenida
+   * (o dentro de un sitio del viaje). Apagada (por omisión, hasta la fase 2) = el comportamiento de siempre. Aún sin columna propia:
+   * se fija al armar la configuración hasta que exista; ausente = el valor de partida.
+   */
+  compuertaMovimientoActiva?: boolean;
+  /** T-A5-36: metros de desplazamiento dentro de `detenidaVentanaMin` a partir de los cuales la unidad «va en marcha» (SUPUESTO del cliente; D-6). */
+  detenidaMetros?: number;
+  /** T-A5-36: ventana (min) en que se mide el desplazamiento y se exigen ≥ 3 muestras para dar la unidad por detenida. */
+  detenidaVentanaMin?: number;
+  /** T-A5-36: sin GPS reciente, ¿se le puede escribir? Por omisión NO (falla cerrado). */
+  sinGpsPermite?: boolean;
   /** 0801: aplicar la salida que reporta el TMS como hito del viaje. */
   aplicarSalidaDelTms: boolean;
   /** 0801: llamadas de seguimiento por viaje medidas antes del agente (null = sin registrar) y la fecha (AAAA-MM-DD) en que se midió. */
@@ -132,6 +144,10 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   silencioRespuestaMin: 120,
   mostrarEstadosFrontera: false,
   aplicarSalidaDelTms: false,
+  compuertaMovimientoActiva: false,
+  detenidaMetros: 150,
+  detenidaVentanaMin: 5,
+  sinGpsPermite: false,
   lineaBaseLlamadasPorViaje: null,
   lineaBaseRegistradaEn: null,
 });
@@ -235,6 +251,11 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
     if (v === null) return { error: msg };
     umbral[campo] = v;
   }
+  // T-A5-36: la compuerta de movimiento. Un valor fuera de rango se RECHAZA (no se corrige en silencio: es lo que decide si se le escribe a un chofer en marcha).
+  const detenidaMetros = entero(b.detenidaMetros ?? CONFIG_CONDUCTOR_DEFAULT.detenidaMetros, 10, 5000);
+  if (detenidaMetros === null) return { error: 'Los metros para dar la unidad por en marcha van de 10 a 5,000.' };
+  const detenidaVentanaMin = entero(b.detenidaVentanaMin ?? CONFIG_CONDUCTOR_DEFAULT.detenidaVentanaMin, 1, 60);
+  if (detenidaVentanaMin === null) return { error: 'La ventana para dar la unidad por detenida va de 1 a 60 minutos.' };
   let lineaBaseLlamadasPorViaje: number | null = null;
   if (b.lineaBaseLlamadasPorViaje !== null && b.lineaBaseLlamadasPorViaje !== undefined) {
     const n = typeof b.lineaBaseLlamadasPorViaje === 'string' && (b.lineaBaseLlamadasPorViaje as string).trim() !== '' ? Number(b.lineaBaseLlamadasPorViaje) : b.lineaBaseLlamadasPorViaje;
@@ -293,6 +314,10 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       silencioRespuestaMin: umbral.silencioRespuestaMin,
       mostrarEstadosFrontera: Boolean(b.mostrarEstadosFrontera),
       aplicarSalidaDelTms: Boolean(b.aplicarSalidaDelTms),
+      compuertaMovimientoActiva: b.compuertaMovimientoActiva === true,
+      detenidaMetros,
+      detenidaVentanaMin,
+      sinGpsPermite: b.sinGpsPermite === true,
       lineaBaseLlamadasPorViaje,
       lineaBaseRegistradaEn,
     },

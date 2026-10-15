@@ -7,6 +7,7 @@ import type { Destino } from './escalamiento';
 import type { ViajeContexto } from './repo';
 import { armarEscalacionSenalVida, armarSenalVida, type MensajeSaliente, type MotivoSenalVida } from './solicitudes';
 import { estaFueraDePerfil } from './perfil';
+import { puedeEscribirAlChofer } from './compuerta_movimiento';
 import { estaPendiente, estaResuelto, type HitoFila } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -167,7 +168,9 @@ export interface EstadoEpisodios {
 }
 
 export type MotivoNadaSenal =
-  | 'flota_apagada' | 'no_transito' | 'sin_gps' | 'conector_caido' | 'ok' | 'fuera_de_ventana' | 'silenciado' | 'sin_telefono' | 'espera' | 'ya_escalado';
+  | 'flota_apagada' | 'no_transito' | 'sin_gps' | 'conector_caido' | 'ok' | 'fuera_de_ventana' | 'silenciado' | 'sin_telefono' | 'espera' | 'ya_escalado'
+  /** T-A5-36: la compuerta «unidad detenida» no deja escribirle al chofer ahora. No abre el episodio ni gasta un nivel. */
+  | 'compuerta_movimiento';
 
 export type AccionSenal =
   | { tipo: 'nada'; motivo: MotivoNadaSenal }
@@ -351,6 +354,12 @@ export async function barridoSenalVida(p: PuertosSenalVida, ahora: Date = new Da
     const estado = episodios.get(v.id) ?? { abierto: null, silenciadoHasta: null };
     const accion = decidirSenalVida({ viaje: v, hitos: hs, config, senal, episodios: estado, ahora });
     if (accion.tipo === 'nada') { salta(accion.motivo); continue; }
+    // T-A5-36: los avisos 1 y 2 le escriben al CHOFER, así que pasan por la compuerta ANTES de abrir el episodio o reclamar el nivel (un
+    // «no» no gasta un nivel; la siguiente pasada vuelve a decidir). Cerrar un episodio y escalar al jefe no le escriben al chofer.
+    if (accion.tipo === 'abrir' || accion.tipo === 'avisar') {
+      const puerta = puedeEscribirAlChofer({ posiciones: muestras.get(llave(v)) ?? [], sitioDelViaje: sitios.get(v.id) ?? null, config, ahora });
+      if (!puerta.permitido) { salta('compuerta_movimiento'); continue; }
+    }
 
     try {
       if (accion.tipo === 'cerrar') {

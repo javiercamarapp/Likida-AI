@@ -4,7 +4,7 @@ import { opcionesDeEnvio } from '@/lib/meta/plantillas_catalogo';
 import { parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
 import { dentroDeVentana, type ConfigConductor } from './config';
 import { calcularEstancias, excedeUmbral, umbralDe, type Estancia } from './estadias_anden';
-import type { PuertosConductor, NuevoAviso } from './ejecutor';
+import { evaluarCompuertaDeViajes, type PuertosConductor, type NuevoAviso } from './ejecutor';
 import { horaYDiaMx } from './mensajes';
 import { textoTiempo } from './planificador';
 import type { ViajeContexto } from './repo';
@@ -37,6 +37,8 @@ export interface ResultadoAlertasEstadia {
   yaReclamadas: number;
   sinDestinatario: number;
   fueraDeVentana: number;
+  /** T-A5-36: estancias cuyo aviso espera porque la compuerta «unidad detenida» no da la unidad por detenida (ni dentro del sitio). Ausente = ninguna. */
+  compuertaMovimiento?: number;
   rechazosReintentables: number;
   fallos: string[];
 }
@@ -85,6 +87,7 @@ export async function correrAlertasEstadia(
   }
   const vacio = new Map<string, never>();
   let rechazosSeguidos = 0;
+  let compuerta: ReturnType<typeof evaluarCompuertaDeViajes> | undefined;
   for (const v of viajes) {
     if (opts.venceEn !== undefined && Date.now() >= opts.venceEn) break;
     const config = configs.get(v.tenantId);
@@ -97,6 +100,11 @@ export async function correrAlertasEstadia(
       if (!dentroDeVentana(config, ahora)) { r.fueraDeVentana++; continue; }
       const hl = hs.find((h) => h.id === e.llegada?.hitoId);
       if (!hl) continue;
+      // T-A5-36: todo mensaje proactivo pasa por la compuerta «unidad detenida» ANTES del claim. Una unidad en el andén queda exenta
+      // (dentro del sitio); si ya va rodando, el aviso espera a la siguiente pasada: ni se reclama ni se pierde.
+      compuerta ??= evaluarCompuertaDeViajes(p, viajes, configs, ahora);
+      const veredicto = (await compuerta).get(v.id);
+      if (veredicto && !veredicto.permitido) { r.compuertaMovimiento = (r.compuertaMovimiento ?? 0) + 1; continue; }
       try {
         const claim = llave(v, hl);
         const gano = await p.reclamar(claim);
