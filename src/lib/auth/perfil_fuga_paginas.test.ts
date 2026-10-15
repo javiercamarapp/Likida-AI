@@ -6,7 +6,7 @@ import { join, relative } from 'node:path';
 // ═══════════════════════════════════════════════════════════════════════════
 // T-PER-02 · FUGAS POR PÁGINA bajo el perfil `cinco_agentes`.
 //
-// (a) CADA `page.tsx` de /dashboard (las 63, enumeradas del disco) se prueba
+// (a) CADA `page.tsx` de /dashboard (las 68, enumeradas del disco) se prueba
 //     por tabla: la ruta con la que la página llama a su puerta
 //     (`resolverTenantEfectivo` / `requireSessionTenant`) se EXTRAE de su
 //     propio código fuente, no de una lista escrita a mano. Se exige que
@@ -53,10 +53,11 @@ vi.mock('@/lib/likida/bitacora_escritura', () => ({ anotarBitacora: async () => 
 const { resolverTenantEfectivo } = await import('./tenant-efectivo');
 const { requireSessionTenant } = await import('./guard');
 const { reiniciarCachePerfil } = await import('./perfil_tenant');
-const { rutaPermitidaEnPerfil, puedeVerRuta, inicioDe, areaDeRuta, RUTAS_PERFIL_CINCO_AGENTES, RUTAS_STAND_BY_PERFIL_CINCO_AGENTES } =
+const { rutaPermitidaEnPerfil, rutaProximamenteEnPerfil, moduloProximamenteDeRuta, rutaProximamente, puedeVerRuta, inicioDe, areaDeRuta, RUTAS_PERFIL_CINCO_AGENTES, RUTAS_STAND_BY_PERFIL_CINCO_AGENTES } =
   await import('./visibilidad');
 const { TODAS_LAS_RUTAS } = await import('../../app/dashboard/rutas');
 
+type ModuloPerfil = Parameters<typeof import('./visibilidad').rutaProximamente>[0];
 const RAIZ = process.cwd();
 const CON = 'tenant-con-perfil';
 const SIN = 'tenant-sin-perfil';
@@ -108,16 +109,16 @@ const concreta = (g: string) => (g === '/dashboard/[id]' ? '/dashboard/0f8fad5b-
 /** La función de puerta que la propia página usa: el detalle de liquidación entra por `requireSessionTenant`, el resto por `resolverTenantEfectivo`. */
 const abrirPuerta = (g: string) => (g === '/dashboard/[id]' ? requireSessionTenant(concreta(g)) : resolverTenantEfectivo(g, {}));
 
-describe('(a) las 63 páginas: enumeración y puerta', () => {
-  it('hay 63 page.tsx en /dashboard (cuenta independiente del disco) y todas se leen', () => {
-    expect(TABLA).toHaveLength(63);
-    expect(new Set(TABLA.map((p) => p.archivo)).size).toBe(63);
+describe('(a) las 68 páginas: enumeración y puerta', () => {
+  it('hay 68 page.tsx en /dashboard (cuenta independiente del disco) y todas se leen', () => {
+    expect(TABLA).toHaveLength(68);
+    expect(new Set(TABLA.map((p) => p.archivo)).size).toBe(68);
   });
 
-  it('solo /dashboard/integraciones es un redirect puro (su destino ya gatea); las otras 62 llaman a su puerta', () => {
+  it('solo /dashboard/integraciones es un redirect puro (su destino ya gatea); las otras 67 llaman a su puerta', () => {
     expect(TABLA.filter((p) => p.puerta === 'REDIRECT_PURO').map((p) => p.ruta)).toEqual(['/dashboard/integraciones']);
     expect(TABLA.filter((p) => p.puerta === null).map((p) => p.archivo)).toEqual([]);
-    expect(GATEADAS).toHaveLength(62);
+    expect(GATEADAS).toHaveLength(67);
     const src = readFileSync(join(RAIZ, 'src/app/dashboard/integraciones/page.tsx'), 'utf8');
     expect(src).toContain('/dashboard/conexiones');
     expect(rutaPermitidaEnPerfil('cinco_agentes', '/dashboard/conexiones')).toBe(true);
@@ -139,18 +140,30 @@ describe('(a) las 63 páginas: enumeración y puerta', () => {
 describe('(a) bajo el perfil, cada página no permitida rebota y cada permitida abre', () => {
   const permitidas = new Set(Object.keys(RUTAS_PERFIL_CINCO_AGENTES));
   const negadas = GATEADAS.filter((p) => !permitidas.has(clave(p)));
-  const abiertas = GATEADAS.filter((p) => permitidas.has(clave(p)));
+  const permitidasEnLista = GATEADAS.filter((p) => permitidas.has(clave(p)));
+  // «Próximamente» (fase 1, 15-oct-2026): vigia y conductor están en la lista cerrada pero no se operan; su puerta
+  // manda a la pantalla «Próximamente», no a /dashboard. Las demás permitidas abren.
+  const proximamente = permitidasEnLista.filter((p) => rutaProximamenteEnPerfil('cinco_agentes', clave(p)));
+  const abiertas = permitidasEnLista.filter((p) => !rutaProximamenteEnPerfil('cinco_agentes', clave(p)));
 
-  it('el reparto es el de la matriz de T-PER-01: 32 negadas y 31 permitidas (30 con puerta propia + integraciones, que solo redirige)', () => {
+  it('el reparto es el de la matriz de T-PER-01 con «Próximamente»: 32 negadas, 24 abiertas y 11 «Próximamente» (más integraciones, que solo redirige)', () => {
     expect(negadas.length).toBe(32);
-    expect(abiertas.length).toBe(30);
-    expect(negadas.length + abiertas.length + 1).toBe(63);
+    expect(abiertas.length).toBe(24);
+    expect(proximamente.length).toBe(11);
+    expect(negadas.length + abiertas.length + proximamente.length + 1).toBe(68);
   });
 
   it.each(negadas.map((p) => [p.ruta, clave(p)] as const))('%s (puerta %s): CON perfil rebota a /dashboard', async (_ruta, puerta) => {
     getSessionTenant.mockResolvedValue(sesion(CON));
     await expect(resolverTenantEfectivo(puerta, {})).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenCalledWith('/dashboard');
+  });
+
+  it.each(proximamente.map((p) => [p.ruta, clave(p)] as const))('%s (puerta %s): CON perfil manda a su pantalla «Próximamente», sin servir la página real', async (_ruta, puerta) => {
+    getSessionTenant.mockResolvedValue(sesion(CON));
+    await expect(abrirPuerta(puerta)).rejects.toThrow('NEXT_REDIRECT');
+    const modulo = moduloProximamenteDeRuta('cinco_agentes', puerta) as ModuloPerfil;
+    expect(redirect).toHaveBeenCalledWith(rutaProximamente(modulo));
   });
 
   it.each(abiertas.map((p) => [p.ruta, clave(p)] as const))('%s (puerta %s): CON perfil abre para el dueño', async (_ruta, puerta) => {

@@ -124,7 +124,11 @@ const RUTAS: { clave: string; raiz: 'v1' | 'export'; recurso: string; pathname: 
 
 // Qué sigue vivo bajo el perfil, escrito a mano desde la ficha (T-PER-05) y la
 // lista de B1. Todo lo demás debe contestar 403 por perfil.
-const V1_PERMITIDOS = ['viajes', 'hitos', 'sitios', 'unidades', 'operadores', 'peajes', 'conductor', 'estadias', 'evidencias', 'liquidaciones-externas'];
+const V1_PERMITIDOS = ['viajes', 'unidades', 'operadores', 'peajes', 'liquidaciones-externas'];
+// «Próximamente» (fase 1, 15-oct-2026): las APIs de A5 (conductor) y A4 (vigía) existen pero el perfil las niega
+// hasta que el módulo se encienda (`API_PROXIMAMENTE_PERFIL`).
+const V1_PROXIMAMENTE = ['hitos', 'sitios', 'conductor', 'estadias', 'evidencias'];
+const EXPORT_PROXIMAMENTE = ['vigia-faqs'];
 // DECISIÓN PENDIENTE (preguntas-javier.md, T-PER-05): la ficha manda 403 a las
 // «liquidaciones propias»; la lista vigente de B1 las deja vivas porque
 // `/dashboard/[id]` (revisión de lo cuadrado) está en la lista. Aquí se fija lo
@@ -132,8 +136,8 @@ const V1_PERMITIDOS = ['viajes', 'hitos', 'sitios', 'unidades', 'operadores', 'p
 // nombres pasan a la lista de negados y se cambia `API_PERFIL_CINCO_AGENTES`.
 const V1_VIVOS_POR_DECIDIR = ['liquidaciones'];
 const EXPORT_PERMITIDOS = [
-  'liquidaciones-externas', 'bitacora-peaje', 'bitacora-conciliada', 'peajes-reclamacion',
-  'carta-porte-docs', 'carta-porte-xml', 'vigia-faqs',
+  'liquidaciones-externas', 'bitacora-peaje', 'bitacora-conciliada', 'peajes-reclamacion', 'peajes-revision',
+  'carta-porte-docs', 'carta-porte-xml',
 ];
 const EXPORT_VIVOS_POR_DECIDIR = ['liquidaciones', 'pdf'];
 const V1_STAND_BY = ['clientes'];
@@ -206,15 +210,15 @@ beforeEach(() => {
 describe('(0) el inventario de rutas está clasificado a mano', () => {
   it('se encontraron las rutas esperadas (si el glob falla, la prueba no probaría nada)', () => {
     expect(RUTAS.filter((r) => r.raiz === 'v1').length).toBeGreaterThanOrEqual(13);
-    expect(RUTAS.filter((r) => r.raiz === 'export').length).toBe(13);
+    expect(RUTAS.filter((r) => r.raiz === 'export').length).toBe(14);
     expect(V1.length).toBeGreaterThanOrEqual(25);
-    expect(EXPORT.length).toBe(13);
+    expect(EXPORT.length).toBe(14);
   });
 
   it('cada recurso de /v1 y /export está en una de las listas de esta prueba (una ruta nueva sin clasificar la pone en rojo)', () => {
     const conocidos = {
-      v1: [...V1_PERMITIDOS, ...V1_VIVOS_POR_DECIDIR, ...V1_STAND_BY],
-      export: [...EXPORT_PERMITIDOS, ...EXPORT_VIVOS_POR_DECIDIR, ...EXPORT_STAND_BY],
+      v1: [...V1_PERMITIDOS, ...V1_VIVOS_POR_DECIDIR, ...V1_STAND_BY, ...V1_PROXIMAMENTE],
+      export: [...EXPORT_PERMITIDOS, ...EXPORT_VIVOS_POR_DECIDIR, ...EXPORT_STAND_BY, ...EXPORT_PROXIMAMENTE],
     };
     const sinClasificar = RUTAS.filter((r) => !conocidos[r.raiz].includes(r.recurso)).map((r) => `${r.raiz}/${r.recurso}`);
     expect(sinClasificar).toEqual([]);
