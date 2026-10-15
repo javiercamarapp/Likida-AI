@@ -946,7 +946,7 @@ export async function contarViajes(
 /** Un renglón de la bitácora del Agente de Conductores (F4): cada sello real
  *  del ciclo de comunicación con el chofer, del más reciente al más viejo. */
 export interface EventoConductor {
-  tipo: 'avisado' | 'acepto' | 'escalado' | 'llegada' | 'descarga' | 'regreso';
+  tipo: 'avisado' | 'acepto' | 'en_seguimiento_importado' | 'escalado' | 'llegada' | 'descarga' | 'regreso';
   folio: string;
   operador: string | null;
   cuando: string;
@@ -957,30 +957,78 @@ const SELLOS_CONDUCTOR: ReadonlyArray<[EventoConductor['tipo'], string]> = [
   ['llegada', 'llegada_en'], ['descarga', 'descarga_en'], ['regreso', 'regreso_en'],
 ];
 
+/** Los viajes más recientes con todos los sellos del ciclo del chofer. UNA sola
+ *  consulta que alimentan la bitácora y el tiempo de aceptación (T-A5-06): así
+ *  la frontera de datos no suma una llamada. Si la base no contesta, LANZA. */
+async function leerSellosRecientes(tenantId: string, limite: number, nombre: string) {
+  const res = await acotada(
+    supabaseAdmin()
+    .from('viaje')
+    .select('folio, id, avisado_en, aceptado_en, aceptado_origen, escalado_en, llegada_en, descarga_en, regreso_en, operador:operador_id(nombre)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(limite),
+    nombre,
+  );
+  return exigir(res, nombre) ?? [];
+}
+
+/** Cuántos viajes recientes mide el tiempo de aceptación (la tarjeta lo rotula). */
+export const VENTANA_TIEMPO_ACEPTACION = 200;
+
+/** T-A5-06 · El tiempo medio que tarda el chofer en aceptar, sobre los
+ *  `VENTANA_TIEMPO_ACEPTACION` viajes más recientes de la flota. Los de
+ *  importación se leen para CONTARLOS como excluidos, no para promediarlos
+ *  (`tiempoAceptacionChofer`). */
+export async function getTiempoAceptacionChofer(tenantId: string): Promise<ReturnType<typeof tiempoAceptacionChofer>> {
+  const filas = await leerSellosRecientes(tenantId, VENTANA_TIEMPO_ACEPTACION, 'getTiempoAceptacionChofer');
+  return tiempoAceptacionChofer(filas as unknown as FilaAceptacion[]);
+}
+
 /** Los sellos de los viajes recientes, aplanados a una bitácora. Ventana de
  *  60 viajes: es la bitácora de actividad, no un histórico exhaustivo — la
  *  vista lo rotula así. */
 export async function getEventosConductores(tenantId: string, limite = 15): Promise<EventoConductor[]> {
-  const res = await acotada(
-    supabaseAdmin()
-    .from('viaje')
-    .select('folio, id, avisado_en, aceptado_en, escalado_en, llegada_en, descarga_en, regreso_en, operador:operador_id(nombre)')
-    .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: false })
-    .limit(60),
-    'getEventosConductores',
-  );
-  const filas = exigir(res, 'getEventosConductores') ?? [];
+  const filas = await leerSellosRecientes(tenantId, 60, 'getEventosConductores');
   const eventos: EventoConductor[] = [];
   for (const v of filas) {
     const op = ((v.operador as { nombre?: string } | null)?.nombre) ?? null;
     const folio = (v.folio as string) || (v.id as string).slice(0, 8);
     for (const [tipo, col] of SELLOS_CONDUCTOR) {
       const cuando = (v as Record<string, unknown>)[col];
-      if (typeof cuando === 'string') eventos.push({ tipo, folio, operador: op, cuando });
+      if (typeof cuando !== 'string') continue;
+      // T-A5-06: un `aceptado_en` escrito por la importación NO es que el
+      // chofer dijo que sí; se rotula aparte para no contarlo como aceptación.
+      const t: EventoConductor['tipo'] = tipo === 'acepto' && v.aceptado_origen === 'importacion'
+        ? 'en_seguimiento_importado' : tipo;
+      eventos.push({ tipo: t, folio, operador: op, cuando });
     }
   }
   return eventos.sort((a, b) => Date.parse(b.cuando) - Date.parse(a.cuando)).slice(0, limite);
+}
+
+/** Una fila mínima para medir cuánto tarda el chofer en aceptar. */
+export interface FilaAceptacion {
+  avisado_en: string | null;
+  aceptado_en: string | null;
+  aceptado_origen?: string | null;
+}
+
+/** Cuántos minutos tarda el chofer en aceptar (`avisado_en → aceptado_en`),
+ *  en promedio. T-A5-06: los viajes con `aceptado_origen = 'importacion'`
+ *  llevan `aceptado_en` escrito por el sistema (latencia 0 falsa) y se
+ *  EXCLUYEN: medirlos arrastraría la media hacia abajo. `n` = viajes medidos;
+ *  sin ninguno, `minutos` es `null` (no 0). */
+export function tiempoAceptacionChofer(filas: readonly FilaAceptacion[]): { minutos: number | null; n: number; excluidosImportados: number } {
+  let suma = 0, n = 0, excluidosImportados = 0;
+  for (const f of filas) {
+    if (f.aceptado_origen === 'importacion') { excluidosImportados++; continue; }
+    if (!f.avisado_en || !f.aceptado_en) continue;
+    const ms = Date.parse(f.aceptado_en) - Date.parse(f.avisado_en);
+    if (!Number.isFinite(ms) || ms < 0) continue;
+    suma += ms / 60_000; n++;
+  }
+  return { minutos: n > 0 ? suma / n : null, n, excluidosImportados };
 }
 
 /** Viajes escalados que siguen sin chofer que acepte — la alerta del Inicio

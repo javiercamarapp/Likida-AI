@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { BloqueCola, type ColaConductores } from './vista';
+import { BloqueCola, BloqueConteos, type ColaConductores, type ConteosConductores } from './vista';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FE-6 (auditoría 24): "Esperan aceptar" salía de `getViajes(tenantId)` (los
@@ -71,5 +71,63 @@ describe('Conductores — "Esperan aceptar" declara el recorte de la paginación
     };
     const html = await pintar(cola);
     expect(html).not.toContain('no alcanza a traerlos a todos');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A5-06: «Aceptados» es lo que dijo el chofer; lo cargado por importación
+// va en su propia tarjeta rotulada — dos cifras, nunca una mezclada.
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('Conductores — conteos separan chofer de importación (T-A5-06)', () => {
+  const pintarConteos = async (k: ConteosConductores) =>
+    renderToStaticMarkup(await BloqueConteos({ kpis: Promise.resolve(k) }));
+
+  it('con importados medidos: rotula las dos cifras por separado', async () => {
+    const html = await pintarConteos({ vivos: 12, aceptados: 3, importados: 5, esperan: 1, escalados: 0 });
+    expect(html).toContain('Aceptados');
+    expect(html).toContain('el chofer dijo que sí');
+    expect(html).toContain('En seguimiento por importación');
+    expect(html).toContain('no los aceptó el chofer');
+  });
+
+  it('sin el campo (origen viejo) no inventa la tarjeta', async () => {
+    const html = await pintarConteos({ vivos: 12, aceptados: 3, esperan: 1, escalados: 0 });
+    expect(html).not.toContain('En seguimiento por importación');
+  });
+
+  it('importados no medibles → «—», no 0', async () => {
+    const html = await pintarConteos({ vivos: 12, aceptados: 3, importados: null, esperan: 1, escalados: 0 });
+    expect(html).toContain('En seguimiento por importación');
+    expect(html).toContain('no se pudo contar');
+  });
+});
+
+describe('Conductores — tarjeta «Tiempo en aceptar» (T-A5-06)', () => {
+  const pintarConteos = async (k: ConteosConductores) =>
+    renderToStaticMarkup(await BloqueConteos({ kpis: Promise.resolve(k) }));
+  const base = { vivos: 12, aceptados: 3, esperan: 1, escalados: 0 };
+
+  it('muestra la media del chofer, su n y cuántos importados no cuenta', async () => {
+    const html = await pintarConteos({ ...base, tiempoAceptacion: { minutos: 10, n: 3, excluidosImportados: 5 } });
+    expect(html).toContain('Tiempo en aceptar');
+    expect(html).toContain('10 min');
+    expect(html).toContain('media de 3 aceptados por el chofer');
+    expect(html).toContain('no cuenta 5 por importación');
+  });
+
+  it('sin viajes medibles → «—», no 0 min', async () => {
+    const html = await pintarConteos({ ...base, tiempoAceptacion: { minutos: null, n: 0, excluidosImportados: 2 } });
+    expect(html).toContain('aún sin aceptaciones del chofer que medir');
+    expect(html).not.toContain('0 min');
+  });
+
+  it('lectura caída → «no se pudo medir»', async () => {
+    const html = await pintarConteos({ ...base, tiempoAceptacion: null });
+    expect(html).toContain('no se pudo medir');
+  });
+
+  it('sin el campo (origen viejo) no pinta la tarjeta', async () => {
+    expect(await pintarConteos(base)).not.toContain('Tiempo en aceptar');
   });
 });
