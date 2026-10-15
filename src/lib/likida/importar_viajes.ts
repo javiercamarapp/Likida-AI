@@ -9,6 +9,7 @@ import { DatoInvalido } from './errores';
 import { aceptarViajesImportados } from './conductor/repo';
 import { localAUtc, normalizarFechaLocal, ZONA_POR_OMISION } from './conectores/tabla_propia/tiempo';
 import { normalizarDespachoRef } from './conectores/tabla_propia/filas';
+import { normalizarEstadoTransito, type ReglaTransito, type ResultadoTransito } from './conductor/estados_transito';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // IMPORTADOR DE VIAJES (kit del PoC, 14-ago-2026) — el export del TMS del
@@ -54,6 +55,8 @@ export interface FilaViajeImportada {
   citaDestino?: string | null;
   /** T-A5-13: referencia de despacho (Icident) normalizada; solo existe si el archivo la trae con valor. Va a `viaje.despacho_ref` (0802). */
   despachoRef?: string;
+  /** T-A5-20: estado de tránsito (patio / en ruta / pendiente de cruce) normalizado; solo existe si la celda trae algo que no sea vacío ni «OK». Va a `viaje.transito_*` (0804). */
+  transito?: ResultadoTransito;
 }
 
 export interface LecturaImportacion {
@@ -68,7 +71,7 @@ export interface LecturaImportacion {
 /** Encabezados que el mundo real usa. Minúsculas, sin acentos. */
 const COLUMNAS: Record<
   'folio' | 'origen' | 'destino' | 'fecha' | 'anticipo' | 'operadorNombre'
-  | 'unidad' | 'cliente' | 'ingreso' | 'km' | 'citaOrigen' | 'citaDestino' | 'despachoRef',
+  | 'unidad' | 'cliente' | 'ingreso' | 'km' | 'citaOrigen' | 'citaDestino' | 'despachoRef' | 'transito',
   string[]
 > = {
   folio: ['folio', 'viaje', 'no viaje', 'no. viaje', 'numero de viaje', 'id viaje', 'referencia'],
@@ -86,6 +89,8 @@ const COLUMNAS: Record<
   citaDestino: ['cita descarga', 'cita destino'],
   // T-A5-13: el «Icident» del TMS del cliente (número de despacho). «viaje» NO va aquí: ya es sinónimo de folio.
   despachoRef: ['despacho', 'icident', 'incident', 'no despacho', 'no. despacho', 'numero de despacho', 'referencia de despacho'],
+  // T-A5-20: el estado de tránsito que la flota mantiene a mano. «estado» a secas NO va: es ambiguo.
+  transito: ['transito', 'estatus transito', 'estatus de transito', 'estado transito', 'estado de transito'],
 };
 
 function normalizarEncabezado(v: unknown): string {
@@ -190,7 +195,7 @@ export const TOPE_FILAS_IMPORT = 2_000;
  */
 export function interpretarFilasViajes(
   matriz: unknown[][],
-  opciones: { permitirFinanzas?: boolean; /** Zona IANA de la flota, para leer las citas sin zona (T-A5-05). */ zona?: string } = {},
+  opciones: { permitirFinanzas?: boolean; /** Zona IANA de la flota, para leer las citas sin zona (T-A5-05). */ zona?: string; /** T-A5-20: reglas propias de la flota para leer el estado de tránsito. */ diccionarioTransito?: readonly ReglaTransito[] } = {},
 ): LecturaImportacion {
   if (!matriz.length) return { viajes: [], descartadas: [], error: 'El archivo está vacío.' };
 
@@ -274,6 +279,7 @@ export function interpretarFilasViajes(
     const citaOrigen = leerCita('citaOrigen', 'cita carga');
     const citaDestino = leerCita('citaDestino', 'cita descarga');
     const despachoRef = normalizarDespachoRef(celda('despachoRef'));
+    const transito = normalizarEstadoTransito(celda('transito'), opciones.diccionarioTransito);
 
     viajes.push({
       folio,
@@ -289,6 +295,7 @@ export function interpretarFilasViajes(
       ...(citaOrigen !== null ? { citaOrigen } : {}),
       ...(citaDestino !== null ? { citaDestino } : {}),
       ...(despachoRef !== null ? { despachoRef } : {}),
+      ...(transito !== null ? { transito } : {}),
     });
   }
 
@@ -600,6 +607,8 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
       ...(f.citaDestino ? { cita_destino_en: f.citaDestino } : {}),
       // T-A5-13: igual que las citas, la clave ausente no toca la columna.
       ...(f.despachoRef ? { despacho_ref: f.despachoRef } : {}),
+      // T-A5-20: solo lo declarado en el archivo; nunca se infiere. La marca de tiempo es la de la importación.
+      ...(f.transito ? { transito_estado: f.transito.estado, transito_texto_origen: f.transito.textoOrigen, transito_actualizado_en: new Date().toISOString() } : {}),
       estatus: 'abierto',
     }));
     // Upsert que IGNORA duplicados contra `viaje_folio_unico` (0092): el que
