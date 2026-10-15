@@ -3,7 +3,7 @@
 //
 // Cada llamada de costo REAL (el costo_usd que el proveedor cobró, leído de
 // `llm_costo` — no una tabla de precios) se registra en
-// la documentación interna Si la corrida pasa su tope, se ABORTA con un
+// docs/qa/<fecha>/ledger.json. Si la corrida pasa su tope, se ABORTA con un
 // error que dice cuánto gastó y en qué. Los mensajes de WhatsApp NO entran:
 // van por el cliente Meta FALSO del arnés y no cuestan dinero real.
 // ═══════════════════════════════════════════════════════════════════════════
