@@ -26,7 +26,7 @@ const PALABRAS_FUERTES: readonly RegExp[] = [
 ];
 const PALABRAS_LEVES: readonly RegExp[] = [
   /\b(molesto|molesta|queja|mal servicio|decepcionado|decepcionada|no es posible|no puede ser|otra vez|de nuevo)\b/,
-  /\b(urgente|urgentisimo|ya mismo|de inmediato|inmediatamente|cuanto antes|lo antes posible)\b/,
+  /\b(urgente|urgentisimo|ya mismo|de inmediato|inmediatamente|cuanto antes|lo antes posible|asap|a s a p)\b/,
   /\b(nadie (me )?(contesta|responde|atiende)|no me (contestan|responden|atienden)|sin respuesta|cuantas veces)\b/,
 ];
 
