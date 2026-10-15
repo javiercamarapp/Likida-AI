@@ -219,7 +219,11 @@ export async function avisarCierrePeaje(
   ahora: Date = new Date(),
   /** EL RELOJ DE LA VUELTA (epoch ms), cuando el llamador impone uno. Sin él el
    *  barrido corre completo, como siempre. */
-  opts: { venceEn?: number } = {},
+  opts: {
+    venceEn?: number;
+    /** Flotas con perfil (0770) que este aviso SALTA: el cierre de peaje con CFDI es un módulo en stand-by. */
+    excluirTenants?: ReadonlySet<string>;
+  } = {},
 ): Promise<ResumenCierrePeaje> {
   const hoy = hoyMx(ahora);
   const periodo = primerDiaDelMes(hoy);
@@ -259,6 +263,10 @@ export async function avisarCierrePeaje(
     );
   } catch (e) {
     throw new Error(`avisarCierrePeaje: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (opts.excluirTenants && opts.excluirTenants.size > 0) {
+    const saltar = opts.excluirTenants;
+    gastos = gastos.filter((g) => !saltar.has(String(g.tenant_id)));
   }
   if (gastos.length === 0) {
     return {
