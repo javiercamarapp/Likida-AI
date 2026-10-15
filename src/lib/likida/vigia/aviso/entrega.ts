@@ -27,6 +27,7 @@
 // Los datos y los envíos entran por `DepsEntrega` (puertos): la implementación con base y Meta la cablea T-A4-21. Módulo sin
 // base propia; el selector real de Meta es el valor por omisión de `enviar`.
 // ═══════════════════════════════════════════════════════════════════════════
+import { TZ_MX, diaEnZona } from '@/lib/formato';
 import { opcionesDeEnvio, PLANTILLA } from '@/lib/meta/plantillas_catalogo';
 import { enviarConFallback, type ResultadoEnvioConFallback } from '@/lib/meta/enviar_con_fallback';
 import { enviarAlCliente, type Enviador } from '../enviar';
@@ -38,7 +39,7 @@ import type { CanalAviso, EstadoAviso } from './repo';
 const PLANTILLA_NO_APROBADA = 132001;
 const POR_CONFIRMAR = 'por confirmar';
 const MAX_ERROR = 200;
-const ZONA_POR_DEFECTO = 'America/Mexico_City';
+const ZONA_POR_DEFECTO = TZ_MX;
 
 /** El aviso tal como lo necesita la entrega (una fila de `vigia_aviso`). */
 export interface AvisoParaEntrega {
@@ -113,7 +114,7 @@ function minutos(v: unknown): number | null {
 }
 
 function zonaValida(zona: string): boolean {
-  try { new Intl.DateTimeFormat('en-CA', { timeZone: zona }); return true; } catch { return false; }
+  try { diaEnZona(new Date(0), zona); return true; } catch { return false; }
 }
 
 /** Minutos desde la medianoche de `instante` en la zona. */

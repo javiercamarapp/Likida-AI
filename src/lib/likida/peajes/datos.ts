@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { hoyMx } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { traerTodo, traerPorIds, conteo, type RespuestaPg } from '../pg';
@@ -150,7 +151,7 @@ export async function bajaTag(
   tenantId: string,
   tagId: string,
   baja: { fecha: unknown; motivo?: unknown },
-  hoy: string = new Date().toISOString().slice(0, 10),
+  hoy: string = hoyMx(),
 ): Promise<ResultadoAltaTag> {
   const v = validarBajaTag(baja, hoy);
   if (!v.ok) return v;

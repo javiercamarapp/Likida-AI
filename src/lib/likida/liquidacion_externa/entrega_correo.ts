@@ -19,6 +19,7 @@
 //   · Los logs llevan el correo enmascarado (`a***@dominio`), nunca completo.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { hoyMx } from '@/lib/formato';
 import { createHash } from 'node:crypto';
 import { logger } from '@/lib/logger';
 import { enviarCorreo, type OpcionesEnvio, type ResultadoEnvio } from '@/lib/correo/enviar';
@@ -43,7 +44,6 @@ const PRESUPUESTO_MS = 40_000;
 const VIGENCIA_LLAVE_MS = 23 * 3_600_000;
 const ESPERA_CONFIG_MS = 15 * 60_000;
 const MARCA_AMBIGUO = 'ambiguo:';
-const TZ_MX = 'America/Mexico_City';
 const TIPO_XLSX_CORREO = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 // ── Puertos ─────────────────────────────────────────────────────────────────
@@ -152,14 +152,10 @@ export function armarCorreoDesglose(ctx: ContextoLiquidacion): { correo: Correo;
   };
 }
 
-const FORMATO_FECHA_MX = new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX, year: 'numeric', month: '2-digit', day: '2-digit' });
-
 /** El instante en que abre la ventana de envío de HOY (hora de México). `null` si no hay hora configurada o no es válida. */
 export function inicioVentanaHoy(ahora: Date, hora: number | null): Date | null {
   if (hora == null || !Number.isInteger(hora) || hora < 0 || hora > 23) return null;
-  const p: Record<string, string> = {};
-  for (const x of FORMATO_FECHA_MX.formatToParts(ahora)) p[x.type] = x.value;
-  const iso = aInstanteMx(`${p.year}-${p.month}-${p.day}`, `${String(hora).padStart(2, '0')}:00:00`);
+  const iso = aInstanteMx(hoyMx(ahora), `${String(hora).padStart(2, '0')}:00:00`);
   return iso ? new Date(iso) : null;
 }
 

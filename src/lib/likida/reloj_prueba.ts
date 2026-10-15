@@ -7,9 +7,10 @@
  *
  * Solo para pruebas: importa `vitest`. No lo importes desde código de producción.
  */
+import { TZ_MX } from '@/lib/formato';
 import { vi } from 'vitest';
 
-export const ZONA_CDMX = 'America/Mexico_City';
+export const ZONA_CDMX = TZ_MX;
 /** Quintana Roo: UTC−5 todo el año (sin horario de verano). */
 export const ZONA_CANCUN = 'America/Cancun';
 /** Nuevo Laredo / Matamoros: siguen el horario de verano de EE. UU. (tzdata las agrupa). */
@@ -18,7 +19,7 @@ export const ZONA_FRONTERA = 'America/Matamoros';
 const PATRON_LOCAL = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
 
 function partesEnZona(instanteMs: number, zona: string): number {
-  const f = new Intl.DateTimeFormat('en-CA', {
+  const f = new Intl.DateTimeFormat('en-US', {
     timeZone: zona, hourCycle: 'h23',
     year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
   });

@@ -1,4 +1,5 @@
 import type { ConfigConductor } from './config';
+import { TZ_MX } from '@/lib/formato';
 import type { ContactoTrafico } from './escalamiento';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -42,7 +43,7 @@ export const OPCIONES_PERFIL: ReadonlyArray<{ valor: 'esenciales' | 'completo'; 
  * La zona horaria de la flota es de solo lectura en la pantalla. Si no es la de México (la que se espera por omisión),
  * se avisa en palabras para que nadie lea la ventana horaria como hora de México sin serlo. `null` = es la esperada.
  */
-export function avisoZona(zona: string, esperada: string = 'America/Mexico_City'): string | null {
+export function avisoZona(zona: string, esperada: string = TZ_MX): string | null {
   if (zona === esperada) return null;
   return `La zona horaria de tu flota es ${zona}, distinta de la esperada (${esperada}). La ventana horaria y los días se leen en ${zona}. Si no es la correcta, avísanos: no se cambia desde esta pantalla.`;
 }

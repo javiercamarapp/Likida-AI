@@ -1,4 +1,5 @@
 import { diasEntre, sumarMeses } from './periodo';
+import { TZ_MX, hoyMx } from '@/lib/formato';
 import { PLAZO_RECLAMO_MESES } from './reclamos_seguimiento';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -22,7 +23,7 @@ import { PLAZO_RECLAMO_MESES } from './reclamos_seguimiento';
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Zona del cliente. México no usa horario de verano desde 2022 (franja fronteriza: decisión pendiente). */
-export const ZONA_PLAZO = 'America/Mexico_City';
+export const ZONA_PLAZO = TZ_MX;
 /** Días antes del vencimiento en los que se avisa (el umbral vigente es el más chico alcanzado). */
 export const UMBRALES_AVISO_DIAS: readonly number[] = [30, 7];
 
@@ -37,7 +38,6 @@ export type EstadoPlazo =
   | { estado: 'vencido'; fechaLimite: string; diasVencido: number };
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
-const FORMATO_MX = new Intl.DateTimeFormat('en-CA', { timeZone: ZONA_PLAZO, year: 'numeric', month: '2-digit', day: '2-digit' });
 
 function fechaValida(f: string): boolean {
   if (!RE_FECHA.test(f)) return false;
@@ -55,7 +55,7 @@ function fechaValida(f: string): boolean {
 export function fechaLocalMX(valor: string | Date): string {
   if (valor instanceof Date) {
     if (Number.isNaN(valor.getTime())) throw new Error('fecha_invalida');
-    return FORMATO_MX.format(valor);
+    return hoyMx(valor);
   }
   const t = valor.trim();
   if (fechaValida(t)) return t;
@@ -63,7 +63,7 @@ export function fechaLocalMX(valor: string | Date): string {
   if (conZona) {
     const d = new Date(t.replace(' ', 'T'));
     if (Number.isNaN(d.getTime())) throw new Error('fecha_invalida');
-    return FORMATO_MX.format(d);
+    return hoyMx(d);
   }
   const sinZona = /^(\d{4}-\d{2}-\d{2})[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.exec(t);
   if (sinZona && fechaValida(sinZona[1])) return sinZona[1];

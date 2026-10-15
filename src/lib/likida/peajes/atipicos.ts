@@ -1,4 +1,5 @@
 import { normalizarNombre } from './formatos';
+import { TZ_MX } from '@/lib/formato';
 import { haversineM } from './geo';
 import { resolverCaseta, type CasetaCatalogo } from './casetas';
 
@@ -83,7 +84,7 @@ const AVISO = 'Patrón inusual, no necesariamente error.';
 const HACER_BASE = 'Pregunta al operador; si es una salida de servicio, justifícala.';
 const MIN_MS = 60_000;
 const HORA_MS = 3_600_000;
-const ZONA = 'America/Mexico_City';
+const ZONA = TZ_MX;
 
 // ── Tiempo: reloj MX → instante real ─────────────────────────────────────────
 const fmtZona = new Intl.DateTimeFormat('en-US', {

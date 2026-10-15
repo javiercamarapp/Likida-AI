@@ -23,6 +23,7 @@
 // Logs: solo un resumen de contadores `vigia.aviso.generado` (T-A4-42). Nada del programa ni de los avisos (texto, cliente,
 // operador, teléfono, placas) sale a ningún registro.
 
+import { TZ_MX, diaEnZona } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 import { componerAviso, type ConfigCompositor } from './compositor';
 import {
@@ -90,14 +91,11 @@ function vacio(estado: ResultadoGeneracion['estado']): ResultadoGeneracion {
 
 /** AAAA-MM-DD de un instante en una zona IANA. */
 export function fechaLocal(instante: Date, zona: string): string {
-  const p = new Intl.DateTimeFormat('en-CA', { timeZone: zona, year: 'numeric', month: '2-digit', day: '2-digit' })
-    .formatToParts(instante);
-  const g = (t: string) => p.find((x) => x.type === t)?.value ?? '';
-  return `${g('year')}-${g('month')}-${g('day')}`;
+  return diaEnZona(instante, zona);
 }
 
 function zonaValida(zona: string): boolean {
-  try { new Intl.DateTimeFormat('en-CA', { timeZone: zona }); return true; } catch { return false; }
+  try { diaEnZona(new Date(0), zona); return true; } catch { return false; }
 }
 
 /** Traduce la configuración guardada a la de `evaluarListo`. Lo vacío o desconocido cae al valor por defecto. */
@@ -247,7 +245,7 @@ export async function generarAvisos(tenantId: string, ahora: Date, deps: DepsGen
   }
   if (!config || !config.habilitado) return vacio('apagado');
 
-  const zona = zonaValida(config.zona) ? config.zona : 'America/Mexico_City';
+  const zona = zonaValida(config.zona) ? config.zona : TZ_MX;
   const desde = fechaLocal(ahora, zona);
   const hasta = fechaLocal(new Date(ahora.getTime() + VENTANA_HORAS * 3_600_000), zona);
   const cfgListo = configListoDe(config);
