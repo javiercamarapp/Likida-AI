@@ -19672,3 +19672,49 @@ begin
   raise exception E'ESTADO_0701 contadores=% dia-mexico=% coherencia-rebota=% ventana-30=% guardia-en-dominio=% sin-grants-abiertos=%   (esperado t / t / t / t / t / t)',
     contadores, dia_mx, coherencia, ventana, guardia, grants;
 end $$;
+
+-- ── 352. Carta Porte, envíos al TMS: un envío activo por documento, reclamo sin repetir filas, alerta única y eventos en el dominio (mig. 0790) ──
+-- El índice parcial deja UN envío activo por documento (un terminal no estorba). `cp_envio_reclamar` pone lease con el reloj de la base y no devuelve dos veces la misma fila.
+-- `cp_envio_marcar_alerta` es un UPDATE condicional: el segundo intento da falso. El CHECK de tipos de evento admite el nuevo y sigue rechazando uno inventado. Sin grants abiertos.
+-- Esperado: ENVIO_TMS_0790 activo-unico=t terminal-no-estorba=t reclamo-sin-repetir=t alerta-unica=t evento-en-dominio=t sin-grants-abiertos=t
+do $$
+declare
+  ta uuid := gen_random_uuid(); d1 uuid := gen_random_uuid(); d2 uuid := gen_random_uuid(); e uuid;
+  activo_unico boolean := false; terminal_libre boolean := false; reclamo boolean := false; alerta boolean := false; evento boolean := false; grants boolean := true;
+  a uuid[]; b uuid[]; f text; r text;
+begin
+  insert into tenant (id, nombre) values (ta, 'ZZZ ENVIO TMS 0790');
+  insert into cp_documento (id, tenant_id, canal, formato, nombre_archivo, bytes, sha256) values
+    (d1, ta, 'manual', 'excel', 'v1.xlsx', 1, repeat('a', 64)), (d2, ta, 'manual', 'excel', 'v2.xlsx', 1, repeat('b', 64));
+  insert into cp_envio_tms (tenant_id, documento_id, version_doc, idempotency_key) values (ta, d1, 1, 'verif-0790-a-' || ta);
+  begin
+    insert into cp_envio_tms (tenant_id, documento_id, version_doc, idempotency_key) values (ta, d1, 1, 'verif-0790-b-' || ta);
+  exception when unique_violation then activo_unico := true; end;
+  update cp_envio_tms set estado = 'enviado', enviado_en = now() where tenant_id = ta and documento_id = d1;
+  insert into cp_envio_tms (tenant_id, documento_id, version_doc, idempotency_key) values (ta, d1, 2, 'verif-0790-c-' || ta);
+  terminal_libre := true;
+
+  insert into cp_envio_tms (tenant_id, documento_id, version_doc, idempotency_key) values (ta, d2, 1, 'verif-0790-d-' || ta);
+  select array_agg(x.id) into a from cp_envio_reclamar(200) x where x.tenant_id = ta;
+  select array_agg(x.id) into b from cp_envio_reclamar(200) x where x.tenant_id = ta;
+  reclamo := cardinality(a) = 2 and b is null;
+
+  select id into e from cp_envio_tms where tenant_id = ta and documento_id = d2;
+  alerta := cp_envio_marcar_alerta(ta, e) and not cp_envio_marcar_alerta(ta, e);
+
+  insert into cp_documento_evento (documento_id, tenant_id, tipo) values (d1, ta, 'envio_enviado');
+  begin
+    insert into cp_documento_evento (documento_id, tenant_id, tipo) values (d1, ta, 'inventado');
+  exception when check_violation then evento := true; end;
+
+  foreach f in array array['cp_envio_reclamar(integer,integer)', 'cp_envio_marcar_alerta(uuid,uuid)', 'cp_envio_liberar_alerta(uuid,uuid)'] loop
+    foreach r in array array['anon', 'authenticated', 'public'] loop
+      if has_function_privilege(r, 'public.' || f, 'execute') then grants := false; end if;
+    end loop;
+  end loop;
+  if has_table_privilege('anon', 'public.cp_envio_tms', 'select') or has_table_privilege('authenticated', 'public.cp_envio_tms', 'select')
+     or has_table_privilege('anon', 'public.cp_salida_config', 'select') or has_table_privilege('authenticated', 'public.cp_salida_config', 'select') then grants := false; end if;
+
+  raise exception E'ENVIO_TMS_0790 activo-unico=% terminal-no-estorba=% reclamo-sin-repetir=% alerta-unica=% evento-en-dominio=% sin-grants-abiertos=%   (esperado t / t / t / t / t / t)',
+    activo_unico, terminal_libre, reclamo, alerta, evento, grants;
+end $$;
