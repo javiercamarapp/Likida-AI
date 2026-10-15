@@ -45,7 +45,8 @@ describe('traducirErroresTms: celda/columna del TMS → campo de Likida', () => 
   });
 
   it('celdas fijas: la fila (o la coordenada) identifica el campo del documento', () => {
-    expect(ubicar({ hoja: 'RemintenteDestinatario', fila: 8, campo: 'Folio', detalle: 'x' }, LAYOUT_NORMAL, 1)).toEqual({ campo: 'folio_cliente', renglon: null });
+    expect(ubicar({ hoja: 'RemintenteDestinatario', fila: 6, campo: 'Folio', detalle: 'x' }, LAYOUT_NORMAL, 1)).toEqual({ campo: 'folio_cliente', renglon: null });
+    expect(ubicar({ hoja: 'RemintenteDestinatario', fila: 8, campo: 'Caja', detalle: 'x' }, LAYOUT_NORMAL, 1)).toEqual({ campo: 'caja_numero', renglon: null });
     expect(ubicar({ hoja: 'RemintenteDestinatario', campo: 'C12', detalle: 'x' }, LAYOUT_NORMAL, 1)).toEqual({ campo: 'origen_rfc', renglon: null });
     expect(ubicar({ hoja: 'RemintenteDestinatario', fila: 7, campo: 'Cliente', detalle: 'x' }, LAYOUT_NORMAL, 1)).toEqual({ campo: 'numero_cliente_interno', renglon: null });
   });

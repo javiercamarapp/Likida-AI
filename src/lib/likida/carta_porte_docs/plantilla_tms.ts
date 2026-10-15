@@ -25,7 +25,7 @@ export const MAX_DESTINOS = 4;
 export const MENSAJE_MAS_DE_4_DESTINOS = 'Más de 4 destinos: divide el embarque.';
 
 export interface ContextoPlantilla {
-  /** Número de cliente interno (C7). Si falta se usa `numero_cliente_interno` de la extracción. */
+  /** Número de cliente interno (B7). Si falta se usa `numero_cliente_interno` de la extracción. */
   clienteInterno: string | null;
   plantilla: 'normal' | 'nueva';
   /** `texto_km` («874,11 km», lo que trae la plantilla) o `numero`. Sin dato: `texto_km`. */
@@ -131,6 +131,8 @@ function construirTabla(sal: PlantillaConstruida, hoja: string, tb: TablaLayout,
   for (let i = 0; i < nFilas; i++) {
     const fila = tb.id === 'destinos' ? null : filas[i];
     for (const col of tb.columnas as ColumnaTabla[]) {
+      // Columna solo de encabezado (sin campo ni constante): no se escribe valor.
+      if (!col.campo && col.constante === undefined && !col.indice && !col.idDestino) continue;
       const celda = `${col.columna}${tb.primeraFila + i}`;
       if (col.indice) { poner(sal, hoja, celda, { ...col, constante: i + 1 }, ext, null, ctx); continue; }
       if (col.idDestino) { ponerIdDestino(sal, hoja, celda, col, totalDestinos, fila, ext, ctx); continue; }
@@ -171,10 +173,12 @@ export function construirPlantilla(ext: Extraccion, ctx: ContextoPlantilla, layo
   } else if (!layoutPuedeEnviarse(layout)) {
     sal.avisos.push('La plantilla «nueva» (varias razones sociales) está pendiente de especificación: úsala solo para revisar, no para enviar.');
   }
-  if (layout.provisional) sal.avisos.push('Layout provisional: forma de la muestra M2, pendiente de la plantilla en blanco del TMS (B-2).');
+  if (layout.provisional) sal.avisos.push('Layout provisional: pendiente de la plantilla en blanco del TMS (B-2).');
   for (const h of layout.hojas) {
     sal.hojas[h.hoja] ??= {};
-    for (const e of h.celdas as EntradaCelda[]) poner(sal, h.hoja, e.celda, e, ext, null, ctx);
+    // Las celdas fijas son del embarque (régimen, referencia, cliente, caja…); si alguna cae en un campo de mercancía
+    // (el régimen aduanero de la carga), se toma de la primera.
+    for (const e of h.celdas as EntradaCelda[]) poner(sal, h.hoja, e.celda, e, ext, ext.mercancias[0] ?? null, ctx);
     for (const tb of h.tablas) construirTabla(sal, h.hoja, tb, ext, ctx);
   }
   // Las coordenadas de `faltantes` van sin hoja; se distingue por campo. Deduplicar mismo par.
