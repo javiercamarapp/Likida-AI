@@ -5,6 +5,9 @@ de cada bitácora y lo **entrega por correo** en un Excel con valores (no fórmu
 usa hoy, al operador y a su coordinador, con copia a recursos humanos. El correo es sobrio y el archivo no lleva pie ni
 razón social de Likida: es un documento del cliente, y Likida solo lo entrega. La carpeta «Enviados» del buzón sirve de archivo.
 
+> Operación, estados, configuración por flota y **runbook de rollback** del desglose por correo: ver
+> [`liquidacion-desglose-correo.md`](liquidacion-desglose-correo.md).
+
 - Likida verifica al recibir que `total` sea la suma de los renglones (percepciones − deducciones, en centavos).
 - Vive en tablas propias (`liquidacion_externa`). **No se mezcla** con `liquidacion` (el cierre que cuadró el motor).
 - El modo de fotos no se toca.
