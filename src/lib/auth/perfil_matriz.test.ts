@@ -1,6 +1,7 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- pruebas que leen el árbol de FUENTE del propio repo; ninguna ruta ni patrón viene de entrada de usuario. */
 import { describe, it, expect } from 'vitest';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { enumerar, clasificar, construirMatriz, aMarkdown, NO_CLASIFICADO } from '../../../scripts/perfil/matriz-superficies.mjs';
 
@@ -131,5 +132,34 @@ describe('test del test: una superficie nueva sin clasificar SÍ se detecta', ()
   });
   it('una superficie desconocida', () => {
     expect(sinClasificar([{ superficie: 'otra-cosa', id: 'x' }])).toEqual(['x']);
+  });
+});
+
+describe('páginas sin llave propia que gatean con una ruta siempre permitida (T-PER-11)', () => {
+  const RUTA = '/dashboard/proximamente/[modulo]';
+  const arbol = (fuente: string) => {
+    const raiz = mkdtempSync(join(tmpdir(), 'matriz-'));
+    mkdirSync(join(raiz, 'src/app', RUTA), { recursive: true });
+    writeFileSync(join(raiz, 'src/app', RUTA, 'page.tsx'), fuente);
+    return raiz;
+  };
+  const veredicto = (raiz: string) =>
+    (clasificar([{ superficie: 'página', id: RUTA, ruta: RUTA }], raiz) as Fila[])[0];
+
+  it('con la compuerta de /dashboard en su fuente: permitida', () => {
+    const v = veredicto(arbol("await resolverTenantEfectivo('/dashboard', sp);"));
+    expect(v.veredicto).toBe('permitido');
+    expect(v.nota).toContain('gatea con /dashboard');
+  });
+  it('sin esa compuerta en su fuente la declaración no basta: NO CLASIFICADO', () => {
+    expect(veredicto(arbol("await resolverTenantEfectivo('/dashboard/vigia', sp);")).veredicto).toBe(NO_CLASIFICADO);
+    expect(veredicto(arbol('export default function P() { return null; }')).veredicto).toBe(NO_CLASIFICADO);
+  });
+  it('otra página dinámica sin llave sigue sin clasificar aunque use la misma compuerta', () => {
+    const raiz = arbol("await resolverTenantEfectivo('/dashboard', sp);");
+    const otra = '/dashboard/otra/[x]';
+    mkdirSync(join(raiz, 'src/app', otra), { recursive: true });
+    writeFileSync(join(raiz, 'src/app', otra, 'page.tsx'), "await resolverTenantEfectivo('/dashboard', sp);");
+    expect((clasificar([{ superficie: 'página', id: otra, ruta: otra }], raiz) as Fila[])[0].veredicto).toBe(NO_CLASIFICADO);
   });
 });
