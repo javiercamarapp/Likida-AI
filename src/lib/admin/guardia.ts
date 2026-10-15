@@ -119,8 +119,8 @@ export async function clasificacionDeGuardia(ahoraMs: number): Promise<Clasifica
 // ═══════════════════════════════════════════════════════════════════════════
 // LA DECISIÓN DE AVISAR (E1-A, P0-8) — la mitad PURA del vigía de producción.
 //
-// Antes vivía dentro de `scripts/mejora-diaria/vigia-produccion.mts` (launchd,
-// la Mac de Javier: una Mac apagada o dormida era una guardia ausente, punto
+// Antes vivía dentro de un script local (launchd, en una Mac:
+// una Mac apagada o dormida era una guardia ausente, punto
 // único de falla). Ahora la misma decisión la comparten el cron del servidor
 // (`/api/cron/guardia`) y ese script, que queda como herramienta manual. Pura:
 // recibe la clasificación y lo ya visto, devuelve qué avisar y el estado nuevo;
