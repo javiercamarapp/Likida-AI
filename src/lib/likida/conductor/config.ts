@@ -1,4 +1,5 @@
-import { TZ_MX, hoyMx } from '@/lib/formato';
+import { TZ_MX, diaEnZona } from '@/lib/formato';
+import { zonaValida } from '../conectores/tabla_propia/tiempo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CONFIGURACIÓN POR FLOTA DEL AGENTE 5 (agente_conductor_config, 0380).
@@ -55,6 +56,12 @@ export interface ConfigConductor {
   detectarHitosGps: boolean;
   /** 0635: si el GPS de un tractor en tránsito queda obsoleto o detenido, preguntarle al chofer «¿sigues bien?» (2 avisos) y luego al jefe de tráfico. Apagado: manda mensajes a personas. */
   avisarSenalVida: boolean;
+  /**
+   * Zona IANA de la flota (`tenant.zona_horaria`, NO una columna de `agente_conductor_config`): la ventana
+   * de insistencia, el día del tope diario y la hora que se le lee al chofer son de SU zona, no del servidor.
+   * Sin zona o con una inválida = la de México (`TZ_MX`): el comportamiento de siempre.
+   */
+  zonaHoraria: string;
 }
 
 export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze({
@@ -90,6 +97,7 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   margenAcercamientoM: 5000,
   detectarHitosGps: true,
   avisarSenalVida: false,
+  zonaHoraria: TZ_MX,
 });
 
 /** El tope de aplazamientos por hito: pasado esto «voy con retraso» ya no calla al agente. */
@@ -209,37 +217,46 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       margenAcercamientoM,
       detectarHitosGps: Boolean(b.detectarHitosGps),
       avisarSenalVida: Boolean(b.avisarSenalVida),
+      zonaHoraria: zonaOCdmx(b.zonaHoraria),
     },
   };
 }
 
+/** La zona si es un nombre IANA que el runtime conoce; si no, la de México (nunca truena). */
+export function zonaOCdmx(zona: unknown): string {
+  return typeof zona === 'string' && zonaValida(zona) ? zona : TZ_MX;
+}
+
 const DIA_ISO: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
 
-/** Hora (0–23) y día ISO en México: la ventana es del chofer, no del servidor. */
-export function horaYDiaMx(ahora: Date): { hora: number; dia: number } {
+/** Hora (0–23) y día ISO en la zona de la flota (por omisión México): la ventana es del chofer, no del servidor. */
+export function horaYDiaMx(ahora: Date, zona: string = TZ_MX): { hora: number; dia: number } {
   const partes = new Intl.DateTimeFormat('en-US', {
-    timeZone: TZ_MX, hour12: false, hour: 'numeric', weekday: 'short',
+    timeZone: zonaOCdmx(zona), hour12: false, hour: 'numeric', weekday: 'short',
   }).formatToParts(ahora);
   const hora = Number(partes.find((p) => p.type === 'hour')?.value ?? '-1') % 24;
   const dia = DIA_ISO[partes.find((p) => p.type === 'weekday')?.value ?? ''] ?? 0;
   return { hora, dia };
 }
 
-/** ¿AHORA MISMO se puede insistirle al chofer? Fuera de la ventana: nunca. */
-export function dentroDeVentana(config: Pick<ConfigConductor, 'horaInicio' | 'horaFin' | 'diasSemana'>, ahora: Date): boolean {
-  const { hora, dia } = horaYDiaMx(ahora);
+/** ¿AHORA MISMO se puede insistirle al chofer? Fuera de la ventana: nunca. La hora se lee en `config.zonaHoraria`. */
+export function dentroDeVentana(
+  config: Pick<ConfigConductor, 'horaInicio' | 'horaFin' | 'diasSemana'> & { zonaHoraria?: string },
+  ahora: Date,
+): boolean {
+  const { hora, dia } = horaYDiaMx(ahora, config.zonaHoraria);
   if (hora < 0 || dia === 0) return false;
   return config.diasSemana.includes(dia) && hora >= config.horaInicio && hora < config.horaFin;
 }
 
-/** El instante (UTC) en que empieza el día calendario de México de `ahora`. */
-export function inicioDiaMx(ahora: Date): Date {
-  const fecha = hoyMx(ahora);
-  // México no tiene horario de verano desde 2022 (UTC-6 fijo); se calcula con la
-  // diferencia real del instante para no depender de ello.
+/** El instante (UTC) en que empieza el día calendario de la zona de la flota (por omisión México) de `ahora`. */
+export function inicioDiaMx(ahora: Date, zona: string = TZ_MX): Date {
+  const z = zonaOCdmx(zona);
+  const fecha = diaEnZona(ahora, z);
+  // Se calcula con la diferencia REAL del instante (la zona puede tener horario de verano).
   const mediaNoche = new Date(`${fecha}T00:00:00Z`);
   const partes = new Intl.DateTimeFormat('en-US', {
-    timeZone: TZ_MX, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    timeZone: z, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
   }).formatToParts(mediaNoche);
   const g = (t: string) => Number(partes.find((p) => p.type === t)?.value ?? '0');
   const comoLocal = Date.UTC(g('year'), g('month') - 1, g('day'), g('hour') % 24, g('minute'), g('second'));

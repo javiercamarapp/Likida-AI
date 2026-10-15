@@ -215,3 +215,32 @@ describe('textoTiempo', () => {
     expect(textoTiempo(-5)).toBe('0 minutos');
   });
 });
+
+// T-A5-01: el planificador respeta la zona de la flota. Ventana 9–13 = valores de PRUEBA.
+describe('planificar con la zona de la flota', () => {
+  const v = viajeBase({ citaOrigenEn: '2026-10-30T10:00:00Z' });
+  const en = (zonaHoraria: string, iso: string) =>
+    planificar({ viaje: v, hitos: hitos(), config: cfg({ horaInicio: 9, horaFin: 13, zonaHoraria }), enviadosHoyChofer: 0, avisos: [], ahora: new Date(iso) });
+
+  it('el mismo instante cae dentro para una flota y fuera para otra (desfase de 1 h en la frontera)', () => {
+    const cdmx = en('America/Mexico_City', '2026-10-30T14:30:00Z');
+    const matamoros = en('America/Matamoros', '2026-10-30T14:30:00Z');
+    expect(cdmx).toMatchObject({ tipo: 'nada', motivo: 'fuera_de_ventana' });
+    expect(matamoros.tipo).not.toBe('nada');
+  });
+
+  it('dentro en ambas: ambas actúan', () => {
+    expect(en('America/Mexico_City', '2026-10-30T15:30:00Z').tipo).not.toBe('nada');
+    expect(en('America/Matamoros', '2026-10-30T15:30:00Z').tipo).not.toBe('nada');
+  });
+
+  it('tras el cambio de horario ambas quedan fuera a las 08:30 locales', () => {
+    expect(en('America/Mexico_City', '2026-11-02T14:30:00Z')).toMatchObject({ motivo: 'fuera_de_ventana' });
+    expect(en('America/Matamoros', '2026-11-02T14:30:00Z')).toMatchObject({ motivo: 'fuera_de_ventana' });
+  });
+
+  it('una zona inválida cae a México', () => {
+    expect(en('No/Existe', '2026-10-30T14:30:00Z')).toMatchObject({ motivo: 'fuera_de_ventana' });
+    expect(en('No/Existe', '2026-10-30T15:30:00Z').tipo).not.toBe('nada');
+  });
+});
