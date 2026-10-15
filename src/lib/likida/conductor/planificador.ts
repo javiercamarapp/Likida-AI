@@ -34,7 +34,9 @@ export type MotivoNada =
   | 'viaje_no_aplica' | 'flota_apagada' | 'completo' | 'sin_ancla' | 'no_toca'
   | 'espera' | 'fuera_de_ventana' | 'tope_diario' | 'atendido' | 'ya_escalado'
   /** T-A5-05: viaje de importación, hito de llegada a carga y el archivo no trajo cita: no hay de dónde colgar el aviso. */
-  | 'sin_cita_importada';
+  | 'sin_cita_importada'
+  /** T-A5-36: la compuerta «unidad detenida» no deja escribirle al chofer ahora (en marcha, sin GPS reciente, muestras ralas…). No es un intento. */
+  | 'compuerta_movimiento';
 
 export type AccionPlan =
   | { tipo: 'chofer'; hito: HitoFila; clase: 'solicitud' | 'recordatorio'; nivel: number; minutosPendiente: number; ancla: Date }
