@@ -70,3 +70,48 @@ describe('Agente de Carta Porte: «Cómo mandarme documentos»', () => {
     expect(pintar(BUZON)).toContain('catálogo del cliente');
   });
 });
+
+// ── T-A3-37 · insights ──────────────────────────────────────────────────────
+import { calcularInsights } from '@/lib/likida/carta_porte_docs/metricas';
+
+describe('Agente de Carta Porte: «Cómo le va al agente»', () => {
+  const vacio = calcularInsights({ docs: [], correcciones: new Map(), camposCorregidos: new Map(), causasRechazo: {}, envios: [], ahora: new Date('2026-10-15T12:00:00Z') });
+
+  it('sin insights pedidos no pinta el bloque', () => {
+    expect(pintar(BUZON)).not.toContain('Cómo le va al agente');
+  });
+
+  it('estado vacío correcto: dice que no hay qué medir y NO pinta un 0 % como medición', () => {
+    const html = renderToStaticMarkup(<VistaAgenteCartaPorte datos={null} insights={vacio} />);
+    expect(html).toContain('Cómo le va al agente');
+    expect(html).toContain('Todavía no hay resultados que medir');
+    expect(html).not.toContain('0 %');
+    expect(html).not.toContain('Aprobados sin tocar');
+  });
+
+  it('si la lectura falló lo dice, no finge «sin datos»', () => {
+    const html = renderToStaticMarkup(<VistaAgenteCartaPorte datos={null} insights="no_leido" />);
+    expect(html).toContain('No se pudieron leer los resultados del agente');
+    expect(html).not.toContain('Todavía no hay resultados que medir');
+  });
+
+  it('con datos muestra % sin tocar, tarjeta «qué pasó / qué significa / qué hacer» y el nombre del cliente', () => {
+    const base = { tenantId: 't', canal: 'manual', formato: 'excel', nombreArchivo: 'x', mime: null, bytes: 1, sha256: 'a'.repeat(64), storageRuta: null, version: 1, perfilId: null, perfilVersion: null, remitente: null, asunto: null,
+      remitenteReconocido: null, textoExtracto: null, riesgoInyeccion: false, extraccion: null, validacion: null, confianzaMin: null, nivelModelo: 1, modelo: null, tokensIn: 0, tokensOut: 0, costoUsd: 0, viajeId: null,
+      procesandoHasta: null, intentos: 1, ultimoError: null, abiertoEn: null, revisadoPor: null, aprobadoPor: null, rechazoMotivo: null, tiempoRevisionSeg: null, exportadoEn: null, retenerHasta: '', purgadoEn: null, createdAt: '', updatedAt: '' } as const;
+    const docs = [1, 2].map((n) => ({ ...base, id: `d${n}`, estado: 'aprobado', clienteId: 'c1', aprobadoEn: '2026-10-14T00:00:00Z' })) as never[];
+    const i = calcularInsights({
+      docs, correcciones: new Map(), camposCorregidos: new Map(), causasRechazo: {}, ahora: new Date('2026-10-15T12:00:00Z'), nombresCliente: new Map([['c1', 'Cliente Ejemplo']]),
+      envios: [
+        { documentoId: 'd1', estado: 'pendiente_reque', createdAt: '2026-10-14T00:00:00Z', enviadoEn: null, causaPendiente: 'El requerimiento no existe en el TMS.' },
+        { documentoId: 'd2', estado: 'pendiente_reque', createdAt: '2026-10-14T01:00:00Z', enviadoEn: null, causaPendiente: 'El requerimiento no existe en el TMS.' },
+      ],
+    });
+    const html = renderToStaticMarkup(<VistaAgenteCartaPorte datos={null} insights={i} nombresCliente={{ c1: 'Cliente Ejemplo' }} />);
+    expect(html).toContain('100 %');
+    expect(html).toContain('2 documentos de Cliente Ejemplo esperan requerimiento hace más de 24 h');
+    expect(html).toContain('Qué significa');
+    expect(html).toContain('Qué hacer');
+    expect(html).toContain('Calidad por formato');
+  });
+});

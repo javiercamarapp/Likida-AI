@@ -23,6 +23,7 @@ import { DatoInvalido } from '../errores';
 import { CAMPOS_DOC, CAMPOS_MERCANCIA, MAX_MERCANCIAS, campoDoc, campoMercancia, etiquetaCampo, type CampoValor, type Extraccion } from './campos';
 import { detectarFormato, prepararContenido, type ContenidoDoc } from './contenido';
 import { completarDerivados } from './derivar';
+import { esCausaRechazo } from './metricas';
 import { normalizarValor } from './normalizar';
 import { aprender, claveDePerfil, dominioDe, firmaDe } from './perfiles';
 import { MENSAJE_FUNCION_NO_DISPONIBLE, flotaBajoPerfil, prepararEnvioTms, type ResultadoEnvio } from './envio';
@@ -319,14 +320,17 @@ export async function crearViajeDeDocumento(
 }
 
 export async function rechazarDocumento(
-  tenantId: string, id: string, versionVista: number, motivo: string, actorId: string | null, ahora = new Date(),
+  tenantId: string, id: string, versionVista: number, motivo: string, actorId: string | null, ahora = new Date(), causaElegida: string | null = null,
 ): Promise<DocumentoFila> {
+  // T-A3-37: la causa clasificada que elige la persona manda sobre la sugerida; vacía = se usa la sugerida (si la hay).
+  const elegida = causaElegida?.trim() || null;
+  if (elegida !== null && !esCausaRechazo(elegida)) throw new DatoInvalido('Elige una causa de rechazo de la lista.');
   const m = motivo.replace(/\s+/g, ' ').trim();
   if (m.length < 3 || m.length > 500) throw new DatoInvalido('Escribe el motivo del rechazo (entre 3 y 500 caracteres).');
   const d = await cargar(tenantId, id);
   if (d.estado !== 'por_revisar' && d.estado !== 'fallido') throw new DatoInvalido(`Un documento «${d.estado}» no se rechaza.`);
   if (d.version !== versionVista) throw new ConflictoDeVersion();
-  const causa = causaSugeridaDeRechazo(d);
+  const causa = elegida ?? causaSugeridaDeRechazo(d);
   const r = await repo.actualizarDocumento(tenantId, id, versionVista, {
     estado: 'rechazado', rechazo_motivo: m, revisado_por: actorId, retener_hasta: new Date(ahora.getTime() + DIAS_RETENCION.cerrado * 86_400_000).toISOString(),
     ...(causa ? { rechazo_causa: causa } : {}),

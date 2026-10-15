@@ -1051,3 +1051,52 @@ export async function estadoEnvioPorDocumento(tenantId: string, documentoIds: st
   }
   return salida;
 }
+
+// ── Agregados para los insights del agente (T-A3-37) ────────────────────────
+// Solo conteos y nombres de campo: jamás el valor antes/después de una corrección ni el contenido de un documento.
+
+/** Cuántas veces se corrigió cada CAMPO (solo el nombre) en los documentos dados. */
+export async function contarCorreccionesPorCampo(tenantId: string, ids: string[]): Promise<Map<string, number>> {
+  const cuenta = new Map<string, number>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const r = await acotada(supabaseAdmin().from('cp_correccion').select('campo')
+      .eq('tenant_id', tenantId).in('documento_id', ids.slice(i, i + 200)).order('id').limit(50_000), 'cpdocs.correcciones_campo');
+    for (const f of (exigir(r, 'cpdocs.correcciones_campo') ?? []) as unknown as Fila[]) cuenta.set(String(f.campo), (cuenta.get(String(f.campo)) ?? 0) + 1);
+  }
+  return cuenta;
+}
+
+/**
+ * Cuántos documentos RECHAZADOS hay por `rechazo_causa` desde `desde` (la clave `''` = rechazado sin causa clasificada).
+ * `null` = la columna (0791) todavía no existe en esta base: «no se puede medir», no «ningún rechazo».
+ */
+export async function contarCausasDeRechazo(tenantId: string, desde: Date): Promise<Record<string, number> | null> {
+  const r = await acotada(supabaseAdmin().from('cp_documento').select('rechazo_causa')
+    .eq('tenant_id', tenantId).eq('estado', 'rechazado').gte('created_at', desde.toISOString()).order('id').limit(5000), 'cpdocs.causas_rechazo');
+  if (r.error) {
+    if ((r.error as { code?: string }).code === '42703' || /rechazo_causa/i.test(r.error.message ?? '')) return null;
+    throw new Error(`cpdocs.causas_rechazo: ${r.error.message}`);
+  }
+  const cuenta: Record<string, number> = {};
+  for (const f of (r.data ?? []) as unknown as Fila[]) {
+    const k = f.rechazo_causa === null || f.rechazo_causa === undefined ? '' : String(f.rechazo_causa);
+    cuenta[k] = (cuenta[k] ?? 0) + 1;
+  }
+  return cuenta;
+}
+
+/** Lo mínimo de un envío para medir su estado: nunca el contenido ni los errores. */
+export interface EnvioParaInsights {
+  documentoId: string; estado: EstadoEnvioTms; createdAt: string; enviadoEn: string | null; causaPendiente: string | null;
+}
+
+/** Los envíos creados desde `desde` (de todos los estados). */
+export async function enviosParaInsights(tenantId: string, desde: Date): Promise<EnvioParaInsights[]> {
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').select('documento_id, estado, created_at, enviado_en, causa_pendiente')
+    .eq('tenant_id', tenantId).gte('created_at', desde.toISOString()).order('created_at', { ascending: false }).limit(5000), 'cpdocs.envios_insights');
+  return ((exigir(r, 'cpdocs.envios_insights') ?? []) as unknown as Fila[]).map((f) => ({
+    documentoId: String(f.documento_id), estado: f.estado as EstadoEnvioTms, createdAt: String(f.created_at),
+    enviadoEn: f.enviado_en === null || f.enviado_en === undefined ? null : String(f.enviado_en),
+    causaPendiente: f.causa_pendiente === null || f.causa_pendiente === undefined ? null : String(f.causa_pendiente),
+  }));
+}

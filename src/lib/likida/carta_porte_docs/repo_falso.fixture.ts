@@ -590,4 +590,22 @@ export const api: typeof Real = {
     }
     return salida;
   },
+  // T-A3-37: agregados de los insights (misma semántica que la real: solo conteos y nombres de campo).
+  async contarCorreccionesPorCampo(tenantId, ids) {
+    const m = new Map<string, number>();
+    for (const c of estado.correcciones) if (c.tenantId === tenantId && ids.includes(c.documentoId)) m.set(c.campo, (m.get(c.campo) ?? 0) + 1);
+    return m;
+  },
+  async contarCausasDeRechazo(tenantId, desde) {
+    const m: Record<string, number> = {};
+    for (const d of estado.docs.values()) {
+      if (d.tenantId !== tenantId || d.estado !== 'rechazado' || Date.parse(d.createdAt) < desde.getTime()) continue;
+      const k = d.rechazoCausa ?? '';
+      m[k] = (m[k] ?? 0) + 1;
+    }
+    return m;
+  },
+  async enviosParaInsights(tenantId) {
+    return estado.envios.filter((e) => e.tenantId === tenantId).map((e) => ({ documentoId: e.documentoId, estado: e.estado, createdAt: new Date().toISOString(), enviadoEn: null, causaPendiente: null }));
+  },
 };

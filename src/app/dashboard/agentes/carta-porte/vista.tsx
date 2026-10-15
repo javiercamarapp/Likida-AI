@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ScrollText, TriangleAlert, Sparkles, Mail, MessageCircle, LayoutDashboard } from 'lucide-react';
 import type { EstadoCartaPorte } from '@/lib/likida/carta_porte_datos';
 import { numero } from '@/lib/formato';
+import type { InsightsAgente, CalidadGrupo, TarjetaInsight } from '@/lib/likida/carta_porte_docs/metricas';
 import { BarraPagina } from '../../resumen-visual';
 import { EstadoError, EstadoVacio } from '@/app/admin/ui/kit';
 import { DireccionBuzon } from '../proveedores/controles';
@@ -24,12 +25,17 @@ export interface BuzonCartaPorteVista { direccion: string | null; activo: boolea
  */
 export const FRASE_SIN_GRUPOS = 'Los grupos de WhatsApp no se pueden leer: pide a tus clientes que escriban al correo o reenvíalos tú.';
 
-export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzon = null }: {
+export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzon = null, insights, nombresCliente = {}, diasVentana = 30 }: {
   datos: EstadoCartaPorte | null;
   sufijo?: string;
   notificaciones?: React.ReactNode;
   /** `null` = la flota aún no activa su buzón; `'no_leido'` = la lectura falló (no se finge «sin buzón»). */
   buzon?: BuzonCartaPorteVista | null | 'no_leido';
+  /** T-A3-37. `undefined` = no se pide el bloque; `'no_leido'` = la lectura falló (no se finge «sin datos»). */
+  insights?: InsightsAgente | 'no_leido';
+  /** id de cliente → nombre, solo para rotular. */
+  nombresCliente?: Record<string, string>;
+  diasVentana?: number;
 }) {
   const conteo = (n: 'si' | 'no' | 'falta_declarar') =>
     datos === null ? null : datos.viajes.filter((v) => v.decision.necesita === n).length;
@@ -100,6 +106,8 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
           )}
 
           <ComoMandarDocumentos buzon={buzon} sufijo={sufijo} />
+
+          {insights !== undefined && <InsightsDelAgente insights={insights} nombresCliente={nombresCliente} diasVentana={diasVentana} />}
 
           <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
             Lo que el agente aprende de cada cliente —productos, remitentes, destinatarios y su número interno— vive en el{' '}
@@ -218,6 +226,97 @@ function ComoMandarDocumentos({ buzon, sufijo }: { buzon: BuzonCartaPorteVista |
         </div>
       </div>
       <p className="text-[12px] font-medium">{FRASE_SIN_GRUPOS}</p>
+    </section>
+  );
+}
+
+const pctTxt = (p: number | null): string => (p === null ? '—' : `${p} %`);
+const COLOR_TONO: Record<TarjetaInsight['tono'], string> = { bad: 'var(--bad)', warn: 'var(--warn)', info: 'var(--muted)' };
+
+function TarjetaQuePaso({ t }: { t: TarjetaInsight }) {
+  return (
+    <div className="card p-3.5 text-[12.5px] space-y-1" style={{ borderLeft: `3px solid ${COLOR_TONO[t.tono]}` }}>
+      <div className="font-medium">{t.quePaso}</div>
+      <div style={{ color: 'var(--muted)' }}><span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Qué significa </span>{t.queSignifica}</div>
+      <div><span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Qué hacer </span>{t.queHacer}</div>
+    </div>
+  );
+}
+
+function TablaCalidad({ titulo, filas, rotular }: { titulo: string; filas: CalidadGrupo[]; rotular: (clave: string) => string }) {
+  return (
+    <div className="card p-4">
+      <div className="etiqueta-mono text-[10px] uppercase mb-2" style={{ color: 'var(--faint)' }}>{titulo}</div>
+      {filas.length === 0 ? <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Sin documentos aprobados todavía.</p> : (
+        <table className="w-full text-[12.5px]">
+          <thead><tr style={{ color: 'var(--faint)' }}><th className="text-left font-normal">Grupo</th><th className="text-right font-normal">Aprobados</th><th className="text-right font-normal">Sin tocar</th></tr></thead>
+          <tbody>
+            {filas.map((g) => (
+              <tr key={g.clave}><td>{rotular(g.clave)}</td><td className="text-right cifra-mono">{numero(g.documentos)}</td><td className="text-right cifra-mono">{pctTxt(g.pctSinTocar)} ({numero(g.sinTocar)})</td></tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Cómo le va al agente (T-A3-37): % sin tocar, causas de rechazo, calidad por formato y cliente y estado de los
+ * envíos. Solo conteos: ningún valor de un documento. Sin base, dice «—», nunca un 0 % que parezca medición.
+ */
+function InsightsDelAgente({ insights, nombresCliente, diasVentana }: { insights: InsightsAgente | 'no_leido'; nombresCliente: Record<string, string>; diasVentana: number }) {
+  if (insights === 'no_leido') {
+    return <section className="card p-4"><EstadoError mensaje="No se pudieron leer los resultados del agente. Vuelve a intentar en un momento." /></section>;
+  }
+  const i = insights;
+  const nombre = (c: string) => (c === 'sin_cliente' ? 'Sin cliente asignado' : nombresCliente[c] ?? 'Cliente sin nombre');
+  const e = i.envios;
+  const hayAlgo = i.aprobados > 0 || e.enviados + e.rechazadosTms + e.pendientesReque + e.subidosAMano > 0 || (i.causasRechazo?.length ?? 0) > 0;
+  return (
+    <section className="space-y-3" aria-label="Cómo le va al agente">
+      <h2 className="font-display text-[15px] font-semibold">Cómo le va al agente <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>· últimos {diasVentana} días</span></h2>
+      {!hayAlgo ? (
+        <EstadoVacio>Todavía no hay resultados que medir. Cuando se aprueben documentos y salgan envíos, aquí verás cuántos pasaron sin tocar, por qué se rechazaron y qué falta enviar.</EstadoVacio>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="card p-4">
+              <div className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Aprobados sin tocar</div>
+              <div className="cifra-mono text-[22px] font-semibold">{pctTxt(i.pctSinTocar)}</div>
+              <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{i.aprobados === 0 ? 'Aún no hay aprobados' : `de ${numero(i.aprobados)} aprobados`}</div>
+            </div>
+            <Tarjeta rotulo="Enviados al sistema del cliente" valor={e.enviados} />
+            <Tarjeta rotulo="Esperan requerimiento" valor={e.pendientesReque} tono="var(--warn)" />
+            <Tarjeta rotulo="Rechazados por el sistema del cliente" valor={e.rechazadosTms} tono="var(--bad)" />
+          </div>
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+            Tiempo típico de aprobado a enviado: {e.medianaAprobadoAEnviadoMin === null ? '— (aún no hay envíos medibles)' : `${e.medianaAprobadoAEnviadoMin} min (mediana)`}.
+            {e.pendienteMasViejoHoras !== null && ` El que más espera lleva ${e.pendienteMasViejoHoras} h.`}
+          </p>
+          {i.tarjetas.length > 0 && <div className="grid md:grid-cols-2 gap-3">{i.tarjetas.map((t) => <TarjetaQuePaso key={t.id} t={t} />)}</div>}
+          <div className="grid md:grid-cols-2 gap-3">
+            <TablaCalidad titulo="Calidad por formato" filas={i.porFormato} rotular={(c) => c} />
+            <TablaCalidad titulo="Calidad por cliente" filas={i.porCliente} rotular={nombre} />
+          </div>
+          <div className="grid md:grid-cols-2 gap-3 text-[12.5px]">
+            <div className="card p-4">
+              <div className="etiqueta-mono text-[10px] uppercase mb-2" style={{ color: 'var(--faint)' }}>Por qué se rechazan</div>
+              {i.causasRechazo === null ? <p style={{ color: 'var(--muted)' }}>No disponible todavía en esta base.</p>
+                : i.causasRechazo.length === 0 && i.rechazadosSinCausa === 0 ? <p style={{ color: 'var(--muted)' }}>No hubo rechazos.</p>
+                : <ul className="space-y-0.5">
+                    {i.causasRechazo.map((c) => <li key={c.causa}>{c.rotulo}: <span className="cifra-mono">{numero(c.documentos)}</span></li>)}
+                    {(i.rechazadosSinCausa ?? 0) > 0 && <li>Sin clasificar: <span className="cifra-mono">{numero(i.rechazadosSinCausa ?? 0)}</span></li>}
+                  </ul>}
+            </div>
+            <div className="card p-4">
+              <div className="etiqueta-mono text-[10px] uppercase mb-2" style={{ color: 'var(--faint)' }}>Lo que más se corrige</div>
+              {i.topCamposCorregidos.length === 0 ? <p style={{ color: 'var(--muted)' }}>Nadie ha corregido campos en este periodo.</p>
+                : <ol className="space-y-0.5 list-decimal pl-4">{i.topCamposCorregidos.map((c) => <li key={c.campo}>{c.campo}: <span className="cifra-mono">{numero(c.correcciones)}</span> {c.correcciones === 1 ? 'vez' : 'veces'}</li>)}</ol>}
+            </div>
+          </div>
+        </>
+      )}
     </section>
   );
 }

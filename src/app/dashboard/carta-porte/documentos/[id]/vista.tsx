@@ -3,6 +3,7 @@ import { ArrowLeft, BookOpen, Check, Download, CircleHelp, FileSearch, Send, Shi
 import { fechaHoraMx, numero, pesoArchivo, usd4 } from '@/lib/formato';
 import { ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO, ROTULO_ORIGEN, ROTULO_ORIGEN_HALLAZGO, type FilaCampo, type Revision } from '@/lib/likida/carta_porte_docs/presentacion';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
+import { CAUSAS_RECHAZO, type CausaRechazo } from '@/lib/likida/carta_porte_docs/metricas';
 import { propuestaVacia, type PropuestaCatalogo } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
 import { FRASE_ENVIADO_SIMULADO, ROTULO_SIMULADO } from '@/lib/likida/carta_porte_docs/salida_simulada';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../forma_accion';
@@ -272,6 +273,13 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                     <div className="grow min-w-[220px]">
                       <label htmlFor="cp-rechazo" className={ETIQUETA}>Rechazar el documento (motivo)</label>
                       <input id="cp-rechazo" name="motivo" maxLength={500} placeholder="No es un embarque nuestro / está duplicado…" className={CAMPO} style={{ background: 'var(--surface)' }} />
+                    </div>
+                    <div>
+                      <label htmlFor="cp-rechazo-causa" className={ETIQUETA}>Causa</label>
+                      <select id="cp-rechazo-causa" name="causa" defaultValue="" className={CAMPO} style={{ background: 'var(--surface)' }}>
+                        <option value="">Sin clasificar</option>
+                        {(Object.keys(CAUSAS_RECHAZO) as CausaRechazo[]).filter((c) => c !== 'tms_rechazo').map((c) => <option key={c} value={c}>{CAUSAS_RECHAZO[c]}</option>)}
+                      </select>
                     </div>
                     <BotonEnvio variante="peligro" intencion="rechazar" etiqueta="Rechazar" pendiente="…" />
                   </div>
