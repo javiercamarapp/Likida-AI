@@ -298,7 +298,7 @@ describe('el tablero de hitos — estados vacíos y avisos en lenguaje llano (T-
       episodios: episodiosVista([{ id: 'e1', viajeId: 'v1', folio: 'F-77', operador: 'Juan Pérez', motivo: 'gps_detenido', abiertoEn: hace(90), nivelEnviado: 2, aviso1En: hace(89), aviso2En: hace(69), escaladoEn: null, cerradoEn: null, cierreMotivo: null, respuesta: null }]),
     });
     // Texto visible = fuera de etiquetas (los atributos name/value de formularios no se leen como texto).
-    const visible = html.replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<[^>]*>/g, ' ');
+    const visible = html.replace(/<script[\s\S]*?<\/script\s*>/gi, ' ').replace(/<[^>]*>/g, ' ');
     const internos = [/aceptado_en/, /aceptado_origen/, /[a-z]{2,}_[a-z_]{2,}/, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /\bundefined\b/, /\bnull\b/, /\bNaN\b/, /\[object/];
     for (const re of internos) expect(visible, String(re)).not.toMatch(re);
     // El uuid tampoco se cuela en la etiqueta accesible.
