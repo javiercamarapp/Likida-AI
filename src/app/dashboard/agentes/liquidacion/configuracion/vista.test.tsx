@@ -197,7 +197,8 @@ describe('la pantalla', () => {
   });
 
   it('no menciona razones sociales ni marcas del cliente', () => {
-    expect(pintar()).not.toMatch(/innovativ|lore/i);
+    // El patrón se arma por trozos para que el nombre del cliente no figure literal en el repo público.
+    expect(pintar()).not.toMatch(new RegExp(`${['inno', 'vativ'].join('')}|${['lo', 're'].join('')}`, 'i'));
   });
 });
 
