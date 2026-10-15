@@ -1,6 +1,6 @@
 import { ErrorTablaPropia, type CursoTablaPropia, type GeocercaTablaPropia, type PosicionTablaPropia, type ResultadoLectura } from './contrato';
 import {
-  ALIAS_CURSO, ALIAS_GEOCERCA, ALIAS_POSICION, MAX_FILAS_LECTURA, indiceDe, registrosACursos, registrosAGeocercas, registrosAPosiciones, type Registro,
+  ALIAS_CURSO, ALIAS_GEOCERCA, ALIAS_POSICION, MAX_FILAS_LECTURA, indiceDe, leerGeocercasGeoJson, registrosACursos, registrosAGeocercas, registrosAPosiciones, type Registro,
 } from './filas';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -63,6 +63,11 @@ export function leerPosicionesCsv(texto: string, opciones: { zona?: string } = {
 }
 
 export function leerGeocercasCsv(texto: string): ResultadoLectura<GeocercaTablaPropia> {
+  // Un archivo que empieza con «{» es un GeoJSON FeatureCollection: mismo juez, otro envoltorio.
+  if (texto.replace(/^﻿/, '').trimStart().startsWith('{')) {
+    if (texto.length > MAX_BYTES_CSV) throw new ErrorTablaPropia('El archivo pesa más de 25 MB; acota la ventana o divídelo.', 'formato');
+    return leerGeocercasGeoJson(texto);
+  }
   const { registros, decimalComa } = aRegistros(texto, ALIAS_GEOCERCA, ['codigo', 'nombre'], ['lat_centro', 'poligono_wkt']);
   return registrosAGeocercas(registros, { decimalComa, primeraFila: 2 });
 }

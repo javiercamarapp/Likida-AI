@@ -1,4 +1,4 @@
-import type { CursoTablaPropia, FilaRechazada, GeocercaTablaPropia, PosicionTablaPropia, ResultadoLectura } from './contrato';
+import { ErrorTablaPropia, type CursoTablaPropia, type FilaRechazada, type GeocercaTablaPropia, type PosicionTablaPropia, type ResultadoLectura } from './contrato';
 import { ZONA_POR_OMISION, normalizarFechaLocal } from './tiempo';
 import { leerIgnicion, leerLineaWkt, leerNumero, leerPoligonoWkt, llaveEncabezado, llaveEconomico, motivoCoordenadas } from './validar';
 
@@ -45,6 +45,87 @@ export function registrosAPosiciones(
   return { filas, rechazadas };
 }
 
+type Vertice = { lat: number; lon: number };
+const orientacion = (a: Vertice, b: Vertice, c: Vertice): number => {
+  const v = (b.lon - a.lon) * (c.lat - a.lat) - (b.lat - a.lat) * (c.lon - a.lon);
+  return v > 0 ? 1 : v < 0 ? -1 : 0;
+};
+const enSegmento = (a: Vertice, b: Vertice, p: Vertice): boolean =>
+  p.lon >= Math.min(a.lon, b.lon) && p.lon <= Math.max(a.lon, b.lon) && p.lat >= Math.min(a.lat, b.lat) && p.lat <= Math.max(a.lat, b.lat);
+function segmentosSeCruzan(a: Vertice, b: Vertice, c: Vertice, d: Vertice): boolean {
+  const o1 = orientacion(a, b, c); const o2 = orientacion(a, b, d); const o3 = orientacion(c, d, a); const o4 = orientacion(c, d, b);
+  if (o1 !== o2 && o3 !== o4) return true;
+  return (o1 === 0 && enSegmento(a, b, c)) || (o2 === 0 && enSegmento(a, b, d)) || (o3 === 0 && enSegmento(c, d, a)) || (o4 === 0 && enSegmento(c, d, b));
+}
+/** ¿Algún par de lados NO contiguos del anillo (sin repetir el primer vértice) se cruza o se toca? (O(n²), acotado a 2,000 vértices.) */
+export function poligonoSeAutointerseca(pts: readonly Vertice[]): boolean {
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (j === i + 1 || (i === 0 && j === n - 1)) continue;
+      if (segmentosSeCruzan(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n])) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * GeoJSON `FeatureCollection` de geocercas → mismas filas que el CSV. Cada Feature: `properties` con codigo, nombre,
+ * (radio_m si es Point) y cliente opcional; geometría `Polygon` (anillo exterior, sin huecos; [lon, lat]) o `Point` (círculo,
+ * exige radio_m). La fila N es el N-ésimo Feature. Lo que no se entiende se rechaza con su motivo.
+ */
+export function registrosDeGeoJson(texto: string): { registros: Registro[]; rechazadas: FilaRechazada[] } {
+  let doc: unknown;
+  try { doc = JSON.parse(texto.replace(/^﻿/, '')); } catch { throw new ErrorTablaPropia('El archivo GeoJSON no es un JSON válido.', 'formato'); }
+  const fc = doc as { type?: unknown; features?: unknown };
+  if (!fc || fc.type !== 'FeatureCollection' || !Array.isArray(fc.features)) throw new ErrorTablaPropia('El GeoJSON debe ser un FeatureCollection con una geocerca por Feature.', 'formato');
+  const registros: Registro[] = []; const rechazadas: FilaRechazada[] = [];
+  const num = (v: unknown): string => (typeof v === 'number' && Number.isFinite(v) ? String(v) : '');
+  fc.features.slice(0, MAX_FILAS_LECTURA).forEach((f: unknown, k: number) => {
+    const fila = k + 1;
+    const ft = f as { type?: unknown; properties?: unknown; geometry?: { type?: unknown; coordinates?: unknown } | null };
+    const rech = (motivo: string) => void rechazadas.push({ fila, motivo });
+    if (!ft || ft.type !== 'Feature' || !ft.geometry) return rech('el Feature no trae geometría');
+    const props: Registro = {};
+    if (ft.properties && typeof ft.properties === 'object') for (const [kk, v] of Object.entries(ft.properties as Registro)) props[llaveEncabezado(kk)] = v;
+    const pick = (alias: readonly string[]): unknown => { for (const a of alias) if (props[a] !== undefined) return props[a]; return undefined; };
+    const base: Registro = { codigo: pick(ALIAS_GEOCERCA.codigo), nombre: pick(ALIAS_GEOCERCA.nombre), cliente: pick(ALIAS_GEOCERCA.cliente) };
+    const g = ft.geometry; const c = g.coordinates;
+    if (g.type === 'Point') {
+      if (!Array.isArray(c) || c.length < 2) return rech('Point sin coordenadas [lon, lat]');
+      const r = pick(ALIAS_GEOCERCA.radio_m);
+      return void registros.push({ ...base, lat_centro: num(c[1]), lon_centro: num(c[0]), radio_m: typeof r === 'number' ? String(r) : r });
+    }
+    if (g.type === 'Polygon') {
+      if (!Array.isArray(c) || c.length !== 1 || !Array.isArray(c[0])) return rech('el Polygon debe traer un solo anillo exterior (sin huecos)');
+      const anillo = c[0] as unknown[];
+      if (anillo.length > MAX_VERTICES_GEOJSON) return rech(`un polígono admite hasta ${MAX_VERTICES_GEOJSON} vértices`);
+      const pares: string[] = [];
+      for (const v of anillo) {
+        if (!Array.isArray(v) || num(v[0]) === '' || num(v[1]) === '') return rech('vértice ilegible en el Polygon (se espera [lon, lat])');
+        pares.push(`${num(v[0])} ${num(v[1])}`);
+      }
+      return void registros.push({ ...base, poligono_wkt: `POLYGON((${pares.join(', ')}))` });
+    }
+    return rech(`geometría no soportada: ${typeof g.type === 'string' ? g.type.slice(0, 30) : 'desconocida'} (usa Polygon o Point con radio_m)`);
+  });
+  if (fc.features.length > MAX_FILAS_LECTURA) rechazadas.push({ fila: MAX_FILAS_LECTURA + 1, motivo: `más de ${MAX_FILAS_LECTURA} filas: se leyeron las primeras` });
+  return { registros, rechazadas };
+}
+const MAX_VERTICES_GEOJSON = 2_000;
+
+/** GeoJSON → geocercas con el MISMO juez que el CSV; los números de fila de los rechazos son el N-ésimo Feature. */
+export function leerGeocercasGeoJson(texto: string): ResultadoLectura<GeocercaTablaPropia> {
+  const { registros, rechazadas: previas } = registrosDeGeoJson(texto);
+  // Los Features rechazados antes de llegar al juez dejan huecos: se reconstruye la fila real de cada registro.
+  const filasReales: number[] = [];
+  const malas = new Set(previas.map((r) => r.fila));
+  const total = registros.length + previas.length;
+  for (let n = 1; n <= total; n++) if (!malas.has(n)) filasReales.push(n);
+  const { filas, rechazadas } = registrosAGeocercas(registros, { primeraFila: 1 });
+  return { filas, rechazadas: [...previas, ...rechazadas.map((r) => ({ ...r, fila: filasReales[r.fila - 1] ?? r.fila }))].sort((a, b) => a.fila - b.fila) };
+}
+
 export function registrosAGeocercas(
   registros: readonly Registro[], opciones: { decimalComa?: boolean; primeraFila?: number } = {},
 ): ResultadoLectura<GeocercaTablaPropia> {
@@ -60,6 +141,7 @@ export function registrosAGeocercas(
     if (wkt !== '') {
       const p = leerPoligonoWkt(wkt);
       if ('error' in p) return void rechazadas.push({ fila, motivo: p.error });
+      if (poligonoSeAutointerseca(p.ok)) return void rechazadas.push({ fila, motivo: 'el polígono se cruza consigo mismo (autointersección): corrige sus vértices' });
       return void filas.push({ codigo, nombre, tipo: 'poligono', centro: null, radioM: null, poligono: p.ok, cliente });
     }
     const lat = leerNumero(r.lat_centro, opciones.decimalComa); const lon = leerNumero(r.lon_centro, opciones.decimalComa);
@@ -145,13 +227,13 @@ export const ALIAS_POSICION: Record<'unidad' | 'lat' | 'lon' | 'fecha_hora' | 'v
   ignicion: ['ignicion', 'ignition', 'encendido', 'motor'],
 };
 export const ALIAS_GEOCERCA: Record<'codigo' | 'nombre' | 'lat_centro' | 'lon_centro' | 'radio_m' | 'poligono_wkt' | 'cliente', string[]> = {
-  codigo: ['codigo', 'clave', 'id', 'code'],
-  nombre: ['nombre', 'name', 'geocerca'],
-  lat_centro: ['lat_centro', 'latitud_centro', 'latitud', 'lat'],
-  lon_centro: ['lon_centro', 'longitud_centro', 'longitud', 'lng', 'lon'],
-  radio_m: ['radio_m', 'radio', 'radio_metros'],
-  poligono_wkt: ['poligono_wkt', 'wkt', 'poligono', 'geometria'],
-  cliente: ['cliente'],
+  codigo: ['codigo', 'clave', 'id', 'code', 'codigo_geocerca', 'clave_geocerca', 'id_geocerca', 'codigo_sitio', 'clave_sitio'],
+  nombre: ['nombre', 'name', 'geocerca', 'nombre_geocerca', 'nombre_de_la_geocerca', 'nombre_de_geocerca', 'nombre_sitio', 'sitio', 'descripcion'],
+  lat_centro: ['lat_centro', 'latitud_centro', 'latitud', 'lat', 'centro_lat', 'centro_latitud'],
+  lon_centro: ['lon_centro', 'longitud_centro', 'longitud', 'lng', 'lon', 'centro_lon', 'centro_lng', 'centro_longitud'],
+  radio_m: ['radio_m', 'radio', 'radio_metros', 'radio_en_metros', 'radio_mts', 'metros'],
+  poligono_wkt: ['poligono_wkt', 'wkt', 'poligono', 'geometria', 'geometria_wkt', 'area_wkt'],
+  cliente: ['cliente', 'nombre_cliente', 'cliente_asociado'],
 };
 
 export const ALIAS_CURSO: Record<'codigo' | 'nombre' | 'unidad' | 'convenio' | 'casetas' | 'corredor_wkt' | 'buffer_m' | 'vigente_desde' | 'vigente_hasta', string[]> = {
