@@ -18,6 +18,7 @@
 //   4. Nada de texto de cliente ni teléfonos en los logs.
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { envPuesta } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { telefonoDeUsuario, telefonoJefeDe } from '../contactos';
@@ -92,7 +93,7 @@ export function aConversacion(f: Fila): Conversacion {
     ultimaEntradaEn: str(f.ultima_entrada_en), ultimaSalidaEn: str(f.ultima_salida_en),
     sinRespuestaDesde: str(f.sin_respuesta_desde), entradasSinRespuesta: num(f.entradas_sin_respuesta),
     molestiaNivel: num(f.molestia_nivel), molestiaMotivos: Array.isArray(f.molestia_motivos) ? (f.molestia_motivos as string[]) : [],
-    molestiaEn: str(f.molestia_en), escalamientoNivel: num(f.escalamiento_nivel), escaladoEn: str(f.escalado_en), atendidaEn: str(f.atendida_en),
+    molestiaEn: str(f.molestia_en), prioridad: num(f.prioridad), escalamientoNivel: num(f.escalamiento_nivel), escaladoEn: str(f.escalado_en), atendidaEn: str(f.atendida_en),
   };
 }
 
@@ -113,6 +114,14 @@ export function aMensaje(f: Fila): MensajeVigia {
 
 const COLS_CONTACTO = 'id, tenant_id, cliente_id, telefono, nombre, gerente_user_id, estado, consentimiento_en, optout_en, aviso_privacidad_en';
 const COLS_CONV = 'id, tenant_id, contacto_id, cliente_id, viaje_id, estado, control, tomada_por, ultima_entrada_en, ultima_salida_en, sin_respuesta_desde, entradas_sin_respuesta, molestia_nivel, molestia_motivos, molestia_en, escalamiento_nivel, escalado_en, atendida_en';
+/**
+ * 0798: la columna `prioridad` solo existe si esa migración ya está en la base. Se declara con la misma bandera que la intención
+ * «datos de la unidad» (`LIKIDA_VIGIA_DATOS_UNIDAD=si`, ver deps.ts): sin ella no se lee ni se escribe y el Vigía funciona como siempre.
+ */
+export function prioridadEnBase(): boolean {
+  return envPuesta('LIKIDA_VIGIA_DATOS_UNIDAD') && String(process.env.LIKIDA_VIGIA_DATOS_UNIDAD).trim().toLowerCase() === 'si';
+}
+const colsConv = (): string => (prioridadEnBase() ? `${COLS_CONV}, prioridad` : COLS_CONV);
 const COLS_MSG = 'id, tenant_id, conversacion_id, direccion, autor, wamid, tipo, texto, intencion, estado, respuesta_a, riesgo, autoenviado, editado, aprobado_por, enviado_en, via, error, senales, datos_respaldo, created_at';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -540,7 +549,7 @@ export function crearRepoVigia(): RepoVigia {
 
     async conversacion(tenantId, id) {
       const f = exigir('conversacion', await acotada(supabaseAdmin().from('vigia_conversacion')
-        .select(COLS_CONV).eq('id', id).eq('tenant_id', tenantId).maybeSingle(), 'vigia.conversacion')) as Fila | null;
+        .select(colsConv()).eq('id', id).eq('tenant_id', tenantId).maybeSingle(), 'vigia.conversacion')) as Fila | null;
       return f ? aConversacion(f) : null;
     },
 
@@ -650,7 +659,7 @@ export function crearRepoVigia(): RepoVigia {
       const m: Record<string, string> = {
         viajeId: 'viaje_id', molestiaNivel: 'molestia_nivel', molestiaMotivos: 'molestia_motivos', molestiaEn: 'molestia_en',
         escalamientoNivel: 'escalamiento_nivel', escaladoEn: 'escalado_en', control: 'control', tomadaPor: 'tomada_por',
-        tomadaEn: 'tomada_en', atendidaEn: 'atendida_en', atendidaPor: 'atendida_por',
+        tomadaEn: 'tomada_en', atendidaEn: 'atendida_en', atendidaPor: 'atendida_por', prioridad: 'prioridad',
       };
       const parche: Fila = { updated_at: new Date().toISOString() };
       for (const [k, v] of Object.entries(p)) if (m[k] !== undefined && v !== undefined) parche[m[k]] = v;
@@ -669,6 +678,7 @@ export function crearRepoVigia(): RepoVigia {
       const { error } = await acotada(supabaseAdmin().from('vigia_conversacion').update({
         sin_respuesta_desde: null, entradas_sin_respuesta: 0, escalamiento_nivel: 0, escalado_en: null, atendida_en: null, atendida_por: null,
         molestia_nivel: 0, molestia_motivos: [], molestia_en: null, ultima_salida_en: ahora.toISOString(), updated_at: ahora.toISOString(),
+        ...(prioridadEnBase() ? { prioridad: 0 } : {}),
       }).eq('id', conversacionId).eq('tenant_id', tenantId), 'vigia.marcar_respondida');
       if (error) throw new Error(`vigia.marcar_respondida: ${error.message}`);
     },
@@ -791,7 +801,7 @@ export function crearRepoVigia(): RepoVigia {
         const tamano = Math.max(1, limite) * 3;
         for (let pagina = 0; pagina < MAX_PAGINAS_EN_ESPERA; pagina++) {
           const f = exigir('en_espera', await acotada(db.from('vigia_conversacion')
-            .select(COLS_CONV).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).lt('escalamiento_nivel', 2).or(alcance)
+            .select(colsConv()).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).lt('escalamiento_nivel', 2).or(alcance)
             .order('sin_respuesta_desde', { ascending: true }).order('id').range(pagina * tamano, (pagina + 1) * tamano - 1), 'vigia.en_espera')) as Fila[] | null ?? [];
           convs.push(...f.map(aConversacion));
           if (f.length < tamano) break;
@@ -861,6 +871,8 @@ export interface ConversacionTablero {
   sinRespuestaDesde: string | null;
   molestiaNivel: number;
   molestiaMotivos: string[];
+  /** 0798: 0 ignorar/sin priorizar · 1 normal · 2 alta (el máximo de los mensajes sin responder). Ausente = 0. */
+  prioridad?: number;
   escalamientoNivel: number;
   atendida: boolean;
   ultimaEntradaEn: string | null;
@@ -926,7 +938,7 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
   const config = await repo.config(tenantId);
 
   const convRows = (exigir('tablero_conv', await acotada(db.from('vigia_conversacion')
-    .select(COLS_CONV).eq('tenant_id', tenantId).eq('estado', 'activa')
+    .select(colsConv()).eq('tenant_id', tenantId).eq('estado', 'activa')
     .order('updated_at', { ascending: false }).order('id').limit(100), 'vigia.tablero_conv')) as Fila[] | null ?? []).map(aConversacion);
 
   const contactosRows = (exigir('tablero_contactos', await acotada(db.from('vigia_contacto')
@@ -952,7 +964,7 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
   const conversaciones: ConversacionTablero[] = convRows.map((c) => ({
     id: c.id, contactoId: c.contactoId, contactoNombre: contactoPorId.get(c.contactoId)?.nombre ?? null,
     clienteNombre: nombreCliente.get(c.clienteId) ?? null, control: c.control, sinRespuestaDesde: c.sinRespuestaDesde,
-    molestiaNivel: c.molestiaNivel, molestiaMotivos: c.molestiaMotivos, escalamientoNivel: c.escalamientoNivel,
+    molestiaNivel: c.molestiaNivel, molestiaMotivos: c.molestiaMotivos, prioridad: c.prioridad ?? 0, escalamientoNivel: c.escalamientoNivel,
     atendida: c.atendidaEn !== null, ultimaEntradaEn: c.ultimaEntradaEn, ultimoMensajeCliente: ultimos.get(c.id) ?? null,
   }));
 

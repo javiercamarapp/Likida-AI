@@ -114,6 +114,8 @@ export interface Conversacion {
   molestiaNivel: number;
   molestiaMotivos: string[];
   molestiaEn: string | null;
+  /** 0798: máximo `nivel` de prioridad de los mensajes sin responder (0 ignorar · 1 normal · 2 alta). Ausente = 0. Solo ordena. */
+  prioridad?: number;
   escalamientoNivel: number;
   escaladoEn: string | null;
   atendidaEn: string | null;
