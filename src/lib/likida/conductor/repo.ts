@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { getZonaHorariaTenant } from '../repo';
 import { acotada } from '../presupuesto';
 import { exigir, traerPorIds } from '../pg';
 import {
@@ -7,7 +8,7 @@ import {
   type Contacto, type FuenteHito, type HitoFila, type InterpretacionHito, type TipoHito,
 } from './tipos';
 import type { LegadoSello } from './maquina';
-import { CONFIG_CONDUCTOR_DEFAULT, validarConfigConductor, type ConfigConductor } from './config';
+import { CONFIG_CONDUCTOR_DEFAULT, validarConfigConductor, zonaOCdmx, type ConfigConductor } from './config';
 import { aHitoApi, type EventoApi, type FiltrosHitos, type HitoApi, type CambioCitas } from './lectura';
 import type { AvisoReclamado } from './planificador';
 import type { ContactoTrafico } from './escalamiento';
@@ -380,10 +381,18 @@ const copiaDefaults = (): ConfigConductor => ({
 
 /** La config de una flota. Sin fila = defaults. LANZA si la base no contesta: «no pude leer» no es «defaults». */
 export async function leerConfigConductor(tenantId: string): Promise<ConfigConductor> {
-  const res = await acotada(supabaseAdmin()
-    .from('agente_conductor_config').select('*').eq('tenant_id', tenantId).maybeSingle(), 'conductor.config');
+  const [res, zonaCruda] = await Promise.all([
+    acotada(supabaseAdmin()
+      .from('agente_conductor_config').select('*').eq('tenant_id', tenantId).maybeSingle(), 'conductor.config'),
+    getZonaHorariaTenant(tenantId),
+  ]);
   const f = exigir(res as never, 'conductor.config') as Fila | null;
-  if (!f) return copiaDefaults();
+  // La zona es de la flota (tenant.zona_horaria), no de esta tabla. Inválida o ausente → la de México, con aviso (no truena el cron).
+  const zonaHoraria = zonaOCdmx(zonaCruda);
+  if (zonaCruda !== null && zonaCruda !== zonaHoraria) {
+    logger.warn('conductor.zona_invalida', { tenant: tenantId, zona: String(zonaCruda).slice(0, 60) });
+  }
+  if (!f) return { ...copiaDefaults(), zonaHoraria };
   const v = validarConfigConductor({
     activo: f.activo as boolean,
     solicitudesMin: f.solicitudes_min as number[],
@@ -419,13 +428,14 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     // 0635: la base sin migrar no trae las columnas; la detección sigue en su valor de partida (encendida) y la señal de vida apagada.
     detectarHitosGps: f.detectar_hitos_gps !== false,
     avisarSenalVida: f.avisar_senal_vida === true,
+    zonaHoraria,
   });
   if ('error' in v) {
     // La base tiene CHECKs equivalentes; llegar aquí es una fila corrupta. Se grita y se opera
     // con defaults, pero un `activo = false` explícito se respeta: encender por error un agente
     // que manda WhatsApp es peor que operar con la escalera de siempre.
     logger.error('conductor.config_invalida', { tenant: tenantId, err: v.error });
-    return { ...copiaDefaults(), activo: f.activo !== false };
+    return { ...copiaDefaults(), activo: f.activo !== false, zonaHoraria };
   }
   return v.ok;
 }

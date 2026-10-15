@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { CONFIG_CONDUCTOR_DEFAULT, dentroDeVentana, horaYDiaMx, inicioDiaMx, validarConfigConductor } from './config';
+import { CONFIG_CONDUCTOR_DEFAULT, dentroDeVentana, horaYDiaMx, inicioDiaMx, validarConfigConductor, zonaOCdmx } from './config';
+import { TZ_MX } from '@/lib/formato';
 
 describe('validarConfigConductor', () => {
   it('los defaults son válidos y son 0/+15/+30/+45, escalar a los 90', () => {
@@ -127,5 +128,56 @@ describe('validarConfigConductor — validación de ubicación y estadías (0385
     expect('ok' in v && v.ok).toMatchObject({ avisarLlegadaSinConfirmar: true, margenAcercamientoM: 0 });
     const tope = validarConfigConductor({ margenAcercamientoM: 50_000 });
     expect('ok' in tope && tope.ok.margenAcercamientoM).toBe(50_000);
+  });
+});
+
+// Reloj simulado por zona. Ventana 9–13 = valores de PRUEBA (no un requisito del cliente).
+describe('la ventana es de la zona de la flota (T-A5-01)', () => {
+  const v = { horaInicio: 9, horaFin: 13, diasSemana: [1, 2, 3, 4, 5, 6, 7] };
+  const MATAMOROS = 'America/Matamoros';
+  const CANCUN = 'America/Cancun';
+
+  it('el default de la config es la zona de México (nada cambia para quien no la configura)', () => {
+    expect(CONFIG_CONDUCTOR_DEFAULT.zonaHoraria).toBe(TZ_MX);
+    expect(dentroDeVentana(v, new Date('2026-10-30T15:30:00Z'))).toBe(dentroDeVentana({ ...v, zonaHoraria: TZ_MX }, new Date('2026-10-30T15:30:00Z')));
+  });
+
+  it.each<[string, string, string, number, boolean]>([
+    ['mismo instante, ambas dentro: CDMX 09:30', '2026-10-30T15:30:00Z', TZ_MX, 9, true],
+    ['mismo instante, ambas dentro: Matamoros 10:30 (horario de verano)', '2026-10-30T15:30:00Z', MATAMOROS, 10, true],
+    ['tras el cambio de horario CDMX 08:30 fuera', '2026-11-02T14:30:00Z', TZ_MX, 8, false],
+    ['tras el cambio de horario Matamoros 08:30 fuera (ya sin verano)', '2026-11-02T14:30:00Z', MATAMOROS, 8, false],
+    ['el desfase de 1 h: CDMX 08:30 fuera', '2026-10-30T14:30:00Z', TZ_MX, 8, false],
+    ['el desfase de 1 h: Matamoros 09:30 dentro', '2026-10-30T14:30:00Z', MATAMOROS, 9, true],
+    ['Cancún UTC-5 en verano: 14:30Z = 09:30 dentro', '2026-07-15T14:30:00Z', CANCUN, 9, true],
+    ['Cancún UTC-5 en invierno: 14:30Z = 09:30 dentro', '2026-12-15T14:30:00Z', CANCUN, 9, true],
+    ['CDMX en verano ya NO tiene horario de verano: 14:30Z = 08:30 fuera', '2026-07-15T14:30:00Z', TZ_MX, 8, false],
+  ])('%s', (_n, iso, zona, horaEsperada, dentro) => {
+    expect(horaYDiaMx(new Date(iso), zona).hora).toBe(horaEsperada);
+    expect(dentroDeVentana({ ...v, zonaHoraria: zona }, new Date(iso))).toBe(dentro);
+  });
+
+  it('una zona inválida cae a México (nunca truena)', () => {
+    expect(zonaOCdmx('No/Existe')).toBe(TZ_MX);
+    expect(zonaOCdmx('')).toBe(TZ_MX);
+    expect(zonaOCdmx(undefined)).toBe(TZ_MX);
+    expect(horaYDiaMx(new Date('2026-10-30T15:30:00Z'), 'No/Existe').hora).toBe(9);
+    expect(dentroDeVentana({ ...v, zonaHoraria: 'No/Existe' }, new Date('2026-10-30T15:30:00Z'))).toBe(true);
+    expect(dentroDeVentana({ ...v, zonaHoraria: 'No/Existe' }, new Date('2026-10-30T14:30:00Z'))).toBe(false);
+  });
+
+  it('validarConfigConductor conserva una zona válida y sanea una inválida', () => {
+    const ok = validarConfigConductor({ zonaHoraria: MATAMOROS });
+    expect('ok' in ok && ok.ok.zonaHoraria).toBe(MATAMOROS);
+    const mal = validarConfigConductor({ zonaHoraria: 'basura' });
+    expect('ok' in mal && mal.ok.zonaHoraria).toBe(TZ_MX);
+  });
+
+  it('el día del tope diario empieza a la medianoche de LA ZONA de la flota', () => {
+    // 2026-10-30 05:30Z: en Matamoros (UTC-5) aún es 00:30 del 30; en CDMX (UTC-6) todavía es 23:30 del 29.
+    const ahora = new Date('2026-10-30T05:30:00Z');
+    expect(inicioDiaMx(ahora, MATAMOROS).toISOString()).toBe('2026-10-30T05:00:00.000Z');
+    expect(inicioDiaMx(ahora, TZ_MX).toISOString()).toBe('2026-10-29T06:00:00.000Z');
+    expect(inicioDiaMx(ahora).toISOString()).toBe('2026-10-29T06:00:00.000Z');
   });
 });
