@@ -138,3 +138,20 @@ describe('requireSessionTenant (acciones que usan esta puerta directo)', () => {
     await expect(requireSessionTenant('/cuenta')).resolves.toMatchObject({ tenantId: CON });
   });
 });
+
+describe('una server action REAL de un módulo en stand-by (importada tal cual)', () => {
+  it('bajo el perfil rebota antes de tocar un solo dato; sin perfil entra a su lógica', async () => {
+    const acciones = await import('@/app/dashboard/agentes/facturas/acciones-control');
+    getSessionTenant.mockResolvedValue(dueno(CON));
+    await expect(acciones.accionEncenderEmision(null, new FormData())).rejects.toThrow('NEXT_REDIRECT');
+    await expect(acciones.accionCambiarLimites(null, new FormData())).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith('/dashboard');
+
+    // Sin perfil la acción SÍ pasa la puerta: llega a su lógica (que aquí falla por el repo falso,
+    // pero NO por un redirect de perfil).
+    redirect.mockClear();
+    getSessionTenant.mockResolvedValue(dueno(SIN));
+    await acciones.accionEncenderEmision(null, new FormData()).catch((e: Error) => expect(e.message).not.toBe('NEXT_REDIRECT'));
+    expect(redirect).not.toHaveBeenCalled();
+  });
+});
