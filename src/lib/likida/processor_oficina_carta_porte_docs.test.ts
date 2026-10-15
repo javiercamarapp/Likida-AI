@@ -101,6 +101,31 @@ describe('processInbound — la oficina reenvía un documento de cliente', () =>
     expect(ingerir).not.toHaveBeenCalled();
   });
 
+  it('un texto pegado con orden «ccp» del jefe va al agente (sin mediaId), y no sale el saludo genérico', async () => {
+    const texto = 'ccp Origen CP: 64000 Monterrey. Destino CP: 44100 Guadalajara. 880 pzas, 14028 kg, clave 24101500.';
+    await processInbound({ from: '5215550000001', type: 'text' as const, text: texto, waMessageId: 'wa-txt-2' });
+    expect(ingerir).toHaveBeenCalledTimes(1);
+    const [entrada] = ingerir.mock.calls[0] as [Record<string, unknown>];
+    expect(entrada).toMatchObject({ tenantId: 't1', userId: 'u1', mensaje: expect.objectContaining({ type: 'text', text: texto }) });
+    expect(salientes.join(' ')).not.toMatch(/te reconozco como/);
+  });
+
+  it('un texto pegado de quien no despacha (contador) o sin cuenta de oficina no entra', async () => {
+    const texto = 'ccp Origen CP: 64000 Monterrey. Destino CP: 44100 Guadalajara. 880 pzas, 14028 kg, clave 24101500.';
+    resolverCuentaOficina.mockResolvedValue({ ...JEFE, rol: 'contador' });
+    await processInbound({ from: '5215550000001', type: 'text' as const, text: texto, waMessageId: 'wa-txt-3' });
+    resolverCuentaOficina.mockResolvedValue(null);
+    await processInbound({ from: '5215550000009', type: 'text' as const, text: texto, waMessageId: 'wa-txt-4' });
+    expect(ingerir).not.toHaveBeenCalled();
+  });
+
+  it('un texto conversacional del jefe sigue su camino aunque sea candidato a revisión: el agente dice «no aplica»', async () => {
+    ingerir.mockResolvedValue('no_aplica');
+    await processInbound({ from: '5215550000001', type: 'text' as const, text: 'ccp ya mandé el embarque de hoy, gracias por avisar', waMessageId: 'wa-txt-5' });
+    expect(ingerir).toHaveBeenCalledTimes(1);
+    expect(salientes.join(' ')).toMatch(/te reconozco como parte del equipo/);
+  });
+
   it('un usuario sin flota (superadmin) no entra', async () => {
     resolverCuentaOficina.mockResolvedValue({ ...JEFE, rol: 'superadmin', tenantId: null });
     await processInbound(documento({ waMessageId: 'wa-doc-sa' }));
