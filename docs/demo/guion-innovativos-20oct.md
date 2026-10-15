@@ -29,7 +29,7 @@ cliente), **peajes**, **liquidación fase 1** y **Carta Porte**— sobre datos c
 | 1 h antes | **Plan B** a la mano: capturas de cada pantalla del ensayo y los archivos de `archivos-muestra/` | — |
 
 **Los agentes vienen apagados y no se manda nada por WhatsApp.** El seed deja el Vigía (`habilitado = false`), el
-Conductor (`activo = false`, sin detección por GPS encendida en vivo ni «sin señal de vida») y los avisos del
+Conductor (`activo = false`; la perilla `detectar_hitos_gps` nace encendida por defecto, pero con el Conductor apagado no corre en vivo, y «sin señal de vida» nace apagada) y los avisos del
 orquestador apagados; `--encender-agentes` enciende solo el Vigía y el Conductor para que se vean sus pantallas (sin eso
 el panel del Vigía dice «El Vigía está apagado para tu flota»). Aun encendidos, todos los teléfonos del demo llevan la
 marca `28999…` (incluidos el de la copia al jefe y los de discrepancia) y el envío real los rechaza antes de llamar a

@@ -16,7 +16,7 @@ El guion de lo que se enseña y se dice (y de lo que **no** se puede enseñar to
 > jefe y los de discrepancia) y el envío real de WhatsApp rechaza cualquier destinatario con esa marca antes de llamar a
 > Meta. El repo es público: nada aquí es dato real de ningún cliente. Lo que no existe todavía (formato real de su Excel,
 > archivo real de PASE, su tabla de GPS) está **declarado como bloqueo**, no adivinado. **El Vigía y el Conductor del
-> tenant demo vienen APAGADOS** (ningún cron les escribe a nadie), igual que el barrido de «sin señal de vida» y los
+> tenant demo vienen APAGADOS** (ningún cron les escribe a nadie), igual que el barrido de «sin señal de vida» (`avisar_senal_vida`, que además nace apagado por defecto) y los
 > avisos del orquestador; el Vigía y el Conductor se encienden a propósito con `--encender-agentes`.
 
 ---
