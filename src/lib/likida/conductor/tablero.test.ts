@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CONFIG_CONDUCTOR_DEFAULT, type ConfigConductor } from './config';
 import { hitoVacio } from './memoria.fixture';
 import type { AccionOficinaFila, DatosTablero, EvidenciaFila, VeredictoFila, ViajeTablero } from './repo_validacion';
+import { nivelesSinDestino } from './escalamiento';
 import { armarTablero, filtrarPorSemaforo, indicadoresVista } from './tablero';
 import type { HitoFila, TipoHito } from './tipos';
 
@@ -322,5 +323,31 @@ describe('indicadoresVista', () => {
   });
   it('sin respuestas medibles el tiempo medio es null aunque la base mande un número', () => {
     expect(indicadoresVista({ ...crudos, conRespuestaMedida: 0, minutosRespuestaPromedio: 0 }).minutosRespuestaPromedio).toBeNull();
+  });
+});
+
+describe('excepción «sin a quién escalar» (T-A5-23)', () => {
+  const hs = hitos('1', {});
+  const faltan = nivelesSinDestino([], null, 'tm1', 'Tlaquepaque');
+  const alertas = (t: ReturnType<typeof armarTablero>) => t.excepciones.filter((e) => e.tipo === 'sin_a_quien_escalar');
+
+  it('sin datos de escalamiento no inventa alerta', () => {
+    expect(alertas(armarTablero(datos([viaje('1')], hs), cfg(), AHORA))).toEqual([]);
+  });
+
+  it('terminal sin contactos ni jefe: una excepción por nivel, con el texto exacto, el nivel 1 como urgente', () => {
+    const ex = alertas(armarTablero(datos([viaje('1')], hs, { sinDestino: faltan }), cfg(), AHORA));
+    expect(ex.map((e) => e.gravedad)).toEqual([3, 2]);
+    expect(ex[0].texto).toBe('El nivel 1 (Patio responsable) de Tlaquepaque no tiene a quién avisar. Agrega un contacto en Configuración.');
+  });
+
+  it('con contacto en ambos niveles o con jefe de respaldo no hay nada que avisar', () => {
+    const con = [{ nivel: 1 as const, terminalId: null, telefono: '523312345678', nombre: 'A' }, { nivel: 2 as const, terminalId: null, telefono: '523398765432', nombre: 'B' }]; // grep-limpio:ok
+    expect(alertas(armarTablero(datos([viaje('1')], hs, { sinDestino: nivelesSinDestino(con, null, 'tm1', 'T') }), cfg(), AHORA))).toEqual([]);
+    expect(alertas(armarTablero(datos([viaje('1')], hs, { sinDestino: nivelesSinDestino([], '523312345678', 'tm1', 'T') }), cfg(), AHORA))).toEqual([]); // grep-limpio:ok
+  });
+
+  it('un hueco de una terminal sin viajes listados no aparece', () => {
+    expect(alertas(armarTablero(datos([viaje('1')], hs, { sinDestino: nivelesSinDestino([], null, 'otra', 'Otra') }), cfg(), AHORA))).toEqual([]);
   });
 });
