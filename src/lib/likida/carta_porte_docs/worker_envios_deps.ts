@@ -4,6 +4,13 @@
 
 import { logger } from '@/lib/logger';
 import { alertarOperador } from '@/lib/observability/alerta';
+import { appUrl } from '@/lib/env';
+import { enviarCorreo } from '@/lib/correo/enviar';
+import { avisarOficina } from '@/lib/meta/aviso_oficina';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { telefonoDeUsuario, telefonoJefeDe } from '../contactos';
+import { acotada } from '../presupuesto';
+import { crearAlertarEnvio } from './alerta_envio';
 import { ConflictoDeVersion, reabrirDocumento, reabrirPorRechazoTms } from './bandeja';
 import * as repo from './repo';
 import { repoEnvios } from './repo_envios';
@@ -32,7 +39,27 @@ export async function salidaDeFlota(tenantId: string): Promise<SalidaTms> {
   }
 }
 
+/** El correo de un usuario ACTIVO de ESTA flota (un usuario de otra flota, o dado de baja, no recibe el aviso). */
+async function correoDeUsuario(userId: string, tenantId: string): Promise<string | null> {
+  const { data, error } = await acotada(supabaseAdmin().from('app_user').select('email, activo').eq('id', userId).eq('tenant_id', tenantId).maybeSingle(), 'correoDeUsuario');
+  if (error) throw new Error(`correoDeUsuario: ${error.message}`);
+  const f = data as { email: string | null; activo: boolean | null } | null;
+  return f && f.activo !== false ? f.email : null;
+}
+
 export function depsEnviosReales(): DepsEnvios {
+  // Una función por pasada: lleva la cuenta de los avisos de la pasada (`TOPE_AVISOS_POR_PASADA`).
+  const alertarEnvio = crearAlertarEnvio({
+    leerConfig: (tenantId) => leerConfigSalida(tenantId),
+    leerFolio: async (tenantId, documentoId) => (await repo.leerDocumento(tenantId, documentoId))?.extraccion?.campos.folio_cliente?.valor ?? null,
+    correoDeUsuario,
+    telefonoDeUsuario,
+    telefonoJefe: telefonoJefeDe,
+    enviarCorreo: (para, correo) => enviarCorreo(para, correo),
+    avisar: (telefono, texto, parametros, contexto) => avisarOficina(telefono, texto, { parametros, contexto }),
+    alertarOperador: (evento, detalle) => alertarOperador(evento, detalle),
+    urlBandeja: `${appUrl()}/dashboard/carta-porte/documentos`,
+  });
   return {
     reclamar: (limite) => repoEnvios.reclamar(limite),
     leerEnvio: (tenantId, id) => repoEnvios.leer(tenantId, id),
@@ -69,10 +96,8 @@ export function depsEnviosReales(): DepsEnvios {
     },
     huellasRechazadas: async (tenantId, documentoId) =>
       (await repoEnvios.listarPorDocumento(tenantId, documentoId)).filter((x) => x.estado === 'rechazado_tms' && x.plantillaSha256 !== null).map((x) => x.plantillaSha256 as string),
-    // Provisional hasta T-A3-30: el aviso a la oficina (destinatario configurable) sustituye este correo al operador.
-    alertarEnvio: async (a) => {
-      await alertarOperador(`cron.carta_porte_envio.${a.motivo}`, { error: a.mensaje, codigo: `cp_envio_${a.motivo}`, tenantId: a.tenantId, envioId: a.envioId, documentoId: a.documentoId });
-    },
+    // T-A3-30: correo + WhatsApp al destinatario configurable (jefe de tráfico si no hay); lanza si no salió por ningún canal.
+    alertarEnvio: async (a) => { await alertarEnvio(a); },
     alertarOperador: (evento, detalle) => alertarOperador(evento, detalle),
     ahora: () => Date.now(),
     senal: (ms) => AbortSignal.timeout(ms),
