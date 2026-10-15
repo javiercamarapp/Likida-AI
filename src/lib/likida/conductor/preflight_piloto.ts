@@ -65,7 +65,7 @@ export interface DatosPreflight {
 }
 
 /** Móvil mexicano de 10 dígitos (con o sin 52) y nunca la marca de demo: la misma regla del alta de voluntarios. */
-function telefonoAlcanzable(telefono: string): boolean {
+export function telefonoAlcanzable(telefono: string): boolean {
   if (esTelefonoDemo(telefono)) return false;
   const d = normalizarTelefonoWa(telefono);
   return /^52\d{10}$/.test(/^\d{10}$/.test(d) ? `52${d}` : d);

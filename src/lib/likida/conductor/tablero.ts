@@ -150,9 +150,14 @@ export interface Tablero {
   excepciones: Excepcion[];
   conteos: ConteosSemaforo;
   hayMas: boolean;
+  /** T-A5-26: `true` solo si se LEYERON las posiciones y no hay ninguna reciente para los viajes listados. Si no se leyeron, `false` (no se afirma). */
+  sinGps: boolean;
 }
 
 const MS_MIN = 60_000;
+
+/** T-A5-26: los datos de demostración del seed llevan folio `DEMO-…`; en pantalla se rotulan «SIMULADO» (nunca pasan por reales). */
+export const esFolioSimulado = (folio: string | null | undefined): boolean => typeof folio === 'string' && /^DEMO-/i.test(folio);
 
 /** Cuánto se espera antes de mostrar una llegada sin respaldo como excepción: el GPS reporta con minutos de retraso. */
 export const MINUTOS_GRACIA_LLEGADA_SIN_CONFIRMAR = 10;
@@ -342,7 +347,8 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
   // Primero lo que más urge: sin_reporte, atrasado, a_tiempo, sin ancla, completo.
   const orden: Record<Semaforo, number> = { sin_reporte: 0, atrasado: 1, sin_ancla: 2, a_tiempo: 3, completo: 4 };
   filas.sort((a, b) => orden[a.semaforo] - orden[b.semaforo] || (b.minutosVencido ?? -1e9) - (a.minutosVencido ?? -1e9));
-  return { filas, excepciones, conteos, hayMas: datos.hayMas };
+  const sinGps = datos.posiciones !== undefined && datos.posiciones.size === 0 && filas.length > 0;
+  return { filas, excepciones, conteos, hayMas: datos.hayMas, sinGps };
 }
 
 // ── Los indicadores ─────────────────────────────────────────────────────────
