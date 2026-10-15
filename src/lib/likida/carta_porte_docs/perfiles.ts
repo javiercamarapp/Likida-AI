@@ -22,7 +22,7 @@
 
 import { CAMPOS_DOC, CAMPOS_MERCANCIA, campoDoc, campoMercancia, extraccionVacia, type CampoDoc, type CampoValor, type Extraccion } from './campos';
 import { llaveTexto } from './catalogos';
-import { CLAVES_PROHIBIDAS_JSON, type ContenidoDoc, type FormatoDoc, type Hoja } from './contenido';
+import { CLAVES_PROHIBIDAS_JSON, esLibroPlantillaTms, type ContenidoDoc, type FormatoDoc, type Hoja } from './contenido';
 import { normalizarNumero, normalizarValor, type OrdenFecha } from './normalizar';
 import { bajar } from './xml_ccp';
 
@@ -112,6 +112,12 @@ export function localizarEncabezado(h: Hoja): TablaLeida | null {
 export function tablasDe(contenido: ContenidoDoc): TablaLeida[] {
   return (contenido.tabla ?? []).map(localizarEncabezado).filter((t): t is TablaLeida => t !== null);
 }
+
+/**
+ * ¿El libro es la plantilla del TMS ya llena (formatos A y B)? Se decide por los nombres de hoja; si lo es, su lectura es
+ * `leerPlantillaTms` (celdas fijas y encabezados reales), no `localizarEncabezado`, que solo mira las primeras 10 filas.
+ */
+export const esContenidoPlantillaTms = (c: ContenidoDoc): boolean => !!c.tabla && esLibroPlantillaTms(c.tabla.map((h) => h.nombre));
 
 const FILA_TOTAL = /^\s*(total(es)?|subtotal|suma|gran total)\b/i;
 export const filasDeDatos = (t: TablaLeida): string[][] => t.filas.filter((r) => !FILA_TOTAL.test(r.find((c) => c.trim() !== '') ?? ''));

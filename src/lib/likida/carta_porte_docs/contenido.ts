@@ -12,6 +12,7 @@
 
 import * as XLSX from 'xlsx';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import { llaveTexto } from './catalogos';
 import { aBuffer, textoDeBase64, textoDeBytes, utf8DeLatin1 } from './bytes';
 
 export type FormatoDoc = 'pdf_texto' | 'pdf_escaneado' | 'imagen' | 'excel' | 'csv' | 'xml' | 'correo' | 'json';
@@ -236,6 +237,28 @@ export function tablaATexto(hojas: Hoja[], maxChars = MAX_TEXTO_GUARDADO): strin
   return recortar(partes.join('\n\n'), maxChars);
 }
 
+// ── Libro con la plantilla del TMS (T-A3-47): sus hojas que no son datos no cuentan contra MAX_HOJAS ──
+
+/** Nombre de hoja a llave comparable: minúsculas, sin acentos, espacios ni signos. */
+export const llaveHoja = (t: unknown): string => llaveTexto(String(t ?? '')).replace(/[^a-z0-9]+/g, '');
+
+/** Hojas que nunca son datos: errores del TMS, catálogo de regímenes del agente aduanal y la Guía de llenado. */
+export function esHojaIgnorada(nombre: string): boolean {
+  const k = llaveHoja(nombre);
+  return k === 'error' || k.startsWith('informacionagenteaduanal') || k === 'guia' || k.startsWith('guiade');
+}
+
+/** ¿Los nombres de hoja son los de la plantilla «normal» del TMS? (firma por nombres; los rótulos se verifican al leer). */
+export function esLibroPlantillaTms(nombres: readonly string[]): boolean {
+  const k = new Set(nombres.map(llaveHoja));
+  return k.has('remintentedestinatario') && k.has('mercancias');
+}
+
+/** Las hojas que se leen como datos: en un libro-plantilla se descartan las ignoradas ANTES del tope `MAX_HOJAS`. */
+export function hojasDeDatos(nombres: readonly string[]): string[] {
+  return esLibroPlantillaTms(nombres) ? nombres.filter((n) => !esHojaIgnorada(n)) : [...nombres];
+}
+
 function prepararHoja(bytes: Uint8Array, esCsv: boolean, avisos: string[]): ContenidoDoc {
   let libro: XLSX.WorkBook;
   if (esCsv) {
@@ -244,8 +267,10 @@ function prepararHoja(bytes: Uint8Array, esCsv: boolean, avisos: string[]): Cont
   } else {
     libro = XLSX.read(aBuffer(bytes), { type: 'buffer', cellDates: true, cellFormula: false, cellHTML: false, cellStyles: false, sheetRows: MAX_FILAS_HOJA + 1 });
   }
-  if (libro.SheetNames.length > MAX_HOJAS) avisos.push(`El libro tiene ${libro.SheetNames.length} hojas; se leyeron ${MAX_HOJAS}.`);
-  const hojas: Hoja[] = libro.SheetNames.slice(0, MAX_HOJAS)
+  const nombresDatos = esCsv ? libro.SheetNames : hojasDeDatos(libro.SheetNames);
+  if (nombresDatos.length < libro.SheetNames.length) avisos.push(`Plantilla del TMS: se ignoraron las hojas que no son datos (${libro.SheetNames.filter(esHojaIgnorada).join(', ')}).`);
+  if (nombresDatos.length > MAX_HOJAS) avisos.push(`El libro tiene ${nombresDatos.length} hojas; se leyeron ${MAX_HOJAS}.`);
+  const hojas: Hoja[] = nombresDatos.slice(0, MAX_HOJAS)
     .map((n) => ({ nombre: n.slice(0, 60), filas: hojaAFilas(libro.Sheets[n], avisos, n) }))
     .filter((h) => h.filas.length > 0);
   if (hojas.length === 0) throw new Error('El archivo no trae filas con datos.');
