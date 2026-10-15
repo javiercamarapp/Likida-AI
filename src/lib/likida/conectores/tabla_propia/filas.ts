@@ -13,6 +13,19 @@ export type Registro = Record<string, unknown>;
 
 export const MAX_FILAS_LECTURA = 200_000;
 
+/** Tope de la referencia de despacho: más largo que cualquier folio razonable; lo que exceda se recorta, no se rechaza la fila. */
+const MAX_DESPACHO_REF = 60;
+
+/**
+ * La referencia de despacho (Icident) tal como se guarda en `posicion.despacho_ref` / `viaje.despacho_ref` (0802):
+ * mayúsculas y sin espacios (ni dentro: «d 1» = «D1»). Vacío → null. UNA sola función para posiciones y viajes,
+ * de modo que la igualdad entre ambos sea exacta.
+ */
+export function normalizarDespachoRef(v: unknown): string | null {
+  const t = (typeof v === 'string' ? v : typeof v === 'number' && Number.isFinite(v) ? String(v) : '').replace(/\s+/g, '').toUpperCase();
+  return t === '' ? null : t.slice(0, MAX_DESPACHO_REF);
+}
+
 const str = (v: unknown): string => (typeof v === 'string' ? v : v === null || v === undefined ? '' : typeof v === 'object' ? '' : String(v));
 
 export function registroAPosicion(
@@ -30,7 +43,13 @@ export function registroAPosicion(
   const vel = r.velocidad_kmh === undefined || r.velocidad_kmh === null || str(r.velocidad_kmh).trim() === '' ? null : leerNumero(r.velocidad_kmh, opciones.decimalComa);
   if (r.velocidad_kmh !== undefined && r.velocidad_kmh !== null && str(r.velocidad_kmh).trim() !== '' && vel === null) return rech('velocidad ilegible');
   if (vel !== null && (vel < 0 || vel >= 250)) return rech('velocidad fuera de rango (0–250 km/h)');
-  return { ok: { unidad, lat: lat as number, lon: lon as number, fechaHoraLocal: f.ok, velocidadKmh: vel, ignicion: r.ignicion === undefined ? null : leerIgnicion(r.ignicion) } };
+  const despacho = normalizarDespachoRef(r.despacho);
+  return {
+    ok: {
+      unidad, lat: lat as number, lon: lon as number, fechaHoraLocal: f.ok, velocidadKmh: vel, ignicion: r.ignicion === undefined ? null : leerIgnicion(r.ignicion),
+      ...(despacho !== null ? { despacho } : {}),
+    },
+  };
 }
 
 export function registrosAPosiciones(
@@ -218,13 +237,14 @@ export function registrosACursos(
 }
 
 // ── Nombres de columna de SU archivo → nombres del contrato ─────────────────
-export const ALIAS_POSICION: Record<'unidad' | 'lat' | 'lon' | 'fecha_hora' | 'velocidad_kmh' | 'ignicion', string[]> = {
+export const ALIAS_POSICION: Record<'unidad' | 'lat' | 'lon' | 'fecha_hora' | 'velocidad_kmh' | 'ignicion' | 'despacho', string[]> = {
   unidad: ['id_unidad', 'unidad', 'economico', 'numero_economico', 'no_economico', 'num_economico', 'vehiculo', 'id_vehiculo'],
   lat: ['latitud', 'lat', 'latitude'],
   lon: ['longitud', 'lon', 'lng', 'long', 'longitude'],
   fecha_hora: ['fecha_hora', 'fechahora', 'fecha_y_hora', 'fecha', 'timestamp', 'ts'],
   velocidad_kmh: ['velocidad_kmh', 'velocidad', 'speed', 'km_h', 'kmh'],
   ignicion: ['ignicion', 'ignition', 'encendido', 'motor'],
+  despacho: ['despacho', 'icident', 'incident', 'viaje', 'no_viaje'],
 };
 export const ALIAS_GEOCERCA: Record<'codigo' | 'nombre' | 'lat_centro' | 'lon_centro' | 'radio_m' | 'poligono_wkt' | 'cliente', string[]> = {
   codigo: ['codigo', 'clave', 'id', 'code', 'codigo_geocerca', 'clave_geocerca', 'id_geocerca', 'codigo_sitio', 'clave_sitio'],

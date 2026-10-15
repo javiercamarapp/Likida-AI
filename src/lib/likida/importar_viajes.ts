@@ -8,6 +8,7 @@ import { numero } from '@/lib/formato';
 import { DatoInvalido } from './errores';
 import { aceptarViajesImportados } from './conductor/repo';
 import { localAUtc, normalizarFechaLocal, ZONA_POR_OMISION } from './conectores/tabla_propia/tiempo';
+import { normalizarDespachoRef } from './conectores/tabla_propia/filas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // IMPORTADOR DE VIAJES (kit del PoC, 14-ago-2026) — el export del TMS del
@@ -51,6 +52,8 @@ export interface FilaViajeImportada {
    *  (o no se entendió: va en `citasIlegibles`). Con ella el motor del Conductor ancla los avisos. */
   citaOrigen?: string | null;
   citaDestino?: string | null;
+  /** T-A5-13: referencia de despacho (Icident) normalizada; solo existe si el archivo la trae con valor. Va a `viaje.despacho_ref` (0802). */
+  despachoRef?: string;
 }
 
 export interface LecturaImportacion {
@@ -65,7 +68,7 @@ export interface LecturaImportacion {
 /** Encabezados que el mundo real usa. Minúsculas, sin acentos. */
 const COLUMNAS: Record<
   'folio' | 'origen' | 'destino' | 'fecha' | 'anticipo' | 'operadorNombre'
-  | 'unidad' | 'cliente' | 'ingreso' | 'km' | 'citaOrigen' | 'citaDestino',
+  | 'unidad' | 'cliente' | 'ingreso' | 'km' | 'citaOrigen' | 'citaDestino' | 'despachoRef',
   string[]
 > = {
   folio: ['folio', 'viaje', 'no viaje', 'no. viaje', 'numero de viaje', 'id viaje', 'referencia'],
@@ -81,6 +84,8 @@ const COLUMNAS: Record<
   // T-A5-05. «cita limite» NO se mapea: en el programa de despacho de referencia esa columna trae nombres (no fechas).
   citaOrigen: ['cita', 'cita carga', 'cita origen'],
   citaDestino: ['cita descarga', 'cita destino'],
+  // T-A5-13: el «Icident» del TMS del cliente (número de despacho). «viaje» NO va aquí: ya es sinónimo de folio.
+  despachoRef: ['despacho', 'icident', 'incident', 'no despacho', 'no. despacho', 'numero de despacho', 'referencia de despacho'],
 };
 
 function normalizarEncabezado(v: unknown): string {
@@ -268,6 +273,7 @@ export function interpretarFilasViajes(
     };
     const citaOrigen = leerCita('citaOrigen', 'cita carga');
     const citaDestino = leerCita('citaDestino', 'cita descarga');
+    const despachoRef = normalizarDespachoRef(celda('despachoRef'));
 
     viajes.push({
       folio,
@@ -282,6 +288,7 @@ export function interpretarFilasViajes(
       kmRecorridos,
       ...(citaOrigen !== null ? { citaOrigen } : {}),
       ...(citaDestino !== null ? { citaDestino } : {}),
+      ...(despachoRef !== null ? { despachoRef } : {}),
     });
   }
 
@@ -591,6 +598,8 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
       // T-A5-05: solo si el archivo las trae (la clave ausente no pisa nada en el upsert que ignora duplicados).
       ...(f.citaOrigen ? { cita_origen_en: f.citaOrigen } : {}),
       ...(f.citaDestino ? { cita_destino_en: f.citaDestino } : {}),
+      // T-A5-13: igual que las citas, la clave ausente no toca la columna.
+      ...(f.despachoRef ? { despacho_ref: f.despachoRef } : {}),
       estatus: 'abierto',
     }));
     // Upsert que IGNORA duplicados contra `viaje_folio_unico` (0092): el que

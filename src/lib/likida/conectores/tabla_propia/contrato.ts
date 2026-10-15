@@ -33,6 +33,12 @@ export interface PosicionTablaPropia {
   fechaHoraLocal: string;
   velocidadKmh: number | null;
   ignicion: boolean | null;
+  /**
+   * T-A5-13: referencia de despacho (el «Icident» del TMS del cliente), ya normalizada (mayúsculas, sin espacios).
+   * OPCIONAL: la llave solo existe cuando su tabla la trae con valor; sin ella todo funciona como antes.
+   * Semántica débil a propósito: puede repetirse entre tramos de un mismo viaje (el cliente no ha definido más).
+   */
+  despacho?: string | null;
 }
 
 /** Una geocerca de SU sistema: círculo (centro + radio) o polígono. */
