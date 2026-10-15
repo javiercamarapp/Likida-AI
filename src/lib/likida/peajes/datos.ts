@@ -6,7 +6,7 @@ import { normalizarNombre, normalizarTag } from './formatos';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../conductor/geometria_datos';
 import { matrizDeArchivoCatalogo } from './archivo';
 import { parsearCasetasMatriz, type CasetaCatalogo } from './casetas';
-import { parsearTagsMatriz, resolverUnidadesDeTags } from './tags';
+import { parsearTagsMatriz, resolverUnidadesDeTags, validarBajaTag, type VigenciaTag } from './tags';
 import { validarMapeo, type ConfigMapeo } from './mapeo';
 import { planificarGps, evaluarCruceGps, type LineaParaGps, type VeredictoGps, type Muestra } from './cruce_gps';
 import { createHash } from 'node:crypto';
@@ -42,7 +42,9 @@ export async function listarUnidades(tenantId: string): Promise<Array<{ id: stri
 }
 
 // ── TAGs ────────────────────────────────────────────────────────────────────
-export interface TagVista { id: string; tag: string; tagOriginal: string | null; unidadId: string; unidadEconomico: string | null; proveedor: string | null; activo: boolean }
+export interface TagVista { id: string; tag: string; tagOriginal: string | null; unidadId: string; unidadEconomico: string | null; proveedor: string | null; activo: boolean;
+  /** Último día vigente, si el TAG se dio de baja (`peaje_tag_baja`). */
+  bajaEn?: string | null; bajaMotivo?: string | null }
 
 export async function listarTags(tenantId: string): Promise<TagVista[]> {
   const filas = await traerTodo<{ id: unknown; tag: unknown; tag_original: unknown; unidad_id: unknown; proveedor: unknown; activo: unknown }>(
@@ -53,11 +55,43 @@ export async function listarTags(tenantId: string): Promise<TagVista[]> {
   );
   const unidades = await listarUnidades(tenantId);
   const eco = new Map(unidades.map((u) => [u.id, u.numeroEconomico]));
-  return filas.map((f) => ({
-    id: String(f.id), tag: String(f.tag), tagOriginal: (f.tag_original as string | null) ?? null,
-    unidadId: String(f.unidad_id), unidadEconomico: eco.get(String(f.unidad_id)) ?? null,
-    proveedor: (f.proveedor as string | null) ?? null, activo: f.activo !== false,
-  }));
+  const bajas = await leerBajas(tenantId);
+  return filas.map((f) => {
+    const baja = bajas.get(String(f.tag));
+    return {
+      id: String(f.id), tag: String(f.tag), tagOriginal: (f.tag_original as string | null) ?? null,
+      unidadId: String(f.unidad_id), unidadEconomico: eco.get(String(f.unidad_id)) ?? null,
+      proveedor: (f.proveedor as string | null) ?? null, activo: f.activo !== false,
+      bajaEn: baja?.bajaEn ?? null, bajaMotivo: baja?.motivo ?? null,
+    };
+  });
+}
+
+/** TAG normalizado → su baja registrada (`peaje_tag_baja`, 0776). */
+async function leerBajas(tenantId: string): Promise<Map<string, { bajaEn: string; motivo: string | null }>> {
+  const filas = await traerTodo<{ tag: unknown; baja_en: unknown; motivo: unknown }>(
+    (d, h) => acotada(supabaseAdmin()
+      .from('peaje_tag_baja').select('tag, baja_en, motivo', conteo(d))
+      .eq('tenant_id', tenantId).order('tag').range(d, h), 'peajes.tags_baja'),
+    'peajes.tags_baja',
+  );
+  return new Map(filas.map((f) => [String(f.tag), { bajaEn: String(f.baja_en).slice(0, 10), motivo: (f.motivo as string | null) ?? null }]));
+}
+
+/**
+ * TODOS los TAGs (activos o dados de baja) con la unidad que los tuvo y su baja, si la hay.
+ * Es lo que necesita `resolverTagEnFecha` para que un cruce ANTERIOR a la baja conserve su
+ * unidad y uno POSTERIOR no. Lanza ante error de base (un mapa a medias daría «sin alta» falsos).
+ */
+export async function cargarVigenciaTags(tenantId: string): Promise<Map<string, VigenciaTag>> {
+  const filas = await traerTodo<{ tag: unknown; unidad_id: unknown }>(
+    (d, h) => acotada(supabaseAdmin()
+      .from('peaje_tag').select('tag, unidad_id', conteo(d))
+      .eq('tenant_id', tenantId).order('tag').range(d, h), 'peajes.vigencia_tags'),
+    'peajes.vigencia_tags',
+  );
+  const bajas = await leerBajas(tenantId);
+  return new Map(filas.map((f) => [String(f.tag), { unidadId: String(f.unidad_id), bajaEn: bajas.get(String(f.tag))?.bajaEn ?? null }]));
 }
 
 /** TAG normalizado → unidad, solo los activos. Lanza ante error de base: un mapa a medias dejaría líneas «sin unidad» falsas. */
@@ -71,7 +105,7 @@ export async function cargarMapaTags(tenantId: string): Promise<Map<string, stri
   return new Map(filas.map((f) => [String(f.tag), String(f.unidad_id)]));
 }
 
-export type ResultadoAltaTag = { ok: true } | { ok: false; motivo: string };
+export type ResultadoAltaTag = { ok: true; /** El TAG estaba de baja y volvió a darse de alta: la baja se retira. */ reactivadoDesdeBaja?: string } | { ok: false; motivo: string };
 
 export async function altaTag(tenantId: string, entrada: { tag: string; unidadId: string; proveedor?: string | null }): Promise<ResultadoAltaTag> {
   const tag = normalizarTag(entrada.tag);
@@ -86,13 +120,52 @@ export async function altaTag(tenantId: string, entrada: { tag: string; unidadId
     logger.error('peajes.alta_tag', { tenant: tenantId, err: error.message });
     return { ok: false, motivo: 'No se pudo guardar el TAG. Inténtalo de nuevo.' };
   }
-  return { ok: true };
+  return quitarBajasDeTags(tenantId, [tag]);
 }
 
-export async function bajaTag(tenantId: string, tagId: string): Promise<boolean> {
-  const { error } = await acotada(supabaseAdmin().from('peaje_tag').delete().eq('tenant_id', tenantId).eq('id', tagId), 'peajes.baja_tag');
-  if (error) logger.error('peajes.baja_tag', { tenant: tenantId, err: error.message });
-  return !error;
+/** Dar de alta otra vez un TAG dado de baja lo reactiva: se retira su baja para que sus cruces nuevos no se marquen. */
+async function quitarBajasDeTags(tenantId: string, tags: readonly string[]): Promise<ResultadoAltaTag> {
+  let desde: string | undefined;
+  for (const lote of lotes(tags)) {
+    const { data: previas, error: eLeer } = await acotada(
+      supabaseAdmin().from('peaje_tag_baja').select('tag, baja_en').eq('tenant_id', tenantId).in('tag', lote), 'peajes.reactivar_leer');
+    if (eLeer) { logger.error('peajes.reactivar_leer', { tenant: tenantId, err: eLeer.message }); return { ok: false, motivo: 'El TAG se guardó, pero no se pudo comprobar si estaba de baja. Vuelve a guardarlo.' }; }
+    if (!previas || previas.length === 0) continue;
+    desde = String((previas[0] as { baja_en: unknown }).baja_en).slice(0, 10);
+    const { error } = await acotada(supabaseAdmin().from('peaje_tag_baja').delete().eq('tenant_id', tenantId).in('tag', lote), 'peajes.reactivar');
+    if (error) { logger.error('peajes.reactivar', { tenant: tenantId, err: error.message }); return { ok: false, motivo: 'El TAG se guardó, pero no se pudo retirar su baja. Vuelve a guardarlo.' }; }
+  }
+  return desde ? { ok: true, reactivadoDesdeBaja: desde } : { ok: true };
+}
+
+/**
+ * BAJA LÓGICA (ya no borra la fila). Registra la fecha y el motivo en `peaje_tag_baja` y, si la
+ * baja ya rige (`fecha` ≤ hoy), deja el TAG en `activo=false`. El historial de cruces anteriores
+ * sigue resolviendo su unidad (`cargarVigenciaTags` + `resolverTagEnFecha`) y la regla
+ * `tag_dado_de_baja` marca los cruces posteriores. Es idempotente: repetirla actualiza fecha y motivo.
+ */
+export async function bajaTag(
+  tenantId: string,
+  tagId: string,
+  baja: { fecha: unknown; motivo?: unknown },
+  hoy: string = new Date().toISOString().slice(0, 10),
+): Promise<ResultadoAltaTag> {
+  const v = validarBajaTag(baja, hoy);
+  if (!v.ok) return v;
+  const { data: fila, error: eLeer } = await acotada(
+    supabaseAdmin().from('peaje_tag').select('id, tag, tag_original').eq('tenant_id', tenantId).eq('id', tagId).maybeSingle(), 'peajes.baja_tag_leer');
+  if (eLeer) { logger.error('peajes.baja_tag_leer', { tenant: tenantId, err: eLeer.message }); return { ok: false, motivo: 'No se pudo leer el TAG. Inténtalo de nuevo.' }; }
+  if (!fila) return { ok: false, motivo: 'Ese TAG ya no existe en tu flota.' };
+  const f = fila as { tag: unknown; tag_original: unknown };
+  const { error: eBaja } = await acotada(supabaseAdmin().from('peaje_tag_baja').upsert({
+    tenant_id: tenantId, tag: String(f.tag), tag_original: (f.tag_original as string | null) ?? null, baja_en: v.fecha, motivo: v.motivo,
+  }, { onConflict: 'tenant_id,tag' }), 'peajes.baja_tag');
+  if (eBaja) { logger.error('peajes.baja_tag', { tenant: tenantId, err: eBaja.message }); return { ok: false, motivo: 'No se pudo registrar la baja del TAG. Inténtalo de nuevo.' }; }
+  // Una baja programada (fecha futura) no apaga el TAG hoy; una vencida o de hoy sí.
+  const { error: eAct } = await acotada(
+    supabaseAdmin().from('peaje_tag').update({ activo: !v.vigente }).eq('tenant_id', tenantId).eq('id', tagId), 'peajes.baja_tag_activo');
+  if (eAct) { logger.error('peajes.baja_tag_activo', { tenant: tenantId, err: eAct.message }); return { ok: false, motivo: 'La baja quedó registrada, pero no se pudo apagar el TAG. Repite la baja.' }; }
+  return { ok: true };
 }
 
 export interface ResultadoImportacionCatalogo {
@@ -138,6 +211,9 @@ export async function importarTagsArchivo(tenantId: string, nombre: string, buff
       logger.error('peajes.importar_tags', { tenant: tenantId, err: error.message });
       return { ok: false, guardadas, actualizadas, rechazadas: todasRechazadas, error: `Se guardaron ${guardadas} TAGs y el resto falló. Vuelve a subir el archivo: es seguro repetirlo.` };
     }
+    // El importador reactiva (activo=true): un TAG que estaba de baja deja de estarlo.
+    const reactivadas = await quitarBajasDeTags(tenantId, lote.map((a) => a.tag));
+    if (!reactivadas.ok) return { ok: false, guardadas, actualizadas, rechazadas: todasRechazadas, error: reactivadas.motivo };
     for (const a of lote) {
       guardadas++;
       const previa = existentes.get(a.tag);

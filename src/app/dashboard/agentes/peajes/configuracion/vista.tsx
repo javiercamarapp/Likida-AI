@@ -318,14 +318,27 @@ function SeccionTags({ tags, unidades, acciones }: { tags: TagVista[] | null; un
         <div className="mt-3 space-y-1 max-h-[320px] overflow-y-auto">
           <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{numero(tags.length)} TAGs</p>
           {tags.slice(0, 300).map((t) => (
-            <div key={t.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 text-[12.5px]">
+            <div key={t.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12.5px]">
               <span className="cifra-mono">{t.tagOriginal ?? t.tag}</span>
               <span style={{ color: 'var(--muted)' }}>→ {t.unidadEconomico ?? 'unidad borrada'}</span>
               {t.proveedor && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{t.proveedor}</span>}
-              <form action={acciones.bajaTag} className="ml-auto">
-                <input type="hidden" name="tag" value={t.id} />
-                <button type="submit" aria-label={`Eliminar el TAG ${t.tag}`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} /></button>
-              </form>
+              {t.bajaEn ? (
+                <span className="text-[11.5px]" style={{ color: 'var(--warn, var(--muted))' }}>
+                  Baja desde el {t.bajaEn}{t.bajaMotivo ? ` · ${t.bajaMotivo}` : ''}. Un cruce posterior a esa fecha se marca para revisar.
+                </span>
+              ) : (
+                <form action={acciones.bajaTag} className="ml-auto flex items-end gap-1.5 flex-wrap">
+                  <input type="hidden" name="tag" value={t.id} />
+                  <label className="block">
+                    <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Último día en uso</span>
+                    <input type="date" name="fecha" required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} />
+                  </label>
+                  <Entrada nombre="motivo" etiqueta="Motivo" ph="Unidad siniestrada" ancho="w-[150px]" />
+                  <button type="submit" aria-label={`Eliminar el TAG ${t.tag} del uso: se da de baja con fecha y motivo`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>
+                    <Trash2 width={12} height={12} strokeWidth={2} /> Dar de baja
+                  </button>
+                </form>
+              )}
             </div>
           ))}
           {tags.length > 300 && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Se muestran los primeros 300.</p>}
