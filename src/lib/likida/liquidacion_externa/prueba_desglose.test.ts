@@ -89,7 +89,7 @@ describe('depurarDetalle', () => {
 });
 
 // Local-only: lo dispara ~/likida-loop/cinco-agentes/enviar-prueba-desglose.sh (Javier). Envía DE VERDAD el fixture a
-// LIKIDA_PRUEBA_DESGLOSE_PARA y escribe la línea de resultado en LIKIDA_PRUEBA_DESGLOSE_SALIDA. Sin esas variables se salta.
+// LIKIDA_PRUEBA_DESGLOSE_PARA y escribe un resumen fijo (ok / sin configurar / error), sin datos de red, en LIKIDA_PRUEBA_DESGLOSE_SALIDA. Sin esas variables se salta.
 describe.skipIf(!process.env.LIKIDA_PRUEBA_DESGLOSE_PARA)('envío real (local-only)', () => {
   it('manda el fixture sintético al buzón indicado', async () => {
     const { writeFileSync, realpathSync } = await import('node:fs');
@@ -98,13 +98,14 @@ describe.skipIf(!process.env.LIKIDA_PRUEBA_DESGLOSE_PARA)('envío real (local-on
     const r = await enviarPruebaDesglose(process.env.LIKIDA_PRUEBA_DESGLOSE_PARA as string);
     const salida = process.env.LIKIDA_PRUEBA_DESGLOSE_SALIDA;
     if (salida) {
-      // Solo se escribe el archivo temporal que crea el script (mktemp en el directorio temporal, prefijo fijo); la línea
-      // se reduce a texto imprimible simple, sin saltos ni caracteres de control, antes de tocar el disco.
+      // Solo se escribe el archivo temporal que crea el script (mktemp en el directorio temporal, prefijo fijo).
       const destino = join(realpathSync(dirname(salida)), basename(salida));
       if (dirname(destino) !== realpathSync(tmpdir()) || !/^prueba-desglose\.[A-Za-z0-9]+$/.test(basename(destino))) {
         throw new Error('LIKIDA_PRUEBA_DESGLOSE_SALIDA debe ser el temporal prueba-desglose.* del directorio temporal');
       }
-      writeFileSync(destino, `${r.linea.replace(/[^\x20-\x7E\u00A0-\uFFFF]/g, ' ')}\n`);
+      // Nunca se escribe lo recibido por la red (id, detalle, estado): solo un literal fijo elegido según el resultado.
+      const resumen = r.ok ? 'ok enviado' : r.linea === 'correo no configurado' ? 'correo no configurado' : 'error: el envío no se completó';
+      writeFileSync(destino, `${resumen}\n`);
     }
     expect(r.linea.length).toBeGreaterThan(0);
   });
