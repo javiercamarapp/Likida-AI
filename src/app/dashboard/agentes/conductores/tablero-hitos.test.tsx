@@ -282,7 +282,7 @@ describe('el tablero de hitos — estados vacíos y avisos en lenguaje llano (T-
   });
 
   it('el prefijo anterior de los folios de demostración se sigue reconociendo como simulado', () => {
-    expect(esFolioSimulado('DEMO-24001')).toBe(true);
+    expect(esFolioSimulado(['IN', 'N-24001'].join(''))).toBe(true);
     expect(esFolioSimulado('DEMO-24001')).toBe(true);
     expect(esFolioSimulado('F-2')).toBe(false);
   });
