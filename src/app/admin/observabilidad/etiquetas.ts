@@ -95,6 +95,8 @@ export const ETIQUETA_INTERRUPTOR: Record<string, string> = {
   // Las 2 del 0250 — los agentes vivos que corrían sin poderse apagar.
   'agente:carta_porte': 'Agente de Carta Porte',
   'agente:copiloto': 'Copiloto del fundador',
+  // La salida de Carta Porte al sistema del cliente (T-A3-28).
+  'agente:carta_porte_salida_tms': 'Salida de Carta Porte al sistema del cliente',
 };
 
 /**
@@ -130,4 +132,21 @@ const NOTA_LATENCIA_RUTA: Record<string, string> = {
 /** La aclaración de qué mide la latencia de esta ruta, o `null` si mide la respuesta completa. */
 export function notaDeLatenciaRuta(nombre: string): string | null {
   return NOTA_LATENCIA_RUTA[nombre] ?? null;
+}
+
+/**
+ * T-A4-42: los contadores que el cron `vigia` deja en el latido, con el nombre que se lee en /admin/crons. Solo cuentas: ningún
+ * texto, cliente ni operador de un aviso viaja por aquí. Una clave que no esté en el mapa se pinta cruda (visible, no rota).
+ */
+const ETIQUETA_CONTADOR_VIGIA: Record<string, string> = {
+  avisosCreados: 'avisos de viaje creados',
+  avisosEnviados: 'avisos de viaje enviados',
+  avisosFallidos: 'avisos de viaje fallidos',
+  avisosOmitidos: 'avisos de viaje omitidos o diferidos',
+  avisosPendientesViejos: 'avisos de viaje esperando confirmación más de 2 h',
+  avisosConError: 'el módulo de avisos de viaje falló',
+};
+
+export function etiquetaContadorVigia(clave: string): string {
+  return ETIQUETA_CONTADOR_VIGIA[clave] ?? clave;
 }

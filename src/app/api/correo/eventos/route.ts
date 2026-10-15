@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { suprimirCorreo } from '@/lib/likida/agentes/enviador';
 import { confirmarPorResend } from '@/lib/likida/buzon/entrega_repo';
+import { confirmarEntregaCorreo } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { logger } from '@/lib/logger';
 import { cuerpoAcotado } from '../_cuerpo';
 
@@ -127,6 +128,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'no se pudo escribir el evento' }, { status: 500 });
   }
   if (!Array.isArray(data) || data.length === 0) {
+    // ¿Es el desglose de liquidación que se mandó al operador, al coordinador o a RH (T-A1-18)? Va ANTES del buzón y
+    // de cualquier supresión: un rebote de un correo de nómina NO entra a la lista de supresión global (esa es de
+    // campañas) — se marca en el operador y se abre una excepción para que una persona lo corrija. Si la base falla:
+    // 500, Resend reintenta (el evento es la única fuente de este dato).
+    try {
+      const d = await confirmarEntregaCorreo(emailId, estado === 'entregado' ? 'entregada' : estado === 'rebotado' ? 'rebotada' : 'queja');
+      if (d.resultado !== 'sin_entrega') {
+        logger.info('correo.eventos.desglose', { emailId, estado, resultado: d.resultado, rol: d.rol, operadorMarcado: d.operadorMarcado === true });
+        return NextResponse.json({ entregaCorreo: d.resultado, estado });
+      }
+    } catch (e) {
+      logger.error('correo.eventos.desglose_sin_escribir', { emailId, estado, err: e instanceof Error ? e.message : String(e) });
+      return NextResponse.json({ error: 'no se pudo escribir el evento' }, { status: 500 });
+    }
     // ¿Es la confirmación de un lote de facturas enviado al contador (0531)? Entregado o rebotado; un rebote
     // suelta las facturas para rearmar el lote. La dirección del contador NO se suprime sola: una persona la corrige.
     if (estado !== 'queja') {

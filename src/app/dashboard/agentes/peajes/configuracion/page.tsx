@@ -18,6 +18,9 @@ import {
   guardarPullPeajes, apagarPullPeajes, borrarCredencialPull,
   type ResultadoImportacionCatalogo,
 } from '@/lib/likida/peajes/datos';
+import {
+  listarReglasCasetas, listarTagsBaja, listarExcepcionesUnidad, guardarExcepcionUnidad, quitarExcepcionUnidad, guardarReglaCaseta, parsearClases, altaBajaDeTag, quitarBajaDeTag, cargarCoordenadasDeCasetas,
+} from '@/lib/likida/peajes/revision_cobros';
 import { importarCursosArchivo, importarCursosDeTablaPropia, type ResultadoImportCursos } from '@/lib/likida/peajes/cursos_importar';
 import { secretoMaestro, claveDeFlota, reintentarArchivoPeaje } from '@/lib/likida/peajes/ingesta';
 import { cofreConfigurado } from '@/lib/likida/conectores/cofre';
@@ -99,7 +102,10 @@ export default async function PaginaConfiguracionPeajes({
   const puedeAdministrar = puedeVerArea(rol, 'administracion');
 
   const secreto = secretoMaestro();
-  const [tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
+  const [reglasCasetas, tagsBaja, excepcionesUnidad, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
+    safe(() => listarReglasCasetas(tenantId)),
+    safe(() => listarTagsBaja(tenantId)),
+    safe(() => listarExcepcionesUnidad(tenantId)),
     safe(() => listarTags(tenantId)),
     safe(() => listarUnidades(tenantId)),
     safe(() => listarCasetas(tenantId)),
@@ -199,13 +205,14 @@ export default async function PaginaConfiguracionPeajes({
     const r = await altaTag(tenantId, {
       tag: String(fd.get('tag') ?? ''), unidadId: String(fd.get('unidad') ?? ''), proveedor: String(fd.get('proveedor') ?? ''),
     });
-    volverConfig(sufijo, r.ok ? 'TAG guardado.' : `error:${r.motivo}`);
+    volverConfig(sufijo, r.ok ? (r.reactivadoDesdeBaja ? `TAG guardado y reactivado (estaba de baja desde el ${r.reactivadoDesdeBaja}).` : 'TAG guardado.') : `error:${r.motivo}`);
   }
   async function accionBajaTag(fd: FormData) {
     'use server';
     const no = await puertaConfig(tenantId);
     if (no) volverConfig(sufijo, `error:${no}`);
-    volverConfig(sufijo, (await bajaTag(tenantId, String(fd.get('tag') ?? ''))) ? 'TAG eliminado.' : 'error:No se pudo eliminar el TAG.');
+    const r = await bajaTag(tenantId, String(fd.get('tag') ?? ''), { fecha: fd.get('fecha'), motivo: fd.get('motivo') });
+    volverConfig(sufijo, r.ok ? 'TAG dado de baja: queda en el historial con su fecha y motivo.' : `error:${r.motivo}`);
   }
   async function accionImportarTags(fd: FormData) {
     'use server';
@@ -280,6 +287,56 @@ export default async function PaginaConfiguracionPeajes({
     volverConfig(sufijo, (await cambiarEstadoCurso(tenantId, String(fd.get('curso') ?? ''), activo)) ? (activo ? 'Curso activado.' : 'Curso desactivado: ya no se evalúa en el reporte de reclamación.') : 'error:No se pudo cambiar el curso.');
   }
 
+  // ── Reglas de cobro (revisión de cobros) ──
+  async function accionGuardarReglaCaseta(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) volverConfig(sufijo, `error:${no}`);
+    const clases = parsearClases(String(fd.get('clases') ?? ''));
+    if (clases === null) volverConfig(sufijo, 'error:Las clases se escriben como números separados por comas (por ejemplo 1, 6).');
+    const r = await guardarReglaCaseta(tenantId, {
+      nombre: String(fd.get('nombre') ?? ''), clasesPermitidas: clases ?? [], noCruzar: String(fd.get('no_cruzar') ?? '') === '1',
+    });
+    volverConfig(sufijo, r.ok ? 'Regla de la caseta guardada. La revisión de cobros la usa en cuanto abras un desglose.' : `error:${r.motivo}`);
+  }
+  async function accionCargarCoordenadas(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) volverConfig(sufijo, `error:${no}`);
+    const a = await archivoDeForm(fd);
+    if (typeof a === 'string') volverConfig(sufijo, `error:${a}`);
+    const r = await cargarCoordenadasDeCasetas(tenantId, (a as { buffer: Uint8Array }).buffer);
+    if (r.error) volverConfig(sufijo, `error:${r.error}`);
+    const rech = r.rechazadas.length > 0 ? ` · ${r.rechazadas.length} filas rechazadas (${r.rechazadas.slice(0, 5).map((x) => `fila ${x.fila}: ${x.motivo}`).join('; ')}${r.rechazadas.length > 5 ? '…' : ''})` : '';
+    volverConfig(sufijo, `${r.guardadas} casetas con coordenadas${rech}`);
+  }
+  async function accionAltaBajaTag(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) volverConfig(sufijo, `error:${no}`);
+    const r = await altaBajaDeTag(tenantId, { tag: String(fd.get('tag') ?? ''), bajaEn: String(fd.get('baja_en') ?? ''), motivo: String(fd.get('motivo') ?? '') || null });
+    volverConfig(sufijo, r.ok ? 'TAG dado de baja. Cualquier cruce posterior a esa fecha se marcará como candidato.' : `error:${r.motivo}`);
+  }
+  async function accionQuitarBajaTag(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) volverConfig(sufijo, `error:${no}`);
+    volverConfig(sufijo, (await quitarBajaDeTag(tenantId, String(fd.get('baja') ?? ''))) ? 'Baja del TAG quitada.' : 'error:No se pudo quitar la baja.');
+  }
+  async function accionGuardarExcepcionUnidad(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) volverConfig(sufijo, `error:${no}`);
+    const r = await guardarExcepcionUnidad(tenantId, { caseta: String(fd.get('caseta') ?? ''), unidad: String(fd.get('unidad') ?? ''), nota: String(fd.get('nota') ?? '') || null });
+    volverConfig(sufijo, r.ok ? 'Excepción guardada. Esa unidad ya no se marca al cruzar esa caseta.' : `error:${r.motivo}`);
+  }
+  async function accionQuitarExcepcionUnidad(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) volverConfig(sufijo, `error:${no}`);
+    volverConfig(sufijo, (await quitarExcepcionUnidad(tenantId, String(fd.get('excepcion') ?? ''))) ? 'Excepción quitada.' : 'error:No se pudo quitar la excepción.');
+  }
+
   // ── Mapeo de columnas ──
   async function accionGuardarMapeo(fd: FormData) {
     'use server';
@@ -288,6 +345,7 @@ export default async function PaginaConfiguracionPeajes({
     const campo = (k: string) => String(fd.get(k) ?? '').trim();
     const r = await guardarMapeo(tenantId, campo('proveedor'), {
       fecha: campo('fecha'), hora: campo('hora'), caseta: campo('caseta'), monto: campo('monto'), tag: campo('tag'),
+      unidad: campo('unidad'), clase: campo('clase'),
     });
     volverConfig(sufijo, r.ok ? 'Mapeo guardado. Se usa en los próximos archivos de ese proveedor; los fallidos se reintentan desde «Archivos recibidos».' : `error:${r.motivo}`);
   }
@@ -323,6 +381,13 @@ export default async function PaginaConfiguracionPeajes({
         puedeAdministrar,
         direccionCorreo: entradas?.correoToken ? direccionPj(entradas.correoToken, dominioBuzon()) : null,
         cofreConfigurado: cofreConfigurado(),
+      }}
+      reglasCobro={{
+        casetas: reglasCasetas, bajas: tagsBaja, excepciones: excepcionesUnidad,
+        acciones: {
+          guardarReglaCaseta: accionGuardarReglaCaseta, cargarCoordenadas: accionCargarCoordenadas, altaBajaTag: accionAltaBajaTag, quitarBajaTag: accionQuitarBajaTag,
+          guardarExcepcionUnidad: accionGuardarExcepcionUnidad, quitarExcepcionUnidad: accionQuitarExcepcionUnidad,
+        },
       }}
       acciones={{
         activarCorreo: accionActivarCorreo, desactivarCorreo: accionDesactivarCorreo, rotarCorreo: accionRotarCorreo, guardarRemitentes: accionGuardarRemitentes,

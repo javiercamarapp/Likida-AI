@@ -221,7 +221,7 @@ const PISO_TOPE_TENANT_USD = 5.00;
 // RE-AUDITORÍA 25, FASE 3 (CAP-1, MEDIO): el techo por defecto NO se sube a
 // mano — se DERIVA del mismo costo medido (`COSTO_ESTIMADO_USD.viajeCompleto`,
 // $0.1848 con el $0.18/liquidación medido en `models.ts`) para el volumen
-// objetivo de escala (`docs/escala-15k.md`: 15,000 viajes/mes ≈ 500/día), con
+// objetivo de escala (la documentación interna: 15,000 viajes/mes ≈ 500/día), con
 // un margen operativo encima — picos de fotos por viaje y reintentos no
 // promedian $0.1848 exacto. El $60 viejo era un número puesto a mano en la
 // auditoría 24 que la 25 midió y no subió; con 500 viajes/día × $0.1848 =

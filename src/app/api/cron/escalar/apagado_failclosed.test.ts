@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Sin perfiles de tenant (0770): este archivo prueba el cron de siempre. El filtro por perfil tiene
+// su propia prueba (src/app/api/cron/perfil_crons.test.ts).
+vi.mock('@/lib/auth/perfil_tenant', () => ({
+  tenantsConPerfilASaltar: async () => new Set<string>(),
+  tenantsConPerfil: async () => new Set<string>(),
+}));
+
 // ═══════════════════════════════════════════════════════════════════════════
 // FAIL-CLOSED DE VERDAD para el cron de escalar — Fase 1 del blueprint.
 //

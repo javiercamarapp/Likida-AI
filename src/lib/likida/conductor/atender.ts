@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger';
+import { moduloEnStandBy } from '@/lib/auth/perfil_tenant';
 import { enviarSolicitudUbicacion } from '@/lib/meta/client';
 import type { ConfigConductor } from './config';
 import { interpretarBoton, interpretarTexto, pareceHablarDeHito, type Intencion, type Interpretacion } from './interprete';
@@ -61,7 +62,7 @@ export interface DepsAtender {
   cargarHitos(tenantId: string, viajeId: string): Promise<HitoFila[]>;
   guardarEvidencia: typeof guardarEvidencia;
   /** P2 (0636): el chofer contestó un botón del «¿sigues bien?». Opcional: las pruebas que no lo ejercen no lo declaran. */
-  responderSenalVida?(tenantId: string, viajeId: string, respuesta: RespuestaSenalVida, ahora: Date): Promise<'cerrado' | 'sin_episodio' | 'fallo'>;
+  responderSenalVida?(tenantId: string, viajeId: string, respuesta: RespuestaSenalVida, ahora: Date, config?: ConfigConductor): Promise<'cerrado' | 'sin_episodio' | 'fallo'>;
 }
 
 export const depsReales: DepsAtender = {
@@ -84,7 +85,7 @@ export const depsReales: DepsAtender = {
   adjuntarUbicacion,
   cargarHitos,
   guardarEvidencia,
-  responderSenalVida: (tenantId, viajeId, respuesta, ahora) => responderEpisodioSenalVida(tenantId, viajeId, respuesta, silencioDeRespuesta(respuesta), ahora),
+  responderSenalVida: (tenantId, viajeId, respuesta, ahora, config) => responderEpisodioSenalVida(tenantId, viajeId, respuesta, silencioDeRespuesta(respuesta, config), ahora),
 };
 
 /** Lo que se le contesta al chofer tras tocar un botón de la señal de vida. */
@@ -168,7 +169,7 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
     // ── Lo que NO cambia hitos ─────────────────────────────────────────────
     if (interp.intencion.clase === 'senal_vida') {
       const respuesta = interp.intencion.respuesta;
-      const resultado = await (deps.responderSenalVida ?? depsReales.responderSenalVida!)(e.tenantId, viaje.id, respuesta, ahora);
+      const resultado = await (deps.responderSenalVida ?? depsReales.responderSenalVida!)(e.tenantId, viaje.id, respuesta, ahora, config);
       return { mensajes: [{ texto: textoRespuestaSenalVida(respuesta, resultado, viaje.folio) }] };
     }
     if (interp.intencion.clase === 'pedir_ubicacion') {
@@ -350,6 +351,8 @@ export interface DepsAcuse {
   evento: typeof registrarEvento;
   /** P2 (0636): el «Ya lo atiendo» también cierra el episodio de «sin señal de vida» del viaje. Opcional. */
   cerrarSenalVida?(tenantId: string, viajeId: string, ahora: Date): Promise<number>;
+  /** Perfil de la flota (fase 1): el Conductor está en «Próximamente» → el acuse no escribe ni contesta. Opcional. */
+  enStandBy?(tenantId: string): Promise<boolean>;
 }
 
 const depsAcuseReales: DepsAcuse = {
@@ -363,9 +366,13 @@ const depsAcuseReales: DepsAcuse = {
   marcar: marcarEscalacionAtendida,
   evento: registrarEvento,
   cerrarSenalVida: cerrarEpisodioPorJefe,
+  enStandBy: (tenantId) => moduloEnStandBy(tenantId, 'conductor'),
 };
 
-/** `null` = el texto no es un acuse de escalación. Un número ajeno NO puede acusar viajes de otra flota. */
+/**
+ * `null` = el texto no es un acuse de escalación. Un número ajeno NO puede acusar viajes de otra flota.
+ * `''` = es un acuse pero la flota tiene el Conductor en «Próximamente» (perfil): se consume en silencio, sin escribir.
+ */
 export async function atenderAcuseJefe(
   telefono: string, texto: string, ahora: Date = new Date(), deps: DepsAcuse = depsAcuseReales,
 ): Promise<string | null> {
@@ -374,6 +381,10 @@ export async function atenderAcuseJefe(
   try {
     const v = await deps.viajePorId(b.viajeId);
     // Misma respuesta para «no existe» y «no es tuyo»: no se confirma qué viajes hay.
+    if (v && deps.enStandBy && (await deps.enStandBy(v.tenantId))) {
+      logger.info('conductor.acuse_stand_by', { tenantId: v.tenantId });
+      return '';
+    }
     if (!v || !(await deps.puedeAcusar(v.tenantId, telefono))) return 'No tengo ese aviso asignado a este número.';
     const marcados = await deps.marcar(v.tenantId, b.viajeId, ahora);
     for (const h of marcados) await deps.evento(h, 'atendido', {});

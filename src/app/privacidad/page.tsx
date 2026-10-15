@@ -24,7 +24,7 @@ import { estadoLegalProduccion, LEGAL_CONFIG } from '@/lib/legal/config';
 // sala.
 //
 // ⚠️ REVISAR ANTES DE PUBLICARLA COMO LA OFICIAL. Este texto está escrito contra
-// el checklist de `docs/conocimiento/11-datos-personales.md` §5.4 y contra lo que
+// el checklist de la documentación interna §5.4 y contra lo que
 // el producto de verdad hace, pero es una declaración que hace una empresa. Los
 // datos entre 🔴 son los que faltan y solo Javier puede poner.
 // ═══════════════════════════════════════════════════════════════════════════

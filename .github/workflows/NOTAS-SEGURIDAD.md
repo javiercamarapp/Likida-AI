@@ -34,9 +34,7 @@ propio, no las dependencias.
 `PUT /repos/.../branches/master/protection` responde **403: "Upgrade to GitHub Pro or
 make this repository public to enable this feature."**
 
-Hoy **cualquiera con acceso puede empujar directo a master sin un solo check**. El
-auto-merge de `auto-merge-rutina.yml` exige que todos los checks pasen, pero solo
-cubre las ramas `mejora/*`: un `git push origin master` no pasa por ahí.
+Hoy **cualquiera con acceso puede empujar directo a master sin un solo check**. Un `git push origin master` directo no pasa por ningún check.
 
 Cuando el plan lo permita, la regla para `master` debe exigir estos dos checks:
 

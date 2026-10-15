@@ -575,7 +575,7 @@ export function armarEnLaMesa(entrada: {
 // Antes: `getCobranza` (todas las facturas) + `factura_emitida` + TODOS los
 // viajes liquidados + TODAS las liquidaciones + `cliente` + `factura_viaje`
 // por lotes, y `armarCartera`/`armarEnLaMesa` reducían en JS. Con 50k
-// viajes/mes eso caducaba ~mes 2 (docs/escala-50k/MAPA.md #13).
+// viajes/mes eso caducaba ~mes 2 (la documentación interna #13).
 // `facturacion_clientes_tenant` hace las DOS reducciones en SQL con las
 // mismas reglas (un solo `hoy`, cubetas, borrador ≠ facturado, cierre en día
 // local MX) y devuelve los agregados completos + una página de facturas (≤100)

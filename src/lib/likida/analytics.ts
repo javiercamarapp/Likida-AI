@@ -31,7 +31,7 @@ import { acotada } from './presupuesto';
 // ═══════════════════════════════════════════════════════════════════════════
 // ESCALA 50k (mig. 0150, 22-ago-2026): las ONCE reducciones "traer filas →
 // agregar en JS" de este archivo que quedaban con fecha de caducidad se
-// movieron a RPC (docs/escala-50k/MAPA.md). Todas comparten este lector:
+// movieron a RPC (la documentación interna). Todas comparten este lector:
 // UN viaje de red, y fail-closed de FORMA — una respuesta que no tenga la
 // forma esperada LANZA, nunca se lee como "cero" (un Resumen en $0 se ve
 // exactamente igual que una flota sin actividad).
@@ -123,7 +123,7 @@ export interface ComparativoPeriodo {
  * correcto para no repetir la misma ventana tres veces. Pero la vista
  * "histórico" de `getSeriesKpiCards` (ventana ~10 años) lee prácticamente la
  * tabla `gasto` ENTERA del tenant, y con 45,000 gastos/mes eso toca el techo
- * de `traerTodo` (100 páginas) ~mes 2.2 (docs/escala-15k.md §6) — la MISMA
+ * de `traerTodo` (100 páginas) ~mes 2.2 (la documentación interna §6) — la MISMA
  * fecha de caducidad que `getGastosFiscales`, y esta función corre en CADA
  * carga del Resumen (tres veces: semanal/mensual/histórico).
  *
@@ -211,7 +211,7 @@ export async function getSeriesKpiCards(
  * Traía TODA `liquidacion` del tenant con `traerTodo` para contar por estatus
  * y sumar el dinero observado de `diferencias` (jsonb) en JavaScript — se lee
  * en CADA carga de /dashboard y /dashboard/contador, y caduca ~mes 8.3 con
- * 15,000 viajes/mes (docs/escala-15k.md §6). `kpis_liquidacion_tenant` hace
+ * 15,000 viajes/mes (la documentación interna §6). `kpis_liquidacion_tenant` hace
  * el conteo/suma en SQL: UN viaje de red, sin techo de páginas. Desde 0344
  * excluye rechazadas; las pendientes siguen siendo resultados operativos. La
  * prueba de equivalencia (`analytics_kpis_acreditables.test.ts`) compara la
@@ -680,7 +680,7 @@ export interface Acreditables {
  * AGREGADO EN SQL DESDE EL 15-AGO-2026 (mig. 0112): traía TODA `liquidacion`
  * del tenant con `traerTodo` para sumar cuatro columnas ya calculadas por
  * liquidación —sin lógica fiscal que reimplementar, solo aritmética— y
- * caducaba ~mes 8.3 con 15,000 viajes/mes (docs/escala-15k.md §6).
+ * caducaba ~mes 8.3 con 15,000 viajes/mes (la documentación interna §6).
  * `acreditables_liquidacion_tenant` hace las cuatro sumas en SQL: UN viaje de
  * red. La prueba de equivalencia (`analytics_kpis_acreditables.test.ts`)
  * compara la reducción JS vieja contra la forma nueva sobre el mismo dataset.
@@ -946,7 +946,7 @@ export async function contarViajes(
 /** Un renglón de la bitácora del Agente de Conductores (F4): cada sello real
  *  del ciclo de comunicación con el chofer, del más reciente al más viejo. */
 export interface EventoConductor {
-  tipo: 'avisado' | 'acepto' | 'escalado' | 'llegada' | 'descarga' | 'regreso';
+  tipo: 'avisado' | 'acepto' | 'en_seguimiento_importado' | 'escalado' | 'llegada' | 'descarga' | 'regreso';
   folio: string;
   operador: string | null;
   cuando: string;
@@ -957,30 +957,78 @@ const SELLOS_CONDUCTOR: ReadonlyArray<[EventoConductor['tipo'], string]> = [
   ['llegada', 'llegada_en'], ['descarga', 'descarga_en'], ['regreso', 'regreso_en'],
 ];
 
+/** Los viajes más recientes con todos los sellos del ciclo del chofer. UNA sola
+ *  consulta que alimentan la bitácora y el tiempo de aceptación (T-A5-06): así
+ *  la frontera de datos no suma una llamada. Si la base no contesta, LANZA. */
+async function leerSellosRecientes(tenantId: string, limite: number, nombre: string) {
+  const res = await acotada(
+    supabaseAdmin()
+    .from('viaje')
+    .select('folio, id, avisado_en, aceptado_en, aceptado_origen, escalado_en, llegada_en, descarga_en, regreso_en, operador:operador_id(nombre)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(limite),
+    nombre,
+  );
+  return exigir(res, nombre) ?? [];
+}
+
+/** Cuántos viajes recientes mide el tiempo de aceptación (la tarjeta lo rotula). */
+export const VENTANA_TIEMPO_ACEPTACION = 200;
+
+/** T-A5-06 · El tiempo medio que tarda el chofer en aceptar, sobre los
+ *  `VENTANA_TIEMPO_ACEPTACION` viajes más recientes de la flota. Los de
+ *  importación se leen para CONTARLOS como excluidos, no para promediarlos
+ *  (`tiempoAceptacionChofer`). */
+export async function getTiempoAceptacionChofer(tenantId: string): Promise<ReturnType<typeof tiempoAceptacionChofer>> {
+  const filas = await leerSellosRecientes(tenantId, VENTANA_TIEMPO_ACEPTACION, 'getTiempoAceptacionChofer');
+  return tiempoAceptacionChofer(filas as unknown as FilaAceptacion[]);
+}
+
 /** Los sellos de los viajes recientes, aplanados a una bitácora. Ventana de
  *  60 viajes: es la bitácora de actividad, no un histórico exhaustivo — la
  *  vista lo rotula así. */
 export async function getEventosConductores(tenantId: string, limite = 15): Promise<EventoConductor[]> {
-  const res = await acotada(
-    supabaseAdmin()
-    .from('viaje')
-    .select('folio, id, avisado_en, aceptado_en, escalado_en, llegada_en, descarga_en, regreso_en, operador:operador_id(nombre)')
-    .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: false })
-    .limit(60),
-    'getEventosConductores',
-  );
-  const filas = exigir(res, 'getEventosConductores') ?? [];
+  const filas = await leerSellosRecientes(tenantId, 60, 'getEventosConductores');
   const eventos: EventoConductor[] = [];
   for (const v of filas) {
     const op = ((v.operador as { nombre?: string } | null)?.nombre) ?? null;
     const folio = (v.folio as string) || (v.id as string).slice(0, 8);
     for (const [tipo, col] of SELLOS_CONDUCTOR) {
       const cuando = (v as Record<string, unknown>)[col];
-      if (typeof cuando === 'string') eventos.push({ tipo, folio, operador: op, cuando });
+      if (typeof cuando !== 'string') continue;
+      // T-A5-06: un `aceptado_en` escrito por la importación NO es que el
+      // chofer dijo que sí; se rotula aparte para no contarlo como aceptación.
+      const t: EventoConductor['tipo'] = tipo === 'acepto' && v.aceptado_origen === 'importacion'
+        ? 'en_seguimiento_importado' : tipo;
+      eventos.push({ tipo: t, folio, operador: op, cuando });
     }
   }
   return eventos.sort((a, b) => Date.parse(b.cuando) - Date.parse(a.cuando)).slice(0, limite);
+}
+
+/** Una fila mínima para medir cuánto tarda el chofer en aceptar. */
+export interface FilaAceptacion {
+  avisado_en: string | null;
+  aceptado_en: string | null;
+  aceptado_origen?: string | null;
+}
+
+/** Cuántos minutos tarda el chofer en aceptar (`avisado_en → aceptado_en`),
+ *  en promedio. T-A5-06: los viajes con `aceptado_origen = 'importacion'`
+ *  llevan `aceptado_en` escrito por el sistema (latencia 0 falsa) y se
+ *  EXCLUYEN: medirlos arrastraría la media hacia abajo. `n` = viajes medidos;
+ *  sin ninguno, `minutos` es `null` (no 0). */
+export function tiempoAceptacionChofer(filas: readonly FilaAceptacion[]): { minutos: number | null; n: number; excluidosImportados: number } {
+  let suma = 0, n = 0, excluidosImportados = 0;
+  for (const f of filas) {
+    if (f.aceptado_origen === 'importacion') { excluidosImportados++; continue; }
+    if (!f.avisado_en || !f.aceptado_en) continue;
+    const ms = Date.parse(f.aceptado_en) - Date.parse(f.avisado_en);
+    if (!Number.isFinite(ms) || ms < 0) continue;
+    suma += ms / 60_000; n++;
+  }
+  return { minutos: n > 0 ? suma / n : null, n, excluidosImportados };
 }
 
 /** Viajes escalados que siguen sin chofer que acepte — la alerta del Inicio
@@ -1980,7 +2028,7 @@ export async function getLineasPorConciliar(tenantId: string): Promise<ColaPorCo
 // Movida aquí desde `dashboard/cuadre/page.tsx` el 10-ago-2026: vivía como
 // función local no exportada dentro de esa página, y al borrarla para el
 // rediseño de "dueño de flota" (ver inventario en
-// `docs/conocimiento/41-inventario-dueno-flota-pre-rediseno.md`) esta consulta
+// la documentación interna) esta consulta
 // se habría perdido en silencio — es la única de las 17 páginas del
 // inventario cuya lógica no vivía ya en `lib/likida`.
 

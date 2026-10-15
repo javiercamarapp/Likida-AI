@@ -10,7 +10,7 @@
 // su salida es un enum que el código vuelve a validar.
 //
 // Prioridad (de más a menos delicada — ante la duda, un humano):
-//   baja > pide_humano > queja > ETA/ubicación/documentos/factura > saludo
+//   baja > pide_humano > queja > ETA/ubicación/documentos/factura/datos de la unidad > saludo
 // «baja» solo se reconoce por regla determinista: dar de baja a alguien es un
 // efecto legal que ningún modelo decide.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -69,6 +69,20 @@ const FACTURA_POD: readonly RegExp[] = [
   /\b(pod|comprobante de entrega|prueba de entrega|acuse de (entrega|recibo)|evidencia de entrega|foto de (la )?entrega|remision firmada|firmada de recibido)\b/,
 ];
 
+// «Datos de la unidad» (41dfb197 00:00): ¿con qué unidad/caja va?, ¿placas?, ¿quién es el operador? Se piden por pregunta
+// explícita: nombrar la unidad sin pedir sus datos («la ubicación de la unidad») sigue siendo ubicación.
+const DATOS_UNIDAD: readonly RegExp[] = [
+  /\b(con que|en que|que|cual)\b[^.]{0,15}\b(unidad|camion|tracto|tractocamion|caja|remolque|trailer|pipa)\b[^.]{0,20}\b(va|viene|vienen|van|trae|traen|llega|llegan|lleva|llevan|asignad[oa]|sale|salio)\b/,
+  /\b(que|cual|cuales)\b[^.]{0,6}\b(caja|unidad|tracto|remolque)\b[^.]{0,6}\b(es|son|tiene|tienen|trae|asignaron|asignada|asignado)\b/,
+  /\b(numero|num)\b[^.]{0,8}\b(de la |de el |del |de )?(caja|unidad|economico|tracto|tractocamion|remolque)\b/,
+  /\bplacas?\b/,
+  /\b(quien|cual)\b[^.]{0,14}\b(es|sera|va de|lleva|maneja|conduce|viene de)\b[^.]{0,14}\b(operador|chofer|conductor|piloto|el que lo lleva)\b/,
+  /\bquien (maneja|conduce|lleva (la|el|mi) (carga|viaje|unidad|camion|caja))\b/,
+  /\b(nombre|datos) (del|de el) (operador|chofer|conductor|piloto)\b/,
+  /\b(datos|informacion) (de la|de mi|del|de el|de) (unidad|caja|camion|tracto|tractocamion|remolque)\b/,
+  /\b(caja|unidad|operador|chofer|conductor) asignad[oa]\b/,
+];
+
 // Saludos y acuses cortos: se comparan como FRASE (hasta una palabra extra: «hola María»),
 // no con una regex —así no hay cuantificadores anidados que vigilar.
 const SALUDOS = new Set([
@@ -93,6 +107,7 @@ const ORDEN_DATO: ReadonlyArray<[Intencion, readonly RegExp[]]> = [
   ['ubicacion', UBICACION],
   ['documentos', DOCUMENTOS],
   ['factura_pod', FACTURA_POD],
+  ['datos_unidad', DATOS_UNIDAD],
 ];
 
 /**

@@ -24,6 +24,8 @@ export interface PosicionLeida {
   rumbo: number | null;
   /** Ignición. `null` = el proveedor no la reporta (no es lo mismo que apagada). */
   ignicion?: boolean | null;
+  /** T-A5-13: referencia de despacho (Icident) ya normalizada, si la fuente la trae. Va a `posicion.despacho_ref` (0802). */
+  despachoRef?: string | null;
 }
 
 /**

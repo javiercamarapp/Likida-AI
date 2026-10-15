@@ -13,7 +13,7 @@
 // `liquidacion`, `factura_emitida`+`factura_saldo` y `cliente` ENTERAS con
 // `traerTodo` para reducirlas en JS. `traerTodo` es correcto —lanza en vez de
 // truncar— pero lanza a las 100,000 filas: con 50k viajes/mes esas tres
-// pantallas caducaban ~mes 2 (docs/escala-50k/MAPA.md #12, #14, #16). Ahora
+// pantallas caducaban ~mes 2 (la documentación interna #12, #14, #16). Ahora
 // cada reducción es UNA RPC (`rentabilidad_tenant`, `cartera_tenant`,
 // `cobranza_tenant`) con el mismo criterio que antes —un `ingreso_flete`
 // NULL no es cero, una cancelada no es dinero que alguien deba— y el lado JS

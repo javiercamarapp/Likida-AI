@@ -56,9 +56,9 @@ describe('catalogoParaCaptura — derivado del catálogo, nunca una segunda list
     // de facturación con cuenta (20-ago-2026). Esa última mitad se DERIVA del
     // mismo registro que la pantalla, porque su lista vive en `comercios.ts` y
     // crece con él; los fijos se quedan escritos para que un cambio ahí no
-    // pase sin que esta prueba lo vea.
+    // pase sin que esta prueba lo vea. `tms_api_lectura` (lectura del TMS del cliente, 0780) también pide credenciales.
     const esperados = [
-      'odoo', 'oracle_fusion', 'powergas', 'sap_b1',
+      'odoo', 'oracle_fusion', 'powergas', 'sap_b1', 'tms_api_lectura',
       ...CONECTORES_GPS.map((c) => c.id),
       ...CONECTORES_PORTALES_FACTURACION.map((c) => c.id),
     ].sort();
@@ -76,10 +76,10 @@ describe('catalogoParaCaptura — derivado del catálogo, nunca una segunda list
     }
   });
 
-  it('agrupa ERP, Rastreo, Peajes y Portales, y todo conector trae sus campos con forma', () => {
+  it('agrupa Hoja/archivo, ERP, Rastreo, Peajes y Portales, y todo conector trae sus campos con forma', () => {
     const grupos = catalogoParaCaptura();
     expect(grupos.map((g) => g.categoria)).toEqual([
-      'ERP y contabilidad', 'Rastreo GPS', 'Peaje y monederos', 'Portal de facturación',
+      'Hoja de cálculo y archivo', 'ERP y contabilidad', 'Rastreo GPS', 'Peaje y monederos', 'Portal de facturación',
     ]);
     for (const c of grupos.flatMap((g) => g.conectores)) {
       expect(c.campos.length).toBeGreaterThan(0);

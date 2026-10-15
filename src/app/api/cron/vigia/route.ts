@@ -6,6 +6,8 @@ import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
+import { UMBRAL_FALLIDOS_ALERTA } from '@/lib/likida/vigia/aviso/cola';
+import { tenantsConPerfilASaltar, sinTenantsDePerfil } from '@/lib/auth/perfil_tenant';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -26,7 +28,9 @@ export const maxDuration = 60;
 //   · sube la molestia por el tiempo aunque el cliente no vuelva a escribir;
 //   · marca como fallidos los «aprobados» que se quedaron sin enviar (no se
 //     reenvían a ciegas: podrían haber salido);
-//   · cierra los hilos de ciclo muerto (7 días) y corre la retención (`vigia_purgar`).
+//   · cierra los hilos de ciclo muerto (7 días) y corre la retención (`vigia_purgar`);
+//   · al final, la pasada de avisos de viaje (genera y entrega los aprobados), con el mismo reloj y aislada: si falla,
+//     el escalamiento ya corrió y el latido sale `parcial`.
 //
 // Respeta la palanca `global` y falla CERRADO si no puede leerla, igual que sus
 // hermanos. No tiene palanca propia: cada flota enciende o apaga el agente en
@@ -58,14 +62,31 @@ export async function GET(req: Request) {
   }
 
   try {
-    const r = await barridoVigia(crearDepsVigia(), {
+    // El Vigía (A4) está en «Próximamente» para las flotas con perfil (fase 1): el barrido no las mira ni les escala nada.
+    // Si la tabla del perfil no se puede leer, esto lanza y el barrido NO corre (falla cerrado; el siguiente minuto reintenta).
+    const saltar = await tenantsConPerfilASaltar('vigia');
+    const deps = crearDepsVigia();
+    if (saltar.size > 0) {
+      const enEspera = deps.repo.conversacionesEnEspera.bind(deps.repo);
+      deps.repo = {
+        ...deps.repo,
+        conversacionesEnEspera: async (...a: Parameters<typeof enEspera>) => sinTenantsDePerfil(await enEspera(...a), saltar, (f) => f.config.tenantId),
+      };
+    }
+    const r = await barridoVigia(deps, {
       vencePorReloj: inicio + maxDuration * 1000 - MARGEN_MS,
       mantenimiento: new Date(inicio).getUTCMinutes() % 5 === 0,
+      saltar,   // y TODAS las demás pasadas (correos de respaldo, atorados, ciclos muertos, avisos) también las saltan
     });
     logger.info('cron.vigia.ok', { ...r });
     // Trabajo que NO terminó (corte por reloj, envíos fallidos, atorados) no es «ok» limpio.
-    const parcial = r.cortadoPorReloj || r.fallosEnvio > 0 || r.atorados > 0;
+    const parcial = r.cortadoPorReloj || r.fallosEnvio > 0 || r.atorados > 0 || r.avisosConError || r.avisosFallidos > 0 || r.avisosPendientesViejos > 0;
     await registrarLatido('vigia', parcial ? 'parcial' : 'ok', { ...r });
+    // T-A4-42: una racha de avisos fallidos en la misma pasada sí es para el operador (un fallo suelto ya queda en el latido
+    // `parcial` y en la bandeja). Sin datos del aviso: solo la cuenta. `alertarOperador` manda a lo más un correo por hora.
+    if (r.avisosFallidos >= UMBRAL_FALLIDOS_ALERTA) {
+      await alertarOperador('cron.vigia.avisos_fallidos', { avisosFallidos: r.avisosFallidos, avisosEnviados: r.avisosEnviados });
+    }
     return NextResponse.json({ corrio: true, ...r });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);

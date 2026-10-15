@@ -25,6 +25,7 @@ import { detectarFormato, prepararContenido, type ContenidoDoc } from './conteni
 import { completarDerivados } from './derivar';
 import { normalizarValor } from './normalizar';
 import { aprender, claveDePerfil, dominioDe, firmaDe } from './perfiles';
+import { MENSAJE_FUNCION_NO_DISPONIBLE, flotaBajoPerfil, prepararEnvioTms, type ResultadoEnvio } from './envio';
 import { aplicarSalidaViaje, type ResultadoSalida } from './salida';
 import { DIAS_RETENCION, validarDocumento } from './servicio';
 import { confianzaMinimaCritica } from './validacion';
@@ -171,7 +172,10 @@ async function guardarRevision(tenantId: string, d: DocumentoFila, versionVista:
 
 export interface ResultadoAprobacion {
   documento: DocumentoFila;
+  /** Flotas sin perfil: el viaje de siempre. Bajo el perfil «cinco_agentes» es null. */
   salida: ResultadoSalida | null;
+  /** Bajo el perfil «cinco_agentes»: el envío preparado al TMS. Para las demás flotas es null. */
+  envio: ResultadoEnvio | null;
   perfil: { accion: 'creado' | 'nueva_version' | 'sin_cambios' | 'omitido'; version?: number; cambios?: string[]; motivo?: string };
 }
 
@@ -262,8 +266,22 @@ export async function aprobarDocumento(
   await repo.registrarEvento(tenantId, id, 'aprobado', actor.id, { revisionSeg: medible, avisos: validacion.hallazgos.length });
 
   const perfil = opciones.aprender === false ? { accion: 'omitido' as const, motivo: 'Aprendizaje desactivado.' } : await aprenderDeAprobado(tenantId, aprobado, actor.id);
-  const salida = await intentarSalida(tenantId, aprobado, actor, opciones.operadorId ?? null);
-  return { documento: (await repo.leerDocumento(tenantId, id)) ?? aprobado, salida, perfil };
+  // Bajo el perfil «cinco_agentes» aprobar = preparar el envío al TMS (sin operador ni viaje); si no, el viaje de siempre.
+  let salida: ResultadoSalida | null = null;
+  let envio: ResultadoEnvio | null = null;
+  if (await flotaBajoPerfil(tenantId)) envio = await intentarEnvio(tenantId, aprobado, actor);
+  else salida = await intentarSalida(tenantId, aprobado, actor, opciones.operadorId ?? null);
+  return { documento: (await repo.leerDocumento(tenantId, id)) ?? aprobado, salida, envio, perfil };
+}
+
+/** Prepara el envío al TMS; un fallo NO deshace la aprobación (el documento sigue aprobado y se puede reintentar). */
+async function intentarEnvio(tenantId: string, d: DocumentoFila, actor: { id: string | null; email?: string }): Promise<ResultadoEnvio> {
+  try {
+    return await prepararEnvioTms(tenantId, d, actor);
+  } catch (e) {
+    logger.error('carta_porte_docs.envio_fallo', { documentoId: d.id, err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, motivo: 'error', mensaje: 'No se pudo preparar el envío por un error del sistema. El documento sigue aprobado; reintenta desde su pantalla.' };
+  }
 }
 
 /** La salida al viaje de un documento YA aprobado (también se llama sola desde «Crear viaje» cuando faltaba el operador). */
@@ -284,6 +302,8 @@ export async function intentarSalida(
 export async function crearViajeDeDocumento(
   tenantId: string, id: string, actor: { id: string | null; email?: string }, operadorId: string | null,
 ): Promise<ResultadoSalida> {
+  // Stand-by bajo el perfil: se responde ANTES de leer nada de la base.
+  if (await flotaBajoPerfil(tenantId)) return { ok: false, motivo: 'datos_invalidos', mensaje: MENSAJE_FUNCION_NO_DISPONIBLE };
   const d = await cargar(tenantId, id);
   if (d.estado !== 'aprobado') throw new DatoInvalido('Solo se crea el viaje de un documento aprobado.');
   return (await intentarSalida(tenantId, d, actor, operadorId)) as ResultadoSalida;

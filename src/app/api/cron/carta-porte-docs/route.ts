@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { correrWorkerCartaPorte, type ResultadoWorker } from '@/lib/likida/carta_porte_docs/worker';
 import { depsWorkerReales } from '@/lib/likida/carta_porte_docs/worker_deps';
+import { correrWorkerEnvios, resultadoEnviosVacio, type ResultadoEnvios } from '@/lib/likida/carta_porte_docs/worker_envios';
+import { depsEnviosReales } from '@/lib/likida/carta_porte_docs/worker_envios_deps';
 import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interruptores';
 import { appUrl } from '@/lib/env';
 import { logger } from '@/lib/logger';
@@ -27,6 +29,11 @@ const MARGEN_MS = 15_000;
 // uno agotó sus intentos. Todo el trabajo vive en `lib/likida/carta_porte_docs/worker.ts`; esto es la puerta
 // (secreto), las palancas (global y `agente:carta_porte`, ambas fail-closed: este cron le ESCRIBE a la oficina y
 // le paga al modelo) y el latido en TODO camino de salida.
+//
+// SEGUNDA PASADA, MISMO CRON (T-A3-28): con el reloj que sobre de la extracción corre `worker_envios.ts`, que SUBE al TMS del
+// cliente los documentos que la oficina aprobó (o los deja `listo` para descarga manual si la flota no tiene conector). Tiene
+// su propia palanca fail-closed, `agente:carta_porte_salida_tms`: apagada o ilegible, la extracción sigue y solo la salida se
+// salta. Un fallo de la salida no tumba lo ya extraído: queda en el latido como `parcial` y alerta al operador.
 // ═══════════════════════════════════════════════════════════════════════════
 
 function ilegible(interruptor: NombreInterruptor) {
@@ -36,6 +43,45 @@ function ilegible(interruptor: NombreInterruptor) {
     codigo: 'interruptor_ilegible',
     interruptor,
   };
+}
+
+interface SalidaPasada {
+  parcial: boolean;
+  /** Para el latido: solo cifras. */
+  resumen: Record<string, unknown>;
+  /** Para la respuesta: cifras y los primeros fallos. */
+  respuesta: Record<string, unknown>;
+}
+
+/** La pasada de envíos al TMS tras la extracción. Nunca lanza: lo que falle aquí no debe borrar lo que la extracción ya hizo. */
+async function correrSalida(venceEn: number): Promise<SalidaPasada> {
+  const palanca = await leerInterruptor('agente:carta_porte_salida_tms');
+  if (palanca === 'apagado') {
+    logger.warn('cron.carta_porte_docs.salida_saltada', { interruptor: 'agente:carta_porte_salida_tms' });
+    return { parcial: false, resumen: { corrio: false, saltado: 'apagada' }, respuesta: { corrio: false, saltado: 'interruptor agente:carta_porte_salida_tms' } };
+  }
+  if (palanca === 'ilegible') {
+    // Fail-closed: sin saber si está apagada no se sube nada. La extracción ya corrió; esto deja el latido en `parcial`.
+    return { parcial: true, resumen: { corrio: false, codigo: 'interruptor_ilegible' }, respuesta: ilegible('agente:carta_porte_salida_tms') };
+  }
+  try {
+    const e = await conRelojDuro(
+      correrWorkerEnvios(depsEnviosReales(), { venceEn }),
+      venceEn,
+      (): ResultadoEnvios => ({ ...resultadoEnviosVacio(), errores: 1, fallos: ['el reloj duro cortó la pasada de envíos'] }),
+    );
+    const { fallos, ...cifras } = e;
+    logger.info('cron.carta_porte_docs.salida_ok', { ...cifras, fallos: fallos.length });
+    // El circuito abierto y la credencial caducada ya alertaron al operador desde el motor; aquí solo cuentan como «no limpio».
+    const parcial = e.errores > 0 || e.alertasFallidas > 0 || e.circuitosAbiertos > 0 || e.credencialesCaducadas > 0 || e.cortadosPorReloj > 0 || e.sinMigracion;
+    return { parcial, resumen: { corrio: true, ...cifras, fallos: fallos.length }, respuesta: { corrio: true, ...cifras, fallos: fallos.slice(0, 20) } };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    const codigo = codigoDeError(err);
+    logger.error('cron.carta_porte_docs.salida_fallo', { error, codigo });
+    await alertarOperador('cron.carta_porte_docs.salida', { error, codigo });
+    return { parcial: true, resumen: { corrio: false, error, codigo }, respuesta: { corrio: false, error, codigo } };
+  }
 }
 
 export async function GET(req: Request) {
@@ -68,21 +114,23 @@ export async function GET(req: Request) {
       }),
     );
 
+    const salida = await correrSalida(venceEn);
+
     // «Parcial» = trabajo que NO terminó o que falló: ni un «ok» limpio ni un «fallo» total.
-    const parcial = r.errores > 0 || r.fallidos > 0 || r.avisosFallidos > 0 || r.cortadosPorReloj > 0
+    const parcial = salida.parcial || r.errores > 0 || r.fallidos > 0 || r.avisosFallidos > 0 || r.cortadosPorReloj > 0
       || r.paradaPorPresupuesto || r.paradaPorFallosSeguidos || r.avisosSinMigracion
       // M3 (ronda 15): un zombi cerrado es trabajo que se perdió (cinco intentos interrumpidos): no es un «ok» limpio.
       || r.zombisCerrados > 0;
     const { fallos, ...cifras } = r;
     logger.info('cron.carta_porte_docs.ok', { ...cifras, fallos: fallos.length });
-    latido = { estado: parcial ? 'parcial' : 'ok', detalle: { ...cifras, fallos: fallos.length } };
+    latido = { estado: parcial ? 'parcial' : 'ok', detalle: { ...cifras, fallos: fallos.length, envios: salida.resumen } };
     if (r.paradaPorFallosSeguidos) {
       await alertarOperador('cron.carta_porte_docs', {
         error: 'El modelo de extracción falló varios documentos seguidos. La pasada se detuvo; los documentos siguen en la bandeja y se reintentan con espera.',
         codigo: 'cp_modelo_caido',
       });
     }
-    return NextResponse.json({ corrio: true, ...cifras, fallos: fallos.slice(0, 20) });
+    return NextResponse.json({ corrio: true, ...cifras, fallos: fallos.slice(0, 20), envios: salida.respuesta });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     const codigo = codigoDeError(e);

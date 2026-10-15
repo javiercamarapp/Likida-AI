@@ -204,13 +204,62 @@ function seccionFacturaPod(
   return partes.join(' ');
 }
 
+const ESTADO_CAJA: Record<string, string> = {
+  vacia: 'vacía', cargada: 'cargada', en_patio: 'en patio', en_transito: 'en tránsito',
+};
+
+/**
+ * «¿Con qué unidad/caja va? ¿Placas? ¿Quién es el operador?» (41dfb197 00:00). Dice SOLO lo que el estatus trae (y el
+ * estatus solo trae lo que pasó la política de privacidad). Si falta la caja, la unidad o el operador NO se rellena: se
+ * dice «lo consulto» y sube a faltante, que obliga a escalar (T-A4-27 lo dirige a servicio al cliente). Las placas y el
+ * estado de la caja, si no están, se declaran «sin registrar» sin escalar por sí solas.
+ */
+function seccionDatosUnidad(e: EstatusViaje, faltantes: string[], respaldo: Record<string, unknown>): string {
+  const lineas: string[] = [];
+  const pendientes: string[] = [];
+  const caja = e.caja ?? null;
+  const unidad = e.unidad ?? null;
+  const operador = e.operador ?? null;
+
+  if (caja) {
+    lineas.push(`Caja: ${caja}.`);
+    lineas.push(e.placasCaja ? `Placas de la caja: ${e.placasCaja}.` : 'Placas de la caja: sin registrar.');
+    const estado = e.estadoCaja ? ESTADO_CAJA[e.estadoCaja] : undefined;
+    if (estado) lineas.push(`Estado de la caja: ${estado}.`);
+  } else {
+    pendientes.push('caja');
+    faltantes.push('caja');
+  }
+  if (unidad) {
+    lineas.push(`Unidad: ${unidad}.`);
+    lineas.push(e.placasUnidad ? `Placas de la unidad: ${e.placasUnidad}.` : 'Placas de la unidad: sin registrar.');
+  } else {
+    pendientes.push('unidad');
+    faltantes.push('unidad');
+  }
+  if (operador) lineas.push(`Operador: ${operador}.`);
+  else {
+    pendientes.push('operador');
+    faltantes.push('operador');
+  }
+  respaldo.datosUnidad = { caja, unidad, conOperador: operador !== null, conPlacasCaja: !!e.placasCaja, conPlacasUnidad: !!e.placasUnidad };
+
+  const cabeza = `${etiquetaViaje(e)}:`;
+  if (lineas.length === 0) {
+    return `${cabeza} todavía no tengo asignada la caja, la unidad ni el operador. Lo consulto con tu ejecutivo y te confirmo.`;
+  }
+  const lista = pendientes.join(', ').replace(/, ([^,]*)$/, ' ni $1');
+  const cola = pendientes.length > 0 ? ` Aún no tengo registro de ${lista}: lo consulto con tu ejecutivo y te confirmo.` : '';
+  return `${cabeza}\n${lineas.join('\n')}${cola}`;
+}
+
 const SALUDA = (nombre: string | null) => (nombre ? `Hola ${nombre.split(/\s+/)[0]}` : 'Hola');
 
 function pieDePrimerContacto(nombreFlota: string, url: string | null): string {
   return `\n\nTus mensajes se atienden con apoyo de un asistente automatizado de ${nombreFlota}.${url ? ` Aviso de privacidad: ${url}.` : ''} Para dejar de recibir mensajes escribe BAJA.`;
 }
 
-const DATO: readonly Intencion[] = ['ubicacion', 'eta', 'documentos', 'factura_pod'];
+const DATO: readonly Intencion[] = ['ubicacion', 'eta', 'documentos', 'factura_pod', 'datos_unidad'];
 
 /**
  * Arma el borrador determinista. PURA: mismos datos, mismo texto.
@@ -271,7 +320,10 @@ export function redactarBorrador(e: EntradaRedaccion): Borrador {
       else if (i === 'eta') secciones.push(seccionEta(estatus, faltantes, respaldo));
       else if (i === 'documentos') secciones.push(seccionDocumentos(estatus, faltantes, respaldo));
       else if (i === 'factura_pod') secciones.push(seccionFacturaPod(estatus, faltantes, tareas, respaldo, adjuntos));
+      else if (i === 'datos_unidad') secciones.push(seccionDatosUnidad(estatus, faltantes, respaldo));
     }
+    // Nombres, placas y números de la unidad salen tal cual del dato: siempre a aprobación de una persona.
+    if (respaldo.datosUnidad) riesgo = 'medio';
     // El ETA usa la etapa como contexto cuando no hay sección de ubicación.
     if (!secciones.some((s) => s.startsWith(etiquetaViaje(estatus))) && intencion === 'eta') {
       secciones.unshift(`${etiquetaViaje(estatus)}: ${ETAPAS[estatus.etapa]}.`);
@@ -335,7 +387,7 @@ export async function pulirBorrador(
   borrador: Borrador, mensajeCliente: string, folio: string | null, modelo: PuertoPulir | null | undefined, tenantId: string = '',
 ): Promise<{ borrador: Borrador; motivoDescartado: string | null }> {
   // Un borrador que pide humano, trae faltantes o responde una queja no se «embellece»: se manda como está.
-  if (!modelo || !tenantId || borrador.requiereHumano || borrador.riesgo === 'alto' || borrador.origen === 'respuesta_rapida') return { borrador, motivoDescartado: null };
+  if (!modelo || !tenantId || borrador.requiereHumano || borrador.riesgo === 'alto' || borrador.origen === 'respuesta_rapida' || borrador.respaldo.datosUnidad) return { borrador, motivoDescartado: null };
   let pulido: string | null;
   try {
     pulido = await modelo.pulir(borrador.texto, { tenantId });

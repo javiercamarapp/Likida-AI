@@ -61,7 +61,7 @@ function bytesDeDataUrl(url: string): Uint8Array | null {
 }
 
 const EXT_POR_MIME: Record<string, string> = {
-  'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'text/csv': 'csv', 'application/xml': 'xml', 'text/xml': 'xml',
+  'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'text/csv': 'csv', 'application/xml': 'xml', 'text/xml': 'xml', 'application/json': 'json',
   'application/vnd.ms-excel': 'xls', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
 };
 
@@ -96,7 +96,7 @@ export async function ingerirDesdeWhatsapp(e: EntradaWhatsapp, deps: DepsWhatsap
     const f = detectarFormato(bytes);
     if (f.ok && f.clase === 'xml' && !/CartaPorte/i.test(textoDeBytes(bytes, 'utf8', 400_000))) return 'no_aplica';
 
-    const ext = EXT_POR_MIME[meta.mimeType] ?? (f.ok ? { pdf: 'pdf', imagen: 'jpg', excel: 'xlsx', csv: 'csv', xml: 'xml', correo: 'txt' }[f.clase] : 'bin');
+    const ext = EXT_POR_MIME[meta.mimeType] ?? (f.ok ? { pdf: 'pdf', imagen: 'jpg', excel: 'xlsx', csv: 'csv', xml: 'xml', correo: 'txt', json: 'json' }[f.clase] : 'bin');
     const r = await recibirDocumento(e.tenantId, {
       canal: 'whatsapp', nombre: `whatsapp-${mediaId.slice(-8)}.${ext}`, bytes, remitente: e.nombreRemitente ? `WhatsApp · ${e.nombreRemitente}`.slice(0, 120) : 'WhatsApp',
       asunto: e.mensaje.text?.slice(0, 300) ?? null, actorId: e.userId,

@@ -120,9 +120,11 @@ Datos personales nuevos: el nombre de un **tercero** (quien recibe en el andén)
 - Palancas: `global` y `agente:conductores` (fail-closed: ilegible = no corre). Latido `conductor-hitos` (parcial = fallos de envío, cortes por reloj o rechazo masivo).
 - Config por flota: `agente_conductor_config` (sin fila = defaults del código, `conductor/config.ts`), editable en `/dashboard/agentes/conductores/configuracion` (la ven los roles con acceso a la ruta; solo guarda quien puede administrar; si no se pudo leer la config, la pantalla lo dice en vez de enseñar los defaults como si fueran lo guardado) o con `PUT /v1/conductor/config`.
 - Interruptores por flota que nacen APAGADOS (se encienden una flota a la vez): `avisar_oficina_llegada`/`avisar_oficina_salida`, `avisar_llegada_sin_confirmar` (0604), `avisar_senal_vida` (0636), las alertas de estadía y `pedir_foto_evidencia`. Encendidos por defecto: la detección por geocerca (`detectar_hitos_gps`, solo con sitio asignado y GPS de la unidad), la validación de ubicación y la confirmación al chofer.
+- **`detectar_hitos_gps` nace ENCENDIDO (`true`) y `avisar_senal_vida` nace APAGADO (`false`)** (`config.ts`, migración 0635). Qué implica: en cuanto el Conductor de una flota está activo, el barrido de GPS registra solo llegadas y salidas de viajes que tengan sitio asignado y GPS de la unidad, sin pedirle nada al chofer; no hace falta encender nada más para eso. En cambio ningún aviso de «sin señal de vida» sale hasta que se encienda `avisar_senal_vida`. Lo que está apagado en el seed del demo es el Conductor entero (`activo = false`), no la perilla de detección. `config.test.ts` fija estos dos defaults y verifica que este párrafo siga diciéndolo: si cambian, hay que actualizar ambos.
 - Cada paso proactivo del cron `conductor-hitos` corre aislado: si uno falla, los demás corren y el latido sale `parcial`.
 - Contactos de escalamiento: `conductor_contacto_trafico`, por el mismo `PUT /v1/conductor/config` (teléfonos normalizados a 52+10).
 - Modelo: `LIKIDA_MODEL_CONDUCTOR_HITO` cambia el modelo sin deploy.
+- **Piloto con voluntarios (0800-0804)**: cómo se enciende (preflight → voluntarios → importar viajes → tablero → `avisar_senal_vida`), cómo se apaga (un voluntario, la señal de vida, el Conductor entero) y el rollback del esquema están en `agente-conductor-piloto.md`. `avisar_senal_vida` solo se deja encender desde el panel con el preflight «¿Está lista la flota?» en verde (la API no aplica esa compuerta).
 
 ## Bloqueos externos (no cerrables por código)
 
@@ -133,6 +135,8 @@ Datos personales nuevos: el nombre de un **tercero** (quien recibe en el andén)
 5. Plazos por defecto sin cita (120/120/480/120/30 min) son **supuestos**: validarlos con su operación.
 
 ## Pendientes de la primera entrega (estado actual)
+
+- Operación del piloto (preflight, voluntarios, apagado por niveles, limpieza de viajes aceptados por importación y reversa de las migraciones 0800-0804) → hecho: `agente-conductor-piloto.md`.
 
 - ~~Validación automática contra geocerca/GPS, editor de geocercas y foto/evidencia por hito~~ → hecho en la 0385 (ver abajo).
 - ~~Tablero ampliado~~ → hecho (0385). ~~Pantalla de configuración~~ → hecha: `/dashboard/agentes/conductores/configuracion` (escalera, ventana, contactos y las perillas de la 0385, 0604 y 0635-0636), además de `PUT /v1/conductor/config`.

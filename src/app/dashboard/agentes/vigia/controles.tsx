@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Check, X, Hand, Send, Save, UserPlus, TriangleAlert, CheckCircle2, RotateCcw, Archive, Trash2, UserX } from 'lucide-react';
 import type { Director, ModoAprobacion } from '@/lib/likida/vigia/tipos';
+import type { ContactoServicio } from '@/lib/likida/vigia/repo';
 
 export type ResultadoVigia = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionVigia = (previo: ResultadoVigia, fd: FormData) => Promise<ResultadoVigia>;
@@ -125,7 +126,7 @@ export function FormaConfig({ accion, valores }: {
         <div>
           <label htmlFor="cfg-sla" className={ETIQUETA}>Minutos sin respuesta antes de avisar al responsable</label>
           <input id="cfg-sla" name="slaRespuestaMin" type="text" inputMode="numeric" defaultValue={valores.slaRespuestaMin} className={CAMPO} style={{ background: 'var(--surface)' }} />
-          <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 5 y 1,440. El barrido corre cada 5 minutos.</p>
+          <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 5 y 1,440 (10 por omisión; tú fijas el plazo de tu flota). Si el cliente tiene un grupo crítico, rige el menor entre este y el de clientes críticos.</p>
         </div>
         <div>
           <label htmlFor="cfg-n2" className={ETIQUETA}>Minutos adicionales antes de avisar al dueño</label>
@@ -135,7 +136,7 @@ export function FormaConfig({ accion, valores }: {
         <div>
           <label htmlFor="cfg-crit" className={ETIQUETA}>Minutos sin respuesta en clientes CRÍTICOS</label>
           <input id="cfg-crit" name="slaCriticoMin" type="text" inputMode="numeric" defaultValue={valores.slaCriticoMin} className={CAMPO} style={{ background: 'var(--surface)' }} />
-          <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 2 y 1,440 (10 recomendado). Rige para los clientes con un grupo marcado como crítico; el barrido corre cada 5 minutos.</p>
+          <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 2 y 1,440 (10 por omisión; 5 y 10 son solo ejemplos, tú fijas el plazo). Rige para los clientes con un grupo marcado como crítico; se aplica el menor entre este y el general.</p>
         </div>
         <div>
           <label htmlFor="cfg-mol" className={ETIQUETA}>Avisar al responsable desde la molestia nivel</label>
@@ -203,6 +204,49 @@ export function FormaDirector({ accion, director }: { accion: AccionVigia; direc
       <div className="flex flex-wrap items-center gap-2">
         <Boton name="accion" value="guardar" tono="marca" Icono={director ? Save : UserPlus}>{director ? 'Guardar cambios' : 'Agregar a la lista'}</Boton>
         {director && <Boton name="accion" value="quitar" tono="peligro" Icono={Trash2}>Quitar</Boton>}
+      </div>
+      <Aviso estado={estado} />
+    </form>
+  );
+}
+
+/**
+ * 0798: una persona de «servicio al cliente» (a quien se avisa cuando el Vigía no tiene el dato). Se corrige o se quita; sin `contacto`,
+ * es el alta de una nueva. «Todos los clientes» = vale para cualquier cliente de la flota.
+ */
+export function FormaServicio({ accion, contacto, clientes }: { accion: AccionVigia; contacto?: ContactoServicio; clientes: Array<{ id: string; nombre: string }> }) {
+  const [estado, despachar] = useActionState(accion, null);
+  const k = contacto?.id ?? 'nuevo';
+  return (
+    <form action={despachar} className="space-y-2">
+      {contacto && <input type="hidden" name="id" value={contacto.id} />}
+      <div className="grid sm:grid-cols-4 gap-2">
+        <div>
+          <label htmlFor={`srv-nombre-${k}`} className={ETIQUETA}>Nombre</label>
+          <input id={`srv-nombre-${k}`} name="nombre" type="text" required maxLength={120} defaultValue={contacto?.nombre ?? ''} className={CAMPO} style={{ background: 'var(--surface)' }} />
+        </div>
+        <div>
+          <label htmlFor={`srv-cliente-${k}`} className={ETIQUETA}>Para</label>
+          <select id={`srv-cliente-${k}`} name="clienteId" defaultValue={contacto?.clienteId ?? ''} className={CAMPO} style={{ background: 'var(--surface)' }}>
+            <option value="">Todos los clientes</option>
+            {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </select>
+        </div>
+        <div>
+          <label htmlFor={`srv-tel-${k}`} className={ETIQUETA}>WhatsApp (10 dígitos)</label>
+          <input id={`srv-tel-${k}`} name="telefono" type="tel" inputMode="tel" defaultValue={contacto?.telefono ? contacto.telefono.replace(/^52/, '') : ''} className={CAMPO} style={{ background: 'var(--surface)' }} />
+        </div>
+        <div>
+          <label htmlFor={`srv-correo-${k}`} className={ETIQUETA}>Correo</label>
+          <input id={`srv-correo-${k}`} name="correo" type="email" maxLength={254} defaultValue={contacto?.correo ?? ''} className={CAMPO} style={{ background: 'var(--surface)' }} />
+        </div>
+      </div>
+      <label className="flex items-center gap-2 text-[12px]">
+        <input type="checkbox" name="activo" defaultChecked={contacto?.activo ?? true} /> Recibe avisos
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <Boton name="accion" value="guardar" tono="marca" Icono={contacto ? Save : UserPlus}>{contacto ? 'Guardar cambios' : 'Agregar a servicio al cliente'}</Boton>
+        {contacto && <Boton name="accion" value="quitar" tono="peligro" Icono={Trash2}>Quitar</Boton>}
       </div>
       <Aviso estado={estado} />
     </form>

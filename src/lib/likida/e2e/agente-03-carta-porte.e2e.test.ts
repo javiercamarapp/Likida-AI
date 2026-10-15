@@ -22,6 +22,13 @@ const { avisosOficina, latidos, depsHolder } = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/admin/salud', () => ({ puertaCron: async () => null, registrarLatido: async (...a: unknown[]) => { latidos.push(a); } }));
 vi.mock('@/lib/likida/interruptores', async (original) => ({ ...(await original<Record<string, unknown>>()), leerInterruptor: async () => 'encendido', estaApagado: async () => false }));
+// La pasada de envíos al TMS (0790) corre tras la extracción dentro del mismo cron; sus reglas tienen sus propias pruebas
+// (worker_envios*.test.ts). Aquí se deja una cola vacía para que el latido refleje SOLO la extracción: sin esto la pasada
+// real tocaba una base inexistente y el latido salía `parcial`.
+vi.mock('../carta_porte_docs/worker_envios', async (original) => {
+  const real = await original<Record<string, unknown>>();
+  return { ...real, correrWorkerEnvios: async () => (real.resultadoEnviosVacio as () => unknown)() };
+});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: async () => {} }));
 vi.mock('@/lib/likida/contactos', () => ({ telefonoJefeDe: async (t: string) => (t === 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' ? '5215500000001' : null) }));
 vi.mock('../carta_porte_docs/worker_deps', async (original) => {
