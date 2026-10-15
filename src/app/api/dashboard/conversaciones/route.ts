@@ -8,6 +8,7 @@ import { rolPuedeConversar } from '@/lib/likida/orquestador/permisos';
 import { listarConversaciones } from '@/lib/likida/chat/conversaciones';
 import { logger } from '@/lib/logger';
 import { tenantEfectivoChat } from '../chat/tenant';
+import { respuestaSiPerfilNiegaApi } from '@/lib/auth/perfil_tenant';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,9 @@ export async function GET(req: NextRequest) {
   // `resolverTenantApi`. Sin `?tenant=` sigue siendo 403 real.
   if (!efectivo) return NextResponse.json({ error: 'sin acceso' },
     { status: req.nextUrl.searchParams.get('tenant') ? 503 : 403 });
+  const negadoPerfil = await respuestaSiPerfilNiegaApi(efectivo.tenantId, req.url);
+  if (negadoPerfil) return negadoPerfil;
+
 
   try {
     const conversaciones = await listarConversaciones(efectivo.tenantId, sesion.userId);

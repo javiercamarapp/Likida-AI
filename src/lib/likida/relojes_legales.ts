@@ -145,6 +145,8 @@ export interface ResultadoRelojes {
 export interface OpcionesBarrido {
   /** Instante (ms) a partir del cual NO se arranca otro envío. */
   venceEn?: number;
+  /** Flotas con perfil (0770) que `avisarRelojesLegales` SALTA (incidencias: módulo en stand-by). */
+  excluirTenants?: ReadonlySet<string>;
 }
 
 interface IncidenciaConReloj {
@@ -190,7 +192,8 @@ export async function avisarRelojesLegales(ahora: Date = new Date(), opts: Opcio
     tenantId: f.tenant_id as string,
     tipo: f.tipo as string,
     viajeId: (f.viaje_id as string) || null,
-  }));
+  // Las flotas con perfil (0770) no tienen relojes legales: las incidencias son un módulo en stand-by.
+  })).filter((i) => !opts.excluirTenants?.has(i.tenantId));
 
   // El anti-join con los sellos: una lectura por tanda, no una por incidencia.
   // El sello vive en la bitácora de la incidencia — el mismo expediente que

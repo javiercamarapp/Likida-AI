@@ -25,6 +25,8 @@ let sesion: { tenantId: string; rol: string } = { tenantId: 't-1', rol: 'flota_a
 
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => sesion }));
 vi.mock('next/navigation', () => ({ redirect: (ruta: string) => { throw new Error(`REDIRECT:${ruta}`); } }));
+// Sin perfil de tenant (0770): este archivo prueba la pantalla de siempre.
+vi.mock('@/lib/auth/perfil_tenant', () => ({ perfilDeTenant: async () => null }));
 vi.mock('@/lib/likida/analytics', () => ({ getKpis: dobles.getKpis, detectarAnomalias: dobles.detectarAnomalias, contarEscalados: dobles.contarEscalados }));
 vi.mock('@/lib/likida/repo', () => ({ contarHuerfanosPendientes: dobles.contarHuerfanosPendientes }));
 vi.mock('@/lib/likida/conexiones', () => ({ getConexiones: dobles.getConexiones }));
