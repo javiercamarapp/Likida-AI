@@ -22,7 +22,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 3. Aprobación: Meta tarda de minutos a 2–5 días hábiles. Hasta que una plantilla esté `APPROVED`, el envío devuelve `132001` y el selector lo reporta con ese motivo (fail-closed y dicho).
 4. Si Meta reclasifica una plantilla a MARKETING, el script lo marca como desviación: sale más cara y con más límites; hay que apelar o reescribir.
 
-## Lista consolidada por someter a Meta (25)
+## Lista consolidada por someter a Meta (27)
 
 Todas las que siguen en estado «nueva para aprobación»: el código ya las nombra (o las nombrará) y, mientras Meta no las apruebe, el envío fuera de la ventana de 24 h devuelve `132001`, queda dicho en `wa_envio_registro` y NO se reintenta en cada pasada. Las funciones que las usan nacen **apagadas por defecto** y se encienden por flota; no hace falta aprobar todas para el demo, solo las de lo que se vaya a enseñar en vivo.
 
@@ -50,9 +50,11 @@ Todas las que siguen en estado «nueva para aprobación»: el código ya las nom
 | 20 | `vigia_respuesta_cliente_v1` | Agente 4 — Vigía de servicio al cliente | `src/lib/likida/vigia/enviar.ts` | 2 | — | autoritativo |
 | 21 | `vigia_aprobacion_v1` | Agente 4 — Vigía de servicio al cliente | `src/lib/likida/vigia/avisos.ts` | 3 | «Enviar», «No enviar», «Yo me encargo» | autoritativo |
 | 22 | `vigia_escalamiento_v1` | Agente 4 — Vigía de servicio al cliente | `src/lib/likida/vigia/avisos.ts` | 4 | «Yo me encargo» | autoritativo |
-| 23 | `liquidacion_externa_v1` | Agente 1 — Liquidación externa (entrega al chofer) | `src/lib/likida/liquidacion_externa/entrega.ts` | 4 | «Recibida», «No coincide» | autoritativo |
-| 24 | `jornada_aviso_encargado_v1` | Agente 12 — Jornada (alerta de tope) | `src/lib/likida/jornada/alerta_tope.ts` | 5 | — | autoritativo |
-| 25 | `jornada_aviso_operador_v1` | Agente 12 — Jornada (alerta de tope) | `src/lib/likida/jornada/alerta_tope.ts` | 3 | — | autoritativo |
+| 23 | `vigia_aviso_viaje_v1` | Agente 4 — Vigía de servicio al cliente | `src/lib/likida/vigia/aviso/entrega.ts` | 5 | — | reconstruido: cotejar |
+| 24 | `vigia_aviso_cambio_v1` | Agente 4 — Vigía de servicio al cliente | `src/lib/likida/vigia/aviso/entrega.ts` | 5 | — | reconstruido: cotejar |
+| 25 | `liquidacion_externa_v1` | Agente 1 — Liquidación externa (entrega al chofer) | `src/lib/likida/liquidacion_externa/entrega.ts` | 4 | «Recibida», «No coincide» | autoritativo |
+| 26 | `jornada_aviso_encargado_v1` | Agente 12 — Jornada (alerta de tope) | `src/lib/likida/jornada/alerta_tope.ts` | 5 | — | autoritativo |
+| 27 | `jornada_aviso_operador_v1` | Agente 12 — Jornada (alerta de tope) | `src/lib/likida/jornada/alerta_tope.ts` | 3 | — | autoritativo |
 
 El cuerpo exacto, las variables con su ejemplo y los botones de cada una están en el bloque de más abajo (los mismos que `scripts/verificar-plantillas-meta.ts --crear` manda a Meta).
 
@@ -218,7 +220,7 @@ El cuerpo exacto, las variables con su ejemplo y los botones de cada una están 
 
 - **Botones:** ninguno
 
-## Plantillas nuevas, listas para enviar a aprobación (25)
+## Plantillas nuevas, listas para enviar a aprobación (27)
 
 ### `cobranza_gastos_v1`
 
@@ -664,6 +666,50 @@ El cuerpo exacto, las variables con su ejemplo y los botones de cada una están 
 | `{{4}}` | liga al tablero del Vigía | https://app.likida.ai/dashboard/agentes/vigia |
 
 - **Botones:** «Yo me encargo» (respuesta rápida, payload `vig_tomo:<viaje_id>`)
+
+### `vigia_aviso_viaje_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 4 — Vigía de servicio al cliente. Aviso proactivo al CLIENTE de la caja, la unidad y el operador asignados a su servicio (canal 1:1 fuera de su ventana de 24 h). La licencia y el teléfono NUNCA van en la plantilla: solo como texto dentro de la ventana y con la política habilitada.
+- **Llamador en código:** src/lib/likida/vigia/aviso/entrega.ts
+- **Texto verificado contra Meta:** **NO** — reconstruido del código; cotejar con `scripts/verificar-plantillas-meta.ts`
+- **Cuerpo exacto:**
+
+  ```text
+  Aviso de viaje de {{1}}: asignamos {{2}} (caja) con {{3}} (unidad) y {{4}} (operador) para tu cita del {{5}}. Responde a este mensaje si algo no coincide.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | razón social de la flota | Transportes del Norte |
+| `{{2}}` | caja y placas (una sola línea) | caja CJ-101, placas 11AA22 |
+| `{{3}}` | unidad y placas (una sola línea) | unidad U-101, placas 33BB44 |
+| `{{4}}` | nombre del operador | Operador Demo |
+| `{{5}}` | hora de la cita | 02/10/2026 07:00 |
+
+- **Botones:** ninguno
+
+### `vigia_aviso_cambio_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 4 — Vigía de servicio al cliente. Actualización al CLIENTE cuando cambió la caja, la unidad o el operador de un servicio ya avisado (canal 1:1 fuera de su ventana de 24 h). Mismas variables que el aviso de viaje; sin licencia ni teléfono.
+- **Llamador en código:** src/lib/likida/vigia/aviso/entrega.ts
+- **Texto verificado contra Meta:** **NO** — reconstruido del código; cotejar con `scripts/verificar-plantillas-meta.ts`
+- **Cuerpo exacto:**
+
+  ```text
+  Actualización del aviso de viaje de {{1}}: la asignación quedó con {{2}} (caja), {{3}} (unidad) y {{4}} (operador) para tu cita del {{5}}. Responde a este mensaje si algo no coincide.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | razón social de la flota | Transportes del Norte |
+| `{{2}}` | caja y placas (una sola línea) | caja CJ-101, placas 11AA22 |
+| `{{3}}` | unidad y placas (una sola línea) | unidad U-205, placas 55CC66 |
+| `{{4}}` | nombre del operador | Operador Demo |
+| `{{5}}` | hora de la cita | 02/10/2026 07:00 |
+
+- **Botones:** ninguno
 
 ### `liquidacion_externa_v1`
 
