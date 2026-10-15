@@ -6,6 +6,7 @@ import { CONFIG_CONDUCTOR_DEFAULT, dentroDeVentana, type ConfigConductor } from 
 import type { Destino } from './escalamiento';
 import type { ViajeContexto } from './repo';
 import { armarEscalacionSenalVida, armarSenalVida, type MensajeSaliente, type MotivoSenalVida } from './solicitudes';
+import { estaFueraDePerfil } from './perfil';
 import { estaPendiente, estaResuelto, type HitoFila } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -64,11 +65,15 @@ export const TOPE_RECHAZOS_SEGUIDOS_SENAL = 5;
 
 // ── Lo puro ─────────────────────────────────────────────────────────────────
 
-/** ¿El viaje va en tránsito? salió de la carga (registrado) y todavía no llega a la descarga. */
+/**
+ * ¿El viaje va en tránsito? salió de la carga (registrado) y todavía no llega a la descarga. Con el perfil `esenciales` la llegada a
+ * la descarga NACE omitida (`fuera_de_perfil`): no se persigue, pero tampoco ha ocurrido nada que cierre el tránsito, así que
+ * cuenta como «aún no llega». Una omisión por otro motivo (el supervisor la dio por no aplicable) sigue sin contar.
+ */
 export function enTransito(hitos: readonly HitoFila[]): boolean {
   const sc = hitos.find((h) => h.tipo === 'salida_carga');
   const ld = hitos.find((h) => h.tipo === 'llegada_descarga');
-  return Boolean(sc && estaResuelto(sc) && ld && estaPendiente(ld));
+  return Boolean(sc && estaResuelto(sc) && ld && (estaPendiente(ld) || estaFueraDePerfil(ld)));
 }
 
 export type EstadoSenal =
