@@ -21,6 +21,7 @@ export interface EsperaAceptar {
 const EVENTO: Record<EventoConductor['tipo'], { Icono: typeof Send; texto: (e: EventoConductor) => string; color: string }> = {
   avisado: { Icono: Send, color: 'var(--muted)', texto: (e) => `Le avisó a ${e.operador ?? 'el operador'} de su viaje ${e.folio}` },
   acepto: { Icono: CheckCheck, color: 'var(--ok)', texto: (e) => `${e.operador ?? 'El operador'} aceptó el viaje ${e.folio}` },
+  en_seguimiento_importado: { Icono: Truck, color: 'var(--muted)', texto: (e) => `El viaje ${e.folio} entró en seguimiento por importación (no lo aceptó el chofer)` },
   escalado: { Icono: Flag, color: 'var(--bad)', texto: (e) => `Escaló el viaje ${e.folio} al jefe — nadie aceptaba` },
   llegada: { Icono: MapPin, color: 'var(--ok)', texto: (e) => `${e.operador ?? 'El operador'} avisó que llegó (${e.folio})` },
   descarga: { Icono: Package, color: 'var(--warn)', texto: (e) => `${e.operador ?? 'El operador'} está descargando (${e.folio})` },
@@ -30,7 +31,15 @@ const EVENTO: Record<EventoConductor['tipo'], { Icono: typeof Send; texto: (e: E
 /** Los cuatro conteos de arriba, ya medidos en la base. */
 export interface ConteosConductores {
   vivos: number | null;
+  /** Aceptados POR EL CHOFER (T-A5-06): excluye los de importación. */
   aceptados: number | null;
+  /** En seguimiento del agente por importación, no por el chofer. Opcional:
+   *  un origen que no lo manda no pinta la tarjeta. */
+  importados?: number | null;
+  /** Tiempo medio avisado → aceptó, SOLO del chofer (T-A5-06). `null` = no se
+   *  pudo leer; `minutos: null` = ningún viaje medible. Opcional: un origen que
+   *  no lo manda no pinta la tarjeta. */
+  tiempoAceptacion?: { minutos: number | null; n: number; excluidosImportados: number } | null;
   esperan: number | null;
   escalados: number | null;
 }
@@ -169,7 +178,7 @@ function EsqConteos() {
   );
 }
 
-async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConductores> }) {
+export async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConductores> }) {
   const kpis = await p;
   return (
     <div>
@@ -178,6 +187,18 @@ async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConductores> })
           nota={kpis.vivos === null ? 'no se pudo contar' : 'abiertos o en cuadre'} />
         <Kpi titulo="Aceptados" valor={kpis.aceptados === null ? '—' : numero(kpis.aceptados)}
           nota={kpis.aceptados === null ? 'no se pudo contar' : 'el chofer dijo que sí'} />
+        {kpis.importados !== undefined && (
+          <Kpi titulo="En seguimiento por importación" valor={kpis.importados === null ? '—' : numero(kpis.importados)}
+            nota={kpis.importados === null ? 'no se pudo contar' : 'cargados por archivo; no los aceptó el chofer'} />
+        )}
+        {kpis.tiempoAceptacion !== undefined && (
+          <Kpi titulo="Tiempo en aceptar"
+            valor={kpis.tiempoAceptacion === null || kpis.tiempoAceptacion.minutos === null
+              ? '—' : `${(Math.round(kpis.tiempoAceptacion.minutos * 10) / 10).toLocaleString('es-MX')} min`}
+            nota={kpis.tiempoAceptacion === null ? 'no se pudo medir'
+              : kpis.tiempoAceptacion.minutos === null ? 'aún sin aceptaciones del chofer que medir'
+                : `media de ${numero(kpis.tiempoAceptacion.n)} aceptados por el chofer (200 viajes recientes); no cuenta ${numero(kpis.tiempoAceptacion.excluidosImportados)} por importación`} />
+        )}
         <Kpi titulo="Esperan aceptar" valor={kpis.esperan === null ? '—' : numero(kpis.esperan)}
           nota={kpis.esperan === null ? 'no se pudo contar' : undefined}
           tono={(kpis.esperan ?? 0) > 0 ? 'warn' : undefined} />
