@@ -330,7 +330,11 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 288;
 // T-A5-03 (Conductor, 0800): 0 archivos y +7 llamadas (1,917 → 1,924), todas en `conductor/repo.ts` (alta y baja de voluntarios del piloto: leer un operador de la flota,
 // listar voluntarios, buscar candidatos, contarlos, leer el tope, marcar la marca y la RPC `retirar_voluntario`; todas por `acotada` con el tenant anclado). La frontera
 // declarada es solo `lib/likida/repo.ts`/`pg.ts`, así que `conductor/repo.ts` cuenta como cualquier módulo. Funcionalidad nueva, no código migrado; medido con el barrido real.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_924;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_936;
+// LOOP CINCO AGENTES, T-A5-17 (equivalencias texto→sitio, 0803): 1,924 → 1,936 (0 archivos, +12 llamadas, medido con el barrido completo), todas en
+// `conductor/repo_validacion.ts`, que ya contaba: el diccionario de la flota (leer), el importador (resolver códigos de sitio, insertar por lotes,
+// actualizar), la asignación a mano desde la lista (comprobar sitio, buscar la previa, crear o editar) y los viajes abiertos de 14 días para la lista de
+// «textos sin sitio». Todas por `acotada`, ancladas a `tenant_id` y las lecturas por lotes con `traerTodo`/`traerPorIds`. Funcionalidad nueva, no código migrado.
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

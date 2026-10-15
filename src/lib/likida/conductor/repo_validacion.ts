@@ -1,12 +1,15 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
-import { exigir, traerPorIds } from '../pg';
+import { exigir, traerPorIds, traerTodo } from '../pg';
 import { COLUMNAS_HITO, cargarContactosTrafico, filaAHito } from './repo';
 import type { NivelSinDestino } from './escalamiento';
 import { coordenadasValidas } from './geo';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from './geometria_datos';
-import type { ErrorCsv, SitioCsv, TipoSitio } from './sitios';
+import {
+  contarTextosSinSitio, DIAS_TEXTOS_SIN_SITIO, planificarEquivalencias,
+  type EquivalenciaCsv, type EquivalenciaGuardada, type ErrorCsv, type LadoEquivalencia, type SitioCsv, type TextoSinSitio, type TipoEquivalencia, type TipoSitio, type ViajeParaTextos,
+} from './sitios';
 import type { PosicionComparada, SitioValidable, Veredicto, ResultadoValidacion, MotivoSinDato, FuenteUbicacion } from './validacion';
 import { TIPOS_HITO, type HitoFila, type TipoEvidencia, type TipoHito } from './tipos';
 
@@ -591,4 +594,108 @@ export async function leerHitosDeOperador(tenantId: string, operadorId: string, 
     .from('viaje_hito').select(COLUMNAS_HITO).eq('tenant_id', tenantId).in('viaje_id', t).in('estado', ['recibido', 'validado'])
     .gte('mensaje_en', desde.toISOString()).lt('mensaje_en', hasta.toISOString()), 'jornada.hitos') as never, 'jornada.hitos');
   return filas.map(filaAHito);
+}
+
+// ── T-A5-17: equivalencias texto→sitio (0803), importador y lista de «textos sin sitio» ──────────────────────────────
+
+const COLUMNAS_EQUIVALENCIA = 'id, texto_normalizado, lado, tipo, geocerca_id, cliente_id';
+
+const aGuardada = (f: Fila): EquivalenciaGuardada => ({
+  id: String(f.id), textoNormalizado: String(f.texto_normalizado),
+  lado: f.lado === 'origen' || f.lado === 'destino' ? f.lado : 'ambos',
+  tipo: f.tipo === 'sin_sitio' || f.tipo === 'ignorar' ? f.tipo : 'sitio',
+  geocercaId: s(f.geocerca_id), clienteId: s(f.cliente_id),
+});
+
+/** El diccionario completo de la flota. Lanza si no puede leerlo todo (un diccionario a medias haría reescribir lo que ya existe). */
+async function leerEquivalenciasDeFlota(tenantId: string): Promise<EquivalenciaGuardada[]> {
+  const filas = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('sitio_equivalencia').select(COLUMNAS_EQUIVALENCIA)
+    .eq('tenant_id', tenantId).order('id').range(d, h), 'equivalencias.leer') as never, 'equivalencias.leer');
+  return filas.map(aGuardada);
+}
+
+export interface ResultadoImportarEquivalencias {
+  guardadas: number;
+  nuevas: number;
+  actualizadas: number;
+  sinCambios: number;
+  rechazadas: ErrorCsv[];
+}
+
+/**
+ * Importa las equivalencias del archivo ya validado. NO es todo-o-nada: cada fila se resuelve sola (el sitio tiene que existir y
+ * estar activo en el catálogo de ESTA flota; las demás filas siguen). Idempotente: lo que ya está igual no se reescribe.
+ */
+export async function importarEquivalencias(tenantId: string, filas: readonly EquivalenciaCsv[]): Promise<ResultadoImportarEquivalencias> {
+  const codigos = [...new Set(filas.filter((f) => f.tipo === 'sitio' && f.geocercaCodigo).map((f) => f.geocercaCodigo as string))];
+  const sitioPorCodigo = new Map<string, string>();
+  if (codigos.length > 0) {
+    const gs = await traerPorIds<Fila>(codigos, (t) => acotada(supabaseAdmin().from('geocerca').select('id, codigo')
+      .eq('tenant_id', tenantId).eq('catalogo', 'conductor').eq('activa', true).in('codigo', t), 'equivalencias.sitios') as never, 'equivalencias.sitios');
+    for (const g of gs) { const c = s(g.codigo); if (c) sitioPorCodigo.set(c.toLowerCase(), String(g.id)); }
+  }
+  const plan = planificarEquivalencias(filas, sitioPorCodigo, await leerEquivalenciasDeFlota(tenantId));
+  for (let i = 0; i < plan.nuevas.length; i += 200) {
+    const lote = plan.nuevas.slice(i, i + 200).map((n) => ({
+      tenant_id: tenantId, texto_normalizado: n.textoNormalizado, lado: n.lado, tipo: n.tipo, geocerca_id: n.geocercaId,
+    }));
+    const res = await acotada(supabaseAdmin().from('sitio_equivalencia').insert(lote), 'equivalencias.insertar');
+    if (res.error) throw new Error(`equivalencias.insertar: ${res.error.message}`);
+  }
+  for (const c of plan.cambios) {
+    const res = await acotada(supabaseAdmin().from('sitio_equivalencia').update({ tipo: c.tipo, geocerca_id: c.geocercaId })
+      .eq('id', c.id).eq('tenant_id', tenantId).select('id'), 'equivalencias.actualizar');
+    if (res.error) throw new Error(`equivalencias.actualizar: ${res.error.message}`);
+  }
+  return {
+    guardadas: plan.nuevas.length + plan.cambios.length, nuevas: plan.nuevas.length, actualizadas: plan.cambios.length,
+    sinCambios: plan.sinCambios, rechazadas: plan.rechazadas,
+  };
+}
+
+export type ResultadoGuardarEquivalencia = 'ok' | 'sitio_no_encontrado' | 'datos_invalidos';
+
+/** Una equivalencia asignada a mano desde la lista de «textos sin sitio». `geocercaId` solo con `tipo === 'sitio'`. */
+export async function guardarEquivalencia(
+  tenantId: string, d: { textoNormalizado: string; lado: LadoEquivalencia; tipo: TipoEquivalencia; geocercaId: string | null },
+): Promise<ResultadoGuardarEquivalencia> {
+  if (!d.textoNormalizado || (d.tipo === 'sitio') !== (d.geocercaId !== null)) return 'datos_invalidos';
+  if (d.geocercaId !== null) {
+    if (!UUID.test(d.geocercaId)) return 'datos_invalidos';
+    const r = await acotada(supabaseAdmin().from('geocerca').select('id').eq('tenant_id', tenantId).eq('catalogo', 'conductor')
+      .eq('activa', true).eq('id', d.geocercaId).limit(1), 'equivalencias.sitio');
+    if (((exigir(r as never, 'equivalencias.sitio') ?? []) as unknown[]).length === 0) return 'sitio_no_encontrado';
+  }
+  const previas = await acotada(supabaseAdmin().from('sitio_equivalencia').select('id').eq('tenant_id', tenantId)
+    .eq('texto_normalizado', d.textoNormalizado).eq('lado', d.lado).is('cliente_id', null).order('id').limit(1), 'equivalencias.previa');
+  const previa = (exigir(previas as never, 'equivalencias.previa') ?? []) as unknown as Fila[];
+  const res = previa.length > 0
+    ? await acotada(supabaseAdmin().from('sitio_equivalencia').update({ tipo: d.tipo, geocerca_id: d.geocercaId }).eq('id', String(previa[0].id)).eq('tenant_id', tenantId), 'equivalencias.editar')
+    : await acotada(supabaseAdmin().from('sitio_equivalencia').insert({ tenant_id: tenantId, texto_normalizado: d.textoNormalizado, lado: d.lado, tipo: d.tipo, geocerca_id: d.geocercaId }), 'equivalencias.crear');
+  if (res.error) {
+    const code = (res.error as { code?: string }).code;
+    if (code === '23505') return 'ok'; // otra persona lo guardó a la vez: el diccionario ya lo tiene
+    if (code === '23503' || code === '23514') return 'datos_invalidos';
+    throw new Error(`equivalencias.guardar: ${res.error.message}`);
+  }
+  return 'ok';
+}
+
+/** Tope de viajes que se leen para armar la lista (la lista es una muestra de los 14 días; el techo evita una lectura sin fondo). */
+export const TOPE_VIAJES_TEXTOS = 5000;
+
+/**
+ * «Los textos de origen/destino sin sitio más frecuentes» de los viajes ABIERTOS de los últimos 14 días: lo que hoy deja a un
+ * viaje sin hito por geocerca. Sin datos de personas: solo el texto del lugar. `truncado` avisa si hubo más viajes de los leídos.
+ */
+export async function leerTextosSinSitio(tenantId: string, ahora: Date): Promise<{ textos: TextoSinSitio[]; truncado: boolean }> {
+  const desde = new Date(ahora.getTime() - DIAS_TEXTOS_SIN_SITIO * 86_400_000).toISOString();
+  const rv = await acotada(supabaseAdmin().from('viaje').select('origen, destino, origen_geocerca_id, destino_geocerca_id')
+    .eq('tenant_id', tenantId).eq('estatus', 'abierto').gte('created_at', desde).order('created_at', { ascending: false }).order('id').limit(TOPE_VIAJES_TEXTOS + 1), 'equivalencias.viajes');
+  const filas = (exigir(rv as never, 'equivalencias.viajes') ?? []) as unknown as Fila[];
+  const viajes: ViajeParaTextos[] = filas.slice(0, TOPE_VIAJES_TEXTOS).map((f) => ({
+    origen: s(f.origen), destino: s(f.destino), origenSitioId: s(f.origen_geocerca_id), destinoSitioId: s(f.destino_geocerca_id),
+  }));
+  const guardadas = await leerEquivalenciasDeFlota(tenantId);
+  return { textos: contarTextosSinSitio(viajes, guardadas), truncado: filas.length > TOPE_VIAJES_TEXTOS };
 }

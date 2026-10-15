@@ -13,7 +13,7 @@ import { TIPOS_SITIO } from '@/lib/likida/conductor/sitios';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type ResultadoSitio =
-  | { ok: true; mensaje: string }
+  | { ok: true; mensaje: string; detalles?: string[] }
   | { ok: false; error: string; detalles?: string[] }
   | null;
 export type AccionSitio = (previo: ResultadoSitio, fd: FormData) => Promise<ResultadoSitio>;
@@ -38,8 +38,11 @@ function Boton({ texto, icono }: { texto: string; icono: 'guardar' | 'subir' }) 
 export function Aviso({ r }: { r: ResultadoSitio }) {
   if (!r) return null;
   return r.ok ? (
-    <div role="status" className="flex items-center gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
-      <CheckCircle2 width={15} height={15} strokeWidth={1.75} />{r.mensaje}
+    <div role="status" className="text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
+      <div className="flex items-center gap-2"><CheckCircle2 width={15} height={15} strokeWidth={1.75} />{r.mensaje}</div>
+      {r.detalles && r.detalles.length > 0 && (
+        <ul className="mt-2 ml-6 list-disc space-y-0.5">{r.detalles.map((d, i) => <li key={i}>{d}</li>)}</ul>
+      )}
     </div>
   ) : (
     <div role="alert" className="text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
