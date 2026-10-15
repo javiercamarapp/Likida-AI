@@ -18,6 +18,7 @@ import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { leerArchivoUniversal, ArchivoNoSoportado } from '@/lib/likida/intake/archivo';
 import { logger } from '@/lib/logger';
 import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
+import { respuestaSiPerfilNiegaApi } from '@/lib/auth/perfil_tenant';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -39,6 +40,9 @@ export async function POST(req: NextRequest) {
   if (!puedeVerArea(sesion.rol, 'dinero')) {
     return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
   }
+  const negadoPerfil = await respuestaSiPerfilNiegaApi(sesion.tenantId, req.url);
+  if (negadoPerfil) return negadoPerfil;
+
   // Mismo freno que la sonda de ingesta (auditoría 21): el cuerpo ya tiene
   // tope de TAMAÑO, esto le pone el de FRECUENCIA — sin él, un bucle con un
   // xlsx de expansión adversarial repetía el parseo sin techo.

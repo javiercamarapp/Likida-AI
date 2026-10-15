@@ -258,7 +258,9 @@ import { join, relative } from 'node:path';
 // E1-B «cuadre-tarjetas-cobranza»: +1 archivo y +3 llamadas (287 → 288 y 1,906 → 1,909), medidos con el barrido real contra la base ec78640f. El módulo
 // nuevo es `acuse_folio.ts` (el acuse «solo folio» del cierre al encargado: sube el PDF al bucket `liquidaciones` y firma su URL). La lectura de la página
 // /admin/cobranza SÍ se puso en `repo.ts` (frontera: 0). CHOQUE ESPERABLE con E1-A: los dos paquetes suben estos techos; al integrar, el techo es la SUMA de los tramos.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 288;
+// WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
+// `tenant_perfil` (una tabla deny-all, un solo `.from(`) con su caché y falla cerrada; no cabe en `repo.ts` sin que éste conozca la política de acceso.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 289;
 // Integración ronda 20: 287 (E1-A, +0) + 1 (E1-B, acuse_folio.ts) = 288.
 // INTEGRACIÓN ola 4a (A + B): 1,805 → 1,807. El paquete B (M3/M4, copia al jefe) suma +2 llamadas RPC en un archivo que ya contaba
 // (`reclamar_copia_jefe` y `cerrar_copia_jefe`, el reclamo atómico de la copia); cada paquete midió contra su propia base, por eso
@@ -330,7 +332,6 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 288;
 // T-A5-03 (Conductor, 0800): 0 archivos y +7 llamadas (1,917 → 1,924), todas en `conductor/repo.ts` (alta y baja de voluntarios del piloto: leer un operador de la flota,
 // listar voluntarios, buscar candidatos, contarlos, leer el tope, marcar la marca y la RPC `retirar_voluntario`; todas por `acotada` con el tenant anclado). La frontera
 // declarada es solo `lib/likida/repo.ts`/`pg.ts`, así que `conductor/repo.ts` cuenta como cualquier módulo. Funcionalidad nueva, no código migrado; medido con el barrido real.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_938;
 // LOOP CINCO AGENTES, T-A5-25 (preflight del piloto): 1,936 → 1,938 (0 archivos, +2 llamadas, medido con el barrido real), ambas en `conductor/repo.ts`
 // (`leerDatosPreflight`: los viajes abiertos y aceptados de los voluntarios y sus posiciones de las últimas 2 h; por `acotada`, ancladas a `tenant_id`, solo lectura).
 // Funcionalidad nueva, no código migrado.
@@ -338,6 +339,9 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_938;
 // `conductor/repo_validacion.ts`, que ya contaba: el diccionario de la flota (leer), el importador (resolver códigos de sitio, insertar por lotes,
 // actualizar), la asignación a mano desde la lista (comprobar sitio, buscar la previa, crear o editar) y los viajes abiertos de 14 días para la lista de
 // «textos sin sitio». Todas por `acotada`, ancladas a `tenant_id` y las lecturas por lotes con `traerTodo`/`traerPorIds`. Funcionalidad nueva, no código migrado.
+// WS1 «perfil de tenant» (0770), integración con el Conductor: +1 llamada (el `.from(` de `tenant_perfil` en `lib/auth/perfil_tenant.ts`). OJO: la rama del Conductor sola YA medía 1,945
+// con el barrido real (su techo declarado, 1,938, estaba 7 por debajo); con el perfil, 1,945 + 1 = 1,946. Suma de tramos, medida con el barrido real; el techo se sube para reflejarla.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_946;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)
