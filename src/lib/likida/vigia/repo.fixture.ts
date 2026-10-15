@@ -228,7 +228,7 @@ export class RepoEnMemoria implements RepoVigia {
     const c = this.conversaciones.get(conversacionId);
     if (!c || c.tenantId !== tenantId) return;
     c.sinRespuestaDesde = null; c.entradasSinRespuesta = 0; c.escalamientoNivel = 0; c.atendidaEn = null;
-    c.molestiaNivel = 0; c.molestiaMotivos = []; c.molestiaEn = null; c.ultimaSalidaEn = ahora.toISOString();
+    c.molestiaNivel = 0; c.molestiaMotivos = []; c.molestiaEn = null; c.prioridad = 0; c.ultimaSalidaEn = ahora.toISOString();
   }
   async cerrarConversacion(tenantId: string, conversacionId: string): Promise<void> {
     const c = this.conversaciones.get(conversacionId);
@@ -277,6 +277,19 @@ export class RepoEnMemoria implements RepoVigia {
       if (d) lista.push({ userId: d.userId, directorId: null, nombre: null, telefono: d.telefono, correo: null });
     }
     return lista;
+  }
+  /** 0798: la lista de «servicio al cliente» por flota; `clienteId` null = para todos. Solo activos, como la base. */
+  servicio = new Map<string, Array<DestinatarioAviso & { clienteId: string | null; activo: boolean }>>();
+  agregarServicio(tenantId: string, d: Partial<DestinatarioAviso> & { clienteId?: string | null; activo?: boolean } & ({ telefono: string } | { correo: string })): void {
+    const lista = this.servicio.get(tenantId) ?? [];
+    lista.push({ userId: null, directorId: null, nombre: 'Servicio', telefono: null, correo: null, clienteId: null, activo: true, ...d });
+    this.servicio.set(tenantId, lista);
+  }
+  async destinatariosServicioCliente(tenantId: string, clienteId: string | null): Promise<DestinatarioAviso[]> {
+    this.verifica('destinatariosServicioCliente');
+    return (this.servicio.get(tenantId) ?? [])
+      .filter((x) => x.activo && (x.clienteId === null || x.clienteId === clienteId))
+      .map(({ clienteId: _c, activo: _a, ...d }) => d);
   }
   /** Los correos de respaldo: llave única (flota, clave), con arriendo, como `vigia_aviso_correo`. */
   correos: Array<{

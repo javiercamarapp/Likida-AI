@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { deflateRawSync } from 'node:zlib';
 import { leerExportWhatsapp, taparDatosPersonales } from './export_whatsapp';
 import { textoDeZip, esZip } from './zip_lector';
-import { analizarHistorial, esPregunta, semanaDe, temaDe } from './analisis';
+import { analizarHistorial, esPregunta, pideDatosUnidad, semanaDe, temaDe } from './analisis';
 
 const OPC = { equipo: ['Ana Servicio', 'Luis Tráfico'], sal: 'flota-1' };
 
@@ -160,3 +160,60 @@ describe('temas y análisis', () => {
     expect(semanaDe('2026-09-03T12:00:00Z')).toBe('2026-08-31');
   });
 });
+
+describe('datos de unidad: línea base de las 4 h', () => {
+  const m = (iso: string, rol: 'cliente' | 'equipo', texto: string) => ({ enviadoEn: iso, rol, texto });
+  const iso = (dia: number, h = 15) => new Date(Date.UTC(2026, 8, dia, h, 0, 0)).toISOString();
+
+  it('reconoce el tema con las reglas compartidas con intencion.ts y no confunde la ubicación', () => {
+    expect(temaDe('¿Con qué unidad va mi carga?')).toBe('datos_unidad');
+    expect(temaDe('¿me pasan las placas?')).toBe('datos_unidad');
+    expect(temaDe('¿quién es el operador?')).toBe('datos_unidad');
+    expect(temaDe('la ubicación de la unidad')).toBe('ubicacion');
+    expect(pideDatosUnidad('¿dónde va y con qué unidad viene?')).toBe(true);
+    expect(pideDatosUnidad('¿dónde va mi viaje?')).toBe(false);
+  });
+
+  it('agradecimientos y avisos de monitoreo son temas ignorables: no son «otros», ni FAQ, ni esperas sin respuesta', () => {
+    expect(temaDe('gracias')).toBe('agradecimiento');
+    expect(temaDe('perfecto, enterado')).toBe('agradecimiento');
+    expect(temaDe('monitoreo sin novedad')).toBe('monitoreo');
+    const r = analizarHistorial([
+      m(iso(1), 'cliente', 'gracias'), m(iso(2), 'cliente', 'gracias'), m(iso(3), 'cliente', 'monitoreo sin novedad'), m(iso(3, 16), 'cliente', 'monitoreo sin novedad'),
+    ]);
+    expect(r.ignorados).toBe(4);
+    expect(r.porTema).toEqual([]);
+    expect(r.faqs).toEqual([]);
+    expect(r.tiempos).toMatchObject({ conRespuesta: 0, sinRespuesta: 0, sobreUmbral: 0 });
+    expect(r.sinClasificar).toEqual({ mensajes: 0, porcentaje: null });
+  });
+
+  it('exportación sintética con 10 peticiones de datos de unidad: conteo, día, semana y respuesta del equipo', () => {
+    const peticiones = [1, 1, 2, 3, 8, 8, 8, 9, 10, 15].flatMap((d, i) => [
+      m(iso(d, 10 + (i % 3)), 'cliente', i % 2 ? '¿Con qué unidad va mi carga?' : '¿Con qué unidad va mi pedido?'),
+      m(iso(d, 10 + (i % 3)).replace(':00:00', ':03:00'), 'equipo', 'Unidad económico 12, placas de ejemplo.'),
+    ]);
+    const r = analizarHistorial([...peticiones, m(iso(4), 'cliente', 'algo rarísimo sin patrón conocido xyz')]);
+    expect(r.datosUnidad.total).toBe(10);
+    expect(r.datosUnidad.porDia).toEqual([
+      { dia: '2026-09-01', mensajes: 2 }, { dia: '2026-09-02', mensajes: 1 }, { dia: '2026-09-03', mensajes: 1 },
+      { dia: '2026-09-08', mensajes: 3 }, { dia: '2026-09-09', mensajes: 1 }, { dia: '2026-09-10', mensajes: 1 }, { dia: '2026-09-15', mensajes: 1 },
+    ]);
+    // 2026-08-31 es lunes; 09-07 y 09-14 también.
+    expect(r.datosUnidad.porSemana).toEqual([
+      { semana: '2026-08-31', mensajes: 4 }, { semana: '2026-09-07', mensajes: 5 }, { semana: '2026-09-14', mensajes: 1 },
+    ]);
+    expect(r.datosUnidad.diasDelPeriodo).toBe(15);
+    expect(r.datosUnidad.promedioPorDia).toBe(0.7);
+    expect(r.datosUnidad.preguntas[0]).toMatchObject({ tema: 'datos_unidad', veces: 10, respuestaTipica: 'Unidad económico 12, placas de ejemplo.' });
+    expect(r.porTema.find((t) => t.tema === 'datos_unidad')?.mensajes).toBe(10);
+    // lo que ninguna regla reconoce se dice tal cual, sin inventar tema
+    expect(r.sinClasificar.mensajes).toBe(1);
+    expect(r.sinClasificar.porcentaje).toBe(9);
+  });
+
+  it('un histórico vacío no inventa cifras de la línea base', () => {
+    expect(analizarHistorial([]).datosUnidad).toEqual({ total: 0, diasDelPeriodo: 0, promedioPorDia: null, porDia: [], porSemana: [], preguntas: [] });
+  });
+});
+

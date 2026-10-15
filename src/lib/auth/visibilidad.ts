@@ -142,6 +142,12 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/agentes/vigia': 'operacion',
   // 0484: grupos de clientes críticos, histórico exportado de WhatsApp y su reporte (FAQs, temas, tiempos). Cero pesos; solo el dueño sube/borra.
   '/dashboard/agentes/vigia/historial': 'operacion',
+  // T-A4-07: la carga del programa de despacho (CSV del día). Operación, cero pesos; sube el dueño o el encargado (se comprueba en la acción).
+  '/dashboard/agentes/vigia/programa': 'operacion',
+  // T-A4-37: tablero de estatus de importación derivado del programa. Operación, cero pesos; solo lee el archivo que se sube.
+  '/dashboard/agentes/vigia/importacion': 'operacion',
+  // T-A4-22: la bandeja de avisos de viaje (confirmación humana antes de avisar al cliente). Operación, cero pesos; decide el dueño o el encargado (se comprueba en la acción).
+  '/dashboard/agentes/vigia/avisos': 'operacion',
   // El Agente de Carta Porte (Fases B-C, 25-ago-2026): mismo criterio que su
   // pantalla /dashboard/carta-porte — cero pesos, y la declaración de ruta es
   // del jefe de tráfico. La página del borrador
@@ -370,6 +376,10 @@ export const RUTAS_PERFIL_CINCO_AGENTES: Readonly<Record<string, ModuloPerfil>> 
   // A4 · Vigía de servicio al cliente.
   '/dashboard/agentes/vigia': 'vigia',
   '/dashboard/agentes/vigia/historial': 'vigia',
+  // Integración Vigía + perfil: las tres pantallas del Vigía (programa de despacho, importación, avisos) son suyas, no de otro frente.
+  '/dashboard/agentes/vigia/programa': 'vigia',
+  '/dashboard/agentes/vigia/importacion': 'vigia',
+  '/dashboard/agentes/vigia/avisos': 'vigia',
   // A5 · Conductor (comunicación con operadores, hitos, estadías y su mapa).
   '/dashboard/agentes/conductores': 'conductor',
   '/dashboard/agentes/conductores/sitios': 'conductor',

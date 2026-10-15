@@ -264,7 +264,13 @@ import { join, relative } from 'node:path';
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
 // `tenant_perfil` (una tabla deny-all, un solo `.from(`) con su caché y falla cerrada; no cabe en `repo.ts` sin que éste conozca la política de acceso.
 // Integración Carta Porte + perfil (0770): el barrido real mide 290 archivos (incluye +1 de perfil_tenant.ts); techo subido a lo medido, sin relajar la regla. Un techo de integración es la suma de los tramos.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 290;
+// Integración Carta Porte + Vigía (INT-RAMAS): techo = suma de los tramos (289 base de perfil + 1 CP + 5 Vigía); se ajusta al barrido real.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 295;
+// Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
+// `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
+// WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
+// `tenant_perfil` (una tabla deny-all, un solo `.from(`) con su caché y falla cerrada; no cabe en `repo.ts` sin que éste conozca la política de acceso.
+// Integración Vigía + perfil (0770): el barrido real mide 294 = 293 (la rama del Vigía sola, 4 por encima de su techo declarado de 289) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // Integración ronda 20: 287 (E1-A, +0) + 1 (E1-B, acuse_folio.ts) = 288.
 // INTEGRACIÓN ola 4a (A + B): 1,805 → 1,807. El paquete B (M3/M4, copia al jefe) suma +2 llamadas RPC en un archivo que ya contaba
 // (`reclamar_copia_jefe` y `cerrar_copia_jefe`, el reclamo atómico de la copia); cada paquete midió contra su propia base, por eso
@@ -335,7 +341,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 290;
 // documento, 1 conteo y 3 RPC). Las otras +11 ya estaban en `carta_porte_docs/repo.ts` en la rama del frente (T-A3-03/04/09/20: configuración de salida, preparar el envío, catálogo del cliente,
 // marcar subido a mano y estado por documento) y el techo no se había subido; la prueba estaba roja ANTES de esta tarea (1,927 > 1,916). Funcionalidad nueva, no código migrado.
 // Integración Carta Porte + perfil (0770): el barrido real mide 1,935 llamadas (incluye +1 de perfil_tenant.ts); techo subido a lo medido, sin relajar la regla.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_935;
+// Integración Carta Porte + Vigía (INT-RAMAS): 1,917 base + 18 CP + 45 Vigía = 1,980 esperado; se ajusta al barrido real.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_980;
+// Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
+// Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

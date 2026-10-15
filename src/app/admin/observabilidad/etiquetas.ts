@@ -133,3 +133,20 @@ const NOTA_LATENCIA_RUTA: Record<string, string> = {
 export function notaDeLatenciaRuta(nombre: string): string | null {
   return NOTA_LATENCIA_RUTA[nombre] ?? null;
 }
+
+/**
+ * T-A4-42: los contadores que el cron `vigia` deja en el latido, con el nombre que se lee en /admin/crons. Solo cuentas: ningún
+ * texto, cliente ni operador de un aviso viaja por aquí. Una clave que no esté en el mapa se pinta cruda (visible, no rota).
+ */
+const ETIQUETA_CONTADOR_VIGIA: Record<string, string> = {
+  avisosCreados: 'avisos de viaje creados',
+  avisosEnviados: 'avisos de viaje enviados',
+  avisosFallidos: 'avisos de viaje fallidos',
+  avisosOmitidos: 'avisos de viaje omitidos o diferidos',
+  avisosPendientesViejos: 'avisos de viaje esperando confirmación más de 2 h',
+  avisosConError: 'el módulo de avisos de viaje falló',
+};
+
+export function etiquetaContadorVigia(clave: string): string {
+  return ETIQUETA_CONTADOR_VIGIA[clave] ?? clave;
+}

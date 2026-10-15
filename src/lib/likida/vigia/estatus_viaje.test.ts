@@ -83,3 +83,40 @@ describe('resolverViaje — SOLO entre los viajes del propio cliente', () => {
     expect(resolverViaje('F-1042 y también F-9999', [v1, v2], null)).toEqual({ tipo: 'uno', viajeId: VIAJE_1 });
   });
 });
+
+describe('datosUnidadVisibles (T-A4-24): solo pasa lo que la política de privacidad deja ver', () => {
+  const crudos = {
+    caja: 'CJ-100', placasCaja: 'ABC123', estadoCaja: 'cargada', unidad: 'C2-08', placasUnidad: 'XYZ789', operadorNombre: 'Operador Uno',
+  };
+
+  it('con la política de por defecto pasan los seis campos', async () => {
+    const { datosUnidadVisibles } = await import('./estatus_viaje');
+    const { camposVisibles } = await import('./aviso/privacidad');
+    expect(datosUnidadVisibles(crudos, camposVisibles(null, 'c1'))).toEqual({
+      caja: 'CJ-100', placasCaja: 'ABC123', estadoCaja: 'cargada', unidad: 'C2-08', placasUnidad: 'XYZ789', operador: 'Operador Uno',
+    });
+  });
+
+  it('un campo no visible queda en null y NO arrastra a los demás', async () => {
+    const { datosUnidadVisibles } = await import('./estatus_viaje');
+    const visibles = new Set(['caja', 'unidad'] as const);
+    expect(datosUnidadVisibles(crudos, visibles)).toEqual({
+      caja: 'CJ-100', placasCaja: null, estadoCaja: null, unidad: 'C2-08', placasUnidad: null, operador: null,
+    });
+  });
+
+  it('texto vacío o de puros espacios es «sin dato» (null), no una cadena vacía', async () => {
+    const { datosUnidadVisibles } = await import('./estatus_viaje');
+    const { camposVisibles } = await import('./aviso/privacidad');
+    const r = datosUnidadVisibles({ ...crudos, caja: '   ', operadorNombre: '' }, camposVisibles(null, 'c1'));
+    expect(r.caja).toBeNull();
+    expect(r.operador).toBeNull();
+  });
+
+  it('el resultado no tiene dónde guardar licencia, vigencia ni teléfono del operador', async () => {
+    const { datosUnidadVisibles } = await import('./estatus_viaje');
+    const { camposVisibles } = await import('./aviso/privacidad');
+    const llaves = Object.keys(datosUnidadVisibles(crudos, camposVisibles(null, 'c1'))).sort();
+    expect(llaves).toEqual(['caja', 'estadoCaja', 'operador', 'placasCaja', 'placasUnidad', 'unidad']);
+  });
+});

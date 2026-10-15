@@ -5,17 +5,18 @@
     "mensajes_cliente": 106,
     "mensajes_equipo": 104,
     "descartados": 5,
-    "sin_respuesta_10min": 17,
+    "sin_respuesta_10min": 21,
     "mediana_min": 6,
-    "p90_min": 30,
+    "p90_min": 31,
     "por_tema": {
-      "otro": 24,
       "eta": 22,
+      "datos_unidad": 22,
       "ubicacion": 17,
       "cita_anden": 15,
       "queja": 11,
       "documentos": 10,
-      "factura_pod": 7
+      "factura_pod": 7,
+      "otro": 2
     },
     "quejas": 11
   },
@@ -24,17 +25,18 @@
     "mensajes_cliente": 114,
     "mensajes_equipo": 111,
     "descartados": 11,
-    "sin_respuesta_10min": 23,
+    "sin_respuesta_10min": 24,
     "mediana_min": 5,
     "p90_min": 34,
     "por_tema": {
       "eta": 20,
       "queja": 20,
-      "otro": 18,
       "ubicacion": 17,
+      "datos_unidad": 15,
       "documentos": 14,
       "cita_anden": 13,
-      "factura_pod": 12
+      "factura_pod": 12,
+      "otro": 3
     },
     "quejas": 20
   },
@@ -43,17 +45,18 @@
     "mensajes_cliente": 104,
     "mensajes_equipo": 103,
     "descartados": 8,
-    "sin_respuesta_10min": 19,
-    "mediana_min": 5,
+    "sin_respuesta_10min": 21,
+    "mediana_min": 6,
     "p90_min": 23,
     "por_tema": {
-      "otro": 27,
+      "datos_unidad": 26,
       "cita_anden": 20,
       "eta": 19,
       "documentos": 11,
       "ubicacion": 10,
       "factura_pod": 9,
-      "queja": 8
+      "queja": 8,
+      "otro": 1
     },
     "quejas": 8
   }
