@@ -135,6 +135,7 @@ function validarFormato(def: CampoDoc, c: CampoValor, renglon: number | null, re
     }
     case 'clave_unidad': {
       if (CLAVES_UNIDAD.has(v)) break;
+      if (/^\d{1,2}$/.test(v)) { aqui('confirmar', 'unidad_no_sat', `«${v}» no es una clave c_ClaveUnidad del SAT (probable código interno del cliente). Elige la clave correcta (p. ej. H87 pieza, XBX caja).`); break; }
       if (!/^[A-Z0-9]{2,3}$/.test(v)) aqui('bloqueo', 'unidad_forma', `«${v}» no es una clave c_ClaveUnidad (2 o 3 caracteres, p. ej. KGM, H87, XBX).`);
       else aqui('aviso', 'unidad_fuera_subconjunto', `La clave ${v} no está entre las de uso común que Likida reconoce; verifícala contra el catálogo c_ClaveUnidad.`);
       break;

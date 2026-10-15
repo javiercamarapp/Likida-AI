@@ -110,7 +110,7 @@ export function normalizarFecha(crudo: string, opciones: { orden?: OrdenFecha } 
 }
 
 /** Lo que puede ir pegado a una cifra del documento y no es parte de ella. */
-const SUFIJOS_NUMERO: ReadonlySet<string> = new Set(['kg', 'kgs', 'kilo', 'kilos', 'ton', 'tons', 'tonelada', 'toneladas', 'lb', 'lbs', 'pza', 'pzas', 'mxn', 'usd', 'mn', 'm.n']);
+const SUFIJOS_NUMERO: ReadonlySet<string> = new Set(['kg', 'kgs', 'kilo', 'kilos', 'ton', 'tons', 'tonelada', 'toneladas', 'lb', 'lbs', 'pza', 'pzas', 'km', 'kms', 'mxn', 'usd', 'mn', 'm.n']);
 
 /** `1,234,567` / `1.234.567`: un grupo de 1 a 3 dígitos y uno o más de EXACTAMENTE 3, separados por `sep`. */
 function esMilesAgrupados(t: string, sep: ',' | '.'): boolean {
