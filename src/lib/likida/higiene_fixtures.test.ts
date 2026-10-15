@@ -69,6 +69,11 @@ export function escanearTexto(ruta: string, texto: string): Hallazgo[] {
  */
 const FAKE_TEL = 'teléfono de relleno con dígitos repetidos, inexistente; deuda: migrar a la marca 28999 (reportado a su frente)';
 export const ALLOWLIST: Record<string, string> = {
+  'src/lib/likida/carta_porte_docs/evaluacion/dorado.fixture.ts|telefono|7308900100': 'fracción arancelaria de 10 dígitos (campo S_Fraccion/fraccion), no es un teléfono', // grep-limpio:ok
+  'src/lib/likida/carta_porte_docs/evaluacion/dorado.fixture.ts|telefono|4011100100': 'fracción arancelaria de 10 dígitos, no es un teléfono', // grep-limpio:ok
+  'src/lib/likida/carta_porte_docs/evaluacion/dorado.fixture.ts|telefono|2208900301': 'fracción arancelaria de 10 dígitos, no es un teléfono', // grep-limpio:ok
+  'src/lib/likida/carta_porte_docs/evaluacion/dorado.fixture.ts|telefono|2208900300': 'fracción arancelaria de 10 dígitos, no es un teléfono', // grep-limpio:ok
+  'src/lib/likida/carta_porte_docs/evaluacion/dorado.fixture.ts|telefono|7100000001': 'número de remisión sintético de 10 dígitos, no es un teléfono', // grep-limpio:ok
   'src/lib/likida/conectores/fixtures-gps/wialon_search_items.json|telefono|1790000000': 'marca de tiempo epoch (campo "t"), no es un teléfono', // grep-limpio:ok
   'src/lib/likida/conectores/fixtures-gps/wialon_search_items.json|telefono|1790000060': 'marca de tiempo epoch (campo "t"), no es un teléfono', // grep-limpio:ok
   'src/lib/likida/vigia/repo.fixture.ts|telefono|5511110001': FAKE_TEL, // grep-limpio:ok
