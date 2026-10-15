@@ -70,6 +70,8 @@ export function aConfig(f: Fila): ConfigVigia {
     avisoPrivacidadUrl: str(f.aviso_privacidad_url),
     // 0673: sin migrar la columna no existe → apagado.
     respaldoCorreo: f.respaldo_correo === true,
+    // 0798: sin migrar la columna no existe → false (el copiloto de siempre, comportamiento idéntico).
+    soloAvisar: f.solo_avisar === true,
   };
 }
 

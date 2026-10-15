@@ -75,3 +75,32 @@ describe('política de envío', () => {
     expect(decidirEnvio(bueno({ config: cfg, aprobacionesSinEditar: 20 })).accion).toBe('autoenviar');
   });
 });
+
+describe('0798 «solo avisar»: matriz modo × solo_avisar', () => {
+  const MODOS = ['siempre', 'autoenviar_bajo_riesgo'] as const;
+  const conSolo = (modoAprobacion: (typeof MODOS)[number], soloAvisar: boolean | undefined) =>
+    bueno({ config: { habilitado: true, modoAprobacion, autoenviarMinAprobaciones: 1, soloAvisar } });
+
+  it('con solo_avisar activo NUNCA autoenvía ni deja borrador por aprobar, en ningún modo', () => {
+    for (const modo of MODOS) {
+      for (const intencion of [...INTENCIONES_AUTOENVIABLES, 'queja', 'otro', 'pide_humano'] as const) {
+        const d = decidirEnvio({ ...conSolo(modo, true), clasificacion: { intencion, confianza: 1, senales: [] } });
+        expect(d, `${modo}/${intencion}`).toEqual({ accion: 'ninguna', motivo: 'solo_avisar' });
+      }
+    }
+  });
+
+  it('sin solo_avisar (false o ausente: base sin la 0798) el comportamiento es idéntico al de siempre', () => {
+    for (const valor of [false, undefined]) {
+      expect(decidirEnvio(conSolo('siempre', valor))).toEqual({ accion: 'aprobar', motivo: 'modo_siempre_aprobar' });
+      expect(decidirEnvio(conSolo('autoenviar_bajo_riesgo', valor))).toEqual({ accion: 'autoenviar', motivo: 'bajo_riesgo_validado' });
+    }
+  });
+
+  it('el agente apagado y el hilo en manos de un humano siguen mandando: solo_avisar no los reemplaza', () => {
+    expect(decidirEnvio(bueno({ config: { habilitado: false, modoAprobacion: 'siempre', autoenviarMinAprobaciones: 1, soloAvisar: true } })).motivo).toBe('agente_apagado');
+    expect(decidirEnvio(bueno({ config: { habilitado: true, modoAprobacion: 'siempre', autoenviarMinAprobaciones: 1, soloAvisar: true }, conversacion: { control: 'humano', molestiaNivel: 0, escalamientoNivel: 0 } })).motivo)
+      .toBe('conversacion_en_manos_de_un_humano');
+  });
+});
+

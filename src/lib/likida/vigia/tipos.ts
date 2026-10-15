@@ -43,7 +43,11 @@ export interface ConfigVigia {
   autoenviarMinAprobaciones: number;
   slaRespuestaMin: number;
   escalarNivel2Min: number;
-  /** 0484: plazo corto (min) para clientes con un grupo CRÍTICO; rige el menor entre este y `slaRespuestaMin`. */
+  /**
+   * 0484: plazo corto (min) para clientes con un grupo CRÍTICO; rige el menor entre este y `slaRespuestaMin`.
+   * Rango real (CHECK de la base): `slaCriticoMin` 2–1440, `slaRespuestaMin` 5–1440; default 10. El «5 minutos» y el «10 minutos» que
+   * se oyen en las llamadas son EJEMPLOS hablados del cliente, no reglas: el valor lo fija cada flota (pendiente B4).
+   */
   slaCriticoMin: number;
   /** 0484: nivel de molestia (2 o 3) desde el que se avisa al gerente responsable. */
   molestiaAvisoNivel: 2 | 3;
@@ -51,6 +55,13 @@ export interface ConfigVigia {
   avisoPrivacidadUrl: string | null;
   /** 0673: si el aviso de escalamiento por WhatsApp no sale, mandarlo por correo a quien tenga correo en la lista de directores. Apagado por omisión. */
   respaldoCorreo: boolean;
+  /**
+   * 0798 «solo avisar»: el Vigía clasifica, prioriza y escala (avisa a gerentes y directores), pero NO redacta borradores ni manda nada al
+   * cliente. Opcional: una base sin la 0798 no trae la columna y entonces vale `false`/ausente (el copiloto de siempre, sin cambios).
+   * Con la 0798 aplicada nace en `true` (alcance inicial del cliente: «avisar, no contestar»). Ponerlo en `false` devuelve el copiloto
+   * con aprobación, las respuestas rápidas y el autoenvío (stand-by, no borrados).
+   */
+  soloAvisar?: boolean;
 }
 
 /** Lo que vale cuando la flota no tiene fila: APAGADO (falla cerrado). */

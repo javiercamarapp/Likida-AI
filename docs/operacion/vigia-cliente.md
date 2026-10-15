@@ -77,7 +77,16 @@ Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`* * * * *`).
 ## Grupos críticos, molestia y la alerta de 10 minutos (0484)
 
 - Cada cliente puede tener **grupos** (`vigia_grupo`) y marcar algunos como **críticos**. Un cliente con algún grupo crítico se atiende con el
-  plazo corto `sla_critico_min` (10 por omisión; se aplica el menor entre este y `sla_respuesta_min`).
+  plazo corto `sla_critico_min` (10 por omisión; se aplica el **menor** entre este y `sla_respuesta_min`).
+- **Rango real de los plazos** (lo que la base y la pantalla aceptan): `sla_critico_min` **2–1440** min (CHECK de la 0484) y `sla_respuesta_min`
+  **5–1440** min (CHECK de la 0400); el default de ambos al encender el agente es 10 para el crítico y 30 para el general. Los «5 minutos» y
+  «10 minutos» que se oyen en las llamadas son **ejemplos hablados**, no reglas: el plazo y el horario de cobertura (¿24/7?) los fija cada flota
+  y siguen abiertos con el cliente. La prueba `limites_sla.test.ts` mantiene alineados esta tabla, la pantalla y los CHECK.
+- **Solo avisar (0798, `vigia_config.solo_avisar`, activo por omisión)**: alcance inicial pedido por el cliente, «avisar, no contestar». Con
+  `solo_avisar` el Vigía guarda y clasifica cada mensaje, calcula molestia y prioridad y escala a gerentes y directores (aviso al cumplirse el plazo
+  que la flota haya fijado, «pide humano», folio ajeno, molestia), pero **no redacta borradores por aprobar ni manda nada al cliente**
+  (tampoco en el modo de autoenvío). Desactivarlo (`solo_avisar = false`) devuelve el copiloto con aprobación, las respuestas rápidas y el
+  autoenvío, que siguen en el código en stand-by. Una base sin la 0798 no trae la columna y se comporta como `solo_avisar = false` (idéntico a antes).
 - **Molestia**: `molestia_aviso_nivel` (2 o 3, por omisión 2) decide desde qué nivel de molestia se avisa al gerente responsable; el nivel 3 siempre sube
   también al dueño. Una queja nunca se autoenvía y «Yo me encargo» detiene al agente en ese hilo.
 - **Lo que NO hace**: leer un grupo de WhatsApp **en vivo**. Eso depende de la API de grupos de Meta (elegibilidad y alta del WABA) y no está simulado:
@@ -161,7 +170,7 @@ de la sesión (otro grupo = 404), sin las tablas de la 0484 = 409.
 
 ## Cuándo llega la alerta de «más de 10 minutos»
 
-El plazo de un cliente con grupo crítico es de 10 min (`sla_critico_min`, mínimo 5). El cron del Vigía pasa **cada minuto**
+El plazo de un cliente con grupo crítico es de 10 min por omisión (`sla_critico_min`, rango 2–1440; el 10 es un ejemplo, ver «Grupos críticos»). El cron del Vigía pasa **cada minuto**
 (decisión de la ronda 08: con `*/5` la alerta salía entre el minuto 10 y el 15; ahora sale entre el 10 y el 11). Un webhook no
 puede sustituir al cron: la alerta nace de que NO llegó nada, así que alguien tiene que mirar el reloj. La pasada de cada
 minuto es una lectura acotada (≤100 hilos, sin modelo) que casi siempre vuelve vacía; atorados, ciclos muertos y retención
