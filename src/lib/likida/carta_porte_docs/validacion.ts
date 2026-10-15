@@ -20,7 +20,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { CAMPOS_DOC, CAMPOS_MERCANCIA, UMBRAL_CRITICO, etiquetaCampo, type CampoDoc, type CampoValor, type Extraccion } from './campos';
-import { CLAVES_UNIDAD, CODIGOS_ESTADO, FACTOR_A_KG, estadoDeCp } from './catalogos';
+import { CLAVES_UNIDAD, CODIGOS_ESTADO, CODIGOS_ESTADO_EEUU, FACTOR_A_KG, estadoDeCp } from './catalogos';
 import {
   CAT_COLONIA, CAT_CP, CAT_EMBALAJE, CAT_FRACCION, CAT_PELIGROSO, CAT_PRODUCTO, CAT_UNIDAD,
   clavesDeFraccion, normalizarFraccion, type ResolvedorSat,
@@ -114,25 +114,52 @@ export function problemaRfc(rfc: string): { codigo: string; mensaje: string; sev
   return null;
 }
 
+/**
+ * Valida la forma de un Tax ID extranjero (país ≠ MEX). Sin dígito verificador mexicano; acepta el genérico
+ * extranjero y el EIN de EE. UU. `NN-NNNNNNN`. `null` = bien.
+ */
+export function problemaTaxId(id: string): { codigo: string; mensaje: string; severidad: Severidad } | null {
+  if (RFC_GENERICOS.has(id)) return null;
+  if (/^[A-Z0-9][A-Z0-9-]{2,19}$/.test(id)) return null;
+  return { codigo: 'taxid_forma', mensaje: `«${id}» no tiene forma de Tax ID (3 a 20 letras, números o guiones).`, severidad: 'bloqueo' };
+}
+
 type Registrar = (h: Hallazgo) => void;
 
-function validarFormato(def: CampoDoc, c: CampoValor, renglon: number | null, reg: Registrar, sat?: ResolvedorSat): void {
+/** País que cuenta como México: MEX, MX, México (el campo recorta a 3: «Méx»). Vacío NO es México ni extranjero. */
+const esPaisMexico = (p: string): boolean => /^(MEX|MX)/.test(p.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[\s.]/g, ''));
+const esPaisEeuu = (p: string): boolean => /^(USA|US|EUA|EEUU)$/.test(p.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[\s.]/g, ''));
+/** Contexto de país de un campo de extremo (`origen_rfc`, `destino_cp`…), o `null` si no es de un extremo o el país es México/vacío. */
+function contextoExtranjero(e: Extraccion, clave: string): { eeuu: boolean } | null {
+  const m = /^(origen|destino)_(rfc|cp|estado)$/.exec(clave);
+  if (!m) return null;
+  const p = (e.campos[`${m[1]}_pais`]?.valor ?? '').trim();
+  if (p === '' || esPaisMexico(p)) return null;
+  return { eeuu: esPaisEeuu(p) };
+}
+
+function validarFormato(def: CampoDoc, c: CampoValor, renglon: number | null, reg: Registrar, sat?: ResolvedorSat, ext: { eeuu: boolean } | null = null): void {
   const v = c.valor as string;
   const aqui = (severidad: Severidad, codigo: string, mensaje: string, relacionados?: Hallazgo['relacionados']) =>
     reg({ campo: def.clave, renglon, severidad, codigo, mensaje: `${etiquetaCampo(def.clave, renglon)}: ${mensaje}`, relacionados });
 
   switch (def.tipo) {
     case 'rfc': {
-      const p = problemaRfc(v);
+      const p = ext ? problemaTaxId(v) : problemaRfc(v);
       if (p) aqui(p.severidad, p.codigo, p.mensaje);
       break;
     }
     case 'cp': {
+      if (ext) { if (!/^[A-Z0-9][A-Z0-9 -]{1,9}$/i.test(v)) aqui('bloqueo', 'cp_forma', `«${v}» no es un código postal extranjero válido.`); break; }
       if (!/^\d{5}$/.test(v)) aqui('bloqueo', 'cp_forma', `«${v}» no es un código postal (5 dígitos).`);
       else if (estadoDeCp(v) === null) aqui('bloqueo', 'cp_inexistente', `El código postal ${v} no existe (los dos primeros dígitos no corresponden a ninguna entidad).`);
       break;
     }
     case 'estado':
+      if (ext) {
+        if (ext.eeuu && !CODIGOS_ESTADO_EEUU.has(v)) aqui('confirmar', 'estado_no_catalogo', `«${v}» no es una clave de estado de EE. UU. de dos letras (p. ej. TX, CA).`);
+        break;
+      }
       if (!CODIGOS_ESTADO.has(v)) aqui('confirmar', 'estado_no_catalogo', `«${v}» no es una clave del catálogo c_Estado (p. ej. JAL, NLE, CMX).`);
       break;
     case 'fecha': {
@@ -344,6 +371,7 @@ function verificarCatalogosSat(e: Extraccion, sat: ResolvedorSat | undefined, re
   });
 
   for (const lado of ['origen', 'destino'] as const) {
+    if (esExtranjero(e, lado)) continue; // un CP o colonia extranjeros no existen en el catálogo del SAT
     const cp = (e.campos[`${lado}_cp`]?.valor ?? '').trim();
     const a = (campo: string, severidad: Severidad, codigo: string, mensaje: string, relacionados?: Hallazgo['relacionados']) =>
       reg({ campo, renglon: null, severidad, codigo, mensaje: `${etiquetaCampo(campo, null)}: ${mensaje}`, relacionados });
@@ -548,7 +576,7 @@ export function reglaRazonSocialSinPuntuacion(e: Extraccion): Hallazgo[] {
 
 const LADOS_DOMICILIO = ['origen', 'destino', 'destino_2', 'destino_3', 'destino_4'] as const;
 const CLAVES_DOMICILIO_MX = ['colonia_clave', 'localidad_clave', 'municipio_clave'] as const;
-const esExtranjero = (e: Extraccion, lado: string): boolean => { const p = texto(e.campos[`${lado}_pais`]).toUpperCase(); return p !== '' && p !== 'MEX'; };
+const esExtranjero = (e: Extraccion, lado: string): boolean => { const p = texto(e.campos[`${lado}_pais`]); return p !== '' && !esPaisMexico(p); };
 
 /** Regla 7 — país distinto de MEX ⇒ sin claves de colonia, localidad ni municipio. Aviso: el exportador las omite. */
 export function reglaDomicilioSoloMexico(e: Extraccion): Hallazgo[] {
@@ -648,7 +676,7 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
       return;
     }
     const campo = c as CampoValor;
-    validarFormato(def, campo, renglon, reg, op.catalogosSat);
+    validarFormato(def, campo, renglon, reg, op.catalogosSat, contextoExtranjero(e, def.clave));
     if (campo.origen === 'humano') return; // lo demás son DUDAS sobre una lectura: un humano ya la resolvió.
     if (valorSospechoso(campo.valor)) {
       reg({ campo: def.clave, renglon, severidad: 'bloqueo', codigo: 'valor_sospechoso', mensaje: `${etiqueta}: el valor leído parece una instrucción, no un dato. Escríbelo tú.` });
@@ -678,6 +706,7 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
   // ── Coherencia entre campos ───────────────────────────────────────────────
   for (const lado of ['origen', 'destino'] as const) {
     const cp = e.campos[`${lado}_cp`]?.valor; const est = e.campos[`${lado}_estado`]?.valor;
+    if (esExtranjero(e, lado)) continue; // el CP de EE. UU. no se cruza con un estado mexicano
     if (cp && est && /^\d{5}$/.test(cp) && CODIGOS_ESTADO.has(est)) {
       const esperado = estadoDeCp(cp);
       if (esperado && esperado !== est) {
