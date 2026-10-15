@@ -23,6 +23,7 @@ import { redirect } from 'next/navigation';
 import { requireSessionTenant } from './guard';
 import { tenantDemo } from './tenant-demo';
 import { puedeVerRuta, inicioDe, rolEfectivo } from './visibilidad';
+import { exigirRutaDePerfil } from './perfil_tenant';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
@@ -233,6 +234,14 @@ export async function resolverTenantEfectivo(
     const { data, error } = await supabaseAdmin().from('tenant').select('id').eq('id', tenantId).maybeSingle();
     if (!error) tenantExiste = data !== null;
   }
+
+  // EL PERFIL DE LA FLOTA (0770), sobre el tenant EFECTIVO. Va aquí y no antes
+  // porque el tenant que importa es el que esta página va a consultar: un
+  // superadmin con `?tenant=` ve lo que ve el cliente (así se prueba el
+  // perfil). Todas las páginas Y las server actions de /dashboard pasan por esta
+  // función con la ruta de su pantalla, así que una pantalla en stand-by queda
+  // cerrada para ambas. Sin perfil, no hace nada.
+  await exigirRutaDePerfil(tenantId, destino);
 
   return { ...sesion, tenantId, tenantNombre, tenantExiste };
 }
