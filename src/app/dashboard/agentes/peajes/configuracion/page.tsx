@@ -204,13 +204,14 @@ export default async function PaginaConfiguracionPeajes({
     const r = await altaTag(tenantId, {
       tag: String(fd.get('tag') ?? ''), unidadId: String(fd.get('unidad') ?? ''), proveedor: String(fd.get('proveedor') ?? ''),
     });
-    volverConfig(sufijo, r.ok ? 'TAG guardado.' : `error:${r.motivo}`);
+    volverConfig(sufijo, r.ok ? (r.reactivadoDesdeBaja ? `TAG guardado y reactivado (estaba de baja desde el ${r.reactivadoDesdeBaja}).` : 'TAG guardado.') : `error:${r.motivo}`);
   }
   async function accionBajaTag(fd: FormData) {
     'use server';
     const no = await puertaConfig(tenantId);
     if (no) volverConfig(sufijo, `error:${no}`);
-    volverConfig(sufijo, (await bajaTag(tenantId, String(fd.get('tag') ?? ''))) ? 'TAG eliminado.' : 'error:No se pudo eliminar el TAG.');
+    const r = await bajaTag(tenantId, String(fd.get('tag') ?? ''), { fecha: fd.get('fecha'), motivo: fd.get('motivo') });
+    volverConfig(sufijo, r.ok ? 'TAG dado de baja: queda en el historial con su fecha y motivo.' : `error:${r.motivo}`);
   }
   async function accionImportarTags(fd: FormData) {
     'use server';
