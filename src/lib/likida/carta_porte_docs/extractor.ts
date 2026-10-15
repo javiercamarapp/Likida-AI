@@ -41,6 +41,7 @@ import { leerBol } from './lectores/bol';
 import { leerOrdenAgente } from './lectores/orden_agente';
 import { leerRemisionEscaneada, type VisionRemision } from './lectores/remision';
 import { aplicarPerfil, elegirPerfil, type EjemploPerfil, type Perfil } from './perfiles';
+import { leerRotulosCorreo, lecturaConfiable } from './rotulos';
 import { extraerCartaPorteXml } from './xml_ccp';
 
 // ── El contrato con el modelo ───────────────────────────────────────────────
@@ -307,6 +308,11 @@ export interface ContextoExtraccion {
   formatoEntrada?: FormatoLector;
   /** T-A3-60: el modelo de visión para el formato C. Sin él, una remisión escaneada no se lee. */
   vision?: VisionRemision | null;
+  /**
+   * T-A3-53: transcribe una captura (imagen) a TEXTO tal como se lee, rótulo por rótulo (el modelo de visión, por este puerto
+   * para que las pruebas lo sustituyan por uno determinista). Sin él, una imagen sigue el camino de siempre (el modelo la lee).
+   */
+  transcribir?: (imagenes: string[], signal?: AbortSignal) => Promise<string>;
 }
 
 export interface ResultadoExtraccion {
@@ -329,6 +335,8 @@ export interface ResultadoExtraccion {
   notasModelo: string[];
   /** T-A3-60: lo que dejó el lector de formato (incidencias, lo que queda vacío para T-A3-62, datos sin campo como el sello). */
   lector?: Pick<ResultadoLector, 'formato' | 'incidencias' | 'vacios' | 'adicionales'>;
+  /** T-A3-53: la captura del correo termina en un rótulo sin valor. La validación lo vuelve bloqueo `captura_incompleta`. */
+  capturaIncompleta: { ultimoRotulo: string } | null;
 }
 
 const marcadorAleatorio = (): string => randomBytes(10).toString('hex');
@@ -342,12 +350,22 @@ function completarCon(base: Extraccion, extra: Extraccion): Extraccion {
   return e;
 }
 
+/** El texto del correo (o la transcripción de la captura) leído por rótulos; `null` si no parece un bloque de rótulos de carga. */
+async function leerCorreoPorRotulos(c: ContenidoDoc, ctx: ContextoExtraccion): Promise<ReturnType<typeof leerRotulosCorreo>> {
+  let texto: string | null = null;
+  if (c.formato === 'correo') texto = c.texto;
+  else if (c.formato === 'imagen' && ctx.transcribir && c.imagenes.length > 0) texto = await ctx.transcribir(c.imagenes, ctx.signal);
+  const lectura = leerRotulosCorreo(texto, { resolucion: c.resolucion ?? null });
+  // Una captura cortada se declara aunque traiga pocos rótulos: callarla dejaría pasar un documento sin su fracción o pedimento.
+  return lectura && (lecturaConfiable(lectura) || (lectura.firma && lectura.capturaIncompleta)) ? lectura : null;
+}
+
 export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion): Promise<ResultadoExtraccion> {
   const det = detectarInyeccion(c.texto);
   const r: ResultadoExtraccion = {
     extraccion: extraccionVacia(), origen: 'llm', nivel: 0, modelo: null, tokensIn: 0, tokensOut: 0, costoUsd: 0,
     riesgoInyeccion: det.riesgo, indiciosInyeccion: det.indicios, perfilId: null, perfilVersion: null, perfilAmbiguo: false,
-    avisos: [...c.avisos], escalamientos: [], notasModelo: [],
+    avisos: [...c.avisos], escalamientos: [], notasModelo: [], capturaIncompleta: null,
   };
 
   const derivar: ContextoDerivar = { nombreArchivo: ctx.nombreArchivo, pedimentoPerfil: ctx.pedimentoPerfil };
@@ -385,6 +403,15 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
     r.avisos.push(...ap.avisos);
     if (ap.camposAplicados > 0) { base = ap.extraccion; r.origen = 'perfil'; }
   }
+  // 2b. Correo en texto o captura de correo: los rótulos se leen por código (con el mapa de rótulos engañosos); el perfil,
+  // si lo hubo, gana, y el modelo solo completa lo que falte.
+  const hayPerfil = base !== null;
+  const rotulos = await leerCorreoPorRotulos(c, ctx);
+  if (rotulos) {
+    r.avisos.push(...rotulos.avisos);
+    r.capturaIncompleta = rotulos.capturaIncompleta;
+    base = base ? completarCon(base, rotulos.extraccion) : rotulos.extraccion;
+  }
   if (base) {
     base = completarDerivados(base, derivar);
     const f = carencias(base);
@@ -412,6 +439,6 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   }
   const delModelo = acumulado ?? extraccionVacia();
   r.extraccion = completarDerivados(base ? completarCon(base, delModelo) : delModelo, derivar);
-  r.origen = base ? 'perfil+llm' : 'llm';
+  r.origen = hayPerfil ? 'perfil+llm' : 'llm';
   return r;
 }
