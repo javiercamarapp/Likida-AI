@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { CampoValor, Extraccion } from './campos';
-import { construirPlantilla } from './plantilla_tms';
-import { LAYOUT_NORMAL, coordenadasLayout } from './plantilla_tms.layout';
+import { construirPlantilla, contarDestinos } from './plantilla_tms';
+import { AVISO_PLANTILLA_POR_CONFIG, contextoPlantillaDeConfig, elegirPlantilla } from './salida_config';
+import { LAYOUT_NORMAL, LAYOUT_NUEVA, coordenadasLayout, layoutPuedeEnviarse } from './plantilla_tms.layout';
 
 const cv = (valor: string | null): CampoValor => ({ valor, confianza: 0.95, evidencia: null, origen: 'llm' });
 
@@ -47,7 +48,7 @@ describe('construirPlantilla', () => {
     expect(rd.C43.valor).toBe('Nuevo León');
     // tabla de destinos
     expect(rd.A50.valor).toBe(1);
-    expect(rd.B50.valor).toBe(874.11);
+    expect(rd.B50.valor).toBe('874,11 km'); // por defecto la distancia sale como la trae la plantilla
     expect(rd.C50.valor).toBe('Destino Sintetico LLC');
     expect(rd.J50.valor).toBe('78040');
     expect(rd.P50.valor).toBe('Nuevo León');
@@ -89,7 +90,7 @@ describe('construirPlantilla', () => {
     expect(c.valor).toBe('=HYPERLINK("x")');
     expect(c.texto).toBe(true);
     expect(hoja(r, 'Mercancias').I22.texto).toBe(false);
-    expect(hoja(r, 'RemintenteDestinatario').B50.texto).toBe(false);
+    expect(hoja(r, 'RemintenteDestinatario').B50.texto).toBe(true);
   });
 
   it('varias mercancías ocupan filas consecutivas desde la 22', () => {
@@ -133,5 +134,138 @@ describe('LAYOUT_NORMAL', () => {
     ];
     expect([...coordenadasLayout(LAYOUT_NORMAL)].sort()).toEqual([...congelada].sort());
     expect(new Set(coordenadasLayout(LAYOUT_NORMAL)).size).toBe(coordenadasLayout(LAYOUT_NORMAL).length);
+  });
+});
+
+/** Agrega el destino N (≥ 2) con datos sintéticos a la extracción. */
+function conDestino(e: Extraccion, n: number): void {
+  const d: Record<string, string> = {
+    nombre: `Destino ${n} Sintetico`, rfc: 'XEXX010101000', calle: `Street ${n}`, cp: `7804${n}`, estado: 'NLE', pais: 'USA', distancia_km: `${100 * n},50 km`, // grep-limpio:ok
+  };
+  for (const [k, v] of Object.entries(d)) e.campos[`destino_${n}_${k}`] = cv(v);
+}
+
+describe('distancia_formato', () => {
+  it('texto_km (por defecto) deja «874,11 km» como texto; numero la vuelve número', () => {
+    const t = construirPlantilla(extraccion(), { ...ctx, distanciaFormato: 'texto_km' });
+    expect(hoja(t, 'RemintenteDestinatario').B50).toEqual({ valor: '874,11 km', texto: true });
+    const n = construirPlantilla(extraccion(), { ...ctx, distanciaFormato: 'numero' });
+    expect(hoja(n, 'RemintenteDestinatario').B50).toEqual({ valor: 874.11, texto: false });
+  });
+
+  it('una distancia dada solo como número sale con el formato pedido; ilegible se deja tal cual', () => {
+    expect(hoja(construirPlantilla(extraccion({ distancia_km: '874.1' }), ctx), 'RemintenteDestinatario').B50.valor).toBe('874,10 km');
+    expect(hoja(construirPlantilla(extraccion({ distancia_km: 'no se sabe' }), ctx), 'RemintenteDestinatario').B50.valor).toBe('no se sabe');
+    expect(hoja(construirPlantilla(extraccion({ distancia_km: null }), ctx), 'RemintenteDestinatario').B50.valor).toBeNull();
+  });
+});
+
+describe('multi-destino', () => {
+  it('un destino: sin cambios, Id Destino 1 en la mercancía y sin fila 51', () => {
+    const e = extraccion();
+    expect(contarDestinos(e)).toBe(1);
+    const r = construirPlantilla(e, ctx);
+    expect(hoja(r, 'Mercancias').A22.valor).toBe(1);
+    expect(hoja(r, 'RemintenteDestinatario').A51).toBeUndefined();
+  });
+
+  it('2 destinos: filas 50–51, mercancías con Id Destino 1 y 2', () => {
+    const e = extraccion();
+    conDestino(e, 2);
+    e.mercancias.push({ ...e.mercancias[0], id_destino: cv('2'), descripcion: cv('Segunda') });
+    e.mercancias[0].id_destino = cv('1');
+    const r = construirPlantilla(e, ctx);
+    const rd = hoja(r, 'RemintenteDestinatario');
+    expect([rd.A50.valor, rd.A51.valor]).toEqual([1, 2]);
+    expect(rd.C50.valor).toBe('Destino Sintetico LLC');
+    expect(rd.C51.valor).toBe('Destino 2 Sintetico');
+    expect(rd.J51.valor).toBe('78042');
+    expect(rd.B51.valor).toBe('200,50 km');
+    expect(rd.P51.valor).toBe('Nuevo León');
+    expect(rd.A52).toBeUndefined();
+    const me = hoja(r, 'Mercancias');
+    expect([me.A22.valor, me.A23.valor]).toEqual([1, 2]);
+    expect(r.faltantes.filter((f) => f.bloqueante)).toEqual([]);
+  });
+
+  it('con varios destinos, la mercancía sin Id Destino es faltante (no se adivina) y uno inexistente bloquea', () => {
+    const e = extraccion();
+    conDestino(e, 2);
+    const r = construirPlantilla(e, ctx);
+    expect(r.faltantes).toContainEqual({ campo: 'mercancia.id_destino', celda: 'A22' });
+    expect(hoja(r, 'Mercancias').A22.valor).toBeNull();
+    e.mercancias[0].id_destino = cv('3');
+    const q = construirPlantilla(e, ctx);
+    expect(q.faltantes.find((f) => f.celda === 'A22')?.bloqueante).toBe(true);
+  });
+
+  it('4 destinos caben; 5 destinos: faltante bloqueante «divide el embarque» y solo se llenan 4 filas', () => {
+    const e4 = extraccion();
+    for (const n of [2, 3, 4]) conDestino(e4, n);
+    e4.mercancias[0].id_destino = cv('4');
+    const r4 = construirPlantilla(e4, ctx);
+    expect(hoja(r4, 'RemintenteDestinatario').A53.valor).toBe(4);
+    expect(r4.faltantes.filter((f) => f.bloqueante)).toEqual([]);
+
+    const e5 = extraccion();
+    for (const n of [2, 3, 4, 5]) conDestino(e5, n);
+    e5.mercancias[0].id_destino = cv('1');
+    const r5 = construirPlantilla(e5, ctx);
+    const bloqueo = r5.faltantes.filter((f) => f.bloqueante);
+    expect(bloqueo).toHaveLength(1);
+    expect(bloqueo[0].mensaje).toContain('divide el embarque');
+    expect(hoja(r5, 'RemintenteDestinatario').A54).toBeUndefined();
+    expect(hoja(r5, 'RemintenteDestinatario').A53.valor).toBe(4);
+  });
+});
+
+describe('LAYOUT_NUEVA', () => {
+  it('es provisional, no verificada, serializable y agrega Origenes/Destinos vacías', () => {
+    expect(LAYOUT_NUEVA.verificada).toBe(false);
+    expect(layoutPuedeEnviarse(LAYOUT_NUEVA)).toBe(false);
+    expect(layoutPuedeEnviarse(LAYOUT_NORMAL)).toBe(true);
+    expect(LAYOUT_NUEVA.hojas.map((h) => h.hoja)).toEqual(['RemintenteDestinatario', 'Mercancias', 'Error', 'Origenes', 'Destinos']);
+    expect(LAYOUT_NUEVA.nota).toContain('pendiente de especificación');
+    expect(JSON.parse(JSON.stringify(LAYOUT_NUEVA))).toEqual(LAYOUT_NUEVA);
+    expect(LAYOUT_NORMAL.nombre).toBe('normal'); // la normal no se tocó
+  });
+
+  it('para ENVIAR se genera la normal con aviso; para DESCARGAR sale la nueva con aviso', () => {
+    const env = construirPlantilla(extraccion(), { ...ctx, plantilla: 'nueva' });
+    expect(Object.keys(env.hojas)).toEqual(['RemintenteDestinatario', 'Mercancias', 'Error']);
+    const des = construirPlantilla(extraccion(), { ...ctx, plantilla: 'nueva', uso: 'descarga' });
+    expect(Object.keys(des.hojas)).toEqual(['RemintenteDestinatario', 'Mercancias', 'Error', 'Origenes', 'Destinos']);
+    expect(des.hojas.Origenes).toEqual({});
+    expect(des.avisos.some((a) => a.includes('solo para revisar'))).toBe(true);
+  });
+});
+
+describe('elección normal / nueva (nunca por el contenido)', () => {
+  const PERFIL = '11111111-1111-4111-8111-111111111111';
+  it('sin override: la de la flota y el aviso de que salió de la configuración', () => {
+    const e = elegirPlantilla({ plantillaPorDefecto: 'normal' }, null, PERFIL);
+    expect(e).toEqual({ plantilla: 'normal', origen: 'defecto', avisos: [AVISO_PLANTILLA_POR_CONFIG] });
+    expect(elegirPlantilla({ plantillaPorDefecto: 'nueva' }, { porPerfil: {} }, null).plantilla).toBe('nueva');
+  });
+
+  it('override por perfil: gana al defecto, sin el aviso; otro perfil sigue con el defecto', () => {
+    const layout = { porPerfil: { [PERFIL]: 'nueva' } };
+    const e = elegirPlantilla({ plantillaPorDefecto: 'normal' }, layout, PERFIL);
+    expect(e).toEqual({ plantilla: 'nueva', origen: 'perfil', avisos: [] });
+    expect(elegirPlantilla({ plantillaPorDefecto: 'normal' }, layout, '22222222-2222-4222-8222-222222222222').plantilla).toBe('normal');
+    expect(elegirPlantilla({ plantillaPorDefecto: 'normal' }, layout, '__proto__').plantilla).toBe('normal');
+  });
+
+  it('una configuración ilegible no se interpreta: defecto + dos avisos', () => {
+    const e = elegirPlantilla({ plantillaPorDefecto: 'normal' }, { porPerfil: { [PERFIL]: 'otra' } }, PERFIL);
+    expect(e.plantilla).toBe('normal');
+    expect(e.avisos).toHaveLength(2);
+  });
+
+  it('el contexto arrastra formato de distancia y avisos hasta el armado', () => {
+    const c = contextoPlantillaDeConfig({ plantillaPorDefecto: 'normal', distanciaFormato: 'numero' }, null);
+    const r = construirPlantilla(extraccion(), c);
+    expect(hoja(r, 'RemintenteDestinatario').B50.valor).toBe(874.11);
+    expect(r.avisos).toContain(AVISO_PLANTILLA_POR_CONFIG);
   });
 });
