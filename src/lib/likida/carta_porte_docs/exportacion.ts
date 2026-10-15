@@ -21,6 +21,8 @@ import { z } from 'zod';
 import { CLAVES_DOC, CLAVES_MERCANCIA, campoDoc, campoMercancia, type CampoValor } from './campos';
 import { llaveTexto } from './catalogos';
 import { normalizarNumero } from './normalizar';
+import { LAYOUT_NORMAL } from './plantilla_tms.layout';
+import type { PlantillaConstruida } from './plantilla_tms';
 import type { DocumentoFila } from './repo';
 
 /** Campos «de sistema» que se pueden exportar además de los del complemento. */
@@ -235,6 +237,56 @@ export function aXlsx(filas: Array<Record<string, Celda>>, cfg: ExportConfig): U
   hoja['!cols'] = enc.map((e) => ({ wch: Math.min(40, Math.max(10, e.length + 2)) }));
   const libro = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(libro, hoja, 'Carta Porte');
+  return new Uint8Array(XLSX.write(libro, { type: 'array', bookType: 'xlsx', compression: true }) as ArrayBuffer);
+}
+
+/** Etiqueta legible de un campo para la columna A de la plantilla generada sin base. */
+const aTextoLegible = (campo: string): string => {
+  const t = campo.replace(/^ctx\./, '').replace(/[_.]+/g, ' ').trim();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};
+
+/**
+ * La PLANTILLA MULTI-HOJA del TMS (hojas con celdas fijas, no tabla plana) a partir de lo que arma `construirPlantilla`.
+ *
+ *   · Sin `base`: construye las hojas desde el layout; en la columna A de cada celda fija pone una etiqueta legible.
+ *   · Con `base` (plantilla en BLANCO de la flota): la abre con `XLSX.read`, escribe cada valor en su coordenada y conserva
+ *     hojas y nombres. ADVERTENCIA: SheetJS community puede perder estilos, validaciones de datos y formatos condicionales
+ *     de la plantilla original; los valores y los nombres de hoja si sobreviven (lo prueba exportacion.test.ts).
+ *
+ * Todo texto va como celda de TEXTO y neutralizado (`= + - @`); un numero solo es numerico donde el layout dice `texto:false`.
+ * Determinista (sin fecha) y sin metadatos de usuario: las propiedades del libro se vacian (autor vacio, tambien con `base`).
+ * Una celda sin valor no se escribe (en `base` se respeta lo que ya tuviera).
+ */
+export function aXlsxPlantillaTms(plantilla: PlantillaConstruida, base?: Uint8Array): Uint8Array {
+  const libro = base ? XLSX.read(base, { type: 'array', cellStyles: true }) : XLSX.utils.book_new();
+  const hojas: Array<[string, Record<string, { valor: string | number | null; texto: boolean }>]> = Object.entries(plantilla.hojas);
+  for (const [nombre, celdas] of hojas) {
+    let ws = libro.Sheets[nombre];
+    if (!ws) { ws = {} as XLSX.WorkSheet; XLSX.utils.book_append_sheet(libro, ws, nombre); }
+    const escribir = (coord: string, v: string | number): void => {
+      ws[coord] = typeof v === 'number' ? { t: 'n', v } : { t: 's', v: textoSeguro(v) };
+    };
+    if (!base) {
+      const etiquetas = LAYOUT_NORMAL.hojas.find((h) => h.hoja === nombre)?.celdas ?? [];
+      for (const e of etiquetas) escribir(`A${e.celda.replace(/^[A-Z]+/, '')}`, aTextoLegible(e.campo));
+    }
+    for (const [coord, c] of Object.entries(celdas)) {
+      if (c.valor === null || c.valor === undefined) continue;
+      if (typeof c.valor === 'number' && (!c.texto && Number.isFinite(c.valor))) escribir(coord, c.valor);
+      else if (typeof c.valor === 'number' && !Number.isFinite(c.valor)) continue;
+      else escribir(coord, String(c.valor));
+    }
+    // Rango: lo que ya traia la hoja + todo lo escrito.
+    let r = ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : { s: { r: 0, c: 0 }, e: { r: 0, c: 0 } };
+    for (const k of Object.keys(ws)) {
+      if (k.startsWith('!')) continue;
+      const a = XLSX.utils.decode_cell(k);
+      r = { s: { r: Math.min(r.s.r, a.r), c: Math.min(r.s.c, a.c) }, e: { r: Math.max(r.e.r, a.r), c: Math.max(r.e.c, a.c) } };
+    }
+    ws['!ref'] = XLSX.utils.encode_range(r);
+  }
+  libro.Props = {};
   return new Uint8Array(XLSX.write(libro, { type: 'array', bookType: 'xlsx', compression: true }) as ArrayBuffer);
 }
 
