@@ -373,6 +373,133 @@ describe('Storage del Excel', () => {
   });
 });
 
+describe('noticia de entrega del proveedor (T-A1-18)', () => {
+  const ENT = (estado: string, rol = 'operador') => ({
+    id: 'ent-1', tenant_id: T, liquidacion_externa_id: LIQ, generacion: 1, rol, correo: 'Operador@Ejemplo.test', estado, intentos: 0,
+    proximo_intento_en: AHORA.toISOString(), claim_token: null, claim_expira_en: null, resend_id: 're_1', ultimo_error: null,
+    disparo: 'auto', xlsx_ruta: null, xlsx_sha256: null, enviada_en: null, entregada_en: null, rebotada_en: null, created_at: AHORA.toISOString(),
+  });
+  const LIQUIDACION = { id: LIQ, tenant_id: T, clave_externa: 'BIT-SINT-1', operador_id: 'op-1' };
+  const sets = (l: Llamada) => l.ops.find((o) => o[0] === 'update')?.[1] as Record<string, unknown> | undefined;
+
+  /** Base en memoria mínima: la entrega, la liquidación, el operador y las excepciones; el UPDATE respeta `.in('estado')`. */
+  function base(estadoInicial: string, rol = 'operador', operadorCasa = true) {
+    const e = ENT(estadoInicial, rol) as Record<string, unknown>;
+    const excepciones: Array<Record<string, unknown>> = [];
+    const operador = { marcado: null as string | null };
+    comportamiento = (l) => {
+      const eq = (c: string) => l.ops.find((o) => o[0] === 'eq' && o[1] === c)?.[2];
+      if (l.tabla === 'liquidacion_entrega_correo') {
+        if (l.ops.some((o) => o[0] === 'update')) {
+          const desde = (l.ops.find((o) => o[0] === 'in')?.[2] as string[]) ?? [];
+          if (!desde.includes(e.estado as string)) return { data: [], error: null };
+          Object.assign(e, sets(l)); return { data: [{ id: 'ent-1' }], error: null };
+        }
+        return { data: e, error: null };
+      }
+      if (l.tabla === 'liquidacion_externa') return { data: LIQUIDACION, error: null };
+      if (l.tabla === 'operador') {
+        if (!operadorCasa) return { data: [], error: null };
+        operador.marcado = String(sets(l)?.correo_rebotado_en); return { data: [{ id: eq('id') }], error: null };
+      }
+      if (l.tabla === 'liquidacion_excepcion') {
+        if (l.ops.some((o) => o[0] === 'insert')) { excepciones.push(l.ops.find((o) => o[0] === 'insert')![1] as Record<string, unknown>); return { data: [{ id: 7 }], error: null }; }
+        return { data: [], error: null };
+      }
+      return { data: [], error: null };
+    };
+    return { e, excepciones, operador };
+  }
+
+  it('id que no es de una entrega ⇒ sin_entrega, sin escribir nada', async () => {
+    respuestas = [{ data: null, error: null }];
+    expect(await r.confirmarEntregaCorreo('re_x', 'entregada', AHORA)).toEqual({ resultado: 'sin_entrega' });
+    expect(llamadas).toHaveLength(1);
+    expect(llamadas[0].ops.some((o) => o[0] === 'update')).toBe(false);
+  });
+
+  it('sin la migración 0787 ⇒ sin_entrega (el webhook sigue su flujo de siempre), no lanza', async () => {
+    respuestas = [ausente];
+    expect(await r.confirmarEntregaCorreo('re_x', 'rebotada', AHORA)).toEqual({ resultado: 'sin_entrega' });
+  });
+
+  it('entregada: escribe solo sobre «enviada» y la repetición no cambia nada', async () => {
+    const b = base('enviada');
+    expect(await r.confirmarEntregaCorreo('re_1', 'entregada', AHORA)).toMatchObject({ resultado: 'aplicada', rol: 'operador' });
+    expect(b.e).toMatchObject({ estado: 'entregada', entregada_en: AHORA.toISOString() });
+    expect(await r.confirmarEntregaCorreo('re_1', 'entregada', AHORA)).toMatchObject({ resultado: 'sin_cambio' });
+  });
+
+  it('entregada tardía NO pisa a una rebotada ni a una queja', async () => {
+    for (const malo of ['rebotada', 'queja']) {
+      const b = base(malo);
+      expect(await r.confirmarEntregaCorreo('re_1', 'entregada', AHORA)).toMatchObject({ resultado: 'sin_cambio' });
+      expect(b.e.estado).toBe(malo);
+    }
+  });
+
+  it('rebotada pisa a entregada; la queja también', async () => {
+    const b = base('entregada', 'rh');
+    expect(await r.confirmarEntregaCorreo('re_1', 'rebotada', AHORA)).toMatchObject({ resultado: 'aplicada' });
+    expect(b.e).toMatchObject({ estado: 'rebotada', rebotada_en: AHORA.toISOString() });
+    const c = base('entregada', 'rh');
+    await r.confirmarEntregaCorreo('re_1', 'queja', AHORA);
+    expect(c.e.estado).toBe('queja');
+  });
+
+  it('rebote del OPERADOR: marca operador.correo_rebotado_en (solo si es SU correo vigente) y abre operador_sin_correo', async () => {
+    const b = base('enviada');
+    const res = await r.confirmarEntregaCorreo('re_1', 'rebotada', AHORA);
+    expect(res).toEqual({ resultado: 'aplicada', rol: 'operador', operadorMarcado: true });
+    expect(b.operador.marcado).toBe(AHORA.toISOString());
+    const llOp = llamadas.find((l) => l.tabla === 'operador')!;
+    expect(tieneEq(llOp, 'tenant_id', T)).toBe(true);
+    expect(tieneEq(llOp, 'id', 'op-1')).toBe(true);
+    expect(tieneEq(llOp, 'correo', 'operador@ejemplo.test')).toBe(true);
+    expect(b.excepciones).toHaveLength(1);
+    expect(b.excepciones[0]).toMatchObject({ tenant_id: T, clave_externa: 'BIT-SINT-1', tipo: 'operador_sin_correo' });
+    expect(JSON.stringify(b.excepciones[0])).not.toContain('Operador@Ejemplo');
+    expect(JSON.stringify(b.excepciones[0])).not.toContain('operador@ejemplo');
+  });
+
+  it('rebote viejo (el operador ya cambió de correo): la entrega se marca, pero ni se marca al operador ni hay excepción', async () => {
+    const b = base('enviada', 'operador', false);
+    expect(await r.confirmarEntregaCorreo('re_1', 'rebotada', AHORA)).toEqual({ resultado: 'aplicada', rol: 'operador', operadorMarcado: false });
+    expect(b.excepciones).toHaveLength(0);
+  });
+
+  it('rebote del coordinador o de RH: no toca al operador ni abre excepción', async () => {
+    for (const rol of ['coordinador', 'rh']) {
+      llamadas.length = 0;
+      const b = base('enviada', rol);
+      expect(await r.confirmarEntregaCorreo('re_1', 'rebotada', AHORA)).toMatchObject({ resultado: 'aplicada', rol });
+      expect(llamadas.some((l) => l.tabla === 'operador')).toBe(false);
+      expect(b.excepciones).toHaveLength(0);
+    }
+  });
+
+  it('reintento de Resend sobre una entrega ya rebotada: completa los efectos del operador (idempotentes)', async () => {
+    const b = base('rebotada');
+    expect(await r.confirmarEntregaCorreo('re_1', 'rebotada', AHORA)).toEqual({ resultado: 'sin_cambio', rol: 'operador', operadorMarcado: true });
+    expect(b.excepciones).toHaveLength(1);
+  });
+
+  it('todo UPDATE posterior a encontrar la entrega va anclado a SU tenant', async () => {
+    base('enviada');
+    await r.confirmarEntregaCorreo('re_1', 'rebotada', AHORA);
+    for (const l of llamadas.slice(1)) {
+      const alta = l.ops.find((o) => o[0] === 'insert');
+      if (alta) expect((alta[1] as Record<string, unknown>).tenant_id, l.tabla).toBe(T);
+      else expect(tieneEq(l, 'tenant_id', T), l.tabla).toBe(true);
+    }
+  });
+
+  it('base caída al escribir: LANZA (el webhook contesta 500 y Resend reintenta)', async () => {
+    comportamiento = (l) => (l.ops.some((o) => o[0] === 'update') ? { data: null, error: { message: 'conexión rota' } } : { data: ENT('enviada'), error: null });
+    await expect(r.confirmarEntregaCorreo('re_1', 'entregada', AHORA)).rejects.toThrow(/conexión rota/);
+  });
+});
+
 describe('guardias del archivo', () => {
   it('toda consulta `.from()` de las funciones por flota lleva tenant_id', async () => {
     // Recorre una llamada de cada función por flota con respuestas vacías/válidas y exige el filtro en TODAS las consultas.
