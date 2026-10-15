@@ -118,6 +118,22 @@ export async function getPerfilCrudo(tenantId: string): Promise<unknown> {
 }
 
 /**
+ * La zona horaria (IANA) de la flota: `tenant.zona_horaria` (0325, default 'America/Mexico_City').
+ * La usa el Conductor para que su ventana de insistencia sea del chofer y no del servidor. Devuelve
+ * `null` si el tenant no existe; LANZA si la base no contesta («no pude leer» no es «México»).
+ */
+export async function getZonaHorariaTenant(tenantId: string): Promise<string | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('tenant')
+    .select('zona_horaria')
+    .eq('id', tenantId)
+    .maybeSingle(), 'getZonaHorariaTenant');
+  if (error) throw new Error(`zona_horaria: ${error.message}`);
+  const z = (data as { zona_horaria?: unknown } | null)?.zona_horaria;
+  return typeof z === 'string' ? z : null;
+}
+
+/**
  * Escribe la declaración del umbral de peaje (LIF 2026 art. 20-A) en
  * `tenant.perfil` + `perfil_actualizado_por` en el MISMO UPDATE — el trigger
  * de 0169 lee `NEW.perfil_actualizado_por`. Sin el actor en el mismo

@@ -1,5 +1,6 @@
 import { logger } from '@/lib/logger';
 import { normalizarTelefonoWa } from '../wa_ventana';
+import { esTelefonoDemo } from '@/lib/meta/telefono_demo';
 import { telefonosJefe, resolverCuentaOficina } from '../contactos';
 import type { HitoFila } from './tipos';
 import { cargarContactosTrafico, ultimaPosicionUnidad, type ViajeContexto } from './repo';
@@ -68,6 +69,50 @@ export function elegirDestinatarios(
     if (salida.length >= MAX_DESTINOS_POR_NIVEL) break;
   }
   return salida;
+}
+
+/** Los rótulos por omisión de cada nivel: los que ya usa el código hoy. La flota puede mostrar otros («Jefe de tráfico», «Jefe de flota»). */
+export const ROTULOS_NIVEL_POR_OMISION: Readonly<Record<1 | 2, string>> = { 1: 'Patio responsable', 2: 'Jefe general' };
+export type RotulosNivel = Partial<Record<1 | 2, string>>;
+
+/** El rótulo que se le muestra al dueño para un nivel: el configurado por la flota si es texto útil; si no, el de omisión. */
+export function rotuloDeNivel(nivel: 1 | 2, rotulos?: RotulosNivel | null): string {
+  const r = rotulos?.[nivel];
+  const limpio = typeof r === 'string' ? r.replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+  return limpio || ROTULOS_NIVEL_POR_OMISION[nivel];
+}
+
+export interface NivelSinDestino {
+  nivel: 1 | 2;
+  terminalId: string | null;
+  /** «El nivel 1 de <terminal> no tiene a quién avisar. Agrega un contacto en Configuración.» */
+  texto: string;
+}
+
+/**
+ * Pura: los niveles de escalamiento de una terminal que NO tienen a quién avisar (ni contacto de la terminal, ni de
+ * toda la flota, ni jefe de la flota de respaldo). Un teléfono con la marca de demo `28999` no cuenta: ahí no se escribe.
+ * No resta al nivel 1 del 2 (eso lo hace `elegirDestinatarios` al enviar): aquí se pregunta si el nivel TIENE a alguien.
+ */
+export function nivelesSinDestino(
+  contactos: readonly ContactoTrafico[],
+  jefeFlota: string | null,
+  terminalId: string | null,
+  nombreTerminal: string | null,
+  rotulos?: RotulosNivel | null,
+): NivelSinDestino[] {
+  const reales = contactos.filter((c) => !esTelefonoDemo(c.telefono));
+  const jefe = jefeFlota && !esTelefonoDemo(jefeFlota) ? jefeFlota : null;
+  const donde = nombreTerminal ?? 'la flota';
+  const faltan: NivelSinDestino[] = [];
+  for (const nivel of [1, 2] as const) {
+    if (elegirDestinatarios(reales, jefe, terminalId, nivel).length > 0) continue;
+    faltan.push({
+      nivel, terminalId,
+      texto: `El nivel ${nivel} (${rotuloDeNivel(nivel, rotulos)}) de ${donde} no tiene a quién avisar. Agrega un contacto en Configuración.`,
+    });
+  }
+  return faltan;
 }
 
 /** Los destinatarios reales de un nivel (lee contactos y, de respaldo, el jefe de la flota). Lanza si la base no contesta. */

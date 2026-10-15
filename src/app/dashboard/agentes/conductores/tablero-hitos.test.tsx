@@ -5,7 +5,7 @@ import { hitoVacio } from '@/lib/likida/conductor/memoria.fixture';
 import type { DatosTablero, ViajeTablero } from '@/lib/likida/conductor/repo_validacion';
 import { armarTablero, episodiosVista, indicadoresVista } from '@/lib/likida/conductor/tablero';
 import type { HitoFila, TipoHito } from '@/lib/likida/conductor/tipos';
-import { TableroHitos, type FiltrosVista } from './tablero-hitos';
+import { TableroHitos, TEXTO_SIN_GPS, TEXTO_SIN_TELEFONO, TEXTO_SIN_VIAJES, type FiltrosVista } from './tablero-hitos';
 
 const AHORA = new Date('2026-10-02T18:00:00.000Z');
 const hace = (min: number) => new Date(AHORA.getTime() - min * 60_000).toISOString();
@@ -195,7 +195,7 @@ describe('el tablero de hitos — lo que ve el jefe de tráfico', () => {
   });
 
   it('sin viajes y sin filtros dice qué falta (no un tablero vacío mudo)', () => {
-    expect(pintar(datos([], []))).toContain('No hay viajes aceptados en curso');
+    expect(pintar(datos([], []))).toContain(TEXTO_SIN_VIAJES);
   });
 
   it('cuando hay más viajes que el tope lo declara', () => {
@@ -230,5 +230,105 @@ describe('CERO pesos en la pantalla del jefe de tráfico (área operación)', ()
     expect(FUENTES[ruta]).not.toMatch(/\bmxn\(|\busd\(|formato="mxn"|formato="usd"/);
     // Las VISTAS tampoco reciben los campos de dinero (la página solo arma un resumen vacío para cumplir el tipo).
     if (!ruta.endsWith('page.tsx')) expect(FUENTES[ruta]).not.toMatch(/montoPropuesto|tarifaHora/);
+  });
+});
+
+describe('el tablero de hitos — «dónde está» en cada tarjeta (T-A5-11)', () => {
+  const pos = new Map([['u1', { lat: 20.02878, lng: -103.0, medidaEn: hace(12), fuente: 'gps' as const }]]);
+  const extra = { sitiosCoords: new Map([['s1', { nombre: 'Planta Norte', lat: 20.0, lng: -103.0 }]]), posiciones: pos };
+
+  it('pinta la última posición con la antigüedad y el sitio', () => {
+    const html = pintar(datos([V('1', { unidadId: 'u1', origenSitioId: 's1' })], H('1', {}), extra));
+    expect(html).toContain('Última posición: hace 12 min · a 3.2 km de Planta Norte');
+  });
+
+  it('sin posición dice que el GPS no ha reportado', () => {
+    const html = pintar(datos([V('1', { unidadId: 'u1' })], H('1', {}), { posiciones: new Map() }));
+    expect(html).toContain('Sin posición reciente (el GPS de esta unidad no ha reportado)');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A5-26: estados vacíos y errores en lenguaje llano.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el tablero de hitos — estados vacíos y avisos en lenguaje llano (T-A5-26)', () => {
+  it('estado 1, sin viajes en seguimiento: la frase exacta que dice qué hacer', () => {
+    expect(TEXTO_SIN_VIAJES).toBe('Todavía no hay viajes en seguimiento. Marca operadores en Configuración y sube sus viajes.');
+    expect(pintar(datos([], []))).toContain('Todavía no hay viajes en seguimiento. Marca operadores en Configuración y sube sus viajes.');
+  });
+
+  it('estado 2, sin GPS: lo dice solo si se LEYERON las posiciones y no hay ninguna; si no se leyeron, no afirma nada', () => {
+    const frase = 'Sin GPS conectado: las llegadas por geocerca no están activas (se siguen pidiendo por WhatsApp).';
+    expect(TEXTO_SIN_GPS).toBe(frase);
+    expect(pintar(datos([V('1', { unidadId: 'u1' })], H('1', {}), { posiciones: new Map() }))).toContain(frase);
+    expect(pintar(datos([V('1', { unidadId: 'u1' })], H('1', {})))).not.toContain('Sin GPS conectado');
+    const conPosicion = new Map([['u1', { lat: 20.6, lng: -103.3, medidaEn: hace(5), fuente: 'gps' as const }]]);
+    expect(pintar(datos([V('1', { unidadId: 'u1' })], H('1', {}), { posiciones: conPosicion }))).not.toContain('Sin GPS conectado');
+    // Sin viajes tampoco se acusa de «sin GPS»: ahí manda el estado 1.
+    expect(pintar(datos([], [], { posiciones: new Map() }))).not.toContain('Sin GPS conectado');
+  });
+
+  it('estado 3, operador sin teléfono: se dice en su viaje; con teléfono o sin dato no se dice', () => {
+    expect(TEXTO_SIN_TELEFONO).toBe('Este operador no tiene teléfono: no se le puede escribir; se avisará al jefe.');
+    expect(pintar(datos([V('1', { operadorSinTelefono: true })], H('1', {})))).toContain('Este operador no tiene teléfono: no se le puede escribir; se avisará al jefe.');
+    expect(pintar(datos([V('2', { operadorSinTelefono: false })], H('2', {})))).not.toContain('no tiene teléfono');
+    expect(pintar(datos([V('3')], H('3', {})))).not.toContain('no tiene teléfono');
+  });
+
+  it('estado 4, datos de demostración (folio DEMO-): rotulados SIMULADO; los reales no', () => {
+    const html = pintar(datos([V('1', { folio: 'DEMO-24001' }), V('2', { folio: 'F-2' })], [...H('1', {}), ...H('2', {})]));
+    expect(html.match(/SIMULADO/g)?.length).toBe(1);
+    expect(html).toMatch(/DEMO-24001<\/span><span[^>]*>SIMULADO/);
+  });
+
+  it('ningún texto técnico llega a la pantalla: ni nombres de columna, ni códigos con guion bajo, ni uuid', () => {
+    const uuid = '3f2b8c1e-5d4a-4b6f-9a7e-1c2d3e4f5a6b';
+    const viajes = [V(uuid, { folio: null, operadorNombre: 'Chofer Uno', operadorSinTelefono: true, aceptadoEn: hace(300) }), V('2')];
+    const hitos = [
+      ...H(uuid, { llegada_carga: { estado: 'omitido', omitidoMotivo: 'viaje_abierto_vencido', escaladoEn: hace(5000) }, salida_carga: { estado: 'validado', fuente: 'sistema', validadoPor: 'gps', mensajeEn: hace(100), recibidoEn: hace(100) } }),
+      ...H('2', { llegada_carga: hace(300), salida_carga: { estado: 'recibido', fuente: 'oficina', mensajeEn: hace(200), recibidoEn: hace(200) } }),
+    ];
+    const html = pintar(datos(viajes, hitos, { posiciones: new Map() }), {
+      episodios: episodiosVista([{ id: 'e1', viajeId: 'v1', folio: 'F-77', operador: 'Juan Pérez', motivo: 'gps_detenido', abiertoEn: hace(90), nivelEnviado: 2, aviso1En: hace(89), aviso2En: hace(69), escaladoEn: null, cerradoEn: null, cierreMotivo: null, respuesta: null }]),
+    });
+    // Texto visible = fuera de etiquetas (los atributos name/value de formularios no se leen como texto).
+    const visible = html.replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<[^>]*>/g, ' ');
+    const internos = [/aceptado_en/, /aceptado_origen/, /[a-z]{2,}_[a-z_]{2,}/, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /\bundefined\b/, /\bnull\b/, /\bNaN\b/, /\[object/];
+    for (const re of internos) expect(visible, String(re)).not.toMatch(re);
+    // El uuid tampoco se cuela en la etiqueta accesible.
+    expect(html).not.toContain(`Viaje ${uuid}`);
+  });
+});
+
+describe('el tablero de hitos — estados de frontera (T-A5-21)', () => {
+  const t7h = new Map([['1', { estado: 'en_patio' as const, textoOrigen: 'PATIO NLD', actualizadoEn: hace(7 * 60) }]]);
+  const armar = (c: Partial<typeof cfg>, transito: DatosTablero['transito']) =>
+    armarTablero(datos([V('1')], H('1', {}), { transito }), { ...cfg, ...c }, AHORA);
+  const html = (t: ReturnType<typeof armarTablero>) => renderToStaticMarkup(
+    <TableroHitos
+      tablero={t} indicadores={IND} dias={7} filtros={FILTROS}
+      catalogos={{ terminales: [], clientes: [], operadores: [] }}
+      ocultos={{ tenant: 't-9' }} accionUrl="/dashboard/agentes/conductores" puedeActuar accion={accion}
+      accionSitios={accion} sitios={[]}
+    />,
+  );
+
+  it('casilla encendida: la fila muestra «En patio NLD desde hace 7 h»', () => {
+    const h = html(armar({ mostrarEstadosFrontera: true }, t7h));
+    expect(h).toContain('Tránsito:');
+    expect(h).toContain('En patio NLD desde hace 7 h');
+  });
+
+  it('casilla apagada: la columna se oculta aunque el dato exista', () => {
+    const h = html(armar({ mostrarEstadosFrontera: false }, t7h));
+    expect(h).not.toContain('Tránsito:');
+    expect(h).not.toContain('En patio NLD');
+  });
+
+  it('pendiente_cruce largo con umbral: aparece en la cola de excepciones con etiqueta propia', () => {
+    const t = new Map([['1', { estado: 'pendiente_cruce' as const, textoOrigen: 'PEND CRUCE', actualizadoEn: hace(7 * 60) }]]);
+    const h = html(armar({ mostrarEstadosFrontera: true, umbralPendienteCruceH: 6 }, t));
+    expect(h).toContain('Pendiente de cruce por mucho tiempo');
+    expect(h).toContain('Es solo lectura');
   });
 });

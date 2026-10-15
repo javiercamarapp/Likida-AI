@@ -42,12 +42,12 @@ export interface ResultadoAlertasEstadia {
 }
 
 /** El texto y la plantilla del aviso. Texto con la hora exacta; plantilla = la genérica de operación. */
-export function armarAlertaEstadia(v: ViajeContexto, e: Estancia, umbralMin: number, ahora: Date): MensajeSaliente {
+export function armarAlertaEstadia(v: ViajeContexto, e: Estancia, umbralMin: number, ahora: Date, zona?: string): MensajeSaliente {
   const chofer = (v.operadorNombre ?? 'El chofer').replace(/\s+/g, ' ').trim().slice(0, 60) || 'El chofer';
   const folio = v.folio || v.id.slice(0, 8);
   const lugar = e.lugar === 'carga' ? 'la carga' : 'la descarga';
   const sitio = ((e.lugar === 'carga' ? v.origen : v.destino) ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
-  const llegada = e.llegada ? horaYDiaMx(new Date(e.llegada.en), ahora) : 'hora desconocida';
+  const llegada = e.llegada ? horaYDiaMx(new Date(e.llegada.en), ahora, zona) : 'hora desconocida';
   const duracion = textoTiempo(e.minutos ?? 0);
   const texto = `Estadía larga: ${chofer} lleva ${duracion} en ${lugar}${sitio ? ` de ${sitio}` : ''} (viaje ${folio}). Llegó a las ${llegada} (hora de su mensaje) y no ha avisado su salida. Tu alerta está en ${textoTiempo(umbralMin)}. Revísalo en el tablero.`;
   const resumen = `lleva ${duracion} en ${lugar} (${folio})`;
@@ -110,7 +110,7 @@ export async function correrAlertasEstadia(
           await p.cerrarAviso(claim, { ok: false, canal: 'ninguno', motivo: 'sin_destinatario', ult4: null });
           continue;
         }
-        const msg = armarAlertaEstadia(v, e, umbralDe(config, e.lugar) ?? 0, ahora);
+        const msg = armarAlertaEstadia(v, e, umbralDe(config, e.lugar) ?? 0, ahora, config.zonaHoraria);
         let entregados = 0;
         let reintentables = 0;
         let ultimoError = '';

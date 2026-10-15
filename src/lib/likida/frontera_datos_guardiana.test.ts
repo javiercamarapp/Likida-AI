@@ -342,9 +342,24 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 295;
 // marcar subido a mano y estado por documento) y el techo no se había subido; la prueba estaba roja ANTES de esta tarea (1,927 > 1,916). Funcionalidad nueva, no código migrado.
 // Integración Carta Porte + perfil (0770): el barrido real mide 1,935 llamadas (incluye +1 de perfil_tenant.ts); techo subido a lo medido, sin relajar la regla.
 // Integración Carta Porte + Vigía (INT-RAMAS): 1,917 base + 18 CP + 45 Vigía = 1,980 esperado; se ajusta al barrido real.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_980;
+// Integración + Conductor (INT-RAMAS): 1,980 (perfil + CP + Vigía) + 29 de tramos propios del Conductor (1,946 − 1,917; 0 archivos) = 2,009 esperado; se ajusta al barrido real.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_009;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
+// T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
+// con el tenant anclado). Funcionalidad nueva, no código migrado; medido con el barrido real: base 1,916, con la tarea 1,917.
+// T-A5-03 (Conductor, 0800): 0 archivos y +7 llamadas (1,917 → 1,924), todas en `conductor/repo.ts` (alta y baja de voluntarios del piloto: leer un operador de la flota,
+// listar voluntarios, buscar candidatos, contarlos, leer el tope, marcar la marca y la RPC `retirar_voluntario`; todas por `acotada` con el tenant anclado). La frontera
+// declarada es solo `lib/likida/repo.ts`/`pg.ts`, así que `conductor/repo.ts` cuenta como cualquier módulo. Funcionalidad nueva, no código migrado; medido con el barrido real.
+// LOOP CINCO AGENTES, T-A5-25 (preflight del piloto): 1,936 → 1,938 (0 archivos, +2 llamadas, medido con el barrido real), ambas en `conductor/repo.ts`
+// (`leerDatosPreflight`: los viajes abiertos y aceptados de los voluntarios y sus posiciones de las últimas 2 h; por `acotada`, ancladas a `tenant_id`, solo lectura).
+// Funcionalidad nueva, no código migrado.
+// LOOP CINCO AGENTES, T-A5-17 (equivalencias texto→sitio, 0803): 1,924 → 1,936 (0 archivos, +12 llamadas, medido con el barrido completo), todas en
+// `conductor/repo_validacion.ts`, que ya contaba: el diccionario de la flota (leer), el importador (resolver códigos de sitio, insertar por lotes,
+// actualizar), la asignación a mano desde la lista (comprobar sitio, buscar la previa, crear o editar) y los viajes abiertos de 14 días para la lista de
+// «textos sin sitio». Todas por `acotada`, ancladas a `tenant_id` y las lecturas por lotes con `traerTodo`/`traerPorIds`. Funcionalidad nueva, no código migrado.
+// WS1 «perfil de tenant» (0770), integración con el Conductor: +1 llamada (el `.from(` de `tenant_perfil` en `lib/auth/perfil_tenant.ts`). OJO: la rama del Conductor sola YA medía 1,945
+// con el barrido real (su techo declarado, 1,938, estaba 7 por debajo); con el perfil, 1,945 + 1 = 1,946. Suma de tramos, medida con el barrido real; el techo se sube para reflejarla.
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)
