@@ -177,6 +177,13 @@ describe('«Próximamente»: las flotas con perfil no entran al barrido', () => 
     expect(vistas).toEqual([{ config: { tenantId: 'libre' } }]);
   });
 
+  it('TODAS las pasadas del barrido (correos de respaldo, atorados, ciclos, avisos) reciben la lista a saltar', async () => {
+    flotasConPerfil = new Set(['con-perfil']);
+    await llamar();
+    const opciones = barrido.mock.calls[0][1] as { saltar: ReadonlySet<string> };
+    expect([...opciones.saltar]).toEqual(['con-perfil']);
+  });
+
   it('sin flotas con perfil el barrido ve todas las conversaciones (nada cambia)', async () => {
     let vistas: unknown[] = [];
     barrido.mockImplementation(async (...a: unknown[]) => {

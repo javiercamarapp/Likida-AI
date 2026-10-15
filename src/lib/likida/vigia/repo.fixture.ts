@@ -339,12 +339,13 @@ export class RepoEnMemoria implements RepoVigia {
     // Misma selección que la real: sin el nivel 2 y por próximo vencimiento (no por orden de inserción).
     return seleccionarEnEspera(filas, limite);
   }
-  async expirarCiclosInactivos(antesDe: Date, limite: number, ahora: Date): Promise<Array<{ tenantId: string; id: string }>> {
+  async expirarCiclosInactivos(antesDe: Date, limite: number, ahora: Date, excluirTenants: readonly string[] = []): Promise<Array<{ tenantId: string; id: string }>> {
     this.verifica('expirarCiclosInactivos');
     const cerradas: Array<{ tenantId: string; id: string }> = [];
     for (const c of this.conversaciones.values()) {
       if (cerradas.length >= limite) break;
       if (c.estado !== 'activa' || !c.sinRespuestaDesde || Date.parse(c.sinRespuestaDesde) >= antesDe.getTime()) continue;
+      if (excluirTenants.includes(c.tenantId)) continue;
       c.estado = 'cerrada'; c.sinRespuestaDesde = null;
       cerradas.push({ tenantId: c.tenantId, id: c.id });
     }

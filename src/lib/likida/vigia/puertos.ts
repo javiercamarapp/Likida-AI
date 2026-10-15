@@ -170,7 +170,7 @@ export interface RepoVigia {
    * Cierra los hilos cuyo cliente lleva esperando desde antes de `antesDe` (ciclo muerto: el cliente se fue, nadie contestó, ya se
    * escaló lo que se podía). Devuelve los cerrados. Si el cliente vuelve a escribir, abre una conversación nueva.
    */
-  expirarCiclosInactivos(antesDe: Date, limite: number, ahora: Date): Promise<Array<{ tenantId: string; id: string }>>;
+  expirarCiclosInactivos(antesDe: Date, limite: number, ahora: Date, excluirTenants?: readonly string[]): Promise<Array<{ tenantId: string; id: string }>>;
   aprobadosAtorados(antesDe: Date, limite: number): Promise<Array<{ tenantId: string; id: string }>>;
   purgar(limite: number): Promise<number>;
 
@@ -217,4 +217,10 @@ export interface DepsVigia {
    * degrada a `otro`. Cableado real: `LIKIDA_VIGIA_DATOS_UNIDAD=si` (deps.ts).
    */
   datosUnidad?: boolean;
+  /**
+   * Perfil de la flota (fase 1): ¿el Vigía está en «Próximamente» para este tenant? Si sí, el WhatsApp del cliente y los
+   * botones del gerente NO leen, escriben ni envían nada. Cableado real: `moduloEnStandBy(tenant,'vigia')` (deps.ts);
+   * sin el puerto (pruebas) no se consulta.
+   */
+  enStandBy?: (tenantId: string) => Promise<boolean>;
 }

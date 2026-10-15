@@ -1,6 +1,7 @@
 // El cableado REAL del Vigía: base, modelo barato para clasificar y —solo si se
 // enciende— el pulidor de redacción. Las pruebas arman sus propios `DepsVigia`.
 import { envPuesta } from '@/lib/env';
+import { moduloEnStandBy } from '@/lib/auth/perfil_tenant';
 import { crearRepoVigia } from './repo';
 import { crearModeloClasificador, crearModeloPulidor } from './modelo';
 import type { DepsVigia, PuertoAvisosCron } from './puertos';
@@ -21,6 +22,7 @@ export function crearDepsVigia(extra: { avisos?: PuertoAvisosCron | null } = {})
     // T-A4-21: sin puerto real de avisos todavía (accesos de la flota al resolver/entrega), la pasada de avisos no corre.
     avisos: extra.avisos ?? null,
     datosUnidad,
+    enStandBy: (tenantId) => moduloEnStandBy(tenantId, 'vigia'),
     modelo: modeloApagado ? null : crearModeloClasificador(),
     pulir: pulir ? crearModeloPulidor() : null,
   };
