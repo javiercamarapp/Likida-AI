@@ -1,8 +1,9 @@
 import Link from 'next/link';
-import { ArrowLeft, Check, Download, CircleHelp, FileSearch, Send, ShieldAlert, Trash2, TriangleAlert, Truck } from 'lucide-react';
+import { ArrowLeft, BookOpen, Check, Download, CircleHelp, FileSearch, Send, ShieldAlert, Trash2, TriangleAlert, Truck } from 'lucide-react';
 import { fechaHoraMx, numero, pesoArchivo, usd4 } from '@/lib/formato';
 import { ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO, ROTULO_ORIGEN, ROTULO_ORIGEN_HALLAZGO, type FilaCampo, type Revision } from '@/lib/likida/carta_porte_docs/presentacion';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
+import { propuestaVacia, type PropuestaCatalogo } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
 import { FRASE_ENVIADO_SIMULADO, ROTULO_SIMULADO } from '@/lib/likida/carta_porte_docs/salida_simulada';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../forma_accion';
 
@@ -26,6 +27,9 @@ export type OriginalVista =
   | { tipo: 'nada'; motivo: string };
 
 export interface EventoVista { tipo: string; creadoEn: string }
+
+/** Lo que se ofrece guardar en el catálogo del cliente tras aprobar (T-A3-22): los datos que tecleó una persona. */
+export interface CatalogoBanner { cliente: string; propuesta: PropuestaCatalogo }
 
 /** De qué archivo nació este documento (0670). */
 export interface EmbarqueVista { indice: number; total: number; clave: string | null; padreId: string; padreNombre: string }
@@ -99,7 +103,7 @@ function Campo({ f, editable }: { f: FilaCampo; editable: boolean }) {
   );
 }
 
-export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', envio = null, salida = null, puedeEliminar = false, embarque = null, hijos = [], perfilRestringido = false }: {
+export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', envio = null, salida = null, puedeEliminar = false, embarque = null, hijos = [], perfilRestringido = false, catalogo = null }: {
   doc: DocumentoFila;
   revision: Revision | null;
   original: OriginalVista;
@@ -119,6 +123,8 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
   hijos?: HijoVista[];
   /** Flota bajo el perfil restringido: aprobar prepara el envío al TMS; no hay viaje, operador ni borrador que ofrecer. */
   perfilRestringido?: boolean;
+  /** Datos tecleados por una persona que valdría la pena guardar en el catálogo del cliente (solo si el documento está aprobado). */
+  catalogo?: CatalogoBanner | null;
 }) {
   const editable = doc.estado === 'por_revisar';
   const meta = doc.extraccion?.meta;
@@ -292,6 +298,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                       )}
                     </>
                   )}
+                  {doc.estado === 'aprobado' && catalogo && !propuestaVacia(catalogo.propuesta) && <BannerCatalogo catalogo={catalogo} />}
                   {doc.estado === 'aprobado' && envio?.estado !== 'enviado' && (
                     <div className="space-y-2" aria-label="Modo manual">
                       <div className="flex flex-wrap items-center gap-2">
@@ -341,6 +348,51 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
         </details>
       )}
     </main>
+  );
+}
+
+/**
+ * «¿Guardar estos datos en el catálogo de <cliente>?»: solo lo que una PERSONA tecleó o confirmó en esta revisión. Nunca
+ * automático: no se guarda nada hasta apretar el botón, y el SKU —que el documento no declara— lo confirma la persona.
+ */
+function BannerCatalogo({ catalogo }: { catalogo: CatalogoBanner }) {
+  const { propuesta } = catalogo;
+  return (
+    <div className="space-y-2.5 rounded-lg p-3" role="region" aria-label="Guardar en el catálogo" style={{ background: 'var(--canvas)' }}>
+      <p className="text-[12.5px] font-medium flex items-center gap-1.5">
+        <BookOpen width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />¿Guardar estos datos en el catálogo de {catalogo.cliente}?
+      </p>
+      <p className="text-[11.5px]" style={{ color: 'var(--muted)' }}>
+        Los escribiste tú en esta revisión. Si los guardas, el próximo documento con el mismo producto, remitente o destinatario saldrá con ellos ya llenos. No se guarda nada solo.
+      </p>
+      <ul className="space-y-2">
+        {propuesta.productos.map((p) => (
+          <li key={`p${p.indice}`} className="space-y-1">
+            <label className="text-[12px] inline-flex items-start gap-1.5 cursor-pointer">
+              <input type="checkbox" name="cat_prod" value={p.indice} defaultChecked className="mt-0.5" />
+              <span>
+                Mercancía {p.indice + 1}{p.descripcion ? ` («${p.descripcion.slice(0, 60)}»)` : ''}: clave {p.campos.bienes_transp}, unidad {p.campos.clave_unidad}
+                {p.campos.embalaje ? `, embalaje ${p.campos.embalaje}` : ''}{p.campos.fraccion ? `, fracción ${p.campos.fraccion}` : ''}
+                {p.estado === 'cambia' ? ' — actualiza el SKU que ya está en el catálogo' : ''}
+              </span>
+            </label>
+            <div className="pl-5 max-w-xs">
+              <label htmlFor={`cat-sku-${p.indice}`} className={ETIQUETA}>SKU del cliente (tal como aparece en el documento)</label>
+              <input id={`cat-sku-${p.indice}`} name={`cat_sku_${p.indice}`} defaultValue={p.skuSugerido} maxLength={80} autoComplete="off" spellCheck={false} className={CAMPO} style={{ background: 'var(--surface)' }} />
+            </div>
+          </li>
+        ))}
+        {propuesta.partes.map((p) => (
+          <li key={p.lado}>
+            <label className="text-[12px] inline-flex items-start gap-1.5 cursor-pointer">
+              <input type="checkbox" name="cat_parte" value={p.lado} defaultChecked className="mt-0.5" />
+              <span>{p.rol === 'remitente' ? 'Remitente' : 'Destinatario'} «{p.alias}»: RFC {p.campos.rfc}{p.campos.cp ? `, CP ${p.campos.cp}` : ''}{p.estado === 'cambia' ? ' — actualiza el que ya está en el catálogo' : ''}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <BotonEnvio variante="secundario" intencion="guardar_catalogo" etiqueta="Guardar en el catálogo" pendiente="Guardando…" icono={<BookOpen width={13} height={13} strokeWidth={1.75} />} />
+    </div>
   );
 }
 

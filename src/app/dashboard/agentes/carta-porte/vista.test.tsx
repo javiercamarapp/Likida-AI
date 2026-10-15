@@ -63,4 +63,10 @@ describe('Agente de Carta Porte: «Cómo mandarme documentos»', () => {
   it('sin el prop buzon (pantallas viejas) se comporta como «sin buzón»: ofrece activarlo', () => {
     expect(pintar()).toContain('Aún no tienes buzón');
   });
+
+  it('liga al catálogo del cliente y conserva el sufijo del «ver como»', () => {
+    const html = renderToStaticMarkup(<VistaAgenteCartaPorte datos={null} sufijo="?tenant=t1" buzon={BUZON} />);
+    expect(html).toContain('/dashboard/agentes/carta-porte/catalogo?tenant=t1');
+    expect(pintar(BUZON)).toContain('catálogo del cliente');
+  });
 });

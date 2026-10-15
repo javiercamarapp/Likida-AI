@@ -101,6 +101,11 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
 
           <ComoMandarDocumentos buzon={buzon} sufijo={sufijo} />
 
+          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            Lo que el agente aprende de cada cliente —productos, remitentes, destinatarios y su número interno— vive en el{' '}
+            <Link href={`/dashboard/agentes/carta-porte/catalogo${sufijo}`} className="font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>catálogo del cliente →</Link>
+          </p>
+
           <section className="card p-4">
             <div className="flex items-center gap-2 mb-3">
               <Sparkles width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
