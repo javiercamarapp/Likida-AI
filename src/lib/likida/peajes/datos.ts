@@ -1012,3 +1012,21 @@ export async function marcarAtipico(
   }
   return { ok: true, estado: cambio.estado };
 }
+
+/** Reclamos enviados con saldo por acreditar: contra ellos se casa una nota de crédito (`notas_credito.ts`). Solo lectura; lanza ante error de base. */
+export async function reclamosParaCasar(tenantId: string): Promise<import('./notas_credito').ReclamoParaCasar[]> {
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin().from('peaje_reclamo')
+      .select('id, estado, monto_reclamado, monto_acreditado, fecha_cobro_mas_antiguo', conteo(d))
+      .eq('tenant_id', tenantId).in('estado', ['enviado', 'acreditado_parcial'])
+      .order('fecha_cobro_mas_antiguo').order('id').range(d, h), 'peajes.reclamos_para_casar'),
+    'peajes.reclamos_para_casar',
+  );
+  return filas
+    .map((f) => ({
+      id: String(f.id), estado: String(f.estado) as import('./reclamos_seguimiento').EstadoReclamo,
+      montoReclamable: Math.round((Number(f.monto_reclamado ?? 0) - Number(f.monto_acreditado ?? 0)) * 100) / 100,
+      fechaCobroMasAntiguo: String(f.fecha_cobro_mas_antiguo).slice(0, 10),
+    }))
+    .filter((r) => r.montoReclamable > 0);
+}
