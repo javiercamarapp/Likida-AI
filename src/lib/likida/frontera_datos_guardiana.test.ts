@@ -325,7 +325,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 288;
 // Ronda 19 (integración): 1,906 (ronda 18) + 7 (E1-A) = 1,913 esperado; el valor final es el del barrido real de la prueba.
 
 // E1-B: +3 llamadas (acuse_folio.ts: storage). Ronda 20 (integración): 1,913 (E1-A integrado) + 3 = 1,916 esperado; el valor final es el del barrido real.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_916;
+// T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
+// con el tenant anclado). Funcionalidad nueva, no código migrado; medido con el barrido real: base 1,916, con la tarea 1,917.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_917;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

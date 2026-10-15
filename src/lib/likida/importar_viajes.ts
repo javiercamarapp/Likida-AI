@@ -6,6 +6,7 @@ import { elegirOperadorPorNombre, OperadorNombreAmbiguo } from './crear_viaje_wa
 import { validarIngreso } from './ingreso_viaje';
 import { numero } from '@/lib/formato';
 import { DatoInvalido } from './errores';
+import { aceptarViajesImportados } from './conductor/repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // IMPORTADOR DE VIAJES (kit del PoC, 14-ago-2026) — el export del TMS del
@@ -281,6 +282,13 @@ export interface ResultadoImportacion {
   clientesSinAmarrar: string[];
   /** Folios descartados porque su cliente no se pudo amarrar. */
   sinCliente: string[];
+  /** Viajes recién creados que quedaron en seguimiento del agente (su operador es voluntario del piloto, 0800).
+   *  Ausente si no se intentó activar seguimiento (nada recién creado). */
+  seguimientoActivado?: number;
+  /** Viajes recién creados que NO se siguen porque su operador no está en el piloto. */
+  seguimientoOmitidoSinVoluntario?: number;
+  /** `true` si la base aún no tiene el seguimiento (migración 0800 sin aplicar) o falló: se importó igual, sin seguimiento. */
+  seguimientoNoDisponible?: boolean;
   error?: string;
 }
 
@@ -506,6 +514,13 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
   }
 
   let creados = 0;
+  // Seguimiento del agente (T-A5-04): se activa por lote, solo para lo recién creado. Falla ABIERTO para el import
+  // (los viajes ya están) y CERRADO para el seguimiento (sin la función, nada queda «aceptado»).
+  const seg = { activados: 0, omitidos: 0, intentado: false, noDisponible: false };
+  const campoSeguimiento = (): Pick<ResultadoImportacion, 'seguimientoActivado' | 'seguimientoOmitidoSinVoluntario' | 'seguimientoNoDisponible'> =>
+    !seg.intentado ? {} : seg.noDisponible
+      ? { seguimientoActivado: 0, seguimientoOmitidoSinVoluntario: 0, seguimientoNoDisponible: true }
+      : { seguimientoActivado: seg.activados, seguimientoOmitidoSinVoluntario: seg.omitidos };
   // Lotes de 100: un INSERT de 2,000 filas en una pasada es donde un timeout
   // deja mitad y mitad sin decir cuál mitad.
   for (let i = 0; i < listas.length; i += 100) {
@@ -533,7 +548,7 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     const { data, error } = await acotada(
       supabaseAdmin().from('viaje')
         .upsert(lote, { onConflict: 'tenant_id,folio', ignoreDuplicates: true })
-        .select('folio'), 'importarViajes.insert',
+        .select('id, folio'), 'importarViajes.insert',
     );
     if (error) {
       logger.error('importar_viajes.lote_fallo', { tenantId, desde: i, err: error.message });
@@ -542,6 +557,7 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
         sinOperador, operadorOcupado,
         unidadesSinAmarrar: [...unidadesSinAmarrar], sinUnidad,
         clientesSinAmarrar: [...clientesSinAmarrar], sinCliente,
+        ...campoSeguimiento(),
         error: `Se crearon ${creados} y el lote que empieza en la fila ${i + 1} falló — revisa y vuelve a subir el archivo: los ya creados se saltan solos.`,
       };
     }
@@ -549,6 +565,17 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     creados += insertados.size;
     for (const fila of lote) {
       if (!insertados.has(fila.folio)) saltados.push(fila.folio);
+    }
+    const idsNuevos = (data ?? []).map((v) => (v as { id?: unknown }).id).filter((x): x is string => typeof x === 'string' && x !== '');
+    if (idsNuevos.length > 0 && !seg.noDisponible) {
+      seg.intentado = true;
+      const acepto = await aceptarViajesImportados(tenantId, idsNuevos);
+      if (acepto.ok) {
+        seg.activados += acepto.aceptados;
+        seg.omitidos += idsNuevos.length - acepto.aceptados;
+      } else {
+        seg.noDisponible = true;
+      }
     }
   }
 
@@ -570,5 +597,6 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     creados, saltados, operadoresSinAmarrar: [...operadoresSinAmarrar], sinOperador, operadorOcupado,
     unidadesSinAmarrar: [...unidadesSinAmarrar], sinUnidad,
     clientesSinAmarrar: [...clientesSinAmarrar], sinCliente,
+    ...campoSeguimiento(),
   };
 }

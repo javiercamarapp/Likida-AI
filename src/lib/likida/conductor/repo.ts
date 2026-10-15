@@ -696,6 +696,37 @@ export interface DatosCruce {
   distanciaM: number;
 }
 
+export type ResultadoAceptarImportados =
+  | { ok: true; aceptados: number }
+  | { ok: false; motivo: 'sin_funcion' | 'fallo' };
+
+/**
+ * Pasa a «aceptados por importación» los viajes recién importados cuyo operador es voluntario del piloto (0800). Un solo
+ * UPDATE en la base: falla cerrado (sin voluntario no escribe nada) y no toca un viaje que el chofer ya aceptó. `sin_funcion`
+ * = base sin la 0800 (el import ya ocurrió: solo se queda sin seguimiento); `fallo` = cualquier otro error, también sin
+ * seguimiento. Nunca lanza: el importador no debe caerse por el seguimiento.
+ */
+export async function aceptarViajesImportados(tenantId: string, viajeIds: string[], ahora?: Date): Promise<ResultadoAceptarImportados> {
+  if (viajeIds.length === 0) return { ok: true, aceptados: 0 };
+  try {
+    const { data, error } = await acotada(
+      supabaseAdmin().rpc('aceptar_viajes_importados', {
+        p_tenant: tenantId, p_viaje_ids: viajeIds, ...(ahora ? { p_ahora: ahora.toISOString() } : {}),
+      }),
+      'conductor.aceptarViajesImportados',
+    );
+    if (error) {
+      const sinFuncion = error.code === 'PGRST202' || error.code === '42883' || (/aceptar_viajes_importados/.test(error.message ?? '') && /does not exist|schema cache|could not find/i.test(error.message ?? ''));
+      logger.warn('conductor.aceptar_importados_error', { tenantId, sinFuncion, err: error.message });
+      return { ok: false, motivo: sinFuncion ? 'sin_funcion' : 'fallo' };
+    }
+    return { ok: true, aceptados: Array.isArray(data) ? data.length : 0 };
+  } catch (e) {
+    logger.warn('conductor.aceptar_importados_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, motivo: 'fallo' };
+  }
+}
+
 /** El error es «esa tabla o columna no existe» (base sin la migración), no otro fallo cualquiera. */
 export function faltaEsquema(e: { code?: string | null; message?: string | null } | null | undefined, objeto: RegExp): boolean {
   if (!e) return false;
