@@ -12,6 +12,11 @@
 -- Solo aditiva e idempotente (if not exists). RLS sin cambios (ambas tablas ya la tienen). No toca 0050 ni 0092:
 -- `uq_posicion_lectura` (0288) y `viaje_folio_unico` quedan intactos.
 
+-- NOTA DE INTEGRACIÓN (INT-RAMAS): 0780_viaje_despacho_ref.sql es la DUEÑA de `viaje.despacho_ref`, `posicion.despacho_ref` y del índice
+-- `viaje_despacho_ref_idx`; esta migración repite las dos columnas (idempotente, no hace nada) y añade además `viaje_tenant_despacho_ref_idx`
+-- (mismas columnas, nombre distinto). Se conservan ambas sin recortar porque supabase/tests/0802_despacho_ref.sql exige ese segundo índice
+-- por nombre y las migraciones aún no están aplicadas en producción: quien quiera quitar el índice doble debe cambiar ambas a la vez.
+
 alter table public.viaje    add column if not exists despacho_ref text;
 alter table public.posicion add column if not exists despacho_ref text;
 
