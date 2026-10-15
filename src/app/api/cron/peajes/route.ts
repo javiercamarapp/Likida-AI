@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { procesarColaPeajes } from '@/lib/likida/peajes/ingesta';
 import { ejecutarPulls, type ResumenPulls } from '@/lib/likida/peajes/pull';
 import { reintentarAvisosPeajes, type ResumenAvisos } from '@/lib/likida/peajes/aviso_oficina';
+import { reintentarAvisosAtipicos, type ResumenAvisosAtipicos } from '@/lib/likida/peajes/aviso_atipicos';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
@@ -72,14 +73,20 @@ export async function GET(req: Request) {
     try { avisos = await reintentarAvisosPeajes(5); } catch (e) {
       logger.error('cron.peajes.avisos_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
-    logger.info('cron.peajes.ok', { ...r, pulls, avisos });
+    // 4. El resumen de cruces atípicos al supervisor (T-A2-14): sin destinatario no envía y no vuelve «parcial» el latido.
+    let avisosAtipicos: ResumenAvisosAtipicos | null = null;
+    try { avisosAtipicos = await reintentarAvisosAtipicos(5); } catch (e) {
+      logger.error('cron.peajes.avisos_atipicos_fallo', { error: e instanceof Error ? e.message : String(e) });
+    }
+    logger.info('cron.peajes.ok', { ...r, pulls, avisos, avisosAtipicos });
     // `fallidos` y `reintentar` son trabajo que NO terminó bien: ni «ok» ni «fallo»
     // total, que son las dos maneras de mentir aquí. Un pull fallido o un aviso que no
     // salió tampoco es «ok».
     const parcial = r.fallidos > 0 || r.reintentar > 0 || r.claimPerdido > 0
-      || (pulls?.fallidas ?? 0) > 0 || pulls === null || (avisos?.pendientes ?? 0) > 0;
-    await registrarLatido('peajes', parcial ? 'parcial' : 'ok', { ...r, pulls, avisos });
-    return NextResponse.json({ corrio: true, ...r, pulls, avisos });
+      || (pulls?.fallidas ?? 0) > 0 || pulls === null || (avisos?.pendientes ?? 0) > 0
+      || avisosAtipicos === null || avisosAtipicos.pendientes > 0;
+    await registrarLatido('peajes', parcial ? 'parcial' : 'ok', { ...r, pulls, avisos, avisosAtipicos });
+    return NextResponse.json({ corrio: true, ...r, pulls, avisos, avisosAtipicos });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     const codigo = codigoDeError(e);
