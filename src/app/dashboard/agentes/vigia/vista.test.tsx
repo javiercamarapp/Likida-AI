@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
 import {
-  BloqueEstadoYKpis, BloqueAprobacion, BloqueExcepciones, BloqueConversaciones, BloqueConfiguracion, BloqueBitacora, BloqueContactos, BloqueDirectores, BloqueCorreos,
+  BloqueEstadoYKpis, BloqueAprobacion, BloqueExcepciones, BloqueConversaciones, BloqueConfiguracion, BloqueBitacora, BloqueContactos, BloqueDirectores, BloqueCorreos, BloqueInsights,
   minutosDeEspera, duracion, motivosDeExcepcion, ordenarPorPrioridad, type AccionesVigia,
 } from './vista';
 import type { DatosTablero, ConversacionTablero } from '@/lib/likida/vigia/repo';
@@ -349,5 +349,27 @@ describe('P14 · lista de directores y respaldo por correo', () => {
     const html = await pintar(BloqueConfiguracion({ datos: Promise.resolve(base()), puedeAdministrar: true, acciones }));
     expect(html).toContain('name="respaldoCorreo"');
     expect(html).toContain('Respaldo por correo');
+  });
+});
+
+describe('BloqueInsights (T-A4-41)', () => {
+  it('sin datos: «Aún no hay avisos enviados», sin ceros inventados', async () => {
+    const html = await pintar(BloqueInsights({ datos: Promise.resolve({ avisos: [], mensajes: [] }) }));
+    expect(html).toContain('Aún no hay avisos enviados');
+    expect(html).toContain('Qué pasó');
+    expect(html).toContain('Qué significa');
+    expect(html).toContain('Qué hacer');
+  });
+  it('cada tarjeta muestra su fuente y el ahorro va rotulado como supuesto', async () => {
+    const html = await pintar(BloqueInsights({
+      datos: Promise.resolve({
+        avisos: [{ estado: 'enviado', enviadoEn: hace(300), citaEn: hace(100) }],
+        mensajes: [{ clienteId: 'c1', entranteEn: hace(60), atendidoEn: hace(50), prioridad: 2 }],
+        config: { minutosPorAviso: 8 },
+      }),
+    }));
+    expect(html.match(/Fuente:/g)).toHaveLength(4);
+    expect(html).toContain('supuesto: 8 min por aviso (configurable)');
+    expect(html).toContain('data-tarjeta="horas_ahorradas"');
   });
 });

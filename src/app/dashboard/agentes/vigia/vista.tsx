@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { UsersRound, Hand, Clock, Flame, Inbox, ShieldCheck, History, Settings2, AlertTriangle, Mail } from 'lucide-react';
 import { numero, fechaHoraMx } from '@/lib/formato';
 import type { DatosTablero, ConversacionTablero } from '@/lib/likida/vigia/repo';
+import { tarjetasInsights, type InsightsEntrada } from '@/lib/likida/vigia/insights';
 import { BarraPagina } from '../../resumen-visual';
 import { Bloque, Barra, EsqTabla } from '../../bloque';
 import {
@@ -615,6 +616,37 @@ export async function BloqueCorreos({ datos: p }: { datos: Promise<DatosTablero>
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+/**
+ * T-A4-41: insights del agente. Cada tarjeta dice qué pasó, qué significa y qué hacer, con su fuente; el ahorro de tiempo sale
+ * siempre rotulado como supuesto (no hay línea base real, B13) y nunca como porcentaje.
+ */
+export async function BloqueInsights({ datos: p }: { datos: Promise<InsightsEntrada> }) {
+  const tarjetas = tarjetasInsights(await p);
+  return (
+    <section className="card p-4" aria-labelledby="h-ins">
+      <h2 id="h-ins" className="font-display text-[15px] font-semibold mb-1">Resultados del agente</h2>
+      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+        Cada número dice de dónde sale. Donde depende de un supuesto o de reglas sin validar con datos reales, va marcado.
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {tarjetas.map((t) => (
+          <article key={t.id} className="hairline rounded-lg p-3.5" data-tarjeta={t.id}>
+            <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{t.titulo}</div>
+            <div className="cifra-mono text-[20px] font-medium mt-1">{t.valor}</div>
+            {t.rotulo && <div className="mt-1"><Chip tono="warn">{t.rotulo}</Chip></div>}
+            <dl className="mt-2 space-y-1 text-[12px]">
+              <div><dt className="inline font-medium">Qué pasó: </dt><dd className="inline" style={{ color: 'var(--muted)' }}>{t.quePaso}</dd></div>
+              <div><dt className="inline font-medium">Qué significa: </dt><dd className="inline" style={{ color: 'var(--muted)' }}>{t.queSignifica}</dd></div>
+              <div><dt className="inline font-medium">Qué hacer: </dt><dd className="inline" style={{ color: 'var(--muted)' }}>{t.queHacer}</dd></div>
+            </dl>
+            <div className="text-[10.5px] mt-2" style={{ color: 'var(--faint)' }}>Fuente: {t.fuente}</div>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
