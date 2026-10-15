@@ -344,7 +344,7 @@ export interface ReporteRevision {
   rotulo: string;
 }
 
-async function lineasDeDesglose(tenantId: string, desgloseId: string) {
+export async function lineasDeDesglose(tenantId: string, desgloseId: string) {
   return traerTodo<Record<string, unknown>>(
     (d, h) => acotada(supabaseAdmin().from('desglose_peaje_linea')
       .select('indice, fecha, hora, caseta, tag, monto, clase, unidad_archivo, unidad_id', conteo(d))
