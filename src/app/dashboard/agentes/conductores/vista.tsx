@@ -197,7 +197,7 @@ export async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConducto
         {kpis.tiempoAceptacion !== undefined && (
           <Kpi titulo="Tiempo en aceptar"
             valor={kpis.tiempoAceptacion === null || kpis.tiempoAceptacion.minutos === null
-              ? '—' : `${(Math.round(kpis.tiempoAceptacion.minutos * 10) / 10).toLocaleString('es-MX')} min`}
+              ? '—' : `${numero(Math.round(kpis.tiempoAceptacion.minutos * 10) / 10)} min`}
             nota={kpis.tiempoAceptacion === null ? 'no se pudo medir'
               : kpis.tiempoAceptacion.minutos === null ? 'aún sin aceptaciones del chofer que medir'
                 : `media de ${numero(kpis.tiempoAceptacion.n)} aceptados por el chofer (200 viajes recientes); no cuenta ${numero(kpis.tiempoAceptacion.excluidosImportados)} por importación`} />
@@ -364,7 +364,7 @@ export interface TextoInsights {
   queHacer: string[];
 }
 
-const minutos = (v: number | null) => (v === null ? null : `${(Math.round(v * 10) / 10).toLocaleString('es-MX')} min`);
+const minutos = (v: number | null) => (v === null ? null : `${numero(Math.round(v * 10) / 10)} min`);
 
 /** Las tres secciones, en lenguaje llano. `discrepancias` = hitos del chofer que la ubicación no confirmó (medido en el tablero); `null` = no disponible. */
 export function textoInsights(i: InsightsConductor, discrepancias: number | null): TextoInsights {
@@ -377,7 +377,7 @@ export function textoInsights(i: InsightsConductor, discrepancias: number | null
       queHacer: ['Activa el seguimiento en los viajes de los operadores voluntarios y vuelve a revisar cuando haya hitos.'],
     };
   }
-  const quePaso = [`${numero(sin)} de ${numero(total)} hitos se registraron sin que nadie los capturara${i.sinIntervencion.porcentaje !== null ? ` (${i.sinIntervencion.porcentaje.toLocaleString('es-MX')} %)` : ''}.`];
+  const quePaso = [`${numero(sin)} de ${numero(total)} hitos se registraron sin que nadie los capturara${i.sinIntervencion.porcentaje !== null ? ` (${numero(i.sinIntervencion.porcentaje)} %)` : ''}.`];
   if (i.deOficina.valor > 0) quePaso.push(`La oficina corrigió o capturó ${numero(i.deOficina.valor)}.`);
   const g = minutos(i.retrasoGps.promedioMin);
   if (g) quePaso.push(`Entre que el GPS detecta el cruce y se registra pasan ${g} en promedio (${numero(i.retrasoGps.mediciones)} mediciones).`);
