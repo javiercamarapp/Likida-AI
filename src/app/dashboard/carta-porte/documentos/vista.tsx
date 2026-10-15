@@ -97,12 +97,14 @@ function Cifra({ rotulo, valor, nota }: { rotulo: string; valor: string; nota?: 
   );
 }
 
-export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', filtroEnvio = 'todos' }: {
+export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', filtroEnvio = 'todos', perfilRestringido = false }: {
   datos: DatosDocumentos | null; acciones: AccionesDocumentos; sufijo?: string;
   /** El filtro «estado de envío» de la bandeja (viene de `?envio=`). */
   filtroEnvio?: FiltroEnvio;
   /** El `?tenant=…` para las descargas (que son GET a /api). */
   apiSufijo?: string;
+  /** Flota bajo el perfil restringido: la bandeja habla del envío al TMS, no de viajes. */
+  perfilRestringido?: boolean;
 }) {
   return (
     <main className="h-full">
@@ -126,7 +128,7 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
             <>
               <Metricas m={datos.metricas} />
               {acciones.subir && <Subir accion={acciones.subir} clientes={datos.clientes} />}
-              <Bandeja datos={datos} acciones={acciones} sufijo={sufijo} filtroEnvio={filtroEnvio} />
+              <Bandeja datos={datos} acciones={acciones} sufijo={sufijo} filtroEnvio={filtroEnvio} perfilRestringido={perfilRestringido} />
               <Canales buzon={datos.buzon} acciones={acciones} />
               <Perfiles perfiles={datos.perfiles} acciones={acciones} />
               <Exportacion configs={datos.configs} acciones={acciones} apiSufijo={apiSufijo} />
@@ -190,7 +192,7 @@ function Subir({ accion, clientes }: { accion: AccionDoc; clientes: Array<{ id: 
   );
 }
 
-function Bandeja({ datos, acciones, sufijo, filtroEnvio }: { datos: DatosDocumentos; acciones: AccionesDocumentos; sufijo: string; filtroEnvio: FiltroEnvio }) {
+function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido }: { datos: DatosDocumentos; acciones: AccionesDocumentos; sufijo: string; filtroEnvio: FiltroEnvio; perfilRestringido: boolean }) {
   const orden = datos.filas.filter((d) => pasaFiltroEnvio(d, datos.envios, filtroEnvio)).sort((a, b) => prioridadEstado(a.estado) - prioridadEstado(b.estado) || (a.createdAt < b.createdAt ? 1 : -1));
   const cliente = new Map(datos.clientes.map((c) => [c.id, c.nombre]));
   return (
@@ -251,7 +253,11 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio }: { datos: DatosDocumen
                       ) : d.estado === 'fallido' ? (
                         <span style={{ color: 'var(--bad)' }}>{d.ultimoError ?? 'No se pudo leer.'}</span>
                       ) : d.estado === 'aprobado' ? (
-                        <span style={{ color: d.viajeId ? 'var(--ok)' : 'var(--warn)' }}>{d.viajeId ? 'Con viaje' : 'Sin viaje todavía'}<span style={{ color: 'var(--muted)' }}> · TMS: {datos.envios?.[d.id] ? ROTULO_ENVIO[datos.envios[d.id]] : 'sin envío'}</span></span>
+                        perfilRestringido ? (
+                          <span style={{ color: 'var(--muted)' }}>Envío al TMS: {datos.envios?.[d.id] ? ROTULO_ENVIO[datos.envios[d.id]] : 'sin envío'}</span>
+                        ) : (
+                          <span style={{ color: d.viajeId ? 'var(--ok)' : 'var(--warn)' }}>{d.viajeId ? 'Con viaje' : 'Sin viaje todavía'}<span style={{ color: 'var(--muted)' }}> · TMS: {datos.envios?.[d.id] ? ROTULO_ENVIO[datos.envios[d.id]] : 'sin envío'}</span></span>
+                        )
                       ) : d.estado === 'rechazado' ? (
                         <span style={{ color: 'var(--muted)' }}>{d.rechazoMotivo}</span>
                       ) : d.estado === 'dividido' ? (

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowLeft, Check, Download, CircleHelp, FileSearch, ShieldAlert, Trash2, TriangleAlert, Truck } from 'lucide-react';
+import { ArrowLeft, Check, Download, CircleHelp, FileSearch, Send, ShieldAlert, Trash2, TriangleAlert, Truck } from 'lucide-react';
 import { fechaHoraMx, numero, pesoArchivo, usd4 } from '@/lib/formato';
 import { ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO, ROTULO_ORIGEN, type FilaCampo, type Revision } from '@/lib/likida/carta_porte_docs/presentacion';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
@@ -42,6 +42,24 @@ function color(sev: 'bloqueo' | 'confirmar' | 'aviso'): string {
   return sev === 'bloqueo' ? 'var(--bad)' : sev === 'confirmar' ? 'var(--warn)' : 'var(--muted)';
 }
 
+/** El envío al TMS tal como lo ve la pantalla: el estado más la fecha del próximo reintento y la ubicación del rechazo (nunca valores). */
+export interface EnvioVista { estado: EstadoEnvioTms; proximaRevision?: string | null; motivo?: string | null }
+
+/** Lo que dice la tarjeta «Envío al sistema del cliente» en lenguaje llano. Sin envío = todavía no se ha enviado nada. */
+export function fraseEnvio(e: EnvioVista | null): string {
+  if (!e || e.estado === 'descartado') return 'Aún no se ha enviado nada.';
+  const cuando = e.proximaRevision ? fechaHoraMx(e.proximaRevision) : null;
+  switch (e.estado) {
+    case 'pendiente_prechequeo': case 'listo': return 'Listo para enviar.';
+    case 'enviando': return 'Enviándose al sistema del cliente…';
+    case 'pendiente_reque': return `Esperando que exista el requerimiento${cuando ? ` — se reintentará el ${cuando}` : ''}.`;
+    case 'error_transitorio': return `El sistema del cliente no contestó${cuando ? ` — se reintentará el ${cuando}` : ' — se reintentará'}.`;
+    case 'enviado': return 'Enviado.';
+    case 'rechazado_tms': return `El sistema del cliente lo rechazó${e.motivo ? `: ${e.motivo}` : ''} — corrige y vuelve a aprobar.`;
+    case 'subido_a_mano': return 'Subido a mano.';
+  }
+}
+
 function Confianza({ c }: { c: number | null }) {
   if (c === null) return <span className="text-[10.5px]" style={{ color: 'var(--faint)' }}>sin dato</span>;
   const pct = Math.round(c * 100);
@@ -80,7 +98,7 @@ function Campo({ f, editable }: { f: FilaCampo; editable: boolean }) {
   );
 }
 
-export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', envio = null, salida = null, puedeEliminar = false, embarque = null, hijos = [] }: {
+export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', envio = null, salida = null, puedeEliminar = false, embarque = null, hijos = [], perfilRestringido = false }: {
   doc: DocumentoFila;
   revision: Revision | null;
   original: OriginalVista;
@@ -89,7 +107,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
   acciones: { revisar: AccionDoc | null };
   sufijo?: string;
   /** El envío al TMS de la versión vigente (solo se carga si el documento está aprobado). */
-  envio?: { estado: EstadoEnvioTms } | null;
+  envio?: EnvioVista | null;
   /** El resultado de la salida al viaje ya conocido (viaje ligado). */
   salida?: { folio: string } | null;
   /** Quien administra la flota puede eliminar el documento y su archivo (cancelación ARCO / subido por error). */
@@ -98,6 +116,8 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
   embarque?: EmbarqueVista | null;
   /** Si este documento es el archivo que se partió: sus embarques. */
   hijos?: HijoVista[];
+  /** Flota bajo el perfil restringido: aprobar prepara el envío al TMS; no hay viaje, operador ni borrador que ofrecer. */
+  perfilRestringido?: boolean;
 }) {
   const editable = doc.estado === 'por_revisar';
   const meta = doc.extraccion?.meta;
@@ -219,7 +239,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                   <div className="flex flex-wrap items-center gap-2">
                     <BotonEnvio variante="secundario" intencion="guardar" etiqueta="Guardar cambios" pendiente="Guardando…" />
                     <BotonEnvio intencion="aprobar" etiqueta="Aprobar" pendiente="Aprobando…" icono={<Check width={14} height={14} strokeWidth={1.75} />} />
-                    <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Aprobar guarda lo que escribiste, revalida y crea o completa el viaje. No timbra nada.</span>
+                    <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{perfilRestringido ? 'Aprobar guarda lo que escribiste, revalida y prepara el envío al sistema del cliente. No timbra nada.' : 'Aprobar guarda lo que escribiste, revalida y crea o completa el viaje. No timbra nada.'}</span>
                   </div>
                   <div className="flex flex-wrap items-end gap-2">
                     <div className="grow min-w-[220px]">
@@ -228,7 +248,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                     </div>
                     <BotonEnvio variante="peligro" intencion="rechazar" etiqueta="Rechazar" pendiente="…" />
                   </div>
-                  {operadores.length > 0 && (
+                  {!perfilRestringido && operadores.length > 0 && (
                     <div>
                       <label htmlFor="cp-operador" className={ETIQUETA}>Operador del viaje (solo si el documento no lo dice con claridad)</label>
                       <select id="cp-operador" name="operadorId" defaultValue="" className={CAMPO} style={{ background: 'var(--surface)' }}>
@@ -242,7 +262,15 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
 
               {!editable && (
                 <div className="card p-3.5 space-y-3">
-                  {doc.estado === 'aprobado' && (
+                  {doc.estado === 'aprobado' && perfilRestringido && (
+                    <div className="space-y-1" aria-label="Envío al sistema del cliente">
+                      <p className="text-[12.5px] font-medium flex items-center gap-1.5">
+                        <Send width={14} height={14} strokeWidth={1.75} style={{ color: envio?.estado === 'rechazado_tms' ? 'var(--bad)' : envio?.estado === 'enviado' ? 'var(--ok)' : 'var(--muted)' }} />Envío al sistema del cliente
+                      </p>
+                      <p className="text-[12.5px]" role="status">{fraseEnvio(envio)}</p>
+                    </div>
+                  )}
+                  {doc.estado === 'aprobado' && !perfilRestringido && (
                     <>
                       <p className="text-[12.5px] flex items-center gap-1.5">
                         <Truck width={14} height={14} strokeWidth={1.75} style={{ color: doc.viajeId ? 'var(--ok)' : 'var(--warn)' }} />
