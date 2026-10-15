@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ArrowLeft, Check, Download, CircleHelp, FileSearch, Send, ShieldAlert, Trash2, TriangleAlert, Truck } from 'lucide-react';
 import { fechaHoraMx, numero, pesoArchivo, usd4 } from '@/lib/formato';
-import { ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO, ROTULO_ORIGEN, type FilaCampo, type Revision } from '@/lib/likida/carta_porte_docs/presentacion';
+import { ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO, ROTULO_ORIGEN, ROTULO_ORIGEN_HALLAZGO, type FilaCampo, type Revision } from '@/lib/likida/carta_porte_docs/presentacion';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../forma_accion';
 
@@ -85,7 +85,7 @@ function Campo({ f, editable }: { f: FilaCampo; editable: boolean }) {
       {f.notas.map((n) => <p key={n} className="text-[10.5px]" style={{ color: 'var(--muted)' }}>{n}</p>)}
       {f.hallazgos.map((h) => (
         <p key={`${h.codigo}-${h.mensaje}`} className="text-[11px] flex items-start gap-1" style={{ color: color(h.severidad) }}>
-          <TriangleAlert width={11} height={11} strokeWidth={1.75} className="mt-0.5 shrink-0" />{h.mensaje}
+          <TriangleAlert width={11} height={11} strokeWidth={1.75} className="mt-0.5 shrink-0" />{h.origen && <strong className="font-medium">{ROTULO_ORIGEN_HALLAZGO[h.origen]}:</strong>} {h.mensaje}
         </p>
       ))}
       {editable && f.porConfirmar && (
@@ -213,7 +213,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
               <Resumen revision={revision} />
               {revision.generales.map((h) => (
                 <p key={h.codigo + h.mensaje} className="text-[12px] flex items-start gap-1.5" style={{ color: color(h.severidad) }}>
-                  <CircleHelp width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" />{h.mensaje}
+                  <CircleHelp width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" />{h.origen && <strong className="font-medium">{ROTULO_ORIGEN_HALLAZGO[h.origen]}:</strong>} {h.mensaje}
                 </p>
               ))}
 

@@ -38,6 +38,7 @@
 import { createHash } from 'node:crypto';
 import { logger } from '@/lib/logger';
 import { aXlsxPlantillaTms, MIME_XLSX } from './exportacion';
+import { hallazgoRepetido, traducirErroresTms } from './errores_tms';
 import { siguienteEstado, TOPE_TRANSITORIOS, type EnvioEnMaquina, type EventoEnvio, type MotivoAlerta, type Transicion } from './envio_estados';
 import { prechequear } from './prechequeo';
 import { construirPlantilla } from './plantilla_tms';
@@ -45,6 +46,7 @@ import type { DocumentoFila, EstadoEnvioTms, TipoEvento } from './repo';
 import type { CambiosEnvio, EnvioDetalle, EnvioReclamado, ResultadoReclamo } from './repo_envios';
 import type { ConfigSalida } from './salida_config';
 import { SIN_TMS, type EntradaCarga, type ResultadoCarga, type SalidaTms } from './tms_puerto';
+import type { Hallazgo } from './validacion';
 
 /** Envíos que toma una pasada (la subida de cada uno es una llamada de red: pocos y bien hechos). */
 export const TOPE_ENVIOS_POR_PASADA = 10;
@@ -76,6 +78,13 @@ export interface DepsEnvios {
   evento(tenantId: string, documentoId: string, tipo: TipoEvento, detalle: Record<string, unknown>): Promise<void>;
   /** El documento vuelve a «por revisar» con el motivo (no hay nada que enviar hasta que una persona lo corrija). */
   devolverARevision(tenantId: string, documentoId: string, versionDoc: number, motivo: string): Promise<void>;
+  /**
+   * El sistema del cliente rechazó el contenido (T-A3-29): el documento vuelve a «por revisar» con los hallazgos del rechazo
+   * como bloqueos y `rechazo_causa = 'tms_rechazo'`. Si el documento ya cambió o ya no está aprobado, no hay nada que devolver.
+   */
+  devolverPorRechazo(tenantId: string, documentoId: string, versionDoc: number, hallazgos: Hallazgo[], ubicaciones: string[]): Promise<void>;
+  /** Huellas (sha256 de la plantilla) de los envíos de ese documento que el TMS ya rechazó: lo idéntico no se reenvía solo. */
+  huellasRechazadas(tenantId: string, documentoId: string): Promise<string[]>;
   /** El aviso de la alerta única de UN envío (reque agotado, rechazo, transitorios agotados). T-A3-30 lo lleva a la oficina. */
   alertarEnvio(a: { tenantId: string; envioId: string; documentoId: string; motivo: MotivoAlerta; destinatario: string; mensaje: string }): Promise<void>;
   /** Alerta de infraestructura al operador del sistema (nunca lanza). */
@@ -266,6 +275,16 @@ async function subir(ctx: Contexto, e: EntradaSubida): Promise<void> {
   const archivo = aXlsxPlantillaTms(plantilla);
   const huella = sha256(archivo);
 
+  // Guardia anti-bucle (T-A3-29): el MISMO contenido, con la misma plantilla, que el TMS ya rechazó no se reenvía solo.
+  // Exige una corrección que cambie la plantilla; si no, el documento vuelve a revisión con el motivo dicho en llano.
+  if (e.estado !== 'enviando' && (await deps.huellasRechazadas(tenantId, doc.id)).includes(huella)) {
+    if (!(await deps.actualizarEnvio(tenantId, envio.id, [e.estado], { estado: 'descartado', proximaRevision: null, soltarLease: true }))) { r.conflictos++; return; }
+    r.descartados++;
+    await deps.evento(tenantId, doc.id, 'envio_error', { envioId: envio.id, causa: 'mismo_contenido_rechazado', versionDoc: doc.version });
+    await devolverPorRechazo(ctx, doc, [hallazgoRepetido()], []);
+    return;
+  }
+
   // `listo`/`error_transitorio` ⇒ `enviando` (la máquina vuelve a revisar los bloqueos). Un `enviando` reclamado es la
   // recuperación de un lease vencido: ya está en el estado correcto y se reenvía con la MISMA llave.
   if (e.estado !== 'enviando') {
@@ -377,6 +396,10 @@ async function aplicarResultado(ctx: Contexto, e: EntradaSubida, res: ResultadoC
       if (!(await deps.actualizarEnvio(tenantId, envio.id, ['enviando'], cambios))) { r.conflictos++; return; }
       r.rechazados++;
       await deps.evento(tenantId, doc.id, 'envio_rechazado', { envioId: envio.id, clase: res.clase, errores: res.errores.length });
+      // El error vuelve a la bandeja como hallazgos sobre los campos de Likida (T-A3-29), ANTES de avisar a la oficina:
+      // quien reciba el aviso debe encontrar el documento ya por revisar.
+      const tr = traducirErroresTms(res.errores, { mercancias: doc.extraccion.mercancias.length, mensajeLlano: res.mensajeLlano });
+      await devolverPorRechazo(ctx, doc, tr.hallazgos, tr.ubicaciones);
       await alertaDeLaMaquina(ctx, envio, doc, t);
       return;
     }
@@ -447,6 +470,18 @@ async function registrarTransicion(ctx: Contexto, envio: EnvioDetalle, doc: Docu
     logger.info('cp_envios.reque_aparecio', { envioId: envio.id });
   }
   if (t.estado === 'listo' && manual) r.enEsperaManual++;
+}
+
+/** Devuelve el documento a revisión con los hallazgos del rechazo. Un fallo NO tumba el lote: el envío ya quedó `rechazado_tms` y el documento se puede reabrir a mano. */
+async function devolverPorRechazo(ctx: Contexto, doc: DocumentoFila, hallazgos: Hallazgo[], ubicaciones: string[]): Promise<void> {
+  const { deps, r } = ctx;
+  try {
+    await deps.devolverPorRechazo(doc.tenantId, doc.id, doc.version, hallazgos, ubicaciones);
+    r.devueltosARevision++;
+  } catch (e) {
+    r.fallos.push(`rechazo ${doc.id.slice(0, 8)}: ${msg(e)}`);
+    logger.error('cp_envios.devolver_por_rechazo_fallo', { documentoId: doc.id, err: msg(e) });
+  }
 }
 
 /** Si la máquina pidió la alerta única: toma el candado (la base decide quién avisa), avisa y deja el evento. */

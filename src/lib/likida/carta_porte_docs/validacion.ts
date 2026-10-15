@@ -37,6 +37,11 @@ export interface Hallazgo {
   mensaje: string;
   /** Otros campos que, al confirmarse, también resuelven este hallazgo. */
   relacionados?: Array<{ campo: string; renglon: number | null }>;
+  /**
+   * De dónde sale el hallazgo. Ausente = lo calculó `validarExtraccion` (se recalcula en cada revisión). `'tms'` = lo dejó
+   * el rechazo del sistema del cliente (T-A3-29): NO se recalcula, se arrastra hasta que una persona corrige ese campo.
+   */
+  origen?: 'tms';
 }
 
 export interface ResultadoValidacion {
@@ -269,6 +274,34 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
   const bloqueos = vigentes.filter((h) => h.severidad === 'bloqueo').length;
   const porConfirmar = vigentes.filter((h) => h.severidad === 'confirmar').length;
   return { hallazgos: vigentes, bloqueos, porConfirmar, listoParaAprobar: bloqueos === 0 && porConfirmar === 0 };
+}
+
+/**
+ * Arrastra a una validación recién calculada los hallazgos que dejó un rechazo del TMS (T-A3-29, `origen: 'tms'`).
+ * `validarExtraccion` no los conoce (no salen del contenido, salen de la respuesta del sistema del cliente), así que sin
+ * esto cualquier revalidación los borraría y el documento volvería a aprobarse tal cual.
+ *
+ * Se levantan solo cuando una persona CORRIGE (cambia el valor de) el campo al que apuntan; el hallazgo sin ubicación
+ * (`documento`) se levanta con cualquier corrección. Quitar un renglón levanta los de ese renglón y los siguientes (se recorren).
+ * Confirmar sin cambiar el valor no levanta nada: el sistema del cliente ya dijo que ese valor no sirve.
+ */
+export function conservarHallazgosTms(
+  nueva: ResultadoValidacion, previa: Pick<ResultadoValidacion, 'hallazgos'> | null | undefined,
+  correcciones: ReadonlyArray<{ campo: string; renglon: number | null }> = [],
+): ResultadoValidacion {
+  const resuelto = (h: Hallazgo): boolean => {
+    if (h.campo === 'documento') return correcciones.length > 0;
+    return correcciones.some((c) => (c.campo === h.campo && c.renglon === h.renglon)
+      || (c.campo === 'mercancia' && h.renglon !== null && c.renglon !== null && h.renglon >= c.renglon));
+  };
+  const vigentes = (previa?.hallazgos ?? []).filter((h) => h.origen === 'tms' && !resuelto(h));
+  if (vigentes.length === 0) return nueva;
+  return {
+    ...nueva, hallazgos: [...nueva.hallazgos.filter((h) => h.origen !== 'tms'), ...vigentes],
+    bloqueos: nueva.bloqueos + vigentes.filter((h) => h.severidad === 'bloqueo').length,
+    porConfirmar: nueva.porConfirmar + vigentes.filter((h) => h.severidad === 'confirmar').length,
+    listoParaAprobar: false,
+  };
 }
 
 /** La confianza mínima entre los campos críticos PRESENTES (para ordenar la bandeja). `null` si no hay ninguno. */
