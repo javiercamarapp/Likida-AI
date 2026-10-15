@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- carga-15k.sql — SIEMBRA sintética para la prueba de escala (docs/escala-15k.md)
+-- carga-15k.sql — SIEMBRA sintética para la prueba de escala (la documentación interna)
 --
 -- Simula UN MES del cliente de 15,000 viajes/mes: un tenant 'ZZZ CARGA' con
 -- 200 choferes, 15,000 viajes (500/día × 30 días), 45,000 gastos (3 por

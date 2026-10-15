@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // TELÉFONOS DEL TENANT DEMO — la marca que el envío real rechaza.
 //
-// El seed del demo (scripts/demo/innovativos) pone en TODOS sus teléfonos (clientes, operadores, contactos de Vigía,
+// El seed del demo (scripts/demo/cinco-agentes) pone en TODOS sus teléfonos (clientes, operadores, contactos de Vigía,
 // jefes de tráfico) el prefijo `28999`. El código de país 289 no está asignado a ningún país (ITU-T E.164) y el número
 // completo no es una numeración mexicana (52…): ningún teléfono real de una persona empieza así.
 //

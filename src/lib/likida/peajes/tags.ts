@@ -131,3 +131,62 @@ export function resolverUnidadesDeTags(
   }
   return { altas, rechazadas };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BAJA LÓGICA DE UN TAG (T-A2-10).
+//
+// Un camión siniestrado se da de baja pero su tarjeta sigue cobrando. Dar de
+// baja un TAG NO borra su fila: queda con la fecha y el motivo (tabla
+// `peaje_tag_baja`, 0776) para que (a) el historial de cruces anteriores siga
+// teniendo unidad y (b) un cruce POSTERIOR a la baja se vea como candidato.
+// Todo PURO: el reloj se inyecta (`hoy`).
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const MOTIVO_BAJA_MAX = 300;
+
+export type ResultadoBaja =
+  | { ok: true; fecha: string; motivo: string | null; /** ya rige (fecha ≤ hoy): el TAG deja de estar activo */ vigente: boolean }
+  | { ok: false; motivo: string };
+
+const esFechaIso = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`))
+  && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
+
+/**
+ * Valida la baja. La fecha es el ÚLTIMO día en que el TAG estaba vigente (un
+ * cruce con fecha posterior es el sospechoso). Una fecha futura es válida: la
+ * baja se programa y no afecta nada hasta que llegue.
+ */
+export function validarBajaTag(entrada: { fecha: unknown; motivo?: unknown }, hoy: string): ResultadoBaja {
+  const fecha = typeof entrada.fecha === 'string' ? entrada.fecha.trim() : '';
+  if (!fecha) return { ok: false, motivo: 'Falta la fecha de baja: indica el último día en que el TAG estuvo en uso.' };
+  if (!esFechaIso(fecha)) return { ok: false, motivo: 'La fecha de baja no es válida. Usa el formato AAAA-MM-DD, por ejemplo 2026-03-05.' };
+  const motivo = typeof entrada.motivo === 'string' ? entrada.motivo.trim().slice(0, MOTIVO_BAJA_MAX) : '';
+  return { ok: true, fecha, motivo: motivo || null, vigente: fecha <= hoy };
+}
+
+/** TAG normalizado → unidad que lo tuvo y, si se dio de baja, el último día vigente. */
+export interface VigenciaTag { unidadId: string; bajaEn: string | null }
+
+export type ResolucionTag =
+  | { estado: 'vigente'; unidadId: string }
+  /** El cruce es POSTERIOR a la baja: no se le atribuye la unidad, pero se conserva cuál era para explicarlo. */
+  | { estado: 'dado_de_baja'; unidadAnteriorId: string; bajaEn: string }
+  | { estado: 'sin_alta' };
+
+/**
+ * ¿A qué unidad pertenece este TAG en la FECHA del cruce? Un cruce hasta el día
+ * de la baja (inclusive) conserva su unidad; uno posterior ya no. Sin fecha de
+ * cruce no se puede afirmar que sea posterior, así que se trata como vigente.
+ */
+export function resolverTagEnFecha(
+  tagNormalizado: string | null,
+  fechaCruce: string | null,
+  mapa: ReadonlyMap<string, VigenciaTag>,
+): ResolucionTag {
+  const v = tagNormalizado ? mapa.get(tagNormalizado) : undefined;
+  if (!v) return { estado: 'sin_alta' };
+  if (v.bajaEn && fechaCruce && fechaCruce.slice(0, 10) > v.bajaEn) {
+    return { estado: 'dado_de_baja', unidadAnteriorId: v.unidadId, bajaEn: v.bajaEn };
+  }
+  return { estado: 'vigente', unidadId: v.unidadId };
+}

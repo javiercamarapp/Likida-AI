@@ -83,6 +83,12 @@ export type ResultadoImportGeocercas =
   /** `motivo`: 'sin_conexion' (no hay «mis propias tablas» guardadas) o 'sin_geocercas' (la conexión no trae vista/archivo/endpoint de geocercas): no son errores de la flota para el proceso automático. */
   | { ok: false; error: string; detalles?: string[]; motivo?: 'sin_conexion' | 'sin_geocercas' };
 
+/** Reporte final en una línea: «N sitios nuevos, M actualizados, K rechazados». Con todo-o-nada, K > 0 solo acompaña a ok: false. */
+export function resumenImportacionGeocercas(r: ResultadoImportGeocercas): string {
+  if (r.ok) return `${r.creados} sitios nuevos, ${r.actualizados} actualizados, ${r.rechazadas.length} rechazados`;
+  return `0 sitios nuevos, 0 actualizados, ${r.detalles?.length ?? 0} rechazados`;
+}
+
 /** Los mensajes con que los lectores dicen «esta conexión no tiene geocercas configuradas» (no es una falla: es que no aplica). */
 export const SIN_GEOCERCAS_CONFIGURADAS = /^no hay (?:vista|archivo|endpoint) de geocercas/i;
 

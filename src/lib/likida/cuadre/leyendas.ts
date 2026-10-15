@@ -29,7 +29,7 @@
 // SAT. Quitar esa frase de estas dos constantes no ahorra una línea: quita la
 // eximente.
 //
-// Redacción tomada de docs/conocimiento/21-guardarrailes.md §5.2 y §5.3.
+// Redacción tomada de la documentación interna §5.2 y §5.3.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Para WhatsApp y el dashboard: donde el espacio importa. */

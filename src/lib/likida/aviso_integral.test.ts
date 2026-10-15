@@ -10,7 +10,7 @@ import { avisoIntegral, avisoSimplificado, revisarAvisoIntegral, versionAviso } 
 // muerta y la respuesta a *PRIVACIDAD* tenía que confesar que no había a dónde
 // mandarlo.
 //
-// Seis de los once elementos del checklist (docs/conocimiento/11-datos-
+// Seis de los once elementos del checklist (la documentación interna
 // personales.md §5.4) viven SOLO en el integral, así que no existían en ningún
 // lado: ARCO (15 fr. V), cambios al aviso (15 fr. VI), transferencias (35),
 // revocación (7 último párr.), contacto (29) y oposición al tratamiento

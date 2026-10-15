@@ -169,7 +169,7 @@ describe('StatCard — delta null (sin comparable) no afirma "0%"', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ESCALA 50k (docs/escala-50k/MAPA.md §UI, 22-ago-2026) — `BannerInsight`
+// ESCALA 50k (la documentación interna, 22-ago-2026) — `BannerInsight`
 // tenía `truncate` sobre un span que lleva un MONTO: "$12,345,6…" mutilado.
 // `StatCard`/`KpiTile`/`WidgetUso` no tenían regla de ancho: a ~1e14 se
 // desbordaban de la tarjeta. La prueba de ancho es con $999,999,999.00 (12

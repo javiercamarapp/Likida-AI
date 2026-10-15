@@ -4,7 +4,7 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Save } from 'lucide-react';
 import { AvisoResultado, type ResultadoUI } from '../../../../admin/ui/aviso-resultado';
-import { FILAS_NUEVAS_CONTACTO, NOMBRES_DIA } from '@/lib/likida/conductor/config_forma';
+import { FILAS_NUEVAS_CONTACTO, NOMBRES_DIA, OPCIONES_PERFIL, avisoZona } from '@/lib/likida/conductor/config_forma';
 import type { ConfigConductor } from '@/lib/likida/conductor/config';
 import type { ContactoTrafico } from '@/lib/likida/conductor/escalamiento';
 
@@ -59,7 +59,7 @@ function Guardar() {
   );
 }
 
-export function FormaConfigConductor({ accion, config, valores, contactos, patios, puedeEditar }: {
+export function FormaConfigConductor({ accion, config, valores, contactos, patios, puedeEditar, puedeForzarPreflight = false }: {
   accion: AccionConfig;
   config: ConfigConductor;
   /** Los textos de los campos (ver `valoresDeForma`). */
@@ -67,6 +67,8 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
   contactos: ContactoTrafico[];
   patios: Array<{ id: string; nombre: string }>;
   puedeEditar: boolean;
+  /** T-A5-25: solo para el soporte de Likida (QA). */
+  puedeForzarPreflight?: boolean;
 }) {
   const [estado, enviar] = useActionState(accion, null);
   const off = !puedeEditar;
@@ -79,6 +81,29 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
         <Casilla nombre="confirmarAlChofer" etiqueta="Confirmarle al chofer cada hito que registra" marcada={config.confirmarAlChofer} deshabilitada={off} />
         <Casilla nombre="usarLlm" etiqueta="Entender con un modelo lo que las reglas no entienden" marcada={config.usarLlm} deshabilitada={off}
           ayuda="Solo cuando el mensaje parece hablar de un hito; nunca puede retirar ni validar un hito." />
+      </Seccion>
+
+      <Seccion id="cfg-perfil" titulo="¿Qué sigue el agente?">
+        <fieldset className="space-y-2" disabled={off}>
+          <legend className={ETIQUETA}>Perfil de seguimiento</legend>
+          {OPCIONES_PERFIL.map((o) => (
+            <label key={o.valor} className="flex items-start gap-2 text-[12.5px]">
+              <input type="radio" name="f_perfilSeguimiento" value={o.valor} defaultChecked={config.perfilSeguimiento === o.valor} className="mt-0.5" />
+              <span>{o.etiqueta}<span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{o.ayuda}</span></span>
+            </label>
+          ))}
+        </fieldset>
+        <Casilla nombre="mostrarEstadosFrontera" etiqueta="Mostrar en el tablero los estados de frontera" marcada={config.mostrarEstadosFrontera} deshabilitada={off}
+          ayuda="Solo informativo: no genera avisos al chofer ni escalamiento." />
+        <Casilla nombre="aplicarSalidaDelTms" etiqueta="Dar por hecha la salida cuando tu sistema de despacho la reporta" marcada={config.aplicarSalidaDelTms} deshabilitada={off} />
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Estos tiempos son una primera propuesta; ajústalos con tus supervisores.</p>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <Numero nombre="gpsObsoletoMin" etiqueta="El GPS se da por viejo después de (min)" valor={valores.gpsObsoletoMin} deshabilitada={off} ayuda="De 5 a 720." />
+          <Numero nombre="detenidoMin" etiqueta="La unidad se da por detenida después de (min)" valor={valores.detenidoMin} deshabilitada={off} ayuda="De 5 a 720." />
+          <Numero nombre="segundoAvisoMin" etiqueta="Segundo aviso al chofer después de (min)" valor={valores.segundoAvisoMin} deshabilitada={off} ayuda="De 5 a 720." />
+          <Numero nombre="escalarSenalMin" etiqueta="Avisar al jefe por falta de señal después de (min)" valor={valores.escalarSenalMin} deshabilitada={off} ayuda="De 5 a 720." />
+          <Numero nombre="silencioRespuestaMin" etiqueta="Chofer sin contestar después de (min)" valor={valores.silencioRespuestaMin} deshabilitada={off} ayuda="De 5 a 720." />
+        </div>
       </Seccion>
 
       <Seccion id="cfg-escalera" titulo="Estrategia de recordatorios">
@@ -96,7 +121,9 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
         </div>
       </Seccion>
 
-      <Seccion id="cfg-ventana" titulo="Ventana horaria (hora de México)">
+      <Seccion id="cfg-ventana" titulo="Ventana horaria y días">
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Zona horaria de la flota: <strong>{config.zonaHoraria}</strong> (solo lectura).</p>
+        {avisoZona(config.zonaHoraria) && <p role="alert" className="text-[12px]" style={{ color: 'var(--bad)' }}>{avisoZona(config.zonaHoraria)}</p>}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Numero nombre="horaInicio" etiqueta="Desde las (0 a 23)" valor={valores.horaInicio} deshabilitada={off} />
           <Numero nombre="horaFin" etiqueta="Hasta las (1 a 24)" valor={valores.horaFin} deshabilitada={off} />
@@ -146,7 +173,13 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
         <Casilla nombre="detectarHitosGps" etiqueta="Dar por hecha la llegada o la salida cuando el GPS entra o sale del sitio del viaje" marcada={config.detectarHitosGps} deshabilitada={off}
           ayuda="El tractor entra o sale de la geocerca y el hito se registra solo, sin que el chofer escriba (queda como «sistema» y validado por GPS). Solo actúa con sitio asignado al viaje y GPS de la unidad." />
         <Casilla nombre="avisarSenalVida" etiqueta="Preguntar «¿sigues bien?» si el GPS de un tractor en tránsito se calla" marcada={config.avisarSenalVida} deshabilitada={off}
-          ayuda="Si la última posición queda vieja o el tractor lleva rato detenido fuera de un sitio: un aviso con botones al chofer, un segundo aviso y después al jefe de tráfico. Apagado: solo se ve en el tablero. Requiere plantilla aprobada fuera de la ventana de 24 h." />
+          ayuda="Si la última posición queda vieja o el tractor lleva rato detenido fuera de un sitio: un aviso con botones al chofer, un segundo aviso y después al jefe de tráfico. Apagado: solo se ve en el tablero. Requiere plantilla aprobada fuera de la ventana de 24 h. Solo se puede encender cuando «¿Está lista la flota?» no tiene nada en rojo." />
+        {puedeForzarPreflight && (
+          <label className="flex items-start gap-2 text-[12.5px]">
+            <input type="checkbox" name="forzarPreflight" value="si" disabled={off} className="mt-0.5" />
+            <span>Encender la señal de vida aunque «¿Está lista la flota?» tenga faltantes (solo QA; queda en la bitácora)</span>
+          </label>
+        )}
         <div className="grid sm:grid-cols-2 gap-3">
           <Numero nombre="estadiaAlertaCargaMin" etiqueta="Alerta de estadía en carga (min)" valor={valores.estadiaAlertaCargaMin} deshabilitada={off} placeholder="vacío = sin alerta" ayuda="De 15 a 4,320. Vacío la apaga." />
           <Numero nombre="estadiaAlertaDescargaMin" etiqueta="Alerta de estadía en descarga (min)" valor={valores.estadiaAlertaDescargaMin} deshabilitada={off} placeholder="vacío = sin alerta" />
@@ -188,5 +221,98 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
         <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esta configuración.</p>
       )}
     </form>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// «OPERADORES DEL PILOTO» (0800): quién está en el seguimiento del Agente 5. Cada alta y cada baja es una acción de servidor
+// aparte (otro formulario, no el de la configuración). El tope se aplica en el servidor; aquí solo se enseña el contador.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface OperadorPilotoVista { id: string; nombre: string; telefono: string }
+export interface DatosVoluntarios {
+  tope: number;
+  voluntarios: OperadorPilotoVista[];
+  /** Activos, con teléfono válido, que aún no están en el piloto (ya filtrados por la búsqueda). */
+  candidatos: OperadorPilotoVista[];
+  busqueda: string;
+}
+export type AccionVoluntario = (previo: ResultadoConfig, fd: FormData) => Promise<ResultadoConfig>;
+
+const diezDigitos = (tel: string): string => tel.replace(/\D/g, '').replace(/^521?(?=\d{10}$)/, '');
+
+function BotonVoluntario({ texto, enCurso }: { texto: string; enCurso: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending} className="h-9 px-4 rounded-lg text-[13px] font-medium hairline transition-opacity hover:opacity-85 disabled:opacity-50">
+      {pending ? enCurso : texto}
+    </button>
+  );
+}
+
+function FilaVoluntario({ op, accion, puedeEditar }: { op: OperadorPilotoVista; accion: AccionVoluntario; puedeEditar: boolean }) {
+  const [estado, enviar] = useActionState(accion, null);
+  return (
+    <li className="py-2 space-y-1.5">
+      <form action={enviar} className="flex items-center justify-between gap-3 text-[12.5px]" aria-label={`Retirar a ${op.nombre} del piloto`}>
+        <span><strong>{op.nombre}</strong> <span style={{ color: 'var(--faint)' }}>{diezDigitos(op.telefono)}</span></span>
+        <input type="hidden" name="operadorId" value={op.id} />
+        {puedeEditar && <BotonVoluntario texto="Retirar del piloto" enCurso="Retirando…" />}
+      </form>
+      <AvisoResultado estado={estado} />
+    </li>
+  );
+}
+
+export function SeccionVoluntarios({ datos, puedeEditar, accionAlta, accionBaja, parametros }: {
+  datos: DatosVoluntarios;
+  puedeEditar: boolean;
+  accionAlta: AccionVoluntario;
+  accionBaja: AccionVoluntario;
+  /** Los parámetros de la URL que la búsqueda debe conservar (flota elegida, etc.), sin `q`. */
+  parametros: Array<[string, string]>;
+}) {
+  const [estadoAlta, enviarAlta] = useActionState(accionAlta, null);
+  const n = datos.voluntarios.length;
+  return (
+    <Seccion id="cfg-voluntarios" titulo="Operadores del piloto">
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        El agente solo da seguimiento a los viajes importados de los operadores que aceptaron participar. Márcalos aquí uno por uno; al retirar a uno,
+        sus viajes importados que siguen abiertos vuelven a «sin aceptar».
+      </p>
+      <p className="text-[13px] font-medium" aria-live="polite">{n} de {datos.tope} operadores en el piloto</p>
+      {n > 0 ? (
+        <ul className="divide-y" style={{ borderColor: 'var(--line)' }}>
+          {datos.voluntarios.map((v) => <FilaVoluntario key={v.id} op={v} accion={accionBaja} puedeEditar={puedeEditar} />)}
+        </ul>
+      ) : (
+        <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Todavía no hay operadores en el piloto.</p>
+      )}
+      {puedeEditar ? (
+        <div className="space-y-2">
+          <form method="get" className="flex items-end gap-2" aria-label="Buscar operador">
+            {parametros.map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
+            <label className="flex-1">
+              <span className={ETIQUETA}>Buscar operador activo (nombre o teléfono)</span>
+              <input name="q" defaultValue={datos.busqueda} className={CAMPO} />
+            </label>
+            <button type="submit" className="h-9 px-4 rounded-lg text-[13px] font-medium hairline">Buscar</button>
+          </form>
+          <form action={enviarAlta} className="flex items-end gap-2" aria-label="Agregar operador al piloto">
+            <label className="flex-1">
+              <span className={ETIQUETA}>Operador</span>
+              <select name="operadorId" defaultValue="" className={CAMPO} aria-label="Operador a agregar">
+                <option value="" disabled>{datos.candidatos.length > 0 ? 'Elige un operador…' : 'Sin operadores disponibles con ese criterio'}</option>
+                {datos.candidatos.map((c) => <option key={c.id} value={c.id}>{c.nombre} · {diezDigitos(c.telefono)}</option>)}
+              </select>
+            </label>
+            <BotonVoluntario texto="Agregar al piloto" enCurso="Agregando…" />
+          </form>
+          <AvisoResultado estado={estadoAlta} />
+        </div>
+      ) : (
+        <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia quién está en el piloto.</p>
+      )}
+    </Seccion>
   );
 }

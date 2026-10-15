@@ -104,6 +104,40 @@ describe('el archivo', () => {
     expect(estado.eventos.some((e) => (e as unknown as { tipo?: string }).tipo === 'exportado')).toBe(true);
   });
 
+  describe('?formato=plantilla_tms&documento=', () => {
+    const lee = async (r: Response) => XLSX.read(new Uint8Array(await r.arrayBuffer()), { type: 'array' });
+
+    it('aprobado: 200, MIME xlsx, 3 hojas, y queda el evento exportado', async () => {
+      const r = await GET(peticion(`?formato=plantilla_tms&documento=${U1}`));
+      expect(r.status).toBe(200);
+      expect(r.headers.get('content-type')).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      expect(r.headers.get('content-disposition')).toMatch(/filename="plantilla-tms-[0-9a-f]{8}\.xlsx"/);
+      const l = await lee(r);
+      expect(l.SheetNames).toEqual(['RemintenteDestinatario', 'Mercancias', 'Error']);
+      expect(l.Sheets.RemintenteDestinatario.C12.v).toBeDefined();
+      expect(estado.eventos.filter((e) => e.tipo === 'exportado' && e.documentoId === U1)).toHaveLength(1);
+    });
+
+    it('no aprobado: 409 con mensaje llano y nada se sella', async () => {
+      const r = await GET(peticion(`?formato=plantilla_tms&documento=${U2}`));
+      expect(r.status).toBe(409);
+      expect(await r.text()).toMatch(/aprobado/);
+      expect(estado.eventos).toHaveLength(0);
+    });
+
+    it('documento de otra flota: 404; id inválido o ausente: 400', async () => {
+      expect((await GET(peticion(`?formato=plantilla_tms&documento=${UB}`))).status).toBe(404);
+      expect((await GET(peticion('?formato=plantilla_tms&documento=nope'))).status).toBe(400);
+      expect((await GET(peticion('?formato=plantilla_tms'))).status).toBe(400);
+      expect(estado.docs.get(UB)!.exportadoEn).toBeNull();
+    });
+
+    it('las puertas siguen: rol sin permiso -> 403', async () => {
+      tenant = { ok: true, tenantId: A, rol: 'contador' };
+      expect((await GET(peticion(`?formato=plantilla_tms&documento=${U1}`))).status).toBe(403);
+    });
+  });
+
   it('un formato que no es csv, json ni xlsx → 400', async () => {
     expect((await GET(peticion('?formato=pdf'))).status).toBe(400);
   });

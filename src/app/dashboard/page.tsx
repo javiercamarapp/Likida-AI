@@ -4,6 +4,8 @@ import { sufijoTenant } from './sufijo';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { InicioContenido } from './inicio-contenido';
 import { InicioOperacion } from './inicio-operacion';
+import { InicioCincoAgentes } from './inicio-cinco-agentes';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { getPerfilCrudo } from '@/lib/likida/repo';
 import { onboardingFiscalListo, onboardingPospuesto } from '@/lib/likida/perfil/preguntas';
 
@@ -22,6 +24,15 @@ export default async function DashboardInicio({
 }) {
   const sp = await searchParams;
   const { tenantId, tenantNombre, nombre, rol, tenantExiste } = await resolverTenantEfectivo('/dashboard', sp);
+
+  // EL PERFIL DE LA FLOTA (0770): una flota con perfil `cinco_agentes` tiene su
+  // propio Resumen reducido a los cinco agentes y NO pasa por el onboarding
+  // fiscal (su pantalla está en stand-by: redirigir allá sería un bucle contra
+  // el propio perfil). Sin perfil, todo sigue como antes.
+  const perfilFlota = await perfilDeTenant(tenantId);
+  if (perfilFlota) {
+    return <InicioCincoAgentes tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijoTenant(sp)} />;
+  }
 
   // DOS CASAS DISTINTAS EN LA MISMA PUERTA.
   //

@@ -8,12 +8,19 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const INTENCIONES = [
-  'ubicacion', 'eta', 'documentos', 'factura_pod', 'queja', 'pide_humano', 'baja', 'saludo', 'otro',
+  'ubicacion', 'eta', 'documentos', 'factura_pod', 'datos_unidad', 'queja', 'pide_humano', 'baja', 'saludo', 'otro',
 ] as const;
 export type Intencion = (typeof INTENCIONES)[number];
 
 /** Las intenciones que piden un DATO del viaje (el resto no tiene qué consultar). */
-export const INTENCIONES_DE_DATO: readonly Intencion[] = ['ubicacion', 'eta', 'documentos', 'factura_pod'];
+export const INTENCIONES_DE_DATO: readonly Intencion[] = ['ubicacion', 'eta', 'documentos', 'factura_pod', 'datos_unidad'];
+
+/**
+ * Intenciones que la base solo acepta desde la migración 0798 (CHECK `vigia_mensaje_intencion_dominio`). Mientras la 0798 no
+ * esté aplicada en una base, guardarlas la rechazaría y se perdería el mensaje del cliente: el servicio las degrada a `otro`
+ * (lo ve una persona) salvo que `DepsVigia.datosUnidad` lo permita explícitamente.
+ */
+export const INTENCIONES_DESDE_0798: readonly Intencion[] = ['datos_unidad'];
 
 export type Clasificador = 'reglas' | 'modelo' | 'ninguno';
 
@@ -36,7 +43,11 @@ export interface ConfigVigia {
   autoenviarMinAprobaciones: number;
   slaRespuestaMin: number;
   escalarNivel2Min: number;
-  /** 0484: plazo corto (min) para clientes con un grupo CRÍTICO; rige el menor entre este y `slaRespuestaMin`. */
+  /**
+   * 0484: plazo corto (min) para clientes con un grupo CRÍTICO; rige el menor entre este y `slaRespuestaMin`.
+   * Rango real (CHECK de la base): `slaCriticoMin` 2–1440, `slaRespuestaMin` 5–1440; default 10. El «5 minutos» y el «10 minutos» que
+   * se oyen en las llamadas son EJEMPLOS hablados del cliente, no reglas: el valor lo fija cada flota (pendiente B4).
+   */
   slaCriticoMin: number;
   /** 0484: nivel de molestia (2 o 3) desde el que se avisa al gerente responsable. */
   molestiaAvisoNivel: 2 | 3;
@@ -44,6 +55,13 @@ export interface ConfigVigia {
   avisoPrivacidadUrl: string | null;
   /** 0673: si el aviso de escalamiento por WhatsApp no sale, mandarlo por correo a quien tenga correo en la lista de directores. Apagado por omisión. */
   respaldoCorreo: boolean;
+  /**
+   * 0798 «solo avisar»: el Vigía clasifica, prioriza y escala (avisa a gerentes y directores), pero NO redacta borradores ni manda nada al
+   * cliente. Opcional: una base sin la 0798 no trae la columna y entonces vale `false`/ausente (el copiloto de siempre, sin cambios).
+   * Con la 0798 aplicada nace en `true` (alcance inicial del cliente: «avisar, no contestar»). Ponerlo en `false` devuelve el copiloto
+   * con aprobación, las respuestas rápidas y el autoenvío (stand-by, no borrados).
+   */
+  soloAvisar?: boolean;
 }
 
 /** Lo que vale cuando la flota no tiene fila: APAGADO (falla cerrado). */
@@ -96,6 +114,8 @@ export interface Conversacion {
   molestiaNivel: number;
   molestiaMotivos: string[];
   molestiaEn: string | null;
+  /** 0798: máximo `nivel` de prioridad de los mensajes sin responder (0 ignorar · 1 normal · 2 alta). Ausente = 0. Solo ordena. */
+  prioridad?: number;
   escalamientoNivel: number;
   escaladoEn: string | null;
   atendidaEn: string | null;

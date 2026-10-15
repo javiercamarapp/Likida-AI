@@ -161,7 +161,7 @@ describe('parseCfdiXml — CFDI consolidado (líneas)', () => {
     expect(l1).toMatchObject({
       indice: 1, fuente: 'ecc12', fecha: '2026-04-03T09:12:00', monto: 2904.05,
       estacionRfc: 'EST010101AAA', estacionClave: '4521', folioOperacion: 'OP-100234', cantidad: 120.5,
-      // FASE 1 (docs/asistencia/PLAN-FASES.md): ECC12 no da ClaveProdServ por
+      // FASE 1 (la documentación interna): ECC12 no da ClaveProdServ por
       // línea, solo TipoCombustible — es lo que consolidado.ts traduce a
       // 15101505 (ver claveProdServDeLinea). Antes se leía y se tiraba.
       tipoCombustible: 'Diesel',

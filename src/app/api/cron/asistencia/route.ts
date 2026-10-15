@@ -6,6 +6,7 @@ import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
 import { margenUnidadAtomicaMs } from '@/lib/likida/presupuesto';
+import { tenantsConPerfilASaltar } from '@/lib/auth/perfil_tenant';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -88,7 +89,9 @@ export async function GET(req: Request) {
   const MARGEN_MS = margenUnidadAtomicaMs({ consultas: 8, envios: 2, extraMs: EXTRA_LATIDO_MS });
   const venceEn = entrada + maxDuration * 1000 - MARGEN_MS;
   try {
-    const r = await escalarAsistenciasPendientes(new Date(), { venceEn });
+    // Las flotas con perfil (0770) se saltan: la mesa de asistencia es un módulo en stand-by.
+    const excluirTenants = await tenantsConPerfilASaltar('asistencia');
+    const r = await escalarAsistenciasPendientes(new Date(), { venceEn, excluirTenants });
     logger.info('cron.asistencia.ok', { ...r });
     await registrarLatido(
       'asistencia',

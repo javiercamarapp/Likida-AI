@@ -1,0 +1,8 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "properties": { "codigo": "PATIO-A", "nombre": "Patio Norte", "radio_m": 600 }, "geometry": { "type": "Point", "coordinates": [-100.19, 25.78] } },
+    { "type": "Feature", "properties": { "Código": "PL-01", "Nombre": "Planta Poniente", "Radio": 550, "Cliente": "Cliente Ficticio Uno" }, "geometry": { "type": "Point", "coordinates": [-103.185, 20.515] } },
+    { "type": "Feature", "properties": { "codigo": "PL-02", "nombre": "Planta Cuadrada" }, "geometry": { "type": "Polygon", "coordinates": [[[-103.30, 20.62], [-103.29, 20.62], [-103.29, 20.63], [-103.30, 20.63], [-103.30, 20.62]]] } }
+  ]
+}

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 // AUDITORÍA 18, MEDIO (M6) — la pantalla citaba el art. 32, que es la
 // numeración de la LFPDPPP abrogada (2010). Los plazos ARCO en la ley de 2025
-// son el art. 31 (docs/conocimiento/11-datos-personales.md:48). Se lee el
+// son el art. 31 (la documentación interna:48). Se lee el
 // fuente, como en `login/no_autoregistro.test.ts`: la página es un server
 // component con sesión y no se monta suelta.
 const PAGINA = readFileSync(fileURLToPath(new URL('./page.tsx', import.meta.url)), 'utf8');

@@ -1,10 +1,10 @@
 # Likida — Sistema de diseño v3.1
 
 Dirección fijada el **12-ago-2026**, reemplazando la dirección "degradado de
-marca" del 7-ago-2026. Javier pidió explícito: **logo negro, ya no paleta
+marca" del 7-ago-2026. Se pidió explícito: **logo negro, ya no paleta
 naranja** en los paneles, tipografía más corporativa, y todo compacto.
 
-**v3.1 (16-ago-2026)**: Javier sumó como referencia el template MIT
+**v3.1 (16-ago-2026)**: Se sumó como referencia el template MIT
 `shadcndashboard/next-shadcn-dashboard` ("visual minimalista y tipografía,
 todo") y ordenó 5 patrones suyos en LOS DOS paneles: divisores internos
 PUNTEADOS (filas de tabla y pies de stat), línea comparativa punteada en

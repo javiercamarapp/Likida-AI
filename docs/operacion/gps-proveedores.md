@@ -84,6 +84,25 @@ con el importador todo-o-nada del Conductor (re-importar actualiza por código, 
   reloj duro; el fallo de una flota se anota en su estado y no frena a las demás. Un sitio editado a mano (`fuente = 'manual'`) NO se pisa (0632). Sin las migraciones
   el cron de posiciones sigue como siempre y la re-importación se apaga con un aviso.
 
+### Tabla propia «combinada» (posición + punto de interés + fecha de recibido) — T-A5-15
+
+Es un MAPEO declarativo sobre el mismo lector: no hay código específico de ningún cliente. Además de unidad, lat, lon y fecha_hora, el
+mapeo acepta dos columnas opcionales (CSV por alias, SQL por `columnas`, endpoint por `campos`):
+
+| Dato | Clave del mapeo | Alias en CSV | Qué se hace con él |
+|---|---|---|---|
+| Fecha de recibido (cuándo llegó el punto a su sistema) | `fecha_recibida` | `fecha_recibida`, `fecha_recibido`, `recibido`, … | Se resta de `fecha_hora` (misma zona declarada) para medir la **latencia de la fuente**. Solo se guarda agregada (p95 por día, para el latido del cron `gps`); nunca una columna por fila. Un «recibido» anterior a la medida no entra al p95 y se reporta (suele ser una zona mal declarada). |
+| Punto de interés | `punto_interes` | `punto_interes`, `punto_de_interes`, `poi` | Se **lee y se cuenta** en el resumen («n posiciones con punto de interés»). **No se guarda** en `posicion` hasta que el cliente confirme que le sirve (decisión abierta en `preguntas-javier.md`). |
+
+Ninguna de las dos hace que una fila se rechace: si no se entienden, la posición se acepta sin ellas.
+
+**Chequeo de calidad (¿posiciones continuas o solo eventos?).** En la última hora, si menos del 70 % de las unidades en tránsito trae al
+menos 2 posiciones, el estado del conector (la prueba de la pantalla de conexiones) agrega: «La tabla parece traer solo eventos, no
+posiciones continuas: la detección por geocerca y la señal de vida no son confiables.» Los umbrales (ventana 60 min, 70 %, 2
+posiciones, mínimo 3 unidades para opinar) son SINTÉTICOS y se ajustan con la semana de datos reales (`calidad.ts`). Con menos de 3
+unidades no se opina. La zona horaria (por omisión Ciudad de México; p. ej. `America/Matamoros`) se aplica a las dos fechas, y el cambio de
+horario se respeta al restar.
+
 ### Cursos (rutas autorizadas) por el mismo lector — P8
 
 Además de posiciones y geocercas, el lector puede leer los **cursos** que consume el reporte de reclamación de peajes

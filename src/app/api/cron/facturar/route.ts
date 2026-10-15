@@ -12,6 +12,7 @@ import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interrupto
 import { hoyMx } from '@/lib/formato';
 import { acotada } from '@/lib/likida/presupuesto';
 import { procesarLoteEnCola, type FilaCola } from './lote';
+import { tenantsConPerfilASaltar } from '@/lib/auth/perfil_tenant';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -328,12 +329,16 @@ export async function GET(req: Request) {
      * ticket y viene NULL cuando el OCR no la pudo leer — filtrar por ella
      * dejaría esos tickets fuera de la cola PARA SIEMPRE, en silencio.
      */
+    // Las flotas con perfil (0770) se saltan: la autofactura es un módulo en stand-by. Se excluyen en
+    // la MISMA consulta (conteo y candidatos) para que el backlog y el lote midan lo mismo.
+    const saltarFlotas = await tenantsConPerfilASaltar('facturar');
+    const excluidas = saltarFlotas.size > 0 ? `(${[...saltarFlotas].join(',')})` : null;
     const enCola = <Q extends {
       is(columna: string, valor: null): Q;
-      not(columna: string, operador: string, valor: null): Q;
+      not(columna: string, operador: string, valor: null | string): Q;
       gte(columna: string, valor: string): Q;
     }>(q: Q): Q =>
-      q
+      (excluidas ? q.not('tenant_id', 'in', excluidas) : q)
         .is('cfdi_uuid', null)
         .not('ocr_extra', 'is', null)
         // LOS BLOQUEADOS NO ENTRAN (mig. 0065). Un portal que pidió CAPTCHA, o

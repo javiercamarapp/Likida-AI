@@ -105,6 +105,12 @@ export const INTERRUPTORES = [
   // fuera del deploy) y `guardia_alertas` (reglas dentro del copiloto) NO
   // llevan palanca, con esa razón.
   'agente:carta_porte', 'agente:copiloto',
+  // LA SALIDA DE CARTA PORTE AL SISTEMA DEL CLIENTE (T-A3-28). Palanca propia y no solo `agente:carta_porte`: la pasada
+  // de envíos SUBE un archivo al TMS del cliente (efecto fuera de Likida) y apagarla no debe frenar la extracción de la
+  // bandeja. Apagada, los envíos quedan donde están (`listo` se descarga a mano) y no se pierde ningún documento.
+  // Fail-closed: si no se puede leer, no se envía. OJO: el CHECK `interruptor_id_dominio` de la base debe recrearse con
+  // este nombre (migración nueva) antes de poder APAGARLA desde el panel; sin fila la lectura contesta «encendido».
+  'agente:carta_porte_salida_tms',
 ] as const;
 
 export type NombreInterruptor = (typeof INTERRUPTORES)[number];

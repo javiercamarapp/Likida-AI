@@ -21,7 +21,7 @@ import type { Gasto } from '@/types/likida';
 //     OCR jamás se enseña como si fuera dato duro.
 // El escalón 3 (escritura directa al Service Layer de SAP B1) NO vive aquí:
 // espera credenciales de un cliente y está documentado en
-// docs/conocimiento/diagrama-flujo-sap-b1.md — ninguna función lo afirma.
+// la documentación interna — ninguna función lo afirma.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface FacturaProveedor {

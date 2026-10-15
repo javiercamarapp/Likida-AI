@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { parsearCasetasMatriz, resolverCaseta, coordenadaDeCelda, validarCoordenadasMexico, type CasetaCatalogo } from './casetas';
 import { matrizDeCsvTexto } from './csv';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // Casetas y coordenadas SINTÉTICAS (no son plazas reales; el catálogo real se carga por CSV).
 const csv = (t: string) => matrizDeCsvTexto(t);
@@ -113,5 +115,26 @@ describe('resolverCaseta — nunca adivina entre dos', () => {
     expect(resolverCaseta(null, catalogo).tipo).toBe('ninguna');
     expect(resolverCaseta('  ', catalogo).tipo).toBe('ninguna');
     expect(resolverCaseta('Tlalpan', []).tipo).toBe('ninguna');
+  });
+});
+
+describe('resolverCaseta — nombres con mojibake', () => {
+  const cat: CasetaCatalogo[] = [{
+    id: 'c1', nombre: 'Bucerías', nombreNorm: 'bucerias', alias: [], lat: 20.7, lng: -105.3, radioM: 300,
+  }];
+  it('el nombre dañado por la codificación casa con la caseta exacta', () => {
+    const r = resolverCaseta('BUCER\u00c3\u008dAS', cat);
+    expect(r).toMatchObject({ tipo: 'unica', por: 'nombre' });
+  });
+});
+
+describe('plantilla de catálogo de casetas (fixture sintético)', () => {
+  it('se importa sin errores con parsearCasetasMatriz', () => {
+    const texto = fs.readFileSync(path.join(__dirname, 'fixtures/catalogo_casetas_plantilla.csv'), 'utf8');
+    const r = parsearCasetasMatriz(matrizDeCsvTexto(texto));
+    expect(r.error).toBeUndefined();
+    expect(r.rechazadas).toEqual([]);
+    expect(r.casetas).toHaveLength(5);
+    expect(r.casetas[0]).toMatchObject({ nombre: 'Caseta Ejemplo Norte', alias: ['Ej Norte', 'Norte Ej'], radioM: 300 });
   });
 });

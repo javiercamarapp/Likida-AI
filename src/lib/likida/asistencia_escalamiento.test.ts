@@ -197,6 +197,16 @@ describe('escalarAsistenciasPendientes — claim, destinatarios y ventana', () =
     expect(anotarEvento).toHaveBeenCalledWith('t-1', 'inc-1', 'escalada', expect.objectContaining({ nivel: 1 }));
   });
 
+  it('una flota con perfil (0770) se SALTA: ni claim ni aviso; las de otra flota siguen', async () => {
+    filasPendientes.mockReturnValue([fila(), fila({ id: 'inc-2', tenant_id: 't-2' })]);
+    const r = await escalarAsistenciasPendientes(AHORA, { excluirTenants: new Set(['t-1']) });
+    expect(r.revisadas).toBe(1);
+    expect(r.escaladas).toBe(1);
+    expect(telefonoJefeDe).toHaveBeenCalledTimes(1);
+    expect(telefonoJefeDe).toHaveBeenCalledWith('t-2');
+    expect(telefonoJefeDe).not.toHaveBeenCalledWith('t-1');
+  });
+
   it('el claim perdido (otro cron ganó) no manda NADA — un solo aviso por peldaño', async () => {
     claimGana = false;
     filasPendientes.mockReturnValue([fila()]);

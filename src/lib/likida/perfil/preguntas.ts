@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// EL PUNTO ÚNICO DEL PERFIL — FASE 3 (docs/perfil/PERFIL-OPERATIVO.md).
+// EL PUNTO ÚNICO DEL PERFIL — FASE 3 (la documentación interna).
 //
 // Este módulo EXPONE DECISIONES, NO CAMPOS. Nada de `Perfil`, `CampoPerfil`
 // ni `Procedencia` se exporta: quien necesita saber algo del cliente llama
@@ -18,7 +18,7 @@
 // función que no existe.
 //
 // PRIMER CAMPO REAL: ingresos anuales + parte relacionada, para el hueco
-// fiscal MÁS CARO de los tres que cierra esta fase (docs/asistencia/PLAN-
+// fiscal MÁS CARO de los tres que cierra esta fase (la documentación interna
 // FASES.md, Fase 3): `estimulos.peajeFactor = 0.5` (config.ts:127) se aplica
 // HOY sin condición, pero LIF 2026 art. 20-A (normas/lif-2026-20-A.yaml,
 // hallazgo H6, verificado_fuente_primaria) exige ingresos < $300M y NO ser
@@ -148,7 +148,7 @@ export function calificaEstimuloPeaje(perfilCrudo: unknown): ElegibilidadEstimul
  *
  * Solo aplica el criterio determinístico; la regla fiscal fina sobre tarjetas
  * de terceros queda como pregunta abierta al fiscalista
- * (docs/fiscalista/PREGUNTAS-AL-FISCALISTA.md, C5).
+ * (la documentación interna, C5).
  */
 export function tarjetasDeLaEmpresa(perfilCrudo: unknown): boolean | undefined {
   const perfil = leerPerfil(perfilCrudo);

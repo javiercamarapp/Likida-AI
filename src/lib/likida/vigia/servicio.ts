@@ -27,23 +27,29 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { createHash } from 'node:crypto';
 import { logger } from '@/lib/logger';
+import { codigoDeError } from '@/lib/observability/sentry';
 import { appUrl } from '@/lib/env';
 import { normalizarTelefonoWa } from '@/lib/likida/wa_ventana';
 import { sendDocument } from '@/lib/meta/client';
 import { enviarAlCliente, MAX_TEXTO_AL_CLIENTE } from './enviar';
 import { nombreDeAdjunto } from './adjuntos';
 import { avisarAprobacion, avisarEscalamiento, interpretarBoton, type DecisionBoton } from './avisos';
+import { generarAvisos } from './aviso/generar';
+import { entregarAviso } from './aviso/entrega';
+import { contarPendientesViejos, TOPE_PENDIENTES_LEIDOS } from './aviso/cola';
 import { clasificar } from './clasificador';
+import { sinTenantsDePerfil } from './sin_flotas';
 import { esSpam, limpiarTexto } from './entrada';
 import { DIAS_CICLO_INACTIVO, evaluarEscalamiento, minutosEsperando, type AccionEscalamiento } from './escalamiento';
 import { resolverViaje, type ResumenViaje } from './estatus_viaje';
 import { evaluarMolestia } from './molestia';
+import { prioridadDe } from './prioridad';
 import { decidirEnvio } from './politica';
 import { claveCorreo, debeRespaldarPorCorreo, hashCorreo, reintentarCorreosVencidos, respaldarPorCorreo, unirDestinatarios } from './respaldo_correo';
 import { pulirBorrador, redactarBorrador, type ViajeParaRedactar } from './redactor';
 import { elegirRespuestaRapida } from './respuestas_rapidas';
-import type { DepsVigia, GuardaConversacion, RepoVigia } from './puertos';
-import { configParaCliente } from './tipos';
+import type { ContextoAvisosFlota, DepsVigia, GuardaConversacion, RepoVigia } from './puertos';
+import { configParaCliente, INTENCIONES_DE_DATO, INTENCIONES_DESDE_0798 } from './tipos';
 import type {
   AdjuntoRef, Clasificacion, ConfigVigia, Contacto, Conversacion, DatosAvisoCorreo, DestinatarioAviso, MensajeVigia, MotivoEscalamiento, NivelDirector,
 } from './tipos';
@@ -91,6 +97,14 @@ export async function atenderMensajeCliente(msg: MensajeEntrante, deps: DepsVigi
     return 'no_es_cliente';
   }
   if (!contacto) return 'no_es_cliente';
+
+  // PERFIL DE LA FLOTA (fase 1): el Vigía está en «Próximamente». Un cliente conocido NO recibe respuesta ni se guarda su
+  // mensaje ni se escala a nadie (y tampoco se le dice «no te tengo registrado», que sería falso). Si el perfil no se
+  // puede leer se falla cerrado (`perfilDeTenant`).
+  if (deps.enStandBy && (await deps.enStandBy(contacto.tenantId).catch(() => true))) {
+    logger.info('vigia.stand_by_perfil', { tenant: contacto.tenantId });
+    return 'atendido';
+  }
 
   // Ya es un cliente conocido: desde aquí, si la base falla, se REINTENTA (no se le
   // dice «no te tengo registrado» a quien sí tenemos).
@@ -171,6 +185,21 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
     return;
   }
 
+  // ── Prioridad (0798): el hilo toma el MÁXIMO de sus mensajes sin responder ───────────────────────
+  // Solo ordena el tablero y la cola del barrido: no cambia umbrales ni dispara envíos. Sin la migración 0798 no se escribe
+  // (la columna no existe) y una falla aquí nunca tumba el mensaje del cliente.
+  if (deps.datosUnidad) {
+    try {
+      const p = prioridadDe(c.texto, { adjunto: c.msg.type !== 'text' && c.msg.type !== 'other' });
+      if (p.nivel > (conv.prioridad ?? 0)) {
+        await repo.actualizarConversacion(tenantId, conv.id, { prioridad: p.nivel });
+        conv.prioridad = p.nivel;
+      }
+    } catch (e) {
+      logger.warn('vigia.prioridad_no_guardada', { tenant: tenantId, conversacion: conv.id, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   // ── Un humano lleva el hilo: el agente solo registra ────────────────────
   if (conv.control === 'humano') {
     await repo.evento(tenantId, { conversacionId: conv.id, tipo: 'entrante', detalle: { control: 'humano' } });
@@ -184,6 +213,16 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
     cl = { intencion: 'otro', secundarias: [], confianza: 0, clasificador: 'ninguno', senales: ['no_texto'] };
   } else {
     cl = await clasificar(c.texto, deps.modelo, tenantId);
+  }
+  // 0798: «datos de la unidad» solo existe en la base desde esa migración. Mientras `deps.datosUnidad` no diga que ya está
+  // aplicada, guardarla violaría el CHECK de `vigia_mensaje.intencion` y se perdería el mensaje del cliente: se degrada a
+  // `otro` (lo ve una persona) y la pregunta no se pierde.
+  if (!deps.datosUnidad) {
+    if (INTENCIONES_DESDE_0798.includes(cl.intencion)) {
+      cl = { ...cl, intencion: 'otro', secundarias: [], confianza: 0, senales: [...cl.senales, 'datos_unidad_sin_0798'] };
+    } else if (cl.secundarias.some((i) => INTENCIONES_DESDE_0798.includes(i))) {
+      cl = { ...cl, secundarias: cl.secundarias.filter((i) => !INTENCIONES_DESDE_0798.includes(i)) };
+    }
   }
   await repo.anotarClasificacion(tenantId, recibido.mensajeId, cl);
   await repo.evento(tenantId, { conversacionId: conv.id, tipo: 'entrante', detalle: { intencion: cl.intencion, clasificador: cl.clasificador } });
@@ -229,12 +268,13 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
   let viaje: ViajeParaRedactar = { tipo: 'ninguno' };
   const senales = [...cl.senales];
   let viajeEnFoco: string | null = conv.viajeId;
-  const pideDato = ['ubicacion', 'eta', 'documentos', 'factura_pod'].includes(cl.intencion);
+  const pideDato = INTENCIONES_DE_DATO.includes(cl.intencion);
+  const pideDatosUnidad = cl.intencion === 'datos_unidad' || cl.secundarias.includes('datos_unidad');
   if (pideDato) {
     const viajes: ResumenViaje[] = await repo.estatus.viajesEnCurso({ tenantId, clienteId: contacto.clienteId });
     const res = resolverViaje(c.texto, viajes, conv.viajeId);
     if (res.tipo === 'uno') {
-      const est = await repo.estatus.estatus({ tenantId, clienteId: contacto.clienteId, viajeId: res.viajeId });
+      const est = await repo.estatus.estatus({ tenantId, clienteId: contacto.clienteId, viajeId: res.viajeId, ...(pideDatosUnidad ? { datosUnidad: true } : {}) });
       viaje = est ? { tipo: 'uno', estatus: est } : { tipo: 'ninguno' };
       viajeEnFoco = est ? est.viajeId : null;
     } else if (res.tipo === 'ambiguo') {
@@ -246,6 +286,27 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
       await repo.evento(tenantId, { conversacionId: conv.id, tipo: 'otro_cliente', clave: `${recibido.mensajeId}:folio_ajeno` });
     }
     if (viajeEnFoco !== conv.viajeId) await repo.actualizarConversacion(tenantId, conv.id, { viajeId: viajeEnFoco });
+  }
+
+  // ── 0798 «solo avisar»: ni borrador ni envío; se conservan clasificación, prioridad y escalera ──────
+  if (config.habilitado && config.soloAvisar === true) {
+    const nombre = await repo.nombreCliente(tenantId, contacto.clienteId);
+    const disparo: Extract<MotivoEscalamiento, 'pide_humano' | 'folio_ajeno'> | null =
+      senales.includes('folio_ajeno') ? 'folio_ajeno' : cl.intencion === 'pide_humano' ? 'pide_humano' : null;
+    const aviso = evaluarEscalamiento({
+      conversacion: { ...convActual, id: conv.id, estado: 'activa', sinRespuestaDesde: conv.sinRespuestaDesde ?? ahora.toISOString() },
+      config, ahoraMs: ahora.getTime(), disparoInmediato: disparo,
+    });
+    if (aviso) {
+      const ctx = { tenantId, conv: convActual, contacto, config, nombreCliente: nombre ?? contacto.nombre };
+      // Sin borrador no hay «aviso de aprobación» que ya fuera la alerta del gerente: si el hilo salta directo al nivel 2
+      // (molestia crítica), el gerente (nivel 1) también se entera. La clave `…:n1` es la misma que usaría el barrido: no se duplica.
+      if (aviso.nivel === 2 && convActual.escalamientoNivel < 1 && !convActual.atendidaEn) {
+        await ejecutarEscalamiento({ ...aviso, nivel: 1, clave: aviso.clave.replace(/:n2$/, ':n1') }, ctx, deps);
+      }
+      await ejecutarEscalamiento(aviso, ctx, deps);
+    }
+    return;
   }
 
   // ── Borrador con datos reales (o con «lo consulto») ─────────────────────
@@ -722,6 +783,12 @@ export async function atenderDecisionVigia(cuenta: CuentaGerente, texto: string,
   if (!cuenta.tenantId || !ROLES_QUE_DECIDEN.includes(cuenta.rol)) {
     return 'Tu rol no puede aprobar respuestas a clientes. Pídeselo al encargado o al dueño de la flota.';
   }
+  // PERFIL DE LA FLOTA (fase 1): botón de un módulo en «Próximamente» (un aviso viejo): se consume sin tocar nada.
+  // '' = no contestar (el processor no envía cadenas vacías).
+  if (deps.enStandBy && (await deps.enStandBy(cuenta.tenantId).catch(() => true))) {
+    logger.info('vigia.decision_stand_by_perfil', { tenant: cuenta.tenantId });
+    return '';
+  }
   const actor: Actor = { tenantId: cuenta.tenantId, userId: cuenta.userId };
   try {
     if (b.accion === 'aprobar') return (await aprobarMensaje(actor, b.id, deps)).mensaje;
@@ -752,6 +819,15 @@ export interface ResultadoBarrido {
   expiradas: number;
   /** 0674: correos de respaldo cuyo arriendo venció y se retomaron. */
   correosRetomados: number;
+  /** T-A4-21: avisos de viaje creados / enviados (o avisados al ejecutivo) / fallidos / omitidos o diferidos en esta pasada. */
+  avisosCreados: number;
+  avisosEnviados: number;
+  avisosFallidos: number;
+  avisosOmitidos: number;
+  /** T-A4-42: avisos en `pendiente_confirmacion` con más de 2 h cuya cita aún no pasa (cola atorada esperando a un humano). */
+  avisosPendientesViejos: number;
+  /** El módulo de avisos lanzó (una flota o toda la pasada): el barrido de escalamiento NO se tumba, pero el latido es `parcial`. */
+  avisosConError: boolean;
   cortadoPorReloj: boolean;
 }
 
@@ -762,12 +838,20 @@ export const MINUTOS_APROBADO_ATORADO = 5;
  * `mantenimiento: false` salta lo que no corre contra el reloj de un cliente (atorados, expiración, retención): el cron pasa cada
  * minuto para que la alerta de 10 min salga a tiempo, y eso solo hace falta cada pocos minutos.
  */
-export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number; vencePorReloj?: number; mantenimiento?: boolean } = {}): Promise<ResultadoBarrido> {
+export async function barridoVigia(deps: DepsVigia, opciones: {
+  limite?: number; vencePorReloj?: number; mantenimiento?: boolean;
+  /** Flotas con perfil (A4 en «Próximamente», fase 1): NINGUNA pasada del barrido las mira, les manda ni les cierra nada. */
+  saltar?: ReadonlySet<string>;
+} = {}): Promise<ResultadoBarrido> {
   const { repo } = deps;
+  const saltar: ReadonlySet<string> = opciones.saltar ?? new Set<string>();
   const ahora = ahoraDe(deps);
-  const r: ResultadoBarrido = { revisadas: 0, escaladas: 0, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, expiradas: 0, correosRetomados: 0, cortadoPorReloj: false };
+  const r: ResultadoBarrido = { revisadas: 0, escaladas: 0, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, expiradas: 0, correosRetomados: 0, avisosCreados: 0, avisosEnviados: 0, avisosFallidos: 0, avisosOmitidos: 0, avisosPendientesViejos: 0, avisosConError: false, cortadoPorReloj: false };
 
-  const filas = await repo.conversacionesEnEspera(opciones.limite ?? 100, ahora);
+  // La selección (quién entra y los umbrales) ya viene decidida por vencimiento; la prioridad alta solo adelanta el ORDEN de revisión.
+  // `sort` es estable: dentro de cada grupo se conserva el orden por vencimiento.
+  const filas = sinTenantsDePerfil(await repo.conversacionesEnEspera(opciones.limite ?? 100, ahora), saltar, (f) => f.config.tenantId)
+    .sort((a, b) => Number((b.conversacion.prioridad ?? 0) >= 2) - Number((a.conversacion.prioridad ?? 0) >= 2));
   for (const f of filas) {
     if (opciones.vencePorReloj && Date.now() >= opciones.vencePorReloj) { r.cortadoPorReloj = true; break; }
     r.revisadas += 1;
@@ -806,16 +890,16 @@ export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number;
   if (opciones.mantenimiento === false) return r;
 
   // 0674: los correos de respaldo que la corrida anterior dejó a medias (arriendo vencido). Mismo reclamo: si otra corrida los retomó, no se repiten.
-  r.correosRetomados = await reintentarCorreosVencidos(deps, 20);
+  r.correosRetomados = await reintentarCorreosVencidos(deps, 20, saltar);
 
-  const atorados = await repo.aprobadosAtorados(new Date(ahora.getTime() - MINUTOS_APROBADO_ATORADO * 60_000), 50);
+  const atorados = sinTenantsDePerfil(await repo.aprobadosAtorados(new Date(ahora.getTime() - MINUTOS_APROBADO_ATORADO * 60_000), 50), saltar, (a) => a.tenantId);
   for (const a of atorados) {
     await repo.marcarFallido(a.tenantId, a.id, 'envío interrumpido: no se sabe si salió, revísalo antes de reenviar').catch(() => {});
     r.atorados += 1;
   }
   // Ciclos muertos: cerrados con su huella en la bitácora (sin texto ni teléfono). Una falla aquí no tira el barrido.
   try {
-    const cerradas = await repo.expirarCiclosInactivos(new Date(ahora.getTime() - DIAS_CICLO_INACTIVO * 86_400_000), 100, ahora);
+    const cerradas = await repo.expirarCiclosInactivos(new Date(ahora.getTime() - DIAS_CICLO_INACTIVO * 86_400_000), 100, ahora, [...saltar]);
     for (const x of cerradas) {
       await repo.evento(x.tenantId, { conversacionId: x.id, tipo: 'cerrada', detalle: { motivo: 'ciclo_inactivo', dias: DIAS_CICLO_INACTIVO } }).catch(() => false);
     }
@@ -827,5 +911,60 @@ export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number;
     logger.error('vigia.purga_fallo', { err: e instanceof Error ? e.message : String(e) });
     return 0;
   });
+  // T-A4-21: la pasada de avisos va AL FINAL (después del escalamiento, que es lo que corre contra el reloj de un cliente) y
+  // respeta el mismo reloj. Aislada: un error aquí no tumba nada de lo anterior.
+  await pasadaAvisos(deps, ahora, r, opciones.vencePorReloj, saltar);
   return r;
+}
+
+/** Aviso por flota por pasada: acota la lectura de aprobados (la entrega vuelve a verificar el estado de cada uno). */
+export const MAX_AVISOS_ENTREGADOS_POR_FLOTA = 50;
+const MAX_FLOTAS_AVISOS = 100;
+
+async function pasadaAvisos(deps: DepsVigia, ahora: Date, r: ResultadoBarrido, vencePorReloj?: number, saltar: ReadonlySet<string> = new Set()): Promise<void> {
+  if (!deps.avisos) return;
+  const sinTiempo = () => !!vencePorReloj && Date.now() >= vencePorReloj;
+  try {
+    const flotas = sinTenantsDePerfil(await deps.avisos.flotas(MAX_FLOTAS_AVISOS), saltar, (f) => f.tenantId);
+    for (const f of flotas) {
+      if (sinTiempo()) { r.cortadoPorReloj = true; return; }
+      try {
+        const g = await generarAvisos(f.tenantId, ahora, f.generar);
+        r.avisosCreados += g.creados;
+        const aprobados = await f.aprobados(MAX_AVISOS_ENTREGADOS_POR_FLOTA);
+        for (const a of aprobados) {
+          if (sinTiempo()) { r.cortadoPorReloj = true; return; }
+          try {
+            const e = await entregarAviso(a, f.entrega, 'automatico');
+            if (e.estado === 'enviado' || e.estado === 'avisado_ejecutivo') r.avisosEnviados += 1;
+            else if (e.estado === 'fallido') r.avisosFallidos += 1;
+            else r.avisosOmitidos += 1;
+          } catch (err) {
+            r.avisosFallidos += 1; r.avisosConError = true;
+            // Solo el código: el mensaje de un error de base puede traer la fila (texto, teléfono) que no se pudo escribir.
+            logger.error('vigia.aviso.entrega_fallo', { tenant: f.tenantId, codigo: codigoDeError(err) });
+          }
+        }
+        r.avisosPendientesViejos += await contarCola(f, ahora);
+      } catch (err) {
+        r.avisosConError = true;
+        logger.error('vigia.aviso.flota_fallo', { tenant: f.tenantId, codigo: codigoDeError(err) });
+      }
+    }
+  } catch (err) {
+    r.avisosConError = true;
+    logger.error('vigia.aviso.pasada_fallo', { codigo: codigoDeError(err) });
+  }
+}
+
+/** T-A4-42: la cola atorada de UNA flota. Un fallo al contarla no tumba la pasada: se registra por código y cuenta como cero. */
+async function contarCola(f: ContextoAvisosFlota, ahora: Date): Promise<number> {
+  const repo = f.generar.repo as ContextoAvisosFlota['generar']['repo'] | undefined;
+  if (!repo?.pendientesConfirmacion) return 0;
+  try {
+    return contarPendientesViejos(await repo.pendientesConfirmacion(f.tenantId, TOPE_PENDIENTES_LEIDOS), ahora);
+  } catch (err) {
+    logger.error('vigia.aviso.cola_fallo', { tenant: f.tenantId, codigo: codigoDeError(err) });
+    return 0;
+  }
 }
