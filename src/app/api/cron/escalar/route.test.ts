@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Sin perfiles de tenant (0770): este archivo prueba el cron de siempre. El filtro por perfil tiene
+// su propia prueba (src/app/api/cron/perfil_crons.test.ts).
+vi.mock('@/lib/auth/perfil_tenant', () => ({
+  tenantsConPerfilASaltar: async () => new Set<string>(),
+  tenantsConPerfil: async () => new Set<string>(),
+}));
+
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 3, OP-C1 (CRÍTICO): este cron respondía 200 con un motor entero
 // reventado — así acumuló ~216 corridas "verdes" mientras el embed roto de

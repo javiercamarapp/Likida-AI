@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { puertaCron, registrarLatido, type EstadoLatido } from '@/lib/admin/salud';
+import { tenantsConPerfilASaltar } from '@/lib/auth/perfil_tenant';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -58,7 +59,9 @@ export async function GET(req: Request) {
   let latido: { estado: EstadoLatido; detalle: Record<string, unknown> } = { estado: 'fallo', detalle: { codigo: 'corrida_sin_cerrar' } };
   try {
     const venceEn = Date.now() + (maxDuration * 1000) - MARGEN_MS;
-    const r = await correrAlertasTope(puertosAlertaReales, { venceEn });
+    // Las flotas con perfil (0770) se saltan: la jornada es un módulo en stand-by.
+    const excluirTenants = await tenantsConPerfilASaltar('jornada-alertas');
+    const r = await correrAlertasTope(puertosAlertaReales, { venceEn, excluirTenants });
     logger.info('cron.jornada_alertas.ok', { ...r, fallos: r.fallos.length });
     const huboFallo = r.fallos.length > 0;
     // `parcial` = la corrida no cerró su trabajo: corte por reloj, lista truncada, rechazo masivo, o

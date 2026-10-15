@@ -36,6 +36,7 @@ import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 import { LecturaIncompleta } from '@/lib/likida/pg';
 import { appUrl } from '@/lib/env';
+import { perfilRestringido, MOTIVO_PERFIL_API } from '@/lib/auth/perfil_tenant';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -155,6 +156,16 @@ export async function POST(req: Request) {
     // lanzan. Eso es un 503 nuestro, nunca un 401 que haga tirar el token.
     logger.error('mcp.credencial', { err: e instanceof Error ? e.message : String(e) });
     return sinAutorizacion(503, 'No se pudo verificar la credencial. Intenta de nuevo.');
+  }
+
+  // EL PERFIL DE LA FLOTA (0770): una flota con perfil NO atiende MCP. Ninguna de las
+  // herramientas del catálogo (viajes, vigencias, cuadre, por-facturar, resumen
+  // fiscal, métricas, search/fetch) es de los cinco agentes, y `search`/`fetch`
+  // devuelven fichas de cualquier módulo: ante la duda, se niega todo. Un acceso
+  // emitido antes del perfil deja de servir en este punto.
+  if (await perfilRestringido(cred.tenantId)) {
+    logger.warn('mcp.negado_por_perfil', { tenant: cred.tenantId });
+    return NextResponse.json({ error: MOTIVO_PERFIL_API }, { status: 403 });
   }
 
   if (!(await rateLimit(`mcp:flota:${cred.tenantId}`, TASA_POR_FLOTA, VENTANA_MS))) {

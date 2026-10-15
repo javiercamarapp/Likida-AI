@@ -10,6 +10,7 @@ import { logger } from '@/lib/logger';
 import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 import { MAX_CHAT_BYTES } from '../chat/limites';
+import { respuestaSiPerfilNiegaApi } from '@/lib/auth/perfil_tenant';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -60,6 +61,9 @@ export async function POST(req: NextRequest) {
   // `resolverTenantApi`. Sin `?tenant=` sigue siendo 403 real.
   if (!efectivo) return NextResponse.json({ error: 'sin acceso' },
     { status: req.nextUrl.searchParams.get('tenant') ? 503 : 403 });
+  const negadoPerfil = await respuestaSiPerfilNiegaApi(efectivo.tenantId, req.url);
+  if (negadoPerfil) return negadoPerfil;
+
 
   if (!(await rateLimit(`onboarding-chat:${sesion.userId}`, TURNOS_POR_MINUTO, 60_000))) {
     return NextResponse.json({ error: 'demasiados turnos seguidos; espera un minuto' }, { status: 429 });
