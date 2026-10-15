@@ -151,6 +151,11 @@ describe('exportarDocumentos: solo lo aprobado', () => {
     expect(r.mime).toBe('text/csv; charset=utf-8');
   });
 
+  it('el nombre del archivo lleva el día de México: a las 19:00 MX del 15 (01:00 UTC del 16) sigue siendo el 15', () => {
+    const r = exportarDocumentos([{ doc: docAprobado(), viajeFolio: null }], 'csv', cfg(), 'Estandar', new Date('2026-10-16T01:00:00Z'));
+    expect(r.nombreArchivo).toBe('carta-porte-estandar-2026-10-15.csv');
+  });
+
   it('json', () => {
     const r = exportarDocumentos([{ doc: docAprobado(), viajeFolio: null }], 'json', cfg(), 'x');
     expect(r.nombreArchivo.endsWith('.json')).toBe(true);

@@ -18,6 +18,7 @@
 
 import * as XLSX from 'xlsx';
 import { z } from 'zod';
+import { hoyMx } from '@/lib/formato';
 import { CLAVES_DOC, CLAVES_MERCANCIA, campoDoc, campoMercancia, type CampoValor } from './campos';
 import { llaveTexto } from './catalogos';
 import { normalizarNumero } from './normalizar';
@@ -313,7 +314,7 @@ export function exportarDocumentos(
     else listos.push(aExportable(doc, viajeFolio));
   }
   const filas = construirFilas(listos, cfg);
-  const fecha = ahora.toISOString().slice(0, 10);
+  const fecha = hoyMx(ahora);   // el día de México, no el de UTC (a las 19:00 MX ya es mañana en UTC)
   const comunes = { nombreArchivo: `carta-porte-${nombreSeguro(nombreConfig)}-${fecha}.${formato}`, filas: filas.length, documentos: listos.length, omitidos };
   if (formato === 'xlsx') return { ...comunes, contenido: aXlsx(filas, cfg), mime: MIME_XLSX };
   return {

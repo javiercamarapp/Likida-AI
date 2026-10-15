@@ -10,6 +10,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { normalizar } from '../entrada';
 import { clasificarPorReglas } from '../intencion';
+import { hoyMx } from '@/lib/formato';
 import type { MensajeHistorial } from './export_whatsapp';
 
 /** Temas de servicio: los que el equipo atiende y de los que se pueden preparar respuestas rápidas. */
@@ -152,9 +153,9 @@ export interface ReporteHistorial {
 
 const VENTANA_RESPUESTA_MIN = 60;
 
-/** Lunes (UTC) de la semana del instante, como YYYY-MM-DD. */
+/** Lunes de la semana del instante EN HORA DE MÉXICO, como YYYY-MM-DD (un domingo 19:00 MX ya es lunes en UTC y no cambia de semana). */
 export function semanaDe(iso: string): string {
-  const d = new Date(iso);
+  const d = new Date(`${hoyMx(new Date(iso))}T00:00:00Z`);   // el día calendario de México, tratado como fecha pura
   const dia = (d.getUTCDay() + 6) % 7;
   d.setUTCDate(d.getUTCDate() - dia);
   return d.toISOString().slice(0, 10);
