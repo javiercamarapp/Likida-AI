@@ -424,6 +424,12 @@ export function filaAViajeTablero(f: Fila): ViajeTablero {
 
 export const TOPE_VIAJES_TABLERO = 400;
 
+/** La última posición de una unidad, tal como la pinta el tablero («pin» = ubicación enviada por WhatsApp). */
+export interface PosicionTablero { lat: number; lng: number; medidaEn: string; fuente: 'gps' | 'pin' }
+
+/** Hasta aquí atrás se acepta una posición como «reciente» para el tablero (la RPC ya acota a 12 h). */
+const VENTANA_POSICION_TABLERO_MS = 12 * 3_600_000;
+
 export interface DatosTablero {
   viajes: ViajeTablero[];
   /** Hay más viajes activos que los listados (el tablero lo dice; no esconde el resto). */
@@ -433,6 +439,10 @@ export interface DatosTablero {
   evidencias: EvidenciaFila[];
   acciones: AccionOficinaFila[];
   sitios: Map<string, string>;
+  /** T-A5-11: coordenadas de los sitios de los viajes listados (para «a 3.2 km de …»). Ausente = no se leyeron. */
+  sitiosCoords?: Map<string, { nombre: string; lat: number; lng: number }>;
+  /** T-A5-11: la última posición conocida por unidad (últimas 12 h). Ausente = no se pudo leer: el tablero no afirma «sin GPS». */
+  posiciones?: Map<string, PosicionTablero>;
   /** Niveles de escalamiento sin a quién avisar, por terminal de los viajes listados. Ausente = no se pudo leer: el tablero no inventa una alerta. */
   sinDestino?: NivelSinDestino[];
 }
@@ -456,9 +466,29 @@ export async function leerDatosTablero(tenantId: string, f: FiltrosTablero = {})
   ]);
   const sitioIds = [...new Set(viajes.flatMap((v) => [v.origenSitioId, v.destinoSitioId]).filter((x): x is string => !!x))];
   const sitios = new Map<string, string>();
+  const sitiosCoords = new Map<string, { nombre: string; lat: number; lng: number }>();
   if (sitioIds.length > 0) {
-    const rs = await traerPorIds<Fila>(sitioIds, (t) => acotada(supabaseAdmin().from('geocerca').select('id, nombre').eq('tenant_id', tenantId).in('id', t), 'tablero.sitios') as never, 'tablero.sitios');
-    for (const g of rs) sitios.set(String(g.id), String(g.nombre));
+    const rs = await traerPorIds<Fila>(sitioIds, (t) => acotada(supabaseAdmin().from('geocerca').select('id, nombre, lat, lng').eq('tenant_id', tenantId).in('id', t), 'tablero.sitios') as never, 'tablero.sitios');
+    for (const g of rs) {
+      sitios.set(String(g.id), String(g.nombre));
+      const lat = Number(g.lat), lng = Number(g.lng);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) sitiosCoords.set(String(g.id), { nombre: String(g.nombre), lat, lng });
+    }
+  }
+  // T-A5-11 «dónde está»: la última posición por unidad. Si la lectura falla NO se inventa «sin GPS»: queda ausente y la fila lo dice.
+  let posiciones: Map<string, PosicionTablero> | undefined;
+  try {
+    const { getUltimasPosiciones } = await import('../comercial');
+    const unidades = new Set(viajes.map((v) => v.unidadId).filter((x): x is string => !!x));
+    const desde = Date.now() - VENTANA_POSICION_TABLERO_MS;
+    posiciones = new Map();
+    for (const p of await getUltimasPosiciones(tenantId)) {
+      if (!unidades.has(p.unidadId) || !(Date.parse(p.medidaEn) >= desde)) continue;
+      posiciones.set(p.unidadId, { lat: p.lat, lng: p.lng, medidaEn: p.medidaEn, fuente: p.proveedor === 'whatsapp' ? 'pin' : 'gps' });
+    }
+  } catch (e) {
+    posiciones = undefined;
+    logger.warn('conductor.tablero_posiciones_no_leidas', { err: e instanceof Error ? e.message : String(e) });
   }
   let sinDestino: NivelSinDestino[] | undefined;
   try {
@@ -471,7 +501,7 @@ export async function leerDatosTablero(tenantId: string, f: FiltrosTablero = {})
   } catch (e) {
     logger.warn('conductor.tablero_escalamiento_no_leido', { err: e instanceof Error ? e.message : String(e) });
   }
-  return { viajes, hayMas, hitos: hitosCrudos.map(filaAHito), veredictos, evidencias, acciones, sitios, sinDestino };
+  return { viajes, hayMas, hitos: hitosCrudos.map(filaAHito), veredictos, evidencias, acciones, sitios, sitiosCoords, posiciones, sinDestino };
 }
 
 export interface CatalogosFiltro {

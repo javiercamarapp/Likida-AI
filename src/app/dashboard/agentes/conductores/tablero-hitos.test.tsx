@@ -232,3 +232,18 @@ describe('CERO pesos en la pantalla del jefe de tráfico (área operación)', ()
     if (!ruta.endsWith('page.tsx')) expect(FUENTES[ruta]).not.toMatch(/montoPropuesto|tarifaHora/);
   });
 });
+
+describe('el tablero de hitos — «dónde está» en cada tarjeta (T-A5-11)', () => {
+  const pos = new Map([['u1', { lat: 20.02878, lng: -103.0, medidaEn: hace(12), fuente: 'gps' as const }]]);
+  const extra = { sitiosCoords: new Map([['s1', { nombre: 'Planta Norte', lat: 20.0, lng: -103.0 }]]), posiciones: pos };
+
+  it('pinta la última posición con la antigüedad y el sitio', () => {
+    const html = pintar(datos([V('1', { unidadId: 'u1', origenSitioId: 's1' })], H('1', {}), extra));
+    expect(html).toContain('Última posición: hace 12 min · a 3.2 km de Planta Norte');
+  });
+
+  it('sin posición dice que el GPS no ha reportado', () => {
+    const html = pintar(datos([V('1', { unidadId: 'u1' })], H('1', {}), { posiciones: new Map() }));
+    expect(html).toContain('Sin posición reciente (el GPS de esta unidad no ha reportado)');
+  });
+});

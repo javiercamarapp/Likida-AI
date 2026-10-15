@@ -1,6 +1,7 @@
 import type { ConfigConductor } from './config';
 import { calcularEstancias, excedeUmbral, type Estancia } from './estadias_anden';
 import { hitoActivo } from './maquina';
+import { haversineM } from './geo';
 import { aplicarPerfil } from './perfil';
 import { anclaDe, textoTiempo } from './planificador';
 import type { AccionOficinaFila, DatosTablero, IndicadoresCrudos, ViajeTablero, VeredictoFila } from './repo_validacion';
@@ -84,6 +85,62 @@ export interface FilaTablero {
   /** Sitios (nombres) contra los que se valida la carga y la descarga. */
   sitioCarga: string | null;
   sitioDescarga: string | null;
+  /** T-A5-11 «dónde está»: la última posición de la unidad, lista para pintar. Nunca inventa. */
+  ubicacion: UbicacionFila;
+}
+
+/** Pasados estos minutos la última posición se marca obsoleta (sigue siendo la última conocida: se marca, no se esconde). */
+export const MINUTOS_POSICION_OBSOLETA = 45;
+
+export interface UbicacionFila {
+  /** «hace 12 min»; null si no hay posición. */
+  hace: string | null;
+  /** Nombre del sitio (carga/descarga del viaje) más cercano, o null si no hay sitio con coordenadas. */
+  sitioMasCercano: string | null;
+  distanciaM: number | null;
+  fuente: 'gps' | 'pin' | 'sin_dato';
+  obsoleta: boolean;
+  /** La frase completa que pinta la pantalla. */
+  texto: string;
+}
+
+export const TEXTO_SIN_POSICION = 'Sin posición reciente (el GPS de esta unidad no ha reportado)';
+export const TEXTO_POSICION_NO_LEIDA = 'No se pudo consultar la posición ahora mismo (no significa que la unidad no tenga GPS)';
+
+function haceTexto(min: number): string {
+  if (min < 1) return 'hace menos de 1 min';
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60), m = min % 60;
+  return m === 0 ? `hace ${h} h` : `hace ${h} h ${m} min`;
+}
+
+function distanciaTexto(m: number): string {
+  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
+}
+
+/** Arma «Última posición: hace 12 min · a 3.2 km de <sitio>». Puro; sin coordenadas en el texto (no se loguean ni se pintan). */
+export function ubicacionDeFila(viaje: ViajeTablero, datos: DatosTablero, ahora: Date): UbicacionFila {
+  const vacia = (texto: string): UbicacionFila => ({ hace: null, sitioMasCercano: null, distanciaM: null, fuente: 'sin_dato', obsoleta: false, texto });
+  if (!datos.posiciones) return vacia(TEXTO_POSICION_NO_LEIDA);
+  const p = viaje.unidadId ? datos.posiciones.get(viaje.unidadId) : undefined;
+  if (!p) return vacia(viaje.unidadId ? TEXTO_SIN_POSICION : 'Sin tractor asignado: no hay posición que mostrar');
+  const t = Date.parse(p.medidaEn);
+  if (!Number.isFinite(t) || !Number.isFinite(p.lat) || !Number.isFinite(p.lng)) return vacia(TEXTO_SIN_POSICION);
+  const min = Math.max(0, Math.floor((ahora.getTime() - t) / MS_MIN));
+  let cercano: { nombre: string; d: number } | null = null;
+  for (const id of [viaje.origenSitioId, viaje.destinoSitioId]) {
+    const s = id ? datos.sitiosCoords?.get(id) : undefined;
+    if (!s) continue;
+    const d = haversineM(p, s);
+    if (!cercano || d < cercano.d) cercano = { nombre: s.nombre, d };
+  }
+  const hace = haceTexto(min);
+  const obsoleta = min > MINUTOS_POSICION_OBSOLETA;
+  const partes = [`Última posición: ${hace}`];
+  if (cercano) partes.push(`a ${distanciaTexto(cercano.d)} de ${cercano.nombre}`);
+  if (p.fuente === 'pin') partes.push('ubicación enviada por WhatsApp');
+  if (obsoleta) partes.push('obsoleta');
+  return { hace, sitioMasCercano: cercano?.nombre ?? null, distanciaM: cercano ? Math.round(cercano.d) : null, fuente: p.fuente, obsoleta, texto: partes.join(' · ') };
 }
 
 export interface ConteosSemaforo { completo: number; a_tiempo: number; atrasado: number; sin_reporte: number; sin_ancla: number }
@@ -200,6 +257,7 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
       viaje, hitos: vistas, semaforo, motivo, hitoActivo: activo?.tipo ?? null, minutosVencido, estancias,
       sitioCarga: viaje.origenSitioId ? datos.sitios.get(viaje.origenSitioId) ?? null : null,
       sitioDescarga: viaje.destinoSitioId ? datos.sitios.get(viaje.destinoSitioId) ?? null : null,
+      ubicacion: ubicacionDeFila(viaje, datos, ahora),
     });
 
     // ── La cola de excepciones ───────────────────────────────────────────
