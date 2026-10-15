@@ -1,5 +1,5 @@
 import { mxn } from '@/lib/formato';
-import { normalizarNombre, normalizarTag } from './formatos';
+import { normalizarNombre, normalizarTag, llaveUnidad } from './formatos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS REGLAS DE REVISIÓN DE COBROS — «¿este cobro del proveedor es correcto?»
@@ -32,7 +32,11 @@ import { normalizarNombre, normalizarTag } from './formatos';
 //                            caseta en ≤ 10 min): ese puede ser un retorno o un carril.
 //   tag_dado_de_baja         cruce posterior a la baja del TAG (unidad siniestrada, TAG
 //                            cancelado): la flota ya no debería recibir cargos con él.
-//   caseta_no_debe_cruzarse  la caseta está en la lista de casetas prohibidas de la flota.
+//   caseta_no_debe_cruzarse  la caseta está en la lista de casetas prohibidas de la flota, salvo las
+//                            UNIDADES que la flota exceptúe para esa caseta (p. ej. la camioneta de
+//                            rescates). Un cruce revisado se puede JUSTIFICAR con un motivo: sigue en
+//                            la lista (historial), rotulado. Con la lista vacía la regla va a
+//                            `reglasNoAplicadas` («no hay casetas prohibidas configuradas»).
 //
 // PURO: sin base, sin red. El I/O vive en `revision_cobros.ts`.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -98,6 +102,16 @@ export interface ReglasCobro {
   tagsBaja?: ReadonlyMap<string, string>;
   /** Casetas (nombre normalizado) que la flota no debe cruzar. */
   casetasNoCruzar?: ReadonlySet<string>;
+  /**
+   * Excepciones por UNIDAD de las casetas que no deben cruzarse: caseta (nombre normalizado) → unidades
+   * (normalizadas con `normalizarNombre`) a las que NO se les marca el cruce. Una línea sin unidad no se exceptúa.
+   */
+  excepcionesPorUnidad?: ReadonlyMap<string, ReadonlySet<string>>;
+  /**
+   * Cruces revisados con motivo: `indice` de la línea → motivo. Solo aplica a `caseta_no_debe_cruzarse`.
+   * El candidato NO desaparece: sigue en la lista con `justificacion`.
+   */
+  justificados?: ReadonlyMap<number, string>;
 }
 
 export interface CandidatoCobro {
@@ -118,6 +132,8 @@ export interface CandidatoCobro {
   queHacer: string;
   /** Dato crudo de apoyo para el Excel (línea del primer cobro, fecha de baja, inicio del periodo…). */
   referencia: string;
+  /** Solo si alguien revisó este cruce y lo justificó: el motivo. El candidato sigue en el historial. */
+  justificacion?: string;
 }
 
 export interface ReglaNoAplicada { regla: CategoriaCobro; motivo: string }
@@ -173,6 +189,8 @@ export function revisarCobros(lineas: readonly LineaCobro[], reglas: ReglasCobro
   const periodoDesde = reglas.periodoDesde ?? null;
   const tagsBaja = reglas.tagsBaja ?? new Map<string, string>();
   const noCruzar = reglas.casetasNoCruzar ?? new Set<string>();
+  const exceptuadas = reglas.excepcionesPorUnidad ?? new Map<string, ReadonlySet<string>>();
+  const justificados = reglas.justificados ?? new Map<number, string>();
 
   const candidatos: CandidatoCobro[] = [];
   const reglasNoAplicadas: ReglaNoAplicada[] = [];
@@ -198,6 +216,10 @@ export function revisarCobros(lineas: readonly LineaCobro[], reglas: ReglasCobro
   }
   if (tagsBaja.size > 0 && conTag === 0) {
     reglasNoAplicadas.push({ regla: 'tag_dado_de_baja', motivo: 'El archivo no trae TAG: no se pueden comparar contra los TAGs dados de baja.' });
+  }
+
+  if (noCruzar.size === 0) {
+    reglasNoAplicadas.push({ regla: 'caseta_no_debe_cruzarse', motivo: 'No hay casetas prohibidas configuradas: la flota decide cuáles no deben cruzarse (Configuración → Reglas de cobro). Nada viene precargado.' });
   }
 
   // ── Clase fuera de {3,5} ──────────────────────────────────────────────────
@@ -272,13 +294,18 @@ export function revisarCobros(lineas: readonly LineaCobro[], reglas: ReglasCobro
   // ── Caseta que no debe cruzarse ───────────────────────────────────────────
   if (noCruzar.size > 0) {
     for (const l of lineas) {
-      if (!l.caseta || !noCruzar.has(normCaseta(l.caseta))) continue;
+      if (!l.caseta) continue;
+      const norm = normCaseta(l.caseta);
+      if (!noCruzar.has(norm)) continue;
+      if (l.unidad && exceptuadas.get(norm)?.has(llaveUnidad(l.unidad))) continue;
+      const justificacion = justificados.get(l.indice);
       candidatos.push({
         ...base(l), categoria: 'caseta_no_debe_cruzarse',
         quePaso: `${quien(l)} cruzó ${nombreCaseta(l)}${cuando(l)} (${mxn(l.monto)}), una caseta que la flota marcó como «no debe cruzarse».`,
         queSignifica: 'La flota declaró esa caseta como prohibida o fuera de ruta. El cobro puede ser correcto: significa que la unidad pasó por donde no debía (o que la lista está desactualizada).',
         queHacer: 'Revisa con el operador o con el despacho si el cruce estaba autorizado. Si lo estaba, quita la caseta de la lista; si no, es un tema interno de la flota, no un reclamo al proveedor.',
         referencia: 'lista de casetas que no deben cruzarse',
+        ...(justificacion ? { justificacion } : {}),
       });
     }
   }

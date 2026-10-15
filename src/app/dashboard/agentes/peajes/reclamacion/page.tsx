@@ -9,7 +9,7 @@ import { hoyMx } from '@/lib/formato';
 import { reporteReclamacion } from '@/lib/likida/peajes/bitacora_conciliada';
 import type { ReporteReclamacion } from '@/lib/likida/peajes/reclamacion';
 import {
-  revisionDeDesglose, cierreMensualDeFlota, listarReclamos, crearReclamoDeCategoria, marcarReclamoEnviado, registrarNotaDeCredito, marcarReclamoRechazado,
+  revisionDeDesglose, cierreMensualDeFlota, listarReclamos, crearReclamoDeCategoria, marcarReclamoEnviado, registrarNotaDeCredito, marcarReclamoRechazado, justificarCruce,
   type ReporteRevision, type ReclamoVista,
 } from '@/lib/likida/peajes/revision_cobros';
 import type { CierreMensual } from '@/lib/likida/peajes/cierre_mensual';
@@ -81,6 +81,15 @@ export default async function PaginaReclamacionPeajes({
     });
     volver(r.ok ? 'Nota de crédito registrada.' : `error:${r.motivo}`);
   }
+  async function accionJustificarCruce(fd: FormData) {
+    'use server';
+    const no = await puerta();
+    const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
+    if (no) volver(`error:${no}`, UUID.test(desgloseId) ? desgloseId : undefined);
+    if (!UUID.test(desgloseId)) volver('error:Falta el desglose del cruce.');
+    const r = await justificarCruce(tenantId, { desgloseId, indice: Number(String(fd.get('indice') ?? '').trim()), motivo: String(fd.get('motivo') ?? '') });
+    volver(r.ok ? 'Cruce justificado. Sigue en el historial, marcado con su motivo.' : `error:${r.motivo}`, desgloseId);
+  }
   async function accionRechazar(fd: FormData) {
     'use server';
     const no = await puerta();
@@ -136,7 +145,7 @@ export default async function PaginaReclamacionPeajes({
       sufijo={sufijo} desglose={desgloseValido} estado={estado} reporte={reporte}
       extras={{
         revision, errorGps, mes, cierre, errorCierre, seguimiento, errorSeguimiento,
-        acciones: { crearReclamo: accionCrearReclamo, marcarEnviado: accionMarcarEnviado, registrarNota: accionRegistrarNota, rechazar: accionRechazar },
+        acciones: { crearReclamo: accionCrearReclamo, marcarEnviado: accionMarcarEnviado, registrarNota: accionRegistrarNota, rechazar: accionRechazar, justificarCruce: accionJustificarCruce },
         aviso: sp.aviso?.slice(0, 300) ?? null, error: sp.error?.slice(0, 300) ?? null,
       }}
     />
