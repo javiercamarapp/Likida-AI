@@ -162,7 +162,7 @@ export function probarTmsApiLectura(v: ValoresCredencial, http: Http): Promise<R
     }
     const cuerpoLogin = jsonObjeto(login.cuerpo);
     const token = cuerpoLogin ? extraerToken(cuerpoLogin) : null;
-    if (token === null) {
+    if (typeof token !== 'string') {
       return resultado(false, `${nombre} contestó 200 al iniciar sesión, pero no con un token que se pueda usar. Suele ser un portal o un proxy en medio. NO se puede afirmar que la credencial sirva.`, endpointLogin, 'no_se_sabe');
     }
 
