@@ -36,6 +36,7 @@ const EXCEPCION: Record<TipoExcepcion, string> = {
   escalado_sin_atender: 'Escalado sin atender', sin_reporte: 'Sin reporte', atrasado: 'Atrasado', sin_coincidencia: 'Ubicación sin coincidencia',
   llegada_sin_confirmar: 'Llegada sin confirmar', llegada_sin_sitio: 'Llegada sin sitio para conciliar',
   estadia_excedida: 'Estadía excedida', horas_incoherentes: 'Horas incoherentes', sin_a_quien_escalar: 'Sin a quién escalar',
+  pendiente_cruce_largo: 'Pendiente de cruce por mucho tiempo',
 };
 const GRAVEDAD: Record<1 | 2 | 3, { texto: string; color: string }> = {
   3: { texto: 'Urgente', color: 'var(--bad)' }, 2: { texto: 'Revisar', color: 'var(--warn)' }, 1: { texto: 'Vigilar', color: 'var(--muted)' },
@@ -291,6 +292,12 @@ export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios }: {
         {f.ubicacion.fuente === 'sin_dato' ? <MapPinOff size={13} aria-hidden /> : <MapPin size={13} aria-hidden />}
         {f.ubicacion.texto}
       </p>
+      {f.transito && (
+        <p className="text-[12px] flex items-center gap-1.5" style={{ color: 'var(--muted)' }} aria-label="Tránsito">
+          <Flag size={13} aria-hidden />
+          <span className="font-medium">Tránsito:</span> {f.transito.texto}
+        </p>
+      )}
       {(f.sitioCarga || f.sitioDescarga) ? (
         <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Se valida contra: {f.sitioCarga ?? 'carga sin sitio asignado'} → {f.sitioDescarga ?? 'descarga sin sitio asignado'}</p>
       ) : (

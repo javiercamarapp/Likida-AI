@@ -19,7 +19,7 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { revalidatePath } from 'next/cache';
 import { FormaEstrategiaConductores, type ResultadoEstrategia } from '../estrategia-forma';
 import { Bloque, EsqTabla, vigilar } from '../../bloque';
-import { leerConfigConductor, leerDatosPreflight, leerEpisodiosParaTablero } from '@/lib/likida/conductor/repo';
+import { leerConfigConductor, leerDatosPreflight, leerEpisodiosParaTablero, leerTransitoViajes } from '@/lib/likida/conductor/repo';
 import { evaluarPreflight } from '@/lib/likida/conductor/preflight_piloto';
 import { BannerPreflight } from './configuracion/preflight';
 import { leerCatalogosFiltro, leerDatosTablero, leerIndicadores, listarSitios, type FiltrosTablero } from '@/lib/likida/conductor/repo_validacion';
@@ -169,7 +169,11 @@ export default async function PaginaAgenteConductores({
   };
   const puedeActuar = puedeAsignar(rol);
   const pTablero = vigilar(Promise.all([leerDatosTablero(tenantId, filtrosRepo), leerConfigConductor(tenantId)])
-    .then(([datos, config]) => filtrarPorSemaforo(armarTablero(datos, config, new Date()), filtrosVista.semaforo || null)));
+    .then(async ([datos, config]) => {
+      // T-A5-21: los estados de frontera solo se leen con la casilla encendida (informativos; no avisan a nadie).
+      if (config.mostrarEstadosFrontera) datos.transito = await leerTransitoViajes(tenantId, datos.viajes.map((v) => v.id));
+      return filtrarPorSemaforo(armarTablero(datos, config, new Date()), filtrosVista.semaforo || null);
+    }));
   const pIndicadores = safe(async () => {
     const hasta = new Date();
     return indicadoresVista(await leerIndicadores(tenantId, new Date(hasta.getTime() - filtrosVista.dias * 86_400_000), new Date(hasta.getTime() + 60_000), filtrosRepo));

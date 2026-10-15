@@ -1,4 +1,5 @@
 import type { ConfigConductor } from './config';
+import type { EstadoTransito } from './estados_transito';
 import { calcularEstancias, excedeUmbral, type Estancia } from './estadias_anden';
 import { hitoActivo } from './maquina';
 import { haversineM } from './geo';
@@ -59,7 +60,7 @@ export interface HitoVista {
 }
 
 export type TipoExcepcion =
-  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'llegada_sin_confirmar' | 'llegada_sin_sitio' | 'estadia_excedida' | 'horas_incoherentes' | 'sin_a_quien_escalar';
+  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'llegada_sin_confirmar' | 'llegada_sin_sitio' | 'estadia_excedida' | 'horas_incoherentes' | 'sin_a_quien_escalar' | 'pendiente_cruce_largo';
 
 export interface Excepcion {
   tipo: TipoExcepcion;
@@ -87,6 +88,17 @@ export interface FilaTablero {
   sitioDescarga: string | null;
   /** T-A5-11 «dónde está»: la última posición de la unidad, lista para pintar. Nunca inventa. */
   ubicacion: UbicacionFila;
+  /** T-A5-21: estado de tránsito (frontera) informativo. `null` con la casilla apagada o sin dato: la columna no se pinta. */
+  transito: TransitoFila | null;
+}
+
+/** T-A5-21: lo que pinta la columna «Tránsito». Solo se lee: NO genera avisos al chofer ni escalamiento. */
+export interface TransitoFila {
+  estado: EstadoTransito;
+  /** «En patio NLD desde hace 7 h» (o «… (sin fecha de actualización)»). */
+  texto: string;
+  /** Minutos que lleva en ese estado; `null` si la fuente no dio fecha. */
+  minutos: number | null;
 }
 
 /** Pasados estos minutos la última posición se marca obsoleta (sigue siendo la última conocida: se marca, no se esconde). */
@@ -176,6 +188,28 @@ function aVeredicto(v: VeredictoFila): Veredicto {
 
 const nombreChofer = (v: ViajeTablero): string => (v.operadorNombre ?? 'El chofer').replace(/\s+/g, ' ').trim() || 'El chofer';
 
+
+const TOPE_TEXTO_TRANSITO = 40;
+
+/** Arma «En patio NLD desde hace 7 h». Puro. El complemento del patio sale del texto crudo de la fuente; nunca se inventa. */
+export function transitoDeFila(
+  d: { estado: EstadoTransito; textoOrigen: string | null; actualizadoEn: string | null },
+  ahora: Date,
+): TransitoFila {
+  const crudo = (d.textoOrigen ?? '').replace(/\s+/g, ' ').trim().slice(0, TOPE_TEXTO_TRANSITO);
+  let etiqueta: string;
+  if (d.estado === 'en_patio') {
+    const resto = /^(?:en\s+)?patio\s+(.+)$/i.exec(crudo)?.[1];
+    etiqueta = resto ? `En patio ${resto}` : 'En patio';
+  } else if (d.estado === 'en_ruta') etiqueta = 'En ruta';
+  else if (d.estado === 'pendiente_cruce') etiqueta = 'Pendiente de cruce';
+  else etiqueta = crudo ? `Tránsito: ${crudo}` : 'Tránsito sin clasificar';
+  const t = d.actualizadoEn ? Date.parse(d.actualizadoEn) : NaN;
+  if (!Number.isFinite(t)) return { estado: d.estado, texto: `${etiqueta} (sin fecha de actualización)`, minutos: null };
+  const minutos = Math.max(0, Math.floor((ahora.getTime() - t) / MS_MIN));
+  return { estado: d.estado, texto: `${etiqueta} ${haceTexto(minutos).replace('hace ', 'desde hace ')}`, minutos };
+}
+
 export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora: Date): Tablero {
   const hitosPorViaje = new Map<string, HitoFila[]>();
   for (const h of datos.hitos) hitosPorViaje.set(h.viajeId, [...(hitosPorViaje.get(h.viajeId) ?? []), h]);
@@ -258,11 +292,16 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
       };
     });
 
+    // T-A5-21: informativo. Solo con la casilla encendida y con dato; no toca semáforo, hitos ni avisos.
+    const dt = config.mostrarEstadosFrontera ? datos.transito?.get(viaje.id) : undefined;
+    const transito = dt ? transitoDeFila(dt, ahora) : null;
+
     filas.push({
       viaje, hitos: vistas, semaforo, motivo, hitoActivo: activo?.tipo ?? null, minutosVencido, estancias,
       sitioCarga: viaje.origenSitioId ? datos.sitios.get(viaje.origenSitioId) ?? null : null,
       sitioDescarga: viaje.destinoSitioId ? datos.sitios.get(viaje.destinoSitioId) ?? null : null,
       ubicacion: ubicacionDeFila(viaje, datos, ahora),
+      transito,
     });
 
     // ── La cola de excepciones ───────────────────────────────────────────
@@ -314,6 +353,13 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
           texto: `${nombreChofer(viaje)} no ha contestado por «${ETIQUETA[activo.tipo].corta}» (${textoTiempo(minutosVencido ?? 0)}).`,
         });
       }
+    }
+    const umbralH = config.umbralPendienteCruceH ?? null;
+    if (transito && transito.estado === 'pendiente_cruce' && umbralH !== null && transito.minutos !== null && transito.minutos >= umbralH * 60) {
+      excepciones.push({
+        ...base, tipo: 'pendiente_cruce_largo', hitoId: null, hitoTipo: null, gravedad: 1, desde: dt?.actualizadoEn ?? null,
+        texto: `${transito.texto} (umbral configurado: ${textoTiempo(umbralH * 60)}). Es solo lectura: el agente no avisa por esto.`,
+      });
     }
     for (const e of estancias) {
       if (excedeUmbral(e, config)) {

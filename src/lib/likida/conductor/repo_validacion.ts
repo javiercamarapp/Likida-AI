@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { exigir, traerPorIds, traerTodo } from '../pg';
-import { COLUMNAS_HITO, cargarContactosTrafico, filaAHito } from './repo';
+import { COLUMNAS_HITO, cargarContactosTrafico, filaAHito, type TransitoViaje } from './repo';
 import type { NivelSinDestino } from './escalamiento';
 import { coordenadasValidas } from './geo';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from './geometria_datos';
@@ -455,6 +455,8 @@ export interface DatosTablero {
   sitiosCoords?: Map<string, { nombre: string; lat: number; lng: number }>;
   /** T-A5-11: la última posición conocida por unidad (últimas 12 h). Ausente = no se pudo leer: el tablero no afirma «sin GPS». */
   posiciones?: Map<string, PosicionTablero>;
+  /** T-A5-21: estado de tránsito (frontera) por viaje. Ausente = no se leyó (casilla apagada o lectura caída): no se afirma nada. */
+  transito?: Map<string, TransitoViaje>;
   /** Niveles de escalamiento sin a quién avisar, por terminal de los viajes listados. Ausente = no se pudo leer: el tablero no inventa una alerta. */
   sinDestino?: NivelSinDestino[];
 }

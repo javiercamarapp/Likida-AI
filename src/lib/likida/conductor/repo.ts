@@ -14,6 +14,7 @@ import { aHitoApi, type EventoApi, type FiltrosHitos, type HitoApi, type CambioC
 import type { AvisoReclamado } from './planificador';
 import type { ContactoTrafico } from './escalamiento';
 import type { EpisodioFila } from './senal_vida';
+import type { EstadoTransito } from './estados_transito';
 import type { MotivoSenalVida } from './solicitudes';
 import type { RespuestaSenalVida } from './tipos';
 import type { FiltrosTablero } from './repo_validacion';
@@ -1183,3 +1184,31 @@ export async function leerDatosPreflight(tenantId: string, ahora: Date = new Dat
     zonaDeclarada, voluntarios: voluntarios.map((o) => ({ telefono: o.telefono })), viajes, posicionesPorUnidad, contactos,
   };
 }
+
+// ── T-A5-21: estado de tránsito (frontera) del tablero ──────────────────────
+
+export interface TransitoViaje { estado: EstadoTransito; textoOrigen: string | null; actualizadoEn: string | null }
+
+const ESTADOS_TRANSITO: readonly string[] = ['en_patio', 'en_ruta', 'pendiente_cruce', 'otro'];
+
+/**
+ * T-A5-21: lee el estado de tránsito de los viajes (columnas de la 0804). Solo se llama con la casilla encendida.
+ * Si la lectura falla devuelve `undefined` (nunca inventa «sin estado»): la fila simplemente no pinta la columna.
+ */
+export async function leerTransitoViajes(tenantId: string, viajeIds: readonly string[]): Promise<Map<string, TransitoViaje> | undefined> {
+  try {
+    const filas = viajeIds.length === 0 ? [] : await traerPorIds<Fila>([...viajeIds], (t) => acotada(supabaseAdmin()
+      .from('viaje').select('id, transito_estado, transito_actualizado_en, transito_texto_origen').eq('tenant_id', tenantId).in('id', t), 'tablero.transito') as never, 'tablero.transito');
+    const m = new Map<string, TransitoViaje>();
+    for (const f of filas) {
+      const e = String(f.transito_estado ?? '');
+      if (!ESTADOS_TRANSITO.includes(e)) continue;
+      m.set(String(f.id), { estado: e as EstadoTransito, textoOrigen: s(f.transito_texto_origen), actualizadoEn: s(f.transito_actualizado_en) });
+    }
+    return m;
+  } catch (e) {
+    logger.warn('conductor.tablero_transito_no_leido', { err: e instanceof Error ? e.message : String(e) });
+    return undefined;
+  }
+}
+
