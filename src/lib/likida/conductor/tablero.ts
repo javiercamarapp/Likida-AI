@@ -179,8 +179,8 @@ export interface Tablero {
 
 const MS_MIN = 60_000;
 
-/** T-A5-26: los datos de demostración del seed llevan folio `DEMO-…`; en pantalla se rotulan «SIMULADO» (nunca pasan por reales). */
-export const esFolioSimulado = (folio: string | null | undefined): boolean => typeof folio === 'string' && /^DEMO-/i.test(folio);
+/** T-A5-26: los datos de demostración del seed llevan folio `DEMO-…` (el prefijo anterior se sigue reconociendo); en pantalla se rotulan «SIMULADO» (nunca pasan por reales). */
+export const esFolioSimulado = (folio: string | null | undefined): boolean => typeof folio === 'string' && /^(DEMO|INN)-/i.test(folio);
 
 /** Cuánto se espera antes de mostrar una llegada sin respaldo como excepción: el GPS reporta con minutos de retraso. */
 export const MINUTOS_GRACIA_LLEGADA_SIN_CONFIRMAR = 10;

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { CONFIG_CONDUCTOR_DEFAULT } from '@/lib/likida/conductor/config';
 import { hitoVacio } from '@/lib/likida/conductor/memoria.fixture';
 import type { DatosTablero, ViajeTablero } from '@/lib/likida/conductor/repo_validacion';
-import { armarTablero, episodiosVista, indicadoresVista } from '@/lib/likida/conductor/tablero';
+import { armarTablero, episodiosVista, esFolioSimulado, indicadoresVista } from '@/lib/likida/conductor/tablero';
 import type { HitoFila, TipoHito } from '@/lib/likida/conductor/tipos';
 import { TableroHitos, TEXTO_SIN_GPS, TEXTO_SIN_TELEFONO, TEXTO_SIN_VIAJES, type FiltrosVista } from './tablero-hitos';
 
@@ -279,6 +279,12 @@ describe('el tablero de hitos — estados vacíos y avisos en lenguaje llano (T-
     const html = pintar(datos([V('1', { folio: 'DEMO-24001' }), V('2', { folio: 'F-2' })], [...H('1', {}), ...H('2', {})]));
     expect(html.match(/SIMULADO/g)?.length).toBe(1);
     expect(html).toMatch(/DEMO-24001<\/span><span[^>]*>SIMULADO/);
+  });
+
+  it('el prefijo anterior de los folios de demostración se sigue reconociendo como simulado', () => {
+    expect(esFolioSimulado('DEMO-24001')).toBe(true);
+    expect(esFolioSimulado('DEMO-24001')).toBe(true);
+    expect(esFolioSimulado('F-2')).toBe(false);
   });
 
   it('ningún texto técnico llega a la pantalla: ni nombres de columna, ni códigos con guion bajo, ni uuid', () => {
