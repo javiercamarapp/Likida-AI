@@ -320,6 +320,26 @@ function aDesglose(r: Fila): Desglose {
   };
 }
 
+/** El encabezado de UN desglose (para el detalle). `null` = no hay fila; `no_disponible` = no se pudo leer. */
+export async function leerDesglose(tenantId: string, liquidacionId: string): Promise<Lectura<Desglose | null>> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_desglose').select(COLS_DESGLOSE)
+    .eq('tenant_id', tenantId).eq('liquidacion_externa_id', liquidacionId).maybeSingle(), 'liqcorreo.desglose_leer');
+  const l = leer(res as unknown as { data: Fila | null; error: ErrorPg }, 'liqcorreo.desglose_leer');
+  if (!l.ok) return l;
+  return { ok: true, valor: l.valor ? aDesglose(l.valor) : null };
+}
+
+/**
+ * Quita la retención de un desglose (una persona decidió enviarlo). UPDATE condicionado a que siga retenido: dos clics seguidos
+ * no se pisan y la segunda llamada devuelve `false`.
+ */
+export async function liberarRetencionDesglose(tenantId: string, liquidacionId: string): Promise<boolean> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_desglose').update({ retenida_motivo: null })
+    .eq('tenant_id', tenantId).eq('liquidacion_externa_id', liquidacionId).not('retenida_motivo', 'is', null).select('liquidacion_externa_id'),
+  'liqcorreo.desglose_liberar');
+  return (exigirEscritura(res as unknown as { data: Fila[] | null; error: ErrorPg }, 'liqcorreo.desglose_liberar') ?? []).length > 0;
+}
+
 export interface FiltroDesgloses { bitacora?: string; terminal?: string; soloRetenidos?: boolean; limite?: number }
 export interface CursorLista { creadoEn: string; id: string }
 
@@ -559,11 +579,12 @@ export async function resolverExcepcion(tenantId: string, id: number, ahora: Dat
 }
 
 export async function listarExcepciones(
-  tenantId: string, opts: { soloAbiertas?: boolean; tipo?: TipoExcepcion; limite?: number } = {},
+  tenantId: string, opts: { soloAbiertas?: boolean; tipo?: TipoExcepcion; clave?: string; limite?: number } = {},
 ): Promise<Lectura<Excepcion[]>> {
   let q = supabaseAdmin().from('liquidacion_excepcion').select(COLS_EXCEPCION).eq('tenant_id', tenantId);
   if (opts.soloAbiertas !== false) q = q.is('resuelta_en', null);
   if (opts.tipo) q = q.eq('tipo', opts.tipo);
+  if (opts.clave) q = q.eq('clave_externa', opts.clave);
   const res = await acotada(q.order('ultima_vez', { ascending: false }).limit(Math.min(Math.max(Math.trunc(opts.limite ?? 100), 1), 500)), 'liqcorreo.excepciones_listar');
   const l = leer(res as unknown as { data: Fila[] | null; error: ErrorPg }, 'liqcorreo.excepciones_listar');
   if (!l.ok) return l;

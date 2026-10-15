@@ -24,12 +24,14 @@ import {
 } from '@/lib/likida/liquidacion_externa/repo';
 import { reintentarLiquidacionExterna, reenviarCopiaAJefe, reavisarDiscrepancia } from '@/lib/likida/liquidacion_externa/servicio';
 import { reenviarDesglose, type DestinoReenvio, type MotivoReenvio } from '@/lib/likida/liquidacion_externa/reenvio_correo';
+import { liberarEnvio } from '@/lib/likida/liquidacion_externa/liberar_envio';
 import { leerFormatoFlota, leerTelefonosFlota } from '@/lib/likida/liquidacion_externa/repo';
 import { importarLiquidacionesDeArchivo } from '@/lib/likida/liquidacion_externa/importar_archivo';
 import { decodificarCursor, codificarCursor } from '@/app/api/v1/_comun';
 import { SeccionExternas, leerFiltroExterno, leerMensajeExterno } from './externas';
 import {
-  SeccionDesgloses, VistaDesgloses, leerFiltroDesglose, leerDia, destinosDe, cumpleFiltro,
+  SeccionDesgloses, VistaDesgloses, PanelDetalleDesglose, SeccionExcepciones, leerMensajeDesglose,
+  leerFiltroDesglose, leerDia, destinosDe, cumpleFiltro,
   type FiltroDesglose, type FilaDesglose, type FilaSinPoliza, type FichasDesgloses, type LecturaDesgloses,
 } from './desgloses';
 import {
@@ -37,6 +39,7 @@ import {
 } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { leerPorId } from '@/lib/likida/liquidacion_externa/repo';
 import { hoyMx, inicioDiaMx, finDiaMx } from '@/lib/formato';
+import { cargarDetalle, leerIdDetalle } from './detalle_desglose';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,6 +97,23 @@ async function fichasDesgloses(tenantId: string): Promise<FichasDesgloses> {
     retenidos,
     sinPoliza,
   };
+}
+
+/** Vuelve al detalle con el código del resultado en la URL (el texto lo pone la pantalla). Módulo, no cierre: una acción de servidor no puede capturar funciones. */
+function volverAlDetalle(contexto: Array<[string, string]>, id: string | null, codigo: string): never {
+  revalidatePath('/dashboard/agentes/liquidacion');
+  const params: Array<[string, string]> = [...contexto, ...(id ? [['des_det', id] as [string, string]] : []), ['des_msg', codigo]];
+  redirect(`/dashboard/agentes/liquidacion?${new URLSearchParams(params).toString()}#detalle-desglose`);
+}
+
+/** Las excepciones abiertas de la flota (las 50 más recientes). `null` = no se pudo leer: jamás «sin excepciones». */
+async function cargarExcepciones(tenantId: string) {
+  try {
+    const r = await listarExcepciones(tenantId, { limite: 50 });
+    return r.ok ? r.valor : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -193,6 +213,8 @@ export default async function PaginaAgenteLiquidacion({
     ext_estado?: string; ext_cursor?: string; ext_msg?: string; ext_imp?: string; ext_det?: string;
     // La lista de desgloses por correo (T-A1-28) tiene los suyos, con prefijo `des_`.
     des_estado?: string; des_desde?: string; des_hasta?: string; des_cursor?: string;
+    // El detalle de un desglose (T-A1-29): solo su id y el código del resultado de la última acción; nunca cifras.
+    des_det?: string; des_msg?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -210,6 +232,51 @@ export default async function PaginaAgenteLiquidacion({
     ...(sp.rol ? [['rol', sp.rol] as [string, string]] : []),
   ];
 
+  // ── ACCIONES DEL DETALLE DEL DESGLOSE (T-A1-29) ─────────────────────────
+  // Cada una re-gatea con la sesión REAL (es alcanzable por POST directo): ruta visible + tenant efectivo; `puedeAdministrar` lo exige
+  // además la librería. Vuelven SIEMPRE a la pantalla con un código de resultado en la URL (el texto lo pone la pantalla, no la URL).
+
+  /** Reenvía por correo el desglose de UNA liquidación («operador, no me da mi desglose»), con o sin correo corregido del operador. */
+  async function reenviarDesgloseExterno(fd: FormData): Promise<void> {
+    'use server';
+    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
+    const id = leerIdDetalle(String(fd.get('id') ?? ''));
+    const a = String(fd.get('a') ?? '');
+    const motivo = String(fd.get('motivo') ?? 'manual');
+    if (!id || !['operador', 'coordinador', 'rh', 'todos'].includes(a) || !['reclamo', 'correccion_de_correo', 'manual'].includes(motivo)) {
+      return volverAlDetalle(contexto, id, 'r_entrada');
+    }
+    let codigo = 'r_error';
+    try {
+      const r = await reenviarDesglose(s.tenantId, id, {
+        a: a as DestinoReenvio, motivo: motivo as MotivoReenvio, actor: { userId: s.userId, rol: s.rol },
+        correoNuevo: String(fd.get('correo_nuevo') ?? ''),
+      });
+      codigo = r.estado === 'reenviado' ? 'reenvio_ok' : `r_${r.motivo}`;
+    } catch {
+      codigo = 'r_error';
+    }
+    return volverAlDetalle(contexto, id, codigo);
+  }
+
+  /** Libera el envío de un desglose retenido (neto negativo, tipo sin regla): crea las entregas y deja al actor en la auditoría. */
+  async function liberarEnvioExterno(fd: FormData): Promise<void> {
+    'use server';
+    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
+    const id = leerIdDetalle(String(fd.get('id') ?? ''));
+    if (!id) return volverAlDetalle(contexto, null, 'r_entrada');
+    let codigo = 'r_error';
+    try {
+      const r = await liberarEnvio(s.tenantId, id, { userId: s.userId, rol: s.rol });
+      codigo = r.estado === 'liberado' ? 'liberado_ok' : `r_${r.motivo}`;
+    } catch {
+      codigo = 'r_error';
+    }
+    return volverAlDetalle(contexto, id, codigo);
+  }
+
   // ── DESGLOSE POR CORREO (T-A1-28) ───────────────────────────────────────
   // Una flota con el canal en correo ve la lista de desgloses EN LUGAR de los KPIs, la cola y la estrategia del flujo de fotos (se
   // ocultan, no se borran: otras flotas siguen igual). Sin configuración guardada el canal es `whatsapp` y todo queda como hoy.
@@ -219,11 +286,30 @@ export default async function PaginaAgenteLiquidacion({
     const hastaDes = leerDia(sp.des_hasta);
     const cursorDes = sp.des_cursor ? decodificarCursor(sp.des_cursor) : null;
     const lectura = cargarDesgloses(tenantId, filtroDes, desdeDes, hastaDes, cursorDes);
+    const idDetalle = leerIdDetalle(sp.des_det);
+    const paramsLista: Array<[string, string]> = [
+      ...(filtroDes ? [['des_estado', filtroDes] as [string, string]] : []),
+      ...(desdeDes ? [['des_desde', desdeDes] as [string, string]] : []),
+      ...(hastaDes ? [['des_hasta', hastaDes] as [string, string]] : []),
+    ];
     return (
       <VistaDesgloses
         desgloses={
           <Bloque mensaje="No se pudieron leer los desgloses." esqueleto={<EsqTabla filas={5} />}>
             <SeccionDesgloses lectura={lectura} filtro={filtroDes} desde={desdeDes} hasta={hastaDes} contexto={contexto} />
+          </Bloque>
+        }
+        detalle={idDetalle && (
+          <Bloque mensaje="No se pudo leer el detalle del desglose." esqueleto={<EsqTabla filas={5} />}>
+            <PanelDetalleDesglose
+              lectura={cargarDetalle(tenantId, idDetalle)} acciones={{ reenviar: reenviarDesgloseExterno, liberar: liberarEnvioExterno }}
+              mensaje={leerMensajeDesglose(sp.des_msg)} contexto={contexto} params={paramsLista}
+            />
+          </Bloque>
+        )}
+        excepciones={
+          <Bloque mensaje="No se pudieron leer las excepciones." esqueleto={<EsqTabla filas={3} />}>
+            <SeccionExcepciones excepciones={cargarExcepciones(tenantId)} contexto={contexto} />
           </Bloque>
         }
         notificaciones={
@@ -374,37 +460,6 @@ export default async function PaginaAgenteLiquidacion({
     revalidatePath('/dashboard/agentes/liquidacion');
     redirect(`/dashboard/agentes/liquidacion?${new URLSearchParams([...contexto, ['ext_msg', resultado]]).toString()}#liquidaciones-externas`);
   }
-
-  /** Reenvía por correo el desglose de UNA liquidación («operador, no me da mi desglose»). Re-gatea con la sesión REAL (es alcanzable
-   *  por POST directo): solo quien administra. Siempre vuelve a la pantalla con el resultado (o el motivo llano del rechazo) en la URL. */
-  async function reenviarDesgloseExterno(fd: FormData): Promise<void> {
-    'use server';
-    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
-    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
-    const id = String(fd.get('id') ?? '');
-    const a = String(fd.get('a') ?? '');
-    const motivo = String(fd.get('motivo') ?? 'manual');
-    const params: Array<[string, string]> = [...contexto];
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
-      || !['operador', 'coordinador', 'rh', 'todos'].includes(a)
-      || !['reclamo', 'correccion_de_correo', 'manual'].includes(motivo)) {
-      params.push(['ext_msg', 'reenvio_rechazado'], ['ext_det', 'No entendí qué desglose reenviar. Vuelve a elegirlo.']);
-    } else {
-      try {
-        const r = await reenviarDesglose(s.tenantId, id.toLowerCase(), {
-          a: a as DestinoReenvio, motivo: motivo as MotivoReenvio, actor: { userId: s.userId, rol: s.rol },
-          correoNuevo: String(fd.get('correo_nuevo') ?? ''),
-        });
-        params.push(r.estado === 'reenviado' ? ['ext_msg', 'reenvio_ok'] : ['ext_msg', 'reenvio_rechazado']);
-        if (r.estado === 'rechazado') params.push(['ext_det', r.mensaje]);
-      } catch {
-        params.push(['ext_msg', 'reenvio_rechazado'], ['ext_det', 'No se pudo reenviar. Vuelve a intentarlo en unos minutos.']);
-      }
-    }
-    revalidatePath('/dashboard/agentes/liquidacion');
-    redirect(`/dashboard/agentes/liquidacion?${new URLSearchParams(params).toString()}#liquidaciones-externas`);
-  }
-  void reenviarDesgloseExterno; // se conecta a su botón en T-A1-29 (detalle del desglose)
 
   /** «Reavisar» una discrepancia: rearma el aviso fallido o pendiente y lo manda ya. Re-gatea con la sesión REAL (es alcanzable por
    *  POST directo) y vuelve a la pantalla con el resultado en la URL. */

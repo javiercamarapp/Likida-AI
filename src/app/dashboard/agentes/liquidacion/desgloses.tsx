@@ -4,7 +4,9 @@ import { fechaCorta, numero, hoyMx, fechaHoraMx } from '@/lib/formato';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
 import { dinero } from '@/lib/likida/liquidacion_externa/presentacion';
-import type { EntregaCorreo, EstadoEntregaCorreo } from '@/lib/likida/liquidacion_externa/repo_correo';
+import { BotonConfirmar } from '@/app/admin/ui/confirmar';
+import type { EntregaCorreo, EstadoEntregaCorreo, Excepcion, TipoExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
+import type { DetalleDesglose, LecturaDetalle, RolDetalle } from './detalle_desglose';
 import { BarraPagina } from '../../resumen-visual';
 import { EnlacePagina, NavPaginas } from '../../paginador';
 
@@ -21,7 +23,8 @@ import { EnlacePagina, NavPaginas } from '../../paginador';
 //   · un error de entrega se enseña como frase que dice qué hacer, jamás el
 //     cuerpo crudo del proveedor ni el correo completo de nadie.
 //
-// Es de lectura: reenviar y el detalle llegan en la siguiente pantalla.
+// La lista es de lectura. El detalle de una bitácora (`PanelDetalleDesglose`, T-A1-29) trae las acciones: descargar el Excel,
+// reenviar, corregir el correo del operador y liberar un envío retenido; y `SeccionExcepciones` junta lo que pide a una persona.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type RolVisible = 'operador' | 'coordinador' | 'rh';
@@ -74,6 +77,29 @@ export interface DesglosesProps {
   desde: string | null;
   hasta: string | null;
   /** Los campos de la query a conservar (`tenant`, `vista`, `rol`). */
+  contexto: Array<[string, string]>;
+}
+
+/** Las acciones de servidor del detalle (las define la puerta, que re-valida la sesión en cada una). */
+export interface AccionesDetalle {
+  reenviar: (fd: FormData) => Promise<void>;
+  liberar: (fd: FormData) => Promise<void>;
+}
+
+export interface PanelDetalleProps {
+  lectura: Promise<LecturaDetalle>;
+  acciones: AccionesDetalle;
+  /** El código del resultado de la última acción (`des_msg`), ya validado con `leerMensajeDesglose`. */
+  mensaje: MensajeDesglose | null;
+  /** Los campos de la query a conservar (`tenant`, `vista`, `rol`). */
+  contexto: Array<[string, string]>;
+  /** El filtro y las fechas vigentes de la lista, para que «Cerrar» no los pierda. */
+  params: Array<[string, string]>;
+}
+
+export interface SeccionExcepcionesProps {
+  /** `null` = no se pudo leer. */
+  excepciones: Promise<Excepcion[] | null>;
   contexto: Array<[string, string]>;
 }
 
@@ -305,10 +331,11 @@ export async function SeccionDesgloses(p: DesglosesProps) {
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
                   <Th>Bitácora</Th><Th>Operador</Th><Th>Periodo</Th><Th derecha>Neto (de tu sistema)</Th>
                   {ROLES_VISIBLES.map((r) => <Th key={r}>{ROTULO_ROL[r]}</Th>)}
+                  <Th>Detalle</Th>
                 </tr>
               </thead>
               <tbody>
-                {filas.map((f) => <Fila key={f.liquidacionId} f={f} />)}
+                {filas.map((f) => <Fila key={f.liquidacionId} f={f} href={`${query(p.contexto, [...params, ['des_det', f.liquidacionId]])}#detalle-desglose`} />)}
               </tbody>
             </table>
           </div>
@@ -326,7 +353,7 @@ export async function SeccionDesgloses(p: DesglosesProps) {
   );
 }
 
-function Fila({ f }: { f: FilaDesglose }) {
+function Fila({ f, href }: { f: FilaDesglose; href: string }) {
   return (
     <tr className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
       <td className="py-2 font-medium">
@@ -353,6 +380,9 @@ function Fila({ f }: { f: FilaDesglose }) {
           </td>
         );
       })}
+      <td className="py-2">
+        <Link href={href} className="text-[12px] font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--marca)' }}>Ver detalle</Link>
+      </td>
     </tr>
   );
 }
@@ -375,14 +405,333 @@ function Th({ children, derecha }: { children: React.ReactNode; derecha?: boolea
   return <th className={`etiqueta-mono text-[10px] uppercase font-normal pb-2${derecha ? ' text-right' : ''}`}>{children}</th>;
 }
 
+// ── Resultado de una acción (el código viaja en la URL, el texto NO) ───────
+
+export interface MensajeDesglose { texto: string; tono: 'ok' | 'bad' }
+
+const MENSAJES: Record<string, MensajeDesglose> = {
+  reenvio_ok: { texto: 'Listo: el desglose quedó en la cola y sale en unos minutos.', tono: 'ok' },
+  liberado_ok: { texto: 'Listo: el envío se liberó y los correos salen en unos minutos.', tono: 'ok' },
+  r_entrada: { texto: 'No entendí qué desglose reenviar. Vuelve a elegirlo.', tono: 'bad' },
+  r_error: { texto: 'No se pudo completar. Vuelve a intentarlo en unos minutos: repetirlo es seguro.', tono: 'bad' },
+  r_sin_permiso: { texto: 'Solo quien administra la flota puede hacer esto.', tono: 'bad' },
+  r_no_encontrada: { texto: 'No encontré ese desglose en tu flota.', tono: 'bad' },
+  r_correo_invalido: { texto: 'El correo nuevo no parece un correo. Revísalo (por ejemplo, que tenga @ y un dominio).', tono: 'bad' },
+  r_correo_nuevo_no_aplica: { texto: 'El correo nuevo es del operador: usa el botón «Corregir correo y reenviar».', tono: 'bad' },
+  r_en_curso: { texto: 'La entrega anterior todavía se está enviando. Espera a que termine antes de reenviar.', tono: 'bad' },
+  r_limite_diario: { texto: 'Ya se reenvió este desglose el máximo de veces hoy. Intenta mañana o revisa por qué no llega.', tono: 'bad' },
+  r_sin_destinatarios: { texto: 'No hay a quién enviarlo: falta el correo de ese destinatario.', tono: 'bad' },
+  r_sin_archivo: { texto: 'Este desglose no tiene archivo para reenviar.', tono: 'bad' },
+  r_no_disponible: { texto: 'No pude leer el estado de este desglose. Intenta de nuevo en unos minutos.', tono: 'bad' },
+  r_no_retenida: { texto: 'Este desglose ya no está retenido: no hay nada que liberar.', tono: 'bad' },
+  r_no_liberable: { texto: 'Este desglose trae un concepto que la empresa prohibió enviar: corrígelo en su sistema; no se libera desde aquí.', tono: 'bad' },
+};
+
+/** Solo los códigos conocidos: un texto inventado en la URL no se pinta. */
+export function leerMensajeDesglose(v: string | undefined): MensajeDesglose | null {
+  return v && Object.prototype.hasOwnProperty.call(MENSAJES, v) ? MENSAJES[v]! : null;
+}
+
+// ── El detalle de una bitácora ─────────────────────────────────────────────
+
+const ROTULO_ROL_DETALLE: Record<RolDetalle, string> = { operador: 'Operador', coordinador: 'Coordinador', rh: 'RH', archivo: 'Archivo' };
+const ORIGEN_GENERACION = { auto: 'Envío automático', reclamo: 'Reclamo del operador', manual: 'Envío manual' } as const;
+
+const EXCEPCION: Record<TipoExcepcion, { titulo: string; ayuda: string }> = {
+  sin_poliza: { titulo: 'Sin póliza', ayuda: 'No se enviará hasta tener póliza: revísala en el sistema de tu empresa.' },
+  operador_no_encontrado: { titulo: 'Operador sin alta', ayuda: 'Este operador no está dado de alta en Likida: dalo de alta y el desglose se procesa en la siguiente lectura.' },
+  operador_sin_correo: { titulo: 'Operador sin correo', ayuda: 'El operador no recibió su desglose porque no tiene correo (o el que tenía rebotó): corrígelo y reenvía.' },
+  coordinador_sin_correo: { titulo: 'Coordinador sin correo', ayuda: 'Este operador no tiene coordinador con correo: asígnalo para que también le llegue.' },
+  total_no_cuadra: { titulo: 'El total no cuadra', ayuda: 'La suma de los renglones no coincide con el neto: revísalo en el sistema de tu empresa.' },
+  concepto_prohibido: { titulo: 'Concepto prohibido', ayuda: 'Trae un concepto que la empresa no quiere enviar: corrígelo en su sistema.' },
+  neto_negativo: { titulo: 'Retenido: neto negativo', ayuda: 'El neto salió negativo. Revísalo y, si está bien, libera el envío.' },
+  tipo_sin_regla: { titulo: 'Retenido: tipo de operador sin regla', ayuda: 'No hay regla para este tipo de operador. Revísalo y, si está bien, libera el envío.' },
+  correccion_pendiente: { titulo: 'Corrección pendiente', ayuda: 'Llegó una versión distinta de este desglose y no se envió: una persona decide si se manda la corrección.' },
+  mapeo_invalido: { titulo: 'Datos inválidos', ayuda: 'El sistema de tu empresa mandó datos que no se pudieron leer: avísale a quien lo administra.' },
+};
+
+function Mensaje({ m }: { m: MensajeDesglose }) {
+  return (
+    <p role="status" className="text-[12.5px] rounded-lg px-3 py-2 mb-3"
+      style={m.tono === 'ok' ? { color: 'var(--ok)', background: 'var(--okbg)' } : { color: 'var(--bad)', background: 'var(--badbg)' }}>
+      {m.texto}
+    </p>
+  );
+}
+
+function TablaRenglones({ titulo, renglones, moneda }: { titulo: string; renglones: Array<{ descripcion: string; monto: number }>; moneda: 'MXN' | 'USD' }) {
+  return (
+    <div className="flex-1 min-w-[16rem]">
+      <h4 className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>{titulo}</h4>
+      {renglones.length === 0 ? (
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Sin renglones.</p>
+      ) : (
+        <table className="w-full text-[13px]">
+          <tbody>
+            {renglones.map((r, i) => (
+              <tr key={i} className="border-t" style={{ borderColor: 'var(--line2)' }}>
+                <td className="py-1.5">{r.descripcion}</td>
+                <td className="py-1.5 text-right cifra-mono">{dinero(r.monto, moneda)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+const CLASE_BOTON = 'hairline h-8 rounded-lg px-3 text-[12px] font-medium transition-opacity hover:opacity-80 disabled:opacity-40';
+
+function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['reenviar'] }) {
+  const sinArchivo = d.retenido !== null;
+  const opciones: Array<{ a: 'operador' | 'coordinador' | 'todos'; etiqueta: string; que: string; curso: boolean }> = [
+    { a: 'operador', etiqueta: 'Reenviar al operador', que: 'al operador', curso: d.enCurso.operador },
+    { a: 'coordinador', etiqueta: 'Reenviar al coordinador', que: 'a su coordinador', curso: d.enCurso.coordinador },
+    { a: 'todos', etiqueta: 'Reenviar a todos', que: 'al operador, a su coordinador y a RH', curso: d.enCurso.operador || d.enCurso.coordinador || d.enCurso.rh },
+  ];
+  const hayCurso = opciones.some((o) => o.curso);
+  return (
+    <div>
+      <h4 className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Reenviar</h4>
+      <div className="flex flex-wrap gap-2">
+        {opciones.map((o) => (
+          <form key={o.a} action={accion}>
+            <input type="hidden" name="id" value={d.liquidacionId} />
+            <input type="hidden" name="a" value={o.a} />
+            <input type="hidden" name="motivo" value="reclamo" />
+            <BotonConfirmar
+              etiqueta={o.etiqueta} titulo="Reenviar el desglose" etiquetaConfirmar="Sí, reenviar" tono="normal"
+              descripcion={`Se volverá a mandar el desglose de la bitácora ${d.bitacora} ${o.que}. Queda registrado quién lo pidió.`}
+              deshabilitado={o.curso || sinArchivo} className={CLASE_BOTON}
+            />
+          </form>
+        ))}
+      </div>
+      {hayCurso && <p className="text-[11px] mt-1.5" style={{ color: 'var(--muted)' }}>Hay un envío en curso: espera a que termine para reenviar.</p>}
+      {sinArchivo && <p className="text-[11px] mt-1.5" style={{ color: 'var(--muted)' }}>Este desglose está retenido: primero libera el envío.</p>}
+
+      <form action={accion} className="flex flex-wrap items-end gap-2 mt-3">
+        <input type="hidden" name="id" value={d.liquidacionId} />
+        <input type="hidden" name="a" value="operador" />
+        <input type="hidden" name="motivo" value="correccion_de_correo" />
+        <label className="flex flex-col gap-1">
+          <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Correo nuevo del operador</span>
+          <input type="email" name="correo_nuevo" required maxLength={254} autoComplete="off" placeholder="Correo del operador"
+            className={`${CLASE_CONTROL} min-w-[16rem]`} style={ESTILO_CONTROL} />
+        </label>
+        <BotonConfirmar
+          etiqueta="Corregir correo del operador y reenviar" titulo="Corregir el correo y reenviar" etiquetaConfirmar="Sí, corregir y reenviar" tono="normal"
+          descripcion="Se guarda el correo nuevo en la ficha del operador y se le vuelve a mandar este desglose. Los próximos también irán a ese correo."
+          deshabilitado={d.enCurso.operador || sinArchivo} className={CLASE_BOTON}
+        />
+      </form>
+    </div>
+  );
+}
+
+function EstadoCabecera({ d }: { d: DetalleDesglose }) {
+  return (
+    <dl className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3 text-[13px]">
+      <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Operador</dt><dd>{d.operador ?? '—'}</dd></div>
+      <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Periodo</dt><dd>{`${fechaCorta(d.periodoDesde)} – ${fechaCorta(d.periodoHasta)}`}</dd></div>
+      <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Terminal</dt><dd>{d.terminal ?? '—'}</dd></div>
+      <div><dt className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Neto (de tu sistema)</dt><dd className="cifra-mono font-semibold">{dinero(d.neto, d.moneda)}</dd></div>
+    </dl>
+  );
+}
+
+function ListaExcepciones({ items }: { items: Array<{ tipo: TipoExcepcion; desde: string }> }) {
+  return (
+    <ul className="space-y-1.5">
+      {items.map((x, i) => (
+        <li key={`${x.tipo}-${i}`} className="text-[12.5px]">
+          <span className="font-medium">{EXCEPCION[x.tipo].titulo}</span>
+          <span style={{ color: 'var(--faint)' }}> · desde {fechaHoraMx(x.desde)}</span>
+          <span className="block text-[12px]" style={{ color: 'var(--muted)' }}>{EXCEPCION[x.tipo].ayuda}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export async function PanelDetalleDesglose(p: PanelDetalleProps) {
+  const lectura = await p.lectura;
+  const cerrar = `${query(p.contexto, p.params)}#desgloses`;
+  const marco = (cuerpo: React.ReactNode, titulo = 'Detalle del desglose') => (
+    <section className="card p-4" id="detalle-desglose">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap mb-2">
+        <h2 className="font-display text-[15px] font-semibold">{titulo}</h2>
+        <Link href={cerrar} className="text-[12px] font-medium hover:opacity-70 transition-opacity" style={{ color: 'var(--muted)' }}>Cerrar</Link>
+      </div>
+      {p.mensaje && <Mensaje m={p.mensaje} />}
+      {cuerpo}
+    </section>
+  );
+
+  if (lectura.estado === 'error') {
+    return marco(
+      <div role="alert" className="flex items-start gap-3">
+        <AlertTriangle width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />
+        <div>
+          <p className="text-sm">No se pudo leer este desglose. No es que no exista: no pudimos consultarlo ahora.</p>
+          <Link href={`${query(p.contexto, p.params)}#detalle-desglose`} className="inline-block mt-2 text-xs font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">Reintentar</Link>
+        </div>
+      </div>,
+    );
+  }
+  if (lectura.estado === 'no_encontrado') return marco(<p className="text-[13px]" style={{ color: 'var(--muted)' }}>No encontré ese desglose en tu flota.</p>);
+
+  const d = lectura.detalle;
+  return marco(
+    <div className="space-y-4">
+      <p className="text-[13px] font-medium">Bitácora {d.bitacora}</p>
+      <EstadoCabecera d={d} />
+
+      {d.retenido && (
+        <div className="rounded-lg px-3 py-2.5" style={{ background: 'var(--warnbg)' }}>
+          <p className="text-[13px] font-medium" style={{ color: 'var(--warn)' }}>
+            {d.retenido.por === 'neto' ? 'Retenido: neto negativo' : 'Retenido: pide revisión'}
+          </p>
+          <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
+            Este desglose no se ha enviado a nadie.{' '}
+            {d.retenido.liberable ? 'Si el monto está bien, puedes liberar el envío.' : 'Corrígelo en el sistema de tu empresa: no se libera desde aquí.'}
+          </p>
+          {d.retenido.liberable && (
+            <form action={p.acciones.liberar} className="mt-2">
+              <input type="hidden" name="id" value={d.liquidacionId} />
+              <BotonConfirmar
+                etiqueta="Liberar envío" titulo="Liberar el envío" etiquetaConfirmar="Sí, liberar y enviar" tono="normal"
+                descripcion={`Se enviará el desglose de la bitácora ${d.bitacora} al operador, a su coordinador y a RH. Queda registrado quién lo liberó.`}
+                className={CLASE_BOTON}
+              />
+            </form>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-4">
+        <TablaRenglones titulo="Percepciones" renglones={d.percepciones} moneda={d.moneda} />
+        <TablaRenglones titulo="Deducciones" renglones={d.deducciones} moneda={d.moneda} />
+      </div>
+
+      <div>
+        <h4 className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Destinatarios</h4>
+        {d.destinatarios.length === 0 ? (
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+            {d.retenido ? 'Aún no se manda a nadie: el desglose está retenido.' : 'Este desglose no tiene correos programados.'}
+          </p>
+        ) : (
+          <table className="w-full text-[13px]">
+            <thead><tr className="text-left" style={{ color: 'var(--faint)' }}><Th>Quién</Th><Th>Correo</Th><Th>Estado</Th><Th>Cuándo</Th></tr></thead>
+            <tbody>
+              {d.destinatarios.map((x, i) => {
+                const r = rotuloDestino(x.destino);
+                return (
+                  <tr key={`${x.rol}-${i}`} className="border-t" style={{ borderColor: 'var(--line2)' }}>
+                    <td className="py-1.5">{ROTULO_ROL_DETALLE[x.rol]}</td>
+                    <td className="py-1.5 cifra-mono" style={{ color: 'var(--muted)' }}>{x.correo}</td>
+                    <td className="py-1.5">
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: COLOR[r.tono].fg, background: COLOR[r.tono].bg }}>{r.rotulo}</span>
+                    </td>
+                    <td className="py-1.5" style={{ color: 'var(--muted)' }}>{x.en ? fechaHoraMx(x.en) : '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {d.generaciones.length > 0 && (
+        <div>
+          <h4 className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Historial de envíos</h4>
+          <ul className="text-[12.5px] space-y-0.5">
+            {d.generaciones.map((g) => (
+              <li key={g.generacion}>
+                <span className="font-medium">Envío {g.generacion}</span>
+                <span style={{ color: 'var(--muted)' }}> · {ORIGEN_GENERACION[g.origen]} · {fechaHoraMx(g.creadaEn)} · {g.entregas === 1 ? '1 correo' : `${g.entregas} correos`}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div>
+        <h4 className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Archivo</h4>
+        {d.descargaUrl ? (
+          <>
+            <a href={d.descargaUrl} download={d.descargaNombre} className={`${CLASE_BOTON} inline-flex items-center`}>Descargar el Excel</a>
+            <span className="text-[11px] ml-2" style={{ color: 'var(--faint)' }}>{d.descargaNombre} · el enlace vale 24 horas</span>
+          </>
+        ) : (
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo preparar la descarga ahora. Recarga la página para intentarlo de nuevo.</p>
+        )}
+      </div>
+
+      <Reenviar d={d} accion={p.acciones.reenviar} />
+
+      <div>
+        <h4 className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Excepciones</h4>
+        {d.excepciones.length === 0
+          ? <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Sin excepciones abiertas para esta bitácora.</p>
+          : <ListaExcepciones items={d.excepciones} />}
+      </div>
+    </div>,
+  );
+}
+
+/** Lo que pide a una persona, de toda la flota: sin póliza, operador sin alta o sin correo, retenidos y correcciones pendientes. */
+export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
+  const lista = await p.excepciones;
+  if (lista === null) {
+    return (
+      <section className="card p-4" id="excepciones" role="alert">
+        <p className="text-sm">No se pudieron leer las excepciones. No es que no haya: no pudimos consultarlas ahora.</p>
+        <Link href={`${query(p.contexto)}#excepciones`} className="inline-block mt-2 text-xs font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">Reintentar</Link>
+      </section>
+    );
+  }
+  return (
+    <section className="card p-4" id="excepciones">
+      <h2 className="font-display text-[15px] font-semibold flex items-center gap-1.5 mb-1">
+        <AlertTriangle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+        Excepciones
+      </h2>
+      <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>Lo que necesita a una persona antes de que el desglose llegue completo.</p>
+      {lista.length === 0 ? (
+        <EstadoVacio icono={<Mail width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>Sin excepciones abiertas.</EstadoVacio>
+      ) : (
+        <ul className="space-y-2">
+          {lista.map((x) => {
+            const bitacora = typeof x.detalle.bitacora === 'string' ? x.detalle.bitacora : x.claveExterna;
+            return (
+              <li key={x.id} className="text-[12.5px]">
+                <span className="font-medium">{EXCEPCION[x.tipo]?.titulo ?? x.tipo}</span>
+                <span style={{ color: 'var(--muted)' }}> · bitácora {bitacora}</span>
+                <span style={{ color: 'var(--faint)' }}> · desde {fechaHoraMx(x.primeraVez)}</span>
+                <span className="block text-[12px]" style={{ color: 'var(--muted)' }}>{EXCEPCION[x.tipo]?.ayuda ?? ''}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /** El marco de la pantalla de un tenant que recibe el desglose por correo: la sección y los avisos, sin los KPIs, la cola ni la estrategia del flujo de fotos. */
-export function VistaDesgloses({ desgloses, notificaciones }: { desgloses: React.ReactNode; notificaciones?: React.ReactNode }) {
+export function VistaDesgloses({ desgloses, detalle, excepciones, notificaciones }: {
+  desgloses: React.ReactNode; detalle?: React.ReactNode; excepciones?: React.ReactNode; notificaciones?: React.ReactNode;
+}) {
   return (
     <main className="h-full">
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
         <BarraPagina icono={<Route width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />} titulo="Liquidación automática" />
         <div className="px-5 py-5 flex-1 space-y-4">
           {desgloses}
+          {detalle}
+          {excepciones}
           {notificaciones}
         </div>
       </div>
