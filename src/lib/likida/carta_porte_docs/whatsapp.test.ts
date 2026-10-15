@@ -170,7 +170,7 @@ describe('texto pegado — esTextoCartaPorte', () => {
     expect(esTextoCartaPorte({ type: 'text', text: `RFC ${RFC.boreal} 880 pzas` })).toBe(false); // 2 señales y corto
   });
   it('un RFC con dígito verificador malo o un número cualquiera de 8 dígitos no cuentan como RFC', () => {
-    expect(senalesDeForma('GBO090704XX1')).toBe(0);
+    expect(senalesDeForma('GBO090704XX1')).toBe(0); // grep-limpio:ok (RFC sintético con dígito verificador inválido)
     expect(senalesDeForma('folio 12345678')).toBe(1); // clave de 8 dígitos, no RFC
   });
   it('un mensaje con archivo, o que no es texto, no es texto pegado', () => {
