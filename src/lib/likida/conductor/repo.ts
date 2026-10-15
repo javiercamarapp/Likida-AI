@@ -8,7 +8,8 @@ import {
   type Contacto, type FuenteHito, type HitoFila, type InterpretacionHito, type TipoHito,
 } from './tipos';
 import type { LegadoSello } from './maquina';
-import { CONFIG_CONDUCTOR_DEFAULT, validarConfigConductor, zonaOCdmx, type ConfigConductor } from './config';
+import { CONFIG_CONDUCTOR_DEFAULT, validarConfigConductor, zonaOCdmx, type ConfigConductor, type PerfilSeguimiento } from './config';
+import { MOTIVO_FUERA_DE_PERFIL, hitoEnPerfil } from './perfil';
 import { aHitoApi, type EventoApi, type FiltrosHitos, type HitoApi, type CambioCitas } from './lectura';
 import type { AvisoReclamado } from './planificador';
 import type { ContactoTrafico } from './escalamiento';
@@ -84,14 +85,28 @@ export async function cargarHitos(tenantId: string, viajeId: string): Promise<Hi
   return ordenar(filas.map(filaAHito));
 }
 
+/** El perfil de la flota. Sin fila, sin la columna (0801 sin aplicar) o con un valor desconocido: `completo`, el comportamiento de siempre. */
+async function leerPerfilSeguimiento(tenantId: string): Promise<PerfilSeguimiento> {
+  const res = await acotada(supabaseAdmin()
+    .from('agente_conductor_config').select('perfil_seguimiento').eq('tenant_id', tenantId).maybeSingle(), 'conductor.perfil');
+  if (res.error) return 'completo';
+  const v = (res.data as { perfil_seguimiento?: string | null } | null)?.perfil_seguimiento;
+  return v === 'esenciales' ? 'esenciales' : 'completo';
+}
+
 /** Los cinco hitos del viaje, creándolos si faltan (idempotente: unique (viaje, tipo)). */
 export async function asegurarHitos(tenantId: string, viajeId: string): Promise<HitoFila[]> {
   const actuales = await cargarHitos(tenantId, viajeId);
   if (actuales.length >= TIPOS_HITO.length) return actuales;
   const faltan = TIPOS_HITO.filter((t) => !actuales.some((h) => h.tipo === t));
+  // T-A5-08: los hitos que el perfil de la flota no sigue nacen omitidos (igual que la siembra de SQL, 0801).
+  const perfil = await leerPerfilSeguimiento(tenantId);
   const res = await acotada(supabaseAdmin()
     .from('viaje_hito')
-    .upsert(faltan.map((tipo) => ({ tenant_id: tenantId, viaje_id: viajeId, tipo })), { onConflict: 'viaje_id,tipo', ignoreDuplicates: true }), 'conductor.asegurar');
+    .upsert(faltan.map((tipo) => (hitoEnPerfil(perfil, tipo)
+      ? { tenant_id: tenantId, viaje_id: viajeId, tipo }
+      : { tenant_id: tenantId, viaje_id: viajeId, tipo, estado: 'omitido', omitido_motivo: MOTIVO_FUERA_DE_PERFIL })),
+    { onConflict: 'viaje_id,tipo', ignoreDuplicates: true }), 'conductor.asegurar');
   if (res.error) throw new Error(`conductor.asegurar: ${res.error.message}`);
   return cargarHitos(tenantId, viajeId);
 }

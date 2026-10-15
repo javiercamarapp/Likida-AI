@@ -1,6 +1,7 @@
 import { logger } from '@/lib/logger';
 import { dentroDeGeocerca, haversineM, type GeocercaGeom } from './geo';
 import type { ConfigConductor } from './config';
+import { aplicarPerfil, estaFueraDePerfil } from './perfil';
 import { estaPendiente, estaResuelto, type HitoFila, type TipoHito } from './tipos';
 import type { ViajeContexto } from './repo';
 
@@ -189,7 +190,9 @@ export function proximaDeteccion(e: EntradaProxima): Deteccion | null {
     if (r) return { tipo: 'llegada_carga', entrada: true, sitio: sitios.origen, ...r, omitir: [], fueraDeOrden: false };
   }
   // 2. Salida de la carga: la llegada ya está (la dio el chofer, la oficina o el sistema) y el tractor ya se fue.
-  if (resuelto(h.llegada_carga) && pendiente(h.salida_carga) && sitios.origen) {
+  // (Con el perfil `esenciales` la llegada a carga no se sigue —nace omitida—: la salida se detecta igual.)
+  const llegadaFueraDePerfil = Boolean(h.llegada_carga) && estaFueraDePerfil(h.llegada_carga as HitoFila);
+  if ((resuelto(h.llegada_carga) || llegadaFueraDePerfil) && pendiente(h.salida_carga) && sitios.origen) {
     const t = horaDe(h.llegada_carga);
     const desde = new Date((t?.getTime() ?? e.aceptadoEn?.getTime() ?? 0) - ventanaMs);
     const r = buscarSalida(sitios.origen, muestras, tol, desde);
@@ -295,6 +298,11 @@ export async function barridoCicloGps(p: PuertosCicloGps, ahora: Date = new Date
   const hitos = await p.hitosDe(aptos.map((v) => v.id));
   const porViaje = new Map<string, HitoFila[]>();
   for (const h of hitos) porViaje.set(h.viajeId, [...(porViaje.get(h.viajeId) ?? []), h]);
+  // T-A5-08: lo que el perfil de la flota no sigue no se detecta (se lee como omitido aunque la base aún lo traiga `esperado`).
+  for (const v of aptos) {
+    const hs = porViaje.get(v.id);
+    if (hs) porViaje.set(v.id, [...aplicarPerfil(hs, configs.get(v.tenantId)!.perfilSeguimiento)]);
+  }
 
   // Solo los viajes con algo detectable pendiente y un sitio con qué compararlo piden muestras.
   const sitios = await p.sitiosDe(aptos);

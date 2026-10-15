@@ -185,8 +185,9 @@ describe('0801: la migración', () => {
     expect(ejecutable.match(/add constraint/g)?.length).toBe(ejecutable.match(/drop constraint if exists/g)?.length);
   });
 
-  it('no redefine función alguna ni borra datos', () => {
-    expect(ejecutable).not.toMatch(/create (or replace )?function/);
+  it('solo redefine sembrar_hitos_conductor (la siembra por perfil) y no borra datos', () => {
+    const funciones = [...ejecutable.matchAll(/create (?:or replace )?function\s+([\w.]+)/g)].map((m) => m[1]);
+    expect(funciones).toEqual(['public.sembrar_hitos_conductor']);
     expect(ejecutable).not.toMatch(/\bdrop (table|column|function)\b|\bdelete from\b|\btruncate\b/);
   });
 

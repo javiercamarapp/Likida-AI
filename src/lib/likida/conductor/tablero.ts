@@ -1,6 +1,7 @@
 import type { ConfigConductor } from './config';
 import { calcularEstancias, excedeUmbral, type Estancia } from './estadias_anden';
 import { hitoActivo } from './maquina';
+import { aplicarPerfil } from './perfil';
 import { anclaDe, textoTiempo } from './planificador';
 import type { AccionOficinaFila, DatosTablero, IndicadoresCrudos, ViajeTablero, VeredictoFila } from './repo_validacion';
 import type { EpisodioTablero } from './repo';
@@ -126,7 +127,8 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
   const excepciones: Excepcion[] = [];
 
   for (const viaje of datos.viajes) {
-    const hs = [...(hitosPorViaje.get(viaje.id) ?? [])].sort((a, b) => TIPOS_HITO.indexOf(a.tipo) - TIPOS_HITO.indexOf(b.tipo));
+    // T-A5-08: un hito que el perfil no sigue se lee como omitido: no cuenta como «atrasado» ni «sin reporte».
+    const hs = [...aplicarPerfil(hitosPorViaje.get(viaje.id) ?? [], config.perfilSeguimiento)].sort((a, b) => TIPOS_HITO.indexOf(a.tipo) - TIPOS_HITO.indexOf(b.tipo));
     // Las evidencias cuentan solo las del CICLO vigente del hito (una corrección retira el hito, no las fotos viejas del historial).
     const evidenciasVigentes = new Map<string, number>();
     const fotosVigentes = new Map<string, Array<{ id: string; tipo: 'sello' | 'anden' | 'recibido' | 'otra' }>>();
