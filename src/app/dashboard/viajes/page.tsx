@@ -6,7 +6,9 @@ import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { getLiquidacionesDeViajes } from '@/lib/likida/analytics';
 import { getViajesRegistro, getConteosViajes, TOPE_PAGINA } from '@/lib/likida/viajes_registro';
-import { interpretarFilasViajes, importarViajes } from '@/lib/likida/importar_viajes';
+import { interpretarFilasViajes, importarViajes, archivoTraeCitas } from '@/lib/likida/importar_viajes';
+import { getZonaHorariaTenant } from '@/lib/likida/repo';
+import { zonaOCdmx } from '@/lib/likida/conductor/config';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../sufijo';
 import { VistaViajes, type FiltroViajes, type FilaRegistroViaje } from './vista';
@@ -109,7 +111,10 @@ export default async function PaginaViajes({
       return { error: 'No pude leer el archivo — asegúrate de que sea CSV o Excel.' };
     }
 
-    const lectura = interpretarFilasViajes(matriz, { permitirFinanzas: puedeVerArea(sesion.rol, 'dinero') });
+    // La hora de las citas del archivo viene sin zona: se lee como hora de la flota (T-A5-05).
+    let zona: string | undefined;
+    try { zona = archivoTraeCitas(matriz) ? zonaOCdmx(await getZonaHorariaTenant(tenantId)) : undefined; } catch { return { error: 'No pude leer la zona horaria de tu flota — no importé nada. Vuelve a intentar.' }; }
+    const lectura = interpretarFilasViajes(matriz, { permitirFinanzas: puedeVerArea(sesion.rol, 'dinero'), zona });
     if (lectura.error && lectura.viajes.length === 0) return { error: lectura.error };
 
     const r = await importarViajes(tenantId, lectura.viajes);
