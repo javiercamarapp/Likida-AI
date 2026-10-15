@@ -526,4 +526,18 @@ export const api: typeof Real = {
     e.estado = 'descartado';
     return true;
   },
+  async marcarEnvioSubidoAMano(tenantId, id, desde) {
+    falla('marcarEnvioSubidoAMano');
+    const e = estado.envios.find((x) => x.tenantId === tenantId && x.id === id);
+    if (!e || !desde.includes(e.estado)) return false;
+    e.estado = 'subido_a_mano';
+    return true;
+  },
+  async estadoEnvioPorDocumento(tenantId, documentoIds) {
+    const salida: Record<string, Real.EstadoEnvioTms> = {};
+    for (const e of [...estado.envios].reverse()) {
+      if (e.tenantId === tenantId && documentoIds.includes(e.documentoId) && e.estado !== 'descartado' && !(e.documentoId in salida)) salida[e.documentoId] = e.estado;
+    }
+    return salida;
+  },
 };

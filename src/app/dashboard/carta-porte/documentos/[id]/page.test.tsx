@@ -209,3 +209,26 @@ it('un embarque HIJO sabe de qué archivo nació (para el enlace de regreso)', a
   expect(p.props.embarque).toEqual({ indice: 1, total: 2, clave: 'ATL-1', padreId: padre.id, padreNombre: 'plan.xlsx' });
   expect(p.props.hijos).toEqual([]);
 });
+
+it('«Ya la subí a mano»: marca el envío, es idempotente y respeta el candado de versión', async () => {
+  sembrarDoc({ estado: 'aprobado', aprobadoEn: '2026-10-02T00:00:00.000Z', version: 5 });
+  estado.envios.push({ id: 'envio-x', tenantId: A, documentoId: ID, versionDoc: 5, idempotencyKey: 'k'.repeat(64), estado: 'pendiente_reque', plantilla: 'normal', intentos: 2 });
+  const p = await montar();
+  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '4', intencion: 'subido_a_mano' }))).toMatchObject({ ok: false, error: expect.stringMatching(/Otra persona cambió/) });
+  expect(estado.envios[0].estado).toBe('pendiente_reque');
+  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '5', intencion: 'subido_a_mano' }))).toMatchObject({ ok: true, mensaje: expect.stringMatching(/subió a mano/) });
+  expect(estado.envios[0].estado).toBe('subido_a_mano');
+  expect(estado.eventos.filter((e) => e.documentoId === ID && e.tipo === 'envio_subido_a_mano')).toHaveLength(1);
+  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '5', intencion: 'subido_a_mano' }))).toMatchObject({ ok: true, mensaje: expect.stringMatching(/Ya estaba/) });
+  expect(estado.eventos.filter((e) => e.documentoId === ID && e.tipo === 'envio_subido_a_mano')).toHaveLength(1);
+  // La pantalla recibe el estado del envío de la versión vigente.
+  expect((await montar()).props).toMatchObject({ envio: { estado: 'subido_a_mano' } });
+});
+
+it('«Ya la subí a mano» con un rol sin el área: rechazado aunque se invoque la acción directo', async () => {
+  sembrarDoc({ estado: 'aprobado', aprobadoEn: '2026-10-02T00:00:00.000Z', version: 5 });
+  const p = await montar();
+  sesion = { ...sesion, rol: 'vendedor' };
+  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '5', intencion: 'subido_a_mano' }))).toEqual({ ok: false, error: 'Tu rol no puede revisar documentos de Carta Porte.' });
+  expect(estado.envios).toHaveLength(0);
+});

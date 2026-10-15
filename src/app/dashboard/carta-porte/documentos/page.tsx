@@ -12,7 +12,7 @@ import { calcularMetricas } from '@/lib/likida/carta_porte_docs/metricas';
 import * as repo from '@/lib/likida/carta_porte_docs/repo';
 import { procesarDocumento, recibirDocumento } from '@/lib/likida/carta_porte_docs/servicio';
 import { sufijoTenant } from '../../sufijo';
-import { VistaDocumentos, type DatosDocumentos } from './vista';
+import { VistaDocumentos, filtroEnvioDe, type DatosDocumentos } from './vista';
 import type { ResultadoAccion } from './forma_accion';
 
 export const dynamic = 'force-dynamic';
@@ -55,8 +55,9 @@ async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
     const versiones = await Promise.all(perfiles.map((p) => repo.listarVersionesPerfil(tenantId, p.id)));
     const dominio = dominioBuzon();
     const linaje = await repo.linajeDeDocumentos(tenantId, lista.filas.map((d) => d.id));
+    const envios = await repo.estadoEnvioPorDocumento(tenantId, lista.filas.filter((d) => d.estado === 'aprobado').map((d) => d.id));
     return {
-      filas: lista.filas, total: lista.total,
+      filas: lista.filas, total: lista.total, envios,
       linaje: Object.fromEntries([...linaje].map(([id, l]) => [id, { rol: l.rol, indice: l.indice, total: l.total, clave: l.clave }])), metricas: calcularMetricas(recientes, correcciones), clientes,
       perfiles: perfiles.map((p, i) => ({ id: p.id, nombre: p.nombre, formato: p.formato, versionActiva: p.versionActiva, mapeos: p.activa.mapeos.length, versiones: versiones[i].map((v) => ({ version: v.version, nota: v.nota, mapeos: v.mapeos })) })),
       buzon: buzon ? { direccion: direccionCp(buzon.token, dominio), activo: buzon.activo, remitentes: buzon.remitentesPermitidos, dominioConfigurado: dominio !== null } : null,
@@ -76,7 +77,7 @@ async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
 export default async function PaginaDocumentos({
   searchParams,
 }: {
-  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string }>;
+  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string; envio?: string }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
@@ -215,6 +216,7 @@ export default async function PaginaDocumentos({
     <VistaDocumentos
       datos={datos}
       sufijo={sufijoTenant(sp)}
+      filtroEnvio={filtroEnvioDe(sp.envio)}
       apiSufijo={sufijoTenant(sp) ? `&${sufijoTenant(sp).slice(1)}` : ''}
       acciones={{ subir, procesar, activarBuzon, guardarRemitentes, guardarExport, borrarExport, volverVersion }}
     />

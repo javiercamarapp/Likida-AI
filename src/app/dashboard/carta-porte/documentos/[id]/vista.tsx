@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import { ArrowLeft, Check, CircleHelp, FileSearch, ShieldAlert, Trash2, TriangleAlert, Truck } from 'lucide-react';
+import { ArrowLeft, Check, Download, CircleHelp, FileSearch, ShieldAlert, Trash2, TriangleAlert, Truck } from 'lucide-react';
 import { fechaHoraMx, numero, pesoArchivo, usd4 } from '@/lib/formato';
 import { ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO, ROTULO_ORIGEN, type FilaCampo, type Revision } from '@/lib/likida/carta_porte_docs/presentacion';
-import type { DocumentoFila } from '@/lib/likida/carta_porte_docs/repo';
+import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../forma_accion';
 
 /**
@@ -35,7 +35,7 @@ const ROTULO_EVENTO: Record<string, string> = {
   recibido: 'Recibido', duplicado_recibido: 'Llegó otra vez (mismo archivo)', extraccion_iniciada: 'Lectura iniciada', extraccion_ok: 'Leído',
   extraccion_fallida: 'No se pudo leer', escalada: 'Se releyó con un modelo más fuerte', revision_abierta: 'Se abrió para revisar', campo_corregido: 'Se corrigieron datos',
   aprobado: 'Aprobado', rechazado: 'Rechazado', reabierto: 'Reabierto', salida_viaje: 'Viaje creado o completado', perfil_aprendido: 'El perfil del cliente aprendió',
-  exportado: 'Exportado', purgado: 'Archivo borrado por retención', dividido: 'Se separó en un documento por embarque',
+  exportado: 'Exportado', envio_preparado: 'Envío al TMS preparado', envio_subido_a_mano: 'Marcado como subido a mano al TMS', purgado: 'Archivo borrado por retención', dividido: 'Se separó en un documento por embarque',
 };
 
 function color(sev: 'bloqueo' | 'confirmar' | 'aviso'): string {
@@ -80,7 +80,7 @@ function Campo({ f, editable }: { f: FilaCampo; editable: boolean }) {
   );
 }
 
-export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', salida = null, puedeEliminar = false, embarque = null, hijos = [] }: {
+export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', envio = null, salida = null, puedeEliminar = false, embarque = null, hijos = [] }: {
   doc: DocumentoFila;
   revision: Revision | null;
   original: OriginalVista;
@@ -88,6 +88,8 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
   eventos: EventoVista[];
   acciones: { revisar: AccionDoc | null };
   sufijo?: string;
+  /** El envío al TMS de la versión vigente (solo se carga si el documento está aprobado). */
+  envio?: { estado: EstadoEnvioTms } | null;
   /** El resultado de la salida al viaje ya conocido (viaje ligado). */
   salida?: { folio: string } | null;
   /** Quien administra la flota puede eliminar el documento y su archivo (cancelación ARCO / subido por error). */
@@ -259,6 +261,24 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                         </div>
                       )}
                     </>
+                  )}
+                  {doc.estado === 'aprobado' && envio?.estado !== 'enviado' && (
+                    <div className="space-y-2" aria-label="Modo manual">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <a href={`/api/export/carta-porte-docs${sufijo ? `${sufijo}&` : '?'}formato=plantilla_tms&documento=${doc.id}`} download
+                          className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 hairline transition-opacity hover:opacity-85" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+                          <Download width={14} height={14} strokeWidth={1.75} />Descargar plantilla del TMS
+                        </a>
+                        {envio?.estado !== 'subido_a_mano' && (
+                          <BotonEnvio variante="secundario" intencion="subido_a_mano" etiqueta="Ya la subí a mano" pendiente="Marcando…" icono={<Check width={14} height={14} strokeWidth={1.75} />} />
+                        )}
+                      </div>
+                      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+                        {envio?.estado === 'subido_a_mano'
+                          ? 'Marcada como subida a mano: Likida no la reenvía.'
+                          : 'Descarga la plantilla, súbela al TMS y avisa aquí: así Likida no la reintenta. No se envía nada por ti.'}
+                      </p>
+                    </div>
                   )}
                   <BotonEnvio variante="secundario" intencion="reabrir" etiqueta="Reabrir para corregir" pendiente="…" />
                 </div>

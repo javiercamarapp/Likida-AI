@@ -943,3 +943,26 @@ export async function descartarEnvioTms(tenantId: string, id: string, desde: Est
     .eq('tenant_id', tenantId).eq('id', id).in('estado', desde).select('id'), 'cpdocs.envio_descartar');
   return ((exigir(r, 'cpdocs.envio_descartar') ?? []) as unknown[]).length > 0;
 }
+
+/**
+ * Pasa a `subido_a_mano` el envío SOLO si sigue en uno de los estados dados (UPDATE condicional) y suelta el lease:
+ * así `cp_envio_reclamar` (que solo mira estados vivos) ya no lo vuelve a tomar. `false` = ya no estaba en esos estados.
+ */
+export async function marcarEnvioSubidoAMano(tenantId: string, id: string, desde: EstadoEnvioTms[]): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').update({ estado: 'subido_a_mano', procesando_hasta: null, proxima_revision: null, updated_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId).eq('id', id).in('estado', desde).select('id'), 'cpdocs.envio_subido_a_mano');
+  return ((exigir(r, 'cpdocs.envio_subido_a_mano') ?? []) as unknown[]).length > 0;
+}
+
+/** El estado del envío más reciente (no descartado) de cada documento, para la lista de la bandeja. Sin envío = sin clave. */
+export async function estadoEnvioPorDocumento(tenantId: string, documentoIds: string[]): Promise<Record<string, EstadoEnvioTms>> {
+  if (documentoIds.length === 0) return {};
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').select('documento_id, estado')
+    .eq('tenant_id', tenantId).in('documento_id', documentoIds).neq('estado', 'descartado').order('created_at', { ascending: false }).limit(2000), 'cpdocs.envios_lista');
+  const salida: Record<string, EstadoEnvioTms> = {};
+  for (const f of (exigir(r, 'cpdocs.envios_lista') ?? []) as unknown as Fila[]) {
+    const id = String(f.documento_id);
+    if (!(id in salida)) salida[id] = f.estado as EstadoEnvioTms; // el más nuevo primero
+  }
+  return salida;
+}
