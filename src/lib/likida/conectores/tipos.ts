@@ -107,7 +107,7 @@ export const CATEGORIAS: readonly CategoriaConector[] = [
  * no cuánto gastan en licencias. Quien la repita tiene que decir de dónde salió.
  */
 export const EVIDENCIA_DE_PRIORIDAD = {
-  fuente: 'Censo de vacantes de autotransporte MX (censo-liquidacion), 1,987 empresas',
+  fuente: 'Censo de vacantes de autotransporte MX, 1,987 empresas',
   medidoEn: '2026-08-14',
   /** Empresas del censo que nombran cada software. Solo lo que se usó aquí. */
   empresasQueLoNombran: {

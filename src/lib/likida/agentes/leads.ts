@@ -1331,7 +1331,7 @@ async function correrPropuestas(disparo: DisparoCorrida, hoy: string, venceEn?: 
 //
 // LO QUE ESTE AGENTE NO PUEDE HACER, Y LO DICE. El blueprint (0125) lo definía
 // como «reactiva el scraper del censo»: ese scraper es un repo aparte
-// (censo-liquidacion) que corre fuera de este servidor. Aquí, en la función de
+// (el censo) que corre fuera de este servidor. Aquí, en la función de
 // Vercel, no hay web, no hay DENUE y no hay bolsa de trabajo — así que este
 // motor NO PUEDE traer empresas nuevas del mundo, y no va a fabricarlas.
 // Insertar en `prospecto` una empresa que este servidor se imaginó sería
