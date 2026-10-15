@@ -13,7 +13,7 @@
 // se confirma con la plantilla en blanco. Cuáles columnas llevan «*» también.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type TransformacionPlantilla = 'nombre_estado' | 'si_no' | 'entero';
+export type TransformacionPlantilla = 'nombre_estado' | 'si_no' | 'entero' | 'distancia';
 
 export interface EntradaCelda {
   /** Coordenada fija, p. ej. `C12`. */
@@ -40,10 +40,16 @@ export interface ColumnaTabla {
   defecto?: string;
   obligatorio: boolean;
   texto: boolean;
+  /** El valor es el número de fila de la tabla (IdDestino 1..n). */
+  indice?: boolean;
+  /** El valor es el destino al que va la mercancía (`mercancia.id_destino`); con un solo destino es 1. */
+  idDestino?: boolean;
 }
 
 export interface TablaLayout {
   id: 'destinos' | 'mercancias';
+  /** La tabla admite varias filas de destino (campos `destino_N_*` para N ≥ 2). */
+  multi?: boolean;
   filaEncabezado: number;
   primeraFila: number;
   maxFilas: number;
@@ -53,10 +59,13 @@ export interface TablaLayout {
 export interface HojaLayout { hoja: string; celdas: EntradaCelda[]; tablas: TablaLayout[] }
 
 export interface LayoutPlantilla {
-  nombre: 'normal';
+  nombre: 'normal' | 'nueva';
   version: number;
   /** true mientras no exista la plantilla real en blanco (B-2). */
   provisional: boolean;
+  /** `false` ⇒ solo sirve para DESCARGAR con aviso; el worker no la usa para enviar al TMS. Ausente = sin restricción. */
+  verificada?: boolean;
+  nota?: string;
   hojas: HojaLayout[];
 }
 
@@ -89,8 +98,8 @@ const t = (columna: string, encabezado: string, campo: string, obligatorio: bool
   ({ columna, encabezado, campo, obligatorio, texto: true, ...extra });
 
 const COLUMNAS_DESTINOS: ColumnaTabla[] = [
-  { columna: 'A', encabezado: 'IdDestino', constante: 1, transformacion: 'entero', obligatorio: true, texto: false },
-  t('B', 'Distancia', 'distancia_km', false, { texto: false }),
+  { columna: 'A', encabezado: 'IdDestino', constante: 1, transformacion: 'entero', obligatorio: true, texto: false, indice: true },
+  t('B', 'Distancia', 'distancia_km', false, { texto: false, transformacion: 'distancia' }),
   t('C', 'Razón Social', 'destino_nombre', true),
   t('D', 'RFC', 'destino_rfc', true),
   t('E', 'Calle', 'destino_calle', true),
@@ -112,7 +121,7 @@ const COLUMNAS_DESTINOS: ColumnaTabla[] = [
 ];
 
 const COLUMNAS_MERCANCIAS: ColumnaTabla[] = [
-  { columna: 'A', encabezado: 'Id Destino', constante: 1, transformacion: 'entero', obligatorio: true, texto: false },
+  { columna: 'A', encabezado: 'Id Destino', constante: 1, transformacion: 'entero', obligatorio: true, texto: false, idDestino: true },
   t('B', 'Bienes Transportados', 'mercancia.bienes_transp', true),
   t('C', 'Descripción', 'mercancia.descripcion', true),
   t('D', 'Cantidad', 'mercancia.cantidad', true, { texto: false }),
@@ -146,12 +155,38 @@ export const LAYOUT_NORMAL: LayoutPlantilla = {
         c('C46', 'contacto_destino_telefono', false),
         c('C47', 'contacto_destino_correo', false),
       ],
-      tablas: [{ id: 'destinos', filaEncabezado: 49, primeraFila: 50, maxFilas: 4, columnas: COLUMNAS_DESTINOS }],
+      tablas: [{ id: 'destinos', multi: true, filaEncabezado: 49, primeraFila: 50, maxFilas: 4, columnas: COLUMNAS_DESTINOS }],
     },
     { hoja: 'Mercancias', celdas: [], tablas: [{ id: 'mercancias', filaEncabezado: 21, primeraFila: 22, maxFilas: 100, columnas: COLUMNAS_MERCANCIAS }] },
     { hoja: 'Error', celdas: [], tablas: [] },
   ],
 };
+
+/**
+ * Plantilla «nueva» (varias razones sociales): PROVISIONAL y NO VERIFICADA. Misma estructura que la normal más las hojas
+ * `Origenes` y `Destinos` vacías. Qué columnas llevan esas hojas y cuándo se usa esta plantilla en vez de la normal lo
+ * define el cliente con la plantilla en blanco (bloqueo B-2); hasta entonces solo sirve para descargar con aviso.
+ */
+const PENDIENTE_NUEVA = 'pendiente de especificación (B-2)';
+export const LAYOUT_NUEVA: LayoutPlantilla = {
+  ...LAYOUT_NORMAL,
+  nombre: 'nueva',
+  verificada: false,
+  nota: `Hojas Origenes y Destinos ${PENDIENTE_NUEVA}.`,
+  hojas: [
+    ...LAYOUT_NORMAL.hojas,
+    { hoja: 'Origenes', celdas: [], tablas: [] },
+    { hoja: 'Destinos', celdas: [], tablas: [] },
+  ],
+};
+
+/** El layout de cada plantilla. */
+export function layoutDe(plantilla: 'normal' | 'nueva'): LayoutPlantilla {
+  return plantilla === 'nueva' ? LAYOUT_NUEVA : LAYOUT_NORMAL;
+}
+
+/** Un layout con `verificada:false` no se usa para enviar al TMS, solo para descargar. */
+export const layoutPuedeEnviarse = (l: LayoutPlantilla): boolean => l.verificada !== false;
 
 /** Coordenadas que el layout declara: celdas fijas + encabezados + primera fila de cada tabla. */
 export function coordenadasLayout(l: LayoutPlantilla): string[] {
