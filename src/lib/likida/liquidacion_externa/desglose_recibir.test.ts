@@ -252,6 +252,20 @@ describe('recibirDesglose: operador y destinatarios', () => {
     expect(b.excepciones.map((e) => e.tipo)).toEqual(['operador_sin_correo']);
   });
 
+  it('con archivo_correo => una entrega más al archivo con el mismo Excel; sin él => ninguna', async () => {
+    const con = banco();
+    await recibirDesglose(TENANT, desglose(), con.deps);
+    const delArchivo = con.entregas.filter((e) => e.rol === 'archivo');
+    expect(delArchivo.map((e) => e.correo)).toEqual(['archivo@ejemplo.test']);
+    expect(delArchivo[0]?.xlsxRuta).toBe(con.entregas[0]?.xlsxRuta);
+    expect(delArchivo[0]?.xlsxSha256).toBe(con.entregas[0]?.xlsxSha256);
+
+    const sin = banco({ config: { archivoCorreo: null } });
+    const r = await recibirDesglose(TENANT, desglose(), sin.deps);
+    expect(r).toMatchObject({ estado: 'creada', entregas: 3, excepciones: [] });
+    expect(sin.entregas.map((e) => e.rol)).toEqual(['operador', 'coordinador', 'rh']);
+  });
+
   it('sin coordinador asignado => 3 entregas y excepción coordinador_sin_correo', async () => {
     const b = banco({ coordinador: null });
     const r = await recibirDesglose(TENANT, desglose(), b.deps);

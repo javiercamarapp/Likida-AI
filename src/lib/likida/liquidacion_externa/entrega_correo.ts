@@ -359,6 +359,13 @@ async function procesarUna(
   // 4xx del destinatario (o rechazo local: sin destinatario válido, adjunto demasiado grande): sin reintento.
   await deps.marcarFallida(e.tenantId, e.id, token, `rechazado: ${res.detalle}`);
   resumen.fallidas += 1;
+  if (e.rol === 'archivo') {
+    // El buzón de archivo («Enviados») es una copia: que rebote no le pide nada al operador ni al coordinador, así que NO se
+    // abre una excepción de ellos (el tipo `coordinador_sin_correo` mentiría). Queda la entrega `fallida` visible en el
+    // detalle y este aviso en el log; un tipo de excepción propio exigiría una migración (ver notas de T-A1-26).
+    logger.warn('liqcorreo.archivo_rebotado', { entrega: e.id, correo: enmascararCorreo(e.correo), detalle: res.detalle });
+    return;
+  }
   const tipo: TipoExcepcion = e.rol === 'operador' ? 'operador_sin_correo' : 'coordinador_sin_correo';
   await deps.abrirExcepcion(e.tenantId, ctx.claveExterna, tipo, {
     motivo: 'correo_invalido', rol: e.rol, correo: enmascararCorreo(e.correo), detalle: res.detalle,

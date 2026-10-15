@@ -143,6 +143,34 @@ describe('procesarEntregasCorreo — las seis ramas de ResultadoEnvio', () => {
     expect(e.excepciones[0]?.detalle.correo).toBe('a***@ejemplo.test');
   });
 
+  it('el buzón de archivo rebota (422) ⇒ solo esa copia falla: el operador queda enviado y no se abre excepción de coordinador', async () => {
+    const cola = [
+      entrega({ id: 'e-op', rol: 'operador', correo: 'ana.prueba@ejemplo.test' }),
+      entrega({ id: 'e-ar', rol: 'archivo', correo: 'archivo@ejemplo.test' }),
+    ];
+    const { e, deps } = montar({ ok: true, id: 're_op' }, {}, cola);
+    deps.enviar = async (para) => (para === 'archivo@ejemplo.test'
+      ? { ok: false, motivo: 'rechazado', detalle: 'HTTP 422', status: 422 }
+      : { ok: true, id: 're_op' });
+    const r = await procesarEntregasCorreo(deps, 10);
+    expect(r).toMatchObject({ reclamadas: 2, enviadas: 1, fallidas: 1, errores: 0 });
+    expect(e.enviadas).toEqual([{ id: 'e-op', resendId: 're_op' }]);
+    expect(e.fallidas.map((f) => f.id)).toEqual(['e-ar']);
+    expect(e.liquidacionEnviada).toBe(1);
+    expect(e.excepciones).toEqual([]);
+  });
+
+  it('el archivo recibe el MISMO adjunto que el operador, con su propia llave de idempotencia', async () => {
+    const cola = [entrega({ id: 'e-op' }), entrega({ id: 'e-ar', rol: 'archivo', correo: 'archivo@ejemplo.test' })];
+    const { e, deps } = montar({ ok: true, id: 're_1' }, {}, cola);
+    await procesarEntregasCorreo(deps, 10);
+    expect(e.llamadasEnviar.map((l) => l.para)).toEqual(['ana.prueba@ejemplo.test', 'archivo@ejemplo.test']);
+    const [a, b] = e.llamadasEnviar;
+    expect(a?.op.adjuntos).toEqual(b?.op.adjuntos);
+    expect(a?.op.idempotencyKey).not.toBe(b?.op.idempotencyKey);
+    expect(b?.op.idempotencyKey).toMatch(/:archivo$/);
+  });
+
   it('rechazo local sin status (destinatario no válido) ⇒ fallida sin reintento', async () => {
     const { e, deps } = montar({ ok: false, motivo: 'rechazado', detalle: 'Sin destinatarios válidos.' });
     await procesarEntregasCorreo(deps, 10);
