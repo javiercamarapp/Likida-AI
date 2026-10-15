@@ -1,4 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Sin perfil de tenant (0770): este archivo prueba la ruta de siempre. El perfil tiene sus pruebas
+// (src/lib/auth/perfil_*.test.ts y src/app/api/perfil_superficies.test.ts).
+vi.mock('@/lib/auth/perfil_tenant', () => ({
+  MOTIVO_PERFIL_API: 'perfil',
+  perfilDeTenant: async () => null,
+  perfilRestringido: async () => false,
+  apiDenegadaPorPerfil: async () => false,
+  respuestaSiPerfilNiegaApi: async () => null,
+}));
 import { peticionStream } from '@/lib/pruebas/peticion_stream';
 
 // ═══════════════════════════════════════════════════════════════════════════

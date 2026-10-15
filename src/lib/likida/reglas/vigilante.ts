@@ -240,9 +240,10 @@ export async function vigilarReglas(
    *  la ruta entera, así que un barrido lento de reglas podía dejar sin
    *  correr a la cobranza/relojes legales que van después en la misma
    *  invocación. */
-  opts: { venceEn?: number } = {},
+  opts: { venceEn?: number; excluirTenants?: ReadonlySet<string> } = {},
 ): Promise<ResultadoVigilancia> {
-  const reglas = await reglasActivas();
+  // Las flotas con perfil (0770) no vigilan reglas: es un módulo en stand-by.
+  const reglas = (await reglasActivas()).filter((r) => !opts.excluirTenants?.has(r.tenantId));
   const r: ResultadoVigilancia = { reglas: reglas.length, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0 };
   for (const regla of reglas) {
     if (opts.venceEn && Date.now() >= opts.venceEn) break;
