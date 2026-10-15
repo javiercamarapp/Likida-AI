@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { INTERRUPTORES } from '@/lib/likida/interruptores';
-import { ETIQUETA_INTERRUPTOR, etiquetaInterruptor, notaDeLatenciaRuta } from './etiquetas';
+import { ETIQUETA_INTERRUPTOR, etiquetaContadorVigia, etiquetaInterruptor, notaDeLatenciaRuta } from './etiquetas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL MAPA DE RÓTULOS NO PUEDE QUEDARSE ATRÁS DEL CATÁLOGO DE PALANCAS.
@@ -46,5 +46,13 @@ describe('notaDeLatenciaRuta (B3, ronda 19)', () => {
     expect(notaDeLatenciaRuta('webhook.whatsapp')).toMatch(/hasta el acuse/);
     expect(notaDeLatenciaRuta('dashboard.chat')).toMatch(/primer byte/);
     expect(notaDeLatenciaRuta('health')).toBeNull();
+  });
+});
+
+describe('etiquetaContadorVigia (T-A4-42)', () => {
+  it('los contadores de avisos del latido del Vigía se leen en español; una clave desconocida se pinta cruda', () => {
+    expect(etiquetaContadorVigia('avisosPendientesViejos')).toMatch(/esperando confirmación/);
+    expect(etiquetaContadorVigia('avisosFallidos')).toMatch(/fallidos/);
+    expect(etiquetaContadorVigia('revisadas')).toBe('revisadas');
   });
 });

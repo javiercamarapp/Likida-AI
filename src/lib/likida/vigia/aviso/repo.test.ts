@@ -136,3 +136,20 @@ describe('insertarAviso', () => {
     expect((llamadas[0].valores as Record<string, unknown>).aprobado_en).toBe('2026-10-05T14:00:00.000Z');
   });
 });
+
+describe('pendientesConfirmacion (T-A4-42)', () => {
+  it('pide solo los pendientes de ESA flota, acotados, y solo fecha de nacimiento y cita (sin texto ni select *)', async () => {
+    respuesta = () => ({ data: [{ creado_en: '2026-10-05T10:00:00Z', cita: '2026-10-05T20:00:00Z' }, { creado_en: '2026-10-05T11:00:00Z', cita: null }], error: null });
+    const r = await crearRepoAviso().pendientesConfirmacion!(T1, 500);
+    expect(r).toEqual([{ creadoEn: '2026-10-05T10:00:00Z', cita: '2026-10-05T20:00:00Z' }, { creadoEn: '2026-10-05T11:00:00Z', cita: null }]);
+    const l = llamadas[0];
+    expect(l.tabla).toBe('vigia_aviso');
+    expect(l.filtros).toEqual(expect.arrayContaining([['eq', 'tenant_id', T1], ['eq', 'estado', 'pendiente_confirmacion']]));
+    expect(l.rango).toEqual([0, 499]);
+    expect(l.columnas).not.toMatch(/\*|texto|cliente|datos\b(?!->)/);
+  });
+  it('un error de la base lanza, no devuelve una cola vacía', async () => {
+    respuesta = () => ({ data: null, error: { message: 'caída' } });
+    await expect(crearRepoAviso().pendientesConfirmacion!(T1, 10)).rejects.toThrow('aviso.pendientes_confirmacion');
+  });
+});

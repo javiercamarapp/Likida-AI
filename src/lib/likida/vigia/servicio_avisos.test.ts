@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { barridoVigia } from './servicio';
+import { logger } from '@/lib/logger';
 import { escenario, RepoEnMemoria } from './repo.fixture';
 import { AHORA, T1, T2 } from './datos.fixture';
 import type { ContextoAvisosFlota, DepsVigia } from './puertos';
@@ -35,7 +36,7 @@ function armar(flotas: ContextoAvisosFlota[] | Error, repo: RepoEnMemoria = esce
   return { deps, puerto };
 }
 
-beforeEach(() => { generar.mockReset(); entregar.mockReset(); generar.mockResolvedValue(gen()); });
+beforeEach(() => { vi.mocked(logger.error).mockClear(); generar.mockReset(); entregar.mockReset(); generar.mockResolvedValue(gen()); });
 
 describe('barridoVigia · pasada de avisos', () => {
   it('suma creados / enviados / fallidos / omitidos de todas las flotas', async () => {
@@ -118,5 +119,67 @@ describe('barridoVigia · pasada de avisos', () => {
       expect(entregar).toHaveBeenCalledTimes(1);
       expect(r).toMatchObject({ avisosEnviados: 1, cortadoPorReloj: true });
     } finally { vi.useRealTimers(); }
+  });
+});
+
+// T-A4-42: la cola atorada y los logs sin PII.
+describe('barridoVigia · cola atorada y logs de avisos (T-A4-42)', () => {
+  const horas = (h: number) => new Date(AHORA.getTime() - h * 3_600_000).toISOString();
+  const conRepo = (f: ContextoAvisosFlota, pendientes: Array<{ creadoEn: string; cita: string | null }> | Error) => {
+    const leer = vi.fn(async () => { if (pendientes instanceof Error) throw pendientes; return pendientes; });
+    (f.generar as unknown as { repo: unknown }).repo = { pendientesConfirmacion: leer };
+    return leer;
+  };
+
+  it('suma por flota los pendientes de más de 2 h; uno reciente o con la cita ya pasada no cuenta', async () => {
+    const f1 = flota(T1, []);
+    const f2 = flota(T2, []);
+    const l1 = conRepo(f1, [{ creadoEn: horas(3), cita: null }, { creadoEn: horas(0.5), cita: null }, { creadoEn: horas(9), cita: horas(1) }]);
+    conRepo(f2, [{ creadoEn: horas(2.5), cita: new Date(AHORA.getTime() + 3_600_000).toISOString() }]);
+    const { deps } = armar([f1, f2]);
+    const r = await barridoVigia(deps, { mantenimiento: true });
+    expect(r.avisosPendientesViejos).toBe(2);
+    expect(l1).toHaveBeenCalledWith(T1, expect.any(Number));
+  });
+
+  it('sin la lectura en el repo (o con mantenimiento apagado) el contador es 0', async () => {
+    const { deps } = armar([flota(T1, [])]);
+    expect((await barridoVigia(deps, { mantenimiento: true })).avisosPendientesViejos).toBe(0);
+    const f = flota(T1, []);
+    const leer = conRepo(f, [{ creadoEn: horas(5), cita: null }]);
+    const { deps: d2 } = armar([f]);
+    expect((await barridoVigia(d2, { mantenimiento: false })).avisosPendientesViejos).toBe(0);
+    expect(leer).not.toHaveBeenCalled();
+  });
+
+  it('si no se puede leer la cola, la pasada sigue, cuenta 0 y no hay error del módulo', async () => {
+    const f = flota(T1, [aviso(T1, 1)]);
+    conRepo(f, new Error('boom'));
+    entregar.mockResolvedValue({ estado: 'enviado', via: 'texto' });
+    const { deps } = armar([f]);
+    const r = await barridoVigia(deps, { mantenimiento: true });
+    expect(r).toMatchObject({ avisosPendientesViejos: 0, avisosEnviados: 1, avisosConError: false });
+  });
+
+  it('los logs de error llevan el código, nunca el mensaje: teléfono, nombre y texto del aviso no salen', async () => {
+    const SECRETOS = ['5255 1234 5678', '525512345678', 'Operador Fulano', 'texto del aviso para el cliente']; // grep-limpio:ok
+    const filtracion = (c: string) => Object.assign(new Error(`insert falló: Failing row contains (${SECRETOS.join(', ')})`), { code: c });
+    const f = flota(T1, [aviso(T1, 1)]);
+    conRepo(f, filtracion('23514'));
+    entregar.mockRejectedValueOnce(filtracion('XX001'));
+    const f2 = flota(T2, []);
+    generar.mockResolvedValueOnce(gen()).mockRejectedValueOnce(filtracion('22P02'));
+    const { deps } = armar([f, f2]);
+    await barridoVigia(deps, { mantenimiento: true });
+    const { deps: d3 } = armar(filtracion('57014'));
+    await barridoVigia(d3, { mantenimiento: true });
+
+    const llamadas = (logger.error as unknown as { mock: { calls: Array<[string, Record<string, unknown>]> } }).mock.calls
+      .filter(([evento]) => evento.startsWith('vigia.aviso.'));
+    expect(llamadas.map(([e]) => e).sort()).toEqual(['vigia.aviso.cola_fallo', 'vigia.aviso.entrega_fallo', 'vigia.aviso.flota_fallo', 'vigia.aviso.pasada_fallo']);
+    const volcado = JSON.stringify(llamadas);
+    for (const s of SECRETOS) expect(volcado).not.toContain(s);
+    expect(volcado).not.toContain('Failing row');
+    expect(llamadas.map(([, d]) => d.codigo)).toEqual(expect.arrayContaining(['23514', 'XX001', '22P02', '57014']));
   });
 });
