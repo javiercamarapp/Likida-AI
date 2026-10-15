@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { puedeVerRuta, conectorPermitidoEnPerfil, integracionPermitidaEnPerfil } from '@/lib/auth/visibilidad';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { getConexiones, contarCredencialesGps } from '@/lib/likida/conexiones';
 import { catalogoIntegraciones } from '@/lib/likida/integraciones';
@@ -33,6 +34,14 @@ export const dynamic = 'force-dynamic';
 
 const RUTA = '/dashboard/conexiones';
 
+const MOTIVO_CONECTOR_FUERA_DEL_PERFIL = 'Este sistema no está incluido en el plan de tu cuenta.';
+
+/** Una action es un endpoint alcanzable por POST directo: ocultar el conector en la pantalla no basta, se vuelve a negar aquí. */
+async function conectorFueraDelPerfil(tenantId: string, conectorId: string): Promise<boolean> {
+  const p = await perfilDeTenant(tenantId);
+  return p !== null && !conectorPermitidoEnPerfil(p, conectorId);
+}
+
 /**
  * Conexiones (F7 del plan — el chasis de agentes): qué tiene conectado la
  * flota y qué le falta, con estado MEDIDO. Área `administracion`: es
@@ -56,6 +65,8 @@ export default async function PaginaConexiones({
   // Primario sin catch: una pantalla de salud que no puede leer la salud
   // debe caerse, no pintar verdes de adorno.
   const conectores = await getConexiones(tenantId);
+  // Perfil de la flota (null = sin perfil: la pantalla de siempre). Con perfil solo se ofrece la lista cerrada de conectores.
+  const perfil = await perfilDeTenant(tenantId);
 
   // El catálogo de sistemas, que hasta agosto-2026 vivía en la pantalla gemela
   // `/dashboard/integraciones`. Su único estado medido por flota es el rastreo,
@@ -86,6 +97,7 @@ export default async function PaginaConexiones({
     }
 
     const conectorId = typeof fd.get('conector') === 'string' ? (fd.get('conector') as string).trim().slice(0, 64) : '';
+    if (await conectorFueraDelPerfil(s.tenantId, conectorId)) return { ok: false, error: MOTIVO_CONECTOR_FUERA_DEL_PERFIL };
     // Los valores se reconstruyen contra los campos DECLARADOS del conector:
     // lo que el formulario mande de más ni siquiera se lee (y el motor
     // vuelve a filtrar de todos modos).
@@ -129,6 +141,7 @@ export default async function PaginaConexiones({
     }
 
     const conectorId = typeof fd.get('conector') === 'string' ? (fd.get('conector') as string).trim().slice(0, 64) : '';
+    if (await conectorFueraDelPerfil(s.tenantId, conectorId)) return { ok: false, error: MOTIVO_CONECTOR_FUERA_DEL_PERFIL };
     try {
       const r = await probarCredencial(s.tenantId, conectorId, { id: s.userId });
       // El sello ya quedó en la fila: se revalida para que el renglón de arriba
@@ -157,6 +170,7 @@ export default async function PaginaConexiones({
     }
 
     const conectorId = typeof fd.get('conector') === 'string' ? (fd.get('conector') as string).trim().slice(0, 64) : '';
+    if (await conectorFueraDelPerfil(s.tenantId, conectorId)) return { ok: false, error: MOTIVO_CONECTOR_FUERA_DEL_PERFIL };
     try {
       await desactivarCredencial(s.tenantId, conectorId, { id: s.userId });
       revalidatePath(RUTA);
@@ -213,7 +227,7 @@ export default async function PaginaConexiones({
   return (
     <VistaConexiones
       conectores={conectores}
-      integraciones={<SeccionIntegraciones integraciones={catalogoIntegraciones({ credencialesRastreo })} />}
+      integraciones={<SeccionIntegraciones integraciones={catalogoIntegraciones({ credencialesRastreo }).filter((i) => perfil === null || integracionPermitidaEnPerfil(perfil, i.id))} />}
       gps={panelGps.error !== null ? (
         <section className="card p-4"><h2 className="font-display text-[15px] font-semibold">GPS</h2>
           <p role="alert" className="mt-1 text-[12.5px]" style={{ color: 'var(--warn)' }}>{panelGps.error}</p></section>
@@ -231,7 +245,7 @@ export default async function PaginaConexiones({
           cofreListo={cofreConfigurado()}
           puedeAdministrarCofre={puedeAdministrar(rol)}
           guardadas={guardadas}
-          grupos={catalogoParaCaptura()}
+          grupos={catalogoParaCaptura(perfil)}
           acciones={{ guardar, desactivar, probar }}
         />
       )}
