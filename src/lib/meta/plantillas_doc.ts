@@ -2,6 +2,7 @@
 // NO se edita a mano: `plantillas_catalogo.test.ts` falla si no coincide con esta
 // salida. Regenerar: `npx tsx scripts/generar-doc-plantillas.ts`.
 import { CATALOGO_PLANTILLAS, type PlantillaCatalogo, type BotonCatalogo } from './plantillas_catalogo';
+import { perfilDePlantilla } from '@/lib/likida/conductor/plantillas_requeridas';
 
 const AGENTES: Record<PlantillaCatalogo['agente'], string> = {
   chofer_asignacion: 'Chofer — asignación de viaje',
@@ -54,13 +55,13 @@ function bloque(p: PlantillaCatalogo): string {
 /** La lista corta para quien somete: una fila por plantilla pendiente, sin el cuerpo (que vive en el bloque de abajo). */
 function tablaPorSometer(nuevas: readonly PlantillaCatalogo[]): string[] {
   const l: string[] = [];
-  l.push('| # | Plantilla | Agente | Llamador en código | Variables | Botones | Texto |');
-  l.push('| --- | --- | --- | --- | --- | --- | --- |');
+  l.push('| # | Plantilla | Agente | Perfil (esenciales / completo) | Llamador en código | Variables | Botones | Texto |');
+  l.push('| --- | --- | --- | --- | --- | --- | --- | --- |');
   nuevas.forEach((p, i) => {
     const botones = p.botones.length === 0 ? '—' : p.botones.map((b) => `«${b.texto}»`).join(', ');
     const llamador = p.llamador === null ? 'sin llamador todavía' : p.llamador.split(', ').map((x) => `\`${x}\``).join(', ');
     const texto = p.textoVerificado ? 'autoritativo' : 'reconstruido: cotejar';
-    l.push(`| ${i + 1} | \`${p.nombre}\` | ${AGENTES[p.agente]} | ${llamador} | ${p.variables.length} | ${botones} | ${texto} |`);
+    l.push(`| ${i + 1} | \`${p.nombre}\` | ${AGENTES[p.agente]} | ${perfilDePlantilla(p.nombre)} | ${llamador} | ${p.variables.length} | ${botones} | ${texto} |`);
   });
   return l;
 }
