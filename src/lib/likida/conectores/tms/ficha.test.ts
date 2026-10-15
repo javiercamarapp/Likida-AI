@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { TMS_API_LECTURA } from '../erp';
 import { CONECTORES, resumenHonesto } from '../registro';
 import { esSecreto, veredictoDe, type Http, type PeticionHttp, type RespuestaHttp, type ValoresCredencial } from '../tipos';
-import { FRASE_PAGINA_DE_ACCESO, probarTmsApiLectura } from './ficha';
+import {
+  FRASE_403_IP, FRASE_DNS, FRASE_PAGINA_DE_ACCESO, FRASE_RECHAZO, FRASE_TIEMPO, clasificarErrorDeRed, probarTmsApiLectura,
+} from './ficha';
 
 // Servidor falso mínimo en línea (Http de tipos.ts). Todo sintético.
 const CLAVE = 'clave-sintetica-xyz';
@@ -160,5 +162,55 @@ describe('ficha tms_api_lectura', () => {
   it('el probar() de la ficha es el mismo flujo', async () => {
     const r = await TMS_API_LECTURA.probar(V, servidor().http);
     expect(veredictoDe(r)).toBe('sirve');
+  });
+});
+
+describe('conectividad: diagnóstico en frases llanas (T-TMS-14)', () => {
+  const codigo = (code: string, msg = code): Error => Object.assign(new Error(msg), { code });
+
+  it.each([
+    ['ENOTFOUND', codigo('ENOTFOUND', 'getaddrinfo ENOTFOUND api.ejemplo.test'), FRASE_DNS],
+    ['ETIMEDOUT', codigo('ETIMEDOUT', 'connect ETIMEDOUT 203.0.113.9:443'), FRASE_TIEMPO],
+    ['ECONNREFUSED', codigo('ECONNREFUSED', 'connect ECONNREFUSED 203.0.113.9:443'), FRASE_RECHAZO],
+  ])('login que lanza %s → frase correcta y no_se_sabe', async (_n, err, frase) => {
+    const r = await probarTmsApiLectura(V, servidor({ login: err }).http);
+    expect(r.ok).toBe(false);
+    expect(veredictoDe(r)).toBe('no_se_sabe');
+    expect(r.detalle).toContain(frase);
+    expect(r.detalle).toMatch(/NO significa que la credencial sea mala/);
+  });
+
+  it('el código viene en la causa (fetch de undici): se reconoce igual', async () => {
+    const err = new TypeError('fetch failed', { cause: codigo('UND_ERR_CONNECT_TIMEOUT') });
+    expect(clasificarErrorDeRed(err)).toBe('tiempo');
+    const r = await probarTmsApiLectura(V, servidor({ login: err }).http);
+    expect(r.detalle).toContain(FRASE_TIEMPO);
+  });
+
+  it('error en la lectura (login bueno) también da la frase llana y no_se_sabe', async () => {
+    const r = await probarTmsApiLectura(V, servidor({ lectura: codigo('ETIMEDOUT') }).http);
+    expect(veredictoDe(r)).toBe('no_se_sabe');
+    expect(r.detalle).toContain(FRASE_TIEMPO);
+  });
+
+  it('403 en login y en lectura → dice «respondió 403 (probable lista de IP permitidas)» y no_sirve', async () => {
+    const a = await probarTmsApiLectura(V, servidor({ login: json(403, {}) }).http);
+    const b = await probarTmsApiLectura(V, servidor({ lectura: json(403, {}) }).http);
+    for (const r of [a, b]) {
+      expect(veredictoDe(r)).toBe('no_sirve');
+      expect(r.detalle).toContain(FRASE_403_IP);
+    }
+  });
+
+  it('un error desconocido conserva su texto y no se clasifica', async () => {
+    expect(clasificarErrorDeRed(new Error('algo raro'))).toBeNull();
+    const r = await probarTmsApiLectura(V, servidor({ login: new Error('algo raro') }).http);
+    expect(r.detalle).toContain('algo raro');
+    expect(veredictoDe(r)).toBe('no_se_sabe');
+  });
+
+  it('las frases de red no filtran clave, usuario ni token', async () => {
+    const r = await probarTmsApiLectura(V, servidor({ login: codigo('ENOTFOUND', `getaddrinfo ENOTFOUND ${CLAVE}`) }).http);
+    expect(r.detalle).not.toContain(CLAVE);
   });
 });

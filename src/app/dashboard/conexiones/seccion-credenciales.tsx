@@ -125,7 +125,10 @@ export interface CredencialPantalla {
 
 /** Exportada para poder probar su gateo por render (patrón
  *  `tablero-operacion.test.tsx`). */
-export function SeccionCredenciales({ cofreListo, puedeAdministrarCofre, guardadas, grupos, acciones }: {
+export function SeccionCredenciales({ cofreListo, puedeAdministrarCofre, guardadas, grupos, acciones, ipSalida }: {
+  /** IP de salida estática del hosting, SOLO si está contratada y confirmada
+   *  (T-TMS-14). Ausente = no se promete ninguna IP. */
+  ipSalida?: string | null;
   /** ¿Hay `LIKIDA_COFRE_LLAVE`? Sin ella no se cifra y no se ofrece capturar. */
   cofreListo: boolean;
   /** Capturar/desactivar es CONTROL (`puedeAdministrar`) — mismo criterio que
@@ -148,6 +151,12 @@ export function SeccionCredenciales({ cofreListo, puedeAdministrarCofre, guardad
         conecta todavía: hay que apretar <strong>Probar conexión</strong>, que llama de verdad al
         sistema y sella aquí lo que contestó.
       </p>
+      {ipSalida && (
+        <p className="text-[12px] mb-3 max-w-2xl" style={{ color: 'var(--muted)' }}>
+          Si tu área de sistemas usa firewall o lista de IP permitidas, pídeles que autoricen la
+          IP de salida de Likida: <span className="cifra-mono">{ipSalida}</span>.
+        </p>
+      )}
 
       {guardadas === null ? (
         // Lectura caída ≠ "no tienes credenciales": pintarlo vacío invitaría a
