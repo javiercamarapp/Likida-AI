@@ -127,6 +127,9 @@ export default async function PaginaViajes({
         sinUnidad: r.sinUnidad,
         clientesSinAmarrar: r.clientesSinAmarrar,
         sinCliente: r.sinCliente,
+        seguimientoActivado: r.seguimientoActivado,
+        seguimientoOmitidoSinVoluntario: r.seguimientoOmitidoSinVoluntario,
+        seguimientoNoDisponible: r.seguimientoNoDisponible,
       },
     };
   }
