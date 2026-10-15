@@ -259,6 +259,27 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
     if (viajeEnFoco !== conv.viajeId) await repo.actualizarConversacion(tenantId, conv.id, { viajeId: viajeEnFoco });
   }
 
+  // ── 0798 «solo avisar»: ni borrador ni envío; se conservan clasificación, prioridad y escalera ──────
+  if (config.habilitado && config.soloAvisar === true) {
+    const nombre = await repo.nombreCliente(tenantId, contacto.clienteId);
+    const disparo: Extract<MotivoEscalamiento, 'pide_humano' | 'folio_ajeno'> | null =
+      senales.includes('folio_ajeno') ? 'folio_ajeno' : cl.intencion === 'pide_humano' ? 'pide_humano' : null;
+    const aviso = evaluarEscalamiento({
+      conversacion: { ...convActual, id: conv.id, estado: 'activa', sinRespuestaDesde: conv.sinRespuestaDesde ?? ahora.toISOString() },
+      config, ahoraMs: ahora.getTime(), disparoInmediato: disparo,
+    });
+    if (aviso) {
+      const ctx = { tenantId, conv: convActual, contacto, config, nombreCliente: nombre ?? contacto.nombre };
+      // Sin borrador no hay «aviso de aprobación» que ya fuera la alerta del gerente: si el hilo salta directo al nivel 2
+      // (molestia crítica), el gerente (nivel 1) también se entera. La clave `…:n1` es la misma que usaría el barrido: no se duplica.
+      if (aviso.nivel === 2 && convActual.escalamientoNivel < 1 && !convActual.atendidaEn) {
+        await ejecutarEscalamiento({ ...aviso, nivel: 1, clave: aviso.clave.replace(/:n2$/, ':n1') }, ctx, deps);
+      }
+      await ejecutarEscalamiento(aviso, ctx, deps);
+    }
+    return;
+  }
+
   // ── Borrador con datos reales (o con «lo consulto») ─────────────────────
   const [nombreFlota, nombreCliente] = await Promise.all([repo.nombreFlota(tenantId), repo.nombreCliente(tenantId, contacto.clienteId)]);
   // 0647: lo que el Vigía no entendió, pero se parece a una pregunta cuya respuesta el gerente ya aprobó. Si leerlas falla, el

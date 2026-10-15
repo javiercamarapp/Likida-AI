@@ -887,3 +887,92 @@ describe('datos de la unidad (T-A4-24)', () => {
     expect(repo.estatus.llamadas.every((l) => l.tenantId === T1)).toBe(true);
   });
 });
+
+describe('0798 «solo avisar»: avisa y prioriza, no contesta', () => {
+  it('una pregunta normal: se guarda y clasifica, pero NO hay borrador, ni aviso de aprobación, ni envío al cliente', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    repo.estatus.agregar(T1, CLIENTE_A, estatus());
+    const { deps, alCliente, alGerente } = armar(repo);
+    expect(await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), deps)).toBe('atendido');
+    expect(repo.entrantes()).toHaveLength(1);
+    expect(repo.entrantes()[0].intencion).toBe('ubicacion');
+    expect(repo.salientes()).toEqual([]);
+    expect(alCliente).toEqual([]);
+    expect(alGerente).toEqual([]);
+  });
+
+  it('aunque el modo sea autoenvío, no sale nada al cliente', async () => {
+    const { repo } = escenario({ soloAvisar: true, modoAprobacion: 'autoenviar_bajo_riesgo', autoenviarMinAprobaciones: 1 });
+    repo.estatus.agregar(T1, CLIENTE_A, estatus());
+    const { deps, alCliente } = armar(repo);
+    await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), deps);
+    expect(repo.salientes()).toEqual([]);
+    expect(alCliente).toEqual([]);
+  });
+
+  it('una queja: sin borrador, pero la escalera funciona (molestia registrada y aviso al gerente)', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    const { deps, alCliente, alGerente } = armar(repo);
+    await atenderMensajeCliente(msg('Tengo una queja del servicio'), deps);
+    expect(repo.salientes()).toEqual([]);
+    expect(alCliente).toEqual([]);
+    expect([...repo.conversaciones.values()][0].molestiaNivel).toBeGreaterThanOrEqual(2);
+    expect(repo.eventosDe('escalada').some((e) => e.nivel === 1)).toBe(true);
+    expect(alGerente).toHaveLength(1);
+    expect(alGerente[0].telefono).toBe('525599999999'); // grep-limpio:ok
+    expect(alGerente[0].op.contexto).toBe('vigia.escalamiento');
+  });
+
+  it('un cliente muy molesto sube también al dueño, sin borrador', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    const { deps, alGerente } = armar(repo);
+    await atenderMensajeCliente(msg('PÉSIMO SERVICIO!!! EXIJO UNA RESPUESTA YA, SON UNOS INCOMPETENTES'), deps);
+    expect(repo.salientes()).toEqual([]);
+    expect(alGerente.map((g) => g.telefono)).toEqual(expect.arrayContaining(['525599999999', '525588888888'])); // grep-limpio:ok
+    expect(repo.eventosDe('escalada').filter((e) => e.clave).map((e) => e.nivel)).toEqual(expect.arrayContaining([1, 2]));
+    expect([...repo.conversaciones.values()][0].escalamientoNivel).toBe(2);
+  });
+
+  it('pide un humano: aviso inmediato al gerente y ninguna respuesta al cliente', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    const { deps, alCliente, alGerente } = armar(repo);
+    await atenderMensajeCliente(msg('Quiero hablar con una persona'), deps);
+    expect(repo.salientes()).toEqual([]);
+    expect(alCliente).toEqual([]);
+    expect(repo.eventosDe('escalada').filter((e) => e.nivel === 1).length).toBeGreaterThan(0);
+    expect(repo.eventosDe('escalada').some((e) => e.nivel === 2)).toBe(false);
+    expect(alGerente).toHaveLength(1);
+    expect(alGerente[0].telefono).toBe('525599999999'); // grep-limpio:ok
+  });
+
+  it('el barrido sigue avisando a los 30 min sin respuesta, también con solo_avisar', async () => {
+    const e = escenario({ soloAvisar: true });
+    e.repo.estatus.agregar(T1, CLIENTE_A, estatus());
+    await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), armar(e.repo).deps);
+    const luego = armar(e.repo, { ahora: new Date(AHORA.getTime() + 30 * 60_000) });
+    const r = await barridoVigia(luego.deps);
+    expect(r.escaladas).toBe(1);
+    expect(luego.alGerente).toHaveLength(1);
+    expect(luego.alGerente[0].op.texto).toContain('lleva 30 minutos sin respuesta');
+    expect(e.repo.salientes()).toEqual([]);
+  });
+
+  it('con solo_avisar apagado (false) el copiloto de siempre sigue intacto: borrador pendiente y aviso de aprobación', async () => {
+    const { repo } = escenario({ soloAvisar: false });
+    repo.estatus.agregar(T1, CLIENTE_A, estatus());
+    const { deps, alGerente } = armar(repo);
+    await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), deps);
+    expect(repo.salientes()).toHaveLength(1);
+    expect(repo.salientes()[0].estado).toBe('pendiente_aprobacion');
+    expect(alGerente).toHaveLength(1);
+  });
+
+  it('el agente apagado sigue callado aunque solo_avisar esté activo', async () => {
+    const { repo } = escenario({ soloAvisar: true, habilitado: false });
+    const { deps, alGerente, alCliente } = armar(repo);
+    await atenderMensajeCliente(msg('Quiero hablar con una persona'), deps);
+    expect(alGerente).toEqual([]);
+    expect(alCliente).toEqual([]);
+  });
+});
+

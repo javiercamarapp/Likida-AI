@@ -126,7 +126,7 @@ export function FormaConfig({ accion, valores }: {
         <div>
           <label htmlFor="cfg-sla" className={ETIQUETA}>Minutos sin respuesta antes de avisar al responsable</label>
           <input id="cfg-sla" name="slaRespuestaMin" type="text" inputMode="numeric" defaultValue={valores.slaRespuestaMin} className={CAMPO} style={{ background: 'var(--surface)' }} />
-          <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 5 y 1,440. El barrido corre cada 5 minutos.</p>
+          <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 5 y 1,440 (10 por omisión; tú fijas el plazo de tu flota). Si el cliente tiene un grupo crítico, rige el menor entre este y el de clientes críticos.</p>
         </div>
         <div>
           <label htmlFor="cfg-n2" className={ETIQUETA}>Minutos adicionales antes de avisar al dueño</label>
@@ -136,7 +136,7 @@ export function FormaConfig({ accion, valores }: {
         <div>
           <label htmlFor="cfg-crit" className={ETIQUETA}>Minutos sin respuesta en clientes CRÍTICOS</label>
           <input id="cfg-crit" name="slaCriticoMin" type="text" inputMode="numeric" defaultValue={valores.slaCriticoMin} className={CAMPO} style={{ background: 'var(--surface)' }} />
-          <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 2 y 1,440 (10 recomendado). Rige para los clientes con un grupo marcado como crítico; el barrido corre cada 5 minutos.</p>
+          <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 2 y 1,440 (10 por omisión; 5 y 10 son solo ejemplos, tú fijas el plazo). Rige para los clientes con un grupo marcado como crítico; se aplica el menor entre este y el general.</p>
         </div>
         <div>
           <label htmlFor="cfg-mol" className={ETIQUETA}>Avisar al responsable desde la molestia nivel</label>
