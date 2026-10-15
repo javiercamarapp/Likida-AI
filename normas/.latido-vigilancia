@@ -1,36 +1,48 @@
 ---
-fecha_corrida: 2026-09-20 (domingo)
+fecha_corrida: 2026-10-15 (jueves)
 ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-19 (9 días, incluye 3 viernes:
-  11, 18-sep, y el 12 previamente reportado) sin barrer. Sigue
-  arrancando en 09-11 para la próxima corrida.
-notas_revisadas: 0 — ningún endpoint respondió.
+rango_pendiente: 2026-09-11 — 2026-10-14 (34 días corridos, incluye los
+  viernes 11, 18, 25-sep y 02, 09-oct — cuota semanal de IEPS diésel sin
+  verificar en ninguno —, los lunes 14, 21, 28-sep y 05, 12-oct — ETag
+  del minisitio del SAT sin comprobar —, y el 01-oct-2026, el único
+  disparo trimestral de deriva de ley del rango, también sin correr).
+  Sigue arrancando en 09-11 para la próxima corrida.
+notas_revisadas: 0 — ningún endpoint respondió, cuarta corrida consecutiva.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
   no hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes, y las cuotas de los
-  viernes 11 y 18-sep tampoco se pudieron verificar (mismo bloqueo).
-  Sigue sin verificar desde el 05-sep.
-etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
+cuota_diesel: no_evaluable — viernes 11, 18, 25-sep y 02, 09-oct sin
+  verificar (mismo bloqueo). Sigue sin verificar desde el 05-sep (40 días).
+etag_sat: no_evaluable — lunes 14, 21, 28-sep y 05, 12-oct sin comprobar.
+deriva_ley_check: no_evaluable — el disparo trimestral del 01-oct-2026
+  cayó dentro de la ventana bloqueada y no corrió.
 estado: >
-  INFRA — TERCERA corrida consecutiva bloqueada (12-sep y 15-sep
-  reportaron el mismo corte; ver latido anterior). Probado con dos rutas
-  de red independientes: curl directo por HTTPS_PROXY y la herramienta
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la
-  sesión) — AMBAS devuelven bloqueo de política de egreso, no timeout ni
-  reset. curl: "CONNECT tunnel failed, response 403" contra
-  sidofqa.segob.gob.mx (notas y diarios/porFecha) y www.google.com como
-  control (también 403 — confirma que el bloqueo cubre dominios no
-  permitidos en general, no que el sitio del SIDOF esté caído). WebFetch:
-  {"error_type":"EGRESS_BLOCKED","domain":"sidofqa.segob.gob.mx"} contra
-  el mismo endpoint. /root/.ccr/__agentproxy/status muestra
-  recentRelayFailures vacío, o sea no es una caída de conexión sino un
-  rechazo de política. Per README del proxy: un 403 de política no se
-  reintenta ni se rodea, se reporta. No se leyó ninguna nota del DOF en
-  esta corrida ni en las dos anteriores. No se tocó ninguna ficha de
-  normas/. El rango sin verificar ya cubre 9 días hábiles y 3 viernes de
-  cuota de diésel. Requiere intervención humana: permitir
-  sidofqa.segob.gob.mx (y el resto de references/fuentes.md) en la
-  política de egreso de este entorno programado, o correr esta rutina
-  desde un entorno con esos dominios permitidos.
+  INFRA — CUARTA corrida consecutiva bloqueada, y la más larga: 35 días
+  sin que la rutina pueda tocar un solo endpoint (10-sep → 15-oct; antes
+  de esta, #461 el 12-sep, #471 el 15-sep y #483 el 20-sep ya reportaron
+  el mismo corte). Probado otra vez con dos rutas de red independientes:
+  curl directo por HTTPS_PROXY y WebFetch (infraestructura propia de
+  Anthropic, no el proxy de la sesión) — AMBAS siguen bloqueadas, aunque
+  con huellas distintas a la corrida anterior: curl da ahora
+  "CONNECT tunnel failed, response 403" contra sidofqa.segob.gob.mx Y
+  contra www.google.com como control (confirma que el bloqueo es de
+  política de host para la sesión completa, no algo específico del
+  SIDOF); /root/.ccr/__agentproxy/status lista ambos en
+  recentRelayFailures con kind "connect_rejected" y el detalle
+  "gateway answered 403 to CONNECT (policy denial or upstream failure)"
+  — ya no recentRelayFailures vacío como en la corrida del 20-sep.
+  WebFetch ya no devuelve el JSON {"error_type":"EGRESS_BLOCKED"} de
+  antes: ahora falla con "getaddrinfo ENOTFOUND sidofqa.segob.gob.mx" —
+  mismo resultado de fondo (el dominio no es alcanzable desde esta
+  sesión), pero el mecanismo de bloqueo cambió de forma entre corridas,
+  así que no asumir que seguirá viéndose igual la próxima vez. Per
+  README del proxy: un 403 de política no se reintenta ni se rodea, se
+  reporta. No se leyó ninguna nota del DOF en esta corrida ni en las
+  tres anteriores. No se tocó ninguna ficha de normas/. El rango sin
+  verificar ya cubre cinco viernes de cuota de diésel, cinco lunes de
+  ETag del SAT, y el único disparo trimestral del periodo. Sigue
+  requiriendo intervención humana: permitir sidofqa.segob.gob.mx (y el
+  resto de references/fuentes.md: dof.gob.mx, www.sat.gob.mx,
+  www.diputados.gob.mx) en la política de egreso de este entorno
+  programado — ya se reportó tres veces antes (PRs #461, #471, #483) sin
+  cambio observable en el bloqueo.
