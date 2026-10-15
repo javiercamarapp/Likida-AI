@@ -22,6 +22,20 @@ export const dynamic = 'force-dynamic';
 const RUTA = '/dashboard/agentes/peajes/reclamacion';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** La puerta de cada acción: rol con acceso al área de dinero y, salvo superadmin, la flota de la propia sesión. */
+async function puertaReclamos(tenantId: string): Promise<string | null> {
+  const sesion = await requireSessionTenant(RUTA);
+  if (!puedeVerArea(sesion.rol, 'dinero')) return 'Tu rol no puede operar reclamos de peaje.';
+  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Esta flota no es la tuya.';
+  return null;
+}
+const volverReclamos = (sufijo: string, msg: string, desgloseId?: string): never => {
+  const q = new URLSearchParams(sufijo.replace(/^\?/, ''));
+  if (desgloseId) q.set('desglose', desgloseId);
+  q.set(msg.startsWith('error:') ? 'error' : 'aviso', msg.replace(/^error:/, ''));
+  redirect(`${RUTA}?${q.toString()}`);
+};
+
 /**
  * El reporte de reclamación de un desglose de peaje: los cruces que el GPS no
  * respalda, con el porqué y la evidencia, para pedirle al proveedor la revisión.
@@ -39,62 +53,52 @@ export default async function PaginaReclamacionPeajes({
   const sufijo = sufijoTenant(sp);
 
   // ── Las acciones del seguimiento: cada una repite su puerta ADENTRO (una action es un endpoint por POST directo). ──
-  async function puerta(): Promise<string | null> {
-    const sesion = await requireSessionTenant(RUTA);
-    if (!puedeVerArea(sesion.rol, 'dinero')) return 'Tu rol no puede operar reclamos de peaje.';
-    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Esta flota no es la tuya.';
-    return null;
-  }
-  const volver = (msg: string, desgloseId?: string): never => {
-    const q = new URLSearchParams(sufijo.replace(/^\?/, ''));
-    if (desgloseId) q.set('desglose', desgloseId);
-    q.set(msg.startsWith('error:') ? 'error' : 'aviso', msg.replace(/^error:/, ''));
-    redirect(`${RUTA}?${q.toString()}`);
-  };
+  // `puerta` y `volver` viven a nivel de módulo: una función del cuerpo del componente usada dentro de un 'use server'
+  // se captura por closure y Next no puede serializarla. Aquí solo se capturan cadenas (tenantId, sufijo).
   async function accionCrearReclamo(fd: FormData) {
     'use server';
-    const no = await puerta();
+    const no = await puertaReclamos(tenantId);
     const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
-    if (no) volver(`error:${no}`, UUID.test(desgloseId) ? desgloseId : undefined);
+    if (no) volverReclamos(sufijo, `error:${no}`, UUID.test(desgloseId) ? desgloseId : undefined);
     const categoria = String(fd.get('categoria') ?? '');
-    if (!UUID.test(desgloseId) || !(CATEGORIAS_COBRO as readonly string[]).includes(categoria)) volver('error:Falta el desglose o la categoría del reclamo.');
+    if (!UUID.test(desgloseId) || !(CATEGORIAS_COBRO as readonly string[]).includes(categoria)) volverReclamos(sufijo, 'error:Falta el desglose o la categoría del reclamo.');
     const r = await crearReclamoDeCategoria(tenantId, {
       desgloseId, categoria: categoria as CategoriaCobro,
       enviadoEn: String(fd.get('enviado_en') ?? '').trim() || null, referenciaPortal: String(fd.get('referencia') ?? '') || null,
     });
-    volver(r.ok ? 'Reclamo registrado. El plazo de 3 meses corre desde el cobro más antiguo.' : `error:${r.motivo}`, desgloseId);
+    volverReclamos(sufijo, r.ok ? 'Reclamo registrado. El plazo de 3 meses corre desde el cobro más antiguo.' : `error:${r.motivo}`, desgloseId);
   }
   async function accionMarcarEnviado(fd: FormData) {
     'use server';
-    const no = await puerta();
-    if (no) volver(`error:${no}`);
+    const no = await puertaReclamos(tenantId);
+    if (no) volverReclamos(sufijo, `error:${no}`);
     const r = await marcarReclamoEnviado(tenantId, String(fd.get('reclamo') ?? ''), String(fd.get('enviado_en') ?? ''), String(fd.get('referencia') ?? '') || null);
-    volver(r.ok ? 'Reclamo marcado como enviado.' : `error:${r.motivo}`);
+    volverReclamos(sufijo, r.ok ? 'Reclamo marcado como enviado.' : `error:${r.motivo}`);
   }
   async function accionRegistrarNota(fd: FormData) {
     'use server';
-    const no = await puerta();
-    if (no) volver(`error:${no}`);
+    const no = await puertaReclamos(tenantId);
+    if (no) volverReclamos(sufijo, `error:${no}`);
     const monto = Number(String(fd.get('monto') ?? '').trim().replace(/[$,\s]/g, ''));
     const r = await registrarNotaDeCredito(tenantId, {
       reclamoId: String(fd.get('reclamo') ?? ''), monto, fecha: String(fd.get('fecha') ?? ''), referencia: String(fd.get('referencia') ?? '') || null,
     });
-    volver(r.ok ? 'Nota de crédito registrada.' : `error:${r.motivo}`);
+    volverReclamos(sufijo, r.ok ? 'Nota de crédito registrada.' : `error:${r.motivo}`);
   }
   async function accionJustificarCruce(fd: FormData) {
     'use server';
-    const no = await puerta();
+    const no = await puertaReclamos(tenantId);
     const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
-    if (no) volver(`error:${no}`, UUID.test(desgloseId) ? desgloseId : undefined);
-    if (!UUID.test(desgloseId)) volver('error:Falta el desglose del cruce.');
+    if (no) volverReclamos(sufijo, `error:${no}`, UUID.test(desgloseId) ? desgloseId : undefined);
+    if (!UUID.test(desgloseId)) volverReclamos(sufijo, 'error:Falta el desglose del cruce.');
     const r = await justificarCruce(tenantId, { desgloseId, indice: Number(String(fd.get('indice') ?? '').trim()), motivo: String(fd.get('motivo') ?? '') });
-    volver(r.ok ? 'Cruce justificado. Sigue en el historial, marcado con su motivo.' : `error:${r.motivo}`, desgloseId);
+    volverReclamos(sufijo, r.ok ? 'Cruce justificado. Sigue en el historial, marcado con su motivo.' : `error:${r.motivo}`, desgloseId);
   }
   async function accionRechazar(fd: FormData) {
     'use server';
-    const no = await puerta();
-    if (no) volver(`error:${no}`);
-    volver((await marcarReclamoRechazado(tenantId, String(fd.get('reclamo') ?? ''))) ? 'Reclamo marcado como rechazado.' : 'error:No se pudo actualizar el reclamo.');
+    const no = await puertaReclamos(tenantId);
+    if (no) volverReclamos(sufijo, `error:${no}`);
+    volverReclamos(sufijo, (await marcarReclamoRechazado(tenantId, String(fd.get('reclamo') ?? ''))) ? 'Reclamo marcado como rechazado.' : 'error:No se pudo actualizar el reclamo.');
   }
 
   const desglose = (sp.desglose ?? '').trim();
