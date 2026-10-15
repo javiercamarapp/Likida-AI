@@ -16,6 +16,7 @@ import type { EpisodioFila } from './senal_vida';
 import type { MotivoSenalVida } from './solicitudes';
 import type { RespuestaSenalVida } from './tipos';
 import type { FiltrosTablero } from './repo_validacion';
+import type { CriterioSitio } from './sitio_derivado';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL ACCESO A DATOS DEL AGENTE 5 (viaje_hito y sus bitácoras, 0380).
@@ -816,7 +817,7 @@ export async function liberarCruce(d: Pick<DatosCruce, 'tenantId' | 'viajeId' | 
  * la 0637 se asigna igual, sin constancia (el UPDATE condicional «sigue sin sitio» es el candado).
  */
 export async function asignarSitioDerivado(
-  tenantId: string, viajeId: string, lado: 'origen' | 'destino', sitioId: string, criterio: 'codigo' | 'nombre_exacto' | 'nombre_contenido', ahora: Date,
+  tenantId: string, viajeId: string, lado: 'origen' | 'destino', sitioId: string, criterio: CriterioSitio, ahora: Date,
 ): Promise<'ok' | 'ya' | 'fallo'> {
   const claim = await acotada(supabaseAdmin().from('viaje_sitio_derivado').insert({
     tenant_id: tenantId, viaje_id: viajeId, lado, geocerca_id: sitioId, criterio, derivado_en: ahora.toISOString(),
@@ -839,6 +840,22 @@ export async function asignarSitioDerivado(
   // Cero filas: alguien le puso sitio entre la lectura y este UPDATE. La constancia se queda (la derivación ya no aplica).
   if (!data || data.length === 0) return 'ya';
   return 'ok';
+}
+
+/**
+ * La oficina declaró (equivalencia `sin_sitio`/`ignorar`, 0803) que el texto de ese lado NO es un lugar («VACIO …», «SALIR A RUTA …»).
+ * Se deja constancia en la misma tabla de la 0637 con `geocerca_id` nulo y criterio `equivalencia_sin_sitio`: el viaje queda
+ * «sin sitio, por decisión» y el barrido no lo vuelve a evaluar. No toca el viaje. Una base sin la 0803 (el CHECK no admite el
+ * criterio) devuelve `fallo`: se reintenta cuando exista, sin inventar nada.
+ */
+export async function marcarSinSitioPorDecision(tenantId: string, viajeId: string, lado: 'origen' | 'destino', ahora: Date): Promise<'ok' | 'ya' | 'fallo'> {
+  const { error } = await acotada(supabaseAdmin().from('viaje_sitio_derivado').insert({
+    tenant_id: tenantId, viaje_id: viajeId, lado, geocerca_id: null, criterio: 'equivalencia_sin_sitio', derivado_en: ahora.toISOString(),
+  }), 'conductor.sitio_sin_sitio_marcar');
+  if (!error) return 'ok';
+  if ((error as { code?: string }).code === '23505') return 'ya';
+  logger.error('conductor.sitio_sin_sitio_marcar_fallo', { viaje: viajeId, err: error.message });
+  return 'fallo';
 }
 
 // ── 0636: los episodios de «sin señal de vida» ───────────────────────────────

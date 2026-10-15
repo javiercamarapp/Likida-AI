@@ -3,11 +3,11 @@ import { correrConductor, puertosReales } from '@/lib/likida/conductor/ejecutor'
 import { correrAlertasEstadia, type ResultadoAlertasEstadia } from '@/lib/likida/conductor/alertas_estadia';
 import { correrAlertasLlegadaSinConfirmar, puertosAlertaLlegadaReales, type ResultadoAlertasLlegada } from '@/lib/likida/conductor/alertas_llegada';
 import { barridoValidacion, depsValidacionReales, type ResultadoBarrido } from '@/lib/likida/conductor/validar_hito';
-import { leerCandidatosValidacion, leerCandidatosSitioDerivado, leerCatalogoSitios } from '@/lib/likida/conductor/trabajo';
+import { leerCandidatosValidacion, leerCandidatosSitioDerivado, leerCatalogoSitios, leerEquivalenciasSitio } from '@/lib/likida/conductor/trabajo';
 import { barridoCicloGps, type ResultadoCicloGps } from '@/lib/likida/conductor/ciclo_gps';
 import { puertosCicloGpsReales } from '@/lib/likida/conductor/ciclo_gps_real';
 import { barridoSitioDerivado, type ResultadoSitioDerivado } from '@/lib/likida/conductor/sitio_derivado';
-import { asignarSitioDerivado } from '@/lib/likida/conductor/repo';
+import { asignarSitioDerivado, marcarSinSitioPorDecision } from '@/lib/likida/conductor/repo';
 import { barridoSenalVida, type ResultadoSenalVida } from '@/lib/likida/conductor/senal_vida';
 import { puertosSenalVidaReales } from '@/lib/likida/conductor/senal_vida_real';
 import { barridoAcercamiento, type ResultadoAcercamiento } from '@/lib/likida/convenios/acercamiento';
@@ -104,7 +104,7 @@ export async function GET(req: Request) {
     // (el GPS entra o sale del sitio y el hito se registra solo). Van ANTES de la validación y de los avisos de llegada: una llegada
     // que el GPS acaba de dar por hecha no debe avisar como «sin confirmar». Aislados como los demás.
     try {
-      sitios = await barridoSitioDerivado({ candidatos: leerCandidatosSitioDerivado, catalogo: leerCatalogoSitios, asignar: asignarSitioDerivado }, new Date(), venceEn);
+      sitios = await barridoSitioDerivado({ candidatos: leerCandidatosSitioDerivado, catalogo: leerCatalogoSitios, equivalencias: (t) => leerEquivalenciasSitio(t), asignar: asignarSitioDerivado, marcarSinSitio: (t, v, l, a) => marcarSinSitioPorDecision(t, v, l, a) }, new Date(), venceEn);
       if (sitios.fallos > 0) extras.push(`sitio derivado: ${sitios.fallos} viajes con fallo`);
     } catch (e) {
       extras.push(`sitio derivado: ${e instanceof Error ? e.message : String(e)}`);
