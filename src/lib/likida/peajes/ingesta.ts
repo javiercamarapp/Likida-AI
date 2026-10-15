@@ -5,6 +5,7 @@ import { acotada } from '../presupuesto';
 import { importarDesglose, conciliarDesglose } from '../intake/desglose_peaje';
 import { registrarCorrida } from '../agentes/corridas';
 import { avisarDesgloseConciliado } from './aviso_oficina';
+import { revisarAtipicosDeDesglose } from './revision_atipicos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA INGESTA AUTOMÁTICA DEL DESGLOSE DE PEAJE (0376).
@@ -243,6 +244,11 @@ export async function procesarColaPeajes(
         ultimo_error: null, reclamo: null, reclamado_hasta: null,
       })) {
         r.procesados++;
+        // Los cruces atípicos (T-A2-13): solo si la flota los activó, sobre este desglose + las decenas previas del
+        // mes. Va DESPUÉS de cerrar: su fallo nunca reabre ni tumba un archivo ya procesado (queda `parcial` en el latido).
+        try { await revisarAtipicosDeDesglose(a.tenant_id, imp.desgloseId, 'cron'); } catch (e) {
+          logger.error('peajes.cola.atipicos', { archivo: a.id, err: e instanceof Error ? e.message : String(e) });
+        }
         // El aviso a la oficina (0563) va DESPUÉS de cerrar: su fallo nunca reabre ni tumba un archivo ya
         // procesado (el barrido del cron lo reintenta). Nunca lanza, pero se blinda de todos modos.
         try { await avisar(a.tenant_id, imp.desgloseId); } catch (e) {
