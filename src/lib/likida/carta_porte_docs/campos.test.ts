@@ -7,6 +7,8 @@ import { ROTULO_ORIGEN } from './presentacion';
 
 /** Largo de `construirSistema()` antes de ampliar los campos del complemento (T-A3-06). */
 const LARGO_PROMPT_BASE = 3498;
+/** T-A3-46: 6 campos aduaneros y una regla de extracción. */
+const LARGO_PROMPT_ADUANA = LARGO_PROMPT_BASE + 490; // el prompt real mide 3981
 
 const NUEVOS_DOC = [
   'origen_calle', 'origen_num_ext', 'origen_num_int', 'origen_colonia_clave', 'origen_colonia', 'origen_localidad_clave',
@@ -14,9 +16,11 @@ const NUEVOS_DOC = [
   'destino_calle', 'destino_num_ext', 'destino_num_int', 'destino_colonia_clave', 'destino_colonia', 'destino_localidad_clave',
   'destino_localidad', 'destino_municipio_clave', 'destino_municipio', 'destino_pais',
   'destino_id_fiscal', 'contacto_destino_nombre', 'contacto_destino_telefono', 'contacto_destino_correo',
-  'caja_numero', 'piezas_total', 'volumen_total', 'numero_cliente_interno',
+  'piezas_total', 'volumen_total', 'numero_cliente_interno',
 ];
-const NUEVOS_MERC = ['pedimento', 'rfc_agente_aduanal', 'regimen_aduanero', 'tipo_materia', 'clave_material_peligroso', 'unidad_descripcion', 'embalaje_descripcion', 'volumen'];
+const NUEVOS_MERC = ['rfc_agente_aduanal', 'unidad_descripcion', 'embalaje_descripcion', 'volumen'];
+/** T-A3-46: salieron de `soloEnriquecimiento`; el documento sí los trae (ver aduana.test.ts). */
+const ADUANEROS_MERC = ['pedimento', 'regimen_aduanero', 'tipo_materia', 'clave_material_peligroso', 'rfc_importador'];
 
 describe('campos del complemento', () => {
   it('las claves no se repiten', () => {
@@ -27,6 +31,13 @@ describe('campos del complemento', () => {
   it('existen los campos nuevos y todos son solo de enriquecimiento', () => {
     for (const k of NUEVOS_DOC) expect(campoDoc(k)?.soloEnriquecimiento, k).toBe(true);
     for (const k of NUEVOS_MERC) expect(campoMercancia(k)?.soloEnriquecimiento, k).toBe(true);
+  });
+
+  it('los campos aduaneros y la caja se le piden al modelo', () => {
+    for (const k of ADUANEROS_MERC) expect(CAMPOS_MERCANCIA_LLM.some((c) => c.clave === k), k).toBe(true);
+    expect(CAMPOS_DOC_LLM.some((c) => c.clave === 'caja_numero')).toBe(true);
+    const sistema = construirSistema();
+    for (const k of [...ADUANEROS_MERC, 'caja_numero']) expect(sistema.includes(`- ${k}:`), k).toBe(true);
   });
 
   it('se conservan las claves anteriores', () => {
@@ -53,7 +64,7 @@ describe('campos del complemento', () => {
   });
 
   it('el prompt no crece', () => {
-    expect(construirSistema().length).toBeLessThanOrEqual(LARGO_PROMPT_BASE);
+    expect(construirSistema().length).toBeLessThanOrEqual(LARGO_PROMPT_ADUANA);
   });
 
   it('el origen «catalogo» tiene rótulo', () => {

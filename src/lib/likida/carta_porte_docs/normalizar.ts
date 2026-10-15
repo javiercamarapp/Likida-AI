@@ -181,6 +181,57 @@ function completarCeros(crudo: string | number, ancho: number): { valor: string;
   return { valor: t.padStart(ancho, '0'), original: String(crudo).trim() };
 }
 
+interface ParcialNorm { valor: string; notas: string[]; penalizacion: number }
+
+/** Pedimento completo: 15 dígitos `AA AD PPPP NNNNNNN` (año, aduana, patente, consecutivo). */
+export const PEDIMENTO_COMPLETO = /^\d{2} \d{2} \d{4} \d{7}$/;
+/** Pedimento incompleto como lo escribe un agente aduanal: `patente-consecutivo`. */
+export const PEDIMENTO_PARCIAL = /^\d{4}-\d{7}$/;
+
+/**
+ * Pedimento al formato de 15 dígitos con espacios. Si solo trae `patente-consecutivo` (11 dígitos) se deja así y se
+ * avisa: el año y la aduana los completa `completarDerivados` con los del perfil, o los captura una persona.
+ */
+export function normalizarPedimento(crudo: string): ParcialNorm {
+  const t = crudo.trim();
+  const notas: string[] = [];
+  if (/[^\d\s\-./]/.test(t)) return { valor: t, notas: ['No tiene forma de pedimento (solo dígitos): confírmalo contra el documento.'], penalizacion: 0.3 };
+  const d = t.replace(/\D/g, '');
+  if (d.length === 15) {
+    const v = `${d.slice(0, 2)} ${d.slice(2, 4)} ${d.slice(4, 8)} ${d.slice(8)}`;
+    if (v !== t) notas.push('Se le dio el formato AA AD PPPP NNNNNNN al pedimento.');
+    return { valor: v, notas, penalizacion: 0 };
+  }
+  if (d.length === 11) {
+    notas.push('Pedimento incompleto (patente-consecutivo): faltan el año y la aduana. Confírmalo.');
+    return { valor: `${d.slice(0, 4)}-${d.slice(4)}`, notas, penalizacion: 0.3 };
+  }
+  return { valor: t, notas: [`El pedimento trae ${d.length} dígitos y debería traer 15 (AA AD PPPP NNNNNNN): confírmalo.`], penalizacion: 0.3 };
+}
+
+const REGIMEN_POR_NOMBRE: Record<string, string> = {
+  'importacion definitiva': 'IMD',
+  'exportacion definitiva': 'EXD',
+};
+
+/** Régimen aduanero: la clave de 3 letras en mayúsculas; el nombre solo se traduce cuando es inequívoco. */
+export function normalizarRegimen(crudo: string): ParcialNorm {
+  const t = crudo.trim();
+  const llave = t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const porNombre = REGIMEN_POR_NOMBRE[llave];
+  if (porNombre) return { valor: porNombre, notas: [`«${t}» se tradujo a la clave ${porNombre}.`], penalizacion: 0 };
+  return { valor: t.toUpperCase(), notas: [], penalizacion: 0 };
+}
+
+/** Clave ONU del material peligroso: 4 dígitos («UN 1203», «1203», «203» → 1203 / 0203). `N/A` y otros textos quedan igual. */
+export function normalizarClavePeligroso(crudo: string): ParcialNorm {
+  const t = crudo.trim().replace(/\s+/g, ' ');
+  const m = /^(?:UN ?)?(\d{3,4})$/i.exec(t);
+  if (!m) return { valor: t, notas: [], penalizacion: 0 };
+  const v = m[1].padStart(4, '0');
+  return { valor: v, notas: v !== t ? [`La clave de material peligroso se escribió ${v} (era «${t}»).`] : [], penalizacion: 0 };
+}
+
 /** Id de destino de la plantilla del TMS: texto («1», « 2 ») o número (1, 2.0) → entero en texto. `null` si no es un entero positivo. */
 export function normalizarIdDestino(crudo: unknown): string | null {
   const t = typeof crudo === 'number' ? (Number.isInteger(crudo) ? String(crudo) : '') : String(crudo ?? '').trim().replace(/^(\d+)\.0+$/, '$1');
@@ -280,6 +331,22 @@ export function normalizarValor(campo: CampoDoc, crudo: unknown, opciones: { mil
       return out(String(texto).toUpperCase().replace(/[^A-Z0-9]/g, ''));
     case 'texto':
     default: {
+      // Campos aduaneros (T-A3-46): forma propia, sin adivinar lo que el documento no dice.
+      if (campo.clave === 'pedimento') {
+        const p = normalizarPedimento(String(texto));
+        notas.push(...p.notas); penalizacion = p.penalizacion;
+        return out(p.valor);
+      }
+      if (campo.clave === 'regimen_aduanero') {
+        const r = normalizarRegimen(String(texto));
+        notas.push(...r.notas);
+        return out(r.valor);
+      }
+      if (campo.clave === 'clave_material_peligroso') {
+        const k = normalizarClavePeligroso(String(texto));
+        notas.push(...k.notas);
+        return out(k.valor);
+      }
       // Claves del SAT que Excel guarda como número y pierde el cero inicial.
       const ancho = anchoClaveNumerica(campo.clave);
       if (ancho !== undefined) {

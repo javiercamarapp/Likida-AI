@@ -121,6 +121,15 @@ describe('procesarDocumento', () => {
     expect(d.ultimoError).toBeNull();
   });
 
+  it('el nombre del archivo llega al extractor: EXPO deduce el régimen y deja el pedimento vacío (T-A3-46)', async () => {
+    const llm = llmFalso((e) => salida(e.nivel, { folio_cliente: ['EX-200', 0.97, 'Folio: EX-200'] }, [{ descripcion: ['Piezas de plastico', 0.97, null], bienes_transp: ['24121500', 0.97, null], cantidad: ['10', 0.97, null], clave_unidad: ['H87', 0.97, null], peso_kg: ['100', 0.97, null], pedimento: ['26 47 1234 5670001', 0.97, null], rfc_importador: [RFC.atlas, 0.97, null] }]));
+    const { documentoId } = await subirYProcesar(A, Buffer.from('Folio: EX-200\nMercancia: Piezas de plastico\n'), llm, 'CCP Transportes-Cliente EXPO TX4471 15-10-26.txt');
+    const f = estado.docs.get(documentoId)!.extraccion!.mercancias[0];
+    expect(f.regimen_aduanero).toMatchObject({ valor: 'EXD', origen: 'derivado' });
+    expect(f.pedimento.valor).toBeNull();
+    expect(f.rfc_importador.valor).toBeNull();
+  });
+
   it('un PDF escaneado y una foto van al modelo como imagen', async () => {
     const llm = llmFalso((e) => salida(e.nivel, { folio_cliente: ['5521', 0.9, null] }, [{ descripcion: ['Cemento', 0.9, null], bienes_transp: ['30111500', 0.9, null], cantidad: ['24', 0.9, null], clave_unidad: ['TNE', 0.9, null], peso_kg: ['24000', 0.9, null] }]));
     const a = await subirYProcesar(A, await pdfEscaneado(), llm);

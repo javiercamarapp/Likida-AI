@@ -32,7 +32,7 @@ import {
 } from './campos';
 import { llaveTexto } from './catalogos';
 import { MAX_TEXTO_MODELO, type ContenidoDoc, type FormatoDoc } from './contenido';
-import { completarDerivados } from './derivar';
+import { completarDerivados, type ContextoDerivar } from './derivar';
 import { detectarInyeccion } from './inyeccion';
 import { limpiarTexto, normalizarNumero, normalizarValor, type OrdenFecha } from './normalizar';
 import { aplicarPerfil, elegirPerfil, type EjemploPerfil, type Perfil } from './perfiles';
@@ -105,6 +105,7 @@ export function construirSistema(): string {
     '- «evidencia» es el fragmento LITERAL del documento (máx. 150 caracteres) donde lo leíste. Sin evidencia no hay valor.',
     '- No conviertas unidades: el peso va como está escrito y su unidad en peso_unidad. No calcules totales. No deduzcas claves del SAT: si el documento no trae la clave de producto (8 dígitos) o la de unidad, déjalas null y pon el texto de la unidad en unidad_texto.',
     '- RFC en mayúsculas, sin espacios. Código postal de 5 dígitos. Fechas tal como aparecen.',
+    '- Aduana: copia tal cual el régimen aduanero, el pedimento (solo importación), el tipo de materia y el RFC del importador (no el del remitente ni el del agente aduanal). Un rótulo sin valor es null; no inventes.',
     '- Una entrada de «mercancias» por cada renglón de mercancía distinto del documento (no repitas el mismo renglón; ignora filas de totales).',
     '- Si el documento trae varios embarques, extrae solo el PRIMERO y dilo en «notas».',
     '',
@@ -294,6 +295,9 @@ export interface ContextoExtraccion {
   marcador?: () => string;
   /** Tope de niveles de modelo (1 = nunca escalar). Por defecto 3. */
   nivelMaximo?: NivelModelo;
+  /** T-A3-46: nombre del archivo y año/aduana del perfil, para derivar el régimen y completar el pedimento. */
+  nombreArchivo?: string | null;
+  pedimentoPerfil?: ContextoDerivar['pedimentoPerfil'];
 }
 
 export interface ResultadoExtraccion {
@@ -335,11 +339,13 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
     avisos: [...c.avisos], escalamientos: [], notasModelo: [],
   };
 
+  const derivar: ContextoDerivar = { nombreArchivo: ctx.nombreArchivo, pedimentoPerfil: ctx.pedimentoPerfil };
+
   // 1. XML con Carta Porte: sin modelo, y no se le pregunta a nadie lo que el XML no dice.
   // Solo un XML de verdad: un JSON de cliente con una clave «CartaPorte» no es un CFDI con 0.99 de confianza.
   if (c.xml && c.formato !== 'json') {
     const ccp = extraerCartaPorteXml(c.xml);
-    if (ccp) { r.extraccion = completarDerivados(ccp); r.origen = 'xml'; return r; }
+    if (ccp) { r.extraccion = completarDerivados(ccp, derivar); r.origen = 'xml'; return r; }
   }
 
   // 2. Perfil.
@@ -354,7 +360,7 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
     if (ap.camposAplicados > 0) { base = ap.extraccion; r.origen = 'perfil'; }
   }
   if (base) {
-    base = completarDerivados(base);
+    base = completarDerivados(base, derivar);
     const f = carencias(base);
     if (f.ausentes.length === 0 && f.dudosos.length === 0) { r.extraccion = base; return r; }
   }
@@ -379,7 +385,7 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
     r.escalamientos.push({ de: nivel, a: (nivel + 1) as NivelModelo, motivo: f.dudosos.length > 0 ? `baja confianza en ${f.dudosos.slice(0, 3).join(', ')}` : `faltan ${f.ausentes.slice(0, 3).join(', ')}` });
   }
   const delModelo = acumulado ?? extraccionVacia();
-  r.extraccion = completarDerivados(base ? completarCon(base, delModelo) : delModelo);
+  r.extraccion = completarDerivados(base ? completarCon(base, delModelo) : delModelo, derivar);
   r.origen = base ? 'perfil+llm' : 'llm';
   return r;
 }
