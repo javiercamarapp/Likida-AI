@@ -49,7 +49,7 @@ export async function ventanaDeDesgloses(tenantId: string, desgloseId: string): 
   const previos = await acotada(supabaseAdmin().from('desglose_peaje')
     .select('id, periodo_desde').eq('tenant_id', tenantId).is('anulado_en', null)
     .gte('periodo_desde', inicioDeMes(desde)).lte('periodo_desde', desde)
-    .order('periodo_desde', { ascending: false }).limit(DECENAS_PREVIAS + 5), 'peajes.atipicos.previos');
+    .order('periodo_desde', { ascending: false }).order('id').limit(DECENAS_PREVIAS + 5), 'peajes.atipicos.previos');
   if (previos.error) throw new Error(`ventanaDeDesgloses: ${previos.error.message}`);
   const otros = ((previos.data ?? []) as Array<{ id: unknown; periodo_desde: unknown }>)
     .filter((f) => String(f.id) !== desgloseId)

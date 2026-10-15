@@ -1078,7 +1078,7 @@ export async function leerEntradaInsights(
   if (viajeIds) { qh = qh.in('viaje_id', viajeIds); qc = qc.in('viaje_id', viajeIds); }
   const [rh, rc, ep] = await Promise.all([
     acotada(qh.order('updated_at', { ascending: false }).order('id').limit(TOPE_INSIGHTS + 1), 'insights.hitos'),
-    acotada(qc.order('registrado_en', { ascending: false }).limit(TOPE_INSIGHTS + 1), 'insights.cruces'),
+    acotada(qc.order('registrado_en', { ascending: false }).order('id').limit(TOPE_INSIGHTS + 1), 'insights.cruces'),
     leerEpisodiosParaTablero(tenantId, desde, f, 500),
   ]);
   const filasH = (exigir(rh as never, 'insights.hitos') ?? []) as unknown as Fila[];
@@ -1135,7 +1135,7 @@ export async function leerOperadorPiloto(tenantId: string, operadorId: string): 
 
 export async function listarVoluntarios(tenantId: string): Promise<OperadorPiloto[]> {
   const res = await acotada(supabaseAdmin().from('operador').select(COLUMNAS_PILOTO)
-    .eq('tenant_id', tenantId).eq('agente_voluntario', true).order('agente_voluntario_desde', { ascending: true }).limit(200), 'conductor.voluntarios');
+    .eq('tenant_id', tenantId).eq('agente_voluntario', true).order('agente_voluntario_desde', { ascending: true }).order('id').limit(200), 'conductor.voluntarios');
   exigirPiloto(res as never, 'conductor.voluntarios');
   return (((res as { data: Fila[] | null }).data) ?? []).map(filaAOperadorPiloto);
 }
@@ -1145,7 +1145,7 @@ export async function buscarCandidatosVoluntarios(tenantId: string, texto: strin
   const t = texto.replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
   let q = supabaseAdmin().from('operador').select(COLUMNAS_PILOTO).eq('tenant_id', tenantId).eq('activo', true).eq('agente_voluntario', false);
   if (t !== '') q = q.or(`nombre.ilike.%${t}%,telefono.ilike.%${t}%`);
-  const res = await acotada(q.order('nombre', { ascending: true }).limit(limite), 'conductor.candidatosVoluntarios');
+  const res = await acotada(q.order('nombre', { ascending: true }).order('id').limit(limite), 'conductor.candidatosVoluntarios');
   exigirPiloto(res as never, 'conductor.candidatosVoluntarios');
   return (((res as { data: Fila[] | null }).data) ?? []).map(filaAOperadorPiloto);
 }
@@ -1209,7 +1209,7 @@ export async function leerDatosPreflight(tenantId: string, ahora: Date = new Dat
       const desde = new Date(ahora.getTime() - HORAS_GPS_RECIENTE * 3_600_000);
       const haceUnaHora = ahora.getTime() - 3_600_000;
       const rp = await acotada(supabaseAdmin().from('posicion').select('unidad_id, medida_en')
-        .eq('tenant_id', tenantId).in('unidad_id', unidades).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString()).order('medida_en', { ascending: false }).limit(5000), 'conductor.preflight_posiciones');
+        .eq('tenant_id', tenantId).in('unidad_id', unidades).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString()).order('medida_en', { ascending: false }).order('id').limit(5000), 'conductor.preflight_posiciones');
       const ps = (exigir(rp as never, 'conductor.preflight_posiciones') ?? []) as unknown as Fila[];
       const mut = posicionesPorUnidad as Record<string, { ultimas2h: number; ultimaHora: number }>;
       for (const p of ps) {

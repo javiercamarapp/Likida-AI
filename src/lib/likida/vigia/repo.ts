@@ -331,7 +331,7 @@ export async function leerDatosUnidad(
 
   if (crudos.caja) {
     const cat = (leerOpcional('datos_unidad_caja', await acotada(db.from('vigia_caja')
-      .select('numero, placas, estado').eq('tenant_id', tenantId).in('numero', variantes(crudos.caja)).limit(5), 'vigia.datos_unidad_caja')) as Fila[] | null) ?? [];
+      .select('numero, placas, estado').eq('tenant_id', tenantId).in('numero', variantes(crudos.caja)).order('id').limit(5), 'vigia.datos_unidad_caja')) as Fila[] | null) ?? [];
     const fila = cat.find((c) => mayus(String(c.numero)) === mayus(crudos.caja as string));
     crudos.placasCaja = str(fila?.placas);
     crudos.estadoCaja = str(fila?.estado);
