@@ -268,6 +268,14 @@ const PORCENTAJES_ADMITIDOS: { archivo: string; fragmento: string; motivo: strin
     motivo: 'umbral fiscal de combustible pagado sin medio admitido, no es ahorro',
   },
 ];
+/** Textos que nombran «ahorro» solo para NEGARLO (no estiman ni muestran una cifra). Exactos, por archivo; cualquier otro texto con «ahorro» sigue fallando. */
+const AHORRO_NEGADO_ADMITIDO: { archivo: string; fragmento: string; motivo: string }[] = [
+  {
+    archivo: 'src/app/dashboard/agentes/conductores/vista.tsx',
+    fragmento: 'ninguna cifra de ahorro se estima sobre cero',
+    motivo: 'el estado vacío declara que NO se estima ahorro sin hitos medidos; es la regla, no una cifra',
+  },
+];
 const CITA_LEGAL = /\b(ley|LIF|RMF|art\.|regla)\b/i;
 
 /** Quita comentarios y devuelve solo texto visible: literales de cadena y texto JSX. */
@@ -288,7 +296,7 @@ export function hallazgosTexto(texto: string, archivo: string): string[] {
       CITA_LEGAL.test(texto) || PORCENTAJES_ADMITIDOS.some((a) => a.archivo === archivo && texto.includes(a.fragmento));
     if (!admitido) h.push(`porcentaje sin cita ni fuente: «${texto}»`);
   }
-  if (/ahorr/i.test(texto)) h.push(`menciona ahorro fuera de ahorroSeguro: «${texto}»`);
+  if (/ahorr/i.test(texto) && !AHORRO_NEGADO_ADMITIDO.some((a) => a.archivo === archivo && texto.includes(a.fragmento))) h.push(`menciona ahorro fuera de ahorroSeguro: «${texto}»`);
   return h;
 }
 
