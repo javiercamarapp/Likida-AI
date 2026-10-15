@@ -23,11 +23,14 @@ create table if not exists public.sitio_equivalencia (
   lado text not null default 'ambos',
   geocerca_id uuid,
   tipo text not null,
-  cliente_id uuid references public.cliente(id) on delete cascade,
+  cliente_id uuid,
   creado_por uuid references public.app_user(id) on delete set null,
   created_at timestamptz not null default now(),
   constraint sitio_equivalencia_sitio_fkey
     foreign key (geocerca_id, tenant_id) references public.geocerca (id, tenant_id) on delete cascade,
+  -- FK compuesta (regla de 0145/0600): el cliente tiene que ser de la misma flota que la equivalencia.
+  constraint sitio_equivalencia_cliente_fkey
+    foreign key (cliente_id, tenant_id) references public.cliente (id, tenant_id) on delete cascade,
   constraint sitio_equivalencia_lado_dominio check (lado in ('origen', 'destino', 'ambos')),
   constraint sitio_equivalencia_tipo_dominio check (tipo in ('sitio', 'sin_sitio', 'ignorar')),
   constraint sitio_equivalencia_tipo_sitio check ((tipo = 'sitio') = (geocerca_id is not null)),
