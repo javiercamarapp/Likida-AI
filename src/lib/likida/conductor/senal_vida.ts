@@ -2,7 +2,7 @@ import { logger } from '@/lib/logger';
 import type { ResultadoEnvioConFallback } from '@/lib/meta/enviar_con_fallback';
 import { dentroDeGeocerca, haversineM } from './geo';
 import type { MuestraGps, SitioGps, SitiosViaje, UnidadDeViaje } from './ciclo_gps';
-import { dentroDeVentana, type ConfigConductor } from './config';
+import { CONFIG_CONDUCTOR_DEFAULT, dentroDeVentana, type ConfigConductor } from './config';
 import type { Destino } from './escalamiento';
 import type { ViajeContexto } from './repo';
 import { armarEscalacionSenalVida, armarSenalVida, type MensajeSaliente, type MotivoSenalVida } from './solicitudes';
@@ -24,7 +24,7 @@ import { estaPendiente, estaResuelto, type HitoFila } from './tipos';
 //                   alguna muestra en las últimas 24 h): una flota sin conector no tiene «señal que se calló».
 //   · gps_detenido  la unidad lleva 60 min dentro de 150 m del mismo punto y NO está en un sitio del viaje (en la planta se
 //                   espera: eso lo cubren la estadía y la alerta de llegada).
-// Los umbrales son SUPUESTOS (constantes de aquí), no mediciones: se ajustan con datos reales de la flota.
+// Los umbrales son SUPUESTOS (45/60/20 por omisión), no mediciones: se leen de la configuración de la flota y se ajustan con datos reales.
 //
 // ── UNA RESPUESTA CIERRA, Y NO SE VUELVE A PREGUNTAR AL INSTANTE ────────────
 // Si el chofer contesta, el episodio se cierra y se SILENCIA 2 h («Voy a cargar»: 1 h): el GPS seguirá mudo y volver a
@@ -32,15 +32,19 @@ import { estaPendiente, estaResuelto, type HitoFila } from './tipos';
 // (0636), así que dos corridas solapadas no mandan el mismo aviso dos veces. Si el GPS vuelve, el episodio se cierra solo.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export const MINUTOS_GPS_OBSOLETO = 45;
-export const MINUTOS_DETENIDO = 60;
+/**
+ * Los umbrales viven en `ConfigConductor` (por flota, `agente_conductor_config`); estas constantes son solo sus DEFAULTS exportados
+ * (los mismos de `CONFIG_CONDUCTOR_DEFAULT`) y la lógica de abajo NO las lee: lee `config.*Min`.
+ */
+export const MINUTOS_GPS_OBSOLETO = CONFIG_CONDUCTOR_DEFAULT.gpsObsoletoMin;
+export const MINUTOS_DETENIDO = CONFIG_CONDUCTOR_DEFAULT.detenidoMin;
 export const RADIO_DETENIDO_M = 150;
 /** Cobertura mínima del GPS para afirmar «detenido»: debe haber muestras desde el principio de la ventana (± esto). */
 export const MINUTOS_COBERTURA_DETENIDO = 15;
 export const MINIMO_MUESTRAS_DETENIDO = 3;
-export const MINUTOS_SEGUNDO_AVISO = 20;
-export const MINUTOS_ESCALAR = 20;
-export const MINUTOS_SILENCIO_RESPUESTA = 120;
+export const MINUTOS_SEGUNDO_AVISO = CONFIG_CONDUCTOR_DEFAULT.segundoAvisoMin;
+export const MINUTOS_ESCALAR = CONFIG_CONDUCTOR_DEFAULT.escalarSenalMin;
+export const MINUTOS_SILENCIO_RESPUESTA = CONFIG_CONDUCTOR_DEFAULT.silencioRespuestaMin;
 export const MINUTOS_SILENCIO_CARGAR = 60;
 /** Cuántas horas de GPS se leen por pasada (lo suficiente para ver «detenido» y «reciente»). */
 export const HORAS_MUESTRAS_SENAL = 2;
@@ -86,9 +90,13 @@ export interface EntradaEvaluar {
   sitiosFlota?: readonly SitioGps[];
   toleranciaM: number;
   ahora: Date;
+  /** Los umbrales de la flota. Sin ella, los defaults (45 / 60). */
+  config?: Partial<Pick<ConfigConductor, 'gpsObsoletoMin' | 'detenidoMin'>>;
 }
 
 export function evaluarSenal(e: EntradaEvaluar): EstadoSenal {
+  const gpsObsoletoMin = e.config?.gpsObsoletoMin ?? CONFIG_CONDUCTOR_DEFAULT.gpsObsoletoMin;
+  const detenidoMin = e.config?.detenidoMin ?? CONFIG_CONDUCTOR_DEFAULT.detenidoMin;
   const ordenadas = [...e.muestras].filter((m) => Number.isFinite(m.medidaEn.getTime())).sort((a, b) => a.medidaEn.getTime() - b.medidaEn.getTime());
   const ultima = ordenadas.length > 0 ? ordenadas[ordenadas.length - 1] : null;
   const ultimaEn = ultima?.medidaEn ?? e.ultimaMuestra?.medidaEn ?? e.ultimaMuestraEn;
@@ -97,7 +105,7 @@ export function evaluarSenal(e: EntradaEvaluar): EstadoSenal {
   const enSitioDeEspera = (m: MuestraGps): boolean => sitiosDeEspera.some((s) => s !== null && dentroDeGeocerca(m, s, e.toleranciaM + RADIO_DETENIDO_M).dentro);
 
   const minutos = Math.floor((e.ahora.getTime() - ultimaEn.getTime()) / 60_000);
-  if (minutos > MINUTOS_GPS_OBSOLETO) {
+  if (minutos > gpsObsoletoMin) {
     // Un tractor que llega a la planta y apaga el motor deja UNA muestra dentro (el poller colapsa la misma lectura) y calla: eso no es
     // «sin señal de vida». Ni en un sitio del viaje o de la flota, ni con la ignición apagada (un tope de horas, no para siempre).
     const posicion = ultima ?? e.ultimaMuestra ?? null;
@@ -108,7 +116,7 @@ export function evaluarSenal(e: EntradaEvaluar): EstadoSenal {
   if (!ultima) return { estado: 'ok' };
 
   // Detenido: cobertura de toda la ventana, ≥ 3 muestras y todas pegadas a la última, y no en un sitio del viaje.
-  const inicio = e.ahora.getTime() - MINUTOS_DETENIDO * 60_000;
+  const inicio = e.ahora.getTime() - detenidoMin * 60_000;
   const ventana = ordenadas.filter((m) => m.medidaEn.getTime() >= inicio);
   if (ventana.length < MINIMO_MUESTRAS_DETENIDO) return { estado: 'ok' };
   if (ventana[0].medidaEn.getTime() > inicio + MINUTOS_COBERTURA_DETENIDO * 60_000) return { estado: 'ok' };
@@ -166,7 +174,7 @@ export type AccionSenal =
 export interface EntradaDecidirSenal {
   viaje: Pick<ViajeContexto, 'operadorTelefono'>;
   hitos: readonly HitoFila[];
-  config: Pick<ConfigConductor, 'activo' | 'avisarSenalVida' | 'horaInicio' | 'horaFin' | 'diasSemana'>;
+  config: Pick<ConfigConductor, 'activo' | 'avisarSenalVida' | 'horaInicio' | 'horaFin' | 'diasSemana'> & Partial<Pick<ConfigConductor, 'segundoAvisoMin' | 'escalarSenalMin' | 'zonaHoraria'>>;
   senal: EstadoSenal;
   episodios: EstadoEpisodios;
   ahora: Date;
@@ -200,18 +208,21 @@ export function decidirSenalVida(e: EntradaDecidirSenal): AccionSenal {
   if (ep.nivelEnviado === 0) return { tipo: 'avisar', nivel: 1, minutos };
   if (ep.nivelEnviado === 1) {
     const t = min(ep.aviso1En, ahora);
-    return t !== null && t >= MINUTOS_SEGUNDO_AVISO ? { tipo: 'avisar', nivel: 2, minutos } : { tipo: 'nada', motivo: 'espera' };
+    return t !== null && t >= (config.segundoAvisoMin ?? CONFIG_CONDUCTOR_DEFAULT.segundoAvisoMin) ? { tipo: 'avisar', nivel: 2, minutos } : { tipo: 'nada', motivo: 'espera' };
   }
   if (ep.nivelEnviado === 2) {
     const t = min(ep.aviso2En, ahora);
-    return t !== null && t >= MINUTOS_ESCALAR ? { tipo: 'escalar', minutos } : { tipo: 'nada', motivo: 'espera' };
+    return t !== null && t >= (config.escalarSenalMin ?? CONFIG_CONDUCTOR_DEFAULT.escalarSenalMin) ? { tipo: 'escalar', minutos } : { tipo: 'nada', motivo: 'espera' };
   }
   return { tipo: 'nada', motivo: 'ya_escalado' };
 }
 
 /** Cuántos minutos de silencio deja cada respuesta del chofer. */
-export function silencioDeRespuesta(r: 'estoy' | 'voy_a_cargar' | 'estoy_bien'): number {
-  return r === 'voy_a_cargar' ? MINUTOS_SILENCIO_CARGAR : MINUTOS_SILENCIO_RESPUESTA;
+export function silencioDeRespuesta(
+  r: 'estoy' | 'voy_a_cargar' | 'estoy_bien',
+  config?: Partial<Pick<ConfigConductor, 'silencioRespuestaMin'>>,
+): number {
+  return r === 'voy_a_cargar' ? MINUTOS_SILENCIO_CARGAR : (config?.silencioRespuestaMin ?? CONFIG_CONDUCTOR_DEFAULT.silencioRespuestaMin);
 }
 
 // ── El barrido (con puertos) ────────────────────────────────────────────────
@@ -313,7 +324,7 @@ export async function barridoSenalVida(p: PuertosSenalVida, ahora: Date = new Da
     senales.set(v.id, evaluarSenal({
       muestras: muestras.get(llave(v)) ?? [], ultimaMuestraEn: ultima?.medidaEn ?? null, ultimaMuestra: ultima,
       sitios: sitios.get(v.id) ?? { origen: null, destino: null }, sitiosFlota: sitiosFlota.get(v.tenantId) ?? [],
-      toleranciaM: configs.get(v.tenantId)!.toleranciaUbicacionM, ahora,
+      toleranciaM: configs.get(v.tenantId)!.toleranciaUbicacionM, ahora, config: configs.get(v.tenantId)!,
     }));
   }
   const conectorCaido = new Set<string>();

@@ -2,12 +2,13 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
+import { TZ_MX } from '@/lib/formato';
 import { CONFIG_CONDUCTOR_DEFAULT, type ConfigConductor } from './config';
 import type { MuestraGps, SitioGps, SitiosViaje } from './ciclo_gps';
 import { hitoVacio, viajeBase } from './memoria.fixture';
 import {
   barridoSenalVida, decidirSenalVida, enTransito, evaluarSenal, silencioDeRespuesta, avisosFallidosAlChofer, marcaAvisoChoferFallido,
-  MINUTOS_DETENIDO, MINUTOS_ESCALAR, MINUTOS_GPS_OBSOLETO, MINUTOS_SEGUNDO_AVISO, TOPE_RECHAZOS_SEGUIDOS_SENAL,
+  MINUTOS_DETENIDO, MINUTOS_ESCALAR, MINUTOS_GPS_OBSOLETO, MINUTOS_SEGUNDO_AVISO, MINUTOS_SILENCIO_RESPUESTA, TOPE_RECHAZOS_SEGUIDOS_SENAL,
   type EpisodioFila, type EstadoEpisodios, type EstadoSenal, type PuertosSenalVida,
 } from './senal_vida';
 import { TIPOS_HITO, type HitoFila, type TipoHito } from './tipos';
@@ -469,5 +470,107 @@ describe('barridoSenalVida', () => {
     const r = await barridoSenalVida(w.puertos, AHORA);
     expect(r.fallos[0]).toMatch(/boom/);
     expect(r.avisosChofer).toBe(1);
+  });
+});
+
+// ── T-A5-09: los umbrales salen de la configuración de la flota, no de literales ──────────────────────────────────
+
+describe('los defaults exportados coinciden con la configuración por omisión', () => {
+  it('45 / 60 / 20 / 20 / 120 como siempre', () => {
+    expect([MINUTOS_GPS_OBSOLETO, MINUTOS_DETENIDO, MINUTOS_SEGUNDO_AVISO, MINUTOS_ESCALAR, MINUTOS_SILENCIO_RESPUESTA]).toEqual([45, 60, 20, 20, 120]);
+    expect([CONFIG_CONDUCTOR_DEFAULT.gpsObsoletoMin, CONFIG_CONDUCTOR_DEFAULT.detenidoMin, CONFIG_CONDUCTOR_DEFAULT.segundoAvisoMin,
+      CONFIG_CONDUCTOR_DEFAULT.escalarSenalMin, CONFIG_CONDUCTOR_DEFAULT.silencioRespuestaMin]).toEqual([45, 60, 20, 20, 120]);
+  });
+});
+
+describe('evaluarSenal — con los umbrales de la flota', () => {
+  const base = { sitios: SIN_SITIOS, toleranciaM: 150, ahora: AHORA, ultimaMuestraEn: null };
+
+  it('gpsObsoletoMin=30: un GPS de 35 min es «gps_obsoleto»; con el default (45) todavía no', () => {
+    const muestras = [M(35)];
+    expect(evaluarSenal({ ...base, muestras, config: { gpsObsoletoMin: 30 } })).toMatchObject({ estado: 'gps_obsoleto', minutos: 35 });
+    expect(evaluarSenal({ ...base, muestras }).estado).toBe('ok');
+    expect(evaluarSenal({ ...base, muestras, config: { gpsObsoletoMin: 45 } }).estado).toBe('ok');
+  });
+
+  it('gpsObsoletoMin=90: un GPS de 60 min ya no es obsoleto', () => {
+    expect(evaluarSenal({ ...base, muestras: [M(60)] }).estado).toBe('gps_obsoleto');
+    expect(evaluarSenal({ ...base, muestras: [M(60)], config: { gpsObsoletoMin: 90 } }).estado).not.toBe('gps_obsoleto');
+  });
+
+  it('detenidoMin=30: 30 min pegado al mismo punto es «gps_detenido»; con el default (60) no', () => {
+    const muestras = [M(30), M(20), M(10), M(2)];
+    expect(evaluarSenal({ ...base, muestras, config: { detenidoMin: 30 } })).toMatchObject({ estado: 'gps_detenido', minutos: 30 });
+    expect(evaluarSenal({ ...base, muestras }).estado).toBe('ok');
+  });
+});
+
+describe('decidirSenalVida — los tiempos de la escalera son de la flota', () => {
+  const e1 = (min: number) => ({ abierto: ep({ nivelEnviado: 1, aviso1En: hace(min).toISOString() }), silenciadoHasta: null });
+  const e2 = (min: number) => ({ abierto: ep({ nivelEnviado: 2, aviso1En: hace(min + 30).toISOString(), aviso2En: hace(min).toISOString() }), silenciadoHasta: null });
+
+  it('segundoAvisoMin=10 adelanta el 2.º aviso (a los 12 min con el default aún espera)', () => {
+    expect(decidir({ episodios: e1(12) })).toEqual({ tipo: 'nada', motivo: 'espera' });
+    expect(decidir({ config: { ...CFG, segundoAvisoMin: 10 }, episodios: e1(12) })).toEqual({ tipo: 'avisar', nivel: 2, minutos: 70 });
+    expect(decidir({ config: { ...CFG, segundoAvisoMin: 10 }, episodios: e1(9) })).toEqual({ tipo: 'nada', motivo: 'espera' });
+  });
+
+  it('segundoAvisoMin=40 retrasa el 2.º aviso (a los 25 min con el default ya avisaría)', () => {
+    expect(decidir({ episodios: e1(25) })).toMatchObject({ tipo: 'avisar', nivel: 2 });
+    expect(decidir({ config: { ...CFG, segundoAvisoMin: 40 }, episodios: e1(25) })).toEqual({ tipo: 'nada', motivo: 'espera' });
+  });
+
+  it('escalarSenalMin=10 escala al jefe a los 10 min del aviso 2', () => {
+    expect(decidir({ episodios: e2(12) })).toEqual({ tipo: 'nada', motivo: 'espera' });
+    expect(decidir({ config: { ...CFG, escalarSenalMin: 10 }, episodios: e2(12) })).toEqual({ tipo: 'escalar', minutos: 70 });
+  });
+});
+
+describe('silencioDeRespuesta — silencioRespuestaMin de la flota', () => {
+  it('«Sí, estoy» y «Estoy bien» usan el de la flota; «Voy a cargar» sigue en 1 h; sin config, el default', () => {
+    expect(silencioDeRespuesta('estoy', { silencioRespuestaMin: 30 })).toBe(30);
+    expect(silencioDeRespuesta('estoy_bien', { silencioRespuestaMin: 240 })).toBe(240);
+    expect(silencioDeRespuesta('voy_a_cargar', { silencioRespuestaMin: 30 })).toBe(60);
+    expect(silencioDeRespuesta('estoy')).toBe(MINUTOS_SILENCIO_RESPUESTA);
+  });
+});
+
+describe('barridoSenalVida — lee los umbrales de la configuración de la flota (aviso 1 / 2)', () => {
+  it('gpsObsoletoMin=30: un GPS de 35 min abre episodio y avisa; con 45 (default) no hace nada', async () => {
+    const con30 = mundo({ muestras: [M(35)], config: { gpsObsoletoMin: 30 } });
+    expect(await barridoSenalVida(con30.puertos, AHORA)).toMatchObject({ abiertos: 1, avisosChofer: 1 });
+    const con45 = mundo({ muestras: [M(35)], config: { gpsObsoletoMin: 45 } });
+    expect(await barridoSenalVida(con45.puertos, AHORA)).toMatchObject({ abiertos: 0, avisosChofer: 0 });
+    expect(con45.enviados).toHaveLength(0);
+  });
+
+  it('segundoAvisoMin=10: a los 12 min del aviso 1 sale el 2.º aviso; con el default no', async () => {
+    const adelantado = mundo({ muestras: [M(100)], config: { segundoAvisoMin: 10 }, episodio: ep({ nivelEnviado: 1, aviso1En: hace(12).toISOString() }) });
+    await barridoSenalVida(adelantado.puertos, AHORA);
+    expect(adelantado.llamadas.niveles).toEqual([2]);
+    const normal = mundo({ muestras: [M(100)], episodio: ep({ nivelEnviado: 1, aviso1En: hace(12).toISOString() }) });
+    await barridoSenalVida(normal.puertos, AHORA);
+    expect(normal.llamadas.niveles).toEqual([]);
+  });
+});
+
+// Reloj simulado (`ahora` inyectado) en las zonas del T-A5-01: la ventana 9–13 es de PRUEBA, no un requisito del cliente.
+describe('decidirSenalVida — la ventana se lee en la zona de la flota (reloj simulado)', () => {
+  const VENTANA = { ...CFG, horaInicio: 9, horaFin: 13 };
+  const MATAMOROS = 'America/Matamoros';
+  const CANCUN = 'America/Cancun';
+  it.each([
+    ['2026-10-30T15:30:00Z', TZ_MX, 'abrir'],      // 09:30 dentro
+    ['2026-10-30T15:30:00Z', MATAMOROS, 'abrir'],  // 10:30 dentro
+    ['2026-10-30T14:30:00Z', TZ_MX, 'nada'],       // 08:30 fuera
+    ['2026-10-30T14:30:00Z', MATAMOROS, 'abrir'],  // 09:30 dentro (aún con horario de verano)
+    ['2026-11-02T14:30:00Z', TZ_MX, 'nada'],       // 08:30 fuera
+    ['2026-11-02T14:30:00Z', MATAMOROS, 'nada'],   // 08:30 fuera (ya sin horario de verano)
+    ['2026-11-02T14:30:00Z', CANCUN, 'abrir'],     // 09:30 dentro (sin horario de verano)
+    ['2026-10-30T14:30:00Z', CANCUN, 'abrir'],     // 09:30 dentro
+  ])('%s en %s: %s', (iso, zona, esperado) => {
+    const r = decidir({ ahora: new Date(iso), config: { ...VENTANA, zonaHoraria: zona } });
+    expect(r.tipo).toBe(esperado);
+    if (esperado === 'nada') expect(r).toEqual({ tipo: 'nada', motivo: 'fuera_de_ventana' });
   });
 });

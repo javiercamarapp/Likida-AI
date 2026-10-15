@@ -61,7 +61,7 @@ export interface DepsAtender {
   cargarHitos(tenantId: string, viajeId: string): Promise<HitoFila[]>;
   guardarEvidencia: typeof guardarEvidencia;
   /** P2 (0636): el chofer contestó un botón del «¿sigues bien?». Opcional: las pruebas que no lo ejercen no lo declaran. */
-  responderSenalVida?(tenantId: string, viajeId: string, respuesta: RespuestaSenalVida, ahora: Date): Promise<'cerrado' | 'sin_episodio' | 'fallo'>;
+  responderSenalVida?(tenantId: string, viajeId: string, respuesta: RespuestaSenalVida, ahora: Date, config?: ConfigConductor): Promise<'cerrado' | 'sin_episodio' | 'fallo'>;
 }
 
 export const depsReales: DepsAtender = {
@@ -84,7 +84,7 @@ export const depsReales: DepsAtender = {
   adjuntarUbicacion,
   cargarHitos,
   guardarEvidencia,
-  responderSenalVida: (tenantId, viajeId, respuesta, ahora) => responderEpisodioSenalVida(tenantId, viajeId, respuesta, silencioDeRespuesta(respuesta), ahora),
+  responderSenalVida: (tenantId, viajeId, respuesta, ahora, config) => responderEpisodioSenalVida(tenantId, viajeId, respuesta, silencioDeRespuesta(respuesta, config), ahora),
 };
 
 /** Lo que se le contesta al chofer tras tocar un botón de la señal de vida. */
@@ -168,7 +168,7 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
     // ── Lo que NO cambia hitos ─────────────────────────────────────────────
     if (interp.intencion.clase === 'senal_vida') {
       const respuesta = interp.intencion.respuesta;
-      const resultado = await (deps.responderSenalVida ?? depsReales.responderSenalVida!)(e.tenantId, viaje.id, respuesta, ahora);
+      const resultado = await (deps.responderSenalVida ?? depsReales.responderSenalVida!)(e.tenantId, viaje.id, respuesta, ahora, config);
       return { mensajes: [{ texto: textoRespuestaSenalVida(respuesta, resultado, viaje.folio) }] };
     }
     if (interp.intencion.clase === 'pedir_ubicacion') {
