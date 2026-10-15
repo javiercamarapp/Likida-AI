@@ -153,3 +153,24 @@ describe('crons', () => {
     expect(m.sinTenantsDePerfil(filas, new Set(), (f) => f.id)).toEqual(filas);
   });
 });
+
+describe('moduloEnStandBy: la puerta del WhatsApp de A4/A5 en «Próximamente»', () => {
+  it('con perfil, vigia y conductor están en stand-by; los módulos operables (liquidacion, peajes, carta_porte) no', async () => {
+    conPerfil();
+    expect(await m.moduloEnStandBy(CON, 'conductor')).toBe(true);
+    expect(await m.moduloEnStandBy(CON, 'vigia')).toBe(true);
+    expect(await m.moduloEnStandBy(CON, 'liquidacion')).toBe(false);
+    expect(await m.moduloEnStandBy(CON, 'peajes')).toBe(false);
+  });
+
+  it('sin perfil (o sin tenant) nada cambia: nunca está en stand-by', async () => {
+    conPerfil();
+    expect(await m.moduloEnStandBy(SIN, 'conductor')).toBe(false);
+    expect(await m.moduloEnStandBy(null, 'vigia')).toBe(false);
+  });
+
+  it('falla CERRADO: si el perfil no se puede leer y no hay valor previo, se asume stand-by', async () => {
+    porTenant.set(CON, { data: null, error: { message: 'timeout' } });
+    expect(await m.moduloEnStandBy(CON, 'conductor')).toBe(true);
+  });
+});

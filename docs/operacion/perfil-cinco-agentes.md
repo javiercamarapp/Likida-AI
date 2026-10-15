@@ -31,9 +31,18 @@ recursos de `API_PROXIMAMENTE_PERFIL` a `API_PERFIL_CINCO_AGENTES` y sus crons d
 `CRONS_PERFIL_CINCO_AGENTES` (y ajustar `perfil_inventario.test.ts` y `perfil_proximamente.test.ts`). Hoy esa lista es
 por perfil, no por flota: encenderlos es para todas las flotas con `cinco_agentes`.
 
-**Límites conocidos de la fase 1:** la siembra de hitos del conductor (`sembrar_hitos_conductor`, RPC en la base) sigue
-creando filas pendientes para viajes de flotas con perfil; no se envía ni valida nada sobre ellas. La recepción de
-WhatsApp del chofer (palanca `whatsapp`) sigue viva bajo el perfil. Ambos puntos se deciden con la fase 2.
+**WhatsApp de A4/A5 bajo el perfil (fase 1):** el chofer ya no dispara el Conductor: `moduloEnStandBy(tenant,'conductor')`
+(en `perfil_tenant.ts`) corta, en el processor, el registro de hitos, la evidencia de hitos, el pin que el Conductor
+compara y la solicitud de ubicación; el «Ya lo atiendo» del jefe se consume en silencio. El resto del turno del chofer
+(ROJO/ARCO, talacha, agente genérico, «sin comprobantes por WhatsApp») sigue como siempre. El Vigía tampoco responde:
+el mensaje de un cliente de la allowlist se descarta sin guardarlo ni escalarlo, y los botones `vig_*` del gerente se
+consumen sin contestar. Todo falla CERRADO si el perfil no se puede leer. Sin fila de perfil nada cambia.
+
+**Límites conocidos de la fase 1:** (a) el pin de ubicación del chofer sigue guardándose en `posicion` y avisando al
+jefe (función de ruta anterior al módulo, no del Conductor); (b) el cron `vigia` ejecuta la retención `vigia_purgar`
+(solo borra lo vencido, no envía ni lee) para todas las flotas; (c) la lectura de correos vencidos del Vigía
+(`vigia_correos_vencidos`) trae hasta 20 filas de cualquier flota y descarta las de perfil: con 20 o más filas de perfil
+atoradas podrían tapar a una flota libre (hoy no hay filas así).
 
 ## Cómo funciona
 
