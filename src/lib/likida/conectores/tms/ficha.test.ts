@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { TMS_API_LECTURA } from '../erp';
-import { CONECTORES, resumenHonesto } from '../registro';
+import { CONECTORES, loQuePedirle, resumenHonesto } from '../registro';
 import { esSecreto, veredictoDe, type Http, type PeticionHttp, type RespuestaHttp, type ValoresCredencial } from '../tipos';
 import {
   FRASE_403_IP, FRASE_DNS, FRASE_PAGINA_DE_ACCESO, FRASE_RECHAZO, FRASE_TIEMPO, clasificarErrorDeRed, probarTmsApiLectura,
@@ -212,5 +214,31 @@ describe('conectividad: diagnóstico en frases llanas (T-TMS-14)', () => {
   it('las frases de red no filtran clave, usuario ni token', async () => {
     const r = await probarTmsApiLectura(V, servidor({ login: codigo('ENOTFOUND', `getaddrinfo ENOTFOUND ${CLAVE}`) }).http);
     expect(r.detalle).not.toContain(CLAVE);
+  });
+});
+
+describe('runbook de conexión (T-TMS-15)', () => {
+  const ruta = join(process.cwd(), 'docs/operacion/conexion-tms.md');
+  const doc = readFileSync(ruta, 'utf8');
+
+  it('el bloque «lo que se pide» del documento es idéntico a loQuePedirle(["tms_api_lectura"])', () => {
+    const m = doc.match(/<!-- BEGIN:lo-que-pedirle -->\n```text\n([\s\S]*?)\n```\n<!-- END:lo-que-pedirle -->/);
+    expect(m).not.toBeNull();
+    expect(m![1]).toBe(loQuePedirle(['tms_api_lectura']).join('\n'));
+  });
+
+  it('cubre los ocho puntos que se piden por escrito y las cuatro operaciones', () => {
+    for (const frase of [
+      'Documentación del inicio de sesión', 'SOLO lectura', 'Ambiente de prueba', 'Límites de tasa',
+      'Zona horaria', '`Icident`', 'token vencido', '«consumido»',
+      'desactivarCredencial', '/dashboard/conexiones', 'Probar conexión', '`tms_mapeo`',
+    ]) {
+      expect(doc, frase).toContain(frase);
+    }
+  });
+
+  it('dice que la contraseña no vuelve al panel y no lleva secretos ni correos', () => {
+    expect(doc).toContain('no la vuelve a mostrar');
+    expect(doc).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
   });
 });
