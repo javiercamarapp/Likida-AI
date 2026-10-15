@@ -7,6 +7,7 @@ import { validarIngreso } from './ingreso_viaje';
 import { numero } from '@/lib/formato';
 import { DatoInvalido } from './errores';
 import { aceptarViajesImportados } from './conductor/repo';
+import { localAUtc, normalizarFechaLocal, ZONA_POR_OMISION } from './conectores/tabla_propia/tiempo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // IMPORTADOR DE VIAJES (kit del PoC, 14-ago-2026) — el export del TMS del
@@ -46,19 +47,25 @@ export interface FilaViajeImportada {
    *  La distinción es la que sostiene toda la medición de margen. */
   ingresoFlete: number | null;
   kmRecorridos: number | null;
+  /** T-A5-05: cita de carga / de descarga como INSTANTE UTC (ISO). `undefined`/`null` = el archivo no la trae
+   *  (o no se entendió: va en `citasIlegibles`). Con ella el motor del Conductor ancla los avisos. */
+  citaOrigen?: string | null;
+  citaDestino?: string | null;
 }
 
 export interface LecturaImportacion {
   viajes: FilaViajeImportada[];
   /** Filas que no se pudieron leer (sin folio, cifra ilegible) — se dicen. */
   descartadas: Array<{ fila: number; motivo: string }>;
+  /** Citas que traían algo que no es fecha y hora (p. ej. «DIRECTO»): la fila SÍ se importa, sin esa cita. */
+  citasIlegibles?: Array<{ fila: number; folio: string; columna: 'cita carga' | 'cita descarga'; valor: string }>;
   error?: string;
 }
 
 /** Encabezados que el mundo real usa. Minúsculas, sin acentos. */
 const COLUMNAS: Record<
   'folio' | 'origen' | 'destino' | 'fecha' | 'anticipo' | 'operadorNombre'
-  | 'unidad' | 'cliente' | 'ingreso' | 'km',
+  | 'unidad' | 'cliente' | 'ingreso' | 'km' | 'citaOrigen' | 'citaDestino',
   string[]
 > = {
   folio: ['folio', 'viaje', 'no viaje', 'no. viaje', 'numero de viaje', 'id viaje', 'referencia'],
@@ -71,6 +78,9 @@ const COLUMNAS: Record<
   cliente: ['cliente', 'nombre cliente', 'razon social'],
   ingreso: ['ingreso', 'flete', 'ingreso flete', 'precio flete', 'monto flete'],
   km: ['km', 'kilometros', 'km recorridos', 'distancia'],
+  // T-A5-05. «cita limite» NO se mapea: en el programa de despacho de referencia esa columna trae nombres (no fechas).
+  citaOrigen: ['cita', 'cita carga', 'cita origen'],
+  citaDestino: ['cita descarga', 'cita destino'],
 };
 
 function normalizarEncabezado(v: unknown): string {
@@ -126,6 +136,33 @@ export function leerFechaImportada(v: unknown): string | null | 'ilegible' {
   return 'ilegible';
 }
 
+/** ¿El archivo trae columnas de cita? Solo entonces hace falta conocer la zona de la flota (T-A5-05). */
+export function archivoTraeCitas(matriz: unknown[][]): boolean {
+  const enc = (matriz[0] ?? []).map(normalizarEncabezado);
+  return enc.some((e) => COLUMNAS.citaOrigen.includes(e) || COLUMNAS.citaDestino.includes(e));
+}
+
+/**
+ * Cita con hora: `dd/mm/aaaa h:mm`, `aaaa-mm-dd hh:mm` o serial de Excel con fracción de día → instante UTC (ISO),
+ * leyendo la hora SIN zona del archivo como hora local de la flota (`zona`). null = vacía; 'ilegible' = no es
+ * fecha con hora (incluye la fecha sola: sin hora no hay a qué anclar un aviso). dd/mm jamás se voltea a mm/dd.
+ */
+export function leerFechaHoraImportada(v: unknown, zona: string = ZONA_POR_OMISION): string | null | 'ilegible' {
+  if (v === null || v === undefined || v === '') return null;
+  let texto: string;
+  if (typeof v === 'number') {
+    if (v < 36526 || v > 73415 || Number.isInteger(v)) return 'ilegible';
+    const ms = Math.round((v - 25569) * 86_400_000 / 60_000) * 60_000;   // al minuto: el serial arrastra ruido de coma flotante
+    texto = new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+  } else {
+    texto = String(v).trim();
+    if (!texto) return null;
+  }
+  const n = normalizarFechaLocal(texto, zona);
+  if ('error' in n) return 'ilegible';
+  return localAUtc(n.ok, zona).toISOString();
+}
+
 /**
  * Cuántas filas de datos se leen de un archivo, COMO MÁXIMO.
  *
@@ -148,7 +185,7 @@ export const TOPE_FILAS_IMPORT = 2_000;
  */
 export function interpretarFilasViajes(
   matriz: unknown[][],
-  opciones: { permitirFinanzas?: boolean } = {},
+  opciones: { permitirFinanzas?: boolean; /** Zona IANA de la flota, para leer las citas sin zona (T-A5-05). */ zona?: string } = {},
 ): LecturaImportacion {
   if (!matriz.length) return { viajes: [], descartadas: [], error: 'El archivo está vacío.' };
 
@@ -177,6 +214,7 @@ export function interpretarFilasViajes(
 
   const viajes: FilaViajeImportada[] = [];
   const descartadas: Array<{ fila: number; motivo: string }> = [];
+  const citasIlegibles: NonNullable<LecturaImportacion['citasIlegibles']> = [];
   const vistos = new Set<string>();
 
   for (let f = 1; f < matriz.length && f <= TOPE_FILAS_IMPORT; f++) {
@@ -221,6 +259,16 @@ export function interpretarFilasViajes(
       throw e;
     }
 
+    // Una cita que no se entiende NO tumba la fila (la columna trae «DIRECTO» y similares): se importa sin ella y se dice.
+    const leerCita = (clave: 'citaOrigen' | 'citaDestino', columna: 'cita carga' | 'cita descarga'): string | null => {
+      const bruto = celda(clave);
+      const r = leerFechaHoraImportada(bruto, opciones.zona);
+      if (r === 'ilegible') { citasIlegibles.push({ fila: f + 1, folio, columna, valor: String(bruto).trim().slice(0, 40) }); return null; }
+      return r;
+    };
+    const citaOrigen = leerCita('citaOrigen', 'cita carga');
+    const citaDestino = leerCita('citaDestino', 'cita descarga');
+
     viajes.push({
       folio,
       origen: String(celda('origen') ?? '').trim().slice(0, 80) || null,
@@ -232,6 +280,8 @@ export function interpretarFilasViajes(
       clienteNombre: String(celda('cliente') ?? '').trim().slice(0, 120) || null,
       ingresoFlete,
       kmRecorridos,
+      ...(citaOrigen !== null ? { citaOrigen } : {}),
+      ...(citaDestino !== null ? { citaDestino } : {}),
     });
   }
 
@@ -252,9 +302,9 @@ export function interpretarFilasViajes(
     const aviso = `El archivo trae ${numero(filasDeDatos)} filas y el tope es ${tope}: `
       + `se leyeron las primeras ${tope}. Pártelo y sube el resto aparte.`;
     descartadas.unshift({ fila: TOPE_FILAS_IMPORT + 1, motivo: aviso });
-    return { viajes, descartadas, error: aviso };
+    return { viajes, descartadas, ...(citasIlegibles.length ? { citasIlegibles } : {}), error: aviso };
   }
-  return { viajes, descartadas };
+  return { viajes, descartadas, ...(citasIlegibles.length ? { citasIlegibles } : {}) };
 }
 
 export interface ResultadoImportacion {
@@ -538,6 +588,9 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
       // TMS es un cero MEDIDO y tiene que entrar a la medición como tal.
       ingreso_flete: f.ingresoFlete ?? null,
       km_recorridos: f.kmRecorridos ?? null,
+      // T-A5-05: solo si el archivo las trae (la clave ausente no pisa nada en el upsert que ignora duplicados).
+      ...(f.citaOrigen ? { cita_origen_en: f.citaOrigen } : {}),
+      ...(f.citaDestino ? { cita_destino_en: f.citaDestino } : {}),
       estatus: 'abierto',
     }));
     // Upsert que IGNORA duplicados contra `viaje_folio_unico` (0092): el que

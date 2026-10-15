@@ -109,6 +109,8 @@ export interface ViajeContexto {
   terminalId: string | null;
   unidadId: string | null;
   aceptadoEn: string | null;
+  /** 'importacion' = el viaje entró por archivo/TMS y lo acepta el sistema (T-A5-05: el motor no inventa anclas para él). */
+  aceptadoOrigen?: string | null;
   citaOrigenEn: string | null;
   citaDestinoEn: string | null;
   etaOrigenEn: string | null;
@@ -116,7 +118,7 @@ export interface ViajeContexto {
 }
 
 export const COLUMNAS_VIAJE_CTX =
-  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, operador:operador_id(nombre, telefono)';
+  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, aceptado_origen, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, operador:operador_id(nombre, telefono)';
 
 export function filaAViajeCtx(f: Fila): ViajeContexto {
   const rel = f.operador as { nombre?: string; telefono?: string } | Array<{ nombre?: string; telefono?: string }> | null;
@@ -134,6 +136,7 @@ export function filaAViajeCtx(f: Fila): ViajeContexto {
     terminalId: s(f.terminal_id),
     unidadId: s(f.unidad_id),
     aceptadoEn: s(f.aceptado_en),
+    aceptadoOrigen: s(f.aceptado_origen),
     citaOrigenEn: s(f.cita_origen_en),
     citaDestinoEn: s(f.cita_destino_en),
     etaOrigenEn: s(f.eta_origen_en),
