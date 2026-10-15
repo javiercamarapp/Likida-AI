@@ -447,6 +447,52 @@ export function rutaPermitidaEnPerfil(perfil: PerfilTenant | string, href: strin
   return Object.prototype.hasOwnProperty.call(RUTAS_PERFIL_CINCO_AGENTES, claveRutaPerfil(href));
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// «PRÓXIMAMENTE» DENTRO DEL PERFIL — FASE 1 (decisión del 15-oct-2026).
+//
+// El perfil `cinco_agentes` conserva su significado (la lista cerrada de arriba).
+// Dentro de ella, los módulos de `MODULOS_PROXIMAMENTE_PERFIL` están en FASE 2:
+//   · SE VEN en el menú con la etiqueta «Próximamente» (siguen en
+//     `RUTAS_PERFIL_CINCO_AGENTES`, así que `rutaPermitidaEnPerfil` y
+//     `puedeVerRuta` los dejan ver),
+//   · pero NO se operan: su página real no se sirve (`exigirRutaDePerfil` manda a
+//     la pantalla «Próximamente», sin datos ni acciones), y sus APIs, crons, chat
+//     y MCP siguen apagados (`API_PROXIMAMENTE_PERFIL`, `CRONS_PROXIMAMENTE_PERFIL`).
+//
+// Encender la fase 2 para un tenant = sacar el módulo de esta lista (el código de
+// A4/A5 sigue construyéndose en sus ramas y viaja sin borrar nada).
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Módulos del perfil que se muestran pero no se operan todavía. */
+export const MODULOS_PROXIMAMENTE_PERFIL: readonly ModuloPerfil[] = ['vigia', 'conductor'];
+
+/** El módulo al que pertenece una ruta del perfil, o `null` si no está en la lista cerrada. */
+export function moduloDeRutaPerfil(perfil: PerfilTenant | string, href: string): ModuloPerfil | null {
+  if (!rutaPermitidaEnPerfil(perfil, href)) return null;
+  return RUTAS_PERFIL_CINCO_AGENTES[claveRutaPerfil(href)];
+}
+
+/** El módulo «próximamente» de una ruta (`vigia` | `conductor`), o `null` si la ruta es operable, ajena o sin perfil. */
+export function moduloProximamenteDeRuta(perfil: PerfilTenant | string, href: string): ModuloPerfil | null {
+  const m = moduloDeRutaPerfil(perfil, href);
+  return m !== null && MODULOS_PROXIMAMENTE_PERFIL.includes(m) ? m : null;
+}
+
+/** ¿Esta ruta se muestra bajo el perfil pero está bloqueada como «Próximamente»? */
+export function rutaProximamenteEnPerfil(perfil: PerfilTenant | string, href: string): boolean {
+  return moduloProximamenteDeRuta(perfil, href) !== null;
+}
+
+/** ¿Esta ruta se puede OPERAR bajo el perfil? (permitida Y no «próximamente»). */
+export function rutaOperativaEnPerfil(perfil: PerfilTenant | string, href: string): boolean {
+  return rutaPermitidaEnPerfil(perfil, href) && !rutaProximamenteEnPerfil(perfil, href);
+}
+
+/** La pantalla única «Próximamente» de un módulo (la sirve `/dashboard/proximamente/[modulo]`). */
+export function rutaProximamente(modulo: ModuloPerfil): string {
+  return `/dashboard/proximamente/${modulo}`;
+}
+
 /**
  * Superficies de API que el perfil deja vivas, por PRIMER segmento bajo su raíz.
  * Todo segmento que no esté aquí se niega (falla cerrado) — incluida una ruta
@@ -462,18 +508,26 @@ export const API_PERFIL_CINCO_AGENTES: Readonly<Record<'v1' | 'export' | 'dashbo
   v1: [
     'liquidaciones', 'liquidaciones-externas', // A1
     'peajes',                                   // A2
-    'hitos', 'estadias', 'sitios', 'conductor', 'evidencias', // A5
     'viajes', 'operadores', 'unidades',         // base
   ],
   export: [
     'liquidaciones', 'liquidaciones-externas', 'pdf', // A1
-    'bitacora-peaje', 'bitacora-conciliada', 'peajes-reclamacion', // A2
+    'bitacora-peaje', 'bitacora-conciliada', 'peajes-reclamacion', 'peajes-revision', // A2
     'carta-porte-docs', 'carta-porte-xml',      // A3
-    'vigia-faqs',                                // A4
   ],
   dashboard: [
     'evento', // el pageview del panel: cero datos, 204 siempre
   ],
+};
+
+/**
+ * Superficies de API de los módulos «próximamente» (A4 y A5): existen, el perfil
+ * las NIEGA hasta que el módulo se encienda. Mismo criterio que la lista de arriba.
+ */
+export const API_PROXIMAMENTE_PERFIL: Readonly<Record<'v1' | 'export' | 'dashboard', readonly string[]>> = {
+  v1: ['hitos', 'estadias', 'sitios', 'conductor', 'evidencias'], // A5
+  export: ['vigia-faqs'],                                          // A4
+  dashboard: [],
 };
 
 /** ¿Esta ruta de API (`/api/v1/...`, `/api/export/...`, `/api/dashboard/...`) sigue viva bajo el perfil? */
@@ -493,13 +547,18 @@ export const CRONS_PERFIL_CINCO_AGENTES: readonly string[] = [
   'liquidaciones-externas', // A1: jala liquidaciones del sistema del cliente
   'peajes',                  // A2
   'carta-porte-docs',        // A3
-  'vigia',                   // A4
-  'conductor-hitos', 'gps',  // A5
-  // `escalar` es MIXTO: lleva la escalación del conductor (sigue) y, además, la cobranza, los relojes
-  // legales de incidencias y las reglas (stand-by), que se saltan flotas con perfil por sección.
+  'gps',                     // sincroniza posiciones/eventos del proveedor del cliente (solo entrada de datos; no manda nada a nadie)
+  // `escalar` es MIXTO: la escalación del conductor (A5, «próximamente»), la cobranza, los relojes
+  // legales de incidencias y las reglas (stand-by) se saltan flotas con perfil por sección.
   'escalar',
   'wa-pendientes', 'wa-outbox', 'purgar', 'guardia', // plomería compartida
 ];
+
+/**
+ * Crons de los módulos «próximamente»: NO corren para flotas con perfil (cada uno
+ * filtra por `tenantsConPerfilASaltar` en su ruta). Siguen corriendo para el resto.
+ */
+export const CRONS_PROXIMAMENTE_PERFIL: readonly string[] = ['vigia', 'conductor-hitos'];
 
 /** Toda ruta que el mapa de áreas conoce — para las pruebas que exigen que cada una esté clasificada en el perfil. */
 export function rutasConocidas(): string[] {

@@ -7,6 +7,7 @@ import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
 import { UMBRAL_FALLIDOS_ALERTA } from '@/lib/likida/vigia/aviso/cola';
+import { tenantsConPerfilASaltar, sinTenantsDePerfil } from '@/lib/auth/perfil_tenant';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -61,7 +62,18 @@ export async function GET(req: Request) {
   }
 
   try {
-    const r = await barridoVigia(crearDepsVigia(), {
+    // El Vigía (A4) está en «Próximamente» para las flotas con perfil (fase 1): el barrido no las mira ni les escala nada.
+    // Si la tabla del perfil no se puede leer, esto lanza y el barrido NO corre (falla cerrado; el siguiente minuto reintenta).
+    const saltar = await tenantsConPerfilASaltar('vigia');
+    const deps = crearDepsVigia();
+    if (saltar.size > 0) {
+      const enEspera = deps.repo.conversacionesEnEspera.bind(deps.repo);
+      deps.repo = {
+        ...deps.repo,
+        conversacionesEnEspera: async (...a: Parameters<typeof enEspera>) => sinTenantsDePerfil(await enEspera(...a), saltar, (f) => f.config.tenantId),
+      };
+    }
+    const r = await barridoVigia(deps, {
       vencePorReloj: inicio + maxDuration * 1000 - MARGEN_MS,
       mantenimiento: new Date(inicio).getUTCMinutes() % 5 === 0,
     });

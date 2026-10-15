@@ -6,6 +6,7 @@ import { ultimasCorridas, duracionLegible, type AgenteConCorridas, type CorridaR
 import { BarraPagina, ChipFecha, HeroSaludo, TituloSeccion } from './resumen-visual';
 import { AvisoSinFlota } from './sin-flota';
 import { Bloque, EsqTabla } from './bloque';
+import { moduloProximamenteDeRuta, rutaProximamente } from '@/lib/auth/visibilidad';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL RESUMEN DE UNA FLOTA CON PERFIL `cinco_agentes` (mig. 0770).
@@ -78,18 +79,27 @@ function Indicador({ corrida }: { corrida: CorridaRegistrada | null | undefined 
 }
 
 async function TarjetaAgente({ ficha, tenantId, sufijo }: { ficha: FichaAgente; tenantId: string; sufijo: string }) {
-  const corrida = ficha.corridas ? await ultima(tenantId, ficha.corridas) : undefined;
+  // «Próximamente» (fase 1): la ficha se ve pero no consulta nada de la flota y su enlace va al anuncio, no a la función.
+  const proximamente = moduloProximamenteDeRuta('cinco_agentes', ficha.href);
+  const corrida = ficha.corridas && !proximamente ? await ultima(tenantId, ficha.corridas) : undefined;
   return (
-    <Link href={`${ficha.href}${sufijo}`} className="card p-4 block transition-opacity hover:opacity-85" data-agente={ficha.clave}>
+    <Link href={`${proximamente ? rutaProximamente(proximamente) : ficha.href}${sufijo}`} className="card p-4 block transition-opacity hover:opacity-85" data-agente={ficha.clave}>
       <div className="flex items-start gap-3">
         <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
           <ficha.Icono width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
         </div>
         <div className="min-w-0">
-          <h3 className="text-[14px] font-medium">{ficha.nombre}</h3>
+          <h3 className="text-[14px] font-medium">
+            {ficha.nombre}
+            {proximamente && (
+              <span className="ml-2 align-middle text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>Próximamente</span>
+            )}
+          </h3>
           <p className="text-[12.5px] mt-0.5" style={{ color: 'var(--ink2)' }}>{ficha.descripcion}</p>
           <div className="mt-2">
-            {ficha.corridas ? <Indicador corrida={corrida} /> : (
+            {proximamente ? (
+              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Todavía no está activo en tu cuenta.</p>
+            ) : ficha.corridas ? <Indicador corrida={corrida} /> : (
               <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Abre su tablero para ver y aprobar las respuestas.</p>
             )}
           </div>

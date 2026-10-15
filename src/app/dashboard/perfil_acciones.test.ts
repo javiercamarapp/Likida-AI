@@ -33,11 +33,17 @@ const ARCHIVOS: Record<string, Clase> = {
   // ── Permitidos: los cinco agentes y la base mínima ─────────────────────
   '[id]/page.tsx': 'permitido',                             // detalle de liquidación (A1)
   'agentes/liquidacion/formato/page.tsx': 'permitido',
+  'agentes/liquidacion/configuracion/page.tsx': 'permitido',
   'agentes/liquidacion/page.tsx': 'permitido',
   'agentes/peajes/configuracion/page.tsx': 'permitido',
   'agentes/peajes/page.tsx': 'permitido',
+  'agentes/peajes/reclamacion/page.tsx': 'permitido',
   'agentes/vigia/historial/page.tsx': 'permitido',
   'agentes/vigia/page.tsx': 'permitido',
+  // «Próximamente» (fase 1): permitidas en la lista del perfil, pero su puerta las manda al anuncio antes de tocar un dato.
+  'agentes/vigia/avisos/page.tsx': 'permitido',
+  'agentes/vigia/importacion/page.tsx': 'permitido',
+  'agentes/vigia/programa/page.tsx': 'permitido',
   'agentes/conductores/configuracion/page.tsx': 'permitido',
   'agentes/conductores/page.tsx': 'permitido',
   'agentes/conductores/sitios/page.tsx': 'permitido',

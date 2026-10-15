@@ -135,9 +135,9 @@ describe('crons', () => {
     expect(m.nombreDeCron('/api/cron/facturar/cola')).toBe('facturar');
     expect(m.nombreDeCron('/api/cron/vigia')).toBe('vigia');
   });
-  it('los crons de los cinco agentes no saltan a nadie; los de stand-by saltan las flotas con perfil', async () => {
+  it('los crons de A1–A3 no saltan a nadie (los de A4/A5 «próximamente» sí: ver perfil_proximamente.test.ts); los de stand-by saltan las flotas con perfil', async () => {
     lista = { data: [{ tenant_id: 'a' }, { tenant_id: 'b' }], error: null };
-    expect((await m.tenantsConPerfilASaltar('vigia')).size).toBe(0);
+    expect((await m.tenantsConPerfilASaltar('peajes')).size).toBe(0);
     expect([...(await m.tenantsConPerfilASaltar('facturar'))].sort()).toEqual(['a', 'b']);
     expect(m.cronAplicaAPerfil('descarga-sat')).toBe(false);
   });
@@ -145,7 +145,7 @@ describe('crons', () => {
     lista = { data: null, error: { message: 'caída' } };
     await expect(m.tenantsConPerfilASaltar('facturar')).rejects.toThrow(/no se pudo leer/);
     // los permitidos no leen la tabla: no dependen de ella
-    await expect(m.tenantsConPerfilASaltar('vigia')).resolves.toEqual(new Set());
+    await expect(m.tenantsConPerfilASaltar('peajes')).resolves.toEqual(new Set());
   });
   it('sinTenantsDePerfil filtra por id', () => {
     const filas = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];

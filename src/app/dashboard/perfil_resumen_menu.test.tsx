@@ -14,7 +14,10 @@ vi.mock('next/navigation', () => ({
 
 const { default: SidebarNav, SidebarAbajo } = await import('./sidebar-nav');
 const { FICHAS_CINCO_AGENTES } = await import('./inicio-cinco-agentes');
-const { RUTAS_PERFIL_CINCO_AGENTES } = await import('@/lib/auth/visibilidad');
+const { RUTAS_PERFIL_CINCO_AGENTES, moduloProximamenteDeRuta, rutaProximamente } = await import('@/lib/auth/visibilidad');
+// Un módulo «próximamente» (fase 1) enlaza a su pantalla de anuncio, no a la función.
+const destinoEnMenu = (href: string) => { const m = moduloProximamenteDeRuta('cinco_agentes', href); return m ? rutaProximamente(m) : href; };
+const enlacesPermitidos = () => [...Object.keys(RUTAS_PERFIL_CINCO_AGENTES), ...['vigia', 'conductor'].map((m) => rutaProximamente(m as 'vigia'))];
 
 const hrefsDe = (html: string) => [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
 const PROHIBIDAS = [
@@ -37,7 +40,7 @@ describe('sidebar', () => {
       + renderToStaticMarkup(<SidebarAbajo rol="flota_admin" perfil="cinco_agentes" usoIa={{ pct: 10 }} />);
     const hrefs = hrefsDe(html);
     expect(hrefs.length).toBeGreaterThan(5);
-    for (const h of hrefs) expect(Object.keys(RUTAS_PERFIL_CINCO_AGENTES), h).toContain(h);
+    for (const h of hrefs) expect(enlacesPermitidos(), h).toContain(h);
     for (const p of PROHIBIDAS) expect(hrefs).not.toContain(p);
     expect(html).not.toContain('Pregunta a tus datos');
     expect(html).not.toContain('Análisis con IA');
@@ -47,7 +50,7 @@ describe('sidebar', () => {
     ruta = '/dashboard/agentes/peajes';
     const hrefs = hrefsDe(renderToStaticMarkup(<SidebarNav rol="flota_admin" perfil="cinco_agentes" />));
     ruta = '/dashboard';
-    for (const f of FICHAS_CINCO_AGENTES) expect(hrefs, f.nombre).toContain(f.href);
+    for (const f of FICHAS_CINCO_AGENTES) expect(hrefs, f.nombre).toContain(destinoEnMenu(f.href));
     for (const p of ['/dashboard/agentes/facturas', '/dashboard/agentes/cobranza', '/dashboard/agentes/proveedores']) expect(hrefs).not.toContain(p);
   });
 
@@ -98,5 +101,37 @@ describe('/dashboard bajo el perfil', () => {
   it('sin perfil y con el onboarding listo muestra el Resumen del dueño, como siempre', async () => {
     const el = await pagina(null, true);
     expect(el.type.name).toBe('InicioContenido');
+  });
+});
+
+describe('«Próximamente» en el menú y en el Resumen (fase 1)', () => {
+  it('el menú enseña vigía y conductor con la etiqueta «Próximamente» y su link va al anuncio, no a la función', () => {
+    ruta = '/dashboard/agentes/peajes';
+    const html = renderToStaticMarkup(<SidebarNav rol="flota_admin" perfil="cinco_agentes" />);
+    ruta = '/dashboard';
+    const hrefs = hrefsDe(html);
+    expect(hrefs).toContain('/dashboard/proximamente/vigia');
+    expect(hrefs).toContain('/dashboard/proximamente/conductor');
+    for (const p of ['/dashboard/agentes/vigia', '/dashboard/agentes/conductores']) expect(hrefs).not.toContain(p);
+    expect(html).toContain('Servicio al cliente');
+    expect(html).toContain('Comunicación con operadores');
+    expect((html.match(/Próximamente<\/span>/g) ?? []).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('A1, A2 y A3 siguen enlazando a su función, sin etiqueta', () => {
+    ruta = '/dashboard/agentes/peajes';
+    const html = renderToStaticMarkup(<SidebarNav rol="flota_admin" perfil="cinco_agentes" />);
+    ruta = '/dashboard';
+    const hrefs = hrefsDe(html);
+    for (const p of ['/dashboard/agentes/liquidacion', '/dashboard/agentes/peajes', '/dashboard/agentes/carta-porte']) expect(hrefs).toContain(p);
+  });
+
+  it('SIN perfil el menú no cambia: nada de «Próximamente», links a las funciones', () => {
+    ruta = '/dashboard/agentes/peajes';
+    const html = renderToStaticMarkup(<SidebarNav rol="flota_admin" />);
+    ruta = '/dashboard';
+    expect(html).not.toContain('Próximamente');
+    expect(hrefsDe(html)).toContain('/dashboard/agentes/vigia');
+    expect(hrefsDe(html)).not.toContain('/dashboard/proximamente/vigia');
   });
 });

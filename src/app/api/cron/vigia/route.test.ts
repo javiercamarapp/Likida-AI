@@ -20,10 +20,22 @@ vi.mock('@/lib/likida/interruptores', () => ({ leerInterruptor: async () => glob
 const base = { revisadas: 3, escaladas: 1, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, cortadoPorReloj: false };
 const barrido = vi.fn(async (..._a: unknown[]): Promise<Record<string, unknown>> => ({ ...base }));
 vi.mock('@/lib/likida/vigia/servicio', () => ({ barridoVigia: (...a: unknown[]) => barrido(...a) }));
-vi.mock('@/lib/likida/vigia/deps', () => ({ crearDepsVigia: () => ({ repo: 'repo' }) }));
+const filasEnEspera = [{ config: { tenantId: 'con-perfil' } }, { config: { tenantId: 'libre' } }];
+vi.mock('@/lib/likida/vigia/deps', () => ({ crearDepsVigia: () => ({ repo: { conversacionesEnEspera: async () => filasEnEspera } }) }));
 const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...a) }));
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'cod' }));
+// «Próximamente» (fase 1): el barrido salta las flotas con perfil. `flotasConPerfil` simula quiénes son.
+let flotasConPerfil = new Set<string>();
+let perfilIlegible = false;
+vi.mock('@/lib/auth/perfil_tenant', () => ({
+  tenantsConPerfilASaltar: async (c: string) => {
+    expect(c).toBe('vigia');
+    if (perfilIlegible) throw new Error('perfil_tenant: no se pudo leer la lista de flotas con perfil (caída)');
+    return flotasConPerfil;
+  },
+  sinTenantsDePerfil: <T,>(filas: readonly T[], saltar: ReadonlySet<string>, idDe: (f: T) => string) => filas.filter((f) => !saltar.has(idDe(f))),
+}));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const { GET } = await import('./route');
@@ -32,7 +44,7 @@ const llamar = () => GET(new Request('https://app.likida.ai/api/cron/vigia'));
 const j = async (r: Response) => (await r.json()) as Record<string, unknown>;
 
 beforeEach(() => {
-  autorizado = 'si'; global = 'encendido';
+  autorizado = 'si'; global = 'encendido'; flotasConPerfil = new Set(); perfilIlegible = false;
   barrido.mockReset(); registrarLatido.mockClear(); alertarOperador.mockClear();
   barrido.mockResolvedValue({ ...base });
 });
@@ -149,5 +161,37 @@ describe('observabilidad de la cola de avisos (T-A4-42)', () => {
     await llamar();
     expect(alertarOperador).toHaveBeenCalledTimes(1);
     expect(alertarOperador).toHaveBeenCalledWith('cron.vigia.avisos_fallidos', { avisosFallidos: UMBRAL_FALLIDOS_ALERTA, avisosEnviados: 2 });
+  });
+});
+
+describe('«Próximamente»: las flotas con perfil no entran al barrido', () => {
+  it('con flotas con perfil, sus conversaciones se filtran antes del barrido', async () => {
+    flotasConPerfil = new Set(['con-perfil']);
+    let vistas: Array<{ config: { tenantId: string } }> = [];
+    barrido.mockImplementation(async (...a: unknown[]) => {
+      const deps = a[0] as { repo: { conversacionesEnEspera: () => Promise<typeof vistas> } };
+      vistas = await deps.repo.conversacionesEnEspera();
+      return { ...base };
+    });
+    expect((await llamar()).status).toBe(200);
+    expect(vistas).toEqual([{ config: { tenantId: 'libre' } }]);
+  });
+
+  it('sin flotas con perfil el barrido ve todas las conversaciones (nada cambia)', async () => {
+    let vistas: unknown[] = [];
+    barrido.mockImplementation(async (...a: unknown[]) => {
+      vistas = await (a[0] as { repo: { conversacionesEnEspera: () => Promise<unknown[]> } }).repo.conversacionesEnEspera();
+      return { ...base };
+    });
+    await llamar();
+    expect(vistas).toHaveLength(2);
+  });
+
+  it('si no se puede leer quién tiene perfil, el barrido NO corre y el latido sale en fallo (falla cerrado)', async () => {
+    perfilIlegible = true;
+    const r = await llamar();
+    expect(r.status).toBe(500);
+    expect(barrido).not.toHaveBeenCalled();
+    expect(registrarLatido).toHaveBeenCalledWith('vigia', 'fallo', expect.anything());
   });
 });
