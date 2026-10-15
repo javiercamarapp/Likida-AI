@@ -11,6 +11,7 @@
 //  - Valores de TRANSITO/CCP que no están en el catálogo → `desconocido` + aviso
 //    con el texto original; los numéricos se marcan «dato fuera de columna».
 
+import { TZ_MX } from '@/lib/formato';
 import type { FilaCruda, ResultadoLector, Seccion, TipoSeccionPrograma } from './lector';
 
 export type Transito =
@@ -18,7 +19,7 @@ export type Transito =
 export type Ccp =
   | 'listo' | 'despachado' | 'pend_reque' | 'pend_ccp' | 'falta_complemento' | 'vacio' | 'desconocido';
 
-export const ZONA_HORARIA_POR_DEFECTO = 'America/Mexico_City';
+export const ZONA_HORARIA_POR_DEFECTO = TZ_MX;
 
 export type CodigoAvisoFila =
   | 'transito_desconocido' | 'ccp_desconocido' | 'dato_fuera_de_columna'

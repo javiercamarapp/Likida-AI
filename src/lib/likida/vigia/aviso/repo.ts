@@ -9,6 +9,7 @@
 //   4. Si la 0797 aún no está en la base (42P01 / PGRST205) se lanza `AvisoSinMigrar`.
 //   5. Nada de contenido del aviso ni del programa en los logs.
 // ═══════════════════════════════════════════════════════════════════════════
+import { TZ_MX } from '@/lib/formato';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../../presupuesto';
 import { IDS_POR_TANDA } from '../../pg';
@@ -115,7 +116,7 @@ function aConfig(r: Record<string, unknown>): ConfigAviso {
     exigirTransito: r.exigir_transito === true,
     secciones: lista(r.secciones),
     horasAntesCita: typeof r.horas_antes_cita === 'number' ? r.horas_antes_cita : null,
-    zona: str(r.zona) ?? 'America/Mexico_City',
+    zona: str(r.zona) ?? TZ_MX,
   };
 }
 

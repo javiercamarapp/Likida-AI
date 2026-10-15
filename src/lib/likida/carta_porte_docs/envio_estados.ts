@@ -30,10 +30,11 @@
 // Invariante: un documento con bloqueos abiertos NUNCA queda en `listo`.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { TZ_MX } from '@/lib/formato';
 import type { EstadoEnvioTms, SalidaConfigFila } from './repo';
 
 /** Zona de la flota por omisión (la ventana horaria de `cp_salida_config` son horas locales). */
-export const ZONA_FLOTA_POR_DEFECTO = 'America/Mexico_City';
+export const ZONA_FLOTA_POR_DEFECTO = TZ_MX;
 /** Tope de reintentos por error transitorio y techo del multiplicador del backoff. */
 export const TOPE_TRANSITORIOS = 5;
 export const TOPE_MULTIPLICADOR_BACKOFF = 8;
@@ -90,7 +91,7 @@ const ceroAlertas = { alerta: null, agotado: false, devolverDocumento: null, men
 // ── Tiempo (determinista, zona explícita) ────────────────────────────────────
 
 function partesLocales(t: number, zona: string): { y: number; mo: number; d: number; h: number; mi: number } {
-  const f = new Intl.DateTimeFormat('en-CA', {
+  const f = new Intl.DateTimeFormat('en-US', {
     timeZone: zona, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
   });
   const p: Record<string, number> = {};
