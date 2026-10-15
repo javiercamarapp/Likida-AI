@@ -17,6 +17,7 @@ import { esErrorDePresupuesto } from '@/lib/llm/budget';
 import { estaApagado } from '../interruptores';
 import { MAX_BYTES_DOC, detectarFormato, prepararContenido, type FormatoDoc } from './contenido';
 import { extraerDocumento, type LlmExtractor, type ResultadoExtraccion } from './extractor';
+import { avisosDelCatalogo, enriquecer } from './catalogo_cliente';
 import { derivarHijos, evaluarDivision, MAX_EMBARQUES, type PlanDivision } from './multiembarque';
 import { elegirPerfil } from './perfiles';
 import { confianzaMinimaCritica, validarExtraccion, type Hallazgo, type ResultadoValidacion } from './validacion';
@@ -282,23 +283,36 @@ export async function procesarDocumento(
       return await fallar('modelo', `El modelo no pudo leer el documento: ${resumenError(e)}`, false);
     }
 
+    // El catálogo del cliente se aplica DESPUÉS del perfil/modelo y ANTES de validar. El modelo ya contestó: nunca lo vio.
+    // Sin cliente en el documento o sin catálogo cargado es un no-op.
+    let extraccion = r.extraccion;
+    const avisosCatalogo: string[] = [];
+    let catalogoAplicados = 0;
+    if (doc.clienteId) {
+      const catalogo = await repo.cargarCatalogoCliente(tenantId, doc.clienteId);
+      const e = enriquecer(extraccion, catalogo, { tenantId, clienteId: doc.clienteId });
+      extraccion = e.extraccion;
+      catalogoAplicados = e.aplicados.length;
+      avisosCatalogo.push(...avisosDelCatalogo(e, catalogo.truncado === true));
+    }
+
     const docVista = { id: doc.id, riesgoInyeccion: r.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido };
-    const validacion = await validarDocumento(tenantId, docVista, r.extraccion);
+    const validacion = await validarDocumento(tenantId, docVista, extraccion);
     const meta: MetaExtraccion = {
-      origen: r.origen, nivel: r.nivel, escalamientos: r.escalamientos, avisos: r.avisos, notasModelo: r.notasModelo, indiciosInyeccion: r.indiciosInyeccion,
+      origen: r.origen, nivel: r.nivel, escalamientos: r.escalamientos, avisos: [...r.avisos, ...avisosCatalogo], notasModelo: r.notasModelo, indiciosInyeccion: r.indiciosInyeccion,
     };
     const guardada = await repo.actualizarDocumento(tenantId, documentoId, version, {
       estado: 'por_revisar', formato: contenido.formato, perfil_id: r.perfilId, perfil_version: r.perfilVersion,
       texto_extracto: contenido.texto, riesgo_inyeccion: r.riesgoInyeccion,
-      extraccion: { campos: r.extraccion.campos, mercancias: r.extraccion.mercancias, meta },
-      validacion, confianza_min: confianzaMinimaCritica(r.extraccion), nivel_modelo: r.nivel, modelo: r.modelo,
+      extraccion: { campos: extraccion.campos, mercancias: extraccion.mercancias, meta },
+      validacion, confianza_min: confianzaMinimaCritica(extraccion), nivel_modelo: r.nivel, modelo: r.modelo,
       tokens_in: r.tokensIn, tokens_out: r.tokensOut, costo_usd: r.costoUsd,
       procesando_hasta: null, ultimo_error: null,
     });
     if (!guardada) return { ok: false, motivo: 'perdi_el_lease', mensaje: 'Otra invocación terminó este documento primero.', permanente: false };
     version = guardada.version;
     await repo.registrarEvento(tenantId, documentoId, 'extraccion_ok', null, {
-      origen: r.origen, nivel: r.nivel, modelo: r.modelo, campos: Object.keys(r.extraccion.campos).length, mercancias: r.extraccion.mercancias.length,
+      origen: r.origen, nivel: r.nivel, modelo: r.modelo, campos: Object.keys(extraccion.campos).length, mercancias: extraccion.mercancias.length, catalogoAplicados,
       costoUsd: r.costoUsd, bloqueos: validacion.bloqueos, porConfirmar: validacion.porConfirmar, riesgoInyeccion: r.riesgoInyeccion,
     });
     for (const x of r.escalamientos) await repo.registrarEvento(tenantId, documentoId, 'escalada', null, x);
