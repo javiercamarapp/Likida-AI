@@ -1,15 +1,21 @@
 import { Upload, Trash2 } from 'lucide-react';
 import { numero } from '@/lib/formato';
 // SOLO tipos: el módulo de datos importa supabaseAdmin y no debe entrar al bundle de la vista.
-import type { ReglaCasetaVista, TagBajaVista } from '@/lib/likida/peajes/revision_cobros';
+import type { ReglaCasetaVista, TagBajaVista, ExcepcionUnidadVista } from '@/lib/likida/peajes/revision_cobros';
 
 type Accion = (fd: FormData) => Promise<void>;
 
-export interface AccionesReglasCobro { guardarReglaCaseta: Accion; cargarCoordenadas: Accion; altaBajaTag: Accion; quitarBajaTag: Accion }
+export interface AccionesReglasCobro {
+  guardarReglaCaseta: Accion; cargarCoordenadas: Accion; altaBajaTag: Accion; quitarBajaTag: Accion;
+  /** Excepciones por unidad de las casetas que no deben cruzarse (opcionales: sin ellas la sección no se pinta). */
+  guardarExcepcionUnidad?: Accion; quitarExcepcionUnidad?: Accion;
+}
 
 export interface ReglasCobroVista {
   casetas: ReglaCasetaVista[] | null;
   bajas: TagBajaVista[] | null;
+  /** `undefined` = la pantalla no maneja excepciones; `null` = no se pudieron leer. */
+  excepciones?: ExcepcionUnidadVista[] | null;
   acciones: AccionesReglasCobro;
 }
 
@@ -29,7 +35,9 @@ const MAX_CASETAS_VISIBLES = 200;
  * Los nombres de casetas salen solos del archivo del proveedor; la flota decide qué regla lleva cada una.
  */
 export function SeccionReglasCobro({ datos }: { datos: ReglasCobroVista }) {
-  const { casetas, bajas, acciones } = datos;
+  const { casetas, bajas, acciones, excepciones } = datos;
+  const prohibidas = (casetas ?? []).filter((c) => c.noCruzar);
+  const nombrePorNorm = new Map((casetas ?? []).map((c) => [c.nombreNorm, c.nombre]));
   const ordenadas = casetas
     ? [...casetas].sort((a, b) => Number(b.noCruzar || b.clasesPermitidas.length > 0) - Number(a.noCruzar || a.clasesPermitidas.length > 0) || b.crucesVistos - a.crucesVistos)
     : null;
@@ -72,6 +80,49 @@ export function SeccionReglasCobro({ datos }: { datos: ReglasCobroVista }) {
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
         «Clases válidas extra» son clases que, en esa caseta, no se marcan (p. ej. <span className="cifra-mono">1</span> en una caseta de tarifa por pasada); las generales son 3 y 5.
       </p>
+
+      {excepciones !== undefined && acciones.guardarExcepcionUnidad && acciones.quitarExcepcionUnidad && (
+        <div className="mb-4" id="excepciones-unidad">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>Unidades exceptuadas de «no debe cruzarse»</h3>
+          <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>
+            Una unidad exceptuada puede cruzar esa caseta sin que se marque (p. ej. una camioneta de rescates). Las demás unidades siguen marcándose. Nada viene precargado.
+          </p>
+          {excepciones === null ? (
+            <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No se pudo leer la lista de excepciones ahora mismo.</p>
+          ) : excepciones.length === 0 ? (
+            <p className="text-[12.5px] mb-2" style={{ color: 'var(--muted)' }}>Ninguna unidad exceptuada.</p>
+          ) : (
+            <div className="space-y-1.5 mb-2">
+              {excepciones.map((e) => (
+                <div key={e.id} className="hairline rounded-lg px-2.5 py-2 flex items-center gap-2 flex-wrap text-[12.5px]">
+                  <span className="font-medium cifra-mono">{e.unidad}</span>
+                  <span>puede cruzar {nombrePorNorm.get(e.casetaNorm) ?? e.casetaNorm}</span>
+                  {e.nota && <span style={{ color: 'var(--muted)' }}>· {e.nota}</span>}
+                  <form action={acciones.quitarExcepcionUnidad} className="ml-auto">
+                    <input type="hidden" name="excepcion" value={e.id} />
+                    <button type="submit" aria-label={`Quitar la excepción de ${e.unidad}`} className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} /></button>
+                  </form>
+                </div>
+              ))}
+            </div>
+          )}
+          {prohibidas.length === 0 ? (
+            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Primero marca una caseta como «No debe cruzarse»; después podrás exceptuar unidades.</p>
+          ) : (
+            <form action={acciones.guardarExcepcionUnidad} className="flex items-end gap-2 flex-wrap">
+              <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Caseta</span>
+                <select name="caseta" required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
+                  {prohibidas.map((c) => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
+                </select></label>
+              <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Unidad</span>
+                <input name="unidad" required maxLength={40} placeholder="TC9001" className={`${CSS_INPUT} w-[120px] mt-0.5`} style={ESTILO_INPUT} /></label>
+              <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Nota (opc.)</span>
+                <input name="nota" maxLength={300} placeholder="Atiende rescates" className={`${CSS_INPUT} w-[200px] mt-0.5`} style={ESTILO_INPUT} /></label>
+              <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Exceptuar unidad</button>
+            </form>
+          )}
+        </div>
+      )}
 
       <form action={acciones.cargarCoordenadas} encType="multipart/form-data" className="flex items-center gap-2 flex-wrap mb-4">
         <input type="file" name="archivo" accept=".csv,.tsv" required aria-label="CSV de coordenadas de casetas"

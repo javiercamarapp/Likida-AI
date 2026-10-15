@@ -21,7 +21,11 @@ import { ETIQUETA_SENAL } from '@/lib/likida/peajes/cruces_atipicos';
 
 type Accion = (fd: FormData) => Promise<void>;
 
-export interface AccionesSeguimiento { crearReclamo: Accion; marcarEnviado: Accion; registrarNota: Accion; rechazar: Accion }
+export interface AccionesSeguimiento {
+  crearReclamo: Accion; marcarEnviado: Accion; registrarNota: Accion; rechazar: Accion;
+  /** «Justificar este cruce» (opcional: sin ella no se pinta el botón). */
+  justificarCruce?: Accion;
+}
 
 const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
@@ -47,7 +51,7 @@ function ExtraSufijo({ sufijo }: { sufijo: string }) {
   return <>{[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries()].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}</>;
 }
 
-function FilasCandidatos({ candidatos }: { candidatos: CandidatoCobro[] }) {
+function FilasCandidatos({ candidatos, justificar, desglose }: { candidatos: CandidatoCobro[]; justificar?: Accion; desglose?: string }) {
   const visibles = candidatos.slice(0, MAX_FILAS_POR_CATEGORIA);
   return (
     <>
@@ -76,6 +80,19 @@ function FilasCandidatos({ candidatos }: { candidatos: CandidatoCobro[] }) {
                   <p><b>Qué pasó:</b> {c.quePaso}</p>
                   <p style={{ color: 'var(--muted)' }}><b>Qué significa:</b> {c.queSignifica}</p>
                   <p style={{ color: 'var(--muted)' }}><b>Qué hacer:</b> {c.queHacer}</p>
+                  {c.categoria === 'caseta_no_debe_cruzarse' && c.justificacion && (
+                    <p><span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium hairline">Justificado</span> <b>Motivo:</b> {c.justificacion}</p>
+                  )}
+                  {c.categoria === 'caseta_no_debe_cruzarse' && !c.justificacion && justificar && desglose && (
+                    <form action={justificar} className="flex items-end gap-2 flex-wrap pt-1">
+                      <input type="hidden" name="desglose" value={desglose} />
+                      <input type="hidden" name="indice" value={c.indice} />
+                      <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Motivo</span>
+                        <input name="motivo" required minLength={3} maxLength={300} placeholder="Salida de servicio autorizada" aria-label={`Motivo para justificar el cruce del renglón ${c.indice + 1}`}
+                          className={`${CSS_INPUT} w-[240px] mt-0.5`} style={ESTILO_INPUT} /></label>
+                      <button type="submit" className={CSS_SECUNDARIO} style={ESTILO_SECUNDARIO}>Justificar este cruce</button>
+                    </form>
+                  )}
                 </td>
               </tr>
             ))}
@@ -91,7 +108,7 @@ function FilasCandidatos({ candidatos }: { candidatos: CandidatoCobro[] }) {
   );
 }
 
-export function SeccionRevisionCobros({ revision, desglose, sufijo }: { revision: ReporteRevision; desglose: string; sufijo: string }) {
+export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCruce }: { revision: ReporteRevision; desglose: string; sufijo: string; justificarCruce?: Accion }) {
   const ctx = sufijo ? `&${sufijo.slice(1)}` : '';
   const r = revision.revision;
   const cal = revision.calidad as {
@@ -177,7 +194,7 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo }: { revision
               {ETIQUETA_CATEGORIA_COBRO[c]} · {numero(lista.length)} · {mxn(r.porCategoria[c].monto)}
             </summary>
             <p className="text-[12px] my-2" style={{ color: 'var(--muted)' }}>{EXPLICACION_CATEGORIA[c]}</p>
-            <FilasCandidatos candidatos={lista} />
+            <FilasCandidatos candidatos={lista} justificar={justificarCruce} desglose={desglose} />
           </details>
         );
       })}

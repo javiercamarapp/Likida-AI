@@ -62,6 +62,14 @@ export function normalizarNombre(v: Celda): string {
 }
 
 /**
+ * La unidad en su forma de comparación: «TC-9001», «tc 9001» y «TC9001» son la misma unidad.
+ * Minúsculas, sin acentos, signos ni espacios. Cadena vacía si no queda nada.
+ */
+export function llaveUnidad(v: Celda): string {
+  return normalizarNombre(v).replace(/\s+/g, '');
+}
+
+/**
  * El TAG en su forma de comparación: mayúsculas y solo letras/dígitos.
  * «IMDM 12345678», «imdm-12345678» e «IMDM12345678» son el mismo dispositivo.
  * Devuelve null si no queda un identificador plausible (4–40 caracteres): un

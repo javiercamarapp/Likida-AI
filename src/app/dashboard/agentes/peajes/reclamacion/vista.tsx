@@ -60,7 +60,7 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
           {extras?.error && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>{extras.error}</p>}
 
           {estado === 'ok' && extras?.revision && desglose && (
-            <SeccionRevisionCobros revision={extras.revision} desglose={desglose} sufijo={sufijo} />
+            <SeccionRevisionCobros revision={extras.revision} desglose={desglose} sufijo={sufijo} justificarCruce={extras.acciones.justificarCruce} />
           )}
           {extras && (estado === 'ok' || estado === 'sin_desglose') && (
             <>

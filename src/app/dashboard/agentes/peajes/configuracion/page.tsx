@@ -19,7 +19,7 @@ import {
   type ResultadoImportacionCatalogo,
 } from '@/lib/likida/peajes/datos';
 import {
-  listarReglasCasetas, listarTagsBaja, guardarReglaCaseta, parsearClases, altaBajaDeTag, quitarBajaDeTag, cargarCoordenadasDeCasetas,
+  listarReglasCasetas, listarTagsBaja, listarExcepcionesUnidad, guardarExcepcionUnidad, quitarExcepcionUnidad, guardarReglaCaseta, parsearClases, altaBajaDeTag, quitarBajaDeTag, cargarCoordenadasDeCasetas,
 } from '@/lib/likida/peajes/revision_cobros';
 import { importarCursosArchivo, importarCursosDeTablaPropia, type ResultadoImportCursos } from '@/lib/likida/peajes/cursos_importar';
 import { secretoMaestro, claveDeFlota, reintentarArchivoPeaje } from '@/lib/likida/peajes/ingesta';
@@ -102,9 +102,10 @@ export default async function PaginaConfiguracionPeajes({
   const puedeAdministrar = puedeVerArea(rol, 'administracion');
 
   const secreto = secretoMaestro();
-  const [reglasCasetas, tagsBaja, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
+  const [reglasCasetas, tagsBaja, excepcionesUnidad, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
     safe(() => listarReglasCasetas(tenantId)),
     safe(() => listarTagsBaja(tenantId)),
+    safe(() => listarExcepcionesUnidad(tenantId)),
     safe(() => listarTags(tenantId)),
     safe(() => listarUnidades(tenantId)),
     safe(() => listarCasetas(tenantId)),
@@ -322,6 +323,19 @@ export default async function PaginaConfiguracionPeajes({
     if (no) volverConfig(sufijo, `error:${no}`);
     volverConfig(sufijo, (await quitarBajaDeTag(tenantId, String(fd.get('baja') ?? ''))) ? 'Baja del TAG quitada.' : 'error:No se pudo quitar la baja.');
   }
+  async function accionGuardarExcepcionUnidad(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) volverConfig(sufijo, `error:${no}`);
+    const r = await guardarExcepcionUnidad(tenantId, { caseta: String(fd.get('caseta') ?? ''), unidad: String(fd.get('unidad') ?? ''), nota: String(fd.get('nota') ?? '') || null });
+    volverConfig(sufijo, r.ok ? 'Excepción guardada. Esa unidad ya no se marca al cruzar esa caseta.' : `error:${r.motivo}`);
+  }
+  async function accionQuitarExcepcionUnidad(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) volverConfig(sufijo, `error:${no}`);
+    volverConfig(sufijo, (await quitarExcepcionUnidad(tenantId, String(fd.get('excepcion') ?? ''))) ? 'Excepción quitada.' : 'error:No se pudo quitar la excepción.');
+  }
 
   // ── Mapeo de columnas ──
   async function accionGuardarMapeo(fd: FormData) {
@@ -369,8 +383,11 @@ export default async function PaginaConfiguracionPeajes({
         cofreConfigurado: cofreConfigurado(),
       }}
       reglasCobro={{
-        casetas: reglasCasetas, bajas: tagsBaja,
-        acciones: { guardarReglaCaseta: accionGuardarReglaCaseta, cargarCoordenadas: accionCargarCoordenadas, altaBajaTag: accionAltaBajaTag, quitarBajaTag: accionQuitarBajaTag },
+        casetas: reglasCasetas, bajas: tagsBaja, excepciones: excepcionesUnidad,
+        acciones: {
+          guardarReglaCaseta: accionGuardarReglaCaseta, cargarCoordenadas: accionCargarCoordenadas, altaBajaTag: accionAltaBajaTag, quitarBajaTag: accionQuitarBajaTag,
+          guardarExcepcionUnidad: accionGuardarExcepcionUnidad, quitarExcepcionUnidad: accionQuitarExcepcionUnidad,
+        },
       }}
       acciones={{
         activarCorreo: accionActivarCorreo, desactivarCorreo: accionDesactivarCorreo, rotarCorreo: accionRotarCorreo, guardarRemitentes: accionGuardarRemitentes,

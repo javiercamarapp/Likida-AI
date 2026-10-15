@@ -11,6 +11,7 @@ import {
 import { detectarAtipicos, type ResultadoAtipicos, type UmbralesAtipicos } from './cruces_atipicos';
 import { cierreMensual, type ArchivoCierre, type CierreMensual } from './cierre_mensual';
 import { limitesDelMes, mesAnterior } from './periodo';
+import { validarExcepcionUnidad, validarJustificacion } from './reglas_cobro_config';
 import {
   estadoTrasAcreditar, evaluarReclamo, resumirSeguimiento, ESTADOS_RECLAMO,
   type EstadoReclamo, type EvaluacionReclamo, type ResumenSeguimiento,
@@ -75,15 +76,38 @@ export async function listarTagsBaja(tenantId: string): Promise<TagBajaVista[]> 
   }));
 }
 
+export interface ExcepcionUnidadVista { id: string; casetaNorm: string; unidad: string; unidadNorm: string; nota: string | null }
+
+export async function listarExcepcionesUnidad(tenantId: string): Promise<ExcepcionUnidadVista[]> {
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin().from('peaje_caseta_excepcion_unidad')
+      .select('id, caseta_norm, unidad_norm, unidad, nota', conteo(d))
+      .eq('tenant_id', tenantId).order('caseta_norm').order('unidad_norm').order('id').range(d, h), 'revision_cobros.listar_excepciones_unidad'),
+    'revision_cobros.listar_excepciones_unidad',
+  );
+  return filas.map((f) => ({
+    id: String(f.id), casetaNorm: String(f.caseta_norm), unidad: String(f.unidad), unidadNorm: String(f.unidad_norm), nota: (f.nota as string | null) ?? null,
+  }));
+}
+
 /** Convierte lo guardado en las `ReglasCobro` que entiende el motor puro. */
-export function reglasDesdeConfig(casetas: readonly ReglaCasetaVista[], bajas: readonly TagBajaVista[], periodoDesde: string | null): ReglasCobro {
+export function reglasDesdeConfig(
+  casetas: readonly ReglaCasetaVista[], bajas: readonly TagBajaVista[], periodoDesde: string | null,
+  excepciones: readonly ExcepcionUnidadVista[] = [], justificados: ReadonlyMap<number, string> = new Map(),
+): ReglasCobro {
   const excepcionesClase = new Map<string, readonly number[]>();
   const casetasNoCruzar = new Set<string>();
   for (const c of casetas) {
     if (c.clasesPermitidas.length > 0) excepcionesClase.set(c.nombreNorm, c.clasesPermitidas);
     if (c.noCruzar) casetasNoCruzar.add(c.nombreNorm);
   }
-  return { periodoDesde, excepcionesClase, casetasNoCruzar, tagsBaja: new Map(bajas.map((b) => [b.tag, b.bajaEn])) };
+  const excepcionesPorUnidad = new Map<string, Set<string>>();
+  for (const e of excepciones) {
+    const set = excepcionesPorUnidad.get(e.casetaNorm) ?? new Set<string>();
+    set.add(e.unidadNorm);
+    excepcionesPorUnidad.set(e.casetaNorm, set);
+  }
+  return { periodoDesde, excepcionesClase, casetasNoCruzar, tagsBaja: new Map(bajas.map((b) => [b.tag, b.bajaEn])), excepcionesPorUnidad, justificados };
 }
 
 export type Resultado = { ok: true } | { ok: false; motivo: string };
@@ -135,6 +159,71 @@ export async function altaBajaDeTag(
   if (error) {
     logger.error('revision_cobros.alta_baja', { tenant: tenantId, err: error.message });
     return { ok: false, motivo: 'No se pudo registrar la baja del TAG. Inténtalo de nuevo.' };
+  }
+  return { ok: true };
+}
+
+/**
+ * Exceptúa una UNIDAD de una caseta que no debe cruzarse (p. ej. la camioneta de rescates): sus cruces por esa
+ * caseta dejan de marcarse. La caseta tiene que estar en el catálogo de la flota (sale sola de los archivos).
+ */
+export async function guardarExcepcionUnidad(
+  tenantId: string, entrada: { caseta: string; unidad: string; nota?: string | null },
+): Promise<Resultado> {
+  const v = validarExcepcionUnidad(entrada);
+  if (!v.ok) return v;
+  const { data: existe, error: errC } = await acotada(supabaseAdmin().from('peaje_caseta_nombre')
+    .select('id').eq('tenant_id', tenantId).eq('nombre_norm', v.valor.casetaNorm).maybeSingle(), 'revision_cobros.excepcion_caseta');
+  if (errC) { logger.error('revision_cobros.excepcion_caseta', { tenant: tenantId, err: errC.message }); return { ok: false, motivo: 'No se pudo leer el catálogo de casetas.' }; }
+  if (!existe) return { ok: false, motivo: 'Esa caseta no está en el catálogo de tu flota. Aparece sola cuando un archivo del proveedor la trae.' };
+  const { error } = await acotada(supabaseAdmin().from('peaje_caseta_excepcion_unidad').upsert({
+    tenant_id: tenantId, caseta_norm: v.valor.casetaNorm, unidad_norm: v.valor.unidadNorm, unidad: v.valor.unidad, nota: v.valor.nota,
+  }, { onConflict: 'tenant_id,caseta_norm,unidad_norm' }), 'revision_cobros.guardar_excepcion_unidad');
+  if (error) {
+    logger.error('revision_cobros.guardar_excepcion_unidad', { tenant: tenantId, err: error.message });
+    return { ok: false, motivo: 'No se pudo guardar la excepción. Inténtalo de nuevo.' };
+  }
+  return { ok: true };
+}
+
+export async function quitarExcepcionUnidad(tenantId: string, id: string): Promise<boolean> {
+  const { error } = await acotada(supabaseAdmin().from('peaje_caseta_excepcion_unidad').delete().eq('tenant_id', tenantId).eq('id', id), 'revision_cobros.quitar_excepcion_unidad');
+  if (error) logger.error('revision_cobros.quitar_excepcion_unidad', { tenant: tenantId, err: error.message });
+  return !error;
+}
+
+/** Los cruces justificados de un desglose: renglón → motivo. */
+export async function listarJustificaciones(tenantId: string, desgloseId: string): Promise<Map<number, string>> {
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin().from('peaje_cruce_justificado')
+      .select('indice, motivo', conteo(d))
+      .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).eq('categoria', 'caseta_no_debe_cruzarse').order('indice').order('id').range(d, h), 'revision_cobros.listar_justificaciones'),
+    'revision_cobros.listar_justificaciones',
+  );
+  return new Map(filas.map((f) => [Number(f.indice), String(f.motivo)]));
+}
+
+/**
+ * «Justificar este cruce»: marca como revisado un cruce que la revisión señala como caseta que no debe cruzarse,
+ * con su motivo. NO borra nada: el candidato sigue en el historial, rotulado como justificado. Solo se puede
+ * justificar un cruce que hoy es candidato (no cualquier renglón).
+ */
+export async function justificarCruce(
+  tenantId: string, entrada: { desgloseId: string; indice: number; motivo: string },
+): Promise<Resultado> {
+  const v = validarJustificacion(entrada);
+  if (!v.ok) return v;
+  const reporte = await revisionDeDesglose(tenantId, entrada.desgloseId);
+  if (!reporte) return { ok: false, motivo: 'Ese desglose no existe en tu flota (o fue anulado).' };
+  if (!reporte.revision.candidatos.some((c) => c.categoria === 'caseta_no_debe_cruzarse' && c.indice === v.valor.indice)) {
+    return { ok: false, motivo: 'Ese cruce ya no aparece como «caseta que no debe cruzarse»: no hay nada que justificar.' };
+  }
+  const { error } = await acotada(supabaseAdmin().from('peaje_cruce_justificado').upsert({
+    tenant_id: tenantId, desglose_id: entrada.desgloseId, indice: v.valor.indice, categoria: 'caseta_no_debe_cruzarse', motivo: v.valor.motivo,
+  }, { onConflict: 'tenant_id,desglose_id,indice,categoria' }), 'revision_cobros.justificar_cruce');
+  if (error) {
+    logger.error('revision_cobros.justificar_cruce', { tenant: tenantId, err: error.message });
+    return { ok: false, motivo: 'No se pudo guardar la justificación. Inténtalo de nuevo.' };
   }
   return { ok: true };
 }
@@ -286,12 +375,13 @@ export async function revisionDeDesglose(
   if (error) throw new Error(`revisionDeDesglose: ${error.message}`);
   if (!d) return null;
 
-  const [filas, casetas, bajas] = await Promise.all([
+  const [filas, casetas, bajas, excepciones, justificados] = await Promise.all([
     lineasDeDesglose(tenantId, desgloseId), listarReglasCasetas(tenantId), listarTagsBaja(tenantId),
+    listarExcepcionesUnidad(tenantId), listarJustificaciones(tenantId, desgloseId),
   ]);
   const periodoOficialDesde = (d.periodo_oficial_desde as string | null) ?? null;
   const lineas = filas.map(lineaCobroDeFila);
-  const revision = revisarCobros(lineas, reglasDesdeConfig(casetas, bajas, periodoOficialDesde));
+  const revision = revisarCobros(lineas, reglasDesdeConfig(casetas, bajas, periodoOficialDesde, excepciones, justificados));
   const conCoords = casetas.filter((c) => c.lat !== null && c.lng !== null).map((c) => ({ nombre: c.nombre, lat: c.lat as number, lng: c.lng as number }));
   const atipicos = detectarAtipicos(lineas, conCoords, umbrales);
   return {
