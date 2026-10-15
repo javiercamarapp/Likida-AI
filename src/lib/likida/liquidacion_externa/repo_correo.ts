@@ -24,7 +24,7 @@ import { acotada } from '../presupuesto';
 import { exigir, traerTodo } from '../pg';
 import { DatoInvalido } from '../errores';
 import { rutaPdfExterno, rutaExcelExterno } from './almacen';
-import { subirArchivoExterno, firmarPdfExterno, TIPO_XLSX } from './repo';
+import { subirArchivoExterno, firmarPdfExterno, leerPorId, TIPO_XLSX } from './repo';
 import type { CursorDesglose } from './desglose_puerto';
 import type { RolDestinatario } from './correo_destinatarios';
 
@@ -435,6 +435,76 @@ export const marcarOmitida = (tenantId: string, id: string, motivo: string): Pro
 /** Devuelve la entrega a `pendiente` con su siguiente intento (backoff lo decide quien llama). */
 export const reprogramarEntrega = (tenantId: string, id: string, claimToken: string, intentos: number, proximoIntentoEn: Date, error: string | null): Promise<boolean> =>
   transicionarEntrega(tenantId, id, ['enviando'], { estado: 'pendiente', intentos, proximo_intento_en: proximoIntentoEn.toISOString(), ultimo_error: recortar(error), ...SIN_LEASE }, claimToken, 'liqcorreo.reprogramar');
+
+// ── Noticia de entrega del proveedor (T-A1-18) ──────────────────────────────
+
+export type EventoEntregaCorreo = 'entregada' | 'rebotada' | 'queja';
+export interface ResultadoEntregaCorreo {
+  /**
+   * `sin_entrega`: ese id de Resend no es de una entrega por correo (el webhook sigue su flujo de siempre).
+   * `aplicada`: la entrega cambió de estado. `sin_cambio`: la noticia llegó tarde, repetida o desordenada.
+   */
+  resultado: 'sin_entrega' | 'aplicada' | 'sin_cambio';
+  rol?: RolDestinatario;
+  /** El correo del operador quedó marcado como rebotado (y su excepción abierta). */
+  operadorMarcado?: boolean;
+}
+
+const enmascarar = (c: string): string => {
+  const [u = '', d = ''] = c.split('@');
+  return `${u.slice(0, 1)}***@${d}`;
+};
+
+/**
+ * Casa el webhook de Resend con la entrega por correo del desglose por `resend_id` (índice único). Es, junto con
+ * `reclamarEntregas`, lo único de este archivo que NO parte de un `tenant_id`: el webhook no sabe de qué flota es el
+ * mensaje. Apenas se encuentra la fila, TODO lo siguiente se ancla a su `tenant_id`.
+ *
+ * Reglas (las mismas del buzón): `entregada` solo escribe sobre `enviada`; `rebotada`/`queja` pisan a `entregada`
+ * (la mala noticia es la que opera); una mala noticia sobre otra mala noticia no cambia nada. Si rebota el correo del
+ * OPERADOR: se marca `operador.correo_rebotado_en` (solo si ese sigue siendo su correo: si ya lo corrigieron, el rebote
+ * es viejo) y se abre la excepción `operador_sin_correo`. Esos efectos son idempotentes y se repiten aunque la entrega
+ * ya estuviera rebotada, para que un reintento de Resend tras un fallo a medias los complete. NO suprime ninguna
+ * dirección: la lista de supresión es de campañas.
+ */
+export async function confirmarEntregaCorreo(
+  emailId: string, evento: EventoEntregaCorreo, ahora: Date = new Date(),
+): Promise<ResultadoEntregaCorreo> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_entrega_correo').select(COLS_ENTREGA)
+    .eq('resend_id', emailId).maybeSingle(), 'liqcorreo.confirmar_buscar');
+  const l = leer(res as unknown as { data: Fila | null; error: ErrorPg }, 'liqcorreo.confirmar_buscar');
+  if (!l.ok || !l.valor) return { resultado: 'sin_entrega' };
+  const e = aEntrega(l.valor);
+
+  let cambio: boolean;
+  if (evento === 'entregada') cambio = await marcarEntregada(e.tenantId, e.id, ahora);
+  else if (evento === 'rebotada') cambio = await marcarRebotada(e.tenantId, e.id, ahora, 'rebote (webhook Resend)');
+  else {
+    cambio = await transicionarEntrega(e.tenantId, e.id, ['enviada', 'entregada'],
+      { estado: 'queja', rebotada_en: ahora.toISOString(), ultimo_error: 'queja de spam (webhook Resend)' }, null, 'liqcorreo.marcar_queja');
+  }
+
+  const malaNoticia = evento !== 'entregada';
+  const yaEraMala = e.estado === 'rebotada' || e.estado === 'queja';
+  if (!(malaNoticia && e.rol === 'operador' && (cambio || yaEraMala))) {
+    return { resultado: cambio ? 'aplicada' : 'sin_cambio', rol: e.rol };
+  }
+
+  const liq = await leerPorId(e.tenantId, e.liquidacionExternaId);
+  let operadorMarcado = false;
+  if (liq) {
+    const up = await acotada(supabaseAdmin().from('operador').update({ correo_rebotado_en: ahora.toISOString() })
+      .eq('tenant_id', e.tenantId).eq('id', liq.operadorId).eq('correo', e.correo.trim().toLowerCase()).select('id'), 'liqcorreo.operador_rebote');
+    operadorMarcado = (exigirEscritura(up as unknown as { data: Fila[] | null; error: ErrorPg }, 'liqcorreo.operador_rebote') ?? []).length > 0;
+    if (operadorMarcado) {
+      await abrirExcepcion(e.tenantId, liq.claveExterna, 'operador_sin_correo', {
+        motivo: 'correo_rebotado', rol: 'operador', correo: enmascarar(e.correo), evento,
+        accion: 'Corrige el correo del operador y reenvía el desglose.',
+      }, ahora);
+    }
+  }
+  return { resultado: cambio ? 'aplicada' : 'sin_cambio', rol: e.rol, operadorMarcado };
+}
 
 export async function entregasDe(tenantId: string, liquidacionId: string): Promise<Lectura<EntregaCorreo[]>> {
   const res = await acotada(supabaseAdmin().from('liquidacion_entrega_correo').select(COLS_ENTREGA)
