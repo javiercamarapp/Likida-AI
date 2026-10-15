@@ -27,8 +27,10 @@ import { MAX_DIRECTORES_POR_NIVEL, unirDestinatarios, type ValoresDirector } fro
 import { seleccionarEnEspera } from './escalamiento';
 import type { RespuestaRapida } from './respuestas_rapidas';
 import {
-  etapaDeViaje, ultimoHitoDe, type EstatusViaje, type ResumenViaje, type ServicioEstatusViaje,
+  datosUnidadVisibles, etapaDeViaje, ultimoHitoDe, type DatosUnidadCrudos, type DatosUnidadViaje, type EstatusViaje, type ResumenViaje, type ServicioEstatusViaje,
 } from './estatus_viaje';
+import { camposVisibles } from './aviso/privacidad';
+import { normalizarAlias } from './aviso/equivalencias';
 import { estatusViaje as estatusDelConductor } from '../conductor/servicios';
 import type { EstatusViaje as EstatusConductor } from '../conductor/estatus_viaje';
 import { mezclarEstatus, parteDelConductor } from './desde_conductor';
@@ -122,6 +124,8 @@ const ESTATUS_EN_CURSO = ['abierto', 'en_cuadre'];
 export interface DepsEstatusReal {
   /** El estatus que calcula el Conductor (hitos, cita/ETA, andén) de un viaje de ESA flota; `null` si no existe. */
   conductor(tenantId: string, viajeId: string): Promise<EstatusConductor | null>;
+  /** Unidad, caja y operador del viaje, ya filtrados por privacidad (T-A4-24); por omisión `leerDatosUnidad`. */
+  datosUnidad?(a: { tenantId: string; clienteId: string; viajeId: string; unidadId: string | null }): Promise<DatosUnidadViaje>;
 }
 
 export function crearEstatusViajeReal(d: DepsEstatusReal): ServicioEstatusViaje {
@@ -138,7 +142,7 @@ export function crearEstatusViajeReal(d: DepsEstatusReal): ServicioEstatusViaje 
     return (filas as Fila[]).map((f): ResumenViaje => ({ viajeId: String(f.id), folio: str(f.folio), origen: str(f.origen), destino: str(f.destino) }));
   },
 
-  async estatus({ tenantId, clienteId, viajeId }) {
+  async estatus({ tenantId, clienteId, viajeId, datosUnidad }) {
     const db = supabaseAdmin();
     // El viaje SOLO si es de ese cliente en esa flota: es el candado de aislamiento.
     const v = exigir('estatus_viaje', await acotada(db.from('viaje')
@@ -212,6 +216,18 @@ export function crearEstatusViajeReal(d: DepsEstatusReal): ServicioEstatusViaje 
     // Un viaje que ya llegó a descarga no tiene «hora estimada de llegada» por decir.
     const yaLlego = mezcla.etapa === 'cerrado' || ['en_destino', 'descargando', 'entregado', 'regresando'].includes(mezcla.etapa);
 
+    // T-A4-24: solo si alguien preguntó por la unidad. Si no se puede leer, el dato queda vacío (nunca inventado) y el
+    // Vigía contesta «lo consulto» y escala.
+    let delaUnidad: DatosUnidadViaje | null = null;
+    if (datosUnidad === true) {
+      try {
+        delaUnidad = await (d.datosUnidad ?? leerDatosUnidad)({ tenantId, clienteId, viajeId, unidadId });
+      } catch (e) {
+        logger.warn('vigia.datos_unidad_ilegibles', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+        delaUnidad = DATOS_UNIDAD_VACIOS;
+      }
+    }
+
     return {
       viajeId: String(v.id), folio: str(v.folio), origen: str(v.origen), destino: str(v.destino),
       etapa: mezcla.etapa, ultimoHito: mezcla.ultimoHito, posicion,
@@ -219,9 +235,109 @@ export function crearEstatusViajeReal(d: DepsEstatusReal): ServicioEstatusViaje 
       citaCarga: parte.citaCarga, enAnden: parte.enAnden,
       adjuntos: podRecibido === true ? [{ clave: 'pod', nombre: nombreDeAdjunto('pod') }] : [],
       documentos, podRecibido, facturaEmitida,
+      ...(delaUnidad ?? {}),
     };
   },
   };
+}
+
+// ── Datos de la unidad (T-A4-24) ────────────────────────────────────────────
+
+/** Tablas de las migraciones 0795/0796: si aún no están en la base, esa fuente simplemente no aporta. */
+const FUENTE_SIN_MIGRAR = new Set(['42P01', 'PGRST205']);
+
+/** Como `exigir`, pero «la tabla aún no existe» es `null` (no hay dato) y no un error. Cualquier otro error LANZA. */
+function leerOpcional<T>(op: string, r: { data: T | null; error: { message: string; code?: string } | null }): T | null {
+  if (r.error && r.error.code && FUENTE_SIN_MIGRAR.has(r.error.code)) return null;
+  return exigir(op, r);
+}
+
+const DATOS_UNIDAD_VACIOS: DatosUnidadViaje = { caja: null, placasCaja: null, estadoCaja: null, unidad: null, placasUnidad: null, operador: null };
+
+const mayus = (v: string) => v.trim().toUpperCase();
+const variantes = (v: string) => [...new Set([v, v.trim(), v.trim().toUpperCase()])];
+const diaIso = (d: Date) => d.toISOString().slice(0, 10);
+
+/**
+ * Qué unidad, caja y operador lleva UN viaje de UN cliente, listo para decírselo (ya filtrado por privacidad).
+ *   · el viaje se verifica contra (flota, cliente) antes de leer nada más: es el candado de aislamiento;
+ *   · unidad y operador salen del propio viaje (`unidad_id`, `operador_id`), nunca del texto del cliente;
+ *   · la CAJA sale de la fila del programa de despacho (0795) de esa unidad cuyo cliente, normalizado, es EL MISMO que el
+ *     nombre del cliente del viaje. Sin esa coincidencia exacta (o con dos cajas distintas) no se da caja: «lo consulto».
+ *     Cuando exista la tabla de alias (T-A4-11) la comparación pasará por ella;
+ *   · placas y estado: captura manual de la fila, y si no, catálogo de cajas (0796) / ficha de la unidad;
+ *   · una tabla de la 0795/0796 que aún no existe no aporta dato; un error de lectura LANZA (quien llama lo trata como «sin dato»).
+ * Toda consulta lleva `tenant_id`.
+ */
+export async function leerDatosUnidad(
+  a: { tenantId: string; clienteId: string; viajeId: string; unidadId: string | null; ahora?: Date },
+): Promise<DatosUnidadViaje> {
+  const db = supabaseAdmin();
+  const { tenantId, clienteId, viajeId } = a;
+  const ahora = a.ahora ?? new Date();
+
+  const viaje = exigir('datos_unidad_viaje', await acotada(db.from('viaje')
+    .select('id, operador_id, unidad_id').eq('id', viajeId).eq('tenant_id', tenantId).eq('cliente_id', clienteId).maybeSingle(), 'vigia.datos_unidad_viaje')) as Fila | null;
+  if (!viaje) return DATOS_UNIDAD_VACIOS;
+  const unidadId = str(viaje.unidad_id) ?? a.unidadId;
+  const operadorId = str(viaje.operador_id);
+
+  const crudos: DatosUnidadCrudos = { caja: null, placasCaja: null, estadoCaja: null, unidad: null, placasUnidad: null, operadorNombre: null };
+
+  if (unidadId) {
+    const u = exigir('datos_unidad_unidad', await acotada(db.from('unidad')
+      .select('numero_economico, placas').eq('id', unidadId).eq('tenant_id', tenantId).maybeSingle(), 'vigia.datos_unidad_unidad')) as Fila | null;
+    crudos.unidad = str(u?.numero_economico);
+    crudos.placasUnidad = str(u?.placas);
+  }
+  if (operadorId) {
+    const o = exigir('datos_unidad_operador', await acotada(db.from('operador')
+      .select('nombre').eq('id', operadorId).eq('tenant_id', tenantId).maybeSingle(), 'vigia.datos_unidad_operador')) as Fila | null;
+    crudos.operadorNombre = str(o?.nombre);
+  }
+
+  // La caja: solo de una fila del programa que sea de ESTE cliente y de ESTA unidad.
+  let filaId: string | null = null;
+  if (crudos.unidad) {
+    const cli = exigir('datos_unidad_cliente', await acotada(db.from('cliente')
+      .select('nombre').eq('id', clienteId).eq('tenant_id', tenantId).maybeSingle(), 'vigia.datos_unidad_cliente')) as Fila | null;
+    const nombreCliente = normalizarAlias(str(cli?.nombre));
+    const filas = nombreCliente === '' ? [] : (leerOpcional('datos_unidad_programa', await acotada(db.from('programa_despacho_fila')
+      .select('id, fecha, cliente, caja, unidad').eq('tenant_id', tenantId).eq('visible', true)
+      .gte('fecha', diaIso(new Date(ahora.getTime() - 86_400_000))).lt('fecha', diaIso(new Date(ahora.getTime() + 2 * 86_400_000)))
+      .in('unidad', variantes(crudos.unidad)).order('fecha', { ascending: false }).order('id').limit(20), 'vigia.datos_unidad_programa')) as Fila[] | null) ?? [];
+    const propias = filas.filter((f) => str(f.unidad) !== null && mayus(String(f.unidad)) === mayus(crudos.unidad as string)
+      && normalizarAlias(str(f.cliente)) === nombreCliente && str(f.caja) !== null);
+    const ultima = propias.length > 0 ? String(propias[0].fecha) : null;
+    const delDia = propias.filter((f) => String(f.fecha) === ultima);
+    const cajas = new Set(delDia.map((f) => mayus(String(f.caja))));
+    // Dos cajas distintas para la misma unidad y cliente en el mismo día: no se adivina cuál es.
+    if (cajas.size === 1) {
+      crudos.caja = String(delDia[0].caja).trim();
+      filaId = String(delDia[0].id);
+    }
+  }
+
+  if (crudos.caja) {
+    const cat = (leerOpcional('datos_unidad_caja', await acotada(db.from('vigia_caja')
+      .select('numero, placas, estado').eq('tenant_id', tenantId).in('numero', variantes(crudos.caja)).limit(5), 'vigia.datos_unidad_caja')) as Fila[] | null) ?? [];
+    const fila = cat.find((c) => mayus(String(c.numero)) === mayus(crudos.caja as string));
+    crudos.placasCaja = str(fila?.placas);
+    crudos.estadoCaja = str(fila?.estado);
+  }
+  if (filaId) {
+    const m = leerOpcional('datos_unidad_manual', await acotada(db.from('vigia_dato_viaje_manual')
+      .select('operador_nombre, placas_unidad, placas_caja, estado_caja').eq('tenant_id', tenantId).eq('fila_id', filaId).maybeSingle(), 'vigia.datos_unidad_manual')) as Fila | null;
+    if (m) {
+      crudos.placasCaja = str(m.placas_caja) ?? crudos.placasCaja;
+      crudos.estadoCaja = str(m.estado_caja) ?? crudos.estadoCaja;
+      crudos.placasUnidad = str(m.placas_unidad) ?? crudos.placasUnidad;
+      crudos.operadorNombre = crudos.operadorNombre ?? str(m.operador_nombre);
+    }
+  }
+
+  // Privacidad: hasta que T-A4-23 guarde la política de la flota, rige la de por defecto (solo los seis campos visibles).
+  return datosUnidadVisibles(crudos, camposVisibles(null, clienteId));
 }
 
 export const estatusViajeReal: ServicioEstatusViaje = crearEstatusViajeReal({ conductor: (tenantId, viajeId) => estatusDelConductor(tenantId, viajeId) });

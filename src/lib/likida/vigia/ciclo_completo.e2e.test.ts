@@ -461,3 +461,47 @@ describe('E2E · P5 · del histórico exportado a una respuesta rápida aprobada
     expect(filas.some((f) => String(f[0]).includes('agendar') && String(f[4]).includes('8 a 18 h'))).toBe(true);
   });
 });
+
+describe('E2E · T-A4-24 · «datos de la unidad»: caja, placas y operador en la respuesta', () => {
+  const unidad = { caja: 'CJ-100', placasCaja: 'ABC123', estadoCaja: 'cargada', unidad: 'C2-08', placasUnidad: 'XYZ789', operador: 'Operador Uno' };
+
+  it('con caja asignada: el gerente ve el dato exacto, aprueba y sale al cliente; no hay escalamiento', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus(unidad));
+    const deps = { repo, ahora: () => AHORA, datosUnidad: true };
+
+    expect(await atenderMensajeCliente(entrante('¿Con qué caja y qué unidad va mi viaje F-1042?', 'du1'), deps)).toBe('atendido');
+    const [, cuerpoGer, botones] = enviarBotones.mock.calls[0];
+    expect(cuerpoGer).toContain('Caja: CJ-100.');
+    expect(enviarTexto).not.toHaveBeenCalled(); // nunca sale sin aprobación
+
+    await atenderDecisionVigia(GERENTE, botones[0].id, deps);
+    const [telCli, texto] = enviarTexto.mock.calls[0];
+    expect(telCli).toBe(CLIENTE_TEL);
+    for (const dato of ['Caja: CJ-100.', 'Placas de la caja: ABC123.', 'Unidad: C2-08.', 'Placas de la unidad: XYZ789.', 'Operador: Operador Uno.']) expect(texto).toContain(dato);
+    expect(repo.eventosDe('sin_dato')).toHaveLength(0);
+    expect(repo.salientes()[0]).toMatchObject({ estado: 'enviado', intencion: 'datos_unidad' });
+  });
+
+  it('sin caja asignada: «lo consulto», escala al gerente y no inventa ninguna caja', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus({ ...unidad, caja: null, placasCaja: null, estadoCaja: null }));
+    await atenderMensajeCliente(entrante('¿Qué caja trae mi viaje?', 'du2'), { repo, ahora: () => AHORA, datosUnidad: true });
+    const [b] = repo.salientes();
+    expect(b.texto).toContain('Aún no tengo registro de caja');
+    expect(b.texto).toContain('lo consulto con tu ejecutivo');
+    expect(b.texto).not.toMatch(/Caja: /);
+    expect(repo.eventosDe('sin_dato')).toHaveLength(1);
+    expect(repo.eventosDe('escalada').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('base sin la 0798: la misma pregunta NO se pierde ni rompe, se guarda como «otro» y la atiende una persona', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus(unidad));
+    expect(await atenderMensajeCliente(entrante('¿Quién es el operador?', 'du3'), { repo, ahora: () => AHORA })).toBe('atendido');
+    const [b] = repo.salientes();
+    expect(b.intencion).toBe('otro');
+    expect(b.texto).not.toContain('Operador Uno');
+    expect(repo.eventosDe('sin_dato').length).toBeGreaterThanOrEqual(1);
+  });
+});

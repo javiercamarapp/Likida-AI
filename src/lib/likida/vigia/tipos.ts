@@ -8,12 +8,19 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const INTENCIONES = [
-  'ubicacion', 'eta', 'documentos', 'factura_pod', 'queja', 'pide_humano', 'baja', 'saludo', 'otro',
+  'ubicacion', 'eta', 'documentos', 'factura_pod', 'datos_unidad', 'queja', 'pide_humano', 'baja', 'saludo', 'otro',
 ] as const;
 export type Intencion = (typeof INTENCIONES)[number];
 
 /** Las intenciones que piden un DATO del viaje (el resto no tiene qué consultar). */
-export const INTENCIONES_DE_DATO: readonly Intencion[] = ['ubicacion', 'eta', 'documentos', 'factura_pod'];
+export const INTENCIONES_DE_DATO: readonly Intencion[] = ['ubicacion', 'eta', 'documentos', 'factura_pod', 'datos_unidad'];
+
+/**
+ * Intenciones que la base solo acepta desde la migración 0798 (CHECK `vigia_mensaje_intencion_dominio`). Mientras la 0798 no
+ * esté aplicada en una base, guardarlas la rechazaría y se perdería el mensaje del cliente: el servicio las degrada a `otro`
+ * (lo ve una persona) salvo que `DepsVigia.datosUnidad` lo permita explícitamente.
+ */
+export const INTENCIONES_DESDE_0798: readonly Intencion[] = ['datos_unidad'];
 
 export type Clasificador = 'reglas' | 'modelo' | 'ninguno';
 

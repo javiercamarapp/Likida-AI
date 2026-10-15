@@ -189,4 +189,9 @@ export interface DepsVigia {
   enviarDocumento?: (telefono: string, link: string, nombre: string, pie?: string) => Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }>;
   enviarCliente?: (e: EntradaEnvioCliente, enviar?: Enviador, opciones?: { confirmacionDeBaja?: boolean }) => Promise<ResultadoEnvioCliente>;
   ahora?: () => Date;
+  /**
+   * La migración 0798 ya está aplicada en esta base (la intención `datos_unidad` cabe en el CHECK). Sin esto el servicio la
+   * degrada a `otro`. Cableado real: `LIKIDA_VIGIA_DATOS_UNIDAD=si` (deps.ts).
+   */
+  datosUnidad?: boolean;
 }

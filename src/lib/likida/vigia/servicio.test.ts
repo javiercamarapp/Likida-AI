@@ -805,3 +805,85 @@ describe('rechazarMensaje', () => {
     expect((await rechazarMensaje({ tenantId: T1, userId: 'u' }, 'no-existe', deps)).ok).toBe(false);
   });
 });
+
+describe('datos de la unidad (T-A4-24)', () => {
+  const unidadCompleta = { caja: 'CJ-100', placasCaja: 'ABC123', estadoCaja: 'cargada', unidad: 'C2-08', placasUnidad: 'XYZ789', operador: 'Operador Uno' };
+
+  it('con la 0798 aplicada: contesta con el dato de SU viaje, pide los datos de la unidad al estatus y queda a aprobación', async () => {
+    const { repo } = escenario({ modoAprobacion: 'autoenviar_bajo_riesgo', autoenviarMinAprobaciones: 0 });
+    repo.estatus.agregar(T1, CLIENTE_A, estatus(unidadCompleta));
+    const { deps, alCliente } = armar(repo);
+    await atenderMensajeCliente(msg('¿Con qué caja va mi viaje?'), { ...deps, datosUnidad: true });
+    const [b] = repo.salientes();
+    expect(b.intencion).toBe('datos_unidad');
+    expect(b.texto).toContain('Caja: CJ-100.');
+    expect(b.texto).toContain('Operador: Operador Uno.');
+    expect(b.estado).toBe('pendiente_aprobacion'); // jamás autoenviado: la intención no es autoenviable
+    expect(alCliente).toEqual([]);
+    const consultas = repo.estatus.llamadas.filter((l) => l.metodo === 'estatus') as Array<{ datosUnidad?: boolean }>;
+    expect(consultas).toHaveLength(1);
+    expect(consultas[0].datosUnidad).toBe(true);
+  });
+
+  it('sin caja asignada: «lo consulto», el borrador queda a aprobación y ESCALA (sin_dato)', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus({ ...unidadCompleta, caja: null, placasCaja: null, estadoCaja: null }));
+    const { deps } = armar(repo);
+    await atenderMensajeCliente(msg('¿Qué caja trae?'), { ...deps, datosUnidad: true });
+    const [b] = repo.salientes();
+    expect(b.texto).toContain('Aún no tengo registro de caja');
+    expect(b.texto).not.toContain('Caja:');
+    expect(b.estado).toBe('pendiente_aprobacion');
+    expect(repo.eventosDe('sin_dato')).toHaveLength(1);
+  });
+
+  it('SIN la 0798 aplicada (por omisión): la intención nueva se degrada a «otro», NO se guarda datos_unidad y nada se pide al estatus', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus(unidadCompleta));
+    const { deps, alCliente } = armar(repo);
+    await atenderMensajeCliente(msg('¿Quién es el operador?'), deps);
+    const guardadas = [...repo.mensajes.values()].map((m) => m.intencion).filter((i) => i !== null);
+    expect(guardadas.length).toBeGreaterThan(0);
+    expect(guardadas).not.toContain('datos_unidad');
+    expect(guardadas.every((i) => i === 'otro')).toBe(true);
+    const [b] = repo.salientes();
+    expect(b.texto).not.toContain('Operador Uno');
+    expect(b.estado).toBe('pendiente_aprobacion');
+    expect(b.senales).toContain('datos_unidad_sin_0798');
+    expect(repo.estatus.llamadas).toEqual([]);
+    expect(alCliente).toEqual([]);
+  });
+
+  it('SIN la 0798, una pregunta secundaria de datos de la unidad se descarta y la principal se atiende normal', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus(unidadCompleta));
+    const { deps } = armar(repo);
+    await atenderMensajeCliente(msg('¿Dónde va mi viaje y con qué caja va?'), deps);
+    const [b] = repo.salientes();
+    expect(b.intencion).toBe('ubicacion');
+    expect(b.texto).not.toContain('Caja:');
+    const consultas = repo.estatus.llamadas.filter((l) => l.metodo === 'estatus') as Array<{ datosUnidad?: boolean }>;
+    expect(consultas[0].datosUnidad).toBeUndefined();
+  });
+
+  it('AISLAMIENTO: la unidad de OTRO cliente de la flota no sale, ni confirma que existe', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus({ ...unidadCompleta, caja: 'CJ-PROPIA' }));
+    repo.estatus.agregar(T1, CLIENTE_A2, estatus({ viajeId: VIAJE_2, folio: 'F-2000', ...unidadCompleta, caja: 'CJ-AJENA', operador: 'Operador Ajeno' }));
+    const { deps } = armar(repo);
+    await atenderMensajeCliente(msg('¿Con qué caja va el F-2000?'), { ...deps, datosUnidad: true });
+    const [b] = repo.salientes();
+    expect(b.texto).toContain('no encuentro ese folio entre tus viajes en curso');
+    expect(b.texto).not.toMatch(/CJ-AJENA|Operador Ajeno|CJ-PROPIA/);
+    expect(repo.estatus.llamadas.filter((l) => l.metodo === 'estatus')).toEqual([]);
+  });
+
+  it('AISLAMIENTO: la unidad de OTRA flota con el mismo clienteId no sale', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T2, CLIENTE_A, estatus({ ...unidadCompleta, caja: 'CJ-OTRA-FLOTA' }));
+    const { deps } = armar(repo);
+    await atenderMensajeCliente(msg('¿Con qué unidad va mi viaje?'), { ...deps, datosUnidad: true });
+    expect(repo.salientes()[0].texto).not.toContain('CJ-OTRA-FLOTA');
+    expect(repo.estatus.llamadas.every((l) => l.tenantId === T1)).toBe(true);
+  });
+});
