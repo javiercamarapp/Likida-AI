@@ -1,6 +1,6 @@
 /* eslint-disable security/detect-non-literal-fs-filename, security/detect-unsafe-regex -- pruebas que leen el árbol de FUENTE del propio repo; ninguna ruta ni patrón viene de entrada de usuario. */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { RUTAS_PERFIL_CINCO_AGENTES, rutaPermitidaEnPerfil } from '@/lib/auth/visibilidad';
 
@@ -107,9 +107,10 @@ const RAIZ = join(process.cwd(), 'src/app/dashboard');
 const PUERTA = /\b(resolverTenantEfectivo|requireSessionTenant|exigirVerRuta)\(\s*([^,)]+)/g;
 
 function conUseServer(dir: string, salida: string[] = []): string[] {
-  for (const nombre of readdirSync(dir)) {
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    const nombre = ent.name;
     const ruta = join(dir, nombre);
-    if (statSync(ruta).isDirectory()) conUseServer(ruta, salida);
+    if (ent.isDirectory()) conUseServer(ruta, salida);
     else if (/\.(ts|tsx)$/.test(nombre) && !/\.test\./.test(nombre)) {
       if (/['"]use server['"]/.test(readFileSync(ruta, 'utf8'))) salida.push(relative(RAIZ, ruta));
     }
@@ -172,6 +173,23 @@ function rutasDePuertas(fuente: string): { rutas: string[]; dinamicas: string[] 
 }
 
 /** ¿Cada `'use server'` del archivo llega a una puerta, directo o por una ayudante del mismo archivo? */
+/** El archivo sin sus comentarios y espacios iniciales (recorrido lineal, sin regexp ambigua). */
+function sinComentariosIniciales(fuente: string): string {
+  let i = 0;
+  for (;;) {
+    while (i < fuente.length && /\s/.test(fuente[i])) i++;
+    if (fuente.startsWith('//', i)) {
+      const fin = fuente.indexOf('\n', i);
+      if (fin < 0) return '';
+      i = fin + 1;
+    } else if (fuente.startsWith('/*', i)) {
+      const fin = fuente.indexOf('*/', i + 2);
+      if (fin < 0) return '';
+      i = fin + 2;
+    } else return fuente.slice(i);
+  }
+}
+
 function accionesSinPuerta(fuente: string): string[] {
   const sinPuerta: string[] = [];
   // Mapa nombre → cuerpo de TODA función nombrada del archivo (módulo o inline).
@@ -181,14 +199,14 @@ function accionesSinPuerta(fuente: string): string[] {
   const llegaAPuerta = (cuerpo: string, visto: Set<string>): boolean => {
     if (new RegExp(PUERTA.source).test(cuerpo)) return true;
     for (const [nombre, c] of cuerpos) {
-      if (visto.has(nombre) || !new RegExp(`\\b${nombre.replace(/\$/g, '\\$')}\\s*\\(`).test(cuerpo)) continue;
+      if (visto.has(nombre) || !new RegExp(`\\b${nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\(`).test(cuerpo)) continue;
       visto.add(nombre);
       if (llegaAPuerta(c, visto)) return true;
     }
     return false;
   };
 
-  const esModulo = /^\s*(?:\/\/[^\n]*\n|\/\*[\s\S]*?\*\/\s*)*['"]use server['"]/.test(fuente);
+  const esModulo = /^['"]use server['"]/.test(sinComentariosIniciales(fuente));
   if (esModulo) {
     // Archivo de acciones: cada `export async function` es una acción.
     for (const m of fuente.matchAll(/export\s+async\s+function\s+([A-Za-z_$][\w$]*)/g)) {
