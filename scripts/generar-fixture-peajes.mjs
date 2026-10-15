@@ -12,5 +12,6 @@ if (!salida) {
   process.exit(1);
 }
 const { buffer, esperado } = generarLibroIave({ filas: Number(filas), inicio });
+// eslint-disable-next-line security/detect-non-literal-fs-filename -- la ruta de salida la elige quien corre el script a mano; el contenido es sintético.
 writeFileSync(salida, buffer);
 console.log(`Escrito ${salida} (${buffer.length} bytes). Verdad del generador:`, JSON.stringify(esperado));
