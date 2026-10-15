@@ -36,7 +36,7 @@ export const dynamic = 'force-dynamic';
 // Hasta 100 desgloses, cada uno con su Excel y su subida a Storage.
 export const maxDuration = 60;
 
-export const MAX_DESGLOSES = 100;
+const MAX_DESGLOSES = 100;
 /** Tope del cuerpo: 100 desgloses de hasta 200 renglones caben de sobra. */
 const MAX_CUERPO_DESGLOSES_BYTES = 2_000_000;
 
