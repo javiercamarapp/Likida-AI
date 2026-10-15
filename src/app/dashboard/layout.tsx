@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import { supabaseServer } from '@/lib/supabase/server';
 import { getSessionTenant } from '@/lib/auth/session';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
+import { leerSeleccionFlota } from '@/lib/auth/admin-context';
 import { topeDiaUsd, gastoChatHoyUsd } from '@/app/api/dashboard/chat/tope';
 import DashboardChrome from './chrome';
 import { PulsoProducto } from './pulso-producto';
@@ -29,8 +31,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // para roles reales con acceso al análisis: en el preview del superadmin
   // el tenant de la sesión no es el que se está viendo, y un widget con el
   // tenant equivocado mentiría. `null` = no se pudo leer, y se dice.
+  // El perfil de la flota (0770) recorta el menú. Para un superadmin es la flota
+  // que eligió en el selector; con `?tenant=` el layout no ve el parámetro (limitación
+  // de Next), pero las PÁGINAS sí aplican el perfil de la flota que miran.
+  const tenantDelMenu = sesion.tenantId ?? (sesion.rol === 'superadmin' ? await leerSeleccionFlota() : null);
+  const perfil = await perfilDeTenant(tenantDelMenu);
+
   let usoIa: { pct: number } | null | undefined;
-  if (sesion.rol !== 'superadmin' && sesion.tenantId && puedeVerArea(sesion.rol, 'dinero')) {
+  if (!perfil && sesion.rol !== 'superadmin' && sesion.tenantId && puedeVerArea(sesion.rol, 'dinero')) {
     try {
       const hoyUsd = await gastoChatHoyUsd(sesion.tenantId);
       const tope = topeDiaUsd();
@@ -48,7 +56,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   return (
-    <DashboardChrome nombre={sesion.nombre} rol={sesion.rol} cerrarSesion={cerrarSesion} usoIa={usoIa}>
+    <DashboardChrome nombre={sesion.nombre} rol={sesion.rol} cerrarSesion={cerrarSesion} usoIa={usoIa} perfil={perfil}>
       {/* El pulso de producto (0251): un POST de fuego-y-olvido por cambio de
           ruta. El servidor decide tenant (sesión) y pantalla (catálogo
           cerrado); el superadmin en preview se descarta allá. */}

@@ -7,6 +7,7 @@ import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
 import { margenUnidadAtomicaMs } from '@/lib/likida/presupuesto';
+import { tenantsConPerfilASaltar } from '@/lib/auth/perfil_tenant';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -115,14 +116,16 @@ export async function GET(req: Request) {
     // el que sí se había portado bien. El problema era visible y no estaba
     // arreglado. Ahora los dos comparten el MISMO instante límite, que es lo
     // que hace que el reparto del tiempo sea una regla y no una carrera.
-    const descarga = await correrDescargaSat(new Date(), { venceEn });
+    // Las flotas con perfil (0770) se saltan: el SAT es un módulo en stand-by.
+    const excluirTenants = await tenantsConPerfilASaltar('descarga-sat');
+    const descarga = await correrDescargaSat(new Date(), { venceEn, excluirTenants });
     // El aviso de peaje va DESPUÉS y en su propio try: si la descarga tropieza
     // con el proveedor, el reloj del cierre de mes sigue corriendo igual y el
     // contralor merece su aviso.
     let peaje: Awaited<ReturnType<typeof avisarCierrePeaje>> | null = null;
     let peajeError: string | null = null;
     try {
-      peaje = await avisarCierrePeaje(new Date(), { venceEn });
+      peaje = await avisarCierrePeaje(new Date(), { venceEn, excluirTenants });
     } catch (e) {
       peajeError = e instanceof Error ? e.message : String(e);
       logger.error('cron.descarga-sat.peaje_falló', { error: peajeError });

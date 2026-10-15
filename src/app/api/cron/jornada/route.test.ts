@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Sin perfiles de tenant (0770): este archivo prueba el cron de siempre. El filtro por perfil tiene
+// su propia prueba (src/app/api/cron/perfil_crons.test.ts).
+const { flotasConPerfil } = vi.hoisted(() => ({ flotasConPerfil: new Set<string>() }));
+vi.mock('@/lib/auth/perfil_tenant', () => ({
+  tenantsConPerfilASaltar: async () => new Set(flotasConPerfil),
+  tenantsConPerfil: async () => new Set(flotasConPerfil),
+}));
+
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CRON QUE DERIVA EL REGISTRO DE JORNADA — su contrato, fijado por prueba.
 //
@@ -189,5 +197,18 @@ describe('cron jornada — palanca, reloj y contrato de fallo', () => {
     expect(await res.json()).toMatchObject({ corrio: false, codigo: 'codigo-prueba' });
     expect(alertarOperador).toHaveBeenCalledWith('cron.jornada', expect.objectContaining({ codigo: 'codigo-prueba' }));
     expect(registrarLatido).toHaveBeenCalledWith('jornada', 'fallo', expect.objectContaining({ codigo: 'codigo-prueba' }));
+  });
+});
+
+describe('cron jornada — el perfil de tenant (0770)', () => {
+  it('le pasa al motor las flotas con perfil para que las SALTE (módulo en stand-by)', async () => {
+    flotasConPerfil.clear();
+    flotasConPerfil.add('t-con-perfil');
+    derivarJornadas.mockClear();
+    const res = await GET(new Request('https://likida.ai/api/cron/jornada', { headers: { authorization: 'Bearer secreto-de-prueba' } }));
+    flotasConPerfil.clear();
+    expect(res.status).toBeLessThan(500);
+    const arg = derivarJornadas.mock.calls[0][0] as { excluirTenants: Set<string> };
+    expect([...arg.excluirTenants]).toEqual(['t-con-perfil']);
   });
 });

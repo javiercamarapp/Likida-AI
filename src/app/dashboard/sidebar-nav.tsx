@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { LayoutGrid, MessageCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { type Item, AUTOMATIZACIONES, OPERACION, DINERO_FISCAL, SISTEMA, ABAJO } from './rutas';
-import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { puedeVerRuta, type PerfilTenant } from '@/lib/auth/visibilidad';
 import { SelectorTema } from '../selector-tema';
 import { WidgetUso } from '../admin/ui/kit';
 
@@ -110,10 +110,14 @@ const TITULOS_DASHBOARD: Array<[string, Item[]]> = [
   ['Automatizaciones', AUTOMATIZACIONES], ['Sistema', SISTEMA],
 ];
 
-export default function SidebarNav({ rol }: { rol: string }) {
+export default function SidebarNav({ rol, perfil }: {
+  rol: string;
+  /** Perfil de la flota (0770): recorta el menú a la lista cerrada del perfil. Sin perfil, el menú de siempre. */
+  perfil?: PerfilTenant | null;
+}) {
   const pathname = usePathname();
   const { sufijo, rolMenu } = useSufijoYRol(rol);
-  const visibles = (items: Item[]) => items.filter((it) => puedeVerRuta(rolMenu, it.href));
+  const visibles = (items: Item[]) => items.filter((it) => puedeVerRuta(rolMenu, it.href, perfil));
   // El acordeón (17-ago): default OPERACIÓN (el trabajo del cliente), o la
   // sección de la ruta activa. Toggle sobre la abierta la cierra (todas
   // plegadas también es válido). /admin sí abre Agentes: allá es la consola
@@ -131,9 +135,9 @@ export default function SidebarNav({ rol }: { rol: string }) {
   // Resumen, con su panel alcanzable solo tecleando la URL. El orden importa:
   // el dueño y el superadmin ven las dos rutas, y su Resumen sigue siendo
   // `/dashboard` — nunca se pintan los dos links.
-  const hrefResumen = puedeVerRuta(rolMenu, '/dashboard')
+  const hrefResumen = puedeVerRuta(rolMenu, '/dashboard', perfil)
     ? '/dashboard'
-    : puedeVerRuta(rolMenu, '/dashboard/contador') ? '/dashboard/contador' : null;
+    : puedeVerRuta(rolMenu, '/dashboard/contador', perfil) ? '/dashboard/contador' : null;
   const resumenActivo = pathname === hrefResumen;
 
   return (
@@ -146,7 +150,7 @@ export default function SidebarNav({ rol }: { rol: string }) {
           {/* El chat a PRIMER NIVEL (17-ago-2026): es el mismo cerebro que
               atiende por WhatsApp — el panel es el espejo del canal, y la
               segunda casa del cliente es preguntar, no navegar menús. */}
-          {puedeVerRuta(rolMenu, '/dashboard/chat') && (
+          {puedeVerRuta(rolMenu, '/dashboard/chat', perfil) && (
             <Link href={`/dashboard/chat${sufijo}`} className={claseItem(pathname === '/dashboard/chat')} style={estiloItem(pathname === '/dashboard/chat')} title="Pregunta a tus datos" aria-label="Pregunta a tus datos">
               <MessageCircle {...estiloIcono(pathname === '/dashboard/chat')} /> <span className="sb-texto truncate">Pregunta a tus datos</span>
             </Link>
@@ -166,8 +170,10 @@ export default function SidebarNav({ rol }: { rol: string }) {
  *  principal para poder anclarlo abajo. El 13-ago llegaron dos piezas más:
  *  "Centro de ayuda" como botón pill y el
  *  selector de tema claro / sistema / oscuro. */
-export function SidebarAbajo({ rol, usoIa }: {
+export function SidebarAbajo({ rol, usoIa, perfil }: {
   rol: string;
+  /** Perfil de la flota (0770): sin chat no hay widget de uso de IA ni «Plan y facturación». */
+  perfil?: PerfilTenant | null;
   /** El % usado del presupuesto diario de análisis con IA (16-ago-2026, ref.
    *  shadcn-dashboard "plan usage") — % real gastado/tope, sin dólares: el
    *  costo interno va en USD y esa unidad no es del cliente. `undefined` no
@@ -176,13 +182,13 @@ export function SidebarAbajo({ rol, usoIa }: {
 }) {
   const pathname = usePathname();
   const { sufijo, rolMenu } = useSufijoYRol(rol);
-  const items = ABAJO.filter((it) => puedeVerRuta(rolMenu, it.href));
+  const items = ABAJO.filter((it) => puedeVerRuta(rolMenu, it.href, perfil));
   if (items.length === 0) return null;
   const ayuda = items.find((it) => it.href === '/dashboard/soporte');
   const filas = items.filter((it) => it.href !== '/dashboard/soporte');
   return (
     <>
-      {usoIa !== undefined && (
+      {usoIa !== undefined && !perfil && (
         <WidgetUso
           etiqueta="Análisis con IA · hoy"
           valor={usoIa ? `${usoIa.pct}%` : null}
