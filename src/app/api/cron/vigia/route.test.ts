@@ -100,3 +100,24 @@ describe('la corrida', () => {
     expect(registrarLatido).toHaveBeenCalledWith('vigia', 'fallo', expect.objectContaining({ error: 'base caída' }));
   });
 });
+
+describe('la pasada de avisos de viaje (T-A4-21)', () => {
+  const conAvisos = { avisosCreados: 2, avisosEnviados: 1, avisosFallidos: 0, avisosOmitidos: 3, avisosConError: false };
+  it('el resultado incluye los contadores de avisos y el latido sale `ok` si todo fue bien', async () => {
+    barrido.mockResolvedValue({ ...base, ...conAvisos });
+    const r = await llamar();
+    expect(await j(r)).toMatchObject({ corrio: true, avisosCreados: 2, avisosEnviados: 1, avisosFallidos: 0, avisosOmitidos: 3 });
+    expect(registrarLatido).toHaveBeenCalledWith('vigia', 'ok', expect.objectContaining({ avisosCreados: 2, avisosEnviados: 1, avisosOmitidos: 3 }));
+  });
+  it('un aviso fallido, o un error del módulo de avisos con el escalamiento ya hecho: 200, el barrido sigue y el latido es `parcial`', async () => {
+    for (const parcial of [{ avisosFallidos: 1 }, { avisosConError: true }]) {
+      registrarLatido.mockClear(); alertarOperador.mockClear();
+      barrido.mockResolvedValue({ ...base, ...conAvisos, ...parcial });
+      const r = await llamar();
+      expect(r.status).toBe(200);
+      expect(await j(r)).toMatchObject({ corrio: true, revisadas: 3, escaladas: 1 });
+      expect(registrarLatido).toHaveBeenCalledWith('vigia', 'parcial', expect.anything());
+      expect(alertarOperador).not.toHaveBeenCalled();
+    }
+  });
+});

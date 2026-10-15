@@ -26,7 +26,9 @@ export const maxDuration = 60;
 //   · sube la molestia por el tiempo aunque el cliente no vuelva a escribir;
 //   · marca como fallidos los «aprobados» que se quedaron sin enviar (no se
 //     reenvían a ciegas: podrían haber salido);
-//   · cierra los hilos de ciclo muerto (7 días) y corre la retención (`vigia_purgar`).
+//   · cierra los hilos de ciclo muerto (7 días) y corre la retención (`vigia_purgar`);
+//   · al final, la pasada de avisos de viaje (genera y entrega los aprobados), con el mismo reloj y aislada: si falla,
+//     el escalamiento ya corrió y el latido sale `parcial`.
 //
 // Respeta la palanca `global` y falla CERRADO si no puede leerla, igual que sus
 // hermanos. No tiene palanca propia: cada flota enciende o apaga el agente en
@@ -64,7 +66,7 @@ export async function GET(req: Request) {
     });
     logger.info('cron.vigia.ok', { ...r });
     // Trabajo que NO terminó (corte por reloj, envíos fallidos, atorados) no es «ok» limpio.
-    const parcial = r.cortadoPorReloj || r.fallosEnvio > 0 || r.atorados > 0;
+    const parcial = r.cortadoPorReloj || r.fallosEnvio > 0 || r.atorados > 0 || r.avisosConError || r.avisosFallidos > 0;
     await registrarLatido('vigia', parcial ? 'parcial' : 'ok', { ...r });
     return NextResponse.json({ corrio: true, ...r });
   } catch (e) {

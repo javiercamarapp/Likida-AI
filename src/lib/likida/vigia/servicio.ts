@@ -33,6 +33,8 @@ import { sendDocument } from '@/lib/meta/client';
 import { enviarAlCliente, MAX_TEXTO_AL_CLIENTE } from './enviar';
 import { nombreDeAdjunto } from './adjuntos';
 import { avisarAprobacion, avisarEscalamiento, interpretarBoton, type DecisionBoton } from './avisos';
+import { generarAvisos } from './aviso/generar';
+import { entregarAviso } from './aviso/entrega';
 import { clasificar } from './clasificador';
 import { esSpam, limpiarTexto } from './entrada';
 import { DIAS_CICLO_INACTIVO, evaluarEscalamiento, minutosEsperando, type AccionEscalamiento } from './escalamiento';
@@ -784,6 +786,13 @@ export interface ResultadoBarrido {
   expiradas: number;
   /** 0674: correos de respaldo cuyo arriendo venció y se retomaron. */
   correosRetomados: number;
+  /** T-A4-21: avisos de viaje creados / enviados (o avisados al ejecutivo) / fallidos / omitidos o diferidos en esta pasada. */
+  avisosCreados: number;
+  avisosEnviados: number;
+  avisosFallidos: number;
+  avisosOmitidos: number;
+  /** El módulo de avisos lanzó (una flota o toda la pasada): el barrido de escalamiento NO se tumba, pero el latido es `parcial`. */
+  avisosConError: boolean;
   cortadoPorReloj: boolean;
 }
 
@@ -797,7 +806,7 @@ export const MINUTOS_APROBADO_ATORADO = 5;
 export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number; vencePorReloj?: number; mantenimiento?: boolean } = {}): Promise<ResultadoBarrido> {
   const { repo } = deps;
   const ahora = ahoraDe(deps);
-  const r: ResultadoBarrido = { revisadas: 0, escaladas: 0, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, expiradas: 0, correosRetomados: 0, cortadoPorReloj: false };
+  const r: ResultadoBarrido = { revisadas: 0, escaladas: 0, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, expiradas: 0, correosRetomados: 0, avisosCreados: 0, avisosEnviados: 0, avisosFallidos: 0, avisosOmitidos: 0, avisosConError: false, cortadoPorReloj: false };
 
   const filas = await repo.conversacionesEnEspera(opciones.limite ?? 100, ahora);
   for (const f of filas) {
@@ -859,5 +868,46 @@ export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number;
     logger.error('vigia.purga_fallo', { err: e instanceof Error ? e.message : String(e) });
     return 0;
   });
+  // T-A4-21: la pasada de avisos va AL FINAL (después del escalamiento, que es lo que corre contra el reloj de un cliente) y
+  // respeta el mismo reloj. Aislada: un error aquí no tumba nada de lo anterior.
+  await pasadaAvisos(deps, ahora, r, opciones.vencePorReloj);
   return r;
+}
+
+/** Aviso por flota por pasada: acota la lectura de aprobados (la entrega vuelve a verificar el estado de cada uno). */
+export const MAX_AVISOS_ENTREGADOS_POR_FLOTA = 50;
+const MAX_FLOTAS_AVISOS = 100;
+
+async function pasadaAvisos(deps: DepsVigia, ahora: Date, r: ResultadoBarrido, vencePorReloj?: number): Promise<void> {
+  if (!deps.avisos) return;
+  const sinTiempo = () => !!vencePorReloj && Date.now() >= vencePorReloj;
+  try {
+    const flotas = await deps.avisos.flotas(MAX_FLOTAS_AVISOS);
+    for (const f of flotas) {
+      if (sinTiempo()) { r.cortadoPorReloj = true; return; }
+      try {
+        const g = await generarAvisos(f.tenantId, ahora, f.generar);
+        r.avisosCreados += g.creados;
+        const aprobados = await f.aprobados(MAX_AVISOS_ENTREGADOS_POR_FLOTA);
+        for (const a of aprobados) {
+          if (sinTiempo()) { r.cortadoPorReloj = true; return; }
+          try {
+            const e = await entregarAviso(a, f.entrega, 'automatico');
+            if (e.estado === 'enviado' || e.estado === 'avisado_ejecutivo') r.avisosEnviados += 1;
+            else if (e.estado === 'fallido') r.avisosFallidos += 1;
+            else r.avisosOmitidos += 1;
+          } catch (err) {
+            r.avisosFallidos += 1; r.avisosConError = true;
+            logger.error('vigia.aviso_entrega_fallo', { err: err instanceof Error ? err.message : String(err) });
+          }
+        }
+      } catch (err) {
+        r.avisosConError = true;
+        logger.error('vigia.aviso_flota_fallo', { err: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  } catch (err) {
+    r.avisosConError = true;
+    logger.error('vigia.avisos_fallo', { err: err instanceof Error ? err.message : String(err) });
+  }
 }
