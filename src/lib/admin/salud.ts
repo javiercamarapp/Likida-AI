@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos', 'vigia', 'buzon-entrega', 'jornada-alertas', 'carta-porte-docs', 'guardia'] as const;
+export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos', 'vigia', 'buzon-entrega', 'jornada-alertas', 'carta-porte-docs', 'guardia', 'tms'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -105,6 +105,9 @@ export const CADENCIA_MS: Record<CronId, number> = {
   // (una Mac apagada o dormida era una guardia ausente). 288 invocaciones/día de unos segundos cada una — es el
   // costo de que el aviso de un incidente tarde ≤ 5 min y de que la página de estado tenga resolución de 5 min.
   guardia: 300_000,
+  // El sincronizador del sistema de transporte del cliente (T-TMS-12): lee (solo lee) viajes, liquidaciones, peajes y
+  // posiciones de las flotas que lo tienen conectado, probado y con mapeo activo. Cada 10 minutos; sin flotas, no hace nada.
+  tms: 10 * 60_000,
 };
 
 /** Cuánto retraso sobre la cadencia se tolera antes de llamarlo muerto. */

@@ -119,6 +119,8 @@ describe('CADENCIA_MS espeja vercel.json', () => {
       // la estampida, y el lunes para que si un portal murió el fin de semana
       // se sepa antes de la primera tanda de facturación de la semana.
       '40 6 * * 1': 7 * 86_400_000,
+      // T-TMS-12: el sincronizador del sistema de transporte del cliente, cada 10 minutos (opt-in por flota).
+      '*/10 * * * *': 600_000,
     };
     for (const c of cfg.crons) {
       const id = c.path.replace('/api/cron/', '') as keyof typeof CADENCIA_MS;
