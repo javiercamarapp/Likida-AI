@@ -151,7 +151,7 @@ async function m5PorCorreo(): Promise<string> {
   const d = detectarFormato(bytes);
   if (!d.ok) throw new Error('M5 ilegible');
   const p = perfilM5(await prepararContenido(bytes, d.clase));
-  await repo.crearPerfil(A, { clave: p.clave, nombre: p.nombre, clienteId: null, formato: p.formato, firma: p.firma, mapeos: p.activa.mapeos, ejemplos: [], nota: null, documentoId: null });
+  await repo.crearPerfil(A, { clave: p.clave, nombre: p.nombre, clienteId: null, formato: p.formato, firma: p.firma, mapeos: p.activa.mapeos, ejemplos: [], nota: null, documentoId: null, actorId: null });
   const r = await atenderCorreoCartaPorte(TOKEN_A, { emailId: 'em-m5', from: 'Logística <plan@cliente.example>', subject: 'Embarque DLV-8001', attachments: [{ id: 'a1', filename: 'dlv-8001.xlsx' }] },
     depsCorreo(bytes, () => llmFalso(guionM5())));
   expect(r).toMatchObject({ status: 200, cuerpo: { ok: true, recibidos: 1 } });
