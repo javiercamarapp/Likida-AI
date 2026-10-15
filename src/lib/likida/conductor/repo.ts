@@ -986,3 +986,89 @@ export async function leerEpisodiosParaTablero(
     }),
   };
 }
+
+// ── 0800: los operadores voluntarios del piloto ──────────────────────────────
+// Todo acotado por tenant. El tope y la marca viven en la base (0800); la REGLA (tope, teléfono, permiso) vive en
+// `acciones_voluntarios.ts`, que usa estas primitivas. Sin la 0800 aplicada las lecturas lanzan un error en palabras.
+
+export interface OperadorPiloto {
+  id: string;
+  nombre: string;
+  /** Tal como está guardado en `operador.telefono`. */
+  telefono: string;
+  activo: boolean;
+  voluntario: boolean;
+  voluntarioDesde: string | null;
+}
+
+const COLUMNAS_PILOTO = 'id, nombre, telefono, activo, agente_voluntario, agente_voluntario_desde';
+const SIN_0800 = 'El alta de voluntarios necesita la migración 0800 (aún no aplicada en esta base).';
+
+function filaAOperadorPiloto(f: Fila): OperadorPiloto {
+  return {
+    id: String(f.id), nombre: String(f.nombre ?? ''), telefono: String(f.telefono ?? ''),
+    activo: f.activo !== false, voluntario: f.agente_voluntario === true, voluntarioDesde: s(f.agente_voluntario_desde),
+  };
+}
+
+function exigirPiloto(res: { error: { code?: string | null; message?: string | null } | null }, contexto: string): void {
+  if (!res.error) return;
+  if (faltaEsquema(res.error, /agente_voluntario|piloto_max_voluntarios|retirar_voluntario/) || res.error.code === 'PGRST202') throw new Error(SIN_0800);
+  throw new Error(`${contexto}: ${res.error.message ?? 'error'}`);
+}
+
+/** Un operador DE ESTA flota (otra flota = `null`, como si no existiera). */
+export async function leerOperadorPiloto(tenantId: string, operadorId: string): Promise<OperadorPiloto | null> {
+  const res = await acotada(supabaseAdmin().from('operador').select(COLUMNAS_PILOTO).eq('tenant_id', tenantId).eq('id', operadorId).maybeSingle(), 'conductor.operadorPiloto');
+  exigirPiloto(res as never, 'conductor.operadorPiloto');
+  const f = (res as { data: Fila | null }).data;
+  return f ? filaAOperadorPiloto(f) : null;
+}
+
+export async function listarVoluntarios(tenantId: string): Promise<OperadorPiloto[]> {
+  const res = await acotada(supabaseAdmin().from('operador').select(COLUMNAS_PILOTO)
+    .eq('tenant_id', tenantId).eq('agente_voluntario', true).order('agente_voluntario_desde', { ascending: true }).limit(200), 'conductor.voluntarios');
+  exigirPiloto(res as never, 'conductor.voluntarios');
+  return (((res as { data: Fila[] | null }).data) ?? []).map(filaAOperadorPiloto);
+}
+
+/** Operadores ACTIVOS que todavía no son voluntarios, por nombre o teléfono (el filtro de teléfono válido lo aplica quien llama). */
+export async function buscarCandidatosVoluntarios(tenantId: string, texto: string, limite = 200): Promise<OperadorPiloto[]> {
+  const t = texto.replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+  let q = supabaseAdmin().from('operador').select(COLUMNAS_PILOTO).eq('tenant_id', tenantId).eq('activo', true).eq('agente_voluntario', false);
+  if (t !== '') q = q.or(`nombre.ilike.%${t}%,telefono.ilike.%${t}%`);
+  const res = await acotada(q.order('nombre', { ascending: true }).limit(limite), 'conductor.candidatosVoluntarios');
+  exigirPiloto(res as never, 'conductor.candidatosVoluntarios');
+  return (((res as { data: Fila[] | null }).data) ?? []).map(filaAOperadorPiloto);
+}
+
+export async function contarVoluntarios(tenantId: string): Promise<number> {
+  const res = await acotada(supabaseAdmin().from('operador').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('agente_voluntario', true), 'conductor.contarVoluntarios');
+  exigirPiloto(res as never, 'conductor.contarVoluntarios');
+  return (res as { count: number | null }).count ?? 0;
+}
+
+/** `piloto_max_voluntarios` de la flota (6 si todavía no tiene fila de configuración). */
+export async function leerTopeVoluntarios(tenantId: string): Promise<number> {
+  const res = await acotada(supabaseAdmin().from('agente_conductor_config').select('piloto_max_voluntarios').eq('tenant_id', tenantId).maybeSingle(), 'conductor.topeVoluntarios');
+  exigirPiloto(res as never, 'conductor.topeVoluntarios');
+  const v = ((res as { data: Fila | null }).data)?.piloto_max_voluntarios;
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 ? v : 6;
+}
+
+/** Enciende la marca SOLO si el operador es de la flota, está activo y aún no era voluntario. `false` = nada cambió. */
+export async function marcarVoluntario(tenantId: string, operadorId: string, porUsuarioId: string | null, ahora: Date): Promise<boolean> {
+  const res = await acotada(supabaseAdmin().from('operador')
+    .update({ agente_voluntario: true, agente_voluntario_desde: ahora.toISOString(), agente_voluntario_por: porUsuarioId })
+    .eq('tenant_id', tenantId).eq('id', operadorId).eq('activo', true).eq('agente_voluntario', false).select('id'), 'conductor.marcarVoluntario');
+  exigirPiloto(res as never, 'conductor.marcarVoluntario');
+  return (((res as { data: unknown[] | null }).data) ?? []).length > 0;
+}
+
+/** Apaga la marca y devuelve a «sin aceptar» los viajes abiertos importados de ese operador (función atómica de la 0800). Devuelve cuántos viajes dejaron de seguirse. */
+export async function retirarVoluntario(tenantId: string, operadorId: string): Promise<number> {
+  const res = await acotada(supabaseAdmin().rpc('retirar_voluntario', { p_tenant: tenantId, p_operador: operadorId }), 'conductor.retirarVoluntario');
+  exigirPiloto(res as never, 'conductor.retirarVoluntario');
+  const d = (res as { data: unknown }).data;
+  return typeof d === 'number' ? d : 0;
+}
