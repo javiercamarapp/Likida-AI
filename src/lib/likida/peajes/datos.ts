@@ -16,6 +16,7 @@ import { generarToken, esTokenValido } from '@/lib/correo/buzon';
 import { hostNoPublico } from '@/lib/http/destino_publico';
 import { cifrar, cofreConfigurado } from '../conectores/cofre';
 import type { HallazgoAtipico, ConfigAtipicos } from './atipicos';
+import { validarConfigAvisos, configAvisosEfectiva, type ConfigAvisos } from './config_avisos';
 import { validarConfigAtipicos, configAtipicosEfectiva, esEstadoAtipico, puedeCambiarEstado, exigeRevisor, type EstadoAtipico } from './atipicos_config';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1200,4 +1201,106 @@ export async function reclamosParaCasar(tenantId: string): Promise<import('./not
       fechaCobroMasAntiguo: String(f.fecha_cobro_mas_antiguo).slice(0, 10),
     }))
     .filter((r) => r.montoReclamable > 0);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL I/O de la configuración de umbrales, plazo y avisos (T-A2-29b). Vive aquí y no en un archivo
+// nuevo para no subir el techo de archivos con acceso directo a Supabase (frontera_datos_guardiana).
+//
+// Vive en la MISMA fila por flota de `peaje_atipico_config` (migración 0779):
+//   · `activo`                       → interruptor del detector de atípicos,
+//   · `umbrales` (reglas atípicas)   → validados por `atipicos_config.ts`,
+//   · `umbrales.aviso.telefono`      → destinatario del aviso (lo escribe `guardarDestinatarioAtipicos`),
+//   · `umbrales.config_peajes`       → plazo, recordatorio e interruptores (`config_avisos.ts`).
+// Sin migración nueva: es un objeto jsonb libre. CADA escritura conserva las claves que no
+// le tocan (guardar umbrales no borra el destinatario ni el plazo, y al revés).
+// Una flota sin fila = todo apagado y con valores por omisión.
+// ═══════════════════════════════════════════════════════════════════════════
+
+type DetalleCfg = Record<string, unknown>;
+const comoDetalleCfg = (x: unknown): DetalleCfg => (x && typeof x === 'object' && !Array.isArray(x) ? (x as DetalleCfg) : {});
+
+export interface ConfigPeajesVista {
+  /** El detector de cruces atípicos corre solo si la flota lo encendió. */
+  atipicosActivo: boolean;
+  umbrales: ConfigAtipicos;
+  avisos: ConfigAvisos;
+  /** Destinatario de los avisos por WhatsApp; `null` = solo se ve en pantalla. */
+  telefono: string | null;
+}
+
+type FilaCfg = { activo: boolean; umbrales: DetalleCfg };
+
+/** Lee la fila de la flota (o `null` si no hay). Lanza ante error de base: un error no se lee como «apagado». */
+async function leerFila(tenantId: string, etiqueta: string): Promise<FilaCfg | null> {
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_atipico_config')
+    .select('activo, umbrales').eq('tenant_id', tenantId).maybeSingle(), etiqueta);
+  if (error) throw new Error(`${etiqueta}: ${error.message}`);
+  if (!data) return null;
+  return { activo: data.activo === true, umbrales: comoDetalleCfg(data.umbrales) };
+}
+
+async function escribirFila(tenantId: string, fila: FilaCfg, etiqueta: string): Promise<boolean> {
+  const { error } = await acotada(supabaseAdmin().from('peaje_atipico_config').upsert({
+    tenant_id: tenantId, activo: fila.activo, umbrales: fila.umbrales, actualizado_en: new Date().toISOString(),
+  }, { onConflict: 'tenant_id' }), etiqueta);
+  if (error) {
+    logger.error(etiqueta, { tenant: tenantId, err: error.message });
+    return false;
+  }
+  return true;
+}
+
+/** Todo lo que la pantalla de configuración muestra de umbrales, plazo y avisos. Lanza ante error de base. */
+export async function leerConfigPeajes(tenantId: string): Promise<ConfigPeajesVista> {
+  const fila = await leerFila(tenantId, 'peajes.config_peajes_leer');
+  const u = fila?.umbrales ?? {};
+  const tel = comoDetalleCfg(u.aviso).telefono;
+  return {
+    atipicosActivo: fila?.activo === true,
+    umbrales: configAtipicosEfectiva(u),
+    avisos: configAvisosEfectiva(u.config_peajes),
+    telefono: typeof tel === 'string' && tel.trim() !== '' ? tel : null,
+  };
+}
+
+export type ResultadoConfigPeajes<T> = { ok: true; valor: T } | { ok: false; motivo: string };
+const NO_SE_PUDO_CONFIG = 'No se pudo guardar la configuración. Intenta de nuevo.';
+
+/**
+ * Guarda el interruptor del detector y sus umbrales (N, H, velocidad, madrugada). Un valor fuera de
+ * rango se RECHAZA con mensaje llano y no se escribe nada. Conserva el destinatario y el plazo.
+ */
+export async function guardarUmbralesPeajes(
+  tenantId: string, entrada: { activo: boolean; umbrales?: unknown },
+): Promise<ResultadoConfigPeajes<{ activo: boolean; umbrales: ConfigAtipicos }>> {
+  if (typeof entrada.activo !== 'boolean') return { ok: false, motivo: 'Indica si el detector está encendido (sí o no).' };
+  const v = validarConfigAtipicos(entrada.umbrales);
+  if (!v.ok) return { ok: false, motivo: v.motivo };
+  let previa: FilaCfg | null;
+  try { previa = await leerFila(tenantId, 'peajes.config_peajes_umbrales_previa'); } catch (e) {
+    logger.error('peajes.config_peajes_umbrales_previa', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, motivo: NO_SE_PUDO_CONFIG };
+  }
+  const resto = previa?.umbrales ?? {};
+  const ok = await escribirFila(tenantId, { activo: entrada.activo, umbrales: { ...resto, ...v.valor } }, 'peajes.config_peajes_umbrales');
+  return ok ? { ok: true, valor: { activo: entrada.activo, umbrales: v.valor } } : { ok: false, motivo: NO_SE_PUDO_CONFIG };
+}
+
+/**
+ * Guarda el plazo de reclamo, los días de aviso, el recordatorio y los interruptores. Se valida
+ * COMPLETO antes de escribir. Conserva los umbrales, el interruptor del detector y el destinatario.
+ */
+export async function guardarConfigAvisos(tenantId: string, entrada: unknown): Promise<ResultadoConfigPeajes<ConfigAvisos>> {
+  const v = validarConfigAvisos(entrada);
+  if (!v.ok) return { ok: false, motivo: v.motivo };
+  let previa: FilaCfg | null;
+  try { previa = await leerFila(tenantId, 'peajes.config_peajes_avisos_previa'); } catch (e) {
+    logger.error('peajes.config_peajes_avisos_previa', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, motivo: NO_SE_PUDO_CONFIG };
+  }
+  const ok = await escribirFila(tenantId, {
+    activo: previa?.activo === true, umbrales: { ...(previa?.umbrales ?? {}), config_peajes: v.valor },
+  }, 'peajes.config_peajes_avisos');
+  return ok ? { ok: true, valor: v.valor } : { ok: false, motivo: NO_SE_PUDO_CONFIG };
 }

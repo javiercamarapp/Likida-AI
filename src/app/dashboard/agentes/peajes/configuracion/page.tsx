@@ -16,10 +16,17 @@ import {
   leerConfigBuzon, activarBuzon, desactivarBuzon, rotarLlaveBuzon, listarArchivosIngesta,
   leerConfigEntradas, activarCorreoPeajes, desactivarCorreoPeajes, rotarCorreoPeajes, guardarRemitentesPeajes,
   guardarPullPeajes, apagarPullPeajes, borrarCredencialPull,
+  listarTarifas, confirmarTarifa, importarTarifasArchivo,
+  leerConfigPeajes, guardarUmbralesPeajes, guardarConfigAvisos,
   type ResultadoImportacionCatalogo,
 } from '@/lib/likida/peajes/datos';
+import { ORIGENES_TARIFA, type OrigenTarifa } from '@/lib/likida/peajes/tarifario_archivo';
+import { parsearDiasAviso, INTERRUPTORES } from '@/lib/likida/peajes/config_avisos';
+import { guardarDestinatarioAtipicos } from '@/lib/likida/peajes/aviso_atipicos';
+import { listarDesgloses } from '@/lib/likida/intake/desglose_peaje';
 import {
   listarReglasCasetas, listarTagsBaja, listarExcepcionesUnidad, guardarExcepcionUnidad, quitarExcepcionUnidad, guardarReglaCaseta, parsearClases, altaBajaDeTag, quitarBajaDeTag, cargarCoordenadasDeCasetas,
+  revisionDeDesglose,
 } from '@/lib/likida/peajes/revision_cobros';
 import { importarCursosArchivo, importarCursosDeTablaPropia, type ResultadoImportCursos } from '@/lib/likida/peajes/cursos_importar';
 import { secretoMaestro, claveDeFlota, reintentarArchivoPeaje } from '@/lib/likida/peajes/ingesta';
@@ -102,7 +109,9 @@ export default async function PaginaConfiguracionPeajes({
   const puedeAdministrar = puedeVerArea(rol, 'administracion');
 
   const secreto = secretoMaestro();
-  const [reglasCasetas, tagsBaja, excepcionesUnidad, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
+  const [tarifas, configPeajes, reglasCasetas, tagsBaja, excepcionesUnidad, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
+    safe(() => listarTarifas(tenantId)),
+    safe(() => leerConfigPeajes(tenantId)),
     safe(() => listarReglasCasetas(tenantId)),
     safe(() => listarTagsBaja(tenantId)),
     safe(() => listarExcepcionesUnidad(tenantId)),
@@ -337,6 +346,84 @@ export default async function PaginaConfiguracionPeajes({
     volverConfig(sufijo, (await quitarExcepcionUnidad(tenantId, String(fd.get('excepcion') ?? ''))) ? 'Excepción quitada.' : 'error:No se pudo quitar la excepción.');
   }
 
+  // ── Tarifario ──
+  async function accionImportarTarifas(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) volverConfig(sufijo, `error:${no}`);
+    const a = await archivoDeForm(fd);
+    if (typeof a === 'string') volverConfig(sufijo, `error:${a}`);
+    const pedido = String(fd.get('origen') ?? 'declarada');
+    // «inferida» no se carga a mano: la produce el sistema; el formulario solo ofrece declarada o proveedor.
+    const origen: OrigenTarifa = (ORIGENES_TARIFA as readonly string[]).includes(pedido) && pedido !== 'inferida' ? (pedido as OrigenTarifa) : 'declarada';
+    const r = await importarTarifasArchivo(tenantId, (a as { nombre: string }).nombre, (a as { buffer: Uint8Array }).buffer, origen);
+    const resumen = resumenImportacion(r, 'tarifas');
+    volverConfig(sufijo, !r.error && origen !== 'proveedor' && r.guardadas > 0 ? `${resumen} · Quedan por confirmar: confírmalas una a una abajo.` : resumen);
+  }
+  async function accionConfirmarTarifa(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) volverConfig(sufijo, `error:${no}`);
+    const sesion = await requireSessionTenant(RUTA);
+    const quien = sesion.nombre?.trim() || 'usuario de la flota';
+    const r = await confirmarTarifa(tenantId, String(fd.get('tarifa') ?? ''), quien);
+    volverConfig(sufijo, r.ok ? (r.yaConfirmada ? 'Esa tarifa ya estaba confirmada.' : 'Tarifa confirmada: desde ahora puede convertir un candidato en cobro con monto reclamable.') : `error:${r.motivo}`);
+  }
+  async function accionSugerirPasada() {
+    'use server';
+    const no = await puertaConfig(tenantId);
+    if (no) volverConfig(sufijo, `error:${no}`);
+    let ultimo: Awaited<ReturnType<typeof listarDesgloses>>;
+    try { ultimo = await listarDesgloses(tenantId, 1); } catch { volverConfig(sufijo, 'error:No se pudo leer el último desglose. Inténtalo de nuevo.'); }
+    const id = ultimo[0]?.desgloseId;
+    if (!id) volverConfig(sufijo, 'Aún no hay desgloses: sube el primer archivo del proveedor para poder sugerir casetas.');
+    let rep: Awaited<ReturnType<typeof revisionDeDesglose>>;
+    try { rep = await revisionDeDesglose(tenantId, id as string); } catch { volverConfig(sufijo, 'error:No se pudo revisar el último desglose. Inténtalo de nuevo.'); }
+    const s = rep?.revision.sugerenciasPasada ?? [];
+    volverConfig(sufijo, s.length === 0
+      ? 'Ninguna caseta del último desglose parece de tarifa por pasada.'
+      : `Posible tarifa por pasada (casi todo clase 1): ${s.slice(0, 8).map((x) => `${x.caseta} (${x.cruces})`).join(', ')}${s.length > 8 ? '…' : ''}. Es solo una sugerencia: decláralas en «Reglas de cobro» con clase válida extra 1.`);
+  }
+
+  // ── Umbrales, plazo y avisos ──
+  async function accionGuardarUmbrales(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId, 'administracion');
+    if (no) volverConfig(sufijo, `error:${no}`);
+    const n = (k: string) => Number(String(fd.get(k) ?? '').trim().replace(',', '.'));
+    const marcado = (k: string) => String(fd.get(k) ?? '') === '1';
+    const r = await guardarUmbralesPeajes(tenantId, {
+      activo: marcado('activo'),
+      umbrales: {
+        repeticion_caseta: { activa: marcado('repeticion_activa'), minCruces: n('repeticion_min'), ventanaHoras: n('repeticion_horas') },
+        ida_y_vuelta_madrugada: { activa: marcado('madrugada_activa'), minCruces: n('madrugada_min') },
+        secuencia_imposible: { activa: marcado('velocidad_activa'), velocidadMaxKmh: n('velocidad_max') },
+      },
+    });
+    volverConfig(sufijo, r.ok ? (r.valor.activo ? 'Umbrales guardados. La búsqueda de cruces atípicos está ENCENDIDA.' : 'Umbrales guardados. La búsqueda de cruces atípicos sigue apagada.') : `error:${r.motivo}`);
+  }
+  async function accionGuardarAvisos(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId, 'administracion');
+    if (no) volverConfig(sufijo, `error:${no}`);
+    const dias = parsearDiasAviso(String(fd.get('aviso_dias') ?? ''));
+    if (dias === null) volverConfig(sufijo, 'error:Los días de aviso se escriben como números enteros separados por comas (por ejemplo 30, 7).');
+    const marcado = (k: string) => String(fd.get(k) ?? '') === '1';
+    const r = await guardarConfigAvisos(tenantId, {
+      plazo: { meses: Number(String(fd.get('plazo_meses') ?? '').trim()), avisoDias: dias },
+      recordatorio: { diasGracia: Number(String(fd.get('dias_gracia') ?? '').trim()) },
+      interruptores: Object.fromEntries(INTERRUPTORES.map((i) => [i, marcado(i)])),
+    });
+    volverConfig(sufijo, r.ok ? 'Plazo y avisos guardados.' : `error:${r.motivo}`);
+  }
+  async function accionGuardarDestinatario(fd: FormData) {
+    'use server';
+    const no = await puertaConfig(tenantId, 'administracion');
+    if (no) volverConfig(sufijo, `error:${no}`);
+    const r = await guardarDestinatarioAtipicos(tenantId, String(fd.get('telefono') ?? ''));
+    volverConfig(sufijo, r.ok ? (r.telefono ? 'Destinatario guardado.' : 'Sin destinatario: los avisos solo se verán en pantalla.') : `error:${r.motivo}`);
+  }
+
   // ── Mapeo de columnas ──
   async function accionGuardarMapeo(fd: FormData) {
     'use server';
@@ -388,6 +475,11 @@ export default async function PaginaConfiguracionPeajes({
           guardarReglaCaseta: accionGuardarReglaCaseta, cargarCoordenadas: accionCargarCoordenadas, altaBajaTag: accionAltaBajaTag, quitarBajaTag: accionQuitarBajaTag,
           guardarExcepcionUnidad: accionGuardarExcepcionUnidad, quitarExcepcionUnidad: accionQuitarExcepcionUnidad,
         },
+      }}
+      tarifario={{ tarifas, acciones: { importarTarifas: accionImportarTarifas, confirmarTarifa: accionConfirmarTarifa, sugerirPasada: accionSugerirPasada } }}
+      umbralesAvisos={{
+        config: configPeajes, puedeAdministrar,
+        acciones: { guardarUmbrales: accionGuardarUmbrales, guardarAvisos: accionGuardarAvisos, guardarDestinatario: accionGuardarDestinatario },
       }}
       acciones={{
         activarCorreo: accionActivarCorreo, desactivarCorreo: accionDesactivarCorreo, rotarCorreo: accionRotarCorreo, guardarRemitentes: accionGuardarRemitentes,

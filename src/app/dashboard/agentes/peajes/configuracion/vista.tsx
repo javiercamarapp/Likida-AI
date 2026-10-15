@@ -10,6 +10,8 @@ import type {
 
 import { SeccionEntradas, type AccionesEntradas, type EntradasVista } from './entradas';
 import { SeccionReglasCobro, type ReglasCobroVista } from './reglas-cobro';
+import { SeccionTarifario, type TarifarioVista } from './tarifario';
+import { SeccionUmbralesAvisos, type UmbralesAvisosVista } from './umbrales-avisos';
 
 type Accion = (fd: FormData) => Promise<void>;
 
@@ -56,7 +58,7 @@ const CSS_SECUNDARIO = 'hairline text-[12.5px] font-medium px-3 py-1.5 rounded-l
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 export function VistaConfiguracionPeajes({
-  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro,
+  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro, tarifario, umbralesAvisos,
 }: {
   sufijo: string;
   aviso: string | null;
@@ -76,6 +78,10 @@ export function VistaConfiguracionPeajes({
   acciones: AccionesConfiguracion;
   /** Las reglas de la revisión de cobros (clases por caseta, casetas prohibidas, TAGs de baja). Opcional. */
   reglasCobro?: ReglasCobroVista;
+  /** El tarifario por caseta y clase (carga y confirmación). Opcional. */
+  tarifario?: TarifarioVista;
+  /** Umbrales de atípicos, plazo de reclamo, avisos e interruptores. Opcional. */
+  umbralesAvisos?: UmbralesAvisosVista;
 }) {
   return (
     <main className="h-full">
@@ -98,6 +104,8 @@ export function VistaConfiguracionPeajes({
           <SeccionEntradas entradas={entradas} acciones={acciones} />
           <SeccionMapeo mapeos={mapeos} acciones={acciones} />
           {reglasCobro && <SeccionReglasCobro datos={reglasCobro} />}
+          {tarifario && <SeccionTarifario datos={tarifario} />}
+          {umbralesAvisos && <SeccionUmbralesAvisos datos={umbralesAvisos} />}
           <SeccionTags tags={tags} unidades={unidades} acciones={acciones} />
           <SeccionCasetas casetas={casetas} acciones={acciones} />
           <SeccionGeocercas geocercas={geocercas} tipos={tiposGeocerca} acciones={acciones} />
