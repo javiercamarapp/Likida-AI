@@ -124,6 +124,7 @@ Datos personales nuevos: el nombre de un **tercero** (quien recibe en el andén)
 - Cada paso proactivo del cron `conductor-hitos` corre aislado: si uno falla, los demás corren y el latido sale `parcial`.
 - Contactos de escalamiento: `conductor_contacto_trafico`, por el mismo `PUT /v1/conductor/config` (teléfonos normalizados a 52+10).
 - Modelo: `LIKIDA_MODEL_CONDUCTOR_HITO` cambia el modelo sin deploy.
+- **Piloto con voluntarios (0800-0804)**: cómo se enciende (preflight → voluntarios → importar viajes → tablero → `avisar_senal_vida`), cómo se apaga (un voluntario, la señal de vida, el Conductor entero) y el rollback del esquema están en `agente-conductor-piloto.md`. `avisar_senal_vida` solo se deja encender desde el panel con el preflight «¿Está lista la flota?» en verde (la API no aplica esa compuerta).
 
 ## Bloqueos externos (no cerrables por código)
 
@@ -134,6 +135,8 @@ Datos personales nuevos: el nombre de un **tercero** (quien recibe en el andén)
 5. Plazos por defecto sin cita (120/120/480/120/30 min) son **supuestos**: validarlos con su operación.
 
 ## Pendientes de la primera entrega (estado actual)
+
+- Operación del piloto (preflight, voluntarios, apagado por niveles, limpieza de viajes aceptados por importación y reversa de las migraciones 0800-0804) → hecho: `agente-conductor-piloto.md`.
 
 - ~~Validación automática contra geocerca/GPS, editor de geocercas y foto/evidencia por hito~~ → hecho en la 0385 (ver abajo).
 - ~~Tablero ampliado~~ → hecho (0385). ~~Pantalla de configuración~~ → hecha: `/dashboard/agentes/conductores/configuracion` (escalera, ventana, contactos y las perillas de la 0385, 0604 y 0635-0636), además de `PUT /v1/conductor/config`.
