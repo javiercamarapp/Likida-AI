@@ -7,8 +7,8 @@
 //   3. ejecutar — processInbound EN PROCESO, con el cliente Meta sustituido
 //   4. consultar DB con service_role (SOLO tenant ZZZ QA)
 //   5. comparar esperado vs real — los 5 oráculos (funciones puras, sin LLM)
-//   6. capturar evidencia en docs/qa/<fecha>/evidencia/operador/<esc>-rep<n>/
-//   7. reportar SOLO con reproducción — docs/qa/<fecha>/operador.md, formato
+//   6. capturar evidencia en la documentación interna
+//   7. reportar SOLO con reproducción — la documentación interna, formato
 //      de tabla del diseño (✅/⚠️/❌, severidad, N/N de reproducibilidad)
 //
 // El gasto REAL de cada llamada (llm_costo, costo del proveedor) se registra

@@ -31,7 +31,7 @@ import { acotada } from './presupuesto';
 // ═══════════════════════════════════════════════════════════════════════════
 // ESCALA 50k (mig. 0150, 22-ago-2026): las ONCE reducciones "traer filas →
 // agregar en JS" de este archivo que quedaban con fecha de caducidad se
-// movieron a RPC (docs/escala-50k/MAPA.md). Todas comparten este lector:
+// movieron a RPC (la documentación interna). Todas comparten este lector:
 // UN viaje de red, y fail-closed de FORMA — una respuesta que no tenga la
 // forma esperada LANZA, nunca se lee como "cero" (un Resumen en $0 se ve
 // exactamente igual que una flota sin actividad).
@@ -123,7 +123,7 @@ export interface ComparativoPeriodo {
  * correcto para no repetir la misma ventana tres veces. Pero la vista
  * "histórico" de `getSeriesKpiCards` (ventana ~10 años) lee prácticamente la
  * tabla `gasto` ENTERA del tenant, y con 45,000 gastos/mes eso toca el techo
- * de `traerTodo` (100 páginas) ~mes 2.2 (docs/escala-15k.md §6) — la MISMA
+ * de `traerTodo` (100 páginas) ~mes 2.2 (la documentación interna §6) — la MISMA
  * fecha de caducidad que `getGastosFiscales`, y esta función corre en CADA
  * carga del Resumen (tres veces: semanal/mensual/histórico).
  *
@@ -211,7 +211,7 @@ export async function getSeriesKpiCards(
  * Traía TODA `liquidacion` del tenant con `traerTodo` para contar por estatus
  * y sumar el dinero observado de `diferencias` (jsonb) en JavaScript — se lee
  * en CADA carga de /dashboard y /dashboard/contador, y caduca ~mes 8.3 con
- * 15,000 viajes/mes (docs/escala-15k.md §6). `kpis_liquidacion_tenant` hace
+ * 15,000 viajes/mes (la documentación interna §6). `kpis_liquidacion_tenant` hace
  * el conteo/suma en SQL: UN viaje de red, sin techo de páginas. Desde 0344
  * excluye rechazadas; las pendientes siguen siendo resultados operativos. La
  * prueba de equivalencia (`analytics_kpis_acreditables.test.ts`) compara la
@@ -680,7 +680,7 @@ export interface Acreditables {
  * AGREGADO EN SQL DESDE EL 15-AGO-2026 (mig. 0112): traía TODA `liquidacion`
  * del tenant con `traerTodo` para sumar cuatro columnas ya calculadas por
  * liquidación —sin lógica fiscal que reimplementar, solo aritmética— y
- * caducaba ~mes 8.3 con 15,000 viajes/mes (docs/escala-15k.md §6).
+ * caducaba ~mes 8.3 con 15,000 viajes/mes (la documentación interna §6).
  * `acreditables_liquidacion_tenant` hace las cuatro sumas en SQL: UN viaje de
  * red. La prueba de equivalencia (`analytics_kpis_acreditables.test.ts`)
  * compara la reducción JS vieja contra la forma nueva sobre el mismo dataset.
@@ -2028,7 +2028,7 @@ export async function getLineasPorConciliar(tenantId: string): Promise<ColaPorCo
 // Movida aquí desde `dashboard/cuadre/page.tsx` el 10-ago-2026: vivía como
 // función local no exportada dentro de esa página, y al borrarla para el
 // rediseño de "dueño de flota" (ver inventario en
-// `docs/conocimiento/41-inventario-dueno-flota-pre-rediseno.md`) esta consulta
+// la documentación interna) esta consulta
 // se habría perdido en silencio — es la única de las 17 páginas del
 // inventario cuya lógica no vivía ya en `lib/likida`.
 

@@ -4660,7 +4660,7 @@ end $$;
 -- ── 89. Los 4 agregados de la 0112: existen, INVOKER, aislados, cuadran ─────
 --
 -- La 0112 movió CUATRO caminos de "traer filas → sumar en JS" a `sum()`/
--- `count()` en SQL (docs/escala-15k.md §6): `sumar_combustible_ejercicio`
+-- `count()` en SQL (la documentación interna §6): `sumar_combustible_ejercicio`
 -- (que YA EXISTÍA desde la 0084, muerta —cero llamadores en `src/`— y con un
 -- bug real: no filtraba `monto > 0`), `serie_comparativa_tenant`,
 -- `kpis_liquidacion_tenant` y `acreditables_liquidacion_tenant` (nuevas).
@@ -6482,7 +6482,7 @@ end $$;
 
 -- ── 122. Los 11 agregados de la 0150: existen, INVOKER, aislados, cuadran ───
 --
--- La 0150 (ESCALA 50k, docs/escala-50k/MAPA.md) movió ONCE caminos de
+-- La 0150 (ESCALA 50k, la documentación interna) movió ONCE caminos de
 -- analytics.ts de "traerTodo → agregar en JS" a RPC: anomalias_gasto_tenant,
 -- gasto_semanal_tenant, top_rutas_gasto_tenant, gasto_por_concepto_tenant,
 -- stats_operador_tenant, liquidado_semanal_tenant, viajes_por_mes_tenant,
@@ -6704,7 +6704,7 @@ end $$;
 -- ── 124. Los 7 agregados de la 0152: existen, INVOKER, aislados y cuadran ───
 --
 -- La 0152 movió OCHO lecturas del lado del ingreso y del encargado de "traer
--- la tabla a JS" a `sum()`/`count()` en SQL (docs/escala-50k/MAPA.md #12-#19).
+-- la tabla a JS" a `sum()`/`count()` en SQL (la documentación interna #12-#19).
 -- Mismo criterio que el bloque 89 (0112), y las mismas cuatro comprobaciones:
 --
 --  1. **Las 7 existen, son SECURITY INVOKER y los permisos son los correctos**
@@ -8203,7 +8203,7 @@ end $$;
 
 -- ── 140. `tenant.perfil` sella su historial con TRIGGER, no por convención (mig. 0169) ──
 --
--- FASE 3 (docs/asistencia/PLAN-FASES.md, docs/perfil/PERFIL-OPERATIVO.md):
+-- FASE 3 (la documentación interna, la documentación interna):
 -- consolidar el perfil del cliente exige poder decir CUÁNDO cambió y QUIÉN lo
 -- cambió — `actualizarFacilidad15` (código existente) ya escribe sin bitácora
 -- y nadie lo notó, y ese es el patrón de bug que este trigger existe para no

@@ -21,7 +21,7 @@ const GUARDADOS = [
   'src/lib/likida/interruptores.ts',
   'src/lib/likida/contactos.ts',
   'src/lib/likida/consulta_chofer.ts',
-  // ESCALA 50k (22-ago-2026, regla 5 de docs/escala-50k/REGLAS-ESCALA.md):
+  // ESCALA 50k (22-ago-2026, regla 5 de la documentación interna):
   // lo que queda en JS de la consola de superadmin también lleva techo. Un
   // `Promise.all` de dieciséis lecturas sin techo colgado en una es toda la
   // página en blanco. OJO: `Array.from(` cuenta como `.from(` para esta
