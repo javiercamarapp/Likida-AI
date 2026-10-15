@@ -887,6 +887,70 @@ export async function guardarSalidaConfig(tenantId: string, c: SalidaConfigFila,
 }
 
 
+// ── Revisor asignado (0790: cp_documento.revisor_asignado) ──────────────────
+// Se lee y se escribe APARTE de `COLUMNAS_DOC` a propósito: la bandeja de hoy no puede romperse en una base que todavía no
+// tiene la 0790. Sin la columna, leer devuelve «sin asignar» y escribir falla con una frase clara.
+
+/** Las personas de la oficina que pueden recibir casos por revisar (activas y de ESTA flota). */
+export interface UsuarioRevisor { id: string; nombre: string | null; email: string; rol: string; telefono: string | null }
+const ROLES_REVISOR = ['encargado', 'flota_admin', 'contador'] as const;
+const aRevisor = (f: Fila): UsuarioRevisor => ({ id: String(f.id), nombre: s(f.nombre), email: String(f.email), rol: String(f.rol), telefono: s(f.telefono) });
+const COLUMNAS_REVISOR = 'id, nombre, email, rol, telefono, activo';
+
+/** La columna de la 0790 no existe todavía (Postgres 42703 / PostgREST lo dice con el nombre de la columna). */
+export function columnaAusente(error: { message?: string; code?: string } | null | undefined): boolean {
+  if (!error) return false;
+  return error.code === '42703' || /revisor_asignado|column .* does not exist/i.test(error.message ?? '');
+}
+
+/** Quien puede revisar en la flota, por nombre. Los desactivados no salen. */
+export async function usuariosRevisores(tenantId: string): Promise<UsuarioRevisor[]> {
+  const r = await acotada(supabaseAdmin().from('app_user').select(COLUMNAS_REVISOR).eq('tenant_id', tenantId)
+    .in('rol', [...ROLES_REVISOR]).or('activo.is.null,activo.eq.true').order('nombre', { ascending: true }).order('id').limit(200), 'cpdocs.usuarios_revisores');
+  return ((exigir(r, 'cpdocs.usuarios_revisores') ?? []) as unknown as Fila[]).filter((f) => f.activo !== false).map(aRevisor);
+}
+
+/** Una persona de ESTA flota que puede revisar, o null (otra flota, desactivada o con un rol que no revisa). */
+export async function usuarioRevisor(tenantId: string, userId: string): Promise<UsuarioRevisor | null> {
+  const r = await acotada(supabaseAdmin().from('app_user').select(COLUMNAS_REVISOR).eq('tenant_id', tenantId).eq('id', userId)
+    .in('rol', [...ROLES_REVISOR]).maybeSingle(), 'cpdocs.usuario_revisor');
+  const f = exigir(r, 'cpdocs.usuario_revisor') as unknown as Fila | null;
+  return f && f.activo !== false ? aRevisor(f) : null;
+}
+
+/** A quién le toca cada documento (solo los asignados salen en el mapa). Sin la 0790: mapa vacío. */
+export async function revisoresDeDocumentos(tenantId: string, ids: string[]): Promise<Map<string, string>> {
+  const mapa = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const r = await acotada(supabaseAdmin().from('cp_documento').select('id, revisor_asignado')
+      .eq('tenant_id', tenantId).in('id', ids.slice(i, i + 200)).not('revisor_asignado', 'is', null).order('id').limit(200), 'cpdocs.revisores_docs');
+    if (r.error && columnaAusente(r.error)) { logger.warn('cartaporte_docs.revisor_sin_migracion', { motivo: r.error.message }); return new Map(); }
+    for (const f of (exigir(r, 'cpdocs.revisores_docs') ?? []) as unknown as Fila[]) mapa.set(String(f.id), String(f.revisor_asignado));
+  }
+  return mapa;
+}
+
+/** Los documentos por revisar asignados a una persona (para «Mis casos»). Sin la 0790: ninguno. */
+export async function idsAsignadosA(tenantId: string, userId: string): Promise<string[]> {
+  const r = await acotada(supabaseAdmin().from('cp_documento').select('id')
+    .eq('tenant_id', tenantId).eq('revisor_asignado', userId).order('id').limit(1000), 'cpdocs.ids_asignados');
+  if (r.error && columnaAusente(r.error)) return [];
+  return ((exigir(r, 'cpdocs.ids_asignados') ?? []) as unknown as Fila[]).map((f) => String(f.id));
+}
+
+/**
+ * Fija (o quita, con null) el revisor de un documento. Escribe SOLO esa columna: no sube la `version` del documento, porque
+ * asignar a quién le toca no es un cambio de contenido y no debe invalidar la pantalla de quien está revisando.
+ * `false` = el documento no es de esta flota. Sin la 0790 lanza con una frase para la pantalla.
+ */
+export async function asignarRevisorDoc(tenantId: string, id: string, revisorId: string | null): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().from('cp_documento').update({ revisor_asignado: revisorId })
+    .eq('tenant_id', tenantId).eq('id', id).select('id'), 'cpdocs.asignar_revisor');
+  if (r.error && columnaAusente(r.error)) throw new Error('La asignación de revisor todavía no está disponible en esta base (falta la migración 0790).');
+  return ((exigir(r, 'cpdocs.asignar_revisor') ?? []) as unknown as Fila[]).length > 0;
+}
+
+
 // ── Envíos al TMS (0790: cp_envio_tms) ──────────────────────────────────────
 // Solo lo que necesita «preparar el envío» (T-A3-04). La cola, el lease y la máquina de estados son de T-A3-26/27.
 

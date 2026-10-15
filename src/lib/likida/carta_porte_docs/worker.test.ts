@@ -40,6 +40,8 @@ function mundo(o: {
   porAvisar?: string[] | null;
   docs?: Record<string, Partial<DocumentoFila>>;
   telefono?: string | null;
+  /** T-A3-31: teléfono de la persona asignada por documento; ausente = el doble no trae la dependencia. */
+  telefonoRevisor?: Record<string, string | null | 'falla'>;
   envio?: () => ResultadoAvisoOficina;
   avanceMs?: number;
 } = {}): Mundo {
@@ -62,6 +64,7 @@ function mundo(o: {
     },
     liberarAviso: async (_t, id, tipo) => { candados.get(id)?.delete(tipo); return true; },
     telefonoOficina: async () => (o.telefono === undefined ? '5215500000001' : o.telefono),
+    ...(o.telefonoRevisor ? { telefonoRevisor: async (_t: string, id: string) => { const v = o.telefonoRevisor?.[id] ?? null; if (v === 'falla') throw new Error('base caída'); return v; } } : {}),
     avisar: async (telefono, texto, _p, contexto) => { avisos.push({ telefono, texto, contexto }); return o.envio ? o.envio() : { ok: true, via: 'texto', id: 'w1' }; },
     evento: async (_t, id, tipo) => { eventos.push({ id, tipo }); },
     ahora: () => reloj.t,
@@ -154,6 +157,31 @@ describe('avisar a la oficina (una vez por documento)', () => {
     const r2 = await correrWorkerCartaPorte(m.deps, opts(m));
     expect(r2).toMatchObject({ avisosEnviados: 0, avisosPerdidos: 1 });
     expect(m.avisos).toHaveLength(1);
+  });
+
+  it('T-A3-31: el aviso de hallazgos va a la persona asignada si tiene teléfono; sin asignar o sin teléfono, al jefe de tráfico como hoy', async () => {
+    const hallazgo = { validacion: { hallazgos: [], bloqueos: 1, porConfirmar: 0, listoParaAprobar: false } };
+    const m = mundo({
+      porAvisar: ['con', 'sin_tel', 'sin_asignar', 'cae'],
+      docs: { con: hallazgo, sin_tel: hallazgo, sin_asignar: hallazgo, cae: hallazgo },
+      telefonoRevisor: { con: '5215599990001', sin_tel: null, sin_asignar: null, cae: 'falla' },
+    });
+    await correrWorkerCartaPorte(m.deps, opts(m));
+    const aQuien = (id: string) => m.avisos.find((a) => a.contexto.documentoId === id)?.telefono;
+    expect(aQuien('con')).toBe('5215599990001');
+    expect(aQuien('sin_tel')).toBe('5215500000001');
+    expect(aQuien('sin_asignar')).toBe('5215500000001');
+    expect(aQuien('cae')).toBe('5215500000001');
+  });
+
+  it('T-A3-31: sin la dependencia (flota sin configurar) el aviso de hallazgos sigue yendo al jefe de tráfico; el de agotado NUNCA se desvía', async () => {
+    const m = mundo({ porAvisar: ['x'], agotados: ['z'], docs: { x: { validacion: { hallazgos: [], bloqueos: 1, porConfirmar: 0, listoParaAprobar: false } }, z: { estado: 'fallido', intentos: 5 } }, telefonoRevisor: { x: null, z: '5215599990002' } });
+    await correrWorkerCartaPorte(m.deps, opts(m));
+    expect(m.avisos.find((a) => a.contexto.documentoId === 'x')?.telefono).toBe('5215500000001');
+    expect(m.avisos.find((a) => a.contexto.documentoId === 'z')?.telefono).toBe('5215500000001');
+    const sin = mundo({ porAvisar: ['y'], docs: { y: { validacion: { hallazgos: [], bloqueos: 1, porConfirmar: 0, listoParaAprobar: false } } } });
+    await correrWorkerCartaPorte(sin.deps, opts(sin));
+    expect(sin.avisos[0].telefono).toBe('5215500000001');
   });
 
   it('un documento agotado avisa UNA vez (terminal)', async () => {

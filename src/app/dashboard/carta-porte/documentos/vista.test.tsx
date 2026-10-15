@@ -434,3 +434,69 @@ describe('VistaDocumentos · perfil restringido', () => {
     expect(sin).toMatch(/Sin viaje todavía/);
   });
 });
+
+describe('T-A3-31: destinatario de revisión en la bandeja', () => {
+  const ME = 'u-yo';
+  const OTRA = 'u-otra';
+  const filas = [doc({ id: 'mio', nombreArchivo: 'mio.xlsx' }), doc({ id: 'ajeno', nombreArchivo: 'ajeno.xlsx' }), doc({ id: 'nadie', nombreArchivo: 'nadie.xlsx' })];
+  const asignacion: Partial<DatosDocumentos> = {
+    asignacionActiva: true, asignados: { mio: ME, ajeno: OTRA }, revisores: [{ id: ME, nombre: 'Persona Uno' }, { id: OTRA, nombre: 'Persona Dos' }],
+  };
+
+  it('sin configuración la bandeja es la de siempre: ni columna «Asignado a» ni filtro «Mis casos»', () => {
+    const h = html(<VistaDocumentos datos={datos(filas)} acciones={todas} usuarioId={ME} soloMios />);
+    expect(h).not.toMatch(/Asignado a|Mis casos/);
+    expect(h).toMatch(/mio\.xlsx/); expect(h).toMatch(/ajeno\.xlsx/); expect(h).toMatch(/nadie\.xlsx/);
+  });
+
+  it('con asignación activa: columna con el nombre de la persona y «Todos los revisores» para lo no asignado', () => {
+    const h = html(<VistaDocumentos datos={datos(filas, asignacion)} acciones={todas} usuarioId={ME} />);
+    expect(h).toMatch(/Asignado a/);
+    expect(h).toMatch(/Persona Uno/); expect(h).toMatch(/Persona Dos/);
+    expect(h).toMatch(/Todos los revisores/);
+    expect(h).toMatch(/Mis casos/);
+  });
+
+  it('«Mis casos» solo muestra los suyos', () => {
+    const h = html(<VistaDocumentos datos={datos(filas, asignacion)} acciones={todas} usuarioId={ME} soloMios />);
+    expect(h).toMatch(/mio\.xlsx/);
+    expect(h).not.toMatch(/ajeno\.xlsx/);
+    expect(h).not.toMatch(/nadie\.xlsx/);
+  });
+
+  it('«Mis casos» sin ningún caso asignado lo dice, y explica que lo no asignado le toca a todos', () => {
+    const h = html(<VistaDocumentos datos={datos(filas, { ...asignacion, asignados: { ajeno: OTRA } })} acciones={todas} usuarioId={ME} soloMios />);
+    expect(h).toMatch(/No tienes casos asignados/);
+  });
+
+  it('el enlace «Mis casos» conserva el ?tenant= de la vista', () => {
+    const h = html(<VistaDocumentos datos={datos(filas, asignacion)} acciones={todas} usuarioId={ME} sufijo="?tenant=abc" />);
+    expect(h).toMatch(/href="\/dashboard\/carta-porte\/documentos\?tenant=abc&amp;mios=1"/);
+  });
+});
+
+describe('T-A3-31: reasignar desde el visor', () => {
+  const opciones = [{ id: 'u1', nombre: 'Persona Uno' }, { id: 'u2', nombre: 'Persona Dos' }];
+  const ver = (d: DocumentoFila, revisor: { actualId: string | null; opciones: typeof opciones } | null, reasignar: typeof accion | null = accion) =>
+    html(<VistaRevision doc={d} revision={null} original={{ tipo: 'nada', motivo: 'x' }} operadores={[]} eventos={[]} acciones={{ revisar: accion, reasignar }} revisor={revisor} />);
+
+  it('sin configuración de asignación no se pinta nada', () => {
+    expect(ver(doc(), null)).not.toMatch(/Asignado a|Reasignar/);
+  });
+
+  it('muestra a quién le toca y el selector para reasignar (con «Todos los revisores»)', () => {
+    const h = ver(doc(), { actualId: 'u1', opciones });
+    expect(h).toMatch(/Asignado a: <strong[^>]*>Persona Uno/);
+    expect(h).toMatch(/name="revisorId"/);
+    expect(h).toMatch(/<option value="u2">Persona Dos/);
+    expect(h).toMatch(/<option value="">Todos los revisores/);
+    expect(h).toMatch(/Reasignar/);
+  });
+
+  it('sin asignar dice «Todos los revisores»; un documento ya aprobado no ofrece reasignar', () => {
+    expect(ver(doc(), { actualId: null, opciones })).toMatch(/Asignado a: <strong[^>]*>Todos los revisores/);
+    const aprobado = ver(doc({ estado: 'aprobado', aprobadoEn: 'x' }), { actualId: 'u1', opciones });
+    expect(aprobado).toMatch(/Asignado a/);
+    expect(aprobado).not.toMatch(/name="revisorId"/);
+  });
+});
