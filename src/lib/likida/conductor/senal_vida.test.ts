@@ -34,6 +34,10 @@ describe('enTransito', () => {
     expect(enTransito(hitos({ salida_carga: hecho(240), llegada_descarga: hecho(10) }))).toBe(false);
     expect(enTransito(hitos({ salida_carga: { estado: 'omitido', omitidoMotivo: 'x' } }))).toBe(false);
   });
+  it('perfil esenciales: la llegada a la descarga nace fuera de perfil y el viaje sigue en tránsito; omitida por otro motivo, no', () => {
+    expect(enTransito(hitos({ salida_carga: hecho(240), llegada_descarga: { estado: 'omitido', omitidoMotivo: 'fuera_de_perfil' } }))).toBe(true);
+    expect(enTransito(hitos({ salida_carga: hecho(240), llegada_descarga: { estado: 'omitido', omitidoMotivo: 'x' } }))).toBe(false);
+  });
 });
 
 describe('evaluarSenal — qué dice el GPS', () => {
