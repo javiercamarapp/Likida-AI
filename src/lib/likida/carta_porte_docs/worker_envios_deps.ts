@@ -15,6 +15,7 @@ import { ConflictoDeVersion, reabrirDocumento, reabrirPorRechazoTms } from './ba
 import * as repo from './repo';
 import { repoEnvios } from './repo_envios';
 import { leerConfigSalida } from './salida_config';
+import { esFlotaSimulada, salidaSimulada } from './salida_simulada';
 import { SIN_TMS, type SalidaTms } from './tms_puerto';
 import type { DepsEnvios } from './worker_envios';
 import { DatoInvalido } from '../errores';
@@ -29,8 +30,13 @@ let proveedor: ProveedorSalida = SIN_PROVEEDOR;
 /** Sustituye el proveedor de puertos (PS pasa aquí su fábrica por flota). Sin argumento, vuelve a «ninguna flota tiene conector». */
 export function fijarProveedorSalida(p?: ProveedorSalida): void { proveedor = p ?? SIN_PROVEEDOR; }
 
+/** Un solo simulador por proceso: así recuerda las llaves vistas. */
+const salidaSimuladaUnica: SalidaTms = salidaSimulada();
+
 /** El puerto de la flota; `SIN_TMS` si no tiene conector o si el proveedor falla (lo prudente: no se sube nada, se descarga a mano). */
 export async function salidaDeFlota(tenantId: string): Promise<SalidaTms> {
+  // Una flota declarada sintética (SALIDA_TMS_SIMULADA, T-A3-42) sale por el simulador; ninguna otra.
+  if (esFlotaSimulada(tenantId)) return salidaSimuladaUnica;
   try {
     return (await proveedor(tenantId)) ?? SIN_TMS;
   } catch (e) {
