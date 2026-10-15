@@ -95,6 +95,8 @@ export const ETIQUETA_INTERRUPTOR: Record<string, string> = {
   // Las 2 del 0250 — los agentes vivos que corrían sin poderse apagar.
   'agente:carta_porte': 'Agente de Carta Porte',
   'agente:copiloto': 'Copiloto del fundador',
+  // La salida de Carta Porte al sistema del cliente (T-A3-28).
+  'agente:carta_porte_salida_tms': 'Salida de Carta Porte al sistema del cliente',
 };
 
 /**
