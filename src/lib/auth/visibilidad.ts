@@ -516,6 +516,7 @@ export const API_PERFIL_CINCO_AGENTES: Readonly<Record<'v1' | 'export' | 'dashbo
   v1: [
     'liquidaciones', 'liquidaciones-externas', // A1
     'peajes',                                   // A2
+    'ccp-timbrado',                             // A3: aviso del TMS con el CCP ya timbrado (T-A3-33)
     'viajes', 'operadores', 'unidades',         // base
   ],
   export: [

@@ -246,7 +246,13 @@ import { join, relative, sep } from 'node:path';
 //   Prueba: `export/peajes-revision/route.test.ts`.
 // INTEGRACIÓN (INT-RAMAS): Peajes (`api/export/peajes-revision`) y Liquidación (`api/v1/liquidaciones-externas/desgloses`) declararon cada una 106 → 107
 // contra la misma base; juntas son 106 + 2 = 108. Las dos rutas ya están revisadas arriba; el conteo es la suma de los tramos.
-const RUTAS_APP_REVISADAS = 108;
+// 108 → 109 (T-A3-33, reanclado sobre master, 15-oct-2026): `api/v1/ccp-timbrado/route.ts` — el aviso del TMS con el CCP ya timbrado. Su puerta: `abrir(req,
+//   'operacion')` ANTES de leer el cuerpo (tasa por IP y por flota, llave de API o sesión desde nuestro sitio, perfil de la flota y
+//   área); la flota sale de la credencial (un `tenant_id` en el cuerpo es 400); la `referencia` debe ser de un envío de ESA flota
+//   (una ajena es 404 sin guardar ni mandar correo); idempotente por UUID fiscal (unique tenant_id + uuid); archivos ≤ 8 MB, XML leído
+//   con el lector oficial y PDF verificado por su cabecera; el correo al cliente sale solo si la flota lo activó (apagado por omisión).
+//   Prueba: `v1/ccp-timbrado/route.test.ts`.
+const RUTAS_APP_REVISADAS = 109;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

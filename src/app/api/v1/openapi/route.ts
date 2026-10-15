@@ -617,6 +617,15 @@ function documento(servidor: string) {
           required: ['datos'],
         },
         // ── 0370: la liquidación que calculó el SAP/TMS del cliente ────────
+        CcpTimbradoAcuse: {
+          type: 'object',
+          properties: {
+            estado: { type: 'string', enum: ['guardado', 'pendiente_confirmacion', 'respondido', 'error_envio'], description: '`guardado`: se registró sin responder (función apagada). `pendiente_confirmacion`: espera a una persona de la flota. `respondido`: ya se mandó el correo. `error_envio`: el correo no salió; un nuevo aviso del mismo UUID reintenta.' },
+            duplicado: { type: 'boolean' },
+            respondido: { type: 'boolean', description: 'Si este aviso terminó en un correo al cliente.' },
+          },
+          required: ['estado', 'duplicado', 'respondido'],
+        },
         LiquidacionExternaAlta: {
           type: 'object',
           description:
@@ -1290,6 +1299,48 @@ function documento(servidor: string) {
                   },
                 },
               },
+            },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/ccp-timbrado': {
+        post: {
+          operationId: 'avisarCcpTimbrado',
+          'x-likida-area': 'operacion',
+          summary: 'Avisa que un CCP ya quedó timbrado en tu TMS y entrega su PDF y su XML.',
+          description:
+            'Área `operacion`. LIKIDA NO TIMBRA: registra el UUID fiscal que tu sistema ya generó y guarda los archivos tal cual.\n\n'
+            + 'La `referencia` es la que tu TMS devolvió al recibir la plantilla de ese documento; tiene que ser de un envío de TU flota (una ajena es 404, sin guardar nada). La flota sale de tu llave: cualquier campo extra en el cuerpo (por ejemplo, uno que intente elegir flota) es 400.\n\n'
+            + 'IDEMPOTENTE POR UUID FISCAL: el mismo aviso dos veces es 200 `duplicado: true` y nunca manda un segundo correo. Un aviso nuevo es 201.\n\n'
+            + 'EL 201/200 SIGNIFICA «GUARDADO». Si la flota activó «responder al cliente» y el remitente del documento es conocido, Likida contesta por correo con el PDF y el XML (`respondido: true`); la PRIMERA vez por cliente queda `pendiente_confirmacion` hasta que una persona de la flota la confirme. Con la función apagada (el valor por omisión) solo se guarda.\n\n'
+            + 'Los archivos van en base64 (el XML byte a byte: cualquier cambio invalida su sello), cada uno de hasta 8 MB.',
+          tags: ['carta-porte', 'operacion'],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    referencia: { type: 'string', maxLength: 200, description: 'La referencia que tu TMS devolvió al recibir la plantilla.' },
+                    xmlBase64: { type: 'string', description: 'El XML del CFDI con complemento Carta Porte y TimbreFiscalDigital, en base64.' },
+                    pdfBase64: { type: 'string', description: 'El PDF de la representación impresa, en base64.' },
+                  },
+                  required: ['referencia', 'xmlBase64', 'pdfBase64'],
+                },
+              },
+            },
+          },
+          responses: {
+            '201': {
+              description: 'Aviso nuevo guardado.',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/CcpTimbradoAcuse' } } },
+            },
+            '200': {
+              description: 'Ya lo teníamos (mismo UUID fiscal): no se duplicó nada ni se mandó otro correo.',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/CcpTimbradoAcuse' } } },
             },
             ...respuestasError,
           },

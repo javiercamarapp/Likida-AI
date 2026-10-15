@@ -108,7 +108,7 @@ select proconfig from pg_proc where proname = 'ejecutar_arco_cancelacion';
 -- esperado: {"search_path=public, extensions, pg_catalog"}
 ```
 
-## Próxima tanda: Carta Porte, salida al TMS (0790 a 0793)
+## Próxima tanda: Carta Porte, salida al TMS (0790 a 0794)
 
 > **Pendiente de aplicar. Este documento no la ejecuta.** Se aplica con `supabase db push` (orden de archivo), con copia de seguridad previa y autorización, y siempre ANTES de un `[deploy]` que use el código nuevo.
 
@@ -120,6 +120,7 @@ Orden (el de archivo, que es el correcto):
 | 0791 | `0791_cp_formato_json_y_causa_rechazo.sql` | Formato `json` en documentos y perfiles, columna `rechazo_causa`. | Sin tablas nuevas; solo restricciones. |
 | 0792 | `0792_cp_catalogo_cliente.sql` | `cp_cliente_numero`, `cp_catalogo_producto`, `cp_catalogo_parte`. | Tablas nuevas, sin datos. |
 | 0793 | `0793_cp_sat_catalogo.sql` | `cp_sat_catalogo` (global, sin datos hasta importarlos). | Tabla nueva, sin datos. |
+| 0794 | `0794_cp_ccp_timbrado_recibido.sql` | `cp_ccp_timbrado` (UUID fiscal único por flota), columna `cp_salida_config.responder_ccp` (apagada) y dos funciones del candado de respuesta. | Tabla nueva sin datos y columna con default `false`: no cambia nada hasta que una flota active «responder al cliente». |
 
 Qué se rompe si el código llega antes que la base: el cron de Carta Porte y la pantalla de configuración de la salida fallan al leer tablas que no existen. Con la base por delante del código no pasa nada: las tablas esperan vacías.
 
