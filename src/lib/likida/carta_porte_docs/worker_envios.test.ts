@@ -4,6 +4,7 @@ import type { DocumentoFila } from './repo';
 import type { ConfigSalida } from './salida_config';
 import type { Existencia, SalidaTms } from './tms_puerto';
 import type { DepsEnvios } from './worker_envios';
+import type { Hallazgo } from './validacion';
 
 // El worker de envíos al TMS (T-A3-28), probado ENTERO con dobles: el repo de envíos en memoria (T-A3-27, con el mismo
 // reclamo con lease que la 0790), el puerto `tms_falso` (T-A3-01), la máquina de estados y el prechequeo REALES.
@@ -34,6 +35,7 @@ let eventos: Array<{ tenantId: string; documentoId: string; tipo: string; detall
 let alertasEnvio: Array<{ tenantId: string; envioId: string; motivo: string; destinatario: string; mensaje: string }>;
 let alertasOperador: Array<{ evento: string; detalle: Record<string, unknown> }>;
 let devueltos: Array<{ documentoId: string; motivo: string }>;
+let rechazosDevueltos: Array<{ documentoId: string; versionDoc: number; hallazgos: Hallazgo[]; ubicaciones: string[] }>;
 
 const cv = (valor: string | null): CampoValor => ({ valor, confianza: 0.95, evidencia: null, origen: 'llm' });
 const extraccion = (): Extraccion => ({
@@ -73,6 +75,9 @@ function deps(over: Partial<DepsEnvios> = {}): DepsEnvios {
     salida: async (t) => puertos.get(t) ?? SIN_TMS,
     evento: async (tenantId, documentoId, tipo, detalle) => { eventos.push({ tenantId, documentoId, tipo, detalle }); },
     devolverARevision: async (_t, documentoId, _v, motivo) => { devueltos.push({ documentoId, motivo }); },
+    devolverPorRechazo: async (_t, documentoId, versionDoc, hallazgos, ubicaciones) => { rechazosDevueltos.push({ documentoId, versionDoc, hallazgos, ubicaciones }); },
+    huellasRechazadas: async (t, documentoId) =>
+      (await repoEnviosFalso.listarPorDocumento(t, documentoId)).filter((x) => x.estado === 'rechazado_tms' && x.plantillaSha256 !== null).map((x) => x.plantillaSha256 as string),
     alertarEnvio: async (a) => { alertasEnvio.push(a); },
     alertarOperador: async (evento, detalle) => { alertasOperador.push({ evento, detalle }); },
     ahora: () => ahoraMs,
@@ -91,7 +96,7 @@ beforeEach(() => {
   docs.clear();
   config = { ...CONFIG_SALIDA_ARRANQUE, modo: 'api' };
   puertos = new Map();
-  eventos = []; alertasEnvio = []; alertasOperador = []; devueltos = [];
+  eventos = []; alertasEnvio = []; alertasOperador = []; devueltos = []; rechazosDevueltos = [];
 });
 
 describe('el camino feliz', () => {
@@ -343,6 +348,80 @@ describe('rechazo del TMS', () => {
     expect(r).toMatchObject({ rechazados: 1, alertas: 0, alertasFallidas: 1 });
     expect((await leer(A, e.id)).alertaEnviadaEn).toBeNull();
     expect(eventos.map((x) => x.tipo)).toEqual(['envio_rechazado']);
+  });
+});
+
+
+describe('el rechazo vuelve a la bandeja (T-A3-29)', () => {
+  const ERROR_FRACCION = { hoja: 'Mercancias', fila: 22, campo: 'Fracción Arancelaria', detalle: 'El valor VALOR-SINTETICO-98765 no existe en el catálogo' };
+  const puertoRechazo = (errores: Array<typeof ERROR_FRACCION>): SalidaTms => ({
+    async cargarPlantilla() { return { ok: false, clase: 'validacion', mensajeLlano: 'El sistema rechazó la carga.', errores }; },
+    consultarReque: async () => 'existe', consultarCaja: async () => 'existe',
+  });
+
+  it('el rechazo devuelve el documento a revisión con hallazgos ubicados, ANTES de avisar a la oficina y sin el valor citado', async () => {
+    puertos.set(A, puertoRechazo([ERROR_FRACCION]));
+    const e = sembrar(A, 1);
+    const r = await pasada();
+    expect(r).toMatchObject({ rechazados: 1, devueltosARevision: 1, errores: 0 });
+    expect((await leer(A, e.id)).estado).toBe('rechazado_tms');
+    expect(rechazosDevueltos).toHaveLength(1);
+    expect(rechazosDevueltos[0]).toMatchObject({ documentoId: e.documentoId, versionDoc: 1, ubicaciones: ['Mercancias!22!Fracción Arancelaria'] });
+    expect(rechazosDevueltos[0].hallazgos).toEqual([expect.objectContaining({ campo: 'fraccion_arancelaria', renglon: 0, severidad: 'bloqueo', origen: 'tms' })]);
+    expect(JSON.stringify([rechazosDevueltos, eventos, await leer(A, e.id)])).not.toContain('VALOR-SINTETICO-98765');
+    expect(alertasEnvio).toHaveLength(1);
+  });
+
+  it('un rechazo sin ubicación deja el hallazgo genérico con el mensaje llano del puerto', async () => {
+    puertos.set(A, puertoRechazo([]));
+    sembrar(A, 1);
+    await pasada();
+    expect(rechazosDevueltos[0].hallazgos).toEqual([expect.objectContaining({ campo: 'documento', mensaje: 'El sistema del cliente rechazó el archivo: El sistema rechazó la carga.' })]);
+  });
+
+  it('si no se pudo reabrir el documento, el lote no se cae: queda anotado y el envío sigue `rechazado_tms` con su alerta', async () => {
+    puertos.set(A, puertoRechazo([ERROR_FRACCION]));
+    const e = sembrar(A, 1);
+    const r = await pasada(deps({ devolverPorRechazo: async () => { throw new Error('base caída'); } }));
+    expect(r).toMatchObject({ rechazados: 1, devueltosARevision: 0, errores: 0, alertas: 1 });
+    expect(r.fallos.join(' ')).toContain('base caída');
+    expect((await leer(A, e.id)).estado).toBe('rechazado_tms');
+  });
+
+  it('sin bucle: el MISMO contenido que el TMS ya rechazó no se reenvía solo; vuelve a revisión pidiendo corrección', async () => {
+    const tms = puertoRechazo([ERROR_FRACCION]); puertos.set(A, tms);
+    const primero = sembrar(A, 1);
+    await pasada();
+    const huella = (await leer(A, primero.id)).plantillaSha256;
+    expect(huella).toMatch(/^[0-9a-f]{64}$/);
+    // Reaprobado SIN corregir nada que cambie la plantilla: otro envío (versión nueva), mismos bytes.
+    const llamadas = vi.fn(tms.cargarPlantilla.bind(tms));
+    puertos.set(A, { cargarPlantilla: llamadas, consultarReque: async () => 'existe', consultarCaja: async () => 'existe' });
+    const segundo = sembrarEnvio(A, { documentoId: primero.documentoId, versionDoc: 2, estado: 'pendiente_prechequeo', createdAt: new Date(ahoraMs).toISOString() });
+    docs.get(`${A}:${primero.documentoId}`)!.version = 2;
+    rechazosDevueltos = [];
+    const r = await pasada();
+    expect(llamadas).not.toHaveBeenCalled();
+    expect(r.enviados).toBe(0);
+    expect((await leer(A, segundo.id)).estado).toBe('descartado');
+    expect(rechazosDevueltos).toHaveLength(1);
+    expect(rechazosDevueltos[0].hallazgos[0]).toMatchObject({ codigo: 'tms_rechazo_repetido', severidad: 'bloqueo', origen: 'tms' });
+    expect(eventos.some((x) => x.tipo === 'envio_error' && x.detalle.causa === 'mismo_contenido_rechazado')).toBe(true);
+  });
+
+  it('una corrección que SÍ cambia la plantilla se envía normal', async () => {
+    puertos.set(A, puertoRechazo([ERROR_FRACCION]));
+    const primero = sembrar(A, 1);
+    await pasada();
+    const tms = puerto('ok'); puertos.set(A, tms);
+    const d = docs.get(`${A}:${primero.documentoId}`)!;
+    d.version = 2;
+    d.extraccion!.mercancias[0].descripcion = cv('Equipo de computo corregido');
+    const segundo = sembrarEnvio(A, { documentoId: primero.documentoId, versionDoc: 2, estado: 'pendiente_prechequeo', createdAt: new Date(ahoraMs).toISOString() });
+    const r = await pasada();
+    expect(r.enviados).toBe(1);
+    expect(tms.llamadas).toHaveLength(1);
+    expect((await leer(A, segundo.id)).estado).toBe('enviado');
   });
 });
 

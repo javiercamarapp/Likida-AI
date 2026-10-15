@@ -4,7 +4,7 @@
 
 import { logger } from '@/lib/logger';
 import { alertarOperador } from '@/lib/observability/alerta';
-import { ConflictoDeVersion, reabrirDocumento } from './bandeja';
+import { ConflictoDeVersion, reabrirDocumento, reabrirPorRechazoTms } from './bandeja';
 import * as repo from './repo';
 import { repoEnvios } from './repo_envios';
 import { leerConfigSalida } from './salida_config';
@@ -55,6 +55,20 @@ export function depsEnviosReales(): DepsEnvios {
         throw e;
       }
     },
+    devolverPorRechazo: async (tenantId, documentoId, versionDoc, hallazgos, ubicaciones) => {
+      try {
+        await reabrirPorRechazoTms(tenantId, documentoId, versionDoc, hallazgos, ubicaciones);
+      } catch (e) {
+        // Igual que arriba: si el documento cambió entre tanto, la persona ya lo tiene en las manos y no hay nada que devolver.
+        if (e instanceof ConflictoDeVersion || e instanceof DatoInvalido) {
+          logger.warn('cp_envios.devolver_por_rechazo_omitido', { documentoId });
+          return;
+        }
+        throw e;
+      }
+    },
+    huellasRechazadas: async (tenantId, documentoId) =>
+      (await repoEnvios.listarPorDocumento(tenantId, documentoId)).filter((x) => x.estado === 'rechazado_tms' && x.plantillaSha256 !== null).map((x) => x.plantillaSha256 as string),
     // Provisional hasta T-A3-30: el aviso a la oficina (destinatario configurable) sustituye este correo al operador.
     alertarEnvio: async (a) => {
       await alertarOperador(`cron.carta_porte_envio.${a.motivo}`, { error: a.mensaje, codigo: `cp_envio_${a.motivo}`, tenantId: a.tenantId, envioId: a.envioId, documentoId: a.documentoId });

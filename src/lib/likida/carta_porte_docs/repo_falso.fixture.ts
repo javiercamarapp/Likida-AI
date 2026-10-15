@@ -141,7 +141,7 @@ export const api: typeof Real = {
       riesgo_inyeccion: 'riesgoInyeccion', extraccion: 'extraccion', validacion: 'validacion', confianza_min: 'confianzaMin', nivel_modelo: 'nivelModelo',
       modelo: 'modelo', tokens_in: 'tokensIn', tokens_out: 'tokensOut', costo_usd: 'costoUsd', procesando_hasta: 'procesandoHasta', ultimo_error: 'ultimoError',
       intentos: 'intentos', retener_hasta: 'retenerHasta', abierto_en: 'abiertoEn', revisado_por: 'revisadoPor', aprobado_por: 'aprobadoPor',
-      aprobado_en: 'aprobadoEn', rechazo_motivo: 'rechazoMotivo', tiempo_revision_seg: 'tiempoRevisionSeg', exportado_en: 'exportadoEn', viaje_id: 'viajeId',
+      aprobado_en: 'aprobadoEn', rechazo_motivo: 'rechazoMotivo', rechazo_causa: 'rechazoCausa', tiempo_revision_seg: 'tiempoRevisionSeg', exportado_en: 'exportadoEn', viaje_id: 'viajeId',
     };
     for (const [k, v] of Object.entries(cambios)) {
       const campo = mapa[k];

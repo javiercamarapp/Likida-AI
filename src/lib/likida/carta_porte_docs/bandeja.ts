@@ -28,7 +28,7 @@ import { aprender, claveDePerfil, dominioDe, firmaDe } from './perfiles';
 import { MENSAJE_FUNCION_NO_DISPONIBLE, flotaBajoPerfil, prepararEnvioTms, type ResultadoEnvio } from './envio';
 import { aplicarSalidaViaje, type ResultadoSalida } from './salida';
 import { DIAS_RETENCION, validarDocumento } from './servicio';
-import { confianzaMinimaCritica } from './validacion';
+import { confianzaMinimaCritica, conservarHallazgosTms, type Hallazgo, type ResultadoValidacion } from './validacion';
 import * as repo from './repo';
 import type { CorreccionFila, DocumentoFila } from './repo';
 
@@ -153,7 +153,8 @@ export async function quitarRenglon(tenantId: string, id: string, versionVista: 
 
 async function guardarRevision(tenantId: string, d: DocumentoFila, versionVista: number, r: ResultadoCambios, actorId: string | null): Promise<DocumentoFila> {
   if (r.correcciones.length === 0 && r.confirmados === 0) return d;
-  const validacion = await validarDocumento(tenantId, d, r.extraccion);
+  // Los hallazgos del rechazo del TMS no salen del contenido: se arrastran hasta que se corrija el campo al que apuntan.
+  const validacion = conservarHallazgosTms(await validarDocumento(tenantId, d, r.extraccion), d.validacion, r.correcciones);
   const guardada = await repo.actualizarDocumento(tenantId, d.id, versionVista, {
     extraccion: { campos: r.extraccion.campos, mercancias: r.extraccion.mercancias, meta: d.extraccion?.meta },
     validacion, confianza_min: confianzaMinimaCritica(r.extraccion), revisado_por: actorId,
@@ -251,7 +252,7 @@ export async function aprobarDocumento(
   if (d.version !== versionVista) throw new ConflictoDeVersion();
 
   // SIEMPRE se revalida en el servidor: lo que la pantalla creía hace tres minutos no es lo que hay ahora.
-  const validacion = await validarDocumento(tenantId, d, d.extraccion as Extraccion);
+  const validacion = conservarHallazgosTms(await validarDocumento(tenantId, d, d.extraccion as Extraccion), d.validacion);
   if (!validacion.listoParaAprobar) {
     const motivos = validacion.hallazgos.filter((h) => h.severidad !== 'aviso').map((h) => h.mensaje).slice(0, 5);
     throw new DatoInvalido(`No se puede aprobar todavía: ${motivos.join(' ')}`);
@@ -327,6 +328,13 @@ export async function rechazarDocumento(
 
 /** Reabre un aprobado o rechazado: vuelve a «por revisar» sin tocar el viaje que ya se haya creado. */
 export async function reabrirDocumento(tenantId: string, id: string, versionVista: number, actorId: string | null): Promise<DocumentoFila> {
+  return reabrir(tenantId, id, versionVista, actorId, {});
+}
+
+async function reabrir(
+  tenantId: string, id: string, versionVista: number, actorId: string | null,
+  extra: { cambios?: (d: DocumentoFila) => Record<string, unknown>; evento?: Record<string, unknown> },
+): Promise<DocumentoFila> {
   const d = await cargar(tenantId, id);
   if (d.estado !== 'aprobado' && d.estado !== 'rechazado') throw new DatoInvalido('Solo se reabren los documentos aprobados o rechazados.');
   if (!d.extraccion) throw new DatoInvalido('Este documento no tiene extracción que revisar.');
@@ -335,10 +343,39 @@ export async function reabrirDocumento(tenantId: string, id: string, versionVist
     estado: 'por_revisar', aprobado_en: null, aprobado_por: null, rechazo_motivo: null, tiempo_revision_seg: null, exportado_en: null,
     abierto_en: null, revisado_por: actorId,
     retener_hasta: new Date(Date.now() + DIAS_RETENCION.recibido * 86_400_000).toISOString(),
+    ...(extra.cambios ? extra.cambios(d) : {}),
   });
   if (!r) throw new ConflictoDeVersion();
-  await repo.registrarEvento(tenantId, id, 'reabierto', actorId, { teniaViaje: d.viajeId !== null });
+  await repo.registrarEvento(tenantId, id, 'reabierto', actorId, { teniaViaje: d.viajeId !== null, ...extra.evento });
   return r;
+}
+
+/**
+ * El sistema del cliente rechazó la carga (T-A3-29): el documento vuelve a «por revisar» con los hallazgos del rechazo como
+ * BLOQUEOS visibles y `rechazo_causa = 'tms_rechazo'`. Es el MISMO camino de «reabrir» (no hay otra RPC ni otro estado).
+ *
+ *   · Reemplaza los hallazgos `origen: 'tms'` de un rechazo anterior; los que calculó la validación se conservan.
+ *   · No toca la extracción: lo que la persona corrija sube la versión ⇒ llave nueva ⇒ envío nuevo; el rechazo viejo queda
+ *     en la bitácora del documento y en su envío `rechazado_tms`.
+ *   · `ubicaciones` (hoja!fila!columna) va al evento: jamás el valor de un campo.
+ */
+export async function reabrirPorRechazoTms(
+  tenantId: string, id: string, versionDoc: number, hallazgos: ReadonlyArray<Hallazgo>, ubicaciones: ReadonlyArray<string> = [],
+): Promise<DocumentoFila> {
+  return reabrir(tenantId, id, versionDoc, null, {
+    cambios: (d) => {
+      const propios = (d.validacion?.hallazgos ?? []).filter((h) => h.origen !== 'tms');
+      const todos = [...propios, ...hallazgos];
+      const validacion: ResultadoValidacion = {
+        hallazgos: todos,
+        bloqueos: todos.filter((h) => h.severidad === 'bloqueo').length,
+        porConfirmar: todos.filter((h) => h.severidad === 'confirmar').length,
+        listoParaAprobar: false,
+      };
+      return { validacion, rechazo_causa: 'tms_rechazo' };
+    },
+    evento: { causa: 'tms_rechazo', hallazgos: hallazgos.length, ubicaciones: ubicaciones.slice(0, 30) },
+  });
 }
 
 /**

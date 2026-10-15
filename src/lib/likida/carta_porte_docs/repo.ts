@@ -78,6 +78,8 @@ export interface DocumentoFila {
   aprobadoPor: string | null;
   aprobadoEn: string | null;
   rechazoMotivo: string | null;
+  /** 0791. Solo se ESCRIBE (`tms_rechazo` al devolver un rechazo del TMS a revisión); `COLUMNAS_DOC` no la lee hasta que la 0791 esté en toda base. */
+  rechazoCausa?: string | null;
   tiempoRevisionSeg: number | null;
   exportadoEn: string | null;
   retenerHasta: string;
