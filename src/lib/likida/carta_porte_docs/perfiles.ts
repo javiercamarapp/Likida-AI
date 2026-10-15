@@ -433,6 +433,119 @@ export function aplicarPerfil(p: Perfil, c: ContenidoDoc): ResultadoPerfil {
   return { extraccion: e, avisos, camposAplicados: n };
 }
 
+// ── Formato G: JSON v3.0 de plataforma (T-A3-58) ─────────────────────────────
+
+/** El JSON que exporta la plataforma de un cliente (v3.0): árbol `Ruta.Mercancias.Mercancia[]` + `DocumentacionAduanera`. */
+export function esJsonPlataformaV3(arbol: unknown): boolean {
+  const version = propia(arbol, 'Version');
+  if (typeof version !== 'string' || !/^3(\.|$)/.test(version.trim())) return false;
+  const merc = propia(propia(propia(arbol, 'Ruta'), 'Mercancias'), 'Mercancia');
+  const doc = propia(arbol, 'DocumentacionAduanera');
+  return (Array.isArray(merc) ? merc.length > 0 : merc !== null && typeof merc === 'object') && doc !== null && typeof doc === 'object';
+}
+
+export interface ResultadoJsonPlataforma extends ResultadoPerfil {
+  /** `EmpresaRfc` del JSON: el identificador de la EMPRESA EN LA PLATAFORMA. No es un RFC ni el número interno del cliente. */
+  identificadorPlataforma: string | null;
+}
+
+/** Mapa renglón: clave del JSON → campo de mercancía (texto/número tal cual; `valor()` normaliza y descarta lo que no sirve). */
+const MERCANCIA_JSON_V3: ReadonlyArray<readonly [string, string]> = [
+  ['S_Descripcion', 'descripcion'], ['S_BienesTransp', 'bienes_transp'], ['S_FraccionArancelaria', 'fraccion_arancelaria'],
+  ['S_NumPiezas', 'cantidad'], ['S_ClaveUnidad', 'clave_unidad'], ['S_Unidad', 'unidad_texto'],
+  ['S_Embalaje', 'embalaje'], ['S_DescripEmbalaje', 'embalaje_descripcion'],
+  ['S_MaterialPeligroso', 'material_peligroso'], ['S_CveMaterialPeligroso', 'clave_material_peligroso'],
+  ['S_TipoMateria', 'tipo_materia'], ['S_ValorMercancia', 'valor_mercancia'], ['S_Moneda', 'moneda'],
+];
+
+/** Un número del JSON solo cuenta si es POSITIVO: la plataforma rellena con 0 lo que no tiene. */
+function positivoJson(v: unknown): string | null {
+  const t = escalarJson(v);
+  if (t === null) return null;
+  const n = normalizarNumero(t).valor;
+  return n !== null && n > 0 ? t : null;
+}
+
+/**
+ * Lee el JSON v3.0 de plataforma SIN modelo. Lo que el JSON no trae (destino, régimen, pedimento) queda VACÍO para los
+ * catálogos y derivados (T-A3-46/50): no se inventa. Reglas del formato:
+ *   · peso bruto en 0 y solo neto ⇒ el neto va como peso (`peso_tipo` = neto; `completarDerivados` deja la nota fija de T-A3-52);
+ *   · `EmpresaRfc` NO es el RFC de nadie: se devuelve aparte como `identificadorPlataforma`;
+ *   · `S_ResidenciaFiscal` es la residencia fiscal (un país), no un domicilio: no se usa como domicilio de origen.
+ */
+export function leerJsonPlataformaV3(arbol: unknown): ResultadoJsonPlataforma {
+  const e = extraccionVacia();
+  const avisos: string[] = [];
+  const ev = (clave: string, v: string): string => `${clave} = ${v}`;
+  const delDoc = (campo: string, clave: string, crudo: unknown): void => {
+    const t = escalarJson(crudo);
+    const v = t === null ? null : valor(campo, false, t, ev(clave, t), CONF_PERFIL);
+    if (v) e.campos[campo] = v;
+  };
+  delDoc('origen_nombre', 'S_NombreRemitente', propia(arbol, 'S_NombreRemitente'));
+  delDoc('origen_rfc', 'S_RFCRemitente', propia(arbol, 'S_RFCRemitente'));
+  delDoc('origen_pais', 'S_PaisOrigen', propia(arbol, 'S_PaisOrigen'));
+  delDoc('destino_pais', 'S_PaisDestino', propia(arbol, 'S_PaisDestino'));
+  // `DatosAdicionales` es una lista de pares Nombre/Valor.
+  const adicionales = propia(arbol, 'DatosAdicionales');
+  if (Array.isArray(adicionales)) {
+    for (const par of adicionales.slice(0, 50)) {
+      const nombre = escalarJson(propia(par, 'Nombre'));
+      if (nombre === null) continue;
+      const k = llaveColumna(nombre);
+      if (k === 'noembarque' || k === 'no embarque') delDoc('folio_cliente', `DatosAdicionales.${nombre}`, propia(par, 'Valor'));
+      else if (k === 'totalpiezas' || k === 'total piezas') delDoc('piezas_total', `DatosAdicionales.${nombre}`, propia(par, 'Valor'));
+    }
+  }
+
+  const bruto = propia(propia(propia(arbol, 'Ruta'), 'Mercancias'), 'Mercancia');
+  const renglones = (Array.isArray(bruto) ? bruto : [bruto]).slice(0, 100);
+  const aduana = propia(arbol, 'DocumentacionAduanera');
+  const regimenDoc = escalarJson(propia(arbol, 'S_RegimenAduanero'));
+  const pedimento = escalarJson(propia(aduana, 'S_NumPedimento'));
+  const rfcImpo = escalarJson(propia(aduana, 'S_RFCImpo'));
+  let soloNeto = 0;
+  renglones.forEach((r, i) => {
+    const fila: Record<string, CampoValor> = {};
+    const base = `Ruta.Mercancias.Mercancia[${i}]`;
+    for (const [clave, campo] of MERCANCIA_JSON_V3) {
+      const t = campo === 'cantidad' || campo === 'valor_mercancia' ? positivoJson(propia(r, clave)) : escalarJson(propia(r, clave));
+      const v = t === null ? null : valor(campo, true, t, ev(`${base}.${clave}`, t), CONF_PERFIL);
+      if (v) fila[campo] = v;
+    }
+    // Peso: el bruto si trae uno de verdad; si no, el neto (o el «en kg») como bruto por defecto, y se dice.
+    const pBruto = positivoJson(propia(r, 'S_PesoBruto'));
+    const pNeto = positivoJson(propia(r, 'S_PesoNeto')) ?? positivoJson(propia(r, 'S_PesoEnKg'));
+    const origenPeso = pBruto !== null ? 'S_PesoBruto' : pNeto !== null ? (positivoJson(propia(r, 'S_PesoNeto')) !== null ? 'S_PesoNeto' : 'S_PesoEnKg') : null;
+    const crudoPeso = pBruto ?? pNeto;
+    if (crudoPeso !== null && origenPeso !== null) {
+      const v = valor('peso_kg', true, crudoPeso, ev(`${base}.${origenPeso}`, crudoPeso), CONF_PERFIL);
+      if (v) {
+        fila.peso_kg = v;
+        if (pBruto === null) {
+          soloNeto++;
+          const tipo = valor('peso_tipo', true, 'neto', `${base}.S_PesoBruto = 0; solo ${origenPeso}`, CONF_PERFIL);
+          if (tipo) fila.peso_tipo = tipo;
+        }
+        const unidad = escalarJson(propia(r, 'S_UnidadPeso'));
+        const u = unidad === null ? null : valor('peso_unidad', true, unidad, ev(`${base}.S_UnidadPeso`, unidad), CONF_PERFIL);
+        if (u) fila.peso_unidad = u;
+      }
+    }
+    if (regimenDoc !== null) { const v = valor('regimen_aduanero', true, regimenDoc, ev('S_RegimenAduanero', regimenDoc), CONF_PERFIL); if (v) fila.regimen_aduanero = v; }
+    if (pedimento !== null) { const v = valor('pedimento', true, pedimento, ev('DocumentacionAduanera.S_NumPedimento', pedimento), CONF_PERFIL); if (v) fila.pedimento = v; }
+    if (rfcImpo !== null) { const v = valor('rfc_importador', true, rfcImpo, ev('DocumentacionAduanera.S_RFCImpo', rfcImpo), CONF_PERFIL); if (v) fila.rfc_importador = v; }
+    e.mercancias.push(fila);
+  });
+  if (soloNeto > 0) avisos.push('El JSON de la plataforma trae el peso bruto en cero y solo el neto: se usó el neto como bruto (queda la nota en cada renglón).');
+  if (e.campos.destino_pais === undefined) avisos.push('El JSON no trae el destino ni el régimen: se completan con el catálogo o se capturan.');
+  const tipoDoc = escalarJson(propia(aduana, 'S_TipoDocumento'));
+  if (tipoDoc !== null) avisos.push(`Tipo de documento aduanero del JSON: ${tipoDoc}.`);
+  const idPlataforma = escalarJson(propia(arbol, 'EmpresaRfc'));
+  const n = Object.keys(e.campos).length + e.mercancias.reduce((t, f) => t + Object.keys(f).length, 0);
+  return { extraccion: e, avisos, camposAplicados: n, identificadorPlataforma: idPlataforma === null ? null : idPlataforma.trim() };
+}
+
 // ── Aprender de lo que un humano aprobó ─────────────────────────────────────
 
 type Igualdad = (celda: string) => boolean;

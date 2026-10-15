@@ -25,7 +25,11 @@ export const TOPE_FILAS_CATALOGO = 5000;
 
 export const CONFIANZA_CATALOGO = 0.95;
 
-export interface NumeroClienteCat { tenantId: string; clienteId: string; numeroInterno: string; numeroPagador: string | null; activo: boolean }
+export interface NumeroClienteCat {
+  tenantId: string; clienteId: string; numeroInterno: string; numeroPagador: string | null; activo: boolean;
+  /** T-A3-58: el identificador de ESTA empresa en la plataforma del cliente (`EmpresaRfc` del JSON v3.0). Opcional: aún sin columna en la base. */
+  identificadorPlataforma?: string | null;
+}
 
 export interface ProductoCat {
   tenantId: string; clienteId: string; sku: string; descripcionPatron: string | null;
@@ -118,6 +122,25 @@ function poner(
   }
   destino[clave] = nuevo([`Antes se leyó «${leido.valor}» del documento (seguridad ${Math.round(leido.confianza * 100)} %); se usó el catálogo del cliente.`]);
   acum.aplicados.push(ruta);
+}
+
+export type ResolucionPlataforma =
+  | { tipo: 'unico'; clienteId: string; numeroInterno: string }
+  | { tipo: 'ambiguo'; coincidencias: number }
+  | { tipo: 'ninguno' };
+
+/**
+ * T-A3-58 · Del identificador de la plataforma al número interno del cliente. Solo filas ACTIVAS del mismo tenant; dos
+ * coincidencias (o dos clientes con el mismo identificador) = ambiguo y no se aplica nada; sin coincidencia, ninguno.
+ */
+export function resolverPorIdentificadorPlataforma(filas: readonly NumeroClienteCat[], tenantId: string, identificador: string | null | undefined): ResolucionPlataforma {
+  const buscado = comparable(identificador ?? '');
+  if (buscado === '') return { tipo: 'ninguno' };
+  const hallados = filas.filter((f) => f.tenantId === tenantId && f.activo && f.identificadorPlataforma != null && comparable(f.identificadorPlataforma) === buscado);
+  if (hallados.length === 0) return { tipo: 'ninguno' };
+  const distintos = new Set(hallados.map((f) => `${f.clienteId}|${f.numeroInterno}`));
+  if (distintos.size > 1) return { tipo: 'ambiguo', coincidencias: distintos.size };
+  return { tipo: 'unico', clienteId: hallados[0].clienteId, numeroInterno: hallados[0].numeroInterno };
 }
 
 export function productosQueCoinciden(descripcion: string, productos: ProductoCat[]): ProductoCat[] {
