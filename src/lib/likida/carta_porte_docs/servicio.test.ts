@@ -321,3 +321,16 @@ describe('validarDocumento: avisos que solo la base sabe', () => {
     void RFC;
   });
 });
+
+describe('recibirDocumento: JSON (T-A3-12)', () => {
+  it('un JSON de embarque se guarda con formato json y mime application/json', async () => {
+    const r = await subir(A, Buffer.from(JSON.stringify({ Embarque: { Folio: 'J-1' }, Mercancias: [{ Descripcion: 'Algo sintético' }] })), 'embarque.json');
+    expect(r).toMatchObject({ ok: true, duplicado: false, estado: 'recibido', formato: 'json' });
+    expect(estado.docs.get(r.documentoId)!.mime).toBe('application/json');
+  });
+  it('un JSON de 2 MB se rechaza antes de guardar nada', async () => {
+    const r = await recibirDocumento(A, { canal: 'manual', nombre: 'grande.json', bytes: Buffer.from(`{"a":"${'x'.repeat(2 * 1024 * 1024)}"}`) }, sinAgenteApagado);
+    expect(r).toMatchObject({ ok: false, motivo: 'formato' });
+    expect(estado.docs.size).toBe(0);
+  });
+});

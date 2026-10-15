@@ -22,7 +22,7 @@
 
 import { CAMPOS_DOC, CAMPOS_MERCANCIA, campoDoc, campoMercancia, extraccionVacia, type CampoDoc, type CampoValor, type Extraccion } from './campos';
 import { llaveTexto } from './catalogos';
-import type { ContenidoDoc, FormatoDoc, Hoja } from './contenido';
+import { CLAVES_PROHIBIDAS_JSON, type ContenidoDoc, type FormatoDoc, type Hoja } from './contenido';
 import { normalizarNumero, normalizarValor, type OrdenFecha } from './normalizar';
 import { bajar } from './xml_ccp';
 
@@ -53,6 +53,8 @@ export interface FirmaPerfil {
   formato: FormatoDoc;
   encabezados?: string[];
   raizXml?: string;
+  /** JSON: las rutas (hasta 3 niveles, arreglos como `[*]`) del documento; se parece si comparte la estructura. */
+  estructuraJson?: string[];
   etiquetas?: string[];
   remitentes?: string[];
 }
@@ -134,6 +136,25 @@ function raizDe(arbol: unknown): string | null {
   return k ?? null;
 }
 
+/** Las rutas de un árbol JSON hasta 3 niveles (`DatosAdicionales.NoEmbarque`, `Mercancias[*].Cantidad`), sin valores. */
+export function estructuraDeJson(arbol: unknown, max = 60): string[] {
+  const out = new Set<string>();
+  const cola: Array<[unknown, string, number]> = [[arbol, '', 0]];
+  while (cola.length > 0 && out.size < max) {
+    const [nodo, pref, nivel] = cola.shift() as [unknown, string, number];
+    const n = Array.isArray(nodo) ? nodo[0] : nodo;
+    if (n === null || typeof n !== 'object' || Array.isArray(n)) continue;
+    for (const [k, v] of Object.entries(n as Record<string, unknown>)) {
+      if (CLAVES_PROHIBIDAS_JSON.has(k)) continue;
+      const ruta = `${pref}${pref ? '.' : ''}${k}${Array.isArray(v) ? '[*]' : ''}`;
+      out.add(ruta);
+      if (nivel < 2 && v !== null && typeof v === 'object') cola.push([v, ruta, nivel + 1]);
+      if (out.size >= max) break;
+    }
+  }
+  return [...out].sort();
+}
+
 export function dominioDe(remitente: string | null | undefined): string | null {
   const m = /@([a-z0-9.-]+\.[a-z]{2,})\b/i.exec(remitente ?? '');
   return m ? m[1].toLowerCase() : null;
@@ -143,8 +164,9 @@ export function firmaDe(contenido: ContenidoDoc, remitente?: string | null): Fir
   const firma: FirmaPerfil = { formato: contenido.formato };
   const t = tablasDe(contenido)[0];
   if (t) firma.encabezados = [...new Set(t.llaves.filter(Boolean))].sort().slice(0, 40);
-  if (contenido.xml) { const r = raizDe(contenido.xml); if (r) firma.raizXml = r; }
-  if (contenido.texto && !contenido.tabla) firma.etiquetas = etiquetasDeTexto(contenido.texto);
+  if (contenido.formato === 'json' && contenido.xml) firma.estructuraJson = estructuraDeJson(contenido.xml);
+  else if (contenido.xml) { const r = raizDe(contenido.xml); if (r) firma.raizXml = r; }
+  if (contenido.texto && !contenido.tabla && contenido.formato !== 'json') firma.etiquetas = etiquetasDeTexto(contenido.texto);
   const d = dominioDe(remitente);
   if (d) firma.remitentes = [d];
   return firma;
@@ -167,6 +189,8 @@ export function puntuarPerfil(p: Perfil, c: ContenidoDoc, remitente?: string | n
   let base = 0;
   if (p.firma.encabezados && c.tabla) {
     base = Math.max(0, ...tablasDe(c).map((t) => jaccard(p.firma.encabezados!, t.llaves.filter(Boolean))));
+  } else if (p.firma.estructuraJson && c.formato === 'json' && c.xml) {
+    base = jaccard(p.firma.estructuraJson, estructuraDeJson(c.xml));
   } else if (p.firma.raizXml && c.xml) {
     base = raizDe(c.xml) === p.firma.raizXml ? 0.9 : 0;
   } else if (p.firma.etiquetas && p.firma.etiquetas.length > 0 && c.texto) {
@@ -296,12 +320,97 @@ function aplicarXml(m: Mapeo[], arbol: unknown, e: Extraccion, avisos: string[])
   if (Object.keys(merc).length > 0) e.mercancias.push(merc);
 }
 
+// ── JSON: rutas con punto o diagonal y comodín de arreglo ──────────────────
+
+interface TramoJson { clave: string; indice: number | '*' | null }
+
+/** `DatosAdicionales.NoEmbarque`, `Mercancias[*].Cantidad`, `Mercancias[0].Peso`. `null` si la ruta no es válida. */
+export function tramosJson(ruta: string): TramoJson[] | null {
+  const partes = ruta.split(/[./]/).map((x) => x.trim()).filter(Boolean);
+  if (partes.length === 0 || partes.length > 12) return null;
+  const tramos: TramoJson[] = [];
+  for (const p of partes) {
+    const m = /^([^[\]]{1,80})(?:\[(\*|\d{1,3})\])?$/.exec(p);
+    if (!m || CLAVES_PROHIBIDAS_JSON.has(m[1])) return null;
+    tramos.push({ clave: m[1], indice: m[2] === undefined ? null : m[2] === '*' ? '*' : Number(m[2]) });
+  }
+  return tramos;
+}
+
+const propia = (o: unknown, k: string): unknown =>
+  o !== null && typeof o === 'object' && !Array.isArray(o) && Object.prototype.hasOwnProperty.call(o, k) ? (o as Record<string, unknown>)[k] : undefined;
+
+/** Las hojas a las que llega la ruta. `fila` = posición del primer comodín (el renglón de mercancía); sin comodín, `null`. */
+function hojasJson(arbol: unknown, tramos: TramoJson[]): Array<{ fila: number | null; hoja: unknown }> {
+  const out: Array<{ fila: number | null; hoja: unknown }> = [];
+  const bajarTramo = (nodo: unknown, i: number, fila: number | null): void => {
+    if (out.length >= 100) return;
+    if (i === tramos.length) { out.push({ fila, hoja: nodo }); return; }
+    // Como en el XML: un arreglo sin índice se lee por su primer elemento.
+    const base = Array.isArray(nodo) ? nodo[0] : nodo;
+    const t = tramos[i];
+    const v = propia(base, t.clave);
+    if (v === undefined) return;
+    if (t.indice === null) { bajarTramo(v, i + 1, fila); return; }
+    if (t.indice === '*') {
+      if (Array.isArray(v)) v.slice(0, 100).forEach((x, k) => bajarTramo(x, i + 1, fila ?? k));
+      else bajarTramo(v, i + 1, fila ?? 0);
+      return;
+    }
+    const el = Array.isArray(v) ? v[t.indice] : (t.indice === 0 ? v : undefined);
+    if (el !== undefined) bajarTramo(el, i + 1, fila);
+  };
+  bajarTramo(arbol, 0, null);
+  return out;
+}
+
+/** Un escalar del JSON como texto (los números llegan como número, no como cadena). `null` si está vacío o no es escalar. */
+function escalarJson(v: unknown): string | null {
+  if (typeof v === 'string') return v.trim() !== '' ? v : null;
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : null;
+  if (typeof v === 'boolean') return String(v);
+  return null;
+}
+
+/** El valor escalar al que llega una ruta sobre un árbol JSON, o `null` (no existe o viene vacío). */
+export function valorDeRutaJson(arbol: unknown, ruta: string): string | null {
+  const t = tramosJson(ruta);
+  if (!t) return null;
+  for (const h of hojasJson(arbol, t)) { const v = escalarJson(h.hoja); if (v !== null) return v; }
+  return null;
+}
+
+function aplicarJson(m: Mapeo[], arbol: unknown, e: Extraccion, avisos: string[]): void {
+  const filas = new Map<number, Record<string, CampoValor>>();
+  for (const x of m) {
+    if (x.fuente.tipo !== 'ruta') continue;
+    const ruta = x.fuente.ruta;
+    const tramos = tramosJson(ruta);
+    if (!tramos) { avisos.push(`La ruta «${ruta}» (${x.campo}) no es válida.`); continue; }
+    const hojas = hojasJson(arbol, tramos).map((h) => ({ fila: h.fila, v: escalarJson(h.hoja) })).filter((h): h is { fila: number | null; v: string } => h.v !== null);
+    if (hojas.length === 0) { avisos.push(`La ruta «${ruta}» (${x.campo}) no existe o viene vacía en este JSON.`); continue; }
+    if (!x.mercancia) {
+      const v = valor(x.campo, false, hojas[0].v, `${ruta} = ${hojas[0].v}`, CONF_PERFIL, x.separadorMiles, x.ordenFecha);
+      if (v) e.campos[x.campo] = v;
+      continue;
+    }
+    for (const h of hojas) {
+      const v = valor(x.campo, true, h.v, `${ruta} = ${h.v}`, CONF_PERFIL, x.separadorMiles, x.ordenFecha);
+      if (!v) continue;
+      const k = h.fila ?? 0;
+      filas.set(k, { ...(filas.get(k) ?? {}), [x.campo]: v });
+    }
+  }
+  for (const [, fila] of [...filas.entries()].sort((a, b) => a[0] - b[0])) e.mercancias.push(fila);
+}
+
 /** Reaplica la versión ACTIVA del perfil. No llama al modelo. */
 export function aplicarPerfil(p: Perfil, c: ContenidoDoc): ResultadoPerfil {
   const e = extraccionVacia();
   const avisos: string[] = [];
   const m = p.activa.mapeos;
   if (c.tabla) aplicarTabla(m, c, e, avisos);
+  else if (c.formato === 'json' && c.xml) aplicarJson(m, c.xml, e, avisos);
   else if (c.xml) aplicarXml(m, c.xml, e, avisos);
   else if (c.texto) aplicarTexto(m, c.texto, e, avisos);
   for (const x of m) {

@@ -43,7 +43,7 @@ async function llmPorDefecto(tenantId: string, canal: CanalDoc): Promise<LlmExtr
   return crearExtractorOpenRouter(tenantId, canal === 'correo' ? 'ocr_lote' : 'interactivo');
 }
 
-const CLASE_A_FORMATO: Record<string, FormatoDoc> = { pdf: 'pdf_texto', imagen: 'imagen', excel: 'excel', csv: 'csv', xml: 'xml', correo: 'correo' };
+const CLASE_A_FORMATO: Record<string, FormatoDoc> = { pdf: 'pdf_texto', imagen: 'imagen', excel: 'excel', csv: 'csv', xml: 'xml', correo: 'correo', json: 'json' };
 
 /** El nombre del archivo tal como lo mandó un tercero: sin rutas, sin controles, con tope. */
 export function nombreArchivoSeguro(nombre: string | null | undefined): string {
