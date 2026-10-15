@@ -11,7 +11,7 @@ import * as XLSX from 'xlsx';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import { fechaHoraMx } from '@/lib/formato';
 import { wa, cortar, envolver } from '../../liquidacion_externa/pdf';
-import { ETIQUETA_TEMA, type ReporteHistorial } from './analisis';
+import { ETIQUETA_TEMA, NOTA_LINEA_BASE, type ReporteHistorial } from './analisis';
 
 export interface MetaReporteFaqs {
   /** «Todos los grupos» o el nombre del grupo elegido. */
@@ -45,6 +45,16 @@ export function faqsAExcel(r: ReporteHistorial, meta: MetaReporteFaqs): Uint8Arr
     [`Esperas que pasaron de ${meta.umbralMin} min`, r.tiempos.sobreUmbral],
     ['Mensajes que nadie contestó', r.tiempos.sinRespuesta],
     [],
+    ['Línea base: peticiones de datos de la unidad'],
+    ['Peticiones en el periodo', r.datosUnidad.total],
+    ['Días que cubre el histórico', r.datosUnidad.diasDelPeriodo],
+    ['Promedio por día', r.datosUnidad.promedioPorDia ?? '—'],
+    [NOTA_LINEA_BASE],
+    [],
+    ['Mensajes sin clasificar («Otros», sin contar saludos)', r.sinClasificar.mensajes],
+    ['Porcentaje de los mensajes de clientes', r.sinClasificar.porcentaje === null ? '—' : `${r.sinClasificar.porcentaje} %`],
+    ['Agradecimientos y avisos de monitoreo dejados fuera', r.ignorados],
+    [],
     ...(meta.truncado ? [['El histórico es más grande de lo que se analiza de una vez: el reporte usa solo los primeros 50,000 mensajes.'], []] : []),
     [AVISO_REPORTE],
   ]);
@@ -68,11 +78,27 @@ export function faqsAExcel(r: ReporteHistorial, meta: MetaReporteFaqs): Uint8Arr
   ]);
   semanas['!cols'] = [{ wch: 36 }, { wch: 16 }, { wch: 10 }];
 
+  const unidad = XLSX.utils.aoa_to_sheet([
+    ['Peticiones de datos de la unidad (caja, placas, operador)'],
+    [NOTA_LINEA_BASE],
+    [],
+    ['Semana (lunes)', 'Peticiones'],
+    ...r.datosUnidad.porSemana.map((s) => [s.semana, s.mensajes]),
+    [],
+    ['Día', 'Peticiones'],
+    ...r.datosUnidad.porDia.map((d) => [d.dia, d.mensajes]),
+    [],
+    ['Pregunta más repetida', 'Veces', 'Lo que suele contestar el equipo'],
+    ...r.datosUnidad.preguntas.map((f) => [f.pregunta, f.veces, f.respuestaTipica ?? 'Sin respuesta del equipo en la hora siguiente']),
+  ]);
+  unidad['!cols'] = [{ wch: 60 }, { wch: 12 }, { wch: 70 }];
+
   const libro = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(libro, resumen, 'Resumen');
   XLSX.utils.book_append_sheet(libro, faqs, 'Preguntas frecuentes');
   XLSX.utils.book_append_sheet(libro, tendencias, 'Tendencias');
   XLSX.utils.book_append_sheet(libro, semanas, 'Por semana');
+  XLSX.utils.book_append_sheet(libro, unidad, 'Datos de unidad');
   return new Uint8Array(XLSX.write(libro, { type: 'array', bookType: 'xlsx', compression: true }) as ArrayBuffer);
 }
 
@@ -133,6 +159,14 @@ export async function faqsAPdf(r: ReporteHistorial, meta: MetaReporteFaqs, razon
   parrafo(`Mediana ${min(r.tiempos.medianaMin)} · 9 de cada 10 respuestas en ${min(r.tiempos.p90Min)} · ${r.tiempos.sobreUmbral} esperas pasaron de ${meta.umbralMin} min (incluye ${r.tiempos.sinRespuesta} mensajes que nadie contestó).`, 9.5, font);
   y -= 8;
 
+  asegurar(70);
+  text('Línea base: peticiones de datos de la unidad', M, y, 11, bold);
+  y -= 15;
+  parrafo(`${r.datosUnidad.total} peticiones en ${r.datosUnidad.diasDelPeriodo} días · promedio ${r.datosUnidad.promedioPorDia ?? '—'} por día.`, 9.5, font);
+  for (const s of r.datosUnidad.porSemana.slice(-12)) parrafo(`Semana del ${s.semana}: ${s.mensajes}`, 8.5, font, INK, 12);
+  parrafo(NOTA_LINEA_BASE, 8, font, MUTED);
+  y -= 8;
+
   asegurar(40);
   text('Preguntas frecuentes', M, y, 11, bold);
   y -= 15;
@@ -171,6 +205,7 @@ export async function faqsAPdf(r: ReporteHistorial, meta: MetaReporteFaqs, razon
     y -= 13;
   }
   y -= 10;
+  parrafo(`Sin clasificar («Otros», sin contar saludos): ${r.sinClasificar.mensajes} mensajes${r.sinClasificar.porcentaje === null ? '' : ` (${r.sinClasificar.porcentaje} %)`}. Se dejan como están, sin inventarles tema. Fuera de los temas: ${r.ignorados} agradecimientos o avisos de monitoreo.`, 8, font, MUTED);
   if (meta.truncado) parrafo('El histórico es más grande de lo que se analiza de una vez: el reporte usa solo los primeros 50,000 mensajes.', 8, font, MUTED);
   parrafo(AVISO_REPORTE, 8, font, MUTED);
   return doc.save();
