@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Sin perfiles de tenant (0770): este archivo prueba el cron de siempre. El filtro por perfil tiene
+// su propia prueba (src/app/api/cron/perfil_crons.test.ts).
+vi.mock('@/lib/auth/perfil_tenant', () => ({
+  tenantsConPerfilASaltar: async () => new Set<string>(),
+  tenantsConPerfil: async () => new Set<string>(),
+}));
+
 // El cron de la entrega al contador (0531, Agente 9) — su CONTRATO operativo, el de sus hermanos: secreto o 401/500,
 // la palanca global respetada (y falla CERRADO si no se puede leer), un latido en TODO camino de salida, y el motor
 // invocado con un reloj que corta antes del techo de la función. El motor mismo lo prueba `buzon/entrega_e2e.test.ts`.

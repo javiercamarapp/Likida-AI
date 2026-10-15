@@ -1,4 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Sin perfiles de tenant (0770): este archivo prueba el cron de siempre. El filtro por perfil tiene
+// su propia prueba (src/app/api/cron/perfil_crons.test.ts).
+const { flotasConPerfil } = vi.hoisted(() => ({ flotasConPerfil: new Set<string>() }));
+vi.mock('@/lib/auth/perfil_tenant', () => ({
+  tenantsConPerfilASaltar: async () => new Set(flotasConPerfil),
+  tenantsConPerfil: async () => new Set(flotasConPerfil),
+}));
 import { margenUnidadAtomicaMs, TECHO_PASO_CONSULTA_MS, TECHO_ENVIO_WHATSAPP_MS, COLCHON_LATIDO_CRON_MS } from '@/lib/likida/presupuesto';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -269,5 +277,19 @@ describe('cron asistencia — el reloj reserva la unidad atómica (REN-31-C1)', 
     const opts = (escalarAsistenciasPendientes.mock.calls[0] as unknown[])[1] as { venceEn: number };
     expect(opts.venceEn).toBeGreaterThanOrEqual(antes + maxDuration * 1000 - margen);
     expect(opts.venceEn).toBeLessThanOrEqual(Date.now() + maxDuration * 1000 - margen);
+  });
+});
+
+describe('cron asistencia — el perfil de tenant (0770)', () => {
+  it('le pasa al motor las flotas con perfil para que las SALTE (módulo en stand-by)', async () => {
+    flotasConPerfil.clear();
+    flotasConPerfil.add('t-con-perfil');
+    escalarAsistenciasPendientes.mockClear();
+    const res = await GET(new Request('https://likida.ai/api/cron/asistencia', { headers: { authorization: 'Bearer secreto-de-prueba' } }));
+    flotasConPerfil.clear();
+    expect(res.status).toBeLessThan(500);
+    expect(escalarAsistenciasPendientes).toHaveBeenCalledWith(expect.any(Date), expect.objectContaining({ excluirTenants: expect.any(Set) }));
+    const args = (escalarAsistenciasPendientes.mock.calls[0] as unknown as unknown[]);
+    expect([...((args[1] as { excluirTenants: Set<string> }).excluirTenants)]).toEqual(['t-con-perfil']);
   });
 });
