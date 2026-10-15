@@ -3,9 +3,9 @@ import { Settings2, TriangleAlert } from 'lucide-react';
 import { BarraPagina } from '../../../resumen-visual';
 import type { ConfigConductor } from '@/lib/likida/conductor/config';
 import type { ContactoTrafico } from '@/lib/likida/conductor/escalamiento';
-import { FormaConfigConductor, type AccionConfig } from './forma';
+import { FormaConfigConductor, SeccionVoluntarios, type AccionConfig, type AccionVoluntario, type DatosVoluntarios } from './forma';
 
-export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar }: {
+export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar, voluntarios, accionAlta, accionBaja }: {
   sufijo: string;
   /** `null` = no se pudo leer: se dice, no se enseña un formulario con los defaults como si fueran lo guardado. */
   config: ConfigConductor | null;
@@ -14,6 +14,10 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
   patios: Array<{ id: string; nombre: string }>;
   puedeEditar: boolean;
   accionGuardar: AccionConfig;
+  /** «Operadores del piloto» (0800). `undefined` = la pantalla no la trae; `null` = no se pudo leer. */
+  voluntarios?: DatosVoluntarios | null;
+  accionAlta?: AccionVoluntario;
+  accionBaja?: AccionVoluntario;
 }) {
   const legible = config !== null && valores !== null && contactos !== null;
   return (
@@ -32,6 +36,16 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
               <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
               No se pudo leer la configuración ahora mismo. No se muestra un formulario con valores por omisión para no confundirlos con lo guardado; intenta de nuevo en un momento.
             </p>
+          )}
+          {voluntarios === null && (
+            <p role="alert" className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+              <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+              No se pudo leer la lista de operadores del piloto ahora mismo (o falta aplicar la migración 0800); intenta de nuevo en un momento.
+            </p>
+          )}
+          {voluntarios && accionAlta && accionBaja && (
+            <SeccionVoluntarios datos={voluntarios} puedeEditar={puedeEditar} accionAlta={accionAlta} accionBaja={accionBaja}
+              parametros={[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries()].filter(([k]) => k !== 'q')} />
           )}
         </div>
       </div>

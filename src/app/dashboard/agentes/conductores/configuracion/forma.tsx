@@ -190,3 +190,96 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
     </form>
   );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// «OPERADORES DEL PILOTO» (0800): quién está en el seguimiento del Agente 5. Cada alta y cada baja es una acción de servidor
+// aparte (otro formulario, no el de la configuración). El tope se aplica en el servidor; aquí solo se enseña el contador.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface OperadorPilotoVista { id: string; nombre: string; telefono: string }
+export interface DatosVoluntarios {
+  tope: number;
+  voluntarios: OperadorPilotoVista[];
+  /** Activos, con teléfono válido, que aún no están en el piloto (ya filtrados por la búsqueda). */
+  candidatos: OperadorPilotoVista[];
+  busqueda: string;
+}
+export type AccionVoluntario = (previo: ResultadoConfig, fd: FormData) => Promise<ResultadoConfig>;
+
+const diezDigitos = (tel: string): string => tel.replace(/\D/g, '').replace(/^521?(?=\d{10}$)/, '');
+
+function BotonVoluntario({ texto, enCurso }: { texto: string; enCurso: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending} className="h-9 px-4 rounded-lg text-[13px] font-medium hairline transition-opacity hover:opacity-85 disabled:opacity-50">
+      {pending ? enCurso : texto}
+    </button>
+  );
+}
+
+function FilaVoluntario({ op, accion, puedeEditar }: { op: OperadorPilotoVista; accion: AccionVoluntario; puedeEditar: boolean }) {
+  const [estado, enviar] = useActionState(accion, null);
+  return (
+    <li className="py-2 space-y-1.5">
+      <form action={enviar} className="flex items-center justify-between gap-3 text-[12.5px]" aria-label={`Retirar a ${op.nombre} del piloto`}>
+        <span><strong>{op.nombre}</strong> <span style={{ color: 'var(--faint)' }}>{diezDigitos(op.telefono)}</span></span>
+        <input type="hidden" name="operadorId" value={op.id} />
+        {puedeEditar && <BotonVoluntario texto="Retirar del piloto" enCurso="Retirando…" />}
+      </form>
+      <AvisoResultado estado={estado} />
+    </li>
+  );
+}
+
+export function SeccionVoluntarios({ datos, puedeEditar, accionAlta, accionBaja, parametros }: {
+  datos: DatosVoluntarios;
+  puedeEditar: boolean;
+  accionAlta: AccionVoluntario;
+  accionBaja: AccionVoluntario;
+  /** Los parámetros de la URL que la búsqueda debe conservar (flota elegida, etc.), sin `q`. */
+  parametros: Array<[string, string]>;
+}) {
+  const [estadoAlta, enviarAlta] = useActionState(accionAlta, null);
+  const n = datos.voluntarios.length;
+  return (
+    <Seccion id="cfg-voluntarios" titulo="Operadores del piloto">
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        El agente solo da seguimiento a los viajes importados de los operadores que aceptaron participar. Márcalos aquí uno por uno; al retirar a uno,
+        sus viajes importados que siguen abiertos vuelven a «sin aceptar».
+      </p>
+      <p className="text-[13px] font-medium" aria-live="polite">{n} de {datos.tope} operadores en el piloto</p>
+      {n > 0 ? (
+        <ul className="divide-y" style={{ borderColor: 'var(--line)' }}>
+          {datos.voluntarios.map((v) => <FilaVoluntario key={v.id} op={v} accion={accionBaja} puedeEditar={puedeEditar} />)}
+        </ul>
+      ) : (
+        <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Todavía no hay operadores en el piloto.</p>
+      )}
+      {puedeEditar ? (
+        <div className="space-y-2">
+          <form method="get" className="flex items-end gap-2" aria-label="Buscar operador">
+            {parametros.map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
+            <label className="flex-1">
+              <span className={ETIQUETA}>Buscar operador activo (nombre o teléfono)</span>
+              <input name="q" defaultValue={datos.busqueda} className={CAMPO} />
+            </label>
+            <button type="submit" className="h-9 px-4 rounded-lg text-[13px] font-medium hairline">Buscar</button>
+          </form>
+          <form action={enviarAlta} className="flex items-end gap-2" aria-label="Agregar operador al piloto">
+            <label className="flex-1">
+              <span className={ETIQUETA}>Operador</span>
+              <select name="operadorId" defaultValue="" className={CAMPO} aria-label="Operador a agregar">
+                <option value="" disabled>{datos.candidatos.length > 0 ? 'Elige un operador…' : 'Sin operadores disponibles con ese criterio'}</option>
+                {datos.candidatos.map((c) => <option key={c.id} value={c.id}>{c.nombre} · {diezDigitos(c.telefono)}</option>)}
+              </select>
+            </label>
+            <BotonVoluntario texto="Agregar al piloto" enCurso="Agregando…" />
+          </form>
+          <AvisoResultado estado={estadoAlta} />
+        </div>
+      ) : (
+        <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia quién está en el piloto.</p>
+      )}
+    </Seccion>
+  );
+}
