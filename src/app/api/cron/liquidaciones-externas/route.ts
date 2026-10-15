@@ -77,7 +77,11 @@ export async function GET(req: Request) {
     // `fallidas` y `reintentar` son trabajo que NO terminó: ni «ok» ni «fallo»
     // total, que son las dos maneras de mentir aquí.
     // Un aviso de «No coincide» que no llegó (por reintentar o ya fallido) es trabajo que tampoco terminó: la oficina no sabe.
-    const parcial = r.fallidas > 0 || r.reintentar > 0 || r.avisos.reintentar > 0 || r.avisos.fallidos > 0;
+    // Lo mismo para el correo (fallidas, por reintentar, sin configurar, sin confirmar, errores de fila) y el pull (una flota que no se pudo leer).
+    const c = r.correo;
+    const correoSinTerminar = !!c && (c.fallidas > 0 || c.reintentar > 0 || c.sinConfigurar > 0 || c.sinConfirmar > 0 || c.errores > 0);
+    const parcial = r.fallidas > 0 || r.reintentar > 0 || r.avisos.reintentar > 0 || r.avisos.fallidos > 0
+      || correoSinTerminar || (r.pull?.errores ?? 0) > 0;
     await registrarLatido('liquidaciones-externas', parcial ? 'parcial' : 'ok', { ...r });
     return NextResponse.json({ corrio: true, ...r });
   } catch (e) {

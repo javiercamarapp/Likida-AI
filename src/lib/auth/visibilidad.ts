@@ -180,6 +180,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/agentes/liquidacion': 'dinero',
   // 0564: el formato de la liquidación de la flota (columnas de su Excel de muestra, documento por WhatsApp, copia al jefe y aviso de discrepancia). Dinero a la vista; solo el dueño guarda (`administracion`, comprobado en cada acción).
   '/dashboard/agentes/liquidacion/formato': 'dinero',
+  // T-A1-30: configuración de la entrega del desglose por correo (destinatarios, renglón de viaje, guardas). Dinero a la vista; solo el dueño guarda (`administracion`, comprobado en la acción).
+  '/dashboard/agentes/liquidacion/configuracion': 'dinero',
   '/dashboard/agentes/facturas': 'dinero',
   // Cobranza de COMPROBANTES (0089): la página no enseña pesos, pero es la
   // cola del cierre contable — el dolor del contador — y opera al bloque
@@ -363,6 +365,8 @@ export const RUTAS_PERFIL_CINCO_AGENTES: Readonly<Record<string, ModuloPerfil>> 
   // revisión de lo que el agente cuadró; se normaliza a '/dashboard/[id]'.
   '/dashboard/agentes/liquidacion': 'liquidacion',
   '/dashboard/agentes/liquidacion/formato': 'liquidacion',
+  // Integración Liquidación + perfil: la configuración del agente es suya.
+  '/dashboard/agentes/liquidacion/configuracion': 'liquidacion',
   '/dashboard/[id]': 'liquidacion',
   // A2 · Peajes.
   '/dashboard/agentes/peajes': 'peajes',

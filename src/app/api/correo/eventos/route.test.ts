@@ -78,6 +78,17 @@ vi.mock('@/lib/likida/buzon/entrega_repo', () => ({
   },
 }));
 
+// T-A1-18: el desglose por correo. Por omisión «no es una entrega de desglose» (todo lo anterior intacto).
+const noticias: Array<{ id: string; ev: string }> = [];
+let respuestaDesglose: { resultado: 'sin_entrega' | 'aplicada' | 'sin_cambio'; rol?: string; operadorMarcado?: boolean } | Error = { resultado: 'sin_entrega' };
+vi.mock('@/lib/likida/liquidacion_externa/repo_correo', () => ({
+  confirmarEntregaCorreo: async (id: string, ev: string) => {
+    noticias.push({ id, ev });
+    if (respuestaDesglose instanceof Error) throw respuestaDesglose;
+    return respuestaDesglose;
+  },
+}));
+
 const { POST } = await import('./route');
 
 const SECRETO_CRUDO = crypto.randomBytes(24);
@@ -103,6 +114,8 @@ beforeEach(() => {
   respuestas.length = 0;
   tabla.length = 0;
   suprimidas.length = 0;
+  noticias.length = 0;
+  respuestaDesglose = { resultado: 'sin_entrega' };
   // La pieza recién aceptada por Resend: `entrega_estado` NACE NULL (0124).
   tabla.push({ id: 'pz-1', provider_message_id: 're_123', entrega_estado: null });
   process.env.RESEND_EVENTOS_WEBHOOK_SECRET = SECRETO;
@@ -256,5 +269,66 @@ describe('c5-12 — el rebote suprime SOLO al que rebotó; la queja barre todo',
       data: { email_id: 're_123', to: ['a@x.mx', 'b@x.mx'] },
     }));
     expect(suprimidas.map((s) => s.correo).sort()).toEqual(['a@x.mx', 'b@x.mx']);
+  });
+});
+
+describe('T-A1-18 — el desglose por correo', () => {
+  const evento = (type: string, extra: Record<string, unknown> = {}) => JSON.stringify({ type, data: { email_id: 're_999', to: ['operador@ejemplo.test'], ...extra } });
+
+  beforeEach(() => { tabla.length = 0; confirmaciones.length = 0; respuestaLote = 'sin_lote'; }); // ninguna pieza de cola_aprobacion: el id es de otro flujo
+
+  it('email.delivered de un desglose: confirma «entregada», responde 200 y NO cae al buzón ni a sinPieza', async () => {
+    respuestaDesglose = { resultado: 'aplicada', rol: 'operador' };
+    const r = await postear(evento('email.delivered'));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ entregaCorreo: 'aplicada', estado: 'entregado' });
+    expect(noticias).toEqual([{ id: 're_999', ev: 'entregada' }]);
+    expect(confirmaciones).toHaveLength(0);
+  });
+
+  it('email.bounced de un desglose: «rebotada», SIN suprimir la dirección (la lista global es de campañas)', async () => {
+    respuestaDesglose = { resultado: 'aplicada', rol: 'operador', operadorMarcado: true };
+    const r = await postear(evento('email.bounced'));
+    expect(await r.json()).toEqual({ entregaCorreo: 'aplicada', estado: 'rebotado' });
+    expect(noticias).toEqual([{ id: 're_999', ev: 'rebotada' }]);
+    expect(suprimidas).toEqual([]);
+  });
+
+  it('email.complained de un desglose: «queja», tampoco suprime', async () => {
+    respuestaDesglose = { resultado: 'aplicada', rol: 'rh' };
+    await postear(evento('email.complained'));
+    expect(noticias).toEqual([{ id: 're_999', ev: 'queja' }]);
+    expect(suprimidas).toEqual([]);
+  });
+
+  it('una noticia tardía o repetida (sin_cambio) también es 200', async () => {
+    respuestaDesglose = { resultado: 'sin_cambio', rol: 'operador' };
+    const r = await postear(evento('email.delivered'));
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ entregaCorreo: 'sin_cambio' });
+  });
+
+  it('id desconocido para el desglose: sigue el flujo actual (buzón, luego sinPieza)', async () => {
+    const r = await postear(evento('email.delivered'));
+    expect(await r.json()).toEqual({ sinPieza: true });
+    expect(confirmaciones).toEqual([{ id: 're_999', r: 'entregada' }]);
+  });
+
+  it('la pieza de cola_aprobacion gana: no se consulta el desglose (el orden no cambia lo existente)', async () => {
+    tabla.push({ id: 'pz-9', provider_message_id: 're_999', entrega_estado: null });
+    const r = await postear(evento('email.delivered'));
+    expect(await r.json()).toMatchObject({ pieza: 'pz-9' });
+    expect(noticias).toEqual([]);
+  });
+
+  it('base caída al escribir el desglose: 500 para que Resend reintente', async () => {
+    respuestaDesglose = new Error('base caída');
+    expect((await postear(evento('email.bounced'))).status).toBe(500);
+    expect(suprimidas).toEqual([]);
+  });
+
+  it('firma inválida sigue siendo 401 y no toca el desglose', async () => {
+    expect((await postear(evento('email.bounced'), { firmar: false })).status).toBe(401);
+    expect(noticias).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 import { logger } from '@/lib/logger';
-import { armarHtml, aTextoPlano, type Correo } from './plantilla';
+import { armarHtml, armarHtmlSobrio, aTextoPlano, aTextoPlanoSobrio, type Correo } from './plantilla';
 import { LOGO_PNG_BASE64, LOGO_CID, LOGO_NOMBRE } from './logo';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -63,10 +63,22 @@ export function correoConfigurado(): boolean {
  * la reputación de envío, de modo que un correo marcado como spam no arrastre
  * la entregabilidad del dominio principal.
  */
-function remitente(local = 'avisos'): string | null {
+function remitente(local = 'avisos', nombre = 'Likida'): string | null {
   const dominio = process.env.RESEND_EMAIL_DOMAIN;
   if (!dominio) return null;
-  return `Likida <${local}@${dominio}>`;
+  return `${nombre} <${local}@${dominio}>`;
+}
+
+/**
+ * Sanea el nombre visible del remitente (T-A1-12): sin `<>`, comillas, saltos
+ * de línea ni control, colapsa espacios y recorta a 60. Devuelve `null` si queda
+ * vacío (se usa el nombre por defecto). Evita inyección de cabeceras y HTML.
+ */
+export function sanearNombreRemitente(nombre: string | undefined): string | null {
+  if (!nombre) return null;
+  // eslint-disable-next-line no-control-regex
+  const limpio = nombre.replace(/[\u0000-\u001f\u007f<>"\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60).trim();
+  return limpio.length > 0 ? limpio : null;
 }
 
 export interface OpcionesEnvio {
@@ -107,6 +119,18 @@ export interface OpcionesEnvio {
    * content, content_type).
    */
   adjuntos?: Array<{ filename: string; content: string; contentType?: string }>;
+  /**
+   * T-A1-12: nombre visible del remitente (`Nombre <avisos@dominio>`). Se sanea
+   * (sin `<>`, saltos ni comillas, ≤ 60). Defecto: `Likida`.
+   */
+  remitenteNombre?: string;
+  /** T-A1-12: dirección de respuesta (`reply_to` de Resend). Si no parece un correo, no se manda. */
+  replyTo?: string;
+  /**
+   * T-A1-12: correo SOBRIO (transaccional operativo): sin logo, sin marca, sin
+   * pie de campaña y SIN `List-Unsubscribe` aunque venga `listaBajaUrl`.
+   */
+  sobrio?: boolean;
 }
 
 /** Tope crudo de los adjuntos de un correo: 28 MB ⇒ ~37.3 MB en base64, debajo de los 40 MB de Resend. */
@@ -124,7 +148,7 @@ export async function enviarCorreo(
   op: OpcionesEnvio = {},
 ): Promise<ResultadoEnvio> {
   const llave = process.env.RESEND_API_KEY;
-  const from = remitente(op.remitenteLocal);
+  const from = remitente(op.remitenteLocal, sanearNombreRemitente(op.remitenteNombre) ?? undefined);
   if (!llave || !from) {
     // A nivel `info`, no `error`: en un entorno sin correo configurado —el de
     // desarrollo, el de pruebas— esto es lo esperado, y sacarlo como error
@@ -146,6 +170,14 @@ export async function enviarCorreo(
     return { ok: false, motivo: 'rechazado', detalle: 'Sin destinatarios válidos.' };
   }
 
+  const replyTo = op.replyTo && destinatarioValido(op.replyTo) && !/[<>\r\n]/.test(op.replyTo) ? op.replyTo.trim() : null;
+  const sobrio = op.sobrio === true;
+  const adjuntosCorreo = (op.adjuntos ?? []).map((a) => ({
+    filename: a.filename,
+    content: a.content,
+    ...(a.contentType ? { content_type: a.contentType } : {}),
+  }));
+
   try {
     const r = await fetch(API, {
       method: 'POST',
@@ -161,28 +193,26 @@ export async function enviarCorreo(
         from,
         to: destinos,
         subject: correo.asunto,
-        html: armarHtml(correo),
+        html: sobrio ? armarHtmlSobrio(correo) : armarHtml(correo),
         // La parte de texto no es opcional: un correo sin ella puntúa peor en
         // los filtros de spam y hay clientes que solo leen esa.
-        text: aTextoPlano(correo),
+        text: sobrio ? aTextoPlanoSobrio(correo) : aTextoPlano(correo),
+        ...(replyTo ? { reply_to: replyTo } : {}),
         // EL LOGO VIAJA CON EL CORREO. `content_disposition: 'inline'` + el
         // `content_id` que el HTML referencia como `cid:` — así el logo no
         // depende de que el cliente autorice imágenes externas, que es lo que
         // lo rompió la primera vez. No aparece como adjunto descargable.
-        attachments: [{
+        // Con `sobrio` el logo NO viaja (T-A1-12): solo los adjuntos del llamador.
+        attachments: sobrio ? adjuntosCorreo : [{
           filename: LOGO_NOMBRE,
           content: LOGO_PNG_BASE64,
           content_id: LOGO_CID,
           content_disposition: 'inline',
-        }, ...(op.adjuntos ?? []).map((a) => ({
-          filename: a.filename,
-          content: a.content,
-          ...(a.contentType ? { content_type: a.contentType } : {}),
-        }))],
+        }, ...adjuntosCorreo],
         // CABECERAS DEL MENSAJE — distintas de las del POST arriba (esas son
         // HTTP hacia Resend; estas viajan DENTRO del correo hacia el cliente
         // del destinatario). Solo van si el llamador trae la liga de baja.
-        ...(op.listaBajaUrl ? {
+        ...(op.listaBajaUrl && !sobrio ? {
           headers: {
             'List-Unsubscribe': `<${op.listaBajaUrl}>`,
             'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
