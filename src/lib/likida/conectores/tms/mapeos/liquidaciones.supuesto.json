@@ -1,0 +1,53 @@
+{
+  "_aviso": "SUPUESTO: rutas, columnas y formatos son HIPOTETICOS. El crudo (c3cc57d3 88:30-101:21) solo confirma tres tablas (nomina por bitacora, operadores, concepto de nomina) ligadas por ID y poliza, cargo = percepcion, abono = deduccion y una columna `desglose`. Reemplazar cuando exista la documentacion real de la API de nomina (BLOQUEO EXTERNO e1 #1, #3, #7).",
+  "nomina": {
+    "recurso": "liquidaciones",
+    "ruta": "/api/nomina-bitacora",
+    "metodo": "GET",
+    "params": { "desde": "desde", "hasta": "hasta", "pagina": "pagina", "tam": "tam" },
+    "raiz": "data.items",
+    "campos": {
+      "id": { "fuente": "ID", "transformar": "texto" },
+      "poliza": { "fuente": "Poliza", "transformar": "texto" },
+      "bitacora": { "fuente": "Bitacora", "transformar": "texto" },
+      "operador_id": { "fuente": "OperadorID", "transformar": "texto" },
+      "concepto_id": { "fuente": "ConceptoID", "transformar": "texto" },
+      "cargo": { "fuente": "Cargo", "transformar": "numero" },
+      "abono": { "fuente": "Abono", "transformar": "numero" },
+      "desglose": { "fuente": "Desglose", "transformar": "texto" },
+      "desde": { "fuente": "FechaInicio", "transformar": "fecha_local", "zona": "America/Mexico_City", "formato": "yyyy-MM-dd HH:mm:ss" },
+      "hasta": { "fuente": "FechaFin", "transformar": "fecha_local", "zona": "America/Mexico_City", "formato": "yyyy-MM-dd HH:mm:ss" }
+    },
+    "clave_externa": ["id"],
+    "obligatorios": ["id", "bitacora", "operador_id", "concepto_id", "desde", "hasta"]
+  },
+  "operadores": {
+    "recurso": "liquidaciones",
+    "ruta": "/api/operadores",
+    "metodo": "GET",
+    "params": { "desde": "desde", "hasta": "hasta", "pagina": "pagina", "tam": "tam" },
+    "raiz": "data.items",
+    "campos": {
+      "id": { "fuente": "ID", "transformar": "texto" },
+      "numero_empleado": { "fuente": "NumeroEmpleado", "transformar": "texto" },
+      "telefono": { "fuente": "Telefono", "transformar": "texto" }
+    },
+    "clave_externa": ["id"],
+    "obligatorios": ["id"]
+  },
+  "conceptos": {
+    "recurso": "liquidaciones",
+    "ruta": "/api/conceptos-nomina",
+    "metodo": "GET",
+    "params": { "desde": "desde", "hasta": "hasta", "pagina": "pagina", "tam": "tam" },
+    "raiz": "data.items",
+    "campos": {
+      "id": { "fuente": "ID", "transformar": "texto" },
+      "clave": { "fuente": "Clave", "transformar": "texto" },
+      "descripcion": { "fuente": "Descripcion", "transformar": "texto" },
+      "oculto": { "fuente": "Oculto", "transformar": "booleano" }
+    },
+    "clave_externa": ["id"],
+    "obligatorios": ["id", "descripcion"]
+  }
+}
