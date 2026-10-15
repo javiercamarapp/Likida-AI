@@ -1,5 +1,7 @@
 import type { GrupoPorVencer, CandidatoPlazo, OpcionesPlazo } from './plazo_reclamo';
 import { clasificarPlazos } from './plazo_reclamo';
+import { logger } from '@/lib/logger';
+import { codigoDeError } from '@/lib/observability/sentry';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL AVISO DE «ESTÁ POR VENCER EL PLAZO DE RECLAMO».
@@ -62,13 +64,13 @@ export async function avisarPlazosReclamo(
 ): Promise<ResumenAvisoPlazo> {
   const r: ResumenAvisoPlazo = { enviados: 0, yaAvisados: 0, sinDestinatario: 0, fallidos: 0, vencidosCruces: 0, vencidosMonto: 0 };
   let clase;
-  try { clase = clasificarPlazos(candidatos, hoy, opciones); } catch { r.fallidos++; return r; }
+  try { clase = clasificarPlazos(candidatos, hoy, opciones); } catch (e) { r.fallidos++; logger.error('cron.peajes.plazos_fallo', { tenant: tenantId, paso: 'clasificar', codigo: codigoDeError(e) }); return r; }
   r.vencidosCruces = clase.vencidos.cruces;
   r.vencidosMonto = clase.vencidos.monto;
   if (clase.porVencer.length === 0) return r;
 
   let tel: string | null;
-  try { tel = await deps.telefono(tenantId); } catch { r.fallidos += clase.porVencer.length; return r; }
+  try { tel = await deps.telefono(tenantId); } catch (e) { r.fallidos += clase.porVencer.length; logger.error('cron.peajes.plazos_fallo', { tenant: tenantId, paso: 'destinatario', codigo: codigoDeError(e) }); return r; }
   if (!tel) { r.sinDestinatario = clase.porVencer.length; return r; }
 
   for (const g of clase.porVencer) {
@@ -80,8 +82,9 @@ export async function avisarPlazosReclamo(
       if (ok) { r.enviados++; continue; }
       r.fallidos++;
       await deps.liberar(tenantId, g.desgloseId, g.umbral);
-    } catch {
+    } catch (e) {
       r.fallidos++;
+      logger.error('cron.peajes.plazos_fallo', { tenant: tenantId, paso: 'aviso', codigo: codigoDeError(e) });
       if (reservado) { try { await deps.liberar(tenantId, g.desgloseId, g.umbral); } catch { /* el siguiente barrido lo recupera por vencimiento de la reserva */ } }
     }
   }

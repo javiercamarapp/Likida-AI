@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { codigoDeError } from '@/lib/observability/sentry';
 import { acotada } from '../presupuesto';
 import { traerTodo, conteo } from '../pg';
 import { registrarCorrida } from '../agentes/corridas';
@@ -130,7 +131,8 @@ export async function revisarAtipicosDeDesglose(
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    logger.error('peajes.atipicos.revision', { tenant: tenantId, desglose: desgloseId, err: msg });
+    // Solo un código estable: el mensaje de la base puede traer el valor de una columna (tag, unidad).
+    logger.error('cron.peajes.atipicos_fallo', { tenant: tenantId, desglose: desgloseId, codigo: codigoDeError(e) });
     await registrarCorrida(tenantId, 'peajes', {
       inicio, fin: new Date(), estado: 'parcial', disparo,
       error: 'La revisión de cruces atípicos no se pudo completar; el desglose sí quedó conciliado. El detalle quedó en los registros del sistema.',

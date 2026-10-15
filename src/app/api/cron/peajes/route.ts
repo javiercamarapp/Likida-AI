@@ -84,7 +84,8 @@ export async function GET(req: Request) {
     // salió tampoco es «ok».
     const parcial = r.fallidos > 0 || r.reintentar > 0 || r.claimPerdido > 0
       || (pulls?.fallidas ?? 0) > 0 || pulls === null || (avisos?.pendientes ?? 0) > 0
-      || avisosAtipicos === null || avisosAtipicos.pendientes > 0;
+      || avisosAtipicos === null || avisosAtipicos.pendientes > 0
+      || (r.atipicos?.fallidos ?? 0) > 0;
     await registrarLatido('peajes', parcial ? 'parcial' : 'ok', { ...r, pulls, avisos, avisosAtipicos });
     return NextResponse.json({ corrio: true, ...r, pulls, avisos, avisosAtipicos });
   } catch (e) {
