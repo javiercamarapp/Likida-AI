@@ -66,6 +66,12 @@ export interface OpcionesValidacion {
    * Dentro de él, `existe() === null` significa «catálogo no cargado»: nunca bloquea, solo avisa.
    */
   catalogosSat?: ResolvedorSat;
+  /**
+   * Reglas de dependencia de la Guía de llenado de la plantilla del TMS (T-A3-45). Ausente = todas con los valores de la
+   * Guía; `false` = ninguna (un perfil que no use esa plantilla). Parametrizable por perfil: la preferencia de un cliente
+   * no se codifica aquí.
+   */
+  reglasGuia?: Partial<ReglasGuia> | false;
 }
 
 const RFC_MORAL = /^[A-ZÑ&]{3}\d{6}[A-Z0-9]{3}$/;
@@ -332,6 +338,264 @@ function verificarCatalogosSat(e: Extraccion, sat: ResolvedorSat | undefined, re
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// REGLAS DE DEPENDENCIA DE LA GUÍA DE LLENADO (T-A3-45) — una función pura por regla.
+//
+// Fuente: hoja «Guía de llenado» de la plantilla «nueva» del TMS (análisis 17 §1.3, §4.6). Cada regla devuelve sus
+// hallazgos en llano y NO modifica nada; el saneo de lo que la regla dice «vacío» o «sin caracteres especiales» lo hace
+// `aplicarReglasGuia` al exportar (y avisa de lo que cambió). Las que la Guía llama obligatorias bloquean; las que el
+// exportador corrige solo (omitir, limpiar) son aviso: no frenan, pero la persona sabe qué saldrá distinto.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Cada regla se puede apagar o ajustar por perfil. Los valores por omisión son los de la Guía. */
+export interface ReglasGuia {
+  /** Embalaje y su descripción solo si hay material peligroso. */
+  embalajeSoloPeligroso: boolean;
+  /** Pedimento y RFC del importador solo en importación (vacíos en exportación y en transporte nacional). */
+  pedimentoSoloImportacion: boolean;
+  /** Tipo de materia 01–05; la descripción es obligatoria si es «05». */
+  tipoMateria: boolean;
+  /** Caja y referencia con largo máximo. */
+  longitudes: boolean;
+  /** Descripción de la mercancía sin caracteres especiales. */
+  descripcionSinEspeciales: boolean;
+  /** Razón social sin puntos ni comas. */
+  razonSocialSinPuntuacion: boolean;
+  /** País distinto de MEX ⇒ sin claves de colonia, localidad ni municipio. */
+  domicilioSoloMexico: boolean;
+  maxCaja: number;
+  maxReferencia: number;
+  /** Signos que se permiten además de letras (con acentos y ñ), dígitos y espacio. */
+  permitidosDescripcion: string;
+}
+
+export const REGLAS_GUIA_POR_OMISION: ReglasGuia = {
+  embalajeSoloPeligroso: true, pedimentoSoloImportacion: true, tipoMateria: true, longitudes: true,
+  descripcionSinEspeciales: true, razonSocialSinPuntuacion: true, domicilioSoloMexico: true,
+  maxCaja: 15, maxReferencia: 30, permitidosDescripcion: '.,-/()',
+};
+
+export function reglasGuiaEfectivas(r: Partial<ReglasGuia> | false | undefined): ReglasGuia | null {
+  return r === false ? null : { ...REGLAS_GUIA_POR_OMISION, ...(r ?? {}) };
+}
+
+export type TipoOperacion = 'exportacion' | 'importacion' | 'nacional' | 'desconocida';
+
+const texto = (c: CampoValor | undefined): string => (c?.valor ?? '').trim();
+
+/**
+ * Importación o exportación, del régimen aduanero (documento o primera mercancía: IMD/ITR/ITE… importan; EXD/ETR/ETE…
+ * exportan) y, sin régimen, de `transp_internac = false` (nacional). Sin dato no se adivina: `desconocida` (ninguna regla
+ * que dependa de la operación actúa).
+ */
+export function tipoOperacion(e: Extraccion): TipoOperacion {
+  const reg = (texto(e.campos.regimen_aduanero) || texto(e.mercancias[0]?.regimen_aduanero)).toUpperCase();
+  if (/^(IM|IT|DF)/.test(reg)) return 'importacion';
+  if (/^(EX|ET)/.test(reg)) return 'exportacion';
+  if (reg === '' && texto(e.campos.transp_internac) === 'false') return 'nacional';
+  return 'desconocida';
+}
+
+const mercanciaPeligrosa = (fila: Record<string, CampoValor>): boolean => texto(fila.material_peligroso) === 'true';
+const CLAVES_RFC_IMPORTADOR = 'rfc_importador';
+
+/** Quita lo que no sea letra (con acentos y ñ), dígito, espacio o alguno de los `permitidos`; deja un solo espacio. */
+export function quitarCaracteresEspeciales(t: string, permitidos: string = REGLAS_GUIA_POR_OMISION.permitidosDescripcion): string {
+  let fuera = '';
+  for (const ch of t.normalize('NFC')) {
+    if (/[\p{L}\p{N}\s]/u.test(ch) || permitidos.includes(ch)) fuera += ch; else fuera += ' ';
+  }
+  return fuera.replace(/\s+/g, ' ').trim();
+}
+
+/** «ACME, S.A. de C.V.» → «ACME SA de CV». */
+export function limpiarRazonSocial(t: string): string {
+  return t.replace(/[.,]/g, (m) => (m === ',' ? ' ' : '')).replace(/\s+/g, ' ').trim();
+}
+
+const especialesDe = (t: string, permitidos: string): string[] => {
+  const raros = new Set<string>();
+  for (const ch of t.normalize('NFC')) if (!/[\p{L}\p{N}\s]/u.test(ch) && !permitidos.includes(ch)) raros.add(ch);
+  return [...raros];
+};
+
+type FilaMerc = Record<string, CampoValor>;
+const porRenglon = (e: Extraccion, f: (fila: FilaMerc, i: number) => Hallazgo | Hallazgo[] | null): Hallazgo[] =>
+  e.mercancias.flatMap((fila, i) => { const h = f(fila, i); return h === null ? [] : Array.isArray(h) ? h : [h]; });
+
+const hay = (c: CampoValor | undefined): boolean => texto(c) !== '';
+
+/** Regla 1 — embalaje y su descripción solo si hay material peligroso (si «NO», vacíos). Aviso: el exportador los omite. */
+export function reglaEmbalajeSoloPeligroso(e: Extraccion): Hallazgo[] {
+  return porRenglon(e, (fila, i) => {
+    if (mercanciaPeligrosa(fila) || !(hay(fila.embalaje) || hay(fila.embalaje_descripcion))) return null;
+    const campo = hay(fila.embalaje) ? 'embalaje' : 'embalaje_descripcion';
+    return {
+      campo, renglon: i, severidad: 'aviso', codigo: 'guia_embalaje_sin_peligroso',
+      mensaje: `${etiquetaCampo(campo, i)}: la Guía de llenado pide el embalaje solo cuando la mercancía es material peligroso; como no lo es, saldrá vacío en el libro del TMS.`,
+      relacionados: [{ campo: 'material_peligroso', renglon: i }],
+    };
+  });
+}
+
+/** Regla 2 — pedimento y RFC del importador solo en importación (vacíos en exportación y en transporte nacional). */
+export function reglaPedimentoSoloImportacion(e: Extraccion): Hallazgo[] {
+  const op = tipoOperacion(e);
+  if (op !== 'exportacion' && op !== 'nacional') return [];
+  const quien = op === 'exportacion' ? 'una exportación' : 'un transporte nacional';
+  return porRenglon(e, (fila, i) => {
+    const sobran = ['pedimento', CLAVES_RFC_IMPORTADOR].filter((k) => hay(fila[k]));
+    return sobran.map((campo): Hallazgo => ({
+      campo, renglon: i, severidad: 'aviso', codigo: campo === 'pedimento' ? 'guia_pedimento_sin_importacion' : 'guia_rfc_importador_sin_importacion',
+      mensaje: `${etiquetaCampo(campo, i)}: en ${quien} la Guía de llenado lo deja vacío; saldrá vacío en el libro del TMS.`,
+    }));
+  });
+}
+
+/** Regla 3 — tipo de materia 01–05; si es «05» hace falta su descripción. */
+export function reglaTipoMateria(e: Extraccion): Hallazgo[] {
+  return porRenglon(e, (fila, i) => {
+    const t = texto(fila.tipo_materia);
+    if (t === '') return null;
+    if (!/^0[1-5]$/.test(t)) {
+      return { campo: 'tipo_materia', renglon: i, severidad: 'bloqueo', codigo: 'guia_tipo_materia', mensaje: `${etiquetaCampo('tipo_materia', i)}: «${t}» no es un tipo de materia válido; la Guía de llenado acepta de 01 a 05.` };
+    }
+    if (t === '05' && !hay(fila.descripcion_materia)) {
+      return {
+        campo: 'tipo_materia', renglon: i, severidad: 'confirmar', codigo: 'guia_materia_05_sin_descripcion',
+        mensaje: `${etiquetaCampo('tipo_materia', i)}: con tipo de materia 05 la Guía de llenado exige describir la materia y no viene. Confírmalo cuando la tengas.`,
+      };
+    }
+    return null;
+  });
+}
+
+/** Regla 4 — caja de hasta 15 caracteres y referencia de hasta 30. */
+export function reglaLongitudes(e: Extraccion, maxCaja = REGLAS_GUIA_POR_OMISION.maxCaja, maxReferencia = REGLAS_GUIA_POR_OMISION.maxReferencia): Hallazgo[] {
+  const salida: Hallazgo[] = [];
+  const revisar = (campo: 'caja_numero' | 'folio_cliente', max: number, codigo: string, nombre: string) => {
+    const v = texto(e.campos[campo]);
+    if (v.length > max) {
+      salida.push({ campo, renglon: null, severidad: 'bloqueo', codigo, mensaje: `${etiquetaCampo(campo, null)}: «${v}» tiene ${v.length} caracteres y la Guía de llenado admite hasta ${max} en ${nombre}. Acórtalo.` });
+    }
+  };
+  revisar('caja_numero', maxCaja, 'guia_caja_larga', 'el número de caja');
+  revisar('folio_cliente', maxReferencia, 'guia_referencia_larga', 'la referencia');
+  return salida;
+}
+
+/** Regla 5 — descripción de la mercancía sin caracteres especiales. Aviso: el exportador los limpia. */
+export function reglaDescripcionSinEspeciales(e: Extraccion, permitidos = REGLAS_GUIA_POR_OMISION.permitidosDescripcion): Hallazgo[] {
+  return porRenglon(e, (fila, i) => {
+    const raros = especialesDe(texto(fila.descripcion), permitidos);
+    if (raros.length === 0) return null;
+    return {
+      campo: 'descripcion', renglon: i, severidad: 'aviso', codigo: 'guia_descripcion_especiales',
+      mensaje: `${etiquetaCampo('descripcion', i)}: trae caracteres especiales (${raros.map((c) => `«${c}»`).join(' ')}) y la Guía de llenado no los admite; se quitarán en el libro del TMS.`,
+    };
+  });
+}
+
+const CAMPOS_RAZON_SOCIAL = /^(origen|destino(?:_\d+)?)_nombre$/;
+
+/** Regla 6 — razón social sin puntos ni comas. Aviso: el exportador los quita. */
+export function reglaRazonSocialSinPuntuacion(e: Extraccion): Hallazgo[] {
+  return Object.keys(e.campos).filter((k) => CAMPOS_RAZON_SOCIAL.test(k) && /[.,]/.test(texto(e.campos[k]))).map((campo): Hallazgo => ({
+    campo, renglon: null, severidad: 'aviso', codigo: 'guia_razon_social_puntuacion',
+    mensaje: `${etiquetaCampo(campo, null)}: la Guía de llenado no admite puntos ni comas en la razón social; se quitarán en el libro del TMS.`,
+  }));
+}
+
+const LADOS_DOMICILIO = ['origen', 'destino', 'destino_2', 'destino_3', 'destino_4'] as const;
+const CLAVES_DOMICILIO_MX = ['colonia_clave', 'localidad_clave', 'municipio_clave'] as const;
+const esExtranjero = (e: Extraccion, lado: string): boolean => { const p = texto(e.campos[`${lado}_pais`]).toUpperCase(); return p !== '' && p !== 'MEX'; };
+
+/** Regla 7 — país distinto de MEX ⇒ sin claves de colonia, localidad ni municipio. Aviso: el exportador las omite. */
+export function reglaDomicilioSoloMexico(e: Extraccion): Hallazgo[] {
+  const salida: Hallazgo[] = [];
+  for (const lado of LADOS_DOMICILIO) {
+    if (!esExtranjero(e, lado)) continue;
+    for (const k of CLAVES_DOMICILIO_MX) {
+      const campo = `${lado}_${k}`;
+      if (hay(e.campos[campo])) {
+        salida.push({
+          campo, renglon: null, severidad: 'aviso', codigo: 'guia_domicilio_extranjero',
+          mensaje: `${etiquetaCampo(campo, null)}: el país es ${texto(e.campos[`${lado}_pais`])} y la Guía de llenado solo pide claves de colonia, localidad y municipio para México; saldrá vacía en el libro del TMS.`,
+          relacionados: [{ campo: `${lado}_pais`, renglon: null }],
+        });
+      }
+    }
+  }
+  return salida;
+}
+
+/** Todas las reglas de la Guía, según lo que el perfil tenga encendido. */
+export function validarReglasGuia(e: Extraccion, reglas: Partial<ReglasGuia> | false | undefined): Hallazgo[] {
+  const r = reglasGuiaEfectivas(reglas);
+  if (!r) return [];
+  return [
+    ...(r.embalajeSoloPeligroso ? reglaEmbalajeSoloPeligroso(e) : []),
+    ...(r.pedimentoSoloImportacion ? reglaPedimentoSoloImportacion(e) : []),
+    ...(r.tipoMateria ? reglaTipoMateria(e) : []),
+    ...(r.longitudes ? reglaLongitudes(e, r.maxCaja, r.maxReferencia) : []),
+    ...(r.descripcionSinEspeciales ? reglaDescripcionSinEspeciales(e, r.permitidosDescripcion) : []),
+    ...(r.razonSocialSinPuntuacion ? reglaRazonSocialSinPuntuacion(e) : []),
+    ...(r.domicilioSoloMexico ? reglaDomicilioSoloMexico(e) : []),
+  ];
+}
+
+/**
+ * Aplica las reglas que dicen «vacío» o «limpio» a una COPIA de la extracción (la original no se toca) y dice, en llano,
+ * qué cambió. Es lo que consumen la plantilla del TMS y la exportación: no escriben lo que la Guía deja vacío.
+ */
+export function aplicarReglasGuia(e: Extraccion, reglas: Partial<ReglasGuia> | false | undefined): { extraccion: Extraccion; avisos: string[] } {
+  const r = reglasGuiaEfectivas(reglas);
+  if (!r) return { extraccion: e, avisos: [] };
+  const campos: Record<string, CampoValor> = { ...e.campos };
+  const mercancias: FilaMerc[] = e.mercancias.map((f) => ({ ...f }));
+  const cambios = new Map<string, Set<string>>();
+  const anotar = (mensaje: string, donde: string) => { (cambios.get(mensaje) ?? cambios.set(mensaje, new Set()).get(mensaje)!).add(donde); };
+  const vaciar = (fila: FilaMerc, k: string) => { fila[k] = { ...fila[k], valor: null }; };
+  const op = tipoOperacion(e);
+
+  mercancias.forEach((fila, i) => {
+    const donde = `mercancía ${i + 1}`;
+    if (r.embalajeSoloPeligroso && !mercanciaPeligrosa(fila)) {
+      for (const k of ['embalaje', 'embalaje_descripcion']) if (hay(fila[k])) { vaciar(fila, k); anotar('Se omitió el embalaje y su descripción porque la mercancía no es material peligroso', donde); }
+    }
+    if (r.pedimentoSoloImportacion && (op === 'exportacion' || op === 'nacional')) {
+      for (const k of ['pedimento', CLAVES_RFC_IMPORTADOR]) if (hay(fila[k])) { vaciar(fila, k); anotar(`Se omitió el pedimento y el RFC del importador porque es ${op === 'exportacion' ? 'una exportación' : 'un transporte nacional'}`, donde); }
+    }
+    if (r.descripcionSinEspeciales && hay(fila.descripcion)) {
+      const limpia = quitarCaracteresEspeciales(texto(fila.descripcion), r.permitidosDescripcion);
+      if (limpia !== texto(fila.descripcion)) {
+        fila.descripcion = { ...fila.descripcion, valor: limpia, notas: [...(fila.descripcion.notas ?? []), 'Se quitaron caracteres especiales (Guía de llenado).'] };
+        anotar('Se quitaron caracteres especiales de la descripción', donde);
+      }
+    }
+  });
+  if (r.razonSocialSinPuntuacion) {
+    for (const k of Object.keys(campos).filter((x) => CAMPOS_RAZON_SOCIAL.test(x))) {
+      const limpia = limpiarRazonSocial(texto(campos[k]));
+      if (hay(campos[k]) && limpia !== texto(campos[k])) {
+        campos[k] = { ...campos[k], valor: limpia, notas: [...(campos[k].notas ?? []), 'Se quitaron puntos y comas (Guía de llenado).'] };
+        anotar('Se quitaron puntos y comas de la razón social', etiquetaCampo(k, null));
+      }
+    }
+  }
+  if (r.domicilioSoloMexico) {
+    for (const lado of LADOS_DOMICILIO) {
+      if (!esExtranjero(e, lado)) continue;
+      for (const k of CLAVES_DOMICILIO_MX) {
+        const campo = `${lado}_${k}`;
+        if (hay(campos[campo])) { campos[campo] = { ...campos[campo], valor: null }; anotar('Se omitieron las claves de colonia, localidad y municipio porque el país no es México', lado); }
+      }
+    }
+  }
+  const avisos = [...cambios].map(([m, donde]) => `${m} (${[...donde].join(', ')}).`);
+  return { extraccion: { campos, mercancias }, avisos };
+}
+
 export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): ResultadoValidacion {
   const hallazgos: Hallazgo[] = [];
   const reg: Registrar = (h) => hallazgos.push(h);
@@ -406,6 +670,8 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
   verificarCatalogosSat(e, op.catalogosSat, reg);
   // Verificación de sumas con rechazo (T-A3-18): piezas, kg y m³ contra el total que declara el documento.
   verificarSumas(e, reg);
+  // Reglas de dependencia de la Guía de llenado del TMS (T-A3-45).
+  for (const h of validarReglasGuia(e, op.reglasGuia)) reg(h);
   // Cantidad vs peso cuando la unidad es de masa.
   e.mercancias.forEach((fila, i) => {
     const u = fila.clave_unidad?.valor; const q = normalizarNumero(fila.cantidad?.valor ?? '').valor; const p = normalizarNumero(fila.peso_kg?.valor ?? '').valor;
