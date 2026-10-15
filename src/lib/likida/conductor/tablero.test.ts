@@ -351,3 +351,61 @@ describe('excepción «sin a quién escalar» (T-A5-23)', () => {
     expect(alertas(armarTablero(datos([viaje('1')], hs, { sinDestino: nivelesSinDestino([], null, 'otra', 'Otra') }), cfg(), AHORA))).toEqual([]);
   });
 });
+
+// ── T-A5-21: estados de frontera como hito OPCIONAL visible (informativo, no escala) ─────────────────────────────
+describe('estados de frontera (T-A5-21)', () => {
+  const tr = (id: string, estado: 'en_patio' | 'en_ruta' | 'pendiente_cruce' | 'otro', textoOrigen: string | null, min: number | null) =>
+    new Map([[id, { estado, textoOrigen, actualizadoEn: min === null ? null : hace(min) }]]);
+  const con = (extra: Partial<ConfigConductor>, t: DatosTablero['transito'], aceptado = 30) =>
+    armarTablero(datos([viaje('1', { aceptadoEn: hace(aceptado) })], hitos('1', {}), { transito: t }), cfg(extra), AHORA);
+
+  it('casilla encendida: «En patio NLD desde hace 7 h» con el texto exacto', () => {
+    const t = con({ mostrarEstadosFrontera: true }, tr('1', 'en_patio', 'PATIO NLD', 7 * 60));
+    expect(t.filas[0].transito).toEqual({ estado: 'en_patio', texto: 'En patio NLD desde hace 7 h', minutos: 420 });
+  });
+
+  it('los demás estados y el borde de minutos', () => {
+    expect(con({ mostrarEstadosFrontera: true }, tr('1', 'en_ruta', 'EN RUTA', 90)).filas[0].transito?.texto).toBe('En ruta desde hace 1 h 30 min');
+    expect(con({ mostrarEstadosFrontera: true }, tr('1', 'pendiente_cruce', 'PEND CRUCE', 20)).filas[0].transito?.texto).toBe('Pendiente de cruce desde hace 20 min');
+    expect(con({ mostrarEstadosFrontera: true }, tr('1', 'en_patio', 'patio', 5)).filas[0].transito?.texto).toBe('En patio desde hace 5 min');
+    expect(con({ mostrarEstadosFrontera: true }, tr('1', 'otro', 'REVISION X', 10)).filas[0].transito?.texto).toBe('Tránsito: REVISION X desde hace 10 min');
+  });
+
+  it('sin fecha de actualización lo dice en vez de inventar horas', () => {
+    expect(con({ mostrarEstadosFrontera: true }, tr('1', 'en_patio', 'PATIO NLD', null)).filas[0].transito)
+      .toEqual({ estado: 'en_patio', texto: 'En patio NLD (sin fecha de actualización)', minutos: null });
+  });
+
+  it('casilla apagada (o dato ausente / sin lectura): la columna no existe', () => {
+    expect(con({ mostrarEstadosFrontera: false }, tr('1', 'pendiente_cruce', 'PEND CRUCE', 500)).filas[0].transito).toBeNull();
+    expect(con({ mostrarEstadosFrontera: true }, undefined).filas[0].transito).toBeNull();
+    expect(con({ mostrarEstadosFrontera: true }, new Map()).filas[0].transito).toBeNull();
+  });
+
+  it('excepción de lectura SOLO con umbral configurado y pendiente_cruce por encima; desactivada por omisión', () => {
+    const t = tr('1', 'pendiente_cruce', 'PEND CRUCE', 7 * 60);
+    expect(con({ mostrarEstadosFrontera: true }, t).excepciones).toEqual([]);
+    expect(con({ mostrarEstadosFrontera: true, umbralPendienteCruceH: null }, t).excepciones).toEqual([]);
+    const ex = con({ mostrarEstadosFrontera: true, umbralPendienteCruceH: 6 }, t).excepciones;
+    expect(ex).toHaveLength(1);
+    expect(ex[0]).toMatchObject({ tipo: 'pendiente_cruce_largo', gravedad: 1, hitoId: null });
+    expect(ex[0].texto).toContain('Pendiente de cruce desde hace 7 h');
+    // exactamente en el umbral cuenta; un minuto antes no
+    expect(con({ mostrarEstadosFrontera: true, umbralPendienteCruceH: 7 }, t).excepciones).toHaveLength(1);
+    expect(con({ mostrarEstadosFrontera: true, umbralPendienteCruceH: 8 }, t).excepciones).toEqual([]);
+    // otro estado largo o casilla apagada: nada
+    expect(con({ mostrarEstadosFrontera: true, umbralPendienteCruceH: 6 }, tr('1', 'en_patio', 'PATIO NLD', 900)).excepciones).toEqual([]);
+    expect(con({ mostrarEstadosFrontera: false, umbralPendienteCruceH: 6 }, t).excepciones).toEqual([]);
+  });
+
+  it('es informativo: no cambia semáforo, motivo, hitos, conteos ni excepciones de hitos', () => {
+    const t = tr('1', 'pendiente_cruce', 'PEND CRUCE', 900);
+    const sin = con({ mostrarEstadosFrontera: false }, t, 140);
+    const con1 = con({ mostrarEstadosFrontera: true }, t, 140);
+    expect(con1.filas[0].semaforo).toBe(sin.filas[0].semaforo);
+    expect(con1.filas[0].motivo).toBe(sin.filas[0].motivo);
+    expect(con1.filas[0].hitos).toEqual(sin.filas[0].hitos);
+    expect(con1.conteos).toEqual(sin.conteos);
+    expect(con1.excepciones).toEqual(sin.excepciones);
+  });
+});

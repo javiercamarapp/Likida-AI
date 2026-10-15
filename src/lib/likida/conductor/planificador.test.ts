@@ -244,3 +244,14 @@ describe('planificar con la zona de la flota', () => {
     expect(en('No/Existe', '2026-10-30T15:30:00Z').tipo).not.toBe('nada');
   });
 });
+
+describe('estados de frontera no mueven al motor (T-A5-21)', () => {
+  it('planificar da el MISMO plan con la casilla de frontera y su umbral encendidos o apagados: 0 avisos por estados de tránsito', () => {
+    const horas = ['05:00', '07:30', '08:00', '08:20', '09:30', '12:00', '16:00', '21:00'];
+    const apagada = cfg({ mostrarEstadosFrontera: false });
+    const encendida = cfg({ mostrarEstadosFrontera: true, umbralPendienteCruceH: 1 });
+    for (const h of horas) {
+      expect(plan({ ahora: mx(h), config: encendida })).toEqual(plan({ ahora: mx(h), config: apagada }));
+    }
+  });
+});

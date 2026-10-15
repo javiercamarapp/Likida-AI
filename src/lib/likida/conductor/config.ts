@@ -75,6 +75,11 @@ export interface ConfigConductor {
   silencioRespuestaMin: number;
   /** 0801: mostrar los estados de frontera como hito OPCIONAL visible (no escala). */
   mostrarEstadosFrontera: boolean;
+  /**
+   * T-A5-21: horas en `pendiente_cruce` a partir de las cuales el tablero marca una excepción de LECTURA (no avisa a nadie).
+   * Ausente o null = desactivado (por omisión). Aún sin columna propia: se fija al armar la configuración hasta que exista.
+   */
+  umbralPendienteCruceH?: number | null;
   /** 0801: aplicar la salida que reporta el TMS como hito del viaje. */
   aplicarSalidaDelTms: boolean;
   /** 0801: llamadas de seguimiento por viaje medidas antes del agente (null = sin registrar) y la fecha (AAAA-MM-DD) en que se midió. */

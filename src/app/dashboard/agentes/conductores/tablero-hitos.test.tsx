@@ -299,3 +299,36 @@ describe('el tablero de hitos — estados vacíos y avisos en lenguaje llano (T-
     expect(html).not.toContain(`Viaje ${uuid}`);
   });
 });
+
+describe('el tablero de hitos — estados de frontera (T-A5-21)', () => {
+  const t7h = new Map([['1', { estado: 'en_patio' as const, textoOrigen: 'PATIO NLD', actualizadoEn: hace(7 * 60) }]]);
+  const armar = (c: Partial<typeof cfg>, transito: DatosTablero['transito']) =>
+    armarTablero(datos([V('1')], H('1', {}), { transito }), { ...cfg, ...c }, AHORA);
+  const html = (t: ReturnType<typeof armarTablero>) => renderToStaticMarkup(
+    <TableroHitos
+      tablero={t} indicadores={IND} dias={7} filtros={FILTROS}
+      catalogos={{ terminales: [], clientes: [], operadores: [] }}
+      ocultos={{ tenant: 't-9' }} accionUrl="/dashboard/agentes/conductores" puedeActuar accion={accion}
+      accionSitios={accion} sitios={[]}
+    />,
+  );
+
+  it('casilla encendida: la fila muestra «En patio NLD desde hace 7 h»', () => {
+    const h = html(armar({ mostrarEstadosFrontera: true }, t7h));
+    expect(h).toContain('Tránsito:');
+    expect(h).toContain('En patio NLD desde hace 7 h');
+  });
+
+  it('casilla apagada: la columna se oculta aunque el dato exista', () => {
+    const h = html(armar({ mostrarEstadosFrontera: false }, t7h));
+    expect(h).not.toContain('Tránsito:');
+    expect(h).not.toContain('En patio NLD');
+  });
+
+  it('pendiente_cruce largo con umbral: aparece en la cola de excepciones con etiqueta propia', () => {
+    const t = new Map([['1', { estado: 'pendiente_cruce' as const, textoOrigen: 'PEND CRUCE', actualizadoEn: hace(7 * 60) }]]);
+    const h = html(armar({ mostrarEstadosFrontera: true, umbralPendienteCruceH: 6 }, t));
+    expect(h).toContain('Pendiente de cruce por mucho tiempo');
+    expect(h).toContain('Es solo lectura');
+  });
+});
