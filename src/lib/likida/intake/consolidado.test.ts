@@ -553,7 +553,7 @@ describe('FASE 1 — equivalencia sobre un ECC12 SINTÉTICO: los litros sobreviv
   // equivalencia contra un ECC real" Y, con el MISMO documento en la mano,
   // resolver la pregunta abierta §6.2 (el `FormaPago = 99`). Un fixture que
   // se llama «real» hace ver esa casilla como palomeada. No lo está: ver
-  // `docs/asistencia/ECC-FORMAPAGO-99.md`.
+  // la documentación interna.
   const ECC12_SINTETICO = `<?xml version="1.0" encoding="UTF-8"?>
 <cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" TipoDeComprobante="I" Fecha="2026-04-30T23:59:00" Total="3300.00" SubTotal="2844.83">
   <cfdi:Emisor Rfc="edn010101aa1"/>

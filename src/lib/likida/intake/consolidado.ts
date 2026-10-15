@@ -92,7 +92,7 @@ export function rangoFechasLineas(lineas: CfdiLineaXml[]): { desde: string; hast
 }
 
 /**
- * FASE 1 (docs/asistencia/PLAN-FASES.md): identifica diésel de una línea del
+ * FASE 1 (la documentación interna): identifica diésel de una línea del
  * consolidado y su clave SAT. concepto_base trae `claveProdServ` nativo;
  * ecc12 NO (la ECC12 v1.2 no da ClaveProdServ por transacción) — solo
  * `tipoCombustible`, catálogo cerrado del SAT. Se traduce ÚNICAMENTE
@@ -121,7 +121,7 @@ export function rangoFechasLineas(lineas: CfdiLineaXml[]): { desde: string; hast
  * LO QUE NO SE HACE, A PROPÓSITO: no se mapea ninguna clave numérica de
  * catálogo (`"01"`, `"02"`…). El SAT publica `c_ClaveTipoCombustible` y este
  * repo NO tiene ese catálogo verificado contra fuente (ni en `normas/`, ni
- * en `normas/datos/`, ni en `docs/conocimiento/05-hidrocarburos.md`, que
+ * en `normas/datos/`, ni en la documentación interna, que
  * documenta el complemento pero no el catálogo de ese atributo). Adivinar
  * que "02" es diésel acreditaría litros de gasolina — una cifra fiscal
  * inventada, exactamente lo que la casa prohíbe. Cuando exista el catálogo

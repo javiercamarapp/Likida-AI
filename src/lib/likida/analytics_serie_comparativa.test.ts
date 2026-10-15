@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //
 // La vista "histórico" de `getSeriesKpiCards` (ventana ~10 años) leía
 // prácticamente toda `gasto` del tenant — caducaba ~mes 2.2 con 15,000
-// viajes/mes (docs/escala-15k.md §6) y corre en CADA carga del Resumen y del
+// viajes/mes (la documentación interna §6) y corre en CADA carga del Resumen y del
 // panel del contador (semanal/mensual/histórico, tres llamadas).
 //
 // Lo que este archivo prueba:

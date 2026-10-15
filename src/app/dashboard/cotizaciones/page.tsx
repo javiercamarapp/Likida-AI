@@ -302,7 +302,7 @@ function Fila({
               Tarifa del catálogo: {q.tarifaCatalogo.monto !== null ? mxn(q.tarifaCatalogo.monto) : 'sin monto (falta un dato de la tarifa)'}
               {' '}— {q.tarifaCatalogo.porque}
               {q.tarifaCatalogo.ambigua && (
-                // El triángulo del sistema y no el emoji (MARCA.md §2.1: «sin emojis como iconos»).
+                // El triángulo del sistema y no el emoji (la documentación interna §2.1: «sin emojis como iconos»).
                 <span className="inline-flex items-center gap-1" style={{ color: 'var(--warn)' }}>
                   {' · '}<TriangleAlert aria-hidden width={12} height={12} strokeWidth={1.75} />
                   el catálogo tiene dos verdades para esta ruta

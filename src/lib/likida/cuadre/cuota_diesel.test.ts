@@ -125,7 +125,7 @@ describe('el validador atrapa lo que la skill pide verificar', () => {
 // `litrosDieselAcreditables`) y el contador multiplica por la cuota del DOF.
 // Imprimir el estímulo en pesos está prohibido hasta que un fiscalista con
 // cédula firme cuál de las dos lecturas del texto aplica (íntegra vs
-// disminuida, 3.5× entre ellas — `docs/qa/verificacion-ieps-casetas-2026-08-19.md:48`).
+// disminuida, 3.5× entre ellas — `la documentación interna:48`).
 //
 // Y EL ARCHIVO SÍ ESTÁ VIGILADO HOY. Medido el 28-ago-2026: se corrompió el
 // YAML real (un sábado cambiado a domingo) y `npm test` se puso ROJO nombrando

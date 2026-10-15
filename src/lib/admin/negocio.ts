@@ -31,7 +31,7 @@
 // de arriba decía que `gasto` "es la siguiente en la fila (~240 mil al año)";
 // con un cliente de 50,000 viajes/mes son 300,000 gastos AL MES: `traerTodo`
 // rebasaba sus 100,000 filas al **día ~10** y las ~17 páginas de /admin que
-// leen `getResumenNegocio` dejaban de cargar (docs/escala-50k/MAPA.md §/admin).
+// leen `getResumenNegocio` dejaban de cargar (la documentación interna).
 // `resumen_negocio()` cuenta en la base (por flota, por día local MX) y cruza
 // la red UNA fila. Es CROSS-TENANT a propósito y revocada a anon/authenticated
 // — ver la cabecera de la migración antes de copiar el molde a otro lado.

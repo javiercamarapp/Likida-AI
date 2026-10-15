@@ -4,7 +4,7 @@ import { acotada } from './presupuesto';
 import type { ViajeRow, FiltroRegistro } from './analytics';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// EL REGISTRO DE VIAJES A 50k VIAJES/MES (docs/escala-50k/MAPA.md, 22-ago-2026)
+// EL REGISTRO DE VIAJES A 50k VIAJES/MES (la documentación interna, 22-ago-2026)
 //
 // `getViajesRegistro` de analytics.ts paginaba con `.range(desde, hasta)` =
 // OFFSET: la página 1000 le pedía a Postgres LEER y TIRAR 100,000 filas, y el

@@ -3,7 +3,7 @@
 -- (TPS): 5,000 unidades, ~7,500 operadores, 25 terminales, 40 clientes,
 -- ~27,500 viajes en 30 días, ~90,000 gastos, ~24,000 liquidaciones (ver
 -- BLOQUE 4 por qué no 70,000: techo de traerTodo).
--- Modelo: docs/demo-5k-modelo.md · Uso y limpieza: docs/demo-5k.md
+-- Modelo: la documentación interna · Uso y limpieza: la documentación interna
 --
 -- Todo ficticio: RFC/placas/teléfonos inventados (teléfonos del rango falso
 -- 5215559xxxxxx). Tenant con id FIJO (lo usa demo-5k-limpiar.sql).
@@ -17,7 +17,7 @@
 --
 -- CONSTRAINTS RESPETADOS: uq_viaje_abierto_por_operador (un abierto/en_cuadre
 -- por operador), viaje_estatus_dominio, viaje_folio_unico, gasto_concepto_dominio
--- (9 conceptos: los 14 del modelo se mapean — ver docs/demo-5k.md),
+-- (9 conceptos: los 14 del modelo se mapean — ver la documentación interna),
 -- uq_gasto_cfdi_uuid, uq_operador_telefono_activo (global), unidad_estado_dominio,
 -- liquidacion_estatus_dominio, liquidacion_viaje_uidx, config_tenant_valida.
 -- avisado_en va NULL en los abiertos (el cron de WhatsApp no les escribe).
@@ -156,7 +156,7 @@ end $$;
 -- `traerTodo` (100,000 filas por tabla, src/lib/likida/pg.ts:48): con más
 -- gastos, /combustible-casetas, /rentabilidad, /operadores y el motor fiscal
 -- del inicio LANZAN «lectura incompleta» en vez de pintar cifras
--- (docs/escala-15k.md §6). Para 70,000 viajes pon 2,540/1,000 y acepta ese
+-- (la documentación interna §6). Para 70,000 viajes pon 2,540/1,000 y acepta ese
 -- error, o agrega en SQL esas lecturas (como la 0112).
 --
 -- Se corre UNA vez por cada tramo de días `d0..d1` (d = días antes de hoy):
