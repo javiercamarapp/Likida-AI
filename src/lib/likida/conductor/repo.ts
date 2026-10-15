@@ -18,6 +18,7 @@ import type { MotivoSenalVida } from './solicitudes';
 import type { RespuestaSenalVida } from './tipos';
 import type { FiltrosTablero } from './repo_validacion';
 import type { CriterioSitio } from './sitio_derivado';
+import { HORAS_GPS_RECIENTE, type DatosPreflight } from './preflight_piloto';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL ACCESO A DATOS DEL AGENTE 5 (viaje_hito y sus bitácoras, 0380).
@@ -1136,4 +1137,42 @@ export async function retirarVoluntario(tenantId: string, operadorId: string): P
   exigirPiloto(res as never, 'conductor.retirarVoluntario');
   const d = (res as { data: unknown }).data;
   return typeof d === 'number' ? d : 0;
+}
+
+// ── T-A5-25: los datos del preflight del piloto (solo lectura) ───────────────
+
+/** Lo que el preflight necesita de la base, de UNA flota. Solo LEE: no manda nada ni escribe. Lanza si la base no contesta. */
+export async function leerDatosPreflight(tenantId: string, ahora: Date = new Date()): Promise<DatosPreflight> {
+  const [config, zonaDeclarada, voluntarios, contactos] = await Promise.all([
+    leerConfigConductor(tenantId), getZonaHorariaTenant(tenantId), listarVoluntarios(tenantId), cargarContactosTrafico(tenantId),
+  ]);
+  const ids = voluntarios.map((o) => o.id);
+  let viajes: DatosPreflight['viajes'] = [];
+  const posicionesPorUnidad: DatosPreflight['posicionesPorUnidad'] = {};
+  if (ids.length > 0) {
+    // El piloto solo sigue viajes abiertos y aceptados de sus voluntarios.
+    const rv = await acotada(supabaseAdmin().from('viaje').select('terminal_id, unidad_id, origen_geocerca_id, destino_geocerca_id')
+      .eq('tenant_id', tenantId).eq('estatus', 'abierto').not('aceptado_en', 'is', null).in('operador_id', ids).order('id').limit(1000), 'conductor.preflight_viajes');
+    const filas = (exigir(rv as never, 'conductor.preflight_viajes') ?? []) as unknown as Fila[];
+    viajes = filas.map((f) => ({ terminalId: s(f.terminal_id), unidadId: s(f.unidad_id), conSitio: typeof f.origen_geocerca_id === 'string' && typeof f.destino_geocerca_id === 'string' }));
+    const unidades = [...new Set(viajes.map((v) => v.unidadId).filter((u): u is string => u !== null))];
+    if (unidades.length > 0) {
+      const desde = new Date(ahora.getTime() - HORAS_GPS_RECIENTE * 3_600_000);
+      const haceUnaHora = ahora.getTime() - 3_600_000;
+      const rp = await acotada(supabaseAdmin().from('posicion').select('unidad_id, medida_en')
+        .eq('tenant_id', tenantId).in('unidad_id', unidades).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString()).order('medida_en', { ascending: false }).limit(5000), 'conductor.preflight_posiciones');
+      const ps = (exigir(rp as never, 'conductor.preflight_posiciones') ?? []) as unknown as Fila[];
+      const mut = posicionesPorUnidad as Record<string, { ultimas2h: number; ultimaHora: number }>;
+      for (const p of ps) {
+        const u = String(p.unidad_id);
+        const c = mut[u] ?? (mut[u] = { ultimas2h: 0, ultimaHora: 0 });
+        c.ultimas2h += 1;
+        if (new Date(String(p.medida_en)).getTime() > haceUnaHora) c.ultimaHora += 1;
+      }
+    }
+  }
+  return {
+    config: { activo: config.activo, perfilSeguimiento: config.perfilSeguimiento, solicitudesMin: config.solicitudesMin },
+    zonaDeclarada, voluntarios: voluntarios.map((o) => ({ telefono: o.telefono })), viajes, posicionesPorUnidad, contactos,
+  };
 }

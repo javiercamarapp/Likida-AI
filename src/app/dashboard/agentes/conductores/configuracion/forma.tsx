@@ -59,7 +59,7 @@ function Guardar() {
   );
 }
 
-export function FormaConfigConductor({ accion, config, valores, contactos, patios, puedeEditar }: {
+export function FormaConfigConductor({ accion, config, valores, contactos, patios, puedeEditar, puedeForzarPreflight = false }: {
   accion: AccionConfig;
   config: ConfigConductor;
   /** Los textos de los campos (ver `valoresDeForma`). */
@@ -67,6 +67,8 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
   contactos: ContactoTrafico[];
   patios: Array<{ id: string; nombre: string }>;
   puedeEditar: boolean;
+  /** T-A5-25: solo para el soporte de Likida (QA). */
+  puedeForzarPreflight?: boolean;
 }) {
   const [estado, enviar] = useActionState(accion, null);
   const off = !puedeEditar;
@@ -171,7 +173,13 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
         <Casilla nombre="detectarHitosGps" etiqueta="Dar por hecha la llegada o la salida cuando el GPS entra o sale del sitio del viaje" marcada={config.detectarHitosGps} deshabilitada={off}
           ayuda="El tractor entra o sale de la geocerca y el hito se registra solo, sin que el chofer escriba (queda como «sistema» y validado por GPS). Solo actúa con sitio asignado al viaje y GPS de la unidad." />
         <Casilla nombre="avisarSenalVida" etiqueta="Preguntar «¿sigues bien?» si el GPS de un tractor en tránsito se calla" marcada={config.avisarSenalVida} deshabilitada={off}
-          ayuda="Si la última posición queda vieja o el tractor lleva rato detenido fuera de un sitio: un aviso con botones al chofer, un segundo aviso y después al jefe de tráfico. Apagado: solo se ve en el tablero. Requiere plantilla aprobada fuera de la ventana de 24 h." />
+          ayuda="Si la última posición queda vieja o el tractor lleva rato detenido fuera de un sitio: un aviso con botones al chofer, un segundo aviso y después al jefe de tráfico. Apagado: solo se ve en el tablero. Requiere plantilla aprobada fuera de la ventana de 24 h. Solo se puede encender cuando «¿Está lista la flota?» no tiene nada en rojo." />
+        {puedeForzarPreflight && (
+          <label className="flex items-start gap-2 text-[12.5px]">
+            <input type="checkbox" name="forzarPreflight" value="si" disabled={off} className="mt-0.5" />
+            <span>Encender la señal de vida aunque «¿Está lista la flota?» tenga faltantes (solo QA; queda en la bitácora)</span>
+          </label>
+        )}
         <div className="grid sm:grid-cols-2 gap-3">
           <Numero nombre="estadiaAlertaCargaMin" etiqueta="Alerta de estadía en carga (min)" valor={valores.estadiaAlertaCargaMin} deshabilitada={off} placeholder="vacío = sin alerta" ayuda="De 15 a 4,320. Vacío la apaga." />
           <Numero nombre="estadiaAlertaDescargaMin" etiqueta="Alerta de estadía en descarga (min)" valor={valores.estadiaAlertaDescargaMin} deshabilitada={off} placeholder="vacío = sin alerta" />
