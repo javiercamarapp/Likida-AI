@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
+import { tenantsConPerfilASaltar } from '@/lib/auth/perfil_tenant';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,7 +45,19 @@ export async function GET(req: Request) {
   }
 
   try {
-    const r = await procesarEntregas(depsEntregaReales(), { vencePorReloj: inicio + maxDuration * 1000 - MARGEN_MS });
+    // Las flotas con perfil (0770) se saltan: la entrega de facturas al contador es un módulo en
+    // stand-by. Se recorta en los dos puntos por donde el barrido descubre flotas y lotes.
+    const saltar = await tenantsConPerfilASaltar('buzon-entrega');
+    const deps = depsEntregaReales();
+    if (saltar.size > 0) {
+      const { flotasConEntregaAutomatica, lotesParaEnviar } = deps.repo;
+      deps.repo = {
+        ...deps.repo,
+        flotasConEntregaAutomatica: async (...a) => (await flotasConEntregaAutomatica(...a)).filter((f) => !saltar.has(f.tenantId)),
+        lotesParaEnviar: async (...a) => (await lotesParaEnviar(...a)).filter((l) => !saltar.has(l.tenantId)),
+      };
+    }
+    const r = await procesarEntregas(deps, { vencePorReloj: inicio + maxDuration * 1000 - MARGEN_MS });
     logger.info('cron.buzon_entrega.ok', { ...r });
     // Lotes fallidos o errores son trabajo que NO terminó: ni «ok» limpio ni «fallo» total.
     const parcial = r.fallidos > 0 || r.errores > 0;

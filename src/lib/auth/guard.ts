@@ -29,6 +29,7 @@ import { mfaSuperadminObligatorio } from './mfa';
 import { veredictoMfaDeSesion } from './superadmin-mfa';
 import { logger } from '@/lib/logger';
 import { getSessionTenant, type SessionTenant } from './session';
+import { exigirRutaDePerfil } from './perfil_tenant';
 
 /**
  * DÓNDE SE INSCRIBE EL SEGUNDO FACTOR. Es la única pantalla EXENTA de la
@@ -107,6 +108,15 @@ export async function requireSessionTenant(
     // pantalla le decía "pide tu alta" a una cuenta ya dada de alta.
     if (s.rol === 'vendedor') redirect('/vendedor');
     redirect('/sin-acceso');
+  }
+  // EL PERFIL DE LA FLOTA (0770) también en esta puerta: las server actions de
+  // las pantallas que la usan directo (y no `resolverTenantEfectivo`) quedan
+  // cerradas bajo el perfil si su pantalla está en stand-by. Solo sesiones de
+  // flota real (el superadmin se gatea en `resolverTenantEfectivo` contra el
+  // tenant que de verdad mira, no contra el de su selección) y solo rutas del
+  // panel (`/cuenta` y demás no tienen perfil).
+  if (s.rol !== 'superadmin' && destino.startsWith('/dashboard')) {
+    await exigirRutaDePerfil(s.tenantId, destino);
   }
   return s as SessionTenant & { tenantId: string };
 }

@@ -240,7 +240,7 @@ export interface ResultadoAlertasTope {
 export const LIMITE_CANDIDATAS = 500;
 const MAX_RECHAZOS_SEGUIDOS = 5;
 
-export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; venceEn?: number } = {}): Promise<ResultadoAlertasTope> {
+export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; venceEn?: number; excluirTenants?: ReadonlySet<string> } = {}): Promise<ResultadoAlertasTope> {
   const ahora = opts.ahora ?? new Date();
   const r: ResultadoAlertasTope = {
     revisadas: 0, enCurso: 0, sinInicio: 0, inicioEnFuturo: 0, sinCierreProbable: 0, bajoUmbral: 0, yaAvisadas: 0,
@@ -248,7 +248,9 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
     listaTruncada: false, cortadaPorRechazoMasivo: false, fallos: [],
   };
   // Si no se puede leer la lista, NO se afirma que no hay nada que avisar: lanza (el cron pinta fallo).
-  const { filas, hayMas } = await p.candidatas(ahora, LIMITE_CANDIDATAS + 1);
+  const { filas: todas, hayMas } = await p.candidatas(ahora, LIMITE_CANDIDATAS + 1);
+  // Las flotas con perfil (0770) no reciben alertas de jornada: es un módulo en stand-by.
+  const filas = opts.excluirTenants && opts.excluirTenants.size > 0 ? todas.filter((f) => !opts.excluirTenants!.has(f.tenantId)) : todas;
   r.listaTruncada = hayMas || filas.length > LIMITE_CANDIDATAS;
   const lista = filas.slice(0, LIMITE_CANDIDATAS);
 

@@ -58,6 +58,9 @@ vi.mock('@/lib/likida/perfil/preguntas', () => ({
 
 vi.mock('./inicio-contenido', () => ({ InicioContenido: () => null }));
 vi.mock('./inicio-operacion', () => ({ InicioOperacion: () => null }));
+vi.mock('./inicio-cinco-agentes', () => ({ InicioCincoAgentes: () => null }));
+// Sin perfil de tenant (0770): este archivo prueba el Resumen de siempre.
+vi.mock('@/lib/auth/perfil_tenant', () => ({ perfilDeTenant: async () => null }));
 vi.mock('@/lib/auth/visibilidad', () => ({ puedeVerArea: () => true }));
 
 import DashboardInicio from './page';

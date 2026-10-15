@@ -7,6 +7,7 @@ import AvisoRol from './aviso-rol';
 import { Logo } from '../logo';
 import { EnlaceCuenta } from './enlace-cuenta';
 import { ROL_BADGE, type RolAppUser } from '@/lib/auth/provisionar';
+import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import { ProveedorNotificaciones } from '../admin/ui/notificaciones';
 
 /**
@@ -28,7 +29,7 @@ import { ProveedorNotificaciones } from '../admin/ui/notificaciones';
  */
 
 export default function DashboardChrome({
-  nombre, rol, cerrarSesion, usoIa, children,
+  nombre, rol, cerrarSesion, usoIa, perfil, children,
 }: {
   nombre: string | null;
   rol: string;
@@ -38,6 +39,8 @@ export default function DashboardChrome({
    *  Lo trae layout.tsx; omitido (render de prueba / preview de superadmin)
    *  no se pinta. */
   usoIa?: { pct: number } | null;
+  /** Perfil de la flota (0770), leído por layout.tsx. Recorta el menú; sin él, el de siempre. */
+  perfil?: PerfilTenant | null;
   children: React.ReactNode;
 }) {
   return (
@@ -71,13 +74,13 @@ export default function DashboardChrome({
           </div>
 
           <nav aria-label="Navegación principal" className="flex-1 overflow-y-auto px-2 space-y-2 pb-3">
-            <SidebarNav rol={rol} />
+            <SidebarNav rol={rol} perfil={perfil} />
           </nav>
 
           {/* El bloque inferior fijo, con su propio
               fondo (el "cambio de color de hasta abajo", 13-ago-2026). */}
           <div className="px-2 pt-2 pb-1.5 space-y-0.5 shrink-0" style={{ background: 'var(--canvas)', borderTop: '1px solid var(--line)' }}>
-            <SidebarAbajo rol={rol} usoIa={usoIa} />
+            <SidebarAbajo rol={rol} usoIa={usoIa} perfil={perfil} />
           </div>
 
           {/* El user card: tarjeta con hairline,

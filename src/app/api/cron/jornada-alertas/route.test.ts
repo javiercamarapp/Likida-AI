@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Sin perfiles de tenant (0770): este archivo prueba el cron de siempre. El filtro por perfil tiene
+// su propia prueba (src/app/api/cron/perfil_crons.test.ts).
+const { flotasConPerfil } = vi.hoisted(() => ({ flotasConPerfil: new Set<string>() }));
+vi.mock('@/lib/auth/perfil_tenant', () => ({
+  tenantsConPerfilASaltar: async () => new Set(flotasConPerfil),
+  tenantsConPerfil: async () => new Set(flotasConPerfil),
+}));
+
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CRON DE LA ALERTA DE TOPE DE JORNADA — su contrato, fijado por prueba.
 //
@@ -150,5 +158,18 @@ describe('cron jornada-alertas — puerta, palanca, reloj y contrato de fallo', 
     expect(alertarOperador).toHaveBeenCalledWith('cron.jornada_alertas', expect.objectContaining({ codigo: 'codigo-prueba' }));
     expect(registrarLatido).toHaveBeenCalledWith('jornada-alertas', 'fallo', expect.objectContaining({ codigo: 'codigo-prueba' }));
     expect(registrarLatido).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('cron jornada-alertas — el perfil de tenant (0770)', () => {
+  it('le pasa al motor las flotas con perfil para que las SALTE (módulo en stand-by)', async () => {
+    flotasConPerfil.clear();
+    flotasConPerfil.add('t-con-perfil');
+    correrAlertasTope.mockClear();
+    const res = await GET(new Request('https://likida.ai/api/cron/jornada-alertas', { headers: { authorization: 'Bearer secreto-de-prueba' } }));
+    flotasConPerfil.clear();
+    expect(res.status).toBeLessThan(500);
+    const opts = correrAlertasTope.mock.calls[0][1] as { excluirTenants: Set<string> };
+    expect([...opts.excluirTenants]).toEqual(['t-con-perfil']);
   });
 });
