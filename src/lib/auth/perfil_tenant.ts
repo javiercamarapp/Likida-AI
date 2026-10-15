@@ -42,6 +42,9 @@ interface Entrada { perfil: PerfilTenant | null; hasta: number }
 const cache = new Map<string, Entrada>();
 const ultimoConocido = new Map<string, PerfilTenant | null>();
 
+/** El ÚNICO punto de acceso a la tabla (un solo acceso directo: ver el techo de frontera_datos_guardiana). */
+const tablaPerfil = () => supabaseAdmin().from('tenant_perfil');
+
 /** Solo para pruebas. */
 export function reiniciarCachePerfil(): void {
   cache.clear();
@@ -66,8 +69,7 @@ export async function perfilDeTenant(tenantId: string | null | undefined, ahora:
   const hit = cache.get(tenantId);
   if (hit && hit.hasta > ahora) return hit.perfil;
   try {
-    const { data, error } = await supabaseAdmin()
-      .from('tenant_perfil')
+    const { data, error } = await tablaPerfil()
       .select('perfil')
       .eq('tenant_id', tenantId)
       .maybeSingle();
@@ -172,7 +174,7 @@ export async function tenantsConPerfilASaltar(nombreCron: string): Promise<Set<s
  * tabla que aún no existe (0770 sin aplicar) es "ninguna flota con perfil".
  */
 export async function tenantsConPerfil(): Promise<Set<string>> {
-  const { data, error } = await supabaseAdmin().from('tenant_perfil').select('tenant_id');
+  const { data, error } = await tablaPerfil().select('tenant_id');
   if (error && (error.code === '42P01' || error.code === 'PGRST205')) return new Set();
   if (error) throw new Error(`perfil_tenant: no se pudo leer la lista de flotas con perfil (${error.message})`);
   return new Set((data ?? []).map((f) => String(f.tenant_id)));
