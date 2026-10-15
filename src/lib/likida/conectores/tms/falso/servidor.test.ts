@@ -43,7 +43,7 @@ describe('servidor TMS falso', () => {
     const s = crearServidorTmsFalso({ datos, tamPaginaDefecto: 5 });
     const t = await entrar(s.http);
     const vistos: string[] = [];
-    let pagina = 1; let total = 1;
+    let pagina = 1; let total: number;
     do {
       const r = await pedir(s.http, t, 'viajes', { pagina });
       const d = (r.cuerpo as { data: { items: { Icident: string }[]; total_paginas: number } }).data;
