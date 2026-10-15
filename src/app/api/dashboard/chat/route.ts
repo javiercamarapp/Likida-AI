@@ -30,6 +30,7 @@ import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 import { MAX_CHAT_BYTES } from './limites';
 import { medirRuta } from '@/lib/observability/latencia';
+import { respuestaSiPerfilNiegaApi } from '@/lib/auth/perfil_tenant';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -76,6 +77,9 @@ async function manejarPOST(req: NextRequest) {
   // `resolverTenantApi`. Sin `?tenant=` sigue siendo 403 real.
   if (!efectivo) return NextResponse.json({ error: 'sin acceso' },
     { status: req.nextUrl.searchParams.get('tenant') ? 503 : 403 });
+  const negadoPerfil = await respuestaSiPerfilNiegaApi(efectivo.tenantId, req.url);
+  if (negadoPerfil) return negadoPerfil;
+
   const { tenantId, nombreFlota } = efectivo;
 
   const lectura = await leerTextoAcotado(req, MAX_CHAT_BYTES);
