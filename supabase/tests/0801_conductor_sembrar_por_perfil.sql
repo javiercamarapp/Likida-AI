@@ -8,32 +8,44 @@
 --   (d) cambiar de `completo` a `esenciales` con viajes abiertos omite lo pendiente y CONSERVA lo ya registrado;
 --   (e) volver a `completo` reactiva lo omitido por el perfil, salvo si un hito posterior ya se registró (queda
 --       omitido `inferido_por_<posterior>`); otros motivos de omisión no se tocan;
---   (f) un viaje no abierto no se toca; solo service_role ejecuta la función.
+--   (f) un viaje no abierto no se toca; solo service_role ejecuta la función;
+--   (g) una flota con fila en tenant_perfil (0770, Conductor en «Próximamente») NO recibe siembra ni conciliación.
 begin;
 
 insert into public.tenant (id, nombre) values
   ('80500000-0000-4000-8000-0000000000a1', 'Flota esenciales 0801'),
   ('80500000-0000-4000-8000-0000000000b1', 'Flota completo 0801'),
   ('80500000-0000-4000-8000-0000000000c1', 'Flota sin config 0801'),
-  ('80500000-0000-4000-8000-0000000000d1', 'Flota apagada 0801');
+  ('80500000-0000-4000-8000-0000000000d1', 'Flota apagada 0801'),
+  ('80500000-0000-4000-8000-0000000000e1', 'Flota con perfil 0801');
+
+insert into public.tenant_perfil (tenant_id, perfil) values ('80500000-0000-4000-8000-0000000000e1', 'cinco_agentes');
 
 insert into public.agente_conductor_config (tenant_id, activo, perfil_seguimiento) values
   ('80500000-0000-4000-8000-0000000000a1', true,  'esenciales'),
   ('80500000-0000-4000-8000-0000000000b1', true,  'completo'),
-  ('80500000-0000-4000-8000-0000000000d1', false, 'esenciales');
+  ('80500000-0000-4000-8000-0000000000d1', false, 'esenciales'),
+  ('80500000-0000-4000-8000-0000000000e1', true,  'esenciales');
 
 insert into public.operador (id, tenant_id, nombre, telefono) values
   ('80500000-0000-4000-8000-000000000101', '80500000-0000-4000-8000-0000000000a1', 'Chofer A', '525500801001'), -- grep-limpio:ok
   ('80500000-0000-4000-8000-000000000102', '80500000-0000-4000-8000-0000000000b1', 'Chofer B', '525500801002'), -- grep-limpio:ok
   ('80500000-0000-4000-8000-000000000103', '80500000-0000-4000-8000-0000000000c1', 'Chofer C', '525500801003'), -- grep-limpio:ok
-  ('80500000-0000-4000-8000-000000000104', '80500000-0000-4000-8000-0000000000d1', 'Chofer D', '525500801004'); -- grep-limpio:ok
+  ('80500000-0000-4000-8000-000000000104', '80500000-0000-4000-8000-0000000000d1', 'Chofer D', '525500801004'), -- grep-limpio:ok
+  ('80500000-0000-4000-8000-000000000105', '80500000-0000-4000-8000-0000000000e1', 'Chofer E', '525500801005'), -- grep-limpio:ok
+  ('80500000-0000-4000-8000-000000000106', '80500000-0000-4000-8000-0000000000e1', 'Chofer F', '525500801006'); -- grep-limpio:ok
 
 insert into public.viaje (id, tenant_id, operador_id, folio, estatus, avisado_en, aceptado_en) values
   ('80500000-0000-4000-8000-000000000201', '80500000-0000-4000-8000-0000000000a1', '80500000-0000-4000-8000-000000000101', 'V-A', 'abierto',   now() - interval '3 hours', now() - interval '2 hours'),
   ('80500000-0000-4000-8000-000000000202', '80500000-0000-4000-8000-0000000000b1', '80500000-0000-4000-8000-000000000102', 'V-B', 'abierto',   now() - interval '3 hours', now() - interval '2 hours'),
   ('80500000-0000-4000-8000-000000000203', '80500000-0000-4000-8000-0000000000c1', '80500000-0000-4000-8000-000000000103', 'V-C', 'abierto',   now() - interval '3 hours', now() - interval '2 hours'),
   ('80500000-0000-4000-8000-000000000204', '80500000-0000-4000-8000-0000000000d1', '80500000-0000-4000-8000-000000000104', 'V-D', 'abierto',   now() - interval '3 hours', now() - interval '2 hours'),
-  ('80500000-0000-4000-8000-000000000205', '80500000-0000-4000-8000-0000000000a1', '80500000-0000-4000-8000-000000000101', 'V-L', 'liquidado', now() - interval '3 hours', now() - interval '2 hours');
+  ('80500000-0000-4000-8000-000000000205', '80500000-0000-4000-8000-0000000000a1', '80500000-0000-4000-8000-000000000101', 'V-L', 'liquidado', now() - interval '3 hours', now() - interval '2 hours'),
+  ('80500000-0000-4000-8000-000000000206', '80500000-0000-4000-8000-0000000000e1', '80500000-0000-4000-8000-000000000105', 'V-E1', 'abierto',   now() - interval '3 hours', now() - interval '2 hours'),
+  ('80500000-0000-4000-8000-000000000207', '80500000-0000-4000-8000-0000000000e1', '80500000-0000-4000-8000-000000000106', 'V-E2', 'abierto',   now() - interval '3 hours', now() - interval '2 hours');
+
+-- Un viaje de la flota con perfil que YA tenía un hito pendiente (la conciliación de `esenciales` lo omitiría si la saltara mal).
+insert into public.viaje_hito (tenant_id, viaje_id, tipo) values ('80500000-0000-4000-8000-0000000000e1', '80500000-0000-4000-8000-000000000206', 'regreso');
 
 set local role service_role;
 
@@ -110,6 +122,14 @@ begin
   perform public.sembrar_hitos_conductor(500);
   select estado into r from public.viaje_hito where viaje_id = vL and tipo = 'regreso';
   if r.estado <> 'esperado' then raise exception '0801: tocó un hito de un viaje liquidado'; end if;
+
+  -- (g) la flota con perfil: V-E2 (sin hitos) sigue sin hitos y el pendiente de V-E1 no se concilia a `omitido`
+  select count(*) into n from public.viaje_hito where viaje_id = '80500000-0000-4000-8000-000000000207';
+  if n <> 0 then raise exception '0801: sembró % hitos para una flota con perfil', n; end if;
+  select estado into r from public.viaje_hito where viaje_id = '80500000-0000-4000-8000-000000000206' and tipo = 'regreso';
+  if r.estado <> 'esperado' then raise exception '0801: concilió un hito de una flota con perfil (%)', r.estado; end if;
+  select count(*) into n from public.viaje_hito where tenant_id = '80500000-0000-4000-8000-0000000000e1';
+  if n <> 1 then raise exception '0801: la flota con perfil debía conservar solo su hito previo, hay %', n; end if;
 
   -- p_limite inválido sigue rebotando
   begin perform public.sembrar_hitos_conductor(0); raise exception '0801: aceptó p_limite 0';
