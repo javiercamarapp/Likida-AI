@@ -33,7 +33,9 @@ function duracion(min: number | null): string {
   return `${numero(Math.floor(min / 60))} h ${numero(min % 60)} min`;
 }
 
-export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendientes, grupoElegido, truncado, umbralMin, puedeEditar, puedeAprobar, rapidas, acciones }: {
+export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendientes, grupoElegido, truncado, umbralMin, puedeEditar, puedeAprobar, rapidas, acciones, standby = false }: {
+  /** T-A4-32: perfil cinco_agentes → las respuestas rápidas (stand-by) no se muestran ni se aprueban. */
+  standby?: boolean;
   sufijo: string;
   /** `null` = la base aún no tiene la 0484: se dice, no se enseña «no hay grupos». */
   grupos: GrupoVigia[] | null;
@@ -107,7 +109,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                 <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota agrega grupos y sube histórico.</p>
               )}
 
-              <Seccion id="rapidas" titulo="Respuestas rápidas aprobadas">
+              {!standby && <Seccion id="rapidas" titulo="Respuestas rápidas aprobadas">
                 {rapidas === null ? (
                   <Aviso>La base de datos todavía no tiene las respuestas rápidas (falta aplicar la migración 0647). Mientras tanto el Vigía contesta como siempre.</Aviso>
                 ) : (
@@ -132,7 +134,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                     )}
                   </>
                 )}
-              </Seccion>
+              </Seccion>}
 
               <Seccion id="reporte" titulo={grupoElegido ? 'Reporte del grupo elegido' : 'Reporte de todos los grupos'}>
                 {reporte === null || reporte.mensajes === 0 ? (
@@ -192,7 +194,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                             <li key={f.pregunta} className="text-[12.5px]">
                               <div><strong>{f.pregunta}</strong> <span style={{ color: 'var(--faint)' }}>· {numero(f.veces)} veces en {numero(f.dias)} días</span></div>
                               <div style={{ color: 'var(--muted)' }}>{f.respuestaTipica ? <>Lo que suele contestar tu equipo: «{f.respuestaTipica}»</> : 'Sin una respuesta del equipo en la hora siguiente.'}</div>
-                              {puedeAprobar && rapidas !== null && (aprobadas.has(f.pregunta.trim().toLowerCase())
+                              {!standby && puedeAprobar && rapidas !== null && (aprobadas.has(f.pregunta.trim().toLowerCase())
                                 ? <div className="text-[11.5px]" style={{ color: 'var(--ok)' }}>Ya es una respuesta rápida aprobada.</div>
                                 : <FormaAprobarRapida accion={acciones.aprobarRapida} tema={f.tema} pregunta={f.pregunta} textoInicial={f.respuestaTipica ?? ''} />)}
                             </li>

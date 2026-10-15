@@ -126,3 +126,23 @@ describe('grupos e histórico del Vigía (pantalla)', () => {
     });
   });
 });
+
+describe('stand-by bajo el perfil (T-A4-32)', () => {
+  const grupos = [{ id: 'g1', clienteId: 'c1', clienteNombre: 'Cliente A', nombre: 'Operación A', critico: false, importaciones: 1, mensajes: 4, ultimaImportacion: null }];
+  const rapidas = [{ id: 'r1', pregunta: 'Pregunta de prueba', tema: 'eta', texto: 'Respuesta de prueba', usos: 2, ultimoUsoEn: null }] as unknown as Parameters<typeof VistaHistorialVigia>[0]['rapidas'];
+
+  it('con perfil: la sección de respuestas rápidas y sus botones no existen', () => {
+    const html = pintar({ grupos, rapidas, standby: true });
+    expect(html).not.toContain('Respuestas rápidas aprobadas');
+    expect(html).not.toContain('Pregunta de prueba');
+    expect(html).not.toContain('Aprobar como respuesta rápida');
+    expect(html).not.toContain('Retirar esta respuesta rápida');
+  });
+  it('sin perfil: la sección sigue igual que hoy', () => {
+    const html = pintar({ grupos, rapidas });
+    expect(html).toContain('Respuestas rápidas aprobadas');
+    expect(html).toContain('Pregunta de prueba');
+    expect(html).toContain('Retirar esta respuesta rápida');
+    expect(pintar({ grupos, rapidas, standby: false })).toBe(html);
+  });
+});

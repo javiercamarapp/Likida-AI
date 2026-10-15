@@ -93,8 +93,10 @@ export function FormaResponder({ accion, id }: { accion: AccionVigia; id: string
   );
 }
 
-export function FormaConfig({ accion, valores }: {
+export function FormaConfig({ accion, valores, standby = false }: {
   accion: AccionVigia;
+  /** T-A4-32: bajo el perfil cinco_agentes el autoenvío es stand-by: ni la opción ni su umbral se muestran (el código sigue intacto). */
+  standby?: boolean;
   valores: {
     habilitado: boolean; modoAprobacion: ModoAprobacion; autoenviarMinAprobaciones: number; slaRespuestaMin: number;
     escalarNivel2Min: number; slaCriticoMin: number; molestiaAvisoNivel: number; retencionDias: number; avisoPrivacidadUrl: string | null; respaldoCorreo: boolean;
@@ -110,19 +112,25 @@ export function FormaConfig({ accion, valores }: {
       <div className="grid sm:grid-cols-2 gap-3">
         <div>
           <label htmlFor="cfg-modo" className={ETIQUETA}>Modo de aprobación</label>
-          <select id="cfg-modo" name="modoAprobacion" defaultValue={valores.modoAprobacion} className={CAMPO} style={{ background: 'var(--surface)' }}>
+          <select id="cfg-modo" name="modoAprobacion" defaultValue={standby ? 'siempre' : valores.modoAprobacion} className={CAMPO} style={{ background: 'var(--surface)' }}>
             <option value="siempre">Siempre aprobar (recomendado al empezar)</option>
-            <option value="autoenviar_bajo_riesgo">Autoenviar solo preguntas de bajo riesgo ya validadas</option>
+            {!standby && <option value="autoenviar_bajo_riesgo">Autoenviar solo preguntas de bajo riesgo ya validadas</option>}
           </select>
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            Aun en autoenvío, una queja, un cliente molesto, un dato faltante o un mensaje raro SIEMPRE esperan tu toque.
+            {standby
+              ? 'El Vigía solo avisa y propone: cada respuesta espera tu toque antes de salir.'
+              : 'Aun en autoenvío, una queja, un cliente molesto, un dato faltante o un mensaje raro SIEMPRE esperan tu toque.'}
           </p>
         </div>
-        <div>
-          <label htmlFor="cfg-min" className={ETIQUETA}>Aprobaciones sin editar para validar una pregunta</label>
-          <input id="cfg-min" name="autoenviarMinAprobaciones" type="text" inputMode="numeric" defaultValue={valores.autoenviarMinAprobaciones} className={CAMPO} style={{ background: 'var(--surface)' }} />
-          <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 1 y 100, por tipo de pregunta (ubicación, documentos…).</p>
-        </div>
+        {standby ? (
+          <input type="hidden" name="autoenviarMinAprobaciones" value={valores.autoenviarMinAprobaciones} />
+        ) : (
+          <div>
+            <label htmlFor="cfg-min" className={ETIQUETA}>Aprobaciones sin editar para validar una pregunta</label>
+            <input id="cfg-min" name="autoenviarMinAprobaciones" type="text" inputMode="numeric" defaultValue={valores.autoenviarMinAprobaciones} className={CAMPO} style={{ background: 'var(--surface)' }} />
+            <p className={AYUDA} style={{ color: 'var(--faint)' }}>Entre 1 y 100, por tipo de pregunta (ubicación, documentos…).</p>
+          </div>
+        )}
         <div>
           <label htmlFor="cfg-sla" className={ETIQUETA}>Minutos sin respuesta antes de avisar al responsable</label>
           <input id="cfg-sla" name="slaRespuestaMin" type="text" inputMode="numeric" defaultValue={valores.slaRespuestaMin} className={CAMPO} style={{ background: 'var(--surface)' }} />
