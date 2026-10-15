@@ -156,7 +156,7 @@ describe('guía de operación = migraciones y código', () => {
   it('la pasada de avisos corre con el mantenimiento y la guía lo dice', () => {
     const servicio = leer('src/lib/likida/vigia/servicio.ts');
     const retorno = servicio.indexOf('if (opciones.mantenimiento === false) return r;');
-    const pasada = servicio.indexOf('await pasadaAvisos(deps, ahora, r, opciones.vencePorReloj);');
+    const pasada = servicio.indexOf('await pasadaAvisos(deps, ahora, r, opciones.vencePorReloj, saltar);');
     expect(retorno).toBeGreaterThan(-1);
     expect(pasada).toBeGreaterThan(retorno);
     expect(doc).toMatch(/cada 5 minutos/);
