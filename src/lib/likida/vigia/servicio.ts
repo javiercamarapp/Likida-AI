@@ -40,6 +40,7 @@ import { esSpam, limpiarTexto } from './entrada';
 import { DIAS_CICLO_INACTIVO, evaluarEscalamiento, minutosEsperando, type AccionEscalamiento } from './escalamiento';
 import { resolverViaje, type ResumenViaje } from './estatus_viaje';
 import { evaluarMolestia } from './molestia';
+import { prioridadDe } from './prioridad';
 import { decidirEnvio } from './politica';
 import { claveCorreo, debeRespaldarPorCorreo, hashCorreo, reintentarCorreosVencidos, respaldarPorCorreo, unirDestinatarios } from './respaldo_correo';
 import { pulirBorrador, redactarBorrador, type ViajeParaRedactar } from './redactor';
@@ -171,6 +172,21 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
     // UN registro por ciclo de espera, no uno por mensaje de spam.
     await repo.evento(tenantId, { conversacionId: conv.id, tipo: 'spam', clave: `${conv.id}:spam:${Date.parse(inicioCiclo)}`, detalle: { motivo: spam } });
     return;
+  }
+
+  // ── Prioridad (0798): el hilo toma el MÁXIMO de sus mensajes sin responder ───────────────────────
+  // Solo ordena el tablero y la cola del barrido: no cambia umbrales ni dispara envíos. Sin la migración 0798 no se escribe
+  // (la columna no existe) y una falla aquí nunca tumba el mensaje del cliente.
+  if (deps.datosUnidad) {
+    try {
+      const p = prioridadDe(c.texto, { adjunto: c.msg.type !== 'text' && c.msg.type !== 'other' });
+      if (p.nivel > (conv.prioridad ?? 0)) {
+        await repo.actualizarConversacion(tenantId, conv.id, { prioridad: p.nivel });
+        conv.prioridad = p.nivel;
+      }
+    } catch (e) {
+      logger.warn('vigia.prioridad_no_guardada', { tenant: tenantId, conversacion: conv.id, err: e instanceof Error ? e.message : String(e) });
+    }
   }
 
   // ── Un humano lleva el hilo: el agente solo registra ────────────────────
@@ -808,7 +824,10 @@ export async function barridoVigia(deps: DepsVigia, opciones: { limite?: number;
   const ahora = ahoraDe(deps);
   const r: ResultadoBarrido = { revisadas: 0, escaladas: 0, duplicadas: 0, sinDestinatario: 0, fallosEnvio: 0, atorados: 0, purgadas: 0, expiradas: 0, correosRetomados: 0, avisosCreados: 0, avisosEnviados: 0, avisosFallidos: 0, avisosOmitidos: 0, avisosConError: false, cortadoPorReloj: false };
 
-  const filas = await repo.conversacionesEnEspera(opciones.limite ?? 100, ahora);
+  // La selección (quién entra y los umbrales) ya viene decidida por vencimiento; la prioridad alta solo adelanta el ORDEN de revisión.
+  // `sort` es estable: dentro de cada grupo se conserva el orden por vencimiento.
+  const filas = (await repo.conversacionesEnEspera(opciones.limite ?? 100, ahora))
+    .sort((a, b) => Number((b.conversacion.prioridad ?? 0) >= 2) - Number((a.conversacion.prioridad ?? 0) >= 2));
   for (const f of filas) {
     if (opciones.vencePorReloj && Date.now() >= opciones.vencePorReloj) { r.cortadoPorReloj = true; break; }
     r.revisadas += 1;

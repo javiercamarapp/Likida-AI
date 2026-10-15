@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
 import {
   BloqueEstadoYKpis, BloqueAprobacion, BloqueExcepciones, BloqueConversaciones, BloqueConfiguracion, BloqueBitacora, BloqueContactos, BloqueDirectores, BloqueCorreos,
-  minutosDeEspera, duracion, motivosDeExcepcion, type AccionesVigia,
+  minutosDeEspera, duracion, motivosDeExcepcion, ordenarPorPrioridad, type AccionesVigia,
 } from './vista';
 import type { DatosTablero, ConversacionTablero } from '@/lib/likida/vigia/repo';
 import { configApagada } from '@/lib/likida/vigia/tipos';
@@ -178,6 +178,57 @@ describe('conversaciones activas y toma de control', () => {
   });
   it('vacío: lo dice', async () => {
     expect(await pintar(BloqueConversaciones({ datos: Promise.resolve(base()), ahoraMs: AHORA, puedeDecidir: true, acciones }))).toContain('Ningún cliente tiene un hilo abierto');
+  });
+});
+
+describe('prioridad en el tablero (T-A4-29)', () => {
+  const alta = (extra: Partial<ConversacionTablero> = {}) => conv({ prioridad: 2, sinRespuestaDesde: hace(5), ...extra });
+
+  it('ordenarPorPrioridad: alta primero, luego quien lleva más esperando, luego id; no muta la lista', () => {
+    const lista = [
+      conv({ id: 'd', sinRespuestaDesde: hace(90) }),
+      alta({ id: 'b' }),
+      alta({ id: 'a', sinRespuestaDesde: hace(40) }),
+      conv({ id: 'c', prioridad: 1, sinRespuestaDesde: hace(10) }),
+    ];
+    const copia = lista.map((c) => c.id);
+    expect(ordenarPorPrioridad(lista, AHORA).map((c) => c.id)).toEqual(['a', 'b', 'c', 'd']);
+    expect(lista.map((c) => c.id)).toEqual(copia);
+  });
+
+  it('empate total: el id decide, siempre igual', () => {
+    const a = conv({ id: 'x' }); const b = conv({ id: 'y' });
+    expect(ordenarPorPrioridad([b, a], AHORA).map((c) => c.id)).toEqual(['x', 'y']);
+  });
+
+  it('sin el campo (base sin 0798) cuenta como 0 y el orden es solo por espera', () => {
+    const lista = [conv({ id: 'a', sinRespuestaDesde: hace(5) }), conv({ id: 'b', sinRespuestaDesde: hace(50) })];
+    expect(ordenarPorPrioridad(lista, AHORA).map((c) => c.id)).toEqual(['b', 'a']);
+  });
+
+  it('el tablero pinta «Prioridad alta» solo en las de prioridad 2 y las pone arriba', async () => {
+    const d = base({ conversaciones: [
+      conv({ id: 'n', clienteNombre: 'Cliente Normal', sinRespuestaDesde: hace(80) }),
+      alta({ id: 'p', clienteNombre: 'Cliente Prioritario' }),
+    ] });
+    const html = await pintar(BloqueConversaciones({ datos: Promise.resolve(d), ahoraMs: AHORA, puedeDecidir: true, acciones }));
+    expect(html.match(/Prioridad alta/g)).toHaveLength(1);
+    expect(html.indexOf('Cliente Prioritario')).toBeLessThan(html.indexOf('Cliente Normal'));
+  });
+
+  it('prioridad 1 o sin dato: no se rotula', async () => {
+    const d = base({ conversaciones: [conv({ prioridad: 1 }), conv({ id: 'b' })] });
+    const html = await pintar(BloqueConversaciones({ datos: Promise.resolve(d), ahoraMs: AHORA, puedeDecidir: true, acciones }));
+    expect(html).not.toContain('Prioridad alta');
+  });
+
+  it('las excepciones también salen con la prioridad alta primero', async () => {
+    const d = base({ conversaciones: [
+      conv({ id: 'n', clienteNombre: 'Cliente Normal', molestiaNivel: 2 }),
+      alta({ id: 'p', clienteNombre: 'Cliente Prioritario', molestiaNivel: 2 }),
+    ] });
+    const html = await pintar(BloqueExcepciones({ datos: Promise.resolve(d), ahoraMs: AHORA, puedeDecidir: true, acciones }));
+    expect(html.indexOf('Cliente Prioritario')).toBeLessThan(html.indexOf('Cliente Normal'));
   });
 });
 

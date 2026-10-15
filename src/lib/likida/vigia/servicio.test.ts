@@ -976,3 +976,103 @@ describe('0798 «solo avisar»: avisa y prioriza, no contesta', () => {
   });
 });
 
+
+// ═══ T-A4-29 · la prioridad se guarda en la conversación y solo ORDENA ═══════════════════════════
+describe('prioridad del hilo (0798)', () => {
+  const conPrioridad = (repo: RepoEnMemoria, opciones: Parameters<typeof armar>[1] = {}) => {
+    const a = armar(repo, opciones);
+    a.deps.datosUnidad = true;
+    return a;
+  };
+  const hilo = (repo: RepoEnMemoria) => [...repo.conversaciones.values()][0];
+
+  it('un mensaje con ASAP deja la prioridad 2 persistida en la conversación', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    await atenderMensajeCliente(msg('Necesito el reporte ASAP'), conPrioridad(repo).deps);
+    expect(hilo(repo).prioridad).toBe(2);
+  });
+
+  it('el hilo conserva el MÁXIMO de sus mensajes sin responder: un «gracias» posterior no la baja', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    const { deps } = conPrioridad(repo);
+    await atenderMensajeCliente(msg('Es urgente, ¿dónde va?'), deps);
+    await atenderMensajeCliente(msg('gracias'), deps);
+    expect(hilo(repo).prioridad).toBe(2);
+  });
+
+  it('un mensaje normal queda en 1 y uno de cortesía en 0; la pregunta simple sube a 2 pero NO suma molestia', async () => {
+    const normal = escenario({ soloAvisar: true });
+    await atenderMensajeCliente(msg('Les paso los datos del viaje mañana'), conPrioridad(normal.repo).deps);
+    expect(hilo(normal.repo).prioridad).toBe(1);
+
+    const cortesia = escenario({ soloAvisar: true });
+    await atenderMensajeCliente(msg('gracias'), conPrioridad(cortesia.repo).deps);
+    expect(hilo(cortesia.repo).prioridad ?? 0).toBe(0);
+
+    const pregunta = escenario({ soloAvisar: true });
+    await atenderMensajeCliente(msg('¿Ya salió la unidad?'), conPrioridad(pregunta.repo).deps);
+    expect(hilo(pregunta.repo).prioridad).toBe(2);
+    expect(hilo(pregunta.repo).molestiaNivel).toBe(0);
+  });
+
+  it('al responderle al cliente, el ciclo siguiente empieza de cero', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    await atenderMensajeCliente(msg('Necesito el reporte ASAP'), conPrioridad(repo).deps);
+    await repo.marcarRespondida(T1, hilo(repo).id, AHORA);
+    expect(hilo(repo).prioridad).toBe(0);
+  });
+
+  it('base SIN 0798 (datosUnidad apagado): no se escribe la prioridad ni se rompe nada', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    const espia = vi.spyOn(repo, 'actualizarConversacion');
+    const { deps } = armar(repo);
+    expect(await atenderMensajeCliente(msg('Necesito el reporte ASAP'), deps)).toBe('atendido');
+    expect(espia.mock.calls.filter(([, , p]) => 'prioridad' in p)).toEqual([]);
+    expect(hilo(repo).prioridad ?? 0).toBe(0);
+  });
+
+  it('si guardar la prioridad falla, el mensaje del cliente se atiende igual (no se escala por esa falla)', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    const original = repo.actualizarConversacion.bind(repo);
+    vi.spyOn(repo, 'actualizarConversacion').mockImplementation(async (t, id, p, g) => {
+      if ('prioridad' in p) throw new Error('column "prioridad" does not exist');
+      return original(t, id, p, g);
+    });
+    const { deps, alGerente } = conPrioridad(repo);
+    expect(await atenderMensajeCliente(msg('Necesito el reporte ASAP'), deps)).toBe('atendido');
+    expect(alGerente).toEqual([]); // la falla no dispara el escalamiento de emergencia
+    expect(repo.mensajes.size).toBe(1);
+  });
+
+  it('el barrido revisa primero la prioridad alta, pero NO cambia quién escala ni cuándo', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    repo.agregarContacto({ tenantId: T1, clienteId: CLIENTE_A2, telefono: '525511110002' }); // grep-limpio:ok
+    await atenderMensajeCliente(msg('Les paso los datos del viaje'), conPrioridad(repo, { ahora: AHORA }).deps);
+    await atenderMensajeCliente(
+      msg('¿Ya salió? ASAP', { from: '525511110002', timestampMs: AHORA.getTime() + 60_000 }), // grep-limpio:ok
+      conPrioridad(repo, { ahora: new Date(AHORA.getTime() + 60_000) }).deps,
+    );
+    const orden: string[] = [];
+    const luego = conPrioridad(repo, { ahora: new Date(AHORA.getTime() + 45 * 60_000) });
+    const original = repo.nombreCliente.bind(repo);
+    vi.spyOn(repo, 'nombreCliente').mockImplementation(async (t, c) => { orden.push(c); return original(t, c); });
+    const r = await barridoVigia(luego.deps);
+    expect(r.escaladas).toBe(2);
+    expect(orden).toEqual([CLIENTE_A2, CLIENTE_A]); // la alta (más nueva) va antes que la normal (más vieja)
+  });
+
+  it('sin prioridad alta el barrido conserva el orden por vencimiento de siempre', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    repo.agregarContacto({ tenantId: T1, clienteId: CLIENTE_A2, telefono: '525511110002' }); // grep-limpio:ok
+    await atenderMensajeCliente(msg('Les paso los datos del viaje'), conPrioridad(repo, { ahora: AHORA }).deps);
+    await atenderMensajeCliente(
+      msg('Les paso otros datos', { from: '525511110002', timestampMs: AHORA.getTime() + 60_000 }), // grep-limpio:ok
+      conPrioridad(repo, { ahora: new Date(AHORA.getTime() + 60_000) }).deps,
+    );
+    const orden: string[] = [];
+    const original = repo.nombreCliente.bind(repo);
+    vi.spyOn(repo, 'nombreCliente').mockImplementation(async (t, c) => { orden.push(c); return original(t, c); });
+    await barridoVigia(conPrioridad(repo, { ahora: new Date(AHORA.getTime() + 45 * 60_000) }).deps);
+    expect(orden).toEqual([CLIENTE_A, CLIENTE_A2]);
+  });
+});

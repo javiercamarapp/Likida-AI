@@ -47,6 +47,16 @@ export function duracion(min: number): string {
   return r === 0 ? `${numero(h)} h` : `${numero(h)} h ${numero(r)} min`;
 }
 
+/**
+ * Orden del tablero (0798): primero la prioridad alta, luego quien lleva más tiempo esperando, y por último el id para que sea
+ * estable. PURA; no muta la lista. Solo ordena: no cambia ningún umbral de aviso.
+ */
+export function ordenarPorPrioridad<T extends Pick<ConversacionTablero, 'id' | 'prioridad' | 'sinRespuestaDesde'>>(lista: readonly T[], ahoraMs: number): T[] {
+  return [...lista].sort((a, b) => (b.prioridad ?? 0) - (a.prioridad ?? 0)
+    || minutosDeEspera(b.sinRespuestaDesde, ahoraMs) - minutosDeEspera(a.sinRespuestaDesde, ahoraMs)
+    || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
 /** Por qué una conversación es una EXCEPCIÓN (vacío = no lo es). PURA. */
 export function motivosDeExcepcion(c: ConversacionTablero, slaMin: number, ahoraMs: number): string[] {
   const m: string[] = [];
@@ -282,7 +292,7 @@ export async function BloqueExcepciones({ datos: p, ahoraMs, puedeDecidir, accio
   datos: Promise<DatosTablero>; ahoraMs: number; puedeDecidir: boolean; acciones: AccionesVigia;
 }) {
   const d = await p;
-  const filas = d.conversaciones
+  const filas = ordenarPorPrioridad(d.conversaciones, ahoraMs)
     .map((c) => ({ c, motivos: motivosDeExcepcion(c, d.config.slaRespuestaMin, ahoraMs) }))
     .filter((x) => x.motivos.length > 0);
   return (
@@ -340,13 +350,14 @@ export async function BloqueConversaciones({ datos: p, ahoraMs, puedeDecidir, ac
         <Leyenda>Ningún cliente tiene un hilo abierto.</Leyenda>
       ) : (
         <div className="space-y-3">
-          {d.conversaciones.map((c) => {
+          {ordenarPorPrioridad(d.conversaciones, ahoraMs).map((c) => {
             const espera = minutosDeEspera(c.sinRespuestaDesde, ahoraMs);
             return (
               <article key={c.id} className="hairline rounded-xl p-3.5 space-y-2" style={{ background: 'var(--surface)' }}>
                 <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
                   <strong>{c.clienteNombre ?? 'Cliente'}</strong>
                   <span style={{ color: 'var(--muted)' }}>{c.contactoNombre ?? ''}</span>
+                  {(c.prioridad ?? 0) >= 2 && <Chip tono="bad">Prioridad alta</Chip>}
                   <Chip tono={c.control === 'humano' ? 'ok' : undefined}>{c.control === 'humano' ? 'Lo lleva una persona' : 'Lo lleva el Vigía'}</Chip>
                   {c.sinRespuestaDesde
                     ? <Chip tono={espera >= d.config.slaRespuestaMin ? 'bad' : 'warn'}>Espera {duracion(espera)}</Chip>

@@ -228,7 +228,7 @@ export class RepoEnMemoria implements RepoVigia {
     const c = this.conversaciones.get(conversacionId);
     if (!c || c.tenantId !== tenantId) return;
     c.sinRespuestaDesde = null; c.entradasSinRespuesta = 0; c.escalamientoNivel = 0; c.atendidaEn = null;
-    c.molestiaNivel = 0; c.molestiaMotivos = []; c.molestiaEn = null; c.ultimaSalidaEn = ahora.toISOString();
+    c.molestiaNivel = 0; c.molestiaMotivos = []; c.molestiaEn = null; c.prioridad = 0; c.ultimaSalidaEn = ahora.toISOString();
   }
   async cerrarConversacion(tenantId: string, conversacionId: string): Promise<void> {
     const c = this.conversaciones.get(conversacionId);

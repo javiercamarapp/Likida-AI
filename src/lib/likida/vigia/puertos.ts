@@ -131,7 +131,7 @@ export interface RepoVigia {
   actualizarConversacion(tenantId: string, id: string, parche: Partial<{
     viajeId: string | null; molestiaNivel: number; molestiaMotivos: string[]; molestiaEn: string | null;
     escalamientoNivel: number; escaladoEn: string | null; control: 'agente' | 'humano'; tomadaPor: string | null; tomadaEn: string | null;
-    atendidaEn: string | null; atendidaPor: string | null;
+    atendidaEn: string | null; atendidaPor: string | null; prioridad: number;
   }>, guarda?: GuardaConversacion): Promise<boolean>;
   /** El cliente fue atendido: se apaga el reloj del SLA, la insistencia y la escalera. */
   marcarRespondida(tenantId: string, conversacionId: string, ahora: Date): Promise<void>;
