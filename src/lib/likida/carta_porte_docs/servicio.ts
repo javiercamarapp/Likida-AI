@@ -279,7 +279,7 @@ export async function procesarDocumento(
     const llm = await (deps.llm ?? llmPorDefecto)(tenantId, doc.canal);
     let r: ResultadoExtraccion;
     try {
-      r = await extraerDocumento(contenido, { llm, perfiles, remitente: doc.remitente, clienteId: doc.clienteId, signal: deps.signal });
+      r = await extraerDocumento(contenido, { llm, perfiles, remitente: doc.remitente, clienteId: doc.clienteId, signal: deps.signal, nombreArchivo: doc.nombreArchivo });
     } catch (e) {
       if (esErrorDePresupuesto(e)) {
         const alcance = alcanceDePresupuesto(e);
