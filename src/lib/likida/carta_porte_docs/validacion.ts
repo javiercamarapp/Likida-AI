@@ -95,6 +95,11 @@ export interface OpcionesValidacion {
    * no se codifica aquí.
    */
   reglasGuia?: Partial<ReglasGuia> | false;
+  /**
+   * T-A3-53: la captura del correo llegó cortada (termina en un rótulo sin valor). Bloquea hasta que llegue el texto o una
+   * captura completa (o una persona capture lo que falta y el documento se vuelva a procesar).
+   */
+  capturaIncompleta?: { ultimoRotulo: string } | null;
 }
 
 const RFC_MORAL = /^[A-ZÑ&]{3}\d{6}[A-Z0-9]{3}$/;
@@ -884,6 +889,9 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
       reg({ campo: 'peso_kg', renglon: i, severidad: 'confirmar', codigo: 'peso_unidad', mensaje: `${etiquetaCampo('peso_kg', i)}: el peso viene en «${pu}», que no se pudo convertir a kg. Escribe el peso en kilogramos.` });
     }
   });
+  if (op.capturaIncompleta) {
+    reg({ campo: 'documento', renglon: null, severidad: 'bloqueo', codigo: 'captura_incompleta', mensaje: `La captura del correo llegó cortada: termina en «${op.capturaIncompleta.ultimoRotulo}» sin valor, así que faltan datos (fracción, pedimento…). Pide al cliente el texto copiado del correo o una captura completa.` });
+  }
   if (op.remitenteReconocido === false) {
     reg({ campo: 'documento', renglon: null, severidad: 'aviso', codigo: 'remitente_no_reconocido', mensaje: 'El documento llegó de un remitente que no está en la lista del buzón. Revisa que de verdad sea de tu cliente.' });
   }

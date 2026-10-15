@@ -46,6 +46,8 @@ export interface ContenidoDoc {
   xml: unknown | null;
   /** T-A3-14: las pestañas de un libro que son UN mismo embarque (una mercancía por pestaña); la pone el servicio, el modelo lo lee. */
   hojasMismoEmbarque?: string[];
+  /** T-A3-53: tamaño en píxeles de la imagen ORIGINAL (antes de reducirla), para marcar una captura de baja resolución. */
+  resolucion?: { ancho: number; alto: number };
   /** Avisos de la lectura (hojas recortadas, PDF con muchas páginas…). */
   avisos: string[];
   /** Solo para correo: lo que declara la cabecera. */
@@ -219,13 +221,18 @@ async function prepararPdf(bytes: Uint8Array, avisos: string[]): Promise<Conteni
 async function prepararImagen(bytes: Uint8Array, avisos: string[]): Promise<ContenidoDoc> {
   const sharp = (await import('sharp')).default;
   // limitInputPixels: una imagen de 40 000 × 40 000 px cabe en pocos KB y reventaría la memoria.
-  const buf = await sharp(aBuffer(bytes), { limitInputPixels: 40_000_000, failOn: 'error' })
+  const original = sharp(aBuffer(bytes), { limitInputPixels: 40_000_000, failOn: 'error' });
+  const meta = await original.metadata();
+  // Con la orientación EXIF 5-8 la foto se gira 90°: el ancho de verdad es el alto declarado.
+  const girada = (meta.orientation ?? 1) >= 5;
+  const resolucion = meta.width && meta.height ? { ancho: girada ? meta.height : meta.width, alto: girada ? meta.width : meta.height } : undefined;
+  const buf = await original
     .rotate()
     .resize({ width: 1800, height: 1800, fit: 'inside', withoutEnlargement: true })
     .jpeg({ quality: 82 })
     .toBuffer();
   avisos.push('La foto se orientó y se redujo a un máximo de 1800 px antes de leerla.');
-  return { formato: 'imagen', texto: null, imagenes: [`data:image/jpeg;base64,${buf.toString('base64')}`], tabla: null, xml: null, avisos };
+  return { formato: 'imagen', texto: null, imagenes: [`data:image/jpeg;base64,${buf.toString('base64')}`], tabla: null, xml: null, ...(resolucion ? { resolucion } : {}), avisos };
 }
 
 function celdaATexto(v: unknown): string {
