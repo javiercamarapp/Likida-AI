@@ -216,7 +216,11 @@ export interface ResultadoEscalamiento {
  */
 export async function escalarAsistenciasPendientes(
   ahora: Date = new Date(),
-  opts: { venceEn?: number } = {},
+  opts: {
+    venceEn?: number;
+    /** Flotas con perfil (0770) que este barrido SALTA: la mesa de asistencia es un módulo en stand-by. */
+    excluirTenants?: ReadonlySet<string>;
+  } = {},
 ): Promise<ResultadoEscalamiento> {
   const venceEn = opts.venceEn ?? Number.POSITIVE_INFINITY;
   const r: ResultadoEscalamiento = { revisadas: 0, escaladas: 0, diferidas: 0, fallosAviso: 0, cortadosPorReloj: 0 };
@@ -227,7 +231,7 @@ export async function escalarAsistenciasPendientes(
   // el borde de una página. `conteo(desde)` además le da a `traerTodo` la
   // prueba barata (el `count` de la primera página) en vez de depender SOLO
   // de la página vacía.
-  const filas = await traerTodo<Record<string, unknown>>(
+  const todasLasFilas = await traerTodo<Record<string, unknown>>(
     (desde, hasta) => supabaseAdmin()
       .from('incidencia')
       .select('id, tenant_id, tipo, prioridad, nivel_escalado, abierta_en, hay_lesionados, viaje_id, operador_id, notificar_desde, descripcion', conteo(desde))
@@ -240,6 +244,9 @@ export async function escalarAsistenciasPendientes(
       .range(desde, hasta),
     'asistencia.pendientes',
   );
+  const filas = opts.excluirTenants && opts.excluirTenants.size > 0
+    ? todasLasFilas.filter((f) => !opts.excluirTenants!.has(String(f.tenant_id)))
+    : todasLasFilas;
 
   for (const f of filas) {
     if (Date.now() > venceEn) {

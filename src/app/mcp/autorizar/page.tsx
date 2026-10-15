@@ -29,6 +29,7 @@ import { perfilDeDestino, requiereConfirmacionReforzada, evaluarConsentimiento }
 import { appUrl } from '@/lib/env';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { Logo } from '../../logo';
+import { perfilRestringido } from '@/lib/auth/perfil_tenant';
 
 export const dynamic = 'force-dynamic';
 
@@ -176,6 +177,11 @@ export default async function Autorizar({
     return <PaginaError titulo="Tu cuenta aún no tiene flota" detalle="Iniciaste sesión, pero esta cuenta no está vinculada a ninguna flota con un rol activo. Pídele a tu administrador que te dé de alta y vuelve a conectar." />;
   }
 
+  // El perfil de la flota (0770) no ofrece MCP: no se autoriza un acceso que el endpoint negaría.
+  if (await perfilRestringido(s.tenantId)) {
+    return <PaginaError titulo="Esta cuenta no incluye acceso MCP" detalle="El plan de tu cuenta no incluye conectar asistentes externos. Si lo necesitas, pídelo a quien administra tu cuenta." />;
+  }
+
   const areas = areasDe(s.rol);
   const reforzada = requiereConfirmacionReforzada(areas);
   const nombreCliente = rc.cliente.nombre ?? 'Un cliente MCP';
@@ -199,6 +205,9 @@ export default async function Autorizar({
     if (!sesion || !sesion.tenantId || sesion.rol === SIN_ROL || sesion.rol === 'superadmin' || areasDe(sesion.rol).length === 0) {
       redirect('/login');
     }
+
+    // Mismo veredicto que arriba, releído al firmar: un POST a mano no se lo salta.
+    if (await perfilRestringido(sesion.tenantId)) redirect('/mcp/autorizar');
 
     const cliente = await leerCliente(p.client_id);
     if (!cliente.ok || !redirectUriRegistrada(p.redirect_uri, cliente.cliente.redirectUris)) {
