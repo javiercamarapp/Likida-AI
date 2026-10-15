@@ -23,6 +23,7 @@ import {
   contarPorEstado, contarNoCoincide, listarLiquidacionesExternas, avisosDiscrepanciaDe, type FiltroListado,
 } from '@/lib/likida/liquidacion_externa/repo';
 import { reintentarLiquidacionExterna, reenviarCopiaAJefe, reavisarDiscrepancia } from '@/lib/likida/liquidacion_externa/servicio';
+import { reenviarDesglose, type DestinoReenvio, type MotivoReenvio } from '@/lib/likida/liquidacion_externa/reenvio_correo';
 import { leerFormatoFlota, leerTelefonosFlota } from '@/lib/likida/liquidacion_externa/repo';
 import { importarLiquidacionesDeArchivo } from '@/lib/likida/liquidacion_externa/importar_archivo';
 import { decodificarCursor, codificarCursor } from '@/app/api/v1/_comun';
@@ -226,6 +227,37 @@ export default async function PaginaAgenteLiquidacion({
     revalidatePath('/dashboard/agentes/liquidacion');
     redirect(`/dashboard/agentes/liquidacion?${new URLSearchParams([...contexto, ['ext_msg', resultado]]).toString()}#liquidaciones-externas`);
   }
+
+  /** Reenvía por correo el desglose de UNA liquidación («operador, no me da mi desglose»). Re-gatea con la sesión REAL (es alcanzable
+   *  por POST directo): solo quien administra. Siempre vuelve a la pantalla con el resultado (o el motivo llano del rechazo) en la URL. */
+  async function reenviarDesgloseExterno(fd: FormData): Promise<void> {
+    'use server';
+    const s = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
+    if (!puedeVerRuta(s.rol, '/dashboard/agentes/liquidacion')) throw new Error('Tu rol no ve esta pantalla.');
+    const id = String(fd.get('id') ?? '');
+    const a = String(fd.get('a') ?? '');
+    const motivo = String(fd.get('motivo') ?? 'manual');
+    const params: Array<[string, string]> = [...contexto];
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+      || !['operador', 'coordinador', 'rh', 'todos'].includes(a)
+      || !['reclamo', 'correccion_de_correo', 'manual'].includes(motivo)) {
+      params.push(['ext_msg', 'reenvio_rechazado'], ['ext_det', 'No entendí qué desglose reenviar. Vuelve a elegirlo.']);
+    } else {
+      try {
+        const r = await reenviarDesglose(s.tenantId, id.toLowerCase(), {
+          a: a as DestinoReenvio, motivo: motivo as MotivoReenvio, actor: { userId: s.userId, rol: s.rol },
+          correoNuevo: String(fd.get('correo_nuevo') ?? ''),
+        });
+        params.push(r.estado === 'reenviado' ? ['ext_msg', 'reenvio_ok'] : ['ext_msg', 'reenvio_rechazado']);
+        if (r.estado === 'rechazado') params.push(['ext_det', r.mensaje]);
+      } catch {
+        params.push(['ext_msg', 'reenvio_rechazado'], ['ext_det', 'No se pudo reenviar. Vuelve a intentarlo en unos minutos.']);
+      }
+    }
+    revalidatePath('/dashboard/agentes/liquidacion');
+    redirect(`/dashboard/agentes/liquidacion?${new URLSearchParams(params).toString()}#liquidaciones-externas`);
+  }
+  void reenviarDesgloseExterno; // se conecta a su botón en T-A1-29 (detalle del desglose)
 
   /** «Reavisar» una discrepancia: rearma el aviso fallido o pendiente y lo manda ya. Re-gatea con la sesión REAL (es alcanzable por
    *  POST directo) y vuelve a la pantalla con el resultado en la URL. */
