@@ -3,8 +3,8 @@
 Atiende por WhatsApp a los **clientes** de la flota (quien espera su carga): clasifica
 lo que preguntan, contesta con datos reales del viaje, el gerente aprueba con un
 toque, y lo molesto o sin respuesta escala por niveles. Migraciones `0400` y `0401` (base), `0481`-`0482` (costo de IA propio y
-adjuntos), `0484` (grupos críticos, histórico exportado y alertas), `0647` (respuestas rápidas aprobadas) y `0673`-`0674` (directores por nivel y respaldo por correo). Estado al 2-oct-2026:
-construido y probado con dobles; **ninguna de esas migraciones está aplicada en la base real** (ver «Puesta en marcha»).
+adjuntos), `0484` (grupos críticos, histórico exportado y alertas), `0647` (respuestas rápidas aprobadas), `0673`-`0674` (directores por nivel y copia por correo) y `0795`-`0799` (aviso proactivo de viaje, servicio al cliente, turnos, prioridad y «solo avisar»; ver «Aviso proactivo y alcance inicial»). Estado al 15-oct-2026:
+construido y probado con dobles y, para 0795-0799, contra una base local de pruebas; **ninguna de esas migraciones está aplicada en la base real** (ver «Puesta en marcha»).
 
 Antes de este agente, un número que no era chofer, oficina ni proveedor recibía
 «no te tengo registrado como operador». Esa regla **se conserva** para cualquier
@@ -29,6 +29,35 @@ cron /api/cron/vigia (cada minuto): SLA → nivel 1 (responsable) → nivel 2 (d
 
 Código: `src/lib/likida/vigia/` (`servicio.ts` orquesta; `repo.ts` es el único acceso a datos).
 Tablero: `/dashboard/agentes/vigia`. Cron: `/api/cron/vigia` (`* * * * *`).
+
+## Aviso proactivo y alcance inicial (0795-0799)
+
+Estado del Vigía al 15-oct-2026. El alcance que pidió el cliente al inicio es **avisar y priorizar, no contestar**: el Vigía clasifica, calcula molestia y prioridad y
+escala a gerentes y directores, pero no redacta respuestas al cliente (`solo_avisar`, abajo). Además arma por su cuenta el **aviso de viaje** (caja, placas,
+unidad y operador) desde el programa de despacho, siempre por confirmación humana al inicio. Cómo funciona, cómo se enciende y qué hacer cuando falla:
+[vigia-aviso-proactivo.md](vigia-aviso-proactivo.md). Apagado de emergencia y reversión: [vigia-aviso-rollback.md](vigia-aviso-rollback.md).
+
+| Migración | Qué pone | Si falta en la base |
+|---|---|---|
+| `0795` | Programa de despacho: cargas, filas con su huella y historia de cambios por campo | Sin programa no hay aviso; la pantalla dice que la base no está lista |
+| `0796` | Cajas, captura a mano por servicio (operador, licencia, teléfono, placas) y política de qué dato se le da al cliente | Los datos personales del operador quedan ocultos |
+| `0797` | Configuración del aviso por flota (nace **apagada**) y bandeja de avisos con reclamo atómico de envío | No se arma ni se envía ningún aviso |
+| `0798` | «Servicio al cliente» (a quién avisar de noche y en festivos), turnos de directores, festivos, prioridad, intención `datos_unidad` y `solo_avisar` | Se avisa al gerente y al director como antes; la prioridad es 0; **`solo_avisar` se comporta como falso** |
+| `0799` | Estatus de importación por caja (patio, pendiente de cruce, en ruta; documentos listos o pendientes) | Sin estatus por caja |
+
+- **`solo_avisar`** (`vigia_config.solo_avisar`, activo por omisión desde la 0798): ver «Grupos críticos, molestia y la alerta» más abajo. Quitar la 0798 devuelve el copiloto con aprobación.
+- **Destinatario de servicio al cliente** (`vigia_servicio_cliente`): a quién se avisa cuando un cliente no es contestado o está molesto, por WhatsApp, correo o ambos. Una
+  fila con `cliente_id` vacío vale para todos los clientes de la flota. Único por flota y teléfono y por flota y correo (sin importar mayúsculas), tope de 10 por flota. Altas,
+  correcciones y bajas atómicas; las edita solo la dueña. Sin lista, se avisa al gerente o al director como hoy.
+- **N, el plazo de aviso.** El «5 minutos» que se oye en las llamadas es un ejemplo hablado, no una regla: el plazo lo fija cada flota (`sla_respuesta_min` 5-1440 y, para clientes
+  críticos, `sla_critico_min` 2-1440; rige el menor), 10 minutos para el crítico por omisión. La horquilla, la prueba que la ata a la pantalla y a la base, y lo que sigue abierto
+  con el cliente (¿5 o 10?, ¿cobertura 24/7?) están en «Grupos críticos, molestia y la alerta de 10 minutos».
+- **Turnos** (`vigia_director.turno`): cuándo recibe la alerta cada persona de la lista de directores: `siempre` (por omisión, como antes), `noche` o `festivos_y_fin_de_semana`.
+  El calendario de festivos es por flota (`vigia_festivo`, uno por fecha). Hoy el turno se escribe con UPDATE directo del servicio: no hay pantalla.
+- **Prioridad** (`vigia_conversacion.prioridad`, `vigia_mensaje.prioridad`): 0 normal, 1 alta, 2 urgente.
+- **Lo que sigue abierto** (bloqueos externos, no se resuelven en el código): el archivo real con los colores del programa, el acceso de lectura a los Drive de las terminales,
+  la política real sobre datos del operador y el aviso de privacidad para clientes finales, la aprobación de las plantillas en Meta, el formato del control de unidad de la
+  plataforma de seguimiento y la API de grupos de Meta.
 
 ## Qué garantiza (y dónde está probado)
 
