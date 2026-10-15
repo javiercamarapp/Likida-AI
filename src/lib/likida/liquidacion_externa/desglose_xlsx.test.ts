@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import * as XLSX from 'xlsx';
 import * as fs from 'node:fs';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
@@ -121,9 +121,10 @@ describe('generarDesgloseXlsx (fixture sintético)', () => {
       const p = join(dir, 'desglose.xlsx');
       XLSX.set_fs(fs);
       writeFileSync(p, bytes);
-      expect(statSync(p).size).toBeLessThan(10_240);
+      const escrito = readFileSync(p);
+      expect(escrito.length).toBeLessThan(10_240);
       expect(XLSX.readFile(p).SheetNames).toEqual(['Desglose']);
-      expect(readFileSync(p).length).toBe(bytes.length);
+      expect(escrito.length).toBe(bytes.length);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
