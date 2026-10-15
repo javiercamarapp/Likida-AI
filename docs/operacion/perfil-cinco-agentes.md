@@ -38,6 +38,14 @@ compara y la solicitud de ubicación; el «Ya lo atiendo» del jefe se consume e
 el mensaje de un cliente de la allowlist se descarta sin guardarlo ni escalarlo, y los botones `vig_*` del gerente se
 consumen sin contestar. Todo falla CERRADO si el perfil no se puede leer. Sin fila de perfil nada cambia.
 
+**Lectura del perfil con la base caída:** `perfilDeTenant` falla CERRADO: sin valor previo en la instancia (arranque en frío) y con la
+tabla ilegible asume `cinco_agentes`, incluso para una flota SIN perfil. Es deliberado (nunca enseña ni opera de más); el costo
+es que, durante un bache de base con una instancia fría, esa flota ve páginas y APIs rebotadas y su chofer no dispara el Conductor
+hasta la siguiente lectura (los errores no se cachean, el siguiente request reintenta; con valor previo se usa el último
+conocido). No se acota para no perder el fail-closed de las flotas CON perfil.
+
+**Siembra de hitos:** `sembrar_hitos_conductor` (0801) ya se salta a toda flota con fila en `tenant_perfil` (siembra y conciliación).
+
 **Límites conocidos de la fase 1:** (a) el pin de ubicación del chofer sigue guardándose en `posicion` y avisando al
 jefe (función de ruta anterior al módulo, no del Conductor); (b) el cron `vigia` ejecuta la retención `vigia_purgar`
 (solo borra lo vencido, no envía ni lee) para todas las flotas; (c) la lectura de correos vencidos del Vigía
