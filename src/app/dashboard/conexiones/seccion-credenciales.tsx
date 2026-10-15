@@ -2,6 +2,7 @@ import { Vault, TriangleAlert } from 'lucide-react';
 import { fechaCorta } from '@/lib/formato';
 import { CONECTORES, conectorPorId } from '@/lib/likida/conectores/registro';
 import { CATEGORIAS } from '@/lib/likida/conectores/tipos';
+import { conectorPermitidoEnPerfil, type PerfilTenant } from '@/lib/auth/visibilidad';
 import {
   FormaCredenciales, FormaDesactivar, FormaProbar,
   type GrupoCaptura, type AccionCredencial,
@@ -52,8 +53,10 @@ import {
  * catálogo es puro, pero sus fichas enteras no tienen nada que hacer en el
  * bundle del navegador.
  */
-export function catalogoParaCaptura(): GrupoCaptura[] {
-  const capturables = CONECTORES.filter((c) => c.credenciales.length > 0);
+export function catalogoParaCaptura(perfil: PerfilTenant | null = null): GrupoCaptura[] {
+  // Sin perfil: el catálogo completo, igual que siempre. Con perfil: solo la lista cerrada (el resto es stand-by).
+  const capturables = CONECTORES.filter((c) => c.credenciales.length > 0
+    && (perfil === null || conectorPermitidoEnPerfil(perfil, c.id)));
   return CATEGORIAS
     .map((categoria) => ({
       categoria: categoria as string,
