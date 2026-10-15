@@ -22,6 +22,7 @@ import type { Extraccion } from './campos';
 import type { ResultadoValidacion } from './validacion';
 import type { FormatoDoc } from './contenido';
 import type { FirmaPerfil, Mapeo, EjemploPerfil, Perfil } from './perfiles';
+import { TOPE_FILAS_CATALOGO, catalogoVacio, type CatalogoCliente, type ParteCat, type ProductoCat } from './catalogo_cliente';
 
 export const BUCKET = 'cartaporte-docs';
 
@@ -468,6 +469,52 @@ export async function clientePropio(tenantId: string, clienteId: string): Promis
 export async function listarClientes(tenantId: string): Promise<Array<{ id: string; nombre: string }>> {
   const r = await acotada(supabaseAdmin().from('cliente').select('id, nombre').eq('tenant_id', tenantId).order('nombre').order('id').limit(1000), 'cpdocs.clientes');
   return ((exigir(r, 'cpdocs.clientes') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), nombre: String(f.nombre) }));
+}
+
+// ── Catálogo por cliente (0792) ─────────────────────────────────────────────
+
+/** La tabla no existe todavía (la 0792 no se ha aplicado): PostgREST PGRST205 / Postgres 42P01. */
+export function tablaAusente(error: { message?: string; code?: string } | null | undefined): boolean {
+  if (!error) return false;
+  return error.code === 'PGRST205' || error.code === '42P01' || /could not find the table|relation .* does not exist/i.test(error.message ?? '');
+}
+
+
+/**
+ * El catálogo de UN cliente de UNA flota: número interno, productos y partes, con tope de filas por tabla. Siempre
+ * filtra por tenant Y cliente. Sin la 0792 aplicada devuelve el catálogo vacío (sin catálogo = no-op) y lo registra.
+ */
+export async function cargarCatalogoCliente(tenantId: string, clienteId: string): Promise<CatalogoCliente> {
+  const [n, p, q] = await Promise.all([
+    acotada(supabaseAdmin().from('cp_cliente_numero').select('numero_interno, numero_pagador, activo').eq('tenant_id', tenantId).eq('cliente_id', clienteId).maybeSingle(), 'cpdocs.catalogo_numero'),
+    acotada(supabaseAdmin().from('cp_catalogo_producto')
+      .select('sku, descripcion_patron, bienes_transp, clave_unidad, embalaje, fraccion, tipo_materia, material_peligroso, clave_material_peligroso')
+      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('sku').limit(TOPE_FILAS_CATALOGO), 'cpdocs.catalogo_productos'),
+    acotada(supabaseAdmin().from('cp_catalogo_parte')
+      .select('rol, alias, razon_social, rfc, id_fiscal_extranjero, calle, num_ext, num_int, colonia_clave, colonia, cp, localidad_clave, localidad, municipio_clave, municipio, estado, pais, contacto, telefono, correo')
+      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('rol').order('alias').limit(TOPE_FILAS_CATALOGO), 'cpdocs.catalogo_partes'),
+  ]);
+  if (tablaAusente(n.error) || tablaAusente(p.error) || tablaAusente(q.error)) {
+    logger.warn('cartaporte_docs.catalogo_sin_migracion', { tenantId });
+    return catalogoVacio();
+  }
+  const num = exigir(n, 'cpdocs.catalogo_numero') as unknown as Fila | null;
+  const productos = ((exigir(p, 'cpdocs.catalogo_productos') ?? []) as unknown as Fila[]).map((f): ProductoCat => ({
+    tenantId, clienteId, sku: String(f.sku), descripcionPatron: s(f.descripcion_patron), bienesTransp: String(f.bienes_transp), claveUnidad: String(f.clave_unidad),
+    embalaje: s(f.embalaje), fraccion: s(f.fraccion), tipoMateria: s(f.tipo_materia), materialPeligroso: f.material_peligroso === true, claveMaterialPeligroso: s(f.clave_material_peligroso),
+  }));
+  const partes = ((exigir(q, 'cpdocs.catalogo_partes') ?? []) as unknown as Fila[]).map((f): ParteCat => ({
+    tenantId, clienteId, rol: f.rol === 'destinatario' ? 'destinatario' : 'remitente', alias: String(f.alias), razonSocial: s(f.razon_social), rfc: s(f.rfc), idFiscalExtranjero: s(f.id_fiscal_extranjero),
+    calle: s(f.calle), numExt: s(f.num_ext), numInt: s(f.num_int), coloniaClave: s(f.colonia_clave), colonia: s(f.colonia), cp: s(f.cp),
+    localidadClave: s(f.localidad_clave), localidad: s(f.localidad), municipioClave: s(f.municipio_clave), municipio: s(f.municipio),
+    estado: s(f.estado), pais: s(f.pais), contacto: s(f.contacto), telefono: s(f.telefono), correo: s(f.correo),
+  }));
+  const truncado = productos.length >= TOPE_FILAS_CATALOGO || partes.length >= TOPE_FILAS_CATALOGO;
+  if (truncado) logger.warn('cartaporte_docs.catalogo_truncado', { tenantId, productos: productos.length, partes: partes.length });
+  return {
+    numero: num ? { tenantId, clienteId, numeroInterno: String(num.numero_interno), numeroPagador: s(num.numero_pagador), activo: num.activo !== false } : null,
+    productos, partes, truncado,
+  };
 }
 
 /** Inserta el viaje borrador. `null` = el folio ya existe (carrera con otra aprobación o con el panel). */

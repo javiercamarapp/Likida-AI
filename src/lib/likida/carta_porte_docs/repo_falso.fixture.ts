@@ -10,6 +10,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type * as Real from './repo';
+import type { CatalogoCliente, NumeroClienteCat, ParteCat, ProductoCat } from './catalogo_cliente';
 import type { DocumentoFila, MercanciaInsertar, OperadorMin, PerfilFila, ViajeMin } from './repo';
 
 interface Viaje extends ViajeMin { tenantId: string }
@@ -32,6 +33,10 @@ export const estado = {
   operadores: [] as Array<OperadorMin & { tenantId: string }>,
   unidades: [] as Array<{ tenantId: string; id: string; placas: string; activo: boolean }>,
   clientes: [] as Array<{ tenantId: string; id: string; nombre: string }>,
+  /** 0792: catálogo por cliente (cada fila trae su tenantId y clienteId). */
+  catalogoNumeros: [] as NumeroClienteCat[],
+  catalogoProductos: [] as ProductoCat[],
+  catalogoPartes: [] as ParteCat[],
   correos: new Map<string, { estado: 'claimed' | 'applied'; token: string }>(),
   /** 0640: avisos a la oficina reclamados por documento ({tipo: instante}). */
   avisos: new Map<string, Record<string, string>>(),
@@ -55,7 +60,7 @@ export const estado = {
 export function reset(): void {
   estado.docs.clear(); estado.archivos.clear(); estado.eventos.length = 0; estado.correcciones.length = 0; estado.buzones.clear();
   estado.perfiles.clear(); estado.versiones.length = 0; estado.exportConfigs.length = 0; estado.viajes.length = 0; estado.mercancias.length = 0;
-  estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0; estado.salidaConfigs.clear();
+  estado.catalogoNumeros.length = 0; estado.catalogoProductos.length = 0; estado.catalogoPartes.length = 0; estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0; estado.salidaConfigs.clear();
   estado.seq = 0; estado.reloj.ahora = () => new Date();
 }
 
@@ -246,6 +251,16 @@ export const api: typeof Real = {
     return v ? { id: v.id, folio: v.folio } : null;
   },
   async clientePropio(tenantId, clienteId) { return estado.clientes.some((c) => c.tenantId === tenantId && c.id === clienteId); },
+  async cargarCatalogoCliente(tenantId, clienteId): Promise<CatalogoCliente> {
+    falla('cargarCatalogoCliente');
+    const propio = (f: { tenantId: string; clienteId: string }) => f.tenantId === tenantId && f.clienteId === clienteId;
+    return clon({
+      numero: estado.catalogoNumeros.find(propio) ?? null,
+      productos: estado.catalogoProductos.filter(propio),
+      partes: estado.catalogoPartes.filter(propio),
+      truncado: false,
+    });
+  },
   async listarClientes(tenantId) { return estado.clientes.filter((c) => c.tenantId === tenantId).map(({ tenantId: _t, ...c }) => c); },
   async insertarViaje(tenantId, v) {
     falla('insertarViaje');
@@ -334,6 +349,7 @@ export const api: typeof Real = {
   TOPE_INTENTOS_DOC: 5,
   GRACIA_RECIBIDO_SEG: 120,
   esperaFallidoMin: (intentos) => 15 * 2 ** Math.max(Math.min(intentos, 6) - 1, 0),
+  tablaAusente: (e) => Boolean(e && (e.code === 'PGRST205' || e.code === '42P01')),
   funcionAusente: (e) => Boolean(e && (e.code === 'PGRST202' || e.code === '42883')),
   async documentosPendientes(limite = 25) {
     falla('documentosPendientes');
