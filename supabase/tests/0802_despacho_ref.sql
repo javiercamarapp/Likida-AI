@@ -61,9 +61,13 @@ begin
   if (select count(*) from public.viaje where tenant_id = '82000000-0000-4000-8000-0000000000a1' and despacho_ref = 'D-100') <> 2 then
     raise exception '0802: la misma referencia no pudo repetirse en dos viajes';
   end if;
-  if not exists (select 1 from pg_indexes where schemaname = 'public' and tablename = 'viaje' and indexname = 'viaje_tenant_despacho_ref_idx'
+  if not exists (select 1 from pg_indexes where schemaname = 'public' and tablename = 'viaje' and indexname = 'viaje_despacho_ref_idx'
                  and indexdef not ilike '%unique%' and indexdef ilike '%where%despacho_ref is not null%') then
     raise exception '0802: el índice de viaje no es parcial/no único';
+  end if;
+  -- un solo índice por (tenant_id, despacho_ref): sin el duplicado que dejaban 0780 + 0802
+  if (select count(*) from pg_indexes where schemaname = 'public' and tablename = 'viaje' and indexdef ilike '%(tenant_id, despacho_ref)%') <> 1 then
+    raise exception '0802: hay más de un índice sobre viaje (tenant_id, despacho_ref)';
   end if;
   if exists (select 1 from pg_indexes where schemaname = 'public' and tablename = 'posicion' and indexdef ilike '%despacho_ref%') then
     raise exception '0802: se creó un índice en posicion sin justificarlo';

@@ -103,7 +103,7 @@ alter table public.viaje_sitio_derivado add constraint viaje_sitio_derivado_crit
 drop table if exists public.sitio_equivalencia;
 
 -- ── 0802: referencia de despacho ────────────────────────────────────────────
-drop index if exists public.viaje_tenant_despacho_ref_idx;
+drop index if exists public.viaje_despacho_ref_idx;
 alter table public.viaje    drop column if exists despacho_ref;
 alter table public.posicion drop column if exists despacho_ref;
 
