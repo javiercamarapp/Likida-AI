@@ -89,6 +89,7 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
         <div className="px-5 py-5 flex-1 space-y-4">
           <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12.5px]">
             <Link href={`/dashboard/agentes/vigia/historial${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Grupos críticos e histórico (FAQs y tendencias)</Link>
+            <Link href={`/dashboard/agentes/vigia/programa${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Programa de despacho (subir el archivo del día)</Link>
           </nav>
           <Bloque mensaje="No se pudo leer el tablero del Vigía." esqueleto={<EsqKpis />}>
             <BloqueEstadoYKpis datos={datos} ahoraMs={ahoraMs} />

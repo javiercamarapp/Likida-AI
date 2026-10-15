@@ -142,6 +142,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/agentes/vigia': 'operacion',
   // 0484: grupos de clientes críticos, histórico exportado de WhatsApp y su reporte (FAQs, temas, tiempos). Cero pesos; solo el dueño sube/borra.
   '/dashboard/agentes/vigia/historial': 'operacion',
+  // T-A4-07: la carga del programa de despacho (CSV del día). Operación, cero pesos; sube el dueño o el encargado (se comprueba en la acción).
+  '/dashboard/agentes/vigia/programa': 'operacion',
   // El Agente de Carta Porte (Fases B-C, 25-ago-2026): mismo criterio que su
   // pantalla /dashboard/carta-porte — cero pesos, y la declaración de ruta es
   // del jefe de tráfico. La página del borrador
