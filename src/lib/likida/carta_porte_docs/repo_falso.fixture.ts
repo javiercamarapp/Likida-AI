@@ -48,12 +48,14 @@ export const estado = {
   reloj: { ahora: () => new Date() },
   seq: 0,
   llamadas: [] as string[],
+  /** 0790: configuración de salida por flota. */
+  salidaConfigs: new Map<string, Real.SalidaConfigFila>(),
 };
 
 export function reset(): void {
   estado.docs.clear(); estado.archivos.clear(); estado.eventos.length = 0; estado.correcciones.length = 0; estado.buzones.clear();
   estado.perfiles.clear(); estado.versiones.length = 0; estado.exportConfigs.length = 0; estado.viajes.length = 0; estado.mercancias.length = 0;
-  estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0;
+  estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0; estado.salidaConfigs.clear();
   estado.seq = 0; estado.reloj.ahora = () => new Date();
 }
 
@@ -483,4 +485,6 @@ export const api: typeof Real = {
     return estado.embarques.filter((e) => e.tenantId === tenantId && e.padreId === padreId).sort((a, b) => a.indice - b.indice)
       .flatMap((e) => { const d = estado.docs.get(e.documentoId); return d ? [{ documento: clon(d), indice: e.indice, total: e.total, clave: e.clave }] : []; });
   },
+  async leerSalidaConfig(tenantId) { falla('leerSalidaConfig'); const c = estado.salidaConfigs.get(tenantId); return c ? clon(c) : null; },
+  async guardarSalidaConfig(tenantId, c) { falla('guardarSalidaConfig'); estado.salidaConfigs.set(tenantId, clon(c)); },
 };

@@ -783,3 +783,53 @@ export async function hijosDeDocumento(tenantId: string, padreId: string): Promi
 }
 
 const MAX_HIJOS_LEIDOS = 100;
+
+// ── Configuración de salida al TMS (0790: cp_salida_config) ─────────────────
+// Una fila por flota. SIN credenciales: esas viven en el cofre de PS, nunca aquí.
+
+export interface SalidaConfigFila {
+  modo: 'descarga' | 'api';
+  plantillaPorDefecto: 'normal' | 'nueva';
+  reintentosMax: number;
+  frecuenciaMin: number;
+  /** HH:MM en hora local de la flota; ambas o ninguna. */
+  ventanaInicio: string | null;
+  ventanaFin: string | null;
+  destinatarioAlertaCorreo: string | null;
+  destinatarioAlertaUsuario: string | null;
+  destinatarioRevisionUsuario: string | null;
+  destinatarioRevisionCorreo: string | null;
+  siTmsDesconocido: 'retener' | 'enviar';
+  distanciaFormato: 'texto_km' | 'numero';
+}
+
+const COLUMNAS_SALIDA_CONFIG = 'modo, plantilla_por_defecto, reintentos_max, frecuencia_min, ventana_inicio, ventana_fin, destinatario_alerta_correo, destinatario_alerta_usuario, destinatario_revision_usuario, destinatario_revision_correo, si_tms_desconocido, distancia_formato';
+/** Postgres devuelve `time` como HH:MM:SS; la app habla HH:MM. */
+const hhmm = (v: unknown): string | null => (v === null || v === undefined ? null : String(v).slice(0, 5));
+
+/** La fila de la flota, o null si nunca se guardó (quien llama aplica los valores de arranque). */
+export async function leerSalidaConfig(tenantId: string): Promise<SalidaConfigFila | null> {
+  const r = await acotada(supabaseAdmin().from('cp_salida_config').select(COLUMNAS_SALIDA_CONFIG).eq('tenant_id', tenantId).maybeSingle(), 'cpdocs.salida_config');
+  const f = exigir(r, 'cpdocs.salida_config') as unknown as Fila | null;
+  if (!f) return null;
+  return {
+    modo: f.modo as SalidaConfigFila['modo'], plantillaPorDefecto: f.plantilla_por_defecto as SalidaConfigFila['plantillaPorDefecto'],
+    reintentosMax: Number(f.reintentos_max), frecuenciaMin: Number(f.frecuencia_min),
+    ventanaInicio: hhmm(f.ventana_inicio), ventanaFin: hhmm(f.ventana_fin),
+    destinatarioAlertaCorreo: s(f.destinatario_alerta_correo), destinatarioAlertaUsuario: s(f.destinatario_alerta_usuario),
+    destinatarioRevisionUsuario: s(f.destinatario_revision_usuario), destinatarioRevisionCorreo: s(f.destinatario_revision_correo),
+    siTmsDesconocido: f.si_tms_desconocido as SalidaConfigFila['siTmsDesconocido'], distanciaFormato: f.distancia_formato as SalidaConfigFila['distanciaFormato'],
+  };
+}
+
+/** Upsert de la fila completa de la flota (idempotente: guardar lo mismo dos veces deja el mismo estado). */
+export async function guardarSalidaConfig(tenantId: string, c: SalidaConfigFila, actorId: string | null): Promise<void> {
+  const r = await acotada(supabaseAdmin().from('cp_salida_config').upsert({
+    tenant_id: tenantId, modo: c.modo, plantilla_por_defecto: c.plantillaPorDefecto, reintentos_max: c.reintentosMax, frecuencia_min: c.frecuenciaMin,
+    ventana_inicio: c.ventanaInicio, ventana_fin: c.ventanaFin,
+    destinatario_alerta_correo: c.destinatarioAlertaCorreo, destinatario_alerta_usuario: c.destinatarioAlertaUsuario,
+    destinatario_revision_usuario: c.destinatarioRevisionUsuario, destinatario_revision_correo: c.destinatarioRevisionCorreo,
+    si_tms_desconocido: c.siTmsDesconocido, distancia_formato: c.distanciaFormato, updated_by: actorId, updated_at: new Date().toISOString(),
+  }, { onConflict: 'tenant_id' }), 'cpdocs.salida_config_guardar');
+  if (r.error) throw new Error(`cartaporte_docs salida config: ${r.error.message}`);
+}
