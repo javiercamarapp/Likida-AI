@@ -239,7 +239,10 @@ export type TipoEvento =
   // 0642: el worker (cron carta-porte-docs).
   | 'aviso_oficina' | 'reintentos_agotados'
   // 0670: un Excel con varios embarques se partió en documentos hijos.
-  | 'dividido';
+  | 'dividido'
+  // 0790: el envío del documento aprobado a la plantilla/API del TMS.
+  | 'envio_preparado' | 'envio_pendiente_reque' | 'envio_enviado' | 'envio_rechazado' | 'envio_error'
+  | 'envio_alertado' | 'envio_subido_a_mano' | 'revisor_asignado';
 
 /** La bitácora: append-only, sin el contenido de los campos. Un fallo AQUÍ se lanza: sin rastro no hay operación. */
 export async function registrarEvento(tenantId: string, documentoId: string, tipo: TipoEvento, actorId: string | null, detalle: Record<string, unknown> = {}): Promise<void> {
@@ -879,4 +882,64 @@ export async function guardarSalidaConfig(tenantId: string, c: SalidaConfigFila,
     si_tms_desconocido: c.siTmsDesconocido, distancia_formato: c.distanciaFormato, updated_by: actorId, updated_at: new Date().toISOString(),
   }, { onConflict: 'tenant_id' }), 'cpdocs.salida_config_guardar');
   if (r.error) throw new Error(`cartaporte_docs salida config: ${r.error.message}`);
+}
+
+
+// ── Envíos al TMS (0790: cp_envio_tms) ──────────────────────────────────────
+// Solo lo que necesita «preparar el envío» (T-A3-04). La cola, el lease y la máquina de estados son de T-A3-26/27.
+
+export type EstadoEnvioTms =
+  | 'pendiente_prechequeo' | 'pendiente_reque' | 'listo' | 'enviando' | 'enviado'
+  | 'rechazado_tms' | 'error_transitorio' | 'subido_a_mano' | 'descartado';
+
+export interface EnvioTmsFila {
+  id: string; tenantId: string; documentoId: string; versionDoc: number; idempotencyKey: string;
+  estado: EstadoEnvioTms; plantilla: 'normal' | 'nueva'; intentos: number;
+}
+
+const COLUMNAS_ENVIO = 'id, tenant_id, documento_id, version_doc, idempotency_key, estado, plantilla, intentos';
+const aEnvio = (f: Fila): EnvioTmsFila => ({
+  id: String(f.id), tenantId: String(f.tenant_id), documentoId: String(f.documento_id), versionDoc: Number(f.version_doc),
+  idempotencyKey: String(f.idempotency_key), estado: f.estado as EstadoEnvioTms, plantilla: f.plantilla as EnvioTmsFila['plantilla'], intentos: Number(f.intentos ?? 0),
+});
+
+export async function envioPorLlave(tenantId: string, idempotencyKey: string): Promise<EnvioTmsFila | null> {
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').select(COLUMNAS_ENVIO).eq('tenant_id', tenantId).eq('idempotency_key', idempotencyKey).maybeSingle(), 'cpdocs.envio_llave');
+  const f = exigir(r, 'cpdocs.envio_llave') as unknown as Fila | null;
+  return f ? aEnvio(f) : null;
+}
+
+/** Los envíos de un documento, el más nuevo primero. */
+export async function enviosDeDocumento(tenantId: string, documentoId: string): Promise<EnvioTmsFila[]> {
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').select(COLUMNAS_ENVIO)
+    .eq('tenant_id', tenantId).eq('documento_id', documentoId).order('created_at', { ascending: false }).limit(50), 'cpdocs.envios_doc');
+  return ((exigir(r, 'cpdocs.envios_doc') ?? []) as unknown as Fila[]).map(aEnvio);
+}
+
+/**
+ * Inserta el envío en `pendiente_prechequeo`. Idempotente por (flota, llave): si la llave ya existe devuelve el existente
+ * (`creado:false`). `null` = el documento ya tiene OTRO envío activo (índice parcial único): quien llama decide qué hacer.
+ */
+export async function insertarEnvioTms(tenantId: string, e: { documentoId: string; versionDoc: number; idempotencyKey: string; plantilla: 'normal' | 'nueva' }): Promise<{ envio: EnvioTmsFila; creado: boolean } | null> {
+  const previo = await envioPorLlave(tenantId, e.idempotencyKey);
+  if (previo) return { envio: previo, creado: false };
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').insert({
+    tenant_id: tenantId, documento_id: e.documentoId, version_doc: e.versionDoc, idempotency_key: e.idempotencyKey, plantilla: e.plantilla, estado: 'pendiente_prechequeo',
+  }).select(COLUMNAS_ENVIO).single(), 'cpdocs.envio_insertar');
+  if (r.error) {
+    if ((r.error as { code?: string }).code === '23505') {
+      // O la misma llave (carrera con otra aprobación) o el índice de «un activo por documento».
+      const ganado = await envioPorLlave(tenantId, e.idempotencyKey);
+      return ganado ? { envio: ganado, creado: false } : null;
+    }
+    throw new Error(`cartaporte_docs envio: ${r.error.message}`);
+  }
+  return { envio: aEnvio(r.data as unknown as Fila), creado: true };
+}
+
+/** Pasa a `descartado` el envío SOLO si sigue en uno de los estados dados (UPDATE condicional). */
+export async function descartarEnvioTms(tenantId: string, id: string, desde: EstadoEnvioTms[]): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').update({ estado: 'descartado', updated_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId).eq('id', id).in('estado', desde).select('id'), 'cpdocs.envio_descartar');
+  return ((exigir(r, 'cpdocs.envio_descartar') ?? []) as unknown[]).length > 0;
 }
