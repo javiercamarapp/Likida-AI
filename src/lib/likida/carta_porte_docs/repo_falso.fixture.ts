@@ -53,6 +53,10 @@ export const estado = {
   reloj: { ahora: () => new Date() },
   seq: 0,
   llamadas: [] as string[],
+  /** 0793: catálogos SAT globales (catálogo → clave → extra). Sin entrada = catálogo no cargado. */
+  catalogosSat: new Map<string, Map<string, Record<string, string>>>(),
+  /** Cuántas veces se consultó cada catálogo SAT (para probar «una consulta por catálogo»). */
+  consultasCatalogoSat: [] as string[],
   /** 0790: configuración de salida por flota. */
   salidaConfigs: new Map<string, Real.SalidaConfigFila>(),
   /** 0790: envíos al TMS. */
@@ -68,7 +72,7 @@ export const estado = {
 export function reset(): void {
   estado.docs.clear(); estado.archivos.clear(); estado.eventos.length = 0; estado.correcciones.length = 0; estado.buzones.clear();
   estado.perfiles.clear(); estado.versiones.length = 0; estado.exportConfigs.length = 0; estado.viajes.length = 0; estado.mercancias.length = 0;
-  estado.catalogoNumeros.length = 0; estado.catalogoProductos.length = 0; estado.catalogoPartes.length = 0; estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0; estado.salidaConfigs.clear(); estado.envios.length = 0; estado.usuarios.length = 0; estado.revisores.clear(); estado.sinColumnaRevisor = false;
+  estado.catalogoNumeros.length = 0; estado.catalogoProductos.length = 0; estado.catalogoPartes.length = 0; estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0; estado.salidaConfigs.clear(); estado.catalogosSat.clear(); estado.consultasCatalogoSat.length = 0; estado.envios.length = 0; estado.usuarios.length = 0; estado.revisores.clear(); estado.sinColumnaRevisor = false;
   estado.seq = 0; estado.reloj.ahora = () => new Date();
 }
 
@@ -158,6 +162,16 @@ export const api: typeof Real = {
     if ((d.estado === 'aprobado') !== (d.aprobadoEn !== null)) throw new Error('repo falso: viola cp_documento_aprobacion_completa');
     d.version = versionEsperada + 1; d.updatedAt = ahoraIso();
     return clon(d);
+  },
+  async cargarCatalogoSat(catalogo, claves) {
+    estado.consultasCatalogoSat.push(catalogo);
+    const caida = estado.fallar.get('cargarCatalogoSat'); // no entra a `llamadas`: es una lectura global, no una consulta de la flota
+    if (caida) throw caida;
+    const t = estado.catalogosSat.get(catalogo);
+    if (!t) return null;
+    const salida = new Map<string, Record<string, string>>();
+    for (const c of claves) { const d = t.get(c); if (d) salida.set(c, d); }
+    return salida;
   },
   async documentosConFolio(tenantId, folio, exceptoId) {
     return [...estado.docs.values()]

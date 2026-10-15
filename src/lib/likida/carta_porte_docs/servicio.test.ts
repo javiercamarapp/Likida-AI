@@ -322,6 +322,34 @@ describe('validarDocumento: avisos que solo la base sabe', () => {
   });
 });
 
+describe('validarDocumento: catálogos SAT (T-A3-24)', () => {
+  const doc = { id: 'x', riesgoInyeccion: false, remitenteReconocido: null };
+  it('tabla vacía → solo avisos, no bloquea; ≤ 1 consulta por catálogo por documento', async () => {
+    const e = extraccionAtlasOk(); e.mercancias.push({ ...e.mercancias[0], descripcion: { ...e.mercancias[0].descripcion } });
+    e.campos.peso_bruto_total = { ...e.campos.peso_bruto_total, valor: '16800' };
+    const v = await validarDocumento(A, doc, e);
+    expect(v.hallazgos.some((h) => h.codigo === 'catalogo_no_cargado')).toBe(true);
+    expect(v.bloqueos).toBe(0);
+    const por = estado.consultasCatalogoSat;
+    expect(por.length).toBeGreaterThan(0);
+    expect(new Set(por).size).toBe(por.length);
+  });
+  it('catálogo cargado: clave inexistente bloquea; existente no', async () => {
+    estado.catalogosSat.set('c_ClaveProdServCP', new Map([['24131500', {}]]));
+    const ok = await validarDocumento(A, doc, extraccionAtlasOk());
+    expect(ok.hallazgos.some((h) => h.codigo === 'clave_no_catalogo')).toBe(false);
+    const e = extraccionAtlasOk(); e.mercancias[0].bienes_transp = { ...e.mercancias[0].bienes_transp, valor: '24999999' };
+    const mal = await validarDocumento(A, doc, e);
+    expect(mal.hallazgos.some((h) => h.codigo === 'clave_no_catalogo' && h.severidad === 'bloqueo')).toBe(true);
+  });
+  it('un error al leer el catálogo degrada a aviso, no rompe ni bloquea', async () => {
+    estado.fallar.set('cargarCatalogoSat', new Error('caída de la base'));
+    const v = await validarDocumento(A, doc, extraccionAtlasOk());
+    expect(v.bloqueos).toBe(0);
+    expect(v.hallazgos.some((h) => h.codigo === 'catalogo_no_cargado')).toBe(true);
+  });
+});
+
 describe('recibirDocumento: JSON (T-A3-12)', () => {
   it('un JSON de embarque se guarda con formato json y mime application/json', async () => {
     const r = await subir(A, Buffer.from(JSON.stringify({ Embarque: { Folio: 'J-1' }, Mercancias: [{ Descripcion: 'Algo sintético' }] })), 'embarque.json');

@@ -18,6 +18,8 @@ import { estaApagado } from '../interruptores';
 import { MAX_BYTES_DOC, detectarFormato, prepararContenido, type FormatoDoc } from './contenido';
 import { extraerDocumento, type LlmExtractor, type ResultadoExtraccion } from './extractor';
 import { avisosDelCatalogo, enriquecer } from './catalogo_cliente';
+import { precargarCatalogosSat } from './catalogos_sat';
+import type { SalidaTms } from './tms_puerto';
 import { derivarHijos, evaluarDivision, MAX_EMBARQUES, type PlanDivision } from './multiembarque';
 import { elegirPerfil } from './perfiles';
 import { confianzaMinimaCritica, validarExtraccion, type Hallazgo, type ResultadoValidacion } from './validacion';
@@ -104,8 +106,13 @@ export async function recibirDocumento(tenantId: string, e: EntradaDocumento, de
  * (posible duplicado lógico: distinto archivo, mismo embarque) y un viaje que ya existe con ese folio.
  * Se usa al procesar y tras cada corrección, para que los avisos no se pierdan al revalidar.
  */
-export async function validarDocumento(tenantId: string, doc: Pick<DocumentoFila, 'id' | 'riesgoInyeccion' | 'remitenteReconocido'>, e: Extraccion): Promise<ResultadoValidacion> {
-  const base = validarExtraccion(e, { riesgoInyeccion: doc.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido });
+export async function validarDocumento(
+  tenantId: string, doc: Pick<DocumentoFila, 'id' | 'riesgoInyeccion' | 'remitenteReconocido'>, e: Extraccion,
+  opc: { tms?: SalidaTms } = {},
+): Promise<ResultadoValidacion> {
+  // Catálogos SAT (T-A3-24): UNA consulta por catálogo con todas las claves del documento; si falla o está vacío, degrada a aviso.
+  const catalogosSat = await precargarCatalogosSat(e, (catalogo, claves) => repo.cargarCatalogoSat(catalogo, claves), { tms: opc.tms });
+  const base = validarExtraccion(e, { riesgoInyeccion: doc.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido, catalogosSat });
   const extra: Hallazgo[] = [];
   const folio = e.campos.folio_cliente?.valor;
   if (folio) {
