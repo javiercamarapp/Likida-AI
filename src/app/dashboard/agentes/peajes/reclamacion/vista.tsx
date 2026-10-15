@@ -6,14 +6,33 @@ import { mxn, numero } from '@/lib/formato';
 // El módulo `reclamacion` es puro (sin base): el bundle de la vista puede importarlo.
 import { ETIQUETA_MOTIVO_RECLAMACION, type ReporteReclamacion } from '@/lib/likida/peajes/reclamacion';
 import { textoEvidencia } from '@/lib/likida/peajes/reclamacion_archivos';
+import type { ReporteRevision, ReclamoVista } from '@/lib/likida/peajes/revision_cobros';
+import type { CierreMensual } from '@/lib/likida/peajes/cierre_mensual';
+import type { ResumenSeguimiento } from '@/lib/likida/peajes/reclamos_seguimiento';
+import { SeccionRevisionCobros, SeccionCierreMensual, SeccionSeguimiento, type AccionesSeguimiento } from './revision';
 
 export type EstadoReclamacion = 'sin_desglose' | 'no_existe' | 'error' | 'ok';
 
 const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
 
-export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte }: {
-  sufijo: string; desglose: string | null; estado: EstadoReclamacion; reporte: ReporteReclamacion | null;
+/** Lo que la pantalla suma a la reclamación con GPS: la revisión de cobros del archivo, el cierre mensual y el seguimiento. Todo opcional. */
+export interface ExtrasReclamacion {
+  revision: ReporteRevision | null;
+  /** El reporte con GPS no se pudo leer (la revisión de cobros sí). */
+  errorGps?: boolean;
+  mes: string | null;
+  cierre: CierreMensual | null;
+  errorCierre?: boolean;
+  seguimiento: { reclamos: ReclamoVista[]; resumen: ResumenSeguimiento } | null;
+  errorSeguimiento?: boolean;
+  acciones: AccionesSeguimiento;
+  aviso?: string | null;
+  error?: string | null;
+}
+
+export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extras }: {
+  sufijo: string; desglose: string | null; estado: EstadoReclamacion; reporte: ReporteReclamacion | null; extras?: ExtrasReclamacion;
 }) {
   const ctx = sufijo ? `&${sufijo.slice(1)}` : '';
   return (
@@ -31,11 +50,31 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte }: {
         <div className="px-5 py-5 flex-1 space-y-4">
           {estado === 'sin_desglose' && (
             <EstadoVacio icono={<ShieldAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              Elige un desglose en el agente de Peajes y abre «Reporte de reclamación».
+              Elige un desglose en el agente de Peajes y abre «Reporte de reclamación». Aquí también puedes ver el cierre mensual y el seguimiento de reclamos.
             </EstadoVacio>
           )}
           {estado === 'no_existe' && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>Ese desglose no existe en tu flota (o fue anulado).</p>}
           {estado === 'error' && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>No se pudo armar el reporte ahora mismo. No es que no haya nada que reclamar: inténtalo de nuevo en un momento.</p>}
+
+          {extras?.aviso && <p role="status" className="card p-3 text-[12.5px]" style={{ color: 'var(--ok)' }}>{extras.aviso}</p>}
+          {extras?.error && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>{extras.error}</p>}
+
+          {estado === 'ok' && extras?.revision && desglose && (
+            <SeccionRevisionCobros revision={extras.revision} desglose={desglose} sufijo={sufijo} />
+          )}
+          {extras && (estado === 'ok' || estado === 'sin_desglose') && (
+            <>
+              <SeccionCierreMensual mes={extras.mes} cierre={extras.cierre} error={extras.errorCierre === true} sufijo={sufijo} desglose={desglose} />
+              <SeccionSeguimiento
+                reclamos={extras.seguimiento?.reclamos ?? null} resumen={extras.seguimiento?.resumen ?? null} acciones={extras.acciones}
+                desglose={estado === 'ok' ? desglose : null} revision={extras.revision} error={extras.errorSeguimiento === true} />
+            </>
+          )}
+          {estado === 'ok' && !reporte && extras?.errorGps && (
+            <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>
+              El reporte con evidencia de GPS no se pudo armar ahora mismo. No es que no haya nada que reclamar: la revisión de cobros de arriba no depende del GPS.
+            </p>
+          )}
 
           {estado === 'ok' && reporte && desglose && (
             <>
