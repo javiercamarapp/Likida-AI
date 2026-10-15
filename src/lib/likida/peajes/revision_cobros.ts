@@ -369,7 +369,7 @@ export async function listarReclamos(tenantId: string, hoy: string): Promise<{ r
     const base = {
       id: String(f.id), estado: String(f.estado) as EstadoReclamo,
       fechaCobroMasAntiguo: String(f.fecha_cobro_mas_antiguo).slice(0, 10),
-      montoReclamado: Number(f.monto_reclamado), montoAcreditado: Number(f.monto_acreditado),
+      montoReclamado: Number(f.monto_reclamado ?? 0), montoAcreditado: Number(f.monto_acreditado ?? 0),
     };
     return {
       ...base, desgloseId: (f.desglose_id as string | null) ?? null, proveedor: (f.proveedor as string | null) ?? null,
@@ -401,7 +401,7 @@ export async function crearReclamoDeCategoria(
   const monto = Math.round(cands.reduce((s, c) => s + c.monto, 0) * 100) / 100;
   const { data, error } = await acotada(supabaseAdmin().from('peaje_reclamo').insert({
     tenant_id: tenantId, desglose_id: entrada.desgloseId, proveedor: reporte.proveedor, categoria: entrada.categoria,
-    estado: enviado ? 'enviado' : 'preparado', n_cruces: cands.length, monto_reclamado: monto,
+    estado: enviado ? 'enviado' : 'preparado', n_cruces: cands.length, monto_reclamado: monto, monto_acreditado: 0,
     fecha_cobro_mas_antiguo: fechas[0], enviado_en: enviado,
     referencia_portal: entrada.referenciaPortal?.trim().slice(0, 120) || null, notas: entrada.notas?.trim().slice(0, 1000) || null,
   }).select('id').single(), 'revision_cobros.crear_reclamo');
@@ -444,7 +444,7 @@ export async function registrarNotaDeCredito(
   }), 'revision_cobros.nota');
   if (errN) { logger.error('revision_cobros.nota', { tenant: tenantId, err: errN.message }); return { ok: false, motivo: 'No se pudo guardar la nota de crédito.' }; }
 
-  const acreditado = Math.round((Number(r.monto_acreditado) + entrada.monto) * 100) / 100;
+  const acreditado = Math.round((Number(r.monto_acreditado ?? 0) + entrada.monto) * 100) / 100;
   const estado = estadoTrasAcreditar(r.estado as EstadoReclamo, Number(r.monto_reclamado), acreditado);
   const { error: errU } = await acotada(supabaseAdmin().from('peaje_reclamo')
     .update({ monto_acreditado: acreditado, estado, actualizado_en: new Date().toISOString() })

@@ -9,6 +9,7 @@ import type {
 } from '@/lib/likida/peajes/datos';
 
 import { SeccionEntradas, type AccionesEntradas, type EntradasVista } from './entradas';
+import { SeccionReglasCobro, type ReglasCobroVista } from './reglas-cobro';
 
 type Accion = (fd: FormData) => Promise<void>;
 
@@ -55,7 +56,7 @@ const CSS_SECUNDARIO = 'hairline text-[12.5px] font-medium px-3 py-1.5 rounded-l
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 export function VistaConfiguracionPeajes({
-  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones,
+  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro,
 }: {
   sufijo: string;
   aviso: string | null;
@@ -73,6 +74,8 @@ export function VistaConfiguracionPeajes({
   buzon: BuzonVista;
   entradas: EntradasVista;
   acciones: AccionesConfiguracion;
+  /** Las reglas de la revisión de cobros (clases por caseta, casetas prohibidas, TAGs de baja). Opcional. */
+  reglasCobro?: ReglasCobroVista;
 }) {
   return (
     <main className="h-full">
@@ -94,6 +97,7 @@ export function VistaConfiguracionPeajes({
           <SeccionBuzon buzon={buzon} archivos={archivos} acciones={acciones} sufijo={sufijo} />
           <SeccionEntradas entradas={entradas} acciones={acciones} />
           <SeccionMapeo mapeos={mapeos} acciones={acciones} />
+          {reglasCobro && <SeccionReglasCobro datos={reglasCobro} />}
           <SeccionTags tags={tags} unidades={unidades} acciones={acciones} />
           <SeccionCasetas casetas={casetas} acciones={acciones} />
           <SeccionGeocercas geocercas={geocercas} tipos={tiposGeocerca} acciones={acciones} />
@@ -229,7 +233,7 @@ function SeccionMapeo({ mapeos, acciones }: { mapeos: MapeoVista[] | null; accio
     <section className="card p-4" id="mapeo">
       <Titulo t="Mapeo de columnas por proveedor"
         nota={<>El lector detecta las columnas por su nombre. Si un proveedor usa otros encabezados (o el lector te dijo «no encontré la columna…»),
-          declara aquí cuál es cuál: por el <b>encabezado exacto</b> («Fecha de cobro») o por la <b>letra de la columna</b> («C»). Fecha, caseta e importe son obligatorios; hora y TAG, opcionales.</>} />
+          declara aquí cuál es cuál: por el <b>encabezado exacto</b> («Fecha de cobro») o por la <b>letra de la columna</b> («C»). Fecha, caseta e importe son obligatorios; hora, TAG, unidad y clase, opcionales (si no los declaras, se buscan por nombre: «Tarjeta IDMX», «No. economico», «Clase»).</>} />
       {mapeos === null ? <NoSePudoLeer que="los mapeos" /> : mapeos.length === 0 ? (
         <p className="text-[12.5px] mb-3" style={{ color: 'var(--muted)' }}>Ningún proveedor tiene mapeo: todos se leen por detección automática.</p>
       ) : (
@@ -239,7 +243,7 @@ function SeccionMapeo({ mapeos, acciones }: { mapeos: MapeoVista[] | null; accio
               <span className="font-medium">{m.proveedor}</span>
               <span className="text-[11.5px] cifra-mono" style={{ color: 'var(--muted)' }}>
                 fecha=«{m.columnas.fecha}» · caseta=«{m.columnas.caseta}» · importe=«{m.columnas.monto}»
-                {m.columnas.hora ? ` · hora=«${m.columnas.hora}»` : ''}{m.columnas.tag ? ` · TAG=«${m.columnas.tag}»` : ''}
+                {m.columnas.hora ? ` · hora=«${m.columnas.hora}»` : ''}{m.columnas.tag ? ` · TAG=«${m.columnas.tag}»` : ''}{m.columnas.unidad ? ` · unidad=«${m.columnas.unidad}»` : ''}{m.columnas.clase ? ` · clase=«${m.columnas.clase}»` : ''}
               </span>
               <form action={acciones.borrarMapeo} className="ml-auto">
                 <input type="hidden" name="mapeo" value={m.id} />
@@ -256,6 +260,8 @@ function SeccionMapeo({ mapeos, acciones }: { mapeos: MapeoVista[] | null; accio
         <Entrada nombre="caseta" etiqueta="Caseta" ph="Plaza" requerido ancho="w-[120px]" />
         <Entrada nombre="monto" etiqueta="Importe" ph="Importe" requerido ancho="w-[110px]" />
         <Entrada nombre="tag" etiqueta="TAG (opc.)" ph="No. TAG" ancho="w-[110px]" />
+        <Entrada nombre="unidad" etiqueta="Unidad (opc.)" ph="No. economico" ancho="w-[120px]" />
+        <Entrada nombre="clase" etiqueta="Clase (opc.)" ph="Clase" ancho="w-[90px]" />
         <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Guardar mapeo</button>
       </form>
       <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
