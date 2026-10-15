@@ -74,7 +74,9 @@ async function correrSalida(venceEn: number): Promise<SalidaPasada> {
     logger.info('cron.carta_porte_docs.salida_ok', { ...cifras, fallos: fallos.length });
     // El circuito abierto y la credencial caducada ya alertaron al operador desde el motor; aquí solo cuentan como «no limpio».
     const parcial = e.errores > 0 || e.alertasFallidas > 0 || e.circuitosAbiertos > 0 || e.credencialesCaducadas > 0 || e.cortadosPorReloj > 0 || e.sinMigracion;
-    return { parcial, resumen: { corrio: true, ...cifras, fallos: fallos.length }, respuesta: { corrio: true, ...cifras, fallos: fallos.slice(0, 20) } };
+    // Lo que mira el panel de salud interno (T-A3-38): cuántos envíos siguen esperando y si el circuito del TMS está abierto.
+    const observables = { envios_pendientes: e.pendientesReque + e.enEsperaManual + e.reintentos + e.soltados, circuito_tms_abierto: e.circuitosAbiertos > 0 };
+    return { parcial, resumen: { corrio: true, ...cifras, ...observables, fallos: fallos.length }, respuesta: { corrio: true, ...cifras, fallos: fallos.slice(0, 20) } };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     const codigo = codigoDeError(err);

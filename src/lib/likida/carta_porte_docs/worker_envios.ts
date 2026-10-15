@@ -135,7 +135,23 @@ export const resultadoEnviosVacio = (): ResultadoEnvios => ({
   errores: 0, fallos: [],
 });
 
-const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e)).replace(/\s+/g, ' ').slice(0, 200);
+/** Lo que jamás debe llegar a un log: un RFC (persona moral o física) o un correo. Se tapa ANTES de recortar. */
+const PATRON_RFC = /(?<![A-Z0-9])[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}(?![A-Z0-9])/gi;
+const PATRON_CORREO = /[^\s@<>"']+@[^\s@<>"']+/g;
+export const sinPII = (t: string): string => t.replace(PATRON_CORREO, '[correo]').replace(PATRON_RFC, '[rfc]');
+const msg = (e: unknown): string => sinPII((e instanceof Error ? e.message : String(e)).replace(/\s+/g, ' ')).slice(0, 200);
+
+/** Los únicos campos del detalle de un evento que pasan al log estructurado `cp_envio.*`: ids, contadores y códigos cortos; nunca contenido. */
+const CAMPOS_LOG = ['envioId', 'versionDoc', 'intentos', 'agotado', 'duplicado', 'clase', 'errores'] as const;
+function camposDeLog(detalle: Record<string, unknown>): Record<string, string | number | boolean> {
+  const o: Record<string, string | number | boolean> = {};
+  for (const k of CAMPOS_LOG) {
+    const v = detalle[k];
+    if (typeof v === 'number' || typeof v === 'boolean') o[k] = v;
+    else if (typeof v === 'string' && v.length <= 64) o[k] = sinPII(v);
+  }
+  return o;
+}
 const sha256 = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex');
 const iso = (ms: number): string => new Date(ms).toISOString();
 
@@ -161,7 +177,15 @@ export async function correrWorkerEnvios(deps: DepsEnvios, opts: OpcionesEnvios)
   if (!reclamo.ok) { r.sinMigracion = true; return r; }
   r.reclamados = reclamo.envios.length;
 
-  const ctx: Contexto = { deps, opts, r, circuitos: new Map(), config: new Map(), puertos: new Map() };
+  // Cada evento de la bitácora deja además su renglón estructurado `cp_envio.<tipo>`: ids y contadores, jamás el contenido.
+  const depsLog: DepsEnvios = {
+    ...deps,
+    evento: async (tenantId, documentoId, tipo, detalle) => {
+      logger.info(`cp_envio.${tipo}`, { tenantId, documentoId, ...camposDeLog(detalle) });
+      return deps.evento(tenantId, documentoId, tipo, detalle);
+    },
+  };
+  const ctx: Contexto = { deps: depsLog, opts, r, circuitos: new Map(), config: new Map(), puertos: new Map() };
   for (const rec of reclamo.envios) {
     try {
       await procesarEnvio(ctx, rec);
@@ -172,8 +196,22 @@ export async function correrWorkerEnvios(deps: DepsEnvios, opts: OpcionesEnvios)
       logger.error('cp_envios.envio_fallo', { envioId: rec.id, err: msg(e) });
     }
   }
+  logger.info('cp_envio.pasada', contadoresDeLog(r));
   return r;
 }
+
+/** Cifras de la pasada para el log y el latido: solo números y banderas. */
+export function contadoresDeLog(r: ResultadoEnvios): Record<string, number | boolean> {
+  return {
+    reclamados: r.reclamados, enviados: r.enviados, rechazados: r.rechazados, pendientes_reque: r.pendientesReque, en_espera_manual: r.enEsperaManual,
+    reintentos: r.reintentos, soltados: r.soltados, errores: r.errores, envios_pendientes: enviosPendientes(r), circuito_tms_abierto: r.circuitosAbiertos > 0,
+    credenciales_caducadas: r.credencialesCaducadas,
+  };
+}
+
+/** Envíos que siguen esperando tras la pasada (reque, subida manual, reintento o soltados sin intentar). */
+export const enviosPendientes = (r: Pick<ResultadoEnvios, 'pendientesReque' | 'enEsperaManual' | 'reintentos' | 'soltados'>): number =>
+  r.pendientesReque + r.enEsperaManual + r.reintentos + r.soltados;
 
 // ── Un envío ────────────────────────────────────────────────────────────────
 
@@ -510,7 +548,7 @@ async function abrirCircuito(ctx: Contexto, tenantId: string, codigo: string, er
   const c = circuitoDe(ctx, tenantId);
   c.abierto = true;
   ctx.r.circuitosAbiertos++;
-  logger.error('cp_envios.circuito_abierto', { tenantId, codigo });
+  logger.error('cp_envio.circuito_abierto', { tenantId, codigo });
   await ctx.deps.alertarOperador('cron.carta_porte_salida', { error, codigo, tenantId });
 }
 

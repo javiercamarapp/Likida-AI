@@ -14,7 +14,8 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('el worker de envíos no toca Supabase en estas pruebas'); } }));
 vi.mock('../presupuesto', () => ({ acotada: async <T,>(p: PromiseLike<T>) => p }));
 
-const { correrWorkerEnvios, TOPE_FALLOS_TMS_SEGUIDOS, SIN_MAS_REVISIONES, ESPERA_LISTO_MANUAL_MIN, MARGEN_ENVIO_MS } = await import('./worker_envios');
+const { logger } = await import('@/lib/logger');
+const { correrWorkerEnvios, sinPII, enviosPendientes, TOPE_FALLOS_TMS_SEGUIDOS, SIN_MAS_REVISIONES, ESPERA_LISTO_MANUAL_MIN, MARGEN_ENVIO_MS } = await import('./worker_envios');
 const { repoEnviosFalso, estadoEnvios, resetEnvios, sembrarEnvio } = await import('./repo_envios_falso.fixture');
 const { crearTmsFalso } = await import('./tms_falso.fixture');
 const { CONFIG_SALIDA_ARRANQUE } = await import('./salida_config');
@@ -596,5 +597,52 @@ describe('el reloj y la infraestructura', () => {
     expect(r).toMatchObject({ conflictos: 1, enviados: 0 });
     expect(tms.llamadas).toHaveLength(0);
     expect((await leer(A, e.id)).estado).toBe('subido_a_mano');
+  });
+});
+
+describe('observabilidad mínima de la salida (T-A3-38)', () => {
+  const RFC = 'XAXX010101000'; // grep-limpio:ok
+  const llamadasLogger = () => [logger.info, logger.warn, logger.error, logger.debug].flatMap((f) => (f as unknown as { mock: { calls: unknown[][] } }).mock.calls);
+
+  beforeEach(() => { for (const f of [logger.info, logger.warn, logger.error, logger.debug]) (f as unknown as { mockClear(): void }).mockClear(); });
+
+  it('cada evento deja su renglón `cp_envio.<tipo>` con ids, y la pasada cierra con `cp_envio.pasada` con los contadores', async () => {
+    puertos.set(A, puerto('ok'));
+    const e = sembrar(A, 1);
+    await pasada();
+    const info = (logger.info as unknown as { mock: { calls: Array<[string, Record<string, unknown>]> } }).mock.calls;
+    const ev = info.find(([n]) => n === 'cp_envio.envio_enviado');
+    expect(ev?.[1]).toMatchObject({ tenantId: A, envioId: e.id, versionDoc: 1, duplicado: false });
+    const pasadaLog = info.find(([n]) => n === 'cp_envio.pasada');
+    expect(pasadaLog?.[1]).toMatchObject({ reclamados: 1, enviados: 1, envios_pendientes: 0, circuito_tms_abierto: false });
+  });
+
+  it('la pasada con el circuito abierto lo dice: `circuito_tms_abierto: true`, los pendientes cuentan lo soltado y se loguea `cp_envio.circuito_abierto`', async () => {
+    puertos.set(A, puerto('transitorio'));
+    for (let n = 1; n <= 6; n++) sembrar(A, n);
+    const r = await pasada();
+    const info = (logger.info as unknown as { mock: { calls: Array<[string, Record<string, unknown>]> } }).mock.calls;
+    expect(info.find(([n]) => n === 'cp_envio.pasada')?.[1]).toMatchObject({ circuito_tms_abierto: true, reintentos: 4, soltados: 2, envios_pendientes: 6 });
+    expect(enviosPendientes(r)).toBe(6);
+    const err = (logger.error as unknown as { mock: { calls: Array<[string, Record<string, unknown>]> } }).mock.calls;
+    expect(err.find(([n]) => n === 'cp_envio.circuito_abierto')?.[1]).toMatchObject({ tenantId: A, codigo: 'cp_tms_circuito_abierto' });
+  });
+
+  it('los logs no incluyen RFC ni correos: ni en un error de infraestructura que los traiga en el mensaje', async () => {
+    puertos.set(A, puerto('ok'));
+    sembrar(A, 1);
+    const d = deps({ actualizarEnvio: async () => { throw new Error(`fallo al guardar el envío de ${RFC} (contacto: persona@cliente.example)`); } });
+    const r = await pasada(d);
+    expect(r.errores).toBe(1);
+    expect(r.fallos.join(' ')).not.toContain(RFC);
+    const todo = JSON.stringify(llamadasLogger());
+    expect(todo).not.toContain(RFC);
+    expect(todo).not.toContain('persona@cliente.example');
+    expect(todo).toContain('[rfc]');
+  });
+
+  it('`sinPII` tapa RFC de moral y de física, en cualquier caja, y deja intacto lo demás', () => {
+    expect(sinPII('RFC ABC010101AB1 y ñaño800101xx9 aquí')).toBe('RFC [rfc] y [rfc] aquí'); // grep-limpio:ok
+    expect(sinPII('envío d0000000 intentos 3')).toBe('envío d0000000 intentos 3');
   });
 });
