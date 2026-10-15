@@ -7,7 +7,7 @@ import type { HitoFila } from './tipos';
 import { debeReintentarseValidacion } from './validacion';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from './geometria_datos';
 import type { MuestraGps, SitioGps, SitiosViaje, UnidadDeViaje } from './ciclo_gps';
-import type { CandidatoSitio, LadoViaje, SitioCatalogo } from './sitio_derivado';
+import { normalizarNombre, type CandidatoSitio, type LadoViaje, type SitioCatalogo, type SitioEquivalencia } from './sitio_derivado';
 import { faltaEsquema, filaAEpisodio } from './repo';
 import type { EstadoEpisodios } from './senal_vida';
 
@@ -318,6 +318,33 @@ export async function leerCatalogoSitios(tenantIds: string[]): Promise<Map<strin
     const t = String(f.tenant_id);
     salida.set(t, [...(salida.get(t) ?? []), {
       id: String(f.id), nombre: String(f.nombre), codigo: typeof f.codigo === 'string' ? f.codigo : null, clienteId: typeof f.cliente_id === 'string' ? f.cliente_id : null,
+    }]);
+  }
+  return salida;
+}
+
+/**
+ * Las equivalencias texto→sitio (0803) de cada flota, junto al catálogo. Una base sin la 0803 se lee como «ninguna»: se deriva
+ * solo con el catálogo, como antes. Acotado a las flotas pedidas.
+ */
+export async function leerEquivalenciasSitio(tenantIds: string[]): Promise<Map<string, SitioEquivalencia[]>> {
+  const salida = new Map<string, SitioEquivalencia[]>();
+  if (tenantIds.length === 0) return salida;
+  let filas: Fila[];
+  try {
+    filas = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('sitio_equivalencia').select('tenant_id, texto_normalizado, lado, geocerca_id, tipo, cliente_id')
+      .in('tenant_id', tenantIds).order('id').range(d, h), 'conductor.sitio_equivalencias') as never, 'conductor.sitio_equivalencias');
+  } catch (e) {
+    if (faltaEsquema({ message: e instanceof Error ? e.message : String(e) }, /sitio_equivalencia/i)) return salida;
+    throw e;
+  }
+  for (const f of filas) {
+    const t = String(f.tenant_id);
+    const tipo = f.tipo === 'sin_sitio' || f.tipo === 'ignorar' ? f.tipo : 'sitio';
+    const lado = f.lado === 'origen' || f.lado === 'destino' ? f.lado : 'ambos';
+    salida.set(t, [...(salida.get(t) ?? []), {
+      texto: normalizarNombre(String(f.texto_normalizado)), lado, tipo,
+      sitioId: typeof f.geocerca_id === 'string' ? f.geocerca_id : null, clienteId: typeof f.cliente_id === 'string' ? f.cliente_id : null,
     }]);
   }
   return salida;
