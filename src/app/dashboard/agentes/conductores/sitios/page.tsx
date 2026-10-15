@@ -4,9 +4,9 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
-import { MAX_BYTES_CSV_SITIOS } from '@/lib/likida/conductor/sitios';
-import { archivarSitioDelPanel, guardarSitioDelPanel, importarCsvDelPanel } from '@/lib/likida/conductor/acciones_sitios';
-import { listarSitios, leerCatalogosFiltro } from '@/lib/likida/conductor/repo_validacion';
+import { csvTextosSinSitio, MAX_BYTES_CSV_SITIOS } from '@/lib/likida/conductor/sitios';
+import { archivarSitioDelPanel, asignarEquivalenciaDelPanel, guardarSitioDelPanel, importarCsvDelPanel, importarEquivalenciasDelPanel } from '@/lib/likida/conductor/acciones_sitios';
+import { listarSitios, leerCatalogosFiltro, leerTextosSinSitio } from '@/lib/likida/conductor/repo_validacion';
 import { sufijoTenant } from '../../../sufijo';
 import { VistaSitios } from './vista';
 import type { ResultadoSitio } from './formas';
@@ -27,10 +27,12 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
   const puedeEditar = puedeAsignar(rol);
   const busqueda = (sp.q ?? '').slice(0, 60);
 
-  const [lista, catalogos] = await Promise.all([
+  const [lista, catalogos, sinSitio] = await Promise.all([
     listarSitios(tenantId, { busqueda }).catch((e) => { logger.warn('sitios.no_leidos', { tenantId, err: e instanceof Error ? e.message : String(e) }); return null; }),
     leerCatalogosFiltro(tenantId).catch(() => null),
+    leerTextosSinSitio(tenantId, new Date()).catch((e) => { logger.warn('equivalencias.textos_no_leidos', { tenantId, err: e instanceof Error ? e.message : String(e) }); return null; }),
   ]);
+  const descargaCsv = sinSitio && sinSitio.textos.length > 0 ? `data:text/csv;charset=utf-8,${encodeURIComponent(csvTextosSinSitio(sinSitio.textos))}` : null;
   const editarId = sp.editar && UUID.test(sp.editar) ? sp.editar.toLowerCase() : null;
   const editando = editarId ? (lista?.sitios.find((s) => s.id === editarId) ?? null) : null;
 
@@ -61,6 +63,30 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
     return r;
   }
 
+  async function accionImportarEquivalencias(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA, sp);
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico importan equivalencias.' };
+    const archivo = fd.get('archivo');
+    let texto = '';
+    if (archivo instanceof File && archivo.size > 0) {
+      if (archivo.size > MAX_BYTES_CSV_SITIOS) return { ok: false, error: 'El archivo pesa más de 1 MB; divídelo en partes.' };
+      texto = await archivo.text();
+    } else if (typeof fd.get('csv') === 'string') texto = fd.get('csv') as string;
+    const r = aResultado(await importarEquivalenciasDelPanel({ tenantId: s.tenantId, rol: s.rol }, { texto }));
+    if (r?.ok) revalidatePath(RUTA);
+    return r;
+  }
+
+  async function accionAsignarEquivalencia(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA, sp);
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan las equivalencias.' };
+    const r = aResultado(await asignarEquivalenciaDelPanel({ tenantId: s.tenantId, rol: s.rol }, fd));
+    if (r?.ok) revalidatePath(RUTA);
+    return r;
+  }
+
   async function accionEstado(fd: FormData): Promise<void> {
     'use server';
     const s = await resolverTenantEfectivo(RUTA, sp);
@@ -74,6 +100,8 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
       sufijo={sufijoTenant(sp)} sitios={lista?.sitios ?? null} hayMas={lista?.hayMas ?? false} clientes={catalogos?.clientes ?? []}
       puedeEditar={puedeEditar} editando={editando} busqueda={busqueda}
       accionGuardar={accionGuardar} accionImportar={accionImportar} accionEstado={accionEstado}
+      textosSinSitio={sinSitio?.textos ?? null} textosTruncado={sinSitio?.truncado ?? false} descargaCsv={descargaCsv}
+      accionImportarEquivalencias={accionImportarEquivalencias} accionAsignarEquivalencia={accionAsignarEquivalencia}
     />
   );
 }

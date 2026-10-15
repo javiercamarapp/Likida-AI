@@ -1,7 +1,7 @@
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
-import { asignarSitiosViaje, cambiarEstadoSitio, guardarSitio, importarSitios } from './repo_validacion';
-import { leerSitioManual, parsearCsvSitios } from './sitios';
+import { asignarSitiosViaje, cambiarEstadoSitio, guardarEquivalencia, guardarSitio, importarEquivalencias, importarSitios } from './repo_validacion';
+import { leerSitioManual, normalizarTextoEquivalencia, parsearCsvEquivalencias, parsearCsvSitios, MAX_LARGO_TEXTO_EQUIVALENCIA, LADOS_EQUIVALENCIA, MARCAR_IGNORAR, MARCAR_INSTRUCCION, type LadoEquivalencia } from './sitios';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS ACCIONES DEL CATÁLOGO DE SITIOS (panel) — la lógica de las acciones de servidor, con puertos para poder
@@ -12,7 +12,7 @@ import { leerSitioManual, parsearCsvSitios } from './sitios';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type ResultadoAccionSitio =
-  | { ok: true; mensaje: string }
+  | { ok: true; mensaje: string; detalles?: string[] }
   | { ok: false; error: string; detalles?: string[] };
 
 export interface DepsSitios {
@@ -112,6 +112,81 @@ export async function asignarSitiosDelPanel(ctx: ContextoSitios, fd: { get(k: st
     return { ok: true, mensaje: 'Listo: las próximas llegadas de este viaje se comparan contra esos sitios.' };
   } catch (e) {
     logger.error('sitios.asignar_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, error: FALLO };
+  }
+}
+
+// ── T-A5-17: equivalencias texto→sitio ──────────────────────────────────────
+
+/**
+ * Puertos de las equivalencias, APARTE de `DepsSitios` y construidos al LLAMAR (no al cargar el módulo): así el resto de las
+ * acciones no depende de ellos ni de cómo se simule `repo_validacion` en sus pruebas.
+ */
+export interface DepsEquivalencias {
+  importar: typeof importarEquivalencias;
+  guardar: typeof guardarEquivalencia;
+}
+export const depsEquivalenciasReales = (): DepsEquivalencias => ({ importar: importarEquivalencias, guardar: guardarEquivalencia });
+
+export { MARCAR_IGNORAR, MARCAR_INSTRUCCION };
+
+/**
+ * Importa el CSV de equivalencias. A diferencia del catálogo NO es todo-o-nada: cada fila se aprueba o se rechaza sola y se dice
+ * cuál y por qué. Solo si no se pudo guardar NI UNA fila (y hubo rechazos) es un error.
+ */
+export async function importarEquivalenciasDelPanel(
+  ctx: ContextoSitios, entrada: { texto: string }, d: DepsEquivalencias = depsEquivalenciasReales(),
+): Promise<ResultadoAccionSitio> {
+  if (!puedeAsignar(ctx.rol)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico importan equivalencias.' };
+  const parseado = parsearCsvEquivalencias(entrada.texto);
+  const aTexto = (e: { linea: number; mensaje: string }) => (e.linea > 0 ? `Línea ${e.linea}: ${e.mensaje}` : e.mensaje);
+  if (parseado.filas.length === 0 && parseado.errores.length > 0) {
+    const n = parseado.errores.length;
+    return { ok: false, error: `No se importó nada: ${n} problema${n === 1 ? '' : 's'} en el archivo.`, detalles: parseado.errores.slice(0, MAX_DETALLES).map(aTexto) };
+  }
+  if (parseado.filas.length === 0) {
+    return { ok: false, error: 'No se importó nada: todas las filas están sin completar. Llena «geocerca_codigo» (o marca «tipo») y vuelve a subir el archivo.' };
+  }
+  try {
+    const r = await d.importar(ctx.tenantId, parseado.filas);
+    const rechazos = [...parseado.errores, ...r.rechazadas].sort((a, b) => a.linea - b.linea);
+    const detalles = rechazos.slice(0, MAX_DETALLES).map(aTexto);
+    if (r.guardadas + r.sinCambios === 0) {
+      const n = rechazos.length;
+      return { ok: false, error: `No se guardó ninguna fila: ${n} rechazada${n === 1 ? '' : 's'}.`, detalles };
+    }
+    const partes = [`${r.guardadas} guardada${r.guardadas === 1 ? '' : 's'} (${r.nuevas} nueva${r.nuevas === 1 ? '' : 's'}, ${r.actualizadas} actualizada${r.actualizadas === 1 ? '' : 's'})`,
+      `${r.sinCambios} sin cambios`, `${rechazos.length} rechazada${rechazos.length === 1 ? '' : 's'}`];
+    if (parseado.sinCompletar > 0) partes.push(`${parseado.sinCompletar} sin completar`);
+    return { ok: true, mensaje: `Equivalencias: ${partes.join(', ')}.`, ...(detalles.length > 0 ? { detalles } : {}) };
+  } catch (e) {
+    logger.error('equivalencias.importar_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, error: 'No pude importar ahorita. Lo que ya estaba guardado sigue igual; intenta de nuevo en un momento.' };
+  }
+}
+
+/** Asigna una equivalencia desde la lista de «textos sin sitio»: un sitio de la flota, «instrucción» o «ignorar». */
+export async function asignarEquivalenciaDelPanel(ctx: ContextoSitios, fd: { get(k: string): unknown }, d: DepsEquivalencias = depsEquivalenciasReales()): Promise<ResultadoAccionSitio> {
+  if (!puedeAsignar(ctx.rol)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan las equivalencias.' };
+  const txt = (k: string): string => (typeof fd.get(k) === 'string' ? (fd.get(k) as string).trim() : '');
+  const textoNormalizado = normalizarTextoEquivalencia(txt('texto').slice(0, MAX_LARGO_TEXTO_EQUIVALENCIA));
+  if (!textoNormalizado) return { ok: false, error: 'No reconozco el texto.' };
+  const lado = txt('lado') as LadoEquivalencia;
+  if (!LADOS_EQUIVALENCIA.includes(lado)) return { ok: false, error: 'No reconozco el lado del texto.' };
+  const eleccion = txt('asignar');
+  let tipo: 'sitio' | 'sin_sitio' | 'ignorar';
+  let geocercaId: string | null = null;
+  if (eleccion === MARCAR_INSTRUCCION) tipo = 'sin_sitio';
+  else if (eleccion === MARCAR_IGNORAR) tipo = 'ignorar';
+  else if (UUID.test(eleccion)) { tipo = 'sitio'; geocercaId = eleccion.toLowerCase(); }
+  else return { ok: false, error: 'Elige un sitio, o marca el texto como instrucción o como ignorar.' };
+  try {
+    const r = await d.guardar(ctx.tenantId, { textoNormalizado, lado, tipo, geocercaId });
+    if (r === 'sitio_no_encontrado') return { ok: false, error: 'Ese sitio no existe en tu catálogo. Impórtalo primero en Sitios.' };
+    if (r === 'datos_invalidos') return { ok: false, error: 'La base rechazó los datos: revisa el texto y el sitio.' };
+    return { ok: true, mensaje: tipo === 'sitio' ? 'Listo: los viajes con ese texto se ligan a ese sitio.' : 'Listo: ese texto ya no se cuenta como lugar.' };
+  } catch (e) {
+    logger.error('equivalencias.asignar_fallo', { err: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: FALLO };
   }
 }
