@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Extraccion } from './campos';
 import { completarDerivados } from './derivar';
-import { confianzaMinimaCritica, problemaRfc, validarExtraccion } from './validacion';
+import { CODIGOS_SUMA, confianzaMinimaCritica, problemaRfc, validarExtraccion } from './validacion';
 import { cv, extraccionAtlasOk, RFC, rfcValido } from './documentos_sinteticos.fixture';
 
 const AHORA = new Date('2026-10-01T12:00:00Z');
@@ -313,5 +313,76 @@ describe('confianzaMinimaCritica', () => {
     const e = extraccionAtlasOk(); e.campos.origen_rfc = cv(RFC.atlas, 0.4); e.campos.origen_nombre = cv('x', 0.1);
     expect(confianzaMinimaCritica(e)).toBe(0.4);
     expect(confianzaMinimaCritica({ campos: {}, mercancias: [] })).toBeNull();
+  });
+});
+
+// T-A3-18 · Verificación de sumas con rechazo (forma sintética de un documento de 14 renglones).
+describe('verificación de sumas (piezas / kg / m³)', () => {
+  function extraccionCatorceRenglones(): Extraccion {
+    const e = extraccionAtlasOk();
+    const base = e.mercancias[0];
+    const piezas = [...Array(13).fill('63'), '61'];
+    const kilos = [...Array(13).fill('1002'), '1002.8'];
+    const m3 = [...Array(13).fill('9.1'), '9.025'];
+    e.mercancias = piezas.map((p, i) => ({ ...base, cantidad: cv(p), clave_unidad: cv('H87'), unidad_texto: cv('Piezas'), peso_kg: cv(kilos[i]), volumen: cv(m3[i]) }));
+    e.campos.piezas_total = cv('880'); e.campos.peso_bruto_total = cv('14029'); e.campos.volumen_total = cv('127.325');
+    return e;
+  }
+  const sumas = (e: Extraccion) => validar(e).hallazgos.filter((h) => CODIGOS_SUMA.includes(h.codigo));
+
+  it('14 renglones que cuadran (880 pzas / 14 028.8 kg ≈ 14 029 / 127.325 m³) → sin hallazgo de suma', () => {
+    expect(sumas(extraccionCatorceRenglones())).toEqual([]);
+  });
+  it('alterar un renglón → bloqueo con el texto llano', () => {
+    const e = extraccionCatorceRenglones(); e.campos.piezas_total = cv('890');
+    const h = sumas(e);
+    expect(h).toHaveLength(1);
+    expect(h[0]).toMatchObject({ severidad: 'bloqueo', codigo: 'suma_piezas', campo: 'piezas_total', mensaje: expect.stringContaining('Las piezas suman 880 pero el documento dice 890') });
+    expect(validar(e).listoParaAprobar).toBe(false);
+    e.mercancias[3].cantidad = cv('73');
+    expect(sumas(e)).toEqual([]);
+  });
+  it('kg y volumen que no cuadran bloquean cada uno con su código', () => {
+    const e = extraccionCatorceRenglones(); e.campos.peso_bruto_total = cv('15000'); e.campos.volumen_total = cv('130');
+    expect(sumas(e).map((h) => h.codigo).sort()).toEqual(['suma_peso', 'suma_volumen']);
+    expect(sumas(e).find((h) => h.codigo === 'suma_volumen')!.mensaje).toMatch(/Los volúmenes suman 127\.325 m³ pero el documento dice 130 m³/);
+  });
+  it('solo piezas disponibles → solo se evalúa piezas', () => {
+    const e = extraccionCatorceRenglones();
+    delete e.campos.peso_bruto_total; delete e.campos.volumen_total; e.campos.piezas_total = cv('900');
+    for (const m of e.mercancias) { delete m.peso_kg; delete m.volumen; }
+    expect(sumas(e).map((h) => h.codigo)).toEqual(['suma_piezas']);
+  });
+  it('sin total del documento no se inventa uno (sin hallazgo)', () => {
+    const e = extraccionCatorceRenglones();
+    delete e.campos.piezas_total; delete e.campos.peso_bruto_total; delete e.campos.volumen_total;
+    expect(sumas(e)).toEqual([]);
+  });
+  it('tolerancia en el borde (0.5 %) pasa y apenas por encima bloquea', () => {
+    const e = extraccionCatorceRenglones();
+    e.campos.volumen_total = cv('127.9602'); // 127.325 × 1.005 = 127.9616
+    expect(sumas(e)).toEqual([]);
+    e.campos.volumen_total = cv('128');
+    expect(sumas(e).map((h) => h.codigo)).toEqual(['suma_volumen']);
+    const f = extraccionCatorceRenglones(); f.campos.piezas_total = cv('884'); // 0.5 % de 880 = 4.4 piezas
+    expect(sumas(f)).toEqual([]);
+    f.campos.piezas_total = cv('885');
+    expect(sumas(f).map((h) => h.codigo)).toEqual(['suma_piezas']);
+  });
+  it('unidades mezcladas (kg y piezas) no se suman como piezas', () => {
+    const e = extraccionCatorceRenglones(); e.mercancias[0].clave_unidad = cv('KGM'); e.campos.piezas_total = cv('1');
+    expect(sumas(e)).toEqual([]);
+  });
+  it('un renglón sin número deja esa suma sin evaluar', () => {
+    const e = extraccionCatorceRenglones(); delete e.mercancias[2].peso_kg; e.campos.peso_bruto_total = cv('1');
+    expect(sumas(e).map((h) => h.codigo)).not.toContain('suma_peso');
+  });
+  it('un total derivado de la suma nunca se contradice', () => {
+    const e = extraccionCatorceRenglones(); delete e.campos.peso_bruto_total; completarDerivados(e);
+    expect(sumas(e)).toEqual([]);
+  });
+  it('el hallazgo viejo peso_suma conserva su severidad (confirmar)', () => {
+    const e = extraccionAtlasOk(); e.campos.peso_bruto_total = cv('9000');
+    expect(codigos(e)).toContain('confirmar:peso_suma:peso_bruto_total');
   });
 });

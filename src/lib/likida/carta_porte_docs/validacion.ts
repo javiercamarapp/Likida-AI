@@ -175,6 +175,49 @@ function confirmado(e: Extraccion, h: Hallazgo): boolean {
   return lista.some((r) => (r.renglon === null ? e.campos[r.campo] : e.mercancias[r.renglon]?.[r.campo])?.origen === 'humano');
 }
 
+/** Tolerancia de la verificación de sumas (T-A3-18): el mayor entre el porcentaje del total y el mínimo absoluto. */
+export const TOLERANCIA_SUMA_PCT = 0.005;
+export const TOLERANCIA_SUMA_MIN_KG = 1;
+export const TOLERANCIA_SUMA_MIN_PIEZAS = 1;
+export const TOLERANCIA_SUMA_MIN_M3 = 0.001;
+
+/** Códigos de los bloqueos de suma; la bandeja sugiere `rechazo_causa = 'suma_no_cuadra'` mientras alguno siga abierto. */
+export const CODIGOS_SUMA: readonly string[] = ['suma_piezas', 'suma_peso', 'suma_volumen'];
+
+function numeroDe(c: CampoValor | undefined): number | null {
+  return normalizarNumero(c?.valor ?? '').valor;
+}
+
+/**
+ * Suma de renglones contra el total del documento. Sin total no se inventa uno (sin hallazgo); un total derivado de la
+ * suma no se contradice a sí mismo; si algún renglón no trae el número, esa suma no se evalúa.
+ */
+function verificarSumas(e: Extraccion, reg: Registrar): void {
+  if (e.mercancias.length === 0) return;
+  const redondeo = (n: number) => Math.round(n * 1000) / 1000;
+  const comprobar = (
+    campoTotal: 'piezas_total' | 'peso_bruto_total' | 'volumen_total', campoRenglon: 'cantidad' | 'peso_kg' | 'volumen',
+    codigo: string, minimo: number, sujeto: string, unidad: string,
+  ) => {
+    const campo = e.campos[campoTotal];
+    const total = numeroDe(campo);
+    if (total === null || !campo || campo.origen === 'derivado') return;
+    const valores = e.mercancias.map((f) => numeroDe(f[campoRenglon]));
+    if (!valores.every((v): v is number => v !== null)) return;
+    const suma = valores.reduce((s, v) => s + v, 0);
+    if (Math.abs(total - suma) <= Math.max(minimo, Math.abs(total) * TOLERANCIA_SUMA_PCT)) return;
+    reg({
+      campo: campoTotal, renglon: null, severidad: 'bloqueo', codigo,
+      mensaje: `${sujeto} suman ${redondeo(suma)}${unidad} pero el documento dice ${redondeo(total)}${unidad}. Corrige el total o los renglones.`,
+    });
+  };
+  // Piezas: solo si todos los renglones están en piezas (o sin unidad); mezclar kg con piezas no es una suma.
+  const enPiezas = e.mercancias.every((f) => { const u = (f.clave_unidad?.valor ?? '').trim().toUpperCase(); return u === '' || u === 'H87'; });
+  if (enPiezas) comprobar('piezas_total', 'cantidad', 'suma_piezas', TOLERANCIA_SUMA_MIN_PIEZAS, 'Las piezas', '');
+  comprobar('peso_bruto_total', 'peso_kg', 'suma_peso', TOLERANCIA_SUMA_MIN_KG, 'Los pesos', ' kg');
+  comprobar('volumen_total', 'volumen', 'suma_volumen', TOLERANCIA_SUMA_MIN_M3, 'Los volúmenes', ' m³');
+}
+
 export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): ResultadoValidacion {
   const hallazgos: Hallazgo[] = [];
   const reg: Registrar = (h) => hallazgos.push(h);
@@ -245,6 +288,8 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
       reg({ campo: 'peso_bruto_total', renglon: null, severidad: 'confirmar', codigo: 'peso_suma', mensaje: `El peso bruto total (${total} kg) no es la suma de las mercancías (${Math.round(suma * 1000) / 1000} kg). El complemento exige que coincidan.`, relacionados: e.mercancias.map((_, i) => ({ campo: 'peso_kg', renglon: i })) });
     }
   }
+  // Verificación de sumas con rechazo (T-A3-18): piezas, kg y m³ contra el total que declara el documento.
+  verificarSumas(e, reg);
   // Cantidad vs peso cuando la unidad es de masa.
   e.mercancias.forEach((fila, i) => {
     const u = fila.clave_unidad?.valor; const q = normalizarNumero(fila.cantidad?.valor ?? '').valor; const p = normalizarNumero(fila.peso_kg?.valor ?? '').valor;
