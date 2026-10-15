@@ -27,6 +27,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import {
   PERFILES_TENANT, rutaPermitidaEnPerfil, apiPermitidaEnPerfil, CRONS_PERFIL_CINCO_AGENTES,
+  moduloProximamenteDeRuta, rutaProximamente,
   type PerfilTenant,
 } from './visibilidad';
 
@@ -108,7 +109,8 @@ export async function perfilRestringido(tenantId: string | null | undefined): Pr
 /**
  * PÁGINAS Y SERVER ACTIONS: si la flota tiene perfil y la ruta no está en su
  * lista, rebota a `/dashboard` (el Resumen, que SIEMPRE está en la lista — por
- * eso no hay bucle). Para `/dashboard` mismo no hace nada.
+ * eso no hay bucle). Para `/dashboard` mismo no hace nada. Si la ruta es de un
+ * módulo «próximamente» (A4/A5 en fase 1) va a su pantalla «Próximamente».
  *
  * Una server action de una pantalla en stand-by llama a `resolverTenantEfectivo`
  * o a `requireSessionTenant` con la ruta de su pantalla: este rebote la corta
@@ -117,7 +119,16 @@ export async function perfilRestringido(tenantId: string | null | undefined): Pr
 export async function exigirRutaDePerfil(tenantId: string | null | undefined, destino: string): Promise<void> {
   const perfil = await perfilDeTenant(tenantId);
   if (!perfil) return;
-  if (rutaPermitidaEnPerfil(perfil, destino)) return;
+  if (rutaPermitidaEnPerfil(perfil, destino)) {
+    // «Próximamente» (fase 1): el módulo se ve pero no se opera. La página real y sus server actions se cortan aquí,
+    // antes de tocar un dato, y se sirve la pantalla única «Próximamente» (sin datos, sin acciones).
+    const proximamente = moduloProximamenteDeRuta(perfil, destino);
+    if (proximamente) {
+      logger.info('perfil_tenant.ruta_proximamente', { tenantId, destino, modulo: proximamente });
+      redirect(rutaProximamente(proximamente));
+    }
+    return;
+  }
   logger.warn('perfil_tenant.ruta_negada', { tenantId, destino });
   redirect('/dashboard');
 }
@@ -156,7 +167,7 @@ export function nombreDeCron(pathname: string): string {
   return m ? m[1] : pathname;
 }
 
-/** ¿Este cron sigue corriendo para las flotas con perfil? (Los de los cinco agentes y la plomería, sí.) */
+/** ¿Este cron sigue corriendo para las flotas con perfil? (Los de A1–A3 y la plomería, sí; los de «próximamente», no.) */
 export function cronAplicaAPerfil(nombreCron: string): boolean {
   return CRONS_PERFIL_CINCO_AGENTES.includes(nombreCron);
 }

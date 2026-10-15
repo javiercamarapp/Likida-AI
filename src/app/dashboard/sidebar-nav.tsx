@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { LayoutGrid, MessageCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { type Item, AUTOMATIZACIONES, OPERACION, DINERO_FISCAL, SISTEMA, ABAJO } from './rutas';
-import { puedeVerRuta, type PerfilTenant } from '@/lib/auth/visibilidad';
+import { puedeVerRuta, moduloProximamenteDeRuta, rutaProximamente, type PerfilTenant } from '@/lib/auth/visibilidad';
 import { SelectorTema } from '../selector-tema';
 import { WidgetUso } from '../admin/ui/kit';
 
@@ -30,18 +30,27 @@ function idSeccion(titulo: string): string {
   return `nav-seccion-${titulo.toLowerCase().split(' ').join('-')}`;
 }
 
-function Fila({ item, sufijo, pathname }: { item: Item; sufijo: string; pathname: string }) {
-  const activo = pathname === item.href;
+function Fila({ item, sufijo, pathname, perfil }: { item: Item; sufijo: string; pathname: string; perfil?: PerfilTenant | null }) {
+  // «Próximamente» (fase 1 del perfil): el módulo se ve en el menú pero su link va a la pantalla única de anuncio, no a la función.
+  const modulo = perfil ? moduloProximamenteDeRuta(perfil, item.href) : null;
+  const activo = modulo ? false : pathname === item.href;
+  const destino = modulo ? rutaProximamente(modulo) : item.href;
   return (
-    <Link href={`${item.href}${sufijo}`} className={claseItem(activo)} style={estiloItem(activo)} title={item.nombre} aria-label={item.nombre}>
+    <Link href={`${destino}${sufijo}`} className={claseItem(activo)} style={estiloItem(activo)} title={modulo ? `${item.nombre} (Próximamente)` : item.nombre}
+      aria-label={modulo ? `${item.nombre}, próximamente` : item.nombre}>
       <item.Icono {...estiloIcono(activo)} /> <span className="sb-texto truncate">{item.nombre}</span>
+      {modulo && (
+        <span className="sb-texto ml-auto shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>
+          Próximamente
+        </span>
+      )}
     </Link>
   );
 }
 
-function Seccion({ titulo, items, sufijo, pathname, abierta, onAbrir }: {
+function Seccion({ titulo, items, sufijo, pathname, abierta, onAbrir, perfil }: {
   titulo: string; items: Item[]; sufijo: string; pathname: string;
-  abierta: string | null; onAbrir: (titulo: string) => void;
+  abierta: string | null; onAbrir: (titulo: string) => void; perfil?: PerfilTenant | null;
 }) {
   // ACORDEÓN (17-ago, misma regla que /admin): UNA sección abierta a la vez,
   // OPERACIÓN por default o la de la ruta activa; el estado vive en el padre
@@ -63,7 +72,7 @@ function Seccion({ titulo, items, sufijo, pathname, abierta, onAbrir }: {
           : <ChevronDown width={13} height={13} strokeWidth={2} />}
       </button>
       <div id={`${idSeccion(titulo)}-items`}>
-        {!plegada && items.map((it) => <Fila key={it.href} item={it} sufijo={sufijo} pathname={pathname} />)}
+        {!plegada && items.map((it) => <Fila key={it.href} item={it} sufijo={sufijo} pathname={pathname} perfil={perfil} />)}
       </div>
     </div>
   );
@@ -159,7 +168,7 @@ export default function SidebarNav({ rol, perfil }: {
       )}
       {TITULOS_DASHBOARD.map(([titulo, items]) => (
         <Seccion key={titulo} titulo={titulo} items={visibles(items)} sufijo={sufijo}
-          pathname={pathname} abierta={abierta} onAbrir={alternar} />
+          pathname={pathname} abierta={abierta} onAbrir={alternar} perfil={perfil} />
       ))}
     </>
   );
@@ -205,7 +214,7 @@ export function SidebarAbajo({ rol, usoIa, perfil }: {
           <span className="sb-texto truncate">{ayuda.nombre}</span>
         </Link>
       )}
-      {filas.map((it) => <Fila key={it.href} item={it} sufijo={sufijo} pathname={pathname} />)}
+      {filas.map((it) => <Fila key={it.href} item={it} sufijo={sufijo} pathname={pathname} perfil={perfil} />)}
       {/* El selector se esconde entero al colapsar (sb-texto): a 72px no
           caben tres botones, y el tema no es algo que se cambie a diario. */}
       <div className="sb-texto px-2.5 pt-1.5 flex justify-center">

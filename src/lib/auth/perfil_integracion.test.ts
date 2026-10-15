@@ -46,7 +46,7 @@ vi.mock('@/lib/likida/bitacora_escritura', () => ({ anotarBitacora: async () => 
 const { resolverTenantEfectivo } = await import('./tenant-efectivo');
 const { requireSessionTenant } = await import('./guard');
 const { reiniciarCachePerfil } = await import('./perfil_tenant');
-const { RUTAS_STAND_BY_PERFIL_CINCO_AGENTES, RUTAS_PERFIL_CINCO_AGENTES } = await import('./visibilidad');
+const { RUTAS_STAND_BY_PERFIL_CINCO_AGENTES, RUTAS_PERFIL_CINCO_AGENTES, rutaProximamenteEnPerfil } = await import('./visibilidad');
 
 const CON = 'tenant-con-perfil';
 const SIN = 'tenant-sin-perfil';
@@ -71,9 +71,9 @@ describe('resolverTenantEfectivo (páginas y acciones)', () => {
     }
   });
 
-  it('bajo el perfil, cada ruta permitida que el rol ve SÍ abre', async () => {
+  it('bajo el perfil, cada ruta permitida que el rol ve SÍ abre (salvo las «próximamente», que van a su anuncio)', async () => {
     getSessionTenant.mockResolvedValue(dueno(CON));
-    const rutas = Object.keys(RUTAS_PERFIL_CINCO_AGENTES).filter((r) => r !== '/dashboard/[id]');
+    const rutas = Object.keys(RUTAS_PERFIL_CINCO_AGENTES).filter((r) => r !== '/dashboard/[id]' && !rutaProximamenteEnPerfil('cinco_agentes', r));
     for (const ruta of rutas) {
       redirect.mockClear();
       const r = await resolverTenantEfectivo(ruta, {});

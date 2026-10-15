@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { API_PERFIL_CINCO_AGENTES, CRONS_PERFIL_CINCO_AGENTES } from '@/lib/auth/visibilidad';
+import { API_PERFIL_CINCO_AGENTES, API_PROXIMAMENTE_PERFIL, CRONS_PERFIL_CINCO_AGENTES, CRONS_PROXIMAMENTE_PERFIL } from '@/lib/auth/visibilidad';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // INVENTARIO DE LAS SUPERFICIES DE API Y DE LOS CRONS BAJO EL PERFIL
@@ -30,12 +30,12 @@ describe('API: toda ruta está clasificada', () => {
   for (const raiz of ['v1', 'export', 'dashboard'] as const) {
     it(`/api/${raiz}: cada carpeta es permitida o de stand-by (ninguna sin clasificar)`, () => {
       const existentes = subdirs(raiz);
-      const clasificadas = [...API_PERFIL_CINCO_AGENTES[raiz], ...STAND_BY[raiz], ...(raiz === 'v1' ? V1_SIN_DATOS : [])];
+      const clasificadas = [...API_PERFIL_CINCO_AGENTES[raiz], ...API_PROXIMAMENTE_PERFIL[raiz], ...STAND_BY[raiz], ...(raiz === 'v1' ? V1_SIN_DATOS : [])];
       expect(existentes.filter((r) => !clasificadas.includes(r))).toEqual([]);
     });
     it(`/api/${raiz}: nada de lo clasificado apunta a una carpeta que ya no existe`, () => {
       const existentes = subdirs(raiz);
-      for (const r of [...API_PERFIL_CINCO_AGENTES[raiz], ...STAND_BY[raiz]]) expect(existentes, r).toContain(r);
+      for (const r of [...API_PERFIL_CINCO_AGENTES[raiz], ...API_PROXIMAMENTE_PERFIL[raiz], ...STAND_BY[raiz]]) expect(existentes, r).toContain(r);
     });
     it(`/api/${raiz}: ninguna ruta está a la vez permitida y en stand-by`, () => {
       expect(API_PERFIL_CINCO_AGENTES[raiz].filter((r) => STAND_BY[raiz].includes(r))).toEqual([]);
@@ -78,6 +78,9 @@ describe('crons: cada cron del repo está clasificado', () => {
     jornada: /tenantsConPerfilASaltar\('jornada'\)/,
     'jornada-alertas': /tenantsConPerfilASaltar\('jornada-alertas'\)/,
     'buzon-entrega': /tenantsConPerfilASaltar\('buzon-entrega'\)/,
+    // «Próximamente» (fase 1): A4 y A5 no corren para flotas con perfil.
+    vigia: /tenantsConPerfilASaltar\('vigia'\)/,
+    'conductor-hitos': /tenantsConPerfilASaltar\('conductor-hitos'\)/,
   };
   /** Mixto: sigue corriendo para los cinco agentes y salta lo de stand-by por sección. */
   const MIXTO: Record<string, RegExp> = { escalar: /tenantsConPerfil\(\)[\s\S]*tenantsConPerfil\(\)[\s\S]*tenantsConPerfil\(\)/ };
@@ -87,7 +90,7 @@ describe('crons: cada cron del repo está clasificado', () => {
   const CALLBACK = ['facturar'];
 
   it('ningún cron sin clasificar', () => {
-    const conocidos = [...CRONS_PERFIL_CINCO_AGENTES, ...Object.keys(SALTA), ...Object.keys(MIXTO), ...GLOBAL, ...CALLBACK];
+    const conocidos = [...CRONS_PERFIL_CINCO_AGENTES, ...CRONS_PROXIMAMENTE_PERFIL, ...Object.keys(SALTA), ...Object.keys(MIXTO), ...GLOBAL, ...CALLBACK];
     expect(crons.filter((c) => !conocidos.includes(c))).toEqual([]);
   });
   it('la lista permitida y la de stand-by no se cruzan, y todo lo clasificado existe', () => {

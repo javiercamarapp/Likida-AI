@@ -222,7 +222,9 @@ export async function GET(req: Request) {
       resultado.aceptacion = { saltado: 'interruptor agente:conductores' };
     } else {
       try {
-        const r = await conReintentoDeTimeout(() => escalarViajesSinAceptar({ venceEn: venceEscalacion }), 'escalarViajesSinAceptar');
+        // El Conductor (A5) está en «Próximamente» para las flotas con perfil (fase 1): su escalación no las toca.
+        const excluirTenants = await tenantsConPerfil();
+        const r = await conReintentoDeTimeout(() => escalarViajesSinAceptar({ venceEn: venceEscalacion, excluirTenants }), 'escalarViajesSinAceptar');
         logger.info('cron.escalar.ok', { ...r });
         resultado.aceptacion = r;
       } catch (e) {
