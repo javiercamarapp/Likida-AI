@@ -107,7 +107,7 @@ describe('el índice de git no contiene datos privados', () => {
     expect(salida.split('\n').filter(Boolean), 'archivos rastreados que nombran al cliente retirado').toEqual([]);
   });
 
-  it('el prefijo de folio retirado (DEMO-) solo sobrevive en la compatibilidad de esFolioSimulado y sus pruebas', () => {
+  it('el prefijo de folio retirado solo sobrevive en la compatibilidad de esFolioSimulado y sus pruebas', () => {
     const prefijo = ['IN', 'N-'].join('');
     let salida = '';
     try {
@@ -122,6 +122,6 @@ describe('el índice de git no contiene datos privados', () => {
       'src/app/dashboard/agentes/conductores/tablero-hitos.test.tsx',
     ]);
     const fuera = salida.split('\n').filter(Boolean).filter((f) => !permitidos.has(f));
-    expect(fuera, 'el prefijo DEMO- reapareció fuera de la compatibilidad').toEqual([]);
+    expect(fuera, 'el prefijo de folio retirado reapareció fuera de la compatibilidad').toEqual([]);
   });
 });
