@@ -3,6 +3,7 @@ import { FileInput, TriangleAlert, Mail, MessageCircle, Upload, Download, Rotate
 import { EstadoVacio, EstadoError } from '@/app/admin/ui/kit';
 import { BarraPagina } from '../../resumen-visual';
 import { fechaHoraMx, numero, pesoArchivo, porcentaje, usd4 } from '@/lib/formato';
+import { soloMisCasos } from '@/lib/likida/carta_porte_docs/revisor';
 import { prioridadEstado, ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO } from '@/lib/likida/carta_porte_docs/presentacion';
 import { MINUTOS_CAPTURA_MANUAL_EMBARQUE, type MetricasAgente } from '@/lib/likida/carta_porte_docs/metricas';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
@@ -59,6 +60,14 @@ export interface DatosDocumentos {
   envios?: Record<string, EstadoEnvioTms>;
   /** Por id de documento. Vacío/ausente = nada se partió (o la base aún no tiene la 0670). */
   linaje?: Record<string, LinajeVista>;
+  /**
+   * T-A3-31. Por id de documento: la persona a la que le toca revisarlo. Solo salen los asignados.
+   * `asignacionActiva` = la flota configuró un destinatario de revisión o ya hay casos asignados: SOLO entonces la bandeja
+   * muestra la columna «Asignado a» y el filtro «Mis casos». Sin configuración, la bandeja es la de siempre.
+   */
+  asignados?: Record<string, string>;
+  revisores?: Array<{ id: string; nombre: string }>;
+  asignacionActiva?: boolean;
   total: number;
   metricas: MetricasAgente;
   perfiles: PerfilVista[];
@@ -97,7 +106,7 @@ function Cifra({ rotulo, valor, nota }: { rotulo: string; valor: string; nota?: 
   );
 }
 
-export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', filtroEnvio = 'todos', perfilRestringido = false }: {
+export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', filtroEnvio = 'todos', perfilRestringido = false, soloMios = false, usuarioId = null }: {
   datos: DatosDocumentos | null; acciones: AccionesDocumentos; sufijo?: string;
   /** El filtro «estado de envío» de la bandeja (viene de `?envio=`). */
   filtroEnvio?: FiltroEnvio;
@@ -105,6 +114,9 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
   apiSufijo?: string;
   /** Flota bajo el perfil restringido: la bandeja habla del envío al TMS, no de viajes. */
   perfilRestringido?: boolean;
+  /** «Mis casos» (viene de `?mios=1`) y quién es la persona de la sesión. */
+  soloMios?: boolean;
+  usuarioId?: string | null;
 }) {
   return (
     <main className="h-full">
@@ -128,7 +140,7 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
             <>
               <Metricas m={datos.metricas} />
               {acciones.subir && <Subir accion={acciones.subir} clientes={datos.clientes} />}
-              <Bandeja datos={datos} acciones={acciones} sufijo={sufijo} filtroEnvio={filtroEnvio} perfilRestringido={perfilRestringido} />
+              <Bandeja datos={datos} acciones={acciones} sufijo={sufijo} filtroEnvio={filtroEnvio} perfilRestringido={perfilRestringido} soloMios={soloMios} usuarioId={usuarioId} />
               <Canales buzon={datos.buzon} acciones={acciones} />
               <Perfiles perfiles={datos.perfiles} acciones={acciones} />
               <Exportacion configs={datos.configs} acciones={acciones} apiSufijo={apiSufijo} />
@@ -192,12 +204,26 @@ function Subir({ accion, clientes }: { accion: AccionDoc; clientes: Array<{ id: 
   );
 }
 
-function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido }: { datos: DatosDocumentos; acciones: AccionesDocumentos; sufijo: string; filtroEnvio: FiltroEnvio; perfilRestringido: boolean }) {
-  const orden = datos.filas.filter((d) => pasaFiltroEnvio(d, datos.envios, filtroEnvio)).sort((a, b) => prioridadEstado(a.estado) - prioridadEstado(b.estado) || (a.createdAt < b.createdAt ? 1 : -1));
+function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, soloMios, usuarioId }: { datos: DatosDocumentos; acciones: AccionesDocumentos; sufijo: string; filtroEnvio: FiltroEnvio; perfilRestringido: boolean; soloMios: boolean; usuarioId: string | null }) {
+  const conAsignacion = datos.asignacionActiva === true;
+  const mios = conAsignacion && soloMios && usuarioId !== null;
+  const nombreDe = new Map((datos.revisores ?? []).map((r) => [r.id, r.nombre]));
+  const base = datos.filas.filter((d) => pasaFiltroEnvio(d, datos.envios, filtroEnvio));
+  const orden = (mios ? soloMisCasos(base, datos.asignados ?? {}, usuarioId) : base).sort((a, b) => prioridadEstado(a.estado) - prioridadEstado(b.estado) || (a.createdAt < b.createdAt ? 1 : -1));
   const cliente = new Map(datos.clientes.map((c) => [c.id, c.nombre]));
   return (
     <section className="space-y-2">
       <h2 className="text-[13px] font-medium">Bandeja de revisión</h2>
+      {conAsignacion && usuarioId !== null && (
+        <nav aria-label="Filtrar por persona asignada" className="flex flex-wrap items-center gap-1.5 text-[12px]">
+          <span style={{ color: 'var(--muted)' }}>Asignación:</span>
+          {[{ clave: false, rotulo: 'Todos' }, { clave: true, rotulo: 'Mis casos' }].map((f) => (
+            <Link key={String(f.clave)} href={`/dashboard/carta-porte/documentos${sufijo}${f.clave ? `${sufijo ? '&' : '?'}mios=1` : ''}`}
+              aria-current={mios === f.clave ? 'page' : undefined} className="px-2 py-0.5 rounded-full hairline hover:opacity-80"
+              style={mios === f.clave ? { background: 'var(--marca)', color: 'var(--surface)' } : { color: 'var(--muted)' }}>{f.rotulo}</Link>
+          ))}
+        </nav>
+      )}
       <nav aria-label="Filtrar por estado de envío al TMS" className="flex flex-wrap items-center gap-1.5 text-[12px]">
         <span style={{ color: 'var(--muted)' }}>Envío al TMS:</span>
         {FILTROS_ENVIO.map((f) => (
@@ -208,7 +234,9 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido }: { 
       </nav>
       {orden.length === 0 ? (
         <EstadoVacio icono={<FileInput width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-          {filtroEnvio === 'todos'
+          {mios
+            ? 'No tienes casos asignados. Los documentos sin persona asignada le tocan a todos los revisores: míralos en «Todos».'
+            : filtroEnvio === 'todos'
             ? 'Todavía no ha llegado ningún documento. Sube uno arriba, mándalo al correo de tu flota o reenvíalo por WhatsApp.'
             : 'Ningún documento aprobado tiene ese estado de envío al TMS.'}
         </EstadoVacio>
@@ -217,7 +245,7 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido }: { 
           <table className="w-full text-[12.5px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                {['Estado', 'Archivo', 'Formato · canal', 'Lo que falta', 'Recibido', ''].map((h) => <th key={h} className="px-3 py-2 font-medium text-[11px]">{h}</th>)}
+                {['Estado', 'Archivo', 'Formato · canal', 'Lo que falta', ...(conAsignacion ? ['Asignado a'] : []), 'Recibido', ''].map((h) => <th key={h} className="px-3 py-2 font-medium text-[11px]">{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -264,6 +292,13 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido }: { 
                         <span style={{ color: 'var(--muted)' }}>{lin?.rol === 'padre' ? `Trae ${numero(lin.total)} embarques: cada uno es un documento aparte` : 'Se separó en un documento por embarque'}</span>
                       ) : '—'}
                     </td>
+                    {conAsignacion && (
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {datos.asignados?.[d.id]
+                          ? (nombreDe.get(datos.asignados[d.id]) ?? 'Otra persona')
+                          : <span style={{ color: 'var(--faint)' }}>{d.estado === 'por_revisar' ? 'Todos los revisores' : '—'}</span>}
+                      </td>
+                    )}
                     <td className="px-3 py-2 whitespace-nowrap">{fechaHoraMx(d.createdAt)}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-right">
                       {(d.estado === 'recibido' || (d.estado === 'fallido' && d.intentos < 5)) && acciones.procesar ? (

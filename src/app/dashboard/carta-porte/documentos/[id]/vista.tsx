@@ -103,13 +103,17 @@ function Campo({ f, editable }: { f: FilaCampo; editable: boolean }) {
   );
 }
 
-export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', envio = null, salida = null, puedeEliminar = false, embarque = null, hijos = [], perfilRestringido = false, catalogo = null }: {
+/** T-A3-31: a quién le toca este caso y a quién se le puede pasar. `null` = la flota no usa asignación (no se pinta nada). */
+export interface RevisorVista { actualId: string | null; opciones: Array<{ id: string; nombre: string }> }
+
+export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', envio = null, salida = null, puedeEliminar = false, embarque = null, hijos = [], perfilRestringido = false, catalogo = null, revisor = null }: {
   doc: DocumentoFila;
   revision: Revision | null;
   original: OriginalVista;
   operadores: Array<{ id: string; nombre: string }>;
   eventos: EventoVista[];
-  acciones: { revisar: AccionDoc | null };
+  acciones: { revisar: AccionDoc | null; reasignar?: AccionDoc | null };
+  revisor?: RevisorVista | null;
   sufijo?: string;
   /** El envío al TMS de la versión vigente (solo se carga si el documento está aprobado). */
   envio?: EnvioVista | null;
@@ -163,6 +167,22 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
             Embarque {numero(embarque.indice)} de {numero(embarque.total)}{embarque.clave ? ` (folio ${embarque.clave})` : ''} del archivo{' '}
             <Link href={`/dashboard/carta-porte/documentos/${embarque.padreId}${sufijo}`} className="font-medium" style={{ color: 'var(--marca)' }}>{embarque.padreNombre}</Link>.
           </p>
+        )}
+        {revisor && (
+          <div className="text-[12px] flex flex-wrap items-center gap-2" style={{ color: 'var(--muted)' }}>
+            <span>Asignado a: <strong style={{ color: 'var(--ink)' }}>{revisor.opciones.find((o) => o.id === revisor.actualId)?.nombre ?? (revisor.actualId ? 'Otra persona' : 'Todos los revisores')}</strong></span>
+            {editable && acciones.reasignar && (
+              <FormaAccion accion={acciones.reasignar} className="flex flex-wrap items-center gap-2">
+                <input type="hidden" name="documentoId" value={doc.id} />
+                <label className="sr-only" htmlFor="revisorId">Reasignar a</label>
+                <select id="revisorId" name="revisorId" defaultValue={revisor.actualId ?? ''} className={`${CAMPO} !w-auto`}>
+                  <option value="">Todos los revisores</option>
+                  {revisor.opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+                </select>
+                <BotonEnvio variante="secundario" etiqueta="Reasignar" pendiente="Reasignando…" />
+              </FormaAccion>
+            )}
+          </div>
         )}
         {doc.estado === 'fallido' && <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>{doc.ultimoError}</p>}
         {doc.estado === 'rechazado' && <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Rechazado: {doc.rechazoMotivo}</p>}

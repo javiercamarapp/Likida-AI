@@ -30,6 +30,7 @@ import { aplicarSalidaViaje, type ResultadoSalida } from './salida';
 import { DIAS_RETENCION, validarDocumento } from './servicio';
 import { CODIGOS_SUMA, confianzaMinimaCritica, conservarHallazgosTms, type Hallazgo, type ResultadoValidacion } from './validacion';
 import * as repo from './repo';
+import { asignarAlLlegarARevision } from './revisor';
 import type { CorreccionFila, DocumentoFila } from './repo';
 
 export class ConflictoDeVersion extends DatoInvalido {
@@ -371,7 +372,7 @@ async function reabrir(
 export async function reabrirPorRechazoTms(
   tenantId: string, id: string, versionDoc: number, hallazgos: ReadonlyArray<Hallazgo>, ubicaciones: ReadonlyArray<string> = [],
 ): Promise<DocumentoFila> {
-  return reabrir(tenantId, id, versionDoc, null, {
+  const reabierto = await reabrir(tenantId, id, versionDoc, null, {
     cambios: (d) => {
       const propios = (d.validacion?.hallazgos ?? []).filter((h) => h.origen !== 'tms');
       const todos = [...propios, ...hallazgos];
@@ -385,6 +386,9 @@ export async function reabrirPorRechazoTms(
     },
     evento: { causa: 'tms_rechazo', hallazgos: hallazgos.length, ubicaciones: ubicaciones.slice(0, 30) },
   });
+  // T-A3-31: el rechazo del sistema del cliente es un caso para una persona; si nadie lo tenía, le llega al destinatario de revisión.
+  await asignarAlLlegarARevision(tenantId, id, reabierto.validacion);
+  return reabierto;
 }
 
 /**

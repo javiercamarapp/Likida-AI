@@ -23,6 +23,7 @@ import { elegirPerfil } from './perfiles';
 import { confianzaMinimaCritica, validarExtraccion, type Hallazgo, type ResultadoValidacion } from './validacion';
 import type { Extraccion } from './campos';
 import * as repo from './repo';
+import { asignarAlLlegarARevision } from './revisor';
 import type { CanalDoc, DocumentoFila, MetaExtraccion } from './repo';
 
 export const DIAS_RETENCION = { recibido: 180, aprobado: 365, cerrado: 90 } as const;
@@ -316,6 +317,8 @@ export async function procesarDocumento(
       costoUsd: r.costoUsd, bloqueos: validacion.bloqueos, porConfirmar: validacion.porConfirmar, riesgoInyeccion: r.riesgoInyeccion,
     });
     for (const x of r.escalamientos) await repo.registrarEvento(tenantId, documentoId, 'escalada', null, x);
+    // T-A3-31: con bloqueo o duda y un destinatario configurado, el caso ya llega a su persona (mejor esfuerzo; sin configuración no hace nada).
+    await asignarAlLlegarARevision(tenantId, documentoId, validacion);
     return { ok: true, estado: 'por_revisar', origen: r.origen, nivel: r.nivel, costoUsd: r.costoUsd, listoParaAprobar: validacion.listoParaAprobar };
   } catch (e) {
     // Cualquier otra cosa (la base, la bitácora): el documento NO se queda «procesando» para siempre; el lease vence solo

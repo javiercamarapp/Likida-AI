@@ -16,9 +16,11 @@ import { detectarFormato, prepararContenido } from '@/lib/likida/carta_porte_doc
 import { cambiosDeFormulario } from '@/lib/likida/carta_porte_docs/formulario';
 import { revisionDe } from '@/lib/likida/carta_porte_docs/presentacion';
 import * as repo from '@/lib/likida/carta_porte_docs/repo';
+import { reasignarRevisor } from '@/lib/likida/carta_porte_docs/revisor';
+import { leerConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import { sufijoTenant } from '../../../sufijo';
 import type { ResultadoAccion } from '../forma_accion';
-import { VistaRevision, type CatalogoBanner, type OriginalVista } from './vista';
+import { VistaRevision, type CatalogoBanner, type OriginalVista, type RevisorVista } from './vista';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -103,7 +105,35 @@ export default async function PaginaRevision({
     }
   }
 
+  // T-A3-31. Solo se pinta si la flota usa asignación; un fallo de lectura (p. ej. base sin la 0790) deja la pantalla como siempre.
+  let revisor: RevisorVista | null = null;
+  try {
+    const [config, asignados, usuarios] = await Promise.all([leerConfigSalida(tenantId), repo.revisoresDeDocumentos(tenantId, [id]), repo.usuariosRevisores(tenantId)]);
+    const actualId = asignados.get(id) ?? null;
+    if (config.destinatarioRevisionUsuario !== null || actualId !== null) {
+      revisor = { actualId, opciones: usuarios.map((u) => ({ id: u.id, nombre: u.nombre ?? u.email })) };
+    }
+  } catch (e) {
+    logger.warn('carta_porte_docs.revisor_no_disponible', { documentoId: id, err: e instanceof Error ? e.message : String(e) });
+  }
+
   const ruta = `${RUTA_PADRE}/${id}`;
+
+  async function reasignar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA_PADRE, sp);
+    if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { ok: false, error: 'Tu rol no puede reasignar documentos de Carta Porte.' };
+    try {
+      if (String(fd.get('documentoId') ?? '') !== id) return { ok: false, error: 'La forma no corresponde a este documento. Recarga la pantalla.' };
+      const crudo = String(fd.get('revisorId') ?? '');
+      if (crudo !== '' && !UUID.test(crudo)) return { ok: false, error: 'No se reconoce a esa persona.' };
+      const r = await reasignarRevisor(s.tenantId, id, crudo === '' ? null : crudo, { id: s.userId });
+      revalidatePath(ruta); revalidatePath(RUTA_PADRE);
+      return { ok: true, mensaje: r.cambio ? (r.usuarioId ? 'Caso reasignado.' : 'El caso quedó sin persona asignada: le toca a todos los revisores.') : 'Ya estaba asignado así.' };
+    } catch (e) {
+      return { ok: false, error: mensajeParaPantalla(e, 'reasignar el caso') };
+    }
+  }
 
   /** Una sola acción atiende todos los botones: `intencion` dice cuál se apretó. */
   async function revisar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
@@ -232,7 +262,8 @@ export default async function PaginaRevision({
       original={original}
       operadores={restringido ? [] : operadores.filter((o) => o.activo).map((o) => ({ id: o.id, nombre: o.nombre }))}
       eventos={eventos.map((e) => ({ tipo: e.tipo, creadoEn: e.creadoEn }))}
-      acciones={{ revisar }}
+      acciones={{ revisar, reasignar }}
+      revisor={revisor}
       sufijo={sufijoTenant(sp)}
       envio={envio ? { estado: envio.estado, proximaRevision: envio.proximaRevision, motivo: motivoDeRechazo(envio.ultimoError), ...(esFlotaSimulada(tenantId) ? { simulado: true } : {}) } : null}
       perfilRestringido={restringido}

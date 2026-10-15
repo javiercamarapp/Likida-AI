@@ -57,12 +57,18 @@ export const estado = {
   salidaConfigs: new Map<string, Real.SalidaConfigFila>(),
   /** 0790: envíos al TMS. */
   envios: [] as Real.EnvioTmsFila[],
+  /** 0790: personas de la oficina (cada una trae su tenantId y si está activa). */
+  usuarios: [] as Array<Real.UsuarioRevisor & { tenantId: string; activo: boolean }>,
+  /** 0790: cp_documento.revisor_asignado por id de documento. */
+  revisores: new Map<string, string>(),
+  /** Simula una base SIN la columna de la 0790. */
+  sinColumnaRevisor: false,
 };
 
 export function reset(): void {
   estado.docs.clear(); estado.archivos.clear(); estado.eventos.length = 0; estado.correcciones.length = 0; estado.buzones.clear();
   estado.perfiles.clear(); estado.versiones.length = 0; estado.exportConfigs.length = 0; estado.viajes.length = 0; estado.mercancias.length = 0;
-  estado.catalogoNumeros.length = 0; estado.catalogoProductos.length = 0; estado.catalogoPartes.length = 0; estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0; estado.salidaConfigs.clear(); estado.envios.length = 0;
+  estado.catalogoNumeros.length = 0; estado.catalogoProductos.length = 0; estado.catalogoPartes.length = 0; estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0; estado.salidaConfigs.clear(); estado.envios.length = 0; estado.usuarios.length = 0; estado.revisores.clear(); estado.sinColumnaRevisor = false;
   estado.seq = 0; estado.reloj.ahora = () => new Date();
 }
 
@@ -502,6 +508,36 @@ export const api: typeof Real = {
   async hijosDeDocumento(tenantId, padreId) {
     return estado.embarques.filter((e) => e.tenantId === tenantId && e.padreId === padreId).sort((a, b) => a.indice - b.indice)
       .flatMap((e) => { const d = estado.docs.get(e.documentoId); return d ? [{ documento: clon(d), indice: e.indice, total: e.total, clave: e.clave }] : []; });
+  },
+  columnaAusente: (e) => Boolean(e && e.code === '42703'),
+  async usuariosRevisores(tenantId) {
+    return estado.usuarios.filter((u) => u.tenantId === tenantId && u.activo && ['encargado', 'flota_admin', 'contador'].includes(u.rol))
+      .map(({ tenantId: _t, activo: _a, ...u }) => clon(u));
+  },
+  async usuarioRevisor(tenantId, userId) {
+    const u = estado.usuarios.find((x) => x.tenantId === tenantId && x.id === userId && x.activo && ['encargado', 'flota_admin', 'contador'].includes(x.rol));
+    if (!u) return null;
+    const { tenantId: _t, activo: _a, ...resto } = u;
+    return clon(resto);
+  },
+  async revisoresDeDocumentos(tenantId, ids) {
+    falla('revisoresDeDocumentos');
+    const m = new Map<string, string>();
+    if (estado.sinColumnaRevisor) return m;
+    for (const id of ids) { const d = estado.docs.get(id); const r = estado.revisores.get(id); if (d && d.tenantId === tenantId && r) m.set(id, r); }
+    return m;
+  },
+  async idsAsignadosA(tenantId, userId) {
+    if (estado.sinColumnaRevisor) return [];
+    return [...estado.revisores].filter(([id, r]) => r === userId && estado.docs.get(id)?.tenantId === tenantId).map(([id]) => id);
+  },
+  async asignarRevisorDoc(tenantId, id, revisorId) {
+    falla('asignarRevisorDoc');
+    if (estado.sinColumnaRevisor) throw new Error('La asignación de revisor todavía no está disponible en esta base (falta la migración 0790).');
+    const d = estado.docs.get(id);
+    if (!d || d.tenantId !== tenantId) return false;
+    if (revisorId === null) estado.revisores.delete(id); else estado.revisores.set(id, revisorId);
+    return true;
   },
   async leerSalidaConfig(tenantId) { falla('leerSalidaConfig'); const c = estado.salidaConfigs.get(tenantId); return c ? clon(c) : null; },
   async guardarSalidaConfig(tenantId, c) { falla('guardarSalidaConfig'); estado.salidaConfigs.set(tenantId, clon(c)); },
