@@ -76,9 +76,8 @@ describe('validarMapeo', () => {
   });
   it('rechaza __proto__ en destino o fuente', () => {
     expect(validarMapeo(base({ campos: { folio: 'a.__proto__.b' } })).join(' ')).toMatch(/no permitido/);
-    const malo = JSON.parse('{"folio":"id","__proto__":"x"}');
-    const campos = Object.assign(Object.create(null), malo);
-    Object.defineProperty(campos, '__proto__', { value: 'x', enumerable: true });
+    // JSON.parse crea `__proto__` como propiedad PROPIA (sin tocar el prototipo): justo el caso hostil.
+    const campos = JSON.parse('{"folio":"id","__proto__":"x"}');
     expect(validarMapeo(base({ campos })).join(' ')).toMatch(/no permitido/);
   });
   it('rechaza ruta http insegura, método y transformación desconocidos, zona mala', () => {

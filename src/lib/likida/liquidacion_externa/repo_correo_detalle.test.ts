@@ -4,8 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // repo_correo.ts — el acceso a datos de la liquidación por correo (T-A1-13).
 //
 // Misma técnica que `repo.test.ts`: la base es un registrador de cadenas. Cada `.from()` anota los verbos aplicados y
-// contesta lo que el caso programó (cola `respuestas`, o la función `comportamiento` cuando el caso necesita estado,
-// como el índice único de las entregas). Todo es sintético: ningún nombre, correo ni importe reales.
+// contesta lo que el caso programó (cola `respuestas`). Todo es sintético: ningún nombre, correo ni importe reales.
 // ═══════════════════════════════════════════════════════════════════════════
 
 type Op = [string, ...unknown[]];
@@ -14,7 +13,6 @@ type Resp = { data?: unknown; error?: { message: string; code?: string } | null;
 const llamadas: Llamada[] = [];
 const rpcs: Array<{ fn: string; args: Record<string, unknown> }> = [];
 let respuestas: Resp[] = [];
-let comportamiento: ((l: Llamada) => Resp) | null = null;
 
 function constructor(tabla: string) {
   const ll: Llamada = { tabla, ops: [] };
@@ -23,7 +21,7 @@ function constructor(tabla: string) {
   for (const m of ['select', 'insert', 'update', 'upsert', 'delete', 'eq', 'in', 'gte', 'lt', 'or', 'is', 'not', 'order', 'range', 'limit', 'neq']) {
     b[m] = (...a: unknown[]) => { ll.ops.push([m, ...a]); return b; };
   }
-  const resolver = (): Resp => (comportamiento ? comportamiento(ll) : (respuestas.shift() ?? { data: [], error: null, count: 0 }));
+  const resolver = (): Resp => (respuestas.shift() ?? { data: [], error: null, count: 0 });
   b.maybeSingle = async () => { ll.ops.push(['maybeSingle']); return resolver(); };
   b.single = async () => { ll.ops.push(['single']); return resolver(); };
   b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(resolver()).then(res, rej);
@@ -48,7 +46,7 @@ const T = 'tenant-sintetico-1';
 const LIQ = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
 const tieneEq = (l: Llamada, col: string, v: unknown) => l.ops.some((o) => o[0] === 'eq' && o[1] === col && o[2] === v);
 
-beforeEach(() => { llamadas.length = 0; rpcs.length = 0; respuestas = []; comportamiento = null; bucketsUsados.length = 0; });
+beforeEach(() => { llamadas.length = 0; rpcs.length = 0; respuestas = []; bucketsUsados.length = 0; });
 
 // T-A1-29: lo que el detalle y «Liberar envío» le piden a la base.
 describe('leerDesglose', () => {

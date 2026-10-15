@@ -329,7 +329,7 @@ describe('detalle de una bitácora', () => {
   });
 
   it('un nombre de bitácora hostil no rompe el nombre del archivo', () => {
-    expect(nombreDescarga('../../etc/passwd')).toBe('desglose-.._.._etc_passwd.xlsx'.replace('.._.._', '.._.._'));
+    expect(nombreDescarga('../../etc/passwd')).toBe('desglose-.._.._etc_passwd.xlsx');
     expect(nombreDescarga('a b/c"d')).toBe('desglose-a_b_c_d.xlsx');
     expect(nombreDescarga('///')).toBe('desglose-bitacora.xlsx');
   });
