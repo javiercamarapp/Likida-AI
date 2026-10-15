@@ -368,7 +368,7 @@ function SeccionCasetas({ casetas, acciones }: { casetas: CasetaVista[] | null; 
           {casetas.slice(0, 300).map((c) => (
             <div key={c.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12.5px]" style={c.activa ? undefined : { opacity: 0.55 }}>
               <span className="font-medium">{c.nombre}</span>
-              <span className="cifra-mono text-[11.5px]" style={{ color: 'var(--muted)' }}>{c.lat.toFixed(5)}, {c.lng.toFixed(5)} · {c.radioM} m</span>
+              <span className="cifra-mono text-[11.5px]" style={{ color: 'var(--muted)' }}>{c.lat !== null && c.lng !== null ? `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)} · ${c.radioM} m` : 'sin coordenadas · solo por nombre'}</span>
               {c.fuente && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{c.fuente}</span>}
               <form action={acciones.estadoCaseta} className="ml-auto">
                 <input type="hidden" name="caseta" value={c.id} />

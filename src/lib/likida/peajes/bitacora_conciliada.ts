@@ -219,7 +219,7 @@ export async function reporteReclamacion(tenantId: string, desgloseId: string): 
     ? await convenioPorViaje(tenantId, [...new Set(b.filas.map((f) => f.viajeId).filter((v): v is string => !!v))])
     : new Map<string, string>();
   const cursosDe = (f: FilaConciliada) => cursosQueAplican(cursos, f.unidadId ?? null, f.viajeId ? (convenioDelViaje.get(f.viajeId) ?? null) : null);
-  const geoPorCaseta = new Map(casetas.filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng)).map((c) => [c.id, { lat: c.lat, lng: c.lng, radioM: c.radioM }]));
+  const geoPorCaseta = new Map(casetas.flatMap((c) => (c.lat !== null && c.lng !== null && Number.isFinite(c.lat) && Number.isFinite(c.lng) ? [[c.id, { lat: c.lat, lng: c.lng, radioM: c.radioM }] as const] : [])));
 
   // Candidatas a evidencia: las que el cruce marcó «no coincide» o dejó en «muestras insuficientes», y las que tienen un curso de
   // tipo corredor (su evaluación mide la posición a la hora del pase contra la polilínea).

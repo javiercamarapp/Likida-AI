@@ -243,7 +243,9 @@ export async function listarCasetas(tenantId: string, soloActivas = false): Prom
   return filas.map((f) => ({
     id: String(f.id), nombre: String(f.nombre), nombreNorm: String(f.nombre_norm),
     alias: Array.isArray(f.alias) ? (f.alias as unknown[]).map(String) : [],
-    lat: Number(f.lat), lng: Number(f.lng), radioM: Number(f.radio_m),
+    lat: f.lat === null || f.lat === undefined ? null : Number(f.lat),
+    lng: f.lng === null || f.lng === undefined ? null : Number(f.lng),
+    radioM: Number(f.radio_m),
     activa: f.activa !== false, fuente: (f.fuente as string | null) ?? null,
   }));
 }
@@ -267,13 +269,25 @@ export async function importarCasetasArchivo(tenantId: string, nombre: string, b
   let guardadas = 0;
   let actualizadas = 0;
   for (const lote of lotes(lectura.casetas)) {
-    const { error } = await acotada(supabaseAdmin().from('peaje_caseta').upsert(
-      lote.map((c) => ({
-        tenant_id: tenantId, nombre: c.nombre, nombre_norm: c.nombreNorm, alias: c.alias,
-        lat: c.lat, lng: c.lng, radio_m: c.radioM, activa: true, fuente: c.fuente ?? fuenteDefault,
-      })),
-      { onConflict: 'tenant_id,nombre_norm' },
-    ), 'peajes.importar_casetas');
+    // Las filas SIN coordenadas se escriben sin las llaves lat/lng: un archivo que solo trae nombres no debe
+    // borrar las coordenadas que la flota ya había cargado de esa caseta.
+    const fila = (c: (typeof lote)[number]) => ({
+      tenant_id: tenantId, nombre: c.nombre, nombre_norm: c.nombreNorm, alias: c.alias,
+      radio_m: c.radioM, activa: true, fuente: c.fuente ?? fuenteDefault,
+      ...(c.lat !== null && c.lng !== null ? { lat: c.lat, lng: c.lng } : {}),
+      ...(c.porPasada === undefined ? {} : { por_pasada: c.porPasada }),
+    });
+    let error = null as { message: string } | null;
+    // Se agrupan por forma (con/sin coordenadas, con/sin por_pasada) para que cada upsert lleve las mismas columnas.
+    const grupos = new Map<string, typeof lote>();
+    for (const c of lote) {
+      const k = `${c.lat !== null ? 'c' : 's'}${c.porPasada === undefined ? 'n' : 'p'}`;
+      grupos.set(k, [...(grupos.get(k) ?? []), c]);
+    }
+    for (const grupo of grupos.values()) {
+      const r = await acotada(supabaseAdmin().from('peaje_caseta').upsert(grupo.map(fila), { onConflict: 'tenant_id,nombre_norm' }), 'peajes.importar_casetas');
+      if (r.error) { error = r.error; break; }
+    }
     if (error) {
       logger.error('peajes.importar_casetas', { tenant: tenantId, err: error.message });
       return { ok: false, guardadas, actualizadas, rechazadas: lectura.rechazadas, error: `Se guardaron ${guardadas} casetas y el resto falló. Vuelve a subir el archivo: es seguro repetirlo.` };
@@ -281,7 +295,7 @@ export async function importarCasetasArchivo(tenantId: string, nombre: string, b
     for (const c of lote) {
       guardadas++;
       const p = porNorm.get(c.nombreNorm);
-      if (p && (p.lat !== c.lat || p.lng !== c.lng || p.radioM !== c.radioM)) actualizadas++;
+      if (p && ((c.lat !== null && (p.lat !== c.lat || p.lng !== c.lng)) || p.radioM !== c.radioM)) actualizadas++;
     }
   }
   return { ok: true, guardadas, actualizadas, rechazadas: lectura.rechazadas };
