@@ -56,6 +56,11 @@ const ACCIONES_RUTA_EXPLICITA = {
   'src/app/dashboard/agentes/seccion-notificaciones.tsx': '/dashboard/notificaciones', // el aviso por agente gatea con la ruta de su agente
 };
 
+/** Páginas que no son una ruta del perfil (no hay llave propia ni padre) y gatean con una ruta SIEMPRE permitida: se acepta solo si su fuente lo demuestra. */
+const PAGINAS_GATEADAS_EXPLICITA = {
+  '/dashboard/proximamente/[modulo]': '/dashboard', // anuncio «Próximamente» (A4/A5 fase 1): sin datos ni acciones, sin perfil redirige
+};
+
 // ── Enumeración (sistema de archivos / config) ─────────────────────────────
 const leer = (raiz, ruta) => readFileSync(join(raiz, ruta), 'utf8');
 const existe = (raiz, ruta) => existsSync(join(raiz, ruta));
@@ -166,6 +171,12 @@ export function clasificar(elementos, raiz = RAIZ_DEFECTO) {
         if (r.veredicto === NO_CLASIFICADO && /\[.+\]/.test(e.ruta)) {
           const m = /const RUTA_PADRE\s*=\s*'([^']+)'/.exec(fuente(`src/app${e.ruta}/page.tsx`));
           if (m) { const v = veredictoRuta(m[1]); r = { veredicto: v.veredicto, nota: `gatea con RUTA_PADRE ${m[1]}: ${v.nota}` }; }
+        }
+        // Declarada a mano: solo vale si la fuente de la página gatea de verdad con esa ruta (resolverTenantEfectivo('<ruta>')).
+        const explicita = PAGINAS_GATEADAS_EXPLICITA[e.ruta];
+        if (r.veredicto === NO_CLASIFICADO && explicita && fuente(`src/app${e.ruta}/page.tsx`).includes(`resolverTenantEfectivo('${explicita}'`)) {
+          const v = veredictoRuta(explicita);
+          r = { veredicto: v.veredicto, nota: `gatea con ${explicita} (declarada): ${v.nota}` };
         }
         break;
       }
