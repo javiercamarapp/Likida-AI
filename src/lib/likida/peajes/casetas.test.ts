@@ -115,3 +115,13 @@ describe('resolverCaseta — nunca adivina entre dos', () => {
     expect(resolverCaseta('Tlalpan', []).tipo).toBe('ninguna');
   });
 });
+
+describe('resolverCaseta — nombres con mojibake', () => {
+  const cat: CasetaCatalogo[] = [{
+    id: 'c1', nombre: 'Bucerías', nombreNorm: 'bucerias', alias: [], lat: 20.7, lng: -105.3, radioM: 300,
+  }];
+  it('el nombre dañado por la codificación casa con la caseta exacta', () => {
+    const r = resolverCaseta('BUCER\u00c3\u008dAS', cat);
+    expect(r).toMatchObject({ tipo: 'unica', por: 'nombre' });
+  });
+});
