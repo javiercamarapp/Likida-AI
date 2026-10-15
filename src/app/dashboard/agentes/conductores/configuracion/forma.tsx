@@ -4,7 +4,7 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Save } from 'lucide-react';
 import { AvisoResultado, type ResultadoUI } from '../../../../admin/ui/aviso-resultado';
-import { FILAS_NUEVAS_CONTACTO, NOMBRES_DIA } from '@/lib/likida/conductor/config_forma';
+import { FILAS_NUEVAS_CONTACTO, NOMBRES_DIA, OPCIONES_PERFIL, avisoZona } from '@/lib/likida/conductor/config_forma';
 import type { ConfigConductor } from '@/lib/likida/conductor/config';
 import type { ContactoTrafico } from '@/lib/likida/conductor/escalamiento';
 
@@ -81,6 +81,29 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
           ayuda="Solo cuando el mensaje parece hablar de un hito; nunca puede retirar ni validar un hito." />
       </Seccion>
 
+      <Seccion id="cfg-perfil" titulo="¿Qué sigue el agente?">
+        <fieldset className="space-y-2" disabled={off}>
+          <legend className={ETIQUETA}>Perfil de seguimiento</legend>
+          {OPCIONES_PERFIL.map((o) => (
+            <label key={o.valor} className="flex items-start gap-2 text-[12.5px]">
+              <input type="radio" name="f_perfilSeguimiento" value={o.valor} defaultChecked={config.perfilSeguimiento === o.valor} className="mt-0.5" />
+              <span>{o.etiqueta}<span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{o.ayuda}</span></span>
+            </label>
+          ))}
+        </fieldset>
+        <Casilla nombre="mostrarEstadosFrontera" etiqueta="Mostrar en el tablero los estados de frontera" marcada={config.mostrarEstadosFrontera} deshabilitada={off}
+          ayuda="Solo informativo: no genera avisos al chofer ni escalamiento." />
+        <Casilla nombre="aplicarSalidaDelTms" etiqueta="Dar por hecha la salida cuando tu sistema de despacho la reporta" marcada={config.aplicarSalidaDelTms} deshabilitada={off} />
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Estos tiempos son una primera propuesta; ajústalos con tus supervisores.</p>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <Numero nombre="gpsObsoletoMin" etiqueta="El GPS se da por viejo después de (min)" valor={valores.gpsObsoletoMin} deshabilitada={off} ayuda="De 5 a 720." />
+          <Numero nombre="detenidoMin" etiqueta="La unidad se da por detenida después de (min)" valor={valores.detenidoMin} deshabilitada={off} ayuda="De 5 a 720." />
+          <Numero nombre="segundoAvisoMin" etiqueta="Segundo aviso al chofer después de (min)" valor={valores.segundoAvisoMin} deshabilitada={off} ayuda="De 5 a 720." />
+          <Numero nombre="escalarSenalMin" etiqueta="Avisar al jefe por falta de señal después de (min)" valor={valores.escalarSenalMin} deshabilitada={off} ayuda="De 5 a 720." />
+          <Numero nombre="silencioRespuestaMin" etiqueta="Chofer sin contestar después de (min)" valor={valores.silencioRespuestaMin} deshabilitada={off} ayuda="De 5 a 720." />
+        </div>
+      </Seccion>
+
       <Seccion id="cfg-escalera" titulo="Estrategia de recordatorios">
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <label className="sm:col-span-2">
@@ -96,7 +119,9 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
         </div>
       </Seccion>
 
-      <Seccion id="cfg-ventana" titulo="Ventana horaria (hora de México)">
+      <Seccion id="cfg-ventana" titulo="Ventana horaria y días">
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Zona horaria de la flota: <strong>{config.zonaHoraria}</strong> (solo lectura).</p>
+        {avisoZona(config.zonaHoraria) && <p role="alert" className="text-[12px]" style={{ color: 'var(--bad)' }}>{avisoZona(config.zonaHoraria)}</p>}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Numero nombre="horaInicio" etiqueta="Desde las (0 a 23)" valor={valores.horaInicio} deshabilitada={off} />
           <Numero nombre="horaFin" etiqueta="Hasta las (1 a 24)" valor={valores.horaFin} deshabilitada={off} />

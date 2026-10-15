@@ -65,6 +65,57 @@ describe('la configuración del agente Conductor (pantalla)', () => {
   });
 });
 
+describe('perfil, umbrales y ventana en texto llano (T-A5-10)', () => {
+  const radios = (html: string) => html.match(/<input[^>]*name="f_perfilSeguimiento"[^>]*>/g) ?? [];
+
+  it('ofrece los dos perfiles con sus etiquetas exactas y marca el guardado (ciclo completo por omisión)', () => {
+    const html = pintar();
+    expect(html).toContain('¿Qué sigue el agente?');
+    expect(html).toContain('Solo lo esencial');
+    expect(html).toContain('Ciclo completo');
+    expect(html).toContain('Salida de carga, dónde está y no se ha reportado.');
+    const r = radios(html);
+    expect(r).toHaveLength(2);
+    expect(r.find((x) => x.includes('value="completo"'))).toContain('checked');
+    expect(r.find((x) => x.includes('value="esenciales"'))).not.toContain('checked');
+  });
+
+  it('con el perfil «esenciales» guardado, es ese el marcado', () => {
+    const config = { ...CONFIG_CONDUCTOR_DEFAULT, perfilSeguimiento: 'esenciales' as const };
+    const r = radios(pintar({ config, valores: valoresDeForma(config) }));
+    expect(r.find((x) => x.includes('value="esenciales"'))).toContain('checked');
+    expect(r.find((x) => x.includes('value="completo"'))).not.toContain('checked');
+  });
+
+  it('pinta los cinco umbrales con el valor guardado y la ayuda de «primera propuesta»', () => {
+    const config = { ...CONFIG_CONDUCTOR_DEFAULT, gpsObsoletoMin: 33, detenidoMin: 77, segundoAvisoMin: 11, escalarSenalMin: 22, silencioRespuestaMin: 99 };
+    const html = pintar({ config, valores: valoresDeForma(config) });
+    expect(html).toContain('Estos tiempos son una primera propuesta; ajústalos con tus supervisores');
+    const esperado: Record<string, string> = { gpsObsoletoMin: '33', detenidoMin: '77', segundoAvisoMin: '11', escalarSenalMin: '22', silencioRespuestaMin: '99' };
+    for (const [k, v] of Object.entries(esperado)) expect(campo(html, `f_${k}`), k).toContain(`value="${v}"`);
+  });
+
+  it('muestra la zona de la flota como texto (sin campo editable) y no avisa si es la esperada', () => {
+    const html = pintar();
+    expect(html).toContain('America/Mexico_City');
+    expect(html).toContain('solo lectura');
+    expect(html).not.toContain('name="f_zonaHoraria"');
+    expect(html).not.toContain('distinta de la esperada');
+  });
+
+  it('avisa en palabras cuando la zona no es la esperada', () => {
+    const config = { ...CONFIG_CONDUCTOR_DEFAULT, zonaHoraria: 'America/Matamoros' };
+    const html = pintar({ config, valores: valoresDeForma(config) });
+    expect(html).toContain('La zona horaria de tu flota es America/Matamoros, distinta de la esperada (America/Mexico_City)');
+  });
+
+  it('quien solo mira ve el perfil y los umbrales deshabilitados', () => {
+    const html = pintar({ puedeEditar: false });
+    expect(campo(html, 'f_gpsObsoletoMin')).toContain('disabled');
+    expect(html).toMatch(/<fieldset[^>]*disabled=""[^>]*><legend[^>]*>Perfil de seguimiento/);
+  });
+});
+
 describe('«Operadores del piloto» en la configuración (T-A5-03)', () => {
   const dato = (n: number) => ({ id: `id-${n}`, nombre: `Operador ${n}`, telefono: `5233100${String(n).padStart(5, '0')}` });
   const datos = (voluntarios: number, tope = 6, candidatos = 2) => ({
