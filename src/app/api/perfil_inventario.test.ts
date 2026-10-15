@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- pruebas que leen el árbol de FUENTE del propio repo; ninguna ruta ni patrón viene de entrada de usuario. */
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -12,10 +13,8 @@ import { API_PERFIL_CINCO_AGENTES, CRONS_PERFIL_CINCO_AGENTES } from '@/lib/auth
 
 const RAIZ = join(process.cwd(), 'src/app/api');
 const subdirs = (d: string) =>
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- recorre el árbol de FUENTE del propio repo en tiempo de prueba.
   readdirSync(join(RAIZ, d)).filter((n) => statSync(join(RAIZ, d, n)).isDirectory()).sort();
 const leer = (ruta: string) =>
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- ídem.
   readFileSync(join(RAIZ, ruta), 'utf8');
 
 /** Recursos / rutas que EXISTEN y el perfil NIEGA a propósito (stand-by). */
