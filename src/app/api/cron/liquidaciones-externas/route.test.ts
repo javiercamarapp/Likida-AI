@@ -106,6 +106,30 @@ describe('la corrida', () => {
     expect(registrarLatido).toHaveBeenCalledWith('liquidaciones-externas', 'parcial', expect.anything());
   });
 
+  it('las fases de correo y pull: lo que no terminó (fallidas, por reintentar, sin configurar, errores, pull con error) es `parcial`; limpio es `ok`', async () => {
+    const avisos = { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 };
+    const base = { tomadas: 0, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos };
+    const correoOk = { reclamadas: 3, enviadas: 3, reintentar: 0, fallidas: 0, sinConfigurar: 0, fueraDeVentana: 0, sinConfirmar: 0, errores: 0 };
+    const pullOk = { flotas: 1, leidas: 4, importadas: 4, excepciones: 0, errores: 0 };
+    const parciales = [
+      { correo: { ...correoOk, fallidas: 1 }, pull: pullOk },
+      { correo: { ...correoOk, reintentar: 1 }, pull: pullOk },
+      { correo: { ...correoOk, sinConfigurar: 1 }, pull: pullOk },
+      { correo: { ...correoOk, errores: 1 }, pull: pullOk },
+      { correo: correoOk, pull: { ...pullOk, errores: 1, error: 'TmsNoDisponible' } },
+    ];
+    for (const extra of parciales) {
+      registrarLatido.mockClear();
+      procesar.mockResolvedValueOnce({ ...base, ...extra });
+      await llamar();
+      expect(registrarLatido).toHaveBeenCalledWith('liquidaciones-externas', 'parcial', expect.objectContaining({ correo: extra.correo, pull: extra.pull }));
+    }
+    registrarLatido.mockClear();
+    procesar.mockResolvedValueOnce({ ...base, correo: correoOk, pull: pullOk });
+    await llamar();
+    expect(registrarLatido).toHaveBeenCalledWith('liquidaciones-externas', 'ok', expect.objectContaining({ correo: correoOk, pull: pullOk }));
+  });
+
   it('si el procesamiento lanza: 500, latido `fallo` y ALERTA al operador (no un cron verde que no hace nada)', async () => {
     procesar.mockRejectedValueOnce(new Error('base caída'));
     const r = await llamar();
