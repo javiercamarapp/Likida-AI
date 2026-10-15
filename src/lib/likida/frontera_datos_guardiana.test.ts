@@ -265,7 +265,10 @@ import { join, relative } from 'node:path';
 // rama del frente. Lo que subió desde T-A1-13: `repo_correo.ts` (+4 llamadas por T-A1-18 y T-A1-29, todas por `acotada` con `tenant_id`), `trabajo.ts` (+1, la lectura
 // de la configuración de correo por `acotada`) y dos módulos de entrega que el barrido cuenta SIN tocar la base: `entrega_correo.ts` y `xlsx_minimo.ts` usan
 // `Buffer.from(` (base64/zip), que la expresión `.from(` confunde con una consulta. Funcionalidad nueva, no código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 291;
+// WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
+// `tenant_perfil` (una tabla deny-all, un solo `.from(`) con su caché y falla cerrada; no cabe en `repo.ts` sin que éste conozca la política de acceso.
+// Integración Liquidación + perfil (0770): el barrido real mide 293 archivos (incluye +1 de perfil_tenant.ts); techo subido a lo medido, sin relajar la regla. Un techo de integración es la suma de los tramos.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 293;
 // Integración ronda 20: 287 (E1-A, +0) + 1 (E1-B, acuse_folio.ts) = 288.
 // INTEGRACIÓN ola 4a (A + B): 1,805 → 1,807. El paquete B (M3/M4, copia al jefe) suma +2 llamadas RPC en un archivo que ya contaba
 // (`reclamar_copia_jefe` y `cerrar_copia_jefe`, el reclamo atómico de la copia); cada paquete midió contra su propia base, por eso
@@ -333,7 +336,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 291;
 
 // E1-B: +3 llamadas (acuse_folio.ts: storage). Ronda 20 (integración): 1,913 (E1-A integrado) + 3 = 1,916 esperado; el valor final es el del barrido real.
 // T-A1-13 (ver el techo de archivos): 1,918 medidas en la rama del frente + 22 de `repo_correo.ts` = 1,940, medido con el barrido real.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_946;
+// Integración Liquidación + perfil (0770): el barrido real mide 1,948 llamadas (incluye +1 de perfil_tenant.ts); techo subido a lo medido, sin relajar la regla.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 1_948;
 // INTEGRACIÓN ola 3 (ronda-03), suma con W3 autofactura (+3 archivos, +22 llamadas): 277 / 1,701 (ajustado al barrido real).
 // OLA 3, Agente 6 «autofacturación» (W3): cada entrega suma su tramo medido, explicado aquí.
 //   · cancelación de CFDI de Carta Porte (0541): `carta_porte_cancelacion.ts` (claim → PAC → resultado → confirmar: 3 consultas)

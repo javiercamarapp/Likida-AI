@@ -9,6 +9,7 @@ import { traerConversacion } from '@/lib/likida/chat/conversaciones';
 import { logger } from '@/lib/logger';
 import { validarConversacionId } from '../../chat/validacion';
 import { tenantEfectivoChat } from '../../chat/tenant';
+import { respuestaSiPerfilNiegaApi } from '@/lib/auth/perfil_tenant';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // `resolverTenantApi`. Sin `?tenant=` sigue siendo 403 real.
   if (!efectivo) return NextResponse.json({ error: 'sin acceso' },
     { status: req.nextUrl.searchParams.get('tenant') ? 503 : 403 });
+  const negadoPerfil = await respuestaSiPerfilNiegaApi(efectivo.tenantId, req.url);
+  if (negadoPerfil) return negadoPerfil;
+
 
   const id = validarConversacionId((await params).id);
   if (!id) return NextResponse.json({ error: 'id inválido' }, { status: 400 });

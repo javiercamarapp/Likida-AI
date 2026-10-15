@@ -324,11 +324,188 @@ const RUTAS_TODO_ROL: ReadonlySet<string> = new Set([
   '/dashboard/soporte',
 ]);
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PERFIL DE TENANT `cinco_agentes` (mig. 0770) — la LISTA CERRADA.
+//
+// Un tenant con fila en `tenant_perfil` solo ve y solo puede operar lo que está
+// aquí; TODO lo demás (el «stand-by») queda oculto e inoperante, sin borrarse.
+// SIN FILA el tenant se comporta como siempre.
+//
+// ESTA ES LA ÚNICA LISTA QUE SE EDITA para ampliar o recortar el perfil de
+// páginas. Las acciones de servidor, la API /v1, los exports, el chat, el MCP
+// y los crons tienen sus listas hermanas más abajo (mismo perfil, mismo
+// archivo, a propósito: una sola revisión en un solo lugar).
+//
+// FALLA CERRADO: lo que no está declarado se niega. Una pantalla nueva que
+// nadie clasifique NO aparece en el perfil (el error caro es mostrar de más).
+// `perfil_tenant.test.ts` exige que toda ruta de `AREA_POR_RUTA` esté o aquí o
+// en `RUTAS_STAND_BY_PERFIL_CINCO_AGENTES`, para que "no la clasifiqué" sea una
+// prueba roja y no un olvido silencioso.
+//
+// El perfil SOLO QUITA, nunca da: se aplica encima del rol (`puedeVerRuta`), así
+// que el resultado es siempre un subconjunto de lo que el rol ya podía ver.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Perfiles de tenant que conoce el código (dominio cerrado, igual que el CHECK de la 0770). */
+export type PerfilTenant = 'cinco_agentes';
+
+export const PERFILES_TENANT: readonly PerfilTenant[] = ['cinco_agentes'];
+
+/** A qué agente (o a la base mínima) pertenece cada ruta permitida. */
+export type ModuloPerfil = 'liquidacion' | 'peajes' | 'carta_porte' | 'vigia' | 'conductor' | 'base';
+
+export const RUTAS_PERFIL_CINCO_AGENTES: Readonly<Record<string, ModuloPerfil>> = {
+  // A1 · Liquidación. El detalle de una liquidación (`/dashboard/<uuid>`) es la
+  // revisión de lo que el agente cuadró; se normaliza a '/dashboard/[id]'.
+  '/dashboard/agentes/liquidacion': 'liquidacion',
+  '/dashboard/agentes/liquidacion/formato': 'liquidacion',
+  // Integración Liquidación + perfil: la configuración del agente es suya.
+  '/dashboard/agentes/liquidacion/configuracion': 'liquidacion',
+  '/dashboard/[id]': 'liquidacion',
+  // A2 · Peajes.
+  '/dashboard/agentes/peajes': 'peajes',
+  '/dashboard/agentes/peajes/configuracion': 'peajes',
+  '/dashboard/agentes/peajes/reclamacion': 'peajes',
+  // A3 · Carta Porte (el borrador y la revisión de documentos cuelgan de estas
+  // dos llaves: sus páginas dinámicas gatean con la de su padre).
+  '/dashboard/agentes/carta-porte': 'carta_porte',
+  '/dashboard/carta-porte': 'carta_porte',
+  '/dashboard/carta-porte/documentos': 'carta_porte',
+  // A4 · Vigía de servicio al cliente.
+  '/dashboard/agentes/vigia': 'vigia',
+  '/dashboard/agentes/vigia/historial': 'vigia',
+  // A5 · Conductor (comunicación con operadores, hitos, estadías y su mapa).
+  '/dashboard/agentes/conductores': 'conductor',
+  '/dashboard/agentes/conductores/sitios': 'conductor',
+  '/dashboard/agentes/conductores/estadias': 'conductor',
+  '/dashboard/agentes/conductores/configuracion': 'conductor',
+  '/dashboard/viajes-en-vivo': 'conductor',
+  '/dashboard/mapa': 'conductor',
+  // Base mínima: lo que los cinco necesitan para operar (viajes, operadores,
+  // unidades, conexiones al sistema del cliente, WhatsApp) y lo de la persona.
+  '/dashboard': 'base',
+  '/dashboard/despacho': 'base',
+  '/dashboard/viajes': 'base',
+  '/dashboard/operadores': 'base',
+  '/dashboard/unidades': 'base',
+  '/dashboard/conexiones': 'base',
+  '/dashboard/integraciones': 'base',
+  '/dashboard/whatsapp': 'base',
+  '/dashboard/notificaciones': 'base',
+  '/dashboard/mi-perfil': 'base',
+  '/dashboard/soporte': 'base',
+  '/dashboard/legal': 'base',
+};
+
+/**
+ * El STAND-BY, escrito a propósito: lo que existe en el producto y el perfil
+ * oculta e inhabilita (sin borrar). No decide nada en runtime —el runtime es
+ * "no está en la lista permitida, se niega"—; existe para que la prueba pueda
+ * exigir que CADA ruta conocida esté clasificada en un lado u otro y para que
+ * quien lea sepa que lo ausente de arriba es deliberado y no un descuido.
+ */
+export const RUTAS_STAND_BY_PERFIL_CINCO_AGENTES: readonly string[] = [
+  '/dashboard/chat', '/dashboard/reglas', '/dashboard/rentabilidad', '/dashboard/clientes',
+  '/dashboard/facturacion', '/dashboard/agentes/cobranza', '/dashboard/agentes/facturas',
+  '/dashboard/agentes/proveedores', '/dashboard/huerfanos', '/dashboard/combustible-casetas',
+  '/dashboard/timbrado', '/dashboard/descarga-sat', '/dashboard/descarga-sat/bandeja',
+  '/dashboard/cotizaciones', '/dashboard/contador', '/dashboard/conocimiento',
+  '/dashboard/convenios', '/dashboard/jornada', '/dashboard/patios', '/dashboard/asistencia',
+  '/dashboard/emergencias', '/dashboard/arranque', '/dashboard/onboarding',
+  '/dashboard/suscripcion', '/dashboard/llaves-api', '/dashboard/sesiones-mcp',
+  '/dashboard/politicas', '/dashboard/usuarios', '/dashboard/arco', '/dashboard/configuracion',
+  '/dashboard/conversaciones',
+];
+
+/**
+ * La llave con la que una ruta se busca en las listas del perfil: quita query y
+ * barra final, y las dinámicas conocidas (`/dashboard/<uuid>`, el detalle de
+ * liquidación) se pliegan a su llave `[id]`. Cualquier otra cosa queda tal cual
+ * y, si no está en la lista, se niega.
+ */
+export function claveRutaPerfil(href: string): string {
+  const limpio = href.split('?')[0].split('#')[0].replace(/\/+$/, '') || '/';
+  if (/^\/dashboard\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(limpio)) {
+    return '/dashboard/[id]';
+  }
+  return limpio;
+}
+
+/** ¿Esta ruta está en la lista cerrada del perfil? Fail closed: perfil desconocido o ruta no declarada → no. */
+export function rutaPermitidaEnPerfil(perfil: PerfilTenant | string, href: string): boolean {
+  if (perfil !== 'cinco_agentes') return false;
+  return Object.prototype.hasOwnProperty.call(RUTAS_PERFIL_CINCO_AGENTES, claveRutaPerfil(href));
+}
+
+/**
+ * Superficies de API que el perfil deja vivas, por PRIMER segmento bajo su raíz.
+ * Todo segmento que no esté aquí se niega (falla cerrado) — incluida una ruta
+ * nueva que se agregue mañana. Mismo criterio para las tres raíces.
+ *
+ *  · /api/v1/<recurso>  — los recursos de los cinco agentes y la base.
+ *  · /api/export/<x>    — las descargas de los cinco agentes.
+ *  · /api/dashboard/<x> — solo lo que no abre una puerta a lo demás: el chat,
+ *    la ingesta de comprobantes, el chat de onboarding y el historial del chat
+ *    quedan fuera (son del stand-by).
+ */
+export const API_PERFIL_CINCO_AGENTES: Readonly<Record<'v1' | 'export' | 'dashboard', readonly string[]>> = {
+  v1: [
+    'liquidaciones', 'liquidaciones-externas', // A1
+    'peajes',                                   // A2
+    'hitos', 'estadias', 'sitios', 'conductor', 'evidencias', // A5
+    'viajes', 'operadores', 'unidades',         // base
+  ],
+  export: [
+    'liquidaciones', 'liquidaciones-externas', 'pdf', // A1
+    'bitacora-peaje', 'bitacora-conciliada', 'peajes-reclamacion', // A2
+    'carta-porte-docs', 'carta-porte-xml',      // A3
+    'vigia-faqs',                                // A4
+  ],
+  dashboard: [
+    'evento', // el pageview del panel: cero datos, 204 siempre
+  ],
+};
+
+/** ¿Esta ruta de API (`/api/v1/...`, `/api/export/...`, `/api/dashboard/...`) sigue viva bajo el perfil? */
+export function apiPermitidaEnPerfil(perfil: PerfilTenant | string, pathname: string): boolean {
+  if (perfil !== 'cinco_agentes') return false;
+  const m = /^\/api\/(v1|export|dashboard)\/([^/?#]+)/.exec(pathname);
+  if (!m) return false;
+  return API_PERFIL_CINCO_AGENTES[m[1] as 'v1' | 'export' | 'dashboard'].includes(m[2]);
+}
+
+/**
+ * Crons que SIGUEN corriendo para una flota con perfil (los de los cinco
+ * agentes y la plomería compartida). Todo cron que no esté aquí SALTA los
+ * tenants con perfil. Por nombre de ruta (`/api/cron/<nombre>`).
+ */
+export const CRONS_PERFIL_CINCO_AGENTES: readonly string[] = [
+  'liquidaciones-externas', // A1: jala liquidaciones del sistema del cliente
+  'peajes',                  // A2
+  'carta-porte-docs',        // A3
+  'vigia',                   // A4
+  'conductor-hitos', 'gps',  // A5
+  // `escalar` es MIXTO: lleva la escalación del conductor (sigue) y, además, la cobranza, los relojes
+  // legales de incidencias y las reglas (stand-by), que se saltan flotas con perfil por sección.
+  'escalar',
+  'wa-pendientes', 'wa-outbox', 'purgar', 'guardia', // plomería compartida
+];
+
+/** Toda ruta que el mapa de áreas conoce — para las pruebas que exigen que cada una esté clasificada en el perfil. */
+export function rutasConocidas(): string[] {
+  return Object.keys(AREA_POR_RUTA);
+}
+
 export function areaDeRuta(href: string): Area | undefined {
   return AREA_POR_RUTA[href];
 }
 
-export function puedeVerRuta(rol: string, href: string): boolean {
+export function puedeVerRuta(rol: string, href: string, perfil?: PerfilTenant | null): boolean {
+  // EL PERFIL DE LA FLOTA SOLO QUITA (0770): se evalúa ANTES del rol y, si la
+  // ruta no está en la lista cerrada del perfil, se niega aunque el rol la
+  // vería. Sin perfil (`undefined`/`null`) esta línea no hace nada y la función
+  // se comporta exactamente como antes.
+  if (perfil && !rutaPermitidaEnPerfil(perfil, href)) return false;
   // Un rol desconocido no ve nada, ni siquiera su perfil: fail closed.
   if (RUTAS_TODO_ROL.has(href)) return areasDe(rol).length > 0;
   const area = areaDeRuta(href);

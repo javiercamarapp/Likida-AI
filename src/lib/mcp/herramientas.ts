@@ -21,6 +21,7 @@ import {
 } from './herramientas/dinero';
 import { herramientaUnidadesVigencias } from './herramientas/unidades';
 import { herramientaSearch, herramientaFetch } from './herramientas/busqueda';
+import { perfilRestringido } from '@/lib/auth/perfil_tenant';
 
 // El tipo del argumento se borra en el catálogo A PROPÓSITO: cada
 // herramienta valida su forma con zod antes de ejecutar (`despachar`), y el
@@ -75,6 +76,12 @@ export async function despacharHerramienta(
   tenantId: string,
   alcanza: (area: Area) => boolean,
 ): Promise<ResultadoDespacho> {
+  // Segunda capa del perfil de la flota (0770): la primera es el endpoint
+  // (`/api/mcp`); esta protege a cualquier otro llamador del despacho. Una flota
+  // con perfil no ejecuta NINGUNA herramienta del catálogo.
+  if (await perfilRestringido(tenantId)) {
+    return { ok: false, tipo: 'sin_permiso', area: 'operacion', mensaje: 'Esta parte del producto no está incluida en el plan de tu cuenta.' };
+  }
   const h = CATALOGO.find((x) => x.nombre === nombre);
   if (!h) {
     return { ok: false, tipo: 'desconocida', mensaje: `No existe la herramienta «${nombre}».` };

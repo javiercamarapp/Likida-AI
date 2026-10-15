@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { getKpis, detectarAnomalias, contarEscalados } from '@/lib/likida/analytics';
 import { contarHuerfanosPendientes } from '@/lib/likida/repo';
 import { getConexiones } from '@/lib/likida/conexiones';
@@ -39,10 +40,13 @@ export default async function PaginaNotificaciones({
   if (!puedeVerRuta(rol, '/dashboard/notificaciones')) redirect('/dashboard');
 
   const sufijo = sufijoTenant(sp);
+  // El perfil de la flota (0770) recorta también las alertas: las de módulos en
+  // stand-by no se enseñan (un aviso cuyo botón rebota es peor que no avisar).
+  const perfil = await perfilDeTenant(tenantId);
 
   // P6: las tareas del asistente y las excepciones del Conductor también son notificaciones (solo si el rol abre viajes en vivo; una tarea
   // de dinero solo la cuenta quien ve dinero). Se leen aparte y con `catch → null`, como el resto: una fuente caída se confiesa, no se calla.
-  const veViajesEnVivo = puedeVerRuta(rol, '/dashboard/viajes-en-vivo');
+  const veViajesEnVivo = puedeVerRuta(rol, '/dashboard/viajes-en-vivo', perfil);
   const [kpis, anomalias, escalados, huerfanos, conectores, tareas, tablero] = await Promise.all([
     getKpis(tenantId).catch(() => null),
     detectarAnomalias(tenantId).catch(() => null),
@@ -68,7 +72,7 @@ export default async function PaginaNotificaciones({
       sinSenalDeVida: tablero == null ? undefined : tablero.sinSenal,
     },
     sufijo,
-    (href) => puedeVerRuta(rol, href),
+    (href) => puedeVerRuta(rol, href, perfil),
   );
 
   return <ListaAlertas alertas={alertas} />;
