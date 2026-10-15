@@ -917,8 +917,15 @@ export async function guardarConfigAtipicos(
   if (typeof entrada.activo !== 'boolean') return { ok: false, motivo: 'Indica si el detector está activo (sí o no).' };
   const v = validarConfigAtipicos(entrada.umbrales);
   if (!v.ok) return { ok: false, motivo: v.motivo };
+  // El destinatario del aviso (`umbrales.aviso`, T-A2-14) no es un umbral: guardar umbrales no lo borra.
+  const previa = await acotada(supabaseAdmin().from('peaje_atipico_config').select('umbrales').eq('tenant_id', tenantId).maybeSingle(), 'peajes.guardar_config_atipicos_previa');
+  if (previa.error) {
+    logger.error('peajes.guardar_config_atipicos', { tenant: tenantId, err: previa.error.message });
+    return { ok: false, motivo: 'No se pudo guardar la configuración. Intenta de nuevo.' };
+  }
+  const aviso = (previa.data?.umbrales as { aviso?: unknown } | null | undefined)?.aviso;
   const { error } = await acotada(supabaseAdmin().from('peaje_atipico_config').upsert({
-    tenant_id: tenantId, activo: entrada.activo, umbrales: v.valor, actualizado_en: new Date().toISOString(),
+    tenant_id: tenantId, activo: entrada.activo, umbrales: aviso === undefined ? v.valor : { ...v.valor, aviso }, actualizado_en: new Date().toISOString(),
   }, { onConflict: 'tenant_id' }), 'peajes.guardar_config_atipicos');
   if (error) {
     logger.error('peajes.guardar_config_atipicos', { tenant: tenantId, err: error.message });
