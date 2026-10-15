@@ -60,6 +60,40 @@ describe('normalizarFecha', () => {
     expect(r.valor).toBe('2026-04-03');
     expect(r.nota).toMatch(/día\/mes\/año/);
   });
+  describe('orden mes/día (perfil con fechas de EE. UU.)', () => {
+    it('10/14/2026 con mdy → 2026-10-14', () => {
+      expect(normalizarFecha('10/14/2026', { orden: 'mdy' }).valor).toBe('2026-10-14');
+    });
+    it('10/11/2026 con mdy → 2026-10-11 (sin la nota de día/mes)', () => {
+      const r = normalizarFecha('10/11/2026', { orden: 'mdy' });
+      expect(r.valor).toBe('2026-10-11');
+      expect(r.nota).toBeUndefined();
+    });
+    it('10/11/2026 sin opción sigue siendo día/mes: 2026-11-10 con nota', () => {
+      const r = normalizarFecha('10/11/2026');
+      expect(r.valor).toBe('2026-11-10');
+      expect(r.nota).toMatch(/día\/mes\/año/);
+    });
+    it('14/10/2026 con mdy → null (no hay mes 14)', () => {
+      expect(normalizarFecha('14/10/2026', { orden: 'mdy' }).valor).toBeNull();
+    });
+    it('10/14/2026 sin opción sigue sin reconocerse (default dmy)', () => {
+      expect(normalizarFecha('10/14/2026').valor).toBeNull();
+      expect(normalizarFecha('10/14/2026', { orden: 'dmy' }).valor).toBeNull();
+    });
+    it('con mdy, hora, separadores y año de dos dígitos también cambian de orden; ISO y nombres de mes no', () => {
+      expect(normalizarFecha('10/14/2026 08:30', { orden: 'mdy' }).valor).toBe('2026-10-14T08:30:00');
+      expect(normalizarFecha('10-14-2026', { orden: 'mdy' }).valor).toBe('2026-10-14');
+      expect(normalizarFecha('10/14/26', { orden: 'mdy' }).valor).toBe('2026-10-14');
+      expect(normalizarFecha('2026-10-14', { orden: 'mdy' }).valor).toBe('2026-10-14');
+      expect(normalizarFecha('14 oct 2026', { orden: 'mdy' }).valor).toBe('2026-10-14');
+    });
+    it('normalizarValor de un campo fecha respeta ordenFecha', () => {
+      const def = campoDoc('fecha_salida')!;
+      expect(normalizarValor(def, '10/14/2026', { ordenFecha: 'mdy' }).valor).toBe('2026-10-14');
+      expect(normalizarValor(def, '10/14/2026').notas.join(' ')).toMatch(/No se reconoció/);
+    });
+  });
 });
 
 describe('normalizarValor por tipo', () => {

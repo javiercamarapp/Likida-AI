@@ -34,7 +34,7 @@ import { llaveTexto } from './catalogos';
 import { MAX_TEXTO_MODELO, type ContenidoDoc, type FormatoDoc } from './contenido';
 import { completarDerivados } from './derivar';
 import { detectarInyeccion } from './inyeccion';
-import { limpiarTexto, normalizarNumero, normalizarValor } from './normalizar';
+import { limpiarTexto, normalizarNumero, normalizarValor, type OrdenFecha } from './normalizar';
 import { aplicarPerfil, elegirPerfil, type EjemploPerfil, type Perfil } from './perfiles';
 import { extraerCartaPorteXml } from './xml_ccp';
 
@@ -167,9 +167,10 @@ export function valorEnTexto(def: CampoDoc, valor: string, texto: string): boole
 function convertirItem(
   def: CampoDoc | undefined, item: { valor: string | null; confianza: number; evidencia: string | null },
   texto: string | null,
+  ordenFecha?: OrdenFecha,
 ): CampoValor | null {
   if (!def || item.valor === null || item.valor.trim() === '') return null;
-  const n = normalizarValor(def, item.valor);
+  const n = normalizarValor(def, item.valor, { ordenFecha });
   if (n.valor === null) return null;
   const notas = [...n.notas];
   let conf = Math.min(0.99, Math.max(0, item.confianza)) - n.penalizacion;
@@ -189,18 +190,18 @@ function convertirItem(
 }
 
 /** Convierte lo que devolvió el modelo (ya validado por zod) a una Extracción normalizada y anclada. */
-export function extraccionDeLlm(s: SalidaLlmDatos, texto: string | null): Extraccion {
+export function extraccionDeLlm(s: SalidaLlmDatos, texto: string | null, ordenFecha?: OrdenFecha): Extraccion {
   const e = extraccionVacia();
   const mejor = (actual: CampoValor | undefined, nuevo: CampoValor | null): CampoValor | undefined => (!nuevo ? actual : !actual || nuevo.confianza > actual.confianza ? nuevo : actual);
   for (const it of s.campos) {
-    const v = convertirItem(campoDoc(it.clave), it, texto);
+    const v = convertirItem(campoDoc(it.clave), it, texto, ordenFecha);
     const r = mejor(e.campos[it.clave], v);
     if (r) e.campos[it.clave] = r;
   }
   for (const fila of s.mercancias.slice(0, MAX_MERCANCIAS)) {
     const salida: Record<string, CampoValor> = {};
     for (const it of fila.campos) {
-      const v = convertirItem(campoMercancia(it.clave), it, texto);
+      const v = convertirItem(campoMercancia(it.clave), it, texto, ordenFecha);
       const r = mejor(salida[it.clave], v);
       if (r) salida[it.clave] = r;
     }
@@ -351,6 +352,8 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   // 3-4. Modelo, con escalamiento por confianza.
   const marcador = (ctx.marcador ?? marcadorAleatorio)();
   const ejemplos = eleccion.perfil?.activa.ejemplos ?? [];
+  // El perfil sabe cómo escribe este cliente sus fechas (mes/día): también vale para lo que lea el modelo.
+  const ordenFecha = eleccion.perfil?.activa.mapeos.find((x) => x.ordenFecha)?.ordenFecha;
   const tope = ctx.nivelMaximo ?? 3;
   let acumulado: Extraccion | null = null;
   for (let nivel: NivelModelo = 1; nivel <= tope; nivel = (nivel + 1) as NivelModelo) {
@@ -359,7 +362,7 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
     r.nivel = nivel; r.modelo = s.modelo;
     r.tokensIn += s.tokensIn; r.tokensOut += s.tokensOut; r.costoUsd += s.costoUsd;
     if (s.notas) r.notasModelo.push(s.notas);
-    const lectura = extraccionDeLlm(s, c.texto);
+    const lectura = extraccionDeLlm(s, c.texto, ordenFecha);
     acumulado = acumulado ? fusionar(acumulado, lectura) : lectura;
     if (!necesitaEscala(acumulado) || nivel === tope) break;
     const f = carencias(acumulado);

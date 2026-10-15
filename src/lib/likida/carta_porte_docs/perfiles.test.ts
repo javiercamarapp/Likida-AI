@@ -198,6 +198,70 @@ describe('aprender de lo que un humano aprobó', () => {
   });
 });
 
+describe('orden de fecha por perfil (MM/DD)', () => {
+  const csvFecha = (fecha: string): Buffer => Buffer.from(`Folio,Fecha Salida,Descripcion,Cantidad\nF1,${fecha},Cemento,5\n`);
+  const finalFecha = (iso: string): Extraccion => ({
+    campos: { folio_cliente: cv('F1', 1, 'humano'), fecha_salida: cv(iso, 1, 'humano') },
+    mercancias: [{ descripcion: cv('Cemento', 1, 'humano') }],
+  });
+  const fechaDe = (r: ReturnType<typeof aplicarPerfil>): string | undefined => r.extraccion.campos.fecha_salida?.valor ?? undefined;
+
+  it('aprender de 10/14/2026 aprobada como 2026-10-14 fija ordenFecha mdy', async () => {
+    const c = await contenido(csvFecha('10/14/2026'));
+    const r = aprender({ contenido: c, final: finalFecha('2026-10-14'), previa: null, riesgoInyeccion: false });
+    const m = r.mapeos.find((x) => x.campo === 'fecha_salida');
+    expect(m?.fuente).toEqual({ tipo: 'columna', encabezado: 'Fecha Salida' });
+    expect(m?.ordenFecha).toBe('mdy');
+    expect(r.notas).toBeUndefined();
+  });
+
+  it('reaplicar el perfil mdy en 10/11/2026 da 11 de octubre; sin ordenFecha daría 10 de noviembre', async () => {
+    const c1 = await contenido(csvFecha('10/14/2026'));
+    const a = aprender({ contenido: c1, final: finalFecha('2026-10-14'), previa: null, riesgoInyeccion: false });
+    const c2 = await contenido(csvFecha('10/11/2026'));
+    expect(fechaDe(aplicarPerfil(perfilCon(c2, a.mapeos), c2))).toBe('2026-10-11');
+    const sinOrden = a.mapeos.map(({ ordenFecha: _o, ...resto }) => resto);
+    expect(fechaDe(aplicarPerfil(perfilCon(c2, sinOrden), c2))).toBe('2026-11-10');
+  });
+
+  it('un perfil viejo (sin ordenFecha) se comporta como antes: día/mes', async () => {
+    const c = await contenido(csvFecha('15/10/2026'));
+    const mapeos: Mapeo[] = [{ campo: 'fecha_salida', mercancia: false, fuente: { tipo: 'columna', encabezado: 'Fecha Salida' } }];
+    expect(fechaDe(aplicarPerfil(perfilCon(c, mapeos), c))).toBe('2026-10-15');
+  });
+
+  it('si la única fecha es ambigua (10/11/2026) no infiere el orden y deja la nota', async () => {
+    const c = await contenido(csvFecha('10/11/2026'));
+    const r = aprender({ contenido: c, final: finalFecha('2026-10-11'), previa: null, riesgoInyeccion: false });
+    expect(r.mapeos.find((x) => x.campo === 'fecha_salida')?.ordenFecha).toBeUndefined();
+    expect(r.notas?.join(' ')).toMatch(/fecha ambigua: confirma el orden/);
+  });
+
+  it('una fecha ya leída día/mes (15/10/2026 → 2026-10-15) no fija mdy ni deja nota', async () => {
+    const c = await contenido(csvFecha('15/10/2026'));
+    const r = aprender({ contenido: c, final: finalFecha('2026-10-15'), previa: null, riesgoInyeccion: false });
+    expect(r.mapeos.find((x) => x.campo === 'fecha_salida')?.ordenFecha).toBeUndefined();
+    expect(r.notas).toBeUndefined();
+  });
+
+  it('un orden mdy ya confirmado no se pierde cuando la nueva muestra es ambigua; y no genera versión nueva', async () => {
+    const c1 = await contenido(csvFecha('10/14/2026'));
+    const a = aprender({ contenido: c1, final: finalFecha('2026-10-14'), previa: null, riesgoInyeccion: false });
+    const c2 = await contenido(csvFecha('10/11/2026'));
+    const b = aprender({ contenido: c2, final: finalFecha('2026-10-11'), previa: { version: 1, mapeos: a.mapeos, ejemplos: a.ejemplos }, riesgoInyeccion: false });
+    expect(b.mapeos.find((x) => x.campo === 'fecha_salida')?.ordenFecha).toBe('mdy');
+    expect(b.cambios).toEqual([]);
+  });
+
+  it('cambiar el orden de un mapeo cuenta como cambio (mapeoIgual compara ordenFecha)', async () => {
+    const c = await contenido(csvFecha('10/14/2026'));
+    const previa: Mapeo[] = [{ campo: 'fecha_salida', mercancia: false, fuente: { tipo: 'columna', encabezado: 'Fecha Salida' } }];
+    const b = aprender({ contenido: c, final: finalFecha('2026-10-14'), previa: { version: 1, mapeos: previa, ejemplos: [] }, riesgoInyeccion: false });
+    expect(b.cambios.join(' ')).toMatch(/Corregido: fecha_salida/);
+    expect(b.mapeos.find((x) => x.campo === 'fecha_salida')?.ordenFecha).toBe('mdy');
+  });
+});
+
 describe('aplicar un perfil', () => {
   const colMapeos = (...pares: Array<[string, string, boolean?]>): Mapeo[] =>
     pares.map(([campo, encabezado, mercancia]) => ({ campo, mercancia: !!mercancia, fuente: { tipo: 'columna', encabezado } }));

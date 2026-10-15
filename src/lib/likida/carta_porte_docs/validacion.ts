@@ -195,6 +195,8 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
     for (const nota of campo.notas ?? []) {
       if (/Confírmalo|confirma la cifra|No se reconoció/i.test(nota)) {
         reg({ campo: def.clave, renglon, severidad: 'confirmar', codigo: 'normalizacion_dudosa', mensaje: `${etiqueta}: ${nota}` });
+      } else if (def.tipo === 'fecha' && /día\/mes\/año/.test(nota)) {
+        reg({ campo: def.clave, renglon, severidad: 'aviso', codigo: 'fecha_ambigua', mensaje: `${etiqueta}: fecha ambigua; se leyó día/mes/año. Si el documento escribe mes/día, corrígela y el perfil lo aprenderá.` });
       }
     }
   };

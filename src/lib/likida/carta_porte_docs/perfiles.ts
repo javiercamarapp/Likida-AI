@@ -23,7 +23,7 @@
 import { CAMPOS_DOC, CAMPOS_MERCANCIA, campoDoc, campoMercancia, extraccionVacia, type CampoDoc, type CampoValor, type Extraccion } from './campos';
 import { llaveTexto } from './catalogos';
 import type { ContenidoDoc, FormatoDoc, Hoja } from './contenido';
-import { normalizarNumero, normalizarValor } from './normalizar';
+import { normalizarNumero, normalizarValor, type OrdenFecha } from './normalizar';
 import { bajar } from './xml_ccp';
 
 export type FuenteMapeo =
@@ -39,6 +39,8 @@ export interface Mapeo {
   fuente: FuenteMapeo;
   /** Cómo escribe ESTE cliente sus cifras: el carácter de miles (el otro es el decimal). Resuelve «1,200» y «1.500». */
   separadorMiles?: ',' | '.';
+  /** Cómo escribe ESTE cliente sus fechas numéricas: `mdy` = mes/día (10/14/2026). Sin el campo = día/mes, como siempre. */
+  ordenFecha?: OrdenFecha;
 }
 
 export interface EjemploPerfil {
@@ -191,10 +193,10 @@ export function elegirPerfil(perfiles: Perfil[], c: ContenidoDoc, remitente?: st
 
 // ── Aplicar el mapeo ────────────────────────────────────────────────────────
 
-function valor(campo: string, mercancia: boolean, crudo: string | null, evidencia: string, confianza: number, miles?: ',' | '.'): CampoValor | null {
+function valor(campo: string, mercancia: boolean, crudo: string | null, evidencia: string, confianza: number, miles?: ',' | '.', ordenFecha?: OrdenFecha): CampoValor | null {
   const def = mercancia ? campoMercancia(campo) : campoDoc(campo);
   if (!def || crudo === null || crudo.trim() === '') return null;
-  const n = normalizarValor(def, crudo, { miles });
+  const n = normalizarValor(def, crudo, { miles, ordenFecha });
   if (n.valor === null) return null;
   return { valor: n.valor, confianza: Math.max(0, confianza - n.penalizacion), evidencia: evidencia.slice(0, 200), origen: 'perfil', ...(n.notas.length ? { notas: n.notas } : {}) };
 }
@@ -220,7 +222,7 @@ function aplicarTabla(m: Mapeo[], c: ContenidoDoc, e: Extraccion, avisos: string
     const i = col(x);
     if (i < 0) { avisos.push(`La columna «${(x.fuente as { encabezado: string }).encabezado}» (${x.campo}) ya no está en este archivo.`); continue; }
     const fila = datos.find((r) => (r[i] ?? '').trim() !== '');
-    const v = fila ? valor(x.campo, false, fila[i], `${t.encabezados[i]}: ${fila[i]}`, CONF_PERFIL, x.separadorMiles) : null;
+    const v = fila ? valor(x.campo, false, fila[i], `${t.encabezados[i]}: ${fila[i]}`, CONF_PERFIL, x.separadorMiles, x.ordenFecha) : null;
     if (v) e.campos[x.campo] = v;
     // Si la columna del folio trae varios folios distintos, es un archivo de VARIOS embarques.
     if (x.campo === 'folio_cliente') {
@@ -234,7 +236,7 @@ function aplicarTabla(m: Mapeo[], c: ContenidoDoc, e: Extraccion, avisos: string
       for (const x of deMerc) {
         const i = col(x);
         if (i < 0) continue;
-        const v = valor(x.campo, true, r[i] ?? null, `${t.encabezados[i]}: ${r[i] ?? ''}`, CONF_PERFIL, x.separadorMiles);
+        const v = valor(x.campo, true, r[i] ?? null, `${t.encabezados[i]}: ${r[i] ?? ''}`, CONF_PERFIL, x.separadorMiles, x.ordenFecha);
         if (v) fila[x.campo] = v;
       }
       if (Object.keys(fila).length > 0) e.mercancias.push(fila);
@@ -266,7 +268,7 @@ function aplicarTexto(m: Mapeo[], texto: string, e: Extraccion, avisos: string[]
     if (x.fuente.tipo !== 'etiqueta') continue;
     const r = valorDeEtiqueta(texto, x.fuente.etiqueta);
     if (!r) { avisos.push(`La etiqueta «${x.fuente.etiqueta}» (${x.campo}) no aparece en este documento.`); continue; }
-    const v = valor(x.campo, x.mercancia, r.valor, r.linea, CONF_PERFIL - 0.02, x.separadorMiles);
+    const v = valor(x.campo, x.mercancia, r.valor, r.linea, CONF_PERFIL - 0.02, x.separadorMiles, x.ordenFecha);
     if (!v) continue;
     if (x.mercancia) merc[x.campo] = v; else e.campos[x.campo] = v;
   }
@@ -287,7 +289,7 @@ function aplicarXml(m: Mapeo[], arbol: unknown, e: Extraccion, avisos: string[])
     if (x.fuente.tipo !== 'ruta') continue;
     const v0 = valorDeRuta(arbol, x.fuente.ruta);
     if (v0 === null) { avisos.push(`La ruta «${x.fuente.ruta}» (${x.campo}) no existe en este XML.`); continue; }
-    const v = valor(x.campo, x.mercancia, v0, `${x.fuente.ruta} = ${v0}`, CONF_PERFIL);
+    const v = valor(x.campo, x.mercancia, v0, `${x.fuente.ruta} = ${v0}`, CONF_PERFIL, undefined, x.ordenFecha);
     if (!v) continue;
     if (x.mercancia) merc[x.campo] = v; else e.campos[x.campo] = v;
   }
@@ -327,8 +329,23 @@ function igualdadDe(def: CampoDoc | undefined, final: string): Igualdad {
     const na = normalizarNumero(celda).valor; const nb = normalizarNumero(final).valor;
     if (na !== null && nb !== null && na === nb) return true;
     // «15/10/2026» → 2026-10-15, «Jalisco» → JAL, «Cajas» → XBX: comparar ya NORMALIZADO.
-    return !!def && def.tipo !== 'texto' && normalizarValor(def, celda).valor === final;
+    if (!def || def.tipo === 'texto') return false;
+    if (normalizarValor(def, celda).valor === final) return true;
+    // «10/14/2026» → 2026-10-14: solo cuadra leyéndola mes/día; la celda es la correcta y `ordenDeFecha` dice cómo leerla.
+    return def.tipo === 'fecha' && normalizarValor(def, celda, { ordenFecha: 'mdy' }).valor === final;
   };
+}
+
+/**
+ * Si la fecha aprobada solo cuadra leyendo la celda mes/día: `'mdy'` cuando no hay duda (el 2.º número pasa de 12),
+ * `'ambiguo'` cuando ambos órdenes eran válidos (10/11/2026) y no se puede saber cuál usa el cliente. `undefined` = día/mes basta.
+ */
+function ordenDeFecha(def: CampoDoc | undefined, celda: string, final: string): 'mdy' | 'ambiguo' | undefined {
+  if (!def || def.tipo !== 'fecha') return undefined;
+  if (normalizarValor(def, celda).valor === final) return undefined;
+  if (normalizarValor(def, celda, { ordenFecha: 'mdy' }).valor !== final) return undefined;
+  const m = /^\s*(\d{1,2})[/\-.](\d{1,2})[/\-.]\d{2,4}/.exec(celda);
+  return m && +m[1] <= 12 && +m[2] <= 12 && m[1] !== m[2] ? 'ambiguo' : 'mdy';
 }
 
 /** Si la cifra es ambigua («1,200», «1.500»), ¿qué separador de miles usa este cliente, dado el valor aprobado? */
@@ -344,7 +361,7 @@ function inferirMiles(celda: string, final: string): ',' | '.' | undefined {
   return undefined;
 }
 
-function inferirColumna(t: TablaLeida, filas: string[][], final: string, igual: Igualdad): { encabezado: string; miles?: ',' | '.' } | null {
+function inferirColumna(t: TablaLeida, filas: string[][], final: string, igual: Igualdad): { encabezado: string; miles?: ',' | '.'; celda?: string } | null {
   const candidatas: number[] = [];
   for (let i = 0; i < t.encabezados.length; i++) {
     if (filas.some((r) => (r[i] ?? '').trim() !== '' && igual(r[i]))) candidatas.push(i);
@@ -353,15 +370,15 @@ function inferirColumna(t: TablaLeida, filas: string[][], final: string, igual: 
   if (candidatas.length !== 1) return null;
   const i = candidatas[0];
   const fila = filas.find((r) => (r[i] ?? '').trim() !== '' && igual(r[i]));
-  return { encabezado: t.encabezados[i], miles: fila ? inferirMiles(fila[i], final) : undefined };
+  return { encabezado: t.encabezados[i], miles: fila ? inferirMiles(fila[i], final) : undefined, celda: fila?.[i] };
 }
 
-function inferirEtiqueta(texto: string, final: string, igual: Igualdad): { etiqueta: string; linea: string; miles?: ',' | '.' } | null {
-  const hallazgos: Array<{ etiqueta: string; linea: string; miles?: ',' | '.' }> = [];
+function inferirEtiqueta(texto: string, final: string, igual: Igualdad): { etiqueta: string; linea: string; miles?: ',' | '.'; celda?: string } | null {
+  const hallazgos: Array<{ etiqueta: string; linea: string; miles?: ',' | '.'; celda?: string }> = [];
   for (const linea of texto.split(/\r?\n/).slice(0, 600)) {
     for (const trozo of linea.slice(0, 400).split(/\s{3,}|\s\|\s/)) {
       const m = /^[\s*•\-–]*([^:=]{2,40}?)\s*[:=]\s*(.{1,200})$/.exec(trozo);
-      if (m && igual(m[2])) hallazgos.push({ etiqueta: m[1].trim(), linea: trozo.trim(), miles: inferirMiles(m[2], final) });
+      if (m && igual(m[2])) hallazgos.push({ etiqueta: m[1].trim(), linea: trozo.trim(), miles: inferirMiles(m[2], final), celda: m[2] });
     }
   }
   const unicos = new Map(hallazgos.map((h) => [llaveColumna(h.etiqueta), h]));
@@ -398,10 +415,12 @@ export interface ResultadoAprendizaje {
   /** Qué cambió, en español (vacío = no hay versión nueva que crear). */
   cambios: string[];
   omitido?: string;
+  /** Avisos que no cambian el perfil pero el revisor debe ver (p. ej. «fecha ambigua: confirma el orden»). */
+  notas?: string[];
 }
 
 const claveMapeo = (m: Pick<Mapeo, 'campo' | 'mercancia'>): string => `${m.mercancia ? 'm' : 'd'}:${m.campo}`;
-const mapeoIgual = (a: Mapeo, b: Mapeo): boolean => JSON.stringify(a.fuente) === JSON.stringify(b.fuente) && a.separadorMiles === b.separadorMiles;
+const mapeoIgual = (a: Mapeo, b: Mapeo): boolean => JSON.stringify(a.fuente) === JSON.stringify(b.fuente) && a.separadorMiles === b.separadorMiles && a.ordenFecha === b.ordenFecha;
 
 export function aprender(inp: EntradaAprendizaje): ResultadoAprendizaje {
   const previos = inp.previa?.mapeos ?? [];
@@ -414,11 +433,13 @@ export function aprender(inp: EntradaAprendizaje): ResultadoAprendizaje {
   const evidencias: EjemploPerfil['evidencias'] = [];
   const camposFinales: Record<string, string> = {};
   const tablas = tablasDe(c);
+  const ordenes = new Map<string, 'mdy' | 'ambiguo'>();
 
   const intentar = (campo: string, mercancia: boolean, finalV: string, filaIdx: number | null): void => {
     let fuente: FuenteMapeo | null = null;
     let linea = '';
     let miles: ',' | '.' | undefined;
+    let celdaCruda: string | null | undefined;
     const igual = igualdadDe(mercancia ? campoMercancia(campo) : campoDoc(campo), finalV);
     if (c.tabla) {
       for (const t of tablas) {
@@ -427,16 +448,18 @@ export function aprender(inp: EntradaAprendizaje): ResultadoAprendizaje {
         if (campo === 'peso_bruto_total' && datos.length > 1) continue;
         const filas = mercancia && filaIdx !== null ? [datos[filaIdx]].filter(Boolean) : datos.slice(0, 1);
         const enc = inferirColumna(t, filas, finalV, igual);
-        if (enc) { fuente = { tipo: 'columna', encabezado: enc.encabezado }; miles = enc.miles; linea = `${enc.encabezado}: ${finalV}`; break; }
+        if (enc) { fuente = { tipo: 'columna', encabezado: enc.encabezado }; miles = enc.miles; celdaCruda = enc.celda; linea = `${enc.encabezado}: ${finalV}`; break; }
       }
     } else if (c.xml) {
       const r = inferirRuta(c.xml, finalV, igual);
-      if (r) { fuente = { tipo: 'ruta', ruta: r }; linea = `${r} = ${finalV}`; }
+      if (r) { fuente = { tipo: 'ruta', ruta: r }; celdaCruda = valorDeRuta(c.xml, r); linea = `${r} = ${finalV}`; }
     } else if (c.texto) {
       const r = inferirEtiqueta(c.texto, finalV, igual);
-      if (r) { fuente = { tipo: 'etiqueta', etiqueta: r.etiqueta }; miles = r.miles; linea = r.linea; }
+      if (r) { fuente = { tipo: 'etiqueta', etiqueta: r.etiqueta }; miles = r.miles; celdaCruda = r.celda; linea = r.linea; }
     }
     if (!fuente) return;
+    const orden = celdaCruda ? ordenDeFecha(mercancia ? campoMercancia(campo) : campoDoc(campo), celdaCruda, finalV) : undefined;
+    if (orden) ordenes.set(claveMapeo({ campo, mercancia }), orden);
     nuevos.set(claveMapeo({ campo, mercancia }), { campo, mercancia, fuente, ...(miles ? { separadorMiles: miles } : {}) });
     evidencias.push({ campo: mercancia ? `mercancia.${campo}` : campo, linea: linea.slice(0, 200) });
   };
@@ -455,8 +478,20 @@ export function aprender(inp: EntradaAprendizaje): ResultadoAprendizaje {
     }
   });
 
-  // Mezcla: lo inferido reemplaza lo previo del mismo campo; lo no tocado se conserva.
+  // Orden de fecha: un cliente escribe todas sus fechas igual. Una fecha sin duda en mes/día (10/14/2026) fija `mdy`
+  // para todos los campos fecha que solo cuadraban así; si TODAS eran ambiguas (10/11/2026) no se adivina y se avisa.
   const mezcla = new Map<string, Mapeo>(previos.map((m) => [claveMapeo(m), m]));
+  const notas: string[] = [];
+  const hayMdy = [...ordenes.values()].includes('mdy');
+  for (const [k, o] of ordenes) {
+    const m = nuevos.get(k);
+    if (!m) continue;
+    if (o === 'mdy' || hayMdy) m.ordenFecha = 'mdy';
+    else if (mezcla.get(k)?.ordenFecha) m.ordenFecha = mezcla.get(k)?.ordenFecha; // ya confirmado en una versión anterior: no se pierde
+    else notas.push(`fecha ambigua: confirma el orden (${m.campo}).`);
+  }
+
+  // Mezcla: lo inferido reemplaza lo previo del mismo campo; lo no tocado se conserva.
   const cambios: string[] = [];
   for (const [k, m] of nuevos) {
     const antes = mezcla.get(k);
@@ -472,7 +507,7 @@ export function aprender(inp: EntradaAprendizaje): ResultadoAprendizaje {
   if (cambios.length > 0 && evidencias.length > 0) {
     ejemplos = [...ejemplosPrevios, { evidencias: evidencias.slice(0, 20), campos: camposFinales }].slice(-MAX_EJEMPLOS);
   }
-  return { mapeos, ejemplos, cambios };
+  return { mapeos, ejemplos, cambios, ...(notas.length ? { notas } : {}) };
 }
 
 export function describir(f: FuenteMapeo): string {

@@ -61,8 +61,12 @@ function armarFecha(a: number, m: number, d: number, h?: number, mi?: number, s?
   return `${a}-${dosD(m)}-${dosD(d)}T${dosD(h)}:${dosD(mi ?? 0)}:${dosD(s ?? 0)}`;
 }
 
-/** Interpreta una fecha mexicana (día primero). `null` = no es una fecha reconocible. */
-export function normalizarFecha(crudo: string): { valor: string | null; nota?: string } {
+/** Orden de las fechas numéricas `a/b/aaaa`: `dmy` = día/mes (México, por omisión); `mdy` = mes/día (formato EE. UU., p. ej. `10/14/2026`). */
+export type OrdenFecha = 'dmy' | 'mdy';
+
+/** Interpreta una fecha (día primero salvo que el perfil diga `mdy`). `null` = no es una fecha reconocible. */
+export function normalizarFecha(crudo: string, opciones: { orden?: OrdenFecha } = {}): { valor: string | null; nota?: string } {
+  const mdy = opciones.orden === 'mdy';
   const t = crudo.trim().toLowerCase().replace(/\s+/g, ' ');
   // Hora opcional al final: 10:30 o 10:30:15 (sin cuantificadores anidados: se quita el sufijo «hrs» y luego se prueba cada forma).
   const base = t.replace(/\s+a las\s+/, ' ').replace(/\s*(hrs|hr|h)\.?$/, '');
@@ -77,14 +81,15 @@ export function normalizarFecha(crudo: string): { valor: string | null; nota?: s
   let m: RegExpExecArray | null;
   // ISO: 2026-10-15
   if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(sinHora))) return { valor: armarFecha(+m[1], +m[2], +m[3], h, mi, s) };
-  // 15/10/2026, 15-10-2026, 15.10.2026 (día primero: es México)
+  // 15/10/2026, 15-10-2026, 15.10.2026 (día primero: es México; con `orden: 'mdy'`, mes primero: 10/14/2026)
   if ((m = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/.exec(sinHora))) {
+    if (mdy) return { valor: armarFecha(+m[3], +m[1], +m[2], h, mi, s) };
     const v = armarFecha(+m[3], +m[2], +m[1], h, mi, s);
     return { valor: v, nota: v && +m[1] <= 12 && +m[2] <= 12 && m[1] !== m[2] ? 'Se leyó como día/mes/año.' : undefined };
   }
   // 15/10/26 (año de dos dígitos → 20xx)
   if ((m = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2})$/.exec(sinHora))) {
-    return { valor: armarFecha(2000 + +m[3], +m[2], +m[1], h, mi, s), nota: 'Año de dos dígitos leído como 20' + m[3] + '.' };
+    return { valor: mdy ? armarFecha(2000 + +m[3], +m[1], +m[2], h, mi, s) : armarFecha(2000 + +m[3], +m[2], +m[1], h, mi, s), nota: 'Año de dos dígitos leído como 20' + m[3] + '.' };
   }
   // 15 de octubre de 2026 · 15-oct-2026 · 15 oct 2026
   if ((m = /^(\d{1,2})[\s-]+([a-záéíóú]+)\.?[\s-]+(\d{4})$/.exec(sinHora))) {
@@ -172,7 +177,7 @@ const MONEDAS: Record<string, string> = {
 };
 
 /** Normaliza el valor CRUDO de un campo a su forma de guardado. Nunca lanza. */
-export function normalizarValor(campo: CampoDoc, crudo: unknown, opciones: { miles?: ',' | '.' } = {}): Normalizado {
+export function normalizarValor(campo: CampoDoc, crudo: unknown, opciones: { miles?: ',' | '.'; ordenFecha?: OrdenFecha } = {}): Normalizado {
   const notas: string[] = [];
   let penalizacion = 0;
   const vacio: Normalizado = { valor: null, notas, penalizacion };
@@ -197,7 +202,7 @@ export function normalizarValor(campo: CampoDoc, crudo: unknown, opciones: { mil
       return out(d);
     }
     case 'fecha': {
-      const f = normalizarFecha(String(texto));
+      const f = normalizarFecha(String(texto), { orden: opciones.ordenFecha });
       if (f.valor === null) { notas.push('No se reconoció como fecha.'); penalizacion = 0.3; return out(String(texto)); }
       if (f.nota) { notas.push(f.nota); penalizacion = 0.05; }
       return out(f.valor);

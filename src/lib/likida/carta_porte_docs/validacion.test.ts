@@ -213,6 +213,11 @@ describe('fechas, placas y otros', () => {
     e.campos.origen_estado = cv('CMX');
     expect(codigos(e)).toContain('confirmar:normalizacion_dudosa:origen_cp');
   });
+  it('fecha leída día/mes con ambos números ≤ 12: aviso de fecha ambigua (no bloquea)', () => {
+    const e = extraccionAtlasOk(); e.campos.fecha_salida = { ...cv('2026-11-10', 0.9), notas: ['Se leyó como día/mes/año.'] };
+    expect(codigos(e)).toContain('aviso:fecha_ambigua:fecha_salida');
+    expect(validar(e).hallazgos.filter((h) => h.codigo === 'fecha_ambigua').every((h) => h.severidad === 'aviso')).toBe(true);
+  });
 });
 
 describe('derivados', () => {
