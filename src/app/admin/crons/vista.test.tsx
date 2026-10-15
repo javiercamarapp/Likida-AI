@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 // lo que se mira aquí es QUÉ se pinta, no a dónde navega el botón.
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }) }));
 import { CRONS, type CronId, type LatidoDetallado } from '@/lib/admin/salud';
-import { VistaCrons, resumenRelojes, cadaCuanto, desdeHace } from './vista';
+import { VistaCrons, resumenRelojes, cadaCuanto, desdeHace, resumenDetalle } from './vista';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TABLEROS AL DÍA (28-ago-2026) — el bug que esta prueba caza, medido: el
@@ -149,5 +149,12 @@ describe('cadaCuanto / desdeHace', () => {
     expect(desdeHace(null)).toBe('nunca');
     expect(desdeHace(3)).toBe('hace 3 min');
     expect(desdeHace(150)).toBe('hace 2.5 h');
+  });
+});
+
+describe('resumenDetalle del Vigía (T-A4-42)', () => {
+  it('rotula los contadores de avisos, omite los ceros y no pinta nada de un aviso concreto', () => {
+    const t = resumenDetalle({ revisadas: 3, avisosPendientesViejos: 2, avisosFallidos: 0, avisosConError: false });
+    expect(t).toBe('revisadas: 3 · avisos de viaje esperando confirmación más de 2 h: 2');
   });
 });
