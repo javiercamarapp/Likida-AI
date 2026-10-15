@@ -1,16 +1,19 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // LAYOUT DECLARATIVO DE LA PLANTILLA DEL TMS («normal») — solo estructura, sin datos.
 //
-// La plantilla del TMS NO es una tabla plana: son hojas con celdas fijas (valores
-// en la columna C) y tablas con encabezado propio. Aquí se declara DÓNDE cae cada
+// La plantilla del TMS NO es una tabla plana: son hojas con celdas fijas (régimen,
+// referencia, cliente y caja en la columna B; el remitente en la C) y tablas con
+// encabezado propio. Aquí se declara DÓNDE cae cada
 // campo; `plantilla_tms.ts` lo aplica. Todo es JSON serializable (se guarda en
 // `cp_salida_config.layout`), así que cuando llegue la plantilla real en blanco se
 // carga como configuración sin tocar código.
 //
-// PROVISIONAL (bloqueo externo B-2): la forma sale de la muestra M2 (hojas
-// RemintenteDestinatario, Mercancias y Error). El bloque del destinatario
-// (C29..C47) replica el del remitente +18 filas y el contacto va en C45..C47: eso
-// se confirma con la plantilla en blanco. Cuáles columnas llevan «*» también.
+// VERIFICADO (T-A3-43) contra la forma de la plantilla real «normal» (análisis 17 §1.2,
+// idéntica en 7 de 7 libros): régimen, referencia, cliente y caja en B5..B8 (C1:C8 son
+// notas); remitente en C11..C26; el bloque «destinatario» (filas 29..47) dice «NO LLENAR»
+// y NO se escribe; destinos en la tabla A49:T53; mercancías con encabezado en la fila 21
+// y columnas reales A..O. B-2 solo confirma qué celda lee el SP; el layout sigue siendo
+// declarativo.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type TransformacionPlantilla = 'nombre_estado' | 'si_no' | 'entero' | 'distancia';
@@ -72,8 +75,8 @@ export interface LayoutPlantilla {
 const c = (celda: string, campo: string, obligatorio: boolean, extra: Partial<EntradaCelda> = {}): EntradaCelda =>
   ({ celda, campo, obligatorio, texto: true, ...extra });
 
-/** Bloque de domicilio (remitente o destinatario): mismas 16 filas, desplazadas. */
-function bloque(lado: 'origen' | 'destino', base: number): EntradaCelda[] {
+/** Bloque de domicilio del remitente (C11..C26; la fila 13 es un rótulo, sin valor). */
+function bloque(lado: 'origen', base: number): EntradaCelda[] {
   const f = (n: number) => `C${base + n}`;
   return [
     c(f(0), `${lado}_nombre`, true),
@@ -120,6 +123,7 @@ const COLUMNAS_DESTINOS: ColumnaTabla[] = [
   t('T', 'Correo', 'contacto_destino_correo', false),
 ];
 
+/** Columnas reales A..O de la hoja Mercancias (análisis 17 §1.2). */
 const COLUMNAS_MERCANCIAS: ColumnaTabla[] = [
   { columna: 'A', encabezado: 'Id Destino', constante: 1, transformacion: 'entero', obligatorio: true, texto: false, idDestino: true },
   t('B', 'Bienes Transportados', 'mercancia.bienes_transp', true),
@@ -131,29 +135,30 @@ const COLUMNAS_MERCANCIAS: ColumnaTabla[] = [
   t('H', 'Descripción embalaje', 'mercancia.embalaje_descripcion', false),
   t('I', 'Peso kg', 'mercancia.peso_kg', true, { texto: false }),
   t('J', 'Fracción', 'mercancia.fraccion_arancelaria', false),
-  t('K', 'Tipo de Materia', 'mercancia.tipo_materia', false),
-  t('L', 'Régimen Aduanero', 'mercancia.regimen_aduanero', false),
-  t('M', 'RFC Agente Aduanal', 'mercancia.rfc_agente_aduanal', false),
-  t('N', 'Número de Pedimento', 'mercancia.pedimento', false),
-  t('O', 'Material Peligroso', 'mercancia.material_peligroso', true, { transformacion: 'si_no', defecto: 'NO' }),
-  t('P', 'Clave Material Peligroso', 'mercancia.clave_material_peligroso', true, { defecto: 'N/A' }),
+  t('K', 'Número de Pedimento', 'mercancia.pedimento', false),
+  t('L', 'Material Peligroso', 'mercancia.material_peligroso', true, { transformacion: 'si_no', defecto: 'NO' }),
+  t('M', 'Clave Material Peligroso', 'mercancia.clave_material_peligroso', true, { defecto: 'N/A' }),
+  t('N', 'Tipo de Materia', 'mercancia.tipo_materia', false),
+  // Sin `campo`: la extracción no tiene «RFC del importador» (distinto del agente aduanal). Solo se escribe el encabezado;
+  // la celda queda vacía hasta que exista el campo (la columna es opcional en el TMS).
+  { columna: 'O', encabezado: 'RFC Importador', obligatorio: false, texto: true },
 ];
 
 export const LAYOUT_NORMAL: LayoutPlantilla = {
   nombre: 'normal',
-  version: 1,
-  provisional: true,
+  version: 2,
+  provisional: false,
+  verificada: true,
+  nota: 'Verificado contra la forma de la plantilla real (7 de 7 libros, análisis 17 §1.2). Bloque destinatario C29..C47: no se escribe.',
   hojas: [
     {
       hoja: 'RemintenteDestinatario',
       celdas: [
-        c('C7', 'ctx.clienteInterno', true),
-        c('C8', 'folio_cliente', false),
+        c('B5', 'regimen_aduanero', false, { alterno: 'mercancia.regimen_aduanero' }),
+        c('B6', 'folio_cliente', false),
+        c('B7', 'ctx.clienteInterno', true),
+        c('B8', 'caja_numero', true),
         ...bloque('origen', 11),
-        ...bloque('destino', 29),
-        c('C45', 'contacto_destino_nombre', false),
-        c('C46', 'contacto_destino_telefono', false),
-        c('C47', 'contacto_destino_correo', false),
       ],
       tablas: [{ id: 'destinos', multi: true, filaEncabezado: 49, primeraFila: 50, maxFilas: 4, columnas: COLUMNAS_DESTINOS }],
     },
@@ -171,6 +176,7 @@ const PENDIENTE_NUEVA = 'pendiente de especificación (B-2)';
 export const LAYOUT_NUEVA: LayoutPlantilla = {
   ...LAYOUT_NORMAL,
   nombre: 'nueva',
+  provisional: true,
   verificada: false,
   nota: `Hojas Origenes y Destinos ${PENDIENTE_NUEVA}.`,
   hojas: [

@@ -3,6 +3,12 @@ import type { CampoValor, Extraccion } from './campos';
 import { construirPlantilla, contarDestinos } from './plantilla_tms';
 import { AVISO_PLANTILLA_POR_CONFIG, contextoPlantillaDeConfig, elegirPlantilla } from './salida_config';
 import { LAYOUT_NORMAL, LAYOUT_NUEVA, coordenadasLayout, layoutPuedeEnviarse } from './plantilla_tms.layout';
+import { aXlsxPlantillaTms } from './exportacion';
+import * as XLSX from 'xlsx';
+import {
+  CELDAS_LLENABLES, CELDAS_NO_TOCAR, ENCABEZADOS_DESTINOS, ENCABEZADOS_MERCANCIAS, HOJAS_REAL, VALORES_LLENA,
+  plantillaNormalRealEnBlanco, plantillaNormalRealLlena,
+} from './evaluacion/plantilla_normal_real.fixture';
 
 const cv = (valor: string | null): CampoValor => ({ valor, confianza: 0.95, evidencia: null, origen: 'llm' });
 
@@ -17,13 +23,13 @@ function extraccion(sobre: Record<string, string | null> = {}, merc: Record<stri
     destino_colonia_clave: null, destino_colonia: 'Zona Dos', destino_cp: '78040', destino_localidad_clave: null, destino_localidad: 'Ciudad Dos',
     destino_municipio_clave: null, destino_municipio: 'Condado Dos', destino_estado: 'NLE', destino_pais: 'USA',
     contacto_destino_nombre: 'Contacto Prueba', contacto_destino_telefono: '5550000000', contacto_destino_correo: 'contacto@example.test', // grep-limpio:ok
-    numero_cliente_interno: '000123',
+    numero_cliente_interno: '000123', caja_numero: 'CAJA-0001', regimen_aduanero: null,
     ...sobre,
   };
   const m: Record<string, string | null> = {
     bienes_transp: '43211500', descripcion: 'Equipo de computo', cantidad: '20', clave_unidad: 'H87', unidad_descripcion: 'Pieza',
     embalaje: '4G', embalaje_descripcion: 'Caja de carton', peso_kg: '14130', fraccion_arancelaria: '8471500100', tipo_materia: '05', // grep-limpio:ok
-    regimen_aduanero: 'EXD', rfc_agente_aduanal: 'BBB020202BBB', pedimento: '24 16 3456 4000123', material_peligroso: null, clave_material_peligroso: null, // grep-limpio:ok
+    regimen_aduanero: 'EXD', pedimento: '24 16 3456 4000123', material_peligroso: null, clave_material_peligroso: null, // grep-limpio:ok
     ...merc,
   };
   const conv = (o: Record<string, string | null>) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, cv(v)]));
@@ -38,14 +44,13 @@ describe('construirPlantilla', () => {
     const r = construirPlantilla(extraccion(), ctx);
     const rd = hoja(r, 'RemintenteDestinatario');
     const esperado: Record<string, string> = {
-      C7: '000123', C8: 'LP-0001', C11: 'Origen Sintetico SA', C12: 'AAA010101AAA', C14: 'Calle Uno', C15: '10', C17: '0001', C18: 'Colonia Uno', // grep-limpio:ok
+      B5: 'EXD', B6: 'LP-0001', B7: '000123', B8: 'CAJA-0001', C11: 'Origen Sintetico SA', C12: 'AAA010101AAA', C14: 'Calle Uno', C15: '10', C17: '0001', C18: 'Colonia Uno', // grep-limpio:ok
       C19: '44100', C20: '01', C21: 'Localidad Uno', C22: '039', C23: 'Municipio Uno', C24: 'JAL', C25: 'Jalisco', C26: 'MEX',
-      C29: 'Destino Sintetico LLC', C30: 'XEXX010101000', C32: 'Street Two', C36: 'Zona Dos', C37: '78040', C44: 'USA', // grep-limpio:ok
-      C45: 'Contacto Prueba', C47: 'contacto@example.test',
     };
     for (const [k, v] of Object.entries(esperado)) expect(rd[k]?.valor, k).toBe(v);
     expect(rd.C16.valor).toBeNull();
-    expect(rd.C43.valor).toBe('Nuevo León');
+    // el bloque «destinatario» (filas 29..47) dice «NO LLENAR»: no se escribe nada ahí
+    for (const k of Object.keys(rd)) expect(/^[A-Z]+(29|3\d|4[0-7])$/.test(k), k).toBe(false);
     // tabla de destinos
     expect(rd.A50.valor).toBe(1);
     expect(rd.B50.valor).toBe('874,11 km'); // por defecto la distancia sale como la trae la plantilla
@@ -62,7 +67,11 @@ describe('construirPlantilla', () => {
     expect(me.B22.valor).toBe('43211500');
     expect(me.D22.valor).toBe(20);
     expect(me.I22.valor).toBe(14130);
-    expect(me.N22.valor).toBe('24 16 3456 4000123');
+    expect(me.K22.valor).toBe('24 16 3456 4000123'); // pedimento
+    expect(me.N22.valor).toBe('05'); // tipo de materia
+    // O = «RFC Importador»: la extracción aún no trae ese dato (no es el RFC del agente aduanal): la celda queda vacía y NO es faltante.
+    expect(me.O21.valor).toBe('RFC Importador');
+    expect(me.O22).toBeUndefined();
     expect(r.faltantes).toEqual([]);
     expect(hoja(r, 'Error')).toEqual({});
   });
@@ -75,13 +84,13 @@ describe('construirPlantilla', () => {
 
   it('peligroso vacío → NO y clave N/A; peligroso sí sin clave → faltante', () => {
     const r = construirPlantilla(extraccion(), ctx);
-    expect(hoja(r, 'Mercancias').O22.valor).toBe('NO');
-    expect(hoja(r, 'Mercancias').P22.valor).toBe('N/A');
+    expect(hoja(r, 'Mercancias').L22.valor).toBe('NO');
+    expect(hoja(r, 'Mercancias').M22.valor).toBe('N/A');
     const p = construirPlantilla(extraccion({}, { material_peligroso: 'true' }), ctx);
-    expect(hoja(p, 'Mercancias').O22.valor).toBe('SI');
-    expect(p.faltantes).toContainEqual({ campo: 'mercancia.clave_material_peligroso', celda: 'P22' });
+    expect(hoja(p, 'Mercancias').L22.valor).toBe('SI');
+    expect(p.faltantes).toContainEqual({ campo: 'mercancia.clave_material_peligroso', celda: 'M22' });
     const q = construirPlantilla(extraccion({}, { material_peligroso: 'true', clave_material_peligroso: '1203' }), ctx);
-    expect(hoja(q, 'Mercancias').P22.valor).toBe('1203');
+    expect(hoja(q, 'Mercancias').M22.valor).toBe('1203');
   });
 
   it('marca como texto lo que viene de un tercero y no altera el valor (neutralizar es de T-A3-08)', () => {
@@ -108,8 +117,11 @@ describe('construirPlantilla', () => {
     expect(r.faltantes).toContainEqual({ campo: 'mercancia.peso_kg', celda: 'I22' });
     expect(r.avisos.some((a) => a.includes('no trae mercancías'))).toBe(true);
     expect(r.avisos.some((a) => a.includes('«nueva»'))).toBe(true);
-    expect(r.avisos.some((a) => a.includes('provisional'))).toBe(true);
-    expect(hoja(r, 'RemintenteDestinatario').C7.valor).toBe('777');
+    // al enviar sale la «normal», que ya está verificada: no hay aviso de layout provisional
+    expect(r.avisos.some((a) => a.includes('provisional'))).toBe(false);
+    // al descargar sale la «nueva», que sigue provisional
+    expect(construirPlantilla(e, { clienteInterno: '777', plantilla: 'nueva', uso: 'descarga' }).avisos.some((a) => a.includes('provisional'))).toBe(true);
+    expect(hoja(r, 'RemintenteDestinatario').B7.valor).toBe('777');
   });
 });
 
@@ -123,14 +135,15 @@ describe('LAYOUT_NORMAL', () => {
     expect(planos).not.toMatch(/[A-Z]{3,4}\d{6}[A-Z0-9]{3}/);
   });
 
-  it('el conjunto de coordenadas coincide con la lista congelada de la estructura de M2', () => {
+  it('el conjunto de coordenadas coincide con la lista congelada de la estructura de la plantilla real', () => {
     const col = (a: string, b: string) => Array.from({ length: b.charCodeAt(0) - a.charCodeAt(0) + 1 }, (_, i) => String.fromCharCode(a.charCodeAt(0) + i));
     const rd = 'RemintenteDestinatario';
-    const filasC = [7, 8, 11, 12, ...Array.from({ length: 13 }, (_, i) => 14 + i), 29, 30, ...Array.from({ length: 16 }, (_, i) => 32 + i)];
+    const filasC = [11, 12, ...Array.from({ length: 13 }, (_, i) => 14 + i)];
     const congelada = [
+      ...[5, 6, 7, 8].map((n) => `${rd}!B${n}`),
       ...filasC.map((n) => `${rd}!C${n}`),
       ...col('A', 'T').flatMap((c) => [`${rd}!${c}49`, `${rd}!${c}50`]),
-      ...col('A', 'P').flatMap((c) => [`Mercancias!${c}21`, `Mercancias!${c}22`]),
+      ...col('A', 'O').flatMap((c) => [`Mercancias!${c}21`, `Mercancias!${c}22`]),
     ];
     expect([...coordenadasLayout(LAYOUT_NORMAL)].sort()).toEqual([...congelada].sort());
     expect(new Set(coordenadasLayout(LAYOUT_NORMAL)).size).toBe(coordenadasLayout(LAYOUT_NORMAL).length);
@@ -267,5 +280,142 @@ describe('elección normal / nueva (nunca por el contenido)', () => {
     const r = construirPlantilla(extraccion(), c);
     expect(hoja(r, 'RemintenteDestinatario').B50.valor).toBe(874.11);
     expect(r.avisos).toContain(AVISO_PLANTILLA_POR_CONFIG);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A3-43 · LAYOUT «normal» contrastado con la FORMA real de la plantilla del TMS (fixture sintético hecho a mano, que NO
+// importa el layout: si el layout se equivoca de celda, estas pruebas lo ven).
+//
+// TABLA CAMPO → CELDA (hoja RemintenteDestinatario; los valores de B van en la columna B, el remitente en la C):
+//   B5 régimen aduanero (regimen_aduanero, o el de la primera mercancía) · B6 referencia (folio_cliente)
+//   B7 cliente interno (ctx.clienteInterno) · B8 número de caja (caja_numero)
+//   C11 razón social · C12 RFC/Tax ID · C14 calle · C15 núm. ext. · C16 núm. int. · C17 clave colonia · C18 colonia · C19 CP
+//   C20 clave localidad · C21 localidad · C22 clave municipio · C23 municipio · C24 clave estado · C25 estado · C26 país
+//   Filas 29..47 («destinatario», «NO LLENAR»), C1:C8, C36 y C37: NO se escriben. Destinos: tabla A49:T53 (4 filas).
+// Hoja Mercancias (encabezado fila 21, datos desde la 22):
+//   A Id destino · B clave producto · C descripción · D cantidad · E clave unidad · F unidad · G embalaje · H desc. embalaje
+//   I peso kg · J fracción · K pedimento · L material peligroso (SI/NO) · M clave mat. peligroso · N tipo de materia · O RFC importador
+// ═══════════════════════════════════════════════════════════════════════════
+describe('LAYOUT_NORMAL contra la forma real de la plantilla (T-A3-43)', () => {
+  const rd = 'RemintenteDestinatario';
+  const celdasDelLayout = (): Array<{ hoja: string; celda: string }> =>
+    LAYOUT_NORMAL.hojas.flatMap((h) => h.celdas.map((e) => ({ hoja: h.hoja, celda: e.celda })));
+
+  it('las celdas fijas del layout son EXACTAMENTE las que la plantilla real deja llenar (B5..B8 y C11..C26 sin la fila 13)', () => {
+    const del = celdasDelLayout().filter((x) => x.hoja === rd).map((x) => x.celda).sort();
+    expect(del).toEqual([...CELDAS_LLENABLES].sort());
+    for (const x of del) expect(CELDAS_NO_TOCAR, x).not.toContain(x);
+  });
+
+  it('encabezados: mismas letras que la plantilla real (A..T en la fila 49, A..O en la 21)', () => {
+    const tabla = (hoja: string) => LAYOUT_NORMAL.hojas.find((h) => h.hoja === hoja)!.tablas[0];
+    expect(tabla(rd).filaEncabezado).toBe(49);
+    expect(tabla(rd).primeraFila).toBe(50);
+    expect(tabla(rd).maxFilas).toBe(4);
+    expect(tabla(rd).columnas.map((c) => c.columna).join('')).toBe('ABCDEFGHIJKLMNOPQRST');
+    expect(tabla(rd).columnas).toHaveLength(ENCABEZADOS_DESTINOS.length);
+    expect(tabla('Mercancias').filaEncabezado).toBe(21);
+    expect(tabla('Mercancias').primeraFila).toBe(22);
+    expect(tabla('Mercancias').columnas.map((c) => c.columna).join('')).toBe('ABCDEFGHIJKLMNO');
+    expect(tabla('Mercancias').columnas).toHaveLength(ENCABEZADOS_MERCANCIAS.length);
+  });
+
+  it('1, 2 y 14 mercancías: cada valor en su coordenada y NADA en C1:C8, C36, C37 ni en el bloque destinatario', () => {
+    for (const n of [1, 2, 14]) {
+      const e = extraccion();
+      for (let i = 1; i < n; i++) e.mercancias.push({ ...e.mercancias[0], descripcion: cv(`Mercancia ${i + 1}`), peso_kg: cv(String(100 + i)) });
+      const r = construirPlantilla(e, ctx);
+      expect(r.faltantes, `n=${n}`).toEqual([]);
+      const sal = r.hojas[rd];
+      for (const k of Object.keys(sal)) expect(CELDAS_NO_TOCAR, `n=${n} ${k}`).not.toContain(k);
+      const me = r.hojas.Mercancias;
+      for (let i = 0; i < n; i++) {
+        const f = 22 + i;
+        expect(me[`A${f}`].valor, `A${f}`).toBe(1);
+        expect(me[`B${f}`].valor).toBe('43211500');
+        expect(me[`C${f}`].valor).toBe(i === 0 ? 'Equipo de computo' : `Mercancia ${i + 1}`);
+        expect(me[`D${f}`].valor).toBe(20);
+        expect(me[`I${f}`].valor).toBe(i === 0 ? 14130 : 100 + i);
+        expect(me[`K${f}`].valor).toBe('24 16 3456 4000123');
+        expect(me[`L${f}`].valor).toBe('NO');
+        expect(me[`M${f}`].valor).toBe('N/A');
+        expect(me[`N${f}`].valor).toBe('05');
+      }
+      expect(me[`A${22 + n}`]).toBeUndefined();
+    }
+  });
+
+  it('relectura celda a celda: el libro generado sobre la plantilla en blanco da lo esperado y conserva notas y comentarios', () => {
+    const p = construirPlantilla(extraccion(), ctx);
+    const base = XLSX.read(plantillaNormalRealEnBlanco(), { type: 'array', cellStyles: true });
+    const salida = XLSX.read(aXlsxPlantillaTms(p, plantillaNormalRealEnBlanco()), { type: 'array', cellStyles: true });
+    expect(salida.SheetNames).toEqual([...HOJAS_REAL]);
+    // lo que construimos está, celda a celda, en el libro releído (números como números, texto como texto)
+    for (const [h, celdas] of Object.entries(p.hojas)) {
+      for (const [coord, c] of Object.entries(celdas)) {
+        if (c.valor === null) continue;
+        const leida = salida.Sheets[h][coord];
+        expect(leida?.v, `${h}!${coord}`).toBe(c.valor);
+        expect(leida.t, `${h}!${coord}`).toBe(typeof c.valor === 'number' ? 'n' : 's');
+      }
+    }
+    // lo que la plantilla reserva a notas queda intacto
+    for (const k of CELDAS_NO_TOCAR) expect(salida.Sheets[rd][k]?.v, k).toBe(base.Sheets[rd][k]?.v);
+    // hojas que no se tocan
+    expect(salida.Sheets.Error.A1.v).toBe(base.Sheets.Error.A1.v);
+    expect(salida.Sheets['Informacion Agente Aduanal'].B3.v).toBe(base.Sheets['Informacion Agente Aduanal'].B3.v);
+    // los comentarios de celda (instrucciones) sobreviven al reescribir
+    expect(base.Sheets[rd].A5.c?.[0]?.t).toBeTruthy();
+    expect(salida.Sheets[rd].A5.c?.[0]?.t).toBe(base.Sheets[rd].A5.c?.[0]?.t);
+    expect(salida.Sheets[rd].A8.c?.[0]?.t).toBe(base.Sheets[rd].A8.c?.[0]?.t);
+  });
+
+  it('equivalencia con el libro «llenado»: la misma información sale en las mismas celdas de datos que la variante de entrada A', () => {
+    const v = VALORES_LLENA;
+    const e = extraccion({
+      folio_cliente: String(v.remitente.B6), numero_cliente_interno: String(v.remitente.B7), caja_numero: String(v.remitente.B8),
+      origen_nombre: String(v.remitente.C11), origen_rfc: String(v.remitente.C12), origen_calle: String(v.remitente.C14),
+      origen_num_ext: String(v.remitente.C15), origen_num_int: String(v.remitente.C16), origen_colonia_clave: String(v.remitente.C17),
+      origen_colonia: String(v.remitente.C18), origen_cp: String(v.remitente.C19), origen_localidad_clave: String(v.remitente.C20),
+      origen_localidad: String(v.remitente.C21), origen_municipio_clave: String(v.remitente.C22), origen_municipio: String(v.remitente.C23),
+      origen_estado: String(v.remitente.C24), origen_pais: String(v.remitente.C26),
+      destino_nombre: String(v.destino.C50), destino_rfc: String(v.destino.D50), destino_calle: String(v.destino.E50), destino_num_ext: String(v.destino.F50),
+      destino_cp: String(v.destino.J50), destino_localidad: String(v.destino.L50), destino_estado: String(v.destino.O50), destino_pais: String(v.destino.Q50),
+      contacto_destino_nombre: String(v.destino.R50), contacto_destino_telefono: String(v.destino.S50), contacto_destino_correo: String(v.destino.T50),
+      distancia_km: String(v.destino.B50), destino_colonia_clave: null, destino_colonia: null, destino_municipio_clave: null, destino_municipio: null,
+    });
+    e.campos.regimen_aduanero = cv(String(v.remitente.B5));
+    const ap = (m: Record<string, string | number>): Record<string, CampoValor> => ({
+      bienes_transp: cv(String(m.B)), descripcion: cv(String(m.C)), cantidad: cv(String(m.D)), clave_unidad: cv(String(m.E)),
+      unidad_descripcion: cv(m.F === undefined ? null : String(m.F)), embalaje: cv(m.G === undefined ? null : String(m.G)),
+      embalaje_descripcion: cv(m.H === undefined ? null : String(m.H)), peso_kg: cv(String(m.I)),
+      fraccion_arancelaria: cv(m.J === undefined ? null : String(m.J)), pedimento: cv(m.K === undefined ? null : String(m.K)),
+      material_peligroso: cv(m.L === 'SI' ? 'true' : null), clave_material_peligroso: cv(m.M === 'N/A' ? null : String(m.M)),
+      tipo_materia: cv(String(m.N)),
+    });
+    e.mercancias = v.mercancias.map(ap);
+    const p = construirPlantilla(e, { ...ctx, distanciaFormato: 'numero' });
+    const generado = XLSX.read(aXlsxPlantillaTms(p, plantillaNormalRealEnBlanco()), { type: 'array' });
+    const llena = XLSX.read(plantillaNormalRealLlena(), { type: 'array' });
+    const datos = (h: string): string[] => Object.keys(llena.Sheets[h]).filter((k) => !k.startsWith('!'))
+      .filter((k) => { const f = Number(k.replace(/^[A-Z]+/, '')); return h === rd ? (f >= 50 || (f >= 5 && f <= 26 && /^[BC]/.test(k) && CELDAS_LLENABLES.includes(k))) : f >= 22; });
+    for (const h of [rd, 'Mercancias']) {
+      const esperadas = datos(h);
+      expect(esperadas.length, h).toBeGreaterThan(10);
+      for (const k of esperadas) {
+        const a = generado.Sheets[h][k]?.v; const b = llena.Sheets[h][k]?.v;
+        // las claves de colonia/municipio de la variante llena vienen en columna C del remitente; en destino quedan vacías (no se inventan)
+        expect(String(a), `${h}!${k}`).toBe(String(b));
+      }
+    }
+  });
+
+  it('el layout es verificado y no provisional; NUEVA conserva su estado', () => {
+    expect(LAYOUT_NORMAL.verificada).toBe(true);
+    expect(LAYOUT_NORMAL.provisional).toBe(false);
+    expect(layoutPuedeEnviarse(LAYOUT_NORMAL)).toBe(true);
+    expect(LAYOUT_NUEVA.provisional).toBe(true);
+    expect(layoutPuedeEnviarse(LAYOUT_NUEVA)).toBe(false);
   });
 });
