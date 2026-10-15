@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   RUTAS_PERFIL_CINCO_AGENTES, RUTAS_STAND_BY_PERFIL_CINCO_AGENTES, CRONS_PERFIL_CINCO_AGENTES, API_PERFIL_CINCO_AGENTES,
+  API_PROXIMAMENTE_PERFIL, CRONS_PROXIMAMENTE_PERFIL, rutaProximamenteEnPerfil,
   rutaPermitidaEnPerfil, apiPermitidaEnPerfil,
 } from '@/lib/auth/visibilidad';
 
@@ -76,13 +77,22 @@ describe('páginas del Conductor bajo el perfil', () => {
 });
 
 describe('API del Conductor bajo el perfil', () => {
-  it('los recursos del Conductor en /api/v1 están permitidos', () => {
+  // «Próximamente» (fase 1, 15-oct-2026): el Conductor está en la lista cerrada pero no se opera; su API existe y el perfil la niega
+  // (`API_PROXIMAMENTE_PERFIL`) hasta que el módulo se encienda.
+  it('los recursos del Conductor en /api/v1 están declarados como «Próximamente»: existen y el perfil los niega', () => {
     for (const recurso of ['hitos', 'estadias', 'sitios', 'conductor', 'evidencias']) {
-      expect(API_PERFIL_CINCO_AGENTES.v1, recurso).toContain(recurso);
-      expect(apiPermitidaEnPerfil(PERFIL, `/api/v1/${recurso}`), recurso).toBe(true);
+      expect(API_PROXIMAMENTE_PERFIL.v1, recurso).toContain(recurso);
+      expect(API_PERFIL_CINCO_AGENTES.v1, recurso).not.toContain(recurso);
+      expect(apiPermitidaEnPerfil(PERFIL, `/api/v1/${recurso}`), recurso).toBe(false);
     }
-    expect(apiPermitidaEnPerfil(PERFIL, '/api/v1/conductor/config')).toBe(true);
-    expect(apiPermitidaEnPerfil(PERFIL, '/api/v1/hitos/eventos')).toBe(true);
+    expect(apiPermitidaEnPerfil(PERFIL, '/api/v1/conductor/config')).toBe(false);
+    expect(apiPermitidaEnPerfil(PERFIL, '/api/v1/hitos/eventos')).toBe(false);
+  });
+
+  it('las páginas del Conductor siguen en la lista cerrada pero se sirven como «Próximamente»', () => {
+    for (const ruta of ['/dashboard/agentes/conductores', '/dashboard/mapa', '/dashboard/viajes-en-vivo']) {
+      expect(rutaProximamenteEnPerfil(PERFIL, ruta), ruta).toBe(true);
+    }
   });
 
   it('cada recurso /v1 del Conductor que el perfil nombra tiene su carpeta en el código', () => {
@@ -97,7 +107,15 @@ describe('API del Conductor bajo el perfil', () => {
 });
 
 describe('crons del Conductor bajo el perfil', () => {
-  it.each(['conductor-hitos', 'escalar', 'gps'])('el cron %s sigue corriendo para flotas con perfil', (cron) => {
+  it('el cron conductor-hitos es «Próximamente»: existe y salta a las flotas con perfil', () => {
+    expect(CRONS_PROXIMAMENTE_PERFIL).toContain('conductor-hitos');
+    expect(CRONS_PERFIL_CINCO_AGENTES).not.toContain('conductor-hitos');
+    expect(cronAplicaAPerfil('conductor-hitos')).toBe(false);
+    expect(existsSync(join(RAIZ, 'src/app/api/cron/conductor-hitos/route.ts'))).toBe(true);
+    expect(leer('src/app/api/cron/conductor-hitos/route.ts')).toContain("tenantsConPerfilASaltar('conductor-hitos')");
+  });
+
+  it.each(['escalar', 'gps'])('el cron %s sigue corriendo para flotas con perfil', (cron) => {
     expect(CRONS_PERFIL_CINCO_AGENTES).toContain(cron);
     expect(cronAplicaAPerfil(cron)).toBe(true);
     expect(existsSync(join(RAIZ, 'src/app/api/cron', cron, 'route.ts')), cron).toBe(true);
