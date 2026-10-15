@@ -6,6 +6,7 @@ import { puedeAdministrar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
 import { DatoInvalido, mensajeParaPantalla } from '@/lib/likida/errores';
 import { aprobarDocumento, abrirRevision, corregirCampos, crearViajeDeDocumento, eliminarDocumento, quitarRenglon, rechazarDocumento, reabrirDocumento } from '@/lib/likida/carta_porte_docs/bandeja';
+import { marcarSubidoAMano } from '@/lib/likida/carta_porte_docs/envio';
 import { detectarFormato, prepararContenido } from '@/lib/likida/carta_porte_docs/contenido';
 import { cambiosDeFormulario } from '@/lib/likida/carta_porte_docs/formulario';
 import { revisionDe } from '@/lib/likida/carta_porte_docs/presentacion';
@@ -60,14 +61,17 @@ export default async function PaginaRevision({
   // La primera apertura arranca el tiempo de revisión medido (idempotente).
   const doc = previo.estado === 'por_revisar' ? await abrirRevision(tenantId, id, userId) : previo;
 
-  const [original, operadores, eventos, viaje, linaje, hijos] = await Promise.all([
+  const [original, operadores, eventos, viaje, linaje, hijos, envios] = await Promise.all([
     originalDe(doc),
     repo.operadoresDeFlota(tenantId),
     repo.listarEventos(tenantId, id),
     doc.viajeId ? repo.viajePorId(tenantId, doc.viajeId) : Promise.resolve(null),
     repo.linajeDeDocumentos(tenantId, [id]),
     doc.estado === 'dividido' ? repo.hijosDeDocumento(tenantId, id) : Promise.resolve([]),
+    doc.estado === 'aprobado' ? repo.enviosDeDocumento(tenantId, id) : Promise.resolve([]),
   ]);
+  // El envío de la versión vigente (los descartados son de versiones viejas): de él depende qué botones del modo manual se ven.
+  const envio = envios.find((e) => e.versionDoc === doc.version && e.estado !== 'descartado') ?? null;
   // De qué archivo nació este embarque (si nació de partir uno): su nombre para el enlace de regreso.
   const lin = linaje.get(id);
   const padre = lin?.rol === 'hijo' ? await repo.leerDocumento(tenantId, lin.padreId) : null;
@@ -144,6 +148,15 @@ export default async function PaginaRevision({
         revalidatePath(RUTA_PADRE);
         return { ok: true, mensaje: 'Documento y archivo eliminados. Vuelve a la bandeja.' };
       }
+      if (intencion === 'subido_a_mano') {
+        const d = await repo.leerDocumento(s.tenantId, id);
+        if (!d) throw new DatoInvalido('Ese documento no está en tu flota, o alguien lo borró. Recarga la pantalla.');
+        const r = await marcarSubidoAMano(s.tenantId, d, version, actor);
+        revalidatePath(ruta); revalidatePath(RUTA_PADRE);
+        return r.ok
+          ? { ok: true, mensaje: r.yaEstaba ? 'Ya estaba marcada como subida a mano.' : 'Listo: quedó registrado que la plantilla se subió a mano. Likida no la volverá a enviar.' }
+          : { ok: false, error: r.mensaje };
+      }
       if (intencion === 'viaje') {
         const r = await crearViajeDeDocumento(s.tenantId, id, actor, operador);
         revalidatePath(ruta);
@@ -166,6 +179,7 @@ export default async function PaginaRevision({
       eventos={eventos.map((e) => ({ tipo: e.tipo, creadoEn: e.creadoEn }))}
       acciones={{ revisar }}
       sufijo={sufijoTenant(sp)}
+      envio={envio ? { estado: envio.estado } : null}
       salida={viaje ? { folio: viaje.folio ?? viaje.id.slice(0, 8) } : null}
       puedeEliminar={puedeAdministrar(rol)}
       embarque={lin?.rol === 'hijo' && padre ? { indice: lin.indice ?? 0, total: lin.total, clave: lin.clave, padreId: padre.id, padreNombre: padre.nombreArchivo } : null}
