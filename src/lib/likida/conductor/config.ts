@@ -62,7 +62,28 @@ export interface ConfigConductor {
    * Sin zona o con una inválida = la de México (`TZ_MX`): el comportamiento de siempre.
    */
   zonaHoraria: string;
+  /**
+   * 0801: 'completo' = los 5 hitos del ciclo (defecto, el comportamiento de siempre); 'esenciales' = solo lo básico
+   * (salida de carga, «dónde está» y señal de vida): un SUBCONJUNTO del ciclo, no otro alcance.
+   */
+  perfilSeguimiento: PerfilSeguimiento;
+  /** 0801: umbrales de «sin señal de vida», en minutos. Los valores de partida son SUPUESTOS, no mediciones. */
+  gpsObsoletoMin: number;
+  detenidoMin: number;
+  segundoAvisoMin: number;
+  escalarSenalMin: number;
+  silencioRespuestaMin: number;
+  /** 0801: mostrar los estados de frontera como hito OPCIONAL visible (no escala). */
+  mostrarEstadosFrontera: boolean;
+  /** 0801: aplicar la salida que reporta el TMS como hito del viaje. */
+  aplicarSalidaDelTms: boolean;
+  /** 0801: llamadas de seguimiento por viaje medidas antes del agente (null = sin registrar) y la fecha (AAAA-MM-DD) en que se midió. */
+  lineaBaseLlamadasPorViaje: number | null;
+  lineaBaseRegistradaEn: string | null;
 }
+
+export const PERFILES_SEGUIMIENTO = ['esenciales', 'completo'] as const;
+export type PerfilSeguimiento = typeof PERFILES_SEGUIMIENTO[number];
 
 export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze({
   activo: true,
@@ -98,6 +119,16 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   detectarHitosGps: true,
   avisarSenalVida: false,
   zonaHoraria: TZ_MX,
+  perfilSeguimiento: 'completo',
+  gpsObsoletoMin: 45,
+  detenidoMin: 60,
+  segundoAvisoMin: 20,
+  escalarSenalMin: 20,
+  silencioRespuestaMin: 120,
+  mostrarEstadosFrontera: false,
+  aplicarSalidaDelTms: false,
+  lineaBaseLlamadasPorViaje: null,
+  lineaBaseRegistradaEn: null,
 });
 
 /** El tope de aplazamientos por hito: pasado esto «voy con retraso» ya no calla al agente. */
@@ -183,6 +214,37 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
   const alertaDescarga = alerta(b.estadiaAlertaDescargaMin, 'descarga');
   if ('error' in alertaDescarga) return { error: alertaDescarga.error };
 
+  if (!(PERFILES_SEGUIMIENTO as readonly unknown[]).includes(b.perfilSeguimiento)) {
+    return { error: 'El perfil de seguimiento es «esenciales» (solo lo básico) o «completo» (el ciclo completo).' };
+  }
+  const umbrales: Array<[keyof ConfigConductor, string]> = [
+    ['gpsObsoletoMin', 'Los minutos para dar el GPS por obsoleto van de 5 a 720.'],
+    ['detenidoMin', 'Los minutos para dar la unidad por detenida van de 5 a 720.'],
+    ['segundoAvisoMin', 'Los minutos hasta el segundo aviso al chofer van de 5 a 720.'],
+    ['escalarSenalMin', 'Los minutos hasta avisar al jefe por falta de señal van de 5 a 720.'],
+    ['silencioRespuestaMin', 'Los minutos de silencio del chofer van de 5 a 720.'],
+  ];
+  const umbral: Record<string, number> = {};
+  for (const [campo, msg] of umbrales) {
+    const v = entero(b[campo], 5, 720);
+    if (v === null) return { error: msg };
+    umbral[campo] = v;
+  }
+  let lineaBaseLlamadasPorViaje: number | null = null;
+  if (b.lineaBaseLlamadasPorViaje !== null && b.lineaBaseLlamadasPorViaje !== undefined) {
+    const n = typeof b.lineaBaseLlamadasPorViaje === 'string' && (b.lineaBaseLlamadasPorViaje as string).trim() !== '' ? Number(b.lineaBaseLlamadasPorViaje) : b.lineaBaseLlamadasPorViaje;
+    if (typeof n !== 'number' || !Number.isFinite(n) || n < 0 || n > 1000) return { error: 'La línea base de llamadas por viaje va de 0 a 1,000 (o vacía si aún no se mide).' };
+    lineaBaseLlamadasPorViaje = n;
+  }
+  let lineaBaseRegistradaEn: string | null = null;
+  if (b.lineaBaseRegistradaEn !== null && b.lineaBaseRegistradaEn !== undefined) {
+    const f = b.lineaBaseRegistradaEn;
+    if (typeof f !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(f) || new Date(`${f}T00:00:00Z`).toISOString().slice(0, 10) !== f) {
+      return { error: 'La fecha de la línea base va como AAAA-MM-DD (o vacía).' };
+    }
+    lineaBaseRegistradaEn = f;
+  }
+
   return {
     ok: {
       activo: Boolean(b.activo),
@@ -218,6 +280,16 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       detectarHitosGps: Boolean(b.detectarHitosGps),
       avisarSenalVida: Boolean(b.avisarSenalVida),
       zonaHoraria: zonaOCdmx(b.zonaHoraria),
+      perfilSeguimiento: b.perfilSeguimiento,
+      gpsObsoletoMin: umbral.gpsObsoletoMin,
+      detenidoMin: umbral.detenidoMin,
+      segundoAvisoMin: umbral.segundoAvisoMin,
+      escalarSenalMin: umbral.escalarSenalMin,
+      silencioRespuestaMin: umbral.silencioRespuestaMin,
+      mostrarEstadosFrontera: Boolean(b.mostrarEstadosFrontera),
+      aplicarSalidaDelTms: Boolean(b.aplicarSalidaDelTms),
+      lineaBaseLlamadasPorViaje,
+      lineaBaseRegistradaEn,
     },
   };
 }

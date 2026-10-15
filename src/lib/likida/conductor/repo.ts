@@ -379,6 +379,9 @@ const copiaDefaults = (): ConfigConductor => ({
   diasSemana: [...CONFIG_CONDUCTOR_DEFAULT.diasSemana],
 });
 
+/** 0801: un umbral numérico de la fila, o su valor de partida si la columna no existe (base sin migrar). */
+const umbralOPartida = (v: unknown, partida: number): number => (v === undefined || v === null ? partida : Number(v));
+
 /** La config de una flota. Sin fila = defaults. LANZA si la base no contesta: «no pude leer» no es «defaults». */
 export async function leerConfigConductor(tenantId: string): Promise<ConfigConductor> {
   const [res, zonaCruda] = await Promise.all([
@@ -428,6 +431,17 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     // 0635: la base sin migrar no trae las columnas; la detección sigue en su valor de partida (encendida) y la señal de vida apagada.
     detectarHitosGps: f.detectar_hitos_gps !== false,
     avisarSenalVida: f.avisar_senal_vida === true,
+    // 0801: la base sin migrar no trae las columnas; cada una cae en su valor de partida (el comportamiento de siempre).
+    perfilSeguimiento: (f.perfil_seguimiento ?? CONFIG_CONDUCTOR_DEFAULT.perfilSeguimiento) as ConfigConductor['perfilSeguimiento'],
+    gpsObsoletoMin: umbralOPartida(f.gps_obsoleto_min, CONFIG_CONDUCTOR_DEFAULT.gpsObsoletoMin),
+    detenidoMin: umbralOPartida(f.detenido_min, CONFIG_CONDUCTOR_DEFAULT.detenidoMin),
+    segundoAvisoMin: umbralOPartida(f.segundo_aviso_min, CONFIG_CONDUCTOR_DEFAULT.segundoAvisoMin),
+    escalarSenalMin: umbralOPartida(f.escalar_senal_min, CONFIG_CONDUCTOR_DEFAULT.escalarSenalMin),
+    silencioRespuestaMin: umbralOPartida(f.silencio_respuesta_min, CONFIG_CONDUCTOR_DEFAULT.silencioRespuestaMin),
+    mostrarEstadosFrontera: f.mostrar_estados_frontera === true,
+    aplicarSalidaDelTms: f.aplicar_salida_del_tms === true,
+    lineaBaseLlamadasPorViaje: f.linea_base_llamadas_por_viaje === undefined || f.linea_base_llamadas_por_viaje === null ? null : Number(f.linea_base_llamadas_por_viaje),
+    lineaBaseRegistradaEn: typeof f.linea_base_registrada_en === 'string' ? f.linea_base_registrada_en.slice(0, 10) : null,
     zonaHoraria,
   });
   if ('error' in v) {
@@ -631,6 +645,17 @@ export async function guardarConfigConductor(
   // partida; si el dueño pidió algo distinto (aviso encendido, otro margen, detección apagada) se dice que falta la migración
   // en vez de callarlo. Cada grupo se retira solo cuando el error de la base nombra una de SUS columnas.
   const grupos: Array<{ mig: string; cols: Record<string, unknown>; esDePartida: boolean }> = [
+    {
+      mig: '0801',
+      cols: {
+        perfil_seguimiento: c.perfilSeguimiento, gps_obsoleto_min: c.gpsObsoletoMin, detenido_min: c.detenidoMin,
+        segundo_aviso_min: c.segundoAvisoMin, escalar_senal_min: c.escalarSenalMin, silencio_respuesta_min: c.silencioRespuestaMin,
+        mostrar_estados_frontera: c.mostrarEstadosFrontera, aplicar_salida_del_tms: c.aplicarSalidaDelTms,
+        linea_base_llamadas_por_viaje: c.lineaBaseLlamadasPorViaje, linea_base_registrada_en: c.lineaBaseRegistradaEn,
+      },
+      esDePartida: (['perfilSeguimiento', 'gpsObsoletoMin', 'detenidoMin', 'segundoAvisoMin', 'escalarSenalMin', 'silencioRespuestaMin', 'mostrarEstadosFrontera', 'aplicarSalidaDelTms', 'lineaBaseLlamadasPorViaje', 'lineaBaseRegistradaEn'] as const)
+        .every((k) => c[k] === CONFIG_CONDUCTOR_DEFAULT[k]),
+    },
     { mig: '0635', cols: { detectar_hitos_gps: c.detectarHitosGps, avisar_senal_vida: c.avisarSenalVida }, esDePartida: c.detectarHitosGps === CONFIG_CONDUCTOR_DEFAULT.detectarHitosGps && c.avisarSenalVida === CONFIG_CONDUCTOR_DEFAULT.avisarSenalVida },
     { mig: '0604', cols: { avisar_llegada_sin_confirmar: c.avisarLlegadaSinConfirmar, margen_acercamiento_m: c.margenAcercamientoM }, esDePartida: !c.avisarLlegadaSinConfirmar && c.margenAcercamientoM === CONFIG_CONDUCTOR_DEFAULT.margenAcercamientoM },
   ];
@@ -641,7 +666,9 @@ export async function guardarConfigConductor(
     const faltante = error ? vigentes.find((g) => Object.keys(g.cols).some((col) => error!.message.includes(col))) : undefined;
     if (!faltante) break;
     if (!faltante.esDePartida) {
-      throw new Error(faltante.mig === '0604'
+      throw new Error(faltante.mig === '0801'
+        ? 'v1.conductor_config: el perfil de seguimiento, los umbrales de señal de vida y las perillas de frontera y TMS necesitan la migración 0801 (aún no aplicada en esta base).'
+        : faltante.mig === '0604'
         ? 'v1.conductor_config: el aviso por llegada sin confirmar y el margen de acercamiento necesitan la migración 0604 (aún no aplicada en esta base).'
         : 'v1.conductor_config: la detección de hitos por GPS y el aviso de señal de vida necesitan la migración 0635 (aún no aplicada en esta base).');
     }
