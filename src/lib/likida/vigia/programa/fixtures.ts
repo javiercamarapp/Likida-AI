@@ -279,7 +279,7 @@ export function construirProgramaSinteticoConOraculo(op: OpcionesPrograma = {}):
       for (let i = 1; i <= n; i++) {
         // Valores base.
         const origen = pick(ORIGENES);
-        let origenDestino = tipo === 'IMPORTACION' ? `${origen}-${terminal}`
+        const origenDestino = tipo === 'IMPORTACION' ? `${origen}-${terminal}`
           : tipo === 'EXPORTACION' ? `${terminal}-${origen}`
           : ruta ?? `${origen}-${terminal}`;
         let cliente = pick(CLIENTES);
