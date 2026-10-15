@@ -84,6 +84,13 @@ describe('la corrida', () => {
     expect(registrarLatido).toHaveBeenCalledWith('peajes', 'parcial', expect.any(Object));
   });
 
+  it('cruces atípicos que fallaron al procesar → latido `parcial` con el conteo `atipicos` (T-A2-33)', async () => {
+    procesar.mockResolvedValue({ tomados: 1, procesados: 1, fallidos: 0, reintentar: 0, claimPerdido: 0, atipicos: { revisados: 0, hallazgos: 0, fallidos: 1 } } as never);
+    const r = await llamar();
+    expect(await j(r)).toMatchObject({ corrio: true, atipicos: { fallidos: 1 } });
+    expect(registrarLatido).toHaveBeenCalledWith('peajes', 'parcial', expect.objectContaining({ atipicos: { revisados: 0, hallazgos: 0, fallidos: 1 } }));
+  });
+
   it('si truena → 500, alerta al operador y latido de fallo', async () => {
     procesar.mockRejectedValue(new Error('rpc caído'));
     const r = await llamar();

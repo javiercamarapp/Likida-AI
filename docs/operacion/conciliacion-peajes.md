@@ -4,6 +4,13 @@ Estado al 1-oct-2026 (loop punta a punta, rama `loop/s3-agentes12`, migraciones 
 Todo lo de abajo está construido y probado **con datos sintéticos**; lo que depende del archivo
 real de PASE, del GPS de la flota o de credenciales externas está en «Bloqueos».
 
+## Revisión de cobros del archivo decenal (rama de peajes, migraciones 0775 a 0777)
+
+El archivo decenal del proveedor entra «tal cual» y además de conciliar se **revisa**: cinco reglas de cobro que producen
+**candidatos** (no cobros indebidos), cruces atípicos, cierre mensual y seguimiento de reclamos con plazo de tres meses.
+Guía de operación: [peajes-revision-cobros.md](peajes-revision-cobros.md). Cómo apagar y deshacer:
+[peajes-rollback.md](peajes-rollback.md).
+
 ## Qué hace
 
 1. **Recibe** el desglose del proveedor (Excel/CSV/PDF con texto) por dos vías: subida manual en
