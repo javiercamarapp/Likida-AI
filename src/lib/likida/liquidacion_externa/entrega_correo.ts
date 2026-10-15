@@ -103,6 +103,14 @@ export function enmascararCorreo(correo: string): string {
   return `${correo[0]}***${correo.slice(i)}`;
 }
 
+/**
+ * El detalle que devuelve el proveedor suele repetir la dirección («Invalid to: x@y»): antes de guardarlo (ultimo_error,
+ * liquidacion_excepcion.detalle) o loguearlo, toda dirección se enmascara. El resto del texto se conserva.
+ */
+export function sinCorreos(detalle: string): string {
+  return detalle.replace(/[^\s@<>"',;:()\[\]]+@[^\s@<>"',;:()\[\]]+/g, (m) => enmascararCorreo(m));
+}
+
 /** La Idempotency-Key: estable entre reintentos, distinta por generación y por rol. */
 export function llaveIdempotencia(e: Pick<EntregaCorreo, 'liquidacionExternaId' | 'generacion' | 'rol'>): string {
   return `liqcorreo:${e.liquidacionExternaId}:g${e.generacion}:${e.rol}`;
@@ -338,33 +346,33 @@ async function procesarUna(
 
   if (res.motivo === 'red') {
     // Ambiguo: el POST pudo haberse aceptado. El reintento usa la misma llave.
-    await falloReintentable(e, token, ahora, `${MARCA_AMBIGUO} ${res.detalle}`, true, deps, resumen);
+    await falloReintentable(e, token, ahora, `${MARCA_AMBIGUO} ${sinCorreos(res.detalle)}`, true, deps, resumen);
     return;
   }
 
   // motivo === 'rechazado'
   if (esDeConfiguracion(res.status)) {
-    await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_CONFIG_MS), `correo no configurado (${res.detalle})`);
+    await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_CONFIG_MS), `correo no configurado (${sinCorreos(res.detalle)})`);
     resumen.sinConfigurar += 1;
     return;
   }
   if (esTransitorio(res.status)) {
-    await falloReintentable(e, token, ahora, res.detalle, false, deps, resumen);
+    await falloReintentable(e, token, ahora, sinCorreos(res.detalle), false, deps, resumen);
     return;
   }
   // 4xx del destinatario (o rechazo local: sin destinatario válido, adjunto demasiado grande): sin reintento.
-  await deps.marcarFallida(e.tenantId, e.id, token, `rechazado: ${res.detalle}`);
+  await deps.marcarFallida(e.tenantId, e.id, token, `rechazado: ${sinCorreos(res.detalle)}`);
   resumen.fallidas += 1;
   if (e.rol === 'archivo') {
     // El buzón de archivo («Enviados») es una copia: que rebote no le pide nada al operador ni al coordinador, así que NO se
     // abre una excepción de ellos (el tipo `coordinador_sin_correo` mentiría). Queda la entrega `fallida` visible en el
     // detalle y este aviso en el log; un tipo de excepción propio exigiría una migración (ver notas de T-A1-26).
-    logger.warn('liqcorreo.archivo_rebotado', { entrega: e.id, correo: enmascararCorreo(e.correo), detalle: res.detalle });
+    logger.warn('liqcorreo.archivo_rebotado', { entrega: e.id, correo: enmascararCorreo(e.correo), detalle: sinCorreos(res.detalle) });
     return;
   }
   const tipo: TipoExcepcion = e.rol === 'operador' ? 'operador_sin_correo' : 'coordinador_sin_correo';
   await deps.abrirExcepcion(e.tenantId, ctx.claveExterna, tipo, {
-    motivo: 'correo_invalido', rol: e.rol, correo: enmascararCorreo(e.correo), detalle: res.detalle,
+    motivo: 'correo_invalido', rol: e.rol, correo: enmascararCorreo(e.correo), detalle: sinCorreos(res.detalle),
   }, ahora);
 }
 

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+import { logger } from '@/lib/logger';
 
 import {
   procesarEntregasCorreo, armarCorreoDesglose, enmascararCorreo, esperaCorreoMs, inicioVentanaHoy, llaveIdempotencia,
@@ -141,6 +142,18 @@ describe('procesarEntregasCorreo — las seis ramas de ResultadoEnvio', () => {
     expect(e.excepciones[0]?.tipo).toBe('operador_sin_correo');
     expect(JSON.stringify(e.excepciones[0]?.detalle)).not.toContain('ana.prueba@ejemplo.test');
     expect(e.excepciones[0]?.detalle.correo).toBe('a***@ejemplo.test');
+  });
+
+  it('el detalle del proveedor que repite la dirección NO se persiste ni se loguea completo (fallida, excepción y reintento)', async () => {
+    const cuerpo = 'Invalid `to` field: ana.prueba@ejemplo.test no es válida';
+    const { e, deps } = montar({ ok: false, motivo: 'rechazado', detalle: cuerpo, status: 422 });
+    await procesarEntregasCorreo(deps, 10);
+    expect(JSON.stringify([e.fallidas, e.excepciones])).not.toContain('ana.prueba@ejemplo.test');
+    expect(e.fallidas[0]?.error).toContain('a***@ejemplo.test');
+    const t = montar({ ok: false, motivo: 'rechazado', detalle: cuerpo, status: 503 });
+    await procesarEntregasCorreo(t.deps, 10);
+    expect(JSON.stringify(t.e.reprogramadas)).not.toContain('ana.prueba@ejemplo.test');
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('ana.prueba@ejemplo.test');
   });
 
   it('el buzón de archivo rebota (422) ⇒ solo esa copia falla: el operador queda enviado y no se abre excepción de coordinador', async () => {
