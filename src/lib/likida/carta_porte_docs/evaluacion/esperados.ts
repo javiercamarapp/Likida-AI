@@ -25,8 +25,7 @@ const conBrecha = (c: CampoEsperado, brecha: string): CampoEsperado => ({ ...c, 
 
 const m0 = (clave: string): string => `mercancias[0].${clave}`;
 
-/** Lo que el módulo no sabe distinguir aún: el embalaje incoherente con la mercancía o con otro catálogo. */
-const BRECHA_EMBALAJE_M2 = '08 §2 marca ◐: «5H4» (sacos de película de plástico) no corresponde a racks. El módulo valida la forma de la clave, no que cuadre con la mercancía.';
+/** Lo que el módulo no sabe distinguir aún: el embalaje que es de otro catálogo (sin c_TipoEmbalaje cargado). */
 const BRECHA_EMBALAJE_M5 = '08 §2 marca ◐: «XBX» es una clave de unidad, no de embalaje. El módulo valida la forma (2-3 caracteres), no el catálogo c_TipoEmbalaje.';
 
 export const MATRIZ_DORADA: Readonly<Record<IdMuestra, ReadonlyArray<CampoEsperado>>> = Object.freeze({
@@ -58,7 +57,7 @@ export const MATRIZ_DORADA: Readonly<Record<IdMuestra, ReadonlyArray<CampoEspera
     ok(m0('clave_unidad'), M2.unidad),
     ok(m0('peso_kg'), M2.kilos),
     ok(m0('fraccion_arancelaria'), '8471500100'), // grep-limpio:ok
-    conBrecha(ok(m0('embalaje'), M2.embalaje), BRECHA_EMBALAJE_M2),
+    rev(m0('embalaje'), M2.embalaje), // «5H4» (sacos) con racks: 08 §2 lo marca ◐; desde T-A3-24 el módulo pide confirmarlo
     falta(m0('valor_mercancia')),
     ok('n_mercancias', '1'),
   ],

@@ -235,6 +235,25 @@ export async function documentosConFolio(tenantId: string, folio: string, except
   return ((exigir(r, 'cpdocs.folio_duplicado') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), estado: f.estado as EstadoDoc, nombreArchivo: String(f.nombre_archivo) }));
 }
 
+/**
+ * Filas de `cp_sat_catalogo` (0793, tabla global) para las claves pedidas de UN catálogo: UNA consulta. `null` = el
+ * catálogo no está cargado (ninguna fila con ese nombre) o no se pudo leer; nunca lanza, porque la validación degrada.
+ */
+export async function cargarCatalogoSat(catalogo: string, claves: string[]): Promise<Map<string, Record<string, string>> | null> {
+  if (claves.length === 0) return new Map();
+  try {
+    const r = await acotada(supabaseAdmin().from('cp_sat_catalogo').select('clave, extra').eq('catalogo', catalogo).in('clave', claves), 'cpdocs.catalogo_sat');
+    const filas = (exigir(r, 'cpdocs.catalogo_sat') ?? []) as unknown as Array<{ clave: string; extra: Record<string, string> | null }>;
+    if (filas.length > 0) return new Map(filas.map((f) => [String(f.clave), f.extra ?? {}]));
+    // Ninguna coincidencia: ¿el catálogo está vacío (no cargado) o la clave simplemente no existe? Una sola sonda más.
+    const sonda = await acotada(supabaseAdmin().from('cp_sat_catalogo').select('clave').eq('catalogo', catalogo).limit(1), 'cpdocs.catalogo_sat_sonda');
+    const hay = (exigir(sonda, 'cpdocs.catalogo_sat_sonda') ?? []) as unknown[];
+    return hay.length > 0 ? new Map() : null;
+  } catch {
+    return null;
+  }
+}
+
 export type TipoEvento =
   | 'recibido' | 'duplicado_recibido' | 'extraccion_iniciada' | 'extraccion_ok' | 'extraccion_fallida' | 'escalada' | 'revision_abierta'
   | 'campo_corregido' | 'aprobado' | 'rechazado' | 'reabierto' | 'salida_viaje' | 'exportado' | 'perfil_aprendido' | 'purgado'

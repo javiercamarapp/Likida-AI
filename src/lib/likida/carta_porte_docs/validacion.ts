@@ -21,6 +21,10 @@
 
 import { CAMPOS_DOC, CAMPOS_MERCANCIA, UMBRAL_CRITICO, etiquetaCampo, type CampoDoc, type CampoValor, type Extraccion } from './campos';
 import { CLAVES_UNIDAD, CODIGOS_ESTADO, FACTOR_A_KG, estadoDeCp } from './catalogos';
+import {
+  CAT_COLONIA, CAT_CP, CAT_EMBALAJE, CAT_FRACCION, CAT_PELIGROSO, CAT_PRODUCTO, CAT_UNIDAD,
+  clavesDeFraccion, normalizarFraccion, type ResolvedorSat,
+} from './catalogos_sat';
 import { valorSospechoso } from './inyeccion';
 import { normalizarNumero } from './normalizar';
 import { rfcChecksumOk } from '../intake/cfdi';
@@ -57,6 +61,11 @@ export interface OpcionesValidacion {
   remitenteReconocido?: boolean | null;
   /** Para probar con un reloj fijo. */
   ahora?: Date;
+  /**
+   * Catálogos SAT ya precargados (T-A3-24, `precargarCatalogosSat`). Ausente = solo las reglas locales de siempre.
+   * Dentro de él, `existe() === null` significa «catálogo no cargado»: nunca bloquea, solo avisa.
+   */
+  catalogosSat?: ResolvedorSat;
 }
 
 const RFC_MORAL = /^[A-ZÑ&]{3}\d{6}[A-Z0-9]{3}$/;
@@ -96,7 +105,7 @@ export function problemaRfc(rfc: string): { codigo: string; mensaje: string; sev
 
 type Registrar = (h: Hallazgo) => void;
 
-function validarFormato(def: CampoDoc, c: CampoValor, renglon: number | null, reg: Registrar): void {
+function validarFormato(def: CampoDoc, c: CampoValor, renglon: number | null, reg: Registrar, sat?: ResolvedorSat): void {
   const v = c.valor as string;
   const aqui = (severidad: Severidad, codigo: string, mensaje: string, relacionados?: Hallazgo['relacionados']) =>
     reg({ campo: def.clave, renglon, severidad, codigo, mensaje: `${etiquetaCampo(def.clave, renglon)}: ${mensaje}`, relacionados });
@@ -135,19 +144,22 @@ function validarFormato(def: CampoDoc, c: CampoValor, renglon: number | null, re
       const seg = Number(v.slice(0, 2));
       if (seg < 10 || seg > 95) aqui('bloqueo', 'clave_segmento', `La clave ${v} no pertenece a ningún segmento del catálogo (10 a 95).`);
       else if (v === '78101800') aqui('confirmar', 'clave_servicio', 'La 78101800 es el SERVICIO de transporte de carga, no la mercancía. Pon la clave del producto que se transporta.');
-      else aqui('aviso', 'clave_sin_catalogo', `La clave ${v} tiene forma válida; el catálogo completo lo valida el PAC al timbrar.`);
+      // Con el catálogo cargado (true/false) la verificación real la hace `verificarCatalogosSat`; el aviso solo queda si no se sabe.
+      else if (sat?.existe(CAT_PRODUCTO, v) == null) aqui('aviso', 'clave_sin_catalogo', `La clave ${v} tiene forma válida; el catálogo completo lo valida el PAC al timbrar.`);
       break;
     }
     case 'clave_unidad': {
       if (CLAVES_UNIDAD.has(v)) break;
       if (/^\d{1,2}$/.test(v)) { aqui('confirmar', 'unidad_no_sat', `«${v}» no es una clave c_ClaveUnidad del SAT (probable código interno del cliente). Elige la clave correcta (p. ej. H87 pieza, XBX caja).`); break; }
       if (!/^[A-Z0-9]{2,3}$/.test(v)) aqui('bloqueo', 'unidad_forma', `«${v}» no es una clave c_ClaveUnidad (2 o 3 caracteres, p. ej. KGM, H87, XBX).`);
-      else aqui('aviso', 'unidad_fuera_subconjunto', `La clave ${v} no está entre las de uso común que Likida reconoce; verifícala contra el catálogo c_ClaveUnidad.`);
+      else if (sat?.existe(CAT_UNIDAD, v) == null) aqui('aviso', 'unidad_fuera_subconjunto', `La clave ${v} no está entre las de uso común que Likida reconoce; verifícala contra el catálogo c_ClaveUnidad.`);
       break;
     }
-    case 'fraccion':
-      if (!/^\d+$/.test(v) || (v.length !== 8 && v.length !== 10)) aqui('bloqueo', 'fraccion_forma', `«${v}» no es una fracción arancelaria (8 dígitos, o 10 con NICO).`);
+    case 'fraccion': {
+      const n = normalizarFraccion(v); // `8517.62.17.99` es la misma fracción que `8517621799` // grep-limpio:ok
+      if (!/^\d+$/.test(n) || (n.length !== 8 && n.length !== 10)) aqui('bloqueo', 'fraccion_forma', `«${v}» no es una fracción arancelaria (8 dígitos, o 10 con NICO).`);
       break;
+    }
     case 'moneda':
       if (!/^[A-Z]{3}$/.test(v)) aqui('bloqueo', 'moneda_forma', `«${v}» no es una clave de moneda ISO (MXN, USD…).`);
       else if (v !== 'MXN' && v !== 'USD') aqui('aviso', 'moneda_rara', `La moneda ${v} no es MXN ni USD; verifica el tipo de cambio al timbrar.`);
@@ -218,6 +230,108 @@ function verificarSumas(e: Extraccion, reg: Registrar): void {
   comprobar('volumen_total', 'volumen', 'suma_volumen', TOLERANCIA_SUMA_MIN_M3, 'Los volúmenes', ' m³');
 }
 
+const EMBALAJE_SACO = /^5[HLM]/; // c_TipoEmbalaje: bolsas/sacos (5H tejida, 5L textil, 5M papel)
+const TEXTO_SACO = /\b(sacos?|costales?)\b/i;
+const TEXTO_RACK = /\b(racks?|rack's|tarimas?|pallets?)\b/i;
+
+/**
+ * Reglas que dependen de los catálogos SAT cargados (T-A3-24).
+ *   · clave inexistente en un catálogo CARGADO → bloqueo (confirmar no basta: el TMS/PAC la va a rechazar);
+ *   · catálogo no cargado (`null`) → un aviso por catálogo, nunca un bloqueo;
+ *   · material peligroso «sí» sin clave → bloqueo (regla local, no necesita catálogo);
+ *   · embalaje que no cuadra con la mercancía → solo `confirmar` (heurística).
+ *   · municipio/localidad/estado/colonia contra el código postal → `confirmar` (colonia: solo aviso, la clave de colonia
+ *     del SAT se repite entre códigos postales).
+ */
+function verificarCatalogosSat(e: Extraccion, sat: ResolvedorSat | undefined, reg: Registrar): void {
+  const sinCargar = new Set<string>();
+  const consulta = (catalogo: string, clave: string): boolean | null => {
+    const r = sat ? sat.existe(catalogo, clave) : null;
+    if (sat && r === null) sinCargar.add(catalogo);
+    return r;
+  };
+
+  e.mercancias.forEach((fila, i) => {
+    const aqui = (campo: string, severidad: Severidad, codigo: string, mensaje: string, relacionados?: Hallazgo['relacionados']) =>
+      reg({ campo, renglon: i, severidad, codigo, mensaje: `${etiquetaCampo(campo, i)}: ${mensaje}`, relacionados });
+    const v = (k: string) => (fila[k]?.valor ?? '').trim();
+
+    const prod = v('bienes_transp');
+    if (/^\d{8}$/.test(prod) && consulta(CAT_PRODUCTO, prod) === false) {
+      aqui('bienes_transp', 'bloqueo', 'clave_no_catalogo', `La clave ${prod} no existe en el catálogo del SAT (c_ClaveProdServCP).`);
+    }
+    const uni = v('clave_unidad');
+    if (uni && !CLAVES_UNIDAD.has(uni) && /^[A-Z0-9]{2,3}$/.test(uni) && !/^\d{1,2}$/.test(uni) && consulta(CAT_UNIDAD, uni) === false) {
+      aqui('clave_unidad', 'bloqueo', 'unidad_no_catalogo', `La clave de unidad ${uni} no existe en el catálogo del SAT (c_ClaveUnidad).`);
+    }
+    const emb = v('embalaje');
+    if (/^[0-9A-Z]{2,3}$/.test(emb) && consulta(CAT_EMBALAJE, emb) === false) {
+      aqui('embalaje', 'bloqueo', 'embalaje_no_catalogo', `La clave de embalaje ${emb} no existe en el catálogo del SAT (c_TipoEmbalaje).`);
+    }
+    const fraccion = v('fraccion_arancelaria');
+    const clavesFr = clavesDeFraccion(fraccion);
+    if (clavesFr.length > 0) {
+      const respuestas = clavesFr.map((c) => consulta(CAT_FRACCION, c));
+      if (respuestas.every((r) => r === false)) {
+        aqui('fraccion_arancelaria', 'bloqueo', 'fraccion_no_catalogo', `La fracción arancelaria ${normalizarFraccion(fraccion)} no existe en el catálogo del SAT (c_FraccionArancelaria).`);
+      }
+    }
+    const peligroso = v('material_peligroso') === 'true';
+    const clavePel = v('clave_material_peligroso');
+    const hayClavePel = clavePel !== '' && clavePel.toUpperCase() !== 'N/A';
+    if (peligroso && !hayClavePel) {
+      aqui('clave_material_peligroso', 'bloqueo', 'peligroso_sin_clave', 'La mercancía está marcada como material peligroso y no trae la clave del material (c_MaterialPeligroso).', [{ campo: 'material_peligroso', renglon: i }]);
+    }
+    if (hayClavePel && consulta(CAT_PELIGROSO, clavePel) === false) {
+      aqui('clave_material_peligroso', 'bloqueo', 'peligroso_no_catalogo', `La clave de material peligroso ${clavePel} no existe en el catálogo del SAT (c_MaterialPeligroso).`);
+    }
+    // Embalaje contra la mercancía (heurística, solo confirmar): sacos en un embalaje que no es de saco, o racks en saco.
+    if (emb && fila.embalaje?.origen !== 'humano') {
+      const texto = `${v('descripcion')} ${v('unidad_texto')}`;
+      const esSaco = EMBALAJE_SACO.test(emb);
+      if (TEXTO_SACO.test(texto) && !esSaco) {
+        aqui('embalaje', 'confirmar', 'embalaje_incoherente', `La mercancía habla de sacos pero el embalaje es ${emb}, que no es de saco/bolsa (5H, 5L, 5M). Confírmalo.`, [{ campo: 'descripcion', renglon: i }]);
+      } else if (TEXTO_RACK.test(texto) && esSaco) {
+        aqui('embalaje', 'confirmar', 'embalaje_incoherente', `La mercancía viene en racks o tarimas pero el embalaje es ${emb} (saco/bolsa). Confírmalo.`, [{ campo: 'descripcion', renglon: i }]);
+      }
+    }
+  });
+
+  for (const lado of ['origen', 'destino'] as const) {
+    const cp = (e.campos[`${lado}_cp`]?.valor ?? '').trim();
+    const a = (campo: string, severidad: Severidad, codigo: string, mensaje: string, relacionados?: Hallazgo['relacionados']) =>
+      reg({ campo, renglon: null, severidad, codigo, mensaje: `${etiquetaCampo(campo, null)}: ${mensaje}`, relacionados });
+    if (/^\d{5}$/.test(cp)) {
+      const existe = consulta(CAT_CP, cp);
+      if (existe === false) a(`${lado}_cp`, 'bloqueo', 'cp_no_catalogo', `El código postal ${cp} no existe en el catálogo del SAT (c_CodigoPostal).`);
+      const d = existe ? sat?.datos(CAT_CP, cp) : null;
+      if (d) {
+        const dif = (campo: string, columna: string, codigo: string, nombre: string) => {
+          const dado = (e.campos[campo]?.valor ?? '').trim();
+          const esperado = (d[columna] ?? '').trim();
+          if (dado && esperado && dado !== esperado && e.campos[campo]?.origen !== 'humano') {
+            a(campo, 'confirmar', codigo, `${nombre} «${dado}» no corresponde al código postal ${cp} según el SAT (le corresponde «${esperado}»).`, [{ campo: `${lado}_cp`, renglon: null }]);
+          }
+        };
+        dif(`${lado}_estado`, 'c_Estado', 'cp_estado_sat', 'El estado');
+        dif(`${lado}_municipio_clave`, 'c_Municipio', 'cp_municipio', 'El municipio');
+        dif(`${lado}_localidad_clave`, 'c_Localidad', 'cp_localidad', 'La localidad');
+      }
+    }
+    const col = (e.campos[`${lado}_colonia_clave`]?.valor ?? '').trim();
+    if (col && consulta(CAT_COLONIA, col) === true) {
+      const cpCol = (sat?.datos(CAT_COLONIA, col)?.c_CodigoPostal ?? '').trim();
+      if (cpCol && /^\d{5}$/.test(cp) && cpCol !== cp) {
+        a(`${lado}_colonia_clave`, 'aviso', 'cp_colonia', `La colonia ${col} figura en el catálogo con el código postal ${cpCol}, no con ${cp}. Verifica la colonia.`, [{ campo: `${lado}_cp`, renglon: null }]);
+      }
+    }
+  }
+
+  for (const catalogo of sinCargar) {
+    reg({ campo: 'documento', renglon: null, severidad: 'aviso', codigo: 'catalogo_no_cargado', mensaje: `El catálogo ${catalogo} no está cargado: no se pudo verificar contra el SAT (no bloquea).` });
+  }
+}
+
 export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): ResultadoValidacion {
   const hallazgos: Hallazgo[] = [];
   const reg: Registrar = (h) => hallazgos.push(h);
@@ -230,7 +344,7 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
       return;
     }
     const campo = c as CampoValor;
-    validarFormato(def, campo, renglon, reg);
+    validarFormato(def, campo, renglon, reg, op.catalogosSat);
     if (campo.origen === 'humano') return; // lo demás son DUDAS sobre una lectura: un humano ya la resolvió.
     if (valorSospechoso(campo.valor)) {
       reg({ campo: def.clave, renglon, severidad: 'bloqueo', codigo: 'valor_sospechoso', mensaje: `${etiqueta}: el valor leído parece una instrucción, no un dato. Escríbelo tú.` });
@@ -288,6 +402,8 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
       reg({ campo: 'peso_bruto_total', renglon: null, severidad: 'confirmar', codigo: 'peso_suma', mensaje: `El peso bruto total (${total} kg) no es la suma de las mercancías (${Math.round(suma * 1000) / 1000} kg). El complemento exige que coincidan.`, relacionados: e.mercancias.map((_, i) => ({ campo: 'peso_kg', renglon: i })) });
     }
   }
+  // Catálogos SAT (T-A3-24): clave inexistente bloquea; catálogo sin cargar solo avisa.
+  verificarCatalogosSat(e, op.catalogosSat, reg);
   // Verificación de sumas con rechazo (T-A3-18): piezas, kg y m³ contra el total que declara el documento.
   verificarSumas(e, reg);
   // Cantidad vs peso cuando la unidad es de masa.

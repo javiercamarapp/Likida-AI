@@ -182,7 +182,7 @@ describe('el resumen por muestra (para el reporte de F5)', () => {
 
     const cuentas = Object.fromEntries(filas.map((f) => [f.id, [f.resumen.ok, f.resumen.revisar, f.resumen.falta]]));
     expect(cuentas).toEqual({
-      M1: [10, 0, 3], M2: [9, 2, 2], M3: [4, 3, 7], 'M3 + catálogo': [8, 3, 3], M4: [5, 6, 3], M5: [12, 0, 2],
+      M1: [10, 0, 3], M2: [8, 3, 2], M3: [4, 3, 7], 'M3 + catálogo': [8, 3, 3], M4: [5, 6, 3], M5: [12, 0, 2],
     });
     // Los campos críticos que quedan ✗ son exactamente los que la forma del documento no trae.
     expect(Object.fromEntries(filas.map((f) => [f.id, f.resumen.criticosFallidos]))).toEqual({
