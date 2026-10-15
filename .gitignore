@@ -44,6 +44,46 @@ docs/comercial/
 docs/REPORTE-ESTADO.md
 PROMPT-SESION-NUEVA.md
 
+# Retirado del repo público (15-oct-2026): estrategia, auditorías, demo con nombres, cosecha/outreach,
+# ensayos reales y skills ajenos. Viven en el archivo privado de Likida. Prueba de CI:
+# sin_datos_privados_rastreados.test.ts (índice de git + esta lista).
+scripts/cosecha/
+scripts/outreach/
+scripts/auditoria/
+scripts/mejora-diaria/encargos/
+scripts/mejora-diaria/*.plist
+pruebas-manuales/ensayo/
+docs/demo/
+docs/asistencia/
+docs/escala-50k/
+docs/escala-15k.md
+docs/fiscalista/
+docs/perfil/
+docs/e2e/
+docs/qa/
+docs/demo-5k.md
+docs/demo-5k-modelo.md
+docs/demo-facturacion-lunes.md
+docs/pruebas-aud24.md
+docs/costos-reales-flota-mx-2026.md
+docs/legal/PENDIENTES-ABOGADO.md
+docs/legal/00-CHECKLIST-ENTERPRISE.md
+MARCA.md
+skill-observations/
+.superpowers/
+.agents/
+skills-lock.json
+vitest.audit.config.ts
+.claude/skills/auditoria-diaria/
+.claude/skills/ensayo-demo/
+.claude/skills/salud-del-repo/
+docs/conocimiento/*
+!docs/conocimiento/DEPLOY.md
+!docs/conocimiento/52-anexo-subencargados.md
+!docs/conocimiento/CONFIGURAR-META.md
+!docs/conocimiento/fiscal/
+!docs/conocimiento/legal/
+
 # Worktrees de sesiones de Claude Code. Sin esto, un worktree activo aparece
 # como "untracked" en `git status` desde la raíz del repo, y vitest (sin el
 # exclude propio en vitest.config.ts) escanea dentro de él y corre una
