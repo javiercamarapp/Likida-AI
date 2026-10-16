@@ -14,6 +14,7 @@ import { BotonEjecutar, type AccionBarrer } from './controles';
 import { SubirDesgloseProveedor, type AccionImportar } from './subir-desglose';
 import { BotonConciliar, type AccionConciliar } from './conciliar-desglose';
 import { BotonAnular, type AccionAnular } from './anular-desglose';
+import { RevisionCobros, type EstadoRevisionCobros } from './revision-cobros';
 
 /**
  * La ventana del Agente de Peajes (F5): lo que el estado de cuenta del
@@ -43,7 +44,7 @@ import { BotonAnular, type AccionAnular } from './anular-desglose';
 export function VistaAgentePeajes({
   conciliacion, lineas, desgloses, peajeAcreditable, sufijo, subirDesglose, ejecutarAhora,
   desglosesProveedor, desgloseSeleccionado, detalleSeleccionado, evidenciaGps, verificacion, importarDesglose, conciliarDesglose,
-  anularDesglose, puedeAnular = false, notificaciones,
+  anularDesglose, puedeAnular = false, notificaciones, revisionCobros,
 }: {
   conciliacion: ConciliacionConsolidado | null;
   // FE-10: `ColaPorConciliar`, no `LineaPorConciliar[]` a secas — sin el
@@ -76,6 +77,9 @@ export function VistaAgentePeajes({
    *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
    *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
   notificaciones?: React.ReactNode;
+  /** T-A2-27: tarjetas y KPIs de la revisión de cobros del archivo abierto, ya calculados por la página.
+   *  Sin la prop se pinta el estado vacío («sube el archivo del proveedor»). Un fallo aquí no toca el resto. */
+  revisionCobros?: EstadoRevisionCobros;
 }) {
   const total = conciliacion ? conciliacion.conciliadas + conciliacion.porConciliar + conciliacion.sinMatch : 0;
   const pct = conciliacion && total > 0 ? Math.round((conciliacion.conciliadas / total) * 100) : null;
@@ -99,6 +103,9 @@ export function VistaAgentePeajes({
             <Kpi titulo="Estados de cuenta" valor={conciliacion ? numero(conciliacion.cfdis) : '—'}
               nota="CFDI consolidados recibidos" />
           </div>
+
+          {/* ── T-A2-27: la revisión de cobros, arriba del detalle ── */}
+          <RevisionCobros estado={revisionCobros ?? { tipo: 'sin_archivo' }} />
 
           {/* ── La ingesta: el ritual del PoC ── */}
           <section className="card p-4">
