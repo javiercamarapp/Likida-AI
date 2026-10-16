@@ -51,7 +51,7 @@ const ARRIBA_F3 = [
   'VILLA EJEMPLO,MICHOACÁN',
   'C.P. 59000',
   'Ant SR. PERSONA INVENTADA',
-  'TEL 5555555555',
+  'TEL 2899912345', // teléfono sintético: marca 28999 (ver higiene_fixtures.test.ts) // grep-limpio:ok
   '',
   'Caja 90077',
   '',
