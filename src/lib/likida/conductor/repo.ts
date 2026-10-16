@@ -141,6 +141,11 @@ export interface ViajeContexto {
    * columna: sin ella es `undefined` y el motor sigue el ciclo actual. Quién lo escribe (TMS, oficina o el chofer) está pendiente de decisión.
    */
   servicio?: Servicio;
+  /**
+   * T-A5-44: el «Entregar en» del requerimiento (texto). Hoy `viaje` no tiene esa columna (BLOQUEO EXTERNO: qué campo del TMS lo trae):
+   * sin ella es `undefined` y el patio esperado cae al `destino`. Quien lo escriba lo hace aquí, sin tocar el resto.
+   */
+  entregarEn?: string | null;
 }
 
 export const COLUMNAS_VIAJE_CTX =
@@ -661,6 +666,29 @@ export async function leerEventos(tenantId: string, despuesDeId: number, limite:
       evento: String(f.evento), detalle: (f.detalle ?? {}) as Record<string, unknown>, creadoEn: String(f.created_at),
     })),
   };
+}
+
+/** T-A5-44: un renglón de la bitácora del patio de entrega (`validacion` o `atendido` con `detalle.clase = 'patio_entrega'`). */
+export interface EventoPatioFila {
+  id: number;
+  viajeId: string;
+  hitoId: string;
+  evento: 'validacion' | 'atendido';
+  detalle: Record<string, unknown>;
+  creadoEn: string;
+}
+
+/** T-A5-44: la bitácora del patio de entrega de esos viajes DE ESA FLOTA, del más viejo al más nuevo. Lanza si la base falla. */
+export async function leerEventosPatio(tenantId: string, viajeIds: string[]): Promise<EventoPatioFila[]> {
+  if (viajeIds.length === 0) return [];
+  const res = await acotada(supabaseAdmin().from('viaje_hito_evento')
+    .select('id, viaje_id, viaje_hito_id, evento, detalle, created_at')
+    .eq('tenant_id', tenantId).in('viaje_id', viajeIds).in('evento', ['validacion', 'atendido'])
+    .eq('detalle->>clase', 'patio_entrega').order('id', { ascending: true }).limit(2000), 'conductor.patio_eventos');
+  return ((exigir(res as never, 'conductor.patio_eventos') ?? []) as unknown as Fila[]).map((f) => ({
+    id: Number(f.id), viajeId: String(f.viaje_id), hitoId: String(f.viaje_hito_id), evento: f.evento === 'atendido' ? 'atendido' as const : 'validacion' as const,
+    detalle: (f.detalle ?? {}) as Record<string, unknown>, creadoEn: String(f.created_at),
+  }));
 }
 
 /** Guarda las citas del viaje DE ESA FLOTA. `no_encontrado` = no existe o es de otra flota (misma respuesta). */

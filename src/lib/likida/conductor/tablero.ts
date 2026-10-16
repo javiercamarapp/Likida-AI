@@ -61,7 +61,7 @@ export interface HitoVista {
 }
 
 export type TipoExcepcion =
-  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'llegada_sin_confirmar' | 'llegada_sin_sitio' | 'estadia_excedida' | 'horas_incoherentes' | 'sin_a_quien_escalar' | 'pendiente_cruce_largo' | 'salida_tms_discrepante';
+  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'llegada_sin_confirmar' | 'llegada_sin_sitio' | 'estadia_excedida' | 'horas_incoherentes' | 'sin_a_quien_escalar' | 'pendiente_cruce_largo' | 'salida_tms_discrepante' | 'patio_entrega_distinto';
 
 export interface Excepcion {
   tipo: TipoExcepcion;
@@ -425,6 +425,16 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
     excepciones.push({
       viajeId: viaje.id, folio: viaje.folio, chofer: null, hitoId: null, hitoTipo: null,
       tipo: 'sin_a_quien_escalar', gravedad: f.nivel === 1 ? 3 : 2, desde: null, texto: f.texto,
+    });
+  }
+
+  // ── T-A5-44: el chofer declaró un patio de entrega distinto del esperado y el supervisor aún no lo atiende ──
+  for (const f of datos.patiosDistintos ?? []) {
+    const viaje = datos.viajes.find((v) => v.id === f.viajeId);
+    if (!viaje) continue;
+    excepciones.push({
+      viajeId: viaje.id, folio: viaje.folio, chofer: null, hitoId: f.hitoId, hitoTipo: 'llegada_descarga',
+      tipo: 'patio_entrega_distinto', gravedad: 3, desde: f.desde, texto: f.texto,
     });
   }
 

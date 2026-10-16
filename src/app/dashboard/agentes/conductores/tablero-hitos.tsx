@@ -35,7 +35,7 @@ export const ORDEN_SEMAFORO: Semaforo[] = ['sin_reporte', 'atrasado', 'a_tiempo'
 const EXCEPCION: Record<TipoExcepcion, string> = {
   escalado_sin_atender: 'Escalado sin atender', sin_reporte: 'Sin reporte', atrasado: 'Atrasado', sin_coincidencia: 'Ubicación sin coincidencia',
   llegada_sin_confirmar: 'Llegada sin confirmar', llegada_sin_sitio: 'Llegada sin sitio para conciliar',
-  estadia_excedida: 'Estadía excedida', horas_incoherentes: 'Horas incoherentes', sin_a_quien_escalar: 'Sin a quién escalar',
+  estadia_excedida: 'Estadía excedida', horas_incoherentes: 'Horas incoherentes', sin_a_quien_escalar: 'Sin a quién escalar', patio_entrega_distinto: 'Patio de entrega distinto',
   pendiente_cruce_largo: 'Pendiente de cruce por mucho tiempo', salida_tms_discrepante: 'Salida del TMS sin confirmar',
 };
 const GRAVEDAD: Record<1 | 2 | 3, { texto: string; color: string }> = {
