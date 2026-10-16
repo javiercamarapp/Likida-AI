@@ -6,6 +6,8 @@ import { traerTodo, traerPorIds, conteo, type RespuestaPg } from '../pg';
 import { normalizarNombre, normalizarTag } from './formatos';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../conductor/geometria_datos';
 import { matrizDeArchivoCatalogo } from './archivo';
+import { sumarMeses } from './periodo';
+import type { ArchivoPrevio } from './doble_entre_archivos';
 import { parsearCasetasMatriz, type CasetaCatalogo } from './casetas';
 import { parsearTarifasMatriz, planificarTarifa, type OrigenTarifa, type TarifaEntrada, type TarifaExistente } from './tarifario_archivo';
 import { parsearTagsMatriz, resolverUnidadesDeTags, validarBajaTag, type VigenciaTag } from './tags';
@@ -1304,4 +1306,46 @@ export async function guardarConfigAvisos(tenantId: string, entrada: unknown): P
     activo: previa?.activo === true, umbrales: { ...(previa?.umbrales ?? {}), config_peajes: v.valor },
   }, 'peajes.config_peajes_avisos');
   return ok ? { ok: true, valor: v.valor } : { ok: false, motivo: NO_SE_PUDO_CONFIG };
+}
+
+// ── Líneas de los desgloses PREVIOS de la flota (T-A2-38: doble cobro entre archivos) ──────────────
+/**
+ * Los desgloses anteriores de la flota con sus líneas, para buscar el mismo cobro tardío en un archivo
+ * previo. Solo se LEEN las líneas de los que caen en la ventana (`ventanaMeses` hacia atrás desde
+ * `periodoDesde`); los demás viajan sin líneas para que el motor puro diga por qué no se consultaron.
+ * Solo existen las líneas de la hoja principal (la hoja repetida de utilitarios no se guarda). Lanza ante error.
+ */
+export async function lineasPreviasDeFlota(
+  tenantId: string, desgloseActualId: string, periodoDesde: string, ventanaMeses: number,
+): Promise<ArchivoPrevio[]> {
+  const metas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin().from('desglose_peaje')
+      .select('id, archivo_nombre, periodo_oficial_desde, periodo_oficial_hasta', conteo(d))
+      .eq('tenant_id', tenantId).is('anulado_en', null).order('id').range(d, h), 'peajes.previos.desgloses'),
+    'peajes.previos.desgloses',
+  );
+  const limite = sumarMeses(periodoDesde, -ventanaMeses);
+  const previos: ArchivoPrevio[] = [];
+  for (const m of metas) {
+    const id = String(m.id);
+    if (id === desgloseActualId) continue;
+    const desde = (m.periodo_oficial_desde as string | null) ?? null;
+    const hasta = (m.periodo_oficial_hasta as string | null) ?? null;
+    const fin = hasta ?? desde;
+    const enVentana = desde !== null && fin !== null && desde < periodoDesde && fin >= limite;
+    const filas = enVentana ? await traerTodo<Record<string, unknown>>(
+      (d, h) => acotada(supabaseAdmin().from('desglose_peaje_linea')
+        .select('indice, fecha, hora, caseta, tag, monto', conteo(d))
+        .eq('tenant_id', tenantId).eq('desglose_id', id).order('indice').order('id').range(d, h), 'peajes.previos.lineas'),
+      'peajes.previos.lineas',
+    ) : [];
+    previos.push({
+      id, etiqueta: String(m.archivo_nombre ?? 'archivo sin nombre'), periodoDesde: desde, periodoHasta: hasta,
+      lineas: filas.map((f) => ({
+        indice: Number(f.indice), fecha: (f.fecha as string | null) ?? null, hora: f.hora ? String(f.hora).slice(0, 8) : null,
+        caseta: (f.caseta as string | null) ?? null, tag: (f.tag as string | null) ?? null, monto: Number(f.monto),
+      })),
+    });
+  }
+  return previos;
 }

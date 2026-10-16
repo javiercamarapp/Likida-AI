@@ -12,6 +12,8 @@ import {
 import { detectarAtipicos, type ResultadoAtipicos, type UmbralesAtipicos } from './cruces_atipicos';
 import { cierreMensual, type ArchivoCierre, type CierreMensual } from './cierre_mensual';
 import { limitesDelMes, mesAnterior } from './periodo';
+import { revisarDobleEntreArchivos, VENTANA_MESES_DEFAULT, type ResultadoDobleEntreArchivos } from './doble_entre_archivos';
+import { lineasPreviasDeFlota } from './datos';
 import { validarExcepcionUnidad, validarJustificacion } from './reglas_cobro_config';
 import {
   estadoTrasAcreditar, evaluarReclamo, resumirSeguimiento, ESTADOS_RECLAMO,
@@ -362,6 +364,8 @@ export interface ReporteRevision {
   calidad: Record<string, unknown> | null;
   revision: ResultadoRevision;
   atipicos: ResultadoAtipicos;
+  /** T-A2-38: extemporáneos ya cobrados en un archivo previo (candidatos) y tardíos legítimos (informativo). */
+  dobleEntreArchivos?: ResultadoDobleEntreArchivos;
   rotulo: string;
 }
 
@@ -388,7 +392,7 @@ export function lineaCobroDeFila(f: Record<string, unknown>): LineaCobro {
 
 /** `null` si el desglose no existe en la flota (o está anulado). */
 export async function revisionDeDesglose(
-  tenantId: string, desgloseId: string, umbrales: Partial<UmbralesAtipicos> = {},
+  tenantId: string, desgloseId: string, umbrales: Partial<UmbralesAtipicos> = {}, ventanaMeses: number = VENTANA_MESES_DEFAULT,
 ): Promise<ReporteRevision | null> {
   const { data: d, error } = await acotada(supabaseAdmin().from('desglose_peaje')
     .select('id, proveedor, archivo_nombre, periodo_desde, periodo_hasta, periodo_oficial_desde, periodo_oficial_hasta, periodo_origen, no_periodo, calidad')
@@ -409,6 +413,11 @@ export async function revisionDeDesglose(
   const revision = revisarCobros(lineas, reglasDesdeConfig(casetas, bajas, periodoOficialDesde, excepciones, justificados));
   const conCoords = casetas.filter((c) => c.lat !== null && c.lng !== null).map((c) => ({ nombre: c.nombre, lat: c.lat as number, lng: c.lng as number }));
   const atipicos = detectarAtipicos(lineas, conCoords, umbrales);
+  // Solo se leen los desgloses previos si hay periodo y al menos un extemporáneo que buscar.
+  const hayExtemporaneos = periodoOficialDesde !== null && lineas.some((l) => l.fecha !== null && l.fecha < periodoOficialDesde);
+  const previos = hayExtemporaneos && periodoOficialDesde !== null
+    ? await lineasPreviasDeFlota(tenantId, desgloseId, periodoOficialDesde, ventanaMeses) : [];
+  const dobleEntreArchivos = revisarDobleEntreArchivos(lineas, previos, { periodoDesde: periodoOficialDesde, archivoActualId: desgloseId, ventanaMeses });
   return {
     desgloseId, proveedor: (d.proveedor as string | null) ?? null, archivoNombre: (d.archivo_nombre as string | null) ?? null,
     periodoMedidoDesde: (d.periodo_desde as string | null) ?? null, periodoMedidoHasta: (d.periodo_hasta as string | null) ?? null,
@@ -416,7 +425,7 @@ export async function revisionDeDesglose(
     periodoOrigen: (d.periodo_origen as ReporteRevision['periodoOrigen']) ?? null,
     noPeriodo: (d.no_periodo as string | null) ?? null,
     calidad: (d.calidad as Record<string, unknown> | null) ?? null,
-    revision, atipicos, rotulo: ROTULO_CANDIDATO,
+    revision, atipicos, dobleEntreArchivos, rotulo: ROTULO_CANDIDATO,
   };
 }
 
