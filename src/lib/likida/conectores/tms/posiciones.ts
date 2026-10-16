@@ -21,6 +21,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { TZ_MX } from '@/lib/formato';
 import { acotada } from '../../presupuesto';
 import { coordenadaValida } from '../posiciones_comun';
 import { asentarLecturas, type Lectura, type ResultadoSync } from '../sincronizar_gps';
@@ -46,7 +47,7 @@ export const MAPEO_POSICIONES_SUPUESTO: MapeoTms = {
     deviceId: { fuente: 'unidad', transformar: 'texto' },
     lat: { fuente: 'latitud', transformar: 'numero' },
     lng: { fuente: 'longitud', transformar: 'numero' },
-    medidaEn: { fuente: 'fecha', transformar: 'fecha_local', zona: 'America/Mexico_City' },
+    medidaEn: { fuente: 'fecha', transformar: 'fecha_local', zona: TZ_MX },
     velocidad: { fuente: 'velocidad', transformar: 'numero' },
     rumbo: { fuente: 'rumbo', transformar: 'numero' },
   },

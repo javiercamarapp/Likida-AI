@@ -24,6 +24,7 @@ import { problemaRfc } from './validacion';
 import { procesarDocumento, recibirDocumento, type DepsServicio } from './servicio';
 import * as repo from './repo';
 import { bytesDeBase64, textoDeBytes } from './bytes';
+import { numero } from '@/lib/formato';
 
 export const MAX_BYTES_WA = 12 * 1024 * 1024;
 const PIE_CARTA_PORTE = /\b(carta\s*porte|cartaporte|embarque|ccp)\b/i;
@@ -122,7 +123,7 @@ export async function ingerirDesdeWhatsapp(e: EntradaWhatsapp, deps: DepsWhatsap
       // Texto pegado: se guarda tal cual como documento de formato «correo» (idempotente por sha256 del texto).
       const texto = (e.mensaje.text ?? '').trim();
       if (texto.length > MAX_TEXTO_MODELO) {
-        await deps.responder(`Ese texto es demasiado largo (más de ${MAX_TEXTO_MODELO.toLocaleString('es-MX')} caracteres). Súbelo como archivo desde el panel de Carta Porte.`);
+        await deps.responder(`Ese texto es demasiado largo (más de ${numero(MAX_TEXTO_MODELO)} caracteres). Súbelo como archivo desde el panel de Carta Porte.`);
         return 'atendido';
       }
       bytes = new TextEncoder().encode(texto);
