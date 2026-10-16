@@ -512,7 +512,7 @@ export const API_PERFIL_CINCO_AGENTES: Readonly<Record<'v1' | 'export' | 'dashbo
   ],
   export: [
     'liquidaciones', 'liquidaciones-externas', 'pdf', // A1
-    'bitacora-peaje', 'bitacora-conciliada', 'peajes-reclamacion', 'peajes-revision', // A2
+    'bitacora-peaje', 'bitacora-conciliada', 'peajes-reclamacion', 'peajes-revision', 'peajes-candidatos', 'peajes-vinculos', // A2
     'carta-porte-docs', 'carta-porte-xml',      // A3
   ],
   dashboard: [

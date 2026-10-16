@@ -251,7 +251,12 @@ import { join, relative, sep } from 'node:path';
 //   dato (área `dinero`), del verbo (`puedeExportar`), rate limit por IP y por flota; el desglose y todas las lecturas (líneas, tarifas, reclamos)
 //   usan el tenant de la sesión (uno ajeno es 404 sin leer nada más) y una lectura incompleta no sale como archivo corto. Mismo molde que
 //   `peajes-revision`. Prueba: `export/peajes-candidatos/route.test.ts`.
-const RUTAS_APP_REVISADAS = 109;
+//
+// 109 → 110 (frente A2 Peajes, T-A2-22): `api/export/peajes-vinculos/route.ts` — GET de la flota de la SESIÓN (`resolverTenantApi`): puerta del
+//   dato (área `dinero`), del verbo (`puedeExportar`), rate limit por IP y por flota; el desglose y todas las lecturas (líneas, vínculos, folios)
+//   usan el tenant de la sesión (uno ajeno es 404) y una lectura incompleta no sale como archivo corto. Mismo molde que `peajes-reclamacion`.
+//   Prueba: `export/peajes-vinculos/route.test.ts`.
+const RUTAS_APP_REVISADAS = 110;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
