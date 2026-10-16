@@ -610,3 +610,54 @@ describe('extremos en EE. UU. y Tax ID extranjero (T-A3-49)', () => {
     sinCodigosEeuu(e);
   });
 });
+
+describe('fracción y clave de producto genéricas (T-A3-57)', () => {
+  const conGenericas = (fr: string | null, prod: string | null) => {
+    const e = extraccionAtlasOk();
+    if (fr !== null) e.mercancias[0].fraccion_arancelaria = cv(fr, 0.95, 'llm', 'Fracción: 9807.00.01.00');
+    if (prod !== null) e.mercancias[0].bienes_transp = cv(prod, 0.95, 'llm', 'Clave: 01010101');
+    return e;
+  };
+  const FRACCION_DOC = { valor: '8708299900', fuente: 'el BOL' }; // grep-limpio:ok
+
+  it('sin documento: la fracción 98xx y la clave 01010101 solo avisan y no frenan la aprobación', () => {
+    const e = conGenericas('9807000100', '01010101'); // grep-limpio:ok
+    const c = codigos(e);
+    expect(c).toContain('aviso:fraccion_generica:fraccion_arancelaria#0');
+    expect(c).toContain('aviso:clave_producto_generica:bienes_transp#0');
+    expect(c.some((x) => x.startsWith('bloqueo:'))).toBe(false);
+    expect(validar(e).listoParaAprobar).toBe(true);
+  });
+  it('el aviso lleva la evidencia del documento', () => {
+    const h = validar(conGenericas('9807000100', '01010101')).hallazgos.find((x) => x.codigo === 'fraccion_generica'); // grep-limpio:ok
+    expect(h?.evidencia).toBe('Fracción: 9807.00.01.00');
+  });
+  it('con puntos o con NICO también se reconoce como genérica', () => {
+    expect(codigos(conGenericas('9807.00.01.00', null))).toContain('aviso:fraccion_generica:fraccion_arancelaria#0');
+    expect(codigos(conGenericas('98070001', null))).toContain('aviso:fraccion_generica:fraccion_arancelaria#0');
+  });
+  it('documento con otra fracción: hallazgo de diferencia que pide confirmar y muestra ambas', () => {
+    const r = validar(conGenericas('9807000100', null), { fraccionDocumento: FRACCION_DOC }); // grep-limpio:ok
+    const h = r.hallazgos.find((x) => x.codigo === 'fraccion_generica_difiere');
+    expect(h?.severidad).toBe('confirmar');
+    expect(h?.mensaje).toContain('9807000100'); // grep-limpio:ok
+    expect(h?.mensaje).toContain('8708299900'); // grep-limpio:ok
+    expect(h?.mensaje).toContain('el BOL');
+    expect(r.hallazgos.some((x) => x.severidad === 'bloqueo')).toBe(false);
+    expect(r.listoParaAprobar).toBe(false);
+  });
+  it('un humano que escribe la fracción resuelve la diferencia', () => {
+    const e = conGenericas('9807000100', null); // grep-limpio:ok
+    e.mercancias[0].fraccion_arancelaria = cv('8708299900', 1, 'humano'); // grep-limpio:ok
+    expect(codigos(e, { fraccionDocumento: FRACCION_DOC })).not.toContain('confirmar:fraccion_generica_difiere:fraccion_arancelaria#0');
+  });
+  it('documento con la misma fracción (con NICO o sin él): solo aviso, sin diferencia', () => {
+    const c = codigos(conGenericas('9807000100', null), { fraccionDocumento: { valor: '9807.00.01', fuente: 'el BOL' } }); // grep-limpio:ok
+    expect(c).not.toContain('confirmar:fraccion_generica_difiere:fraccion_arancelaria#0');
+    expect(c).toContain('aviso:fraccion_generica:fraccion_arancelaria#0');
+  });
+  it('una fracción y una clave específicas no generan nada, aunque el documento diga otra', () => {
+    const c = codigos(conGenericas('8708299900', '24131500'), { fraccionDocumento: { valor: '8501100000', fuente: 'el BOL' } }); // grep-limpio:ok
+    expect(c.filter((x) => /generica/.test(x))).toEqual([]);
+  });
+});

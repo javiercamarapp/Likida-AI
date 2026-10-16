@@ -81,6 +81,24 @@ export function normalizarFraccion(v: string): string {
   return /^[\d\s.\-]+$/.test(v) ? v.replace(/[\s.\-]/g, '') : v;
 }
 
+/** Clave de producto genérica del SAT que el operador usa cuando el documento no da dato (T-A3-57). */
+export const CLAVE_PRODUCTO_GENERICA = '01010101';
+
+/** Fracción genérica: grupo 98xx del arancel (p. ej. 9807.00.01.00), con o sin puntos. */
+export function esFraccionGenerica(v: string): boolean {
+  return /^98\d{6}(\d{2})?$/.test(normalizarFraccion(v.trim()));
+}
+
+export const esClaveProductoGenerica = (v: string): boolean => v.trim() === CLAVE_PRODUCTO_GENERICA;
+
+/** ¿Dos fracciones son la misma? Compara los 8 dígitos base (una puede traer NICO y la otra no). */
+export function mismaFraccion(a: string, b: string): boolean {
+  const x = normalizarFraccion(a.trim());
+  const y = normalizarFraccion(b.trim());
+  if (/^\d{8,10}$/.test(x) && /^\d{8,10}$/.test(y)) return x.slice(0, 8) === y.slice(0, 8);
+  return x === y;
+}
+
 /** Claves a consultar de la fracción: la normalizada y, si trae NICO (10 dígitos), también sus 8 dígitos (el catálogo base). */
 export function clavesDeFraccion(v: string): string[] {
   const n = normalizarFraccion(v);
