@@ -125,6 +125,8 @@ export function construirSistema(): string {
     '- «confianza» (0 a 1) es qué tan seguro estás de que el valor es EXACTAMENTE lo escrito en el documento. Usa ≥0.95 solo si es legible y sin ambigüedad; baja a ≤0.6 si la imagen es borrosa, el dato está cortado o hay dos candidatos.',
     '- «evidencia» es el fragmento LITERAL del documento (máx. 150 caracteres) donde lo leíste. Sin evidencia no hay valor.',
     '- No conviertas unidades: el peso va como está escrito y su unidad en peso_unidad. No calcules totales. No deduzcas claves del SAT: si el documento no trae la clave de producto (8 dígitos) o la de unidad, déjalas null y pon el texto de la unidad en unidad_texto.',
+    '- PESO: el peso de la mercancía es el PESO BRUTO. Si el documento trae «Peso total bruto» (o «Gross weight»), ese manda; el peso neto o «por embalaje» NO va en peso_kg ni en peso_bruto_total (si es lo único que hay, ponlo en peso_kg con la evidencia literal de su rótulo y dilo en «notas»).',
+    '- CIFRAS: copia los números con sus separadores tal como están escritos («1.234.567» y «1,234,567.89» son cifras distintas); no cambies el punto por la coma ni quites los separadores de miles.',
     '- RFC en mayúsculas, sin espacios. Código postal de 5 dígitos. Fechas tal como aparecen.',
     '- Aduana: copia tal cual el régimen aduanero, el pedimento (solo importación), el tipo de materia y el RFC del importador (no el del remitente ni el del agente aduanal). Un rótulo sin valor es null; no inventes.',
     '- Una entrada de «mercancias» por cada renglón de mercancía distinto del documento (no repitas el mismo renglón; ignora filas de totales).',
