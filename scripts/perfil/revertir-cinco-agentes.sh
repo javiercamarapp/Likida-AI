@@ -12,6 +12,11 @@
 # SOLO borra las filas que puso el perfil: la de `tenant_perfil` y las de `interruptor_tenant` (ocr, cuadre) cuyo motivo
 # empieza con «Perfil cinco_agentes». Si alguien apagó `ocr` o `cuadre` por otra razón, esa palanca NO se toca.
 # La flota recupera el comportamiento de siempre. No borra datos de la flota. Este script NO se ejecuta solo.
+#
+# NO TOCA `liquidacion_correo_config`: ese canal (`aplicar-cinco-agentes.sh` lo pone en `correo`) es la decisión de
+# producto de que A1 nunca manda WhatsApp, y no una palanca del perfil que deba regresar sola. Si después de
+# revertir la flota debe volver a WhatsApp para A1, es un cambio aparte y explícito (pantalla de configuración del
+# correo o un UPDATE a mano), nunca un efecto automático de este script.
 # ═══════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
