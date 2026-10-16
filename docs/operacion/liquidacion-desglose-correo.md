@@ -10,6 +10,7 @@ lectura periódica o por el plan B), arma un Excel **con valores, sin fórmulas*
 (encabezado de operador, unidad, bitácora y periodo; bloque «Percepción» a la izquierda y «Deducción» a la derecha; total
 por bloque y neto), y lo **entrega por correo**. El correo es sobrio: sin logotipo, sin pie de Likida y sin importes en
 el asunto ni en el cuerpo. El detalle va solo en el archivo adjunto.
+Likida no edita los importes de un desglose recibido: el agente solo envía el desglose y no procesa bonos ni condiciones.
 
 Se envía **un correo por destinatario**, nunca uno solo con copias. Así el rebote o la queja de uno no oculta lo de los
 demás y cada envío tiene su propio estado.
@@ -152,6 +153,12 @@ siempre queda un evento de auditoría con quién lo pidió y por qué.
 `reintentando`, `red`, `rebotada`, `queja`, `sin_confirmar`, `interno`); el texto crudo del proveedor nunca llega a la
 pantalla ni a `/v1`. El latido del cron reporta `parcial` si algo quedó sin terminar. El aviso al operador de guardia
 solo se dispara si la lectura falla 3 pasadas seguidas o si las rebotadas superan el umbral.
+
+**Corregir un importe: se corrige en el origen.** Ninguna pantalla ni ruta de Likida modifica `concepto`, `monto`, `total` ni `neto` de un desglose
+ya recibido (lo vigila la prueba `guardia_sin_edicion.test.ts`). Lo permitido es reenviar, corregir el correo del operador y registrar o
+resolver excepciones. Si un pago está mal, se corrige en el sistema de origen y se reimporta; el camino previsto es que entre como una nueva generación, con su motivo,
+y la anterior quede como constancia (hoy reintentar la misma liquidación no pisa el desglose recibido). Si el dueño pide algún día poder editar un pago, el contrato `aprobacion_mancomunada.ts` ya fija la
+regla (dos personas distintas y bitácora sin importes); nace apagado y sin pantalla, y encenderlo es una decisión aparte.
 
 ## 8. Retención
 
