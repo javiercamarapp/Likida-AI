@@ -505,3 +505,33 @@ describe('E2E · T-A4-24 · «datos de la unidad»: caja, placas y operador en l
     expect(repo.eventosDe('sin_dato').length).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('E2E · T-A4-27 · «sin caja» va a servicio al cliente y, si nadie contesta, sube al gerente', () => {
+  const SERVICIO_TEL = '525577770001'; // grep-limpio:ok
+  const sinCaja = { caja: null, placasCaja: null, estadoCaja: null, unidad: 'C2-08', placasUnidad: 'XYZ789', operador: 'Operador Uno' };
+
+  it('servicio recibe el aviso por botones en privado; el gerente no; a los N2 min sin contestar el gerente recibe el aviso de siempre', async () => {
+    const { repo } = escenario({ escalarNivel2Min: 15, slaRespuestaMin: 120, slaCriticoMin: 10, soloAvisar: true });
+    repo.agregarServicio(T1, { telefono: SERVICIO_TEL });
+    ventanas.set(SERVICIO_TEL, 'abierta');
+    repo.estatus.agregar(T1, CLIENTE_A, estatus(sinCaja));
+    const deps = { repo, ahora: () => AHORA, datosUnidad: true };
+
+    expect(await atenderMensajeCliente(entrante('¿Qué caja trae mi viaje F-1042?', 'sc1'), deps)).toBe('atendido');
+    expect(enviarBotones).toHaveBeenCalledTimes(1);
+    const [tel, cuerpo, botones] = enviarBotones.mock.calls[0];
+    expect(tel).toBe(SERVICIO_TEL);
+    expect(cuerpo).toContain('preguntó por la caja de F-1042 y no la tengo registrada');
+    expect(botones[0].titulo).toBe('Yo me encargo');
+    expect(enviarTexto).not.toHaveBeenCalled(); // al cliente no le sale nada: solo se avisa
+
+    const luego = { repo, ahora: () => new Date(AHORA.getTime() + 15 * 60_000) };
+    await barridoVigia(luego);
+    const paraGerente = enviarBotones.mock.calls.filter((c) => c[0] === GERENTE_TEL);
+    expect(paraGerente).toHaveLength(1);
+    expect(paraGerente[0][1]).toContain('preguntó algo que no tengo registrado');
+    await barridoVigia(luego);
+    expect(enviarBotones.mock.calls.filter((c) => c[0] === GERENTE_TEL)).toHaveLength(1);
+    expect(enviarBotones.mock.calls.filter((c) => c[0] === SERVICIO_TEL)).toHaveLength(1);
+  });
+});

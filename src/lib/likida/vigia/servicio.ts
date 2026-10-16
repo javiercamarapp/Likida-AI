@@ -33,14 +33,14 @@ import { normalizarTelefonoWa } from '@/lib/likida/wa_ventana';
 import { sendDocument } from '@/lib/meta/client';
 import { enviarAlCliente, MAX_TEXTO_AL_CLIENTE } from './enviar';
 import { nombreDeAdjunto } from './adjuntos';
-import { avisarAprobacion, avisarEscalamiento, interpretarBoton, type DecisionBoton } from './avisos';
+import { avisarAprobacion, avisarEscalamiento, interpretarBoton, textoSinDatoUnidad, type DecisionBoton } from './avisos';
 import { generarAvisos } from './aviso/generar';
 import { entregarAviso } from './aviso/entrega';
 import { contarPendientesViejos, TOPE_PENDIENTES_LEIDOS } from './aviso/cola';
 import { clasificar } from './clasificador';
 import { sinTenantsDePerfil } from './sin_flotas';
 import { esSpam, limpiarTexto } from './entrada';
-import { DIAS_CICLO_INACTIVO, evaluarEscalamiento, minutosEsperando, type AccionEscalamiento } from './escalamiento';
+import { claveServicio, DIAS_CICLO_INACTIVO, destinoDelDisparo, evaluarEscalamiento, faltantesDeUnidad, minutosEsperando, type AccionEscalamiento } from './escalamiento';
 import { resolverViaje, type ResumenViaje } from './estatus_viaje';
 import { evaluarMolestia } from './molestia';
 import { prioridadDe } from './prioridad';
@@ -291,14 +291,20 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
   // ── 0798 «solo avisar»: ni borrador ni envío; se conservan clasificación, prioridad y escalera ──────
   if (config.habilitado && config.soloAvisar === true) {
     const nombre = await repo.nombreCliente(tenantId, contacto.clienteId);
-    const disparo: Extract<MotivoEscalamiento, 'pide_humano' | 'folio_ajeno'> | null =
-      senales.includes('folio_ajeno') ? 'folio_ajeno' : cl.intencion === 'pide_humano' ? 'pide_humano' : null;
+    // T-A4-27: preguntaron por la unidad/caja y el estatus no la trae. Sin borrador no hay «faltantes» del redactor: salen del estatus.
+    const faltantesUnidad = pideDatosUnidad && viaje.tipo === 'uno' ? faltantesDeUnidad(viaje.estatus) : [];
+    let disparo: Extract<MotivoEscalamiento, 'pide_humano' | 'sin_dato' | 'folio_ajeno'> | null =
+      senales.includes('folio_ajeno') ? 'folio_ajeno' : cl.intencion === 'pide_humano' ? 'pide_humano' : faltantesUnidad.length > 0 ? 'sin_dato' : null;
+    const ctx = { tenantId, conv: convActual, contacto, config, nombreCliente: nombre ?? contacto.nombre };
+    if (disparo === 'sin_dato') {
+      await repo.evento(tenantId, { conversacionId: conv.id, tipo: 'sin_dato', clave: `${recibido.mensajeId}:sin_dato`, detalle: { faltantes: faltantesUnidad } });
+      if (await avisoAServicioCubre(ctx, faltantesUnidad, viaje.tipo === 'uno' ? viaje.estatus.folio : null, deps)) disparo = null;
+    }
     const aviso = evaluarEscalamiento({
       conversacion: { ...convActual, id: conv.id, estado: 'activa', sinRespuestaDesde: conv.sinRespuestaDesde ?? ahora.toISOString() },
       config, ahoraMs: ahora.getTime(), disparoInmediato: disparo,
     });
     if (aviso) {
-      const ctx = { tenantId, conv: convActual, contacto, config, nombreCliente: nombre ?? contacto.nombre };
       // Sin borrador no hay «aviso de aprobación» que ya fuera la alerta del gerente: si el hilo salta directo al nivel 2
       // (molestia crítica), el gerente (nivel 1) también se entera. La clave `…:n1` es la misma que usaría el barrido: no se duplica.
       if (aviso.nivel === 2 && convActual.escalamientoNivel < 1 && !convActual.atendidaEn) {
@@ -362,11 +368,26 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
   if (disparo === 'sin_dato') {
     await repo.evento(tenantId, { conversacionId: conv.id, tipo: 'sin_dato', clave: `${recibido.mensajeId}:sin_dato`, detalle: { faltantes: borrador.faltantes } });
   }
+  // T-A4-27: el «sin dato» de la unidad/caja avisa PRIMERO, en privado, a servicio al cliente. Un autoenvío no se toca (no aplica a esta intención).
+  let cubreServicio = false;
+  if (disparo === 'sin_dato' && decision.accion !== 'autoenviar' && pideDatosUnidad && viaje.tipo === 'uno') {
+    cubreServicio = await avisoAServicioCubre(
+      { tenantId, conv: convActual, contacto, config, nombreCliente: nombreCliente ?? contacto.nombre }, borrador.faltantes, viaje.estatus.folio, deps,
+    );
+    if (cubreServicio) disparo = null;
+  }
 
   const accion = evaluarEscalamiento({
     conversacion: { ...convActual, id: conv.id, estado: 'activa', sinRespuestaDesde: conv.sinRespuestaDesde ?? ahora.toISOString() },
     config, ahoraMs: ahora.getTime(), disparoInmediato: disparo,
   });
+
+  if (cubreServicio) {
+    // El borrador queda pendiente en el tablero y el gerente NO recibe aviso por esto: servicio al cliente tiene el caso. Si no
+    // contesta en `escalarNivel2Min`, el barrido lo sube al nivel 1 (el aviso de siempre). Molestia/sin respuesta siguen su curso.
+    if (accion) await ejecutarEscalamiento(accion, { tenantId, conv: convActual, contacto, config, nombreCliente: nombreCliente ?? contacto.nombre }, deps);
+    return;
+  }
 
   if (decision.accion === 'autoenviar') {
     await enviarSaliente({ tenantId, mensajeId: saliente.id, texto: borrador.texto, contacto, config, conversacionId: conv.id, nombreFlota, autoenviado: true, adjuntos: [] }, deps);
@@ -589,11 +610,14 @@ async function avisarLista(a: AccionEscalamiento, c: ContextoEscalamiento, deps:
  */
 async function avisarADestinatario(
   d: DestinatarioAviso, a: AccionEscalamiento, c: ContextoEscalamiento, deps: DepsVigia, ultimo: string, datosCorreo: DatosAvisoCorreo,
+  /** T-A4-27: aviso en privado a servicio al cliente (sin nivel; sin correo, que hoy solo sabe decir «nivel 1/2»). */
+  servicio?: { detalle: string },
 ): Promise<'entregado' | 'no_entregado' | 'saltado'> {
   const { repo } = deps;
+  const nivelEv = servicio ? null : a.nivel;
   const hash = d.telefono ? hashTelefono(d.telefono) : d.correo ? hashCorreo(d.correo) : null;
   if (hash) {
-    const reclamo = await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'escalada', clave: `${a.clave}:d:${hash.slice(0, 16)}`, nivel: a.nivel, detalle: { destinatario: true } });
+    const reclamo = await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'escalada', clave: `${a.clave}:d:${hash.slice(0, 16)}`, nivel: nivelEv, detalle: { destinatario: true } });
     if (!reclamo) return 'saltado';
   }
   let entregado = false;
@@ -601,15 +625,20 @@ async function avisarADestinatario(
   if (d.telefono) {
     const r = await avisarEscalamiento({
       tenantId: c.tenantId, telefonoDestino: d.telefono, mensajeId: ultimo, nombreCliente: c.nombreCliente ?? 'Un cliente',
-      motivo: a.motivo, minutosEsperando: a.minutosEsperando, nivel: a.nivel,
+      motivo: a.motivo, minutosEsperando: a.minutosEsperando, nivel: a.nivel, ...(servicio ? { servicio } : {}),
     }, deps.enviar);
     if (r.ok) {
       entregado = true;
-      await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'escalada', nivel: a.nivel, destinatarioHash: hash, actorUserId: d.userId, detalle: { entregado: true, canal: 'whatsapp' } });
+      await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'escalada', nivel: nivelEv, destinatarioHash: hash, actorUserId: d.userId, detalle: { entregado: true, canal: 'whatsapp', ...(servicio ? { destino: 'servicio' } : {}) } });
     } else {
-      await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'fallo_envio', nivel: a.nivel, destinatarioHash: hash, detalle: { motivo: r.motivo, aviso: 'escalamiento' } });
+      await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'fallo_envio', nivel: nivelEv, destinatarioHash: hash, detalle: { motivo: r.motivo, aviso: 'escalamiento', ...(servicio ? { destino: 'servicio' } : {}) } });
       porCorreo = debeRespaldarPorCorreo(r);
     }
+  }
+  if (servicio) {
+    // Sin correo para servicio al cliente (el correo de apoyo de hoy dice «nivel 1/2»): si solo tenía correo, queda a la vista, no en silencio.
+    if (!d.telefono && d.correo) await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'fallo_envio', nivel: null, destinatarioHash: hash, detalle: { motivo: 'correo_no_soportado_servicio', aviso: 'escalamiento', destino: 'servicio' } });
+    return entregado ? 'entregado' : 'no_entregado';
   }
   if (!porCorreo || !d.correo) return entregado ? 'entregado' : 'no_entregado';
   if (!c.config.respaldoCorreo) {
@@ -621,6 +650,57 @@ async function avisarADestinatario(
     tenantId: c.tenantId, conversacionId: c.conv.id, clave: claveCorreo(a.clave, d.correo), nivel: a.nivel, directorId: d.directorId, correo: d.correo, datos: datosCorreo,
   }, deps);
   return entregado || res === 'enviado' ? 'entregado' : 'no_entregado';
+}
+
+/**
+ * T-A4-27: «sin dato / sin caja» → PRIMERO a la lista de servicio al cliente, en privado, con «Yo me encargo». Devuelve `true` si
+ * servicio al cliente quedó con el aviso (entonces el llamador NO sube al nivel 1 por ahora; el plazo `escalarNivel2Min` lo sube
+ * después si nadie contesta). Devuelve `false` —y el llamador sigue la escalera de siempre, al nivel 1— si la lista está vacía o
+ * no se puede leer, o si a nadie de la lista se le pudo entregar el aviso (nunca silencio). Nunca lanza.
+ *
+ * Idempotente: el sello es la llave `<conv>:<inicio del ciclo>:srv` en la bitácora (sufijo propio, no choca con `:n1`/`:n2`) y cada
+ * persona se reclama con su llave `:d:<huella>`, como la escalera. NO toca `escalamiento_nivel`; solo anota `escalado_en` (el reloj).
+ */
+async function avisoAServicioCubre(c: ContextoEscalamiento, faltantes: readonly string[], folio: string | null, deps: DepsVigia): Promise<boolean> {
+  const { repo } = deps;
+  try {
+    let lista: DestinatarioAviso[] = [];
+    try { lista = unirDestinatarios(await repo.destinatariosServicioCliente(c.tenantId, c.contacto.clienteId)); }
+    catch (e) { logger.warn('vigia.servicio_lista_fallo', { tenant: c.tenantId, err: e instanceof Error ? e.message : String(e) }); }
+    if (destinoDelDisparo({ disparo: 'sin_dato', faltantes, hayListaServicio: lista.length > 0 }) !== 'servicio') return false;
+
+    const ahora = ahoraDe(deps);
+    const clave = claveServicio(c.conv.id, c.conv.sinRespuestaDesde ?? ahora.toISOString());
+    const sello = await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'escalada', clave, nivel: null, detalle: { motivo: 'sin_dato', destino: 'servicio', faltantes: [...faltantes] } });
+    if (sello) await repo.actualizarConversacion(c.tenantId, c.conv.id, { escaladoEn: ahora.toISOString() });
+    const ultimo = await repo.ultimoEntranteId(c.tenantId, c.conv.id);
+    if (!ultimo) return false;
+
+    const accion: AccionEscalamiento = { nivel: 1, motivo: 'sin_dato', clave, minutosEsperando: 0 };
+    const datosCorreo: DatosAvisoCorreo = { cliente: c.nombreCliente ?? 'Un cliente', motivo: 'sin_dato', minutos: 0, nivel: 1 };
+    const servicio = { detalle: textoSinDatoUnidad(faltantes, folio) };
+    let entregado = false;
+    let yaReclamados = 0;
+    for (const d of lista) {
+      try {
+        const r = await avisarADestinatario(d, accion, c, deps, ultimo, datosCorreo, servicio);
+        if (r === 'saltado') yaReclamados += 1;
+        else if (r === 'entregado') entregado = true;
+      } catch (e) {
+        logger.error('vigia.servicio_destinatario_fallo', { tenant: c.tenantId, err: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    // Reentrada (otra pasada ya los reclamó): el aviso ya salió o está en camino; no se sube al nivel 1 por eso.
+    if (!sello && yaReclamados > 0) return true;
+    if (entregado) return true;
+    // Nadie lo recibió: no se queda esperando el plazo de servicio; el llamador sube al nivel 1 YA y se borra el reloj de servicio.
+    await repo.evento(c.tenantId, { conversacionId: c.conv.id, tipo: 'sin_destinatario', clave: `${clave}:sin_entrega`, nivel: null, detalle: { destino: 'servicio' } });
+    if (sello) await repo.actualizarConversacion(c.tenantId, c.conv.id, { escaladoEn: null });
+    return false;
+  } catch (e) {
+    logger.error('vigia.servicio_aviso_fallo', { tenant: c.tenantId, err: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
 }
 
 /**
