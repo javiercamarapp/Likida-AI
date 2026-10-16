@@ -21,6 +21,7 @@ import { hostNoPublico } from '@/lib/http/destino_publico';
 import { cifrar, cofreConfigurado } from '../conectores/cofre';
 import type { HallazgoAtipico, ConfigAtipicos } from './atipicos';
 import { validarConfigAvisos, configAvisosEfectiva, type ConfigAvisos } from './config_avisos';
+import { validarMargenLejos, margenLejosEfectivo } from './gps_umbral';
 import { validarConfigAtipicos, configAtipicosEfectiva, esEstadoAtipico, puedeCambiarEstado, exigeRevisor, type EstadoAtipico } from './atipicos_config';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1036,12 +1037,18 @@ export async function evaluarGpsDeLineas(
   catalogo: readonly CasetaCatalogo[],
 ): Promise<ResultadoGpsLinea[]> {
   const planes = planificarGps(lineas, catalogo);
+  // El margen «lejos» es de la flota (T-A2-24). Si no se puede leer, el de siempre: nunca afirma de más por un fallo de lectura.
+  let margen = margenLejosEfectivo(undefined);
+  // (El mensaje de la base NO va al log: puede traer valores de la fila.)
+  try { margen = await leerMargenLejosM(tenantId); } catch {
+    logger.warn('peajes.margen_gps_lectura', { tenant: tenantId });
+  }
   const listos = planes.filter((p): p is Extract<typeof p, { listo: true }> => p.listo);
   const muestrasPorLinea = await traerMuestrasPorLinea(tenantId, listos.map((p) => ({ lineaId: p.lineaId, unidadId: p.unidadId, desde: p.desde, hasta: p.hasta })));
 
   return planes.map((p) => {
     if (!p.listo) return { lineaId: p.lineaId, casetaId: p.casetaId, veredicto: p.veredicto };
-    return { lineaId: p.lineaId, casetaId: p.casetaId, veredicto: evaluarCruceGps(p.cruceMs, p.caseta, muestrasPorLinea.get(p.lineaId) ?? []) };
+    return { lineaId: p.lineaId, casetaId: p.casetaId, veredicto: evaluarCruceGps(p.cruceMs, p.caseta, muestrasPorLinea.get(p.lineaId) ?? [], margen) };
   });
 }
 
@@ -1399,6 +1406,30 @@ export async function guardarConfigAvisos(tenantId: string, entrada: unknown): P
   const ok = await escribirFila(tenantId, {
     activo: previa?.activo === true, umbrales: { ...(previa?.umbrales ?? {}), config_peajes: v.valor },
   }, 'peajes.config_peajes_avisos');
+  return ok ? { ok: true, valor: v.valor } : { ok: false, motivo: NO_SE_PUDO_CONFIG };
+}
+
+/**
+ * El margen «lejos de la caseta» de la flota (m) para el cruce con GPS (T-A2-24). Vive en `umbrales.gps` de la misma fila de
+ * configuración (sin tabla nueva). Sin fila o con un valor corrupto: el de siempre. Lanza ante error de base: un error no se lee como «el de siempre».
+ */
+export async function leerMargenLejosM(tenantId: string): Promise<number> {
+  const fila = await leerFila(tenantId, 'peajes.config_peajes_margen_gps_leer');
+  return margenLejosEfectivo(comoDetalleCfg(fila?.umbrales.gps).margenLejosM);
+}
+
+/** Guarda el margen de la flota. Se valida ANTES de escribir; conserva el resto de la configuración (umbrales, plazo, destinatario, interruptor). */
+export async function guardarMargenLejosM(tenantId: string, entrada: unknown): Promise<ResultadoConfigPeajes<number>> {
+  const v = validarMargenLejos(entrada);
+  if (!v.ok) return { ok: false, motivo: v.motivo };
+  let previa: FilaCfg | null;
+  try { previa = await leerFila(tenantId, 'peajes.config_peajes_margen_gps_previa'); } catch (e) {
+    logger.error('peajes.config_peajes_margen_gps_previa', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, motivo: NO_SE_PUDO_CONFIG };
+  }
+  const ok = await escribirFila(tenantId, {
+    activo: previa?.activo === true, umbrales: { ...(previa?.umbrales ?? {}), gps: { margenLejosM: v.valor } },
+  }, 'peajes.config_peajes_margen_gps');
   return ok ? { ok: true, valor: v.valor } : { ok: false, motivo: NO_SE_PUDO_CONFIG };
 }
 

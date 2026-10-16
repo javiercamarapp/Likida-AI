@@ -1,5 +1,6 @@
 import { haversineM, distanciaPuntoSegmentoM, coordenadasValidas } from './geo';
 import { resolverCaseta, type CasetaCatalogo } from './casetas';
+import { MARGEN_LEJOS_DEFAULT_M, margenLejosEfectivo } from './gps_umbral';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CRUCE POR CASETA — ¿la unidad estuvo en la caseta a la hora del cobro?
@@ -35,7 +36,8 @@ export const MAX_HUECO_CONFIRMA_MIN = 15;
 export const MAX_HUECO_NO_COINCIDE_MIN = 6;
 /** Tolerancia entre el reloj del proveedor y el del GPS al buscar el tramo. */
 export const HOLGURA_RELOJ_MIN = 5;
-export const MARGEN_LEJOS_M = 1000;
+/** El margen de siempre; cada flota puede fijar el suyo (`gps_umbral.ts`, T-A2-24). */
+export const MARGEN_LEJOS_M = MARGEN_LEJOS_DEFAULT_M;
 
 export interface Muestra { lat: number; lng: number; t: number }
 export interface CasetaGeo { id: string; lat: number; lng: number; radioM: number }
@@ -67,9 +69,11 @@ const redondear1 = (n: number) => Math.round(n * 10) / 10;
 /**
  * Evalúa UNA línea. `muestras` son las posiciones de la unidad dentro de la
  * ventana alrededor de `cruceMs` (en cualquier orden; se ordenan aquí).
- * Las muestras con coordenadas inválidas se ignoran.
+ * Las muestras con coordenadas inválidas se ignoran. `margenLejosM` es el margen «lejos de la caseta» de la flota
+ * (T-A2-24); uno inválido cae al de siempre, nunca afirma de más.
  */
-export function evaluarCruceGps(cruceMs: number, caseta: CasetaGeo, muestrasCrudas: readonly Muestra[]): VeredictoGps {
+export function evaluarCruceGps(cruceMs: number, caseta: CasetaGeo, muestrasCrudas: readonly Muestra[], margenLejosM: number = MARGEN_LEJOS_M): VeredictoGps {
+  const margenBase = margenLejosEfectivo(margenLejosM);
   const muestras = muestrasCrudas
     .filter((m) => Number.isFinite(m.t) && coordenadasValidas(m))
     .sort((a, b) => a.t - b.t);
@@ -109,7 +113,7 @@ export function evaluarCruceGps(cruceMs: number, caseta: CasetaGeo, muestrasCrud
     if (!(a.t <= cruceMs && b.t >= cruceMs)) continue;
     if (b.t - a.t > MAX_HUECO_NO_COINCIDE_MIN * MIN) continue;
     const cuerda = haversineM(a, b);
-    const margen = Math.max(MARGEN_LEJOS_M, 0.3 * cuerda);
+    const margen = Math.max(margenBase, 0.3 * cuerda);
     const dTramo = distanciaPuntoSegmentoM(caseta, a, b);
     if (dTramo > radio + margen && distMuestra[i] > radio + margen && distMuestra[i + 1] > radio + margen) {
       return { veredicto: 'no_coincide', distanciaM: redondear1(dTramo), muestras: muestras.length };

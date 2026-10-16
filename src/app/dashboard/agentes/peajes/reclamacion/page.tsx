@@ -16,7 +16,8 @@ import type { CierreMensual } from '@/lib/likida/peajes/cierre_mensual';
 import type { ResumenSeguimiento } from '@/lib/likida/peajes/reclamos_seguimiento';
 import { CATEGORIAS_COBRO, type CategoriaCobro } from '@/lib/likida/peajes/reglas_cobro';
 import { superficiePeajesDeTenant } from '@/lib/likida/peajes/superficie_perfil';
-import { listarDecisionesCandidatos } from '@/lib/likida/peajes/datos';
+import { listarDecisionesCandidatos, leerMargenLejosM, guardarMargenLejosM } from '@/lib/likida/peajes/datos';
+import { MOTIVOS_VISIBLES_CINCO_AGENTES } from '@/lib/likida/peajes/reclamacion_perfil';
 import { filasDeCandidatos, filtrosAQuery, normalizarFiltros, tablaDeCandidatos, type TablaCandidatos, type AccionCandidato } from '@/lib/likida/peajes/candidatos_tabla';
 import { aplicablesDelFiltro, ejecutarAccionDeFormulario } from '../acciones-candidatos';
 import { VistaReclamacionPeajes } from './vista';
@@ -57,7 +58,8 @@ export default async function PaginaReclamacionPeajes({
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
-  // T-A2-31: el reporte con evidencia GPS es stand-by; con perfil `cinco_agentes` ni se arma (la revisión de cobros y el seguimiento sí).
+  // T-A2-31/T-A2-24: el reporte con evidencia GPS completo es stand-by; con perfil `cinco_agentes` se arma RESTRINGIDO (solo `gps_lejos_de_caseta` y doble cobro,
+  // todo como candidato, sin geocercas ni cursos). La revisión de cobros y el seguimiento siempre.
   const superficie = await superficiePeajesDeTenant(tenantId);
 
   // ── Las acciones del seguimiento: cada una repite su puerta ADENTRO (una action es un endpoint por POST directo). ──
@@ -110,6 +112,17 @@ export default async function PaginaReclamacionPeajes({
     const r = await ejecutarAccionDeFormulario(tenantId, fd);
     volverReclamos(sufijo, r.ok ? r.mensaje : `error:${r.error}`, UUID.test(desgloseId) ? desgloseId : undefined, String(fd.get('retorno') ?? ''));
   }
+  // T-A2-24: el margen «lejos de la caseta» de la flota (el cliente fijará 200 o 500 m). Repite su puerta ADENTRO y valida antes de escribir.
+  async function accionGuardarMargen(fd: FormData) {
+    'use server';
+    const no = await puertaReclamos(tenantId);
+    const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
+    const volver = UUID.test(desgloseId) ? desgloseId : undefined;
+    if (no) volverReclamos(sufijo, `error:${no}`, volver);
+    const texto = String(fd.get('margen') ?? '').trim();
+    const r = await guardarMargenLejosM(tenantId, /^\d{1,5}$/.test(texto) ? Number(texto) : null);
+    volverReclamos(sufijo, r.ok ? `Margen guardado: ${r.valor} m. Vuelve a conciliar el desglose para que aplique.` : `error:${r.motivo}`, volver);
+  }
   async function accionRechazar(fd: FormData) {
     'use server';
     const no = await puertaReclamos(tenantId);
@@ -128,7 +141,7 @@ export default async function PaginaReclamacionPeajes({
     else {
       // Los dos reportes son independientes: que falle el del GPS no esconde la revisión de cobros (ni al revés).
       const [gps, rev] = await Promise.allSettled([
-        superficie.gps ? reporteReclamacion(tenantId, desgloseValido) : Promise.resolve(null),
+        superficie.gps ? reporteReclamacion(tenantId, desgloseValido) : reporteReclamacion(tenantId, desgloseValido, { perfilRestringido: true }),
         revisionDeDesglose(tenantId, desgloseValido),
       ]);
       if (gps.status === 'fulfilled') reporte = gps.value;
@@ -178,9 +191,19 @@ export default async function PaginaReclamacionPeajes({
     errorSeguimiento = true;
   }
 
+  // Perfil `cinco_agentes`: el margen de la flota para mostrarlo y fijarlo. Si no se puede leer se muestra el de siempre (la pantalla no se cae).
+  let candidato: { motivos: typeof MOTIVOS_VISIBLES_CINCO_AGENTES; margenLejosM: number; guardarMargen: typeof accionGuardarMargen } | undefined;
+  if (!superficie.gps) {
+    let margenLejosM = 1000;
+    try { margenLejosM = await leerMargenLejosM(tenantId); } catch (e) {
+      logger.error('peajes.margen_gps_pagina', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    }
+    candidato = { motivos: MOTIVOS_VISIBLES_CINCO_AGENTES, margenLejosM, guardarMargen: accionGuardarMargen };
+  }
+
   return (
     <VistaReclamacionPeajes
-      sufijo={sufijo} desglose={desgloseValido} estado={estado} reporte={reporte}
+      sufijo={sufijo} desglose={desgloseValido} estado={estado} reporte={reporte} candidato={candidato}
       extras={{
         revision, candidatos: { tabla, error: errorTabla, decidir: accionDecidirCandidato, aplicables }, errorGps, mes, cierre, errorCierre, seguimiento, errorSeguimiento,
         acciones: { crearReclamo: accionCrearReclamo, marcarEnviado: accionMarcarEnviado, registrarNota: accionRegistrarNota, rechazar: accionRechazar, justificarCruce: accionJustificarCruce },
