@@ -1443,3 +1443,84 @@ export async function lineasPreviasDeFlota(
   }
   return previos;
 }
+
+// ── Vínculo cruce → viaje (T-A2-21, migración 0811) ─────────────────────────
+// NO toca `desglose_peaje_linea.viaje_id` (viaje del gasto que respalda, 0106): el vínculo vive aparte.
+
+/** Interruptor por flota del cálculo cruce→viaje. Sin fila = apagado. Lanza ante error de base. */
+export async function leerVinculosActivo(tenantId: string): Promise<boolean> {
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_vinculo_config')
+    .select('activo').eq('tenant_id', tenantId).maybeSingle(), 'peajes.config_vinculos');
+  if (error) throw new Error(`leerVinculosActivo: ${error.message}`);
+  return data?.activo === true;
+}
+
+/** Prende o apaga el cálculo cruce→viaje de la flota. */
+export async function guardarVinculosActivo(tenantId: string, activo: boolean): Promise<boolean> {
+  const { error } = await acotada(supabaseAdmin().from('peaje_vinculo_config').upsert({
+    tenant_id: tenantId, activo, actualizado_en: new Date().toISOString(),
+  }, { onConflict: 'tenant_id' }), 'peajes.guardar_config_vinculos');
+  if (error) logger.error('peajes.guardar_config_vinculos', { tenant: tenantId, err: error.message });
+  return !error;
+}
+
+export interface VinculoGuardado {
+  lineaId: string;
+  estado: 'ligado' | 'ambiguo' | 'sin_viaje' | 'sin_unidad' | 'conflicto';
+  viajeId: string | null;
+  via: 'icident' | 'unidad_ventana';
+  candidatos: readonly string[];
+  icident?: string | null;
+  motivo?: string | null;
+}
+
+export interface VinculoVista extends VinculoGuardado { id: string; desgloseId: string; calculadoEn: string }
+
+const LOTE_VINCULOS = 200;
+
+/**
+ * Guarda los vínculos de un desglose de forma RECALCULABLE: la clave (flota, línea) es única y un
+ * nuevo cálculo SOBRESCRIBE la fila (nunca la duplica). Solo `ligado` conserva `viaje_id`. Lanza ante error de base.
+ */
+export async function guardarVinculos(tenantId: string, desgloseId: string, vinculos: readonly VinculoGuardado[]): Promise<{ guardados: number }> {
+  const porLinea = new Map(vinculos.map((v) => [v.lineaId, v]));
+  const unicos = [...porLinea.values()];
+  const ahora = new Date().toISOString();
+  for (let i = 0; i < unicos.length; i += LOTE_VINCULOS) {
+    const filas = unicos.slice(i, i + LOTE_VINCULOS).map((v) => ({
+      tenant_id: tenantId,
+      desglose_id: desgloseId,
+      linea_id: v.lineaId,
+      viaje_id: v.estado === 'ligado' ? v.viajeId : null,
+      estado: v.estado,
+      via: v.via,
+      candidatos: [...v.candidatos],
+      icident: v.icident ?? null,
+      motivo: v.motivo ?? null,
+      calculado_en: ahora,
+    }));
+    const { error } = await acotada(supabaseAdmin().from('peaje_cruce_viaje')
+      .upsert(filas, { onConflict: 'tenant_id,linea_id' }), 'peajes.guardar_vinculos');
+    if (error) throw new Error(`guardarVinculos: ${error.message}`);
+  }
+  return { guardados: unicos.length };
+}
+
+/** Los vínculos guardados de un desglose (de esa flota). Lanza ante error de base. */
+export async function vinculosDeDesglose(tenantId: string, desgloseId: string): Promise<VinculoVista[]> {
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin().from('peaje_cruce_viaje')
+      .select('id, desglose_id, linea_id, viaje_id, estado, via, candidatos, icident, motivo, calculado_en', conteo(d))
+      .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('id').range(d, h), 'peajes.vinculos_de_desglose'),
+    'peajes.vinculos_de_desglose',
+  );
+  return filas.map((f) => ({
+    id: String(f.id), desgloseId: String(f.desglose_id), lineaId: String(f.linea_id),
+    viajeId: typeof f.viaje_id === 'string' ? f.viaje_id : null,
+    estado: String(f.estado) as VinculoGuardado['estado'], via: String(f.via) as VinculoGuardado['via'],
+    candidatos: Array.isArray(f.candidatos) ? f.candidatos.map(String) : [],
+    icident: typeof f.icident === 'string' ? f.icident : null,
+    motivo: typeof f.motivo === 'string' ? f.motivo : null,
+    calculadoEn: String(f.calculado_en),
+  }));
+}
