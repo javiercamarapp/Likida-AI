@@ -1746,3 +1746,14 @@ export async function importarRutas(tenantId: string, filas: readonly RutaCsv[])
   }
   return { guardadas: plan.nuevas.length + plan.cambios.length, nuevas: plan.nuevas.length, actualizadas: plan.cambios.length, sinCambios: plan.sinCambios };
 }
+
+/**
+ * T-A5-50: «Revisada». Pone `revisada_en` (AAAA-MM-DD de la flota) en UNA ruta de ESA flota. `true` si la ruta existía; `false` si no
+ * (id inexistente o de otra flota: no se toca nada). No envía mensajes ni programa nada. Lanza si la base falla.
+ */
+export async function marcarRutaRevisada(tenantId: string, rutaId: string, dia: string): Promise<boolean> {
+  const res = await acotada(supabaseAdmin().from('ruta_autorizada').update({ revisada_en: dia })
+    .eq('id', rutaId).eq('tenant_id', tenantId).select('id'), 'conductor.rutas_revisar');
+  if (res.error) throw new Error(`conductor.rutas_revisar: ${res.error.message}`);
+  return ((res.data ?? []) as unknown[]).length > 0;
+}

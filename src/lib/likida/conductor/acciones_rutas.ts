@@ -1,7 +1,7 @@
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
-import { importarRutas } from './repo';
-import { parsearCsvRutas } from './rutas';
+import { importarRutas, marcarRutaRevisada } from './repo';
+import { hoyDeLaFlota, parsearCsvRutas } from './rutas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA ACCIÓN DE IMPORTAR RUTAS AUTORIZADAS (T-A5-48) — la lógica de la acción de servidor, con puerto para poder probarla:
@@ -16,8 +16,8 @@ export type ResultadoAccionRutas =
   | { ok: true; mensaje: string; detalles?: string[] }
   | { ok: false; error: string; detalles?: string[] };
 
-export interface DepsRutas { importar: typeof importarRutas }
-export const depsRutasReales = (): DepsRutas => ({ importar: importarRutas });
+export interface DepsRutas { importar: typeof importarRutas; marcar: typeof marcarRutaRevisada }
+export const depsRutasReales = (): DepsRutas => ({ importar: importarRutas, marcar: marcarRutaRevisada });
 
 export interface ContextoRutas { tenantId: string; rol: string }
 
@@ -45,5 +45,25 @@ export async function importarRutasDelPanel(
   } catch (e) {
     logger.error('rutas.importar_fallo', { err: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: 'No pude importar ahorita. Lo que ya estaba guardado sigue igual; intenta de nuevo en un momento.' };
+  }
+}
+
+/**
+ * T-A5-50: el botón «Revisada» de la lista de pendientes. Mismo permiso que importar; el tenant sale de la SESIÓN y el día es el de la
+ * flota (America/Mexico_City), no el del servidor. Solo escribe `revisada_en`: no envía mensajes ni crea cron.
+ */
+export async function marcarRutaRevisadaDelPanel(
+  ctx: ContextoRutas, entrada: { id: string }, d: DepsRutas = depsRutasReales(), ahora: Date = new Date(),
+): Promise<ResultadoAccionRutas> {
+  if (!puedeAsignar(ctx.rol)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico marcan rutas como revisadas.' };
+  const id = typeof entrada.id === 'string' ? entrada.id.trim() : '';
+  if (id === '') return { ok: false, error: 'No sé cuál ruta marcar; recarga la pantalla e intenta de nuevo.' };
+  try {
+    const existia = await d.marcar(ctx.tenantId, id, hoyDeLaFlota(ahora));
+    if (!existia) return { ok: false, error: 'Esa ruta ya no existe; recarga la pantalla.' };
+    return { ok: true, mensaje: 'Ruta marcada como revisada hoy.' };
+  } catch (e) {
+    logger.error('rutas.revisar_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, error: 'No pude marcarla ahorita. Intenta de nuevo en un momento.' };
   }
 }

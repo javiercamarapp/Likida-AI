@@ -10,6 +10,8 @@ import { VistaConfigConductor } from './vista';
 const sesion = vi.hoisted(() => ({ tenantId: 'tenant-A', rol: 'flota_admin', userId: 'u1' }));
 const importar = vi.hoisted(() => vi.fn());
 const revalidar = vi.hoisted(() => vi.fn());
+const leerRutas = vi.hoisted(() => vi.fn());
+const marcarRevisada = vi.hoisted(() => vi.fn());
 
 vi.mock('next/navigation', () => ({ redirect: vi.fn() }));
 vi.mock('next/cache', () => ({ revalidatePath: revalidar }));
@@ -18,6 +20,8 @@ vi.mock('@/lib/auth/visibilidad', () => ({ puedeVerRuta: vi.fn(() => true) }));
 vi.mock('@/lib/likida/conductor/repo', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/likida/conductor/repo')>()),
   importarRutas: importar,
+  leerRutasAutorizadas: leerRutas,
+  marcarRutaRevisada: marcarRevisada,
   leerConfigConductor: vi.fn(async () => ({ ...CONFIG_CONDUCTOR_DEFAULT })),
   cargarContactosTrafico: vi.fn(async () => []),
   leerDatosPreflight: vi.fn(async () => { throw new Error('sin preflight en la prueba'); }),
@@ -44,7 +48,7 @@ async function accionDeLaPagina(rol: string) {
 }
 
 describe('rutas autorizadas en la pantalla de configuración del Conductor (T-A5-48)', () => {
-  beforeEach(() => { importar.mockReset(); revalidar.mockReset(); sesion.tenantId = 'tenant-A'; });
+  beforeEach(() => { importar.mockReset(); revalidar.mockReset(); leerRutas.mockReset(); marcarRevisada.mockReset(); leerRutas.mockResolvedValue([]); sesion.tenantId = 'tenant-A'; });
 
   it('la vista pinta el formulario de importar rutas solo si recibe la acción', () => {
     const con = renderToStaticMarkup(<VistaConfigConductor {...baseProps} accionImportarRutas={accion} />);
@@ -88,3 +92,75 @@ describe('rutas autorizadas en la pantalla de configuración del Conductor (T-A5
     expect(importar).not.toHaveBeenCalled();
   });
 });
+
+// T-A5-50: el mantenimiento por antigüedad está CABLEADO a la misma pantalla (página → lista → botón «Revisada» → repositorio).
+const rutaVieja = { id: 'r-vieja', corredor: 'ejemplo-corredor', sitioOrigen: null, sitioDestino: null, url: URL_OK, vigenteHasta: null, revisadaEn: '2020-01-01' };
+const rutaAlDia = { ...rutaVieja, id: 'r-hoy', corredor: 'ejemplo-al-dia', revisadaEn: new Date().toISOString().slice(0, 10) };
+
+async function propsDeLaPagina(rol: string) {
+  sesion.rol = rol;
+  const { default: Pagina } = await import('./page');
+  const el = await Pagina({ searchParams: Promise.resolve({}) });
+  return (el as { props: Record<string, unknown> }).props;
+}
+
+describe('mantenimiento de rutas por antigüedad en la configuración del Conductor (T-A5-50)', () => {
+  beforeEach(() => { importar.mockReset(); revalidar.mockReset(); leerRutas.mockReset(); marcarRevisada.mockReset(); leerRutas.mockResolvedValue([]); sesion.tenantId = 'tenant-A'; });
+
+  it('la página lee las rutas de la flota de la SESIÓN y le pasa a la vista solo las pendientes', async () => {
+    leerRutas.mockResolvedValue([rutaVieja, rutaAlDia]);
+    const props = await propsDeLaPagina('flota_admin');
+    expect(leerRutas).toHaveBeenCalledWith('tenant-A');
+    expect((props.rutasPendientes as Array<{ ruta: { id: string } }>).map((p) => p.ruta.id)).toEqual(['r-vieja']);
+    expect(props.totalRutas).toBe(2);
+    expect(props.diasRevisionRutas).toBe(90);
+  });
+
+  it('la vista pinta la lista con el botón «Revisada» y el estado vacío en lenguaje llano', () => {
+    const accionR = async () => null;
+    const pendientes = [{ ruta: rutaVieja, diasSinRevisar: 2000, vencida: false }, { ruta: { ...rutaVieja, id: 'r2', corredor: 'ejemplo-nunca', revisadaEn: null }, diasSinRevisar: null, vencida: true }];
+    const con = renderToStaticMarkup(<VistaConfigConductor {...baseProps} accionImportarRutas={accion} rutasPendientes={pendientes} totalRutas={2} accionRutaRevisada={accionR} />);
+    expect(con).toContain('Rutas por revisar');
+    expect(con).toContain('ejemplo-corredor');
+    expect(con).toContain('Sin revisar hace 2000 días');
+    expect(con).toContain('Nunca se ha revisado');
+    expect(con).toContain('vencida');
+    expect(con).toContain('>Revisada<');
+    expect(con).toContain('name="id"');
+    const vacio = renderToStaticMarkup(<VistaConfigConductor {...baseProps} accionImportarRutas={accion} rutasPendientes={[]} totalRutas={3} />);
+    expect(vacio).toContain('Todas las rutas se revisaron en los últimos 90 días. No hay nada pendiente.');
+    const sinRutas = renderToStaticMarkup(<VistaConfigConductor {...baseProps} accionImportarRutas={accion} rutasPendientes={[]} totalRutas={0} />);
+    expect(sinRutas).toContain('Todavía no hay rutas cargadas');
+    const noLeida = renderToStaticMarkup(<VistaConfigConductor {...baseProps} accionImportarRutas={accion} rutasPendientes={null} />);
+    expect(noLeida).not.toContain('Rutas por revisar');
+  });
+
+  it('el botón «Revisada» llega al repositorio con el tenant de la sesión (no del formulario) y refresca la pantalla', async () => {
+    marcarRevisada.mockResolvedValue(true);
+    const props = await propsDeLaPagina('flota_admin');
+    const accionR = props.accionRutaRevisada as (p: null, fd: FormData) => Promise<{ ok: boolean }>;
+    expect(accionR).toBeTypeOf('function');
+    const fd = new FormData(); fd.set('id', 'r-vieja'); fd.set('tenant_id', 'tenant-B');
+    const r = await accionR(null, fd);
+    expect(r.ok).toBe(true);
+    expect(marcarRevisada).toHaveBeenCalledTimes(1);
+    expect(marcarRevisada.mock.calls[0][0]).toBe('tenant-A');
+    expect(marcarRevisada.mock.calls[0][1]).toBe('r-vieja');
+    expect(marcarRevisada.mock.calls[0][2]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(revalidar).toHaveBeenCalled();
+  });
+
+  it('un rol sin permiso de asignar no ve la lista ni recibe el botón, y no se leen las rutas', async () => {
+    const props = await propsDeLaPagina('operador');
+    expect(props.accionRutaRevisada).toBeUndefined();
+    expect(props.rutasPendientes).toBeNull();
+    expect(leerRutas).not.toHaveBeenCalled();
+  });
+
+  it('si la lectura falla la pantalla sigue (lista omitida), no se cae', async () => {
+    leerRutas.mockRejectedValue(new Error('base caída'));
+    const props = await propsDeLaPagina('flota_admin');
+    expect(props.rutasPendientes).toBeNull();
+  });
+});
+
