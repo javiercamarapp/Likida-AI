@@ -13,6 +13,7 @@ import {
 } from './sitios';
 import type { PosicionComparada, SitioValidable, Veredicto, ResultadoValidacion, MotivoSinDato, FuenteUbicacion } from './validacion';
 import { telefonoAlcanzable } from './preflight_piloto';
+import type { RutaExistente } from './rutas';
 import { TIPOS_HITO, type HitoFila, type TipoEvidencia, type TipoHito } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -462,6 +463,10 @@ export interface DatosTablero {
   salidasTms?: Map<string, string>;
   /** T-A5-57: viajes con Carta Porte aprobada ligada (`cp_documento.viaje_id`). Ausente = no se leyó: el tablero no afirma «sin Carta Porte». */
   ccpLigado?: ReadonlySet<string>;
+  /** T-A5-49: las rutas autorizadas de la flota (vigentes o no). Ausente = no se leyeron: el tablero no afirma «sin ruta». */
+  rutasAutorizadas?: readonly RutaExistente[];
+  /** T-A5-49: id de sitio → su código, para buscar la ruta del sitio de origen/destino. Sitios sin código no aparecen. */
+  sitioCodigos?: Map<string, string>;
   /** Niveles de escalamiento sin a quién avisar, por terminal de los viajes listados. Ausente = no se pudo leer: el tablero no inventa una alerta. */
   sinDestino?: NivelSinDestino[];
   /** T-A5-44: patios de entrega distintos del esperado que el supervisor aún no atendió. Ausente = no se pudo leer: no se inventa una alerta. */
@@ -488,10 +493,12 @@ export async function leerDatosTablero(tenantId: string, f: FiltrosTablero = {})
   const sitioIds = [...new Set(viajes.flatMap((v) => [v.origenSitioId, v.destinoSitioId]).filter((x): x is string => !!x))];
   const sitios = new Map<string, string>();
   const sitiosCoords = new Map<string, { nombre: string; lat: number; lng: number; radioM?: number }>();
+  const sitioCodigos = new Map<string, string>();
   if (sitioIds.length > 0) {
-    const rs = await traerPorIds<Fila>(sitioIds, (t) => acotada(supabaseAdmin().from('geocerca').select('id, nombre, lat, lng, radio_m').eq('tenant_id', tenantId).in('id', t), 'tablero.sitios') as never, 'tablero.sitios');
+    const rs = await traerPorIds<Fila>(sitioIds, (t) => acotada(supabaseAdmin().from('geocerca').select('id, nombre, codigo, lat, lng, radio_m').eq('tenant_id', tenantId).in('id', t), 'tablero.sitios') as never, 'tablero.sitios');
     for (const g of rs) {
       sitios.set(String(g.id), String(g.nombre));
+      if (typeof g.codigo === 'string' && g.codigo !== '') sitioCodigos.set(String(g.id), g.codigo);
       const lat = Number(g.lat), lng = Number(g.lng);
       const radioM = Number(g.radio_m);
       if (Number.isFinite(lat) && Number.isFinite(lng)) sitiosCoords.set(String(g.id), { nombre: String(g.nombre), lat, lng, ...(Number.isFinite(radioM) && radioM > 0 ? { radioM } : {}) });
@@ -529,7 +536,7 @@ export async function leerDatosTablero(tenantId: string, f: FiltrosTablero = {})
   } catch (e) {
     logger.warn('conductor.tablero_patio_no_leido', { err: e instanceof Error ? e.message : String(e) });
   }
-  return { viajes, hayMas, hitos: hitosCrudos.map(filaAHito), veredictos, evidencias, acciones, sitios, sitiosCoords, posiciones, sinDestino, patiosDistintos };
+  return { viajes, hayMas, hitos: hitosCrudos.map(filaAHito), veredictos, evidencias, acciones, sitios, sitioCodigos, sitiosCoords, posiciones, sinDestino, patiosDistintos };
 }
 
 export interface CatalogosFiltro {

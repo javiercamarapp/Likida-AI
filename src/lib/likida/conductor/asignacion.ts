@@ -2,7 +2,8 @@ import { appUrl } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { opcionesDeEnvio } from '@/lib/meta/plantillas_catalogo';
 import { parametrosAvisoOficina } from '@/lib/meta/aviso_oficina';
-import { aceptarPorBoton, leerCajaDelViaje, type ResultadoAceptarPorBoton, type ViajeContexto } from './repo';
+import { aceptarPorBoton, leerCajaDelViaje, leerCodigosSitios, leerRutasAutorizadas, type ResultadoAceptarPorBoton, type ViajeContexto } from './repo';
+import { hoyDeLaFlota, rutasDelViaje, type RutaAutorizada } from './rutas';
 import { despacharInstrucciones } from '../convenios/envio';
 import type { ConfigConductor } from './config';
 import type { NuevoAviso, PuertosConductor } from './ejecutor';
@@ -33,8 +34,8 @@ import { PREFIJO_BOTON, type HitoFila } from './tipos';
 // ── RULINGS (reversibles) ──────────────────────────────────────────────────
 //   · Origen de la aceptación = 'chofer': el dominio de `viaje_aceptado_origen_dominio` (0800) es chofer | importacion | oficina; 'whatsapp'
 //     violaría el CHECK. La métrica de T-A5-06 solo excluye 'importacion', así que el chofer cuenta bien.
-//   · Datos que faltan NO se inventan: caja sin dato → «por confirmar con tu supervisor»; cita ausente → se dice; rutas → la tarea T-A5-49
-//     las trae del repositorio de rutas autorizadas (hoy «consulta con tu supervisor»).
+//   · Datos que faltan NO se inventan: caja sin dato → «por confirmar con tu supervisor»; cita ausente → se dice; rutas → T-A5-49 las trae del repositorio
+//     de rutas autorizadas (`rutasParaAsignacion`); sin ruta vigente, «consulta con tu supervisor».
 //   · «Despachador» = los destinatarios de nivel 1 (jefe de tráfico) que ya usa todo el módulo: no hay un rol de despachador aparte.
 //   · El botón se atiende aunque la perilla se apague después de mandar N01: dejar al chofer con un botón muerto no ayuda a nadie.
 //   · Un rechazo no reasigna ni desasigna (efecto sobre datos de la oficina): solo avisa; el viaje sigue sin aceptar y la escalación de
@@ -133,13 +134,51 @@ export interface PuertosAsignacion extends Pick<PuertosConductor, 'reclamar' | '
   convenio(tenantId: string, viajeId: string): Promise<void>;
 }
 
+export interface LectorRutasViaje {
+  /** Las rutas autorizadas de la flota (vigentes o no). Lanza si la base falla. */
+  rutas(tenantId: string): Promise<readonly RutaAutorizada[]>;
+  /** id de sitio → código. Lanza si la base falla. */
+  codigos(tenantId: string, sitioIds: readonly string[]): Promise<Map<string, string>>;
+}
+
+/**
+ * T-A5-49 (R04): los links de ruta del mensaje, SOLO de la base de rutas autorizadas (T-A5-48). Importación = origen; exportación = origen y
+ * destino. Si no hay ruta vigente (o no se pudo leer la base) devuelve null y el mensaje dice «consulta con tu supervisor»: nunca inventa.
+ * La excepción para la oficina NO se guarda aquí: el tablero la calcula al leer con la misma `rutasDelViaje`.
+ */
+export async function rutasParaAsignacion(
+  l: LectorRutasViaje, v: Pick<ViajeContexto, 'tenantId' | 'id' | 'origen' | 'destino' | 'origenSitioId' | 'destinoSitioId' | 'servicio'>, ahora: Date, zona?: string,
+): Promise<Pick<DatosInstrucciones, 'rutaCarga' | 'rutaPatio'>> {
+  try {
+    const rutas = await l.rutas(v.tenantId);
+    if (rutas.length === 0) return { rutaCarga: null, rutaPatio: null };
+    const ids = [v.origenSitioId, v.destinoSitioId].filter((x): x is string => !!x);
+    const codigos = ids.length === 0 ? new Map<string, string>() : await l.codigos(v.tenantId, ids);
+    const r = rutasDelViaje(rutas, {
+      origen: v.origen, destino: v.destino, servicio: v.servicio,
+      sitioOrigenCodigo: (v.origenSitioId && codigos.get(v.origenSitioId)) || null,
+      sitioDestinoCodigo: (v.destinoSitioId && codigos.get(v.destinoSitioId)) || null,
+    }, hoyDeLaFlota(ahora, zona));
+    return { rutaCarga: r.carga, rutaPatio: r.patio };
+  } catch (err) {
+    logger.warn('conductor.asignacion_rutas_fallo', { viaje: v.id, err: err instanceof Error ? err.message : String(err) });
+    return { rutaCarga: null, rutaPatio: null };
+  }
+}
+
+const LECTOR_RUTAS_REAL: LectorRutasViaje = { rutas: leerRutasAutorizadas, codigos: leerCodigosSitios };
+
 export function puertosAsignacionReales(): PuertosAsignacion {
   const base = puertosReales();
   return {
     reclamar: base.reclamar, cerrarAviso: base.cerrarAviso, enviar: base.enviar, destinatarios: base.destinatarios,
     aceptar: aceptarPorBoton,
-    // T-A5-49 sustituye las rutas por las del repositorio de rutas autorizadas; hasta entonces no hay de dónde sacarlas.
-    datos: async (viaje) => ({ caja: await leerCajaDelViaje(viaje), rutaCarga: null, rutaPatio: null }),
+    // Caja del programa del Vigía y rutas del repositorio de rutas autorizadas (T-A5-49); cada una falla sola, sin tirar a la otra.
+    datos: async (viaje) => {
+      const [caja, rutas] = await Promise.allSettled([leerCajaDelViaje(viaje), rutasParaAsignacion(LECTOR_RUTAS_REAL, viaje, new Date())]);
+      if (caja.status === 'rejected') logger.warn('conductor.asignacion_caja_fallo', { viaje: viaje.id, err: caja.reason instanceof Error ? caja.reason.message : String(caja.reason) });
+      return { caja: caja.status === 'fulfilled' ? caja.value : null, ...(rutas.status === 'fulfilled' ? rutas.value : { rutaCarga: null, rutaPatio: null }) };
+    },
     convenio: async (tenantId, viajeId) => { await despacharInstrucciones(tenantId, viajeId); },
   };
 }

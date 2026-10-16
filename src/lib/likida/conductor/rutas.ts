@@ -1,4 +1,5 @@
 import { TZ_MX, diaEnZona } from '@/lib/formato';
+import type { Servicio } from './ciclo_servicio';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL REPOSITORIO DE RUTAS AUTORIZADAS (T-A5-48, migración 0808) — del CSV a filas validadas y la búsqueda de la ruta de un viaje.
@@ -259,4 +260,55 @@ export function buscarRuta<T extends RutaAutorizada>(rutas: readonly T[], consul
     if (puntos > mejorPuntos) { mejor = r; mejorPuntos = puntos; }
   }
   return mejor;
+}
+
+// ── Las rutas de UN viaje (T-A5-49) ─────────────────────────────────────────
+
+export interface ViajeParaRuta {
+  /** El corredor del viaje, si algún campo lo trae. `viaje` no tiene esa columna hoy (BLOQUEO EXTERNO): sin él se prueba con el texto del destino y del origen. */
+  corredor?: string | null;
+  origen: string | null;
+  destino: string | null;
+  /** CÓDIGO del sitio de origen/destino (catálogo de sitios), si el viaje ya está ligado a uno. */
+  sitioOrigenCodigo: string | null;
+  sitioDestinoCodigo: string | null;
+  servicio?: Servicio;
+}
+
+export interface RutasDelViaje {
+  /** Link de Google Maps al punto de origen/carga; `null` = no hay ruta autorizada vigente. */
+  carga: string | null;
+  /** Link al destino/patio de entrega. Importación: nunca (solo se manda el de origen). */
+  patio: string | null;
+  /** Lo que el mensaje no pudo llevar y el tablero debe mostrar. El origen siempre cuenta; el destino solo en exportación. */
+  faltan: Array<'origen' | 'destino'>;
+}
+
+/**
+ * Los links que lleva el mensaje de asignación (R04): importación = el de origen; exportación = el de origen y el de destino. Solo sale
+ * de la base de rutas autorizadas y vigentes (`buscarRuta`): sin ruta o vencida es ausencia, nunca una ruta inventada.
+ *
+ * Ruling: el origen se busca con su código de sitio (o la ruta del corredor completo); el destino solo con una fila que nombre ese sitio
+ * de destino (la del corredor completo ya es el link de origen y no se repite). Sin `servicio` conocido el destino se manda si existe,
+ * pero su falta no se reclama. Costo si me equivoco: cambiar `corredoresCandidatos` cuando el cliente diga qué campo es el corredor.
+ */
+export function rutasDelViaje(rutas: readonly RutaAutorizada[], v: ViajeParaRuta, hoy: string): RutasDelViaje {
+  const corredores = v.corredor
+    ? [v.corredor]
+    : [v.destino, v.origen].filter((t): t is string => typeof t === 'string' && t.trim() !== '');
+  const unicos = [...new Set(corredores.map(normalizarClaveRuta).filter((c) => c !== ''))];
+  const buscar = (consulta: Omit<ConsultaRuta, 'corredor'>, exigeSitioDestino: boolean): string | null => {
+    for (const corredor of unicos) {
+      const hallada = buscarRuta(rutas, { corredor, ...consulta }, hoy);
+      if (hallada && (!exigeSitioDestino || hallada.sitioDestino !== null)) return hallada.url;
+    }
+    return null;
+  };
+  const carga = buscar({ sitioOrigen: v.sitioOrigenCodigo, sitioDestino: null }, false);
+  const patioHallado = v.sitioDestinoCodigo ? buscar({ sitioOrigen: null, sitioDestino: v.sitioDestinoCodigo }, true) : null;
+  const patio = v.servicio === 'importacion' ? null : patioHallado;
+  const faltan: RutasDelViaje['faltan'] = [];
+  if (carga === null) faltan.push('origen');
+  if (v.servicio === 'exportacion' && patio === null) faltan.push('destino');
+  return { carga, patio, faltan };
 }

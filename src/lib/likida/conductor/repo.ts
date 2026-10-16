@@ -149,10 +149,13 @@ export interface ViajeContexto {
   entregarEn?: string | null;
   /** T-A5-45: el cliente del viaje (`viaje.cliente_id`); con él se elige el umbral de estadía de descarga POR CLIENTE. */
   clienteId?: string | null;
+  /** T-A5-49: el sitio (geocerca) ligado al origen y al destino, si el viaje ya tiene uno; con su código se busca la ruta autorizada. */
+  origenSitioId?: string | null;
+  destinoSitioId?: string | null;
 }
 
 export const COLUMNAS_VIAJE_CTX =
-  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, aceptado_origen, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, despacho_ref, cliente_id, operador:operador_id(nombre, telefono)';
+  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, aceptado_origen, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, despacho_ref, cliente_id, origen_geocerca_id, destino_geocerca_id, operador:operador_id(nombre, telefono)';
 
 export function filaAViajeCtx(f: Fila): ViajeContexto {
   const rel = f.operador as { nombre?: string; telefono?: string } | Array<{ nombre?: string; telefono?: string }> | null;
@@ -177,6 +180,8 @@ export function filaAViajeCtx(f: Fila): ViajeContexto {
     etaDestinoEn: s(f.eta_destino_en),
     despachoRef: s(f.despacho_ref),
     clienteId: s(f.cliente_id),
+    origenSitioId: s(f.origen_geocerca_id),
+    destinoSitioId: s(f.destino_geocerca_id),
     ...(esServicio(f.servicio) ? { servicio: f.servicio } : {}),
   };
 }
@@ -1590,6 +1595,16 @@ export async function leerRutasAutorizadas(tenantId: string): Promise<RutaExiste
     throw new Error(`conductor.rutas_leer: ${error.message}`);
   }
   return ((data ?? []) as unknown as Fila[]).map(filaARuta).filter((r): r is RutaExistente => r !== null);
+}
+
+/** T-A5-49: id de sitio → su CÓDIGO del catálogo (para buscar la ruta autorizada). Solo de esa flota; un sitio sin código no aparece. Lanza si la base falla. */
+export async function leerCodigosSitios(tenantId: string, sitioIds: readonly string[]): Promise<Map<string, string>> {
+  const ids = [...new Set(sitioIds.filter((x) => x !== ''))];
+  const codigos = new Map<string, string>();
+  if (ids.length === 0) return codigos;
+  const filas = await traerPorIds<Fila>(ids, (t) => acotada(supabaseAdmin().from('geocerca').select('id, codigo').eq('tenant_id', tenantId).in('id', t), 'conductor.sitios_codigo') as never, 'conductor.sitios_codigo');
+  for (const f of filas) { const id = s(f.id); const c = s(f.codigo); if (id && c) codigos.set(id, c); }
+  return codigos;
 }
 
 export interface ResultadoImportarRutas { guardadas: number; nuevas: number; actualizadas: number; sinCambios: number }

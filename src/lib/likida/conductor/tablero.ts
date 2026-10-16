@@ -4,6 +4,7 @@ import { calcularEstancias, excedeUmbral, type Estancia } from './estadias_anden
 import { estadoReporte, hitoActivo, reubicacionesDespuesDelPrimero, type Reubicacion } from './maquina';
 import { textoRampa } from './mensajes';
 import { haversineM } from './geo';
+import { hoyDeLaFlota, rutasDelViaje } from './rutas';
 import { aplicarPerfil } from './perfil';
 import { evaluarSalidaTms, textoSalidaTms } from './salida_tms';
 import { anclaDe, textoTiempo } from './planificador';
@@ -74,7 +75,7 @@ export interface ReporteLlegadaVista {
 }
 
 export type TipoExcepcion =
-  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'llegada_sin_confirmar' | 'llegada_sin_sitio' | 'estadia_excedida' | 'horas_incoherentes' | 'sin_a_quien_escalar' | 'pendiente_cruce_largo' | 'salida_tms_discrepante' | 'patio_entrega_distinto' | 'local_abierto_sin_ccp';
+  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'llegada_sin_confirmar' | 'llegada_sin_sitio' | 'estadia_excedida' | 'horas_incoherentes' | 'sin_a_quien_escalar' | 'pendiente_cruce_largo' | 'salida_tms_discrepante' | 'patio_entrega_distinto' | 'local_abierto_sin_ccp' | 'sin_ruta_autorizada';
 
 export interface Excepcion {
   tipo: TipoExcepcion;
@@ -421,6 +422,22 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
         ...base, tipo: 'local_abierto_sin_ccp', hitoId: null, hitoTipo: null, gravedad: 1, desde: dt.actualizadoEn ?? null,
         texto: `${transito.texto}: sin Carta Porte (viaje local abierto). Sigue abierto para no perder el GPS; el agente no lo cierra ni emite el complemento.`,
       });
+    }
+    // T-A5-49 (R04): el chofer ya recibió «consulta con tu supervisor» en vez del link de ruta. Solo se muestra: no inventa ruta ni avisa a nadie.
+    // Con la base de rutas vacía (la flota aún no las carga) o sin poder leerla no se afirma nada. Importación y exportación se distinguen
+    // cuando `viaje` traiga el servicio; hoy solo el origen se reclama (el destino lo exige solo la exportación).
+    if (datos.rutasAutorizadas && datos.rutasAutorizadas.length > 0) {
+      const r = rutasDelViaje(datos.rutasAutorizadas, {
+        origen: viaje.origen, destino: viaje.destino,
+        sitioOrigenCodigo: (viaje.origenSitioId && datos.sitioCodigos?.get(viaje.origenSitioId)) || null,
+        sitioDestinoCodigo: (viaje.destinoSitioId && datos.sitioCodigos?.get(viaje.destinoSitioId)) || null,
+      }, hoyDeLaFlota(ahora, config.zonaHoraria));
+      if (r.faltan.length > 0) {
+        excepciones.push({
+          ...base, tipo: 'sin_ruta_autorizada', hitoId: null, hitoTipo: null, gravedad: 2, desde: viaje.aceptadoEn,
+          texto: 'No hay ruta autorizada vigente para este viaje: el chofer recibió «consulta con tu supervisor» en lugar del link. Cárgala en Configuración, Rutas autorizadas.',
+        });
+      }
     }
     for (const e of estancias) {
       if (excedeUmbral(e, config)) {
