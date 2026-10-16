@@ -25,6 +25,7 @@ Los crons son los de `vercel.json`. «Reactivo» = lo dispara un mensaje o una p
 | 13 Mis reglas | `mis-reglas.md` | dentro de `/api/cron/escalar` (el vigilante de reglas) | — |
 | Convenios | `convenios-clientes.md` | dentro de `conductor-hitos` (acercamiento) | 0580 (anterior a las olas 4) |
 | Orquestador | `orquestador.md` | barrido de salud dentro de `/api/cron/escalar` | 0650-0652 (escalaciones, aviso por correo, barrido de salud) |
+| Perfil de flota `cinco_agentes` | `perfil-cinco-agentes.md`, índice en `cinco-agentes.md` | los de los agentes activos (A1-A3); A4 y A5 «Próximamente» no corren para flotas con perfil | `0770` (tabla `tenant_perfil`) |
 
 Otros crons de la plataforma: `wa-outbox` y `wa-pendientes` (cada minuto), `runner` (cada 4 h), `purgar` (04:15), `asistencia` (cada 5 min), `descarga-sat` (cada 6 h).
 
