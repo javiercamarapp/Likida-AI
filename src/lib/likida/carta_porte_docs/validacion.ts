@@ -19,14 +19,14 @@
 // complemento es un comprobante falso (CFF 29-A fr. IX), no un error de captura.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { CAMPOS_DOC, CAMPOS_MERCANCIA, UMBRAL_CRITICO, etiquetaCampo, type CampoDoc, type CampoValor, type Extraccion } from './campos';
+import { CAMPOS_DOC, CAMPOS_MERCANCIA, REFERENCIAS_MERCANCIA, UMBRAL_CRITICO, etiquetaCampo, type CampoDoc, type CampoValor, type Extraccion } from './campos';
 import { CLAVES_UNIDAD, CODIGOS_ESTADO, CODIGOS_ESTADO_EEUU, FACTOR_A_KG, estadoDeCp } from './catalogos';
 import {
   CAT_COLONIA, CAT_CP, CAT_EMBALAJE, CAT_FRACCION, CAT_PELIGROSO, CAT_PRODUCTO, CAT_UNIDAD,
   clavesDeFraccion, esClaveProductoGenerica, esFraccionGenerica, mismaFraccion, normalizarFraccion, type ResolvedorSat,
 } from './catalogos_sat';
 import { valorSospechoso } from './inyeccion';
-import { normalizarNumero } from './normalizar';
+import { normalizarIdDestino, normalizarNumero } from './normalizar';
 import { rfcChecksumOk } from '../intake/cfdi';
 import type { ReglaTramoCliente } from './perfiles';
 
@@ -49,6 +49,11 @@ export interface Hallazgo {
   origen?: 'tms';
   /** Fragmento del documento que sustenta el hallazgo (T-A3-57). Ausente en los demás. */
   evidencia?: string | null;
+  /**
+   * Corrección que se PROPONE (T-A3-55). Nunca se aplica sola: la aplica una persona al confirmarla
+   * (`aplicarPropuestaReferencia`), que deja el valor con origen `humano`. Ausente = no hay propuesta segura.
+   */
+  propuesta?: { campo: string; renglon: number; valor: string };
 }
 
 export interface ResultadoValidacion {
@@ -427,6 +432,51 @@ function verificarCatalogosSat(e: Extraccion, sat: ResolvedorSat | undefined, re
  * ⇒ `confirmar` con la diferencia (un humano que escribe el campo lo resuelve). La regla definitiva es del cliente
  * (stand-by): nada de esto bloquea.
  */
+/** Cuántos orígenes/destinos trae la extracción: el mayor N con algún dato `origen_N_*` / `destino_N_*` (mínimo 1). */
+function contarExtremos(e: Extraccion, lado: 'origen' | 'destino'): number {
+  let max = 1;
+  const re = new RegExp(`^${lado}_(\\d{1,4})_`);
+  for (const [k, v] of Object.entries(e.campos)) {
+    const m = re.exec(k);
+    if (m && (v?.valor ?? '').trim() !== '') max = Math.max(max, Number(m[1]));
+  }
+  return max;
+}
+
+/**
+ * Referencias huérfanas (T-A3-55): una mercancía que apunta al origen/destino N cuando el documento solo trae menos
+ * (típico: 14 renglones numerados 1..14 con un solo destino, donde el número era el del renglón). Pide confirmar; con un
+ * único origen/destino propone el 1, con varios no adivina. La exportación no emite una referencia inexistente (bloquea).
+ */
+function verificarReferencias(e: Extraccion, reg: Registrar): void {
+  for (const lado of ['origen', 'destino'] as const) {
+    const campo = `id_${lado}` as (typeof REFERENCIAS_MERCANCIA)[number];
+    const total = contarExtremos(e, lado);
+    e.mercancias.forEach((fila, i) => {
+      const c = fila[campo];
+      if (!c || c.origen === 'humano') return;
+      const n = normalizarIdDestino(c.valor);
+      if (n === null || Number(n) <= total) return;
+      reg({
+        campo, renglon: i, severidad: 'confirmar', codigo: `${campo}_huerfano`, evidencia: c.evidencia ?? null,
+        mensaje: `Mercancía ${i + 1}: apunta al ${lado} ${n}, pero el documento trae ${total} ${total === 1 ? lado : `${lado}s`}.`
+          + (total === 1 ? ` Si ${n} era el número de renglón, va al ${lado} 1: confírmalo.` : ` Indica a cuál de los ${total} va.`),
+        ...(total === 1 ? { propuesta: { campo, renglon: i, valor: '1' } } : {}),
+      });
+    });
+  }
+}
+
+/** Aplica la propuesta de un hallazgo (la decisión de una persona); devuelve una extracción nueva, el valor queda `humano`. */
+export function aplicarPropuestaReferencia(e: Extraccion, h: Hallazgo): Extraccion {
+  const p = h.propuesta;
+  if (!p || !e.mercancias[p.renglon]) return e;
+  const mercancias = e.mercancias.map((f, i) => i === p.renglon
+    ? { ...f, [p.campo]: { valor: p.valor, confianza: 1, evidencia: f[p.campo]?.evidencia ?? null, origen: 'humano' as const } }
+    : f);
+  return { campos: e.campos, mercancias };
+}
+
 function verificarGenericos(e: Extraccion, doc: OpcionesValidacion['fraccionDocumento'], reg: Registrar): void {
   e.mercancias.forEach((fila, i) => {
     const aqui = (campo: string, severidad: Severidad, codigo: string, mensaje: string) =>
@@ -809,6 +859,8 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
   verificarCatalogosSat(e, op.catalogosSat, reg);
   // Fracción y clave de producto genéricas (T-A3-57): avisan, nunca bloquean por sí solas.
   verificarGenericos(e, op.fraccionDocumento, reg);
+  // Referencias huérfanas de origen/destino por mercancía (T-A3-55).
+  verificarReferencias(e, reg);
   // Verificación de sumas con rechazo (T-A3-18): piezas, kg y m³ contra el total que declara el documento.
   verificarSumas(e, reg);
   // Cuadre del peso entre lecturas y contra el documento hermano (T-A3-52).

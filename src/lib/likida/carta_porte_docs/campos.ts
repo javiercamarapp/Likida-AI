@@ -123,6 +123,13 @@ export const CAMPOS_MERCANCIA: ReadonlyArray<CampoDoc> = [
   { clave: 'volumen', rotulo: 'Volumen (m³)', grupo: 'carga', tipo: 'numero', critico: false, max: 14, soloEnriquecimiento: true },
 ];
 
+/**
+ * Referencias por mercancía (T-A3-55): a qué origen y a qué destino del documento va CADA renglón (posición 1..N, no un
+ * id del cliente). No son campos de pantalla ni se le piden al modelo: los llena el lector de la plantilla del TMS.
+ */
+export const REFERENCIAS_MERCANCIA = ['id_origen', 'id_destino'] as const;
+export type ReferenciaMercancia = (typeof REFERENCIAS_MERCANCIA)[number];
+
 export const CLAVES_DOC: readonly string[] = CAMPOS_DOC.map((c) => c.clave);
 export const CLAVES_MERCANCIA: readonly string[] = CAMPOS_MERCANCIA.map((c) => c.clave);
 
