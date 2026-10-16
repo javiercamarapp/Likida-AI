@@ -21,6 +21,8 @@ import { esPasoCiclo, esServicio, filasDeSemilla, type CicloServicioFila, type S
 import { planificarRutas, type RutaCsv, type RutaExistente } from './rutas';
 import type { RespuestaSenalVida } from './tipos';
 import type { FiltrosTablero } from './repo_validacion';
+import type { EventoHuerfano, EventoNuevo, UltimoCruce } from './huerfanos';
+import type { UnidadDeViaje } from './ciclo_gps';
 import type { CriterioSitio } from './sitio_derivado';
 import { HORAS_GPS_RECIENTE, type DatosPreflight } from './preflight_piloto';
 
@@ -680,6 +682,14 @@ export async function correrMantenimientoConductor(): Promise<Record<string, num
       salida[rpc] = Number(data ?? 0);
     }
   }
+  // T-A5-66 (0820): la retención de los huérfanos (30 días). Una base sin la 0820 no tiene la función: no es un fallo, no hay nada que purgar.
+  const huerfanos = await acotada(supabaseAdmin().rpc('purgar_eventos_geocerca_huerfanos', { p_dias: 30 }), 'conductor.purgar_eventos_geocerca_huerfanos');
+  if (!huerfanos.error) salida.purgar_eventos_geocerca_huerfanos = Number(huerfanos.data ?? 0);
+  else if (faltaEsquema(huerfanos.error, /purgar_eventos_geocerca_huerfanos/i) || (huerfanos.error as { code?: string }).code === 'PGRST202') salida.purgar_eventos_geocerca_huerfanos = 0;
+  else {
+    logger.error('conductor.mantenimiento_fallo', { rpc: 'purgar_eventos_geocerca_huerfanos', err: huerfanos.error.message });
+    salida.purgar_eventos_geocerca_huerfanos = `error: ${huerfanos.error.message}`;
+  }
   return salida;
 }
 
@@ -1013,6 +1023,111 @@ export async function liberarCruce(d: Pick<DatosCruce, 'tenantId' | 'viajeId' | 
   } catch (e) {
     logger.warn('conductor.cruce_liberar_fallo', { viaje: d.viajeId, err: e instanceof Error ? e.message : String(e) });
   }
+}
+
+// ── T-A5-66 (0820): eventos de geocerca SIN viaje abierto ───────────────────
+
+const COLUMNAS_HUERFANO = 'id, tenant_id, unidad_id, geocerca_id, tipo, en, distancia_m, despacho_ref';
+const TOPE_FILAS_ULTIMOS_CRUCES = 5000;
+
+function filaAHuerfano(f: Fila): EventoHuerfano {
+  return {
+    id: String(f.id), tenantId: String(f.tenant_id), unidadId: String(f.unidad_id), geocercaId: String(f.geocerca_id),
+    tipo: f.tipo === 'salida' ? 'salida' : 'entrada', en: new Date(String(f.en)), distanciaM: n(f.distancia_m), despachoRef: s(f.despacho_ref),
+  };
+}
+
+/**
+ * Las flotas con el Conductor activo que encendieron `registrar_geocerca_huerfana` (0820, apagado por omisión). Una base sin la columna
+ * se lee como «ninguna»: sin la 0820 el barrido de huérfanos no hace nada.
+ */
+export async function leerFlotasConHuerfanos(): Promise<string[]> {
+  const res = await acotada(supabaseAdmin().from('agente_conductor_config').select('tenant_id')
+    .eq('activo', true).eq('registrar_geocerca_huerfana', true).order('tenant_id').range(0, 999), 'conductor.huerfanos_flotas');
+  if (res.error) {
+    if (faltaEsquema(res.error, /registrar_geocerca_huerfana/i)) return [];
+    throw new Error(`conductor.huerfanos_flotas: ${res.error.message}`);
+  }
+  return ((res.data ?? []) as unknown as Fila[]).map((f) => String(f.tenant_id));
+}
+
+/**
+ * El último cruce guardado por unidad (`<flota>|<unidad>`) y sitio, de la retención en adelante. De él depende qué cambio sigue (entrada tras
+ * salida, salida tras entrada); una base sin la 0820 se lee como «ninguno».
+ */
+export async function leerUltimosCrucesHuerfanos(unidades: UnidadDeViaje[], ahora: Date = new Date()): Promise<Map<string, Map<string, UltimoCruce>>> {
+  const salida = new Map<string, Map<string, UltimoCruce>>();
+  if (unidades.length === 0) return salida;
+  const tenants = [...new Set(unidades.map((u) => u.tenantId))];
+  const pedidas = new Set(unidades.map((u) => `${u.tenantId}|${u.unidadId}`));
+  const desde = new Date(ahora.getTime() - 30 * 86_400_000).toISOString();
+  const ids = [...new Set(unidades.map((u) => u.unidadId))];
+  for (let i = 0; i < ids.length; i += 100) {
+    const res = await acotada(supabaseAdmin().from('evento_geocerca_huerfano').select('tenant_id, unidad_id, geocerca_id, tipo, en')
+      .in('tenant_id', tenants).in('unidad_id', ids.slice(i, i + 100)).gte('en', desde)
+      .order('en', { ascending: false }).order('id').limit(TOPE_FILAS_ULTIMOS_CRUCES), 'conductor.huerfanos_ultimos');
+    if (res.error) {
+      if (faltaEsquema(res.error, /evento_geocerca_huerfano/i)) return salida;
+      throw new Error(`conductor.huerfanos_ultimos: ${res.error.message}`);
+    }
+    for (const f of (res.data ?? []) as unknown as Fila[]) {
+      const k = `${String(f.tenant_id)}|${String(f.unidad_id)}`;
+      if (!pedidas.has(k)) continue;
+      const porSitio = salida.get(k) ?? new Map<string, UltimoCruce>();
+      const sitio = String(f.geocerca_id);
+      if (!porSitio.has(sitio)) porSitio.set(sitio, { tipo: f.tipo === 'salida' ? 'salida' : 'entrada', en: new Date(String(f.en)) }); // el primero leído es el más reciente
+      salida.set(k, porSitio);
+    }
+  }
+  return salida;
+}
+
+/** Guarda los cruces sin duplicar (misma flota, unidad, sitio, sentido y hora = la misma fila). Devuelve cuántos eran nuevos. Lanza si no se pudo: no se finge una anotación que no existió. */
+export async function guardarEventosHuerfanos(eventos: EventoNuevo[]): Promise<number> {
+  if (eventos.length === 0) return 0;
+  const filas = eventos.map((e) => ({
+    tenant_id: e.tenantId, unidad_id: e.unidadId, geocerca_id: e.geocercaId, tipo: e.tipo, en: e.en.toISOString(),
+    distancia_m: e.distanciaM, despacho_ref: e.despachoRef,
+  }));
+  let guardados = 0;
+  for (let i = 0; i < filas.length; i += 200) {
+    const res = await acotada(supabaseAdmin().from('evento_geocerca_huerfano')
+      .upsert(filas.slice(i, i + 200), { onConflict: 'tenant_id,unidad_id,geocerca_id,tipo,en', ignoreDuplicates: true }).select('id'), 'conductor.huerfanos_guardar');
+    if (res.error) throw new Error(`conductor.huerfanos_guardar: ${res.error.message}`);
+    guardados += ((res.data ?? []) as unknown[]).length;
+  }
+  return guardados;
+}
+
+/** Los huérfanos aún sin reconciliar de esas unidades (de la retención en adelante), de los más viejos a los más nuevos. Una base sin la 0820 = ninguno. */
+export async function leerEventosHuerfanosPendientes(unidades: UnidadDeViaje[], limite: number, ahora: Date = new Date()): Promise<EventoHuerfano[]> {
+  if (unidades.length === 0) return [];
+  const tenants = [...new Set(unidades.map((u) => u.tenantId))];
+  const pedidas = new Set(unidades.map((u) => `${u.tenantId}|${u.unidadId}`));
+  const desde = new Date(ahora.getTime() - 30 * 86_400_000).toISOString();
+  const ids = [...new Set(unidades.map((u) => u.unidadId))];
+  const salida: EventoHuerfano[] = [];
+  for (let i = 0; i < ids.length && salida.length < limite; i += 100) {
+    const res = await acotada(supabaseAdmin().from('evento_geocerca_huerfano').select(COLUMNAS_HUERFANO)
+      .in('tenant_id', tenants).in('unidad_id', ids.slice(i, i + 100)).is('reconciliado_en', null).gte('en', desde)
+      .order('en', { ascending: true }).order('id').limit(limite), 'conductor.huerfanos_pendientes');
+    if (res.error) {
+      if (faltaEsquema(res.error, /evento_geocerca_huerfano/i)) return [];
+      throw new Error(`conductor.huerfanos_pendientes: ${res.error.message}`);
+    }
+    for (const f of (res.data ?? []) as unknown as Fila[]) {
+      if (pedidas.has(`${String(f.tenant_id)}|${String(f.unidad_id)}`)) salida.push(filaAHuerfano(f));
+    }
+  }
+  return salida.slice(0, limite);
+}
+
+/** Marca esos huérfanos (de esa flota) como ligados al viaje. Solo toca los aún sin reconciliar: marcar dos veces es inocuo. Lanza si no se pudo. */
+export async function marcarEventosHuerfanosReconciliados(tenantId: string, ids: string[], viajeId: string, ahora: Date): Promise<void> {
+  if (ids.length === 0) return;
+  const res = await acotada(supabaseAdmin().from('evento_geocerca_huerfano')
+    .update({ reconciliado_en: ahora.toISOString(), viaje_id: viajeId }).eq('tenant_id', tenantId).in('id', ids).is('reconciliado_en', null), 'conductor.huerfanos_marcar');
+  if (res.error) throw new Error(`conductor.huerfanos_marcar: ${res.error.message}`);
 }
 
 // ── 0637: asignar el sitio derivado a un viaje ───────────────────────────────
