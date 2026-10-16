@@ -56,6 +56,14 @@ export interface PosicionViaje {
   medidaEn: string;
 }
 
+/** Lo que el adaptador sabe del avance: «va por <lugar>, le faltan ~<km> / ~<min>». Cada campo puede faltar. */
+export interface AvanceViaje {
+  /** Lugar cercano a la posición (poblado, caseta, tramo). */
+  cercaDe: string | null;
+  kmRestantes: number | null;
+  minRestantes: number | null;
+}
+
 export interface DocumentoViaje {
   nombre: string;
   estado: 'entregado' | 'pendiente';
@@ -69,6 +77,12 @@ export interface EstatusViaje {
   etapa: EtapaViaje;
   ultimoHito: HitoViaje | null;
   posicion: PosicionViaje | null;
+  /**
+   * T-A4-39: avance sobre la ruta calculado por el adaptador GPS / geocodificador (A5 o conector; hoy NADIE lo llena,
+   * bloqueo B12). Solo es creíble junto con una `posicion` vigente y un `destino` geocodificado; el redactor lo revalida.
+   * Ausente o `null` = no hay: el estatus se queda como hoy. NO es una ETA prometida.
+   */
+  avance?: AvanceViaje | null;
   etaIso: string | null;
   /** De dónde salió `etaIso`: la cita pactada o la ETA capturada. `null` si no hay. */
   etaFuente: 'cita' | 'eta' | null;

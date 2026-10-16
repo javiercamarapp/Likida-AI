@@ -374,7 +374,11 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // 16-oct-2026, T-A3-67: techo 2,120 → 2,138 llamadas (rojo heredado de las tareas A3 anteriores, medido con el barrido real; esta tarea no suma ninguna).
 // 16-oct-2026, T-A3-66: techo 2,138 → 2,141 llamadas (+3, medido con el barrido real), todas en `carta_porte_docs/repo.ts` (`leerSalidasParaSinCcp`: hitos de salida, viajes con su cliente y complementos aprobados ligados); solo lectura, con `tenant_id`, por `acotada`/`traerPorIds`.
 // Integración cinco-integracion-2 (+ cartaporte sobre la misma base): el barrido real del árbol fusionado mide 2,180 llamadas; techo subido a lo medido, sin relajar la regla.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_180;
+// T-A4-31 (Vigía, turnos y festivos): 2,095 → 2,101 (+6 llamadas, medido con el barrido real; techo no subido en su commit bda0409f, corregido en T-A4-45), todas en
+// `vigia/repo.ts` por `acotada` y ancladas a `tenant_id` (la lectura de `tenant.zona_horaria` por `id`): zona del tenant, festivos (leer, guardar, quitar) y nombre de la flota.
+// Funcionalidad nueva, no código migrado.
+// Integración cinco-integracion-2 (+ vigia sobre la misma base): el barrido real del árbol fusionado mide 2,186 llamadas; techo subido a lo medido, sin relajar la regla.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_186;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
