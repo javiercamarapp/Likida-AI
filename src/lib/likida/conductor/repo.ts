@@ -17,6 +17,7 @@ import type { EpisodioFila } from './senal_vida';
 import type { EstadoTransito } from './estados_transito';
 import type { MotivoSenalVida } from './solicitudes';
 import { esMotivoParada, type MotivoParada, type ParadaFila } from './paradas';
+import { esPasoCiclo, esServicio, filasDeSemilla, type CicloServicioFila } from './ciclo_servicio';
 import type { RespuestaSenalVida } from './tipos';
 import type { FiltrosTablero } from './repo_validacion';
 import type { CriterioSitio } from './sitio_derivado';
@@ -1358,4 +1359,37 @@ export async function cerrarParada(
     return 'fallo';
   }
   return data && data.length > 0 ? 'cerrada' : 'sin_parada';
+}
+
+// ── T-A5-41: el ciclo de hitos por tipo de servicio (0807) ──────────────────
+//
+// Sin filas (o una base sin la 0807) = lista vacía = ciclo actual de cinco hitos: `cicloDelServicio` (ciclo_servicio.ts) decide. La
+// semilla NO se aplica sola: `sembrarCicloServicio` la llama una persona (o una tarea posterior) para una flota concreta.
+
+export function filaACiclo(f: Fila): CicloServicioFila | null {
+  if (!esServicio(f.servicio) || !esPasoCiclo(f.hito)) return null;
+  const orden = Number(f.orden);
+  if (!Number.isInteger(orden) || orden < 1) return null;
+  return { tenantId: String(f.tenant_id), servicio: f.servicio, orden, hito: f.hito, activo: f.activo !== false };
+}
+
+/** Las filas de ciclo de la flota (todas, activas o no). `[]` si no hay o la base aún no tiene la 0807. Lanza si la base falla por otra causa. */
+export async function leerCicloServicio(tenantId: string): Promise<CicloServicioFila[]> {
+  const { data, error } = await acotada(supabaseAdmin().from('ciclo_servicio').select('tenant_id, servicio, orden, hito, activo')
+    .eq('tenant_id', tenantId).order('servicio').order('orden'), 'conductor.ciclo_servicio_leer');
+  if (error) {
+    if (faltaEsquema(error, /ciclo_servicio/i)) return [];
+    throw new Error(`conductor.ciclo_servicio_leer: ${error.message}`);
+  }
+  return ((data ?? []) as unknown as Fila[]).map(filaACiclo).filter((c): c is CicloServicioFila => c !== null);
+}
+
+/** Siembra la propuesta de ciclos en una flota. Idempotente: lo que ya existe (mismo servicio y orden) no se toca. */
+export async function sembrarCicloServicio(tenantId: string): Promise<'ok' | 'sin_tabla' | 'fallo'> {
+  const { error } = await acotada(supabaseAdmin().from('ciclo_servicio')
+    .upsert(filasDeSemilla(tenantId), { onConflict: 'tenant_id,servicio,orden', ignoreDuplicates: true }), 'conductor.ciclo_servicio_sembrar');
+  if (!error) return 'ok';
+  if (faltaEsquema(error, /ciclo_servicio/i)) return 'sin_tabla';
+  logger.error('conductor.ciclo_servicio_sembrar_fallo', { err: error.message });
+  return 'fallo';
 }
