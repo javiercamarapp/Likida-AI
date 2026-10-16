@@ -34,8 +34,13 @@ export const unidadSchema = textoCorto('la unidad', 40)
 export const motivoSchema = textoCorto('el motivo', 300)
   .refine((s) => s.length >= 3, 'Escribe un motivo de al menos 3 caracteres.');
 
+/** Tipo de la unidad de un TAG (T-A2-39): `peaje_tag.tipo_unidad`. */
+export const tipoUnidadSchema = z.enum(['tracto', 'utilitario'], { error: 'El tipo de unidad debe ser «tracto» o «utilitario».' });
+
 export const reglasCobroConfigSchema = z.object({
   clasesValidas: clasesSchema.default([]),
+  /** Clases válidas para las unidades utilitarias. Ausente o vacía = no se les evalúa la clase (y se dice). */
+  clasesUtilitario: clasesSchema.optional(),
   excepcionesClase: z.array(z.object({ caseta: casetaSchema, clases: clasesSchema.min(1, 'Declara al menos una clase.') })).default([]),
   casetasNoCruzar: z.array(casetaSchema).default([]),
   excepcionesPorUnidad: z.array(z.object({ caseta: casetaSchema, unidad: unidadSchema })).default([]),
