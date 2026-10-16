@@ -4,7 +4,7 @@
 
 import { logger } from '@/lib/logger';
 
-export type CodigoEscalamiento = 'validador' | 'baja_confianza' | 'desacuerdo' | 'faltan_datos';
+export type CodigoEscalamiento = 'validador' | 'baja_confianza' | 'desacuerdo' | 'faltan_datos' | 'error_modelo';
 
 const cuentas = new Map<string, number>();
 

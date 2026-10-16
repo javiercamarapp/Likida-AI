@@ -328,6 +328,11 @@ export interface ContextoExtraccion {
   nivelMaximo?: NivelModelo;
   /** T-A3-68 f: los niveles a recorrer y su orden. Por omisión, el del tipo de documento (orden_niveles.ts: texto o visión, con ajuste por entorno). */
   niveles?: readonly NivelModelo[];
+  /**
+   * T-A3-68: ¿este error del modelo debe DETENER la cascada (presupuesto agotado, aborto)? Cualquier otro (salida inválida, proveedor
+   * caído tras sus reintentos) pasa al siguiente nivel con un escalamiento `error_modelo`; en el último nivel se relanza.
+   */
+  errorFatal?: (e: unknown) => boolean;
   /** T-A3-68 e: catálogos SAT precargados para el validador de clave de producto. Sin ellos solo se valida la forma. */
   catalogosSat?: OpcionesCompuesta['catalogosSat'];
   /** T-A3-46: nombre del archivo y año/aduana del perfil, para derivar el régimen y completar el pedimento. */
@@ -414,6 +419,16 @@ async function leerCorreoPorRotulos(c: ContenidoDoc, ctx: ContextoExtraccion, fo
     ? { extraccion: lectura.extraccion, avisos: lectura.avisos, capturaIncompleta: lectura.capturaIncompleta }
     : null;
 }
+
+/** Por omisión, solo el presupuesto agotado detiene la cascada (por nombre, como `esErrorDePresupuesto`: este archivo no importa el cliente). */
+const presupuestoAgotado = (err: unknown): boolean => {
+  let actual: unknown = err;
+  for (let d = 0; d < 6 && actual && typeof actual === 'object'; d++) {
+    if ((actual as { name?: unknown }).name === 'LlmBudgetExceededError') return true;
+    actual = (actual as { cause?: unknown }).cause;
+  }
+  return false;
+};
 
 const hayDesacuerdo = (e: Extraccion, clave: string): boolean => {
   const [k, i] = clave.split('#');
@@ -535,7 +550,18 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   for (let i = 0; i < secuencia.length; i++) {
     const nivel = secuencia[i];
     ctx.signal?.throwIfAborted();
-    const s0 = await ctx.llm({ formato: c.formato, texto: c.texto, imagenes: c.imagenes, ejemplos, nivel, marcador, ...(c.hojasMismoEmbarque ? { hojasMismoEmbarque: c.hojasMismoEmbarque } : {}) }, ctx.signal);
+    let s0: SalidaLlm;
+    try {
+      s0 = await ctx.llm({ formato: c.formato, texto: c.texto, imagenes: c.imagenes, ejemplos, nivel, marcador, ...(c.hojasMismoEmbarque ? { hojasMismoEmbarque: c.hojasMismoEmbarque } : {}) }, ctx.signal);
+    } catch (e) {
+      // Un nivel que falla (salida inválida tras sus reintentos, proveedor caído) no tumba el documento si hay otro nivel: se
+      // escala y se deja constancia. Presupuesto agotado y abortos sí detienen (los decide quien llama).
+      if (i === secuencia.length - 1 || ctx.signal?.aborted || (ctx.errorFatal ?? presupuestoAgotado)(e)) throw e;
+      const esc = { de: nivel, a: secuencia[i + 1], codigo: 'error_modelo' as const, motivo: `el modelo del nivel ${nivel} no entregó una lectura válida: ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}` };
+      r.escalamientos.push(esc);
+      registrarEscalamiento(esc);
+      continue;
+    }
     const s = recortarSalida(s0);
     r.nivel = nivel; r.modelo = s.modelo;
     r.tokensIn += s.tokensIn; r.tokensOut += s.tokensOut; r.costoUsd += s.costoUsd;
