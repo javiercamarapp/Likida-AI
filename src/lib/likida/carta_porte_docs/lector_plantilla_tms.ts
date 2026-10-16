@@ -180,7 +180,7 @@ export function leerPlantillaTms(bytes: Uint8Array): LecturaPlantillaTms | null 
   // La clave de estado de C24 gana sobre su nombre: el orden del layout (C24 antes de C25) ya lo garantiza.
 
   // ── Destinos (tabla del remitente, hasta 4) ───────────────────────────────
-  const nDestinos = leerDestinos(rd, filaDest, tDest, MAX_DESTINOS, 'RemintenteDestinatario', ext, avisos);
+  leerDestinos(rd, filaDest, tDest, MAX_DESTINOS, 'RemintenteDestinatario', ext, avisos);
 
   // ── Mercancías (encabezado real, normalmente fila 21) ─────────────────────
   const colsMerc = tMerc.columnas.filter((c) => c.campo || c.columna === 'O');
@@ -200,7 +200,8 @@ export function leerPlantillaTms(bytes: Uint8Array): LecturaPlantillaTms | null 
       if (v) m[clave] = v;
     }
     // El peligroso «NO» sin clave: la plantilla pone `N/A`, que `limpiarTexto` ya descarta (campo ausente, no «N/A»).
-    if (nDestinos > 1) {
+    {
+      // Se conserva SIEMPRE lo que el libro trae: con un destino y ids 1..14 la validación detecta la referencia huérfana (T-A3-55).
       const id = normalizarIdDestino(celda(me, `A${fila}`));
       if (id !== null) m.id_destino = { valor: id, confianza: CONF_PLANTILLA, evidencia: `Mercancias!A${fila}`, origen: 'perfil' };
     }
