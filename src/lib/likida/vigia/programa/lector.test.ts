@@ -210,3 +210,75 @@ describe('leerProgramaCsv · tope y errores', () => {
     expect(retenidos / texto.length).toBeLessThan(0.01);
   }, 60_000);
 });
+
+describe('leerProgramaCsv · encabezado por mayoría de rótulos (T-A4-49)', () => {
+  const ENC = '#;SUC;TIPO DE VIAJE;ORIGEN-DESTINO;CLIENTE;CONSIGNATARIO;LINEA;CAJA;COMENTARIOS;CITA;UNIDAD;TRANSITO;CCP';
+  const DATOS = '1;GDL;IMP;PUERTO-PLANTA;CLIENTE X;DEST Y;LNA;ABCD123456;;05/10 08:00;U-01;EN RUTA;SI';
+
+  it('encabezado en la fila 1: se elige y no hay avisos de estructura', () => {
+    const r = leerProgramaCsv(`${ENC}\n${DATOS}\n`, T);
+    expect(r.filas).toHaveLength(1);
+    expect(r.filas[0].celdas.CAJA).toBe('ABCD123456');
+    expect(r.secciones[0].lineaEncabezado).toBe(1);
+    expect(r.avisos.filter((a) => a.codigo === 'columna_faltante' || a.codigo === 'encabezado_desconocido')).toEqual([]);
+  });
+
+  it('encabezado en la fila 3 tras una fila de título y una vacía', () => {
+    const r = leerProgramaCsv(`PROGRAMA DE DESPACHO SINTETICO\n\n${ENC}\n${DATOS}\n`, T);
+    expect(r.filas).toHaveLength(1);
+    expect(r.secciones[r.filas[0].seccion].lineaEncabezado).toBe(3);
+    expect(r.filas[0].celdas.UNIDAD).toBe('U-01');
+  });
+
+  it('título con celdas combinadas (texto en la primera, resto vacío) y encabezado con huecos', () => {
+    const titulo = 'IMPORTACION MARTES 06 DE OCTUBRE 2026;;;;;;;;;;;;';
+    const encHuecos = '#;SUC;;ORIGEN-DESTINO;;CLIENTE;CONSIGNATARIO;LINEA;CAJA;;COMENTARIOS;CITA;;UNIDAD;TRANSITO;CCP';
+    const dato = '1;GDL;;PUERTO-PLANTA;;CLIENTE X;DEST Y;LNA;ABCD123456;;;05/10 08:00;;U-01;EN RUTA;SI';
+    const r = leerProgramaCsv(`${titulo}\n${encHuecos}\n${dato}\n`, T);
+    expect(r.secciones[0].tipo).toBe('IMPORTACION');
+    expect(r.secciones[0].fecha).toBe('2026-10-06');
+    expect(r.filas).toHaveLength(1);
+    expect(r.filas[0].celdas.CAJA).toBe('ABCD123456');
+    expect(r.filas[0].celdas.UNIDAD).toBe('U-01');
+  });
+
+  it('encabezado sin CAJA ni ORIGEN-DESTINO exactos: basta la mayoría de rótulos, con aviso de las columnas faltantes', () => {
+    const enc = '#;SUC;CLIENTE;CONSIGNATARIO;LINEA;CITA;UNIDAD;TRANSITO;CCP';
+    const r = leerProgramaCsv(`${enc}\n1;GDL;CLIENTE X;DEST Y;LNA;05/10 08:00;U-01;EN RUTA;SI\n`, T);
+    expect(r.filas).toHaveLength(1);
+    const falta = r.avisos.find((a) => a.codigo === 'columna_faltante');
+    expect(falta?.mensaje).toMatch(/ORIGEN-DESTINO/);
+    expect(falta?.mensaje).toMatch(/CAJA/);
+  });
+
+  it('rótulos no reconocidos se informan y la fila elegida queda en lineaEncabezado', () => {
+    const enc = `${ENC};COLUMNA RARA`;
+    const r = leerProgramaCsv(`TITULO\n${enc}\n${DATOS}\n`, T);
+    expect(r.secciones[0].lineaEncabezado).toBe(2);
+    const desc = r.avisos.filter((a) => a.codigo === 'encabezado_desconocido');
+    expect(desc).toHaveLength(1);
+    expect(desc[0].mensaje).toMatch(/COLUMNA RARA/);
+  });
+
+  it('empate de dos candidatos seguidos sin datos en medio: gana el de más rótulos', () => {
+    const pobre = '#;SUC;CLIENTE;CAJA;UNIDAD';
+    const r = leerProgramaCsv(`${pobre}\n${ENC}\n${DATOS}\n`, T);
+    expect(r.secciones[0].lineaEncabezado).toBe(2);
+    expect(r.filas).toHaveLength(1);
+    expect(r.filas[0].celdas.TRANSITO).toBe('EN RUTA');
+    // Y al revés: el rico primero no se pisa con el pobre.
+    const r2 = leerProgramaCsv(`${ENC}\n${pobre}\n${DATOS}\n`, T);
+    expect(r2.secciones[0].lineaEncabezado).toBe(1);
+    expect(r2.filas[0].celdas.TRANSITO).toBe('EN RUTA');
+  });
+
+  it('sin encabezado (menos rótulos que el umbral) → error llano', () => {
+    expect(() => leerProgramaCsv('#;SUC;CLIENTE\n1;GDL;X\n', T)).toThrow(ErrorLectorPrograma);
+    expect(() => leerProgramaCsv('#;SUC;CLIENTE\n1;GDL;X\n', T)).toThrow(/encabezados/);
+  });
+
+  it('una fila de datos con pocas coincidencias no se confunde con encabezado', () => {
+    const r = leerProgramaCsv(`${ENC}\n1;GDL;IMP;CAJA;CLIENTE;X;LNA;UNIDAD;;05/10;U-01;EN RUTA;SI\n`, T);
+    expect(r.filas).toHaveLength(1);
+  });
+});
