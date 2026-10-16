@@ -1,6 +1,7 @@
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
 import { asignarSitiosViaje, cambiarEstadoSitio, guardarEquivalencia, guardarSitio, importarEquivalencias, importarSitios } from './repo_validacion';
+import { analizarCatalogo, enLotes, leerCatalogo } from './catalogo_sitios_import';
 import { leerSitioManual, normalizarTextoEquivalencia, parsearCsvEquivalencias, parsearCsvSitios, MAX_LARGO_TEXTO_EQUIVALENCIA, LADOS_EQUIVALENCIA, MARCAR_IGNORAR, MARCAR_INSTRUCCION, type LadoEquivalencia } from './sitios';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -189,4 +190,56 @@ export async function asignarEquivalenciaDelPanel(ctx: ContextoSitios, fd: { get
     logger.error('equivalencias.asignar_fallo', { err: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: FALLO };
   }
+}
+
+// ── T-SYS-25: catálogo depurado de orígenes y destinos (≈13 440) ────────────
+
+export interface EntradaCatalogo {
+  texto: string;
+  /** `analizar` solo informa (no escribe); `importar` además guarda las filas listas por lotes. */
+  modo: 'analizar' | 'importar';
+  cupoDiario?: number;
+  radioDefecto?: number | null;
+}
+
+/**
+ * Analiza (y si se pide, importa) el catálogo del cliente SIN tope de filas. Nada se fusiona solo: los duplicados son
+ * candidatos y lo «por validar» no se importa. Solo importa filas activas con coordenadas confiables; las inactivas y las
+ * dudosas quedan en el reporte. Cada lote es todo-o-nada en la base; si uno falla se dice cuántos ya quedaron guardados
+ * (la reimportación es idempotente: los códigos son estables).
+ */
+export async function importarCatalogoDelPanel(ctx: ContextoSitios, entrada: EntradaCatalogo, d: DepsSitios = depsSitiosReales): Promise<ResultadoAccionSitio> {
+  if (!puedeAsignar(ctx.rol)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico importan el catálogo.' };
+  const lectura = leerCatalogo(entrada.texto);
+  if (lectura.filas.length === 0) {
+    return { ok: false, error: 'No se leyó ninguna fila del archivo.', detalles: lectura.errores.slice(0, MAX_DETALLES).map((e) => (e.linea > 0 ? `Línea ${e.linea}: ${e.mensaje}` : e.mensaje)) };
+  }
+  const a = analizarCatalogo(lectura.filas, { cupoDiario: entrada.cupoDiario, radioPorDefectoM: entrada.radioDefecto ?? undefined });
+  const r = a.resumen;
+  const detalles: string[] = [];
+  for (const e of lectura.errores.slice(0, 10)) detalles.push(`Línea ${e.linea}: ${e.mensaje}`);
+  for (const t of a.validacion) detalles.push(`${t.terminal}: ${t.total} por revisar en ${t.dias.length} día${t.dias.length === 1 ? '' : 's'} (${a.cupoDiario} al día).`);
+  const base = `${r.total} filas: ${r.activas} activas y ${r.inactivas} inactivas; ${r.porValidar} por validar; ${r.gruposDuplicados} grupo${r.gruposDuplicados === 1 ? '' : 's'} de posibles duplicados (${r.filasEnDuplicados} filas, ninguno se fusionó)`
+    + `${lectura.errores.length > 0 ? `; ${lectura.errores.length} ilegible${lectura.errores.length === 1 ? '' : 's'}` : ''}.`;
+  if (entrada.modo === 'analizar') return { ok: true, mensaje: `Análisis sin guardar nada. ${base}`, detalles: detalles.slice(0, MAX_DETALLES) };
+
+  let guardadas = 0;
+  let creados = 0;
+  let actualizados = 0;
+  try {
+    for (const lote of enLotes(a.listas)) {
+      const res = await d.importar(ctx.tenantId, lote);
+      if (!res.ok) {
+        return {
+          ok: false, error: `Se detuvo: la base rechazó un lote (${guardadas} filas ya guardadas; vuelve a subir el archivo, no duplica).`,
+          detalles: res.errores.slice(0, MAX_DETALLES).map((e) => `Línea ${e.linea}: ${e.mensaje}`),
+        };
+      }
+      guardadas += lote.length; creados += res.creados; actualizados += res.actualizados;
+    }
+  } catch (e) {
+    logger.error('catalogo.importar_fallo', { err: e instanceof Error ? e.message : String(e), guardadas });
+    return { ok: false, error: `No pude importar ahorita (${guardadas} filas ya guardadas; vuelve a subir el archivo, no duplica).` };
+  }
+  return { ok: true, mensaje: `Importado: ${creados} nuevo${creados === 1 ? '' : 's'} y ${actualizados} actualizado${actualizados === 1 ? '' : 's'}. ${base}`, detalles: detalles.slice(0, MAX_DETALLES) };
 }

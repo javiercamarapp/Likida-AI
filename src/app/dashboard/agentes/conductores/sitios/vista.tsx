@@ -5,6 +5,7 @@ import { numero } from '@/lib/formato';
 import { DIAS_TEXTOS_SIN_SITIO, PLANTILLA_CSV_SITIOS, TOP_TEXTOS_SIN_SITIO, type TextoSinSitio } from '@/lib/likida/conductor/sitios';
 import type { SitioFila } from '@/lib/likida/conductor/repo_validacion';
 import { FilaTextoSinSitio, FormaImportarEquivalencias } from './formas_equivalencias';
+import { FormaCatalogo } from './formas_catalogo';
 import { FormaImportar, FormaSitio, SITIO_VACIO, type AccionSitio, type SitioEditable } from './formas';
 
 // SOLO tipos: la vista no debe arrastrar al bundle el acceso a datos.
@@ -31,6 +32,8 @@ export interface PropsVistaSitios {
   textosTruncado?: boolean;
   descargaCsv?: string | null;
   accionImportarEquivalencias?: AccionSitio;
+  /** T-SYS-25: catálogo depurado (analizar / importar por lotes + lista de validación por terminal). Opcional: sin él no se pinta. */
+  accionCatalogo?: AccionSitio;
   accionAsignarEquivalencia?: AccionSitio;
 }
 
@@ -131,6 +134,19 @@ export function VistaSitios(p: PropsVistaSitios) {
             </>
           ) : (
             <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota o el jefe de tráfico editan el catálogo.</p>
+          )}
+
+          {p.puedeEditar && p.accionCatalogo && (
+            <section className="card p-4 space-y-3" aria-label="Catálogo depurado de orígenes y destinos">
+              <h2 className="font-display text-[15px] font-semibold">Catálogo depurado de orígenes y destinos</h2>
+              <p className="text-[12.5px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
+                Sin tope de filas. Columnas: <code>nombre, lat, lng, estatus, terminal, pais</code> (y opcionales <code>codigo, radio_m, direccion, tipo</code>).
+                Los posibles duplicados (mismo nombre o a 100 m o menos) <strong>se reportan, nunca se fusionan solos</strong>. Las coordenadas ausentes, (0, 0),
+                fuera de rango o fuera de México sin país declarado quedan «por validar» y no se importan; las inactivas tampoco. El reporte trae, por terminal,
+                la lista de revisión de los sábados con el cupo diario elegido; las de EE. UU. van aparte. Solo lee tu archivo: no escribe en el sistema del cliente.
+              </p>
+              <FormaCatalogo accion={p.accionCatalogo} />
+            </section>
           )}
 
           {p.textosSinSitio !== undefined && (
