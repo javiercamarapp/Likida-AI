@@ -13,6 +13,7 @@ import { cicloDelServicio, type CicloServicioFila } from './ciclo_servicio';
 import { cerrarHitosDeViajesVencidos, contarEnviadosPorChofer, leerAvisosDeHitos, leerHitosDeViajes, leerMuestrasGps, leerSitiosGeometriaDeViajes, leerViajesActivos, sembrarHitos } from './trabajo';
 import type { MuestraGps, SitiosViaje, UnidadDeViaje } from './ciclo_gps';
 import { clavesPoleoDe, lapsoMaxCompuertaMin, puedeEscribirAlChofer } from './compuerta_movimiento';
+import { leerSenalesDeUnidades, senalesApagadas, type SenalesConduccion } from './senales_conduccion';
 import { planificar, type AccionPlan, type AvisoReclamado, type MotivoNada } from './planificador';
 import { armarEscalacion, armarRecordatorio, armarSolicitud, type MensajeSaliente, type MotivoEscalacion } from './solicitudes';
 import type { HitoFila } from './tipos';
@@ -95,6 +96,11 @@ export interface PuertosConductor {
    */
   muestrasUnidad?(unidades: UnidadDeViaje[], desde: Date): Promise<Map<string, MuestraGps[]>>;
   sitiosDe?(viajes: Array<{ id: string; tenantId: string }>): Promise<Map<string, SitiosViaje>>;
+  /**
+   * T-A5-68: la señal de conducción del proveedor de telemática (ignición, velocidad, teléfono en la mano) → `senalExtra` de la compuerta,
+   * para que «atasco» (quieto pero conduciendo) no cuente como unidad detenida. Opcional: sin puerto, o sin lectura, rige la regla solo-GPS.
+   */
+  senalesConduccion?: SenalesConduccion;
 }
 
 /**
@@ -103,7 +109,7 @@ export interface PuertosConductor {
  * silencio. No se registran coordenadas.
  */
 export async function evaluarCompuertaDeViajes(
-  p: Pick<PuertosConductor, 'muestrasUnidad' | 'sitiosDe'>,
+  p: Pick<PuertosConductor, 'muestrasUnidad' | 'sitiosDe' | 'senalesConduccion'>,
   viajes: readonly ViajeContexto[], configs: ReadonlyMap<string, ConfigConductor | null>, ahora: Date,
 ): Promise<Map<string, { permitido: boolean; razon: string }>> {
   const salida = new Map<string, { permitido: boolean; razon: string }>();
@@ -125,11 +131,14 @@ export async function evaluarCompuertaDeViajes(
     logger.error('conductor.compuerta_lectura_fallo', { err: e instanceof Error ? e.message : String(e) });
     return cierra('lectura_fallida');
   }
+  // T-A5-68: una lectura de la señal de conducción por unidad (nunca lanza; sin puerto o sin dato = solo-GPS).
+  const senales = await leerSenalesDeUnidades(p.senalesConduccion, conUnidad.map((v) => v.unidadId!), ahora);
   for (const v of activos) {
     const posiciones = v.unidadId ? (muestras.get(`${v.tenantId}|${v.unidadId}`) ?? []) : [];
     const r = puedeEscribirAlChofer({
       posiciones, clavesPoleo: clavesPoleoDe(v.unidadId, posiciones), // T-A5-37: cadencia por unidad/proveedor
       sitioDelViaje: sitios.get(v.id) ?? null, config: configs.get(v.tenantId)!, ahora,
+      senalExtra: v.unidadId ? (senales.get(v.unidadId) ?? null) : null,
     });
     salida.set(v.id, r);
   }
@@ -420,5 +429,7 @@ export function puertosReales(): PuertosConductor {
     evento: (h, evento, detalle) => registrarEvento(h, evento, detalle),
     muestrasUnidad: leerMuestrasGps,
     sitiosDe: leerSitiosGeometriaDeViajes,
+    // T-A5-68: nace apagado (sin adaptador de proveedor real: BLOQUEO EXTERNO); con uno, se cambia aquí y todo el cron lo recibe.
+    senalesConduccion: senalesApagadas,
   };
 }

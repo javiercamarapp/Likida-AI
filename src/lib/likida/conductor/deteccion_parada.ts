@@ -9,6 +9,7 @@ import {
 } from './compuerta_movimiento';
 import { CONFIG_CONDUCTOR_DEFAULT, dentroDeVentana, type ConfigConductor } from './config';
 import { puertosReales, type NuevoAviso, type PuertosConductor } from './ejecutor';
+import { combinarSenal, leerSenalesDeUnidades } from './senales_conduccion';
 import { horaYDiaMx, type BotonSalida, type Salida } from './mensajes';
 import {
   ejecutarParada, ETIQUETA_MOTIVO, MOTIVOS_PARADA, PREFIJO_PARADA, type DepsParada, type OrdenParada,
@@ -267,7 +268,7 @@ async function avisarSupervisor(
 
 // ── El cron: la pregunta proactiva ───────────────────────────────────────────
 
-export interface PuertosDetencion extends Pick<PuertosConductor, 'viajesActivos' | 'hitosDe' | 'configDe' | 'reclamar' | 'cerrarAviso' | 'liberarAviso' | 'enviar' | 'destinatarios' | 'muestrasUnidad' | 'sitiosDe'> {
+export interface PuertosDetencion extends Pick<PuertosConductor, 'viajesActivos' | 'hitosDe' | 'configDe' | 'reclamar' | 'cerrarAviso' | 'liberarAviso' | 'enviar' | 'destinatarios' | 'muestrasUnidad' | 'sitiosDe' | 'senalesConduccion'> {
   eventosDetencion(tenantId: string, viajeIds: string[]): Promise<EventoDetencionFila[]>;
   guardarEventoDetencion(h: HitoFila, detalle: Record<string, string | number | boolean | null>): Promise<boolean>;
   paradasRecientes(tenantId: string, viajeIds: string[], desde: Date): Promise<ParadaFila[]>;
@@ -364,6 +365,8 @@ export async function correrDeteccionParada(
     return r;
   }
 
+  // T-A5-68: la señal de conducción del proveedor, una lectura por unidad (sin puerto o sin dato = solo-GPS + la ignición del GPS).
+  const senales = await leerSenalesDeUnidades(p.senalesConduccion, candidatos.map((v) => v.unidadId!), ahora);
   for (const v of candidatos) {
     if (opts.venceEn !== undefined && Date.now() >= opts.venceEn) break;
     const config = configs.get(v.tenantId)!;
@@ -375,14 +378,15 @@ export async function correrDeteccionParada(
     const sitioDelViaje = sitios.get(v.id) ?? null;
     const ultima = [...posiciones].sort((a, b) => b.medidaEn.getTime() - a.medidaEn.getTime())[0];
     const delViaje = paradas.filter((x) => x.viajeId === v.id);
+    const senalExtra = combinarSenal(senales.get(v.unidadId!), ultima?.ignicion);
     const estado = estadoDetencionDeEventos(eventos, v.id);
     const decision = decidirDetencion({
       activo: true, enTransito: enTransito(hs), estado, ahora,
       paradaAbierta: delViaje.some((x) => x.fin === null),
       paradaReciente: delViaje.some((x) => x.fin !== null),
-      elegibilidad: detencionElegible({ posiciones, sitioDelViaje, config, ahora, clavesPoleo: claves }),
+      elegibilidad: detencionElegible({ posiciones, sitioDelViaje, config, ahora, clavesPoleo: claves, senalExtra }),
       // T-A5-36: pasa por la compuerta de unidad detenida como todo mensaje proactivo (apagada = permitido; la elegibilidad exige GPS igual).
-      compuerta: puedeEscribirAlChofer({ posiciones, clavesPoleo: claves, sitioDelViaje, config, ahora, senalExtra: ultima ? { ignicion: ultima.ignicion ?? null } : null }),
+      compuerta: puedeEscribirAlChofer({ posiciones, clavesPoleo: claves, sitioDelViaje, config, ahora, senalExtra }),
       dentroDeVentana: dentroDeVentana(config, ahora), tieneTelefono: Boolean(v.operadorTelefono),
       escalaSinRespuestaMin: config.detencionEscalaSinRespuestaMin,
     });

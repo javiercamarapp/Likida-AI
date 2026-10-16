@@ -8,6 +8,7 @@ import type { ViajeContexto } from './repo';
 import { armarEscalacionSenalVida, armarSenalVida, type MensajeSaliente, type MotivoSenalVida } from './solicitudes';
 import { estaFueraDePerfil } from './perfil';
 import { clavesPoleoDe, poleoEfectivoMin, puedeEscribirAlChofer, requisitoDeMuestras } from './compuerta_movimiento';
+import { leerSenalesDeUnidades, type SenalesConduccion } from './senales_conduccion';
 import { estaPendiente, estaResuelto, type HitoFila } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -262,6 +263,8 @@ export interface PuertosSenalVida {
   enviar(telefono: string, m: MensajeSaliente, contexto: string, tenantId: string, ahora: Date): Promise<ResultadoEnvioConFallback>;
   destinatarios(tenantId: string, terminalId: string | null, nivel: 1 | 2): Promise<Destino[]>;
   ubicacion(v: ViajeContexto, hs: readonly HitoFila[], ahora: Date): Promise<string>;
+  /** T-A5-68: la señal de conducción del proveedor de telemática → `senalExtra` de la compuerta (atasco). Opcional: sin él rige solo-GPS. */
+  senalesConduccion?: SenalesConduccion;
 }
 
 export interface ResultadoSenalVida {
@@ -350,6 +353,8 @@ export async function barridoSenalVida(p: PuertosSenalVida, ahora: Date = new Da
     if (unidadesObsoletas.size > 0 && (masivo || conectoresDegradados.has(t))) conectorCaido.add(t);
   }
 
+  // T-A5-68: la señal de conducción del proveedor, una lectura por unidad (solo se usa en los avisos que le escriben al chofer).
+  const conduccion = await leerSenalesDeUnidades(p.senalesConduccion, aEvaluar.map((v) => v.unidadId!), ahora);
   let rechazosSeguidos = 0;
   for (const [i, v] of aEvaluar.entries()) {
     if (venceEn !== undefined && Date.now() >= venceEn) { r.cortadosPorReloj = aEvaluar.length - i; break; }
@@ -364,7 +369,7 @@ export async function barridoSenalVida(p: PuertosSenalVida, ahora: Date = new Da
     // «no» no gasta un nivel; la siguiente pasada vuelve a decidir). Cerrar un episodio y escalar al jefe no le escriben al chofer.
     if (accion.tipo === 'abrir' || accion.tipo === 'avisar') {
       const posiciones = muestras.get(llave(v)) ?? [];
-      const puerta = puedeEscribirAlChofer({ posiciones, clavesPoleo: clavesPoleoDe(v.unidadId, posiciones), sitioDelViaje: sitios.get(v.id) ?? null, config, ahora });
+      const puerta = puedeEscribirAlChofer({ posiciones, clavesPoleo: clavesPoleoDe(v.unidadId, posiciones), sitioDelViaje: sitios.get(v.id) ?? null, config, ahora, senalExtra: conduccion.get(v.unidadId!) ?? null });
       if (!puerta.permitido) { salta('compuerta_movimiento'); continue; }
     }
 
