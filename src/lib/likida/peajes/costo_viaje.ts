@@ -134,7 +134,7 @@ export function costoPorViaje(
           motivo: 'El viaje no tiene origen o destino capturado: no hay con qué compararlo.', fuente: 'datos del viaje' };
       } else if (valores.length < minViajes) {
         referencia = { ...base, aplica: false, mediana: null, desviacion: null, desviacionPct: null,
-          motivo: `Hay ${valores.length} viaje(s) con ese origen y destino: menos de ${minViajes}, no alcanza para una referencia.`,
+          motivo: `Hay ${valores.length} ${valores.length === 1 ? 'viaje' : 'viajes'} con ese origen y destino: menos de ${minViajes}, no alcanza para una referencia.`,
           fuente: `viajes de este archivo con el mismo origen y destino (${valores.length})` };
       } else {
         const med = mediana(valores);
