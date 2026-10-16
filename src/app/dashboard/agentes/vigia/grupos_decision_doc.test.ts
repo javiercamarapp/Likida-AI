@@ -33,4 +33,36 @@ describe('decisión de grupos: no se promete nada', () => {
     expect(g).toContain('vigia-grupos-decision.md');
     expect(g).toMatch(/hoy no se promete/i);
   });
+
+  // T-A4-46: anexo de factibilidad verificada, con fecha y fuente, sin prometer nada.
+  it('el anexo de factibilidad tiene fecha de consulta, fuente con URL y rotula lo NO verificado', () => {
+    const anexo = leer(DOC).split('## Anexo: factibilidad verificada')[1] ?? '';
+    expect(anexo).toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(anexo).toMatch(/documentaci[oó]n/i);
+    expect(anexo).toMatch(/https:\/\/developers\.facebook\.com\/documentation\//);
+    expect(anexo).toMatch(/NO verificado/);
+    expect(anexo).toMatch(/servicio al cliente/i);
+    expect(anexo).toMatch(/frescura/i);
+  });
+
+  it('el anexo no promete estar en los grupos actuales ni leer en vivo', () => {
+    const anexo = leer(DOC).split('## Anexo: factibilidad verificada')[1] ?? '';
+    expect(anexo).toMatch(/no tiene v[ií]a documentada/i);
+    expect(anexo).not.toMatch(/\b(ya est[aá] en|estar[aá] en) (todos )?(los|sus) grupos\b(?!\s+actuales)/i);
+  });
+
+  it('el documento no contiene correos, razones sociales ni nombres propios de personas', () => {
+    const t = leer(DOC);
+    expect(t).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
+    expect(t).not.toMatch(/\bS\.?\s?A\.?\s+de\s+C\.?V\b/i);
+    // Dos palabras seguidas con inicial mayúscula fuera de títulos/tablas/citas de producto = posible nombre de persona.
+    const prosa = t
+      .split('\n')
+      .filter((l) => !/^(#|\||\s*-\s+https?:)/.test(l))
+      .join('\n')
+      .replace(/«[^»]*»/g, '');
+    const candidatos = prosa.match(/(?<![.¿¡:]\s)(?<!^)\b[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+ [A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\b/gm) ?? [];
+    const permitidos = new Set(['Cloud API', 'Official Business', 'Business Account', 'Groups API', 'Multi-solution Conversations']);
+    expect(candidatos.filter((c) => !permitidos.has(c))).toEqual([]);
+  });
 });
