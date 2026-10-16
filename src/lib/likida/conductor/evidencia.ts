@@ -1,3 +1,4 @@
+import { contieneDatoDeSeguridad } from './guardia_seguridad';
 import { estaResuelto, TIPOS_HITO, type HitoFila, type TipoEvidencia, type TipoHito } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -30,6 +31,7 @@ const FORMAS: ReadonlyArray<[TipoEvidencia, ReadonlySet<string>]> = [
 /** ¿El caption dice que la foto es evidencia de un hito? Formas EXACTAS (lista cerrada): «mi sello de diésel» no cuenta. */
 export function tipoEvidenciaDeCaption(texto: string | undefined): TipoEvidencia | null {
   if (typeof texto !== 'string' || !texto.trim() || texto.length > MAX_LARGO_CAPTION) return null;
+  if (contieneDatoDeSeguridad(texto)) return null; // T-A5-58: un pie de foto con la clave no es evidencia ni se guarda como tal
   const t = limpiar(texto);
   for (const [tipo, formas] of FORMAS) if (formas.has(t)) return tipo;
   return null;
