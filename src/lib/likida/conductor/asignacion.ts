@@ -11,6 +11,7 @@ import { puertosReales } from './ejecutor';
 import { horaYDiaMx, type Salida } from './mensajes';
 import { textoEsperado } from './patio_regla';
 import type { MensajeSaliente } from './solicitudes';
+import { preguntarGastosAlAceptar } from './gastos_etc';
 import { PREFIJO_BOTON, type HitoFila } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -190,7 +191,7 @@ export interface EntradaAsignacion {
   /** El teléfono de quien tocó el botón (la ventana de 24 h es suya). */
   telefono: string;
   opcion: OpcionAsignacion;
-  config: Pick<ConfigConductor, 'patioQueManda'>;
+  config: Pick<ConfigConductor, 'patioQueManda'> & Partial<Pick<ConfigConductor, 'gastosEtcActiva'>>;
   /** Solo para el rechazo: los hitos ya sembrados del viaje; el primero cuelga el claim del aviso. */
   hitos?: readonly HitoFila[];
   ahora: Date;
@@ -222,6 +223,8 @@ export async function responderAsignacion(p: PuertosAsignacion, x: EntradaAsigna
       const m = armarInstrucciones(v, datos, x.config.patioQueManda, x.ahora);
       const envio = await p.enviar(x.telefono, m, 'conductor.asignacion_instrucciones', v.tenantId, x.ahora);
       await p.convenio(v.tenantId, v.id).catch((err) => logger.warn('conductor.asignacion_convenio_fallo', { viaje: v.id, err: err instanceof Error ? err.message : String(err) }));
+      // T-A5-51 (R07): con la perilla, DESPUÉS de las instrucciones, la pregunta de gastos/ETC. Nunca lanza ni retiene la confirmación.
+      await preguntarGastosAlAceptar(p.enviar, x.config, v, x.telefono, x.ahora);
       // Salió por el envío (texto con botón o plantilla N02): ya es la confirmación. Si no, el texto va como respuesta del turno.
       return envio.ok ? [] : [{ texto: m.texto, botones: m.botones }];
     }

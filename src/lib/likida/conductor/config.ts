@@ -136,6 +136,11 @@ export interface ConfigConductor {
    */
   asignacionBotonesActiva?: boolean;
   /**
+   * T-A5-51 (R07): al aceptar el viaje se le pregunta al chofer (plantilla N03, dos botones) si requiere gastos de viaje / ETC para generar su vale.
+   * Apagado por omisión (hasta la fase 2); sin columna propia, como `asignacionBotonesActiva`. No pide montos ni emite nada.
+   */
+  gastosEtcActiva?: boolean;
+  /**
    * T-A5-37: minutos con la unidad detenida a partir de los cuales una detención sin aviso es ELEGIBLE para preguntarle al chofer
    * (T-A5-39). Es distinto de `detenidoMin` (la señal de vida, 60). SUPUESTO del cliente; lo fija monitoreo (D-6, B-10). 5–720.
    */
@@ -235,6 +240,7 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   reporteLlegadaActivo: false,
   resultadoDescargaActivo: false,
   asignacionBotonesActiva: false,
+  gastosEtcActiva: false,
   detenidoAvisoMin: 15,
   deteccionParadaActiva: false,
   lineaBaseLlamadasPorViaje: null,
@@ -465,6 +471,7 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       reporteLlegadaActivo: b.reporteLlegadaActivo === true,
       resultadoDescargaActivo: b.resultadoDescargaActivo === true,
       asignacionBotonesActiva: b.asignacionBotonesActiva === true,
+      gastosEtcActiva: b.gastosEtcActiva === true,
       detenidoAvisoMin,
       ...(poleoMin !== undefined ? { poleoMin } : {}),
       ...(poleoPorClaveMin !== undefined ? { poleoPorClaveMin } : {}),
