@@ -14,6 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { celdaCsv } from './exportacion';
+import { TZ_MX, fechaHoraEnZona } from '@/lib/formato';
 
 export type ColorAntiguedad = 'verde' | 'ambar' | 'rojo';
 
@@ -105,14 +106,9 @@ export function listarViajesSinCcp(
 
 export const ENCABEZADOS_CSV_SIN_CCP = ['Cliente', 'Folio', 'Salida', 'Horas sin Carta Porte', 'Días sin Carta Porte', 'Riesgo', 'Viaje local abierto'] as const;
 const RIESGO: Record<ColorAntiguedad, string> = { verde: 'Reciente', ambar: 'Atención', rojo: 'Riesgo de multa' };
-const ZONA = 'America/Mexico_City';
-
-/** La salida en hora de la flota (America/Mexico_City), `AAAA-MM-DD HH:mm`. */
+/** La salida en hora de la flota (TZ_MX), `AAAA-MM-DD HH:mm`. */
 export function salidaEnZona(iso: string): string {
-  const p = new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
-    .formatToParts(new Date(iso));
-  const g = (t: string) => p.find((x) => x.type === t)?.value ?? '';
-  return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}`;
+  return fechaHoraEnZona(new Date(iso), TZ_MX);
 }
 
 /** Reporte semanal exportable: una línea por viaje, con BOM para Excel y celdas sin fórmulas. */

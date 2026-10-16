@@ -61,6 +61,23 @@ export function diaEnZona(momento: Date, zonaHoraria: string): string {
   return dia;
 }
 
+/**
+ * Día Y hora de un instante en una zona IANA, `AAAA-MM-DD HH:mm` — el mismo
+ * `en-CA` + `formatToParts` de `diaEnZona`, con la hora. Para exports/CSV que
+ * necesitan orden lexicográfico (no la fecha "04 ago 2026, 20:00" de
+ * `fechaHoraMx`, pensada para que una persona la lea, no para ordenarla).
+ */
+export function fechaHoraEnZona(momento: Date, zonaHoraria: string): string {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: zonaHoraria, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(momento);
+  const valor = (tipo: Intl.DateTimeFormatPartTypes) =>
+    partes.find((p) => p.type === tipo)?.value;
+  const dia = `${valor('year')}-${valor('month')}-${valor('day')}`;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) throw new Error(`zona IANA inválida: ${zonaHoraria}`);
+  return `${dia} ${valor('hour')}:${valor('minute')}`;
+}
+
 
 /**
  * El desfase fijo de México contra UTC, para armar un instante a partir de un
