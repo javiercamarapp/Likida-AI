@@ -105,6 +105,19 @@ export interface ConfigConductor {
   patioEntregaActivo?: boolean;
   /** T-A5-44 (D-5, configuración y no decisión nuestra): qué campo manda como patio esperado. Por omisión «Entregar en». */
   patioQueManda?: 'entregar_en' | 'destino';
+  /**
+   * T-A5-45 (R17): la estadía de DESCARGA se vuelve interactiva. Al rebasar `estadiaAlertaDescargaMin` (o el umbral del cliente) el agente
+   * le pregunta al chofer «¿ya inició la descarga?»: «no» o sin respuesta → aviso al supervisor; «sí» → espera el fin de descarga.
+   * Apagada (por omisión) = el aviso al patio de siempre, sin preguntar. Aún sin columna propia: se fija al armar la configuración.
+   */
+  estadiaDescargaInteractiva?: boolean;
+  /**
+   * T-A5-45 (audio, A6): el umbral de descarga es POR CLIENTE (id del cliente → minutos): 120 por omisión del piloto y, p. ej., 240 para un
+   * convenio de 4 h. Un cliente sin entrada usa `estadiaAlertaDescargaMin`. Vive en configuración (sin migración): nunca nombres reales aquí.
+   */
+  estadiaDescargaMinPorCliente?: Readonly<Record<string, number>>;
+  /** T-A5-45: minutos que se espera la respuesta del chofer antes de avisar al supervisor por falta de respuesta. */
+  estadiaDescargaSinRespuestaMin?: number;
   /** 0801: aplicar la salida que reporta el TMS como hito del viaje. */
   aplicarSalidaDelTms: boolean;
   /** 0801: llamadas de seguimiento por viaje medidas antes del agente (null = sin registrar) y la fecha (AAAA-MM-DD) en que se midió. */
@@ -164,6 +177,9 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   exigirSelloInicio: false,
   patioEntregaActivo: false,
   patioQueManda: 'entregar_en',
+  estadiaDescargaInteractiva: false,
+  estadiaDescargaMinPorCliente: Object.freeze({}),
+  estadiaDescargaSinRespuestaMin: 30,
   lineaBaseLlamadasPorViaje: null,
   lineaBaseRegistradaEn: null,
 });
@@ -272,6 +288,21 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
   if (detenidaMetros === null) return { error: 'Los metros para dar la unidad por en marcha van de 10 a 5,000.' };
   const detenidaVentanaMin = entero(b.detenidaVentanaMin ?? CONFIG_CONDUCTOR_DEFAULT.detenidaVentanaMin, 1, 60);
   if (detenidaVentanaMin === null) return { error: 'La ventana para dar la unidad por detenida va de 1 a 60 minutos.' };
+  // T-A5-45: umbral de descarga por cliente y espera de la respuesta del chofer. Fuera de rango se RECHAZA (no se corrige en silencio).
+  const estadiaDescargaSinRespuestaMin = entero(b.estadiaDescargaSinRespuestaMin ?? CONFIG_CONDUCTOR_DEFAULT.estadiaDescargaSinRespuestaMin, 5, 720);
+  if (estadiaDescargaSinRespuestaMin === null) return { error: 'Los minutos de espera de la respuesta del chofer en la descarga van de 5 a 720.' };
+  const estadiaDescargaMinPorCliente: Record<string, number> = {};
+  const crudoPorCliente = b.estadiaDescargaMinPorCliente ?? {};
+  if (typeof crudoPorCliente !== 'object' || crudoPorCliente === null || Array.isArray(crudoPorCliente)) {
+    return { error: 'Los umbrales de descarga por cliente van como una lista de cliente y minutos.' };
+  }
+  for (const [cliente, minutos] of Object.entries(crudoPorCliente)) {
+    const n = entero(minutos, 15, 4320);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cliente) || n === null) {
+      return { error: 'El umbral de descarga de un cliente va de 15 a 4,320 minutos y se liga al id del cliente.' };
+    }
+    estadiaDescargaMinPorCliente[cliente.toLowerCase()] = n;
+  }
   let lineaBaseLlamadasPorViaje: number | null = null;
   if (b.lineaBaseLlamadasPorViaje !== null && b.lineaBaseLlamadasPorViaje !== undefined) {
     const n = typeof b.lineaBaseLlamadasPorViaje === 'string' && (b.lineaBaseLlamadasPorViaje as string).trim() !== '' ? Number(b.lineaBaseLlamadasPorViaje) : b.lineaBaseLlamadasPorViaje;
@@ -337,6 +368,9 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       exigirSelloInicio: b.exigirSelloInicio === true,
       patioEntregaActivo: b.patioEntregaActivo === true,
       patioQueManda: b.patioQueManda === 'destino' ? 'destino' : 'entregar_en',
+      estadiaDescargaInteractiva: b.estadiaDescargaInteractiva === true,
+      estadiaDescargaMinPorCliente,
+      estadiaDescargaSinRespuestaMin,
       lineaBaseLlamadasPorViaje,
       lineaBaseRegistradaEn,
     },

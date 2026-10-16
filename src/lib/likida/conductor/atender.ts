@@ -21,6 +21,8 @@ import { debeSellarTrasValidar, depsValidacionReales, validarHitoContraSitio, ty
 import { guardarEvidencia, hitoLlegadaReciente } from './repo_validacion';
 import { ETIQUETA_EVIDENCIA, hitoParaEvidencia, mensajeEvidencia, tipoEvidenciaDeCaption } from './evidencia';
 import { textoVeredicto, veredictoSellaLlegada } from './validacion';
+import { puertosEstadiaReales, responderEstadiaDescarga, type PuertosEstadia } from './alertas_estadia';
+import type { RespuestaEstadia } from './mensajes';
 import { leerTextoPatio, marcarPatioAtendido, preguntarPatio, puertosPatioReales, responderPatio, type PuertosPatio } from './patio_entrega';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -66,6 +68,8 @@ export interface DepsAtender {
   responderSenalVida?(tenantId: string, viajeId: string, respuesta: RespuestaSenalVida, ahora: Date, config?: ConfigConductor): Promise<'cerrado' | 'sin_episodio' | 'fallo'>;
   /** T-A5-44: los puertos del patio de entrega (catálogo, bitácora, aviso al supervisor). Opcional: sin él se usan los reales, y solo si la flota lo encendió. */
   patio?: PuertosPatio;
+  /** T-A5-45: los puertos del aviso al supervisor por la estadía de descarga. Opcional: sin él, los reales. */
+  estadia?: PuertosEstadia;
 }
 
 export const depsReales: DepsAtender = {
@@ -149,6 +153,8 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
     if (r) return r;
     if (esBotonPatio) return null;
   }
+  // T-A5-45: «¿ya inició la descarga?» — el botón `estadia_descarga:<viaje>:si|no` es de este módulo pero tampoco registra un hito.
+  if (botonPatio?.prefijo === PREFIJO_BOTON.estadiaDescarga) return atenderEstadia(e, botonPatio, ahora, deps);
   if (!boton && leerBotonConductor(e.texto)) return null;
   const llevaViaje = boton?.viajeId ?? e.viajeAbiertoId;
   if (!llevaViaje) return null;
@@ -251,6 +257,25 @@ async function atenderPatio(
   } catch (err) {
     logger.error('conductor.patio_fallo', { viaje: llevaViaje, err: err instanceof Error ? err.message : String(err) });
     return boton ? { mensajes: [FALLO] } : null;
+  }
+}
+
+/** T-A5-45: atiende la respuesta del chofer al «¿ya inició la descarga?». Los botones siempre contestan algo. */
+async function atenderEstadia(
+  e: EntradaAtender, boton: NonNullable<ReturnType<typeof leerBotonConductor>>, ahora: Date, deps: DepsAtender,
+): Promise<SalidaAtender | null> {
+  try {
+    const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, boton.viajeId);
+    if (!viaje) return { mensajes: [{ texto: 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] };
+    if (viaje.estatus === 'liquidado') return { mensajes: [{ texto: 'Ese viaje ya está cerrado. 👍' }] };
+    const config = await deps.config(e.tenantId);
+    const hitos = await deps.cargarHitos(e.tenantId, viaje.id);
+    const respuesta = (boton.opcion === 'no' ? 'no' : 'si') as RespuestaEstadia;
+    const mensajes = await responderEstadiaDescarga(deps.estadia ?? puertosEstadiaReales(), { viaje, hitos, config, respuesta, ahora });
+    return { mensajes };
+  } catch (err) {
+    logger.error('conductor.estadia_atender_fallo', { viaje: boton.viajeId, err: err instanceof Error ? err.message : String(err) });
+    return { mensajes: [FALLO] };
   }
 }
 

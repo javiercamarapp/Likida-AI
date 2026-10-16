@@ -173,3 +173,29 @@ export function resumenParaPlantilla(d: DatosAvisoOficina): string {
   const completo = `${ETIQUETA[d.tipo].oficina}${folio} a las ${hora}`;
   return completo.length <= 60 ? completo : `${completo.slice(0, 59)}…`;
 }
+
+// ── T-A5-45: la estadía de descarga interactiva (R17) ───────────────────────
+
+/** «¿Ya inició la descarga?» con dos botones (Meta admite hasta 3). `duracion` ya viene en texto («2 horas»). */
+export function preguntaEstadiaDescarga(viaje: { id: string; folio: string | null }, duracion: string): Salida {
+  const folio = viaje.folio ? ` (viaje ${viaje.folio.replace(/\s+/g, ' ').trim().slice(0, 30)})` : '';
+  return {
+    texto: `Llevas ${duracion} en la descarga${folio}. ¿Ya inició la descarga?`,
+    botones: [
+      { id: `${PREFIJO_BOTON.estadiaDescarga}:${viaje.id}:si`, titulo: 'Sí, ya empezó' },
+      { id: `${PREFIJO_BOTON.estadiaDescarga}:${viaje.id}:no`, titulo: 'No, sigo esperando' },
+    ],
+  };
+}
+
+export type RespuestaEstadia = 'si' | 'no';
+
+/** El acuse al chofer según lo que contestó y lo que pasó al registrarlo. */
+export function acuseEstadiaDescarga(r: RespuestaEstadia, avisado: boolean): Salida {
+  if (r === 'si') return { texto: 'Anotado ✅ Avísame cuando termines la descarga. 👍' };
+  return {
+    texto: avisado
+      ? 'Anotado ✅ Ya le avisé a tu supervisor para que te apoye con el cliente. 🙏'
+      : 'Anotado ✅ Si quieres apoyo, avísale directo a tu supervisor. 🙏',
+  };
+}

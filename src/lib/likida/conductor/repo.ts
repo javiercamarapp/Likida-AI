@@ -146,10 +146,12 @@ export interface ViajeContexto {
    * sin ella es `undefined` y el patio esperado cae al `destino`. Quien lo escriba lo hace aquí, sin tocar el resto.
    */
   entregarEn?: string | null;
+  /** T-A5-45: el cliente del viaje (`viaje.cliente_id`); con él se elige el umbral de estadía de descarga POR CLIENTE. */
+  clienteId?: string | null;
 }
 
 export const COLUMNAS_VIAJE_CTX =
-  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, aceptado_origen, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, despacho_ref, operador:operador_id(nombre, telefono)';
+  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, aceptado_origen, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, despacho_ref, cliente_id, operador:operador_id(nombre, telefono)';
 
 export function filaAViajeCtx(f: Fila): ViajeContexto {
   const rel = f.operador as { nombre?: string; telefono?: string } | Array<{ nombre?: string; telefono?: string }> | null;
@@ -173,6 +175,7 @@ export function filaAViajeCtx(f: Fila): ViajeContexto {
     etaOrigenEn: s(f.eta_origen_en),
     etaDestinoEn: s(f.eta_destino_en),
     despachoRef: s(f.despacho_ref),
+    clienteId: s(f.cliente_id),
     ...(esServicio(f.servicio) ? { servicio: f.servicio } : {}),
   };
 }
