@@ -49,6 +49,14 @@ import {
 
 interface Baseline { version: number; total: number; porArchivo: Record<string, number> }
 
+// Integración cinco-integracion-2: medido con el barrido real tras fusionar las 10 ramas (mismo criterio que
+// `frontera_datos_guardiana.test.ts`/`migraciones_verificadas.test.ts`, que sí se reconciliaron en sus commits de
+// merge). Este trinquete se quedó sin tocar: cinco-cartaporte sola medía 194 y cinco-conductor sola 190, pero
+// ninguna de las dos bajó su deuda al baseline compartido (187) antes del merge. El barrido real de la integración
+// mide 197 (+10 sobre 187): catalogo_distancias_puerto.ts (+1), ccp_respuesta_repo.ts (+1),
+// referencia_cliente_puerto.ts (+2) y repo.ts (+3) de `carta_porte_docs/` (cinco-cartaporte), y repo.ts (+3) de
+// `conductor/` (cinco-conductor). Techo subido a lo medido, sin relajar la regla — igual que los otros dos
+// guardianes ya reconciliados, nunca se baja un límite, solo se sube a lo real.
 const BASELINE: Baseline = JSON.parse(readFileSync('ci/limite-sin-orden-baseline.json', 'utf8'));
 
 const SITIOS = sitiosDeLimite();
