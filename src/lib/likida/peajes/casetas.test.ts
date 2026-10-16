@@ -138,3 +138,44 @@ describe('plantilla de catálogo de casetas (fixture sintético)', () => {
     expect(r.casetas[0]).toMatchObject({ nombre: 'Caseta Ejemplo Norte', alias: ['Ej Norte', 'Norte Ej'], radioM: 300 });
   });
 });
+
+describe('coordenadas opcionales (T-A2-05)', () => {
+  it('una fila sin coordenadas se importa por nombre', () => {
+    const r = parsearCasetasMatriz(csv('nombre;lat;lng;alias\nCaseta Ejemplo Norte;;;Ej Norte\nCaseta Ejemplo Sur;19.0;-99.0;\n'));
+    expect(r.error).toBeUndefined();
+    expect(r.rechazadas).toEqual([]);
+    expect(r.casetas[0]).toMatchObject({ nombre: 'Caseta Ejemplo Norte', lat: null, lng: null, alias: ['Ej Norte'] });
+    expect(r.casetas[1]).toMatchObject({ lat: 19, lng: -99 });
+  });
+  it('un archivo sin columnas de coordenadas funciona (solo nombres)', () => {
+    const r = parsearCasetasMatriz(csv('nombre;cruces\nCaseta Ejemplo Norte;40\nCaseta Ejemplo Sur;12\n'));
+    expect(r.error).toBeUndefined();
+    expect(r.casetas.map((c) => [c.nombre, c.lat, c.lng])).toEqual([['Caseta Ejemplo Norte', null, null], ['Caseta Ejemplo Sur', null, null]]);
+  });
+  it('una fila con solo la latitud (o solo la longitud) se rechaza con motivo llano', () => {
+    const r = parsearCasetasMatriz(csv('nombre;lat;lng\nSolo Lat;19.5;\nSolo Lng;;-99.2\nCompleta;19.5;-99.2\n'));
+    expect(r.casetas.map((c) => c.nombre)).toEqual(['Completa']);
+    const por = Object.fromEntries(r.rechazadas.map((x) => [x.fila, x.motivo]));
+    expect(por[2]).toBe('trae solo la latitud: captura las dos coordenadas o deja ambas vacías');
+    expect(por[3]).toBe('trae solo la longitud: captura las dos coordenadas o deja ambas vacías');
+  });
+  it('un archivo con UNA sola columna de coordenada sigue siendo error de encabezados', () => {
+    expect(parsearCasetasMatriz(csv('nombre;lng\nX;-99\n')).error).toMatch(/Faltan columnas: lat/);
+  });
+  it('coordenadas presentes pero malas siguen rechazándose (ilegible, invertida, fuera de México)', () => {
+    const r = parsearCasetasMatriz(csv('nombre;lat;lng\nA;abc;-99\nB;-99.2;19.5\nC;40.7;-74\n'));
+    expect(r.casetas).toEqual([]);
+    expect(r.rechazadas.map((x) => x.motivo)).toEqual([expect.stringMatching(/ilegible/), expect.stringMatching(/invertidas/), expect.stringMatching(/fuera de México/)]);
+  });
+  it('por_pasada: se lee si el archivo trae la columna y queda sin definir si no', () => {
+    const con = parsearCasetasMatriz(csv('nombre;tarifa_por_pasada\nA;si\nB;no\nC;\nD;sí\n'));
+    expect(con.casetas.map((c) => c.porPasada)).toEqual([true, false, false, true]);
+    const sin = parsearCasetasMatriz(csv('nombre\nA\n'));
+    expect(sin.casetas[0].porPasada).toBeUndefined();
+  });
+  it('resolverCaseta resuelve por nombre y alias aunque el catálogo no tenga coordenadas', () => {
+    const cat: CasetaCatalogo[] = [{ id: 'c1', nombre: 'Caseta Ejemplo Norte', nombreNorm: 'caseta ejemplo norte', alias: ['Ej Norte'], lat: null, lng: null, radioM: 300 }];
+    expect(resolverCaseta('CASETA EJEMPLO NORTE', cat)).toMatchObject({ tipo: 'unica', por: 'nombre' });
+    expect(resolverCaseta('Ej Norte', cat)).toMatchObject({ tipo: 'unica', por: 'alias' });
+  });
+});

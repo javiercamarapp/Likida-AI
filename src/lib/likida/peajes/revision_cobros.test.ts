@@ -220,3 +220,30 @@ describe('el seguimiento de reclamos de punta a punta', () => {
     expect(db.tablas.peaje_reclamo[0].estado).toBe('preparado');
   });
 });
+
+describe('revisionDeDesglose: doble cobro entre archivos (T-A2-38)', () => {
+  it('lee los desgloses previos de la flota en la ventana y no los de otra flota', async () => {
+    const a = await subir('21 A 31 DE AGOSTO.xlsx', { filas: 300, inicio: '2026-08-21', extemporaneos: 0 });
+    // mismo archivo subido como otra decena: sus cruces de agosto reaparecen «tarde» en octubre
+    const lineasA = db.tablas.desglose_peaje_linea.filter((f) => f.desglose_id === a.id);
+    const b = await subir('01 A 10 DE OCTUBRE.xlsx', { filas: 300, inicio: '2026-10-01', extemporaneos: 0 });
+    const repetida = lineasA.find((f) => f.fecha && f.hora && f.tag);
+    if (!repetida) throw new Error('sin línea para repetir');
+    db.tablas.desglose_peaje_linea.push({ ...repetida, id: 'x-rep', desglose_id: b.id, indice: 9999 });
+    const antes = db.llamadas.length;
+    const rep = await R.revisionDeDesglose(T, b.id);
+    const llamadasRevision = db.llamadas.slice(antes);
+    const d = rep?.dobleEntreArchivos;
+    expect(d?.candidatos.length).toBeGreaterThanOrEqual(1);
+    expect(d?.candidatos.some((c) => c.indice === 9999 && c.archivoPrevioId === a.id)).toBe(true);
+    // otra flota no ve nada de la primera
+    const c2 = await subir('01 A 10 DE OCTUBRE.xlsx', { filas: 50, inicio: '2026-10-01', extemporaneos: 0 }, OTRO);
+    db.tablas.desglose_peaje_linea.push({ ...repetida, id: 'x-rep2', desglose_id: c2.id, tenant_id: OTRO, indice: 9999 });
+    const rep2 = await R.revisionDeDesglose(OTRO, c2.id);
+    expect(rep2?.dobleEntreArchivos?.candidatos).toHaveLength(0);
+    // toda consulta a los previos lleva el filtro de la flota
+    const previas = llamadasRevision.filter((x) => x.tabla === 'desglose_peaje' || x.tabla === 'desglose_peaje_linea');
+    expect(previas.length).toBeGreaterThan(0);
+    expect(previas.every((x) => x.filtros.some(([col]) => col === 'tenant_id'))).toBe(true);
+  }, 60_000);
+});

@@ -20,7 +20,7 @@ const leer = (ruta: string) =>
 /** Recursos / rutas que EXISTEN y el perfil NIEGA a propósito (stand-by). */
 const STAND_BY = {
   v1: ['clientes'],
-  export: ['convenios', 'facturas-proveedor', 'jornada', 'poliza'],
+  export: ['bitacora-conciliada', 'bitacora-peaje', 'convenios', 'facturas-proveedor', 'jornada', 'peajes-reclamacion', 'poliza'],
   dashboard: ['archivo', 'chat', 'conversaciones', 'ingesta', 'onboarding-chat'],
 };
 /** /v1 que NO pasan por `abrir`: documentación pública, sin datos de ninguna flota. */

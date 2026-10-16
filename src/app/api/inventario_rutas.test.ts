@@ -251,7 +251,18 @@ import { join, relative, sep } from 'node:path';
 //   `fallo`) y latido en todo camino de salida. No acepta cuerpo ni parámetros; no devuelve credenciales ni datos de la flota (solo conteos y
 //   frases propias). Opt-in: solo recorre flotas con credencial `tms_api_lectura` activa, probada y con mapeo activo. Prueba: `cron/tms/route.test.ts`.
 // Reanclado sobre master: 108 de la integración + 1 (cron/tms) = 109.
-const RUTAS_APP_REVISADAS = 109;
+//
+// 109 → 110 (frente A2 Peajes, T-A2-25): `api/export/peajes-candidatos/route.ts` — GET de la flota de la SESIÓN (`resolverTenantApi`): puerta del
+//   dato (área `dinero`), del verbo (`puedeExportar`), rate limit por IP y por flota; el desglose y todas las lecturas (líneas, tarifas, reclamos)
+//   usan el tenant de la sesión (uno ajeno es 404 sin leer nada más) y una lectura incompleta no sale como archivo corto. Mismo molde que
+//   `peajes-revision`. Prueba: `export/peajes-candidatos/route.test.ts`.
+//
+// 110 → 111 (frente A2 Peajes, T-A2-22): `api/export/peajes-vinculos/route.ts` — GET de la flota de la SESIÓN (`resolverTenantApi`): puerta del
+//   dato (área `dinero`), del verbo (`puedeExportar`), rate limit por IP y por flota; el desglose y todas las lecturas (líneas, vínculos, folios)
+//   usan el tenant de la sesión (uno ajeno es 404) y una lectura incompleta no sale como archivo corto. Mismo molde que `peajes-reclamacion`.
+//   Prueba: `export/peajes-vinculos/route.test.ts`.
+// Integración cinco-integracion-2 (tms-conector + peajes-importador sobre la misma base 108): 109 (cron/tms) + 2 (candidatos, vinculos) = 111.
+const RUTAS_APP_REVISADAS = 111;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

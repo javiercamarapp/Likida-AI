@@ -269,7 +269,10 @@ import { join, relative } from 'node:path';
 // Integración + Liquidación (INT-RAMAS): 301 + 4 (Liquidación sobre la base de perfil: 293 − 289) = 305 esperado; se ajusta al barrido real.
 // 15-oct-2026, frente TMS (reanclado sobre master): techo 305 → 308 archivos y 2,095 → 2,105 llamadas, medido con el barrido real. Lo nuevo es el conector TMS de solo
 // lectura: `conectores/tms/sincronizar.ts`, `conectores/tms/ccp.ts` y `api/cron/tms/route.ts` (todo con `tenant_id`, por `acotada`/`traerTodo`). Funcionalidad nueva, no código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 308;
+// Integración cinco-integracion-2 (tms-conector + peajes-importador sobre la misma base): 308 → 312, medido con el barrido real del árbol fusionado
+// (archivos nuevos de los conectores TMS/peajes con acceso directo: tms/{archivo,ccp,liquidaciones,peajes,posiciones,sincronizar}.ts y
+// peajes/datos.ts). Funcionalidad nueva, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 312;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -360,7 +363,11 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 308;
 // Integración + Conductor (INT-RAMAS): 1,980 (perfil + CP + Vigía) + 29 de tramos propios del Conductor (1,946 − 1,917; 0 archivos) = 2,009 esperado; se ajusta al barrido real.
 // Integración + Peajes (INT-RAMAS): 2,009 + 55 (Peajes sobre la base de perfil: 1,972 − 1,917) = 2,064 esperado; se ajusta al barrido real.
 // Integración + Liquidación (INT-RAMAS): 2,064 + 31 (Liquidación sobre la base de perfil: 1,948 − 1,917) = 2,095 esperado; se ajusta al barrido real.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_105;
+// 15-oct-2026, frente Peajes (reanclado sobre master): techo 2,095 → 2,102 llamadas (+7 en `peajes/datos.ts`: tarifario por caseta y clase, tarifas
+// de referencia, configuración de umbrales y avisos; todas por `acotada`/`traerTodo`/`conteo` con `tenant_id`). Funcionalidad nueva, no código migrado.
+// Integración cinco-integracion-2 (tms-conector + peajes-importador sobre la misma base, 2,105 de tms-conector + llamadas propias de
+// peajes-importador que tms-conector no traía): el barrido real del árbol fusionado mide 2,134 llamadas; techo subido a lo medido, sin relajar la regla.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_134;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

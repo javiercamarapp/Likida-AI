@@ -41,7 +41,7 @@ import { enLotes } from '../lotes';
 import { round2 } from '@/lib/formato';
 import { toCsv } from '../export';
 import { leerArchivoUniversal, ArchivoNoSoportado } from './archivo';
-import { diasDeDiferencia, VENTANA_DIAS_FECHA, TOLERANCIA_MONTO_MXN } from './consolidado';
+import { VENTANA_DIAS_FECHA, TOLERANCIA_MONTO_MXN } from './consolidado';
 import { registrarCorrida } from '../agentes/corridas';
 import { contextoEvidenciaGps, llaveUnidadDia } from '../peajes/evidencia_gps';
 import { cargarMapaTags, cargarMapeo, listarCasetas, evaluarGpsDeLineas } from '../peajes/datos';
@@ -687,7 +687,7 @@ export interface CruceLinea {
   detalle: Record<string, unknown> | null;
 }
 
-interface CandidatoEvaluado { gasto: GastoCaseta; dias: number; diff: number }
+interface CandidatoEvaluado { gasto: GastoCaseta; dias: number; diff: number; orden: number }
 
 const resumenCandidato = (c: CandidatoEvaluado) =>
   ({ gastoId: c.gasto.id, monto: c.gasto.monto, fecha: c.gasto.fecha });
@@ -720,7 +720,25 @@ export function cruzarLineasDesglose(
   lineas: ReadonlyArray<{ fecha: string | null; monto: number; unidadId?: string | null }>,
   gastos: readonly GastoCaseta[],
 ): CruceLinea[] {
-  let disponibles = [...gastos];
+  // ESCALA (T-A2-32): el barrido de TODOS los gastos por cada línea era O(líneas × gastos) — a 60 000
+  // líneas y ~45 000 gastos, miles de millones de comparaciones. Los gastos se indexan por día (medianoche
+  // UTC → entero) y cada línea solo mira los días de su ventana (±VENTANA_DIAS_FECHA). El orden de los
+  // candidatos es el original de `gastos` (la posición decide empates y el orden en `detalle`), y «ya usado»
+  // se marca por id, igual que antes se filtraba por id: el resultado es idéntico al del barrido completo.
+  const MS_DIA = 86_400_000;
+  const diaDe = (fecha: string): number | null => {
+    const t = Date.parse(`${fecha}T00:00:00Z`);
+    return Number.isNaN(t) ? null : Math.round(t / MS_DIA);
+  };
+  const porDia = new Map<number, Array<{ gasto: GastoCaseta; orden: number; dia: number }>>();
+  gastos.forEach((g, orden) => {
+    const d = diaDe(g.fecha.slice(0, 10));
+    if (d === null) return; // fecha ilegible: la diferencia era Infinity, nunca entraba a una ventana
+    const lista = porDia.get(d);
+    if (lista) lista.push({ gasto: g, orden, dia: d });
+    else porDia.set(d, [{ gasto: g, orden, dia: d }]);
+  });
+  const usados = new Set<string>();
   const resultados: CruceLinea[] = [];
 
   for (const linea of lineas) {
@@ -731,19 +749,41 @@ export function cruzarLineasDesglose(
       });
       continue;
     }
-    const dia = linea.fecha.slice(0, 10);
-    const evaluar = (fondo: GastoCaseta[]): CandidatoEvaluado[] => fondo
-      .map((g) => ({ gasto: g, dias: diasDeDiferencia(g.fecha.slice(0, 10), dia), diff: round2(Math.abs(g.monto - linea.monto)) }))
-      .filter((c) => c.dias <= VENTANA_DIAS_FECHA);
+    const diaN = diaDe(linea.fecha.slice(0, 10));
 
-    const ventana = evaluar(disponibles);
+    // UNA pasada sobre los gastos de la ventana, sin crear un objeto por gasto: solo se guardan los que
+    // pueden cuadrar (monto exacto o en tolerancia) y el más cercano (para «monto distinto»). La posición
+    // original (`orden`) es el último desempate, que es lo que antes daba el orden estable del arreglo.
+    const exactos: CandidatoEvaluado[] = [];
+    const tolerables: CandidatoEvaluado[] = [];
+    let masCercano: CandidatoEvaluado | null = null;
+    let enVentana = 0;
+    let habiaEnFondoCompleto = false;
+    if (diaN !== null) {
+      for (let k = -VENTANA_DIAS_FECHA; k <= VENTANA_DIAS_FECHA; k++) {
+        const lista = porDia.get(diaN + k);
+        if (!lista) continue;
+        for (const e of lista) {
+          const diff = round2(Math.abs(e.gasto.monto - linea.monto));
+          if (usados.has(e.gasto.id)) {
+            // Fondo completo (incluye lo ya usado): solo importa si HABRÍA cuadrado.
+            if (diff <= TOLERANCIA_CENTAVOS_MXN) habiaEnFondoCompleto = true;
+            continue;
+          }
+          enVentana++;
+          const c: CandidatoEvaluado = { gasto: e.gasto, dias: Math.abs(e.dia - diaN), diff, orden: e.orden };
+          if (diff < 0.005) exactos.push(c);
+          if (diff <= TOLERANCIA_CENTAVOS_MXN) tolerables.push(c);
+          if (masCercano === null || diff < masCercano.diff || (diff === masCercano.diff && (c.dias < masCercano.dias || (c.dias === masCercano.dias && c.orden < masCercano.orden)))) masCercano = c;
+        }
+      }
+    }
 
-    if (ventana.length === 0) {
+    if (enVentana === 0) {
       // «Ya reclamada» solo si lo reclamado HABRÍA cuadrado (monto exacto o en
       // tolerancia). Un gasto de OTRO monto en la ventana, ya usado por otra
       // línea, no es la contraparte de esta: decir «su gasto ya lo usó otra
       // línea» sería afirmar una contraparte que no existe.
-      const habiaEnFondoCompleto = evaluar([...gastos]).some((c) => c.diff <= TOLERANCIA_CENTAVOS_MXN);
       resultados.push({
         estatus: 'sin_contraparte', viajeId: null, gastoId: null, diferencia: null,
         // `fondo_gastos`: cuántos gastos de caseta había en TODO el rango del
@@ -756,7 +796,7 @@ export function cruzarLineasDesglose(
 
     const cuadrar = (candidatos: CandidatoEvaluado[], motivoAmbigua: string): CruceLinea | null => {
       // Menor diferencia de monto manda; la fecha más cercana desempata.
-      const orden = [...candidatos].sort((a, b) => (a.diff - b.diff) || (a.dias - b.dias));
+      const orden = [...candidatos].sort((a, b) => (a.diff - b.diff) || (a.dias - b.dias) || (a.orden - b.orden));
       let mejor = orden[0];
       let empatados = orden.filter((c) => c.diff === mejor.diff && c.dias === mejor.dias);
       let desempate: 'tag_unidad' | null = null;
@@ -777,7 +817,7 @@ export function cruzarLineasDesglose(
           detalle: { motivo: motivoAmbigua, candidatos: empatados.map(resumenCandidato) },
         };
       }
-      disponibles = disponibles.filter((g) => g.id !== mejor.gasto.id);
+      usados.add(mejor.gasto.id);
       // El TAG dice una unidad y el viaje del gasto es de OTRA: el monto y el día
       // cuadran, pero quizá el TAG se prestó o el gasto es de otro camión. Se
       // marca para revisión humana; no se desfaza el cruce.
@@ -796,13 +836,11 @@ export function cruzarLineasDesglose(
       };
     };
 
-    const exactos = ventana.filter((c) => c.diff < 0.005);
     if (exactos.length > 0) {
       resultados.push(cuadrar(exactos, 'ambigua_monto_exacto')!);
       continue;
     }
 
-    const tolerables = ventana.filter((c) => c.diff <= TOLERANCIA_CENTAVOS_MXN);
     if (tolerables.length > 0) {
       resultados.push(cuadrar(tolerables, 'ambigua_en_tolerancia')!);
       continue;
@@ -810,11 +848,11 @@ export function cruzarLineasDesglose(
 
     // Hay contraparte en la ventana, pero el monto no aguanta ni el rondeo:
     // es LA discrepancia que este agente existe para marcar.
-    const masCercano = [...ventana].sort((a, b) => (a.diff - b.diff) || (a.dias - b.dias))[0];
+    const cercano = masCercano as CandidatoEvaluado; // enVentana > 0 ⇒ hay uno
     resultados.push({
       estatus: 'no_cuadra', viajeId: null, gastoId: null,
-      diferencia: round2(linea.monto - masCercano.gasto.monto),
-      detalle: { motivo: 'monto_distinto', candidato: resumenCandidato(masCercano) },
+      diferencia: round2(linea.monto - cercano.gasto.monto),
+      detalle: { motivo: 'monto_distinto', candidato: resumenCandidato(cercano) },
     });
   }
   return resultados;

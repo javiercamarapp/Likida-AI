@@ -4,6 +4,7 @@ import { traerTodo, traerPorIds, conteo } from '../pg';
 import { listarCasetas, listarUnidades, listarGeocercas, listarCursos, convenioPorViaje, traerMuestrasPorLinea, type VentanaPosiciones } from './datos';
 import { cursosQueAplican, type CursoDeFlota } from './cursos';
 import { VENTANA_GPS_MIN } from './cruce_gps';
+import { leyendasDePerfil } from './reclamacion_perfil';
 import {
   construirReclamacion, LEYENDAS_RECLAMACION, type LineaReclamable, type ReporteReclamacion,
 } from './reclamacion';
@@ -202,11 +203,21 @@ export function bitacoraConciliadaACsv(b: BitacoraConciliada): string {
  * Las posiciones solo se piden para las candidatas (el GPS dijo «no coincide» o
  * dijo «no alcanzan las muestras»): las confirmadas y las sin datos no necesitan
  * evidencia ni se reclaman, y traerlas todas multiplicaría las consultas.
+ *
+ * `perfilRestringido` (perfil `cinco_agentes`, T-A2-24): solo `gps_lejos_de_caseta` y doble cobro. No se leen geocercas ni cursos
+ * (stand-by: ni se consultan, ni pueden quedarse con la línea antes que el doble cobro) y las leyendas son las del perfil.
  */
-export async function reporteReclamacion(tenantId: string, desgloseId: string): Promise<ReporteReclamacion | null> {
+export async function reporteReclamacion(
+  tenantId: string, desgloseId: string, opciones: { perfilRestringido?: boolean } = {},
+): Promise<ReporteReclamacion | null> {
+  const restringido = opciones.perfilRestringido === true;
   const b = await bitacoraConciliada(tenantId, desgloseId);
   if (!b) return null;
-  const [casetas, geocercas, cursosVista] = await Promise.all([listarCasetas(tenantId), listarGeocercas(tenantId, { zonasParaReclamacion: true }), listarCursos(tenantId)]);
+  const [casetas, geocercas, cursosVista] = await Promise.all([
+    listarCasetas(tenantId),
+    restringido ? Promise.resolve([]) : listarGeocercas(tenantId, { zonasParaReclamacion: true }),
+    restringido ? Promise.resolve([]) : listarCursos(tenantId),
+  ]);
   const cursos: CursoDeFlota[] = cursosVista.filter((c) => c.activo).map((c) => ({
     id: c.id, codigo: c.codigo, nombre: c.nombre, tipo: c.tipo, unidadId: c.unidadId, convenioId: c.convenioId, activo: c.activo,
     casetaIds: c.casetas.map((k) => k.id), casetaNombres: c.casetas.map((k) => k.nombre),
@@ -219,7 +230,7 @@ export async function reporteReclamacion(tenantId: string, desgloseId: string): 
     ? await convenioPorViaje(tenantId, [...new Set(b.filas.map((f) => f.viajeId).filter((v): v is string => !!v))])
     : new Map<string, string>();
   const cursosDe = (f: FilaConciliada) => cursosQueAplican(cursos, f.unidadId ?? null, f.viajeId ? (convenioDelViaje.get(f.viajeId) ?? null) : null);
-  const geoPorCaseta = new Map(casetas.filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng)).map((c) => [c.id, { lat: c.lat, lng: c.lng, radioM: c.radioM }]));
+  const geoPorCaseta = new Map(casetas.flatMap((c) => (c.lat !== null && c.lng !== null && Number.isFinite(c.lat) && Number.isFinite(c.lng) ? [[c.id, { lat: c.lat, lng: c.lng, radioM: c.radioM }] as const] : [])));
 
   // Candidatas a evidencia: las que el cruce marcó «no coincide» o dejó en «muestras insuficientes», y las que tienen un curso de
   // tipo corredor (su evaluación mide la posición a la hora del pase contra la polilínea).
@@ -245,6 +256,6 @@ export async function reporteReclamacion(tenantId: string, desgloseId: string): 
   const { cruces, resumen } = construirReclamacion(lineas, geocercas.filter((g) => g.activa));
   return {
     desgloseId, proveedor: b.proveedor, periodoDesde: b.periodoDesde, periodoHasta: b.periodoHasta,
-    cruces, resumen, leyendas: LEYENDAS_RECLAMACION,
+    cruces, resumen, leyendas: restringido ? leyendasDePerfil() : LEYENDAS_RECLAMACION,
   };
 }
