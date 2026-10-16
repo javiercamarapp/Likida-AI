@@ -104,6 +104,24 @@ describe('(e) un campo CRÍTICO que falla un validador ESCALA aunque el modelo d
   });
 });
 
+describe('un nivel que falla no tumba el documento si hay otro nivel', () => {
+  it('el nivel 1 entrega una salida inválida: se escala al 2 con motivo error_modelo (y se cuenta)', async () => {
+    const llm = llmFalso((e) => { if (e.nivel === 1) throw new Error('Validación falló: salida truncada'); return lectura(e.nivel); });
+    const r = await extraerDocumento(captura(), { llm, niveles: [1, 2, 3] });
+    expect(r.escalamientos).toEqual([{ de: 1, a: 2, codigo: 'error_modelo', motivo: expect.stringContaining('Validación falló') }]);
+    expect(r.nivel).toBe(2);
+    expect(contadoresDeEscalamientos()['1>2:error_modelo']).toBe(1);
+  });
+  it('un error fatal (presupuesto agotado) o el fallo del ÚLTIMO nivel se relanzan', async () => {
+    const fatal = llmFalso(() => { throw new Error('presupuesto'); });
+    await expect(extraerDocumento(captura(), { llm: fatal, niveles: [1, 2], errorFatal: () => true })).rejects.toThrow('presupuesto');
+    expect(fatal.llamadas).toHaveLength(1);
+    const todos = llmFalso(() => { throw new Error('caído'); });
+    await expect(extraerDocumento(captura(), { llm: todos, niveles: [1, 2] })).rejects.toThrow('caído');
+    expect(todos.llamadas).toHaveLength(2);
+  });
+});
+
 describe('(f) el orden de los niveles es configurable por tipo de documento', () => {
   it('niveles [2, 3] en el contexto: la primera llamada es al nivel 2 y el 1 no se usa', async () => {
     const llm = llmFalso((e) => lectura(e.nivel));

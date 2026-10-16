@@ -342,7 +342,7 @@ export async function procesarDocumento(
       r = sinVision || !llm
         ? resultadoSinLectura(contenido.avisos, 'Sin modelo de visión configurado: esta remisión escaneada se captura a mano.')
         : await extraerDocumento(contenido, {
-          llm, perfiles, remitente: doc.remitente, clienteId: doc.clienteId, signal: deps.signal, nombreArchivo: doc.nombreArchivo,
+          llm, perfiles, remitente: doc.remitente, clienteId: doc.clienteId, signal: deps.signal, nombreArchivo: doc.nombreArchivo, errorFatal: esErrorDePresupuesto,
           ...(transcribir ? { transcribir } : {}), ...(formatoEntrada ? { formatoEntrada } : {}), ...(deps.vision ? { vision: deps.vision } : {}),
         });
     } catch (e) {
