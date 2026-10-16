@@ -84,6 +84,28 @@ export function textoDeMotivoEscalamiento(motivo: MotivoEscalamiento, minutos: n
   }
 }
 
+const ROTULO_FALTANTE: Record<string, { rotulo: string; pron: 'la' | 'lo'; fin: 'a' | 'o' }> = {
+  caja: { rotulo: 'la caja', pron: 'la', fin: 'a' },
+  unidad: { rotulo: 'la unidad', pron: 'la', fin: 'a' },
+  operador: { rotulo: 'el operador', pron: 'lo', fin: 'o' },
+};
+
+/**
+ * T-A4-27: lo que se le dice a servicio al cliente cuando preguntaron por la unidad y falta un dato:
+ * «preguntó por la caja de F-1042 y no la tengo registrada». Solo rótulos y el folio del viaje del propio cliente: ni teléfono ni texto suyo.
+ */
+export function textoSinDatoUnidad(faltantes: readonly string[], folio: string | null): string {
+  const conocidos = faltantes.filter((f) => f in ROTULO_FALTANTE).map((f) => ROTULO_FALTANTE[f]);
+  const de = folio ? ` de ${recortar(folio, 40)}` : '';
+  if (conocidos.length === 0) return `preguntó por los datos de la unidad${de} y no los tengo registrados`;
+  if (conocidos.length === 1) {
+    const d = conocidos[0];
+    return `preguntó por ${d.rotulo}${de} y no ${d.pron} tengo registrad${d.fin}`;
+  }
+  const lista = conocidos.map((d) => d.rotulo).join(', ').replace(/, ([^,]*)$/, ' y $1');
+  return `preguntó por ${lista}${de} y no los tengo registrados`;
+}
+
 export interface EntradaAvisoEscalamiento {
   tenantId: string;
   telefonoDestino: string;
@@ -93,12 +115,34 @@ export interface EntradaAvisoEscalamiento {
   motivo: MotivoEscalamiento;
   minutosEsperando: number;
   nivel: 1 | 2;
+  /**
+   * T-A4-27: aviso en PRIVADO a servicio al cliente (no es un nivel de la escalera). `detalle` reemplaza al motivo genérico
+   * («preguntó por la caja de F-1042 y no la tengo registrada»). Fuera de la ventana de 24 h usa la plantilla de escalamiento
+   * que ya existe, con «servicio al cliente» donde va el nivel (no hay plantilla propia: ver notas de la tarea).
+   */
+  servicio?: { detalle: string };
 }
 
 export async function avisarEscalamiento(e: EntradaAvisoEscalamiento, enviar: Enviador = enviarConFallback): Promise<ResultadoEnvioConFallback> {
   const cliente = recortar(e.nombreCliente, 60) || 'Un cliente';
-  const motivo = textoDeMotivoEscalamiento(e.motivo, e.minutosEsperando);
   const liga = `${appUrl()}/dashboard/agentes/vigia`;
+  if (e.servicio) {
+    const detalle = recortar(e.servicio.detalle, 120);
+    return enviar(e.telefonoDestino, {
+      texto: `Vigía de servicio: el cliente ${cliente} ${detalle}. Revísalo en ${liga} o toca «Yo me encargo».`,
+      botones: [{ id: `${PREFIJO_TOMAR}:${e.mensajeId}`, titulo: 'Yo me encargo' }],
+      plantilla: {
+        nombre: PLANTILLA.vigiaEscalamiento,
+        ...opcionesDeEnvio(PLANTILLA.vigiaEscalamiento, {
+          cuerpo: [aLineaPlantilla(cliente, 60), aLineaPlantilla(detalle, 80), 'servicio al cliente', liga],
+          idsBotones: e.mensajeId,
+        }),
+      },
+      contexto: 'vigia.escalamiento',
+      tenantId: e.tenantId,
+    });
+  }
+  const motivo = textoDeMotivoEscalamiento(e.motivo, e.minutosEsperando);
   const texto = `Vigía de servicio: el cliente ${cliente} necesita atención (${motivo}). Nivel ${e.nivel} de escalamiento. Revísalo en ${liga} o toca «Yo me encargo».`;
   return enviar(e.telefonoDestino, {
     texto,

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
-  avisarAprobacion, avisarEscalamiento, interpretarBoton, textoDeMotivoEscalamiento,
+  avisarAprobacion, avisarEscalamiento, interpretarBoton, textoDeMotivoEscalamiento, textoSinDatoUnidad,
   PREFIJO_APROBAR, PREFIJO_RECHAZAR, PREFIJO_TOMAR,
 } from './avisos';
 import type { Enviador } from './enviar';
@@ -112,5 +112,45 @@ describe('interpretarBoton', () => {
     for (const t of ['', 'vig_ok', 'vig_ok:', 'vig_ok:123', `vig_ok:${MSG}x`, `vig_borrar:${MSG}`, `hola vig_ok:${MSG}`, `vig_ok:${MSG}\nvig_ok:${MSG}`, 'enviar', `tal_si:${MSG}`]) {
       expect(interpretarBoton(t), t).toBeNull();
     }
+  });
+});
+
+describe('T-A4-27 · aviso en privado a servicio al cliente', () => {
+  const e = { tenantId: 't1', telefonoDestino: '525577770001', mensajeId: MSG, nombreCliente: 'Compras Acme', motivo: 'sin_dato' as const, minutosEsperando: 0, nivel: 1 as const }; // grep-limpio:ok
+
+  it('el texto dice qué faltó, con el folio, y NO habla de niveles de escalamiento', () => {
+    expect(textoSinDatoUnidad(['caja'], 'F-1042')).toBe('preguntó por la caja de F-1042 y no la tengo registrada');
+    expect(textoSinDatoUnidad(['operador'], 'F-1042')).toBe('preguntó por el operador de F-1042 y no lo tengo registrado');
+    expect(textoSinDatoUnidad(['caja', 'unidad', 'operador'], null)).toBe('preguntó por la caja, la unidad y el operador y no los tengo registrados');
+    expect(textoSinDatoUnidad(['hora'], 'F-1042')).toBe('preguntó por los datos de la unidad de F-1042 y no los tengo registrados');
+  });
+
+  it('dentro de ventana: «preguntó por la caja de F-1042…» con el botón «Yo me encargo»', async () => {
+    const enviar = okEnviar();
+    await avisarEscalamiento({ ...e, servicio: { detalle: textoSinDatoUnidad(['caja'], 'F-1042') } }, enviar);
+    const [tel, op] = (enviar as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, Record<string, unknown>];
+    expect(tel).toBe('525577770001'); // grep-limpio:ok
+    expect(op.texto).toContain('el cliente Compras Acme preguntó por la caja de F-1042 y no la tengo registrada');
+    expect(op.texto).not.toMatch(/[Nn]ivel/);
+    expect(op.botones).toEqual([{ id: `${PREFIJO_TOMAR}:${MSG}`, titulo: 'Yo me encargo' }]);
+    expect(op.contexto).toBe('vigia.escalamiento');
+  });
+
+  it('fuera de ventana: la plantilla de escalamiento que ya existe, con valores válidos para Meta', async () => {
+    const enviar = okEnviar();
+    await avisarEscalamiento({ ...e, servicio: { detalle: textoSinDatoUnidad(['caja'], 'F-1042') } }, enviar);
+    const op = (enviar as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as { plantilla: { nombre: string; parametros: string[]; botones: Array<{ payload: string }> } };
+    expect(op.plantilla.nombre).toBe('vigia_escalamiento_v1');
+    expect(op.plantilla.parametros.slice(0, 3)).toEqual(['Compras Acme', 'preguntó por la caja de F-1042 y no la tengo registrada', 'servicio al cliente']);
+    expect(op.plantilla.botones.map((b) => b.payload)).toEqual([`vig_tomo:${MSG}`]);
+    expect(armarComponentesPlantilla(op.plantilla as never).ok).toBe(true);
+  });
+
+  it('sin `servicio` el aviso de la escalera es exactamente el de siempre', async () => {
+    const enviar = okEnviar();
+    await avisarEscalamiento(e, enviar);
+    const op = (enviar as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1] as { texto: string };
+    expect(op.texto).toContain('preguntó algo que no tengo registrado');
+    expect(op.texto).toContain('Nivel 1 de escalamiento');
   });
 });
