@@ -460,6 +460,8 @@ export interface DatosTablero {
   transito?: Map<string, TransitoViaje>;
   /** T-A5-22: la «Fecha Salida» (ISO) que el TMS selló, por viaje. Ausente = no se leyó: el tablero no afirma nada. */
   salidasTms?: Map<string, string>;
+  /** T-A5-57: viajes con Carta Porte aprobada ligada (`cp_documento.viaje_id`). Ausente = no se leyó: el tablero no afirma «sin Carta Porte». */
+  ccpLigado?: ReadonlySet<string>;
   /** Niveles de escalamiento sin a quién avisar, por terminal de los viajes listados. Ausente = no se pudo leer: el tablero no inventa una alerta. */
   sinDestino?: NivelSinDestino[];
   /** T-A5-44: patios de entrega distintos del esperado que el supervisor aún no atendió. Ausente = no se pudo leer: no se inventa una alerta. */

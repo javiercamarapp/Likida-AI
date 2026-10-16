@@ -20,7 +20,7 @@ import { revalidatePath } from 'next/cache';
 import { FormaEstrategiaConductores, type ResultadoEstrategia } from '../estrategia-forma';
 import { Bloque, EsqTabla, vigilar } from '../../bloque';
 import { calcularInsights } from '@/lib/likida/conductor/insights';
-import { leerConfigConductor, leerEntradaInsights, leerDatosPreflight, leerEpisodiosParaTablero, leerSalidasTms, leerTransitoViajes } from '@/lib/likida/conductor/repo';
+import { leerConfigConductor, leerEntradaInsights, leerDatosPreflight, leerEpisodiosParaTablero, leerSalidasTms, leerTransitoViajes, leerViajesConCartaPorte } from '@/lib/likida/conductor/repo';
 import { evaluarPreflight } from '@/lib/likida/conductor/preflight_piloto';
 import { BannerPreflight } from './configuracion/preflight';
 import { leerCatalogosFiltro, leerDatosTablero, leerIndicadores, listarSitios, type FiltrosTablero } from '@/lib/likida/conductor/repo_validacion';
@@ -172,7 +172,11 @@ export default async function PaginaAgenteConductores({
   const pTablero = vigilar(Promise.all([leerDatosTablero(tenantId, filtrosRepo), leerConfigConductor(tenantId)])
     .then(async ([datos, config]) => {
       // T-A5-21: los estados de frontera solo se leen con la casilla encendida (informativos; no avisan a nadie).
-      if (config.mostrarEstadosFrontera) datos.transito = await leerTransitoViajes(tenantId, datos.viajes.map((v) => v.id));
+      if (config.mostrarEstadosFrontera) {
+        datos.transito = await leerTransitoViajes(tenantId, datos.viajes.map((v) => v.id));
+        // T-A5-57: «local abierto sin Carta Porte» necesita saber qué viajes ya tienen complemento; si no se lee, no se afirma.
+        datos.ccpLigado = await leerViajesConCartaPorte(tenantId, datos.viajes.map((v) => v.id));
+      }
       // T-A5-22: la «Fecha Salida» del TMS se muestra como candidato aunque la casilla esté apagada; si no se puede leer, no se afirma nada.
       datos.salidasTms = await leerSalidasTms(tenantId, datos.viajes.map((v) => v.id));
       return filtrarPorSemaforo(armarTablero(datos, config, new Date()), filtrosVista.semaforo || null);

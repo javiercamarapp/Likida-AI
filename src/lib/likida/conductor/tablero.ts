@@ -1,5 +1,5 @@
 import type { ConfigConductor } from './config';
-import type { EstadoTransito } from './estados_transito';
+import { esLocalAbierto, type EstadoTransito } from './estados_transito';
 import { calcularEstancias, excedeUmbral, type Estancia } from './estadias_anden';
 import { hitoActivo } from './maquina';
 import { haversineM } from './geo';
@@ -61,7 +61,7 @@ export interface HitoVista {
 }
 
 export type TipoExcepcion =
-  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'llegada_sin_confirmar' | 'llegada_sin_sitio' | 'estadia_excedida' | 'horas_incoherentes' | 'sin_a_quien_escalar' | 'pendiente_cruce_largo' | 'salida_tms_discrepante' | 'patio_entrega_distinto';
+  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'llegada_sin_confirmar' | 'llegada_sin_sitio' | 'estadia_excedida' | 'horas_incoherentes' | 'sin_a_quien_escalar' | 'pendiente_cruce_largo' | 'salida_tms_discrepante' | 'patio_entrega_distinto' | 'local_abierto_sin_ccp';
 
 export interface Excepcion {
   tipo: TipoExcepcion;
@@ -209,7 +209,8 @@ export function transitoDeFila(
 ): TransitoFila {
   const crudo = (d.textoOrigen ?? '').replace(/\s+/g, ' ').trim().slice(0, TOPE_TEXTO_TRANSITO);
   let etiqueta: string;
-  if (d.estado === 'en_patio') {
+  if (esLocalAbierto(d)) etiqueta = 'Local abierto';
+  else if (d.estado === 'en_patio') {
     // eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de una celda o campo
     const resto = /^(?:en\s+)?patio\s+(.+)$/i.exec(crudo)?.[1];
     etiqueta = resto ? `En patio ${resto}` : 'En patio';
@@ -398,6 +399,14 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
       excepciones.push({
         ...base, tipo: 'pendiente_cruce_largo', hitoId: null, hitoTipo: null, gravedad: 1, desde: dt?.actualizadoEn ?? null,
         texto: `${transito.texto} (umbral configurado: ${textoTiempo(umbralH * 60)}). Es solo lectura: el agente no avisa por esto.`,
+      });
+    }
+    // T-A5-57: viaje local abierto sin complemento ligado. Solo se muestra: el agente no lo cierra, no emite la Carta Porte
+    // ni avisa a nadie (cerrarlo es decisión de los ejecutivos). Sin lectura de complementos no se afirma «sin Carta Porte».
+    if (transito && dt && esLocalAbierto(dt) && datos.ccpLigado && !datos.ccpLigado.has(viaje.id)) {
+      excepciones.push({
+        ...base, tipo: 'local_abierto_sin_ccp', hitoId: null, hitoTipo: null, gravedad: 1, desde: dt.actualizadoEn ?? null,
+        texto: `${transito.texto}: sin Carta Porte (viaje local abierto). Sigue abierto para no perder el GPS; el agente no lo cierra ni emite el complemento.`,
       });
     }
     for (const e of estancias) {
