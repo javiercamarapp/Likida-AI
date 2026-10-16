@@ -2,7 +2,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { exigir, traerPorIds, traerTodo } from '../pg';
-import { COLUMNAS_HITO, cargarContactosTrafico, filaAHito, type TransitoViaje } from './repo';
+import { COLUMNAS_HITO, cargarContactosTrafico, filaAHito, leerEventosPatio, type TransitoViaje } from './repo';
+import { excepcionesPatio, type ExcepcionPatio } from './patio_regla';
 import type { NivelSinDestino } from './escalamiento';
 import { coordenadasValidas } from './geo';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from './geometria_datos';
@@ -461,6 +462,8 @@ export interface DatosTablero {
   salidasTms?: Map<string, string>;
   /** Niveles de escalamiento sin a quién avisar, por terminal de los viajes listados. Ausente = no se pudo leer: el tablero no inventa una alerta. */
   sinDestino?: NivelSinDestino[];
+  /** T-A5-44: patios de entrega distintos del esperado que el supervisor aún no atendió. Ausente = no se pudo leer: no se inventa una alerta. */
+  patiosDistintos?: ExcepcionPatio[];
 }
 
 /** Los viajes activos de la flota con todo lo que el tablero necesita. Un solo tenant, siempre. */
@@ -518,7 +521,13 @@ export async function leerDatosTablero(tenantId: string, f: FiltrosTablero = {})
   } catch (e) {
     logger.warn('conductor.tablero_escalamiento_no_leido', { err: e instanceof Error ? e.message : String(e) });
   }
-  return { viajes, hayMas, hitos: hitosCrudos.map(filaAHito), veredictos, evidencias, acciones, sitios, sitiosCoords, posiciones, sinDestino };
+  let patiosDistintos: ExcepcionPatio[] | undefined;
+  try {
+    patiosDistintos = excepcionesPatio(await leerEventosPatio(tenantId, ids));
+  } catch (e) {
+    logger.warn('conductor.tablero_patio_no_leido', { err: e instanceof Error ? e.message : String(e) });
+  }
+  return { viajes, hayMas, hitos: hitosCrudos.map(filaAHito), veredictos, evidencias, acciones, sitios, sitiosCoords, posiciones, sinDestino, patiosDistintos };
 }
 
 export interface CatalogosFiltro {

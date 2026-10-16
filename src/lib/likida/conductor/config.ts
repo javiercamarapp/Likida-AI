@@ -98,6 +98,13 @@ export interface ConfigConductor {
    * nunca se exige (el sello previo es de importación). Aún sin columna propia: se fija al armar la configuración; ausente = apagada.
    */
   exigirSelloInicio?: boolean;
+  /**
+   * T-A5-44: preguntar al chofer en qué patio entrega (botones del catálogo + «otro») y avisar al supervisor si difiere del esperado.
+   * Apagado por omisión (hasta la fase 2). Aún sin columna propia: se fija al armar la configuración; ausente = apagado.
+   */
+  patioEntregaActivo?: boolean;
+  /** T-A5-44 (D-5, configuración y no decisión nuestra): qué campo manda como patio esperado. Por omisión «Entregar en». */
+  patioQueManda?: 'entregar_en' | 'destino';
   /** 0801: aplicar la salida que reporta el TMS como hito del viaje. */
   aplicarSalidaDelTms: boolean;
   /** 0801: llamadas de seguimiento por viaje medidas antes del agente (null = sin registrar) y la fecha (AAAA-MM-DD) en que se midió. */
@@ -155,6 +162,8 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   detenidaVentanaMin: 5,
   sinGpsPermite: false,
   exigirSelloInicio: false,
+  patioEntregaActivo: false,
+  patioQueManda: 'entregar_en',
   lineaBaseLlamadasPorViaje: null,
   lineaBaseRegistradaEn: null,
 });
@@ -326,6 +335,8 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       detenidaVentanaMin,
       sinGpsPermite: b.sinGpsPermite === true,
       exigirSelloInicio: b.exigirSelloInicio === true,
+      patioEntregaActivo: b.patioEntregaActivo === true,
+      patioQueManda: b.patioQueManda === 'destino' ? 'destino' : 'entregar_en',
       lineaBaseLlamadasPorViaje,
       lineaBaseRegistradaEn,
     },

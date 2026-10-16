@@ -21,6 +21,7 @@ import { debeSellarTrasValidar, depsValidacionReales, validarHitoContraSitio, ty
 import { guardarEvidencia, hitoLlegadaReciente } from './repo_validacion';
 import { ETIQUETA_EVIDENCIA, hitoParaEvidencia, mensajeEvidencia, tipoEvidenciaDeCaption } from './evidencia';
 import { textoVeredicto, veredictoSellaLlegada } from './validacion';
+import { leerTextoPatio, marcarPatioAtendido, preguntarPatio, puertosPatioReales, responderPatio, type PuertosPatio } from './patio_entrega';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA ENTRADA DEL CONDUCTOR EN EL PROCESSOR — del mensaje al hito registrado.
@@ -63,6 +64,8 @@ export interface DepsAtender {
   guardarEvidencia: typeof guardarEvidencia;
   /** P2 (0636): el chofer contestó un botón del «¿sigues bien?». Opcional: las pruebas que no lo ejercen no lo declaran. */
   responderSenalVida?(tenantId: string, viajeId: string, respuesta: RespuestaSenalVida, ahora: Date, config?: ConfigConductor): Promise<'cerrado' | 'sin_episodio' | 'fallo'>;
+  /** T-A5-44: los puertos del patio de entrega (catálogo, bitácora, aviso al supervisor). Opcional: sin él se usan los reales, y solo si la flota lo encendió. */
+  patio?: PuertosPatio;
 }
 
 export const depsReales: DepsAtender = {
@@ -137,6 +140,15 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
   // o PARECE hablar de un hito (y entonces decide el respaldo con modelo).
   // Los payloads de OTROS botones nuestros (el «Ya lo atiendo» del jefe) no son de este módulo
   // aunque parezcan hablar de un hito: ni se interpretan ni pagan una llamada al modelo.
+  // T-A5-44: la respuesta del patio de entrega (botón `hito_patio` o «patio <nombre>» tras «Otro») es de este módulo, pero no es un hito.
+  const botonPatio = leerBotonConductor(e.texto);
+  const esBotonPatio = botonPatio?.prefijo === PREFIJO_BOTON.patioEntrega;
+  const nombrePatio = esBotonPatio ? null : leerTextoPatio(e.texto);
+  if (esBotonPatio || nombrePatio) {
+    const r = await atenderPatio(e, botonPatio, nombrePatio, ahora, deps);
+    if (r) return r;
+    if (esBotonPatio) return null;
+  }
   if (!boton && leerBotonConductor(e.texto)) return null;
   const llevaViaje = boton?.viajeId ?? e.viajeAbiertoId;
   if (!llevaViaje) return null;
@@ -195,7 +207,7 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
     });
 
     const fuente: FuenteHito = boton ? 'boton' : 'texto';
-    const efectos = { pedirUbicacion: false };
+    const efectos: { pedirUbicacion: boolean; preguntaPatio?: Salida | null } = { pedirUbicacion: false };
     const aplicado = await aplicar(decision, { deps, e, viaje, hitos, interp, fuente, ahora, mensajeEn, config, efectos });
     logger.info('hito.conductor', {
       viaje: viaje.id, accion: decision.accion, via: interp.via, aplicado,
@@ -205,16 +217,40 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
     const salida = mensajeParaChofer(decision, ctx, ahora, aplicado);
     const pedir = efectos.pedirUbicacion ? { solicitarUbicacion: TEXTO_PEDIR_UBICACION } : {};
     // Con la confirmación apagada, el hito registrado queda en silencio (todo lo demás sí se contesta).
-    if (!config.confirmarAlChofer && decision.accion === 'registrar' && aplicado === 'ok') return { mensajes: [], ...pedir };
+    const pregunta = efectos.preguntaPatio ? [efectos.preguntaPatio] : [];
+    if (!config.confirmarAlChofer && decision.accion === 'registrar' && aplicado === 'ok') return { mensajes: [...pregunta], ...pedir };
     if (config.pedirFotoEvidencia && decision.accion === 'registrar' && aplicado === 'ok') {
       const invitacion = invitacionFoto(decision.objetivo);
       if (invitacion) salida.texto = `${salida.texto}\n${invitacion}`;
     }
-    return { mensajes: [salida], ...pedir };
+    return { mensajes: [salida, ...pregunta], ...pedir };
   } catch (err) {
     // Fail-closed: no se finge una anotación. Pero tampoco se rompe el turno entero.
     logger.error('hito.conductor_fallo', { viaje: llevaViaje, err: err instanceof Error ? err.message : String(err) });
     return { mensajes: [FALLO] };
+  }
+}
+
+/** T-A5-44: atiende la respuesta del chofer al patio de entrega. `null` = no es de este módulo (texto sin pregunta abierta, o nada que decir). */
+async function atenderPatio(
+  e: EntradaAtender, boton: ReturnType<typeof leerBotonConductor>, nombre: string | null, ahora: Date, deps: DepsAtender,
+): Promise<SalidaAtender | null> {
+  const llevaViaje = boton?.viajeId ?? e.viajeAbiertoId;
+  if (!llevaViaje) return null;
+  try {
+    const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, llevaViaje);
+    if (!viaje) return boton ? { mensajes: [{ texto: 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] } : null;
+    if (viaje.estatus === 'liquidado') return boton ? { mensajes: [{ texto: 'Ese viaje ya está cerrado. 👍' }] } : null;
+    const config = await deps.config(e.tenantId);
+    if (config.patioEntregaActivo !== true) return boton ? { mensajes: [{ texto: 'Ese aviso ya no está vigente. 👍' }] } : null;
+    const hito = (await deps.cargarHitos(e.tenantId, viaje.id)).find((h) => h.tipo === 'llegada_descarga' && (h.estado === 'recibido' || h.estado === 'validado'));
+    if (!hito) return boton ? { mensajes: [{ texto: 'Todavía no tengo tu llegada a descargar anotada. Avísame cuando llegues. 📍' }] } : null;
+    const respuesta = boton ? { tipo: 'boton' as const, opcion: boton.opcion ?? '' } : { tipo: 'texto' as const, nombre: nombre ?? '' };
+    const mensajes = await responderPatio(deps.patio ?? puertosPatioReales(), { viaje, hito, config, respuesta, ahora });
+    return mensajes.length > 0 ? { mensajes } : null;
+  } catch (err) {
+    logger.error('conductor.patio_fallo', { viaje: llevaViaje, err: err instanceof Error ? err.message : String(err) });
+    return boton ? { mensajes: [FALLO] } : null;
   }
 }
 
@@ -229,7 +265,7 @@ interface ContextoAplicar {
   mensajeEn: Date;
   config: ConfigConductor;
   /** Lo que `aplicar` descubre y el llamador necesita después del acuse. */
-  efectos: { pedirUbicacion: boolean };
+  efectos: { pedirUbicacion: boolean; preguntaPatio?: Salida | null };
 }
 
 /** La invitación (opcional, por flota) a mandar la foto de evidencia del hito recién registrado. */
@@ -277,6 +313,10 @@ async function aplicar(d: Decision, c: ContextoAplicar): Promise<'ok' | 'carrera
       const v = await deps.validarHito({ viaje, hito: registrado, config: c.config, mensajeEn: d.mensajeEn, ahora });
       if (v?.pedirUbicacion) c.efectos.pedirUbicacion = true;
       if (difiereLlegada && veredictoSellaLlegada(v?.veredicto ?? null, true)) await deps.sincronizarLegado(viaje.tenantId, viaje.id, ['llegada'], d.mensajeEn);
+      // T-A5-44: la llegada a descargar abre la pregunta «¿en qué patio entregas?» (solo si la flota lo encendió; best-effort).
+      if (d.objetivo === 'llegada_descarga' && c.config.patioEntregaActivo === true) {
+        c.efectos.preguntaPatio = await preguntarPatio(deps.patio ?? puertosPatioReales(), c.config, viaje, registrado);
+      }
       // El aviso a la oficina es best-effort y no retrasa el acuse más de lo que cuesta un envío.
       const esLlegada = d.objetivo === 'llegada_carga' || d.objetivo === 'llegada_descarga';
       if (esLlegada ? c.config.avisarOficinaLlegada : c.config.avisarOficinaSalida) {
@@ -353,6 +393,10 @@ export interface DepsAcuse {
   cerrarSenalVida?(tenantId: string, viajeId: string, ahora: Date): Promise<number>;
   /** Perfil de la flota (fase 1): el Conductor está en «Próximamente» → el acuse no escribe ni contesta. Opcional. */
   enStandBy?(tenantId: string): Promise<boolean>;
+  /** T-A5-44: el «Ya lo atiendo» también cierra la excepción de patio de entrega distinto. Opcional (sin él, solo las escalaciones). */
+  cerrarPatio?(tenantId: string, hitos: readonly HitoFila[]): Promise<number>;
+  /** Los hitos del viaje (para `cerrarPatio`); por omisión la base. */
+  hitosDe?(tenantId: string, viajeId: string): Promise<HitoFila[]>;
 }
 
 const depsAcuseReales: DepsAcuse = {
@@ -367,6 +411,7 @@ const depsAcuseReales: DepsAcuse = {
   evento: registrarEvento,
   cerrarSenalVida: cerrarEpisodioPorJefe,
   enStandBy: (tenantId) => moduloEnStandBy(tenantId, 'conductor'),
+  cerrarPatio: (tenantId, hitos) => marcarPatioAtendido(puertosPatioReales(), tenantId, hitos),
 };
 
 /**
@@ -389,7 +434,9 @@ export async function atenderAcuseJefe(
     const marcados = await deps.marcar(v.tenantId, b.viajeId, ahora);
     for (const h of marcados) await deps.evento(h, 'atendido', {});
     const episodios = deps.cerrarSenalVida ? await deps.cerrarSenalVida(v.tenantId, b.viajeId, ahora).catch(() => 0) : 0;
-    return marcados.length > 0 || episodios > 0
+    // T-A5-44: la excepción de patio no depende de que algún hito esté `escalado`: se busca en la bitácora del viaje (best-effort).
+    const patios = deps.cerrarPatio ? await deps.cerrarPatio(v.tenantId, await (deps.hitosDe ?? cargarHitos)(v.tenantId, b.viajeId)).catch(() => 0) : 0;
+    return marcados.length > 0 || episodios > 0 || patios > 0
       ? 'Anotado ✅ lo marqué como atendido; ya no insisto por este viaje.'
       : 'Ya estaba atendido o el chofer ya respondió. 👍';
   } catch (err) {
@@ -612,7 +659,7 @@ export async function registrarHitoDesdeFoto(e: EntradaFotoComoHito, deps: DepsA
         : mensajeEvidencia('sin_hito', e.tipo) }] };
     }
 
-    const efectos = { pedirUbicacion: false };
+    const efectos: { pedirUbicacion: boolean; preguntaPatio?: Salida | null } = { pedirUbicacion: false };
     const interp: Interpretacion = { intencion, contacto: null, via: 'foto', confianza: 1 };
     const aplicado = await aplicar(decision, {
       deps, e: { tenantId: e.tenantId, operadorId: e.operadorId, telefono: e.telefono, viajeAbiertoId: viaje.id, texto: '', waMessageId: e.waMessageId ?? null }, viaje, hitos,
@@ -639,8 +686,9 @@ export async function registrarHitoDesdeFoto(e: EntradaFotoComoHito, deps: DepsA
     // Si la foto no se pudo colgar (raro: el hito acaba de registrarse), el chofer lo sabe; el hito sí quedó.
     const aviso = evidencia && !/Recibí la foto/.test(evidencia) ? [{ texto: evidencia }] : [];
     // Con la confirmación apagada el hito queda en silencio, pero lo que falló de la foto sí se dice.
-    if (!config.confirmarAlChofer) return { mensajes: aviso, ...pedir };
-    return { mensajes: [{ ...acuse, texto: conFoto }, ...aviso], ...pedir };
+    const pregunta = efectos.preguntaPatio ? [efectos.preguntaPatio] : [];
+    if (!config.confirmarAlChofer) return { mensajes: [...aviso, ...pregunta], ...pedir };
+    return { mensajes: [{ ...acuse, texto: conFoto }, ...aviso, ...pregunta], ...pedir };
   } catch (err) {
     logger.error('conductor.foto_como_hito_fallo', { viaje: e.viajeId, err: err instanceof Error ? err.message : String(err) });
     return { mensajes: [{ texto: mensajeEvidencia('fallo', e.tipo) }] };
