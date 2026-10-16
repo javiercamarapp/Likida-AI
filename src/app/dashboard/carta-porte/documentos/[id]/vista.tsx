@@ -6,6 +6,7 @@ import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_doc
 import { CAUSAS_RECHAZO, type CausaRechazo } from '@/lib/likida/carta_porte_docs/metricas';
 import { propuestaVacia, type PropuestaCatalogo } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
 import { FRASE_ENVIADO_SIMULADO, ROTULO_SIMULADO } from '@/lib/likida/carta_porte_docs/salida_simulada';
+import { lineasDelOriginal, marcaDeFila, resumenDeMarcas } from '@/lib/likida/carta_porte_docs/revision_formato';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../forma_accion';
 
 /**
@@ -75,12 +76,16 @@ function Confianza({ c }: { c: number | null }) {
 
 function Campo({ f, editable }: { f: FilaCampo; editable: boolean }) {
   const id = `f-${f.nombre.replace(/:/g, '-')}`;
-  const borde = f.bloqueado ? 'var(--bad)' : f.porConfirmar ? 'var(--warn)' : undefined;
+  const marca = marcaDeFila(f);
+  const resaltado = marca.inferido || marca.bajaConfianza;
+  const borde = f.bloqueado ? 'var(--bad)' : f.porConfirmar ? 'var(--warn)' : resaltado ? 'var(--warn)' : undefined;
   return (
-    <div className="space-y-1">
+    <div className="space-y-1" data-marca={marca.inferido ? 'inferido' : marca.bajaConfianza ? 'poco-seguro' : undefined}>
       <div className="flex items-center justify-between gap-2">
         <label htmlFor={id} className="text-[11px] font-medium">{f.rotulo}{f.critico && <abbr title="Dato crítico: si falta o es dudoso, no se aprueba" className="no-underline" style={{ color: 'var(--marca)' }}> *</abbr>}</label>
         <span className="flex items-center gap-1.5">
+          {marca.inferido && <span className="text-[10.5px] font-medium px-1.5 py-0.5 rounded" style={{ color: 'var(--warn)', border: '1px solid var(--warn)' }}>Inferido</span>}
+          {!marca.inferido && marca.bajaConfianza && <span className="text-[10.5px] font-medium px-1.5 py-0.5 rounded" style={{ color: 'var(--warn)', border: '1px solid var(--warn)' }}>Poco seguro</span>}
           {f.origen && <span className="text-[10.5px]" style={{ color: 'var(--faint)' }}>{ROTULO_ORIGEN[f.origen]}</span>}
           <Confianza c={f.confianza} />
         </span>
@@ -88,6 +93,7 @@ function Campo({ f, editable }: { f: FilaCampo; editable: boolean }) {
       <input id={id} name={f.nombre} defaultValue={f.valor} readOnly={!editable} autoComplete="off" spellCheck={false}
         className={CAMPO} style={{ background: 'var(--surface)', ...(borde ? { borderColor: borde } : {}) }} aria-invalid={f.bloqueado || undefined} />
       {f.evidencia && <p className="text-[10.5px] truncate" style={{ color: 'var(--faint)' }} title={f.evidencia}>Evidencia: «{f.evidencia}»</p>}
+      {marca.avisos.map((a) => <p key={a} className="text-[10.5px]" style={{ color: 'var(--warn)' }}>{a}</p>)}
       {f.notas.map((n) => <p key={n} className="text-[10.5px]" style={{ color: 'var(--muted)' }}>{n}</p>)}
       {f.hallazgos.map((h) => (
         <p key={`${h.codigo}-${h.mensaje}`} className="text-[11px] flex items-start gap-1" style={{ color: color(h.severidad) }}>
@@ -198,7 +204,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
             // eslint-disable-next-line @next/next/no-img-element
             <img key={i} src={u} alt={`Página ${i + 1} del documento del cliente`} className="w-full rounded-md hairline" />
           ))}
-          {original.tipo === 'texto' && <pre className="text-[11.5px] whitespace-pre-wrap break-words cifra-mono">{original.texto}</pre>}
+          {original.tipo === 'texto' && <TextoOriginal texto={original.texto} revision={revision} />}
           {original.tipo === 'nada' && <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{original.motivo}</p>}
         </section>
 
@@ -424,14 +430,38 @@ function BannerCatalogo({ catalogo }: { catalogo: CatalogoBanner }) {
   );
 }
 
+/** El texto del documento; las líneas donde hay algo por mirar (poco seguro, por confirmar, por corregir) van resaltadas. */
+function TextoOriginal({ texto, revision }: { texto: string; revision: Revision | null }) {
+  const { lineas, recortado } = lineasDelOriginal(texto, revision);
+  return (
+    <>
+      <pre className="text-[11.5px] whitespace-pre-wrap break-words cifra-mono">
+        {lineas.map((l, i) => (l.resaltada
+          ? <mark key={i} data-linea-resaltada style={{ display: 'block', background: 'var(--warnbg, var(--canvas))', color: 'inherit' }}>{l.texto}{'\n'}</mark>
+          : <span key={i}>{l.texto}{'\n'}</span>))}
+      </pre>
+      {recortado && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Se muestra solo el principio del documento.</p>}
+    </>
+  );
+}
+
 function Resumen({ revision }: { revision: Revision }) {
   const { bloqueos, porConfirmar, listoParaAprobar } = revision;
+  const { inferidos, pocoSeguros } = resumenDeMarcas(revision);
   return (
-    <p className="text-[12.5px] px-3.5 py-2.5 rounded-lg" role="status"
-      style={{ background: listoParaAprobar ? 'var(--okbg)' : 'var(--canvas)', color: listoParaAprobar ? 'var(--ok)' : 'var(--ink)' }}>
-      {listoParaAprobar
-        ? 'Todo en orden: puedes aprobar.'
-        : <>Para aprobar falta resolver {bloqueos > 0 && <strong style={{ color: 'var(--bad)' }}>{numero(bloqueos)} {bloqueos === 1 ? 'dato por corregir' : 'datos por corregir'}</strong>}{bloqueos > 0 && porConfirmar > 0 && ' y '}{porConfirmar > 0 && <strong style={{ color: 'var(--warn)' }}>{numero(porConfirmar)} {porConfirmar === 1 ? 'dato por confirmar' : 'datos por confirmar'}</strong>}.</>}
-    </p>
+    <div className="space-y-1.5">
+      <p className="text-[12.5px] px-3.5 py-2.5 rounded-lg" role="status"
+        style={{ background: listoParaAprobar ? 'var(--okbg)' : 'var(--canvas)', color: listoParaAprobar ? 'var(--ok)' : 'var(--ink)' }}>
+        {listoParaAprobar
+          ? 'Todo en orden: puedes aprobar.'
+          : <>Para aprobar falta resolver {bloqueos > 0 && <strong style={{ color: 'var(--bad)' }}>{numero(bloqueos)} {bloqueos === 1 ? 'dato por corregir' : 'datos por corregir'}</strong>}{bloqueos > 0 && porConfirmar > 0 && ' y '}{porConfirmar > 0 && <strong style={{ color: 'var(--warn)' }}>{numero(porConfirmar)} {porConfirmar === 1 ? 'dato por confirmar' : 'datos por confirmar'}</strong>}.</>}
+      </p>
+      {(inferidos > 0 || pocoSeguros > 0) && (
+        <p className="text-[12px] px-3.5" style={{ color: 'var(--warn)' }} data-testid="resumen-marcas">
+          Resaltados para que los mires: {inferidos > 0 && <strong>{numero(inferidos)} {inferidos === 1 ? 'dato inferido' : 'datos inferidos'} (no vienen en el documento)</strong>}{inferidos > 0 && pocoSeguros > 0 && ' y '}{pocoSeguros > 0 && <strong>{numero(pocoSeguros)} {pocoSeguros === 1 ? 'dato poco seguro' : 'datos poco seguros'}</strong>}.
+          {' '}Si corriges algo y apruebas, el formato de este cliente aprende y el siguiente documento igual sale sin modelo.
+        </p>
+      )}
+    </div>
   );
 }
