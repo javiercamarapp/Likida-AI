@@ -50,6 +50,9 @@ export interface FilaDesglose {
   neto: number | null;
   moneda: 'MXN' | 'USD';
   terminal: string | null;
+  /** T-A1-41: consecutivo de liquidación y número de pago del origen; ausentes = desglose de una sola bitácora. */
+  numeroLiquidacion?: string | null;
+  numeroPago?: string | null;
   destinos: Record<RolVisible, DestinoVista>;
 }
 
@@ -364,6 +367,11 @@ function Fila({ f, href }: { f: FilaDesglose; href: string }) {
       <td className="py-2 font-medium">
         {f.bitacora}
         {f.terminal && <span className="block text-[11px] font-normal" style={{ color: 'var(--faint)' }}>{f.terminal}</span>}
+        {f.numeroLiquidacion && (
+          <span className="block text-[11px] font-normal" style={{ color: 'var(--faint)' }}>
+            Liquidación {f.numeroLiquidacion}{f.numeroPago ? ` · pago ${f.numeroPago}` : ''}
+          </span>
+        )}
       </td>
       <td className="py-2" style={{ color: 'var(--muted)' }}>{f.operador ?? '—'}</td>
       <td className="py-2" style={{ color: 'var(--muted)' }}>
@@ -475,6 +483,7 @@ const EXCEPCION: Record<TipoExcepcion, { titulo: string; ayuda: string }> = {
   tipo_sin_regla: { titulo: 'Retenido: tipo de operador sin regla', ayuda: 'No hay regla para este tipo de operador. Revísalo y, si está bien, libera el envío.' },
   correccion_pendiente: { titulo: 'Corrección pendiente', ayuda: 'Llegó una versión distinta de este desglose y no se envió: una persona decide si se manda la corrección.' },
   mapeo_invalido: { titulo: 'Datos inválidos', ayuda: 'El sistema de tu empresa mandó datos que no se pudieron leer: avísale a quien lo administra.' },
+  unidades_mezcladas: { titulo: 'Unidades mezcladas', ayuda: 'La liquidación es por unidad y este desglose trajo bitácoras de unidades distintas, así que no se guardó: tu sistema tiene que mandar un desglose por unidad.' },
 };
 
 function Mensaje({ m }: { m: MensajeDesglose }) {

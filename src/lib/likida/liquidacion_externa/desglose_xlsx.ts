@@ -19,6 +19,9 @@ export interface DatosDesglose {
   operador: string;
   unidad?: string;
   bitacora?: string;
+  /** T-A1-41: consecutivo de liquidación y número de pago del origen; si faltan, el encabezado queda como antes. */
+  numeroLiquidacion?: string;
+  numeroPago?: string;
   /** AAAA-MM-DD (fecha civil). */
   desde: string;
   hasta: string;
@@ -93,6 +96,8 @@ export function generarDesgloseXlsx(d: DatosDesglose): Uint8Array {
   put(f0, 1, 'Operador:', 'etiqueta'); fusion(f0, 2, 5, d.operador, 'valor');
   put(f0 + 1, 1, 'Unidad:', 'etiqueta'); put(f0 + 1, 2, d.unidad ?? '', 'valor');
   put(f0 + 1, 3, 'Bitácora:', 'etiqueta'); put(f0 + 1, 4, d.bitacora ?? '', 'valor');
+  if (d.numeroLiquidacion) { put(f0, 7, 'Liquidación:', 'etiqueta'); put(f0, 8, d.numeroLiquidacion, 'valor'); }
+  if (d.numeroPago) { put(f0 + 1, 7, 'Pago:', 'etiqueta'); put(f0 + 1, 8, d.numeroPago, 'valor'); }
   put(f0 + 2, 1, 'De:', 'etiqueta'); fusion(f0 + 2, 2, 5, fechaLarga(d.desde), 'valor');
   put(f0 + 3, 1, 'A:', 'etiqueta'); fusion(f0 + 3, 2, 5, fechaLarga(d.hasta), 'valor');
   put(f0 + 3, 7, `${dias} días`, 'etiqueta');
