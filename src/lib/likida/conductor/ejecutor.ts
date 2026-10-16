@@ -7,8 +7,9 @@ import {
 } from './escalamiento';
 import {
   anotarAvisoAlChofer, cerrarAvisoReclamado, leerConfigConductor, liberarAvisoReclamado, marcarHitoEscalado, reclamarAviso,
-  registrarEvento, type EventoHito, type ViajeContexto,
+  leerCicloServicio, registrarEvento, type EventoHito, type ViajeContexto,
 } from './repo';
+import { cicloDelServicio, type CicloServicioFila } from './ciclo_servicio';
 import { cerrarHitosDeViajesVencidos, contarEnviadosPorChofer, leerAvisosDeHitos, leerHitosDeViajes, leerMuestrasGps, leerSitiosGeometriaDeViajes, leerViajesActivos, sembrarHitos } from './trabajo';
 import type { MuestraGps, SitiosViaje, UnidadDeViaje } from './ciclo_gps';
 import { puedeEscribirAlChofer } from './compuerta_movimiento';
@@ -76,6 +77,8 @@ export interface PuertosConductor {
   avisosDe(hitoIds: string[]): Promise<Array<AvisoReclamado & { hitoId: string }>>;
   enviadosHoyPorChofer(operadorIds: string[], desde: Date): Promise<Record<string, number>>;
   configDe(tenantId: string): Promise<ConfigConductor>;
+  /** T-A5-42: los ciclos por servicio de la flota (0807). Opcional: sin puerto, o sin filas, todos los viajes siguen el ciclo actual. */
+  ciclosDe?(tenantId: string): Promise<CicloServicioFila[]>;
   reclamar(a: NuevoAviso): Promise<'ganado' | 'perdido' | 'fallo'>;
   cerrarAviso(a: NuevoAviso, c: CierreAviso): Promise<void>;
   liberarAviso(a: NuevoAviso): Promise<void>;
@@ -208,9 +211,12 @@ export async function correrConductor(
   // esta pasada: operar contra una estrategia que no se pudo consultar es operar
   // con datos equivocados (el criterio de `escalar_viaje.ts`, B4).
   const configs = new Map<string, ConfigConductor | null>();
+  const ciclos = new Map<string, CicloServicioFila[]>();
   for (const t of new Set(viajes.map((v) => v.tenantId))) {
     try {
       configs.set(t, await p.configDe(t));
+      // T-A5-42: el ciclo se lee con la config; si no se puede leer, la flota se salta (perseguir hitos que su servicio no tiene sería operar a ciegas).
+      if (p.ciclosDe) ciclos.set(t, await p.ciclosDe(t));
     } catch (e) {
       configs.set(t, null);
       logger.error('conductor.config_ilegible', { tenant: t, err: e instanceof Error ? e.message : String(e) });
@@ -243,6 +249,7 @@ export async function correrConductor(
     const hs = porViaje.get(v.id) ?? [];
     const accion: AccionPlan = planificar({
       viaje: v, hitos: hs, config, ahora,
+      ciclo: p.ciclosDe ? cicloDelServicio(ciclos.get(v.tenantId) ?? [], v.servicio ?? null) : undefined,
       enviadosHoyChofer: enviadosHoy[v.operadorId] ?? 0,
       avisos: avisos.filter((a) => hs.some((h) => h.id === a.hitoId)),
     });
@@ -397,6 +404,7 @@ export function puertosReales(): PuertosConductor {
     avisosDe: leerAvisosDeHitos,
     enviadosHoyPorChofer: contarEnviadosPorChofer,
     configDe: leerConfigConductor,
+    ciclosDe: leerCicloServicio,
     reclamar: reclamarAviso,
     cerrarAviso: cerrarAvisoReclamado,
     liberarAviso: liberarAvisoReclamado,
