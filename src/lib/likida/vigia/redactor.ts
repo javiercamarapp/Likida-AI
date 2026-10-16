@@ -22,6 +22,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { fechaHoraMx } from '@/lib/formato';
 import { cifrasRespaldadas, extraerNumeros } from '@/lib/agents/analista';
+import { lineaLigaPortal } from './respuestas_rapidas';
 import type { AdjuntoRef, Clasificacion, Intencion, Riesgo } from './tipos';
 import type { EstatusViaje, ResumenViaje, TipoHitoViaje } from './estatus_viaje';
 
@@ -40,6 +41,8 @@ export interface EntradaRedaccion {
   /** Primer mensaje que se le manda a este contacto: lleva el aviso de privacidad y cómo darse de baja. */
   primerContacto: boolean;
   avisoPrivacidadUrl: string | null;
+  /** Liga al portal de seguimiento del tenant (T-A4-47). Vacío/ausente = no se añade. Solo en la respuesta de «datos de la unidad». */
+  ligaPortalUrl?: string | null;
   /**
    * La respuesta rápida APROBADA por el gerente que se parece al mensaje (0647). Solo se usa cuando el Vigía no entendió el
    * mensaje («otro»); en cualquier otra intención se ignora: un dato del viaje se contesta con el dato de ese viaje.
@@ -303,6 +306,7 @@ export function redactarBorrador(e: EntradaRedaccion): Borrador {
   let riesgo: Riesgo = 'bajo';
   let requiereHumano = false;
   let origen: Borrador['origen'] = 'plantilla';
+  let ligaPortal = '';
 
   const pie = e.primerContacto ? pieDePrimerContacto(e.nombreFlota, e.avisoPrivacidadUrl) : '';
 
@@ -357,6 +361,10 @@ export function redactarBorrador(e: EntradaRedaccion): Borrador {
       secciones.unshift(`${etiquetaViaje(estatus)}: ${ETAPAS[estatus.etapa]}.`);
     }
     cuerpo = `${saludo}. ${secciones.join('\n\n')}`;
+    if (respaldo.datosUnidad) {
+      ligaPortal = lineaLigaPortal(e.ligaPortalUrl);
+      if (ligaPortal) respaldo.ligaPortal = true;
+    }
     // Lo que falta, o lo que una persona debe entregar, baja de «bajo»: no sale sin aprobación.
     if (faltantes.length > 0 || tareas.length > 0 || adjuntos.length > 0) riesgo = 'medio';
     // Lo que se guarda para el envío: el archivo se busca por (flota, cliente, viaje), nunca por una ruta del respaldo.
@@ -366,8 +374,10 @@ export function redactarBorrador(e: EntradaRedaccion): Borrador {
   // El riesgo también sube por lo que el cliente intentó (la política lo repite: defensa en capas).
   if (e.clasificacion.senales.includes('inyeccion')) riesgo = 'alto';
 
-  let texto = `${cuerpo}${pie}`;
-  if (texto.length > MAX_RESPUESTA + pie.length) texto = `${texto.slice(0, MAX_RESPUESTA + pie.length - 1)}…`;
+  // La liga no se corta: el tope se aplica al cuerpo y la liga se agrega entera (igual que el pie).
+  const cola = ligaPortal + pie;
+  let texto = `${cuerpo}${cola}`;
+  if (texto.length > MAX_RESPUESTA + cola.length) texto = `${cuerpo.slice(0, MAX_RESPUESTA - 1)}…${cola}`;
   return { texto, faltantes, tareas, riesgo, adjuntos, requiereHumano, respaldo, origen };
 }
 
