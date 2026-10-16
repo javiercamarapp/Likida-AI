@@ -116,7 +116,7 @@ export const VALORES_LLENA: { remitente: Record<string, string | number>; destin
   },
   destino: {
     A50: 1, B50: 874.11, C50: 'Destino Sintetico LLC', D50: '58-7654321', E50: 'Street Two', F50: '20', J50: '78040', L50: 'Ciudad Dos', // grep-limpio:ok
-    O50: 'NLE', P50: 'Nuevo León', Q50: 'USA', R50: 'Contacto Prueba', S50: '5550000000', T50: 'contacto@example.test', // grep-limpio:ok
+    O50: 'NLE', P50: 'Nuevo León', Q50: 'USA', R50: 'Contacto Prueba', S50: '2899900001', T50: 'contacto@example.test', // teléfono sintético: marca 28999 // grep-limpio:ok
   },
   mercancias: [
     { A: 1, B: '43211500', C: 'Equipo de computo', D: 20, E: 'H87', F: 'Pieza', I: 14130, J: '8471500100', K: '24 16 3456 4000123', L: 'NO', M: 'N/A', N: '03' }, // grep-limpio:ok

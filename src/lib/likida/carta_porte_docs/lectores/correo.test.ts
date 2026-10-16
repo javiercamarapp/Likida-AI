@@ -104,7 +104,7 @@ describe('F3 — bloque de rótulos con el valor en la línea de abajo', () => {
     expect(d(e, 'destino_cp')).toBe('59000');
     expect(d(e, 'destino_estado')).toBe('MIC');
     expect(d(e, 'destino_domicilio')).toMatch(/CALLE FICTICIA 100.*COLONIA IMAGINARIA/);
-    expect(d(e, 'contacto_destino_telefono')).toBe('5555555555');
+    expect(d(e, 'contacto_destino_telefono')).toBe('2899912345');
     expect(d(e, 'contacto_destino_nombre')).toBe('SR. PERSONA INVENTADA');
     expect(d(e, 'caja_numero')).toBe('90077');
     expect(v(e, 'descripcion')).toBe('HERRAMIENTAS');
