@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  buscarRuta, fechaIsoValida, hoyDeLaFlota, motivoUrlInvalida, normalizarClaveRuta, parsearCsvRutas, planificarRutas, rutaVigente,
+  buscarRuta, rutasDelViaje, fechaIsoValida, hoyDeLaFlota, motivoUrlInvalida, normalizarClaveRuta, parsearCsvRutas, planificarRutas, rutaVigente,
   type RutaAutorizada, type RutaExistente,
 } from './rutas';
 
@@ -153,5 +153,50 @@ describe('buscarRuta', () => {
   });
   it('normalizarClaveRuta quita acentos y espacios de más', () => {
     expect(normalizarClaveRuta('  Querétaro   Norte ')).toBe('queretaro norte');
+  });
+});
+
+
+// ── T-A5-49: las rutas que lleva un viaje (impo: origen; expo: origen y destino; sin ruta o vencida = ausente) ───────
+describe('rutasDelViaje (T-A5-49)', () => {
+  const HOY = '2026-10-16';
+  const r = (p: Partial<RutaAutorizada>): RutaAutorizada => ({
+    corredor: 'laredo', sitioOrigen: null, sitioDestino: null, url: OK, vigenteHasta: null, revisadaEn: null, ...p,
+  });
+  const viaje = (p: Partial<Parameters<typeof rutasDelViaje>[1]> = {}) => ({
+    origen: 'Planta Demo', destino: 'Laredo', sitioOrigenCodigo: 'pl-01', sitioDestinoCodigo: 'pt-09', ...p,
+  });
+
+  it('importación: solo el link de origen, aunque exista uno de destino', () => {
+    const rutas = [r({ sitioOrigen: 'pl-01', url: OK }), r({ sitioDestino: 'pt-09', url: OK2 })];
+    expect(rutasDelViaje(rutas, viaje({ servicio: 'importacion' }), HOY)).toEqual({ carga: OK, patio: null, faltan: [] });
+  });
+  it('exportación: link de origen y link de destino', () => {
+    const rutas = [r({ sitioOrigen: 'pl-01', url: OK }), r({ sitioDestino: 'pt-09', url: OK2 })];
+    expect(rutasDelViaje(rutas, viaje({ servicio: 'exportacion' }), HOY)).toEqual({ carga: OK, patio: OK2, faltan: [] });
+  });
+  it('sin ruta autorizada: no se inventa ninguna y se dice qué lado falta', () => {
+    expect(rutasDelViaje([], viaje({ servicio: 'importacion' }), HOY)).toEqual({ carga: null, patio: null, faltan: ['origen'] });
+    expect(rutasDelViaje([r({ sitioOrigen: 'pl-01' })], viaje({ servicio: 'exportacion' }), HOY)).toEqual({ carga: OK, patio: null, faltan: ['destino'] });
+  });
+  it('una ruta vencida se trata como ausente (el último día vigente todavía sirve)', () => {
+    expect(rutasDelViaje([r({ sitioOrigen: 'pl-01', vigenteHasta: '2026-10-15' })], viaje(), HOY)).toEqual({ carga: null, patio: null, faltan: ['origen'] });
+    expect(rutasDelViaje([r({ sitioOrigen: 'pl-01', vigenteHasta: HOY })], viaje(), HOY).carga).toBe(OK);
+  });
+  it('el corredor del viaje manda si viene; si no, se prueba con el texto del destino y luego el del origen', () => {
+    const rutas = [r({ corredor: 'monterrey', url: OK2 })];
+    expect(rutasDelViaje(rutas, viaje({ corredor: 'Monterrey', destino: 'Laredo' }), HOY).carga).toBe(OK2);
+    expect(rutasDelViaje(rutas, viaje({ corredor: null, origen: 'Monterrey', destino: 'Laredo' }), HOY).carga).toBe(OK2);
+    expect(rutasDelViaje(rutas, viaje({ corredor: 'Laredo', origen: 'Monterrey' }), HOY).carga).toBeNull();
+  });
+  it('sin servicio conocido el origen es obligatorio; el destino se manda si existe pero su falta no se reclama', () => {
+    expect(rutasDelViaje([], viaje(), HOY).faltan).toEqual(['origen']);
+    expect(rutasDelViaje([r({ sitioOrigen: 'pl-01' }), r({ sitioDestino: 'pt-09', url: OK2 })], viaje(), HOY)).toEqual({ carga: OK, patio: OK2, faltan: [] });
+  });
+  it('la ruta del corredor completo sirve para el origen pero no se repite como ruta de destino', () => {
+    expect(rutasDelViaje([r({})], viaje({ servicio: 'exportacion' }), HOY)).toEqual({ carga: OK, patio: null, faltan: ['destino'] });
+  });
+  it('un viaje sin ningún texto ni corredor no encuentra ruta', () => {
+    expect(rutasDelViaje([r({})], { origen: null, destino: null, sitioOrigenCodigo: null, sitioDestinoCodigo: null }, HOY).faltan).toEqual(['origen']);
   });
 });

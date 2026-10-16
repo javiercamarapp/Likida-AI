@@ -460,3 +460,42 @@ describe('viaje local abierto sin Carta Porte (T-A5-57)', () => {
     expect(con1.filas[0].transito?.texto).toContain('Local abierto');
   });
 });
+
+
+// ── T-A5-49: viaje aceptado sin ruta autorizada vigente = excepción visible (el chofer recibió «consulta con tu supervisor») ──
+describe('sin ruta autorizada (T-A5-49)', () => {
+  const URL = 'https://maps.app.goo.gl/EjemploSintetico';
+  const ruta = (p: Record<string, unknown> = {}) => ({ id: 'r1', corredor: 'monterrey', sitioOrigen: null, sitioDestino: null, url: URL, vigenteHasta: null, revisadaEn: null, ...p });
+  const con = (rutas: DatosTablero['rutasAutorizadas'], v: Partial<ViajeTablero> = {}, extra: Partial<DatosTablero> = {}) =>
+    armarTablero(datos([viaje('1', { aceptadoEn: hace(600), ...v })], hitos('1', {}), { rutasAutorizadas: rutas, ...extra }), cfg(), AHORA);
+  const sinRuta = (t: ReturnType<typeof con>) => t.excepciones.filter((e) => e.tipo === 'sin_ruta_autorizada');
+
+  it('con la base de rutas en uso y ninguna que le quede al viaje: excepción visible, de revisar, sin tocar el semáforo', () => {
+    const t = con([ruta({ corredor: 'tijuana' })]);
+    const ex = sinRuta(t);
+    expect(ex).toHaveLength(1);
+    expect(ex[0]).toMatchObject({ tipo: 'sin_ruta_autorizada', viajeId: '1', folio: 'F-1', gravedad: 2, hitoId: null, hitoTipo: null });
+    expect(ex[0].texto).toMatch(/consulta con tu supervisor/);
+    expect(t.filas[0].semaforo).toBe(con([ruta()]).filas[0].semaforo);
+  });
+
+  it('si hay ruta vigente del corredor (destino del viaje = Monterrey) no hay excepción', () => {
+    expect(sinRuta(con([ruta()]))).toEqual([]);
+  });
+
+  it('con el código del sitio de origen, la ruta de ese sitio sirve; la de otro sitio no', () => {
+    const sitioCodigos = new Map([['g1', 'pl-01']]);
+    expect(sinRuta(con([ruta({ sitioOrigen: 'pl-01' })], { origenSitioId: 'g1' }, { sitioCodigos }))).toEqual([]);
+    expect(sinRuta(con([ruta({ sitioOrigen: 'pl-77' })], { origenSitioId: 'g1' }, { sitioCodigos }))).toHaveLength(1);
+  });
+
+  it('una ruta vencida cuenta como ausente (la fecha es la del día en México)', () => {
+    expect(sinRuta(con([ruta({ vigenteHasta: '2026-10-01' })]))).toHaveLength(1);
+    expect(sinRuta(con([ruta({ vigenteHasta: '2026-10-02' })]))).toEqual([]);
+  });
+
+  it('flota que aún no cargó ninguna ruta, o lectura que no se pudo hacer: no se afirma nada', () => {
+    expect(sinRuta(con([]))).toEqual([]);
+    expect(sinRuta(con(undefined))).toEqual([]);
+  });
+});

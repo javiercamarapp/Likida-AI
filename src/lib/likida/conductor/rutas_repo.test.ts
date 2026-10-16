@@ -54,6 +54,20 @@ describe('leerRutasAutorizadas', () => {
   });
 });
 
+describe('leerCodigosSitios (T-A5-49)', () => {
+  it('lee solo los sitios pedidos de la flota y devuelve id → código, sin los que no tienen código', async () => {
+    respuestas = [{ data: [{ id: 'g1', codigo: 'pl-01' }, { id: 'g2', codigo: null }, { id: 'g3', codigo: '' }], error: null }];
+    const r = await repo.leerCodigosSitios('t1', ['g1', 'g2', 'g3', 'g1']);
+    expect(registros[0].tabla).toBe('geocerca');
+    expect(registros[0].ops).toContainEqual(['eq', 'tenant_id', 't1']);
+    expect([...r]).toEqual([['g1', 'pl-01']]);
+  });
+  it('sin ids no consulta la base', async () => {
+    expect((await repo.leerCodigosSitios('t1', [])).size).toBe(0);
+    expect(registros).toEqual([]);
+  });
+});
+
 describe('importarRutas', () => {
   it('inserta lo nuevo con el tenant de la sesión y no toca lo que no cambió', async () => {
     respuestas = [{ data: [fila()], error: null }, { data: [], error: null }];

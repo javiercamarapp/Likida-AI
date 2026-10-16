@@ -375,7 +375,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 305;
 // `acotada`, ancladas a `tenant_id`; la prueba `confirmar_viaje_boton.test.ts` cubre sus filtros). `leerCajaDelViaje` no suma (reusa el lector del Vigía). Sin migración. Funcionalidad nueva.
 // LOOP CINCO AGENTES, T-A5-48 (rutas autorizadas, 0808): 2,108 → 2,111 (0 archivos, +3 llamadas medidas con el barrido completo, las tres en `conductor/repo.ts`:
 // `leerRutasAutorizadas`, e `importarRutas` (un INSERT por lote y un UPDATE por fila cambiada, por id Y `tenant_id`), todas por `acotada`, ancladas a `tenant_id`; las prueba `rutas_repo.test.ts`). Funcionalidad nueva.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_111;
+// LOOP CINCO AGENTES, T-A5-49 (rutas en el mensaje de asignación): 2,111 → 2,112 (0 archivos, +1 llamada medida con el barrido completo, en `conductor/repo.ts`:
+// `leerCodigosSitios` lee `geocerca.id, codigo` de los sitios del viaje, por `acotada`, anclada a `tenant_id`; la prueba `rutas_repo.test.ts` cubre su filtro). Sin migración. Funcionalidad nueva.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_112;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

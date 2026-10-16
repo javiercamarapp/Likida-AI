@@ -7,10 +7,10 @@ vi.mock('@/lib/meta/client', () => ({ enviarSolicitudUbicacion: vi.fn(async () =
 const { atenderConductor } = await import('./atender');
 const { crearMemoria, viajeBase } = await import('./memoria.fixture');
 const { leerBotonConductor, PREFIJO_BOTON } = await import('./tipos');
-const { armarInstrucciones, armarAvisoRechazo, NIVEL_AVISO_RECHAZO, SIN_DATO } = await import('./asignacion');
+const { armarInstrucciones, armarAvisoRechazo, rutasParaAsignacion, NIVEL_AVISO_RECHAZO, SIN_DATO } = await import('./asignacion');
 const { plantillaDeCatalogo, validarCatalogo, opcionesDeEnvio, textoRenderizado } = await import('@/lib/meta/plantillas_catalogo');
 const { validarConfigConductor, CONFIG_CONDUCTOR_DEFAULT } = await import('./config');
-import type { PuertosAsignacion, DatosInstrucciones } from './asignacion';
+import type { PuertosAsignacion, DatosInstrucciones, LectorRutasViaje } from './asignacion';
 import type { ResultadoAceptarPorBoton } from '../confirmar_viaje';
 
 // Fixtures SINTÉTICOS: ningún nombre real.
@@ -22,6 +22,8 @@ interface Opc {
   /** Lo que contesta la base al aceptar (primera vez 'aceptado', luego 'ya_aceptado' como la base real). */
   aceptar?: ResultadoAceptarPorBoton;
   datos?: Partial<DatosInstrucciones>;
+  /** T-A5-49: si viene, las rutas salen de `rutasParaAsignacion` con este lector (como en producción). */
+  lector?: LectorRutasViaje;
   datosFallan?: boolean;
   envioOk?: boolean;
   via?: 'texto' | 'botones' | 'plantilla';
@@ -44,9 +46,10 @@ function puertos(o: Opc = {}) {
       yaAceptado = true;
       return 'aceptado';
     },
-    datos: async () => {
+    datos: async (v) => {
       if (o.datosFallan) throw new Error('base caída');
-      return { caja: 'CJ-5521', rutaCarga: null, rutaPatio: null, ...o.datos };
+      const rutas = o.lector ? await rutasParaAsignacion(o.lector, v, AHORA) : { rutaCarga: null, rutaPatio: null };
+      return { caja: 'CJ-5521', ...rutas, ...o.datos };
     },
     convenio: async (_t, viajeId) => { convenios.push(viajeId); },
     reclamar: async (a) => { claims.push({ clase: a.clase, nivel: a.nivel, hitoId: a.hitoId }); return o.reclamoPerdido ? 'perdido' : 'ganado'; },
@@ -274,5 +277,76 @@ describe('rechazar con el botón', () => {
   it('con el envío rechazado el acuse no afirma que se avisó', async () => {
     const { toca } = escenario({ envioOk: false });
     expect(textos(await toca('viaje_rechazo'))).toMatch(/no pude avisarle al despachador/);
+  });
+});
+
+
+// ── T-A5-49: las rutas dentro del mensaje de asignación e instrucciones ─────────────────────────────
+describe('rutas en las instrucciones (T-A5-49)', () => {
+  const ORIGEN = 'https://maps.app.goo.gl/OrigenSintetico';
+  const DESTINO = 'https://www.google.com/maps/dir/Demo/Destino';
+  const ruta = (p: Record<string, unknown>) => ({ corredor: 'laredo', sitioOrigen: null, sitioDestino: null, url: ORIGEN, vigenteHasta: null, revisadaEn: null, ...p });
+  const lector = (rutas: unknown[], codigos: Record<string, string> = { s1: 'pl-01', s2: 'pt-09' }): LectorRutasViaje & { llamadas: string[] } => {
+    const llamadas: string[] = [];
+    return {
+      llamadas,
+      rutas: async (t) => { llamadas.push(`rutas:${t}`); return rutas as never; },
+      codigos: async (t, ids) => { llamadas.push(`codigos:${t}:${ids.join(',')}`); return new Map(ids.filter((i) => codigos[i]).map((i) => [i, codigos[i]])); },
+    };
+  };
+  const viaje = { destino: 'Laredo', origenSitioId: 's1', destinoSitioId: 's2' };
+
+  it('importación: el chofer recibe el link de origen y el de destino NO se manda', async () => {
+    const l = lector([ruta({ sitioOrigen: 'pl-01' }), ruta({ sitioDestino: 'pt-09', url: DESTINO })]);
+    const { pu, toca } = escenario({ lector: l }, { ...viaje, servicio: 'importacion' });
+    await toca('viaje_acepto');
+    expect(pu.enviados[0].texto).toContain(`Ruta al punto de carga: ${ORIGEN}`);
+    expect(pu.enviados[0].texto).not.toContain(DESTINO);
+    expect(l.llamadas[0]).toBe('rutas:t1');
+  });
+
+  it('exportación: origen y destino, también en los parámetros de la plantilla N02', async () => {
+    const l = lector([ruta({ sitioOrigen: 'pl-01' }), ruta({ sitioDestino: 'pt-09', url: DESTINO })]);
+    const { pu, toca } = escenario({ lector: l }, { ...viaje, servicio: 'exportacion' });
+    await toca('viaje_acepto');
+    expect(pu.enviados[0].texto).toContain(`Ruta al punto de carga: ${ORIGEN}`);
+    expect(pu.enviados[0].texto).toContain(`Ruta al patio de entrega: ${DESTINO}`);
+    expect(pu.enviados[0].plantilla.parametros).toEqual(expect.arrayContaining([ORIGEN, DESTINO]));
+  });
+
+  it('sin ruta autorizada: «consulta con tu supervisor», sin inventar link', async () => {
+    const { pu, toca } = escenario({ lector: lector([]) }, { ...viaje, servicio: 'exportacion' });
+    await toca('viaje_acepto');
+    expect(pu.enviados[0].texto).toContain(`Ruta al punto de carga: ${SIN_DATO}`);
+    expect(pu.enviados[0].texto).toContain(`Ruta al patio de entrega: ${SIN_DATO}`);
+    expect(pu.enviados[0].texto).not.toMatch(/https:/);
+  });
+
+  it('una ruta vencida se trata como ausente', async () => {
+    const { pu, toca } = escenario({ lector: lector([ruta({ sitioOrigen: 'pl-01', vigenteHasta: '2026-10-15' })]) }, viaje);
+    await toca('viaje_acepto');
+    expect(pu.enviados[0].texto).toContain(`Ruta al punto de carga: ${SIN_DATO}`);
+  });
+
+  it('si la base de rutas falla, el mensaje sale igual con «consulta con tu supervisor» (y la caja se conserva)', async () => {
+    const roto: LectorRutasViaje = { rutas: async () => { throw new Error('base caída'); }, codigos: async () => new Map() };
+    const { pu, toca } = escenario({ lector: roto }, viaje);
+    await toca('viaje_acepto');
+    expect(pu.enviados[0].texto).toContain(`Ruta al punto de carga: ${SIN_DATO}`);
+    expect(pu.enviados[0].texto).toContain('Caja: CJ-5521');
+  });
+
+  it('sin sitio ligado solo sirve la ruta del corredor completo, y no se leen códigos', async () => {
+    const l = lector([ruta({ sitioOrigen: 'pl-01', url: DESTINO }), ruta({})]);
+    const { pu, toca } = escenario({ lector: l }, { destino: 'Laredo', origenSitioId: null, destinoSitioId: null });
+    await toca('viaje_acepto');
+    expect(pu.enviados[0].texto).toContain(`Ruta al punto de carga: ${ORIGEN}`);
+    expect(l.llamadas.some((x) => x.startsWith('codigos'))).toBe(false);
+  });
+
+  it('la ruta de otro corredor no se manda', async () => {
+    const { pu, toca } = escenario({ lector: lector([ruta({ corredor: 'tijuana' })]) }, viaje);
+    await toca('viaje_acepto');
+    expect(pu.enviados[0].texto).toContain(`Ruta al punto de carga: ${SIN_DATO}`);
   });
 });

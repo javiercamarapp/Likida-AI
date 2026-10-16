@@ -21,7 +21,7 @@ import { FormaEstrategiaConductores, type ResultadoEstrategia } from '../estrate
 import { Bloque, EsqTabla, vigilar } from '../../bloque';
 import { calcularInsights } from '@/lib/likida/conductor/insights';
 import { mapaReubicaciones } from '@/lib/likida/conductor/reporte_llegada';
-import { leerConfigConductor, leerEventosReporte, leerEntradaInsights, leerDatosPreflight, leerEpisodiosParaTablero, leerSalidasTms, leerTransitoViajes, leerViajesConCartaPorte } from '@/lib/likida/conductor/repo';
+import { leerConfigConductor, leerEventosReporte, leerEntradaInsights, leerDatosPreflight, leerEpisodiosParaTablero, leerRutasAutorizadas, leerSalidasTms, leerTransitoViajes, leerViajesConCartaPorte } from '@/lib/likida/conductor/repo';
 import { evaluarPreflight } from '@/lib/likida/conductor/preflight_piloto';
 import { BannerPreflight } from './configuracion/preflight';
 import { leerCatalogosFiltro, leerDatosTablero, leerIndicadores, listarSitios, type FiltrosTablero } from '@/lib/likida/conductor/repo_validacion';
@@ -180,6 +180,8 @@ export default async function PaginaAgenteConductores({
       }
       // T-A5-22: la «Fecha Salida» del TMS se muestra como candidato aunque la casilla esté apagada; si no se puede leer, no se afirma nada.
       datos.salidasTms = await leerSalidasTms(tenantId, datos.viajes.map((v) => v.id));
+      // T-A5-49: las rutas autorizadas, para mostrar el viaje que quedó sin ruta; si no se pueden leer no se afirma nada.
+      datos.rutasAutorizadas = await leerRutasAutorizadas(tenantId).catch(() => undefined);
       const tablero = armarTablero(datos, config, new Date());
       // T-A5-43: «con quién te reportaste» y la rampa de cada llegada, con su lista de reubicaciones. Solo con la perilla encendida; si la
       // bitácora no se puede leer el tablero sale sin ella (no se afirma lo que no se leyó).
