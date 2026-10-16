@@ -10,6 +10,8 @@ import type { ReporteRevision, ReclamoVista } from '@/lib/likida/peajes/revision
 import type { CierreMensual } from '@/lib/likida/peajes/cierre_mensual';
 import type { ResumenSeguimiento } from '@/lib/likida/peajes/reclamos_seguimiento';
 import { SeccionRevisionCobros, SeccionCierreMensual, SeccionSeguimiento, type AccionesSeguimiento } from './revision';
+import { TablaCandidatosCobros, type AccionDecidir } from '../candidatos-tabla';
+import type { TablaCandidatos, AccionCandidato } from '@/lib/likida/peajes/candidatos_tabla';
 
 export type EstadoReclamacion = 'sin_desglose' | 'no_existe' | 'error' | 'ok';
 
@@ -19,6 +21,8 @@ const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' }
 /** Lo que la pantalla suma a la reclamación con GPS: la revisión de cobros del archivo, el cierre mensual y el seguimiento. Todo opcional. */
 export interface ExtrasReclamacion {
   revision: ReporteRevision | null;
+  /** La tabla de candidatos con sus acciones (T-A2-28). */
+  candidatos?: { tabla: TablaCandidatos | null; error: boolean; decidir?: AccionDecidir; aplicables?: Record<AccionCandidato, number> };
   /** El reporte con GPS no se pudo leer (la revisión de cobros sí). */
   errorGps?: boolean;
   mes: string | null;
@@ -61,6 +65,10 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
 
           {estado === 'ok' && extras?.revision && desglose && (
             <SeccionRevisionCobros revision={extras.revision} desglose={desglose} sufijo={sufijo} justificarCruce={extras.acciones.justificarCruce} />
+          )}
+          {estado === 'ok' && extras?.candidatos && desglose && (
+            <TablaCandidatosCobros tabla={extras.candidatos.tabla} error={extras.candidatos.error} desglose={desglose} sufijo={sufijo}
+              decidir={extras.candidatos.decidir} aplicables={extras.candidatos.aplicables} />
           )}
           {extras && (estado === 'ok' || estado === 'sin_desglose') && (
             <>
