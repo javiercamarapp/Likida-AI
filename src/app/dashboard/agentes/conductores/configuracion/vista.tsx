@@ -7,10 +7,12 @@ import type { ResultadoPreflight } from '@/lib/likida/conductor/preflight_piloto
 import { PanelPreflight } from './preflight';
 import { FormaImportarRutas } from './forma_rutas';
 import { PendientesRutas, type FilaPendienteRuta } from './pendientes_rutas';
+import { DocumentosCliente } from './documentos_cliente';
+import type { DocumentoCliente } from '@/lib/likida/conductor/documentos_cliente';
 import type { AccionSitio } from '../sitios/formas';
 import { FormaConfigConductor, SeccionVoluntarios, type AccionConfig, type AccionVoluntario, type DatosVoluntarios } from './forma';
 
-export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar, voluntarios, accionAlta, accionBaja, preflight, puedeForzarPreflight, accionImportarRutas, rutasPendientes, totalRutas = 0, diasRevisionRutas = 90, accionRutaRevisada }: {
+export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar, voluntarios, accionAlta, accionBaja, preflight, puedeForzarPreflight, accionImportarRutas, rutasPendientes, totalRutas = 0, diasRevisionRutas = 90, accionRutaRevisada, documentosCliente, clientes, accionAltaDocumento, accionBajaDocumento }: {
   sufijo: string;
   /** `null` = no se pudo leer: se dice, no se enseña un formulario con los defaults como si fueran lo guardado. */
   config: ConfigConductor | null;
@@ -34,6 +36,12 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
   totalRutas?: number;
   diasRevisionRutas?: number;
   accionRutaRevisada?: AccionSitio;
+  /** T-A5-52: documentos que pide cada cliente. `undefined` = la pantalla no lo trae (sin permiso de asignar); `null` = no se pudo leer. */
+  documentosCliente?: DocumentoCliente[] | null;
+  /** Clientes activos de la flota (para elegir de cuál es el documento). */
+  clientes?: Array<{ id: string; nombre: string }>;
+  accionAltaDocumento?: AccionSitio;
+  accionBajaDocumento?: AccionSitio;
 }) {
   const legible = config !== null && valores !== null && contactos !== null;
   return (
@@ -79,6 +87,17 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
                   <PendientesRutas pendientes={rutasPendientes} totalRutas={totalRutas} dias={diasRevisionRutas} accionRevisada={accionRutaRevisada} />
                 </div>
               )}
+            </section>
+          )}
+          {documentosCliente !== undefined && (
+            <section aria-labelledby="documentos-cliente-titulo" className="space-y-2">
+              <h2 id="documentos-cliente-titulo" className="text-[13px] font-medium">Documentos que pide cada cliente</h2>
+              <p className="text-[12.5px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
+                Cada cliente pide papeles distintos al cerrar el viaje: unos solo la carta porte firmada y sellada, otros además pedimento, DODA,
+                fitosanitario o tickets de báscula. Aquí dices cuáles son y cuáles son indispensables. Un cliente sin documentos propios sigue como hoy:
+                solo se le pide el comprobante de entrega.
+              </p>
+              <DocumentosCliente clientes={clientes ?? []} documentos={documentosCliente} accionAlta={accionAltaDocumento} accionBaja={accionBajaDocumento} />
             </section>
           )}
         </div>

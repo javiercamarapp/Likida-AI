@@ -7,8 +7,9 @@ import { logger } from '@/lib/logger';
 import { valoresDeForma } from '@/lib/likida/conductor/config_forma';
 import { guardarConfigDelPanel } from '@/lib/likida/conductor/acciones_config';
 import { altaVoluntarioDelPanel, bajaVoluntarioDelPanel, telefonoDePilotoValido } from '@/lib/likida/conductor/acciones_voluntarios';
-import { buscarCandidatosVoluntarios, cargarContactosTrafico, leerConfigConductor, leerDatosPreflight, leerRutasAutorizadas, leerTopeVoluntarios, listarVoluntarios } from '@/lib/likida/conductor/repo';
+import { buscarCandidatosVoluntarios, cargarContactosTrafico, leerConfigConductor, leerDocumentosCliente, leerDatosPreflight, leerRutasAutorizadas, leerTopeVoluntarios, listarVoluntarios } from '@/lib/likida/conductor/repo';
 import { importarRutasDelPanel, marcarRutaRevisadaDelPanel } from '@/lib/likida/conductor/acciones_rutas';
+import { altaDocumentoDelPanel, bajaDocumentoDelPanel } from '@/lib/likida/conductor/acciones_documentos_cliente';
 import { DIAS_REVISION_RUTAS_DEFAULT, hoyDeLaFlota, MAX_BYTES_CSV_RUTAS, rutasPendientesDeRevision } from '@/lib/likida/conductor/rutas';
 import { evaluarPreflight } from '@/lib/likida/conductor/preflight_piloto';
 import { emailDeUsuario } from '@/lib/likida/conductor/trabajo';
@@ -57,6 +58,27 @@ async function ejecutarRutaRevisada(sp: ParametrosPagina, fd: FormData): Promise
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
   const id = fd.get('id');
   const r = await marcarRutaRevisadaDelPanel({ tenantId: s.tenantId, rol: s.rol }, { id: typeof id === 'string' ? id : '' });
+  if (r.ok) revalidatePath(RUTA);
+  return r;
+}
+
+/** T-A5-52: alta de un documento del catálogo de un cliente. A nivel de módulo por la misma razón; el permiso y el tenant salen de la SESIÓN. */
+async function ejecutarAltaDocumento(sp: ParametrosPagina, fd: FormData): Promise<ResultadoSitio> {
+  const s = await resolverTenantEfectivo(RUTA, sp);
+  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
+  const r = await altaDocumentoDelPanel({ tenantId: s.tenantId, rol: s.rol }, {
+    clienteId: fd.get('clienteId'), nombre: fd.get('nombre'), tipo: fd.get('tipo'), requiereFirma: fd.get('requiereFirma'), requiereSello: fd.get('requiereSello'),
+  });
+  if (r.ok) revalidatePath(RUTA);
+  return r;
+}
+
+/** T-A5-52: baja de un documento del catálogo. A nivel de módulo por la misma razón; el permiso y el tenant salen de la SESIÓN. */
+async function ejecutarBajaDocumento(sp: ParametrosPagina, fd: FormData): Promise<ResultadoSitio> {
+  const s = await resolverTenantEfectivo(RUTA, sp);
+  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
+  const id = fd.get('id');
+  const r = await bajaDocumentoDelPanel({ tenantId: s.tenantId, rol: s.rol }, { id: typeof id === 'string' ? id : '' });
   if (r.ok) revalidatePath(RUTA);
   return r;
 }
@@ -120,6 +142,20 @@ export default async function PaginaConfigConductor({ searchParams }: { searchPa
     return ejecutarRutaRevisada(sp, fd);
   }
 
+  // T-A5-52: los documentos que pide cada cliente. Solo se leen si el usuario puede editarlos. `null` = no se pudo leer.
+  const documentosCliente = puedeAsignar(rol)
+    ? await leerDocumentosCliente(tenantId).catch((e) => { logger.warn('conductor.documentos_cliente_no_leidos', { tenantId, err: e instanceof Error ? e.message : String(e) }); return null; })
+    : undefined;
+
+  async function accionAltaDocumento(_previo: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
+    'use server';
+    return ejecutarAltaDocumento(sp, fd);
+  }
+  async function accionBajaDocumento(_previo: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
+    'use server';
+    return ejecutarBajaDocumento(sp, fd);
+  }
+
   async function accionImportarRutas(_previo: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
     return ejecutarImportarRutas(sp, fd);
@@ -134,6 +170,8 @@ export default async function PaginaConfigConductor({ searchParams }: { searchPa
       accionImportarRutas={puedeAsignar(rol) ? accionImportarRutas : undefined}
       rutasPendientes={rutasPendientes} totalRutas={totalRutas} diasRevisionRutas={DIAS_REVISION_RUTAS_DEFAULT}
       accionRutaRevisada={puedeAsignar(rol) ? accionRutaRevisada : undefined}
+      documentosCliente={documentosCliente} clientes={catalogos?.clientes ?? []}
+      accionAltaDocumento={puedeAsignar(rol) ? accionAltaDocumento : undefined} accionBajaDocumento={puedeAsignar(rol) ? accionBajaDocumento : undefined}
     />
   );
 }
