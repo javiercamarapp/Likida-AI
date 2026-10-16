@@ -360,7 +360,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 305;
 // Integración + Liquidación (INT-RAMAS): 2,064 + 31 (Liquidación sobre la base de perfil: 1,948 − 1,917) = 2,095 esperado; se ajusta al barrido real.
 // LOOP CINCO AGENTES, T-A5-38 (parada iniciada por el chofer, 0806): 2,095 → 2,098 (0 archivos, +3 llamadas, medido con el barrido completo), las tres en `conductor/repo.ts`
 // (`leerParadaAbierta`, `abrirParada`, `cerrarParada`: sobre `viaje_parada`, por `acotada`, ancladas a `tenant_id`; las prueba `paradas_repo.test.ts`). Funcionalidad nueva, no código migrado.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_098;
+// LOOP CINCO AGENTES, T-A5-41 (ciclo por servicio, 0807): 2,098 → 2,101 medido con el barrido completo. +2 son de esta tarea, en `conductor/repo.ts` (`leerCicloServicio`,
+// `sembrarCicloServicio`: sobre `ciclo_servicio`, por `acotada`, ancladas a `tenant_id`; las prueba `ciclo_servicio_repo.test.ts`). El +1 restante ya estaba en la rama del
+// frente desde T-A5-40 (`leerEvidenciasSelloViaje`) y su techo no se había subido. Funcionalidad nueva, no código migrado.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_101;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
