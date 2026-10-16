@@ -121,6 +121,8 @@ export const PREFIJO_BOTON = {
   patioEntrega: 'hito_patio',
   /** T-A5-45: respuesta al «¿ya inició la descarga?» (2 h en el cliente). Tercer segmento: `si` o `no`. */
   estadiaDescarga: 'estadia_descarga',
+  /** T-A5-46: respuesta al «¿cómo terminó la descarga?». Tercer segmento: `completa`, `no_recibida` o `caja_cargada`. */
+  resultadoDescarga: 'resultado_descarga',
 } as const;
 
 export type RespuestaSenalVida = 'estoy' | 'voy_a_cargar' | 'estoy_bien';
@@ -132,7 +134,7 @@ export interface BotonLeido {
   viajeId: string;
   /** Solo los botones de recordatorio llevan el hito al que se refieren (`<prefijo>:<viaje>:<hito>`). */
   hito: TipoHito | null;
-  /** `hito_patio`: id del patio (uuid), `otro` o `mas<n>`. `estadia_descarga`: `si` o `no`. */
+  /** `hito_patio`: id del patio (uuid), `otro` o `mas<n>`. `estadia_descarga`: `si` o `no`. `resultado_descarga`: `completa`, `no_recibida` o `caja_cargada`. */
   opcion?: string | null;
 }
 
@@ -161,6 +163,11 @@ export function leerBotonConductor(texto: string | undefined): BotonLeido | null
   if (partes.length === 3 && prefijo === PREFIJO_BOTON.estadiaDescarga) {
     const opcion = hito.toLowerCase();
     if (opcion !== 'si' && opcion !== 'no') return null;
+    return { prefijo, viajeId: viajeId.toLowerCase(), hito: null, opcion };
+  }
+  if (partes.length === 3 && prefijo === PREFIJO_BOTON.resultadoDescarga) {
+    const opcion = hito.toLowerCase();
+    if (opcion !== 'completa' && opcion !== 'no_recibida' && opcion !== 'caja_cargada') return null;
     return { prefijo, viajeId: viajeId.toLowerCase(), hito: null, opcion };
   }
   if (partes.length === 3) {

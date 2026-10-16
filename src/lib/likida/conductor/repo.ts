@@ -694,6 +694,19 @@ export async function leerEventosPatio(tenantId: string, viajeIds: string[]): Pr
   }));
 }
 
+/** T-A5-46: la bitácora del resultado de la descarga de esos viajes DE ESA FLOTA (mismo formato que la del patio), del más viejo al más nuevo. Lanza si la base falla. */
+export async function leerEventosResultadoDescarga(tenantId: string, viajeIds: string[]): Promise<EventoPatioFila[]> {
+  if (viajeIds.length === 0) return [];
+  const res = await acotada(supabaseAdmin().from('viaje_hito_evento')
+    .select('id, viaje_id, viaje_hito_id, evento, detalle, created_at')
+    .eq('tenant_id', tenantId).in('viaje_id', viajeIds).eq('evento', 'validacion')
+    .eq('detalle->>clase', 'resultado_descarga').order('id', { ascending: true }).limit(2000), 'conductor.resultado_descarga_eventos');
+  return ((exigir(res as never, 'conductor.resultado_descarga_eventos') ?? []) as unknown as Fila[]).map((f) => ({
+    id: Number(f.id), viajeId: String(f.viaje_id), hitoId: String(f.viaje_hito_id), evento: 'validacion' as const,
+    detalle: (f.detalle ?? {}) as Record<string, unknown>, creadoEn: String(f.created_at),
+  }));
+}
+
 // ── T-A5-43: la bitácora de «con quién te reportaste» y la rampa ────────────
 //
 // Persistencia SIN migración (mismo Ruling que el patio de T-A5-44): renglones `validacion` de `viaje_hito_evento` con

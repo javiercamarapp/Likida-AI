@@ -2,7 +2,7 @@ import { logger } from '@/lib/logger';
 import { moduloEnStandBy } from '@/lib/auth/perfil_tenant';
 import { enviarSolicitudUbicacion } from '@/lib/meta/client';
 import type { ConfigConductor } from './config';
-import { interpretarBoton, interpretarTexto, leerBotonRampa, pareceHablarDeHito, type BotonRampa, type Intencion, type Interpretacion } from './interprete';
+import { interpretarBoton, interpretarTexto, leerBotonRampa, leerTextoResultadoDescarga, pareceHablarDeHito, type BotonRampa, type Intencion, type Interpretacion } from './interprete';
 import { interpretarConLlm } from './llm';
 import { decidir, hitoActivo, type Decision } from './maquina';
 import { mensajeParaChofer, type ContextoMensaje, type Salida } from './mensajes';
@@ -22,7 +22,8 @@ import { guardarEvidencia, hitoLlegadaReciente } from './repo_validacion';
 import { ETIQUETA_EVIDENCIA, hitoParaEvidencia, mensajeEvidencia, tipoEvidenciaDeCaption } from './evidencia';
 import { textoVeredicto, veredictoSellaLlegada } from './validacion';
 import { puertosEstadiaReales, responderEstadiaDescarga, type PuertosEstadia } from './alertas_estadia';
-import type { RespuestaEstadia } from './mensajes';
+import type { OpcionResultadoDescarga, RespuestaEstadia } from './mensajes';
+import { preguntarResultado, puertosResultadoReales, responderResultadoDescarga, type PuertosResultado } from './resultado_descarga';
 import {
   puertosReporteAtenderReales, responderReporteBoton, responderReporteTexto, type PuertosReporteAtender,
 } from './reporte_llegada';
@@ -75,6 +76,8 @@ export interface DepsAtender {
   estadia?: PuertosEstadia;
   /** T-A5-43: la bitácora del «con quién te reportaste» y la rampa (leer lo preguntado, guardar lo respondido). Opcional: sin él, la real. */
   reporte?: PuertosReporteAtender;
+  /** T-A5-46: los puertos del resultado de la descarga y la caja cargada (bitácora, claim, aviso al supervisor). Opcional: sin él, los reales. */
+  resultado?: PuertosResultado;
 }
 
 export const depsReales: DepsAtender = {
@@ -160,6 +163,13 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
   }
   // T-A5-45: «¿ya inició la descarga?» — el botón `estadia_descarga:<viaje>:si|no` es de este módulo pero tampoco registra un hito.
   if (botonPatio?.prefijo === PREFIJO_BOTON.estadiaDescarga) return atenderEstadia(e, botonPatio, ahora, deps);
+  // T-A5-46: «¿cómo terminó la descarga?» — el botón `resultado_descarga:<viaje>:<opción>` o, con la pregunta abierta, su texto equivalente.
+  if (botonPatio?.prefijo === PREFIJO_BOTON.resultadoDescarga) return atenderResultado(e, botonPatio, null, ahora, deps);
+  const opcionTexto = botonPatio || !e.viajeAbiertoId ? null : leerTextoResultadoDescarga(e.texto);
+  if (opcionTexto) {
+    const r = await atenderResultado(e, null, opcionTexto, ahora, deps);
+    if (r) return r;
+  }
   // T-A5-43: los botones de la rampa (`rampa_estado_*`, `rampa_mas`, `rampa_como_omitir`) son de este módulo y tampoco registran un hito.
   const botonRampa = leerBotonRampa(e.texto);
   if (botonRampa) return atenderReporteBoton(e, botonRampa, deps);
@@ -226,7 +236,7 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
     });
 
     const fuente: FuenteHito = boton ? 'boton' : 'texto';
-    const efectos: { pedirUbicacion: boolean; preguntaPatio?: Salida | null } = { pedirUbicacion: false };
+    const efectos: ContextoAplicar['efectos'] = { pedirUbicacion: false };
     const aplicado = await aplicar(decision, { deps, e, viaje, hitos, interp, fuente, ahora, mensajeEn, config, efectos });
     logger.info('hito.conductor', {
       viaje: viaje.id, accion: decision.accion, via: interp.via, aplicado,
@@ -236,7 +246,7 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
     const salida = mensajeParaChofer(decision, ctx, ahora, aplicado);
     const pedir = efectos.pedirUbicacion ? { solicitarUbicacion: TEXTO_PEDIR_UBICACION } : {};
     // Con la confirmación apagada, el hito registrado queda en silencio (todo lo demás sí se contesta).
-    const pregunta = efectos.preguntaPatio ? [efectos.preguntaPatio] : [];
+    const pregunta = [efectos.preguntaPatio, efectos.preguntaResultado].filter((x): x is Salida => Boolean(x));
     if (!config.confirmarAlChofer && decision.accion === 'registrar' && aplicado === 'ok') return { mensajes: [...pregunta], ...pedir };
     if (config.pedirFotoEvidencia && decision.accion === 'registrar' && aplicado === 'ok') {
       const invitacion = invitacionFoto(decision.objetivo);
@@ -292,6 +302,45 @@ async function atenderEstadia(
   }
 }
 
+/**
+ * T-A5-46: atiende la respuesta al «¿cómo terminó la descarga?». `null` = no es de este módulo (texto sin pregunta abierta, flota sin la
+ * perilla, o la base no contestó): sigue su camino. Con las opciones de caja cargada fija además el hito `regreso` con la máquina de hitos.
+ */
+async function atenderResultado(
+  e: EntradaAtender, boton: ReturnType<typeof leerBotonConductor>, opcionTexto: OpcionResultadoDescarga | null, ahora: Date, deps: DepsAtender,
+): Promise<SalidaAtender | null> {
+  const llevaViaje = boton?.viajeId ?? e.viajeAbiertoId;
+  if (!llevaViaje) return null;
+  const via = boton ? 'boton' as const : 'texto' as const;
+  try {
+    const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, llevaViaje);
+    if (!viaje) return boton ? { mensajes: [{ texto: 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] } : null;
+    if (viaje.estatus === 'liquidado') return boton ? { mensajes: [{ texto: 'Ese viaje ya está cerrado. 👍' }] } : null;
+    const config = await deps.config(e.tenantId);
+    if (config.resultadoDescargaActivo !== true) return boton ? { mensajes: [{ texto: 'Ese aviso ya no está vigente. 👍' }] } : null;
+    const hitos = await deps.cargarHitos(e.tenantId, viaje.id);
+    const opcion = (boton ? boton.opcion : opcionTexto) as OpcionResultadoDescarga;
+    const r = await responderResultadoDescarga(deps.resultado ?? puertosResultadoReales(), { viaje, hitos, config, opcion, via, ahora });
+    if (!r) return null;
+    if (r.fijarRegreso) {
+      // El regreso queda registrado como cualquier «voy de regreso»: la misma máquina omite lo pendiente y sella lo de la 0090.
+      const frescos = await deps.asegurarHitos(viaje.tenantId, viaje.id);
+      const decision = decidir({
+        hitos: frescos, intencion: { clase: 'regreso' }, contacto: null, ahora, mensajeEn: ahora,
+        ventanaCorreccionMin: config.ventanaCorreccionMin, posponerMin: config.posponerMin,
+      });
+      if (decision.accion === 'registrar') {
+        const interp: Interpretacion = { intencion: { clase: 'regreso' }, contacto: null, via: via === 'boton' ? 'boton' : 'regla', confianza: 1, viajeId: viaje.id };
+        await aplicar(decision, { deps, e, viaje, hitos: frescos, interp, fuente: via === 'boton' ? 'boton' : 'texto', ahora, mensajeEn: ahora, config, efectos: { pedirUbicacion: false } });
+      }
+    }
+    return { mensajes: r.mensajes };
+  } catch (err) {
+    logger.error('conductor.resultado_descarga_atender_fallo', { viaje: llevaViaje, err: err instanceof Error ? err.message : String(err) });
+    return boton ? { mensajes: [FALLO] } : null;
+  }
+}
+
 /** T-A5-43: el viaje del chofer y su config, o `null` si el viaje no es suyo / está cerrado (el llamador decide qué contestar). */
 async function viajeYConfigDelReporte(e: EntradaAtender, viajeId: string, deps: DepsAtender) {
   const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, viajeId);
@@ -341,7 +390,7 @@ interface ContextoAplicar {
   mensajeEn: Date;
   config: ConfigConductor;
   /** Lo que `aplicar` descubre y el llamador necesita después del acuse. */
-  efectos: { pedirUbicacion: boolean; preguntaPatio?: Salida | null };
+  efectos: { pedirUbicacion: boolean; preguntaPatio?: Salida | null; preguntaResultado?: Salida | null };
 }
 
 /** La invitación (opcional, por flota) a mandar la foto de evidencia del hito recién registrado. */
@@ -392,6 +441,10 @@ async function aplicar(d: Decision, c: ContextoAplicar): Promise<'ok' | 'carrera
       // T-A5-44: la llegada a descargar abre la pregunta «¿en qué patio entregas?» (solo si la flota lo encendió; best-effort).
       if (d.objetivo === 'llegada_descarga' && c.config.patioEntregaActivo === true) {
         c.efectos.preguntaPatio = await preguntarPatio(deps.patio ?? puertosPatioReales(), c.config, viaje, registrado);
+      }
+      // T-A5-46: la salida de la descarga abre «¿cómo terminó?» (solo si la flota lo encendió; best-effort; sin respuesta no bloquea el cierre).
+      if (d.objetivo === 'salida_descarga' && c.config.resultadoDescargaActivo === true) {
+        c.efectos.preguntaResultado = await preguntarResultado(deps.resultado ?? puertosResultadoReales(), c.config, viaje, registrado);
       }
       // El aviso a la oficina es best-effort y no retrasa el acuse más de lo que cuesta un envío.
       const esLlegada = d.objetivo === 'llegada_carga' || d.objetivo === 'llegada_descarga';

@@ -124,6 +124,11 @@ export interface ConfigConductor {
    * configuración, como `patioEntregaActivo`. Pasa por la compuerta de unidad detenida (T-A5-36).
    */
   reporteLlegadaActivo?: boolean;
+  /**
+   * T-A5-46 (R19): al terminar la descarga el agente pregunta «completa / no me recibieron / regreso con la caja cargada»; las dos últimas
+   * avisan al supervisor y marcan el regreso con la bandera `caja_cargada`. Apagado por omisión (hasta la fase 2); aún sin columna propia.
+   */
+  resultadoDescargaActivo?: boolean;
   /** 0801: aplicar la salida que reporta el TMS como hito del viaje. */
   aplicarSalidaDelTms: boolean;
   /** 0801: llamadas de seguimiento por viaje medidas antes del agente (null = sin registrar) y la fecha (AAAA-MM-DD) en que se midió. */
@@ -187,6 +192,7 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   estadiaDescargaMinPorCliente: Object.freeze({}),
   estadiaDescargaSinRespuestaMin: 30,
   reporteLlegadaActivo: false,
+  resultadoDescargaActivo: false,
   lineaBaseLlamadasPorViaje: null,
   lineaBaseRegistradaEn: null,
 });
@@ -379,6 +385,7 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       estadiaDescargaMinPorCliente,
       estadiaDescargaSinRespuestaMin,
       reporteLlegadaActivo: b.reporteLlegadaActivo === true,
+      resultadoDescargaActivo: b.resultadoDescargaActivo === true,
       lineaBaseLlamadasPorViaje,
       lineaBaseRegistradaEn,
     },
