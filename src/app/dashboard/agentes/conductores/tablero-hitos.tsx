@@ -241,6 +241,15 @@ function CeldaHito({ h, puedeActuar, accion, viajeId }: { h: HitoVista; puedeAct
       )}
       {h.contacto && <div className="text-[11px]" style={{ color: 'var(--muted)' }}>Lo atiende {h.contacto}</div>}
       {h.sinContacto && <div className="text-[11px]" style={{ color: 'var(--faint)' }}>sin contacto en andén</div>}
+      {h.reporte?.rampa && <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{h.reporte.rampa}</div>}
+      {h.reporte && h.reporte.reubicaciones > 0 && (
+        <details className="text-[11px]" style={{ color: 'var(--muted)' }}>
+          <summary className="cursor-pointer">{h.reporte.reubicaciones === 1 ? '1 cambio' : `${h.reporte.reubicaciones} cambios`} de rampa o contacto</summary>
+          <ol className="mt-0.5 space-y-0.5">
+            {h.reporte.historial.map((r) => <li key={r.en}><span className="cifra-mono">{fechaHoraMx(r.en)}</span> · {r.rampa ?? 'sin rampa registrada'}</li>)}
+          </ol>
+        </details>
+      )}
       {h.validacion && h.validacion.resultado !== 'sin_dato' && (
         <div className="text-[11px] flex items-start gap-1" style={{ color: h.validacion.resultado === 'validado' ? 'var(--ok)' : 'var(--warn)' }} title={h.validacion.texto}>
           {h.validacion.resultado === 'validado' ? <MapPin width={11} height={11} aria-hidden className="mt-0.5 shrink-0" /> : <MapPinOff width={11} height={11} aria-hidden className="mt-0.5 shrink-0" />}

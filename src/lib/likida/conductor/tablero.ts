@@ -1,7 +1,8 @@
 import type { ConfigConductor } from './config';
 import { esLocalAbierto, type EstadoTransito } from './estados_transito';
 import { calcularEstancias, excedeUmbral, type Estancia } from './estadias_anden';
-import { hitoActivo } from './maquina';
+import { estadoReporte, hitoActivo, reubicacionesDespuesDelPrimero, type Reubicacion } from './maquina';
+import { textoRampa } from './mensajes';
 import { haversineM } from './geo';
 import { aplicarPerfil } from './perfil';
 import { evaluarSalidaTms, textoSalidaTms } from './salida_tms';
@@ -58,6 +59,18 @@ export interface HitoVista {
   tocaDesde: string | null;
   /** Se capturó/validó/atendió desde la oficina: el motivo y quién. */
   accionesOficina: Array<{ accion: AccionOficinaFila['accion']; email: string; motivo: string; cuando: string }>;
+  /** T-A5-43: «con quién te reportaste» y rampa vigentes de la llegada, con la lista de reubicaciones. Ausente si nadie la compuso (`conReporteDeLlegada`). */
+  reporte?: ReporteLlegadaVista;
+}
+
+/** T-A5-43: lo que pinta el tablero de la lista de reubicaciones de una llegada. */
+export interface ReporteLlegadaVista {
+  contacto: string | null;
+  rampa: string | null;
+  /** Veces que cambió de rampa o contacto después del primer registro (el «como canica» del cliente). */
+  reubicaciones: number;
+  /** El historial, del primero al último, para abrirlo como evidencia: «HH:MM · contacto · rampa». */
+  historial: Array<{ en: string; contacto: string | null; rampa: string | null }>;
 }
 
 export type TipoExcepcion =
@@ -537,4 +550,34 @@ export function episodiosVista(eps: readonly EpisodioTablero[]): EpisodioVista[]
       abiertoEn: e.abiertoEn, abierto, estado, pasos, urgente: abierto && e.nivelEnviado === 3,
     };
   });
+}
+
+// ── T-A5-43: contacto y rampa de la llegada en el tablero (lectura pura; no registra nada) ──────────────────────────────
+
+/** Lo vigente del reporte de la llegada. `contactoHito` es el del hito (`contacto_nombre`); la lista, si lo trae, manda. */
+export function reporteLlegadaVista(contactoHito: string | null, lista: readonly Reubicacion[]): ReporteLlegadaVista | null {
+  const vigente = estadoReporte(lista);
+  if (!vigente && !contactoHito) return null;
+  return {
+    contacto: vigente?.contacto ?? contactoHito,
+    rampa: textoRampa(vigente),
+    reubicaciones: reubicacionesDespuesDelPrimero(lista),
+    historial: lista.map((r) => ({ en: r.en, contacto: r.contacto, rampa: textoRampa(r) })),
+  };
+}
+
+/**
+ * Compone el reporte de llegada sobre las filas ya armadas: `reubicaciones` es hitoId → su lista. Una fila sin lista queda tal cual
+ * (no se inventa rampa); solo se toca el hito que tiene lista. Devuelve filas nuevas, no muta las de `armarTablero`.
+ */
+export function conReporteDeLlegada(filas: readonly FilaTablero[], reubicaciones: ReadonlyMap<string, readonly Reubicacion[]>): FilaTablero[] {
+  return filas.map((f) => ({
+    ...f,
+    hitos: f.hitos.map((h) => {
+      const lista = reubicaciones.get(h.id);
+      if (!lista || lista.length === 0) return h;
+      const reporte = reporteLlegadaVista(h.contacto, lista);
+      return reporte ? { ...h, reporte } : h;
+    }),
+  }));
 }

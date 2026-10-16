@@ -200,7 +200,7 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
   {
     nombre: 'conductor_contacto_anden_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
     proposito: 'Pedir al chofer el contacto en andén una vez que llegó a cargar.',
-    llamador: null,
+    llamador: 'src/lib/likida/conductor/alertas_llegada.ts',
     cuerpo: 'Hola {{1}}, ya registramos tu llegada a {{2}} del viaje {{3}}. Responde con el nombre y teléfono de la persona que te recibe en el andén, o toca «Aún no tengo contacto».',
     ejemplos: ['Juan', 'Planta Zapopan', 'F-1042'],
     variables: ['nombre del chofer', 'lugar', 'folio'],

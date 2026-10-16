@@ -694,6 +694,55 @@ export async function leerEventosPatio(tenantId: string, viajeIds: string[]): Pr
   }));
 }
 
+// ── T-A5-43: la bitácora de «con quién te reportaste» y la rampa ────────────
+//
+// Persistencia SIN migración (mismo Ruling que el patio de T-A5-44): renglones `validacion` de `viaje_hito_evento` con
+// `detalle.clase = 'reporte_llegada'`, colgados del hito de llegada. SIN datos personales (la tabla lo prohíbe: la lee un feed ajeno y la
+// cancelación ARCO no la reescribe): el NOMBRE del contacto vive donde ya vivía, en `viaje_hito.contacto_nombre`; aquí solo van pasos
+// preguntados, estado y número de rampa, y el «¿cómo descargas?» ya limpio de teléfonos, correos y enlaces.
+
+/** Un renglón de la bitácora del reporte de llegada. */
+export interface EventoReporteFila {
+  id: number;
+  viajeId: string;
+  hitoId: string;
+  detalle: Record<string, unknown>;
+  creadoEn: string;
+}
+
+/** La bitácora del reporte de llegada de esos viajes DE ESA FLOTA, del más viejo al más nuevo. Lanza si la base falla. */
+export async function leerEventosReporte(tenantId: string, viajeIds: string[]): Promise<EventoReporteFila[]> {
+  if (viajeIds.length === 0) return [];
+  const res = await acotada(supabaseAdmin().from('viaje_hito_evento')
+    .select('id, viaje_id, viaje_hito_id, detalle, created_at')
+    .eq('tenant_id', tenantId).in('viaje_id', viajeIds).eq('evento', 'validacion')
+    .eq('detalle->>clase', 'reporte_llegada').order('id', { ascending: true }).limit(2000), 'conductor.reporte_eventos');
+  return ((exigir(res as never, 'conductor.reporte_eventos') ?? []) as unknown as Fila[]).map((f) => ({
+    id: Number(f.id), viajeId: String(f.viaje_id), hitoId: String(f.viaje_hito_id),
+    detalle: (f.detalle ?? {}) as Record<string, unknown>, creadoEn: String(f.created_at),
+  }));
+}
+
+/**
+ * Escribe UN renglón del reporte de llegada. A diferencia de `registrarEvento` (mejor esfuerzo), aquí el resultado se devuelve: la
+ * respuesta del chofer no se acusa como «anotada» si no quedó guardada.
+ */
+export async function guardarEventoReporte(
+  h: Pick<HitoFila, 'id' | 'tenantId' | 'viajeId' | 'tipo'>, detalle: Record<string, string | number | boolean | null>,
+): Promise<boolean> {
+  try {
+    const { error } = await acotada(supabaseAdmin().from('viaje_hito_evento').insert({
+      tenant_id: h.tenantId, viaje_id: h.viajeId, viaje_hito_id: h.id, tipo_hito: h.tipo, evento: 'validacion',
+      detalle: { clase: 'reporte_llegada', ...detalle },
+    }), 'conductor.reporte_evento');
+    if (error) { logger.error('conductor.reporte_evento_no_guardado', { hito: h.id, err: error.message }); return false; }
+    return true;
+  } catch (e) {
+    logger.error('conductor.reporte_evento_no_guardado', { hito: h.id, err: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
+}
+
 /** Guarda las citas del viaje DE ESA FLOTA. `no_encontrado` = no existe o es de otra flota (misma respuesta). */
 export async function guardarCitas(tenantId: string, viajeId: string, cambio: CambioCitas): Promise<'ok' | 'no_encontrado'> {
   const res = await acotada(supabaseAdmin()

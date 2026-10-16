@@ -118,6 +118,12 @@ export interface ConfigConductor {
   estadiaDescargaMinPorCliente?: Readonly<Record<string, number>>;
   /** T-A5-45: minutos que se espera la respuesta del chofer antes de avisar al supervisor por falta de respuesta. */
   estadiaDescargaSinRespuestaMin?: number;
+  /**
+   * T-A5-43 (R15/R16): al llegar con el cliente el agente pregunta «¿con quién te reportaste?» y, en importación, la rampa de descarga
+   * (sí / no / no aplica / en espera + número). Apagado por omisión (hasta la fase 2); aún sin columna propia: se fija al armar la
+   * configuración, como `patioEntregaActivo`. Pasa por la compuerta de unidad detenida (T-A5-36).
+   */
+  reporteLlegadaActivo?: boolean;
   /** 0801: aplicar la salida que reporta el TMS como hito del viaje. */
   aplicarSalidaDelTms: boolean;
   /** 0801: llamadas de seguimiento por viaje medidas antes del agente (null = sin registrar) y la fecha (AAAA-MM-DD) en que se midió. */
@@ -180,6 +186,7 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   estadiaDescargaInteractiva: false,
   estadiaDescargaMinPorCliente: Object.freeze({}),
   estadiaDescargaSinRespuestaMin: 30,
+  reporteLlegadaActivo: false,
   lineaBaseLlamadasPorViaje: null,
   lineaBaseRegistradaEn: null,
 });
@@ -371,6 +378,7 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       estadiaDescargaInteractiva: b.estadiaDescargaInteractiva === true,
       estadiaDescargaMinPorCliente,
       estadiaDescargaSinRespuestaMin,
+      reporteLlegadaActivo: b.reporteLlegadaActivo === true,
       lineaBaseLlamadasPorViaje,
       lineaBaseRegistradaEn,
     },

@@ -28,6 +28,8 @@ let voluntarios: number | Error = 0;
 vi.mock('@/lib/likida/conductor/repo', () => ({ contarVoluntariosActivos: async () => { if (voluntarios instanceof Error) throw voluntarios; return voluntarios; }, correrMantenimientoConductor: () => mantenimiento(), leerConfigConductor: async () => ({}), asignarSitioDerivado: async () => 'ok' }));
 const alertasEstadia = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisadas: 1, alertas: 1, yaReclamadas: 0, sinDestinatario: 0, fueraDeVentana: 0, rechazosReintentables: 0, fallos: [] }));
 vi.mock('@/lib/likida/conductor/alertas_estadia', () => ({ correrAlertasEstadia: () => alertasEstadia() }));
+// T-A5-43: la pasada de «con quién te reportaste» es otro módulo; aquí solo se aísla (su prueba propia es reporte_llegada_cableado.test.ts).
+vi.mock('@/lib/likida/conductor/reporte_llegada', () => ({ correrReporteLlegada: async () => ({ revisados: 0, preguntas: 0, yaReclamadas: 0, sinTelefono: 0, fueraDeVentana: 0, compuertaMovimiento: 0, rechazosReintentables: 0, fallos: [] }), puertosReporteReales: () => ({}) }));
 const llegadas = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisadas: 1, avisos: 1, yaReclamados: 0, sinDestinatario: 0, fueraDeVentana: 0, rechazosReintentables: 0, fallos: [] }));
 vi.mock('@/lib/likida/conductor/alertas_llegada', () => ({ correrAlertasLlegadaSinConfirmar: () => llegadas(), puertosAlertaLlegadaReales: () => ({}) }));
 const barrido = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisados: 2, validados: 1, sinCoincidencia: 0, sinDato: 1, saltados: 0, fallos: 0 }));

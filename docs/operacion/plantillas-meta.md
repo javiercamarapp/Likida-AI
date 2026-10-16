@@ -31,7 +31,7 @@ Todas las que siguen en estado «nueva para aprobación»: el código ya las nom
 | 1 | `cobranza_gastos_v1` | Chofer — cobranza de comprobantes / recordatorio de aceptación | — | `src/lib/likida/agentes/cobranza_gasto.ts` | 3 | — | autoritativo |
 | 2 | `regla_aviso_v1` | Mis reglas (vigilante) | — | `src/lib/likida/reglas/vigilante.ts` | 3 | — | autoritativo |
 | 3 | `conductor_solicitud_llegada_carga_v1` | Agente 5 — Conductor | Solo completo | `src/lib/likida/conductor/ejecutor.ts` | 4 | «Ya llegué», «Voy con retraso», «Compartir ubicación» | autoritativo |
-| 4 | `conductor_contacto_anden_v1` | Agente 5 — Conductor | Solo completo | sin llamador todavía | 3 | «Aún no tengo contacto» | autoritativo |
+| 4 | `conductor_contacto_anden_v1` | Agente 5 — Conductor | Solo completo | `src/lib/likida/conductor/alertas_llegada.ts` | 3 | «Aún no tengo contacto» | autoritativo |
 | 5 | `conductor_salida_carga_v1` | Agente 5 — Conductor | Esenciales y completo | `src/lib/likida/conductor/ejecutor.ts` | 2 | «Ya salí», «Sigo cargando» | autoritativo |
 | 6 | `conductor_llegada_descarga_v1` | Agente 5 — Conductor | Solo completo | `src/lib/likida/conductor/ejecutor.ts` | 3 | «Ya llegué», «Compartir ubicación» | autoritativo |
 | 7 | `conductor_salida_descarga_v1` | Agente 5 — Conductor | Solo completo | `src/lib/likida/conductor/ejecutor.ts` | 2 | «Ya salí», «Sigo descargando» | autoritativo |
@@ -287,7 +287,7 @@ El cuerpo exacto, las variables con su ejemplo y los botones de cada una están 
 
 - **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
 - **Agente / uso:** Agente 5 — Conductor. Pedir al chofer el contacto en andén una vez que llegó a cargar.
-- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Llamador en código:** src/lib/likida/conductor/alertas_llegada.ts
 - **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
 - **Cuerpo exacto:**
 
