@@ -407,7 +407,13 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // LOOP CINCO AGENTES, T-A5-52 (catálogo de documentos por cliente, 0809): 2,121 → 2,125 (0 archivos, +4 llamadas medidas con el barrido completo, las cuatro en `conductor/repo.ts`:
 // `leerDocumentosCliente`, el conteo previo de `altaDocumentoCliente` (tope por cliente), su INSERT y el DELETE de `bajaDocumentoCliente`; todas por `acotada`, ancladas a `tenant_id`; las prueba `documentos_cliente_repo.test.ts`). Funcionalidad nueva.
 // Integración cinco-integracion-2 (+ conductor sobre la misma base): el barrido real del árbol fusionado mide 2,221 llamadas; techo subido a lo medido, sin relajar la regla.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_221;
+// FASE 1 SEGURIDAD · SEG-SESIONES: +1 llamada (2,095 → 2,096), en
+// `auth/usuarios_escritura.ts` (`cerrarSesionesUsuario`: la RPC
+// `revocar_sesiones_usuario`, migración 0840 SOLO LOCAL). No es tráfico de
+// tenant — llama con el id YA ANCLADO al tenant por `leerObjetivo`, que es
+// el guardia de esta función. Funcionalidad nueva, no código migrado.
+// Integración cinco-integracion-2 (+ auditoria-seguridad sobre la misma base): el barrido real del árbol fusionado mide 2,222 llamadas; techo subido a lo medido, sin relajar la regla.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_222;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

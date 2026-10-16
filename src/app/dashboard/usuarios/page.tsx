@@ -10,7 +10,7 @@ import {
   validarInvitacion, descifrarErrorProvision, esCorreoYaRegistrado, mensajeAltaNeutro, ROLES_INVITABLES,
 } from '@/lib/auth/invitar';
 import {
-  cambiarRolUsuario, desactivarUsuario, reactivarUsuario, reenviarAcceso, enviarCorreoDeAcceso,
+  cambiarRolUsuario, desactivarUsuario, reactivarUsuario, reenviarAcceso, enviarCorreoDeAcceso, cerrarSesionesUsuario,
   type ContextoAcceso, type ResultadoCorreoAcceso,
 } from '@/lib/auth/usuarios_escritura';
 import { nombreDeRol } from '@/lib/auth/roles';
@@ -213,6 +213,21 @@ export default async function UsuariosPage({
     }
   }
 
+  async function cerrarSesiones(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
+    'use server';
+    const p = await puertaAdministrar(sp);
+    if ('error' in p) return { ok: false, error: p.error };
+    const { s } = p;
+    try {
+      const r = await cerrarSesionesUsuario(s.tenantId, String(fd.get('id') ?? ''), { id: s.userId });
+      return r.sesionesCerradas
+        ? { ok: true, mensaje: 'Listo: todas sus sesiones quedaron cerradas. Va a tener que volver a entrar con su correo.' }
+        : { ok: false, error: 'No se pudo confirmar el cierre de sesiones — quedó registrado; vuelve a intentarlo.' };
+    } catch (e) {
+      return { ok: false, error: mensajeParaPantalla(e, 'cerrar sus sesiones') };
+    }
+  }
+
   async function reactivar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
     const p = await puertaAdministrar(sp);
@@ -254,7 +269,7 @@ export default async function UsuariosPage({
       puedeInvitar={puedeAdministrar(rol)}
       // Como PROP y no como import del componente cliente — ver forma.tsx.
       roles={ROLES_INVITABLES}
-      acciones={{ invitar: invitarUsuario, cambiarRol, darDeBaja, reactivar, reenviarAcceso: reenviar }}
+      acciones={{ invitar: invitarUsuario, cambiarRol, darDeBaja, reactivar, reenviarAcceso: reenviar, cerrarSesiones }}
     />
   );
 }
