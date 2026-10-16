@@ -44,7 +44,7 @@ export const CAMPOS_DOC: ReadonlyArray<CampoDoc> = [
   { clave: 'folio_cliente', rotulo: 'Folio / referencia del cliente', grupo: 'documento', tipo: 'texto', critico: false, max: 40 },
   { clave: 'fecha_salida', rotulo: 'Fecha y hora de salida', grupo: 'documento', tipo: 'fecha', critico: false, max: 25 },
   { clave: 'fecha_llegada', rotulo: 'Fecha y hora de llegada (cita)', grupo: 'documento', tipo: 'fecha', critico: false, max: 25 },
-  { clave: 'distancia_km', rotulo: 'Distancia (km)', grupo: 'documento', tipo: 'numero', critico: false, max: 12 },
+  { clave: 'distancia_km', rotulo: 'Distancia (km)', grupo: 'documento', tipo: 'numero', critico: false, max: 12, soloEnriquecimiento: true }, // T-A3-51: no viene en ningún documento; sale del catálogo de distancias (0830), nunca del modelo
   { clave: 'transp_internac', rotulo: 'Transporte internacional', grupo: 'documento', tipo: 'booleano', critico: false, max: 5 },
 
   { clave: 'origen_nombre', rotulo: 'Remitente (nombre)', grupo: 'origen', tipo: 'texto', critico: false, max: 200 },
