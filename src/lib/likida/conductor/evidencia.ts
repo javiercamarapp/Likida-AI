@@ -76,3 +76,61 @@ export function mensajeEvidencia(r: 'ok' | 'duplicada' | 'sin_hito' | 'fallo', t
     case 'fallo': return 'No pude guardar esa foto ahorita 😕 — consérvala y reenvíamela en un momento, por favor.';
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A5-40 — LA FOTO DEL SELLO ANTES DE «INICIO DE VIAJE» (R08). Puro.
+//
+// El cliente: antes de que la unidad salga, la foto del sello; luego ya manda su inicio de viaje. La clave de amago, el bloqueo, la
+// cámara y el botón de pánico NO viajan por WhatsApp (quedan con monitoreo): nada de esto las pide ni las nombra. El sello previo es de
+// IMPORTACIÓN; en exportación «aquí no se ocupa». Que la foto por WhatsApp baste, o monitoreo la necesite además por su canal, es
+// pregunta abierta al cliente: por eso la opción nace APAGADA (solo recomienda y registra) y nunca exige en exportación.
+//
+// El «inicio de viaje» del ciclo actual es la salida de la carga (`salida_carga`); el ciclo por servicio (T-A5-41/42) lo separará.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type ServicioViaje = 'importacion' | 'exportacion' | 'nacional';
+
+/** Lo mínimo de una evidencia ya guardada (`viaje_hito_evidencia`) para decidir. */
+export interface EvidenciaSelloFila { tipo: TipoEvidencia; creadaEn: string }
+
+export type DecisionSelloInicio =
+  /** Hay sello reciente, o no aplica: se registra el inicio sin más. */
+  | { accion: 'registrar'; recomendar: false }
+  /** Sin sello y la opción apagada: se registra el inicio y se recomienda la foto. */
+  | { accion: 'registrar'; recomendar: true }
+  /** Sin sello y la opción encendida (importación): NO se registra; se pide la foto primero. */
+  | { accion: 'pedir_foto' };
+
+/** ¿Hay una foto de sello del viaje lo bastante reciente (≤ `HORAS_EVIDENCIA`)? Las purgadas no llegan (ruta nula); las `otra`/`anden` no cuentan. */
+export function hayFotoDeSello(evidencias: readonly EvidenciaSelloFila[], ahora: Date): boolean {
+  const limite = ahora.getTime() - HORAS_EVIDENCIA * 3_600_000;
+  return evidencias.some((e) => {
+    const t = new Date(e.creadaEn).getTime();
+    return e.tipo === 'sello' && Number.isFinite(t) && t >= limite && t <= ahora.getTime() + 60_000;
+  });
+}
+
+/**
+ * Qué hacer con un aviso que registraría `objetivo`. Solo `salida_carga` (el inicio de viaje) pasa por aquí; cualquier otro hito
+ * se registra como siempre. `servicio` null = aún no se sabe (el modelo por servicio llega con T-A5-41): nunca se EXIGE, solo se recomienda.
+ */
+export function decidirSelloInicio(a: {
+  objetivo: TipoHito;
+  servicio: ServicioViaje | null;
+  exigir: boolean | undefined;
+  evidencias: readonly EvidenciaSelloFila[];
+  ahora: Date;
+}): DecisionSelloInicio {
+  if (a.objetivo !== 'salida_carga') return { accion: 'registrar', recomendar: false };
+  if (a.servicio === 'exportacion' || a.servicio === 'nacional') return { accion: 'registrar', recomendar: false };
+  if (hayFotoDeSello(a.evidencias, a.ahora)) return { accion: 'registrar', recomendar: false };
+  if (a.exigir === true && a.servicio === 'importacion') return { accion: 'pedir_foto' };
+  return { accion: 'registrar', recomendar: true };
+}
+
+/** El texto al chofer. Sin claves, evidencias de seguridad ni nada de monitoreo. */
+export function mensajeSelloInicio(que: 'pedir' | 'recomendar'): string {
+  return que === 'pedir'
+    ? '📷 Antes de iniciar el viaje, manda la foto del sello y escribe «sello» en el pie de la foto. Cuando la reciba, dime «ya salí».'
+    : '📷 Si puedes, manda la foto del sello y escribe «sello» en el pie de la foto.';
+}

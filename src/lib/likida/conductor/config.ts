@@ -92,6 +92,12 @@ export interface ConfigConductor {
   detenidaVentanaMin?: number;
   /** T-A5-36: sin GPS reciente, ¿se le puede escribir? Por omisión NO (falla cerrado). */
   sinGpsPermite?: boolean;
+  /**
+   * T-A5-40: `exigir_sello_inicio`. Encendida, un «ya salí» (inicio de viaje) de un viaje de IMPORTACIÓN sin foto de sello reciente NO
+   * se registra: se le pide la foto primero. Apagada (por omisión) = el inicio se registra y solo se le RECOMIENDA la foto. En exportación
+   * nunca se exige (el sello previo es de importación). Aún sin columna propia: se fija al armar la configuración; ausente = apagada.
+   */
+  exigirSelloInicio?: boolean;
   /** 0801: aplicar la salida que reporta el TMS como hito del viaje. */
   aplicarSalidaDelTms: boolean;
   /** 0801: llamadas de seguimiento por viaje medidas antes del agente (null = sin registrar) y la fecha (AAAA-MM-DD) en que se midió. */
@@ -148,6 +154,7 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   detenidaMetros: 150,
   detenidaVentanaMin: 5,
   sinGpsPermite: false,
+  exigirSelloInicio: false,
   lineaBaseLlamadasPorViaje: null,
   lineaBaseRegistradaEn: null,
 });
@@ -318,6 +325,7 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       detenidaMetros,
       detenidaVentanaMin,
       sinGpsPermite: b.sinGpsPermite === true,
+      exigirSelloInicio: b.exigirSelloInicio === true,
       lineaBaseLlamadasPorViaje,
       lineaBaseRegistradaEn,
     },

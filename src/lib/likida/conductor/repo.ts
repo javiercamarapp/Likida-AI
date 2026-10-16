@@ -376,6 +376,22 @@ export async function adjuntarUbicacion(
   return data && data.length > 0 ? { ...h, lat, lng } : null;
 }
 
+/**
+ * T-A5-40: las evidencias de sello vigentes (no purgadas) de un viaje de ESTA flota, de las últimas `horas` h. Lectura: una base caída
+ * lanza (no es «no hay foto»). Solo tipo y hora: la ruta y la huella no salen de aquí.
+ */
+export async function leerEvidenciasSelloViaje(
+  tenantId: string, viajeId: string, ahora: Date, horas = 12,
+): Promise<Array<{ tipo: 'sello'; creadaEn: string }>> {
+  const desde = new Date(ahora.getTime() - horas * 3_600_000).toISOString();
+  const res = await acotada(supabaseAdmin()
+    .from('viaje_hito_evidencia').select('tipo, created_at')
+    .eq('tenant_id', tenantId).eq('viaje_id', viajeId).eq('tipo', 'sello').is('purgada_en', null)
+    .gte('created_at', desde).order('created_at', { ascending: false }).limit(20), 'conductor.evidencia_sello');
+  const filas = (exigir(res as never, 'conductor.evidencia_sello') ?? []) as unknown as Fila[];
+  return filas.map((f) => ({ tipo: 'sello' as const, creadaEn: String(f.created_at) }));
+}
+
 /** Marca que el jefe/patio atendió la escalación de estos hitos (botón «Ya lo atiendo»). */
 export async function marcarEscalacionAtendida(tenantId: string, viajeId: string, ahora: Date): Promise<HitoFila[]> {
   const { data, error } = await acotada(supabaseAdmin()
