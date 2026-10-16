@@ -41,6 +41,10 @@ import { leerBol } from './lectores/bol';
 import { leerOrdenAgente } from './lectores/orden_agente';
 import { leerRemisionEscaneada, type VisionRemision } from './lectores/remision';
 import { aplicarPerfil, elegirPerfil, type EjemploPerfil, type Perfil } from './perfiles';
+import { leerCorreoF1 } from './lectores/correo_f1';
+import { leerCorreoF2 } from './lectores/correo_f2';
+import { leerCorreoF3 } from './lectores/correo_f3';
+import { clasificarFormato } from './registro_formatos';
 import { leerRotulosCorreo, lecturaConfiable } from './rotulos';
 import { extraerCartaPorteXml } from './xml_ccp';
 
@@ -350,14 +354,36 @@ function completarCon(base: Extraccion, extra: Extraccion): Extraccion {
   return e;
 }
 
-/** El texto del correo (o la transcripción de la captura) leído por rótulos; `null` si no parece un bloque de rótulos de carga. */
-async function leerCorreoPorRotulos(c: ContenidoDoc, ctx: ContextoExtraccion): Promise<ReturnType<typeof leerRotulosCorreo>> {
-  let texto: string | null = null;
-  if (c.formato === 'correo') texto = c.texto;
-  else if (c.formato === 'imagen' && ctx.transcribir && c.imagenes.length > 0) texto = await ctx.transcribir(c.imagenes, ctx.signal);
+const LECTORES_CORREO = { F1: leerCorreoF1, F2: leerCorreoF2, F3: leerCorreoF3 } as const;
+type FormatoCorreo = keyof typeof LECTORES_CORREO;
+
+/** El texto de un correo, o la transcripción de su captura (por el puerto `transcribir`); `null` si no hay qué leer por rótulos. */
+async function textoDeCorreoOCaptura(c: ContenidoDoc, ctx: ContextoExtraccion): Promise<string | null> {
+  if (c.formato === 'correo') return c.texto;
+  if (c.formato === 'imagen' && ctx.transcribir && c.imagenes.length > 0) return ctx.transcribir(c.imagenes, ctx.signal);
+  return null;
+}
+
+interface LecturaCorreo { extraccion: Extraccion; avisos: string[]; capturaIncompleta: { ultimoRotulo: string } | null; lector?: ResultadoLector }
+
+/**
+ * T-A3-53 y T-A3-61: un correo en texto o la captura de un correo se lee SIN modelo, por rótulo. La firma elige el lector de la
+ * variante (F1 tabla, F2 «Datos para CP:», F3 bloque de rótulos); un correo que no es de ninguna variante pero trae rótulos de
+ * carga claros se lee con el mapa de rótulos común. `null` si no parece un bloque de rótulos (el flujo sigue con el modelo).
+ */
+async function leerCorreoPorRotulos(c: ContenidoDoc, ctx: ContextoExtraccion, forzado?: FormatoCorreo): Promise<LecturaCorreo | null> {
+  const texto = await textoDeCorreoOCaptura(c, ctx);
+  if (!texto) return null;
+  const clase = forzado ?? clasificarFormato({ contenido: c, textoVision: c.formato === 'imagen' ? texto : null }).formato;
+  if (clase === 'F1' || clase === 'F2' || clase === 'F3') {
+    const lec = LECTORES_CORREO[clase](c, { transcripcion: texto });
+    // Una captura cortada se declara aunque traiga pocos datos: callarla dejaría pasar un documento sin su fracción o pedimento.
+    if (lec.leido || lec.capturaIncompleta) return { extraccion: lec.extraccion, avisos: lec.avisos, capturaIncompleta: lec.capturaIncompleta ?? null, lector: lec };
+  }
   const lectura = leerRotulosCorreo(texto, { resolucion: c.resolucion ?? null });
-  // Una captura cortada se declara aunque traiga pocos rótulos: callarla dejaría pasar un documento sin su fracción o pedimento.
-  return lectura && (lecturaConfiable(lectura) || (lectura.firma && lectura.capturaIncompleta)) ? lectura : null;
+  return lectura && (lecturaConfiable(lectura) || (lectura.firma && lectura.capturaIncompleta))
+    ? { extraccion: lectura.extraccion, avisos: lectura.avisos, capturaIncompleta: lectura.capturaIncompleta }
+    : null;
 }
 
 export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion): Promise<ResultadoExtraccion> {
@@ -380,13 +406,16 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   // 1b. Lector de formato C, D o E: lee lo que el documento escribe y deja vacío lo que no trae. Si no pudo leer ningún renglón,
   // sigue el flujo de siempre (y nada se envía al TMS sin que una persona lo confirme).
   if (ctx.formatoEntrada) {
-    const lec = ctx.formatoEntrada === 'C'
-      ? await leerRemisionEscaneada(c, ctx.vision, { signal: ctx.signal })
-      : ctx.formatoEntrada === 'D' ? leerBol(c) : leerOrdenAgente(c);
+    const f = ctx.formatoEntrada;
+    const lec = f === 'C' ? await leerRemisionEscaneada(c, ctx.vision, { signal: ctx.signal })
+      : f === 'D' ? leerBol(c)
+        : f === 'E' ? leerOrdenAgente(c)
+          : LECTORES_CORREO[f](c, { transcripcion: await textoDeCorreoOCaptura(c, ctx) });
     r.avisos.push(...lec.avisos.filter((a) => !r.avisos.includes(a)));
+    if (lec.capturaIncompleta) r.capturaIncompleta = lec.capturaIncompleta;
     if (lec.leido) {
       r.extraccion = completarDerivados(lec.extraccion, derivar);
-      r.origen = ctx.formatoEntrada === 'C' ? 'llm' : 'perfil';
+      r.origen = f === 'C' || c.formato === 'imagen' ? 'llm' : 'perfil';
       r.lector = { formato: lec.formato, incidencias: lec.incidencias, vacios: lec.vacios, adicionales: lec.adicionales };
       return r;
     }
@@ -408,8 +437,9 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   const hayPerfil = base !== null;
   const rotulos = await leerCorreoPorRotulos(c, ctx);
   if (rotulos) {
-    r.avisos.push(...rotulos.avisos);
+    r.avisos.push(...rotulos.avisos.filter((a) => !r.avisos.includes(a)));
     r.capturaIncompleta = rotulos.capturaIncompleta;
+    if (rotulos.lector) r.lector = { formato: rotulos.lector.formato, incidencias: rotulos.lector.incidencias, vacios: rotulos.lector.vacios, adicionales: rotulos.lector.adicionales };
     base = base ? completarCon(base, rotulos.extraccion) : rotulos.extraccion;
   }
   if (base) {

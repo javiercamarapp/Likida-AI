@@ -91,11 +91,11 @@ describe('clasificación por firma: 9 de 9 formatos', () => {
     expect(puntuarFormatos(fx.B).A).toBe(0);
   });
 
-  it('solo A y G tienen lector hoy: el resto sigue el flujo genérico y no puede enviarse al TMS', async () => {
+  it('A, G y los correos F1-F3 tienen lector (T-A3-61): el resto sigue el flujo genérico y no puede enviarse al TMS', async () => {
     const fx = await fixtures();
     for (const f of FORMATOS_ENTRADA) {
       const r = clasificarFormato(fx[f]);
-      const hay = f === 'A' || f === 'G';
+      const hay = f === 'A' || f === 'G' || f === 'F1' || f === 'F2' || f === 'F3';
       expect(r.lectorDisponible).toBe(hay);
       expect(r.puedeEnviarAlTms).toBe(hay);
       expect(r.flujoSugerido).toBe(hay ? 'lector_determinista' : 'generico_llm');

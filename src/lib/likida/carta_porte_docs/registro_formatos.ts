@@ -40,7 +40,7 @@ export type LectorId =
   | 'remision_escaneada' // T-A3-60 (pendiente)
   | 'bol_ingles' // T-A3-60 (pendiente)
   | 'orden_agente' // T-A3-60 (pendiente)
-  | 'correo_f1' | 'correo_f2' | 'correo_f3' // T-A3-61 (pendientes)
+  | 'correo_f1' | 'correo_f2' | 'correo_f3' // T-A3-61 (lectores/correo_f1.ts, correo_f2.ts, correo_f3.ts)
   | 'json_plataforma_v3'; // perfiles.ts leerJsonPlataformaV3 (T-A3-58)
 
 export interface DescripcionFormato {
@@ -59,9 +59,9 @@ export const REGISTRO: Readonly<Record<FormatoEntrada, DescripcionFormato>> = {
   C: { formato: 'C', nombre: 'Remisión escaneada de planta', lector: 'remision_escaneada', lectorDisponible: false, tarea: 'T-A3-60' },
   D: { formato: 'D', nombre: 'Bill of Lading en inglés', lector: 'bol_ingles', lectorDisponible: false, tarea: 'T-A3-60' },
   E: { formato: 'E', nombre: 'Orden de remisión de agente aduanal', lector: 'orden_agente', lectorDisponible: false, tarea: 'T-A3-60' },
-  F1: { formato: 'F1', nombre: 'Correo/captura: tabla «DATOS DE LA MERCANCÍA»', lector: 'correo_f1', lectorDisponible: false, tarea: 'T-A3-61' },
-  F2: { formato: 'F2', nombre: 'Correo/captura: bloque «Datos para CP:»', lector: 'correo_f2', lectorDisponible: false, tarea: 'T-A3-61' },
-  F3: { formato: 'F3', nombre: 'Correo/captura: bloque de rótulos de bienes', lector: 'correo_f3', lectorDisponible: false, tarea: 'T-A3-61' },
+  F1: { formato: 'F1', nombre: 'Correo/captura: tabla «DATOS DE LA MERCANCÍA»', lector: 'correo_f1', lectorDisponible: true, tarea: 'T-A3-61' },
+  F2: { formato: 'F2', nombre: 'Correo/captura: bloque «Datos para CP:»', lector: 'correo_f2', lectorDisponible: true, tarea: 'T-A3-61' },
+  F3: { formato: 'F3', nombre: 'Correo/captura: bloque de rótulos de bienes', lector: 'correo_f3', lectorDisponible: true, tarea: 'T-A3-61' },
   G: { formato: 'G', nombre: 'JSON v3.0 de plataforma', lector: 'json_plataforma_v3', lectorDisponible: true, tarea: 'T-A3-58' },
 };
 
