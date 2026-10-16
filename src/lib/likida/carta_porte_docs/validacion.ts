@@ -28,6 +28,7 @@ import {
 import { valorSospechoso } from './inyeccion';
 import { normalizarNumero } from './normalizar';
 import { rfcChecksumOk } from '../intake/cfdi';
+import type { ReglaTramoCliente } from './perfiles';
 
 export type Severidad = 'bloqueo' | 'confirmar' | 'aviso';
 
@@ -57,6 +58,11 @@ export interface ResultadoValidacion {
 }
 
 export interface OpcionesValidacion {
+  /**
+   * T-A3-50: regla del cliente para el tramo mexicano. Ausente = no se evalúa (comportamiento de siempre); `null` o sin el
+   * valor del régimen del documento = «falta definir destino/origen» (bloqueo). Nunca se toma el extremo del documento por omisión.
+   */
+  reglaTramo?: ReglaTramoCliente | null;
   riesgoInyeccion?: boolean;
   remitenteReconocido?: boolean | null;
   /** Para probar con un reloj fijo. */
@@ -464,6 +470,24 @@ export function tipoOperacion(e: Extraccion): TipoOperacion {
   return 'desconocida';
 }
 
+/** Prefijo de la nota que deja la regla del tramo mexicano cuando el extremo elegido no es el del documento (T-A3-50). */
+export const MARCA_TRAMO_DISTINTO = 'Tramo mexicano:';
+
+/**
+ * T-A3-50 · ¿Falta la regla del cliente para el tramo mexicano? Exportación pide la del destino; importación, la del origen.
+ * Otra operación (o desconocida) no la necesita. Devuelve el bloqueo «falta definir destino/origen», o `null`.
+ */
+export function bloqueoTramoSinRegla(e: Extraccion, regla: ReglaTramoCliente | null | undefined): { campo: string; mensaje: string } | null {
+  const op = tipoOperacion(e);
+  if (op === 'exportacion' && !regla?.destinoExportacion) {
+    return { campo: 'destino_nombre', mensaje: 'Falta definir destino: el perfil del cliente no declara dónde termina el tramo mexicano (patio propio, frontera o el destino del documento). No se toma el destino del BOL por omisión.' };
+  }
+  if (op === 'importacion' && !regla?.origenImportacion) {
+    return { campo: 'origen_nombre', mensaje: 'Falta definir origen: el perfil del cliente no declara dónde empieza el tramo mexicano (patio propio o el origen del documento). No se toma el origen del documento por omisión.' };
+  }
+  return null;
+}
+
 const mercanciaPeligrosa = (fila: Record<string, CampoValor>): boolean => texto(fila.material_peligroso) === 'true';
 const CLAVES_RFC_IMPORTADOR = 'rfc_importador';
 
@@ -690,6 +714,10 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
     for (const nota of campo.notas ?? []) {
       if (/Confírmalo|confirma la cifra|No se reconoció/i.test(nota)) {
         reg({ campo: def.clave, renglon, severidad: 'confirmar', codigo: 'normalizacion_dudosa', mensaje: `${etiqueta}: ${nota}` });
+      } else if (def.clave === 'destino_nombre' && nota.startsWith(MARCA_TRAMO_DISTINTO)) {
+        reg({ campo: def.clave, renglon, severidad: 'aviso', codigo: 'destino_distinto_documento', mensaje: nota });
+      } else if (def.clave === 'origen_nombre' && nota.startsWith(MARCA_TRAMO_DISTINTO)) {
+        reg({ campo: def.clave, renglon, severidad: 'aviso', codigo: 'origen_distinto_documento', mensaje: nota });
       } else if (def.tipo === 'fecha' && /día\/mes\/año/.test(nota)) {
         reg({ campo: def.clave, renglon, severidad: 'aviso', codigo: 'fecha_ambigua', mensaje: `${etiqueta}: fecha ambigua; se leyó día/mes/año. Si el documento escribe mes/día, corrígela y el perfil lo aprenderá.` });
       }
@@ -713,6 +741,10 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
         reg({ campo: `${lado}_cp`, renglon: null, severidad: 'confirmar', codigo: 'cp_estado', mensaje: `El código postal ${cp} corresponde a ${esperado}, pero el estado de ${lado} dice ${est}. Revisa cuál de los dos está mal.`, relacionados: [{ campo: `${lado}_estado`, renglon: null }] });
       }
     }
+  }
+  if (op.reglaTramo !== undefined) {
+    const b = bloqueoTramoSinRegla(e, op.reglaTramo);
+    if (b) reg({ campo: b.campo, renglon: null, severidad: 'bloqueo', codigo: 'tramo_sin_regla', mensaje: b.mensaje });
   }
   const f1 = partesFecha(e.campos.fecha_salida?.valor); const f2 = partesFecha(e.campos.fecha_llegada?.valor);
   if (f1 && f2) {

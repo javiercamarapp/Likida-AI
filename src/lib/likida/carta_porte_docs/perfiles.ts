@@ -66,6 +66,30 @@ export interface PerfilVersion {
   nota?: string | null;
 }
 
+/**
+ * T-A3-50 · Rol del cliente en el tramo mexicano. El CCP cubre solo el tramo mexicano: el destino (exportación) o el origen
+ * (importación) del libro casi nunca es el del documento. El cliente declara UNA regla por régimen; sin regla no se adivina.
+ */
+export const DESTINOS_EXPORTACION = ['patio_propio', 'frontera', 'documento'] as const;
+export const ORIGENES_IMPORTACION = ['patio_propio', 'documento'] as const;
+export type DestinoExportacion = (typeof DESTINOS_EXPORTACION)[number];
+export type OrigenImportacion = (typeof ORIGENES_IMPORTACION)[number];
+export interface ReglaTramoCliente {
+  /** Exportación: dónde termina el tramo mexicano. Ausente = sin regla declarada (bloquea). */
+  destinoExportacion?: DestinoExportacion;
+  /** Importación: dónde empieza el tramo mexicano. Ausente = sin regla declarada (bloquea). */
+  origenImportacion?: OrigenImportacion;
+}
+
+/** Lee una regla guardada (JSON): solo se aceptan los valores declarados; todo lo demás se descarta, nunca se adivina. */
+export function leerReglaTramo(v: unknown): ReglaTramoCliente {
+  const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
+  const regla: ReglaTramoCliente = {};
+  if (typeof o.destinoExportacion === 'string' && (DESTINOS_EXPORTACION as readonly string[]).includes(o.destinoExportacion)) regla.destinoExportacion = o.destinoExportacion as DestinoExportacion;
+  if (typeof o.origenImportacion === 'string' && (ORIGENES_IMPORTACION as readonly string[]).includes(o.origenImportacion)) regla.origenImportacion = o.origenImportacion as OrigenImportacion;
+  return regla;
+}
+
 export interface Perfil {
   id: string;
   clave: string;
@@ -76,6 +100,8 @@ export interface Perfil {
   versionActiva: number;
   /** La versión ACTIVA (la que se reaplica). */
   activa: PerfilVersion;
+  /** T-A3-50: regla del cliente para el tramo mexicano. Ausente/null = sin declarar. */
+  tramoMexicano?: ReglaTramoCliente | null;
 }
 
 export const MAX_MAPEOS = 200;
