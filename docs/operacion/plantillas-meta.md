@@ -22,7 +22,7 @@ WhatsApp solo entrega texto libre y botones interactivos dentro de las **24 h po
 3. Aprobación: Meta tarda de minutos a 2–5 días hábiles. Hasta que una plantilla esté `APPROVED`, el envío devuelve `132001` y el selector lo reporta con ese motivo (fail-closed y dicho).
 4. Si Meta reclasifica una plantilla a MARKETING, el script lo marca como desviación: sale más cara y con más límites; hay que apelar o reescribir.
 
-## Lista consolidada por someter a Meta (27)
+## Lista consolidada por someter a Meta (37)
 
 Todas las que siguen en estado «nueva para aprobación»: el código ya las nombra (o las nombrará) y, mientras Meta no las apruebe, el envío fuera de la ventana de 24 h devuelve `132001`, queda dicho en `wa_envio_registro` y NO se reintenta en cada pasada. Las funciones que las usan nacen **apagadas por defecto** y se encienden por flota; no hace falta aprobar todas para el demo, solo las de lo que se vaya a enseñar en vivo.
 
@@ -46,17 +46,50 @@ Todas las que siguen en estado «nueva para aprobación»: el código ya las nom
 | 16 | `conductor_llegada_sin_confirmar_v1` | Agente 5 — Conductor | Solo completo | `src/lib/likida/conductor/alertas_llegada.ts` | 4 | — | autoritativo |
 | 17 | `conductor_senal_vida_v1` | Agente 5 — Conductor | Ambos, si la señal de vida está encendida | `src/lib/likida/conductor/senal_vida.ts` | 3 | «Sí, estoy», «Voy a cargar», «Estoy bien» | autoritativo |
 | 18 | `aviso_jefe_senal_vida_v1` | Agente 5 — Conductor | Ambos, si la señal de vida está encendida | `src/lib/likida/conductor/senal_vida.ts` | 4 | «Ya lo atiendo», «Abrir tablero» | autoritativo |
-| 19 | `operador_invitacion_v1` | Alta de operadores (invitación del chofer) | — | `src/lib/likida/invitacion_operador.ts` | 2 | — | autoritativo |
-| 20 | `vigia_respuesta_cliente_v1` | Agente 4 — Vigía de servicio al cliente | — | `src/lib/likida/vigia/enviar.ts` | 2 | — | autoritativo |
-| 21 | `vigia_aprobacion_v1` | Agente 4 — Vigía de servicio al cliente | — | `src/lib/likida/vigia/avisos.ts` | 3 | «Enviar», «No enviar», «Yo me encargo» | autoritativo |
-| 22 | `vigia_escalamiento_v1` | Agente 4 — Vigía de servicio al cliente | — | `src/lib/likida/vigia/avisos.ts` | 4 | «Yo me encargo» | autoritativo |
-| 23 | `vigia_aviso_viaje_v1` | Agente 4 — Vigía de servicio al cliente | — | `src/lib/likida/vigia/aviso/entrega.ts` | 5 | — | reconstruido: cotejar |
-| 24 | `vigia_aviso_cambio_v1` | Agente 4 — Vigía de servicio al cliente | — | `src/lib/likida/vigia/aviso/entrega.ts` | 5 | — | reconstruido: cotejar |
-| 25 | `liquidacion_externa_v1` | Agente 1 — Liquidación externa (entrega al chofer) | — | `src/lib/likida/liquidacion_externa/entrega.ts` | 4 | «Recibida», «No coincide» | autoritativo |
-| 26 | `jornada_aviso_encargado_v1` | Agente 12 — Jornada (alerta de tope) | — | `src/lib/likida/jornada/alerta_tope.ts` | 5 | — | autoritativo |
-| 27 | `jornada_aviso_operador_v1` | Agente 12 — Jornada (alerta de tope) | — | `src/lib/likida/jornada/alerta_tope.ts` | 3 | — | autoritativo |
+| 19 | `viaje_gastos_etc_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: solo cinco_agentes | sin llamador todavía | 2 | «Sí, necesito gastos», «No necesito» | autoritativo |
+| 20 | `conductor_foto_sello_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: piloto y cinco_agentes | sin llamador todavía | 3 | «Ya salí», «Tengo un problema» | autoritativo |
+| 21 | `conductor_detencion_sin_aviso_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: piloto y cinco_agentes | sin llamador todavía | 3 | «Todo bien», «Registrar motivo», «Necesito apoyo» | autoritativo |
+| 22 | `conductor_confirma_patio_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: piloto y cinco_agentes | sin llamador todavía | 3 | «Sí, es ese patio», «Estoy en otro patio», «Compartir ubicación» | autoritativo |
+| 23 | `conductor_estadia_descarga_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: solo cinco_agentes | sin llamador todavía | 4 | «Ya inició», «Aún no inicia», «Tengo un problema» | autoritativo |
+| 24 | `aviso_supervisor_patio_distinto_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: piloto y cinco_agentes | sin llamador todavía | 5 | «Ya lo atiendo», «Abrir tablero» | autoritativo |
+| 25 | `aviso_supervisor_estadia_descarga_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: piloto y cinco_agentes | sin llamador todavía | 6 | «Ya lo atiendo», «Abrir tablero» | autoritativo |
+| 26 | `aviso_supervisor_caja_cargada_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: solo cinco_agentes | sin llamador todavía | 5 | «Ya lo atiendo», «Abrir tablero» | autoritativo |
+| 27 | `conductor_pedir_evidencia_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: solo cinco_agentes | sin llamador todavía | 3 | «Ya los envié», «Me falta uno» | autoritativo |
+| 28 | `conductor_llegada_detectada_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: opcional (ningún perfil la exige) | sin llamador todavía | 3 | «Sí, es correcto», «No es correcto» | autoritativo |
+| 29 | `operador_invitacion_v1` | Alta de operadores (invitación del chofer) | — | `src/lib/likida/invitacion_operador.ts` | 2 | — | autoritativo |
+| 30 | `vigia_respuesta_cliente_v1` | Agente 4 — Vigía de servicio al cliente | — | `src/lib/likida/vigia/enviar.ts` | 2 | — | autoritativo |
+| 31 | `vigia_aprobacion_v1` | Agente 4 — Vigía de servicio al cliente | — | `src/lib/likida/vigia/avisos.ts` | 3 | «Enviar», «No enviar», «Yo me encargo» | autoritativo |
+| 32 | `vigia_escalamiento_v1` | Agente 4 — Vigía de servicio al cliente | — | `src/lib/likida/vigia/avisos.ts` | 4 | «Yo me encargo» | autoritativo |
+| 33 | `vigia_aviso_viaje_v1` | Agente 4 — Vigía de servicio al cliente | — | `src/lib/likida/vigia/aviso/entrega.ts` | 5 | — | reconstruido: cotejar |
+| 34 | `vigia_aviso_cambio_v1` | Agente 4 — Vigía de servicio al cliente | — | `src/lib/likida/vigia/aviso/entrega.ts` | 5 | — | reconstruido: cotejar |
+| 35 | `liquidacion_externa_v1` | Agente 1 — Liquidación externa (entrega al chofer) | — | `src/lib/likida/liquidacion_externa/entrega.ts` | 4 | «Recibida», «No coincide» | autoritativo |
+| 36 | `jornada_aviso_encargado_v1` | Agente 12 — Jornada (alerta de tope) | — | `src/lib/likida/jornada/alerta_tope.ts` | 5 | — | autoritativo |
+| 37 | `jornada_aviso_operador_v1` | Agente 12 — Jornada (alerta de tope) | — | `src/lib/likida/jornada/alerta_tope.ts` | 3 | — | autoritativo |
 
 El cuerpo exacto, las variables con su ejemplo y los botones de cada una están en el bloque de más abajo (los mismos que `scripts/verificar-plantillas-meta.ts --crear` manda a Meta).
+
+## Las 12 plantillas del ciclo del conductor (N01–N12)
+
+Perfil **piloto** exige las P0; perfil **cinco_agentes** exige P0 y P1; la P2 es opcional. La columna «Estado en el proveedor» es lo asentado a mano en `ESTADO_PROVEEDOR_CICLO` (`src/lib/likida/conductor/plantillas_requeridas.ts`): no se consulta a Meta al generar este documento; `scripts/verificar-plantillas-meta.ts --consultar` lo contrasta.
+
+- **Antes de crear nada en Meta:** comparar con la lista existente (`whatsapp_biz_list_templates`) para no duplicar; el script solo somete las que Meta no tiene.
+- **Versionado:** una aprobada no se edita. Si Meta rechaza una o su texto debe cambiar, se corrige el catálogo con nombre nuevo, sufijo `_v2` (`siguienteVersion`), y se marca aquí el estado de la nueva.
+- Rampa, motivo de parada, «¿cómo descargas?» y resultado de descarga no necesitan plantilla: son mensajes interactivos dentro de la ventana de 24 h.
+
+| Código | Plantilla | Prioridad | Piloto | cinco_agentes | Estado en el proveedor | Llamador en código |
+| --- | --- | --- | --- | --- | --- | --- |
+| N01 | `viaje_asignado_confirmar_v1` | P0 | sí | sí | aprobada | `src/lib/likida/notificar.ts` |
+| N02 | `viaje_instrucciones_ruta_v1` | P0 | sí | sí | aprobada | `src/lib/likida/conductor/asignacion.ts` |
+| N03 | `viaje_gastos_etc_v1` | P1 | no | sí | no enviada | sin llamador todavía |
+| N04 | `conductor_foto_sello_v1` | P0 | sí | sí | aprobada | sin llamador todavía |
+| N05 | `conductor_detencion_sin_aviso_v1` | P0 | sí | sí | aprobada | sin llamador todavía |
+| N06 | `conductor_confirma_patio_v1` | P0 | sí | sí | aprobada | sin llamador todavía |
+| N07 | `conductor_estadia_descarga_v1` | P1 | no | sí | no enviada | sin llamador todavía |
+| N08 | `aviso_supervisor_patio_distinto_v1` | P0 | sí | sí | aprobada | sin llamador todavía |
+| N09 | `aviso_supervisor_estadia_descarga_v1` | P0 | sí | sí | aprobada | sin llamador todavía |
+| N10 | `aviso_supervisor_caja_cargada_v1` | P1 | no | sí | no enviada | sin llamador todavía |
+| N11 | `conductor_pedir_evidencia_v1` | P1 | no | sí | no enviada | sin llamador todavía |
+| N12 | `conductor_llegada_detectada_v1` | P2 | no | no | no enviada | sin llamador todavía |
 
 ## Plantillas en uso (10)
 
@@ -271,7 +304,7 @@ El cuerpo exacto, las variables con su ejemplo y los botones de cada una están 
 
 - **Botones:** ninguno
 
-## Plantillas nuevas, listas para enviar a aprobación (27)
+## Plantillas nuevas, listas para enviar a aprobación (37)
 
 ### `cobranza_gastos_v1`
 
@@ -638,6 +671,213 @@ El cuerpo exacto, las variables con su ejemplo y los botones de cada una están 
 | `{{4}}` | última ubicación conocida | hace 52 min: https://maps.google.com/?q=20.67000,-103.35000 |
 
 - **Botones:** «Ya lo atiendo» (respuesta rápida, payload `jefe_atiendo:<viaje_id>`); «Abrir tablero» (URL fija https://app.likida.ai/dashboard/despacho)
+
+### `viaje_gastos_etc_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor (ciclo con botones). N03 · Preguntar antes de iniciar el viaje si el chofer requiere gastos de viaje o ETC para generar su vale. Solo flotas con la perilla (requiere definir qué es ETC).
+- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, antes de iniciar el viaje {{2}} necesitamos saber si requieres gastos de viaje o ETC para generar tu vale. Elige una opción.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del chofer | Juan |
+| `{{2}}` | folio | F-1042 |
+
+- **Botones:** «Sí, necesito gastos» (respuesta rápida, payload `gastos_si:<viaje_id>`); «No necesito» (respuesta rápida, payload `gastos_no:<viaje_id>`)
+
+### `conductor_foto_sello_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor (ciclo con botones). N04 · Pedir la foto del sello de la caja antes de salir y el botón «Ya salí» que registra el inicio del viaje; se manda con la unidad detenida en el patio.
+- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, antes de salir con el viaje {{2}} envía por aquí una foto clara del sello de la caja {{3}}. Después toca «Ya salí» para registrar el inicio de tu viaje.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del chofer | Juan |
+| `{{2}}` | folio | F-1042 |
+| `{{3}}` | caja | CJ-5521 |
+
+- **Botones:** «Ya salí» (respuesta rápida, payload `inicio_viaje:<viaje_id>`); «Tengo un problema» (respuesta rápida, payload `inicio_problema:<viaje_id>`)
+
+### `conductor_detencion_sin_aviso_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor (ciclo con botones). N05 · Preguntar por una detención sin parada registrada; solo si el GPS confirma detención por encima del umbral, nunca en movimiento.
+- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, tu unidad del viaje {{2}} lleva {{3}} minutos detenida y no registramos una parada. ¿Todo bien? Elige una opción.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del chofer | Juan |
+| `{{2}}` | folio | F-1042 |
+| `{{3}}` | minutos detenida | 15 |
+
+- **Botones:** «Todo bien» (respuesta rápida, payload `parada_ok:<viaje_id>`); «Registrar motivo» (respuesta rápida, payload `parada_motivo:<viaje_id>`); «Necesito apoyo» (respuesta rápida, payload `parada_apoyo:<viaje_id>`)
+
+### `conductor_confirma_patio_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor (ciclo con botones). N06 · Pedir al chofer que confirme que está en el patio de entrega asignado antes de descargar; «otro» abre la lista de patios dentro de la ventana de 24 h.
+- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, tu viaje {{2}} se entrega en el patio {{3}}. Antes de descargar, confirma si estás en ese patio.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del chofer | Juan |
+| `{{2}}` | folio | F-1042 |
+| `{{3}}` | patio de entrega asignado | Patio Norte 2 |
+
+- **Botones:** «Sí, es ese patio» (respuesta rápida, payload `patio_ok:<viaje_id>`); «Estoy en otro patio» (respuesta rápida, payload `patio_otro:<viaje_id>`); «Compartir ubicación» (respuesta rápida, payload `pedir_ubicacion:<viaje_id>`)
+
+### `conductor_estadia_descarga_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor (ciclo con botones). N07 · Preguntar a las 2 h de la llegada si ya inició la descarga (respaldo cuando la ventana de 24 h está cerrada).
+- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, llevas {{2}} desde tu llegada a {{3}} con el viaje {{4}}. ¿Ya inició la descarga?
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del chofer | Juan |
+| `{{2}}` | tiempo transcurrido | 2 horas |
+| `{{3}}` | sitio de descarga | Planta Escobedo |
+| `{{4}}` | folio | F-1042 |
+
+- **Botones:** «Ya inició» (respuesta rápida, payload `descarga_inicio:<viaje_id>`); «Aún no inicia» (respuesta rápida, payload `descarga_no_inicia:<viaje_id>`); «Tengo un problema» (respuesta rápida, payload `descarga_problema:<viaje_id>`)
+
+### `aviso_supervisor_patio_distinto_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor (ciclo con botones). N08 · Avisar al supervisor que el operador declaró un patio distinto del asignado para la entrega.
+- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Atención, supervisor: {{1}} indica estar en el patio {{2}} con el viaje {{3}}, pero la entrega está asignada al patio {{4}}. Última ubicación conocida: {{5}}. Confirma con el operador antes de que descargue.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | chofer | Juan Pérez |
+| `{{2}}` | patio declarado | Patio Sur 1 |
+| `{{3}}` | folio | F-1042 |
+| `{{4}}` | patio asignado | Patio Norte 2 |
+| `{{5}}` | última ubicación conocida | Carretera 85D km 40 |
+
+- **Botones:** «Ya lo atiendo» (respuesta rápida, payload `jefe_atiendo:<viaje_id>`); «Abrir tablero» (URL fija https://app.likida.ai/dashboard/despacho)
+
+### `aviso_supervisor_estadia_descarga_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor (ciclo con botones). N09 · Avisar al supervisor que la descarga lleva la estadía de la pregunta de 2 h sin iniciar o sin respuesta del chofer.
+- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Atención, supervisor: {{1}} lleva {{2}} en {{3}} con el viaje {{4}}. Estado de la descarga: {{5}}. Se reportó con: {{6}}. Revisa la situación con el cliente.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | chofer | Juan Pérez |
+| `{{2}}` | tiempo en el sitio | 2 horas 10 minutos |
+| `{{3}}` | sitio de descarga | Planta Escobedo |
+| `{{4}}` | folio | F-1042 |
+| `{{5}}` | estado de la descarga | el operador indica que no ha iniciado |
+| `{{6}}` | contacto con quien se reportó (o «sin dato») | Ana, andén 4 |
+
+- **Botones:** «Ya lo atiendo» (respuesta rápida, payload `jefe_atiendo:<viaje_id>`); «Abrir tablero» (URL fija https://app.likida.ai/dashboard/despacho)
+
+### `aviso_supervisor_caja_cargada_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor (ciclo con botones). N10 · Avisar al supervisor que no recibieron la carga o que la caja regresa cargada.
+- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Atención, supervisor: {{1}} reporta que en {{2}} no recibieron la carga del viaje {{3}}. Motivo indicado: {{4}}. La caja regresa cargada a {{5}}. Confirma el siguiente paso.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | chofer | Juan Pérez |
+| `{{2}}` | sitio de descarga | Planta Escobedo |
+| `{{3}}` | folio | F-1042 |
+| `{{4}}` | motivo indicado | sin cita de descarga |
+| `{{5}}` | patio de regreso | Patio Norte 2 |
+
+- **Botones:** «Ya lo atiendo» (respuesta rápida, payload `jefe_atiendo:<viaje_id>`); «Abrir tablero» (URL fija https://app.likida.ai/dashboard/despacho)
+
+### `conductor_pedir_evidencia_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor (ciclo con botones). N11 · Pedir al cierre los documentos que faltan según el catálogo de documentos del cliente, con la unidad detenida.
+- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, para cerrar el viaje {{2}} faltan estos documentos: {{3}}. Envíalos por aquí en fotos legibles y completas. Cuando termines, toca «Ya los envié».
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del chofer | Juan |
+| `{{2}}` | folio | F-1042 |
+| `{{3}}` | documentos que faltan (una línea) | carta porte firmada y sellada, pedimento |
+
+- **Botones:** «Ya los envié» (respuesta rápida, payload `evid_listo:<viaje_id>`); «Me falta uno» (respuesta rápida, payload `evid_falta:<viaje_id>`)
+
+### `conductor_llegada_detectada_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Agente 5 — Conductor (ciclo con botones). N12 · Cortesía por geocerca: confirmar la llegada detectada con la unidad ya detenida dentro del sitio (alternativa a insistir cada cierto tiempo).
+- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, detectamos que tu unidad llegó a {{2}} con el viaje {{3}}. Confirma si es correcto para registrar tu llegada.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del chofer | Juan |
+| `{{2}}` | sitio detectado | Planta Escobedo |
+| `{{3}}` | folio | F-1042 |
+
+- **Botones:** «Sí, es correcto» (respuesta rápida, payload `llegada_det_ok:<viaje_id>`); «No es correcto» (respuesta rápida, payload `llegada_det_no:<viaje_id>`)
 
 ### `operador_invitacion_v1`
 
