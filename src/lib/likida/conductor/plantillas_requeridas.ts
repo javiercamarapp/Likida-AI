@@ -34,11 +34,78 @@ export const PLANTILLAS_SENAL_VIDA = ['conductor_senal_vida_v1', 'aviso_jefe_sen
 /** Las que solo el ciclo completo usa además de las anteriores (contacto de andén y llegada sin confirmar). */
 const PLANTILLAS_SOLO_COMPLETO = ['conductor_contacto_anden_v1', 'conductor_llegada_sin_confirmar_v1'] as const;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LAS 12 PLANTILLAS DEL CICLO CON BOTONES (T-A5-59; N01–N12 de la reunión del 15-oct). Aquí vive lo que NO es texto de la
+// plantilla: su prioridad, qué perfil la exige y en qué estado está ante el proveedor (Meta). Nada de esto llama a Meta.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Lo que el proveedor (Meta) dice de la plantilla. Se actualiza a mano cuando Javier crea, Meta aprueba o rechaza. */
+export type EstadoProveedor = 'no_enviada' | 'pendiente' | 'aprobada' | 'rechazada';
+
+/** `piloto` = perfil del piloto (solo lo P0); `cinco_agentes` = perfil de los cinco agentes (P0 y P1). La P2 es opcional. */
+export type PerfilPlantillas = 'piloto' | 'cinco_agentes';
+
+export interface PlantillaCiclo { codigo: string; nombre: string; prioridad: 'P0' | 'P1' | 'P2' }
+
+export const PLANTILLAS_CICLO: readonly PlantillaCiclo[] = [
+  { codigo: 'N01', nombre: 'viaje_asignado_confirmar_v1', prioridad: 'P0' },
+  { codigo: 'N02', nombre: 'viaje_instrucciones_ruta_v1', prioridad: 'P0' },
+  { codigo: 'N03', nombre: 'viaje_gastos_etc_v1', prioridad: 'P1' },
+  { codigo: 'N04', nombre: 'conductor_foto_sello_v1', prioridad: 'P0' },
+  { codigo: 'N05', nombre: 'conductor_detencion_sin_aviso_v1', prioridad: 'P0' },
+  { codigo: 'N06', nombre: 'conductor_confirma_patio_v1', prioridad: 'P0' },
+  { codigo: 'N07', nombre: 'conductor_estadia_descarga_v1', prioridad: 'P1' },
+  { codigo: 'N08', nombre: 'aviso_supervisor_patio_distinto_v1', prioridad: 'P0' },
+  { codigo: 'N09', nombre: 'aviso_supervisor_estadia_descarga_v1', prioridad: 'P0' },
+  { codigo: 'N10', nombre: 'aviso_supervisor_caja_cargada_v1', prioridad: 'P1' },
+  { codigo: 'N11', nombre: 'conductor_pedir_evidencia_v1', prioridad: 'P1' },
+  { codigo: 'N12', nombre: 'conductor_llegada_detectada_v1', prioridad: 'P2' },
+];
+
 /**
- * Las plantillas del Conductor que Meta ya aprobó. HOY NINGUNA (docs/operacion/plantillas-meta.md: las 14 del Conductor están
- * «nueva para aprobación»). Javier agrega aquí el nombre cuando Meta la marca `APPROVED`; una prueba exige que sea del catálogo.
+ * Estado ante Meta de cada una de las 12, según lo asentado por Javier el 15-oct (RESPUESTAS-javier.md: 7 enviadas a revisión,
+ * aprobadas ese mismo día). Las otras 5 esperan respuestas del cliente (gastos/ETC, estadía, caja cargada, evidencia, llegada
+ * detectada). NO se consulta a Meta desde aquí: `scripts/verificar-plantillas-meta.ts --consultar` lo contrasta. Si una se
+ * rechaza o su texto cambia, se corrige el catálogo con nombre nuevo (`siguienteVersion`) y se marca aquí la nueva.
  */
-export const APROBADAS: readonly string[] = [];
+export const ESTADO_PROVEEDOR_CICLO: Readonly<Record<string, EstadoProveedor>> = {
+  viaje_asignado_confirmar_v1: 'aprobada',
+  viaje_instrucciones_ruta_v1: 'aprobada',
+  viaje_gastos_etc_v1: 'no_enviada',
+  conductor_foto_sello_v1: 'aprobada',
+  conductor_detencion_sin_aviso_v1: 'aprobada',
+  conductor_confirma_patio_v1: 'aprobada',
+  conductor_estadia_descarga_v1: 'no_enviada',
+  aviso_supervisor_patio_distinto_v1: 'aprobada',
+  aviso_supervisor_estadia_descarga_v1: 'aprobada',
+  aviso_supervisor_caja_cargada_v1: 'no_enviada',
+  conductor_pedir_evidencia_v1: 'no_enviada',
+  conductor_llegada_detectada_v1: 'no_enviada',
+};
+
+/** Las del ciclo que exige un perfil: piloto = P0; cinco_agentes = P0 y P1; la P2 no la exige ninguno. */
+export function plantillasDelCicloPorPerfil(perfil: PerfilPlantillas): string[] {
+  const admite = perfil === 'piloto' ? ['P0'] : ['P0', 'P1'];
+  return PLANTILLAS_CICLO.filter((p) => admite.includes(p.prioridad)).map((p) => p.nombre);
+}
+
+/** Las del perfil que NO están aprobadas (vacío = el perfil puede encenderse en lo que a plantillas toca). */
+export function faltantesPorAprobar(perfil: PerfilPlantillas, estados: Readonly<Record<string, EstadoProveedor>> = ESTADO_PROVEEDOR_CICLO): string[] {
+  return plantillasDelCicloPorPerfil(perfil).filter((n) => estados[n] !== 'aprobada');
+}
+
+/** Regla de versionado: una plantilla aprobada no se edita; un cambio o un rechazo se reenvía con el sufijo siguiente (`_v2`). */
+export function siguienteVersion(nombre: string): string {
+  const m = /^(.*)_v(\d+)$/.exec(nombre);
+  return m ? `${m[1]}_v${Number(m[2]) + 1}` : `${nombre}_v2`;
+}
+
+/**
+ * Las plantillas que Meta ya aprobó: las 7 del ciclo asentadas por Javier el 15-oct (se derivan de `ESTADO_PROVEEDOR_CICLO`;
+ * una prueba exige que sean del catálogo). Las demás del Conductor siguen «nueva para aprobación» en
+ * docs/operacion/plantillas-meta.md. Javier marca aquí la aprobación cuando Meta la da.
+ */
+export const APROBADAS: readonly string[] = PLANTILLAS_CICLO.filter((p) => ESTADO_PROVEEDOR_CICLO[p.nombre] === 'aprobada').map((p) => p.nombre);
 
 export type EntradaPlantillas = Pick<ConfigConductor, 'perfilSeguimiento' | 'avisarSenalVida' | 'solicitudesMin'>;
 
@@ -89,6 +156,11 @@ export function listaCopiableParaMeta(requeridas: readonly string[]): string {
 
 /** Para la columna «Perfil» del documento de plantillas: en qué perfil se necesita cada plantilla del Conductor. */
 export function perfilDePlantilla(nombre: string): string {
+  const delCiclo = PLANTILLAS_CICLO.find((p) => p.nombre === nombre);
+  if (delCiclo) {
+    if (delCiclo.prioridad === 'P2') return 'Ciclo del chofer: opcional (ningún perfil la exige)';
+    return delCiclo.prioridad === 'P0' ? 'Ciclo del chofer: piloto y cinco_agentes' : 'Ciclo del chofer: solo cinco_agentes';
+  }
   const base: EntradaPlantillas = { perfilSeguimiento: 'esenciales', avisarSenalVida: false, solicitudesMin: [0, 1, 2, 3] };
   if ((PLANTILLAS_SENAL_VIDA as readonly string[]).includes(nombre)) return 'Ambos, si la señal de vida está encendida';
   if (plantillasRequeridas(base).includes(nombre)) return 'Esenciales y completo';
