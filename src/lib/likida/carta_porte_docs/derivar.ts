@@ -150,11 +150,12 @@ export function completarDerivados(e: Extraccion, ctx: ContextoDerivar = {}): Ex
 // con catálogos y lo marca «inferido». Nada de aquí inventa un valor.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type FormatoLector = 'C' | 'D' | 'E';
+export type FormatoLector = 'C' | 'D' | 'E' | 'F1' | 'F2' | 'F3';
 
 export type CodigoIncidenciaLector =
   | 'columna_cortada' | 'clave_truncada' | 'renglon_no_leido' | 'pedimento_incompleto'
-  | 'peso_en_libras' | 'peso_unidad_supuesta' | 'total_miles_por_cuadre' | 'total_no_cuadra' | 'sin_vision';
+  | 'peso_en_libras' | 'peso_unidad_supuesta' | 'total_miles_por_cuadre' | 'total_no_cuadra' | 'sin_vision'
+  | 'captura_incompleta' | 'baja_resolucion';
 
 /** Algo que quien revisa debe ver: va al visor junto al campo, no se pierde en un log. */
 export interface IncidenciaLector {
@@ -176,6 +177,8 @@ export interface ResultadoLector {
   vacios: string[];
   /** Datos leídos que el complemento no tiene como campo (p. ej. el sello de la caja). */
   adicionales: Record<string, string>;
+  /** T-A3-61: correos y capturas — el texto termina en un rótulo sin valor (la captura llegó cortada). La validación lo vuelve bloqueo. */
+  capturaIncompleta?: { ultimoRotulo: string } | null;
 }
 
 export interface OpcionesCampoLeido {

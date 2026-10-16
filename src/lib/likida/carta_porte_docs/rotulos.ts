@@ -14,7 +14,7 @@
 // para CP:», F3 bloque de rótulos) de T-A3-61 se apoyan en este mapa y en esta detección de corte.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { campoDoc, campoMercancia, extraccionVacia, type CampoValor, type Extraccion } from './campos';
+import { campoDoc, campoMercancia, extraccionVacia, type CampoValor, type Extraccion, type Origen } from './campos';
 import { llaveTexto } from './catalogos';
 import { normalizarValor } from './normalizar';
 
@@ -43,6 +43,8 @@ export interface RotuloDef {
   enganoso?: string;
   /** Qué peso es (para que `derivar` use el neto como bruto con su nota). */
   pesoTipo?: TipoPesoRotulo;
+  /** Rótulo sin campo en el complemento (p. ej. «Documento: 1 Pedimento»): el valor se conserva en `adicionales` con esta clave. */
+  adicional?: string;
 }
 
 const merc = (clave: string | null, extra: Partial<RotuloDef> = {}): RotuloDef => ({ clave, mercancia: true, ...extra });
@@ -57,6 +59,10 @@ export const MAPA_ROTULOS: Readonly<Record<string, RotuloDef>> = {
   'descripcion de la mercancia': merc('descripcion'),
   'mercancia': merc('descripcion'),
   'bienes transportados': merc('descripcion'),
+  'descripcion bienes transportados': merc('descripcion'),
+  'descripcion del bien transportado': merc('descripcion'),
+  'descripcion de los bienes transportados': merc('descripcion'),
+  'bien transportado': merc('descripcion'),
   'clave de producto': merc('bienes_transp'),
   'clave producto': merc('bienes_transp'),
   'clave de producto sat': merc('bienes_transp'),
@@ -79,8 +85,14 @@ export const MAPA_ROTULOS: Readonly<Record<string, RotuloDef>> = {
   'clave embalaje': merc('embalaje'),
   'clave de embalaje': merc('embalaje'),
   'descripcion embalaje': merc('embalaje_descripcion'),
+  'descripcion del embalaje': merc('embalaje_descripcion'),
+  // «CLABE» por «CLAVE»: el cliente lo escribe mal y es la clave de embalaje.
+  'embalaje clabe sat': merc('embalaje'),
+  'embalaje clave sat': merc('embalaje'),
   // Pesos
   'peso bruto': merc('peso_kg', { pesoTipo: 'bruto' }),
+  'peso total bruto': merc('peso_kg', { pesoTipo: 'bruto' }),
+  'peso bruto total': merc('peso_kg', { pesoTipo: 'bruto' }),
   'peso en kilos': merc('peso_kg'),
   'peso kg': merc('peso_kg'),
   'peso kilos': merc('peso_kg'),
@@ -89,6 +101,8 @@ export const MAPA_ROTULOS: Readonly<Record<string, RotuloDef>> = {
   // ENGAÑOSO: «por embalaje» suena a peso de un bulto y es el neto total.
   'peso por embalaje': merc('peso_kg', { pesoTipo: 'por embalaje', enganoso: 'es el peso NETO total, no el bruto ni el de un bulto' }),
   'unidad de peso': merc('peso_unidad'),
+  'clave unidad de peso': merc('peso_unidad'),
+  'clave de unidad de peso': merc('peso_unidad'),
   'volumen': merc('volumen'),
   // Valor
   'valor': merc('valor_mercancia'),
@@ -100,8 +114,8 @@ export const MAPA_ROTULOS: Readonly<Record<string, RotuloDef>> = {
   'regimen': merc('regimen_aduanero'),
   'regimen aduanero': merc('regimen_aduanero'),
   'tipo de materia': merc('tipo_materia'),
-  'tipo de documento': merc(null),
-  'documento': merc(null),
+  'tipo de documento': merc(null, { adicional: 'tipo_documento' }),
+  'documento': merc(null, { adicional: 'tipo_documento' }),
   'rfc importador': merc('rfc_importador'),
   'rfc del importador': merc('rfc_importador'),
   'material peligroso': merc('material_peligroso'),
@@ -145,6 +159,10 @@ export interface LecturaRotulos {
   /** El texto termina en un rótulo sin valor: la captura llegó cortada. */
   capturaIncompleta: { ultimoRotulo: string } | null;
   bajaResolucion: boolean;
+  /** Datos leídos sin campo en el complemento (tipo de documento, peso neto que no se usó…). */
+  adicionales: Record<string, string>;
+  /** El valor de la fila de título de una tabla vertical («DATOS DE LA MERCANCÍA | 20205»), si la hay. */
+  tituloTabla: string | null;
   /**
    * Trae la firma de uno de los formatos de correo conocidos: la tabla «DATOS DE LA MERCANCÍA», el encabezado «Datos para CP:»,
    * el bloque «BIENES TRANSPORTADOS…» o un rótulo engañoso. Sin firma, unas líneas «Cantidad: 10» sueltas no son un bloque.
@@ -156,6 +174,14 @@ export interface LecturaRotulos {
 const NO_VACIAS = (f: string[]): number => f.filter((c) => c.trim() !== '').length;
 const FILA_TOTAL = /^\s*(total(es)?|subtotal|suma|gran total)\b/i;
 const ES_TITULO_TABLA = (l: string): boolean => /\bdatos de la mercancia\b/.test(llaveRotulo(l)) && !/:\s*\S/.test(l);
+
+/** ¿La línea es, ella misma, un rótulo reconocido («Rótulo: v», «Rótulo | v» o el rótulo solo)? Distingue el valor de la línea siguiente. */
+export function rotuloDeLinea(l: string): RotuloDef | null {
+  const t = l.trim();
+  if (/[|\t]/.test(t)) { const c = celdasDe(t).filter((x) => x !== ''); if (c.length >= 2 && rotuloDe(c[0])) return rotuloDe(c[0]); }
+  const m = /^[\s|*•-]*([^:]{2,60}?)\s*:/.exec(t);
+  return rotuloDe(m ? m[1] : t);
+}
 
 function celdasDe(linea: string): string[] {
   const l = linea.trim();
@@ -170,7 +196,7 @@ const PARENTESIS_CANTIDAD = /^\(\s*(\d[\d.,]*)\s*\)\s*(.+)$/;
 interface Fila { [clave: string]: CampoValor }
 
 /** Convierte un valor leído bajo UN rótulo en campos (puede dar varios: «(20) CAJA» → cantidad + unidad). */
-function aplicarPar(par: Par, valor: string, fila: Fila, docCampos: Record<string, CampoValor>, conf: number, avisos: string[], evidencia: string): void {
+function aplicarPar(par: Par, valor: string, fila: Fila, docCampos: Record<string, CampoValor>, conf: number, avisos: string[], evidencia: string, origen: Origen = 'llm', adicionales: Record<string, string> = {}): void {
   const def = par.def as RotuloDef;
   const clave = def.clave as string;
   const poner = (destino: Fila | Record<string, CampoValor>, k: string, v: string, c: number, notas: string[] = []): boolean => {
@@ -179,9 +205,10 @@ function aplicarPar(par: Par, valor: string, fila: Fila, docCampos: Record<strin
     const n = normalizarValor(d, v);
     if (n.valor === null) return false;
     const todas = [...notas, ...n.notas];
-    destino[k] = { valor: n.valor, confianza: Math.max(0, Math.round((c - n.penalizacion) * 1000) / 1000), evidencia: evidencia.slice(0, 200), origen: 'llm', ...(todas.length ? { notas: todas } : {}) };
+    destino[k] = { valor: n.valor, confianza: Math.max(0, Math.round((c - n.penalizacion) * 1000) / 1000), evidencia: evidencia.slice(0, 200), origen, ...(todas.length ? { notas: todas } : {}) };
     return true;
   };
+  if (def.adicional) { adicionales[def.adicional] = valor; return; }
   const destino = def.mercancia ? fila : docCampos;
   const notaEnganoso = def.enganoso ? [`El rótulo «${par.rotulo}» engaña: ${def.enganoso}.`] : [];
   const conf2 = def.enganoso ? Math.min(conf, CONF_ROTULO_ENGANOSO) : conf;
@@ -190,7 +217,7 @@ function aplicarPar(par: Par, valor: string, fila: Fila, docCampos: Record<strin
     const p = PARENTESIS_CANTIDAD.exec(valor);
     if (p) {
       // «(20) CAJA»: 20 es la cantidad y CAJA el texto de la unidad (no una clave del SAT).
-      if (!fila.cantidad || fila.cantidad.origen !== 'llm') poner(fila, 'cantidad', p[1], Math.min(conf2, 0.9), [`«${valor}»: el número entre paréntesis es la cantidad.`]);
+      if (!fila.cantidad) poner(fila, 'cantidad', p[1], Math.min(conf2, 0.9), [`«${valor}»: el número entre paréntesis es la cantidad.`]);
       poner(fila, clave === 'embalaje' ? 'embalaje_descripcion' : 'unidad_texto', p[2], conf2);
       avisos.push(`«${valor}» (rótulo «${par.rotulo}») se leyó como cantidad ${p[1]} de «${p[2]}», no como una clave.`);
       return;
@@ -198,12 +225,41 @@ function aplicarPar(par: Par, valor: string, fila: Fila, docCampos: Record<strin
     if (clave === 'clave_unidad' && !/^[A-Za-z0-9]{2,3}$/.test(valor.trim())) { poner(fila, 'unidad_texto', valor, conf2); return; }
     if (clave === 'embalaje' && !/^[A-Za-z0-9]{1,3}$/.test(valor.trim())) { poner(fila, 'embalaje_descripcion', valor, conf2); return; }
   }
+  if (def.mercancia && (clave === 'cantidad' || clave === 'peso_kg')) {
+    // «1175 CAJAS DE RASTRILLO», «11385.75KILOS DE RASTRILLO»: la cifra y, pegado, el texto de su unidad.
+    const m = /^(\d[\d.,]*)\s*([A-Za-zÁ-ú][^\d]*)$/.exec(valor.trim());
+    if (m) {
+      if (clave === 'peso_kg') {
+        const unidad = m[2].trim().split(/\s+/)[0];
+        if (/^(kg|kgs|kgm|kilos?|kilogramos?|ton|tons|tne|toneladas?|lbs?|lbr|libras?|g|gramos?)$/i.test(unidad)) { poner(fila, 'peso_unidad', unidad, conf2); valor = m[1]; }
+      } else {
+        if (!fila.unidad_texto) poner(fila, 'unidad_texto', m[2].trim(), conf2);
+        valor = m[1];
+      }
+    }
+  }
   if (def.mercancia && par.def?.clave === 'descripcion') {
+    // «RASTRILLOS 27112003»: la descripción y, al final, la clave de producto de 8 dígitos.
+    const f = /^(.*\S)\s+(\d{8})$/.exec(valor);
+    if (f && !/^\d{8}\b/.test(valor)) { poner(fila, 'bienes_transp', f[2], conf2); poner(fila, 'descripcion', f[1], conf2); return; }
     // «BIENES TRANSPORTADOS»: a veces antepone la clave de 8 dígitos a la descripción.
     const m = /^(\d{8})\s*[-–:]?\s*(.+)$/.exec(valor);
     if (m) { poner(fila, 'bienes_transp', m[1], conf2); poner(fila, 'descripcion', m[2], conf2); return; }
   }
+  if (clave === 'tipo_materia') {
+    // «3 producto terminado»: la clave es el número; el texto es su descripción.
+    const t = /^(\d{1,2})\s+\S/.exec(valor.trim());
+    if (t) { poner(fila, 'tipo_materia', t[1], conf2, [`«${valor.trim()}»: la clave de tipo de materia es ${t[1]}.`]); return; }
+  }
   if (clave === 'peso_kg' && def.pesoTipo) {
+    // Un renglón puede traer el peso bruto Y el «peso por embalaje» (el neto): el complemento pide el bruto; el otro se conserva aparte.
+    const previo = fila.peso_tipo?.valor;
+    if (previo === 'bruto' && def.pesoTipo !== 'bruto') {
+      adicionales.peso_neto = valor;
+      avisos.push(`El documento trae también «${par.rotulo}» (${valor}): es el peso neto y no se usó; el peso es el bruto.`);
+      return;
+    }
+    if (previo && previo !== 'bruto' && def.pesoTipo === 'bruto' && fila.peso_kg?.valor) adicionales.peso_neto = fila.peso_kg.valor;
     poner(fila, 'peso_kg', valor, conf2, notaEnganoso);
     poner(fila, 'peso_tipo', def.pesoTipo, conf2);
     return;
@@ -216,22 +272,45 @@ function aplicarPar(par: Par, valor: string, fila: Fila, docCampos: Record<strin
  * carga (el llamador sigue su camino de siempre). Nunca inventa: un rótulo sin valor es un campo vacío, y si es el ÚLTIMO
  * renglón del texto, la captura se declara incompleta.
  */
-export function leerRotulosCorreo(texto: string | null | undefined, opciones: { resolucion?: Resolucion | null } = {}): LecturaRotulos | null {
-  if (!texto || texto.trim() === '') return null;
+/** La barra de asunto de una captura trae el asunto y, pegado, el botón de resumen: «ASUNTO   Resumir este correo electrónico». */
+const ASUNTO_ANTES_DEL_BOTON = /^(.*?\S)\s*(?:✨\s*)?resumir este correo(?: electr[oó]nico)?\s*$/i;
+
+export interface InterfazSeparada { asunto: string | null; chrome: string[]; lineas: string[] }
+
+/** Separa lo que es de la interfaz del correo (asunto, botones, cabeceras) de las líneas del cuerpo. */
+export function separarInterfaz(texto: string): InterfazSeparada {
   const lineasCrudas = texto.replace(/\r/g, '').split('\n');
   const chrome: string[] = [];
   let asunto: string | null = null;
   const lineas: string[] = [];
+  let previaNoVacia: string | null = null;
   for (const l of lineasCrudas) {
     const t = l.trim();
     if (t === '') { lineas.push(''); continue; }
     const a = LINEA_ASUNTO.exec(t);
-    if (a && asunto === null) { asunto = a[1].trim(); chrome.push(t); continue; }
-    if (CHROME_LINEA.test(t) || CABECERA_CORREO.test(t) || /^[\s|_\-=.·•*]+$/.test(t)) { chrome.push(t); continue; }
-    lineas.push(l);
+    if (a && asunto === null) { asunto = a[1].trim(); chrome.push(t); previaNoVacia = null; continue; }
+    const b = ASUNTO_ANTES_DEL_BOTON.exec(t);
+    if (b && asunto === null) { asunto = b[1].replace(/^\[external\]\s*/i, '').trim(); chrome.push(t); previaNoVacia = null; continue; }
+    if (CHROME_LINEA.test(t) || CABECERA_CORREO.test(t) || /^[\s|_\-=.·•*]+$/.test(t)) {
+      // El botón solo en su línea: el asunto es la línea anterior (la barra de la captura), si aún no hay uno.
+      if (asunto === null && /^[\W_]*resumir este correo/i.test(t) && previaNoVacia !== null && lineas.length > 0 && lineas[lineas.length - 1] === previaNoVacia) {
+        asunto = previaNoVacia.trim().replace(/^\[external\]\s*/i, ''); lineas.pop();
+      }
+      chrome.push(t); previaNoVacia = null; continue;
+    }
+    lineas.push(l); previaNoVacia = l;
   }
   // Líneas del cuerpo, sin las vacías al final.
   while (lineas.length > 0 && lineas[lineas.length - 1].trim() === '') lineas.pop();
+  return { asunto, chrome, lineas };
+}
+
+export function leerRotulosCorreo(texto: string | null | undefined, opciones: { resolucion?: Resolucion | null; origen?: Origen } = {}): LecturaRotulos | null {
+  if (!texto || texto.trim() === '') return null;
+  const { asunto, chrome, lineas } = separarInterfaz(texto);
+  const origen: Origen = opciones.origen ?? 'llm';
+  const adicionales: Record<string, string> = {};
+  let tituloTabla: string | null = null;
 
   const avisos: string[] = [];
   const docCampos: Record<string, CampoValor> = {};
@@ -267,7 +346,7 @@ export function leerRotulosCorreo(texto: string | null | undefined, opciones: { 
             const def = defs[k];
             const v = (c[k] ?? '').trim();
             if (!def?.clave || v === '') return;
-            aplicarPar({ rotulo: rot, valor: v, def }, v, fila, docCampos, conf, avisos, `${rot}: ${v}`);
+            aplicarPar({ rotulo: rot, valor: v, def }, v, fila, docCampos, conf, avisos, `${rot}: ${v}`, origen, adicionales);
             reconocidos++;
           });
           // La última fila con menos celdas que la cabecera: la captura se cortó dentro de la tabla.
@@ -284,18 +363,29 @@ export function leerRotulosCorreo(texto: string | null | undefined, opciones: { 
       }
     }
 
-    // Bloque de rótulos: «Rótulo: valor», «Rótulo:» (sin valor) o el rótulo solo en su línea.
-    const m = /^[\s|*•-]*([^:]{2,60}?)\s*:\s*(.*)$/.exec(l);
-    const rotulo = (m ? m[1] : l).trim();
-    const valor = m ? m[2].trim() : '';
+    // Bloque de rótulos: «Rótulo: valor», «Rótulo | valor» (fila de una tabla vertical), «Rótulo:» sin valor o el rótulo solo en su línea
+    // con su valor en la línea de abajo.
+    const celdas = /[|\t]/.test(l) ? celdasDe(l).filter((c) => c !== '') : [];
+    if (celdas.length >= 1 && ES_TITULO_TABLA(celdas[0])) { firma = true; tituloTabla = celdas[1] ?? null; ultimo = null; continue; }
+    let rotulo: string; let valor: string;
+    if (celdas.length >= 2 && rotuloDe(celdas[0])) { rotulo = celdas[0]; valor = celdas.slice(1).join(' ').trim(); }
+    else {
+      const m = /^[\s|*•-]*([^:]{2,60}?)\s*:\s*(.*)$/.exec(l);
+      rotulo = (m ? m[1] : l).trim();
+      valor = m ? m[2].trim() : '';
+    }
     const def = rotuloDe(rotulo);
     if (llaveRotulo(rotulo) === 'datos para cp') firma = true;
     if (!def) { ultimo = null; continue; }
     if (def.enganoso || llaveRotulo(rotulo) === 'bienes transportados') firma = true; // «Datos para CP:», saludos, firma: no son rótulos de carga.
+    if (valor === '') {
+      const sig = lineas[i + 1];
+      if (sig !== undefined && sig.trim() !== '' && !rotuloDeLinea(sig) && !ES_TITULO_TABLA(sig)) { valor = sig.trim(); i++; }
+    }
     ultimo = { rotulo, vacio: valor === '', def };
-    if (valor === '' || !def.clave) continue;
-    aplicarPar({ rotulo, valor, def }, valor, bloque, docCampos, conf, avisos, `${rotulo}: ${valor}`);
-    reconocidos++;
+    if (valor === '' || (!def.clave && !def.adicional)) continue;
+    aplicarPar({ rotulo, valor, def }, valor, bloque, docCampos, conf, avisos, `${rotulo}: ${valor}`, origen, adicionales);
+    if (!def.adicional) reconocidos++;
   }
 
   if (reconocidos === 0 && !ultimo) return null;
@@ -326,7 +416,7 @@ export function leerRotulosCorreo(texto: string | null | undefined, opciones: { 
   const extraccion = extraccionVacia();
   extraccion.campos = docCampos;
   extraccion.mercancias = mercancias;
-  return { extraccion, reconocidos, chrome, asunto, capturaIncompleta, bajaResolucion: bajaRes, firma, avisos };
+  return { extraccion, reconocidos, chrome, asunto, capturaIncompleta, bajaResolucion: bajaRes, adicionales, tituloTabla, firma, avisos };
 }
 
 /**
