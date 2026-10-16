@@ -9,6 +9,8 @@
 // ORDEN DE PREFERENCIA (de lo más barato y seguro a lo más caro):
 //
 //   1. XML con complemento Carta Porte  → se lee por código, sin modelo.
+//   1b. Lector de formato C, D o E (T-A3-60): si quien llama ya sabe el formato (registro_formatos.ts), el lector
+//       de ese formato produce la extracción común. D y E no usan modelo; C (escaneada) usa el puerto de visión.
 //   2. Perfil del cliente-formato        → el mapeo aprendido se reaplica, sin modelo.
 //   3. Modelo, nivel 1 (Gemini 3.5 Flash-Lite).
 //   4. Escalamiento por confianza: nivel 2 (Gemini 3.8 Flash) y nivel 3 (Sonnet 5.5)
@@ -32,9 +34,12 @@ import {
 } from './campos';
 import { llaveTexto } from './catalogos';
 import { MAX_TEXTO_MODELO, type ContenidoDoc, type FormatoDoc } from './contenido';
-import { completarDerivados, type ContextoDerivar } from './derivar';
+import { completarDerivados, type ContextoDerivar, type FormatoLector, type ResultadoLector } from './derivar';
 import { detectarInyeccion } from './inyeccion';
 import { limpiarTexto, normalizarNumero, normalizarValor, type OrdenFecha } from './normalizar';
+import { leerBol } from './lectores/bol';
+import { leerOrdenAgente } from './lectores/orden_agente';
+import { leerRemisionEscaneada, type VisionRemision } from './lectores/remision';
 import { aplicarPerfil, elegirPerfil, type EjemploPerfil, type Perfil } from './perfiles';
 import { extraerCartaPorteXml } from './xml_ccp';
 
@@ -298,6 +303,10 @@ export interface ContextoExtraccion {
   /** T-A3-46: nombre del archivo y año/aduana del perfil, para derivar el régimen y completar el pedimento. */
   nombreArchivo?: string | null;
   pedimentoPerfil?: ContextoDerivar['pedimentoPerfil'];
+  /** T-A3-60: el formato de entrada ya reconocido (C remisión escaneada, D BOL en inglés, E orden del agente aduanal). */
+  formatoEntrada?: FormatoLector;
+  /** T-A3-60: el modelo de visión para el formato C. Sin él, una remisión escaneada no se lee. */
+  vision?: VisionRemision | null;
 }
 
 export interface ResultadoExtraccion {
@@ -318,6 +327,8 @@ export interface ResultadoExtraccion {
   escalamientos: Array<{ de: NivelModelo; a: NivelModelo; motivo: string }>;
   /** Notas del modelo (p. ej. «el documento trae varios embarques»). */
   notasModelo: string[];
+  /** T-A3-60: lo que dejó el lector de formato (incidencias, lo que queda vacío para T-A3-62, datos sin campo como el sello). */
+  lector?: Pick<ResultadoLector, 'formato' | 'incidencias' | 'vacios' | 'adicionales'>;
 }
 
 const marcadorAleatorio = (): string => randomBytes(10).toString('hex');
@@ -346,6 +357,21 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   if (c.xml && c.formato !== 'json') {
     const ccp = extraerCartaPorteXml(c.xml);
     if (ccp) { r.extraccion = completarDerivados(ccp, derivar); r.origen = 'xml'; return r; }
+  }
+
+  // 1b. Lector de formato C, D o E: lee lo que el documento escribe y deja vacío lo que no trae. Si no pudo leer ningún renglón,
+  // sigue el flujo de siempre (y nada se envía al TMS sin que una persona lo confirme).
+  if (ctx.formatoEntrada) {
+    const lec = ctx.formatoEntrada === 'C'
+      ? await leerRemisionEscaneada(c, ctx.vision, { signal: ctx.signal })
+      : ctx.formatoEntrada === 'D' ? leerBol(c) : leerOrdenAgente(c);
+    r.avisos.push(...lec.avisos.filter((a) => !r.avisos.includes(a)));
+    if (lec.leido) {
+      r.extraccion = completarDerivados(lec.extraccion, derivar);
+      r.origen = ctx.formatoEntrada === 'C' ? 'llm' : 'perfil';
+      r.lector = { formato: lec.formato, incidencias: lec.incidencias, vacios: lec.vacios, adicionales: lec.adicionales };
+      return r;
+    }
   }
 
   // 2. Perfil.
