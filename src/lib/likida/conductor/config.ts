@@ -129,6 +129,12 @@ export interface ConfigConductor {
    * avisan al supervisor y marcan el regreso con la bandera `caja_cargada`. Apagado por omisión (hasta la fase 2); aún sin columna propia.
    */
   resultadoDescargaActivo?: boolean;
+  /**
+   * T-A5-47 (R02/R03/R05): la asignación del viaje sale con la plantilla N01 y botones «Acepto el viaje» / «No puedo tomarlo» (en lugar de
+   * `viaje_asignado` sin botones), y al aceptar el chofer recibe sus instrucciones completas. Apagado por omisión (hasta la fase 2); aún sin
+   * columna propia: se fija al armar la configuración, como `patioEntregaActivo`.
+   */
+  asignacionBotonesActiva?: boolean;
   /** 0801: aplicar la salida que reporta el TMS como hito del viaje. */
   aplicarSalidaDelTms: boolean;
   /** 0801: llamadas de seguimiento por viaje medidas antes del agente (null = sin registrar) y la fecha (AAAA-MM-DD) en que se midió. */
@@ -193,6 +199,7 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   estadiaDescargaSinRespuestaMin: 30,
   reporteLlegadaActivo: false,
   resultadoDescargaActivo: false,
+  asignacionBotonesActiva: false,
   lineaBaseLlamadasPorViaje: null,
   lineaBaseRegistradaEn: null,
 });
@@ -386,6 +393,7 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       estadiaDescargaSinRespuestaMin,
       reporteLlegadaActivo: b.reporteLlegadaActivo === true,
       resultadoDescargaActivo: b.resultadoDescargaActivo === true,
+      asignacionBotonesActiva: b.asignacionBotonesActiva === true,
       lineaBaseLlamadasPorViaje,
       lineaBaseRegistradaEn,
     },

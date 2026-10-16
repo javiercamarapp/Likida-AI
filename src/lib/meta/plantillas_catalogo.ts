@@ -100,6 +100,29 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
     botones: [], textoVerificado: false, estado: 'en_uso',
   },
   {
+    nombre: 'viaje_asignado_confirmar_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'chofer_asignacion',
+    proposito: 'N01 · Avisar al chofer que le asignaron un viaje y pedirle que lo acepte o no con un botón (sustituye a `viaje_asignado` solo en el perfil piloto).',
+    llamador: 'src/lib/likida/notificar.ts',
+    cuerpo: 'Hola {{1}}, tienes un viaje asignado: {{2}}, servicio de {{3}}, de {{4}} a {{5}}, con cita el {{6}}. Confirma por aquí si lo aceptas.',
+    ejemplos: ['Juan', 'F-1042', 'importación', 'Nuevo Laredo', 'Monterrey', '16/10 a las 08:00'],
+    variables: ['nombre del chofer', 'folio', 'tipo de servicio', 'origen', 'destino', 'cita'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Acepto el viaje', payloadPrefijo: 'viaje_acepto' },
+      { tipo: 'QUICK_REPLY', texto: 'No puedo tomarlo', payloadPrefijo: 'viaje_rechazo' },
+    ],
+    textoVerificado: true, estado: 'en_uso',
+  },
+  {
+    nombre: 'viaje_instrucciones_ruta_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'chofer_asignacion',
+    proposito: 'N02 · Instrucciones completas del viaje (caja, cita, patio de entrega y rutas) cuando el chofer acepta y su ventana de 24 h ya cerró.',
+    llamador: 'src/lib/likida/conductor/asignacion.ts',
+    cuerpo: 'Instrucciones del viaje {{1}} para {{2}}: caja {{3}}, cita en {{4}} a las {{5}}, entrega en el patio {{6}}.\nRuta al punto de carga: {{7}}\nRuta al patio de entrega: {{8}}\nSi tienes dudas, responde por aquí.',
+    ejemplos: ['F-1042', 'Juan', 'CJ-5521', 'Planta Zapopan', '08:00', 'Patio Norte 2', 'https://maps.app.goo.gl/abc123', 'https://maps.app.goo.gl/def456'],
+    variables: ['folio', 'nombre del chofer', 'caja', 'lugar de la cita', 'hora de la cita', 'patio de entrega', 'ruta al punto de carga (o «consulta con tu supervisor»)', 'ruta al patio de entrega (o «consulta con tu supervisor»)'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Entendido', payloadPrefijo: 'instr_ok' }],
+    textoVerificado: true, estado: 'en_uso',
+  },
+  {
     nombre: 'recordatorio_cierre', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'chofer_cobranza',
     proposito: 'Recordar al chofer que cierre su viaje (cobranza de comprobantes y recordatorio de aceptación) cuando su ventana de 24 h está cerrada.',
     llamador: 'src/lib/likida/agentes/cobranza.ts, src/lib/likida/escalar_viaje.ts',
@@ -492,6 +515,8 @@ export function parametrosReglaAviso(casos: number, frase: string, liga: string)
 
 export const PLANTILLA = {
   viajeAsignado: 'viaje_asignado',
+  viajeAsignadoConfirmar: 'viaje_asignado_confirmar_v1',
+  viajeInstruccionesRuta: 'viaje_instrucciones_ruta_v1',
   recordatorioCierre: 'recordatorio_cierre',
   cobranzaGastos: 'cobranza_gastos_v1',
   avisoOperacion: 'aviso_operacion_v1',

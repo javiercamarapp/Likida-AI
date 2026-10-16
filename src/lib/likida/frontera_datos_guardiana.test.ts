@@ -370,7 +370,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 305;
 // `reporte_llegada_repo.test.ts`. La tercera ya estaba en la rama del frente antes de esta tarea). Sin migración. Funcionalidad nueva, no código migrado.
 // LOOP CINCO AGENTES, T-A5-46 (resultado de la descarga y caja cargada): 2,105 → 2,106 (0 archivos, +1 llamada medida con el barrido completo, en `conductor/repo.ts`:
 // `leerEventosResultadoDescarga` lee la bitácora `viaje_hito_evento` de esos viajes, por `acotada`, anclada a `tenant_id`; la prueba `resultado_descarga_repo.test.ts` cubre su uso). Sin migración. Funcionalidad nueva.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_106;
+// LOOP CINCO AGENTES, T-A5-47 (asignación con botones): 2,106 → 2,108 (0 archivos, +2 llamadas medidas con el barrido completo, ambas en `conductor/repo.ts`:
+// `aceptarPorBoton` escribe `aceptado_en`/`aceptado_origen` en un solo UPDATE condicionado (sin aceptar, ya avisado, mismo operador y flota) y relee la fila para decir por qué no cambió; por
+// `acotada`, ancladas a `tenant_id`; la prueba `confirmar_viaje_boton.test.ts` cubre sus filtros). `leerCajaDelViaje` no suma (reusa el lector del Vigía). Sin migración. Funcionalidad nueva.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_108;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
