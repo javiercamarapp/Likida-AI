@@ -10,6 +10,7 @@ import { evaluarSalidaTms, textoSalidaTms } from './salida_tms';
 import { anclaDe, textoTiempo } from './planificador';
 import type { AccionOficinaFila, DatosTablero, IndicadoresCrudos, ViajeTablero, VeredictoFila } from './repo_validacion';
 import type { EpisodioTablero } from './repo';
+import type { ReubicacionesCliente } from './reubicaciones';
 import { ETIQUETA, estaResuelto, TIPOS_HITO, type HitoFila, type TipoHito } from './tipos';
 import { llegadaPorConfirmar, llegadaSinSitio, textoVeredicto, type ResultadoValidacion, type Veredicto } from './validacion';
 
@@ -189,6 +190,11 @@ export interface Tablero {
   hayMas: boolean;
   /** T-A5-26: `true` solo si se LEYERON las posiciones y no hay ninguna reciente para los viajes listados. Si no se leyeron, `false` (no se afirma). */
   sinGps: boolean;
+  /**
+   * T-A5-63: reubicaciones por cliente (cuántas veces y cuántos minutos lo mandaron a otra rampa) y el CSV para disputar «no se presentó».
+   * Ausente si la perilla del reporte de llegada está apagada o la bitácora no se pudo leer: no se afirma lo que no se leyó.
+   */
+  reubicaciones?: { porCliente: ReubicacionesCliente[]; csv: string };
 }
 
 const MS_MIN = 60_000;

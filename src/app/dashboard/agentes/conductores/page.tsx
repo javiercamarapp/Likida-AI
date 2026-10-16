@@ -21,6 +21,7 @@ import { FormaEstrategiaConductores, type ResultadoEstrategia } from '../estrate
 import { Bloque, EsqTabla, vigilar } from '../../bloque';
 import { calcularInsights } from '@/lib/likida/conductor/insights';
 import { mapaReubicaciones } from '@/lib/likida/conductor/reporte_llegada';
+import { csvReubicaciones, reubicacionesPorCliente, reubicacionesPorViaje } from '@/lib/likida/conductor/reubicaciones';
 import { leerConfigConductor, leerEventosReporte, leerEntradaInsights, leerDatosPreflight, leerEpisodiosParaTablero, leerRutasAutorizadas, leerSalidasTms, leerTransitoViajes, leerViajesConCartaPorte } from '@/lib/likida/conductor/repo';
 import { evaluarPreflight } from '@/lib/likida/conductor/preflight_piloto';
 import { BannerPreflight } from './configuracion/preflight';
@@ -187,7 +188,14 @@ export default async function PaginaAgenteConductores({
       // bitácora no se puede leer el tablero sale sin ella (no se afirma lo que no se leyó).
       if (config.reporteLlegadaActivo === true) {
         try {
-          tablero.filas = conReporteDeLlegada(tablero.filas, mapaReubicaciones(await leerEventosReporte(tenantId, datos.viajes.map((v) => v.id)), datos.hitos));
+          const eventosReporte = await leerEventosReporte(tenantId, datos.viajes.map((v) => v.id));
+          tablero.filas = conReporteDeLlegada(tablero.filas, mapaReubicaciones(eventosReporte, datos.hitos));
+          // T-A5-63: el mismo conjunto de eventos, agrupado por cliente y listo para exportar (solo cálculo; no escribe nada).
+          const nombres = new Map(datos.viajes.flatMap((v) => (v.clienteId && v.clienteNombre ? [[v.clienteId, v.clienteNombre] as [string, string]] : [])));
+          tablero.reubicaciones = {
+            porCliente: reubicacionesPorCliente(tenantId, datos.viajes, datos.hitos, eventosReporte, nombres),
+            csv: csvReubicaciones(reubicacionesPorViaje(tenantId, datos.viajes, datos.hitos, eventosReporte)),
+          };
         } catch (e) {
           logger.warn('conductor.tablero_reporte_llegada_fallo', { err: e instanceof Error ? e.message : String(e) });
         }
