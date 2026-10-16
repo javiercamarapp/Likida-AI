@@ -12,9 +12,10 @@
 //   1b. Lector de formato C, D o E (T-A3-60): si quien llama ya sabe el formato (registro_formatos.ts), el lector
 //       de ese formato produce la extracción común. D y E no usan modelo; C (escaneada) usa el puerto de visión.
 //   2. Perfil del cliente-formato        → el mapeo aprendido se reaplica, sin modelo.
-//   3. Modelo, nivel 1 (Gemini 3.5 Flash-Lite).
-//   4. Escalamiento por confianza: nivel 2 (Gemini 3.8 Flash) y nivel 3 (Sonnet 5.5)
-//      SOLO si un campo CRÍTICO sale con baja confianza o faltan varios.
+//   3. Modelo: los niveles de `orden_niveles.ts` (por omisión nivel 2 = Gemini 3.8 Flash, luego nivel 3 = Sonnet 5.5; el nivel 1
+//      = Gemini 3.5 Flash-Lite queda configurable por tipo de documento).
+//   4. Escalamiento por CONFIANZA COMPUESTA (confianza_compuesta.ts): al siguiente nivel SOLO si un campo CRÍTICO sale con baja
+//      confianza, falla un validador determinista (aunque el modelo diga 0.99), los niveles discrepan o faltan varios.
 //
 // Dos modelos que coinciden en un valor SUBEN su confianza; si discrepan, la
 // confianza BAJA (a lo sumo 0.6) y el campo cae a revisión humana. Nunca se

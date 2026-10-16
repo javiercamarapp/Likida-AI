@@ -137,6 +137,10 @@ describe('(f) el orden de los niveles es configurable por tipo de documento', ()
     await extraerDocumento(captura(), { llm, niveles: [2, 3], nivelMaximo: 1 });
     expect(llm.llamadas.map((l) => l.nivel)).toEqual([2]);
   });
+  it('el orden por omisión es 3.8 Flash → Sonnet para texto y visión (la simulación no respalda a Lite como nivel 1)', () => {
+    expect(ordenDeNiveles('vision', {})).toEqual([2, 3]);
+    expect(ordenDeNiveles('texto', {})).toEqual([2, 3]);
+  });
   it('por omisión sale del tipo (texto o visión) y se ajusta por variable de entorno, sin tocar el código', () => {
     expect(tipoDeLectura({ texto: null, imagenes: ['x'] })).toBe('vision');
     expect(tipoDeLectura({ texto: 'hola', imagenes: [] })).toBe('texto');
@@ -148,11 +152,11 @@ describe('(f) el orden de los niveles es configurable por tipo de documento', ()
     expect(ordenDeNiveles('vision', { LIKIDA_CARTAPORTE_NIVELES_VISION: '9' })).toEqual(ordenDeNiveles('vision', {}));
   });
   it('sin ctx.niveles, el extractor usa el orden del tipo de documento (la variable de entorno llega al flujo real)', async () => {
-    vi.stubEnv('LIKIDA_CARTAPORTE_NIVELES_VISION', '2,3');
+    vi.stubEnv('LIKIDA_CARTAPORTE_NIVELES_VISION', '3');
     try {
       const llm = llmFalso((e) => lectura(e.nivel));
       await extraerDocumento(captura(), { llm });
-      expect(llm.llamadas.map((l) => l.nivel)).toEqual([2]);
+      expect(llm.llamadas.map((l) => l.nivel)).toEqual([3]);
     } finally { vi.unstubAllEnvs(); }
   });
 });
@@ -163,17 +167,17 @@ describe('integración: entra por el SERVICIO (procesarDocumento) y deja el rast
       ...lecturaBoreal(e.nivel),
       // La lectura de siempre, pero con el estado de destino mal en TODOS los niveles (el texto del PDF dice CDMX).
       campos: lecturaBoreal(e.nivel).campos.map((c) => (c.clave === 'destino_estado' ? { ...c, valor: 'NL', evidencia: 'Estado destino: CDMX' } : c)),
-      ...(e.nivel === 1 ? { caidas: [{ tipo: 'modo_json' as const, rol: 'cartaporte_extractor', de: 'google/gemini-3.5-flash-lite', a: 'google/gemini-3.5-flash-lite', motivo: 'modelo_sin_esquema_estricto' as const }] } : {}),
+      ...(e.nivel === 2 ? { caidas: [{ tipo: 'modo_json' as const, rol: 'cartaporte_extractor', de: 'google/gemini-3.5-flash-lite', a: 'google/gemini-3.5-flash-lite', motivo: 'modelo_sin_esquema_estricto' as const }] } : {}),
     }));
     const r = await subir(A, await pdfBoreal(), 'boreal.pdf');
     const p = await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => llm });
     expect(p).toMatchObject({ ok: true, listoParaAprobar: false });
     const d = estado.docs.get(r.documentoId)!;
-    expect(d.extraccion?.meta?.escalamientos?.map((x) => x.codigo)).toEqual(['validador', 'validador']);
+    expect(d.extraccion?.meta?.escalamientos?.map((x) => `${x.de}>${x.a}:${x.codigo}`)).toEqual(['2>3:validador']); // orden por omisión: 3.8 Flash → Sonnet
     expect(d.extraccion?.meta?.revisionHumana?.some((h) => h.campo === 'destino_cp' && h.valores.includes('NLE'))).toBe(true);
     expect(d.extraccion?.meta?.caidas).toEqual([expect.objectContaining({ tipo: 'modo_json', motivo: 'modelo_sin_esquema_estricto' })]);
     const escaladas = estado.eventos.filter((x) => x.documentoId === r.documentoId && x.tipo === 'escalada');
-    expect(escaladas.map((x) => (x.detalle as { codigo: string }).codigo)).toEqual(['validador', 'validador']);
-    expect(contadoresDeEscalamientos()['1>2:validador']).toBe(1);
+    expect(escaladas.map((x) => (x.detalle as { codigo: string }).codigo)).toEqual(['validador']);
+    expect(contadoresDeEscalamientos()['2>3:validador']).toBe(1);
   });
 });

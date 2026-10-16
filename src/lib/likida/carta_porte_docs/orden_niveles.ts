@@ -7,7 +7,9 @@
 //   · `vision` — lo que el modelo tiene que MIRAR (imagen, captura, PDF escaneado);
 // con un valor por omisión (aquí) y un ajuste por variable de entorno sin tocar el código:
 //   LIKIDA_CARTAPORTE_NIVELES_TEXTO=1,2,3   LIKIDA_CARTAPORTE_NIVELES_VISION=2,3
-// El orden por omisión sale de la simulación sin costo (informe privado 25) y de la decisión de Javier.
+// El orden por omisión (3.8 Flash → Sonnet, niveles 2 y 3, para texto y visión) sale de la decisión de Javier y de la simulación
+// sin costo con las salidas grabadas (informe privado 25): Lite como nivel 1 dejó errores sin señal y no ahorró (escalaba casi siempre).
+// Lite sigue disponible: LIKIDA_CARTAPORTE_NIVELES_TEXTO=1,2,3.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type { ContenidoDoc } from './contenido';
@@ -17,8 +19,8 @@ export type TipoLectura = 'texto' | 'vision';
 
 /** El orden por omisión. */
 export const ORDEN_NIVELES_DEFECTO: Readonly<Record<TipoLectura, readonly NivelModelo[]>> = {
-  texto: [1, 2, 3],
-  vision: [1, 2, 3],
+  texto: [2, 3],
+  vision: [2, 3],
 };
 
 const VARIABLE: Record<TipoLectura, string> = { texto: 'LIKIDA_CARTAPORTE_NIVELES_TEXTO', vision: 'LIKIDA_CARTAPORTE_NIVELES_VISION' };
