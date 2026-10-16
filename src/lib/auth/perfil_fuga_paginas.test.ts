@@ -109,16 +109,16 @@ const concreta = (g: string) => (g === '/dashboard/[id]' ? '/dashboard/0f8fad5b-
 /** La función de puerta que la propia página usa: el detalle de liquidación entra por `requireSessionTenant`, el resto por `resolverTenantEfectivo`. */
 const abrirPuerta = (g: string) => (g === '/dashboard/[id]' ? requireSessionTenant(concreta(g)) : resolverTenantEfectivo(g, {}));
 
-describe('(a) las 68 páginas: enumeración y puerta', () => {
-  it('hay 68 page.tsx en /dashboard (cuenta independiente del disco) y todas se leen', () => {
-    expect(TABLA).toHaveLength(68);
-    expect(new Set(TABLA.map((p) => p.archivo)).size).toBe(68);
+describe('(a) las 70 páginas: enumeración y puerta', () => {
+  it('hay 70 page.tsx en /dashboard (cuenta independiente del disco) y todas se leen', () => {
+    expect(TABLA).toHaveLength(70);
+    expect(new Set(TABLA.map((p) => p.archivo)).size).toBe(70);
   });
 
-  it('solo /dashboard/integraciones es un redirect puro (su destino ya gatea); las otras 67 llaman a su puerta', () => {
+  it('solo /dashboard/integraciones es un redirect puro (su destino ya gatea); las otras 69 llaman a su puerta', () => {
     expect(TABLA.filter((p) => p.puerta === 'REDIRECT_PURO').map((p) => p.ruta)).toEqual(['/dashboard/integraciones']);
     expect(TABLA.filter((p) => p.puerta === null).map((p) => p.archivo)).toEqual([]);
-    expect(GATEADAS).toHaveLength(67);
+    expect(GATEADAS).toHaveLength(69);
     const src = readFileSync(join(RAIZ, 'src/app/dashboard/integraciones/page.tsx'), 'utf8');
     expect(src).toContain('/dashboard/conexiones');
     expect(rutaPermitidaEnPerfil('cinco_agentes', '/dashboard/conexiones')).toBe(true);
@@ -146,11 +146,11 @@ describe('(a) bajo el perfil, cada página no permitida rebota y cada permitida 
   const proximamente = permitidasEnLista.filter((p) => rutaProximamenteEnPerfil('cinco_agentes', clave(p)));
   const abiertas = permitidasEnLista.filter((p) => !rutaProximamenteEnPerfil('cinco_agentes', clave(p)));
 
-  it('el reparto es el de la matriz de T-PER-01 con «Próximamente»: 32 negadas, 24 abiertas y 11 «Próximamente» (más integraciones, que solo redirige)', () => {
+  it('el reparto es el de la matriz de T-PER-01 con «Próximamente»: 32 negadas, 26 abiertas (+2: el catálogo y la configuración del Agente de Carta Porte, A3) y 11 «Próximamente» (más integraciones, que solo redirige)', () => {
     expect(negadas.length).toBe(32);
-    expect(abiertas.length).toBe(24);
+    expect(abiertas.length).toBe(26);
     expect(proximamente.length).toBe(11);
-    expect(negadas.length + abiertas.length + proximamente.length + 1).toBe(68);
+    expect(negadas.length + abiertas.length + proximamente.length + 1).toBe(70);
   });
 
   it.each(negadas.map((p) => [p.ruta, clave(p)] as const))('%s (puerta %s): CON perfil rebota a /dashboard', async (_ruta, puerta) => {
