@@ -15,11 +15,22 @@
 #   1. inserta (o actualiza) la fila de `tenant_perfil` con perfil = cinco_agentes;
 #   2. apaga en `interruptor_tenant` los pipelines `ocr` y `cuadre` de esa flota, con motivo
 #      (el código ya los trata como apagados bajo el perfil; la fila deja la palanca VISIBLE en /admin);
-#   3. imprime el estado final.
+#   3. pone (o corrige) `liquidacion_correo_config.canal = 'correo'` y `activa = true` para esa flota —
+#      DECISIÓN DE PRODUCTO: bajo este perfil, A1 (liquidación) es SIEMPRE por correo, nunca por WhatsApp (hallazgo
+#      de la revisión adversarial de oct-2026: sin esta fila explícita, el código caía al default de siempre y
+#      mandaba por WhatsApp). Solo se tocan las columnas `canal`/`activa`/`actualizado_en`/`actualizado_por`: si la
+#      flota ya tenía remitente, destinatarios de RH u otras reglas de correo configuradas, se CONSERVAN. Esto es
+#      defensa en profundidad junto con el default de `canalDeEntregaPorOmision` en
+#      `src/lib/likida/liquidacion_externa/servicio.ts` (código Y configuración, no solo uno);
+#   4. imprime el estado final.
+#
+# Requiere, además de la migración 0770, la 0785 (tabla `liquidacion_correo_config`) ya aplicada: si falta, el
+# paso 3 falla y la transacción entera se revierte (no hay estado a medias: ni el perfil ni los interruptores
+# quedan puestos sin la fila de correo).
 #
 # QUÉ NO HACE: no toca ninguna otra flota, no borra datos, no cambia usuarios ni llaves. Revertir:
 # scripts/perfil/revertir-cinco-agentes.sh. Este script NO se ejecuta solo: lo corre quien opera la
-# plataforma, contra la base que corresponda, DESPUÉS de aplicar la migración 0770 en esa base.
+# plataforma, contra la base que corresponda, DESPUÉS de aplicar las migraciones 0770 y 0785 en esa base.
 # ═══════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 # shellcheck source=scripts/perfil/_comun-cinco-agentes.sh
@@ -62,6 +73,15 @@ select 'perfil' as que, perfil as valor, cambiado_en::text from public.tenant_pe
 select 'pipeline' as que, pipeline as valor, case when apagado then 'APAGADO' else 'encendido' end as estado
   from public.interruptor_tenant where tenant_id = :'tenant' order by pipeline;
 SQL
+  # Consulta aparte y SIN ON_ERROR_STOP: la 0785 (liquidacion_correo_config) es una migración distinta de la 0770, y
+  # --verificar debe seguir funcionando (mostrando las otras dos tablas) aunque esa todavía no esté aplicada.
+  if ! psql "$DB" -v tenant="$TENANT" <<'SQL'
+select 'correo' as que, canal as valor, activa::text as estado
+  from public.liquidacion_correo_config where tenant_id = :'tenant';
+SQL
+  then
+    echo "(sin la migración 0785: liquidacion_correo_config no existe todavía — aplicarla ANTES de aplicar este perfil)"
+  fi
   exit 0
 fi
 
@@ -73,6 +93,16 @@ SQL
 if [ "$EXISTE" != "1" ]; then
   echo "❌ La flota $TENANT no existe en esta base." >&2
   exit 3
+fi
+
+# La 0785 es requisito (paso 3 de este script): un error claro aquí, no uno críptico de psql a medio transacción.
+TIENE_TABLA_CORREO="$(psql "$DB" -X -v ON_ERROR_STOP=1 -tA <<'SQL'
+select to_regclass('public.liquidacion_correo_config') is not null;
+SQL
+)"
+if [ "$TIENE_TABLA_CORREO" != "t" ]; then
+  echo "❌ Falta la migración 0785 (tabla liquidacion_correo_config) en esta base. Aplícala antes de aplicar este perfil: sin ella A1 no puede quedar en canal 'correo' y este script se niega a dejar el perfil puesto sin esa fila." >&2
+  exit 7
 fi
 
 # Revertir solo borra las filas ocr/cuadre cuyo motivo empieza con «Perfil cinco_agentes». Si la flota ya tenía un ocr/cuadre
@@ -104,9 +134,18 @@ select :'tenant'::uuid, p, true, :'motivo', null, now()
 on conflict (tenant_id, pipeline) do update
   set apagado = true, motivo = excluded.motivo, cambiado_por = null, cambiado_en = now();
 
+-- A1 (liquidación) SIEMPRE por correo bajo este perfil, nunca WhatsApp: solo se tocan canal/activa/actualizado_*,
+-- así que remitente, destinatarios de RH y demás reglas de correo que la flota ya tuviera configuradas se conservan.
+insert into public.liquidacion_correo_config (tenant_id, canal, activa, actualizado_en, actualizado_por)
+values (:'tenant'::uuid, 'correo', true, now(), null)
+on conflict (tenant_id) do update
+  set canal = 'correo', activa = true, actualizado_en = now(), actualizado_por = null;
+
 select 'perfil' as que, perfil as valor, cambiado_en::text from public.tenant_perfil where tenant_id = :'tenant'::uuid;
 select 'pipeline' as que, pipeline as valor, case when apagado then 'APAGADO' else 'encendido' end as estado
   from public.interruptor_tenant where tenant_id = :'tenant'::uuid order by pipeline;
+select 'correo' as que, canal as valor, activa::text as estado
+  from public.liquidacion_correo_config where tenant_id = :'tenant'::uuid;
 
 commit;
 SQL

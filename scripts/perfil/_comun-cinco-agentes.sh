@@ -94,7 +94,10 @@ select json_build_object(
   'tenant_id', :'tenant'::text,
   'respaldado_en', now(),
   'tenant_perfil', (select coalesce(json_agg(t order by t.tenant_id), '[]'::json) from public.tenant_perfil t where t.tenant_id = :'tenant'::uuid),
-  'interruptor_tenant', (select coalesce(json_agg(i order by i.pipeline), '[]'::json) from public.interruptor_tenant i where i.tenant_id = :'tenant'::uuid)
+  'interruptor_tenant', (select coalesce(json_agg(i order by i.pipeline), '[]'::json) from public.interruptor_tenant i where i.tenant_id = :'tenant'::uuid),
+  -- Puede faltar (migración 0785 sin aplicar): to_regclass la trata como «sin tabla», nunca como error.
+  'liquidacion_correo_config', (case when to_regclass('public.liquidacion_correo_config') is null then null
+    else (select coalesce(json_agg(c), '[]'::json) from public.liquidacion_correo_config c where c.tenant_id = :'tenant'::uuid) end)
 );
 SQL
   chmod 600 "$RESPALDO"
@@ -110,6 +113,11 @@ select md5(
   || '|' ||
   coalesce((select string_agg(pipeline || ':' || apagado::text || ':' || coalesce(motivo, ''), ',' order by pipeline)
               from public.interruptor_tenant where tenant_id = :'tenant'::uuid), '')
+  || '|' ||
+  -- Puede faltar (migración 0785 sin aplicar): to_regclass la trata como «sin tabla» (cadena fija), nunca como error.
+  (case when to_regclass('public.liquidacion_correo_config') is null then 'sin-0785'
+    else coalesce((select string_agg(canal || ':' || activa::text, ',' order by tenant_id)
+                     from public.liquidacion_correo_config where tenant_id = :'tenant'::uuid), '') end)
 );
 SQL
 }
