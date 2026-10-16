@@ -71,6 +71,29 @@ export async function leerSenalExtra(puerto: SenalesConduccion | null | undefine
   }
 }
 
+/**
+ * T-A5-68: lo que el cron lee por pasada, UNA vez por unidad (no por viaje): la `SenalExtra` de cada unidad, o `null` = solo-GPS. Nunca
+ * lanza (`leerSenalExtra` ya cae a `null`). Sin puerto o sin unidades no lee nada.
+ */
+export async function leerSenalesDeUnidades(
+  puerto: SenalesConduccion | null | undefined, unidadIds: readonly string[], ahora: Date,
+): Promise<Map<string, SenalExtra | null>> {
+  const salida = new Map<string, SenalExtra | null>();
+  if (!puerto) return salida;
+  for (const id of new Set(unidadIds)) salida.set(id, await leerSenalExtra(puerto, id, ahora));
+  return salida;
+}
+
+/**
+ * La señal que ve la compuerta: la del proveedor manda; la ignición que el GPS ya trae (T-A5-39) rellena solo lo que el proveedor no
+ * reporta. Sin ninguna de las dos, `null` (regla solo-GPS, la más conservadora).
+ */
+export function combinarSenal(proveedor: SenalExtra | null | undefined, ignicionGps: boolean | null | undefined): SenalExtra | null {
+  const ignicion = proveedor?.ignicion ?? ignicionGps ?? null;
+  const velocidadKmh = proveedor?.velocidadKmh ?? null;
+  return ignicion === null && velocidadKmh === null ? null : { ignicion, velocidadKmh };
+}
+
 /** Puerto por omisión (nace apagado): ningún proveedor conectado → sin señal → solo-GPS. */
 export const senalesApagadas: SenalesConduccion = { leer: async () => null };
 

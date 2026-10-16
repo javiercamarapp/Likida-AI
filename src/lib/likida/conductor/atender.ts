@@ -10,17 +10,19 @@ import { mensajeParaChofer, type ContextoMensaje, type Salida } from './mensajes
 import {
   abrirParada, adjuntarUbicacion, asegurarHitos, cargarHitos, cerrarParada, leerParadaAbierta, cerrarEpisodioPorJefe, guardarContacto, leerConfigConductor, marcarEscalacionAtendida, marcarSinContacto,
   posponerHito, registrarEvento, registrarHito, responderEpisodioSenalVida, retirarHitos, sincronizarLegado, viajeDelOperador,
+  leerCicloServicio, leerEvidenciasSelloViaje,
   type ResultadoEscritura, type ViajeContexto,
 } from './repo';
+import { cicloDelServicio, hitoEnCiclo, type CicloEfectivo, type CicloServicioFila } from './ciclo_servicio';
 import { tenantDelViaje } from './trabajo';
-import { leerBotonConductor, PREFIJO_BOTON, type HitoFila, type FuenteHito, type RespuestaSenalVida, type TipoEvidencia, type TipoHito } from './tipos';
+import { estaResuelto, leerBotonConductor, PREFIJO_BOTON, type HitoFila, type FuenteHito, type RespuestaSenalVida, type TipoEvidencia, type TipoHito } from './tipos';
 import { silencioDeRespuesta } from './senal_vida';
 import { escalarPorProblema, puertosReales } from './ejecutor';
 import { avisarOficinaDeHito } from './avisos_oficina';
 import { puedeAcusar } from './escalamiento';
 import { debeSellarTrasValidar, depsValidacionReales, validarHitoContraSitio, type EntradaValidarHito, type SalidaValidar } from './validar_hito';
 import { guardarEvidencia, hitoLlegadaReciente } from './repo_validacion';
-import { ETIQUETA_EVIDENCIA, hitoParaEvidencia, mensajeEvidencia, tipoEvidenciaDeCaption } from './evidencia';
+import { decidirSelloInicio, ETIQUETA_EVIDENCIA, hitoParaEvidencia, mensajeEvidencia, mensajeSelloInicio, tipoEvidenciaDeCaption, type EvidenciaSelloFila } from './evidencia';
 import { textoVeredicto, veredictoSellaLlegada } from './validacion';
 import { puertosEstadiaReales, responderEstadiaDescarga, type PuertosEstadia } from './alertas_estadia';
 import type { OpcionResultadoDescarga, RespuestaEstadia } from './mensajes';
@@ -91,6 +93,10 @@ export interface DepsAtender {
   detencion?: PuertosDetencionAtender;
   /** T-A5-38/39: la parada que inicia el chofer (leer, abrir, cerrar). Opcional: sin él, la real. */
   parada?: DepsParada;
+  /** T-A5-68: los ciclos por servicio de la flota (0807), para que «ya llegué»/«ya salí» sigan el ciclo impo/expo/nacional. Opcional: sin él, el ciclo actual. */
+  ciclosDe?(tenantId: string): Promise<CicloServicioFila[]>;
+  /** T-A5-68: las fotos de sello recientes del viaje (T-A5-40), para el paso previo del «inicio de viaje». Opcional: sin él, las reales. */
+  evidenciasSello?(tenantId: string, viajeId: string, ahora: Date): Promise<EvidenciaSelloFila[]>;
 }
 
 export const depsReales: DepsAtender = {
@@ -114,7 +120,50 @@ export const depsReales: DepsAtender = {
   cargarHitos,
   guardarEvidencia,
   responderSenalVida: (tenantId, viajeId, respuesta, ahora, config) => responderEpisodioSenalVida(tenantId, viajeId, respuesta, silencioDeRespuesta(respuesta, config), ahora),
+  ciclosDe: leerCicloServicio,
+  evidenciasSello: leerEvidenciasSelloViaje,
 };
+
+/**
+ * T-A5-68 (T-A5-42 cableado): el ciclo del servicio del viaje. Sin puerto, sin servicio conocido o sin filas = el ciclo actual (cero
+ * regresión). Si la lectura falla, el viaje sigue el ciclo actual y se dice en el log: el chofer nunca se queda sin registrar por esto.
+ */
+async function cicloDelViaje(deps: DepsAtender, viaje: Pick<ViajeContexto, 'tenantId' | 'servicio'>): Promise<CicloEfectivo | undefined> {
+  const leer = deps.ciclosDe ?? depsReales.ciclosDe;
+  if (!leer) return undefined;
+  try {
+    return cicloDelServicio(await leer(viaje.tenantId), viaje.servicio ?? null);
+  } catch (err) {
+    logger.warn('conductor.ciclo_servicio_fallo', { tenant: viaje.tenantId, err: err instanceof Error ? err.message : String(err) });
+    return undefined;
+  }
+}
+
+/**
+ * Ruling (T-A5-68): el «inicio de viaje» cuelga de `salida_carga` (T-A5-40: es el ancla de «en tránsito» y de la detención sin aviso, y el
+ * hito del sello). Un servicio cuyo ciclo no tiene carga (importación) no tiene ese hito, y un «ya salí» a secas antes de llegar al
+ * cliente se leería como la salida de la DESCARGA y cerraría el viaje al arrancar. Mientras no haya llegado ni salido de descargar, ese
+ * aviso se decide con el ciclo de siempre (inicio de viaje = salida_carga); todo lo demás sigue el ciclo del servicio. Costo si me equivoco:
+ * en importación el hito de inicio se llama `salida_carga`; se corrige al decidir un hito propio para el inicio de viaje (reversible).
+ */
+function cicloParaDecidir(ciclo: CicloEfectivo | undefined, intencion: Intencion, hitos: readonly HitoFila[]): CicloEfectivo | undefined {
+  if (!ciclo || ciclo.origen === 'actual') return ciclo;
+  if (intencion.clase !== 'salida' || intencion.lugar === 'descarga' || hitoEnCiclo(ciclo, 'salida_carga')) return ciclo;
+  const llegoOSalio = hitos.some((h) => (h.tipo === 'llegada_descarga' || h.tipo === 'salida_descarga') && estaResuelto(h));
+  return llegoOSalio ? ciclo : undefined;
+}
+
+/** T-A5-68: las fotos de sello recientes del viaje. `exigir` = la opción está encendida: una base caída NO equivale a «no hay foto» (lanza). */
+async function leerSelloDelViaje(deps: DepsAtender, tenantId: string, viajeId: string, ahora: Date, exigir: boolean): Promise<EvidenciaSelloFila[]> {
+  const leer = deps.evidenciasSello ?? depsReales.evidenciasSello!;
+  try {
+    return await leer(tenantId, viajeId, ahora);
+  } catch (err) {
+    if (exigir) throw err;
+    logger.warn('conductor.sello_lectura_fallo', { viaje: viajeId, err: err instanceof Error ? err.message : String(err) });
+    return [];
+  }
+}
 
 /** Lo que se le contesta al chofer tras tocar un botón de la señal de vida. */
 export function textoRespuestaSenalVida(respuesta: RespuestaSenalVida, resultado: 'cerrado' | 'sin_episodio' | 'fallo', folio: string | null): string {
@@ -260,10 +309,26 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
       };
     }
 
+    // T-A5-68: «ya llegué a descargar» y «ya salí» siguen el ciclo del servicio del viaje (impo/expo/nacional).
+    const ciclo = cicloParaDecidir(await cicloDelViaje(deps, viaje), interp.intencion, hitos);
     const decision = decidir({
       hitos, intencion: interp.intencion, contacto: interp.contacto, ahora, mensajeEn,
-      ventanaCorreccionMin: config.ventanaCorreccionMin, posponerMin: config.posponerMin,
+      ventanaCorreccionMin: config.ventanaCorreccionMin, posponerMin: config.posponerMin, ciclo,
     });
+
+    // T-A5-68: el inicio de viaje (`salida_carga`) pasa por el paso previo del sello (T-A5-40) ANTES de registrarse.
+    let recomendarSello = false;
+    if (decision.accion === 'registrar' && decision.objetivo === 'salida_carga') {
+      // Con la opción apagada una lectura fallida no estorba (se recomienda de más); encendida, falla cerrado: el catch pide reintentar.
+      const evidencias = await leerSelloDelViaje(deps, e.tenantId, viaje.id, ahora, config.exigirSelloInicio === true);
+      const paso = decidirSelloInicio({ objetivo: decision.objetivo, servicio: viaje.servicio ?? null, exigir: config.exigirSelloInicio, evidencias, ahora });
+      if (paso.accion === 'pedir_foto') {
+        logger.info('hito.conductor', { viaje: viaje.id, accion: 'pedir_sello', via: interp.via, objetivo: decision.objetivo });
+        return { mensajes: [{ texto: mensajeSelloInicio('pedir') }] };
+      }
+      // Sin servicio conocido no se insiste (el sello previo es de importación; «apagada por defecto: el acuse no la menciona»).
+      recomendarSello = paso.recomendar && viaje.servicio === 'importacion';
+    }
 
     const fuente: FuenteHito = boton ? 'boton' : 'texto';
     const efectos: ContextoAplicar['efectos'] = { pedirUbicacion: false };
@@ -281,6 +346,8 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
     if (config.pedirFotoEvidencia && decision.accion === 'registrar' && aplicado === 'ok') {
       const invitacion = invitacionFoto(decision.objetivo);
       if (invitacion) salida.texto = `${salida.texto}\n${invitacion}`;
+    } else if (recomendarSello && aplicado === 'ok') {
+      salida.texto = `${salida.texto}\n${mensajeSelloInicio('recomendar')}`;
     }
     return { mensajes: [salida, ...pregunta], ...pedir };
   } catch (err) {
@@ -808,6 +875,7 @@ export async function hitoParaEvidenciaDelChofer(
     if (intencion && config?.fotoRegistraHito) {
       const d = decidir({
         hitos, intencion, contacto: null, ahora, mensajeEn: ahora, ventanaCorreccionMin: config.ventanaCorreccionMin, posponerMin: config.posponerMin,
+        ciclo: cicloParaDecidir(await cicloDelViaje(deps, viaje), intencion, hitos), // T-A5-68: el «andén» sin lugar sigue el ciclo del servicio
       });
       if (d.accion === 'registrar') return { tipo, hito: null, comoHito: d.objetivo };
     }
@@ -877,6 +945,7 @@ export async function registrarHitoDesdeFoto(e: EntradaFotoComoHito, deps: DepsA
     const mensajeEn = e.mensajeEn && !Number.isNaN(e.mensajeEn.getTime()) ? e.mensajeEn : ahora;
     const decision = decidir({
       hitos, intencion, contacto: null, ahora, mensajeEn, ventanaCorreccionMin: config.ventanaCorreccionMin, posponerMin: config.posponerMin,
+      ciclo: cicloParaDecidir(await cicloDelViaje(deps, viaje), intencion, hitos), // T-A5-68: la misma regla que el texto del chofer
     });
     // Un duplicado (el aviso ya estaba: el chofer lo dijo mientras la foto subía), una aclaración o un rechazo NO son avisos
     // nuevos: si hay un hito al cual colgarla es evidencia; si no, se le dice. La foto no inventa ninguno.
