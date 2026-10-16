@@ -61,6 +61,9 @@ const MIXTOS = ['escalar'] as const;
 const PERMITIDOS = [
   'gps', 'peajes', 'carta-porte-docs', 'liquidaciones-externas',
   'wa-outbox', 'wa-pendientes', 'guardia', 'purgar',
+  // T-TMS-12: el conector al sistema del cliente. Solo corre para flotas que lo activaron (opt-in); no filtra por
+  // perfil, igual que los demás permitidos.
+  'tms',
 ] as const;
 /**
  * PLATAFORMA: no iteran flotas con datos operativos. `runner` despacha los agentes de Likida (CRM/prospección con
