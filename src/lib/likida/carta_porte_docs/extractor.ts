@@ -27,11 +27,16 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { randomBytes } from 'node:crypto';
+import type { CaidaLlm } from '@/lib/llm/caidas';
 import { z } from 'zod';
 import {
   CAMPOS_DOC, CAMPOS_DOC_LLM, CAMPOS_MERCANCIA, CAMPOS_MERCANCIA_LLM, CLAVES_DOC, CLAVES_DOC_LLM, CLAVES_MERCANCIA, CLAVES_MERCANCIA_LLM, MAX_MERCANCIAS, UMBRAL_ESCALA,
-  campoDoc, campoMercancia, extraccionVacia, type CampoDoc, type CampoValor, type Extraccion,
+  campoDoc, campoMercancia, etiquetaCampo, extraccionVacia, type CampoDoc, type CampoValor, type Extraccion,
 } from './campos';
+import {
+  aplicarConfianzaCompuesta, resolverAmbiguosPorCuadre, revisionHumanaDe, validadoresDeterministas, type FalloValidador, type OpcionesCompuesta, type RevisionHumana,
+} from './confianza_compuesta';
+import { registrarEscalamiento, type CodigoEscalamiento } from './contador_escalamientos';
 import { llaveTexto } from './catalogos';
 import { MAX_TEXTO_MODELO, type ContenidoDoc, type FormatoDoc } from './contenido';
 import { completarDerivados, type ContextoDerivar, type FormatoLector, type ResultadoLector } from './derivar';
@@ -40,6 +45,7 @@ import { limpiarTexto, normalizarNumero, normalizarValor, type OrdenFecha } from
 import { leerBol } from './lectores/bol';
 import { leerOrdenAgente } from './lectores/orden_agente';
 import { leerRemisionEscaneada, type VisionRemision } from './lectores/remision';
+import { ordenDeNiveles, tipoDeLectura } from './orden_niveles';
 import { aplicarPerfil, elegirPerfil, type EjemploPerfil, type Perfil } from './perfiles';
 import { leerCorreoF1 } from './lectores/correo_f1';
 import { leerCorreoF2 } from './lectores/correo_f2';
@@ -79,6 +85,8 @@ export interface SalidaLlm extends SalidaLlmDatos {
   tokensIn: number;
   tokensOut: number;
   costoUsd: number;
+  /** T-A3-68: cambios de modo (`json_object`) o de modelo (respaldo) que ocurrieron en esta llamada; nunca en silencio. */
+  caidas?: CaidaLlm[];
 }
 
 /** Recorta `notas` (400) y `evidencia` (300) en vez de rechazar la salida entera: el contenido sirve, solo venía largo. */
@@ -316,8 +324,12 @@ export interface ContextoExtraccion {
   signal?: AbortSignal;
   /** Para pruebas: marcador determinista. */
   marcador?: () => string;
-  /** Tope de niveles de modelo (1 = nunca escalar). Por defecto 3. */
+  /** Tope de niveles a recorrer (1 = nunca escalar). Por defecto, todos los del orden. */
   nivelMaximo?: NivelModelo;
+  /** T-A3-68 f: los niveles a recorrer y su orden. Por omisión, el del tipo de documento (orden_niveles.ts: texto o visión, con ajuste por entorno). */
+  niveles?: readonly NivelModelo[];
+  /** T-A3-68 e: catálogos SAT precargados para el validador de clave de producto. Sin ellos solo se valida la forma. */
+  catalogosSat?: OpcionesCompuesta['catalogosSat'];
   /** T-A3-46: nombre del archivo y año/aduana del perfil, para derivar el régimen y completar el pedimento. */
   nombreArchivo?: string | null;
   pedimentoPerfil?: ContextoDerivar['pedimentoPerfil'];
@@ -347,7 +359,11 @@ export interface ResultadoExtraccion {
   perfilVersion: number | null;
   perfilAmbiguo: boolean;
   avisos: string[];
-  escalamientos: Array<{ de: NivelModelo; a: NivelModelo; motivo: string }>;
+  escalamientos: Array<{ de: NivelModelo; a: NivelModelo; motivo: string; codigo: CodigoEscalamiento }>;
+  /** T-A3-68 e: campos que ningún nivel logró dejar que cuadren, con los valores en conflicto. Nunca se aprueban solos. */
+  revisionHumana: RevisionHumana[];
+  /** T-A3-68 a: cambios de modo o de modelo (respaldo) con su motivo. */
+  caidas: CaidaLlm[];
   /** Notas del modelo (p. ej. «el documento trae varios embarques»). */
   notasModelo: string[];
   /** T-A3-60: lo que dejó el lector de formato (incidencias, lo que queda vacío para T-A3-62, datos sin campo como el sello). */
@@ -399,12 +415,56 @@ async function leerCorreoPorRotulos(c: ContenidoDoc, ctx: ContextoExtraccion, fo
     : null;
 }
 
+const hayDesacuerdo = (e: Extraccion, clave: string): boolean => {
+  const [k, i] = clave.split('#');
+  const c = i === undefined ? e.campos[k] : e.mercancias[Number(i)]?.[k];
+  return (c?.notas ?? []).some((n) => n.startsWith('Los modelos discreparon'));
+};
+
+const campoDe = (e: Extraccion, campo: string, renglon: number | null): CampoValor | undefined => (renglon === null ? e.campos[campo] : e.mercancias[renglon]?.[campo]);
+
+/**
+ * El nivel anterior fallaba un validador en estos campos; si el valor de ESTE nivel no lo falla, se queda el de este nivel
+ * (confianza ≤ 0.85, con nota del cambio). Solo se pisa si los dos niveles leyeron el mismo número de renglones.
+ */
+function preferirElQueCumple(acum: Extraccion, antes: Extraccion, lectura: Extraccion, previos: ReadonlyArray<FalloValidador>, ahora: ReadonlyArray<FalloValidador>): Extraccion {
+  const falla = new Set(ahora.map((f) => `${f.renglon ?? 'doc'}|${f.campo}`));
+  const mismosRenglones = antes.mercancias.length === lectura.mercancias.length && acum.mercancias.length === lectura.mercancias.length;
+  const campos = { ...acum.campos };
+  const mercancias = acum.mercancias.map((f) => ({ ...f }));
+  for (const p of previos) {
+    if (falla.has(`${p.renglon ?? 'doc'}|${p.campo}`)) continue;
+    if (p.renglon !== null && !mismosRenglones) continue;
+    const nuevo = campoDe(lectura, p.campo, p.renglon);
+    const viejo = campoDe(antes, p.campo, p.renglon);
+    if (!presente(nuevo) || !presente(viejo) || nuevo.valor === viejo.valor) continue;
+    const elegido: CampoValor = { ...nuevo, confianza: Math.min(nuevo.confianza, 0.85), notas: [...(nuevo.notas ?? []), `El nivel anterior leyó «${viejo.valor}», que no pasaba un validador; este nivel lo cumple.`] };
+    if (p.renglon === null) campos[p.campo] = elegido; else mercancias[p.renglon][p.campo] = elegido;
+  }
+  return { campos, mercancias };
+}
+
+/** Lo que va a una persona: los campos que siguen fallando un validador y los críticos en desacuerdo, con los valores de cada nivel. */
+function revisionHumanaFinal(acum: Extraccion, fallos: ReadonlyArray<FalloValidador>, lecturas: ReadonlyArray<Extraccion>): RevisionHumana[] {
+  const lista = revisionHumanaDe(fallos, lecturas);
+  const ya = new Set(lista.map((h) => `${h.renglon ?? 'doc'}|${h.campo}`));
+  const agregar = (def: CampoDoc, renglon: number | null): void => {
+    const c = campoDe(acum, def.clave, renglon);
+    if (!def.critico || !presente(c) || ya.has(`${renglon ?? 'doc'}|${def.clave}`) || !(c.notas ?? []).some((n) => n.startsWith('Los modelos discreparon'))) return;
+    const valores = [...new Set(lecturas.map((l) => campoDe(l, def.clave, renglon)?.valor).filter((v): v is string => typeof v === 'string' && v !== ''))];
+    lista.push({ campo: def.clave, renglon, codigo: 'desacuerdo', motivo: 'Los niveles del modelo discreparon y el último no logró confirmar el valor.', valores });
+  };
+  for (const d of CAMPOS_DOC) agregar(d, null);
+  acum.mercancias.forEach((_, i) => { for (const d of CAMPOS_MERCANCIA) agregar(d, i); });
+  return lista;
+}
+
 export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion): Promise<ResultadoExtraccion> {
   const det = detectarInyeccion(c.texto);
   const r: ResultadoExtraccion = {
     extraccion: extraccionVacia(), origen: 'llm', nivel: 0, modelo: null, tokensIn: 0, tokensOut: 0, costoUsd: 0,
     riesgoInyeccion: det.riesgo, indiciosInyeccion: det.indicios, perfilId: null, perfilVersion: null, perfilAmbiguo: false,
-    avisos: [...c.avisos], escalamientos: [], notasModelo: [], capturaIncompleta: null,
+    avisos: [...c.avisos], escalamientos: [], revisionHumana: [], caidas: [], notasModelo: [], capturaIncompleta: null,
   };
 
   const derivar: ContextoDerivar = { nombreArchivo: ctx.nombreArchivo, pedimentoPerfil: ctx.pedimentoPerfil };
@@ -466,20 +526,45 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   const ejemplos = eleccion.perfil?.activa.ejemplos ?? [];
   // El perfil sabe cómo escribe este cliente sus fechas (mes/día): también vale para lo que lea el modelo.
   const ordenFecha = eleccion.perfil?.activa.mapeos.find((x) => x.ordenFecha)?.ordenFecha;
-  const tope = ctx.nivelMaximo ?? 3;
+  const orden = ctx.niveles ?? ordenDeNiveles(tipoDeLectura(c));
+  const secuencia = ctx.nivelMaximo ? orden.slice(0, ctx.nivelMaximo) : orden;
+  const opCompuesta: OpcionesCompuesta = { texto: c.texto, catalogosSat: ctx.catalogosSat };
   let acumulado: Extraccion | null = null;
-  for (let nivel: NivelModelo = 1; nivel <= tope; nivel = (nivel + 1) as NivelModelo) {
+  const lecturas: Extraccion[] = [];
+  let fallos: FalloValidador[] = [];
+  for (let i = 0; i < secuencia.length; i++) {
+    const nivel = secuencia[i];
     ctx.signal?.throwIfAborted();
     const s0 = await ctx.llm({ formato: c.formato, texto: c.texto, imagenes: c.imagenes, ejemplos, nivel, marcador, ...(c.hojasMismoEmbarque ? { hojasMismoEmbarque: c.hojasMismoEmbarque } : {}) }, ctx.signal);
     const s = recortarSalida(s0);
     r.nivel = nivel; r.modelo = s.modelo;
     r.tokensIn += s.tokensIn; r.tokensOut += s.tokensOut; r.costoUsd += s.costoUsd;
+    if (s.caidas) r.caidas.push(...s.caidas);
     if (s.notas) r.notasModelo.push(s.notas);
-    const lectura = extraccionDeLlm(s, c.texto, ordenFecha);
+    // (b) un total con separador ambiguo se resuelve contra la suma de las mercancías ANTES de comparar niveles.
+    const resuelta = resolverAmbiguosPorCuadre(extraccionDeLlm(s, c.texto, ordenFecha));
+    r.avisos.push(...resuelta.notas.filter((n) => !r.avisos.includes(n)));
+    const lectura = resuelta.extraccion;
+    lecturas.push(lectura);
+    const previos = fallos;
+    const antes = acumulado;
     acumulado = acumulado ? fusionar(acumulado, lectura) : lectura;
-    if (!necesitaEscala(acumulado) || nivel === tope) break;
+    // (e) si el nivel anterior fallaba un validador en un campo y ESTE nivel lo cumple, gana el que cumple (con tope de confianza).
+    if (antes && previos.length > 0) acumulado = preferirElQueCumple(acumulado, antes, lectura, previos, validadoresDeterministas(lectura, opCompuesta));
+    fallos = validadoresDeterministas(acumulado, opCompuesta);
+    acumulado = aplicarConfianzaCompuesta(acumulado, fallos);
+    if (!(necesitaEscala(acumulado) || fallos.length > 0) || i === secuencia.length - 1) break;
     const f = carencias(acumulado);
-    r.escalamientos.push({ de: nivel, a: (nivel + 1) as NivelModelo, motivo: f.dudosos.length > 0 ? `baja confianza en ${f.dudosos.slice(0, 3).join(', ')}` : `faltan ${f.ausentes.slice(0, 3).join(', ')}` });
+    const codigo: CodigoEscalamiento = fallos.length > 0 ? 'validador' : f.dudosos.some((k) => hayDesacuerdo(acumulado as Extraccion, k)) ? 'desacuerdo' : f.dudosos.length > 0 ? 'baja_confianza' : 'faltan_datos';
+    const motivo = fallos.length > 0 ? `un validador rechazó ${[...new Set(fallos.map((x) => `${x.campo}${x.renglon === null ? '' : `#${x.renglon}`} (${x.codigo})`))].slice(0, 3).join(', ')}`
+      : f.dudosos.length > 0 ? `${codigo === 'desacuerdo' ? 'los niveles discreparon' : 'baja confianza'} en ${f.dudosos.slice(0, 3).join(', ')}` : `faltan ${f.ausentes.slice(0, 3).join(', ')}`;
+    const esc = { de: nivel, a: secuencia[i + 1], motivo, codigo };
+    r.escalamientos.push(esc);
+    registrarEscalamiento(esc);
+  }
+  if (acumulado) {
+    r.revisionHumana = revisionHumanaFinal(acumulado, fallos, lecturas);
+    for (const h of r.revisionHumana) r.avisos.push(`Revisión humana: ${etiquetaCampo(h.campo, h.renglon)} — ${h.motivo} Valores en conflicto: ${h.valores.map((v) => `«${v}»`).join(', ')}.`);
   }
   const delModelo = acumulado ?? extraccionVacia();
   r.extraccion = completarDerivados(base ? completarCon(base, delModelo) : delModelo, derivar);

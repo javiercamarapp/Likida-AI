@@ -78,7 +78,7 @@ describe('extraerDocumento', () => {
       const r = await extraerDocumento(await contenido(await pdfBoreal()), { llm });
       expect(r.nivel).toBe(2);
       expect(llm.llamadas.map((l) => l.nivel)).toEqual([1, 2]);
-      expect(r.escalamientos).toEqual([{ de: 1, a: 2, motivo: expect.stringContaining('origen_cp') }]);
+      expect(r.escalamientos).toEqual([{ de: 1, a: 2, codigo: 'baja_confianza', motivo: expect.stringContaining('origen_cp') }]);
       expect(r.extraccion.campos.origen_cp.confianza).toBeCloseTo(1, 1); // max(.55,.97)+.05 → tope .99
       expect(r.extraccion.campos.origen_cp.notas?.join(' ')).toMatch(/Dos modelos coinciden/);
       expect(r.costoUsd).toBeCloseTo(MODELO_POR_NIVEL[1].costoUsd + MODELO_POR_NIVEL[2].costoUsd, 6);

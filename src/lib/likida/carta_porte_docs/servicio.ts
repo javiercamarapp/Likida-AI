@@ -263,7 +263,7 @@ function resultadoSinLectura(avisos: string[], aviso: string): ResultadoExtracci
   return {
     extraccion: extraccionVacia(), origen: 'llm', nivel: 0, modelo: null, tokensIn: 0, tokensOut: 0, costoUsd: 0,
     riesgoInyeccion: false, indiciosInyeccion: [], perfilId: null, perfilVersion: null, perfilAmbiguo: false,
-    avisos: [...avisos, aviso], escalamientos: [], notasModelo: [], capturaIncompleta: null,
+    avisos: [...avisos, aviso], escalamientos: [], revisionHumana: [], caidas: [], notasModelo: [], capturaIncompleta: null,
   };
 }
 
@@ -373,7 +373,7 @@ export async function procesarDocumento(
     const docVista = { id: doc.id, riesgoInyeccion: r.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido, capturaIncompleta: r.capturaIncompleta, requiereCapturaManual };
     const validacion = await validarDocumento(tenantId, docVista, extraccion);
     const meta: MetaExtraccion = {
-      origen: r.origen, nivel: r.nivel, escalamientos: r.escalamientos, avisos: [...r.avisos, ...avisosCatalogo], notasModelo: r.notasModelo, indiciosInyeccion: r.indiciosInyeccion,
+      origen: r.origen, nivel: r.nivel, escalamientos: r.escalamientos, ...(r.revisionHumana.length > 0 ? { revisionHumana: r.revisionHumana } : {}), ...(r.caidas.length > 0 ? { caidas: r.caidas } : {}), avisos: [...r.avisos, ...avisosCatalogo], notasModelo: r.notasModelo, indiciosInyeccion: r.indiciosInyeccion,
       ...(r.capturaIncompleta ? { capturaIncompleta: r.capturaIncompleta } : {}),
       ...(formatoEntrada ? { formatoEntrada } : {}),
       ...(requiereCapturaManual ? { requiereCapturaManual } : {}),
