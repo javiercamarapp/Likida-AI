@@ -22,7 +22,7 @@ import { Bloque, EsqTabla, vigilar } from '../../bloque';
 import { calcularInsights } from '@/lib/likida/conductor/insights';
 import { mapaReubicaciones } from '@/lib/likida/conductor/reporte_llegada';
 import { csvReubicaciones, reubicacionesPorCliente, reubicacionesPorViaje } from '@/lib/likida/conductor/reubicaciones';
-import { leerConfigConductor, leerEventosReporte, leerEntradaInsights, leerDatosPreflight, leerEpisodiosParaTablero, leerRutasAutorizadas, leerSalidasTms, leerTransitoViajes, leerViajesConCartaPorte } from '@/lib/likida/conductor/repo';
+import { leerConfigConductor, leerDatosConstancia, leerEventosReporte, leerEntradaInsights, leerDatosPreflight, leerEpisodiosParaTablero, leerRutasAutorizadas, leerSalidasTms, leerTransitoViajes, leerViajesConCartaPorte } from '@/lib/likida/conductor/repo';
 import { evaluarPreflight } from '@/lib/likida/conductor/preflight_piloto';
 import { BannerPreflight } from './configuracion/preflight';
 import { leerCatalogosFiltro, leerDatosTablero, leerIndicadores, listarSitios, type FiltrosTablero } from '@/lib/likida/conductor/repo_validacion';
@@ -30,6 +30,8 @@ import { asignarSitiosDelPanel } from '@/lib/likida/conductor/acciones_sitios';
 import { armarTablero, conReporteDeLlegada, episodiosVista, filtrarPorSemaforo, indicadoresVista, type EpisodioVista, type Semaforo } from '@/lib/likida/conductor/tablero';
 import { ejecutarAccionOficina, leerAccion } from '@/lib/likida/conductor/acciones_oficina';
 import { emailDeUsuario } from '@/lib/likida/conductor/trabajo';
+import { armarConstancia } from '@/lib/likida/conductor/constancia';
+import { ConstanciaReportes } from './constancia-vista';
 import { TableroHitos, ORDEN_SEMAFORO, type FiltrosVista } from './tablero-hitos';
 import type { ResultadoOficina } from './acciones-forma';
 
@@ -220,6 +222,15 @@ export default async function PaginaAgenteConductores({
       }),
     };
   });
+  // T-A5-67: la constancia de reportes por operador del periodo (hitos reportados frente a esperados, con su CSV). Solo con la perilla
+  // encendida (apagada de origen hasta D-2); `undefined` = apagada (no se pinta nada); un fallo de lectura lo dice la sección.
+  const pConstancia = vigilar(leerConfigConductor(tenantId).then(async (config) => {
+    if (config.constanciaReportesActiva !== true) return undefined;
+    const hasta = new Date(ahoraMs());
+    const desde = new Date(hasta.getTime() - filtrosVista.dias * 86_400_000);
+    const d = await leerDatosConstancia(tenantId, desde, hasta);
+    return { constancia: armarConstancia({ tenantId, periodo: { desde: desde.toISOString(), hasta: hasta.toISOString() }, viajes: d.viajes, hitos: d.hitos }), hayMas: d.hayMas };
+  }));
   const pCatalogos = safe(() => leerCatalogosFiltro(tenantId));
   // Los episodios de «sin señal de vida» del mismo periodo y con los mismos filtros. `null` = no se pudo leer; `{ episodios: [] }` = ninguno.
   const pEpisodios = safe(async () => {
@@ -286,6 +297,9 @@ export default async function PaginaAgenteConductores({
           <Bloque mensaje="No se pudieron leer los insights." esqueleto={null}>
             <BloqueInsights pInsights={pInsights} pIndicadores={pIndicadores} dias={filtrosVista.dias} />
           </Bloque>
+          <Bloque mensaje="No se pudo leer la constancia de reportes." esqueleto={null}>
+            <BloqueConstancia pConstancia={pConstancia} dias={filtrosVista.dias} />
+          </Bloque>
           <Bloque mensaje="No se pudo leer el tablero de hitos." esqueleto={<EsqTabla filas={6} />}>
             <BloqueTableroHitos
               pTablero={pTablero} pIndicadores={pIndicadores} pCatalogos={pCatalogos} pSitios={pSitios} pEpisodios={pEpisodios} filtros={filtrosVista} ocultos={ocultos}
@@ -332,6 +346,15 @@ async function BloqueInsights({ pInsights, pIndicadores, dias }: {
 }) {
   const [r, ind] = await Promise.all([pInsights, pIndicadores]);
   return <TarjetaInsights insights={r?.insights ?? null} dias={dias} discrepancias={ind?.sinCoincidencia ?? null} recortada={r?.recortada ?? false} />;
+}
+
+async function BloqueConstancia({ pConstancia, dias }: {
+  pConstancia: Promise<{ constancia: ReturnType<typeof armarConstancia>; hayMas: boolean } | undefined>;
+  dias: number;
+}) {
+  const r = await pConstancia;
+  if (r === undefined) return null;
+  return <ConstanciaReportes constancia={r.constancia} dias={dias} hayMas={r.hayMas} />;
 }
 
 async function BloqueTableroHitos({ pTablero, pIndicadores, pCatalogos, pSitios, pEpisodios, filtros, ocultos, accionUrl, puedeActuar, accion, accionSitios }: {

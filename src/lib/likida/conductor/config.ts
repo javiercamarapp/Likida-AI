@@ -125,6 +125,12 @@ export interface ConfigConductor {
    */
   reporteLlegadaActivo?: boolean;
   /**
+   * T-A5-67: muestra en el panel del Conductor la constancia de reportes por operador y periodo (hitos reportados frente a esperados, con su
+   * CSV para monitoreo y RH). Solo lectura: no envía nada ni calcula ningún pago. Apagado por omisión hasta la decisión D-2 (macros) y la de
+   * RH; aún sin columna propia: se fija al armar la configuración, como `reporteLlegadaActivo`.
+   */
+  constanciaReportesActiva?: boolean;
+  /**
    * T-A5-46 (R19): al terminar la descarga el agente pregunta «completa / no me recibieron / regreso con la caja cargada»; las dos últimas
    * avisan al supervisor y marcan el regreso con la bandera `caja_cargada`. Apagado por omisión (hasta la fase 2); aún sin columna propia.
    */
@@ -238,6 +244,7 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   estadiaDescargaMinPorCliente: Object.freeze({}),
   estadiaDescargaSinRespuestaMin: 30,
   reporteLlegadaActivo: false,
+  constanciaReportesActiva: false,
   resultadoDescargaActivo: false,
   asignacionBotonesActiva: false,
   gastosEtcActiva: false,
@@ -469,6 +476,7 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       estadiaDescargaMinPorCliente,
       estadiaDescargaSinRespuestaMin,
       reporteLlegadaActivo: b.reporteLlegadaActivo === true,
+      constanciaReportesActiva: b.constanciaReportesActiva === true,
       resultadoDescargaActivo: b.resultadoDescargaActivo === true,
       asignacionBotonesActiva: b.asignacionBotonesActiva === true,
       gastosEtcActiva: b.gastosEtcActiva === true,
