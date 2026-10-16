@@ -50,7 +50,7 @@ export async function GET(req: Request) {
     if (d.vinculos.length === 0) {
       return new NextResponse('Este desglose aún no tiene vínculos con viajes calculados: activa el vínculo cruce-viaje de la flota y vuelve a conciliar.', { status: 409 });
     }
-    const bytes = vinculosAExcel(armarVinculos(d.lineas, d.vinculos, d.folios));
+    const bytes = vinculosAExcel(armarVinculos(d.lineas, d.vinculos, d.folios, d.costos));
     return new NextResponse(new Blob([bytes as BlobPart]), {
       headers: {
         'Cache-Control': 'no-store',
