@@ -5,7 +5,11 @@ import {
   CONFIANZA_TOPE_FALLO, aplicarConfianzaCompuesta, brutosEnTexto, lecturasPosibles, resolverAmbiguosPorCuadre, revisionHumanaDe,
   validadoresDeterministas, validarRotuloPeso,
 } from './confianza_compuesta';
+import { rfcChecksumOk } from '../intake/cfdi';
 import { cv, extraccionAtlasOk, RFC } from './documentos_sinteticos.fixture';
+
+/** Un RFC de forma correcta cuyo dígito verificador NO cuadra. */
+const rfcMalo = (): string => { const b = RFC.boreal.slice(0, 11); return b + Array.from({ length: 11 }, (_, i) => (i < 10 ? String(i) : 'A')).find((d) => !rfcChecksumOk(b + d))!; };
 
 /** Dos renglones sintéticos que suman 14 029 kg; el total lo ponemos nosotros. */
 function embarque(totalValor: string, evidenciaTotal: string | null = null): Extraccion {
@@ -94,9 +98,16 @@ describe('(e) validadores deterministas y confianza compuesta', () => {
   it('una extracción buena no falla ningún validador', () => {
     expect(validadoresDeterministas(extraccionAtlasOk('llm', 0.99))).toEqual([]);
   });
+  it('un Tax ID extranjero (aún sin país) NO es un RFC malo; un RFC de 13 con dígito imposible sí falla', () => {
+    const e = extraccionAtlasOk('llm', 0.99);
+    e.campos.destino_rfc = cv('12-3456789', 0.99);
+    expect(validadoresDeterministas(e)).toEqual([]);
+    e.campos.destino_rfc = cv(rfcMalo(), 0.99);
+    expect(validadoresDeterministas(e).map((x) => x.codigo)).toContain('rfc_digito');
+  });
   it('un RFC con forma imposible falla aunque el modelo diga 0.99, y su confianza baja a ≤ 0.5', () => {
     const e = extraccionAtlasOk('llm', 0.99);
-    e.campos.origen_rfc = cv('XYZ', 0.99);
+    e.campos.origen_rfc = cv('X', 0.99);
     const f = validadoresDeterministas(e);
     expect(f.map((x) => x.codigo)).toContain('rfc_forma');
     const c = aplicarConfianzaCompuesta(e, f);
@@ -143,9 +154,9 @@ describe('(e) revisión humana: los valores en conflicto de cada nivel', () => {
     expect(r[0].valores).toEqual(expect.arrayContaining(['14.029', '15029', '9000', '5029'])); // los dos niveles y los renglones del cuadre
   });
   it('un RFC malo en los dos niveles se muestra una sola vez', () => {
-    const a = extraccionAtlasOk(); a.campos.destino_rfc = cv('ABC', 0.9);
+    const a = extraccionAtlasOk(); a.campos.destino_rfc = cv(rfcMalo(), 0.9);
     const r = revisionHumanaDe(validadoresDeterministas(a), [a, a]);
-    expect(r.find((x) => x.campo === 'destino_rfc')?.valores).toEqual(['ABC']);
+    expect(r.find((x) => x.campo === 'destino_rfc')?.valores).toEqual([rfcMalo()]);
     expect(RFC.atlas).toBeTruthy();
   });
 });

@@ -16,6 +16,10 @@ import { ordenDeNiveles, leerOrden, tipoDeLectura } from './orden_niveles';
 import { pdfBoreal, RFC } from './documentos_sinteticos.fixture';
 import { lecturaBoreal, llmFalso, salida, type Fila } from './llm_falso.fixture';
 import { validarExtraccion } from './validacion';
+import { rfcChecksumOk } from '../intake/cfdi';
+
+/** Un RFC de forma correcta cuyo dígito verificador NO cuadra. */
+const rfcMalo = (): string => { const b = RFC.boreal.slice(0, 11); return b + Array.from({ length: 11 }, (_, i) => (i < 10 ? String(i) : 'A')).find((d) => !rfcChecksumOk(b + d))!; };
 
 /** Una captura (visión: sin texto, así que nada se ancla y la confianza que declara el modelo llega entera). */
 const captura = (): ContenidoDoc => ({ formato: 'imagen', texto: null, imagenes: ['data:image/png;base64,AAAA'], tabla: null, xml: null, avisos: [] });
@@ -45,8 +49,8 @@ describe('(e) un campo CRÍTICO que falla un validador ESCALA aunque el modelo d
     expect(contadoresDeEscalamientos()['1>2:validador']).toBe(1);
   });
 
-  it('RFC con forma imposible a 0.99: escala; sin validador (control) NO escalaría', async () => {
-    const llm = llmFalso((e) => (e.nivel === 1 ? lectura(1, { origen_rfc: ['XYZ', 0.99, null] }) : lectura(e.nivel)));
+  it('RFC con dígito verificador imposible a 0.99: escala; sin validador (control) NO escalaría', async () => {
+    const llm = llmFalso((e) => (e.nivel === 1 ? lectura(1, { origen_rfc: [rfcMalo(), 0.99, null] }) : lectura(e.nivel)));
     const r = await extraerDocumento(captura(), { llm, niveles: [1, 2, 3] });
     expect(r.escalamientos[0]).toMatchObject({ de: 1, a: 2, codigo: 'validador' });
     expect(r.extraccion.campos.origen_rfc.valor).toBe(RFC.boreal);
@@ -86,14 +90,14 @@ describe('(e) un campo CRÍTICO que falla un validador ESCALA aunque el modelo d
   });
 
   it('dos niveles que coinciden en un valor que un validador rechaza NO lo salvan', async () => {
-    const llm = llmFalso((e) => lectura(e.nivel, { origen_rfc: ['XYZ', 0.99, null] }));
+    const llm = llmFalso((e) => lectura(e.nivel, { origen_rfc: [rfcMalo(), 0.99, null] }));
     const r = await extraerDocumento(captura(), { llm, niveles: [1, 2, 3] });
     expect(r.extraccion.campos.origen_rfc.confianza).toBeLessThanOrEqual(0.5);
     expect(r.revisionHumana.map((x) => x.campo)).toContain('origen_rfc');
   });
 
   it('si el nivel 1 falla un validador y el 2 lo cumple pero DIFIERE, gana el que cumple (con tope 0.85 y nota)', async () => {
-    const llm = llmFalso((e) => lectura(e.nivel, { origen_rfc: [e.nivel === 1 ? 'XYZ' : RFC.boreal, 0.99, null] }));
+    const llm = llmFalso((e) => lectura(e.nivel, { origen_rfc: [e.nivel === 1 ? rfcMalo() : RFC.boreal, 0.99, null] }));
     const r = await extraerDocumento(captura(), { llm, niveles: [1, 2, 3] });
     const c = r.extraccion.campos.origen_rfc;
     expect(c.valor).toBe(RFC.boreal);
@@ -129,7 +133,7 @@ describe('(f) el orden de los niveles es configurable por tipo de documento', ()
     expect(llm.llamadas.map((l) => l.nivel)).toEqual([2]);
   });
   it('nivelMaximo sigue siendo «cuántos niveles se recorren» (1 = nunca escalar)', async () => {
-    const llm = llmFalso((e) => lectura(e.nivel, { origen_rfc: ['XYZ', 0.99, null] }));
+    const llm = llmFalso((e) => lectura(e.nivel, { origen_rfc: [rfcMalo(), 0.99, null] }));
     await extraerDocumento(captura(), { llm, niveles: [2, 3], nivelMaximo: 1 });
     expect(llm.llamadas.map((l) => l.nivel)).toEqual([2]);
   });
