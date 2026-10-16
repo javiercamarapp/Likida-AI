@@ -312,3 +312,46 @@ export function rutasDelViaje(rutas: readonly RutaAutorizada[], v: ViajeParaRuta
   if (v.servicio === 'exportacion' && patio === null) faltan.push('destino');
   return { carga, patio, faltan };
 }
+
+// ── El mantenimiento de la base (T-A5-50) ───────────────────────────────────
+
+/** Días sin revisar a partir de los cuales una ruta aparece en la lista de pendientes. */
+export const DIAS_REVISION_RUTAS_DEFAULT = 90;
+
+export interface PendienteRevision<T extends RutaAutorizada = RutaExistente> {
+  ruta: T;
+  /** Días enteros desde `revisadaEn` hasta hoy; `null` = nunca se revisó. */
+  diasSinRevisar: number | null;
+  /** Ya pasó su `vigenteHasta`: el chofer no la recibe (vale como ausente) hasta que se renueve. */
+  vencida: boolean;
+}
+
+const diaNumero = (iso: string): number => {
+  const [a, m, d] = iso.split('-').map(Number);
+  return Date.UTC(a, m - 1, d) / 86_400_000;
+};
+
+/**
+ * Las rutas que llevan `dias` o más sin revisarse (en días de calendario de la flota; `hoy` en AAAA-MM-DD), de la más descuidada a la
+ * menos: primero las que nunca se revisaron, luego por antigüedad. Solo LEE: no envía nada ni toca la base; revisar una ruta es el
+ * botón «Revisada» (`marcarRutaRevisada`), que pone `revisada_en` en hoy y la saca de aquí. Un plazo no entero o menor que 1 usa el
+ * de 90 días. Las vencidas se incluyen y se marcan: hay que renovarlas o quitarlas.
+ */
+export function rutasPendientesDeRevision<T extends RutaAutorizada>(
+  rutas: readonly T[], hoy: string, dias: number = DIAS_REVISION_RUTAS_DEFAULT,
+): Array<PendienteRevision<T>> {
+  const plazo = Number.isInteger(dias) && dias >= 1 ? dias : DIAS_REVISION_RUTAS_DEFAULT;
+  const hoyN = diaNumero(hoy);
+  const pendientes: Array<PendienteRevision<T>> = [];
+  for (const ruta of rutas) {
+    const diasSinRevisar = ruta.revisadaEn === null ? null : hoyN - diaNumero(ruta.revisadaEn);
+    if (diasSinRevisar !== null && diasSinRevisar < plazo) continue;
+    pendientes.push({ ruta, diasSinRevisar, vencida: !rutaVigente(ruta, hoy) });
+  }
+  return pendientes.sort((a, b) => {
+    if (a.diasSinRevisar === b.diasSinRevisar) return a.ruta.corredor.localeCompare(b.ruta.corredor);
+    if (a.diasSinRevisar === null) return -1;
+    if (b.diasSinRevisar === null) return 1;
+    return b.diasSinRevisar - a.diasSinRevisar;
+  });
+}

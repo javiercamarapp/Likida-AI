@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('./repo', () => ({ importarRutas: vi.fn() }));
+vi.mock('./repo', () => ({ importarRutas: vi.fn(), marcarRutaRevisada: vi.fn() }));
 
-const { importarRutasDelPanel } = await import('./acciones_rutas');
+const { importarRutasDelPanel, marcarRutaRevisadaDelPanel } = await import('./acciones_rutas');
 
 const OK = 'https://maps.app.goo.gl/EjemploSintetico1';
 const CAB = 'corredor,sitio_origen,sitio_destino,url';
@@ -53,5 +53,41 @@ describe('importarRutasDelPanel', () => {
     const r = await importarRutasDelPanel({ tenantId: 't1', rol: 'flota_admin' }, { texto: `${CAB}\nA,,,${OK}\n` }, deps);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).not.toMatch(/boom/);
+  });
+});
+
+describe('marcarRutaRevisadaDelPanel (T-A5-50)', () => {
+  const marcar = vi.fn();
+  const depsM = { importar, marcar } as never;
+  const ahora = new Date('2026-10-16T05:30:00Z'); // 23:30 del 15-oct en America/Mexico_City
+  beforeEach(() => { marcar.mockReset(); });
+
+  it('sin permiso no escribe', async () => {
+    for (const rol of ['contador', 'operador', '']) {
+      const r = await marcarRutaRevisadaDelPanel({ tenantId: 't1', rol }, { id: 'r1' }, depsM, ahora);
+      expect(r.ok).toBe(false);
+    }
+    expect(marcar).not.toHaveBeenCalled();
+  });
+
+  it('marca con el tenant de la sesión y el día de la flota (no el UTC del servidor)', async () => {
+    marcar.mockResolvedValue(true);
+    const r = await marcarRutaRevisadaDelPanel({ tenantId: 't1', rol: 'flota_admin' }, { id: 'r1' }, depsM, ahora);
+    expect(marcar).toHaveBeenCalledWith('t1', 'r1', '2026-10-15');
+    expect(r.ok).toBe(true);
+  });
+
+  it('id vacío o ruta inexistente/ajena: error en palabras, sin excepción', async () => {
+    expect((await marcarRutaRevisadaDelPanel({ tenantId: 't1', rol: 'flota_admin' }, { id: '  ' }, depsM, ahora)).ok).toBe(false);
+    expect(marcar).not.toHaveBeenCalled();
+    marcar.mockResolvedValue(false);
+    const r = await marcarRutaRevisadaDelPanel({ tenantId: 't1', rol: 'flota_admin' }, { id: 'r-ajena' }, depsM, ahora);
+    expect(r).toMatchObject({ ok: false });
+  });
+
+  it('un fallo de la base se reporta sin romper', async () => {
+    marcar.mockRejectedValue(new Error('boom'));
+    const r = await marcarRutaRevisadaDelPanel({ tenantId: 't1', rol: 'flota_admin' }, { id: 'r1' }, depsM, ahora);
+    expect(r.ok).toBe(false);
   });
 });

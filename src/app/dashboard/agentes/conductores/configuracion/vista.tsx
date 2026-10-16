@@ -6,10 +6,11 @@ import type { ContactoTrafico } from '@/lib/likida/conductor/escalamiento';
 import type { ResultadoPreflight } from '@/lib/likida/conductor/preflight_piloto';
 import { PanelPreflight } from './preflight';
 import { FormaImportarRutas } from './forma_rutas';
+import { PendientesRutas, type FilaPendienteRuta } from './pendientes_rutas';
 import type { AccionSitio } from '../sitios/formas';
 import { FormaConfigConductor, SeccionVoluntarios, type AccionConfig, type AccionVoluntario, type DatosVoluntarios } from './forma';
 
-export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar, voluntarios, accionAlta, accionBaja, preflight, puedeForzarPreflight, accionImportarRutas }: {
+export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar, voluntarios, accionAlta, accionBaja, preflight, puedeForzarPreflight, accionImportarRutas, rutasPendientes, totalRutas = 0, diasRevisionRutas = 90, accionRutaRevisada }: {
   sufijo: string;
   /** `null` = no se pudo leer: se dice, no se enseña un formulario con los defaults como si fueran lo guardado. */
   config: ConfigConductor | null;
@@ -28,6 +29,11 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
   puedeForzarPreflight?: boolean;
   /** T-A5-48: importar rutas autorizadas de Google Maps (CSV). `undefined` = no se ofrece (sin permiso de asignar). */
   accionImportarRutas?: AccionSitio;
+  /** T-A5-50: rutas sin revisar por antigüedad. `null`/`undefined` = no se pudo leer o no se ofrece: no se pinta la lista. */
+  rutasPendientes?: FilaPendienteRuta[] | null;
+  totalRutas?: number;
+  diasRevisionRutas?: number;
+  accionRutaRevisada?: AccionSitio;
 }) {
   const legible = config !== null && valores !== null && contactos !== null;
   return (
@@ -67,6 +73,12 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
                 Cada fila se aprueba o se rechaza sola; volver a subir el mismo archivo no cambia nada.
               </p>
               <FormaImportarRutas accion={accionImportarRutas} />
+              {rutasPendientes && (
+                <div className="space-y-2 pt-2">
+                  <h3 id="rutas-pendientes-titulo" className="text-[12.5px] font-medium">Rutas por revisar</h3>
+                  <PendientesRutas pendientes={rutasPendientes} totalRutas={totalRutas} dias={diasRevisionRutas} accionRevisada={accionRutaRevisada} />
+                </div>
+              )}
             </section>
           )}
         </div>

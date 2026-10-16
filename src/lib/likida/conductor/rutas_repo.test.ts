@@ -96,3 +96,20 @@ describe('importarRutas', () => {
     await expect(repo.importarRutas('t1', [csv()])).rejects.toThrow(/rutas_insertar/);
   });
 });
+
+describe('marcarRutaRevisada (T-A5-50)', () => {
+  it('actualiza solo revisada_en de ESA ruta de ESA flota y dice si la encontró', async () => {
+    respuestas = [{ data: [{ id: 'r1' }], error: null }];
+    expect(await repo.marcarRutaRevisada('t1', 'r1', '2026-10-16')).toBe(true);
+    expect(registros[0].tabla).toBe('ruta_autorizada');
+    expect(registros[0].ops).toContainEqual(['update', { revisada_en: '2026-10-16' }]);
+    expect(registros[0].ops).toContainEqual(['eq', 'id', 'r1']);
+    expect(registros[0].ops).toContainEqual(['eq', 'tenant_id', 't1']);
+  });
+  it('una ruta de otra flota (0 filas) da false; un error de base se lanza', async () => {
+    respuestas = [{ data: [], error: null }];
+    expect(await repo.marcarRutaRevisada('t1', 'r-ajena', '2026-10-16')).toBe(false);
+    respuestas = [{ error: { message: 'timeout', code: '57014' } }];
+    await expect(repo.marcarRutaRevisada('t1', 'r1', '2026-10-16')).rejects.toThrow(/rutas_revisar/);
+  });
+});
