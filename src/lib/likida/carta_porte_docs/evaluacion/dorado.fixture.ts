@@ -24,6 +24,8 @@ import { enriquecer, catalogoVacio, type CatalogoCliente, type ParteCat, type Pr
 import type { Extraccion } from '../campos';
 import { rfcValido } from '../documentos_sinteticos.fixture';
 import { llmFalso, salida, type Fila, type Item } from '../llm_falso.fixture';
+import type { LecturaVisionRemision, VisionRemision, CeldaVision } from '../lectores/remision';
+import type { CampoEsperado } from './evaluar';
 
 export type IdMuestra = 'M1' | 'M2' | 'M3' | 'M4' | 'M5';
 
@@ -368,3 +370,231 @@ export async function correrMuestra(m: MuestraDorada, op: OpcionesCorrida = {}):
   if (op.catalogo) extraccion = enriquecer(extraccion, op.catalogo, { tenantId: TENANT_DORADO, clienteId: CLIENTE_DORADO }).extraccion;
   return { extraccion, extraido, llamadasModelo: llm.llamadas.length, contenido };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS TRES CASOS DE LOS LECTORES C, D y E (T-A3-60). Se leen SIN pasar por `extraerDocumento` genérico:
+// cada formato tiene su lector (lectores/remision.ts, bol.ts, orden_agente.ts). Van aparte de MUESTRAS a propósito:
+// M1–M5 miden el camino con modelo/perfil y su matriz está congelada; estos miden el camino por formato.
+//
+//   M6  Remisión ESCANEADA (formato C): PDF-imagen sin capa de texto, 14 renglones, la línea vertical sobre la columna de
+//       claves (SKU truncado), el borde izquierdo recortado (cantidad del primer renglón cortada) y un TOTAL con punto de miles.
+//   M7  Bill of Lading en INGLÉS (formato D): peso en libras con coma de miles y «Notes» fiscales en español.
+//   M8  Orden de remisión de un AGENTE ADUANAL (formato E): pedimento `patente-consecutivo`, caja, placas, sello, peso con coma.
+//
+// Todo inventado: empresas, folios, placas, sellos, pedimentos y RFC con la forma y el dígito válidos, sin ser de nadie.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const RFC_LECTORES = {
+  m7Notes: rfcValido('MEJ150610XXX'), // grep-limpio:ok
+  m8Importador: rfcValido('CEJ160720XXX'), // grep-limpio:ok
+};
+
+// ── M6 · remisión escaneada ─────────────────────────────────────────────────
+
+const PIEZAS_M6 = [120, 100, 90, 80, 80, 70, 60, 60, 50, 50, 40, 40, 30, 30] as const; // suma 900
+const KG_POR_PIEZA_M6 = 7.771;
+const M3_POR_PIEZA_M6 = 0.0912;
+
+export const M6 = {
+  remision: '88000002', fecha: '07/10/2026', remitente: 'Planta Neumaticos Ficticia SA de CV', destinatario: 'Distribuidora Ficticia LLC', ordenCompra: 'OC-5501',
+  renglones: PIEZAS_M6.map((p, i) => {
+    const clave = `NP-${String(i + 1).padStart(2, '0')}01`;
+    const descripcion = `NEUMATICO CARGA ${String(i + 1).padStart(2, '0')}`;
+    const kg = (p * KG_POR_PIEZA_M6).toFixed(3);
+    const vol = (p * M3_POR_PIEZA_M6).toFixed(3);
+    return { clave, descripcion, piezas: String(p), kg, vol, linea: `${String(i + 1).padStart(2, '0')} | ${p} PZA | ${clave} | ${descripcion} | ${kg} | ${vol}` };
+  }),
+  /** El total con PUNTO de miles junto a renglones con punto DECIMAL (suma real: 6 993.900 kg). */
+  totalKg: '6.994',
+  totalPiezas: '900',
+  totalVol: '82.080',
+} as const;
+
+/** PDF-imagen SIN capa de texto: la remisión dibujada como imagen, con borde izquierdo recortado y una línea vertical sobre las claves. */
+export async function pdfM6(): Promise<Uint8Array> {
+  const sharp = (await import('sharp')).default;
+  const filas = M6.renglones.map((r, i) => `<text x="-12" y="${110 + i * 26}" font-size="16" font-family="sans-serif">${r.linea.replace(/[<&]/g, ' ')}</text>`).join('');
+  const png = await sharp(Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600"><rect width="900" height="600" fill="white"/>'
+    + `<text x="-8" y="40" font-size="22" font-family="sans-serif">REMISION ${M6.remision}</text>${filas}`
+    + '<line x1="250" y1="0" x2="250" y2="600" stroke="black" stroke-width="3"/></svg>',
+  )).png().toBuffer();
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([595, 842]);
+  const img = await doc.embedPng(png);
+  page.drawImage(img, { x: 20, y: 400, width: 555, height: 370 });
+  return new Uint8Array(await doc.save());
+}
+
+const C = (texto: string | null, confianza = 0.95, cortada = false): CeldaVision => ({ texto, confianza, ...(cortada ? { cortada: true } : {}) });
+
+export interface OpcionesVisionM6 {
+  /** Las claves de planta salen truncadas (la línea vertical las tapa). Por omisión sí: es la forma de la muestra. */
+  claveCortada?: boolean;
+  /** Reemplaza el texto del total de kg (p. ej. un total que NO cuadra). */
+  totalKg?: string;
+}
+
+/** La visión FALSA determinista: devuelve lo que un buen modelo leería de M6, sin tocar la red ni mirar los píxeles. */
+export function visionFalsaM6(op: OpcionesVisionM6 = {}): VisionRemision & { llamadas: number } {
+  const claveCortada = op.claveCortada ?? true;
+  const contador = { llamadas: 0 };
+  const f = async (): Promise<LecturaVisionRemision> => {
+    contador.llamadas++;
+    return {
+      encabezado: {
+        remision: C(M6.remision, 0.97), fecha: C(M6.fecha, 0.95), orden_compra: C(M6.ordenCompra, 0.9),
+        origen_nombre: C(M6.remitente, 0.95), destino_nombre: C(M6.destinatario, 0.95),
+      },
+      filas: M6.renglones.map((r, i) => ({
+        // El recorte izquierdo se come parte de la cantidad del PRIMER renglón.
+        cantidad: C(`${r.piezas} PZA`, 0.95, i === 0),
+        clave: C(claveCortada ? r.clave.slice(0, 5) : r.clave, claveCortada ? 0.5 : 0.95, claveCortada),
+        descripcion: C(r.descripcion, 0.95),
+        peso_bruto: C(r.kg, 0.95),
+        volumen: C(r.vol, 0.9),
+        linea: r.linea,
+      })),
+      total: { cantidad: C(M6.totalPiezas, 0.95), peso_bruto: C(op.totalKg ?? M6.totalKg, 0.95), volumen: C(M6.totalVol, 0.9), linea: `TOTAL | ${M6.totalPiezas} PZA | ${op.totalKg ?? M6.totalKg} | ${M6.totalVol}` },
+      columnasCortadas: claveCortada ? ['clave'] : [],
+      notas: null,
+    };
+  };
+  // El contador se lee en vivo (getter), no se copia: las pruebas miran `vision.llamadas` después de llamar.
+  return Object.defineProperty(f, 'llamadas', { get: () => contador.llamadas, enumerable: true }) as unknown as VisionRemision & { llamadas: number };
+}
+
+/** Catálogo sintético del cliente de M6: sus claves de planta (las de 4 dígitos completas) con la clave SAT del producto. */
+export function catalogoM6(): CatalogoCliente {
+  const productos: ProductoCat[] = M6.renglones.map((r) => ({
+    tenantId: TENANT_DORADO, clienteId: CLIENTE_DORADO, sku: r.clave, descripcionPatron: null, bienesTransp: '25172500', claveUnidad: 'H87', embalaje: '1A',
+    fraccion: '4011200100', tipoMateria: '01', materialPeligroso: false, claveMaterialPeligroso: null, // grep-limpio:ok
+  }));
+  return { ...catalogoVacio(), productos };
+}
+
+// ── M7 · Bill of Lading en inglés ───────────────────────────────────────────
+
+export const M7 = {
+  bol: '420002-1', ship: '13-Oct-2026', delivery: '17-Oct-2026', shipper: 'Manufactura Ejemplo SA de CV', shipperDom: 'Nuevo Leon MX',
+  consignee: 'Buyer Example Inc', consigneeDom: 'Dallas TX', piezas: '18', descripcion: 'Steel brackets', libras: '8,820', kilos: '4000.685', fraccion: '7326.90.99.00', claveSat: '24112100',
+} as const;
+
+export const NOTAS_M7 = `Notes: RFC ${RFC_LECTORES.m7Notes} Fraccion ${M7.fraccion} Regimen EXD Clave SAT ${M7.claveSat} Unidad 20 Embalaje 1`;
+
+export async function pdfM7(): Promise<Uint8Array> {
+  return pdfDeLineas([
+    'BILL OF LADING',
+    `BOL #: ${M7.bol}`,
+    `Ship Date: ${M7.ship}`,
+    `Delivery Date: ${M7.delivery}`,
+    `Shipper: ${M7.shipper}, ${M7.shipperDom}`,
+    `Consignee: ${M7.consignee}, ${M7.consigneeDom}`,
+    'Carrier: Freight Example LLC',
+    `Pieces: ${M7.piezas}`,
+    `Description: ${M7.descripcion}`,
+    `Weight (LBS): ${M7.libras}`,
+    NOTAS_M7,
+  ]);
+}
+
+// ── M8 · orden de remisión del agente aduanal ───────────────────────────────
+
+export const M8 = {
+  control: '5500123', origen: 'Laredo TX', remitente: 'Proveedor Ejemplo Inc', importador: 'Comercializadora Ejemplo SA de CV', caja: 'TRL-4412', placas: '12AB3C', sello: 'A1234567',
+  pedimento: '3456-7890123', instrucciones: 'DESTINO PLANTA SALTILLO',
+  renglones: [
+    { ref: 'LFH-01', cantidad: '120', clase: 'CARTONES', contenido: 'Juguetes de plastico', kg: '6,577.50' },
+    { ref: 'LFH-02', cantidad: '45', clase: 'TARIMAS', contenido: 'Piezas metalicas', kg: '2,010.00' },
+  ],
+} as const;
+
+export async function pdfM8(): Promise<Uint8Array> {
+  return pdfDeLineas([
+    'ORDEN DE REMISION - AGENTE ADUANAL',
+    `CONTROL No.: ${M8.control}`,
+    `ORIGEN: ${M8.origen}`,
+    `REMITENTE: ${M8.remitente}`,
+    `IMPORTADOR: ${M8.importador}  RFC: ${RFC_LECTORES.m8Importador}`,
+    `CAJA NO.: ${M8.caja}`,
+    `PLACAS: ${M8.placas}`,
+    `SELLO: ${M8.sello}`,
+    '',
+    'REF   CANTIDAD   CLASE   CONTENIDO   PEDIMENTO   PESO(KG)',
+    ...M8.renglones.map((r) => `${r.ref}   ${r.cantidad}   ${r.clase}   ${r.contenido}   ${M8.pedimento}   ${r.kg}`),
+    '',
+    `INSTRUCCIONES: ${M8.instrucciones}`,
+  ]);
+}
+
+// ── Las matrices esperadas de los tres casos ────────────────────────────────
+
+const ok = (campo: string, valor: string): CampoEsperado => ({ campo, valor, estado: 'ok' });
+const rev = (campo: string, valor: string): CampoEsperado => ({ campo, valor, estado: 'revisar' });
+const falta = (campo: string, valor: string | null = null): CampoEsperado => ({ campo, valor, estado: 'falta' });
+const m0 = (clave: string): string => `mercancias[0].${clave}`;
+
+export type IdCasoLector = 'M6' | 'M7' | 'M8';
+
+/**
+ * ✔ lo que el documento escribe y el lector deja pasar; ◐ lo que se convirtió o se leyó con duda; ✗ lo que el documento no trae
+ * (queda vacío para T-A3-62: régimen, cliente, distancia, claves SAT, tramo mexicano). Los valores esperados son los que traería
+ * el CCP verdadero.
+ */
+export const MATRIZ_LECTORES: Readonly<Record<IdCasoLector, ReadonlyArray<CampoEsperado>>> = Object.freeze({
+  M6: [
+    ok('folio_cliente', M6.remision),
+    rev('fecha_salida', '2026-10-07'), // 07/10/2026: día/mes o mes/día, el documento no lo dice
+    falta('origen_rfc'),
+    falta('destino_rfc'),
+    falta('distancia_km'),
+    rev('peso_bruto_total', '6994'), // «6.994» con punto de MILES: se resuelve solo porque cuadra con la suma de renglones (6 993.9 kg)
+    falta(m0('bienes_transp'), '25172500'), // la clave de planta no es del SAT: la pone el catálogo (T-A3-62)
+    ok(m0('descripcion'), 'NEUMATICO CARGA 01'),
+    rev(m0('cantidad'), '120'), // el recorte izquierdo se come parte de la cantidad del primer renglón
+    rev(m0('clave_unidad'), 'H87'), // «PZA» traducido a H87, con la misma confianza de la celda cortada
+    ok(m0('peso_kg'), '932.52'),
+    falta(m0('fraccion_arancelaria'), '4011200100'), // grep-limpio:ok
+    falta(m0('embalaje'), '1A'),
+    falta(m0('valor_mercancia')),
+    ok('n_mercancias', '14'),
+  ],
+  M7: [
+    ok('folio_cliente', M7.bol),
+    ok('fecha_salida', '2026-10-13'),
+    ok('fecha_llegada', '2026-10-17'),
+    rev('origen_rfc', RFC_LECTORES.m7Notes), // en «Notes»: es de un fiscal, no se da por del remitente
+    falta('destino_rfc'),
+    falta('distancia_km'),
+    ok('peso_bruto_total', M7.kilos), // suma de renglones YA convertidos a kg
+    rev(m0('bienes_transp'), M7.claveSat), // «Clave SAT» en Notes: de segunda mano
+    ok(m0('descripcion'), M7.descripcion),
+    ok(m0('cantidad'), M7.piezas),
+    falta(m0('clave_unidad'), 'H87'), // la unidad «20» no es una clave del SAT: queda como texto
+    rev(m0('peso_kg'), M7.kilos), // 8 820 lb × 0.45359237
+    rev(m0('fraccion_arancelaria'), '7326909900'), // grep-limpio:ok
+    rev(m0('embalaje'), '1'),
+    rev(m0('regimen_aduanero'), 'EXD'),
+    falta(m0('valor_mercancia')),
+    ok('n_mercancias', '1'),
+  ],
+  M8: [
+    ok('folio_cliente', M8.control),
+    ok('caja_numero', M8.caja),
+    ok('unidad_placas', M8.placas),
+    falta('origen_rfc'),
+    falta('destino_rfc'),
+    falta('distancia_km'),
+    ok('peso_bruto_total', '8587.5'), // suma de renglones (la coma de miles queda demostrada por «6,577.50»)
+    falta(m0('bienes_transp')),
+    ok(m0('descripcion'), 'Juguetes de plastico'),
+    ok(m0('cantidad'), '120'),
+    falta(m0('clave_unidad')),
+    rev(m0('peso_kg'), '6577.5'), // «6,577.50»: coma de miles
+    rev(m0('pedimento'), M8.pedimento), // patente-consecutivo: faltan año y aduana
+    ok(m0('rfc_importador'), RFC_LECTORES.m8Importador),
+    falta(m0('regimen_aduanero')), // IMPO → IMD lo infiere T-A3-62
+    falta(m0('valor_mercancia')),
+    ok('n_mercancias', '2'),
+  ],
+});
