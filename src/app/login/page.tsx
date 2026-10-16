@@ -143,7 +143,10 @@ export default async function Login({
     if (!(await dentroDelLimite('login:email'))) {
       redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
     }
-    const email = String(formData.get('email') ?? '').trim();
+    // AUDITORÍA 31 v2 · SEG-LOGIN-MAYUSCULAS: `.toLowerCase()` además de
+    // `.trim()`, igual que `invitar.ts:81` al crear la cuenta — sin esto,
+    // ENTRAR y DAR DE ALTA normalizaban el correo de forma distinta.
+    const email = String(formData.get('email') ?? '').trim().toLowerCase();
     if (!email) redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
     // Deja dicho a quién reenviar si este enlace muere (reenvio_enlace.ts).
     // ANTES de saber si el correo tiene cuenta, a propósito: guardarlo solo
