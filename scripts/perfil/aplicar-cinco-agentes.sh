@@ -2,8 +2,14 @@
 # ═══════════════════════════════════════════════════════════════════════════
 # Aplica el perfil `cinco_agentes` (mig. 0770) a UNA flota.
 #
-#   DATABASE_URL="postgres://..." scripts/perfil/aplicar-cinco-agentes.sh <UUID-del-tenant>
+#   DATABASE_URL="postgres://..." scripts/perfil/aplicar-cinco-agentes.sh [--produccion] <UUID-del-tenant>
 #   DATABASE_URL="postgres://..." scripts/perfil/aplicar-cinco-agentes.sh --verificar <UUID>   # solo lee, no escribe
+#   scripts/perfil/aplicar-cinco-agentes.sh --env-file <ruta> [--produccion] <UUID>             # DATABASE_URL leído del archivo
+#
+# SEGURIDAD: contra un host que no sea local (127.0.0.1 / localhost / ::1) el script se NIEGA, salvo --produccion
+# más una confirmación interactiva (escribir el UUID). Antes de cambiar nada escribe el estado previo de la flota en
+# ~/likida-respaldos/perfil/<fecha>-<tenant>.json y al final imprime el comando EXACTO de reversa. No imprime la URL
+# (solo el host).
 #
 # QUÉ HACE, en UNA transacción (todo o nada):
 #   1. inserta (o actualiza) la fila de `tenant_perfil` con perfil = cinco_agentes;
@@ -16,28 +22,35 @@
 # plataforma, contra la base que corresponda, DESPUÉS de aplicar la migración 0770 en esa base.
 # ═══════════════════════════════════════════════════════════════════════════
 set -euo pipefail
+# shellcheck source=scripts/perfil/_comun-cinco-agentes.sh
+. "$(dirname "$0")/_comun-cinco-agentes.sh"
 
 SOLO_VERIFICAR=0
-if [ "${1:-}" = "--verificar" ]; then SOLO_VERIFICAR=1; shift; fi
-
-TENANT="${1:-}"
+PRODUCCION=0
+ENV_FILE=""
+TENANT=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --verificar) SOLO_VERIFICAR=1 ;;
+    --produccion) PRODUCCION=1 ;;
+    --env-file) shift; ENV_FILE="${1:-}"; [ -n "$ENV_FILE" ] || perfil_uso_error "❌ --env-file pide una ruta." ;;
+    -*) perfil_uso_error "❌ Opción desconocida: $1" ;;
+    *) [ -z "$TENANT" ] || perfil_uso_error "❌ Sobra el argumento: $1"; TENANT="$1" ;;
+  esac
+  shift
+done
 if [ -z "$TENANT" ]; then
-  echo "Uso: DATABASE_URL=... $0 [--verificar] <UUID-del-tenant>" >&2
+  echo "Uso: DATABASE_URL=... $0 [--verificar] [--produccion] [--env-file RUTA] <UUID-del-tenant>" >&2
   exit 2
 fi
 # El UUID entra a SQL: solo se acepta con la forma exacta de un UUID (nada de comillas ni espacios).
-if ! printf '%s' "$TENANT" | grep -Eq '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'; then
-  echo "❌ '$TENANT' no es un UUID." >&2
-  exit 2
-fi
-DB="${DATABASE_URL:-}"
-if [ -z "$DB" ]; then
-  echo "❌ Falta DATABASE_URL." >&2
-  exit 2
-fi
-if ! command -v psql >/dev/null 2>&1; then
-  echo "❌ Falta psql." >&2
-  exit 2
+perfil_validar_uuid "$TENANT"
+if [ -n "$ENV_FILE" ]; then perfil_cargar_env_file "$ENV_FILE"; fi
+perfil_requerir_db
+
+# Guardia ANTES de tocar la base (incluso de leerla en modo escritura): host no local => se niega sin --produccion.
+if [ "$SOLO_VERIFICAR" = "0" ]; then
+  perfil_guardia_host "$PRODUCCION" "$TENANT" "APLICAR el perfil cinco_agentes"
 fi
 
 MOTIVO="Perfil cinco_agentes: la lectura de comprobantes y el cierre por WhatsApp no se usan en esta flota"
@@ -62,6 +75,21 @@ if [ "$EXISTE" != "1" ]; then
   exit 3
 fi
 
+# Revertir solo borra las filas ocr/cuadre cuyo motivo empieza con «Perfil cinco_agentes». Si la flota ya tenía un ocr/cuadre
+# propio (otro motivo), aplicar lo sobrescribiría y revertir no lo restauraría: se rehúsa antes de cambiar nada.
+AJENAS="$(psql "$DB" -X -v ON_ERROR_STOP=1 -v tenant="$TENANT" -tA <<'SQL'
+select count(*) from public.interruptor_tenant
+ where tenant_id = :'tenant'::uuid and pipeline in ('ocr', 'cuadre') and coalesce(motivo, '') not like 'Perfil cinco_agentes%';
+SQL
+)"
+if [ "$AJENAS" != "0" ]; then
+  echo "❌ La flota $TENANT ya tiene $AJENAS interruptor(es) ocr/cuadre propios (motivo distinto de «Perfil cinco_agentes»). Aplicar los sobrescribiría y revertir no los restauraría. No se cambió nada; decide a mano (el estado actual se ve con --verificar)." >&2
+  exit 6
+fi
+
+perfil_respaldar "$TENANT"
+HUELLA_ANTES="$(perfil_huella "$TENANT")"
+
 psql "$DB" -v ON_ERROR_STOP=1 -v tenant="$TENANT" -v motivo="$MOTIVO" <<'SQL'
 begin;
 
@@ -82,4 +110,12 @@ select 'pipeline' as que, pipeline as valor, case when apagado then 'APAGADO' el
 
 commit;
 SQL
+echo "huella antes=$HUELLA_ANTES despues=$(perfil_huella "$TENANT")"
 echo "✔ Perfil cinco_agentes aplicado. Se nota en la app en menos de un minuto (caché de 30 s)."
+if [ -n "$ENV_FILE" ]; then ARG_ENV="--env-file $ENV_FILE"; else ARG_ENV=""; fi
+if [ "$PRODUCCION" = "1" ]; then ARG_PROD=" --produccion"; else ARG_PROD=""; fi
+if [ -n "$ARG_ENV" ]; then PREFIJO=""; else PREFIJO='DATABASE_URL="$DATABASE_URL" '; fi
+echo "Para REVERTIR (comando exacto):"
+echo "  ${PREFIJO}scripts/perfil/revertir-cinco-agentes.sh${ARG_PROD}${ARG_ENV:+ $ARG_ENV} $TENANT"
+echo "Para VERIFICAR:"
+echo "  ${PREFIJO}scripts/perfil/verificar-cinco-agentes.sh${ARG_PROD}${ARG_ENV:+ $ARG_ENV} $TENANT"
