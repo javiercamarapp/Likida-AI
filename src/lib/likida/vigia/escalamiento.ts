@@ -12,6 +12,9 @@
 //   · molestia nivel 2 ........... nivel 1, al instante
 //   · molestia nivel 3 (crítica) . nivel 2, al instante
 //   · pide_humano / sin dato ..... nivel 1, al instante
+//   · sin dato de UNIDAD/CAJA .... primero a la lista de SERVICIO AL CLIENTE (T-A4-27, 41dfb197 00:00, en privado, sin tocar los
+//                                  niveles); solo si esa lista está vacía, no se entrega, o no contesta en `escalarNivel2Min`
+//                                  (nadie toca «Yo me encargo»), sube al nivel 1 como siempre
 //   · espera ≥ SLA ............... nivel 1
 //   · espera ≥ SLA + N2 min ...... nivel 2 (aunque el gerente ya «se encargó»: si
 //                                  tomó el hilo y el cliente sigue esperando, el
@@ -36,7 +39,9 @@ export interface AccionEscalamiento {
 
 export interface EntradaEscalamiento {
   conversacion: Pick<Conversacion,
-    'id' | 'estado' | 'control' | 'sinRespuestaDesde' | 'escalamientoNivel' | 'molestiaNivel' | 'molestiaEn' | 'atendidaEn'>;
+    'id' | 'estado' | 'control' | 'sinRespuestaDesde' | 'escalamientoNivel' | 'molestiaNivel' | 'molestiaEn' | 'atendidaEn'>
+    // T-A4-27: con el nivel en 0, `escaladoEn` marca CUÁNDO se avisó a servicio al cliente (el reloj de su plazo).
+    & Partial<Pick<Conversacion, 'escaladoEn'>>;
   config: Pick<ConfigVigia, 'slaRespuestaMin' | 'escalarNivel2Min'> & Partial<Pick<ConfigVigia, 'molestiaAvisoNivel'>>;
   ahoraMs: number;
   /** Alguien pidió un humano o faltó un dato en el mensaje que se acaba de procesar. */
@@ -53,6 +58,49 @@ export function minutosEsperando(sinRespuestaDesde: string | null, ahoraMs: numb
 function claveDe(id: string, inicio: string | null, nivel: number): string {
   const t = inicio ? Date.parse(inicio) : 0;
   return `${id}:${Number.isNaN(t) ? 0 : t}:n${nivel}`;
+}
+
+// ── T-A4-27: «sin dato / sin caja» va primero a servicio al cliente ─────────────────────────────────────
+
+/** Lo que el Vigía pide al estatus cuando preguntan por la unidad: si falta alguno de estos, es un «sin dato de unidad». */
+export const FALTANTES_DE_UNIDAD: readonly string[] = ['caja', 'unidad', 'operador'];
+
+/** ¿Algo de lo que falta es de la unidad (caja, unidad u operador)? Otros faltantes (hora estimada…) siguen la escalera de siempre. */
+export function esSinDatoDeUnidad(faltantes: readonly string[]): boolean {
+  return faltantes.some((f) => FALTANTES_DE_UNIDAD.includes(f));
+}
+
+/** Los faltantes de unidad de un estatus (lo que el Vigía diría «no tengo registrado»), en el orden en que se piden. */
+export function faltantesDeUnidad(est: { caja?: string | null; unidad?: string | null; operador?: string | null }): string[] {
+  return [est.caja ? null : 'caja', est.unidad ? null : 'unidad', est.operador ? null : 'operador'].filter((x): x is string => x !== null);
+}
+
+/**
+ * ¿A dónde va este disparo inmediato? SOLO el `sin_dato` de unidad/caja con una lista de servicio al cliente que tenga a alguien va
+ * a `servicio`; todo lo demás (molestia, sin_respuesta, pide_humano, folio_ajeno, sin_dato de otra cosa, lista vacía) va a la
+ * `escalera` exactamente como antes. PURA.
+ */
+export function destinoDelDisparo(e: { disparo: MotivoEscalamiento | null; faltantes: readonly string[]; hayListaServicio: boolean }): 'servicio' | 'escalera' {
+  return e.disparo === 'sin_dato' && esSinDatoDeUnidad(e.faltantes) && e.hayListaServicio ? 'servicio' : 'escalera';
+}
+
+/** La llave del aviso a servicio al cliente: la del ciclo de espera con sufijo propio, que no choca con `:n1`/`:n2`. */
+export function claveServicio(id: string, inicio: string | null): string {
+  const t = inicio ? Date.parse(inicio) : 0;
+  return `${id}:${Number.isNaN(t) ? 0 : t}:srv`;
+}
+
+/**
+ * Servicio al cliente fue avisado (nivel 0 con `escaladoEn`: el único camino que lo deja así) y pasó `escalarNivel2Min` sin que
+ * nadie contestara (contestar vacía `sinRespuestaDesde`; «Yo me encargo» pone `atendidaEn`). PURA.
+ */
+export function servicioSinContestar(
+  c: Pick<Conversacion, 'sinRespuestaDesde' | 'escalamientoNivel' | 'atendidaEn'> & Partial<Pick<Conversacion, 'escaladoEn'>>, plazoMin: number, ahoraMs: number,
+): boolean {
+  if (c.escalamientoNivel !== 0 || !c.escaladoEn || !c.sinRespuestaDesde || c.atendidaEn) return false;
+  const desde = Date.parse(c.escaladoEn);
+  // El aviso a servicio tiene que ser de ESTE ciclo de espera: uno anterior (de antes de que contestaran) no cuenta.
+  return !Number.isNaN(desde) && desde >= Date.parse(c.sinRespuestaDesde) && ahoraMs - desde >= plazoMin * 60_000;
 }
 
 /**
@@ -79,6 +127,8 @@ export function evaluarEscalamiento(e: EntradaEscalamiento): AccionEscalamiento 
   if (c.molestiaNivel >= 3 && nivel < 2) { nivel = 2; motivo = 'molestia'; }
   else if (c.molestiaNivel >= Math.max(2, e.config.molestiaAvisoNivel ?? 2) && nivel < 1) { nivel = 1; motivo = 'molestia'; }
   if (e.disparoInmediato && nivel < 1) { nivel = 1; motivo = e.disparoInmediato; }
+  // T-A4-27: servicio al cliente fue avisado (nivel en 0, `escaladoEn` puesto) y nadie se hizo cargo en el plazo: sube al nivel 1.
+  if (nivel < 1 && servicioSinContestar(c, e.config.escalarNivel2Min, e.ahoraMs)) { nivel = 1; motivo = 'sin_dato'; }
 
   if (nivel === 0) return null;
   // Nivel 1 lo detiene un humano que ya se hizo cargo; el 2 no (ver encabezado).
@@ -106,7 +156,7 @@ export function evaluarEscalamiento(e: EntradaEscalamiento): AccionEscalamiento 
 // ordenarse por su vencimiento real (SLA + N2) no se interpone a nadie.
 // ═══════════════════════════════════════════════════════════════════════════
 
-type ConvParaCola = Pick<Conversacion, 'sinRespuestaDesde' | 'escalamientoNivel' | 'molestiaNivel' | 'atendidaEn' | 'entradasSinRespuesta'>;
+type ConvParaCola = Pick<Conversacion, 'sinRespuestaDesde' | 'escalamientoNivel' | 'molestiaNivel' | 'atendidaEn' | 'entradasSinRespuesta'> & Partial<Pick<Conversacion, 'escaladoEn'>>;
 type ConfigParaCola = Pick<ConfigVigia, 'slaRespuestaMin' | 'escalarNivel2Min'> & Partial<Pick<ConfigVigia, 'molestiaAvisoNivel'>>;
 
 /**
@@ -126,6 +176,11 @@ export function proximoVencimientoMs(c: ConvParaCola, config: ConfigParaCola): n
   const umbralMolestia = Math.max(2, config.molestiaAvisoNivel ?? 2);
   const urgente = c.molestiaNivel >= 3 || (c.escalamientoNivel < 1 && !c.atendidaEn && c.molestiaNivel >= umbralMolestia);
   if (urgente) return inicio;
+  // T-A4-27: con servicio al cliente ya avisado, el plazo corto (el suyo) puede vencer antes que el SLA.
+  if (c.escalamientoNivel === 0 && !c.atendidaEn && c.escaladoEn) {
+    const desde = Date.parse(c.escaladoEn);
+    if (!Number.isNaN(desde) && desde >= inicio) return Math.min(inicio + sla, desde + config.escalarNivel2Min * 60_000);
+  }
   if (c.escalamientoNivel >= 1 || c.atendidaEn) return inicio + n2;
   return inicio + sla;
 }

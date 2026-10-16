@@ -71,3 +71,27 @@ export function validarRespuestaRapida(e: { tema: unknown; pregunta: unknown; te
   if (texto.length > MAX_TEXTO_RESPUESTA_RAPIDA) return { ok: false, error: `La respuesta pasa de ${MAX_TEXTO_RESPUESTA_RAPIDA} letras (límite de un mensaje de WhatsApp del Vigía).` };
   return { ok: true, valor: { tema: tema as Tema, pregunta, texto } };
 }
+
+// ── Liga al portal de seguimiento (T-A4-47) ──────────────────────────────────
+// Requisito (reunión del 14-oct, 32:08–32:50): la respuesta automática lleva la liga al portal para educar al cliente.
+// La liga la configura cada tenant; sin liga (vacío o inválida) NO se añade nada. Solo https, sin credenciales ni espacios.
+export const MAX_LIGA_PORTAL = 200;
+
+export function normalizarLigaPortal(cruda: unknown): string | null {
+  if (typeof cruda !== 'string') return null;
+  const t = cruda.trim();
+  if (!t || t.length > MAX_LIGA_PORTAL || /\s/.test(t)) return null;
+  try {
+    const u = new URL(t);
+    if (u.protocol !== 'https:' || u.username || u.password) return null;
+    return t;
+  } catch {
+    return null;
+  }
+}
+
+/** La línea que se añade a la respuesta, o `''` si el tenant no configuró una liga válida. */
+export function lineaLigaPortal(cruda: unknown): string {
+  const liga = normalizarLigaPortal(cruda);
+  return liga ? `\n\nPuedes ver el detalle de tu viaje en nuestro portal de seguimiento: ${liga}` : '';
+}

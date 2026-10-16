@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { vigilar } from '../../bloque';
 import { ahoraMs } from '@/lib/saludo';
@@ -63,6 +64,8 @@ export default async function PaginaAgenteVigia({
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
+  // T-A4-32: bajo el perfil cinco_agentes el autoenvío y el POD adjunto son stand-by (ocultos e inoperantes; el código sigue).
+  const standby = (await perfilDeTenant(tenantId)) === 'cinco_agentes';
 
   // FE-14: se lanza UNA vez y se pasa la PROMESA; cada tarjeta espera la suya.
   const datos = vigilar(cargarTablero(tenantId));
@@ -130,6 +133,8 @@ export default async function PaginaAgenteVigia({
       respaldoCorreo: fd.get('respaldoCorreo') === 'on',
     });
     if (!v.ok) return { ok: false, error: v.error };
+    // El perfil se relee en el servidor: un formulario armado a mano no puede encender el autoenvío (stand-by).
+    if (v.valor.modoAprobacion !== 'siempre' && (await perfilDeTenant(a.tenantId)) === 'cinco_agentes') return { ok: false, error: 'El autoenvío no está disponible en tu plan.' };
     try {
       await guardarConfigVigia(a.tenantId, a.userId, v.valor);
       revalidatePath(RUTA);
@@ -252,6 +257,7 @@ export default async function PaginaAgenteVigia({
       acciones={{ decidir, conversacion, config, alta, contacto, director, servicio }}
       sufijo={sufijoTenant(sp)}
       avisosPendientes={avisosPendientes}
+      standby={standby}
     />
   );
 }

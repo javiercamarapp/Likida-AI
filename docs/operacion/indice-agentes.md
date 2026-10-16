@@ -13,7 +13,7 @@ Los crons son los de `vercel.json`. «Reactivo» = lo dispara un mensaje o una p
 | 1 Liquidación fase 1 | `liquidacion-externa.md` | `/api/cron/liquidaciones-externas` (cada 5 min) | 0620 (candado de la copia al jefe), 0643-0645 (aviso de discrepancia con red, «Reavisar», teléfonos sin Excel) |
 | 2 Peajes | `conciliacion-peajes.md` | `/api/cron/peajes` (cada 15 min) | 0603 (el pin de WhatsApp no cuenta como GPS), 0630-0632 (polígonos) |
 | 3 Carta Porte | `carta-porte-multiformato.md` | `/api/cron/carta-porte-docs` (cada 5 min) | 0640-0642 (worker, avisos a la oficina, latido) |
-| 4 Vigía | `vigia-cliente.md`, `vigia-aviso-proactivo.md`, `vigia-aviso-rollback.md` | `/api/cron/vigia` (cada minuto; mantenimiento y avisos de viaje cada 5) | 0647 (respuestas rápidas aprobadas), 0795-0799 (aviso proactivo, servicio al cliente, turnos, prioridad, «solo avisar», estatus de importación) |
+| 4 Vigía | `vigia-cliente.md`, `vigia-aviso-proactivo.md`, `vigia-aviso-rollback.md`, `demo-vigia-aviso.md` | `/api/cron/vigia` (cada minuto; mantenimiento y avisos de viaje cada 5) | 0647 (respuestas rápidas aprobadas), 0795-0799 (aviso proactivo, servicio al cliente, turnos, prioridad, «solo avisar», estatus de importación) |
 | 5 Conductor | `agente-conductor.md` | `/api/cron/conductor-hitos` (cada 5 min) | 0603, 0604 (llegada sin confirmar, margen de acercamiento), 0630, 0635-0637 (geocerca, señal de vida, sitio derivado) |
 | 6 Autofactura | `verificacion-portales.md` | `/api/cron/facturar` (cada 15 min), `/api/cron/portales-vivos` (lunes) | — |
 | 7 Cobranza | `cobranza-por-gasto.md` | dentro de `/api/cron/escalar` (cada hora) | — |
