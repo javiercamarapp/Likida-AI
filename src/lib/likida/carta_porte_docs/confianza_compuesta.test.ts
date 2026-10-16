@@ -140,7 +140,7 @@ describe('(e) revisión humana: los valores en conflicto de cada nivel', () => {
     const r = revisionHumanaDe(fallos, [n1, n2]);
     expect(r).toHaveLength(1);
     expect(r[0]).toMatchObject({ campo: 'peso_bruto_total', renglon: null });
-    expect(r[0].valores).toEqual(['14.029', '15029']);
+    expect(r[0].valores).toEqual(expect.arrayContaining(['14.029', '15029', '9000', '5029'])); // los dos niveles y los renglones del cuadre
   });
   it('un RFC malo en los dos niveles se muestra una sola vez', () => {
     const a = extraccionAtlasOk(); a.campos.destino_rfc = cv('ABC', 0.9);

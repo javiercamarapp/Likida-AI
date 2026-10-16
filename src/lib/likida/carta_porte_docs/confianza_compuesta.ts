@@ -33,6 +33,8 @@ export interface FalloValidador {
   mensaje: string;
   /** Los valores en conflicto (lo que leyó cada nivel, o lo que dice el texto), sin repetir. */
   valores: string[];
+  /** Otros campos que entran en el conflicto (p. ej. el estado frente al código postal, los renglones frente al total). */
+  relacionados?: Array<{ campo: string; renglon: number | null }>;
 }
 
 /** Un campo que ningún nivel logró dejar que cuadre: lo resuelve una persona viendo estos valores. */
@@ -49,11 +51,12 @@ export const CONFIANZA_TOPE_FALLO = 0.5;
 
 /** Campos que, además de los críticos, escalan cuando fallan: el total del peso y la fracción arancelaria. */
 const ESCALABLES_EXTRA = new Set(['peso_bruto_total', 'fraccion_arancelaria']);
-/** Hallazgos que NO son un rechazo de un validador sobre la lectura (los cubre la confianza declarada, la ausencia o el contexto). */
-const CODIGOS_AJENOS = new Set([
-  'critico_ausente', 'confianza_baja', 'documento_con_instrucciones', 'normalizacion_dudosa', 'sin_mercancias',
-  'captura_incompleta', 'remitente_no_reconocido', 'inyeccion', 'moneda_falta',
-]);
+/**
+ * Los hallazgos que delatan una LECTURA mala (forma de RFC/CP/clave/fracción, catálogo SAT, sumas, peso imposible, fechas…).
+ * Quedan fuera los que no los arregla un modelo mejor: unidad del peso sin convertir, moneda, placas, avisos de contexto,
+ * confianza baja o ausencia (esas las cubre la confianza declarada y `carencias`).
+ */
+const CODIGO_DE_LECTURA = /^(rfc_|taxid_|cp_|clave_(forma|segmento|servicio|no_catalogo)$|unidad_(no_sat|forma|no_catalogo)$|fraccion_(forma|no_catalogo)$|numero_|peso_(imposible|suma|factor_1000|fuentes_difieren)$|suma_|cantidad_peso$|fecha_(forma|orden)$|estado_no_catalogo$|valor_sospechoso$|embalaje_no_catalogo$|peligroso_no_catalogo$)/;
 const CODIGOS_PESO_TOTAL = new Set<string>([...CODIGOS_SUMA, 'peso_suma', 'peso_factor_1000', 'peso_fuentes_difieren']);
 
 const esEscalable = (campo: string, renglon: number | null): boolean => {
@@ -62,7 +65,7 @@ const esEscalable = (campo: string, renglon: number | null): boolean => {
 };
 
 const presente = (c: CampoValor | undefined): c is CampoValor => !!c && c.valor !== null && c.valor !== '';
-const num = (c: CampoValor | undefined): number | null => (presente(c) ? normalizarNumero(c.valor).valor : null);
+const num = (c: CampoValor | undefined): number | null => (presente(c) ? normalizarNumero(c.valor as string).valor : null);
 const unicos = (xs: Array<string | null | undefined>): string[] => [...new Set(xs.filter((x): x is string => typeof x === 'string' && x !== ''))];
 
 // ── (b) Montos y pesos con separadores ambiguos ─────────────────────────────
@@ -176,7 +179,7 @@ export function validadoresDeterministas(e: Extraccion, op: OpcionesCompuesta = 
   const sumar = (f: FalloValidador) => { if (!vistos.has(llave(f))) { vistos.add(llave(f)); fallos.push(f); } };
   const r = validarExtraccion(e, { ahora: op.ahora ?? new Date('2026-01-01T00:00:00Z'), catalogosSat: op.catalogosSat, reglasGuia: false });
   for (const h of r.hallazgos) {
-    if (h.severidad === 'aviso' || CODIGOS_AJENOS.has(h.codigo) || h.origen === 'tms') continue;
+    if (h.severidad === 'aviso' || !CODIGO_DE_LECTURA.test(h.codigo) || h.origen === 'tms') continue;
     const afectados = [{ campo: h.campo, renglon: h.renglon }, ...(h.relacionados ?? [])];
     // Un desajuste del total del peso afecta también al peso de cada renglón (no se sabe cuál de los dos leyó mal).
     if (CODIGOS_PESO_TOTAL.has(h.codigo)) e.mercancias.forEach((_, i) => afectados.push({ campo: 'peso_kg', renglon: i }));
@@ -184,7 +187,8 @@ export function validadoresDeterministas(e: Extraccion, op: OpcionesCompuesta = 
       if (!esEscalable(a.campo, a.renglon)) continue;
       const c = a.renglon === null ? e.campos[a.campo] : e.mercancias[a.renglon]?.[a.campo];
       if (!presente(c) || c.origen === 'humano') continue;
-      sumar({ campo: a.campo, renglon: a.renglon, codigo: h.codigo, mensaje: h.mensaje, valores: unicos([c.valor]) });
+      const hermanos = afectados.filter((x) => x !== a).map((x) => (x.renglon === null ? e.campos[x.campo] : e.mercancias[x.renglon]?.[x.campo])?.valor);
+      sumar({ campo: a.campo, renglon: a.renglon, codigo: h.codigo, mensaje: h.mensaje, valores: unicos([c.valor, ...hermanos]), relacionados: afectados.filter((x) => x !== a) });
     }
   }
   for (const f of validarRotuloPeso(e, op.texto ?? null)) sumar(f);
@@ -218,7 +222,8 @@ export function revisionHumanaDe(fallos: ReadonlyArray<FalloValidador>, lecturas
   const salida = new Map<string, RevisionHumana>();
   for (const f of fallos) {
     const k = `${f.renglon ?? 'doc'}|${f.campo}`;
-    const delNivel = lecturas.map((l) => (f.renglon === null ? l.campos[f.campo] : l.mercancias[f.renglon]?.[f.campo])?.valor);
+    const de = (l: Extraccion, x: { campo: string; renglon: number | null }) => (x.renglon === null ? l.campos[x.campo] : l.mercancias[x.renglon]?.[x.campo])?.valor;
+    const delNivel = lecturas.flatMap((l) => [de(l, f), ...(f.relacionados ?? []).map((x) => de(l, x))]);
     const previo = salida.get(k);
     salida.set(k, {
       campo: f.campo, renglon: f.renglon,

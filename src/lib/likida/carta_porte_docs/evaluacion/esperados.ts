@@ -8,7 +8,7 @@
 //   · `estado` es lo que ESTA forma de documento da con el módulo tal como está. Si cambia (alguien rompe una conversión,
 //     un perfil deja de leer una ruta, el modelo empieza a inventar), la prueba falla y dice qué campo.
 //   · En las celdas `revisar` el `valor` es el que el módulo debe CONSERVAR para que una persona lo confirme (p. ej.
-//     «14.029» sin convertir a 14029: la cifra ambigua nunca se resuelve en silencio, ni a favor ni en contra).
+//     una cifra ambigua que NO cuadra con la suma de las mercancías no se adivina; la que sí cuadra se resuelve CON NOTA (T-A3-68 b)).
 //   · `brecha` anota dónde `08 §2` marcaba ◐ y el módulo hoy da ✔ o ✗ (lo que todavía no distingue).
 //
 // Renglones de mercancía: se evalúa el renglón 0 (`mercancias[0].…`) y el número de renglones (`n_mercancias`).
@@ -67,7 +67,7 @@ export const MATRIZ_DORADA: Readonly<Record<IdMuestra, ReadonlyArray<CampoEspera
     falta('origen_rfc', RFC_DORADO.m3Remitente), // sin catálogo no hay RFC; con catálogo del cliente sí (ver MATRIZ_M3_CON_CATALOGO)
     falta('destino_rfc'),
     falta('distancia_km'),
-    rev('peso_bruto_total', '14.029'), // total con punto de MILES junto a renglones con punto DECIMAL
+    rev('peso_bruto_total', '14029'), // T-A3-68 b: «14.029» (punto de MILES junto a renglones con punto DECIMAL) se resuelve CONTRA LA SUMA de los renglones, con nota, y sigue ◐ (una persona la confirma); antes quedaba «14.029»
     falta(m0('bienes_transp'), '25172500'),
     ok(m0('descripcion'), 'LLANTA RADIAL LL-C01 TL'),
     ok(m0('cantidad'), '80'),

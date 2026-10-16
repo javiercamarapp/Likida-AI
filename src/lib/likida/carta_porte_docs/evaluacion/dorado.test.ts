@@ -116,11 +116,12 @@ describe('metas de la demo (08 §4)', () => {
     expect(ev.destino_rfc.motivo).toMatch(/rfc_forma/);
   });
 
-  it('M3: RFC del remitente ✗ sin catálogo y ✔ con el catálogo sintético cargado; el total con punto de miles NO se resuelve en silencio', async () => {
+  it('M3: RFC del remitente ✗ sin catálogo y ✔ con el catálogo sintético cargado; el total con punto de miles se resuelve CONTRA LA SUMA, con nota (T-A3-68 b)', async () => {
     const sin = await evaluarMuestra('M3');
     expect(sin.ev.origen_rfc).toEqual({ estado: '✗', motivo: 'ausente' });
-    expect(sin.corrida.extraccion.campos.peso_bruto_total.valor).toBe('14.029'); // ni 14029 ni se descarta
-    expect(sin.ev.peso_bruto_total.estado).toBe('◐');
+    expect(sin.corrida.extraccion.campos.peso_bruto_total.valor).toBe('14029'); // cuadra con la suma de los 14 renglones
+    expect(sin.corrida.extraccion.campos.peso_bruto_total.notas?.join(' ')).toMatch(/cuadra con la suma/); // nunca en silencio
+    expect(sin.ev.peso_bruto_total.estado).toBe('◐'); // resuelto con nota: una persona lo confirma
     expect(sin.corrida.extraccion.mercancias).toHaveLength(14);
 
     const con = await evaluarMuestra('M3', { catalogo: catalogoM3() }, MATRIZ_M3_CON_CATALOGO);

@@ -33,7 +33,11 @@ export type EstadoDoc = 'recibido' | 'procesando' | 'por_revisar' | 'aprobado' |
 export interface MetaExtraccion {
   origen: 'xml' | 'perfil' | 'llm' | 'perfil+llm';
   nivel: number;
-  escalamientos: Array<{ de: number; a: number; motivo: string }>;
+  escalamientos: Array<{ de: number; a: number; motivo: string; codigo?: string }>;
+  /** T-A3-68 e: campos que ningún nivel del modelo logró dejar que cuadren, con los valores en conflicto. Nunca se aprueban solos. */
+  revisionHumana?: Array<{ campo: string; renglon: number | null; codigo: string; motivo: string; valores: string[] }>;
+  /** T-A3-68 a: cambios de modo (`json_object`) o de modelo (respaldo) que ocurrieron al leer el documento, con su motivo. */
+  caidas?: Array<{ tipo: string; rol: string; de: string; a: string; motivo: string; detalle?: string }>;
   avisos: string[];
   notasModelo: string[];
   indiciosInyeccion: string[];

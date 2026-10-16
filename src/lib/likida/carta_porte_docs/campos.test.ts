@@ -8,7 +8,9 @@ import { ROTULO_ORIGEN } from './presentacion';
 /** Largo de `construirSistema()` antes de ampliar los campos del complemento (T-A3-06). */
 const LARGO_PROMPT_BASE = 3498;
 /** T-A3-46: 6 campos aduaneros y una regla de extracción. */
-const LARGO_PROMPT_ADUANA = LARGO_PROMPT_BASE + 490; // el prompt real mide 3981
+const LARGO_PROMPT_ADUANA = LARGO_PROMPT_BASE + 490; // el prompt real mide 3981 (T-A3-46)
+/** T-A3-68: regla del peso bruto, regla de cifras con separadores y tope de «notas» (el prompt real mide 4467). */
+const LARGO_PROMPT_PESO = LARGO_PROMPT_ADUANA + 490;
 
 const NUEVOS_DOC = [
   'origen_calle', 'origen_num_ext', 'origen_num_int', 'origen_colonia_clave', 'origen_colonia', 'origen_localidad_clave',
@@ -64,7 +66,7 @@ describe('campos del complemento', () => {
   });
 
   it('el prompt no crece', () => {
-    expect(construirSistema().length).toBeLessThanOrEqual(LARGO_PROMPT_ADUANA);
+    expect(construirSistema().length).toBeLessThanOrEqual(LARGO_PROMPT_PESO);
   });
 
   it('el origen «catalogo» tiene rótulo', () => {
