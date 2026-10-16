@@ -16,6 +16,9 @@ import type { CierreMensual } from '@/lib/likida/peajes/cierre_mensual';
 import type { ResumenSeguimiento } from '@/lib/likida/peajes/reclamos_seguimiento';
 import { CATEGORIAS_COBRO, type CategoriaCobro } from '@/lib/likida/peajes/reglas_cobro';
 import { superficiePeajesDeTenant } from '@/lib/likida/peajes/superficie_perfil';
+import { listarDecisionesCandidatos } from '@/lib/likida/peajes/datos';
+import { filasDeCandidatos, filtrosAQuery, normalizarFiltros, tablaDeCandidatos, type TablaCandidatos, type AccionCandidato } from '@/lib/likida/peajes/candidatos_tabla';
+import { aplicablesDelFiltro, ejecutarAccionDeFormulario } from '../acciones-candidatos';
 import { VistaReclamacionPeajes } from './vista';
 
 export const dynamic = 'force-dynamic';
@@ -30,11 +33,13 @@ async function puertaReclamos(tenantId: string): Promise<string | null> {
   if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Esta flota no es la tuya.';
   return null;
 }
-const volverReclamos = (sufijo: string, msg: string, desgloseId?: string): never => {
+const volverReclamos = (sufijo: string, msg: string, desgloseId?: string, filtros?: string): never => {
   const q = new URLSearchParams(sufijo.replace(/^\?/, ''));
   if (desgloseId) q.set('desglose', desgloseId);
+  // Los filtros de la tabla de candidatos vuelven saneados (solo claves conocidas, valores validados).
+  if (filtros) for (const [k, v] of new URLSearchParams(filtrosAQuery(normalizarFiltros(Object.fromEntries(new URLSearchParams(filtros)))))) q.set(k, v);
   q.set(msg.startsWith('error:') ? 'error' : 'aviso', msg.replace(/^error:/, ''));
-  redirect(`${RUTA}?${q.toString()}`);
+  redirect(`${RUTA}?${q.toString()}${filtros !== undefined ? '#candidatos' : ''}`);
 };
 
 /**
@@ -46,7 +51,7 @@ const volverReclamos = (sufijo: string, msg: string, desgloseId?: string): never
 export default async function PaginaReclamacionPeajes({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; desglose?: string; mes?: string; aviso?: string; error?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; desglose?: string; mes?: string; aviso?: string; error?: string; cat?: string; estado?: string; unidad?: string; caseta?: string; desde?: string; hasta?: string; orden?: string; pag?: string }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
@@ -97,6 +102,14 @@ export default async function PaginaReclamacionPeajes({
     const r = await justificarCruce(tenantId, { desgloseId, indice: Number(String(fd.get('indice') ?? '').trim()), motivo: String(fd.get('motivo') ?? '') });
     volverReclamos(sufijo, r.ok ? 'Cruce justificado. Sigue en el historial, marcado con su motivo.' : `error:${r.motivo}`, desgloseId);
   }
+  // T-A2-28b: reclamar / descartar / justificar un candidato (o un lote por filtro). La puerta, el motivo y la idempotencia
+  // viven en `acciones-candidatos.ts`; aquí solo se captura la flota y se decide a dónde volver.
+  async function accionDecidirCandidato(fd: FormData) {
+    'use server';
+    const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
+    const r = await ejecutarAccionDeFormulario(tenantId, fd);
+    volverReclamos(sufijo, r.ok ? r.mensaje : `error:${r.error}`, UUID.test(desgloseId) ? desgloseId : undefined, String(fd.get('retorno') ?? ''));
+  }
   async function accionRechazar(fd: FormData) {
     'use server';
     const no = await puertaReclamos(tenantId);
@@ -141,6 +154,21 @@ export default async function PaginaReclamacionPeajes({
       errorCierre = true;
     }
   }
+  // La tabla de candidatos (T-A2-28a): una página de la lista, con lo ya decidido. Si no se pudieron leer las decisiones, se dice.
+  let tabla: TablaCandidatos | null = null;
+  let errorTabla = false;
+  const aplicables: Record<AccionCandidato, number> = { reclamado: 0, descartado: 0, justificado: 0 };
+  if (estado === 'ok' && desgloseValido && revision) {
+    try {
+      const filas = filasDeCandidatos(revision.revision.candidatos, revision.atipicos.atipicos, await listarDecisionesCandidatos(tenantId, desgloseValido));
+      const filtros = normalizarFiltros(sp);
+      tabla = tablaDeCandidatos(filas, filtros);
+      for (const a of ['reclamado', 'descartado', 'justificado'] as const) aplicables[a] = aplicablesDelFiltro(filas, filtros, a).length;
+    } catch (e) {
+      logger.error('peajes.candidatos_tabla_pagina', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+      errorTabla = true;
+    }
+  }
   let seguimiento: { reclamos: ReclamoVista[]; resumen: ResumenSeguimiento } | null = null;
   let errorSeguimiento = false;
   try {
@@ -154,7 +182,7 @@ export default async function PaginaReclamacionPeajes({
     <VistaReclamacionPeajes
       sufijo={sufijo} desglose={desgloseValido} estado={estado} reporte={reporte}
       extras={{
-        revision, errorGps, mes, cierre, errorCierre, seguimiento, errorSeguimiento,
+        revision, candidatos: { tabla, error: errorTabla, decidir: accionDecidirCandidato, aplicables }, errorGps, mes, cierre, errorCierre, seguimiento, errorSeguimiento,
         acciones: { crearReclamo: accionCrearReclamo, marcarEnviado: accionMarcarEnviado, registrarNota: accionRegistrarNota, rechazar: accionRechazar, justificarCruce: accionJustificarCruce },
         aviso: sp.aviso?.slice(0, 300) ?? null, error: sp.error?.slice(0, 300) ?? null,
       }}

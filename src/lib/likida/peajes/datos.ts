@@ -1524,3 +1524,119 @@ export async function vinculosDeDesglose(tenantId: string, desgloseId: string): 
     calculadoEn: String(f.calculado_en),
   }));
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA DECISIÓN SOBRE CADA CANDIDATO (T-A2-28b, migración 0815).
+//
+// Los candidatos se calculan al leer; aquí solo vive lo que finanzas decidió: reclamado, descartado o
+// justificado, con motivo, quién y cuándo. La llave única (flota, desglose, renglón, categoría) hace
+// idempotente el doble clic: la segunda inserción no escribe nada y no devuelve la fila. Nada de esto
+// toca `desglose_peaje_linea`: el cobro del proveedor no cambia.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type AccionDecisionCandidato = 'reclamado' | 'descartado' | 'justificado';
+
+export interface DecisionCandidatoVista {
+  id: string;
+  indice: number;
+  categoria: string;
+  accion: AccionDecisionCandidato;
+  motivo: string | null;
+  reclamoId: string | null;
+  actor: string;
+  creadoEn: string;
+}
+
+const LOTE_DECISIONES = 500;
+
+/** Las decisiones de un desglose (de esa flota). Lanza ante error de base: leer a medias diría «todo pendiente». */
+export async function listarDecisionesCandidatos(tenantId: string, desgloseId: string): Promise<DecisionCandidatoVista[]> {
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin().from('peaje_candidato_accion')
+      .select('id, indice, categoria, accion, motivo, reclamo_id, actor, creado_en', conteo(d))
+      .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('indice').order('id').range(d, h), 'peajes.listar_decisiones_candidatos'),
+    'peajes.listar_decisiones_candidatos',
+  );
+  return filas.map((f) => ({
+    id: String(f.id), indice: Number(f.indice), categoria: String(f.categoria),
+    accion: String(f.accion) as AccionDecisionCandidato, motivo: typeof f.motivo === 'string' ? f.motivo : null,
+    reclamoId: typeof f.reclamo_id === 'string' ? f.reclamo_id : null, actor: String(f.actor), creadoEn: String(f.creado_en),
+  }));
+}
+
+/**
+ * Registra la decisión sobre varios candidatos en lotes. Devuelve SOLO las filas que de verdad se insertaron:
+ * un renglón que ya tenía decisión (otro clic, otra pestaña) no se pisa ni se devuelve. Lanza ante error de base.
+ */
+export async function registrarDecisionesCandidatos(
+  tenantId: string, desgloseId: string, items: ReadonlyArray<{ indice: number; categoria: string }>,
+  accion: AccionDecisionCandidato, extra: { motivo: string | null; actor: string },
+): Promise<Array<{ id: string; indice: number; categoria: string }>> {
+  const unicos = [...new Map(items.map((i) => [`${i.indice}|${i.categoria}`, i])).values()];
+  const insertadas: Array<{ id: string; indice: number; categoria: string }> = [];
+  for (let i = 0; i < unicos.length; i += LOTE_DECISIONES) {
+    const filas = unicos.slice(i, i + LOTE_DECISIONES).map((x) => ({
+      tenant_id: tenantId, desglose_id: desgloseId, indice: x.indice, categoria: x.categoria, accion,
+      motivo: accion === 'reclamado' ? null : extra.motivo, actor: extra.actor,
+    }));
+    const { data, error } = await acotada(supabaseAdmin().from('peaje_candidato_accion')
+      .upsert(filas, { onConflict: 'tenant_id,desglose_id,indice,categoria', ignoreDuplicates: true }).select('id, indice, categoria'),
+    'peajes.registrar_decisiones_candidatos');
+    if (error) {
+      // Lo ya insertado de esta llamada se retira: no queda una decisión a medias sin su efecto.
+      if (insertadas.length > 0) await retirarDecisionesCandidatos(tenantId, insertadas.map((x) => x.id)).catch(() => undefined);
+      throw new Error(`registrarDecisionesCandidatos: ${error.message}`);
+    }
+    for (const f of (data ?? []) as Array<Record<string, unknown>>) insertadas.push({ id: String(f.id), indice: Number(f.indice), categoria: String(f.categoria) });
+  }
+  return insertadas;
+}
+
+/** Liga decisiones «reclamado» con su reclamo. Lanza ante error de base. */
+export async function ligarDecisionesAReclamo(tenantId: string, ids: readonly string[], reclamoId: string): Promise<void> {
+  for (const lote of lotes(ids)) {
+    const { error } = await acotada(supabaseAdmin().from('peaje_candidato_accion')
+      .update({ reclamo_id: reclamoId }).eq('tenant_id', tenantId).eq('accion', 'reclamado').in('id', lote), 'peajes.ligar_decisiones_reclamo');
+    if (error) throw new Error(`ligarDecisionesAReclamo: ${error.message}`);
+  }
+}
+
+/** Retira decisiones que esta misma llamada acababa de insertar (compensación si el reclamo no se pudo crear). */
+export async function retirarDecisionesCandidatos(tenantId: string, ids: readonly string[]): Promise<void> {
+  for (const lote of lotes(ids)) {
+    const { error } = await acotada(supabaseAdmin().from('peaje_candidato_accion')
+      .delete().eq('tenant_id', tenantId).in('id', lote), 'peajes.retirar_decisiones_candidatos');
+    if (error) throw new Error(`retirarDecisionesCandidatos: ${error.message}`);
+  }
+}
+
+/**
+ * Crea UN reclamo (preparado, o enviado si trae fecha de envío) a partir de un grupo de candidatos ya elegidos.
+ * Los números salen de los candidatos, no del formulario. `fechaCobroMasAntigua` es de donde corre el plazo.
+ */
+export async function crearReclamoDeCandidatos(
+  tenantId: string,
+  e: { desgloseId: string; proveedor: string | null; categoria: string; nCruces: number; monto: number; fechaCobroMasAntigua: string; enviadoEn: string | null; referenciaPortal?: string | null },
+): Promise<string> {
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_reclamo').insert({
+    tenant_id: tenantId, desglose_id: e.desgloseId, proveedor: e.proveedor, categoria: e.categoria,
+    estado: e.enviadoEn ? 'enviado' : 'preparado', n_cruces: e.nCruces, monto_reclamado: Math.round(e.monto * 100) / 100, monto_acreditado: 0,
+    fecha_cobro_mas_antiguo: e.fechaCobroMasAntigua, enviado_en: e.enviadoEn, referencia_portal: e.referenciaPortal?.trim().slice(0, 120) || null,
+  }).select('id').single(), 'peajes.crear_reclamo_candidatos');
+  if (error || !data) throw new Error(`crearReclamoDeCandidatos: ${error?.message ?? 'sin id'}`);
+  return String(data.id);
+}
+
+/** Justifica cruces de «caseta que no debe cruzarse» en lote (la misma tabla que `justificarCruce`, para que la regla los marque). */
+export async function guardarJustificacionesDeCruces(
+  tenantId: string, desgloseId: string, items: ReadonlyArray<{ indice: number; motivo: string }>,
+): Promise<void> {
+  for (let i = 0; i < items.length; i += LOTE_DECISIONES) {
+    const filas = items.slice(i, i + LOTE_DECISIONES).map((x) => ({
+      tenant_id: tenantId, desglose_id: desgloseId, indice: x.indice, categoria: 'caseta_no_debe_cruzarse', motivo: x.motivo,
+    }));
+    const { error } = await acotada(supabaseAdmin().from('peaje_cruce_justificado')
+      .upsert(filas, { onConflict: 'tenant_id,desglose_id,indice,categoria', ignoreDuplicates: true }), 'peajes.guardar_justificaciones_cruces');
+    if (error) throw new Error(`guardarJustificacionesDeCruces: ${error.message}`);
+  }
+}
