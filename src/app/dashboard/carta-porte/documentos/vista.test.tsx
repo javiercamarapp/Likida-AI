@@ -500,3 +500,44 @@ describe('T-A3-31: reasignar desde el visor', () => {
     expect(aprobado).not.toMatch(/name="revisorId"/);
   });
 });
+
+describe('T-A3-63: lo inferido y lo poco seguro se resaltan al lado del documento', () => {
+  const montar = (d: DocumentoFila, texto: string) => html(
+    <VistaRevision doc={d} revision={revisionDe(d)} original={{ tipo: 'texto', texto }} operadores={[]} eventos={[]} acciones={{ revisar: accion }} />,
+  );
+  const conMarcas = () => {
+    const e = extraccionAtlasOk();
+    e.campos.origen_cp = { ...cv('44100', 0.6), evidencia: 'CP Origen: 44100' };
+    e.campos.unidad_placas = cv('ABC1234', 0.95, 'catalogo');
+    return doc({}, e);
+  };
+
+  it('el inferido lleva rótulo «Inferido», su aviso en llano y nunca el rótulo de leído', () => {
+    const h = montar(conMarcas(), 'Folio | ATL-20481');
+    expect(h).toContain('data-marca="inferido"');
+    expect(h).toMatch(/Inferido del catálogo del cliente: el documento no lo trae/);
+    expect(h).toMatch(/>Inferido</);
+  });
+
+  it('el poco seguro se rotula y su línea del documento original va resaltada', () => {
+    const h = montar(conMarcas(), 'Folio | ATL-20481\nCP Origen: 44100');
+    expect(h).toContain('data-marca="poco-seguro"');
+    expect(h).toMatch(/>Poco seguro</);
+    expect(h).toContain('data-linea-resaltada');
+    expect(h.match(/data-linea-resaltada/g)).toHaveLength(1);
+  });
+
+  it('el resumen cuenta lo resaltado y avisa que aprobar con correcciones enseña al formato', () => {
+    const h = montar(conMarcas(), 'x');
+    expect(h).toMatch(/1 dato inferido/);
+    expect(h).toMatch(/1 dato poco seguro/);
+    expect(h).toMatch(/el siguiente documento igual sale sin modelo/);
+  });
+
+  it('un documento sin nada que resaltar no pinta marcas ni resumen', () => {
+    const h = montar(doc(), 'Folio | ATL-20481');
+    expect(h).not.toContain('data-marca=');
+    expect(h).not.toContain('resumen-marcas');
+    expect(h).not.toContain('data-linea-resaltada');
+  });
+});
