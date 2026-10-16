@@ -33,6 +33,7 @@ import { secretoMaestro, claveDeFlota, reintentarArchivoPeaje } from '@/lib/liki
 import { cofreConfigurado } from '@/lib/likida/conectores/cofre';
 import { direccionPj } from '@/lib/likida/peajes/correo_entrante';
 import { dominioBuzon } from '@/lib/correo/buzon';
+import { superficiePeajesDeTenant, MOTIVO_STAND_BY_PERFIL } from '@/lib/likida/peajes/superficie_perfil';
 import { VistaConfiguracionPeajes } from './vista';
 
 export const dynamic = 'force-dynamic';
@@ -53,6 +54,13 @@ async function puertaConfig(tenantId: string, area: 'dinero' | 'administracion' 
   if (!puedeVerArea(sesion.rol, area)) return 'Tu rol no puede hacer esto.';
   if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Esta configuración no es de tu flota.';
   return null;
+}
+
+/** Puerta extra de las acciones de STAND-BY (geocercas, cursos): una flota con perfil `cinco_agentes` no las ejecuta aunque llegue un POST directo. */
+async function puertaStandBy(tenantId: string, parte: 'gps' | 'cursos'): Promise<string | null> {
+  const no = await puertaConfig(tenantId);
+  if (no) return no;
+  return (await superficiePeajesDeTenant(tenantId))[parte] ? null : MOTIVO_STAND_BY_PERFIL;
 }
 
 function volverConfig(sufijo: string, msg: string): never {
@@ -108,6 +116,7 @@ export default async function PaginaConfiguracionPeajes({
   const sufijo = sufijoTenant(sp);
   const puedeAdministrar = puedeVerArea(rol, 'administracion');
 
+  const superficie = await superficiePeajesDeTenant(tenantId);
   const secreto = secretoMaestro();
   const [tarifas, configPeajes, reglasCasetas, tagsBaja, excepcionesUnidad, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
     safe(() => listarTarifas(tenantId)),
@@ -118,9 +127,9 @@ export default async function PaginaConfiguracionPeajes({
     safe(() => listarTags(tenantId)),
     safe(() => listarUnidades(tenantId)),
     safe(() => listarCasetas(tenantId)),
-    safe(() => listarGeocercas(tenantId)),
-    safe(() => listarCursos(tenantId)),
-    safe(() => listarConveniosPorNombre(tenantId)),
+    superficie.gps ? safe(() => listarGeocercas(tenantId)) : Promise.resolve(null),
+    superficie.cursos ? safe(() => listarCursos(tenantId)) : Promise.resolve(null),
+    superficie.cursos ? safe(() => listarConveniosPorNombre(tenantId)) : Promise.resolve(null),
     safe(() => listarMapeos(tenantId)),
     safe(() => leerConfigBuzon(tenantId)),
     safe(() => listarArchivosIngesta(tenantId, 20)),
@@ -255,7 +264,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Geocercas ──
   async function accionGuardarGeocerca(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaStandBy(tenantId, 'gps');
     if (no) volverConfig(sufijo, `error:${no}`);
     const num = (k: string) => Number(String(fd.get(k) ?? '').trim().replace(',', '.'));
     const r = await guardarGeocerca(tenantId, {
@@ -266,7 +275,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionEstadoGeocerca(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaStandBy(tenantId, 'gps');
     if (no) volverConfig(sufijo, `error:${no}`);
     const activa = String(fd.get('activa')) === 'true';
     volverConfig(sufijo, (await cambiarEstadoGeocerca(tenantId, String(fd.get('geocerca') ?? ''), activa)) ? (activa ? 'Geocerca activada.' : 'Geocerca desactivada.') : 'error:No se pudo cambiar la geocerca.');
@@ -275,7 +284,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Cursos (rutas autorizadas) ──
   async function accionImportarCursos(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaStandBy(tenantId, 'cursos');
     if (no) volverConfig(sufijo, `error:${no}`);
     const a = await archivoDeForm(fd);
     if (typeof a === 'string') volverConfig(sufijo, `error:${a}`);
@@ -283,14 +292,14 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionImportarCursosDeTabla() {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaStandBy(tenantId, 'cursos');
     if (no) volverConfig(sufijo, `error:${no}`);
     const sesion = await requireSessionTenant(RUTA);
     volverConfig(sufijo, resumenCursos(await importarCursosDeTablaPropia({ tenantId, rol: sesion.rol })));
   }
   async function accionEstadoCurso(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaStandBy(tenantId, 'cursos');
     if (no) volverConfig(sufijo, `error:${no}`);
     const activo = String(fd.get('activo')) === 'true';
     volverConfig(sufijo, (await cambiarEstadoCurso(tenantId, String(fd.get('curso') ?? ''), activo)) ? (activo ? 'Curso activado.' : 'Curso desactivado: ya no se evalúa en el reporte de reclamación.') : 'error:No se pudo cambiar el curso.');
@@ -454,6 +463,7 @@ export default async function PaginaConfiguracionPeajes({
       agenteApagado={aviso}
       tags={tags} unidades={unidades} casetas={casetas} geocercas={geocercas} cursos={cursos} convenios={convenios} mapeos={mapeos} archivos={archivos}
       tiposGeocerca={[...TIPOS_GEOCERCA]}
+      superficie={superficie}
       buzon={{
         estado: buzon === null ? 'ilegible' : (buzon?.activa ? 'activo' : 'inactivo'),
         rotacion: buzon?.rotacion ?? null,

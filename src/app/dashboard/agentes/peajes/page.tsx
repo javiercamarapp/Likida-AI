@@ -18,6 +18,7 @@ import { bitacoraConciliada } from '@/lib/likida/peajes/bitacora_conciliada';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../../sufijo';
 import { avisoAgentePeajesApagado } from './apagado';
+import { superficiePeajesDeTenant, MOTIVO_STAND_BY_PERFIL } from '@/lib/likida/peajes/superficie_perfil';
 import { VistaAgentePeajes } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
@@ -62,12 +63,14 @@ export default async function PaginaAgentePeajes({
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/peajes', sp);
   if (!puedeVerRuta(rol, '/dashboard/agentes/peajes')) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
+  // T-A2-31: qué del stand-by se lee y se pinta. Con perfil `cinco_agentes` (o sin poder leerlo: falla cerrado) nada de eso.
+  const superficie = await superficiePeajesDeTenant(tenantId);
 
   const [conciliacion, lineas, desgloses, acreditables, corridas, desglosesProveedor] = await Promise.all([
-    getConciliacionConsolidado(tenantId),
-    safe(() => getLineasPorConciliar(tenantId)),
-    safe(() => getDesglosesRecibidos(tenantId)),
-    safe(() => getAcreditables(tenantId)),
+    superficie.cfdiYTickets ? getConciliacionConsolidado(tenantId) : Promise.resolve(null),
+    superficie.cfdiYTickets ? safe(() => getLineasPorConciliar(tenantId)) : Promise.resolve(null),
+    superficie.cfdiYTickets ? safe(() => getDesglosesRecibidos(tenantId)) : Promise.resolve(null),
+    superficie.estimulo ? safe(() => getAcreditables(tenantId)) : Promise.resolve(null),
     // La ficha de corridas (B3): null = no se pudo leer, y la ficha lo dice.
     safe(() => ultimasCorridas(tenantId, 'peajes')),
     // Los desgloses del proveedor (F5): null = no se pudo leer, y se dice.
@@ -90,17 +93,17 @@ export default async function PaginaAgentePeajes({
         // Se computa al leer — no escribe nada — y `safe()` la degrada a "no
         // se pudo leer" igual que el detalle: un resumen a medias diría "sin
         // evidencia" de cruces que sí la tienen.
-        safe(async () => {
+        superficie.gps ? safe(async () => {
           const e = await evidenciaGpsDeDesglose(tenantId, desgloseSel.desgloseId);
           // El Map → objeto plano: la vista solo anota las líneas visibles.
           return { resumen: e.resumen, porLinea: Object.fromEntries(e.porLinea) };
-        }),
+        }) : Promise.resolve(null),
         // El estado conciliado (cuadra / sin respaldo / por verificar): solo el
         // resumen viaja a la vista; el detalle línea a línea es el CSV.
-        safe(async () => {
+        superficie.bitacoraEstimulo ? safe(async () => {
           const b = await bitacoraConciliada(tenantId, desgloseSel.desgloseId);
           return b ? { resumen: b.resumen, sinEvaluarGps: b.sinEvaluarGps } : null;
-        }),
+        }) : Promise.resolve(null),
         // T-A2-27: las lecturas de la revisión de cobros. Cada una va con `safe()`: un fallo aquí
         // degrada SOLO esa franja (`estadoRevisionCobros` → error) y nunca bloquea subir/anular/conciliar.
         safe(() => revisionDeDesglose(tenantId, desgloseSel.desgloseId)),
@@ -125,6 +128,8 @@ export default async function PaginaAgentePeajes({
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
     // El kill switch (0110), después de la puerta y antes de trabajar — el
     // punto único vive en ./apagado.ts, las cuatro actions lo consultan.
+    // Stand-by (CFDI consolidado): una flota con perfil no lo ejecuta ni por POST directo.
+    if (!(await superficiePeajesDeTenant(tenantId)).cfdiYTickets) return { error: MOTIVO_STAND_BY_PERFIL };
     const apagado = await avisoAgentePeajesApagado();
     if (apagado) return { error: apagado };
 
@@ -277,6 +282,8 @@ export default async function PaginaAgentePeajes({
     const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede operar este agente.' };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+    // Stand-by (barrido de la cola de tickets de caseta): igual, cortado en servidor.
+    if (!(await superficiePeajesDeTenant(tenantId)).cfdiYTickets) return { error: MOTIVO_STAND_BY_PERFIL };
     const apagado = await avisoAgentePeajesApagado();
     if (apagado) return { error: apagado };
 
@@ -335,6 +342,7 @@ export default async function PaginaAgentePeajes({
       evidenciaGps={evidenciaSel}
       verificacion={verificacionSel}
       revisionCobros={revisionCobros}
+      superficie={superficie}
       importarDesglose={importarYCruzarDesglose}
       conciliarDesglose={conciliarDesgloseAhora}
       anularDesglose={anularDesgloseAhora}

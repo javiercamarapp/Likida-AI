@@ -15,6 +15,7 @@ import {
 import type { CierreMensual } from '@/lib/likida/peajes/cierre_mensual';
 import type { ResumenSeguimiento } from '@/lib/likida/peajes/reclamos_seguimiento';
 import { CATEGORIAS_COBRO, type CategoriaCobro } from '@/lib/likida/peajes/reglas_cobro';
+import { superficiePeajesDeTenant } from '@/lib/likida/peajes/superficie_perfil';
 import { VistaReclamacionPeajes } from './vista';
 
 export const dynamic = 'force-dynamic';
@@ -51,6 +52,8 @@ export default async function PaginaReclamacionPeajes({
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
+  // T-A2-31: el reporte con evidencia GPS es stand-by; con perfil `cinco_agentes` ni se arma (la revisión de cobros y el seguimiento sí).
+  const superficie = await superficiePeajesDeTenant(tenantId);
 
   // ── Las acciones del seguimiento: cada una repite su puerta ADENTRO (una action es un endpoint por POST directo). ──
   // `puerta` y `volver` viven a nivel de módulo: una función del cuerpo del componente usada dentro de un 'use server'
@@ -111,7 +114,10 @@ export default async function PaginaReclamacionPeajes({
     if (!desgloseValido) estado = 'no_existe';
     else {
       // Los dos reportes son independientes: que falle el del GPS no esconde la revisión de cobros (ni al revés).
-      const [gps, rev] = await Promise.allSettled([reporteReclamacion(tenantId, desgloseValido), revisionDeDesglose(tenantId, desgloseValido)]);
+      const [gps, rev] = await Promise.allSettled([
+        superficie.gps ? reporteReclamacion(tenantId, desgloseValido) : Promise.resolve(null),
+        revisionDeDesglose(tenantId, desgloseValido),
+      ]);
       if (gps.status === 'fulfilled') reporte = gps.value;
       else { errorGps = true; logger.error('peajes.reclamacion_pagina', { tenant: tenantId, err: gps.reason instanceof Error ? gps.reason.message : String(gps.reason) }); }
       if (rev.status === 'fulfilled') revision = rev.value;
