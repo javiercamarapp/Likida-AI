@@ -6,7 +6,8 @@ import { normalizarNombre, normalizarTag } from './formatos';
 import { matrizDeCsv } from './csv';
 import { coordenadaDeCelda, validarCoordenadasMexico } from './casetas';
 import {
-  revisarCobros, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, type CategoriaCobro, type LineaCobro, type ReglasCobro, type ResultadoRevision,
+  revisarCobros, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, TIPOS_UNIDAD_PEAJE,
+  type CategoriaCobro, type LineaCobro, type ReglasCobro, type ResultadoRevision, type TipoUnidadPeaje,
 } from './reglas_cobro';
 import { detectarAtipicos, type ResultadoAtipicos, type UmbralesAtipicos } from './cruces_atipicos';
 import { cierreMensual, type ArchivoCierre, type CierreMensual } from './cierre_mensual';
@@ -90,10 +91,30 @@ export async function listarExcepcionesUnidad(tenantId: string): Promise<Excepci
   }));
 }
 
+/**
+ * TAG normalizado → tipo de su unidad (`peaje_tag.tipo_unidad`, 0812). Solo entran los TAGs con tipo declarado:
+ * un TAG sin alta o sin tipo no aparece (la regla de clase lo trata como «sin tipo de unidad»). Lanza ante error.
+ */
+export async function listarTiposUnidadPorTag(tenantId: string): Promise<Map<string, TipoUnidadPeaje>> {
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin().from('peaje_tag')
+      .select('tag, tipo_unidad', conteo(d))
+      .eq('tenant_id', tenantId).order('tag').range(d, h), 'revision_cobros.listar_tipos_unidad'),
+    'revision_cobros.listar_tipos_unidad',
+  );
+  const mapa = new Map<string, TipoUnidadPeaje>();
+  for (const f of filas) {
+    const tipo = TIPOS_UNIDAD_PEAJE.find((t) => t === f.tipo_unidad);
+    if (tipo) mapa.set(String(f.tag), tipo);
+  }
+  return mapa;
+}
+
 /** Convierte lo guardado en las `ReglasCobro` que entiende el motor puro. */
 export function reglasDesdeConfig(
   casetas: readonly ReglaCasetaVista[], bajas: readonly TagBajaVista[], periodoDesde: string | null,
   excepciones: readonly ExcepcionUnidadVista[] = [], justificados: ReadonlyMap<number, string> = new Map(),
+  clasesUtilitario: readonly number[] = [],
 ): ReglasCobro {
   const excepcionesClase = new Map<string, readonly number[]>();
   const casetasNoCruzar = new Set<string>();
@@ -107,7 +128,7 @@ export function reglasDesdeConfig(
     set.add(e.unidadNorm);
     excepcionesPorUnidad.set(e.casetaNorm, set);
   }
-  return { periodoDesde, excepcionesClase, casetasNoCruzar, tagsBaja: new Map(bajas.map((b) => [b.tag, b.bajaEn])), excepcionesPorUnidad, justificados };
+  return { periodoDesde, excepcionesClase, casetasNoCruzar, tagsBaja: new Map(bajas.map((b) => [b.tag, b.bajaEn])), excepcionesPorUnidad, justificados, clasesUtilitario };
 }
 
 export type Resultado = { ok: true } | { ok: false; motivo: string };
@@ -375,12 +396,16 @@ export async function revisionDeDesglose(
   if (error) throw new Error(`revisionDeDesglose: ${error.message}`);
   if (!d) return null;
 
-  const [filas, casetas, bajas, excepciones, justificados] = await Promise.all([
+  const [filas, casetas, bajas, excepciones, justificados, tipos] = await Promise.all([
     lineasDeDesglose(tenantId, desgloseId), listarReglasCasetas(tenantId), listarTagsBaja(tenantId),
-    listarExcepcionesUnidad(tenantId), listarJustificaciones(tenantId, desgloseId),
+    listarExcepcionesUnidad(tenantId), listarJustificaciones(tenantId, desgloseId), listarTiposUnidadPorTag(tenantId),
   ]);
   const periodoOficialDesde = (d.periodo_oficial_desde as string | null) ?? null;
-  const lineas = filas.map(lineaCobroDeFila);
+  // El tipo de unidad sale del maestro TAG→unidad (no del archivo): un TAG sin alta o sin tipo queda `null`.
+  const lineas = filas.map(lineaCobroDeFila).map((l) => {
+    const tag = normalizarTag(l.tag);
+    return { ...l, tipoUnidad: (tag ? tipos.get(tag) : undefined) ?? null };
+  });
   const revision = revisarCobros(lineas, reglasDesdeConfig(casetas, bajas, periodoOficialDesde, excepciones, justificados));
   const conCoords = casetas.filter((c) => c.lat !== null && c.lng !== null).map((c) => ({ nombre: c.nombre, lat: c.lat as number, lng: c.lng as number }));
   const atipicos = detectarAtipicos(lineas, conCoords, umbrales);

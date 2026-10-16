@@ -206,12 +206,18 @@ export async function importarTagsArchivo(tenantId: string, nombre: string, buff
   let guardadas = 0;
   let actualizadas = 0;
   for (const lote of lotes(altas)) {
-    const { error } = await acotada(supabaseAdmin().from('peaje_tag').upsert(
-      lote.map((a) => ({
-        tenant_id: tenantId, tag: a.tag, tag_original: a.tagOriginal, unidad_id: a.unidadId, proveedor: a.proveedor, activo: true,
-      })),
-      { onConflict: 'tenant_id,tag' },
-    ), 'peajes.importar_tags');
+    // `tipo_unidad` (0812) solo se escribe si el CSV lo trae: una celda vacía NO borra el tipo ya capturado.
+    // Las filas con y sin tipo van en upserts separados para que cada lote tenga las mismas columnas.
+    const fila = (a: (typeof lote)[number]) => ({
+      tenant_id: tenantId, tag: a.tag, tag_original: a.tagOriginal, unidad_id: a.unidadId, proveedor: a.proveedor, activo: true,
+    });
+    const conTipo = lote.filter((a) => a.tipoUnidad).map((a) => ({ ...fila(a), tipo_unidad: a.tipoUnidad }));
+    const sinTipo = lote.filter((a) => !a.tipoUnidad).map(fila);
+    let error: { message: string } | null = null;
+    for (const grupo of [sinTipo, conTipo]) {
+      if (grupo.length === 0 || error) continue;
+      ({ error } = await acotada(supabaseAdmin().from('peaje_tag').upsert(grupo, { onConflict: 'tenant_id,tag' }), 'peajes.importar_tags'));
+    }
     if (error) {
       logger.error('peajes.importar_tags', { tenant: tenantId, err: error.message });
       return { ok: false, guardadas, actualizadas, rechazadas: todasRechazadas, error: `Se guardaron ${guardadas} TAGs y el resto falló. Vuelve a subir el archivo: es seguro repetirlo.` };
