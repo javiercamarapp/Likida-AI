@@ -841,6 +841,66 @@ export async function guardarEventoReporte(
   }
 }
 
+// ── T-A5-39: la bitácora de «detención sin aviso» y las paradas recientes ───
+//
+// Persistencia SIN migración (mismo Ruling que el reporte de llegada, T-A5-43): renglones `validacion` de `viaje_hito_evento` con
+// `detalle.clase = 'deteccion_parada'`, colgados de un hito del viaje. SIN datos personales ni coordenadas: solo pasos del episodio
+// (pregunta, respuesta, apoyo, escalada, cierre) y minutos.
+
+/** Un renglón de la bitácora de detención sin aviso. */
+export interface EventoDetencionFila {
+  id: number;
+  viajeId: string;
+  hitoId: string;
+  detalle: Record<string, unknown>;
+  creadoEn: string;
+}
+
+/** La bitácora de detención sin aviso de esos viajes DE ESA FLOTA, del más viejo al más nuevo. Lanza si la base falla. */
+export async function leerEventosDetencion(tenantId: string, viajeIds: string[]): Promise<EventoDetencionFila[]> {
+  if (viajeIds.length === 0) return [];
+  const res = await acotada(supabaseAdmin().from('viaje_hito_evento')
+    .select('id, viaje_id, viaje_hito_id, detalle, created_at')
+    .eq('tenant_id', tenantId).in('viaje_id', viajeIds).eq('evento', 'validacion')
+    .eq('detalle->>clase', 'deteccion_parada').order('id', { ascending: true }).limit(2000), 'conductor.detencion_eventos');
+  return ((exigir(res as never, 'conductor.detencion_eventos') ?? []) as unknown as Fila[]).map((f) => ({
+    id: Number(f.id), viajeId: String(f.viaje_id), hitoId: String(f.viaje_hito_id),
+    detalle: (f.detalle ?? {}) as Record<string, unknown>, creadoEn: String(f.created_at),
+  }));
+}
+
+/** Escribe UN renglón de la bitácora de detención. Devuelve si quedó guardado: nada se acusa como «anotado» si no lo quedó. */
+export async function guardarEventoDetencion(
+  h: Pick<HitoFila, 'id' | 'tenantId' | 'viajeId' | 'tipo'>, detalle: Record<string, string | number | boolean | null>,
+): Promise<boolean> {
+  try {
+    const { error } = await acotada(supabaseAdmin().from('viaje_hito_evento').insert({
+      tenant_id: h.tenantId, viaje_id: h.viajeId, viaje_hito_id: h.id, tipo_hito: h.tipo, evento: 'validacion',
+      detalle: { clase: 'deteccion_parada', ...detalle },
+    }), 'conductor.detencion_evento');
+    if (error) { logger.error('conductor.detencion_evento_no_guardado', { hito: h.id, err: error.message }); return false; }
+    return true;
+  } catch (e) {
+    logger.error('conductor.detencion_evento_no_guardado', { hito: h.id, err: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
+}
+
+/**
+ * Las paradas de esos viajes DE ESA FLOTA que siguen abiertas o se cerraron desde `desde` (para no preguntar por una detención que el
+ * chofer acaba de avisar). `[]` si no hay o la base aún no tiene la 0806. Lanza si la base falla por otra causa.
+ */
+export async function leerParadasRecientes(tenantId: string, viajeIds: string[], desde: Date): Promise<ParadaFila[]> {
+  if (viajeIds.length === 0) return [];
+  const { data, error } = await acotada(supabaseAdmin().from('viaje_parada').select(COLUMNAS_PARADA)
+    .eq('tenant_id', tenantId).in('viaje_id', viajeIds).or(`fin.is.null,fin.gte.${desde.toISOString()}`).limit(2000), 'conductor.parada_recientes');
+  if (error) {
+    if (faltaEsquema(error, /viaje_parada/i)) return [];
+    throw new Error(`conductor.parada_recientes: ${error.message}`);
+  }
+  return ((data ?? []) as unknown as Fila[]).map(filaAParada).filter((p): p is ParadaFila => p !== null);
+}
+
 /** Guarda las citas del viaje DE ESA FLOTA. `no_encontrado` = no existe o es de otra flota (misma respuesta). */
 export async function guardarCitas(tenantId: string, viajeId: string, cambio: CambioCitas): Promise<'ok' | 'no_encontrado'> {
   const res = await acotada(supabaseAdmin()

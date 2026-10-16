@@ -2,13 +2,13 @@ import { logger } from '@/lib/logger';
 import { moduloEnStandBy } from '@/lib/auth/perfil_tenant';
 import { enviarSolicitudUbicacion } from '@/lib/meta/client';
 import type { ConfigConductor } from './config';
-import { interpretarBoton, interpretarTexto, leerBotonRampa, leerTextoResultadoDescarga, pareceHablarDeHito, type BotonRampa, type Intencion, type Interpretacion } from './interprete';
+import { interpretarBoton, interpretarBotonParada, interpretarParadaTexto, interpretarTexto, leerBotonRampa, leerTextoResultadoDescarga, pareceHablarDeHito, type BotonRampa, type InterpretacionParada, type Intencion, type Interpretacion } from './interprete';
 import { interpretarConLlm } from './llm';
 import { guardiaDatosSeguridad } from './guardia_seguridad';
 import { decidir, hitoActivo, type Decision } from './maquina';
 import { mensajeParaChofer, type ContextoMensaje, type Salida } from './mensajes';
 import {
-  adjuntarUbicacion, asegurarHitos, cargarHitos, cerrarEpisodioPorJefe, guardarContacto, leerConfigConductor, marcarEscalacionAtendida, marcarSinContacto,
+  abrirParada, adjuntarUbicacion, asegurarHitos, cargarHitos, cerrarParada, leerParadaAbierta, cerrarEpisodioPorJefe, guardarContacto, leerConfigConductor, marcarEscalacionAtendida, marcarSinContacto,
   posponerHito, registrarEvento, registrarHito, responderEpisodioSenalVida, retirarHitos, sincronizarLegado, viajeDelOperador,
   type ResultadoEscritura, type ViajeContexto,
 } from './repo';
@@ -29,6 +29,11 @@ import {
   puertosReporteAtenderReales, responderReporteBoton, responderReporteTexto, type PuertosReporteAtender,
 } from './reporte_llegada';
 import { puertosAsignacionReales, responderAsignacion, type OpcionAsignacion, type PuertosAsignacion } from './asignacion';
+import {
+  leerBotonDetencion, puertosDetencionAtenderReales, responderDetencion, responderPaginaMotivos, responderParada,
+  TEXTO_DETENCION_NO_VIGENTE, type BotonDetencion, type PuertosDetencionAtender,
+} from './deteccion_parada';
+import type { DepsParada } from './paradas';
 import { leerTextoPatio, marcarPatioAtendido, preguntarPatio, puertosPatioReales, responderPatio, type PuertosPatio } from './patio_entrega';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -82,6 +87,10 @@ export interface DepsAtender {
   resultado?: PuertosResultado;
   /** T-A5-47: los puertos de la asignación con botones (aceptar, instrucciones, aviso del rechazo). Opcional: sin él, los reales. */
   asignacion?: PuertosAsignacion;
+  /** T-A5-39: la bitácora de la detención sin aviso y el aviso al supervisor por «Necesito apoyo». Opcional: sin él, los reales. */
+  detencion?: PuertosDetencionAtender;
+  /** T-A5-38/39: la parada que inicia el chofer (leer, abrir, cerrar). Opcional: sin él, la real. */
+  parada?: DepsParada;
 }
 
 export const depsReales: DepsAtender = {
@@ -188,6 +197,17 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
   if (!interp && e.viajeAbiertoId) {
     const r = await atenderReporteTexto(e, ahora, deps);
     if (r) return r;
+  }
+  // T-A5-39: los botones de la pregunta de detención (N05: `parada_ok`, `parada_motivo`, `parada_apoyo`) y la página de motivos son de este
+  // módulo y no registran un hito. La parada del chofer (T-A5-38: «parada», un motivo, «ya continúo») va ANTES que el hito: «parada por tráfico»
+  // contiene «tráfico», que para las reglas de hitos es un retraso.
+  const botonDetencion = leerBotonDetencion(e.texto);
+  if (botonDetencion) return atenderDetencionBoton(e, botonDetencion, ahora, deps);
+  const iParada = interpretarBotonParada(e.texto) ?? (e.viajeAbiertoId ? interpretarParadaTexto(e.texto) : null);
+  if (iParada) {
+    const r = await atenderParada(e, iParada, ahora, deps);
+    if (r) return r;
+    if (iParada.via === 'boton') return null;
   }
   const llevaViaje = boton?.viajeId ?? e.viajeAbiertoId;
   if (!llevaViaje) return null;
@@ -372,6 +392,51 @@ async function atenderResultado(
   } catch (err) {
     logger.error('conductor.resultado_descarga_atender_fallo', { viaje: llevaViaje, err: err instanceof Error ? err.message : String(err) });
     return boton ? { mensajes: [FALLO] } : null;
+  }
+}
+
+/** T-A5-39: el viaje del chofer (no liquidado) y su config, o el motivo por el que no hay: ajeno o cerrado. */
+async function viajeVigenteDelBoton(e: EntradaAtender, viajeId: string, deps: DepsAtender) {
+  const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, viajeId);
+  if (!viaje) return { viaje: null, motivo: 'ajeno' as const };
+  if (viaje.estatus === 'liquidado') return { viaje: null, motivo: 'cerrado' as const };
+  return { viaje, config: await deps.config(e.tenantId) };
+}
+
+/** T-A5-39: un botón de la pregunta de detención o de la página de motivos. Los botones siempre contestan algo. */
+async function atenderDetencionBoton(e: EntradaAtender, boton: BotonDetencion, ahora: Date, deps: DepsAtender): Promise<SalidaAtender> {
+  try {
+    const r = await viajeVigenteDelBoton(e, boton.viajeId, deps);
+    if (!r.viaje) return { mensajes: [{ texto: r.motivo === 'cerrado' ? 'Ese viaje ya está cerrado. 👍' : 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] };
+    if (boton.accion === 'pagina') return { mensajes: responderPaginaMotivos(r.config!, r.viaje.id, boton.pagina) };
+    const hitos = await deps.cargarHitos(e.tenantId, r.viaje.id);
+    const mensajes = await responderDetencion(deps.detencion ?? puertosDetencionAtenderReales(), { viaje: r.viaje, hitos, config: r.config!, ahora, opcion: boton.opcion });
+    return { mensajes };
+  } catch (err) {
+    logger.error('conductor.detencion_atender_fallo', { viaje: boton.viajeId, err: err instanceof Error ? err.message : String(err) });
+    return { mensajes: [FALLO] };
+  }
+}
+
+/**
+ * T-A5-38/39: la parada que inicia el chofer. `null` = no es de este módulo (flota con la perilla apagada, o un texto sin viaje): sigue su
+ * camino. Un BOTÓN siempre contesta algo (uno viejo, de otro viaje o con la perilla apagada, dice «ya no está vigente»).
+ */
+async function atenderParada(e: EntradaAtender, i: InterpretacionParada, ahora: Date, deps: DepsAtender): Promise<SalidaAtender | null> {
+  const viajeId = i.viajeId ?? e.viajeAbiertoId;
+  if (!viajeId) return null;
+  const esBoton = i.via === 'boton';
+  try {
+    const r = await viajeVigenteDelBoton(e, viajeId, deps);
+    if (!r.viaje) return esBoton ? { mensajes: [{ texto: r.motivo === 'cerrado' ? 'Ese viaje ya está cerrado. 👍' : 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] } : null;
+    const orden = i.intencion.clase === 'continuo' ? { tipo: 'continuo' as const } : { tipo: 'abrir' as const, motivo: i.intencion.motivo };
+    const parada = deps.parada ?? { leerAbierta: leerParadaAbierta, abrir: abrirParada, cerrar: cerrarParada };
+    const mensajes = await responderParada(parada, { viaje: r.viaje, config: r.config!, ahora, orden });
+    if (!mensajes) return esBoton ? { mensajes: [{ texto: TEXTO_DETENCION_NO_VIGENTE }] } : null;
+    return { mensajes };
+  } catch (err) {
+    logger.error('conductor.parada_atender_fallo', { viaje: viajeId, err: err instanceof Error ? err.message : String(err) });
+    return esBoton ? { mensajes: [FALLO] } : null;
   }
 }
 
