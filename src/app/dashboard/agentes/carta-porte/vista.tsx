@@ -3,6 +3,7 @@ import { ScrollText, TriangleAlert, Sparkles, Mail, MessageCircle, LayoutDashboa
 import type { EstadoCartaPorte } from '@/lib/likida/carta_porte_datos';
 import { numero } from '@/lib/formato';
 import type { InsightsAgente, CalidadGrupo, TarjetaInsight } from '@/lib/likida/carta_porte_docs/metricas';
+import { aCsvSinCcp, type ListadoSinCcp, type ColorAntiguedad } from '@/lib/likida/carta_porte_docs/viajes_sin_ccp';
 import { BarraPagina } from '../../resumen-visual';
 import { EstadoError, EstadoVacio } from '@/app/admin/ui/kit';
 import { DireccionBuzon } from '../proveedores/controles';
@@ -25,7 +26,7 @@ export interface BuzonCartaPorteVista { direccion: string | null; activo: boolea
  */
 export const FRASE_SIN_GRUPOS = 'Los grupos de WhatsApp no se pueden leer: pide a tus clientes que escriban al correo o reenvíalos tú.';
 
-export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzon = null, insights, nombresCliente = {}, diasVentana = 30 }: {
+export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzon = null, insights, sinCcp, nombresCliente = {}, diasVentana = 30 }: {
   datos: EstadoCartaPorte | null;
   sufijo?: string;
   notificaciones?: React.ReactNode;
@@ -33,6 +34,8 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
   buzon?: BuzonCartaPorteVista | null | 'no_leido';
   /** T-A3-37. `undefined` = no se pide el bloque; `'no_leido'` = la lectura falló (no se finge «sin datos»). */
   insights?: InsightsAgente | 'no_leido';
+  /** T-A3-66. `undefined` = no se pide el bloque; `'no_leido'` = la lectura falló (no se finge «sin pendientes»). */
+  sinCcp?: ListadoSinCcp | 'no_leido';
   /** id de cliente → nombre, solo para rotular. */
   nombresCliente?: Record<string, string>;
   diasVentana?: number;
@@ -106,6 +109,8 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
           )}
 
           <ComoMandarDocumentos buzon={buzon} sufijo={sufijo} />
+
+          {sinCcp !== undefined && <ViajesSinCcp listado={sinCcp} />}
 
           {insights !== undefined && <InsightsDelAgente insights={insights} nombresCliente={nombresCliente} diasVentana={diasVentana} />}
 
@@ -317,6 +322,48 @@ function InsightsDelAgente({ insights, nombresCliente, diasVentana }: { insights
           </div>
         </>
       )}
+    </section>
+  );
+}
+
+const TONO_ANTIGUEDAD: Record<ColorAntiguedad, string> = { verde: 'var(--ok)', ambar: 'var(--warn)', rojo: 'var(--bad)' };
+const ROTULO_ANTIGUEDAD: Record<ColorAntiguedad, string> = { verde: 'Reciente', ambar: 'Atención', rojo: 'Riesgo de multa' };
+
+/**
+ * T-A3-66 — viajes que ya salieron y siguen sin Carta Porte, por cliente y con su antigüedad. SOLO LECTURA: no envía
+ * mensajes ni cierra viajes. El reporte semanal es un CSV que se baja desde aquí.
+ */
+function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
+  if (listado === 'no_leido') {
+    return <section className="card p-4"><EstadoError mensaje="No se pudo leer la lista de viajes salidos sin Carta Porte. Vuelve a intentar en un momento." /></section>;
+  }
+  return (
+    <section className="space-y-3" aria-label="Viajes salidos sin Carta Porte">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h2 className="font-display text-[15px] font-semibold">Viajes salidos sin Carta Porte <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>· {numero(listado.total)}</span></h2>
+        {!listado.vacio && (
+          <a download="viajes-sin-carta-porte.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(aCsvSinCcp(listado))}`}
+            className="text-[12.5px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>Descargar reporte (CSV)</a>
+        )}
+      </div>
+      {listado.vacio ? (
+        <EstadoVacio>No hay viajes salidos sin Carta Porte. Cuando salga uno sin complemento aparecerá aquí con las horas que lleva sin él.</EstadoVacio>
+      ) : listado.grupos.map((g) => (
+        <div key={g.clienteId ?? 'sin_cliente'} className="card p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[13px] font-medium">{g.clienteNombre}</div>
+            <div className="text-[11.5px]" style={{ color: TONO_ANTIGUEDAD[g.colorMax] }}>{numero(g.viajes.length)} {g.viajes.length === 1 ? 'viaje' : 'viajes'} · el más viejo {numero(g.masAntiguoHoras)} h</div>
+          </div>
+          <ul className="space-y-0.5 text-[12.5px]">
+            {g.viajes.map((v) => (
+              <li key={v.viajeId} className="flex items-center justify-between gap-3">
+                <span>{v.folio ?? 'Sin folio'}{v.localAbierto ? ' · local abierto' : ''}</span>
+                <span className="cifra-mono" style={{ color: TONO_ANTIGUEDAD[v.color] }}>{numero(v.horas)} h ({numero(v.dias)} d) · {ROTULO_ANTIGUEDAD[v.color]}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </section>
   );
 }

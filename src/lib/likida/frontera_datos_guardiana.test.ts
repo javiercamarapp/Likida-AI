@@ -362,7 +362,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 314;
 // Integración + Peajes (INT-RAMAS): 2,009 + 55 (Peajes sobre la base de perfil: 1,972 − 1,917) = 2,064 esperado; se ajusta al barrido real.
 // Integración + Liquidación (INT-RAMAS): 2,064 + 31 (Liquidación sobre la base de perfil: 1,948 − 1,917) = 2,095 esperado; se ajusta al barrido real.
 // 16-oct-2026, T-A3-67: techo 2,120 → 2,138 llamadas (rojo heredado de las tareas A3 anteriores, medido con el barrido real; esta tarea no suma ninguna).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_138;
+// 16-oct-2026, T-A3-66: techo 2,138 → 2,141 llamadas (+3, medido con el barrido real), todas en `carta_porte_docs/repo.ts` (`leerSalidasParaSinCcp`: hitos de salida, viajes con su cliente y complementos aprobados ligados); solo lectura, con `tenant_id`, por `acotada`/`traerPorIds`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_141;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

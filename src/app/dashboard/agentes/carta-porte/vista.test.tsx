@@ -115,3 +115,39 @@ describe('Agente de Carta Porte: «Cómo le va al agente»', () => {
     expect(html).toContain('Calidad por formato');
   });
 });
+
+describe('Agente de Carta Porte: «Viajes salidos sin Carta Porte» (T-A3-66)', () => {
+  const listado = {
+    vacio: false, total: 2,
+    grupos: [{ clienteId: 'c1', clienteNombre: 'Cliente Ejemplo A', masAntiguoHoras: 80, colorMax: 'rojo' as const, viajes: [
+      { viajeId: 'v1', folio: 'F-1', salidaEn: '2026-03-07T10:00:00Z', horas: 80, dias: 3, color: 'rojo' as const, localAbierto: false },
+      { viajeId: 'v2', folio: 'F-2', salidaEn: '2026-03-10T10:00:00Z', horas: 5, dias: 0, color: 'verde' as const, localAbierto: true },
+    ] }],
+  };
+  const pintarSin = (sinCcp?: Parameters<typeof VistaAgenteCartaPorte>[0]['sinCcp']) =>
+    renderToStaticMarkup(<VistaAgenteCartaPorte datos={null} {...(sinCcp === undefined ? {} : { sinCcp })} />);
+
+  it('lista por cliente con horas, riesgo y la descarga del CSV con sus columnas', () => {
+    const html = pintarSin(listado);
+    expect(html).toContain('Viajes salidos sin Carta Porte');
+    expect(html).toContain('Cliente Ejemplo A');
+    expect(html).toContain('F-1');
+    expect(html).toContain('Riesgo de multa');
+    expect(html).toContain('local abierto');
+    expect(html).toContain('download="viajes-sin-carta-porte.csv"');
+    expect(decodeURIComponent(html.match(/href="data:text\/csv;charset=utf-8,([^"]+)"/)![1]!)).toContain('Cliente,Folio,Salida');
+  });
+
+  it('sin viajes dice el estado vacío y no ofrece descarga; con la lectura caída lo dice y no finge «sin pendientes»', () => {
+    const vacio = pintarSin({ vacio: true, total: 0, grupos: [] });
+    expect(vacio).toContain('No hay viajes salidos sin Carta Porte');
+    expect(vacio).not.toContain('Descargar reporte');
+    const caido = pintarSin('no_leido');
+    expect(caido).toContain('No se pudo leer la lista de viajes salidos sin Carta Porte');
+    expect(caido).not.toContain('No hay viajes salidos');
+  });
+
+  it('sin la prop no pinta el bloque', () => {
+    expect(pintarSin()).not.toContain('Viajes salidos sin Carta Porte');
+  });
+});
