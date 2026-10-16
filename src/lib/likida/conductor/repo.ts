@@ -1331,6 +1331,25 @@ export async function leerSalidasTms(tenantId: string, viajeIds: readonly string
   }
 }
 
+// ── T-A5-57: viajes con Carta Porte ligada ──────────────────────────────────
+
+/**
+ * T-A5-57: ids de los viajes que ya tienen un complemento APROBADO ligado (`cp_documento.viaje_id`, 0420). Sirve para saber
+ * si un viaje local abierto todavía está «sin Carta Porte». Si la lectura falla devuelve `undefined`: el tablero no afirma nada.
+ */
+export async function leerViajesConCartaPorte(tenantId: string, viajeIds: readonly string[]): Promise<Set<string> | undefined> {
+  try {
+    const filas = viajeIds.length === 0 ? [] : await traerPorIds<Fila>([...viajeIds], (t) => acotada(supabaseAdmin()
+      .from('cp_documento').select('viaje_id').eq('tenant_id', tenantId).eq('estado', 'aprobado').in('viaje_id', t), 'conductor.ccp_ligada') as never, 'conductor.ccp_ligada');
+    const ids = new Set<string>();
+    for (const f of filas) { const id = s(f.viaje_id); if (id) ids.add(id); }
+    return ids;
+  } catch (e) {
+    logger.warn('conductor.ccp_ligada_no_leida', { err: e instanceof Error ? e.message : String(e) });
+    return undefined;
+  }
+}
+
 // ── T-A5-38: la parada que inicia el chofer (0806) ──────────────────────────
 //
 // Una parada abierta por viaje como máximo (índice único parcial, 0806): abrir es insertar y la carrera la gana el índice, no esta

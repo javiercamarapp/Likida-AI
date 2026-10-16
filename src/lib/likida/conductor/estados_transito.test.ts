@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizarEstadoTransito, type ReglaTransito } from './estados_transito';
+import { normalizarEstadoTransito, esLocalAbierto, type ReglaTransito } from './estados_transito';
 import { interpretarFilasViajes } from '../importar_viajes';
 
 describe('normalizarEstadoTransito — tabla de textos', () => {
@@ -87,5 +87,23 @@ describe('importador — columna opcional de tránsito', () => {
   it('acepta el diccionario de la flota', () => {
     const r = interpretarFilasViajes([['Folio', 'Transito'], ['V-1', 'En frontera']], { diccionarioTransito: [{ texto: 'en frontera', tipo: 'exacto', estado: 'pendiente_cruce' }] });
     expect(r.viajes[0].transito?.estado).toBe('pendiente_cruce');
+  });
+});
+
+// ── T-A5-57: «viaje local abierto» se reconoce en el texto crudo, sin tocar el vocabulario cerrado de la base ─────
+describe('esLocalAbierto (T-A5-57)', () => {
+  it.each(['LOCAL ABIERTO', 'local abierto', 'Viaje local abierto', '  Local   ABIERTO '])('«%s» sí es local abierto', (texto) => {
+    const r = normalizarEstadoTransito(texto);
+    expect(r).not.toBeNull();
+    expect(r?.estado).toBe('otro'); // el vocabulario de la 0804 no cambia
+    expect(esLocalAbierto(r!)).toBe(true);
+  });
+  it.each(['EN RUTA', 'PATIO NLD', 'PEND CRUCE', 'LOCAL CERRADO', 'EN TALLER', 'localidad abierta'])('«%s» no lo es', (texto) => {
+    const r = normalizarEstadoTransito(texto);
+    expect(r !== null && esLocalAbierto(r)).toBe(false);
+  });
+  it('un estado reconocido nunca es local abierto aunque el texto lo mencione; sin texto tampoco', () => {
+    expect(esLocalAbierto({ estado: 'en_ruta', textoOrigen: 'local abierto' })).toBe(false);
+    expect(esLocalAbierto({ estado: 'otro', textoOrigen: null })).toBe(false);
   });
 });

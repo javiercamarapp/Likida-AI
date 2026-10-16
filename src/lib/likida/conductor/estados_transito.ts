@@ -65,3 +65,12 @@ export function normalizarEstadoTransito(
   }
   return { estado: 'otro', textoOrigen: crudo };
 }
+
+// T-A5-57 — «Viaje local abierto». El cliente deja abierto el viaje local (sin Carta Porte) para que el GPS siga ligado; en su
+// programa de despacho se ve como «LOCAL ABIERTO». No es un valor nuevo del vocabulario cerrado de la base (0804): llega como
+// `otro` con el texto crudo, y este reconocimiento solo lee ese texto. Nunca infiere «local abierto» de otro estado.
+const TEXTOS_LOCAL_ABIERTO: readonly string[] = ['local abierto', 'viaje local abierto'];
+
+export function esLocalAbierto(d: { estado: EstadoTransito; textoOrigen: string | null }): boolean {
+  return d.estado === 'otro' && TEXTOS_LOCAL_ABIERTO.includes(normalizarTextoTransito(d.textoOrigen));
+}
