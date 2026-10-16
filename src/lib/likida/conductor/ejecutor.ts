@@ -12,7 +12,7 @@ import {
 import { cicloDelServicio, type CicloServicioFila } from './ciclo_servicio';
 import { cerrarHitosDeViajesVencidos, contarEnviadosPorChofer, leerAvisosDeHitos, leerHitosDeViajes, leerMuestrasGps, leerSitiosGeometriaDeViajes, leerViajesActivos, sembrarHitos } from './trabajo';
 import type { MuestraGps, SitiosViaje, UnidadDeViaje } from './ciclo_gps';
-import { puedeEscribirAlChofer } from './compuerta_movimiento';
+import { clavesPoleoDe, lapsoMaxCompuertaMin, puedeEscribirAlChofer } from './compuerta_movimiento';
 import { planificar, type AccionPlan, type AvisoReclamado, type MotivoNada } from './planificador';
 import { armarEscalacion, armarRecordatorio, armarSolicitud, type MensajeSaliente, type MotivoEscalacion } from './solicitudes';
 import type { HitoFila } from './tipos';
@@ -114,7 +114,8 @@ export async function evaluarCompuertaDeViajes(
 
   const conUnidad = activos.filter((v) => v.unidadId);
   const unidades = [...new Map(conUnidad.map((v) => [`${v.tenantId}|${v.unidadId}`, { tenantId: v.tenantId, unidadId: v.unidadId! }])).values()];
-  const ventanaMax = Math.max(...activos.map((v) => configs.get(v.tenantId)?.detenidaVentanaMin ?? CONFIG_CONDUCTOR_DEFAULT.detenidaVentanaMin ?? 5));
+  // T-A5-37: la lectura cubre el lapso que exige la cadencia de poleo (poleo × muestras), no solo la ventana corta; sin poleo, la de siempre.
+  const ventanaMax = Math.max(...activos.map((v) => lapsoMaxCompuertaMin(configs.get(v.tenantId) ?? CONFIG_CONDUCTOR_DEFAULT)));
   let muestras = new Map<string, MuestraGps[]>();
   let sitios = new Map<string, SitiosViaje>();
   try {
@@ -125,8 +126,9 @@ export async function evaluarCompuertaDeViajes(
     return cierra('lectura_fallida');
   }
   for (const v of activos) {
+    const posiciones = v.unidadId ? (muestras.get(`${v.tenantId}|${v.unidadId}`) ?? []) : [];
     const r = puedeEscribirAlChofer({
-      posiciones: v.unidadId ? (muestras.get(`${v.tenantId}|${v.unidadId}`) ?? []) : [],
+      posiciones, clavesPoleo: clavesPoleoDe(v.unidadId, posiciones), // T-A5-37: cadencia por unidad/proveedor
       sitioDelViaje: sitios.get(v.id) ?? null, config: configs.get(v.tenantId)!, ahora,
     });
     salida.set(v.id, r);

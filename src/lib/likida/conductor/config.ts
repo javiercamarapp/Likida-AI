@@ -135,6 +135,19 @@ export interface ConfigConductor {
    * columna propia: se fija al armar la configuración, como `patioEntregaActivo`.
    */
   asignacionBotonesActiva?: boolean;
+  /**
+   * T-A5-37: minutos con la unidad detenida a partir de los cuales una detención sin aviso es ELEGIBLE para preguntarle al chofer
+   * (T-A5-39). Es distinto de `detenidoMin` (la señal de vida, 60). SUPUESTO del cliente; lo fija monitoreo (D-6, B-10). 5–720.
+   */
+  detenidoAvisoMin?: number;
+  /**
+   * T-A5-37: cadencia (min) con que RECIBIMOS posiciones de la flota (≈ 2 con la plataforma rápida, ≈ 15 con la lenta, aunque esta
+   * registre cada minuto). Con ella la compuerta y la detección piden menos muestras pero un lapso mayor. Ausente = la regla de
+   * T-A5-36 sin cambios (3 muestras en `detenidaVentanaMin`). 1–60.
+   */
+  poleoMin?: number;
+  /** T-A5-37: cadencia por proveedor (o unidad), que manda sobre `poleoMin`. Las claves las pone quien configura; los valores, 1–60. */
+  poleoPorClaveMin?: Record<string, number>;
   /** 0801: aplicar la salida que reporta el TMS como hito del viaje. */
   aplicarSalidaDelTms: boolean;
   /** 0801: llamadas de seguimiento por viaje medidas antes del agente (null = sin registrar) y la fecha (AAAA-MM-DD) en que se midió. */
@@ -200,6 +213,7 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   reporteLlegadaActivo: false,
   resultadoDescargaActivo: false,
   asignacionBotonesActiva: false,
+  detenidoAvisoMin: 15,
   lineaBaseLlamadasPorViaje: null,
   lineaBaseRegistradaEn: null,
 });
@@ -323,6 +337,25 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
     }
     estadiaDescargaMinPorCliente[cliente.toLowerCase()] = n;
   }
+  // T-A5-37: umbral corto de detención y cadencia de poleo. Fuera de rango se RECHAZA (no se corrige en silencio).
+  const detenidoAvisoMin = entero(b.detenidoAvisoMin ?? CONFIG_CONDUCTOR_DEFAULT.detenidoAvisoMin, 5, 720);
+  if (detenidoAvisoMin === null) return { error: 'Los minutos para preguntar por una detención sin aviso van de 5 a 720.' };
+  let poleoMin: number | undefined;
+  if (b.poleoMin !== undefined && b.poleoMin !== null) {
+    const n = entero(b.poleoMin, 1, 60);
+    if (n === null) return { error: 'La cadencia con que llegan las posiciones va de 1 a 60 minutos.' };
+    poleoMin = n;
+  }
+  let poleoPorClaveMin: Record<string, number> | undefined;
+  if (b.poleoPorClaveMin !== undefined && b.poleoPorClaveMin !== null) {
+    if (typeof b.poleoPorClaveMin !== 'object' || Array.isArray(b.poleoPorClaveMin)) return { error: 'La cadencia por proveedor es una lista de «proveedor: minutos».' };
+    poleoPorClaveMin = {};
+    for (const [clave, v] of Object.entries(b.poleoPorClaveMin)) {
+      const n = entero(v, 1, 60);
+      if (clave.trim() === '' || n === null) return { error: 'La cadencia de cada proveedor va de 1 a 60 minutos.' };
+      poleoPorClaveMin[clave.trim()] = n;
+    }
+  }
   let lineaBaseLlamadasPorViaje: number | null = null;
   if (b.lineaBaseLlamadasPorViaje !== null && b.lineaBaseLlamadasPorViaje !== undefined) {
     const n = typeof b.lineaBaseLlamadasPorViaje === 'string' && (b.lineaBaseLlamadasPorViaje as string).trim() !== '' ? Number(b.lineaBaseLlamadasPorViaje) : b.lineaBaseLlamadasPorViaje;
@@ -394,6 +427,9 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       reporteLlegadaActivo: b.reporteLlegadaActivo === true,
       resultadoDescargaActivo: b.resultadoDescargaActivo === true,
       asignacionBotonesActiva: b.asignacionBotonesActiva === true,
+      detenidoAvisoMin,
+      ...(poleoMin !== undefined ? { poleoMin } : {}),
+      ...(poleoPorClaveMin !== undefined ? { poleoPorClaveMin } : {}),
       lineaBaseLlamadasPorViaje,
       lineaBaseRegistradaEn,
     },
