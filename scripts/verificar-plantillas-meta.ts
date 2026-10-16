@@ -16,6 +16,7 @@ import {
   compararConMeta, consultarPlantillasMeta, crearPlantillaMeta, resumenEstado,
 } from '@/lib/meta/plantillas_estado';
 import { CATALOGO_PLANTILLAS, validarCatalogo, plantillaDeCatalogo } from '@/lib/meta/plantillas_catalogo';
+import { PLANTILLAS_CICLO, ESTADO_PROVEEDOR_CICLO, faltantesPorAprobar } from '@/lib/likida/conductor/plantillas_requeridas';
 
 async function main(argv: string[]): Promise<number> {
   const consultar = argv.includes('--consultar');
@@ -33,6 +34,12 @@ async function main(argv: string[]): Promise<number> {
   if (!consultar) {
     console.log(`EN SECO — ${CATALOGO_PLANTILLAS.length} plantillas en el catálogo; no se llamó a Meta.`);
     for (const p of CATALOGO_PLANTILLAS) console.log(`  ${p.estado === 'en_uso' ? 'en uso ' : 'nueva  '} ${p.nombre} [${p.idioma}] ${p.categoria}`);
+    console.log('\nCiclo del conductor (N01–N12), estado asentado en el repo (no consultado a Meta):');
+    for (const c of PLANTILLAS_CICLO) console.log(`  ${c.codigo} ${c.prioridad} ${c.nombre}: ${ESTADO_PROVEEDOR_CICLO[c.nombre]}`);
+    for (const perfil of ['piloto', 'cinco_agentes'] as const) {
+      const f = faltantesPorAprobar(perfil);
+      console.log(`  perfil ${perfil}: ${f.length === 0 ? 'todas aprobadas' : `faltan por aprobar ${f.join(', ')}`}`);
+    }
     console.log('\nPara consultar el estado: --consultar (necesita WHATSAPP_ACCESS_TOKEN y WHATSAPP_BUSINESS_ACCOUNT_ID).');
     return 0;
   }

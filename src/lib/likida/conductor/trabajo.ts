@@ -280,12 +280,12 @@ export async function leerMuestrasGps(unidades: UnidadDeViaje[], desde: Date): P
     // La ignición (0500) sirve a la señal de vida y `despacho_ref` (0802) liga la muestra a su viaje; una base sin alguna de las
     // columnas sigue funcionando sin ella (sin `despacho_ref` todo cae a «unidad + ventana», como antes).
     let filas: Fila[];
-    try { filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion, despacho_ref'); } catch (e) {
+    try { filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion, despacho_ref, proveedor'); } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
       if (!/ignicion|despacho_ref/i.test(m)) throw e;
-      try { filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion'); } catch (e2) {
+      try { filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion, proveedor'); } catch (e2) {
         if (!/ignicion/i.test(e2 instanceof Error ? e2.message : String(e2))) throw e2;
-        filas = await traer('tenant_id, unidad_id, lat, lng, medida_en');
+        filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, proveedor');
       }
     }
     for (const f of filas) {
@@ -294,10 +294,31 @@ export async function leerMuestrasGps(unidades: UnidadDeViaje[], desde: Date): P
       salida.set(llave, [...(salida.get(llave) ?? []), {
         lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(String(f.medida_en)), ignicion: typeof f.ignicion === 'boolean' ? f.ignicion : null,
         despachoRef: typeof f.despacho_ref === 'string' && f.despacho_ref !== '' ? f.despacho_ref : null,
+        proveedor: typeof f.proveedor === 'string' && f.proveedor !== '' ? f.proveedor : null,
       }]);
     }
   }
   return salida;
+}
+
+/**
+ * T-A5-66: las unidades activas de esas flotas SIN un viaje abierto que el ciclo por geocerca atienda (abierto, aceptado y de menos de
+ * `DIAS_VIAJE_ABIERTO_VENCIDO` días): son las que pueden dejar un cruce huérfano. Anclado a las flotas pedidas.
+ */
+export async function leerUnidadesSinViajeAbierto(tenantIds: string[], limite: number, ahora: Date = new Date()): Promise<UnidadDeViaje[]> {
+  if (tenantIds.length === 0) return [];
+  const unidades = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('unidad').select('id, tenant_id')
+    .in('tenant_id', tenantIds).eq('activo', true).order('id').range(d, h), 'conductor.huerfanos_unidades') as never, 'conductor.huerfanos_unidades');
+  const desde = new Date(ahora.getTime() - DIAS_VIAJE_ABIERTO_VENCIDO * 86_400_000).toISOString();
+  const ocupadas = new Set<string>();
+  const viajes = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('viaje').select('tenant_id, unidad_id')
+    .in('tenant_id', tenantIds).eq('estatus', 'abierto').not('aceptado_en', 'is', null).not('unidad_id', 'is', null).gte('aceptado_en', desde)
+    .order('id').range(d, h), 'conductor.huerfanos_viajes_abiertos') as never, 'conductor.huerfanos_viajes_abiertos');
+  for (const v of viajes) ocupadas.add(`${String(v.tenant_id)}|${String(v.unidad_id)}`);
+  return unidades
+    .map((u) => ({ tenantId: String(u.tenant_id), unidadId: String(u.id) }))
+    .filter((u) => !ocupadas.has(`${u.tenantId}|${u.unidadId}`))
+    .slice(0, limite);
 }
 
 /**
@@ -414,11 +435,11 @@ export async function leerUltimaMuestraGps(unidades: UnidadDeViaje[], desde: Dat
     const consulta = (columnas: string) => acotada(supabaseAdmin().from('posicion').select(columnas)
       .eq('tenant_id', u.tenantId).eq('unidad_id', u.unidadId).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString())
       .order('medida_en', { ascending: false }).order('id').limit(1), 'conductor.senal_ultima_muestra');
-    let res = await consulta('lat, lng, medida_en, ignicion');
-    if (res.error && faltaEsquema(res.error, /ignicion/i)) res = await consulta('lat, lng, medida_en'); // base sin la 0500
+    let res = await consulta('lat, lng, medida_en, ignicion, proveedor');
+    if (res.error && faltaEsquema(res.error, /ignicion/i)) res = await consulta('lat, lng, medida_en, proveedor'); // base sin la 0500
     const f = ((exigir(res as never, 'conductor.senal_ultima_muestra') ?? []) as unknown as Fila[])[0];
     if (f && typeof f.medida_en === 'string') {
-      salida.set(`${u.tenantId}|${u.unidadId}`, { lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(f.medida_en), ignicion: typeof f.ignicion === 'boolean' ? f.ignicion : null });
+      salida.set(`${u.tenantId}|${u.unidadId}`, { lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(f.medida_en), ignicion: typeof f.ignicion === 'boolean' ? f.ignicion : null, proveedor: typeof f.proveedor === 'string' && f.proveedor !== '' ? f.proveedor : null });
     }
   }
   return salida;

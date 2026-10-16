@@ -36,6 +36,7 @@ import {
 import { versionAvisoVigente, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/likida/privacidad';
 import { mensajeEvidencia } from '@/lib/likida/conductor/evidencia';
 import { atenderPreguntaConvenio } from '@/lib/likida/convenios/pregunta';
+import { guardiaDatosSeguridad } from '@/lib/likida/conductor/guardia_seguridad';
 import { atenderConductor, atenderAcuseJefe, atenderPinConductor, hitoParaEvidenciaDelChofer, registrarEvidenciaDelChofer, registrarHitoDesdeFoto } from '@/lib/likida/conductor/atender';
 import {
   interpretarMarcaJornada, interpretarConformidadJornada,
@@ -1993,6 +1994,19 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         });
         logger.info('asistencia.rojo', { viaje: viajeId, tipoMsg: msg.type, mudo: emergencia.modoMudo });
         await sendText(msg.from, r.respuesta);
+        return;
+      }
+    }
+
+    // ── T-A5-58: CLAVE DE AMAGO / BOTÓN DE PÁNICO — no van por WhatsApp ─────
+    //
+    // Después del ROJO (una emergencia real le gana a todo) y ANTES de cualquier otra cosa que guarde el texto (oficina,
+    // talacha, hitos, memoria del agente, log). Texto e imagen (por su pie de foto); en todos los perfiles y con el módulo
+    // del conductor en stand-by o no. La respuesta no repite lo que escribió.
+    if ((msg.type === 'text' || msg.type === 'image') && msg.text) {
+      const sensible = guardiaDatosSeguridad(msg.text);
+      if (sensible) {
+        await sendText(msg.from, sensible.texto);
         return;
       }
     }

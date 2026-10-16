@@ -5,6 +5,7 @@ import type { CatalogosFiltro } from '@/lib/likida/conductor/repo_validacion';
 import { textoTiempo } from '@/lib/likida/conductor/planificador';
 import { esFolioSimulado, type EpisodioVista, type Excepcion, type FilaTablero, type HitoVista, type IndicadoresVista, type Semaforo, type Tablero, type TipoExcepcion } from '@/lib/likida/conductor/tablero';
 import type { Estancia } from '@/lib/likida/conductor/estadias_anden';
+import type { ReubicacionesCliente } from '@/lib/likida/conductor/reubicaciones';
 import { AccionesHito, FormaAsignarSitios, type AccionOficinaServidor, type ModoAccion, type OpcionSitio } from './acciones-forma';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -35,8 +36,8 @@ export const ORDEN_SEMAFORO: Semaforo[] = ['sin_reporte', 'atrasado', 'a_tiempo'
 const EXCEPCION: Record<TipoExcepcion, string> = {
   escalado_sin_atender: 'Escalado sin atender', sin_reporte: 'Sin reporte', atrasado: 'Atrasado', sin_coincidencia: 'Ubicación sin coincidencia',
   llegada_sin_confirmar: 'Llegada sin confirmar', llegada_sin_sitio: 'Llegada sin sitio para conciliar',
-  estadia_excedida: 'Estadía excedida', horas_incoherentes: 'Horas incoherentes', sin_a_quien_escalar: 'Sin a quién escalar',
-  pendiente_cruce_largo: 'Pendiente de cruce por mucho tiempo', salida_tms_discrepante: 'Salida del TMS sin confirmar',
+  estadia_excedida: 'Estadía excedida', horas_incoherentes: 'Horas incoherentes', sin_a_quien_escalar: 'Sin a quién escalar', patio_entrega_distinto: 'Patio de entrega distinto',
+  pendiente_cruce_largo: 'Pendiente de cruce por mucho tiempo', salida_tms_discrepante: 'Salida del TMS sin confirmar', local_abierto_sin_ccp: 'Sin Carta Porte (viaje local abierto)', sin_ruta_autorizada: 'Sin ruta autorizada',
 };
 const GRAVEDAD: Record<1 | 2 | 3, { texto: string; color: string }> = {
   3: { texto: 'Urgente', color: 'var(--bad)' }, 2: { texto: 'Revisar', color: 'var(--warn)' }, 1: { texto: 'Vigilar', color: 'var(--muted)' },
@@ -241,6 +242,15 @@ function CeldaHito({ h, puedeActuar, accion, viajeId }: { h: HitoVista; puedeAct
       )}
       {h.contacto && <div className="text-[11px]" style={{ color: 'var(--muted)' }}>Lo atiende {h.contacto}</div>}
       {h.sinContacto && <div className="text-[11px]" style={{ color: 'var(--faint)' }}>sin contacto en andén</div>}
+      {h.reporte?.rampa && <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{h.reporte.rampa}</div>}
+      {h.reporte && h.reporte.reubicaciones > 0 && (
+        <details className="text-[11px]" style={{ color: 'var(--muted)' }}>
+          <summary className="cursor-pointer">{h.reporte.reubicaciones === 1 ? '1 cambio' : `${h.reporte.reubicaciones} cambios`} de rampa o contacto</summary>
+          <ol className="mt-0.5 space-y-0.5">
+            {h.reporte.historial.map((r) => <li key={r.en}><span className="cifra-mono">{fechaHoraMx(r.en)}</span> · {r.rampa ?? 'sin rampa registrada'}</li>)}
+          </ol>
+        </details>
+      )}
       {h.validacion && h.validacion.resultado !== 'sin_dato' && (
         <div className="text-[11px] flex items-start gap-1" style={{ color: h.validacion.resultado === 'validado' ? 'var(--ok)' : 'var(--warn)' }} title={h.validacion.texto}>
           {h.validacion.resultado === 'validado' ? <MapPin width={11} height={11} aria-hidden className="mt-0.5 shrink-0" /> : <MapPinOff width={11} height={11} aria-hidden className="mt-0.5 shrink-0" />}
@@ -362,6 +372,47 @@ export function EpisodiosSenalVida({ episodios, dias, hayMas }: { episodios: Epi
   );
 }
 
+/**
+ * T-A5-63: cuántas veces y cuántos minutos cada cliente reubicó a los choferes (otra rampa u otro edificio), con el CSV para disputar
+ * un «no se presentó». «Sin dato» no es cero: un cliente sin respuestas del chofer no se pinta como 0 reubicaciones.
+ */
+export function ReubicacionesPorCliente({ filas, csv }: { filas: ReubicacionesCliente[]; csv: string }) {
+  const hayCsv = filas.some((f) => f.viajesConDato > 0);
+  return (
+    <section className="card p-4 space-y-3" aria-label="Reubicaciones por cliente">
+      <div className="flex items-center gap-2 flex-wrap">
+        <h2 className="font-display text-[15px] font-semibold mr-2">Reubicaciones por cliente</h2>
+        {hayCsv && (
+          <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`} download="reubicaciones-por-cliente.csv" className="text-[12px] underline" style={{ color: 'var(--muted)' }}>
+            Descargar evidencia (CSV)
+          </a>
+        )}
+      </div>
+      {filas.length === 0 ? (
+        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Aún no hay llegadas con reporte del chofer en los viajes en curso.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {filas.map((f) => (
+            <li key={f.clienteId ?? 'sin-cliente'} className="hairline rounded-lg p-2.5 text-[12.5px] flex flex-wrap items-center gap-x-3 gap-y-0.5">
+              <span className="font-medium">{f.clienteNombre}</span>
+              {f.viajesConDato === 0 ? (
+                <span style={{ color: 'var(--muted)' }}>Sin dato ({numero(f.viajes)} {f.viajes === 1 ? 'viaje' : 'viajes'} sin respuesta del chofer)</span>
+              ) : (
+                <>
+                  <span><span className="cifra-mono">{numero(f.reubicaciones ?? 0)}</span> {f.reubicaciones === 1 ? 'reubicación' : 'reubicaciones'}</span>
+                  <span><span className="cifra-mono">{numero(f.minutos ?? 0)}</span> min</span>
+                  <span style={{ color: 'var(--muted)' }}>en {numero(f.viajesReubicados ?? 0)} de {numero(f.viajesConDato)} {f.viajesConDato === 1 ? 'viaje con dato' : 'viajes con dato'}</span>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Los minutos van del primer al último cambio registrado: es lo que se puede probar con horas guardadas, no el tiempo total de espera.</p>
+    </section>
+  );
+}
+
 export function TableroHitos({
   tablero, indicadores, dias, filtros, catalogos, ocultos, accionUrl, puedeActuar, accion, accionSitios, sitios, episodios, hayMasEpisodios,
 }: {
@@ -397,6 +448,7 @@ export function TableroHitos({
         )}
       </section>
       <ColaExcepciones excepciones={tablero.excepciones} puedeActuar={puedeActuar} accion={accion} />
+      {tablero.reubicaciones && <ReubicacionesPorCliente filas={tablero.reubicaciones.porCliente} csv={tablero.reubicaciones.csv} />}
       {episodios !== undefined && <EpisodiosSenalVida episodios={episodios} dias={dias} hayMas={hayMasEpisodios} />}
       {tablero.filas.length === 0 ? (
         <section className="card p-4 text-[12.5px] flex items-center gap-2" style={{ color: 'var(--muted)' }}>

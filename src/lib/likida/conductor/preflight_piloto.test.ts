@@ -9,7 +9,7 @@ import {
 const TODAS = plantillasRequeridas({ ...CONFIG_CONDUCTOR_DEFAULT, avisarSenalVida: true });
 const viaje = (n: number, extra: Partial<ViajeDelPiloto> = {}): ViajeDelPiloto => ({ terminalId: 'p1', unidadId: `u${n}`, conSitio: true, ...extra });
 const verde = (): DatosPreflight => ({
-  config: { activo: true, perfilSeguimiento: 'esenciales', solicitudesMin: [0, 15, 30, 45] },
+  config: { activo: true, perfilSeguimiento: 'esenciales', solicitudesMin: [0, 15, 30, 45], cohortePiloto: 'sin_tableta_ni_macros' },
   zonaDeclarada: 'America/Mexico_City',
   voluntarios: [{ telefono: '3312345678' }], // grep-limpio:ok
   viajes: [viaje(1), viaje(2), viaje(3)],
@@ -20,9 +20,9 @@ const verde = (): DatosPreflight => ({
 const faltas = (d: DatosPreflight): IdComprobacion[] => evaluarPreflight(d).bloqueos.map((b) => b.id);
 
 describe('preflight del piloto', () => {
-  it('todo verde: ocho comprobaciones en orden, sin bloqueos y lista', () => {
+  it('todo verde: nueve comprobaciones en orden, sin bloqueos y lista', () => {
     const r = evaluarPreflight(verde());
-    expect(r.comprobaciones.map((c) => c.id)).toEqual(['activo', 'zona', 'voluntarios', 'sitios', 'gps_unidades', 'calidad_gps', 'escalamiento', 'plantillas']);
+    expect(r.comprobaciones.map((c) => c.id)).toEqual(['activo', 'zona', 'cohorte', 'voluntarios', 'sitios', 'gps_unidades', 'calidad_gps', 'escalamiento', 'plantillas']);
     expect(r.bloqueos).toEqual([]);
     expect(r.lista).toBe(true);
     expect(r.comprobaciones.every((c) => c.queHacer === null)).toBe(true);
@@ -70,6 +70,20 @@ describe('preflight del piloto', () => {
     const r = evaluarPreflight({ ...verde(), aprobadas: sinSenal });
     expect(r.bloqueos).toHaveLength(1);
     expect(r.bloqueos[0].detalle).toContain('Faltan por aprobar 2 de');
+  });
+
+  it('rojo 9 (T-A5-64): sin cohorte definida no se enciende nada; con cualquier cohorte del catálogo, en verde', () => {
+    for (const cohortePiloto of [undefined, null]) {
+      const d = { ...verde(), config: { ...verde().config, cohortePiloto } };
+      expect(faltas(d), String(cohortePiloto)).toEqual(['cohorte']);
+      const c = evaluarPreflight(d).bloqueos[0];
+      expect(c.queHacer).toContain('docs/operacion/cohorte-piloto.md');
+    }
+    for (const cohortePiloto of ['sin_tableta_ni_macros', 'voluntarios_abiertos'] as const) {
+      expect(faltas({ ...verde(), config: { ...verde().config, cohortePiloto } })).toEqual([]);
+    }
+    const sin = evaluarPreflight({ ...verde(), config: { ...verde().config, cohortePiloto: undefined } });
+    expect(mensajeBloqueoSenalVida(sin)).toContain('falta «cohorte del piloto definida»');
   });
 
   it('rojo 6: agente apagado', () => {

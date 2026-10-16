@@ -125,14 +125,24 @@ export function calcularEstancias(
 export interface UmbralesEstadia {
   estadiaAlertaCargaMin: number | null;
   estadiaAlertaDescargaMin: number | null;
+  /** T-A5-45: umbral de descarga POR CLIENTE (id del cliente → minutos). Gana sobre `estadiaAlertaDescargaMin`; un cliente sin entrada usa el de la flota. */
+  estadiaDescargaMinPorCliente?: Readonly<Record<string, number>>;
 }
 
-export const umbralDe = (c: UmbralesEstadia, lugar: Lugar): number | null =>
-  lugar === 'carga' ? c.estadiaAlertaCargaMin : c.estadiaAlertaDescargaMin;
+/** El umbral de ese lugar; el de descarga puede ser el del CLIENTE del viaje (T-A5-45: p. ej. 120 general y 240 para un convenio de 4 h). */
+export const umbralDe = (c: UmbralesEstadia, lugar: Lugar, clienteId?: string | null): number | null => {
+  if (lugar === 'carga') return c.estadiaAlertaCargaMin;
+  const propio = clienteId ? c.estadiaDescargaMinPorCliente?.[clienteId.toLowerCase()] : undefined;
+  return propio ?? c.estadiaAlertaDescargaMin;
+};
+
+/** ¿Hay algún umbral encendido (el de la flota o el de algún cliente)? Sin ninguno, la alerta de estadía no corre. */
+export const hayUmbralDeEstadia = (c: UmbralesEstadia): boolean =>
+  c.estadiaAlertaCargaMin !== null || c.estadiaAlertaDescargaMin !== null || Object.keys(c.estadiaDescargaMinPorCliente ?? {}).length > 0;
 
 /** ¿Esta estancia EN CURSO ya rebasó el umbral configurado? Solo cuenta lo que sigue corriendo. */
-export function excedeUmbral(e: Estancia, c: UmbralesEstadia): boolean {
-  const umbral = umbralDe(c, e.lugar);
+export function excedeUmbral(e: Estancia, c: UmbralesEstadia, clienteId?: string | null): boolean {
+  const umbral = umbralDe(c, e.lugar, clienteId);
   return umbral !== null && e.fase === 'en_curso' && e.minutos !== null && e.minutos >= umbral;
 }
 
