@@ -10,7 +10,7 @@ import { estado, reset } from './repo_falso.fixture';
 import { A, ACTOR, B, USUARIO_B, lecturaAtlas, llmBoreal, sembrarFlotas, subir, subirYProcesar } from './escenario.fixture';
 import {
   ConflictoDeVersion, MAX_SEGUNDOS_REVISION_MEDIBLE, abrirRevision, aplicarCambiosAExtraccion, aprobarDocumento, corregirCampos, crearViajeDeDocumento, eliminarDocumento,
-  motivosDeBloqueo, quitarRenglon, quitarRenglonDeExtraccion, rechazarDocumento, reabrirDocumento,
+  causaSugeridaDeRechazo, motivosDeBloqueo, quitarRenglon, quitarRenglonDeExtraccion, rechazarDocumento, reabrirDocumento,
 } from './bandeja';
 import { DatoInvalido } from '../errores';
 import { cv, excelAtlas, extraccionAtlasOk, filaAtlas, EMBARQUE_ATLAS, pdfBoreal, RFC } from './documentos_sinteticos.fixture';
@@ -532,5 +532,33 @@ describe('eliminar un documento (cancelación ARCO / subido por error)', () => {
     await expect(eliminarDocumento(A, r.documentoId, ACTOR)).rejects.toThrow(/se está leyendo/);
     await expect(eliminarDocumento(B, r.documentoId, { id: USUARIO_B })).rejects.toThrow(/no está en tu flota/);
     expect(estado.docs.has(r.documentoId)).toBe(true);
+  });
+});
+
+// T-A3-18 · una suma que no cuadra bloquea, se explica en llano y sugiere la causa de rechazo.
+describe('suma que no cuadra', () => {
+  it('bloquea la aprobación con el motivo llano y el rechazo guarda rechazo_causa = suma_no_cuadra', async () => {
+    const { id, doc } = await documentoBoreal();
+    expect(causaSugeridaDeRechazo(doc())).toBeNull();
+    const suma = doc().extraccion!.mercancias.reduce((s, m) => s + Number(m.peso_kg?.valor ?? 0), 0);
+    await corregirCampos(A, id, doc().version, [{ campo: 'peso_bruto_total', renglon: null, valor: String(suma + 5000) }], ACTOR.id);
+    const motivos = motivosDeBloqueo(doc());
+    expect(motivos.join(' ')).toMatch(new RegExp(`Los pesos suman ${suma} kg pero el documento dice ${suma + 5000} kg`));
+    expect(causaSugeridaDeRechazo(doc())).toBe('suma_no_cuadra');
+    await expect(aprobarDocumento(A, id, doc().version, ACTOR)).rejects.toThrow(/No se puede aprobar todavía.*Los pesos suman/);
+    const r = await rechazarDocumento(A, id, doc().version, 'La suma de pesos no cuadra', ACTOR.id);
+    expect(r.rechazoCausa).toBe('suma_no_cuadra');
+  });
+  it('T-A3-37: la causa elegida por la persona se guarda y manda sobre la sugerida; una causa fuera del dominio se rechaza', async () => {
+    const { id, doc } = await documentoBoreal();
+    await expect(rechazarDocumento(A, id, doc().version, 'Es un duplicado', ACTOR.id, new Date(), 'inventada')).rejects.toThrow(/causa de rechazo/);
+    expect(doc().estado).not.toBe('rechazado');
+    const r = await rechazarDocumento(A, id, doc().version, 'Es un duplicado', ACTOR.id, new Date(), 'duplicado');
+    expect(r.rechazoCausa).toBe('duplicado');
+  });
+  it('un rechazo sin bloqueo de suma no inventa causa', async () => {
+    const { id, doc } = await documentoBoreal();
+    const r = await rechazarDocumento(A, id, doc().version, 'No es un embarque nuestro', ACTOR.id);
+    expect(r.rechazoCausa ?? null).toBeNull();
   });
 });

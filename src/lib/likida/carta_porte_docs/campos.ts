@@ -44,7 +44,7 @@ export const CAMPOS_DOC: ReadonlyArray<CampoDoc> = [
   { clave: 'folio_cliente', rotulo: 'Folio / referencia del cliente', grupo: 'documento', tipo: 'texto', critico: false, max: 40 },
   { clave: 'fecha_salida', rotulo: 'Fecha y hora de salida', grupo: 'documento', tipo: 'fecha', critico: false, max: 25 },
   { clave: 'fecha_llegada', rotulo: 'Fecha y hora de llegada (cita)', grupo: 'documento', tipo: 'fecha', critico: false, max: 25 },
-  { clave: 'distancia_km', rotulo: 'Distancia (km)', grupo: 'documento', tipo: 'numero', critico: false, max: 12 },
+  { clave: 'distancia_km', rotulo: 'Distancia (km)', grupo: 'documento', tipo: 'numero', critico: false, max: 12, soloEnriquecimiento: true }, // T-A3-51: no viene en ningún documento; sale del catálogo de distancias (0830), nunca del modelo
   { clave: 'transp_internac', rotulo: 'Transporte internacional', grupo: 'documento', tipo: 'booleano', critico: false, max: 5 },
 
   { clave: 'origen_nombre', rotulo: 'Remitente (nombre)', grupo: 'origen', tipo: 'texto', critico: false, max: 200 },
@@ -91,7 +91,7 @@ export const CAMPOS_DOC: ReadonlyArray<CampoDoc> = [
   { clave: 'remolque_placas', rotulo: 'Placas del remolque', grupo: 'transporte', tipo: 'placa', critico: false, max: 7 },
 
   { clave: 'peso_bruto_total', rotulo: 'Peso bruto total (kg)', grupo: 'carga', tipo: 'numero', critico: false, max: 14 },
-  { clave: 'caja_numero', rotulo: 'Número de caja', grupo: 'transporte', tipo: 'texto', critico: false, max: 30, soloEnriquecimiento: true },
+  { clave: 'caja_numero', rotulo: 'Número de caja', grupo: 'transporte', tipo: 'texto', critico: false, max: 30 },
   { clave: 'piezas_total', rotulo: 'Total de piezas', grupo: 'carga', tipo: 'numero', critico: false, max: 14, soloEnriquecimiento: true },
   { clave: 'volumen_total', rotulo: 'Volumen total (m³)', grupo: 'carga', tipo: 'numero', critico: false, max: 14, soloEnriquecimiento: true },
   { clave: 'numero_cliente_interno', rotulo: 'Número de cliente interno (solo sistema)', grupo: 'documento', tipo: 'texto', critico: false, max: 40, soloEnriquecimiento: true },
@@ -107,19 +107,28 @@ export const CAMPOS_MERCANCIA: ReadonlyArray<CampoDoc> = [
   { clave: 'unidad_texto', rotulo: 'Unidad (como la escribe el cliente)', grupo: 'carga', tipo: 'texto', critico: false, max: 40 },
   { clave: 'peso_kg', rotulo: 'Peso (kg)', grupo: 'carga', tipo: 'numero', critico: true, max: 14 },
   { clave: 'peso_unidad', rotulo: 'Unidad del peso en el documento', grupo: 'carga', tipo: 'texto', critico: false, max: 10 },
+  { clave: 'peso_tipo', rotulo: 'Qué peso trae el documento (bruto, neto o por embalaje)', grupo: 'carga', tipo: 'texto', critico: false, max: 30, soloEnriquecimiento: true },
   { clave: 'embalaje', rotulo: 'Embalaje (c_TipoEmbalaje)', grupo: 'carga', tipo: 'embalaje', critico: false, max: 3 },
   { clave: 'valor_mercancia', rotulo: 'Valor de la mercancía', grupo: 'carga', tipo: 'numero', critico: false, max: 16 },
   { clave: 'moneda', rotulo: 'Moneda del valor', grupo: 'carga', tipo: 'moneda', critico: false, max: 3 },
   { clave: 'material_peligroso', rotulo: 'Material peligroso', grupo: 'carga', tipo: 'booleano', critico: false, max: 5 },
-  { clave: 'pedimento', rotulo: 'Número de pedimento', grupo: 'carga', tipo: 'texto', critico: false, max: 21, soloEnriquecimiento: true },
+  { clave: 'pedimento', rotulo: 'Número de pedimento', grupo: 'carga', tipo: 'texto', critico: false, max: 21 },
   { clave: 'rfc_agente_aduanal', rotulo: 'RFC del agente aduanal', grupo: 'carga', tipo: 'rfc', critico: false, max: 13, soloEnriquecimiento: true },
-  { clave: 'regimen_aduanero', rotulo: 'Régimen aduanero', grupo: 'carga', tipo: 'texto', critico: false, max: 10, soloEnriquecimiento: true },
-  { clave: 'tipo_materia', rotulo: 'Tipo de materia', grupo: 'carga', tipo: 'texto', critico: false, max: 10, soloEnriquecimiento: true },
-  { clave: 'clave_material_peligroso', rotulo: 'Clave de material peligroso', grupo: 'carga', tipo: 'texto', critico: false, max: 6, soloEnriquecimiento: true },
+  { clave: 'rfc_importador', rotulo: 'RFC del importador', grupo: 'carga', tipo: 'rfc', critico: false, max: 13 },
+  { clave: 'regimen_aduanero', rotulo: 'Régimen aduanero', grupo: 'carga', tipo: 'texto', critico: false, max: 10 },
+  { clave: 'tipo_materia', rotulo: 'Tipo de materia', grupo: 'carga', tipo: 'texto', critico: false, max: 10 },
+  { clave: 'clave_material_peligroso', rotulo: 'Clave de material peligroso', grupo: 'carga', tipo: 'texto', critico: false, max: 6 },
   { clave: 'unidad_descripcion', rotulo: 'Descripción de la unidad', grupo: 'carga', tipo: 'texto', critico: false, max: 100, soloEnriquecimiento: true },
   { clave: 'embalaje_descripcion', rotulo: 'Descripción del embalaje', grupo: 'carga', tipo: 'texto', critico: false, max: 100, soloEnriquecimiento: true },
   { clave: 'volumen', rotulo: 'Volumen (m³)', grupo: 'carga', tipo: 'numero', critico: false, max: 14, soloEnriquecimiento: true },
 ];
+
+/**
+ * Referencias por mercancía (T-A3-55): a qué origen y a qué destino del documento va CADA renglón (posición 1..N, no un
+ * id del cliente). No son campos de pantalla ni se le piden al modelo: los llena el lector de la plantilla del TMS.
+ */
+export const REFERENCIAS_MERCANCIA = ['id_origen', 'id_destino'] as const;
+export type ReferenciaMercancia = (typeof REFERENCIAS_MERCANCIA)[number];
 
 export const CLAVES_DOC: readonly string[] = CAMPOS_DOC.map((c) => c.clave);
 export const CLAVES_MERCANCIA: readonly string[] = CAMPOS_MERCANCIA.map((c) => c.clave);

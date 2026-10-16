@@ -207,6 +207,21 @@ describe('la salida al TMS: segunda pasada del mismo cron (T-A3-28)', () => {
     expect(registrarLatido).toHaveBeenCalledWith('carta-porte-docs', 'parcial', expect.anything());
   });
 
+  it('la pasada con el circuito abierto registra el latido con `circuito_tms_abierto: true` y los pendientes (T-A3-38)', async () => {
+    envios.mockResolvedValueOnce({ ...cifrasEnvios(), circuitosAbiertos: 1, reintentos: 4, soltados: 2, pendientesReque: 1 });
+    await llamar();
+    expect(registrarLatido).toHaveBeenCalledWith('carta-porte-docs', 'parcial', expect.objectContaining({
+      envios: expect.objectContaining({ circuito_tms_abierto: true, envios_pendientes: 7 }),
+    }));
+  });
+
+  it('con el circuito cerrado el latido lo dice y no inventa pendientes (T-A3-38)', async () => {
+    await llamar();
+    expect(registrarLatido).toHaveBeenCalledWith('carta-porte-docs', 'ok', expect.objectContaining({
+      envios: expect.objectContaining({ circuito_tms_abierto: false, envios_pendientes: 0 }),
+    }));
+  });
+
   it('envíos que esperan (reque, descarga manual) o rechazados por el TMS NO son un fallo del cron: el latido sale ok', async () => {
     envios.mockResolvedValueOnce({ ...cifrasEnvios(), pendientesReque: 3, enEsperaManual: 2, rechazados: 1, reintentos: 1 });
     await llamar();

@@ -262,7 +262,15 @@ import { join, relative, sep } from 'node:path';
 //   usan el tenant de la sesión (uno ajeno es 404) y una lectura incompleta no sale como archivo corto. Mismo molde que `peajes-reclamacion`.
 //   Prueba: `export/peajes-vinculos/route.test.ts`.
 // Integración cinco-integracion-2 (tms-conector + peajes-importador sobre la misma base 108): 109 (cron/tms) + 2 (candidatos, vinculos) = 111.
-const RUTAS_APP_REVISADAS = 111;
+//
+// 111 → 112 (T-A3-33, reanclado sobre master, 15-oct-2026): `api/v1/ccp-timbrado/route.ts` — el aviso del TMS con el CCP ya timbrado. Su puerta: `abrir(req,
+//   'operacion')` ANTES de leer el cuerpo (tasa por IP y por flota, llave de API o sesión desde nuestro sitio, perfil de la flota y
+//   área); la flota sale de la credencial (un `tenant_id` en el cuerpo es 400); la `referencia` debe ser de un envío de ESA flota
+//   (una ajena es 404 sin guardar ni mandar correo); idempotente por UUID fiscal (unique tenant_id + uuid); archivos ≤ 8 MB, XML leído
+//   con el lector oficial y PDF verificado por su cabecera; el correo al cliente sale solo si la flota lo activó (apagado por omisión).
+//   Prueba: `v1/ccp-timbrado/route.test.ts`.
+// Integración cinco-integracion-2 (+ cartaporte sobre la misma base 108): 111 + 1 (ccp-timbrado) = 112.
+const RUTAS_APP_REVISADAS = 112;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

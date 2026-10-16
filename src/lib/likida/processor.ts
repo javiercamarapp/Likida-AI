@@ -46,7 +46,7 @@ import { puedeAsignar } from '@/lib/auth/permisos';
 import { atenderDespachoOficina } from '@/lib/likida/despacho_wa';
 import { interpretarTalacha, atenderTalachaChofer, atenderAutorizacionTalacha } from '@/lib/likida/talacha_wa';
 import { atenderCcpOficina } from '@/lib/likida/carta_porte_wa';
-import { esCandidatoCartaPorte, ingerirDesdeWhatsapp as ingerirCartaPorteDoc } from '@/lib/likida/carta_porte_docs/whatsapp';
+import { esCandidatoCartaPorte, esTextoCartaPorte, ingerirDesdeWhatsapp as ingerirCartaPorteDoc } from '@/lib/likida/carta_porte_docs/whatsapp';
 import { atenderAcuseLiquidacionExterna } from '@/lib/likida/liquidacion_externa/acuse';
 import { interpretarAsistencia, atenderAsistenciaChofer, atenderReconocimientoAsistencia, atenderAsistenciaOficina, anclarUbicacionIncidencia } from '@/lib/likida/asistencia_wa';
 import { atenderCoordinacionOficina, atenderMensajeProveedor, atenderMedioProveedorSinTexto } from '@/lib/likida/asistencia_coordinacion';
@@ -1743,7 +1743,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // «carta porte», XML con complemento): entra a la bandeja de revisión de SU flota.
         // Solo para quien puede despachar y solo en flotas que activaron el agente (su
         // buzón); un XML que no es Carta Porte, o una foto sin pie, siguen su camino.
-        if (cuenta.tenantId && puedeAsignar(cuenta.rol) && msg.mediaId && esCandidatoCartaPorte(msg)) {
+        if (cuenta.tenantId && puedeAsignar(cuenta.rol) && ((msg.mediaId && esCandidatoCartaPorte(msg)) || esTextoCartaPorte(msg))) {
           const tenantCp = cuenta.tenantId;
           const liga = `${appUrl()}/dashboard/carta-porte/documentos`;
           const atendido = await ingerirCartaPorteDoc(

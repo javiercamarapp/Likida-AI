@@ -19,6 +19,7 @@ import { reserveLlmBudget, settleLlmBudget, type LlmBudget, type LlmBudgetReserv
 // `instanceof` sobre el envoltorio, que era `false` en producción.
 export { esErrorDePresupuesto } from './budget';
 import { runWithToolSignal } from './runtime-signal';
+import { aprenderSinEsquemaEstricto, esErrorEsquemaRechazado, registrarCaida, usaEsquemaEstricto, type CaidaLlm } from './caidas';
 
 let _client: OpenAI | null = null;
 
@@ -76,6 +77,9 @@ export function getClient(): OpenAI {
  * lo usa. Se paga lo generado.
  */
 const DEFAULT_MAX_TOKENS = 4000;
+
+/** Instrucción que sustituye al esquema estricto cuando el proveedor solo admite `json_object` (T-A3-68). */
+const INSTRUCCION_JSON_OBJECT = 'Responde EXCLUSIVAMENTE con un objeto JSON (sin markdown ni texto extra) que cumpla este JSON Schema:';
 
 // Fallback cross-provider por modelo. El primario cae a un proveedor distinto
 // para que un provider caído nunca sea un error visible para el operador.
@@ -651,6 +655,8 @@ export async function generateStructured<T>(opts: {
   temperature?: number;
   /** Reserva dura por corrida/tenant antes de cada intento, incluido fallback. */
   budget?: LlmBudget;
+  /** T-A3-68: se avisa de cada caída (modo `json_object` o modelo de respaldo) para dejarla en el rastro del documento. */
+  onCaida?: (c: CaidaLlm) => void;
 }): Promise<{ data: T; raw: string; model: string; tokensIn: number; tokensOut: number; cost: number; costoPorModelo: Record<string, { tokensIn: number; tokensOut: number; cost: number }>; /** ms en el proveedor, SUMA de todos los intentos del turno (E1-A). */ ms: number }> {
   const model = modelFor(opts.role);
   const fallback = FALLBACK_POR_ROL[opts.role] ?? FALLBACK[model] ?? null;
@@ -725,19 +731,26 @@ export async function generateStructured<T>(opts: {
     // Si el presupuesto ya se agotó, no se paga una llamada que se va a cortar a
     // media respuesta.
     opts.signal?.throwIfAborted();
-    const body = {
+    // T-A3-68: algunos proveedores (los dos Gemini del extractor de Carta Porte) responden HTTP 400 al esquema estricto. Para
+    // esos modelos —y para cualquiera que lo rechace una vez— se pide `json_object` con el esquema en el prompt; la salida
+    // se valida igual con zod más abajo. Cada cambio de modo se registra (caidas.ts): nunca en silencio.
+    const armarBody = (estricto: boolean) => ({
       model: m,
-      messages: msgs,
+      messages: estricto ? msgs : [{ role: 'system' as const, content: `${msgs[0].content as string}\n\n${INSTRUCCION_JSON_OBJECT}\n${JSON.stringify(jsonSchema)}` }, ...msgs.slice(1)],
       max_tokens: maxTokens,
       temperature: opts.temperature ?? 0,
-      response_format: {
-        type: 'json_schema',
-        json_schema: { name: opts.schemaName, strict: true, schema: jsonSchema },
+      response_format: (estricto
+        ? { type: 'json_schema', json_schema: { name: opts.schemaName, strict: true, schema: jsonSchema } }
+        : { type: 'json_object' }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+      ) as any,
       ...opcionesDeRazonamiento(opts.role),
       ...PROVIDER_OPTS,
-    };
+    });
+    const avisarCaida = (c: CaidaLlm) => { registrarCaida(c); opts.onCaida?.(c); };
+    const estrictoInicial = usaEsquemaEstricto(m);
+    if (!estrictoInicial) avisarCaida({ tipo: 'modo_json', rol: opts.role, de: m, a: m, motivo: 'modelo_sin_esquema_estricto' });
+    const body = armarBody(estrictoInicial);
     const reservation = opts.budget
       ? await reserveLlmBudget(opts.budget, calcCost(m, Math.max(1, cotaEntradaEnTokens(body.messages) + JSON.stringify(jsonSchema).length), maxTokens))
       : null;
@@ -751,7 +764,15 @@ export async function generateStructured<T>(opts: {
     let res: OpenAI.Chat.ChatCompletion;
     const t0Llamada = Date.now();
     try {
-      res = await getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined);
+      try {
+        res = await getClient().chat.completions.create(body, opts.signal ? { signal: opts.signal } : undefined);
+      } catch (e0) {
+        // Un 400 del esquema estricto no es transitorio ni se arregla con el respaldo: se repite UNA vez con `json_object`.
+        if (!estrictoInicial || !esErrorEsquemaRechazado(e0)) throw e0;
+        aprenderSinEsquemaEstricto(m);
+        avisarCaida({ tipo: 'modo_json', rol: opts.role, de: m, a: m, motivo: 'esquema_estricto_rechazado', detalle: resumenCausa(e0).slice(0, 160) });
+        res = await getClient().chat.completions.create(armarBody(false), opts.signal ? { signal: opts.signal } : undefined);
+      }
     } catch (e) {
       msAcumulados += Date.now() - t0Llamada;
       // BACKEND-19C2-1: ver el mismo fix en `generateResponse` — no liquidar
@@ -844,6 +865,8 @@ export async function generateStructured<T>(opts: {
       // fallback cross-provider, intentar con OTRO proveedor antes de rendirse.
       if (fallback && (isTransientError(e1) || isTransientError(e2))) {
         logger.warn('llm.fallback', { fn: 'generateStructured', from: model, to: fallback });
+        registrarCaida({ tipo: 'respaldo', rol: opts.role, de: model, a: fallback, motivo: 'proveedor_transitorio', detalle: resumenCausa(isTransientError(e2) ? e2 : e1).slice(0, 160) });
+        opts.onCaida?.({ tipo: 'respaldo', rol: opts.role, de: model, a: fallback, motivo: 'proveedor_transitorio', detalle: resumenCausa(isTransientError(e2) ? e2 : e1).slice(0, 160) });
         try {
           return await attempt(fallback, note);
         } catch (e3) {

@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { generateStructured } from '@/lib/llm/openrouter';
 import { createLlmBudget, type PropositoIa } from '@/lib/llm/budget';
 import type { ModelRole } from '@/lib/llm/models';
+import type { CaidaLlm } from '@/lib/llm/caidas';
 import { SalidaLlmSchema, construirSistema, construirUsuario, type LlmExtractor, type NivelModelo } from './extractor';
 
 export const ROL_POR_NIVEL: Record<NivelModelo, ModelRole> = {
@@ -23,6 +24,7 @@ export const ROL_POR_NIVEL: Record<NivelModelo, ModelRole> = {
 export function crearExtractorOpenRouter(tenantId: string, proposito: PropositoIa): LlmExtractor {
   const budget = createLlmBudget(tenantId, `cp-${randomUUID()}`, proposito);
   return async (entrada, signal) => {
+    const caidas: CaidaLlm[] = [];
     const r = await generateStructured({
       role: ROL_POR_NIVEL[entrada.nivel],
       system: construirSistema(),
@@ -33,7 +35,8 @@ export function crearExtractorOpenRouter(tenantId: string, proposito: PropositoI
       maxTokens: 8000,
       signal,
       budget,
+      onCaida: (c) => caidas.push(c),
     });
-    return { ...r.data, modelo: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut, costoUsd: r.cost };
+    return { ...r.data, modelo: r.model, tokensIn: r.tokensIn, tokensOut: r.tokensOut, costoUsd: r.cost, ...(caidas.length > 0 ? { caidas } : {}) };
   };
 }

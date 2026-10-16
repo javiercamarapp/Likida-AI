@@ -361,6 +361,15 @@ describe('VistaRevision · perfil restringido (envío al TMS, sin viaje)', () =>
       envio={envio} perfilRestringido={perfilRestringido} salida={{ folio: 'F-1' }} />,
   );
 
+  it('salida simulada: la tarjeta de envío lleva «Simulado» y dice «Subido al TMS (simulado)»; sin simulador dice solo «Enviado.»', () => {
+    const sim = montar(aprobado(), true, { estado: 'enviado', simulado: true });
+    expect(sim).toMatch(/data-testid="rotulo-simulado"[^>]*>Simulado</);
+    expect(sim).toMatch(/Subido al TMS \(simulado\)/);
+    const real = montar(aprobado(), true, { estado: 'enviado' });
+    expect(real).not.toMatch(/Simulado|simulado/);
+    expect(real).toMatch(/Enviado\./);
+  });
+
   it('por revisar con perfil: no hay selector de operador ni «crea o completa el viaje»; sí «No timbra nada»', () => {
     const h = montar(doc(), true);
     expect(h).not.toMatch(/Operador del viaje/);
@@ -423,5 +432,112 @@ describe('VistaDocumentos · perfil restringido', () => {
     expect(con).not.toMatch(/Sin viaje todavía|Con viaje/);
     const sin = html(<VistaDocumentos datos={datos([a], { envios: { a1: 'listo' } })} acciones={ninguna} />);
     expect(sin).toMatch(/Sin viaje todavía/);
+  });
+});
+
+describe('T-A3-31: destinatario de revisión en la bandeja', () => {
+  const ME = 'u-yo';
+  const OTRA = 'u-otra';
+  const filas = [doc({ id: 'mio', nombreArchivo: 'mio.xlsx' }), doc({ id: 'ajeno', nombreArchivo: 'ajeno.xlsx' }), doc({ id: 'nadie', nombreArchivo: 'nadie.xlsx' })];
+  const asignacion: Partial<DatosDocumentos> = {
+    asignacionActiva: true, asignados: { mio: ME, ajeno: OTRA }, revisores: [{ id: ME, nombre: 'Persona Uno' }, { id: OTRA, nombre: 'Persona Dos' }],
+  };
+
+  it('sin configuración la bandeja es la de siempre: ni columna «Asignado a» ni filtro «Mis casos»', () => {
+    const h = html(<VistaDocumentos datos={datos(filas)} acciones={todas} usuarioId={ME} soloMios />);
+    expect(h).not.toMatch(/Asignado a|Mis casos/);
+    expect(h).toMatch(/mio\.xlsx/); expect(h).toMatch(/ajeno\.xlsx/); expect(h).toMatch(/nadie\.xlsx/);
+  });
+
+  it('con asignación activa: columna con el nombre de la persona y «Todos los revisores» para lo no asignado', () => {
+    const h = html(<VistaDocumentos datos={datos(filas, asignacion)} acciones={todas} usuarioId={ME} />);
+    expect(h).toMatch(/Asignado a/);
+    expect(h).toMatch(/Persona Uno/); expect(h).toMatch(/Persona Dos/);
+    expect(h).toMatch(/Todos los revisores/);
+    expect(h).toMatch(/Mis casos/);
+  });
+
+  it('«Mis casos» solo muestra los suyos', () => {
+    const h = html(<VistaDocumentos datos={datos(filas, asignacion)} acciones={todas} usuarioId={ME} soloMios />);
+    expect(h).toMatch(/mio\.xlsx/);
+    expect(h).not.toMatch(/ajeno\.xlsx/);
+    expect(h).not.toMatch(/nadie\.xlsx/);
+  });
+
+  it('«Mis casos» sin ningún caso asignado lo dice, y explica que lo no asignado le toca a todos', () => {
+    const h = html(<VistaDocumentos datos={datos(filas, { ...asignacion, asignados: { ajeno: OTRA } })} acciones={todas} usuarioId={ME} soloMios />);
+    expect(h).toMatch(/No tienes casos asignados/);
+  });
+
+  it('el enlace «Mis casos» conserva el ?tenant= de la vista', () => {
+    const h = html(<VistaDocumentos datos={datos(filas, asignacion)} acciones={todas} usuarioId={ME} sufijo="?tenant=abc" />);
+    expect(h).toMatch(/href="\/dashboard\/carta-porte\/documentos\?tenant=abc&amp;mios=1"/);
+  });
+});
+
+describe('T-A3-31: reasignar desde el visor', () => {
+  const opciones = [{ id: 'u1', nombre: 'Persona Uno' }, { id: 'u2', nombre: 'Persona Dos' }];
+  const ver = (d: DocumentoFila, revisor: { actualId: string | null; opciones: typeof opciones } | null, reasignar: typeof accion | null = accion) =>
+    html(<VistaRevision doc={d} revision={null} original={{ tipo: 'nada', motivo: 'x' }} operadores={[]} eventos={[]} acciones={{ revisar: accion, reasignar }} revisor={revisor} />);
+
+  it('sin configuración de asignación no se pinta nada', () => {
+    expect(ver(doc(), null)).not.toMatch(/Asignado a|Reasignar/);
+  });
+
+  it('muestra a quién le toca y el selector para reasignar (con «Todos los revisores»)', () => {
+    const h = ver(doc(), { actualId: 'u1', opciones });
+    expect(h).toMatch(/Asignado a: <strong[^>]*>Persona Uno/);
+    expect(h).toMatch(/name="revisorId"/);
+    expect(h).toMatch(/<option value="u2">Persona Dos/);
+    expect(h).toMatch(/<option value="">Todos los revisores/);
+    expect(h).toMatch(/Reasignar/);
+  });
+
+  it('sin asignar dice «Todos los revisores»; un documento ya aprobado no ofrece reasignar', () => {
+    expect(ver(doc(), { actualId: null, opciones })).toMatch(/Asignado a: <strong[^>]*>Todos los revisores/);
+    const aprobado = ver(doc({ estado: 'aprobado', aprobadoEn: 'x' }), { actualId: 'u1', opciones });
+    expect(aprobado).toMatch(/Asignado a/);
+    expect(aprobado).not.toMatch(/name="revisorId"/);
+  });
+});
+
+describe('T-A3-63: lo inferido y lo poco seguro se resaltan al lado del documento', () => {
+  const montar = (d: DocumentoFila, texto: string) => html(
+    <VistaRevision doc={d} revision={revisionDe(d)} original={{ tipo: 'texto', texto }} operadores={[]} eventos={[]} acciones={{ revisar: accion }} />,
+  );
+  const conMarcas = () => {
+    const e = extraccionAtlasOk();
+    e.campos.origen_cp = { ...cv('44100', 0.6), evidencia: 'CP Origen: 44100' };
+    e.campos.unidad_placas = cv('ABC1234', 0.95, 'catalogo');
+    return doc({}, e);
+  };
+
+  it('el inferido lleva rótulo «Inferido», su aviso en llano y nunca el rótulo de leído', () => {
+    const h = montar(conMarcas(), 'Folio | ATL-20481');
+    expect(h).toContain('data-marca="inferido"');
+    expect(h).toMatch(/Inferido del catálogo del cliente: el documento no lo trae/);
+    expect(h).toMatch(/>Inferido</);
+  });
+
+  it('el poco seguro se rotula y su línea del documento original va resaltada', () => {
+    const h = montar(conMarcas(), 'Folio | ATL-20481\nCP Origen: 44100');
+    expect(h).toContain('data-marca="poco-seguro"');
+    expect(h).toMatch(/>Poco seguro</);
+    expect(h).toContain('data-linea-resaltada');
+    expect(h.match(/data-linea-resaltada/g)).toHaveLength(1);
+  });
+
+  it('el resumen cuenta lo resaltado y avisa que aprobar con correcciones enseña al formato', () => {
+    const h = montar(conMarcas(), 'x');
+    expect(h).toMatch(/1 dato inferido/);
+    expect(h).toMatch(/1 dato poco seguro/);
+    expect(h).toMatch(/el siguiente documento igual sale sin modelo/);
+  });
+
+  it('un documento sin nada que resaltar no pinta marcas ni resumen', () => {
+    const h = montar(doc(), 'Folio | ATL-20481');
+    expect(h).not.toContain('data-marca=');
+    expect(h).not.toContain('resumen-marcas');
+    expect(h).not.toContain('data-linea-resaltada');
   });
 });
