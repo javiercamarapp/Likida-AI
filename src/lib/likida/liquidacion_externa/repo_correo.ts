@@ -35,7 +35,8 @@ export type CanalEntrega = 'whatsapp' | 'correo' | 'ambos';
 export type EstadoEntregaCorreo = 'pendiente' | 'enviando' | 'enviada' | 'entregada' | 'rebotada' | 'queja' | 'fallida' | 'omitida';
 export type TipoExcepcion =
   | 'sin_poliza' | 'operador_no_encontrado' | 'operador_sin_correo' | 'coordinador_sin_correo' | 'total_no_cuadra'
-  | 'concepto_prohibido' | 'neto_negativo' | 'tipo_sin_regla' | 'correccion_pendiente' | 'mapeo_invalido';
+  | 'concepto_prohibido' | 'neto_negativo' | 'tipo_sin_regla' | 'correccion_pendiente' | 'mapeo_invalido'
+  | 'unidades_mezcladas';
 
 export interface ConfigCorreo {
   canal: CanalEntrega;
@@ -77,8 +78,15 @@ export interface MetaDesglose {
   dias?: number | null;
   totalOrigen: 'tms' | 'calculado';
   retenidaMotivo?: string | null;
+  /** 0789: número de liquidación y de pago del origen, y todas las bitácoras que la liquidación junta. */
+  numeroLiquidacion?: string | null;
+  numeroPago?: string | null;
+  bitacoras?: string[] | null;
 }
-export interface Desglose extends Required<Omit<MetaDesglose, 'retenidaMotivo'>> {
+export interface Desglose extends Required<Omit<MetaDesglose, 'retenidaMotivo' | 'numeroLiquidacion' | 'numeroPago' | 'bitacoras'>> {
+  numeroLiquidacion?: string | null;
+  numeroPago?: string | null;
+  bitacoras?: string[] | null;
   enviadoOrigenEn: string | null;
   retenidaMotivo: string | null;
   creadoEn: string;
@@ -298,6 +306,10 @@ export async function insertarDesglose(tenantId: string, m: MetaDesglose): Promi
     terminal: m.terminal ?? null, poliza: m.poliza ?? null, unidad: m.unidad ?? null,
     tipo_operador: m.tipoOperador ?? null, dias: m.dias ?? null, total_origen: m.totalOrigen,
     retenida_motivo: recortar(m.retenidaMotivo),
+    // 0789: solo si vienen, para no exigir las columnas nuevas a quien no las usa.
+    ...(m.numeroLiquidacion != null ? { numero_liquidacion: m.numeroLiquidacion } : {}),
+    ...(m.numeroPago != null ? { numero_pago: m.numeroPago } : {}),
+    ...(m.bitacoras != null ? { bitacoras: m.bitacoras } : {}),
   };
   const res = await acotada(supabaseAdmin().from('liquidacion_desglose').insert(fila).select('liquidacion_externa_id'), 'liqcorreo.desglose_insertar');
   const r = res as unknown as { data: unknown; error: ErrorPg };
