@@ -70,6 +70,17 @@ describe('el archivo', () => {
     expect(l.SheetNames).toEqual(['Ligadas', 'Sin viaje', 'Ambiguas']);
     expect(XLSX.utils.sheet_to_json(l.Sheets['Ligadas'])).toHaveLength(1);
   });
+  it('T-A2-23: el costo por viaje que trae la lectura llega a la hoja «Ligadas»', async () => {
+    leer.mockResolvedValue({ ...datos, costos: new Map([['v1', {
+      viajeId: 'v1', folio: 'VJ-0001', cruces: 1, costo: 100, casetasDistintas: 1, candidatos: null, ambiguos: 1,
+      aviso: null, referencia: null, fuente: 'suma del importe de 1 cruces ligados del archivo del proveedor',
+    }]]) });
+    const r = await get();
+    const l = XLSX.read(new Uint8Array(await r.arrayBuffer()), { type: 'array' });
+    const fila = XLSX.utils.sheet_to_json<Record<string, unknown>>(l.Sheets['Ligadas'])[0];
+    expect(fila['Costo del viaje']).toBe(100);
+    expect(String(fila['Costo del viaje: detalle y fuente'])).toContain('Fuente: suma del importe de 1 cruces');
+  });
   it('el desglose de OTRA flota (la lectura devuelve null) es 404', async () => {
     leer.mockResolvedValue(null);
     expect((await get('?desglose=ajeno')).status).toBe(404);
