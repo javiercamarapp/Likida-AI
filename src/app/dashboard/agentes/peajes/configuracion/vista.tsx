@@ -10,6 +10,8 @@ import type {
 
 import { SeccionEntradas, type AccionesEntradas, type EntradasVista } from './entradas';
 import { SeccionReglasCobro, type ReglasCobroVista } from './reglas-cobro';
+import { SeccionTarifario, type TarifarioVista } from './tarifario';
+import { SeccionUmbralesAvisos, type UmbralesAvisosVista } from './umbrales-avisos';
 
 type Accion = (fd: FormData) => Promise<void>;
 
@@ -56,7 +58,7 @@ const CSS_SECUNDARIO = 'hairline text-[12.5px] font-medium px-3 py-1.5 rounded-l
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 export function VistaConfiguracionPeajes({
-  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro,
+  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro, tarifario, umbralesAvisos, superficie,
 }: {
   sufijo: string;
   aviso: string | null;
@@ -76,6 +78,12 @@ export function VistaConfiguracionPeajes({
   acciones: AccionesConfiguracion;
   /** Las reglas de la revisión de cobros (clases por caseta, casetas prohibidas, TAGs de baja). Opcional. */
   reglasCobro?: ReglasCobroVista;
+  /** El tarifario por caseta y clase (carga y confirmación). Opcional. */
+  tarifario?: TarifarioVista;
+  /** Umbrales de atípicos, plazo de reclamo, avisos e interruptores. Opcional. */
+  umbralesAvisos?: UmbralesAvisosVista;
+  /** T-A2-31: con perfil `cinco_agentes` no se pintan geocercas ni cursos (stand-by). Sin la prop: todo, como siempre. */
+  superficie?: { gps: boolean; cursos: boolean };
 }) {
   return (
     <main className="h-full">
@@ -98,10 +106,12 @@ export function VistaConfiguracionPeajes({
           <SeccionEntradas entradas={entradas} acciones={acciones} />
           <SeccionMapeo mapeos={mapeos} acciones={acciones} />
           {reglasCobro && <SeccionReglasCobro datos={reglasCobro} />}
+          {tarifario && <SeccionTarifario datos={tarifario} />}
+          {umbralesAvisos && <SeccionUmbralesAvisos datos={umbralesAvisos} />}
           <SeccionTags tags={tags} unidades={unidades} acciones={acciones} />
           <SeccionCasetas casetas={casetas} acciones={acciones} />
-          <SeccionGeocercas geocercas={geocercas} tipos={tiposGeocerca} acciones={acciones} />
-          <SeccionCursos cursos={cursos} unidades={unidades} convenios={convenios} acciones={acciones} />
+          {(superficie?.gps ?? true) && <SeccionGeocercas geocercas={geocercas} tipos={tiposGeocerca} acciones={acciones} />}
+          {(superficie?.cursos ?? true) && <SeccionCursos cursos={cursos} unidades={unidades} convenios={convenios} acciones={acciones} />}
         </div>
       </div>
     </main>
@@ -368,7 +378,7 @@ function SeccionCasetas({ casetas, acciones }: { casetas: CasetaVista[] | null; 
           {casetas.slice(0, 300).map((c) => (
             <div key={c.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12.5px]" style={c.activa ? undefined : { opacity: 0.55 }}>
               <span className="font-medium">{c.nombre}</span>
-              <span className="cifra-mono text-[11.5px]" style={{ color: 'var(--muted)' }}>{c.lat.toFixed(5)}, {c.lng.toFixed(5)} · {c.radioM} m</span>
+              <span className="cifra-mono text-[11.5px]" style={{ color: 'var(--muted)' }}>{c.lat !== null && c.lng !== null ? `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)} · ${c.radioM} m` : 'sin coordenadas · solo por nombre'}</span>
               {c.fuente && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{c.fuente}</span>}
               <form action={acciones.estadoCaseta} className="ml-auto">
                 <input type="hidden" name="caseta" value={c.id} />

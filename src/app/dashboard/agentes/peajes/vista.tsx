@@ -14,6 +14,12 @@ import { BotonEjecutar, type AccionBarrer } from './controles';
 import { SubirDesgloseProveedor, type AccionImportar } from './subir-desglose';
 import { BotonConciliar, type AccionConciliar } from './conciliar-desglose';
 import { BotonAnular, type AccionAnular } from './anular-desglose';
+import { RevisionCobros, type EstadoRevisionCobros } from './revision-cobros';
+// SOLO tipo y constante pura: el módulo importa el perfil (servidor) y no debe entrar al bundle de la vista.
+import type { SuperficiePeajes } from '@/lib/likida/peajes/superficie_perfil';
+
+/** Sin perfil: todo se pinta (valor local para no importar el módulo de servidor). */
+const SUPERFICIE_TODA: SuperficiePeajes = { estimulo: true, cfdiYTickets: true, bitacoraEstimulo: true, gps: true, cursos: true };
 
 /**
  * La ventana del Agente de Peajes (F5): lo que el estado de cuenta del
@@ -43,7 +49,7 @@ import { BotonAnular, type AccionAnular } from './anular-desglose';
 export function VistaAgentePeajes({
   conciliacion, lineas, desgloses, peajeAcreditable, sufijo, subirDesglose, ejecutarAhora,
   desglosesProveedor, desgloseSeleccionado, detalleSeleccionado, evidenciaGps, verificacion, importarDesglose, conciliarDesglose,
-  anularDesglose, puedeAnular = false, notificaciones,
+  anularDesglose, puedeAnular = false, notificaciones, revisionCobros, superficie = SUPERFICIE_TODA,
 }: {
   conciliacion: ConciliacionConsolidado | null;
   // FE-10: `ColaPorConciliar`, no `LineaPorConciliar[]` a secas — sin el
@@ -76,6 +82,11 @@ export function VistaAgentePeajes({
    *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
    *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
   notificaciones?: React.ReactNode;
+  /** T-A2-27: tarjetas y KPIs de la revisión de cobros del archivo abierto, ya calculados por la página.
+   *  Sin la prop se pinta el estado vacío («sube el archivo del proveedor»). Un fallo aquí no toca el resto. */
+  revisionCobros?: EstadoRevisionCobros;
+  /** T-A2-31: qué partes del stand-by se pintan. Sin la prop (sin perfil) se pinta todo; con perfil `cinco_agentes` ninguna. */
+  superficie?: SuperficiePeajes;
 }) {
   const total = conciliacion ? conciliacion.conciliadas + conciliacion.porConciliar + conciliacion.sinMatch : 0;
   const pct = conciliacion && total > 0 ? Math.round((conciliacion.conciliadas / total) * 100) : null;
@@ -89,6 +100,7 @@ export function VistaAgentePeajes({
         />
         <div className="px-5 py-5 flex-1 space-y-4">
 
+          {superficie.cfdiYTickets && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Kpi titulo="Líneas conciliadas" valor={conciliacion ? numero(conciliacion.conciliadas) : '—'}
               nota={pct !== null ? `${numero(pct)}% del estado de cuenta` : 'aún sin estados de cuenta'} />
@@ -99,8 +111,13 @@ export function VistaAgentePeajes({
             <Kpi titulo="Estados de cuenta" valor={conciliacion ? numero(conciliacion.cfdis) : '—'}
               nota="CFDI consolidados recibidos" />
           </div>
+          )}
 
-          {/* ── La ingesta: el ritual del PoC ── */}
+          {/* ── T-A2-27: la revisión de cobros, arriba del detalle ── */}
+          <RevisionCobros estado={revisionCobros ?? { tipo: 'sin_archivo' }} />
+
+          {/* ── La ingesta: el ritual del PoC (CFDI consolidado: stand-by con perfil) ── */}
+          {superficie.cfdiYTickets && (<>
           <section className="card p-4">
             <h2 className="font-display text-[15px] font-semibold mb-1">Subir estado de cuenta</h2>
             <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
@@ -200,6 +217,8 @@ export function VistaAgentePeajes({
             </section>
           </div>
 
+          </>)}
+
           {/* ── El desglose del PROVEEDOR (F5, PoC): tres cubetas y bitácora ── */}
           <section className="card p-4">
             <h2 className="font-display text-[15px] font-semibold mb-1">Desglose del proveedor de peaje</h2>
@@ -207,16 +226,15 @@ export function VistaAgentePeajes({
               El Excel/CSV (o PDF con texto) que IAVE, PASE, TeleVía o el convenio directo mandan
               cada corte — a mano aquí, o solo por el buzón firmado (ver Configuración). El agente lo
               cruza contra los gastos de caseta de los viajes — por fecha (±1 día) y monto, usando el
-              TAG de cada unidad para desempatar — y, cuando hay catálogo de casetas con coordenadas y
-              la unidad tiene GPS, valida con la hora del cobro que la unidad estuvo en la caseta.
+              TAG de cada unidad para desempatar{superficie.gps ? ' — y, cuando hay catálogo de casetas con coordenadas y la unidad tiene GPS, valida con la hora del cobro que la unidad estuvo en la caseta' : ''}.
               Cada línea queda <b>cuadra</b>, <b>sin respaldo</b> o <b>por verificar</b>: lo que el dato
-              no alcanza a afirmar no se acusa. De lo que cuadra sale la bitácora de la RMF 9.1.8.
+              no alcanza a afirmar no se acusa.{superficie.bitacoraEstimulo && ' De lo que cuadra sale la bitácora de la RMF 9.1.8.'}
             </p>
             <div className="mb-3">
               <Link href={`/dashboard/agentes/peajes/configuracion${sufijo}`}
                 className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg hairline transition-colors hover:bg-[var(--canvas)]"
                 style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
-                <Settings2 width={13} height={13} strokeWidth={2} /> Configuración: TAGs, casetas, geocercas, mapeo de columnas y buzón
+                <Settings2 width={13} height={13} strokeWidth={2} /> Configuración: TAGs, casetas, {superficie.gps ? 'geocercas, ' : ''}mapeo de columnas y buzón
               </Link>
             </div>
             <SubirDesgloseProveedor importar={importarDesglose} />
@@ -272,6 +290,7 @@ export function VistaAgentePeajes({
                     <div className="flex items-center gap-2 flex-wrap mb-3">
                       <BotonConciliar conciliar={conciliarDesglose} desgloseId={desgloseSeleccionado.desgloseId} />
                       {puedeAnular && anularDesglose && <BotonAnular anular={anularDesglose} desgloseId={desgloseSeleccionado.desgloseId} />}
+                      {superficie.bitacoraEstimulo && (<>
                       {desgloseSeleccionado.cuadra > 0 ? (
                         <a href={`/api/export/bitacora-peaje?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
                           className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg hairline transition-colors hover:bg-[var(--canvas)]"
@@ -288,6 +307,12 @@ export function VistaAgentePeajes({
                         style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
                         <FileDown width={13} height={13} strokeWidth={2} /> Bitácora conciliada (CSV)
                       </a>
+                      </>)}
+                      <a href={`/api/export/peajes-vinculos?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
+                        className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg hairline transition-colors hover:bg-[var(--canvas)]"
+                        style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+                        <FileDown width={13} height={13} strokeWidth={2} /> Casetas ligadas a viaje (Excel)
+                      </a>
                       <Link href={`/dashboard/agentes/peajes/reclamacion${sufijo}${sufijo ? '&' : '?'}desglose=${desgloseSeleccionado.desgloseId}`}
                         className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85"
                         style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
@@ -299,7 +324,7 @@ export function VistaAgentePeajes({
                         Revisión de cobros (candidatos)
                       </Link>
                     </div>
-                    <EstadoConciliado v={verificacion} />
+                    {superficie.gps && <EstadoConciliado v={verificacion} />}
                     {detalleSeleccionado === null ? (
                       <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
                         No se pudo leer el detalle de este desglose ahora mismo.
@@ -331,7 +356,7 @@ export function VistaAgentePeajes({
                         />
                       </div>
                     )}
-                    <EvidenciaGpsResumen resumen={evidenciaGps?.resumen ?? null} />
+                    {superficie.gps && <EvidenciaGpsResumen resumen={evidenciaGps?.resumen ?? null} />}
                   </div>
                 )}
               </div>
@@ -339,6 +364,7 @@ export function VistaAgentePeajes({
           </section>
 
           {/* ── El estímulo de peaje: cada renglón dice lo que su ficha sostiene ── */}
+          {superficie.estimulo && (
           <section className="card p-4">
             <h2 className="font-display text-[15px] font-semibold mb-1">El estímulo de peaje — hasta 50% (LIF 2026 art. 20, ap. A · RMF 2026 regla 9.1.8)</h2>
             <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
@@ -367,6 +393,7 @@ export function VistaAgentePeajes({
             )}
             <p className="text-[11px] pt-3" style={{ color: 'var(--faint)' }}>{LEYENDA_CORTA}</p>
           </section>
+          )}
 
           {notificaciones}
         </div>
