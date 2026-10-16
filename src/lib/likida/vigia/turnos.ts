@@ -7,11 +7,13 @@
 // La zona es IANA (`tenant.zona_horaria`); no se supone ningún horario de verano: se pregunta a Intl por la hora local en esa zona.
 // Garantía de cobertura: `filtrarPorTurno` NUNCA deja un nivel sin destinatario; si el filtro lo vacía, devuelve a todos.
 
+import { TZ_MX } from '@/lib/formato';
+
 export type TurnoDirector = 'siempre' | 'noche' | 'festivos_y_fin_de_semana';
 export type TurnoActual = 'dia' | 'noche' | 'festivo';
 
 export const TURNOS_DIRECTOR: readonly TurnoDirector[] = ['siempre', 'noche', 'festivos_y_fin_de_semana'];
-export const ZONA_POR_OMISION = 'America/Mexico_City';
+export const ZONA_POR_OMISION = TZ_MX;
 
 export interface VentanaNoche { desdeHora: number; hastaHora: number }
 /** Noche por omisión: de las 20:00 a las 07:00 locales (cruza la medianoche). */
