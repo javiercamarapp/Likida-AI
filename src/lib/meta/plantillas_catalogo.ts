@@ -439,7 +439,7 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
   {
     nombre: 'conductor_detencion_sin_aviso_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_ciclo',
     proposito: 'N05 · Preguntar por una detención sin parada registrada; solo si el GPS confirma detención por encima del umbral, nunca en movimiento.',
-    llamador: null,
+    llamador: 'src/lib/likida/conductor/deteccion_parada.ts',
     cuerpo: 'Hola {{1}}, tu unidad del viaje {{2}} lleva {{3}} minutos detenida y no registramos una parada. ¿Todo bien? Elige una opción.',
     ejemplos: ['Juan', 'F-1042', '15'],
     variables: ['nombre del chofer', 'folio', 'minutos detenida'],

@@ -48,7 +48,7 @@ Todas las que siguen en estado «nueva para aprobación»: el código ya las nom
 | 18 | `aviso_jefe_senal_vida_v1` | Agente 5 — Conductor | Ambos, si la señal de vida está encendida | `src/lib/likida/conductor/senal_vida.ts` | 4 | «Ya lo atiendo», «Abrir tablero» | autoritativo |
 | 19 | `viaje_gastos_etc_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: solo cinco_agentes | sin llamador todavía | 2 | «Sí, necesito gastos», «No necesito» | autoritativo |
 | 20 | `conductor_foto_sello_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: piloto y cinco_agentes | sin llamador todavía | 3 | «Ya salí», «Tengo un problema» | autoritativo |
-| 21 | `conductor_detencion_sin_aviso_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: piloto y cinco_agentes | sin llamador todavía | 3 | «Todo bien», «Registrar motivo», «Necesito apoyo» | autoritativo |
+| 21 | `conductor_detencion_sin_aviso_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: piloto y cinco_agentes | `src/lib/likida/conductor/deteccion_parada.ts` | 3 | «Todo bien», «Registrar motivo», «Necesito apoyo» | autoritativo |
 | 22 | `conductor_confirma_patio_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: piloto y cinco_agentes | sin llamador todavía | 3 | «Sí, es ese patio», «Estoy en otro patio», «Compartir ubicación» | autoritativo |
 | 23 | `conductor_estadia_descarga_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: solo cinco_agentes | sin llamador todavía | 4 | «Ya inició», «Aún no inicia», «Tengo un problema» | autoritativo |
 | 24 | `aviso_supervisor_patio_distinto_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: piloto y cinco_agentes | sin llamador todavía | 5 | «Ya lo atiendo», «Abrir tablero» | autoritativo |
@@ -82,7 +82,7 @@ Perfil **piloto** exige las P0; perfil **cinco_agentes** exige P0 y P1; la P2 es
 | N02 | `viaje_instrucciones_ruta_v1` | P0 | sí | sí | aprobada | `src/lib/likida/conductor/asignacion.ts` |
 | N03 | `viaje_gastos_etc_v1` | P1 | no | sí | no enviada | sin llamador todavía |
 | N04 | `conductor_foto_sello_v1` | P0 | sí | sí | aprobada | sin llamador todavía |
-| N05 | `conductor_detencion_sin_aviso_v1` | P0 | sí | sí | aprobada | sin llamador todavía |
+| N05 | `conductor_detencion_sin_aviso_v1` | P0 | sí | sí | aprobada | `src/lib/likida/conductor/deteccion_parada.ts` |
 | N06 | `conductor_confirma_patio_v1` | P0 | sí | sí | aprobada | sin llamador todavía |
 | N07 | `conductor_estadia_descarga_v1` | P1 | no | sí | no enviada | sin llamador todavía |
 | N08 | `aviso_supervisor_patio_distinto_v1` | P0 | sí | sí | aprobada | sin llamador todavía |
@@ -715,7 +715,7 @@ Perfil **piloto** exige las P0; perfil **cinco_agentes** exige P0 y P1; la P2 es
 
 - **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
 - **Agente / uso:** Agente 5 — Conductor (ciclo con botones). N05 · Preguntar por una detención sin parada registrada; solo si el GPS confirma detención por encima del umbral, nunca en movimiento.
-- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Llamador en código:** src/lib/likida/conductor/deteccion_parada.ts
 - **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
 - **Cuerpo exacto:**
 

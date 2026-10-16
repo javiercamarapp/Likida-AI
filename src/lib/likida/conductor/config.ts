@@ -148,6 +148,18 @@ export interface ConfigConductor {
   poleoMin?: number;
   /** T-A5-37: cadencia por proveedor (o unidad), que manda sobre `poleoMin`. Las claves las pone quien configura; los valores, 1–60. */
   poleoPorClaveMin?: Record<string, number>;
+  /**
+   * T-A5-39 (R10): si la unidad lleva detenida `detenidoAvisoMin` sin parada registrada, el agente le hace UNA pregunta por episodio
+   * («¿todo bien?», plantilla N05) y atiende la parada que inicia el chofer (T-A5-38: «parada», motivo, «ya continúo»). Apagado por
+   * omisión (hasta la fase 2); aún sin columna propia: se fija al armar la configuración, como `reporteLlegadaActivo`. Pasa por la
+   * compuerta de unidad detenida (T-A5-36).
+   */
+  deteccionParadaActiva?: boolean;
+  /**
+   * T-A5-39: minutos tras la pregunta de detención sin que el chofer conteste a partir de los cuales se avisa al supervisor. Ausente =
+   * apagada (por omisión): sin respuesta NO se escala por sí sola. 5–720.
+   */
+  detencionEscalaSinRespuestaMin?: number;
   /** 0801: aplicar la salida que reporta el TMS como hito del viaje. */
   aplicarSalidaDelTms: boolean;
   /** 0801: llamadas de seguimiento por viaje medidas antes del agente (null = sin registrar) y la fecha (AAAA-MM-DD) en que se midió. */
@@ -214,6 +226,7 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   resultadoDescargaActivo: false,
   asignacionBotonesActiva: false,
   detenidoAvisoMin: 15,
+  deteccionParadaActiva: false,
   lineaBaseLlamadasPorViaje: null,
   lineaBaseRegistradaEn: null,
 });
@@ -356,6 +369,13 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       poleoPorClaveMin[clave.trim()] = n;
     }
   }
+  // T-A5-39: escalar a un supervisor la pregunta sin respuesta es opcional; ausente/null = apagada. Fuera de rango se RECHAZA.
+  let detencionEscalaSinRespuestaMin: number | undefined;
+  if (b.detencionEscalaSinRespuestaMin !== undefined && b.detencionEscalaSinRespuestaMin !== null) {
+    const n = entero(b.detencionEscalaSinRespuestaMin, 5, 720);
+    if (n === null) return { error: 'Los minutos para avisar al supervisor de una detención sin respuesta van de 5 a 720.' };
+    detencionEscalaSinRespuestaMin = n;
+  }
   let lineaBaseLlamadasPorViaje: number | null = null;
   if (b.lineaBaseLlamadasPorViaje !== null && b.lineaBaseLlamadasPorViaje !== undefined) {
     const n = typeof b.lineaBaseLlamadasPorViaje === 'string' && (b.lineaBaseLlamadasPorViaje as string).trim() !== '' ? Number(b.lineaBaseLlamadasPorViaje) : b.lineaBaseLlamadasPorViaje;
@@ -430,6 +450,8 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       detenidoAvisoMin,
       ...(poleoMin !== undefined ? { poleoMin } : {}),
       ...(poleoPorClaveMin !== undefined ? { poleoPorClaveMin } : {}),
+      deteccionParadaActiva: b.deteccionParadaActiva === true,
+      ...(detencionEscalaSinRespuestaMin !== undefined ? { detencionEscalaSinRespuestaMin } : {}),
       lineaBaseLlamadasPorViaje,
       lineaBaseRegistradaEn,
     },

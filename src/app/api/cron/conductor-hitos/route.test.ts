@@ -30,6 +30,9 @@ const alertasEstadia = vi.fn(async (): Promise<Record<string, unknown>> => ({ re
 vi.mock('@/lib/likida/conductor/alertas_estadia', () => ({ correrAlertasEstadia: () => alertasEstadia() }));
 // T-A5-43: la pasada de «con quién te reportaste» es otro módulo; aquí solo se aísla (su prueba propia es reporte_llegada_cableado.test.ts).
 vi.mock('@/lib/likida/conductor/reporte_llegada', () => ({ correrReporteLlegada: async () => ({ revisados: 0, preguntas: 0, yaReclamadas: 0, sinTelefono: 0, fueraDeVentana: 0, compuertaMovimiento: 0, rechazosReintentables: 0, fallos: [] }), puertosReporteReales: () => ({}) }));
+// T-A5-39: la pasada de «detención sin aviso» es otro módulo; aquí solo se aísla (su prueba propia es deteccion_parada_cableado.test.ts).
+const detencion = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisados: 1, preguntas: 1, cerrados: 0, escaladas: 0, yaReclamadas: 0, sinTelefono: 0, sinDestinatario: 0, fueraDeVentana: 0, compuertaMovimiento: 0, rechazosReintentables: 0, fallos: [] }));
+vi.mock('@/lib/likida/conductor/deteccion_parada', () => ({ correrDeteccionParada: () => detencion(), puertosDetencionReales: () => ({}) }));
 const llegadas = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisadas: 1, avisos: 1, yaReclamados: 0, sinDestinatario: 0, fueraDeVentana: 0, rechazosReintentables: 0, fallos: [] }));
 vi.mock('@/lib/likida/conductor/alertas_llegada', () => ({ correrAlertasLlegadaSinConfirmar: () => llegadas(), puertosAlertaLlegadaReales: () => ({}) }));
 const barrido = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisados: 2, validados: 1, sinCoincidencia: 0, sinDato: 1, saltados: 0, fallos: 0 }));
@@ -69,7 +72,7 @@ const j = async (r: Response) => (await r.json()) as Record<string, any>; // esl
 
 beforeEach(() => {
   autorizado = 'si'; interruptores = {}; horaMx = 12; voluntarios = 0; flotasConPerfil = new Set(); perfilIlegible = false;
-  correr.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); mantenimiento.mockClear(); alertasEstadia.mockClear(); llegadas.mockClear(); barrido.mockClear(); acercamiento.mockClear(); ciclo.mockClear(); sitios.mockClear(); senal.mockClear();
+  correr.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); mantenimiento.mockClear(); alertasEstadia.mockClear(); llegadas.mockClear(); barrido.mockClear(); acercamiento.mockClear(); ciclo.mockClear(); sitios.mockClear(); senal.mockClear(); detencion.mockClear();
 });
 
 describe('la puerta y las palancas', () => {
@@ -290,6 +293,36 @@ describe('P2: el ciclo por geocerca, el sitio derivado y la señal de vida', () 
     expect(ciclo).not.toHaveBeenCalled();
     expect(sitios).not.toHaveBeenCalled();
     expect(senal).not.toHaveBeenCalled();
+  });
+});
+
+describe('T-A5-39: la pasada de «detención sin aviso» del cron', () => {
+  it('corre en cada pasada y su resumen viaja en el cuerpo de la respuesta', async () => {
+    const r = await j(await llamar());
+    expect(detencion).toHaveBeenCalledTimes(1);
+    expect(r.deteccionParada).toMatchObject({ revisados: 1, preguntas: 1 });
+  });
+
+  it('si revienta, las demás pasadas corren igual y el latido sale parcial con el motivo a la vista', async () => {
+    detencion.mockRejectedValueOnce(new Error('boom detencion'));
+    const r = await j(await llamar());
+    expect(barrido).toHaveBeenCalledTimes(1);
+    expect(senal).toHaveBeenCalledTimes(1);
+    expect(r.fallos.join(' ')).toMatch(/detención sin aviso: boom detencion/);
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'parcial', expect.anything());
+  });
+
+  it('los fallos que reporta la pasada llegan al cuerpo y vuelven parcial el latido', async () => {
+    detencion.mockResolvedValueOnce({ revisados: 1, preguntas: 0, fallos: ['detención F-1: plantilla sin aprobar'] });
+    const r = await j(await llamar());
+    expect(r.fallos).toContain('detención F-1: plantilla sin aprobar');
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'parcial', expect.anything());
+  });
+
+  it('con el interruptor del agente apagado no corre', async () => {
+    interruptores = { 'agente:conductores': 'apagado' };
+    await llamar();
+    expect(detencion).not.toHaveBeenCalled();
   });
 });
 
