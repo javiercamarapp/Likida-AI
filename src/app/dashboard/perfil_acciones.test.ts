@@ -38,6 +38,8 @@ const ARCHIVOS: Record<string, Clase> = {
   'agentes/peajes/configuracion/page.tsx': 'permitido',
   'agentes/peajes/page.tsx': 'permitido',
   'agentes/peajes/reclamacion/page.tsx': 'permitido',
+  // Helper de la tabla de candidatos: NO es un archivo de acciones (el comentario menciona 'use server'); gatea con la ruta de la reclamación.
+  'agentes/peajes/acciones-candidatos.ts': 'permitido',
   'agentes/vigia/historial/page.tsx': 'permitido',
   'agentes/vigia/page.tsx': 'permitido',
   // «Próximamente» (fase 1): permitidas en la lista del perfil, pero su puerta las manda al anuncio antes de tocar un dato.

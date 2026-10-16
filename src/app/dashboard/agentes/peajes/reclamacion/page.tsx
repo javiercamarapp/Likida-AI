@@ -108,7 +108,11 @@ export default async function PaginaReclamacionPeajes({
   // viven en `acciones-candidatos.ts`; aquí solo se captura la flota y se decide a dónde volver.
   async function accionDecidirCandidato(fd: FormData) {
     'use server';
+    // La puerta con perfil se repite AQUÍ (una action es un endpoint por POST directo): si el perfil de la flota niega la ruta,
+    // `requireSessionTenant` rebota antes de tocar un dato. El borde del formulario la repite otra vez (defensa en profundidad).
+    const no = await puertaReclamos(tenantId);
     const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
+    if (no) volverReclamos(sufijo, `error:${no}`, UUID.test(desgloseId) ? desgloseId : undefined, String(fd.get('retorno') ?? ''));
     const r = await ejecutarAccionDeFormulario(tenantId, fd);
     volverReclamos(sufijo, r.ok ? r.mensaje : `error:${r.error}`, UUID.test(desgloseId) ? desgloseId : undefined, String(fd.get('retorno') ?? ''));
   }
