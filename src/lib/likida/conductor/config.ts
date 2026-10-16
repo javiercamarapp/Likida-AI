@@ -160,12 +160,22 @@ export interface ConfigConductor {
    * apagada (por omisión): sin respuesta NO se escala por sí sola. 5–720.
    */
   detencionEscalaSinRespuestaMin?: number;
+  /**
+   * T-A5-64: marca de COHORTE del piloto. `sin_tableta_ni_macros` = voluntarios de las unidades que ya no traen tableta (WhatsApp es su
+   * único canal); `voluntarios_abiertos` = voluntarios de cualquier unidad. Ausente/null = SIN COHORTE DEFINIDA: el preflight no deja
+   * encender nada (`cohorte`). Aún sin columna propia: se fija al armar la configuración, como las demás perillas de la fase 2.
+   * El criterio de selección y las preguntas al cliente viven en `docs/operacion/cohorte-piloto.md` (nunca nombres ni cifras reales).
+   */
+  cohortePiloto?: CohortePiloto | null;
   /** 0801: aplicar la salida que reporta el TMS como hito del viaje. */
   aplicarSalidaDelTms: boolean;
   /** 0801: llamadas de seguimiento por viaje medidas antes del agente (null = sin registrar) y la fecha (AAAA-MM-DD) en que se midió. */
   lineaBaseLlamadasPorViaje: number | null;
   lineaBaseRegistradaEn: string | null;
 }
+
+export const COHORTES_PILOTO = ['sin_tableta_ni_macros', 'voluntarios_abiertos'] as const;
+export type CohortePiloto = typeof COHORTES_PILOTO[number];
 
 export const PERFILES_SEGUIMIENTO = ['esenciales', 'completo'] as const;
 export type PerfilSeguimiento = typeof PERFILES_SEGUIMIENTO[number];
@@ -376,6 +386,14 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
     if (n === null) return { error: 'Los minutos para avisar al supervisor de una detención sin respuesta van de 5 a 720.' };
     detencionEscalaSinRespuestaMin = n;
   }
+  // T-A5-64: la cohorte del piloto. null/ausente = sin definir; un valor fuera del catálogo se RECHAZA (no se corrige en silencio).
+  let cohortePiloto: CohortePiloto | undefined;
+  if (b.cohortePiloto !== undefined && b.cohortePiloto !== null) {
+    if (!(COHORTES_PILOTO as readonly unknown[]).includes(b.cohortePiloto)) {
+      return { error: 'La cohorte del piloto es «sin_tableta_ni_macros» o «voluntarios_abiertos» (o vacía si aún no se define).' };
+    }
+    cohortePiloto = b.cohortePiloto;
+  }
   let lineaBaseLlamadasPorViaje: number | null = null;
   if (b.lineaBaseLlamadasPorViaje !== null && b.lineaBaseLlamadasPorViaje !== undefined) {
     const n = typeof b.lineaBaseLlamadasPorViaje === 'string' && (b.lineaBaseLlamadasPorViaje as string).trim() !== '' ? Number(b.lineaBaseLlamadasPorViaje) : b.lineaBaseLlamadasPorViaje;
@@ -452,6 +470,7 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       ...(poleoPorClaveMin !== undefined ? { poleoPorClaveMin } : {}),
       deteccionParadaActiva: b.deteccionParadaActiva === true,
       ...(detencionEscalaSinRespuestaMin !== undefined ? { detencionEscalaSinRespuestaMin } : {}),
+      ...(cohortePiloto !== undefined ? { cohortePiloto } : {}),
       lineaBaseLlamadasPorViaje,
       lineaBaseRegistradaEn,
     },

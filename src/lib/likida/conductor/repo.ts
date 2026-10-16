@@ -8,7 +8,7 @@ import {
   type Contacto, type FuenteHito, type HitoFila, type InterpretacionHito, type TipoHito,
 } from './tipos';
 import type { LegadoSello } from './maquina';
-import { CONFIG_CONDUCTOR_DEFAULT, validarConfigConductor, zonaOCdmx, type ConfigConductor, type PerfilSeguimiento } from './config';
+import { CONFIG_CONDUCTOR_DEFAULT, COHORTES_PILOTO, validarConfigConductor, zonaOCdmx, type CohortePiloto, type ConfigConductor, type PerfilSeguimiento } from './config';
 import { MOTIVO_FUERA_DE_PERFIL, hitoEnPerfil } from './perfil';
 import { contieneDatoDeSeguridad } from './guardia_seguridad';
 import { aHitoApi, type EventoApi, type FiltrosHitos, type HitoApi, type CambioCitas } from './lectura';
@@ -571,6 +571,9 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     poleoMin: f.poleo_min === undefined || f.poleo_min === null ? undefined : Number(f.poleo_min),
     poleoPorClaveMin: f.poleo_por_clave_min !== null && typeof f.poleo_por_clave_min === 'object' && !Array.isArray(f.poleo_por_clave_min)
       ? f.poleo_por_clave_min as Record<string, number> : undefined,
+    // T-A5-64: la cohorte del piloto. Sin columna todavia (pide slot A5 0820-0829, ver preguntas-javier.md): la lectura es tolerante, asi que
+    // una base con `cohorte_piloto` ya la usa y una sin ella (o con un valor fuera del catalogo) queda en «sin cohorte definida».
+    ...(typeof f.cohorte_piloto === 'string' && (COHORTES_PILOTO as readonly string[]).includes(f.cohorte_piloto) ? { cohortePiloto: f.cohorte_piloto as CohortePiloto } : {}),
     mostrarEstadosFrontera: f.mostrar_estados_frontera === true,
     aplicarSalidaDelTms: f.aplicar_salida_del_tms === true,
     lineaBaseLlamadasPorViaje: f.linea_base_llamadas_por_viaje === undefined || f.linea_base_llamadas_por_viaje === null ? null : Number(f.linea_base_llamadas_por_viaje),
@@ -1596,7 +1599,7 @@ export async function leerDatosPreflight(tenantId: string, ahora: Date = new Dat
     }
   }
   return {
-    config: { activo: config.activo, perfilSeguimiento: config.perfilSeguimiento, solicitudesMin: config.solicitudesMin },
+    config: { activo: config.activo, perfilSeguimiento: config.perfilSeguimiento, solicitudesMin: config.solicitudesMin, cohortePiloto: config.cohortePiloto ?? null },
     zonaDeclarada, voluntarios: voluntarios.map((o) => ({ telefono: o.telefono })), viajes, posicionesPorUnidad, contactos,
   };
 }
