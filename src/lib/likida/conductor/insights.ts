@@ -42,7 +42,8 @@ export const FUENTES_SIN_INTERVENCION: readonly FuenteHito[] = ['sistema', 'boto
 /** Fuentes en que el dato lo manda el chofer (tienen `mensaje_en`). */
 const FUENTES_CHOFER: readonly FuenteHito[] = ['texto', 'boton', 'ubicacion', 'foto'];
 
-export type HitoParaInsights = Pick<HitoFila, 'estado' | 'fuente' | 'mensajeEn' | 'recibidoEn'>;
+/** `viajeId` y `tipo` son opcionales: solo hacen falta para el KPI «viajes completos» (T-A5-61). */
+export type HitoParaInsights = Pick<HitoFila, 'estado' | 'fuente' | 'mensajeEn' | 'recibidoEn'> & Partial<Pick<HitoFila, 'viajeId' | 'tipo'>>;
 
 /** Una fila de `viaje_cruce_geocerca`. */
 export interface CruceParaInsights {
@@ -65,6 +66,29 @@ export interface LineaBase {
   registradaEn: string | null;
 }
 
+/** Líneas base que DECLARA el cliente para los KPIs del piloto (T-A5-61). `null`/ausente/inválida = no declarada. */
+export interface LineaBasePiloto {
+  /** % de hitos que hoy se registran sin intervención de la oficina (0–100). */
+  hitosSinIntervencionPct?: number | null;
+  /** Minutos que hoy tarda en quedar registrado un evento (> 0). */
+  minutosGpsRegistro?: number | null;
+  /** % de viajes con todos sus hitos registrados (0–100). */
+  viajesCompletosPct?: number | null;
+  /** Minutos de la salida de la terminal al primer cliente (> 0). */
+  minutosSalidaTerminalPrimerCliente?: number | null;
+  /** Reubicaciones por cliente que hoy se dan (≥ 0). */
+  reubicacionesPorCliente?: number | null;
+}
+
+/** Datos extra del piloto que no salen de los hitos. Todo opcional: lo que no llega, queda «sin dato». */
+export interface DatosPiloto {
+  lineaBase?: LineaBasePiloto | null;
+  /** Minutos por viaje de la salida de la terminal al primer cliente (se descartan negativos y no finitos). */
+  minutosSalidaTerminalPrimerCliente?: readonly number[];
+  /** Salida de `reubicacionesPorCliente` (T-A5-63): total de reubicaciones (`null` = sin dato) y clientes con dato. */
+  reubicaciones?: { total: number | null; clientes: number } | null;
+}
+
 export interface EntradaInsights {
   hitos: readonly HitoParaInsights[];
   cruces: readonly CruceParaInsights[];
@@ -72,6 +96,30 @@ export interface EntradaInsights {
   /** Viajes que el GPS no pudo evaluar por no tener sitio asignado (contador de la corrida). `null` = no disponible. */
   viajesSinSitio: number | null;
   lineaBase: LineaBase | null;
+  piloto?: DatosPiloto;
+}
+
+export const SIN_DATO = 'sin dato' as const;
+
+export type IdKpiPiloto =
+  | 'hitos_sin_intervencion' | 'minutos_gps_registro' | 'viajes_completos' | 'mensajes_supervisor_evitados'
+  | 'salida_terminal_primer_cliente' | 'reubicaciones_por_cliente';
+
+export type ComparacionBase =
+  | typeof SIN_DATO
+  | { lineaBase: number; diferencia: number | null; mejoraPct: number | null; mejor: boolean | null };
+
+export interface KpiPiloto {
+  id: IdKpiPiloto;
+  nombre: string;
+  unidad: string;
+  /** `null` = sin dato. */
+  valor: number | null;
+  rotulo: Rotulo;
+  fuente: string;
+  calculo: string;
+  /** Comparación con la línea base declarada; «sin dato» si no hay base válida. */
+  contraBase: ComparacionBase;
 }
 
 export interface RetrasoMinutos {
@@ -105,6 +153,8 @@ export interface InsightsConductor {
     aviso2: Cifra<number>;
     jefe: Cifra<number>;
   };
+  /** Los KPIs del piloto (T-A5-61), siempre en el mismo orden; ver `docs/operacion/agente-conductor-piloto.md` §6. */
+  kpisPiloto: KpiPiloto[];
 }
 
 export const MENSAJE_SIN_LINEA_BASE = 'Falta tu línea base: cuántas llamadas hacen hoy tus supervisores por viaje';
@@ -135,6 +185,102 @@ function fechaLegible(f: string | null): string {
   return f && /^\d{4}-\d{2}-\d{2}/.test(f) ? f.slice(0, 10) : 'fecha no registrada';
 }
 
+
+const redondear1 = (n: number): number => Math.round(n * 10) / 10;
+
+type TipoBase = 'pct' | 'minutos' | 'conteo';
+
+/** Una base declarada es válida si es finita y: % en 0–100, minutos > 0, conteo ≥ 0. Si no, cuenta como no declarada. */
+function baseValida(b: number | null | undefined, tipo: TipoBase): b is number {
+  if (typeof b !== 'number' || !Number.isFinite(b)) return false;
+  if (tipo === 'pct') return b >= 0 && b <= 100;
+  if (tipo === 'minutos') return b > 0;
+  return b >= 0;
+}
+
+function comparar(valor: number | null, base: number | null | undefined, tipo: TipoBase, menorEsMejor: boolean): ComparacionBase {
+  if (valor === null || !baseValida(base, tipo)) return SIN_DATO;
+  const dif = redondear1(valor - base);
+  const mejor = menorEsMejor ? valor < base : valor > base;
+  // El % de mejora solo existe donde «menos es mejor» y la base es > 0: dividir entre cero o inventar un % de puntos sería falsear.
+  const mejoraPct = menorEsMejor && base > 0 ? redondear1(((base - valor) / base) * 100) : null;
+  return { lineaBase: base, diferencia: dif, mejoraPct, mejor };
+}
+
+/** Viajes con todos sus hitos (no omitidos) registrados / viajes con algún hito que cuente. `null` si ningún hito trae viajeId. */
+function porcentajeViajesCompletos(hitos: readonly HitoParaInsights[]): number | null {
+  const porViaje = new Map<string, boolean>();
+  for (const h of hitos) {
+    if (!h.viajeId || h.estado === 'omitido') continue;
+    porViaje.set(h.viajeId, (porViaje.get(h.viajeId) ?? true) && resuelto(h));
+  }
+  if (porViaje.size === 0) return null;
+  const completos = [...porViaje.values()].filter(Boolean).length;
+  return redondear1((completos / porViaje.size) * 100);
+}
+
+function calcularKpisPiloto(
+  base: InsightsConductor['llamadasEvitadas'], sinInt: number | null, retrasoGps: number | null,
+  hitos: readonly HitoParaInsights[], lineaBaseLlamadas: LineaBase | null, piloto: DatosPiloto | undefined,
+): KpiPiloto[] {
+  const lb = piloto?.lineaBase ?? null;
+
+  const salidas = (piloto?.minutosSalidaTerminalPrimerCliente ?? []).filter((m) => Number.isFinite(m) && m >= 0);
+  const salidaMedia = salidas.length > 0 ? redondear1(salidas.reduce((a, b) => a + b, 0) / salidas.length) : null;
+  const salidaBase = lb?.minutosSalidaTerminalPrimerCliente;
+  // Los dos KPIs de referencia (16b) solo se muestran con línea base declarada y válida.
+  const salidaValor = baseValida(salidaBase, 'minutos') ? salidaMedia : null;
+
+  const r = piloto?.reubicaciones ?? null;
+  const reubMedia = r && r.total !== null && Number.isFinite(r.total) && r.total >= 0 && r.clientes > 0 ? redondear1(r.total / r.clientes) : null;
+  const reubBase = lb?.reubicacionesPorCliente;
+  const reubValor = baseValida(reubBase, 'conteo') ? reubMedia : null;
+
+  const completos = porcentajeViajesCompletos(hitos);
+  const llamadasBase = lineaBaseLlamadas?.llamadasPorViaje;
+
+  return [
+    {
+      id: 'hitos_sin_intervencion', nombre: 'Hitos sin intervención', unidad: '% de hitos registrados',
+      valor: sinInt, rotulo: 'medido', fuente: 'viaje_hito.fuente (sistema, botón, texto, ubicación)',
+      calculo: 'hitos registrados por el sistema o el chofer ÷ hitos registrados × 100; los de la oficina no cuentan',
+      contraBase: comparar(sinInt, lb?.hitosSinIntervencionPct, 'pct', false),
+    },
+    {
+      id: 'minutos_gps_registro', nombre: 'Minutos del GPS al registro', unidad: 'min (promedio)',
+      valor: retrasoGps === null ? null : redondear1(retrasoGps), rotulo: 'medido', fuente: 'viaje_cruce_geocerca.registrado_en − detectado_en',
+      calculo: 'promedio de (registrado_en − detectado_en); se descartan los negativos y los sin fecha',
+      contraBase: comparar(retrasoGps === null ? null : redondear1(retrasoGps), lb?.minutosGpsRegistro, 'minutos', true),
+    },
+    {
+      id: 'viajes_completos', nombre: 'Viajes completos', unidad: '% de viajes',
+      valor: completos, rotulo: 'medido', fuente: 'viaje_hito.estado por viaje',
+      calculo: 'viajes con todos sus hitos no omitidos en recibido o validado ÷ viajes con algún hito que cuente × 100',
+      contraBase: comparar(completos, lb?.viajesCompletosPct, 'pct', false),
+    },
+    {
+      id: 'mensajes_supervisor_evitados', nombre: 'Mensajes del supervisor evitados', unidad: 'mensajes (estimación)',
+      valor: base.valor, rotulo: 'estimación', fuente: base.fuente,
+      calculo: 'hitos sin intervención × llamadas por viaje declaradas por el cliente; sin esa línea base no hay cifra',
+      contraBase: baseValida(llamadasBase, 'conteo') && llamadasBase > 0
+        ? { lineaBase: llamadasBase, diferencia: null, mejoraPct: null, mejor: null }
+        : SIN_DATO,
+    },
+    {
+      id: 'salida_terminal_primer_cliente', nombre: 'Tiempo de salida de terminal al primer cliente', unidad: 'min (promedio por viaje)',
+      valor: salidaValor, rotulo: 'medido', fuente: 'mediciones por viaje de la salida de terminal al primer cliente (referencia 16b)',
+      calculo: 'promedio de las mediciones válidas; solo se muestra con línea base declarada',
+      contraBase: comparar(salidaValor, salidaBase, 'minutos', true),
+    },
+    {
+      id: 'reubicaciones_por_cliente', nombre: 'Reubicaciones por cliente', unidad: 'reubicaciones por cliente',
+      valor: reubValor, rotulo: 'medido', fuente: 'reubicacionesPorCliente (T-A5-63), bitácora de la llegada',
+      calculo: 'reubicaciones totales ÷ clientes con dato; solo se muestra con línea base declarada',
+      contraBase: comparar(reubValor, reubBase, 'conteo', true),
+    },
+  ];
+}
+
 export function calcularInsights(e: EntradaInsights): InsightsConductor {
   const registrados = e.hitos.filter(resuelto);
   const sinInt = registrados.filter((h) => h.fuente !== null && FUENTES_SIN_INTERVENCION.includes(h.fuente));
@@ -160,7 +306,7 @@ export function calcularInsights(e: EntradaInsights): InsightsConductor {
         mensaje: MENSAJE_SIN_LINEA_BASE,
       };
 
-  return {
+  const res: InsightsConductor = {
     hitosRegistrados: { valor: registrados.length, fuente: 'viaje_hito.estado', rotulo: 'medido' },
     sinIntervencion: {
       valor: sinInt.length,
@@ -191,5 +337,10 @@ export function calcularInsights(e: EntradaInsights): InsightsConductor {
       aviso2: { valor: e.episodios.filter((x) => x.aviso2En !== null).length, fuente: 'viaje_senal_vida.aviso_2_en', rotulo: 'medido' },
       jefe: { valor: e.episodios.filter((x) => x.escaladoEn !== null).length, fuente: 'viaje_senal_vida.escalado_en', rotulo: 'medido' },
     },
+    kpisPiloto: [],
   };
+  res.kpisPiloto = calcularKpisPiloto(
+    llamadas, res.sinIntervencion.porcentaje, res.retrasoGps.promedioMin, e.hitos, e.lineaBase, e.piloto,
+  );
+  return res;
 }

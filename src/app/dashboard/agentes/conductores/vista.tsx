@@ -9,7 +9,7 @@ import { BarraPagina } from '../../resumen-visual';
 import { Bloque, Barra, EsqTabla } from '../../bloque';
 import { esFolioSimulado } from '@/lib/likida/conductor/tablero';
 import { EtiquetaSimulado } from './tablero-hitos';
-import { MENSAJE_SIN_LINEA_BASE, type Cifra, type InsightsConductor } from '@/lib/likida/conductor/insights';
+import { MENSAJE_SIN_LINEA_BASE, type Cifra, type InsightsConductor, type KpiPiloto } from '@/lib/likida/conductor/insights';
 
 export interface EsperaAceptar {
   id: string;
@@ -412,6 +412,18 @@ function FilaFuente({ etiqueta, valor, cifra }: { etiqueta: string; valor: strin
   );
 }
 
+/** T-A5-61: una línea de KPI del piloto. Sin valor o sin línea base válida dice «sin dato»; nunca inventa un porcentaje. */
+function textoKpiPiloto(k: KpiPiloto): { valor: string; comparacion: string } {
+  const sufijo = k.unidad.startsWith('%') ? ' %' : k.unidad.startsWith('min') ? ' min' : '';
+  const valor = k.valor === null ? 'sin dato' : `${numero(k.valor)}${sufijo}`;
+  const c = k.contraBase;
+  if (c === 'sin dato') return { valor, comparacion: 'sin dato (falta línea base declarada)' };
+  const partes = [`base ${numero(c.lineaBase)}${sufijo}`];
+  if (c.mejoraPct !== null) partes.push(`mejora ${numero(c.mejoraPct)} %`);
+  else if (c.diferencia !== null) partes.push(`diferencia ${c.diferencia > 0 ? '+' : ''}${numero(c.diferencia)}${sufijo}`);
+  return { valor, comparacion: partes.join(' · ') };
+}
+
 const valorCifra = (c: Cifra<number | null>) => (c.valor === null ? '—' : numero(c.valor));
 
 /** La tarjeta de arriba del tablero. `insights = null` = no se pudo leer (se dice; no se pinta «0»). */
@@ -444,6 +456,22 @@ export function TarjetaInsights({ insights, dias, discrepancias = null, recortad
         {seccion('Qué significa', t.queSignifica)}
         {seccion('Qué hacer', t.queHacer)}
       </div>
+      <section aria-label="KPIs del piloto" className="space-y-1">
+        <h3 className="text-[11px] uppercase tracking-wide" style={{ color: 'var(--muted)' }}>KPIs del piloto</h3>
+        <ul className="space-y-1">
+          {insights.kpisPiloto.map((k) => {
+            const t2 = textoKpiPiloto(k);
+            return (
+              <li key={k.id} className="flex flex-wrap items-baseline gap-x-2 text-[12px]">
+                <span style={{ color: 'var(--muted)' }}>{k.nombre}</span>
+                <span className="tabular-nums font-medium">{t2.valor}</span>
+                <span style={{ color: 'var(--muted)' }}>· {k.rotulo} · {t2.comparacion} · fuente: {k.fuente}</span>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Los KPIs de referencia sin línea base declarada no muestran valor.</p>
+      </section>
       <details>
         <summary className="cursor-pointer text-[12px]" style={{ color: 'var(--muted)' }}>De dónde sale cada número</summary>
         <ul className="mt-2 space-y-1">
