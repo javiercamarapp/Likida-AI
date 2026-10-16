@@ -66,6 +66,8 @@ export interface MuestraGps {
   lat: number; lng: number; medidaEn: Date; ignicion?: boolean | null;
   /** T-A5-14: referencia de despacho (0802, ya normalizada) con la que el proveedor etiquetó la posición; ausente/`null` = no la trae. */
   despachoRef?: string | null;
+  /** T-A5-37: proveedor de la posición (`posicion.proveedor`); de él sale la cadencia de poleo por proveedor. Ausente = no se sabe. */
+  proveedor?: string | null;
 }
 
 export interface SitioGps extends GeocercaGeom { id: string; nombre: string }

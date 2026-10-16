@@ -564,6 +564,13 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     segundoAvisoMin: umbralOPartida(f.segundo_aviso_min, CONFIG_CONDUCTOR_DEFAULT.segundoAvisoMin),
     escalarSenalMin: umbralOPartida(f.escalar_senal_min, CONFIG_CONDUCTOR_DEFAULT.escalarSenalMin),
     silencioRespuestaMin: umbralOPartida(f.silencio_respuesta_min, CONFIG_CONDUCTOR_DEFAULT.silencioRespuestaMin),
+    // T-A5-37: umbral corto de detención y cadencia de poleo. Sin columna todavía (necesita un slot de migración que la ficha no trae):
+    // la lectura es tolerante, así que una base con `detenido_aviso_min` / `poleo_min` / `poleo_por_clave_min` ya los usa y una sin ellas
+    // cae en los defaults (15 / sin poleo = regla de T-A5-36).
+    detenidoAvisoMin: umbralOPartida(f.detenido_aviso_min, CONFIG_CONDUCTOR_DEFAULT.detenidoAvisoMin ?? 15),
+    poleoMin: f.poleo_min === undefined || f.poleo_min === null ? undefined : Number(f.poleo_min),
+    poleoPorClaveMin: f.poleo_por_clave_min !== null && typeof f.poleo_por_clave_min === 'object' && !Array.isArray(f.poleo_por_clave_min)
+      ? f.poleo_por_clave_min as Record<string, number> : undefined,
     mostrarEstadosFrontera: f.mostrar_estados_frontera === true,
     aplicarSalidaDelTms: f.aplicar_salida_del_tms === true,
     lineaBaseLlamadasPorViaje: f.linea_base_llamadas_por_viaje === undefined || f.linea_base_llamadas_por_viaje === null ? null : Number(f.linea_base_llamadas_por_viaje),
@@ -848,6 +855,14 @@ export async function guardarCitas(tenantId: string, viajeId: string, cambio: Ca
 export async function guardarConfigConductor(
   tenantId: string, c: ConfigConductor, contactos: ContactoTrafico[] | undefined,
 ): Promise<'ok' | 'terminal_ajena'> {
+  // T-A5-37 (y T-A5-36): estas llaves se validan y se leen, pero aún NO tienen columna (falta slot de migración). Guardar algo distinto
+  // del valor de partida sería perderlo en silencio: se dice, como con las migraciones 0604/0635/0801.
+  const sinColumna = c.poleoMin !== undefined || (c.poleoPorClaveMin !== undefined && Object.keys(c.poleoPorClaveMin).length > 0)
+    || c.detenidoAvisoMin !== CONFIG_CONDUCTOR_DEFAULT.detenidoAvisoMin || c.detenidaMetros !== CONFIG_CONDUCTOR_DEFAULT.detenidaMetros
+    || c.detenidaVentanaMin !== CONFIG_CONDUCTOR_DEFAULT.detenidaVentanaMin;
+  if (sinColumna) {
+    throw new Error('v1.conductor_config: el umbral de detención, la cadencia de poleo y la ventana/metros de unidad detenida aún no tienen columna (migración pendiente); no se guardan.');
+  }
   const fila = {
     tenant_id: tenantId, activo: c.activo, solicitudes_min: c.solicitudesMin, escalar_tras_min: c.escalarTrasMin,
     segundo_nivel_min: c.segundoNivelMin, hora_inicio: c.horaInicio, hora_fin: c.horaFin, dias_semana: c.diasSemana,

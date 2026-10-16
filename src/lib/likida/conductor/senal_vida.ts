@@ -7,7 +7,7 @@ import type { Destino } from './escalamiento';
 import type { ViajeContexto } from './repo';
 import { armarEscalacionSenalVida, armarSenalVida, type MensajeSaliente, type MotivoSenalVida } from './solicitudes';
 import { estaFueraDePerfil } from './perfil';
-import { puedeEscribirAlChofer } from './compuerta_movimiento';
+import { clavesPoleoDe, poleoEfectivoMin, puedeEscribirAlChofer, requisitoDeMuestras } from './compuerta_movimiento';
 import { estaPendiente, estaResuelto, type HitoFila } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -97,7 +97,9 @@ export interface EntradaEvaluar {
   toleranciaM: number;
   ahora: Date;
   /** Los umbrales de la flota. Sin ella, los defaults (45 / 60). */
-  config?: Partial<Pick<ConfigConductor, 'gpsObsoletoMin' | 'detenidoMin'>>;
+  config?: Partial<Pick<ConfigConductor, 'gpsObsoletoMin' | 'detenidoMin' | 'poleoMin' | 'poleoPorClaveMin'>>;
+  /** T-A5-37: clave (proveedor o unidad) de la que se lee la cadencia de poleo en la config. */
+  clavesPoleo?: readonly string[];
 }
 
 export function evaluarSenal(e: EntradaEvaluar): EstadoSenal {
@@ -124,8 +126,11 @@ export function evaluarSenal(e: EntradaEvaluar): EstadoSenal {
   // Detenido: cobertura de toda la ventana, ≥ 3 muestras y todas pegadas a la última, y no en un sitio del viaje.
   const inicio = e.ahora.getTime() - detenidoMin * 60_000;
   const ventana = ordenadas.filter((m) => m.medidaEn.getTime() >= inicio);
-  if (ventana.length < MINIMO_MUESTRAS_DETENIDO) return { estado: 'ok' };
-  if (ventana[0].medidaEn.getTime() > inicio + MINUTOS_COBERTURA_DETENIDO * 60_000) return { estado: 'ok' };
+  // T-A5-37: con la cadencia configurada, la cobertura tolerada y las muestras salen de ella; sin configurar rigen las de siempre.
+  const poleoMin = e.config ? poleoEfectivoMin(e.config, ...(e.clavesPoleo ?? [])) : undefined;
+  const minimoMuestras = poleoMin === undefined ? MINIMO_MUESTRAS_DETENIDO : requisitoDeMuestras(poleoMin, detenidoMin).muestras;
+  if (ventana.length < minimoMuestras) return { estado: 'ok' };
+  if (ventana[0].medidaEn.getTime() > inicio + (poleoMin ?? MINUTOS_COBERTURA_DETENIDO) * 60_000) return { estado: 'ok' };
   if (!ventana.every((m) => haversineM(m, ultima) <= RADIO_DETENIDO_M)) return { estado: 'ok' };
   if (enSitioDeEspera(ultima)) return { estado: 'ok' };
   return { estado: 'gps_detenido', minutos: Math.floor((e.ahora.getTime() - ventana[0].medidaEn.getTime()) / 60_000), ultimaMuestraEn: ultima.medidaEn };
@@ -333,6 +338,7 @@ export async function barridoSenalVida(p: PuertosSenalVida, ahora: Date = new Da
       muestras: muestras.get(llave(v)) ?? [], ultimaMuestraEn: ultima?.medidaEn ?? null, ultimaMuestra: ultima,
       sitios: sitios.get(v.id) ?? { origen: null, destino: null }, sitiosFlota: sitiosFlota.get(v.tenantId) ?? [],
       toleranciaM: configs.get(v.tenantId)!.toleranciaUbicacionM, ahora, config: configs.get(v.tenantId)!,
+      clavesPoleo: clavesPoleoDe(v.unidadId, [...(muestras.get(llave(v)) ?? []), ...(ultima ? [ultima] : [])]), // T-A5-37
     }));
   }
   const conectorCaido = new Set<string>();
@@ -357,7 +363,8 @@ export async function barridoSenalVida(p: PuertosSenalVida, ahora: Date = new Da
     // T-A5-36: los avisos 1 y 2 le escriben al CHOFER, así que pasan por la compuerta ANTES de abrir el episodio o reclamar el nivel (un
     // «no» no gasta un nivel; la siguiente pasada vuelve a decidir). Cerrar un episodio y escalar al jefe no le escriben al chofer.
     if (accion.tipo === 'abrir' || accion.tipo === 'avisar') {
-      const puerta = puedeEscribirAlChofer({ posiciones: muestras.get(llave(v)) ?? [], sitioDelViaje: sitios.get(v.id) ?? null, config, ahora });
+      const posiciones = muestras.get(llave(v)) ?? [];
+      const puerta = puedeEscribirAlChofer({ posiciones, clavesPoleo: clavesPoleoDe(v.unidadId, posiciones), sitioDelViaje: sitios.get(v.id) ?? null, config, ahora });
       if (!puerta.permitido) { salta('compuerta_movimiento'); continue; }
     }
 
