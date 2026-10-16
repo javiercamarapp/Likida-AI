@@ -8,7 +8,7 @@
 //   existe     ya está integrado en esta rama y es el que valida el archivo (`archivos.ts` lo llama, no lo copia);
 //   en_rama    lo construye otra rama que aún no se integra;
 //   contrato   no existe aún: solo hay una forma de archivo acordada.
-// Tras integrar el nivel 0 (A, B, P1–P6) los nueve tipos son `existe`; una prueba
+// Tras integrar el nivel 0 (A, B, P1–P6) los tipos son `existe`; una prueba
 // (`muestras_importadores_reales.test.ts`) pasa cada muestra por ese importador y la compara con lo sembrado.
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -90,5 +90,12 @@ export const KIT: readonly EntradaKit[] = [
     formato: 'los documentos de 3 a 5 clientes grandes (PDF, Excel, CSV) y su Excel/sistema de carga',
     importador: { estado: 'existe', donde: 'bandeja de Carta Porte multi-formato (carta_porte_docs/servicio.ts, perfiles.ts), el worker que la barre cada 5 min (cron carta-porte-docs, 0640-0642: reintentos con tope y aviso a la oficina) y la exportación por mapeo (exportacion.ts, cp_export_config)' },
     pantalla: '/dashboard/carta-porte/documentos',
+  },
+  {
+    id: 'programa_despacho', agentes: ['Vigía'],
+    muestra: 'programa/programa_despacho_sintetico.csv',
+    formato: 'CSV del programa de despacho (;): una sección por tipo y día con su título, encabezados repetidos, CAJA, UNIDAD, CITA, TRANSITO y CCP. SIMULADO: clientes y claves inventados; el archivo real lo reemplaza',
+    importador: { estado: 'existe', donde: 'vigia/programa (lector.ts, normalizar.ts, sincronizar.ts: carga idempotente con historia de cambios) y la pantalla de carga del programa; el aviso proactivo al cliente sale de él con la regla provisional «proxy» (vigia/aviso: listo.ts, generar.ts, cambios.ts), con escalamiento a servicio al cliente cuando falta un dato' },
+    pantalla: '/dashboard/agentes/vigia/programa (carga) y /dashboard/agentes/vigia/avisos (bandeja de avisos)',
   },
 ];
