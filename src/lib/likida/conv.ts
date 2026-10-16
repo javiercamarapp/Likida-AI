@@ -684,7 +684,24 @@ export function iniciarRenovacionMessageClaim(waMessageId: string, leaseToken: s
  * simultáneos, y lo peor que se pierde es un pendiente de despacho (se vuelve
  * a pedir el "sí"), no un cobro ni un despacho duplicado.
  */
+/**
+ * FASE 1 · SEG-ADMIN-DOS-CASOS (checklist 31 v2, #10): `tenantId` ANCLA tanto
+ * la lectura como el UPDATE, igual que cualquier otro escritor de
+ * `supabaseAdmin` en el repo (patrón `cambiarRolUsuario`/`desactivarUsuario`
+ * en `usuarios_escritura.ts`). `wa_conversacion` SÍ tiene `tenant_id`
+ * (0047, `uq_wa_conversacion_tenant_telefono_norm`) — a diferencia de
+ * `wa_evento_pendiente` (ver `descartarCartaMuerta`, que NO tiene esa
+ * columna y por eso no puede anclarse igual).
+ *
+ * No era un IDOR explotable hoy: `convId` nunca viaja en una entrada de
+ * usuario, siempre nace de `loadConversation(tenantId, …)`, que YA lo
+ * resuelve anclado a ese mismo tenant. Es defensa en profundidad — si algún
+ * día un llamador nuevo pasara un `convId` de otra fuente, este `.eq()`
+ * sigue cerrando la puerta en vez de depender de que esa fuente nunca se
+ * equivoque.
+ */
 export async function saveConversation(
+  tenantId: string,
   convId: string,
   turns: ConvTurn[],
   viajeId: string | null,
@@ -698,6 +715,7 @@ export async function saveConversation(
     .from('wa_conversacion')
     .select('estado')
     .eq('id', convId)
+    .eq('tenant_id', tenantId)
     .maybeSingle(), 'saveConversation.leerEstado');
   if (errLectura) {
     logger.warn('conv.estado_previo_ilegible', { convId, err: errLectura.message });
@@ -718,7 +736,8 @@ export async function saveConversation(
       viaje_id: viajeId,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', convId), 'saveConversation');
+    .eq('id', convId)
+    .eq('tenant_id', tenantId), 'saveConversation');
   if (error) logger.error('conv.no_se_guardo', { convId, err: error.message });
 }
 
