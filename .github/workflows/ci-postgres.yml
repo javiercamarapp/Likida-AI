@@ -278,6 +278,7 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0801_conductor_sembrar_por_perfil.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0780_tms_aislamiento.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0788_liquidacion_correo_retencion.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0789_liquidacion_desglose_numeros.sql
           PGUSER=postgres bash supabase/tests/0790_cp_envio_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0790_cp_envio_tms.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0791_cp_formato_json_y_causa_rechazo.sql
