@@ -2,12 +2,14 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { puedeAdministrar } from '@/lib/auth/permisos';
+import { puedeAdministrar, puedeAsignar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
 import { valoresDeForma } from '@/lib/likida/conductor/config_forma';
 import { guardarConfigDelPanel } from '@/lib/likida/conductor/acciones_config';
 import { altaVoluntarioDelPanel, bajaVoluntarioDelPanel, telefonoDePilotoValido } from '@/lib/likida/conductor/acciones_voluntarios';
 import { buscarCandidatosVoluntarios, cargarContactosTrafico, leerConfigConductor, leerDatosPreflight, leerTopeVoluntarios, listarVoluntarios } from '@/lib/likida/conductor/repo';
+import { importarRutasDelPanel } from '@/lib/likida/conductor/acciones_rutas';
+import { MAX_BYTES_CSV_RUTAS } from '@/lib/likida/conductor/rutas';
 import { evaluarPreflight } from '@/lib/likida/conductor/preflight_piloto';
 import { emailDeUsuario } from '@/lib/likida/conductor/trabajo';
 import { leerCatalogosFiltro } from '@/lib/likida/conductor/repo_validacion';
@@ -15,6 +17,7 @@ import { sufijoTenant } from '../../../sufijo';
 import { VistaConfigConductor } from './vista';
 import { esTelefonoDemo } from '@/lib/meta/telefono_demo';
 import type { DatosVoluntarios, ResultadoConfig } from './forma';
+import type { ResultadoSitio } from '../sitios/formas';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +32,21 @@ async function ejecutarVoluntario(cual: 'alta' | 'baja', sp: ParametrosPagina, f
   const email = await emailDeUsuario(s.userId).catch(() => null);
   const ctx = { tenantId: s.tenantId, rol: s.rol, usuarioId: s.userId, email };
   const r = cual === 'alta' ? await altaVoluntarioDelPanel(ctx, fd) : await bajaVoluntarioDelPanel(ctx, fd);
+  if (r.ok) revalidatePath(RUTA);
+  return r;
+}
+
+/** T-A5-48: importar rutas autorizadas (CSV). A nivel de módulo por la misma razón. El permiso y el tenant salen de la SESIÓN. */
+async function ejecutarImportarRutas(sp: ParametrosPagina, fd: FormData): Promise<ResultadoSitio> {
+  const s = await resolverTenantEfectivo(RUTA, sp);
+  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
+  const archivo = fd.get('archivo');
+  let texto = '';
+  if (archivo instanceof File && archivo.size > 0) {
+    if (archivo.size > MAX_BYTES_CSV_RUTAS) return { ok: false, error: 'El archivo pesa más de 1 MB; divídelo en partes.' };
+    texto = await archivo.text();
+  } else if (typeof fd.get('csv') === 'string') texto = fd.get('csv') as string;
+  const r = await importarRutasDelPanel({ tenantId: s.tenantId, rol: s.rol }, { texto });
   if (r.ok) revalidatePath(RUTA);
   return r;
 }
@@ -79,12 +97,18 @@ export default async function PaginaConfigConductor({ searchParams }: { searchPa
     return ejecutarVoluntario('baja', sp, fd);
   }
 
+  async function accionImportarRutas(_previo: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
+    'use server';
+    return ejecutarImportarRutas(sp, fd);
+  }
+
   return (
     <VistaConfigConductor
       sufijo={sufijoTenant(sp)} config={config} valores={config ? valoresDeForma(config) : null} contactos={contactos}
       patios={catalogos?.terminales ?? []} puedeEditar={puedeAdministrar(rol)} accionGuardar={accionGuardar}
       voluntarios={voluntarios} accionAlta={accionAlta} accionBaja={accionBaja}
       preflight={preflight} puedeForzarPreflight={rol === 'superadmin'}
+      accionImportarRutas={puedeAsignar(rol) ? accionImportarRutas : undefined}
     />
   );
 }

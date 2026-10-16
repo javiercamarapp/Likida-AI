@@ -18,6 +18,7 @@ import type { EstadoTransito } from './estados_transito';
 import type { MotivoSenalVida } from './solicitudes';
 import { esMotivoParada, type MotivoParada, type ParadaFila } from './paradas';
 import { esPasoCiclo, esServicio, filasDeSemilla, type CicloServicioFila, type Servicio } from './ciclo_servicio';
+import { planificarRutas, type RutaCsv, type RutaExistente } from './rutas';
 import type { RespuestaSenalVida } from './tipos';
 import type { FiltrosTablero } from './repo_validacion';
 import type { CriterioSitio } from './sitio_derivado';
@@ -1570,4 +1571,47 @@ export async function sembrarCicloServicio(tenantId: string): Promise<'ok' | 'si
   if (faltaEsquema(error, /ciclo_servicio/i)) return 'sin_tabla';
   logger.error('conductor.ciclo_servicio_sembrar_fallo', { err: error.message });
   return 'fallo';
+}
+
+// ── T-A5-48: el repositorio de rutas autorizadas (0808) ─────────────────────
+
+const filaARuta = (f: Fila): RutaExistente | null => {
+  const id = s(f.id); const corredor = s(f.corredor); const url = s(f.url);
+  if (!id || !corredor || !url) return null;
+  return { id, corredor, sitioOrigen: s(f.sitio_origen), sitioDestino: s(f.sitio_destino), url, vigenteHasta: s(f.vigente_hasta), revisadaEn: s(f.revisada_en) };
+};
+
+/** Las rutas autorizadas de la flota (todas, vigentes o no: quien las usa decide con `buscarRuta`). `[]` si no hay o la base aún no tiene la 0808. Lanza si la base falla por otra causa. */
+export async function leerRutasAutorizadas(tenantId: string): Promise<RutaExistente[]> {
+  const { data, error } = await acotada(supabaseAdmin().from('ruta_autorizada').select('id, corredor, sitio_origen, sitio_destino, url, vigente_hasta, revisada_en')
+    .eq('tenant_id', tenantId).order('corredor').order('id'), 'conductor.rutas_leer');
+  if (error) {
+    if (faltaEsquema(error, /ruta_autorizada/i)) return [];
+    throw new Error(`conductor.rutas_leer: ${error.message}`);
+  }
+  return ((data ?? []) as unknown as Fila[]).map(filaARuta).filter((r): r is RutaExistente => r !== null);
+}
+
+export interface ResultadoImportarRutas { guardadas: number; nuevas: number; actualizadas: number; sinCambios: number }
+
+/**
+ * Guarda las filas YA validadas (`parsearCsvRutas`) de una flota. Idempotente: lo que no cambió no se escribe, así que reimportar
+ * el mismo archivo da 0 nuevas y 0 actualizadas. La base vuelve a exigir https y dominio de mapas (CHECK de la 0808).
+ */
+export async function importarRutas(tenantId: string, filas: readonly RutaCsv[]): Promise<ResultadoImportarRutas> {
+  const plan = planificarRutas(filas, await leerRutasAutorizadas(tenantId));
+  for (let i = 0; i < plan.nuevas.length; i += 200) {
+    const lote = plan.nuevas.slice(i, i + 200).map((n) => ({
+      tenant_id: tenantId, corredor: n.corredor, sitio_origen: n.sitioOrigen, sitio_destino: n.sitioDestino, url: n.url,
+      vigente_hasta: n.vigenteHasta, revisada_en: n.revisadaEn,
+    }));
+    const res = await acotada(supabaseAdmin().from('ruta_autorizada').insert(lote), 'conductor.rutas_insertar');
+    if (res.error) throw new Error(`conductor.rutas_insertar: ${res.error.message}`);
+  }
+  for (const c of plan.cambios) {
+    const res = await acotada(supabaseAdmin().from('ruta_autorizada').update({ url: c.url, vigente_hasta: c.vigenteHasta, revisada_en: c.revisadaEn })
+      .eq('id', c.id).eq('tenant_id', tenantId).select('id'), 'conductor.rutas_actualizar');
+    if (res.error) throw new Error(`conductor.rutas_actualizar: ${res.error.message}`);
+  }
+  return { guardadas: plan.nuevas.length + plan.cambios.length, nuevas: plan.nuevas.length, actualizadas: plan.cambios.length, sinCambios: plan.sinCambios };
 }

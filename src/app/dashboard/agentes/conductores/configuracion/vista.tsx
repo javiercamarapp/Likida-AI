@@ -5,9 +5,11 @@ import type { ConfigConductor } from '@/lib/likida/conductor/config';
 import type { ContactoTrafico } from '@/lib/likida/conductor/escalamiento';
 import type { ResultadoPreflight } from '@/lib/likida/conductor/preflight_piloto';
 import { PanelPreflight } from './preflight';
+import { FormaImportarRutas } from './forma_rutas';
+import type { AccionSitio } from '../sitios/formas';
 import { FormaConfigConductor, SeccionVoluntarios, type AccionConfig, type AccionVoluntario, type DatosVoluntarios } from './forma';
 
-export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar, voluntarios, accionAlta, accionBaja, preflight, puedeForzarPreflight }: {
+export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar, voluntarios, accionAlta, accionBaja, preflight, puedeForzarPreflight, accionImportarRutas }: {
   sufijo: string;
   /** `null` = no se pudo leer: se dice, no se enseña un formulario con los defaults como si fueran lo guardado. */
   config: ConfigConductor | null;
@@ -24,6 +26,8 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
   preflight?: ResultadoPreflight | null;
   /** Solo el soporte de Likida (QA): casilla para encender la señal de vida saltando el preflight. */
   puedeForzarPreflight?: boolean;
+  /** T-A5-48: importar rutas autorizadas de Google Maps (CSV). `undefined` = no se ofrece (sin permiso de asignar). */
+  accionImportarRutas?: AccionSitio;
 }) {
   const legible = config !== null && valores !== null && contactos !== null;
   return (
@@ -53,6 +57,17 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
           {voluntarios && accionAlta && accionBaja && (
             <SeccionVoluntarios datos={voluntarios} puedeEditar={puedeEditar} accionAlta={accionAlta} accionBaja={accionBaja}
               parametros={[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries()].filter(([k]) => k !== 'q')} />
+          )}
+          {accionImportarRutas && (
+            <section aria-labelledby="rutas-titulo" className="space-y-2">
+              <h2 id="rutas-titulo" className="text-[13px] font-medium">Rutas autorizadas de Google Maps</h2>
+              <p className="text-[12.5px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
+                La base de rutas hechas con anticipación, por corredor (y, si quieres, por sitio de origen y de destino). El agente nunca arma ni
+                corrige un link: solo se aceptan links de maps.app.goo.gl o google.com/maps, y una ruta vencida se trata como si no existiera.
+                Cada fila se aprueba o se rechaza sola; volver a subir el mismo archivo no cambia nada.
+              </p>
+              <FormaImportarRutas accion={accionImportarRutas} />
+            </section>
           )}
         </div>
       </div>
