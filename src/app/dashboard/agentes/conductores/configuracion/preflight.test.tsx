@@ -6,7 +6,7 @@ import { CONFIG_CONDUCTOR_DEFAULT } from '@/lib/likida/conductor/config';
 import { BannerPreflight, PanelPreflight } from './preflight';
 
 const verde = (): DatosPreflight => ({
-  config: { activo: true, perfilSeguimiento: 'esenciales', solicitudesMin: [0, 15, 30, 45] }, zonaDeclarada: 'America/Mexico_City',
+  config: { activo: true, perfilSeguimiento: 'esenciales', solicitudesMin: [0, 15, 30, 45], cohortePiloto: 'sin_tableta_ni_macros' }, zonaDeclarada: 'America/Mexico_City',
   voluntarios: [{ telefono: '3312345678' }], // grep-limpio:ok
   viajes: [1, 2, 3].map((n) => ({ terminalId: 'p1', unidadId: `u${n}`, conSitio: true })),
   posicionesPorUnidad: { u1: { ultimas2h: 9, ultimaHora: 5 }, u2: { ultimas2h: 9, ultimaHora: 5 }, u3: { ultimas2h: 9, ultimaHora: 5 } },
@@ -27,10 +27,10 @@ describe('«¿Está lista la flota?» (pantallas)', () => {
     expect(html).toContain('href="/dashboard/agentes/conductores/configuracion?tenant=abc#cfg-preflight"');
   });
 
-  it('el panel lista las 8 comprobaciones con su «qué hacer» solo en las que faltan', () => {
+  it('el panel lista las 9 comprobaciones con su «qué hacer» solo en las que faltan', () => {
     const html = renderToStaticMarkup(<PanelPreflight preflight={evaluarPreflight({ ...verde(), contactos: [] })} />);
     expect(html).toContain('¿Está lista la flota?');
-    expect((html.match(/<li /g) ?? []).length).toBe(8);
+    expect((html.match(/<li /g) ?? []).length).toBe(9);
     expect((html.match(/Qué hacer:/g) ?? []).length).toBe(1);
     expect(html).toContain('Falta 1 cosa');
     const todo = renderToStaticMarkup(<PanelPreflight preflight={evaluarPreflight(verde())} />);
