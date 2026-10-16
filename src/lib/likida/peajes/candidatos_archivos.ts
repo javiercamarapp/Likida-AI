@@ -26,7 +26,7 @@ export type CategoriaArchivo = CategoriaCobro | CategoriaTarifa;
 
 /** El orden de las hojas: el de la ficha (el importe sobre tarifa va después de los duplicados). */
 export const CATEGORIAS_ARCHIVO: readonly CategoriaArchivo[] = [
-  'clase_fuera_de_3_5', 'extemporaneo', 'duplicado_exacto', 'importe_sobre_tarifa', 'tag_dado_de_baja', 'caseta_no_debe_cruzarse',
+  'unidad_inmovilizada', 'clase_fuera_de_3_5', 'extemporaneo', 'duplicado_exacto', 'importe_sobre_tarifa', 'tag_dado_de_baja', 'caseta_no_debe_cruzarse',
 ];
 
 export const ETIQUETA_CATEGORIA_ARCHIVO: Record<CategoriaArchivo, string> = { ...ETIQUETA_CATEGORIA_COBRO, ...ETIQUETA_CATEGORIA_TARIFA };

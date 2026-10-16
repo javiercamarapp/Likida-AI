@@ -7,13 +7,13 @@ import { matrizDeCsv } from './csv';
 import { coordenadaDeCelda, validarCoordenadasMexico } from './casetas';
 import {
   revisarCobros, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, TIPOS_UNIDAD_PEAJE,
-  type CategoriaCobro, type LineaCobro, type ReglasCobro, type ResultadoRevision, type TipoUnidadPeaje,
+  type CategoriaCobro, type LineaCobro, type ReglasCobro, type ResultadoRevision, type TipoUnidadPeaje, type VentanaInmovilizada,
 } from './reglas_cobro';
 import { detectarAtipicos, type ResultadoAtipicos, type UmbralesAtipicos } from './cruces_atipicos';
 import { cierreMensual, type ArchivoCierre, type CierreMensual } from './cierre_mensual';
 import { limitesDelMes, mesAnterior } from './periodo';
 import { revisarDobleEntreArchivos, VENTANA_MESES_DEFAULT, type ResultadoDobleEntreArchivos } from './doble_entre_archivos';
-import { lineasPreviasDeFlota } from './datos';
+import { lineasPreviasDeFlota, inmovilizadasPorTag } from './datos';
 import { validarExcepcionUnidad, validarJustificacion } from './reglas_cobro_config';
 import {
   estadoTrasAcreditar, evaluarReclamo, resumirSeguimiento, ESTADOS_RECLAMO,
@@ -117,6 +117,7 @@ export function reglasDesdeConfig(
   casetas: readonly ReglaCasetaVista[], bajas: readonly TagBajaVista[], periodoDesde: string | null,
   excepciones: readonly ExcepcionUnidadVista[] = [], justificados: ReadonlyMap<number, string> = new Map(),
   clasesUtilitario: readonly number[] = [],
+  inmovilizadasPorTag: ReadonlyMap<string, readonly VentanaInmovilizada[]> = new Map(),
 ): ReglasCobro {
   const excepcionesClase = new Map<string, readonly number[]>();
   const casetasNoCruzar = new Set<string>();
@@ -130,7 +131,7 @@ export function reglasDesdeConfig(
     set.add(e.unidadNorm);
     excepcionesPorUnidad.set(e.casetaNorm, set);
   }
-  return { periodoDesde, excepcionesClase, casetasNoCruzar, tagsBaja: new Map(bajas.map((b) => [b.tag, b.bajaEn])), excepcionesPorUnidad, justificados, clasesUtilitario };
+  return { periodoDesde, excepcionesClase, casetasNoCruzar, tagsBaja: new Map(bajas.map((b) => [b.tag, b.bajaEn])), excepcionesPorUnidad, justificados, clasesUtilitario, inmovilizadasPorTag };
 }
 
 export type Resultado = { ok: true } | { ok: false; motivo: string };
@@ -400,9 +401,10 @@ export async function revisionDeDesglose(
   if (error) throw new Error(`revisionDeDesglose: ${error.message}`);
   if (!d) return null;
 
-  const [filas, casetas, bajas, excepciones, justificados, tipos] = await Promise.all([
+  const [filas, casetas, bajas, excepciones, justificados, tipos, inmovilizadas] = await Promise.all([
     lineasDeDesglose(tenantId, desgloseId), listarReglasCasetas(tenantId), listarTagsBaja(tenantId),
     listarExcepcionesUnidad(tenantId), listarJustificaciones(tenantId, desgloseId), listarTiposUnidadPorTag(tenantId),
+    inmovilizadasPorTag(tenantId),
   ]);
   const periodoOficialDesde = (d.periodo_oficial_desde as string | null) ?? null;
   // El tipo de unidad sale del maestro TAG→unidad (no del archivo): un TAG sin alta o sin tipo queda `null`.
@@ -410,7 +412,7 @@ export async function revisionDeDesglose(
     const tag = normalizarTag(l.tag);
     return { ...l, tipoUnidad: (tag ? tipos.get(tag) : undefined) ?? null };
   });
-  const revision = revisarCobros(lineas, reglasDesdeConfig(casetas, bajas, periodoOficialDesde, excepciones, justificados));
+  const revision = revisarCobros(lineas, reglasDesdeConfig(casetas, bajas, periodoOficialDesde, excepciones, justificados, [], inmovilizadas));
   const conCoords = casetas.filter((c) => c.lat !== null && c.lng !== null).map((c) => ({ nombre: c.nombre, lat: c.lat as number, lng: c.lng as number }));
   const atipicos = detectarAtipicos(lineas, conCoords, umbrales);
   // Solo se leen los desgloses previos si hay periodo y al menos un extemporáneo que buscar.

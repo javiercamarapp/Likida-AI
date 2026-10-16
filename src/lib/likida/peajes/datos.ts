@@ -11,6 +11,8 @@ import type { ArchivoPrevio } from './doble_entre_archivos';
 import { parsearCasetasMatriz, type CasetaCatalogo } from './casetas';
 import { parsearTarifasMatriz, planificarTarifa, type OrigenTarifa, type TarifaEntrada, type TarifaExistente } from './tarifario_archivo';
 import { parsearTagsMatriz, resolverUnidadesDeTags, validarBajaTag, type VigenciaTag } from './tags';
+import { parsearInmovilizadasMatriz, resolverUnidadesInmovilizadas } from './reglas_cobro_config';
+import type { MotivoInmovilizada, VentanaInmovilizada } from './reglas_cobro';
 import { validarMapeo, type ConfigMapeo } from './mapeo';
 import { planificarGps, evaluarCruceGps, type LineaParaGps, type VeredictoGps, type Muestra } from './cruce_gps';
 import { createHash } from 'node:crypto';
@@ -231,6 +233,98 @@ export async function importarTagsArchivo(tenantId: string, nombre: string, buff
       guardadas++;
       const previa = existentes.get(a.tag);
       if (previa !== undefined && previa !== a.unidadId) actualizadas++;
+    }
+  }
+  return { ok: true, guardadas, actualizadas, rechazadas: todasRechazadas };
+}
+
+// ── Unidades inmovilizadas (taller / siniestro / baja, T-A2-36) ─────────────
+export interface InmovilizadaVista {
+  id: string; unidadId: string; unidadEconomico: string | null;
+  desde: string; hasta: string | null; motivo: MotivoInmovilizada; nota: string | null;
+}
+
+/** Las ventanas de inmovilización de la flota (`peaje_unidad_inmovilizada`, 0813). Lanza ante error de base. */
+export async function listarInmovilizadas(tenantId: string): Promise<InmovilizadaVista[]> {
+  const [filas, unidades] = await Promise.all([
+    traerTodo<Record<string, unknown>>(
+      (d, h) => acotada(supabaseAdmin().from('peaje_unidad_inmovilizada')
+        .select('id, unidad_id, desde, hasta, motivo, nota', conteo(d))
+        .eq('tenant_id', tenantId).order('desde', { ascending: false }).order('id').range(d, h), 'peajes.inmovilizadas'),
+      'peajes.inmovilizadas',
+    ),
+    listarUnidades(tenantId),
+  ]);
+  const eco = new Map(unidades.map((u) => [u.id, u.numeroEconomico]));
+  return filas.map((f) => ({
+    id: String(f.id), unidadId: String(f.unidad_id), unidadEconomico: eco.get(String(f.unidad_id)) ?? null,
+    desde: String(f.desde).slice(0, 10), hasta: f.hasta ? String(f.hasta).slice(0, 10) : null,
+    motivo: f.motivo as MotivoInmovilizada, nota: (f.nota as string | null) ?? null,
+  }));
+}
+
+/**
+ * TAG normalizado → ventanas de inmovilización de SU unidad, para la regla `unidad_inmovilizada`. Cruza el
+ * maestro TAG↔unidad (`peaje_tag`) con las ventanas por unidad: un TAG sin alta no aparece (no se adivina la
+ * unidad). Lanza ante error de base: un mapa a medias leería «sin candidatos» estando ciego.
+ */
+export async function inmovilizadasPorTag(tenantId: string): Promise<Map<string, VentanaInmovilizada[]>> {
+  const ventanas = await listarInmovilizadas(tenantId);
+  const mapa = new Map<string, VentanaInmovilizada[]>();
+  if (ventanas.length === 0) return mapa;
+  const porUnidad = new Map<string, VentanaInmovilizada[]>();
+  for (const v of ventanas) {
+    porUnidad.set(v.unidadId, [...(porUnidad.get(v.unidadId) ?? []), { desde: v.desde, hasta: v.hasta, motivo: v.motivo }]);
+  }
+  const tags = await traerTodo<{ tag: unknown; unidad_id: unknown }>(
+    (d, h) => acotada(supabaseAdmin().from('peaje_tag').select('tag, unidad_id', conteo(d))
+      .eq('tenant_id', tenantId).order('tag').range(d, h), 'peajes.inmovilizadas_tags'),
+    'peajes.inmovilizadas_tags',
+  );
+  for (const t of tags) {
+    const w = porUnidad.get(String(t.unidad_id));
+    if (w) mapa.set(String(t.tag), w);
+  }
+  return mapa;
+}
+
+/** Importa la lista de unidades inmovilizadas (CSV/XLSX). Repetirlo es seguro: actualiza `hasta` y nota. */
+export async function importarInmovilizadasArchivo(tenantId: string, nombre: string, buffer: Uint8Array): Promise<ResultadoImportacionCatalogo> {
+  const falla = (error: string): ResultadoImportacionCatalogo => ({ ok: false, guardadas: 0, actualizadas: 0, rechazadas: [], error });
+  const m = matrizDeArchivoCatalogo(nombre, buffer);
+  if (!m.ok) return falla(m.motivo);
+  const lectura = parsearInmovilizadasMatriz(m.matriz);
+  if (lectura.error) return falla(lectura.error);
+
+  let unidades;
+  let previas: InmovilizadaVista[];
+  try {
+    unidades = await listarUnidades(tenantId);
+    previas = await listarInmovilizadas(tenantId);
+  } catch (e) {
+    logger.error('peajes.importar_inmovilizadas_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return falla('No se pudo leer la lista actual. Inténtalo de nuevo.');
+  }
+  const { altas, rechazadas } = resolverUnidadesInmovilizadas(lectura.ventanas, unidades);
+  const todasRechazadas = [...lectura.rechazadas, ...rechazadas].sort((a, b) => a.fila - b.fila);
+  if (altas.length === 0) return { ok: true, guardadas: 0, actualizadas: 0, rechazadas: todasRechazadas };
+
+  const existente = new Map(previas.map((p) => [`${p.unidadId}|${p.desde}|${p.motivo}`, p]));
+  let guardadas = 0;
+  let actualizadas = 0;
+  for (const lote of lotes(altas)) {
+    const filas = lote.map((a) => ({
+      tenant_id: tenantId, unidad_id: a.unidadId, desde: a.desde, hasta: a.hasta, motivo: a.motivo, nota: a.nota,
+    }));
+    const { error } = await acotada(supabaseAdmin().from('peaje_unidad_inmovilizada').upsert(filas, { onConflict: 'tenant_id,unidad_id,desde,motivo' }), 'peajes.importar_inmovilizadas');
+    if (error) {
+      logger.error('peajes.importar_inmovilizadas', { tenant: tenantId, err: error.message });
+      return { ok: false, guardadas, actualizadas, rechazadas: todasRechazadas, error: `Se guardaron ${guardadas} renglones y el resto falló. Vuelve a subir el archivo: es seguro repetirlo.` };
+    }
+    for (const a of lote) {
+      guardadas++;
+      const previa = existente.get(`${a.unidadId}|${a.desde}|${a.motivo}`);
+      if (previa && (previa.hasta !== a.hasta || previa.nota !== a.nota)) actualizadas++;
     }
   }
   return { ok: true, guardadas, actualizadas, rechazadas: todasRechazadas };

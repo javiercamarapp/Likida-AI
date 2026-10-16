@@ -20,6 +20,13 @@ import { normalizarNombre, normalizarTag, llaveUnidad } from './formatos';
 //     tags dados de baja) las configura la flota; NO viene nada precargado.
 //
 // Reglas:
+//   unidad_inmovilizada      (T-A2-36, SEVERIDAD CRÍTICA, primera de la lista) cruce con el TAG de una
+//                            unidad dentro de una ventana en que la flota la declaró inmovilizada (taller,
+//                            siniestro o baja): basta teclear el número impreso del TAG para pasar una caseta,
+//                            y una foto del TAG de una unidad parada alcanza. Es un candidato a validar, NUNCA
+//                            una afirmación de fraude. Es DISTINTA de `tag_dado_de_baja` (esa mira la fecha de
+//                            baja del TAG): si el cruce ya cae en `tag_dado_de_baja` no se duplica aquí. Sin la
+//                            lista de ventanas la regla va a `reglasNoAplicadas`.
 //   clase_fuera_de_3_5       clase distinta de {3, 5} (3 = tracto solo, 5 = tracto
 //                            + caja de 2 ejes), salvo las clases que la flota declare
 //                            válidas para esa caseta. Depende del TIPO DE UNIDAD del TAG
@@ -47,6 +54,7 @@ import { normalizarNombre, normalizarTag, llaveUnidad } from './formatos';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type CategoriaCobro =
+  | 'unidad_inmovilizada'
   | 'clase_fuera_de_3_5'
   | 'extemporaneo'
   | 'duplicado_exacto'
@@ -54,10 +62,11 @@ export type CategoriaCobro =
   | 'caseta_no_debe_cruzarse';
 
 export const CATEGORIAS_COBRO: readonly CategoriaCobro[] = [
-  'clase_fuera_de_3_5', 'extemporaneo', 'duplicado_exacto', 'tag_dado_de_baja', 'caseta_no_debe_cruzarse',
+  'unidad_inmovilizada', 'clase_fuera_de_3_5', 'extemporaneo', 'duplicado_exacto', 'tag_dado_de_baja', 'caseta_no_debe_cruzarse',
 ];
 
 export const ETIQUETA_CATEGORIA_COBRO: Record<CategoriaCobro, string> = {
+  unidad_inmovilizada: 'Cruce con unidad inmovilizada',
   clase_fuera_de_3_5: 'Clase distinta de 3 y 5',
   extemporaneo: 'Cobro extemporáneo',
   duplicado_exacto: 'Cobro duplicado exacto',
@@ -74,6 +83,19 @@ export const TIPOS_UNIDAD_PEAJE: readonly TipoUnidadPeaje[] = ['tracto', 'utilit
 
 /** Rótulo de un candidato de clase cuya unidad no tiene tipo declarado (falta el maestro TAG→unidad con tipo). */
 export const ROTULO_SIN_TIPO_UNIDAD = 'sin tipo de unidad: candidato';
+
+/** Categorías de severidad crítica: van primero en toda lista y llevan `severidad: 'critica'`. */
+export const CATEGORIAS_CRITICAS: readonly CategoriaCobro[] = ['unidad_inmovilizada'];
+
+/** Por qué estaba inmovilizada una unidad (`peaje_unidad_inmovilizada.motivo`, 0813). */
+export type MotivoInmovilizada = 'taller' | 'siniestro' | 'baja';
+export const MOTIVOS_INMOVILIZADA: readonly MotivoInmovilizada[] = ['taller', 'siniestro', 'baja'];
+const TEXTO_MOTIVO_INMOVILIZADA: Record<MotivoInmovilizada, string> = {
+  taller: 'en taller', siniestro: 'siniestrada', baja: 'dada de baja',
+};
+
+/** Una ventana de inmovilización de una unidad. `desde` y `hasta` inclusive; `hasta: null` = sigue inmovilizada. */
+export interface VentanaInmovilizada { desde: string; hasta: string | null; motivo: MotivoInmovilizada }
 
 /** Las clases de cobro válidas por defecto: 3 (tracto solo) y 5 (tracto + caja de 2 ejes). */
 export const CLASES_VALIDAS_DEFAULT: readonly number[] = [3, 5];
@@ -131,6 +153,12 @@ export interface ReglasCobro {
    * El candidato NO desaparece: sigue en la lista con `justificacion`.
    */
   justificados?: ReadonlyMap<number, string>;
+  /**
+   * Ventanas de inmovilización por TAG normalizado (`normalizarTag`): el llamador resuelve TAG → unidad →
+   * ventanas con el maestro TAG↔unidad. Ausente o vacío = la flota no declaró ninguna y la regla
+   * `unidad_inmovilizada` no se aplica (se dice en `reglasNoAplicadas`).
+   */
+  inmovilizadasPorTag?: ReadonlyMap<string, readonly VentanaInmovilizada[]>;
 }
 
 export interface CandidatoCobro {
@@ -155,6 +183,8 @@ export interface CandidatoCobro {
   queHacer: string;
   /** Dato crudo de apoyo para el Excel (línea del primer cobro, fecha de baja, inicio del periodo…). */
   referencia: string;
+  /** `'critica'` en las categorías de `CATEGORIAS_CRITICAS`; ausente en las demás. */
+  severidad?: 'critica';
   /** Solo si alguien revisó este cruce y lo justificó: el motivo. El candidato sigue en el historial. */
   justificacion?: string;
 }
@@ -215,6 +245,7 @@ export function revisarCobros(lineas: readonly LineaCobro[], reglas: ReglasCobro
   const noCruzar = reglas.casetasNoCruzar ?? new Set<string>();
   const exceptuadas = reglas.excepcionesPorUnidad ?? new Map<string, ReadonlySet<string>>();
   const justificados = reglas.justificados ?? new Map<number, string>();
+  const inmovilizadas = reglas.inmovilizadasPorTag ?? new Map<string, readonly VentanaInmovilizada[]>();
 
   const candidatos: CandidatoCobro[] = [];
   const reglasNoAplicadas: ReglaNoAplicada[] = [];
@@ -250,8 +281,37 @@ export function revisarCobros(lineas: readonly LineaCobro[], reglas: ReglasCobro
     reglasNoAplicadas.push({ regla: 'tag_dado_de_baja', motivo: 'El archivo no trae TAG: no se pueden comparar contra los TAGs dados de baja.' });
   }
 
+  if (inmovilizadas.size === 0) {
+    reglasNoAplicadas.push({ regla: 'unidad_inmovilizada', motivo: 'No hay unidades inmovilizadas declaradas: la flota carga la lista de unidades en taller o siniestradas con sus fechas (Configuración → Reglas de cobro). Nada viene precargado.' });
+  } else if (lineas.length > 0 && conTag === 0) {
+    reglasNoAplicadas.push({ regla: 'unidad_inmovilizada', motivo: 'El archivo no trae TAG: no se pueden comparar contra las unidades inmovilizadas.' });
+  }
+
   if (noCruzar.size === 0) {
     reglasNoAplicadas.push({ regla: 'caseta_no_debe_cruzarse', motivo: 'No hay casetas prohibidas configuradas: la flota decide cuáles no deben cruzarse (Configuración → Reglas de cobro). Nada viene precargado.' });
+  }
+
+  // ── Unidad inmovilizada (crítica) ─────────────────────────────────────────
+  if (inmovilizadas.size > 0) {
+    for (const l of lineas) {
+      const tag = normalizarTag(l.tag);
+      if (!tag || !l.fecha) continue;
+      const bajaTag = tagsBaja.get(tag);
+      // Ya es `tag_dado_de_baja`: no se duplica el aviso con otra categoría.
+      if (bajaTag && l.fecha > bajaTag) continue;
+      const fecha = l.fecha;
+      const ventana = (inmovilizadas.get(tag) ?? []).find((v) => fecha >= v.desde && (v.hasta === null || fecha <= v.hasta));
+      if (!ventana) continue;
+      const estado = TEXTO_MOTIVO_INMOVILIZADA[ventana.motivo];
+      const rango = ventana.hasta === null ? `desde el ${ventana.desde}` : `del ${ventana.desde} al ${ventana.hasta}`;
+      candidatos.push({
+        ...base(l), categoria: 'unidad_inmovilizada', severidad: 'critica',
+        quePaso: `El TAG ${l.tag} de ${l.unidad ? `la unidad ${l.unidad}` : 'una unidad de la flota'} aparece en ${nombreCaseta(l)}${cuando(l)} (${mxn(l.monto)}), pero la flota declaró esa unidad ${estado} ${rango}.`,
+        queSignifica: 'Una unidad inmovilizada no debería generar cruces. Puede ser que alguien esté usando el número del TAG sin la tarjeta (basta teclearlo en la caseta), un error del proveedor o una ventana mal capturada. No se afirma que haya fraude: es un candidato a validar.',
+        queHacer: 'Confirma las fechas de la inmovilización; si son correctas, valida con seguridad y con el proveedor quién pasó por la caseta y, de ser necesario, bloquea el TAG. Si las fechas están mal, corrígelas en «Reglas de cobro».',
+        referencia: `${ventana.motivo} ${rango}`,
+      });
+    }
   }
 
   // ── Clase fuera de {3,5} ──────────────────────────────────────────────────

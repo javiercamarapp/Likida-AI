@@ -23,7 +23,7 @@ const tarifa = (p: Partial<TarifaExistente> = {}): TarifaExistente => ({
   casetaNorm: 'caseta ejemplo norte', clase: 5, importe: 100, vigenteDesde: '2026-01-01', vigenteHasta: null, origen: 'proveedor', confirmada: true, confirmadaPor: 'f', ...p,
 });
 
-// 0: clase 9 (400) · 1: extemporáneo (250) · 2 y 3: duplicado exacto · 4: cobra 130 con tarifa 100 (clase 5) · 5: TAG de baja · 6: caseta prohibida · 7: limpia
+// 0: clase 9 (400) · 1: extemporáneo (250) · 2 y 3: duplicado exacto · 4: cobra 130 con tarifa 100 (clase 5) · 5: TAG de baja · 6: caseta prohibida · 7: limpia · 8: unidad en taller (T-A2-36)
 const lineas: LineaCobro[] = [
   l(0, { clase: 9, monto: 400 }),
   l(1, { fecha: '2026-02-27', monto: 100, tag: 'IMDM1', unidad: '201' }),
@@ -33,11 +33,13 @@ const lineas: LineaCobro[] = [
   l(5, { tag: 'IMDM5', unidad: '205', caseta: 'Caseta Ejemplo Este', fecha: '2026-03-08' }),
   l(6, { tag: 'IMDM6', unidad: '206', caseta: 'Caseta Prohibida Uno' }),
   l(7, { tag: 'IMDM7', unidad: '207', caseta: 'Caseta Ejemplo Oeste' }),
+  l(8, { tag: 'IMDM8', unidad: '208', caseta: 'Caseta Ejemplo Oeste', fecha: '2026-03-04' }),
 ];
 const reglas = {
   periodoDesde: '2026-03-01',
   tagsBaja: new Map([[normalizarTag('IMDM5') as string, '2026-03-01']]),
   casetasNoCruzar: new Set(['caseta prohibida uno']),
+  inmovilizadasPorTag: new Map([[normalizarTag('IMDM8') as string, [{ desde: '2026-03-03', hasta: '2026-03-05', motivo: 'taller' as const }]]]),
 };
 const tarifas = [tarifa(), tarifa({ casetaNorm: 'caseta ejemplo sur' }), tarifa({ casetaNorm: 'caseta ejemplo oeste', confirmada: false, origen: 'inferida', confirmadaPor: null })];
 
@@ -183,12 +185,14 @@ describe('texto del proveedor, caracteres especiales y determinismo', () => {
 describe('el archivo se abre con el lector tolerante de Likida (round-trip)', () => {
   it('la primera hoja del Excel se lee como un desglose: mismas líneas, importes y clases', async () => {
     const r = reporte();
-    const primera = r.filas.filter((f) => f.categoria === 'clase_fuera_de_3_5');
+    // La primera hoja es la de la categoría crítica (T-A2-36): la unidad inmovilizada va primero.
+    expect(CATEGORIAS_ARCHIVO[0]).toBe('unidad_inmovilizada');
+    const primera = r.filas.filter((f) => f.categoria === 'unidad_inmovilizada');
     const lectura = await parsearArchivoDesglose('candidatos.xlsx', Buffer.from(candidatosAExcel(r)));
     expect(lectura.ok).toBe(true);
     if (!lectura.ok) return;
     expect(lectura.lineas).toHaveLength(primera.length);
-    expect(lectura.lineas[0]).toMatchObject({ fecha: '2026-03-05', caseta: CASETA, tag: 'IMDM00000000', monto: 400, clase: 9, unidad: '100' });
+    expect(lectura.lineas[0]).toMatchObject({ fecha: '2026-03-04', caseta: 'Caseta Ejemplo Oeste', tag: 'IMDM8', monto: 100, clase: 5, unidad: '208' });
     expect(lectura.calidad.columnasFaltantes ?? []).toEqual([]);
   });
 });

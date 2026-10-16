@@ -40,6 +40,7 @@ export const MAX_FILAS_POR_CATEGORIA = 100;
 
 /** Qué significa la categoría, en general (cada candidato trae además su explicación). */
 const EXPLICACION_CATEGORIA: Record<CategoriaCobro, string> = {
+  unidad_inmovilizada: 'Cruces con el TAG de una unidad que la flota declaró en taller, siniestrada o de baja en esa fecha. Es la categoría más importante: basta teclear el número del TAG para pasar una caseta. Es un candidato a validar, no una acusación.',
   clase_fuera_de_3_5: 'Lo esperado es clase 3 (tracto solo) o 5 (tracto con caja de 2 ejes). Otra clase puede ser un error de clasificación del proveedor. La clase 1 suele ser la tarifa por pasada de algunas casetas: decláralas en «Reglas de cobro» para que no aparezcan.',
   extemporaneo: 'El cruce es anterior al periodo de este archivo: el proveedor lo cobró tarde. Hay que revisarlo junto con el mes en que ocurrió.',
   duplicado_exacto: 'Mismo TAG, mismo segundo, misma caseta y mismo importe. Dos cobros seguidos en minutos (posible retorno o reintento) se revisan aparte.',
