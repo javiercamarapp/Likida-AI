@@ -256,3 +256,31 @@ export function textoRampa(r: Pick<Reubicacion, 'rampaEstado' | 'rampa' | 'comoD
     case 'en_espera': return 'En espera de rampa';
   }
 }
+
+// ── T-A5-46: el resultado de la descarga y la caja cargada (R19) ────────────
+
+export type OpcionResultadoDescarga = 'completa' | 'no_recibida' | 'caja_cargada';
+
+/** «¿Cómo terminó la descarga?» con tres botones (el máximo de Meta; títulos de ≤ 20 caracteres). */
+export function preguntaResultadoDescarga(viaje: { id: string; folio: string | null }): Salida {
+  const folio = viaje.folio ? ` (viaje ${viaje.folio.replace(/\s+/g, ' ').trim().slice(0, 30)})` : '';
+  return {
+    texto: `¿Cómo terminó la descarga${folio}? Toca una opción.`,
+    botones: [
+      { id: `${PREFIJO_BOTON.resultadoDescarga}:${viaje.id}:completa`, titulo: 'Descarga completa' },
+      { id: `${PREFIJO_BOTON.resultadoDescarga}:${viaje.id}:no_recibida`, titulo: 'No me recibieron' },
+      { id: `${PREFIJO_BOTON.resultadoDescarga}:${viaje.id}:caja_cargada`, titulo: 'Caja cargada' },
+    ],
+  };
+}
+
+/** El acuse al chofer según lo que contestó y si el supervisor recibió el aviso. */
+export function acuseResultadoDescarga(o: OpcionResultadoDescarga, avisado: boolean): Salida {
+  if (o === 'completa') return { texto: 'Anotado ✅ descarga completa. Avísame cuando vayas de regreso. 🚛' };
+  const que = o === 'no_recibida' ? 'no te recibieron la mercancía y regresas con la caja cargada' : 'regresas a patio con la caja cargada';
+  return {
+    texto: avisado
+      ? `Anotado ✅ ${que}. Ya le avisé a tu supervisor. 🙏`
+      : `Anotado ✅ ${que}. Si quieres apoyo, avísale directo a tu supervisor. 🙏`,
+  };
+}

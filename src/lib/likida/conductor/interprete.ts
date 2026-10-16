@@ -481,3 +481,25 @@ export function limpiarComoDescarga(texto: string | undefined): string | null {
   if (!t || /https?:|www\.|@|\d{7,}/i.test(t)) return null;
   return t.slice(0, MAX_COMO_DESCARGA);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL RESULTADO DE LA DESCARGA (T-A5-46, R19) — «descarga completa», «no me recibieron», «regreso con la caja cargada».
+//
+// Va APARTE de `Intencion` (no es un hito). SOLO se consulta con la pregunta abierta (resultado_descarga.ts lo comprueba): fuera de ahí
+// «no me recibieron» sigue su camino como cualquier mensaje. Mismos candados: nada de preguntas y texto corto.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type OpcionResultadoTexto = 'completa' | 'no_recibida' | 'caja_cargada';
+
+const RE_NO_RECIBIDA = /\b(no (me )?(recibieron|recibio|aceptaron|quisieron recibir|dejaron descargar|descargaron)|rechazaron (la )?(carga|caja|mercancia)|no recibieron (la )?(carga|caja|mercancia))\b/;
+const RE_CAJA_CARGADA = /\b(caja (va |viene |sigue )?(cargada|llena)|(llevo|regreso con|regreso a patio con|vengo con) (la )?(caja|carga|mercancia)( cargada| llena)?|cargada a patio|con carga a patio)\b/;
+const RE_COMPLETA = /^(ya )?(se )?(descarga )?(completa|completo|todo|descargo todo|descargue todo|descargaron todo)$|\bdescarga completa\b|\b(se )?descargo (todo|completo)\b|\bdescargue todo\b/;
+
+export function leerTextoResultadoDescarga(texto: string | undefined): OpcionResultadoTexto | null {
+  if (typeof texto !== 'string' || !texto.trim() || texto.length > 120 || /[?¿]/.test(texto)) return null;
+  const n = normalizar(texto);
+  if (RE_NO_RECIBIDA.test(n)) return 'no_recibida';
+  if (RE_CAJA_CARGADA.test(n)) return 'caja_cargada';
+  if (RE_COMPLETA.test(n)) return 'completa';
+  return null;
+}
