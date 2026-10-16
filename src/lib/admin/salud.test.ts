@@ -23,7 +23,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-const { puertaCron, registrarLatido, registrarLatencia, registrarEstado, leerEstado30Dias, purgarObservabilidad, juzgarLatido, motivoDeSalto, esHuecoDeConfiguracion, CRONS, CADENCIA_MS, TOLERANCIA_LATIDO_MS } = await import('./salud');
+const { puertaCron, registrarLatido, registrarLatencia, registrarEstado, leerEstado30Dias, purgarObservabilidad, juzgarLatido, salidaTmsDeLatido, motivoDeSalto, esHuecoDeConfiguracion, CRONS, CADENCIA_MS, TOLERANCIA_LATIDO_MS } = await import('./salud');
 const { estadoDescargaSat } = await import('@/lib/likida/sat_descarga');
 
 beforeEach(() => { vi.clearAllMocks(); process.env.CRON_SECRET = 's3cr3t'; });
@@ -424,5 +424,16 @@ describe('estado público (0701)', () => {
   it('purgarObservabilidad LANZA si la base falla (la guardia lo registra)', async () => {
     rpc.mockResolvedValueOnce({ data: null, error: { message: 'lock' } });
     await expect(purgarObservabilidad()).rejects.toThrow(/lock/);
+  });
+});
+
+describe('los contadores de la salida al TMS en el panel de salud (T-A3-38)', () => {
+  it('salen del detalle del latido de carta-porte-docs', () => {
+    expect(salidaTmsDeLatido({ envios: { corrio: true, envios_pendientes: 3, circuito_tms_abierto: true } })).toEqual({ enviosPendientes: 3, circuitoTmsAbierto: true });
+  });
+  it('un latido sin ellos (salida apagada, cron viejo) da null, no ceros inventados', () => {
+    expect(salidaTmsDeLatido({})).toBeNull();
+    expect(salidaTmsDeLatido({ envios: { corrio: false, saltado: 'apagada' } })).toBeNull();
+    expect(salidaTmsDeLatido({ envios: 'x' })).toBeNull();
   });
 });

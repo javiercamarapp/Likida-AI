@@ -290,6 +290,20 @@ export interface LatidoDetallado extends SaludCron {
   detalle: Record<string, unknown>;
   /** `motivoDeSalto(detalle)` ya resuelto, para que la vista no razone. */
   motivoSalto: string | null;
+  /** Solo `carta-porte-docs` (T-A3-38): la salida al TMS que dejó su última pasada. `null` si el latido no la trae. */
+  salidaTms?: SalidaTmsSalud | null;
+}
+
+/** Lo que el panel interno muestra de la salida al TMS de Carta Porte. */
+export interface SalidaTmsSalud { enviosPendientes: number; circuitoTmsAbierto: boolean }
+
+/** Lee del `detalle` del latido de `carta-porte-docs` los contadores de la salida; `null` si no corrió o el detalle no los trae. */
+export function salidaTmsDeLatido(detalle: Record<string, unknown>): SalidaTmsSalud | null {
+  const e = detalle.envios;
+  if (!e || typeof e !== 'object') return null;
+  const { envios_pendientes: pendientes, circuito_tms_abierto: abierto } = e as Record<string, unknown>;
+  if (typeof pendientes !== 'number' || typeof abierto !== 'boolean') return null;
+  return { enviosPendientes: pendientes, circuitoTmsAbierto: abierto };
 }
 
 /**
@@ -320,6 +334,7 @@ export async function detalleLatidos(ahoraMs: number = Date.now()): Promise<Reco
       // puede traer llaves parecidas (p.ej. qué palanca resultó ilegible) y
       // leerlas como «apagado a propósito» sería contar la historia al revés.
       motivoSalto: ultimoEstado === 'saltado' ? motivoDeSalto(detalle) : null,
+      ...(c === 'carta-porte-docs' ? { salidaTms: salidaTmsDeLatido(detalle) } : {}),
     };
   }
   return salida;

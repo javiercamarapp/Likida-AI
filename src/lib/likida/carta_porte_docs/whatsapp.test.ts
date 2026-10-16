@@ -3,10 +3,11 @@ vi.mock('./repo', async () => (await import('./repo_falso.fixture')).api);
 vi.mock('../bitacora_escritura', () => ({ anotarBitacora: vi.fn(async () => true) }));
 import { estado, reset } from './repo_falso.fixture';
 import { A, USUARIO_A, sembrarFlotas } from './escenario.fixture';
-import { esCandidatoCartaPorte, ingerirDesdeWhatsapp, MAX_BYTES_WA, type DepsWhatsapp } from './whatsapp';
+import { esCandidatoCartaPorte, esTextoCartaPorte, senalesDeForma, ingerirDesdeWhatsapp, MAX_BYTES_WA, type DepsWhatsapp } from './whatsapp';
+import { MAX_TEXTO_MODELO } from './contenido';
 import { llmFalso, lecturaBoreal } from './llm_falso.fixture';
 import * as repo from './repo';
-import { fotoRemision, pdfBoreal, excelAtlas, xmlCartaPorte, defectuosos } from './documentos_sinteticos.fixture';
+import { fotoRemision, pdfBoreal, excelAtlas, xmlCartaPorte, defectuosos, RFC } from './documentos_sinteticos.fixture';
 
 const aDataUrl = (b: Uint8Array, mime: string) => `data:${mime};base64,${Buffer.from(b).toString('base64')}`;
 
@@ -144,5 +145,99 @@ describe('ingerirDesdeWhatsapp', () => {
     const d = deps({ m1: { mime: 'application/pdf', bytes: await pdfBoreal() } });
     await ingerirDesdeWhatsapp(entrada({ type: 'document', mediaId: 'm1' }, { nombreRemitente: 'N'.repeat(300) }), d);
     expect([...estado.docs.values()][0].remitente!.length).toBeLessThanOrEqual(120);
+  });
+});
+
+// ── Texto pegado (T-A3-15): sintético, sin datos reales ──────────────────────
+const CUERPO = `Origen CP: 64000 Monterrey. Destino CP: 44100 Guadalajara. Cliente Boreal ${RFC.boreal}. Fecha de carga 15/10/2026. 880 pzas, 14028 kg, clave 24101500.`;
+const SIN_ORDEN_4_SENALES = `Buenas tardes, les paso lo del embarque de mañana: RFC ${RFC.boreal}, C.P. 64000, 880 piezas, fecha de carga 2026-10-15.`;
+
+describe('texto pegado — esTextoCartaPorte', () => {
+  it('con orden explícita al inicio (ccp / carta porte / embarque) y cuerpo suficiente', () => {
+    expect(esTextoCartaPorte({ type: 'text', text: `ccp ${CUERPO}` })).toBe(true);
+    expect(esTextoCartaPorte({ type: 'text', text: `  Carta Porte: ${CUERPO}` })).toBe(true);
+    expect(esTextoCartaPorte({ type: 'text', text: `EMBARQUE - ${CUERPO}` })).toBe(true);
+  });
+  it('la orden sola, o con cuerpo mínimo, o fuera del inicio, no basta', () => {
+    expect(esTextoCartaPorte({ type: 'text', text: 'ccp' })).toBe(false);
+    expect(esTextoCartaPorte({ type: 'text', text: 'embarque 5521' })).toBe(false);
+    expect(esTextoCartaPorte({ type: 'text', text: 'oye el embarque ya salió, avísale al cliente por favor, gracias' })).toBe(false);
+  });
+  it('sin orden: ≥ 3 señales y ≥ 80 caracteres; menos no entra', () => {
+    expect(senalesDeForma(SIN_ORDEN_4_SENALES)).toBe(4);
+    expect(esTextoCartaPorte({ type: 'text', text: SIN_ORDEN_4_SENALES })).toBe(true);
+    expect(esTextoCartaPorte({ type: 'text', text: 'Hola, ya salió el camión con 880 piezas, llega mañana temprano a la bodega de siempre.' })).toBe(false);
+    expect(esTextoCartaPorte({ type: 'text', text: `RFC ${RFC.boreal} 880 pzas` })).toBe(false); // 2 señales y corto
+  });
+  it('un RFC con dígito verificador malo o un número cualquiera de 8 dígitos no cuentan como RFC', () => {
+    expect(senalesDeForma('GBO090704XX1')).toBe(0); // grep-limpio:ok (RFC sintético con dígito verificador inválido)
+    expect(senalesDeForma('folio 12345678')).toBe(1); // clave de 8 dígitos, no RFC
+  });
+  it('un mensaje con archivo, o que no es texto, no es texto pegado', () => {
+    expect(esTextoCartaPorte({ type: 'image', text: `ccp ${CUERPO}` })).toBe(false);
+    expect(esTextoCartaPorte({ type: 'text', mediaId: 'm', text: `ccp ${CUERPO}` })).toBe(false);
+    expect(esTextoCartaPorte({ type: 'text' })).toBe(false);
+  });
+});
+
+describe('texto pegado — ingerirDesdeWhatsapp', () => {
+  it('orden «ccp» + datos: queda como documento de WhatsApp, formato correo, nombre por sha, y se responde con la liga', async () => {
+    const d = deps({});
+    expect(await ingerirDesdeWhatsapp(entrada({ type: 'text', text: `ccp ${CUERPO}` }), d)).toBe('atendido');
+    expect(estado.docs.size).toBe(1);
+    const doc = [...estado.docs.values()][0];
+    expect(doc).toMatchObject({ tenantId: A, canal: 'whatsapp', formato: 'correo' });
+    expect(doc.nombreArchivo).toMatch(/^whatsapp-texto-[0-9a-f]{8}\.txt$/);
+    expect(doc.remitente).toBe('WhatsApp · Ana');
+    expect(d.respuestas).toHaveLength(1);
+    expect(d.respuestas[0]).toContain(`/dashboard/carta-porte/documentos/${doc.id}`);
+  });
+
+  it('texto largo con 4 señales y sin orden: atendido y 1 documento', async () => {
+    const d = deps({});
+    expect(await ingerirDesdeWhatsapp(entrada({ type: 'text', text: SIN_ORDEN_4_SENALES }), d)).toBe('atendido');
+    expect(estado.docs.size).toBe(1);
+  });
+
+  it('un mensaje conversacional no se toca: no_aplica, sin documento ni respuesta', async () => {
+    const d = deps({});
+    expect(await ingerirDesdeWhatsapp(entrada({ type: 'text', text: 'hola, ya salió el camión' }), d)).toBe('no_aplica');
+    expect(estado.docs.size).toBe(0);
+    expect(estado.archivos.size).toBe(0);
+    expect(d.respuestas).toEqual([]);
+  });
+
+  it('el mismo texto dos veces: duplicado, no se crea otro y se le da la liga al existente', async () => {
+    const d = deps({});
+    await ingerirDesdeWhatsapp(entrada({ type: 'text', text: `ccp ${CUERPO}` }), d);
+    await ingerirDesdeWhatsapp(entrada({ type: 'text', text: `ccp ${CUERPO}` }), d);
+    expect(estado.docs.size).toBe(1);
+    const doc = [...estado.docs.values()][0];
+    expect(d.respuestas[1]).toMatch(/ya estaba en la bandeja/);
+    expect(d.respuestas[1]).toContain(doc.id);
+  });
+
+  it('flota sin buzón, o con el buzón apagado: no_aplica y no se guarda nada', async () => {
+    const d = deps({});
+    await repo.configurarBuzon(A, { activo: false });
+    expect(await ingerirDesdeWhatsapp(entrada({ type: 'text', text: `ccp ${CUERPO}` }), d)).toBe('no_aplica');
+    estado.buzones.clear();
+    expect(await ingerirDesdeWhatsapp(entrada({ type: 'text', text: `ccp ${CUERPO}` }), d)).toBe('no_aplica');
+    expect(estado.docs.size).toBe(0);
+    expect(d.respuestas).toEqual([]);
+  });
+
+  it('un texto de más de 30 000 caracteres no se guarda: se le pide subirlo como archivo', async () => {
+    const d = deps({});
+    expect(await ingerirDesdeWhatsapp(entrada({ type: 'text', text: `ccp ${CUERPO} ${'x'.repeat(MAX_TEXTO_MODELO)}` }), d)).toBe('atendido');
+    expect(estado.docs.size).toBe(0);
+    expect(d.respuestas[0]).toMatch(/demasiado largo/);
+  });
+
+  it('con el agente apagado: se le dice y no se guarda nada', async () => {
+    const d = deps({}, { apagado: async () => true });
+    expect(await ingerirDesdeWhatsapp(entrada({ type: 'text', text: `ccp ${CUERPO}` }), d)).toBe('atendido');
+    expect(d.respuestas[0]).toMatch(/apagado/);
+    expect(estado.docs.size).toBe(0);
   });
 });

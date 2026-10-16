@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { campoDoc, campoMercancia } from './campos';
-import { codigoEstado, claveUnidadDeTexto, estadoDeCp } from './catalogos';
-import { normalizarFecha, normalizarNumero, normalizarValor, limpiarTexto } from './normalizar';
+import { codigoEstado, codigoEstadoEeuu, claveUnidadDeTexto, estadoDeCp } from './catalogos';
+import { normalizarFecha, normalizarNumero, normalizarValor, normalizarIdDestino, limpiarTexto } from './normalizar';
 
 const doc = (k: string) => campoDoc(k)!;
 const merc = (k: string) => campoMercancia(k)!;
@@ -242,5 +242,72 @@ describe('unidades: PZA y claves que no son del SAT', () => {
   it('«20» y «1» no se traducen a ninguna clave (no se adivina)', () => {
     expect(claveUnidadDeTexto('20')).toBeNull();
     expect(claveUnidadDeTexto('1')).toBeNull();
+  });
+});
+
+describe('T-A3-48: ceros a la izquierda y tipos de celda en claves SAT', () => {
+  it.each([
+    ['destino_localidad_clave', 6, '06'],
+    ['origen_localidad_clave', '3', '03'],
+    ['origen_colonia_clave', 876, '0876'],
+    ['destino_colonia_clave', '876', '0876'],
+    ['origen_municipio_clave', 14, '014'],
+    ['destino_municipio_clave', '6.0', '006'],
+  ])('%s: %s → %s con nota', (clave, crudo, esperado) => {
+    const r = normalizarValor(doc(clave), crudo);
+    expect(r.valor).toBe(esperado);
+    expect(r.notas.join(' ')).toMatch(/cero a la izquierda/);
+    expect(r.penalizacion).toBeGreaterThan(0);
+  });
+  it('tipo de materia numérico a 2', () => {
+    const r = normalizarValor(merc('tipo_materia'), 1);
+    expect(r.valor).toBe('01');
+    expect(r.notas.length).toBe(1);
+  });
+  it.each([
+    ['origen_colonia_clave', '0876'],
+    ['origen_localidad_clave', '06'],
+    ['origen_municipio_clave', '014'],
+  ])('%s ya correcto (%s): igual y sin nota', (clave, v) => {
+    const r = normalizarValor(doc(clave), v);
+    expect(r.valor).toBe(v);
+    expect(r.notas).toEqual([]);
+    expect(r.penalizacion).toBe(0);
+  });
+  it('claves no numéricas no se tocan', () => {
+    expect(normalizarValor(doc('origen_localidad_clave'), 'A1').valor).toBe('A1');
+    expect(normalizarValor(doc('origen_colonia_clave'), 'A1').notas).toEqual([]);
+  });
+  it('CP numérico de 3 y 4 dígitos → 5; de 5 queda igual sin nota', () => {
+    expect(normalizarValor(doc('origen_cp'), 6600).valor).toBe('06600');
+    expect(normalizarValor(doc('origen_cp'), '6600').valor).toBe('06600');
+    expect(normalizarValor(doc('origen_cp'), 600).valor).toBe('00600');
+    const ok = normalizarValor(doc('destino_cp'), '44100');
+    expect(ok.valor).toBe('44100');
+    expect(ok.notas).toEqual([]);
+  });
+  it('Id de destino acepta texto o número', () => {
+    expect(normalizarIdDestino('1')).toBe('1');
+    expect(normalizarIdDestino(' 2 ')).toBe('2');
+    expect(normalizarIdDestino(3)).toBe('3');
+    expect(normalizarIdDestino('2.0')).toBe('2');
+    expect(normalizarIdDestino('x')).toBeNull();
+    expect(normalizarIdDestino(0)).toBeNull();
+    expect(normalizarIdDestino(null)).toBeNull();
+  });
+});
+
+describe('Tax ID y estado de EE. UU. (T-A3-49)', () => {
+  it('el EIN conserva su guion; el RFC mexicano sigue normalizándose sin guiones ni espacios', () => {
+    expect(normalizarValor(doc('destino_rfc'), ' 12-3456789 ').valor).toBe('12-3456789');
+    expect(normalizarValor(doc('destino_rfc'), 'abc-010101-xxx').valor).toBe('ABC010101XXX'); // grep-limpio:ok
+    expect(normalizarValor(doc('destino_rfc'), 'abc 010101 xxx').valor).toBe('ABC010101XXX'); // grep-limpio:ok
+  });
+  it('el estado de EE. UU. se conserva o se traduce a su clave; un estado mexicano sigue igual', () => {
+    expect(normalizarValor(doc('destino_estado'), 'tx').valor).toBe('TX');
+    expect(normalizarValor(doc('destino_estado'), 'Texas').valor).toBe('TX');
+    expect(normalizarValor(doc('destino_estado'), 'Nuevo León').valor).toBe('NLE');
+    expect(codigoEstadoEeuu('New Mexico')).toBe('NM');
+    expect(codigoEstadoEeuu('Jalisco')).toBeNull();
   });
 });
