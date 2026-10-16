@@ -58,7 +58,7 @@ const CSS_SECUNDARIO = 'hairline text-[12.5px] font-medium px-3 py-1.5 rounded-l
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 export function VistaConfiguracionPeajes({
-  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro, tarifario, umbralesAvisos,
+  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro, tarifario, umbralesAvisos, superficie,
 }: {
   sufijo: string;
   aviso: string | null;
@@ -82,6 +82,8 @@ export function VistaConfiguracionPeajes({
   tarifario?: TarifarioVista;
   /** Umbrales de atípicos, plazo de reclamo, avisos e interruptores. Opcional. */
   umbralesAvisos?: UmbralesAvisosVista;
+  /** T-A2-31: con perfil `cinco_agentes` no se pintan geocercas ni cursos (stand-by). Sin la prop: todo, como siempre. */
+  superficie?: { gps: boolean; cursos: boolean };
 }) {
   return (
     <main className="h-full">
@@ -108,8 +110,8 @@ export function VistaConfiguracionPeajes({
           {umbralesAvisos && <SeccionUmbralesAvisos datos={umbralesAvisos} />}
           <SeccionTags tags={tags} unidades={unidades} acciones={acciones} />
           <SeccionCasetas casetas={casetas} acciones={acciones} />
-          <SeccionGeocercas geocercas={geocercas} tipos={tiposGeocerca} acciones={acciones} />
-          <SeccionCursos cursos={cursos} unidades={unidades} convenios={convenios} acciones={acciones} />
+          {(superficie?.gps ?? true) && <SeccionGeocercas geocercas={geocercas} tipos={tiposGeocerca} acciones={acciones} />}
+          {(superficie?.cursos ?? true) && <SeccionCursos cursos={cursos} unidades={unidades} convenios={convenios} acciones={acciones} />}
         </div>
       </div>
     </main>
