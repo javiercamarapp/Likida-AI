@@ -1,4 +1,4 @@
-import { TIPOS_HITO } from './tipos';
+import { TIPOS_HITO, type HitoFila, type TipoHito } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // T-A5-41 — EL CICLO DE HITOS POR TIPO DE SERVICIO (0807). Puro, sin I/O.
@@ -127,4 +127,60 @@ export function validarSecuencia(pasos: readonly string[]): string | null {
 /** Las filas que se insertan al sembrar una flota con la semilla (cada una activa). */
 export function filasDeSemilla(tenantId: string): Array<{ tenant_id: string; servicio: Servicio; orden: number; hito: PasoCiclo; activo: true }> {
   return SEMILLA_CICLOS.map((p) => ({ tenant_id: tenantId, servicio: p.servicio, orden: p.orden, hito: p.hito, activo: true as const }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A5-42 — EL MOTOR SIGUE EL CICLO DEL SERVICIO. Puro, sin I/O.
+//
+// El viaje guarda hoy cinco hitos (`TIPOS_HITO`, CHECK de la 0380). El ciclo por servicio habla un vocabulario más fino
+// (`PASOS_CICLO`). Aquí se dice QUÉ hito de los cinco cubre cada paso del ciclo, y con eso el motor sabe qué hitos de un viaje
+// pertenecen a su servicio: los demás se leen como `omitido` con motivo `fuera_de_ciclo`, igual que `aplicarPerfil` hace con el perfil.
+// Los pasos que aún no tienen hito propio (confirmar, inicio de viaje, rampa, resultado de descarga, patio de entrega…) los traen
+// T-A5-43/46 y siguientes: aquí no se persiguen.
+//
+// Reglas:
+//   · Ciclo `actual` (flota sin filas, o viaje sin servicio conocido) o `undefined`: la MISMA lista de hitos, sin tocar nada.
+//   · Un hito ya registrado (recibido/validado) se conserva siempre: lo que el chofer dijo no se pierde por el ciclo.
+//   · Se asume el orden de `TIPOS_HITO` para los cinco hitos (los tres ciclos de la semilla lo respetan).
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Motivo con que se omite un hito que el ciclo del servicio del viaje no tiene (el CHECK `viaje_hito_omitido_motivo` exige un motivo). */
+export const MOTIVO_FUERA_DE_CICLO = 'fuera_de_ciclo';
+
+/** Qué pasos del ciclo cubre cada uno de los cinco hitos. «Llegada a cliente» sustituye a «llegada a destino» (libreta, tachado). */
+export const PASOS_DEL_HITO: Readonly<Record<TipoHito, readonly PasoCiclo[]>> = {
+  llegada_carga: ['llegada_carga', 'llegada_cita_carga'],
+  salida_carga: ['salida_carga', 'fin_carga', 'salida_destino'],
+  llegada_descarga: ['llegada_descarga', 'llegada_cliente'],
+  salida_descarga: ['salida_descarga', 'fin_descarga'],
+  regreso: ['regreso'],
+};
+
+/** Los hitos (de los cinco) que el ciclo sigue, en el orden de la secuencia válida. */
+export function hitosDelCiclo(ciclo: CicloEfectivo): TipoHito[] {
+  return TIPOS_HITO.filter((t) => PASOS_DEL_HITO[t].some((p) => ciclo.pasos.includes(p)));
+}
+
+export function hitoEnCiclo(ciclo: CicloEfectivo | undefined, tipo: TipoHito): boolean {
+  return !ciclo || hitosDelCiclo(ciclo).includes(tipo);
+}
+
+/** Un hito que el ciclo del servicio dejó fuera (omitido con el motivo `fuera_de_ciclo`). */
+export function estaFueraDeCiclo(h: Pick<HitoFila, 'estado' | 'omitidoMotivo'>): boolean {
+  return h.estado === 'omitido' && h.omitidoMotivo === MOTIVO_FUERA_DE_CICLO;
+}
+
+/**
+ * Los hitos tal como los ve el motor con el ciclo del servicio del viaje: un hito PENDIENTE que el ciclo no tiene se lee omitido
+ * aunque la base aún lo traiga `esperado` (la siembra de SQL no conoce el servicio). Un hito ya omitido por otra causa (perfil,
+ * inferido, vencido) conserva su motivo. Sin ciclo, o con el ciclo actual, devuelve la MISMA lista.
+ */
+export function aplicarCiclo(hitos: readonly HitoFila[], ciclo: CicloEfectivo | undefined): readonly HitoFila[] {
+  if (!ciclo || ciclo.origen === 'actual') return hitos;
+  const sigue = new Set(hitosDelCiclo(ciclo));
+  return hitos.map((h) => (
+    !sigue.has(h.tipo) && (h.estado === 'esperado' || h.estado === 'escalado')
+      ? { ...h, estado: 'omitido' as const, omitidoMotivo: MOTIVO_FUERA_DE_CICLO }
+      : h
+  ));
 }

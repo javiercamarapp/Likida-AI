@@ -17,7 +17,7 @@ import type { EpisodioFila } from './senal_vida';
 import type { EstadoTransito } from './estados_transito';
 import type { MotivoSenalVida } from './solicitudes';
 import { esMotivoParada, type MotivoParada, type ParadaFila } from './paradas';
-import { esPasoCiclo, esServicio, filasDeSemilla, type CicloServicioFila } from './ciclo_servicio';
+import { esPasoCiclo, esServicio, filasDeSemilla, type CicloServicioFila, type Servicio } from './ciclo_servicio';
 import type { RespuestaSenalVida } from './tipos';
 import type { FiltrosTablero } from './repo_validacion';
 import type { CriterioSitio } from './sitio_derivado';
@@ -136,6 +136,11 @@ export interface ViajeContexto {
   etaDestinoEn: string | null;
   /** T-A5-14 (0802): referencia de despacho del TMS, normalizada; con ella el GPS se liga al viaje sin adivinar por unidad + ventana. */
   despachoRef?: string | null;
+  /**
+   * T-A5-42: el tipo de servicio del viaje (importación / exportación / nacional), si la base lo trae. Hoy `viaje` no tiene esa
+   * columna: sin ella es `undefined` y el motor sigue el ciclo actual. Quién lo escribe (TMS, oficina o el chofer) está pendiente de decisión.
+   */
+  servicio?: Servicio;
 }
 
 export const COLUMNAS_VIAJE_CTX =
@@ -163,6 +168,7 @@ export function filaAViajeCtx(f: Fila): ViajeContexto {
     etaOrigenEn: s(f.eta_origen_en),
     etaDestinoEn: s(f.eta_destino_en),
     despachoRef: s(f.despacho_ref),
+    ...(esServicio(f.servicio) ? { servicio: f.servicio } : {}),
   };
 }
 

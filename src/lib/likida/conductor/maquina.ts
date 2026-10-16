@@ -3,6 +3,7 @@ import {
   type Contacto, type HitoFila, type Lugar, type TipoHito,
 } from './tipos';
 import { MAX_POSPOSICIONES } from './config';
+import { aplicarCiclo, hitoEnCiclo, type CicloEfectivo } from './ciclo_servicio';
 import type { Intencion } from './interprete';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -75,6 +76,11 @@ export interface EntradaMaquina {
   mensajeEn: Date;
   ventanaCorreccionMin: number;
   posponerMin: number;
+  /**
+   * T-A5-42: el ciclo del servicio del viaje. Con él, un hito que el ciclo no tiene se lee omitido y un «ya llegué»/«ya salí» a secas
+   * se resuelve por lo que el servicio SÍ tiene (importación: la descarga; exportación: la carga). Sin él, o el ciclo actual: igual que siempre.
+   */
+  ciclo?: CicloEfectivo;
 }
 
 type Mapa = Record<TipoHito, HitoFila | undefined>;
@@ -114,9 +120,16 @@ function horaDeHito(h: HitoFila | undefined): number {
   return v ? new Date(v).getTime() : Number.NaN;
 }
 
-function objetivoLlegada(m: Mapa, lugar: Lugar | null, mensajeEn: Date): Objetivo {
+function objetivoLlegada(m: Mapa, lugar: Lugar | null, mensajeEn: Date, ciclo?: CicloEfectivo): Objetivo {
   if (lugar === 'carga') return { objetivo: 'llegada_carga', ambigua: false };
   if (lugar === 'descarga') return { objetivo: 'llegada_descarga', ambigua: false };
+  // T-A5-42: el servicio solo tiene UNO de los dos lugares: «ya llegué» a secas es de ese lugar, sin ambigüedad.
+  if (!hitoEnCiclo(ciclo, 'llegada_carga') && hitoEnCiclo(ciclo, 'llegada_descarga')) {
+    return resuelto(m.llegada_descarga) ? { duplicadoDe: 'llegada_descarga' } : { objetivo: 'llegada_descarga', ambigua: false };
+  }
+  if (!hitoEnCiclo(ciclo, 'llegada_descarga') && hitoEnCiclo(ciclo, 'llegada_carga')) {
+    return resuelto(m.llegada_carga) ? { duplicadoDe: 'llegada_carga' } : { objetivo: 'llegada_carga', ambigua: false };
+  }
   const lc = m.llegada_carga, sc = m.salida_carga, ld = m.llegada_descarga;
   // Nada registrado todavía: lo primero que pasa en un viaje es llegar a cargar.
   if (!resuelto(lc) && !resuelto(sc) && !resuelto(ld)) return { objetivo: 'llegada_carga', ambigua: true };
@@ -133,9 +146,16 @@ function objetivoLlegada(m: Mapa, lugar: Lugar | null, mensajeEn: Date): Objetiv
   return { aclarar: true };
 }
 
-function objetivoSalida(m: Mapa, lugar: Lugar | null): Objetivo {
+function objetivoSalida(m: Mapa, lugar: Lugar | null, ciclo?: CicloEfectivo): Objetivo {
   if (lugar === 'carga') return { objetivo: 'salida_carga', ambigua: false };
   if (lugar === 'descarga') return { objetivo: 'salida_descarga', ambigua: false };
+  // T-A5-42: igual que la llegada, si el servicio solo tiene la salida de un lugar.
+  if (!hitoEnCiclo(ciclo, 'salida_carga') && hitoEnCiclo(ciclo, 'salida_descarga')) {
+    return resuelto(m.salida_descarga) ? { duplicadoDe: 'salida_descarga' } : { objetivo: 'salida_descarga', ambigua: false };
+  }
+  if (!hitoEnCiclo(ciclo, 'salida_descarga') && hitoEnCiclo(ciclo, 'salida_carga')) {
+    return resuelto(m.salida_carga) ? { duplicadoDe: 'salida_carga' } : { objetivo: 'salida_carga', ambigua: false };
+  }
   const sc = m.salida_carga, ld = m.llegada_descarga, sd = m.salida_descarga;
   if (resuelto(sd)) return { duplicadoDe: 'salida_descarga' };
   if (resuelto(ld)) return { objetivo: 'salida_descarga', ambigua: false };
@@ -202,16 +222,18 @@ function ultimaLlegadaResuelta(m: Mapa): HitoFila | null {
 }
 
 /** Decide qué hacer con lo que dijo el chofer. Pura. */
-export function decidir(e: EntradaMaquina): Decision {
+export function decidir(entrada: EntradaMaquina): Decision {
+  // T-A5-42: el motor ve los hitos con el ciclo del servicio del viaje (sin ciclo, o el actual, la misma lista).
+  const e: EntradaMaquina = { ...entrada, hitos: aplicarCiclo(entrada.hitos, entrada.ciclo) };
   const m = mapaDe(e.hitos);
   const i = e.intencion;
 
   switch (i.clase) {
     case 'llegada':
-      return desdeObjetivo(objetivoLlegada(m, i.lugar, e.mensajeEn), m, e);
+      return desdeObjetivo(objetivoLlegada(m, i.lugar, e.mensajeEn, e.ciclo), m, e);
 
     case 'salida':
-      return desdeObjetivo(objetivoSalida(m, i.lugar), m, e);
+      return desdeObjetivo(objetivoSalida(m, i.lugar, e.ciclo), m, e);
 
     case 'regreso':
       return registrarObjetivo(m, 'regreso', e, false);
@@ -247,7 +269,7 @@ export function decidir(e: EntradaMaquina): Decision {
         // Sin pista de lugar: si ya llegó a algún lado, el contacto es de ahí.
         const ya = ultimaLlegadaResuelta(m);
         if (ya) return { accion: 'contacto', objetivo: ya.tipo, contacto: e.contacto };
-        o = objetivoLlegada(m, null, e.mensajeEn);
+        o = objetivoLlegada(m, null, e.mensajeEn, e.ciclo);
       }
       if ('objetivo' in o && resuelto(m[o.objetivo])) return { accion: 'contacto', objetivo: o.objetivo, contacto: e.contacto };
       return desdeObjetivo(o, m, e);
