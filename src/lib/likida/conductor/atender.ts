@@ -4,6 +4,7 @@ import { enviarSolicitudUbicacion } from '@/lib/meta/client';
 import type { ConfigConductor } from './config';
 import { interpretarBoton, interpretarTexto, leerBotonRampa, leerTextoResultadoDescarga, pareceHablarDeHito, type BotonRampa, type Intencion, type Interpretacion } from './interprete';
 import { interpretarConLlm } from './llm';
+import { guardiaDatosSeguridad } from './guardia_seguridad';
 import { decidir, hitoActivo, type Decision } from './maquina';
 import { mensajeParaChofer, type ContextoMensaje, type Salida } from './mensajes';
 import {
@@ -146,6 +147,9 @@ export const TEXTO_PEDIR_UBICACION =
 const FALLO: Salida = { texto: 'No pude anotarlo ahorita — mándamelo de nuevo en un momento. 🙏' };
 
 export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = depsReales): Promise<SalidaAtender | null> {
+  // T-A5-58: la clave de amago y el botón de pánico no se guardan ni se interpretan: antes de cualquier regla, modelo, base o log.
+  const sensible = guardiaDatosSeguridad(e.texto);
+  if (sensible) return { mensajes: [sensible] };
   const ahora = e.ahora ?? new Date();
   const boton = interpretarBoton(e.texto);
   let interp: Interpretacion | null = boton;

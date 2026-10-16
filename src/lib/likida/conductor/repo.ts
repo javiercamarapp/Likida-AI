@@ -10,6 +10,7 @@ import {
 import type { LegadoSello } from './maquina';
 import { CONFIG_CONDUCTOR_DEFAULT, validarConfigConductor, zonaOCdmx, type ConfigConductor, type PerfilSeguimiento } from './config';
 import { MOTIVO_FUERA_DE_PERFIL, hitoEnPerfil } from './perfil';
+import { contieneDatoDeSeguridad } from './guardia_seguridad';
 import { aHitoApi, type EventoApi, type FiltrosHitos, type HitoApi, type CambioCitas } from './lectura';
 import type { AvisoReclamado } from './planificador';
 import type { ContactoTrafico } from './escalamiento';
@@ -316,7 +317,7 @@ export async function registrarHito(d: DatosRegistro): Promise<ResultadoEscritur
       wa_message_id: d.waMessageId,
       mensaje_en: d.mensajeEn.toISOString(),
       recibido_en: d.ahora.toISOString(),
-      texto_chofer: d.texto ? d.texto.slice(0, 240) : null,
+      texto_chofer: d.texto && !contieneDatoDeSeguridad(d.texto) ? d.texto.slice(0, 240) : null, // T-A5-58: defensa en profundidad
       contacto_nombre: d.contacto?.nombre ?? null,
       contacto_area: d.contacto?.area ?? null,
       sin_contacto: false,
