@@ -123,6 +123,10 @@ export const PREFIJO_BOTON = {
   estadiaDescarga: 'estadia_descarga',
   /** T-A5-46: respuesta al «¿cómo terminó la descarga?». Tercer segmento: `completa`, `no_recibida` o `caja_cargada`. */
   resultadoDescarga: 'resultado_descarga',
+  /** T-A5-47: botones de la plantilla N01 («Acepto el viaje» / «No puedo tomarlo») y «Entendido» de las instrucciones (N02). Solo `<prefijo>:<viaje>`. */
+  viajeAcepto: 'viaje_acepto',
+  viajeRechazo: 'viaje_rechazo',
+  instruccionesOk: 'instr_ok',
 } as const;
 
 export type RespuestaSenalVida = 'estoy' | 'voy_a_cargar' | 'estoy_bien';

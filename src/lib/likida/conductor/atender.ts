@@ -27,6 +27,7 @@ import { preguntarResultado, puertosResultadoReales, responderResultadoDescarga,
 import {
   puertosReporteAtenderReales, responderReporteBoton, responderReporteTexto, type PuertosReporteAtender,
 } from './reporte_llegada';
+import { puertosAsignacionReales, responderAsignacion, type OpcionAsignacion, type PuertosAsignacion } from './asignacion';
 import { leerTextoPatio, marcarPatioAtendido, preguntarPatio, puertosPatioReales, responderPatio, type PuertosPatio } from './patio_entrega';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -78,6 +79,8 @@ export interface DepsAtender {
   reporte?: PuertosReporteAtender;
   /** T-A5-46: los puertos del resultado de la descarga y la caja cargada (bitácora, claim, aviso al supervisor). Opcional: sin él, los reales. */
   resultado?: PuertosResultado;
+  /** T-A5-47: los puertos de la asignación con botones (aceptar, instrucciones, aviso del rechazo). Opcional: sin él, los reales. */
+  asignacion?: PuertosAsignacion;
 }
 
 export const depsReales: DepsAtender = {
@@ -154,6 +157,9 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
   // aunque parezcan hablar de un hito: ni se interpretan ni pagan una llamada al modelo.
   // T-A5-44: la respuesta del patio de entrega (botón `hito_patio` o «patio <nombre>» tras «Otro») es de este módulo, pero no es un hito.
   const botonPatio = leerBotonConductor(e.texto);
+  // T-A5-47: los botones de la asignación (`viaje_acepto`, `viaje_rechazo`, `instr_ok`) son de este módulo y no registran un hito.
+  const opcionAsignacion = botonPatio ? OPCION_ASIGNACION[botonPatio.prefijo] : undefined;
+  if (botonPatio && opcionAsignacion) return atenderAsignacion(e, botonPatio, opcionAsignacion, ahora, deps);
   const esBotonPatio = botonPatio?.prefijo === PREFIJO_BOTON.patioEntrega;
   const nombrePatio = esBotonPatio ? null : leerTextoPatio(e.texto);
   if (esBotonPatio || nombrePatio) {
@@ -256,6 +262,30 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
   } catch (err) {
     // Fail-closed: no se finge una anotación. Pero tampoco se rompe el turno entero.
     logger.error('hito.conductor_fallo', { viaje: llevaViaje, err: err instanceof Error ? err.message : String(err) });
+    return { mensajes: [FALLO] };
+  }
+}
+
+const OPCION_ASIGNACION: Readonly<Record<string, OpcionAsignacion | undefined>> = {
+  [PREFIJO_BOTON.viajeAcepto]: 'acepto',
+  [PREFIJO_BOTON.viajeRechazo]: 'rechazo',
+  [PREFIJO_BOTON.instruccionesOk]: 'entendido',
+};
+
+/** T-A5-47: atiende un botón de la asignación. Los botones siempre contestan algo (o, si las instrucciones ya salieron solas, nada). */
+async function atenderAsignacion(
+  e: EntradaAtender, boton: NonNullable<ReturnType<typeof leerBotonConductor>>, opcion: OpcionAsignacion, ahora: Date, deps: DepsAtender,
+): Promise<SalidaAtender | null> {
+  try {
+    const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, boton.viajeId);
+    if (!viaje) return { mensajes: [{ texto: 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] };
+    if (viaje.estatus === 'liquidado') return { mensajes: [{ texto: 'Ese viaje ya está cerrado. 👍' }] };
+    const config = await deps.config(e.tenantId);
+    const hitos = opcion === 'rechazo' ? await deps.asegurarHitos(e.tenantId, viaje.id) : undefined;
+    const mensajes = await responderAsignacion(deps.asignacion ?? puertosAsignacionReales(), { viaje, telefono: e.telefono, opcion, config, hitos, ahora });
+    return { mensajes };
+  } catch (err) {
+    logger.error('conductor.asignacion_atender_fallo', { viaje: boton.viajeId, err: err instanceof Error ? err.message : String(err) });
     return { mensajes: [FALLO] };
   }
 }

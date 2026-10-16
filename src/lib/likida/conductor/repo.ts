@@ -190,6 +190,66 @@ export async function viajeDelOperador(tenantId: string, operadorId: string, via
   return f ? filaAViajeCtx(f) : null;
 }
 
+/**
+ * T-A5-47: el número de caja del viaje, o `null` si no hay forma segura de saberlo. `viaje` no trae la caja: sale del programa de despacho
+ * con la regla que ya usa el Vigía (fila del MISMO cliente y de la MISMA unidad; dos cajas distintas el mismo día = no se adivina).
+ * Sin cliente o sin unidad asignada no hay con qué cruzar. Lanza si la base falla (el llamador manda las instrucciones con «por confirmar»).
+ * Import perezoso: el Vigía lee el estatus del Conductor, y un import estático haría un ciclo.
+ */
+export async function leerCajaDelViaje(v: Pick<ViajeContexto, 'id' | 'tenantId' | 'clienteId' | 'unidadId'>): Promise<string | null> {
+  if (!v.clienteId || !v.unidadId) return null;
+  const { leerDatosUnidad } = await import('../vigia/repo');
+  const d = await leerDatosUnidad({ tenantId: v.tenantId, clienteId: v.clienteId, viajeId: v.id, unidadId: v.unidadId });
+  return d.caja;
+}
+
+export type ResultadoAceptarPorBoton = 'aceptado' | 'ya_aceptado' | 'sin_aviso' | 'no_encontrado' | 'fallo';
+
+/**
+ * T-A5-47 (R02/R05): el botón «Acepto el viaje» de la plantilla N01. Escribe `aceptado_en` con `aceptado_origen = 'chofer'` (el valor que
+ * la 0800 reserva para «el chofer, por WhatsApp»; el dominio de la columna NO admite 'whatsapp').
+ *
+ * UN solo UPDATE condicionado a lo que la 0058 exige (`viaje_aceptado_requiere_aviso`: no hay `aceptado_en` sin `avisado_en`), así que
+ * la restricción nunca se viola: un botón de un viaje que jamás se avisó no escribe nada y se distingue de «ya estaba aceptado». La hora que
+ * vale es la primera (`aceptado_en is null`): aceptar dos veces no la reescribe. Acotado por flota Y por operador (el id viene de un payload
+ * que un chofer puede teclear a mano). Nunca lanza.
+ */
+export async function aceptarPorBoton(tenantId: string, viajeId: string, operadorId: string, ahora: Date = new Date()): Promise<ResultadoAceptarPorBoton> {
+  try {
+    const { data, error } = await acotada(supabaseAdmin()
+      .from('viaje')
+      .update({ aceptado_en: ahora.toISOString(), aceptado_origen: 'chofer' })
+      .eq('id', viajeId)
+      .eq('tenant_id', tenantId)
+      .eq('operador_id', operadorId)
+      .eq('estatus', 'abierto')
+      .is('aceptado_en', null)
+      .not('avisado_en', 'is', null)
+      .select('id'), 'conductor.aceptar_por_boton');
+    if (error) {
+      logger.warn('conductor.boton_no_se_marcó_aceptado', { viajeId, err: error.message });
+      return 'fallo';
+    }
+    if ((data ?? []).length > 0) return 'aceptado';
+
+    // Ninguna fila cambió: ¿ya estaba aceptado, nunca se avisó, o no es suyo / ya no está abierto?
+    const { data: previo, error: errLectura } = await acotada(supabaseAdmin()
+      .from('viaje')
+      .select('aceptado_en, avisado_en')
+      .eq('id', viajeId).eq('tenant_id', tenantId).eq('operador_id', operadorId)
+      .maybeSingle(), 'conductor.aceptar_por_boton_previo');
+    if (errLectura) return 'fallo';
+    if (!previo) return 'no_encontrado';
+    if (previo.aceptado_en) return 'ya_aceptado';
+    if (!previo.avisado_en) return 'sin_aviso';
+    return 'no_encontrado'; // abierto = falso (cerrado o cancelado)
+  } catch (e) {
+    logger.warn('conductor.boton_aceptar_falló', { viajeId, err: e instanceof Error ? e.message : String(e) });
+    return 'fallo';
+  }
+}
+
+
 export async function cargarViajeContexto(tenantId: string, viajeId: string): Promise<ViajeContexto | null> {
   const res = await acotada(supabaseAdmin()
     .from('viaje').select(COLUMNAS_VIAJE_CTX)

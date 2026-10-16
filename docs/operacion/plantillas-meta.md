@@ -58,7 +58,7 @@ Todas las que siguen en estado «nueva para aprobación»: el código ya las nom
 
 El cuerpo exacto, las variables con su ejemplo y los botones de cada una están en el bloque de más abajo (los mismos que `scripts/verificar-plantillas-meta.ts --crear` manda a Meta).
 
-## Plantillas en uso (8)
+## Plantillas en uso (10)
 
 ### `viaje_asignado`
 
@@ -85,6 +85,57 @@ El cuerpo exacto, las variables con su ejemplo y los botones de cada una están 
 | `{{4}}` | unidad y anticipo | Unidad ECO-114, anticipo $3,000.00 |
 
 - **Botones:** ninguno
+
+### `viaje_asignado_confirmar_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Chofer — asignación de viaje. N01 · Avisar al chofer que le asignaron un viaje y pedirle que lo acepte o no con un botón (sustituye a `viaje_asignado` solo en el perfil piloto).
+- **Llamador en código:** src/lib/likida/notificar.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Hola {{1}}, tienes un viaje asignado: {{2}}, servicio de {{3}}, de {{4}} a {{5}}, con cita el {{6}}. Confirma por aquí si lo aceptas.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | nombre del chofer | Juan |
+| `{{2}}` | folio | F-1042 |
+| `{{3}}` | tipo de servicio | importación |
+| `{{4}}` | origen | Nuevo Laredo |
+| `{{5}}` | destino | Monterrey |
+| `{{6}}` | cita | 16/10 a las 08:00 |
+
+- **Botones:** «Acepto el viaje» (respuesta rápida, payload `viaje_acepto:<viaje_id>`); «No puedo tomarlo» (respuesta rápida, payload `viaje_rechazo:<viaje_id>`)
+
+### `viaje_instrucciones_ruta_v1`
+
+- **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
+- **Agente / uso:** Chofer — asignación de viaje. N02 · Instrucciones completas del viaje (caja, cita, patio de entrega y rutas) cuando el chofer acepta y su ventana de 24 h ya cerró.
+- **Llamador en código:** src/lib/likida/conductor/asignacion.ts
+- **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
+- **Cuerpo exacto:**
+
+  ```text
+  Instrucciones del viaje {{1}} para {{2}}: caja {{3}}, cita en {{4}} a las {{5}}, entrega en el patio {{6}}.
+  Ruta al punto de carga: {{7}}
+  Ruta al patio de entrega: {{8}}
+  Si tienes dudas, responde por aquí.
+  ```
+
+| Variable | Qué es | Ejemplo para Meta |
+| --- | --- | --- |
+| `{{1}}` | folio | F-1042 |
+| `{{2}}` | nombre del chofer | Juan |
+| `{{3}}` | caja | CJ-5521 |
+| `{{4}}` | lugar de la cita | Planta Zapopan |
+| `{{5}}` | hora de la cita | 08:00 |
+| `{{6}}` | patio de entrega | Patio Norte 2 |
+| `{{7}}` | ruta al punto de carga (o «consulta con tu supervisor») | https://maps.app.goo.gl/abc123 |
+| `{{8}}` | ruta al patio de entrega (o «consulta con tu supervisor») | https://maps.app.goo.gl/def456 |
+
+- **Botones:** «Entendido» (respuesta rápida, payload `instr_ok:<viaje_id>`)
 
 ### `recordatorio_cierre`
 
