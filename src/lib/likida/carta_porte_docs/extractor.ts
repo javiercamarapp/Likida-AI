@@ -54,19 +54,23 @@ const ItemDoc = z.object({
   clave: z.enum(CLAVES_DOC_LLM as [string, ...string[]]),
   valor: z.string().max(600).nullable(),
   confianza: z.number().min(0).max(1),
-  evidencia: z.string().max(300).nullable(),
+  evidencia: z.string().nullable(),
 });
 const ItemMerc = z.object({
   clave: z.enum(CLAVES_MERCANCIA_LLM as [string, ...string[]]),
   valor: z.string().max(600).nullable(),
   confianza: z.number().min(0).max(1),
-  evidencia: z.string().max(300).nullable(),
+  evidencia: z.string().nullable(),
 });
+
+/** Tope de `notas` y de `evidencia`: se RECORTAN (recortarSalida), no invalidan la salida (T-A3-68 d: 5 de 15 salidas se perdían por esto). */
+export const MAX_NOTAS = 400;
+export const MAX_EVIDENCIA = 300;
 
 export const SalidaLlmSchema = z.object({
   campos: z.array(ItemDoc).max(80),
   mercancias: z.array(z.object({ campos: z.array(ItemMerc).max(40) })).max(MAX_MERCANCIAS),
-  notas: z.string().max(400).nullable(),
+  notas: z.string().nullable(),
 });
 export type SalidaLlmDatos = z.infer<typeof SalidaLlmSchema>;
 
@@ -75,6 +79,13 @@ export interface SalidaLlm extends SalidaLlmDatos {
   tokensIn: number;
   tokensOut: number;
   costoUsd: number;
+}
+
+/** Recorta `notas` (400) y `evidencia` (300) en vez de rechazar la salida entera: el contenido sirve, solo venía largo. */
+export function recortarSalida<T extends SalidaLlmDatos>(s: T): T {
+  const corta = (t: string | null, max: number): string | null => (t === null || t.length <= max ? t : `${t.slice(0, max - 1)}…`);
+  const item = <I extends { evidencia: string | null }>(i: I): I => (i.evidencia !== null && i.evidencia.length > MAX_EVIDENCIA ? { ...i, evidencia: corta(i.evidencia, MAX_EVIDENCIA) } : i);
+  return { ...s, notas: corta(s.notas, MAX_NOTAS), campos: s.campos.map(item), mercancias: s.mercancias.map((m) => ({ campos: m.campos.map(item) })) };
 }
 
 export type NivelModelo = 1 | 2 | 3;
@@ -117,7 +128,7 @@ export function construirSistema(): string {
     '- RFC en mayúsculas, sin espacios. Código postal de 5 dígitos. Fechas tal como aparecen.',
     '- Aduana: copia tal cual el régimen aduanero, el pedimento (solo importación), el tipo de materia y el RFC del importador (no el del remitente ni el del agente aduanal). Un rótulo sin valor es null; no inventes.',
     '- Una entrada de «mercancias» por cada renglón de mercancía distinto del documento (no repitas el mismo renglón; ignora filas de totales).',
-    '- Si el documento trae varios embarques, extrae solo el PRIMERO y dilo en «notas».',
+    '- Si el documento trae varios embarques, extrae solo el PRIMERO y dilo en «notas». «notas» va en 400 caracteres como máximo.',
     '',
     'CAMPOS DEL DOCUMENTO:',
     describirCampos(CAMPOS_DOC_LLM),
@@ -457,7 +468,8 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   let acumulado: Extraccion | null = null;
   for (let nivel: NivelModelo = 1; nivel <= tope; nivel = (nivel + 1) as NivelModelo) {
     ctx.signal?.throwIfAborted();
-    const s = await ctx.llm({ formato: c.formato, texto: c.texto, imagenes: c.imagenes, ejemplos, nivel, marcador, ...(c.hojasMismoEmbarque ? { hojasMismoEmbarque: c.hojasMismoEmbarque } : {}) }, ctx.signal);
+    const s0 = await ctx.llm({ formato: c.formato, texto: c.texto, imagenes: c.imagenes, ejemplos, nivel, marcador, ...(c.hojasMismoEmbarque ? { hojasMismoEmbarque: c.hojasMismoEmbarque } : {}) }, ctx.signal);
+    const s = recortarSalida(s0);
     r.nivel = nivel; r.modelo = s.modelo;
     r.tokensIn += s.tokensIn; r.tokensOut += s.tokensOut; r.costoUsd += s.costoUsd;
     if (s.notas) r.notasModelo.push(s.notas);

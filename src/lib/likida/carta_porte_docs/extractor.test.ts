@@ -247,6 +247,20 @@ describe('extraerDocumento', () => {
       expect(SalidaLlmSchema.safeParse({ ...base, mercancias: [{ campos: [{ clave: 'origen_cp', valor: 'x', confianza: 1, evidencia: null }] }] }).success).toBe(false);
       expect(SalidaLlmSchema.safeParse({ ...base, extra: 1 }).success).toBe(true); // zod quita lo extra; strictify lo prohíbe en el esquema JSON que ve el modelo
     });
+    it('T-A3-68 d: notas y evidencia largas NO invalidan la salida (el esquema las acepta)', () => {
+      expect(SalidaLlmSchema.safeParse({ ...base, notas: 'n'.repeat(900) }).success).toBe(true);
+      expect(SalidaLlmSchema.safeParse({ ...base, campos: [{ clave: 'origen_cp', valor: '44100', confianza: 0.9, evidencia: 'e'.repeat(700) }] }).success).toBe(true);
+    });
+    it('T-A3-68 d: el extractor RECORTA notas a 400 y evidencia a 300 en vez de perder la lectura', async () => {
+      const llm = llmFalso((e) => {
+        const s = lecturaBoreal(e.nivel);
+        return { ...s, notas: 'n'.repeat(900), campos: s.campos.map((c) => (c.clave === 'origen_cp' ? { ...c, evidencia: `CP origen: 66600 ${'x'.repeat(700)}` } : c)) };
+      });
+      const r = await extraerDocumento(await contenido(await pdfBoreal()), { llm, nivelMaximo: 1 });
+      expect(r.notasModelo[0]).toHaveLength(400);
+      expect(r.extraccion.campos.origen_cp.valor).toBe('66600');
+      expect((r.extraccion.campos.origen_cp.evidencia ?? '').length).toBeLessThanOrEqual(200);
+    });
     it('el esquema JSON que ve el modelo enumera EXACTAMENTE los campos del complemento', async () => {
       const { z } = await import('zod');
       const js = JSON.stringify(z.toJSONSchema(SalidaLlmSchema, { target: 'draft-7' }));
