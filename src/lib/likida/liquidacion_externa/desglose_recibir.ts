@@ -21,7 +21,9 @@ import { createHash } from 'node:crypto';
 import { logger } from '@/lib/logger';
 import { DatoInvalido } from '../errores';
 import { huellaContenido } from './esquema';
-import { aLiquidacionExterna, type DesgloseBitacora, type RenglonBitacora } from './desglose_contrato';
+import {
+  aLiquidacionExterna, claveDeBitacora, claveDeLiquidacion, UnidadesMezcladas, type DesgloseBitacora, type RenglonBitacora,
+} from './desglose_contrato';
 import {
   aplicarRenombres, colapsarRenglonViaje, guardasPreEnvio,
   type ConfigGuardasEnvio, type MotivoRetencion, type Renombre,
@@ -174,7 +176,19 @@ export async function recibirDesglose(
   tenantId: string, d: DesgloseBitacora, deps: DependenciasDesglose = dependenciasDesglosePorOmision, opciones: OpcionesDesglose = {},
 ): Promise<ResultadoDesglose> {
   // (1) contrato → liquidación vigente + huella
-  const conversion = aLiquidacionExterna(d, { sistemaOrigen: opciones.sistemaOrigen ?? SISTEMA_ORIGEN_DEFECTO });
+  let conversion: ReturnType<typeof aLiquidacionExterna>;
+  try {
+    conversion = aLiquidacionExterna(d, { sistemaOrigen: opciones.sistemaOrigen ?? SISTEMA_ORIGEN_DEFECTO });
+  } catch (e) {
+    if (e instanceof UnidadesMezcladas) {
+      // Visible en la pantalla de excepciones (T-A1-41); luego se relanza: el llamador responde 400 y nada se guarda.
+      const clave = typeof d.numeroLiquidacion === 'string' && d.numeroLiquidacion !== ''
+        ? claveDeLiquidacion(d.terminal, d.numeroLiquidacion) : claveDeBitacora(d.terminal, d.bitacora);
+      await deps.abrirExcepcion(tenantId, clave, 'unidades_mezcladas', { bitacora: d.bitacora, unidades: e.unidades }, deps.ahora());
+      logger.warn('liqcorreo.unidades_mezcladas', { clave });
+    }
+    throw e;
+  }
   const liq = conversion.liquidacion;
   const claveExterna = liq.claveExterna;
   const huella = huellaContenido(liq);
@@ -211,7 +225,9 @@ export async function recibirDesglose(
   const bytes = generarDesgloseXlsx({
     operador: operador.nombre,
     ...(d.unidad !== undefined ? { unidad: d.unidad } : {}),
-    bitacora: d.bitacora,
+    bitacora: d.bitacoras !== undefined ? liq.viajes.join(', ') : d.bitacora,
+    ...(d.numeroLiquidacion !== undefined ? { numeroLiquidacion: d.numeroLiquidacion } : {}),
+    ...(d.numeroPago !== undefined ? { numeroPago: d.numeroPago } : {}),
     desde: d.desde, hasta: d.hasta, dias: conversion.dias,
     percepciones: vista.percepciones, deducciones: vista.deducciones,
     neto: liq.total,
@@ -228,6 +244,9 @@ export async function recibirDesglose(
   await deps.insertarDesglose(tenantId, {
     liquidacionExternaId: creada.id, bitacora: d.bitacora, terminal: d.terminal ?? null, poliza: d.poliza,
     unidad: d.unidad ?? null, tipoOperador: d.tipoOperador ?? null, dias: conversion.dias,
+    ...(d.numeroLiquidacion !== undefined ? { numeroLiquidacion: d.numeroLiquidacion } : {}),
+    ...(d.numeroPago !== undefined ? { numeroPago: d.numeroPago } : {}),
+    ...(d.bitacoras !== undefined ? { bitacoras: liq.viajes } : {}),
     totalOrigen: conversion.totalOrigen === 'origen' ? 'tms' : 'calculado',
     retenidaMotivo: retenida ? decision.detalle.join(' ') : null,
   });
