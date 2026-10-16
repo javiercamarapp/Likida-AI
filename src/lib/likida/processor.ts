@@ -526,6 +526,7 @@ async function recordarPeticionDeFoto(
   try {
     const conv = await loadConversation(tenantId, telefono, viajeId);
     await saveConversation(
+      tenantId,
       conv.id,
       [...conv.turns, { role: 'assistant', content: texto }],
       viajeId,
@@ -4081,6 +4082,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // contador de intentos cobrara una pregunta que no salió.
         const turnos: ConvTurn[] = [...conv0.turns, { role: 'user', content: msg.text }];
         await saveConversation(
+          op.tenantId,
           conv0.id,
           entregado ? [...turnos, { role: 'assistant', content: c.mensaje }] : turnos,
           viajeId,
@@ -4542,6 +4544,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         const entregado = await say(aviso);
         const turnos: ConvTurn[] = [...conv.turns, { role: 'user', content: msg.text }];
         await saveConversation(
+          op.tenantId,
           conv.id,
           entregado ? [...turnos, { role: 'assistant', content: aviso }] : turnos,
           viajeId,
@@ -5201,6 +5204,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // Los turnos del OPERADOR sí se guardan siempre: ésos sí ocurrieron, y
     // perderlos borraría lo único que él sí mandó.
     await saveConversation(
+      op.tenantId,
       conv.id,
       entregado ? [...turns, { role: 'assistant', content: reply }] : turns,
       closed ? null : viajeId,

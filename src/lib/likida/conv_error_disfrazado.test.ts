@@ -41,7 +41,14 @@ vi.mock('@/lib/supabase/admin', () => ({
     from: () => ({
       select: () => nodoEncadenable(),
       insert: () => ({ select: () => ({ single: insertSingle }) }),
-      update: (...a: unknown[]) => { update(...a); return { eq: () => Promise.resolve(updateResult) }; },
+      // `saveConversation` ahora encadena DOS `.eq()` (id, tenant_id) antes de
+      // resolver — FASE 1 · SEG-ADMIN-DOS-CASOS, ancla también por tenant.
+      update: (...a: unknown[]) => {
+        update(...a);
+        type NodoUpdate = { eq: () => NodoUpdate; then: (r: (v: unknown) => unknown) => Promise<unknown> };
+        const nodo: NodoUpdate = { eq: () => nodo, then: (r) => Promise.resolve(updateResult).then(r) };
+        return nodo;
+      },
     }),
   }),
 }));
@@ -76,18 +83,18 @@ describe('loadConversation — un fallo de consulta ya no se lee como "no existe
 describe('saveConversation — el fallo ya no es completamente silencioso', () => {
   it('con error de Supabase, lo registra como ERROR (no se traga)', async () => {
     updateResult = { error: { message: 'convId vacío no matchea ninguna fila' } };
-    await saveConversation('', [], 'v1');
+    await saveConversation('t1', '', [], 'v1');
     expect(logger.error).toHaveBeenCalledWith('conv.no_se_guardo', expect.objectContaining({ convId: '' }));
   });
 
   it('NO lanza — la respuesta ya pudo haberse entregado, no debe disparar un segundo mensaje de error', async () => {
     updateResult = { error: { message: 'boom' } };
-    await expect(saveConversation('c1', [], 'v1')).resolves.toBeUndefined();
+    await expect(saveConversation('t1', 'c1', [], 'v1')).resolves.toBeUndefined();
   });
 
   it('control: sin error, no registra nada', async () => {
     updateResult = { error: null };
-    await saveConversation('c1', [], 'v1');
+    await saveConversation('t1', 'c1', [], 'v1');
     expect(logger.error).not.toHaveBeenCalled();
   });
 });
@@ -102,7 +109,7 @@ describe('saveConversation — fusiona en vez de pisar (auditoría 2, ronda 2)',
       data: { estado: { viajePendiente: { operadorId: 'op-9', en: '2026-08-14T17:00:00Z' } } },
       error: null,
     });
-    await saveConversation('c1', [{ role: 'user', content: 'ya llegué' }], 'v1', { intentosConfirmacion: 1 });
+    await saveConversation('t1', 'c1', [{ role: 'user', content: 'ya llegué' }], 'v1', { intentosConfirmacion: 1 });
 
     expect(update).toHaveBeenCalledTimes(1);
     const payload = update.mock.calls[0][0] as { estado: Record<string, unknown>; viaje_id: string | null };
@@ -118,7 +125,7 @@ describe('saveConversation — fusiona en vez de pisar (auditoría 2, ronda 2)',
       data: { estado: { asignacionPendiente: { viajeId: 'v7', accion: 'unidad', en: '2026-08-14T17:00:00Z' } } },
       error: null,
     });
-    await saveConversation('c1', [{ role: 'assistant', content: 'listo' }], null);
+    await saveConversation('t1', 'c1', [{ role: 'assistant', content: 'listo' }], null);
 
     const payload = update.mock.calls[0][0] as { estado: Record<string, unknown> };
     expect(payload.estado.asignacionPendiente).toEqual({ viajeId: 'v7', accion: 'unidad', en: '2026-08-14T17:00:00Z' });
@@ -130,7 +137,7 @@ describe('saveConversation — fusiona en vez de pisar (auditoría 2, ronda 2)',
       data: { estado: { intentosConfirmacion: 2, cierreSinComprobantes: true } },
       error: null,
     });
-    await saveConversation('c1', [], 'v1');   // sin marcas: default {}
+    await saveConversation('t1', 'c1', [], 'v1');   // sin marcas: default {}
 
     const payload = update.mock.calls[0][0] as { estado: Record<string, unknown> };
     expect(payload.estado.intentosConfirmacion).toBeUndefined();

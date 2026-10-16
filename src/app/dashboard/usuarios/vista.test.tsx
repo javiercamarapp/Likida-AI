@@ -27,7 +27,9 @@ const EX_CONTADOR: UsuarioRow = {
   activo: false, desactivadoEn: '2026-10-15T18:00:00Z',
 };
 
-const acciones = { invitar: accion, cambiarRol: accion, darDeBaja: accion, reactivar: accion, reenviarAcceso: accion };
+const acciones = {
+  invitar: accion, cambiarRol: accion, darDeBaja: accion, reactivar: accion, reenviarAcceso: accion, cerrarSesiones: accion,
+};
 
 function pintar(p: { usuarios: UsuarioRow[] | null; puedeInvitar: boolean; userId?: string }) {
   return renderToStaticMarkup(
@@ -102,11 +104,12 @@ describe('la lista dice la verdad de cada renglón', () => {
 // textual; ahora se fija lo contrario, y a quién se le ofrece.
 // ═══════════════════════════════════════════════════════════════════════════
 describe('gestión del equipo: baja, rol y reenvío', () => {
-  it('el dueño ve Dar de baja, Cambiar rol y Reenviar acceso en cada cuenta activa ajena', () => {
+  it('el dueño ve Dar de baja, Cambiar rol, Reenviar acceso y Cerrar sus sesiones en cada cuenta activa ajena', () => {
     const html = pintar({ usuarios: [CONTADOR_CON_TEL], puedeInvitar: true });
     expect(html).toContain('Dar de baja');
     expect(html).toContain('Cambiar rol');
     expect(html).toContain('Reenviar acceso');
+    expect(html).toContain('Cerrar sus sesiones');
     expect(html).not.toContain('todavía no existe');
   });
 
@@ -120,6 +123,7 @@ describe('gestión del equipo: baja, rol y reenvío', () => {
   it('la propia cuenta no se ofrece para baja ni cambio de rol', () => {
     const html = pintar({ usuarios: [CONTADOR_CON_TEL], puedeInvitar: true, userId: 'u-1' });
     expect(html).not.toContain('Dar de baja');
+    expect(html).not.toContain('Cerrar sus sesiones');
     expect(html).toContain('la administra otro dueño');
   });
 
@@ -129,6 +133,7 @@ describe('gestión del equipo: baja, rol y reenvío', () => {
     expect(html).toContain('Reactivar');
     expect(html).not.toContain('Dar de baja');
     expect(html).not.toContain('Reenviar acceso');
+    expect(html).not.toContain('Cerrar sus sesiones');
   });
 
   it('una fila de superadmin no se administra desde el panel del cliente', () => {

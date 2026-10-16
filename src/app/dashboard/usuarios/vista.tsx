@@ -4,7 +4,7 @@ import { fechaMx } from '@/lib/formato';
 import type { OpcionRol } from '@/lib/auth/invitar';
 import { nombreDeRol, detalleDeRol } from '@/lib/auth/roles';
 import {
-  FormaInvitar, FormaCambiarRol, FormaDarDeBaja, FormaReactivar, FormaReenviarAcceso, type AccionForma,
+  FormaInvitar, FormaCambiarRol, FormaDarDeBaja, FormaReactivar, FormaReenviarAcceso, FormaCerrarSesiones, type AccionForma,
 } from './forma';
 
 export interface UsuarioRow {
@@ -27,6 +27,8 @@ export interface AccionesEquipo {
   darDeBaja: AccionForma;
   reactivar: AccionForma;
   reenviarAcceso: AccionForma;
+  /** FASE 1 · SEG-SESIONES: cerrar TODAS sus sesiones sin darlo de baja. */
+  cerrarSesiones: AccionForma;
 }
 
 /**
@@ -201,6 +203,7 @@ function Renglon({ u, esYo, puedeInvitar, roles, acciones }: {
               <FormaCambiarRol accion={acciones.cambiarRol} id={u.id} rolActual={u.rol} roles={roles} />
               <div className="flex items-start gap-3 flex-wrap">
                 <FormaReenviarAcceso accion={acciones.reenviarAcceso} id={u.id} />
+                <FormaCerrarSesiones accion={acciones.cerrarSesiones} id={u.id} />
                 <FormaDarDeBaja accion={acciones.darDeBaja} id={u.id} nombre={u.nombre ?? u.email} />
               </div>
             </div>
