@@ -22,7 +22,7 @@
 
 import { campoDoc, campoMercancia, type CampoValor, type Extraccion } from './campos';
 import { limpiarTexto, normalizarNumero } from './normalizar';
-import { CODIGOS_SUMA, validarExtraccion, type OpcionesValidacion } from './validacion';
+import { CODIGOS_SUMA, problemaTaxId, validarExtraccion, type OpcionesValidacion } from './validacion';
 
 /** Un validador determinista rechazó la lectura de un campo. */
 export interface FalloValidador {
@@ -187,6 +187,8 @@ export function validadoresDeterministas(e: Extraccion, op: OpcionesCompuesta = 
       if (!esEscalable(a.campo, a.renglon)) continue;
       const c = a.renglon === null ? e.campos[a.campo] : e.mercancias[a.renglon]?.[a.campo];
       if (!presente(c) || c.origen === 'humano') continue;
+      // El país del extremo aún no está (lo pone el catálogo DESPUÉS): una cadena con forma de Tax ID extranjero no es un RFC malo. Sí lo son un RFC de 12-13 con dígito o fecha imposibles.
+      if (h.codigo === 'rfc_forma' && problemaTaxId(c.valor as string) === null) continue;
       const hermanos = afectados.filter((x) => x !== a).map((x) => (x.renglon === null ? e.campos[x.campo] : e.mercancias[x.renglon]?.[x.campo])?.valor);
       sumar({ campo: a.campo, renglon: a.renglon, codigo: h.codigo, mensaje: h.mensaje, valores: unicos([c.valor, ...hermanos]), relacionados: afectados.filter((x) => x !== a) });
     }
