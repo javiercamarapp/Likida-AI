@@ -35,6 +35,10 @@
 
 import { NextResponse } from 'next/server';
 import { clientIp, rateLimit } from '@/lib/ratelimit';
+import { getSessionTenant } from '@/lib/auth/session';
+import { llaveDelHeader, resolverLlave } from '@/lib/auth/llave-api';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
+import { apiPermitidaEnPerfil, type PerfilTenant } from '@/lib/auth/visibilidad';
 import { DIAS_AVISO } from '@/lib/likida/vigencias';
 import { CABECERA_IDEMPOTENCIA, LARGO_MIN_LLAVE, LARGO_MAX_LLAVE, ANIO_MIN_UNIDAD } from '../_escritura';
 // El tope de filas por POST en las altas por lote. Se importa del MISMO sitio
@@ -1729,6 +1733,42 @@ function documento(servidor: string) {
   };
 }
 
+/**
+ * De qué flota es la petición, SI trae credencial (llave Bearer o sesión). Sin
+ * credencial o con una inválida devuelve `null` y el documento sale completo,
+ * como siempre (es una constante pública). Nunca lanza.
+ */
+async function flotaDeLaPeticion(req: Request): Promise<string | null> {
+  try {
+    const bearer = llaveDelHeader(req.headers.get('authorization'));
+    if (bearer) {
+      const l = await resolverLlave(bearer);
+      return l.ok ? l.tenantId : null;
+    }
+    // La sesión directa, NO `resolverTenantApi`: éste aplica el perfil sobre la ruta
+    // pedida y `/v1/openapi` no está en la lista, así que negaría justo a quien hay
+    // que recortar y el documento saldría completo. Un superadmin (sin flota) no recorta.
+    const s = await getSessionTenant();
+    return s?.tenantId ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * El documento que ve una flota CON perfil: solo las rutas que `apiPermitidaEnPerfil`
+ * deja vivas (más `/v1/openapi`, que es este mismo documento). Lo que el perfil
+ * niega no se anuncia: un integrador no debe generar un cliente para rutas que
+ * van a contestarle 403. Sin perfil no se llama y el documento queda idéntico.
+ */
+function recortarParaPerfil<T extends { paths: Record<string, unknown> }>(doc: T, perfil: PerfilTenant): T {
+  const paths: Record<string, unknown> = {};
+  for (const [ruta, def] of Object.entries(doc.paths)) {
+    if (ruta === '/v1/openapi' || apiPermitidaEnPerfil(perfil, `/api${ruta}`)) paths[ruta] = def;
+  }
+  return { ...doc, paths };
+}
+
 export async function GET(req: Request) {
   // Acotado por IP aunque sea público: un documento estático que cualquiera
   // puede pedir sin límite es un amplificador barato, y el costo de servirlo lo
@@ -1742,6 +1782,17 @@ export async function GET(req: Request) {
   // dominio a mano: un `servers` equivocado manda el cliente generado a un host
   // que no existe, y ese fallo aparece hasta la primera llamada del integrador.
   const base = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
+
+  // EL PERFIL DE LA FLOTA (0770): quien llega con credencial de una flota con
+  // perfil recibe solo lo permitido, y esa respuesta NO se cachea en el CDN
+  // (depende de la credencial). Anónimo o sin perfil: el documento de siempre.
+  const flota = await flotaDeLaPeticion(req);
+  const perfil = flota ? await perfilDeTenant(flota) : null;
+  if (perfil) {
+    return NextResponse.json(recortarParaPerfil(documento(base), perfil), {
+      headers: { 'Cache-Control': 'private, no-store', Vary: 'Authorization, Cookie' },
+    });
+  }
 
   return NextResponse.json(documento(base), {
     headers: {

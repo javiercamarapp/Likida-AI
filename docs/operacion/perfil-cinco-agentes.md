@@ -75,13 +75,22 @@ atoradas podrían tapar a una flota libre (hoy no hay filas así).
 | --- | --- |
 | URL directa de una pantalla | `resolverTenantEfectivo` rebota a `/dashboard` (a `/dashboard/proximamente/<modulo>` si es de A4/A5) |
 | Acciones de servidor (`'use server'`) | pasan por `resolverTenantEfectivo` o `requireSessionTenant` con la ruta de su pantalla; una prueba escanea cada archivo |
-| Menú, ⌘K y Resumen | `SidebarNav` recibe el perfil; el Resumen es `inicio-cinco-agentes.tsx` (sin chat, planes ni precios) |
+| Menú, ⌘K y Resumen | `SidebarNav` recibe el perfil; el Resumen es `src/app/dashboard/inicio-cinco-agentes.tsx` (sin chat, planes ni precios) |
 | Notificaciones | filtradas con el mismo perfil |
 | Chat «Pregunta a tus datos» (y su historial, archivo, ingesta y chat de onboarding) | 403 en cada endpoint de `/api/dashboard/*` fuera de la lista |
 | MCP (`/api/mcp`, autorización OAuth y despacho) | 403: una flota con perfil no atiende MCP |
 | API `/v1` (llave y sesión) y exports | 403 por recurso fuera de la lista |
 | Crons de stand-by y de A4/A5 | saltan las flotas con perfil (`tenantsConPerfilASaltar`); `escalar` (mixto) lo hace por sección |
 | WhatsApp del chofer | `ocr` y `cuadre` apagados por código bajo el perfil; la recepción y los hitos del conductor siguen |
+
+Inventario completo, generado del sistema de archivos y no a mano:
+
+```bash
+node scripts/perfil/matriz-superficies.mjs                              # tabla markdown: permitido | negado | NO CLASIFICADO
+node scripts/perfil/matriz-superficies.mjs | grep -c "NO CLASIFICADO"   # debe dar 0
+```
+
+La prueba `src/lib/auth/perfil_matriz.test.ts` falla si queda algo `NO CLASIFICADO`.
 
 ## Aplicar y revertir (lo ejecuta quien opera la plataforma)
 
@@ -102,6 +111,14 @@ DATABASE_URL="postgres://..." scripts/perfil/revertir-cinco-agentes.sh <UUID-de-
 Ambos scripts validan que el argumento sea un UUID, son idempotentes y no tocan ninguna otra flota. El cambio se
 nota en la app en menos de un minuto (caché de 30 s).
 
+Seguridad de los scripts de cambio (`aplicar-` y `revertir-`):
+
+- Contra un host que no sea local (`127.0.0.1`, `localhost`, `::1`) se **niegan**, salvo con `--produccion` y una
+  confirmación interactiva (escribir el UUID de la flota).
+- Antes de cambiar nada escriben el estado previo de la flota en `~/likida-respaldos/perfil/<fecha>-<tenant>.json`
+  e imprimen al final el comando exacto de reversa. No imprimen la URL de la base (solo el host).
+- `--env-file <ruta>` lee `DATABASE_URL` de un archivo sin ejecutarlo ni imprimirlo.
+
 ## Cómo ampliar el perfil
 
 1. Agrega la ruta a `RUTAS_PERFIL_CINCO_AGENTES` (y quítala de `RUTAS_STAND_BY_PERFIL_CINCO_AGENTES`).
@@ -109,7 +126,61 @@ nota en la app en menos de un minuto (caché de 30 s).
    `src/app/dashboard/perfil_acciones.test.ts`.
 3. Para una API o un cron, agrega el recurso a `API_PERFIL_CINCO_AGENTES` / `CRONS_PERFIL_CINCO_AGENTES` y
    actualiza `src/app/api/perfil_inventario.test.ts`.
-4. Corre `src/lib/auth/perfil_*.test.ts`, `src/app/dashboard/perfil_*.test.ts*` y `src/app/api/perfil_*.test.ts`.
+4. Corre la matriz (`node scripts/perfil/matriz-superficies.mjs | grep -c "NO CLASIFICADO"` debe dar 0) tras cada
+   integración de un frente que añada rutas, recursos `/v1` o crons.
+5. Corre `src/lib/auth/perfil_*.test.ts`, `src/app/dashboard/perfil_*.test.ts*` y `src/app/api/perfil_*.test.ts`.
+
+## Si la lectura del perfil falla (decisión de T-PER-08)
+
+`perfilDeTenant` (`src/lib/auth/perfil_tenant.ts`) tiene cuatro casos, fijados por
+`src/lib/auth/perfil_sin_perfil.test.ts`:
+
+1. Flota **sin fila** y lectura correcta: `null`, todas las puertas permiten (comportamiento de siempre).
+2. **Tabla ausente** (códigos `42P01` / `PGRST205`, migración `0770` sin aplicar): se trata como «sin perfil».
+3. **Error transitorio con valor previo**: se usa el último valor conocido de esa flota.
+4. **Error transitorio sin valor previo** (por ejemplo, un arranque en frío durante un bache de la base): se asume el
+   perfil **restrictivo** (`PERFIL_SI_NO_SE_PUDO_LEER`). El error no se cachea; el siguiente request reintenta.
+
+Consecuencia del caso 4: durante unos segundos, **cualquier** flota (también las que no tienen perfil) puede ver la
+aplicación recortada. Nunca se enseña de más. Está **pendiente de decisión de quien opera la plataforma**
+(opciones: dejarlo así, fallar abierto, o guardar «esta flota tuvo perfil alguna vez»); mientras no se decida,
+rige la opción de dejarlo así, que es la recomendada para la fase actual. Cambiar de opción es ajustar la rama
+`catch` de `perfilDeTenant` y la sección «(4)» de `src/lib/auth/perfil_sin_perfil.test.ts`.
+
+## Rollback (runbook)
+
+Cuándo: el perfil recortó algo que la flota necesita, o hay que devolverla al comportamiento de siempre.
+
+1. **Ver el estado actual** (solo lectura):
+   ```bash
+   scripts/perfil/verificar-cinco-agentes.sh --env-file <ruta-del-env> --produccion <UUID-de-la-flota>
+   ```
+2. **Revertir** (borra la fila de `tenant_perfil` y los interruptores `ocr` y `cuadre` que puso el perfil; si alguien
+   apagó uno de ellos por otra razón, esa palanca no se toca):
+   ```bash
+   scripts/perfil/revertir-cinco-agentes.sh --env-file <ruta-del-env> --produccion <UUID-de-la-flota>
+   ```
+   Pide escribir el UUID para confirmar y deja el respaldo en `~/likida-respaldos/perfil/`.
+3. **Comprobar** que quedó sin perfil (sale con código 0 si coincide):
+   ```bash
+   scripts/perfil/verificar-cinco-agentes.sh --esperado sin --env-file <ruta-del-env> --produccion <UUID-de-la-flota>
+   ```
+   Opcional: `--base-url <URL> --cookie "nombre=valor"` prueba además rutas contra la app con la sesión de un usuario
+   de la flota.
+4. **Esperar menos de un minuto** (caché de 30 s) y confirmar a mano que el menú y el Resumen vuelven a ser los de siempre.
+5. **Re-aplicar** si fue una falsa alarma: el script de aplicar imprime su propio comando; es idempotente.
+
+Revertir no borra datos de la flota. Si lo que falla es el **código** y no el perfil, el perfil no se toca: se
+revierte el despliegue como cualquier otro; la migración `0770` es aditiva y puede quedarse aplicada (sin fila no
+hace nada).
+
+## Qué NO hace
+
+- **No aísla datos.** La flota con perfil sigue en la misma base y en la misma aplicación que las demás; el perfil
+  solo oculta e inhabilita superficies. Separar la base de una flota (instancia aparte) es una decisión de quien opera
+  la plataforma, que se toma cuando entren datos de nómina y GPS reales.
+- No borra código ni datos de los módulos en stand-by.
+- No da permisos: se aplica encima del rol.
 
 ## Alcance y límites conocidos
 
