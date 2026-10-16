@@ -2,6 +2,7 @@ import { estaResuelto, TIPOS_HITO, indiceHito, type HitoFila, type TipoHito } fr
 import { dentroDeVentana, type ConfigConductor } from './config';
 import { hitoActivo } from './maquina';
 import { aplicarPerfil, estaFueraDePerfil } from './perfil';
+import { aplicarCiclo, estaFueraDeCiclo, type CicloEfectivo } from './ciclo_servicio';
 import type { ViajeContexto } from './repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -34,7 +35,9 @@ export type MotivoNada =
   | 'viaje_no_aplica' | 'flota_apagada' | 'completo' | 'sin_ancla' | 'no_toca'
   | 'espera' | 'fuera_de_ventana' | 'tope_diario' | 'atendido' | 'ya_escalado'
   /** T-A5-05: viaje de importación, hito de llegada a carga y el archivo no trajo cita: no hay de dónde colgar el aviso. */
-  | 'sin_cita_importada';
+  | 'sin_cita_importada'
+  /** T-A5-36: la compuerta «unidad detenida» no deja escribirle al chofer ahora (en marcha, sin GPS reciente, muestras ralas…). No es un intento. */
+  | 'compuerta_movimiento';
 
 export type AccionPlan =
   | { tipo: 'chofer'; hito: HitoFila; clase: 'solicitud' | 'recordatorio'; nivel: number; minutosPendiente: number; ancla: Date }
@@ -50,6 +53,8 @@ export interface EntradaPlan {
   enviadosHoyChofer: number;
   /** Los avisos ya reclamados para los hitos de este viaje (cualquier ciclo). */
   avisos: readonly (AvisoReclamado & { hitoId: string })[];
+  /** T-A5-42: el ciclo del servicio del viaje (impo/expo/nacional). Sin él, o el ciclo actual: los cinco hitos de siempre. */
+  ciclo?: CicloEfectivo;
 }
 
 const ms = (iso: string | null): number | null => (iso ? new Date(iso).getTime() : null);
@@ -99,7 +104,7 @@ export function anclaDe(
       // Perfil `esenciales`: la llegada a carga no se sigue, así que no hay hora previa; la cita de carga (o su ETA) ancla la
       // espera de carga. Sin cita, sigue el ancla de siempre (la aceptación más el plazo por omisión).
       const llegada = hitos.find((x) => x.tipo === 'llegada_carga');
-      if (!previa && llegada && estaFueraDePerfil(llegada)) {
+      if (!previa && llegada && (estaFueraDePerfil(llegada) || estaFueraDeCiclo(llegada))) {
         const cita = ms(viaje.citaOrigenEn) ?? ms(viaje.etaOrigenEn);
         if (cita !== null) ancla = cita + config.esperaCargaMin * min;
         else if (importado) return null; // el motor no inventa anclas para un viaje importado sin cita
@@ -152,7 +157,8 @@ export function textoTiempo(minutos: number): string {
 export function planificar(e: EntradaPlan): AccionPlan {
   const { viaje, config, ahora } = e;
   // T-A5-08: con el perfil `esenciales` lo que el perfil no sigue se lee como omitido (la base puede traerlo aún `esperado`).
-  const hitos = aplicarPerfil(e.hitos, config.perfilSeguimiento);
+  // T-A5-42: lo mismo con el ciclo del servicio del viaje (importación no pide carga; exportación no pide descarga).
+  const hitos = aplicarCiclo(aplicarPerfil(e.hitos, config.perfilSeguimiento), e.ciclo);
   if (!config.activo) return { tipo: 'nada', motivo: 'flota_apagada' };
   if (viaje.estatus !== 'abierto') return { tipo: 'nada', motivo: 'viaje_no_aplica' };
 

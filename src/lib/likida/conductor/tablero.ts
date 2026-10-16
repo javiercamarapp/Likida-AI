@@ -1,13 +1,16 @@
 import type { ConfigConductor } from './config';
-import type { EstadoTransito } from './estados_transito';
+import { esLocalAbierto, type EstadoTransito } from './estados_transito';
 import { calcularEstancias, excedeUmbral, type Estancia } from './estadias_anden';
-import { hitoActivo } from './maquina';
+import { estadoReporte, hitoActivo, reubicacionesDespuesDelPrimero, type Reubicacion } from './maquina';
+import { textoRampa } from './mensajes';
 import { haversineM } from './geo';
+import { hoyDeLaFlota, rutasDelViaje } from './rutas';
 import { aplicarPerfil } from './perfil';
 import { evaluarSalidaTms, textoSalidaTms } from './salida_tms';
 import { anclaDe, textoTiempo } from './planificador';
 import type { AccionOficinaFila, DatosTablero, IndicadoresCrudos, ViajeTablero, VeredictoFila } from './repo_validacion';
 import type { EpisodioTablero } from './repo';
+import type { ReubicacionesCliente } from './reubicaciones';
 import { ETIQUETA, estaResuelto, TIPOS_HITO, type HitoFila, type TipoHito } from './tipos';
 import { llegadaPorConfirmar, llegadaSinSitio, textoVeredicto, type ResultadoValidacion, type Veredicto } from './validacion';
 
@@ -58,10 +61,22 @@ export interface HitoVista {
   tocaDesde: string | null;
   /** Se capturó/validó/atendió desde la oficina: el motivo y quién. */
   accionesOficina: Array<{ accion: AccionOficinaFila['accion']; email: string; motivo: string; cuando: string }>;
+  /** T-A5-43: «con quién te reportaste» y rampa vigentes de la llegada, con la lista de reubicaciones. Ausente si nadie la compuso (`conReporteDeLlegada`). */
+  reporte?: ReporteLlegadaVista;
+}
+
+/** T-A5-43: lo que pinta el tablero de la lista de reubicaciones de una llegada. */
+export interface ReporteLlegadaVista {
+  contacto: string | null;
+  rampa: string | null;
+  /** Veces que cambió de rampa o contacto después del primer registro (el «como canica» del cliente). */
+  reubicaciones: number;
+  /** El historial, del primero al último, para abrirlo como evidencia: «HH:MM · contacto · rampa». */
+  historial: Array<{ en: string; contacto: string | null; rampa: string | null }>;
 }
 
 export type TipoExcepcion =
-  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'llegada_sin_confirmar' | 'llegada_sin_sitio' | 'estadia_excedida' | 'horas_incoherentes' | 'sin_a_quien_escalar' | 'pendiente_cruce_largo' | 'salida_tms_discrepante';
+  | 'escalado_sin_atender' | 'sin_reporte' | 'atrasado' | 'sin_coincidencia' | 'llegada_sin_confirmar' | 'llegada_sin_sitio' | 'estadia_excedida' | 'horas_incoherentes' | 'sin_a_quien_escalar' | 'pendiente_cruce_largo' | 'salida_tms_discrepante' | 'patio_entrega_distinto' | 'local_abierto_sin_ccp' | 'sin_ruta_autorizada';
 
 export interface Excepcion {
   tipo: TipoExcepcion;
@@ -175,6 +190,11 @@ export interface Tablero {
   hayMas: boolean;
   /** T-A5-26: `true` solo si se LEYERON las posiciones y no hay ninguna reciente para los viajes listados. Si no se leyeron, `false` (no se afirma). */
   sinGps: boolean;
+  /**
+   * T-A5-63: reubicaciones por cliente (cuántas veces y cuántos minutos lo mandaron a otra rampa) y el CSV para disputar «no se presentó».
+   * Ausente si la perilla del reporte de llegada está apagada o la bitácora no se pudo leer: no se afirma lo que no se leyó.
+   */
+  reubicaciones?: { porCliente: ReubicacionesCliente[]; csv: string };
 }
 
 const MS_MIN = 60_000;
@@ -209,7 +229,8 @@ export function transitoDeFila(
 ): TransitoFila {
   const crudo = (d.textoOrigen ?? '').replace(/\s+/g, ' ').trim().slice(0, TOPE_TEXTO_TRANSITO);
   let etiqueta: string;
-  if (d.estado === 'en_patio') {
+  if (esLocalAbierto(d)) etiqueta = 'Local abierto';
+  else if (d.estado === 'en_patio') {
     // eslint-disable-next-line security/detect-unsafe-regex -- patrón anclado de formato fijo, sin cuantificadores anidados ni retroceso exponencial; la entrada es un valor corto de una celda o campo
     const resto = /^(?:en\s+)?patio\s+(.+)$/i.exec(crudo)?.[1];
     etiqueta = resto ? `En patio ${resto}` : 'En patio';
@@ -400,6 +421,30 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
         texto: `${transito.texto} (umbral configurado: ${textoTiempo(umbralH * 60)}). Es solo lectura: el agente no avisa por esto.`,
       });
     }
+    // T-A5-57: viaje local abierto sin complemento ligado. Solo se muestra: el agente no lo cierra, no emite la Carta Porte
+    // ni avisa a nadie (cerrarlo es decisión de los ejecutivos). Sin lectura de complementos no se afirma «sin Carta Porte».
+    if (transito && dt && esLocalAbierto(dt) && datos.ccpLigado && !datos.ccpLigado.has(viaje.id)) {
+      excepciones.push({
+        ...base, tipo: 'local_abierto_sin_ccp', hitoId: null, hitoTipo: null, gravedad: 1, desde: dt.actualizadoEn ?? null,
+        texto: `${transito.texto}: sin Carta Porte (viaje local abierto). Sigue abierto para no perder el GPS; el agente no lo cierra ni emite el complemento.`,
+      });
+    }
+    // T-A5-49 (R04): el chofer ya recibió «consulta con tu supervisor» en vez del link de ruta. Solo se muestra: no inventa ruta ni avisa a nadie.
+    // Con la base de rutas vacía (la flota aún no las carga) o sin poder leerla no se afirma nada. Importación y exportación se distinguen
+    // cuando `viaje` traiga el servicio; hoy solo el origen se reclama (el destino lo exige solo la exportación).
+    if (datos.rutasAutorizadas && datos.rutasAutorizadas.length > 0) {
+      const r = rutasDelViaje(datos.rutasAutorizadas, {
+        origen: viaje.origen, destino: viaje.destino,
+        sitioOrigenCodigo: (viaje.origenSitioId && datos.sitioCodigos?.get(viaje.origenSitioId)) || null,
+        sitioDestinoCodigo: (viaje.destinoSitioId && datos.sitioCodigos?.get(viaje.destinoSitioId)) || null,
+      }, hoyDeLaFlota(ahora, config.zonaHoraria));
+      if (r.faltan.length > 0) {
+        excepciones.push({
+          ...base, tipo: 'sin_ruta_autorizada', hitoId: null, hitoTipo: null, gravedad: 2, desde: viaje.aceptadoEn,
+          texto: 'No hay ruta autorizada vigente para este viaje: el chofer recibió «consulta con tu supervisor» en lugar del link. Cárgala en Configuración, Rutas autorizadas.',
+        });
+      }
+    }
     for (const e of estancias) {
       if (excedeUmbral(e, config)) {
         excepciones.push({
@@ -425,6 +470,16 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
     excepciones.push({
       viajeId: viaje.id, folio: viaje.folio, chofer: null, hitoId: null, hitoTipo: null,
       tipo: 'sin_a_quien_escalar', gravedad: f.nivel === 1 ? 3 : 2, desde: null, texto: f.texto,
+    });
+  }
+
+  // ── T-A5-44: el chofer declaró un patio de entrega distinto del esperado y el supervisor aún no lo atiende ──
+  for (const f of datos.patiosDistintos ?? []) {
+    const viaje = datos.viajes.find((v) => v.id === f.viajeId);
+    if (!viaje) continue;
+    excepciones.push({
+      viajeId: viaje.id, folio: viaje.folio, chofer: null, hitoId: f.hitoId, hitoTipo: 'llegada_descarga',
+      tipo: 'patio_entrega_distinto', gravedad: 3, desde: f.desde, texto: f.texto,
     });
   }
 
@@ -518,4 +573,34 @@ export function episodiosVista(eps: readonly EpisodioTablero[]): EpisodioVista[]
       abiertoEn: e.abiertoEn, abierto, estado, pasos, urgente: abierto && e.nivelEnviado === 3,
     };
   });
+}
+
+// ── T-A5-43: contacto y rampa de la llegada en el tablero (lectura pura; no registra nada) ──────────────────────────────
+
+/** Lo vigente del reporte de la llegada. `contactoHito` es el del hito (`contacto_nombre`); la lista, si lo trae, manda. */
+export function reporteLlegadaVista(contactoHito: string | null, lista: readonly Reubicacion[]): ReporteLlegadaVista | null {
+  const vigente = estadoReporte(lista);
+  if (!vigente && !contactoHito) return null;
+  return {
+    contacto: vigente?.contacto ?? contactoHito,
+    rampa: textoRampa(vigente),
+    reubicaciones: reubicacionesDespuesDelPrimero(lista),
+    historial: lista.map((r) => ({ en: r.en, contacto: r.contacto, rampa: textoRampa(r) })),
+  };
+}
+
+/**
+ * Compone el reporte de llegada sobre las filas ya armadas: `reubicaciones` es hitoId → su lista. Una fila sin lista queda tal cual
+ * (no se inventa rampa); solo se toca el hito que tiene lista. Devuelve filas nuevas, no muta las de `armarTablero`.
+ */
+export function conReporteDeLlegada(filas: readonly FilaTablero[], reubicaciones: ReadonlyMap<string, readonly Reubicacion[]>): FilaTablero[] {
+  return filas.map((f) => ({
+    ...f,
+    hitos: f.hitos.map((h) => {
+      const lista = reubicaciones.get(h.id);
+      if (!lista || lista.length === 0) return h;
+      const reporte = reporteLlegadaVista(h.contacto, lista);
+      return reporte ? { ...h, reporte } : h;
+    }),
+  }));
 }

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { correrConductor, puertosReales } from '@/lib/likida/conductor/ejecutor';
 import { correrAlertasEstadia, type ResultadoAlertasEstadia } from '@/lib/likida/conductor/alertas_estadia';
+import { correrReporteLlegada, puertosReporteReales, type ResultadoReporteLlegada } from '@/lib/likida/conductor/reporte_llegada';
+import { correrDeteccionParada, puertosDetencionReales, type ResultadoDeteccionParada } from '@/lib/likida/conductor/deteccion_parada';
 import { correrAlertasLlegadaSinConfirmar, puertosAlertaLlegadaReales, type ResultadoAlertasLlegada } from '@/lib/likida/conductor/alertas_llegada';
 import { barridoValidacion, depsValidacionReales, type ResultadoBarrido } from '@/lib/likida/conductor/validar_hito';
 import { leerCandidatosValidacion, leerCandidatosSitioDerivado, leerCatalogoSitios, leerEquivalenciasSitio } from '@/lib/likida/conductor/trabajo';
@@ -101,6 +103,8 @@ export async function GET(req: Request) {
     const extras: string[] = [];
     let alertas: ResultadoAlertasEstadia | undefined;
     let llegadas: ResultadoAlertasLlegada | undefined;
+    let reporte: ResultadoReporteLlegada | undefined;
+    let detencion: ResultadoDeteccionParada | undefined;
     let validacion: ResultadoBarrido | undefined;
     let acercamiento: ResultadoAcercamiento | undefined;
     let sitios: ResultadoSitioDerivado | undefined;
@@ -129,6 +133,22 @@ export async function GET(req: Request) {
     } catch (e) {
       extras.push(`alertas de estadía: ${e instanceof Error ? e.message : String(e)}`);
       logger.error('cron.conductor_hitos.alertas_estadia_fallo', { error: e instanceof Error ? e.message : String(e) });
+    }
+    // T-A5-43: «¿con quién te reportaste?» y la rampa (apagado por flota por omisión; pasa por la compuerta de unidad detenida). Aislado como los demás.
+    try {
+      reporte = await correrReporteLlegada(sinFlotasEnViajes(puertosReporteReales(), saltar), { venceEn });
+      extras.push(...reporte.fallos);
+    } catch (e) {
+      extras.push(`reporte de llegada: ${e instanceof Error ? e.message : String(e)}`);
+      logger.error('cron.conductor_hitos.reporte_llegada_fallo', { error: e instanceof Error ? e.message : String(e) });
+    }
+    // T-A5-39: «detención sin aviso» — una pregunta al chofer por episodio (apagado por flota por omisión; con la unidad detenida y por la compuerta). Aislado como los demás.
+    try {
+      detencion = await correrDeteccionParada(sinFlotasEnViajes(puertosDetencionReales(), saltar), { venceEn });
+      extras.push(...detencion.fallos);
+    } catch (e) {
+      extras.push(`detención sin aviso: ${e instanceof Error ? e.message : String(e)}`);
+      logger.error('cron.conductor_hitos.deteccion_parada_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
     try {
       validacion = await barridoValidacion({ candidatos: sinFlotasEnValidacion(leerCandidatosValidacion, saltar), configDe: leerConfigConductor, deps: depsValidacionReales }, new Date(), venceEn);
@@ -206,7 +226,7 @@ export async function GET(req: Request) {
       });
     }
     return NextResponse.json({
-      corrio: true, ...r, fallos: [...r.fallos, ...extras].slice(0, 20), alertasEstadia: alertas, llegadasSinConfirmar: llegadas, validacion, acercamiento, cicloGps: ciclo, sitiosDerivados: sitios, senalVida, observabilidad, alarmas,
+      corrio: true, ...r, fallos: [...r.fallos, ...extras].slice(0, 20), alertasEstadia: alertas, reporteLlegada: reporte, deteccionParada: detencion, llegadasSinConfirmar: llegadas, validacion, acercamiento, cicloGps: ciclo, sitiosDerivados: sitios, senalVida, observabilidad, alarmas,
       ...(mantenimiento ? { mantenimiento } : {}),
     });
   } catch (e) {

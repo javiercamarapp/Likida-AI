@@ -2,25 +2,42 @@ import { logger } from '@/lib/logger';
 import { moduloEnStandBy } from '@/lib/auth/perfil_tenant';
 import { enviarSolicitudUbicacion } from '@/lib/meta/client';
 import type { ConfigConductor } from './config';
-import { interpretarBoton, interpretarTexto, pareceHablarDeHito, type Intencion, type Interpretacion } from './interprete';
+import { interpretarBoton, interpretarBotonParada, interpretarParadaTexto, interpretarTexto, leerBotonRampa, leerTextoResultadoDescarga, pareceHablarDeHito, type BotonRampa, type InterpretacionParada, type Intencion, type Interpretacion } from './interprete';
 import { interpretarConLlm } from './llm';
+import { guardiaDatosSeguridad } from './guardia_seguridad';
 import { decidir, hitoActivo, type Decision } from './maquina';
 import { mensajeParaChofer, type ContextoMensaje, type Salida } from './mensajes';
 import {
-  adjuntarUbicacion, asegurarHitos, cargarHitos, cerrarEpisodioPorJefe, guardarContacto, leerConfigConductor, marcarEscalacionAtendida, marcarSinContacto,
+  abrirParada, adjuntarUbicacion, asegurarHitos, cargarHitos, cerrarParada, leerParadaAbierta, cerrarEpisodioPorJefe, guardarContacto, leerConfigConductor, marcarEscalacionAtendida, marcarSinContacto,
   posponerHito, registrarEvento, registrarHito, responderEpisodioSenalVida, retirarHitos, sincronizarLegado, viajeDelOperador,
+  leerCicloServicio, leerEvidenciasSelloViaje,
   type ResultadoEscritura, type ViajeContexto,
 } from './repo';
+import { cicloDelServicio, hitoEnCiclo, type CicloEfectivo, type CicloServicioFila } from './ciclo_servicio';
 import { tenantDelViaje } from './trabajo';
-import { leerBotonConductor, PREFIJO_BOTON, type HitoFila, type FuenteHito, type RespuestaSenalVida, type TipoEvidencia, type TipoHito } from './tipos';
+import { puertosGastosReales, responderGastos, type PuertosGastos, type RespuestaGastos } from './gastos_etc';
+import { estaResuelto, leerBotonConductor, PREFIJO_BOTON, type HitoFila, type FuenteHito, type RespuestaSenalVida, type TipoEvidencia, type TipoHito } from './tipos';
 import { silencioDeRespuesta } from './senal_vida';
 import { escalarPorProblema, puertosReales } from './ejecutor';
 import { avisarOficinaDeHito } from './avisos_oficina';
 import { puedeAcusar } from './escalamiento';
 import { debeSellarTrasValidar, depsValidacionReales, validarHitoContraSitio, type EntradaValidarHito, type SalidaValidar } from './validar_hito';
 import { guardarEvidencia, hitoLlegadaReciente } from './repo_validacion';
-import { ETIQUETA_EVIDENCIA, hitoParaEvidencia, mensajeEvidencia, tipoEvidenciaDeCaption } from './evidencia';
+import { decidirSelloInicio, ETIQUETA_EVIDENCIA, hitoParaEvidencia, mensajeEvidencia, mensajeSelloInicio, tipoEvidenciaDeCaption, type EvidenciaSelloFila } from './evidencia';
 import { textoVeredicto, veredictoSellaLlegada } from './validacion';
+import { puertosEstadiaReales, responderEstadiaDescarga, type PuertosEstadia } from './alertas_estadia';
+import type { OpcionResultadoDescarga, RespuestaEstadia } from './mensajes';
+import { preguntarResultado, puertosResultadoReales, responderResultadoDescarga, type PuertosResultado } from './resultado_descarga';
+import {
+  puertosReporteAtenderReales, responderReporteBoton, responderReporteTexto, type PuertosReporteAtender,
+} from './reporte_llegada';
+import { puertosAsignacionReales, responderAsignacion, type OpcionAsignacion, type PuertosAsignacion } from './asignacion';
+import {
+  leerBotonDetencion, puertosDetencionAtenderReales, responderDetencion, responderPaginaMotivos, responderParada,
+  TEXTO_DETENCION_NO_VIGENTE, type BotonDetencion, type PuertosDetencionAtender,
+} from './deteccion_parada';
+import type { DepsParada } from './paradas';
+import { leerTextoPatio, marcarPatioAtendido, preguntarPatio, puertosPatioReales, responderPatio, type PuertosPatio } from './patio_entrega';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA ENTRADA DEL CONDUCTOR EN EL PROCESSOR — del mensaje al hito registrado.
@@ -63,6 +80,26 @@ export interface DepsAtender {
   guardarEvidencia: typeof guardarEvidencia;
   /** P2 (0636): el chofer contestó un botón del «¿sigues bien?». Opcional: las pruebas que no lo ejercen no lo declaran. */
   responderSenalVida?(tenantId: string, viajeId: string, respuesta: RespuestaSenalVida, ahora: Date, config?: ConfigConductor): Promise<'cerrado' | 'sin_episodio' | 'fallo'>;
+  /** T-A5-44: los puertos del patio de entrega (catálogo, bitácora, aviso al supervisor). Opcional: sin él se usan los reales, y solo si la flota lo encendió. */
+  patio?: PuertosPatio;
+  /** T-A5-45: los puertos del aviso al supervisor por la estadía de descarga. Opcional: sin él, los reales. */
+  estadia?: PuertosEstadia;
+  /** T-A5-43: la bitácora del «con quién te reportaste» y la rampa (leer lo preguntado, guardar lo respondido). Opcional: sin él, la real. */
+  reporte?: PuertosReporteAtender;
+  /** T-A5-46: los puertos del resultado de la descarga y la caja cargada (bitácora, claim, aviso al supervisor). Opcional: sin él, los reales. */
+  resultado?: PuertosResultado;
+  /** T-A5-47: los puertos de la asignación con botones (aceptar, instrucciones, aviso del rechazo). Opcional: sin él, los reales. */
+  asignacion?: PuertosAsignacion;
+  /** T-A5-51: la pregunta de gastos/ETC. Opcional: las pruebas que no la ejercen no lo declaran. */
+  gastos?: PuertosGastos;
+  /** T-A5-39: la bitácora de la detención sin aviso y el aviso al supervisor por «Necesito apoyo». Opcional: sin él, los reales. */
+  detencion?: PuertosDetencionAtender;
+  /** T-A5-38/39: la parada que inicia el chofer (leer, abrir, cerrar). Opcional: sin él, la real. */
+  parada?: DepsParada;
+  /** T-A5-68: los ciclos por servicio de la flota (0807), para que «ya llegué»/«ya salí» sigan el ciclo impo/expo/nacional. Opcional: sin él, el ciclo actual. */
+  ciclosDe?(tenantId: string): Promise<CicloServicioFila[]>;
+  /** T-A5-68: las fotos de sello recientes del viaje (T-A5-40), para el paso previo del «inicio de viaje». Opcional: sin él, las reales. */
+  evidenciasSello?(tenantId: string, viajeId: string, ahora: Date): Promise<EvidenciaSelloFila[]>;
 }
 
 export const depsReales: DepsAtender = {
@@ -86,7 +123,50 @@ export const depsReales: DepsAtender = {
   cargarHitos,
   guardarEvidencia,
   responderSenalVida: (tenantId, viajeId, respuesta, ahora, config) => responderEpisodioSenalVida(tenantId, viajeId, respuesta, silencioDeRespuesta(respuesta, config), ahora),
+  ciclosDe: leerCicloServicio,
+  evidenciasSello: leerEvidenciasSelloViaje,
 };
+
+/**
+ * T-A5-68 (T-A5-42 cableado): el ciclo del servicio del viaje. Sin puerto, sin servicio conocido o sin filas = el ciclo actual (cero
+ * regresión). Si la lectura falla, el viaje sigue el ciclo actual y se dice en el log: el chofer nunca se queda sin registrar por esto.
+ */
+async function cicloDelViaje(deps: DepsAtender, viaje: Pick<ViajeContexto, 'tenantId' | 'servicio'>): Promise<CicloEfectivo | undefined> {
+  const leer = deps.ciclosDe ?? depsReales.ciclosDe;
+  if (!leer) return undefined;
+  try {
+    return cicloDelServicio(await leer(viaje.tenantId), viaje.servicio ?? null);
+  } catch (err) {
+    logger.warn('conductor.ciclo_servicio_fallo', { tenant: viaje.tenantId, err: err instanceof Error ? err.message : String(err) });
+    return undefined;
+  }
+}
+
+/**
+ * Ruling (T-A5-68): el «inicio de viaje» cuelga de `salida_carga` (T-A5-40: es el ancla de «en tránsito» y de la detención sin aviso, y el
+ * hito del sello). Un servicio cuyo ciclo no tiene carga (importación) no tiene ese hito, y un «ya salí» a secas antes de llegar al
+ * cliente se leería como la salida de la DESCARGA y cerraría el viaje al arrancar. Mientras no haya llegado ni salido de descargar, ese
+ * aviso se decide con el ciclo de siempre (inicio de viaje = salida_carga); todo lo demás sigue el ciclo del servicio. Costo si me equivoco:
+ * en importación el hito de inicio se llama `salida_carga`; se corrige al decidir un hito propio para el inicio de viaje (reversible).
+ */
+function cicloParaDecidir(ciclo: CicloEfectivo | undefined, intencion: Intencion, hitos: readonly HitoFila[]): CicloEfectivo | undefined {
+  if (!ciclo || ciclo.origen === 'actual') return ciclo;
+  if (intencion.clase !== 'salida' || intencion.lugar === 'descarga' || hitoEnCiclo(ciclo, 'salida_carga')) return ciclo;
+  const llegoOSalio = hitos.some((h) => (h.tipo === 'llegada_descarga' || h.tipo === 'salida_descarga') && estaResuelto(h));
+  return llegoOSalio ? ciclo : undefined;
+}
+
+/** T-A5-68: las fotos de sello recientes del viaje. `exigir` = la opción está encendida: una base caída NO equivale a «no hay foto» (lanza). */
+async function leerSelloDelViaje(deps: DepsAtender, tenantId: string, viajeId: string, ahora: Date, exigir: boolean): Promise<EvidenciaSelloFila[]> {
+  const leer = deps.evidenciasSello ?? depsReales.evidenciasSello!;
+  try {
+    return await leer(tenantId, viajeId, ahora);
+  } catch (err) {
+    if (exigir) throw err;
+    logger.warn('conductor.sello_lectura_fallo', { viaje: viajeId, err: err instanceof Error ? err.message : String(err) });
+    return [];
+  }
+}
 
 /** Lo que se le contesta al chofer tras tocar un botón de la señal de vida. */
 export function textoRespuestaSenalVida(respuesta: RespuestaSenalVida, resultado: 'cerrado' | 'sin_episodio' | 'fallo', folio: string | null): string {
@@ -128,6 +208,9 @@ export const TEXTO_PEDIR_UBICACION =
 const FALLO: Salida = { texto: 'No pude anotarlo ahorita — mándamelo de nuevo en un momento. 🙏' };
 
 export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = depsReales): Promise<SalidaAtender | null> {
+  // T-A5-58: la clave de amago y el botón de pánico no se guardan ni se interpretan: antes de cualquier regla, modelo, base o log.
+  const sensible = guardiaDatosSeguridad(e.texto);
+  if (sensible) return { mensajes: [sensible] };
   const ahora = e.ahora ?? new Date();
   const boton = interpretarBoton(e.texto);
   let interp: Interpretacion | null = boton;
@@ -137,7 +220,49 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
   // o PARECE hablar de un hito (y entonces decide el respaldo con modelo).
   // Los payloads de OTROS botones nuestros (el «Ya lo atiendo» del jefe) no son de este módulo
   // aunque parezcan hablar de un hito: ni se interpretan ni pagan una llamada al modelo.
+  // T-A5-44: la respuesta del patio de entrega (botón `hito_patio` o «patio <nombre>» tras «Otro») es de este módulo, pero no es un hito.
+  const botonPatio = leerBotonConductor(e.texto);
+  // T-A5-47: los botones de la asignación (`viaje_acepto`, `viaje_rechazo`, `instr_ok`) son de este módulo y no registran un hito.
+  const opcionAsignacion = botonPatio ? OPCION_ASIGNACION[botonPatio.prefijo] : undefined;
+  if (botonPatio && opcionAsignacion) return atenderAsignacion(e, botonPatio, opcionAsignacion, ahora, deps);
+  // T-A5-51: la respuesta a «¿requieres gastos de viaje o ETC?» (`gastos_si` / `gastos_no`) tampoco registra un hito.
+  if (botonPatio && (botonPatio.prefijo === PREFIJO_BOTON.gastosSi || botonPatio.prefijo === PREFIJO_BOTON.gastosNo)) return atenderGastos(e, botonPatio, ahora, deps);
+  const esBotonPatio = botonPatio?.prefijo === PREFIJO_BOTON.patioEntrega;
+  const nombrePatio = esBotonPatio ? null : leerTextoPatio(e.texto);
+  if (esBotonPatio || nombrePatio) {
+    const r = await atenderPatio(e, botonPatio, nombrePatio, ahora, deps);
+    if (r) return r;
+    if (esBotonPatio) return null;
+  }
+  // T-A5-45: «¿ya inició la descarga?» — el botón `estadia_descarga:<viaje>:si|no` es de este módulo pero tampoco registra un hito.
+  if (botonPatio?.prefijo === PREFIJO_BOTON.estadiaDescarga) return atenderEstadia(e, botonPatio, ahora, deps);
+  // T-A5-46: «¿cómo terminó la descarga?» — el botón `resultado_descarga:<viaje>:<opción>` o, con la pregunta abierta, su texto equivalente.
+  if (botonPatio?.prefijo === PREFIJO_BOTON.resultadoDescarga) return atenderResultado(e, botonPatio, null, ahora, deps);
+  const opcionTexto = botonPatio || !e.viajeAbiertoId ? null : leerTextoResultadoDescarga(e.texto);
+  if (opcionTexto) {
+    const r = await atenderResultado(e, null, opcionTexto, ahora, deps);
+    if (r) return r;
+  }
+  // T-A5-43: los botones de la rampa (`rampa_estado_*`, `rampa_mas`, `rampa_como_omitir`) son de este módulo y tampoco registran un hito.
+  const botonRampa = leerBotonRampa(e.texto);
+  if (botonRampa) return atenderReporteBoton(e, botonRampa, deps);
   if (!boton && leerBotonConductor(e.texto)) return null;
+  // T-A5-43: un texto que ninguna regla de hitos entiende puede ser la respuesta a «¿cómo descargas?» o el número de rampa.
+  if (!interp && e.viajeAbiertoId) {
+    const r = await atenderReporteTexto(e, ahora, deps);
+    if (r) return r;
+  }
+  // T-A5-39: los botones de la pregunta de detención (N05: `parada_ok`, `parada_motivo`, `parada_apoyo`) y la página de motivos son de este
+  // módulo y no registran un hito. La parada del chofer (T-A5-38: «parada», un motivo, «ya continúo») va ANTES que el hito: «parada por tráfico»
+  // contiene «tráfico», que para las reglas de hitos es un retraso.
+  const botonDetencion = leerBotonDetencion(e.texto);
+  if (botonDetencion) return atenderDetencionBoton(e, botonDetencion, ahora, deps);
+  const iParada = interpretarBotonParada(e.texto) ?? (e.viajeAbiertoId ? interpretarParadaTexto(e.texto) : null);
+  if (iParada) {
+    const r = await atenderParada(e, iParada, ahora, deps);
+    if (r) return r;
+    if (iParada.via === 'boton') return null;
+  }
   const llevaViaje = boton?.viajeId ?? e.viajeAbiertoId;
   if (!llevaViaje) return null;
   if (!interp && !pareceHablarDeHito(e.texto)) return null;
@@ -189,13 +314,29 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
       };
     }
 
+    // T-A5-68: «ya llegué a descargar» y «ya salí» siguen el ciclo del servicio del viaje (impo/expo/nacional).
+    const ciclo = cicloParaDecidir(await cicloDelViaje(deps, viaje), interp.intencion, hitos);
     const decision = decidir({
       hitos, intencion: interp.intencion, contacto: interp.contacto, ahora, mensajeEn,
-      ventanaCorreccionMin: config.ventanaCorreccionMin, posponerMin: config.posponerMin,
+      ventanaCorreccionMin: config.ventanaCorreccionMin, posponerMin: config.posponerMin, ciclo,
     });
 
+    // T-A5-68: el inicio de viaje (`salida_carga`) pasa por el paso previo del sello (T-A5-40) ANTES de registrarse.
+    let recomendarSello = false;
+    if (decision.accion === 'registrar' && decision.objetivo === 'salida_carga') {
+      // Con la opción apagada una lectura fallida no estorba (se recomienda de más); encendida, falla cerrado: el catch pide reintentar.
+      const evidencias = await leerSelloDelViaje(deps, e.tenantId, viaje.id, ahora, config.exigirSelloInicio === true);
+      const paso = decidirSelloInicio({ objetivo: decision.objetivo, servicio: viaje.servicio ?? null, exigir: config.exigirSelloInicio, evidencias, ahora });
+      if (paso.accion === 'pedir_foto') {
+        logger.info('hito.conductor', { viaje: viaje.id, accion: 'pedir_sello', via: interp.via, objetivo: decision.objetivo });
+        return { mensajes: [{ texto: mensajeSelloInicio('pedir') }] };
+      }
+      // Sin servicio conocido no se insiste (el sello previo es de importación; «apagada por defecto: el acuse no la menciona»).
+      recomendarSello = paso.recomendar && viaje.servicio === 'importacion';
+    }
+
     const fuente: FuenteHito = boton ? 'boton' : 'texto';
-    const efectos = { pedirUbicacion: false };
+    const efectos: ContextoAplicar['efectos'] = { pedirUbicacion: false };
     const aplicado = await aplicar(decision, { deps, e, viaje, hitos, interp, fuente, ahora, mensajeEn, config, efectos });
     logger.info('hito.conductor', {
       viaje: viaje.id, accion: decision.accion, via: interp.via, aplicado,
@@ -205,16 +346,223 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
     const salida = mensajeParaChofer(decision, ctx, ahora, aplicado);
     const pedir = efectos.pedirUbicacion ? { solicitarUbicacion: TEXTO_PEDIR_UBICACION } : {};
     // Con la confirmación apagada, el hito registrado queda en silencio (todo lo demás sí se contesta).
-    if (!config.confirmarAlChofer && decision.accion === 'registrar' && aplicado === 'ok') return { mensajes: [], ...pedir };
+    const pregunta = [efectos.preguntaPatio, efectos.preguntaResultado].filter((x): x is Salida => Boolean(x));
+    if (!config.confirmarAlChofer && decision.accion === 'registrar' && aplicado === 'ok') return { mensajes: [...pregunta], ...pedir };
     if (config.pedirFotoEvidencia && decision.accion === 'registrar' && aplicado === 'ok') {
       const invitacion = invitacionFoto(decision.objetivo);
       if (invitacion) salida.texto = `${salida.texto}\n${invitacion}`;
+    } else if (recomendarSello && aplicado === 'ok') {
+      salida.texto = `${salida.texto}\n${mensajeSelloInicio('recomendar')}`;
     }
-    return { mensajes: [salida], ...pedir };
+    return { mensajes: [salida, ...pregunta], ...pedir };
   } catch (err) {
     // Fail-closed: no se finge una anotación. Pero tampoco se rompe el turno entero.
     logger.error('hito.conductor_fallo', { viaje: llevaViaje, err: err instanceof Error ? err.message : String(err) });
     return { mensajes: [FALLO] };
+  }
+}
+
+const OPCION_ASIGNACION: Readonly<Record<string, OpcionAsignacion | undefined>> = {
+  [PREFIJO_BOTON.viajeAcepto]: 'acepto',
+  [PREFIJO_BOTON.viajeRechazo]: 'rechazo',
+  [PREFIJO_BOTON.instruccionesOk]: 'entendido',
+};
+
+/** T-A5-47: atiende un botón de la asignación. Los botones siempre contestan algo (o, si las instrucciones ya salieron solas, nada). */
+async function atenderAsignacion(
+  e: EntradaAtender, boton: NonNullable<ReturnType<typeof leerBotonConductor>>, opcion: OpcionAsignacion, ahora: Date, deps: DepsAtender,
+): Promise<SalidaAtender | null> {
+  try {
+    const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, boton.viajeId);
+    if (!viaje) return { mensajes: [{ texto: 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] };
+    if (viaje.estatus === 'liquidado') return { mensajes: [{ texto: 'Ese viaje ya está cerrado. 👍' }] };
+    const config = await deps.config(e.tenantId);
+    const hitos = opcion === 'rechazo' ? await deps.asegurarHitos(e.tenantId, viaje.id) : undefined;
+    const mensajes = await responderAsignacion(deps.asignacion ?? puertosAsignacionReales(), { viaje, telefono: e.telefono, opcion, config, hitos, ahora });
+    return { mensajes };
+  } catch (err) {
+    logger.error('conductor.asignacion_atender_fallo', { viaje: boton.viajeId, err: err instanceof Error ? err.message : String(err) });
+    return { mensajes: [FALLO] };
+  }
+}
+
+/** T-A5-51: atiende la respuesta del chofer a la pregunta de gastos/ETC. El botón se atiende aunque la perilla se apague después. */
+async function atenderGastos(
+  e: EntradaAtender, boton: NonNullable<ReturnType<typeof leerBotonConductor>>, ahora: Date, deps: DepsAtender,
+): Promise<SalidaAtender | null> {
+  try {
+    const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, boton.viajeId);
+    if (!viaje) return { mensajes: [{ texto: 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] };
+    if (viaje.estatus === 'liquidado') return { mensajes: [{ texto: 'Ese viaje ya está cerrado. 👍' }] };
+    const respuesta: RespuestaGastos = boton.prefijo === PREFIJO_BOTON.gastosSi ? 'si' : 'no';
+    return { mensajes: await responderGastos(deps.gastos ?? puertosGastosReales(), { viaje, respuesta, ahora }) };
+  } catch (err) {
+    logger.error('conductor.gastos_atender_fallo', { viaje: boton.viajeId, err: err instanceof Error ? err.message : String(err) });
+    return { mensajes: [FALLO] };
+  }
+}
+
+/** T-A5-44: atiende la respuesta del chofer al patio de entrega. `null` = no es de este módulo (texto sin pregunta abierta, o nada que decir). */
+async function atenderPatio(
+  e: EntradaAtender, boton: ReturnType<typeof leerBotonConductor>, nombre: string | null, ahora: Date, deps: DepsAtender,
+): Promise<SalidaAtender | null> {
+  const llevaViaje = boton?.viajeId ?? e.viajeAbiertoId;
+  if (!llevaViaje) return null;
+  try {
+    const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, llevaViaje);
+    if (!viaje) return boton ? { mensajes: [{ texto: 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] } : null;
+    if (viaje.estatus === 'liquidado') return boton ? { mensajes: [{ texto: 'Ese viaje ya está cerrado. 👍' }] } : null;
+    const config = await deps.config(e.tenantId);
+    if (config.patioEntregaActivo !== true) return boton ? { mensajes: [{ texto: 'Ese aviso ya no está vigente. 👍' }] } : null;
+    const hito = (await deps.cargarHitos(e.tenantId, viaje.id)).find((h) => h.tipo === 'llegada_descarga' && (h.estado === 'recibido' || h.estado === 'validado'));
+    if (!hito) return boton ? { mensajes: [{ texto: 'Todavía no tengo tu llegada a descargar anotada. Avísame cuando llegues. 📍' }] } : null;
+    const respuesta = boton ? { tipo: 'boton' as const, opcion: boton.opcion ?? '' } : { tipo: 'texto' as const, nombre: nombre ?? '' };
+    const mensajes = await responderPatio(deps.patio ?? puertosPatioReales(), { viaje, hito, config, respuesta, ahora });
+    return mensajes.length > 0 ? { mensajes } : null;
+  } catch (err) {
+    logger.error('conductor.patio_fallo', { viaje: llevaViaje, err: err instanceof Error ? err.message : String(err) });
+    return boton ? { mensajes: [FALLO] } : null;
+  }
+}
+
+/** T-A5-45: atiende la respuesta del chofer al «¿ya inició la descarga?». Los botones siempre contestan algo. */
+async function atenderEstadia(
+  e: EntradaAtender, boton: NonNullable<ReturnType<typeof leerBotonConductor>>, ahora: Date, deps: DepsAtender,
+): Promise<SalidaAtender | null> {
+  try {
+    const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, boton.viajeId);
+    if (!viaje) return { mensajes: [{ texto: 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] };
+    if (viaje.estatus === 'liquidado') return { mensajes: [{ texto: 'Ese viaje ya está cerrado. 👍' }] };
+    const config = await deps.config(e.tenantId);
+    const hitos = await deps.cargarHitos(e.tenantId, viaje.id);
+    const respuesta = (boton.opcion === 'no' ? 'no' : 'si') as RespuestaEstadia;
+    const mensajes = await responderEstadiaDescarga(deps.estadia ?? puertosEstadiaReales(), { viaje, hitos, config, respuesta, ahora });
+    return { mensajes };
+  } catch (err) {
+    logger.error('conductor.estadia_atender_fallo', { viaje: boton.viajeId, err: err instanceof Error ? err.message : String(err) });
+    return { mensajes: [FALLO] };
+  }
+}
+
+/**
+ * T-A5-46: atiende la respuesta al «¿cómo terminó la descarga?». `null` = no es de este módulo (texto sin pregunta abierta, flota sin la
+ * perilla, o la base no contestó): sigue su camino. Con las opciones de caja cargada fija además el hito `regreso` con la máquina de hitos.
+ */
+async function atenderResultado(
+  e: EntradaAtender, boton: ReturnType<typeof leerBotonConductor>, opcionTexto: OpcionResultadoDescarga | null, ahora: Date, deps: DepsAtender,
+): Promise<SalidaAtender | null> {
+  const llevaViaje = boton?.viajeId ?? e.viajeAbiertoId;
+  if (!llevaViaje) return null;
+  const via = boton ? 'boton' as const : 'texto' as const;
+  try {
+    const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, llevaViaje);
+    if (!viaje) return boton ? { mensajes: [{ texto: 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] } : null;
+    if (viaje.estatus === 'liquidado') return boton ? { mensajes: [{ texto: 'Ese viaje ya está cerrado. 👍' }] } : null;
+    const config = await deps.config(e.tenantId);
+    if (config.resultadoDescargaActivo !== true) return boton ? { mensajes: [{ texto: 'Ese aviso ya no está vigente. 👍' }] } : null;
+    const hitos = await deps.cargarHitos(e.tenantId, viaje.id);
+    const opcion = (boton ? boton.opcion : opcionTexto) as OpcionResultadoDescarga;
+    const r = await responderResultadoDescarga(deps.resultado ?? puertosResultadoReales(), { viaje, hitos, config, opcion, via, ahora });
+    if (!r) return null;
+    if (r.fijarRegreso) {
+      // El regreso queda registrado como cualquier «voy de regreso»: la misma máquina omite lo pendiente y sella lo de la 0090.
+      const frescos = await deps.asegurarHitos(viaje.tenantId, viaje.id);
+      const decision = decidir({
+        hitos: frescos, intencion: { clase: 'regreso' }, contacto: null, ahora, mensajeEn: ahora,
+        ventanaCorreccionMin: config.ventanaCorreccionMin, posponerMin: config.posponerMin,
+      });
+      if (decision.accion === 'registrar') {
+        const interp: Interpretacion = { intencion: { clase: 'regreso' }, contacto: null, via: via === 'boton' ? 'boton' : 'regla', confianza: 1, viajeId: viaje.id };
+        await aplicar(decision, { deps, e, viaje, hitos: frescos, interp, fuente: via === 'boton' ? 'boton' : 'texto', ahora, mensajeEn: ahora, config, efectos: { pedirUbicacion: false } });
+      }
+    }
+    return { mensajes: r.mensajes };
+  } catch (err) {
+    logger.error('conductor.resultado_descarga_atender_fallo', { viaje: llevaViaje, err: err instanceof Error ? err.message : String(err) });
+    return boton ? { mensajes: [FALLO] } : null;
+  }
+}
+
+/** T-A5-39: el viaje del chofer (no liquidado) y su config, o el motivo por el que no hay: ajeno o cerrado. */
+async function viajeVigenteDelBoton(e: EntradaAtender, viajeId: string, deps: DepsAtender) {
+  const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, viajeId);
+  if (!viaje) return { viaje: null, motivo: 'ajeno' as const };
+  if (viaje.estatus === 'liquidado') return { viaje: null, motivo: 'cerrado' as const };
+  return { viaje, config: await deps.config(e.tenantId) };
+}
+
+/** T-A5-39: un botón de la pregunta de detención o de la página de motivos. Los botones siempre contestan algo. */
+async function atenderDetencionBoton(e: EntradaAtender, boton: BotonDetencion, ahora: Date, deps: DepsAtender): Promise<SalidaAtender> {
+  try {
+    const r = await viajeVigenteDelBoton(e, boton.viajeId, deps);
+    if (!r.viaje) return { mensajes: [{ texto: r.motivo === 'cerrado' ? 'Ese viaje ya está cerrado. 👍' : 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] };
+    if (boton.accion === 'pagina') return { mensajes: responderPaginaMotivos(r.config!, r.viaje.id, boton.pagina) };
+    const hitos = await deps.cargarHitos(e.tenantId, r.viaje.id);
+    const mensajes = await responderDetencion(deps.detencion ?? puertosDetencionAtenderReales(), { viaje: r.viaje, hitos, config: r.config!, ahora, opcion: boton.opcion });
+    return { mensajes };
+  } catch (err) {
+    logger.error('conductor.detencion_atender_fallo', { viaje: boton.viajeId, err: err instanceof Error ? err.message : String(err) });
+    return { mensajes: [FALLO] };
+  }
+}
+
+/**
+ * T-A5-38/39: la parada que inicia el chofer. `null` = no es de este módulo (flota con la perilla apagada, o un texto sin viaje): sigue su
+ * camino. Un BOTÓN siempre contesta algo (uno viejo, de otro viaje o con la perilla apagada, dice «ya no está vigente»).
+ */
+async function atenderParada(e: EntradaAtender, i: InterpretacionParada, ahora: Date, deps: DepsAtender): Promise<SalidaAtender | null> {
+  const viajeId = i.viajeId ?? e.viajeAbiertoId;
+  if (!viajeId) return null;
+  const esBoton = i.via === 'boton';
+  try {
+    const r = await viajeVigenteDelBoton(e, viajeId, deps);
+    if (!r.viaje) return esBoton ? { mensajes: [{ texto: r.motivo === 'cerrado' ? 'Ese viaje ya está cerrado. 👍' : 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] } : null;
+    const orden = i.intencion.clase === 'continuo' ? { tipo: 'continuo' as const } : { tipo: 'abrir' as const, motivo: i.intencion.motivo };
+    const parada = deps.parada ?? { leerAbierta: leerParadaAbierta, abrir: abrirParada, cerrar: cerrarParada };
+    const mensajes = await responderParada(parada, { viaje: r.viaje, config: r.config!, ahora, orden });
+    if (!mensajes) return esBoton ? { mensajes: [{ texto: TEXTO_DETENCION_NO_VIGENTE }] } : null;
+    return { mensajes };
+  } catch (err) {
+    logger.error('conductor.parada_atender_fallo', { viaje: viajeId, err: err instanceof Error ? err.message : String(err) });
+    return esBoton ? { mensajes: [FALLO] } : null;
+  }
+}
+
+/** T-A5-43: el viaje del chofer y su config, o `null` si el viaje no es suyo / está cerrado (el llamador decide qué contestar). */
+async function viajeYConfigDelReporte(e: EntradaAtender, viajeId: string, deps: DepsAtender) {
+  const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, viajeId);
+  if (!viaje) return { viaje: null, motivo: 'ajeno' as const };
+  if (viaje.estatus === 'liquidado') return { viaje: null, motivo: 'cerrado' as const };
+  return { viaje, config: await deps.config(e.tenantId) };
+}
+
+/** T-A5-43: un botón de la rampa. Los botones siempre contestan algo. */
+async function atenderReporteBoton(e: EntradaAtender, boton: BotonRampa, deps: DepsAtender): Promise<SalidaAtender | null> {
+  try {
+    const r = await viajeYConfigDelReporte(e, boton.viajeId, deps);
+    if (!r.viaje) return { mensajes: [{ texto: r.motivo === 'cerrado' ? 'Ese viaje ya está cerrado. 👍' : 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] };
+    const hitos = await deps.cargarHitos(e.tenantId, r.viaje.id);
+    const mensajes = await responderReporteBoton(deps.reporte ?? puertosReporteAtenderReales(), { viaje: r.viaje, hitos, config: r.config!, ahora: e.ahora ?? new Date() }, boton);
+    return { mensajes };
+  } catch (err) {
+    logger.error('conductor.reporte_atender_fallo', { viaje: boton.viajeId, err: err instanceof Error ? err.message : String(err) });
+    return { mensajes: [FALLO] };
+  }
+}
+
+/** T-A5-43: un texto suelto. `null` = no es de este módulo (flota sin la perilla, sin pregunta abierta, o la base no contestó): sigue al agente. */
+async function atenderReporteTexto(e: EntradaAtender, ahora: Date, deps: DepsAtender): Promise<SalidaAtender | null> {
+  try {
+    const config = await deps.config(e.tenantId);
+    if (config.reporteLlegadaActivo !== true) return null;
+    const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, e.viajeAbiertoId!);
+    if (!viaje || viaje.estatus === 'liquidado') return null;
+    const hitos = await deps.cargarHitos(e.tenantId, viaje.id);
+    const mensajes = await responderReporteTexto(deps.reporte ?? puertosReporteAtenderReales(), { viaje, hitos, config, ahora }, e.texto);
+    return mensajes && mensajes.length > 0 ? { mensajes } : null;
+  } catch (err) {
+    logger.warn('conductor.reporte_texto_atender_fallo', { viaje: e.viajeAbiertoId, err: err instanceof Error ? err.message : String(err) });
+    return null;
   }
 }
 
@@ -229,7 +577,7 @@ interface ContextoAplicar {
   mensajeEn: Date;
   config: ConfigConductor;
   /** Lo que `aplicar` descubre y el llamador necesita después del acuse. */
-  efectos: { pedirUbicacion: boolean };
+  efectos: { pedirUbicacion: boolean; preguntaPatio?: Salida | null; preguntaResultado?: Salida | null };
 }
 
 /** La invitación (opcional, por flota) a mandar la foto de evidencia del hito recién registrado. */
@@ -277,6 +625,14 @@ async function aplicar(d: Decision, c: ContextoAplicar): Promise<'ok' | 'carrera
       const v = await deps.validarHito({ viaje, hito: registrado, config: c.config, mensajeEn: d.mensajeEn, ahora });
       if (v?.pedirUbicacion) c.efectos.pedirUbicacion = true;
       if (difiereLlegada && veredictoSellaLlegada(v?.veredicto ?? null, true)) await deps.sincronizarLegado(viaje.tenantId, viaje.id, ['llegada'], d.mensajeEn);
+      // T-A5-44: la llegada a descargar abre la pregunta «¿en qué patio entregas?» (solo si la flota lo encendió; best-effort).
+      if (d.objetivo === 'llegada_descarga' && c.config.patioEntregaActivo === true) {
+        c.efectos.preguntaPatio = await preguntarPatio(deps.patio ?? puertosPatioReales(), c.config, viaje, registrado);
+      }
+      // T-A5-46: la salida de la descarga abre «¿cómo terminó?» (solo si la flota lo encendió; best-effort; sin respuesta no bloquea el cierre).
+      if (d.objetivo === 'salida_descarga' && c.config.resultadoDescargaActivo === true) {
+        c.efectos.preguntaResultado = await preguntarResultado(deps.resultado ?? puertosResultadoReales(), c.config, viaje, registrado);
+      }
       // El aviso a la oficina es best-effort y no retrasa el acuse más de lo que cuesta un envío.
       const esLlegada = d.objetivo === 'llegada_carga' || d.objetivo === 'llegada_descarga';
       if (esLlegada ? c.config.avisarOficinaLlegada : c.config.avisarOficinaSalida) {
@@ -353,6 +709,10 @@ export interface DepsAcuse {
   cerrarSenalVida?(tenantId: string, viajeId: string, ahora: Date): Promise<number>;
   /** Perfil de la flota (fase 1): el Conductor está en «Próximamente» → el acuse no escribe ni contesta. Opcional. */
   enStandBy?(tenantId: string): Promise<boolean>;
+  /** T-A5-44: el «Ya lo atiendo» también cierra la excepción de patio de entrega distinto. Opcional (sin él, solo las escalaciones). */
+  cerrarPatio?(tenantId: string, hitos: readonly HitoFila[]): Promise<number>;
+  /** Los hitos del viaje (para `cerrarPatio`); por omisión la base. */
+  hitosDe?(tenantId: string, viajeId: string): Promise<HitoFila[]>;
 }
 
 const depsAcuseReales: DepsAcuse = {
@@ -367,6 +727,7 @@ const depsAcuseReales: DepsAcuse = {
   evento: registrarEvento,
   cerrarSenalVida: cerrarEpisodioPorJefe,
   enStandBy: (tenantId) => moduloEnStandBy(tenantId, 'conductor'),
+  cerrarPatio: (tenantId, hitos) => marcarPatioAtendido(puertosPatioReales(), tenantId, hitos),
 };
 
 /**
@@ -389,7 +750,9 @@ export async function atenderAcuseJefe(
     const marcados = await deps.marcar(v.tenantId, b.viajeId, ahora);
     for (const h of marcados) await deps.evento(h, 'atendido', {});
     const episodios = deps.cerrarSenalVida ? await deps.cerrarSenalVida(v.tenantId, b.viajeId, ahora).catch(() => 0) : 0;
-    return marcados.length > 0 || episodios > 0
+    // T-A5-44: la excepción de patio no depende de que algún hito esté `escalado`: se busca en la bitácora del viaje (best-effort).
+    const patios = deps.cerrarPatio ? await deps.cerrarPatio(v.tenantId, await (deps.hitosDe ?? cargarHitos)(v.tenantId, b.viajeId)).catch(() => 0) : 0;
+    return marcados.length > 0 || episodios > 0 || patios > 0
       ? 'Anotado ✅ lo marqué como atendido; ya no insisto por este viaje.'
       : 'Ya estaba atendido o el chofer ya respondió. 👍';
   } catch (err) {
@@ -533,6 +896,7 @@ export async function hitoParaEvidenciaDelChofer(
     if (intencion && config?.fotoRegistraHito) {
       const d = decidir({
         hitos, intencion, contacto: null, ahora, mensajeEn: ahora, ventanaCorreccionMin: config.ventanaCorreccionMin, posponerMin: config.posponerMin,
+        ciclo: cicloParaDecidir(await cicloDelViaje(deps, viaje), intencion, hitos), // T-A5-68: el «andén» sin lugar sigue el ciclo del servicio
       });
       if (d.accion === 'registrar') return { tipo, hito: null, comoHito: d.objetivo };
     }
@@ -602,6 +966,7 @@ export async function registrarHitoDesdeFoto(e: EntradaFotoComoHito, deps: DepsA
     const mensajeEn = e.mensajeEn && !Number.isNaN(e.mensajeEn.getTime()) ? e.mensajeEn : ahora;
     const decision = decidir({
       hitos, intencion, contacto: null, ahora, mensajeEn, ventanaCorreccionMin: config.ventanaCorreccionMin, posponerMin: config.posponerMin,
+      ciclo: cicloParaDecidir(await cicloDelViaje(deps, viaje), intencion, hitos), // T-A5-68: la misma regla que el texto del chofer
     });
     // Un duplicado (el aviso ya estaba: el chofer lo dijo mientras la foto subía), una aclaración o un rechazo NO son avisos
     // nuevos: si hay un hito al cual colgarla es evidencia; si no, se le dice. La foto no inventa ninguno.
@@ -612,7 +977,7 @@ export async function registrarHitoDesdeFoto(e: EntradaFotoComoHito, deps: DepsA
         : mensajeEvidencia('sin_hito', e.tipo) }] };
     }
 
-    const efectos = { pedirUbicacion: false };
+    const efectos: { pedirUbicacion: boolean; preguntaPatio?: Salida | null } = { pedirUbicacion: false };
     const interp: Interpretacion = { intencion, contacto: null, via: 'foto', confianza: 1 };
     const aplicado = await aplicar(decision, {
       deps, e: { tenantId: e.tenantId, operadorId: e.operadorId, telefono: e.telefono, viajeAbiertoId: viaje.id, texto: '', waMessageId: e.waMessageId ?? null }, viaje, hitos,
@@ -639,8 +1004,9 @@ export async function registrarHitoDesdeFoto(e: EntradaFotoComoHito, deps: DepsA
     // Si la foto no se pudo colgar (raro: el hito acaba de registrarse), el chofer lo sabe; el hito sí quedó.
     const aviso = evidencia && !/Recibí la foto/.test(evidencia) ? [{ texto: evidencia }] : [];
     // Con la confirmación apagada el hito queda en silencio, pero lo que falló de la foto sí se dice.
-    if (!config.confirmarAlChofer) return { mensajes: aviso, ...pedir };
-    return { mensajes: [{ ...acuse, texto: conFoto }, ...aviso], ...pedir };
+    const pregunta = efectos.preguntaPatio ? [efectos.preguntaPatio] : [];
+    if (!config.confirmarAlChofer) return { mensajes: [...aviso, ...pregunta], ...pedir };
+    return { mensajes: [{ ...acuse, texto: conFoto }, ...aviso, ...pregunta], ...pedir };
   } catch (err) {
     logger.error('conductor.foto_como_hito_fallo', { viaje: e.viajeId, err: err instanceof Error ? err.message : String(err) });
     return { mensajes: [{ texto: mensajeEvidencia('fallo', e.tipo) }] };

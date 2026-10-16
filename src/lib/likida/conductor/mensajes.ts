@@ -1,7 +1,8 @@
 import { TZ_MX, diaEnZona } from '@/lib/formato';
 import { zonaOCdmx } from './config';
 import { ETIQUETA, PREFIJO_BOTON, type Contacto, type TipoHito } from './tipos';
-import type { Decision, MotivoRechazo } from './maquina';
+import { ETIQUETA_RAMPA, PREFIJO_RAMPA, type EstadoRampa } from './interprete';
+import type { Decision, MotivoRechazo, Reubicacion } from './maquina';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LO QUE SE LE DICE AL CHOFER Y A LA OFICINA — textos puros.
@@ -172,4 +173,114 @@ export function resumenParaPlantilla(d: DatosAvisoOficina): string {
   const folio = d.folio ? ` ${d.folio}` : '';
   const completo = `${ETIQUETA[d.tipo].oficina}${folio} a las ${hora}`;
   return completo.length <= 60 ? completo : `${completo.slice(0, 59)}…`;
+}
+
+// ── T-A5-45: la estadía de descarga interactiva (R17) ───────────────────────
+
+/** «¿Ya inició la descarga?» con dos botones (Meta admite hasta 3). `duracion` ya viene en texto («2 horas»). */
+export function preguntaEstadiaDescarga(viaje: { id: string; folio: string | null }, duracion: string): Salida {
+  const folio = viaje.folio ? ` (viaje ${viaje.folio.replace(/\s+/g, ' ').trim().slice(0, 30)})` : '';
+  return {
+    texto: `Llevas ${duracion} en la descarga${folio}. ¿Ya inició la descarga?`,
+    botones: [
+      { id: `${PREFIJO_BOTON.estadiaDescarga}:${viaje.id}:si`, titulo: 'Sí, ya empezó' },
+      { id: `${PREFIJO_BOTON.estadiaDescarga}:${viaje.id}:no`, titulo: 'No, sigo esperando' },
+    ],
+  };
+}
+
+export type RespuestaEstadia = 'si' | 'no';
+
+/** El acuse al chofer según lo que contestó y lo que pasó al registrarlo. */
+export function acuseEstadiaDescarga(r: RespuestaEstadia, avisado: boolean): Salida {
+  if (r === 'si') return { texto: 'Anotado ✅ Avísame cuando termines la descarga. 👍' };
+  return {
+    texto: avisado
+      ? 'Anotado ✅ Ya le avisé a tu supervisor para que te apoye con el cliente. 🙏'
+      : 'Anotado ✅ Si quieres apoyo, avísale directo a tu supervisor. 🙏',
+  };
+}
+
+// ── T-A5-43: «con quién te reportaste» y la rampa ──────────────────────────
+// UNA pregunta por paso y sin insistir: ningún texto de aquí pide más de un toque ni repite la pregunta. Cortos, sin regañar.
+
+/** Pregunta proactiva del contacto al llegar al cliente. El botón es el de siempre (`hito_sin_contacto_anden`); su título cabe en los 20 caracteres que Meta admite en un botón de sesión. */
+export function mensajePreguntaContacto(ctx: ContextoMensaje): Salida {
+  return {
+    texto: '¿Con quién te reportaste? Dime su nombre y área (o toca «Aún sin contacto»).',
+    botones: [{ id: `${PREFIJO_BOTON.sinContactoAnden}:${ctx.viajeId}`, titulo: 'Aún sin contacto' }],
+  };
+}
+
+/**
+ * La pregunta de la rampa en DOS páginas de botones (Meta admite 3 por mensaje y son 4 estados): página 0 = «Sí», «No», «Más»;
+ * página 1 = «No aplica», «En espera». El id lleva el viaje, como todos los botones del módulo.
+ */
+export function preguntaRampa(viajeId: string, pagina: 0 | 1 = 0): Salida {
+  const b = (e: EstadoRampa) => ({ id: `${PREFIJO_RAMPA.estado}${e}:${viajeId}`, titulo: ETIQUETA_RAMPA[e] });
+  if (pagina === 1) return { texto: 'Va. ¿En cuál caso estás?', botones: [b('no_aplica'), b('en_espera')] };
+  return {
+    texto: '¿Te asignaron rampa de descarga? Toca una opción.',
+    botones: [b('si'), b('no'), { id: `${PREFIJO_RAMPA.mas}:${viajeId}`, titulo: 'Más opciones' }],
+  };
+}
+
+/** Tras «sí»: el número es opcional (el cliente pidió no pedir tanto detalle). */
+export const TEXTO_PEDIR_NUMERO_RAMPA = 'Va. Si quieres, dime el número de rampa; si no, no pasa nada. 👍';
+
+/** Tras «no aplica»: ¿cómo descarga? Opcional, con un botón para saltarla. */
+export function mensajePreguntaComoDescarga(ctx: ContextoMensaje): Salida {
+  return {
+    texto: 'Entendido, sin rampa. Si quieres, cuéntame cómo descargas (a pie de calle, a granel…); es opcional.',
+    botones: [{ id: `${PREFIJO_RAMPA.omitirComo}:${ctx.viajeId}`, titulo: 'Omitir' }],
+  };
+}
+
+/** El acuse a la respuesta de rampa (sin volver a preguntar nada). */
+export function acuseRampa(estado: EstadoRampa, numero: string | null): string {
+  switch (estado) {
+    case 'si': return numero ? `Anotado ✅ rampa ${numero}.` : 'Anotado ✅ ya tienes rampa asignada.';
+    case 'no': return 'Anotado ✅ sin rampa asignada.';
+    case 'no_aplica': return 'Anotado ✅ la rampa no aplica en esta entrega.';
+    case 'en_espera': return 'Anotado ✅ quedas en espera de rampa. Avísame cuando te asignen.';
+  }
+}
+
+/** La línea de la rampa vigente para la oficina y el tablero. */
+export function textoRampa(r: Pick<Reubicacion, 'rampaEstado' | 'rampa' | 'comoDescarga'> | null): string | null {
+  if (!r || !r.rampaEstado) return null;
+  switch (r.rampaEstado) {
+    case 'si': return r.rampa ? `Rampa ${r.rampa}` : 'Con rampa asignada';
+    case 'no': return 'Sin rampa asignada';
+    case 'no_aplica': return r.comoDescarga ? `Rampa no aplica · descarga: ${r.comoDescarga}` : 'Rampa no aplica';
+    case 'en_espera': return 'En espera de rampa';
+  }
+}
+
+// ── T-A5-46: el resultado de la descarga y la caja cargada (R19) ────────────
+
+export type OpcionResultadoDescarga = 'completa' | 'no_recibida' | 'caja_cargada';
+
+/** «¿Cómo terminó la descarga?» con tres botones (el máximo de Meta; títulos de ≤ 20 caracteres). */
+export function preguntaResultadoDescarga(viaje: { id: string; folio: string | null }): Salida {
+  const folio = viaje.folio ? ` (viaje ${viaje.folio.replace(/\s+/g, ' ').trim().slice(0, 30)})` : '';
+  return {
+    texto: `¿Cómo terminó la descarga${folio}? Toca una opción.`,
+    botones: [
+      { id: `${PREFIJO_BOTON.resultadoDescarga}:${viaje.id}:completa`, titulo: 'Descarga completa' },
+      { id: `${PREFIJO_BOTON.resultadoDescarga}:${viaje.id}:no_recibida`, titulo: 'No me recibieron' },
+      { id: `${PREFIJO_BOTON.resultadoDescarga}:${viaje.id}:caja_cargada`, titulo: 'Caja cargada' },
+    ],
+  };
+}
+
+/** El acuse al chofer según lo que contestó y si el supervisor recibió el aviso. */
+export function acuseResultadoDescarga(o: OpcionResultadoDescarga, avisado: boolean): Salida {
+  if (o === 'completa') return { texto: 'Anotado ✅ descarga completa. Avísame cuando vayas de regreso. 🚛' };
+  const que = o === 'no_recibida' ? 'no te recibieron la mercancía y regresas con la caja cargada' : 'regresas a patio con la caja cargada';
+  return {
+    texto: avisado
+      ? `Anotado ✅ ${que}. Ya le avisé a tu supervisor. 🙏`
+      : `Anotado ✅ ${que}. Si quieres apoyo, avísale directo a tu supervisor. 🙏`,
+  };
 }

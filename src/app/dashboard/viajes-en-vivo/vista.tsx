@@ -34,8 +34,8 @@ const FRESCURA: Record<NivelFrescura, { etiqueta: string; color: string }> = {
 export const ETIQUETA_EXCEPCION: Record<TipoExcepcionViaje, string> = {
   escalado_sin_atender: 'Escalado sin atender', sin_reporte: 'Sin reporte', atrasado: 'Atrasado', sin_coincidencia: 'Ubicación sin coincidencia',
   llegada_sin_confirmar: 'Llegada sin confirmar', llegada_sin_sitio: 'Llegada sin sitio para conciliar', estadia_excedida: 'Estadía excedida', horas_incoherentes: 'Horas incoherentes',
-  sin_senal_de_vida: 'Sin señal de vida', gps_obsoleto: 'GPS obsoleto', sin_posicion: 'Sin posición', sin_unidad: 'Sin tractor asignado', sin_a_quien_escalar: 'Sin a quién escalar',
-  pendiente_cruce_largo: 'Pendiente de cruce por mucho tiempo', salida_tms_discrepante: 'Salida del TMS sin confirmar',
+  sin_senal_de_vida: 'Sin señal de vida', gps_obsoleto: 'GPS obsoleto', sin_posicion: 'Sin posición', sin_unidad: 'Sin tractor asignado', sin_a_quien_escalar: 'Sin a quién escalar', patio_entrega_distinto: 'Patio de entrega distinto',
+  pendiente_cruce_largo: 'Pendiente de cruce por mucho tiempo', salida_tms_discrepante: 'Salida del TMS sin confirmar', local_abierto_sin_ccp: 'Sin Carta Porte (viaje local abierto)', sin_ruta_autorizada: 'Sin ruta autorizada',
 };
 const GRAVEDAD: Record<1 | 2 | 3, { texto: string; color: string }> = {
   3: { texto: 'Urgente', color: 'var(--bad)' }, 2: { texto: 'Revisar', color: 'var(--warn)' }, 1: { texto: 'Vigilar', color: 'var(--muted)' },

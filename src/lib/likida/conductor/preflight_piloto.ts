@@ -24,7 +24,7 @@ export const PORCENTAJE_MINIMO_CON_SITIO = 80;
 export const HORAS_GPS_RECIENTE = 2;
 
 export type IdComprobacion =
-  | 'voluntarios' | 'gps_unidades' | 'sitios' | 'escalamiento' | 'plantillas' | 'activo' | 'zona' | 'calidad_gps';
+  | 'voluntarios' | 'cohorte' | 'gps_unidades' | 'sitios' | 'escalamiento' | 'plantillas' | 'activo' | 'zona' | 'calidad_gps';
 
 export interface Comprobacion {
   id: IdComprobacion;
@@ -52,7 +52,7 @@ export interface ViajeDelPiloto {
 }
 
 export interface DatosPreflight {
-  config: Pick<ConfigConductor, 'activo' | 'perfilSeguimiento' | 'solicitudesMin'>;
+  config: Pick<ConfigConductor, 'activo' | 'perfilSeguimiento' | 'solicitudesMin' | 'cohortePiloto'>;
   /** `tenant.zona_horaria` tal como está guardada (sin sustituir por la de México). */
   zonaDeclarada: string | null;
   voluntarios: ReadonlyArray<{ telefono: string }>;
@@ -83,6 +83,16 @@ function comprobarVoluntarios(d: DatosPreflight): Comprobacion {
   return falta('voluntarios', t,
     d.voluntarios.length === 0 ? 'Todavía no hay operadores en el piloto.' : 'Ningún operador del piloto tiene un teléfono que WhatsApp pueda alcanzar.',
     'Agrega al menos un operador voluntario con su celular de 10 dígitos en «Operadores del piloto».');
+}
+
+function comprobarCohorte(d: DatosPreflight): Comprobacion {
+  const t = 'Cohorte del piloto definida';
+  const c = d.config.cohortePiloto;
+  if (c === 'sin_tableta_ni_macros' || c === 'voluntarios_abiertos') {
+    return ok('cohorte', t, c === 'sin_tableta_ni_macros' ? 'Cohorte: unidades sin tableta ni macros.' : 'Cohorte: voluntarios de cualquier unidad.');
+  }
+  return falta('cohorte', t, 'Todavía no se definió con quién arranca el piloto.',
+    'Define la cohorte del piloto (criterio y preguntas pendientes en docs/operacion/cohorte-piloto.md); sin cohorte no se enciende nada.');
 }
 
 function comprobarGpsUnidades(d: DatosPreflight): Comprobacion {
@@ -156,10 +166,10 @@ function comprobarCalidadGps(d: DatosPreflight): Comprobacion {
   return falta('calidad_gps', t, `Solo ${pct} % de las unidades manda posiciones continuas en la última hora.`, `${AVISO_SOLO_EVENTOS} Pide a la fuente de GPS posiciones continuas, no solo eventos.`);
 }
 
-/** Las 8 comprobaciones, en el orden en que se le explican al dueño. */
+/** Las 9 comprobaciones, en el orden en que se le explican al dueño. */
 export function evaluarPreflight(d: DatosPreflight): ResultadoPreflight {
   const comprobaciones = [
-    comprobarActivo(d), comprobarZona(d), comprobarVoluntarios(d), comprobarSitios(d),
+    comprobarActivo(d), comprobarZona(d), comprobarCohorte(d), comprobarVoluntarios(d), comprobarSitios(d),
     comprobarGpsUnidades(d), comprobarCalidadGps(d), comprobarEscalamiento(d), comprobarPlantillas(d),
   ];
   const bloqueos = comprobaciones.filter((c) => c.estado === 'falta');

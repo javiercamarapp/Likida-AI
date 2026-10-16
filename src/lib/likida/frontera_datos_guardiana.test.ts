@@ -378,7 +378,36 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // `vigia/repo.ts` por `acotada` y ancladas a `tenant_id` (la lectura de `tenant.zona_horaria` por `id`): zona del tenant, festivos (leer, guardar, quitar) y nombre de la flota.
 // Funcionalidad nueva, no código migrado.
 // Integración cinco-integracion-2 (+ vigia sobre la misma base): el barrido real del árbol fusionado mide 2,186 llamadas; techo subido a lo medido, sin relajar la regla.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_186;
+// Historia propia de la rama Conductor (conteo desde su propia base, antes de integrarse a cinco-integracion-2; se conserva para el rastro de auditoría):
+// LOOP CINCO AGENTES, T-A5-38 (parada iniciada por el chofer, 0806): 2,095 → 2,098 (0 archivos, +3 llamadas, medido con el barrido completo), las tres en `conductor/repo.ts`
+// (`leerParadaAbierta`, `abrirParada`, `cerrarParada`: sobre `viaje_parada`, por `acotada`, ancladas a `tenant_id`; las prueba `paradas_repo.test.ts`). Funcionalidad nueva, no código migrado.
+// LOOP CINCO AGENTES, T-A5-41 (ciclo por servicio, 0807): 2,098 → 2,101 medido con el barrido completo. +2 son de esta tarea, en `conductor/repo.ts` (`leerCicloServicio`,
+// `sembrarCicloServicio`: sobre `ciclo_servicio`, por `acotada`, ancladas a `tenant_id`; las prueba `ciclo_servicio_repo.test.ts`). El +1 restante ya estaba en la rama del
+// frente desde T-A5-40 (`leerEvidenciasSelloViaje`) y su techo no se había subido. Funcionalidad nueva, no código migrado.
+// LOOP CINCO AGENTES, T-A5-44 (patio de entrega declarado vs «Entregar en»): 2,101 → 2,102 (0 archivos, +1 llamada, medido con el barrido completo), en `conductor/repo.ts`
+// (`leerEventosPatio`: lee la bitácora `viaje_hito_evento` de esos viajes, por `acotada`, anclada a `tenant_id`; la prueba `patio_entrega.test.ts` cubre su uso). Sin migración. Funcionalidad nueva.
+// LOOP CINCO AGENTES, T-A5-43 («con quién te reportaste» y rampa): 2,102 → 2,105 (0 archivos, +3 llamadas medidas con el barrido completo; las dos de esta tarea son `leerEventosReporte`
+// y `guardarEventoReporte` en `conductor/repo.ts`: leen y escriben la bitácora `viaje_hito_evento` de esos viajes, por `acotada`, ancladas a `tenant_id`; las prueba
+// `reporte_llegada_repo.test.ts`. La tercera ya estaba en la rama del frente antes de esta tarea). Sin migración. Funcionalidad nueva, no código migrado.
+// LOOP CINCO AGENTES, T-A5-46 (resultado de la descarga y caja cargada): 2,105 → 2,106 (0 archivos, +1 llamada medida con el barrido completo, en `conductor/repo.ts`:
+// `leerEventosResultadoDescarga` lee la bitácora `viaje_hito_evento` de esos viajes, por `acotada`, anclada a `tenant_id`; la prueba `resultado_descarga_repo.test.ts` cubre su uso). Sin migración. Funcionalidad nueva.
+// LOOP CINCO AGENTES, T-A5-47 (asignación con botones): 2,106 → 2,108 (0 archivos, +2 llamadas medidas con el barrido completo, ambas en `conductor/repo.ts`:
+// `aceptarPorBoton` escribe `aceptado_en`/`aceptado_origen` en un solo UPDATE condicionado (sin aceptar, ya avisado, mismo operador y flota) y relee la fila para decir por qué no cambió; por
+// `acotada`, ancladas a `tenant_id`; la prueba `confirmar_viaje_boton.test.ts` cubre sus filtros). `leerCajaDelViaje` no suma (reusa el lector del Vigía). Sin migración. Funcionalidad nueva.
+// LOOP CINCO AGENTES, T-A5-48 (rutas autorizadas, 0808): 2,108 → 2,111 (0 archivos, +3 llamadas medidas con el barrido completo, las tres en `conductor/repo.ts`:
+// `leerRutasAutorizadas`, e `importarRutas` (un INSERT por lote y un UPDATE por fila cambiada, por id Y `tenant_id`), todas por `acotada`, ancladas a `tenant_id`; las prueba `rutas_repo.test.ts`). Funcionalidad nueva.
+// LOOP CINCO AGENTES, T-A5-49 (rutas en el mensaje de asignación): 2,111 → 2,112 (0 archivos, +1 llamada medida con el barrido completo, en `conductor/repo.ts`:
+// `leerCodigosSitios` lee `geocerca.id, codigo` de los sitios del viaje, por `acotada`, anclada a `tenant_id`; la prueba `rutas_repo.test.ts` cubre su filtro). Sin migración. Funcionalidad nueva.
+// LOOP CINCO AGENTES, T-A5-66 (eventos de geocerca sin viaje, 0820): 2,112 → 2,120 (0 archivos, +8 llamadas medidas con el barrido completo): +6 en `conductor/repo.ts`
+// (`leerFlotasConHuerfanos`, `leerUltimosCrucesHuerfanos`, `guardarEventosHuerfanos`, `leerEventosHuerfanosPendientes`, `marcarEventosHuerfanosReconciliados` y la RPC de
+// retención `purgar_eventos_geocerca_huerfanos` en el mantenimiento) y +2 en `conductor/trabajo.ts` (`leerUnidadesSinViajeAbierto`: unidades y viajes abiertos, por `traerTodo`).
+// Todas por `acotada`, ancladas a `tenant_id`; las prueba `huerfanos_repo.test.ts`. Funcionalidad nueva, no código migrado.
+// LOOP CINCO AGENTES, T-A5-50 (mantenimiento de rutas): 2,120 → 2,121 (0 archivos, +1 llamada medida con el barrido completo, en `conductor/repo.ts`: `marcarRutaRevisada`, un UPDATE de
+// `revisada_en` por id Y `tenant_id`, por `acotada`; la prueba `rutas_repo.test.ts` cubre sus filtros). La lectura reusa `leerRutasAutorizadas`. Sin migración. Funcionalidad nueva.
+// LOOP CINCO AGENTES, T-A5-52 (catálogo de documentos por cliente, 0809): 2,121 → 2,125 (0 archivos, +4 llamadas medidas con el barrido completo, las cuatro en `conductor/repo.ts`:
+// `leerDocumentosCliente`, el conteo previo de `altaDocumentoCliente` (tope por cliente), su INSERT y el DELETE de `bajaDocumentoCliente`; todas por `acotada`, ancladas a `tenant_id`; las prueba `documentos_cliente_repo.test.ts`). Funcionalidad nueva.
+// Integración cinco-integracion-2 (+ conductor sobre la misma base): el barrido real del árbol fusionado mide 2,221 llamadas; techo subido a lo medido, sin relajar la regla.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_221;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

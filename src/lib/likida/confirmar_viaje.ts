@@ -103,6 +103,10 @@ export async function marcarAceptado(
   return (data ?? []).length > 0;
 }
 
+// T-A5-47: el botón «Acepto el viaje» de la plantilla N01. Vive en `conductor/repo.ts` (la frontera de datos del Conductor); se reexporta aquí
+// porque es la otra mitad de «confirmar el viaje» (esta función es la aceptación por texto; aquélla, por botón).
+export { aceptarPorBoton, type ResultadoAceptarPorBoton } from './conductor/repo';
+
 /**
  * Mandar un comprobante ES aceptar el viaje.
  *
