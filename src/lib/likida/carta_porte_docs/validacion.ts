@@ -23,7 +23,7 @@ import { CAMPOS_DOC, CAMPOS_MERCANCIA, UMBRAL_CRITICO, etiquetaCampo, type Campo
 import { CLAVES_UNIDAD, CODIGOS_ESTADO, CODIGOS_ESTADO_EEUU, FACTOR_A_KG, estadoDeCp } from './catalogos';
 import {
   CAT_COLONIA, CAT_CP, CAT_EMBALAJE, CAT_FRACCION, CAT_PELIGROSO, CAT_PRODUCTO, CAT_UNIDAD,
-  clavesDeFraccion, normalizarFraccion, type ResolvedorSat,
+  clavesDeFraccion, esClaveProductoGenerica, esFraccionGenerica, mismaFraccion, normalizarFraccion, type ResolvedorSat,
 } from './catalogos_sat';
 import { valorSospechoso } from './inyeccion';
 import { normalizarNumero } from './normalizar';
@@ -47,6 +47,8 @@ export interface Hallazgo {
    * el rechazo del sistema del cliente (T-A3-29): NO se recalcula, se arrastra hasta que una persona corrige ese campo.
    */
   origen?: 'tms';
+  /** Fragmento del documento que sustenta el hallazgo (T-A3-57). Ausente en los demás. */
+  evidencia?: string | null;
 }
 
 export interface ResultadoValidacion {
@@ -77,6 +79,11 @@ export interface OpcionesValidacion {
    * Excel que se está revisando) (T-A3-52). Ausente = no hay con qué cruzar.
    */
   pesoReferencia?: { kg: number; fuente: string };
+  /**
+   * Fracción arancelaria que da el documento HERMANO del libro (p. ej. la de las notas del BOL) (T-A3-57). Ausente = no hay
+   * documento con qué comparar: una fracción genérica solo avisa.
+   */
+  fraccionDocumento?: { valor: string; fuente: string };
   /**
    * Reglas de dependencia de la Guía de llenado de la plantilla del TMS (T-A3-45). Ausente = todas con los valores de la
    * Guía; `false` = ninguna (un perfil que no use esa plantilla). Parametrizable por perfil: la preferencia de un cliente
@@ -186,6 +193,8 @@ function validarFormato(def: CampoDoc, c: CampoValor, renglon: number | null, re
     case 'clave_prod': {
       if (!/^\d{8}$/.test(v)) { aqui('bloqueo', 'clave_forma', `«${v}» no es una clave c_ClaveProdServCP (8 dígitos).`); break; }
       const seg = Number(v.slice(0, 2));
+      // La clave genérica 01010101 es la que el operador usa a falta de dato (T-A3-57): pasa con aviso, no bloquea.
+      if (esClaveProductoGenerica(v)) break;
       if (seg < 10 || seg > 95) aqui('bloqueo', 'clave_segmento', `La clave ${v} no pertenece a ningún segmento del catálogo (10 a 95).`);
       else if (v === '78101800') aqui('confirmar', 'clave_servicio', 'La 78101800 es el SERVICIO de transporte de carga, no la mercancía. Pon la clave del producto que se transporta.');
       // Con el catálogo cargado (true/false) la verificación real la hace `verificarCatalogosSat`; el aviso solo queda si no se sabe.
@@ -410,6 +419,35 @@ function verificarCatalogosSat(e: Extraccion, sat: ResolvedorSat | undefined, re
   for (const catalogo of sinCargar) {
     reg({ campo: 'documento', renglon: null, severidad: 'aviso', codigo: 'catalogo_no_cargado', mensaje: `El catálogo ${catalogo} no está cargado: no se pudo verificar contra el SAT (no bloquea).` });
   }
+}
+
+/**
+ * Fracción (grupo 98xx) y clave de producto (`01010101`) genéricas (T-A3-57): el operador las usa cuando el documento no da
+ * dato o da otro. Hoy pasarían sin aviso. Sin documento con qué comparar ⇒ solo `aviso`; si el documento da OTRA fracción
+ * ⇒ `confirmar` con la diferencia (un humano que escribe el campo lo resuelve). La regla definitiva es del cliente
+ * (stand-by): nada de esto bloquea.
+ */
+function verificarGenericos(e: Extraccion, doc: OpcionesValidacion['fraccionDocumento'], reg: Registrar): void {
+  e.mercancias.forEach((fila, i) => {
+    const aqui = (campo: string, severidad: Severidad, codigo: string, mensaje: string) =>
+      reg({ campo, renglon: i, severidad, codigo, mensaje: `${etiquetaCampo(campo, i)}: ${mensaje}`, evidencia: fila[campo]?.evidencia ?? null });
+    const fr = (fila.fraccion_arancelaria?.valor ?? '').trim();
+    if (fr && esFraccionGenerica(fr)) {
+      const propia = normalizarFraccion(fr);
+      const otra = doc?.valor?.trim();
+      if (otra && !mismaFraccion(propia, otra)) {
+        if (fila.fraccion_arancelaria?.origen !== 'humano') {
+          aqui('fraccion_arancelaria', 'confirmar', 'fraccion_generica_difiere', `el libro trae la fracción genérica ${propia} y ${doc!.fuente} da ${normalizarFraccion(otra)}. Confirma cuál va en el complemento.`);
+        }
+      } else {
+        aqui('fraccion_arancelaria', 'aviso', 'fraccion_generica', `la fracción ${propia} es genérica (grupo 98xx)${otra ? '' : ' y no hay documento con qué compararla'}. Verifica que sea la que corresponde.`);
+      }
+    }
+    const prod = (fila.bienes_transp?.valor ?? '').trim();
+    if (prod && esClaveProductoGenerica(prod)) {
+      aqui('bienes_transp', 'aviso', 'clave_producto_generica', `la clave de producto ${prod} es genérica. Verifica que sea la que corresponde a la mercancía.`);
+    }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -769,6 +807,8 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
   }
   // Catálogos SAT (T-A3-24): clave inexistente bloquea; catálogo sin cargar solo avisa.
   verificarCatalogosSat(e, op.catalogosSat, reg);
+  // Fracción y clave de producto genéricas (T-A3-57): avisan, nunca bloquean por sí solas.
+  verificarGenericos(e, op.fraccionDocumento, reg);
   // Verificación de sumas con rechazo (T-A3-18): piezas, kg y m³ contra el total que declara el documento.
   verificarSumas(e, reg);
   // Cuadre del peso entre lecturas y contra el documento hermano (T-A3-52).
