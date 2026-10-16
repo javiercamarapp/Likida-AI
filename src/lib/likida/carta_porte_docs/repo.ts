@@ -15,12 +15,13 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import { exigir } from '../pg';
+import { exigir, traerPorIds } from '../pg';
 import { logger } from '@/lib/logger';
 import { aBuffer } from './bytes';
 import type { Extraccion } from './campos';
 import type { ResultadoValidacion } from './validacion';
 import type { FormatoDoc } from './contenido';
+import type { ViajeSalido } from './viajes_sin_ccp';
 import type { FirmaPerfil, Mapeo, EjemploPerfil, Perfil } from './perfiles';
 import { TOPE_FILAS_CATALOGO, catalogoVacio, type CatalogoCliente, type ParteCat, type ProductoCat } from './catalogo_cliente';
 
@@ -1105,4 +1106,42 @@ export async function enviosParaInsights(tenantId: string, desde: Date): Promise
     enviadoEn: f.enviado_en === null || f.enviado_en === undefined ? null : String(f.enviado_en),
     causaPendiente: f.causa_pendiente === null || f.causa_pendiente === undefined ? null : String(f.causa_pendiente),
   }));
+}
+
+// ── Viajes salidos sin Carta Porte (T-A3-66) ────────────────────────────────
+
+/** Cuánto hacia atrás se buscan salidas (más viejo que esto ya no es un pendiente de la semana). */
+export const DIAS_SALIDAS_SIN_CCP = 45;
+
+/**
+ * Viajes con salida registrada (hito `salida_carga` recibido o validado) y los ids de los que ya tienen un complemento
+ * APROBADO ligado (`cp_documento.viaje_id`). SOLO LECTURA; si algo falla LANZA (la pantalla dice «no se pudo leer», no «sin pendientes»).
+ */
+export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new Date()): Promise<{ viajes: ViajeSalido[]; conCcp: Set<string> }> {
+  const desde = new Date(ahora.getTime() - DIAS_SALIDAS_SIN_CCP * 86_400_000).toISOString();
+  const rh = await acotada(supabaseAdmin().from('viaje_hito').select('viaje_id, mensaje_en, recibido_en')
+    .eq('tenant_id', tenantId).eq('tipo', 'salida_carga').in('estado', ['recibido', 'validado'])
+    .gte('recibido_en', desde).order('recibido_en', { ascending: false }).limit(2000), 'cpdocs.sin_ccp_hitos');
+  const hitos = (exigir(rh, 'cpdocs.sin_ccp_hitos') ?? []) as unknown as Fila[];
+  const salidaPorViaje = new Map<string, string>();
+  for (const h of hitos) {
+    const id = s(h.viaje_id); const t = s(h.mensaje_en) ?? s(h.recibido_en);
+    if (id && t && !salidaPorViaje.has(id)) salidaPorViaje.set(id, t);
+  }
+  const ids = [...salidaPorViaje.keys()];
+  if (ids.length === 0) return { viajes: [], conCcp: new Set() };
+  const [filas, docs] = await Promise.all([
+    traerPorIds<Fila>(ids, (t) => acotada(supabaseAdmin().from('viaje').select('id, folio, cliente_id, cliente:cliente_id (nombre)')
+      .eq('tenant_id', tenantId).in('id', t), 'cpdocs.sin_ccp_viajes') as never, 'cpdocs.sin_ccp_viajes'),
+    traerPorIds<Fila>(ids, (t) => acotada(supabaseAdmin().from('cp_documento').select('viaje_id')
+      .eq('tenant_id', tenantId).eq('estado', 'aprobado').in('viaje_id', t), 'cpdocs.sin_ccp_docs') as never, 'cpdocs.sin_ccp_docs'),
+  ]);
+  const viajes: ViajeSalido[] = filas.map((f) => {
+    const c = (f.cliente ?? null) as Fila | null;
+    const id = String(f.id);
+    return { viajeId: id, folio: s(f.folio), clienteId: s(f.cliente_id), clienteNombre: s(c?.nombre), salidaEn: salidaPorViaje.get(id) ?? null };
+  });
+  const conCcp = new Set<string>();
+  for (const d of docs) { const id = s(d.viaje_id); if (id) conCcp.add(id); }
+  return { viajes, conCcp };
 }

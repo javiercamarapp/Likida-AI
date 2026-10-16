@@ -7,6 +7,7 @@ import { dominioBuzon } from '@/lib/correo/buzon';
 import { direccionCp } from '@/lib/likida/carta_porte_docs/correo_entrante';
 import * as repoDocs from '@/lib/likida/carta_porte_docs/repo';
 import { calcularInsights, type InsightsAgente } from '@/lib/likida/carta_porte_docs/metricas';
+import { listarViajesSinCcp, type ListadoSinCcp } from '@/lib/likida/carta_porte_docs/viajes_sin_ccp';
 import { sufijoTenant } from '../../sufijo';
 import { VistaAgenteCartaPorte, type BuzonCartaPorteVista } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
@@ -40,6 +41,17 @@ async function leerInsights(tenantId: string): Promise<{ insights: InsightsAgent
     };
   } catch {
     return { insights: 'no_leido', nombres: {} };
+  }
+}
+
+/** Viajes salidos sin Carta Porte (T-A3-66). `'no_leido'` = la lectura falló: la vista lo dice, no pinta «sin pendientes». */
+async function leerSinCcp(tenantId: string): Promise<ListadoSinCcp | 'no_leido'> {
+  try {
+    const ahora = new Date();
+    const { viajes, conCcp } = await repoDocs.leerSalidasParaSinCcp(tenantId, ahora);
+    return listarViajesSinCcp(viajes, conCcp, ahora);
+  } catch {
+    return 'no_leido';
   }
 }
 
@@ -81,6 +93,8 @@ export default async function PaginaAgenteCartaPorte({
   // La ficha de corridas (B3): null = no se pudo leer, y la ficha lo dice.
   const { insights, nombres } = await leerInsights(tenantId);
 
+  const sinCcp = await leerSinCcp(tenantId);
+
   const pCorridas = ultimasCorridas(tenantId, 'carta_porte').catch(() => null);
 
   return (
@@ -89,6 +103,7 @@ export default async function PaginaAgenteCartaPorte({
       sufijo={sufijoTenant(sp)}
       buzon={buzon}
       insights={insights}
+      sinCcp={sinCcp}
       nombresCliente={nombres}
       diasVentana={DIAS_INSIGHTS}
       notificaciones={
