@@ -90,12 +90,12 @@ export const CONFLICTO: Record<TipoPlantilla, string> = {
 };
 
 const RFC = /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TELEFONO_INTERNACIONAL = /^\+[0-9][0-9 ().-]*$/;
 // Caracteres de control (salvo los que el CSV maneja en el parser). Una celda con uno de estos no es texto de catálogo.
-const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
-const INICIO_FORMULA = /^[=+\-@\t\r]/;
+export const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
+export const INICIO_FORMULA = /^[=+\-@\t\r]/;
 
 export type Valor = string | boolean | null;
 export type Registro = Record<string, Valor>;
@@ -218,7 +218,7 @@ function detectarSeparador(texto: string): ',' | ';' {
 
 // ── Validación fila por fila ────────────────────────────────────────────────
 
-const normEncabezado = (h: string): string => llaveTexto(h).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+export const normEncabezado = (h: string): string => llaveTexto(h).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 
 export type Validacion =
   | { ok: false; mensaje: string }
