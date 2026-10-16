@@ -340,6 +340,19 @@ export async function cartasMuertas(): Promise<number> {
  * Devuelve si SÍ selló (una fila afectada). El llamador NO debe avisar al
  * chofer si esto devuelve `false`: evita martillarlo con el mismo aviso en
  * cada vuelta del cron mientras la escritura no se pueda confirmar.
+ *
+ * FASE 1 · SEG-ADMIN-DOS-CASOS (checklist 31 v2, #10): este `.update` filtra
+ * SOLO por `id`, sin `tenant_id` — a propósito, tras rastrearlo, no por
+ * descuido. `wa_evento_pendiente` NO TIENE columna `tenant_id` (0119 y
+ * siguientes): es la bandeja global del webhook, atribuida por teléfono
+ * (`evento->>'from'`), no por flota — mismo patrón ya documentado para
+ * `wa_mensaje_procesado` en CLAUDE.md. Y el `id` que llega aquí nunca es
+ * ajeno: `consultarFotoAnterior` (conv.ts) ya lo filtró por
+ * `evento->>'from' in variantesTelefono(telefono)`, el mismo teléfono del
+ * mensaje que se está procesando — no hay forma de que esta función reciba
+ * el id de la carta muerta de OTRO operador. Agregar un `.eq('tenant_id', …)`
+ * exigiría una migración nueva solo para esto; se deja anotado como
+ * verificado, no como pendiente.
  */
 export async function descartarCartaMuerta(id: string, motivo: string): Promise<boolean> {
   try {
