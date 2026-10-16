@@ -127,6 +127,9 @@ export const PREFIJO_BOTON = {
   viajeAcepto: 'viaje_acepto',
   viajeRechazo: 'viaje_rechazo',
   instruccionesOk: 'instr_ok',
+  /** T-A5-51: botones de la plantilla N03 («Sí, necesito gastos» / «No necesito»). Solo `<prefijo>:<viaje>`. */
+  gastosSi: 'gastos_si',
+  gastosNo: 'gastos_no',
 } as const;
 
 export type RespuestaSenalVida = 'estoy' | 'voy_a_cargar' | 'estoy_bien';

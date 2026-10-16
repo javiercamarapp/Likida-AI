@@ -46,7 +46,7 @@ Todas las que siguen en estado «nueva para aprobación»: el código ya las nom
 | 16 | `conductor_llegada_sin_confirmar_v1` | Agente 5 — Conductor | Solo completo | `src/lib/likida/conductor/alertas_llegada.ts` | 4 | — | autoritativo |
 | 17 | `conductor_senal_vida_v1` | Agente 5 — Conductor | Ambos, si la señal de vida está encendida | `src/lib/likida/conductor/senal_vida.ts` | 3 | «Sí, estoy», «Voy a cargar», «Estoy bien» | autoritativo |
 | 18 | `aviso_jefe_senal_vida_v1` | Agente 5 — Conductor | Ambos, si la señal de vida está encendida | `src/lib/likida/conductor/senal_vida.ts` | 4 | «Ya lo atiendo», «Abrir tablero» | autoritativo |
-| 19 | `viaje_gastos_etc_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: solo cinco_agentes | sin llamador todavía | 2 | «Sí, necesito gastos», «No necesito» | autoritativo |
+| 19 | `viaje_gastos_etc_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: solo cinco_agentes | `src/lib/likida/conductor/gastos_etc.ts` | 2 | «Sí, necesito gastos», «No necesito» | autoritativo |
 | 20 | `conductor_foto_sello_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: piloto y cinco_agentes | sin llamador todavía | 3 | «Ya salí», «Tengo un problema» | autoritativo |
 | 21 | `conductor_detencion_sin_aviso_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: piloto y cinco_agentes | `src/lib/likida/conductor/deteccion_parada.ts` | 3 | «Todo bien», «Registrar motivo», «Necesito apoyo» | autoritativo |
 | 22 | `conductor_confirma_patio_v1` | Agente 5 — Conductor (ciclo con botones) | Ciclo del chofer: piloto y cinco_agentes | sin llamador todavía | 3 | «Sí, es ese patio», «Estoy en otro patio», «Compartir ubicación» | autoritativo |
@@ -80,7 +80,7 @@ Perfil **piloto** exige las P0; perfil **cinco_agentes** exige P0 y P1; la P2 es
 | --- | --- | --- | --- | --- | --- | --- |
 | N01 | `viaje_asignado_confirmar_v1` | P0 | sí | sí | aprobada | `src/lib/likida/notificar.ts` |
 | N02 | `viaje_instrucciones_ruta_v1` | P0 | sí | sí | aprobada | `src/lib/likida/conductor/asignacion.ts` |
-| N03 | `viaje_gastos_etc_v1` | P1 | no | sí | no enviada | sin llamador todavía |
+| N03 | `viaje_gastos_etc_v1` | P1 | no | sí | no enviada | `src/lib/likida/conductor/gastos_etc.ts` |
 | N04 | `conductor_foto_sello_v1` | P0 | sí | sí | aprobada | sin llamador todavía |
 | N05 | `conductor_detencion_sin_aviso_v1` | P0 | sí | sí | aprobada | `src/lib/likida/conductor/deteccion_parada.ts` |
 | N06 | `conductor_confirma_patio_v1` | P0 | sí | sí | aprobada | sin llamador todavía |
@@ -676,7 +676,7 @@ Perfil **piloto** exige las P0; perfil **cinco_agentes** exige P0 y P1; la P2 es
 
 - **Categoría:** UTILITY · **Idioma:** `es_MX` · **Versión:** 1
 - **Agente / uso:** Agente 5 — Conductor (ciclo con botones). N03 · Preguntar antes de iniciar el viaje si el chofer requiere gastos de viaje o ETC para generar su vale. Solo flotas con la perilla (requiere definir qué es ETC).
-- **Llamador en código:** ninguno todavía (la usará el Agente 5)
+- **Llamador en código:** src/lib/likida/conductor/gastos_etc.ts
 - **Texto verificado contra Meta:** sí (texto autoritativo del catálogo)
 - **Cuerpo exacto:**
 

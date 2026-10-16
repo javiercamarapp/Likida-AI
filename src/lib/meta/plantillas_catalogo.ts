@@ -413,7 +413,7 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
   {
     nombre: 'viaje_gastos_etc_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_ciclo',
     proposito: 'N03 · Preguntar antes de iniciar el viaje si el chofer requiere gastos de viaje o ETC para generar su vale. Solo flotas con la perilla (requiere definir qué es ETC).',
-    llamador: null,
+    llamador: 'src/lib/likida/conductor/gastos_etc.ts',
     cuerpo: 'Hola {{1}}, antes de iniciar el viaje {{2}} necesitamos saber si requieres gastos de viaje o ETC para generar tu vale. Elige una opción.',
     ejemplos: ['Juan', 'F-1042'],
     variables: ['nombre del chofer', 'folio'],

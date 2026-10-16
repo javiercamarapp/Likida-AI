@@ -15,6 +15,7 @@ import {
 } from './repo';
 import { cicloDelServicio, hitoEnCiclo, type CicloEfectivo, type CicloServicioFila } from './ciclo_servicio';
 import { tenantDelViaje } from './trabajo';
+import { puertosGastosReales, responderGastos, type PuertosGastos, type RespuestaGastos } from './gastos_etc';
 import { estaResuelto, leerBotonConductor, PREFIJO_BOTON, type HitoFila, type FuenteHito, type RespuestaSenalVida, type TipoEvidencia, type TipoHito } from './tipos';
 import { silencioDeRespuesta } from './senal_vida';
 import { escalarPorProblema, puertosReales } from './ejecutor';
@@ -89,6 +90,8 @@ export interface DepsAtender {
   resultado?: PuertosResultado;
   /** T-A5-47: los puertos de la asignación con botones (aceptar, instrucciones, aviso del rechazo). Opcional: sin él, los reales. */
   asignacion?: PuertosAsignacion;
+  /** T-A5-51: la pregunta de gastos/ETC. Opcional: las pruebas que no la ejercen no lo declaran. */
+  gastos?: PuertosGastos;
   /** T-A5-39: la bitácora de la detención sin aviso y el aviso al supervisor por «Necesito apoyo». Opcional: sin él, los reales. */
   detencion?: PuertosDetencionAtender;
   /** T-A5-38/39: la parada que inicia el chofer (leer, abrir, cerrar). Opcional: sin él, la real. */
@@ -222,6 +225,8 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
   // T-A5-47: los botones de la asignación (`viaje_acepto`, `viaje_rechazo`, `instr_ok`) son de este módulo y no registran un hito.
   const opcionAsignacion = botonPatio ? OPCION_ASIGNACION[botonPatio.prefijo] : undefined;
   if (botonPatio && opcionAsignacion) return atenderAsignacion(e, botonPatio, opcionAsignacion, ahora, deps);
+  // T-A5-51: la respuesta a «¿requieres gastos de viaje o ETC?» (`gastos_si` / `gastos_no`) tampoco registra un hito.
+  if (botonPatio && (botonPatio.prefijo === PREFIJO_BOTON.gastosSi || botonPatio.prefijo === PREFIJO_BOTON.gastosNo)) return atenderGastos(e, botonPatio, ahora, deps);
   const esBotonPatio = botonPatio?.prefijo === PREFIJO_BOTON.patioEntrega;
   const nombrePatio = esBotonPatio ? null : leerTextoPatio(e.texto);
   if (esBotonPatio || nombrePatio) {
@@ -377,6 +382,22 @@ async function atenderAsignacion(
     return { mensajes };
   } catch (err) {
     logger.error('conductor.asignacion_atender_fallo', { viaje: boton.viajeId, err: err instanceof Error ? err.message : String(err) });
+    return { mensajes: [FALLO] };
+  }
+}
+
+/** T-A5-51: atiende la respuesta del chofer a la pregunta de gastos/ETC. El botón se atiende aunque la perilla se apague después. */
+async function atenderGastos(
+  e: EntradaAtender, boton: NonNullable<ReturnType<typeof leerBotonConductor>>, ahora: Date, deps: DepsAtender,
+): Promise<SalidaAtender | null> {
+  try {
+    const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, boton.viajeId);
+    if (!viaje) return { mensajes: [{ texto: 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] };
+    if (viaje.estatus === 'liquidado') return { mensajes: [{ texto: 'Ese viaje ya está cerrado. 👍' }] };
+    const respuesta: RespuestaGastos = boton.prefijo === PREFIJO_BOTON.gastosSi ? 'si' : 'no';
+    return { mensajes: await responderGastos(deps.gastos ?? puertosGastosReales(), { viaje, respuesta, ahora }) };
+  } catch (err) {
+    logger.error('conductor.gastos_atender_fallo', { viaje: boton.viajeId, err: err instanceof Error ? err.message : String(err) });
     return { mensajes: [FALLO] };
   }
 }
