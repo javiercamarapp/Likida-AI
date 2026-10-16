@@ -67,7 +67,15 @@ const destinoDeFicha = (href: string) => {
   return m ? rutaProximamente(m) : href;
 };
 const hrefsDe = (html: string) => [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
-const texto = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+/**
+ * Texto visible de un HTML renderizado: quita las ETIQUETAS y, antes que nada, el contenido de `<script>` —
+ * nunca es texto que una persona lee. Hace falta porque `renderToReadableStream` con `Suspense` (las tarjetas
+ * `async` del Resumen) inyecta scripts de arranque de streaming (`$RC(...)`, `$RT=...`, `$RB=[]`) cuyos literales
+ * con `$` y dígitos sueltos los regex de "nada de dinero"/"nunca un cero" de abajo atrapaban como falso positivo —
+ * no es dinero filtrándose, es hidratación de React. Sin quitar el script, cualquier regex de texto visible
+ * queda expuesto al mismo falso positivo.
+ */
+const texto = (html: string) => html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
 /** Lo que la página de Notificaciones le entrega al listado (el elemento devuelto lleva las alertas en sus props). */
 async function alertasDeLaPagina(): Promise<Array<{ id: string; href: string }>> {
@@ -142,6 +150,11 @@ describe('(c) Resumen: nada de dinero ni de fiscal bajo el perfil', () => {
     const t = texto(await aHtml(<InicioCincoAgentes tenantId="t-1" tenantNombre={null} nombre="Ana" />));
     expect(t).toContain('No se pudo leer la última corrida');
     expect(t).not.toMatch(/\b0\b/);
+  });
+
+  it('texto() sigue atrapando un monto real (no es que el falso positivo se "arregló" debilitando la protección)', () => {
+    expect(texto('<div>Total: $1,234.50 MXN</div>')).toMatch(/\$/);
+    expect(texto('<div>Total: $1,234.50 MXN</div><script>$RC("B:1","S:1")</script>')).toMatch(/\$/);
   });
 
   it('la fuente del Resumen del perfil no importa nada de dinero, fiscal, analítica ni chat', () => {
