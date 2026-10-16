@@ -39,6 +39,8 @@ export interface DepsServicio {
   ahora?: () => Date;
   /** Para probar sin tocar interruptores. */
   apagado?: () => Promise<boolean>;
+  /** T-A3-53: transcribe una captura (imagen) a texto por rótulos (modelo de visión). Sin él, una imagen se lee como siempre y no se puede detectar un corte por código. */
+  transcribir?: (imagenes: string[], signal?: AbortSignal) => Promise<string>;
 }
 
 async function llmPorDefecto(tenantId: string, canal: CanalDoc): Promise<LlmExtractor> {
@@ -107,12 +109,16 @@ export async function recibirDocumento(tenantId: string, e: EntradaDocumento, de
  * Se usa al procesar y tras cada corrección, para que los avisos no se pierdan al revalidar.
  */
 export async function validarDocumento(
-  tenantId: string, doc: Pick<DocumentoFila, 'id' | 'riesgoInyeccion' | 'remitenteReconocido'>, e: Extraccion,
+  tenantId: string,
+  doc: Pick<DocumentoFila, 'id' | 'riesgoInyeccion' | 'remitenteReconocido'> & { capturaIncompleta?: { ultimoRotulo: string } | null; extraccion?: DocumentoFila['extraccion'] },
+  e: Extraccion,
   opc: { tms?: SalidaTms } = {},
 ): Promise<ResultadoValidacion> {
   // Catálogos SAT (T-A3-24): UNA consulta por catálogo con todas las claves del documento; si falla o está vacío, degrada a aviso.
   const catalogosSat = await precargarCatalogosSat(e, (catalogo, claves) => repo.cargarCatalogoSat(catalogo, claves), { tms: opc.tms });
-  const base = validarExtraccion(e, { riesgoInyeccion: doc.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido, catalogosSat });
+  // T-A3-53: el corte de la captura vive en lo guardado (meta) para que la revalidación tras una corrección y la de «aprobar» lo vean.
+  const capturaIncompleta = doc.capturaIncompleta ?? doc.extraccion?.meta?.capturaIncompleta ?? null;
+  const base = validarExtraccion(e, { riesgoInyeccion: doc.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido, catalogosSat, capturaIncompleta });
   const extra: Hallazgo[] = [];
   const folio = e.campos.folio_cliente?.valor;
   if (folio) {
@@ -279,7 +285,7 @@ export async function procesarDocumento(
     const llm = await (deps.llm ?? llmPorDefecto)(tenantId, doc.canal);
     let r: ResultadoExtraccion;
     try {
-      r = await extraerDocumento(contenido, { llm, perfiles, remitente: doc.remitente, clienteId: doc.clienteId, signal: deps.signal, nombreArchivo: doc.nombreArchivo });
+      r = await extraerDocumento(contenido, { llm, perfiles, remitente: doc.remitente, clienteId: doc.clienteId, signal: deps.signal, nombreArchivo: doc.nombreArchivo, ...(deps.transcribir ? { transcribir: deps.transcribir } : {}) });
     } catch (e) {
       if (esErrorDePresupuesto(e)) {
         const alcance = alcanceDePresupuesto(e);
@@ -304,10 +310,11 @@ export async function procesarDocumento(
       avisosCatalogo.push(...avisosDelCatalogo(e, catalogo.truncado === true));
     }
 
-    const docVista = { id: doc.id, riesgoInyeccion: r.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido };
+    const docVista = { id: doc.id, riesgoInyeccion: r.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido, capturaIncompleta: r.capturaIncompleta };
     const validacion = await validarDocumento(tenantId, docVista, extraccion);
     const meta: MetaExtraccion = {
       origen: r.origen, nivel: r.nivel, escalamientos: r.escalamientos, avisos: [...r.avisos, ...avisosCatalogo], notasModelo: r.notasModelo, indiciosInyeccion: r.indiciosInyeccion,
+      ...(r.capturaIncompleta ? { capturaIncompleta: r.capturaIncompleta } : {}),
     };
     const guardada = await repo.actualizarDocumento(tenantId, documentoId, version, {
       estado: 'por_revisar', formato: contenido.formato, perfil_id: r.perfilId, perfil_version: r.perfilVersion,

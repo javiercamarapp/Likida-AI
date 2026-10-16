@@ -36,6 +36,8 @@ export interface MetaExtraccion {
   avisos: string[];
   notasModelo: string[];
   indiciosInyeccion: string[];
+  /** T-A3-53: la captura del correo llegó cortada (termina en este rótulo sin valor). Se revalida en cada corrección y al aprobar. */
+  capturaIncompleta?: { ultimoRotulo: string } | null;
 }
 
 /** Lo que se guarda en `cp_documento.extraccion`. */
