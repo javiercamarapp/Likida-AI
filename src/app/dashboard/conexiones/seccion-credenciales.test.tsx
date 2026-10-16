@@ -186,3 +186,18 @@ describe('SeccionCredenciales — estados honestos y gateo', () => {
     expect(html).not.toContain(ICONO_PROBAR);
   });
 });
+
+describe('IP de salida en la ayuda (T-TMS-14)', () => {
+  const html = (ipSalida?: string | null) => renderToStaticMarkup(
+    <SeccionCredenciales cofreListo puedeAdministrarCofre guardadas={[]} grupos={catalogoParaCaptura()} acciones={acciones} ipSalida={ipSalida} />,
+  );
+  it('con IP confirmada la muestra con la petición a sistemas', () => {
+    const h = html('203.0.113.7');
+    expect(h).toContain('203.0.113.7');
+    expect(h).toMatch(/IP de salida de Likida/);
+  });
+  it('sin IP (no contratada) no promete ninguna', () => {
+    expect(html(undefined)).not.toMatch(/IP de salida de Likida/);
+    expect(html(null)).not.toMatch(/IP de salida de Likida/);
+  });
+});
