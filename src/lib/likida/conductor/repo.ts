@@ -20,6 +20,7 @@ import type { MotivoSenalVida } from './solicitudes';
 import { esMotivoParada, type MotivoParada, type ParadaFila } from './paradas';
 import { esPasoCiclo, esServicio, filasDeSemilla, type CicloServicioFila, type Servicio } from './ciclo_servicio';
 import { planificarRutas, type RutaCsv, type RutaExistente } from './rutas';
+import { MAX_DOCUMENTOS_POR_CLIENTE, esTipoDocumento, type DocumentoCliente, type EntradaDocumento } from './documentos_cliente';
 import type { RespuestaSenalVida } from './tipos';
 import type { FiltrosTablero } from './repo_validacion';
 import type { EventoHuerfano, EventoNuevo, UltimoCruce } from './huerfanos';
@@ -1755,5 +1756,56 @@ export async function marcarRutaRevisada(tenantId: string, rutaId: string, dia: 
   const res = await acotada(supabaseAdmin().from('ruta_autorizada').update({ revisada_en: dia })
     .eq('id', rutaId).eq('tenant_id', tenantId).select('id'), 'conductor.rutas_revisar');
   if (res.error) throw new Error(`conductor.rutas_revisar: ${res.error.message}`);
+  return ((res.data ?? []) as unknown[]).length > 0;
+}
+
+// ── T-A5-52: el catálogo de documentos por cliente (0809) ───────────────────
+
+const filaADocumento = (f: Fila): DocumentoCliente | null => {
+  const id = s(f.id); const clienteId = s(f.cliente_id); const nombre = s(f.nombre);
+  if (!id || !clienteId || !nombre || !esTipoDocumento(f.tipo)) return null;
+  return { id, clienteId, nombre, tipo: f.tipo, requiereFirma: f.requiere_firma === true, requiereSello: f.requiere_sello === true };
+};
+
+/** Los documentos que pide cada cliente de la flota. `[]` si no hay o la base aún no tiene la 0809. Lanza si la base falla por otra causa. */
+export async function leerDocumentosCliente(tenantId: string): Promise<DocumentoCliente[]> {
+  const { data, error } = await acotada(supabaseAdmin().from('cliente_documento_requerido').select('id, cliente_id, nombre, tipo, requiere_firma, requiere_sello')
+    .eq('tenant_id', tenantId).order('nombre').order('id'), 'conductor.documentos_cliente_leer');
+  if (error) {
+    if (faltaEsquema(error, /cliente_documento_requerido/i)) return [];
+    throw new Error(`conductor.documentos_cliente_leer: ${error.message}`);
+  }
+  return ((data ?? []) as unknown as Fila[]).map(filaADocumento).filter((d): d is DocumentoCliente => d !== null);
+}
+
+export type ResultadoAltaDocumento = 'ok' | 'duplicado' | 'cliente_inexistente' | 'tope';
+
+/**
+ * Da de alta UN documento ya validado (`validarDocumento`) para un cliente de la flota. La base decide lo que solo ella garantiza:
+ * el mismo nombre no se repite dentro del cliente (23505 → `duplicado`) y el cliente tiene que ser de la misma flota (23503 →
+ * `cliente_inexistente`). El tope por cliente se revisa antes. Lanza si la base falla por otra causa.
+ */
+export async function altaDocumentoCliente(tenantId: string, doc: EntradaDocumento): Promise<ResultadoAltaDocumento> {
+  const previos = await acotada(supabaseAdmin().from('cliente_documento_requerido').select('id')
+    .eq('tenant_id', tenantId).eq('cliente_id', doc.clienteId).limit(MAX_DOCUMENTOS_POR_CLIENTE), 'conductor.documentos_cliente_contar');
+  if (previos.error) throw new Error(`conductor.documentos_cliente_contar: ${previos.error.message}`);
+  if (((previos.data ?? []) as unknown[]).length >= MAX_DOCUMENTOS_POR_CLIENTE) return 'tope';
+  const res = await acotada(supabaseAdmin().from('cliente_documento_requerido').insert({
+    tenant_id: tenantId, cliente_id: doc.clienteId, nombre: doc.nombre, tipo: doc.tipo, requiere_firma: doc.requiereFirma, requiere_sello: doc.requiereSello,
+  }), 'conductor.documentos_cliente_alta');
+  if (res.error) {
+    const code = (res.error as { code?: string }).code;
+    if (code === '23505') return 'duplicado';
+    if (code === '23503') return 'cliente_inexistente';
+    throw new Error(`conductor.documentos_cliente_alta: ${res.error.message}`);
+  }
+  return 'ok';
+}
+
+/** Da de baja UN documento por id Y flota (un id de otra flota no toca nada). `true` si existía. Lanza si la base falla. */
+export async function bajaDocumentoCliente(tenantId: string, id: string): Promise<boolean> {
+  const res = await acotada(supabaseAdmin().from('cliente_documento_requerido').delete()
+    .eq('id', id).eq('tenant_id', tenantId).select('id'), 'conductor.documentos_cliente_baja');
+  if (res.error) throw new Error(`conductor.documentos_cliente_baja: ${res.error.message}`);
   return ((res.data ?? []) as unknown[]).length > 0;
 }
