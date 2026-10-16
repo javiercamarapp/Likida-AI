@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./repo', async () => (await import('./repo_falso.fixture')).api);
 vi.mock('../bitacora_escritura', () => ({ anotarBitacora: vi.fn(async () => true) }));
@@ -9,6 +9,11 @@ import { DIAS_RETENCION, MAX_INTENTOS, nombreArchivoSeguro, procesarDocumento, r
 import { defectuosos, excelAtlas, fotoRemision, pdfBoreal, pdfEscaneado, xmlCartaPorte, csvAtlas, correoTexto, extraccionAtlasOk, RFC } from './documentos_sinteticos.fixture';
 import { llmFalso, lecturaBoreal, salida } from './llm_falso.fixture';
 import * as repo from './repo';
+
+// T-A3-68 f: el orden por omisión pasó a 3.8 Flash → Sonnet (niveles 2, 3). Estas pruebas ejercitan la escalera completa de tres
+// niveles, así que fijan el orden por entorno (la misma variable que usa producción).
+beforeAll(() => { vi.stubEnv('LIKIDA_CARTAPORTE_NIVELES_TEXTO', '1,2,3'); vi.stubEnv('LIKIDA_CARTAPORTE_NIVELES_VISION', '1,2,3'); });
+afterAll(() => { vi.unstubAllEnvs(); });
 
 beforeEach(() => { reset(); sembrarFlotas(); });
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { detectarFormato, prepararContenido, type ContenidoDoc } from './contenido';
 import {
   SalidaLlmSchema, construirSistema, construirUsuario, evidenciaEnTexto, extraerDocumento, extraccionDeLlm, fusionar, necesitaEscala, valorEnTexto,
@@ -8,6 +8,11 @@ import { validarExtraccion } from './validacion';
 import { aprender, firmaDe, type Perfil } from './perfiles';
 import { cv, extraccionAtlasOk, pdfBoreal, fotoRemision, xmlCartaPorte, excelAtlas, correoTexto, RFC, xmlPropio } from './documentos_sinteticos.fixture';
 import { MODELO_POR_NIVEL, lecturaBoreal, llmFalso, salida } from './llm_falso.fixture';
+
+// T-A3-68 f: el orden por omisión pasó a 3.8 Flash → Sonnet (niveles 2, 3). Estas pruebas ejercitan la escalera completa de tres
+// niveles, así que fijan el orden por entorno (la misma variable que usa producción).
+beforeAll(() => { vi.stubEnv('LIKIDA_CARTAPORTE_NIVELES_TEXTO', '1,2,3'); vi.stubEnv('LIKIDA_CARTAPORTE_NIVELES_VISION', '1,2,3'); });
+afterAll(() => { vi.unstubAllEnvs(); });
 
 async function contenido(bytes: Uint8Array): Promise<ContenidoDoc> {
   const d = detectarFormato(bytes);
