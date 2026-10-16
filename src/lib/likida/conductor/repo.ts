@@ -23,6 +23,7 @@ import { planificarRutas, type RutaCsv, type RutaExistente } from './rutas';
 import { MAX_DOCUMENTOS_POR_CLIENTE, esTipoDocumento, type DocumentoCliente, type EntradaDocumento } from './documentos_cliente';
 import type { RespuestaSenalVida } from './tipos';
 import type { FiltrosTablero } from './repo_validacion';
+import type { ViajeConstancia } from './constancia';
 import type { EventoHuerfano, EventoNuevo, UltimoCruce } from './huerfanos';
 import type { UnidadDeViaje } from './ciclo_gps';
 import type { CriterioSitio } from './sitio_derivado';
@@ -1471,6 +1472,34 @@ export async function leerEntradaInsights(
     episodios: ep?.episodios ?? [],
     hayMas,
   };
+}
+
+// ── T-A5-67: la constancia de reportes por operador y periodo ────────────────
+// Solo lectura sobre `viaje` y `viaje_hito`, acotada por tenant. Viajes creados en [desde, hasta) (los más recientes primero, hasta el tope);
+// `hayMas` avisa que el periodo trae más viajes de los leídos (la constancia lo dice; no esconde el resto).
+const TOPE_VIAJES_CONSTANCIA = 2000;
+
+export async function leerDatosConstancia(
+  tenantId: string, desde: Date, hasta: Date,
+): Promise<{ viajes: ViajeConstancia[]; hitos: HitoFila[]; hayMas: boolean }> {
+  const rv = await acotada(
+    supabaseAdmin().from('viaje').select('id, folio, estatus, operador_id, created_at, operador:operador_id(nombre)').eq('tenant_id', tenantId)
+      .gte('created_at', desde.toISOString()).lt('created_at', hasta.toISOString()).order('created_at', { ascending: false }).order('id').limit(TOPE_VIAJES_CONSTANCIA + 1),
+    'constancia.viajes',
+  );
+  const filas = (exigir(rv as never, 'constancia.viajes') ?? []) as unknown as Fila[];
+  const hayMas = filas.length > TOPE_VIAJES_CONSTANCIA;
+  const viajes: ViajeConstancia[] = filas.slice(0, TOPE_VIAJES_CONSTANCIA).map((f) => {
+    const rel = Array.isArray(f.operador) ? f.operador[0] : f.operador;
+    return {
+      id: String(f.id), folio: s(f.folio), operadorId: String(f.operador_id), estatus: String(f.estatus), creadoEn: String(f.created_at),
+      operadorNombre: rel && typeof rel === 'object' ? s((rel as { nombre?: unknown }).nombre) : null,
+    };
+  });
+  if (viajes.length === 0) return { viajes, hitos: [], hayMas };
+  const hitos = await traerPorIds<Fila>(viajes.map((v) => v.id), (t) => acotada(
+    supabaseAdmin().from('viaje_hito').select(COLUMNAS_HITO).eq('tenant_id', tenantId).in('viaje_id', t), 'constancia.hitos') as never, 'constancia.hitos');
+  return { viajes, hitos: hitos.map(filaAHito), hayMas };
 }
 
 // ── 0800: los operadores voluntarios del piloto ──────────────────────────────
