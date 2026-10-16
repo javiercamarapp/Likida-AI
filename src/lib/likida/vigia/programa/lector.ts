@@ -172,17 +172,23 @@ function leerEncabezados(celdas: string[], hasta: number): ColumnaPrograma[] {
   return out;
 }
 
-function esFilaEncabezado(celdas: string[], hasta: number): boolean {
-  let caja = false;
-  let od = false;
+/** Mínimo de rótulos conocidos distintos para tratar una fila como encabezado (T-A4-49). */
+export const UMBRAL_ROTULOS_ENCABEZADO = 4;
+
+/**
+ * Cuenta los rótulos conocidos distintos de una fila. El encabezado es la fila con más
+ * rótulos conocidos (no la que trae justo «CAJA» y «ORIGEN-DESTINO»): el programa de cada
+ * terminal es «muy parecido» pero no idéntico, y puede faltarle o sobrarle alguna columna.
+ */
+function contarRotulosConocidos(celdas: string[], hasta: number): { total: number; cajaYOrigen: boolean } {
+  const vistos = new Set<string>();
   for (let i = 0; i < Math.min(celdas.length, hasta); i++) {
     const c = celdas[i];
     if (c === '' || c.length > 40) continue;
     const n = normEncabezado(c);
-    if (n === 'CAJA') caja = true;
-    else if (n === 'ORIGEN-DESTINO') od = true;
+    if (ENCABEZADOS_CONOCIDOS.has(n)) vistos.add(n);
   }
-  return caja && od;
+  return { total: vistos.size, cajaYOrigen: vistos.has('CAJA') && vistos.has('ORIGEN-DESTINO') };
 }
 
 export function leerProgramaCsv(textoCrudo: string, opciones: OpcionesLector): ResultadoLector {
@@ -206,6 +212,8 @@ export function leerProgramaCsv(textoCrudo: string, opciones: OpcionesLector): R
   let sec: Seccion | null = null;
   let ultimaFecha: string | null = null;
   let hayEncabezado = false;
+  let rotulosVigentes = 0;
+  let filasDesdeEncabezado = 0;
   let filasEncontradas = 0;
   let avisoSinEncabezado = false;
   let lineaNo = 0;
@@ -289,16 +297,26 @@ export function leerProgramaCsv(textoCrudo: string, opciones: OpcionesLector): R
       }
     }
 
-    // 2) Fila de encabezados (la primera de la sección; las repetidas se absorben).
-    if (pobladas >= 4 && esFilaEncabezado(celdas, lateralDesde)) {
+    // 2) Fila de encabezados: la de mayor número de rótulos conocidos (>= umbral). Las repetidas
+    //    en secciones siguientes se absorben; dos candidatos seguidos sin datos en medio: gana el de más rótulos.
+    //    Compatibilidad: «CAJA» + «ORIGEN-DESTINO» con >= 4 celdas pobladas sigue contando como encabezado.
+    const cuenta = pobladas >= UMBRAL_ROTULOS_ENCABEZADO ? contarRotulosConocidos(celdas, lateralDesde) : null;
+    const rotulos = cuenta?.total ?? 0;
+    if (cuenta && (rotulos >= UMBRAL_ROTULOS_ENCABEZADO || cuenta.cajaYOrigen)) {
+      if (
+        columnas && filasDesdeEncabezado === 0 && rotulos <= rotulosVigentes
+        && (sec as Seccion | null)?.lineaEncabezado != null
+      ) return;
       const cols = leerEncabezados(celdas, lateralDesde);
       if (!sec) {
         aviso(linea, 'encabezado_sin_titulo', 'Hay encabezados antes de cualquier título de sección; se tratan como una sección sin tipo.');
         nuevaSeccion('', null, 'OTRO', null);
       }
       const s = sec as Seccion | null;
-      if (s && s.lineaEncabezado === null) s.lineaEncabezado = linea;
+      if (s && (s.lineaEncabezado === null || filasDesdeEncabezado === 0)) s.lineaEncabezado = linea;
       columnas = cols;
+      rotulosVigentes = rotulos;
+      filasDesdeEncabezado = 0;
       hayEncabezado = true;
       const firma = cols.map((c) => c.nombre).join('|');
       if (!firmasAvisadas.has(firma)) {
@@ -349,6 +367,7 @@ export function leerProgramaCsv(textoCrudo: string, opciones: OpcionesLector): R
       }
     }
     filasEncontradas++;
+    filasDesdeEncabezado++;
     if (filas.length >= topeFilas) return;
     const obj: Record<string, string> = {};
     for (const c of columnas) obj[c.nombre] = c.indice < celdas.length ? celdas[c.indice] : '';
@@ -358,7 +377,7 @@ export function leerProgramaCsv(textoCrudo: string, opciones: OpcionesLector): R
 
   if (!hayEncabezado) {
     throw new ErrorLectorPrograma(
-      'No se encontró la fila de encabezados del programa (debe traer al menos «ORIGEN-DESTINO» y «CAJA»). '
+      `No se encontró la fila de encabezados del programa (debe traer al menos ${UMBRAL_ROTULOS_ENCABEZADO} rótulos conocidos, como «ORIGEN-DESTINO», «CAJA», «CLIENTE» o «UNIDAD»). `
       + 'Revisa que sea el CSV del programa de despacho.',
     );
   }
