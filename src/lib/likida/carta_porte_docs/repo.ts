@@ -38,6 +38,10 @@ export interface MetaExtraccion {
   indiciosInyeccion: string[];
   /** T-A3-53: la captura del correo llegó cortada (termina en este rótulo sin valor). Se revalida en cada corrección y al aprobar. */
   capturaIncompleta?: { ultimoRotulo: string } | null;
+  /** T-A3-67: el formato de entrada que reconoció el servicio y despachó a su lector (C remisión escaneada, D BOL en inglés, E orden del agente aduanal). */
+  formatoEntrada?: 'C' | 'D' | 'E';
+  /** T-A3-67: el lector no pudo leer el documento (hoy: remisión escaneada sin modelo de visión). Nada se inventó: se captura a mano. Se revalida en cada corrección. */
+  requiereCapturaManual?: { formato: 'C' | 'D' | 'E'; motivo: 'sin_vision' } | null;
 }
 
 /** Lo que se guarda en `cp_documento.extraccion`. */

@@ -23,7 +23,9 @@ import type { SalidaTms } from './tms_puerto';
 import { derivarHijos, evaluarDivision, MAX_EMBARQUES, type PlanDivision } from './multiembarque';
 import { elegirPerfil } from './perfiles';
 import { confianzaMinimaCritica, validarExtraccion, type Hallazgo, type ResultadoValidacion } from './validacion';
-import type { Extraccion } from './campos';
+import { extraccionVacia, type Extraccion } from './campos';
+import { clasificarFormato } from './registro_formatos';
+import type { VisionRemision } from './lectores/remision';
 import * as repo from './repo';
 import { asignarAlLlegarARevision } from './revisor';
 import type { CanalDoc, DocumentoFila, MetaExtraccion } from './repo';
@@ -41,6 +43,8 @@ export interface DepsServicio {
   apagado?: () => Promise<boolean>;
   /** T-A3-53: transcribe una captura (imagen) a texto por rótulos (modelo de visión). Sin él, una imagen se lee como siempre y no se puede detectar un corte por código. */
   transcribir?: (imagenes: string[], signal?: AbortSignal) => Promise<string>;
+  /** T-A3-67: el modelo de visión que lee una remisión escaneada (formato C). Sin él (sin llave: bloqueo externo) esa remisión queda «requiere captura manual». */
+  vision?: VisionRemision | null;
 }
 
 async function llmPorDefecto(tenantId: string, canal: CanalDoc): Promise<LlmExtractor> {
@@ -110,7 +114,7 @@ export async function recibirDocumento(tenantId: string, e: EntradaDocumento, de
  */
 export async function validarDocumento(
   tenantId: string,
-  doc: Pick<DocumentoFila, 'id' | 'riesgoInyeccion' | 'remitenteReconocido'> & { capturaIncompleta?: { ultimoRotulo: string } | null; extraccion?: DocumentoFila['extraccion'] },
+  doc: Pick<DocumentoFila, 'id' | 'riesgoInyeccion' | 'remitenteReconocido'> & { capturaIncompleta?: { ultimoRotulo: string } | null; requiereCapturaManual?: MetaExtraccion['requiereCapturaManual']; extraccion?: DocumentoFila['extraccion'] },
   e: Extraccion,
   opc: { tms?: SalidaTms } = {},
 ): Promise<ResultadoValidacion> {
@@ -120,6 +124,11 @@ export async function validarDocumento(
   const capturaIncompleta = doc.capturaIncompleta ?? doc.extraccion?.meta?.capturaIncompleta ?? null;
   const base = validarExtraccion(e, { riesgoInyeccion: doc.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido, catalogosSat, capturaIncompleta });
   const extra: Hallazgo[] = [];
+  // T-A3-67: lo que el lector no pudo leer se declara en cada revalidación (no se pierde al corregir un campo).
+  const manual = doc.requiereCapturaManual ?? doc.extraccion?.meta?.requiereCapturaManual ?? null;
+  if (manual) {
+    extra.push({ campo: 'documento', renglon: null, severidad: 'bloqueo', codigo: 'requiere_captura_manual', mensaje: 'Esta remisión escaneada no se pudo leer porque no hay modelo de visión configurado. No se inventó ningún dato: captúrala a mano contra el original.' });
+  }
   const folio = e.campos.folio_cliente?.valor;
   if (folio) {
     const otros = await repo.documentosConFolio(tenantId, folio, doc.id);
@@ -129,7 +138,10 @@ export async function validarDocumento(
     const viaje = await repo.viajePorFolio(tenantId, folio);
     if (viaje) extra.push({ campo: 'folio_cliente', renglon: null, severidad: 'aviso', codigo: 'viaje_existente', mensaje: `Ya existe un viaje con el folio ${folio}: al aprobar se le completarán solo los datos que le falten.` });
   }
-  return extra.length === 0 ? base : { ...base, hallazgos: [...base.hallazgos, ...extra] };
+  if (extra.length === 0) return base;
+  // Los extras de aquí son avisos, salvo `requiere_captura_manual`, que SÍ bloquea: se recuentan para que `listoParaAprobar` no mienta.
+  const bloqueos = base.bloqueos + extra.filter((h) => h.severidad === 'bloqueo').length;
+  return { ...base, hallazgos: [...base.hallazgos, ...extra], bloqueos, listoParaAprobar: base.listoParaAprobar && bloqueos === 0 };
 }
 
 // ── Procesar ────────────────────────────────────────────────────────────────
@@ -220,6 +232,41 @@ async function limpiarArchivosHuerfanos(tenantId: string, padreId: string, huell
   }
 }
 
+// ── T-A3-67: formatos C, D y E ──────────────────────────────────────────────
+
+/** Pide la transcripción una sola vez: la clasificación y el extractor comparten el resultado (y el costo del modelo de visión). */
+function memorizarTranscripcion(f: NonNullable<DepsServicio['transcribir']>): NonNullable<DepsServicio['transcribir']> {
+  let promesa: Promise<string> | null = null;
+  return (imagenes, signal) => (promesa ??= f(imagenes, signal));
+}
+
+/**
+ * Reconoce por su firma (T-A3-59) si el documento es una remisión escaneada (C), un BOL en inglés (D) o una orden del agente
+ * aduanal (E), para despacharlo a su lector. Un PDF o correo con texto se clasifica con su texto; un escaneo o una imagen, con la
+ * transcripción de su encabezado (puerto `transcribir`; sin él no hay con qué reconocerlo y sigue el flujo de siempre). Los
+ * formatos F1–F3 (correo/captura) los despacha el extractor por su cuenta; lo ambiguo o no reconocido tampoco se adivina.
+ */
+async function clasificarEntradaCDE(
+  c: Awaited<ReturnType<typeof prepararContenido>>, transcribir: DepsServicio['transcribir'], signal?: AbortSignal,
+): Promise<'C' | 'D' | 'E' | null> {
+  const visual = c.formato === 'imagen' || c.formato === 'pdf_escaneado';
+  let textoVision: string | null = null;
+  if (visual && !c.texto && transcribir && c.imagenes.length > 0) {
+    try { textoVision = await transcribir(c.imagenes, signal); } catch (e) { if (signal?.aborted) throw e; textoVision = null; }
+  }
+  const f = clasificarFormato({ contenido: c, textoVision }).formato;
+  return f === 'C' || f === 'D' || f === 'E' ? f : null;
+}
+
+/** Resultado de «nadie leyó el documento»: extracción vacía, sin modelo, sin costo. Lo que no se leyó no se inventa. */
+function resultadoSinLectura(avisos: string[], aviso: string): ResultadoExtraccion {
+  return {
+    extraccion: extraccionVacia(), origen: 'llm', nivel: 0, modelo: null, tokensIn: 0, tokensOut: 0, costoUsd: 0,
+    riesgoInyeccion: false, indiciosInyeccion: [], perfilId: null, perfilVersion: null, perfilAmbiguo: false,
+    avisos: [...avisos, aviso], escalamientos: [], notasModelo: [], capturaIncompleta: null,
+  };
+}
+
 export async function procesarDocumento(
   tenantId: string, documentoId: string, deps: DepsServicio & { signal?: AbortSignal } = {},
 ): Promise<ResultadoProceso> {
@@ -282,10 +329,22 @@ export async function procesarDocumento(
       contenido.avisos.push(`El archivo trae ${exceso} embarques (más de ${MAX_EMBARQUES}): no se parte solo. Se leyó el primero; divide el archivo y súbelo por partes.`);
     }
 
-    const llm = await (deps.llm ?? llmPorDefecto)(tenantId, doc.canal);
+    // T-A3-67: la transcripción de una captura/escaneo se pide UNA vez por documento (la usan la clasificación y, después, el extractor).
+    const transcribir = deps.transcribir ? memorizarTranscripcion(deps.transcribir) : undefined;
+    const formatoEntrada = await clasificarEntradaCDE(contenido, transcribir, deps.signal);
+    // Remisión escaneada sin modelo de visión (sin llave): no hay con qué leerla. No se manda al modelo genérico a adivinarla ni se
+    // inventa nada: queda «requiere captura manual», visible y bloqueante, y el flujo no se rompe.
+    const sinVision = formatoEntrada === 'C' && !deps.vision && contenido.imagenes.length > 0;
+
+    const llm = sinVision ? null : await (deps.llm ?? llmPorDefecto)(tenantId, doc.canal);
     let r: ResultadoExtraccion;
     try {
-      r = await extraerDocumento(contenido, { llm, perfiles, remitente: doc.remitente, clienteId: doc.clienteId, signal: deps.signal, nombreArchivo: doc.nombreArchivo, ...(deps.transcribir ? { transcribir: deps.transcribir } : {}) });
+      r = sinVision || !llm
+        ? resultadoSinLectura(contenido.avisos, 'Sin modelo de visión configurado: esta remisión escaneada se captura a mano.')
+        : await extraerDocumento(contenido, {
+          llm, perfiles, remitente: doc.remitente, clienteId: doc.clienteId, signal: deps.signal, nombreArchivo: doc.nombreArchivo,
+          ...(transcribir ? { transcribir } : {}), ...(formatoEntrada ? { formatoEntrada } : {}), ...(deps.vision ? { vision: deps.vision } : {}),
+        });
     } catch (e) {
       if (esErrorDePresupuesto(e)) {
         const alcance = alcanceDePresupuesto(e);
@@ -310,11 +369,14 @@ export async function procesarDocumento(
       avisosCatalogo.push(...avisosDelCatalogo(e, catalogo.truncado === true));
     }
 
-    const docVista = { id: doc.id, riesgoInyeccion: r.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido, capturaIncompleta: r.capturaIncompleta };
+    const requiereCapturaManual: MetaExtraccion['requiereCapturaManual'] = sinVision ? { formato: 'C', motivo: 'sin_vision' } : null;
+    const docVista = { id: doc.id, riesgoInyeccion: r.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido, capturaIncompleta: r.capturaIncompleta, requiereCapturaManual };
     const validacion = await validarDocumento(tenantId, docVista, extraccion);
     const meta: MetaExtraccion = {
       origen: r.origen, nivel: r.nivel, escalamientos: r.escalamientos, avisos: [...r.avisos, ...avisosCatalogo], notasModelo: r.notasModelo, indiciosInyeccion: r.indiciosInyeccion,
       ...(r.capturaIncompleta ? { capturaIncompleta: r.capturaIncompleta } : {}),
+      ...(formatoEntrada ? { formatoEntrada } : {}),
+      ...(requiereCapturaManual ? { requiereCapturaManual } : {}),
     };
     const guardada = await repo.actualizarDocumento(tenantId, documentoId, version, {
       estado: 'por_revisar', formato: contenido.formato, perfil_id: r.perfilId, perfil_version: r.perfilVersion,
