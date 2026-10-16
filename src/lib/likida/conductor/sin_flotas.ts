@@ -24,6 +24,11 @@ export function sinFlotasEnViajes<P extends object>(p: P, saltar: Saltar): P {
       envuelto[nombre] = async (limite: number) => sinTenantsDePerfil(await leer(limite), saltar, (v) => v.tenantId);
     }
   }
+  // T-A5-66: las flotas con eventos huérfanos tampoco incluyen a las que están en «Próximamente».
+  const flotas = puertos.flotasConHuerfanos as (() => Promise<string[]>) | undefined;
+  if (typeof flotas === 'function') {
+    envuelto.flotasConHuerfanos = async () => sinTenantsDePerfil(await flotas(), saltar, (t) => t);
+  }
   return envuelto as P;
 }
 

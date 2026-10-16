@@ -301,6 +301,26 @@ export async function leerMuestrasGps(unidades: UnidadDeViaje[], desde: Date): P
 }
 
 /**
+ * T-A5-66: las unidades activas de esas flotas SIN un viaje abierto que el ciclo por geocerca atienda (abierto, aceptado y de menos de
+ * `DIAS_VIAJE_ABIERTO_VENCIDO` días): son las que pueden dejar un cruce huérfano. Anclado a las flotas pedidas.
+ */
+export async function leerUnidadesSinViajeAbierto(tenantIds: string[], limite: number, ahora: Date = new Date()): Promise<UnidadDeViaje[]> {
+  if (tenantIds.length === 0) return [];
+  const unidades = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('unidad').select('id, tenant_id')
+    .in('tenant_id', tenantIds).eq('activo', true).order('id').range(d, h), 'conductor.huerfanos_unidades') as never, 'conductor.huerfanos_unidades');
+  const desde = new Date(ahora.getTime() - DIAS_VIAJE_ABIERTO_VENCIDO * 86_400_000).toISOString();
+  const ocupadas = new Set<string>();
+  const viajes = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('viaje').select('tenant_id, unidad_id')
+    .in('tenant_id', tenantIds).eq('estatus', 'abierto').not('aceptado_en', 'is', null).not('unidad_id', 'is', null).gte('aceptado_en', desde)
+    .order('id').range(d, h), 'conductor.huerfanos_viajes_abiertos') as never, 'conductor.huerfanos_viajes_abiertos');
+  for (const v of viajes) ocupadas.add(`${String(v.tenant_id)}|${String(v.unidad_id)}`);
+  return unidades
+    .map((u) => ({ tenantId: String(u.tenant_id), unidadId: String(u.id) }))
+    .filter((u) => !ocupadas.has(`${u.tenantId}|${u.unidadId}`))
+    .slice(0, limite);
+}
+
+/**
  * Los viajes abiertos y aceptados a los que les falta el sitio de carga o de descarga, con el texto de su origen y destino, su
  * cliente y qué lados ya se derivaron una vez (0637; una base sin esa tabla se lee como «ninguno»). Cruza flotas a propósito
  * (cron); cada candidato lleva su `tenantId` y todo lo posterior se ancla a él. Los más recientes primero.
