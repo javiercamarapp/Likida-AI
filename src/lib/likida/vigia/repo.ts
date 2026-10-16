@@ -451,7 +451,7 @@ async function contextoDeTurnos(tenantId: string): Promise<{ zona: string; festi
   const z = await acotada(supabaseAdmin().from('tenant').select('zona_horaria').eq('id', tenantId).maybeSingle(), 'vigia.turnos_zona');
   if (z.error && !sinMigrar(z.error) && !sinColumna(z.error)) throw new Error(`vigia.turnos_zona: ${z.error.message}`);
   const zona = str((z.data as Fila | null)?.zona_horaria) ?? ZONA_POR_OMISION;
-  const f = await acotada(supabaseAdmin().from('vigia_festivo').select('fecha').eq('tenant_id', tenantId).limit(400), 'vigia.turnos_festivos');
+  const f = await acotada(supabaseAdmin().from('vigia_festivo').select('fecha').eq('tenant_id', tenantId).order('fecha').order('id').limit(400), 'vigia.turnos_festivos');
   if (f.error && !sinMigrar(f.error)) throw new Error(`vigia.turnos_festivos: ${f.error.message}`);
   const festivos = ((f.error ? [] : f.data ?? []) as Fila[]).map((x) => String(x.fecha ?? '').slice(0, 10)).filter(esFechaValida);
   return { zona, festivos };
@@ -1196,7 +1196,7 @@ export async function fijarTurnoDirector(tenantId: string, id: string, turno: un
 
 /** Los festivos de la flota, por fecha. Sin la tabla (base sin 0798) es lista vacía. */
 export async function listarFestivos(tenantId: string): Promise<FestivoFlota[]> {
-  const r = await acotada(supabaseAdmin().from('vigia_festivo').select('id, fecha, nombre').eq('tenant_id', tenantId).order('fecha').limit(400), 'vigia.festivos');
+  const r = await acotada(supabaseAdmin().from('vigia_festivo').select('id, fecha, nombre').eq('tenant_id', tenantId).order('fecha').order('id').limit(400), 'vigia.festivos');
   if (r.error) {
     if (sinMigrar(r.error)) return [];
     throw new Error(`vigia.festivos: ${r.error.message}`);
