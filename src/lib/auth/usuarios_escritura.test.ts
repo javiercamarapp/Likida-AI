@@ -59,7 +59,8 @@ const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
 
 const {
-  cambiarRolUsuario, desactivarUsuario, reactivarUsuario, reenviarAcceso, enviarCorreoDeAcceso, BAN_PERMANENTE,
+  cambiarRolUsuario, desactivarUsuario, reactivarUsuario, reenviarAcceso, enviarCorreoDeAcceso, cerrarSesionesUsuario,
+  BAN_PERMANENTE,
 } = await import('./usuarios_escritura');
 const { DatoInvalido } = await import('@/lib/likida/errores');
 
@@ -233,6 +234,63 @@ describe('desactivarUsuario — la baja en tres capas', () => {
     expect(r).toEqual({ sesionRevocada: true });
     expect(logger.error).toHaveBeenCalledWith('equipo.mcp_revocar_fallo',
       expect.objectContaining({ usuario: U, err: 'rpc caída' }));
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FASE 1 · SEG-SESIONES (checklist 31 v2 #5): «cerrar todas las sesiones de
+// un usuario», el lado ADMIN (sobre OTRO usuario de su mismo tenant) —
+// `revocar_sesiones_usuario` (migración 0840, SOLO LOCAL) es la RPC
+// hermana de `revocar_mcp_oauth_usuario` (0265), misma firma de llamada
+// (service role, anclada a tenant por `leerObjetivo`), con bitácora igual
+// que la impersonación.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cerrarSesionesUsuario', () => {
+  it('ancla la lectura al tenant (rechaza superadmin y cuentas de otra flota) y llama a la RPC con el id correcto', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    const r = await cerrarSesionesUsuario(TENANT, U, ACTOR);
+    expect(r).toEqual({ sesionesCerradas: true });
+    expect(rpc).toHaveBeenCalledWith('revocar_sesiones_usuario', { p_usuario: U });
+    const [lectura] = llamadas;
+    expect(lectura.eq).toEqual(expect.arrayContaining([['id', U], ['tenant_id', TENANT]]));
+  });
+
+  it('anota en bitácora, igual que la impersonación', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    await cerrarSesionesUsuario(TENANT, U, ACTOR);
+    expect(anotarBitacora).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: TENANT, accion: 'usuario.sesiones_cerradas', entidad: 'app_user', entidadId: U }),
+      expect.anything(),
+    );
+  });
+
+  it('una cuenta de otra flota (o inexistente) es «no está en tu equipo»: no llama a la RPC', async () => {
+    colas.set('app_user', [{ data: null }]);
+    await expect(cerrarSesionesUsuario(TENANT, U, ACTOR)).rejects.toThrow(/no está en tu equipo/);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('un superadmin no se administra desde el panel del cliente', async () => {
+    colas.set('app_user', [{ data: fila({ rol: 'superadmin' }) }]);
+    await expect(cerrarSesionesUsuario(TENANT, U, ACTOR)).rejects.toThrow(/de Likida/);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('si la RPC falla, se DICE (sesionesCerradas=false) y queda en el log y en la bitácora — no se finge', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    rpc.mockResolvedValueOnce({ data: null, error: { message: 'rpc caída' } });
+    const r = await cerrarSesionesUsuario(TENANT, U, ACTOR);
+    expect(r).toEqual({ sesionesCerradas: false });
+    expect(logger.error).toHaveBeenCalledWith('equipo.sesiones_cerrar_fallo', expect.objectContaining({ usuario: U }));
+    expect(anotarBitacora).toHaveBeenCalledWith(
+      expect.objectContaining({ detalle: expect.objectContaining({ sesiones_cerradas: false }) }), expect.anything(),
+    );
+  });
+
+  it('un id que no es UUID se rechaza ANTES de leer nada', async () => {
+    await expect(cerrarSesionesUsuario(TENANT, 'no-es-uuid', ACTOR)).rejects.toBeInstanceOf(DatoInvalido);
+    expect(llamadas).toHaveLength(0);
+    expect(rpc).not.toHaveBeenCalled();
   });
 });
 
