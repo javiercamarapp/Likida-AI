@@ -11,7 +11,8 @@ import {
   importarDesglose, conciliarDesglose, listarDesgloses, detalleDesglose,
 } from '@/lib/likida/intake/desglose_peaje';
 import { evidenciaGpsDeDesglose } from '@/lib/likida/peajes/evidencia_gps';
-import { anularDesgloseDb } from '@/lib/likida/peajes/datos';
+import { anularDesgloseDb, vinculosDeDesglose, listarTarifas } from '@/lib/likida/peajes/datos';
+import { revisionDeDesglose, listarReclamos } from '@/lib/likida/peajes/revision_cobros';
 import { validarPeriodoDeclarado } from '@/lib/likida/peajes/periodo';
 import { bitacoraConciliada } from '@/lib/likida/peajes/bitacora_conciliada';
 import { logger } from '@/lib/logger';
@@ -22,6 +23,8 @@ import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
 import { registrarCorrida, ultimasCorridas } from '@/lib/likida/agentes/corridas';
 import { ahoraMs } from '@/lib/saludo';
+import { hoyMx } from '@/lib/formato';
+import { estadoRevisionCobros } from './revision-cobros';
 import type { EstadoImportar } from './subir-desglose';
 import type { EstadoConciliar } from './conciliar-desglose';
 import type { EstadoAnular } from './anular-desglose';
@@ -80,7 +83,7 @@ export default async function PaginaAgentePeajes({
   // FE-33: las dos lecturas de abajo solo dependen de `desgloseSel` — nada
   // de la segunda depende del resultado de la primera —, así que van en
   // paralelo en vez de en serie.
-  const [detalleSel, evidenciaSel, verificacionSel] = desgloseSel
+  const [detalleSel, evidenciaSel, verificacionSel, reporteCobros, reclamosFlota, tarifasFlota, vinculosSel] = desgloseSel
     ? await Promise.all([
         safe(() => detalleDesglose(tenantId, desgloseSel.desgloseId)),
         // La evidencia GPS del desglose seleccionado (post-plan-maestro #1).
@@ -98,8 +101,18 @@ export default async function PaginaAgentePeajes({
           const b = await bitacoraConciliada(tenantId, desgloseSel.desgloseId);
           return b ? { resumen: b.resumen, sinEvaluarGps: b.sinEvaluarGps } : null;
         }),
+        // T-A2-27: las lecturas de la revisión de cobros. Cada una va con `safe()`: un fallo aquí
+        // degrada SOLO esa franja (`estadoRevisionCobros` → error) y nunca bloquea subir/anular/conciliar.
+        safe(() => revisionDeDesglose(tenantId, desgloseSel.desgloseId)),
+        safe(async () => (await listarReclamos(tenantId, hoyMx())).reclamos),
+        safe(async () => (await listarTarifas(tenantId)).length),
+        safe(() => vinculosDeDesglose(tenantId, desgloseSel.desgloseId)),
       ])
-    : [null, null, null];
+    : [null, null, null, null, null, null, null];
+  const revisionCobros = estadoRevisionCobros({
+    reporte: reporteCobros, hayDesglose: desgloseSel !== null,
+    reclamos: reclamosFlota, tarifas: tarifasFlota, vinculos: vinculosSel, hoy: hoyMx(),
+  });
 
   async function subirDesglose(
     _prev: { error?: string; resumen?: { totalLineas: number; conciliadas: number; porConciliar: number } } | null,
@@ -321,6 +334,7 @@ export default async function PaginaAgentePeajes({
       detalleSeleccionado={detalleSel}
       evidenciaGps={evidenciaSel}
       verificacion={verificacionSel}
+      revisionCobros={revisionCobros}
       importarDesglose={importarYCruzarDesglose}
       conciliarDesglose={conciliarDesgloseAhora}
       anularDesglose={anularDesgloseAhora}
