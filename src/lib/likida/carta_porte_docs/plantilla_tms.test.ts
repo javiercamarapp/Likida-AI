@@ -234,12 +234,12 @@ describe('multi-destino', () => {
 });
 
 describe('LAYOUT_NUEVA', () => {
-  it('es provisional, no verificada, serializable y agrega Origenes/Destinos vacías', () => {
+  it('es provisional, no verificada, serializable y trae Datos/Origenes/Destinos/Mercancias (T-A3-44)', () => {
     expect(LAYOUT_NUEVA.verificada).toBe(false);
     expect(layoutPuedeEnviarse(LAYOUT_NUEVA)).toBe(false);
     expect(layoutPuedeEnviarse(LAYOUT_NORMAL)).toBe(true);
-    expect(LAYOUT_NUEVA.hojas.map((h) => h.hoja)).toEqual(['RemintenteDestinatario', 'Mercancias', 'Error', 'Origenes', 'Destinos']);
-    expect(LAYOUT_NUEVA.nota).toContain('pendiente de especificación');
+    expect(LAYOUT_NUEVA.hojas.map((h) => h.hoja)).toEqual(['Datos', 'Origenes', 'Destinos', 'Mercancias']);
+    expect(LAYOUT_NUEVA.nota).toContain('Sin verificar');
     expect(JSON.parse(JSON.stringify(LAYOUT_NUEVA))).toEqual(LAYOUT_NUEVA);
     expect(LAYOUT_NORMAL.nombre).toBe('normal'); // la normal no se tocó
   });
@@ -248,8 +248,8 @@ describe('LAYOUT_NUEVA', () => {
     const env = construirPlantilla(extraccion(), { ...ctx, plantilla: 'nueva' });
     expect(Object.keys(env.hojas)).toEqual(['RemintenteDestinatario', 'Mercancias', 'Error']);
     const des = construirPlantilla(extraccion(), { ...ctx, plantilla: 'nueva', uso: 'descarga' });
-    expect(Object.keys(des.hojas)).toEqual(['RemintenteDestinatario', 'Mercancias', 'Error', 'Origenes', 'Destinos']);
-    expect(des.hojas.Origenes).toEqual({});
+    expect(Object.keys(des.hojas)).toEqual(['Datos', 'Origenes', 'Destinos', 'Mercancias']);
+    expect(des.hojas.Origenes.A2.valor).toBe('OR000001');
     expect(des.avisos.some((a) => a.includes('solo para revisar'))).toBe(true);
   });
 });

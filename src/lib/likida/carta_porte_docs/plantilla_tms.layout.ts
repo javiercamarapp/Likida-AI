@@ -16,7 +16,7 @@
 // declarativo.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type TransformacionPlantilla = 'nombre_estado' | 'si_no' | 'entero' | 'distancia';
+export type TransformacionPlantilla = 'nombre_estado' | 'si_no' | 'si_no_tilde' | 'entero' | 'distancia';
 
 export interface EntradaCelda {
   /** Coordenada fija, p. ej. `C12`. */
@@ -47,10 +47,14 @@ export interface ColumnaTabla {
   indice?: boolean;
   /** El valor es el destino al que va la mercancía (`mercancia.id_destino`); con un solo destino es 1. */
   idDestino?: boolean;
+  /** Plantilla «nueva»: el valor es el ID del registro (`OR000001`, `DE000001`), único y estable por documento (por posición). */
+  idRegistro?: 'origen' | 'destino';
+  /** Plantilla «nueva»: el valor es el ID del origen/destino al que apunta la mercancía (`mercancia.id_origen` / `id_destino`). */
+  referencia?: 'origen' | 'destino';
 }
 
 export interface TablaLayout {
-  id: 'destinos' | 'mercancias';
+  id: 'origenes' | 'destinos' | 'mercancias';
   /** La tabla admite varias filas de destino (campos `destino_N_*` para N ≥ 2). */
   multi?: boolean;
   filaEncabezado: number;
@@ -59,7 +63,13 @@ export interface TablaLayout {
   columnas: ColumnaTabla[];
 }
 
-export interface HojaLayout { hoja: string; celdas: EntradaCelda[]; tablas: TablaLayout[] }
+export interface HojaLayout {
+  hoja: string;
+  celdas: EntradaCelda[];
+  tablas: TablaLayout[];
+  /** Rótulos de encabezado de las celdas fijas (hoja `Datos` de la plantilla «nueva»: rótulos en la fila 1, valores en la 2). */
+  encabezados?: Array<{ celda: string; texto: string }>;
+}
 
 export interface LayoutPlantilla {
   nombre: 'normal' | 'nueva';
@@ -167,22 +177,85 @@ export const LAYOUT_NORMAL: LayoutPlantilla = {
   ],
 };
 
+/** Máximo de filas de las tablas de orígenes y destinos de la plantilla «nueva» (si hay más, el documento se bloquea). */
+export const MAX_ORIGENES_NUEVA = 50;
+export const MAX_DESTINOS_NUEVA = 50;
+
+const COLUMNAS_ORIGENES_NUEVA: ColumnaTabla[] = [
+  { columna: 'A', encabezado: 'ID Origen', obligatorio: true, texto: true, idRegistro: 'origen' },
+  t('B', 'Razón Social', 'origen_nombre', true),
+  t('C', 'RFC', 'origen_rfc', true),
+  t('D', 'Calle', 'origen_calle', true),
+  t('E', 'Num Int', 'origen_num_int', false),
+  t('F', 'Num Ext', 'origen_num_ext', false),
+  t('G', 'Clave Colonia', 'origen_colonia_clave', false),
+  t('H', 'CP', 'origen_cp', true),
+  t('I', 'Clave Localidad', 'origen_localidad_clave', false),
+  t('J', 'Clave Municipio', 'origen_municipio_clave', false),
+  t('K', 'Clave Estado', 'origen_estado', true),
+  t('L', 'País', 'origen_pais', true),
+];
+
+/** Destinos de la «nueva»: las mismas A..T de la normal, con `DE######` en la columna A. */
+const COLUMNAS_DESTINOS_NUEVA: ColumnaTabla[] = [
+  { columna: 'A', encabezado: 'ID Destino', obligatorio: true, texto: true, idRegistro: 'destino' },
+  ...COLUMNAS_DESTINOS.slice(1),
+];
+
+/** Mercancías de la «nueva» (A..Q): ID Destino e ID Origen apuntan a las otras hojas. */
+const COLUMNAS_MERCANCIAS_NUEVA: ColumnaTabla[] = [
+  { columna: 'A', encabezado: 'ID Destino', obligatorio: true, texto: true, referencia: 'destino' },
+  { columna: 'B', encabezado: 'ID Origen', obligatorio: true, texto: true, referencia: 'origen' },
+  t('C', 'Bienes Transportados', 'mercancia.bienes_transp', true),
+  t('D', 'Descripción', 'mercancia.descripcion', true),
+  t('E', 'Cantidad', 'mercancia.cantidad', true, { texto: false }),
+  t('F', 'Clave Unidad', 'mercancia.clave_unidad', true),
+  t('G', 'Unidad', 'mercancia.unidad_descripcion', false, { alterno: 'mercancia.unidad_texto' }),
+  t('H', 'Embalaje', 'mercancia.embalaje', false),
+  t('I', 'Descripción embalaje', 'mercancia.embalaje_descripcion', false),
+  t('J', 'Peso kg', 'mercancia.peso_kg', true, { texto: false }),
+  t('K', 'Fracción', 'mercancia.fraccion_arancelaria', false),
+  t('L', 'Número de Pedimento', 'mercancia.pedimento', false),
+  t('M', 'Material Peligroso', 'mercancia.material_peligroso', true, { transformacion: 'si_no_tilde', defecto: 'No' }),
+  t('N', 'Clave Material Peligroso', 'mercancia.clave_material_peligroso', false),
+  t('O', 'Tipo de Materia', 'mercancia.tipo_materia', false),
+  t('P', 'Descripción de la Materia', 'mercancia.descripcion_materia', false),
+  t('Q', 'RFC Importador', 'mercancia.rfc_importador', false),
+];
+
 /**
- * Plantilla «nueva» (varias razones sociales): PROVISIONAL y NO VERIFICADA. Misma estructura que la normal más las hojas
- * `Origenes` y `Destinos` vacías. Qué columnas llevan esas hojas y cuándo se usa esta plantilla en vez de la normal lo
- * define el cliente con la plantilla en blanco (bloqueo B-2); hasta entonces solo sirve para descargar con aviso.
+ * Plantilla «nueva» (varias razones sociales): hojas Datos, Origenes, Destinos y Mercancias (la «Guía de llenado» es
+ * documentación del TMS y no se escribe). Forma tomada de la muestra real (análisis 17 §1.3): `Datos` con rótulos en la fila 1
+ * y valores en la 2; `Origenes` A..L con `OR######`; `Destinos` A..T con `DE######`; `Mercancias` A..Q con ID Destino e ID Origen.
+ *
+ * Sigue SIN VERIFICAR (`verificada:false`): falta la plantilla en blanco del TMS y la respuesta del cliente sobre cuándo se
+ * usa (bloqueo B-2/B-10, criterio provisional «más de una razón social ⇒ nueva»). Mientras tanto solo sirve para DESCARGAR,
+ * con el aviso de criterio provisional; para enviar al TMS se genera la normal.
  */
-const PENDIENTE_NUEVA = 'pendiente de especificación (B-2)';
 export const LAYOUT_NUEVA: LayoutPlantilla = {
-  ...LAYOUT_NORMAL,
   nombre: 'nueva',
+  version: 1,
   provisional: true,
   verificada: false,
-  nota: `Hojas Origenes y Destinos ${PENDIENTE_NUEVA}.`,
+  nota: 'Forma tomada de la muestra real (análisis 17 §1.3). Sin verificar contra la plantilla en blanco del TMS ni confirmado el criterio de uso (B-2/B-10): solo descarga.',
   hojas: [
-    ...LAYOUT_NORMAL.hojas,
-    { hoja: 'Origenes', celdas: [], tablas: [] },
-    { hoja: 'Destinos', celdas: [], tablas: [] },
+    {
+      hoja: 'Datos',
+      encabezados: [
+        { celda: 'A1', texto: 'Régimen Aduanero' }, { celda: 'B1', texto: 'Referencia Interna Cliente' },
+        { celda: 'C1', texto: 'Cliente' }, { celda: 'D1', texto: 'Número de Caja' },
+      ],
+      celdas: [
+        c('A2', 'regimen_aduanero', false, { alterno: 'mercancia.regimen_aduanero' }),
+        c('B2', 'folio_cliente', false),
+        c('C2', 'ctx.clienteInterno', true),
+        c('D2', 'caja_numero', true),
+      ],
+      tablas: [],
+    },
+    { hoja: 'Origenes', celdas: [], tablas: [{ id: 'origenes', multi: true, filaEncabezado: 1, primeraFila: 2, maxFilas: MAX_ORIGENES_NUEVA, columnas: COLUMNAS_ORIGENES_NUEVA }] },
+    { hoja: 'Destinos', celdas: [], tablas: [{ id: 'destinos', multi: true, filaEncabezado: 1, primeraFila: 2, maxFilas: MAX_DESTINOS_NUEVA, columnas: COLUMNAS_DESTINOS_NUEVA }] },
+    { hoja: 'Mercancias', celdas: [], tablas: [{ id: 'mercancias', filaEncabezado: 1, primeraFila: 2, maxFilas: 100, columnas: COLUMNAS_MERCANCIAS_NUEVA }] },
   ],
 };
 
@@ -199,6 +272,7 @@ export function coordenadasLayout(l: LayoutPlantilla): string[] {
   const out: string[] = [];
   for (const h of l.hojas) {
     for (const e of h.celdas) out.push(`${h.hoja}!${e.celda}`);
+    for (const e of h.encabezados ?? []) out.push(`${h.hoja}!${e.celda}`);
     for (const tb of h.tablas) for (const col of tb.columnas) {
       out.push(`${h.hoja}!${col.columna}${tb.filaEncabezado}`, `${h.hoja}!${col.columna}${tb.primeraFila}`);
     }

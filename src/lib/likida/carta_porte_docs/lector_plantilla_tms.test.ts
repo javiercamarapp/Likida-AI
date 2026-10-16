@@ -7,6 +7,7 @@ import { prepararContenido, MAX_HOJAS, hojasDeDatos } from './contenido';
 import { esLibroPlantillaNueva, leerPlantillaTms } from './lector_plantilla_tms';
 import { construirPlantilla } from './plantilla_tms';
 import { llmFalso } from './llm_falso.fixture';
+import { filasDeHoja, plantillaNuevaEnBlanco, plantillaNuevaLlena, RFC_DESTINO_SINTETICO, verificarReglasGuiaNueva } from './evaluacion/plantilla_nueva_real.fixture';
 import { plantillaNormalRealEnBlanco, plantillaNormalRealLlena, VALORES_LLENA } from './evaluacion/plantilla_normal_real.fixture';
 
 const cv = (valor: string | null): CampoValor => ({ valor, confianza: 0.95, evidencia: null, origen: 'llm' });
@@ -209,11 +210,102 @@ describe('leerPlantillaTms: lo que no es la plantilla cae al flujo actual', () =
     expect(Object.keys(l.extraccion.campos)).toHaveLength(0);
     expect(l.avisos.some((a) => a.includes('no trae mercancías'))).toBe(true);
   });
-  it('la plantilla «nueva» (Datos/Origenes/Destinos) se detecta y espera a T-A3-44', () => {
+  it('la plantilla «nueva» (Datos/Origenes/Destinos/Mercancias) se detecta por sus hojas, con o sin Guía', () => {
     expect(esLibroPlantillaNueva(['Datos', 'Origenes', 'Destinos', 'Mercancias', 'RemintenteDestinatario'])).toBe(true);
+    expect(esLibroPlantillaNueva(['Datos', 'Origenes', 'Destinos', 'Mercancias', 'Guia de Llenado'])).toBe(true);
     expect(esLibroPlantillaNueva(['RemintenteDestinatario', 'Mercancias', 'Error'])).toBe(false);
+    expect(esLibroPlantillaNueva(['Datos', 'Origenes'])).toBe(false);
   });
-  it.todo('plantilla «nueva»: leer Origenes y Destinos (espera a T-A3-44)');
+});
+
+describe('leerPlantillaTms: plantilla «nueva» (T-A3-44 + T-A3-47), sin modelo', () => {
+  const ctxNueva = { clienteInterno: null, plantilla: 'nueva' as const, uso: 'descarga' as const, distanciaFormato: 'numero' as const, reglasGuia: false as const };
+  const libroDe = (hojas: Record<string, string[][]>): Uint8Array => {
+    const wb = XLSX.utils.book_new();
+    for (const [n, filas] of Object.entries(hojas)) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filas), n);
+    return new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer);
+  };
+  const datosDe = (bytes: Uint8Array, hoja: string) => filasDeHoja(XLSX.read(bytes, { type: 'array' }).Sheets[hoja]).slice(0).filter((f) => f.fila > 1);
+  const reexportar = (bytes: Uint8Array) => {
+    const l = leerPlantillaTms(bytes);
+    expect(l).not.toBeNull();
+    return { l: l!, bytes: aXlsxPlantillaTms(construirPlantilla(l!.extraccion, ctxNueva), plantillaNuevaEnBlanco()) };
+  };
+
+  it('lee el libro sintético «nueva» y lo reexporta idéntico, hoja por hoja y celda por celda', () => {
+    const original = plantillaNuevaLlena();
+    const { l, bytes } = reexportar(original);
+    expect(l.plantilla).toBe('nueva');
+    expect(l.llamadasLlm).toBe(0);
+    for (const hoja of ['Datos', 'Origenes', 'Destinos', 'Mercancias']) {
+      expect(datosDe(bytes, hoja), hoja).toEqual(datosDe(original, hoja));
+      expect(datosDe(bytes, hoja).length, hoja).toBeGreaterThan(0);
+    }
+    expect(datosDe(bytes, 'Origenes')).toHaveLength(2);
+    expect(datosDe(bytes, 'Destinos')).toHaveLength(2);
+    expect(datosDe(bytes, 'Mercancias')).toHaveLength(2);
+  });
+
+  it('lo reexportado cumple las reglas de la Guía sintética y una segunda vuelta no cambia nada', () => {
+    const una = reexportar(plantillaNuevaLlena());
+    expect(verificarReglasGuiaNueva(una.bytes)).toEqual([]);
+    const dos = reexportar(una.bytes);
+    for (const hoja of ['Datos', 'Origenes', 'Destinos', 'Mercancias']) expect(datosDe(dos.bytes, hoja)).toEqual(datosDe(una.bytes, hoja));
+  });
+
+  it('la extracción trae 2 orígenes, 2 destinos y cada mercancía apunta a su par, con origen «perfil»', () => {
+    const { campos, mercancias } = leerPlantillaTms(plantillaNuevaLlena())!.extraccion;
+    expect(campos.origen_nombre?.valor).toBe('Embarcador Sintetico Uno SA');
+    expect(campos.origen_2_nombre?.valor).toBe('Embarcador Sintetico Dos SA');
+    expect(campos.destino_nombre?.valor).toBe('Destino Sintetico LLC');
+    expect(campos.destino_2_nombre?.valor).toBe('Destino Sintetico LLC');
+    expect(campos.destino_2_rfc?.valor).toBe(RFC_DESTINO_SINTETICO);
+    expect(campos.numero_cliente_interno?.valor).toBe('123');
+    expect(campos.caja_numero?.valor).toBe('CAJA-0001');
+    expect(campos.regimen_aduanero?.valor).toBe('EXD');
+    expect(mercancias.map((m) => [m.id_origen?.valor, m.id_destino?.valor])).toEqual([['1', '1'], ['2', '2']]);
+    expect(mercancias.map((m) => m.fraccion_arancelaria?.valor)).toEqual(['8471500100', '8471500101']); // grep-limpio:ok
+    expect(Object.values(campos).every((c) => c.origen === 'perfil')).toBe(true);
+  });
+
+  it('IDs que no son consecutivos se convierten a la posición de su fila', () => {
+    const wb = XLSX.read(plantillaNuevaLlena(), { type: 'array' });
+    wb.Sheets.Origenes.A2.v = 'OR000007'; wb.Sheets.Origenes.A3.v = 'OR000003';
+    wb.Sheets.Mercancias.B2.v = 'OR000003'; wb.Sheets.Mercancias.B3.v = 'OR000007';
+    const bytes = new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer);
+    const { mercancias } = leerPlantillaTms(bytes)!.extraccion;
+    expect(mercancias.map((m) => m.id_origen?.valor)).toEqual(['2', '1']);
+  });
+
+  it('una referencia a un ID que no existe se avisa y no se adivina', () => {
+    const wb = XLSX.read(plantillaNuevaLlena(), { type: 'array' });
+    wb.Sheets.Mercancias.B3.v = 'OR000009'; wb.Sheets.Mercancias.A2.v = 'sin id';
+    const bytes = new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer);
+    const l = leerPlantillaTms(bytes)!;
+    expect(l.avisos.some((a) => a.includes('OR000009') && a.includes('no existe'))).toBe(true);
+    expect(l.avisos.some((a) => a.includes('sin id') && a.includes('no es un ID'))).toBe(true);
+    expect(l.extraccion.mercancias[0].id_destino).toBeUndefined();
+    expect(l.extraccion.mercancias[1].id_origen?.valor).toBe('9');
+    const bloqueada = construirPlantilla(l.extraccion, ctxNueva);
+    expect(bloqueada.faltantes.some((f) => f.bloqueante && f.campo === 'mercancia.id_origen')).toBe(true);
+  });
+
+  it('la Guía de llenado se ignora y la plantilla en blanco se lee sin datos y lo avisa', () => {
+    expect(leerPlantillaTms(plantillaNuevaLlena())!.hojasIgnoradas).toEqual(['Guia de Llenado']);
+    const l = leerPlantillaTms(plantillaNuevaEnBlanco())!;
+    expect(l.plantilla).toBe('nueva');
+    expect(l.extraccion.mercancias).toHaveLength(0);
+    expect(Object.keys(l.extraccion.campos)).toHaveLength(0);
+    expect(l.avisos.some((a) => a.includes('no trae mercancías'))).toBe(true);
+  });
+
+  it('un libro con esos nombres de hoja pero sin sus encabezados devuelve null', () => {
+    expect(leerPlantillaTms(libroDe({ Datos: [['x']], Origenes: [['x']], Destinos: [['x']], Mercancias: [['x']] }))).toBeNull();
+  });
+
+  it('la lectura de la «normal» no cambia: sigue devolviendo plantilla «normal»', () => {
+    expect(leerPlantillaTms(plantillaNormalRealLlena())!.plantilla).toBe('normal');
+  });
 });
 
 describe('libro de 5 hojas con la Guía de llenado', () => {

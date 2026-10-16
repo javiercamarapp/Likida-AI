@@ -12,7 +12,8 @@
 // · Hojas `Error`, `Informacion Agente Aduanal` y la Guía de llenado se ignoran: no son datos y no
 //   cuentan contra `MAX_HOJAS` (ver `hojasDeDatos`).
 // · Un libro que no coincide con la plantilla «normal» devuelve `null`: el llamador sigue el flujo actual.
-// · La plantilla «nueva» (hojas Datos/Origenes/Destinos) espera a T-A3-44: devuelve `null`.
+// · La plantilla «nueva» (hojas Datos/Origenes/Destinos/Mercancias, T-A3-44) se lee igual, sin modelo, con los IDs
+//   `OR/DE` convertidos a la posición que usa `construirPlantilla` (releer y reexportar da el mismo libro).
 // ═══════════════════════════════════════════════════════════════════════════
 
 import * as XLSX from 'xlsx';
@@ -20,8 +21,8 @@ import { campoDoc, campoMercancia, extraccionVacia, MAX_MERCANCIAS, type CampoDo
 import { ESTADOS_SAT } from './catalogos';
 import { esHojaIgnorada, esLibroPlantillaTms, llaveHoja } from './contenido';
 import { normalizarIdDestino, normalizarNumero, normalizarValor, limpiarTexto } from './normalizar';
-import { campoDestino, MAX_DESTINOS } from './plantilla_tms';
-import { LAYOUT_NORMAL, type TablaLayout } from './plantilla_tms.layout';
+import { campoDestino, campoOrigen, MAX_DESTINOS } from './plantilla_tms';
+import { LAYOUT_NORMAL, LAYOUT_NUEVA, MAX_DESTINOS_NUEVA, MAX_ORIGENES_NUEVA, type LayoutPlantilla, type TablaLayout } from './plantilla_tms.layout';
 
 /** Confianza de un valor leído de celda fija (igual que un perfil, `CONF_PERFIL` en perfiles.ts). */
 const CONF_PLANTILLA = 0.97;
@@ -32,14 +33,14 @@ const llave = llaveHoja;
 const HOJA_REMITENTE = 'remintentedestinatario';
 const HOJA_MERCANCIAS = 'mercancias';
 
-/** ¿Es la plantilla «nueva» (varias razones sociales)? Pendiente de T-A3-44. */
+/** ¿Es la plantilla «nueva» (varias razones sociales)? Trae las hojas Datos, Origenes, Destinos y Mercancias. */
 export function esLibroPlantillaNueva(nombres: readonly string[]): boolean {
   const k = new Set(nombres.map(llaveHoja));
-  return esLibroPlantillaTms(nombres) && ['datos', 'origenes', 'destinos'].some((h) => k.has(h));
+  return ['datos', 'origenes', 'destinos', 'mercancias'].every((h) => k.has(h));
 }
 
 export interface LecturaPlantillaTms {
-  plantilla: 'normal';
+  plantilla: 'normal' | 'nueva';
   extraccion: Extraccion;
   avisos: string[];
   hojasIgnoradas: string[];
@@ -84,22 +85,57 @@ function idFiscal(crudo: Crudo, evidencia: string): CampoValor | null {
   return t === null ? null : { valor: t.toUpperCase(), confianza: CONF_PLANTILLA, evidencia, origen: 'perfil' };
 }
 
-/** Localiza la fila de encabezado: A = «IdDestino/Id Destino» y B empieza con el rótulo dado. */
-function filaEncabezado(ws: XLSX.WorkSheet, rotuloB: string, esperada: number): number | null {
+/** Localiza la fila de encabezado: A = el rótulo dado (por defecto «IdDestino/Id Destino») y B empieza con el rótulo dado. */
+function filaEncabezado(ws: XLSX.WorkSheet, rotuloB: string, esperada: number, rotuloA = 'iddestino'): number | null {
   const n = rangoFilas(ws);
-  const coincide = (f: number): boolean => llave(celda(ws, `A${f}`)) === 'iddestino' && llave(celda(ws, `B${f}`)).startsWith(rotuloB);
+  const coincide = (f: number): boolean => llave(celda(ws, `A${f}`)) === rotuloA && llave(celda(ws, `B${f}`)).startsWith(rotuloB);
   if (coincide(esperada)) return esperada;
   for (let f = 1; f <= n; f++) if (coincide(f)) return f;
   return null;
 }
 
-function tabla(id: TablaLayout['id']): TablaLayout {
-  const t = LAYOUT_NORMAL.hojas.flatMap((h) => h.tablas).find((x) => x.id === id);
+function tabla(id: TablaLayout['id'], layout: LayoutPlantilla = LAYOUT_NORMAL): TablaLayout {
+  const t = layout.hojas.flatMap((h) => h.tablas).find((x) => x.id === id);
   if (!t) throw new Error(`El layout no declara la tabla ${id}.`);
   return t;
 }
 
 const vaciaDesde = (ws: XLSX.WorkSheet, fila: number, columnas: string[]): boolean => columnas.every((c) => celda(ws, `${c}${fila}`) === null);
+
+/** Lee las filas de la tabla de destinos (normal: hasta 4; nueva: hasta 50). Devuelve cuántas filas con datos leyó. */
+function leerDestinos(ws: XLSX.WorkSheet, filaDest: number, tDest: TablaLayout, maximo: number, hoja: string, ext: Extraccion, avisos: string[]): number {
+  const colsDest = tDest.columnas.filter((c) => c.campo);
+  const letrasDest = tDest.columnas.map((c) => c.columna).filter((l) => l !== 'A');
+  let nDestinos = 0;
+  for (let i = 0; i < maximo; i++) {
+    const fila = filaDest + 1 + i;
+    if (vaciaDesde(ws, fila, letrasDest)) continue;
+    nDestinos = i + 1;
+    for (const col of colsDest) {
+      const crudo = celda(ws, `${col.columna}${fila}`);
+      if (crudo === null) continue;
+      const base = col.campo as string;
+      const esNombreEstado = col.transformacion === 'nombre_estado';
+      const clave = campoDestino(base, i + 1);
+      if (esNombreEstado && ext.campos[clave]) continue;
+      const evidencia = `${hoja}!${col.columna}${fila}`;
+      const dato: Crudo = esNombreEstado ? (NOMBRE_A_CODIGO.get(llave(crudo)) ?? crudo) : crudo;
+      let v: CampoValor | null;
+      if (base === 'destino_rfc') v = idFiscalODestino(ws, fila, i, crudo, evidencia, avisos);
+      else {
+        // Los campos `destino_N_*` no están en CAMPOS_DOC: se normalizan con la definición del destino 1.
+        const def = campoDoc(base);
+        v = campoValor(def, clave, base === 'distancia_km' ? distancia(crudo) : dato, evidencia, avisos, `${col.columna}${fila}`);
+      }
+      if (v) ext.campos[clave] = v;
+    }
+  }
+  // Más allá del máximo hay más destinos de los que caben: no se pierden en silencio.
+  for (let f = filaDest + 1 + maximo; f <= filaDest + maximo + 10; f++) {
+    if (!vaciaDesde(ws, f, letrasDest)) { avisos.push(`La tabla de destinos trae datos después de la fila ${filaDest + maximo}: la plantilla admite ${maximo} destinos y se ignoraron.`); break; }
+  }
+  return nDestinos;
+}
 
 /**
  * Lee un libro con la plantilla «normal» ya llena. `null` si el libro no es esa plantilla (sin lanzar): el llamador
@@ -110,7 +146,8 @@ export function leerPlantillaTms(bytes: Uint8Array): LecturaPlantillaTms | null 
   try { libro = XLSX.read(bytes, { type: 'array', cellDates: false, cellFormula: false, cellHTML: false, cellStyles: false, sheetRows: TOPE_FILAS + 1 }); }
   catch { return null; }
   const nombres = libro.SheetNames;
-  if (!esLibroPlantillaTms(nombres) || esLibroPlantillaNueva(nombres)) return null;
+  if (esLibroPlantillaNueva(nombres)) return leerPlantillaNueva(libro);
+  if (!esLibroPlantillaTms(nombres)) return null;
   const hojaDe = (k: string): XLSX.WorkSheet | undefined => libro.Sheets[nombres.find((n) => llave(n) === k) as string];
   const rd = hojaDe(HOJA_REMITENTE); const me = hojaDe(HOJA_MERCANCIAS);
   if (!rd || !me) return null;
@@ -143,36 +180,7 @@ export function leerPlantillaTms(bytes: Uint8Array): LecturaPlantillaTms | null 
   // La clave de estado de C24 gana sobre su nombre: el orden del layout (C24 antes de C25) ya lo garantiza.
 
   // ── Destinos (tabla del remitente, hasta 4) ───────────────────────────────
-  const colsDest = tDest.columnas.filter((c) => c.campo);
-  const letrasDest = tDest.columnas.map((c) => c.columna).filter((l) => l !== 'A');
-  let nDestinos = 0;
-  for (let i = 0; i < MAX_DESTINOS; i++) {
-    const fila = filaDest + 1 + i;
-    if (vaciaDesde(rd, fila, letrasDest)) continue;
-    nDestinos = i + 1;
-    for (const col of colsDest) {
-      const crudo = celda(rd, `${col.columna}${fila}`);
-      if (crudo === null) continue;
-      const base = col.campo as string;
-      const esNombreEstado = col.transformacion === 'nombre_estado';
-      const clave = campoDestino(base, i + 1);
-      if (esNombreEstado && ext.campos[clave]) continue;
-      const evidencia = `RemintenteDestinatario!${col.columna}${fila}`;
-      const dato: Crudo = esNombreEstado ? (NOMBRE_A_CODIGO.get(llave(crudo)) ?? crudo) : crudo;
-      let v: CampoValor | null;
-      if (base === 'destino_rfc') v = idFiscalODestino(rd, fila, i, crudo, evidencia, avisos);
-      else {
-        // Los campos `destino_N_*` no están en CAMPOS_DOC: se normalizan con la definición del destino 1.
-        const def = campoDoc(base);
-        v = campoValor(def, clave, base === 'distancia_km' ? distancia(crudo) : dato, evidencia, avisos, `${col.columna}${fila}`);
-      }
-      if (v) ext.campos[clave] = v;
-    }
-  }
-  // Más allá de la fila 4 hay más destinos de los que caben: no se pierden en silencio.
-  for (let f = filaDest + 1 + MAX_DESTINOS; f <= filaDest + MAX_DESTINOS + 10; f++) {
-    if (!vaciaDesde(rd, f, letrasDest)) { avisos.push(`La tabla de destinos trae datos después de la fila ${filaDest + MAX_DESTINOS}: la plantilla admite ${MAX_DESTINOS} destinos y se ignoraron.`); break; }
-  }
+  const nDestinos = leerDestinos(rd, filaDest, tDest, MAX_DESTINOS, 'RemintenteDestinatario', ext, avisos);
 
   // ── Mercancías (encabezado real, normalmente fila 21) ─────────────────────
   const colsMerc = tMerc.columnas.filter((c) => c.campo || c.columna === 'O');
@@ -219,4 +227,114 @@ function idFiscalODestino(rd: XLSX.WorkSheet, fila: number, i: number, crudo: Cr
   const clave = campoDestino('destino_rfc', i + 1);
   if (pais !== '' && pais !== 'MEX') return idFiscal(crudo, evidencia);
   return campoValor(campoDoc('destino_rfc'), clave, crudo, evidencia, avisos, `D${fila}`);
+}
+
+/** «OR000002» / «DE000002» → 2. Cualquier otra cosa → null. */
+function posicionDeId(crudo: Crudo | null, prefijo: 'OR' | 'DE'): number | null {
+  if (crudo === null) return null;
+  const m = new RegExp(`^${prefijo}0*(\\d+)$`, 'i').exec(String(crudo).trim());
+  return m ? Number(m[1]) : null;
+}
+
+/** IDs de la columna A (filas con datos) → su posición 1..n, que es la que usa `construirPlantilla` (`OR000001`, `OR000002`…). */
+function posicionesDeIds(ws: XLSX.WorkSheet, tb: TablaLayout, maximo: number): Map<string, number> {
+  const letras = tb.columnas.map((c) => c.columna).filter((l) => l !== 'A');
+  const mapa = new Map<string, number>();
+  for (let i = 0; i < maximo; i++) {
+    const fila = tb.filaEncabezado + 1 + i;
+    if (vaciaDesde(ws, fila, letras)) continue;
+    const id = celda(ws, `A${fila}`);
+    if (id !== null) mapa.set(String(id).trim().toUpperCase(), i + 1);
+  }
+  return mapa;
+}
+
+/**
+ * Lee la plantilla «nueva» (Datos / Origenes / Destinos / Mercancias) sin modelo. Inversa de `construirPlantilla` con
+ * `LAYOUT_NUEVA`: los orígenes salen como `origen_N_*`, los destinos como `destino_N_*` y cada mercancía lleva
+ * `id_origen` / `id_destino` (la posición de la fila a la que apunta su ID). Las hojas Guía/Error se ignoran.
+ */
+function leerPlantillaNueva(libro: XLSX.WorkBook): LecturaPlantillaTms | null {
+  const nombres = libro.SheetNames;
+  const hojaDe = (k: string): XLSX.WorkSheet | undefined => libro.Sheets[nombres.find((n) => llave(n) === k) as string];
+  const da = hojaDe('datos'); const og = hojaDe('origenes'); const ds = hojaDe('destinos'); const me = hojaDe('mercancias');
+  if (!da || !og || !ds || !me) return null;
+  const tOrg = tabla('origenes', LAYOUT_NUEVA); const tDest = tabla('destinos', LAYOUT_NUEVA); const tMerc = tabla('mercancias', LAYOUT_NUEVA);
+  const filaOrg = filaEncabezado(og, 'razonsocial', tOrg.filaEncabezado, 'idorigen');
+  const filaDest = filaEncabezado(ds, 'distancia', tDest.filaEncabezado);
+  const filaMerc = filaEncabezado(me, 'idorigen', tMerc.filaEncabezado);
+  if (filaOrg === null || filaDest === null || filaMerc === null) return null; // sin los encabezados reales no es esta plantilla
+
+  const avisos: string[] = [];
+  const ext: Extraccion = extraccionVacia();
+  const ignoradas = nombres.filter(esHojaIgnorada);
+
+  // ── Datos (fila 2): régimen, referencia, cliente, caja ────────────────────
+  const fijas = LAYOUT_NUEVA.hojas.find((h) => llave(h.hoja) === 'datos')?.celdas ?? [];
+  for (const e of fijas) {
+    const crudo = celda(da, e.celda);
+    if (crudo === null) continue;
+    const clave = e.campo === 'ctx.clienteInterno' ? 'numero_cliente_interno' : (e.campo as string);
+    if (ext.campos[clave]) continue;
+    const v = campoValor(campoDoc(clave), clave, crudo, `Datos!${e.celda}`, avisos, e.celda);
+    if (v) ext.campos[clave] = v;
+  }
+
+  // ── Orígenes (hasta 50) ────────────────────────────────────────────────────
+  const colsOrg = tOrg.columnas.filter((c) => c.campo);
+  const letrasOrg = tOrg.columnas.map((c) => c.columna).filter((l) => l !== 'A');
+  for (let i = 0; i < MAX_ORIGENES_NUEVA; i++) {
+    const fila = filaOrg + 1 + i;
+    if (vaciaDesde(og, fila, letrasOrg)) continue;
+    for (const col of colsOrg) {
+      const crudo = celda(og, `${col.columna}${fila}`);
+      if (crudo === null) continue;
+      const clave = campoOrigen(col.campo as string, i + 1);
+      const v = campoValor(campoDoc(col.campo as string), clave, crudo, `Origenes!${col.columna}${fila}`, avisos, `${col.columna}${fila}`);
+      if (v) ext.campos[clave] = v;
+    }
+  }
+  for (let f = filaOrg + 1 + MAX_ORIGENES_NUEVA; f <= filaOrg + MAX_ORIGENES_NUEVA + 10; f++) {
+    if (!vaciaDesde(og, f, letrasOrg)) { avisos.push(`La hoja Origenes trae datos después de la fila ${filaOrg + MAX_ORIGENES_NUEVA}: la plantilla admite ${MAX_ORIGENES_NUEVA} orígenes y se ignoraron.`); break; }
+  }
+
+  // ── Destinos (hasta 50) ────────────────────────────────────────────────────
+  leerDestinos(ds, filaDest, tDest, MAX_DESTINOS_NUEVA, 'Destinos', ext, avisos);
+
+  // ── Mercancías: A = ID Destino, B = ID Origen, C..Q con campo ─────────────
+  const posOrg = posicionesDeIds(og, { ...tOrg, filaEncabezado: filaOrg }, MAX_ORIGENES_NUEVA);
+  const posDest = posicionesDeIds(ds, { ...tDest, filaEncabezado: filaDest }, MAX_DESTINOS_NUEVA);
+  const colsMerc = tMerc.columnas.filter((c) => c.campo);
+  const letrasMerc = tMerc.columnas.map((c) => c.columna).filter((l) => l !== 'A' && l !== 'B');
+  const tope = Math.min(tMerc.maxFilas, MAX_MERCANCIAS);
+  const ultima = rangoFilas(me);
+  let omitidas = 0;
+  for (let fila = filaMerc + 1; fila <= ultima; fila++) {
+    if (vaciaDesde(me, fila, [...letrasMerc, 'A', 'B'])) continue;
+    if (ext.mercancias.length >= tope) { omitidas++; continue; }
+    const m: Record<string, CampoValor> = {};
+    for (const col of colsMerc) {
+      const crudo = celda(me, `${col.columna}${fila}`);
+      if (crudo === null) continue;
+      const clave = (col.campo as string).slice('mercancia.'.length);
+      const v = campoValor(campoMercancia(clave), clave, crudo, `Mercancias!${col.columna}${fila}`, avisos, `Mercancía ${ext.mercancias.length + 1} · ${col.columna}${fila}`);
+      if (v) m[clave] = v;
+    }
+    for (const [letra, tipo, prefijo, posiciones, hojaRef] of [['A', 'destino', 'DE', posDest, 'Destinos'], ['B', 'origen', 'OR', posOrg, 'Origenes']] as const) {
+      const crudo = celda(me, `${letra}${fila}`);
+      if (crudo === null) continue; // vacío: `construirPlantilla` lo pide (con un solo registro, usa el 1)
+      const pos = posiciones.get(String(crudo).trim().toUpperCase()) ?? posicionDeId(crudo, prefijo);
+      if (pos === null) { avisos.push(`Mercancías: ${letra}${fila} trae «${String(crudo)}», que no es un ID de ${hojaRef}.`); continue; }
+      if (!posiciones.has(String(crudo).trim().toUpperCase())) avisos.push(`Mercancías: ${letra}${fila} apunta a «${String(crudo)}», que no existe en la hoja ${hojaRef}.`);
+      m[`id_${tipo}`] = { valor: String(pos), confianza: CONF_PLANTILLA, evidencia: `Mercancias!${letra}${fila}`, origen: 'perfil' };
+    }
+    const regimen = ext.campos.regimen_aduanero;
+    if (regimen && !m.regimen_aduanero) m.regimen_aduanero = { ...regimen };
+    ext.mercancias.push(m);
+  }
+  if (omitidas > 0) avisos.push(`El libro trae ${omitidas} mercancías más de las ${tope} que se leen: se omitieron.`);
+  if (ext.mercancias.length === 0) avisos.push('La plantilla no trae mercancías en la hoja Mercancias.');
+  if (ignoradas.length > 0) avisos.push(`Hojas ignoradas (no son datos): ${ignoradas.join(', ')}.`);
+
+  return { plantilla: 'nueva', extraccion: ext, avisos, hojasIgnoradas: ignoradas, llamadasLlm: 0 };
 }

@@ -48,7 +48,11 @@ export interface PlantillaConstruida {
   hojas: Record<string, Record<string, CeldaPlantilla>>;
   faltantes: Faltante[];
   avisos: string[];
+  /** Solo con la plantilla «nueva»: el criterio para usarla aún no lo confirma el cliente (B-2/B-10); el visor lo muestra. */
+  criterio_provisional?: true;
 }
+
+export const AVISO_CRITERIO_PROVISIONAL = 'Plantilla «nueva» elegida con criterio provisional (más de una razón social de embarcador): el cliente aún no confirma cuándo se usa. Revísala antes de enviar.';
 
 const NOMBRE_ESTADO = new Map(ESTADOS_SAT.map((e) => [e.codigo, e.nombre]));
 
@@ -71,6 +75,7 @@ function aplicar(v: string | null, tr: TransformacionPlantilla | undefined, text
   if (tr === 'distancia') return formatearDistancia(v, formato);
   if (tr === 'nombre_estado') return NOMBRE_ESTADO.get(v) ?? v;
   if (tr === 'si_no') return v === 'true' ? 'SI' : v === 'false' ? 'NO' : v;
+  if (tr === 'si_no_tilde') return v === 'true' ? 'Sí' : v === 'false' ? 'No' : v;
   if (tr === 'entero') return Number.parseInt(v, 10);
   if (!texto) { const n = normalizarNumero(v).valor; return n === null ? v : n; }
   return v;
@@ -89,6 +94,25 @@ export function campoDestino(campo: string, n: number): string {
   if (campo.startsWith('destino_')) return `destino_${n}_${campo.slice('destino_'.length)}`;
   return campo;
 }
+
+/** Campo del origen N: el primero usa los nombres de siempre; del 2.º en adelante `origen_N_…`. */
+export function campoOrigen(campo: string, n: number): string {
+  if (n === 1 || !campo.startsWith('origen_')) return campo;
+  return `origen_${n}_${campo.slice('origen_'.length)}`;
+}
+
+/** Cuántos orígenes trae la extracción: el mayor N con algún dato `origen_N_*` (mínimo 1). */
+export function contarOrigenes(ext: Extraccion): number {
+  let max = 1;
+  for (const [k, v] of Object.entries(ext.campos)) {
+    const m = /^origen_(\d{1,4})_/.exec(k);
+    if (m && !vacio(v?.valor)) max = Math.max(max, Number(m[1]));
+  }
+  return max;
+}
+
+/** ID de un origen/destino de la plantilla «nueva»: prefijo + 6 dígitos por posición (único y estable dentro del documento). */
+export const idRegistro = (tipo: 'origen' | 'destino', n: number): string => `${tipo === 'origen' ? 'OR' : 'DE'}${String(n).padStart(6, '0')}`;
 
 /** Cuántos destinos trae la extracción: el mayor N con algún dato `destino_N_*` (mínimo 1). */
 export function contarDestinos(ext: Extraccion): number {
@@ -122,32 +146,62 @@ function construirTabla(sal: PlantillaConstruida, hoja: string, tb: TablaLayout,
   for (const col of tb.columnas) {
     (sal.hojas[hoja] ??= {})[`${col.columna}${tb.filaEncabezado}`] = { valor: col.encabezado, texto: true };
   }
+  const totalOrigenes = contarOrigenes(ext);
   const totalDestinos = contarDestinos(ext);
-  if (tb.id === 'destinos' && totalDestinos > MAX_DESTINOS) {
-    // Nunca se recorta en silencio: se llenan los 4 primeros y el documento queda bloqueado.
-    sal.faltantes.push({ campo: 'destinos', celda: `A${tb.primeraFila + MAX_DESTINOS}`, bloqueante: true, mensaje: MENSAJE_MAS_DE_4_DESTINOS });
-    sal.avisos.push(`El documento trae ${totalDestinos} destinos y la plantilla admite ${MAX_DESTINOS}. ${MENSAJE_MAS_DE_4_DESTINOS}`);
+  const total = tb.id === 'origenes' ? totalOrigenes : totalDestinos;
+  if ((tb.id === 'destinos' || tb.id === 'origenes') && total > tb.maxFilas) {
+    // Nunca se recorta en silencio: se llenan los primeros y el documento queda bloqueado.
+    const mensaje = tb.id === 'destinos' && tb.maxFilas === MAX_DESTINOS ? MENSAJE_MAS_DE_4_DESTINOS : `Más de ${tb.maxFilas} ${tb.id}: divide el embarque.`;
+    sal.faltantes.push({ campo: tb.id, celda: `A${tb.primeraFila + tb.maxFilas}`, bloqueante: true, mensaje });
+    sal.avisos.push(`El documento trae ${total} ${tb.id} y la plantilla admite ${tb.maxFilas}. ${mensaje}`);
   }
   const filas: Array<Record<string, CampoValor> | null> =
     tb.id === 'mercancias' ? (ext.mercancias.length > 0 ? ext.mercancias.slice(0, tb.maxFilas) : [null]) : [null];
   if (tb.id === 'mercancias' && ext.mercancias.length > tb.maxFilas) {
     sal.avisos.push(`El documento trae ${ext.mercancias.length} mercancías y la plantilla admite ${tb.maxFilas}: se omitieron ${ext.mercancias.length - tb.maxFilas}.`);
   }
-  if (tb.id === 'mercancias' && ext.mercancias.length === 0) sal.avisos.push('El documento no trae mercancías: la fila 22 queda vacía.');
-  const nFilas = tb.id === 'destinos' && tb.multi ? Math.min(totalDestinos, tb.maxFilas) : filas.length;
+  if (tb.id === 'mercancias' && ext.mercancias.length === 0) sal.avisos.push(`El documento no trae mercancías: la fila ${tb.primeraFila} queda vacía.`);
+  const nFilas = (tb.id === 'destinos' || tb.id === 'origenes') && tb.multi ? Math.min(total, tb.maxFilas) : filas.length;
   for (let i = 0; i < nFilas; i++) {
-    const fila = tb.id === 'destinos' ? null : filas[i];
+    const fila = tb.id === 'mercancias' ? filas[i] : null;
     for (const col of tb.columnas as ColumnaTabla[]) {
       // Columna solo de encabezado (sin campo ni constante): no se escribe valor.
-      if (!col.campo && col.constante === undefined && !col.indice && !col.idDestino) continue;
+      if (!col.campo && col.constante === undefined && !col.indice && !col.idDestino && !col.idRegistro && !col.referencia) continue;
       const celda = `${col.columna}${tb.primeraFila + i}`;
       if (col.indice) { poner(sal, hoja, celda, { ...col, constante: i + 1 }, ext, null, ctx); continue; }
+      if (col.idRegistro) { (sal.hojas[hoja] ??= {})[celda] = { valor: idRegistro(col.idRegistro, i + 1), texto: true }; continue; }
+      if (col.referencia) { ponerReferencia(sal, hoja, celda, col.referencia, col.referencia === 'origen' ? totalOrigenes : totalDestinos, fila, ext, ctx); continue; }
       if (col.idDestino) { ponerIdDestino(sal, hoja, celda, col, totalDestinos, fila, ext, ctx); continue; }
       const regla: ColumnaTabla = tb.id === 'destinos' && col.campo
         ? { ...col, campo: campoDestino(col.campo, i + 1), alterno: col.alterno ? campoDestino(col.alterno, i + 1) : undefined }
-        : col;
+        : tb.id === 'origenes' && col.campo
+          ? { ...col, campo: campoOrigen(col.campo, i + 1) }
+          : col;
       poner(sal, hoja, celda, regla, ext, fila, ctx);
     }
+  }
+}
+
+/**
+ * Plantilla «nueva»: `ID Destino` / `ID Origen` de la mercancía. Con un solo origen/destino es el 1 (`OR000001`); con varios lo
+ * dice el documento (`mercancia.id_origen` / `id_destino`, número de posición) y NUNCA se adivina. Una referencia que apunta a
+ * un registro que no existe bloquea el documento.
+ */
+function ponerReferencia(sal: PlantillaConstruida, hoja: string, celda: string, tipo: 'origen' | 'destino', total: number, fila: Record<string, CampoValor> | null, ext: Extraccion, ctx: ContextoPlantilla): void {
+  const campo = `mercancia.id_${tipo}`;
+  const nombre = tipo === 'origen' ? 'origen' : 'destino';
+  let n: number | null = 1;
+  let crudo: ValorCelda = null;
+  if (total > 1) {
+    crudo = resolver({ campo, transformacion: 'entero', obligatorio: true, texto: false }, ext, fila, ctx);
+    n = typeof crudo === 'number' && Number.isInteger(crudo) && crudo >= 1 && crudo <= total ? crudo : null;
+  }
+  (sal.hojas[hoja] ??= {})[celda] = { valor: n === null ? null : idRegistro(tipo, n), texto: true };
+  if (n === null) {
+    sal.faltantes.push({
+      campo, celda,
+      ...(crudo === null ? {} : { bloqueante: true as const, mensaje: `La mercancía apunta al ${nombre} ${String(crudo)}, que no existe (hay ${total}).` }),
+    });
   }
 }
 
@@ -179,13 +233,15 @@ export function construirPlantilla(extOriginal: Extraccion, ctx: ContextoPlantil
   let layout = layoutExplicito ?? layoutDe(ctx.plantilla);
   if (!layoutPuedeEnviarse(layout) && (ctx.uso ?? 'envio') === 'envio') {
     layout = LAYOUT_NORMAL;
-    sal.avisos.push('La plantilla «nueva» (varias razones sociales) aún no está definida: se generó con la normal.');
+    sal.avisos.push('La plantilla «nueva» (varias razones sociales) aún no está verificada contra la del TMS: se generó con la normal.');
   } else if (!layoutPuedeEnviarse(layout)) {
-    sal.avisos.push('La plantilla «nueva» (varias razones sociales) está pendiente de especificación: úsala solo para revisar, no para enviar.');
+    sal.avisos.push('La plantilla «nueva» (varias razones sociales) aún no está verificada contra la del TMS: úsala solo para revisar o descargar, no para enviar.');
   }
   if (layout.provisional) sal.avisos.push('Layout provisional: pendiente de la plantilla en blanco del TMS (B-2).');
+  if (layout.nombre === 'nueva') { sal.criterio_provisional = true; sal.avisos.push(AVISO_CRITERIO_PROVISIONAL); }
   for (const h of layout.hojas) {
     sal.hojas[h.hoja] ??= {};
+    for (const e of h.encabezados ?? []) sal.hojas[h.hoja][e.celda] = { valor: e.texto, texto: true };
     // Las celdas fijas son del embarque (régimen, referencia, cliente, caja…); si alguna cae en un campo de mercancía
     // (el régimen aduanero de la carga), se toma de la primera.
     for (const e of h.celdas as EntradaCelda[]) poner(sal, h.hoja, e.celda, e, ext, ext.mercancias[0] ?? null, ctx);
