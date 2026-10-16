@@ -373,3 +373,111 @@ export function interpretarBotonParada(texto: string | undefined): Interpretacio
 export function interpretarParada(texto: string | undefined): InterpretacionParada | null {
   return interpretarBotonParada(texto) ?? interpretarParadaTexto(texto);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A5-43 — LA RAMPA DE DESCARGA Y EL «¿CÓMO DESCARGAS?» (R16). Reglas puras, sin I/O.
+//
+// Cuatro respuestas cerradas (SÍ / NO / NO APLICA / EN ESPERA) más el número de rampa si la hay. El cliente pidió trabajar por
+// excepciones (no pedir tanto detalle): el número es opcional y «no aplica» solo ofrece una pregunta OPCIONAL de cómo descarga.
+// Los botones llevan su propio lector (como la parada): tipos.ts es del núcleo del ciclo. El llamador SIEMPRE comprueba que el viaje
+// del botón sea del chofer.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const ESTADOS_RAMPA = ['si', 'no', 'no_aplica', 'en_espera'] as const;
+export type EstadoRampa = typeof ESTADOS_RAMPA[number];
+
+export function esEstadoRampa(valor: unknown): valor is EstadoRampa {
+  return typeof valor === 'string' && (ESTADOS_RAMPA as readonly string[]).includes(valor);
+}
+
+/** Cómo se llama cada estado en la lista (≤ 24 caracteres: tope del título de una fila de lista de WhatsApp). */
+export const ETIQUETA_RAMPA: Readonly<Record<EstadoRampa, string>> = {
+  si: 'Sí, me dieron rampa', no: 'No', no_aplica: 'No aplica', en_espera: 'En espera',
+};
+
+export const PREFIJO_RAMPA = {
+  /** Un estado de la lista: `rampa_estado_<estado>:<viaje>`. */
+  estado: 'rampa_estado_',
+  /** Botón «Más opciones» de la primera página (WhatsApp limita a tres botones por mensaje). */
+  mas: 'rampa_mas',
+  /** Botón «Omitir» de la pregunta opcional «¿cómo descargas?». */
+  omitirComo: 'rampa_como_omitir',
+} as const;
+
+export type BotonRampa =
+  | { accion: 'estado'; estado: EstadoRampa; viajeId: string }
+  | { accion: 'mas'; viajeId: string }
+  | { accion: 'omitir_como'; viajeId: string };
+
+const UUID_RAMPA = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** ¿El texto es el payload de uno de los botones de la rampa? Anclado, con el uuid validado y el estado del vocabulario. */
+export function leerBotonRampa(texto: string | undefined): BotonRampa | null {
+  if (typeof texto !== 'string') return null;
+  const t = texto.trim();
+  if (t.length > 128) return null;
+  const partes = t.split(':');
+  if (partes.length !== 2) return null;
+  const [prefijo, viajeId] = partes;
+  if (!UUID_RAMPA.test(viajeId)) return null;
+  const id = viajeId.toLowerCase();
+  if (prefijo === PREFIJO_RAMPA.omitirComo) return { accion: 'omitir_como', viajeId: id };
+  if (prefijo === PREFIJO_RAMPA.mas) return { accion: 'mas', viajeId: id };
+  if (prefijo.startsWith(PREFIJO_RAMPA.estado)) {
+    const estado = prefijo.slice(PREFIJO_RAMPA.estado.length);
+    return esEstadoRampa(estado) ? { accion: 'estado', estado, viajeId: id } : null;
+  }
+  return null;
+}
+
+export interface RespuestaRampa {
+  estado: EstadoRampa;
+  /** La rampa asignada («7», «B2»); solo con `estado = 'si'`. */
+  numero: string | null;
+  via: 'boton' | 'regla';
+}
+
+const MAX_LARGO_RAMPA = 80;
+const NUMERO_RAMPA = '([a-z]?\\d{1,3}[a-z]?)';
+const RE_RAMPA_NA = /\b(no aplica|n a|na|no hay (?:rampa|rampas|anden|andenes)|sin rampa|a pie de calle|a ras de piso|a granel|en patio|en la calle)\b/;
+const RE_RAMPA_ESPERA = /\b(en espera|espera|esperando|me dijeron que espere|me formaron|estoy formado|en fila|todavia no me asignan|aun no me asignan|no me han asignado)\b/;
+const RE_RAMPA_NUMERO = new RegExp(`^(?:(?:ya )?(?:estoy )?(?:en|me dieron|me asignaron|me tocó|me toco|la|el)\\s+)?(?:(?:la|el)\\s+)?(?:rampa|anden|puerta|dock|muelle)?\\s*(?:numero|num|no)?\\s*${NUMERO_RAMPA}$`);
+
+/** Lo que dijo el chofer sobre la rampa. `null` si no es una respuesta de rampa (el mensaje sigue su camino). Pura. */
+export function interpretarRampaTexto(texto: string | undefined): RespuestaRampa | null {
+  if (typeof texto !== 'string' || !texto.trim() || texto.length > MAX_LARGO_RAMPA) return null;
+  const n = normalizar(texto);
+  if (!n) return null;
+  if (RE_RAMPA_NA.test(n)) return { estado: 'no_aplica', numero: null, via: 'regla' };
+  if (RE_RAMPA_ESPERA.test(n)) return { estado: 'en_espera', numero: null, via: 'regla' };
+  const m = RE_RAMPA_NUMERO.exec(n);
+  if (m && /\d/.test(m[1])) return { estado: 'si', numero: m[1].toUpperCase(), via: 'regla' };
+  if (/^(si|sip|simon|claro|ya me dieron rampa|tengo rampa|hay rampa)$/.test(n)) return { estado: 'si', numero: null, via: 'regla' };
+  if (/^(no|nel|nop|no hay)$/.test(n)) return { estado: 'no', numero: null, via: 'regla' };
+  return null;
+}
+
+/** El payload de un botón de la rampa → respuesta. El estado del botón es el del vocabulario cerrado (no se interpreta). */
+export function interpretarBotonRampa(texto: string | undefined): (RespuestaRampa & { viajeId: string }) | null {
+  const b = leerBotonRampa(texto);
+  if (!b || b.accion !== 'estado') return null;
+  return { estado: b.estado, numero: null, via: 'boton', viajeId: b.viajeId };
+}
+
+/** Botón primero, texto después. */
+export function interpretarRampa(texto: string | undefined): RespuestaRampa | null {
+  return interpretarBotonRampa(texto) ?? interpretarRampaTexto(texto);
+}
+
+const MAX_COMO_DESCARGA = 120;
+
+/**
+ * La respuesta libre a «¿cómo descargas?» (a pie de calle, a granel…): se guarda tal cual, una sola línea, sin enlaces ni teléfonos
+ * ni correos. `null` si no hay nada utilizable (la pregunta es opcional: no responder no pasa nada).
+ */
+export function limpiarComoDescarga(texto: string | undefined): string | null {
+  if (typeof texto !== 'string') return null;
+  const t = texto.replace(/\s+/g, ' ').trim();
+  if (!t || /https?:|www\.|@|\d{7,}/i.test(t)) return null;
+  return t.slice(0, MAX_COMO_DESCARGA);
+}

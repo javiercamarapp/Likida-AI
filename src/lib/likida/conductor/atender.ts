@@ -2,7 +2,7 @@ import { logger } from '@/lib/logger';
 import { moduloEnStandBy } from '@/lib/auth/perfil_tenant';
 import { enviarSolicitudUbicacion } from '@/lib/meta/client';
 import type { ConfigConductor } from './config';
-import { interpretarBoton, interpretarTexto, pareceHablarDeHito, type Intencion, type Interpretacion } from './interprete';
+import { interpretarBoton, interpretarTexto, leerBotonRampa, pareceHablarDeHito, type BotonRampa, type Intencion, type Interpretacion } from './interprete';
 import { interpretarConLlm } from './llm';
 import { decidir, hitoActivo, type Decision } from './maquina';
 import { mensajeParaChofer, type ContextoMensaje, type Salida } from './mensajes';
@@ -23,6 +23,9 @@ import { ETIQUETA_EVIDENCIA, hitoParaEvidencia, mensajeEvidencia, tipoEvidenciaD
 import { textoVeredicto, veredictoSellaLlegada } from './validacion';
 import { puertosEstadiaReales, responderEstadiaDescarga, type PuertosEstadia } from './alertas_estadia';
 import type { RespuestaEstadia } from './mensajes';
+import {
+  puertosReporteAtenderReales, responderReporteBoton, responderReporteTexto, type PuertosReporteAtender,
+} from './reporte_llegada';
 import { leerTextoPatio, marcarPatioAtendido, preguntarPatio, puertosPatioReales, responderPatio, type PuertosPatio } from './patio_entrega';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -70,6 +73,8 @@ export interface DepsAtender {
   patio?: PuertosPatio;
   /** T-A5-45: los puertos del aviso al supervisor por la estadía de descarga. Opcional: sin él, los reales. */
   estadia?: PuertosEstadia;
+  /** T-A5-43: la bitácora del «con quién te reportaste» y la rampa (leer lo preguntado, guardar lo respondido). Opcional: sin él, la real. */
+  reporte?: PuertosReporteAtender;
 }
 
 export const depsReales: DepsAtender = {
@@ -155,7 +160,15 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
   }
   // T-A5-45: «¿ya inició la descarga?» — el botón `estadia_descarga:<viaje>:si|no` es de este módulo pero tampoco registra un hito.
   if (botonPatio?.prefijo === PREFIJO_BOTON.estadiaDescarga) return atenderEstadia(e, botonPatio, ahora, deps);
+  // T-A5-43: los botones de la rampa (`rampa_estado_*`, `rampa_mas`, `rampa_como_omitir`) son de este módulo y tampoco registran un hito.
+  const botonRampa = leerBotonRampa(e.texto);
+  if (botonRampa) return atenderReporteBoton(e, botonRampa, deps);
   if (!boton && leerBotonConductor(e.texto)) return null;
+  // T-A5-43: un texto que ninguna regla de hitos entiende puede ser la respuesta a «¿cómo descargas?» o el número de rampa.
+  if (!interp && e.viajeAbiertoId) {
+    const r = await atenderReporteTexto(e, ahora, deps);
+    if (r) return r;
+  }
   const llevaViaje = boton?.viajeId ?? e.viajeAbiertoId;
   if (!llevaViaje) return null;
   if (!interp && !pareceHablarDeHito(e.texto)) return null;
@@ -276,6 +289,44 @@ async function atenderEstadia(
   } catch (err) {
     logger.error('conductor.estadia_atender_fallo', { viaje: boton.viajeId, err: err instanceof Error ? err.message : String(err) });
     return { mensajes: [FALLO] };
+  }
+}
+
+/** T-A5-43: el viaje del chofer y su config, o `null` si el viaje no es suyo / está cerrado (el llamador decide qué contestar). */
+async function viajeYConfigDelReporte(e: EntradaAtender, viajeId: string, deps: DepsAtender) {
+  const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, viajeId);
+  if (!viaje) return { viaje: null, motivo: 'ajeno' as const };
+  if (viaje.estatus === 'liquidado') return { viaje: null, motivo: 'cerrado' as const };
+  return { viaje, config: await deps.config(e.tenantId) };
+}
+
+/** T-A5-43: un botón de la rampa. Los botones siempre contestan algo. */
+async function atenderReporteBoton(e: EntradaAtender, boton: BotonRampa, deps: DepsAtender): Promise<SalidaAtender | null> {
+  try {
+    const r = await viajeYConfigDelReporte(e, boton.viajeId, deps);
+    if (!r.viaje) return { mensajes: [{ texto: r.motivo === 'cerrado' ? 'Ese viaje ya está cerrado. 👍' : 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] };
+    const hitos = await deps.cargarHitos(e.tenantId, r.viaje.id);
+    const mensajes = await responderReporteBoton(deps.reporte ?? puertosReporteAtenderReales(), { viaje: r.viaje, hitos, config: r.config!, ahora: e.ahora ?? new Date() }, boton);
+    return { mensajes };
+  } catch (err) {
+    logger.error('conductor.reporte_atender_fallo', { viaje: boton.viajeId, err: err instanceof Error ? err.message : String(err) });
+    return { mensajes: [FALLO] };
+  }
+}
+
+/** T-A5-43: un texto suelto. `null` = no es de este módulo (flota sin la perilla, sin pregunta abierta, o la base no contestó): sigue al agente. */
+async function atenderReporteTexto(e: EntradaAtender, ahora: Date, deps: DepsAtender): Promise<SalidaAtender | null> {
+  try {
+    const config = await deps.config(e.tenantId);
+    if (config.reporteLlegadaActivo !== true) return null;
+    const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, e.viajeAbiertoId!);
+    if (!viaje || viaje.estatus === 'liquidado') return null;
+    const hitos = await deps.cargarHitos(e.tenantId, viaje.id);
+    const mensajes = await responderReporteTexto(deps.reporte ?? puertosReporteAtenderReales(), { viaje, hitos, config, ahora }, e.texto);
+    return mensajes && mensajes.length > 0 ? { mensajes } : null;
+  } catch (err) {
+    logger.warn('conductor.reporte_texto_atender_fallo', { viaje: e.viajeAbiertoId, err: err instanceof Error ? err.message : String(err) });
+    return null;
   }
 }
 

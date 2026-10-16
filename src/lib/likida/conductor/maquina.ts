@@ -3,8 +3,9 @@ import {
   type Contacto, type HitoFila, type Lugar, type TipoHito,
 } from './tipos';
 import { MAX_POSPOSICIONES } from './config';
-import { aplicarCiclo, hitoEnCiclo, type CicloEfectivo } from './ciclo_servicio';
-import type { Intencion } from './interprete';
+import { aplicarCiclo, hitoEnCiclo, type CicloEfectivo, type Servicio } from './ciclo_servicio';
+import type { EstadoRampa, Intencion } from './interprete';
+import type { ResultadoCompuerta } from './compuerta_movimiento';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA MÁQUINA DE ESTADOS DE LOS HITOS — pura, sin I/O.
@@ -338,4 +339,156 @@ export function viajeCompleto(hitos: readonly HitoFila[]): boolean {
 /** Los hitos que se consideran «hechos» para efectos de anclar el siguiente. */
 export function ultimoHitoRegistrado(hitos: readonly HitoFila[]): HitoFila | null {
   return ultimoResuelto(mapaDe(hitos));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A5-43 — «CON QUIÉN TE REPORTASTE» PROACTIVO Y RAMPA. Puro, sin I/O.
+//
+// Al llegar al cliente los clientes cambian rampa o edificio y mandan al operador «como canica» (R15). Por eso el contacto y la rampa
+// se llevan como LISTA DE REUBICACIONES (cada cambio agrega un registro con hora), no como un valor único: es la evidencia contra
+// una cancelación por «no se presentó». Esta sección decide QUÉ se pregunta y cuándo, y arma la lista; quien la persiste y quien manda
+// los mensajes la consume (alertas_llegada.ts, mensajes.ts, tablero.ts).
+//
+// Reglas de la pregunta (una por paso, sin insistir):
+//   · APAGADO por omisión hasta la fase 2 (`activo`); sin llegada registrada del ciclo, no hay nada que preguntar.
+//   · Unidad en movimiento (la compuerta de T-A5-36 no permite escribir) → no se pregunta; se vuelve a evaluar en la siguiente pasada.
+//   · Orden: contacto → rampa (SOLO importación, en la descarga) → «¿cómo descargas?» (OPCIONAL, solo tras «no aplica»).
+//   · Cada paso se pregunta UNA vez. Un paso preguntado y sin respuesta NO bloquea: pasados `esperaMin` minutos se sigue con el
+//     siguiente y el ciclo del viaje nunca depende de la respuesta.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Tope de registros por llegada: una cadena de reubicaciones real no pasa de unas pocas; el tope frena un bucle de mensajes. */
+export const MAX_REUBICACIONES = 20;
+/** Minutos que se espera la respuesta de un paso antes de seguir con el siguiente. */
+export const MINUTOS_ESPERA_PASO_REPORTE = 10;
+
+export type OrdenadoPor = 'chofer' | 'cliente' | 'oficina';
+
+/** Un registro de la lista de reubicaciones de UNA llegada. `en` es ISO; el orden de la lista es el cronológico. */
+export interface Reubicacion {
+  en: string;
+  contacto: string | null;
+  rampaEstado: EstadoRampa | null;
+  rampa: string | null;
+  comoDescarga: string | null;
+  ordenadoPor: OrdenadoPor | null;
+}
+
+export type CambioReubicacion = Partial<Omit<Reubicacion, 'en'>>;
+
+const limpiar = (v: string | null | undefined, max: number): string | null => {
+  const t = (v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+  return t || null;
+};
+const comparable = (v: string | null): string => (v ?? '').toLocaleLowerCase('es-MX');
+
+/** El estado vigente: el último registro (o nada si aún no hay). */
+export function estadoReporte(lista: readonly Reubicacion[]): Reubicacion | null {
+  return lista.length > 0 ? lista[lista.length - 1] : null;
+}
+
+/**
+ * Agrega un cambio a la lista. Hereda lo vigente (cambiar solo la rampa conserva el contacto) y NO agrega nada si el resultado
+ * es igual a lo vigente (un duplicado no mueve la hora ni infla la evidencia). Pura: devuelve una lista nueva.
+ */
+export function agregarReubicacion(
+  lista: readonly Reubicacion[], cambio: CambioReubicacion, en: Date, ordenadoPor: OrdenadoPor | null = 'chofer',
+): Reubicacion[] {
+  const previo = estadoReporte(lista);
+  const rampaEstado = cambio.rampaEstado !== undefined ? cambio.rampaEstado : previo?.rampaEstado ?? null;
+  const siguiente: Reubicacion = {
+    en: Number.isNaN(en.getTime()) ? new Date(0).toISOString() : en.toISOString(),
+    contacto: cambio.contacto !== undefined ? limpiar(cambio.contacto, 80) : previo?.contacto ?? null,
+    rampaEstado,
+    // El número de rampa solo existe con «sí»: cualquier otro estado lo borra.
+    rampa: rampaEstado === 'si' ? (cambio.rampa !== undefined ? limpiar(cambio.rampa, 12)?.toUpperCase() ?? null : previo?.rampa ?? null) : null,
+    comoDescarga: rampaEstado === 'no_aplica' ? (cambio.comoDescarga !== undefined ? limpiar(cambio.comoDescarga, 120) : previo?.comoDescarga ?? null) : null,
+    ordenadoPor: cambio.ordenadoPor !== undefined ? cambio.ordenadoPor : ordenadoPor,
+  };
+  if (previo
+    && comparable(previo.contacto) === comparable(siguiente.contacto)
+    && previo.rampaEstado === siguiente.rampaEstado
+    && comparable(previo.rampa) === comparable(siguiente.rampa)
+    && comparable(previo.comoDescarga) === comparable(siguiente.comoDescarga)) return [...lista];
+  const nueva = [...lista, siguiente];
+  return nueva.length > MAX_REUBICACIONES ? nueva.slice(nueva.length - MAX_REUBICACIONES) : nueva;
+}
+
+/** Cuántas veces cambió de rampa/contacto después del primer registro (el «canica»). */
+export const reubicacionesDespuesDelPrimero = (lista: readonly Reubicacion[]): number => Math.max(0, lista.length - 1);
+
+export type PasoReporte = 'contacto' | 'rampa' | 'como_descarga';
+
+/** Un paso ya preguntado: cuándo (ISO) y cuántas veces no se repite (una). */
+export type PreguntadosReporte = Partial<Record<PasoReporte, string>>;
+
+export type RazonSinPregunta =
+  | 'apagado' | 'sin_llegada' | 'en_movimiento' | 'esperando_respuesta' | 'completo';
+
+export type DecisionReporte =
+  | { accion: 'preguntar'; paso: PasoReporte }
+  | { accion: 'nada'; razon: RazonSinPregunta };
+
+export interface EntradaReporteLlegada {
+  /** Perilla por flota; apagada por omisión hasta la fase 2. */
+  activo: boolean;
+  /** Los hitos del viaje (la llegada del ciclo debe estar resuelta). */
+  hitos: readonly HitoFila[];
+  servicio: Servicio | null;
+  /** Lo vigente de la lista de reubicaciones del viaje. */
+  reubicaciones: readonly Reubicacion[];
+  /** `sinContacto` del hito de llegada: el chofer dijo «aún no tengo contacto» (es una respuesta, no un hueco). */
+  sinContacto: boolean;
+  preguntados: PreguntadosReporte;
+  /** La compuerta «unidad detenida» (T-A5-36) evaluada con las posiciones del viaje. `null` = no se evaluó: no se pregunta. */
+  compuerta: ResultadoCompuerta | null;
+  ahora: Date;
+  esperaMin?: number;
+}
+
+/** La llegada del ciclo de la que cuelga el reporte: la de descarga en importación; la de carga en exportación y nacional. */
+export function hitoLlegadaDelReporte(hitos: readonly HitoFila[], servicio: Servicio | null): HitoFila | null {
+  const tipo: TipoHito = servicio === 'importacion' ? 'llegada_descarga' : servicio === 'exportacion' ? 'llegada_carga' : hitoActivoLlegada(hitos);
+  const h = hitos.find((x) => x.tipo === tipo);
+  return h && estaResuelto(h) ? h : null;
+}
+
+/** Sin servicio conocido o nacional: la última llegada resuelta (descarga si ya hay, si no carga). */
+function hitoActivoLlegada(hitos: readonly HitoFila[]): TipoHito {
+  const d = hitos.find((x) => x.tipo === 'llegada_descarga');
+  return d && estaResuelto(d) ? 'llegada_descarga' : 'llegada_carga';
+}
+
+/** Qué se le pregunta ahora al chofer sobre «con quién te reportaste» y la rampa. Pura; ante la duda, NO pregunta. */
+export function decidirReporteLlegada(e: EntradaReporteLlegada): DecisionReporte {
+  if (!e.activo) return { accion: 'nada', razon: 'apagado' };
+  const llegada = hitoLlegadaDelReporte(e.hitos, e.servicio);
+  if (!llegada) return { accion: 'nada', razon: 'sin_llegada' };
+  if (!e.compuerta || !e.compuerta.permitido) return { accion: 'nada', razon: 'en_movimiento' };
+
+  const vigente = estadoReporte(e.reubicaciones);
+  const tieneContacto = Boolean(vigente?.contacto) || Boolean(llegada.contactoNombre) || e.sinContacto || llegada.sinContacto;
+  const pideRampa = e.servicio === 'importacion' && llegada.tipo === 'llegada_descarga';
+  const tieneRampa = vigente?.rampaEstado != null;
+  const pideComo = pideRampa && vigente?.rampaEstado === 'no_aplica' && !vigente.comoDescarga;
+
+  const pendientes: PasoReporte[] = [];
+  if (!tieneContacto) pendientes.push('contacto');
+  if (pideRampa && !tieneRampa) pendientes.push('rampa');
+  if (pideComo) pendientes.push('como_descarga');
+  if (pendientes.length === 0) return { accion: 'nada', razon: 'completo' };
+
+  const espera = (e.esperaMin ?? MINUTOS_ESPERA_PASO_REPORTE) * 60_000;
+  let esperando = false;
+  for (const paso of pendientes) {
+    const cuando = e.preguntados[paso];
+    if (cuando === undefined) {
+      // Un paso anterior preguntado hace poco todavía puede contestarse: no se encimen dos preguntas.
+      return esperando ? { accion: 'nada', razon: 'esperando_respuesta' } : { accion: 'preguntar', paso };
+    }
+    const t = new Date(cuando).getTime();
+    if (Number.isNaN(t) || e.ahora.getTime() - t < espera) esperando = true; // ya preguntado y aún en plazo
+    // ya preguntado y vencido: no se repite y no bloquea; se sigue con el siguiente
+  }
+  return { accion: 'nada', razon: esperando ? 'esperando_respuesta' : 'completo' };
 }

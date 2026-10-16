@@ -20,12 +20,13 @@ import { revalidatePath } from 'next/cache';
 import { FormaEstrategiaConductores, type ResultadoEstrategia } from '../estrategia-forma';
 import { Bloque, EsqTabla, vigilar } from '../../bloque';
 import { calcularInsights } from '@/lib/likida/conductor/insights';
-import { leerConfigConductor, leerEntradaInsights, leerDatosPreflight, leerEpisodiosParaTablero, leerSalidasTms, leerTransitoViajes, leerViajesConCartaPorte } from '@/lib/likida/conductor/repo';
+import { mapaReubicaciones } from '@/lib/likida/conductor/reporte_llegada';
+import { leerConfigConductor, leerEventosReporte, leerEntradaInsights, leerDatosPreflight, leerEpisodiosParaTablero, leerSalidasTms, leerTransitoViajes, leerViajesConCartaPorte } from '@/lib/likida/conductor/repo';
 import { evaluarPreflight } from '@/lib/likida/conductor/preflight_piloto';
 import { BannerPreflight } from './configuracion/preflight';
 import { leerCatalogosFiltro, leerDatosTablero, leerIndicadores, listarSitios, type FiltrosTablero } from '@/lib/likida/conductor/repo_validacion';
 import { asignarSitiosDelPanel } from '@/lib/likida/conductor/acciones_sitios';
-import { armarTablero, episodiosVista, filtrarPorSemaforo, indicadoresVista, type EpisodioVista, type Semaforo } from '@/lib/likida/conductor/tablero';
+import { armarTablero, conReporteDeLlegada, episodiosVista, filtrarPorSemaforo, indicadoresVista, type EpisodioVista, type Semaforo } from '@/lib/likida/conductor/tablero';
 import { ejecutarAccionOficina, leerAccion } from '@/lib/likida/conductor/acciones_oficina';
 import { emailDeUsuario } from '@/lib/likida/conductor/trabajo';
 import { TableroHitos, ORDEN_SEMAFORO, type FiltrosVista } from './tablero-hitos';
@@ -179,7 +180,17 @@ export default async function PaginaAgenteConductores({
       }
       // T-A5-22: la «Fecha Salida» del TMS se muestra como candidato aunque la casilla esté apagada; si no se puede leer, no se afirma nada.
       datos.salidasTms = await leerSalidasTms(tenantId, datos.viajes.map((v) => v.id));
-      return filtrarPorSemaforo(armarTablero(datos, config, new Date()), filtrosVista.semaforo || null);
+      const tablero = armarTablero(datos, config, new Date());
+      // T-A5-43: «con quién te reportaste» y la rampa de cada llegada, con su lista de reubicaciones. Solo con la perilla encendida; si la
+      // bitácora no se puede leer el tablero sale sin ella (no se afirma lo que no se leyó).
+      if (config.reporteLlegadaActivo === true) {
+        try {
+          tablero.filas = conReporteDeLlegada(tablero.filas, mapaReubicaciones(await leerEventosReporte(tenantId, datos.viajes.map((v) => v.id)), datos.hitos));
+        } catch (e) {
+          logger.warn('conductor.tablero_reporte_llegada_fallo', { err: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      return filtrarPorSemaforo(tablero, filtrosVista.semaforo || null);
     }));
   const pIndicadores = safe(async () => {
     const hasta = new Date();
