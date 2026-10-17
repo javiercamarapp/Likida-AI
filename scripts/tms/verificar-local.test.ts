@@ -11,7 +11,7 @@ afterAll(() => rmSync(carpeta, { recursive: true, force: true }));
 
 function correr(args: string[], env: Record<string, string> = {}) {
   const r = spawnSync(process.execPath, [SCRIPT, ...args], {
-    env: { PATH: process.env.PATH ?? '', ...env }, encoding: 'utf8', timeout: 90_000,
+    env: { NODE_ENV: 'test', PATH: process.env.PATH ?? '', ...env }, encoding: 'utf8', timeout: 90_000,
   });
   return { codigo: r.status, salida: `${r.stdout}\n${r.stderr}`, stdout: r.stdout };
 }
