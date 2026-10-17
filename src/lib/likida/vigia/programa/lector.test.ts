@@ -154,6 +154,46 @@ describe('leerProgramaCsv · estructura', () => {
     expect(r.filas).toHaveLength(1);
     expect(r.filas[0].lineaCsv).toBe(4);
   });
+
+  it('(T-A4-04-reintento) celda entre comillas con salto de línea literal no rompe la fila en dos', () => {
+    // Hallazgo real (oráculo GDL): una celda de CONSIGNATARIO/COMENTARIOS puede traer
+    // un salto de línea literal dentro de las comillas (export de Excel a CSV). Sin
+    // juntar las dos líneas físicas, la fila se parte en dos y CAJA/UNIDAD de todas
+    // las filas siguientes quedan desalineadas con el oráculo.
+    const csv = [
+      'EXPORTACION LUNES 05 DE OCTUBRE 2026',
+      '#;SUC;TIPO DE VIAJE;ORIGEN-DESTINO;CLIENTE;CONSIGNATARIO;LINEA;CAJA;COMENTARIOS;CITA;CITA LIMITE;UNIDAD',
+      '1;GDL;EXPO;GDL-NLD;CLIENTE A;CONSIG A;LNA;ZC0001;;05/10/2026 8:00;;ZU0001',
+      '2;GDL;EXPO;GDL-NLD;CLIENTE B;"CONSIGNATARIO CON',
+      'SALTO DE LINEA";LNB;ZC0002;;05/10/2026 9:00;;ZU0002',
+      '3;GDL;EXPO;GDL-NLD;CLIENTE C;CONSIG C;LNC;ZC0003;;05/10/2026 10:00;;ZU0003',
+    ].join('\n');
+    const r = leerProgramaCsv(csv, T);
+    expect(r.filas).toHaveLength(3);
+    const [f1, f2, f3] = r.filas;
+    expect(f1.lineaCsv).toBe(3);
+    expect(f2.lineaCsv).toBe(4);
+    expect(f2.celdas.CAJA).toBe('ZC0002');
+    expect(f2.celdas.UNIDAD).toBe('ZU0002');
+    expect(f2.celdas.CONSIGNATARIO).toContain('CONSIGNATARIO CON');
+    expect(f2.celdas.CONSIGNATARIO).toContain('SALTO DE LINEA');
+    // La tercera fila (física, línea 6) no se confunde con una fila nueva espuria.
+    expect(f3.lineaCsv).toBe(6);
+    expect(f3.celdas.CAJA).toBe('ZC0003');
+    expect(f3.celdas.UNIDAD).toBe('ZU0003');
+    expect(r.resumen.lineas).toBe(6);
+  });
+
+  it('(T-A4-04-reintento) comillas sin cerrar hasta fin de archivo no cuelga el lector', () => {
+    const csv = [
+      'EXPORTACION LUNES 05 DE OCTUBRE 2026',
+      '#;SUC;TIPO DE VIAJE;ORIGEN-DESTINO;CLIENTE;CONSIGNATARIO;LINEA;CAJA;COMENTARIOS;CITA;CITA LIMITE;UNIDAD',
+      '1;GDL;EXPO;GDL-NLD;CLIENTE A;"SIN CERRAR;LNA;ZC0001;;05/10/2026 8:00;;ZU0001',
+    ].join('\n');
+    const r = leerProgramaCsv(csv, T);
+    expect(r.filas).toHaveLength(1);
+    expect(r.filas[0].lineaCsv).toBe(3);
+  });
 });
 
 describe('leerProgramaCsv · tope y errores', () => {

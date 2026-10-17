@@ -251,24 +251,49 @@ export function leerProgramaCsv(textoCrudo: string, opciones: OpcionesLector): R
   let pos = 0;
   const largo = texto.length;
   for (;;) {
-    let e = texto.indexOf('\n', pos);
-    const ultima = e === -1;
-    if (ultima) e = largo;
-    lineaNo++;
+    // Una fila lógica puede abarcar varias líneas físicas cuando una celda entre
+    // comillas trae un salto de línea literal (export de Excel a CSV). Se acumulan
+    // líneas mientras el número de comillas de la fila sea impar (comilla abierta
+    // sin cerrar); `lineaNo` cuenta TODAS las líneas físicas consumidas (para que
+    // `resumen.lineas` siga siendo el total real), pero la fila se reporta con la
+    // línea donde empezó.
+    const inicioRegistro = pos;
+    const lineaDelRegistro = lineaNo + 1;
+    // Solo se cuentan comillas dentro de las columnas del programa (antes de la
+    // tabla lateral): la marca de tiempo de la lateral trae a veces una comilla
+    // suelta (sin pareja) que NO es una celda sin cerrar (ver fixtures.ts /
+    // «marca de tiempo con comilla final»), y no debe disparar una unión de líneas.
+    let comillas = 0;
+    let columna = 0;
+    let finRegistro = pos;
+    for (;;) {
+      let e = texto.indexOf('\n', pos);
+      const ultimaLinea = e === -1;
+      if (ultimaLinea) e = largo;
+      lineaNo++;
+      for (let i = pos; i < e; i++) {
+        const ch = texto.charCodeAt(i);
+        if (ch === cDelim) columna++;
+        else if (ch === 34 && columna < lateralDesde) comillas++;
+      }
+      finRegistro = e;
+      if (ultimaLinea) { pos = e; break; }
+      pos = e + 1;
+      if (comillas % 2 === 0) break;
+    }
 
     // Cortar relleno final (delimitadores, CR, espacios) sin dividir toda la línea.
-    let fin = e;
-    while (fin > pos) {
+    let fin = finRegistro;
+    while (fin > inicioRegistro) {
       const ch = texto.charCodeAt(fin - 1);
       if (ch === cDelim || ch === 13 || ch === 32 || ch === 9) fin--;
       else break;
     }
-    if (fin > pos) {
-      const celdas = texto.slice(pos, fin).split(delim);
-      procesarLinea(celdas, lineaNo);
+    if (fin > inicioRegistro) {
+      const celdas = texto.slice(inicioRegistro, fin).split(delim);
+      procesarLinea(celdas, lineaDelRegistro);
     }
-    if (ultima) break;
-    pos = e + 1;
+    if (pos >= largo) break;
   }
 
   function procesarLinea(celdas: string[], linea: number) {
