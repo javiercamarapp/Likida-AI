@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calcularInsights, MENSAJE_SIN_LINEA_BASE, type CruceParaInsights, type EntradaInsights, type HitoParaInsights } from './insights';
+import { calcularInsights, MENSAJE_SIN_LINEA_BASE, SIN_DATO, type CruceParaInsights, type EntradaInsights, type HitoParaInsights } from './insights';
 
 const T0 = Date.parse('2026-03-02T12:00:00.000Z');
 const iso = (min: number) => new Date(T0 + min * 60_000).toISOString();
@@ -123,5 +123,110 @@ describe('insights del Conductor (T-A5-31)', () => {
       expect(['medido', 'estimación']).toContain(c.rotulo);
     }
     expect(r.retrasoGps.rotulo).toBe('medido');
+  });
+});
+
+describe('KPIs del piloto (T-A5-61): con línea base declarada o «sin dato», nunca un porcentaje inventado', () => {
+  const kpi = (r: ReturnType<typeof calcularInsights>, id: string) => {
+    const k = r.kpisPiloto.find((x) => x.id === id);
+    if (!k) throw new Error(`falta el KPI ${id}`);
+    return k;
+  };
+  const hv = (viajeId: string, tipo: 'llegada_carga' | 'salida_carga' | 'llegada_descarga', p: Partial<HitoParaInsights> = {}): HitoParaInsights => ({
+    ...hito({ fuente: 'sistema' }), viajeId, tipo, ...p,
+  });
+
+  it('son exactamente seis, en orden: los cuatro de la ficha y los dos de referencia (16b)', () => {
+    const r = calcularInsights(entrada());
+    expect(r.kpisPiloto.map((k) => k.id)).toEqual([
+      'hitos_sin_intervencion', 'minutos_gps_registro', 'viajes_completos', 'mensajes_supervisor_evitados',
+      'salida_terminal_primer_cliente', 'reubicaciones_por_cliente',
+    ]);
+    for (const k of r.kpisPiloto) { expect(k.fuente.length).toBeGreaterThan(0); expect(k.calculo.length).toBeGreaterThan(0); }
+  });
+
+  it('sin ninguna línea base: sin comparación («sin dato»); los dos de referencia ni siquiera muestran valor', () => {
+    const r = calcularInsights(entrada({ piloto: { minutosSalidaTerminalPrimerCliente: [30, 40], reubicaciones: { total: 4, clientes: 2 } } }));
+    expect(kpi(r, 'hitos_sin_intervencion').valor).toBe(90);
+    expect(kpi(r, 'hitos_sin_intervencion').contraBase).toBe(SIN_DATO);
+    expect(kpi(r, 'minutos_gps_registro').valor).toBe(7.5);
+    expect(kpi(r, 'minutos_gps_registro').contraBase).toBe(SIN_DATO);
+    expect(kpi(r, 'mensajes_supervisor_evitados').valor).toBeNull();
+    expect(kpi(r, 'mensajes_supervisor_evitados').contraBase).toBe(SIN_DATO);
+    for (const id of ['salida_terminal_primer_cliente', 'reubicaciones_por_cliente']) {
+      expect(kpi(r, id).valor).toBeNull();
+      expect(kpi(r, id).contraBase).toBe(SIN_DATO);
+    }
+    expect(JSON.stringify(r.kpisPiloto)).not.toMatch(/NaN|Infinity/);
+  });
+
+  it('con línea base declarada compara: mejora en puntos/minutos y su % solo si la base es mayor que cero', () => {
+    const r = calcularInsights(entrada({
+      piloto: {
+        lineaBase: { hitosSinIntervencionPct: 40, minutosGpsRegistro: 15, viajesCompletosPct: null, minutosSalidaTerminalPrimerCliente: 50, reubicacionesPorCliente: 0 },
+        minutosSalidaTerminalPrimerCliente: [30, 40],
+        reubicaciones: { total: 4, clientes: 2 },
+      },
+    }));
+    expect(kpi(r, 'hitos_sin_intervencion').contraBase).toEqual({ lineaBase: 40, diferencia: 50, mejoraPct: null, mejor: true });
+    expect(kpi(r, 'minutos_gps_registro').contraBase).toEqual({ lineaBase: 15, diferencia: -7.5, mejoraPct: 50, mejor: true });
+    expect(kpi(r, 'salida_terminal_primer_cliente').valor).toBe(35);
+    expect(kpi(r, 'salida_terminal_primer_cliente').contraBase).toEqual({ lineaBase: 50, diferencia: -15, mejoraPct: 30, mejor: true });
+    // base 0 → no hay % posible (dividir entre cero sería inventar)
+    expect(kpi(r, 'reubicaciones_por_cliente').valor).toBe(2);
+    expect(kpi(r, 'reubicaciones_por_cliente').contraBase).toEqual({ lineaBase: 0, diferencia: 2, mejoraPct: null, mejor: false });
+    expect(kpi(r, 'viajes_completos').contraBase).toBe(SIN_DATO);
+  });
+
+  it('una base negativa, no finita o 0 en un KPI donde no es posible, cuenta como no declarada', () => {
+    const r = calcularInsights(entrada({ piloto: { lineaBase: { minutosGpsRegistro: -3, hitosSinIntervencionPct: Number.NaN, minutosSalidaTerminalPrimerCliente: 0 }, minutosSalidaTerminalPrimerCliente: [10] } }));
+    expect(kpi(r, 'minutos_gps_registro').contraBase).toBe(SIN_DATO);
+    expect(kpi(r, 'hitos_sin_intervencion').contraBase).toBe(SIN_DATO);
+    expect(kpi(r, 'salida_terminal_primer_cliente').valor).toBeNull();
+  });
+
+  it('mensajes del supervisor evitados: es la estimación de llamadas evitadas, solo con su línea base', () => {
+    const r = calcularInsights(entrada({ lineaBase: { llamadasPorViaje: 2, registradaEn: '2026-03-01' } }));
+    const k = kpi(r, 'mensajes_supervisor_evitados');
+    expect(k.valor).toBe(36);
+    expect(k.rotulo).toBe('estimación');
+    expect(k.contraBase).toEqual({ lineaBase: 2, diferencia: null, mejoraPct: null, mejor: null });
+  });
+
+  it('viajes completos: todos los hitos no omitidos del viaje registrados; un viaje con uno pendiente no cuenta', () => {
+    const r = calcularInsights({
+      hitos: [
+        hv('v1', 'llegada_carga'), hv('v1', 'salida_carga'), hv('v1', 'llegada_descarga', { estado: 'omitido', fuente: null }),
+        hv('v2', 'llegada_carga'), hv('v2', 'salida_carga', { estado: 'esperado', fuente: null }),
+        hv('v3', 'llegada_carga', { estado: 'escalado', fuente: null }),
+        hv('v4', 'llegada_carga', { estado: 'validado', fuente: 'oficina' }),
+      ],
+      cruces: [], episodios: [], viajesSinSitio: null, lineaBase: null,
+      piloto: { lineaBase: { viajesCompletosPct: 25 } },
+    });
+    const k = kpi(r, 'viajes_completos');
+    expect(k.valor).toBe(50);
+    expect(k.contraBase).toEqual({ lineaBase: 25, diferencia: 25, mejoraPct: null, mejor: true });
+  });
+
+  it('viajes completos sin viajeId en los hitos o sin viajes: sin dato (null), no 0 %', () => {
+    expect(kpi(calcularInsights(entrada()), 'viajes_completos').valor).toBeNull();
+    expect(kpi(calcularInsights({ hitos: [], cruces: [], episodios: [], viajesSinSitio: null, lineaBase: null }), 'viajes_completos').valor).toBeNull();
+    // un viaje cuyos hitos están todos omitidos no es «completo»: no hay nada que completar
+    const r = calcularInsights({ hitos: [hv('v1', 'llegada_carga', { estado: 'omitido', fuente: null })], cruces: [], episodios: [], viajesSinSitio: null, lineaBase: null });
+    expect(kpi(r, 'viajes_completos').valor).toBeNull();
+  });
+
+  it('los KPIs de referencia dependen de datos con medición: sin mediciones válidas, sin dato aunque haya base', () => {
+    const r = calcularInsights(entrada({
+      piloto: {
+        lineaBase: { minutosSalidaTerminalPrimerCliente: 50, reubicacionesPorCliente: 1 },
+        minutosSalidaTerminalPrimerCliente: [-5, Number.NaN],
+        reubicaciones: { total: null, clientes: 0 },
+      },
+    }));
+    expect(kpi(r, 'salida_terminal_primer_cliente').valor).toBeNull();
+    expect(kpi(r, 'reubicaciones_por_cliente').valor).toBeNull();
+    expect(kpi(r, 'salida_terminal_primer_cliente').contraBase).toBe(SIN_DATO);
   });
 });

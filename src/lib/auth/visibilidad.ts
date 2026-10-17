@@ -154,6 +154,12 @@ const AREA_POR_RUTA: Record<string, Area> = {
   // (/dashboard/carta-porte/borrador/<uuid>) es dinámica y se gatea con la
   // llave de su padre, como /dashboard/<uuid> gatea su área a mano.
   '/dashboard/agentes/carta-porte': 'operacion',
+  // El catálogo del cliente del Agente de Carta Porte (T-A3-22): productos (SKU → clave SAT), remitentes/destinatarios y el
+  // número interno del cliente. Misma área que su agente: cero pesos, lo usa el jefe de tráfico.
+  '/dashboard/agentes/carta-porte/catalogo': 'operacion',
+  // La configuración de la salida del Agente de Carta Porte (T-A3-32): modo, reintentos, frecuencia, destinatarios y plantilla.
+  // Cambia a quién se avisa y cómo sale lo que el agente arma: solo dueño/administrador, como las demás configuraciones.
+  '/dashboard/agentes/carta-porte/configuracion': 'administracion',
   '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',
   // Notificaciones (14-ago-2026) — el "alertas primero". Su VISIBILIDAD la
@@ -375,6 +381,8 @@ export const RUTAS_PERFIL_CINCO_AGENTES: Readonly<Record<string, ModuloPerfil>> 
   // A3 · Carta Porte (el borrador y la revisión de documentos cuelgan de estas
   // dos llaves: sus páginas dinámicas gatean con la de su padre).
   '/dashboard/agentes/carta-porte': 'carta_porte',
+  '/dashboard/agentes/carta-porte/catalogo': 'carta_porte',
+  '/dashboard/agentes/carta-porte/configuracion': 'carta_porte',
   '/dashboard/carta-porte': 'carta_porte',
   '/dashboard/carta-porte/documentos': 'carta_porte',
   // A4 · Vigía de servicio al cliente.
@@ -508,11 +516,12 @@ export const API_PERFIL_CINCO_AGENTES: Readonly<Record<'v1' | 'export' | 'dashbo
   v1: [
     'liquidaciones', 'liquidaciones-externas', // A1
     'peajes',                                   // A2
+    'ccp-timbrado',                             // A3: aviso del TMS con el CCP ya timbrado (T-A3-33)
     'viajes', 'operadores', 'unidades',         // base
   ],
   export: [
     'liquidaciones', 'liquidaciones-externas', 'pdf', // A1
-    'bitacora-peaje', 'bitacora-conciliada', 'peajes-reclamacion', 'peajes-revision', // A2
+    'peajes-revision', 'peajes-candidatos', 'peajes-vinculos', // A2 (T-A2-31: bitacora-peaje, bitacora-conciliada y peajes-reclamacion son stand-by: estímulo RMF 9.1.8 y evidencia GPS)
     'carta-porte-docs', 'carta-porte-xml',      // A3
   ],
   dashboard: [
@@ -539,6 +548,38 @@ export function apiPermitidaEnPerfil(perfil: PerfilTenant | string, pathname: st
 }
 
 /**
+ * CONECTORES que /dashboard/conexiones ofrece a una flota con perfil (lista
+ * cerrada, junto a la lista de rutas). Los cinco agentes dependen del sistema
+ * del cliente (TMS) y del GPS; el resto del catálogo (SAP B1, Oracle, Odoo,
+ * CONTPAQi/Aspel, monederos y peajes, portales de facturación) es stand-by:
+ * oculto, NO borrado. Todo conector que no esté aquí se niega (falla cerrado),
+ * incluido uno nuevo que se agregue mañana.
+ */
+export const CONECTORES_PERFIL_CINCO_AGENTES: readonly string[] = [
+  'tms_api_lectura', 'tms_generico', 'tabla_propia', // el sistema del cliente
+  'wialon', 'samsara', 'geotab', 'navixy', 'gps_generico', // GPS
+];
+
+/**
+ * Renglones del catálogo de sistemas (`integraciones.ts`) que el perfil deja
+ * ver. SAP/CONTPAQi/Aspel, el monedero/TAG y el buzón de facturas de
+ * proveedores quedan en stand-by.
+ */
+export const INTEGRACIONES_PERFIL_CINCO_AGENTES: readonly string[] = ['export_csv', 'gps', 'whatsapp_docs'];
+
+/** ¿Este conector se ofrece (y se acepta) bajo el perfil? Perfil desconocido o conector no declarado → no. */
+export function conectorPermitidoEnPerfil(perfil: PerfilTenant | string, conectorId: string): boolean {
+  if (perfil !== 'cinco_agentes') return false;
+  return CONECTORES_PERFIL_CINCO_AGENTES.includes(conectorId);
+}
+
+/** ¿Este renglón del catálogo de sistemas se muestra bajo el perfil? */
+export function integracionPermitidaEnPerfil(perfil: PerfilTenant | string, integracionId: string): boolean {
+  if (perfil !== 'cinco_agentes') return false;
+  return INTEGRACIONES_PERFIL_CINCO_AGENTES.includes(integracionId);
+}
+
+/**
  * Crons que SIGUEN corriendo para una flota con perfil (los de los cinco
  * agentes y la plomería compartida). Todo cron que no esté aquí SALTA los
  * tenants con perfil. Por nombre de ruta (`/api/cron/<nombre>`).
@@ -551,6 +592,7 @@ export const CRONS_PERFIL_CINCO_AGENTES: readonly string[] = [
   // `escalar` es MIXTO: la escalación del conductor (A5, «próximamente»), la cobranza, los relojes
   // legales de incidencias y las reglas (stand-by) se saltan flotas con perfil por sección.
   'escalar',
+  'tms',                     // el conector al sistema del cliente: solo corre para flotas que lo activaron (credencial probada + mapeo)
   'wa-pendientes', 'wa-outbox', 'purgar', 'guardia', // plomería compartida
 ];
 

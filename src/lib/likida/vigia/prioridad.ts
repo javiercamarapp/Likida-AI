@@ -109,3 +109,15 @@ export function prioridadDe(texto: string, contexto: ContextoPrioridad = {}): Pr
 
   return { nivel: 1, motivos: ['mensaje_normal'] };
 }
+
+// ── Filtro de lectura (T-A4-47) ──────────────────────────────────────────────
+// Requisito (reunión del 14-oct, 31:43): marcar los mensajes «que no tienes que leer» frente a los que se escalan, para
+// que servicio al cliente no tenga que abrir decenas de chats. Se DERIVA del nivel: no cambia `Prioridad` ni su forma.
+// GUARDIA: es solo una etiqueta de orden/lectura; no contesta nada ni toca los umbrales de escalamiento.
+export type EtiquetaLectura = 'no_requiere_respuesta' | 'escalar' | 'atender';
+
+export function etiquetaDeLectura(p: Prioridad): EtiquetaLectura {
+  if (p.nivel === 0) return 'no_requiere_respuesta';
+  if (p.nivel === 2) return 'escalar';
+  return 'atender';
+}

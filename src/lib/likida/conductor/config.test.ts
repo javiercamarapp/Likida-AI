@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CONFIG_CONDUCTOR_DEFAULT, dentroDeVentana, horaYDiaMx, inicioDiaMx, validarConfigConductor, zonaOCdmx } from './config';
+import { COHORTES_PILOTO, CONFIG_CONDUCTOR_DEFAULT, dentroDeVentana, horaYDiaMx, inicioDiaMx, validarConfigConductor, zonaOCdmx } from './config';
 import { TZ_MX } from '@/lib/formato';
 
 describe('validarConfigConductor', () => {
@@ -196,5 +196,32 @@ describe('defaults de las perillas del Conductor (contrato con la documentación
     const doc = readFileSync(join(process.cwd(), 'docs/operacion/agente-conductor.md'), 'utf8');
     expect(doc).toMatch(/`detectar_hitos_gps` nace ENCENDIDO \(`true`\)/);
     expect(doc).toMatch(/`avisar_senal_vida` nace APAGADO \(`false`\)/);
+  });
+});
+
+describe('marca de cohorte del piloto (T-A5-64)', () => {
+  it('sin cohorte definida: la configuración no trae marca y el valor de partida es «sin definir»', () => {
+    const v = validarConfigConductor({});
+    expect('ok' in v && v.ok.cohortePiloto).toBeUndefined();
+    expect(CONFIG_CONDUCTOR_DEFAULT.cohortePiloto ?? null).toBeNull();
+  });
+
+  it('acepta cada cohorte del catálogo y la conserva', () => {
+    for (const c of COHORTES_PILOTO) {
+      const v = validarConfigConductor({ cohortePiloto: c });
+      expect('ok' in v && v.ok.cohortePiloto).toBe(c);
+    }
+    expect([...COHORTES_PILOTO]).toEqual(['sin_tableta_ni_macros', 'voluntarios_abiertos']);
+  });
+
+  it('null o vacío = sin cohorte; un valor fuera del catálogo se RECHAZA (no se corrige en silencio)', () => {
+    for (const vacio of [null, undefined]) {
+      const v = validarConfigConductor({ cohortePiloto: vacio as never });
+      expect('ok' in v && v.ok.cohortePiloto).toBeUndefined();
+    }
+    for (const malo of ['', 'todas', 'SIN_TABLETA_NI_MACROS', 7, {}]) {
+      const v = validarConfigConductor({ cohortePiloto: malo as never });
+      expect(v, String(malo)).toEqual({ error: expect.stringContaining('cohorte') });
+    }
   });
 });

@@ -78,6 +78,43 @@ export const CREDENCIALES_TMS_API_LECTURA: readonly CampoCredencial[] = [
   },
 ];
 
+/** Frases llanas para los fallos de RED (no son veredicto sobre la credencial). */
+export const FRASE_DNS = 'no resuelve el nombre (DNS)';
+export const FRASE_TIEMPO = 'no conectó a tiempo (probable firewall)';
+export const FRASE_RECHAZO = 'el servidor rechazó la conexión';
+export const FRASE_403_IP = 'respondió 403 (probable lista de IP permitidas)';
+
+/** Distingue DNS / tiempo agotado / conexión rechazada por código o texto del error; `null` si no se reconoce. */
+export function clasificarErrorDeRed(e: unknown): 'dns' | 'tiempo' | 'rechazo' | null {
+  const partes: string[] = [];
+  let actual: unknown = e;
+  for (let i = 0; i < 3 && actual != null; i++) {
+    if (typeof actual === 'object') {
+      const o = actual as { code?: unknown; message?: unknown; cause?: unknown };
+      if (typeof o.code === 'string') partes.push(o.code);
+      if (typeof o.message === 'string') partes.push(o.message);
+      actual = o.cause;
+    } else {
+      partes.push(String(actual));
+      actual = null;
+    }
+  }
+  const t = partes.join(' ');
+  if (/ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(t)) return 'dns';
+  if (/ETIMEDOUT|ESOCKETTIMEDOUT|UND_ERR_CONNECT_TIMEOUT|time-?d?\s?out|timeout|aborted/i.test(t)) return 'tiempo';
+  if (/ECONNREFUSED|ECONNRESET/i.test(t)) return 'rechazo';
+  return null;
+}
+
+function fraseDeRed(e: unknown): string {
+  switch (clasificarErrorDeRed(e)) {
+    case 'dns': return FRASE_DNS;
+    case 'tiempo': return FRASE_TIEMPO;
+    case 'rechazo': return FRASE_RECHAZO;
+    default: return e instanceof Error ? e.message : String(e);
+  }
+}
+
 function resultado(
   ok: boolean, detalle: string, verificadoContra: string | null, sobreLaCredencial: ResultadoPrueba['sobreLaCredencial'],
 ): ResultadoPrueba {
@@ -147,7 +184,7 @@ export function probarTmsApiLectura(v: ValoresCredencial, http: Http): Promise<R
         cuerpo: JSON.stringify({ usuario, clave }),
       });
     } catch (e) {
-      return resultado(false, limpiar(`No se pudo hablar con ${nombre}: ${e instanceof Error ? e.message : String(e)}. Un error de red, de DNS o de tiempo NO significa que la credencial sea mala; significa que no se pudo comprobar.`), null, 'no_se_sabe');
+      return resultado(false, limpiar(`No se pudo hablar con ${nombre}: ${fraseDeRed(e)}. Un error de red, de DNS o de tiempo NO significa que la credencial sea mala; significa que no se pudo comprobar.`), null, 'no_se_sabe');
     }
     if (login.estado >= 300 && login.estado < 400) {
       return resultado(false, `${nombre} contestó una redirección (${login.estado}) al iniciar sesión y no se siguió. Suele ser una página de acceso web en medio, no la API: NO se puede afirmar que la credencial sirva.`, endpointLogin, 'no_se_sabe');
@@ -157,7 +194,7 @@ export function probarTmsApiLectura(v: ValoresCredencial, http: Http): Promise<R
     }
     const veredictoLogin = veredictoHttp(login, endpointLogin, nombre);
     if (!veredictoLogin.ok) {
-      const extra = login.estado === 403 ? ' Si la credencial es correcta, pregunta a tu área de sistemas si un firewall o una lista de IP permitidas está bloqueando a Likida.' : '';
+      const extra = login.estado === 403 ? ` ${nombre} ${FRASE_403_IP}. Si la credencial es correcta, pregunta a tu área de sistemas si un firewall o una lista de IP permitidas está bloqueando a Likida.` : '';
       return { ...veredictoLogin, detalle: limpiar(veredictoLogin.detalle + extra) };
     }
     const cuerpoLogin = jsonObjeto(login.cuerpo);
@@ -176,7 +213,7 @@ export function probarTmsApiLectura(v: ValoresCredencial, http: Http): Promise<R
         encabezados: { authorization: `Bearer ${token}`, accept: 'application/json' },
       });
     } catch (e) {
-      return resultado(false, limpiar(`El inicio de sesión funcionó, pero no se pudo leer de ${nombre}: ${e instanceof Error ? e.message : String(e)}. No se pudo comprobar la lectura.`, token), endpointLogin, 'no_se_sabe');
+      return resultado(false, limpiar(`El inicio de sesión funcionó, pero no se pudo leer de ${nombre}: ${fraseDeRed(e)}. No se pudo comprobar la lectura.`, token), endpointLogin, 'no_se_sabe');
     }
     if (lectura.estado >= 300 && lectura.estado < 400) {
       return resultado(false, `${nombre} contestó una redirección (${lectura.estado}) al leer y no se siguió. NO se puede afirmar que la credencial sirva.`, endpointLectura, 'no_se_sabe');
@@ -188,6 +225,7 @@ export function probarTmsApiLectura(v: ValoresCredencial, http: Http): Promise<R
       return resultado(true, `${nombre} aceptó el inicio de sesión y contestó una lectura de prueba (${lectura.estado}). Solo se leyó una fila; no se escribió nada.`, endpointLectura, 'sirve');
     }
     const v2 = veredictoHttp(lectura, endpointLectura, nombre);
-    return { ...v2, detalle: limpiar(v2.detalle, token) };
+    const extra2 = lectura.estado === 403 ? ` ${FRASE_403_IP}: pregunta a tu área de sistemas si una lista de IP permitidas está bloqueando a Likida.` : '';
+    return { ...v2, detalle: limpiar(v2.detalle + extra2, token) };
   });
 }

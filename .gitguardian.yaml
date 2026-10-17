@@ -1,0 +1,16 @@
+version: 2
+# Falsos positivos confirmados a mano (no son secretos reales).
+secret:
+  ignored-matches:
+    - name: token-sintetico-tms-tests
+      match: abcdefghjkmnpqrstvwxyz23
+      # El alfabeto base32 (Crockford, sin I/L/O/U) usado como token de
+      # descarga ficticio en pruebas (errores_tms.test.ts,
+      # agente-03-salida-tms.e2e.test.ts). Alta entropía por diseño del
+      # propio alfabeto, nunca una credencial real.
+    - name: valor-sintetico-plataforma-json
+      match: VALOR-SINTETICO-98765
+      # Literal explícitamente marcado "sintético" en
+      # carta_porte_docs/plataforma_json.test.ts; nombre de la constante
+      # (VALOR_SECRETO) es lo que atrapan los escáneres por entropía, no
+      # el contenido.

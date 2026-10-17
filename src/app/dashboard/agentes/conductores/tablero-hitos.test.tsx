@@ -354,3 +354,37 @@ describe('el tablero de hitos — estados de frontera (T-A5-21)', () => {
     expect(h).toContain('Es solo lectura');
   });
 });
+
+describe('el tablero de hitos — reubicaciones por cliente (T-A5-63)', () => {
+  const base = () => armarTablero({ viajes: [V('1')], hayMas: false, hitos: H('1', {}), veredictos: [], evidencias: [], acciones: [], sitios: new Map() }, cfg, AHORA);
+  const html = (t: ReturnType<typeof armarTablero>) => renderToStaticMarkup(
+    <TableroHitos tablero={t} indicadores={IND} dias={7} filtros={FILTROS} catalogos={null} ocultos={{}} accionUrl="/x" puedeActuar={false} accion={accion} accionSitios={accion} sitios={[]} />,
+  );
+
+  it('sin el cálculo compuesto (perilla apagada o bitácora ilegible) no se pinta la sección', () => {
+    expect(html(base())).not.toContain('Reubicaciones por cliente');
+  });
+
+  it('con datos: reubicaciones y minutos por cliente y el enlace de descarga', () => {
+    const t = { ...base(), reubicaciones: {
+      porCliente: [{ clienteId: 'c1', clienteNombre: 'Cliente A', viajes: 2, viajesConDato: 2, viajesReubicados: 1, reubicaciones: 3, minutos: 95 }],
+      csv: 'folio\nF-1\n',
+    } };
+    const h = html(t);
+    expect(h).toContain('Reubicaciones por cliente');
+    expect(h).toContain('Cliente A');
+    expect(h).toContain('3');
+    expect(h).toContain('95');
+    expect(h).toContain('Descargar evidencia (CSV)');
+  });
+
+  it('un cliente sin ninguna respuesta dice «Sin dato», no cero, y no ofrece CSV', () => {
+    const t = { ...base(), reubicaciones: {
+      porCliente: [{ clienteId: 'c1', clienteNombre: 'Cliente A', viajes: 1, viajesConDato: 0, viajesReubicados: null, reubicaciones: null, minutos: null }],
+      csv: '',
+    } };
+    const h = html(t);
+    expect(h).toContain('Sin dato');
+    expect(h).not.toContain('Descargar evidencia');
+  });
+});

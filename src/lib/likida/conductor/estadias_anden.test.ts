@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PoliticaDetencion } from '../estadias/motor';
 import {
-  calcularEstancias, celdaCsv, COLUMNAS_CSV_ESTADIAS, csvEstadias, excedeUmbral, horaExactaMx, resumirEstadias, valorarEstancias,
+  calcularEstancias, celdaCsv, COLUMNAS_CSV_ESTADIAS, csvEstadias, excedeUmbral, hayUmbralDeEstadia, horaExactaMx, resumirEstadias, umbralDe, valorarEstancias,
   type ContextoEstancias, type ViajeParaCobro,
 } from './estadias_anden';
 import { hitoVacio } from './memoria.fixture';
@@ -98,6 +98,29 @@ describe('excedeUmbral', () => {
     const [d] = calcularEstancias({ id: 'v1', estatus: 'abierto' }, [hito('llegada_descarga', T('19:00'))], AHORA, ctxVacio);
     expect(excedeUmbral(d, { estadiaAlertaCargaMin: 15, estadiaAlertaDescargaMin: null })).toBe(false);
     expect(excedeUmbral(d, { estadiaAlertaCargaMin: null, estadiaAlertaDescargaMin: 60 })).toBe(true);
+  });
+});
+
+describe('umbral de descarga por cliente (T-A5-45)', () => {
+  const CA = '11111111-1111-4111-8111-111111111111';
+  const [d] = calcularEstancias({ id: 'v1', estatus: 'abierto' }, [hito('llegada_descarga', T('19:00'))], AHORA, ctxVacio); // 180 min en curso
+  const u = { estadiaAlertaCargaMin: null, estadiaAlertaDescargaMin: 120, estadiaDescargaMinPorCliente: { [CA]: 240 } };
+  it('el umbral del cliente gana sobre el de la flota; sin entrada (o sin cliente) rige el de la flota', () => {
+    expect(umbralDe(u, 'descarga', CA)).toBe(240);
+    expect(umbralDe(u, 'descarga', CA.toUpperCase())).toBe(240);
+    expect(umbralDe(u, 'descarga', '22222222-2222-4222-8222-222222222222')).toBe(120);
+    expect(umbralDe(u, 'descarga')).toBe(120);
+    expect(umbralDe(u, 'carga', CA)).toBeNull();
+  });
+  it('180 min excede el 120 de la flota pero NO el 240 del convenio de 4 h', () => {
+    expect(excedeUmbral(d, u)).toBe(true);
+    expect(excedeUmbral(d, u, CA)).toBe(false);
+  });
+  it('sin umbral de flota, el de un cliente basta para que la alerta corra', () => {
+    expect(hayUmbralDeEstadia({ estadiaAlertaCargaMin: null, estadiaAlertaDescargaMin: null })).toBe(false);
+    expect(hayUmbralDeEstadia({ estadiaAlertaCargaMin: null, estadiaAlertaDescargaMin: null, estadiaDescargaMinPorCliente: { [CA]: 240 } })).toBe(true);
+    expect(excedeUmbral(d, { estadiaAlertaCargaMin: null, estadiaAlertaDescargaMin: null, estadiaDescargaMinPorCliente: { [CA]: 120 } }, CA)).toBe(true);
+    expect(excedeUmbral(d, { estadiaAlertaCargaMin: null, estadiaAlertaDescargaMin: null, estadiaDescargaMinPorCliente: { [CA]: 120 } })).toBe(false);
   });
 });
 

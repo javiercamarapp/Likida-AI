@@ -192,7 +192,7 @@ export function detectarAtipicos(
       const res = resolverCaseta(crudo, catalogo);
       if (res.tipo === 'unica') {
         const c = res.caseta;
-        r = { key: `cat:${c.id}`, nombre: c.nombre, coord: Number.isFinite(c.lat) && Number.isFinite(c.lng) ? { lat: c.lat, lng: c.lng } : null };
+        r = { key: `cat:${c.id}`, nombre: c.nombre, coord: c.lat !== null && c.lng !== null && Number.isFinite(c.lat) && Number.isFinite(c.lng) ? { lat: c.lat, lng: c.lng } : null };
       }
     }
     cache.set(crudo, r);

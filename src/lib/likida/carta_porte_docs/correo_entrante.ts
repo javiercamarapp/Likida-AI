@@ -23,6 +23,7 @@ import { logger } from '@/lib/logger';
 import { esTokenValido, generarToken } from '@/lib/correo/buzon';
 import { remitenteReconocido } from '@/lib/correo/remitente';
 import { estaApagado } from '../interruptores';
+import { aceptableSinExtension } from './contenido';
 import { nombreArchivoSeguro, procesarDocumento, recibirDocumento, type DepsServicio } from './servicio';
 import * as repo from './repo';
 
@@ -33,6 +34,11 @@ export const MAX_ADJUNTOS = 10;
 /** El cuerpo solo cuenta como documento si tiene algo más que «gracias». */
 export const MIN_CUERPO_CHARS = 80;
 const EXT_ADJUNTO = /\.(pdf|xlsx|xls|csv|xml|json|png|jpe?g|webp|eml|txt)$/i;
+/** Una extensión de verdad: punto + letra + hasta 5 caracteres al final. «CCP v3.0» o «CCP EJEMPLO (3)» NO la tienen. */
+const EXT_CUALQUIERA = /\.[a-z][a-z0-9]{0,5}$/i;
+
+/** Un adjunto sin nombre o sin extensión: el portal de un cliente manda su JSON así. Se decide por los bytes después de bajarlo. */
+export const sinExtension = (nombre: string | null | undefined): boolean => !EXT_CUALQUIERA.test((nombre ?? '').trim());
 
 export const generarTokenCp = generarToken;
 /** Reexportada: vive en `lib/correo/remitente.ts` para que otros buzones la usen sin arrastrar este módulo. */
@@ -103,7 +109,9 @@ export async function atenderCorreoCartaPorte(token: string, correo: CorreoEntra
   if (!buzon.activo) return { status: 200, cuerpo: { ok: true, ignorado: 'buzon_apagado' } };
   const tenantId = buzon.tenantId;
 
-  const adjuntos = (correo.attachments ?? []).filter((a) => a.id && EXT_ADJUNTO.test(a.filename ?? '')).slice(0, MAX_ADJUNTOS);
+  // Con extensión conocida, entra; sin extensión, entra como CANDIDATO y se decide por los bytes al bajarlo (T-A3-58);
+  // con una extensión que no es de documento (.exe, .zip, .docx) no se descarga.
+  const adjuntos = (correo.attachments ?? []).filter((a) => a.id && (EXT_ADJUNTO.test(a.filename ?? '') || sinExtension(a.filename))).slice(0, MAX_ADJUNTOS);
   const cuerpoTexto = (correo.text && correo.text.trim().length > 0 ? correo.text : htmlATexto(correo.html ?? '')).trim();
   const hayCuerpo = cuerpoTexto.length >= MIN_CUERPO_CHARS;
   if (adjuntos.length === 0 && !hayCuerpo) {
@@ -147,6 +155,7 @@ export async function atenderCorreoCartaPorte(token: string, correo: CorreoEntra
       const d = await deps.descargar(correo.emailId, a.id as string);
       if (!d.ok) { if (d.transitorio) caidas++; else ignorados++; continue; }
       if (d.bytes.length > MAX_ADJUNTO_BYTES) { ignorados++; continue; }
+      if (!EXT_ADJUNTO.test(a.filename ?? '') && !aceptableSinExtension(d.bytes, a.content_type)) { ignorados++; continue; }
       await recibir(nombreArchivoSeguro(a.filename), d.bytes);
     }
     if (hayCuerpo) {

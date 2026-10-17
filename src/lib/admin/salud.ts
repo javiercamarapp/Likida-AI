@@ -25,7 +25,7 @@ import { logger } from '@/lib/logger';
 import { autorizaCron } from '@/lib/auth/cron';
 import { alertarOperador } from '@/lib/observability/alerta';
 
-export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos', 'vigia', 'buzon-entrega', 'jornada-alertas', 'carta-porte-docs', 'guardia'] as const;
+export const CRONS = ['wa-pendientes', 'wa-outbox', 'escalar', 'facturar', 'purgar', 'runner', 'gps', 'asistencia', 'descarga-sat', 'jornada', 'portales-vivos', 'liquidaciones-externas', 'peajes', 'conductor-hitos', 'vigia', 'buzon-entrega', 'jornada-alertas', 'carta-porte-docs', 'guardia', 'tms'] as const;
 export type CronId = (typeof CRONS)[number];
 export type EstadoLatido = 'ok' | 'fallo' | 'saltado' | 'parcial';
 
@@ -105,6 +105,9 @@ export const CADENCIA_MS: Record<CronId, number> = {
   // (una Mac apagada o dormida era una guardia ausente). 288 invocaciones/día de unos segundos cada una — es el
   // costo de que el aviso de un incidente tarde ≤ 5 min y de que la página de estado tenga resolución de 5 min.
   guardia: 300_000,
+  // El sincronizador del sistema de transporte del cliente (T-TMS-12): lee (solo lee) viajes, liquidaciones, peajes y
+  // posiciones de las flotas que lo tienen conectado, probado y con mapeo activo. Cada 10 minutos; sin flotas, no hace nada.
+  tms: 10 * 60_000,
 };
 
 /** Cuánto retraso sobre la cadencia se tolera antes de llamarlo muerto. */
@@ -287,6 +290,20 @@ export interface LatidoDetallado extends SaludCron {
   detalle: Record<string, unknown>;
   /** `motivoDeSalto(detalle)` ya resuelto, para que la vista no razone. */
   motivoSalto: string | null;
+  /** Solo `carta-porte-docs` (T-A3-38): la salida al TMS que dejó su última pasada. `null` si el latido no la trae. */
+  salidaTms?: SalidaTmsSalud | null;
+}
+
+/** Lo que el panel interno muestra de la salida al TMS de Carta Porte. */
+export interface SalidaTmsSalud { enviosPendientes: number; circuitoTmsAbierto: boolean }
+
+/** Lee del `detalle` del latido de `carta-porte-docs` los contadores de la salida; `null` si no corrió o el detalle no los trae. */
+export function salidaTmsDeLatido(detalle: Record<string, unknown>): SalidaTmsSalud | null {
+  const e = detalle.envios;
+  if (!e || typeof e !== 'object') return null;
+  const { envios_pendientes: pendientes, circuito_tms_abierto: abierto } = e as Record<string, unknown>;
+  if (typeof pendientes !== 'number' || typeof abierto !== 'boolean') return null;
+  return { enviosPendientes: pendientes, circuitoTmsAbierto: abierto };
 }
 
 /**
@@ -317,6 +334,7 @@ export async function detalleLatidos(ahoraMs: number = Date.now()): Promise<Reco
       // puede traer llaves parecidas (p.ej. qué palanca resultó ilegible) y
       // leerlas como «apagado a propósito» sería contar la historia al revés.
       motivoSalto: ultimoEstado === 'saltado' ? motivoDeSalto(detalle) : null,
+      ...(c === 'carta-porte-docs' ? { salidaTms: salidaTmsDeLatido(detalle) } : {}),
     };
   }
   return salida;

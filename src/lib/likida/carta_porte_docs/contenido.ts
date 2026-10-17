@@ -12,6 +12,7 @@
 
 import * as XLSX from 'xlsx';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import { llaveTexto } from './catalogos';
 import { aBuffer, textoDeBase64, textoDeBytes, utf8DeLatin1 } from './bytes';
 
 export type FormatoDoc = 'pdf_texto' | 'pdf_escaneado' | 'imagen' | 'excel' | 'csv' | 'xml' | 'correo' | 'json';
@@ -45,6 +46,8 @@ export interface ContenidoDoc {
   xml: unknown | null;
   /** T-A3-14: las pestañas de un libro que son UN mismo embarque (una mercancía por pestaña); la pone el servicio, el modelo lo lee. */
   hojasMismoEmbarque?: string[];
+  /** T-A3-53: tamaño en píxeles de la imagen ORIGINAL (antes de reducirla), para marcar una captura de baja resolución. */
+  resolucion?: { ancho: number; alto: number };
   /** Avisos de la lectura (hojas recortadas, PDF con muchas páginas…). */
   avisos: string[];
   /** Solo para correo: lo que declara la cabecera. */
@@ -174,6 +177,18 @@ export function detectarFormato(bytes: Uint8Array): DeteccionFormato {
   return { ok: false, motivo: 'El archivo no trae contenido legible.' };
 }
 
+/**
+ * T-A3-58 · ¿Un adjunto SIN extensión se acepta? Solo si sus BYTES son JSON, PDF o Excel (y una foto cuando el correo la
+ * declara `image/*`: las imágenes pegadas llegan sin nombre). Cualquier otra cosa —texto, XML, CSV, zip, ejecutable,
+ * binario desconocido— se descarta sin leerla ni interpretarla: sin extensión no hay ninguna pista de que sea un documento.
+ */
+export function aceptableSinExtension(bytes: Uint8Array, contentType?: string | null): boolean {
+  const d = detectarFormato(bytes);
+  if (!d.ok) return false;
+  if (d.clase === 'json' || d.clase === 'pdf' || d.clase === 'excel') return true;
+  return d.clase === 'imagen' && /^image\//i.test((contentType ?? '').trim());
+}
+
 const recortar = (s: string, max: number): string => (s.length > max ? s.slice(0, max) : s);
 
 /** Quita el ruido que pdf-parse agrega entre páginas. */
@@ -206,13 +221,18 @@ async function prepararPdf(bytes: Uint8Array, avisos: string[]): Promise<Conteni
 async function prepararImagen(bytes: Uint8Array, avisos: string[]): Promise<ContenidoDoc> {
   const sharp = (await import('sharp')).default;
   // limitInputPixels: una imagen de 40 000 × 40 000 px cabe en pocos KB y reventaría la memoria.
-  const buf = await sharp(aBuffer(bytes), { limitInputPixels: 40_000_000, failOn: 'error' })
+  const original = sharp(aBuffer(bytes), { limitInputPixels: 40_000_000, failOn: 'error' });
+  const meta = await original.metadata();
+  // Con la orientación EXIF 5-8 la foto se gira 90°: el ancho de verdad es el alto declarado.
+  const girada = (meta.orientation ?? 1) >= 5;
+  const resolucion = meta.width && meta.height ? { ancho: girada ? meta.height : meta.width, alto: girada ? meta.width : meta.height } : undefined;
+  const buf = await original
     .rotate()
     .resize({ width: 1800, height: 1800, fit: 'inside', withoutEnlargement: true })
     .jpeg({ quality: 82 })
     .toBuffer();
   avisos.push('La foto se orientó y se redujo a un máximo de 1800 px antes de leerla.');
-  return { formato: 'imagen', texto: null, imagenes: [`data:image/jpeg;base64,${buf.toString('base64')}`], tabla: null, xml: null, avisos };
+  return { formato: 'imagen', texto: null, imagenes: [`data:image/jpeg;base64,${buf.toString('base64')}`], tabla: null, xml: null, ...(resolucion ? { resolucion } : {}), avisos };
 }
 
 function celdaATexto(v: unknown): string {
@@ -236,6 +256,28 @@ export function tablaATexto(hojas: Hoja[], maxChars = MAX_TEXTO_GUARDADO): strin
   return recortar(partes.join('\n\n'), maxChars);
 }
 
+// ── Libro con la plantilla del TMS (T-A3-47): sus hojas que no son datos no cuentan contra MAX_HOJAS ──
+
+/** Nombre de hoja a llave comparable: minúsculas, sin acentos, espacios ni signos. */
+export const llaveHoja = (t: unknown): string => llaveTexto(String(t ?? '')).replace(/[^a-z0-9]+/g, '');
+
+/** Hojas que nunca son datos: errores del TMS, catálogo de regímenes del agente aduanal y la Guía de llenado. */
+export function esHojaIgnorada(nombre: string): boolean {
+  const k = llaveHoja(nombre);
+  return k === 'error' || k.startsWith('informacionagenteaduanal') || k === 'guia' || k.startsWith('guiade');
+}
+
+/** ¿Los nombres de hoja son los de la plantilla «normal» del TMS? (firma por nombres; los rótulos se verifican al leer). */
+export function esLibroPlantillaTms(nombres: readonly string[]): boolean {
+  const k = new Set(nombres.map(llaveHoja));
+  return k.has('remintentedestinatario') && k.has('mercancias');
+}
+
+/** Las hojas que se leen como datos: en un libro-plantilla se descartan las ignoradas ANTES del tope `MAX_HOJAS`. */
+export function hojasDeDatos(nombres: readonly string[]): string[] {
+  return esLibroPlantillaTms(nombres) ? nombres.filter((n) => !esHojaIgnorada(n)) : [...nombres];
+}
+
 function prepararHoja(bytes: Uint8Array, esCsv: boolean, avisos: string[]): ContenidoDoc {
   let libro: XLSX.WorkBook;
   if (esCsv) {
@@ -244,8 +286,10 @@ function prepararHoja(bytes: Uint8Array, esCsv: boolean, avisos: string[]): Cont
   } else {
     libro = XLSX.read(aBuffer(bytes), { type: 'buffer', cellDates: true, cellFormula: false, cellHTML: false, cellStyles: false, sheetRows: MAX_FILAS_HOJA + 1 });
   }
-  if (libro.SheetNames.length > MAX_HOJAS) avisos.push(`El libro tiene ${libro.SheetNames.length} hojas; se leyeron ${MAX_HOJAS}.`);
-  const hojas: Hoja[] = libro.SheetNames.slice(0, MAX_HOJAS)
+  const nombresDatos = esCsv ? libro.SheetNames : hojasDeDatos(libro.SheetNames);
+  if (nombresDatos.length < libro.SheetNames.length) avisos.push(`Plantilla del TMS: se ignoraron las hojas que no son datos (${libro.SheetNames.filter(esHojaIgnorada).join(', ')}).`);
+  if (nombresDatos.length > MAX_HOJAS) avisos.push(`El libro tiene ${nombresDatos.length} hojas; se leyeron ${MAX_HOJAS}.`);
+  const hojas: Hoja[] = nombresDatos.slice(0, MAX_HOJAS)
     .map((n) => ({ nombre: n.slice(0, 60), filas: hojaAFilas(libro.Sheets[n], avisos, n) }))
     .filter((h) => h.filas.length > 0);
   if (hojas.length === 0) throw new Error('El archivo no trae filas con datos.');

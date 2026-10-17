@@ -31,9 +31,28 @@ export interface RenglonBitacora {
   vale?: string;
 }
 
+/** Una bitácora de la liquidación, con su unidad si la fuente la manda (para detectar unidades mezcladas). */
+export interface BitacoraDeLiquidacion {
+  bitacora: string;
+  unidad?: string;
+}
+
 export interface DesgloseBitacora {
   terminal?: string;
+  /** La bitácora principal. Con `bitacoras`, tiene que estar en la lista. */
   bitacora: string;
+  /**
+   * T-A1-41: número de liquidación (el consecutivo que arroja el sistema de origen) y número de pago. Opcionales: sin
+   * ellos todo se comporta como antes (una bitácora = un desglose). Con `numeroLiquidacion` la clave de idempotencia
+   * pasa a ser la liquidación y no la bitácora.
+   */
+  numeroLiquidacion?: string;
+  numeroPago?: string;
+  /**
+   * T-A1-41: todas las bitácoras que la liquidación junta (una unidad con dos viajes se liquida junta). La fuente manda
+   * los renglones YA agregados: Likida no recalcula. Cada elemento es el folio o `{ bitacora, unidad }`.
+   */
+  bitacoras?: Array<string | BitacoraDeLiquidacion>;
   poliza: string | null;
   operador: { numeroEmpleado: string; nombre?: string };
   unidad?: string;
@@ -123,7 +142,62 @@ function validarBloque(crudo: unknown, bloque: 'percepciones' | 'deducciones'): 
   return crudo.map((r, i) => validarRenglon(r, bloque, i));
 }
 
-const CAMPOS = ['terminal', 'bitacora', 'poliza', 'operador', 'unidad', 'tipoOperador', 'desde', 'hasta', 'dias', 'percepciones', 'deducciones', 'neto', 'enviadoOrigen'] as const;
+/** Unidades distintas en un mismo desglose: la liquidación es por unidad (c3cc57d3 09:11). Lleva su propia excepción. */
+export class UnidadesMezcladas extends CampoInvalido {
+  constructor(public readonly unidades: number) {
+    super('bitacoras', 'unidades_mezcladas: la liquidación es por unidad y este desglose trae bitácoras de unidades distintas; la fuente tiene que mandar un desglose por unidad.');
+    this.name = 'UnidadesMezcladas';
+  }
+}
+
+const MAX_BITACORAS = 100;
+const PATRON_NUMERO = /^[A-Za-z0-9._/-]{1,40}$/;
+
+function validarNumero(crudo: Record<string, unknown>, campo: 'numeroLiquidacion' | 'numeroPago'): string | undefined {
+  const v = crudo[campo];
+  if (v === undefined || v === null) return undefined;
+  const t = typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? String(v) : typeof v === 'string' ? v.trim() : null;
+  if (t === null || t === '') {
+    if (typeof v === 'string' && v.trim() === '') return undefined;
+    throw new CampoInvalido(campo, `\`${campo}\` tiene que ser un número entero o un texto corto.`);
+  }
+  if (!PATRON_NUMERO.test(t)) {
+    throw new CampoInvalido(campo, `\`${campo}\` solo admite letras, números y . _ / - (hasta 40 caracteres).`);
+  }
+  return t;
+}
+
+/** Normaliza `bitacoras` a folios únicos; unidades distintas (entre sí o contra la del encabezado) lanzan `UnidadesMezcladas`. */
+function validarBitacoras(crudo: unknown, principal: string, unidadEncabezado: string | null): { bitacoras: string[]; unidades: number } | undefined {
+  if (crudo === undefined || crudo === null) return undefined;
+  if (!Array.isArray(crudo) || crudo.length === 0) throw new CampoInvalido('bitacoras', '`bitacoras` tiene que ser una lista con al menos una bitácora.');
+  if (crudo.length > MAX_BITACORAS) throw new CampoInvalido('bitacoras', `\`bitacoras\` no puede traer más de ${MAX_BITACORAS} bitácoras.`);
+  const folios: string[] = [];
+  const unidades = new Set<string>();
+  if (unidadEncabezado !== null) unidades.add(unidadEncabezado);
+  crudo.forEach((e, i) => {
+    const ruta = `bitacoras[${i}]`;
+    let folio: string | null;
+    let unidad: string | null = null;
+    if (typeof e === 'string') folio = e.trim();
+    else if (esObjeto(e)) {
+      soloCampos(e, ['bitacora', 'unidad'], `\`${ruta}\``);
+      folio = texto(e, 'bitacora', { obligatorio: true, max: 40 });
+      unidad = texto(e, 'unidad', { max: 40 });
+    } else throw new CampoInvalido(ruta, `\`${ruta}\` tiene que ser un folio o \`{ bitacora, unidad? }\`.`);
+    if (!folio) throw new CampoInvalido(ruta, `\`${ruta}\` no puede ir vacía.`);
+    if (folio.length > 40) throw new CampoInvalido(ruta, `\`${ruta}\` no puede pasar de 40 caracteres.`);
+    sinControl(folio, ruta);
+    if (unidad !== null) { sinControl(unidad, `${ruta}.unidad`); unidades.add(unidad); }
+    if (folios.includes(folio)) throw new CampoInvalido(ruta, `\`${ruta}\` repite la bitácora ${folio}.`);
+    folios.push(folio);
+  });
+  if (!folios.includes(principal)) throw new CampoInvalido('bitacoras', '`bitacoras` tiene que incluir la bitácora principal (`bitacora`).');
+  if (unidades.size > 1) throw new UnidadesMezcladas(unidades.size);
+  return { bitacoras: folios, unidades: unidades.size };
+}
+
+const CAMPOS = ['terminal', 'bitacora', 'numeroLiquidacion', 'numeroPago', 'bitacoras', 'poliza', 'operador', 'unidad', 'tipoOperador', 'desde', 'hasta', 'dias', 'percepciones', 'deducciones', 'neto', 'enviadoOrigen'] as const;
 
 /** Validador estricto del desglose: campo desconocido, montos ≤ 0, texto con control o fechas mal formadas son error. */
 export function validarDesgloseBitacora(crudo: unknown): DesgloseBitacora {
@@ -148,6 +222,9 @@ export function validarDesgloseBitacora(crudo: unknown): DesgloseBitacora {
 
   const unidad = texto(crudo, 'unidad', { max: 40 });
   if (unidad !== null) sinControl(unidad, 'unidad');
+  const numeroLiquidacion = validarNumero(crudo, 'numeroLiquidacion');
+  const numeroPago = validarNumero(crudo, 'numeroPago');
+  const lista = validarBitacoras(crudo.bitacoras, bitacora, unidad);
 
   let tipoOperador: TipoOperadorDesglose | undefined;
   if (crudo.tipoOperador !== undefined && crudo.tipoOperador !== null) {
@@ -190,6 +267,9 @@ export function validarDesgloseBitacora(crudo: unknown): DesgloseBitacora {
   return {
     ...(terminalT !== null ? { terminal: terminalT } : {}),
     bitacora,
+    ...(numeroLiquidacion !== undefined ? { numeroLiquidacion } : {}),
+    ...(numeroPago !== undefined ? { numeroPago } : {}),
+    ...(lista ? { bitacoras: lista.bitacoras } : {}),
     poliza: polizaT,
     operador: { numeroEmpleado, ...(nombre !== null ? { nombre } : {}) },
     ...(unidad !== null ? { unidad } : {}),
@@ -215,6 +295,15 @@ export function claveDeBitacora(terminal: string | undefined, bitacora: string):
   return base.replace(/[^A-Za-z0-9._:/#-]/g, '_');
 }
 
+/**
+ * La clave con número de liquidación: `LIQ-<terminal>-<numero>`. La misma liquidación reenviada da la misma clave
+ * (idempotente) aunque cambie la lista de bitácoras; otro contenido bajo el mismo número abre `correccion_pendiente`.
+ */
+export function claveDeLiquidacion(terminal: string | undefined, numeroLiquidacion: string): string {
+  const base = ['LIQ', terminal, numeroLiquidacion].filter((p): p is string => p !== undefined && p !== '').join('-');
+  return base.replace(/[^A-Za-z0-9._:/#-]/g, '_');
+}
+
 /** Convierte un desglose al contrato vigente y lo valida con `validarLiquidacionExterna`. */
 export function aLiquidacionExterna(d: DesgloseBitacora, opciones: { sistemaOrigen: string }): ResultadoConversion {
   const v = validarDesgloseBitacora(d);
@@ -230,10 +319,10 @@ export function aLiquidacionExterna(d: DesgloseBitacora, opciones: { sistemaOrig
   const total = v.neto !== undefined ? v.neto : sumaCentavos / 100;
 
   const liquidacion = validarLiquidacionExterna({
-    claveExterna: claveDeBitacora(v.terminal, v.bitacora),
+    claveExterna: v.numeroLiquidacion !== undefined ? claveDeLiquidacion(v.terminal, v.numeroLiquidacion) : claveDeBitacora(v.terminal, v.bitacora),
     sistemaOrigen: opciones.sistemaOrigen,
     operador: { numeroEmpleado: v.operador.numeroEmpleado },
-    viajes: [v.bitacora],
+    viajes: v.bitacoras ?? [v.bitacora],
     periodo: { desde: v.desde, hasta: v.hasta },
     conceptos: [...v.percepciones.map(concepto('percepcion')), ...v.deducciones.map(concepto('deduccion'))],
     total,

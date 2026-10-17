@@ -57,9 +57,17 @@ const TABLAS_DOBLE_FK = [
  * deja pasar `foo:operador(`: un alias que apunta a la tabla a secas renombra
  * la salida y sigue siendo ambiguo. La forma anclada es `alias:columna(...)`
  * — `operador:operador_id(` — donde la columna FK decide la relación.
+ *
+ * El lookahead final `(?!s\))` descarta el plural de prosa — `viaje(s) sin
+ * entrar` en un mensaje de log o de usuario, no un embed de PostgREST (que
+ * nunca selecciona una columna de un solo carácter llamada `s`). Hallazgo del
+ * 16-oct-2026: `conectores/tms/sincronizar.ts` tenía `` `${n} viaje(s) sin
+ * entrar` `` y el escaneo —que mira el archivo ENTERO, no solo `.select()`,
+ * a propósito (ver comentario de arriba)— lo atrapaba como si fuera un embed
+ * real filtrándose.
  */
 const SIN_ALIAS = new RegExp(
-  String.raw`(?<![\w.$])(?:${TABLAS_DOBLE_FK.join('|')})(?:!(?:inner|left))?\(`,
+  String.raw`(?<![\w.$])(?:${TABLAS_DOBLE_FK.join('|')})(?:!(?:inner|left))?\((?!s\))`,
   'g',
 );
 
@@ -147,9 +155,16 @@ describe('los embeds sobre pares con doble FK llevan ancla :columna', () => {
       ".select('id, viaje_id, operador_id, tenant_id')", // columnas, no embeds
       'const v = crearViaje(datos);', // otra palabra que termina igual
       ".select('id, flota:tenant_id(nombre)')", // tenant no está en un par doble
+      '`${n} viaje(s) sin entrar: falta operador, unidad o cliente`', // prosa de log/usuario, no un embed
+      '`${n} gasto(s) sin conciliar`', // mismo patrón de plural, otra tabla del par
     ];
     for (const linea of sanas) {
       expect(embedsSinAlias(linea), `falso positivo en: ${linea}`).toEqual([]);
     }
+  });
+
+  it('sigue atrapando un embed real cuya primera columna empieza con "s" (el lookahead del plural no lo tapa)', () => {
+    expect(embedsSinAlias(".select('id, viaje(saldo)')"), 'no atrapó un embed real').not.toEqual([]);
+    expect(embedsSinAlias(".select('id, operador(sucursal, nombre)')"), 'no atrapó un embed real').not.toEqual([]);
   });
 });

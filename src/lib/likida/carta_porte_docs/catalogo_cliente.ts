@@ -19,13 +19,19 @@
 
 import { UMBRAL_CRITICO, campoDoc, campoMercancia, type CampoValor, type Extraccion } from './campos';
 import { llaveTexto } from './catalogos';
+import type { ReglaTramoCliente } from './perfiles';
+import { MARCA_TRAMO_DISTINTO, bloqueoTramoSinRegla, tipoOperacion } from './validacion';
 
 /** Filas que se leen del catálogo de UN cliente por documento (por tabla). */
 export const TOPE_FILAS_CATALOGO = 5000;
 
 export const CONFIANZA_CATALOGO = 0.95;
 
-export interface NumeroClienteCat { tenantId: string; clienteId: string; numeroInterno: string; numeroPagador: string | null; activo: boolean }
+export interface NumeroClienteCat {
+  tenantId: string; clienteId: string; numeroInterno: string; numeroPagador: string | null; activo: boolean;
+  /** T-A3-58: el identificador de ESTA empresa en la plataforma del cliente (`EmpresaRfc` del JSON v3.0). Opcional: aún sin columna en la base. */
+  identificadorPlataforma?: string | null;
+}
 
 export interface ProductoCat {
   tenantId: string; clienteId: string; sku: string; descripcionPatron: string | null;
@@ -42,8 +48,13 @@ export interface ParteCat {
   estado: string | null; pais: string | null; contacto: string | null; telefono: string | null; correo: string | null;
 }
 
+/** T-A3-50 · Sitio propio del cliente para el tramo mexicano: su patio o la localidad fronteriza que usa. */
+export type SitioCat = Omit<ParteCat, 'rol'> & { tipo: 'patio_propio' | 'frontera' };
+
 export interface CatalogoCliente {
   numero: NumeroClienteCat | null;
+  /** T-A3-50: patios y fronteras del cliente (solo los de la regla del tramo mexicano). Ausente = ninguno cargado. */
+  sitios?: SitioCat[];
   productos: ProductoCat[];
   partes: ParteCat[];
   /** Alguna tabla llegó al tope de filas: puede faltar una entrada (se avisa). */
@@ -120,7 +131,26 @@ function poner(
   acum.aplicados.push(ruta);
 }
 
-function productosQueCoinciden(descripcion: string, productos: ProductoCat[]): ProductoCat[] {
+export type ResolucionPlataforma =
+  | { tipo: 'unico'; clienteId: string; numeroInterno: string }
+  | { tipo: 'ambiguo'; coincidencias: number }
+  | { tipo: 'ninguno' };
+
+/**
+ * T-A3-58 · Del identificador de la plataforma al número interno del cliente. Solo filas ACTIVAS del mismo tenant; dos
+ * coincidencias (o dos clientes con el mismo identificador) = ambiguo y no se aplica nada; sin coincidencia, ninguno.
+ */
+export function resolverPorIdentificadorPlataforma(filas: readonly NumeroClienteCat[], tenantId: string, identificador: string | null | undefined): ResolucionPlataforma {
+  const buscado = comparable(identificador ?? '');
+  if (buscado === '') return { tipo: 'ninguno' };
+  const hallados = filas.filter((f) => f.tenantId === tenantId && f.activo && f.identificadorPlataforma != null && comparable(f.identificadorPlataforma) === buscado);
+  if (hallados.length === 0) return { tipo: 'ninguno' };
+  const distintos = new Set(hallados.map((f) => `${f.clienteId}|${f.numeroInterno}`));
+  if (distintos.size > 1) return { tipo: 'ambiguo', coincidencias: distintos.size };
+  return { tipo: 'unico', clienteId: hallados[0].clienteId, numeroInterno: hallados[0].numeroInterno };
+}
+
+export function productosQueCoinciden(descripcion: string, productos: ProductoCat[]): ProductoCat[] {
   const toks = tokens(descripcion);
   const plano = llaveTexto(descripcion);
   return productos.filter((p) => {
@@ -226,4 +256,93 @@ export function avisosDelCatalogo(r: ResultadoEnriquecer, truncado: boolean): st
   if (r.desconocidos.length > 0) avisos.push(`${r.desconocidos.length === 1 ? 'Un renglón' : `${r.desconocidos.length} renglones`} sin coincidencia en el catálogo del cliente.`);
   if (truncado) avisos.push(`El catálogo del cliente llegó al tope de ${TOPE_FILAS_CATALOGO} filas leídas: puede faltar alguna entrada.`);
   return avisos;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A3-50 · TRAMO MEXICANO — el CCP cubre solo el tramo mexicano.
+//
+// Exportación: el destino del libro es el patio propio / la frontera / el del documento, según la regla del cliente.
+// Importación: el origen es el patio propio / el del documento. El extremo extranjero del BOL no entra al CCP.
+// Función PURA (corre antes de convertir/validar). Reglas:
+//   · Sin regla declarada NO se adivina: queda el bloqueo «falta definir destino/origen» y la extracción no se toca.
+//   · «documento» es una regla explícita: no cambia nada.
+//   · Patio/frontera: el domicilio del sitio del catálogo REEMPLAZA al del documento (no se mezclan los dos); lo que un
+//     humano escribió no se pisa. Si el documento traía otro extremo, queda una nota (aviso `*_distinto_documento`).
+//   · Sitio ausente o repetido en el catálogo: bloqueo, nunca se elige uno al azar.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface BloqueoTramo {
+  campo: string;
+  codigo: 'tramo_sin_regla' | 'tramo_sitio_faltante' | 'tramo_sitio_ambiguo';
+  mensaje: string;
+}
+
+export interface ResultadoTramo {
+  extraccion: Extraccion;
+  /** `campos.<clave>` que la regla escribió o limpió. */
+  aplicados: string[];
+  avisos: string[];
+  bloqueos: BloqueoTramo[];
+}
+
+const CLAVES_EXTREMO = ['rfc', 'calle', 'num_ext', 'num_int', 'colonia_clave', 'colonia', 'cp', 'localidad_clave', 'localidad', 'municipio_clave', 'municipio', 'estado', 'pais'] as const;
+const ROTULO_SITIO = { patio_propio: 'el patio propio', frontera: 'la frontera' } as const;
+
+export function aplicarTramoMexicano(
+  extraccion: Extraccion, regla: ReglaTramoCliente | null | undefined, catalogo: CatalogoCliente | null | undefined, contexto: ContextoCatalogo,
+): ResultadoTramo {
+  const salida: Extraccion = structuredClone(extraccion);
+  const res: ResultadoTramo = { extraccion: salida, aplicados: [], avisos: [], bloqueos: [] };
+  const op = tipoOperacion(salida);
+  if (op !== 'exportacion' && op !== 'importacion') return res;
+  const lado = op === 'exportacion' ? 'destino' : 'origen';
+  const decision = op === 'exportacion' ? regla?.destinoExportacion : regla?.origenImportacion;
+
+  if (!decision) {
+    const b = bloqueoTramoSinRegla(salida, regla);
+    if (b) res.bloqueos.push({ campo: b.campo, codigo: 'tramo_sin_regla', mensaje: b.mensaje });
+    return res;
+  }
+  if (decision === 'documento') return res;
+
+  const sitios = (catalogo?.sitios ?? []).filter((x) => x.tipo === decision && x.tenantId === contexto.tenantId && x.clienteId === contexto.clienteId);
+  const nombreLado = lado === 'destino' ? 'destino' : 'origen';
+  if (sitios.length === 0 || !contexto.clienteId) {
+    res.bloqueos.push({ campo: `${lado}_nombre`, codigo: 'tramo_sitio_faltante', mensaje: `La regla del cliente manda usar ${ROTULO_SITIO[decision]} como ${nombreLado} del tramo mexicano, pero el catálogo no tiene ese sitio. Cárgalo o captura el ${nombreLado} a mano.` });
+    return res;
+  }
+  if (sitios.length > 1) {
+    res.bloqueos.push({ campo: `${lado}_nombre`, codigo: 'tramo_sitio_ambiguo', mensaje: `El catálogo tiene ${sitios.length} sitios de tipo ${decision.replace('_', ' ')} (${sitios.slice(0, 5).map((x) => x.alias).join(', ')}); no se eligió ninguno.` });
+    return res;
+  }
+  const sitio = sitios[0];
+  const c = salida.campos;
+  const antes = { nombre: (c[`${lado}_nombre`]?.valor ?? '').trim(), cp: (c[`${lado}_cp`]?.valor ?? '').trim() };
+  const nuevoNombre = textoLimpio(sitio.razonSocial) ?? sitio.alias;
+  const nuevo: Record<string, string | null> = {
+    nombre: nuevoNombre, rfc: sitio.rfc, calle: sitio.calle, num_ext: sitio.numExt, num_int: sitio.numInt,
+    colonia_clave: sitio.coloniaClave, colonia: sitio.colonia, cp: sitio.cp, localidad_clave: sitio.localidadClave, localidad: sitio.localidad,
+    municipio_clave: sitio.municipioClave, municipio: sitio.municipio, estado: sitio.estado, pais: sitio.pais,
+  };
+  const evidencia = `Catálogo del cliente: ${ROTULO_SITIO[decision].replace('el ', '')} «${sitio.alias}» (tramo mexicano)`;
+  for (const sufijo of ['nombre', ...CLAVES_EXTREMO] as const) {
+    const clave = `${lado}_${sufijo}`;
+    if (c[clave]?.origen === 'humano') continue; // lo que una persona escribió no se toca
+    const valor = textoLimpio(nuevo[sufijo]);
+    const def = campoDoc(clave);
+    if (valor === null || !def || valor.length > def.max) { // el sitio no lo trae: no se deja el del documento (se mezclarían dos domicilios)
+      if (clave in c) { delete c[clave]; res.aplicados.push(`campos.${clave}`); }
+      continue;
+    }
+    c[clave] = { valor, confianza: CONFIANZA_CATALOGO, evidencia: evidencia.slice(0, 200), origen: 'catalogo' };
+    res.aplicados.push(`campos.${clave}`);
+  }
+  const distinto = antes.nombre !== '' && (comparable(antes.nombre) !== comparable(nuevoNombre) || (antes.cp !== '' && antes.cp !== (textoLimpio(sitio.cp) ?? '')));
+  if (distinto && c[`${lado}_nombre`]) {
+    const nota = `${MARCA_TRAMO_DISTINTO} el ${nombreLado} del documento es «${antes.nombre}${antes.cp ? `, CP ${antes.cp}` : ''}»; para el tramo mexicano se usó ${ROTULO_SITIO[decision]} «${sitio.alias}»${sitio.cp ? ` (CP ${sitio.cp})` : ''}.`;
+    c[`${lado}_nombre`] = { ...c[`${lado}_nombre`], notas: [...(c[`${lado}_nombre`].notas ?? []), nota] };
+    res.avisos.push(nota);
+  }
+  return res;
 }

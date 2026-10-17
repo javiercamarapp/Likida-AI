@@ -1,0 +1,18 @@
+{
+  "recurso": "peajes",
+  "ruta": "/api/peajes",
+  "metodo": "GET",
+  "params": { "desde": "desde", "hasta": "hasta", "pagina": "pagina", "tam": "tam" },
+  "raiz": "data.items",
+  "campos": {
+    "tag": { "fuente": "TAG", "transformar": "texto" },
+    "unidad": { "fuente": "Unidad", "transformar": "texto" },
+    "caseta": { "fuente": "Caseta", "transformar": "texto" },
+    "clase": { "fuente": "Clase", "transformar": "texto" },
+    "importe": { "fuente": "Importe", "transformar": "numero" },
+    "cruce_en": { "fuente": "Fecha", "transformar": "fecha_local", "zona": "America/Mexico_City", "formato": "yyyy-MM-dd HH:mm:ss" },
+    "despacho_ref": { "fuente": "Icident", "transformar": "texto" }
+  },
+  "clave_externa": ["unidad", "caseta", "cruce_en"],
+  "obligatorios": ["unidad", "caseta", "importe", "cruce_en"]
+}

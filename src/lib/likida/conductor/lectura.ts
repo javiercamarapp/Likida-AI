@@ -159,6 +159,7 @@ const LLAVES_CONFIG: readonly (keyof ConfigConductor)[] = [
   'pedirFotoEvidencia', 'fotoRegistraHito', 'avisarLlegadaSinConfirmar', 'margenAcercamientoM',
   'detectarHitosGps', 'avisarSenalVida',
   'perfilSeguimiento', 'gpsObsoletoMin', 'detenidoMin', 'segundoAvisoMin', 'escalarSenalMin', 'silencioRespuestaMin',
+  'detenidaMetros', 'detenidaVentanaMin', 'detenidoAvisoMin', 'poleoMin', 'poleoPorClaveMin',
   'mostrarEstadosFrontera', 'aplicarSalidaDelTms', 'lineaBaseLlamadasPorViaje', 'lineaBaseRegistradaEn',
 ];
 

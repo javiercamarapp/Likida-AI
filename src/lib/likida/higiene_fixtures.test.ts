@@ -75,6 +75,11 @@ export const ALLOWLIST: Record<string, string> = {
   'src/lib/likida/carta_porte_docs/evaluacion/dorado.fixture.ts|telefono|2208900301': 'fracción arancelaria de 10 dígitos, no es un teléfono', // grep-limpio:ok
   'src/lib/likida/carta_porte_docs/evaluacion/dorado.fixture.ts|telefono|2208900300': 'fracción arancelaria de 10 dígitos, no es un teléfono', // grep-limpio:ok
   'src/lib/likida/carta_porte_docs/evaluacion/dorado.fixture.ts|telefono|7100000001': 'número de remisión sintético de 10 dígitos, no es un teléfono', // grep-limpio:ok
+  'src/lib/likida/carta_porte_docs/evaluacion/dorado.fixture.ts|telefono|4011200100': 'fracción arancelaria de 10 dígitos, no es un teléfono', // grep-limpio:ok
+  'src/lib/likida/carta_porte_docs/evaluacion/dorado.fixture.ts|telefono|7326909900': 'fracción arancelaria de 10 dígitos, no es un teléfono', // grep-limpio:ok
+  'src/lib/likida/carta_porte_docs/evaluacion/plantilla_normal_real.fixture.ts|telefono|8471500100': 'fracción arancelaria de 10 dígitos (columna J de Mercancias), no es un teléfono', // grep-limpio:ok
+  'src/lib/likida/carta_porte_docs/evaluacion/plantilla_nueva_real.fixture.ts|telefono|8471500100': 'fracción arancelaria de 10 dígitos (columna "Fraccion Arancelaria"), no es un teléfono', // grep-limpio:ok
+  'src/lib/likida/carta_porte_docs/evaluacion/plantilla_nueva_real.fixture.ts|telefono|8471500101': 'fracción arancelaria de 10 dígitos (columna "Fraccion Arancelaria"), no es un teléfono', // grep-limpio:ok
   'src/lib/likida/conectores/fixtures-gps/wialon_search_items.json|telefono|1790000000': 'marca de tiempo epoch (campo "t"), no es un teléfono', // grep-limpio:ok
   'src/lib/likida/conectores/fixtures-gps/wialon_search_items.json|telefono|1790000060': 'marca de tiempo epoch (campo "t"), no es un teléfono', // grep-limpio:ok
   'src/lib/likida/vigia/repo.fixture.ts|telefono|5511110001': FAKE_TEL, // grep-limpio:ok

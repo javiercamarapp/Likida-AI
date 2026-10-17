@@ -195,7 +195,7 @@ describe('exportarDocumentos: solo lo aprobado', () => {
 });
 
 describe('aXlsxPlantillaTms: plantilla multi-hoja del TMS', () => {
-  const ctx = { clienteInterno: null, plantilla: 'normal' as const };
+  const ctx = { clienteInterno: null, plantilla: 'normal' as const, reglasGuia: false as const }; // sin reglas de la Guía: aquí se prueba la escritura y la neutralización
   const ext = (): Extraccion => {
     const e = extraccionAtlasOk();
     e.campos.origen_calle = cv('Calle Uno'); e.campos.origen_pais = cv('MEX');
@@ -258,5 +258,50 @@ describe('aXlsxPlantillaTms: plantilla multi-hoja del TMS', () => {
   it('aXlsx (hoja plana) sigue igual', () => {
     const l = XLSX.read(aXlsx([{ A: 'x' }], cfg({ columnas: [{ encabezado: 'A', campo: 'folio_cliente' }] })), { type: 'array' });
     expect(l.SheetNames).toEqual(['Carta Porte']);
+  });
+});
+
+describe('exportación plana con las reglas de la Guía de llenado (T-A3-45)', () => {
+  const docs = () => {
+    const e = extraccionAtlasOk();
+    e.campos.regimen_aduanero = cv('EXD'); e.campos.origen_nombre = cv('Atlas, S.A. de C.V.');
+    Object.assign(e.mercancias[0], { embalaje: cv('4G'), pedimento: cv('24 16 3456 4000123'), material_peligroso: cv('false'), descripcion: cv('Tubo 5" #12') }); // grep-limpio:ok
+    return [{ doc: docAprobado({}, e), viajeFolio: null }];
+  };
+  const c = (reglasGuia?: boolean) => ({ ...configEstandar(), reglasGuia, columnas: [
+    ...configEstandar().columnas, { encabezado: 'Pedimento', campo: 'mercancia.pedimento' },
+  ] }) as ExportConfig;
+
+  it('con reglasGuia: sin embalaje ni pedimento, descripción y razón social limpias', () => {
+    const r = exportarDocumentos(docs(), 'json', c(true), 'guia');
+    const f = JSON.parse(r.contenido).filas[0];
+    expect(f.Embalaje).toBeNull();
+    expect(f.Pedimento).toBeNull();
+    expect(f.Descripcion).toBe('Tubo 5 12');
+    expect(f.Remitente).toBe('Atlas SA de CV');
+  });
+
+  it('sin reglasGuia (o en false) la exportación es la de siempre', () => {
+    for (const flag of [undefined, false]) {
+      const f = JSON.parse(exportarDocumentos(docs(), 'json', c(flag), 'guia').contenido).filas[0];
+      expect(f.Embalaje).toBe('4G');
+      expect(f.Pedimento).toBe('24 16 3456 4000123');
+      expect(f.Remitente).toBe('Atlas, S.A. de C.V.');
+    }
+  });
+
+  it('el documento aprobado guardado no se modifica', () => {
+    const d = docs(); const antes = JSON.stringify(d[0].doc.extraccion);
+    exportarDocumentos(d, 'csv', c(true), 'guia');
+    expect(JSON.stringify(d[0].doc.extraccion)).toBe(antes);
+  });
+
+  it('el libro xlsx de la plantilla no trae embalaje si NO peligroso ni pedimento en exportación', () => {
+    const e = extraccionAtlasOk();
+    Object.assign(e.mercancias[0], { embalaje: cv('4G'), embalaje_descripcion: cv('Caja'), pedimento: cv('24 16 3456 4000123'), regimen_aduanero: cv('EXD'), material_peligroso: cv('false') }); // grep-limpio:ok
+    const l = XLSX.read(aXlsxPlantillaTms(construirPlantilla(e, { clienteInterno: null, plantilla: 'normal' })), { type: 'array' });
+    const m = l.Sheets.Mercancias;
+    expect(m.G22).toBeUndefined(); expect(m.H22).toBeUndefined(); expect(m.K22).toBeUndefined();
+    expect(m.B22.v).toBe('24131500'); // lo demás sigue
   });
 });

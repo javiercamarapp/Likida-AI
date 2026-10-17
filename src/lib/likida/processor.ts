@@ -36,6 +36,7 @@ import {
 import { versionAvisoVigente, pideAtencionPrivacidad, respuestaPrivacidad } from '@/lib/likida/privacidad';
 import { mensajeEvidencia } from '@/lib/likida/conductor/evidencia';
 import { atenderPreguntaConvenio } from '@/lib/likida/convenios/pregunta';
+import { guardiaDatosSeguridad } from '@/lib/likida/conductor/guardia_seguridad';
 import { atenderConductor, atenderAcuseJefe, atenderPinConductor, hitoParaEvidenciaDelChofer, registrarEvidenciaDelChofer, registrarHitoDesdeFoto } from '@/lib/likida/conductor/atender';
 import {
   interpretarMarcaJornada, interpretarConformidadJornada,
@@ -46,7 +47,7 @@ import { puedeAsignar } from '@/lib/auth/permisos';
 import { atenderDespachoOficina } from '@/lib/likida/despacho_wa';
 import { interpretarTalacha, atenderTalachaChofer, atenderAutorizacionTalacha } from '@/lib/likida/talacha_wa';
 import { atenderCcpOficina } from '@/lib/likida/carta_porte_wa';
-import { esCandidatoCartaPorte, ingerirDesdeWhatsapp as ingerirCartaPorteDoc } from '@/lib/likida/carta_porte_docs/whatsapp';
+import { esCandidatoCartaPorte, esTextoCartaPorte, ingerirDesdeWhatsapp as ingerirCartaPorteDoc } from '@/lib/likida/carta_porte_docs/whatsapp';
 import { atenderAcuseLiquidacionExterna } from '@/lib/likida/liquidacion_externa/acuse';
 import { interpretarAsistencia, atenderAsistenciaChofer, atenderReconocimientoAsistencia, atenderAsistenciaOficina, anclarUbicacionIncidencia } from '@/lib/likida/asistencia_wa';
 import { atenderCoordinacionOficina, atenderMensajeProveedor, atenderMedioProveedorSinTexto } from '@/lib/likida/asistencia_coordinacion';
@@ -525,6 +526,7 @@ async function recordarPeticionDeFoto(
   try {
     const conv = await loadConversation(tenantId, telefono, viajeId);
     await saveConversation(
+      tenantId,
       conv.id,
       [...conv.turns, { role: 'assistant', content: texto }],
       viajeId,
@@ -1743,7 +1745,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // «carta porte», XML con complemento): entra a la bandeja de revisión de SU flota.
         // Solo para quien puede despachar y solo en flotas que activaron el agente (su
         // buzón); un XML que no es Carta Porte, o una foto sin pie, siguen su camino.
-        if (cuenta.tenantId && puedeAsignar(cuenta.rol) && msg.mediaId && esCandidatoCartaPorte(msg)) {
+        if (cuenta.tenantId && puedeAsignar(cuenta.rol) && ((msg.mediaId && esCandidatoCartaPorte(msg)) || esTextoCartaPorte(msg))) {
           const tenantCp = cuenta.tenantId;
           const liga = `${appUrl()}/dashboard/carta-porte/documentos`;
           const atendido = await ingerirCartaPorteDoc(
@@ -1993,6 +1995,19 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         });
         logger.info('asistencia.rojo', { viaje: viajeId, tipoMsg: msg.type, mudo: emergencia.modoMudo });
         await sendText(msg.from, r.respuesta);
+        return;
+      }
+    }
+
+    // ── T-A5-58: CLAVE DE AMAGO / BOTÓN DE PÁNICO — no van por WhatsApp ─────
+    //
+    // Después del ROJO (una emergencia real le gana a todo) y ANTES de cualquier otra cosa que guarde el texto (oficina,
+    // talacha, hitos, memoria del agente, log). Texto e imagen (por su pie de foto); en todos los perfiles y con el módulo
+    // del conductor en stand-by o no. La respuesta no repite lo que escribió.
+    if ((msg.type === 'text' || msg.type === 'image') && msg.text) {
+      const sensible = guardiaDatosSeguridad(msg.text);
+      if (sensible) {
+        await sendText(msg.from, sensible.texto);
         return;
       }
     }
@@ -4067,6 +4082,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // contador de intentos cobrara una pregunta que no salió.
         const turnos: ConvTurn[] = [...conv0.turns, { role: 'user', content: msg.text }];
         await saveConversation(
+          op.tenantId,
           conv0.id,
           entregado ? [...turnos, { role: 'assistant', content: c.mensaje }] : turnos,
           viajeId,
@@ -4528,6 +4544,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         const entregado = await say(aviso);
         const turnos: ConvTurn[] = [...conv.turns, { role: 'user', content: msg.text }];
         await saveConversation(
+          op.tenantId,
           conv.id,
           entregado ? [...turnos, { role: 'assistant', content: aviso }] : turnos,
           viajeId,
@@ -5187,6 +5204,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // Los turnos del OPERADOR sí se guardan siempre: ésos sí ocurrieron, y
     // perderlos borraría lo único que él sí mandó.
     await saveConversation(
+      op.tenantId,
       conv.id,
       entregado ? [...turns, { role: 'assistant', content: reply }] : turns,
       closed ? null : viajeId,

@@ -6,11 +6,14 @@ import { normalizarNombre, normalizarTag } from './formatos';
 import { matrizDeCsv } from './csv';
 import { coordenadaDeCelda, validarCoordenadasMexico } from './casetas';
 import {
-  revisarCobros, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, type CategoriaCobro, type LineaCobro, type ReglasCobro, type ResultadoRevision,
+  revisarCobros, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, TIPOS_UNIDAD_PEAJE,
+  type CategoriaCobro, type LineaCobro, type ReglasCobro, type ResultadoRevision, type TipoUnidadPeaje, type VentanaInmovilizada,
 } from './reglas_cobro';
 import { detectarAtipicos, type ResultadoAtipicos, type UmbralesAtipicos } from './cruces_atipicos';
 import { cierreMensual, type ArchivoCierre, type CierreMensual } from './cierre_mensual';
 import { limitesDelMes, mesAnterior } from './periodo';
+import { revisarDobleEntreArchivos, VENTANA_MESES_DEFAULT, type ResultadoDobleEntreArchivos } from './doble_entre_archivos';
+import { lineasPreviasDeFlota, inmovilizadasPorTag } from './datos';
 import { validarExcepcionUnidad, validarJustificacion } from './reglas_cobro_config';
 import {
   estadoTrasAcreditar, evaluarReclamo, resumirSeguimiento, ESTADOS_RECLAMO,
@@ -90,10 +93,31 @@ export async function listarExcepcionesUnidad(tenantId: string): Promise<Excepci
   }));
 }
 
+/**
+ * TAG normalizado → tipo de su unidad (`peaje_tag.tipo_unidad`, 0812). Solo entran los TAGs con tipo declarado:
+ * un TAG sin alta o sin tipo no aparece (la regla de clase lo trata como «sin tipo de unidad»). Lanza ante error.
+ */
+export async function listarTiposUnidadPorTag(tenantId: string): Promise<Map<string, TipoUnidadPeaje>> {
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin().from('peaje_tag')
+      .select('tag, tipo_unidad', conteo(d))
+      .eq('tenant_id', tenantId).order('tag').range(d, h), 'revision_cobros.listar_tipos_unidad'),
+    'revision_cobros.listar_tipos_unidad',
+  );
+  const mapa = new Map<string, TipoUnidadPeaje>();
+  for (const f of filas) {
+    const tipo = TIPOS_UNIDAD_PEAJE.find((t) => t === f.tipo_unidad);
+    if (tipo) mapa.set(String(f.tag), tipo);
+  }
+  return mapa;
+}
+
 /** Convierte lo guardado en las `ReglasCobro` que entiende el motor puro. */
 export function reglasDesdeConfig(
   casetas: readonly ReglaCasetaVista[], bajas: readonly TagBajaVista[], periodoDesde: string | null,
   excepciones: readonly ExcepcionUnidadVista[] = [], justificados: ReadonlyMap<number, string> = new Map(),
+  clasesUtilitario: readonly number[] = [],
+  inmovilizadasPorTag: ReadonlyMap<string, readonly VentanaInmovilizada[]> = new Map(),
 ): ReglasCobro {
   const excepcionesClase = new Map<string, readonly number[]>();
   const casetasNoCruzar = new Set<string>();
@@ -107,7 +131,7 @@ export function reglasDesdeConfig(
     set.add(e.unidadNorm);
     excepcionesPorUnidad.set(e.casetaNorm, set);
   }
-  return { periodoDesde, excepcionesClase, casetasNoCruzar, tagsBaja: new Map(bajas.map((b) => [b.tag, b.bajaEn])), excepcionesPorUnidad, justificados };
+  return { periodoDesde, excepcionesClase, casetasNoCruzar, tagsBaja: new Map(bajas.map((b) => [b.tag, b.bajaEn])), excepcionesPorUnidad, justificados, clasesUtilitario, inmovilizadasPorTag };
 }
 
 export type Resultado = { ok: true } | { ok: false; motivo: string };
@@ -341,10 +365,12 @@ export interface ReporteRevision {
   calidad: Record<string, unknown> | null;
   revision: ResultadoRevision;
   atipicos: ResultadoAtipicos;
+  /** T-A2-38: extemporáneos ya cobrados en un archivo previo (candidatos) y tardíos legítimos (informativo). */
+  dobleEntreArchivos?: ResultadoDobleEntreArchivos;
   rotulo: string;
 }
 
-async function lineasDeDesglose(tenantId: string, desgloseId: string) {
+export async function lineasDeDesglose(tenantId: string, desgloseId: string) {
   return traerTodo<Record<string, unknown>>(
     (d, h) => acotada(supabaseAdmin().from('desglose_peaje_linea')
       .select('indice, fecha, hora, caseta, tag, monto, clase, unidad_archivo, unidad_id', conteo(d))
@@ -367,7 +393,7 @@ export function lineaCobroDeFila(f: Record<string, unknown>): LineaCobro {
 
 /** `null` si el desglose no existe en la flota (o está anulado). */
 export async function revisionDeDesglose(
-  tenantId: string, desgloseId: string, umbrales: Partial<UmbralesAtipicos> = {},
+  tenantId: string, desgloseId: string, umbrales: Partial<UmbralesAtipicos> = {}, ventanaMeses: number = VENTANA_MESES_DEFAULT,
 ): Promise<ReporteRevision | null> {
   const { data: d, error } = await acotada(supabaseAdmin().from('desglose_peaje')
     .select('id, proveedor, archivo_nombre, periodo_desde, periodo_hasta, periodo_oficial_desde, periodo_oficial_hasta, periodo_origen, no_periodo, calidad')
@@ -375,15 +401,25 @@ export async function revisionDeDesglose(
   if (error) throw new Error(`revisionDeDesglose: ${error.message}`);
   if (!d) return null;
 
-  const [filas, casetas, bajas, excepciones, justificados] = await Promise.all([
+  const [filas, casetas, bajas, excepciones, justificados, tipos, inmovilizadas] = await Promise.all([
     lineasDeDesglose(tenantId, desgloseId), listarReglasCasetas(tenantId), listarTagsBaja(tenantId),
-    listarExcepcionesUnidad(tenantId), listarJustificaciones(tenantId, desgloseId),
+    listarExcepcionesUnidad(tenantId), listarJustificaciones(tenantId, desgloseId), listarTiposUnidadPorTag(tenantId),
+    inmovilizadasPorTag(tenantId),
   ]);
   const periodoOficialDesde = (d.periodo_oficial_desde as string | null) ?? null;
-  const lineas = filas.map(lineaCobroDeFila);
-  const revision = revisarCobros(lineas, reglasDesdeConfig(casetas, bajas, periodoOficialDesde, excepciones, justificados));
+  // El tipo de unidad sale del maestro TAG→unidad (no del archivo): un TAG sin alta o sin tipo queda `null`.
+  const lineas = filas.map(lineaCobroDeFila).map((l) => {
+    const tag = normalizarTag(l.tag);
+    return { ...l, tipoUnidad: (tag ? tipos.get(tag) : undefined) ?? null };
+  });
+  const revision = revisarCobros(lineas, reglasDesdeConfig(casetas, bajas, periodoOficialDesde, excepciones, justificados, [], inmovilizadas));
   const conCoords = casetas.filter((c) => c.lat !== null && c.lng !== null).map((c) => ({ nombre: c.nombre, lat: c.lat as number, lng: c.lng as number }));
   const atipicos = detectarAtipicos(lineas, conCoords, umbrales);
+  // Solo se leen los desgloses previos si hay periodo y al menos un extemporáneo que buscar.
+  const hayExtemporaneos = periodoOficialDesde !== null && lineas.some((l) => l.fecha !== null && l.fecha < periodoOficialDesde);
+  const previos = hayExtemporaneos && periodoOficialDesde !== null
+    ? await lineasPreviasDeFlota(tenantId, desgloseId, periodoOficialDesde, ventanaMeses) : [];
+  const dobleEntreArchivos = revisarDobleEntreArchivos(lineas, previos, { periodoDesde: periodoOficialDesde, archivoActualId: desgloseId, ventanaMeses });
   return {
     desgloseId, proveedor: (d.proveedor as string | null) ?? null, archivoNombre: (d.archivo_nombre as string | null) ?? null,
     periodoMedidoDesde: (d.periodo_desde as string | null) ?? null, periodoMedidoHasta: (d.periodo_hasta as string | null) ?? null,
@@ -391,7 +427,7 @@ export async function revisionDeDesglose(
     periodoOrigen: (d.periodo_origen as ReporteRevision['periodoOrigen']) ?? null,
     noPeriodo: (d.no_periodo as string | null) ?? null,
     calidad: (d.calidad as Record<string, unknown> | null) ?? null,
-    revision, atipicos, rotulo: ROTULO_CANDIDATO,
+    revision, atipicos, dobleEntreArchivos, rotulo: ROTULO_CANDIDATO,
   };
 }
 

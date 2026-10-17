@@ -108,6 +108,26 @@ select proconfig from pg_proc where proname = 'ejecutar_arco_cancelacion';
 -- esperado: {"search_path=public, extensions, pg_catalog"}
 ```
 
+## Próxima tanda: Carta Porte, salida al TMS (0790 a 0794)
+
+> **Pendiente de aplicar. Este documento no la ejecuta.** Se aplica con `supabase db push` (orden de archivo), con copia de seguridad previa y autorización, y siempre ANTES de un `[deploy]` que use el código nuevo.
+
+Orden (el de archivo, que es el correcto):
+
+| # | Archivo | Qué crea | Riesgo |
+|---|---|---|---|
+| 0790 | `0790_cp_envio_tms.sql` | `cp_envio_tms`, `cp_salida_config`, tres funciones de reserva y alerta única, columna `cp_documento.revisor_asignado`, y **reescribe entera** la restricción de tipos de evento. | La restricción de eventos se recrea con la lista completa: si otra migración la toca en medio, se pierde. No aplicar fuera de orden. |
+| 0791 | `0791_cp_formato_json_y_causa_rechazo.sql` | Formato `json` en documentos y perfiles, columna `rechazo_causa`. | Sin tablas nuevas; solo restricciones. |
+| 0792 | `0792_cp_catalogo_cliente.sql` | `cp_cliente_numero`, `cp_catalogo_producto`, `cp_catalogo_parte`. | Tablas nuevas, sin datos. |
+| 0793 | `0793_cp_sat_catalogo.sql` | `cp_sat_catalogo` (global, sin datos hasta importarlos). | Tabla nueva, sin datos. |
+| 0794 | `0794_cp_ccp_timbrado_recibido.sql` | `cp_ccp_timbrado` (UUID fiscal único por flota), columna `cp_salida_config.responder_ccp` (apagada) y dos funciones del candado de respuesta. | Tabla nueva sin datos y columna con default `false`: no cambia nada hasta que una flota active «responder al cliente». |
+
+Qué se rompe si el código llega antes que la base: el cron de Carta Porte y la pantalla de configuración de la salida fallan al leer tablas que no existen. Con la base por delante del código no pasa nada: las tablas esperan vacías.
+
+Después de aplicar: comprobar que existen las cuatro (`select to_regclass('public.cp_envio_tms'), to_regclass('public.cp_sat_catalogo');`), dejar el modo de salida en `descarga` y seguir `docs/operacion/carta-porte-salida-tms.md`. Para deshacer: `docs/operacion/carta-porte-salida-tms-rollback.md`.
+
+Falta (migración aparte, aún no escrita): ampliar la restricción `interruptor_id_dominio` con `agente:carta_porte_salida_tms`, sin lo cual el panel no puede apagarlo (ver el rollback).
+
 ## Lo que sigue pendiente (auditoría 24, no cerrado aquí)
 
 - ~~**DAT-3 / DAT-4**: piso ≥ 0 en las cinco columnas de dinero de `gasto`, y

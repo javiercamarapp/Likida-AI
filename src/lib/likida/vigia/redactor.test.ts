@@ -412,3 +412,57 @@ describe('datos de la unidad (T-A4-24)', () => {
     expect(r.borrador.texto).toBe(b.texto);
   });
 });
+
+describe('estatus de ubicación «va por…, le faltan…» (T-A4-39)', () => {
+  const con = (extra: Parameters<typeof estatus>[0]) => redactarBorrador(base({ viaje: { tipo: 'uno', estatus: estatus(extra) } }));
+  const hace = (min: number) => ({ lat: 21.1, lng: -101.6, medidaEn: new Date(AHORA.getTime() - min * 60_000).toISOString() });
+
+  it('con posición reciente y avance dice «va por <lugar>, le faltan ~km / ~h» y aclara que no es hora de llegada', () => {
+    const b = con({ avance: { cercaDe: 'Saltillo', kmRestantes: 84.4, minRestantes: 95 } });
+    expect(b.texto).toContain('Va por Saltillo, le faltan ~84 km / ~2 h a Monterrey');
+    expect(b.texto).toContain('no es hora de llegada');
+    expect(b.texto).toContain('maps.google.com');
+    expect(b.respaldo.avance).toEqual({ cercaDe: 'Saltillo', kmRestantes: 84, minRestantes: 95 });
+    expect(b.faltantes).toEqual([]);
+  });
+
+  it('menos de una hora se dice en minutos', () => {
+    expect(con({ avance: { cercaDe: null, kmRestantes: 30, minRestantes: 40 } }).texto).toContain('Va en camino, le faltan ~30 km / ~40 min a Monterrey');
+  });
+
+  it('con posición vieja NO dice «va por» (queda como hoy: antigüedad y liga)', () => {
+    const b = con({ posicion: hace(45), avance: { cercaDe: 'Saltillo', kmRestantes: 80, minRestantes: 90 } });
+    expect(b.texto).not.toContain('Va por');
+    expect(b.texto).not.toContain('le faltan');
+    expect(b.texto).toContain('hace 45 min');
+    expect(b.respaldo.avance).toBeUndefined();
+  });
+
+  it('sin destino no inventa distancia', () => {
+    const b = con({ destino: null, avance: { cercaDe: 'Saltillo', kmRestantes: 80, minRestantes: 90 } });
+    expect(b.texto).not.toContain('le faltan');
+    expect(b.texto).not.toContain('Va por');
+  });
+
+  it('sin avance, o con cifras inválidas, el texto es el de siempre', () => {
+    const sin = con({});
+    for (const avance of [null, { cercaDe: null, kmRestantes: null, minRestantes: null }, { cercaDe: null, kmRestantes: -5, minRestantes: Number.NaN }]) {
+      expect(con({ avance }).texto).toBe(sin.texto);
+    }
+    expect(sin.texto).not.toContain('le faltan');
+  });
+
+  it('sin posición no hay avance aunque el adaptador lo mande («lo consulto» sigue igual)', () => {
+    const b = con({ posicion: null, avance: { cercaDe: 'Saltillo', kmRestantes: 80, minRestantes: 90 } });
+    expect(b.texto).toContain('Todavía no tengo posición GPS');
+    expect(b.texto).not.toContain('Va por');
+    expect(b.faltantes).toContain('posicion');
+  });
+
+  it('el lugar se limpia (sin saltos de línea ni largo desmedido)', () => {
+    const b = con({ avance: { cercaDe: `Tramo\n  largo ${'x'.repeat(200)}`, kmRestantes: 10, minRestantes: null } });
+    expect(b.texto).toContain('Va por Tramo largo xxx');
+    expect(b.texto).not.toContain('x'.repeat(61));
+    expect(b.texto).not.toMatch(/Tramo\n/);
+  });
+});

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Valida un archivo del cliente ANTES de cargarlo (no escribe nada, no toca red).
 //   node scripts/demo/cinco-agentes/validar-archivo.mjs <tipo> <ruta>
-//   tipos: gps_posiciones | geocercas | pases | liquidaciones | convenios | whatsapp | carta_porte
+//   tipos: gps_posiciones | geocercas | pases | liquidaciones | convenios | whatsapp | carta_porte | programa_despacho
 // Sale 0 si se puede cargar tal cual; 1 si hay problemas; 2 si se usó mal.
 import { readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 const [tipo, ruta] = process.argv.slice(2);
-if (!tipo || !ruta) { console.error('Uso: node scripts/demo/cinco-agentes/validar-archivo.mjs <tipo> <ruta>\n  tipos: gps_posiciones | geocercas | pases | liquidaciones | convenios | whatsapp | carta_porte'); process.exit(2); }
+if (!tipo || !ruta) { console.error('Uso: node scripts/demo/cinco-agentes/validar-archivo.mjs <tipo> <ruta>\n  tipos: gps_posiciones | geocercas | pases | liquidaciones | convenios | whatsapp | carta_porte | programa_despacho'); process.exit(2); }
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const { createJiti } = createRequire(import.meta.url)('jiti');

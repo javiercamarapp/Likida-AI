@@ -13,7 +13,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { notificarAsignacion } from './notificar';
+import { notificarAsignacion, notificarAsignacionConBotones } from './notificar';
 import { evaluarYAvisarCcpDespacho } from './carta_porte_wa';
 import { despacharInstrucciones } from './convenios/envio';
 import { enviarBriefingInicio } from './briefing_inicio_wa';
@@ -672,6 +672,20 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
 }
 
 /**
+ * T-A5-47: ¿esta flota manda la asignación con botones (plantilla N01)? Apagado por omisión; si la configuración no se puede leer se queda
+ * en el aviso de siempre (nunca se deja de avisar al chofer por esto). Import perezoso: el Conductor ya depende de este módulo.
+ */
+async function asignacionConBotones(tenantId: string): Promise<boolean> {
+  try {
+    const { leerConfigConductor } = await import('./conductor/repo');
+    return (await leerConfigConductor(tenantId)).asignacionBotonesActiva === true;
+  } catch (e) {
+    logger.warn('viaje.aviso_config_no_leida', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
+}
+
+/**
  * Le manda al chofer el aviso de su viaje. Resuelve el teléfono aquí para que
  * quien llame no tenga que conocer la tabla `operador`.
  */
@@ -690,8 +704,8 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
   // acotada, pero el día que llegue de la entrada del usuario, un id de la flota
   // B le manda a un chofer de la flota A el anticipo de un viaje ajeno.
   const [{ data: op, error: errOp }, { data: viaje, error: errViaje }] = await Promise.all([
-    acotada(admin.from('operador').select('telefono').eq('id', operadorId).eq('tenant_id', tenantId).maybeSingle(), 'avisarAlChofer.operador'),
-    acotada(admin.from('viaje').select('folio, origen, destino, fecha_inicio, anticipo, unidad_id')
+    acotada(admin.from('operador').select('telefono, nombre').eq('id', operadorId).eq('tenant_id', tenantId).maybeSingle(), 'avisarAlChofer.operador'),
+    acotada(admin.from('viaje').select('folio, origen, destino, fecha_inicio, anticipo, unidad_id, cita_origen_en')
       .eq('tenant_id', tenantId).eq('id', viajeId).maybeSingle(), 'avisarAlChofer.viaje'),
   ]);
   const errLectura = errOp ?? errViaje;
@@ -727,18 +741,22 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
     unidad = (u?.numero_economico as string) ?? null;
   }
 
-  const r = await notificarAsignacion({
-    telefono: op.telefono as string,
-    tenantId,
-    viaje: {
-      folio: viaje.folio as string | null,
-      origen: viaje.origen as string | null,
-      destino: viaje.destino as string | null,
-      fechaInicio: viaje.fecha_inicio as string | null,
-      anticipo: viaje.anticipo === null ? null : Number(viaje.anticipo),
-      unidad,
-    },
-  });
+  const datosViaje = {
+    folio: viaje.folio as string | null,
+    origen: viaje.origen as string | null,
+    destino: viaje.destino as string | null,
+    fechaInicio: viaje.fecha_inicio as string | null,
+    anticipo: viaje.anticipo === null ? null : Number(viaje.anticipo),
+    unidad,
+  };
+  // T-A5-47: en la flota con la perilla encendida la asignación sale con botones (N01) en vez de `viaje_asignado`.
+  const r = (await asignacionConBotones(tenantId))
+    ? await notificarAsignacionConBotones({
+      telefono: op.telefono as string,
+      tenantId,
+      viaje: { ...datosViaje, viajeId, operadorNombre: (op.nombre as string | null) ?? null, citaEn: (viaje.cita_origen_en as string | null) ?? null },
+    })
+    : await notificarAsignacion({ telefono: op.telefono as string, tenantId, viaje: datosViaje });
   if (!r.enviado) {
     // ERROR, no WARN, y la razón importa: `avisado_en` es lo ÚNICO que hace
     // visible este viaje para la escalación de las 5 h. Si el aviso no salió, no

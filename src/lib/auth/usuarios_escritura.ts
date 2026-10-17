@@ -277,6 +277,57 @@ export async function reactivarUsuario(
   return { accesoRestaurado };
 }
 
+export interface ResultadoCierreSesiones {
+  /** `true` si la RPC tumbó las sesiones vivas (puede ser 0 si no tenía
+   *  ninguna — no es un fallo). `false` = la RPC falló: se dice, no se
+   *  finge, igual que `sesionRevocada` en la baja. */
+  sesionesCerradas: boolean;
+}
+
+/**
+ * FASE 1 · SEG-SESIONES (checklist 31 v2 #5): cierra TODAS las sesiones
+ * vivas de alguien del equipo de un tiro, SIN darlo de baja — el caso real
+ * es «sospecho que alguien más tiene su sesión» o «perdió el celular»,
+ * donde la persona sigue trabajando y no hay por qué banearla.
+ *
+ * `revocar_sesiones_usuario` (migración 0840, SOLO LOCAL hoy) borra las
+ * filas de `auth.sessions` del usuario — `auth.refresh_tokens.session_id`
+ * las referencia con `ON DELETE CASCADE`, así que sus refresh tokens caen
+ * con ellas. Es el equivalente de `admin.signOut(jwt, 'global')` para
+ * cuando quien actúa NO tiene el JWT de esa sesión (el caso de un admin
+ * sobre OTRO usuario) — el SDK de supabase-js no ofrece esa llamada por
+ * userId, solo por JWT (ver el comentario de `desactivarUsuario` arriba).
+ *
+ * Mismo patrón que el ban de `desactivarUsuario`: `leerObjetivo` ancla al
+ * tenant y rechaza un superadmin; no se exige `activo` (cerrar sesiones de
+ * una cuenta ya de baja es un no-op inofensivo, no un error); best-effort
+ * con el resultado DICHO, nunca fingido; bitácora siempre, con el
+ * resultado real en el detalle.
+ */
+export async function cerrarSesionesUsuario(
+  tenantId: string,
+  usuarioId: string,
+  actor: ActorEquipo,
+): Promise<ResultadoCierreSesiones> {
+  exigirUuid(usuarioId);
+  const objetivo = await leerObjetivo(tenantId, usuarioId);
+
+  let sesionesCerradas = true;
+  try {
+    const { error } = await supabaseAdmin().rpc('revocar_sesiones_usuario', { p_usuario: usuarioId });
+    if (error) {
+      sesionesCerradas = false;
+      logger.error('equipo.sesiones_cerrar_fallo', { usuario: usuarioId, err: error.message });
+    }
+  } catch (e) {
+    sesionesCerradas = false;
+    logger.error('equipo.sesiones_cerrar_fallo', { usuario: usuarioId, err: e instanceof Error ? e.message : String(e) });
+  }
+
+  await anotar(tenantId, 'usuario.sesiones_cerradas', usuarioId, { rol: objetivo.rol, sesiones_cerradas: sesionesCerradas }, actor);
+  return { sesionesCerradas };
+}
+
 export interface ContextoAcceso {
   /** El nombre de la flota, para el correo. `null` si no se pudo leer. */
   flotaNombre: string | null;

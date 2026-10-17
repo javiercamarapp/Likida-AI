@@ -18,7 +18,7 @@ Los defaults los fija `src/lib/likida/conductor/config.ts` y los vigila `config.
 
 ## 1. Encender el piloto (en este orden)
 
-1. **Preflight.** Abrir `/dashboard/agentes/conductores/configuracion`, panel «¿Está lista la flota?». Son ocho comprobaciones de solo lectura (`preflight_piloto.ts`): voluntarios con teléfono alcanzable, unidades con GPS reciente, viajes con sitio de origen y destino (≥ 80 %), a quién avisar por patio (escalamiento), plantillas Meta aprobadas, agente encendido, zona horaria válida y continuidad del GPS (que no traiga solo eventos). Cada una dice qué falta y qué hacer. Mientras haya algo en rojo el tablero muestra un aviso y la señal de vida no se deja encender; los hitos por WhatsApp siguen funcionando.
+1. **Preflight.** Abrir `/dashboard/agentes/conductores/configuracion`, panel «¿Está lista la flota?». Son nueve comprobaciones de solo lectura (`preflight_piloto.ts`): voluntarios con teléfono alcanzable, unidades con GPS reciente, viajes con sitio de origen y destino (≥ 80 %), a quién avisar por patio (escalamiento), plantillas Meta aprobadas, agente encendido, zona horaria válida y continuidad del GPS (que no traiga solo eventos). Cada una dice qué falta y qué hacer; la de la cohorte exige haber definido con quién arranca el piloto (`cohorte-piloto.md`). Mientras haya algo en rojo el tablero muestra un aviso y la señal de vida no se deja encender; los hitos por WhatsApp siguen funcionando.
 2. **Alta de voluntarios.** En la misma pantalla, sección «Operadores del piloto»: buscar, agregar. Muestra el contador «n de 6»; el tope se aplica en el servidor. Se rechazan teléfonos inválidos o de demo y operadores de otra flota. Solo quien puede administrar la flota cambia la lista; queda bitácora sin datos personales.
 3. **Importar los viajes.** Por la pantalla de viajes (`/dashboard/viajes`, importador de archivo/TMS). La compuerta de voluntarios deja **aceptados por importación** (`viaje.aceptado_origen = 'importacion'`) solo los viajes abiertos, sin aceptar, de un operador voluntario; a los demás no les escribe nada. Un viaje que el chofer ya aceptó no se reescribe. Las métricas de «aceptación del chofer» excluyen los viajes importados.
 4. **Ver el tablero.** `/dashboard/agentes/conductores`: hitos por viaje, excepciones («sin sitio», «sin señal», «sin respuesta») y, si falta algo del preflight, el banner con el primer pendiente. Revisar que los viajes del piloto aparezcan y que traigan sitio.
@@ -161,3 +161,36 @@ commit;
 - Panel «¿Está lista la flota?» y su banner en el tablero: si algo vuelve a rojo (un voluntario sin teléfono, GPS que dejó de reportar), la señal de vida debe apagarse (§2b) hasta resolverlo.
 - Excepciones del tablero («sin sitio», «sin señal», «sin respuesta»): son trabajo de la oficina, no del agente.
 - Plantillas Meta: sin aprobación el envío fuera de la ventana de 24 h falla (132001) y el agente lo reporta; no lo simula.
+
+## 6. KPIs del piloto y fechas
+
+> Requisito R28 del cliente: arrancar en piloto «para ver cómo está extrayendo la información, cómo la está presentando» y qué suma o quita, y reportar el avance a los interesados. El cálculo vive en `src/lib/likida/conductor/insights.ts` (`calcularInsights` → `kpisPiloto`, puro, sin IA) y lo pinta la tarjeta de insights del tablero del agente (sección «KPIs del piloto», `TarjetaInsights` en `vista.tsx`); este documento solo define qué mide cada KPI.
+
+**Regla de oro.** Un KPI solo se compara contra una **línea base declarada por el cliente**. Sin línea base válida la comparación dice «sin dato»: nunca se calcula un porcentaje de ahorro ni de mejora por cuenta propia. Una base no válida (negativa, no numérica, un % fuera de 0–100, minutos en cero) cuenta como no declarada. El % de mejora solo existe donde «menos es mejor» y la base es mayor que cero.
+
+| # | KPI | Cálculo | Fuente | Línea base que debe declarar el cliente |
+|---|---|---|---|---|
+| 1 | Hitos sin intervención | hitos registrados por el sistema o el chofer ÷ hitos registrados × 100 (los de la oficina no cuentan) | `viaje_hito.fuente` | % de hitos que hoy se registran sin que la oficina intervenga |
+| 2 | Minutos del GPS al registro | promedio de `registrado_en − detectado_en`; los negativos y sin fecha se descartan y se cuentan | `viaje_cruce_geocerca` | minutos que hoy tarda en quedar registrado un evento |
+| 3 | Viajes completos | viajes con todos sus hitos no omitidos en recibido o validado ÷ viajes con algún hito que cuente × 100 | `viaje_hito.estado` por viaje | % de viajes completos hoy |
+| 4 | Mensajes del supervisor evitados | hitos sin intervención × llamadas por viaje declaradas; **es una estimación** y así se rotula | `agente_conductor_config.linea_base_llamadas_por_viaje` | llamadas por viaje que hoy hace el supervisor |
+| 5 | Tiempo de salida de terminal al primer cliente (referencia) | promedio de las mediciones válidas por viaje | mediciones por viaje (sin fuente automática todavía) | minutos hoy |
+| 6 | Reubicaciones por cliente (referencia) | reubicaciones totales ÷ clientes con dato (lo que entrega `reubicacionesPorCliente`, T-A5-63) | bitácora de la llegada | reubicaciones por cliente hoy |
+
+Notas de lectura:
+
+- Los KPIs 5 y 6 son de referencia: **sin línea base no muestran valor**, ni siquiera el medido.
+- «Sin dato» no es cero: un periodo sin hitos con viaje, sin cruces o sin reubicaciones registradas se muestra como «sin dato».
+- El KPI 3 usa los hitos con movimiento en el periodo; un viaje que empezó antes puede aparecer incompleto por estar a medias, y si la lectura se recorta (tarjeta «recortada») la cifra es parcial.
+- El KPI 2 mide el retraso del propio sistema, no cuándo ocurrió el hecho físico; el retraso de entrega del mensaje del chofer se muestra aparte y no se mezcla.
+- Hoy la tarjeta recibe solo la línea base de llamadas (KPI 4), que se guarda en la configuración del agente. Las demás líneas base (KPIs 1, 2, 3, 5 y 6) y las mediciones de los KPIs 5 y 6 se aceptan en el cálculo (`piloto`), pero `page.tsx` todavía no las alimenta: no tienen columna ni pantalla donde capturarlas (es parte de lo que se acuerde con el cliente). Mientras tanto la tarjeta muestra esos KPIs como «sin dato».
+
+**Fechas del piloto.** En blanco hasta recibirlas del cliente; las fechas autogeneradas de los resúmenes no valen.
+
+| Concepto | Valor |
+|---|---|
+| Fecha de arranque del piloto | _(pendiente del cliente)_ |
+| Fecha de la primera revisión de avance | _(pendiente del cliente)_ |
+| Voluntarios del piloto | _(pendiente del cliente; tope por flota en `piloto_max_voluntarios`)_ |
+| Patios críticos | _(pendiente del cliente)_ |
+| Cohorte «sin tableta» | _(pendiente; la mapean el coordinador y monitoreo del cliente)_ |

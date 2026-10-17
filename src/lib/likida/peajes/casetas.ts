@@ -7,8 +7,13 @@ import { normalizarNombre, type Celda } from './formatos';
 // y una coordenada inventada acusaría a un chofer con un dato de mentira. La
 // flota (o Likida, con el shapefile del IMT cuando se cargue) sube su CSV:
 //
-//   nombre;lat;lng;radio_m;alias;fuente
-//   Caseta Ejemplo Norte;19.4326;-99.1332;300;Ejemplo N|Ej. Norte;captura propia
+//   nombre;lat;lng;radio_m;alias;fuente;por_pasada
+//   Caseta Ejemplo Norte;19.4326;-99.1332;300;Ejemplo N|Ej. Norte;captura propia;no
+//
+// LAS COORDENADAS SON OPCIONALES (T-A2-05). Una caseta vive por NOMBRE (+ alias):
+// sin coordenadas se resuelve igual contra el desglose del proveedor y solo la
+// evidencia GPS queda en «sin datos» para ella. Una fila trae las dos coordenadas
+// o ninguna; con una sola se rechaza.
 //
 // Este módulo es PURO: valida el CSV fila por fila y resuelve el nombre que
 // trae el proveedor contra el catálogo. El I/O vive en `datos.ts`.
@@ -24,10 +29,13 @@ export interface CasetaImportada {
   nombre: string;
   nombreNorm: string;
   alias: string[];
-  lat: number;
-  lng: number;
+  /** null = la fila no trae coordenadas (caseta conocida solo por nombre). Siempre las dos o ninguna. */
+  lat: number | null;
+  lng: number | null;
   radioM: number;
   fuente: string | null;
+  /** true/false si el archivo trae la columna; undefined = no la trae (no se pisa lo ya guardado). */
+  porPasada?: boolean;
 }
 
 export interface LecturaCasetas {
@@ -36,14 +44,23 @@ export interface LecturaCasetas {
   error?: string;
 }
 
-const COLS: Record<'nombre' | 'lat' | 'lng' | 'radio' | 'alias' | 'fuente', string[]> = {
+const COLS: Record<'nombre' | 'lat' | 'lng' | 'radio' | 'alias' | 'fuente' | 'porPasada', string[]> = {
   nombre: ['nombre', 'caseta', 'plaza', 'nombre de la caseta', 'nombre de la plaza'],
   lat: ['lat', 'latitud', 'latitude', 'y'],
   lng: ['lng', 'lon', 'long', 'longitud', 'longitude', 'x'],
   radio: ['radio', 'radio m', 'radio_m', 'radio metros', 'radio en metros'],
   alias: ['alias', 'otros nombres', 'sinonimos'],
   fuente: ['fuente', 'origen', 'referencia'],
+  porPasada: ['por pasada', 'por_pasada', 'tarifa por pasada', 'tarifa_por_pasada'],
 };
+
+/** «si», «sí», «true», «1», «x» → true; «no», «false», «0» → false; vacío o raro → null. */
+function booleanoDeCelda(v: Celda): boolean | null {
+  const s = normalizarNombre(String(v ?? ''));
+  if (['si', 'true', '1', 'x', 'verdadero'].includes(s)) return true;
+  if (['no', 'false', '0', 'falso'].includes(s)) return false;
+  return null;
+}
 
 /** «19.43», «19,43» (coma decimal), « -99.13 » → número, o null. */
 export function coordenadaDeCelda(v: Celda): number | null {
@@ -74,12 +91,15 @@ export function parsearCasetasMatriz(matriz: Celda[][]): LecturaCasetas {
     const i = enc.findIndex((e) => COLS[k].includes(e));
     if (i >= 0) idx[k] = i;
   }
-  const faltan = (['nombre', 'lat', 'lng'] as const).filter((k) => idx[k] === undefined);
+  // Solo el nombre es obligatorio. Las coordenadas son opcionales, pero un archivo con UNA sola de las
+  // dos columnas es un error de captura (se pediría una mitad de la coordenada): se avisa cuál falta.
+  const faltan = (['nombre'] as const).filter((k) => idx[k] === undefined);
+  if ((idx.lat === undefined) !== (idx.lng === undefined)) faltan.push(...((idx.lat === undefined ? ['lat'] : ['lng']) as never[]));
   if (faltan.length > 0) {
     return {
       ...vacio,
       error: `Faltan columnas: ${faltan.join(', ')}. Encabezados leídos: ${matriz[0].map((c) => `«${String(c ?? '').trim()}»`).join(', ')}. `
-        + 'El CSV necesita: nombre, lat, lng (y opcionales radio_m, alias, fuente).',
+        + 'El CSV necesita: nombre (y opcionales lat y lng —las dos juntas—, radio_m, alias, fuente, por_pasada).',
     };
   }
   if (matriz.length - 1 > TOPE_CASETAS_IMPORTACION) {
@@ -101,11 +121,20 @@ export function parsearCasetasMatriz(matriz: Celda[][]): LecturaCasetas {
     const nombreNorm = normalizarNombre(nombre);
     if (!nombreNorm) { rechazadas.push({ fila: n, motivo: 'el nombre no tiene letras ni dígitos' }); continue; }
 
-    const lat = coordenadaDeCelda(celda('lat'));
-    const lng = coordenadaDeCelda(celda('lng'));
-    if (lat === null || lng === null) { rechazadas.push({ fila: n, motivo: 'latitud o longitud ilegible' }); continue; }
-    const fuera = validarCoordenadasMexico(lat, lng);
-    if (fuera) { rechazadas.push({ fila: n, motivo: fuera }); continue; }
+    const vacia = (k: 'lat' | 'lng') => String(celda(k) ?? '').trim() === '';
+    let lat: number | null = null;
+    let lng: number | null = null;
+    if (idx.lat !== undefined && !(vacia('lat') && vacia('lng'))) {
+      if (vacia('lat') !== vacia('lng')) {
+        rechazadas.push({ fila: n, motivo: `trae solo ${vacia('lat') ? 'la longitud' : 'la latitud'}: captura las dos coordenadas o deja ambas vacías` });
+        continue;
+      }
+      lat = coordenadaDeCelda(celda('lat'));
+      lng = coordenadaDeCelda(celda('lng'));
+      if (lat === null || lng === null) { rechazadas.push({ fila: n, motivo: 'latitud o longitud ilegible' }); continue; }
+      const fuera = validarCoordenadasMexico(lat, lng);
+      if (fuera) { rechazadas.push({ fila: n, motivo: fuera }); continue; }
+    }
 
     let radioM = RADIO_DEFAULT_M;
     const radioCrudo = celda('radio');
@@ -131,7 +160,8 @@ export function parsearCasetasMatriz(matriz: Celda[][]): LecturaCasetas {
       .filter((a) => a !== '' && normalizarNombre(a) !== nombreNorm)
       .slice(0, 10);
     const fuente = String(celda('fuente') ?? '').trim().slice(0, 200) || null;
-    casetas.push({ fila: n, nombre, nombreNorm, alias, lat, lng, radioM, fuente });
+    const porPasada = idx.porPasada === undefined ? undefined : (booleanoDeCelda(celda('porPasada')) ?? false);
+    casetas.push({ fila: n, nombre, nombreNorm, alias, lat, lng, radioM, fuente, ...(porPasada === undefined ? {} : { porPasada }) });
   }
   return { casetas, rechazadas };
 }
@@ -143,8 +173,9 @@ export interface CasetaCatalogo {
   nombre: string;
   nombreNorm: string;
   alias: string[];
-  lat: number;
-  lng: number;
+  /** null = caseta conocida solo por nombre (sin coordenadas): no entra al cruce GPS. */
+  lat: number | null;
+  lng: number | null;
   radioM: number;
 }
 

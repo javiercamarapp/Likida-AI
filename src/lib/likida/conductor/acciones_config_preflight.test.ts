@@ -23,7 +23,7 @@ function formulario(extra: Record<string, string> = {}, senalVida = true): FormD
   return fd;
 }
 const rojo = (): ResultadoPreflight => evaluarPreflight({
-  config: { activo: true, perfilSeguimiento: 'esenciales', solicitudesMin: [0, 15, 30, 45] }, zonaDeclarada: 'America/Mexico_City',
+  config: { activo: true, perfilSeguimiento: 'esenciales', solicitudesMin: [0, 15, 30, 45], cohortePiloto: 'sin_tableta_ni_macros' }, zonaDeclarada: 'America/Mexico_City',
   voluntarios: [], viajes: [], posicionesPorUnidad: {}, contactos: [], aprobadas: [],
 });
 const verde = (): ResultadoPreflight => ({ comprobaciones: [], bloqueos: [], lista: true });
@@ -90,5 +90,24 @@ describe('encender la señal de vida desde el panel', () => {
     const d = deps({ preflight: async () => { throw new Error('base caída'); } });
     expect(await guardarConfigDelPanel(ctx(), formulario(), d)).toMatchObject({ ok: false, error: expect.stringContaining('No pude guardarlo') });
     expect(d.guardado).toHaveLength(0);
+  });
+});
+
+// T-A5-64: `preflightReal` (el que usa el panel) arma el config del preflight CON la cohorte de la config que se quiere guardar.
+describe('preflightReal y la cohorte del piloto', () => {
+  it('pasa cohortePiloto de la config al preflight: con cohorte la comprobacion `cohorte` queda ok; sin ella, falta', async () => {
+    vi.resetModules();
+    const visto: unknown[] = [];
+    vi.doMock('./repo', async (orig) => ({
+      ...(await orig<typeof import('./repo')>()),
+      leerDatosPreflight: async () => ({ config: { activo: true, perfilSeguimiento: 'esenciales', solicitudesMin: [0, 15, 30, 45], cohortePiloto: null }, zonaDeclarada: 'America/Mexico_City', voluntarios: [], viajes: [], posicionesPorUnidad: {}, contactos: [], aprobadas: [] }),
+    }));
+    const { preflightReal } = await import('./acciones_config');
+    const con = await preflightReal('t1', { ...CONFIG_CONDUCTOR_DEFAULT, cohortePiloto: 'sin_tableta_ni_macros' });
+    const sin = await preflightReal('t1', { ...CONFIG_CONDUCTOR_DEFAULT });
+    visto.push(con, sin);
+    expect(con.comprobaciones.find((x) => x.id === 'cohorte')?.estado).toBe('ok');
+    expect(sin.comprobaciones.find((x) => x.id === 'cohorte')?.estado).toBe('falta');
+    vi.doUnmock('./repo');
   });
 });

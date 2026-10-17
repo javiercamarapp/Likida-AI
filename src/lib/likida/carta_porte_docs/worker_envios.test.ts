@@ -4,6 +4,7 @@ import type { DocumentoFila } from './repo';
 import type { ConfigSalida } from './salida_config';
 import type { Existencia, SalidaTms } from './tms_puerto';
 import type { DepsEnvios } from './worker_envios';
+import type { Hallazgo } from './validacion';
 
 // El worker de envíos al TMS (T-A3-28), probado ENTERO con dobles: el repo de envíos en memoria (T-A3-27, con el mismo
 // reclamo con lease que la 0790), el puerto `tms_falso` (T-A3-01), la máquina de estados y el prechequeo REALES.
@@ -13,7 +14,8 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('el worker de envíos no toca Supabase en estas pruebas'); } }));
 vi.mock('../presupuesto', () => ({ acotada: async <T,>(p: PromiseLike<T>) => p }));
 
-const { correrWorkerEnvios, TOPE_FALLOS_TMS_SEGUIDOS, SIN_MAS_REVISIONES, ESPERA_LISTO_MANUAL_MIN, MARGEN_ENVIO_MS } = await import('./worker_envios');
+const { logger } = await import('@/lib/logger');
+const { correrWorkerEnvios, sinPII, enviosPendientes, TOPE_FALLOS_TMS_SEGUIDOS, SIN_MAS_REVISIONES, ESPERA_LISTO_MANUAL_MIN, MARGEN_ENVIO_MS } = await import('./worker_envios');
 const { repoEnviosFalso, estadoEnvios, resetEnvios, sembrarEnvio } = await import('./repo_envios_falso.fixture');
 const { crearTmsFalso } = await import('./tms_falso.fixture');
 const { CONFIG_SALIDA_ARRANQUE } = await import('./salida_config');
@@ -34,6 +36,7 @@ let eventos: Array<{ tenantId: string; documentoId: string; tipo: string; detall
 let alertasEnvio: Array<{ tenantId: string; envioId: string; motivo: string; destinatario: string; mensaje: string }>;
 let alertasOperador: Array<{ evento: string; detalle: Record<string, unknown> }>;
 let devueltos: Array<{ documentoId: string; motivo: string }>;
+let rechazosDevueltos: Array<{ documentoId: string; versionDoc: number; hallazgos: Hallazgo[]; ubicaciones: string[] }>;
 
 const cv = (valor: string | null): CampoValor => ({ valor, confianza: 0.95, evidencia: null, origen: 'llm' });
 const extraccion = (): Extraccion => ({
@@ -73,6 +76,9 @@ function deps(over: Partial<DepsEnvios> = {}): DepsEnvios {
     salida: async (t) => puertos.get(t) ?? SIN_TMS,
     evento: async (tenantId, documentoId, tipo, detalle) => { eventos.push({ tenantId, documentoId, tipo, detalle }); },
     devolverARevision: async (_t, documentoId, _v, motivo) => { devueltos.push({ documentoId, motivo }); },
+    devolverPorRechazo: async (_t, documentoId, versionDoc, hallazgos, ubicaciones) => { rechazosDevueltos.push({ documentoId, versionDoc, hallazgos, ubicaciones }); },
+    huellasRechazadas: async (t, documentoId) =>
+      (await repoEnviosFalso.listarPorDocumento(t, documentoId)).filter((x) => x.estado === 'rechazado_tms' && x.plantillaSha256 !== null).map((x) => x.plantillaSha256 as string),
     alertarEnvio: async (a) => { alertasEnvio.push(a); },
     alertarOperador: async (evento, detalle) => { alertasOperador.push({ evento, detalle }); },
     ahora: () => ahoraMs,
@@ -91,7 +97,7 @@ beforeEach(() => {
   docs.clear();
   config = { ...CONFIG_SALIDA_ARRANQUE, modo: 'api' };
   puertos = new Map();
-  eventos = []; alertasEnvio = []; alertasOperador = []; devueltos = [];
+  eventos = []; alertasEnvio = []; alertasOperador = []; devueltos = []; rechazosDevueltos = [];
 });
 
 describe('el camino feliz', () => {
@@ -346,6 +352,80 @@ describe('rechazo del TMS', () => {
   });
 });
 
+
+describe('el rechazo vuelve a la bandeja (T-A3-29)', () => {
+  const ERROR_FRACCION = { hoja: 'Mercancias', fila: 22, campo: 'Fracción Arancelaria', detalle: 'El valor VALOR-SINTETICO-98765 no existe en el catálogo' };
+  const puertoRechazo = (errores: Array<typeof ERROR_FRACCION>): SalidaTms => ({
+    async cargarPlantilla() { return { ok: false, clase: 'validacion', mensajeLlano: 'El sistema rechazó la carga.', errores }; },
+    consultarReque: async () => 'existe', consultarCaja: async () => 'existe',
+  });
+
+  it('el rechazo devuelve el documento a revisión con hallazgos ubicados, ANTES de avisar a la oficina y sin el valor citado', async () => {
+    puertos.set(A, puertoRechazo([ERROR_FRACCION]));
+    const e = sembrar(A, 1);
+    const r = await pasada();
+    expect(r).toMatchObject({ rechazados: 1, devueltosARevision: 1, errores: 0 });
+    expect((await leer(A, e.id)).estado).toBe('rechazado_tms');
+    expect(rechazosDevueltos).toHaveLength(1);
+    expect(rechazosDevueltos[0]).toMatchObject({ documentoId: e.documentoId, versionDoc: 1, ubicaciones: ['Mercancias!22!Fracción Arancelaria'] });
+    expect(rechazosDevueltos[0].hallazgos).toEqual([expect.objectContaining({ campo: 'fraccion_arancelaria', renglon: 0, severidad: 'bloqueo', origen: 'tms' })]);
+    expect(JSON.stringify([rechazosDevueltos, eventos, await leer(A, e.id)])).not.toContain('VALOR-SINTETICO-98765');
+    expect(alertasEnvio).toHaveLength(1);
+  });
+
+  it('un rechazo sin ubicación deja el hallazgo genérico con el mensaje llano del puerto', async () => {
+    puertos.set(A, puertoRechazo([]));
+    sembrar(A, 1);
+    await pasada();
+    expect(rechazosDevueltos[0].hallazgos).toEqual([expect.objectContaining({ campo: 'documento', mensaje: 'El sistema del cliente rechazó el archivo: El sistema rechazó la carga.' })]);
+  });
+
+  it('si no se pudo reabrir el documento, el lote no se cae: queda anotado y el envío sigue `rechazado_tms` con su alerta', async () => {
+    puertos.set(A, puertoRechazo([ERROR_FRACCION]));
+    const e = sembrar(A, 1);
+    const r = await pasada(deps({ devolverPorRechazo: async () => { throw new Error('base caída'); } }));
+    expect(r).toMatchObject({ rechazados: 1, devueltosARevision: 0, errores: 0, alertas: 1 });
+    expect(r.fallos.join(' ')).toContain('base caída');
+    expect((await leer(A, e.id)).estado).toBe('rechazado_tms');
+  });
+
+  it('sin bucle: el MISMO contenido que el TMS ya rechazó no se reenvía solo; vuelve a revisión pidiendo corrección', async () => {
+    const tms = puertoRechazo([ERROR_FRACCION]); puertos.set(A, tms);
+    const primero = sembrar(A, 1);
+    await pasada();
+    const huella = (await leer(A, primero.id)).plantillaSha256;
+    expect(huella).toMatch(/^[0-9a-f]{64}$/);
+    // Reaprobado SIN corregir nada que cambie la plantilla: otro envío (versión nueva), mismos bytes.
+    const llamadas = vi.fn(tms.cargarPlantilla.bind(tms));
+    puertos.set(A, { cargarPlantilla: llamadas, consultarReque: async () => 'existe', consultarCaja: async () => 'existe' });
+    const segundo = sembrarEnvio(A, { documentoId: primero.documentoId, versionDoc: 2, estado: 'pendiente_prechequeo', createdAt: new Date(ahoraMs).toISOString() });
+    docs.get(`${A}:${primero.documentoId}`)!.version = 2;
+    rechazosDevueltos = [];
+    const r = await pasada();
+    expect(llamadas).not.toHaveBeenCalled();
+    expect(r.enviados).toBe(0);
+    expect((await leer(A, segundo.id)).estado).toBe('descartado');
+    expect(rechazosDevueltos).toHaveLength(1);
+    expect(rechazosDevueltos[0].hallazgos[0]).toMatchObject({ codigo: 'tms_rechazo_repetido', severidad: 'bloqueo', origen: 'tms' });
+    expect(eventos.some((x) => x.tipo === 'envio_error' && x.detalle.causa === 'mismo_contenido_rechazado')).toBe(true);
+  });
+
+  it('una corrección que SÍ cambia la plantilla se envía normal', async () => {
+    puertos.set(A, puertoRechazo([ERROR_FRACCION]));
+    const primero = sembrar(A, 1);
+    await pasada();
+    const tms = puerto('ok'); puertos.set(A, tms);
+    const d = docs.get(`${A}:${primero.documentoId}`)!;
+    d.version = 2;
+    d.extraccion!.mercancias[0].descripcion = cv('Equipo de computo corregido');
+    const segundo = sembrarEnvio(A, { documentoId: primero.documentoId, versionDoc: 2, estado: 'pendiente_prechequeo', createdAt: new Date(ahoraMs).toISOString() });
+    const r = await pasada();
+    expect(r.enviados).toBe(1);
+    expect(tms.llamadas).toHaveLength(1);
+    expect((await leer(A, segundo.id)).estado).toBe('enviado');
+  });
+});
+
 describe('lo que nunca se envía', () => {
   it('versión del documento cambiada ⇒ `descartado`, 0 subidas', async () => {
     const tms = puerto('ok'); puertos.set(A, tms);
@@ -517,5 +597,52 @@ describe('el reloj y la infraestructura', () => {
     expect(r).toMatchObject({ conflictos: 1, enviados: 0 });
     expect(tms.llamadas).toHaveLength(0);
     expect((await leer(A, e.id)).estado).toBe('subido_a_mano');
+  });
+});
+
+describe('observabilidad mínima de la salida (T-A3-38)', () => {
+  const RFC = 'XAXX010101000'; // grep-limpio:ok
+  const llamadasLogger = () => [logger.info, logger.warn, logger.error, logger.debug].flatMap((f) => (f as unknown as { mock: { calls: unknown[][] } }).mock.calls);
+
+  beforeEach(() => { for (const f of [logger.info, logger.warn, logger.error, logger.debug]) (f as unknown as { mockClear(): void }).mockClear(); });
+
+  it('cada evento deja su renglón `cp_envio.<tipo>` con ids, y la pasada cierra con `cp_envio.pasada` con los contadores', async () => {
+    puertos.set(A, puerto('ok'));
+    const e = sembrar(A, 1);
+    await pasada();
+    const info = (logger.info as unknown as { mock: { calls: Array<[string, Record<string, unknown>]> } }).mock.calls;
+    const ev = info.find(([n]) => n === 'cp_envio.envio_enviado');
+    expect(ev?.[1]).toMatchObject({ tenantId: A, envioId: e.id, versionDoc: 1, duplicado: false });
+    const pasadaLog = info.find(([n]) => n === 'cp_envio.pasada');
+    expect(pasadaLog?.[1]).toMatchObject({ reclamados: 1, enviados: 1, envios_pendientes: 0, circuito_tms_abierto: false });
+  });
+
+  it('la pasada con el circuito abierto lo dice: `circuito_tms_abierto: true`, los pendientes cuentan lo soltado y se loguea `cp_envio.circuito_abierto`', async () => {
+    puertos.set(A, puerto('transitorio'));
+    for (let n = 1; n <= 6; n++) sembrar(A, n);
+    const r = await pasada();
+    const info = (logger.info as unknown as { mock: { calls: Array<[string, Record<string, unknown>]> } }).mock.calls;
+    expect(info.find(([n]) => n === 'cp_envio.pasada')?.[1]).toMatchObject({ circuito_tms_abierto: true, reintentos: 4, soltados: 2, envios_pendientes: 6 });
+    expect(enviosPendientes(r)).toBe(6);
+    const err = (logger.error as unknown as { mock: { calls: Array<[string, Record<string, unknown>]> } }).mock.calls;
+    expect(err.find(([n]) => n === 'cp_envio.circuito_abierto')?.[1]).toMatchObject({ tenantId: A, codigo: 'cp_tms_circuito_abierto' });
+  });
+
+  it('los logs no incluyen RFC ni correos: ni en un error de infraestructura que los traiga en el mensaje', async () => {
+    puertos.set(A, puerto('ok'));
+    sembrar(A, 1);
+    const d = deps({ actualizarEnvio: async () => { throw new Error(`fallo al guardar el envío de ${RFC} (contacto: persona@cliente.example)`); } });
+    const r = await pasada(d);
+    expect(r.errores).toBe(1);
+    expect(r.fallos.join(' ')).not.toContain(RFC);
+    const todo = JSON.stringify(llamadasLogger());
+    expect(todo).not.toContain(RFC);
+    expect(todo).not.toContain('persona@cliente.example');
+    expect(todo).toContain('[rfc]');
+  });
+
+  it('`sinPII` tapa RFC de moral y de física, en cualquier caja, y deja intacto lo demás', () => {
+    expect(sinPII('RFC ABC010101AB1 y ñaño800101xx9 aquí')).toBe('RFC [rfc] y [rfc] aquí'); // grep-limpio:ok
+    expect(sinPII('envío d0000000 intentos 3')).toBe('envío d0000000 intentos 3');
   });
 });
