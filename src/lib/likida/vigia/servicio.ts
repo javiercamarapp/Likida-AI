@@ -46,7 +46,7 @@ import { evaluarMolestia } from './molestia';
 import { prioridadDe } from './prioridad';
 import { decidirEnvio } from './politica';
 import { claveCorreo, debeRespaldarPorCorreo, hashCorreo, reintentarCorreosVencidos, respaldarPorCorreo, unirDestinatarios } from './respaldo_correo';
-import { pulirBorrador, redactarBorrador, type ViajeParaRedactar } from './redactor';
+import { pulirBorrador, redactarBorrador, trajoPieDeAviso, type ViajeParaRedactar } from './redactor';
 import { elegirRespuestaRapida } from './respuestas_rapidas';
 import type { ContextoAvisosFlota, DepsVigia, GuardaConversacion, RepoVigia } from './puertos';
 import { configParaCliente, INTENCIONES_DE_DATO, INTENCIONES_DESDE_0798 } from './tipos';
@@ -324,10 +324,31 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
     try { respuestaRapida = elegirRespuestaRapida(c.texto, await repo.respuestasRapidas(tenantId)); }
     catch (e) { logger.warn('vigia.respuestas_rapidas_no_leidas', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) }); }
   }
+  // LEG-32C13-C1: el hueco tiene dueño. Si la flota no capturó su aviso, el
+  // pie sale sin liga y el operador se entera por aquí, en vez de que el
+  // producto lo tape con un documento de otro responsable.
+  if (!contacto.avisoPrivacidadEn && !config.avisoPrivacidadUrl) {
+    logger.warn('vigia.aviso_privacidad_sin_url', { tenant: tenantId, conversacion: conv.id });
+  }
   let borrador = redactarBorrador({
     clasificacion: { intencion: cl.intencion, secundarias: cl.secundarias, senales },
     nombreContacto: contacto.nombre, nombreFlota, viaje, ahora,
-    primerContacto: !contacto.avisoPrivacidadEn, avisoPrivacidadUrl: config.avisoPrivacidadUrl ?? `${appUrl()}/privacidad`,
+    // LEG-32C13-C1 (auditoría 32 c13, CRÍTICO): aquí había un
+    // `?? `${appUrl()}/privacidad``. Esa página es la política de LIKIDA, y su
+    // propia cabecera (`src/app/privacidad/page.tsx:7-18`) declara que es el
+    // documento de quien CONTRATA Likida —el contralor—, con Likida como
+    // responsable, y que «servir uno como el otro dejaría a un grupo entero sin
+    // aviso». Quien recibe este pie es el contacto del CLIENTE de la flota: ni
+    // es titular de ese documento ni Likida es la responsable de sus datos. Se
+    // le estaba dando una liga falsa a un tercero.
+    //
+    // Sin URL de la flota el pie OMITE la liga (`redactor.ts:209` ya lo
+    // contempla) y se avisa, porque el hueco tiene dueño —la flota captura su
+    // aviso en la configuración del Vigía— y callarlo es lo que dejó esto vivo.
+    // Lo que esto NO arregla, y queda propuesto: que el aviso simplificado
+    // traiga las fracciones I a IV del art. 15 LFPDPPP, y que el texto del
+    // cliente no salga al modelo (`:186`) antes de que el aviso exista.
+    primerContacto: !contacto.avisoPrivacidadEn, avisoPrivacidadUrl: config.avisoPrivacidadUrl,
     respuestaRapida,
   });
   const folio = viaje.tipo === 'uno' ? viaje.estatus.folio : null;
@@ -481,7 +502,12 @@ async function enviarSaliente(e: EntradaEnviarSaliente, deps: DepsVigia): Promis
   if (r.ok) {
     await repo.marcarEnviado(e.tenantId, e.mensajeId, { via: r.via, wamid: r.id, ahora });
     await repo.marcarRespondida(e.tenantId, e.conversacionId, ahora);
-    if (!e.contacto.avisoPrivacidadEn) await repo.marcarAvisoPrivacidad(e.tenantId, e.contacto.id, ahora);
+    // LEG-C19-C1: la constancia se escribe por el PIE, no por el envío. Los dos
+    // caminos humanos (`responderComoHumano`, `aprobarMensaje` con texto
+    // editado) llegan acá con texto que nunca pasó por el redactor y por lo
+    // tanto sin pie; `marcarAvisoPrivacidad` es write-once (`repo.ts:744`), así
+    // que afirmarlo aquí dejaba al contacto sin aviso para siempre.
+    if (!e.contacto.avisoPrivacidadEn && trajoPieDeAviso(e.texto)) await repo.marcarAvisoPrivacidad(e.tenantId, e.contacto.id, ahora);
     await repo.evento(e.tenantId, { conversacionId: e.conversacionId, tipo: e.autoenviado ? 'autoenviado' : 'enviado', detalle: { via: r.via, ventana: r.ventana } });
     // Los archivos son un EXTRA: que fallen no deshace el texto que ya salió (queda a la vista del gerente).
     if (e.adjuntos.length > 0) {

@@ -40,7 +40,7 @@ function pintar(datos: DatosTablero, o: { puedeActuar?: boolean; ind?: ReturnTyp
 const datos = (viajes: ViajeTablero[], hitos: HitoFila[], extra: Partial<DatosTablero> = {}): DatosTablero => ({ viajes, hayMas: false, hitos, veredictos: [], evidencias: [], acciones: [], sitios: new Map(), ...extra });
 
 describe('el tablero de hitos — los episodios de «sin señal de vida» se LISTAN en pantalla', () => {
-  const ep = { id: 'e1', viajeId: 'v1', folio: 'F-77', operador: 'Juan Pérez', motivo: 'gps_obsoleto' as const, abiertoEn: hace(90), nivelEnviado: 3 as const, aviso1En: hace(89), aviso2En: hace(69), escaladoEn: hace(49), cerradoEn: null, cierreMotivo: null, respuesta: null };
+  const ep = { id: 'e1', viajeId: 'v1', folio: 'F-77', operador: 'Juan Pérez', motivo: 'gps_obsoleto' as const, abiertoEn: hace(90), nivelEnviado: 3 as const, aviso1En: hace(89), aviso2En: hace(69), escaladoEn: hace(49), ultimoError: null, cerradoEn: null, cierreMotivo: null, respuesta: null };
 
   it('lista cada episodio con folio, chofer, motivo, la cadena de avisos y dónde va; uno cerrado dice cómo terminó', () => {
     const html = pintar(datos([], []), { episodios: episodiosVista([ep, { ...ep, id: 'e2', folio: 'F-78', nivelEnviado: 1, aviso2En: null, escaladoEn: null, cerradoEn: hace(10), cierreMotivo: 'respondio', respuesta: 'estoy' }]) });
@@ -295,7 +295,7 @@ describe('el tablero de hitos — estados vacíos y avisos en lenguaje llano (T-
       ...H('2', { llegada_carga: hace(300), salida_carga: { estado: 'recibido', fuente: 'oficina', mensajeEn: hace(200), recibidoEn: hace(200) } }),
     ];
     const html = pintar(datos(viajes, hitos, { posiciones: new Map() }), {
-      episodios: episodiosVista([{ id: 'e1', viajeId: 'v1', folio: 'F-77', operador: 'Juan Pérez', motivo: 'gps_detenido', abiertoEn: hace(90), nivelEnviado: 2, aviso1En: hace(89), aviso2En: hace(69), escaladoEn: null, cerradoEn: null, cierreMotivo: null, respuesta: null }]),
+      episodios: episodiosVista([{ id: 'e1', viajeId: 'v1', folio: 'F-77', operador: 'Juan Pérez', motivo: 'gps_detenido', abiertoEn: hace(90), nivelEnviado: 2, aviso1En: hace(89), aviso2En: hace(69), escaladoEn: null, ultimoError: null, cerradoEn: null, cierreMotivo: null, respuesta: null }]),
     });
     // Texto visible = fuera de etiquetas (los atributos name/value de formularios no se leen como texto).
     // Sin regexp de filtrado HTML: se recorre el marcado con indexOf; el contenido de <script> no es texto visible.

@@ -41,6 +41,13 @@ vi.mock('@/lib/saas/suscripcion', () => ({
 vi.mock('@/lib/ratelimit', () => ({ bodyExcede: vi.fn(() => false) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/seguridad/eventos', () => ({ registrarEventoSeguridad: vi.fn(async () => {}) }));
+// OPE-32C13-C1 (auditoría 32 c13, CRÍTICO): `alerta.ts` declara `stripe\.` como
+// EVENTO DE DINERO (`EVENTOS_DE_DINERO`) y en todo `src/` no había una sola
+// llamada a `alertarOperador` con un evento `stripe.*` fuera de un test. Un
+// cobro que no se puede aplicar contestaba 500 y se quedaba en un
+// `logger.error` que nadie mira a las 3 a.m.
+const alertar = vi.fn(async () => true);
+vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: alertar }));
 
 // La marca NO se borra jamás desde 0132; `borrado` queda para AFIRMAR que
 // ningún camino la borra (el modo de falla "marca huérfana" murió).
@@ -62,6 +69,7 @@ function req(body: unknown, firma?: string): NextRequest {
 }
 
 beforeEach(() => {
+  alertar.mockClear();
   firmaValida.mockClear(); configurado.mockClear(); marcar.mockClear();
   aplicarSuscripcion.mockClear(); aplicarFactura.mockClear();
   tenantDeCustomer.mockClear(); planDePrice.mockClear(); borrado.mockClear();
@@ -142,6 +150,37 @@ describe('POST /api/stripe/webhook — la puerta del plan', () => {
     expect(r.status).toBe(500);
     expect(borrado).not.toHaveBeenCalled();
     expect(sellar).not.toHaveBeenCalled();
+  });
+
+  it('OPE-32C13-C1: si aplicar falla, se ALERTA al operador con el evento y el id — no solo un logger.error', async () => {
+    // El 500 hace que Stripe reintente con backoff de DÍAS. Si la causa es
+    // sistemática (un price sin plan ligado en /admin), el reintento nunca
+    // aplica: la flota pagó, su plan no se activa, y sin esta alerta lo único
+    // que queda es una línea de log. `stripe.` ya está declarado evento de
+    // dinero, así que esta alerta sale también por WhatsApp.
+    aplicarSuscripcion.mockRejectedValueOnce(new Error('price sin plan'));
+    const r = await POST(req({
+      id: 'evt-9', type: 'customer.subscription.created',
+      data: { object: { id: 'sub-9', customer: 'cus-9', items: { data: [{ price: { id: 'price-9' } }] }, status: 'active' } },
+    }));
+    expect(r.status).toBe(500);
+    expect(alertar).toHaveBeenCalledTimes(1);
+    const [evento, detalle] = alertar.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    // El nombre tiene que caer dentro de EVENTOS_DE_DINERO (/^stripe\./), o la
+    // alerta no sale por WhatsApp y el piso por hora la trata como cualquiera.
+    expect(evento).toMatch(/^stripe\./);
+    // Sin el id del evento y su tipo no hay forma de reconstruir QUÉ cobro se
+    // quedó sin aplicar, que es lo único que esta alerta existe para decir.
+    expect(detalle).toMatchObject({ id: 'evt-9', tipo: 'customer.subscription.created' });
+  });
+
+  it('OPE-32C13-C1 (el contraste): un evento que se aplica bien NO alerta a nadie', async () => {
+    const r = await POST(req({
+      id: 'evt-10', type: 'customer.subscription.created',
+      data: { object: { id: 'sub-10', customer: 'cus-10', items: { data: [{ price: { id: 'price-10' } }] }, status: 'active' } },
+    }));
+    expect(r.status).toBe(200);
+    expect(alertar).not.toHaveBeenCalled();
   });
 
   it("evento PENDIENTE (intento anterior muerto a medias): se RE-aplica y se sella", async () => {

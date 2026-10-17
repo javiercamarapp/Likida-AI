@@ -198,7 +198,7 @@ export function crearPuertos(opts: {
     viajesActivos: async (limite) => opts.viajes.filter((v) => v.estatus === 'abierto' && v.aceptadoEn).slice(0, limite),
     hitosDe: async (ids) => [...hitos.values()].filter((h) => ids.includes(h.viajeId)).map((h) => ({ ...h })),
     avisosDe: async (ids) => [...reclamos.entries()]
-      .map(([k, v]) => { const [hitoId, ciclo, clase, nivel] = k.split('|'); return { hitoId, ciclo: Number(ciclo), clase: clase as AvisoReclamado['clase'], nivel: Number(nivel), v }; })
+      .map(([k, v]) => { const [hitoId, ciclo, clase, nivel] = k.split('|'); return { hitoId, ciclo: Number(ciclo), clase: clase as AvisoReclamado['clase'], nivel: Number(nivel), entregado: v.ok, v }; })
       .filter((a) => ids.includes(a.hitoId)).map(({ v: _v, ...a }) => a),
     enviadosHoyPorChofer: async (ops, desde) => {
       const c: Record<string, number> = {};

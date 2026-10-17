@@ -8,6 +8,7 @@ import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 import { logger } from '@/lib/logger';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { hoyMx } from '@/lib/formato';
+import { alertarOperador } from '@/lib/observability/alerta';
 
 // ── EL TECHO DEL CUERPO (auditoría prod, DAT-40) ──────────────────────────
 //
@@ -115,9 +116,24 @@ export async function POST(req: NextRequest) {
     // 500 A PROPÓSITO: que Stripe reintente. La fila queda con
     // `aplicado_en = null`, así que el reintento entra como 'pendiente' y
     // vuelve a aplicar — nada que borrar, nada que quede huérfano.
-    logger.error('stripe.webhook.fallo', {
-      id: evt.id, tipo: evt.type, err: e instanceof Error ? e.message : String(e),
-    });
+    const detalle = { id: evt.id, tipo: evt.type, err: e instanceof Error ? e.message : String(e) };
+    logger.error('stripe.webhook.fallo', detalle);
+    // OPE-32C13-C1 (auditoría 32 c13, CRÍTICO): el 500 hace que Stripe
+    // reintente con backoff de DÍAS, y eso resuelve el fallo TRANSITORIO. El
+    // sistemático —un price sin plan ligado en /admin, un invoice cuyo tenant
+    // nunca va a resolverse— reintenta y vuelve a fallar hasta que Stripe
+    // desiste: la flota pagó, su plan no se activa, y lo único que quedaba era
+    // esta línea de log. `alerta.ts` ya declaraba `stripe.` dentro de
+    // `EVENTOS_DE_DINERO` —así que esto sale también por WhatsApp— y en todo
+    // `src/` no había una sola llamada con un evento `stripe.*`.
+    //
+    // Va DESPUÉS del log y sin poder tumbar la respuesta: `alertarOperador`
+    // nunca lanza (todo su cuerpo vive en un try) y de todos modos el `await`
+    // se protege, porque un fallo del canal de alertas no puede convertir un
+    // 500 reintentable en una excepción sin respuesta.
+    try {
+      await alertarOperador('stripe.webhook.fallo', detalle);
+    } catch { /* el canal de alertas no decide el código de respuesta */ }
     return new NextResponse('Error al aplicar', { status: 500 });
   }
 }

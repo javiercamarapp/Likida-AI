@@ -286,8 +286,32 @@ function seccionDatosUnidad(e: EstatusViaje, faltantes: string[], respaldo: Reco
 
 const SALUDA = (nombre: string | null) => (nombre ? `Hola ${nombre.split(/\s+/)[0]}` : 'Hola');
 
+/**
+ * Las dos frases del pie que la LFPDPPP exige y que NO son estilo: la liga al
+ * aviso (art. 15-16) y la salida (art. 26-II). Viven aquí, en un solo lugar,
+ * porque `guardiaDePulido` las usa para no dejar que el modelo se las coma:
+ * una segunda lista que mantener sincronizada sería el bug de mañana.
+ */
+export const MARCA_AVISO = 'Aviso de privacidad:';
+export const MARCA_BAJA = 'Para dejar de recibir mensajes escribe BAJA';
+
+/**
+ * ¿El texto que DE VERDAD salió llevaba el pie del aviso? La constancia del
+ * art. 16 no la justifica «hubo envío», la justifica «salió el pie», y por eso
+ * el predicado vive acá, junto a las marcas y a la guardia del pulido, y no en
+ * el servicio: una segunda definición sería el bug de mañana.
+ *
+ * El testigo es `MARCA_BAJA` porque es la única parte que el pie trae SIEMPRE:
+ * `MARCA_AVISO` depende de que la flota tenga liga de aviso configurada (ver
+ * `pieDePrimerContacto`), así que exigirla le negaría la constancia a una
+ * flota sin liga — otro problema, y no el de esta función.
+ */
+export function trajoPieDeAviso(texto: string): boolean {
+  return texto.includes(MARCA_BAJA);
+}
+
 function pieDePrimerContacto(nombreFlota: string, url: string | null): string {
-  return `\n\nTus mensajes se atienden con apoyo de un asistente automatizado de ${nombreFlota}.${url ? ` Aviso de privacidad: ${url}.` : ''} Para dejar de recibir mensajes escribe BAJA.`;
+  return `\n\nTus mensajes se atienden con apoyo de un asistente automatizado de ${nombreFlota}.${url ? ` ${MARCA_AVISO} ${url}.` : ''} ${MARCA_BAJA}.`;
 }
 
 const DATO: readonly Intencion[] = ['ubicacion', 'eta', 'documentos', 'factura_pod', 'datos_unidad'];
@@ -416,6 +440,18 @@ export function guardiaDePulido(pulido: string, borrador: Borrador, mensajeClien
   if (/[\w.+-]+@[\w-]+\.[\w.-]+/.test(t) && !/[\w.+-]+@[\w-]+\.[\w.-]+/.test(borrador.texto)) return { ok: false, motivo: 'correo_nuevo' };
   if (folio && !t.toUpperCase().includes(folio.toUpperCase()) && borrador.texto.toUpperCase().includes(folio.toUpperCase())) {
     return { ok: false, motivo: 'folio_perdido' };
+  }
+  // LEG-C18-C1: el pie del primer contacto no es estilo, es la constancia.
+  // `servicio.ts:423` escribe `marcarAvisoPrivacidad` por el ÉXITO DEL ENVÍO, y
+  // el update lleva `.is('aviso_privacidad_en', null)`: se escribe una vez y no
+  // se corrige nunca. Si el modelo se come el pie, la base afirma que se
+  // entregó un aviso que el contacto no recibió — y quitarlo no disparaba
+  // ninguna de las guardias de arriba: el texto queda MÁS corto, sin cifras
+  // nuevas, y `liga_nueva` solo mira las que se AGREGAN, no la que se pierde.
+  // El invariante se deriva del borrador (si no lo traía, no hay nada que
+  // perder), igual que `folio_perdido`.
+  for (const marca of [MARCA_AVISO, MARCA_BAJA]) {
+    if (borrador.texto.includes(marca) && !t.includes(marca)) return { ok: false, motivo: 'pie_perdido' };
   }
   return { ok: true, motivo: null };
 }

@@ -75,7 +75,19 @@ export interface PuertosConductor {
   cerrarVencidos?(): Promise<number>;
   viajesActivos(limite: number): Promise<ViajeContexto[]>;
   hitosDe(viajeIds: string[]): Promise<HitoFila[]>;
-  avisosDe(hitoIds: string[]): Promise<Array<AvisoReclamado & { hitoId: string }>>;
+  /**
+   * AGE-C17-A1 (auditoría 32 c17): `entregado` es el desenlace del claim.
+   *
+   * `viaje_hito_aviso` es tabla de CLAIMS — la fila nace al apartar la llave de
+   * idempotencia, antes de saber si Meta aceptó. Para la escalera («¿ya intenté
+   * este aviso?») eso es correcto y no cambia. Pero lo que se le DICE al jefe
+   * («sin respuesta a 3 avisos») tiene que contar ENTREGAS, así que el puerto
+   * las carga. `null` = claim abierto, todavía sin cerrar.
+   *
+   * Va aquí y no en `AvisoReclamado` a propósito: el planificador decide por
+   * idempotencia y no debe poder mirar esto.
+   */
+  avisosDe(hitoIds: string[]): Promise<Array<AvisoReclamado & { hitoId: string; entregado: boolean | null }>>;
   enviadosHoyPorChofer(operadorIds: string[], desde: Date): Promise<Record<string, number>>;
   configDe(tenantId: string): Promise<ConfigConductor>;
   /** T-A5-42: los ciclos por servicio de la flota (0807). Opcional: sin puerto, o sin filas, todos los viajes siguen el ciclo actual. */
@@ -335,7 +347,7 @@ type Escalacion = Extract<AccionPlan, { tipo: 'escalar' }>;
 /** Ejecuta una escalación (claim → destinatarios → envío → marca). Devuelve cómo terminó. */
 async function escalar(
   p: PuertosConductor, v: ViajeContexto, hs: HitoFila[], a: Escalacion,
-  avisos: ReadonlyArray<AvisoReclamado & { hitoId: string }>, ahora: Date, r: ResultadoConductor,
+  avisos: ReadonlyArray<AvisoReclamado & { hitoId: string; entregado: boolean | null }>, ahora: Date, r: ResultadoConductor,
   motivoForzado?: MotivoEscalacion,
 ): Promise<'ok' | 'reintentable' | 'sin_envio' | 'perdido'> {
   const claim = nuevoAviso(v, a.hito, 'escalacion', a.nivel, null);
@@ -354,7 +366,12 @@ async function escalar(
     return 'sin_envio';
   }
 
-  const avisosAlChofer = avisos.filter((x) => x.hitoId === a.hito.id && x.ciclo === a.hito.ciclo && (x.clase === 'solicitud' || x.clase === 'recordatorio')).length;
+  // AGE-C17-A1: `entregado === true`, no «existe el claim». Un teléfono mal
+  // capturado dejaba 3 filas `ok=false` y el jefe leía «sin respuesta a 3
+  // avisos» de mensajes que nunca salieron. Mismo criterio que `armarSenalVida`
+  // ya aplicaba («un rechazo definitivo no es "se le avisó"»).
+  const avisosAlChofer = avisos.filter((x) => x.hitoId === a.hito.id && x.ciclo === a.hito.ciclo
+    && (x.clase === 'solicitud' || x.clase === 'recordatorio') && x.entregado === true).length;
   const ubic = await p.ubicacion(v, hs, ahora);
   const msg = armarEscalacion(a.hito, v, a.nivel, motivoForzado ?? a.motivo, avisosAlChofer, ubic);
 

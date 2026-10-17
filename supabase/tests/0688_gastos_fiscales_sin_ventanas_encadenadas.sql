@@ -103,7 +103,19 @@ AS $function$
     select bc.*,
       min(bc.rfc_emisor) over (
         partition by unaccent(lower(bc.concepto)), coalesce(bc.folio_norm, bc.folio), bc.monto
-      ) as rfc_emisor_del_grupo
+      ) as rfc_emisor_del_grupo,
+      -- FIS-32C13-C1 (0702): el oraculo recibe el MISMO desempate que la
+      -- funcion viva. No es «ajustar la prueba hasta que pase»: este oraculo
+      -- existe para demostrar que la pasada estrecha de la 0688 no cambio la
+      -- SALIDA, y si su tie-break se quedara en el de la 0367 dejaria de medir
+      -- la reestructuracion y empezaria a medir el desempate --que es lo que
+      -- `supabase/tests/0702_panel_fiscal_copia_legible.sql` vigila, con copias
+      -- que DIFIEREN. El campo y los dos `order by` son el unico cambio.
+      case
+        when bc.forma_pago is null then 1
+        when bc.forma_pago = '99' and not bc.pagado then 1
+        else 0
+      end as sin_forma_pago_util
     from base_cruda bc
   ),
   con_censo_de_uuids as (
@@ -149,10 +161,10 @@ AS $function$
               coalesce(bc.folio_norm, bc.folio),
               bc.monto,
               coalesce(bc.rfc_emisor, bc.rfc_emisor_del_grupo, '')
-            order by bc.created_at, bc.id
+            order by bc.sin_forma_pago_util, bc.created_at, bc.id
           )
         when bc.cfdi_uuid is not null then
-          row_number() over (partition by lower(bc.cfdi_uuid), coalesce(bc.cfdi_orden, 1) order by bc.created_at, bc.id)
+          row_number() over (partition by lower(bc.cfdi_uuid), coalesce(bc.cfdi_orden, 1) order by bc.sin_forma_pago_util, bc.created_at, bc.id)
         when bc.folio is not null then
           -- DAT32C-C2 (0359): el folio lo numera cada estacion y se reinicia por
           -- emisor, asi que dos tickets legitimos de $2,500 con folio 1234 de
@@ -164,7 +176,7 @@ AS $function$
               coalesce(bc.folio_norm, bc.folio),
               bc.monto,
               coalesce(bc.rfc_emisor, bc.rfc_emisor_del_grupo, '')
-            order by bc.created_at, bc.id
+            order by bc.sin_forma_pago_util, bc.created_at, bc.id
           )
         else 1
       end as orden_copia

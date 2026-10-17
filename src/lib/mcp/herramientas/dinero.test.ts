@@ -264,6 +264,35 @@ describe('herramientaCuadreViaje.ejecutar', () => {
     expect(r.texto).toBe(contarRenglon(renglon));
     expect(r.estructurado).toEqual({ viaje: renglon });
   });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // TOO-32C13-A1 (auditoría 32 c13, ALTO): `estructurado` devolvía el
+  // `RenglonLibro` COMPLETO, y `libro_viaje.ts:704` lo llena con
+  // `operador: operador?.nombre`. `contarRenglon` nunca imprime al operador,
+  // así que el nombre del chofer salía hacia el proveedor del modelo en un
+  // campo que la respuesta en pantalla no muestra.
+  //
+  // El propio módulo hermano declara la regla contraria, literal:
+  // «MINIMIZACIÓN: el nombre del operador NO se devuelve … un cliente MCP es
+  // un tercero» (`mcp/herramientas/viajes.ts:9-12`), y `busqueda.ts:100-106`
+  // recorta a mano sobre el MISMO `getLibroViaje`.
+  //
+  // Y la suite era ciega por construcción: el único caso que tocaba este
+  // camino sembraba `operador: null` en su fixture, así que la fuga no podía
+  // fallar ninguna aserción. Aquí se siembra un nombre.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('TOO-32C13-A1: el nombre del operador NO cruza al cliente MCP, ni en el texto ni en `estructurado`', async () => {
+    resolverViaje.mockResolvedValue([VIAJE]);
+    const renglon = renglonBase({ ingreso: 10000, comprobado: 6000, operador: 'Juan Pérez Hernández' });
+    getLibroViaje.mockResolvedValue(renglon);
+    const r = await herramientaCuadreViaje.ejecutar('t1', { viaje: 'F-100' }, { alcanza: () => true });
+    expect(JSON.stringify(r.estructurado)).not.toContain('Juan Pérez');
+    expect(r.texto).not.toContain('Juan Pérez');
+    // El CAMPO sigue existiendo, en null: un cliente que lo lee no se rompe,
+    // simplemente no recibe el dato. Lo demás del renglón no se toca.
+    expect((r.estructurado as { viaje: { operador: unknown; ingreso: unknown } }).viaje)
+      .toMatchObject({ operador: null, ingreso: 10000 });
+  });
 });
 
 // ── por_facturar ─────────────────────────────────────────────────────────

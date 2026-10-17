@@ -1237,6 +1237,63 @@ export function resumirCombustibleCasetas(gastos: GastoFiscal[]): ResumenCombust
   });
 }
 
+/**
+ * Gasto agrupado por concepto, sobre comprobantes YA DEDUPLICADOS.
+ *
+ * AUDITORÍA 32 c16, ARQ-A3 (CRÍTICO, reincidente desde la c13): la misma
+ * verdad del dinero tenía DOS sedes. `/dashboard/combustible-casetas` pintaba
+ * `gasto_por_concepto_tenant` (mig. `0150:284-287`), que suma `gasto` CRUDO
+ * —`select coalesce(concepto,'otro'), count(*), sum(monto) … group by 1`, sin
+ * un solo `row_number()`—, mientras el PDF, la póliza, WhatsApp al chofer y
+ * `/dashboard/contador` deduplican por la 0702 y por `copiasDeComprobante`
+ * (`cuadre/engine.ts:529`).
+ *
+ * MEDIDO contra PostgreSQL 16.15 con las 439 migraciones aplicadas, sobre el
+ * par mixto que la 0365 documenta como «la ÚNICA forma que puede tomar un par
+ * de copias de un comprobante con folio fiscal» (un ticket de diésel de
+ * $2,500, folio 1234, fotografiado dos veces: la 1ª sin CFDI porque el OCR lo
+ * leyó ilegible, la 2ª con CFDI, que es el camino NORMAL del producto —
+ * `processor.ts:492` pide la segunda foto, y `uq_gasto_cfdi_uuid` impide que
+ * las dos lleven el UUID):
+ *
+ *   gasto_por_concepto_tenant            → diesel · n 2 · $5,000.00
+ *   gastos_fiscales_agregados_tenant     → diesel · 1 fila · $2,500.00
+ *
+ * El contralor abre esta pantalla para el cierre con el PDF al lado. Ver
+ * $5,000 contra $2,500 no se lee como un bug de agregación: se lee como que el
+ * producto no sabe cuánto gastó la flota, en el único número que la flota ya
+ * conoce de memoria.
+ *
+ * Esta función es el puente que faltaba, y vive junto a
+ * `resumirCombustibleCasetas` a propósito: las dos consumen `GastoFiscal[]` de
+ * `getGastosFiscales`, o sea la salida de la 0702, o sea la MISMA sede que el
+ * PDF. No es un tercer agregador — es el mismo, agrupado por concepto.
+ *
+ * `pesoDe` y no `.length`: una celda consolidada por
+ * `consolidarCeldasPorEmisor` representa `n` comprobantes, y el rótulo de la
+ * pantalla dice «cargas registradas». Es la misma cuenta que `n` de
+ * `resumirCombustibleCasetas`.
+ */
+export function gastoPorConceptoFiscal(
+  gastos: GastoFiscal[],
+): { concepto: string; n: number; total: number }[] {
+  const porConcepto = new Map<string, { concepto: string; n: number; total: number }>();
+  for (const g of gastos) {
+    // `coalesce(concepto, 'otro')` de la 0150: un comprobante sin concepto
+    // sigue contando, y cae en el mismo cajón que antes.
+    const clave = g.concepto || 'otro';
+    const fila = porConcepto.get(clave) ?? { concepto: clave, n: 0, total: 0 };
+    fila.n += pesoDe(g);
+    fila.total += g.monto;
+    porConcepto.set(clave, fila);
+  }
+  return [...porConcepto.values()]
+    .map((f) => ({ ...f, total: round2(f.total) }))
+    // Mismo orden que la 0150 (`order by total desc, concepto`), para que la
+    // Dona y las HBars no se reordenen por el cambio de sede.
+    .sort((a, b) => b.total - a.total || a.concepto.localeCompare(b.concepto));
+}
+
 // AUDITORÍA 28, FIS-B2 (BAJO, reincidente): `tope15DeGastos` se retiró de
 // aquí. No tenía llamador en producción — solo sus propias pruebas — y lo
 // vivo del 15% en el panel del contador es `combustibleEjercicioDe` (arriba,

@@ -31,7 +31,16 @@ const dirBin = (): string | null => {
 };
 const BIN = dirBin();
 const OPENSSL = spawnSync('which', ['openssl']).status === 0;
-const puedeCorrer = BIN !== null && OPENSSL;
+// `initdb` se NIEGA a correr como root («cannot be run as root»), así que tener
+// el binario no es lo mismo que poder usarlo. El sondeo miraba sólo si existe, y
+// en cualquier contenedor que corra como root --el de la rutina de auditoría
+// diaria en la nube, entre otros-- la suite completa salía ROJA con un error de
+// `initdb` en vez de un error de código. Eso rompe lo único que una corrida
+// desatendida necesita: distinguir «el código se rompió» de «el entorno no
+// puede». En GitHub Actions el job corre como `runner`, no como root, así que
+// esta guarda no quita cobertura donde importa.
+const ROOT = typeof process.getuid === 'function' && process.getuid() === 0;
+const puedeCorrer = BIN !== null && OPENSSL && !ROOT;
 
 const puertoLibre = (): Promise<number> => new Promise((ok, mal) => {
   const s = net.createServer();

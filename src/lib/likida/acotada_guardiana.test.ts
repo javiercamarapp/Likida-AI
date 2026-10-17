@@ -49,6 +49,14 @@ const GUARDADOS = [
   'src/lib/likida/clientes.ts',
   'src/lib/likida/facturacion_clientes.ts',
   'src/lib/likida/operacion.ts',
+  // AUDITORÍA 32 c18, BAC-C18-A2: este guardia vigilaba al LECTOR de
+  // facturación (`facturacion_clientes.ts`) y dejaba al ESCRITOR fuera. El
+  // escritor tenía 9 consultas y 7 `acotada`: las dos sin techo eran el insert
+  // de `factura_viaje` y el update que lo COMPENSA. Sin techo, la compensación
+  // no alcanza a correr y queda una factura viva sin ligas, cobrable y muda.
+  // Un guardia que cubre la lectura del dinero y no su escritura mide lo que
+  // menos cuesta.
+  'src/lib/likida/facturacion_escritura.ts',
 ];
 
 describe('toda consulta de los módulos del camino caliente lleva techo', () => {

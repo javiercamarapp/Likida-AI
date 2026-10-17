@@ -1367,6 +1367,13 @@ export interface EpisodioTablero {
   aviso1En: string | null;
   aviso2En: string | null;
   escaladoEn: string | null;
+  /**
+   * AGE-C19-A1: las tres marcas de arriba las escribe `reclamarNivelSenalVida`
+   * al RECLAMAR el nivel, ANTES de mandar nada. Si el envío falla después, la
+   * marca queda y el motivo cae acá. Sin este campo el tablero presenta un
+   * intento como un aviso entregado — la misma forma que AGE-C17-A1.
+   */
+  ultimoError: string | null;
   cerradoEn: string | null;
   cierreMotivo: 'respondio' | 'senal_recuperada' | 'viaje_cerrado' | 'atendido_por_jefe' | null;
   respuesta: 'estoy' | 'voy_a_cargar' | 'estoy_bien' | null;
@@ -1394,7 +1401,7 @@ export async function leerEpisodiosParaTablero(
     if (viajeIds.length === 0) return { episodios: [], hayMas: false };
   }
   let q = supabaseAdmin().from('viaje_senal_vida')
-    .select('id, viaje_id, motivo, abierto_en, nivel_enviado, aviso_1_en, aviso_2_en, escalado_en, cerrado_en, cierre_motivo, respuesta')
+    .select('id, viaje_id, motivo, abierto_en, nivel_enviado, aviso_1_en, aviso_2_en, escalado_en, ultimo_error, cerrado_en, cierre_motivo, respuesta')
     .eq('tenant_id', tenantId).gte('abierto_en', desde.toISOString());
   if (viajeIds) q = q.in('viaje_id', viajeIds.slice(0, 1000));
   const r = await acotada(q.order('abierto_en', { ascending: false }).order('id').limit(limite + 1), 'tablero.episodios');
@@ -1425,7 +1432,7 @@ export async function leerEpisodiosParaTablero(
         operador: v && typeof v.operador_id === 'string' ? nombrePorOp.get(v.operador_id) ?? null : null,
         motivo: x.motivo === 'gps_detenido' ? 'gps_detenido' : 'gps_obsoleto',
         abiertoEn: String(x.abierto_en), nivelEnviado: (nivel === 1 || nivel === 2 || nivel === 3 ? nivel : 0),
-        aviso1En: str(x.aviso_1_en), aviso2En: str(x.aviso_2_en), escaladoEn: str(x.escalado_en), cerradoEn: str(x.cerrado_en),
+        aviso1En: str(x.aviso_1_en), aviso2En: str(x.aviso_2_en), escaladoEn: str(x.escalado_en), ultimoError: str(x.ultimo_error), cerradoEn: str(x.cerrado_en),
         cierreMotivo: (['respondio', 'senal_recuperada', 'viaje_cerrado', 'atendido_por_jefe'] as const).find((c) => c === x.cierre_motivo) ?? null,
         respuesta: (['estoy', 'voy_a_cargar', 'estoy_bien'] as const).find((c) => c === x.respuesta) ?? null,
       };

@@ -37,7 +37,7 @@
     "leaflet": "^1.9.4",
     "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^1.48.0",
-    "next": "^16.3.6",
+    "next": "^16.3.8",
     "openai": "^7.23.0",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^2.4.5",
@@ -51,9 +51,10 @@
     "zod": "^4.6.5",
     "zxing-wasm": "^3.1.4"
   },
-  "//overrides": "sharp procesa las fotos que llegan por WhatsApp — entrada NO autenticada. Next trae su propia copia anidada, así que subir la dependencia directa no basta: sin este override quedaba un sharp <0.35.0 vulnerable (CVE-2026-33327/33328/35590/35591 en libvips) en el árbol, alcanzable desde la primera foto de un chofer.",
+  "//overrides": "sharp procesa las fotos que llegan por WhatsApp — entrada NO autenticada. Next trae su propia copia anidada, así que subir la dependencia directa no basta: sin este override quedaba un sharp <0.35.0 vulnerable (CVE-2026-33327/33328/35590/35591 en libvips) en el árbol, alcanzable desde la primera foto de un chofer. source-map-js entra por override y no como dependencia directa porque esta app NO lo importa: lo piden postcss, @tailwindcss/node, magicast y la copia anidada de vite, cuatro veces con el mismo rango ^1.2.1, y 1.2.1 está en el rango de GHSA-68fv-2mgg-jv7q (DoS del event loop por desplazamientos de sección indexados). El camino de explotación en producción es implausible —postcss no está en la ruta de un request— pero la puerta de ci.yml no mide alcanzabilidad: scripts/ci/audit-runtime.mjs:34 sale 1 con cualquier high en runtime, sin lista de excepciones, así que TODO PR nacía rojo por esto.",
   "overrides": {
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.3",
+    "source-map-js": "^1.2.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",

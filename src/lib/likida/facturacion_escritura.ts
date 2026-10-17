@@ -55,7 +55,9 @@ export interface FacturaCruda {
   subtotal: string;
   iva: string;
   /** Retención del 4% de IVA (FIS-M3, mig. 0351). Vacía = sin retención (el
-   *  caso común hoy: ningún formulario la teclea todavía). */
+   *  caso de un cliente persona física). Cableada en el formulario desde
+   *  FIS-32C13-C1: el campo existía y nadie lo tecleaba, así que la cartera
+   *  quedaba 4% arriba del CFDI que Likida timbra. */
   retencion?: string;
   /** La SERIE del CFDI (0166, RES-22). Vacía = la flota no usa series. */
   serie: string;
@@ -153,8 +155,10 @@ export function validarFactura(c: FacturaCruda): FacturaValida {
   // siempre declara su IVA, aunque sea $0 (tasa 0% o exento) — y ese $0
   // tecleado es una medición, no un relleno.
   const iva = montoTecleado(c.iva, 'El IVA', { obligatorio: true }) as number;
-  // FIS-M3 (mig. 0351): retención del 4% de IVA, opcional — sin ella (el
-  // caso de hoy) el cálculo es idéntico al de siempre.
+  // FIS-M3 (mig. 0351): retención del 4% de IVA, opcional. Vacía = 0, que es
+  // el caso de un cliente persona física; con cliente persona moral viene
+  // tecleada desde el formulario (FIS-32C13-C1) porque el CFDI que Likida
+  // timbra ya la descontó del Total.
   const retencion = montoTecleado(c.retencion ?? '', 'La retención', { obligatorio: false }) ?? 0;
   // Redondeo a centavos ANTES de sumar: 0.1 + 0.2 en binario no es 0.30, y el
   // constraint `factura_total_cuadra` tolera un centavo, no una cola binaria.
@@ -458,11 +462,26 @@ export async function crearFactura(
   // cancelada y decidir. Que la cancelada siga ocupando su lugar es
   // deliberado (0166): es un consecutivo fiscal, no una lista de pendientes.
   if (f.viajeIds.length > 0) {
-    const { error: errLigas } = await supabaseAdmin().from('factura_viaje')
-      .insert(f.viajeIds.map((v) => ({ factura_id: facturaId, viaje_id: v })));
+    // BAC-C18-A2: estas DOS eran las únicas consultas del archivo sin techo (9
+    // consultas, 7 `acotada`), y son justo la escritura de las ligas y la
+    // compensación que la deshace. Sin techo heredaban los 300 s de undici: la
+    // invocación muere antes, la compensación NO corre, y queda una
+    // `factura_emitida` viva sin una sola liga a viaje —la cartera la cobra y
+    // `armarEnLaMesa` deja sus viajes en «liquidados sin facturar»— sin una
+    // línea de log. Con techo, agotarlo entra por el mismo `{data:null,error}`
+    // (`presupuesto.ts:254`), así que la compensación corre y, si ella también
+    // se agota, el `facturacion.alta_a_medias` de abajo sale con su `facturaId`.
+    const { error: errLigas } = await acotada(
+      supabaseAdmin().from('factura_viaje')
+        .insert(f.viajeIds.map((v) => ({ factura_id: facturaId, viaje_id: v }))),
+      'crearFactura.ligas',
+    );
     if (errLigas) {
-      const { error: errDeshacer } = await supabaseAdmin().from('factura_emitida')
-        .update({ estatus: 'cancelada' }).eq('id', facturaId).eq('tenant_id', tenantId);
+      const { error: errDeshacer } = await acotada(
+        supabaseAdmin().from('factura_emitida')
+          .update({ estatus: 'cancelada' }).eq('id', facturaId).eq('tenant_id', tenantId),
+        'crearFactura.deshacer',
+      );
       if (errDeshacer) {
         logger.error('facturacion.alta_a_medias', {
           tenantId, facturaId,
