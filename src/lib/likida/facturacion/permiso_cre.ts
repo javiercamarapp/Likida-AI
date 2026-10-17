@@ -23,7 +23,7 @@
 // Cubre 12,625 de las ~14,300 estaciones del padrón (88%). Lo que falta son 676
 // páginas que fallaron por timeout y las fichas cuya "compañía" venía corrida,
 // que se descartan a propósito. Se regenera con
-// `scripts/cosecha/generar-tabla-cre.mjs` sin tocar el código.
+// una herramienta local de cosecha (fuera del repo) sin tocar el código.
 //
 // Es seguro usarla incompleta porque `identificarPorPermiso` devuelve TRES
 // estados y nunca dos. La distinción es la lección que este repo aprendió cinco

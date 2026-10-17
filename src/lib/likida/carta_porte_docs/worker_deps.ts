@@ -5,6 +5,7 @@
 import { avisarOficina } from '@/lib/meta/aviso_oficina';
 import { telefonoJefeDe } from '../contactos';
 import * as repo from './repo';
+import { telefonoDelRevisor } from './revisor';
 import { DIAS_RETENCION, procesarDocumento, type DepsServicio } from './servicio';
 import type { DepsWorker } from './worker';
 
@@ -20,6 +21,7 @@ export function depsWorkerReales(servicio: DepsServicio = {}): DepsWorker {
     reclamarAviso: repo.reclamarAvisoDoc,
     liberarAviso: repo.liberarAvisoDoc,
     telefonoOficina: telefonoJefeDe,
+    telefonoRevisor: telefonoDelRevisor,
     avisar: (telefono, texto, parametros, contexto) => avisarOficina(telefono, texto, { parametros, contexto }),
     evento: (tenantId, id, tipo, detalle) => repo.registrarEvento(tenantId, id, tipo, null, detalle),
     ahora: () => Date.now(),

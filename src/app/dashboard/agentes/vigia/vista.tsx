@@ -1,11 +1,13 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { UsersRound, Hand, Clock, Flame, Inbox, ShieldCheck, History, Settings2, AlertTriangle, Mail } from 'lucide-react';
 import { numero, fechaHoraMx } from '@/lib/formato';
 import type { DatosTablero, ConversacionTablero } from '@/lib/likida/vigia/repo';
+import { tarjetasInsights, type InsightsEntrada } from '@/lib/likida/vigia/insights';
 import { BarraPagina } from '../../resumen-visual';
 import { Bloque, Barra, EsqTabla } from '../../bloque';
 import {
-  FormaBorrador, BotonConversacion, FormaResponder, FormaConfig, FormaAlta, FormaDirector, AccionesContacto, type AccionVigia,
+  FormaBorrador, BotonConversacion, FormaResponder, FormaConfig, FormaAlta, FormaDirector, FormaServicio, AccionesContacto, type AccionVigia,
 } from './controles';
 
 export interface AccionesVigia {
@@ -16,6 +18,20 @@ export interface AccionesVigia {
   contacto: AccionVigia;
   /** 0673: alta, corrección y baja de un director de la lista de avisos (solo el dueño). */
   director: AccionVigia;
+  /** 0798: alta, corrección y baja de una persona de «servicio al cliente» (solo el dueño). */
+  servicio?: AccionVigia;
+}
+
+const ENLACE = 'hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]';
+
+/** T-A4-22: el acceso a la bandeja de avisos de viaje, con cuántos esperan a una persona. Si no se pudo contar, el enlace va sin número. */
+export async function EnlaceAvisos({ sufijo, pendientes }: { sufijo: string; pendientes?: Promise<number | null> }) {
+  const n = pendientes ? await pendientes.catch(() => null) : null;
+  return (
+    <Link href={`/dashboard/agentes/vigia/avisos${sufijo}`} className={ENLACE}>
+      Avisos de viaje{typeof n === 'number' && n > 0 ? ` (${n} por revisar)` : ''}
+    </Link>
+  );
 }
 
 /** Minutos enteros que lleva esperando una conversación (0 si nadie espera). */
@@ -30,6 +46,16 @@ export function duracion(min: number): string {
   const h = Math.floor(min / 60);
   const r = min % 60;
   return r === 0 ? `${numero(h)} h` : `${numero(h)} h ${numero(r)} min`;
+}
+
+/**
+ * Orden del tablero (0798): primero la prioridad alta, luego quien lleva más tiempo esperando, y por último el id para que sea
+ * estable. PURA; no muta la lista. Solo ordena: no cambia ningún umbral de aviso.
+ */
+export function ordenarPorPrioridad<T extends Pick<ConversacionTablero, 'id' | 'prioridad' | 'sinRespuestaDesde'>>(lista: readonly T[], ahoraMs: number): T[] {
+  return [...lista].sort((a, b) => (b.prioridad ?? 0) - (a.prioridad ?? 0)
+    || minutosDeEspera(b.sinRespuestaDesde, ahoraMs) - minutosDeEspera(a.sinRespuestaDesde, ahoraMs)
+    || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 /** Por qué una conversación es una EXCEPCIÓN (vacío = no lo es). PURA. */
@@ -69,9 +95,13 @@ export const TEXTO_ESTADO_CORREO: Record<string, string> = {
   red: 'No se pudo mandar por correo: falla de red o sin confirmar',
 };
 
-export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministrar, acciones, sufijo = '' }: {
+export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministrar, acciones, sufijo = '', avisosPendientes, standby = false }: {
   datos: Promise<DatosTablero>;
+  /** T-A4-32: perfil cinco_agentes → se ocultan los controles stand-by (autoenvío, POD adjunto). Sin perfil: idéntico a hoy. */
+  standby?: boolean;
   sufijo?: string;
+  /** T-A4-22: cuántos avisos de viaje esperan a una persona (`null` = no se pudo contar). Opcional: sin él el enlace va sin número. */
+  avisosPendientes?: Promise<number | null>;
   ahoraMs: number;
   /** flota_admin y encargado deciden por los clientes; el resto solo mira. */
   puedeDecidir: boolean;
@@ -89,13 +119,18 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
         <div className="px-5 py-5 flex-1 space-y-4">
           <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12.5px]">
             <Link href={`/dashboard/agentes/vigia/historial${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Grupos críticos e histórico (FAQs y tendencias)</Link>
+            <Link href={`/dashboard/agentes/vigia/programa${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Programa de despacho (subir el archivo del día)</Link>
+            <Link href={`/dashboard/agentes/vigia/importacion${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Estatus de importación (derivado del programa)</Link>
+            <Suspense fallback={<Link href={`/dashboard/agentes/vigia/avisos${sufijo}`} className={ENLACE}>Avisos de viaje</Link>}>
+              <EnlaceAvisos sufijo={sufijo} pendientes={avisosPendientes} />
+            </Suspense>
           </nav>
           <Bloque mensaje="No se pudo leer el tablero del Vigía." esqueleto={<EsqKpis />}>
             <BloqueEstadoYKpis datos={datos} ahoraMs={ahoraMs} />
           </Bloque>
 
           <Bloque mensaje="No se pudo leer la cola de aprobación." esqueleto={<EsqTabla filas={3} />}>
-            <BloqueAprobacion datos={datos} puedeDecidir={puedeDecidir} acciones={acciones} />
+            <BloqueAprobacion datos={datos} puedeDecidir={puedeDecidir} acciones={acciones} standby={standby} />
           </Bloque>
 
           <Bloque mensaje="No se pudieron leer las excepciones." esqueleto={<EsqTabla filas={3} />}>
@@ -108,7 +143,7 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
 
           <div className="grid lg:grid-cols-2 gap-4">
             <Bloque mensaje="No se pudo leer la configuración." esqueleto={<EsqTabla filas={4} />}>
-              <BloqueConfiguracion datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
+              <BloqueConfiguracion datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} standby={standby} />
             </Bloque>
             <Bloque mensaje="No se pudo leer la bitácora." esqueleto={<EsqTabla filas={4} />}>
               <BloqueBitacora datos={datos} />
@@ -117,6 +152,10 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
 
           <Bloque mensaje="No se pudo leer la lista de directores." esqueleto={<EsqTabla filas={3} />}>
             <BloqueDirectores datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
+          </Bloque>
+
+          <Bloque mensaje="No se pudo leer la lista de servicio al cliente." esqueleto={<EsqTabla filas={3} />}>
+            <BloqueServicio datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
           </Bloque>
 
           <Bloque mensaje="No se pudieron leer los correos de respaldo." esqueleto={<EsqTabla filas={3} />}>
@@ -212,7 +251,7 @@ export async function BloqueEstadoYKpis({ datos: p, ahoraMs }: { datos: Promise<
   );
 }
 
-export async function BloqueAprobacion({ datos: p, puedeDecidir, acciones }: { datos: Promise<DatosTablero>; puedeDecidir: boolean; acciones: AccionesVigia }) {
+export async function BloqueAprobacion({ datos: p, puedeDecidir, acciones, standby = false }: { datos: Promise<DatosTablero>; puedeDecidir: boolean; acciones: AccionesVigia; standby?: boolean }) {
   const d = await p;
   return (
     <section className="card p-4" aria-labelledby="h-aprob">
@@ -235,7 +274,7 @@ export async function BloqueAprobacion({ datos: p, puedeDecidir, acciones }: { d
                 {m.riesgo && <Chip tono={m.riesgo === 'alto' ? 'bad' : m.riesgo === 'medio' ? 'warn' : 'ok'}>Riesgo {m.riesgo}</Chip>}
                 {m.senales.includes('inyeccion') && <Chip tono="bad">Mensaje con instrucciones raras</Chip>}
                 {m.senales.includes('folio_ajeno') && <Chip tono="warn">Preguntó por un folio que no es suyo</Chip>}
-                {m.adjuntos.length > 0 && <Chip>Adjuntará: {m.adjuntos.join(', ')}</Chip>}
+                {!standby && m.adjuntos.length > 0 && <Chip>Adjuntará: {m.adjuntos.join(', ')}</Chip>}
                 <span className="ml-auto text-[11px]" style={{ color: 'var(--faint)' }}>{fechaHoraMx(m.creadoEn)}</span>
               </div>
               <blockquote className="text-[12.5px] pl-3 border-l-2" style={{ borderColor: 'var(--line2)', color: 'var(--muted)' }}>
@@ -256,7 +295,7 @@ export async function BloqueExcepciones({ datos: p, ahoraMs, puedeDecidir, accio
   datos: Promise<DatosTablero>; ahoraMs: number; puedeDecidir: boolean; acciones: AccionesVigia;
 }) {
   const d = await p;
-  const filas = d.conversaciones
+  const filas = ordenarPorPrioridad(d.conversaciones, ahoraMs)
     .map((c) => ({ c, motivos: motivosDeExcepcion(c, d.config.slaRespuestaMin, ahoraMs) }))
     .filter((x) => x.motivos.length > 0);
   return (
@@ -314,13 +353,14 @@ export async function BloqueConversaciones({ datos: p, ahoraMs, puedeDecidir, ac
         <Leyenda>Ningún cliente tiene un hilo abierto.</Leyenda>
       ) : (
         <div className="space-y-3">
-          {d.conversaciones.map((c) => {
+          {ordenarPorPrioridad(d.conversaciones, ahoraMs).map((c) => {
             const espera = minutosDeEspera(c.sinRespuestaDesde, ahoraMs);
             return (
               <article key={c.id} className="hairline rounded-xl p-3.5 space-y-2" style={{ background: 'var(--surface)' }}>
                 <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
                   <strong>{c.clienteNombre ?? 'Cliente'}</strong>
                   <span style={{ color: 'var(--muted)' }}>{c.contactoNombre ?? ''}</span>
+                  {(c.prioridad ?? 0) >= 2 && <Chip tono="bad">Prioridad alta</Chip>}
                   <Chip tono={c.control === 'humano' ? 'ok' : undefined}>{c.control === 'humano' ? 'Lo lleva una persona' : 'Lo lleva el Vigía'}</Chip>
                   {c.sinRespuestaDesde
                     ? <Chip tono={espera >= d.config.slaRespuestaMin ? 'bad' : 'warn'}>Espera {duracion(espera)}</Chip>
@@ -348,7 +388,7 @@ export async function BloqueConversaciones({ datos: p, ahoraMs, puedeDecidir, ac
   );
 }
 
-export async function BloqueConfiguracion({ datos: p, puedeAdministrar, acciones }: { datos: Promise<DatosTablero>; puedeAdministrar: boolean; acciones: AccionesVigia }) {
+export async function BloqueConfiguracion({ datos: p, puedeAdministrar, acciones, standby = false }: { datos: Promise<DatosTablero>; puedeAdministrar: boolean; acciones: AccionesVigia; standby?: boolean }) {
   const { config } = await p;
   return (
     <section className="card p-4" aria-labelledby="h-cfg">
@@ -357,11 +397,11 @@ export async function BloqueConfiguracion({ datos: p, puedeAdministrar, acciones
         <h2 id="h-cfg" className="font-display text-[15px] font-semibold">Configuración y SLA</h2>
       </div>
       {puedeAdministrar ? (
-        <FormaConfig accion={acciones.config} valores={config} />
+        <FormaConfig accion={acciones.config} valores={config} standby={standby} />
       ) : (
         <ul className="text-[12.5px] space-y-1" style={{ color: 'var(--muted)' }}>
           <li>Vigía: {config.habilitado ? 'encendido' : 'apagado'}</li>
-          <li>Modo: {config.modoAprobacion === 'siempre' ? 'siempre aprobar' : 'autoenviar solo bajo riesgo ya validado'}</li>
+          {!standby && <li>Modo: {config.modoAprobacion === 'siempre' ? 'siempre aprobar' : 'autoenviar solo bajo riesgo ya validado'}</li>}
           <li>SLA de respuesta: {numero(config.slaRespuestaMin)} min · dueño a los {numero(config.slaRespuestaMin + config.escalarNivel2Min)} min · clientes críticos: {numero(Math.min(config.slaRespuestaMin, config.slaCriticoMin))} min</li>
           <li>Retención: {numero(config.retencionDias)} días</li>
           <li className="pt-1" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esto.</li>
@@ -501,6 +541,58 @@ export async function BloqueDirectores({ datos: p, puedeAdministrar, acciones }:
   );
 }
 
+/**
+ * 0798: «A quién avisa cuando no hay dato». Las personas de servicio al cliente a quienes el Vigía avisa primero cuando no tiene el dato
+ * que el cliente pide (p. ej. la caja de una unidad). Solo el dueño la edita; quien solo mira ve el teléfono enmascarado y ningún correo.
+ */
+export async function BloqueServicio({ datos: p, puedeAdministrar, acciones }: { datos: Promise<DatosTablero>; puedeAdministrar: boolean; acciones: AccionesVigia }) {
+  const d = await p;
+  const lista = d.servicio ?? [];
+  const nombreCliente = new Map(d.clientes.map((c) => [c.id, c.nombre]));
+  const accion = acciones.servicio;
+  return (
+    <section className="card p-4" aria-labelledby="h-srv">
+      <div className="flex items-center gap-2 mb-1">
+        <UsersRound width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+        <h2 id="h-srv" className="font-display text-[15px] font-semibold">A quién avisa cuando no hay dato</h2>
+      </div>
+      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+        Cuando un cliente pregunta algo que el sistema no tiene (por ejemplo, la caja de una unidad), el Vigía avisa en privado a estas personas de servicio al cliente.
+        {' '}Sin lista, se avisa como siempre: al responsable del cliente o al jefe de la flota. Hasta 10 personas.
+      </p>
+      {lista.length === 0 ? (
+        <p className="text-[12.5px] mb-3" style={{ color: 'var(--muted)' }}>Nadie en la lista: se avisa como siempre.</p>
+      ) : (
+        <div className="space-y-3 mb-3">
+          {lista.map((x) => (
+            <div key={x.id} className="hairline rounded-xl p-3" style={{ background: 'var(--surface)' }}>
+              {puedeAdministrar && accion ? (
+                <FormaServicio accion={accion} contacto={x} clientes={d.clientes} />
+              ) : (
+                <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+                  <strong>{x.nombre}</strong>
+                  <Chip>{x.clienteId ? (nombreCliente.get(x.clienteId) ?? 'Un cliente') : 'Todos los clientes'}</Chip>
+                  {x.telefono && <Chip>WhatsApp …{x.telefono.slice(-4)}</Chip>}
+                  {x.correo && <Chip>Correo</Chip>}
+                  {!x.activo && <Chip>Pausado</Chip>}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {puedeAdministrar && accion ? (
+        <div className="pt-3 border-t" style={{ borderColor: 'var(--line2)' }}>
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>Agregar a servicio al cliente</h3>
+          <FormaServicio accion={accion} clientes={d.clientes} />
+        </div>
+      ) : (
+        <p className="text-[11.5px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esta lista.</p>
+      )}
+    </section>
+  );
+}
+
 /** 0674: los últimos avisos mandados por correo como respaldo y su resultado. */
 export async function BloqueCorreos({ datos: p }: { datos: Promise<DatosTablero> }) {
   const { correos = [] } = await p;
@@ -526,6 +618,37 @@ export async function BloqueCorreos({ datos: p }: { datos: Promise<DatosTablero>
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+/**
+ * T-A4-41: insights del agente. Cada tarjeta dice qué pasó, qué significa y qué hacer, con su fuente; el ahorro de tiempo sale
+ * siempre rotulado como supuesto (no hay línea base real, B13) y nunca como porcentaje.
+ */
+export async function BloqueInsights({ datos: p }: { datos: Promise<InsightsEntrada> }) {
+  const tarjetas = tarjetasInsights(await p);
+  return (
+    <section className="card p-4" aria-labelledby="h-ins">
+      <h2 id="h-ins" className="font-display text-[15px] font-semibold mb-1">Resultados del agente</h2>
+      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+        Cada número dice de dónde sale. Donde depende de un supuesto o de reglas sin validar con datos reales, va marcado.
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {tarjetas.map((t) => (
+          <article key={t.id} className="hairline rounded-lg p-3.5" data-tarjeta={t.id}>
+            <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>{t.titulo}</div>
+            <div className="cifra-mono text-[20px] font-medium mt-1">{t.valor}</div>
+            {t.rotulo && <div className="mt-1"><Chip tono="warn">{t.rotulo}</Chip></div>}
+            <dl className="mt-2 space-y-1 text-[12px]">
+              <div><dt className="inline font-medium">Qué pasó: </dt><dd className="inline" style={{ color: 'var(--muted)' }}>{t.quePaso}</dd></div>
+              <div><dt className="inline font-medium">Qué significa: </dt><dd className="inline" style={{ color: 'var(--muted)' }}>{t.queSignifica}</dd></div>
+              <div><dt className="inline font-medium">Qué hacer: </dt><dd className="inline" style={{ color: 'var(--muted)' }}>{t.queHacer}</dd></div>
+            </dl>
+            <div className="text-[10.5px] mt-2" style={{ color: 'var(--faint)' }}>Fuente: {t.fuente}</div>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }

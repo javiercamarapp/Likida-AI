@@ -3,6 +3,7 @@ import type { DepsAtender } from './atender';
 import type { NuevoAviso, CierreAviso, PuertosConductor } from './ejecutor';
 import type { AvisoReclamado } from './planificador';
 import type { ViajeContexto } from './repo';
+import type { CicloServicioFila } from './ciclo_servicio';
 import { TIPOS_HITO, type HitoFila, type TipoHito } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -45,7 +46,9 @@ export function crearMemoria(opts: { viajes?: ViajeContexto[]; config?: Partial<
   const fallos = { registrar: false, config: false };
   const validaciones: Array<{ hito: string; tipo: string; pin: boolean }> = [];
   const validarResultado: { valor: Awaited<ReturnType<DepsAtender['validarHito']>> } = { valor: null };
-  const evidencias: Array<{ hitoId: string; ciclo: number; tipo: string; ruta: string; sha256: string; waMessageId: string | null }> = [];
+  const evidencias: Array<{ hitoId: string; ciclo: number; tipo: string; ruta: string; sha256: string; waMessageId: string | null; viajeId?: string; creadaEn?: string }> = [];
+  /** T-A5-68: los ciclos por servicio de la flota (0807) en memoria; vacío = todos los viajes siguen el ciclo actual. */
+  const ciclos: CicloServicioFila[] = [];
   let n = 0;
 
   const sembrar = (viajeId: string) => {
@@ -146,9 +149,13 @@ export function crearMemoria(opts: { viajes?: ViajeContexto[]; config?: Partial<
     guardarEvidencia: async (a) => {
       if (evidencias.some((x) => x.waMessageId && x.waMessageId === a.waMessageId) || evidencias.some((x) => x.hitoId === a.hito.id && x.ciclo === a.hito.ciclo && x.sha256 === a.sha256)) return 'duplicada';
       if (!['recibido', 'validado'].includes(poId(a.hito.id).estado)) return 'hito_cambio';
-      evidencias.push({ hitoId: a.hito.id, ciclo: a.hito.ciclo, tipo: a.tipo, ruta: a.ruta, sha256: a.sha256, waMessageId: a.waMessageId });
+      evidencias.push({ hitoId: a.hito.id, ciclo: a.hito.ciclo, tipo: a.tipo, ruta: a.ruta, sha256: a.sha256, waMessageId: a.waMessageId, viajeId: a.hito.viajeId, creadaEn: a.ahora.toISOString() });
       return 'ok';
     },
+    ciclosDe: async (tenantId) => ciclos.filter((c) => c.tenantId === tenantId).map((c) => ({ ...c })),
+    evidenciasSello: async (_t, viajeId) => evidencias
+      .filter((x) => x.viajeId === viajeId && x.tipo === 'sello' && x.creadaEn)
+      .map((x) => ({ tipo: 'sello' as const, creadaEn: x.creadaEn! })),
   };
 
   /** Atajo: un hito ya registrado a las `hora` (UTC, hoy 2026-10-02). */
@@ -158,7 +165,7 @@ export function crearMemoria(opts: { viajes?: ViajeContexto[]; config?: Partial<
     set(h.id, { estado: 'recibido', fuente: 'texto', interpretacion: 'regla', mensajeEn: iso, recibidoEn: iso, ...extra });
   };
 
-  return { deps, hitos, de, viajes, eventos, legado, oficina, config, fallos, sembrar, registrar, mensajesVistos, validaciones, validarResultado, evidencias };
+  return { deps, hitos, de, viajes, eventos, legado, oficina, config, fallos, sembrar, registrar, mensajesVistos, validaciones, validarResultado, evidencias, ciclos };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

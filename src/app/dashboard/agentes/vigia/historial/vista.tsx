@@ -3,6 +3,7 @@ import { MessagesSquare, TriangleAlert } from 'lucide-react';
 import { numero, fechaHoraMx } from '@/lib/formato';
 import type { GrupoVigia } from '@/lib/likida/vigia/historial/repo';
 import type { ReporteHistorial } from '@/lib/likida/vigia/historial/analisis';
+import type { ResultadoPendientes } from '@/lib/likida/vigia/historial/pendientes';
 import { BarraPagina } from '../../../resumen-visual';
 import type { RespuestaRapidaFila } from '@/lib/likida/vigia/historial/repo';
 import { FilaBorrar, FilaCritico, FilaRetirarRapida, FormaAltaGrupo, FormaAprobarRapida, FormaImportar, type AccionGrupos } from './formas';
@@ -32,13 +33,17 @@ function duracion(min: number | null): string {
   return `${numero(Math.floor(min / 60))} h ${numero(min % 60)} min`;
 }
 
-export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, grupoElegido, truncado, umbralMin, puedeEditar, puedeAprobar, rapidas, acciones }: {
+export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendientes, grupoElegido, truncado, umbralMin, puedeEditar, puedeAprobar, rapidas, acciones, standby = false }: {
+  /** T-A4-32: perfil cinco_agentes → las respuestas rápidas (stand-by) no se muestran ni se aprueban. */
+  standby?: boolean;
   sufijo: string;
   /** `null` = la base aún no tiene la 0484: se dice, no se enseña «no hay grupos». */
   grupos: GrupoVigia[] | null;
   clientes: Array<{ id: string; nombre: string }>;
   /** `null` = no hay nada importado todavía (o no se pudo leer). */
   reporte: ReporteHistorial | null;
+  /** Mensajes del cliente sin respuesta en la exportación (foto de ese momento); omitido o `null` = no se calculó. */
+  pendientes?: ResultadoPendientes | null;
   grupoElegido: string | null;
   truncado: boolean;
   umbralMin: number;
@@ -104,7 +109,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, grupoEl
                 <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota agrega grupos y sube histórico.</p>
               )}
 
-              <Seccion id="rapidas" titulo="Respuestas rápidas aprobadas">
+              {!standby && <Seccion id="rapidas" titulo="Respuestas rápidas aprobadas">
                 {rapidas === null ? (
                   <Aviso>La base de datos todavía no tiene las respuestas rápidas (falta aplicar la migración 0647). Mientras tanto el Vigía contesta como siempre.</Aviso>
                 ) : (
@@ -129,7 +134,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, grupoEl
                     )}
                   </>
                 )}
-              </Seccion>
+              </Seccion>}
 
               <Seccion id="reporte" titulo={grupoElegido ? 'Reporte del grupo elegido' : 'Reporte de todos los grupos'}>
                 {reporte === null || reporte.mensajes === 0 ? (
@@ -146,6 +151,30 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, grupoEl
                       {numero(reporte.mensajes)} mensajes ({numero(reporte.mensajesCliente)} de clientes, {numero(reporte.mensajesEquipo)} de tu equipo)
                       {reporte.desde && reporte.hasta ? ` del ${fechaHoraMx(reporte.desde)} al ${fechaHoraMx(reporte.hasta)}` : ''}. Los temas se detectan por palabras clave, sin modelo: lo que no encaja queda en «Otros».
                     </p>
+
+                    {pendientes && (
+                      <div>
+                        <h3 className="text-[13px] font-semibold mb-1.5">Pendientes de contestar en el chat subido</h3>
+                        <p className="text-[11.5px] mb-1.5" style={{ color: 'var(--faint)' }}>
+                          Foto del momento de la exportación{pendientes.fotoEn ? ` (${fechaHoraMx(pendientes.fotoEn)})` : ''}, no en vivo: el Vigía no lee los grupos al instante. Se ocultan los «gracias», los avisos de monitoreo y lo que el equipo ya contestó.
+                        </p>
+                        {pendientes.pendientes.length === 0 ? (
+                          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>No quedó ningún mensaje de cliente sin contestar en este chat.</p>
+                        ) : (
+                          <ul className="space-y-2">
+                            {pendientes.pendientes.map((p) => (
+                              <li key={`${p.enviadoEn}|${p.texto}`} className="text-[12.5px]">
+                                <div>
+                                  <strong style={{ color: p.nivel === 2 ? 'var(--bad)' : undefined }}>{p.nivel === 2 ? 'Alta' : 'Normal'}</strong>{' '}
+                                  <span style={{ color: 'var(--faint)' }}>· {p.grupo ? `${p.grupo} · ` : ''}esperando {duracion(p.antiguedadMin)} · {fechaHoraMx(p.enviadoEn)}</span>
+                                </div>
+                                <div style={{ color: 'var(--muted)' }}>«{p.texto}»</div>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
 
                     <div>
                       <h3 className="text-[13px] font-semibold mb-1.5">Tiempo de respuesta del equipo</h3>
@@ -165,7 +194,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, grupoEl
                             <li key={f.pregunta} className="text-[12.5px]">
                               <div><strong>{f.pregunta}</strong> <span style={{ color: 'var(--faint)' }}>· {numero(f.veces)} veces en {numero(f.dias)} días</span></div>
                               <div style={{ color: 'var(--muted)' }}>{f.respuestaTipica ? <>Lo que suele contestar tu equipo: «{f.respuestaTipica}»</> : 'Sin una respuesta del equipo en la hora siguiente.'}</div>
-                              {puedeAprobar && rapidas !== null && (aprobadas.has(f.pregunta.trim().toLowerCase())
+                              {!standby && puedeAprobar && rapidas !== null && (aprobadas.has(f.pregunta.trim().toLowerCase())
                                 ? <div className="text-[11.5px]" style={{ color: 'var(--ok)' }}>Ya es una respuesta rápida aprobada.</div>
                                 : <FormaAprobarRapida accion={acciones.aprobarRapida} tema={f.tema} pregunta={f.pregunta} textoInicial={f.respuestaTipica ?? ''} />)}
                             </li>

@@ -15,13 +15,15 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import { exigir } from '../pg';
+import { exigir, traerPorIds } from '../pg';
 import { logger } from '@/lib/logger';
 import { aBuffer } from './bytes';
 import type { Extraccion } from './campos';
 import type { ResultadoValidacion } from './validacion';
 import type { FormatoDoc } from './contenido';
+import type { ViajeSalido } from './viajes_sin_ccp';
 import type { FirmaPerfil, Mapeo, EjemploPerfil, Perfil } from './perfiles';
+import { TOPE_FILAS_CATALOGO, catalogoVacio, type CatalogoCliente, type ParteCat, type ProductoCat } from './catalogo_cliente';
 
 export const BUCKET = 'cartaporte-docs';
 
@@ -31,10 +33,20 @@ export type EstadoDoc = 'recibido' | 'procesando' | 'por_revisar' | 'aprobado' |
 export interface MetaExtraccion {
   origen: 'xml' | 'perfil' | 'llm' | 'perfil+llm';
   nivel: number;
-  escalamientos: Array<{ de: number; a: number; motivo: string }>;
+  escalamientos: Array<{ de: number; a: number; motivo: string; codigo?: string }>;
+  /** T-A3-68 e: campos que ningún nivel del modelo logró dejar que cuadren, con los valores en conflicto. Nunca se aprueban solos. */
+  revisionHumana?: Array<{ campo: string; renglon: number | null; codigo: string; motivo: string; valores: string[] }>;
+  /** T-A3-68 a: cambios de modo (`json_object`) o de modelo (respaldo) que ocurrieron al leer el documento, con su motivo. */
+  caidas?: Array<{ tipo: string; rol: string; de: string; a: string; motivo: string; detalle?: string }>;
   avisos: string[];
   notasModelo: string[];
   indiciosInyeccion: string[];
+  /** T-A3-53: la captura del correo llegó cortada (termina en este rótulo sin valor). Se revalida en cada corrección y al aprobar. */
+  capturaIncompleta?: { ultimoRotulo: string } | null;
+  /** T-A3-67: el formato de entrada que reconoció el servicio y despachó a su lector (C remisión escaneada, D BOL en inglés, E orden del agente aduanal). */
+  formatoEntrada?: 'C' | 'D' | 'E';
+  /** T-A3-67: el lector no pudo leer el documento (hoy: remisión escaneada sin modelo de visión). Nada se inventó: se captura a mano. Se revalida en cada corrección. */
+  requiereCapturaManual?: { formato: 'C' | 'D' | 'E'; motivo: 'sin_vision' } | null;
 }
 
 /** Lo que se guarda en `cp_documento.extraccion`. */
@@ -77,6 +89,8 @@ export interface DocumentoFila {
   aprobadoPor: string | null;
   aprobadoEn: string | null;
   rechazoMotivo: string | null;
+  /** 0791. Solo se ESCRIBE (`tms_rechazo` al devolver un rechazo del TMS a revisión); `COLUMNAS_DOC` no la lee hasta que la 0791 esté en toda base. */
+  rechazoCausa?: string | null;
   tiempoRevisionSeg: number | null;
   exportadoEn: string | null;
   retenerHasta: string;
@@ -232,13 +246,35 @@ export async function documentosConFolio(tenantId: string, folio: string, except
   return ((exigir(r, 'cpdocs.folio_duplicado') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), estado: f.estado as EstadoDoc, nombreArchivo: String(f.nombre_archivo) }));
 }
 
+/**
+ * Filas de `cp_sat_catalogo` (0793, tabla global) para las claves pedidas de UN catálogo: UNA consulta. `null` = el
+ * catálogo no está cargado (ninguna fila con ese nombre) o no se pudo leer; nunca lanza, porque la validación degrada.
+ */
+export async function cargarCatalogoSat(catalogo: string, claves: string[]): Promise<Map<string, Record<string, string>> | null> {
+  if (claves.length === 0) return new Map();
+  try {
+    const r = await acotada(supabaseAdmin().from('cp_sat_catalogo').select('clave, extra').eq('catalogo', catalogo).in('clave', claves), 'cpdocs.catalogo_sat');
+    const filas = (exigir(r, 'cpdocs.catalogo_sat') ?? []) as unknown as Array<{ clave: string; extra: Record<string, string> | null }>;
+    if (filas.length > 0) return new Map(filas.map((f) => [String(f.clave), f.extra ?? {}]));
+    // Ninguna coincidencia: ¿el catálogo está vacío (no cargado) o la clave simplemente no existe? Una sola sonda más.
+    const sonda = await acotada(supabaseAdmin().from('cp_sat_catalogo').select('clave').eq('catalogo', catalogo).limit(1), 'cpdocs.catalogo_sat_sonda');
+    const hay = (exigir(sonda, 'cpdocs.catalogo_sat_sonda') ?? []) as unknown[];
+    return hay.length > 0 ? new Map() : null;
+  } catch {
+    return null;
+  }
+}
+
 export type TipoEvento =
   | 'recibido' | 'duplicado_recibido' | 'extraccion_iniciada' | 'extraccion_ok' | 'extraccion_fallida' | 'escalada' | 'revision_abierta'
   | 'campo_corregido' | 'aprobado' | 'rechazado' | 'reabierto' | 'salida_viaje' | 'exportado' | 'perfil_aprendido' | 'purgado'
   // 0642: el worker (cron carta-porte-docs).
   | 'aviso_oficina' | 'reintentos_agotados'
   // 0670: un Excel con varios embarques se partió en documentos hijos.
-  | 'dividido';
+  | 'dividido'
+  // 0790: el envío del documento aprobado a la plantilla/API del TMS.
+  | 'envio_preparado' | 'envio_pendiente_reque' | 'envio_enviado' | 'envio_rechazado' | 'envio_error'
+  | 'envio_alertado' | 'envio_subido_a_mano' | 'revisor_asignado';
 
 /** La bitácora: append-only, sin el contenido de los campos. Un fallo AQUÍ se lanza: sin rastro no hay operación. */
 export async function registrarEvento(tenantId: string, documentoId: string, tipo: TipoEvento, actorId: string | null, detalle: Record<string, unknown> = {}): Promise<void> {
@@ -468,6 +504,52 @@ export async function clientePropio(tenantId: string, clienteId: string): Promis
 export async function listarClientes(tenantId: string): Promise<Array<{ id: string; nombre: string }>> {
   const r = await acotada(supabaseAdmin().from('cliente').select('id, nombre').eq('tenant_id', tenantId).order('nombre').order('id').limit(1000), 'cpdocs.clientes');
   return ((exigir(r, 'cpdocs.clientes') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), nombre: String(f.nombre) }));
+}
+
+// ── Catálogo por cliente (0792) ─────────────────────────────────────────────
+
+/** La tabla no existe todavía (la 0792 no se ha aplicado): PostgREST PGRST205 / Postgres 42P01. */
+export function tablaAusente(error: { message?: string; code?: string } | null | undefined): boolean {
+  if (!error) return false;
+  return error.code === 'PGRST205' || error.code === '42P01' || /could not find the table|relation .* does not exist/i.test(error.message ?? '');
+}
+
+
+/**
+ * El catálogo de UN cliente de UNA flota: número interno, productos y partes, con tope de filas por tabla. Siempre
+ * filtra por tenant Y cliente. Sin la 0792 aplicada devuelve el catálogo vacío (sin catálogo = no-op) y lo registra.
+ */
+export async function cargarCatalogoCliente(tenantId: string, clienteId: string): Promise<CatalogoCliente> {
+  const [n, p, q] = await Promise.all([
+    acotada(supabaseAdmin().from('cp_cliente_numero').select('numero_interno, numero_pagador, activo').eq('tenant_id', tenantId).eq('cliente_id', clienteId).maybeSingle(), 'cpdocs.catalogo_numero'),
+    acotada(supabaseAdmin().from('cp_catalogo_producto')
+      .select('sku, descripcion_patron, bienes_transp, clave_unidad, embalaje, fraccion, tipo_materia, material_peligroso, clave_material_peligroso')
+      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('sku').order('id').limit(TOPE_FILAS_CATALOGO), 'cpdocs.catalogo_productos'),
+    acotada(supabaseAdmin().from('cp_catalogo_parte')
+      .select('rol, alias, razon_social, rfc, id_fiscal_extranjero, calle, num_ext, num_int, colonia_clave, colonia, cp, localidad_clave, localidad, municipio_clave, municipio, estado, pais, contacto, telefono, correo')
+      .eq('tenant_id', tenantId).eq('cliente_id', clienteId).order('rol').order('alias').order('id').limit(TOPE_FILAS_CATALOGO), 'cpdocs.catalogo_partes'),
+  ]);
+  if (tablaAusente(n.error) || tablaAusente(p.error) || tablaAusente(q.error)) {
+    logger.warn('cartaporte_docs.catalogo_sin_migracion', { tenantId });
+    return catalogoVacio();
+  }
+  const num = exigir(n, 'cpdocs.catalogo_numero') as unknown as Fila | null;
+  const productos = ((exigir(p, 'cpdocs.catalogo_productos') ?? []) as unknown as Fila[]).map((f): ProductoCat => ({
+    tenantId, clienteId, sku: String(f.sku), descripcionPatron: s(f.descripcion_patron), bienesTransp: String(f.bienes_transp), claveUnidad: String(f.clave_unidad),
+    embalaje: s(f.embalaje), fraccion: s(f.fraccion), tipoMateria: s(f.tipo_materia), materialPeligroso: f.material_peligroso === true, claveMaterialPeligroso: s(f.clave_material_peligroso),
+  }));
+  const partes = ((exigir(q, 'cpdocs.catalogo_partes') ?? []) as unknown as Fila[]).map((f): ParteCat => ({
+    tenantId, clienteId, rol: f.rol === 'destinatario' ? 'destinatario' : 'remitente', alias: String(f.alias), razonSocial: s(f.razon_social), rfc: s(f.rfc), idFiscalExtranjero: s(f.id_fiscal_extranjero),
+    calle: s(f.calle), numExt: s(f.num_ext), numInt: s(f.num_int), coloniaClave: s(f.colonia_clave), colonia: s(f.colonia), cp: s(f.cp),
+    localidadClave: s(f.localidad_clave), localidad: s(f.localidad), municipioClave: s(f.municipio_clave), municipio: s(f.municipio),
+    estado: s(f.estado), pais: s(f.pais), contacto: s(f.contacto), telefono: s(f.telefono), correo: s(f.correo),
+  }));
+  const truncado = productos.length >= TOPE_FILAS_CATALOGO || partes.length >= TOPE_FILAS_CATALOGO;
+  if (truncado) logger.warn('cartaporte_docs.catalogo_truncado', { tenantId, productos: productos.length, partes: partes.length });
+  return {
+    numero: num ? { tenantId, clienteId, numeroInterno: String(num.numero_interno), numeroPagador: s(num.numero_pagador), activo: num.activo !== false } : null,
+    productos, partes, truncado,
+  };
 }
 
 /** Inserta el viaje borrador. `null` = el folio ya existe (carrera con otra aprobación o con el panel). */
@@ -783,3 +865,287 @@ export async function hijosDeDocumento(tenantId: string, padreId: string): Promi
 }
 
 const MAX_HIJOS_LEIDOS = 100;
+
+// ── Configuración de salida al TMS (0790: cp_salida_config) ─────────────────
+// Una fila por flota. SIN credenciales: esas viven en el cofre de PS, nunca aquí.
+
+export interface SalidaConfigFila {
+  modo: 'descarga' | 'api';
+  plantillaPorDefecto: 'normal' | 'nueva';
+  reintentosMax: number;
+  frecuenciaMin: number;
+  /** HH:MM en hora local de la flota; ambas o ninguna. */
+  ventanaInicio: string | null;
+  ventanaFin: string | null;
+  destinatarioAlertaCorreo: string | null;
+  destinatarioAlertaUsuario: string | null;
+  destinatarioRevisionUsuario: string | null;
+  destinatarioRevisionCorreo: string | null;
+  siTmsDesconocido: 'retener' | 'enviar';
+  distanciaFormato: 'texto_km' | 'numero';
+}
+
+const COLUMNAS_SALIDA_CONFIG = 'modo, plantilla_por_defecto, reintentos_max, frecuencia_min, ventana_inicio, ventana_fin, destinatario_alerta_correo, destinatario_alerta_usuario, destinatario_revision_usuario, destinatario_revision_correo, si_tms_desconocido, distancia_formato';
+/** Postgres devuelve `time` como HH:MM:SS; la app habla HH:MM. */
+const hhmm = (v: unknown): string | null => (v === null || v === undefined ? null : String(v).slice(0, 5));
+
+/** La fila de la flota, o null si nunca se guardó (quien llama aplica los valores de arranque). */
+export async function leerSalidaConfig(tenantId: string): Promise<SalidaConfigFila | null> {
+  const r = await acotada(supabaseAdmin().from('cp_salida_config').select(COLUMNAS_SALIDA_CONFIG).eq('tenant_id', tenantId).maybeSingle(), 'cpdocs.salida_config');
+  const f = exigir(r, 'cpdocs.salida_config') as unknown as Fila | null;
+  if (!f) return null;
+  return {
+    modo: f.modo as SalidaConfigFila['modo'], plantillaPorDefecto: f.plantilla_por_defecto as SalidaConfigFila['plantillaPorDefecto'],
+    reintentosMax: Number(f.reintentos_max), frecuenciaMin: Number(f.frecuencia_min),
+    ventanaInicio: hhmm(f.ventana_inicio), ventanaFin: hhmm(f.ventana_fin),
+    destinatarioAlertaCorreo: s(f.destinatario_alerta_correo), destinatarioAlertaUsuario: s(f.destinatario_alerta_usuario),
+    destinatarioRevisionUsuario: s(f.destinatario_revision_usuario), destinatarioRevisionCorreo: s(f.destinatario_revision_correo),
+    siTmsDesconocido: f.si_tms_desconocido as SalidaConfigFila['siTmsDesconocido'], distanciaFormato: f.distancia_formato as SalidaConfigFila['distanciaFormato'],
+  };
+}
+
+/** Upsert de la fila completa de la flota (idempotente: guardar lo mismo dos veces deja el mismo estado). */
+export async function guardarSalidaConfig(tenantId: string, c: SalidaConfigFila, actorId: string | null): Promise<void> {
+  const r = await acotada(supabaseAdmin().from('cp_salida_config').upsert({
+    tenant_id: tenantId, modo: c.modo, plantilla_por_defecto: c.plantillaPorDefecto, reintentos_max: c.reintentosMax, frecuencia_min: c.frecuenciaMin,
+    ventana_inicio: c.ventanaInicio, ventana_fin: c.ventanaFin,
+    destinatario_alerta_correo: c.destinatarioAlertaCorreo, destinatario_alerta_usuario: c.destinatarioAlertaUsuario,
+    destinatario_revision_usuario: c.destinatarioRevisionUsuario, destinatario_revision_correo: c.destinatarioRevisionCorreo,
+    si_tms_desconocido: c.siTmsDesconocido, distancia_formato: c.distanciaFormato, updated_by: actorId, updated_at: new Date().toISOString(),
+  }, { onConflict: 'tenant_id' }), 'cpdocs.salida_config_guardar');
+  if (r.error) throw new Error(`cartaporte_docs salida config: ${r.error.message}`);
+}
+
+
+// ── Revisor asignado (0790: cp_documento.revisor_asignado) ──────────────────
+// Se lee y se escribe APARTE de `COLUMNAS_DOC` a propósito: la bandeja de hoy no puede romperse en una base que todavía no
+// tiene la 0790. Sin la columna, leer devuelve «sin asignar» y escribir falla con una frase clara.
+
+/** Las personas de la oficina que pueden recibir casos por revisar (activas y de ESTA flota). */
+export interface UsuarioRevisor { id: string; nombre: string | null; email: string; rol: string; telefono: string | null }
+const ROLES_REVISOR = ['encargado', 'flota_admin', 'contador'] as const;
+const aRevisor = (f: Fila): UsuarioRevisor => ({ id: String(f.id), nombre: s(f.nombre), email: String(f.email), rol: String(f.rol), telefono: s(f.telefono) });
+const COLUMNAS_REVISOR = 'id, nombre, email, rol, telefono, activo';
+
+/** La columna de la 0790 no existe todavía (Postgres 42703 / PostgREST lo dice con el nombre de la columna). */
+export function columnaAusente(error: { message?: string; code?: string } | null | undefined): boolean {
+  if (!error) return false;
+  return error.code === '42703' || /revisor_asignado|column .* does not exist/i.test(error.message ?? '');
+}
+
+/** Quien puede revisar en la flota, por nombre. Los desactivados no salen. */
+export async function usuariosRevisores(tenantId: string): Promise<UsuarioRevisor[]> {
+  const r = await acotada(supabaseAdmin().from('app_user').select(COLUMNAS_REVISOR).eq('tenant_id', tenantId)
+    .in('rol', [...ROLES_REVISOR]).or('activo.is.null,activo.eq.true').order('nombre', { ascending: true }).order('id').limit(200), 'cpdocs.usuarios_revisores');
+  return ((exigir(r, 'cpdocs.usuarios_revisores') ?? []) as unknown as Fila[]).filter((f) => f.activo !== false).map(aRevisor);
+}
+
+/** Una persona de ESTA flota que puede revisar, o null (otra flota, desactivada o con un rol que no revisa). */
+export async function usuarioRevisor(tenantId: string, userId: string): Promise<UsuarioRevisor | null> {
+  const r = await acotada(supabaseAdmin().from('app_user').select(COLUMNAS_REVISOR).eq('tenant_id', tenantId).eq('id', userId)
+    .in('rol', [...ROLES_REVISOR]).maybeSingle(), 'cpdocs.usuario_revisor');
+  const f = exigir(r, 'cpdocs.usuario_revisor') as unknown as Fila | null;
+  return f && f.activo !== false ? aRevisor(f) : null;
+}
+
+/** A quién le toca cada documento (solo los asignados salen en el mapa). Sin la 0790: mapa vacío. */
+export async function revisoresDeDocumentos(tenantId: string, ids: string[]): Promise<Map<string, string>> {
+  const mapa = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const r = await acotada(supabaseAdmin().from('cp_documento').select('id, revisor_asignado')
+      .eq('tenant_id', tenantId).in('id', ids.slice(i, i + 200)).not('revisor_asignado', 'is', null).order('id').limit(200), 'cpdocs.revisores_docs');
+    if (r.error && columnaAusente(r.error)) { logger.warn('cartaporte_docs.revisor_sin_migracion', { motivo: r.error.message }); return new Map(); }
+    for (const f of (exigir(r, 'cpdocs.revisores_docs') ?? []) as unknown as Fila[]) mapa.set(String(f.id), String(f.revisor_asignado));
+  }
+  return mapa;
+}
+
+/** Los documentos por revisar asignados a una persona (para «Mis casos»). Sin la 0790: ninguno. */
+export async function idsAsignadosA(tenantId: string, userId: string): Promise<string[]> {
+  const r = await acotada(supabaseAdmin().from('cp_documento').select('id')
+    .eq('tenant_id', tenantId).eq('revisor_asignado', userId).order('id').limit(1000), 'cpdocs.ids_asignados');
+  if (r.error && columnaAusente(r.error)) return [];
+  return ((exigir(r, 'cpdocs.ids_asignados') ?? []) as unknown as Fila[]).map((f) => String(f.id));
+}
+
+/**
+ * Fija (o quita, con null) el revisor de un documento. Escribe SOLO esa columna: no sube la `version` del documento, porque
+ * asignar a quién le toca no es un cambio de contenido y no debe invalidar la pantalla de quien está revisando.
+ * `false` = el documento no es de esta flota. Sin la 0790 lanza con una frase para la pantalla.
+ */
+export async function asignarRevisorDoc(tenantId: string, id: string, revisorId: string | null): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().from('cp_documento').update({ revisor_asignado: revisorId })
+    .eq('tenant_id', tenantId).eq('id', id).select('id'), 'cpdocs.asignar_revisor');
+  if (r.error && columnaAusente(r.error)) throw new Error('La asignación de revisor todavía no está disponible en esta base (falta la migración 0790).');
+  return ((exigir(r, 'cpdocs.asignar_revisor') ?? []) as unknown as Fila[]).length > 0;
+}
+
+
+// ── Envíos al TMS (0790: cp_envio_tms) ──────────────────────────────────────
+// Solo lo que necesita «preparar el envío» (T-A3-04). La cola, el lease y la máquina de estados son de T-A3-26/27.
+
+export type EstadoEnvioTms =
+  | 'pendiente_prechequeo' | 'pendiente_reque' | 'listo' | 'enviando' | 'enviado'
+  | 'rechazado_tms' | 'error_transitorio' | 'subido_a_mano' | 'descartado';
+
+export interface EnvioTmsFila {
+  id: string; tenantId: string; documentoId: string; versionDoc: number; idempotencyKey: string;
+  estado: EstadoEnvioTms; plantilla: 'normal' | 'nueva'; intentos: number;
+}
+
+const COLUMNAS_ENVIO = 'id, tenant_id, documento_id, version_doc, idempotency_key, estado, plantilla, intentos';
+const aEnvio = (f: Fila): EnvioTmsFila => ({
+  id: String(f.id), tenantId: String(f.tenant_id), documentoId: String(f.documento_id), versionDoc: Number(f.version_doc),
+  idempotencyKey: String(f.idempotency_key), estado: f.estado as EstadoEnvioTms, plantilla: f.plantilla as EnvioTmsFila['plantilla'], intentos: Number(f.intentos ?? 0),
+});
+
+export async function envioPorLlave(tenantId: string, idempotencyKey: string): Promise<EnvioTmsFila | null> {
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').select(COLUMNAS_ENVIO).eq('tenant_id', tenantId).eq('idempotency_key', idempotencyKey).maybeSingle(), 'cpdocs.envio_llave');
+  const f = exigir(r, 'cpdocs.envio_llave') as unknown as Fila | null;
+  return f ? aEnvio(f) : null;
+}
+
+/** Los envíos de un documento, el más nuevo primero. */
+export async function enviosDeDocumento(tenantId: string, documentoId: string): Promise<EnvioTmsFila[]> {
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').select(COLUMNAS_ENVIO)
+    .eq('tenant_id', tenantId).eq('documento_id', documentoId).order('created_at', { ascending: false }).order('id').limit(50), 'cpdocs.envios_doc');
+  return ((exigir(r, 'cpdocs.envios_doc') ?? []) as unknown as Fila[]).map(aEnvio);
+}
+
+/**
+ * Inserta el envío en `pendiente_prechequeo`. Idempotente por (flota, llave): si la llave ya existe devuelve el existente
+ * (`creado:false`). `null` = el documento ya tiene OTRO envío activo (índice parcial único): quien llama decide qué hacer.
+ */
+export async function insertarEnvioTms(tenantId: string, e: { documentoId: string; versionDoc: number; idempotencyKey: string; plantilla: 'normal' | 'nueva' }): Promise<{ envio: EnvioTmsFila; creado: boolean } | null> {
+  const previo = await envioPorLlave(tenantId, e.idempotencyKey);
+  if (previo) return { envio: previo, creado: false };
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').insert({
+    tenant_id: tenantId, documento_id: e.documentoId, version_doc: e.versionDoc, idempotency_key: e.idempotencyKey, plantilla: e.plantilla, estado: 'pendiente_prechequeo',
+  }).select(COLUMNAS_ENVIO).single(), 'cpdocs.envio_insertar');
+  if (r.error) {
+    if ((r.error as { code?: string }).code === '23505') {
+      // O la misma llave (carrera con otra aprobación) o el índice de «un activo por documento».
+      const ganado = await envioPorLlave(tenantId, e.idempotencyKey);
+      return ganado ? { envio: ganado, creado: false } : null;
+    }
+    throw new Error(`cartaporte_docs envio: ${r.error.message}`);
+  }
+  return { envio: aEnvio(r.data as unknown as Fila), creado: true };
+}
+
+/** Pasa a `descartado` el envío SOLO si sigue en uno de los estados dados (UPDATE condicional). */
+export async function descartarEnvioTms(tenantId: string, id: string, desde: EstadoEnvioTms[]): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').update({ estado: 'descartado', updated_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId).eq('id', id).in('estado', desde).select('id'), 'cpdocs.envio_descartar');
+  return ((exigir(r, 'cpdocs.envio_descartar') ?? []) as unknown[]).length > 0;
+}
+
+/**
+ * Pasa a `subido_a_mano` el envío SOLO si sigue en uno de los estados dados (UPDATE condicional) y suelta el lease:
+ * así `cp_envio_reclamar` (que solo mira estados vivos) ya no lo vuelve a tomar. `false` = ya no estaba en esos estados.
+ */
+export async function marcarEnvioSubidoAMano(tenantId: string, id: string, desde: EstadoEnvioTms[]): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').update({ estado: 'subido_a_mano', procesando_hasta: null, proxima_revision: null, updated_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId).eq('id', id).in('estado', desde).select('id'), 'cpdocs.envio_subido_a_mano');
+  return ((exigir(r, 'cpdocs.envio_subido_a_mano') ?? []) as unknown[]).length > 0;
+}
+
+/** El estado del envío más reciente (no descartado) de cada documento, para la lista de la bandeja. Sin envío = sin clave. */
+export async function estadoEnvioPorDocumento(tenantId: string, documentoIds: string[]): Promise<Record<string, EstadoEnvioTms>> {
+  if (documentoIds.length === 0) return {};
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').select('documento_id, estado')
+    .eq('tenant_id', tenantId).in('documento_id', documentoIds).neq('estado', 'descartado').order('created_at', { ascending: false }).order('id').limit(2000), 'cpdocs.envios_lista');
+  const salida: Record<string, EstadoEnvioTms> = {};
+  for (const f of (exigir(r, 'cpdocs.envios_lista') ?? []) as unknown as Fila[]) {
+    const id = String(f.documento_id);
+    if (!(id in salida)) salida[id] = f.estado as EstadoEnvioTms; // el más nuevo primero
+  }
+  return salida;
+}
+
+// ── Agregados para los insights del agente (T-A3-37) ────────────────────────
+// Solo conteos y nombres de campo: jamás el valor antes/después de una corrección ni el contenido de un documento.
+
+/** Cuántas veces se corrigió cada CAMPO (solo el nombre) en los documentos dados. */
+export async function contarCorreccionesPorCampo(tenantId: string, ids: string[]): Promise<Map<string, number>> {
+  const cuenta = new Map<string, number>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const r = await acotada(supabaseAdmin().from('cp_correccion').select('campo')
+      .eq('tenant_id', tenantId).in('documento_id', ids.slice(i, i + 200)).order('id').limit(50_000), 'cpdocs.correcciones_campo');
+    for (const f of (exigir(r, 'cpdocs.correcciones_campo') ?? []) as unknown as Fila[]) cuenta.set(String(f.campo), (cuenta.get(String(f.campo)) ?? 0) + 1);
+  }
+  return cuenta;
+}
+
+/**
+ * Cuántos documentos RECHAZADOS hay por `rechazo_causa` desde `desde` (la clave `''` = rechazado sin causa clasificada).
+ * `null` = la columna (0791) todavía no existe en esta base: «no se puede medir», no «ningún rechazo».
+ */
+export async function contarCausasDeRechazo(tenantId: string, desde: Date): Promise<Record<string, number> | null> {
+  const r = await acotada(supabaseAdmin().from('cp_documento').select('rechazo_causa')
+    .eq('tenant_id', tenantId).eq('estado', 'rechazado').gte('created_at', desde.toISOString()).order('id').limit(5000), 'cpdocs.causas_rechazo');
+  if (r.error) {
+    if ((r.error as { code?: string }).code === '42703' || /rechazo_causa/i.test(r.error.message ?? '')) return null;
+    throw new Error(`cpdocs.causas_rechazo: ${r.error.message}`);
+  }
+  const cuenta: Record<string, number> = {};
+  for (const f of (r.data ?? []) as unknown as Fila[]) {
+    const k = f.rechazo_causa === null || f.rechazo_causa === undefined ? '' : String(f.rechazo_causa);
+    cuenta[k] = (cuenta[k] ?? 0) + 1;
+  }
+  return cuenta;
+}
+
+/** Lo mínimo de un envío para medir su estado: nunca el contenido ni los errores. */
+export interface EnvioParaInsights {
+  documentoId: string; estado: EstadoEnvioTms; createdAt: string; enviadoEn: string | null; causaPendiente: string | null;
+}
+
+/** Los envíos creados desde `desde` (de todos los estados). */
+export async function enviosParaInsights(tenantId: string, desde: Date): Promise<EnvioParaInsights[]> {
+  const r = await acotada(supabaseAdmin().from('cp_envio_tms').select('documento_id, estado, created_at, enviado_en, causa_pendiente')
+    .eq('tenant_id', tenantId).gte('created_at', desde.toISOString()).order('created_at', { ascending: false }).limit(5000), 'cpdocs.envios_insights');
+  return ((exigir(r, 'cpdocs.envios_insights') ?? []) as unknown as Fila[]).map((f) => ({
+    documentoId: String(f.documento_id), estado: f.estado as EstadoEnvioTms, createdAt: String(f.created_at),
+    enviadoEn: f.enviado_en === null || f.enviado_en === undefined ? null : String(f.enviado_en),
+    causaPendiente: f.causa_pendiente === null || f.causa_pendiente === undefined ? null : String(f.causa_pendiente),
+  }));
+}
+
+// ── Viajes salidos sin Carta Porte (T-A3-66) ────────────────────────────────
+
+/** Cuánto hacia atrás se buscan salidas (más viejo que esto ya no es un pendiente de la semana). */
+export const DIAS_SALIDAS_SIN_CCP = 45;
+
+/**
+ * Viajes con salida registrada (hito `salida_carga` recibido o validado) y los ids de los que ya tienen un complemento
+ * APROBADO ligado (`cp_documento.viaje_id`). SOLO LECTURA; si algo falla LANZA (la pantalla dice «no se pudo leer», no «sin pendientes»).
+ */
+export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new Date()): Promise<{ viajes: ViajeSalido[]; conCcp: Set<string> }> {
+  const desde = new Date(ahora.getTime() - DIAS_SALIDAS_SIN_CCP * 86_400_000).toISOString();
+  const rh = await acotada(supabaseAdmin().from('viaje_hito').select('viaje_id, mensaje_en, recibido_en')
+    .eq('tenant_id', tenantId).eq('tipo', 'salida_carga').in('estado', ['recibido', 'validado'])
+    .gte('recibido_en', desde).order('recibido_en', { ascending: false }).limit(2000), 'cpdocs.sin_ccp_hitos');
+  const hitos = (exigir(rh, 'cpdocs.sin_ccp_hitos') ?? []) as unknown as Fila[];
+  const salidaPorViaje = new Map<string, string>();
+  for (const h of hitos) {
+    const id = s(h.viaje_id); const t = s(h.mensaje_en) ?? s(h.recibido_en);
+    if (id && t && !salidaPorViaje.has(id)) salidaPorViaje.set(id, t);
+  }
+  const ids = [...salidaPorViaje.keys()];
+  if (ids.length === 0) return { viajes: [], conCcp: new Set() };
+  const [filas, docs] = await Promise.all([
+    traerPorIds<Fila>(ids, (t) => acotada(supabaseAdmin().from('viaje').select('id, folio, cliente_id, cliente:cliente_id (nombre)')
+      .eq('tenant_id', tenantId).in('id', t), 'cpdocs.sin_ccp_viajes') as never, 'cpdocs.sin_ccp_viajes'),
+    traerPorIds<Fila>(ids, (t) => acotada(supabaseAdmin().from('cp_documento').select('viaje_id')
+      .eq('tenant_id', tenantId).eq('estado', 'aprobado').in('viaje_id', t), 'cpdocs.sin_ccp_docs') as never, 'cpdocs.sin_ccp_docs'),
+  ]);
+  const viajes: ViajeSalido[] = filas.map((f) => {
+    const c = (f.cliente ?? null) as Fila | null;
+    const id = String(f.id);
+    return { viajeId: id, folio: s(f.folio), clienteId: s(f.cliente_id), clienteNombre: s(c?.nombre), salidaEn: salidaPorViaje.get(id) ?? null };
+  });
+  const conCcp = new Set<string>();
+  for (const d of docs) { const id = s(d.viaje_id); if (id) conCcp.add(id); }
+  return { viajes, conCcp };
+}

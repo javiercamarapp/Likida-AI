@@ -24,6 +24,8 @@
 //     (error de lectura), que NO es lo mismo que «no hay faltantes».
 // ═══════════════════════════════════════════════════════════════════════════
 
+import type { CampoAviso } from './aviso/privacidad';
+
 export type EtapaViaje =
   | 'en_curso' | 'en_origen' | 'en_ruta' | 'en_destino' | 'descargando' | 'entregado' | 'regresando' | 'cerrado';
 
@@ -54,6 +56,14 @@ export interface PosicionViaje {
   medidaEn: string;
 }
 
+/** Lo que el adaptador sabe del avance: «va por <lugar>, le faltan ~<km> / ~<min>». Cada campo puede faltar. */
+export interface AvanceViaje {
+  /** Lugar cercano a la posición (poblado, caseta, tramo). */
+  cercaDe: string | null;
+  kmRestantes: number | null;
+  minRestantes: number | null;
+}
+
 export interface DocumentoViaje {
   nombre: string;
   estado: 'entregado' | 'pendiente';
@@ -67,6 +77,12 @@ export interface EstatusViaje {
   etapa: EtapaViaje;
   ultimoHito: HitoViaje | null;
   posicion: PosicionViaje | null;
+  /**
+   * T-A4-39: avance sobre la ruta calculado por el adaptador GPS / geocodificador (A5 o conector; hoy NADIE lo llena,
+   * bloqueo B12). Solo es creíble junto con una `posicion` vigente y un `destino` geocodificado; el redactor lo revalida.
+   * Ausente o `null` = no hay: el estatus se queda como hoy. NO es una ETA prometida.
+   */
+  avance?: AvanceViaje | null;
   etaIso: string | null;
   /** De dónde salió `etaIso`: la cita pactada o la ETA capturada. `null` si no hay. */
   etaFuente: 'cita' | 'eta' | null;
@@ -79,6 +95,59 @@ export interface EstatusViaje {
   documentos: DocumentoViaje[] | null;
   podRecibido: boolean | null;
   facturaEmitida: boolean | null;
+  /**
+   * T-A4-24: datos de la unidad del viaje, SOLO cuando alguien los pidió (`datosUnidad: true`) y solo los campos que
+   * pasan `camposVisibles` (privacidad.ts). Ausente = no se pidieron; `null` = se pidieron y no hay (no se inventa).
+   * Nunca llevan licencia, vigencia ni teléfono del operador: ese tipo no tiene dónde guardarlos.
+   */
+  caja?: string | null;
+  placasCaja?: string | null;
+  estadoCaja?: string | null;
+  unidad?: string | null;
+  placasUnidad?: string | null;
+  operador?: string | null;
+}
+
+/** Los datos de la unidad ya filtrados por privacidad (los mismos nombres que `EstatusViaje`). */
+export interface DatosUnidadViaje {
+  caja: string | null;
+  placasCaja: string | null;
+  estadoCaja: string | null;
+  unidad: string | null;
+  placasUnidad: string | null;
+  operador: string | null;
+}
+
+/** Lo que el lector (programa, catálogos, captura manual) pudo juntar de UN viaje, SIN filtrar. */
+export interface DatosUnidadCrudos {
+  caja: string | null;
+  placasCaja: string | null;
+  estadoCaja: string | null;
+  unidad: string | null;
+  placasUnidad: string | null;
+  operadorNombre: string | null;
+}
+
+const limpiar = (v: string | null | undefined): string | null => {
+  if (v == null) return null;
+  const t = v.trim();
+  return t === '' ? null : t;
+};
+
+/**
+ * Deja pasar SOLO lo que la política de privacidad del cliente permite ver (`camposVisibles`). Cada dato es un campo
+ * distinto: ocultar `operador_nombre` no oculta la caja. PURA.
+ */
+export function datosUnidadVisibles(crudos: DatosUnidadCrudos, visibles: ReadonlySet<CampoAviso>): DatosUnidadViaje {
+  const si = (campo: CampoAviso, valor: string | null) => (visibles.has(campo) ? limpiar(valor) : null);
+  return {
+    caja: si('caja', crudos.caja),
+    placasCaja: si('placas_caja', crudos.placasCaja),
+    estadoCaja: si('estado_caja', crudos.estadoCaja),
+    unidad: si('unidad', crudos.unidad),
+    placasUnidad: si('placas_unidad', crudos.placasUnidad),
+    operador: si('operador_nombre', crudos.operadorNombre),
+  };
 }
 
 /** Lo mínimo para distinguir un viaje de otro cuando el cliente tiene varios. */
@@ -93,7 +162,7 @@ export interface ServicioEstatusViaje {
   /** Viajes EN CURSO de ESE cliente en ESA flota, el más reciente primero. */
   viajesEnCurso(args: { tenantId: string; clienteId: string }): Promise<ResumenViaje[]>;
   /** El estatus de UN viaje, o `null` si no es de ese cliente en esa flota. */
-  estatus(args: { tenantId: string; clienteId: string; viajeId: string }): Promise<EstatusViaje | null>;
+  estatus(args: { tenantId: string; clienteId: string; viajeId: string; datosUnidad?: boolean }): Promise<EstatusViaje | null>;
 }
 
 /** Etapa del viaje a partir de los sellos de la 0090 y el estatus. PURA. */

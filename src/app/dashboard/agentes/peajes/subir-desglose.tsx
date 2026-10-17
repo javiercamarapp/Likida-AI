@@ -46,9 +46,20 @@ export function SubirDesgloseProveedor({ importar }: { importar: AccionImportar 
           aria-label="Proveedor del desglose (opcional)"
           className="hairline text-[12.5px] px-2.5 py-1.5 rounded-lg w-[210px]"
           style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
+        <label className="flex items-center gap-1.5 text-[11.5px]" style={{ color: 'var(--muted)' }}>
+          Periodo del archivo (opcional)
+          <input type="date" name="periodo_desde" aria-label="Inicio del periodo del archivo"
+            className="hairline text-[12.5px] px-2 py-1 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
+          <span>a</span>
+          <input type="date" name="periodo_hasta" aria-label="Fin del periodo del archivo"
+            className="hairline text-[12.5px] px-2 py-1 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
+        </label>
         <BotonImportar />
       </form>
-      <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>Máximo 4 MB por archivo.</p>
+      <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
+        Máximo 4 MB por archivo (un corte decenal real pesa ~1 MB). Sube el Excel del proveedor tal cual: se lee solo su hoja principal.
+        El periodo decide qué cobro es extemporáneo: si no lo declaras, se toma del nombre del archivo («01 A 10 DE SEPT»); si tampoco lo dice, esa revisión no se aplica y se avisa.
+      </p>
       {estado?.error && <p className="text-[12px] mt-2" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
       {r && (
         <div className="text-[12px] mt-2 space-y-0.5" style={{ color: 'var(--muted)' }}>

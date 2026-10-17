@@ -33,6 +33,22 @@ export interface PosicionTablaPropia {
   fechaHoraLocal: string;
   velocidadKmh: number | null;
   ignicion: boolean | null;
+  /**
+   * T-A5-13: referencia de despacho (el «Icident» del TMS del cliente), ya normalizada (mayúsculas, sin espacios).
+   * OPCIONAL: la llave solo existe cuando su tabla la trae con valor; sin ella todo funciona como antes.
+   * Semántica débil a propósito: puede repetirse entre tramos de un mismo viaje (el cliente no ha definido más).
+   */
+  despacho?: string | null;
+  /**
+   * T-A5-15: «fecha de recibido» de la tabla combinada (cuándo llegó la posición a SU sistema), en la misma hora local y
+   * zona que `fechaHoraLocal`. Solo sirve para medir la latencia de la fuente (se agrega, no se guarda por fila).
+   */
+  fechaRecibidaLocal?: string | null;
+  /**
+   * T-A5-15: «punto de interés» tal como lo escribe su tabla (el sitio donde se generó el evento). Se LEE y se cuenta en el
+   * resumen de la lectura; NO se guarda en `posicion` hasta que el cliente confirme que le sirve (decisión abierta).
+   */
+  puntoInteres?: string | null;
 }
 
 /** Una geocerca de SU sistema: círculo (centro + radio) o polígono. */

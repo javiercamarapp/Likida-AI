@@ -1,12 +1,19 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
-import { exigir, traerPorIds } from '../pg';
-import { COLUMNAS_HITO, filaAHito } from './repo';
+import { exigir, traerPorIds, traerTodo } from '../pg';
+import { COLUMNAS_HITO, cargarContactosTrafico, filaAHito, leerEventosPatio, type TransitoViaje } from './repo';
+import { excepcionesPatio, type ExcepcionPatio } from './patio_regla';
+import type { NivelSinDestino } from './escalamiento';
 import { coordenadasValidas } from './geo';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from './geometria_datos';
-import type { ErrorCsv, SitioCsv, TipoSitio } from './sitios';
+import {
+  contarTextosSinSitio, DIAS_TEXTOS_SIN_SITIO, planificarEquivalencias,
+  type EquivalenciaCsv, type EquivalenciaGuardada, type ErrorCsv, type LadoEquivalencia, type SitioCsv, type TextoSinSitio, type TipoEquivalencia, type TipoSitio, type ViajeParaTextos,
+} from './sitios';
 import type { PosicionComparada, SitioValidable, Veredicto, ResultadoValidacion, MotivoSinDato, FuenteUbicacion } from './validacion';
+import { telefonoAlcanzable } from './preflight_piloto';
+import type { RutaExistente } from './rutas';
 import { TIPOS_HITO, type HitoFila, type TipoEvidencia, type TipoHito } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -397,16 +404,26 @@ export interface ViajeTablero {
   etaDestinoEn: string | null;
   origenSitioId: string | null;
   destinoSitioId: string | null;
+  /** T-A5-26: `true` si el operador no tiene un teléfono al que se pueda escribir; ausente = no se leyó (no se afirma nada). */
+  operadorSinTelefono?: boolean;
 }
 
 const COLUMNAS_VIAJE_TABLERO =
   'id, folio, origen, destino, estatus, operador_id, terminal_id, cliente_id, unidad_id, aceptado_en, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, origen_geocerca_id, destino_geocerca_id, ' +
-  'operador:operador_id(nombre), terminal:terminal_id(nombre), cliente:cliente_id(nombre)';
+  'operador:operador_id(nombre, telefono), terminal:terminal_id(nombre), cliente:cliente_id(nombre)';
 
 const nombreDe = (rel: unknown): string | null => {
   const r = Array.isArray(rel) ? rel[0] : rel;
   return r && typeof r === 'object' && typeof (r as { nombre?: unknown }).nombre === 'string' ? (r as { nombre: string }).nombre : null;
 };
+
+/** `true`/`false` si la fila trae al operador con su teléfono; `undefined` si no se leyó (nunca se asume «sin teléfono»). */
+function sinTelefonoDe(rel: unknown): boolean | undefined {
+  const r = Array.isArray(rel) ? rel[0] : rel;
+  if (!r || typeof r !== 'object' || !('telefono' in r)) return undefined;
+  const tel = (r as { telefono?: unknown }).telefono;
+  return typeof tel !== 'string' || !telefonoAlcanzable(tel);
+}
 
 export function filaAViajeTablero(f: Fila): ViajeTablero {
   return {
@@ -415,10 +432,17 @@ export function filaAViajeTablero(f: Fila): ViajeTablero {
     clienteId: s(f.cliente_id), clienteNombre: nombreDe(f.cliente), unidadId: s(f.unidad_id), aceptadoEn: s(f.aceptado_en),
     citaOrigenEn: s(f.cita_origen_en), citaDestinoEn: s(f.cita_destino_en), etaOrigenEn: s(f.eta_origen_en), etaDestinoEn: s(f.eta_destino_en),
     origenSitioId: s(f.origen_geocerca_id), destinoSitioId: s(f.destino_geocerca_id),
+    ...(sinTelefonoDe(f.operador) === undefined ? {} : { operadorSinTelefono: sinTelefonoDe(f.operador) }),
   };
 }
 
 export const TOPE_VIAJES_TABLERO = 400;
+
+/** La última posición de una unidad, tal como la pinta el tablero («pin» = ubicación enviada por WhatsApp). */
+export interface PosicionTablero { lat: number; lng: number; medidaEn: string; fuente: 'gps' | 'pin' }
+
+/** Hasta aquí atrás se acepta una posición como «reciente» para el tablero (la RPC ya acota a 12 h). */
+const VENTANA_POSICION_TABLERO_MS = 12 * 3_600_000;
 
 export interface DatosTablero {
   viajes: ViajeTablero[];
@@ -429,6 +453,24 @@ export interface DatosTablero {
   evidencias: EvidenciaFila[];
   acciones: AccionOficinaFila[];
   sitios: Map<string, string>;
+  /** T-A5-11: coordenadas de los sitios de los viajes listados (para «a 3.2 km de …»). Ausente = no se leyeron. */
+  sitiosCoords?: Map<string, { nombre: string; lat: number; lng: number; radioM?: number }>;
+  /** T-A5-11: la última posición conocida por unidad (últimas 12 h). Ausente = no se pudo leer: el tablero no afirma «sin GPS». */
+  posiciones?: Map<string, PosicionTablero>;
+  /** T-A5-21: estado de tránsito (frontera) por viaje. Ausente = no se leyó (casilla apagada o lectura caída): no se afirma nada. */
+  transito?: Map<string, TransitoViaje>;
+  /** T-A5-22: la «Fecha Salida» (ISO) que el TMS selló, por viaje. Ausente = no se leyó: el tablero no afirma nada. */
+  salidasTms?: Map<string, string>;
+  /** T-A5-57: viajes con Carta Porte aprobada ligada (`cp_documento.viaje_id`). Ausente = no se leyó: el tablero no afirma «sin Carta Porte». */
+  ccpLigado?: ReadonlySet<string>;
+  /** T-A5-49: las rutas autorizadas de la flota (vigentes o no). Ausente = no se leyeron: el tablero no afirma «sin ruta». */
+  rutasAutorizadas?: readonly RutaExistente[];
+  /** T-A5-49: id de sitio → su código, para buscar la ruta del sitio de origen/destino. Sitios sin código no aparecen. */
+  sitioCodigos?: Map<string, string>;
+  /** Niveles de escalamiento sin a quién avisar, por terminal de los viajes listados. Ausente = no se pudo leer: el tablero no inventa una alerta. */
+  sinDestino?: NivelSinDestino[];
+  /** T-A5-44: patios de entrega distintos del esperado que el supervisor aún no atendió. Ausente = no se pudo leer: no se inventa una alerta. */
+  patiosDistintos?: ExcepcionPatio[];
 }
 
 /** Los viajes activos de la flota con todo lo que el tablero necesita. Un solo tenant, siempre. */
@@ -450,11 +492,51 @@ export async function leerDatosTablero(tenantId: string, f: FiltrosTablero = {})
   ]);
   const sitioIds = [...new Set(viajes.flatMap((v) => [v.origenSitioId, v.destinoSitioId]).filter((x): x is string => !!x))];
   const sitios = new Map<string, string>();
+  const sitiosCoords = new Map<string, { nombre: string; lat: number; lng: number; radioM?: number }>();
+  const sitioCodigos = new Map<string, string>();
   if (sitioIds.length > 0) {
-    const rs = await traerPorIds<Fila>(sitioIds, (t) => acotada(supabaseAdmin().from('geocerca').select('id, nombre').eq('tenant_id', tenantId).in('id', t), 'tablero.sitios') as never, 'tablero.sitios');
-    for (const g of rs) sitios.set(String(g.id), String(g.nombre));
+    const rs = await traerPorIds<Fila>(sitioIds, (t) => acotada(supabaseAdmin().from('geocerca').select('id, nombre, codigo, lat, lng, radio_m').eq('tenant_id', tenantId).in('id', t), 'tablero.sitios') as never, 'tablero.sitios');
+    for (const g of rs) {
+      sitios.set(String(g.id), String(g.nombre));
+      if (typeof g.codigo === 'string' && g.codigo !== '') sitioCodigos.set(String(g.id), g.codigo);
+      const lat = Number(g.lat), lng = Number(g.lng);
+      const radioM = Number(g.radio_m);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) sitiosCoords.set(String(g.id), { nombre: String(g.nombre), lat, lng, ...(Number.isFinite(radioM) && radioM > 0 ? { radioM } : {}) });
+    }
   }
-  return { viajes, hayMas, hitos: hitosCrudos.map(filaAHito), veredictos, evidencias, acciones, sitios };
+  // T-A5-11 «dónde está»: la última posición por unidad. Si la lectura falla NO se inventa «sin GPS»: queda ausente y la fila lo dice.
+  let posiciones: Map<string, PosicionTablero> | undefined;
+  try {
+    const { getUltimasPosiciones } = await import('../comercial');
+    const unidades = new Set(viajes.map((v) => v.unidadId).filter((x): x is string => !!x));
+    const desde = Date.now() - VENTANA_POSICION_TABLERO_MS;
+    posiciones = new Map();
+    for (const p of await getUltimasPosiciones(tenantId)) {
+      if (!unidades.has(p.unidadId) || !(Date.parse(p.medidaEn) >= desde)) continue;
+      posiciones.set(p.unidadId, { lat: p.lat, lng: p.lng, medidaEn: p.medidaEn, fuente: p.proveedor === 'whatsapp' ? 'pin' : 'gps' });
+    }
+  } catch (e) {
+    posiciones = undefined;
+    logger.warn('conductor.tablero_posiciones_no_leidas', { err: e instanceof Error ? e.message : String(e) });
+  }
+  let sinDestino: NivelSinDestino[] | undefined;
+  try {
+    // Import diferido: `contactos` arrastra `conv`; el tablero no debe pagarlo (ni romperse) cuando esa lectura no hace falta.
+    const [{ telefonosJefe }, { nivelesSinDestino }] = await Promise.all([import('../contactos'), import('./escalamiento')]);
+    const [contactos, jefes] = await Promise.all([cargarContactosTrafico(tenantId), telefonosJefe([tenantId])]);
+    const terminales = new Map<string, { id: string | null; nombre: string | null }>();
+    for (const v of viajes) terminales.set(v.terminalId ?? '', { id: v.terminalId, nombre: v.terminalNombre });
+    sinDestino = [...terminales.values()].flatMap((t) => nivelesSinDestino(contactos, jefes[tenantId] ?? null, t.id, t.nombre));
+  } catch (e) {
+    logger.warn('conductor.tablero_escalamiento_no_leido', { err: e instanceof Error ? e.message : String(e) });
+  }
+  let patiosDistintos: ExcepcionPatio[] | undefined;
+  try {
+    patiosDistintos = excepcionesPatio(await leerEventosPatio(tenantId, ids));
+  } catch (e) {
+    logger.warn('conductor.tablero_patio_no_leido', { err: e instanceof Error ? e.message : String(e) });
+  }
+  return { viajes, hayMas, hitos: hitosCrudos.map(filaAHito), veredictos, evidencias, acciones, sitios, sitioCodigos, sitiosCoords, posiciones, sinDestino, patiosDistintos };
 }
 
 export interface CatalogosFiltro {
@@ -577,4 +659,108 @@ export async function leerHitosDeOperador(tenantId: string, operadorId: string, 
     .from('viaje_hito').select(COLUMNAS_HITO).eq('tenant_id', tenantId).in('viaje_id', t).in('estado', ['recibido', 'validado'])
     .gte('mensaje_en', desde.toISOString()).lt('mensaje_en', hasta.toISOString()), 'jornada.hitos') as never, 'jornada.hitos');
   return filas.map(filaAHito);
+}
+
+// ── T-A5-17: equivalencias texto→sitio (0803), importador y lista de «textos sin sitio» ──────────────────────────────
+
+const COLUMNAS_EQUIVALENCIA = 'id, texto_normalizado, lado, tipo, geocerca_id, cliente_id';
+
+const aGuardada = (f: Fila): EquivalenciaGuardada => ({
+  id: String(f.id), textoNormalizado: String(f.texto_normalizado),
+  lado: f.lado === 'origen' || f.lado === 'destino' ? f.lado : 'ambos',
+  tipo: f.tipo === 'sin_sitio' || f.tipo === 'ignorar' ? f.tipo : 'sitio',
+  geocercaId: s(f.geocerca_id), clienteId: s(f.cliente_id),
+});
+
+/** El diccionario completo de la flota. Lanza si no puede leerlo todo (un diccionario a medias haría reescribir lo que ya existe). */
+async function leerEquivalenciasDeFlota(tenantId: string): Promise<EquivalenciaGuardada[]> {
+  const filas = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('sitio_equivalencia').select(COLUMNAS_EQUIVALENCIA)
+    .eq('tenant_id', tenantId).order('id').range(d, h), 'equivalencias.leer') as never, 'equivalencias.leer');
+  return filas.map(aGuardada);
+}
+
+export interface ResultadoImportarEquivalencias {
+  guardadas: number;
+  nuevas: number;
+  actualizadas: number;
+  sinCambios: number;
+  rechazadas: ErrorCsv[];
+}
+
+/**
+ * Importa las equivalencias del archivo ya validado. NO es todo-o-nada: cada fila se resuelve sola (el sitio tiene que existir y
+ * estar activo en el catálogo de ESTA flota; las demás filas siguen). Idempotente: lo que ya está igual no se reescribe.
+ */
+export async function importarEquivalencias(tenantId: string, filas: readonly EquivalenciaCsv[]): Promise<ResultadoImportarEquivalencias> {
+  const codigos = [...new Set(filas.filter((f) => f.tipo === 'sitio' && f.geocercaCodigo).map((f) => f.geocercaCodigo as string))];
+  const sitioPorCodigo = new Map<string, string>();
+  if (codigos.length > 0) {
+    const gs = await traerPorIds<Fila>(codigos, (t) => acotada(supabaseAdmin().from('geocerca').select('id, codigo')
+      .eq('tenant_id', tenantId).eq('catalogo', 'conductor').eq('activa', true).in('codigo', t), 'equivalencias.sitios') as never, 'equivalencias.sitios');
+    for (const g of gs) { const c = s(g.codigo); if (c) sitioPorCodigo.set(c.toLowerCase(), String(g.id)); }
+  }
+  const plan = planificarEquivalencias(filas, sitioPorCodigo, await leerEquivalenciasDeFlota(tenantId));
+  for (let i = 0; i < plan.nuevas.length; i += 200) {
+    const lote = plan.nuevas.slice(i, i + 200).map((n) => ({
+      tenant_id: tenantId, texto_normalizado: n.textoNormalizado, lado: n.lado, tipo: n.tipo, geocerca_id: n.geocercaId,
+    }));
+    const res = await acotada(supabaseAdmin().from('sitio_equivalencia').insert(lote), 'equivalencias.insertar');
+    if (res.error) throw new Error(`equivalencias.insertar: ${res.error.message}`);
+  }
+  for (const c of plan.cambios) {
+    const res = await acotada(supabaseAdmin().from('sitio_equivalencia').update({ tipo: c.tipo, geocerca_id: c.geocercaId })
+      .eq('id', c.id).eq('tenant_id', tenantId).select('id'), 'equivalencias.actualizar');
+    if (res.error) throw new Error(`equivalencias.actualizar: ${res.error.message}`);
+  }
+  return {
+    guardadas: plan.nuevas.length + plan.cambios.length, nuevas: plan.nuevas.length, actualizadas: plan.cambios.length,
+    sinCambios: plan.sinCambios, rechazadas: plan.rechazadas,
+  };
+}
+
+export type ResultadoGuardarEquivalencia = 'ok' | 'sitio_no_encontrado' | 'datos_invalidos';
+
+/** Una equivalencia asignada a mano desde la lista de «textos sin sitio». `geocercaId` solo con `tipo === 'sitio'`. */
+export async function guardarEquivalencia(
+  tenantId: string, d: { textoNormalizado: string; lado: LadoEquivalencia; tipo: TipoEquivalencia; geocercaId: string | null },
+): Promise<ResultadoGuardarEquivalencia> {
+  if (!d.textoNormalizado || (d.tipo === 'sitio') !== (d.geocercaId !== null)) return 'datos_invalidos';
+  if (d.geocercaId !== null) {
+    if (!UUID.test(d.geocercaId)) return 'datos_invalidos';
+    const r = await acotada(supabaseAdmin().from('geocerca').select('id').eq('tenant_id', tenantId).eq('catalogo', 'conductor')
+      .eq('activa', true).eq('id', d.geocercaId).order('id').limit(1), 'equivalencias.sitio');
+    if (((exigir(r as never, 'equivalencias.sitio') ?? []) as unknown[]).length === 0) return 'sitio_no_encontrado';
+  }
+  const previas = await acotada(supabaseAdmin().from('sitio_equivalencia').select('id').eq('tenant_id', tenantId)
+    .eq('texto_normalizado', d.textoNormalizado).eq('lado', d.lado).is('cliente_id', null).order('id').limit(1), 'equivalencias.previa');
+  const previa = (exigir(previas as never, 'equivalencias.previa') ?? []) as unknown as Fila[];
+  const res = previa.length > 0
+    ? await acotada(supabaseAdmin().from('sitio_equivalencia').update({ tipo: d.tipo, geocerca_id: d.geocercaId }).eq('id', String(previa[0].id)).eq('tenant_id', tenantId), 'equivalencias.editar')
+    : await acotada(supabaseAdmin().from('sitio_equivalencia').insert({ tenant_id: tenantId, texto_normalizado: d.textoNormalizado, lado: d.lado, tipo: d.tipo, geocerca_id: d.geocercaId }), 'equivalencias.crear');
+  if (res.error) {
+    const code = (res.error as { code?: string }).code;
+    if (code === '23505') return 'ok'; // otra persona lo guardó a la vez: el diccionario ya lo tiene
+    if (code === '23503' || code === '23514') return 'datos_invalidos';
+    throw new Error(`equivalencias.guardar: ${res.error.message}`);
+  }
+  return 'ok';
+}
+
+/** Tope de viajes que se leen para armar la lista (la lista es una muestra de los 14 días; el techo evita una lectura sin fondo). */
+export const TOPE_VIAJES_TEXTOS = 5000;
+
+/**
+ * «Los textos de origen/destino sin sitio más frecuentes» de los viajes ABIERTOS de los últimos 14 días: lo que hoy deja a un
+ * viaje sin hito por geocerca. Sin datos de personas: solo el texto del lugar. `truncado` avisa si hubo más viajes de los leídos.
+ */
+export async function leerTextosSinSitio(tenantId: string, ahora: Date): Promise<{ textos: TextoSinSitio[]; truncado: boolean }> {
+  const desde = new Date(ahora.getTime() - DIAS_TEXTOS_SIN_SITIO * 86_400_000).toISOString();
+  const rv = await acotada(supabaseAdmin().from('viaje').select('origen, destino, origen_geocerca_id, destino_geocerca_id')
+    .eq('tenant_id', tenantId).eq('estatus', 'abierto').gte('created_at', desde).order('created_at', { ascending: false }).order('id').limit(TOPE_VIAJES_TEXTOS + 1), 'equivalencias.viajes');
+  const filas = (exigir(rv as never, 'equivalencias.viajes') ?? []) as unknown as Fila[];
+  const viajes: ViajeParaTextos[] = filas.slice(0, TOPE_VIAJES_TEXTOS).map((f) => ({
+    origen: s(f.origen), destino: s(f.destino), origenSitioId: s(f.origen_geocerca_id), destinoSitioId: s(f.destino_geocerca_id),
+  }));
+  const guardadas = await leerEquivalenciasDeFlota(tenantId);
+  return { textos: contarTextosSinSitio(viajes, guardadas), truncado: filas.length > TOPE_VIAJES_TEXTOS };
 }

@@ -4,7 +4,7 @@
 -- Correr DESPUÉS de scripts/carga-15k.sql y DESPUÉS de aplicar la 0111.
 -- Cada bloque es la traducción SQL literal de una consulta del código (el
 -- `.range(d,h)` de PostgREST es LIMIT/OFFSET; el `.order(desc)` es DESC).
--- Pegar la salida en docs/escala-15k.md § "Resultados de la corrida".
+-- Pegar la salida en la documentación interna § "Resultados de la corrida".
 --
 -- UMBRAL (justificado en el doc): consulta de PANTALLA < 100 ms; página de
 -- 1,000 de un agregado < 100 ms; consulta del camino del WEBHOOK < 50 ms.

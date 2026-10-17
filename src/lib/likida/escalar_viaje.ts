@@ -225,6 +225,8 @@ export async function escalarViajesSinAceptar(args: {
   /** `Date.now()` a partir del cual la corrida deja de tomar viajes nuevos
    *  (ESC-3). El corte es ANTES del claim, nunca después. */
   venceEn?: number;
+  /** Flotas a saltar (las de perfil `cinco_agentes`: el Conductor está en «Próximamente»). */
+  excluirTenants?: ReadonlySet<string>;
 } = {}): Promise<ResultadoEscalacion> {
   // ── B4: el corte de horas es ESTRATEGIA de cada flota ────────────────────
   // La consulta global trae candidatos desde el PISO configurable (1 h) y el
@@ -234,7 +236,8 @@ export async function escalarViajesSinAceptar(args: {
   // no se pudo consultar es escalar con los datos equivocados (el criterio de
   // getConfig)— y se grita en el log; la corrida de la siguiente hora los
   // levanta.
-  const candidatos = await viajesSinAceptar(args.ahora, HORAS_MINIMAS_ESCALACION);
+  const todos = await viajesSinAceptar(args.ahora, HORAS_MINIMAS_ESCALACION);
+  const candidatos = args.excluirTenants && args.excluirTenants.size > 0 ? todos.filter((v) => !args.excluirTenants!.has(v.tenantId)) : todos;
   const ahoraMs = (args.ahora ?? new Date()).getTime();
   const horasPorTenant = new Map<string, number | null>();
   await Promise.all([...new Set(candidatos.map((v) => v.tenantId))].map(async (t) => {

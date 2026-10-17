@@ -1,14 +1,17 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { vigilar } from '../../bloque';
 import { ahoraMs } from '@/lib/saludo';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { crearDepsVigia } from '@/lib/likida/vigia/deps';
+import { crearRepoBandeja } from '@/lib/likida/vigia/aviso/bandeja';
 import {
   cargarTablero, validarConfig, guardarConfigVigia, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, guardarDirectorVigia, quitarDirectorVigia,
+  validarServicio, guardarServicioVigia, quitarServicioVigia,
 } from '@/lib/likida/vigia/repo';
 import { validarDirector } from '@/lib/likida/vigia/respaldo_correo';
 import {
@@ -61,9 +64,13 @@ export default async function PaginaAgenteVigia({
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
+  // T-A4-32: bajo el perfil cinco_agentes el autoenvío y el POD adjunto son stand-by (ocultos e inoperantes; el código sigue).
+  const standby = (await perfilDeTenant(tenantId)) === 'cinco_agentes';
 
   // FE-14: se lanza UNA vez y se pasa la PROMESA; cada tarjeta espera la suya.
   const datos = vigilar(cargarTablero(tenantId));
+  // T-A4-22: cuántos avisos de viaje esperan a una persona; si no se puede contar (p. ej. 0797 sin aplicar) el enlace va sin número.
+  const avisosPendientes = vigilar(crearRepoBandeja().contarPendientes(tenantId).catch((): number | null => null));
 
   async function decidir(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
@@ -126,6 +133,8 @@ export default async function PaginaAgenteVigia({
       respaldoCorreo: fd.get('respaldoCorreo') === 'on',
     });
     if (!v.ok) return { ok: false, error: v.error };
+    // El perfil se relee en el servidor: un formulario armado a mano no puede encender el autoenvío (stand-by).
+    if (v.valor.modoAprobacion !== 'siempre' && (await perfilDeTenant(a.tenantId)) === 'cinco_agentes') return { ok: false, error: 'El autoenvío no está disponible en tu plan.' };
     try {
       await guardarConfigVigia(a.tenantId, a.userId, v.valor);
       revalidatePath(RUTA);
@@ -159,6 +168,35 @@ export default async function PaginaAgenteVigia({
     } catch (e) {
       logger.error('vigia.accion_director_fallo', { tenant: a.tenantId, err: e instanceof Error ? e.message : String(e) });
       return { ok: false, error: mensajeParaPantalla(e, 'guardar la lista de avisos') };
+    }
+  }
+
+  async function servicio(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
+    'use server';
+    const a = await actor(sp, 'administra');
+    if (!a) return { ok: false, error: 'Solo el dueño de la flota cambia a quién avisa el Vigía.' };
+    const id = texto(fd, 'id');
+    if (id && !UUID.test(id)) return { ok: false, error: 'Persona no válida.' };
+    const que = texto(fd, 'accion');
+    try {
+      if (que === 'quitar') {
+        if (!id) return { ok: false, error: 'Elige a quién quitar.' };
+        const ok = await quitarServicioVigia(a.tenantId, id);
+        revalidatePath(RUTA);
+        return ok ? { ok: true, mensaje: 'Quitado de servicio al cliente.' } : { ok: false, error: 'No encontré a esa persona en tu flota.' };
+      }
+      if (que !== 'guardar') return { ok: false, error: 'Acción no válida.' };
+      const v = validarServicio({
+        clienteId: texto(fd, 'clienteId'), nombre: texto(fd, 'nombre'), telefono: texto(fd, 'telefono'), correo: texto(fd, 'correo'), activo: fd.get('activo') === 'on',
+      });
+      if (!v.ok) return { ok: false, error: v.error };
+      const r = await guardarServicioVigia(a.tenantId, a.userId, id || null, v.valor);
+      if (!r.ok) return { ok: false, error: r.error };
+      revalidatePath(RUTA);
+      return { ok: true, mensaje: id ? 'Cambios guardados.' : 'Agregado a servicio al cliente.' };
+    } catch (e) {
+      logger.error('vigia.accion_servicio_fallo', { tenant: a.tenantId, err: e instanceof Error ? e.message : String(e) });
+      return { ok: false, error: mensajeParaPantalla(e, 'guardar la lista de servicio al cliente') };
     }
   }
 
@@ -216,8 +254,10 @@ export default async function PaginaAgenteVigia({
       ahoraMs={ahoraMs()}
       puedeDecidir={DECIDE.includes(rol)}
       puedeAdministrar={rol === 'flota_admin'}
-      acciones={{ decidir, conversacion, config, alta, contacto, director }}
+      acciones={{ decidir, conversacion, config, alta, contacto, director, servicio }}
       sufijo={sufijoTenant(sp)}
+      avisosPendientes={avisosPendientes}
+      standby={standby}
     />
   );
 }

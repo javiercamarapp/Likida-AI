@@ -12,9 +12,10 @@
 
 import * as XLSX from 'xlsx';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import { llaveTexto } from './catalogos';
 import { aBuffer, textoDeBase64, textoDeBytes, utf8DeLatin1 } from './bytes';
 
-export type FormatoDoc = 'pdf_texto' | 'pdf_escaneado' | 'imagen' | 'excel' | 'csv' | 'xml' | 'correo';
+export type FormatoDoc = 'pdf_texto' | 'pdf_escaneado' | 'imagen' | 'excel' | 'csv' | 'xml' | 'correo' | 'json';
 
 export const MAX_BYTES_DOC = 12 * 1024 * 1024;
 export const MAX_PAGINAS_TEXTO = 20;
@@ -22,6 +23,11 @@ export const MAX_PAGINAS_IMAGEN = 3;
 export const MAX_HOJAS = 5;
 export const MAX_FILAS_HOJA = 2000;
 export const MAX_COLUMNAS = 60;
+/** Un JSON de embarque es chico: más de 1 MB no es un embarque, es otra cosa (o un ataque). */
+export const MAX_BYTES_JSON = 1024 * 1024;
+export const MAX_PROFUNDIDAD_JSON = 20;
+/** Claves que nunca se leen de un JSON de un tercero (contaminación de prototipos). */
+export const CLAVES_PROHIBIDAS_JSON: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
 /** Lo que viaja al modelo como texto: lo que cabe, no el documento entero. */
 export const MAX_TEXTO_MODELO = 30_000;
 /** Lo que se guarda en `texto_extracto` (para revisar al lado y para anclar). */
@@ -36,16 +42,22 @@ export interface ContenidoDoc {
   /** Data-URLs JPEG/PNG para el modelo de visión (foto o páginas de un PDF escaneado). */
   imagenes: string[];
   tabla: Hoja[] | null;
-  /** El árbol del XML ya parseado (sin prefijos de namespace), si es XML. */
+  /** El árbol del XML ya parseado (sin prefijos de namespace), si es XML. En `json` es el árbol del JSON ya limpio (sin claves prohibidas). */
   xml: unknown | null;
+  /** T-A3-14: las pestañas de un libro que son UN mismo embarque (una mercancía por pestaña); la pone el servicio, el modelo lo lee. */
+  hojasMismoEmbarque?: string[];
+  /** T-A3-53: tamaño en píxeles de la imagen ORIGINAL (antes de reducirla), para marcar una captura de baja resolución. */
+  resolucion?: { ancho: number; alto: number };
   /** Avisos de la lectura (hojas recortadas, PDF con muchas páginas…). */
   avisos: string[];
   /** Solo para correo: lo que declara la cabecera. */
   correo?: { de: string | null; asunto: string | null; fecha: string | null };
 }
 
+export type ClaseDoc = 'pdf' | 'imagen' | 'excel' | 'csv' | 'xml' | 'correo' | 'json';
+
 export type DeteccionFormato =
-  | { ok: true; clase: 'pdf' | 'imagen' | 'excel' | 'csv' | 'xml' | 'correo'; mime: string }
+  | { ok: true; clase: ClaseDoc; mime: string }
   | { ok: false; motivo: string };
 
 const empieza = (b: Uint8Array, ...bytes: number[]): boolean => bytes.every((v, i) => b[i] === v);
@@ -77,6 +89,46 @@ function pareceDelimitado(t: string): boolean {
   return false;
 }
 
+/** Profundidad del JSON, sin recursión (un JSON con miles de niveles no debe reventar la pila). Se corta al pasar `max`. */
+function profundidadJson(raiz: unknown, max: number): number {
+  let mayor = 0;
+  const pila: Array<[unknown, number]> = [[raiz, 1]];
+  while (pila.length > 0) {
+    const [nodo, d] = pila.pop() as [unknown, number];
+    if (nodo === null || typeof nodo !== 'object') continue;
+    if (d > mayor) mayor = d;
+    if (mayor > max) return mayor;
+    for (const hijo of Array.isArray(nodo) ? nodo : Object.values(nodo as Record<string, unknown>)) {
+      if (hijo !== null && typeof hijo === 'object') pila.push([hijo, d + 1]);
+    }
+  }
+  return mayor;
+}
+
+/**
+ * ¿El texto es un JSON de objeto o arreglo (no vacío)? `null` = no lo es (sigue el camino de siempre: un texto con llaves
+ * que no parsea es texto libre). Si lo es pero no se acepta (muy grande o demasiado anidado) se rechaza con un motivo llano.
+ */
+function detectarJson(t: string, bytes: number): DeteccionFormato | null {
+  const ini = t.trimStart();
+  if (ini[0] !== '{' && ini[0] !== '[') return null;
+  let valor: unknown;
+  try {
+    valor = JSON.parse(t);
+  } catch (e) {
+    // Un SyntaxError es texto libre que empieza con llave. Un RangeError es anidamiento absurdo: eso sí se rechaza.
+    if (e instanceof RangeError) return { ok: false, motivo: `El JSON está anidado a más de ${MAX_PROFUNDIDAD_JSON} niveles: no es un documento de embarque.` };
+    return null;
+  }
+  if (valor === null || typeof valor !== 'object') return null;
+  if (Array.isArray(valor) ? valor.length === 0 : Object.keys(valor).length === 0) return null;
+  if (bytes > MAX_BYTES_JSON) return { ok: false, motivo: `El JSON pesa más de ${MAX_BYTES_JSON / 1024 / 1024} MB: no es un documento de embarque.` };
+  if (profundidadJson(valor, MAX_PROFUNDIDAD_JSON) > MAX_PROFUNDIDAD_JSON) {
+    return { ok: false, motivo: `El JSON está anidado a más de ${MAX_PROFUNDIDAD_JSON} niveles: no es un documento de embarque.` };
+  }
+  return { ok: true, clase: 'json', mime: 'application/json' };
+}
+
 /** Decide qué ES el archivo por sus bytes. */
 export function detectarFormato(bytes: Uint8Array): DeteccionFormato {
   if (bytes.length === 0) return { ok: false, motivo: 'El archivo está vacío.' };
@@ -98,7 +150,7 @@ export function detectarFormato(bytes: Uint8Array): DeteccionFormato {
     if (muestra.includes('xl/workbook.xml') || muestra.includes('xl/_rels') || (muestra.includes('[Content_Types].xml') && muestra.includes('xl/'))) {
       return { ok: true, clase: 'excel', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
     }
-    return { ok: false, motivo: 'Es un archivo comprimido o un documento de Office que no es Excel. Manda el Excel, PDF, foto, XML o CSV directamente.' };
+    return { ok: false, motivo: 'Es un archivo comprimido o un documento de Office que no es Excel. Manda el Excel, PDF, foto, XML, JSON o CSV directamente.' };
   }
   // Ejecutables y otros binarios conocidos: se nombran, no se intentan leer.
   if (empieza(bytes, 0x4d, 0x5a) || empieza(bytes, 0x7f, 0x45, 0x4c, 0x46) || empieza(bytes, 0x1f, 0x8b) || empieza(bytes, 0x52, 0x61, 0x72, 0x21)) {
@@ -116,10 +168,25 @@ export function detectarFormato(bytes: Uint8Array): DeteccionFormato {
     if (/^<!doctype\s+html|^<html[\s>]/i.test(ini)) return { ok: true, clase: 'correo', mime: 'text/html' };
     return { ok: true, clase: 'xml', mime: 'application/xml' };
   }
+  // JSON estructurado (el «API propio» de algún cliente): antes del texto plano, que es donde caía.
+  const json = detectarJson(t, bytes.length);
+  if (json) return json;
   if (parecenCabecerasDeCorreo(t)) return { ok: true, clase: 'correo', mime: 'message/rfc822' };
   if (pareceDelimitado(t)) return { ok: true, clase: 'csv', mime: 'text/csv' };
   if (t.trim().length >= 10) return { ok: true, clase: 'correo', mime: 'text/plain' };
   return { ok: false, motivo: 'El archivo no trae contenido legible.' };
+}
+
+/**
+ * T-A3-58 · ¿Un adjunto SIN extensión se acepta? Solo si sus BYTES son JSON, PDF o Excel (y una foto cuando el correo la
+ * declara `image/*`: las imágenes pegadas llegan sin nombre). Cualquier otra cosa —texto, XML, CSV, zip, ejecutable,
+ * binario desconocido— se descarta sin leerla ni interpretarla: sin extensión no hay ninguna pista de que sea un documento.
+ */
+export function aceptableSinExtension(bytes: Uint8Array, contentType?: string | null): boolean {
+  const d = detectarFormato(bytes);
+  if (!d.ok) return false;
+  if (d.clase === 'json' || d.clase === 'pdf' || d.clase === 'excel') return true;
+  return d.clase === 'imagen' && /^image\//i.test((contentType ?? '').trim());
 }
 
 const recortar = (s: string, max: number): string => (s.length > max ? s.slice(0, max) : s);
@@ -154,13 +221,18 @@ async function prepararPdf(bytes: Uint8Array, avisos: string[]): Promise<Conteni
 async function prepararImagen(bytes: Uint8Array, avisos: string[]): Promise<ContenidoDoc> {
   const sharp = (await import('sharp')).default;
   // limitInputPixels: una imagen de 40 000 × 40 000 px cabe en pocos KB y reventaría la memoria.
-  const buf = await sharp(aBuffer(bytes), { limitInputPixels: 40_000_000, failOn: 'error' })
+  const original = sharp(aBuffer(bytes), { limitInputPixels: 40_000_000, failOn: 'error' });
+  const meta = await original.metadata();
+  // Con la orientación EXIF 5-8 la foto se gira 90°: el ancho de verdad es el alto declarado.
+  const girada = (meta.orientation ?? 1) >= 5;
+  const resolucion = meta.width && meta.height ? { ancho: girada ? meta.height : meta.width, alto: girada ? meta.width : meta.height } : undefined;
+  const buf = await original
     .rotate()
     .resize({ width: 1800, height: 1800, fit: 'inside', withoutEnlargement: true })
     .jpeg({ quality: 82 })
     .toBuffer();
   avisos.push('La foto se orientó y se redujo a un máximo de 1800 px antes de leerla.');
-  return { formato: 'imagen', texto: null, imagenes: [`data:image/jpeg;base64,${buf.toString('base64')}`], tabla: null, xml: null, avisos };
+  return { formato: 'imagen', texto: null, imagenes: [`data:image/jpeg;base64,${buf.toString('base64')}`], tabla: null, xml: null, ...(resolucion ? { resolucion } : {}), avisos };
 }
 
 function celdaATexto(v: unknown): string {
@@ -184,6 +256,28 @@ export function tablaATexto(hojas: Hoja[], maxChars = MAX_TEXTO_GUARDADO): strin
   return recortar(partes.join('\n\n'), maxChars);
 }
 
+// ── Libro con la plantilla del TMS (T-A3-47): sus hojas que no son datos no cuentan contra MAX_HOJAS ──
+
+/** Nombre de hoja a llave comparable: minúsculas, sin acentos, espacios ni signos. */
+export const llaveHoja = (t: unknown): string => llaveTexto(String(t ?? '')).replace(/[^a-z0-9]+/g, '');
+
+/** Hojas que nunca son datos: errores del TMS, catálogo de regímenes del agente aduanal y la Guía de llenado. */
+export function esHojaIgnorada(nombre: string): boolean {
+  const k = llaveHoja(nombre);
+  return k === 'error' || k.startsWith('informacionagenteaduanal') || k === 'guia' || k.startsWith('guiade');
+}
+
+/** ¿Los nombres de hoja son los de la plantilla «normal» del TMS? (firma por nombres; los rótulos se verifican al leer). */
+export function esLibroPlantillaTms(nombres: readonly string[]): boolean {
+  const k = new Set(nombres.map(llaveHoja));
+  return k.has('remintentedestinatario') && k.has('mercancias');
+}
+
+/** Las hojas que se leen como datos: en un libro-plantilla se descartan las ignoradas ANTES del tope `MAX_HOJAS`. */
+export function hojasDeDatos(nombres: readonly string[]): string[] {
+  return esLibroPlantillaTms(nombres) ? nombres.filter((n) => !esHojaIgnorada(n)) : [...nombres];
+}
+
 function prepararHoja(bytes: Uint8Array, esCsv: boolean, avisos: string[]): ContenidoDoc {
   let libro: XLSX.WorkBook;
   if (esCsv) {
@@ -192,8 +286,10 @@ function prepararHoja(bytes: Uint8Array, esCsv: boolean, avisos: string[]): Cont
   } else {
     libro = XLSX.read(aBuffer(bytes), { type: 'buffer', cellDates: true, cellFormula: false, cellHTML: false, cellStyles: false, sheetRows: MAX_FILAS_HOJA + 1 });
   }
-  if (libro.SheetNames.length > MAX_HOJAS) avisos.push(`El libro tiene ${libro.SheetNames.length} hojas; se leyeron ${MAX_HOJAS}.`);
-  const hojas: Hoja[] = libro.SheetNames.slice(0, MAX_HOJAS)
+  const nombresDatos = esCsv ? libro.SheetNames : hojasDeDatos(libro.SheetNames);
+  if (nombresDatos.length < libro.SheetNames.length) avisos.push(`Plantilla del TMS: se ignoraron las hojas que no son datos (${libro.SheetNames.filter(esHojaIgnorada).join(', ')}).`);
+  if (nombresDatos.length > MAX_HOJAS) avisos.push(`El libro tiene ${nombresDatos.length} hojas; se leyeron ${MAX_HOJAS}.`);
+  const hojas: Hoja[] = nombresDatos.slice(0, MAX_HOJAS)
     .map((n) => ({ nombre: n.slice(0, 60), filas: hojaAFilas(libro.Sheets[n], avisos, n) }))
     .filter((h) => h.filas.length > 0);
   if (hojas.length === 0) throw new Error('El archivo no trae filas con datos.');
@@ -224,6 +320,37 @@ function prepararXml(bytes: Uint8Array, avisos: string[]): ContenidoDoc {
   try { arbol = parsearXml(texto); } catch { throw new Error('El XML está mal formado.'); }
   if (!arbol || typeof arbol !== 'object') throw new Error('El XML está vacío.');
   return { formato: 'xml', texto: recortar(texto, MAX_TEXTO_GUARDADO), imagenes: [], tabla: null, xml: arbol, avisos };
+}
+
+// ── JSON ────────────────────────────────────────────────────────────────────
+
+/** Copia el árbol sin las claves prohibidas (cuenta cuántas quitó) y con tope de profundidad. */
+function limpiarJson(v: unknown, profundidad: number, quitadas: { n: number }): unknown {
+  if (v === null || typeof v !== 'object') return v;
+  if (profundidad > MAX_PROFUNDIDAD_JSON) throw new Error(`El JSON está anidado a más de ${MAX_PROFUNDIDAD_JSON} niveles: no es un documento de embarque.`);
+  if (Array.isArray(v)) return v.map((x) => limpiarJson(x, profundidad + 1, quitadas));
+  const salida: Record<string, unknown> = {};
+  for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+    if (CLAVES_PROHIBIDAS_JSON.has(k)) { quitadas.n++; continue; }
+    salida[k] = limpiarJson(x, profundidad + 1, quitadas);
+  }
+  return salida;
+}
+
+/** Un JSON de embarque: el árbol (sin claves peligrosas) para los perfiles y su texto re-serializado para el modelo y la pantalla. */
+function prepararJson(bytes: Uint8Array, avisos: string[]): ContenidoDoc {
+  if (bytes.length > MAX_BYTES_JSON) throw new Error(`El JSON pesa más de ${MAX_BYTES_JSON / 1024 / 1024} MB: no es un documento de embarque.`);
+  const crudo = textoDeBytes(bytes).replace(/^\ufeff/, '');
+  let valor: unknown;
+  try { valor = JSON.parse(crudo); } catch { throw new Error('El JSON está mal formado.'); }
+  if (valor === null || typeof valor !== 'object') throw new Error('El JSON no es un objeto ni un arreglo.');
+  if (profundidadJson(valor, MAX_PROFUNDIDAD_JSON) > MAX_PROFUNDIDAD_JSON) throw new Error(`El JSON está anidado a más de ${MAX_PROFUNDIDAD_JSON} niveles: no es un documento de embarque.`);
+  const quitadas = { n: 0 };
+  const arbol = limpiarJson(valor, 1, quitadas);
+  if (quitadas.n > 0) avisos.push(`Se ignoraron ${quitadas.n} clave(s) no permitidas del JSON (__proto__, constructor, prototype).`);
+  const completo = JSON.stringify(arbol, null, 2);
+  if (completo.length > MAX_TEXTO_GUARDADO) avisos.push(`El JSON es largo: solo se guardan y se leen los primeros ${MAX_TEXTO_GUARDADO} caracteres del texto; el mapeo del perfil sí recorre todo.`);
+  return { formato: 'json', texto: recortar(completo, MAX_TEXTO_GUARDADO), imagenes: [], tabla: null, xml: arbol, avisos };
 }
 
 // ── Correo ──────────────────────────────────────────────────────────────────
@@ -304,7 +431,7 @@ function prepararCorreo(bytes: Uint8Array, avisos: string[]): ContenidoDoc {
 }
 
 /** Prepara el contenido de un archivo YA detectado. Lanza con un motivo en español si no se puede leer. */
-export async function prepararContenido(bytes: Uint8Array, clase: 'pdf' | 'imagen' | 'excel' | 'csv' | 'xml' | 'correo'): Promise<ContenidoDoc> {
+export async function prepararContenido(bytes: Uint8Array, clase: ClaseDoc): Promise<ContenidoDoc> {
   const avisos: string[] = [];
   try {
     switch (clase) {
@@ -314,6 +441,7 @@ export async function prepararContenido(bytes: Uint8Array, clase: 'pdf' | 'image
       case 'csv': return prepararHoja(bytes, true, avisos);
       case 'xml': return prepararXml(bytes, avisos);
       case 'correo': return prepararCorreo(bytes, avisos);
+      case 'json': return prepararJson(bytes, avisos);
     }
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);

@@ -9,10 +9,13 @@
 // ORDEN DE PREFERENCIA (de lo más barato y seguro a lo más caro):
 //
 //   1. XML con complemento Carta Porte  → se lee por código, sin modelo.
+//   1b. Lector de formato C, D o E (T-A3-60): si quien llama ya sabe el formato (registro_formatos.ts), el lector
+//       de ese formato produce la extracción común. D y E no usan modelo; C (escaneada) usa el puerto de visión.
 //   2. Perfil del cliente-formato        → el mapeo aprendido se reaplica, sin modelo.
-//   3. Modelo, nivel 1 (Gemini 3.5 Flash-Lite).
-//   4. Escalamiento por confianza: nivel 2 (Gemini 3.8 Flash) y nivel 3 (Sonnet 5.5)
-//      SOLO si un campo CRÍTICO sale con baja confianza o faltan varios.
+//   3. Modelo: los niveles de `orden_niveles.ts` (por omisión nivel 2 = Gemini 3.8 Flash, luego nivel 3 = Sonnet 5.5; el nivel 1
+//      = Gemini 3.5 Flash-Lite queda configurable por tipo de documento).
+//   4. Escalamiento por CONFIANZA COMPUESTA (confianza_compuesta.ts): al siguiente nivel SOLO si un campo CRÍTICO sale con baja
+//      confianza, falla un validador determinista (aunque el modelo diga 0.99), los niveles discrepan o faltan varios.
 //
 // Dos modelos que coinciden en un valor SUBEN su confianza; si discrepan, la
 // confianza BAJA (a lo sumo 0.6) y el campo cae a revisión humana. Nunca se
@@ -25,38 +28,56 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { randomBytes } from 'node:crypto';
+import type { CaidaLlm } from '@/lib/llm/caidas';
 import { z } from 'zod';
 import {
-  CAMPOS_DOC, CAMPOS_MERCANCIA, CLAVES_DOC, CLAVES_MERCANCIA, MAX_MERCANCIAS, UMBRAL_ESCALA,
-  campoDoc, campoMercancia, extraccionVacia, type CampoDoc, type CampoValor, type Extraccion,
+  CAMPOS_DOC, CAMPOS_DOC_LLM, CAMPOS_MERCANCIA, CAMPOS_MERCANCIA_LLM, CLAVES_DOC, CLAVES_DOC_LLM, CLAVES_MERCANCIA, CLAVES_MERCANCIA_LLM, MAX_MERCANCIAS, UMBRAL_ESCALA,
+  campoDoc, campoMercancia, etiquetaCampo, extraccionVacia, type CampoDoc, type CampoValor, type Extraccion,
 } from './campos';
+import {
+  aplicarConfianzaCompuesta, resolverAmbiguosPorCuadre, revisionHumanaDe, validadoresDeterministas, type FalloValidador, type OpcionesCompuesta, type RevisionHumana,
+} from './confianza_compuesta';
+import { registrarEscalamiento, type CodigoEscalamiento } from './contador_escalamientos';
 import { llaveTexto } from './catalogos';
 import { MAX_TEXTO_MODELO, type ContenidoDoc, type FormatoDoc } from './contenido';
-import { completarDerivados } from './derivar';
+import { completarDerivados, type ContextoDerivar, type FormatoLector, type ResultadoLector } from './derivar';
 import { detectarInyeccion } from './inyeccion';
-import { limpiarTexto, normalizarNumero, normalizarValor } from './normalizar';
+import { limpiarTexto, normalizarNumero, normalizarValor, type OrdenFecha } from './normalizar';
+import { leerBol } from './lectores/bol';
+import { leerOrdenAgente } from './lectores/orden_agente';
+import { leerRemisionEscaneada, type VisionRemision } from './lectores/remision';
+import { ordenDeNiveles, tipoDeLectura } from './orden_niveles';
 import { aplicarPerfil, elegirPerfil, type EjemploPerfil, type Perfil } from './perfiles';
+import { leerCorreoF1 } from './lectores/correo_f1';
+import { leerCorreoF2 } from './lectores/correo_f2';
+import { leerCorreoF3 } from './lectores/correo_f3';
+import { clasificarFormato } from './registro_formatos';
+import { leerRotulosCorreo, lecturaConfiable } from './rotulos';
 import { extraerCartaPorteXml } from './xml_ccp';
 
 // ── El contrato con el modelo ───────────────────────────────────────────────
 
 const ItemDoc = z.object({
-  clave: z.enum(CLAVES_DOC as [string, ...string[]]),
+  clave: z.enum(CLAVES_DOC_LLM as [string, ...string[]]),
   valor: z.string().max(600).nullable(),
   confianza: z.number().min(0).max(1),
-  evidencia: z.string().max(300).nullable(),
+  evidencia: z.string().nullable(),
 });
 const ItemMerc = z.object({
-  clave: z.enum(CLAVES_MERCANCIA as [string, ...string[]]),
+  clave: z.enum(CLAVES_MERCANCIA_LLM as [string, ...string[]]),
   valor: z.string().max(600).nullable(),
   confianza: z.number().min(0).max(1),
-  evidencia: z.string().max(300).nullable(),
+  evidencia: z.string().nullable(),
 });
+
+/** Tope de `notas` y de `evidencia`: se RECORTAN (recortarSalida), no invalidan la salida (T-A3-68 d: 5 de 15 salidas se perdían por esto). */
+export const MAX_NOTAS = 400;
+export const MAX_EVIDENCIA = 300;
 
 export const SalidaLlmSchema = z.object({
   campos: z.array(ItemDoc).max(80),
   mercancias: z.array(z.object({ campos: z.array(ItemMerc).max(40) })).max(MAX_MERCANCIAS),
-  notas: z.string().max(400).nullable(),
+  notas: z.string().nullable(),
 });
 export type SalidaLlmDatos = z.infer<typeof SalidaLlmSchema>;
 
@@ -65,6 +86,15 @@ export interface SalidaLlm extends SalidaLlmDatos {
   tokensIn: number;
   tokensOut: number;
   costoUsd: number;
+  /** T-A3-68: cambios de modo (`json_object`) o de modelo (respaldo) que ocurrieron en esta llamada; nunca en silencio. */
+  caidas?: CaidaLlm[];
+}
+
+/** Recorta `notas` (400) y `evidencia` (300) en vez de rechazar la salida entera: el contenido sirve, solo venía largo. */
+export function recortarSalida<T extends SalidaLlmDatos>(s: T): T {
+  const corta = (t: string | null, max: number): string | null => (t === null || t.length <= max ? t : `${t.slice(0, max - 1)}…`);
+  const item = <I extends { evidencia: string | null }>(i: I): I => (i.evidencia !== null && i.evidencia.length > MAX_EVIDENCIA ? { ...i, evidencia: corta(i.evidencia, MAX_EVIDENCIA) } : i);
+  return { ...s, notas: corta(s.notas, MAX_NOTAS), campos: s.campos.map(item), mercancias: s.mercancias.map((m) => ({ campos: m.campos.map(item) })) };
 }
 
 export type NivelModelo = 1 | 2 | 3;
@@ -75,6 +105,8 @@ export interface EntradaLlm {
   imagenes: string[];
   ejemplos: EjemploPerfil[];
   nivel: NivelModelo;
+  /** T-A3-14: nombres de las pestañas que son UN mismo embarque (una mercancía por pestaña). */
+  hojasMismoEmbarque?: string[];
   /** Marcador aleatorio con el que se delimita el documento dentro del prompt. */
   marcador: string;
 }
@@ -102,15 +134,18 @@ export function construirSistema(): string {
     '- «confianza» (0 a 1) es qué tan seguro estás de que el valor es EXACTAMENTE lo escrito en el documento. Usa ≥0.95 solo si es legible y sin ambigüedad; baja a ≤0.6 si la imagen es borrosa, el dato está cortado o hay dos candidatos.',
     '- «evidencia» es el fragmento LITERAL del documento (máx. 150 caracteres) donde lo leíste. Sin evidencia no hay valor.',
     '- No conviertas unidades: el peso va como está escrito y su unidad en peso_unidad. No calcules totales. No deduzcas claves del SAT: si el documento no trae la clave de producto (8 dígitos) o la de unidad, déjalas null y pon el texto de la unidad en unidad_texto.',
+    '- PESO: el peso de la mercancía es el PESO BRUTO. Si el documento trae «Peso total bruto» (o «Gross weight»), ese manda; el peso neto o «por embalaje» NO va en peso_kg ni en peso_bruto_total (si es lo único que hay, ponlo en peso_kg con la evidencia literal de su rótulo y dilo en «notas»).',
+    '- CIFRAS: copia los números con sus separadores tal como están escritos («1.234.567» y «1,234,567.89» son cifras distintas); no cambies el punto por la coma ni quites los separadores de miles.',
     '- RFC en mayúsculas, sin espacios. Código postal de 5 dígitos. Fechas tal como aparecen.',
+    '- Aduana: copia tal cual el régimen aduanero, el pedimento (solo importación), el tipo de materia y el RFC del importador (no el del remitente ni el del agente aduanal). Un rótulo sin valor es null; no inventes.',
     '- Una entrada de «mercancias» por cada renglón de mercancía distinto del documento (no repitas el mismo renglón; ignora filas de totales).',
-    '- Si el documento trae varios embarques, extrae solo el PRIMERO y dilo en «notas».',
+    '- Si el documento trae varios embarques, extrae solo el PRIMERO y dilo en «notas». «notas» va en 400 caracteres como máximo.',
     '',
     'CAMPOS DEL DOCUMENTO:',
-    describirCampos(CAMPOS_DOC),
+    describirCampos(CAMPOS_DOC_LLM),
     '',
     'CAMPOS DE CADA MERCANCÍA:',
-    describirCampos(CAMPOS_MERCANCIA),
+    describirCampos(CAMPOS_MERCANCIA_LLM),
   ].join('\n');
 }
 
@@ -120,6 +155,13 @@ export function construirUsuario(e: EntradaLlm): string {
     partes.push(
       'Así escribe ESTE cliente sus datos (ejemplos ya confirmados por una persona; son referencia de formato, no de valores):',
       ...e.ejemplos.slice(-3).flatMap((ej) => ej.evidencias.slice(0, 8).map((x) => `  · ${x.campo} ← «${limpiarTexto(x.linea, 160) ?? ''}»`)),
+    );
+  }
+  if (e.hojasMismoEmbarque && e.hojasMismoEmbarque.length > 1) {
+    const rotulos = e.hojasMismoEmbarque.map((n) => `HOJA ${n}`).join(', ');
+    partes.push(
+      `Este libro trae ${e.hojasMismoEmbarque.length} pestañas (${rotulos}) y TODAS son el MISMO embarque: no es "varios embarques", así que NO extraigas solo el primero.`,
+      'Lee todas las pestañas: los datos del embarque (remitente, destinatario, caja, folio) son comunes y cada pestaña aporta su propia mercancía. Devuelve UNA mercancía por pestaña (o por renglón de mercancía, si una pestaña trae varios), sin omitir ninguna.',
     );
   }
   if (e.texto) {
@@ -167,9 +209,10 @@ export function valorEnTexto(def: CampoDoc, valor: string, texto: string): boole
 function convertirItem(
   def: CampoDoc | undefined, item: { valor: string | null; confianza: number; evidencia: string | null },
   texto: string | null,
+  ordenFecha?: OrdenFecha,
 ): CampoValor | null {
   if (!def || item.valor === null || item.valor.trim() === '') return null;
-  const n = normalizarValor(def, item.valor);
+  const n = normalizarValor(def, item.valor, { ordenFecha });
   if (n.valor === null) return null;
   const notas = [...n.notas];
   let conf = Math.min(0.99, Math.max(0, item.confianza)) - n.penalizacion;
@@ -189,18 +232,18 @@ function convertirItem(
 }
 
 /** Convierte lo que devolvió el modelo (ya validado por zod) a una Extracción normalizada y anclada. */
-export function extraccionDeLlm(s: SalidaLlmDatos, texto: string | null): Extraccion {
+export function extraccionDeLlm(s: SalidaLlmDatos, texto: string | null, ordenFecha?: OrdenFecha): Extraccion {
   const e = extraccionVacia();
   const mejor = (actual: CampoValor | undefined, nuevo: CampoValor | null): CampoValor | undefined => (!nuevo ? actual : !actual || nuevo.confianza > actual.confianza ? nuevo : actual);
   for (const it of s.campos) {
-    const v = convertirItem(campoDoc(it.clave), it, texto);
+    const v = convertirItem(campoDoc(it.clave), it, texto, ordenFecha);
     const r = mejor(e.campos[it.clave], v);
     if (r) e.campos[it.clave] = r;
   }
   for (const fila of s.mercancias.slice(0, MAX_MERCANCIAS)) {
     const salida: Record<string, CampoValor> = {};
     for (const it of fila.campos) {
-      const v = convertirItem(campoMercancia(it.clave), it, texto);
+      const v = convertirItem(campoMercancia(it.clave), it, texto, ordenFecha);
       const r = mejor(salida[it.clave], v);
       if (r) salida[it.clave] = r;
     }
@@ -282,8 +325,29 @@ export interface ContextoExtraccion {
   signal?: AbortSignal;
   /** Para pruebas: marcador determinista. */
   marcador?: () => string;
-  /** Tope de niveles de modelo (1 = nunca escalar). Por defecto 3. */
+  /** Tope de niveles a recorrer (1 = nunca escalar). Por defecto, todos los del orden. */
   nivelMaximo?: NivelModelo;
+  /** T-A3-68 f: los niveles a recorrer y su orden. Por omisión, el del tipo de documento (orden_niveles.ts: texto o visión, con ajuste por entorno). */
+  niveles?: readonly NivelModelo[];
+  /**
+   * T-A3-68: ¿este error del modelo debe DETENER la cascada (presupuesto agotado, aborto)? Cualquier otro (salida inválida, proveedor
+   * caído tras sus reintentos) pasa al siguiente nivel con un escalamiento `error_modelo`; en el último nivel se relanza.
+   */
+  errorFatal?: (e: unknown) => boolean;
+  /** T-A3-68 e: catálogos SAT precargados para el validador de clave de producto. Sin ellos solo se valida la forma. */
+  catalogosSat?: OpcionesCompuesta['catalogosSat'];
+  /** T-A3-46: nombre del archivo y año/aduana del perfil, para derivar el régimen y completar el pedimento. */
+  nombreArchivo?: string | null;
+  pedimentoPerfil?: ContextoDerivar['pedimentoPerfil'];
+  /** T-A3-60: el formato de entrada ya reconocido (C remisión escaneada, D BOL en inglés, E orden del agente aduanal). */
+  formatoEntrada?: FormatoLector;
+  /** T-A3-60: el modelo de visión para el formato C. Sin él, una remisión escaneada no se lee. */
+  vision?: VisionRemision | null;
+  /**
+   * T-A3-53: transcribe una captura (imagen) a TEXTO tal como se lee, rótulo por rótulo (el modelo de visión, por este puerto
+   * para que las pruebas lo sustituyan por uno determinista). Sin él, una imagen sigue el camino de siempre (el modelo la lee).
+   */
+  transcribir?: (imagenes: string[], signal?: AbortSignal) => Promise<string>;
 }
 
 export interface ResultadoExtraccion {
@@ -301,9 +365,17 @@ export interface ResultadoExtraccion {
   perfilVersion: number | null;
   perfilAmbiguo: boolean;
   avisos: string[];
-  escalamientos: Array<{ de: NivelModelo; a: NivelModelo; motivo: string }>;
+  escalamientos: Array<{ de: NivelModelo; a: NivelModelo; motivo: string; codigo: CodigoEscalamiento }>;
+  /** T-A3-68 e: campos que ningún nivel logró dejar que cuadren, con los valores en conflicto. Nunca se aprueban solos. */
+  revisionHumana: RevisionHumana[];
+  /** T-A3-68 a: cambios de modo o de modelo (respaldo) con su motivo. */
+  caidas: CaidaLlm[];
   /** Notas del modelo (p. ej. «el documento trae varios embarques»). */
   notasModelo: string[];
+  /** T-A3-60: lo que dejó el lector de formato (incidencias, lo que queda vacío para T-A3-62, datos sin campo como el sello). */
+  lector?: Pick<ResultadoLector, 'formato' | 'incidencias' | 'vacios' | 'adicionales'>;
+  /** T-A3-53: la captura del correo termina en un rótulo sin valor. La validación lo vuelve bloqueo `captura_incompleta`. */
+  capturaIncompleta: { ultimoRotulo: string } | null;
 }
 
 const marcadorAleatorio = (): string => randomBytes(10).toString('hex');
@@ -317,18 +389,125 @@ function completarCon(base: Extraccion, extra: Extraccion): Extraccion {
   return e;
 }
 
+const LECTORES_CORREO = { F1: leerCorreoF1, F2: leerCorreoF2, F3: leerCorreoF3 } as const;
+type FormatoCorreo = keyof typeof LECTORES_CORREO;
+
+/** El texto de un correo, o la transcripción de su captura (por el puerto `transcribir`); `null` si no hay qué leer por rótulos. */
+async function textoDeCorreoOCaptura(c: ContenidoDoc, ctx: ContextoExtraccion): Promise<string | null> {
+  if (c.formato === 'correo') return c.texto;
+  if (c.formato === 'imagen' && ctx.transcribir && c.imagenes.length > 0) return ctx.transcribir(c.imagenes, ctx.signal);
+  return null;
+}
+
+interface LecturaCorreo { extraccion: Extraccion; avisos: string[]; capturaIncompleta: { ultimoRotulo: string } | null; lector?: ResultadoLector }
+
+/**
+ * T-A3-53 y T-A3-61: un correo en texto o la captura de un correo se lee SIN modelo, por rótulo. La firma elige el lector de la
+ * variante (F1 tabla, F2 «Datos para CP:», F3 bloque de rótulos); un correo que no es de ninguna variante pero trae rótulos de
+ * carga claros se lee con el mapa de rótulos común. `null` si no parece un bloque de rótulos (el flujo sigue con el modelo).
+ */
+async function leerCorreoPorRotulos(c: ContenidoDoc, ctx: ContextoExtraccion, forzado?: FormatoCorreo): Promise<LecturaCorreo | null> {
+  const texto = await textoDeCorreoOCaptura(c, ctx);
+  if (!texto) return null;
+  const clase = forzado ?? clasificarFormato({ contenido: c, textoVision: c.formato === 'imagen' ? texto : null }).formato;
+  if (clase === 'F1' || clase === 'F2' || clase === 'F3') {
+    const lec = LECTORES_CORREO[clase](c, { transcripcion: texto });
+    // Una captura cortada se declara aunque traiga pocos datos: callarla dejaría pasar un documento sin su fracción o pedimento.
+    if (lec.leido || lec.capturaIncompleta) return { extraccion: lec.extraccion, avisos: lec.avisos, capturaIncompleta: lec.capturaIncompleta ?? null, lector: lec };
+  }
+  const lectura = leerRotulosCorreo(texto, { resolucion: c.resolucion ?? null });
+  return lectura && (lecturaConfiable(lectura) || (lectura.firma && lectura.capturaIncompleta))
+    ? { extraccion: lectura.extraccion, avisos: lectura.avisos, capturaIncompleta: lectura.capturaIncompleta }
+    : null;
+}
+
+/** Por omisión, solo el presupuesto agotado detiene la cascada (por nombre, como `esErrorDePresupuesto`: este archivo no importa el cliente). */
+const presupuestoAgotado = (err: unknown): boolean => {
+  let actual: unknown = err;
+  for (let d = 0; d < 6 && actual && typeof actual === 'object'; d++) {
+    if ((actual as { name?: unknown }).name === 'LlmBudgetExceededError') return true;
+    actual = (actual as { cause?: unknown }).cause;
+  }
+  return false;
+};
+
+const hayDesacuerdo = (e: Extraccion, clave: string): boolean => {
+  const [k, i] = clave.split('#');
+  const c = i === undefined ? e.campos[k] : e.mercancias[Number(i)]?.[k];
+  return (c?.notas ?? []).some((n) => n.startsWith('Los modelos discreparon'));
+};
+
+const campoDe = (e: Extraccion, campo: string, renglon: number | null): CampoValor | undefined => (renglon === null ? e.campos[campo] : e.mercancias[renglon]?.[campo]);
+
+/**
+ * El nivel anterior fallaba un validador en estos campos; si el valor de ESTE nivel no lo falla, se queda el de este nivel
+ * (confianza ≤ 0.85, con nota del cambio). Solo se pisa si los dos niveles leyeron el mismo número de renglones.
+ */
+function preferirElQueCumple(acum: Extraccion, antes: Extraccion, lectura: Extraccion, previos: ReadonlyArray<FalloValidador>, ahora: ReadonlyArray<FalloValidador>): Extraccion {
+  const falla = new Set(ahora.map((f) => `${f.renglon ?? 'doc'}|${f.campo}`));
+  const mismosRenglones = antes.mercancias.length === lectura.mercancias.length && acum.mercancias.length === lectura.mercancias.length;
+  const campos = { ...acum.campos };
+  const mercancias = acum.mercancias.map((f) => ({ ...f }));
+  for (const p of previos) {
+    if (falla.has(`${p.renglon ?? 'doc'}|${p.campo}`)) continue;
+    if (p.renglon !== null && !mismosRenglones) continue;
+    const nuevo = campoDe(lectura, p.campo, p.renglon);
+    const viejo = campoDe(antes, p.campo, p.renglon);
+    if (!presente(nuevo) || !presente(viejo) || nuevo.valor === viejo.valor) continue;
+    const elegido: CampoValor = { ...nuevo, confianza: Math.min(nuevo.confianza, 0.85), notas: [...(nuevo.notas ?? []), `El nivel anterior leyó «${viejo.valor}», que no pasaba un validador; este nivel lo cumple.`] };
+    if (p.renglon === null) campos[p.campo] = elegido; else mercancias[p.renglon][p.campo] = elegido;
+  }
+  return { campos, mercancias };
+}
+
+/** Lo que va a una persona: los campos que siguen fallando un validador y los críticos en desacuerdo, con los valores de cada nivel. */
+function revisionHumanaFinal(acum: Extraccion, fallos: ReadonlyArray<FalloValidador>, lecturas: ReadonlyArray<Extraccion>): RevisionHumana[] {
+  const lista = revisionHumanaDe(fallos, lecturas);
+  const ya = new Set(lista.map((h) => `${h.renglon ?? 'doc'}|${h.campo}`));
+  const agregar = (def: CampoDoc, renglon: number | null): void => {
+    const c = campoDe(acum, def.clave, renglon);
+    if (!def.critico || !presente(c) || ya.has(`${renglon ?? 'doc'}|${def.clave}`) || !(c.notas ?? []).some((n) => n.startsWith('Los modelos discreparon'))) return;
+    const valores = [...new Set(lecturas.map((l) => campoDe(l, def.clave, renglon)?.valor).filter((v): v is string => typeof v === 'string' && v !== ''))];
+    lista.push({ campo: def.clave, renglon, codigo: 'desacuerdo', motivo: 'Los niveles del modelo discreparon y el último no logró confirmar el valor.', valores });
+  };
+  for (const d of CAMPOS_DOC) agregar(d, null);
+  acum.mercancias.forEach((_, i) => { for (const d of CAMPOS_MERCANCIA) agregar(d, i); });
+  return lista;
+}
+
 export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion): Promise<ResultadoExtraccion> {
   const det = detectarInyeccion(c.texto);
   const r: ResultadoExtraccion = {
     extraccion: extraccionVacia(), origen: 'llm', nivel: 0, modelo: null, tokensIn: 0, tokensOut: 0, costoUsd: 0,
     riesgoInyeccion: det.riesgo, indiciosInyeccion: det.indicios, perfilId: null, perfilVersion: null, perfilAmbiguo: false,
-    avisos: [...c.avisos], escalamientos: [], notasModelo: [],
+    avisos: [...c.avisos], escalamientos: [], revisionHumana: [], caidas: [], notasModelo: [], capturaIncompleta: null,
   };
 
+  const derivar: ContextoDerivar = { nombreArchivo: ctx.nombreArchivo, pedimentoPerfil: ctx.pedimentoPerfil };
+
   // 1. XML con Carta Porte: sin modelo, y no se le pregunta a nadie lo que el XML no dice.
-  if (c.xml) {
+  // Solo un XML de verdad: un JSON de cliente con una clave «CartaPorte» no es un CFDI con 0.99 de confianza.
+  if (c.xml && c.formato !== 'json') {
     const ccp = extraerCartaPorteXml(c.xml);
-    if (ccp) { r.extraccion = completarDerivados(ccp); r.origen = 'xml'; return r; }
+    if (ccp) { r.extraccion = completarDerivados(ccp, derivar); r.origen = 'xml'; return r; }
+  }
+
+  // 1b. Lector de formato C, D o E: lee lo que el documento escribe y deja vacío lo que no trae. Si no pudo leer ningún renglón,
+  // sigue el flujo de siempre (y nada se envía al TMS sin que una persona lo confirme).
+  if (ctx.formatoEntrada) {
+    const f = ctx.formatoEntrada;
+    const lec = f === 'C' ? await leerRemisionEscaneada(c, ctx.vision, { signal: ctx.signal })
+      : f === 'D' ? leerBol(c)
+        : f === 'E' ? leerOrdenAgente(c)
+          : LECTORES_CORREO[f](c, { transcripcion: await textoDeCorreoOCaptura(c, ctx) });
+    r.avisos.push(...lec.avisos.filter((a) => !r.avisos.includes(a)));
+    if (lec.capturaIncompleta) r.capturaIncompleta = lec.capturaIncompleta;
+    if (lec.leido) {
+      r.extraccion = completarDerivados(lec.extraccion, derivar);
+      r.origen = f === 'C' || c.formato === 'imagen' ? 'llm' : 'perfil';
+      r.lector = { formato: lec.formato, incidencias: lec.incidencias, vacios: lec.vacios, adicionales: lec.adicionales };
+      return r;
+    }
   }
 
   // 2. Perfil.
@@ -342,8 +521,18 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
     r.avisos.push(...ap.avisos);
     if (ap.camposAplicados > 0) { base = ap.extraccion; r.origen = 'perfil'; }
   }
+  // 2b. Correo en texto o captura de correo: los rótulos se leen por código (con el mapa de rótulos engañosos); el perfil,
+  // si lo hubo, gana, y el modelo solo completa lo que falte.
+  const hayPerfil = base !== null;
+  const rotulos = await leerCorreoPorRotulos(c, ctx);
+  if (rotulos) {
+    r.avisos.push(...rotulos.avisos.filter((a) => !r.avisos.includes(a)));
+    r.capturaIncompleta = rotulos.capturaIncompleta;
+    if (rotulos.lector) r.lector = { formato: rotulos.lector.formato, incidencias: rotulos.lector.incidencias, vacios: rotulos.lector.vacios, adicionales: rotulos.lector.adicionales };
+    base = base ? completarCon(base, rotulos.extraccion) : rotulos.extraccion;
+  }
   if (base) {
-    base = completarDerivados(base);
+    base = completarDerivados(base, derivar);
     const f = carencias(base);
     if (f.ausentes.length === 0 && f.dudosos.length === 0) { r.extraccion = base; return r; }
   }
@@ -351,22 +540,61 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   // 3-4. Modelo, con escalamiento por confianza.
   const marcador = (ctx.marcador ?? marcadorAleatorio)();
   const ejemplos = eleccion.perfil?.activa.ejemplos ?? [];
-  const tope = ctx.nivelMaximo ?? 3;
+  // El perfil sabe cómo escribe este cliente sus fechas (mes/día): también vale para lo que lea el modelo.
+  const ordenFecha = eleccion.perfil?.activa.mapeos.find((x) => x.ordenFecha)?.ordenFecha;
+  const orden = ctx.niveles ?? ordenDeNiveles(tipoDeLectura(c));
+  const secuencia = ctx.nivelMaximo ? orden.slice(0, ctx.nivelMaximo) : orden;
+  const opCompuesta: OpcionesCompuesta = { texto: c.texto, catalogosSat: ctx.catalogosSat };
   let acumulado: Extraccion | null = null;
-  for (let nivel: NivelModelo = 1; nivel <= tope; nivel = (nivel + 1) as NivelModelo) {
+  const lecturas: Extraccion[] = [];
+  let fallos: FalloValidador[] = [];
+  for (let i = 0; i < secuencia.length; i++) {
+    const nivel = secuencia[i];
     ctx.signal?.throwIfAborted();
-    const s = await ctx.llm({ formato: c.formato, texto: c.texto, imagenes: c.imagenes, ejemplos, nivel, marcador }, ctx.signal);
+    let s0: SalidaLlm;
+    try {
+      s0 = await ctx.llm({ formato: c.formato, texto: c.texto, imagenes: c.imagenes, ejemplos, nivel, marcador, ...(c.hojasMismoEmbarque ? { hojasMismoEmbarque: c.hojasMismoEmbarque } : {}) }, ctx.signal);
+    } catch (e) {
+      // Un nivel que falla (salida inválida tras sus reintentos, proveedor caído) no tumba el documento si hay otro nivel: se
+      // escala y se deja constancia. Presupuesto agotado y abortos sí detienen (los decide quien llama).
+      if (i === secuencia.length - 1 || ctx.signal?.aborted || (ctx.errorFatal ?? presupuestoAgotado)(e)) throw e;
+      const esc = { de: nivel, a: secuencia[i + 1], codigo: 'error_modelo' as const, motivo: `el modelo del nivel ${nivel} no entregó una lectura válida: ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}` };
+      r.escalamientos.push(esc);
+      registrarEscalamiento(esc);
+      continue;
+    }
+    const s = recortarSalida(s0);
     r.nivel = nivel; r.modelo = s.modelo;
     r.tokensIn += s.tokensIn; r.tokensOut += s.tokensOut; r.costoUsd += s.costoUsd;
+    if (s.caidas) r.caidas.push(...s.caidas);
     if (s.notas) r.notasModelo.push(s.notas);
-    const lectura = extraccionDeLlm(s, c.texto);
+    // (b) un total con separador ambiguo se resuelve contra la suma de las mercancías ANTES de comparar niveles.
+    const resuelta = resolverAmbiguosPorCuadre(extraccionDeLlm(s, c.texto, ordenFecha));
+    r.avisos.push(...resuelta.notas.filter((n) => !r.avisos.includes(n)));
+    const lectura = resuelta.extraccion;
+    lecturas.push(lectura);
+    const previos = fallos;
+    const antes = acumulado;
     acumulado = acumulado ? fusionar(acumulado, lectura) : lectura;
-    if (!necesitaEscala(acumulado) || nivel === tope) break;
+    // (e) si el nivel anterior fallaba un validador en un campo y ESTE nivel lo cumple, gana el que cumple (con tope de confianza).
+    if (antes && previos.length > 0) acumulado = preferirElQueCumple(acumulado, antes, lectura, previos, validadoresDeterministas(lectura, opCompuesta));
+    fallos = validadoresDeterministas(acumulado, opCompuesta);
+    acumulado = aplicarConfianzaCompuesta(acumulado, fallos);
+    if (!(necesitaEscala(acumulado) || fallos.length > 0) || i === secuencia.length - 1) break;
     const f = carencias(acumulado);
-    r.escalamientos.push({ de: nivel, a: (nivel + 1) as NivelModelo, motivo: f.dudosos.length > 0 ? `baja confianza en ${f.dudosos.slice(0, 3).join(', ')}` : `faltan ${f.ausentes.slice(0, 3).join(', ')}` });
+    const codigo: CodigoEscalamiento = fallos.length > 0 ? 'validador' : f.dudosos.some((k) => hayDesacuerdo(acumulado as Extraccion, k)) ? 'desacuerdo' : f.dudosos.length > 0 ? 'baja_confianza' : 'faltan_datos';
+    const motivo = fallos.length > 0 ? `un validador rechazó ${[...new Set(fallos.map((x) => `${x.campo}${x.renglon === null ? '' : `#${x.renglon}`} (${x.codigo})`))].slice(0, 3).join(', ')}`
+      : f.dudosos.length > 0 ? `${codigo === 'desacuerdo' ? 'los niveles discreparon' : 'baja confianza'} en ${f.dudosos.slice(0, 3).join(', ')}` : `faltan ${f.ausentes.slice(0, 3).join(', ')}`;
+    const esc = { de: nivel, a: secuencia[i + 1], motivo, codigo };
+    r.escalamientos.push(esc);
+    registrarEscalamiento(esc);
+  }
+  if (acumulado) {
+    r.revisionHumana = revisionHumanaFinal(acumulado, fallos, lecturas);
+    for (const h of r.revisionHumana) r.avisos.push(`Revisión humana: ${etiquetaCampo(h.campo, h.renglon)} — ${h.motivo} Valores en conflicto: ${h.valores.map((v) => `«${v}»`).join(', ')}.`);
   }
   const delModelo = acumulado ?? extraccionVacia();
-  r.extraccion = completarDerivados(base ? completarCon(base, delModelo) : delModelo);
-  r.origen = base ? 'perfil+llm' : 'llm';
+  r.extraccion = completarDerivados(base ? completarCon(base, delModelo) : delModelo, derivar);
+  r.origen = hayPerfil ? 'perfil+llm' : 'llm';
   return r;
 }

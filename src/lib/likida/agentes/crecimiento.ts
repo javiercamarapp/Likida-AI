@@ -20,7 +20,7 @@
 //
 // NINGUNO PUBLICA, MANDA NI SUBE NADA. Los diez fabrican una pieza y la dejan
 // en `cola_aprobacion`. Publicar es el tap de Javier, siempre — la misma
-// frase que MARCA.md §6 ya tenía escrita para las rutinas locales, ahora con
+// frase que la documentación interna §6 ya tenía escrita para las rutinas locales, ahora con
 // dientes: este módulo no importa un solo canal de salida.
 //
 // ── LAS OTRAS CINCO REGLAS ────────────────────────────────────────────────
@@ -41,7 +41,7 @@
 //  4. NO HAY PIPELINE DE RENDER EN EL SERVIDOR. `visuales`, `video_demo` y
 //     `video_marketing` NO generan imagen ni video: producen el ENCARGO
 //     estructurado (brief, copy, referencias de marca, prompt listo). Los
-//     modelos de imagen y video de MARCA.md §5 viven en el flujo local de
+//     modelos de imagen y video de la documentación interna §5 viven en el flujo local de
 //     Javier con Higgsfield; el runner de Vercel no tiene acceso a ellos y la
 //     pieza lo declara en su propio cuerpo.
 //  5. IDEMPOTENCIA POR CONSTRAINT. Título determinista por periodo contra el
@@ -53,7 +53,7 @@
 //
 // `guiones`, `noticias_mercado` y `promos_diarias` YA corren hoy como rutinas
 // en la Mac de Javier (`guiones-semanal` lunes 08:00, `noticias-diaria` 09:00,
-// `promos-diaria` 10:00 — MARCA.md §6). Esas rutinas tienen lo que este
+// `promos-diaria` 10:00 — la documentación interna §6). Esas rutinas tienen lo que este
 // servidor NO tiene: whisper local sobre los videos de referencia, acceso a
 // la web para buscar noticias del mercado, y el pipeline de imagen. LO QUE SE
 // CONSTRUYE AQUÍ NO LAS REEMPLAZA: es el piso que corre solo, con lo que el
@@ -190,7 +190,7 @@ export async function anotarCorrida(
 }
 
 /** El cierre que llevan TODAS las piezas de este departamento. Es la frase que
- *  la casa ya usaba en MARCA.md §6, puesta donde se lee. */
+ *  la casa ya usaba en la documentación interna §6, puesta donde se lee. */
 const PIE_TAP_DE_JAVIER = 'Nadie publicó nada desde aquí: esto es una propuesta y publicarla es el tap de Javier.';
 
 /** El pie de los tres que además tienen rutina local viva. */
@@ -732,7 +732,7 @@ export function beneficioDelDia(beneficios: BeneficioVerificado[], dia: string):
 // 3 · PROMOS DIARIAS — un beneficio REAL del producto, al día.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** El copy por canal (MARCA.md §6: LinkedIn + Instagram + TikTok). Es la MISMA
+/** El copy por canal (la documentación interna §6: LinkedIn + Instagram + TikTok). Es la MISMA
  *  afirmación en tres largos — no tres afirmaciones distintas: partir el
  *  mensaje por canal es cómo una de las tres versiones acaba diciendo algo que
  *  el producto no hace. PURA. */
@@ -1047,7 +1047,7 @@ async function correrNoticiasMercado(disparo: DisparoCorrida, hoy: string): Prom
 // 6 · VISUALES / VIDEO DEMO / VIDEO MARKETING — el ENCARGO, no la pieza.
 //
 // LOS TRES DECLARAN LO MISMO EN SU CUERPO: este servidor NO genera imagen ni
-// video. Los modelos de MARCA.md §5 (nano_banana_2, gpt_image_2, seedance,
+// video. Los modelos de la documentación interna §5 (nano_banana_2, gpt_image_2, seedance,
 // ElevenLabs) viven en el flujo local de Javier con Higgsfield; el runner de
 // Vercel no tiene ni las llaves ni el pipeline, y una pieza que dijera «aquí
 // está tu imagen» estaría mintiendo. Lo que producen es el ENCARGO completo:
@@ -1055,7 +1055,7 @@ async function correrNoticiasMercado(disparo: DisparoCorrida, hoy: string): Prom
 // prompt listo para pegar en la skill que sí ejecuta.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** El bloque de marca que llevan los tres encargos. Sale de MARCA.md §2.3/§4 y
+/** El bloque de marca que llevan los tres encargos. Sale de la documentación interna §2.3/§4 y
  *  de DESIGN.md; se escribe aquí porque el runner no lee archivos del repo en
  *  tiempo de ejecución, y una referencia de marca por memoria es la clase de
  *  dato que se desincroniza. Cambiar la marca es cambiar esta constante en el

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ESCALA 50k (docs/escala-50k/MAPA.md, "/dashboard/viajes", 22-ago-2026).
+// ESCALA 50k (la documentación interna, "/dashboard/viajes", 22-ago-2026).
 // `getViajesRegistro` vivía en analytics.ts con `.range()` = OFFSET (hasta
 // 100,000 filas leídas y tiradas por página) y un `.or(ilike)` sin índice.
 // Aquí se prueba la versión nueva: cursor keyset opaco, UNA llamada a la RPC

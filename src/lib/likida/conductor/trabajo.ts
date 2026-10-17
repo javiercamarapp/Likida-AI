@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { exigir, traerTodo } from '../pg';
@@ -7,7 +8,7 @@ import type { HitoFila } from './tipos';
 import { debeReintentarseValidacion } from './validacion';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from './geometria_datos';
 import type { MuestraGps, SitioGps, SitiosViaje, UnidadDeViaje } from './ciclo_gps';
-import type { CandidatoSitio, LadoViaje, SitioCatalogo } from './sitio_derivado';
+import { normalizarNombre, type CandidatoSitio, type LadoViaje, type SitioCatalogo, type SitioEquivalencia } from './sitio_derivado';
 import { faltaEsquema, filaAEpisodio } from './repo';
 import type { EstadoEpisodios } from './senal_vida';
 
@@ -119,6 +120,28 @@ export async function leerHitosDeViajes(viajeIds: string[]): Promise<HitoFila[]>
     salida.push(...filas.map(filaAHito));
   }
   return salida;
+}
+
+/**
+ * T-A5-22: la «Fecha Salida» (ISO) que el TMS selló en cada viaje (0804), solo de los que la traen. Para el barrido: los ids vienen de
+ * viajes ya leídos por tenant. Si la lectura falla (p. ej. la 0804 sin aplicar) devuelve `undefined`: el barrido no registra nada.
+ */
+export async function leerSalidasTmsDeViajes(viajeIds: string[]): Promise<Map<string, string> | undefined> {
+  try {
+    const m = new Map<string, string>();
+    for (const ids of trozos(viajeIds, 150)) {
+      const filas = await traerTodo<Fila>((desde, hasta) => acotada(supabaseAdmin()
+        .from('viaje').select('id, tms_salida_en').in('id', ids).not('tms_salida_en', 'is', null).order('id').range(desde, hasta), 'conductor.salidas_tms_lote') as never, 'conductor.salidas_tms_lote');
+      for (const f of filas) {
+        const iso = typeof f.tms_salida_en === 'string' ? f.tms_salida_en : null;
+        if (iso && Number.isFinite(Date.parse(iso))) m.set(String(f.id), iso);
+      }
+    }
+    return m;
+  } catch (e) {
+    logger.warn('conductor.salidas_tms_lote_no_leidas', { err: e instanceof Error ? e.message : String(e) });
+    return undefined;
+  }
 }
 
 export async function leerAvisosDeHitos(hitoIds: string[]): Promise<Array<AvisoReclamado & { hitoId: string; entregado: boolean | null }>> {
@@ -260,21 +283,48 @@ export async function leerMuestrasGps(unidades: UnidadDeViaje[], desde: Date): P
     const traer = (columnas: string) => traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('posicion').select(columnas)
       .in('tenant_id', tenants).in('unidad_id', ids).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString())
       .order('medida_en', { ascending: true }).order('id').range(d, h), 'conductor.ciclo_muestras') as never, 'conductor.ciclo_muestras');
-    // La ignición (0500) sirve a la señal de vida; una base sin la columna sigue funcionando sin ella.
+    // La ignición (0500) sirve a la señal de vida y `despacho_ref` (0802) liga la muestra a su viaje; una base sin alguna de las
+    // columnas sigue funcionando sin ella (sin `despacho_ref` todo cae a «unidad + ventana», como antes).
     let filas: Fila[];
-    try { filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion'); } catch (e) {
-      if (!/ignicion/i.test(e instanceof Error ? e.message : String(e))) throw e;
-      filas = await traer('tenant_id, unidad_id, lat, lng, medida_en');
+    try { filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion, despacho_ref, proveedor'); } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      if (!/ignicion|despacho_ref/i.test(m)) throw e;
+      try { filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, ignicion, proveedor'); } catch (e2) {
+        if (!/ignicion/i.test(e2 instanceof Error ? e2.message : String(e2))) throw e2;
+        filas = await traer('tenant_id, unidad_id, lat, lng, medida_en, proveedor');
+      }
     }
     for (const f of filas) {
       const llave = `${String(f.tenant_id)}|${String(f.unidad_id)}`;
       if (!pedidas.has(llave)) continue; // la combinación flota/unidad que no se pidió no es de esta corrida
       salida.set(llave, [...(salida.get(llave) ?? []), {
         lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(String(f.medida_en)), ignicion: typeof f.ignicion === 'boolean' ? f.ignicion : null,
+        despachoRef: typeof f.despacho_ref === 'string' && f.despacho_ref !== '' ? f.despacho_ref : null,
+        proveedor: typeof f.proveedor === 'string' && f.proveedor !== '' ? f.proveedor : null,
       }]);
     }
   }
   return salida;
+}
+
+/**
+ * T-A5-66: las unidades activas de esas flotas SIN un viaje abierto que el ciclo por geocerca atienda (abierto, aceptado y de menos de
+ * `DIAS_VIAJE_ABIERTO_VENCIDO` días): son las que pueden dejar un cruce huérfano. Anclado a las flotas pedidas.
+ */
+export async function leerUnidadesSinViajeAbierto(tenantIds: string[], limite: number, ahora: Date = new Date()): Promise<UnidadDeViaje[]> {
+  if (tenantIds.length === 0) return [];
+  const unidades = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('unidad').select('id, tenant_id')
+    .in('tenant_id', tenantIds).eq('activo', true).order('id').range(d, h), 'conductor.huerfanos_unidades') as never, 'conductor.huerfanos_unidades');
+  const desde = new Date(ahora.getTime() - DIAS_VIAJE_ABIERTO_VENCIDO * 86_400_000).toISOString();
+  const ocupadas = new Set<string>();
+  const viajes = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('viaje').select('tenant_id, unidad_id')
+    .in('tenant_id', tenantIds).eq('estatus', 'abierto').not('aceptado_en', 'is', null).not('unidad_id', 'is', null).gte('aceptado_en', desde)
+    .order('id').range(d, h), 'conductor.huerfanos_viajes_abiertos') as never, 'conductor.huerfanos_viajes_abiertos');
+  for (const v of viajes) ocupadas.add(`${String(v.tenant_id)}|${String(v.unidad_id)}`);
+  return unidades
+    .map((u) => ({ tenantId: String(u.tenant_id), unidadId: String(u.id) }))
+    .filter((u) => !ocupadas.has(`${u.tenantId}|${u.unidadId}`))
+    .slice(0, limite);
 }
 
 /**
@@ -330,6 +380,33 @@ export async function leerCatalogoSitios(tenantIds: string[]): Promise<Map<strin
 }
 
 /**
+ * Las equivalencias texto→sitio (0803) de cada flota, junto al catálogo. Una base sin la 0803 se lee como «ninguna»: se deriva
+ * solo con el catálogo, como antes. Acotado a las flotas pedidas.
+ */
+export async function leerEquivalenciasSitio(tenantIds: string[]): Promise<Map<string, SitioEquivalencia[]>> {
+  const salida = new Map<string, SitioEquivalencia[]>();
+  if (tenantIds.length === 0) return salida;
+  let filas: Fila[];
+  try {
+    filas = await traerTodo<Fila>((d, h) => acotada(supabaseAdmin().from('sitio_equivalencia').select('tenant_id, texto_normalizado, lado, geocerca_id, tipo, cliente_id')
+      .in('tenant_id', tenantIds).order('id').range(d, h), 'conductor.sitio_equivalencias') as never, 'conductor.sitio_equivalencias');
+  } catch (e) {
+    if (faltaEsquema({ message: e instanceof Error ? e.message : String(e) }, /sitio_equivalencia/i)) return salida;
+    throw e;
+  }
+  for (const f of filas) {
+    const t = String(f.tenant_id);
+    const tipo = f.tipo === 'sin_sitio' || f.tipo === 'ignorar' ? f.tipo : 'sitio';
+    const lado = f.lado === 'origen' || f.lado === 'destino' ? f.lado : 'ambos';
+    salida.set(t, [...(salida.get(t) ?? []), {
+      texto: normalizarNombre(String(f.texto_normalizado)), lado, tipo,
+      sitioId: typeof f.geocerca_id === 'string' ? f.geocerca_id : null, clienteId: typeof f.cliente_id === 'string' ? f.cliente_id : null,
+    }]);
+  }
+  return salida;
+}
+
+/**
  * Los episodios de «sin señal de vida» de estos viajes: el abierto (si lo hay) y el silencio vigente que dejó la respuesta del chofer.
  * Cruza flotas a propósito (cron). Una base sin la 0636 se lee como «sin episodios» (la perilla de la flota tampoco existe: apagada).
  */
@@ -364,11 +441,11 @@ export async function leerUltimaMuestraGps(unidades: UnidadDeViaje[], desde: Dat
     const consulta = (columnas: string) => acotada(supabaseAdmin().from('posicion').select(columnas)
       .eq('tenant_id', u.tenantId).eq('unidad_id', u.unidadId).neq('proveedor', 'whatsapp').gte('medida_en', desde.toISOString())
       .order('medida_en', { ascending: false }).order('id').limit(1), 'conductor.senal_ultima_muestra');
-    let res = await consulta('lat, lng, medida_en, ignicion');
-    if (res.error && faltaEsquema(res.error, /ignicion/i)) res = await consulta('lat, lng, medida_en'); // base sin la 0500
+    let res = await consulta('lat, lng, medida_en, ignicion, proveedor');
+    if (res.error && faltaEsquema(res.error, /ignicion/i)) res = await consulta('lat, lng, medida_en, proveedor'); // base sin la 0500
     const f = ((exigir(res as never, 'conductor.senal_ultima_muestra') ?? []) as unknown as Fila[])[0];
     if (f && typeof f.medida_en === 'string') {
-      salida.set(`${u.tenantId}|${u.unidadId}`, { lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(f.medida_en), ignicion: typeof f.ignicion === 'boolean' ? f.ignicion : null });
+      salida.set(`${u.tenantId}|${u.unidadId}`, { lat: Number(f.lat), lng: Number(f.lng), medidaEn: new Date(f.medida_en), ignicion: typeof f.ignicion === 'boolean' ? f.ignicion : null, proveedor: typeof f.proveedor === 'string' && f.proveedor !== '' ? f.proveedor : null });
     }
   }
   return salida;

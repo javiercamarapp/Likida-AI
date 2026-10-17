@@ -118,4 +118,22 @@ describe('planificarGps — cada línea o es evaluable o dice por qué no', () =
     ]);
     expect(p).toMatchObject({ listo: false, veredicto: { motivo: 'caseta_ambigua' } });
   });
+  it('caseta del catálogo SIN coordenadas → sin_coordenadas, con la caseta resuelta y sin lanzar', () => {
+    const sinCoord: CasetaCatalogo[] = [{ ...catalogo[0], lat: null, lng: null }, catalogo[1]];
+    const [p] = planificarGps([linea()], sinCoord);
+    expect(p).toMatchObject({ listo: false, casetaId: 'c1', veredicto: { veredicto: 'sin_datos', motivo: 'sin_coordenadas' } });
+  });
+  it('un catálogo mezclado: la caseta con coordenadas sigue lista y la otra no estorba', () => {
+    const mezcla: CasetaCatalogo[] = [{ ...catalogo[0], lat: null, lng: null }, catalogo[1]];
+    const [a, b] = planificarGps([linea({ id: 'l1' }), linea({ id: 'l2', caseta: 'Caseta Ejemplo Sur' })], mezcla);
+    expect(a).toMatchObject({ listo: false, veredicto: { motivo: 'sin_coordenadas' } });
+    expect(b).toMatchObject({ listo: true, casetaId: 'c2', caseta: { lat: 19.0, lng: -99.0, radioM: 400 } });
+  });
+  it('con coordenadas conocidas el plan queda idéntico (listo, caseta y ventana)', () => {
+    const [p] = planificarGps([linea()], catalogo);
+    expect(p).toMatchObject({ listo: true, casetaId: 'c1', caseta: { id: 'c1', lat: 19.5, lng: -99.2, radioM: 300 } });
+  });
+  it('la sin_caseta y la caseta_ambigua conservan su motivo (no se confunden con sin_coordenadas)', () => {
+    expect(planificarGps([linea({ caseta: 'Plaza Desconocida' })], catalogo)[0]).toMatchObject({ veredicto: { motivo: 'sin_caseta' } });
+  });
 });

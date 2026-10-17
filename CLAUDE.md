@@ -6,7 +6,7 @@ entrega la liquidación en PDF.
 
 ## Los dos paneles
 
-- `/admin` — la consola de Javier (superadmin). Costo de IA, flotas, agentes.
+- `/admin` — la consola interna de Likida (superadmin). Costo de IA, flotas, agentes.
   Cruza TODOS los tenants a propósito (`lib/admin/negocio.ts` es la única
   función con ese permiso).
 - `/dashboard` — el panel del CLIENTE (flota_admin, contador, encargado). ~31
@@ -73,7 +73,7 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
     facturación), `portal_credencial`, `invitacion`, y las muertas de facto
     `campania`/`envio_mensaje` (las sustituyó `campana`, 0123).
   - La base entera está en cero (0 viajes, 14-ago-2026) porque **no hay
-    clientes todavía**, no porque falte código. Ver `project_likida_sin_clientes`.
+    clientes en producción todavía**, no porque falte código.
 
   El historial de esta línea es la advertencia: hasta el 4-ago decía "no
   existen" y le prohibía a cada agente construir sobre tablas ya aplicadas;
@@ -106,9 +106,8 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
 **El push a `master` ya NO despliega solo.** Desde el 5-ago-2026, `vercel.json`
 trae un `ignoreCommand` que construye únicamente si **el asunto** (la primera
 línea) del commit lleva la bandera. Lee solo el asunto a propósito: leyendo el
-mensaje completo, cualquier commit que *mencione* desplegar disparaba un build. Antes se redesplegaba producción en cada push: 30 builds en
-12 horas, ~$26 USD/mes de puro build, casi todos publicando arreglos de auditoría
-que no urgían.
+mensaje completo, cualquier commit que *mencione* desplegar disparaba un build. Antes se redesplegaba producción en cada push, con un build por
+cada arreglo menor.
 
 - **Para publicar:** pon la bandera en la PRIMERA LÍNEA del commit, o usa
   **Redeploy** en el panel de Vercel sobre el último deployment.

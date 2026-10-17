@@ -4,7 +4,10 @@ import { opcionesDeEnvio } from '@/lib/meta/plantillas_catalogo';
 import { dentroDeVentana, type ConfigConductor } from './config';
 import type { PuertosConductor, NuevoAviso } from './ejecutor';
 import { puertosReales } from './ejecutor';
-import { horaYDiaMx } from './mensajes';
+import {
+  horaYDiaMx, mensajePreguntaComoDescarga, mensajePreguntaContacto, preguntaRampa, type ContextoMensaje,
+} from './mensajes';
+import type { PasoReporte } from './maquina';
 import type { ViajeContexto } from './repo';
 import { leerVeredictos, type VeredictoFila } from './repo_validacion';
 import type { MensajeSaliente } from './solicitudes';
@@ -63,13 +66,13 @@ type Motivo = 'sin_sitio' | 'sin_coincidencia' | 'sin_ubicacion';
 const una = (t: string, n: number): string => t.replace(/\s+/g, ' ').trim().slice(0, n);
 
 /** El texto y la plantilla del aviso. Texto con la hora exacta; la plantilla lleva los cuatro datos en una línea. */
-export function armarAvisoLlegadaSinConfirmar(v: ViajeContexto, h: HitoFila, motivo: Motivo, ahora: Date): MensajeSaliente {
+export function armarAvisoLlegadaSinConfirmar(v: ViajeContexto, h: HitoFila, motivo: Motivo, ahora: Date, zona?: string): MensajeSaliente {
   const chofer = una(v.operadorNombre ?? 'El chofer', 60) || 'El chofer';
   const folio = v.folio || v.id.slice(0, 8);
   const esCarga = h.tipo === 'llegada_carga';
   const sitio = una((esCarga ? v.origen : v.destino) ?? '', 60);
   const lugar = `${esCarga ? 'la carga' : 'la descarga'}${sitio ? ` de ${sitio}` : ''}`;
-  const cuando = horaYDiaMx(new Date(h.mensajeEn ?? h.recibidoEn ?? ahora.toISOString()), ahora);
+  const cuando = horaYDiaMx(new Date(h.mensajeEn ?? h.recibidoEn ?? ahora.toISOString()), ahora, zona);
   const porQue: Record<Motivo, { largo: string; corto: string }> = {
     sin_sitio: { largo: 'el viaje no tiene sitio asignado y no hay con qué compararlo contra el GPS', corto: 'el viaje no tiene sitio asignado para compararlo con el GPS' },
     sin_coincidencia: { largo: 'la posición que se comparó cae fuera del sitio (puede ser una muestra vieja: revísalo antes de dar por mala la llegada)', corto: 'la posición comparada cae fuera del sitio' },
@@ -155,7 +158,7 @@ export async function correrAlertasLlegadaSinConfirmar(
           await p.cerrarAviso(claim, { ok: false, canal: 'ninguno', motivo: 'sin_destinatario', ult4: null });
           continue;
         }
-        const msg = armarAvisoLlegadaSinConfirmar(v, h, motivo, ahora);
+        const msg = armarAvisoLlegadaSinConfirmar(v, h, motivo, ahora, config.zonaHoraria);
         let entregados = 0;
         let reintentables = 0;
         let ultimoError = '';
@@ -191,4 +194,60 @@ export async function correrAlertasLlegadaSinConfirmar(
     }
   }
   return r;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A5-43 — LA PREGUNTA PROACTIVA «¿CON QUIÉN TE REPORTASTE?» Y LA RAMPA. Armado puro de los mensajes.
+//
+// QUÉ pregunta y cuándo lo decide `decidirReporteLlegada` (maquina.ts): apagado hasta la fase 2, unidad detenida (compuerta T-A5-36),
+// una vez por paso y sin bloquear el ciclo. Aquí solo se arma el mensaje de cada paso. El contacto sale por `enviarConFallback`: ventana
+// de 24 h abierta → texto con botón; cerrada → la plantilla `conductor_contacto_anden_v1` (que hasta hoy no tenía llamador). La rampa
+// son cuatro estados en DOS páginas de botones (WhatsApp limita a tres) y viaja dentro de la ventana que el propio «ya llegué» abrió.
+// Quien lo invoca fuera de tests es `reporte_llegada.ts` (`correrReporteLlegada`, desde el cron `conductor-hitos`); allí viven el claim
+// «una vez por paso» y la persistencia de la lista de reubicaciones.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const contextoDe = (v: ViajeContexto): ContextoMensaje => ({ viajeId: v.id, folio: v.folio ?? null, origen: v.origen ?? null, destino: v.destino ?? null });
+
+/** El mensaje de contacto: texto con el botón «Aún no tengo contacto» y, de respaldo, `conductor_contacto_anden_v1`. */
+export function armarPreguntaContacto(v: ViajeContexto, h: HitoFila): MensajeSaliente {
+  const ctx = contextoDe(v);
+  const chofer = una(v.operadorNombre ?? 'chofer', 40).split(' ')[0] || 'chofer';
+  const esCarga = h.tipo === 'llegada_carga';
+  const lugar = una((esCarga ? v.origen : v.destino) ?? '', 60) || 'el lugar del viaje';
+  const folio = v.folio || v.id.slice(0, 8);
+  const salida = mensajePreguntaContacto(ctx);
+  return {
+    texto: salida.texto,
+    botones: salida.botones ?? [],
+    plantilla: {
+      nombre: 'conductor_contacto_anden_v1',
+      ...opcionesDeEnvio('conductor_contacto_anden_v1', { cuerpo: [chofer, lugar, folio], idsBotones: v.id }),
+    },
+  };
+}
+
+/**
+ * La plantilla de reserva de los pasos de rampa y «¿cómo descargas?». Todavía NO existe en el catálogo ni está aprobada por Meta (la deja
+ * T-A5-59, como la N07 de la estadía): fuera de la ventana de 24 h la pregunta no se entrega, el claim queda cerrado y el ciclo del viaje
+ * sigue sin ella (la pregunta es de excepción y nunca bloquea). Dentro de la ventana —lo normal, el chofer acaba de escribir «ya llegué»—
+ * sale como texto con botones.
+ */
+const plantillaPendiente = (nombre: string, v: ViajeContexto) => ({
+  nombre, idioma: 'es_MX', parametros: [una(v.operadorNombre ?? 'chofer', 40).split(' ')[0] || 'chofer', v.folio || v.id.slice(0, 8)],
+});
+
+/** El mensaje del paso que decidió `decidirReporteLlegada`, listo para `enviar`. `pagina` solo importa en la rampa. */
+export function armarPreguntaReporte(paso: PasoReporte, v: ViajeContexto, h: HitoFila, pagina: 0 | 1 = 0): MensajeSaliente {
+  switch (paso) {
+    case 'contacto': return armarPreguntaContacto(v, h);
+    case 'rampa': {
+      const s = preguntaRampa(v.id, pagina);
+      return { texto: s.texto, botones: s.botones ?? [], plantilla: plantillaPendiente('conductor_rampa_descarga_v1', v) };
+    }
+    case 'como_descarga': {
+      const s = mensajePreguntaComoDescarga(contextoDe(v));
+      return { texto: s.texto, botones: s.botones ?? [], plantilla: plantillaPendiente('conductor_como_descarga_v1', v) };
+    }
+  }
 }

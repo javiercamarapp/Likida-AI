@@ -38,7 +38,7 @@ function b(prefijo: string, viajeId: string, titulo: string): BotonAcuse {
 }
 
 /** La solicitud (nivel 0) de un hito. */
-export function armarSolicitud(hito: HitoFila, v: ViajeContexto, ahora: Date): MensajeSaliente {
+export function armarSolicitud(hito: HitoFila, v: ViajeContexto, ahora: Date, zona?: string): MensajeSaliente {
   const nombre = primerNombre(v.operadorNombre);
   const folio = folioDe(v);
   const P = PREFIJO_BOTON;
@@ -50,7 +50,7 @@ export function armarSolicitud(hito: HitoFila, v: ViajeContexto, ahora: Date): M
       const lugar = lugarDe(v, 'llegada_carga');
       const botones = [b(P.llegadaCarga, v.id, 'Ya llegué'), b(P.retrasoCarga, v.id, 'Voy con retraso'), b(P.pedirUbicacion, v.id, 'Compartir ubicación')];
       if (cita) {
-        const hora = horaYDiaMx(new Date(cita), ahora);
+        const hora = horaYDiaMx(new Date(cita), ahora, zona);
         return {
           texto: `Hola ${nombre}, tu viaje ${folio} tiene cita de carga en ${lugar} a las ${hora}. Cuando llegues, toca «Ya llegué» para registrar tu llegada.`,
           botones,

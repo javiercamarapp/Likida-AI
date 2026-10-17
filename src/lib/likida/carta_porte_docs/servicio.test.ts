@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./repo', async () => (await import('./repo_falso.fixture')).api);
 vi.mock('../bitacora_escritura', () => ({ anotarBitacora: vi.fn(async () => true) }));
@@ -9,6 +9,11 @@ import { DIAS_RETENCION, MAX_INTENTOS, nombreArchivoSeguro, procesarDocumento, r
 import { defectuosos, excelAtlas, fotoRemision, pdfBoreal, pdfEscaneado, xmlCartaPorte, csvAtlas, correoTexto, extraccionAtlasOk, RFC } from './documentos_sinteticos.fixture';
 import { llmFalso, lecturaBoreal, salida } from './llm_falso.fixture';
 import * as repo from './repo';
+
+// T-A3-68 f: el orden por omisión pasó a 3.8 Flash → Sonnet (niveles 2, 3). Estas pruebas ejercitan la escalera completa de tres
+// niveles, así que fijan el orden por entorno (la misma variable que usa producción).
+beforeAll(() => { vi.stubEnv('LIKIDA_CARTAPORTE_NIVELES_TEXTO', '1,2,3'); vi.stubEnv('LIKIDA_CARTAPORTE_NIVELES_VISION', '1,2,3'); });
+afterAll(() => { vi.unstubAllEnvs(); });
 
 beforeEach(() => { reset(); sembrarFlotas(); });
 
@@ -119,6 +124,15 @@ describe('procesarDocumento', () => {
     expect(d.extraccion?.mercancias[0].peso_kg.valor).toBe('30000');
     expect(d.procesandoHasta).toBeNull();
     expect(d.ultimoError).toBeNull();
+  });
+
+  it('el nombre del archivo llega al extractor: EXPO deduce el régimen y deja el pedimento vacío (T-A3-46)', async () => {
+    const llm = llmFalso((e) => salida(e.nivel, { folio_cliente: ['EX-200', 0.97, 'Folio: EX-200'] }, [{ descripcion: ['Piezas de plastico', 0.97, null], bienes_transp: ['24121500', 0.97, null], cantidad: ['10', 0.97, null], clave_unidad: ['H87', 0.97, null], peso_kg: ['100', 0.97, null], pedimento: ['26 47 1234 5670001', 0.97, null], rfc_importador: [RFC.atlas, 0.97, null] }]));
+    const { documentoId } = await subirYProcesar(A, Buffer.from('Folio: EX-200\nMercancia: Piezas de plastico\n'), llm, 'CCP Transportes-Cliente EXPO TX4471 15-10-26.txt');
+    const f = estado.docs.get(documentoId)!.extraccion!.mercancias[0];
+    expect(f.regimen_aduanero).toMatchObject({ valor: 'EXD', origen: 'derivado' });
+    expect(f.pedimento.valor).toBeNull();
+    expect(f.rfc_importador.valor).toBeNull();
   });
 
   it('un PDF escaneado y una foto van al modelo como imagen', async () => {
@@ -319,5 +333,119 @@ describe('validarDocumento: avisos que solo la base sabe', () => {
     await validarDocumento(A, { id: 'x', riesgoInyeccion: false, remitenteReconocido: null }, e);
     expect(estado.llamadas.slice(antes)).toEqual([]);
     void RFC;
+  });
+});
+
+describe('validarDocumento: catálogos SAT (T-A3-24)', () => {
+  const doc = { id: 'x', riesgoInyeccion: false, remitenteReconocido: null };
+  it('tabla vacía → solo avisos, no bloquea; ≤ 1 consulta por catálogo por documento', async () => {
+    const e = extraccionAtlasOk(); e.mercancias.push({ ...e.mercancias[0], descripcion: { ...e.mercancias[0].descripcion } });
+    e.campos.peso_bruto_total = { ...e.campos.peso_bruto_total, valor: '16800' };
+    const v = await validarDocumento(A, doc, e);
+    expect(v.hallazgos.some((h) => h.codigo === 'catalogo_no_cargado')).toBe(true);
+    expect(v.bloqueos).toBe(0);
+    const por = estado.consultasCatalogoSat;
+    expect(por.length).toBeGreaterThan(0);
+    expect(new Set(por).size).toBe(por.length);
+  });
+  it('catálogo cargado: clave inexistente bloquea; existente no', async () => {
+    estado.catalogosSat.set('c_ClaveProdServCP', new Map([['24131500', {}]]));
+    const ok = await validarDocumento(A, doc, extraccionAtlasOk());
+    expect(ok.hallazgos.some((h) => h.codigo === 'clave_no_catalogo')).toBe(false);
+    const e = extraccionAtlasOk(); e.mercancias[0].bienes_transp = { ...e.mercancias[0].bienes_transp, valor: '24999999' };
+    const mal = await validarDocumento(A, doc, e);
+    expect(mal.hallazgos.some((h) => h.codigo === 'clave_no_catalogo' && h.severidad === 'bloqueo')).toBe(true);
+  });
+  it('un error al leer el catálogo degrada a aviso, no rompe ni bloquea', async () => {
+    estado.fallar.set('cargarCatalogoSat', new Error('caída de la base'));
+    const v = await validarDocumento(A, doc, extraccionAtlasOk());
+    expect(v.bloqueos).toBe(0);
+    expect(v.hallazgos.some((h) => h.codigo === 'catalogo_no_cargado')).toBe(true);
+  });
+});
+
+describe('recibirDocumento: JSON (T-A3-12)', () => {
+  it('un JSON de embarque se guarda con formato json y mime application/json', async () => {
+    const r = await subir(A, Buffer.from(JSON.stringify({ Embarque: { Folio: 'J-1' }, Mercancias: [{ Descripcion: 'Algo sintético' }] })), 'embarque.json');
+    expect(r).toMatchObject({ ok: true, duplicado: false, estado: 'recibido', formato: 'json' });
+    expect(estado.docs.get(r.documentoId)!.mime).toBe('application/json');
+  });
+  it('un JSON de 2 MB se rechaza antes de guardar nada', async () => {
+    const r = await recibirDocumento(A, { canal: 'manual', nombre: 'grande.json', bytes: Buffer.from(`{"a":"${'x'.repeat(2 * 1024 * 1024)}"}`) }, sinAgenteApagado);
+    expect(r).toMatchObject({ ok: false, motivo: 'formato' });
+    expect(estado.docs.size).toBe(0);
+  });
+});
+
+describe('procesarDocumento: catálogo del cliente (T-A3-20)', () => {
+  const CLI = 'cli-boreal';
+  const PRODUCTO_CLAVE = '31162800'; // distinta a la que trae el PDF: así se ve de dónde salió
+  const sembrarCatalogo = (tenantId = A, clienteId = CLI): void => {
+    estado.catalogoNumeros.push({ tenantId, clienteId, numeroInterno: 'CLI-0042', numeroPagador: null, activo: true });
+    estado.catalogoProductos.push({
+      tenantId, clienteId, sku: 'SKU-AL-01', descripcionPatron: 'enlatados', bienesTransp: PRODUCTO_CLAVE, claveUnidad: 'TNE', embalaje: '1A', fraccion: null, tipoMateria: null,
+      materialPeligroso: false, claveMaterialPeligroso: null,
+    });
+    estado.catalogoPartes.push(
+      { tenantId, clienteId, rol: 'remitente', alias: 'Grupo Boreal SA de CV', razonSocial: null, rfc: RFC.boreal, idFiscalExtranjero: null, calle: 'Av. Sintética', numExt: '1', numInt: null, coloniaClave: null, colonia: null, cp: null, localidadClave: null, localidad: null, municipioClave: null, municipio: null, estado: null, pais: 'MEX', contacto: null, telefono: null, correo: null },
+      { tenantId, clienteId, rol: 'destinatario', alias: 'Supermercados del Centro SA de CV', razonSocial: null, rfc: RFC.destino2, idFiscalExtranjero: null, calle: null, numExt: null, numInt: null, coloniaClave: null, colonia: null, cp: null, localidadClave: null, localidad: null, municipioClave: null, municipio: null, estado: null, pais: 'MEX', contacto: null, telefono: null, correo: null },
+    );
+  };
+  /** Lo que lee un modelo de un embarque «sin clave SAT ni RFC»: se omiten las claves y los RFC. */
+  const lecturaSinSat = () => llmFalso((e) => {
+    const s = lecturaBoreal(e.nivel);
+    const sin = new Set(['origen_rfc', 'destino_rfc']);
+    return { ...s, campos: s.campos.filter((c) => !sin.has(c.clave)), mercancias: s.mercancias.map((m) => ({ campos: m.campos.filter((c) => c.clave !== 'bienes_transp') })) };
+  });
+
+  it('con catálogo el documento sin clave SAT ni RFC ya no se bloquea; sin catálogo sí', async () => {
+    const sin = await subirYProcesar(A, await pdfBoreal(), lecturaSinSat(), 'sin.pdf', { clienteId: CLI });
+    const dSin = estado.docs.get(sin.documentoId)!;
+    expect(dSin.validacion!.bloqueos).toBeGreaterThan(0);
+    expect(dSin.extraccion!.mercancias[0].bienes_transp?.valor ?? null).toBeNull();
+
+    sembrarCatalogo();
+    const con = await subirYProcesar(A, Buffer.concat([await pdfBoreal(), Buffer.from(' ')]), lecturaSinSat(), 'con.pdf', { clienteId: CLI });
+    const d = estado.docs.get(con.documentoId)!;
+    expect(d.validacion!.bloqueos).toBe(0);
+    expect(d.extraccion!.mercancias[0].bienes_transp).toMatchObject({ valor: PRODUCTO_CLAVE, origen: 'catalogo' });
+    expect(d.extraccion!.campos).toMatchObject({ origen_rfc: { valor: RFC.boreal, origen: 'catalogo' }, destino_rfc: { valor: RFC.destino2 }, numero_cliente_interno: { valor: 'CLI-0042' } });
+    expect(d.extraccion!.meta!.avisos.join(' ')).toMatch(/catálogo del cliente completó \d+ datos/i);
+    expect(estado.eventos.find((e) => e.documentoId === d.id && e.tipo === 'extraccion_ok')!.detalle.catalogoAplicados).toBeGreaterThan(0);
+  });
+
+  it('el modelo NO recibe el catálogo (ni clave, SKU, domicilio ni número interno)', async () => {
+    sembrarCatalogo();
+    const llm = lecturaSinSat();
+    await subirYProcesar(A, await pdfBoreal(), llm, 'x.pdf', { clienteId: CLI });
+    expect(llm.llamadas.length).toBeGreaterThan(0);
+    const visto = JSON.stringify(llm.llamadas);
+    for (const secreto of [PRODUCTO_CLAVE, 'CLI-0042', 'SKU-AL-01', 'Av. Sintética']) expect(visto).not.toContain(secreto);
+  });
+
+  it('el catálogo de otro cliente o de otra flota no se aplica', async () => {
+    sembrarCatalogo(A, 'cli-otro');
+    sembrarCatalogo(B, CLI);
+    const r = await subirYProcesar(A, await pdfBoreal(), lecturaSinSat(), 'x.pdf', { clienteId: CLI });
+    const d = estado.docs.get(r.documentoId)!;
+    expect(d.extraccion!.mercancias[0].bienes_transp?.valor ?? null).toBeNull();
+    expect(d.extraccion!.campos.numero_cliente_interno).toBeUndefined();
+    expect(d.validacion!.bloqueos).toBeGreaterThan(0);
+  });
+
+  it('un documento sin cliente no consulta el catálogo', async () => {
+    sembrarCatalogo();
+    const antes = estado.llamadas.length;
+    await subirYProcesar(A, await pdfBoreal(), lecturaSinSat(), 'x.pdf');
+    expect(estado.llamadas.slice(antes)).not.toContain('cargarCatalogoCliente');
+  });
+
+  it('una discrepancia con lo que dice el documento queda por confirmar y el documento manda', async () => {
+    sembrarCatalogo();
+    estado.catalogoProductos[0].claveUnidad = 'KGM'; // el modelo leyó «Toneladas» → TNE
+    const r = await subirYProcesar(A, await pdfBoreal(), lecturaSinSat(), 'x.pdf', { clienteId: CLI });
+    const d = estado.docs.get(r.documentoId)!;
+    expect(d.extraccion!.mercancias[0].clave_unidad.origen).not.toBe('catalogo');
+    expect(d.validacion!.hallazgos.some((h) => h.campo === 'clave_unidad' && h.severidad === 'confirmar' && /El catálogo dice «KGM»/.test(h.mensaje))).toBe(true);
   });
 });

@@ -10,6 +10,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type * as Real from './repo';
+import type { CatalogoCliente, NumeroClienteCat, ParteCat, ProductoCat } from './catalogo_cliente';
 import type { DocumentoFila, MercanciaInsertar, OperadorMin, PerfilFila, ViajeMin } from './repo';
 
 interface Viaje extends ViajeMin { tenantId: string }
@@ -32,6 +33,10 @@ export const estado = {
   operadores: [] as Array<OperadorMin & { tenantId: string }>,
   unidades: [] as Array<{ tenantId: string; id: string; placas: string; activo: boolean }>,
   clientes: [] as Array<{ tenantId: string; id: string; nombre: string }>,
+  /** 0792: catálogo por cliente (cada fila trae su tenantId y clienteId). */
+  catalogoNumeros: [] as NumeroClienteCat[],
+  catalogoProductos: [] as ProductoCat[],
+  catalogoPartes: [] as ParteCat[],
   correos: new Map<string, { estado: 'claimed' | 'applied'; token: string }>(),
   /** 0640: avisos a la oficina reclamados por documento ({tipo: instante}). */
   avisos: new Map<string, Record<string, string>>(),
@@ -48,12 +53,26 @@ export const estado = {
   reloj: { ahora: () => new Date() },
   seq: 0,
   llamadas: [] as string[],
+  /** 0793: catálogos SAT globales (catálogo → clave → extra). Sin entrada = catálogo no cargado. */
+  catalogosSat: new Map<string, Map<string, Record<string, string>>>(),
+  /** Cuántas veces se consultó cada catálogo SAT (para probar «una consulta por catálogo»). */
+  consultasCatalogoSat: [] as string[],
+  /** 0790: configuración de salida por flota. */
+  salidaConfigs: new Map<string, Real.SalidaConfigFila>(),
+  /** 0790: envíos al TMS. */
+  envios: [] as Real.EnvioTmsFila[],
+  /** 0790: personas de la oficina (cada una trae su tenantId y si está activa). */
+  usuarios: [] as Array<Real.UsuarioRevisor & { tenantId: string; activo: boolean }>,
+  /** 0790: cp_documento.revisor_asignado por id de documento. */
+  revisores: new Map<string, string>(),
+  /** Simula una base SIN la columna de la 0790. */
+  sinColumnaRevisor: false,
 };
 
 export function reset(): void {
   estado.docs.clear(); estado.archivos.clear(); estado.eventos.length = 0; estado.correcciones.length = 0; estado.buzones.clear();
   estado.perfiles.clear(); estado.versiones.length = 0; estado.exportConfigs.length = 0; estado.viajes.length = 0; estado.mercancias.length = 0;
-  estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0;
+  estado.catalogoNumeros.length = 0; estado.catalogoProductos.length = 0; estado.catalogoPartes.length = 0; estado.operadores.length = 0; estado.unidades.length = 0; estado.clientes.length = 0; estado.correos.clear(); estado.avisos.clear(); estado.embarques.length = 0; estado.sinMigracion = false; estado.sinDivision = false; estado.antesDeDividir = null; estado.fallar.clear(); estado.llamadas.length = 0; estado.salidaConfigs.clear(); estado.catalogosSat.clear(); estado.consultasCatalogoSat.length = 0; estado.envios.length = 0; estado.usuarios.length = 0; estado.revisores.clear(); estado.sinColumnaRevisor = false;
   estado.seq = 0; estado.reloj.ahora = () => new Date();
 }
 
@@ -132,7 +151,7 @@ export const api: typeof Real = {
       riesgo_inyeccion: 'riesgoInyeccion', extraccion: 'extraccion', validacion: 'validacion', confianza_min: 'confianzaMin', nivel_modelo: 'nivelModelo',
       modelo: 'modelo', tokens_in: 'tokensIn', tokens_out: 'tokensOut', costo_usd: 'costoUsd', procesando_hasta: 'procesandoHasta', ultimo_error: 'ultimoError',
       intentos: 'intentos', retener_hasta: 'retenerHasta', abierto_en: 'abiertoEn', revisado_por: 'revisadoPor', aprobado_por: 'aprobadoPor',
-      aprobado_en: 'aprobadoEn', rechazo_motivo: 'rechazoMotivo', tiempo_revision_seg: 'tiempoRevisionSeg', exportado_en: 'exportadoEn', viaje_id: 'viajeId',
+      aprobado_en: 'aprobadoEn', rechazo_motivo: 'rechazoMotivo', rechazo_causa: 'rechazoCausa', tiempo_revision_seg: 'tiempoRevisionSeg', exportado_en: 'exportadoEn', viaje_id: 'viajeId',
     };
     for (const [k, v] of Object.entries(cambios)) {
       const campo = mapa[k];
@@ -143,6 +162,16 @@ export const api: typeof Real = {
     if ((d.estado === 'aprobado') !== (d.aprobadoEn !== null)) throw new Error('repo falso: viola cp_documento_aprobacion_completa');
     d.version = versionEsperada + 1; d.updatedAt = ahoraIso();
     return clon(d);
+  },
+  async cargarCatalogoSat(catalogo, claves) {
+    estado.consultasCatalogoSat.push(catalogo);
+    const caida = estado.fallar.get('cargarCatalogoSat'); // no entra a `llamadas`: es una lectura global, no una consulta de la flota
+    if (caida) throw caida;
+    const t = estado.catalogosSat.get(catalogo);
+    if (!t) return null;
+    const salida = new Map<string, Record<string, string>>();
+    for (const c of claves) { const d = t.get(c); if (d) salida.set(c, d); }
+    return salida;
   },
   async documentosConFolio(tenantId, folio, exceptoId) {
     return [...estado.docs.values()]
@@ -244,6 +273,16 @@ export const api: typeof Real = {
     return v ? { id: v.id, folio: v.folio } : null;
   },
   async clientePropio(tenantId, clienteId) { return estado.clientes.some((c) => c.tenantId === tenantId && c.id === clienteId); },
+  async cargarCatalogoCliente(tenantId, clienteId): Promise<CatalogoCliente> {
+    falla('cargarCatalogoCliente');
+    const propio = (f: { tenantId: string; clienteId: string }) => f.tenantId === tenantId && f.clienteId === clienteId;
+    return clon({
+      numero: estado.catalogoNumeros.find(propio) ?? null,
+      productos: estado.catalogoProductos.filter(propio),
+      partes: estado.catalogoPartes.filter(propio),
+      truncado: false,
+    });
+  },
   async listarClientes(tenantId) { return estado.clientes.filter((c) => c.tenantId === tenantId).map(({ tenantId: _t, ...c }) => c); },
   async insertarViaje(tenantId, v) {
     falla('insertarViaje');
@@ -332,6 +371,7 @@ export const api: typeof Real = {
   TOPE_INTENTOS_DOC: 5,
   GRACIA_RECIBIDO_SEG: 120,
   esperaFallidoMin: (intentos) => 15 * 2 ** Math.max(Math.min(intentos, 6) - 1, 0),
+  tablaAusente: (e) => Boolean(e && (e.code === 'PGRST205' || e.code === '42P01')),
   funcionAusente: (e) => Boolean(e && (e.code === 'PGRST202' || e.code === '42883')),
   async documentosPendientes(limite = 25) {
     falla('documentosPendientes');
@@ -482,5 +522,92 @@ export const api: typeof Real = {
   async hijosDeDocumento(tenantId, padreId) {
     return estado.embarques.filter((e) => e.tenantId === tenantId && e.padreId === padreId).sort((a, b) => a.indice - b.indice)
       .flatMap((e) => { const d = estado.docs.get(e.documentoId); return d ? [{ documento: clon(d), indice: e.indice, total: e.total, clave: e.clave }] : []; });
+  },
+  columnaAusente: (e) => Boolean(e && e.code === '42703'),
+  async usuariosRevisores(tenantId) {
+    return estado.usuarios.filter((u) => u.tenantId === tenantId && u.activo && ['encargado', 'flota_admin', 'contador'].includes(u.rol))
+      .map(({ tenantId: _t, activo: _a, ...u }) => clon(u));
+  },
+  async usuarioRevisor(tenantId, userId) {
+    const u = estado.usuarios.find((x) => x.tenantId === tenantId && x.id === userId && x.activo && ['encargado', 'flota_admin', 'contador'].includes(x.rol));
+    if (!u) return null;
+    const { tenantId: _t, activo: _a, ...resto } = u;
+    return clon(resto);
+  },
+  async revisoresDeDocumentos(tenantId, ids) {
+    falla('revisoresDeDocumentos');
+    const m = new Map<string, string>();
+    if (estado.sinColumnaRevisor) return m;
+    for (const id of ids) { const d = estado.docs.get(id); const r = estado.revisores.get(id); if (d && d.tenantId === tenantId && r) m.set(id, r); }
+    return m;
+  },
+  async idsAsignadosA(tenantId, userId) {
+    if (estado.sinColumnaRevisor) return [];
+    return [...estado.revisores].filter(([id, r]) => r === userId && estado.docs.get(id)?.tenantId === tenantId).map(([id]) => id);
+  },
+  async asignarRevisorDoc(tenantId, id, revisorId) {
+    falla('asignarRevisorDoc');
+    if (estado.sinColumnaRevisor) throw new Error('La asignación de revisor todavía no está disponible en esta base (falta la migración 0790).');
+    const d = estado.docs.get(id);
+    if (!d || d.tenantId !== tenantId) return false;
+    if (revisorId === null) estado.revisores.delete(id); else estado.revisores.set(id, revisorId);
+    return true;
+  },
+  async leerSalidaConfig(tenantId) { falla('leerSalidaConfig'); const c = estado.salidaConfigs.get(tenantId); return c ? clon(c) : null; },
+  async guardarSalidaConfig(tenantId, c) { falla('guardarSalidaConfig'); estado.salidaConfigs.set(tenantId, clon(c)); },
+  async envioPorLlave(tenantId, llave) { falla('envioPorLlave'); const e = estado.envios.find((x) => x.tenantId === tenantId && x.idempotencyKey === llave); return e ? clon(e) : null; },
+  async enviosDeDocumento(tenantId, documentoId) { return estado.envios.filter((x) => x.tenantId === tenantId && x.documentoId === documentoId).reverse().map(clon); },
+  async insertarEnvioTms(tenantId, e) {
+    falla('insertarEnvioTms');
+    const previo = estado.envios.find((x) => x.tenantId === tenantId && x.idempotencyKey === e.idempotencyKey);
+    if (previo) return { envio: clon(previo), creado: false };
+    const d = estado.docs.get(e.documentoId);
+    if (!d || d.tenantId !== tenantId) throw new Error('repo falso: FK compuesta (envío de otra flota)');
+    // Índice parcial único de la 0790: un solo envío ACTIVO por documento.
+    const activo = estado.envios.some((x) => x.tenantId === tenantId && x.documentoId === e.documentoId && !['descartado', 'rechazado_tms', 'subido_a_mano', 'enviado'].includes(x.estado));
+    if (activo) return null;
+    const envio: Real.EnvioTmsFila = { id: `envio-${++estado.seq}`, tenantId, documentoId: e.documentoId, versionDoc: e.versionDoc, idempotencyKey: e.idempotencyKey, estado: 'pendiente_prechequeo', plantilla: e.plantilla, intentos: 0 };
+    estado.envios.push(envio);
+    return { envio: clon(envio), creado: true };
+  },
+  async descartarEnvioTms(tenantId, id, desde) {
+    const e = estado.envios.find((x) => x.tenantId === tenantId && x.id === id);
+    if (!e || !desde.includes(e.estado)) return false;
+    e.estado = 'descartado';
+    return true;
+  },
+  async marcarEnvioSubidoAMano(tenantId, id, desde) {
+    falla('marcarEnvioSubidoAMano');
+    const e = estado.envios.find((x) => x.tenantId === tenantId && x.id === id);
+    if (!e || !desde.includes(e.estado)) return false;
+    e.estado = 'subido_a_mano';
+    return true;
+  },
+  async estadoEnvioPorDocumento(tenantId, documentoIds) {
+    const salida: Record<string, Real.EstadoEnvioTms> = {};
+    for (const e of [...estado.envios].reverse()) {
+      if (e.tenantId === tenantId && documentoIds.includes(e.documentoId) && e.estado !== 'descartado' && !(e.documentoId in salida)) salida[e.documentoId] = e.estado;
+    }
+    return salida;
+  },
+  // T-A3-37: agregados de los insights (misma semántica que la real: solo conteos y nombres de campo).
+  async contarCorreccionesPorCampo(tenantId, ids) {
+    const m = new Map<string, number>();
+    for (const c of estado.correcciones) if (c.tenantId === tenantId && ids.includes(c.documentoId)) m.set(c.campo, (m.get(c.campo) ?? 0) + 1);
+    return m;
+  },
+  async contarCausasDeRechazo(tenantId, desde) {
+    const m: Record<string, number> = {};
+    for (const d of estado.docs.values()) {
+      if (d.tenantId !== tenantId || d.estado !== 'rechazado' || Date.parse(d.createdAt) < desde.getTime()) continue;
+      const k = d.rechazoCausa ?? '';
+      m[k] = (m[k] ?? 0) + 1;
+    }
+    return m;
+  },
+  DIAS_SALIDAS_SIN_CCP: 45,
+  async leerSalidasParaSinCcp() { falla('leerSalidasParaSinCcp'); return { viajes: [], conCcp: new Set<string>() }; },
+  async enviosParaInsights(tenantId) {
+    return estado.envios.filter((e) => e.tenantId === tenantId).map((e) => ({ documentoId: e.documentoId, estado: e.estado, createdAt: new Date().toISOString(), enviadoEn: null, causaPendiente: null }));
   },
 };

@@ -27,7 +27,7 @@ export interface FilaCampo {
   origen: Origen | null;
   evidencia: string | null;
   notas: string[];
-  hallazgos: Array<{ severidad: Severidad; mensaje: string; codigo: string }>;
+  hallazgos: Array<{ severidad: Severidad; mensaje: string; codigo: string; origen?: Hallazgo['origen'] }>;
   /** Tiene algo por confirmar: se pinta la casilla. */
   porConfirmar: boolean;
   bloqueado: boolean;
@@ -51,7 +51,7 @@ const TITULOS: Record<GrupoCampo, string> = { documento: 'Datos del embarque', o
 function hallazgosDe(todos: Hallazgo[], clave: string, renglon: number | null): FilaCampo['hallazgos'] {
   return todos
     .filter((h) => (h.campo === clave && h.renglon === renglon) || (h.relacionados ?? []).some((r) => r.campo === clave && r.renglon === renglon))
-    .map((h) => ({ severidad: h.severidad, mensaje: h.mensaje, codigo: h.codigo }));
+    .map((h) => ({ severidad: h.severidad, mensaje: h.mensaje, codigo: h.codigo, ...(h.origen ? { origen: h.origen } : {}) }));
 }
 
 function fila(def: CampoDoc, c: CampoValor | undefined, renglon: number | null, todos: Hallazgo[]): FilaCampo {
@@ -86,10 +86,13 @@ export const ROTULO_ESTADO: Record<EstadoDoc, string> = {
   dividido: 'Dividido en embarques',
 };
 
-export const ROTULO_ORIGEN: Record<Origen, string> = { xml: 'XML', perfil: 'Perfil del cliente', llm: 'Modelo', humano: 'Persona', derivado: 'Calculado' };
+/** De dónde viene un hallazgo que no calculó Likida (rechazo del sistema del cliente, T-A3-29). */
+export const ROTULO_ORIGEN_HALLAZGO: Record<NonNullable<Hallazgo['origen']>, string> = { tms: 'Sistema del cliente' };
+
+export const ROTULO_ORIGEN: Record<Origen, string> = { xml: 'XML', perfil: 'Perfil del cliente', llm: 'Modelo', humano: 'Persona', derivado: 'Calculado', catalogo: 'Catálogo' };
 
 export const ROTULO_FORMATO: Record<string, string> = {
-  pdf_texto: 'PDF con texto', pdf_escaneado: 'PDF escaneado', imagen: 'Foto', excel: 'Excel', csv: 'CSV', xml: 'XML', correo: 'Correo',
+  pdf_texto: 'PDF con texto', pdf_escaneado: 'PDF escaneado', imagen: 'Foto', excel: 'Excel', csv: 'CSV', xml: 'XML', correo: 'Correo', json: 'JSON',
 };
 
 export const ROTULO_CANAL: Record<string, string> = { manual: 'Carga manual', correo: 'Correo', whatsapp: 'WhatsApp' };

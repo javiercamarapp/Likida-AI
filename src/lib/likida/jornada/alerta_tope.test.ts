@@ -87,6 +87,16 @@ describe('correrAlertasTope', () => {
     expect(p.enviarWa).toHaveBeenCalledTimes(2);
     expect(p.cerrar).toHaveBeenCalledWith(expect.objectContaining({ estado: 'enviada' }));
   });
+  it('una flota con perfil (0770) se SALTA: ni se revisa, ni se reclama, ni se avisa; las demás siguen', async () => {
+    const p = puertos([a('inicio_jornada', hace(10))]);
+    const r = await correrAlertasTope(p, { ahora: AHORA, excluirTenants: new Set(['t1']) });
+    expect(r.revisadas).toBe(0);
+    expect(p.reclamar).not.toHaveBeenCalled();
+    expect(p.enviarWa).not.toHaveBeenCalled();
+    const q = puertos([a('inicio_jornada', hace(10))]);
+    const r2 = await correrAlertasTope(q, { ahora: AHORA, excluirTenants: new Set(['otra-flota']) });
+    expect(r2.alertas.aviso).toBe(1);
+  });
   it('si el nivel ya fue reclamado no reenvía', async () => {
     const p = puertos([a('inicio_jornada', hace(10))], { reclamar: vi.fn(async () => null) });
     const r = await correrAlertasTope(p, { ahora: AHORA });

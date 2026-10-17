@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPLEMENTO CARTA PORTE 3.1 — el clasificador, los 37 campos y el validador.
 //
-// Fuente: docs/conocimiento/02-carta-porte.md (investigación verificada contra
+// Fuente: la documentación interna (investigación verificada contra
 // RMF 2026 DOF 28-dic-2025, Estándar CCP 3.1 y el Instructivo Autotransporte;
 // cada regla de aquí cita su fundamento). Ficha normativa: normas/rmf-2026-2.7.7.yaml.
 //

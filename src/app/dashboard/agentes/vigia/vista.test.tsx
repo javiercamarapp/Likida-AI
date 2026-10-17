@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
 import {
-  BloqueEstadoYKpis, BloqueAprobacion, BloqueExcepciones, BloqueConversaciones, BloqueConfiguracion, BloqueBitacora, BloqueContactos, BloqueDirectores, BloqueCorreos,
-  minutosDeEspera, duracion, motivosDeExcepcion, type AccionesVigia,
+  BloqueEstadoYKpis, BloqueAprobacion, BloqueExcepciones, BloqueConversaciones, BloqueConfiguracion, BloqueBitacora, BloqueContactos, BloqueDirectores, BloqueCorreos, BloqueInsights,
+  minutosDeEspera, duracion, motivosDeExcepcion, ordenarPorPrioridad, type AccionesVigia,
 } from './vista';
 import type { DatosTablero, ConversacionTablero } from '@/lib/likida/vigia/repo';
 import { configApagada } from '@/lib/likida/vigia/tipos';
@@ -181,6 +181,57 @@ describe('conversaciones activas y toma de control', () => {
   });
 });
 
+describe('prioridad en el tablero (T-A4-29)', () => {
+  const alta = (extra: Partial<ConversacionTablero> = {}) => conv({ prioridad: 2, sinRespuestaDesde: hace(5), ...extra });
+
+  it('ordenarPorPrioridad: alta primero, luego quien lleva más esperando, luego id; no muta la lista', () => {
+    const lista = [
+      conv({ id: 'd', sinRespuestaDesde: hace(90) }),
+      alta({ id: 'b' }),
+      alta({ id: 'a', sinRespuestaDesde: hace(40) }),
+      conv({ id: 'c', prioridad: 1, sinRespuestaDesde: hace(10) }),
+    ];
+    const copia = lista.map((c) => c.id);
+    expect(ordenarPorPrioridad(lista, AHORA).map((c) => c.id)).toEqual(['a', 'b', 'c', 'd']);
+    expect(lista.map((c) => c.id)).toEqual(copia);
+  });
+
+  it('empate total: el id decide, siempre igual', () => {
+    const a = conv({ id: 'x' }); const b = conv({ id: 'y' });
+    expect(ordenarPorPrioridad([b, a], AHORA).map((c) => c.id)).toEqual(['x', 'y']);
+  });
+
+  it('sin el campo (base sin 0798) cuenta como 0 y el orden es solo por espera', () => {
+    const lista = [conv({ id: 'a', sinRespuestaDesde: hace(5) }), conv({ id: 'b', sinRespuestaDesde: hace(50) })];
+    expect(ordenarPorPrioridad(lista, AHORA).map((c) => c.id)).toEqual(['b', 'a']);
+  });
+
+  it('el tablero pinta «Prioridad alta» solo en las de prioridad 2 y las pone arriba', async () => {
+    const d = base({ conversaciones: [
+      conv({ id: 'n', clienteNombre: 'Cliente Normal', sinRespuestaDesde: hace(80) }),
+      alta({ id: 'p', clienteNombre: 'Cliente Prioritario' }),
+    ] });
+    const html = await pintar(BloqueConversaciones({ datos: Promise.resolve(d), ahoraMs: AHORA, puedeDecidir: true, acciones }));
+    expect(html.match(/Prioridad alta/g)).toHaveLength(1);
+    expect(html.indexOf('Cliente Prioritario')).toBeLessThan(html.indexOf('Cliente Normal'));
+  });
+
+  it('prioridad 1 o sin dato: no se rotula', async () => {
+    const d = base({ conversaciones: [conv({ prioridad: 1 }), conv({ id: 'b' })] });
+    const html = await pintar(BloqueConversaciones({ datos: Promise.resolve(d), ahoraMs: AHORA, puedeDecidir: true, acciones }));
+    expect(html).not.toContain('Prioridad alta');
+  });
+
+  it('las excepciones también salen con la prioridad alta primero', async () => {
+    const d = base({ conversaciones: [
+      conv({ id: 'n', clienteNombre: 'Cliente Normal', molestiaNivel: 2 }),
+      alta({ id: 'p', clienteNombre: 'Cliente Prioritario', molestiaNivel: 2 }),
+    ] });
+    const html = await pintar(BloqueExcepciones({ datos: Promise.resolve(d), ahoraMs: AHORA, puedeDecidir: true, acciones }));
+    expect(html.indexOf('Cliente Prioritario')).toBeLessThan(html.indexOf('Cliente Normal'));
+  });
+});
+
 describe('configuración, bitácora y contactos', () => {
   it('el dueño ve el formulario con los valores actuales; los demás ven un resumen de solo lectura', async () => {
     const d = base({ config: { ...configApagada('t1'), habilitado: true, slaRespuestaMin: 45, retencionDias: 90 } });
@@ -308,5 +359,63 @@ describe('P14 · lista de directores y respaldo por correo', () => {
     const html = await pintar(BloqueConfiguracion({ datos: Promise.resolve(base()), puedeAdministrar: true, acciones }));
     expect(html).toContain('name="respaldoCorreo"');
     expect(html).toContain('Respaldo por correo');
+  });
+});
+
+describe('BloqueInsights (T-A4-41)', () => {
+  it('sin datos: «Aún no hay avisos enviados», sin ceros inventados', async () => {
+    const html = await pintar(BloqueInsights({ datos: Promise.resolve({ avisos: [], mensajes: [] }) }));
+    expect(html).toContain('Aún no hay avisos enviados');
+    expect(html).toContain('Qué pasó');
+    expect(html).toContain('Qué significa');
+    expect(html).toContain('Qué hacer');
+  });
+  it('cada tarjeta muestra su fuente y el ahorro va rotulado como supuesto', async () => {
+    const html = await pintar(BloqueInsights({
+      datos: Promise.resolve({
+        avisos: [{ estado: 'enviado', enviadoEn: hace(300), citaEn: hace(100) }],
+        mensajes: [{ clienteId: 'c1', entranteEn: hace(60), atendidoEn: hace(50), prioridad: 2 }],
+        config: { minutosPorAviso: 8 },
+      }),
+    }));
+    expect(html.match(/Fuente:/g)).toHaveLength(4);
+    expect(html).toContain('supuesto: 8 min por aviso (configurable)');
+    expect(html).toContain('data-tarjeta="horas_ahorradas"');
+  });
+});
+
+// T-A4-32 · stand-by bajo el perfil cinco_agentes: los controles de autoenvío y el POD adjunto no se muestran;
+// sin el perfil (standby ausente o false) la pantalla es idéntica a la de siempre.
+describe('stand-by bajo el perfil (T-A4-32)', () => {
+  const pend = { id: '22222222-2222-4222-8222-222222222222', conversacionId: '1', clienteNombre: 'Compras Acme', mensajeCliente: 'm',
+    borrador: 'b', intencion: 'eta' as const, riesgo: 'bajo' as const, senales: [], adjuntos: ['Comprobante de entrega (POD)'], creadoEn: hace(2) };
+
+  it('configuración con perfil: sin la opción de autoenviar ni su umbral; el modo queda en «siempre aprobar»', async () => {
+    const html = await pintar(BloqueConfiguracion({ datos: Promise.resolve(base()), puedeAdministrar: true, acciones, standby: true }));
+    expect(html).not.toContain('autoenviar_bajo_riesgo');
+    expect(html).not.toContain('Autoenviar');
+    expect(html).not.toContain('Aprobaciones sin editar');
+    expect(html).toContain('value="siempre"');
+  });
+  it('configuración sin perfil: idéntica a hoy (con la opción y el umbral), con o sin la propiedad', async () => {
+    const sin = await pintar(BloqueConfiguracion({ datos: Promise.resolve(base()), puedeAdministrar: true, acciones }));
+    const falso = await pintar(BloqueConfiguracion({ datos: Promise.resolve(base()), puedeAdministrar: true, acciones, standby: false }));
+    expect(sin).toBe(falso);
+    expect(sin).toContain('autoenviar_bajo_riesgo');
+    expect(sin).toContain('Aprobaciones sin editar');
+  });
+  it('quien solo mira, con perfil: no ve la línea «Modo» (autoenvío)', async () => {
+    const d = base({ config: { ...configApagada('t1'), habilitado: true, modoAprobacion: 'autoenviar_bajo_riesgo' } });
+    const con = await pintar(BloqueConfiguracion({ datos: Promise.resolve(d), puedeAdministrar: false, acciones, standby: true }));
+    expect(con).not.toContain('autoenviar');
+    const sin = await pintar(BloqueConfiguracion({ datos: Promise.resolve(d), puedeAdministrar: false, acciones }));
+    expect(sin).toContain('autoenviar solo bajo riesgo ya validado');
+  });
+  it('cola de aprobación con perfil: no anuncia el POD adjunto; sin perfil sí', async () => {
+    const con = await pintar(BloqueAprobacion({ datos: Promise.resolve(base({ pendientes: [pend] })), puedeDecidir: true, acciones, standby: true }));
+    expect(con).not.toContain('Adjuntará');
+    expect(con).toContain('value="aprobar"');
+    const sin = await pintar(BloqueAprobacion({ datos: Promise.resolve(base({ pendientes: [pend] })), puedeDecidir: true, acciones }));
+    expect(sin).toContain('Adjuntará: Comprobante de entrega (POD)');
   });
 });

@@ -1,10 +1,14 @@
 import { normalizarNombre, normalizarTag, type Celda } from './formatos';
+import { TIPOS_UNIDAD_PEAJE, type TipoUnidadPeaje } from './reglas_cobro';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TAG ↔ UNIDAD — alta masiva por CSV.
 //
-//   tag;unidad;proveedor
-//   IMDM 12345678;C2-08;PASE
+//   tag;unidad;proveedor;tipo
+//   IMDM 12345678;C2-08;PASE;tracto
+//
+// `proveedor` y `tipo` son opcionales. `tipo` (T-A2-39) es `tracto` o `utilitario`; vacío = sin
+// tipo de unidad (no se adivina); cualquier otro valor rechaza esa fila con su motivo.
 //
 // «unidad» es el número económico o las placas (como la flota llama a su
 // camión). Todo el módulo es PURO: valida el CSV y lo resuelve contra la lista
@@ -24,6 +28,8 @@ export interface TagImportado {
   tagOriginal: string;
   unidadRef: string;
   proveedor: string | null;
+  /** Tipo de unidad declarado en el CSV; AUSENTE = la columna no viene o la celda está vacía (sin tipo de unidad). */
+  tipoUnidad?: TipoUnidadPeaje;
 }
 
 export interface LecturaTags {
@@ -32,10 +38,11 @@ export interface LecturaTags {
   error?: string;
 }
 
-const COLS: Record<'tag' | 'unidad' | 'proveedor', string[]> = {
+const COLS: Record<'tag' | 'unidad' | 'proveedor' | 'tipo', string[]> = {
   tag: ['tag', 'no tag', 'no. tag', 'numero de tag', 'id tag', 'dispositivo', 'telepeaje', 'etiqueta'],
   unidad: ['unidad', 'economico', 'numero economico', 'no economico', 'no. economico', 'numero_economico', 'placas', 'placa', 'camion'],
   proveedor: ['proveedor', 'emisor', 'operador de telepeaje'],
+  tipo: ['tipo', 'tipo de unidad', 'tipo unidad', 'tipo_unidad'],
 };
 
 export function parsearTagsMatriz(matriz: Celda[][]): LecturaTags {
@@ -52,7 +59,7 @@ export function parsearTagsMatriz(matriz: Celda[][]): LecturaTags {
     return {
       ...vacio,
       error: `Faltan columnas: ${faltan.join(', ')}. Encabezados leídos: ${matriz[0].map((c) => `«${String(c ?? '').trim()}»`).join(', ')}. `
-        + 'El CSV necesita: tag y unidad (número económico o placas); proveedor es opcional.',
+        + 'El CSV necesita: tag y unidad (número económico o placas); proveedor y tipo (tracto o utilitario) son opcionales.',
     };
   }
   if (matriz.length - 1 > TOPE_TAGS_IMPORTACION) {
@@ -71,7 +78,17 @@ export function parsearTagsMatriz(matriz: Celda[][]): LecturaTags {
     const unidadRef = String(fila[idx.unidad as number] ?? '').trim();
     if (!unidadRef) { rechazadas.push({ fila: n, motivo: 'sin unidad' }); continue; }
     const proveedor = idx.proveedor === undefined ? null : (String(fila[idx.proveedor] ?? '').trim().slice(0, 60) || null);
-    tags.push({ fila: n, tag, tagOriginal: tagOriginal.slice(0, 60), unidadRef, proveedor });
+    let tipoUnidad: TipoUnidadPeaje | undefined;
+    if (idx.tipo !== undefined) {
+      const crudo = String(fila[idx.tipo] ?? '').trim();
+      if (crudo !== '') {
+        const norm = normalizarNombre(crudo);
+        const valido = TIPOS_UNIDAD_PEAJE.find((t) => t === norm);
+        if (!valido) { rechazadas.push({ fila: n, motivo: `el tipo de unidad «${crudo.slice(0, 40)}» no es válido: usa «tracto» o «utilitario» (o deja la celda vacía)` }); continue; }
+        tipoUnidad = valido;
+      }
+    }
+    tags.push({ fila: n, tag, tagOriginal: tagOriginal.slice(0, 60), unidadRef, proveedor, ...(tipoUnidad ? { tipoUnidad } : {}) });
   }
 
   // Un mismo TAG con dos unidades distintas dentro del archivo: se rechazan las
@@ -83,16 +100,28 @@ export function parsearTagsMatriz(matriz: Celda[][]): LecturaTags {
     porTag.set(t.tag, s);
   }
   const conflictivos = new Set([...porTag.entries()].filter(([, s]) => s.size > 1).map(([t]) => t));
+  // Un mismo TAG con dos TIPOS de unidad distintos (declarados) tampoco se resuelve eligiendo uno.
+  const tiposPorTag = new Map<string, Set<TipoUnidadPeaje>>();
+  for (const t of tags) {
+    if (!t.tipoUnidad) continue;
+    const s = tiposPorTag.get(t.tag) ?? new Set<TipoUnidadPeaje>();
+    s.add(t.tipoUnidad);
+    tiposPorTag.set(t.tag, s);
+  }
+  const tiposConflictivos = new Set([...tiposPorTag.entries()].filter(([, s]) => s.size > 1).map(([t]) => t));
   const limpios: TagImportado[] = [];
-  const vistos = new Set<string>();
+  const posicion = new Map<string, number>();
   for (const t of tags) {
     if (conflictivos.has(t.tag)) {
       rechazadas.push({ fila: t.fila, motivo: 'el mismo TAG aparece con unidades distintas en el archivo — no se elige una' });
-    } else if (vistos.has(t.tag)) {
-      // Repetido con la MISMA unidad: inocuo, se ignora la repetición.
-      continue;
+    } else if (tiposConflictivos.has(t.tag)) {
+      rechazadas.push({ fila: t.fila, motivo: 'el mismo TAG aparece con tipos de unidad distintos en el archivo — no se elige uno' });
+    } else if (posicion.has(t.tag)) {
+      // Repetido con la MISMA unidad: inocuo, se ignora la repetición (salvo que traiga el tipo que la primera no tenía).
+      const i = posicion.get(t.tag) as number;
+      if (!limpios[i].tipoUnidad && t.tipoUnidad) limpios[i] = { ...limpios[i], tipoUnidad: t.tipoUnidad };
     } else {
-      vistos.add(t.tag);
+      posicion.set(t.tag, limpios.length);
       limpios.push(t);
     }
   }
@@ -130,4 +159,63 @@ export function resolverUnidadesDeTags(
     else altas.push({ ...t, unidadId: candidatas[0].id });
   }
   return { altas, rechazadas };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BAJA LÓGICA DE UN TAG (T-A2-10).
+//
+// Un camión siniestrado se da de baja pero su tarjeta sigue cobrando. Dar de
+// baja un TAG NO borra su fila: queda con la fecha y el motivo (tabla
+// `peaje_tag_baja`, 0776) para que (a) el historial de cruces anteriores siga
+// teniendo unidad y (b) un cruce POSTERIOR a la baja se vea como candidato.
+// Todo PURO: el reloj se inyecta (`hoy`).
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const MOTIVO_BAJA_MAX = 300;
+
+export type ResultadoBaja =
+  | { ok: true; fecha: string; motivo: string | null; /** ya rige (fecha ≤ hoy): el TAG deja de estar activo */ vigente: boolean }
+  | { ok: false; motivo: string };
+
+const esFechaIso = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`))
+  && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
+
+/**
+ * Valida la baja. La fecha es el ÚLTIMO día en que el TAG estaba vigente (un
+ * cruce con fecha posterior es el sospechoso). Una fecha futura es válida: la
+ * baja se programa y no afecta nada hasta que llegue.
+ */
+export function validarBajaTag(entrada: { fecha: unknown; motivo?: unknown }, hoy: string): ResultadoBaja {
+  const fecha = typeof entrada.fecha === 'string' ? entrada.fecha.trim() : '';
+  if (!fecha) return { ok: false, motivo: 'Falta la fecha de baja: indica el último día en que el TAG estuvo en uso.' };
+  if (!esFechaIso(fecha)) return { ok: false, motivo: 'La fecha de baja no es válida. Usa el formato AAAA-MM-DD, por ejemplo 2026-03-05.' };
+  const motivo = typeof entrada.motivo === 'string' ? entrada.motivo.trim().slice(0, MOTIVO_BAJA_MAX) : '';
+  return { ok: true, fecha, motivo: motivo || null, vigente: fecha <= hoy };
+}
+
+/** TAG normalizado → unidad que lo tuvo y, si se dio de baja, el último día vigente. */
+export interface VigenciaTag { unidadId: string; bajaEn: string | null }
+
+export type ResolucionTag =
+  | { estado: 'vigente'; unidadId: string }
+  /** El cruce es POSTERIOR a la baja: no se le atribuye la unidad, pero se conserva cuál era para explicarlo. */
+  | { estado: 'dado_de_baja'; unidadAnteriorId: string; bajaEn: string }
+  | { estado: 'sin_alta' };
+
+/**
+ * ¿A qué unidad pertenece este TAG en la FECHA del cruce? Un cruce hasta el día
+ * de la baja (inclusive) conserva su unidad; uno posterior ya no. Sin fecha de
+ * cruce no se puede afirmar que sea posterior, así que se trata como vigente.
+ */
+export function resolverTagEnFecha(
+  tagNormalizado: string | null,
+  fechaCruce: string | null,
+  mapa: ReadonlyMap<string, VigenciaTag>,
+): ResolucionTag {
+  const v = tagNormalizado ? mapa.get(tagNormalizado) : undefined;
+  if (!v) return { estado: 'sin_alta' };
+  if (v.bajaEn && fechaCruce && fechaCruce.slice(0, 10) > v.bajaEn) {
+    return { estado: 'dado_de_baja', unidadAnteriorId: v.unidadId, bajaEn: v.bajaEn };
+  }
+  return { estado: 'vigente', unidadId: v.unidadId };
 }

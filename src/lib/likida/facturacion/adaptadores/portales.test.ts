@@ -271,9 +271,9 @@ describe('un adaptador de plataforma cubre N comercios', () => {
     for (const g of conLectura) {
       expect(g.lecturaDeCampo!.fecha, g.comercio).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       // Los diez de la primera ronda apuntan a los .md que vivían fuera del
-      // repo público; los siete de la segunda apuntan al acta que SÍ vive
-      // aquí, en `pruebas-manuales/ensayo/`.
-      expect(g.lecturaDeCampo!.acta, g.comercio).toMatch(/RECON-PORTALES-(17|20)\.md|pruebas-manuales\/ensayo\//);
+      // repo público; los siete de la segunda apuntan al acta de la lectura
+      // de campo del 2026-08-29 (archivo privado, tampoco vive en el repo).
+      expect(g.lecturaDeCampo!.acta, g.comercio).toMatch(/RECON-PORTALES-(17|20)\.md|lectura de campo del 2026-08-29/);
     }
   });
 

@@ -221,3 +221,79 @@ describe('extraerCartaPorteXml (sin modelo)', () => {
     expect(extraerCartaPorteXml(c.xml)).toBeNull();
   });
 });
+
+
+describe('JSON estructurado (T-A3-12)', () => {
+  const enc = (t: string): Uint8Array => new TextEncoder().encode(t);
+  const anidado = (n: number): string => '{"a":'.repeat(n) + '1' + '}'.repeat(n);
+
+  it('{"a":1} es JSON, y también un arreglo de objetos', () => {
+    expect(detectarFormato(enc('{"a":1}'))).toEqual({ ok: true, clase: 'json', mime: 'application/json' });
+    expect(detectarFormato(enc('  \n[{"a":1},{"a":2}]'))).toMatchObject({ ok: true, clase: 'json' });
+    expect(detectarFormato(Buffer.from('\ufeff{"a":1}', 'utf8'))).toMatchObject({ ok: true, clase: 'json' });
+  });
+
+  it('JSON inválido con llaves, texto libre y objetos vacíos siguen el camino de siempre', () => {
+    expect(detectarFormato(enc('{"folio": 12, "peso": }'))).toMatchObject({ ok: true, clase: 'correo', mime: 'text/plain' });
+    expect(detectarFormato(enc('[pendiente] Folio: 123\nPeso: 400 kg'))).toMatchObject({ ok: true, clase: 'correo', mime: 'text/plain' });
+    expect(detectarFormato(enc('Folio: 123\nPeso: 400 kg'))).toMatchObject({ ok: true, clase: 'correo' });
+    expect(detectarFormato(enc('{}'))).toMatchObject({ ok: false });
+    expect(detectarFormato(enc('"un texto entre comillas"'))).toMatchObject({ ok: true, clase: 'correo' });
+  });
+
+  it('el cuerpo de un correo declarado como correo no se vuelve JSON', async () => {
+    // formatoForzado ni siquiera pasa por detectarFormato; aquí se comprueba que un .eml con JSON en el cuerpo sigue siendo correo.
+    expect(detectarFormato(Buffer.from(emlConAsunto('{"a":1}')))).toMatchObject({ ok: true, clase: 'correo' });
+  });
+
+  it('3 000 niveles se rechaza con un motivo llano; 20 pasa y 21 no', () => {
+    expect(detectarFormato(enc(anidado(3000)))).toMatchObject({ ok: false, motivo: expect.stringMatching(/anidado a más de 20 niveles/) });
+    expect(detectarFormato(enc(anidado(20)))).toMatchObject({ ok: true, clase: 'json' });
+    expect(detectarFormato(enc(anidado(21)))).toMatchObject({ ok: false });
+  });
+
+  it('un anidamiento que revienta el parser también se rechaza (no queda como texto)', () => {
+    expect(detectarFormato(enc('['.repeat(2_000_000) + ']'.repeat(2_000_000)))).toMatchObject({ ok: false });
+  });
+
+  it('2 MB de JSON se rechaza por tamaño; justo debajo del tope pasa', () => {
+    const grande = `{"a":"${'x'.repeat(2 * 1024 * 1024)}"}`;
+    expect(detectarFormato(enc(grande))).toMatchObject({ ok: false, motivo: expect.stringMatching(/más de 1 MB/) });
+    const cabe = `{"a":"${'x'.repeat(1024 * 1024 - 20)}"}`;
+    expect(detectarFormato(enc(cabe))).toMatchObject({ ok: true, clase: 'json' });
+  });
+
+  it('prepararContenido: árbol limpio, texto re-serializado y formato json', async () => {
+    const { d, c } = await leer(enc('{"Embarque":{"Folio":"A-1","Peso":120.5},"Mercancias":[{"d":"x"},{"d":"y"}]}'));
+    expect(d).toMatchObject({ clase: 'json' });
+    expect(c.formato).toBe('json');
+    expect(c.tabla).toBeNull();
+    expect(c.imagenes).toEqual([]);
+    expect(c.xml).toEqual({ Embarque: { Folio: 'A-1', Peso: 120.5 }, Mercancias: [{ d: 'x' }, { d: 'y' }] });
+    expect(JSON.parse(c.texto as string)).toEqual(c.xml);
+    expect(c.texto).toContain('"Folio": "A-1"');
+  });
+
+  it('las claves __proto__, constructor y prototype se descartan y no contaminan', async () => {
+    const { c } = await leer(enc('{"a":1,"__proto__":{"polluted":"si"},"x":{"constructor":{"prototype":{"polluted2":1}},"b":2},"l":[{"__proto__":5,"k":1}]}'));
+    expect(c.xml).toEqual({ a: 1, x: { b: 2 }, l: [{ k: 1 }] });
+    expect(c.texto).not.toMatch(/polluted|__proto__|constructor/);
+    expect(c.avisos.join(' ')).toMatch(/Se ignoraron 3 clave/);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(c.xml, '__proto__')).toBe(false);
+  });
+
+  it('prepararContenido también se defiende solo (sin pasar por detectarFormato)', async () => {
+    await expect(prepararContenido(enc(anidado(25)), 'json')).rejects.toThrow(/anidado a más de 20 niveles/);
+    await expect(prepararContenido(enc('{"a":'), 'json')).rejects.toThrow(/mal formado/);
+    await expect(prepararContenido(enc(`{"a":"${'x'.repeat(2 * 1024 * 1024)}"}`), 'json')).rejects.toThrow(/más de 1 MB/);
+  });
+
+  it('un JSON largo recorta el texto pero conserva el árbol completo', async () => {
+    const filas = Array.from({ length: 4000 }, (_, i) => ({ renglon: i, descripcion: `Mercancía sintética número ${i}` }));
+    const { c } = await leer(enc(JSON.stringify({ Mercancias: filas })));
+    expect((c.texto as string).length).toBeLessThanOrEqual(60_000);
+    expect((c.xml as { Mercancias: unknown[] }).Mercancias).toHaveLength(4000);
+    expect(c.avisos.join(' ')).toMatch(/JSON es largo/);
+  });
+});

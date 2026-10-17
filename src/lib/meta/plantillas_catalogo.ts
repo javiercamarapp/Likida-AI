@@ -61,7 +61,7 @@ export type EncabezadoCatalogo =
 export type AgenteDestino =
   | 'chofer_asignacion' | 'chofer_cobranza' | 'oficina' | 'facturacion' | 'privacidad_arco'
   | 'gps' | 'asistencia' | 'mis_reglas' | 'agente5_conductor' | 'onboarding_operador' | 'vigia_cliente'
-  | 'liquidacion_externa' | 'jornada';
+  | 'liquidacion_externa' | 'jornada' | 'agente5_ciclo';
 
 export interface PlantillaCatalogo {
   nombre: string;
@@ -98,6 +98,29 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
     ejemplos: ['Viaje F-1042', 'Ruta: Guadalajara → Monterrey', 'Salida: 02/10/2026', 'Unidad ECO-114, anticipo $3,000.00'],
     variables: ['folio', 'ruta', 'salida', 'unidad y anticipo'],
     botones: [], textoVerificado: false, estado: 'en_uso',
+  },
+  {
+    nombre: 'viaje_asignado_confirmar_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'chofer_asignacion',
+    proposito: 'N01 · Avisar al chofer que le asignaron un viaje y pedirle que lo acepte o no con un botón (sustituye a `viaje_asignado` solo en el perfil piloto).',
+    llamador: 'src/lib/likida/notificar.ts',
+    cuerpo: 'Hola {{1}}, tienes un viaje asignado: {{2}}, servicio de {{3}}, de {{4}} a {{5}}, con cita el {{6}}. Confirma por aquí si lo aceptas.',
+    ejemplos: ['Juan', 'F-1042', 'importación', 'Nuevo Laredo', 'Monterrey', '16/10 a las 08:00'],
+    variables: ['nombre del chofer', 'folio', 'tipo de servicio', 'origen', 'destino', 'cita'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Acepto el viaje', payloadPrefijo: 'viaje_acepto' },
+      { tipo: 'QUICK_REPLY', texto: 'No puedo tomarlo', payloadPrefijo: 'viaje_rechazo' },
+    ],
+    textoVerificado: true, estado: 'en_uso',
+  },
+  {
+    nombre: 'viaje_instrucciones_ruta_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'chofer_asignacion',
+    proposito: 'N02 · Instrucciones completas del viaje (caja, cita, patio de entrega y rutas) cuando el chofer acepta y su ventana de 24 h ya cerró.',
+    llamador: 'src/lib/likida/conductor/asignacion.ts',
+    cuerpo: 'Instrucciones del viaje {{1}} para {{2}}: caja {{3}}, cita en {{4}} a las {{5}}, entrega en el patio {{6}}.\nRuta al punto de carga: {{7}}\nRuta al patio de entrega: {{8}}\nSi tienes dudas, responde por aquí.',
+    ejemplos: ['F-1042', 'Juan', 'CJ-5521', 'Planta Zapopan', '08:00', 'Patio Norte 2', 'https://maps.app.goo.gl/abc123', 'https://maps.app.goo.gl/def456'],
+    variables: ['folio', 'nombre del chofer', 'caja', 'lugar de la cita', 'hora de la cita', 'patio de entrega', 'ruta al punto de carga (o «consulta con tu supervisor»)', 'ruta al patio de entrega (o «consulta con tu supervisor»)'],
+    botones: [{ tipo: 'QUICK_REPLY', texto: 'Entendido', payloadPrefijo: 'instr_ok' }],
+    textoVerificado: true, estado: 'en_uso',
   },
   {
     nombre: 'recordatorio_cierre', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'chofer_cobranza',
@@ -200,7 +223,7 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
   {
     nombre: 'conductor_contacto_anden_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_conductor',
     proposito: 'Pedir al chofer el contacto en andén una vez que llegó a cargar.',
-    llamador: null,
+    llamador: 'src/lib/likida/conductor/alertas_llegada.ts',
     cuerpo: 'Hola {{1}}, ya registramos tu llegada a {{2}} del viaje {{3}}. Responde con el nombre y teléfono de la persona que te recibe en el andén, o toca «Aún no tengo contacto».',
     ejemplos: ['Juan', 'Planta Zapopan', 'F-1042'],
     variables: ['nombre del chofer', 'lugar', 'folio'],
@@ -384,6 +407,142 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
     ],
     textoVerificado: true, estado: 'nueva_para_aprobacion',
   },
+  // ── Agente 5 — ciclo del conductor con botones (T-A5-59, N03–N12 de la reunión del 15-oct) ──
+  // N01 y N02 ya están arriba (`viaje_asignado_confirmar_v1`, `viaje_instrucciones_ruta_v1`). Estas no tienen llamador todavía:
+  // las cablea cada tarea de su ficha (T-A5-39, 44, 45, 46, 51, 53…). Meta: ver `ESTADO_PROVEEDOR_CICLO`.
+  {
+    nombre: 'viaje_gastos_etc_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_ciclo',
+    proposito: 'N03 · Preguntar antes de iniciar el viaje si el chofer requiere gastos de viaje o ETC para generar su vale. Solo flotas con la perilla (requiere definir qué es ETC).',
+    llamador: 'src/lib/likida/conductor/gastos_etc.ts',
+    cuerpo: 'Hola {{1}}, antes de iniciar el viaje {{2}} necesitamos saber si requieres gastos de viaje o ETC para generar tu vale. Elige una opción.',
+    ejemplos: ['Juan', 'F-1042'],
+    variables: ['nombre del chofer', 'folio'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Sí, necesito gastos', payloadPrefijo: 'gastos_si' },
+      { tipo: 'QUICK_REPLY', texto: 'No necesito', payloadPrefijo: 'gastos_no' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'conductor_foto_sello_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_ciclo',
+    proposito: 'N04 · Pedir la foto del sello de la caja antes de salir y el botón «Ya salí» que registra el inicio del viaje; se manda con la unidad detenida en el patio.',
+    llamador: null,
+    cuerpo: 'Hola {{1}}, antes de salir con el viaje {{2}} envía por aquí una foto clara del sello de la caja {{3}}. Después toca «Ya salí» para registrar el inicio de tu viaje.',
+    ejemplos: ['Juan', 'F-1042', 'CJ-5521'],
+    variables: ['nombre del chofer', 'folio', 'caja'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Ya salí', payloadPrefijo: 'inicio_viaje' },
+      { tipo: 'QUICK_REPLY', texto: 'Tengo un problema', payloadPrefijo: 'inicio_problema' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'conductor_detencion_sin_aviso_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_ciclo',
+    proposito: 'N05 · Preguntar por una detención sin parada registrada; solo si el GPS confirma detención por encima del umbral, nunca en movimiento.',
+    llamador: 'src/lib/likida/conductor/deteccion_parada.ts',
+    cuerpo: 'Hola {{1}}, tu unidad del viaje {{2}} lleva {{3}} minutos detenida y no registramos una parada. ¿Todo bien? Elige una opción.',
+    ejemplos: ['Juan', 'F-1042', '15'],
+    variables: ['nombre del chofer', 'folio', 'minutos detenida'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Todo bien', payloadPrefijo: 'parada_ok' },
+      { tipo: 'QUICK_REPLY', texto: 'Registrar motivo', payloadPrefijo: 'parada_motivo' },
+      { tipo: 'QUICK_REPLY', texto: 'Necesito apoyo', payloadPrefijo: 'parada_apoyo' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'conductor_confirma_patio_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_ciclo',
+    proposito: 'N06 · Pedir al chofer que confirme que está en el patio de entrega asignado antes de descargar; «otro» abre la lista de patios dentro de la ventana de 24 h.',
+    llamador: null,
+    cuerpo: 'Hola {{1}}, tu viaje {{2}} se entrega en el patio {{3}}. Antes de descargar, confirma si estás en ese patio.',
+    ejemplos: ['Juan', 'F-1042', 'Patio Norte 2'],
+    variables: ['nombre del chofer', 'folio', 'patio de entrega asignado'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Sí, es ese patio', payloadPrefijo: 'patio_ok' },
+      { tipo: 'QUICK_REPLY', texto: 'Estoy en otro patio', payloadPrefijo: 'patio_otro' },
+      { tipo: 'QUICK_REPLY', texto: 'Compartir ubicación', payloadPrefijo: 'pedir_ubicacion' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'conductor_estadia_descarga_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_ciclo',
+    proposito: 'N07 · Preguntar a las 2 h de la llegada si ya inició la descarga (respaldo cuando la ventana de 24 h está cerrada).',
+    llamador: null,
+    cuerpo: 'Hola {{1}}, llevas {{2}} desde tu llegada a {{3}} con el viaje {{4}}. ¿Ya inició la descarga?',
+    ejemplos: ['Juan', '2 horas', 'Planta Escobedo', 'F-1042'],
+    variables: ['nombre del chofer', 'tiempo transcurrido', 'sitio de descarga', 'folio'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Ya inició', payloadPrefijo: 'descarga_inicio' },
+      { tipo: 'QUICK_REPLY', texto: 'Aún no inicia', payloadPrefijo: 'descarga_no_inicia' },
+      { tipo: 'QUICK_REPLY', texto: 'Tengo un problema', payloadPrefijo: 'descarga_problema' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'aviso_supervisor_patio_distinto_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_ciclo',
+    proposito: 'N08 · Avisar al supervisor que el operador declaró un patio distinto del asignado para la entrega.',
+    llamador: null,
+    cuerpo: 'Atención, supervisor: {{1}} indica estar en el patio {{2}} con el viaje {{3}}, pero la entrega está asignada al patio {{4}}. Última ubicación conocida: {{5}}. Confirma con el operador antes de que descargue.',
+    ejemplos: ['Juan Pérez', 'Patio Sur 1', 'F-1042', 'Patio Norte 2', 'Carretera 85D km 40'],
+    variables: ['chofer', 'patio declarado', 'folio', 'patio asignado', 'última ubicación conocida'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Ya lo atiendo', payloadPrefijo: 'jefe_atiendo' },
+      { tipo: 'URL', texto: 'Abrir tablero', url: 'https://app.likida.ai/dashboard/despacho' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'aviso_supervisor_estadia_descarga_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_ciclo',
+    proposito: 'N09 · Avisar al supervisor que la descarga lleva la estadía de la pregunta de 2 h sin iniciar o sin respuesta del chofer.',
+    llamador: null,
+    cuerpo: 'Atención, supervisor: {{1}} lleva {{2}} en {{3}} con el viaje {{4}}. Estado de la descarga: {{5}}. Se reportó con: {{6}}. Revisa la situación con el cliente.',
+    ejemplos: ['Juan Pérez', '2 horas 10 minutos', 'Planta Escobedo', 'F-1042', 'el operador indica que no ha iniciado', 'Ana, andén 4'],
+    variables: ['chofer', 'tiempo en el sitio', 'sitio de descarga', 'folio', 'estado de la descarga', 'contacto con quien se reportó (o «sin dato»)'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Ya lo atiendo', payloadPrefijo: 'jefe_atiendo' },
+      { tipo: 'URL', texto: 'Abrir tablero', url: 'https://app.likida.ai/dashboard/despacho' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'aviso_supervisor_caja_cargada_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_ciclo',
+    proposito: 'N10 · Avisar al supervisor que no recibieron la carga o que la caja regresa cargada.',
+    llamador: null,
+    cuerpo: 'Atención, supervisor: {{1}} reporta que en {{2}} no recibieron la carga del viaje {{3}}. Motivo indicado: {{4}}. La caja regresa cargada a {{5}}. Confirma el siguiente paso.',
+    ejemplos: ['Juan Pérez', 'Planta Escobedo', 'F-1042', 'sin cita de descarga', 'Patio Norte 2'],
+    variables: ['chofer', 'sitio de descarga', 'folio', 'motivo indicado', 'patio de regreso'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Ya lo atiendo', payloadPrefijo: 'jefe_atiendo' },
+      { tipo: 'URL', texto: 'Abrir tablero', url: 'https://app.likida.ai/dashboard/despacho' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'conductor_pedir_evidencia_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_ciclo',
+    proposito: 'N11 · Pedir al cierre los documentos que faltan según el catálogo de documentos del cliente, con la unidad detenida.',
+    llamador: null,
+    cuerpo: 'Hola {{1}}, para cerrar el viaje {{2}} faltan estos documentos: {{3}}. Envíalos por aquí en fotos legibles y completas. Cuando termines, toca «Ya los envié».',
+    ejemplos: ['Juan', 'F-1042', 'carta porte firmada y sellada, pedimento'],
+    variables: ['nombre del chofer', 'folio', 'documentos que faltan (una línea)'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Ya los envié', payloadPrefijo: 'evid_listo' },
+      { tipo: 'QUICK_REPLY', texto: 'Me falta uno', payloadPrefijo: 'evid_falta' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'conductor_llegada_detectada_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'agente5_ciclo',
+    proposito: 'N12 · Cortesía por geocerca: confirmar la llegada detectada con la unidad ya detenida dentro del sitio (alternativa a insistir cada cierto tiempo).',
+    llamador: null,
+    cuerpo: 'Hola {{1}}, detectamos que tu unidad llegó a {{2}} con el viaje {{3}}. Confirma si es correcto para registrar tu llegada.',
+    ejemplos: ['Juan', 'Planta Escobedo', 'F-1042'],
+    variables: ['nombre del chofer', 'sitio detectado', 'folio'],
+    botones: [
+      { tipo: 'QUICK_REPLY', texto: 'Sí, es correcto', payloadPrefijo: 'llegada_det_ok' },
+      { tipo: 'QUICK_REPLY', texto: 'No es correcto', payloadPrefijo: 'llegada_det_no' },
+    ],
+    textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
   {
     nombre: 'operador_invitacion_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'onboarding_operador',
     proposito: 'Invitar al chofer recién dado de alta (alta masiva o ficha) a escribirle a Likida: inicia su conversación y abre la ventana de 24 h. Solo se manda si la flota lo confirma.',
@@ -426,6 +585,24 @@ export const CATALOGO_PLANTILLAS: readonly PlantillaCatalogo[] = [
     variables: ['cliente', 'motivo (sin respuesta, molestia, pide un humano…)', 'nivel (1 o 2)', 'liga al tablero del Vigía'],
     botones: [{ tipo: 'QUICK_REPLY', texto: 'Yo me encargo', payloadPrefijo: 'vig_tomo' }],
     textoVerificado: true, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'vigia_aviso_viaje_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'vigia_cliente',
+    proposito: 'Aviso proactivo al CLIENTE de la caja, la unidad y el operador asignados a su servicio (canal 1:1 fuera de su ventana de 24 h). La licencia y el teléfono NUNCA van en la plantilla: solo como texto dentro de la ventana y con la política habilitada.',
+    llamador: 'src/lib/likida/vigia/aviso/entrega.ts',
+    cuerpo: 'Aviso de viaje de {{1}}: asignamos {{2}} (caja) con {{3}} (unidad) y {{4}} (operador) para tu cita del {{5}}. Responde a este mensaje si algo no coincide.',
+    ejemplos: ['Transportes del Norte', 'caja CJ-101, placas 11AA22', 'unidad U-101, placas 33BB44', 'Operador Demo', '02/10/2026 07:00'],
+    variables: ['razón social de la flota', 'caja y placas (una sola línea)', 'unidad y placas (una sola línea)', 'nombre del operador', 'hora de la cita'],
+    botones: [], textoVerificado: false, estado: 'nueva_para_aprobacion',
+  },
+  {
+    nombre: 'vigia_aviso_cambio_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'vigia_cliente',
+    proposito: 'Actualización al CLIENTE cuando cambió la caja, la unidad o el operador de un servicio ya avisado (canal 1:1 fuera de su ventana de 24 h). Mismas variables que el aviso de viaje; sin licencia ni teléfono.',
+    llamador: 'src/lib/likida/vigia/aviso/entrega.ts',
+    cuerpo: 'Actualización del aviso de viaje de {{1}}: la asignación quedó con {{2}} (caja), {{3}} (unidad) y {{4}} (operador) para tu cita del {{5}}. Responde a este mensaje si algo no coincide.',
+    ejemplos: ['Transportes del Norte', 'caja CJ-101, placas 11AA22', 'unidad U-205, placas 55CC66', 'Operador Demo', '02/10/2026 07:00'],
+    variables: ['razón social de la flota', 'caja y placas (una sola línea)', 'unidad y placas (una sola línea)', 'nombre del operador', 'hora de la cita'],
+    botones: [], textoVerificado: false, estado: 'nueva_para_aprobacion',
   },
   {
     nombre: 'liquidacion_externa_v1', version: 1, categoria: 'UTILITY', idioma: ES_MX, agente: 'liquidacion_externa',
@@ -474,6 +651,8 @@ export function parametrosReglaAviso(casos: number, frase: string, liga: string)
 
 export const PLANTILLA = {
   viajeAsignado: 'viaje_asignado',
+  viajeAsignadoConfirmar: 'viaje_asignado_confirmar_v1',
+  viajeInstruccionesRuta: 'viaje_instrucciones_ruta_v1',
   recordatorioCierre: 'recordatorio_cierre',
   cobranzaGastos: 'cobranza_gastos_v1',
   avisoOperacion: 'aviso_operacion_v1',
@@ -484,6 +663,8 @@ export const PLANTILLA = {
   vigiaRespuestaCliente: 'vigia_respuesta_cliente_v1',
   vigiaAprobacion: 'vigia_aprobacion_v1',
   vigiaEscalamiento: 'vigia_escalamiento_v1',
+  vigiaAvisoViaje: 'vigia_aviso_viaje_v1',
+  vigiaAvisoCambio: 'vigia_aviso_cambio_v1',
   liquidacionExterna: 'liquidacion_externa_v1',
   jornadaAvisoEncargado: 'jornada_aviso_encargado_v1',
   jornadaAvisoOperador: 'jornada_aviso_operador_v1',

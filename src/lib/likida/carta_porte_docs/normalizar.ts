@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type { CampoDoc } from './campos';
-import { codigoEstado, claveUnidadDeTexto, CLAVES_UNIDAD } from './catalogos';
+import { codigoEstado, codigoEstadoEeuu, claveUnidadDeTexto, CLAVES_UNIDAD } from './catalogos';
 
 export interface Normalizado {
   valor: string | null;
@@ -61,8 +61,12 @@ function armarFecha(a: number, m: number, d: number, h?: number, mi?: number, s?
   return `${a}-${dosD(m)}-${dosD(d)}T${dosD(h)}:${dosD(mi ?? 0)}:${dosD(s ?? 0)}`;
 }
 
-/** Interpreta una fecha mexicana (día primero). `null` = no es una fecha reconocible. */
-export function normalizarFecha(crudo: string): { valor: string | null; nota?: string } {
+/** Orden de las fechas numéricas `a/b/aaaa`: `dmy` = día/mes (México, por omisión); `mdy` = mes/día (formato EE. UU., p. ej. `10/14/2026`). */
+export type OrdenFecha = 'dmy' | 'mdy';
+
+/** Interpreta una fecha (día primero salvo que el perfil diga `mdy`). `null` = no es una fecha reconocible. */
+export function normalizarFecha(crudo: string, opciones: { orden?: OrdenFecha } = {}): { valor: string | null; nota?: string } {
+  const mdy = opciones.orden === 'mdy';
   const t = crudo.trim().toLowerCase().replace(/\s+/g, ' ');
   // Hora opcional al final: 10:30 o 10:30:15 (sin cuantificadores anidados: se quita el sufijo «hrs» y luego se prueba cada forma).
   const base = t.replace(/\s+a las\s+/, ' ').replace(/\s*(hrs|hr|h)\.?$/, '');
@@ -77,14 +81,15 @@ export function normalizarFecha(crudo: string): { valor: string | null; nota?: s
   let m: RegExpExecArray | null;
   // ISO: 2026-10-15
   if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(sinHora))) return { valor: armarFecha(+m[1], +m[2], +m[3], h, mi, s) };
-  // 15/10/2026, 15-10-2026, 15.10.2026 (día primero: es México)
+  // 15/10/2026, 15-10-2026, 15.10.2026 (día primero: es México; con `orden: 'mdy'`, mes primero: 10/14/2026)
   if ((m = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/.exec(sinHora))) {
+    if (mdy) return { valor: armarFecha(+m[3], +m[1], +m[2], h, mi, s) };
     const v = armarFecha(+m[3], +m[2], +m[1], h, mi, s);
     return { valor: v, nota: v && +m[1] <= 12 && +m[2] <= 12 && m[1] !== m[2] ? 'Se leyó como día/mes/año.' : undefined };
   }
   // 15/10/26 (año de dos dígitos → 20xx)
   if ((m = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2})$/.exec(sinHora))) {
-    return { valor: armarFecha(2000 + +m[3], +m[2], +m[1], h, mi, s), nota: 'Año de dos dígitos leído como 20' + m[3] + '.' };
+    return { valor: mdy ? armarFecha(2000 + +m[3], +m[1], +m[2], h, mi, s) : armarFecha(2000 + +m[3], +m[2], +m[1], h, mi, s), nota: 'Año de dos dígitos leído como 20' + m[3] + '.' };
   }
   // 15 de octubre de 2026 · 15-oct-2026 · 15 oct 2026
   if ((m = /^(\d{1,2})[\s-]+([a-záéíóú]+)\.?[\s-]+(\d{4})$/.exec(sinHora))) {
@@ -105,7 +110,7 @@ export function normalizarFecha(crudo: string): { valor: string | null; nota?: s
 }
 
 /** Lo que puede ir pegado a una cifra del documento y no es parte de ella. */
-const SUFIJOS_NUMERO: ReadonlySet<string> = new Set(['kg', 'kgs', 'kilo', 'kilos', 'ton', 'tons', 'tonelada', 'toneladas', 'lb', 'lbs', 'pza', 'pzas', 'mxn', 'usd', 'mn', 'm.n']);
+const SUFIJOS_NUMERO: ReadonlySet<string> = new Set(['kg', 'kgs', 'kilo', 'kilos', 'ton', 'tons', 'tonelada', 'toneladas', 'lb', 'lbs', 'pza', 'pzas', 'km', 'kms', 'mxn', 'usd', 'mn', 'm.n']);
 
 /** `1,234,567` / `1.234.567`: un grupo de 1 a 3 dígitos y uno o más de EXACTAMENTE 3, separados por `sep`. */
 function esMilesAgrupados(t: string, sep: ',' | '.'): boolean {
@@ -157,6 +162,109 @@ export function normalizarNumero(crudo: string | number, miles?: ',' | '.'): { v
   return { valor: Math.round(n * 1000) / 1000, ambiguo };
 }
 
+/**
+ * Peso: `normalizarNumero` más la regla explícita de los separadores y sus notas (T-A3-52). Nada ambiguo pasa sin nota.
+ *   · `3,002.00` → 3002 (coma de miles + punto decimal: inequívoco, sin nota).
+ *   · `1999.350` → 1999.35 (el grupo previo tiene más de 3 dígitos: el punto NO puede ser de miles; se anota).
+ *   · `14.029` / `6,578` → ambiguo: se lee con la regla de México (punto decimal; coma de miles) y la nota trae la OTRA
+ *     lectura para que quien tiene el documento decida. `alternativa` es esa otra lectura.
+ * Si el perfil del cliente ya fijó su separador de miles (`miles`), no hay ambigüedad.
+ */
+export function normalizarPeso(crudo: string | number, miles?: ',' | '.'): { valor: number | null; ambiguo: boolean; alternativa: number | null; notas: string[] } {
+  const n = normalizarNumero(crudo, miles);
+  const notas: string[] = [];
+  if (n.valor === null || typeof crudo === 'number') return { valor: n.valor, ambiguo: n.ambiguo, alternativa: null, notas };
+  const m = /([+-]?\d[\d.,]*)\s*[a-z.]{0,12}$/i.exec(crudo.trim());
+  const t = m ? m[1] : '';
+  let alternativa: number | null = null;
+  if (n.ambiguo && /^[+-]?\d{1,3}[.,]\d{3}$/.test(t)) {
+    const enteros = Number(t.replace(/^[+-]/, '').replace(/[.,]/, ''));
+    const decimal = Number(t.replace(',', '.'));
+    alternativa = n.valor === decimal ? enteros : decimal;
+    const como = t.includes('.') ? 'punto decimal' : 'coma de miles';
+    notas.push(`«${t}» es ambiguo: se leyó ${n.valor} kg (${como}); si fuera la otra lectura serían ${alternativa} kg. Confírmalo: confirma la cifra contra el documento.`);
+  } else if (!miles && /^[+-]?\d{4,}\.\d{3}$/.test(t)) {
+    notas.push(`«${t}»: el punto se leyó como decimal (${n.valor} kg) porque el grupo previo tiene más de 3 dígitos y no puede ser un separador de miles.`);
+  }
+  return { valor: n.valor, ambiguo: n.ambiguo, alternativa, notas };
+}
+
+/** Ancho fijo de las claves SAT numéricas de domicilio y aduana (colonia 4, localidad 2, municipio 3, tipo de materia 2). */
+function anchoClaveNumerica(clave: string): number | undefined {
+  if (/_colonia_clave$/.test(clave)) return 4;
+  if (/_localidad_clave$/.test(clave)) return 2;
+  if (/_municipio_clave$/.test(clave)) return 3;
+  if (clave === 'tipo_materia') return 2;
+  return undefined;
+}
+
+/**
+ * Completa con ceros a la izquierda una clave que llegó como celda numérica (`6`, `876`, `3`, `'6.0'`).
+ * `null` si ya está bien, si no son solo dígitos o si es más larga que el ancho (no se adivina).
+ */
+function completarCeros(crudo: string | number, ancho: number): { valor: string; original: string } | null {
+  const t = typeof crudo === 'number' ? (Number.isInteger(crudo) && crudo >= 0 ? String(crudo) : '') : crudo.trim().replace(/^(\d+)\.0+$/, '$1');
+  if (!/^\d+$/.test(t) || t.length >= ancho) return null;
+  return { valor: t.padStart(ancho, '0'), original: String(crudo).trim() };
+}
+
+interface ParcialNorm { valor: string; notas: string[]; penalizacion: number }
+
+/** Pedimento completo: 15 dígitos `AA AD PPPP NNNNNNN` (año, aduana, patente, consecutivo). */
+export const PEDIMENTO_COMPLETO = /^\d{2} \d{2} \d{4} \d{7}$/;
+/** Pedimento incompleto como lo escribe un agente aduanal: `patente-consecutivo`. */
+export const PEDIMENTO_PARCIAL = /^\d{4}-\d{7}$/;
+
+/**
+ * Pedimento al formato de 15 dígitos con espacios. Si solo trae `patente-consecutivo` (11 dígitos) se deja así y se
+ * avisa: el año y la aduana los completa `completarDerivados` con los del perfil, o los captura una persona.
+ */
+export function normalizarPedimento(crudo: string): ParcialNorm {
+  const t = crudo.trim();
+  const notas: string[] = [];
+  if (/[^\d\s\-./]/.test(t)) return { valor: t, notas: ['No tiene forma de pedimento (solo dígitos): confírmalo contra el documento.'], penalizacion: 0.3 };
+  const d = t.replace(/\D/g, '');
+  if (d.length === 15) {
+    const v = `${d.slice(0, 2)} ${d.slice(2, 4)} ${d.slice(4, 8)} ${d.slice(8)}`;
+    if (v !== t) notas.push('Se le dio el formato AA AD PPPP NNNNNNN al pedimento.');
+    return { valor: v, notas, penalizacion: 0 };
+  }
+  if (d.length === 11) {
+    notas.push('Pedimento incompleto (patente-consecutivo): faltan el año y la aduana. Confírmalo.');
+    return { valor: `${d.slice(0, 4)}-${d.slice(4)}`, notas, penalizacion: 0.3 };
+  }
+  return { valor: t, notas: [`El pedimento trae ${d.length} dígitos y debería traer 15 (AA AD PPPP NNNNNNN): confírmalo.`], penalizacion: 0.3 };
+}
+
+const REGIMEN_POR_NOMBRE: Record<string, string> = {
+  'importacion definitiva': 'IMD',
+  'exportacion definitiva': 'EXD',
+};
+
+/** Régimen aduanero: la clave de 3 letras en mayúsculas; el nombre solo se traduce cuando es inequívoco. */
+export function normalizarRegimen(crudo: string): ParcialNorm {
+  const t = crudo.trim();
+  const llave = t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const porNombre = REGIMEN_POR_NOMBRE[llave];
+  if (porNombre) return { valor: porNombre, notas: [`«${t}» se tradujo a la clave ${porNombre}.`], penalizacion: 0 };
+  return { valor: t.toUpperCase(), notas: [], penalizacion: 0 };
+}
+
+/** Clave ONU del material peligroso: 4 dígitos («UN 1203», «1203», «203» → 1203 / 0203). `N/A` y otros textos quedan igual. */
+export function normalizarClavePeligroso(crudo: string): ParcialNorm {
+  const t = crudo.trim().replace(/\s+/g, ' ');
+  const m = /^(?:UN ?)?(\d{3,4})$/i.exec(t);
+  if (!m) return { valor: t, notas: [], penalizacion: 0 };
+  const v = m[1].padStart(4, '0');
+  return { valor: v, notas: v !== t ? [`La clave de material peligroso se escribió ${v} (era «${t}»).`] : [], penalizacion: 0 };
+}
+
+/** Id de destino de la plantilla del TMS: texto («1», « 2 ») o número (1, 2.0) → entero en texto. `null` si no es un entero positivo. */
+export function normalizarIdDestino(crudo: unknown): string | null {
+  const t = typeof crudo === 'number' ? (Number.isInteger(crudo) ? String(crudo) : '') : String(crudo ?? '').trim().replace(/^(\d+)\.0+$/, '$1');
+  return /^\d+$/.test(t) && Number(t) > 0 ? String(Number(t)) : null;
+}
+
 const aTexto = (n: number): string => String(n);
 
 export function normalizarBooleano(v: unknown): 'true' | 'false' | null {
@@ -172,7 +280,7 @@ const MONEDAS: Record<string, string> = {
 };
 
 /** Normaliza el valor CRUDO de un campo a su forma de guardado. Nunca lanza. */
-export function normalizarValor(campo: CampoDoc, crudo: unknown, opciones: { miles?: ',' | '.' } = {}): Normalizado {
+export function normalizarValor(campo: CampoDoc, crudo: unknown, opciones: { miles?: ',' | '.'; ordenFecha?: OrdenFecha } = {}): Normalizado {
   const notas: string[] = [];
   let penalizacion = 0;
   const vacio: Normalizado = { valor: null, notas, penalizacion };
@@ -183,26 +291,39 @@ export function normalizarValor(campo: CampoDoc, crudo: unknown, opciones: { mil
 
   switch (campo.tipo) {
     case 'rfc': {
+      // Un Tax ID de EE. UU. (EIN `NN-NNNNNNN`) conserva su guion: ningún RFC mexicano tiene esa forma (T-A3-49).
+      const bruto = String(texto).trim().toUpperCase();
+      if (/^\d{2}-\d{7}$/.test(bruto)) {
+        if (bruto !== String(texto)) notas.push('Tax ID normalizado (mayúsculas, sin espacios); se conserva el guion.');
+        return out(bruto);
+      }
       const r = String(texto).toUpperCase().replace(/[\s.\-_]/g, '');
       if (r !== String(texto)) notas.push('RFC normalizado (mayúsculas, sin espacios ni guiones).');
       return out(r);
     }
     case 'cp': {
       const d = String(texto).replace(/\s+/g, '').replace(/^c\.?p\.?:?/i, '');
-      if (/^\d{4}$/.test(d)) {
-        notas.push('El CP traía 4 dígitos (probable cero inicial perdido en Excel): se completó a 5. Confírmalo.');
+      if (/^\d{1,4}$/.test(d)) {
+        notas.push(`El CP traía ${d.length} dígito${d.length === 1 ? '' : 's'} (probable cero inicial perdido en Excel): se completó a 5. Confírmalo.`);
         penalizacion = 0.25;
-        return out(`0${d}`);
+        return out(d.padStart(5, '0'));
       }
       return out(d);
     }
     case 'fecha': {
-      const f = normalizarFecha(String(texto));
+      const f = normalizarFecha(String(texto), { orden: opciones.ordenFecha });
       if (f.valor === null) { notas.push('No se reconoció como fecha.'); penalizacion = 0.3; return out(String(texto)); }
       if (f.nota) { notas.push(f.nota); penalizacion = 0.05; }
       return out(f.valor);
     }
     case 'numero': {
+      if (campo.clave === 'peso_kg' || campo.clave === 'peso_bruto_total') {
+        const p = normalizarPeso(texto, opciones.miles);
+        if (p.valor === null) { notas.push('No se reconoció como número.'); penalizacion = 0.3; return out(String(texto)); }
+        notas.push(...p.notas);
+        if (p.ambiguo) penalizacion = 0.2;
+        return out(aTexto(p.valor));
+      }
       const n = normalizarNumero(texto, opciones.miles);
       if (n.valor === null) { notas.push('No se reconoció como número.'); penalizacion = 0.3; return out(String(texto)); }
       if (n.ambiguo) { notas.push('Número ambiguo (punto/coma de miles o decimal): confirma la cifra.'); penalizacion = 0.2; }
@@ -232,6 +353,8 @@ export function normalizarValor(campo: CampoDoc, crudo: unknown, opciones: { mil
       const t = String(texto).trim();
       const c = codigoEstado(t);
       if (c) { if (c !== t.toUpperCase()) notas.push(`«${t}» se tradujo a la clave de estado ${c}.`); return out(c); }
+      const us = codigoEstadoEeuu(t);
+      if (us) { if (us !== t.toUpperCase()) notas.push(`«${t}» se tradujo a la clave de estado de EE. UU. ${us}.`); return out(us); }
       return out(t.toUpperCase());
     }
     case 'booleano': {
@@ -249,7 +372,34 @@ export function normalizarValor(campo: CampoDoc, crudo: unknown, opciones: { mil
     case 'placa':
       return out(String(texto).toUpperCase().replace(/[^A-Z0-9]/g, ''));
     case 'texto':
-    default:
+    default: {
+      // Campos aduaneros (T-A3-46): forma propia, sin adivinar lo que el documento no dice.
+      if (campo.clave === 'pedimento') {
+        const p = normalizarPedimento(String(texto));
+        notas.push(...p.notas); penalizacion = p.penalizacion;
+        return out(p.valor);
+      }
+      if (campo.clave === 'regimen_aduanero') {
+        const r = normalizarRegimen(String(texto));
+        notas.push(...r.notas);
+        return out(r.valor);
+      }
+      if (campo.clave === 'clave_material_peligroso') {
+        const k = normalizarClavePeligroso(String(texto));
+        notas.push(...k.notas);
+        return out(k.valor);
+      }
+      // Claves del SAT que Excel guarda como número y pierde el cero inicial.
+      const ancho = anchoClaveNumerica(campo.clave);
+      if (ancho !== undefined) {
+        const c = completarCeros(texto, ancho);
+        if (c) {
+          notas.push(`Se completó el cero a la izquierda (${c.original} → ${c.valor}). Confírmalo.`);
+          penalizacion = 0.1;
+          return out(c.valor);
+        }
+      }
       return out(limpiarTexto(texto, campo.max));
+    }
   }
 }

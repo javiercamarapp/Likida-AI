@@ -1,8 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CALCULADORA DE RECUPERACIÓN FISCAL — el motor puro del lead magnet.
 //
-// Blueprint: Documentos Likida/13-Agentes-de-AI/05-Marketing-y-Contenido/
-// agente-lead-magnet.md. Es la única pieza de contenido que un facturador
+// Blueprint: documentación interna, fuera del repo (agente-lead-magnet.md). Es la única pieza de contenido que un facturador
 // genérico no puede copiar, y su diferenciador NO es calcular más: es
 // calcular menos y decirlo (la regla de honestidad, seis candados).
 //

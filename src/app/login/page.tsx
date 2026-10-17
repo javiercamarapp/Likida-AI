@@ -92,6 +92,26 @@ async function dentroDelLimite(llave: string): Promise<boolean> {
 }
 
 /**
+ * FASE 1 · SEG-LIMITE-CUENTA (checklist 31 v2 #13): el límite de arriba es
+ * POR IP — alguien con IPs rotadas puede seguir pidiendo magic links a la
+ * MISMA cuenta sin tocar ese techo nunca, quemando la cuota de SMTP y
+ * martillando el inbox de un tercero. Supabase Auth YA espacia una petición
+ * a la vez al MISMO correo (`[auth.email].max_frequency`) — esto es
+ * COMPLEMENTARIO, no un reemplazo: una ventana con techo de intentos que
+ * EXPIRA, no un espaciador de una sola petición.
+ *
+ * La VENTANA ES CORTA a propósito (5 min, el mismo número que el límite por
+ * IP): un techo largo volvería esto un candado que cualquiera pone sobre la
+ * cuenta de OTRO con solo teclear su correo repetidas veces. El peor caso
+ * tiene que ser "espera 5 minutos", nunca "bloqueado hasta que alguien de
+ * Likida lo revise" — por eso tampoco hay ban ni fila en una tabla: es el
+ * mismo contador de `ratelimit.ts` que ya expira solo.
+ */
+async function dentroDelLimitePorCuenta(email: string): Promise<boolean> {
+  return await rateLimit(`login:cuenta:${email}`, 10, 5 * 60_000, { fallaCerrado: false });
+}
+
+/**
  * La allowlist de PREFIJOS DE RUTA PROPIOS a la que este login honra `next`
  * — mismo criterio, y las mismas dos rutas, que `destinoExplicito` en
  * `auth/callback/route.ts`. Antes de esto SOLO admitía `/dashboard`: quien
@@ -138,13 +158,23 @@ export default async function Login({
     'use server';
     const rawNext = String(formData.get('next') ?? '/dashboard');
     const dest = destinoPermitido(rawNext) ? rawNext : '/dashboard';
-    // Al exceder el límite se responde el error GENÉRICO, no "vas muy rápido":
-    // la diferencia le diría a quien prueba correos cuándo dejó de contar.
-    if (!(await dentroDelLimite('login:email'))) {
+    // AUDITORÍA 31 v2 · SEG-LOGIN-MAYUSCULAS: `.toLowerCase()` además de
+    // `.trim()`, igual que `invitar.ts:81` al crear la cuenta — sin esto,
+    // ENTRAR y DAR DE ALTA normalizaban el correo de forma distinta. Se lee
+    // ANTES de los límites porque el de abajo (SEG-LIMITE-CUENTA) necesita
+    // la versión normalizada: MAYUSCULA@x y minuscula@x tienen que gastar
+    // EL MISMO contador, no dos separados que duplicarían el techo real.
+    const email = String(formData.get('email') ?? '').trim().toLowerCase();
+    if (!email) redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
+    // Al exceder cualquiera de los dos límites se responde el error
+    // GENÉRICO, no "vas muy rápido": la diferencia le diría a quien prueba
+    // correos cuándo dejó de contar. SEG-LIMITE-CUENTA (checklist 31 v2
+    // #13): por IP (de siempre) Y por CUENTA (ventana corta, ver
+    // `dentroDelLimitePorCuenta`) — rotar de IP no sirve si la cuenta es la
+    // misma.
+    if (!(await dentroDelLimite('login:email')) || !(await dentroDelLimitePorCuenta(email))) {
       redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
     }
-    const email = String(formData.get('email') ?? '').trim();
-    if (!email) redirect(`/login?next=${encodeURIComponent(dest)}&error=1`);
     // Deja dicho a quién reenviar si este enlace muere (reenvio_enlace.ts).
     // ANTES de saber si el correo tiene cuenta, a propósito: guardarlo solo
     // para los que existen reabriría el oráculo de enumeración por cookie.

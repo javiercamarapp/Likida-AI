@@ -175,6 +175,10 @@ import { join, relative, sep } from 'node:path';
 // Svix antes de leer el cuerpo y resuelve la flota por el token del destinatario.
 //
 // (Lo anterior, 89 → 95, es de la rama de los Agentes 1 y 2; lo siguiente, 89 → 93, de la rama integrada; la suma de ambas es 99.)
+// 106 → 107 (cinco agentes, A1 T-A1-21, plan B del desglose): `api/v1/liquidaciones-externas/desgloses/route.ts` — `abrir(req,
+//   'administracion')` antes de leer el cuerpo; el tenant sale SIEMPRE de la credencial (un `tenant_id` es 400); cuerpo acotado a
+//   2 MB y ≤ 100 desgloses; estricta y todo-o-nada (se valida todo antes de escribir); idempotente por bitácora y sin sobrescribir
+//   (otra huella = excepción `correccion_pendiente`); no entrega nada ni acepta credenciales.
 // 89 → 90 (loop punta a punta, ola 3, Agente 9 «Buzón de facturas», 2-oct-2026): una ruta,
 //   · `api/cron/buzon-entrega/route.ts` — puertaCron (CRON_SECRET, comparación en tiempo
 //     constante) y palanca `global` (falla cerrado si no se puede leer); latido en todo camino de
@@ -235,7 +239,38 @@ import { join, relative, sep } from 'node:path';
 //   Javier) al servidor. Su puerta: `puertaCron` (CRON_SECRET, comparación de tiempo constante; sin él 500 y alerta), palanca
 //   `global` fail-closed (ilegible = 500 + aviso) y latido en todo camino de salida. No lee ni devuelve datos de flota: responde
 //   conteos, y los componentes de /estado son un catálogo cerrado de cinco nombres con tres estados. Prueba: `cron/guardia/route.test.ts`.
-const RUTAS_APP_REVISADAS = 106;
+//
+// 106 → 107 (frente A2 Peajes, revisión de cobros): `api/export/peajes-revision/route.ts` — GET de la flota de la SESIÓN
+//   (`resolverTenantApi`): puerta del dato (área `dinero`), del verbo (`puedeExportar`), rate limit por IP y por flota; el desglose se busca CON
+//   el tenant de la sesión (uno ajeno es 404) y una lectura incompleta no sale como archivo corto. Mismo molde que `peajes-reclamacion`.
+//   Prueba: `export/peajes-revision/route.test.ts`.
+// INTEGRACIÓN (INT-RAMAS): Peajes (`api/export/peajes-revision`) y Liquidación (`api/v1/liquidaciones-externas/desgloses`) declararon cada una 106 → 107
+// contra la misma base; juntas son 106 + 2 = 108. Las dos rutas ya están revisadas arriba; el conteo es la suma de los tramos.
+// 108 → 109 (T-TMS-12, 15-oct-2026): `api/cron/tms/route.ts` — el sincronizador del sistema de transporte del cliente. Su puerta:
+//   `puertaCron` (CRON_SECRET, comparación de tiempo constante; sin él 500 y alerta), palanca `global` fail-closed (ilegible = 500 + latido
+//   `fallo`) y latido en todo camino de salida. No acepta cuerpo ni parámetros; no devuelve credenciales ni datos de la flota (solo conteos y
+//   frases propias). Opt-in: solo recorre flotas con credencial `tms_api_lectura` activa, probada y con mapeo activo. Prueba: `cron/tms/route.test.ts`.
+// Reanclado sobre master: 108 de la integración + 1 (cron/tms) = 109.
+//
+// 109 → 110 (frente A2 Peajes, T-A2-25): `api/export/peajes-candidatos/route.ts` — GET de la flota de la SESIÓN (`resolverTenantApi`): puerta del
+//   dato (área `dinero`), del verbo (`puedeExportar`), rate limit por IP y por flota; el desglose y todas las lecturas (líneas, tarifas, reclamos)
+//   usan el tenant de la sesión (uno ajeno es 404 sin leer nada más) y una lectura incompleta no sale como archivo corto. Mismo molde que
+//   `peajes-revision`. Prueba: `export/peajes-candidatos/route.test.ts`.
+//
+// 110 → 111 (frente A2 Peajes, T-A2-22): `api/export/peajes-vinculos/route.ts` — GET de la flota de la SESIÓN (`resolverTenantApi`): puerta del
+//   dato (área `dinero`), del verbo (`puedeExportar`), rate limit por IP y por flota; el desglose y todas las lecturas (líneas, vínculos, folios)
+//   usan el tenant de la sesión (uno ajeno es 404) y una lectura incompleta no sale como archivo corto. Mismo molde que `peajes-reclamacion`.
+//   Prueba: `export/peajes-vinculos/route.test.ts`.
+// Integración cinco-integracion-2 (tms-conector + peajes-importador sobre la misma base 108): 109 (cron/tms) + 2 (candidatos, vinculos) = 111.
+//
+// 111 → 112 (T-A3-33, reanclado sobre master, 15-oct-2026): `api/v1/ccp-timbrado/route.ts` — el aviso del TMS con el CCP ya timbrado. Su puerta: `abrir(req,
+//   'operacion')` ANTES de leer el cuerpo (tasa por IP y por flota, llave de API o sesión desde nuestro sitio, perfil de la flota y
+//   área); la flota sale de la credencial (un `tenant_id` en el cuerpo es 400); la `referencia` debe ser de un envío de ESA flota
+//   (una ajena es 404 sin guardar ni mandar correo); idempotente por UUID fiscal (unique tenant_id + uuid); archivos ≤ 8 MB, XML leído
+//   con el lector oficial y PDF verificado por su cabecera; el correo al cliente sale solo si la flota lo activó (apagado por omisión).
+//   Prueba: `v1/ccp-timbrado/route.test.ts`.
+// Integración cinco-integracion-2 (+ cartaporte sobre la misma base 108): 111 + 1 (ccp-timbrado) = 112.
+const RUTAS_APP_REVISADAS = 112;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

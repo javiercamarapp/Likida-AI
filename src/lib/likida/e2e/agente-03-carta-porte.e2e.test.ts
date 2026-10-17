@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import './reloj_adelantado.fixture';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -13,6 +13,10 @@ import './reloj_adelantado.fixture';
 vi.mock('../carta_porte_docs/repo', async () => (await import('../carta_porte_docs/repo_falso.fixture')).api);
 vi.mock('../bitacora_escritura', () => ({ anotarBitacora: vi.fn(async () => true) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+// T-A3-39: el PAC no debe tocarse JAMÁS desde la bandeja; estos espías lo vigilan.
+const { pac } = vi.hoisted(() => ({ pac: { crearProveedorSw: vi.fn(), resolverPac: vi.fn(), estadoPac: vi.fn() } }));
+vi.mock('../pac/sw', () => ({ crearProveedorSw: pac.crearProveedorSw, _limpiarTokenSw: () => {} }));
+vi.mock('../pac/index', () => ({ resolverPac: pac.resolverPac, estadoPac: pac.estadoPac, MOTIVOS_CANCELACION: [] }));
 // El CRON de la bandeja (0640-0642): la ruta REAL con su motor real; solo la puerta, los interruptores, el teléfono de la
 // oficina y WhatsApp son dobles. Los datos pasan por el repo en memoria.
 const { avisosOficina, latidos, depsHolder } = vi.hoisted(() => ({
@@ -22,8 +26,22 @@ const { avisosOficina, latidos, depsHolder } = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/admin/salud', () => ({ puertaCron: async () => null, registrarLatido: async (...a: unknown[]) => { latidos.push(a); } }));
 vi.mock('@/lib/likida/interruptores', async (original) => ({ ...(await original<Record<string, unknown>>()), leerInterruptor: async () => 'encendido', estaApagado: async () => false }));
+// La pasada de envíos al TMS (0790) corre tras la extracción dentro del mismo cron; sus reglas tienen sus propias pruebas
+// (worker_envios*.test.ts). Aquí se deja una cola vacía para que el latido refleje SOLO la extracción: sin esto la pasada
+// real tocaba una base inexistente y el latido salía `parcial`.
+vi.mock('../carta_porte_docs/worker_envios', async (original) => {
+  const real = await original<Record<string, unknown>>();
+  return { ...real, correrWorkerEnvios: async () => (real.resultadoEnviosVacio as () => unknown)() };
+});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: async () => {} }));
-vi.mock('@/lib/likida/contactos', () => ({ telefonoJefeDe: async (t: string) => (t === 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' ? '5215500000001' : null) }));
+vi.mock('@/lib/likida/contactos', () => ({ telefonoDeUsuario: async () => null, telefonoJefeDe: async (t: string) => (t === 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' ? '5215500000001' : null) }));
+// La SEGUNDA pasada del cron (envíos al TMS, T-A3-28) corre contra el doble en memoria del repo de envíos: aquí no hay nada que
+// enviar (la bandeja de estas pruebas crea viaje, no envío), y sin este doble la pasada pegaría a una base que no existe.
+vi.mock('../carta_porte_docs/worker_envios_deps', async () => {
+  const { repoEnviosFalso } = await import('../carta_porte_docs/repo_envios_falso.fixture');
+  const noAplica = async (): Promise<never> => { throw new Error('esta suite no envía nada al TMS'); };
+  return { depsEnviosReales: () => ({ reclamar: (l: number) => repoEnviosFalso.reclamar(l), ahora: () => Date.now() }), noAplica };
+});
 vi.mock('../carta_porte_docs/worker_deps', async (original) => {
   const real = await original<typeof import('../carta_porte_docs/worker_deps')>();
   return { depsWorkerReales: () => real.depsWorkerReales({ apagado: async () => false, llm: () => (depsHolder.modelo as () => LlmExtractor)() }) };
@@ -37,6 +55,7 @@ vi.mock('@/lib/meta/aviso_oficina', async (original) => ({
 }));
 
 import { estado, reset } from '../carta_porte_docs/repo_falso.fixture';
+import { resetEnvios } from '../carta_porte_docs/repo_envios_falso.fixture';
 import { A, B, ACTOR, USUARIO_B, lecturaAtlas, llmBoreal, sembrarFlotas, sinAgenteApagado, subir, subirYProcesar } from '../carta_porte_docs/escenario.fixture';
 import { llmFalso, lecturaBoreal, type LlmFalso } from '../carta_porte_docs/llm_falso.fixture';
 import type { LlmExtractor } from '../carta_porte_docs/extractor';
@@ -48,6 +67,7 @@ import { procesarDocumento, recibirDocumento } from '../carta_porte_docs/servici
 import { exportarDocumentos, configEstandar } from '../carta_porte_docs/exportacion';
 import { calcularMetricas } from '../carta_porte_docs/metricas';
 import * as repo from '../carta_porte_docs/repo';
+import { fijarGuardiaPerfil } from '../carta_porte_docs/envio';
 
 const TOKEN_A = 'abcdefghjkmnpqrstvwxyz23';
 const TOKEN_B = 'zyxwvtsrqpnmkjhgfedcba98'.slice(0, 24);
@@ -55,7 +75,7 @@ const tipos = (id: string) => estado.eventos.filter((e) => e.documentoId === id)
 const docs = (t: string) => [...estado.docs.values()].filter((d) => d.tenantId === t);
 
 beforeEach(async () => {
-  reset(); sembrarFlotas();
+  reset(); resetEnvios(); sembrarFlotas();
   process.env.RESEND_API_KEY = 'llave-sintetica';
   await repo.crearBuzon(A, TOKEN_A); await repo.crearBuzon(B, TOKEN_B);
 });
@@ -510,6 +530,36 @@ describe('multi-embarque: un Excel con tres embarques', () => {
     expect(estado.embarques.filter((h) => h.tenantId === B)).toHaveLength(3);
     expect(new Set(estado.embarques.map((h) => h.documentoId)).size).toBe(6);
     expect(estado.embarques.every((h) => estado.docs.get(h.documentoId)!.tenantId === h.tenantId && estado.docs.get(h.padreId)!.tenantId === h.tenantId)).toBe(true);
+  });
+});
+
+describe('perfil «cinco_agentes» vs. flota de siempre (T-A3-39)', () => {
+  afterEach(() => { fijarGuardiaPerfil(); });
+
+  it('flota CON perfil: aprobar NO crea viaje, ni mercancías, ni borrador, ni toca el PAC; deja UN envío preparado', async () => {
+    fijarGuardiaPerfil(async (t) => t === A);
+    const r = await subirYProcesar(A, await pdfBoreal(), llmBoreal(), 'orden.pdf', { clienteId: 'cli-boreal' });
+    const ap = await aprobarDocumento(A, r.documentoId, estado.docs.get(r.documentoId)!.version, ACTOR);
+    expect(ap.documento.estado).toBe('aprobado');
+    expect(ap.salida).toBeNull();
+    expect(ap.envio).toMatchObject({ ok: true, creado: true });
+    expect(estado.viajes).toHaveLength(0);
+    expect(estado.mercancias).toHaveLength(0);
+    expect(estado.envios.filter((e) => e.documentoId === r.documentoId)).toHaveLength(1);
+    expect(pac.crearProveedorSw).not.toHaveBeenCalled();
+    expect(pac.resolverPac).not.toHaveBeenCalled();
+    expect(pac.estadoPac).not.toHaveBeenCalled();
+  });
+
+  it('flota SIN perfil (la guardia por omisión): la salida a viaje de siempre, sin envío al TMS y sin tocar el PAC', async () => {
+    const r = await subirYProcesar(A, await pdfBoreal(), llmBoreal(), 'orden.pdf', { clienteId: 'cli-boreal' });
+    const ap = await aprobarDocumento(A, r.documentoId, estado.docs.get(r.documentoId)!.version, ACTOR);
+    expect(ap.envio).toBeNull();
+    expect(ap.salida).toMatchObject({ ok: true, accion: 'creado' });
+    expect(estado.viajes.filter((v) => v.folio === 'BOR-77120')).toHaveLength(1);
+    expect(estado.envios).toHaveLength(0);
+    expect(pac.crearProveedorSw).not.toHaveBeenCalled();
+    expect(pac.resolverPac).not.toHaveBeenCalled();
   });
 });
 
