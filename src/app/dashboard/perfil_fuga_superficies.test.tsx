@@ -75,7 +75,7 @@ const hrefsDe = (html: string) => [...html.matchAll(/href="([^"]+)"/g)].map((m) 
  * no es dinero filtrándose, es hidratación de React. Sin quitar el script, cualquier regex de texto visible
  * queda expuesto al mismo falso positivo.
  */
-const texto = (html: string) => html.replace(/<script[^>]*>[\s\S]*?<\/script\s*>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+const texto = (html: string) => html.replace(/<script[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
 /** Lo que la página de Notificaciones le entrega al listado (el elemento devuelto lleva las alertas en sus props). */
 async function alertasDeLaPagina(): Promise<Array<{ id: string; href: string }>> {
