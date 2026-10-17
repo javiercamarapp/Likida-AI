@@ -231,8 +231,7 @@ function idFiscalODestino(rd: XLSX.WorkSheet, fila: number, i: number, crudo: Cr
 }
 
 /** «OR000002» / «DE000002» → 2. Cualquier otra cosa → null. */
-function posicionDeId(crudo: Crudo | null, prefijo: 'OR' | 'DE'): number | null {
-  if (crudo === null) return null;
+function posicionDeId(crudo: Crudo, prefijo: 'OR' | 'DE'): number | null {
   const m = new RegExp(`^${prefijo}0*(\\d+)$`, 'i').exec(String(crudo).trim());
   return m ? Number(m[1]) : null;
 }

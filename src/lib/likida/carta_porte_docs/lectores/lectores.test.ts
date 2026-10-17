@@ -12,7 +12,7 @@ import { extraerDocumento } from '../extractor';
 import { llmFalso, salida } from '../llm_falso.fixture';
 import { validarExtraccion } from '../validacion';
 import {
-  CLIENTE_DORADO, M6, M7, M8, MATRIZ_LECTORES, RFC_LECTORES, TENANT_DORADO, catalogoM6, pdfM6, pdfM7, pdfM8, visionFalsaM6, type IdCasoLector,
+  CLIENTE_DORADO, M6, M8, MATRIZ_LECTORES, RFC_LECTORES, TENANT_DORADO, catalogoM6, pdfM6, pdfM7, pdfM8, visionFalsaM6, type IdCasoLector,
 } from '../evaluacion/dorado.fixture';
 import { MARCA_DE, diferenciasConMatriz, evaluar, resumir } from '../evaluacion/evaluar';
 import { leerBol, partirNombreYDomicilio } from './bol';

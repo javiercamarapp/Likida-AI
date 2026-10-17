@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Guardar la configuración de la salida (T-A3-32): vuelve a resolver la sesión, escribe SIEMPRE con el tenant de la
 // sesión, rechaza valores inválidos en español, no deja activar el modo API sin conector y deja bitácora sin correos.
-const T = 'dddddddd-dddd-4ddd-8ddd-dddddddddd01';
 const U = 'dddddddd-dddd-4ddd-8ddd-dddddddddd02';
 const AJENO = 'dddddddd-dddd-4ddd-8ddd-dddddddddd99';
 const sesion = { actual: { tenantId: 't-sesion', userId: 'u-sesion', rol: 'flota_admin' } };

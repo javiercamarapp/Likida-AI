@@ -353,7 +353,7 @@ export async function correrDeteccionParada(
 
   // El GPS y los sitios del viaje (exención «dentro del sitio»): sin ellos no se sabe si está en la planta; falla cerrado.
   const unidades: UnidadDeViaje[] = [...new Map(candidatos.map((v) => [`${v.tenantId}|${v.unidadId}`, { tenantId: v.tenantId, unidadId: v.unidadId! }])).values()];
-  let muestras = new Map<string, MuestraGps[]>();
+  let muestras: Map<string, MuestraGps[]>;
   let sitios = new Map<string, SitiosViaje>();
   try {
     const minutos = Math.max(...candidatos.map((v) => lookbackMin(configs.get(v.tenantId)!)));
