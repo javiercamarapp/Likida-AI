@@ -552,15 +552,24 @@ const RESPUESTA_EPISODIO: Record<NonNullable<EpisodioTablero['respuesta']>, stri
 export function episodiosVista(eps: readonly EpisodioTablero[]): EpisodioVista[] {
   return eps.map((e): EpisodioVista => {
     const abierto = e.cerradoEn === null;
+    // AGE-C19-A1: la marca de tiempo de cada nivel se escribe al RECLAMARLO
+    // (`reclamarNivelSenalVida`), antes de mandar nada. Si el envío falla, la
+    // marca queda y el motivo cae en `ultimoError`. La escalera es secuencial
+    // —cada nivel sólo se reclama desde el anterior—, así que el error es
+    // siempre del ÚLTIMO nivel reclamado, que es `nivelEnviado`.
+    //
+    // El motivo NO se interpola en el texto: es texto libre de hasta 200
+    // caracteres que viene de la base y acaba pintado en la pantalla.
+    const noSalio = (nivel: 1 | 2 | 3): boolean => e.ultimoError !== null && e.nivelEnviado === nivel;
     const pasos: EpisodioVista['pasos'] = [];
-    if (e.aviso1En) pasos.push({ texto: 'Primer aviso al chofer', en: e.aviso1En });
-    if (e.aviso2En) pasos.push({ texto: 'Segundo aviso al chofer', en: e.aviso2En });
-    if (e.escaladoEn) pasos.push({ texto: 'Aviso al jefe de tráfico', en: e.escaladoEn });
+    if (e.aviso1En) pasos.push({ texto: noSalio(1) ? 'Primer aviso al chofer: NO salió' : 'Primer aviso al chofer', en: e.aviso1En });
+    if (e.aviso2En) pasos.push({ texto: noSalio(2) ? 'Segundo aviso al chofer: NO salió' : 'Segundo aviso al chofer', en: e.aviso2En });
+    if (e.escaladoEn) pasos.push({ texto: noSalio(3) ? 'Aviso al jefe de tráfico: NO salió' : 'Aviso al jefe de tráfico', en: e.escaladoEn });
     let estado: string;
     if (abierto) {
-      estado = e.nivelEnviado === 3 ? 'Escalado al jefe de tráfico, sigue sin atenderse'
-        : e.nivelEnviado === 2 ? 'Segundo aviso mandado, sin respuesta del chofer'
-        : e.nivelEnviado === 1 ? 'Primer aviso mandado, sin respuesta del chofer'
+      estado = e.nivelEnviado === 3 ? (noSalio(3) ? 'El aviso al jefe de tráfico NO salió: nadie lo recibió' : 'Escalado al jefe de tráfico, sigue sin atenderse')
+        : e.nivelEnviado === 2 ? (noSalio(2) ? 'El segundo aviso NO salió: el chofer no lo recibió' : 'Segundo aviso mandado, sin respuesta del chofer')
+        : e.nivelEnviado === 1 ? (noSalio(1) ? 'El primer aviso NO salió: el chofer no lo recibió' : 'Primer aviso mandado, sin respuesta del chofer')
         : 'Detectado, falta mandar el primer aviso (o la flota lo tiene apagado)';
     } else {
       estado = e.cierreMotivo === 'respondio' ? `El chofer respondió${e.respuesta ? `: «${RESPUESTA_EPISODIO[e.respuesta]}»` : ''}`

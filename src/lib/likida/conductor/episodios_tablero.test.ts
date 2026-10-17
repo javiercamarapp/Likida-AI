@@ -76,7 +76,7 @@ describe('leerEpisodiosParaTablero', () => {
 });
 
 describe('episodiosVista', () => {
-  const base: EpisodioTablero = { id: 'e1', viajeId: 'v1', folio: 'F-1', operador: 'Ana', motivo: 'gps_obsoleto', abiertoEn: '2026-10-01T10:00:00Z', nivelEnviado: 0, aviso1En: null, aviso2En: null, escaladoEn: null, cerradoEn: null, cierreMotivo: null, respuesta: null };
+  const base: EpisodioTablero = { id: 'e1', viajeId: 'v1', folio: 'F-1', operador: 'Ana', motivo: 'gps_obsoleto', abiertoEn: '2026-10-01T10:00:00Z', nivelEnviado: 0, aviso1En: null, aviso2En: null, escaladoEn: null, ultimoError: null, cerradoEn: null, cierreMotivo: null, respuesta: null };
 
   it('cuenta la cadena paso por paso: primer aviso, segundo aviso, jefe; el escalado abierto es urgente', () => {
     const [e] = episodiosVista([{ ...base, nivelEnviado: 3, aviso1En: '2026-10-01T10:01:00Z', aviso2En: '2026-10-01T10:21:00Z', escaladoEn: '2026-10-01T10:41:00Z' }]);
