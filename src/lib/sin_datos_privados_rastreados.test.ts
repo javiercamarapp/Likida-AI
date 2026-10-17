@@ -28,7 +28,8 @@ const PROHIBIDOS = [
   'PROMPT-SESION-NUEVA.md',
   // Retirado del repo público el 15-oct-2026 (limpieza «solo lo que pertenece al funcionamiento de Likida»):
   // estrategia, auditorías, demo con nombres, cosecha/outreach, ensayos reales y skills ajenos.
-  'docs/demo', 'docs/asistencia', 'docs/escala-15k.md', 'docs/escala-50k', 'docs/fiscalista', 'docs/perfil',
+  'docs/demo', ':(exclude)docs/demo/a3-salida-tms.md',
+  'docs/asistencia', 'docs/escala-15k.md', 'docs/escala-50k', 'docs/fiscalista', 'docs/perfil',
   'docs/e2e', 'docs/qa', 'docs/pruebas-aud24.md', 'docs/costos-reales-flota-mx-2026.md', 'docs/demo-5k.md',
   'docs/demo-5k-modelo.md', 'docs/demo-facturacion-lunes.md', 'docs/legal/PENDIENTES-ABOGADO.md',
   'docs/legal/00-CHECKLIST-ENTERPRISE.md', 'MARCA.md', 'skill-observations', '.superpowers',
