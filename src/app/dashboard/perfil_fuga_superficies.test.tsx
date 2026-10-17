@@ -75,7 +75,7 @@ const hrefsDe = (html: string) => [...html.matchAll(/href="([^"]+)"/g)].map((m) 
  * no es dinero filtrándose, es hidratación de React. Sin quitar el script, cualquier regex de texto visible
  * queda expuesto al mismo falso positivo.
  */
-const texto = (html: string) => html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+const texto = (html: string) => html.replace(/<script[^>]*>[\s\S]*?<\/script\s*>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
 /** Lo que la página de Notificaciones le entrega al listado (el elemento devuelto lleva las alertas en sus props). */
 async function alertasDeLaPagina(): Promise<Array<{ id: string; href: string }>> {
@@ -237,7 +237,7 @@ describe('(e) widget de uso de IA y enlaces de suscripción / admin', () => {
     for (const h of hrefs) {
       if (h.startsWith('#') || h === '/cuenta' || h.startsWith('/cuenta?')) continue; // ancla de accesibilidad y cerrar sesión/cuenta
       expect(PERMITIDAS, h).toContain(h.split('?')[0]);
-      expect(h, h).not.toMatch(/^\/admin|suscripcion|chat|llaves-api|usuarios|sesiones-mcp/);
+      expect(h, h).not.toMatch(/^\/(?:dashboard\/)?(?:admin|suscripcion|chat|llaves-api|usuarios|sesiones-mcp)(?:\/|$|\?)/);
     }
     expect(texto(html)).not.toMatch(/Plan y facturaci|Suscripci|Pregunta a tus datos|Llaves de API|Sesiones MCP/);
   });

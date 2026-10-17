@@ -39,7 +39,7 @@ describe('decisión de grupos: no se promete nada', () => {
     const anexo = leer(DOC).split('## Anexo: factibilidad verificada')[1] ?? '';
     expect(anexo).toMatch(/\d{4}-\d{2}-\d{2}/);
     expect(anexo).toMatch(/documentaci[oó]n/i);
-    expect(anexo).toMatch(/https:\/\/developers\.facebook\.com\/documentation\//);
+    expect(anexo).toMatch(/(?<![\w.-])https:\/\/developers\.facebook\.com\/documentation\//);
     expect(anexo).toMatch(/NO verificado/);
     expect(anexo).toMatch(/servicio al cliente/i);
     expect(anexo).toMatch(/frescura/i);

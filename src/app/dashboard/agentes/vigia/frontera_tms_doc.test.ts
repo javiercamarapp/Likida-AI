@@ -30,7 +30,7 @@ describe('frontera con el TMS', () => {
 
   it('compara los tres escenarios y recomienda uno explícito', () => {
     const t = leer();
-    for (const e of ['(a)', '(b)', '(c)']) expect(t).toMatch(new RegExp(`\\|\\s*${e.replace(/[()]/g, '\\$&')}\\s*\\|`));
+    for (const e of ['(a)', '(b)', '(c)']) expect(t).toMatch(new RegExp(`\\|\\s*${e.replace(/[\\()]/g, '\\$&')}\\s*\\|`));
     expect(t).toMatch(/### Recomendaci[oó]n/);
     expect(t).toMatch(/\*\*\(a\) para lo que ya esté en el sistema y \(b\) como respaldo/);
     expect(t).toMatch(/no se borra/i);
