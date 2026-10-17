@@ -60,7 +60,7 @@ export const DIAS_LIQUIDADOS_CARGA = 90;
  *
  * AGREGADO EN SQL DESDE EL 22-AGO-2026 (mig. 0152): traía `operador`, `viaje`,
  * `pod` e `incidencia` ENTEROS para contar en JS — con 50k viajes/mes
- * caducaba ~mes 2 (docs/escala-50k/MAPA.md #18). `carga_operadores_tenant`
+ * caducaba ~mes 2 (la documentación interna #18). `carga_operadores_tenant`
  * cuenta lo mismo (un POD rechazado NO es entregado; un viaje sin dueño no le
  * cuenta a nadie). La forma se valida y LANZA si no encaja.
  *
@@ -277,7 +277,7 @@ export const LIMITE_INCIDENCIAS = 500;
 /**
  * JOIN EN SQL DESDE EL 22-AGO-2026 (mig. 0152): traía TODOS los viajes y
  * unidades del tenant para resolver el folio y el número económico de unas
- * cuantas incidencias (docs/escala-50k/MAPA.md #19). `incidencias_tenant` los
+ * cuantas incidencias (la documentación interna #19). `incidencias_tenant` los
  * resuelve con un left join anclado por tenant — una incidencia que apunte a
  * un viaje ajeno sale sin folio, igual que antes. Abiertas siempre; resueltas
  * solo las de los últimos `DIAS_INCIDENCIAS_RESUELTAS` días; tope
@@ -404,7 +404,7 @@ export interface TableroOperacion {
  * el que se lee como "no falta ninguno".
  *
  * AGREGADO EN SQL DESDE EL 22-AGO-2026 (mig. 0152): leía `viaje` y `pod`
- * enteros (docs/escala-50k/MAPA.md #17). `tablero_operacion_tenant` cuenta lo
+ * enteros (la documentación interna #17). `tablero_operacion_tenant` cuenta lo
  * mismo; la forma se valida y LANZA si no encaja — un tablero en ceros sobre
  * una respuesta rota se lee como "no hay nada pendiente".
  */

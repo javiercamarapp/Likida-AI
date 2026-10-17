@@ -7,6 +7,9 @@ import { HORAS_PARA_ESCALAR } from '@/lib/likida/escalar_viaje';
 import { numero, fechaCorta } from '@/lib/formato';
 import { BarraPagina } from '../../resumen-visual';
 import { Bloque, Barra, EsqTabla } from '../../bloque';
+import { esFolioSimulado } from '@/lib/likida/conductor/tablero';
+import { EtiquetaSimulado } from './tablero-hitos';
+import { MENSAJE_SIN_LINEA_BASE, type Cifra, type InsightsConductor } from '@/lib/likida/conductor/insights';
 
 export interface EsperaAceptar {
   id: string;
@@ -21,6 +24,7 @@ export interface EsperaAceptar {
 const EVENTO: Record<EventoConductor['tipo'], { Icono: typeof Send; texto: (e: EventoConductor) => string; color: string }> = {
   avisado: { Icono: Send, color: 'var(--muted)', texto: (e) => `Le avisó a ${e.operador ?? 'el operador'} de su viaje ${e.folio}` },
   acepto: { Icono: CheckCheck, color: 'var(--ok)', texto: (e) => `${e.operador ?? 'El operador'} aceptó el viaje ${e.folio}` },
+  en_seguimiento_importado: { Icono: Truck, color: 'var(--muted)', texto: (e) => `El viaje ${e.folio} entró en seguimiento por importación (no lo aceptó el chofer)` },
   escalado: { Icono: Flag, color: 'var(--bad)', texto: (e) => `Escaló el viaje ${e.folio} al jefe — nadie aceptaba` },
   llegada: { Icono: MapPin, color: 'var(--ok)', texto: (e) => `${e.operador ?? 'El operador'} avisó que llegó (${e.folio})` },
   descarga: { Icono: Package, color: 'var(--warn)', texto: (e) => `${e.operador ?? 'El operador'} está descargando (${e.folio})` },
@@ -30,7 +34,15 @@ const EVENTO: Record<EventoConductor['tipo'], { Icono: typeof Send; texto: (e: E
 /** Los cuatro conteos de arriba, ya medidos en la base. */
 export interface ConteosConductores {
   vivos: number | null;
+  /** Aceptados POR EL CHOFER (T-A5-06): excluye los de importación. */
   aceptados: number | null;
+  /** En seguimiento del agente por importación, no por el chofer. Opcional:
+   *  un origen que no lo manda no pinta la tarjeta. */
+  importados?: number | null;
+  /** Tiempo medio avisado → aceptó, SOLO del chofer (T-A5-06). `null` = no se
+   *  pudo leer; `minutos: null` = ningún viaje medible. Opcional: un origen que
+   *  no lo manda no pinta la tarjeta. */
+  tiempoAceptacion?: { minutos: number | null; n: number; excluidosImportados: number } | null;
   esperan: number | null;
   escalados: number | null;
 }
@@ -169,7 +181,7 @@ function EsqConteos() {
   );
 }
 
-async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConductores> }) {
+export async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConductores> }) {
   const kpis = await p;
   return (
     <div>
@@ -178,6 +190,18 @@ async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConductores> })
           nota={kpis.vivos === null ? 'no se pudo contar' : 'abiertos o en cuadre'} />
         <Kpi titulo="Aceptados" valor={kpis.aceptados === null ? '—' : numero(kpis.aceptados)}
           nota={kpis.aceptados === null ? 'no se pudo contar' : 'el chofer dijo que sí'} />
+        {kpis.importados !== undefined && (
+          <Kpi titulo="En seguimiento por importación" valor={kpis.importados === null ? '—' : numero(kpis.importados)}
+            nota={kpis.importados === null ? 'no se pudo contar' : 'cargados por archivo; no los aceptó el chofer'} />
+        )}
+        {kpis.tiempoAceptacion !== undefined && (
+          <Kpi titulo="Tiempo en aceptar"
+            valor={kpis.tiempoAceptacion === null || kpis.tiempoAceptacion.minutos === null
+              ? '—' : `${numero(Math.round(kpis.tiempoAceptacion.minutos * 10) / 10)} min`}
+            nota={kpis.tiempoAceptacion === null ? 'no se pudo medir'
+              : kpis.tiempoAceptacion.minutos === null ? 'aún sin aceptaciones del chofer que medir'
+                : `media de ${numero(kpis.tiempoAceptacion.n)} aceptados por el chofer (200 viajes recientes); no cuenta ${numero(kpis.tiempoAceptacion.excluidosImportados)} por importación`} />
+        )}
         <Kpi titulo="Esperan aceptar" valor={kpis.esperan === null ? '—' : numero(kpis.esperan)}
           nota={kpis.esperan === null ? 'no se pudo contar' : undefined}
           tono={(kpis.esperan ?? 0) > 0 ? 'warn' : undefined} />
@@ -223,6 +247,7 @@ export async function BloqueCola({ cola, sufijo }: {
           {esperan.map((v) => (
             <div key={v.id} className="flex items-center gap-2.5 text-[12.5px]">
               <span className="font-medium">{v.folio}</span>
+              {esFolioSimulado(v.folio) && <EtiquetaSimulado />}
               <span className="truncate" style={{ color: 'var(--muted)' }}>{v.operadorNombre ?? 'Sin operador'}</span>
               <span className="ml-auto shrink-0 cifra-mono" style={{ color: v.horasDesdeAviso >= HORAS_PARA_ESCALAR ? 'var(--warn)' : 'var(--muted)' }}>
                 {v.horasDesdeAviso === 0 ? 'hace menos de 1 h' : `hace ${numero(v.horasDesdeAviso)} h`}
@@ -293,6 +318,7 @@ async function BloqueBitacora({ eventos: p }: { eventos: Promise<EventoConductor
                 <cfg.Icono width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: cfg.color }} />
                 <div className="min-w-0">
                   <span>{cfg.texto(e)}</span>
+                  {esFolioSimulado(e.folio) && <> <EtiquetaSimulado /></>}
                   <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaCorta(e.cuando)}</span>
                 </div>
               </div>
@@ -320,5 +346,123 @@ function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; not
         style={tono ? { color: `var(--${tono})` } : undefined}>{valor}</div>
       {nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{nota}</div>}
     </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A5-32 — LOS INSIGHTS: qué pasó · qué significa · qué hacer (12 §F4).
+//
+// Cada pantalla de agente trae resumen + interpretación + siguiente paso, y TODO número con su fuente y su rótulo
+// («medido» / «estimación»). Sin IA: el texto sale de `calcularInsights` (puro). Sin línea base NO hay cifra de ahorro:
+// se pide la línea base. Un tiempo del chofer es retraso de ENTREGA del mensaje, nunca la hora del evento físico.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface TextoInsights {
+  quePaso: string[];
+  queSignifica: string[];
+  queHacer: string[];
+}
+
+const minutos = (v: number | null) => (v === null ? null : `${numero(Math.round(v * 10) / 10)} min`);
+
+/** Las tres secciones, en lenguaje llano. `discrepancias` = hitos del chofer que la ubicación no confirmó (medido en el tablero); `null` = no disponible. */
+export function textoInsights(i: InsightsConductor, discrepancias: number | null): TextoInsights {
+  const total = i.hitosRegistrados.valor;
+  const sin = i.sinIntervencion.valor;
+  if (total === 0) {
+    return {
+      quePaso: ['Todavía no hay hitos registrados en este periodo.'],
+      queSignifica: ['Sin hitos no hay nada que medir: ninguna cifra de ahorro se estima sobre cero.'],
+      queHacer: ['Activa el seguimiento en los viajes de los operadores voluntarios y vuelve a revisar cuando haya hitos.'],
+    };
+  }
+  const quePaso = [`${numero(sin)} de ${numero(total)} hitos se registraron sin que nadie los capturara${i.sinIntervencion.porcentaje !== null ? ` (${numero(i.sinIntervencion.porcentaje)} %)` : ''}.`];
+  if (i.deOficina.valor > 0) quePaso.push(`La oficina corrigió o capturó ${numero(i.deOficina.valor)}.`);
+  const g = minutos(i.retrasoGps.promedioMin);
+  if (g) quePaso.push(`Entre que el GPS detecta el cruce y se registra pasan ${g} en promedio (${numero(i.retrasoGps.mediciones)} mediciones).`);
+  const c = minutos(i.retrasoChofer.promedioMin);
+  if (c) quePaso.push(`Los mensajes del chofer tardan ${c} en llegar, en promedio (${numero(i.retrasoChofer.mediciones)} mediciones).`);
+  if (discrepancias !== null && discrepancias > 0) quePaso.push(`Hay ${numero(discrepancias)} hitos donde lo que dijo el chofer no coincide con la ubicación del GPS.`);
+
+  const queSignifica = [`Tu equipo dejó de teclear esos ${numero(sin)} registros.`];
+  if (i.llamadasEvitadas.valor !== null) queSignifica.push(`${i.llamadasEvitadas.mensaje}: unas ${numero(i.llamadasEvitadas.valor)} llamadas evitadas (estimación, no medición).`);
+  else queSignifica.push('No se puede estimar cuántas llamadas se evitaron sin tu línea base.');
+  if (c) queSignifica.push('El tiempo del chofer mide la entrega del mensaje, no cuándo ocurrió el evento físico.');
+
+  const queHacer: string[] = [];
+  if (i.deOficina.valor > 0) queHacer.push(`Revisa los ${numero(i.deOficina.valor)} que corrigió la oficina.`);
+  const ex = i.excepciones;
+  if (ex.sinRespuesta.valor > 0) queHacer.push(`Atiende ${numero(ex.sinRespuesta.valor)} hitos escalados por falta de respuesta.`);
+  if (ex.sinSenal.valor > 0) queHacer.push(`Revisa ${numero(ex.sinSenal.valor)} episodios de «sin señal de vida» del periodo.`);
+  if (ex.sinSitio.valor !== null && ex.sinSitio.valor > 0) queHacer.push(`Asigna sitio a ${numero(ex.sinSitio.valor)} viajes que el GPS no pudo evaluar.`);
+  if (discrepancias !== null && discrepancias > 0) queHacer.push('Compara los hitos que el GPS no confirmó contra lo que dijo el chofer.');
+  if (i.llamadasEvitadas.valor === null) queHacer.push(MENSAJE_SIN_LINEA_BASE + ' (se captura en Configuración).');
+  if (queHacer.length === 0) queHacer.push('Nada urgente: sigue el seguimiento y revisa de nuevo mañana.');
+  return { quePaso, queSignifica, queHacer };
+}
+
+function FilaFuente({ etiqueta, valor, cifra }: { etiqueta: string; valor: string; cifra: { fuente: string; rotulo: string } }) {
+  return (
+    <li className="flex flex-wrap items-baseline gap-x-2 text-[12px]">
+      <span style={{ color: 'var(--muted)' }}>{etiqueta}</span>
+      <span className="tabular-nums font-medium">{valor}</span>
+      <span style={{ color: 'var(--muted)' }}>· {cifra.rotulo} · fuente: {cifra.fuente}</span>
+    </li>
+  );
+}
+
+const valorCifra = (c: Cifra<number | null>) => (c.valor === null ? '—' : numero(c.valor));
+
+/** La tarjeta de arriba del tablero. `insights = null` = no se pudo leer (se dice; no se pinta «0»). */
+export function TarjetaInsights({ insights, dias, discrepancias = null, recortada = false }: {
+  insights: InsightsConductor | null; dias: number; discrepancias?: number | null; recortada?: boolean;
+}) {
+  if (insights === null) {
+    return (
+      <section aria-label="Insights del agente" className="hairline rounded-xl px-4 py-3 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        No se pudieron leer los insights del periodo.
+      </section>
+    );
+  }
+  const t = textoInsights(insights, discrepancias);
+  const ex = insights.excepciones;
+  const seccion = (titulo: string, lineas: string[]) => (
+    <div>
+      <h3 className="text-[11px] uppercase tracking-wide" style={{ color: 'var(--muted)' }}>{titulo}</h3>
+      <ul className="mt-1 space-y-1 text-[13px]">{lineas.map((l, k) => <li key={k}>{l}</li>)}</ul>
+    </div>
+  );
+  return (
+    <section aria-label="Insights del agente" className="hairline rounded-xl px-4 py-4 space-y-3" style={{ background: 'var(--canvas)' }}>
+      <div className="flex items-center gap-2 text-[13px] font-medium">
+        <Sparkles width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+        Insights de los últimos {numero(dias)} {dias === 1 ? 'día' : 'días'}
+      </div>
+      <div className="grid md:grid-cols-3 gap-4">
+        {seccion('Qué pasó', t.quePaso)}
+        {seccion('Qué significa', t.queSignifica)}
+        {seccion('Qué hacer', t.queHacer)}
+      </div>
+      <details>
+        <summary className="cursor-pointer text-[12px]" style={{ color: 'var(--muted)' }}>De dónde sale cada número</summary>
+        <ul className="mt-2 space-y-1">
+          <FilaFuente etiqueta="Hitos registrados" valor={numero(insights.hitosRegistrados.valor)} cifra={insights.hitosRegistrados} />
+          <FilaFuente etiqueta="Sin intervención" valor={numero(insights.sinIntervencion.valor)} cifra={insights.sinIntervencion} />
+          <FilaFuente etiqueta="De la oficina" valor={numero(insights.deOficina.valor)} cifra={insights.deOficina} />
+          <FilaFuente etiqueta="Retraso GPS" valor={minutos(insights.retrasoGps.promedioMin) ?? '—'} cifra={insights.retrasoGps} />
+          <FilaFuente etiqueta="Retraso de entrega del chofer" valor={minutos(insights.retrasoChofer.promedioMin) ?? '—'} cifra={insights.retrasoChofer} />
+          <FilaFuente etiqueta="Llamadas evitadas" valor={valorCifra(insights.llamadasEvitadas)} cifra={insights.llamadasEvitadas} />
+          <FilaFuente etiqueta="Hitos sin respuesta" valor={numero(ex.sinRespuesta.valor)} cifra={ex.sinRespuesta} />
+          <FilaFuente etiqueta="Viajes sin sitio" valor={valorCifra(ex.sinSitio)} cifra={ex.sinSitio} />
+          <FilaFuente etiqueta="Episodios sin señal" valor={numero(ex.sinSenal.valor)} cifra={ex.sinSenal} />
+          <FilaFuente etiqueta="Primer aviso / segundo / jefe" valor={`${numero(insights.escalera.aviso1.valor)} / ${numero(insights.escalera.aviso2.valor)} / ${numero(insights.escalera.jefe.valor)}`} cifra={insights.escalera.aviso1} />
+          {discrepancias !== null && (
+            <FilaFuente etiqueta="Chofer vs GPS sin coincidir" valor={numero(discrepancias)} cifra={{ rotulo: 'medido', fuente: 'viaje_hito.interpretacion (validación de ubicación)' }} />
+          )}
+        </ul>
+        {recortada && <p className="mt-2 text-[12px]" style={{ color: 'var(--warn)' }}>La lectura llegó a su tope: las cifras cubren solo lo más reciente del periodo.</p>}
+      </details>
+    </section>
   );
 }

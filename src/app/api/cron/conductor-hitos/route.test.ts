@@ -20,11 +20,12 @@ const correr = vi.fn(async (): Promise<Record<string, unknown>> => ({
   sembrados: 5, viajes: 2, solicitudes: 1, recordatorios: 0, escalaciones: 0, yaReclamados: 0, rechazosReintentables: 0,
   configIlegible: 0, sinDestinatario: 0, cortadosPorReloj: 0, cortadaPorRechazoMasivo: false, fallos: [], saltados: {},
 }));
-vi.mock('@/lib/likida/conductor/ejecutor', () => ({ correrConductor: (...a: unknown[]) => correr(...(a as [])), puertosReales: () => ({}) }));
+vi.mock('@/lib/likida/conductor/ejecutor', () => ({ correrConductor: (...a: unknown[]) => correr(...(a as [])), puertosReales: () => ({ viajesActivos: async () => [{ tenantId: 'con-perfil', id: 'a' }, { tenantId: 'libre', id: 'b' }] }) }));
 let horaMx = 12;
 vi.mock('@/lib/likida/conductor/config', () => ({ horaYDiaMx: () => ({ hora: horaMx, dia: 5 }) }));
 const mantenimiento = vi.fn(async (): Promise<Record<string, number | string>> => ({ anonimizar_conductor_hitos: 3, purgar_conductor_auditoria: 3 }));
-vi.mock('@/lib/likida/conductor/repo', () => ({ correrMantenimientoConductor: () => mantenimiento(), leerConfigConductor: async () => ({}), asignarSitioDerivado: async () => 'ok' }));
+let voluntarios: number | Error = 0;
+vi.mock('@/lib/likida/conductor/repo', () => ({ contarVoluntariosActivos: async () => { if (voluntarios instanceof Error) throw voluntarios; return voluntarios; }, correrMantenimientoConductor: () => mantenimiento(), leerConfigConductor: async () => ({}), asignarSitioDerivado: async () => 'ok' }));
 const alertasEstadia = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisadas: 1, alertas: 1, yaReclamadas: 0, sinDestinatario: 0, fueraDeVentana: 0, rechazosReintentables: 0, fallos: [] }));
 vi.mock('@/lib/likida/conductor/alertas_estadia', () => ({ correrAlertasEstadia: () => alertasEstadia() }));
 const llegadas = vi.fn(async (): Promise<Record<string, unknown>> => ({ revisadas: 1, avisos: 1, yaReclamados: 0, sinDestinatario: 0, fueraDeVentana: 0, rechazosReintentables: 0, fallos: [] }));
@@ -41,12 +42,23 @@ const senal = vi.fn(async (): Promise<Record<string, unknown>> => ({ viajes: 4, 
 vi.mock('@/lib/likida/conductor/senal_vida', () => ({ barridoSenalVida: () => senal() }));
 vi.mock('@/lib/likida/conductor/senal_vida_real', () => ({ puertosSenalVidaReales: () => ({}) }));
 const acercamiento = vi.fn(async (): Promise<Record<string, unknown>> => ({ candidatos: 3, enviados: 1, sinPosicion: 1, lejos: 1, rechazados: 0, fallos: 0, cortadosPorReloj: 0 }));
-vi.mock('@/lib/likida/convenios/acercamiento', () => ({ barridoAcercamiento: () => acercamiento() }));
+vi.mock('@/lib/likida/convenios/acercamiento', () => ({ barridoAcercamiento: () => acercamiento(), puertosAcercamientoReales: { candidatos: async () => [] } }));
 class ConveniosNoDisponiblesDoble extends Error {}
 vi.mock('@/lib/likida/convenios/repo', () => ({ ConveniosNoDisponibles: ConveniosNoDisponiblesDoble }));
 const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...a) }));
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'cod' }));
+// «Próximamente» (fase 1): el Conductor salta las flotas con perfil. `flotasConPerfil` simula quiénes son.
+let flotasConPerfil = new Set<string>();
+let perfilIlegible = false;
+vi.mock('@/lib/auth/perfil_tenant', () => ({
+  tenantsConPerfilASaltar: async (c: string) => {
+    expect(c).toBe('conductor-hitos');
+    if (perfilIlegible) throw new Error('perfil_tenant: no se pudo leer la lista de flotas con perfil (caída)');
+    return flotasConPerfil;
+  },
+  sinTenantsDePerfil: <T,>(filas: readonly T[], saltar: ReadonlySet<string>, idDe: (f: T) => string) => filas.filter((f) => !saltar.has(idDe(f))),
+}));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const { GET } = await import('./route');
@@ -54,7 +66,7 @@ const llamar = () => GET(new Request('https://app.likida.ai/api/cron/conductor-h
 const j = async (r: Response) => (await r.json()) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 beforeEach(() => {
-  autorizado = 'si'; interruptores = {}; horaMx = 12;
+  autorizado = 'si'; interruptores = {}; horaMx = 12; voluntarios = 0; flotasConPerfil = new Set(); perfilIlegible = false;
   correr.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); mantenimiento.mockClear(); alertasEstadia.mockClear(); llegadas.mockClear(); barrido.mockClear(); acercamiento.mockClear(); ciclo.mockClear(); sitios.mockClear(); senal.mockClear();
 });
 
@@ -276,5 +288,82 @@ describe('P2: el ciclo por geocerca, el sitio derivado y la señal de vida', () 
     expect(ciclo).not.toHaveBeenCalled();
     expect(sitios).not.toHaveBeenCalled();
     expect(senal).not.toHaveBeenCalled();
+  });
+});
+
+describe('T-A5-27: observabilidad mínima en el latido', () => {
+  const PII = /\d{7,}|-?\d{1,3}\.\d{3,}/;
+  it('el latido y el cuerpo traen los contadores y ningún teléfono ni coordenada', async () => {
+    voluntarios = 4;
+    correr.mockResolvedValueOnce({ sembrados: 0, viajes: 3, viajesPorOrigen: { chofer: 1, importacion: 2, otro: 0 }, solicitudes: 1, recordatorios: 1, escalaciones: 0, rechazosReintentables: 1, configIlegible: 0, sinDestinatario: 0, cortadosPorReloj: 0, cortadaPorRechazoMasivo: false, fallos: [], saltados: {} });
+    ciclo.mockResolvedValueOnce({ viajes: 3, detectados: 2, sinSitio: 1, sinMuestras: 1, detectadosViaDespacho: 1, detectadosViaUnidadVentana: 1, unidadesConsultadas: 4, unidadesSinPosicion: 1, fallos: [] });
+    const r = await j(await llamar());
+    const esperado = {
+      viajesEnSeguimiento: 3, viajesPorOrigen: { chofer: 1, importacion: 2, otro: 0 }, rechazosMeta: 1, hitosPorGps: 2, hitosViaDespacho: 1, hitosViaUnidadVentana: 1,
+      viajesSinSitio: 1, viajesSinGps: 1, voluntariosActivos: 4, unidadesEnTransito: 4, unidadesSinPosicion: 1,
+    };
+    expect(r.observabilidad).toMatchObject(esperado);
+    expect(r.alarmas).toEqual([]);
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'ok', expect.objectContaining({ observabilidad: expect.objectContaining(esperado), alarmas: [] }));
+    const detalle = registrarLatido.mock.calls[0][2];
+    expect(JSON.stringify(detalle)).not.toMatch(PII);
+  });
+
+  it('alarma: voluntarios activos y 0 viajes en seguimiento → warn y latido parcial con la alarma en el estado', async () => {
+    voluntarios = 2;
+    correr.mockResolvedValueOnce({ sembrados: 0, viajes: 0, solicitudes: 0, recordatorios: 0, escalaciones: 0, rechazosReintentables: 0, configIlegible: 0, sinDestinatario: 0, cortadosPorReloj: 0, cortadaPorRechazoMasivo: false, fallos: [], saltados: {} });
+    const { logger } = await import('@/lib/logger');
+    vi.mocked(logger.warn).mockClear();
+    await llamar();
+    expect(logger.warn).toHaveBeenCalledWith('conductor.alarma', expect.objectContaining({ codigo: 'sin_viajes_con_voluntarios' }));
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'parcial', expect.objectContaining({ alarmas: ['sin_viajes_con_voluntarios'] }));
+    for (const l of vi.mocked(logger.warn).mock.calls) expect(JSON.stringify(l)).not.toMatch(PII);
+  });
+
+  it('alarma: más de la mitad de las unidades en tránsito sin posición en 45 min', async () => {
+    ciclo.mockResolvedValueOnce({ viajes: 4, detectados: 0, sinSitio: 0, sinMuestras: 0, unidadesConsultadas: 4, unidadesSinPosicion: 3, fallos: [] });
+    const r = await j(await llamar());
+    expect(r.alarmas).toEqual(['flota_sin_posicion']);
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'parcial', expect.objectContaining({ alarmas: ['flota_sin_posicion'] }));
+  });
+
+  it('si no se puede contar a los voluntarios (base sin 0800) no se alarma ni se rompe la corrida', async () => {
+    voluntarios = new Error('sin 0800');
+    correr.mockResolvedValueOnce({ sembrados: 0, viajes: 0, solicitudes: 0, recordatorios: 0, escalaciones: 0, rechazosReintentables: 0, configIlegible: 0, sinDestinatario: 0, cortadosPorReloj: 0, cortadaPorRechazoMasivo: false, fallos: [], saltados: {} });
+    const r = await j(await llamar());
+    expect(r.alarmas).toEqual([]);
+    expect(r.observabilidad.voluntariosActivos).toBeNull();
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'ok', expect.anything());
+  });
+});
+
+describe('«Próximamente»: las flotas con perfil no entran a ninguna pasada del Conductor', () => {
+  it('el motor recibe puertos que ya no traen los viajes de las flotas con perfil', async () => {
+    flotasConPerfil = new Set(['con-perfil']);
+    let vistos: Array<{ id: string }> = [];
+    correr.mockImplementationOnce(async (...a: unknown[]) => {
+      vistos = await (a[0] as { viajesActivos: (n: number) => Promise<Array<{ id: string }>> }).viajesActivos(10);
+      return { sembrados: 0, viajes: 0, solicitudes: 0, recordatorios: 0, escalaciones: 0, rechazosReintentables: 0, configIlegible: 0, sinDestinatario: 0, cortadosPorReloj: 0, cortadaPorRechazoMasivo: false, fallos: [], saltados: {} };
+    });
+    expect((await llamar()).status).toBe(200);
+    expect(vistos).toEqual([{ tenantId: 'libre', id: 'b' }]);
+  });
+
+  it('sin flotas con perfil el motor ve todos los viajes (nada cambia)', async () => {
+    let vistos: unknown[] = [];
+    correr.mockImplementationOnce(async (...a: unknown[]) => {
+      vistos = await (a[0] as { viajesActivos: (n: number) => Promise<unknown[]> }).viajesActivos(10);
+      return { sembrados: 0, viajes: 0, solicitudes: 0, recordatorios: 0, escalaciones: 0, rechazosReintentables: 0, configIlegible: 0, sinDestinatario: 0, cortadosPorReloj: 0, cortadaPorRechazoMasivo: false, fallos: [], saltados: {} };
+    });
+    await llamar();
+    expect(vistos).toHaveLength(2);
+  });
+
+  it('si no se puede leer quién tiene perfil, NADA corre y el latido sale en fallo (falla cerrado)', async () => {
+    perfilIlegible = true;
+    const r = await llamar();
+    expect(r.status).toBe(500);
+    expect(correr).not.toHaveBeenCalled();
+    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'fallo', expect.anything());
   });
 });

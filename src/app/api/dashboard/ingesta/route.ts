@@ -36,6 +36,7 @@ import { logger } from '@/lib/logger';
 import { gastoSondaHoyUsd, topeSondaDiaUsd, SONDAS_POR_MINUTO } from './tope';
 import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 import { tenantEfectivoChat } from '../chat/tenant';
+import { respuestaSiPerfilNiegaApi } from '@/lib/auth/perfil_tenant';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -94,6 +95,9 @@ async function manejarPOST(req: NextRequest) {
   // flota cae al tenant demo, y solo un superadmin puede pedir otro tenant.
   const efectivo = await tenantEfectivoChat(sesion, new URL(req.url).searchParams.get('tenant'));
   if (!efectivo) return NextResponse.json({ error: 'sin acceso' }, { status: 403 });
+  const negadoPerfil = await respuestaSiPerfilNiegaApi(efectivo.tenantId, req.url);
+  if (negadoPerfil) return negadoPerfil;
+
   // ── Tope diario ── se lee ANTES de gastar; fallar cerrado si no se pudo.
   const tenantId = efectivo.tenantId;
   let gastadoHoy: number;

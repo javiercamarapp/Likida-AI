@@ -124,6 +124,10 @@ export type EntidadBitacora =
   // Ola 3, Vigía: grupos de clientes (críticos o no) y el histórico exportado que se importó. Ids y conteos: nunca texto del chat.
   | 'vigia_grupo'
   | 'vigia_historial'
+  // T-A4-23: la configuración del aviso de viaje (encendido, modo, canal, «listo», horario, reenvíos y qué datos del operador
+  // salen al cliente). Decide cuándo y qué se le manda a un cliente: quién lo cambió y el antes/después es lo que hay que poder
+  // reconstruir. `entidadId` es el id de la flota; el detalle lleva solo nombres de campo y valores de configuración.
+  | 'vigia_aviso_config'
   // Ronda 08, P5: quién aprobó o retiró una respuesta rápida del Vigía (0647). Id, tema y largos: nunca el texto.
   | 'vigia_respuesta_rapida'
   // W3 «autofacturación» (agente 6): la vinculación asistida de un portal (quién la

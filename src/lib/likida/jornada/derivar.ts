@@ -226,6 +226,8 @@ export async function derivarJornadas(args: {
   ahora?: Date;
   venceEn?: number;
   dias?: number;
+  /** Flotas con perfil (0770) que esta derivación SALTA: la jornada es un módulo en stand-by. */
+  excluirTenants?: ReadonlySet<string>;
 } = {}): Promise<ResultadoDerivacion> {
   const ahora = args.ahora ?? new Date();
   const dias = args.dias ?? DIAS_QUE_BARRE;
@@ -237,7 +239,15 @@ export async function derivarJornadas(args: {
     diasSinGps: 0, listaTruncada: false, sinAvisoPrevio: 0,
   };
 
-  const { trabajos, truncada, owner, error } = await listaDeTrabajo(ahora, dias);
+  const { trabajos: reclamados, truncada, owner, error } = await listaDeTrabajo(ahora, dias);
+  // Se reclaman por rondas POR TENANT (la 0325 reparte turno por flota), así que una flota con
+  // perfil no monopoliza la vuelta: lo suyo se SUELTA enseguida, sin derivar, y el lease no
+  // queda retenido.
+  const saltar = args.excluirTenants;
+  const trabajos = saltar && saltar.size > 0 ? reclamados.filter((t) => !saltar.has(t.tenantId)) : reclamados;
+  if (!error && trabajos.length < reclamados.length) {
+    await liberarNoIntentados(owner, reclamados.filter((t) => saltar!.has(t.tenantId)));
+  }
   if (error) {
     // Fallar cerrado y DECIRLO: sin la lista de trabajo no hay nada que
     // derivar, y devolver un resultado en ceros se leería como «no había nada

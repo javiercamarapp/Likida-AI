@@ -232,7 +232,7 @@ Lo que hay que mirar en cada visita. «Apuestas» son los elementos que el formu
 - Campos del ticket: sucursal, numeroTicket, caja, fecha, monto
 - Botón de emitir (apuesta): `#facturar` o `button:has-text("Realizar facturación"), input[type="submit"][value*="Realizar facturación" i]`
 - Contenedor del UUID (apuesta, solo se ve emitiendo): `.uuid, [class*="folio-fiscal" i], [data-uuid]`
-- Selectores copiados del DOM real el 2026-08-29 (pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt); el pre-vuelo debería confirmarlos.
+- Selectores copiados del DOM real el 2026-08-29 (lectura de campo del 2026-08-29 (archivo privado, fuera del repo)); el pre-vuelo debería confirmarlos.
 - Comando: `npx tsx scripts/verificar-portal.mjs mcdonalds --visita-real --yo "Nombre Apellido"`
 
 ### Los Bisquets Bisquets Obregón (BB del Sur) — `lbbo`
@@ -243,7 +243,7 @@ Lo que hay que mirar en cada visita. «Apuestas» son los elementos que el formu
 - Paso de búsqueda previo: el botón de facturar (revela el paso fiscal)
 - Botón de emitir (apuesta): `button:has-text("Generar Factura"), input[type="submit"][value*="Generar Factura" i]` o `button:has-text("Emitir"), input[type="submit"][value*="Emitir" i]`
 - Contenedor del UUID (apuesta, solo se ve emitiendo): `.uuid, [class*="folio-fiscal" i], [data-uuid]`
-- Selectores copiados del DOM real el 2026-08-29 (pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt); el pre-vuelo debería confirmarlos.
+- Selectores copiados del DOM real el 2026-08-29 (lectura de campo del 2026-08-29 (archivo privado, fuera del repo)); el pre-vuelo debería confirmarlos.
 - Comando: `npx tsx scripts/verificar-portal.mjs lbbo --visita-real --yo "Nombre Apellido"`
 
 ### Tim Hortons México — `tim_hortons`
@@ -254,7 +254,7 @@ Lo que hay que mirar en cada visita. «Apuestas» son los elementos que el formu
 - Paso de búsqueda previo: el botón de buscar el ticket
 - Botón de emitir (apuesta): `button:has-text("Facturar"), input[type="submit"][value*="Facturar" i]` o `button:has-text("Generar"), input[type="submit"][value*="Generar" i]`
 - Contenedor del UUID (apuesta, solo se ve emitiendo): `.uuid, [class*="folio-fiscal" i], [data-uuid]`
-- Selectores copiados del DOM real el 2026-08-29 (pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt); el pre-vuelo debería confirmarlos.
+- Selectores copiados del DOM real el 2026-08-29 (lectura de campo del 2026-08-29 (archivo privado, fuera del repo)); el pre-vuelo debería confirmarlos.
 - Comando: `npx tsx scripts/verificar-portal.mjs tim_hortons --visita-real --yo "Nombre Apellido"`
 
 ### The Home Depot México — `home_depot`
@@ -265,7 +265,7 @@ Lo que hay que mirar en cada visita. «Apuestas» son los elementos que el formu
 - Paso de búsqueda previo: el botón de continuar
 - Botón de emitir (apuesta): `button:has-text("Facturar"), input[type="submit"][value*="Facturar" i]` o `button:has-text("Generar"), input[type="submit"][value*="Generar" i]`
 - Contenedor del UUID (apuesta, solo se ve emitiendo): `.uuid, [class*="folio-fiscal" i], [data-uuid]`
-- Selectores copiados del DOM real el 2026-08-29 (pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt); el pre-vuelo debería confirmarlos.
+- Selectores copiados del DOM real el 2026-08-29 (lectura de campo del 2026-08-29 (archivo privado, fuera del repo)); el pre-vuelo debería confirmarlos.
 - Comando: `npx tsx scripts/verificar-portal.mjs home_depot --visita-real --yo "Nombre Apellido"`
 
 ### Lo de Mored (Fomento Gasolinero, Mérida) — `lodemored`
@@ -276,7 +276,7 @@ Lo que hay que mirar en cada visita. «Apuestas» son los elementos que el formu
 - Paso de búsqueda previo: el botón de agregar el ticket a la lista
 - Botón de emitir (apuesta): `#lnkBtnFacturar` o `button:has-text("GENERAR FACTURA"), input[type="submit"][value*="GENERAR FACTURA" i]`
 - Contenedor del UUID (apuesta, solo se ve emitiendo): `.uuid, [class*="folio-fiscal" i], [data-uuid]`
-- Selectores copiados del DOM real el 2026-08-29 (pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt); el pre-vuelo debería confirmarlos.
+- Selectores copiados del DOM real el 2026-08-29 (lectura de campo del 2026-08-29 (archivo privado, fuera del repo)); el pre-vuelo debería confirmarlos.
 - Comando: `npx tsx scripts/verificar-portal.mjs lodemored --visita-real --yo "Nombre Apellido"`
 
 ### Parrot (plataforma de punto de venta para restaurantes) — `parrot`
@@ -286,7 +286,7 @@ Lo que hay que mirar en cada visita. «Apuestas» son los elementos que el formu
 - Campos del ticket: codigo
 - Botón de emitir (apuesta): `button:has-text("Facturar"), input[type="submit"][value*="Facturar" i]` o `button:has-text("Generar"), input[type="submit"][value*="Generar" i]` o `button[type="submit"]`
 - Contenedor del UUID (apuesta, solo se ve emitiendo): `.uuid, [class*="folio-fiscal" i], [data-uuid]`
-- Selectores copiados del DOM real el 2026-08-29 (pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt); el pre-vuelo debería confirmarlos.
+- Selectores copiados del DOM real el 2026-08-29 (lectura de campo del 2026-08-29 (archivo privado, fuera del repo)); el pre-vuelo debería confirmarlos.
 - Comando: `npx tsx scripts/verificar-portal.mjs parrot --visita-real --yo "Nombre Apellido"`
 
 ### El Globo (Tradición en Pastelerías) — `el_globo`
@@ -296,6 +296,6 @@ Lo que hay que mirar en cada visita. «Apuestas» son los elementos que el formu
 - Campos del ticket: numeroTicket, sucursal, monto, fecha
 - Botón de emitir (apuesta): `button:has-text("Generar"), input[type="submit"][value*="Generar" i]` o `button:has-text("Facturar"), input[type="submit"][value*="Facturar" i]` o `button:has-text("Confirmar"), input[type="submit"][value*="Confirmar" i]`
 - Contenedor del UUID (apuesta, solo se ve emitiendo): `.uuid, [class*="folio-fiscal" i], [data-uuid]`
-- Selectores copiados del DOM real el 2026-08-29 (pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt); el pre-vuelo debería confirmarlos.
+- Selectores copiados del DOM real el 2026-08-29 (lectura de campo del 2026-08-29 (archivo privado, fuera del repo)); el pre-vuelo debería confirmarlos.
 - Comando: `npx tsx scripts/verificar-portal.mjs el_globo --visita-real --yo "Nombre Apellido"`
 

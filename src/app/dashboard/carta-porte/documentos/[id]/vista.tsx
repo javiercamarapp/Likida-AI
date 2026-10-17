@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import { ArrowLeft, Check, CircleHelp, FileSearch, ShieldAlert, Trash2, TriangleAlert, Truck } from 'lucide-react';
+import { ArrowLeft, Check, Download, CircleHelp, FileSearch, Send, ShieldAlert, Trash2, TriangleAlert, Truck } from 'lucide-react';
 import { fechaHoraMx, numero, pesoArchivo, usd4 } from '@/lib/formato';
 import { ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO, ROTULO_ORIGEN, type FilaCampo, type Revision } from '@/lib/likida/carta_porte_docs/presentacion';
-import type { DocumentoFila } from '@/lib/likida/carta_porte_docs/repo';
+import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../forma_accion';
 
 /**
@@ -35,11 +35,29 @@ const ROTULO_EVENTO: Record<string, string> = {
   recibido: 'Recibido', duplicado_recibido: 'Llegó otra vez (mismo archivo)', extraccion_iniciada: 'Lectura iniciada', extraccion_ok: 'Leído',
   extraccion_fallida: 'No se pudo leer', escalada: 'Se releyó con un modelo más fuerte', revision_abierta: 'Se abrió para revisar', campo_corregido: 'Se corrigieron datos',
   aprobado: 'Aprobado', rechazado: 'Rechazado', reabierto: 'Reabierto', salida_viaje: 'Viaje creado o completado', perfil_aprendido: 'El perfil del cliente aprendió',
-  exportado: 'Exportado', purgado: 'Archivo borrado por retención', dividido: 'Se separó en un documento por embarque',
+  exportado: 'Exportado', envio_preparado: 'Envío al TMS preparado', envio_subido_a_mano: 'Marcado como subido a mano al TMS', purgado: 'Archivo borrado por retención', dividido: 'Se separó en un documento por embarque',
 };
 
 function color(sev: 'bloqueo' | 'confirmar' | 'aviso'): string {
   return sev === 'bloqueo' ? 'var(--bad)' : sev === 'confirmar' ? 'var(--warn)' : 'var(--muted)';
+}
+
+/** El envío al TMS tal como lo ve la pantalla: el estado más la fecha del próximo reintento y la ubicación del rechazo (nunca valores). */
+export interface EnvioVista { estado: EstadoEnvioTms; proximaRevision?: string | null; motivo?: string | null }
+
+/** Lo que dice la tarjeta «Envío al sistema del cliente» en lenguaje llano. Sin envío = todavía no se ha enviado nada. */
+export function fraseEnvio(e: EnvioVista | null): string {
+  if (!e || e.estado === 'descartado') return 'Aún no se ha enviado nada.';
+  const cuando = e.proximaRevision ? fechaHoraMx(e.proximaRevision) : null;
+  switch (e.estado) {
+    case 'pendiente_prechequeo': case 'listo': return 'Listo para enviar.';
+    case 'enviando': return 'Enviándose al sistema del cliente…';
+    case 'pendiente_reque': return `Esperando que exista el requerimiento${cuando ? ` — se reintentará el ${cuando}` : ''}.`;
+    case 'error_transitorio': return `El sistema del cliente no contestó${cuando ? ` — se reintentará el ${cuando}` : ' — se reintentará'}.`;
+    case 'enviado': return 'Enviado.';
+    case 'rechazado_tms': return `El sistema del cliente lo rechazó${e.motivo ? `: ${e.motivo}` : ''} — corrige y vuelve a aprobar.`;
+    case 'subido_a_mano': return 'Subido a mano.';
+  }
 }
 
 function Confianza({ c }: { c: number | null }) {
@@ -80,7 +98,7 @@ function Campo({ f, editable }: { f: FilaCampo; editable: boolean }) {
   );
 }
 
-export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', salida = null, puedeEliminar = false, embarque = null, hijos = [] }: {
+export function VistaRevision({ doc, revision, original, operadores, eventos, acciones, sufijo = '', envio = null, salida = null, puedeEliminar = false, embarque = null, hijos = [], perfilRestringido = false }: {
   doc: DocumentoFila;
   revision: Revision | null;
   original: OriginalVista;
@@ -88,6 +106,8 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
   eventos: EventoVista[];
   acciones: { revisar: AccionDoc | null };
   sufijo?: string;
+  /** El envío al TMS de la versión vigente (solo se carga si el documento está aprobado). */
+  envio?: EnvioVista | null;
   /** El resultado de la salida al viaje ya conocido (viaje ligado). */
   salida?: { folio: string } | null;
   /** Quien administra la flota puede eliminar el documento y su archivo (cancelación ARCO / subido por error). */
@@ -96,6 +116,8 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
   embarque?: EmbarqueVista | null;
   /** Si este documento es el archivo que se partió: sus embarques. */
   hijos?: HijoVista[];
+  /** Flota bajo el perfil restringido: aprobar prepara el envío al TMS; no hay viaje, operador ni borrador que ofrecer. */
+  perfilRestringido?: boolean;
 }) {
   const editable = doc.estado === 'por_revisar';
   const meta = doc.extraccion?.meta;
@@ -217,7 +239,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                   <div className="flex flex-wrap items-center gap-2">
                     <BotonEnvio variante="secundario" intencion="guardar" etiqueta="Guardar cambios" pendiente="Guardando…" />
                     <BotonEnvio intencion="aprobar" etiqueta="Aprobar" pendiente="Aprobando…" icono={<Check width={14} height={14} strokeWidth={1.75} />} />
-                    <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Aprobar guarda lo que escribiste, revalida y crea o completa el viaje. No timbra nada.</span>
+                    <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{perfilRestringido ? 'Aprobar guarda lo que escribiste, revalida y prepara el envío al sistema del cliente. No timbra nada.' : 'Aprobar guarda lo que escribiste, revalida y crea o completa el viaje. No timbra nada.'}</span>
                   </div>
                   <div className="flex flex-wrap items-end gap-2">
                     <div className="grow min-w-[220px]">
@@ -226,7 +248,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                     </div>
                     <BotonEnvio variante="peligro" intencion="rechazar" etiqueta="Rechazar" pendiente="…" />
                   </div>
-                  {operadores.length > 0 && (
+                  {!perfilRestringido && operadores.length > 0 && (
                     <div>
                       <label htmlFor="cp-operador" className={ETIQUETA}>Operador del viaje (solo si el documento no lo dice con claridad)</label>
                       <select id="cp-operador" name="operadorId" defaultValue="" className={CAMPO} style={{ background: 'var(--surface)' }}>
@@ -240,7 +262,15 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
 
               {!editable && (
                 <div className="card p-3.5 space-y-3">
-                  {doc.estado === 'aprobado' && (
+                  {doc.estado === 'aprobado' && perfilRestringido && (
+                    <div className="space-y-1" aria-label="Envío al sistema del cliente">
+                      <p className="text-[12.5px] font-medium flex items-center gap-1.5">
+                        <Send width={14} height={14} strokeWidth={1.75} style={{ color: envio?.estado === 'rechazado_tms' ? 'var(--bad)' : envio?.estado === 'enviado' ? 'var(--ok)' : 'var(--muted)' }} />Envío al sistema del cliente
+                      </p>
+                      <p className="text-[12.5px]" role="status">{fraseEnvio(envio)}</p>
+                    </div>
+                  )}
+                  {doc.estado === 'aprobado' && !perfilRestringido && (
                     <>
                       <p className="text-[12.5px] flex items-center gap-1.5">
                         <Truck width={14} height={14} strokeWidth={1.75} style={{ color: doc.viajeId ? 'var(--ok)' : 'var(--warn)' }} />
@@ -259,6 +289,24 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                         </div>
                       )}
                     </>
+                  )}
+                  {doc.estado === 'aprobado' && envio?.estado !== 'enviado' && (
+                    <div className="space-y-2" aria-label="Modo manual">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <a href={`/api/export/carta-porte-docs${sufijo ? `${sufijo}&` : '?'}formato=plantilla_tms&documento=${doc.id}`} download
+                          className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 hairline transition-opacity hover:opacity-85" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+                          <Download width={14} height={14} strokeWidth={1.75} />Descargar plantilla del TMS
+                        </a>
+                        {envio?.estado !== 'subido_a_mano' && (
+                          <BotonEnvio variante="secundario" intencion="subido_a_mano" etiqueta="Ya la subí a mano" pendiente="Marcando…" icono={<Check width={14} height={14} strokeWidth={1.75} />} />
+                        )}
+                      </div>
+                      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+                        {envio?.estado === 'subido_a_mano'
+                          ? 'Marcada como subida a mano: Likida no la reenvía.'
+                          : 'Descarga la plantilla, súbela al TMS y avisa aquí: así Likida no la reintenta. No se envía nada por ti.'}
+                      </p>
+                    </div>
                   )}
                   <BotonEnvio variante="secundario" intencion="reabrir" etiqueta="Reabrir para corregir" pendiente="…" />
                 </div>

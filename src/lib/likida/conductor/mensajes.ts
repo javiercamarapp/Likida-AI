@@ -1,4 +1,5 @@
-import { TZ_MX, hoyMx } from '@/lib/formato';
+import { TZ_MX, diaEnZona } from '@/lib/formato';
+import { zonaOCdmx } from './config';
 import { ETIQUETA, PREFIJO_BOTON, type Contacto, type TipoHito } from './tipos';
 import type { Decision, MotivoRechazo } from './maquina';
 
@@ -19,16 +20,17 @@ export interface ContextoMensaje {
 export interface BotonSalida { id: string; titulo: string }
 export interface Salida { texto: string; botones?: BotonSalida[] }
 
-export function horaMx(fecha: Date): string {
-  return new Intl.DateTimeFormat('es-MX', { timeZone: TZ_MX, hour: '2-digit', minute: '2-digit', hour12: false }).format(fecha);
+export function horaMx(fecha: Date, zona: string = TZ_MX): string {
+  return new Intl.DateTimeFormat('es-MX', { timeZone: zonaOCdmx(zona), hour: '2-digit', minute: '2-digit', hour12: false }).format(fecha);
 }
 
 /** «13:05 del 02/10» cuando el hito no es de hoy; solo la hora cuando sí. */
-export function horaYDiaMx(fecha: Date, ahora: Date): string {
-  const dia = (d: Date) => hoyMx(d);
-  if (dia(fecha) === dia(ahora)) return horaMx(fecha);
-  const corto = new Intl.DateTimeFormat('es-MX', { timeZone: TZ_MX, day: '2-digit', month: '2-digit' }).format(fecha);
-  return `${horaMx(fecha)} del ${corto}`;
+export function horaYDiaMx(fecha: Date, ahora: Date, zona: string = TZ_MX): string {
+  const z = zonaOCdmx(zona);
+  const dia = (d: Date) => diaEnZona(d, z);
+  if (dia(fecha) === dia(ahora)) return horaMx(fecha, z);
+  const corto = new Intl.DateTimeFormat('es-MX', { timeZone: z, day: '2-digit', month: '2-digit' }).format(fecha);
+  return `${horaMx(fecha, z)} del ${corto}`;
 }
 
 function lugarTexto(nombre: string | null): string {

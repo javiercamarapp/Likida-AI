@@ -5,7 +5,9 @@ import { getSessionTenant } from '@/lib/auth/session';
 import { puedeExportar } from '@/lib/auth/permisos';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
-import { configEstandar, exportarDocumentos, validarConfigExport, type ExportConfig, type FormatoExport } from '@/lib/likida/carta_porte_docs/exportacion';
+import { aXlsxPlantillaTms, configEstandar, exportarDocumentos, MIME_XLSX, validarConfigExport, type ExportConfig, type FormatoExport } from '@/lib/likida/carta_porte_docs/exportacion';
+import { construirPlantilla } from '@/lib/likida/carta_porte_docs/plantilla_tms';
+import { leerConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import * as repo from '@/lib/likida/carta_porte_docs/repo';
 
 export const runtime = 'nodejs';
@@ -24,6 +26,7 @@ const MAX_DOCS = 500;
  *   ?config=estandar | <uuid de cp_export_config>   (por omisión, el estándar de Likida)
  *   ?formato=csv|json|xlsx                            (por omisión, el de la configuración)
  *   ?ids=<uuid>,<uuid>…                               (por omisión, los aprobados que aún no se exportaron)
+ *   ?formato=plantilla_tms&documento=<uuid>           (la plantilla multi-hoja del TMS de UN documento aprobado: 404 si no es de tu flota, 409 si no está aprobado)
  *
  * Solo salen documentos APROBADOS; el resto se reporta en el encabezado `X-Omitidos`. No timbra ni emite nada.
  */
@@ -48,6 +51,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const configParam = url.searchParams.get('config')?.trim() || 'estandar';
   const formatoParam = url.searchParams.get('formato')?.trim();
+  if (formatoParam === 'plantilla_tms') return plantillaTms(t.tenantId, t.rol, url.searchParams.get('documento')?.trim() ?? '');
   if (formatoParam && formatoParam !== 'csv' && formatoParam !== 'json' && formatoParam !== 'xlsx') return new NextResponse('El formato es csv, json o xlsx.', { status: 400 });
   const idsParam = url.searchParams.get('ids')?.split(',').map((x) => x.trim()).filter(Boolean) ?? null;
   if (idsParam && (idsParam.length > MAX_DOCS || idsParam.some((x) => !UUID.test(x)))) return new NextResponse(`«ids» son hasta ${MAX_DOCS} uuid separados por coma.`, { status: 400 });
@@ -92,6 +96,40 @@ export async function GET(req: Request) {
         'Content-Disposition': `attachment; filename="${r.nombreArchivo}"`,
         'Cache-Control': 'no-store',
         'X-Omitidos': String(r.omitidos.length),
+      },
+    });
+  } catch (e) {
+    logger.error('export.cp_docs_fallo', { error: e instanceof Error ? e.message : String(e) });
+    return new NextResponse('No se pudo generar el archivo. Intenta de nuevo.', { status: 500 });
+  }
+}
+
+/** Un documento APROBADO -> la plantilla multi-hoja del TMS (.xlsx). Solo de la flota de la sesión. */
+async function plantillaTms(tenantId: string, rol: string, documentoId: string): Promise<NextResponse> {
+  if (!UUID.test(documentoId)) return new NextResponse('«documento» es el id de un documento.', { status: 400 });
+  try {
+    const doc = await repo.leerDocumento(tenantId, documentoId);
+    if (!doc) return new NextResponse('Ese documento no existe en tu flota.', { status: 404 });
+    if (doc.estado !== 'aprobado' || !doc.extraccion) {
+      return new NextResponse('Solo se descarga la plantilla de un documento aprobado. Revísalo y apruébalo primero.', { status: 409 });
+    }
+    const config = await leerConfigSalida(tenantId);
+    const plantilla = construirPlantilla(doc.extraccion, { clienteInterno: null, plantilla: config.plantillaPorDefecto });
+    const bytes = aXlsxPlantillaTms(plantilla);
+    const s = await getSessionTenant();
+    try {
+      await repo.marcarExportado(tenantId, [doc.id]);
+      await repo.registrarEvento(tenantId, doc.id, 'exportado', s?.userId ?? null, { formato: 'plantilla_tms', plantilla: config.plantillaPorDefecto });
+    } catch (e) {
+      logger.warn('export.cp_docs_sello_fallo', { error: e instanceof Error ? e.message : String(e) });
+    }
+    logger.info('export.cp_docs_generado', { rol, documentos: 1, faltantes: plantilla.faltantes.length, formato: 'plantilla_tms' });
+    return new NextResponse(new Blob([bytes as BlobPart]), {
+      headers: {
+        'Content-Type': MIME_XLSX,
+        'Content-Disposition': `attachment; filename="plantilla-tms-${doc.id.slice(0, 8)}.xlsx"`,
+        'Cache-Control': 'no-store',
+        'X-Faltantes': String(plantilla.faltantes.length),
       },
     });
   } catch (e) {

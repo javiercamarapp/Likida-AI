@@ -96,8 +96,8 @@ export type FabricaDePagina = () => Promise<PaginaPortal>;
 // EL INVENTARIO DE UNA PÁGINA — lo que el piloto de visión necesita LEER para
 // poder actuar sin selectores escritos a mano.
 //
-// Es la MISMA extracción que los pre-vuelos hacían inline (megasur-prevuelo,
-// capufe-prevuelo): campos con sus señas, botones con su texto, marcas de
+// Es la MISMA extracción que los pre-vuelos hacían inline (los arneses de
+// pruebas-manuales): campos con sus señas, botones con su texto, marcas de
 // captcha y el texto visible. Vive en el contrato y no en el piloto porque es
 // una capacidad de la PÁGINA (la implementa Playwright con `evaluate`), y así
 // el piloto entero se prueba con un doble, sin Chromium — el mismo trato que

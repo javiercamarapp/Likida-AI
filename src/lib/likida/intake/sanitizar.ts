@@ -40,7 +40,7 @@ export function sanitizarTexto(s: string | null | undefined, maxLen = 80): strin
 // autenticación — que por este canal no existe en ninguna forma. Además el
 // art. 59 fr. IV permite incrementar la sanción "hasta por dos veces" cuando
 // hay sensibles de por medio: es el único renglón del rubro que la duplica.
-// docs/conocimiento/11-datos-personales.md §8.6 lo pide por escrito:
+// la documentación interna §8.6 lo pide por escrito:
 // "Filtro de datos sensibles colados […] Detecta y excluye."
 //
 // LÍMITE QUE HAY QUE TENER PRESENTE: esto reduce lo que se PERSISTE, no lo que

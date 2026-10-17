@@ -64,6 +64,38 @@ describe('el catálogo respeta las reglas de Meta que se pueden comprobar sin re
   });
 });
 
+describe('plantillas UTILITY del aviso del Vigía (T-A4-15)', () => {
+  const NOMBRES = [PLANTILLA.vigiaAvisoViaje, PLANTILLA.vigiaAvisoCambio];
+  it('existen, son vigia_cliente/UTILITY/es_MX, 5 variables de una línea y quedan para aprobación', () => {
+    expect(NOMBRES).toEqual(['vigia_aviso_viaje_v1', 'vigia_aviso_cambio_v1']);
+    for (const n of NOMBRES) {
+      const p = plantillaDeCatalogo(n) as PlantillaCatalogo;
+      expect(p.agente).toBe('vigia_cliente');
+      expect(p.categoria).toBe('UTILITY');
+      expect(p.idioma).toBe('es_MX');
+      expect(p.estado).toBe('nueva_para_aprobacion');
+      expect(p.textoVerificado).toBe(false);
+      expect(p.llamador).toBe('src/lib/likida/vigia/aviso/entrega.ts');
+      expect(variablesDeTexto(p.cuerpo)).toEqual([1, 2, 3, 4, 5]);
+      for (const e of p.ejemplos) expect(e).not.toMatch(/[\n\r]/);
+    }
+  });
+  it('ninguna lleva licencia ni teléfono (ni en el cuerpo ni en variables ni ejemplos)', () => {
+    for (const n of NOMBRES) {
+      const p = plantillaDeCatalogo(n) as PlantillaCatalogo;
+      const todo = [p.cuerpo, ...p.variables, ...p.ejemplos].join(' ');
+      expect(todo, n).not.toMatch(/licencia|vigencia|tel[eé]fono|celular|whatsapp|\+?\d{10,}/i);
+    }
+  });
+  it('el cuerpo no es promocional y se arma con los ejemplos', () => {
+    for (const n of NOMBRES) {
+      const p = plantillaDeCatalogo(n) as PlantillaCatalogo;
+      expect(p.cuerpo).not.toMatch(/oferta|promoci|descuento|gratis|compra ya/i);
+      expect(armarComponentesPlantilla(opcionesDeEnvio(n, { cuerpo: p.ejemplos })).ok).toBe(true);
+    }
+  });
+});
+
 describe('opcionesDeEnvio / textoRenderizado', () => {
   it('arma parámetros y botones de respuesta rápida con el id del viaje', () => {
     const o = opcionesDeEnvio('conductor_recordatorio_2_v1', { cuerpo: ['Juan', 'tu llegada', 'F-1', '30 minutos'], idsBotones: 'viaje-uuid' });

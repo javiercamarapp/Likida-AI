@@ -32,7 +32,7 @@ export const MAX_ADJUNTO_BYTES = 8 * 1024 * 1024;
 export const MAX_ADJUNTOS = 10;
 /** El cuerpo solo cuenta como documento si tiene algo más que «gracias». */
 export const MIN_CUERPO_CHARS = 80;
-const EXT_ADJUNTO = /\.(pdf|xlsx|xls|csv|xml|png|jpe?g|webp|eml|txt)$/i;
+const EXT_ADJUNTO = /\.(pdf|xlsx|xls|csv|xml|json|png|jpe?g|webp|eml|txt)$/i;
 
 export const generarTokenCp = generarToken;
 /** Reexportada: vive en `lib/correo/remitente.ts` para que otros buzones la usen sin arrastrar este módulo. */

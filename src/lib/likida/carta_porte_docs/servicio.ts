@@ -17,6 +17,7 @@ import { esErrorDePresupuesto } from '@/lib/llm/budget';
 import { estaApagado } from '../interruptores';
 import { MAX_BYTES_DOC, detectarFormato, prepararContenido, type FormatoDoc } from './contenido';
 import { extraerDocumento, type LlmExtractor, type ResultadoExtraccion } from './extractor';
+import { avisosDelCatalogo, enriquecer } from './catalogo_cliente';
 import { derivarHijos, evaluarDivision, MAX_EMBARQUES, type PlanDivision } from './multiembarque';
 import { elegirPerfil } from './perfiles';
 import { confianzaMinimaCritica, validarExtraccion, type Hallazgo, type ResultadoValidacion } from './validacion';
@@ -43,7 +44,7 @@ async function llmPorDefecto(tenantId: string, canal: CanalDoc): Promise<LlmExtr
   return crearExtractorOpenRouter(tenantId, canal === 'correo' ? 'ocr_lote' : 'interactivo');
 }
 
-const CLASE_A_FORMATO: Record<string, FormatoDoc> = { pdf: 'pdf_texto', imagen: 'imagen', excel: 'excel', csv: 'csv', xml: 'xml', correo: 'correo' };
+const CLASE_A_FORMATO: Record<string, FormatoDoc> = { pdf: 'pdf_texto', imagen: 'imagen', excel: 'excel', csv: 'csv', xml: 'xml', correo: 'correo', json: 'json' };
 
 /** El nombre del archivo tal como lo mandó un tercero: sin rutas, sin controles, con tope. */
 export function nombreArchivoSeguro(nombre: string | null | undefined): string {
@@ -251,7 +252,7 @@ export async function procesarDocumento(
 
     // Un Excel/CSV con N embarques se PARTE en N documentos (0670-0671) antes de gastar un solo token: cada embarque es
     // su propio documento, con su revisión, su aprobación y su viaje. Sin la migración cae a leer el primero con el aviso.
-    const { plan, exceso, variasHojas } = evaluarDivision(contenido, elegirPerfil(perfiles, contenido, doc.remitente, doc.clienteId).perfil);
+    const { plan, exceso, variasHojas, mismoEmbarque } = evaluarDivision(contenido, elegirPerfil(perfiles, contenido, doc.remitente, doc.clienteId).perfil);
     if (plan) {
       const div = await dividirEnHijos(tenantId, doc, version, plan, ahora);
       if (div.estado === 'ok') return div.resultado;
@@ -260,6 +261,9 @@ export async function procesarDocumento(
     } else if (variasHojas !== null) {
       const otras = variasHojas.otras.slice(0, 5).map((n) => `«${n}»`).join(', ');
       contenido.avisos.push(`El libro trae ${variasHojas.embarques} embarques en la hoja «${variasHojas.hojaDelFolio}» y además datos en otra(s) hoja(s) (${otras}): partirlo dejaría a cada embarque sin esas hojas, así que no se parte. Se leyó el primero; deja los embarques en una sola hoja o súbelos por separado.`);
+    } else if (mismoEmbarque) {
+      contenido.hojasMismoEmbarque = mismoEmbarque.hojas;
+      contenido.avisos.push(mismoEmbarque.aviso);
     } else if (exceso !== null) {
       contenido.avisos.push(`El archivo trae ${exceso} embarques (más de ${MAX_EMBARQUES}): no se parte solo. Se leyó el primero; divide el archivo y súbelo por partes.`);
     }
@@ -279,23 +283,36 @@ export async function procesarDocumento(
       return await fallar('modelo', `El modelo no pudo leer el documento: ${resumenError(e)}`, false);
     }
 
+    // El catálogo del cliente se aplica DESPUÉS del perfil/modelo y ANTES de validar. El modelo ya contestó: nunca lo vio.
+    // Sin cliente en el documento o sin catálogo cargado es un no-op.
+    let extraccion = r.extraccion;
+    const avisosCatalogo: string[] = [];
+    let catalogoAplicados = 0;
+    if (doc.clienteId) {
+      const catalogo = await repo.cargarCatalogoCliente(tenantId, doc.clienteId);
+      const e = enriquecer(extraccion, catalogo, { tenantId, clienteId: doc.clienteId });
+      extraccion = e.extraccion;
+      catalogoAplicados = e.aplicados.length;
+      avisosCatalogo.push(...avisosDelCatalogo(e, catalogo.truncado === true));
+    }
+
     const docVista = { id: doc.id, riesgoInyeccion: r.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido };
-    const validacion = await validarDocumento(tenantId, docVista, r.extraccion);
+    const validacion = await validarDocumento(tenantId, docVista, extraccion);
     const meta: MetaExtraccion = {
-      origen: r.origen, nivel: r.nivel, escalamientos: r.escalamientos, avisos: r.avisos, notasModelo: r.notasModelo, indiciosInyeccion: r.indiciosInyeccion,
+      origen: r.origen, nivel: r.nivel, escalamientos: r.escalamientos, avisos: [...r.avisos, ...avisosCatalogo], notasModelo: r.notasModelo, indiciosInyeccion: r.indiciosInyeccion,
     };
     const guardada = await repo.actualizarDocumento(tenantId, documentoId, version, {
       estado: 'por_revisar', formato: contenido.formato, perfil_id: r.perfilId, perfil_version: r.perfilVersion,
       texto_extracto: contenido.texto, riesgo_inyeccion: r.riesgoInyeccion,
-      extraccion: { campos: r.extraccion.campos, mercancias: r.extraccion.mercancias, meta },
-      validacion, confianza_min: confianzaMinimaCritica(r.extraccion), nivel_modelo: r.nivel, modelo: r.modelo,
+      extraccion: { campos: extraccion.campos, mercancias: extraccion.mercancias, meta },
+      validacion, confianza_min: confianzaMinimaCritica(extraccion), nivel_modelo: r.nivel, modelo: r.modelo,
       tokens_in: r.tokensIn, tokens_out: r.tokensOut, costo_usd: r.costoUsd,
       procesando_hasta: null, ultimo_error: null,
     });
     if (!guardada) return { ok: false, motivo: 'perdi_el_lease', mensaje: 'Otra invocación terminó este documento primero.', permanente: false };
     version = guardada.version;
     await repo.registrarEvento(tenantId, documentoId, 'extraccion_ok', null, {
-      origen: r.origen, nivel: r.nivel, modelo: r.modelo, campos: Object.keys(r.extraccion.campos).length, mercancias: r.extraccion.mercancias.length,
+      origen: r.origen, nivel: r.nivel, modelo: r.modelo, campos: Object.keys(extraccion.campos).length, mercancias: extraccion.mercancias.length, catalogoAplicados,
       costoUsd: r.costoUsd, bloqueos: validacion.bloqueos, porConfirmar: validacion.porConfirmar, riesgoInyeccion: r.riesgoInyeccion,
     });
     for (const x of r.escalamientos) await repo.registrarEvento(tenantId, documentoId, 'escalada', null, x);

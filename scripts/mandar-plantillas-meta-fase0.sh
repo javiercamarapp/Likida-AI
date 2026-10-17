@@ -1,6 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════════════════
-# FASE 0 del plan de asistencia/siniestros (docs/asistencia/PLAN-FASES.md):
+# FASE 0 del plan de asistencia/siniestros (la documentación interna):
 # manda a aprobación de Meta las dos plantillas nuevas que bloquean la Fase 5
 # (escalamiento). Tardan días en aprobarse y no dependen de código — por eso
 # van el día 1, en paralelo a todo lo demás.

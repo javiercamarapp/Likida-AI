@@ -310,3 +310,46 @@ describe('libros de varias hojas (M2, ronda 15)', () => {
     expect(p).toMatchObject({ ok: true, estado: 'dividido', embarques: 2 });
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A3-14: M5, 2 pestañas = 2 productos de UN embarque. No se parte; el modelo recibe la instrucción de una mercancía por hoja.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('libros multipestaña de un mismo embarque (T-A3-14, forma M5)', () => {
+  const ENC = ['Delivery', 'Caja', 'Producto', 'Cantidad', 'Peso (kg)'];
+  const libro = (d2: string): Buffer => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([ENC, ['DLV-5001', 'CAJA-77', 'Botellas de vidrio', '1308', '9800']]), 'Producto A');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([ENC, [d2, 'CAJA-77', 'Tapas metálicas', '795', '4100']]), 'Producto B');
+    return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+  };
+
+  it('mismo delivery: no se parte, el modelo ve las dos hojas con la orden de una mercancía por hoja y devuelve 2 mercancías', async () => {
+    const r = await subir(A, libro('DLV-5001'), 'embarque-dos-pestanas.xlsx');
+    const llm = llmFalso((e) => {
+      const base = lecturaAtlas(e.nivel, 'DLV-5001');
+      return { ...base, mercancias: [
+        ...base.mercancias,
+        { campos: [{ clave: 'descripcion', valor: 'Tapas metálicas', confianza: 0.97, evidencia: 'Tapas metálicas' }, { clave: 'cantidad', valor: '795', confianza: 0.97, evidencia: '795' }] },
+      ] };
+    });
+    const p = await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => llm });
+    expect(p).toMatchObject({ ok: true, estado: 'por_revisar' });
+    expect(estado.embarques).toHaveLength(0);
+    const entrada = llm.llamadas[0];
+    expect(entrada.hojasMismoEmbarque).toEqual(['Producto A', 'Producto B']);
+    expect(entrada.texto).toContain('Hoja: Producto A');
+    expect(entrada.texto).toContain('Hoja: Producto B');
+    const d = estado.docs.get(r.documentoId)!;
+    expect(d.extraccion?.mercancias).toHaveLength(2);
+    expect(d.extraccion?.meta?.avisos.join(' ')).toContain('El libro tiene 2 pestañas: se leyeron como un solo embarque con 2 renglones.');
+  });
+
+  it('deliveries distintos: se divide en 2 documentos hijos, sin gastar un token', async () => {
+    const r = await subir(A, libro('DLV-5002'), 'dos-embarques.xlsx');
+    const llm = llmFalso(() => { throw new Error('el modelo no debía llamarse para partir el archivo'); });
+    const p = await procesarDocumento(A, r.documentoId, { ...sinAgenteApagado, llm: () => llm });
+    expect(p).toMatchObject({ ok: true, estado: 'dividido', embarques: 2 });
+    expect(hijosDe(r.documentoId).map((h) => h.clave)).toEqual(['DLV-5001', 'DLV-5002']);
+    expect(llm.llamadas).toHaveLength(0);
+  });
+});

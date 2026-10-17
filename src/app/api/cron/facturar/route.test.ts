@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+// Sin perfiles de tenant (0770): este archivo prueba el cron de siempre. El filtro por perfil tiene
+// su propia prueba (src/app/api/cron/perfil_crons.test.ts).
+vi.mock('@/lib/auth/perfil_tenant', () => ({
+  tenantsConPerfilASaltar: async () => new Set<string>(),
+  tenantsConPerfil: async () => new Set<string>(),
+}));
+
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CRON DE FACTURACIÓN — el cable, que es donde estaba el agujero.
 //

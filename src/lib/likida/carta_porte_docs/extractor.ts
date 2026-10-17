@@ -27,27 +27,27 @@
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import {
-  CAMPOS_DOC, CAMPOS_MERCANCIA, CLAVES_DOC, CLAVES_MERCANCIA, MAX_MERCANCIAS, UMBRAL_ESCALA,
+  CAMPOS_DOC, CAMPOS_DOC_LLM, CAMPOS_MERCANCIA, CAMPOS_MERCANCIA_LLM, CLAVES_DOC, CLAVES_DOC_LLM, CLAVES_MERCANCIA, CLAVES_MERCANCIA_LLM, MAX_MERCANCIAS, UMBRAL_ESCALA,
   campoDoc, campoMercancia, extraccionVacia, type CampoDoc, type CampoValor, type Extraccion,
 } from './campos';
 import { llaveTexto } from './catalogos';
 import { MAX_TEXTO_MODELO, type ContenidoDoc, type FormatoDoc } from './contenido';
 import { completarDerivados } from './derivar';
 import { detectarInyeccion } from './inyeccion';
-import { limpiarTexto, normalizarNumero, normalizarValor } from './normalizar';
+import { limpiarTexto, normalizarNumero, normalizarValor, type OrdenFecha } from './normalizar';
 import { aplicarPerfil, elegirPerfil, type EjemploPerfil, type Perfil } from './perfiles';
 import { extraerCartaPorteXml } from './xml_ccp';
 
 // ── El contrato con el modelo ───────────────────────────────────────────────
 
 const ItemDoc = z.object({
-  clave: z.enum(CLAVES_DOC as [string, ...string[]]),
+  clave: z.enum(CLAVES_DOC_LLM as [string, ...string[]]),
   valor: z.string().max(600).nullable(),
   confianza: z.number().min(0).max(1),
   evidencia: z.string().max(300).nullable(),
 });
 const ItemMerc = z.object({
-  clave: z.enum(CLAVES_MERCANCIA as [string, ...string[]]),
+  clave: z.enum(CLAVES_MERCANCIA_LLM as [string, ...string[]]),
   valor: z.string().max(600).nullable(),
   confianza: z.number().min(0).max(1),
   evidencia: z.string().max(300).nullable(),
@@ -75,6 +75,8 @@ export interface EntradaLlm {
   imagenes: string[];
   ejemplos: EjemploPerfil[];
   nivel: NivelModelo;
+  /** T-A3-14: nombres de las pestañas que son UN mismo embarque (una mercancía por pestaña). */
+  hojasMismoEmbarque?: string[];
   /** Marcador aleatorio con el que se delimita el documento dentro del prompt. */
   marcador: string;
 }
@@ -107,10 +109,10 @@ export function construirSistema(): string {
     '- Si el documento trae varios embarques, extrae solo el PRIMERO y dilo en «notas».',
     '',
     'CAMPOS DEL DOCUMENTO:',
-    describirCampos(CAMPOS_DOC),
+    describirCampos(CAMPOS_DOC_LLM),
     '',
     'CAMPOS DE CADA MERCANCÍA:',
-    describirCampos(CAMPOS_MERCANCIA),
+    describirCampos(CAMPOS_MERCANCIA_LLM),
   ].join('\n');
 }
 
@@ -120,6 +122,13 @@ export function construirUsuario(e: EntradaLlm): string {
     partes.push(
       'Así escribe ESTE cliente sus datos (ejemplos ya confirmados por una persona; son referencia de formato, no de valores):',
       ...e.ejemplos.slice(-3).flatMap((ej) => ej.evidencias.slice(0, 8).map((x) => `  · ${x.campo} ← «${limpiarTexto(x.linea, 160) ?? ''}»`)),
+    );
+  }
+  if (e.hojasMismoEmbarque && e.hojasMismoEmbarque.length > 1) {
+    const rotulos = e.hojasMismoEmbarque.map((n) => `HOJA ${n}`).join(', ');
+    partes.push(
+      `Este libro trae ${e.hojasMismoEmbarque.length} pestañas (${rotulos}) y TODAS son el MISMO embarque: no es "varios embarques", así que NO extraigas solo el primero.`,
+      'Lee todas las pestañas: los datos del embarque (remitente, destinatario, caja, folio) son comunes y cada pestaña aporta su propia mercancía. Devuelve UNA mercancía por pestaña (o por renglón de mercancía, si una pestaña trae varios), sin omitir ninguna.',
     );
   }
   if (e.texto) {
@@ -167,9 +176,10 @@ export function valorEnTexto(def: CampoDoc, valor: string, texto: string): boole
 function convertirItem(
   def: CampoDoc | undefined, item: { valor: string | null; confianza: number; evidencia: string | null },
   texto: string | null,
+  ordenFecha?: OrdenFecha,
 ): CampoValor | null {
   if (!def || item.valor === null || item.valor.trim() === '') return null;
-  const n = normalizarValor(def, item.valor);
+  const n = normalizarValor(def, item.valor, { ordenFecha });
   if (n.valor === null) return null;
   const notas = [...n.notas];
   let conf = Math.min(0.99, Math.max(0, item.confianza)) - n.penalizacion;
@@ -189,18 +199,18 @@ function convertirItem(
 }
 
 /** Convierte lo que devolvió el modelo (ya validado por zod) a una Extracción normalizada y anclada. */
-export function extraccionDeLlm(s: SalidaLlmDatos, texto: string | null): Extraccion {
+export function extraccionDeLlm(s: SalidaLlmDatos, texto: string | null, ordenFecha?: OrdenFecha): Extraccion {
   const e = extraccionVacia();
   const mejor = (actual: CampoValor | undefined, nuevo: CampoValor | null): CampoValor | undefined => (!nuevo ? actual : !actual || nuevo.confianza > actual.confianza ? nuevo : actual);
   for (const it of s.campos) {
-    const v = convertirItem(campoDoc(it.clave), it, texto);
+    const v = convertirItem(campoDoc(it.clave), it, texto, ordenFecha);
     const r = mejor(e.campos[it.clave], v);
     if (r) e.campos[it.clave] = r;
   }
   for (const fila of s.mercancias.slice(0, MAX_MERCANCIAS)) {
     const salida: Record<string, CampoValor> = {};
     for (const it of fila.campos) {
-      const v = convertirItem(campoMercancia(it.clave), it, texto);
+      const v = convertirItem(campoMercancia(it.clave), it, texto, ordenFecha);
       const r = mejor(salida[it.clave], v);
       if (r) salida[it.clave] = r;
     }
@@ -326,7 +336,8 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   };
 
   // 1. XML con Carta Porte: sin modelo, y no se le pregunta a nadie lo que el XML no dice.
-  if (c.xml) {
+  // Solo un XML de verdad: un JSON de cliente con una clave «CartaPorte» no es un CFDI con 0.99 de confianza.
+  if (c.xml && c.formato !== 'json') {
     const ccp = extraerCartaPorteXml(c.xml);
     if (ccp) { r.extraccion = completarDerivados(ccp); r.origen = 'xml'; return r; }
   }
@@ -351,15 +362,17 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   // 3-4. Modelo, con escalamiento por confianza.
   const marcador = (ctx.marcador ?? marcadorAleatorio)();
   const ejemplos = eleccion.perfil?.activa.ejemplos ?? [];
+  // El perfil sabe cómo escribe este cliente sus fechas (mes/día): también vale para lo que lea el modelo.
+  const ordenFecha = eleccion.perfil?.activa.mapeos.find((x) => x.ordenFecha)?.ordenFecha;
   const tope = ctx.nivelMaximo ?? 3;
   let acumulado: Extraccion | null = null;
   for (let nivel: NivelModelo = 1; nivel <= tope; nivel = (nivel + 1) as NivelModelo) {
     ctx.signal?.throwIfAborted();
-    const s = await ctx.llm({ formato: c.formato, texto: c.texto, imagenes: c.imagenes, ejemplos, nivel, marcador }, ctx.signal);
+    const s = await ctx.llm({ formato: c.formato, texto: c.texto, imagenes: c.imagenes, ejemplos, nivel, marcador, ...(c.hojasMismoEmbarque ? { hojasMismoEmbarque: c.hojasMismoEmbarque } : {}) }, ctx.signal);
     r.nivel = nivel; r.modelo = s.modelo;
     r.tokensIn += s.tokensIn; r.tokensOut += s.tokensOut; r.costoUsd += s.costoUsd;
     if (s.notas) r.notasModelo.push(s.notas);
-    const lectura = extraccionDeLlm(s, c.texto);
+    const lectura = extraccionDeLlm(s, c.texto, ordenFecha);
     acumulado = acumulado ? fusionar(acumulado, lectura) : lectura;
     if (!necesitaEscala(acumulado) || nivel === tope) break;
     const f = carencias(acumulado);

@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// EL PADRÓN DE EMISORES DE MONEDEROS — FASE 2 (docs/asistencia/PLAN-FASES.md).
+// EL PADRÓN DE EMISORES DE MONEDEROS — FASE 2 (la documentación interna).
 //
 // `padron_monederos.json` es una SEMILLA (13 emisores del corpus fiscal,
-// docs/conocimiento/09-liquidacion.md, "los relevantes para flotas de carga"),
+// la documentación interna, "los relevantes para flotas de carga"),
 // NO el padrón SAT completo (~30 emisores desde 2005). El SAT publica DOS
 // listas en DOS URLs que no coinciden, más un padrón separado de "no
 // renovados" — ninguna de las tres se lee aquí todavía.

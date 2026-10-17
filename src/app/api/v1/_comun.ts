@@ -40,6 +40,7 @@ import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { resolverTenantApi } from '@/lib/auth/tenant-api';
+import { apiDenegadaPorPerfil, MOTIVO_PERFIL_API } from '@/lib/auth/perfil_tenant';
 import { llaveDelHeader, resolverLlave } from '@/lib/auth/llave-api';
 import { puedeVerArea, type Area } from '@/lib/auth/visibilidad';
 import { LecturaIncompleta } from '@/lib/likida/pg';
@@ -222,6 +223,11 @@ export async function abrir(req: Request, area: Area): Promise<Acceso> {
     // El área de la llave se compara con la que pide la ruta usando el MISMO
     // orden de la app: `administracion` ve todo, `dinero` ve dinero y
     // operación, `operacion` solo operación.
+    // EL PERFIL DE LA FLOTA (0770) también para la llave: una llave emitida antes del
+    // perfil no abre recursos que el perfil deja en stand-by. Por la ruta pedida.
+    if (await apiDenegadaPorPerfil(l.tenantId, new URL(req.url).pathname)) {
+      return { ok: false, respuesta: errorApi('sin_permiso', MOTIVO_PERFIL_API) };
+    }
     if (!areaDeLlaveAlcanza(l.area, area)) {
       logger.warn('v1.llave_area', { area_llave: l.area, area });
       return { ok: false, respuesta: errorApi('sin_permiso', 'Esta llave no tiene acceso a esa parte de la flota.') };

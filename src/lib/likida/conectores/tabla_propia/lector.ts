@@ -259,6 +259,7 @@ export async function leerPosicionesTablaPropia(
     const posiciones: PosicionLeida[] = r.filas.map((f) => ({
       deviceId: f.unidad, lat: f.lat, lng: f.lon, medidaEn: localAUtc(f.fechaHoraLocal, c.config.zona).toISOString(),
       velocidad: f.velocidadKmh, rumbo: null, ignicion: f.ignicion,
+      ...(f.despacho ? { despachoRef: f.despacho } : {}),
     }));
     return { ok: true, posiciones, paginas: 1, completo: true, invalidas: r.rechazadas.length };
   } catch (e) {

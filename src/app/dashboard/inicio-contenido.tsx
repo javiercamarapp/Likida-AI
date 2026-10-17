@@ -691,8 +691,7 @@ async function BloqueFiscal({ pAcred, pResumenPerdidas, pResumenPerdidasSeries, 
           explícito, 8-ago-2026), misma altura (`h-full`). El
           diésel elegible va en LITROS, no en pesos — el estímulo
           es cuota DOF (semanal) × litros, y esa cuota no vive
-          aquí. `docs/conocimiento/guion-demo.md` +
-          `guion_demo.test.ts` atan el guion de venta a esto. */}
+          aquí. */}
       <div className="mt-2 flex flex-wrap gap-2 items-stretch">
         <MotorFiscalPeriodo series={resumenPerdidasSeries} />
         {acred && (

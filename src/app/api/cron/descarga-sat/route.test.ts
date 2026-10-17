@@ -1,4 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Sin perfiles de tenant (0770): este archivo prueba el cron de siempre. El filtro por perfil tiene
+// su propia prueba (src/app/api/cron/perfil_crons.test.ts).
+const { flotasConPerfil } = vi.hoisted(() => ({ flotasConPerfil: new Set<string>() }));
+vi.mock('@/lib/auth/perfil_tenant', () => ({
+  tenantsConPerfilASaltar: async () => new Set(flotasConPerfil),
+  tenantsConPerfil: async () => new Set(flotasConPerfil),
+}));
 import { margenUnidadAtomicaMs, TECHO_PASO_CONSULTA_MS, TECHO_ENVIO_WHATSAPP_MS } from '@/lib/likida/presupuesto';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -250,5 +258,20 @@ describe('cron descarga-sat — la corrida', () => {
     expect(await res.json()).toMatchObject({ error: 'base caída' });
     expect(alertarOperador).toHaveBeenCalled();
     expect(registrarLatido).toHaveBeenCalledWith('descarga-sat', 'fallo', { codigo: 'codigo-prueba' });
+  });
+});
+
+describe('cron descarga-sat — el perfil de tenant (0770)', () => {
+  it('le pasa al motor las flotas con perfil para que las SALTE (módulo en stand-by)', async () => {
+    flotasConPerfil.clear();
+    flotasConPerfil.add('t-con-perfil');
+    correrDescargaSat.mockClear();
+    const res = await GET(new Request('https://likida.ai/api/cron/descarga-sat', { headers: { authorization: 'Bearer secreto-de-prueba' } }));
+    flotasConPerfil.clear();
+    expect(res.status).toBeLessThan(500);
+    const opts = (correrDescargaSat.mock.calls[0] as unknown as unknown[])[1] as { excluirTenants: Set<string> };
+    expect([...opts.excluirTenants]).toEqual(['t-con-perfil']);
+    const op2 = (avisarCierrePeaje.mock.calls[0] as unknown as unknown[])[1] as { excluirTenants: Set<string> };
+    expect([...op2.excluirTenants]).toEqual(['t-con-perfil']);
   });
 });

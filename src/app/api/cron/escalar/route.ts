@@ -9,6 +9,7 @@ import { alertarOperador } from '@/lib/observability/alerta';
 import { puertaCron, registrarLatido, leerLatido, type EstadoLatido } from '@/lib/admin/salud';
 import { conRelojDuro } from '../_reloj_duro';
 import { appUrl } from '@/lib/env';
+import { tenantsConPerfil } from '@/lib/auth/perfil_tenant';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -221,7 +222,9 @@ export async function GET(req: Request) {
       resultado.aceptacion = { saltado: 'interruptor agente:conductores' };
     } else {
       try {
-        const r = await conReintentoDeTimeout(() => escalarViajesSinAceptar({ venceEn: venceEscalacion }), 'escalarViajesSinAceptar');
+        // El Conductor (A5) está en «Próximamente» para las flotas con perfil (fase 1): su escalación no las toca.
+        const excluirTenants = await tenantsConPerfil();
+        const r = await conReintentoDeTimeout(() => escalarViajesSinAceptar({ venceEn: venceEscalacion, excluirTenants }), 'escalarViajesSinAceptar');
         logger.info('cron.escalar.ok', { ...r });
         resultado.aceptacion = r;
       } catch (e) {
@@ -251,7 +254,9 @@ export async function GET(req: Request) {
       resultado.comprobacion = { saltado: 'interruptor agente:cobranza' };
     } else {
       try {
-        const r = await conReintentoDeTimeout(() => ejecutarCobranzaGlobal(new Date(), { venceEn: venceCobranza }), 'ejecutarCobranzaGlobal');
+        // Las flotas con perfil (0770) se saltan: la cobranza es un módulo en stand-by.
+        const excluirTenants = await tenantsConPerfil();
+        const r = await conReintentoDeTimeout(() => ejecutarCobranzaGlobal(new Date(), { venceEn: venceCobranza, excluirTenants }), 'ejecutarCobranzaGlobal');
         logger.info('cron.cobranza.ok', { ...r });
         resultado.comprobacion = r;
       } catch (e) {
@@ -301,8 +306,10 @@ export async function GET(req: Request) {
     // al final, con lo que quede del presupuesto).
     enVuelo = 'relojes';
     try {
+      // Las flotas con perfil (0770) se saltan los relojes de incidencias (módulo en stand-by).
+      const excluirTenants = await tenantsConPerfil();
       const [relojes, vencimientos] = [
-        await avisarRelojesLegales(new Date(), { venceEn: venceBarridos }),
+        await avisarRelojesLegales(new Date(), { venceEn: venceBarridos, excluirTenants }),
         await avisarVencimientos(new Date(), { venceEn: venceBarridos }),
       ];
       logger.info('cron.relojes.ok', { ...relojes, vencimientos });
@@ -334,7 +341,8 @@ export async function GET(req: Request) {
     enVuelo = 'reglas';
     try {
       const { vigilarReglas } = await import('@/lib/likida/reglas/vigilante');
-      const reglas = await vigilarReglas(new Date(), { venceEn: venceBarridos });
+      // Las flotas con perfil (0770) se saltan: las reglas son un módulo en stand-by.
+      const reglas = await vigilarReglas(new Date(), { venceEn: venceBarridos, excluirTenants: await tenantsConPerfil() });
       logger.info('cron.reglas.ok', { ...reglas });
       resultado.reglas = reglas;
       if (reglas.fallos > 0) huboFallo = true;

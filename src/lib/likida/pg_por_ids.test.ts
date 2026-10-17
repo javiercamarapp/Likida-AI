@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // `traerPorIds` — el `.in('id', ids)` sin techo silencioso (auditoría de
-// escala 15k, docs/escala-15k.md §2). Un `.in()` de miles de ids se recorta a
+// escala 15k, la documentación interna §2). Un `.in()` de miles de ids se recorta a
 // `max_rows` igual que cualquier select, y además viaja en la URL. El helper
 // parte en tandas de IDS_POR_TANDA para que ninguna pueda tocar ninguno de
 // los dos techos.

@@ -365,7 +365,7 @@ export function avisoSimplificado(r: DatosResponsable): string {
     sobreUbicacion,
     ``,
     // Art. 26 fr. II — el derecho de oposición al tratamiento automatizado. Es
-    // el elemento 11 del checklist de docs/conocimiento/11-datos-personales.md
+    // el elemento 11 del checklist de la documentación interna
     // §5.4, que la tabla ubica en el integral. Se pone aquí igual porque la
     // revisión que lo activa ya corre hoy y porque un derecho que solo vive en
     // un documento que el titular no ha visto no se ejerce nunca.
@@ -457,7 +457,7 @@ export function versionAvisoVigente(datos: DatosIntegral): { texto: string; vers
  * contesta `PRIVACIDAD`: contesta con la frase que acaba de leer. Reconocer
  * solo la palabra clave dejaba el ejercicio del derecho en manos del LLM, que
  * es exactamente lo que el resto de este módulo decidió no hacer. §6 de
- * `docs/conocimiento/11-datos-personales.md` lo pide con todas sus letras: un
+ * la documentación interna lo pide con todas sus letras: un
  * mecanismo de oposición documentado en el aviso *y accesible desde WhatsApp*.
  *
  * Calibrado a favor de la cobertura y no de la precisión, porque los dos errores
@@ -609,7 +609,7 @@ export function respuestaPrivacidad(r: DatosResponsable): string {
 // dónde mandarlo. El art. 16 fr. II obliga a "señalar el sitio donde se podrá
 // consultar el aviso integral", y no había sitio.
 //
-// Seis de los once elementos del checklist (docs/conocimiento/11-datos-
+// Seis de los once elementos del checklist (la documentación interna
 // personales.md §5.4) viven SOLO en el integral, así que sin él no existían en
 // ningún lado:
 //

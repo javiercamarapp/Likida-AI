@@ -3,18 +3,21 @@ import { correrConductor, puertosReales } from '@/lib/likida/conductor/ejecutor'
 import { correrAlertasEstadia, type ResultadoAlertasEstadia } from '@/lib/likida/conductor/alertas_estadia';
 import { correrAlertasLlegadaSinConfirmar, puertosAlertaLlegadaReales, type ResultadoAlertasLlegada } from '@/lib/likida/conductor/alertas_llegada';
 import { barridoValidacion, depsValidacionReales, type ResultadoBarrido } from '@/lib/likida/conductor/validar_hito';
-import { leerCandidatosValidacion, leerCandidatosSitioDerivado, leerCatalogoSitios } from '@/lib/likida/conductor/trabajo';
+import { leerCandidatosValidacion, leerCandidatosSitioDerivado, leerCatalogoSitios, leerEquivalenciasSitio } from '@/lib/likida/conductor/trabajo';
 import { barridoCicloGps, type ResultadoCicloGps } from '@/lib/likida/conductor/ciclo_gps';
 import { puertosCicloGpsReales } from '@/lib/likida/conductor/ciclo_gps_real';
 import { barridoSitioDerivado, type ResultadoSitioDerivado } from '@/lib/likida/conductor/sitio_derivado';
-import { asignarSitioDerivado } from '@/lib/likida/conductor/repo';
+import { asignarSitioDerivado, marcarSinSitioPorDecision } from '@/lib/likida/conductor/repo';
 import { barridoSenalVida, type ResultadoSenalVida } from '@/lib/likida/conductor/senal_vida';
 import { puertosSenalVidaReales } from '@/lib/likida/conductor/senal_vida_real';
-import { barridoAcercamiento, type ResultadoAcercamiento } from '@/lib/likida/convenios/acercamiento';
+import { barridoAcercamiento, puertosAcercamientoReales, type ResultadoAcercamiento } from '@/lib/likida/convenios/acercamiento';
 import { ConveniosNoDisponibles } from '@/lib/likida/convenios/repo';
+import { alarmasConductor, contadoresConductor } from '@/lib/likida/conductor/observabilidad';
 import { horaYDiaMx } from '@/lib/likida/conductor/config';
-import { correrMantenimientoConductor, leerConfigConductor } from '@/lib/likida/conductor/repo';
+import { contarVoluntariosActivos, correrMantenimientoConductor, leerConfigConductor } from '@/lib/likida/conductor/repo';
 import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interruptores';
+import { tenantsConPerfilASaltar } from '@/lib/auth/perfil_tenant';
+import { sinFlotasEnViajes, sinFlotasEnCandidatos, sinFlotasEnValidacion } from '@/lib/likida/conductor/sin_flotas';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
@@ -88,7 +91,10 @@ export async function GET(req: Request) {
   try {
     const inicio = Date.now();
     const venceEn = inicio + (maxDuration * 1000) - MARGEN_MS;
-    const r = await correrConductor(puertosReales(), { venceEn });
+    // El Conductor (A5) está en «Próximamente» para las flotas con perfil (fase 1): ninguna pasada les manda ni les valida nada.
+    // Si la tabla del perfil no se puede leer, esto lanza y el cron NO corre (falla cerrado; el siguiente tick reintenta).
+    const saltar = await tenantsConPerfilASaltar('conductor-hitos');
+    const r = await correrConductor(sinFlotasEnViajes(puertosReales(), saltar), { venceEn });
 
     // 0385: las dos pasadas nuevas. Cada una aislada: si una revienta, la otra corre y el latido sale `parcial`
     // con el motivo (un `try` global las haría caer juntas y taparía cuál falló).
@@ -104,28 +110,28 @@ export async function GET(req: Request) {
     // (el GPS entra o sale del sitio y el hito se registra solo). Van ANTES de la validación y de los avisos de llegada: una llegada
     // que el GPS acaba de dar por hecha no debe avisar como «sin confirmar». Aislados como los demás.
     try {
-      sitios = await barridoSitioDerivado({ candidatos: leerCandidatosSitioDerivado, catalogo: leerCatalogoSitios, asignar: asignarSitioDerivado }, new Date(), venceEn);
+      sitios = await barridoSitioDerivado({ candidatos: sinFlotasEnCandidatos(leerCandidatosSitioDerivado, saltar), catalogo: leerCatalogoSitios, equivalencias: (t) => leerEquivalenciasSitio(t), asignar: asignarSitioDerivado, marcarSinSitio: (t, v, l, a) => marcarSinSitioPorDecision(t, v, l, a) }, new Date(), venceEn);
       if (sitios.fallos > 0) extras.push(`sitio derivado: ${sitios.fallos} viajes con fallo`);
     } catch (e) {
       extras.push(`sitio derivado: ${e instanceof Error ? e.message : String(e)}`);
       logger.error('cron.conductor_hitos.sitio_derivado_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
     try {
-      ciclo = await barridoCicloGps(puertosCicloGpsReales(), new Date(), venceEn);
+      ciclo = await barridoCicloGps(sinFlotasEnViajes(puertosCicloGpsReales(), saltar), new Date(), venceEn);
       extras.push(...ciclo.fallos);
     } catch (e) {
       extras.push(`ciclo por geocerca: ${e instanceof Error ? e.message : String(e)}`);
       logger.error('cron.conductor_hitos.ciclo_gps_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
     try {
-      alertas = await correrAlertasEstadia(puertosReales(), { venceEn });
+      alertas = await correrAlertasEstadia(sinFlotasEnViajes(puertosReales(), saltar), { venceEn });
       extras.push(...alertas.fallos);
     } catch (e) {
       extras.push(`alertas de estadía: ${e instanceof Error ? e.message : String(e)}`);
       logger.error('cron.conductor_hitos.alertas_estadia_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
     try {
-      validacion = await barridoValidacion({ candidatos: leerCandidatosValidacion, configDe: leerConfigConductor, deps: depsValidacionReales }, new Date(), venceEn);
+      validacion = await barridoValidacion({ candidatos: sinFlotasEnValidacion(leerCandidatosValidacion, saltar), configDe: leerConfigConductor, deps: depsValidacionReales }, new Date(), venceEn);
       if (validacion.fallos > 0) extras.push(`validación: ${validacion.fallos} hito(s) sin poder validar`);
     } catch (e) {
       extras.push(`validación de ubicación: ${e instanceof Error ? e.message : String(e)}`);
@@ -134,7 +140,7 @@ export async function GET(req: Request) {
     // 0604: el aviso al jefe de tráfico por «ya llegué» sin confirmar (apagado por flota por omisión). Va DESPUÉS de la validación (una llegada que el barrido acaba de confirmar no debe avisar). Aislado como los demás;
     // una base sin la 0604/0385 no trae la perilla encendida en ninguna flota, así que no hay nada que avisar.
     try {
-      llegadas = await correrAlertasLlegadaSinConfirmar(puertosAlertaLlegadaReales(), { venceEn });
+      llegadas = await correrAlertasLlegadaSinConfirmar(sinFlotasEnViajes(puertosAlertaLlegadaReales(), saltar), { venceEn });
       extras.push(...llegadas.fallos);
     } catch (e) {
       extras.push(`llegada sin confirmar: ${e instanceof Error ? e.message : String(e)}`);
@@ -143,7 +149,7 @@ export async function GET(req: Request) {
     // 0580: el aviso de acercamiento a la planta (las instrucciones del convenio). Aislado como los otros dos: un fallo aquí
     // no frena el resto. La base sin migrar (sin tablas de convenios) no es un fallo: no hay nada que avisar.
     try {
-      acercamiento = await barridoAcercamiento(undefined, new Date(), venceEn);
+      acercamiento = await barridoAcercamiento({ ...puertosAcercamientoReales, candidatos: sinFlotasEnCandidatos(puertosAcercamientoReales.candidatos, saltar) }, new Date(), venceEn);
       if (acercamiento.fallos > 0) extras.push(`acercamiento: ${acercamiento.fallos} aviso(s) con fallo`);
     } catch (e) {
       if (!(e instanceof ConveniosNoDisponibles)) {
@@ -154,7 +160,7 @@ export async function GET(req: Request) {
 
     // P2 (0636): «sin señal de vida» en tránsito (apagado por flota por omisión). Manda a personas: al final, aislado.
     try {
-      senalVida = await barridoSenalVida(puertosSenalVidaReales(), new Date(), venceEn);
+      senalVida = await barridoSenalVida(sinFlotasEnViajes(puertosSenalVidaReales(), saltar), new Date(), venceEn);
       extras.push(...senalVida.fallos);
     } catch (e) {
       extras.push(`señal de vida: ${e instanceof Error ? e.message : String(e)}`);
@@ -168,7 +174,15 @@ export async function GET(req: Request) {
       mantenimiento = await correrMantenimientoConductor();
     }
 
-    const huboFallo = r.fallos.length > 0 || r.configIlegible > 0 || r.sinDestinatario > 0 || extras.length > 0;
+    // T-A5-27: contadores sin PII y dos alarmas (en el log y en el estado del latido). Contar voluntarios es lectura: si la base no
+    // tiene la 0800 o no contesta, el dato queda en `null` y no se alarma con lo que no se sabe.
+    let voluntariosActivos: number | null = null;
+    try { voluntariosActivos = await contarVoluntariosActivos(); } catch { voluntariosActivos = null; }
+    const observabilidad = contadoresConductor({ motor: r, gps: ciclo, senalVida, voluntariosActivos });
+    const alarmas = alarmasConductor(observabilidad);
+    for (const codigo of alarmas) logger.warn('conductor.alarma', { codigo, ...observabilidad });
+
+    const huboFallo = alarmas.length > 0 || r.fallos.length > 0 || r.configIlegible > 0 || r.sinDestinatario > 0 || extras.length > 0;
     const incompleto = r.cortadosPorReloj > 0 || r.cortadaPorRechazoMasivo || Boolean(senalVida?.cortadaPorRechazoMasivo);
     logger.info('cron.conductor_hitos.ok', { ...r, fallos: r.fallos.length });
     const estado: EstadoLatido = huboFallo || incompleto ? 'parcial' : 'ok';
@@ -182,6 +196,7 @@ export async function GET(req: Request) {
         acercamientos: acercamiento?.enviados ?? null,
         hitosPorGps: ciclo?.detectados ?? null, sitiosDerivados: sitios?.derivados ?? null,
         senalVidaAvisos: senalVida?.avisosChofer ?? null, senalVidaEscalaciones: senalVida?.escalaciones ?? null,
+        observabilidad, alarmas,
       },
     };
     if (r.cortadaPorRechazoMasivo) {
@@ -191,7 +206,7 @@ export async function GET(req: Request) {
       });
     }
     return NextResponse.json({
-      corrio: true, ...r, fallos: [...r.fallos, ...extras].slice(0, 20), alertasEstadia: alertas, llegadasSinConfirmar: llegadas, validacion, acercamiento, cicloGps: ciclo, sitiosDerivados: sitios, senalVida,
+      corrio: true, ...r, fallos: [...r.fallos, ...extras].slice(0, 20), alertasEstadia: alertas, llegadasSinConfirmar: llegadas, validacion, acercamiento, cicloGps: ciclo, sitiosDerivados: sitios, senalVida, observabilidad, alarmas,
       ...(mantenimiento ? { mantenimiento } : {}),
     });
   } catch (e) {

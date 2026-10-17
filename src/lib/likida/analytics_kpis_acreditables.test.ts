@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // `acreditables_liquidacion_tenant` EN SQL.
 //
 // Las dos leían TODA `liquidacion` del tenant para reducirla a un puñado de
-// números — caducaban ~mes 8.3 con 15,000 viajes/mes (docs/escala-15k.md
+// números — caducaban ~mes 8.3 con 15,000 viajes/mes (la documentación interna
 // §6) y se leen en CADA carga de /dashboard y /dashboard/contador.
 //
 // Lo que este archivo prueba:

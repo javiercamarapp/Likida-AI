@@ -16,6 +16,8 @@
 //          editarlas (`autoenviar_min_aprobaciones`). Así el autoenvío se
 //          GANA con evidencia, intención por intención, y no se enciende de golpe.
 //
+// Con `solo_avisar` (0798) ninguno de los dos modos aplica: no sale texto libre al cliente.
+//
 // Ante cualquier duda la respuesta es «aprobar»: equivocarse hacia pedir un
 // toque cuesta segundos; equivocarse hacia mandar solo puede costar un cliente.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -33,7 +35,7 @@ export type DecisionEnvio =
   | { accion: 'ninguna'; motivo: string };
 
 export interface EntradaPolitica {
-  config: Pick<ConfigVigia, 'habilitado' | 'modoAprobacion' | 'autoenviarMinAprobaciones'>;
+  config: Pick<ConfigVigia, 'habilitado' | 'modoAprobacion' | 'autoenviarMinAprobaciones' | 'soloAvisar'>;
   clasificacion: Pick<Clasificacion, 'intencion' | 'confianza' | 'senales'>;
   borrador: Pick<Borrador, 'riesgo' | 'faltantes' | 'tareas' | 'requiereHumano' | 'origen'>;
   conversacion: Pick<Conversacion, 'control' | 'molestiaNivel' | 'escalamientoNivel'>;
@@ -44,6 +46,8 @@ export interface EntradaPolitica {
 export function decidirEnvio(e: EntradaPolitica): DecisionEnvio {
   if (!e.config.habilitado) return { accion: 'ninguna', motivo: 'agente_apagado' };
   if (e.conversacion.control === 'humano') return { accion: 'ninguna', motivo: 'conversacion_en_manos_de_un_humano' };
+  // 0798 «solo avisar»: el Vigía no le escribe al cliente (ni autoenvía ni deja borradores por aprobar); sigue clasificando y escalando.
+  if (e.config.soloAvisar === true) return { accion: 'ninguna', motivo: 'solo_avisar' };
   if (e.config.modoAprobacion !== 'autoenviar_bajo_riesgo') return { accion: 'aprobar', motivo: 'modo_siempre_aprobar' };
 
   if (!INTENCIONES_AUTOENVIABLES.includes(e.clasificacion.intencion)) return { accion: 'aprobar', motivo: 'intencion_no_autoenviable' };

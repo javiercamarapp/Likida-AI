@@ -31,4 +31,3 @@ verificado_por: "ola1 / 01-cfdi-cff.md; ola2 / 10-contradicciones.md"
 verificado_el: 2026-07-27
 usado_en_codigo:
   - "normas/por_diferencia.ts — factura_por_vencer la cita como fundamento, junto a politica-portales-plazos: es la regla que explica POR QUÉ los comercios cierran su ventana"
-  - "docs/conocimiento/01-cfdi-cff.md — el análisis de la factura global (documentación, no código)"

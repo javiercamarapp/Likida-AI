@@ -72,3 +72,33 @@ describe('intención por reglas — lo que de verdad escribe un cliente', () => 
     expect(Date.now() - inicio).toBeLessThan(1_500);
   });
 });
+
+describe('«datos de la unidad» por reglas (T-A4-24, 41dfb197 00:00)', () => {
+  const frases = [
+    '¿Con qué unidad va mi viaje?', 'en qué camión viene la carga', '¿Cuál es la caja asignada?', 'me pasas las placas del tracto',
+    'placas de la caja por favor', '¿Quién es el operador?', 'quien maneja mi unidad', 'nombre del chofer', 'dame los datos de la unidad',
+    'necesito el número de caja', '¿qué caja trae?', 'operador asignado al viaje F-1042',
+  ];
+  for (const t of frases) it(`datos_unidad: «${t}»`, () => expect(intencionDe(t)).toBe('datos_unidad'));
+
+  it('acentos, mayúsculas y signos no cambian el resultado', () => {
+    expect(intencionDe('¿¿QUÉ PLACAS TIENE EL TRACTO??')).toBe('datos_unidad');
+  });
+
+  it('nombrar la unidad sin pedir sus datos NO es datos_unidad (la ubicación sigue siendo ubicación)', () => {
+    expect(intencionDe('me pueden dar la ubicación de la unidad')).toBe('ubicacion');
+    expect(intencionDe('¿a qué hora llega la caja?')).toBe('eta');
+    expect(intencionDe('no tengo caja para cargar')).toBeNull();
+  });
+
+  it('dos preguntas: «¿dónde va y con qué caja?» es ubicación con datos_unidad de secundaria', () => {
+    const c = clasificarPorReglas('¿dónde va mi viaje y con qué caja va?');
+    expect(c?.intencion).toBe('ubicacion');
+    expect(c?.secundarias).toContain('datos_unidad');
+  });
+
+  it('una queja o un pedido de humano le ganan a los datos de la unidad', () => {
+    expect(intencionDe('es inaceptable, nadie me dice qué placas trae')).toBe('queja');
+    expect(intencionDe('quiero hablar con una persona sobre las placas')).toBe('pide_humano');
+  });
+});

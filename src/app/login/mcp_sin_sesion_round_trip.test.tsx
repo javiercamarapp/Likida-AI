@@ -54,6 +54,8 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('@/lib/ratelimit', () => ({ rateLimit: vi.fn(async () => true) }));
+// Sin perfil de tenant (0770): este archivo prueba el round-trip de siempre.
+vi.mock('@/lib/auth/perfil_tenant', () => ({ perfilRestringido: async () => false }));
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
 vi.mock('@/lib/auth/reenvio_enlace', () => ({
