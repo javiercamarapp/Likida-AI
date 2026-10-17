@@ -1825,7 +1825,7 @@ export const COMERCIOS: Comercio[] = [
     // La raíz redirige sola a `lodemo.com.mx`, el sitio CORPORATIVO del grupo
     // — sin un solo campo de facturación. La liga real, en su pie: `fact.
     // lodemored.net`. Formulario largo pero medido campo por campo; detalle
-    // completo en `pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt`.
+    // completo en la lectura de campo del 2026-08-29 (archivo privado, fuera del repo).
     portal: 'https://fact.lodemored.net/',
     requiereCuenta: false,
     plazo: 'mes_natural',
@@ -2004,7 +2004,7 @@ export const COMERCIOS: Comercio[] = [
     // — leídos del DOM real. ⚠️ Ese formulario NO CARGA si se abre directo
     // (sin pasar antes por este índice): el guion de `portales.ts` apunta
     // aquí a propósito, mismo límite ya documentado en `CIRCLE_K`. Detalle
-    // completo: `pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt`.
+    // completo: la lectura de campo del 2026-08-29 (archivo privado, fuera del repo).
     portal: 'https://www.masfacturaweb.com.mx:73/ElGlobo/',
     requiereCuenta: false,
     // El ticket no imprime plazo por comprobante, solo la leyenda de cierre de
@@ -2226,7 +2226,7 @@ export const COMERCIOS: Comercio[] = [
     // guion por eso: hace falta que el catálogo sepa distinguir
     // sucursal/marca antes de automatizar esto sin arriesgar el camino
     // manual. Detalle completo:
-    // `pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt`.
+    // la lectura de campo del 2026-08-29 (archivo privado, fuera del repo).
     //
     // Sin `rfc`: el de Grupo Bospatex se imprime con espacios intercalados y no
     // se leyó de forma inequívoca.

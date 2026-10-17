@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// AUDITORÍA DE ESCALA 15k (docs/escala-15k.md §2): `agregarEstatus` llevaba un
+// AUDITORÍA DE ESCALA 15k (la documentación interna §2): `agregarEstatus` llevaba un
 // `.limit(MAX_LINEAS_DESGLOSE = 5000)` con un comentario que afirmaba que con
 // eso "cabe completo". La premisa era falsa: PostgREST aplica
 // min(limit, max_rows) y entrega 1,000 filas sin error — `total` y `pctCuadra`

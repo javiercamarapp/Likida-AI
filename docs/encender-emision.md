@@ -28,7 +28,7 @@ cerrada = ensayo, y el motivo se dice.
   `docs/conocimiento/legal/tos-mandato-borrador.md` — borrador de una página
   esperando visto bueno del abogado, con las notas para él incluidas.
 - **Pre-vuelo contra el portal real de CAPUFE** (13-ago-2026, solo lectura,
-  reporte en `pruebas-manuales/ensayo/2026-08-14/capufe-prevuelo.txt`):
+  reporte archivado fuera del repo):
   - ✅ 11 selectores del adaptador casan contra el DOM real (RFC, nombre,
     CP, régimen, uso CFDI, correo, código, botón Validar, tabla, checkbox
     de partidos —que `clicSeguro()` prohíbe—, cuadro de error).

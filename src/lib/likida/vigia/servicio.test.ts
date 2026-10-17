@@ -853,3 +853,424 @@ describe('rechazarMensaje', () => {
     expect((await rechazarMensaje({ tenantId: T1, userId: 'u' }, 'no-existe', deps)).ok).toBe(false);
   });
 });
+
+describe('datos de la unidad (T-A4-24)', () => {
+  const unidadCompleta = { caja: 'CJ-100', placasCaja: 'ABC123', estadoCaja: 'cargada', unidad: 'C2-08', placasUnidad: 'XYZ789', operador: 'Operador Uno' };
+
+  it('con la 0798 aplicada: contesta con el dato de SU viaje, pide los datos de la unidad al estatus y queda a aprobación', async () => {
+    const { repo } = escenario({ modoAprobacion: 'autoenviar_bajo_riesgo', autoenviarMinAprobaciones: 0 });
+    repo.estatus.agregar(T1, CLIENTE_A, estatus(unidadCompleta));
+    const { deps, alCliente } = armar(repo);
+    await atenderMensajeCliente(msg('¿Con qué caja va mi viaje?'), { ...deps, datosUnidad: true });
+    const [b] = repo.salientes();
+    expect(b.intencion).toBe('datos_unidad');
+    expect(b.texto).toContain('Caja: CJ-100.');
+    expect(b.texto).toContain('Operador: Operador Uno.');
+    expect(b.estado).toBe('pendiente_aprobacion'); // jamás autoenviado: la intención no es autoenviable
+    expect(alCliente).toEqual([]);
+    const consultas = repo.estatus.llamadas.filter((l) => l.metodo === 'estatus') as Array<{ datosUnidad?: boolean }>;
+    expect(consultas).toHaveLength(1);
+    expect(consultas[0].datosUnidad).toBe(true);
+  });
+
+  it('sin caja asignada: «lo consulto», el borrador queda a aprobación y ESCALA (sin_dato)', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus({ ...unidadCompleta, caja: null, placasCaja: null, estadoCaja: null }));
+    const { deps } = armar(repo);
+    await atenderMensajeCliente(msg('¿Qué caja trae?'), { ...deps, datosUnidad: true });
+    const [b] = repo.salientes();
+    expect(b.texto).toContain('Aún no tengo registro de caja');
+    expect(b.texto).not.toContain('Caja:');
+    expect(b.estado).toBe('pendiente_aprobacion');
+    expect(repo.eventosDe('sin_dato')).toHaveLength(1);
+  });
+
+  it('SIN la 0798 aplicada (por omisión): la intención nueva se degrada a «otro», NO se guarda datos_unidad y nada se pide al estatus', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus(unidadCompleta));
+    const { deps, alCliente } = armar(repo);
+    await atenderMensajeCliente(msg('¿Quién es el operador?'), deps);
+    const guardadas = [...repo.mensajes.values()].map((m) => m.intencion).filter((i) => i !== null);
+    expect(guardadas.length).toBeGreaterThan(0);
+    expect(guardadas).not.toContain('datos_unidad');
+    expect(guardadas.every((i) => i === 'otro')).toBe(true);
+    const [b] = repo.salientes();
+    expect(b.texto).not.toContain('Operador Uno');
+    expect(b.estado).toBe('pendiente_aprobacion');
+    expect(b.senales).toContain('datos_unidad_sin_0798');
+    expect(repo.estatus.llamadas).toEqual([]);
+    expect(alCliente).toEqual([]);
+  });
+
+  it('SIN la 0798, una pregunta secundaria de datos de la unidad se descarta y la principal se atiende normal', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus(unidadCompleta));
+    const { deps } = armar(repo);
+    await atenderMensajeCliente(msg('¿Dónde va mi viaje y con qué caja va?'), deps);
+    const [b] = repo.salientes();
+    expect(b.intencion).toBe('ubicacion');
+    expect(b.texto).not.toContain('Caja:');
+    const consultas = repo.estatus.llamadas.filter((l) => l.metodo === 'estatus') as Array<{ datosUnidad?: boolean }>;
+    expect(consultas[0].datosUnidad).toBeUndefined();
+  });
+
+  it('AISLAMIENTO: la unidad de OTRO cliente de la flota no sale, ni confirma que existe', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus({ ...unidadCompleta, caja: 'CJ-PROPIA' }));
+    repo.estatus.agregar(T1, CLIENTE_A2, estatus({ viajeId: VIAJE_2, folio: 'F-2000', ...unidadCompleta, caja: 'CJ-AJENA', operador: 'Operador Ajeno' }));
+    const { deps } = armar(repo);
+    await atenderMensajeCliente(msg('¿Con qué caja va el F-2000?'), { ...deps, datosUnidad: true });
+    const [b] = repo.salientes();
+    expect(b.texto).toContain('no encuentro ese folio entre tus viajes en curso');
+    expect(b.texto).not.toMatch(/CJ-AJENA|Operador Ajeno|CJ-PROPIA/);
+    expect(repo.estatus.llamadas.filter((l) => l.metodo === 'estatus')).toEqual([]);
+  });
+
+  it('AISLAMIENTO: la unidad de OTRA flota con el mismo clienteId no sale', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T2, CLIENTE_A, estatus({ ...unidadCompleta, caja: 'CJ-OTRA-FLOTA' }));
+    const { deps } = armar(repo);
+    await atenderMensajeCliente(msg('¿Con qué unidad va mi viaje?'), { ...deps, datosUnidad: true });
+    expect(repo.salientes()[0].texto).not.toContain('CJ-OTRA-FLOTA');
+    expect(repo.estatus.llamadas.every((l) => l.tenantId === T1)).toBe(true);
+  });
+});
+
+describe('0798 «solo avisar»: avisa y prioriza, no contesta', () => {
+  it('una pregunta normal: se guarda y clasifica, pero NO hay borrador, ni aviso de aprobación, ni envío al cliente', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    repo.estatus.agregar(T1, CLIENTE_A, estatus());
+    const { deps, alCliente, alGerente } = armar(repo);
+    expect(await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), deps)).toBe('atendido');
+    expect(repo.entrantes()).toHaveLength(1);
+    expect(repo.entrantes()[0].intencion).toBe('ubicacion');
+    expect(repo.salientes()).toEqual([]);
+    expect(alCliente).toEqual([]);
+    expect(alGerente).toEqual([]);
+  });
+
+  it('aunque el modo sea autoenvío, no sale nada al cliente', async () => {
+    const { repo } = escenario({ soloAvisar: true, modoAprobacion: 'autoenviar_bajo_riesgo', autoenviarMinAprobaciones: 1 });
+    repo.estatus.agregar(T1, CLIENTE_A, estatus());
+    const { deps, alCliente } = armar(repo);
+    await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), deps);
+    expect(repo.salientes()).toEqual([]);
+    expect(alCliente).toEqual([]);
+  });
+
+  it('una queja: sin borrador, pero la escalera funciona (molestia registrada y aviso al gerente)', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    const { deps, alCliente, alGerente } = armar(repo);
+    await atenderMensajeCliente(msg('Tengo una queja del servicio'), deps);
+    expect(repo.salientes()).toEqual([]);
+    expect(alCliente).toEqual([]);
+    expect([...repo.conversaciones.values()][0].molestiaNivel).toBeGreaterThanOrEqual(2);
+    expect(repo.eventosDe('escalada').some((e) => e.nivel === 1)).toBe(true);
+    expect(alGerente).toHaveLength(1);
+    expect(alGerente[0].telefono).toBe('525599999999'); // grep-limpio:ok
+    expect(alGerente[0].op.contexto).toBe('vigia.escalamiento');
+  });
+
+  it('un cliente muy molesto sube también al dueño, sin borrador', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    const { deps, alGerente } = armar(repo);
+    await atenderMensajeCliente(msg('PÉSIMO SERVICIO!!! EXIJO UNA RESPUESTA YA, SON UNOS INCOMPETENTES'), deps);
+    expect(repo.salientes()).toEqual([]);
+    expect(alGerente.map((g) => g.telefono)).toEqual(expect.arrayContaining(['525599999999', '525588888888'])); // grep-limpio:ok
+    expect(repo.eventosDe('escalada').filter((e) => e.clave).map((e) => e.nivel)).toEqual(expect.arrayContaining([1, 2]));
+    expect([...repo.conversaciones.values()][0].escalamientoNivel).toBe(2);
+  });
+
+  it('pide un humano: aviso inmediato al gerente y ninguna respuesta al cliente', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    const { deps, alCliente, alGerente } = armar(repo);
+    await atenderMensajeCliente(msg('Quiero hablar con una persona'), deps);
+    expect(repo.salientes()).toEqual([]);
+    expect(alCliente).toEqual([]);
+    expect(repo.eventosDe('escalada').filter((e) => e.nivel === 1).length).toBeGreaterThan(0);
+    expect(repo.eventosDe('escalada').some((e) => e.nivel === 2)).toBe(false);
+    expect(alGerente).toHaveLength(1);
+    expect(alGerente[0].telefono).toBe('525599999999'); // grep-limpio:ok
+  });
+
+  it('el barrido sigue avisando a los 30 min sin respuesta, también con solo_avisar', async () => {
+    const e = escenario({ soloAvisar: true });
+    e.repo.estatus.agregar(T1, CLIENTE_A, estatus());
+    await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), armar(e.repo).deps);
+    const luego = armar(e.repo, { ahora: new Date(AHORA.getTime() + 30 * 60_000) });
+    const r = await barridoVigia(luego.deps);
+    expect(r.escaladas).toBe(1);
+    expect(luego.alGerente).toHaveLength(1);
+    expect(luego.alGerente[0].op.texto).toContain('lleva 30 minutos sin respuesta');
+    expect(e.repo.salientes()).toEqual([]);
+  });
+
+  it('con solo_avisar apagado (false) el copiloto de siempre sigue intacto: borrador pendiente y aviso de aprobación', async () => {
+    const { repo } = escenario({ soloAvisar: false });
+    repo.estatus.agregar(T1, CLIENTE_A, estatus());
+    const { deps, alGerente } = armar(repo);
+    await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), deps);
+    expect(repo.salientes()).toHaveLength(1);
+    expect(repo.salientes()[0].estado).toBe('pendiente_aprobacion');
+    expect(alGerente).toHaveLength(1);
+  });
+
+  it('el agente apagado sigue callado aunque solo_avisar esté activo', async () => {
+    const { repo } = escenario({ soloAvisar: true, habilitado: false });
+    const { deps, alGerente, alCliente } = armar(repo);
+    await atenderMensajeCliente(msg('Quiero hablar con una persona'), deps);
+    expect(alGerente).toEqual([]);
+    expect(alCliente).toEqual([]);
+  });
+});
+
+
+// ═══ T-A4-29 · la prioridad se guarda en la conversación y solo ORDENA ═══════════════════════════
+describe('prioridad del hilo (0798)', () => {
+  const conPrioridad = (repo: RepoEnMemoria, opciones: Parameters<typeof armar>[1] = {}) => {
+    const a = armar(repo, opciones);
+    a.deps.datosUnidad = true;
+    return a;
+  };
+  const hilo = (repo: RepoEnMemoria) => [...repo.conversaciones.values()][0];
+
+  it('un mensaje con ASAP deja la prioridad 2 persistida en la conversación', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    await atenderMensajeCliente(msg('Necesito el reporte ASAP'), conPrioridad(repo).deps);
+    expect(hilo(repo).prioridad).toBe(2);
+  });
+
+  it('el hilo conserva el MÁXIMO de sus mensajes sin responder: un «gracias» posterior no la baja', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    const { deps } = conPrioridad(repo);
+    await atenderMensajeCliente(msg('Es urgente, ¿dónde va?'), deps);
+    await atenderMensajeCliente(msg('gracias'), deps);
+    expect(hilo(repo).prioridad).toBe(2);
+  });
+
+  it('un mensaje normal queda en 1 y uno de cortesía en 0; la pregunta simple sube a 2 pero NO suma molestia', async () => {
+    const normal = escenario({ soloAvisar: true });
+    await atenderMensajeCliente(msg('Les paso los datos del viaje mañana'), conPrioridad(normal.repo).deps);
+    expect(hilo(normal.repo).prioridad).toBe(1);
+
+    const cortesia = escenario({ soloAvisar: true });
+    await atenderMensajeCliente(msg('gracias'), conPrioridad(cortesia.repo).deps);
+    expect(hilo(cortesia.repo).prioridad ?? 0).toBe(0);
+
+    const pregunta = escenario({ soloAvisar: true });
+    await atenderMensajeCliente(msg('¿Ya salió la unidad?'), conPrioridad(pregunta.repo).deps);
+    expect(hilo(pregunta.repo).prioridad).toBe(2);
+    expect(hilo(pregunta.repo).molestiaNivel).toBe(0);
+  });
+
+  it('al responderle al cliente, el ciclo siguiente empieza de cero', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    await atenderMensajeCliente(msg('Necesito el reporte ASAP'), conPrioridad(repo).deps);
+    await repo.marcarRespondida(T1, hilo(repo).id, AHORA);
+    expect(hilo(repo).prioridad).toBe(0);
+  });
+
+  it('base SIN 0798 (datosUnidad apagado): no se escribe la prioridad ni se rompe nada', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    const espia = vi.spyOn(repo, 'actualizarConversacion');
+    const { deps } = armar(repo);
+    expect(await atenderMensajeCliente(msg('Necesito el reporte ASAP'), deps)).toBe('atendido');
+    expect(espia.mock.calls.filter(([, , p]) => 'prioridad' in p)).toEqual([]);
+    expect(hilo(repo).prioridad ?? 0).toBe(0);
+  });
+
+  it('si guardar la prioridad falla, el mensaje del cliente se atiende igual (no se escala por esa falla)', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    const original = repo.actualizarConversacion.bind(repo);
+    vi.spyOn(repo, 'actualizarConversacion').mockImplementation(async (t, id, p, g) => {
+      if ('prioridad' in p) throw new Error('column "prioridad" does not exist');
+      return original(t, id, p, g);
+    });
+    const { deps, alGerente } = conPrioridad(repo);
+    expect(await atenderMensajeCliente(msg('Necesito el reporte ASAP'), deps)).toBe('atendido');
+    expect(alGerente).toEqual([]); // la falla no dispara el escalamiento de emergencia
+    expect(repo.mensajes.size).toBe(1);
+  });
+
+  it('el barrido revisa primero la prioridad alta, pero NO cambia quién escala ni cuándo', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    repo.agregarContacto({ tenantId: T1, clienteId: CLIENTE_A2, telefono: '525511110002' }); // grep-limpio:ok
+    await atenderMensajeCliente(msg('Les paso los datos del viaje'), conPrioridad(repo, { ahora: AHORA }).deps);
+    await atenderMensajeCliente(
+      msg('¿Ya salió? ASAP', { from: '525511110002', timestampMs: AHORA.getTime() + 60_000 }), // grep-limpio:ok
+      conPrioridad(repo, { ahora: new Date(AHORA.getTime() + 60_000) }).deps,
+    );
+    const orden: string[] = [];
+    const luego = conPrioridad(repo, { ahora: new Date(AHORA.getTime() + 45 * 60_000) });
+    const original = repo.nombreCliente.bind(repo);
+    vi.spyOn(repo, 'nombreCliente').mockImplementation(async (t, c) => { orden.push(c); return original(t, c); });
+    const r = await barridoVigia(luego.deps);
+    expect(r.escaladas).toBe(2);
+    expect(orden).toEqual([CLIENTE_A2, CLIENTE_A]); // la alta (más nueva) va antes que la normal (más vieja)
+  });
+
+  it('sin prioridad alta el barrido conserva el orden por vencimiento de siempre', async () => {
+    const { repo } = escenario({ soloAvisar: true });
+    repo.agregarContacto({ tenantId: T1, clienteId: CLIENTE_A2, telefono: '525511110002' }); // grep-limpio:ok
+    await atenderMensajeCliente(msg('Les paso los datos del viaje'), conPrioridad(repo, { ahora: AHORA }).deps);
+    await atenderMensajeCliente(
+      msg('Les paso otros datos', { from: '525511110002', timestampMs: AHORA.getTime() + 60_000 }), // grep-limpio:ok
+      conPrioridad(repo, { ahora: new Date(AHORA.getTime() + 60_000) }).deps,
+    );
+    const orden: string[] = [];
+    const original = repo.nombreCliente.bind(repo);
+    vi.spyOn(repo, 'nombreCliente').mockImplementation(async (t, c) => { orden.push(c); return original(t, c); });
+    await barridoVigia(conPrioridad(repo, { ahora: new Date(AHORA.getTime() + 45 * 60_000) }).deps);
+    expect(orden).toEqual([CLIENTE_A, CLIENTE_A2]);
+  });
+});
+
+describe('«sin dato / sin caja» escala a servicio al cliente, en privado (T-A4-27)', () => {
+  const SERVICIO = '525577770001'; // grep-limpio:ok
+  const GERENTE = '525599999999';  // grep-limpio:ok
+  const sinCaja = { caja: null, placasCaja: null, estadoCaja: null, unidad: 'C2-08', placasUnidad: 'XYZ789', operador: 'Operador Uno' };
+  const conDatos = (extra: Parameters<typeof escenario>[0] = {}, servicio: string | null = SERVICIO) => {
+    const e = escenario(extra);
+    e.repo.estatus.agregar(T1, CLIENTE_A, estatus(sinCaja));
+    if (servicio) e.repo.agregarServicio(T1, { telefono: servicio });
+    return e;
+  };
+  const AUN = (d: ReturnType<typeof armar>) => d.alGerente.map((g) => g.telefono);
+
+  it('con lista: avisa a servicio («preguntó por la caja de F-1042 y no la tengo registrada») y NO al gerente', async () => {
+    const { repo } = conDatos({ escalarNivel2Min: 15, slaRespuestaMin: 120 });
+    const a = armar(repo);
+    await atenderMensajeCliente(msg('¿Qué caja trae?'), { ...a.deps, datosUnidad: true });
+    expect(AUN(a)).toEqual([SERVICIO]);
+    expect(a.alGerente[0].op.texto).toContain('preguntó por la caja de F-1042 y no la tengo registrada');
+    expect(a.alGerente[0].op.botones?.map((b) => b.titulo)).toEqual(['Yo me encargo']);
+    expect(a.alCliente).toEqual([]);
+    // la escalera no se movió: sigue en 0; solo quedó el reloj de servicio y la llave con sufijo propio
+    const conv = [...repo.conversaciones.values()][0];
+    expect(conv.escalamientoNivel).toBe(0);
+    expect(conv.escaladoEn).toBe(AHORA.toISOString());
+    expect(repo.eventos.some((e) => e.clave?.endsWith(':srv'))).toBe(true);
+    expect(repo.eventosDe('escalada').filter((e) => e.nivel === 1 || e.nivel === 2)).toEqual([]);
+    expect(repo.eventosDe('sin_destinatario')).toEqual([]);
+    expect(repo.salientes()[0].estado).toBe('pendiente_aprobacion');
+  });
+
+  it('sin lista (o con la lista de otra flota / de otro cliente): igual que hoy, el gerente recibe la aprobación', async () => {
+    const { repo } = conDatos({}, null);
+    repo.agregarServicio(T2, { telefono: SERVICIO });
+    repo.agregarServicio(T1, { telefono: SERVICIO, clienteId: CLIENTE_A2 });
+    repo.agregarServicio(T1, { telefono: SERVICIO, activo: false });
+    const a = armar(repo);
+    await atenderMensajeCliente(msg('¿Qué caja trae?'), { ...a.deps, datosUnidad: true });
+    expect(AUN(a)).toEqual([GERENTE]);
+    expect(a.alGerente[0].op.contexto).toBe('vigia.aprobacion');
+    expect(repo.eventosDe('sin_dato')).toHaveLength(1);
+    expect(repo.eventos.some((e) => e.clave?.endsWith(':srv'))).toBe(false);
+    expect(repo.eventosDe('escalada').some((e) => e.nivel === 1)).toBe(true);
+  });
+
+  it('la lista no se puede leer: cae a la escalera de siempre (nunca se pierde el aviso)', async () => {
+    const { repo } = conDatos();
+    repo.fallaEn.destinatariosServicioCliente = true;
+    const a = armar(repo);
+    await atenderMensajeCliente(msg('¿Qué caja trae?'), { ...a.deps, datosUnidad: true });
+    expect(AUN(a)).toEqual([GERENTE]);
+  });
+
+  it('IDEMPOTENCIA: un segundo mensaje del mismo ciclo no vuelve a avisar a servicio ni sube al gerente', async () => {
+    const { repo } = conDatos({ escalarNivel2Min: 15, slaRespuestaMin: 120 });
+    const a = armar(repo);
+    await atenderMensajeCliente(msg('¿Qué caja trae?'), { ...a.deps, datosUnidad: true });
+    await atenderMensajeCliente(msg('¿Y la caja?'), { ...a.deps, datosUnidad: true });
+    expect(AUN(a)).toEqual([SERVICIO]);
+  });
+
+  it('servicio NO contesta en `escalarNivel2Min`: el barrido sube al nivel 1 (gerente), una sola vez y sin repetir a servicio', async () => {
+    const { repo } = conDatos({ escalarNivel2Min: 15, slaRespuestaMin: 120, slaCriticoMin: 10 });
+    await atenderMensajeCliente(msg('¿Qué caja trae?'), { ...armar(repo).deps, datosUnidad: true });
+    const antes = armar(repo, { ahora: new Date(AHORA.getTime() + 14 * 60_000) });
+    await barridoVigia(antes.deps);
+    expect(antes.alGerente).toEqual([]);
+
+    const luego = armar(repo, { ahora: new Date(AHORA.getTime() + 15 * 60_000) });
+    const r = await barridoVigia(luego.deps);
+    expect(r.escaladas).toBe(1);
+    expect(AUN(luego)).toEqual([GERENTE]);
+    expect(luego.alGerente[0].op.texto).toContain('preguntó algo que no tengo registrado');
+    expect([...repo.conversaciones.values()][0].escalamientoNivel).toBe(1);
+    await barridoVigia(luego.deps); await barridoVigia(luego.deps);
+    expect(AUN(luego)).toEqual([GERENTE]);
+  });
+
+  it('servicio se hace cargo («Yo me encargo»): el barrido NO sube al gerente', async () => {
+    const { repo } = conDatos({ escalarNivel2Min: 15, slaRespuestaMin: 120, slaCriticoMin: 10 });
+    await atenderMensajeCliente(msg('¿Qué caja trae?'), { ...armar(repo).deps, datosUnidad: true });
+    const convId = [...repo.conversaciones.values()][0].id;
+    await tomarConversacion({ tenantId: T1, userId: 'u-servicio' }, convId, armar(repo).deps);
+    const luego = armar(repo, { ahora: new Date(AHORA.getTime() + 60 * 60_000) });
+    await barridoVigia(luego.deps);
+    expect(luego.alGerente).toEqual([]);
+  });
+
+  it('a nadie de la lista se le pudo entregar: sube YA al nivel 1 (no espera el plazo) y queda el hecho a la vista', async () => {
+    const { repo } = conDatos({ escalarNivel2Min: 15, slaRespuestaMin: 120 });
+    const a = armar(repo);
+    const llamadas: string[] = [];
+    const deps: DepsVigia = {
+      ...a.deps,
+      enviar: (async (telefono: string) => {
+        llamadas.push(telefono);
+        return telefono === SERVICIO ? { ok: false, motivo: 'rechazado', mensaje: 'no', reintentable: false } : { ok: true, via: 'botones', id: 'w', motivo: 'ventana_abierta', ventana: 'abierta' };
+      }) as unknown as DepsVigia['enviar'],
+    };
+    await atenderMensajeCliente(msg('¿Qué caja trae?'), { ...deps, datosUnidad: true });
+    expect(llamadas).toContain(SERVICIO);
+    expect(llamadas).toContain(GERENTE);
+    expect(repo.eventosDe('fallo_envio').some((e) => (e.detalle as { destino?: string })?.destino === 'servicio')).toBe(true);
+    expect(repo.eventosDe('sin_destinatario').some((e) => e.clave?.endsWith(':srv:sin_entrega'))).toBe(true);
+    expect([...repo.conversaciones.values()][0].escalamientoNivel).toBe(1); // subió YA, sin esperar el plazo de servicio
+  });
+
+  it('con «solo avisar» (el perfil de los 5 agentes): servicio recibe el aviso y el gerente no; sin lista, nivel 1 como cualquier sin dato', async () => {
+    const a1 = conDatos({ soloAvisar: true });
+    const x = armar(a1.repo);
+    await atenderMensajeCliente(msg('¿Qué caja trae?'), { ...x.deps, datosUnidad: true });
+    expect(a1.repo.salientes()).toEqual([]);
+    expect(AUN(x)).toEqual([SERVICIO]);
+    expect(x.alGerente[0].op.texto).toContain('preguntó por la caja de F-1042 y no la tengo registrada');
+
+    const a2 = conDatos({ soloAvisar: true }, null);
+    const y = armar(a2.repo);
+    await atenderMensajeCliente(msg('¿Qué caja trae?'), { ...y.deps, datosUnidad: true });
+    expect(a2.repo.salientes()).toEqual([]);
+    expect(AUN(y)).toEqual([GERENTE]);
+    expect(a2.repo.eventosDe('escalada').some((e) => e.nivel === 1)).toBe(true);
+  });
+
+  it('con la caja registrada no hay «sin dato»: nada va a servicio', async () => {
+    const e = escenario({ soloAvisar: true });
+    e.repo.estatus.agregar(T1, CLIENTE_A, estatus({ ...sinCaja, caja: 'CJ-100', placasCaja: 'ABC123' }));
+    e.repo.agregarServicio(T1, { telefono: SERVICIO });
+    const a = armar(e.repo);
+    await atenderMensajeCliente(msg('¿Qué caja trae?'), { ...a.deps, datosUnidad: true });
+    expect(a.alGerente).toEqual([]);
+  });
+
+  it('el resto de los motivos NO cambia: una queja y «quiero un humano» van al gerente, no a servicio', async () => {
+    for (const texto of ['Tengo una queja del servicio', 'Quiero hablar con una persona']) {
+      const { repo } = conDatos({ soloAvisar: true });
+      const a = armar(repo);
+      await atenderMensajeCliente(msg(texto), { ...a.deps, datosUnidad: true });
+      expect(AUN(a)).toEqual([GERENTE]);
+    }
+  });
+
+  it('un folio ajeno sigue yendo al gerente aunque haya lista de servicio', async () => {
+    const { repo } = conDatos();
+    repo.estatus.agregar(T1, CLIENTE_A2, estatus({ viajeId: VIAJE_2, folio: 'F-2000' }));
+    const a = armar(repo);
+    await atenderMensajeCliente(msg('¿Con qué caja va el F-2000?'), { ...a.deps, datosUnidad: true });
+    expect(AUN(a)).not.toContain(SERVICIO);
+    expect(a.alGerente.length).toBeGreaterThan(0);
+  });
+});

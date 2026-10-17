@@ -40,6 +40,8 @@ const CABECERAS_DE_FOLIO = new Set([
 export interface EmbarqueDetectado {
   /** 1..n, en el orden en que aparece el folio en el archivo. */
   indice: number;
+  /** Solo al dividir por PESTAÑAS (cada hoja con su propia cabecera): la cabecera de este embarque; si falta, la del plan. */
+  encabezados?: string[];
   /** El folio tal como lo escribió el cliente (la primera escritura). */
   clave: string;
   filas: string[][];
@@ -76,6 +78,21 @@ function localizarColumnaFolio(c: ContenidoDoc, perfil: Perfil | null): { tabla:
   return null;
 }
 
+/** Cabeceras que identifican el embarque de una PESTAÑA entera (T-A3-14): las del folio más delivery y caja. */
+const CABECERAS_ID_HOJA = new Set([
+  ...CABECERAS_DE_FOLIO,
+  'delivery', 'delivery no', 'no delivery', 'num delivery', 'numero de delivery', 'delivery number', 'delivery id', 'id delivery',
+  'caja', 'no caja', 'num caja', 'numero de caja', 'id caja', 'id de caja', 'placas caja', 'placa caja', 'placas de caja',
+]);
+
+export interface MismoEmbarque {
+  /** Nombres de las pestañas con datos, en orden. */
+  hojas: string[];
+  /** Por qué se leyeron como un solo embarque. */
+  motivo: 'identificador_comun' | 'perfil';
+  aviso: string;
+}
+
 export interface EvaluacionDivision {
   /** El plan, si hay 2 a `MAX_EMBARQUES` embarques. */
   plan: PlanDivision | null;
@@ -88,17 +105,74 @@ export interface EvaluacionDivision {
    * y un aviso claro que N documentos que callan lo que les falta.
    */
   variasHojas: { hojaDelFolio: string; otras: string[]; embarques: number } | null;
+  /**
+   * T-A3-14 (forma M5): varias pestañas que son UN mismo embarque (mismo delivery/caja/folio en todas, o el perfil lo dice con
+   * `hojas:'mismo_embarque'`): NO se parte; se leen juntas, una mercancía por pestaña. Solo existe cuando es el caso.
+   */
+  mismoEmbarque?: MismoEmbarque;
+}
+
+export interface OpcionesDivision {
+  /** Lo que declara el perfil del cliente sobre sus pestañas. */
+  hojas?: 'mismo_embarque';
+}
+
+const normId = (v: string): string => v.trim().toLowerCase().replace(/\s+/g, ' ');
+
+/** Los identificadores de embarque (no vacíos) de una pestaña, o `null` si no tiene columna de identificador. */
+function identificadoresDeHoja(t: TablaLeida): { ids: Map<string, string>; columna: number } | null {
+  const columna = t.llaves.findIndex((k) => CABECERAS_ID_HOJA.has(k));
+  if (columna < 0) return null;
+  const ids = new Map<string, string>();
+  for (const f of filasDeDatos(t)) {
+    const v = (f[columna] ?? '').trim();
+    if (v !== '' && !ids.has(normId(v))) ids.set(normId(v), v);
+  }
+  return ids.size > 0 ? { ids, columna } : null;
+}
+
+/** Una pestaña cuenta si tiene al menos una fila de datos con algo escrito. */
+const hojasConDatos = (c: ContenidoDoc): TablaLeida[] => tablasDe(c).filter((t) => filasDeDatos(t).some((f) => f.some((x) => x.trim() !== '')));
+
+/**
+ * ¿Las pestañas de un libro son UN embarque o varios? (T-A3-14). Solo se llama cuando la hoja del folio no trae 2+ embarques.
+ *   · el perfil dice `hojas:'mismo_embarque'` → un embarque, sin mirar nada más;
+ *   · todas las pestañas con datos traen UN solo identificador (folio/delivery/caja) y es el mismo → un embarque;
+ *   · todas traen UN identificador y son todos distintos → un embarque POR pestaña (comportamiento de antes: se divide);
+ *   · cualquier otra cosa (sin columna de identificador, ids parcialmente repetidos, una pestaña con varios): no se decide.
+ */
+function evaluarHojas(c: ContenidoDoc, opciones: OpcionesDivision): { mismo?: MismoEmbarque; plan?: PlanDivision } {
+  const tablas = hojasConDatos(c);
+  if (tablas.length < 2) return {};
+  const nombres = tablas.map((t) => t.hoja);
+  const avisoMismo = `El libro tiene ${tablas.length} pestañas: se leyeron como un solo embarque con ${tablas.length} renglones.`;
+  if (opciones.hojas === 'mismo_embarque') return { mismo: { hojas: nombres, motivo: 'perfil', aviso: avisoMismo } };
+  const ids = tablas.map(identificadoresDeHoja);
+  if (ids.some((x) => x === null || x.ids.size !== 1)) return {};
+  const claves = ids.map((x) => [...(x as { ids: Map<string, string> }).ids.keys()][0]);
+  if (new Set(claves).size === 1) return { mismo: { hojas: nombres, motivo: 'identificador_comun', aviso: avisoMismo } };
+  if (new Set(claves).size < claves.length) return {}; // algunas pestañas repiten y otras no: ambiguo, no se decide.
+  const embarques: EmbarqueDetectado[] = tablas.map((t, i) => ({
+    indice: i + 1, clave: (ids[i] as { ids: Map<string, string> }).ids.values().next().value as string,
+    encabezados: t.encabezados, filas: filasDeDatos(t),
+  }));
+  return {
+    plan: {
+      hoja: tablas[0].hoja, encabezados: tablas[0].encabezados, columnaFolio: tablas[0].encabezados[(ids[0] as { columna: number }).columna] ?? '',
+      embarques, origenColumna: 'cabecera', avisos: [`El libro tiene ${tablas.length} pestañas con embarques distintos: se partió en ${tablas.length} documentos, uno por pestaña.`],
+    },
+  };
 }
 
 /**
  * ¿Este contenido trae más de un embarque? `plan: null` = no hay nada que partir (no es tabla, un solo folio, sin columna de
  * folio inequívoca, o son más de `MAX_EMBARQUES`: en ese caso `exceso` lo dice).
  */
-export function evaluarDivision(c: ContenidoDoc, perfil: Perfil | null): EvaluacionDivision {
+export function evaluarDivision(c: ContenidoDoc, perfil: Perfil | null, opciones: OpcionesDivision = {}): EvaluacionDivision {
   const nada: EvaluacionDivision = { plan: null, exceso: null, variasHojas: null };
   if (!c.tabla || (c.formato !== 'excel' && c.formato !== 'csv')) return nada;
   const hallada = localizarColumnaFolio(c, perfil);
-  if (!hallada) return nada;
+  if (!hallada) return deHojas(c, opciones, nada);
   const { tabla, columna, origen } = hallada;
   const datos = filasDeDatos(tabla);
 
@@ -120,7 +194,7 @@ export function evaluarDivision(c: ContenidoDoc, perfil: Perfil | null): Evaluac
     if (actual) actual.filas.push(fila);
     else huerfanas.push(fila); // filas con datos ANTES del primer folio
   }
-  if (grupos.size < 2) return nada;
+  if (grupos.size < 2) return deHojas(c, opciones, nada);
   if (grupos.size > MAX_EMBARQUES) return { plan: null, exceso: grupos.size, variasHojas: null };
   const otras = (c.tabla ?? []).filter((h) => h.nombre !== tabla.hoja && h.filas.some((f) => f.some((x) => String(x ?? '').trim() !== ''))).map((h) => h.nombre);
   if (otras.length > 0) return { plan: null, exceso: null, variasHojas: { hojaDelFolio: tabla.hoja, otras, embarques: grupos.size } };
@@ -140,8 +214,16 @@ export function evaluarDivision(c: ContenidoDoc, perfil: Perfil | null): Evaluac
   };
 }
 
+/** Cuando la hoja del folio no trae varios embarques, mira si las PESTAÑAS son uno o varios (T-A3-14). */
+function deHojas(c: ContenidoDoc, opciones: OpcionesDivision, nada: EvaluacionDivision): EvaluacionDivision {
+  const r = evaluarHojas(c, opciones);
+  if (r.plan) return { ...nada, plan: r.plan };
+  if (r.mismo) return { ...nada, mismoEmbarque: r.mismo };
+  return nada;
+}
+
 /** Atajo: solo el plan. */
-export const planearDivision = (c: ContenidoDoc, perfil: Perfil | null): PlanDivision | null => evaluarDivision(c, perfil).plan;
+export const planearDivision = (c: ContenidoDoc, perfil: Perfil | null, opciones: OpcionesDivision = {}): PlanDivision | null => evaluarDivision(c, perfil, opciones).plan;
 
 // ── Los archivos derivados ──────────────────────────────────────────────────
 
@@ -183,7 +265,7 @@ export function nombreDeHijo(nombreOriginal: string, clave: string): string {
 /** Los N archivos derivados, deterministas: el mismo Excel produce los mismos bytes y, por tanto, las mismas huellas. */
 export function derivarHijos(plan: PlanDivision, nombreOriginal: string): HijoDerivado[] {
   return plan.embarques.map((e) => {
-    const bytes = new TextEncoder().encode(aCsv(plan.encabezados, e.filas));
+    const bytes = new TextEncoder().encode(aCsv(e.encabezados ?? plan.encabezados, e.filas));
     return {
       indice: e.indice, clave: e.clave, nombre: nombreDeHijo(nombreOriginal, e.clave), bytes,
       sha256: createHash('sha256').update(bytes).digest('hex'), filas: e.filas.length,

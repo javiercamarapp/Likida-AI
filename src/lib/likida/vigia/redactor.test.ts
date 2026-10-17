@@ -325,3 +325,144 @@ describe('lo que aporta el Conductor (ronda 03)', () => {
     expect(b.adjuntos).toEqual([]);
   });
 });
+
+describe('datos de la unidad (T-A4-24)', () => {
+  const datos = { caja: 'CJ-100', placasCaja: 'ABC123', estadoCaja: 'cargada', unidad: 'C2-08', placasUnidad: 'XYZ789', operador: 'Operador Uno' };
+  const pide = (e: Partial<ReturnType<typeof estatus>>, extra: Partial<EntradaRedaccion> = {}) =>
+    redactarBorrador(base({ clasificacion: { intencion: 'datos_unidad', secundarias: [], senales: [] }, viaje: { tipo: 'uno', estatus: estatus(e) }, ...extra }));
+
+  it('CON caja: dice caja, placas, estado, unidad y operador del dato, sin faltantes', () => {
+    const b = pide(datos);
+    expect(b.texto).toContain('Caja: CJ-100.');
+    expect(b.texto).toContain('Placas de la caja: ABC123.');
+    expect(b.texto).toContain('Estado de la caja: cargada.');
+    expect(b.texto).toContain('Unidad: C2-08.');
+    expect(b.texto).toContain('Placas de la unidad: XYZ789.');
+    expect(b.texto).toContain('Operador: Operador Uno.');
+    expect(b.faltantes).toEqual([]);
+    expect(b.requiereHumano).toBe(false);
+  });
+
+  it('siempre a aprobación de una persona: riesgo medio aunque el dato esté completo', () => {
+    expect(pide(datos).riesgo).toBe('medio');
+  });
+
+  it('SIN caja: no la inventa, dice «lo consulto», marca el faltante (escala) y conserva lo que sí hay', () => {
+    const b = pide({ ...datos, caja: null, placasCaja: null, estadoCaja: null });
+    expect(b.texto).not.toContain('Caja:');
+    expect(b.texto).toContain('Aún no tengo registro de caja');
+    expect(b.texto).toContain('lo consulto con tu ejecutivo');
+    expect(b.texto).toContain('Unidad: C2-08.');
+    expect(b.faltantes).toEqual(['caja']);
+  });
+
+  it('sin caja, unidad ni operador (o sin que se hayan pedido): todo es «lo consulto» y los tres son faltantes', () => {
+    const b = pide({});
+    expect(b.texto).toContain('todavía no tengo asignada la caja, la unidad ni el operador');
+    expect(b.faltantes).toEqual(['caja', 'unidad', 'operador']);
+    expect(b.texto).not.toMatch(/Caja:|Unidad:|Operador:/);
+  });
+
+  it('sin operador ni unidad: lista los dos con «ni» y escala', () => {
+    const b = pide({ ...datos, unidad: null, placasUnidad: null, operador: null });
+    expect(b.texto).toContain('Aún no tengo registro de unidad ni operador');
+    expect(b.faltantes).toEqual(['unidad', 'operador']);
+  });
+
+  it('placas o estado sin registrar se dicen, pero por sí solos NO escalan', () => {
+    const b = pide({ ...datos, placasCaja: null, placasUnidad: null, estadoCaja: 'desconocido' });
+    expect(b.texto).toContain('Placas de la caja: sin registrar.');
+    expect(b.texto).toContain('Placas de la unidad: sin registrar.');
+    expect(b.texto).not.toContain('Estado de la caja');
+    expect(b.faltantes).toEqual([]);
+  });
+
+  it('nunca imprime licencia, vigencia ni teléfono, aunque el objeto del estatus los traiga por error', () => {
+    const sucio = { ...datos, licencia: 'LIC-999', vigencia: '2030-01-01', telefonoOperador: '5215500000000' } as unknown as Partial<ReturnType<typeof estatus>>;
+    const b = pide(sucio);
+    expect(b.texto).not.toMatch(/LIC-999|2030|5215500000000/);
+  });
+
+  it('lo que se guarda para la auditoría omite el nombre del operador y las placas', () => {
+    const b = pide(datos);
+    expect(JSON.stringify(b.respaldo)).not.toMatch(/Operador Uno|ABC123|XYZ789/);
+    expect(b.respaldo).toMatchObject({ datosUnidad: { caja: 'CJ-100', unidad: 'C2-08', conOperador: true } });
+  });
+
+  it('como pregunta secundaria: se suma a la ubicación en el mismo mensaje', () => {
+    const b = redactarBorrador(base({ clasificacion: { intencion: 'ubicacion', secundarias: ['datos_unidad'], senales: [] }, viaje: { tipo: 'uno', estatus: estatus(datos) } }));
+    expect(b.texto).toContain('Última posición del GPS');
+    expect(b.texto).toContain('Caja: CJ-100.');
+  });
+
+  it('con varios viajes sin decir cuál, o folio ajeno: no suelta ningún dato de unidad', () => {
+    const amb = redactarBorrador(base({ clasificacion: { intencion: 'datos_unidad', secundarias: [], senales: [] }, viaje: { tipo: 'ambiguo', viajes: [resumen('F-1'), resumen('F-2')] } }));
+    expect(amb.texto).toContain('¿De cuál quieres saber?');
+    const ajeno = redactarBorrador(base({ clasificacion: { intencion: 'datos_unidad', secundarias: [], senales: [] }, viaje: { tipo: 'folio_no_encontrado' } }));
+    expect(ajeno.requiereHumano).toBe(true);
+    expect(ajeno.texto).not.toMatch(/Caja:|Unidad:|Operador:/);
+  });
+
+  it('un modelo NO pule este borrador (placas y nombres salen exactos del dato)', async () => {
+    const b = pide(datos);
+    let llamado = false;
+    const modelo: PuertoPulir = { pulir: async () => { llamado = true; return 'otro texto'; } };
+    const r = await pulirBorrador(b, 'placas?', 'F-1042', modelo, 't1');
+    expect(llamado).toBe(false);
+    expect(r.borrador.texto).toBe(b.texto);
+  });
+});
+
+describe('estatus de ubicación «va por…, le faltan…» (T-A4-39)', () => {
+  const con = (extra: Parameters<typeof estatus>[0]) => redactarBorrador(base({ viaje: { tipo: 'uno', estatus: estatus(extra) } }));
+  const hace = (min: number) => ({ lat: 21.1, lng: -101.6, medidaEn: new Date(AHORA.getTime() - min * 60_000).toISOString() });
+
+  it('con posición reciente y avance dice «va por <lugar>, le faltan ~km / ~h» y aclara que no es hora de llegada', () => {
+    const b = con({ avance: { cercaDe: 'Saltillo', kmRestantes: 84.4, minRestantes: 95 } });
+    expect(b.texto).toContain('Va por Saltillo, le faltan ~84 km / ~2 h a Monterrey');
+    expect(b.texto).toContain('no es hora de llegada');
+    expect(b.texto).toContain('maps.google.com');
+    expect(b.respaldo.avance).toEqual({ cercaDe: 'Saltillo', kmRestantes: 84, minRestantes: 95 });
+    expect(b.faltantes).toEqual([]);
+  });
+
+  it('menos de una hora se dice en minutos', () => {
+    expect(con({ avance: { cercaDe: null, kmRestantes: 30, minRestantes: 40 } }).texto).toContain('Va en camino, le faltan ~30 km / ~40 min a Monterrey');
+  });
+
+  it('con posición vieja NO dice «va por» (queda como hoy: antigüedad y liga)', () => {
+    const b = con({ posicion: hace(45), avance: { cercaDe: 'Saltillo', kmRestantes: 80, minRestantes: 90 } });
+    expect(b.texto).not.toContain('Va por');
+    expect(b.texto).not.toContain('le faltan');
+    expect(b.texto).toContain('hace 45 min');
+    expect(b.respaldo.avance).toBeUndefined();
+  });
+
+  it('sin destino no inventa distancia', () => {
+    const b = con({ destino: null, avance: { cercaDe: 'Saltillo', kmRestantes: 80, minRestantes: 90 } });
+    expect(b.texto).not.toContain('le faltan');
+    expect(b.texto).not.toContain('Va por');
+  });
+
+  it('sin avance, o con cifras inválidas, el texto es el de siempre', () => {
+    const sin = con({});
+    for (const avance of [null, { cercaDe: null, kmRestantes: null, minRestantes: null }, { cercaDe: null, kmRestantes: -5, minRestantes: Number.NaN }]) {
+      expect(con({ avance }).texto).toBe(sin.texto);
+    }
+    expect(sin.texto).not.toContain('le faltan');
+  });
+
+  it('sin posición no hay avance aunque el adaptador lo mande («lo consulto» sigue igual)', () => {
+    const b = con({ posicion: null, avance: { cercaDe: 'Saltillo', kmRestantes: 80, minRestantes: 90 } });
+    expect(b.texto).toContain('Todavía no tengo posición GPS');
+    expect(b.texto).not.toContain('Va por');
+    expect(b.faltantes).toContain('posicion');
+  });
+
+  it('el lugar se limpia (sin saltos de línea ni largo desmedido)', () => {
+    const b = con({ avance: { cercaDe: `Tramo\n  largo ${'x'.repeat(200)}`, kmRestantes: 10, minRestantes: null } });
+    expect(b.texto).toContain('Va por Tramo largo xxx');
+    expect(b.texto).not.toContain('x'.repeat(61));
+    expect(b.texto).not.toMatch(/Tramo\n/);
+  });
+});

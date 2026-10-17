@@ -142,12 +142,24 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/agentes/vigia': 'operacion',
   // 0484: grupos de clientes críticos, histórico exportado de WhatsApp y su reporte (FAQs, temas, tiempos). Cero pesos; solo el dueño sube/borra.
   '/dashboard/agentes/vigia/historial': 'operacion',
+  // T-A4-07: la carga del programa de despacho (CSV del día). Operación, cero pesos; sube el dueño o el encargado (se comprueba en la acción).
+  '/dashboard/agentes/vigia/programa': 'operacion',
+  // T-A4-37: tablero de estatus de importación derivado del programa. Operación, cero pesos; solo lee el archivo que se sube.
+  '/dashboard/agentes/vigia/importacion': 'operacion',
+  // T-A4-22: la bandeja de avisos de viaje (confirmación humana antes de avisar al cliente). Operación, cero pesos; decide el dueño o el encargado (se comprueba en la acción).
+  '/dashboard/agentes/vigia/avisos': 'operacion',
   // El Agente de Carta Porte (Fases B-C, 25-ago-2026): mismo criterio que su
   // pantalla /dashboard/carta-porte — cero pesos, y la declaración de ruta es
   // del jefe de tráfico. La página del borrador
   // (/dashboard/carta-porte/borrador/<uuid>) es dinámica y se gatea con la
   // llave de su padre, como /dashboard/<uuid> gatea su área a mano.
   '/dashboard/agentes/carta-porte': 'operacion',
+  // El catálogo del cliente del Agente de Carta Porte (T-A3-22): productos (SKU → clave SAT), remitentes/destinatarios y el
+  // número interno del cliente. Misma área que su agente: cero pesos, lo usa el jefe de tráfico.
+  '/dashboard/agentes/carta-porte/catalogo': 'operacion',
+  // La configuración de la salida del Agente de Carta Porte (T-A3-32): modo, reintentos, frecuencia, destinatarios y plantilla.
+  // Cambia a quién se avisa y cómo sale lo que el agente arma: solo dueño/administrador, como las demás configuraciones.
+  '/dashboard/agentes/carta-porte/configuracion': 'administracion',
   '/dashboard/arco': 'operacion',
   '/dashboard/soporte': 'operacion',
   // Notificaciones (14-ago-2026) — el "alertas primero". Su VISIBILIDAD la
@@ -174,6 +186,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/agentes/liquidacion': 'dinero',
   // 0564: el formato de la liquidación de la flota (columnas de su Excel de muestra, documento por WhatsApp, copia al jefe y aviso de discrepancia). Dinero a la vista; solo el dueño guarda (`administracion`, comprobado en cada acción).
   '/dashboard/agentes/liquidacion/formato': 'dinero',
+  // T-A1-30: configuración de la entrega del desglose por correo (destinatarios, renglón de viaje, guardas). Dinero a la vista; solo el dueño guarda (`administracion`, comprobado en la acción).
+  '/dashboard/agentes/liquidacion/configuracion': 'dinero',
   '/dashboard/agentes/facturas': 'dinero',
   // Cobranza de COMPROBANTES (0089): la página no enseña pesos, pero es la
   // cola del cierre contable — el dolor del contador — y opera al bloque
@@ -322,11 +336,287 @@ const RUTAS_TODO_ROL: ReadonlySet<string> = new Set([
   '/dashboard/soporte',
 ]);
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PERFIL DE TENANT `cinco_agentes` (mig. 0770) — la LISTA CERRADA.
+//
+// Un tenant con fila en `tenant_perfil` solo ve y solo puede operar lo que está
+// aquí; TODO lo demás (el «stand-by») queda oculto e inoperante, sin borrarse.
+// SIN FILA el tenant se comporta como siempre.
+//
+// ESTA ES LA ÚNICA LISTA QUE SE EDITA para ampliar o recortar el perfil de
+// páginas. Las acciones de servidor, la API /v1, los exports, el chat, el MCP
+// y los crons tienen sus listas hermanas más abajo (mismo perfil, mismo
+// archivo, a propósito: una sola revisión en un solo lugar).
+//
+// FALLA CERRADO: lo que no está declarado se niega. Una pantalla nueva que
+// nadie clasifique NO aparece en el perfil (el error caro es mostrar de más).
+// `perfil_tenant.test.ts` exige que toda ruta de `AREA_POR_RUTA` esté o aquí o
+// en `RUTAS_STAND_BY_PERFIL_CINCO_AGENTES`, para que "no la clasifiqué" sea una
+// prueba roja y no un olvido silencioso.
+//
+// El perfil SOLO QUITA, nunca da: se aplica encima del rol (`puedeVerRuta`), así
+// que el resultado es siempre un subconjunto de lo que el rol ya podía ver.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Perfiles de tenant que conoce el código (dominio cerrado, igual que el CHECK de la 0770). */
+export type PerfilTenant = 'cinco_agentes';
+
+export const PERFILES_TENANT: readonly PerfilTenant[] = ['cinco_agentes'];
+
+/** A qué agente (o a la base mínima) pertenece cada ruta permitida. */
+export type ModuloPerfil = 'liquidacion' | 'peajes' | 'carta_porte' | 'vigia' | 'conductor' | 'base';
+
+export const RUTAS_PERFIL_CINCO_AGENTES: Readonly<Record<string, ModuloPerfil>> = {
+  // A1 · Liquidación. El detalle de una liquidación (`/dashboard/<uuid>`) es la
+  // revisión de lo que el agente cuadró; se normaliza a '/dashboard/[id]'.
+  '/dashboard/agentes/liquidacion': 'liquidacion',
+  '/dashboard/agentes/liquidacion/formato': 'liquidacion',
+  // Integración Liquidación + perfil: la configuración del agente es suya.
+  '/dashboard/agentes/liquidacion/configuracion': 'liquidacion',
+  '/dashboard/[id]': 'liquidacion',
+  // A2 · Peajes.
+  '/dashboard/agentes/peajes': 'peajes',
+  '/dashboard/agentes/peajes/configuracion': 'peajes',
+  '/dashboard/agentes/peajes/reclamacion': 'peajes',
+  // A3 · Carta Porte (el borrador y la revisión de documentos cuelgan de estas
+  // dos llaves: sus páginas dinámicas gatean con la de su padre).
+  '/dashboard/agentes/carta-porte': 'carta_porte',
+  '/dashboard/agentes/carta-porte/catalogo': 'carta_porte',
+  '/dashboard/agentes/carta-porte/configuracion': 'carta_porte',
+  '/dashboard/carta-porte': 'carta_porte',
+  '/dashboard/carta-porte/documentos': 'carta_porte',
+  // A4 · Vigía de servicio al cliente.
+  '/dashboard/agentes/vigia': 'vigia',
+  '/dashboard/agentes/vigia/historial': 'vigia',
+  // Integración Vigía + perfil: las tres pantallas del Vigía (programa de despacho, importación, avisos) son suyas, no de otro frente.
+  '/dashboard/agentes/vigia/programa': 'vigia',
+  '/dashboard/agentes/vigia/importacion': 'vigia',
+  '/dashboard/agentes/vigia/avisos': 'vigia',
+  // A5 · Conductor (comunicación con operadores, hitos, estadías y su mapa).
+  '/dashboard/agentes/conductores': 'conductor',
+  '/dashboard/agentes/conductores/sitios': 'conductor',
+  '/dashboard/agentes/conductores/estadias': 'conductor',
+  '/dashboard/agentes/conductores/configuracion': 'conductor',
+  '/dashboard/viajes-en-vivo': 'conductor',
+  '/dashboard/mapa': 'conductor',
+  // Base mínima: lo que los cinco necesitan para operar (viajes, operadores,
+  // unidades, conexiones al sistema del cliente, WhatsApp) y lo de la persona.
+  '/dashboard': 'base',
+  '/dashboard/despacho': 'base',
+  '/dashboard/viajes': 'base',
+  '/dashboard/operadores': 'base',
+  '/dashboard/unidades': 'base',
+  '/dashboard/conexiones': 'base',
+  '/dashboard/integraciones': 'base',
+  '/dashboard/whatsapp': 'base',
+  '/dashboard/notificaciones': 'base',
+  '/dashboard/mi-perfil': 'base',
+  '/dashboard/soporte': 'base',
+  '/dashboard/legal': 'base',
+};
+
+/**
+ * El STAND-BY, escrito a propósito: lo que existe en el producto y el perfil
+ * oculta e inhabilita (sin borrar). No decide nada en runtime —el runtime es
+ * "no está en la lista permitida, se niega"—; existe para que la prueba pueda
+ * exigir que CADA ruta conocida esté clasificada en un lado u otro y para que
+ * quien lea sepa que lo ausente de arriba es deliberado y no un descuido.
+ */
+export const RUTAS_STAND_BY_PERFIL_CINCO_AGENTES: readonly string[] = [
+  '/dashboard/chat', '/dashboard/reglas', '/dashboard/rentabilidad', '/dashboard/clientes',
+  '/dashboard/facturacion', '/dashboard/agentes/cobranza', '/dashboard/agentes/facturas',
+  '/dashboard/agentes/proveedores', '/dashboard/huerfanos', '/dashboard/combustible-casetas',
+  '/dashboard/timbrado', '/dashboard/descarga-sat', '/dashboard/descarga-sat/bandeja',
+  '/dashboard/cotizaciones', '/dashboard/contador', '/dashboard/conocimiento',
+  '/dashboard/convenios', '/dashboard/jornada', '/dashboard/patios', '/dashboard/asistencia',
+  '/dashboard/emergencias', '/dashboard/arranque', '/dashboard/onboarding',
+  '/dashboard/suscripcion', '/dashboard/llaves-api', '/dashboard/sesiones-mcp',
+  '/dashboard/politicas', '/dashboard/usuarios', '/dashboard/arco', '/dashboard/configuracion',
+  '/dashboard/conversaciones',
+];
+
+/**
+ * La llave con la que una ruta se busca en las listas del perfil: quita query y
+ * barra final, y las dinámicas conocidas (`/dashboard/<uuid>`, el detalle de
+ * liquidación) se pliegan a su llave `[id]`. Cualquier otra cosa queda tal cual
+ * y, si no está en la lista, se niega.
+ */
+export function claveRutaPerfil(href: string): string {
+  const limpio = href.split('?')[0].split('#')[0].replace(/\/+$/, '') || '/';
+  if (/^\/dashboard\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(limpio)) {
+    return '/dashboard/[id]';
+  }
+  return limpio;
+}
+
+/** ¿Esta ruta está en la lista cerrada del perfil? Fail closed: perfil desconocido o ruta no declarada → no. */
+export function rutaPermitidaEnPerfil(perfil: PerfilTenant | string, href: string): boolean {
+  if (perfil !== 'cinco_agentes') return false;
+  return Object.prototype.hasOwnProperty.call(RUTAS_PERFIL_CINCO_AGENTES, claveRutaPerfil(href));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// «PRÓXIMAMENTE» DENTRO DEL PERFIL — FASE 1 (decisión del 15-oct-2026).
+//
+// El perfil `cinco_agentes` conserva su significado (la lista cerrada de arriba).
+// Dentro de ella, los módulos de `MODULOS_PROXIMAMENTE_PERFIL` están en FASE 2:
+//   · SE VEN en el menú con la etiqueta «Próximamente» (siguen en
+//     `RUTAS_PERFIL_CINCO_AGENTES`, así que `rutaPermitidaEnPerfil` y
+//     `puedeVerRuta` los dejan ver),
+//   · pero NO se operan: su página real no se sirve (`exigirRutaDePerfil` manda a
+//     la pantalla «Próximamente», sin datos ni acciones), y sus APIs, crons, chat
+//     y MCP siguen apagados (`API_PROXIMAMENTE_PERFIL`, `CRONS_PROXIMAMENTE_PERFIL`).
+//
+// Encender la fase 2 para un tenant = sacar el módulo de esta lista (el código de
+// A4/A5 sigue construyéndose en sus ramas y viaja sin borrar nada).
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Módulos del perfil que se muestran pero no se operan todavía. */
+export const MODULOS_PROXIMAMENTE_PERFIL: readonly ModuloPerfil[] = ['vigia', 'conductor'];
+
+/** El módulo al que pertenece una ruta del perfil, o `null` si no está en la lista cerrada. */
+export function moduloDeRutaPerfil(perfil: PerfilTenant | string, href: string): ModuloPerfil | null {
+  if (!rutaPermitidaEnPerfil(perfil, href)) return null;
+  return RUTAS_PERFIL_CINCO_AGENTES[claveRutaPerfil(href)];
+}
+
+/** El módulo «próximamente» de una ruta (`vigia` | `conductor`), o `null` si la ruta es operable, ajena o sin perfil. */
+export function moduloProximamenteDeRuta(perfil: PerfilTenant | string, href: string): ModuloPerfil | null {
+  const m = moduloDeRutaPerfil(perfil, href);
+  return m !== null && MODULOS_PROXIMAMENTE_PERFIL.includes(m) ? m : null;
+}
+
+/** ¿Esta ruta se muestra bajo el perfil pero está bloqueada como «Próximamente»? */
+export function rutaProximamenteEnPerfil(perfil: PerfilTenant | string, href: string): boolean {
+  return moduloProximamenteDeRuta(perfil, href) !== null;
+}
+
+/** ¿Esta ruta se puede OPERAR bajo el perfil? (permitida Y no «próximamente»). */
+export function rutaOperativaEnPerfil(perfil: PerfilTenant | string, href: string): boolean {
+  return rutaPermitidaEnPerfil(perfil, href) && !rutaProximamenteEnPerfil(perfil, href);
+}
+
+/** La pantalla única «Próximamente» de un módulo (la sirve `/dashboard/proximamente/[modulo]`). */
+export function rutaProximamente(modulo: ModuloPerfil): string {
+  return `/dashboard/proximamente/${modulo}`;
+}
+
+/**
+ * Superficies de API que el perfil deja vivas, por PRIMER segmento bajo su raíz.
+ * Todo segmento que no esté aquí se niega (falla cerrado) — incluida una ruta
+ * nueva que se agregue mañana. Mismo criterio para las tres raíces.
+ *
+ *  · /api/v1/<recurso>  — los recursos de los cinco agentes y la base.
+ *  · /api/export/<x>    — las descargas de los cinco agentes.
+ *  · /api/dashboard/<x> — solo lo que no abre una puerta a lo demás: el chat,
+ *    la ingesta de comprobantes, el chat de onboarding y el historial del chat
+ *    quedan fuera (son del stand-by).
+ */
+export const API_PERFIL_CINCO_AGENTES: Readonly<Record<'v1' | 'export' | 'dashboard', readonly string[]>> = {
+  v1: [
+    'liquidaciones', 'liquidaciones-externas', // A1
+    'peajes',                                   // A2
+    'ccp-timbrado',                             // A3: aviso del TMS con el CCP ya timbrado (T-A3-33)
+    'viajes', 'operadores', 'unidades',         // base
+  ],
+  export: [
+    'liquidaciones', 'liquidaciones-externas', 'pdf', // A1
+    'peajes-revision', 'peajes-candidatos', 'peajes-vinculos', // A2 (T-A2-31: bitacora-peaje, bitacora-conciliada y peajes-reclamacion son stand-by: estímulo RMF 9.1.8 y evidencia GPS)
+    'carta-porte-docs', 'carta-porte-xml',      // A3
+  ],
+  dashboard: [
+    'evento', // el pageview del panel: cero datos, 204 siempre
+  ],
+};
+
+/**
+ * Superficies de API de los módulos «próximamente» (A4 y A5): existen, el perfil
+ * las NIEGA hasta que el módulo se encienda. Mismo criterio que la lista de arriba.
+ */
+export const API_PROXIMAMENTE_PERFIL: Readonly<Record<'v1' | 'export' | 'dashboard', readonly string[]>> = {
+  v1: ['hitos', 'estadias', 'sitios', 'conductor', 'evidencias'], // A5
+  export: ['vigia-faqs'],                                          // A4
+  dashboard: [],
+};
+
+/** ¿Esta ruta de API (`/api/v1/...`, `/api/export/...`, `/api/dashboard/...`) sigue viva bajo el perfil? */
+export function apiPermitidaEnPerfil(perfil: PerfilTenant | string, pathname: string): boolean {
+  if (perfil !== 'cinco_agentes') return false;
+  const m = /^\/api\/(v1|export|dashboard)\/([^/?#]+)/.exec(pathname);
+  if (!m) return false;
+  return API_PERFIL_CINCO_AGENTES[m[1] as 'v1' | 'export' | 'dashboard'].includes(m[2]);
+}
+
+/**
+ * CONECTORES que /dashboard/conexiones ofrece a una flota con perfil (lista
+ * cerrada, junto a la lista de rutas). Los cinco agentes dependen del sistema
+ * del cliente (TMS) y del GPS; el resto del catálogo (SAP B1, Oracle, Odoo,
+ * CONTPAQi/Aspel, monederos y peajes, portales de facturación) es stand-by:
+ * oculto, NO borrado. Todo conector que no esté aquí se niega (falla cerrado),
+ * incluido uno nuevo que se agregue mañana.
+ */
+export const CONECTORES_PERFIL_CINCO_AGENTES: readonly string[] = [
+  'tms_api_lectura', 'tms_generico', 'tabla_propia', // el sistema del cliente
+  'wialon', 'samsara', 'geotab', 'navixy', 'gps_generico', // GPS
+];
+
+/**
+ * Renglones del catálogo de sistemas (`integraciones.ts`) que el perfil deja
+ * ver. SAP/CONTPAQi/Aspel, el monedero/TAG y el buzón de facturas de
+ * proveedores quedan en stand-by.
+ */
+export const INTEGRACIONES_PERFIL_CINCO_AGENTES: readonly string[] = ['export_csv', 'gps', 'whatsapp_docs'];
+
+/** ¿Este conector se ofrece (y se acepta) bajo el perfil? Perfil desconocido o conector no declarado → no. */
+export function conectorPermitidoEnPerfil(perfil: PerfilTenant | string, conectorId: string): boolean {
+  if (perfil !== 'cinco_agentes') return false;
+  return CONECTORES_PERFIL_CINCO_AGENTES.includes(conectorId);
+}
+
+/** ¿Este renglón del catálogo de sistemas se muestra bajo el perfil? */
+export function integracionPermitidaEnPerfil(perfil: PerfilTenant | string, integracionId: string): boolean {
+  if (perfil !== 'cinco_agentes') return false;
+  return INTEGRACIONES_PERFIL_CINCO_AGENTES.includes(integracionId);
+}
+
+/**
+ * Crons que SIGUEN corriendo para una flota con perfil (los de los cinco
+ * agentes y la plomería compartida). Todo cron que no esté aquí SALTA los
+ * tenants con perfil. Por nombre de ruta (`/api/cron/<nombre>`).
+ */
+export const CRONS_PERFIL_CINCO_AGENTES: readonly string[] = [
+  'liquidaciones-externas', // A1: jala liquidaciones del sistema del cliente
+  'peajes',                  // A2
+  'carta-porte-docs',        // A3
+  'gps',                     // sincroniza posiciones/eventos del proveedor del cliente (solo entrada de datos; no manda nada a nadie)
+  // `escalar` es MIXTO: la escalación del conductor (A5, «próximamente»), la cobranza, los relojes
+  // legales de incidencias y las reglas (stand-by) se saltan flotas con perfil por sección.
+  'escalar',
+  'tms',                     // el conector al sistema del cliente: solo corre para flotas que lo activaron (credencial probada + mapeo)
+  'wa-pendientes', 'wa-outbox', 'purgar', 'guardia', // plomería compartida
+];
+
+/**
+ * Crons de los módulos «próximamente»: NO corren para flotas con perfil (cada uno
+ * filtra por `tenantsConPerfilASaltar` en su ruta). Siguen corriendo para el resto.
+ */
+export const CRONS_PROXIMAMENTE_PERFIL: readonly string[] = ['vigia', 'conductor-hitos'];
+
+/** Toda ruta que el mapa de áreas conoce — para las pruebas que exigen que cada una esté clasificada en el perfil. */
+export function rutasConocidas(): string[] {
+  return Object.keys(AREA_POR_RUTA);
+}
+
 export function areaDeRuta(href: string): Area | undefined {
   return AREA_POR_RUTA[href];
 }
 
-export function puedeVerRuta(rol: string, href: string): boolean {
+export function puedeVerRuta(rol: string, href: string, perfil?: PerfilTenant | null): boolean {
+  // EL PERFIL DE LA FLOTA SOLO QUITA (0770): se evalúa ANTES del rol y, si la
+  // ruta no está en la lista cerrada del perfil, se niega aunque el rol la
+  // vería. Sin perfil (`undefined`/`null`) esta línea no hace nada y la función
+  // se comporta exactamente como antes.
+  if (perfil && !rutaPermitidaEnPerfil(perfil, href)) return false;
   // Un rol desconocido no ve nada, ni siquiera su perfil: fail closed.
   if (RUTAS_TODO_ROL.has(href)) return areasDe(rol).length > 0;
   const area = areaDeRuta(href);

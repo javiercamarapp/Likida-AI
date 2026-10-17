@@ -1,5 +1,6 @@
 import { sendTemplate, motivoDeFalloWhatsApp } from '@/lib/meta/client';
-import { mxn, fechaMx } from '@/lib/formato';
+import { opcionesDeEnvio, PLANTILLA } from '@/lib/meta/plantillas_catalogo';
+import { mxn, fechaMx, TZ_MX } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -180,5 +181,69 @@ export async function notificarAsignacion(args: {
   // se ven igual en los logs —los dos, en blanco— y mañana nadie sabe si el
   // chofer no salió porque no quiso o porque nunca le llegó el aviso.
   logger.info('viaje.aviso_enviado', { tenantId: args.tenantId, wamid: r.id });
+  return { enviado: true };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A5-47 (R02/R05) — LA ASIGNACIÓN CON BOTONES (plantilla N01).
+//
+// En el perfil piloto (`asignacionBotonesActiva`) el aviso de asignación es `viaje_asignado_confirmar_v1`: el chofer lo ACEPTA o no con un
+// botón (`viaje_acepto:<viaje>` / `viaje_rechazo:<viaje>`, que `conductor/atender.ts` atiende) en vez de escribir «va». Mismas reglas que
+// `notificarAsignacion`: falla cerrado y dice el motivo; sin teléfono, o sin folio ni ruta, no se gasta una plantilla. Lo que falta NO se
+// inventa: sin servicio se dice «transporte» y sin cita, «fecha por confirmar con tu supervisor».
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ViajeAsignadoConBotones extends ViajeAsignado {
+  /** `viaje.id`: va en el payload de los botones. */
+  viajeId: string;
+  operadorNombre?: string | null;
+  /** «importación», «exportación», «nacional»… ya legible; ausente = «transporte» (hoy `viaje` no trae el tipo de servicio). */
+  servicio?: string | null;
+  /** `viaje.cita_origen_en`. */
+  citaEn?: string | null;
+}
+
+/** «16/10 a las 08:00» en la hora del Centro de México, o `null` si no hay cita legible. */
+function citaCorta(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const f = new Date(iso);
+  if (Number.isNaN(f.getTime())) return null;
+  const parte = (o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('es-MX', { timeZone: TZ_MX, ...o }).format(f);
+  return `${parte({ day: '2-digit', month: '2-digit' })} a las ${parte({ hour: '2-digit', minute: '2-digit', hour12: false })}`;
+}
+
+/** Los seis parámetros de N01, en orden. Fuente única del envío y de la vista previa. */
+export function parametrosAsignacionConBotones(v: ViajeAsignadoConBotones): string[] {
+  const nombre = pieza(v.operadorNombre).split(' ')[0] || 'chofer';
+  return [
+    nombre.slice(0, 40),
+    pieza(v.folio).slice(0, 30) || 'sin folio',
+    pieza(v.servicio).slice(0, 30) || 'transporte',
+    pieza(v.origen).slice(0, 60) || 'el origen por confirmar',
+    pieza(v.destino).slice(0, 60) || 'el destino por confirmar',
+    citaCorta(v.citaEn) ?? 'fecha por confirmar con tu supervisor',
+  ];
+}
+
+export async function notificarAsignacionConBotones(args: {
+  telefono?: string | null;
+  viaje: ViajeAsignadoConBotones;
+  tenantId: string;
+}): Promise<ResultadoNotificacion> {
+  const digitos = (args.telefono ?? '').replace(/\D/g, '');
+  if (digitos.length < DIGITOS_MINIMOS) {
+    return { enviado: false, motivo: 'Ese operador no tiene un teléfono al que se le pueda escribir. Captúralo en su ficha y vuelve a asignarlo.' };
+  }
+  if (!identificable(args.viaje)) {
+    return { enviado: false, motivo: 'El viaje no tiene folio ni ruta: el aviso no le diría al chofer de qué viaje se trata.' };
+  }
+
+  const opciones = opcionesDeEnvio(PLANTILLA.viajeAsignadoConfirmar, { cuerpo: parametrosAsignacionConBotones(args.viaje), idsBotones: args.viaje.viajeId });
+  const r = await sendTemplate(args.telefono as string, PLANTILLA.viajeAsignadoConfirmar, opciones);
+  if (!r.ok) {
+    logger.warn('viaje.aviso_botones_no_salio', { tenantId: args.tenantId, codigo: r.codigo });
+    return { enviado: false, motivo: motivoDeFalloWhatsApp(r.error, r.codigo) };
+  }
+  logger.info('viaje.aviso_botones_enviado', { tenantId: args.tenantId, wamid: r.id });
   return { enviado: true };
 }

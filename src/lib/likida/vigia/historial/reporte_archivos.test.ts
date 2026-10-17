@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as XLSX from 'xlsx';
 import { analizarHistorial } from './analisis';
 import { faqsAExcel, faqsAPdf, AVISO_REPORTE } from './reporte_archivos';
+import { NOTA_LINEA_BASE } from './analisis';
 
 const m = (iso: string, rol: 'cliente' | 'equipo', texto: string) => ({ enviadoEn: iso, rol, texto });
 const dia = (n: number) => new Date(Date.UTC(2026, 6, 1 + n, 15, 0, 0)).toISOString();
@@ -22,7 +23,29 @@ describe('faqsAExcel', () => {
   const hoja = (n: string) => XLSX.utils.sheet_to_json<unknown[]>(libro.Sheets[n], { header: 1, defval: null });
 
   it('trae las cuatro hojas', () => {
-    expect(libro.SheetNames).toEqual(['Resumen', 'Preguntas frecuentes', 'Tendencias', 'Por semana']);
+    expect(libro.SheetNames).toEqual(['Resumen', 'Preguntas frecuentes', 'Tendencias', 'Por semana', 'Datos de unidad']);
+  });
+
+  it('línea base: las peticiones de datos de unidad por semana y día, sin cifra de ahorro', () => {
+    const unidadMsgs = [0, 1, 2, 7, 8, 8, 9, 14, 15, 16].flatMap((d) => [
+      m(dia(d), 'cliente', '¿Con qué unidad va mi carga?'), m(conMinutos(d, 3), 'equipo', '=1+1'),
+    ]);
+    const r = analizarHistorial(unidadMsgs);
+    const l = XLSX.read(faqsAExcel(r, meta), { type: 'array' });
+    const h = XLSX.utils.sheet_to_json<unknown[]>(l.Sheets['Datos de unidad'], { header: 1, defval: null });
+    expect(h.flat()).toContain(NOTA_LINEA_BASE);
+    expect(h.filter((f) => /^\d{4}-\d{2}-\d{2}$/.test(String(f[0])) && typeof f[1] === 'number').reduce((s, f) => s + (f[1] as number), 0)).toBe(20); // 10 por semana + 10 por día
+    const resumen = XLSX.utils.sheet_to_json<unknown[]>(l.Sheets['Resumen'], { header: 1, defval: null });
+    expect(resumen.find((f) => f[0] === 'Peticiones en el periodo')?.[1]).toBe(10);
+    expect(JSON.stringify([...resumen, ...h]).toLowerCase()).not.toMatch(/horas ahorradas: \d|ahorro de \d/);
+    for (const celda of Object.values(l.Sheets['Datos de unidad'])) expect((celda as { f?: string }).f).toBeUndefined();
+  });
+
+  it('marca los «Otros» sin inventar tema', () => {
+    const r = analizarHistorial([m(dia(0), 'cliente', 'cosa rara sin patrón alguno'), m(dia(1), 'cliente', '¿Dónde va mi viaje?')]);
+    const resumen = XLSX.utils.sheet_to_json<unknown[]>(XLSX.read(faqsAExcel(r, meta), { type: 'array' }).Sheets['Resumen'], { header: 1, defval: null });
+    expect(resumen.find((f) => String(f[0]).startsWith('Mensajes sin clasificar'))?.[1]).toBe(1);
+    expect(resumen.find((f) => String(f[0]).startsWith('Porcentaje'))?.[1]).toBe('50 %');
   });
 
   it('resumen: alcance, conteos, tiempos contra el umbral y la leyenda de qué es una «respuesta típica»', () => {

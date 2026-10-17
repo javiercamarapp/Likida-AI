@@ -461,3 +461,77 @@ describe('E2E · P5 · del histórico exportado a una respuesta rápida aprobada
     expect(filas.some((f) => String(f[0]).includes('agendar') && String(f[4]).includes('8 a 18 h'))).toBe(true);
   });
 });
+
+describe('E2E · T-A4-24 · «datos de la unidad»: caja, placas y operador en la respuesta', () => {
+  const unidad = { caja: 'CJ-100', placasCaja: 'ABC123', estadoCaja: 'cargada', unidad: 'C2-08', placasUnidad: 'XYZ789', operador: 'Operador Uno' };
+
+  it('con caja asignada: el gerente ve el dato exacto, aprueba y sale al cliente; no hay escalamiento', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus(unidad));
+    const deps = { repo, ahora: () => AHORA, datosUnidad: true };
+
+    expect(await atenderMensajeCliente(entrante('¿Con qué caja y qué unidad va mi viaje F-1042?', 'du1'), deps)).toBe('atendido');
+    const [, cuerpoGer, botones] = enviarBotones.mock.calls[0];
+    expect(cuerpoGer).toContain('Caja: CJ-100.');
+    expect(enviarTexto).not.toHaveBeenCalled(); // nunca sale sin aprobación
+
+    await atenderDecisionVigia(GERENTE, botones[0].id, deps);
+    const [telCli, texto] = enviarTexto.mock.calls[0];
+    expect(telCli).toBe(CLIENTE_TEL);
+    for (const dato of ['Caja: CJ-100.', 'Placas de la caja: ABC123.', 'Unidad: C2-08.', 'Placas de la unidad: XYZ789.', 'Operador: Operador Uno.']) expect(texto).toContain(dato);
+    expect(repo.eventosDe('sin_dato')).toHaveLength(0);
+    expect(repo.salientes()[0]).toMatchObject({ estado: 'enviado', intencion: 'datos_unidad' });
+  });
+
+  it('sin caja asignada: «lo consulto», escala al gerente y no inventa ninguna caja', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus({ ...unidad, caja: null, placasCaja: null, estadoCaja: null }));
+    await atenderMensajeCliente(entrante('¿Qué caja trae mi viaje?', 'du2'), { repo, ahora: () => AHORA, datosUnidad: true });
+    const [b] = repo.salientes();
+    expect(b.texto).toContain('Aún no tengo registro de caja');
+    expect(b.texto).toContain('lo consulto con tu ejecutivo');
+    expect(b.texto).not.toMatch(/Caja: /);
+    expect(repo.eventosDe('sin_dato')).toHaveLength(1);
+    expect(repo.eventosDe('escalada').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('base sin la 0798: la misma pregunta NO se pierde ni rompe, se guarda como «otro» y la atiende una persona', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus(unidad));
+    expect(await atenderMensajeCliente(entrante('¿Quién es el operador?', 'du3'), { repo, ahora: () => AHORA })).toBe('atendido');
+    const [b] = repo.salientes();
+    expect(b.intencion).toBe('otro');
+    expect(b.texto).not.toContain('Operador Uno');
+    expect(repo.eventosDe('sin_dato').length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('E2E · T-A4-27 · «sin caja» va a servicio al cliente y, si nadie contesta, sube al gerente', () => {
+  const SERVICIO_TEL = '525577770001'; // grep-limpio:ok
+  const sinCaja = { caja: null, placasCaja: null, estadoCaja: null, unidad: 'C2-08', placasUnidad: 'XYZ789', operador: 'Operador Uno' };
+
+  it('servicio recibe el aviso por botones en privado; el gerente no; a los N2 min sin contestar el gerente recibe el aviso de siempre', async () => {
+    const { repo } = escenario({ escalarNivel2Min: 15, slaRespuestaMin: 120, slaCriticoMin: 10, soloAvisar: true });
+    repo.agregarServicio(T1, { telefono: SERVICIO_TEL });
+    ventanas.set(SERVICIO_TEL, 'abierta');
+    repo.estatus.agregar(T1, CLIENTE_A, estatus(sinCaja));
+    const deps = { repo, ahora: () => AHORA, datosUnidad: true };
+
+    expect(await atenderMensajeCliente(entrante('¿Qué caja trae mi viaje F-1042?', 'sc1'), deps)).toBe('atendido');
+    expect(enviarBotones).toHaveBeenCalledTimes(1);
+    const [tel, cuerpo, botones] = enviarBotones.mock.calls[0];
+    expect(tel).toBe(SERVICIO_TEL);
+    expect(cuerpo).toContain('preguntó por la caja de F-1042 y no la tengo registrada');
+    expect(botones[0].titulo).toBe('Yo me encargo');
+    expect(enviarTexto).not.toHaveBeenCalled(); // al cliente no le sale nada: solo se avisa
+
+    const luego = { repo, ahora: () => new Date(AHORA.getTime() + 15 * 60_000) };
+    await barridoVigia(luego);
+    const paraGerente = enviarBotones.mock.calls.filter((c) => c[0] === GERENTE_TEL);
+    expect(paraGerente).toHaveLength(1);
+    expect(paraGerente[0][1]).toContain('preguntó algo que no tengo registrado');
+    await barridoVigia(luego);
+    expect(enviarBotones.mock.calls.filter((c) => c[0] === GERENTE_TEL)).toHaveLength(1);
+    expect(enviarBotones.mock.calls.filter((c) => c[0] === SERVICIO_TEL)).toHaveLength(1);
+  });
+});

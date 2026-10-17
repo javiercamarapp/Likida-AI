@@ -832,7 +832,7 @@ export const LIBRAMIENTOS_META: GuionPortal = {
 // quedaron pendientes (credenciales que no se tienen, CAPTCHA, URLs muertas,
 // SPA que no montan campos sin enviar algo antes, un caso nuevo de TLS
 // ausente) está en
-// `pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt`.
+// la lectura de campo del 2026-08-29 (archivo privado, fuera del repo).
 //
 // Igual que la tanda anterior: NINGUNO se marca `verificado`. Se leyeron
 // formularios en blanco, no se ensayó ni se emitió un solo CFDI.
@@ -840,7 +840,7 @@ export const MCDONALDS: GuionPortal = {
   comercio: 'mcdonalds',
   portal: 'https://www.facturacionmcdonalds.com.mx/',
   verificado: null,
-  lecturaDeCampo: { fecha: '2026-08-29', acta: 'pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt' },
+  lecturaDeCampo: { fecha: '2026-08-29', acta: 'lectura de campo del 2026-08-29 (archivo privado, fuera del repo)' },
   campos: {
     sucursal: { selector: ['#number_store'], formato: 'solo_digitos' },
     numeroTicket: { selector: ['#num_ticket'] },
@@ -880,7 +880,7 @@ export const LBBO: GuionPortal = {
   comercio: 'lbbo',
   portal: 'https://autofacturacionlbbo.edimex.com.mx/edi2/AutofacturacionPublico',
   verificado: null,
-  lecturaDeCampo: { fecha: '2026-08-29', acta: 'pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt' },
+  lecturaDeCampo: { fecha: '2026-08-29', acta: 'lectura de campo del 2026-08-29 (archivo privado, fuera del repo)' },
   campos: {
     sucursal: { selector: ['#NotaVentaEmpresa'] },
     folio: { selector: ['#NotaVentaFolio'] },
@@ -911,7 +911,7 @@ export const TIM_HORTONS: GuionPortal = {
   comercio: 'tim_hortons',
   portal: 'https://timsboh.com/autofacturacion/busqueda',
   verificado: null,
-  lecturaDeCampo: { fecha: '2026-08-29', acta: 'pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt' },
+  lecturaDeCampo: { fecha: '2026-08-29', acta: 'lectura de campo del 2026-08-29 (archivo privado, fuera del repo)' },
   campos: {
     sucursal: { selector: ['#sucursal'] },
     numeroTicket: { selector: ['#ticket'] },
@@ -947,7 +947,7 @@ export const HOME_DEPOT: GuionPortal = {
   comercio: 'home_depot',
   portal: 'https://facturacion.homedepot.com.mx/',
   verificado: null,
-  lecturaDeCampo: { fecha: '2026-08-29', acta: 'pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt' },
+  lecturaDeCampo: { fecha: '2026-08-29', acta: 'lectura de campo del 2026-08-29 (archivo privado, fuera del repo)' },
   captcha: ['.turnstile-container', 'iframe[src*="challenges.cloudflare.com"]'],
   campos: {
     numeroTicket: { selector: ['#ticket'] },
@@ -986,7 +986,7 @@ export const LODEMORED: GuionPortal = {
   comercio: 'lodemored',
   portal: 'https://fact.lodemored.net/',
   verificado: null,
-  lecturaDeCampo: { fecha: '2026-08-29', acta: 'pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt' },
+  lecturaDeCampo: { fecha: '2026-08-29', acta: 'lectura de campo del 2026-08-29 (archivo privado, fuera del repo)' },
   captcha: ['#txtRecaptcha', '#lnkBtnCaptcha'],
   campos: {
     numeroTicket: { selector: ['#txtTicket'] },
@@ -1029,7 +1029,7 @@ export const PARROT: GuionPortal = {
   comercio: 'parrot',
   portal: 'https://facturacion.parrot.rest/',
   verificado: null,
-  lecturaDeCampo: { fecha: '2026-08-29', acta: 'pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt' },
+  lecturaDeCampo: { fecha: '2026-08-29', acta: 'lectura de campo del 2026-08-29 (archivo privado, fuera del repo)' },
   campos: {
     codigo: { selector: ['#input-code'] },
   },
@@ -1070,7 +1070,7 @@ export const EL_GLOBO: GuionPortal = {
   comercio: 'el_globo',
   portal: 'https://www.masfacturaweb.com.mx:73/ElGlobo/',
   verificado: null,
-  lecturaDeCampo: { fecha: '2026-08-29', acta: 'pruebas-manuales/ensayo/2026-08-29/recon-portales-26.txt' },
+  lecturaDeCampo: { fecha: '2026-08-29', acta: 'lectura de campo del 2026-08-29 (archivo privado, fuera del repo)' },
   campos: {
     numeroTicket: { selector: [porEtiqueta('TICKET-#'), '#ctl00_Main_repCampos_ctl03_txtVariable'] },
     sucursal: { selector: [porEtiqueta('SUCURSAL'), '#ctl00_Main_repCampos_ctl05_txtVariable'] },

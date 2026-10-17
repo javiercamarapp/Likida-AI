@@ -14,17 +14,19 @@ import { normalizarNombre, type Celda } from './formatos';
 // que faltó — como SUGERENCIA, nunca como lectura.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export const CAMPOS_MAPEO = ['fecha', 'hora', 'caseta', 'monto', 'tag'] as const;
+export const CAMPOS_MAPEO = ['fecha', 'hora', 'caseta', 'monto', 'tag', 'unidad', 'clase'] as const;
 export type CampoMapeo = (typeof CAMPOS_MAPEO)[number];
 
 /** Cada valor es el ENCABEZADO (sin importar mayúsculas, acentos ni signos) o la
- *  LETRA de la columna («C», «AB»). `hora` y `tag` son opcionales. */
+ *  LETRA de la columna («C», «AB»). `hora`, `tag`, `unidad` y `clase` son opcionales. */
 export interface ConfigMapeo {
   fecha: string;
   caseta: string;
   monto: string;
   hora?: string;
   tag?: string;
+  unidad?: string;
+  clase?: string;
 }
 
 export interface ColumnasMapeadas {
@@ -33,9 +35,11 @@ export interface ColumnasMapeadas {
   monto: number;
   hora?: number;
   tag?: number;
+  unidad?: number;
+  clase?: number;
 }
 
-const OBLIGATORIOS: ReadonlyArray<Exclude<CampoMapeo, 'hora' | 'tag'>> = ['fecha', 'caseta', 'monto'];
+const OBLIGATORIOS: ReadonlyArray<Exclude<CampoMapeo, 'hora' | 'tag' | 'unidad' | 'clase'>> = ['fecha', 'caseta', 'monto'];
 const LARGO_MAX = 80;
 
 /** La declaración que llega de un formulario o de la base → un ConfigMapeo limpio, o el motivo. */
@@ -120,7 +124,9 @@ const SINONIMOS: Record<CampoMapeo, readonly string[]> = {
   hora: ['hora', 'horario'],
   caseta: ['caseta', 'plaza', 'tramo', 'estacion', 'autopista', 'punto de cobro', 'plaza de cobro'],
   monto: ['importe', 'monto', 'total', 'cargo', 'costo', 'cuota', 'tarifa', 'peaje'],
-  tag: ['tag', 'etiqueta', 'dispositivo', 'telepeaje', 'economico', 'unidad'],
+  tag: ['tag', 'etiqueta', 'dispositivo', 'telepeaje', 'tarjeta', 'idmx'],
+  unidad: ['unidad', 'economico', 'numero economico', 'no economico'],
+  clase: ['clase', 'ejes', 'categoria'],
 };
 
 function distancia(a: string, b: string): number {

@@ -18,6 +18,7 @@
 //   4. Nada de texto de cliente ni teléfonos en los logs.
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { envPuesta } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { telefonoDeUsuario, telefonoJefeDe } from '../contactos';
@@ -25,14 +26,18 @@ import { normalizarTelefonoWa } from '../wa_ventana';
 import { hashTelefono } from './servicio';
 import { MAX_DIRECTORES_POR_NIVEL, unirDestinatarios, type ValoresDirector } from './respaldo_correo';
 import { seleccionarEnEspera } from './escalamiento';
+import { aTurnoDirector, esFechaValida, esTurnoDirector, filtrarPorTurno, ZONA_POR_OMISION } from './turnos';
 import type { RespuestaRapida } from './respuestas_rapidas';
 import {
-  etapaDeViaje, ultimoHitoDe, type EstatusViaje, type ResumenViaje, type ServicioEstatusViaje,
+  datosUnidadVisibles, etapaDeViaje, ultimoHitoDe, type DatosUnidadCrudos, type DatosUnidadViaje, type EstatusViaje, type ResumenViaje, type ServicioEstatusViaje,
 } from './estatus_viaje';
+import { camposVisibles } from './aviso/privacidad';
+import { normalizarAlias } from './aviso/equivalencias';
 import { estatusViaje as estatusDelConductor } from '../conductor/servicios';
 import type { EstatusViaje as EstatusConductor } from '../conductor/estatus_viaje';
 import { mezclarEstatus, parteDelConductor } from './desde_conductor';
 import { adjuntosDeRespaldo, nombreDeAdjunto, nombreDeArchivo, pieDeAdjunto, rutaEsDeLaFlota, SEGUNDOS_URL_ADJUNTO, type ArchivoParaEnviar } from './adjuntos';
+import { hoyMx } from '@/lib/formato';
 import type {
   CambioReclamo, CorreoVencido, Destinatario, FilaEnEspera, NuevoEvento, NuevoSaliente, RepoVigia, ResultadoRecibir,
 } from './puertos';
@@ -68,6 +73,8 @@ export function aConfig(f: Fila): ConfigVigia {
     avisoPrivacidadUrl: str(f.aviso_privacidad_url),
     // 0673: sin migrar la columna no existe → apagado.
     respaldoCorreo: f.respaldo_correo === true,
+    // 0798: sin migrar la columna no existe → false (el copiloto de siempre, comportamiento idéntico).
+    soloAvisar: f.solo_avisar === true,
   };
 }
 
@@ -88,7 +95,7 @@ export function aConversacion(f: Fila): Conversacion {
     ultimaEntradaEn: str(f.ultima_entrada_en), ultimaSalidaEn: str(f.ultima_salida_en),
     sinRespuestaDesde: str(f.sin_respuesta_desde), entradasSinRespuesta: num(f.entradas_sin_respuesta),
     molestiaNivel: num(f.molestia_nivel), molestiaMotivos: Array.isArray(f.molestia_motivos) ? (f.molestia_motivos as string[]) : [],
-    molestiaEn: str(f.molestia_en), escalamientoNivel: num(f.escalamiento_nivel), escaladoEn: str(f.escalado_en), atendidaEn: str(f.atendida_en),
+    molestiaEn: str(f.molestia_en), prioridad: num(f.prioridad), escalamientoNivel: num(f.escalamiento_nivel), escaladoEn: str(f.escalado_en), atendidaEn: str(f.atendida_en),
   };
 }
 
@@ -109,6 +116,14 @@ export function aMensaje(f: Fila): MensajeVigia {
 
 const COLS_CONTACTO = 'id, tenant_id, cliente_id, telefono, nombre, gerente_user_id, estado, consentimiento_en, optout_en, aviso_privacidad_en';
 const COLS_CONV = 'id, tenant_id, contacto_id, cliente_id, viaje_id, estado, control, tomada_por, ultima_entrada_en, ultima_salida_en, sin_respuesta_desde, entradas_sin_respuesta, molestia_nivel, molestia_motivos, molestia_en, escalamiento_nivel, escalado_en, atendida_en';
+/**
+ * 0798: la columna `prioridad` solo existe si esa migración ya está en la base. Se declara con la misma bandera que la intención
+ * «datos de la unidad» (`LIKIDA_VIGIA_DATOS_UNIDAD=si`, ver deps.ts): sin ella no se lee ni se escribe y el Vigía funciona como siempre.
+ */
+export function prioridadEnBase(): boolean {
+  return envPuesta('LIKIDA_VIGIA_DATOS_UNIDAD') && String(process.env.LIKIDA_VIGIA_DATOS_UNIDAD).trim().toLowerCase() === 'si';
+}
+const colsConv = (): string => (prioridadEnBase() ? `${COLS_CONV}, prioridad` : COLS_CONV);
 const COLS_MSG = 'id, tenant_id, conversacion_id, direccion, autor, wamid, tipo, texto, intencion, estado, respuesta_a, riesgo, autoenviado, editado, aprobado_por, enviado_en, via, error, senales, datos_respaldo, created_at';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -122,6 +137,8 @@ const ESTATUS_EN_CURSO = ['abierto', 'en_cuadre'];
 export interface DepsEstatusReal {
   /** El estatus que calcula el Conductor (hitos, cita/ETA, andén) de un viaje de ESA flota; `null` si no existe. */
   conductor(tenantId: string, viajeId: string): Promise<EstatusConductor | null>;
+  /** Unidad, caja y operador del viaje, ya filtrados por privacidad (T-A4-24); por omisión `leerDatosUnidad`. */
+  datosUnidad?(a: { tenantId: string; clienteId: string; viajeId: string; unidadId: string | null }): Promise<DatosUnidadViaje>;
 }
 
 export function crearEstatusViajeReal(d: DepsEstatusReal): ServicioEstatusViaje {
@@ -138,7 +155,7 @@ export function crearEstatusViajeReal(d: DepsEstatusReal): ServicioEstatusViaje 
     return (filas as Fila[]).map((f): ResumenViaje => ({ viajeId: String(f.id), folio: str(f.folio), origen: str(f.origen), destino: str(f.destino) }));
   },
 
-  async estatus({ tenantId, clienteId, viajeId }) {
+  async estatus({ tenantId, clienteId, viajeId, datosUnidad }) {
     const db = supabaseAdmin();
     // El viaje SOLO si es de ese cliente en esa flota: es el candado de aislamiento.
     const v = exigir('estatus_viaje', await acotada(db.from('viaje')
@@ -212,6 +229,18 @@ export function crearEstatusViajeReal(d: DepsEstatusReal): ServicioEstatusViaje 
     // Un viaje que ya llegó a descarga no tiene «hora estimada de llegada» por decir.
     const yaLlego = mezcla.etapa === 'cerrado' || ['en_destino', 'descargando', 'entregado', 'regresando'].includes(mezcla.etapa);
 
+    // T-A4-24: solo si alguien preguntó por la unidad. Si no se puede leer, el dato queda vacío (nunca inventado) y el
+    // Vigía contesta «lo consulto» y escala.
+    let delaUnidad: DatosUnidadViaje | null = null;
+    if (datosUnidad === true) {
+      try {
+        delaUnidad = await (d.datosUnidad ?? leerDatosUnidad)({ tenantId, clienteId, viajeId, unidadId });
+      } catch (e) {
+        logger.warn('vigia.datos_unidad_ilegibles', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+        delaUnidad = DATOS_UNIDAD_VACIOS;
+      }
+    }
+
     return {
       viajeId: String(v.id), folio: str(v.folio), origen: str(v.origen), destino: str(v.destino),
       etapa: mezcla.etapa, ultimoHito: mezcla.ultimoHito, posicion,
@@ -219,9 +248,109 @@ export function crearEstatusViajeReal(d: DepsEstatusReal): ServicioEstatusViaje 
       citaCarga: parte.citaCarga, enAnden: parte.enAnden,
       adjuntos: podRecibido === true ? [{ clave: 'pod', nombre: nombreDeAdjunto('pod') }] : [],
       documentos, podRecibido, facturaEmitida,
+      ...(delaUnidad ?? {}),
     };
   },
   };
+}
+
+// ── Datos de la unidad (T-A4-24) ────────────────────────────────────────────
+
+/** Tablas de las migraciones 0795/0796: si aún no están en la base, esa fuente simplemente no aporta. */
+const FUENTE_SIN_MIGRAR = new Set(['42P01', 'PGRST205']);
+
+/** Como `exigir`, pero «la tabla aún no existe» es `null` (no hay dato) y no un error. Cualquier otro error LANZA. */
+function leerOpcional<T>(op: string, r: { data: T | null; error: { message: string; code?: string } | null }): T | null {
+  if (r.error && r.error.code && FUENTE_SIN_MIGRAR.has(r.error.code)) return null;
+  return exigir(op, r);
+}
+
+const DATOS_UNIDAD_VACIOS: DatosUnidadViaje = { caja: null, placasCaja: null, estadoCaja: null, unidad: null, placasUnidad: null, operador: null };
+
+const mayus = (v: string) => v.trim().toUpperCase();
+const variantes = (v: string) => [...new Set([v, v.trim(), v.trim().toUpperCase()])];
+const diaIso = (d: Date) => hoyMx(d);   // día calendario de México (el programa de despacho se escribe en hora local)
+
+/**
+ * Qué unidad, caja y operador lleva UN viaje de UN cliente, listo para decírselo (ya filtrado por privacidad).
+ *   · el viaje se verifica contra (flota, cliente) antes de leer nada más: es el candado de aislamiento;
+ *   · unidad y operador salen del propio viaje (`unidad_id`, `operador_id`), nunca del texto del cliente;
+ *   · la CAJA sale de la fila del programa de despacho (0795) de esa unidad cuyo cliente, normalizado, es EL MISMO que el
+ *     nombre del cliente del viaje. Sin esa coincidencia exacta (o con dos cajas distintas) no se da caja: «lo consulto».
+ *     Cuando exista la tabla de alias (T-A4-11) la comparación pasará por ella;
+ *   · placas y estado: captura manual de la fila, y si no, catálogo de cajas (0796) / ficha de la unidad;
+ *   · una tabla de la 0795/0796 que aún no existe no aporta dato; un error de lectura LANZA (quien llama lo trata como «sin dato»).
+ * Toda consulta lleva `tenant_id`.
+ */
+export async function leerDatosUnidad(
+  a: { tenantId: string; clienteId: string; viajeId: string; unidadId: string | null; ahora?: Date },
+): Promise<DatosUnidadViaje> {
+  const db = supabaseAdmin();
+  const { tenantId, clienteId, viajeId } = a;
+  const ahora = a.ahora ?? new Date();
+
+  const viaje = exigir('datos_unidad_viaje', await acotada(db.from('viaje')
+    .select('id, operador_id, unidad_id').eq('id', viajeId).eq('tenant_id', tenantId).eq('cliente_id', clienteId).maybeSingle(), 'vigia.datos_unidad_viaje')) as Fila | null;
+  if (!viaje) return DATOS_UNIDAD_VACIOS;
+  const unidadId = str(viaje.unidad_id) ?? a.unidadId;
+  const operadorId = str(viaje.operador_id);
+
+  const crudos: DatosUnidadCrudos = { caja: null, placasCaja: null, estadoCaja: null, unidad: null, placasUnidad: null, operadorNombre: null };
+
+  if (unidadId) {
+    const u = exigir('datos_unidad_unidad', await acotada(db.from('unidad')
+      .select('numero_economico, placas').eq('id', unidadId).eq('tenant_id', tenantId).maybeSingle(), 'vigia.datos_unidad_unidad')) as Fila | null;
+    crudos.unidad = str(u?.numero_economico);
+    crudos.placasUnidad = str(u?.placas);
+  }
+  if (operadorId) {
+    const o = exigir('datos_unidad_operador', await acotada(db.from('operador')
+      .select('nombre').eq('id', operadorId).eq('tenant_id', tenantId).maybeSingle(), 'vigia.datos_unidad_operador')) as Fila | null;
+    crudos.operadorNombre = str(o?.nombre);
+  }
+
+  // La caja: solo de una fila del programa que sea de ESTE cliente y de ESTA unidad.
+  let filaId: string | null = null;
+  if (crudos.unidad) {
+    const cli = exigir('datos_unidad_cliente', await acotada(db.from('cliente')
+      .select('nombre').eq('id', clienteId).eq('tenant_id', tenantId).maybeSingle(), 'vigia.datos_unidad_cliente')) as Fila | null;
+    const nombreCliente = normalizarAlias(str(cli?.nombre));
+    const filas = nombreCliente === '' ? [] : (leerOpcional('datos_unidad_programa', await acotada(db.from('programa_despacho_fila')
+      .select('id, fecha, cliente, caja, unidad').eq('tenant_id', tenantId).eq('visible', true)
+      .gte('fecha', diaIso(new Date(ahora.getTime() - 86_400_000))).lt('fecha', diaIso(new Date(ahora.getTime() + 2 * 86_400_000)))
+      .in('unidad', variantes(crudos.unidad)).order('fecha', { ascending: false }).order('id').limit(20), 'vigia.datos_unidad_programa')) as Fila[] | null) ?? [];
+    const propias = filas.filter((f) => str(f.unidad) !== null && mayus(String(f.unidad)) === mayus(crudos.unidad as string)
+      && normalizarAlias(str(f.cliente)) === nombreCliente && str(f.caja) !== null);
+    const ultima = propias.length > 0 ? String(propias[0].fecha) : null;
+    const delDia = propias.filter((f) => String(f.fecha) === ultima);
+    const cajas = new Set(delDia.map((f) => mayus(String(f.caja))));
+    // Dos cajas distintas para la misma unidad y cliente en el mismo día: no se adivina cuál es.
+    if (cajas.size === 1) {
+      crudos.caja = String(delDia[0].caja).trim();
+      filaId = String(delDia[0].id);
+    }
+  }
+
+  if (crudos.caja) {
+    const cat = (leerOpcional('datos_unidad_caja', await acotada(db.from('vigia_caja')
+      .select('numero, placas, estado').eq('tenant_id', tenantId).in('numero', variantes(crudos.caja)).order('id').limit(5), 'vigia.datos_unidad_caja')) as Fila[] | null) ?? [];
+    const fila = cat.find((c) => mayus(String(c.numero)) === mayus(crudos.caja as string));
+    crudos.placasCaja = str(fila?.placas);
+    crudos.estadoCaja = str(fila?.estado);
+  }
+  if (filaId) {
+    const m = leerOpcional('datos_unidad_manual', await acotada(db.from('vigia_dato_viaje_manual')
+      .select('operador_nombre, placas_unidad, placas_caja, estado_caja').eq('tenant_id', tenantId).eq('fila_id', filaId).maybeSingle(), 'vigia.datos_unidad_manual')) as Fila | null;
+    if (m) {
+      crudos.placasCaja = str(m.placas_caja) ?? crudos.placasCaja;
+      crudos.estadoCaja = str(m.estado_caja) ?? crudos.estadoCaja;
+      crudos.placasUnidad = str(m.placas_unidad) ?? crudos.placasUnidad;
+      crudos.operadorNombre = crudos.operadorNombre ?? str(m.operador_nombre);
+    }
+  }
+
+  // Privacidad: hasta que T-A4-23 guarde la política de la flota, rige la de por defecto (solo los seis campos visibles).
+  return datosUnidadVisibles(crudos, camposVisibles(null, clienteId));
 }
 
 export const estatusViajeReal: ServicioEstatusViaje = crearEstatusViajeReal({ conductor: (tenantId, viajeId) => estatusDelConductor(tenantId, viajeId) });
@@ -277,6 +406,8 @@ const MAX_PAGINAS_EN_ESPERA = 10;
 
 /** La 0647 (y la 0673/0674) aún no están en la base: no hay tabla ni función. */
 const SIN_0647 = new Set(['42P01', 'PGRST205', '42883', 'PGRST202']);
+/** Tope de contactos de «servicio al cliente» por flota (el mismo de la RPC de 0798). */
+export const MAX_SERVICIO_CLIENTE = 10;
 const sinMigrar = (e: { code?: string } | null | undefined): boolean => !!e?.code && SIN_0647.has(e.code);
 
 /** El destino de SIEMPRE (antes de la lista de directores): nivel 1 el gerente del cliente o el jefe de la flota, nivel 2 el dueño. */
@@ -312,15 +443,62 @@ export function aDirector(f: Fila): Director {
   };
 }
 
-/** La lista de directores de un nivel (0673). Sin la tabla (base sin migrar) es lista vacía: queda el destino de siempre. */
-async function directoresDeNivel(tenantId: string, nivel: NivelDirector): Promise<Director[]> {
-  const r = await acotada(supabaseAdmin().from('vigia_director')
-    .select('id, nivel, nombre, telefono, correo').eq('tenant_id', tenantId).eq('nivel', nivel).order('created_at').order('id').limit(20), 'vigia.directores_nivel');
+/** La columna `turno` (0798) aún no existe en la base: se lee la lista como antes (todos «siempre»). */
+const sinColumna = (e: { code?: string } | null | undefined): boolean => e?.code === '42703' || e?.code === 'PGRST204';
+
+/** 0798: la zona IANA y los festivos de la flota para decidir turnos. Sin tabla/columna (base sin 0798) es la zona de omisión y sin festivos. */
+async function contextoDeTurnos(tenantId: string): Promise<{ zona: string; festivos: string[] }> {
+  const z = await acotada(supabaseAdmin().from('tenant').select('zona_horaria').eq('id', tenantId).maybeSingle(), 'vigia.turnos_zona');
+  if (z.error && !sinMigrar(z.error) && !sinColumna(z.error)) throw new Error(`vigia.turnos_zona: ${z.error.message}`);
+  const zona = str((z.data as Fila | null)?.zona_horaria) ?? ZONA_POR_OMISION;
+  const f = await acotada(supabaseAdmin().from('vigia_festivo').select('fecha').eq('tenant_id', tenantId).order('fecha').order('id').limit(400), 'vigia.turnos_festivos');
+  if (f.error && !sinMigrar(f.error)) throw new Error(`vigia.turnos_festivos: ${f.error.message}`);
+  const festivos = ((f.error ? [] : f.data ?? []) as Fila[]).map((x) => String(x.fecha ?? '').slice(0, 10)).filter(esFechaValida);
+  return { zona, festivos };
+}
+
+/**
+ * La lista de directores de un nivel (0673). Sin la tabla (base sin migrar) es lista vacía: queda el destino de siempre.
+ * 0798: quien tiene turno `noche` o `festivos_y_fin_de_semana` solo entra en su turno (hora local de la flota). Si el filtro deja
+ * el nivel vacío, caen TODOS: nunca se queda un nivel sin destinatario por la sobrescritura de turnos. `ahora` solo lo cambian las pruebas.
+ */
+async function directoresDeNivel(tenantId: string, nivel: NivelDirector, ahora: Date = new Date()): Promise<Director[]> {
+  const consulta = (columnas: string) => acotada(supabaseAdmin().from('vigia_director')
+    .select(columnas).eq('tenant_id', tenantId).eq('nivel', nivel).order('created_at').order('id').limit(20), 'vigia.directores_nivel');
+  let r = await consulta('id, nivel, nombre, telefono, correo, turno');
+  if (r.error && sinColumna(r.error)) r = await consulta('id, nivel, nombre, telefono, correo');   // base sin 0798: todos «siempre»
   if (r.error) {
     if (!sinMigrar(r.error)) throw new Error(`vigia.directores_nivel: ${r.error.message}`);
     return [];
   }
-  return ((r.data ?? []) as Fila[]).map(aDirector);
+  const filas = (r.data ?? []) as unknown as Fila[];
+  const conTurno = filas.map((f) => ({ director: aDirector(f), turno: aTurnoDirector(f.turno) }));
+  if (conTurno.every((d) => d.turno === 'siempre')) return conTurno.map((d) => d.director);
+  const { zona, festivos } = await contextoDeTurnos(tenantId);
+  const { lista, cayoATodos } = filtrarPorTurno(conTurno, ahora, zona, festivos);
+  if (cayoATodos) logger.warn('vigia.turnos_nivel_sin_turno', { tenant: tenantId, nivel });
+  return lista.map((d) => d.director);
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * 0798: a quién avisar como «servicio al cliente» para un cliente: los contactos activos de la flota que son para ese cliente
+ * o para todos (`cliente_id` null). Sin lista (o sin la migración 0798) es vacío: quien llama sigue con gerente/director como hoy.
+ * Un `clienteId` que no es un uuid no entra al filtro: solo se consideran los contactos «para todos».
+ */
+async function servicioDeCliente(tenantId: string, clienteId: string | null): Promise<DestinatarioAviso[]> {
+  let q = supabaseAdmin().from('vigia_servicio_cliente')
+    .select('id, nombre, telefono, correo').eq('tenant_id', tenantId).eq('activo', true);
+  q = clienteId && UUID_RE.test(clienteId) ? q.or(`cliente_id.is.null,cliente_id.eq.${clienteId}`) : q.is('cliente_id', null);
+  const r = await acotada(q.order('created_at').order('id').limit(MAX_SERVICIO_CLIENTE), 'vigia.servicio_cliente');
+  if (r.error) {
+    if (!sinMigrar(r.error)) throw new Error(`vigia.servicio_cliente: ${r.error.message}`);
+    return [];
+  }
+  return unirDestinatarios(((r.data ?? []) as Fila[])
+    .map((f): DestinatarioAviso => ({ userId: null, directorId: null, nombre: str(f.nombre), telefono: str(f.telefono), correo: str(f.correo) }))
+    .filter((d) => d.telefono || d.correo));
 }
 
 /** Teléfono y correo del gerente asignado a un cliente (solo si es de ESTA flota y está activo). */
@@ -399,7 +577,7 @@ export function crearRepoVigia(): RepoVigia {
 
     async conversacion(tenantId, id) {
       const f = exigir('conversacion', await acotada(supabaseAdmin().from('vigia_conversacion')
-        .select(COLS_CONV).eq('id', id).eq('tenant_id', tenantId).maybeSingle(), 'vigia.conversacion')) as Fila | null;
+        .select(colsConv()).eq('id', id).eq('tenant_id', tenantId).maybeSingle(), 'vigia.conversacion')) as Fila | null;
       return f ? aConversacion(f) : null;
     },
 
@@ -509,7 +687,7 @@ export function crearRepoVigia(): RepoVigia {
       const m: Record<string, string> = {
         viajeId: 'viaje_id', molestiaNivel: 'molestia_nivel', molestiaMotivos: 'molestia_motivos', molestiaEn: 'molestia_en',
         escalamientoNivel: 'escalamiento_nivel', escaladoEn: 'escalado_en', control: 'control', tomadaPor: 'tomada_por',
-        tomadaEn: 'tomada_en', atendidaEn: 'atendida_en', atendidaPor: 'atendida_por',
+        tomadaEn: 'tomada_en', atendidaEn: 'atendida_en', atendidaPor: 'atendida_por', prioridad: 'prioridad',
       };
       const parche: Fila = { updated_at: new Date().toISOString() };
       for (const [k, v] of Object.entries(p)) if (m[k] !== undefined && v !== undefined) parche[m[k]] = v;
@@ -528,6 +706,7 @@ export function crearRepoVigia(): RepoVigia {
       const { error } = await acotada(supabaseAdmin().from('vigia_conversacion').update({
         sin_respuesta_desde: null, entradas_sin_respuesta: 0, escalamiento_nivel: 0, escalado_en: null, atendida_en: null, atendida_por: null,
         molestia_nivel: 0, molestia_motivos: [], molestia_en: null, ultima_salida_en: ahora.toISOString(), updated_at: ahora.toISOString(),
+        ...(prioridadEnBase() ? { prioridad: 0 } : {}),
       }).eq('id', conversacionId).eq('tenant_id', tenantId), 'vigia.marcar_respondida');
       if (error) throw new Error(`vigia.marcar_respondida: ${error.message}`);
     },
@@ -582,6 +761,11 @@ export function crearRepoVigia(): RepoVigia {
         if (d) lista.push({ userId: d.userId, directorId: null, nombre: null, telefono: d.telefono, correo: null });
       }
       return unirDestinatarios(lista);
+    },
+
+    // 0798: la lista de «servicio al cliente» (no toca los niveles). Vacía = el llamador usa gerente/director como siempre.
+    async destinatariosServicioCliente(tenantId, clienteId): Promise<DestinatarioAviso[]> {
+      return servicioDeCliente(tenantId, clienteId);
     },
 
     // 0674: el reclamo del correo de respaldo. Insertar la llave ES reclamarla; sin filas = otro lo lleva o ya salió.
@@ -645,7 +829,7 @@ export function crearRepoVigia(): RepoVigia {
         const tamano = Math.max(1, limite) * 3;
         for (let pagina = 0; pagina < MAX_PAGINAS_EN_ESPERA; pagina++) {
           const f = exigir('en_espera', await acotada(db.from('vigia_conversacion')
-            .select(COLS_CONV).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).lt('escalamiento_nivel', 2).or(alcance)
+            .select(colsConv()).eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).lt('escalamiento_nivel', 2).or(alcance)
             .order('sin_respuesta_desde', { ascending: true }).order('id').range(pagina * tamano, (pagina + 1) * tamano - 1), 'vigia.en_espera')) as Fila[] | null ?? [];
           convs.push(...f.map(aConversacion));
           if (f.length < tamano) break;
@@ -666,10 +850,13 @@ export function crearRepoVigia(): RepoVigia {
       return seleccionarEnEspera(candidatas, limite);
     },
 
-    async expirarCiclosInactivos(antesDe, limite, ahora) {
+    async expirarCiclosInactivos(antesDe, limite, ahora, excluirTenants = []) {
       const db = supabaseAdmin();
+      // Flotas con perfil (A4 en «Próximamente»): el cron no les cierra nada. Sin flotas a excluir se excluye el uuid nulo (no existe).
+      const excluidas = `(${(excluirTenants.length > 0 ? excluirTenants : ['00000000-0000-0000-0000-000000000000']).join(',')})`;
       const f = exigir('expirar_ciclos', await acotada(db.from('vigia_conversacion')
         .select('id, tenant_id').eq('estado', 'activa').not('sin_respuesta_desde', 'is', null).lt('sin_respuesta_desde', antesDe.toISOString())
+        .not('tenant_id', 'in', excluidas)
         .order('sin_respuesta_desde', { ascending: true }).order('id').limit(limite), 'vigia.expirar_ciclos')) as Fila[] | null ?? [];
       const cerradas: Array<{ tenantId: string; id: string }> = [];
       for (const x of f) {
@@ -715,6 +902,8 @@ export interface ConversacionTablero {
   sinRespuestaDesde: string | null;
   molestiaNivel: number;
   molestiaMotivos: string[];
+  /** 0798: 0 ignorar/sin priorizar · 1 normal · 2 alta (el máximo de los mensajes sin responder). Ausente = 0. */
+  prioridad?: number;
   escalamientoNivel: number;
   atendida: boolean;
   ultimaEntradaEn: string | null;
@@ -747,6 +936,9 @@ export interface CorreoTablero { id: string; nivel: number; estado: string; deta
 
 export interface EventoTablero { id: number; tipo: string; nivel: number | null; creadoEn: string; conversacionId: string | null }
 
+/** 0798: un contacto de «servicio al cliente». `clienteId` null = para todos los clientes de la flota. */
+export interface ContactoServicio { id: string; nombre: string; telefono: string | null; correo: string | null; clienteId: string | null; activo: boolean }
+
 export interface DatosTablero {
   config: ConfigVigia;
   conversaciones: ConversacionTablero[];
@@ -762,6 +954,8 @@ export interface DatosTablero {
   directores?: Director[];
   /** 0674: los últimos correos de respaldo y su resultado (vacío si la base no tiene la migración). */
   correos?: CorreoTablero[];
+  /** 0798: la lista de «servicio al cliente» (vacía si la base no tiene la migración). */
+  servicio?: ContactoServicio[];
 }
 
 function recorta(t: unknown, n: number): string | null {
@@ -775,7 +969,7 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
   const config = await repo.config(tenantId);
 
   const convRows = (exigir('tablero_conv', await acotada(db.from('vigia_conversacion')
-    .select(COLS_CONV).eq('tenant_id', tenantId).eq('estado', 'activa')
+    .select(colsConv()).eq('tenant_id', tenantId).eq('estado', 'activa')
     .order('updated_at', { ascending: false }).order('id').limit(100), 'vigia.tablero_conv')) as Fila[] | null ?? []).map(aConversacion);
 
   const contactosRows = (exigir('tablero_contactos', await acotada(db.from('vigia_contacto')
@@ -801,7 +995,7 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
   const conversaciones: ConversacionTablero[] = convRows.map((c) => ({
     id: c.id, contactoId: c.contactoId, contactoNombre: contactoPorId.get(c.contactoId)?.nombre ?? null,
     clienteNombre: nombreCliente.get(c.clienteId) ?? null, control: c.control, sinRespuestaDesde: c.sinRespuestaDesde,
-    molestiaNivel: c.molestiaNivel, molestiaMotivos: c.molestiaMotivos, escalamientoNivel: c.escalamientoNivel,
+    molestiaNivel: c.molestiaNivel, molestiaMotivos: c.molestiaMotivos, prioridad: c.prioridad ?? 0, escalamientoNivel: c.escalamientoNivel,
     atendida: c.atendidaEn !== null, ultimaEntradaEn: c.ultimaEntradaEn, ultimoMensajeCliente: ultimos.get(c.id) ?? null,
   }));
 
@@ -870,8 +1064,15 @@ export async function cargarTablero(tenantId: string, ahora: Date = new Date()):
     .select('id, nivel, estado, detalle, created_at, conversacion_id').eq('tenant_id', tenantId).order('created_at', { ascending: false }).order('id').limit(15), 'vigia.tablero_correos');
   if (cors.error && !sinMigrar(cors.error)) throw new Error(`vigia.tablero_correos: ${cors.error.message}`);
 
+  const serv = await acotada(db.from('vigia_servicio_cliente')
+    .select('id, nombre, telefono, correo, cliente_id, activo').eq('tenant_id', tenantId).order('created_at').order('id').limit(MAX_SERVICIO_CLIENTE), 'vigia.tablero_servicio');
+  if (serv.error && !sinMigrar(serv.error)) throw new Error(`vigia.tablero_servicio: ${serv.error.message}`);
+
   return {
     config, conversaciones, pendientes, fallidos, eventos, respuesta, clientes: clientesRows, gerentes,
+    servicio: ((serv.data ?? []) as Fila[]).map((f): ContactoServicio => ({
+      id: String(f.id), nombre: String(f.nombre ?? ''), telefono: str(f.telefono), correo: str(f.correo), clienteId: str(f.cliente_id), activo: f.activo !== false,
+    })),
     directores: ((dirs.data ?? []) as Fila[]).map(aDirector),
     correos: ((cors.data ?? []) as Fila[]).map((f): CorreoTablero => ({
       id: String(f.id), nivel: num(f.nivel), estado: String(f.estado), detalle: str(f.detalle), creadoEn: String(f.created_at), conversacionId: String(f.conversacion_id),
@@ -975,6 +1176,99 @@ export async function guardarDirectorVigia(tenantId: string, userId: string, id:
 export async function quitarDirectorVigia(tenantId: string, id: string): Promise<boolean> {
   const r = await acotada(supabaseAdmin().rpc('vigia_director_quitar', { p_tenant: tenantId, p_id: id }), 'vigia.director_quitar');
   if (r.error) throw new Error(`vigia.director_quitar: ${r.error.message}`);
+  return r.data === true;
+}
+
+// ── 0798/T-A4-31: turno de cada director y calendario de festivos ───────────
+
+export interface FestivoFlota { id: string; fecha: string; nombre: string }
+
+/** Fija el turno de un director (0798: UPDATE directo del servicio, sin RPC). `false` = no es de esta flota o no existe. */
+export async function fijarTurnoDirector(tenantId: string, id: string, turno: unknown): Promise<Validacion<{ id: string }>> {
+  if (!esTurnoDirector(turno)) return { ok: false, error: 'Elige un turno de la lista: siempre, noche o festivos y fin de semana.' };
+  const r = await acotada(supabaseAdmin().from('vigia_director').update({ turno }).eq('id', id).eq('tenant_id', tenantId).select('id'), 'vigia.director_turno');
+  if (r.error) {
+    if (sinMigrar(r.error) || sinColumna(r.error)) return { ok: false, error: 'Los turnos necesitan la migración 0798, que aún no está aplicada en la base.' };
+    throw new Error(`vigia.director_turno: ${r.error.message}`);
+  }
+  return ((r.data ?? []) as Fila[]).length > 0 ? { ok: true, valor: { id } } : { ok: false, error: 'No encontré a esa persona en tu flota.' };
+}
+
+/** Los festivos de la flota, por fecha. Sin la tabla (base sin 0798) es lista vacía. */
+export async function listarFestivos(tenantId: string): Promise<FestivoFlota[]> {
+  const r = await acotada(supabaseAdmin().from('vigia_festivo').select('id, fecha, nombre').eq('tenant_id', tenantId).order('fecha').order('id').limit(400), 'vigia.festivos');
+  if (r.error) {
+    if (sinMigrar(r.error)) return [];
+    throw new Error(`vigia.festivos: ${r.error.message}`);
+  }
+  return ((r.data ?? []) as Fila[]).map((f) => ({ id: String(f.id), fecha: String(f.fecha).slice(0, 10), nombre: String(f.nombre ?? '') }));
+}
+
+/** Alta de un festivo (misma fecha = se actualiza el nombre). La base repite las reglas. */
+export async function guardarFestivo(tenantId: string, fecha: unknown, nombre: unknown): Promise<Validacion<{ fecha: string }>> {
+  if (!esFechaValida(fecha)) return { ok: false, error: 'Escribe una fecha válida (año-mes-día).' };
+  const n = String(nombre ?? '').replace(/\s+/g, ' ').trim();
+  if (n.length < 1 || n.length > 120) return { ok: false, error: 'Ponle un nombre al festivo (hasta 120 letras).' };
+  const r = await acotada(supabaseAdmin().from('vigia_festivo').upsert({ tenant_id: tenantId, fecha, nombre: n }, { onConflict: 'tenant_id,fecha' }), 'vigia.festivo_guardar');
+  if (r.error) {
+    if (sinMigrar(r.error)) return { ok: false, error: 'El calendario de festivos necesita la migración 0798, que aún no está aplicada en la base.' };
+    throw new Error(`vigia.festivo_guardar: ${r.error.message}`);
+  }
+  return { ok: true, valor: { fecha } };
+}
+
+export async function quitarFestivo(tenantId: string, id: string): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().from('vigia_festivo').delete().eq('id', id).eq('tenant_id', tenantId).select('id'), 'vigia.festivo_quitar');
+  if (r.error) throw new Error(`vigia.festivo_quitar: ${r.error.message}`);
+  return ((r.data ?? []) as Fila[]).length > 0;
+}
+
+// ── 0798: la lista de «servicio al cliente» ─────────────────────────────────
+
+export interface EntradaServicio { clienteId: unknown; nombre: unknown; telefono: unknown; correo: unknown; activo: unknown }
+export interface ValoresServicio { clienteId: string | null; nombre: string; telefono: string | null; correo: string | null; activo: boolean }
+
+/** Valida lo que escribe el dueño (la base repite las mismas reglas). PURA. `clienteId` vacío = para todos los clientes. */
+export function validarServicio(e: EntradaServicio): { ok: true; valor: ValoresServicio } | { ok: false; error: string } {
+  const clienteCrudo = String(e.clienteId ?? '').trim();
+  if (clienteCrudo && !UUID_RE.test(clienteCrudo)) return { ok: false, error: 'Elige un cliente de la lista, o «Todos los clientes».' };
+  const nombre = String(e.nombre ?? '').replace(/\s+/g, ' ').trim();
+  if (nombre.length < 1 || nombre.length > 120) return { ok: false, error: 'Escribe el nombre de la persona (hasta 120 letras).' };
+  const telCrudo = String(e.telefono ?? '').trim();
+  const correoCrudo = String(e.correo ?? '').trim();
+  if (!telCrudo && !correoCrudo) return { ok: false, error: 'Escribe un WhatsApp, un correo o los dos: sin ninguno no hay a dónde avisar.' };
+  let telefono: string | null = null;
+  if (telCrudo) {
+    telefono = telefonoDeAllowlist(telCrudo);
+    if (!telefono) return { ok: false, error: 'El WhatsApp debe ser de 10 dígitos (o con 52).' };
+  }
+  let correo: string | null = null;
+  if (correoCrudo) {
+    if (correoCrudo.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(correoCrudo)) return { ok: false, error: 'El correo no parece válido.' };
+    correo = correoCrudo;
+  }
+  return { ok: true, valor: { clienteId: clienteCrudo || null, nombre, telefono, correo, activo: e.activo !== false && String(e.activo ?? '') !== 'off' } };
+}
+
+/** Alta (`id` null) o corrección de un contacto de servicio al cliente. `ok:false` con un mensaje para la pantalla. */
+export async function guardarServicioVigia(tenantId: string, userId: string, id: string | null, v: ValoresServicio): Promise<Validacion<{ id: string }>> {
+  const r = await acotada(supabaseAdmin().rpc('vigia_servicio_guardar', {
+    p_tenant: tenantId, p_id: id, p_cliente: v.clienteId, p_nombre: v.nombre, p_telefono: v.telefono, p_correo: v.correo, p_activo: v.activo, p_usuario: userId,
+  }), 'vigia.servicio_guardar');
+  if (r.error) {
+    if (r.error.code === '54000') return { ok: false, error: `Ya hay ${MAX_SERVICIO_CLIENTE} personas en servicio al cliente: quita a alguien antes de agregar a otra.` };
+    if (r.error.code === '23505') return { ok: false, error: 'Esa persona (mismo WhatsApp o mismo correo) ya está en la lista.' };
+    if (r.error.code === '23503') return { ok: false, error: 'Ese cliente no es de tu flota.' };
+    if (r.error.code === 'P0002') return { ok: false, error: 'No encontré a esa persona en tu flota.' };
+    if (sinMigrar(r.error)) return { ok: false, error: 'La lista de servicio al cliente necesita la migración 0798, que aún no está aplicada en la base.' };
+    throw new Error(`vigia.servicio_guardar: ${r.error.message}`);
+  }
+  return { ok: true, valor: { id: String(r.data) } };
+}
+
+export async function quitarServicioVigia(tenantId: string, id: string): Promise<boolean> {
+  const r = await acotada(supabaseAdmin().rpc('vigia_servicio_quitar', { p_tenant: tenantId, p_id: id }), 'vigia.servicio_quitar');
+  if (r.error) throw new Error(`vigia.servicio_quitar: ${r.error.message}`);
   return r.data === true;
 }
 

@@ -1,0 +1,14 @@
+tipo,folio,economico,tag,caseta,cruce_local,monto,gps_veredicto,gps_distancia_m
+duplicado,DEMO-24009,IN-009,PSD000000009,Caseta Demo Santa Catarina,2026-10-19 23:59:10,262.00,confirma,61.0
+duplicado,DEMO-24038,IN-038,PSD000000038,Caseta Demo Vanegas,2026-10-20 00:41:40,428.00,confirma,20.0
+fuera_de_ruta,DEMO-24017,IN-017,PSD000000017,Caseta Demo Encarnacion,2026-10-20 02:39:02,809.00,no_coincide,351179.0
+fuera_de_ruta,DEMO-24047,IN-047,PSD000000047,Caseta Demo Silao Sur,2026-10-20 03:10:08,449.00,no_coincide,168179.0
+fuera_de_ruta,DEMO-24133,IN-133,PSD000000133,Caseta Demo Santa Catarina,2026-10-20 04:58:24,262.00,no_coincide,823545.0
+fuera_de_ruta,DEMO-24060,IN-060,PSD000000060,Caseta Demo Ahualulco,2026-10-20 05:09:44,323.00,no_coincide,75821.0
+duplicado,DEMO-24048,IN-048,PSD000000048,Caseta Demo Vanegas,2026-10-20 05:44:58,428.00,confirma,23.0
+fuera_de_ruta,DEMO-24120,IN-120,PSD000000120,Caseta Demo Vanegas,2026-10-20 06:27:00,428.00,no_coincide,173421.0
+duplicado,DEMO-24030,IN-030,PSD000000030,Caseta Demo Ahualulco,2026-10-20 06:29:05,323.00,confirma,17.0
+fuera_de_ruta,DEMO-24125,IN-125,PSD000000125,Caseta Demo Vanegas,2026-10-20 06:49:40,428.00,no_coincide,173421.0
+fuera_de_ruta,DEMO-24117,IN-117,PSD000000117,Caseta Demo Vanegas,2026-10-20 08:05:15,428.00,no_coincide,377903.0
+fuera_de_ruta,DEMO-24065,IN-065,PSD000000065,Caseta Demo Tepatitlan,2026-10-20 08:41:32,315.00,no_coincide,201255.0
+fuera_de_ruta,DEMO-24082,IN-082,PSD000000082,Caseta Demo Ahualulco,2026-10-20 08:46:36,323.00,no_coincide,286745.0

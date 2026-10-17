@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
+import { tenantsConPerfilASaltar } from '@/lib/auth/perfil_tenant';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -75,7 +76,9 @@ export async function GET(req: Request) {
   const venceEn = Date.now() + Math.min(PLAZO_DERIVACION_MS, (maxDuration - 10) * 1000);
 
   try {
-    const r = await derivarJornadas({ venceEn });
+    // Las flotas con perfil (0770) se saltan: la jornada es un módulo en stand-by.
+    const excluirTenants = await tenantsConPerfilASaltar('jornada');
+    const r = await derivarJornadas({ venceEn, excluirTenants });
     logger.info('cron.jornada.ok', { ...r, fallos: r.fallos.length });
 
     // ── EL CORTE SE DICE EN LA RESPUESTA, NO SOLO EN EL LOG ───────────────

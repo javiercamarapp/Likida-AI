@@ -36,7 +36,9 @@ let sesion = { userId: 'u-1', tenantId: 't-1', rol: 'flota_admin', nombre: 'Ana'
 vi.mock('@/lib/auth/guard', () => ({ requireSessionTenant: async () => sesion }));
 vi.mock('@/lib/auth/visibilidad', () => ({ puedeVerRuta: () => true }));
 vi.mock('@/lib/auth/mfa', () => ({ estadoMfa: async () => ({ inscrito: false, factorId: null, sinVerificar: [] }) }));
-vi.mock('@/lib/supabase/server', () => ({ supabaseServer: async () => ({ auth: { mfa: {} } }) }));
+let signOutResultado: { error: { message: string } | null } = { error: null };
+const signOut = vi.fn(async (_opts?: unknown) => signOutResultado);
+vi.mock('@/lib/supabase/server', () => ({ supabaseServer: async () => ({ auth: { mfa: {}, signOut: (o?: unknown) => signOut(o) } }) }));
 vi.mock('@/lib/mcp/sesiones', () => ({
   listarMisClientesMcp: async () => [],
   revocarSesionesMcp: async () => {},
@@ -95,6 +97,32 @@ beforeEach(() => {
   updateResultado = { error: null };
   updateLlamadas.length = 0;
   redirectMock.mockClear();
+  signOutResultado = { error: null };
+  signOut.mockClear();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FASE 1 · SEG-SESIONES — «cerrar todas mis sesiones», explícito con
+// scope: 'global' (no depender del default de la librería sin decirlo).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cerrarTodasMisSesiones', () => {
+  it('pide scope: global explícito y, si Auth lo confirma, manda a /login (la sesión propia también murió)', async () => {
+    const arbol = await MiPerfilFlota({ searchParams: Promise.resolve({}) }) as ReactElement;
+    const accion = hallarAction(arbol, 'Cerrar sesión en todos los dispositivos')!;
+    expect(accion).toBeTypeOf('function');
+    await expect(accion(new FormData())).rejects.toThrow('NEXT_REDIRECT');
+    expect(signOut).toHaveBeenCalledWith({ scope: 'global' });
+    expect(redirectMock).toHaveBeenCalledWith('/login');
+  });
+
+  it('si Auth no confirma el cierre, se DICE (error=sesiones) y NO manda a /login', async () => {
+    signOutResultado = { error: { message: 'auth caído' } };
+    const arbol = await MiPerfilFlota({ searchParams: Promise.resolve({}) }) as ReactElement;
+    const accion = hallarAction(arbol, 'Cerrar sesión en todos los dispositivos')!;
+    await expect(accion(new FormData())).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirectMock).toHaveBeenCalledWith(expect.stringContaining('error=sesiones'));
+    expect(redirectMock).not.toHaveBeenCalledWith('/login');
+  });
 });
 
 describe('H16 — leer el correo falla cerrado', () => {

@@ -184,8 +184,8 @@ const SECCIONES: SeccionLegal[] = [
       // que el DPA todavía no estaba firmado con nadie — en un documento
       // PÚBLICO, sin sesión, que lee cualquiera que entra al sitio antes de
       // ser cliente. No se cambia el hecho de fondo (sigue sin existir un
-      // DPA firmado: el estado real vive en `docs/legal/PENDIENTES-ABOGADO.md`,
-      // un archivo interno), solo cómo se dice aquí: el contrato de encargado
+      // DPA firmado: el estado real vive en un documento interno
+      // no publicado), solo cómo se dice aquí: el contrato de encargado
       // es un instrumento aparte de estos términos, y se remite al contacto
       // en vez de anunciar en la página pública que no existe.
       LEGAL_CONFIG.dpaVersion

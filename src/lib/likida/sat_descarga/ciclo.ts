@@ -856,7 +856,11 @@ export interface ResumenCorrida {
  */
 export async function correrDescargaSat(
   ahora: Date = new Date(),
-  opts: { venceEn?: number } = {},
+  opts: {
+    venceEn?: number;
+    /** Flotas con perfil (0770) que esta descarga SALTA: la descarga del SAT es un módulo en stand-by. */
+    excluirTenants?: ReadonlySet<string>;
+  } = {},
 ): Promise<ResumenCorrida> {
   const estado = estadoDescargaSat();
   const prov = resolverDescargaSat();
@@ -878,7 +882,10 @@ export async function correrDescargaSat(
 
   const hoy = hoyMx(ahora);
   const resumenes: ResumenFlota[] = [];
-  const lista = configs ?? [];
+  const saltarFlotas = opts.excluirTenants;
+  const lista = saltarFlotas && saltarFlotas.size > 0
+    ? (configs ?? []).filter((c) => !saltarFlotas.has(String(c.tenant_id)))
+    : (configs ?? []);
   let flotasSinTurno = 0;
   for (let i = 0; i < lista.length; i++) {
     const c = lista[i];

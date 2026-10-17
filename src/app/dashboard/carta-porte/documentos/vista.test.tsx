@@ -5,7 +5,7 @@ import type { ReactElement } from 'react';
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {}, push() {} }) }));
 vi.mock('next/link', () => ({ default: ({ href, children, ...r }: { href: string; children: React.ReactNode }) => <a href={href} {...r}>{children}</a> }));
 
-import { VistaDocumentos, type DatosDocumentos } from './vista';
+import { VistaDocumentos, filtroEnvioDe, pasaFiltroEnvio, type DatosDocumentos } from './vista';
 import { VistaRevision } from './[id]/vista';
 import { calcularMetricas } from '@/lib/likida/carta_porte_docs/metricas';
 import { revisionDe } from '@/lib/likida/carta_porte_docs/presentacion';
@@ -260,5 +260,284 @@ describe('archivos con varios embarques (P13, 0670)', () => {
       embarque={{ indice: 1, total: 3, clave: 'ATL-1', padreId: 'pa', padreNombre: 'plan-del-dia.xlsx' }} />);
     expect(h).toMatch(/Embarque 1 de 3 \(folio ATL-1\) del archivo/);
     expect(h).toMatch(/href="\/dashboard\/carta-porte\/documentos\/pa"[^>]*>plan-del-dia\.xlsx</);
+  });
+});
+
+describe('VistaRevision · modo manual del TMS', () => {
+  const aprobado = () => doc({ id: 'd9', estado: 'aprobado', aprobadoEn: 'x' });
+  const montar = (d: DocumentoFila, envio: React.ComponentProps<typeof VistaRevision>['envio'], sufijo = '') => html(
+    <VistaRevision doc={d} revision={revisionDe(d)} original={{ tipo: 'texto', texto: 'x' }} operadores={[]} eventos={[]} acciones={{ revisar: accion }} envio={envio} sufijo={sufijo} />,
+  );
+
+  it('aprobado con envío pendiente: enlace de descarga a la plantilla y botón «Ya la subí a mano»', () => {
+    const h = montar(aprobado(), { estado: 'pendiente_prechequeo' });
+    expect(h).toContain('href="/api/export/carta-porte-docs?formato=plantilla_tms&amp;documento=d9"');
+    expect(h).toMatch(/Descargar plantilla del TMS/);
+    expect(conIntencion(h, 'subido_a_mano')).toBe(true);
+  });
+
+  it('el enlace conserva el sufijo de la flota elegida', () => {
+    expect(montar(aprobado(), { estado: 'listo' }, '?tenant=abc')).toContain('href="/api/export/carta-porte-docs?tenant=abc&amp;formato=plantilla_tms&amp;documento=d9"');
+  });
+
+  it('aprobado sin envío registrado (flota sin perfil): también ofrece el modo manual', () => {
+    const h = montar(aprobado(), null);
+    expect(h).toMatch(/Descargar plantilla del TMS/);
+    expect(conIntencion(h, 'subido_a_mano')).toBe(true);
+  });
+
+  it('ya subido a mano: sigue la descarga, desaparece el botón y se dice que no se reenvía', () => {
+    const h = montar(aprobado(), { estado: 'subido_a_mano' });
+    expect(h).toMatch(/Descargar plantilla del TMS/);
+    expect(conIntencion(h, 'subido_a_mano')).toBe(false);
+    expect(h).toMatch(/Marcada como subida a mano/);
+  });
+
+  it('envío ya enviado por el sistema: ni descarga ni botón', () => {
+    const h = montar(aprobado(), { estado: 'enviado' });
+    expect(h).not.toMatch(/Descargar plantilla del TMS/);
+    expect(conIntencion(h, 'subido_a_mano')).toBe(false);
+  });
+
+  it('documento por revisar o rechazado: no hay modo manual', () => {
+    for (const d of [doc({ id: 'd9' }), doc({ id: 'd9', estado: 'rechazado', rechazoMotivo: 'x' })]) {
+      const h = montar(d, null);
+      expect(h).not.toMatch(/Descargar plantilla del TMS/);
+      expect(conIntencion(h, 'subido_a_mano')).toBe(false);
+    }
+  });
+});
+
+describe('VistaRevision · modo manual con envío rechazado por el TMS', () => {
+  it('ofrece la descarga y «Ya la subí a mano» (subir a mano es lo que se hace tras un rechazo)', () => {
+    const d = doc({ id: 'd9', estado: 'aprobado', aprobadoEn: 'x' });
+    const h = html(<VistaRevision doc={d} revision={revisionDe(d)} original={{ tipo: 'texto', texto: 'x' }} operadores={[]} eventos={[]} acciones={{ revisar: accion }} envio={{ estado: 'rechazado_tms' }} />);
+    expect(h).toMatch(/Descargar plantilla del TMS/);
+    expect(conIntencion(h, 'subido_a_mano')).toBe(true);
+  });
+});
+
+describe('VistaDocumentos · filtro por estado de envío', () => {
+  const a1 = doc({ id: 'a1', estado: 'aprobado', nombreArchivo: 'uno.xlsx' });
+  const a2 = doc({ id: 'a2', estado: 'aprobado', nombreArchivo: 'dos.xlsx' });
+  const a3 = doc({ id: 'a3', estado: 'aprobado', nombreArchivo: 'tres.xlsx' });
+  const a4 = doc({ id: 'a4', estado: 'aprobado', nombreArchivo: 'cuatro.xlsx' });
+  const p1 = doc({ id: 'p1', estado: 'por_revisar', nombreArchivo: 'pendiente.xlsx' });
+  const envios = { a1: 'rechazado_tms', a2: 'subido_a_mano', a3: 'listo' } as const;
+  const mostrar = (f: string) => html(<VistaDocumentos datos={datos([a1, a2, a3, a4, p1], { envios })} acciones={ninguna} filtroEnvio={filtroEnvioDe(f)} />);
+
+  it('un valor desconocido en la URL vuelve a «todos»', () => {
+    expect(filtroEnvioDe('x')).toBe('todos');
+    expect(filtroEnvioDe(undefined)).toBe('todos');
+    expect(filtroEnvioDe('subido_a_mano')).toBe('subido_a_mano');
+  });
+
+  it('cada filtro deja solo los aprobados de ese grupo; «todos» no esconde nada', () => {
+    const nombres = (h: string) => ['uno', 'dos', 'tres', 'cuatro', 'pendiente'].filter((n) => h.includes(`${n}.xlsx`));
+    expect(nombres(mostrar('todos'))).toEqual(['uno', 'dos', 'tres', 'cuatro', 'pendiente']);
+    expect(nombres(mostrar('rechazado_tms'))).toEqual(['uno']);
+    expect(nombres(mostrar('subido_a_mano'))).toEqual(['dos']);
+    expect(nombres(mostrar('en_curso'))).toEqual(['tres']);
+    expect(nombres(mostrar('sin_envio'))).toEqual(['cuatro']);
+    expect(nombres(mostrar('enviado'))).toEqual([]);
+    expect(mostrar('enviado')).toMatch(/Ningún documento aprobado tiene ese estado de envío/);
+  });
+
+  it('los enlaces del filtro arrastran el sufijo de la flota', () => {
+    const h = html(<VistaDocumentos datos={datos([a1], { envios })} acciones={ninguna} sufijo="?tenant=abc" />);
+    expect(h).toContain('href="/dashboard/carta-porte/documentos?tenant=abc&amp;envio=subido_a_mano"');
+    expect(h).toContain('href="/dashboard/carta-porte/documentos?tenant=abc"');
+  });
+
+  it('pasaFiltroEnvio: un documento no aprobado nunca entra a un filtro de envío', () => {
+    expect(pasaFiltroEnvio({ id: 'p1', estado: 'por_revisar' }, envios, 'sin_envio')).toBe(false);
+  });
+});
+
+describe('VistaRevision · perfil restringido (envío al TMS, sin viaje)', () => {
+  const aprobado = () => doc({ id: 'd9', estado: 'aprobado', aprobadoEn: 'x' });
+  const montar = (d: DocumentoFila, perfilRestringido: boolean, envio: React.ComponentProps<typeof VistaRevision>['envio'] = null) => html(
+    <VistaRevision doc={d} revision={revisionDe(d)} original={{ tipo: 'texto', texto: 'x' }} operadores={[{ id: 'o1', nombre: 'Operador Uno' }]} eventos={[]} acciones={{ revisar: accion }}
+      envio={envio} perfilRestringido={perfilRestringido} salida={{ folio: 'F-1' }} />,
+  );
+
+  it('salida simulada: la tarjeta de envío lleva «Simulado» y dice «Subido al TMS (simulado)»; sin simulador dice solo «Enviado.»', () => {
+    const sim = montar(aprobado(), true, { estado: 'enviado', simulado: true });
+    expect(sim).toMatch(/data-testid="rotulo-simulado"[^>]*>Simulado</);
+    expect(sim).toMatch(/Subido al TMS \(simulado\)/);
+    const real = montar(aprobado(), true, { estado: 'enviado' });
+    expect(real).not.toMatch(/Simulado|simulado/);
+    expect(real).toMatch(/Enviado\./);
+  });
+
+  it('por revisar con perfil: no hay selector de operador ni «crea o completa el viaje»; sí «No timbra nada»', () => {
+    const h = montar(doc(), true);
+    expect(h).not.toMatch(/Operador del viaje/);
+    expect(h).not.toMatch(/crea o completa el viaje/);
+    expect(h).toMatch(/prepara el envío al sistema del cliente/);
+    expect(h).toMatch(/No timbra nada/);
+  });
+
+  it('aprobado con perfil: ni «Crear el viaje», ni operador, ni enlace al borrador, aunque el documento tenga viaje', () => {
+    for (const d of [aprobado(), doc({ id: 'd9', estado: 'aprobado', aprobadoEn: 'x', viajeId: 'v1' })]) {
+      const h = montar(d, true, { estado: 'listo' });
+      expect(h).not.toMatch(/Crear el viaje|Actualizar el viaje/);
+      expect(h).not.toMatch(/cp-operador|Operador Uno/);
+      expect(h).not.toMatch(/\/borrador\//);
+      expect(conIntencion(h, 'viaje')).toBe(false);
+      expect(h).toMatch(/Envío al sistema del cliente/);
+    }
+  });
+
+  it('sin perfil todo sigue igual: operador, «Crear el viaje» y enlace al borrador', () => {
+    const sinViaje = montar(aprobado(), false);
+    expect(sinViaje).toMatch(/Crear el viaje/);
+    expect(sinViaje).toMatch(/cp-operador2/);
+    expect(conIntencion(sinViaje, 'viaje')).toBe(true);
+    expect(sinViaje).not.toMatch(/Envío al sistema del cliente/);
+    expect(montar(doc({ id: 'd9', estado: 'aprobado', aprobadoEn: 'x', viajeId: 'v1' }), false)).toMatch(/\/borrador\/v1/);
+    expect(montar(doc(), false)).toMatch(/Operador del viaje/);
+  });
+
+  it('cada estado del envío pinta su frase en lenguaje llano', () => {
+    const f = (envio: React.ComponentProps<typeof VistaRevision>['envio']) => montar(aprobado(), true, envio);
+    expect(f(null)).toMatch(/Aún no se ha enviado nada/);
+    expect(f({ estado: 'descartado' })).toMatch(/Aún no se ha enviado nada/);
+    expect(f({ estado: 'pendiente_prechequeo' })).toMatch(/Listo para enviar/);
+    expect(f({ estado: 'listo' })).toMatch(/Listo para enviar/);
+    expect(f({ estado: 'enviando' })).toMatch(/Enviándose al sistema del cliente/);
+    expect(f({ estado: 'enviado' })).toMatch(/Enviado\./);
+    expect(f({ estado: 'subido_a_mano' })).toMatch(/Subido a mano/);
+    const espera = f({ estado: 'pendiente_reque', proximaRevision: '2026-10-20T15:00:00.000Z' });
+    expect(espera).toMatch(/Esperando que exista el requerimiento — se reintentará el /);
+    expect(espera).toMatch(/2026|20/);
+    expect(f({ estado: 'pendiente_reque' })).toMatch(/Esperando que exista el requerimiento\./);
+    expect(f({ estado: 'error_transitorio' })).toMatch(/no contestó — se reintentará/);
+    const rechazo = f({ estado: 'rechazado_tms', motivo: 'hoja Mercancias, fila 22, campo Cantidad' });
+    expect(rechazo).toMatch(/lo rechazó: hoja Mercancias, fila 22, campo Cantidad — corrige y vuelve a aprobar/);
+  });
+
+  it('conserva los botones del modo manual (descargar plantilla y marcar subido a mano)', () => {
+    const h = montar(aprobado(), true, { estado: 'listo' });
+    expect(h).toMatch(/Descargar plantilla del TMS/);
+    expect(conIntencion(h, 'subido_a_mano')).toBe(true);
+  });
+});
+
+describe('VistaDocumentos · perfil restringido', () => {
+  const a = doc({ id: 'a1', estado: 'aprobado', nombreArchivo: 'uno.xlsx', viajeId: null });
+  it('la bandeja habla del envío al TMS y no de viajes; sin perfil, igual que siempre', () => {
+    const con = html(<VistaDocumentos datos={datos([a], { envios: { a1: 'listo' } })} acciones={ninguna} perfilRestringido />);
+    expect(con).toMatch(/Envío al TMS: En curso/);
+    expect(con).not.toMatch(/Sin viaje todavía|Con viaje/);
+    const sin = html(<VistaDocumentos datos={datos([a], { envios: { a1: 'listo' } })} acciones={ninguna} />);
+    expect(sin).toMatch(/Sin viaje todavía/);
+  });
+});
+
+describe('T-A3-31: destinatario de revisión en la bandeja', () => {
+  const ME = 'u-yo';
+  const OTRA = 'u-otra';
+  const filas = [doc({ id: 'mio', nombreArchivo: 'mio.xlsx' }), doc({ id: 'ajeno', nombreArchivo: 'ajeno.xlsx' }), doc({ id: 'nadie', nombreArchivo: 'nadie.xlsx' })];
+  const asignacion: Partial<DatosDocumentos> = {
+    asignacionActiva: true, asignados: { mio: ME, ajeno: OTRA }, revisores: [{ id: ME, nombre: 'Persona Uno' }, { id: OTRA, nombre: 'Persona Dos' }],
+  };
+
+  it('sin configuración la bandeja es la de siempre: ni columna «Asignado a» ni filtro «Mis casos»', () => {
+    const h = html(<VistaDocumentos datos={datos(filas)} acciones={todas} usuarioId={ME} soloMios />);
+    expect(h).not.toMatch(/Asignado a|Mis casos/);
+    expect(h).toMatch(/mio\.xlsx/); expect(h).toMatch(/ajeno\.xlsx/); expect(h).toMatch(/nadie\.xlsx/);
+  });
+
+  it('con asignación activa: columna con el nombre de la persona y «Todos los revisores» para lo no asignado', () => {
+    const h = html(<VistaDocumentos datos={datos(filas, asignacion)} acciones={todas} usuarioId={ME} />);
+    expect(h).toMatch(/Asignado a/);
+    expect(h).toMatch(/Persona Uno/); expect(h).toMatch(/Persona Dos/);
+    expect(h).toMatch(/Todos los revisores/);
+    expect(h).toMatch(/Mis casos/);
+  });
+
+  it('«Mis casos» solo muestra los suyos', () => {
+    const h = html(<VistaDocumentos datos={datos(filas, asignacion)} acciones={todas} usuarioId={ME} soloMios />);
+    expect(h).toMatch(/mio\.xlsx/);
+    expect(h).not.toMatch(/ajeno\.xlsx/);
+    expect(h).not.toMatch(/nadie\.xlsx/);
+  });
+
+  it('«Mis casos» sin ningún caso asignado lo dice, y explica que lo no asignado le toca a todos', () => {
+    const h = html(<VistaDocumentos datos={datos(filas, { ...asignacion, asignados: { ajeno: OTRA } })} acciones={todas} usuarioId={ME} soloMios />);
+    expect(h).toMatch(/No tienes casos asignados/);
+  });
+
+  it('el enlace «Mis casos» conserva el ?tenant= de la vista', () => {
+    const h = html(<VistaDocumentos datos={datos(filas, asignacion)} acciones={todas} usuarioId={ME} sufijo="?tenant=abc" />);
+    expect(h).toMatch(/href="\/dashboard\/carta-porte\/documentos\?tenant=abc&amp;mios=1"/);
+  });
+});
+
+describe('T-A3-31: reasignar desde el visor', () => {
+  const opciones = [{ id: 'u1', nombre: 'Persona Uno' }, { id: 'u2', nombre: 'Persona Dos' }];
+  const ver = (d: DocumentoFila, revisor: { actualId: string | null; opciones: typeof opciones } | null, reasignar: typeof accion | null = accion) =>
+    html(<VistaRevision doc={d} revision={null} original={{ tipo: 'nada', motivo: 'x' }} operadores={[]} eventos={[]} acciones={{ revisar: accion, reasignar }} revisor={revisor} />);
+
+  it('sin configuración de asignación no se pinta nada', () => {
+    expect(ver(doc(), null)).not.toMatch(/Asignado a|Reasignar/);
+  });
+
+  it('muestra a quién le toca y el selector para reasignar (con «Todos los revisores»)', () => {
+    const h = ver(doc(), { actualId: 'u1', opciones });
+    expect(h).toMatch(/Asignado a: <strong[^>]*>Persona Uno/);
+    expect(h).toMatch(/name="revisorId"/);
+    expect(h).toMatch(/<option value="u2">Persona Dos/);
+    expect(h).toMatch(/<option value="">Todos los revisores/);
+    expect(h).toMatch(/Reasignar/);
+  });
+
+  it('sin asignar dice «Todos los revisores»; un documento ya aprobado no ofrece reasignar', () => {
+    expect(ver(doc(), { actualId: null, opciones })).toMatch(/Asignado a: <strong[^>]*>Todos los revisores/);
+    const aprobado = ver(doc({ estado: 'aprobado', aprobadoEn: 'x' }), { actualId: 'u1', opciones });
+    expect(aprobado).toMatch(/Asignado a/);
+    expect(aprobado).not.toMatch(/name="revisorId"/);
+  });
+});
+
+describe('T-A3-63: lo inferido y lo poco seguro se resaltan al lado del documento', () => {
+  const montar = (d: DocumentoFila, texto: string) => html(
+    <VistaRevision doc={d} revision={revisionDe(d)} original={{ tipo: 'texto', texto }} operadores={[]} eventos={[]} acciones={{ revisar: accion }} />,
+  );
+  const conMarcas = () => {
+    const e = extraccionAtlasOk();
+    e.campos.origen_cp = { ...cv('44100', 0.6), evidencia: 'CP Origen: 44100' };
+    e.campos.unidad_placas = cv('ABC1234', 0.95, 'catalogo');
+    return doc({}, e);
+  };
+
+  it('el inferido lleva rótulo «Inferido», su aviso en llano y nunca el rótulo de leído', () => {
+    const h = montar(conMarcas(), 'Folio | ATL-20481');
+    expect(h).toContain('data-marca="inferido"');
+    expect(h).toMatch(/Inferido del catálogo del cliente: el documento no lo trae/);
+    expect(h).toMatch(/>Inferido</);
+  });
+
+  it('el poco seguro se rotula y su línea del documento original va resaltada', () => {
+    const h = montar(conMarcas(), 'Folio | ATL-20481\nCP Origen: 44100');
+    expect(h).toContain('data-marca="poco-seguro"');
+    expect(h).toMatch(/>Poco seguro</);
+    expect(h).toContain('data-linea-resaltada');
+    expect(h.match(/data-linea-resaltada/g)).toHaveLength(1);
+  });
+
+  it('el resumen cuenta lo resaltado y avisa que aprobar con correcciones enseña al formato', () => {
+    const h = montar(conMarcas(), 'x');
+    expect(h).toMatch(/1 dato inferido/);
+    expect(h).toMatch(/1 dato poco seguro/);
+    expect(h).toMatch(/el siguiente documento igual sale sin modelo/);
+  });
+
+  it('un documento sin nada que resaltar no pinta marcas ni resumen', () => {
+    const h = montar(doc(), 'Folio | ATL-20481');
+    expect(h).not.toContain('data-marca=');
+    expect(h).not.toContain('resumen-marcas');
+    expect(h).not.toContain('data-linea-resaltada');
   });
 });

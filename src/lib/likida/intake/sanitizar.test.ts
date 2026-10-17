@@ -8,7 +8,7 @@ import { sanitizarFolio, sanitizarTexto, sanitizarProducto } from './sanitizar';
 // produce "METFORMINA 850MG 30 TABS", que es un dato de SALUD del titular
 // (art. 2 fr. VI) en una base sin justificación (art. 8 párrafo segundo), con el
 // incremento de sanción "hasta por dos veces" del art. 59 fr. IV disponible.
-// docs/conocimiento/11-datos-personales.md §8.6: "Detecta y excluye."
+// la documentación interna §8.6: "Detecta y excluye."
 // ═══════════════════════════════════════════════════════════════════════════
 describe('sanitizarProducto — filtro de datos sensibles', () => {
   it('excluye lo que revela salud', () => {

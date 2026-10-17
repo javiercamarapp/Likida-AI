@@ -11,16 +11,21 @@ import {
   importarDesglose, conciliarDesglose, listarDesgloses, detalleDesglose,
 } from '@/lib/likida/intake/desglose_peaje';
 import { evidenciaGpsDeDesglose } from '@/lib/likida/peajes/evidencia_gps';
-import { anularDesgloseDb } from '@/lib/likida/peajes/datos';
+import { anularDesgloseDb, vinculosDeDesglose, listarTarifas } from '@/lib/likida/peajes/datos';
+import { revisionDeDesglose, listarReclamos } from '@/lib/likida/peajes/revision_cobros';
+import { validarPeriodoDeclarado } from '@/lib/likida/peajes/periodo';
 import { bitacoraConciliada } from '@/lib/likida/peajes/bitacora_conciliada';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../../sufijo';
 import { avisoAgentePeajesApagado } from './apagado';
+import { superficiePeajesDeTenant, MOTIVO_STAND_BY_PERFIL } from '@/lib/likida/peajes/superficie_perfil';
 import { VistaAgentePeajes } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
 import { registrarCorrida, ultimasCorridas } from '@/lib/likida/agentes/corridas';
 import { ahoraMs } from '@/lib/saludo';
+import { hoyMx } from '@/lib/formato';
+import { estadoRevisionCobros } from './revision-cobros';
 import type { EstadoImportar } from './subir-desglose';
 import type { EstadoConciliar } from './conciliar-desglose';
 import type { EstadoAnular } from './anular-desglose';
@@ -58,12 +63,14 @@ export default async function PaginaAgentePeajes({
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/peajes', sp);
   if (!puedeVerRuta(rol, '/dashboard/agentes/peajes')) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
+  // T-A2-31: qué del stand-by se lee y se pinta. Con perfil `cinco_agentes` (o sin poder leerlo: falla cerrado) nada de eso.
+  const superficie = await superficiePeajesDeTenant(tenantId);
 
   const [conciliacion, lineas, desgloses, acreditables, corridas, desglosesProveedor] = await Promise.all([
-    getConciliacionConsolidado(tenantId),
-    safe(() => getLineasPorConciliar(tenantId)),
-    safe(() => getDesglosesRecibidos(tenantId)),
-    safe(() => getAcreditables(tenantId)),
+    superficie.cfdiYTickets ? getConciliacionConsolidado(tenantId) : Promise.resolve(null),
+    superficie.cfdiYTickets ? safe(() => getLineasPorConciliar(tenantId)) : Promise.resolve(null),
+    superficie.cfdiYTickets ? safe(() => getDesglosesRecibidos(tenantId)) : Promise.resolve(null),
+    superficie.estimulo ? safe(() => getAcreditables(tenantId)) : Promise.resolve(null),
     // La ficha de corridas (B3): null = no se pudo leer, y la ficha lo dice.
     safe(() => ultimasCorridas(tenantId, 'peajes')),
     // Los desgloses del proveedor (F5): null = no se pudo leer, y se dice.
@@ -79,26 +86,36 @@ export default async function PaginaAgentePeajes({
   // FE-33: las dos lecturas de abajo solo dependen de `desgloseSel` — nada
   // de la segunda depende del resultado de la primera —, así que van en
   // paralelo en vez de en serie.
-  const [detalleSel, evidenciaSel, verificacionSel] = desgloseSel
+  const [detalleSel, evidenciaSel, verificacionSel, reporteCobros, reclamosFlota, tarifasFlota, vinculosSel] = desgloseSel
     ? await Promise.all([
         safe(() => detalleDesglose(tenantId, desgloseSel.desgloseId)),
         // La evidencia GPS del desglose seleccionado (post-plan-maestro #1).
         // Se computa al leer — no escribe nada — y `safe()` la degrada a "no
         // se pudo leer" igual que el detalle: un resumen a medias diría "sin
         // evidencia" de cruces que sí la tienen.
-        safe(async () => {
+        superficie.gps ? safe(async () => {
           const e = await evidenciaGpsDeDesglose(tenantId, desgloseSel.desgloseId);
           // El Map → objeto plano: la vista solo anota las líneas visibles.
           return { resumen: e.resumen, porLinea: Object.fromEntries(e.porLinea) };
-        }),
+        }) : Promise.resolve(null),
         // El estado conciliado (cuadra / sin respaldo / por verificar): solo el
         // resumen viaja a la vista; el detalle línea a línea es el CSV.
-        safe(async () => {
+        superficie.bitacoraEstimulo ? safe(async () => {
           const b = await bitacoraConciliada(tenantId, desgloseSel.desgloseId);
           return b ? { resumen: b.resumen, sinEvaluarGps: b.sinEvaluarGps } : null;
-        }),
+        }) : Promise.resolve(null),
+        // T-A2-27: las lecturas de la revisión de cobros. Cada una va con `safe()`: un fallo aquí
+        // degrada SOLO esa franja (`estadoRevisionCobros` → error) y nunca bloquea subir/anular/conciliar.
+        safe(() => revisionDeDesglose(tenantId, desgloseSel.desgloseId)),
+        safe(async () => (await listarReclamos(tenantId, hoyMx())).reclamos),
+        safe(async () => (await listarTarifas(tenantId)).length),
+        safe(() => vinculosDeDesglose(tenantId, desgloseSel.desgloseId)),
       ])
-    : [null, null, null];
+    : [null, null, null, null, null, null, null];
+  const revisionCobros = estadoRevisionCobros({
+    reporte: reporteCobros, hayDesglose: desgloseSel !== null,
+    reclamos: reclamosFlota, tarifas: tarifasFlota, vinculos: vinculosSel, hoy: hoyMx(),
+  });
 
   async function subirDesglose(
     _prev: { error?: string; resumen?: { totalLineas: number; conciliadas: number; porConciliar: number } } | null,
@@ -111,6 +128,8 @@ export default async function PaginaAgentePeajes({
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
     // El kill switch (0110), después de la puerta y antes de trabajar — el
     // punto único vive en ./apagado.ts, las cuatro actions lo consultan.
+    // Stand-by (CFDI consolidado): una flota con perfil no lo ejecuta ni por POST directo.
+    if (!(await superficiePeajesDeTenant(tenantId)).cfdiYTickets) return { error: MOTIVO_STAND_BY_PERFIL };
     const apagado = await avisoAgentePeajesApagado();
     if (apagado) return { error: apagado };
 
@@ -155,11 +174,20 @@ export default async function PaginaAgentePeajes({
     if (!(archivo instanceof File) || archivo.size === 0) return { error: 'Elige el archivo del desglose (Excel, CSV o PDF).' };
     if (archivo.size > MAX_DESGLOSE_BYTES) return { error: MENSAJE_ARCHIVO_GRANDE };
     const proveedor = String(fd.get('proveedor') ?? '').trim();
+    // El periodo del archivo (opcional): decide qué cobro es extemporáneo. Las dos fechas o ninguna.
+    const desde = String(fd.get('periodo_desde') ?? '').trim();
+    const hasta = String(fd.get('periodo_hasta') ?? '').trim();
+    let periodo: { desde: string; hasta: string } | null = null;
+    if (desde || hasta) {
+      const v = validarPeriodoDeclarado(desde, hasta);
+      if (!v.ok) return { error: v.motivo };
+      periodo = { desde: v.periodo.desde, hasta: v.periodo.hasta };
+    }
 
     try {
       const buffer = Buffer.from(await archivo.arrayBuffer());
       const importado = await importarDesglose(tenantId, {
-        nombre: archivo.name, buffer, proveedor: proveedor || undefined,
+        nombre: archivo.name, buffer, proveedor: proveedor || undefined, periodo,
       });
       // El motivo del parseo VIAJA al usuario tal cual: nombra la columna que
       // faltó o por qué el PDF no alcanza — es el error útil, no uno genérico.
@@ -254,6 +282,8 @@ export default async function PaginaAgentePeajes({
     const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede operar este agente.' };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+    // Stand-by (barrido de la cola de tickets de caseta): igual, cortado en servidor.
+    if (!(await superficiePeajesDeTenant(tenantId)).cfdiYTickets) return { error: MOTIVO_STAND_BY_PERFIL };
     const apagado = await avisoAgentePeajesApagado();
     if (apagado) return { error: apagado };
 
@@ -311,6 +341,8 @@ export default async function PaginaAgentePeajes({
       detalleSeleccionado={detalleSel}
       evidenciaGps={evidenciaSel}
       verificacion={verificacionSel}
+      revisionCobros={revisionCobros}
+      superficie={superficie}
       importarDesglose={importarYCruzarDesglose}
       conciliarDesglose={conciliarDesgloseAhora}
       anularDesglose={anularDesgloseAhora}

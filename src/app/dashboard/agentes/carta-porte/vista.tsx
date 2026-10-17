@@ -1,9 +1,12 @@
 import Link from 'next/link';
-import { ScrollText, TriangleAlert, Sparkles } from 'lucide-react';
+import { ScrollText, TriangleAlert, Sparkles, Mail, MessageCircle, LayoutDashboard } from 'lucide-react';
 import type { EstadoCartaPorte } from '@/lib/likida/carta_porte_datos';
 import { numero } from '@/lib/formato';
+import type { InsightsAgente, CalidadGrupo, TarjetaInsight } from '@/lib/likida/carta_porte_docs/metricas';
+import { aCsvSinCcp, type ListadoSinCcp, type ColorAntiguedad } from '@/lib/likida/carta_porte_docs/viajes_sin_ccp';
 import { BarraPagina } from '../../resumen-visual';
 import { EstadoError, EstadoVacio } from '@/app/admin/ui/kit';
+import { DireccionBuzon } from '../proveedores/controles';
 
 /**
  * La ventana del Agente de Carta Porte (Fases B-C del blueprint): los conteos
@@ -14,10 +17,28 @@ import { EstadoError, EstadoVacio } from '@/app/admin/ui/kit';
  * Área `operacion` como su pantalla hermana /dashboard/carta-porte: cero
  * pesos, y su usuario diario es el jefe de tráfico. Pura props.
  */
-export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones }: {
+/** El buzón de correo de la flota tal como lo pinta el bloque «Cómo mandarme documentos». */
+export interface BuzonCartaPorteVista { direccion: string | null; activo: boolean; remitentes: string[]; dominioConfigurado: boolean }
+
+/**
+ * La frase que dice que los grupos NO son un canal. Exportada para que la prueba
+ * la distinga de cualquier otra mención: «grupo» solo puede aparecer aquí.
+ */
+export const FRASE_SIN_GRUPOS = 'Los grupos de WhatsApp no se pueden leer: pide a tus clientes que escriban al correo o reenvíalos tú.';
+
+export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzon = null, insights, sinCcp, nombresCliente = {}, diasVentana = 30 }: {
   datos: EstadoCartaPorte | null;
   sufijo?: string;
   notificaciones?: React.ReactNode;
+  /** `null` = la flota aún no activa su buzón; `'no_leido'` = la lectura falló (no se finge «sin buzón»). */
+  buzon?: BuzonCartaPorteVista | null | 'no_leido';
+  /** T-A3-37. `undefined` = no se pide el bloque; `'no_leido'` = la lectura falló (no se finge «sin datos»). */
+  insights?: InsightsAgente | 'no_leido';
+  /** T-A3-66. `undefined` = no se pide el bloque; `'no_leido'` = la lectura falló (no se finge «sin pendientes»). */
+  sinCcp?: ListadoSinCcp | 'no_leido';
+  /** id de cliente → nombre, solo para rotular. */
+  nombresCliente?: Record<string, string>;
+  diasVentana?: number;
 }) {
   const conteo = (n: 'si' | 'no' | 'falta_declarar') =>
     datos === null ? null : datos.viajes.filter((v) => v.decision.necesita === n).length;
@@ -87,6 +108,17 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones }: {
             </>
           )}
 
+          <ComoMandarDocumentos buzon={buzon} sufijo={sufijo} />
+
+          {sinCcp !== undefined && <ViajesSinCcp listado={sinCcp} />}
+
+          {insights !== undefined && <InsightsDelAgente insights={insights} nombresCliente={nombresCliente} diasVentana={diasVentana} />}
+
+          <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+            Lo que el agente aprende de cada cliente —productos, remitentes, destinatarios y su número interno— vive en el{' '}
+            <Link href={`/dashboard/agentes/carta-porte/catalogo${sufijo}`} className="font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>catálogo del cliente →</Link>
+          </p>
+
           <section className="card p-4">
             <div className="flex items-center gap-2 mb-3">
               <Sparkles width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
@@ -135,5 +167,203 @@ function Tarjeta({ rotulo, valor, tono }: { rotulo: string; valor: number | null
         {valor === null ? '—' : numero(valor)}
       </div>
     </div>
+  );
+}
+
+/**
+ * Los tres caminos por los que llega un documento (el correo oficial del cliente
+ * es el principal; el WhatsApp es 1:1 con la oficina, nunca un grupo) y, con el
+ * buzón sin activar, el estado vacío que dice cómo empezar.
+ */
+function ComoMandarDocumentos({ buzon, sufijo }: { buzon: BuzonCartaPorteVista | null | 'no_leido'; sufijo: string }) {
+  const panel = `/dashboard/carta-porte/documentos${sufijo}`;
+  return (
+    <section className="card p-4 space-y-3" aria-labelledby="cp-como-mandar">
+      <h2 id="cp-como-mandar" className="font-display text-[15px] font-semibold">Cómo mandarme documentos</h2>
+      <div className="grid md:grid-cols-3 gap-4 text-[12.5px]">
+        <div className="space-y-1.5">
+          <div className="etiqueta-mono text-[10px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
+            <Mail width={12} height={12} strokeWidth={1.75} /> 1 · Correo (el medio oficial)
+          </div>
+          {buzon === 'no_leido' ? (
+            <EstadoError mensaje="No se pudo leer el buzón de tu flota. Sin lectura no se enseña una dirección: una inventada se perdería." />
+          ) : buzon === null ? (
+            <EstadoVacio icono={<Mail width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+              Aún no tienes buzón. Actívalo en el panel de documentos y aquí verás la dirección para
+              que tus clientes (o tú) reenvíen los embarques.
+            </EstadoVacio>
+          ) : buzon.direccion ? (
+            <>
+              <DireccionBuzon direccion={buzon.direccion} />
+              {!buzon.activo && <p style={{ color: 'var(--warn)' }}>El buzón está apagado: lo que llegue no se leerá hasta encenderlo en el panel.</p>}
+              <p style={{ color: 'var(--muted)' }}>
+                Los adjuntos (PDF, Excel, XML, foto) y el texto del correo entran solos a la bandeja.
+              </p>
+              <p style={{ color: 'var(--muted)' }}>
+                {buzon.remitentes.length > 0
+                  ? `Remitentes de tus clientes reconocidos: ${buzon.remitentes.join(', ')}. Uno distinto entra igual, marcado «remitente no reconocido».`
+                  : 'Remitentes reconocidos: cualquiera (puedes limitarlos a los correos de tus clientes en el panel).'}
+              </p>
+            </>
+          ) : (
+            <p style={{ color: 'var(--warn)' }}>
+              {buzon.dominioConfigurado ? 'La dirección no se pudo armar.' : 'El dominio de correo de Likida no está configurado en este entorno: el buzón existe pero no hay dirección que dar.'}
+            </p>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <div className="etiqueta-mono text-[10px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
+            <MessageCircle width={12} height={12} strokeWidth={1.75} /> 2 · WhatsApp 1:1 de la oficina
+          </div>
+          <p style={{ color: 'var(--muted)' }}>
+            Quien despacha reenvía el archivo al número de Likida, o pega el texto del embarque empezando
+            con la palabra «carta porte». Una foto debe llevar ese mismo pie.
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <div className="etiqueta-mono text-[10px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
+            <LayoutDashboard width={12} height={12} strokeWidth={1.75} /> 3 · El panel
+          </div>
+          <p style={{ color: 'var(--muted)' }}>Sube el archivo a mano en la bandeja de documentos.</p>
+          <Link href={panel} className="inline-block text-[12px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>
+            Abrir la bandeja de documentos →
+          </Link>
+        </div>
+      </div>
+      <p className="text-[12px] font-medium">{FRASE_SIN_GRUPOS}</p>
+    </section>
+  );
+}
+
+const pctTxt = (p: number | null): string => (p === null ? '—' : `${p} %`);
+const COLOR_TONO: Record<TarjetaInsight['tono'], string> = { bad: 'var(--bad)', warn: 'var(--warn)', info: 'var(--muted)' };
+
+function TarjetaQuePaso({ t }: { t: TarjetaInsight }) {
+  return (
+    <div className="card p-3.5 text-[12.5px] space-y-1" style={{ borderLeft: `3px solid ${COLOR_TONO[t.tono]}` }}>
+      <div className="font-medium">{t.quePaso}</div>
+      <div style={{ color: 'var(--muted)' }}><span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Qué significa </span>{t.queSignifica}</div>
+      <div><span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Qué hacer </span>{t.queHacer}</div>
+    </div>
+  );
+}
+
+function TablaCalidad({ titulo, filas, rotular }: { titulo: string; filas: CalidadGrupo[]; rotular: (clave: string) => string }) {
+  return (
+    <div className="card p-4">
+      <div className="etiqueta-mono text-[10px] uppercase mb-2" style={{ color: 'var(--faint)' }}>{titulo}</div>
+      {filas.length === 0 ? <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Sin documentos aprobados todavía.</p> : (
+        <table className="w-full text-[12.5px]">
+          <thead><tr style={{ color: 'var(--faint)' }}><th className="text-left font-normal">Grupo</th><th className="text-right font-normal">Aprobados</th><th className="text-right font-normal">Sin tocar</th></tr></thead>
+          <tbody>
+            {filas.map((g) => (
+              <tr key={g.clave}><td>{rotular(g.clave)}</td><td className="text-right cifra-mono">{numero(g.documentos)}</td><td className="text-right cifra-mono">{pctTxt(g.pctSinTocar)} ({numero(g.sinTocar)})</td></tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Cómo le va al agente (T-A3-37): % sin tocar, causas de rechazo, calidad por formato y cliente y estado de los
+ * envíos. Solo conteos: ningún valor de un documento. Sin base, dice «—», nunca un 0 % que parezca medición.
+ */
+function InsightsDelAgente({ insights, nombresCliente, diasVentana }: { insights: InsightsAgente | 'no_leido'; nombresCliente: Record<string, string>; diasVentana: number }) {
+  if (insights === 'no_leido') {
+    return <section className="card p-4"><EstadoError mensaje="No se pudieron leer los resultados del agente. Vuelve a intentar en un momento." /></section>;
+  }
+  const i = insights;
+  const nombre = (c: string) => (c === 'sin_cliente' ? 'Sin cliente asignado' : nombresCliente[c] ?? 'Cliente sin nombre');
+  const e = i.envios;
+  const hayAlgo = i.aprobados > 0 || e.enviados + e.rechazadosTms + e.pendientesReque + e.subidosAMano > 0 || (i.causasRechazo?.length ?? 0) > 0;
+  return (
+    <section className="space-y-3" aria-label="Cómo le va al agente">
+      <h2 className="font-display text-[15px] font-semibold">Cómo le va al agente <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>· últimos {diasVentana} días</span></h2>
+      {!hayAlgo ? (
+        <EstadoVacio>Todavía no hay resultados que medir. Cuando se aprueben documentos y salgan envíos, aquí verás cuántos pasaron sin tocar, por qué se rechazaron y qué falta enviar.</EstadoVacio>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="card p-4">
+              <div className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Aprobados sin tocar</div>
+              <div className="cifra-mono text-[22px] font-semibold">{pctTxt(i.pctSinTocar)}</div>
+              <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{i.aprobados === 0 ? 'Aún no hay aprobados' : `de ${numero(i.aprobados)} aprobados`}</div>
+            </div>
+            <Tarjeta rotulo="Enviados al sistema del cliente" valor={e.enviados} />
+            <Tarjeta rotulo="Esperan requerimiento" valor={e.pendientesReque} tono="var(--warn)" />
+            <Tarjeta rotulo="Rechazados por el sistema del cliente" valor={e.rechazadosTms} tono="var(--bad)" />
+          </div>
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+            Tiempo típico de aprobado a enviado: {e.medianaAprobadoAEnviadoMin === null ? '— (aún no hay envíos medibles)' : `${e.medianaAprobadoAEnviadoMin} min (mediana)`}.
+            {e.pendienteMasViejoHoras !== null && ` El que más espera lleva ${e.pendienteMasViejoHoras} h.`}
+          </p>
+          {i.tarjetas.length > 0 && <div className="grid md:grid-cols-2 gap-3">{i.tarjetas.map((t) => <TarjetaQuePaso key={t.id} t={t} />)}</div>}
+          <div className="grid md:grid-cols-2 gap-3">
+            <TablaCalidad titulo="Calidad por formato" filas={i.porFormato} rotular={(c) => c} />
+            <TablaCalidad titulo="Calidad por cliente" filas={i.porCliente} rotular={nombre} />
+          </div>
+          <div className="grid md:grid-cols-2 gap-3 text-[12.5px]">
+            <div className="card p-4">
+              <div className="etiqueta-mono text-[10px] uppercase mb-2" style={{ color: 'var(--faint)' }}>Por qué se rechazan</div>
+              {i.causasRechazo === null ? <p style={{ color: 'var(--muted)' }}>No disponible todavía en esta base.</p>
+                : i.causasRechazo.length === 0 && i.rechazadosSinCausa === 0 ? <p style={{ color: 'var(--muted)' }}>No hubo rechazos.</p>
+                : <ul className="space-y-0.5">
+                    {i.causasRechazo.map((c) => <li key={c.causa}>{c.rotulo}: <span className="cifra-mono">{numero(c.documentos)}</span></li>)}
+                    {(i.rechazadosSinCausa ?? 0) > 0 && <li>Sin clasificar: <span className="cifra-mono">{numero(i.rechazadosSinCausa ?? 0)}</span></li>}
+                  </ul>}
+            </div>
+            <div className="card p-4">
+              <div className="etiqueta-mono text-[10px] uppercase mb-2" style={{ color: 'var(--faint)' }}>Lo que más se corrige</div>
+              {i.topCamposCorregidos.length === 0 ? <p style={{ color: 'var(--muted)' }}>Nadie ha corregido campos en este periodo.</p>
+                : <ol className="space-y-0.5 list-decimal pl-4">{i.topCamposCorregidos.map((c) => <li key={c.campo}>{c.campo}: <span className="cifra-mono">{numero(c.correcciones)}</span> {c.correcciones === 1 ? 'vez' : 'veces'}</li>)}</ol>}
+            </div>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+const TONO_ANTIGUEDAD: Record<ColorAntiguedad, string> = { verde: 'var(--ok)', ambar: 'var(--warn)', rojo: 'var(--bad)' };
+const ROTULO_ANTIGUEDAD: Record<ColorAntiguedad, string> = { verde: 'Reciente', ambar: 'Atención', rojo: 'Riesgo de multa' };
+
+/**
+ * T-A3-66 — viajes que ya salieron y siguen sin Carta Porte, por cliente y con su antigüedad. SOLO LECTURA: no envía
+ * mensajes ni cierra viajes. El reporte semanal es un CSV que se baja desde aquí.
+ */
+function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
+  if (listado === 'no_leido') {
+    return <section className="card p-4"><EstadoError mensaje="No se pudo leer la lista de viajes salidos sin Carta Porte. Vuelve a intentar en un momento." /></section>;
+  }
+  return (
+    <section className="space-y-3" aria-label="Viajes salidos sin Carta Porte">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h2 className="font-display text-[15px] font-semibold">Viajes salidos sin Carta Porte <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>· {numero(listado.total)}</span></h2>
+        {!listado.vacio && (
+          <a download="viajes-sin-carta-porte.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(aCsvSinCcp(listado))}`}
+            className="text-[12.5px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>Descargar reporte (CSV)</a>
+        )}
+      </div>
+      {listado.vacio ? (
+        <EstadoVacio>No hay viajes salidos sin Carta Porte. Cuando salga uno sin complemento aparecerá aquí con las horas que lleva sin él.</EstadoVacio>
+      ) : listado.grupos.map((g) => (
+        <div key={g.clienteId ?? 'sin_cliente'} className="card p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[13px] font-medium">{g.clienteNombre}</div>
+            <div className="text-[11.5px]" style={{ color: TONO_ANTIGUEDAD[g.colorMax] }}>{numero(g.viajes.length)} {g.viajes.length === 1 ? 'viaje' : 'viajes'} · el más viejo {numero(g.masAntiguoHoras)} h</div>
+          </div>
+          <ul className="space-y-0.5 text-[12.5px]">
+            {g.viajes.map((v) => (
+              <li key={v.viajeId} className="flex items-center justify-between gap-3">
+                <span>{v.folio ?? 'Sin folio'}{v.localAbierto ? ' · local abierto' : ''}</span>
+                <span className="cifra-mono" style={{ color: TONO_ANTIGUEDAD[v.color] }}>{numero(v.horas)} h ({numero(v.dias)} d) · {ROTULO_ANTIGUEDAD[v.color]}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
   );
 }

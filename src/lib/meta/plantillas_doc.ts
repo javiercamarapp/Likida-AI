@@ -2,6 +2,9 @@
 // NO se edita a mano: `plantillas_catalogo.test.ts` falla si no coincide con esta
 // salida. Regenerar: `npx tsx scripts/generar-doc-plantillas.ts`.
 import { CATALOGO_PLANTILLAS, type PlantillaCatalogo, type BotonCatalogo } from './plantillas_catalogo';
+import {
+  perfilDePlantilla, PLANTILLAS_CICLO, ESTADO_PROVEEDOR_CICLO, plantillasDelCicloPorPerfil, type EstadoProveedor,
+} from '@/lib/likida/conductor/plantillas_requeridas';
 
 const AGENTES: Record<PlantillaCatalogo['agente'], string> = {
   chofer_asignacion: 'Chofer — asignación de viaje',
@@ -13,6 +16,7 @@ const AGENTES: Record<PlantillaCatalogo['agente'], string> = {
   asistencia: 'Asistencia en carretera',
   mis_reglas: 'Mis reglas (vigilante)',
   agente5_conductor: 'Agente 5 — Conductor',
+  agente5_ciclo: 'Agente 5 — Conductor (ciclo con botones)',
   onboarding_operador: 'Alta de operadores (invitación del chofer)',
   vigia_cliente: 'Agente 4 — Vigía de servicio al cliente',
   liquidacion_externa: 'Agente 1 — Liquidación externa (entrega al chofer)',
@@ -54,14 +58,42 @@ function bloque(p: PlantillaCatalogo): string {
 /** La lista corta para quien somete: una fila por plantilla pendiente, sin el cuerpo (que vive en el bloque de abajo). */
 function tablaPorSometer(nuevas: readonly PlantillaCatalogo[]): string[] {
   const l: string[] = [];
-  l.push('| # | Plantilla | Agente | Llamador en código | Variables | Botones | Texto |');
-  l.push('| --- | --- | --- | --- | --- | --- | --- |');
+  l.push('| # | Plantilla | Agente | Perfil (esenciales / completo) | Llamador en código | Variables | Botones | Texto |');
+  l.push('| --- | --- | --- | --- | --- | --- | --- | --- |');
   nuevas.forEach((p, i) => {
     const botones = p.botones.length === 0 ? '—' : p.botones.map((b) => `«${b.texto}»`).join(', ');
     const llamador = p.llamador === null ? 'sin llamador todavía' : p.llamador.split(', ').map((x) => `\`${x}\``).join(', ');
     const texto = p.textoVerificado ? 'autoritativo' : 'reconstruido: cotejar';
-    l.push(`| ${i + 1} | \`${p.nombre}\` | ${AGENTES[p.agente]} | ${llamador} | ${p.variables.length} | ${botones} | ${texto} |`);
+    l.push(`| ${i + 1} | \`${p.nombre}\` | ${AGENTES[p.agente]} | ${perfilDePlantilla(p.nombre)} | ${llamador} | ${p.variables.length} | ${botones} | ${texto} |`);
   });
+  return l;
+}
+
+const ESTADO_TEXTO: Record<EstadoProveedor, string> = {
+  no_enviada: 'no enviada', pendiente: 'pendiente', aprobada: 'aprobada', rechazada: 'rechazada',
+};
+
+/** Las 12 del ciclo del conductor (N01–N12): prioridad, perfil que la exige y estado ante Meta (T-A5-59). */
+function seccionCiclo(catalogo: readonly PlantillaCatalogo[]): string[] {
+  const l: string[] = [];
+  const piloto = new Set(plantillasDelCicloPorPerfil('piloto'));
+  const cinco = new Set(plantillasDelCicloPorPerfil('cinco_agentes'));
+  l.push('## Las 12 plantillas del ciclo del conductor (N01–N12)');
+  l.push('');
+  l.push('Perfil **piloto** exige las P0; perfil **cinco_agentes** exige P0 y P1; la P2 es opcional. La columna «Estado en el proveedor» es lo asentado a mano en `ESTADO_PROVEEDOR_CICLO` (`src/lib/likida/conductor/plantillas_requeridas.ts`): no se consulta a Meta al generar este documento; `scripts/verificar-plantillas-meta.ts --consultar` lo contrasta.');
+  l.push('');
+  l.push('- **Antes de crear nada en Meta:** comparar con la lista existente (`whatsapp_biz_list_templates`) para no duplicar; el script solo somete las que Meta no tiene.');
+  l.push('- **Versionado:** una aprobada no se edita. Si Meta rechaza una o su texto debe cambiar, se corrige el catálogo con nombre nuevo, sufijo `_v2` (`siguienteVersion`), y se marca aquí el estado de la nueva.');
+  l.push('- Rampa, motivo de parada, «¿cómo descargas?» y resultado de descarga no necesitan plantilla: son mensajes interactivos dentro de la ventana de 24 h.');
+  l.push('');
+  l.push('| Código | Plantilla | Prioridad | Piloto | cinco_agentes | Estado en el proveedor | Llamador en código |');
+  l.push('| --- | --- | --- | --- | --- | --- | --- |');
+  for (const c of PLANTILLAS_CICLO) {
+    const p = catalogo.find((x) => x.nombre === c.nombre);
+    const llamador = p === undefined ? 'fuera del catálogo' : p.llamador === null ? 'sin llamador todavía' : `\`${p.llamador}\``;
+    l.push(`| ${c.codigo} | \`${c.nombre}\` | ${c.prioridad} | ${piloto.has(c.nombre) ? 'sí' : 'no'} | ${cinco.has(c.nombre) ? 'sí' : 'no'} | ${ESTADO_TEXTO[ESTADO_PROVEEDOR_CICLO[c.nombre]]} | ${llamador} |`);
+  }
+  l.push('');
   return l;
 }
 
@@ -101,6 +133,7 @@ export function renderizarDocPlantillas(catalogo: readonly PlantillaCatalogo[] =
   l.push('');
   l.push('El cuerpo exacto, las variables con su ejemplo y los botones de cada una están en el bloque de más abajo (los mismos que `scripts/verificar-plantillas-meta.ts --crear` manda a Meta).');
   l.push('');
+  l.push(...seccionCiclo(catalogo));
   l.push(`## Plantillas en uso (${enUso.length})`);
   l.push('');
   for (const p of enUso) l.push(bloque(p));

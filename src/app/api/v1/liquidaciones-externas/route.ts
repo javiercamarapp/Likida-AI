@@ -43,6 +43,7 @@ import {
   type EstadoLiquidacionExterna, type FiltroListado,
 } from '@/lib/likida/liquidacion_externa/repo';
 import { recibirLiquidacionExterna, intentarEntrega } from '@/lib/likida/liquidacion_externa/servicio';
+import { leerConfigCorreo } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { aLiquidacionExternaApi, type LiquidacionExternaApi } from '@/lib/likida/liquidacion_externa/api';
 
 export const runtime = 'nodejs';
@@ -50,6 +51,15 @@ export const dynamic = 'force-dynamic';
 // Genera un PDF y lo sube a Storage antes de contestar: más que un POST de
 // alta, menos que un export.
 export const maxDuration = 30;
+
+async function canalEs(tenantId: string): Promise<string> {
+  try {
+    const c = await leerConfigCorreo(tenantId);
+    return c.ok ? c.valor.canal : 'whatsapp';
+  } catch {
+    return 'whatsapp';
+  }
+}
 
 // ── POST ────────────────────────────────────────────────────────────────────
 
@@ -95,7 +105,9 @@ export async function POST(req: Request) {
       // Se intenta entregar YA, pero la entrega no es parte de la promesa de
       // este POST: `intentarEntrega` nunca lanza, y lo que no salga ahora lo
       // levanta el cron. Se relee para acusar el estado real, no el de antes.
-      await intentarEntrega(liquidacion);
+      // Si la flota recibe el desglose por correo no se intenta WhatsApp. Sin config, sin la migración o con la base caída:
+      // el camino de siempre (`intentarEntrega` vuelve a mirar el canal y el cron filtra por él).
+      if (await canalEs(acceso.tenantId) !== 'correo') await intentarEntrega(liquidacion);
       const actual = await leerPorId(acceso.tenantId, liquidacion.id);
       return aLiquidacionExternaApi(actual ?? liquidacion);
     },

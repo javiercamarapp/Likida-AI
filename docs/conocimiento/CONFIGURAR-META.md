@@ -129,7 +129,7 @@ El sistema solo atiende a números dados de alta. Con tu celular:
 
 ```sql
 insert into operador (tenant_id, nombre, telefono)
-values ('11111111-1111-1111-1111-111111111111', 'Javier', '+52TUNUMERO');
+values ('11111111-1111-1111-1111-111111111111', 'Operador', '+52TUNUMERO');
 
 insert into viaje (tenant_id, operador_id, anticipo, estatus)
 select '11111111-1111-1111-1111-111111111111', id, 5000, 'abierto'

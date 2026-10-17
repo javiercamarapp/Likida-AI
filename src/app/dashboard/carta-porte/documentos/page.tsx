@@ -8,11 +8,13 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { dominioBuzon } from '@/lib/correo/buzon';
 import { direccionCp, generarTokenCp } from '@/lib/likida/carta_porte_docs/correo_entrante';
 import { validarConfigExport } from '@/lib/likida/carta_porte_docs/exportacion';
+import { flotaBajoPerfil } from '@/lib/likida/carta_porte_docs/envio';
+import { leerConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import { calcularMetricas } from '@/lib/likida/carta_porte_docs/metricas';
 import * as repo from '@/lib/likida/carta_porte_docs/repo';
 import { procesarDocumento, recibirDocumento } from '@/lib/likida/carta_porte_docs/servicio';
 import { sufijoTenant } from '../../sufijo';
-import { VistaDocumentos, type DatosDocumentos } from './vista';
+import { VistaDocumentos, filtroEnvioDe, type DatosDocumentos } from './vista';
 import type { ResultadoAccion } from './forma_accion';
 
 export const dynamic = 'force-dynamic';
@@ -40,6 +42,19 @@ async function sesionDeAccion(sp: { tenant?: string; rol?: string; vista?: strin
 }
 
 /** La lectura de la bandeja. Fuera del componente: «hace 90 días» depende del reloj y un render no debe leerlo. */
+async function cargarAsignacion(tenantId: string, ids: string[]): Promise<Pick<DatosDocumentos, 'asignados' | 'revisores' | 'asignacionActiva'>> {
+  // T-A3-31. Es un adorno de la bandeja: si la base aún no tiene la 0790 (o la lectura falla) la bandeja sale como siempre.
+  try {
+    const [config, asignados, revisores] = await Promise.all([leerConfigSalida(tenantId), repo.revisoresDeDocumentos(tenantId, ids), repo.usuariosRevisores(tenantId)]);
+    const hay = config.destinatarioRevisionUsuario !== null || asignados.size > 0;
+    if (!hay) return {};
+    return { asignacionActiva: true, asignados: Object.fromEntries(asignados), revisores: revisores.map((r) => ({ id: r.id, nombre: r.nombre ?? r.email })) };
+  } catch (e) {
+    logger.warn('carta_porte_docs.asignacion_no_disponible', { error: e instanceof Error ? e.message : String(e) });
+    return {};
+  }
+}
+
 async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
   try {
     const desde = new Date(Date.now() - DIAS_VENTANA * 86_400_000).toISOString();
@@ -55,8 +70,10 @@ async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
     const versiones = await Promise.all(perfiles.map((p) => repo.listarVersionesPerfil(tenantId, p.id)));
     const dominio = dominioBuzon();
     const linaje = await repo.linajeDeDocumentos(tenantId, lista.filas.map((d) => d.id));
+    const envios = await repo.estadoEnvioPorDocumento(tenantId, lista.filas.filter((d) => d.estado === 'aprobado').map((d) => d.id));
+    const asignacion = await cargarAsignacion(tenantId, lista.filas.map((d) => d.id));
     return {
-      filas: lista.filas, total: lista.total,
+      filas: lista.filas, total: lista.total, envios, ...asignacion,
       linaje: Object.fromEntries([...linaje].map(([id, l]) => [id, { rol: l.rol, indice: l.indice, total: l.total, clave: l.clave }])), metricas: calcularMetricas(recientes, correcciones), clientes,
       perfiles: perfiles.map((p, i) => ({ id: p.id, nombre: p.nombre, formato: p.formato, versionActiva: p.versionActiva, mapeos: p.activa.mapeos.length, versiones: versiones[i].map((v) => ({ version: v.version, nota: v.nota, mapeos: v.mapeos })) })),
       buzon: buzon ? { direccion: direccionCp(buzon.token, dominio), activo: buzon.activo, remitentes: buzon.remitentesPermitidos, dominioConfigurado: dominio !== null } : null,
@@ -76,14 +93,14 @@ async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
 export default async function PaginaDocumentos({
   searchParams,
 }: {
-  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string }>;
+  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string; envio?: string; mios?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
+  const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
 
   // Una base que no contesta NO se pinta como bandeja vacía.
-  const datos = await cargarDatos(tenantId);
+  const [datos, restringido] = await Promise.all([cargarDatos(tenantId), flotaBajoPerfil(tenantId)]);
 
   async function subir(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
@@ -215,6 +232,10 @@ export default async function PaginaDocumentos({
     <VistaDocumentos
       datos={datos}
       sufijo={sufijoTenant(sp)}
+      filtroEnvio={filtroEnvioDe(sp.envio)}
+      soloMios={sp.mios === '1'}
+      usuarioId={userId}
+      perfilRestringido={restringido}
       apiSufijo={sufijoTenant(sp) ? `&${sufijoTenant(sp).slice(1)}` : ''}
       acciones={{ subir, procesar, activarBuzon, guardarRemitentes, guardarExport, borrarExport, volverVersion }}
     />

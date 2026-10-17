@@ -105,7 +105,7 @@ export async function getViaje(viajeId: string, tenantId: string): Promise<Viaje
  * de `getConfig()` (config.ts) a propósito, no por descuido: `getConfig`
  * fusiona `config` con los defaults de la demo, y el perfil existe
  * justamente para poder decir "esto lo declaró el cliente" sin que una
- * fusión lo confunda con relleno (docs/perfil/PERFIL-OPERATIVO.md).
+ * fusión lo confunda con relleno (la documentación interna).
  */
 export async function getPerfilCrudo(tenantId: string): Promise<unknown> {
   const { data, error } = await acotada(supabaseAdmin()
@@ -115,6 +115,22 @@ export async function getPerfilCrudo(tenantId: string): Promise<unknown> {
     .maybeSingle(), 'getPerfilCrudo');
   if (error) throw new Error(`perfil: ${error.message}`);
   return data?.perfil ?? {};
+}
+
+/**
+ * La zona horaria (IANA) de la flota: `tenant.zona_horaria` (0325, default 'America/Mexico_City').
+ * La usa el Conductor para que su ventana de insistencia sea del chofer y no del servidor. Devuelve
+ * `null` si el tenant no existe; LANZA si la base no contesta («no pude leer» no es «México»).
+ */
+export async function getZonaHorariaTenant(tenantId: string): Promise<string | null> {
+  const { data, error } = await acotada(supabaseAdmin()
+    .from('tenant')
+    .select('zona_horaria')
+    .eq('id', tenantId)
+    .maybeSingle(), 'getZonaHorariaTenant');
+  if (error) throw new Error(`zona_horaria: ${error.message}`);
+  const z = (data as { zona_horaria?: unknown } | null)?.zona_horaria;
+  return typeof z === 'string' ? z : null;
 }
 
 /**
@@ -1484,7 +1500,7 @@ export async function liberarEnvioAviso(tenantId: string, operadorId: string): P
  * incompleta. Correcto, pero con fecha de caducidad CALCULABLE: **esto corre
  * EN CADA CUADRE** (el camino más caliente del producto), y su techo de 100
  * páginas = 100 000 cargas de diésel se toca ~mes 6.7 con un cliente de
- * 15 000 viajes/mes (docs/escala-15k.md §4/§6) — al tocarlo, el CIERRE deja
+ * 15 000 viajes/mes (la documentación interna §4/§6) — al tocarlo, el CIERRE deja
  * de cerrar, no solo una pantalla.
  *
  * La migración 0084 (05-ago-2026, "sumar_combustible_ejercicio: la

@@ -6,6 +6,7 @@ import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { FileUp } from 'lucide-react';
 import { validarArchivoElegido } from '@/lib/http/subidas_formulario';
+import { frasesSeguimiento } from '@/lib/likida/importacion/resultado_ui';
 
 export interface ResultadoImportarUI {
   error?: string;
@@ -26,6 +27,10 @@ export interface ResultadoImportarUI {
     clientesSinAmarrar: string[];
     /** Folios NO creados porque su cliente no se pudo amarrar. */
     sinCliente: string[];
+    /** Seguimiento del agente (T-A5-04): ausentes si no se intentó. */
+    seguimientoActivado?: number;
+    seguimientoOmitidoSinVoluntario?: number;
+    seguimientoNoDisponible?: boolean;
   };
 }
 
@@ -75,6 +80,7 @@ export function ImportarViajes({ importar, verDinero = false }: { importar: Acci
             {r.saltados > 0 && <> · {r.saltados} saltados (el folio ya existía)</>}
             {r.descartadas.length > 0 && <span style={{ color: 'var(--warn)' }}> · {r.descartadas.length} filas descartadas</span>}
           </p>
+          {frasesSeguimiento(r).length > 0 && <p data-testid="seguimiento-agente">{frasesSeguimiento(r).join(' ')}</p>}
           {r.descartadas.slice(0, 5).map((d) => (
             <p key={d.fila} style={{ color: 'var(--warn)' }}>fila {d.fila}: {d.motivo}</p>
           ))}

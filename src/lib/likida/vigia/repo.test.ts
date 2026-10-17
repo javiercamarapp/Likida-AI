@@ -46,7 +46,7 @@ vi.mock('../contactos', () => ({
 }));
 
 const repoMod = await import('./repo');
-const { crearRepoVigia, estatusViajeReal, aConfig, aContacto, validarConfig, telefonoDeAllowlist, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, cargarTablero, guardarDirectorVigia, quitarDirectorVigia, guardarConfigVigia } = repoMod;
+const { crearRepoVigia, estatusViajeReal, aConfig, aContacto, validarConfig, telefonoDeAllowlist, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, cargarTablero, guardarDirectorVigia, quitarDirectorVigia, guardarConfigVigia, validarServicio, guardarServicioVigia, quitarServicioVigia, fijarTurnoDirector, listarFestivos, guardarFestivo } = repoMod;
 const { T1, T2, CLIENTE_A, VIAJE_1 } = await import('./datos.fixture');
 
 const tiene = (l: Llamada, op: string, col: string, valor?: unknown) =>
@@ -55,7 +55,7 @@ const tiene = (l: Llamada, op: string, col: string, valor?: unknown) =>
 beforeEach(() => { llamadas = []; respuesta = () => ({ data: [], error: null }); });
 
 describe('AISLAMIENTO: toda consulta a una tabla con tenant filtra por él', () => {
-  const TABLAS_CON_TENANT = ['vigia_config', 'vigia_contacto', 'vigia_conversacion', 'vigia_mensaje', 'vigia_evento', 'viaje', 'posicion', 'pod', 'factura_emitida', 'cliente', 'app_user', 'tenant', 'vigia_director', 'vigia_aviso_correo'];
+  const TABLAS_CON_TENANT = ['vigia_config', 'vigia_contacto', 'vigia_conversacion', 'vigia_mensaje', 'vigia_evento', 'viaje', 'posicion', 'pod', 'factura_emitida', 'cliente', 'app_user', 'tenant', 'vigia_director', 'vigia_aviso_correo', 'vigia_servicio_cliente'];
 
   /** Las únicas dos que cruzan flotas A PROPÓSITO (rotuladas en el código). */
   const EXENTAS = new Set(['contactoPorTelefono', 'conversacionesEnEspera', 'aprobadosAtorados', 'correosVencidos']);
@@ -97,10 +97,13 @@ describe('AISLAMIENTO: toda consulta a una tabla con tenant filtra por él', () 
       ['destinatarioNivel2', () => repo.destinatarioNivel(T1, contacto, 2)],
       ['destinatariosNivel1', () => repo.destinatariosNivel(T1, contacto, 1)],
       ['destinatariosNivel2', () => repo.destinatariosNivel(T1, contacto, 2)],
+      ['servicioCliente', () => repo.destinatariosServicioCliente(T1, CLIENTE_A)],
       ['reclamarCorreo', () => repo.reclamarCorreo(T1, { conversacionId: id, clave: 'k', nivel: 1, directorId: null, destino: 'a@b.mx', datos: { cliente: 'x', motivo: 'sin_respuesta', minutos: 1, nivel: 1 } })],
       ['cerrarCorreo', () => repo.cerrarCorreo(T1, id, id, 'enviado', null)],
       ['guardarDirector', () => guardarDirectorVigia(T1, 'u', null, { nivel: 1, nombre: 'x', telefono: null, correo: 'a@b.mx' })],
       ['quitarDirector', () => quitarDirectorVigia(T1, id)],
+      ['guardarServicio', () => guardarServicioVigia(T1, 'u', null, { clienteId: null, nombre: 'x', telefono: null, correo: 'a@b.example', activo: true })],
+      ['quitarServicio', () => quitarServicioVigia(T1, id)],
       ['viajesEnCurso', () => estatusViajeReal.viajesEnCurso({ tenantId: T1, clienteId: CLIENTE_A })],
       ['estatus', () => estatusViajeReal.estatus({ tenantId: T1, clienteId: CLIENTE_A, viajeId: id })],
       ['altaContacto', () => altaContactoVigia(T1, 'u', { clienteId: CLIENTE_A, telefono: '5511110001', nombre: null, gerenteUserId: 'u-ger', consentimiento: true })],
@@ -726,5 +729,349 @@ describe('P14 · directores y correos de respaldo (0673/0674)', () => {
     // sin pedir el respaldo, la base sin migrar guarda lo demás sin quejarse
     llamadas = [];
     await expect(guardarConfigVigia(T1, 'u', { ...v, respaldoCorreo: false })).resolves.toBeUndefined();
+  });
+});
+
+describe('leerDatosUnidad (T-A4-24): unidad, caja y operador de UN viaje de UN cliente', () => {
+  const { leerDatosUnidad } = repoMod;
+  const U = 'uuuuuuuu-uuuu-4uuu-8uuu-uuuuuuuuuuu1';
+  const OP = 'oooooooo-oooo-4ooo-8ooo-ooooooooooo1';
+  const AHORA_ = new Date('2026-10-01T18:00:00Z');
+  const pedir = () => leerDatosUnidad({ tenantId: T1, clienteId: CLIENTE_A, viajeId: VIAJE_1, unidadId: U, ahora: AHORA_ });
+
+  const mundo = (parche: Partial<Record<string, unknown>> = {}) => {
+    const t: Record<string, unknown> = {
+      viaje: { id: VIAJE_1, operador_id: OP, unidad_id: U },
+      unidad: { numero_economico: 'C2-08', placas: 'XYZ789' },
+      operador: { nombre: 'Operador Uno' },
+      cliente: { nombre: 'Cliente Uno S.A.' },
+      programa_despacho_fila: [{ id: 'f1', fecha: '2026-10-01', cliente: 'cliente  uno s.a.', caja: 'CJ-100', unidad: 'c2-08' }],
+      vigia_caja: [{ numero: 'cj-100', placas: 'ABC123', estado: 'cargada' }],
+      vigia_dato_viaje_manual: null,
+      ...parche,
+    };
+    respuesta = (l) => ({ data: t[l.tabla] ?? [], error: null });
+  };
+
+  it('feliz: junta unidad, caja, placas, estado y operador de las fuentes del propio viaje', async () => {
+    mundo();
+    expect(await pedir()).toEqual({ caja: 'CJ-100', placasCaja: 'ABC123', estadoCaja: 'cargada', unidad: 'C2-08', placasUnidad: 'XYZ789', operador: 'Operador Uno' });
+  });
+
+  it('AISLAMIENTO: TODA consulta lleva tenant_id, y el viaje además el cliente', async () => {
+    mundo();
+    await pedir();
+    expect(llamadas.map((l) => l.tabla).sort()).toEqual(['cliente', 'operador', 'programa_despacho_fila', 'unidad', 'viaje', 'vigia_caja', 'vigia_dato_viaje_manual'].sort());
+    for (const l of llamadas) expect(tiene(l, 'eq', 'tenant_id', T1), `${l.tabla} sin tenant`).toBe(true);
+    const v = llamadas.find((l) => l.tabla === 'viaje')!;
+    expect(tiene(v, 'eq', 'cliente_id', CLIENTE_A)).toBe(true);
+    expect(tiene(v, 'eq', 'id', VIAJE_1)).toBe(true);
+  });
+
+  it('un viaje que no es de ese cliente en esa flota: no lee nada más y no devuelve nada', async () => {
+    mundo({ viaje: null });
+    const r = await pedir();
+    expect(Object.values(r).every((x) => x === null)).toBe(true);
+    expect(llamadas.map((l) => l.tabla)).toEqual(['viaje']);
+  });
+
+  it('la fila del programa es de OTRO cliente (mismo número de unidad): NO se da su caja', async () => {
+    mundo({ programa_despacho_fila: [{ id: 'f9', fecha: '2026-10-01', cliente: 'Cliente Dos', caja: 'CJ-AJENA', unidad: 'C2-08' }] });
+    const r = await pedir();
+    expect(r.caja).toBeNull();
+    expect(r.placasCaja).toBeNull();
+    expect(r.unidad).toBe('C2-08');
+    expect(r.operador).toBe('Operador Uno');
+    expect(llamadas.some((l) => l.tabla === 'vigia_caja')).toBe(false);
+  });
+
+  it('un cliente «casi igual» NO cuenta (solo la igualdad del texto normalizado)', async () => {
+    mundo({ programa_despacho_fila: [{ id: 'f9', fecha: '2026-10-01', cliente: 'Cliente Uno Norte', caja: 'CJ-DUDOSA', unidad: 'C2-08' }] });
+    expect((await pedir()).caja).toBeNull();
+  });
+
+  it('dos cajas distintas para la misma unidad y cliente el mismo día: no se adivina', async () => {
+    mundo({ programa_despacho_fila: [
+      { id: 'f1', fecha: '2026-10-01', cliente: 'Cliente Uno S.A.', caja: 'CJ-100', unidad: 'C2-08' },
+      { id: 'f2', fecha: '2026-10-01', cliente: 'Cliente Uno S.A.', caja: 'CJ-200', unidad: 'C2-08' },
+    ] });
+    expect((await pedir()).caja).toBeNull();
+  });
+
+  it('la captura manual de la fila manda sobre el catálogo para placas y estado', async () => {
+    mundo({ vigia_dato_viaje_manual: { operador_nombre: 'Otro Nombre', placas_unidad: 'MAN111', placas_caja: 'MAN222', estado_caja: 'en_patio' } });
+    const r = await pedir();
+    expect(r).toMatchObject({ placasCaja: 'MAN222', estadoCaja: 'en_patio', placasUnidad: 'MAN111', operador: 'Operador Uno' });
+    const m = llamadas.find((l) => l.tabla === 'vigia_dato_viaje_manual')!;
+    expect(tiene(m, 'eq', 'fila_id', 'f1')).toBe(true);
+  });
+
+  it('sin operador en el sistema, usa el capturado a mano', async () => {
+    mundo({ operador: null, vigia_dato_viaje_manual: { operador_nombre: 'Capturado A Mano', placas_unidad: null, placas_caja: null, estado_caja: null } });
+    expect((await pedir()).operador).toBe('Capturado A Mano');
+  });
+
+  it('las tablas de la 0795/0796 que aún no existen no aportan dato, pero tampoco rompen', async () => {
+    mundo();
+    const base = respuesta;
+    respuesta = (l) => (['programa_despacho_fila', 'vigia_caja', 'vigia_dato_viaje_manual'].includes(l.tabla)
+      ? { data: null, error: { message: 'no existe', code: '42P01' } } : base(l));
+    const r = await pedir();
+    expect(r).toEqual({ caja: null, placasCaja: null, estadoCaja: null, unidad: 'C2-08', placasUnidad: 'XYZ789', operador: 'Operador Uno' });
+  });
+
+  it('un error real de la base LANZA (no se lee como «no hay nada»)', async () => {
+    mundo();
+    const base = respuesta;
+    respuesta = (l) => (l.tabla === 'unidad' ? { data: null, error: { message: 'caída', code: '57014' } } : base(l));
+    await expect(pedir()).rejects.toThrow(/datos_unidad_unidad/);
+  });
+
+  it('el estatus real NO lee datos de la unidad si nadie los pidió, y si fallan devuelve el estatus con la unidad vacía', async () => {
+    const { crearEstatusViajeReal } = repoMod;
+    respuesta = (l) => (l.tabla === 'viaje' ? { data: [{ id: VIAJE_1, folio: 'F-1', origen: 'A', destino: 'B', estatus: 'abierto', unidad_id: U, llegada_en: null, descarga_en: null, regreso_en: null }], error: null } : { data: [], error: null });
+    const lector = vi.fn(async () => { throw new Error('boom'); });
+    const real = crearEstatusViajeReal({ conductor: async () => null, datosUnidad: lector });
+    const sin = await real.estatus({ tenantId: T1, clienteId: CLIENTE_A, viajeId: VIAJE_1 });
+    expect(lector).not.toHaveBeenCalled();
+    expect(sin).not.toHaveProperty('caja');
+    const con = await real.estatus({ tenantId: T1, clienteId: CLIENTE_A, viajeId: VIAJE_1, datosUnidad: true });
+    expect(lector).toHaveBeenCalledWith({ tenantId: T1, clienteId: CLIENTE_A, viajeId: VIAJE_1, unidadId: U });
+    expect(con).toMatchObject({ caja: null, unidad: null, operador: null });
+  });
+});
+
+describe('T-A4-26 · destinatario de «servicio al cliente» (0798)', () => {
+  const FILAS = [
+    { id: 's1', nombre: 'Servicio Uno', telefono: '522899900001', correo: 'uno@flota.example' },
+    { id: 's2', nombre: 'Servicio Dos', telefono: null, correo: 'dos@flota.example' },
+  ];
+
+  it('consulta con tenant_id, solo activos y los de ese cliente o «para todos»; devuelve teléfono y/o correo', async () => {
+    respuesta = (l) => (l.tabla === 'vigia_servicio_cliente' ? { data: FILAS, error: null } : { data: [], error: null });
+    const r = await crearRepoVigia().destinatariosServicioCliente(T1, CLIENTE_A);
+    expect(r).toEqual([
+      { userId: null, directorId: null, nombre: 'Servicio Uno', telefono: '522899900001', correo: 'uno@flota.example' },
+      { userId: null, directorId: null, nombre: 'Servicio Dos', telefono: null, correo: 'dos@flota.example' },
+    ]);
+    const q = llamadas.find((l) => l.tabla === 'vigia_servicio_cliente')!;
+    expect(tiene(q, 'eq', 'tenant_id', T1)).toBe(true);
+    expect(tiene(q, 'eq', 'activo', true)).toBe(true);
+    expect(tiene(q, 'or', 'cliente_id.is.null,cliente_id.eq.' + CLIENTE_A)).toBe(true);
+  });
+
+  it('no toca los niveles: no consulta vigia_director ni app_user', async () => {
+    respuesta = () => ({ data: [], error: null });
+    await crearRepoVigia().destinatariosServicioCliente(T1, CLIENTE_A);
+    expect(llamadas.map((l) => l.tabla)).toEqual(['vigia_servicio_cliente']);
+  });
+
+  it('sin lista devuelve vacío (el llamador sigue con gerente/director); sin la migración también; un fallo real lanza', async () => {
+    respuesta = () => ({ data: [], error: null });
+    expect(await crearRepoVigia().destinatariosServicioCliente(T1, CLIENTE_A)).toEqual([]);
+    for (const code of ['42P01', 'PGRST205']) {
+      respuesta = () => ({ data: null, error: { message: 'x', code } });
+      expect(await crearRepoVigia().destinatariosServicioCliente(T1, CLIENTE_A)).toEqual([]);
+    }
+    respuesta = () => ({ data: null, error: { message: 'caída', code: 'XX000' } });
+    await expect(crearRepoVigia().destinatariosServicioCliente(T1, CLIENTE_A)).rejects.toThrow(/caída/);
+  });
+
+  it('un clienteId que no es uuid (o nulo) no entra al filtro: solo los «para todos»', async () => {
+    respuesta = () => ({ data: [], error: null });
+    for (const malo of ["x',cliente_id.neq.y", null]) {
+      llamadas = [];
+      await crearRepoVigia().destinatariosServicioCliente(T1, malo);
+      const q = llamadas[0];
+      expect(tiene(q, 'is', 'cliente_id', null)).toBe(true);
+      expect(q.filtros.some(([o]) => o === 'or')).toBe(false);
+    }
+  });
+
+  it('un contacto sin teléfono ni correo no cuenta, y el mismo WhatsApp repetido es una sola persona', async () => {
+    respuesta = () => ({ data: [
+      { id: 'a', nombre: 'A', telefono: '522899900001', correo: null },
+      { id: 'b', nombre: 'B', telefono: '522899900001', correo: null },
+      { id: 'c', nombre: 'C', telefono: null, correo: null },
+    ], error: null });
+    const r = await crearRepoVigia().destinatariosServicioCliente(T1, CLIENTE_A);
+    expect(r).toHaveLength(1);
+    expect(r[0].telefono).toBe('522899900001');
+  });
+
+  it('el tablero trae la lista (tolerante a una base sin 0798)', async () => {
+    respuesta = (l) => (l.tabla === 'vigia_servicio_cliente'
+      ? { data: [{ id: 's1', nombre: 'Servicio Uno', telefono: '522899900001', correo: null, cliente_id: null, activo: true }], error: null }
+      : { data: [], error: null });
+    const d = await cargarTablero(T1);
+    expect(d.servicio).toEqual([{ id: 's1', nombre: 'Servicio Uno', telefono: '522899900001', correo: null, clienteId: null, activo: true }]);
+    const q = llamadas.find((l) => l.tabla === 'vigia_servicio_cliente')!;
+    expect(tiene(q, 'eq', 'tenant_id', T1)).toBe(true);
+    respuesta = (l) => (l.tabla === 'vigia_servicio_cliente' ? { data: null, error: { message: 'x', code: '42P01' } } : { data: [], error: null });
+    expect((await cargarTablero(T1)).servicio).toEqual([]);
+  });
+
+  it('validarServicio: nombre, al menos un canal, WhatsApp de 10 dígitos, correo, cliente uuid o vacío', () => {
+    const ok = { clienteId: '', nombre: ' Ana  Pérez ', telefono: '28 9990 0001', correo: '', activo: true };
+    expect(validarServicio(ok)).toEqual({ ok: true, valor: { clienteId: null, nombre: 'Ana Pérez', telefono: '522899900001', correo: null, activo: true } });
+    expect(validarServicio({ ...ok, clienteId: CLIENTE_A })).toMatchObject({ ok: true, valor: { clienteId: CLIENTE_A } });
+    expect(validarServicio({ ...ok, telefono: '', correo: '' })).toMatchObject({ ok: false });
+    expect(validarServicio({ ...ok, telefono: '123' })).toMatchObject({ ok: false });
+    expect(validarServicio({ ...ok, telefono: '', correo: 'sin-arroba' })).toMatchObject({ ok: false });
+    expect(validarServicio({ ...ok, nombre: '   ' })).toMatchObject({ ok: false });
+    expect(validarServicio({ ...ok, clienteId: "1'; drop" })).toMatchObject({ ok: false });
+    expect(validarServicio({ ...ok, activo: false })).toMatchObject({ ok: true, valor: { activo: false } });
+  });
+
+  it('guardar llama a la RPC con el tenant de la sesión; el tope de 10 (54000) y el duplicado (23505) dan mensaje para la pantalla', async () => {
+    respuesta = () => ({ data: 'nuevo-id', error: null });
+    const v = { clienteId: null, nombre: 'Ana', telefono: '522899900001', correo: null, activo: true };
+    expect(await guardarServicioVigia(T1, 'u1', null, v)).toEqual({ ok: true, valor: { id: 'nuevo-id' } });
+    expect(llamadas[0]).toMatchObject({ tabla: 'rpc:vigia_servicio_guardar', valores: { p_tenant: T1, p_id: null, p_telefono: '522899900001', p_usuario: 'u1' } });
+    respuesta = () => ({ data: null, error: { message: 'x', code: '54000' } });
+    expect(await guardarServicioVigia(T1, 'u1', null, v)).toMatchObject({ ok: false, error: expect.stringContaining('10') });
+    respuesta = () => ({ data: null, error: { message: 'x', code: '23505' } });
+    expect(await guardarServicioVigia(T1, 'u1', null, v)).toMatchObject({ ok: false, error: expect.stringContaining('ya está') });
+    respuesta = () => ({ data: null, error: { message: 'x', code: '42883' } });
+    expect(await guardarServicioVigia(T1, 'u1', null, v)).toMatchObject({ ok: false, error: expect.stringContaining('0798') });
+    respuesta = () => ({ data: null, error: { message: 'caída', code: 'XX000' } });
+    await expect(guardarServicioVigia(T1, 'u1', null, v)).rejects.toThrow(/caída/);
+  });
+
+  it('quitar llama a la RPC con el tenant; false si no existe; un error lanza', async () => {
+    respuesta = () => ({ data: true, error: null });
+    expect(await quitarServicioVigia(T1, 'id1')).toBe(true);
+    expect(llamadas[0]).toMatchObject({ tabla: 'rpc:vigia_servicio_quitar', valores: { p_tenant: T1, p_id: 'id1' } });
+    respuesta = () => ({ data: false, error: null });
+    expect(await quitarServicioVigia(T1, 'id1')).toBe(false);
+    respuesta = () => ({ data: null, error: { message: 'caída' } });
+    await expect(quitarServicioVigia(T1, 'id1')).rejects.toThrow(/caída/);
+  });
+});
+
+describe('T-A4-31 · turnos de los directores (0798)', () => {
+  const base = { id: 'c', tenantId: T1, clienteId: CLIENTE_A, telefono: 'sin-telefono', nombre: null, estado: 'activo' as const, consentimientoEn: 'x', optoutEn: null, avisoPrivacidadEn: null, gerenteUserId: null };
+  const fila = (id: string, turno?: string) => ({ id, nivel: 2, nombre: `P-${id}`, telefono: null, correo: `${id}@flota.mx`, ...(turno ? { turno } : {}) });
+  const MIERCOLES_MEDIODIA = new Date('2026-10-14T18:00:00Z');   // 12:00 en America/Mexico_City
+  const MIERCOLES_NOCHE = new Date('2026-10-15T03:00:00Z');      // 21:00 en America/Mexico_City
+  const SABADO_MEDIODIA = new Date('2026-10-17T18:00:00Z');
+
+  const conLista = (filas: unknown[], extra?: { zona?: string | null; festivos?: string[] }) => {
+    respuesta = (l) => {
+      if (l.tabla === 'vigia_director') return { data: filas, error: null };
+      if (l.tabla === 'tenant') return { data: [{ zona_horaria: extra?.zona ?? 'America/Mexico_City' }], error: null };
+      if (l.tabla === 'vigia_festivo') return { data: (extra?.festivos ?? []).map((fecha) => ({ fecha })), error: null };
+      return { data: [], error: null };
+    };
+  };
+  const ids = async (ahora: Date) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(ahora);
+    try { return (await crearRepoVigia().destinatariosNivel(T1, base, 2)).map((d) => d.directorId); } finally { vi.useRealTimers(); }
+  };
+
+  it('todos «siempre» (o sin la columna): igual que hoy, sin consultar zona ni festivos', async () => {
+    conLista([fila('a'), fila('b', 'siempre')]);
+    expect(await ids(MIERCOLES_NOCHE)).toEqual(['a', 'b']);
+    expect(llamadas.some((l) => l.tabla === 'tenant' || l.tabla === 'vigia_festivo')).toBe(false);
+  });
+
+  it('pide la columna turno y, si la base no la tiene (sin 0798), relee la lista de siempre', async () => {
+    let intentos = 0;
+    respuesta = (l) => {
+      if (l.tabla !== 'vigia_director') return { data: [], error: null };
+      intentos += 1;
+      return intentos === 1 ? { data: null, error: { message: 'column vigia_director.turno does not exist', code: '42703' } } : { data: [fila('a')], error: null };
+    };
+    expect(await ids(MIERCOLES_MEDIODIA)).toEqual(['a']);
+    expect(intentos).toBe(2);
+  });
+
+  it('un director de noche solo recibe de noche; de día quedan los «siempre»', async () => {
+    conLista([fila('a', 'siempre'), fila('b', 'noche')]);
+    expect(await ids(MIERCOLES_MEDIODIA)).toEqual(['a']);
+    conLista([fila('a', 'siempre'), fila('b', 'noche')]);
+    expect(await ids(MIERCOLES_NOCHE)).toEqual(['a', 'b']);
+  });
+
+  it('festivos del calendario de la flota y fin de semana activan el turno festivos_y_fin_de_semana', async () => {
+    const lista = [fila('a', 'siempre'), fila('c', 'festivos_y_fin_de_semana')];
+    conLista(lista, { festivos: [] });
+    expect(await ids(MIERCOLES_MEDIODIA)).toEqual(['a']);
+    conLista(lista, { festivos: ['2026-10-14'] });
+    expect(await ids(MIERCOLES_MEDIODIA)).toEqual(['a', 'c']);
+    conLista(lista, { festivos: [] });
+    expect(await ids(SABADO_MEDIODIA)).toEqual(['a', 'c']);
+  });
+
+  it('consulta zona y festivos SOLO de esa flota', async () => {
+    conLista([fila('b', 'noche')]);
+    await ids(MIERCOLES_NOCHE);
+    const t = llamadas.find((l) => l.tabla === 'tenant')!;
+    const f = llamadas.find((l) => l.tabla === 'vigia_festivo')!;
+    expect(tiene(t, 'eq', 'id', T1)).toBe(true);
+    expect(tiene(f, 'eq', 'tenant_id', T1)).toBe(true);
+  });
+
+  it('la zona de la flota manda: 21:00 en México es mediodía en Tokio', async () => {
+    conLista([fila('a', 'siempre'), fila('b', 'noche')], { zona: 'Asia/Tokyo' });
+    expect(await ids(new Date('2026-10-14T03:00:00Z'))).toEqual(['a']);
+  });
+
+  it('si el filtro deja el nivel vacío, caen TODOS (nunca sin destinatario) y no se cae al «destino de siempre»', async () => {
+    conLista([fila('b', 'noche'), fila('c', 'festivos_y_fin_de_semana')]);
+    expect(await ids(MIERCOLES_MEDIODIA)).toEqual(['b', 'c']);
+  });
+
+  it('sin tabla de festivos o sin zona (base sin 0798) no rompe: fin de semana y noche siguen funcionando', async () => {
+    respuesta = (l) => {
+      if (l.tabla === 'vigia_director') return { data: [fila('a', 'siempre'), fila('c', 'festivos_y_fin_de_semana')], error: null };
+      if (l.tabla === 'vigia_festivo') return { data: null, error: { message: 'x', code: '42P01' } };
+      if (l.tabla === 'tenant') return { data: null, error: { message: 'x', code: '42703' } };
+      return { data: [], error: null };
+    };
+    expect(await ids(SABADO_MEDIODIA)).toEqual(['a', 'c']);
+  });
+
+  it('un error real de la base al leer festivos LANZA (fallar cerrado), no se lee como «sin festivos»', async () => {
+    respuesta = (l) => {
+      if (l.tabla === 'vigia_director') return { data: [fila('a', 'siempre'), fila('b', 'noche')], error: null };
+      if (l.tabla === 'vigia_festivo') return { data: null, error: { message: 'caída', code: 'XX000' } };
+      return { data: [{ zona_horaria: 'America/Mexico_City' }], error: null };
+    };
+    await expect(ids(MIERCOLES_NOCHE)).rejects.toThrow(/caída/);
+  });
+});
+
+describe('T-A4-31 · turno y festivos: escritura', () => {
+  it('fijarTurnoDirector: valida el turno, filtra por flota y reporta si no existe', async () => {
+    expect((await fijarTurnoDirector(T1, 'd1', 'quincena')).ok).toBe(false);
+    expect(llamadas).toHaveLength(0);
+    respuesta = () => ({ data: [{ id: 'd1' }], error: null });
+    expect(await fijarTurnoDirector(T1, 'd1', 'noche')).toEqual({ ok: true, valor: { id: 'd1' } });
+    const u = llamadas.find((l) => l.op === 'update')!;
+    expect(u.tabla).toBe('vigia_director');
+    expect(u.valores).toEqual({ turno: 'noche' });
+    expect(tiene(u, 'eq', 'tenant_id', T1) && tiene(u, 'eq', 'id', 'd1')).toBe(true);
+    respuesta = () => ({ data: [], error: null });
+    expect((await fijarTurnoDirector(T1, 'otro-tenant', 'noche')).ok).toBe(false);
+    respuesta = () => ({ data: null, error: { message: 'x', code: '42703' } });
+    expect(await fijarTurnoDirector(T1, 'd1', 'noche')).toMatchObject({ ok: false, error: expect.stringContaining('0798') });
+  });
+
+  it('guardarFestivo valida fecha y nombre; listarFestivos y quitarFestivo van acotados a la flota', async () => {
+    expect((await guardarFestivo(T1, '2026-02-30', 'x')).ok).toBe(false);
+    expect((await guardarFestivo(T1, '2026-09-16', '   ')).ok).toBe(false);
+    expect(llamadas).toHaveLength(0);
+    respuesta = () => ({ data: null, error: null });
+    expect(await guardarFestivo(T1, '2026-09-16', ' Día  de la Independencia ')).toEqual({ ok: true, valor: { fecha: '2026-09-16' } });
+    const up = llamadas.find((l) => l.op === 'upsert')!;
+    expect(up.valores).toEqual({ tenant_id: T1, fecha: '2026-09-16', nombre: 'Día de la Independencia' });
+    llamadas = [];
+    respuesta = () => ({ data: [{ id: 'f1', fecha: '2026-09-16', nombre: 'X' }], error: null });
+    expect(await listarFestivos(T1)).toEqual([{ id: 'f1', fecha: '2026-09-16', nombre: 'X' }]);
+    expect(tiene(llamadas[0], 'eq', 'tenant_id', T1)).toBe(true);
+    respuesta = () => ({ data: null, error: { message: 'x', code: '42P01' } });
+    expect(await listarFestivos(T1)).toEqual([]);
   });
 });

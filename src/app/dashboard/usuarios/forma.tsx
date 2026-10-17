@@ -203,3 +203,21 @@ export function FormaReenviarAcceso({ accion, id }: { accion: AccionForma; id: s
     </form>
   );
 }
+
+/**
+ * FASE 1 · SEG-SESIONES: cierra TODAS sus sesiones vivas sin darla de baja
+ * — el caso de "sospecho que alguien más tiene su sesión" o "perdió el
+ * celular", donde la persona sigue trabajando y no hay por qué banearla.
+ * Sin diálogo de confirmación aparte (a diferencia de Dar de baja): es
+ * reversible por completo con solo volver a iniciar sesión.
+ */
+export function FormaCerrarSesiones({ accion, id }: { accion: AccionForma; id: string }) {
+  const [estado, despachar] = useActionState(accion, null);
+  return (
+    <form action={despachar} className="space-y-1.5">
+      <input type="hidden" name="id" value={id} />
+      <BotonChico etiqueta="Cerrar sus sesiones" ocupado="Cerrando…" />
+      <Aviso estado={estado} />
+    </form>
+  );
+}

@@ -283,3 +283,254 @@ export function leerSitioManual(fd: { get(k: string): unknown }): { ok: SitioMan
     },
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LAS EQUIVALENCIAS TEXTO→SITIO (0803) — el importador y la lista de «textos sin sitio» (T-A5-17).
+//
+// El origen y el destino de un viaje llegan como TEXTO LIBRE («STOP <planta> FINAL <producto>», «VACIO <cliente>»). Esta
+// herramienta es NEUTRAL: no trae ningún diccionario; la flota (o su cliente) lo llena. Dos caminos:
+//   · descargar los textos que hoy se quedan sin sitio, completarlos y subir el archivo;
+//   · asignarlos uno a uno desde la pantalla.
+// Todo puro, sin I/O: la lectura y la escritura son de `repo_validacion.ts`.
+//
+// Columnas del CSV (cabecera obligatoria, sin distinguir mayúsculas ni acentos):
+//   texto*  geocerca_codigo  tipo  lado
+//   · `tipo`: sitio | sin_sitio (alias «instruccion») | ignorar. Vacío con `geocerca_codigo` = sitio.
+//   · `lado`: origen | destino | ambos (vacío = ambos).
+//   · una fila con `tipo` y `geocerca_codigo` AMBOS vacíos es «sin completar» (la plantilla descargada): se omite, no es error.
+// A diferencia del catálogo de sitios, aquí NO es todo-o-nada: una fila mala no tumba las demás, y se dice cuál y por qué.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const MAX_FILAS_EQUIVALENCIAS = 2000;
+export const MAX_LARGO_TEXTO_EQUIVALENCIA = 200;
+/** Cuántos textos sin sitio se listan (los más frecuentes). */
+export const TOP_TEXTOS_SIN_SITIO = 50;
+/** La ventana de viajes que se mira para la lista. */
+export const DIAS_TEXTOS_SIN_SITIO = 14;
+
+/** El valor del `<select>` de la lista que significa «esto es una instrucción, no un lugar» (tipo `sin_sitio`). */
+export const MARCAR_INSTRUCCION = '__sin_sitio';
+/** El valor del `<select>` de la lista que significa «ignora este texto» (tipo `ignorar`). */
+export const MARCAR_IGNORAR = '__ignorar';
+
+export const TIPOS_EQUIVALENCIA = ['sitio', 'sin_sitio', 'ignorar'] as const;
+export type TipoEquivalencia = typeof TIPOS_EQUIVALENCIA[number];
+export const LADOS_EQUIVALENCIA = ['origen', 'destino', 'ambos'] as const;
+export type LadoEquivalencia = typeof LADOS_EQUIVALENCIA[number];
+
+/**
+ * Minúsculas, sin acentos, sin puntuación y con espacios simples. Es la MISMA función que `normalizarNombre` de
+ * `sitio_derivado.ts` (la que compara `derivarSitio`); se repite aquí para que los formularios del navegador no arrastren
+ * ese módulo, y una prueba vigila que no se separen.
+ */
+export function normalizarTextoEquivalencia(t: string): string {
+  return t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+export interface EquivalenciaCsv {
+  linea: number;
+  /** Como vino en el archivo (espacios simples). */
+  texto: string;
+  textoNormalizado: string;
+  /** Solo con `tipo === 'sitio'`: el código del sitio en el catálogo. */
+  geocercaCodigo: string | null;
+  tipo: TipoEquivalencia;
+  lado: LadoEquivalencia;
+}
+
+export interface ResultadoCsvEquivalencias {
+  filas: EquivalenciaCsv[];
+  errores: ErrorCsv[];
+  /** Filas de la plantilla que el cliente aún no completó (sin tipo ni sitio): se omiten sin ruido. */
+  sinCompletar: number;
+}
+
+const ALIAS_COLUMNA_EQ: Record<string, string> = {
+  texto: 'texto', texto_libre: 'texto', consignatario: 'texto', destinatario: 'texto',
+  geocerca_codigo: 'geocerca_codigo', codigo_sitio: 'geocerca_codigo', codigo_geocerca: 'geocerca_codigo', sitio_codigo: 'geocerca_codigo', geocerca: 'geocerca_codigo', codigo: 'geocerca_codigo',
+  tipo: 'tipo',
+  lado: 'lado',
+};
+const ALIAS_TIPO_EQ: Record<string, TipoEquivalencia> = {
+  sitio: 'sitio', sin_sitio: 'sin_sitio', instruccion: 'sin_sitio', ignorar: 'ignorar',
+};
+const ALIAS_LADO_EQ: Record<string, LadoEquivalencia> = {
+  origen: 'origen', carga: 'origen', destino: 'destino', descarga: 'destino', ambos: 'ambos', ambas: 'ambos',
+};
+
+export function parsearCsvEquivalencias(texto: string): ResultadoCsvEquivalencias {
+  const fallo = (linea: number, mensaje: string): ResultadoCsvEquivalencias => ({ filas: [], errores: [{ linea, mensaje }], sinCompletar: 0 });
+  if (typeof texto !== 'string' || texto.trim() === '') return fallo(0, 'El archivo está vacío.');
+  if (texto.length > MAX_BYTES_CSV_SITIOS) return fallo(0, 'El archivo pesa más de 1 MB; divídelo en partes.');
+  const limpio = texto.replace(/^﻿/, '');
+  const sep = detectarSeparador(limpio.split(/\r?\n/, 1)[0] ?? '');
+  const registros = partir(limpio, sep);
+  const cabecera = (registros[0] ?? []).map((c) => ALIAS_COLUMNA_EQ[clave(c)] ?? `__${clave(c)}`);
+  if (!cabecera.includes('texto')) return fallo(1, 'Falta la columna «texto» en la cabecera.');
+  if (!cabecera.includes('tipo') && !cabecera.includes('geocerca_codigo')) {
+    return fallo(1, 'Falta la columna «geocerca_codigo» (o «tipo») en la cabecera: sin ellas no hay a qué sitio ligar el texto.');
+  }
+  const cuerpo = registros.slice(1).map((r, i) => ({ linea: i + 2, celdas: r })).filter((r) => r.celdas.some((c) => c.trim() !== ''));
+  if (cuerpo.length === 0) return fallo(0, 'El archivo no trae filas debajo de la cabecera.');
+  if (cuerpo.length > MAX_FILAS_EQUIVALENCIAS) return fallo(0, `El archivo trae ${cuerpo.length} filas; el máximo por importación es ${MAX_FILAS_EQUIVALENCIAS}.`);
+
+  const filas: EquivalenciaCsv[] = [];
+  const errores: ErrorCsv[] = [];
+  const vistas = new Map<string, number>();
+  let sinCompletar = 0;
+  for (const { linea, celdas } of cuerpo) {
+    const v: Record<string, string> = {};
+    cabecera.forEach((col, i) => { if (!col.startsWith('__')) v[col] = (celdas[i] ?? '').trim(); });
+    const falla = (mensaje: string) => errores.push({ linea, mensaje });
+
+    const textoFila = (v.texto ?? '').replace(/\s+/g, ' ');
+    const codigo = v.geocerca_codigo ?? '';
+    const tipoTxt = v.tipo ?? '';
+    if (tipoTxt === '' && codigo === '' && textoFila !== '') { sinCompletar++; continue; }
+    if (!textoFila) { falla('El texto es obligatorio.'); continue; }
+    if (textoFila.length > MAX_LARGO_TEXTO_EQUIVALENCIA) { falla(`El texto admite hasta ${MAX_LARGO_TEXTO_EQUIVALENCIA} caracteres.`); continue; }
+    const textoNormalizado = normalizarTextoEquivalencia(textoFila);
+    if (!textoNormalizado) { falla('El texto no tiene letras ni números: no hay nada que comparar.'); continue; }
+
+    let tipo: TipoEquivalencia;
+    if (tipoTxt === '') tipo = 'sitio';
+    else {
+      const t = ALIAS_TIPO_EQ[clave(tipoTxt)];
+      if (!t) { falla(`El tipo «${tipoTxt}» no es válido. Usa: sitio, sin_sitio (o instruccion), ignorar.`); continue; }
+      tipo = t;
+    }
+    if (tipo === 'sitio' && codigo === '') { falla('Con tipo «sitio» hay que indicar el código del sitio en «geocerca_codigo».'); continue; }
+    if (tipo !== 'sitio' && codigo !== '') {
+      falla(`Un texto marcado «${tipo}» no es un lugar y no lleva sitio: quita «geocerca_codigo» o cambia el tipo a «sitio».`);
+      continue;
+    }
+    if (codigo.length > 40) { falla('El código del sitio admite hasta 40 caracteres.'); continue; }
+    let lado: LadoEquivalencia = 'ambos';
+    if ((v.lado ?? '') !== '') {
+      const l = ALIAS_LADO_EQ[clave(v.lado)];
+      if (!l) { falla(`El lado «${v.lado}» no es válido. Usa: origen, destino o ambos.`); continue; }
+      lado = l;
+    }
+    const llave = `${textoNormalizado}|${lado}`;
+    const previa = vistas.get(llave);
+    if (previa !== undefined) { falla(`El texto ya aparece en la línea ${previa} con el mismo lado.`); continue; }
+    vistas.set(llave, linea);
+    filas.push({ linea, texto: textoFila, textoNormalizado, geocercaCodigo: tipo === 'sitio' ? codigo : null, tipo, lado });
+  }
+  return { filas, errores, sinCompletar };
+}
+
+/** Una equivalencia que ya está guardada (para comparar y no reescribir lo que no cambió). */
+export interface EquivalenciaGuardada {
+  id: string;
+  textoNormalizado: string;
+  lado: LadoEquivalencia;
+  tipo: TipoEquivalencia;
+  geocercaId: string | null;
+  clienteId: string | null;
+}
+
+export interface PlanEquivalencias {
+  nuevas: Array<{ textoNormalizado: string; lado: LadoEquivalencia; tipo: TipoEquivalencia; geocercaId: string | null }>;
+  cambios: Array<{ id: string; tipo: TipoEquivalencia; geocercaId: string | null }>;
+  sinCambios: number;
+  rechazadas: ErrorCsv[];
+}
+
+/**
+ * Qué hay que escribir para que la base quede como dice el archivo. IDEMPOTENTE: lo que ya está igual cuenta como «sin cambios»
+ * y no se toca (reimportar el mismo archivo = 0 cambios). Un código que no está en el catálogo se rechaza con una frase que
+ * dice qué hacer; las demás filas siguen. `sitioPorCodigo` se indexa por código en minúsculas y solo trae sitios ACTIVOS de la flota.
+ */
+export function planificarEquivalencias(
+  filas: readonly EquivalenciaCsv[], sitioPorCodigo: ReadonlyMap<string, string>, guardadas: readonly EquivalenciaGuardada[],
+): PlanEquivalencias {
+  const plan: PlanEquivalencias = { nuevas: [], cambios: [], sinCambios: 0, rechazadas: [] };
+  const porLlave = new Map<string, EquivalenciaGuardada>();
+  for (const g of guardadas) if (g.clienteId === null) porLlave.set(`${g.textoNormalizado}|${g.lado}`, g);
+  for (const f of filas) {
+    let geocercaId: string | null = null;
+    if (f.tipo === 'sitio') {
+      geocercaId = sitioPorCodigo.get((f.geocercaCodigo ?? '').toLowerCase()) ?? null;
+      if (!geocercaId) {
+        plan.rechazadas.push({ linea: f.linea, mensaje: `El sitio "${f.geocercaCodigo}" no existe en tu catálogo. Impórtalo primero en Sitios.` });
+        continue;
+      }
+    }
+    const previa = porLlave.get(`${f.textoNormalizado}|${f.lado}`);
+    if (!previa) plan.nuevas.push({ textoNormalizado: f.textoNormalizado, lado: f.lado, tipo: f.tipo, geocercaId });
+    else if (previa.tipo === f.tipo && previa.geocercaId === geocercaId) plan.sinCambios++;
+    else plan.cambios.push({ id: previa.id, tipo: f.tipo, geocercaId });
+  }
+  return plan;
+}
+
+// ── La lista de «textos sin sitio» ──────────────────────────────────────────
+
+export interface ViajeParaTextos {
+  origen: string | null;
+  destino: string | null;
+  origenSitioId: string | null;
+  destinoSitioId: string | null;
+}
+
+export interface TextoSinSitio {
+  /** Cómo se escribe más seguido (para mostrar). */
+  texto: string;
+  textoNormalizado: string;
+  /** `ambos` si aparece sin sitio tanto de origen como de destino. */
+  lado: LadoEquivalencia;
+  frecuencia: number;
+}
+
+/**
+ * Los textos de origen/destino que NO tienen sitio (ni asignado al viaje ni cubierto por una equivalencia ya guardada), los más
+ * frecuentes primero. El conteo es por lado y se junta por texto normalizado; el desempate es alfabético para que la lista sea
+ * estable. Un texto que ya tiene equivalencia para ese lado no vuelve a salir (la oficina ya decidió).
+ */
+export function contarTextosSinSitio(
+  viajes: readonly ViajeParaTextos[],
+  cubiertas: ReadonlyArray<{ textoNormalizado: string; lado: LadoEquivalencia }>,
+  tope = TOP_TEXTOS_SIN_SITIO,
+): TextoSinSitio[] {
+  const cubre = (n: string, lado: 'origen' | 'destino') => cubiertas.some((c) => c.textoNormalizado === n && (c.lado === 'ambos' || c.lado === lado));
+  const porTexto = new Map<string, { origen: number; destino: number; variantes: Map<string, number> }>();
+  for (const v of viajes) {
+    for (const lado of ['origen', 'destino'] as const) {
+      const crudo = (lado === 'origen' ? v.origen : v.destino)?.replace(/\s+/g, ' ').trim().slice(0, MAX_LARGO_TEXTO_EQUIVALENCIA) ?? '';
+      const sitio = lado === 'origen' ? v.origenSitioId : v.destinoSitioId;
+      if (!crudo || sitio) continue;
+      const n = normalizarTextoEquivalencia(crudo);
+      if (!n || cubre(n, lado)) continue;
+      const e = porTexto.get(n) ?? { origen: 0, destino: 0, variantes: new Map<string, number>() };
+      e[lado]++;
+      e.variantes.set(crudo, (e.variantes.get(crudo) ?? 0) + 1);
+      porTexto.set(n, e);
+    }
+  }
+  const lista: TextoSinSitio[] = [];
+  for (const [n, e] of porTexto) {
+    const variante = [...e.variantes.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
+    lista.push({
+      texto: variante, textoNormalizado: n, lado: e.origen > 0 && e.destino > 0 ? 'ambos' : e.origen > 0 ? 'origen' : 'destino', frecuencia: e.origen + e.destino,
+    });
+  }
+  lista.sort((a, b) => b.frecuencia - a.frecuencia || a.textoNormalizado.localeCompare(b.textoNormalizado));
+  return lista.slice(0, tope);
+}
+
+const celdaCsv = (t: string): string => {
+  // Un texto que empieza como fórmula no se ejecuta al abrirlo en una hoja de cálculo (la normalización ignora el apóstrofo).
+  const seguro = /^[=+\-@\t\r]/.test(t) ? `'${t}` : t;
+  return /[",\n\r]/.test(seguro) ? `"${seguro.replace(/"/g, '""')}"` : seguro;
+};
+
+/**
+ * El listado como CSV para que el cliente lo complete. Solo trae el texto, el lado y cuántas veces salió: ningún nombre de
+ * operador, teléfono ni folio. Las columnas `geocerca_codigo` y `tipo` van vacías; ESAS son las que se llenan. Vuelve a entrar
+ * tal cual al importador (la columna `frecuencia` no la lee).
+ */
+export function csvTextosSinSitio(textos: readonly TextoSinSitio[]): string {
+  const filas = textos.map((t) => [celdaCsv(t.texto), '', '', t.lado, String(t.frecuencia)].join(','));
+  return ['texto,geocerca_codigo,tipo,lado,frecuencia', ...filas].join('\n') + '\n';
+}

@@ -181,8 +181,7 @@ export function TablaViajes({ viajes, sufijo = '' }: { viajes: FilaViaje[]; sufi
  *  parezca "sin riesgo".
  *
  *  El diésel del estímulo NO va aquí en pesos — va en LITROS, y la tarjeta
- *  vive en `inicio-contenido.tsx` (`docs/conocimiento/guion-demo.md` +
- *  `guion_demo.test.ts`): el IEPS en pesos se quitó del panel el 25-jul
+ *  vive en `inicio-contenido.tsx`: el IEPS en pesos se quitó del panel el 25-jul
  *  porque sumaba el trasladado del CFDI, que no es el estímulo — el
  *  estímulo es cuota vigente (la publica el DOF cada semana) × litros, y
  *  esa cuota no vive en este componente. */

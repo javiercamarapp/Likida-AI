@@ -2,7 +2,7 @@
 // RETENCIÓN DE LOS AGENTES 1 Y 2 — lo que tenía RPC de purga pero ningún cron.
 //
 // Cuelga de `/api/cron/purgar` (que ya trae la puerta con secreto, el kill switch
-// y el latido). Cuatro purgas, cada una con SU plazo y su porqué:
+// y el latido). Cinco purgas, cada una con SU plazo y su porqué:
 //
 //   · wa_ventana_contacto      7 días  — el teléfono y la hora del último mensaje
 //                                         del chofer: la ventana de Meta dura 24 h.
@@ -12,6 +12,10 @@
 //                                         borrado de Storage (mig. 0562).
 //   · peaje_ingesta_archivo    30 días — el CONTENIDO de los archivos de peajes que
 //                                         fallaron (la fila queda de constancia).
+//   · liquidacion_entrega_correo 13 meses — la entrega del desglose por correo (≈1 año,
+//                                         piso 12): el Excel se encola para borrado y el
+//                                         correo queda en «purgado» (mig. 0788). NO acorta
+//                                         la retención de liquidacion_externa.
 //
 // UNA purga que falla NO tumba a las demás ni a la corrida: cada una devuelve su
 // propio `{ok:false,error}` y el cron lo grita y avisa. `null`/error en el cuerpo
@@ -36,6 +40,7 @@ export const PLAZOS_AGENTES = {
   waEnvioRegistroDias: 90,
   liquidacionExternaMeses: 60,
   peajeFallidosDias: 30,
+  liquidacionEntregaCorreoMeses: 13,
   /** Tope por purga y corrida. */
   limite: 5000,
 } as const;
@@ -64,6 +69,11 @@ const LLAMADAS = (ahora: string): Llamada[] => [
     nombre: 'peaje_archivos_fallidos', rpc: 'purgar_peaje_archivos_fallidos',
     args: { p_dias: PLAZOS_AGENTES.peajeFallidosDias, p_limite: 500, p_ahora: ahora },
     leer: (d) => ({ filas: numero((d as { vaciados?: unknown } | null)?.vaciados), parcial: (d as { parcial?: unknown } | null)?.parcial === true }),
+  },
+  {
+    nombre: 'liquidacion_entrega_correo', rpc: 'purgar_liquidacion_entrega_correo',
+    args: { p_meses: PLAZOS_AGENTES.liquidacionEntregaCorreoMeses, p_limite: 500, p_ahora: ahora },
+    leer: (d) => ({ filas: numero((d as { purgadas?: unknown } | null)?.purgadas), parcial: (d as { parcial?: unknown } | null)?.parcial === true }),
   },
 ];
 
@@ -94,7 +104,7 @@ export async function correrPurgas(llamadas: Llamada[], clavesLog = 'agentes'): 
   return salida;
 }
 
-/** Corre las cuatro purgas. Nunca lanza. */
+/** Corre las cinco purgas. Nunca lanza. */
 export async function mantenerDatosAgentes(ahora: Date = new Date()): Promise<ResultadoPurgaAgente[]> {
   return correrPurgas(LLAMADAS(ahora.toISOString()), 'agentes');
 }

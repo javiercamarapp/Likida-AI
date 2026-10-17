@@ -58,6 +58,11 @@ export interface DepsWorker {
   reclamarAviso(tenantId: string, id: string, tipo: TipoAvisoDoc): Promise<'ganado' | 'perdido' | 'sin_migracion'>;
   liberarAviso(tenantId: string, id: string, tipo: TipoAvisoDoc): Promise<boolean>;
   telefonoOficina(tenantId: string): Promise<string | null>;
+  /**
+   * T-A3-31: el teléfono de la persona asignada para revisar este documento. Opcional: un doble sin él (o una persona sin
+   * teléfono, o un error) deja el aviso de `hallazgos` donde siempre estuvo, en el jefe de tráfico.
+   */
+  telefonoRevisor?(tenantId: string, id: string): Promise<string | null>;
   avisar(telefono: string, texto: string, parametros: [string, string, string], contexto: Record<string, unknown>): Promise<ResultadoAvisoOficina>;
   /** Mejor esfuerzo: una base sin la 0642 no admite estos tipos de evento y eso no debe tumbar nada. */
   evento(tenantId: string, id: string, tipo: TipoEvento, detalle: Record<string, unknown>): Promise<void>;
@@ -299,7 +304,8 @@ async function avisarOficinaDe(deps: DepsWorker, opts: OpcionesWorker, r: Result
       if (presupuesto <= 0 || rechazadosSeguidos >= TOPE_AVISOS_RECHAZADOS_SEGUIDOS) return;
       if (deps.ahora() + 3_000 >= opts.venceEn) return;
 
-      const tel = await telefonoDe(d.tenantId);
+      const telRevisor = tipo === 'hallazgos' && deps.telefonoRevisor ? await deps.telefonoRevisor(d.tenantId, d.id).catch(() => null) : null;
+      const tel = telRevisor ?? await telefonoDe(d.tenantId);
       if (!tel) {
         // Sin a quién avisar no se reclama el candado: cuando capturen el teléfono, el aviso sale.
         r.sinTelefono++;

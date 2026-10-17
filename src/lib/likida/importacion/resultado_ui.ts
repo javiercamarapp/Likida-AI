@@ -47,3 +47,28 @@ export interface ResultadoImportacionUI {
 
 export const TOPE_PROBLEMAS_UI = 300;
 export const TOPE_MUESTRA_UI = 10;
+
+/** Lo que el importador de viajes dice del seguimiento del agente (T-A5-04). Todo opcional: sin intento no hay frase. */
+export interface SeguimientoImportacion {
+  creados: number;
+  seguimientoActivado?: number;
+  seguimientoOmitidoSinVoluntario?: number;
+  seguimientoNoDisponible?: boolean;
+}
+
+/** Frases llanas para el acuse de la importación; vacío si no se intentó activar seguimiento. */
+export function frasesSeguimiento(r: SeguimientoImportacion): string[] {
+  if (r.seguimientoNoDisponible) return ['El seguimiento del agente no está disponible todavía: los viajes se importaron igual, sin seguimiento.'];
+  if (r.seguimientoActivado === undefined) return [];
+  const activados = r.seguimientoActivado;
+  const omitidos = r.seguimientoOmitidoSinVoluntario ?? 0;
+  const plural = (n: number, uno: string, varios: string) => (n === 1 ? uno : varios);
+  const frases = [`Se importaron ${r.creados} ${plural(r.creados, 'viaje', 'viajes')}.`];
+  frases.push(activados > 0
+    ? `${activados} ${plural(activados, 'quedó', 'quedaron')} en seguimiento del agente (operadores del piloto).`
+    : 'Ninguno quedó en seguimiento del agente.');
+  if (omitidos > 0) {
+    frases.push(`${activados > 0 ? 'Los otros ' : 'Los '}${omitidos} no se siguen porque su operador no está en el piloto.`);
+  }
+  return frases;
+}

@@ -239,4 +239,4 @@ describe('otro tenant / otro cliente', () => {
 //  · histórico exportado (.txt/.zip) → FAQ → respuesta rápida aprobada y usada → Excel → «P5 · del histórico exportado…»;
 //  · copiloto (sugiere, un humano aprueba y envía; nada depende de leer grupos en vivo) → el borrador con aprobación de
 //    «el cliente pregunta y recibe un dato real…» y el aviso de queja de «cliente molesto → escalamiento por niveles».
-// No se duplican aquí: la matriz (docs/e2e/matriz-agentes.md) los cuenta junto a este archivo.
+// No se duplican aquí: la matriz (la documentación interna) los cuenta junto a este archivo.

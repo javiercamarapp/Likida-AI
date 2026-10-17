@@ -348,3 +348,70 @@ ${c.datos.map(([k, v]) => `        <tr>
 </body>
 </html>`;
 }
+
+/**
+ * Texto plano del correo SOBRIO: sin wordmark ni pie de marca. Solo el contenido
+ * y la línea neutra de por qué llega (T-A1-12).
+ */
+export function aTextoPlanoSobrio(c: Correo): string {
+  const lineas = [c.titulo, '', ...c.parrafos];
+  if (c.datos?.length) {
+    lineas.push('');
+    for (const [k, v] of c.datos) lineas.push(`${k}: ${v}`);
+  }
+  if (c.boton) lineas.push('', `${c.boton.texto}: ${c.boton.href}`);
+  if (c.nota) lineas.push('', c.nota);
+  lineas.push('', '—', c.porQueLoRecibes);
+  return lineas.join('\n');
+}
+
+/**
+ * Variante SOBRIA (T-A1-12): correo transaccional operativo (p. ej. el desglose
+ * de liquidación) sin logo (`cid:` ni URL), sin wordmark, sin pie de marca y sin
+ * liga de baja de campaña. Solo título, párrafos, datos, botón/nota opcionales y
+ * UNA línea neutra de por qué llega. Estilos en línea y tablas, como `armarHtml`.
+ */
+export function armarHtmlSobrio(c: Correo): string {
+  const datos = c.datos?.length
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0 4px 0;border-collapse:collapse;">
+${c.datos.map(([k, v]) => `        <tr>
+          <td style="padding:8px 0;border-top:1px solid ${C.linea};font-family:${SANS};font-size:13px;line-height:18px;color:${C.faint};">${esc(k)}</td>
+          <td align="right" style="padding:8px 0;border-top:1px solid ${C.linea};font-family:${SANS};font-size:14px;line-height:20px;color:${C.tinta};font-weight:600;">${esc(v)}</td>
+        </tr>`).join('\n')}
+      </table>`
+    : '';
+  const boton = c.boton
+    ? `<p style="margin:20px 0 0 0;font-family:${SANS};font-size:14px;line-height:22px;"><a href="${hrefSeguro(c.boton.href)}" style="color:${C.tinta};text-decoration:underline;">${esc(c.boton.texto)}</a></p>`
+    : '';
+  const nota = c.nota
+    ? `<p style="margin:20px 0 0 0;font-family:${SANS};font-size:12px;line-height:19px;color:${C.muted};">${esc(c.nota)}</p>`
+    : '';
+  const parrafos = c.parrafos
+    .map((p) => `<p style="margin:0 0 14px 0;font-family:${SANS};font-size:15px;line-height:24px;color:#3f3f46;">${esc(p)}</p>`)
+    .join('\n    ');
+  return `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(c.asunto)}</title>
+</head>
+<body style="margin:0;padding:0;background-color:${C.papel};">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;height:0;width:0;">${esc(c.avance)}</div>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:${C.papel};">
+  <tr><td align="left" style="padding:24px 16px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px;max-width:100%;border-collapse:collapse;">
+      <tr><td style="padding:0;">
+    <h1 style="margin:0 0 16px 0;font-family:${SANS};font-size:20px;line-height:28px;font-weight:600;color:${C.tinta};">${esc(c.titulo)}</h1>
+    ${parrafos}
+    ${datos}
+    ${boton}
+    ${nota}
+    <p style="margin:28px 0 0 0;font-family:${SANS};font-size:11px;line-height:18px;color:${C.faint};">${esc(c.porQueLoRecibes)}</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
+}

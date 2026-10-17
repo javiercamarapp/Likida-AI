@@ -13,7 +13,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { notificarAsignacion } from './notificar';
+import { notificarAsignacion, notificarAsignacionConBotones } from './notificar';
 import { evaluarYAvisarCcpDespacho } from './carta_porte_wa';
 import { despacharInstrucciones } from './convenios/envio';
 import { enviarBriefingInicio } from './briefing_inicio_wa';
@@ -60,7 +60,7 @@ export const DIAS_LIQUIDADOS_CARGA = 90;
  *
  * AGREGADO EN SQL DESDE EL 22-AGO-2026 (mig. 0152): traía `operador`, `viaje`,
  * `pod` e `incidencia` ENTEROS para contar en JS — con 50k viajes/mes
- * caducaba ~mes 2 (docs/escala-50k/MAPA.md #18). `carga_operadores_tenant`
+ * caducaba ~mes 2 (la documentación interna #18). `carga_operadores_tenant`
  * cuenta lo mismo (un POD rechazado NO es entregado; un viaje sin dueño no le
  * cuenta a nadie). La forma se valida y LANZA si no encaja.
  *
@@ -277,7 +277,7 @@ export const LIMITE_INCIDENCIAS = 500;
 /**
  * JOIN EN SQL DESDE EL 22-AGO-2026 (mig. 0152): traía TODOS los viajes y
  * unidades del tenant para resolver el folio y el número económico de unas
- * cuantas incidencias (docs/escala-50k/MAPA.md #19). `incidencias_tenant` los
+ * cuantas incidencias (la documentación interna #19). `incidencias_tenant` los
  * resuelve con un left join anclado por tenant — una incidencia que apunte a
  * un viaje ajeno sale sin folio, igual que antes. Abiertas siempre; resueltas
  * solo las de los últimos `DIAS_INCIDENCIAS_RESUELTAS` días; tope
@@ -404,7 +404,7 @@ export interface TableroOperacion {
  * el que se lee como "no falta ninguno".
  *
  * AGREGADO EN SQL DESDE EL 22-AGO-2026 (mig. 0152): leía `viaje` y `pod`
- * enteros (docs/escala-50k/MAPA.md #17). `tablero_operacion_tenant` cuenta lo
+ * enteros (la documentación interna #17). `tablero_operacion_tenant` cuenta lo
  * mismo; la forma se valida y LANZA si no encaja — un tablero en ceros sobre
  * una respuesta rota se lee como "no hay nada pendiente".
  */
@@ -672,6 +672,20 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
 }
 
 /**
+ * T-A5-47: ¿esta flota manda la asignación con botones (plantilla N01)? Apagado por omisión; si la configuración no se puede leer se queda
+ * en el aviso de siempre (nunca se deja de avisar al chofer por esto). Import perezoso: el Conductor ya depende de este módulo.
+ */
+async function asignacionConBotones(tenantId: string): Promise<boolean> {
+  try {
+    const { leerConfigConductor } = await import('./conductor/repo');
+    return (await leerConfigConductor(tenantId)).asignacionBotonesActiva === true;
+  } catch (e) {
+    logger.warn('viaje.aviso_config_no_leida', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
+}
+
+/**
  * Le manda al chofer el aviso de su viaje. Resuelve el teléfono aquí para que
  * quien llame no tenga que conocer la tabla `operador`.
  */
@@ -690,8 +704,8 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
   // acotada, pero el día que llegue de la entrada del usuario, un id de la flota
   // B le manda a un chofer de la flota A el anticipo de un viaje ajeno.
   const [{ data: op, error: errOp }, { data: viaje, error: errViaje }] = await Promise.all([
-    acotada(admin.from('operador').select('telefono').eq('id', operadorId).eq('tenant_id', tenantId).maybeSingle(), 'avisarAlChofer.operador'),
-    acotada(admin.from('viaje').select('folio, origen, destino, fecha_inicio, anticipo, unidad_id')
+    acotada(admin.from('operador').select('telefono, nombre').eq('id', operadorId).eq('tenant_id', tenantId).maybeSingle(), 'avisarAlChofer.operador'),
+    acotada(admin.from('viaje').select('folio, origen, destino, fecha_inicio, anticipo, unidad_id, cita_origen_en')
       .eq('tenant_id', tenantId).eq('id', viajeId).maybeSingle(), 'avisarAlChofer.viaje'),
   ]);
   const errLectura = errOp ?? errViaje;
@@ -727,18 +741,22 @@ export async function avisarAlChofer(tenantId: string, operadorId: string, viaje
     unidad = (u?.numero_economico as string) ?? null;
   }
 
-  const r = await notificarAsignacion({
-    telefono: op.telefono as string,
-    tenantId,
-    viaje: {
-      folio: viaje.folio as string | null,
-      origen: viaje.origen as string | null,
-      destino: viaje.destino as string | null,
-      fechaInicio: viaje.fecha_inicio as string | null,
-      anticipo: viaje.anticipo === null ? null : Number(viaje.anticipo),
-      unidad,
-    },
-  });
+  const datosViaje = {
+    folio: viaje.folio as string | null,
+    origen: viaje.origen as string | null,
+    destino: viaje.destino as string | null,
+    fechaInicio: viaje.fecha_inicio as string | null,
+    anticipo: viaje.anticipo === null ? null : Number(viaje.anticipo),
+    unidad,
+  };
+  // T-A5-47: en la flota con la perilla encendida la asignación sale con botones (N01) en vez de `viaje_asignado`.
+  const r = (await asignacionConBotones(tenantId))
+    ? await notificarAsignacionConBotones({
+      telefono: op.telefono as string,
+      tenantId,
+      viaje: { ...datosViaje, viajeId, operadorNombre: (op.nombre as string | null) ?? null, citaEn: (viaje.cita_origen_en as string | null) ?? null },
+    })
+    : await notificarAsignacion({ telefono: op.telefono as string, tenantId, viaje: datosViaje });
   if (!r.enviado) {
     // ERROR, no WARN, y la razón importa: `avisado_en` es lo ÚNICO que hace
     // visible este viaje para la escalación de las 5 h. Si el aviso no salió, no

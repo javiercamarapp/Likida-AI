@@ -121,10 +121,10 @@ export function crearMundo(o: OpcionesMundo) {
   type EpisodioMem = EpisodioFila & { cerradoEn: string | null; cierre: string | null; respuesta: string | null; silenciadoHasta: string | null };
   const episodios = new Map<string, EpisodioMem>();
   let nEpisodio = 0;
-  m.deps.responderSenalVida = async (tenantId, viajeId, respuesta, ahora) => {
+  m.deps.responderSenalVida = async (tenantId, viajeId, respuesta, ahora, config) => {
     const e = [...episodios.values()].find((x) => x.tenantId === tenantId && x.viajeId === viajeId && !x.cerradoEn);
     if (!e) return 'sin_episodio';
-    Object.assign(e, { cerradoEn: ahora.toISOString(), cierre: 'respondio', respuesta, silenciadoHasta: new Date(ahora.getTime() + silencioDeRespuesta(respuesta) * 60_000).toISOString() });
+    Object.assign(e, { cerradoEn: ahora.toISOString(), cierre: 'respondio', respuesta, silenciadoHasta: new Date(ahora.getTime() + silencioDeRespuesta(respuesta, config) * 60_000).toISOString() });
     return 'cerrado';
   };
   const cruces = new Set<string>();

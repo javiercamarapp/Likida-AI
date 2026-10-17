@@ -4,18 +4,56 @@ import { BarraPagina } from '../../../resumen-visual';
 import { EstadoVacio } from '@/app/admin/ui/kit';
 import { mxn, numero } from '@/lib/formato';
 // El módulo `reclamacion` es puro (sin base): el bundle de la vista puede importarlo.
-import { ETIQUETA_MOTIVO_RECLAMACION, type ReporteReclamacion } from '@/lib/likida/peajes/reclamacion';
+import { ETIQUETA_MOTIVO_RECLAMACION, type ReporteReclamacion, type MotivoReclamacion } from '@/lib/likida/peajes/reclamacion';
+import { TEXTO_SIN_POSICIONES } from '@/lib/likida/peajes/reclamacion_perfil';
 import { textoEvidencia } from '@/lib/likida/peajes/reclamacion_archivos';
+import type { ReporteRevision, ReclamoVista } from '@/lib/likida/peajes/revision_cobros';
+import type { CierreMensual } from '@/lib/likida/peajes/cierre_mensual';
+import type { ResumenSeguimiento } from '@/lib/likida/peajes/reclamos_seguimiento';
+import { SeccionRevisionCobros, SeccionCierreMensual, SeccionSeguimiento, type AccionesSeguimiento } from './revision';
+import { TablaCandidatosCobros, type AccionDecidir } from '../candidatos-tabla';
+import type { TablaCandidatos, AccionCandidato } from '@/lib/likida/peajes/candidatos_tabla';
 
 export type EstadoReclamacion = 'sin_desglose' | 'no_existe' | 'error' | 'ok';
 
 const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
 
-export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte }: {
-  sufijo: string; desglose: string | null; estado: EstadoReclamacion; reporte: ReporteReclamacion | null;
+/** Lo que la pantalla suma a la reclamación con GPS: la revisión de cobros del archivo, el cierre mensual y el seguimiento. Todo opcional. */
+export interface ExtrasReclamacion {
+  revision: ReporteRevision | null;
+  /** La tabla de candidatos con sus acciones (T-A2-28). */
+  candidatos?: { tabla: TablaCandidatos | null; error: boolean; decidir?: AccionDecidir; aplicables?: Record<AccionCandidato, number> };
+  /** El reporte con GPS no se pudo leer (la revisión de cobros sí). */
+  errorGps?: boolean;
+  mes: string | null;
+  cierre: CierreMensual | null;
+  errorCierre?: boolean;
+  seguimiento: { reclamos: ReclamoVista[]; resumen: ResumenSeguimiento } | null;
+  errorSeguimiento?: boolean;
+  acciones: AccionesSeguimiento;
+  aviso?: string | null;
+  error?: string | null;
+}
+
+/**
+ * Perfil `cinco_agentes` (T-A2-24): el reporte enseña solo los motivos visibles, todo como «candidato», sin descargas (la ruta de
+ * export es stand-by) y con el margen de distancia de la flota. Ausente = flota sin perfil: todo como siempre.
+ */
+export interface CandidatoReclamacion {
+  motivos: readonly MotivoReclamacion[];
+  margenLejosM: number;
+  /** Fija el margen de la flota (acción de servidor con su propia puerta). Sin ella no se pinta el formulario. */
+  guardarMargen?: (fd: FormData) => void | Promise<void>;
+}
+
+export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extras, candidato }: {
+  sufijo: string; desglose: string | null; estado: EstadoReclamacion; reporte: ReporteReclamacion | null; extras?: ExtrasReclamacion; candidato?: CandidatoReclamacion;
 }) {
   const ctx = sufijo ? `&${sufijo.slice(1)}` : '';
+  const motivosVisibles = (Object.keys(ETIQUETA_MOTIVO_RECLAMACION) as MotivoReclamacion[]).filter((m) => !candidato || candidato.motivos.includes(m));
+  // Sin nada evaluado (ni una línea confirmada ni un cruce) no hay con qué comparar: no se pinta como «todo bien».
+  const faltanDatos = !!candidato && !!reporte && reporte.resumen.reclamables === 0 && reporte.resumen.confirmadas === 0;
   return (
     <main className="h-full">
       <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
@@ -31,11 +69,35 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte }: {
         <div className="px-5 py-5 flex-1 space-y-4">
           {estado === 'sin_desglose' && (
             <EstadoVacio icono={<ShieldAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              Elige un desglose en el agente de Peajes y abre «Reporte de reclamación».
+              Elige un desglose en el agente de Peajes y abre «Reporte de reclamación». Aquí también puedes ver el cierre mensual y el seguimiento de reclamos.
             </EstadoVacio>
           )}
           {estado === 'no_existe' && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>Ese desglose no existe en tu flota (o fue anulado).</p>}
           {estado === 'error' && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>No se pudo armar el reporte ahora mismo. No es que no haya nada que reclamar: inténtalo de nuevo en un momento.</p>}
+
+          {extras?.aviso && <p role="status" className="card p-3 text-[12.5px]" style={{ color: 'var(--ok)' }}>{extras.aviso}</p>}
+          {extras?.error && <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>{extras.error}</p>}
+
+          {estado === 'ok' && extras?.revision && desglose && (
+            <SeccionRevisionCobros revision={extras.revision} desglose={desglose} sufijo={sufijo} justificarCruce={extras.acciones.justificarCruce} />
+          )}
+          {estado === 'ok' && extras?.candidatos && desglose && (
+            <TablaCandidatosCobros tabla={extras.candidatos.tabla} error={extras.candidatos.error} desglose={desglose} sufijo={sufijo}
+              decidir={extras.candidatos.decidir} aplicables={extras.candidatos.aplicables} />
+          )}
+          {extras && (estado === 'ok' || estado === 'sin_desglose') && (
+            <>
+              <SeccionCierreMensual mes={extras.mes} cierre={extras.cierre} error={extras.errorCierre === true} sufijo={sufijo} desglose={desglose} />
+              <SeccionSeguimiento
+                reclamos={extras.seguimiento?.reclamos ?? null} resumen={extras.seguimiento?.resumen ?? null} acciones={extras.acciones}
+                desglose={estado === 'ok' ? desglose : null} revision={extras.revision} error={extras.errorSeguimiento === true} />
+            </>
+          )}
+          {estado === 'ok' && !reporte && extras?.errorGps && (
+            <p role="alert" className="card p-3 text-[12.5px]" style={{ color: 'var(--bad)' }}>
+              El reporte con evidencia de GPS no se pudo armar ahora mismo. No es que no haya nada que reclamar: la revisión de cobros de arriba no depende del GPS.
+            </p>
+          )}
 
           {estado === 'ok' && reporte && desglose && (
             <>
@@ -43,7 +105,9 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte }: {
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div>
                     <h2 className="font-display text-[15px] font-semibold">
-                      {reporte.resumen.reclamables === 0 ? 'Sin cruces para reclamar' : `${numero(reporte.resumen.reclamables)} ${reporte.resumen.reclamables === 1 ? 'cruce' : 'cruces'} para pedir revisión`}
+                      {candidato
+                        ? (reporte.resumen.reclamables === 0 ? 'Sin cruces candidatos' : `${numero(reporte.resumen.reclamables)} ${reporte.resumen.reclamables === 1 ? 'cruce candidato' : 'cruces candidatos'} para pedir revisión`)
+                        : (reporte.resumen.reclamables === 0 ? 'Sin cruces para reclamar' : `${numero(reporte.resumen.reclamables)} ${reporte.resumen.reclamables === 1 ? 'cruce' : 'cruces'} para pedir revisión`)}
                     </h2>
                     <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
                       {reporte.proveedor ? `Proveedor ${reporte.proveedor} · ` : ''}
@@ -56,16 +120,28 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte }: {
                     <span className="text-[20px] font-semibold cifra-mono">{mxn(reporte.resumen.montoReclamable)}</span>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2 mt-3">
+                {!candidato && <div className="flex flex-wrap gap-2 mt-3">
                   <a href={`/api/export/peajes-reclamacion?desglose=${desglose}&formato=xlsx${ctx}`} className={CSS_BOTON} style={ESTILO_PRIMARIO}>
                     <FileDown width={13} height={13} strokeWidth={2} /> Excel
                   </a>
                   <a href={`/api/export/peajes-reclamacion?desglose=${desglose}&formato=pdf${ctx}`} className={`${CSS_BOTON} hairline`} style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
                     <FileDown width={13} height={13} strokeWidth={2} /> PDF
                   </a>
-                </div>
+                </div>}
+                {faltanDatos && <p role="status" className="card p-3 mt-3 text-[12.5px]" style={{ color: 'var(--muted)' }}>{TEXTO_SIN_POSICIONES}</p>}
+                {candidato?.guardarMargen && (
+                  <form action={candidato.guardarMargen} className="mt-3 flex flex-wrap items-end gap-2 text-[12px]">
+                    <input type="hidden" name="desglose" value={desglose} />
+                    <label className="flex flex-col gap-1">
+                      <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Margen de distancia a la caseta (m)</span>
+                      <input name="margen" type="number" inputMode="numeric" min={100} max={5000} step={1} defaultValue={candidato.margenLejosM} className="rounded-lg hairline px-2 py-1 w-28" />
+                    </label>
+                    <button type="submit" className={`${CSS_BOTON} hairline`} style={{ background: 'var(--surface)', color: 'var(--ink)' }}>Guardar margen</button>
+                    <span style={{ color: 'var(--muted)' }}>Un cruce se marca como candidato si la unidad pasó a más de ese margen (sumado al radio de la caseta). Por omisión 1,000 m; fíjalo en 200 o 500 m cuando se decida.</span>
+                  </form>
+                )}
                 <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 mt-3">
-                  {(Object.keys(ETIQUETA_MOTIVO_RECLAMACION) as Array<keyof typeof ETIQUETA_MOTIVO_RECLAMACION>).map((m) => (
+                  {motivosVisibles.map((m) => (
                     <div key={m} className="rounded-lg hairline p-2.5">
                       <span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>{ETIQUETA_MOTIVO_RECLAMACION[m]}</span>
                       <span className="text-[15px] font-semibold cifra-mono">{numero(reporte.resumen.porMotivo[m].n)}</span>
@@ -76,7 +152,7 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte }: {
                 <p className="text-[11px] mt-3" style={{ color: 'var(--faint)' }}>
                   No se reclaman (sin evidencia en contra del cobro): {numero(reporte.resumen.confirmadas)} confirmadas por el GPS · {numero(reporte.resumen.sinDatos)} sin datos suficientes
                   {reporte.resumen.sinEvaluar > 0 ? ` · ${numero(reporte.resumen.sinEvaluar)} sin evaluar (vuelve a conciliar el desglose)` : ''}. Sin datos no es evidencia en contra de nadie.
-                  {reporte.resumen.sinCurso > 0 ? ` ${numero(reporte.resumen.sinCurso)} de ${numero(reporte.resumen.lineas)} líneas no tienen curso declarado y no se evaluaron por curso: cárgalos en Configuración, sección Cursos.` : ''}
+                  {!candidato && reporte.resumen.sinCurso > 0 ? ` ${numero(reporte.resumen.sinCurso)} de ${numero(reporte.resumen.lineas)} líneas no tienen curso declarado y no se evaluaron por curso: cárgalos en Configuración, sección Cursos.` : ''}
                 </p>
               </section>
 
@@ -90,7 +166,7 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte }: {
                           <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">Caseta</th>
                           <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2">TAG / unidad</th>
                           <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 text-right">Monto</th>
-                          <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pl-3">Por qué se reclama</th>
+                          <th className="etiqueta-mono text-[10px] uppercase font-normal pb-2 pl-3">{candidato ? 'Por qué es candidato' : 'Por qué se reclama'}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -103,7 +179,7 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte }: {
                             <td className="py-2 pl-3 max-w-[34rem]">
                               <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium mr-1.5"
                                 style={c.confianza === 'alta' ? { color: 'var(--bad)', background: 'var(--badbg)' } : { color: 'var(--warn)', background: 'var(--warnbg)' }}>
-                                {ETIQUETA_MOTIVO_RECLAMACION[c.motivo]} · {c.confianza}
+                                {ETIQUETA_MOTIVO_RECLAMACION[c.motivo]} · {candidato ? 'candidato' : c.confianza}
                               </span>
                               <span>{c.porQue}</span>
                               {c.evidencia.length > 0 && (

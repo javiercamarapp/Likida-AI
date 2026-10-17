@@ -92,7 +92,7 @@ export function rangoFechasLineas(lineas: CfdiLineaXml[]): { desde: string; hast
 }
 
 /**
- * FASE 1 (docs/asistencia/PLAN-FASES.md): identifica diésel de una línea del
+ * FASE 1 (la documentación interna): identifica diésel de una línea del
  * consolidado y su clave SAT. concepto_base trae `claveProdServ` nativo;
  * ecc12 NO (la ECC12 v1.2 no da ClaveProdServ por transacción) — solo
  * `tipoCombustible`, catálogo cerrado del SAT. Se traduce ÚNICAMENTE
@@ -105,9 +105,8 @@ export function rangoFechasLineas(lineas: CfdiLineaXml[]): { desde: string; hast
  *
  * Hasta hoy la comparación era `l.tipoCombustible === 'Diesel'`, EXACTA:
  * mayúscula inicial, sin acento, sin espacios. El repo no tiene —ni ha
- * tenido nunca— un solo CFDI con complemento ECC emitido de verdad (los tres
- * fixtures del repo son strings sintéticos; ver `pruebas-manuales/
- * consolidado-real.prueba.ts`, que dice literal "real en estructura"), así
+ * tenido nunca— un solo CFDI con complemento ECC emitido de verdad (los
+ * fixtures del repo son strings sintéticos, p. ej. `cfdi_xml.test.ts`), así
  * que nadie ha visto con qué exactitud tipográfica timbra un emisor real ese
  * atributo. Un `"DIESEL"`, un `"Diésel"` o un `" Diesel "` —las tres formas
  * en que un emisor puede escribir LA MISMA PALABRA— devolvían `undefined`, y
@@ -122,7 +121,7 @@ export function rangoFechasLineas(lineas: CfdiLineaXml[]): { desde: string; hast
  * LO QUE NO SE HACE, A PROPÓSITO: no se mapea ninguna clave numérica de
  * catálogo (`"01"`, `"02"`…). El SAT publica `c_ClaveTipoCombustible` y este
  * repo NO tiene ese catálogo verificado contra fuente (ni en `normas/`, ni
- * en `normas/datos/`, ni en `docs/conocimiento/05-hidrocarburos.md`, que
+ * en `normas/datos/`, ni en la documentación interna, que
  * documenta el complemento pero no el catálogo de ese atributo). Adivinar
  * que "02" es diésel acreditaría litros de gasolina — una cifra fiscal
  * inventada, exactamente lo que la casa prohíbe. Cuando exista el catálogo

@@ -546,15 +546,14 @@ describe('FASE 1 — equivalencia sobre un ECC12 SINTÉTICO: los litros sobreviv
   // ESTRUCTURA: los RFC son de relleno (`edn010101aa1`, `EST010101AAA`), el
   // UUID es `1111…5555` y el comprobante ni siquiera declara `FormaPago`.
   // El repo NO tiene —ni ha tenido nunca— un CFDI con complemento ECC emitido
-  // de verdad: no hay un solo archivo `.xml` en el árbol y los otros dos
-  // fixtures ECC (`cfdi_xml.test.ts`, `pruebas-manuales/consolidado-real.
-  // prueba.ts`) son este mismo, con otro nombre.
+  // de verdad: no hay un solo archivo `.xml` en el árbol y los otro
+  // fixture ECC (`cfdi_xml.test.ts`) es este mismo, con otro nombre.
   //
   // Importa decirlo aquí porque el plan de cierre del ciclo pide "prueba de
   // equivalencia contra un ECC real" Y, con el MISMO documento en la mano,
   // resolver la pregunta abierta §6.2 (el `FormaPago = 99`). Un fixture que
   // se llama «real» hace ver esa casilla como palomeada. No lo está: ver
-  // `docs/asistencia/ECC-FORMAPAGO-99.md`.
+  // la documentación interna.
   const ECC12_SINTETICO = `<?xml version="1.0" encoding="UTF-8"?>
 <cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" TipoDeComprobante="I" Fecha="2026-04-30T23:59:00" Total="3300.00" SubTotal="2844.83">
   <cfdi:Emisor Rfc="edn010101aa1"/>

@@ -14,6 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { logger } from '@/lib/logger';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { conPool } from '../lotes';
 import { generarPdfLiquidacionExterna } from './pdf';
 import { generarExcelFormato, generarPdfFormato, type DatosFormato } from './render_formato';
@@ -34,12 +35,18 @@ import { trabajoPendiente, avisosPendientes } from './trabajo';
 import { avisarNoCoincidePorOmision, tareaDeDiferencia, type AvisarNoCoincide } from './aviso_no_coincide';
 import { copiarAJefePorOmision, type CopiarAJefe, type ResultadoCopia } from './copia_jefe';
 import type { LiquidacionExternaNormalizada } from './esquema';
+import { leerConfigCorreo, type CanalEntrega } from './repo_correo';
+import type { ResumenEntregasCorreo } from './entrega_correo';
+import type { ResultadoPull } from './pull_desglose';
+import type { LectorDesglosesPuerto } from './desglose_puerto';
 
 /** Cuántas veces el cron intenta ENCOLAR (fallos nuestros, transitorios) antes
  *  de darla por fallida y pedirle a una persona que mire. */
 export const MAX_INTENTOS_ENCOLADO = 5;
 /** Lote por pasada del cron. */
 export const LOTE_CRON = 50;
+/** Lote de entregas por correo por pasada (debe coincidir con `LIMITE_POR_PASADA` de entrega_correo; una prueba lo fija). Mantiene la pasada ≤ maxDuration=60. */
+export const LOTE_CORREO = 25;
 
 export interface Dependencias {
   entrega: EntregaWhatsApp;
@@ -57,6 +64,67 @@ export interface Dependencias {
   subirArchivo: (ruta: string, bytes: Uint8Array, tipo: string) => Promise<void>;
   /** Copia de la liquidación entregada al jefe de flota. */
   copiarAJefe: CopiarAJefe;
+  /** El canal de entrega de la flota (`whatsapp` por defecto). Con `correo` el camino WhatsApp no corre. Opcional: sin ella, la real con caché corta. */
+  canalDeEntrega?: (tenantId: string) => Promise<CanalEntrega>;
+  /** Las flotas con canal `correo`/`ambos` que tienen un lector del sistema de transporte (T-A1-24). Opcional: sin ella la fase `pull` no corre.
+   *  La real devuelve `[]` hasta que exista el conector HTTP (BLOQUEO EXTERNO: la API de lectura del cliente). */
+  lectoresPull?: () => Promise<Array<{ tenantId: string; lector: LectorDesglosesPuerto }>>;
+  /** Una pasada de pull para una flota. Opcional: sin ella, `pullDesgloses`. */
+  pullDeFlota?: (tenantId: string, lector: LectorDesglosesPuerto) => Promise<ResultadoPull>;
+  /** Una pasada de entregas por correo (≤ `limite`). Opcional: sin ella la fase `correo` no corre. */
+  entregasCorreo?: (limite: number) => Promise<ResumenEntregasCorreo>;
+}
+
+/** Cuánto se recuerda el canal de una flota: el cron y el POST consultan lo mismo muchas veces por minuto. */
+const CANAL_TTL_MS = 30_000;
+const canalRecordado = new Map<string, { canal: CanalEntrega; hasta: number }>();
+
+/**
+ * Lee el canal de la flota.
+ *
+ * FAIL-SAFE DE PRODUCTO (hallazgo ALTO, oct-2026): bajo el perfil `cinco_agentes`, A1 (liquidación) es SIEMPRE por
+ * correo — nunca por WhatsApp. Esto se decide ANTES de mirar `liquidacion_correo_config`, y sin excepción: ni la
+ * ausencia de fila, ni una fila vieja o mal puesta (`canal: 'whatsapp'`/`'ambos'`), ni una migración 0785 sin
+ * aplicar, ni un fallo al leer la tabla pueden hacer que una flota de este perfil reciba por WhatsApp. Es la
+ * dirección conservadora: el riesgo real era aplicar el perfil (`aplicar-cinco-agentes.sh`) SIN el paso que deja la
+ * fila explícita, y caer en el default de siempre. `aplicar-cinco-agentes.sh` también inserta esa fila con
+ * `canal: 'correo'` (defensa en profundidad: código Y configuración), pero este default no depende de que ese paso
+ * se haya corrido ni de que se mantenga correcto después.
+ *
+ * Para el RESTO de las flotas (sin perfil `cinco_agentes`) el default por ausencia de fila, migración sin aplicar o
+ * lectura fallida SIGUE siendo `whatsapp`, a propósito y no por descuido: cambiarlo de forma global dejaría, para
+ * cualquier flota que nunca configuró `liquidacion_correo_config` (hoy la inmensa mayoría), la liquidación sin
+ * entregar por NINGÚN canal — ni WhatsApp (porque el canal ya no sería `whatsapp`) ni correo (esa entrega nace de
+ * `recibirDesglose`/el pull del T-A1-24, que esta función no puede invocar ni inventar). El fallo no se recuerda:
+ * se reintenta en la siguiente llamada. El cron ya filtra por canal en `trabajoPendiente`, que sí LANZA ante un
+ * fallo de base.
+ *
+ * `perfilDeTenant(..., 'permitir')`: un bache leyendo `tenant_perfil` para una flota NUNCA antes confirmada como
+ * `cinco_agentes` debe leerse como "sin perfil" aquí (comportamiento de siempre), no como "asumir cinco_agentes".
+ * Su modo por omisión (`'restringir'`) es al revés a propósito PARA OTRAS superficies (ocultar de más ante la duda es
+ * seguro); aquí sería la dirección insegura: convertiría cualquier bache transitorio de esa tabla, para CUALQUIER
+ * flota, en una fuga del canal de entrega de TODAS las liquidaciones hacia `correo` sin que nadie lo pidiera. Una
+ * flota que SÍ se confirmó `cinco_agentes` alguna vez sigue protegida: `perfilDeTenant` recuerda ese último valor y
+ * lo devuelve aunque la lectura de ahora falle.
+ */
+async function canalDeEntregaPorOmision(tenantId: string): Promise<CanalEntrega> {
+  const ahora = Date.now();
+  const r = canalRecordado.get(tenantId);
+  if (r && r.hasta > ahora) return r.canal;
+  if ((await perfilDeTenant(tenantId, ahora, 'permitir')) === 'cinco_agentes') {
+    canalRecordado.set(tenantId, { canal: 'correo', hasta: ahora + CANAL_TTL_MS });
+    return 'correo';
+  }
+  let lectura: Awaited<ReturnType<typeof leerConfigCorreo>>;
+  try {
+    lectura = await leerConfigCorreo(tenantId);
+  } catch (e) {
+    logger.warn('liqext.canal_no_leido', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    return 'whatsapp';
+  }
+  const canal: CanalEntrega = lectura.ok ? lectura.valor.canal : 'whatsapp';
+  canalRecordado.set(tenantId, { canal, hasta: ahora + CANAL_TTL_MS });
+  return canal;
 }
 
 export type CrearTareaDiferencia = (tenantId: string, liquidacionId: string, t: TareaDiferencia) => ReturnType<typeof crearTareaDiferenciaLiquidacion>;
@@ -71,6 +139,11 @@ export const dependenciasPorOmision: Required<Dependencias> = {
   formato: (t) => leerFormatoFlota(t),
   subirArchivo: (r, b, t) => subirArchivoExterno(r, b, t),
   copiarAJefe: copiarAJefePorOmision,
+  canalDeEntrega: canalDeEntregaPorOmision,
+  lectoresPull: async () => [],
+  // Import dinámico: estos módulos arrastran la base y el proveedor de correo; solo se cargan cuando la fase corre.
+  pullDeFlota: async (t, l) => (await import('./pull_desglose')).pullDesgloses(t, l),
+  entregasCorreo: async (limite) => (await import('./entrega_correo')).procesarEntregasCorreo(undefined, limite),
 };
 
 // ── recibir ─────────────────────────────────────────────────────────────────
@@ -165,6 +238,16 @@ export async function intentarEntrega(
   try {
     // Solo se empuja lo que no terminó: una acusada o fallida no se toca.
     if (liq.estado !== 'pendiente' && liq.estado !== 'en_cola') return 'sin_cambio';
+    // Gate por canal: si la flota recibe el desglose por correo, el camino WhatsApp no corre (ni el teléfono ni el PDF se piden).
+    // Un lector inyectado que falla ⇒ no se manda nada: la siguiente pasada del cron lo reintenta sin gastar intento.
+    let canal: CanalEntrega;
+    try {
+      canal = await (deps.canalDeEntrega ?? canalDeEntregaPorOmision)(tenantId);
+    } catch (e) {
+      logger.warn('liqext.canal_no_leido', { id: liq.id, err: e instanceof Error ? e.message : String(e) });
+      return 'sin_cambio';
+    }
+    if (canal === 'correo') return 'sin_cambio';
     if (!liq.pdfRuta) throw new Error('la liquidación no tiene PDF en Storage');
     if (!liq.operadorTelefono) throw new Error('el operador no tiene teléfono');
 
@@ -304,15 +387,76 @@ export interface ResumenPasada {
   en_cola: number; enviadas: number; reintentar: number; fallidas: number; sin_cambio: number;
   /** Los avisos de discrepancia que el cron levantó (reintentos de «No coincide» que no llegaron a la oficina). */
   avisos: { tomados: number; enviados: number; reintentar: number; fallidos: number; en_curso: number };
+  /** La fase de lectura de desgloses (T-A1-24). Ausente si la pasada no tiene esa fase. */
+  pull?: ResumenPull;
+  /** La fase de entregas por correo (T-A1-16). Ausente si la pasada no tiene esa fase; con `errores: 1` si la fase lanzó. */
+  correo?: ResumenEntregasCorreo;
+}
+
+export interface ResumenPull {
+  /** Flotas con lector que se consultaron. */
+  flotas: number;
+  leidas: number;
+  importadas: number;
+  excepciones: number;
+  /** Flotas cuyo pull falló (estado `error` o lanzó). */
+  errores: number;
+  /** Clase del primer error, sin datos personales. */
+  error?: string;
+}
+
+const CORREO_VACIO = (): ResumenEntregasCorreo => ({
+  reclamadas: 0, enviadas: 0, reintentar: 0, fallidas: 0, sinConfigurar: 0, fueraDeVentana: 0, sinConfirmar: 0, errores: 0,
+});
+
+async function faseDePull(deps: Dependencias): Promise<ResumenPull | undefined> {
+  if (!deps.lectoresPull) return undefined;
+  const r: ResumenPull = { flotas: 0, leidas: 0, importadas: 0, excepciones: 0, errores: 0 };
+  const falla = (clase: string) => { r.errores++; r.error ??= clase; };
+  let lectores: Awaited<ReturnType<NonNullable<Dependencias['lectoresPull']>>>;
+  try {
+    lectores = await deps.lectoresPull();
+  } catch (e) {
+    logger.error('liqext.pull_lectores_fallo', { err: e instanceof Error ? e.name : 'error' });
+    falla(e instanceof Error ? e.name : 'error');
+    return r;
+  }
+  const pull = deps.pullDeFlota ?? dependenciasPorOmision.pullDeFlota;
+  for (const { tenantId, lector } of lectores) {
+    r.flotas++;
+    try {
+      const p = await pull(tenantId, lector);
+      r.leidas += p.leidas; r.importadas += p.importadas; r.excepciones += p.excepciones;
+      if (p.estado === 'error') falla(p.error ?? 'error');
+    } catch (e) {
+      logger.error('liqext.pull_fallo', { tenantId, err: e instanceof Error ? e.name : 'error' });
+      falla(e instanceof Error ? e.name : 'error');
+    }
+  }
+  return r;
+}
+
+async function faseDeCorreo(deps: Dependencias, limite: number): Promise<ResumenEntregasCorreo | undefined> {
+  if (!deps.entregasCorreo) return undefined;
+  try {
+    return await deps.entregasCorreo(Math.max(1, Math.min(limite, LOTE_CORREO)));
+  } catch (e) {
+    logger.error('liqext.correo_pasada_fallo', { err: e instanceof Error ? e.name : 'error' });
+    return { ...CORREO_VACIO(), errores: 1 };
+  }
 }
 
 export async function procesarLiquidacionesExternas(
   deps: Dependencias = dependenciasPorOmision, limite = LOTE_CRON,
 ): Promise<ResumenPasada> {
+  // Orden: (1) pull de desgloses, (2) entregas por correo, (3) lo de WhatsApp de siempre. Cada fase aislada: una que lanza no tumba a las demás.
+  const pull = await faseDePull(deps);
+  const correo = await faseDeCorreo(deps, limite);
   const trabajo = await trabajoPendiente(limite, deps.ahora().toISOString());
   const resumen: ResumenPasada = {
     tomadas: trabajo.length, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0,
     avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 },
+    ...(pull ? { pull } : {}), ...(correo ? { correo } : {}),
   };
   await conPool(trabajo, 4, async (liq) => {
     const r = await intentarEntrega(liq, deps);

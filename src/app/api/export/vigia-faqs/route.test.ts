@@ -85,6 +85,16 @@ describe('el archivo', () => {
     expect(resumen.some((f) => String(f[0]).startsWith('Esperas que pasaron de 8 min'))).toBe(true);
   });
 
+  it('el Excel trae la hoja de datos de unidad con el conteo de peticiones', async () => {
+    leerMensajes.mockResolvedValue({
+      mensajes: [0, 1].flatMap((i) => [m(i, 'cliente', '¿Con qué unidad va mi carga?'), m(i, 'equipo', 'Unidad 12.', 5)]), truncado: false,
+    });
+    const libro = XLSX.read(new Uint8Array(await (await get()).arrayBuffer()), { type: 'array' });
+    expect(libro.SheetNames).toContain('Datos de unidad');
+    const resumen = XLSX.utils.sheet_to_json<unknown[]>(libro.Sheets['Resumen'], { header: 1, defval: null });
+    expect(resumen.find((f) => f[0] === 'Peticiones en el periodo')?.[1]).toBe(2);
+  });
+
   it('con un grupo de la flota: lo nombra y lee solo ese', async () => {
     const r = await get(`?grupo=${G}`);
     expect(r.status).toBe(200);

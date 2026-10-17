@@ -2,6 +2,7 @@ import { AlarmClock, Power, TriangleAlert } from 'lucide-react';
 import { fechaHoraMx } from '@/lib/formato';
 import { CRONS, TOLERANCIA_LATIDO_MS, type CronId, type LatidoDetallado } from '@/lib/admin/salud';
 import { StatusPill, EstadoError, type Estado } from '../ui/kit';
+import { etiquetaContadorVigia } from '../observabilidad/etiquetas';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 
 /**
@@ -50,6 +51,7 @@ const RUTA: Record<CronId, string> = {
   'buzon-entrega': '/api/cron/buzon-entrega',
   'carta-porte-docs': '/api/cron/carta-porte-docs',
   guardia: '/api/cron/guardia',
+  tms: '/api/cron/tms',
 };
 
 /** Qué hace cada reloj, en una línea, para que el rojo se pueda priorizar. */
@@ -73,6 +75,7 @@ const OFICIO: Record<CronId, string> = {
   'buzon-entrega': 'arma y manda al contador el lote de facturas aprobadas, reintenta con espera y marca lo que Resend no confirma',
   'carta-porte-docs': 'extrae los documentos de Carta Porte que quedaron en la bandeja, reintenta con espera y avisa a la oficina de los que traen dudas o no se pudieron leer',
   guardia: 'la guardia de producción: clasifica la bandeja con las reglas del A0, mide los componentes de /estado, avisa al operador de lo nuevo (S1/S2 o fuente ciega) y purga la retención de latencias',
+  tms: 'lee del sistema de transporte del cliente (solo lectura) los viajes, liquidaciones, peajes y posiciones de las flotas que lo conectaron, y los entrega a cada agente'
 };
 
 /**
@@ -125,10 +128,11 @@ export function resumenDetalle(detalle: Record<string, unknown>): string | null 
   const partes = Object.entries(detalle)
     .filter(([clave, valor]) => clave !== 'codigo' && valor !== undefined && valor !== null)
     .map(([clave, valor]): string | null => {
-      if (Array.isArray(valor)) return valor.length > 0 ? `${clave}: ${valor.length}` : null;
-      if (typeof valor === 'number') return valor > 0 ? `${clave}: ${valor}` : null;
-      if (typeof valor === 'string') return valor.trim() !== '' ? `${clave}: ${valor}` : null;
-      if (typeof valor === 'boolean') return valor ? clave : null;
+      const nombre = etiquetaContadorVigia(clave);
+      if (Array.isArray(valor)) return valor.length > 0 ? `${nombre}: ${valor.length}` : null;
+      if (typeof valor === 'number') return valor > 0 ? `${nombre}: ${valor}` : null;
+      if (typeof valor === 'string') return valor.trim() !== '' ? `${nombre}: ${valor}` : null;
+      if (typeof valor === 'boolean') return valor ? nombre : null;
       return null;
     })
     .filter((x): x is string => x !== null);

@@ -3,9 +3,16 @@ import { Settings2, TriangleAlert } from 'lucide-react';
 import { BarraPagina } from '../../../resumen-visual';
 import type { ConfigConductor } from '@/lib/likida/conductor/config';
 import type { ContactoTrafico } from '@/lib/likida/conductor/escalamiento';
-import { FormaConfigConductor, type AccionConfig } from './forma';
+import type { ResultadoPreflight } from '@/lib/likida/conductor/preflight_piloto';
+import { PanelPreflight } from './preflight';
+import { FormaImportarRutas } from './forma_rutas';
+import { PendientesRutas, type FilaPendienteRuta } from './pendientes_rutas';
+import { DocumentosCliente } from './documentos_cliente';
+import type { DocumentoCliente } from '@/lib/likida/conductor/documentos_cliente';
+import type { AccionSitio } from '../sitios/formas';
+import { FormaConfigConductor, SeccionVoluntarios, type AccionConfig, type AccionVoluntario, type DatosVoluntarios } from './forma';
 
-export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar }: {
+export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar, voluntarios, accionAlta, accionBaja, preflight, puedeForzarPreflight, accionImportarRutas, rutasPendientes, totalRutas = 0, diasRevisionRutas = 90, accionRutaRevisada, documentosCliente, clientes, accionAltaDocumento, accionBajaDocumento }: {
   sufijo: string;
   /** `null` = no se pudo leer: se dice, no se enseña un formulario con los defaults como si fueran lo guardado. */
   config: ConfigConductor | null;
@@ -14,6 +21,27 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
   patios: Array<{ id: string; nombre: string }>;
   puedeEditar: boolean;
   accionGuardar: AccionConfig;
+  /** «Operadores del piloto» (0800). `undefined` = la pantalla no la trae; `null` = no se pudo leer. */
+  voluntarios?: DatosVoluntarios | null;
+  accionAlta?: AccionVoluntario;
+  accionBaja?: AccionVoluntario;
+  /** T-A5-25: «¿está lista la flota?». `undefined` = la pantalla no la trae (no se pinta); `null` = no se pudo leer. */
+  preflight?: ResultadoPreflight | null;
+  /** Solo el soporte de Likida (QA): casilla para encender la señal de vida saltando el preflight. */
+  puedeForzarPreflight?: boolean;
+  /** T-A5-48: importar rutas autorizadas de Google Maps (CSV). `undefined` = no se ofrece (sin permiso de asignar). */
+  accionImportarRutas?: AccionSitio;
+  /** T-A5-50: rutas sin revisar por antigüedad. `null`/`undefined` = no se pudo leer o no se ofrece: no se pinta la lista. */
+  rutasPendientes?: FilaPendienteRuta[] | null;
+  totalRutas?: number;
+  diasRevisionRutas?: number;
+  accionRutaRevisada?: AccionSitio;
+  /** T-A5-52: documentos que pide cada cliente. `undefined` = la pantalla no lo trae (sin permiso de asignar); `null` = no se pudo leer. */
+  documentosCliente?: DocumentoCliente[] | null;
+  /** Clientes activos de la flota (para elegir de cuál es el documento). */
+  clientes?: Array<{ id: string; nombre: string }>;
+  accionAltaDocumento?: AccionSitio;
+  accionBajaDocumento?: AccionSitio;
 }) {
   const legible = config !== null && valores !== null && contactos !== null;
   return (
@@ -25,13 +53,52 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
             Cuándo y cuánto insiste el agente con tus choferes, en qué horario, y a quién avisa cuando nadie contesta. Lo que guardes aplica desde
             la próxima corrida (cada 5 minutos). <Link href={`/dashboard/agentes/conductores${sufijo}`} className="underline">Volver al tablero</Link>
           </p>
+          {preflight !== undefined && <PanelPreflight preflight={preflight} />}
           {legible ? (
-            <FormaConfigConductor accion={accionGuardar} config={config} valores={valores} contactos={contactos} patios={patios} puedeEditar={puedeEditar} />
+            <FormaConfigConductor accion={accionGuardar} config={config} valores={valores} contactos={contactos} patios={patios} puedeEditar={puedeEditar} puedeForzarPreflight={puedeForzarPreflight} />
           ) : (
             <p role="alert" className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
               <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
               No se pudo leer la configuración ahora mismo. No se muestra un formulario con valores por omisión para no confundirlos con lo guardado; intenta de nuevo en un momento.
             </p>
+          )}
+          {voluntarios === null && (
+            <p role="alert" className="flex items-start gap-2 text-[12.5px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+              <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+              No se pudo leer la lista de operadores del piloto ahora mismo (o falta aplicar la migración 0800); intenta de nuevo en un momento.
+            </p>
+          )}
+          {voluntarios && accionAlta && accionBaja && (
+            <SeccionVoluntarios datos={voluntarios} puedeEditar={puedeEditar} accionAlta={accionAlta} accionBaja={accionBaja}
+              parametros={[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries()].filter(([k]) => k !== 'q')} />
+          )}
+          {accionImportarRutas && (
+            <section aria-labelledby="rutas-titulo" className="space-y-2">
+              <h2 id="rutas-titulo" className="text-[13px] font-medium">Rutas autorizadas de Google Maps</h2>
+              <p className="text-[12.5px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
+                La base de rutas hechas con anticipación, por corredor (y, si quieres, por sitio de origen y de destino). El agente nunca arma ni
+                corrige un link: solo se aceptan links de maps.app.goo.gl o google.com/maps, y una ruta vencida se trata como si no existiera.
+                Cada fila se aprueba o se rechaza sola; volver a subir el mismo archivo no cambia nada.
+              </p>
+              <FormaImportarRutas accion={accionImportarRutas} />
+              {rutasPendientes && (
+                <div className="space-y-2 pt-2">
+                  <h3 id="rutas-pendientes-titulo" className="text-[12.5px] font-medium">Rutas por revisar</h3>
+                  <PendientesRutas pendientes={rutasPendientes} totalRutas={totalRutas} dias={diasRevisionRutas} accionRevisada={accionRutaRevisada} />
+                </div>
+              )}
+            </section>
+          )}
+          {documentosCliente !== undefined && (
+            <section aria-labelledby="documentos-cliente-titulo" className="space-y-2">
+              <h2 id="documentos-cliente-titulo" className="text-[13px] font-medium">Documentos que pide cada cliente</h2>
+              <p className="text-[12.5px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
+                Cada cliente pide papeles distintos al cerrar el viaje: unos solo la carta porte firmada y sellada, otros además pedimento, DODA,
+                fitosanitario o tickets de báscula. Aquí dices cuáles son y cuáles son indispensables. Un cliente sin documentos propios sigue como hoy:
+                solo se le pide el comprobante de entrega.
+              </p>
+              <DocumentosCliente clientes={clientes ?? []} documentos={documentosCliente} accionAlta={accionAltaDocumento} accionBaja={accionBajaDocumento} />
+            </section>
           )}
         </div>
       </div>
