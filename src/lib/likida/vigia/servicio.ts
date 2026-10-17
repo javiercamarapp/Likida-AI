@@ -46,7 +46,7 @@ import { evaluarMolestia } from './molestia';
 import { prioridadDe } from './prioridad';
 import { decidirEnvio } from './politica';
 import { claveCorreo, debeRespaldarPorCorreo, hashCorreo, reintentarCorreosVencidos, respaldarPorCorreo, unirDestinatarios } from './respaldo_correo';
-import { pulirBorrador, redactarBorrador, type ViajeParaRedactar } from './redactor';
+import { pulirBorrador, redactarBorrador, trajoPieDeAviso, type ViajeParaRedactar } from './redactor';
 import { elegirRespuestaRapida } from './respuestas_rapidas';
 import type { ContextoAvisosFlota, DepsVigia, GuardaConversacion, RepoVigia } from './puertos';
 import { configParaCliente, INTENCIONES_DE_DATO, INTENCIONES_DESDE_0798 } from './tipos';
@@ -502,7 +502,12 @@ async function enviarSaliente(e: EntradaEnviarSaliente, deps: DepsVigia): Promis
   if (r.ok) {
     await repo.marcarEnviado(e.tenantId, e.mensajeId, { via: r.via, wamid: r.id, ahora });
     await repo.marcarRespondida(e.tenantId, e.conversacionId, ahora);
-    if (!e.contacto.avisoPrivacidadEn) await repo.marcarAvisoPrivacidad(e.tenantId, e.contacto.id, ahora);
+    // LEG-C19-C1: la constancia se escribe por el PIE, no por el envío. Los dos
+    // caminos humanos (`responderComoHumano`, `aprobarMensaje` con texto
+    // editado) llegan acá con texto que nunca pasó por el redactor y por lo
+    // tanto sin pie; `marcarAvisoPrivacidad` es write-once (`repo.ts:744`), así
+    // que afirmarlo aquí dejaba al contacto sin aviso para siempre.
+    if (!e.contacto.avisoPrivacidadEn && trajoPieDeAviso(e.texto)) await repo.marcarAvisoPrivacidad(e.tenantId, e.contacto.id, ahora);
     await repo.evento(e.tenantId, { conversacionId: e.conversacionId, tipo: e.autoenviado ? 'autoenviado' : 'enviado', detalle: { via: r.via, ventana: r.ventana } });
     // Los archivos son un EXTRA: que fallen no deshace el texto que ya salió (queda a la vista del gerente).
     if (e.adjuntos.length > 0) {
