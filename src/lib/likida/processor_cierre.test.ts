@@ -370,6 +370,42 @@ describe('el XML que llega después del cierre no se pierde', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// T-SYS-28 · un "listo" DESPUÉS del cierre no puede volver a cerrar el viaje.
+//
+// Una prueba simulada con 4 modelos de IA contra una herramienta FALSA (no
+// este código) encontró que, ante un mensaje posterior al cierre, 4 de 5
+// modelos re-invocaban la tool de cerrar liquidación — el riesgo que esta
+// prueba descarta contra el motor REAL: `guardar_liquidacion` solo existe
+// como tool DENTRO de `runAgent` (agents/run.ts), y `runAgent` nunca se llama
+// en la rama `!viajeId` de processor.ts (líneas ~2109-2434) — CUALQUIER
+// mensaje de texto sin viaje abierto se contesta con un mensaje fijo y
+// `return`, antes de llegar al punto donde se invoca al agente. El operador
+// escribiendo "listo" de nuevo —la MISMA frase que cerró el viaje la primera
+// vez— no es distinto de escribir "hola": ninguna de las dos llega al modelo.
+//
+// `getOpenViaje` (conv.ts) solo devuelve viajes `abierto`/`en_cuadre`; un
+// viaje `liquidado` (el que dejó `guardar_liquidacion_tx` en la mig. 0366)
+// no califica, así que esta prueba simula exactamente el estado posterior a
+// un cierre real sin necesitar una base — es el MISMO `null` que ya usa
+// 'un TEXTO sin viaje abierto...' arriba, puesto aquí a prueba contra
+// `runAgent` explícitamente, que es lo que faltaba afirmar.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('T-SYS-28 — re-cierre tras un mensaje posterior al cierre', () => {
+  beforeEach(() => { getOpenViaje.mockResolvedValue(null); });
+
+  it('"listo" sin viaje abierto NUNCA llega al agente: no hay forma de volver a invocar guardar_liquidacion', async () => {
+    await processInbound(listo);
+    expect(runAgent).not.toHaveBeenCalled();
+    expect(textos().join('\n')).toMatch(/No tienes un viaje abierto/i);
+  });
+
+  it('"ya terminé" sin viaje abierto tampoco llega al agente (no es solo la palabra "listo")', async () => {
+    await processInbound({ from: '5219993700779', type: 'text', text: 'ya terminé, ciérralo', waMessageId: 'wa11' });
+    expect(runAgent).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 4 · ALTO — el fail-closed del claim se apoyaba en un retry inexistente.
 //
 // `claimMessage` trataba CUALQUIER error de DB como duplicado, con el argumento
