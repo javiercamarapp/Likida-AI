@@ -7,6 +7,7 @@ import { importarDesglose, conciliarDesglose } from '../intake/desglose_peaje';
 import { registrarCorrida } from '../agentes/corridas';
 import { avisarDesgloseConciliado } from './aviso_oficina';
 import { revisarAtipicosDeDesglose } from './revision_atipicos';
+import { vincularDesglose } from './vinculos_conciliacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA INGESTA AUTOMÁTICA DEL DESGLOSE DE PEAJE (0376).
@@ -183,6 +184,8 @@ export interface ResumenCola {
   claimPerdido: number;
   /** Los cruces atípicos (T-A2-13) de los archivos procesados: solo conteos, nunca tags ni importes. `fallidos` vuelve «parcial» al latido. */
   atipicos?: { revisados: number; hallazgos: number; fallidos: number };
+  /** El vínculo cruce→viaje (T-A2-21): solo existe si la flota lo activó. Conteos, nunca unidades ni importes. */
+  vinculos?: { calculados: number; fallidos: number };
 }
 
 const minutos = (n: number) => new Date(Date.now() + n * 60_000).toISOString();
@@ -259,6 +262,17 @@ export async function procesarColaPeajes(
           r.atipicos ??= { revisados: 0, hallazgos: 0, fallidos: 0 };
           r.atipicos.fallidos++;
           logger.error('cron.peajes.atipicos_fallo', { archivo: a.id, codigo: codigoDeError(e) });
+        }
+        // El vínculo cruce→viaje (T-A2-21): solo si la flota lo activó; recalculable y aparte de `desglose_peaje_linea.viaje_id`.
+        // Va DESPUÉS de cerrar y no lanza (devuelve `fallo` y deja el log); aquí solo se cuenta.
+        try {
+          const vin = await vincularDesglose(a.tenant_id, imp.desgloseId);
+          if (vin.estado === 'ok') { r.vinculos ??= { calculados: 0, fallidos: 0 }; r.vinculos.calculados++; }
+          else if (vin.estado === 'fallo') { r.vinculos ??= { calculados: 0, fallidos: 0 }; r.vinculos.fallidos++; }
+        } catch (e) {
+          r.vinculos ??= { calculados: 0, fallidos: 0 };
+          r.vinculos.fallidos++;
+          logger.error('cron.peajes.vinculos_fallo', { archivo: a.id, codigo: codigoDeError(e) });
         }
         // El aviso a la oficina (0563) va DESPUÉS de cerrar: su fallo nunca reabre ni tumba un archivo ya
         // procesado (el barrido del cron lo reintenta). Nunca lanza, pero se blinda de todos modos.

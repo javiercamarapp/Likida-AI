@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
@@ -17,6 +18,8 @@ export const dynamic = 'force-dynamic';
 
 const RUTA = '/dashboard/agentes/vigia/historial';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const NO_DISPONIBLE = 'Esto no está disponible en tu plan.';
 
 type Busqueda = { vista?: string; tenant?: string; rol?: string; grupo?: string };
 
@@ -36,13 +39,15 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
+  // T-A4-32: bajo el perfil cinco_agentes las respuestas rápidas son stand-by (ni se leen, ni se ven, ni se aprueban).
+  const standby = (await perfilDeTenant(tenantId)) === 'cinco_agentes';
   const grupoElegido = sp.grupo && UUID.test(sp.grupo) ? sp.grupo : null;
 
   const [grupos, clientes, config, rapidas] = await Promise.all([
     leerGrupos(tenantId).catch((e) => { logger.warn('vigia.grupos_no_leidos', { err: e instanceof Error ? e.message : String(e) }); return null; }),
     leerClientesParaGrupo(tenantId).catch(() => []),
     crearRepoVigia().config(tenantId).catch(() => null),
-    leerRespuestasRapidas(tenantId).catch((e) => { logger.warn('vigia.respuestas_rapidas_no_leidas', { err: e instanceof Error ? e.message : String(e) }); return null; }),
+    standby ? Promise.resolve(null) : leerRespuestasRapidas(tenantId).catch((e) => { logger.warn('vigia.respuestas_rapidas_no_leidas', { err: e instanceof Error ? e.message : String(e) }); return null; }),
   ]);
   const umbralMin = config?.slaCriticoMin ?? 10;
   const datos = grupos === null ? null : await leerMensajesHistorial(tenantId, grupoElegido).catch((e) => { logger.warn('vigia.historial_no_leido', { err: e instanceof Error ? e.message : String(e) }); return null; });
@@ -76,6 +81,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
     'use server';
     const c = await contexto(sp);
     if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
+    if ((await perfilDeTenant(c.tenantId)) === 'cinco_agentes') return { ok: false, error: NO_DISPONIBLE };
     const r = await aprobarRespuestaRapidaPanel(c, fd);
     if (r.ok) revalidatePath(RUTA);
     return r;
@@ -84,6 +90,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
     'use server';
     const c = await contexto(sp);
     if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
+    if ((await perfilDeTenant(c.tenantId)) === 'cinco_agentes') return { ok: false, error: NO_DISPONIBLE };
     const r = await retirarRespuestaRapidaPanel(c, fd);
     if (r.ok) revalidatePath(RUTA);
     return r;
@@ -102,7 +109,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   return (
     <VistaHistorialVigia
       sufijo={sufijoTenant(sp)} grupos={grupos} clientes={clientes} reporte={reporte} grupoElegido={grupoElegido} truncado={datos?.truncado ?? false}
-      umbralMin={umbralMin} puedeEditar={puedeAdministrar(rol)} puedeAprobar={['superadmin', 'flota_admin', 'encargado'].includes(rol)} rapidas={rapidas}
+      umbralMin={umbralMin} puedeEditar={puedeAdministrar(rol)} puedeAprobar={['superadmin', 'flota_admin', 'encargado'].includes(rol)} rapidas={rapidas} standby={standby}
       acciones={{ alta, critico, borrar, importar, aprobarRapida, retirarRapida }}
     />
   );

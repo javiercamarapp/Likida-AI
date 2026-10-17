@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { evaluarEscalamiento, minutosEsperando, type EntradaEscalamiento } from './escalamiento';
+import {
+  claveServicio, destinoDelDisparo, esSinDatoDeUnidad, evaluarEscalamiento, faltantesDeUnidad, minutosEsperando, proximoVencimientoMs, servicioSinContestar,
+  type EntradaEscalamiento,
+} from './escalamiento';
+import type { MotivoEscalamiento } from './tipos';
 
 const T0 = Date.parse('2026-10-01T12:00:00Z');
 const hace = (min: number) => new Date(T0 - min * 60_000).toISOString();
@@ -111,5 +115,72 @@ describe('0484 · nivel de molestia configurable para avisar', () => {
     const config = { slaRespuestaMin: 30, escalarNivel2Min: 60, molestiaAvisoNivel: 3 as const };
     expect(evaluarEscalamiento(entrada({ molestiaNivel: 2, molestiaEn: hace(1) }, { config }))).toBeNull();
     expect(evaluarEscalamiento(entrada({ molestiaNivel: 3, molestiaEn: hace(1) }, { config }))).toMatchObject({ nivel: 2, motivo: 'molestia' });
+  });
+});
+
+describe('T-A4-27 · «sin dato / sin caja» va primero a servicio al cliente', () => {
+  const MOTIVOS: MotivoEscalamiento[] = ['sin_respuesta', 'molestia', 'pide_humano', 'sin_dato', 'folio_ajeno'];
+
+  it('matriz con/sin lista × motivo: SOLO el sin_dato de unidad con lista va a servicio; todo lo demás, a la escalera como hoy', () => {
+    for (const disparo of MOTIVOS) {
+      for (const faltantes of [['caja'], ['unidad', 'operador'], ['hora_estimada'], []]) {
+        for (const hayListaServicio of [true, false]) {
+          const esperado = disparo === 'sin_dato' && esSinDatoDeUnidad(faltantes) && hayListaServicio ? 'servicio' : 'escalera';
+          expect(destinoDelDisparo({ disparo, faltantes, hayListaServicio })).toBe(esperado);
+        }
+      }
+    }
+    expect(destinoDelDisparo({ disparo: 'sin_dato', faltantes: ['caja'], hayListaServicio: true })).toBe('servicio');
+    expect(destinoDelDisparo({ disparo: 'sin_dato', faltantes: ['caja'], hayListaServicio: false })).toBe('escalera');
+    expect(destinoDelDisparo({ disparo: null, faltantes: ['caja'], hayListaServicio: true })).toBe('escalera');
+    expect(destinoDelDisparo({ disparo: 'molestia', faltantes: ['caja'], hayListaServicio: true })).toBe('escalera');
+  });
+
+  it('qué cuenta como faltante de unidad', () => {
+    expect(esSinDatoDeUnidad(['caja'])).toBe(true);
+    expect(esSinDatoDeUnidad(['hora_estimada', 'operador'])).toBe(true);
+    expect(esSinDatoDeUnidad(['hora_estimada'])).toBe(false);
+    expect(faltantesDeUnidad({ caja: null, unidad: 'U-1', operador: undefined })).toEqual(['caja', 'operador']);
+    expect(faltantesDeUnidad({ caja: 'CJ-1', unidad: 'U-1', operador: 'Operador Uno' })).toEqual([]);
+  });
+
+  it('la llave de servicio lleva el ciclo y un sufijo propio que no choca con los niveles', () => {
+    const k = claveServicio('conv-1', hace(5));
+    expect(k).toBe(`conv-1:${T0 - 5 * 60_000}:srv`);
+    expect(k).not.toMatch(/:n[12]$/);
+    expect(claveServicio('conv-1', null)).toBe('conv-1:0:srv');
+  });
+
+  it('servicio fue avisado y NO contesta en `escalarNivel2Min`: sube al nivel 1 por sin_dato (aunque falte para el SLA)', () => {
+    const config = { slaRespuestaMin: 120, escalarNivel2Min: 15 };
+    const base = { sinRespuestaDesde: hace(20), escaladoEn: hace(14) };
+    expect(evaluarEscalamiento(entrada(base, { config }))).toBeNull();                       // aún dentro del plazo de servicio
+    const a = evaluarEscalamiento(entrada({ ...base, escaladoEn: hace(15) }, { config }));
+    expect(a).toMatchObject({ nivel: 1, motivo: 'sin_dato' });
+    expect(a?.clave).toBe(`conv-1:${T0 - 20 * 60_000}:n1`);                                   // la misma llave que el SLA: no se duplica
+  });
+
+  it('servicio contestó (sin espera), se encargó («Yo me encargo») o el hilo ya está en un nivel: no sube', () => {
+    const config = { slaRespuestaMin: 120, escalarNivel2Min: 15 };
+    expect(evaluarEscalamiento(entrada({ sinRespuestaDesde: null, escaladoEn: hace(60) }, { config }))).toBeNull();
+    expect(evaluarEscalamiento(entrada({ sinRespuestaDesde: hace(60), escaladoEn: hace(60), atendidaEn: hace(10) }, { config }))).toBeNull();
+    expect(evaluarEscalamiento(entrada({ sinRespuestaDesde: hace(60), escaladoEn: hace(60), escalamientoNivel: 1 }, { config }))).toBeNull();
+  });
+
+  it('sin aviso a servicio (escaladoEn vacío) nada cambia: la escalera es la de siempre', () => {
+    expect(evaluarEscalamiento(entrada({ sinRespuestaDesde: hace(29), escaladoEn: null }))).toBeNull();
+    expect(servicioSinContestar({ sinRespuestaDesde: hace(99), escalamientoNivel: 0, atendidaEn: null, escaladoEn: null }, 10, T0)).toBe(false);
+  });
+
+  it('el resto de los motivos NO cambia con el aviso a servicio: molestia crítica sigue subiendo al dueño', () => {
+    expect(evaluarEscalamiento(entrada({ sinRespuestaDesde: hace(1), escaladoEn: hace(1), molestiaNivel: 3, molestiaEn: hace(1) }))).toMatchObject({ nivel: 2, motivo: 'molestia' });
+  });
+
+  it('la cola del barrido: con servicio avisado vence en el plazo corto de servicio; sin él, igual que antes', () => {
+    const config = { slaRespuestaMin: 120, escalarNivel2Min: 15 };
+    const c = { sinRespuestaDesde: hace(10), escalamientoNivel: 0, molestiaNivel: 0, atendidaEn: null, entradasSinRespuesta: 1 };
+    expect(proximoVencimientoMs(c, config)).toBe(T0 - 10 * 60_000 + 120 * 60_000);
+    expect(proximoVencimientoMs({ ...c, escaladoEn: hace(5) }, config)).toBe(T0 - 5 * 60_000 + 15 * 60_000);
+    expect(proximoVencimientoMs({ ...c, escaladoEn: hace(5), atendidaEn: hace(1) }, config)).toBe(T0 - 10 * 60_000 + (120 + 15) * 60_000);
   });
 });

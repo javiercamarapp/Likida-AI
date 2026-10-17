@@ -54,6 +54,7 @@ scripts/mejora-diaria/encargos/
 scripts/mejora-diaria/*.plist
 pruebas-manuales/ensayo/
 docs/demo/
+!docs/demo/a3-salida-tms.md
 docs/asistencia/
 docs/escala-50k/
 docs/escala-15k.md

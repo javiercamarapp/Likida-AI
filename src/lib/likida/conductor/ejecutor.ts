@@ -7,9 +7,13 @@ import {
 } from './escalamiento';
 import {
   anotarAvisoAlChofer, cerrarAvisoReclamado, leerConfigConductor, liberarAvisoReclamado, marcarHitoEscalado, reclamarAviso,
-  registrarEvento, type EventoHito, type ViajeContexto,
+  leerCicloServicio, registrarEvento, type EventoHito, type ViajeContexto,
 } from './repo';
-import { cerrarHitosDeViajesVencidos, contarEnviadosPorChofer, leerAvisosDeHitos, leerHitosDeViajes, leerViajesActivos, sembrarHitos } from './trabajo';
+import { cicloDelServicio, type CicloServicioFila } from './ciclo_servicio';
+import { cerrarHitosDeViajesVencidos, contarEnviadosPorChofer, leerAvisosDeHitos, leerHitosDeViajes, leerMuestrasGps, leerSitiosGeometriaDeViajes, leerViajesActivos, sembrarHitos } from './trabajo';
+import type { MuestraGps, SitiosViaje, UnidadDeViaje } from './ciclo_gps';
+import { clavesPoleoDe, lapsoMaxCompuertaMin, puedeEscribirAlChofer } from './compuerta_movimiento';
+import { leerSenalesDeUnidades, senalesApagadas, type SenalesConduccion } from './senales_conduccion';
 import { planificar, type AccionPlan, type AvisoReclamado, type MotivoNada } from './planificador';
 import { armarEscalacion, armarRecordatorio, armarSolicitud, type MensajeSaliente, type MotivoEscalacion } from './solicitudes';
 import type { HitoFila } from './tipos';
@@ -74,6 +78,8 @@ export interface PuertosConductor {
   avisosDe(hitoIds: string[]): Promise<Array<AvisoReclamado & { hitoId: string }>>;
   enviadosHoyPorChofer(operadorIds: string[], desde: Date): Promise<Record<string, number>>;
   configDe(tenantId: string): Promise<ConfigConductor>;
+  /** T-A5-42: los ciclos por servicio de la flota (0807). Opcional: sin puerto, o sin filas, todos los viajes siguen el ciclo actual. */
+  ciclosDe?(tenantId: string): Promise<CicloServicioFila[]>;
   reclamar(a: NuevoAviso): Promise<'ganado' | 'perdido' | 'fallo'>;
   cerrarAviso(a: NuevoAviso, c: CierreAviso): Promise<void>;
   liberarAviso(a: NuevoAviso): Promise<void>;
@@ -84,6 +90,59 @@ export interface PuertosConductor {
   destinatarios(tenantId: string, terminalId: string | null, nivel: 1 | 2): Promise<Destino[]>;
   ubicacion(v: ViajeContexto, hs: readonly HitoFila[], ahora: Date): Promise<string>;
   evento(h: HitoFila, evento: EventoHito, detalle: Record<string, string | number | boolean | null>): Promise<void>;
+  /**
+   * T-A5-36: las muestras de GPS de las unidades desde `desde` (llave `<tenant>|<unidad>`) y los sitios de los viajes, para la compuerta
+   * «unidad detenida». Opcionales: un puerto que no los trae, con la compuerta ENCENDIDA, no manda nada (falla cerrado).
+   */
+  muestrasUnidad?(unidades: UnidadDeViaje[], desde: Date): Promise<Map<string, MuestraGps[]>>;
+  sitiosDe?(viajes: Array<{ id: string; tenantId: string }>): Promise<Map<string, SitiosViaje>>;
+  /**
+   * T-A5-68: la señal de conducción del proveedor de telemática (ignición, velocidad, teléfono en la mano) → `senalExtra` de la compuerta,
+   * para que «atasco» (quieto pero conduciendo) no cuente como unidad detenida. Opcional: sin puerto, o sin lectura, rige la regla solo-GPS.
+   */
+  senalesConduccion?: SenalesConduccion;
+}
+
+/**
+ * T-A5-36: ¿la compuerta «unidad detenida» deja escribirle al chofer de CADA viaje? Una lectura por pasada (no por viaje). Apagada
+ * (por omisión) no lee nada. Encendida y con un fallo de lectura, o sin puerto o sin unidad, el viaje NO se escribe: ante la duda,
+ * silencio. No se registran coordenadas.
+ */
+export async function evaluarCompuertaDeViajes(
+  p: Pick<PuertosConductor, 'muestrasUnidad' | 'sitiosDe' | 'senalesConduccion'>,
+  viajes: readonly ViajeContexto[], configs: ReadonlyMap<string, ConfigConductor | null>, ahora: Date,
+): Promise<Map<string, { permitido: boolean; razon: string }>> {
+  const salida = new Map<string, { permitido: boolean; razon: string }>();
+  const activos = viajes.filter((v) => configs.get(v.tenantId)?.compuertaMovimientoActiva === true);
+  if (activos.length === 0) return salida;
+  const cierra = (razon: string) => { for (const v of activos) salida.set(v.id, { permitido: false, razon }); return salida; };
+  if (!p.muestrasUnidad) return cierra('sin_puerto_gps');
+
+  const conUnidad = activos.filter((v) => v.unidadId);
+  const unidades = [...new Map(conUnidad.map((v) => [`${v.tenantId}|${v.unidadId}`, { tenantId: v.tenantId, unidadId: v.unidadId! }])).values()];
+  // T-A5-37: la lectura cubre el lapso que exige la cadencia de poleo (poleo × muestras), no solo la ventana corta; sin poleo, la de siempre.
+  const ventanaMax = Math.max(...activos.map((v) => lapsoMaxCompuertaMin(configs.get(v.tenantId) ?? CONFIG_CONDUCTOR_DEFAULT)));
+  let muestras = new Map<string, MuestraGps[]>();
+  let sitios = new Map<string, SitiosViaje>();
+  try {
+    muestras = unidades.length > 0 ? await p.muestrasUnidad(unidades, new Date(ahora.getTime() - (ventanaMax + 5) * 60_000)) : muestras;
+    sitios = p.sitiosDe && conUnidad.length > 0 ? await p.sitiosDe(conUnidad) : sitios;
+  } catch (e) {
+    logger.error('conductor.compuerta_lectura_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return cierra('lectura_fallida');
+  }
+  // T-A5-68: una lectura de la señal de conducción por unidad (nunca lanza; sin puerto o sin dato = solo-GPS).
+  const senales = await leerSenalesDeUnidades(p.senalesConduccion, conUnidad.map((v) => v.unidadId!), ahora);
+  for (const v of activos) {
+    const posiciones = v.unidadId ? (muestras.get(`${v.tenantId}|${v.unidadId}`) ?? []) : [];
+    const r = puedeEscribirAlChofer({
+      posiciones, clavesPoleo: clavesPoleoDe(v.unidadId, posiciones), // T-A5-37: cadencia por unidad/proveedor
+      sitioDelViaje: sitios.get(v.id) ?? null, config: configs.get(v.tenantId)!, ahora,
+      senalExtra: v.unidadId ? (senales.get(v.unidadId) ?? null) : null,
+    });
+    salida.set(v.id, r);
+  }
+  return salida;
 }
 
 export interface ResultadoConductor {
@@ -163,9 +222,12 @@ export async function correrConductor(
   // esta pasada: operar contra una estrategia que no se pudo consultar es operar
   // con datos equivocados (el criterio de `escalar_viaje.ts`, B4).
   const configs = new Map<string, ConfigConductor | null>();
+  const ciclos = new Map<string, CicloServicioFila[]>();
   for (const t of new Set(viajes.map((v) => v.tenantId))) {
     try {
       configs.set(t, await p.configDe(t));
+      // T-A5-42: el ciclo se lee con la config; si no se puede leer, la flota se salta (perseguir hitos que su servicio no tiene sería operar a ciegas).
+      if (p.ciclosDe) ciclos.set(t, await p.ciclosDe(t));
     } catch (e) {
       configs.set(t, null);
       logger.error('conductor.config_ilegible', { tenant: t, err: e instanceof Error ? e.message : String(e) });
@@ -185,6 +247,7 @@ export async function correrConductor(
   }
 
   let rechazosSeguidos = 0;
+  let compuerta: Promise<Map<string, { permitido: boolean; razon: string }>> | undefined;
   for (const v of viajes) {
     if (opts.venceEn !== undefined && Date.now() >= opts.venceEn) {
       r.cortadosPorReloj = viajes.length - viajes.indexOf(v);
@@ -197,6 +260,7 @@ export async function correrConductor(
     const hs = porViaje.get(v.id) ?? [];
     const accion: AccionPlan = planificar({
       viaje: v, hitos: hs, config, ahora,
+      ciclo: p.ciclosDe ? cicloDelServicio(ciclos.get(v.tenantId) ?? [], v.servicio ?? null) : undefined,
       enviadosHoyChofer: enviadosHoy[v.operadorId] ?? 0,
       avisos: avisos.filter((a) => hs.some((h) => h.id === a.hitoId)),
     });
@@ -204,6 +268,13 @@ export async function correrConductor(
 
     try {
       if (accion.tipo === 'chofer') {
+        // T-A5-36: al chofer no se le escribe en marcha. ANTES del claim: un «no» no es un intento y no consume un recordatorio;
+        // la siguiente pasada vuelve a decidir (el planificador devuelve lo mismo mientras siga vencido). Se lee una sola vez, y solo
+        // si hay un mensaje por mandar.
+        compuerta ??= evaluarCompuertaDeViajes(p, viajes, configs, ahora);
+        const veredicto = (await compuerta).get(v.id);
+        if (veredicto && !veredicto.permitido) { salta('compuerta_movimiento'); continue; }
+
         const claim = nuevoAviso(v, accion.hito, accion.clase, accion.nivel, v.operadorId);
         const gano = await p.reclamar(claim);
         if (gano === 'perdido') { r.yaReclamados++; continue; }
@@ -344,6 +415,7 @@ export function puertosReales(): PuertosConductor {
     avisosDe: leerAvisosDeHitos,
     enviadosHoyPorChofer: contarEnviadosPorChofer,
     configDe: leerConfigConductor,
+    ciclosDe: leerCicloServicio,
     reclamar: reclamarAviso,
     cerrarAviso: cerrarAvisoReclamado,
     liberarAviso: liberarAvisoReclamado,
@@ -355,5 +427,9 @@ export function puertosReales(): PuertosConductor {
     destinatarios: destinatariosEscalacion,
     ubicacion: ubicacionConocida,
     evento: (h, evento, detalle) => registrarEvento(h, evento, detalle),
+    muestrasUnidad: leerMuestrasGps,
+    sitiosDe: leerSitiosGeometriaDeViajes,
+    // T-A5-68: nace apagado (sin adaptador de proveedor real: BLOQUEO EXTERNO); con uno, se cambia aquí y todo el cron lo recibe.
+    senalesConduccion: senalesApagadas,
   };
 }

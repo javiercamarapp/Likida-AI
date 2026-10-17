@@ -2,9 +2,13 @@ import { logger } from '@/lib/logger';
 import { avisarOficinaDeHito } from './avisos_oficina';
 import { MINUTOS_CLAIM_VENCIDO, type Deteccion, type PuertosCicloGps, type ResultadoAplicar } from './ciclo_gps';
 import type { ConfigConductor } from './config';
-import { completarCruce, leerConfigConductor, liberarCruce, registrarEvento, registrarHito, reclamarCruce, sincronizarLegado, validarHito, type ViajeContexto } from './repo';
+import {
+  completarCruce, guardarEventosHuerfanos, leerConfigConductor, leerEventosHuerfanosPendientes, leerFlotasConHuerfanos, leerUltimosCrucesHuerfanos, liberarCruce,
+  marcarEventosHuerfanosReconciliados, registrarEvento, registrarHito, reclamarCruce, sincronizarLegado, validarHito, type ViajeContexto,
+} from './repo';
+import { barridoHuerfanos, type PuertosHuerfanos } from './huerfanos';
 import { aplicarVeredicto } from './repo_validacion';
-import { leerHitosDeViajes, leerMuestrasGps, leerSalidasTmsDeViajes, leerSitiosGeometriaDeViajes, leerViajesActivos } from './trabajo';
+import { leerHitosDeViajes, leerMuestrasGps, leerSalidasTmsDeViajes, leerSitiosGeometriaDeFlotas, leerSitiosGeometriaDeViajes, leerUnidadesSinViajeAbierto, leerViajesActivos } from './trabajo';
 import type { HitoFila } from './tipos';
 import type { Veredicto } from './validacion';
 
@@ -96,6 +100,16 @@ export async function aplicarSalidaTms(
   return 'ok';
 }
 
+/** T-A5-66: los puertos reales del barrido de eventos de geocerca sin viaje (huérfanos, 0820). */
+export const puertosHuerfanosReales: PuertosHuerfanos = {
+  unidadesSinViaje: (tenantIds, limite) => leerUnidadesSinViajeAbierto(tenantIds, limite),
+  sitiosDeFlotas: leerSitiosGeometriaDeFlotas,
+  ultimosCruces: (unidades) => leerUltimosCrucesHuerfanos(unidades),
+  guardar: guardarEventosHuerfanos,
+  pendientes: (unidades, limite) => leerEventosHuerfanosPendientes(unidades, limite),
+  marcarReconciliados: marcarEventosHuerfanosReconciliados,
+};
+
 export function puertosCicloGpsReales(): PuertosCicloGps {
   return {
     viajes: leerViajesActivos,
@@ -109,5 +123,7 @@ export function puertosCicloGpsReales(): PuertosCicloGps {
     aplicar: (v, h, d, config, ahora) => aplicarDeteccion(v, h, d, config, ahora),
     salidasTms: (ids) => leerSalidasTmsDeViajes(ids),
     aplicarSalidaTms: (v, h, marca, config, ahora) => aplicarSalidaTms(v, h, marca, config, ahora),
+    flotasConHuerfanos: leerFlotasConHuerfanos,
+    huerfanos: (p, ahora, venceEn) => barridoHuerfanos(p, puertosHuerfanosReales, ahora, venceEn),
   };
 }

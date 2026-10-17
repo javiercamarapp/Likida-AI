@@ -22,6 +22,7 @@ import { hoyMx } from '@/lib/formato';
 import { CLAVES_DOC, CLAVES_MERCANCIA, campoDoc, campoMercancia, type CampoValor } from './campos';
 import { llaveTexto } from './catalogos';
 import { normalizarNumero } from './normalizar';
+import { aplicarReglasGuia } from './validacion';
 import { LAYOUT_NORMAL } from './plantilla_tms.layout';
 import type { PlantillaConstruida } from './plantilla_tms';
 import type { DocumentoFila } from './repo';
@@ -47,6 +48,8 @@ export const ExportConfigSchema = z.object({
   decimales: z.number().int().min(0).max(6).default(3),
   fecha: z.enum(['iso', 'dd/mm/yyyy']).default('iso'),
   columnas: z.array(ColumnaSchema).min(1).max(80),
+  /** Aplica las reglas de la Guía de llenado del TMS (T-A3-45) también a esta exportación plana. Ausente = no. */
+  reglasGuia: z.boolean().optional(),
 });
 export type ExportConfig = z.infer<typeof ExportConfigSchema>;
 export type ColumnaExport = z.infer<typeof ColumnaSchema>;
@@ -141,6 +144,12 @@ export function aExportable(d: DocumentoFila, viajeFolio: string | null): Docume
     id: d.id, nombreArchivo: d.nombreArchivo, canal: d.canal, formato: d.formato, aprobadoEn: d.aprobadoEn, viajeFolio,
     campos: d.extraccion?.campos ?? {}, mercancias: d.extraccion?.mercancias ?? [],
   };
+}
+
+/** El documento sin lo que la Guía de llenado deja vacío y con los textos limpios (la original no se toca). */
+export function conReglasGuia(d: DocumentoExportable): DocumentoExportable {
+  const { extraccion } = aplicarReglasGuia({ campos: d.campos, mercancias: d.mercancias }, undefined);
+  return { ...d, campos: extraccion.campos, mercancias: extraccion.mercancias };
 }
 
 function valorColumna(col: ColumnaExport, d: DocumentoExportable, fila: Record<string, CampoValor> | null, idx: number, cfg: ExportConfig): Celda {
@@ -311,7 +320,7 @@ export function exportarDocumentos(
   for (const { doc, viajeFolio } of docs) {
     if (doc.estado !== 'aprobado') omitidos.push({ id: doc.id, motivo: `Estado «${doc.estado}»: solo se exportan documentos aprobados.` });
     else if (!doc.extraccion) omitidos.push({ id: doc.id, motivo: 'Sin extracción.' });
-    else listos.push(aExportable(doc, viajeFolio));
+    else listos.push(cfg.reglasGuia ? conReglasGuia(aExportable(doc, viajeFolio)) : aExportable(doc, viajeFolio));
   }
   const filas = construirFilas(listos, cfg);
   const fecha = hoyMx(ahora);   // el día de México, no el de UTC (a las 19:00 MX ya es mañana en UTC)

@@ -187,6 +187,32 @@ export default async function MiPerfilFlota({
     redirect(volverAMiPerfil(sufijo, 'ok=mcp'));
   }
 
+  /**
+   * FASE 1 · SEG-SESIONES (checklist 31 v2 #5): «cerrar todas mis sesiones»,
+   * explícito — el lado de SELF-SERVICE (ver `cerrarSesionesUsuario` en
+   * `usuarios_escritura.ts` para el lado admin-sobre-otro-usuario, en
+   * /dashboard/usuarios).
+   *
+   * `sb.auth.signOut()` SIN opciones ya tiene `scope:'global'` por default en
+   * el SDK (@supabase/auth-js, confirmado contra la pila de auditoría: cerrar
+   * UNA sesión con el default revoca TAMBIÉN el refresh de las demás del
+   * mismo usuario) — los 7 `signOut()` del repo ya hacían esto, sin saberlo.
+   * Aquí se pasa EXPLÍCITO (`{ scope: 'global' }`) a propósito: que lo diga
+   * el código, no un default que un cambio de librería podría mover a
+   * `'local'` sin que nada lo note. Mismo criterio de "un rótulo tiene que
+   * ser verdad" que el resto del repo — el botón promete cerrar TODAS, y el
+   * código lo pide por su nombre.
+   */
+  async function cerrarTodasMisSesiones() {
+    'use server';
+    await requireSessionTenant('/dashboard/mi-perfil');
+    const sb2 = await supabaseServer();
+    const { error } = await sb2.auth.signOut({ scope: 'global' });
+    if (error) redirect(volverAMiPerfil(sufijo, 'error=sesiones'));
+    // La sesión propia también murió: no hay a dónde volver en el panel.
+    redirect('/login');
+  }
+
   async function verificarMfa(formData: FormData) {
     'use server';
     await requireSessionTenant('/dashboard/mi-perfil');
@@ -237,6 +263,7 @@ export default async function MiPerfilFlota({
     mfa: 'No se pudo completar la operación del segundo factor — intenta de nuevo.',
     mfa_codigo: 'El código no es válido — revisa tu app de autenticación y vuelve a intentar.',
     mcp: 'No se pudieron cortar los accesos MCP — recarga la pantalla y vuelve a intentar.',
+    sesiones: 'No se pudo confirmar el cierre de tus sesiones — vuelve a intentarlo.',
   };
 
   // El veredicto con el que `exigirMfaSuperadmin` rebotó hasta aquí, si es que
@@ -358,6 +385,22 @@ export default async function MiPerfilFlota({
                   </a>
                 </div>
               )}
+            </div>
+
+            {/* ── SEGURIDAD: sesiones activas (FASE 1 · SEG-SESIONES) ──────
+                Cierra TODAS mis sesiones a la vez, en cualquier dispositivo
+                donde haya iniciado sesión — no solo esta pestaña. ── */}
+            <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--line)' }}>
+              <h2 className="text-[13px] font-semibold mb-1">Seguridad — sesiones activas</h2>
+              <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
+                Si crees que alguien más entró con tu cuenta, o perdiste un celular o laptop donde quedaste conectado,
+                cierra todas tus sesiones de un tiro. Vas a tener que volver a iniciar sesión aquí también.
+              </p>
+              <form action={cerrarTodasMisSesiones}>
+                <button type="submit" className="text-[11.5px]" style={{ color: 'var(--bad)' }}>
+                  Cerrar sesión en todos los dispositivos
+                </button>
+              </form>
             </div>
 
             {/* ── SEGURIDAD: mis clientes MCP (H3, 29-ago-2026) ────────────

@@ -80,6 +80,33 @@ export function codigoEstado(texto: string): string | null {
   return POR_LLAVE.get(l) ?? POR_LLAVE.get(`${l}.`) ?? null;
 }
 
+/** Estados de EE. UU. (clave de dos letras) para domicilios de extremos extranjeros (T-A3-49). No es parte del c_Estado del SAT. */
+export const ESTADOS_EEUU: ReadonlyArray<readonly [string, string]> = [
+  ['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'], ['CO', 'Colorado'],
+  ['CT', 'Connecticut'], ['DE', 'Delaware'], ['DC', 'District of Columbia'], ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'],
+  ['ID', 'Idaho'], ['IL', 'Illinois'], ['IN', 'Indiana'], ['IA', 'Iowa'], ['KS', 'Kansas'], ['KY', 'Kentucky'],
+  ['LA', 'Louisiana'], ['ME', 'Maine'], ['MD', 'Maryland'], ['MA', 'Massachusetts'], ['MI', 'Michigan'], ['MN', 'Minnesota'],
+  ['MS', 'Mississippi'], ['MO', 'Missouri'], ['MT', 'Montana'], ['NE', 'Nebraska'], ['NV', 'Nevada'], ['NH', 'New Hampshire'],
+  ['NJ', 'New Jersey'], ['NM', 'New Mexico'], ['NY', 'New York'], ['NC', 'North Carolina'], ['ND', 'North Dakota'], ['OH', 'Ohio'],
+  ['OK', 'Oklahoma'], ['OR', 'Oregon'], ['PA', 'Pennsylvania'], ['RI', 'Rhode Island'], ['SC', 'South Carolina'], ['SD', 'South Dakota'],
+  ['TN', 'Tennessee'], ['TX', 'Texas'], ['UT', 'Utah'], ['VT', 'Vermont'], ['VA', 'Virginia'], ['WA', 'Washington'],
+  ['WV', 'West Virginia'], ['WI', 'Wisconsin'], ['WY', 'Wyoming'],
+];
+export const CODIGOS_ESTADO_EEUU: ReadonlySet<string> = new Set(ESTADOS_EEUU.map(([c]) => c));
+const ALIAS_EEUU: Record<string, string> = {
+  'nuevo mexico': 'NM', 'nueva york': 'NY', 'nueva jersey': 'NJ', 'nueva hampshire': 'NH', 'carolina del norte': 'NC',
+  'carolina del sur': 'SC', 'dakota del norte': 'ND', 'dakota del sur': 'SD', 'virginia occidental': 'WV', luisiana: 'LA',
+  pensilvania: 'PA', misisipi: 'MS', misuri: 'MO',
+};
+const POR_LLAVE_EEUU = new Map<string, string>();
+for (const [c, n] of ESTADOS_EEUU) { POR_LLAVE_EEUU.set(c.toLowerCase(), c); POR_LLAVE_EEUU.set(llaveTexto(n), c); }
+for (const [a, c] of Object.entries(ALIAS_EEUU)) POR_LLAVE_EEUU.set(a, c);
+
+/** «Texas», «tx», «TX.» → `TX`. `null` si no es un estado de EE. UU. (no se adivina). */
+export function codigoEstadoEeuu(texto: string): string | null {
+  return POR_LLAVE_EEUU.get(llaveTexto(texto).replace(/[.,]+$/g, '')) ?? null;
+}
+
 /** Rangos de los dos primeros dígitos del CP por entidad (aproximación documentada arriba). */
 const PREFIJOS_CP: ReadonlyArray<[number, number, string]> = [
   [1, 16, 'CMX'], [20, 20, 'AGU'], [21, 22, 'BCN'], [23, 23, 'BCS'], [24, 24, 'CAM'],

@@ -150,3 +150,53 @@ describe('API bajo el perfil', () => {
     expect(apiPermitidaEnPerfil('cinco_agentes', '/api/cron/vigia')).toBe(false);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A3 (T-A3-40) · timbrado, descarga SAT y borrador de Carta Porte: stand-by.
+// Solo casos agregados; ninguno de arriba se tocó.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A3: superficies de timbrado y viaje inalcanzables bajo el perfil', () => {
+  const viaje = '0f8fad5b-d9cb-469f-a165-70867728950e';
+  const NEGADAS_A3 = [
+    '/dashboard/timbrado', `/dashboard/timbrado/${viaje}`,
+    '/dashboard/descarga-sat', '/dashboard/descarga-sat/bandeja',
+    '/dashboard/carta-porte/borrador', `/dashboard/carta-porte/borrador/${viaje}`,
+  ];
+
+  it('la ruta se niega bajo el perfil: timbrado, descarga SAT y el borrador por viaje', () => {
+    for (const r of NEGADAS_A3) expect(rutaPermitidaEnPerfil('cinco_agentes', r), r).toBe(false);
+  });
+
+  it('se niega incluso al superadmin y al dueño (el perfil quita, no depende del rol)', () => {
+    for (const r of NEGADAS_A3) {
+      expect(puedeVerRuta('superadmin', r, 'cinco_agentes'), `superadmin ${r}`).toBe(false);
+      expect(puedeVerRuta('flota_admin', r, 'cinco_agentes'), `flota_admin ${r}`).toBe(false);
+    }
+  });
+
+  it('están en la lista de stand-by (ocultas, no borradas) y no en la permitida', () => {
+    for (const r of ['/dashboard/timbrado', '/dashboard/descarga-sat', '/dashboard/descarga-sat/bandeja']) {
+      expect(RUTAS_STAND_BY_PERFIL_CINCO_AGENTES, r).toContain(r);
+      expect(permitidas, r).not.toContain(r);
+    }
+  });
+
+  it('SIN perfil el dueño sigue entrando a timbrado y descarga SAT (nada cambia para las demás flotas)', () => {
+    for (const r of ['/dashboard/timbrado', '/dashboard/descarga-sat']) {
+      expect(puedeVerRuta('flota_admin', r), r).toBe(puedeVerRuta('flota_admin', r, null));
+    }
+  });
+
+  it('lo de A3 que sí es del cliente sigue permitido: el visor de documentos y la bandeja', () => {
+    for (const r of ['/dashboard/carta-porte', '/dashboard/carta-porte/documentos', '/dashboard/agentes/carta-porte']) {
+      expect(rutaPermitidaEnPerfil('cinco_agentes', r), r).toBe(true);
+    }
+  });
+
+  it('el cron y la exportación de documentos de A3 están clasificados como permitidos; el XML del timbre no abre la puerta del PAC', () => {
+    expect(API_PERFIL_CINCO_AGENTES.export).toContain('carta-porte-docs');
+    expect(apiPermitidaEnPerfil('cinco_agentes', '/api/export/carta-porte-docs')).toBe(true);
+    expect(apiPermitidaEnPerfil('cinco_agentes', '/api/export/timbrado')).toBe(false);
+    expect(apiPermitidaEnPerfil('cinco_agentes', '/api/v1/clientes')).toBe(false);
+  });
+});

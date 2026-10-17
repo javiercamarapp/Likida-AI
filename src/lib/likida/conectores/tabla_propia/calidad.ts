@@ -108,6 +108,8 @@ export interface ResumenTablaCombinada {
   conPuntoInteres: number;
   latencia: LatenciaAgregada;
   continuidad: CalidadContinuidad;
+  /** T-A5-37: cadencia observada (recepción vs registro) de la tabla; alimenta `poleoMin` de la configuración del Conductor. */
+  cadencia: Record<string, CadenciaObservada>;
   /** Frases para el estado del conector y la pantalla de conexiones (vacío si no hay nada que decir). */
   frases: string[];
 }
@@ -126,5 +128,82 @@ export function resumirTablaCombinada(
   if (latencia.p95Segundos !== null) frases.push(`Latencia de la fuente (p95): ${minutos(latencia.p95Segundos)}.`);
   if (latencia.recibidoAntesDeMedido > 0) frases.push(`${latencia.recibidoAntesDeMedido} fila(s) traen «recibido» anterior a la medida: revisa la zona horaria declarada.`);
   if (continuidad.aviso) frases.push(continuidad.aviso);
-  return { conPuntoInteres, latencia, continuidad, frases };
+  const cadencia = cadenciaObservada(filas, zona);
+  const tabla = cadencia.tabla_propia;
+  if (tabla && tabla.recepcionMin !== null) {
+    frases.push(`Cadencia de la fuente: recibe cada ~${Math.round(tabla.recepcionMin)} min${tabla.registroMin !== null ? ` (registra cada ~${Math.round(tabla.registroMin)} min)` : ''}.`);
+  }
+  return { conPuntoInteres, latencia, continuidad, cadencia, frases };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-A5-37 — Cadencia OBSERVADA por proveedor. La telemática del cliente registra cada minuto pero a veces RECIBIMOS cada ~15
+// (la otra plataforma, cada ~2): ambas cadencias se miden aquí para que quien configura `poleoMin` parta de un dato y no de un
+// supuesto. «Recepción» = minutos entre momentos distintos de llegada (el búfer entregado de golpe es UNA recepción);
+// «registro» = minutos entre mediciones consecutivas de la misma unidad. Mediana por unidad y luego mediana entre unidades.
+// Puras: no se guarda nada por fila ni por unidad.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface CadenciaObservada {
+  /** Unidades con al menos dos instantes distintos que aportaron a la cifra. */
+  unidades: number;
+  /** Minutos (mediana) entre recepciones distintas; null si la tabla no trae «recibido» o no hay muestra. */
+  recepcionMin: number | null;
+  /** Minutos (mediana) entre mediciones consecutivas de una unidad; null si no hay muestra. */
+  registroMin: number | null;
+}
+
+const mediana = (v: readonly number[]): number | null => {
+  if (v.length === 0) return null;
+  const o = [...v].sort((a, b) => a - b);
+  const m = Math.floor(o.length / 2);
+  return o.length % 2 === 1 ? o[m] : (o[m - 1] + o[m]) / 2;
+};
+
+/** Mediana de los saltos positivos entre instantes DISTINTOS (ms) de una lista, en minutos; null si no hay dos instantes distintos. */
+function saltoMedianoMin(instantes: readonly number[]): number | null {
+  const orden = [...new Set(instantes)].sort((a, b) => a - b);
+  const saltos: number[] = [];
+  for (let i = 1; i < orden.length; i += 1) saltos.push((orden[i] - orden[i - 1]) / 60_000);
+  return mediana(saltos);
+}
+
+/**
+ * La cadencia observada por clave (por omisión una sola: la tabla entera; quien llama puede dar `claveDe` para separar por
+ * proveedor). El resultado alimenta `poleoMin`/`poleoPorClaveMin` de la configuración del Conductor.
+ */
+export function cadenciaObservada(
+  filas: readonly PosicionTablaPropia[], zona: string = ZONA_POR_OMISION,
+  claveDe: (f: PosicionTablaPropia) => string = () => 'tabla_propia',
+): Record<string, CadenciaObservada> {
+  type Acum = { registro: number[]; recepcion: number[] };
+  const porClave = new Map<string, Map<string, Acum>>();
+  for (const f of filas) {
+    const u = llaveEconomico(f.unidad);
+    if (u === '') continue;
+    const clave = claveDe(f);
+    const unidades = porClave.get(clave) ?? new Map<string, Acum>();
+    const a = unidades.get(u) ?? { registro: [], recepcion: [] };
+    a.registro.push(localAUtc(f.fechaHoraLocal, zona).getTime());
+    if (f.fechaRecibidaLocal) a.recepcion.push(localAUtc(f.fechaRecibidaLocal, zona).getTime());
+    unidades.set(u, a);
+    porClave.set(clave, unidades);
+  }
+  const salida: Record<string, CadenciaObservada> = {};
+  for (const [clave, unidades] of porClave) {
+    const reg: number[] = []; const rec: number[] = []; let contadas = 0;
+    for (const a of unidades.values()) {
+      const r = saltoMedianoMin(a.registro); const c = saltoMedianoMin(a.recepcion);
+      if (r !== null) { reg.push(r); contadas += 1; }
+      if (c !== null) rec.push(c);
+    }
+    salida[clave] = { unidades: contadas, recepcionMin: mediana(rec), registroMin: mediana(reg) };
+  }
+  return salida;
+}
+
+/** El `poleoMin` que sugiere una cadencia de recepción observada: entero de 1 a 60; null si no hay dato (no se inventa uno). */
+export function poleoSugeridoMin(c: Pick<CadenciaObservada, 'recepcionMin'>): number | null {
+  if (c.recepcionMin === null || !Number.isFinite(c.recepcionMin) || c.recepcionMin <= 0) return null;
+  return Math.min(60, Math.max(1, Math.round(c.recepcionMin)));
 }

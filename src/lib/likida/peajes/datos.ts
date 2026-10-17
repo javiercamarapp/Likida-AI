@@ -6,8 +6,13 @@ import { traerTodo, traerPorIds, conteo, type RespuestaPg } from '../pg';
 import { normalizarNombre, normalizarTag } from './formatos';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from '../conductor/geometria_datos';
 import { matrizDeArchivoCatalogo } from './archivo';
+import { sumarMeses } from './periodo';
+import type { ArchivoPrevio } from './doble_entre_archivos';
 import { parsearCasetasMatriz, type CasetaCatalogo } from './casetas';
+import { parsearTarifasMatriz, planificarTarifa, type OrigenTarifa, type TarifaEntrada, type TarifaExistente } from './tarifario_archivo';
 import { parsearTagsMatriz, resolverUnidadesDeTags, validarBajaTag, type VigenciaTag } from './tags';
+import { parsearInmovilizadasMatriz, resolverUnidadesInmovilizadas } from './reglas_cobro_config';
+import type { MotivoInmovilizada, VentanaInmovilizada } from './reglas_cobro';
 import { validarMapeo, type ConfigMapeo } from './mapeo';
 import { planificarGps, evaluarCruceGps, type LineaParaGps, type VeredictoGps, type Muestra } from './cruce_gps';
 import { createHash } from 'node:crypto';
@@ -15,6 +20,8 @@ import { generarToken, esTokenValido } from '@/lib/correo/buzon';
 import { hostNoPublico } from '@/lib/http/destino_publico';
 import { cifrar, cofreConfigurado } from '../conectores/cofre';
 import type { HallazgoAtipico, ConfigAtipicos } from './atipicos';
+import { validarConfigAvisos, configAvisosEfectiva, type ConfigAvisos } from './config_avisos';
+import { validarMargenLejos, margenLejosEfectivo } from './gps_umbral';
 import { validarConfigAtipicos, configAtipicosEfectiva, esEstadoAtipico, puedeCambiarEstado, exigeRevisor, type EstadoAtipico } from './atipicos_config';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -204,12 +211,18 @@ export async function importarTagsArchivo(tenantId: string, nombre: string, buff
   let guardadas = 0;
   let actualizadas = 0;
   for (const lote of lotes(altas)) {
-    const { error } = await acotada(supabaseAdmin().from('peaje_tag').upsert(
-      lote.map((a) => ({
-        tenant_id: tenantId, tag: a.tag, tag_original: a.tagOriginal, unidad_id: a.unidadId, proveedor: a.proveedor, activo: true,
-      })),
-      { onConflict: 'tenant_id,tag' },
-    ), 'peajes.importar_tags');
+    // `tipo_unidad` (0812) solo se escribe si el CSV lo trae: una celda vacía NO borra el tipo ya capturado.
+    // Las filas con y sin tipo van en upserts separados para que cada lote tenga las mismas columnas.
+    const fila = (a: (typeof lote)[number]) => ({
+      tenant_id: tenantId, tag: a.tag, tag_original: a.tagOriginal, unidad_id: a.unidadId, proveedor: a.proveedor, activo: true,
+    });
+    const conTipo = lote.filter((a) => a.tipoUnidad).map((a) => ({ ...fila(a), tipo_unidad: a.tipoUnidad }));
+    const sinTipo = lote.filter((a) => !a.tipoUnidad).map(fila);
+    let error: { message: string } | null = null;
+    for (const grupo of [sinTipo, conTipo]) {
+      if (grupo.length === 0 || error) continue;
+      ({ error } = await acotada(supabaseAdmin().from('peaje_tag').upsert(grupo, { onConflict: 'tenant_id,tag' }), 'peajes.importar_tags'));
+    }
     if (error) {
       logger.error('peajes.importar_tags', { tenant: tenantId, err: error.message });
       return { ok: false, guardadas, actualizadas, rechazadas: todasRechazadas, error: `Se guardaron ${guardadas} TAGs y el resto falló. Vuelve a subir el archivo: es seguro repetirlo.` };
@@ -221,6 +234,98 @@ export async function importarTagsArchivo(tenantId: string, nombre: string, buff
       guardadas++;
       const previa = existentes.get(a.tag);
       if (previa !== undefined && previa !== a.unidadId) actualizadas++;
+    }
+  }
+  return { ok: true, guardadas, actualizadas, rechazadas: todasRechazadas };
+}
+
+// ── Unidades inmovilizadas (taller / siniestro / baja, T-A2-36) ─────────────
+export interface InmovilizadaVista {
+  id: string; unidadId: string; unidadEconomico: string | null;
+  desde: string; hasta: string | null; motivo: MotivoInmovilizada; nota: string | null;
+}
+
+/** Las ventanas de inmovilización de la flota (`peaje_unidad_inmovilizada`, 0813). Lanza ante error de base. */
+export async function listarInmovilizadas(tenantId: string): Promise<InmovilizadaVista[]> {
+  const [filas, unidades] = await Promise.all([
+    traerTodo<Record<string, unknown>>(
+      (d, h) => acotada(supabaseAdmin().from('peaje_unidad_inmovilizada')
+        .select('id, unidad_id, desde, hasta, motivo, nota', conteo(d))
+        .eq('tenant_id', tenantId).order('desde', { ascending: false }).order('id').range(d, h), 'peajes.inmovilizadas'),
+      'peajes.inmovilizadas',
+    ),
+    listarUnidades(tenantId),
+  ]);
+  const eco = new Map(unidades.map((u) => [u.id, u.numeroEconomico]));
+  return filas.map((f) => ({
+    id: String(f.id), unidadId: String(f.unidad_id), unidadEconomico: eco.get(String(f.unidad_id)) ?? null,
+    desde: String(f.desde).slice(0, 10), hasta: f.hasta ? String(f.hasta).slice(0, 10) : null,
+    motivo: f.motivo as MotivoInmovilizada, nota: (f.nota as string | null) ?? null,
+  }));
+}
+
+/**
+ * TAG normalizado → ventanas de inmovilización de SU unidad, para la regla `unidad_inmovilizada`. Cruza el
+ * maestro TAG↔unidad (`peaje_tag`) con las ventanas por unidad: un TAG sin alta no aparece (no se adivina la
+ * unidad). Lanza ante error de base: un mapa a medias leería «sin candidatos» estando ciego.
+ */
+export async function inmovilizadasPorTag(tenantId: string): Promise<Map<string, VentanaInmovilizada[]>> {
+  const ventanas = await listarInmovilizadas(tenantId);
+  const mapa = new Map<string, VentanaInmovilizada[]>();
+  if (ventanas.length === 0) return mapa;
+  const porUnidad = new Map<string, VentanaInmovilizada[]>();
+  for (const v of ventanas) {
+    porUnidad.set(v.unidadId, [...(porUnidad.get(v.unidadId) ?? []), { desde: v.desde, hasta: v.hasta, motivo: v.motivo }]);
+  }
+  const tags = await traerTodo<{ tag: unknown; unidad_id: unknown }>(
+    (d, h) => acotada(supabaseAdmin().from('peaje_tag').select('tag, unidad_id', conteo(d))
+      .eq('tenant_id', tenantId).order('tag').range(d, h), 'peajes.inmovilizadas_tags'),
+    'peajes.inmovilizadas_tags',
+  );
+  for (const t of tags) {
+    const w = porUnidad.get(String(t.unidad_id));
+    if (w) mapa.set(String(t.tag), w);
+  }
+  return mapa;
+}
+
+/** Importa la lista de unidades inmovilizadas (CSV/XLSX). Repetirlo es seguro: actualiza `hasta` y nota. */
+export async function importarInmovilizadasArchivo(tenantId: string, nombre: string, buffer: Uint8Array): Promise<ResultadoImportacionCatalogo> {
+  const falla = (error: string): ResultadoImportacionCatalogo => ({ ok: false, guardadas: 0, actualizadas: 0, rechazadas: [], error });
+  const m = matrizDeArchivoCatalogo(nombre, buffer);
+  if (!m.ok) return falla(m.motivo);
+  const lectura = parsearInmovilizadasMatriz(m.matriz);
+  if (lectura.error) return falla(lectura.error);
+
+  let unidades;
+  let previas: InmovilizadaVista[];
+  try {
+    unidades = await listarUnidades(tenantId);
+    previas = await listarInmovilizadas(tenantId);
+  } catch (e) {
+    logger.error('peajes.importar_inmovilizadas_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return falla('No se pudo leer la lista actual. Inténtalo de nuevo.');
+  }
+  const { altas, rechazadas } = resolverUnidadesInmovilizadas(lectura.ventanas, unidades);
+  const todasRechazadas = [...lectura.rechazadas, ...rechazadas].sort((a, b) => a.fila - b.fila);
+  if (altas.length === 0) return { ok: true, guardadas: 0, actualizadas: 0, rechazadas: todasRechazadas };
+
+  const existente = new Map(previas.map((p) => [`${p.unidadId}|${p.desde}|${p.motivo}`, p]));
+  let guardadas = 0;
+  let actualizadas = 0;
+  for (const lote of lotes(altas)) {
+    const filas = lote.map((a) => ({
+      tenant_id: tenantId, unidad_id: a.unidadId, desde: a.desde, hasta: a.hasta, motivo: a.motivo, nota: a.nota,
+    }));
+    const { error } = await acotada(supabaseAdmin().from('peaje_unidad_inmovilizada').upsert(filas, { onConflict: 'tenant_id,unidad_id,desde,motivo' }), 'peajes.importar_inmovilizadas');
+    if (error) {
+      logger.error('peajes.importar_inmovilizadas', { tenant: tenantId, err: error.message });
+      return { ok: false, guardadas, actualizadas, rechazadas: todasRechazadas, error: `Se guardaron ${guardadas} renglones y el resto falló. Vuelve a subir el archivo: es seguro repetirlo.` };
+    }
+    for (const a of lote) {
+      guardadas++;
+      const previa = existente.get(`${a.unidadId}|${a.desde}|${a.motivo}`);
+      if (previa && (previa.hasta !== a.hasta || previa.nota !== a.nota)) actualizadas++;
     }
   }
   return { ok: true, guardadas, actualizadas, rechazadas: todasRechazadas };
@@ -243,7 +348,9 @@ export async function listarCasetas(tenantId: string, soloActivas = false): Prom
   return filas.map((f) => ({
     id: String(f.id), nombre: String(f.nombre), nombreNorm: String(f.nombre_norm),
     alias: Array.isArray(f.alias) ? (f.alias as unknown[]).map(String) : [],
-    lat: Number(f.lat), lng: Number(f.lng), radioM: Number(f.radio_m),
+    lat: f.lat === null || f.lat === undefined ? null : Number(f.lat),
+    lng: f.lng === null || f.lng === undefined ? null : Number(f.lng),
+    radioM: Number(f.radio_m),
     activa: f.activa !== false, fuente: (f.fuente as string | null) ?? null,
   }));
 }
@@ -267,13 +374,25 @@ export async function importarCasetasArchivo(tenantId: string, nombre: string, b
   let guardadas = 0;
   let actualizadas = 0;
   for (const lote of lotes(lectura.casetas)) {
-    const { error } = await acotada(supabaseAdmin().from('peaje_caseta').upsert(
-      lote.map((c) => ({
-        tenant_id: tenantId, nombre: c.nombre, nombre_norm: c.nombreNorm, alias: c.alias,
-        lat: c.lat, lng: c.lng, radio_m: c.radioM, activa: true, fuente: c.fuente ?? fuenteDefault,
-      })),
-      { onConflict: 'tenant_id,nombre_norm' },
-    ), 'peajes.importar_casetas');
+    // Las filas SIN coordenadas se escriben sin las llaves lat/lng: un archivo que solo trae nombres no debe
+    // borrar las coordenadas que la flota ya había cargado de esa caseta.
+    const fila = (c: (typeof lote)[number]) => ({
+      tenant_id: tenantId, nombre: c.nombre, nombre_norm: c.nombreNorm, alias: c.alias,
+      radio_m: c.radioM, activa: true, fuente: c.fuente ?? fuenteDefault,
+      ...(c.lat !== null && c.lng !== null ? { lat: c.lat, lng: c.lng } : {}),
+      ...(c.porPasada === undefined ? {} : { por_pasada: c.porPasada }),
+    });
+    let error = null as { message: string } | null;
+    // Se agrupan por forma (con/sin coordenadas, con/sin por_pasada) para que cada upsert lleve las mismas columnas.
+    const grupos = new Map<string, typeof lote>();
+    for (const c of lote) {
+      const k = `${c.lat !== null ? 'c' : 's'}${c.porPasada === undefined ? 'n' : 'p'}`;
+      grupos.set(k, [...(grupos.get(k) ?? []), c]);
+    }
+    for (const grupo of grupos.values()) {
+      const r = await acotada(supabaseAdmin().from('peaje_caseta').upsert(grupo.map(fila), { onConflict: 'tenant_id,nombre_norm' }), 'peajes.importar_casetas');
+      if (r.error) { error = r.error; break; }
+    }
     if (error) {
       logger.error('peajes.importar_casetas', { tenant: tenantId, err: error.message });
       return { ok: false, guardadas, actualizadas, rechazadas: lectura.rechazadas, error: `Se guardaron ${guardadas} casetas y el resto falló. Vuelve a subir el archivo: es seguro repetirlo.` };
@@ -281,7 +400,7 @@ export async function importarCasetasArchivo(tenantId: string, nombre: string, b
     for (const c of lote) {
       guardadas++;
       const p = porNorm.get(c.nombreNorm);
-      if (p && (p.lat !== c.lat || p.lng !== c.lng || p.radioM !== c.radioM)) actualizadas++;
+      if (p && ((c.lat !== null && (p.lat !== c.lat || p.lng !== c.lng)) || p.radioM !== c.radioM)) actualizadas++;
     }
   }
   return { ok: true, guardadas, actualizadas, rechazadas: lectura.rechazadas };
@@ -291,6 +410,149 @@ export async function cambiarEstadoCaseta(tenantId: string, casetaId: string, ac
   const { error } = await acotada(supabaseAdmin().from('peaje_caseta').update({ activa }).eq('tenant_id', tenantId).eq('id', casetaId), 'peajes.estado_caseta');
   if (error) logger.error('peajes.estado_caseta', { tenant: tenantId, err: error.message });
   return !error;
+}
+
+// ── Tarifario por caseta y clase (migración 0811) ───────────────────────────
+// Las reglas (traslapes, confirmación) viven en `tarifario_archivo.ts`; aquí solo se lee y se escribe.
+// Ninguna tarifa se crea confirmada salvo una carga marcada «proveedor»; confirmar es `confirmarTarifa`.
+export interface TarifaVista extends TarifaExistente { id: string; creadaEn: string | null }
+
+const COLUMNAS_TARIFA = 'id, caseta_norm, clase, importe, vigente_desde, vigente_hasta, origen, confirmada, confirmada_por, created_at';
+
+type FilaTarifa = { id: unknown; caseta_norm: unknown; clase: unknown; importe: unknown; vigente_desde: unknown; vigente_hasta: unknown; origen: unknown; confirmada: unknown; confirmada_por: unknown; created_at: unknown };
+
+function tarifaDeFila(f: FilaTarifa): TarifaVista {
+  return {
+    id: String(f.id), casetaNorm: String(f.caseta_norm), clase: Number(f.clase), importe: Number(f.importe),
+    vigenteDesde: String(f.vigente_desde), vigenteHasta: f.vigente_hasta === null || f.vigente_hasta === undefined ? null : String(f.vigente_hasta),
+    origen: f.origen as OrigenTarifa, confirmada: f.confirmada === true,
+    confirmadaPor: f.confirmada_por === null || f.confirmada_por === undefined ? null : String(f.confirmada_por),
+    creadaEn: f.created_at === null || f.created_at === undefined ? null : String(f.created_at),
+  };
+}
+
+export async function listarTarifas(tenantId: string, filtro: { caseta?: string; clase?: number } = {}): Promise<TarifaVista[]> {
+  const casetaNorm = filtro.caseta === undefined ? null : normalizarNombre(filtro.caseta);
+  const filas = await traerTodo<FilaTarifa>(
+    (d, h) => {
+      let q = supabaseAdmin().from('peaje_tarifa').select(COLUMNAS_TARIFA, conteo(d)).eq('tenant_id', tenantId);
+      if (casetaNorm !== null) q = q.eq('caseta_norm', casetaNorm);
+      if (filtro.clase !== undefined) q = q.eq('clase', filtro.clase);
+      return acotada(q.order('caseta_norm').order('clase').order('vigente_desde').order('id').range(d, h), 'peajes.tarifas');
+    },
+    'peajes.tarifas',
+  );
+  return filas.map(tarifaDeFila);
+}
+
+const filaParaEscribir = (tenantId: string, t: TarifaExistente) => ({
+  tenant_id: tenantId, caseta_norm: t.casetaNorm, clase: t.clase, importe: t.importe,
+  vigente_desde: t.vigenteDesde, vigente_hasta: t.vigenteHasta, origen: t.origen,
+  confirmada: t.confirmada, confirmada_por: t.confirmadaPor,
+});
+
+export type ResultadoGuardarTarifa =
+  | { ok: true; accion: 'creada' | 'actualizada' | 'sin_cambios'; confirmada: boolean }
+  | { ok: false; motivo: string };
+
+/** Guarda (crea o actualiza por caseta+clase+inicio) UNA tarifa. `origen` por omisión: «declarada» (nunca nace confirmada). */
+export async function guardarTarifa(tenantId: string, entrada: TarifaEntrada, origen: OrigenTarifa = 'declarada'): Promise<ResultadoGuardarTarifa> {
+  let existentes: TarifaVista[];
+  try {
+    existentes = await listarTarifas(tenantId, { caseta: entrada.caseta, clase: entrada.clase });
+  } catch (e) {
+    logger.error('peajes.guardar_tarifa_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, motivo: 'No se pudo leer el tarifario actual. Inténtalo de nuevo.' };
+  }
+  const plan = planificarTarifa(existentes, entrada, origen);
+  if (plan.tipo === 'rechazada') return { ok: false, motivo: plan.motivo };
+  if (plan.tipo === 'igual') return { ok: true, accion: 'sin_cambios', confirmada: plan.fila.confirmada };
+  const { error } = await acotada(
+    supabaseAdmin().from('peaje_tarifa').upsert(filaParaEscribir(tenantId, plan.fila), { onConflict: 'tenant_id,caseta_norm,clase,vigente_desde' }),
+    'peajes.guardar_tarifa',
+  );
+  if (error) {
+    logger.error('peajes.guardar_tarifa', { tenant: tenantId, err: error.message });
+    return { ok: false, motivo: 'No se pudo guardar la tarifa. Inténtalo de nuevo.' };
+  }
+  return { ok: true, accion: plan.tipo === 'crear' ? 'creada' : 'actualizada', confirmada: plan.fila.confirmada };
+}
+
+export type ResultadoConfirmarTarifa = { ok: true; yaConfirmada: boolean } | { ok: false; motivo: string };
+
+/** La acción humana que vuelve «confirmada» una tarifa: queda quién la confirmó. */
+export async function confirmarTarifa(tenantId: string, tarifaId: string, por: string): Promise<ResultadoConfirmarTarifa> {
+  const quien = por.trim().replace(/\s+/g, ' ');
+  if (!quien) return { ok: false, motivo: 'Indica quién confirma la tarifa.' };
+  if (quien.length > 120) return { ok: false, motivo: 'El nombre de quien confirma pasa de 120 caracteres.' };
+  const { data, error } = await acotada(
+    supabaseAdmin().from('peaje_tarifa').select(COLUMNAS_TARIFA).eq('tenant_id', tenantId).eq('id', tarifaId).maybeSingle(),
+    'peajes.confirmar_tarifa_lectura',
+  );
+  if (error) {
+    logger.error('peajes.confirmar_tarifa_lectura', { tenant: tenantId, err: error.message });
+    return { ok: false, motivo: 'No se pudo leer la tarifa. Inténtalo de nuevo.' };
+  }
+  if (!data) return { ok: false, motivo: 'No encontré esa tarifa.' };
+  if ((data as FilaTarifa).confirmada === true) return { ok: true, yaConfirmada: true };
+  const upd = await acotada(
+    supabaseAdmin().from('peaje_tarifa').update({ confirmada: true, confirmada_por: quien }).eq('tenant_id', tenantId).eq('id', tarifaId),
+    'peajes.confirmar_tarifa',
+  );
+  if (upd.error) {
+    logger.error('peajes.confirmar_tarifa', { tenant: tenantId, err: upd.error.message });
+    return { ok: false, motivo: 'No se pudo confirmar la tarifa. Inténtalo de nuevo.' };
+  }
+  return { ok: true, yaConfirmada: false };
+}
+
+/**
+ * Importa un CSV/Excel de tarifas (`caseta;clase;importe;desde;hasta`). `origen` es lo que el llamador
+ * DECLARA del archivo: solo «proveedor» deja las tarifas confirmadas. Si el archivo no trae «desde», la
+ * vigencia empieza hoy (hora de México). Repetirlo es seguro.
+ */
+export async function importarTarifasArchivo(
+  tenantId: string, nombre: string, buffer: Uint8Array, origen: OrigenTarifa = 'declarada',
+): Promise<ResultadoImportacionCatalogo> {
+  const falla = (error: string): ResultadoImportacionCatalogo => ({ ok: false, guardadas: 0, actualizadas: 0, rechazadas: [], error });
+  const m = matrizDeArchivoCatalogo(nombre, buffer);
+  if (!m.ok) return falla(m.motivo);
+  const lectura = parsearTarifasMatriz(m.matriz, { desdePorDefecto: hoyMx() });
+  if (lectura.error) return falla(lectura.error);
+  if (lectura.tarifas.length === 0) return { ok: true, guardadas: 0, actualizadas: 0, rechazadas: lectura.rechazadas };
+
+  let vigentes: TarifaExistente[];
+  try {
+    vigentes = await listarTarifas(tenantId);
+  } catch (e) {
+    logger.error('peajes.importar_tarifas_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return falla('No se pudo leer el tarifario actual. Inténtalo de nuevo.');
+  }
+  const rechazadas = [...lectura.rechazadas];
+  const aEscribir: TarifaExistente[] = [];
+  let guardadas = 0;
+  let actualizadas = 0;
+  for (const t of lectura.tarifas) {
+    // Se planifica contra lo guardado MÁS lo ya aceptado de este mismo archivo.
+    const plan = planificarTarifa(vigentes, t, origen);
+    if (plan.tipo === 'rechazada') { rechazadas.push({ fila: t.fila, motivo: plan.motivo }); continue; }
+    guardadas++;
+    if (plan.tipo === 'actualizar') actualizadas++;
+    if (plan.tipo !== 'igual') aEscribir.push(plan.fila);
+    vigentes = [...vigentes.filter((v) => !(v.casetaNorm === plan.fila.casetaNorm && v.clase === plan.fila.clase && v.vigenteDesde === plan.fila.vigenteDesde)), plan.fila];
+  }
+  rechazadas.sort((a, b) => a.fila - b.fila);
+  for (const lote of lotes(aEscribir)) {
+    const { error } = await acotada(
+      supabaseAdmin().from('peaje_tarifa').upsert(lote.map((t) => filaParaEscribir(tenantId, t)), { onConflict: 'tenant_id,caseta_norm,clase,vigente_desde' }),
+      'peajes.importar_tarifas',
+    );
+    if (error) {
+      logger.error('peajes.importar_tarifas', { tenant: tenantId, err: error.message });
+      return { ok: false, guardadas: 0, actualizadas: 0, rechazadas, error: 'No se pudo guardar el tarifario y no se aplicó ninguna fila de este lote. Vuelve a subir el archivo: es seguro repetirlo.' };
+    }
+  }
+  return { ok: true, guardadas, actualizadas, rechazadas };
 }
 
 // ── Geocercas (la tabla de la 0050; nadie creaba filas) ─────────────────────
@@ -775,12 +1037,18 @@ export async function evaluarGpsDeLineas(
   catalogo: readonly CasetaCatalogo[],
 ): Promise<ResultadoGpsLinea[]> {
   const planes = planificarGps(lineas, catalogo);
+  // El margen «lejos» es de la flota (T-A2-24). Si no se puede leer, el de siempre: nunca afirma de más por un fallo de lectura.
+  let margen = margenLejosEfectivo(undefined);
+  // (El mensaje de la base NO va al log: puede traer valores de la fila.)
+  try { margen = await leerMargenLejosM(tenantId); } catch {
+    logger.warn('peajes.margen_gps_lectura', { tenant: tenantId });
+  }
   const listos = planes.filter((p): p is Extract<typeof p, { listo: true }> => p.listo);
   const muestrasPorLinea = await traerMuestrasPorLinea(tenantId, listos.map((p) => ({ lineaId: p.lineaId, unidadId: p.unidadId, desde: p.desde, hasta: p.hasta })));
 
   return planes.map((p) => {
     if (!p.listo) return { lineaId: p.lineaId, casetaId: p.casetaId, veredicto: p.veredicto };
-    return { lineaId: p.lineaId, casetaId: p.casetaId, veredicto: evaluarCruceGps(p.cruceMs, p.caseta, muestrasPorLinea.get(p.lineaId) ?? []) };
+    return { lineaId: p.lineaId, casetaId: p.casetaId, veredicto: evaluarCruceGps(p.cruceMs, p.caseta, muestrasPorLinea.get(p.lineaId) ?? [], margen) };
   });
 }
 
@@ -1037,4 +1305,369 @@ export async function reclamosParaCasar(tenantId: string): Promise<import('./not
       fechaCobroMasAntiguo: String(f.fecha_cobro_mas_antiguo).slice(0, 10),
     }))
     .filter((r) => r.montoReclamable > 0);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL I/O de la configuración de umbrales, plazo y avisos (T-A2-29b). Vive aquí y no en un archivo
+// nuevo para no subir el techo de archivos con acceso directo a Supabase (frontera_datos_guardiana).
+//
+// Vive en la MISMA fila por flota de `peaje_atipico_config` (migración 0779):
+//   · `activo`                       → interruptor del detector de atípicos,
+//   · `umbrales` (reglas atípicas)   → validados por `atipicos_config.ts`,
+//   · `umbrales.aviso.telefono`      → destinatario del aviso (lo escribe `guardarDestinatarioAtipicos`),
+//   · `umbrales.config_peajes`       → plazo, recordatorio e interruptores (`config_avisos.ts`).
+// Sin migración nueva: es un objeto jsonb libre. CADA escritura conserva las claves que no
+// le tocan (guardar umbrales no borra el destinatario ni el plazo, y al revés).
+// Una flota sin fila = todo apagado y con valores por omisión.
+// ═══════════════════════════════════════════════════════════════════════════
+
+type DetalleCfg = Record<string, unknown>;
+const comoDetalleCfg = (x: unknown): DetalleCfg => (x && typeof x === 'object' && !Array.isArray(x) ? (x as DetalleCfg) : {});
+
+export interface ConfigPeajesVista {
+  /** El detector de cruces atípicos corre solo si la flota lo encendió. */
+  atipicosActivo: boolean;
+  umbrales: ConfigAtipicos;
+  avisos: ConfigAvisos;
+  /** Destinatario de los avisos por WhatsApp; `null` = solo se ve en pantalla. */
+  telefono: string | null;
+}
+
+type FilaCfg = { activo: boolean; umbrales: DetalleCfg };
+
+/** Lee la fila de la flota (o `null` si no hay). Lanza ante error de base: un error no se lee como «apagado». */
+async function leerFila(tenantId: string, etiqueta: string): Promise<FilaCfg | null> {
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_atipico_config')
+    .select('activo, umbrales').eq('tenant_id', tenantId).maybeSingle(), etiqueta);
+  if (error) throw new Error(`${etiqueta}: ${error.message}`);
+  if (!data) return null;
+  return { activo: data.activo === true, umbrales: comoDetalleCfg(data.umbrales) };
+}
+
+async function escribirFila(tenantId: string, fila: FilaCfg, etiqueta: string): Promise<boolean> {
+  const { error } = await acotada(supabaseAdmin().from('peaje_atipico_config').upsert({
+    tenant_id: tenantId, activo: fila.activo, umbrales: fila.umbrales, actualizado_en: new Date().toISOString(),
+  }, { onConflict: 'tenant_id' }), etiqueta);
+  if (error) {
+    logger.error(etiqueta, { tenant: tenantId, err: error.message });
+    return false;
+  }
+  return true;
+}
+
+/** Todo lo que la pantalla de configuración muestra de umbrales, plazo y avisos. Lanza ante error de base. */
+export async function leerConfigPeajes(tenantId: string): Promise<ConfigPeajesVista> {
+  const fila = await leerFila(tenantId, 'peajes.config_peajes_leer');
+  const u = fila?.umbrales ?? {};
+  const tel = comoDetalleCfg(u.aviso).telefono;
+  return {
+    atipicosActivo: fila?.activo === true,
+    umbrales: configAtipicosEfectiva(u),
+    avisos: configAvisosEfectiva(u.config_peajes),
+    telefono: typeof tel === 'string' && tel.trim() !== '' ? tel : null,
+  };
+}
+
+export type ResultadoConfigPeajes<T> = { ok: true; valor: T } | { ok: false; motivo: string };
+const NO_SE_PUDO_CONFIG = 'No se pudo guardar la configuración. Intenta de nuevo.';
+
+/**
+ * Guarda el interruptor del detector y sus umbrales (N, H, velocidad, madrugada). Un valor fuera de
+ * rango se RECHAZA con mensaje llano y no se escribe nada. Conserva el destinatario y el plazo.
+ */
+export async function guardarUmbralesPeajes(
+  tenantId: string, entrada: { activo: boolean; umbrales?: unknown },
+): Promise<ResultadoConfigPeajes<{ activo: boolean; umbrales: ConfigAtipicos }>> {
+  if (typeof entrada.activo !== 'boolean') return { ok: false, motivo: 'Indica si el detector está encendido (sí o no).' };
+  const v = validarConfigAtipicos(entrada.umbrales);
+  if (!v.ok) return { ok: false, motivo: v.motivo };
+  let previa: FilaCfg | null;
+  try { previa = await leerFila(tenantId, 'peajes.config_peajes_umbrales_previa'); } catch (e) {
+    logger.error('peajes.config_peajes_umbrales_previa', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, motivo: NO_SE_PUDO_CONFIG };
+  }
+  const resto = previa?.umbrales ?? {};
+  const ok = await escribirFila(tenantId, { activo: entrada.activo, umbrales: { ...resto, ...v.valor } }, 'peajes.config_peajes_umbrales');
+  return ok ? { ok: true, valor: { activo: entrada.activo, umbrales: v.valor } } : { ok: false, motivo: NO_SE_PUDO_CONFIG };
+}
+
+/**
+ * Guarda el plazo de reclamo, los días de aviso, el recordatorio y los interruptores. Se valida
+ * COMPLETO antes de escribir. Conserva los umbrales, el interruptor del detector y el destinatario.
+ */
+export async function guardarConfigAvisos(tenantId: string, entrada: unknown): Promise<ResultadoConfigPeajes<ConfigAvisos>> {
+  const v = validarConfigAvisos(entrada);
+  if (!v.ok) return { ok: false, motivo: v.motivo };
+  let previa: FilaCfg | null;
+  try { previa = await leerFila(tenantId, 'peajes.config_peajes_avisos_previa'); } catch (e) {
+    logger.error('peajes.config_peajes_avisos_previa', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, motivo: NO_SE_PUDO_CONFIG };
+  }
+  const ok = await escribirFila(tenantId, {
+    activo: previa?.activo === true, umbrales: { ...(previa?.umbrales ?? {}), config_peajes: v.valor },
+  }, 'peajes.config_peajes_avisos');
+  return ok ? { ok: true, valor: v.valor } : { ok: false, motivo: NO_SE_PUDO_CONFIG };
+}
+
+/**
+ * El margen «lejos de la caseta» de la flota (m) para el cruce con GPS (T-A2-24). Vive en `umbrales.gps` de la misma fila de
+ * configuración (sin tabla nueva). Sin fila o con un valor corrupto: el de siempre. Lanza ante error de base: un error no se lee como «el de siempre».
+ */
+export async function leerMargenLejosM(tenantId: string): Promise<number> {
+  const fila = await leerFila(tenantId, 'peajes.config_peajes_margen_gps_leer');
+  return margenLejosEfectivo(comoDetalleCfg(fila?.umbrales.gps).margenLejosM);
+}
+
+/** Guarda el margen de la flota. Se valida ANTES de escribir; conserva el resto de la configuración (umbrales, plazo, destinatario, interruptor). */
+export async function guardarMargenLejosM(tenantId: string, entrada: unknown): Promise<ResultadoConfigPeajes<number>> {
+  const v = validarMargenLejos(entrada);
+  if (!v.ok) return { ok: false, motivo: v.motivo };
+  let previa: FilaCfg | null;
+  try { previa = await leerFila(tenantId, 'peajes.config_peajes_margen_gps_previa'); } catch (e) {
+    logger.error('peajes.config_peajes_margen_gps_previa', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, motivo: NO_SE_PUDO_CONFIG };
+  }
+  const ok = await escribirFila(tenantId, {
+    activo: previa?.activo === true, umbrales: { ...(previa?.umbrales ?? {}), gps: { margenLejosM: v.valor } },
+  }, 'peajes.config_peajes_margen_gps');
+  return ok ? { ok: true, valor: v.valor } : { ok: false, motivo: NO_SE_PUDO_CONFIG };
+}
+
+// ── Líneas de los desgloses PREVIOS de la flota (T-A2-38: doble cobro entre archivos) ──────────────
+/**
+ * Los desgloses anteriores de la flota con sus líneas, para buscar el mismo cobro tardío en un archivo
+ * previo. Solo se LEEN las líneas de los que caen en la ventana (`ventanaMeses` hacia atrás desde
+ * `periodoDesde`); los demás viajan sin líneas para que el motor puro diga por qué no se consultaron.
+ * Solo existen las líneas de la hoja principal (la hoja repetida de utilitarios no se guarda). Lanza ante error.
+ */
+export async function lineasPreviasDeFlota(
+  tenantId: string, desgloseActualId: string, periodoDesde: string, ventanaMeses: number,
+): Promise<ArchivoPrevio[]> {
+  const metas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin().from('desglose_peaje')
+      .select('id, archivo_nombre, periodo_oficial_desde, periodo_oficial_hasta', conteo(d))
+      .eq('tenant_id', tenantId).is('anulado_en', null).order('id').range(d, h), 'peajes.previos.desgloses'),
+    'peajes.previos.desgloses',
+  );
+  const limite = sumarMeses(periodoDesde, -ventanaMeses);
+  const previos: ArchivoPrevio[] = [];
+  for (const m of metas) {
+    const id = String(m.id);
+    if (id === desgloseActualId) continue;
+    const desde = (m.periodo_oficial_desde as string | null) ?? null;
+    const hasta = (m.periodo_oficial_hasta as string | null) ?? null;
+    const fin = hasta ?? desde;
+    const enVentana = desde !== null && fin !== null && desde < periodoDesde && fin >= limite;
+    const filas = enVentana ? await traerTodo<Record<string, unknown>>(
+      (d, h) => acotada(supabaseAdmin().from('desglose_peaje_linea')
+        .select('indice, fecha, hora, caseta, tag, monto', conteo(d))
+        .eq('tenant_id', tenantId).eq('desglose_id', id).order('indice').order('id').range(d, h), 'peajes.previos.lineas'),
+      'peajes.previos.lineas',
+    ) : [];
+    previos.push({
+      id, etiqueta: String(m.archivo_nombre ?? 'archivo sin nombre'), periodoDesde: desde, periodoHasta: hasta,
+      lineas: filas.map((f) => ({
+        indice: Number(f.indice), fecha: (f.fecha as string | null) ?? null, hora: f.hora ? String(f.hora).slice(0, 8) : null,
+        caseta: (f.caseta as string | null) ?? null, tag: (f.tag as string | null) ?? null, monto: Number(f.monto),
+      })),
+    });
+  }
+  return previos;
+}
+
+// ── Vínculo cruce → viaje (T-A2-21, migración 0811) ─────────────────────────
+// NO toca `desglose_peaje_linea.viaje_id` (viaje del gasto que respalda, 0106): el vínculo vive aparte.
+
+/** Interruptor por flota del cálculo cruce→viaje. Sin fila = apagado. Lanza ante error de base. */
+export async function leerVinculosActivo(tenantId: string): Promise<boolean> {
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_vinculo_config')
+    .select('activo').eq('tenant_id', tenantId).maybeSingle(), 'peajes.config_vinculos');
+  if (error) throw new Error(`leerVinculosActivo: ${error.message}`);
+  return data?.activo === true;
+}
+
+/** Prende o apaga el cálculo cruce→viaje de la flota. */
+export async function guardarVinculosActivo(tenantId: string, activo: boolean): Promise<boolean> {
+  const { error } = await acotada(supabaseAdmin().from('peaje_vinculo_config').upsert({
+    tenant_id: tenantId, activo, actualizado_en: new Date().toISOString(),
+  }, { onConflict: 'tenant_id' }), 'peajes.guardar_config_vinculos');
+  if (error) logger.error('peajes.guardar_config_vinculos', { tenant: tenantId, err: error.message });
+  return !error;
+}
+
+export interface VinculoGuardado {
+  lineaId: string;
+  estado: 'ligado' | 'ambiguo' | 'sin_viaje' | 'sin_unidad' | 'conflicto';
+  viajeId: string | null;
+  via: 'icident' | 'unidad_ventana';
+  candidatos: readonly string[];
+  icident?: string | null;
+  motivo?: string | null;
+}
+
+export interface VinculoVista extends VinculoGuardado { id: string; desgloseId: string; calculadoEn: string }
+
+const LOTE_VINCULOS = 200;
+
+/**
+ * Guarda los vínculos de un desglose de forma RECALCULABLE: la clave (flota, línea) es única y un
+ * nuevo cálculo SOBRESCRIBE la fila (nunca la duplica). Solo `ligado` conserva `viaje_id`. Lanza ante error de base.
+ */
+export async function guardarVinculos(tenantId: string, desgloseId: string, vinculos: readonly VinculoGuardado[]): Promise<{ guardados: number }> {
+  const porLinea = new Map(vinculos.map((v) => [v.lineaId, v]));
+  const unicos = [...porLinea.values()];
+  const ahora = new Date().toISOString();
+  for (let i = 0; i < unicos.length; i += LOTE_VINCULOS) {
+    const filas = unicos.slice(i, i + LOTE_VINCULOS).map((v) => ({
+      tenant_id: tenantId,
+      desglose_id: desgloseId,
+      linea_id: v.lineaId,
+      viaje_id: v.estado === 'ligado' ? v.viajeId : null,
+      estado: v.estado,
+      via: v.via,
+      candidatos: [...v.candidatos],
+      icident: v.icident ?? null,
+      motivo: v.motivo ?? null,
+      calculado_en: ahora,
+    }));
+    const { error } = await acotada(supabaseAdmin().from('peaje_cruce_viaje')
+      .upsert(filas, { onConflict: 'tenant_id,linea_id' }), 'peajes.guardar_vinculos');
+    if (error) throw new Error(`guardarVinculos: ${error.message}`);
+  }
+  return { guardados: unicos.length };
+}
+
+/** Los vínculos guardados de un desglose (de esa flota). Lanza ante error de base. */
+export async function vinculosDeDesglose(tenantId: string, desgloseId: string): Promise<VinculoVista[]> {
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin().from('peaje_cruce_viaje')
+      .select('id, desglose_id, linea_id, viaje_id, estado, via, candidatos, icident, motivo, calculado_en', conteo(d))
+      .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('id').range(d, h), 'peajes.vinculos_de_desglose'),
+    'peajes.vinculos_de_desglose',
+  );
+  return filas.map((f) => ({
+    id: String(f.id), desgloseId: String(f.desglose_id), lineaId: String(f.linea_id),
+    viajeId: typeof f.viaje_id === 'string' ? f.viaje_id : null,
+    estado: String(f.estado) as VinculoGuardado['estado'], via: String(f.via) as VinculoGuardado['via'],
+    candidatos: Array.isArray(f.candidatos) ? f.candidatos.map(String) : [],
+    icident: typeof f.icident === 'string' ? f.icident : null,
+    motivo: typeof f.motivo === 'string' ? f.motivo : null,
+    calculadoEn: String(f.calculado_en),
+  }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA DECISIÓN SOBRE CADA CANDIDATO (T-A2-28b, migración 0815).
+//
+// Los candidatos se calculan al leer; aquí solo vive lo que finanzas decidió: reclamado, descartado o
+// justificado, con motivo, quién y cuándo. La llave única (flota, desglose, renglón, categoría) hace
+// idempotente el doble clic: la segunda inserción no escribe nada y no devuelve la fila. Nada de esto
+// toca `desglose_peaje_linea`: el cobro del proveedor no cambia.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type AccionDecisionCandidato = 'reclamado' | 'descartado' | 'justificado';
+
+export interface DecisionCandidatoVista {
+  id: string;
+  indice: number;
+  categoria: string;
+  accion: AccionDecisionCandidato;
+  motivo: string | null;
+  reclamoId: string | null;
+  actor: string;
+  creadoEn: string;
+}
+
+const LOTE_DECISIONES = 500;
+
+/** Las decisiones de un desglose (de esa flota). Lanza ante error de base: leer a medias diría «todo pendiente». */
+export async function listarDecisionesCandidatos(tenantId: string, desgloseId: string): Promise<DecisionCandidatoVista[]> {
+  const filas = await traerTodo<Record<string, unknown>>(
+    (d, h) => acotada(supabaseAdmin().from('peaje_candidato_accion')
+      .select('id, indice, categoria, accion, motivo, reclamo_id, actor, creado_en', conteo(d))
+      .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('indice').order('id').range(d, h), 'peajes.listar_decisiones_candidatos'),
+    'peajes.listar_decisiones_candidatos',
+  );
+  return filas.map((f) => ({
+    id: String(f.id), indice: Number(f.indice), categoria: String(f.categoria),
+    accion: String(f.accion) as AccionDecisionCandidato, motivo: typeof f.motivo === 'string' ? f.motivo : null,
+    reclamoId: typeof f.reclamo_id === 'string' ? f.reclamo_id : null, actor: String(f.actor), creadoEn: String(f.creado_en),
+  }));
+}
+
+/**
+ * Registra la decisión sobre varios candidatos en lotes. Devuelve SOLO las filas que de verdad se insertaron:
+ * un renglón que ya tenía decisión (otro clic, otra pestaña) no se pisa ni se devuelve. Lanza ante error de base.
+ */
+export async function registrarDecisionesCandidatos(
+  tenantId: string, desgloseId: string, items: ReadonlyArray<{ indice: number; categoria: string }>,
+  accion: AccionDecisionCandidato, extra: { motivo: string | null; actor: string },
+): Promise<Array<{ id: string; indice: number; categoria: string }>> {
+  const unicos = [...new Map(items.map((i) => [`${i.indice}|${i.categoria}`, i])).values()];
+  const insertadas: Array<{ id: string; indice: number; categoria: string }> = [];
+  for (let i = 0; i < unicos.length; i += LOTE_DECISIONES) {
+    const filas = unicos.slice(i, i + LOTE_DECISIONES).map((x) => ({
+      tenant_id: tenantId, desglose_id: desgloseId, indice: x.indice, categoria: x.categoria, accion,
+      motivo: accion === 'reclamado' ? null : extra.motivo, actor: extra.actor,
+    }));
+    const { data, error } = await acotada(supabaseAdmin().from('peaje_candidato_accion')
+      .upsert(filas, { onConflict: 'tenant_id,desglose_id,indice,categoria', ignoreDuplicates: true }).select('id, indice, categoria'),
+    'peajes.registrar_decisiones_candidatos');
+    if (error) {
+      // Lo ya insertado de esta llamada se retira: no queda una decisión a medias sin su efecto.
+      if (insertadas.length > 0) await retirarDecisionesCandidatos(tenantId, insertadas.map((x) => x.id)).catch(() => undefined);
+      throw new Error(`registrarDecisionesCandidatos: ${error.message}`);
+    }
+    for (const f of (data ?? []) as Array<Record<string, unknown>>) insertadas.push({ id: String(f.id), indice: Number(f.indice), categoria: String(f.categoria) });
+  }
+  return insertadas;
+}
+
+/** Liga decisiones «reclamado» con su reclamo. Lanza ante error de base. */
+export async function ligarDecisionesAReclamo(tenantId: string, ids: readonly string[], reclamoId: string): Promise<void> {
+  for (const lote of lotes(ids)) {
+    const { error } = await acotada(supabaseAdmin().from('peaje_candidato_accion')
+      .update({ reclamo_id: reclamoId }).eq('tenant_id', tenantId).eq('accion', 'reclamado').in('id', lote), 'peajes.ligar_decisiones_reclamo');
+    if (error) throw new Error(`ligarDecisionesAReclamo: ${error.message}`);
+  }
+}
+
+/** Retira decisiones que esta misma llamada acababa de insertar (compensación si el reclamo no se pudo crear). */
+export async function retirarDecisionesCandidatos(tenantId: string, ids: readonly string[]): Promise<void> {
+  for (const lote of lotes(ids)) {
+    const { error } = await acotada(supabaseAdmin().from('peaje_candidato_accion')
+      .delete().eq('tenant_id', tenantId).in('id', lote), 'peajes.retirar_decisiones_candidatos');
+    if (error) throw new Error(`retirarDecisionesCandidatos: ${error.message}`);
+  }
+}
+
+/**
+ * Crea UN reclamo (preparado, o enviado si trae fecha de envío) a partir de un grupo de candidatos ya elegidos.
+ * Los números salen de los candidatos, no del formulario. `fechaCobroMasAntigua` es de donde corre el plazo.
+ */
+export async function crearReclamoDeCandidatos(
+  tenantId: string,
+  e: { desgloseId: string; proveedor: string | null; categoria: string; nCruces: number; monto: number; fechaCobroMasAntigua: string; enviadoEn: string | null; referenciaPortal?: string | null },
+): Promise<string> {
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_reclamo').insert({
+    tenant_id: tenantId, desglose_id: e.desgloseId, proveedor: e.proveedor, categoria: e.categoria,
+    estado: e.enviadoEn ? 'enviado' : 'preparado', n_cruces: e.nCruces, monto_reclamado: Math.round(e.monto * 100) / 100, monto_acreditado: 0,
+    fecha_cobro_mas_antiguo: e.fechaCobroMasAntigua, enviado_en: e.enviadoEn, referencia_portal: e.referenciaPortal?.trim().slice(0, 120) || null,
+  }).select('id').single(), 'peajes.crear_reclamo_candidatos');
+  if (error || !data) throw new Error(`crearReclamoDeCandidatos: ${error?.message ?? 'sin id'}`);
+  return String(data.id);
+}
+
+/** Justifica cruces de «caseta que no debe cruzarse» en lote (la misma tabla que `justificarCruce`, para que la regla los marque). */
+export async function guardarJustificacionesDeCruces(
+  tenantId: string, desgloseId: string, items: ReadonlyArray<{ indice: number; motivo: string }>,
+): Promise<void> {
+  for (let i = 0; i < items.length; i += LOTE_DECISIONES) {
+    const filas = items.slice(i, i + LOTE_DECISIONES).map((x) => ({
+      tenant_id: tenantId, desglose_id: desgloseId, indice: x.indice, categoria: 'caseta_no_debe_cruzarse', motivo: x.motivo,
+    }));
+    const { error } = await acotada(supabaseAdmin().from('peaje_cruce_justificado')
+      .upsert(filas, { onConflict: 'tenant_id,desglose_id,indice,categoria', ignoreDuplicates: true }), 'peajes.guardar_justificaciones_cruces');
+    if (error) throw new Error(`guardarJustificacionesDeCruces: ${error.message}`);
+  }
 }

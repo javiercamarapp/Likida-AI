@@ -15,6 +15,7 @@ import { DatoInvalido } from '../errores';
 import { anotarBitacora } from '../bitacora_escritura';
 import * as repo from './repo';
 import type { SalidaConfigFila } from './repo';
+import type { ContextoPlantilla } from './plantilla_tms';
 
 export type ConfigSalida = SalidaConfigFila;
 
@@ -91,4 +92,42 @@ export async function guardarConfigSalida(
     { evento: 'carta_porte_docs.bitacora_no_escribio' },
   );
   return nueva;
+}
+
+
+// ── Elección de plantilla (normal / nueva) ──────────────────────────────────
+// NUNCA se adivina por el contenido: el criterio real del cliente aún no existe (bloqueo B-2). Se usa lo configurado:
+// `plantillaPorDefecto` y, si la flota lo definió, un override por perfil de cliente en `cp_salida_config.layout.porPerfil`
+// ({ "<id de perfil>": "normal" | "nueva" }). `cp_perfil.firma` no cambia.
+
+export const AVISO_PLANTILLA_POR_CONFIG = 'Plantilla elegida por configuración, no por el contenido.';
+const AVISO_LAYOUT_INVALIDO = 'La configuración de plantillas por cliente no es válida: se usó la plantilla por defecto.';
+
+const esquemaLayoutSalida = z.looseObject({
+  porPerfil: z.record(z.string().max(128), z.enum(['normal', 'nueva'])).optional(),
+});
+
+export interface EleccionPlantilla { plantilla: 'normal' | 'nueva'; origen: 'perfil' | 'defecto'; avisos: string[] }
+
+/** Elige la plantilla con el override del perfil si existe; si no, la de la flota más el aviso de que no salió del contenido. */
+export function elegirPlantilla(config: Pick<ConfigSalida, 'plantillaPorDefecto'>, layoutConfig: unknown, perfilId: string | null): EleccionPlantilla {
+  const avisos: string[] = [];
+  if (layoutConfig !== null && layoutConfig !== undefined) {
+    const r = esquemaLayoutSalida.safeParse(layoutConfig);
+    if (!r.success) avisos.push(AVISO_LAYOUT_INVALIDO);
+    else if (perfilId && r.data.porPerfil && Object.hasOwn(r.data.porPerfil, perfilId)) {
+      return { plantilla: r.data.porPerfil[perfilId], origen: 'perfil', avisos };
+    }
+  }
+  avisos.push(AVISO_PLANTILLA_POR_CONFIG);
+  return { plantilla: config.plantillaPorDefecto, origen: 'defecto', avisos };
+}
+
+/** El contexto de `construirPlantilla` desde la configuración de la flota: plantilla elegida, formato de distancia y avisos. */
+export function contextoPlantillaDeConfig(
+  config: Pick<ConfigSalida, 'plantillaPorDefecto' | 'distanciaFormato'>, layoutConfig: unknown,
+  opciones: { perfilId?: string | null; clienteInterno?: string | null; uso?: 'descarga' | 'envio' } = {},
+): ContextoPlantilla {
+  const e = elegirPlantilla(config, layoutConfig, opciones.perfilId ?? null);
+  return { clienteInterno: opciones.clienteInterno ?? null, plantilla: e.plantilla, distanciaFormato: config.distanciaFormato, uso: opciones.uso, avisos: e.avisos };
 }

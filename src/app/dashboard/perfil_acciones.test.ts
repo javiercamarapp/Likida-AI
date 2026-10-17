@@ -38,6 +38,8 @@ const ARCHIVOS: Record<string, Clase> = {
   'agentes/peajes/configuracion/page.tsx': 'permitido',
   'agentes/peajes/page.tsx': 'permitido',
   'agentes/peajes/reclamacion/page.tsx': 'permitido',
+  // Helper de la tabla de candidatos: NO es un archivo de acciones (el comentario menciona 'use server'); gatea con la ruta de la reclamación.
+  'agentes/peajes/acciones-candidatos.ts': 'permitido',
   'agentes/vigia/historial/page.tsx': 'permitido',
   'agentes/vigia/page.tsx': 'permitido',
   // «Próximamente» (fase 1): permitidas en la lista del perfil, pero su puerta las manda al anuncio antes de tocar un dato.
@@ -47,6 +49,8 @@ const ARCHIVOS: Record<string, Clase> = {
   'agentes/conductores/configuracion/page.tsx': 'permitido',
   'agentes/conductores/page.tsx': 'permitido',
   'agentes/conductores/sitios/page.tsx': 'permitido',
+  'agentes/carta-porte/catalogo/actions.ts': 'permitido',  // importación CSV del catálogo por cliente (A3, T-A3-21)
+  'agentes/carta-porte/configuracion/actions.ts': 'permitido',  // configuración de la salida al TMS (A3, T-A3-32)
   'carta-porte/documentos/[id]/page.tsx': 'permitido',
   'carta-porte/documentos/page.tsx': 'permitido',
   'carta-porte/page.tsx': 'permitido',

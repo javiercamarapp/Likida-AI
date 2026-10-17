@@ -80,12 +80,113 @@ export interface ConfigConductor {
    * Ausente o null = desactivado (por omisión). Aún sin columna propia: se fija al armar la configuración hasta que exista.
    */
   umbralPendienteCruceH?: number | null;
+  /**
+   * T-A5-36: compuerta «unidad detenida». Encendida, NINGÚN mensaje proactivo al chofer sale si el GPS no confirma la unidad detenida
+   * (o dentro de un sitio del viaje). Apagada (por omisión, hasta la fase 2) = el comportamiento de siempre. Aún sin columna propia:
+   * se fija al armar la configuración hasta que exista; ausente = el valor de partida.
+   */
+  compuertaMovimientoActiva?: boolean;
+  /** T-A5-36: metros de desplazamiento dentro de `detenidaVentanaMin` a partir de los cuales la unidad «va en marcha» (SUPUESTO del cliente; D-6). */
+  detenidaMetros?: number;
+  /** T-A5-36: ventana (min) en que se mide el desplazamiento y se exigen ≥ 3 muestras para dar la unidad por detenida. */
+  detenidaVentanaMin?: number;
+  /** T-A5-36: sin GPS reciente, ¿se le puede escribir? Por omisión NO (falla cerrado). */
+  sinGpsPermite?: boolean;
+  /**
+   * T-A5-40: `exigir_sello_inicio`. Encendida, un «ya salí» (inicio de viaje) de un viaje de IMPORTACIÓN sin foto de sello reciente NO
+   * se registra: se le pide la foto primero. Apagada (por omisión) = el inicio se registra y solo se le RECOMIENDA la foto. En exportación
+   * nunca se exige (el sello previo es de importación). Aún sin columna propia: se fija al armar la configuración; ausente = apagada.
+   */
+  exigirSelloInicio?: boolean;
+  /**
+   * T-A5-44: preguntar al chofer en qué patio entrega (botones del catálogo + «otro») y avisar al supervisor si difiere del esperado.
+   * Apagado por omisión (hasta la fase 2). Aún sin columna propia: se fija al armar la configuración; ausente = apagado.
+   */
+  patioEntregaActivo?: boolean;
+  /** T-A5-44 (D-5, configuración y no decisión nuestra): qué campo manda como patio esperado. Por omisión «Entregar en». */
+  patioQueManda?: 'entregar_en' | 'destino';
+  /**
+   * T-A5-45 (R17): la estadía de DESCARGA se vuelve interactiva. Al rebasar `estadiaAlertaDescargaMin` (o el umbral del cliente) el agente
+   * le pregunta al chofer «¿ya inició la descarga?»: «no» o sin respuesta → aviso al supervisor; «sí» → espera el fin de descarga.
+   * Apagada (por omisión) = el aviso al patio de siempre, sin preguntar. Aún sin columna propia: se fija al armar la configuración.
+   */
+  estadiaDescargaInteractiva?: boolean;
+  /**
+   * T-A5-45 (audio, A6): el umbral de descarga es POR CLIENTE (id del cliente → minutos): 120 por omisión del piloto y, p. ej., 240 para un
+   * convenio de 4 h. Un cliente sin entrada usa `estadiaAlertaDescargaMin`. Vive en configuración (sin migración): nunca nombres reales aquí.
+   */
+  estadiaDescargaMinPorCliente?: Readonly<Record<string, number>>;
+  /** T-A5-45: minutos que se espera la respuesta del chofer antes de avisar al supervisor por falta de respuesta. */
+  estadiaDescargaSinRespuestaMin?: number;
+  /**
+   * T-A5-43 (R15/R16): al llegar con el cliente el agente pregunta «¿con quién te reportaste?» y, en importación, la rampa de descarga
+   * (sí / no / no aplica / en espera + número). Apagado por omisión (hasta la fase 2); aún sin columna propia: se fija al armar la
+   * configuración, como `patioEntregaActivo`. Pasa por la compuerta de unidad detenida (T-A5-36).
+   */
+  reporteLlegadaActivo?: boolean;
+  /**
+   * T-A5-67: muestra en el panel del Conductor la constancia de reportes por operador y periodo (hitos reportados frente a esperados, con su
+   * CSV para monitoreo y RH). Solo lectura: no envía nada ni calcula ningún pago. Apagado por omisión hasta la decisión D-2 (macros) y la de
+   * RH; aún sin columna propia: se fija al armar la configuración, como `reporteLlegadaActivo`.
+   */
+  constanciaReportesActiva?: boolean;
+  /**
+   * T-A5-46 (R19): al terminar la descarga el agente pregunta «completa / no me recibieron / regreso con la caja cargada»; las dos últimas
+   * avisan al supervisor y marcan el regreso con la bandera `caja_cargada`. Apagado por omisión (hasta la fase 2); aún sin columna propia.
+   */
+  resultadoDescargaActivo?: boolean;
+  /**
+   * T-A5-47 (R02/R03/R05): la asignación del viaje sale con la plantilla N01 y botones «Acepto el viaje» / «No puedo tomarlo» (en lugar de
+   * `viaje_asignado` sin botones), y al aceptar el chofer recibe sus instrucciones completas. Apagado por omisión (hasta la fase 2); aún sin
+   * columna propia: se fija al armar la configuración, como `patioEntregaActivo`.
+   */
+  asignacionBotonesActiva?: boolean;
+  /**
+   * T-A5-51 (R07): al aceptar el viaje se le pregunta al chofer (plantilla N03, dos botones) si requiere gastos de viaje / ETC para generar su vale.
+   * Apagado por omisión (hasta la fase 2); sin columna propia, como `asignacionBotonesActiva`. No pide montos ni emite nada.
+   */
+  gastosEtcActiva?: boolean;
+  /**
+   * T-A5-37: minutos con la unidad detenida a partir de los cuales una detención sin aviso es ELEGIBLE para preguntarle al chofer
+   * (T-A5-39). Es distinto de `detenidoMin` (la señal de vida, 60). SUPUESTO del cliente; lo fija monitoreo (D-6, B-10). 5–720.
+   */
+  detenidoAvisoMin?: number;
+  /**
+   * T-A5-37: cadencia (min) con que RECIBIMOS posiciones de la flota (≈ 2 con la plataforma rápida, ≈ 15 con la lenta, aunque esta
+   * registre cada minuto). Con ella la compuerta y la detección piden menos muestras pero un lapso mayor. Ausente = la regla de
+   * T-A5-36 sin cambios (3 muestras en `detenidaVentanaMin`). 1–60.
+   */
+  poleoMin?: number;
+  /** T-A5-37: cadencia por proveedor (o unidad), que manda sobre `poleoMin`. Las claves las pone quien configura; los valores, 1–60. */
+  poleoPorClaveMin?: Record<string, number>;
+  /**
+   * T-A5-39 (R10): si la unidad lleva detenida `detenidoAvisoMin` sin parada registrada, el agente le hace UNA pregunta por episodio
+   * («¿todo bien?», plantilla N05) y atiende la parada que inicia el chofer (T-A5-38: «parada», motivo, «ya continúo»). Apagado por
+   * omisión (hasta la fase 2); aún sin columna propia: se fija al armar la configuración, como `reporteLlegadaActivo`. Pasa por la
+   * compuerta de unidad detenida (T-A5-36).
+   */
+  deteccionParadaActiva?: boolean;
+  /**
+   * T-A5-39: minutos tras la pregunta de detención sin que el chofer conteste a partir de los cuales se avisa al supervisor. Ausente =
+   * apagada (por omisión): sin respuesta NO se escala por sí sola. 5–720.
+   */
+  detencionEscalaSinRespuestaMin?: number;
+  /**
+   * T-A5-64: marca de COHORTE del piloto. `sin_tableta_ni_macros` = voluntarios de las unidades que ya no traen tableta (WhatsApp es su
+   * único canal); `voluntarios_abiertos` = voluntarios de cualquier unidad. Ausente/null = SIN COHORTE DEFINIDA: el preflight no deja
+   * encender nada (`cohorte`). Aún sin columna propia: se fija al armar la configuración, como las demás perillas de la fase 2.
+   * El criterio de selección y las preguntas al cliente viven en `docs/operacion/cohorte-piloto.md` (nunca nombres ni cifras reales).
+   */
+  cohortePiloto?: CohortePiloto | null;
   /** 0801: aplicar la salida que reporta el TMS como hito del viaje. */
   aplicarSalidaDelTms: boolean;
   /** 0801: llamadas de seguimiento por viaje medidas antes del agente (null = sin registrar) y la fecha (AAAA-MM-DD) en que se midió. */
   lineaBaseLlamadasPorViaje: number | null;
   lineaBaseRegistradaEn: string | null;
 }
+
+export const COHORTES_PILOTO = ['sin_tableta_ni_macros', 'voluntarios_abiertos'] as const;
+export type CohortePiloto = typeof COHORTES_PILOTO[number];
 
 export const PERFILES_SEGUIMIENTO = ['esenciales', 'completo'] as const;
 export type PerfilSeguimiento = typeof PERFILES_SEGUIMIENTO[number];
@@ -132,6 +233,23 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   silencioRespuestaMin: 120,
   mostrarEstadosFrontera: false,
   aplicarSalidaDelTms: false,
+  compuertaMovimientoActiva: false,
+  detenidaMetros: 150,
+  detenidaVentanaMin: 5,
+  sinGpsPermite: false,
+  exigirSelloInicio: false,
+  patioEntregaActivo: false,
+  patioQueManda: 'entregar_en',
+  estadiaDescargaInteractiva: false,
+  estadiaDescargaMinPorCliente: Object.freeze({}),
+  estadiaDescargaSinRespuestaMin: 30,
+  reporteLlegadaActivo: false,
+  constanciaReportesActiva: false,
+  resultadoDescargaActivo: false,
+  asignacionBotonesActiva: false,
+  gastosEtcActiva: false,
+  detenidoAvisoMin: 15,
+  deteccionParadaActiva: false,
   lineaBaseLlamadasPorViaje: null,
   lineaBaseRegistradaEn: null,
 });
@@ -235,6 +353,60 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
     if (v === null) return { error: msg };
     umbral[campo] = v;
   }
+  // T-A5-36: la compuerta de movimiento. Un valor fuera de rango se RECHAZA (no se corrige en silencio: es lo que decide si se le escribe a un chofer en marcha).
+  const detenidaMetros = entero(b.detenidaMetros ?? CONFIG_CONDUCTOR_DEFAULT.detenidaMetros, 10, 5000);
+  if (detenidaMetros === null) return { error: 'Los metros para dar la unidad por en marcha van de 10 a 5,000.' };
+  const detenidaVentanaMin = entero(b.detenidaVentanaMin ?? CONFIG_CONDUCTOR_DEFAULT.detenidaVentanaMin, 1, 60);
+  if (detenidaVentanaMin === null) return { error: 'La ventana para dar la unidad por detenida va de 1 a 60 minutos.' };
+  // T-A5-45: umbral de descarga por cliente y espera de la respuesta del chofer. Fuera de rango se RECHAZA (no se corrige en silencio).
+  const estadiaDescargaSinRespuestaMin = entero(b.estadiaDescargaSinRespuestaMin ?? CONFIG_CONDUCTOR_DEFAULT.estadiaDescargaSinRespuestaMin, 5, 720);
+  if (estadiaDescargaSinRespuestaMin === null) return { error: 'Los minutos de espera de la respuesta del chofer en la descarga van de 5 a 720.' };
+  const estadiaDescargaMinPorCliente: Record<string, number> = {};
+  const crudoPorCliente = b.estadiaDescargaMinPorCliente ?? {};
+  if (typeof crudoPorCliente !== 'object' || crudoPorCliente === null || Array.isArray(crudoPorCliente)) {
+    return { error: 'Los umbrales de descarga por cliente van como una lista de cliente y minutos.' };
+  }
+  for (const [cliente, minutos] of Object.entries(crudoPorCliente)) {
+    const n = entero(minutos, 15, 4320);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cliente) || n === null) {
+      return { error: 'El umbral de descarga de un cliente va de 15 a 4,320 minutos y se liga al id del cliente.' };
+    }
+    estadiaDescargaMinPorCliente[cliente.toLowerCase()] = n;
+  }
+  // T-A5-37: umbral corto de detención y cadencia de poleo. Fuera de rango se RECHAZA (no se corrige en silencio).
+  const detenidoAvisoMin = entero(b.detenidoAvisoMin ?? CONFIG_CONDUCTOR_DEFAULT.detenidoAvisoMin, 5, 720);
+  if (detenidoAvisoMin === null) return { error: 'Los minutos para preguntar por una detención sin aviso van de 5 a 720.' };
+  let poleoMin: number | undefined;
+  if (b.poleoMin !== undefined && b.poleoMin !== null) {
+    const n = entero(b.poleoMin, 1, 60);
+    if (n === null) return { error: 'La cadencia con que llegan las posiciones va de 1 a 60 minutos.' };
+    poleoMin = n;
+  }
+  let poleoPorClaveMin: Record<string, number> | undefined;
+  if (b.poleoPorClaveMin !== undefined && b.poleoPorClaveMin !== null) {
+    if (typeof b.poleoPorClaveMin !== 'object' || Array.isArray(b.poleoPorClaveMin)) return { error: 'La cadencia por proveedor es una lista de «proveedor: minutos».' };
+    poleoPorClaveMin = {};
+    for (const [clave, v] of Object.entries(b.poleoPorClaveMin)) {
+      const n = entero(v, 1, 60);
+      if (clave.trim() === '' || n === null) return { error: 'La cadencia de cada proveedor va de 1 a 60 minutos.' };
+      poleoPorClaveMin[clave.trim()] = n;
+    }
+  }
+  // T-A5-39: escalar a un supervisor la pregunta sin respuesta es opcional; ausente/null = apagada. Fuera de rango se RECHAZA.
+  let detencionEscalaSinRespuestaMin: number | undefined;
+  if (b.detencionEscalaSinRespuestaMin !== undefined && b.detencionEscalaSinRespuestaMin !== null) {
+    const n = entero(b.detencionEscalaSinRespuestaMin, 5, 720);
+    if (n === null) return { error: 'Los minutos para avisar al supervisor de una detención sin respuesta van de 5 a 720.' };
+    detencionEscalaSinRespuestaMin = n;
+  }
+  // T-A5-64: la cohorte del piloto. null/ausente = sin definir; un valor fuera del catálogo se RECHAZA (no se corrige en silencio).
+  let cohortePiloto: CohortePiloto | undefined;
+  if (b.cohortePiloto !== undefined && b.cohortePiloto !== null) {
+    if (!(COHORTES_PILOTO as readonly unknown[]).includes(b.cohortePiloto)) {
+      return { error: 'La cohorte del piloto es «sin_tableta_ni_macros» o «voluntarios_abiertos» (o vacía si aún no se define).' };
+    }
+    cohortePiloto = b.cohortePiloto;
+  }
   let lineaBaseLlamadasPorViaje: number | null = null;
   if (b.lineaBaseLlamadasPorViaje !== null && b.lineaBaseLlamadasPorViaje !== undefined) {
     const n = typeof b.lineaBaseLlamadasPorViaje === 'string' && (b.lineaBaseLlamadasPorViaje as string).trim() !== '' ? Number(b.lineaBaseLlamadasPorViaje) : b.lineaBaseLlamadasPorViaje;
@@ -293,6 +465,27 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       silencioRespuestaMin: umbral.silencioRespuestaMin,
       mostrarEstadosFrontera: Boolean(b.mostrarEstadosFrontera),
       aplicarSalidaDelTms: Boolean(b.aplicarSalidaDelTms),
+      compuertaMovimientoActiva: b.compuertaMovimientoActiva === true,
+      detenidaMetros,
+      detenidaVentanaMin,
+      sinGpsPermite: b.sinGpsPermite === true,
+      exigirSelloInicio: b.exigirSelloInicio === true,
+      patioEntregaActivo: b.patioEntregaActivo === true,
+      patioQueManda: b.patioQueManda === 'destino' ? 'destino' : 'entregar_en',
+      estadiaDescargaInteractiva: b.estadiaDescargaInteractiva === true,
+      estadiaDescargaMinPorCliente,
+      estadiaDescargaSinRespuestaMin,
+      reporteLlegadaActivo: b.reporteLlegadaActivo === true,
+      constanciaReportesActiva: b.constanciaReportesActiva === true,
+      resultadoDescargaActivo: b.resultadoDescargaActivo === true,
+      asignacionBotonesActiva: b.asignacionBotonesActiva === true,
+      gastosEtcActiva: b.gastosEtcActiva === true,
+      detenidoAvisoMin,
+      ...(poleoMin !== undefined ? { poleoMin } : {}),
+      ...(poleoPorClaveMin !== undefined ? { poleoPorClaveMin } : {}),
+      deteccionParadaActiva: b.deteccionParadaActiva === true,
+      ...(detencionEscalaSinRespuestaMin !== undefined ? { detencionEscalaSinRespuestaMin } : {}),
+      ...(cohortePiloto !== undefined ? { cohortePiloto } : {}),
       lineaBaseLlamadasPorViaje,
       lineaBaseRegistradaEn,
     },

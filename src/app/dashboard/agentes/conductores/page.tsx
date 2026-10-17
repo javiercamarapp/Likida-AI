@@ -20,14 +20,18 @@ import { revalidatePath } from 'next/cache';
 import { FormaEstrategiaConductores, type ResultadoEstrategia } from '../estrategia-forma';
 import { Bloque, EsqTabla, vigilar } from '../../bloque';
 import { calcularInsights } from '@/lib/likida/conductor/insights';
-import { leerConfigConductor, leerEntradaInsights, leerDatosPreflight, leerEpisodiosParaTablero, leerSalidasTms, leerTransitoViajes } from '@/lib/likida/conductor/repo';
+import { mapaReubicaciones } from '@/lib/likida/conductor/reporte_llegada';
+import { csvReubicaciones, reubicacionesPorCliente, reubicacionesPorViaje } from '@/lib/likida/conductor/reubicaciones';
+import { leerConfigConductor, leerDatosConstancia, leerEventosReporte, leerEntradaInsights, leerDatosPreflight, leerEpisodiosParaTablero, leerRutasAutorizadas, leerSalidasTms, leerTransitoViajes, leerViajesConCartaPorte } from '@/lib/likida/conductor/repo';
 import { evaluarPreflight } from '@/lib/likida/conductor/preflight_piloto';
 import { BannerPreflight } from './configuracion/preflight';
 import { leerCatalogosFiltro, leerDatosTablero, leerIndicadores, listarSitios, type FiltrosTablero } from '@/lib/likida/conductor/repo_validacion';
 import { asignarSitiosDelPanel } from '@/lib/likida/conductor/acciones_sitios';
-import { armarTablero, episodiosVista, filtrarPorSemaforo, indicadoresVista, type EpisodioVista, type Semaforo } from '@/lib/likida/conductor/tablero';
+import { armarTablero, conReporteDeLlegada, episodiosVista, filtrarPorSemaforo, indicadoresVista, type EpisodioVista, type Semaforo } from '@/lib/likida/conductor/tablero';
 import { ejecutarAccionOficina, leerAccion } from '@/lib/likida/conductor/acciones_oficina';
 import { emailDeUsuario } from '@/lib/likida/conductor/trabajo';
+import { armarConstancia } from '@/lib/likida/conductor/constancia';
+import { ConstanciaReportes } from './constancia-vista';
 import { TableroHitos, ORDEN_SEMAFORO, type FiltrosVista } from './tablero-hitos';
 import type { ResultadoOficina } from './acciones-forma';
 
@@ -172,10 +176,33 @@ export default async function PaginaAgenteConductores({
   const pTablero = vigilar(Promise.all([leerDatosTablero(tenantId, filtrosRepo), leerConfigConductor(tenantId)])
     .then(async ([datos, config]) => {
       // T-A5-21: los estados de frontera solo se leen con la casilla encendida (informativos; no avisan a nadie).
-      if (config.mostrarEstadosFrontera) datos.transito = await leerTransitoViajes(tenantId, datos.viajes.map((v) => v.id));
+      if (config.mostrarEstadosFrontera) {
+        datos.transito = await leerTransitoViajes(tenantId, datos.viajes.map((v) => v.id));
+        // T-A5-57: «local abierto sin Carta Porte» necesita saber qué viajes ya tienen complemento; si no se lee, no se afirma.
+        datos.ccpLigado = await leerViajesConCartaPorte(tenantId, datos.viajes.map((v) => v.id));
+      }
       // T-A5-22: la «Fecha Salida» del TMS se muestra como candidato aunque la casilla esté apagada; si no se puede leer, no se afirma nada.
       datos.salidasTms = await leerSalidasTms(tenantId, datos.viajes.map((v) => v.id));
-      return filtrarPorSemaforo(armarTablero(datos, config, new Date()), filtrosVista.semaforo || null);
+      // T-A5-49: las rutas autorizadas, para mostrar el viaje que quedó sin ruta; si no se pueden leer no se afirma nada.
+      datos.rutasAutorizadas = await leerRutasAutorizadas(tenantId).catch(() => undefined);
+      const tablero = armarTablero(datos, config, new Date());
+      // T-A5-43: «con quién te reportaste» y la rampa de cada llegada, con su lista de reubicaciones. Solo con la perilla encendida; si la
+      // bitácora no se puede leer el tablero sale sin ella (no se afirma lo que no se leyó).
+      if (config.reporteLlegadaActivo === true) {
+        try {
+          const eventosReporte = await leerEventosReporte(tenantId, datos.viajes.map((v) => v.id));
+          tablero.filas = conReporteDeLlegada(tablero.filas, mapaReubicaciones(eventosReporte, datos.hitos));
+          // T-A5-63: el mismo conjunto de eventos, agrupado por cliente y listo para exportar (solo cálculo; no escribe nada).
+          const nombres = new Map(datos.viajes.flatMap((v) => (v.clienteId && v.clienteNombre ? [[v.clienteId, v.clienteNombre] as [string, string]] : [])));
+          tablero.reubicaciones = {
+            porCliente: reubicacionesPorCliente(tenantId, datos.viajes, datos.hitos, eventosReporte, nombres),
+            csv: csvReubicaciones(reubicacionesPorViaje(tenantId, datos.viajes, datos.hitos, eventosReporte)),
+          };
+        } catch (e) {
+          logger.warn('conductor.tablero_reporte_llegada_fallo', { err: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      return filtrarPorSemaforo(tablero, filtrosVista.semaforo || null);
     }));
   const pIndicadores = safe(async () => {
     const hasta = new Date();
@@ -195,6 +222,15 @@ export default async function PaginaAgenteConductores({
       }),
     };
   });
+  // T-A5-67: la constancia de reportes por operador del periodo (hitos reportados frente a esperados, con su CSV). Solo con la perilla
+  // encendida (apagada de origen hasta D-2); `undefined` = apagada (no se pinta nada); un fallo de lectura lo dice la sección.
+  const pConstancia = vigilar(leerConfigConductor(tenantId).then(async (config) => {
+    if (config.constanciaReportesActiva !== true) return undefined;
+    const hasta = new Date(ahoraMs());
+    const desde = new Date(hasta.getTime() - filtrosVista.dias * 86_400_000);
+    const d = await leerDatosConstancia(tenantId, desde, hasta);
+    return { constancia: armarConstancia({ tenantId, periodo: { desde: desde.toISOString(), hasta: hasta.toISOString() }, viajes: d.viajes, hitos: d.hitos }), hayMas: d.hayMas };
+  }));
   const pCatalogos = safe(() => leerCatalogosFiltro(tenantId));
   // Los episodios de «sin señal de vida» del mismo periodo y con los mismos filtros. `null` = no se pudo leer; `{ episodios: [] }` = ninguno.
   const pEpisodios = safe(async () => {
@@ -261,6 +297,9 @@ export default async function PaginaAgenteConductores({
           <Bloque mensaje="No se pudieron leer los insights." esqueleto={null}>
             <BloqueInsights pInsights={pInsights} pIndicadores={pIndicadores} dias={filtrosVista.dias} />
           </Bloque>
+          <Bloque mensaje="No se pudo leer la constancia de reportes." esqueleto={null}>
+            <BloqueConstancia pConstancia={pConstancia} dias={filtrosVista.dias} />
+          </Bloque>
           <Bloque mensaje="No se pudo leer el tablero de hitos." esqueleto={<EsqTabla filas={6} />}>
             <BloqueTableroHitos
               pTablero={pTablero} pIndicadores={pIndicadores} pCatalogos={pCatalogos} pSitios={pSitios} pEpisodios={pEpisodios} filtros={filtrosVista} ocultos={ocultos}
@@ -307,6 +346,15 @@ async function BloqueInsights({ pInsights, pIndicadores, dias }: {
 }) {
   const [r, ind] = await Promise.all([pInsights, pIndicadores]);
   return <TarjetaInsights insights={r?.insights ?? null} dias={dias} discrepancias={ind?.sinCoincidencia ?? null} recortada={r?.recortada ?? false} />;
+}
+
+async function BloqueConstancia({ pConstancia, dias }: {
+  pConstancia: Promise<{ constancia: ReturnType<typeof armarConstancia>; hayMas: boolean } | undefined>;
+  dias: number;
+}) {
+  const r = await pConstancia;
+  if (r === undefined) return null;
+  return <ConstanciaReportes constancia={r.constancia} dias={dias} hayMas={r.hayMas} />;
 }
 
 async function BloqueTableroHitos({ pTablero, pIndicadores, pCatalogos, pSitios, pEpisodios, filtros, ocultos, accionUrl, puedeActuar, accion, accionSitios }: {

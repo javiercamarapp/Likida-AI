@@ -336,7 +336,7 @@ describe('AGEN-1 — un guardar_liquidacion que reporta fallo sin tumbar el cicl
     expect(logger.error).toHaveBeenCalledWith('agent.cierre_commiteado_tras_fallo_tool', expect.objectContaining({ viaje: 'v1', liquidacion: 'L1' }));
     expect(logger.error).not.toHaveBeenCalledWith('pdf.contralor_no_generado', expect.anything());
     // La conversación se desancla del viaje cerrado (igual que en el camino feliz).
-    expect(saveConversation).toHaveBeenCalledWith('c1', expect.anything(), null, expect.anything());
+    expect(saveConversation).toHaveBeenCalledWith('t1', 'c1', expect.anything(), null, expect.anything());
   });
 
   it('si la base dice que NO hay liquidación, se le dice que el viaje sigue abierto y no se inventa un cierre', async () => {
@@ -427,7 +427,7 @@ describe('recierre rechazado: la fila histórica no confirma un cierre nuevo', (
     expect(documentos()).toHaveLength(0);
     expect(createSignedUrl).not.toHaveBeenCalled();
     expect(avisarCierreAlJefe).not.toHaveBeenCalled();
-    expect(saveConversation).toHaveBeenCalledWith('c1', expect.anything(), 'v1', expect.anything());
+    expect(saveConversation).toHaveBeenCalledWith('t1', 'c1', expect.anything(), 'v1', expect.anything());
     expect(consultasCierre).toEqual([{ campos: 'id,pdf_url,revision,viaje:viaje_id(estatus)', filtros: [['tenant_id', 't1'], ['viaje_id', 'v1']] }]);
   });
 

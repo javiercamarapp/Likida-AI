@@ -429,12 +429,15 @@ export function veredictoDe(r: Pick<ResultadoPrueba, 'ok' | 'sobreLaCredencial'>
  * documentado) y la salida de la póliza al ARCHIVO. Ningún módulo lee el catálogo de cuentas ni los
  * proveedores del ERP, ni escribe un asiento o una factura de proveedor en él.
  *
+ * `leer_viajes` salió de la lista el 15-oct-2026 (T-TMS-12): `conectores/tms/sincronizar.ts` la ejecuta, SOLO para
+ * `tms_api_lectura` (login → token → lectura paginada, solo lectura). Los demás conectores que la declaran
+ * (`tms_generico`) siguen sin ejecutor propio: su camino es el archivo.
+ *
  * `capacidades_con_ejecutor.test.ts` vigila las dos direcciones: si alguien construye un ejecutor y no
  * saca la capacidad de aquí, la prueba falla; si alguien declara una capacidad de ESCRITURA nueva sin
  * ejecutor y sin listarla aquí, también. Es la prueba de contrato que el hallazgo pedía.
  */
 export const CAPACIDADES_SIN_EJECUTOR: readonly Capacidad[] = [
-  'leer_viajes',
   'leer_catalogo_cuentas',
   'leer_proveedores',
   'escribir_asiento',

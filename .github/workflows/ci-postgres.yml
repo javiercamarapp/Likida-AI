@@ -223,9 +223,13 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0564_liquidacion_formato_flota.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0775_peajes_revision_cobros.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0778_peaje_excepcion_unidad.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0812_peaje_tag_tipo_unidad.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0813_peaje_unidad_inmovilizada.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0785_liquidacion_correo_destinatarios.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0786_liquidacion_desglose_meta.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0787_liquidacion_entrega_correo.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0814_peaje_cruce_viaje.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0815_peaje_candidato_accion.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0500_gps_backoff.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0501_gps_push_huerfanos.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0502_jornada_alerta_tope.sql
@@ -275,13 +279,21 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0802_despacho_ref.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0803_sitio_equivalencia.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0804_viaje_transito.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0806_viaje_parada.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0807_ciclo_por_servicio.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0808_ruta_autorizada.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0809_catalogo_documentos_cliente.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0820_evento_geocerca_huerfano.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0801_conductor_sembrar_por_perfil.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0780_tms_aislamiento.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0788_liquidacion_correo_retencion.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0789_liquidacion_desglose_numeros.sql
           PGUSER=postgres bash supabase/tests/0790_cp_envio_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0790_cp_envio_tms.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0791_cp_formato_json_y_causa_rechazo.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0792_cp_catalogo_cliente.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0830_cp_distancias.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0832_cp_referencia_cliente.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0795_programa_despacho.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0796_vigia_datos_viaje.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0797_vigia_aviso.sql
@@ -305,11 +317,18 @@ jobs:
           PGUSER=postgres bash supabase/tests/0693_vigia_respuesta_rapida_tope_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0700_latencia_observabilidad.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0701_estado_publico.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0805_insight_linea_base.sql
           PGUSER=postgres bash supabase/tests/0674_vigia_correo_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0684_carga_250_camiones.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0688_gastos_fiscales_sin_ventanas_encadenadas.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0689_vigia_purgar_por_lotes.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0690_agregados_resumen_por_grupo.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0770_tenant_perfil.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0776_peaje_reglas_cobro_config.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0777_peaje_reclamo_seguimiento.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0779_peaje_atipicos.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0809_aislamiento_tablas_cinco_agentes.sql
+          PGUSER=postgres bash supabase/tests/0809_migraciones_reaplicables.sh localhost 5432 postgres
           PGUSER=postgres bash supabase/tests/0380_conductor_claim_concurrencia.sh localhost 5432 postgres
 
       # ── Capa 0: contratos de leases/fencing en Postgres real ───────────

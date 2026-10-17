@@ -230,6 +230,25 @@ describe('Conductores — tarjeta de insights (T-A5-32)', () => {
     expect(html).toContain('18 de 20 hitos');
   });
 
+  it('KPIs del piloto (T-A5-61): los 6 salen en la tarjeta; sin línea base dicen «sin dato», sin porcentaje inventado', () => {
+    const html = pintarI(entradaI({ lineaBase: null }));
+    expect(html).toContain('aria-label="KPIs del piloto"');
+    for (const n of ['Hitos sin intervención', 'Minutos del GPS al registro', 'Viajes completos', 'Mensajes del supervisor evitados',
+      'Tiempo de salida de terminal al primer cliente', 'Reubicaciones por cliente']) expect(html).toContain(n);
+    // KPI 1 sí tiene valor medido (90 % = 18 de 20) pero NO base: la comparación dice «sin dato».
+    expect(html).toContain('90 %');
+    expect(html).toContain('sin dato');
+    expect(html).not.toContain('mejora');
+    expect(html).toContain('KPIs de referencia sin línea base declarada no muestran valor');
+  });
+
+  it('KPIs del piloto: con línea base declarada, muestra la base y la mejora', () => {
+    const html = pintarI(entradaI({ piloto: { lineaBase: { hitosSinIntervencionPct: 50, minutosGpsRegistro: 20 } } }));
+    expect(html).toContain('base 50 %');
+    expect(html).toContain('base 20 min');
+    expect(html).toContain('mejora');
+  });
+
   it('lectura caída: lo dice, no pinta ceros', () => {
     const html = renderToStaticMarkup(<TarjetaInsights insights={null} dias={7} />);
     expect(html).toContain('No se pudieron leer los insights');

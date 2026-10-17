@@ -5,7 +5,7 @@
 // por qué. NO escribe en ninguna base y no toca la red.
 //
 //   node scripts/demo/cinco-agentes/validar-archivo.mjs <tipo> <ruta>
-//   tipos: gps_posiciones | geocercas | pases | tags | casetas | liquidaciones | convenios | whatsapp | carta_porte
+//   tipos: gps_posiciones | geocercas | pases | tags | casetas | liquidaciones | convenios | whatsapp | carta_porte | programa_despacho
 //
 // TODO se valida con el importador REAL del producto, no con una copia: posiciones y geocercas con el lector de tabla
 // propia (conectores/tabla_propia), pases/TAG/casetas con los lectores de peajes, liquidaciones con su esquema, convenios
@@ -24,6 +24,9 @@ import { matrizDeArchivoCatalogo } from '../peajes/archivo';
 import { parsearCasetasMatriz } from '../peajes/casetas';
 import { interpretarDesglose } from '../peajes/desglose';
 import { parsearTagsMatriz } from '../peajes/tags';
+import { evaluarListo } from '../vigia/aviso/listo';
+import { ErrorLectorPrograma, leerProgramaCsv } from '../vigia/programa/lector';
+import { normalizarPrograma } from '../vigia/programa/normalizar';
 import { leerExportWhatsapp } from '../vigia/historial/export_whatsapp';
 import { esZip, textoDeZip } from '../vigia/historial/zip_lector';
 import { TIPOS_ARCHIVO_KIT, type TipoArchivoKit } from './contratos';
@@ -205,6 +208,24 @@ function validarCartaPorte(nombre: string, bytes: Uint8Array): ResultadoValidaci
   return res('carta_porte', [], [`formato .${ext || '?'} no soportado (PDF, Excel, CSV, XML, imagen)`]);
 }
 
+// ── programa_despacho (el lector y el normalizador del Vigía: vigia/programa) ───────────────────────────
+function validarPrograma(texto: string): ResultadoValidacion {
+  let lectura: ReturnType<typeof leerProgramaCsv>;
+  try { lectura = leerProgramaCsv(texto, { terminal: 'GDL' }); } catch (e) {
+    if (e instanceof ErrorLectorPrograma) return res('programa_despacho', [], [e.message]);
+    throw e;
+  }
+  const n = normalizarPrograma(lectura);
+  const listos = n.filas.filter((f) => evaluarListo(f).listo).length;
+  const resumen = [
+    `${lectura.resumen.filasLeidas} filas de datos en ${lectura.secciones.length} sección(es); ${n.calidad.validas} válidas`,
+    `con la regla provisional (proxy): ${listos} listas para avisar, ${n.calidad.validas - listos} no (les falta caja, unidad o CCP en listo/despachado)`,
+  ];
+  const avisos = lectura.avisos.map((a) => (a.lineaCsv === null ? a.mensaje : `línea ${a.lineaCsv}: ${a.mensaje}`));
+  if (n.calidad.descartadas.length) avisos.push(`${n.calidad.descartadas.length} fila(s) sin caja, unidad ni cliente: se descartan`);
+  return res('programa_despacho', resumen, [], avisos);
+}
+
 // ── entrada única ───────────────────────────────────────────────────────────
 export function validarArchivo(tipo: string, nombre: string, bytes: Uint8Array): ResultadoValidacion {
   if (!(TIPOS_ARCHIVO_KIT as readonly string[]).includes(tipo)) {
@@ -220,5 +241,6 @@ export function validarArchivo(tipo: string, nombre: string, bytes: Uint8Array):
     case 'convenios': return validarConvenios(decodificar(bytes));
     case 'whatsapp': return validarWhatsapp(nombre, bytes);
     case 'carta_porte': return validarCartaPorte(nombre, bytes);
+    case 'programa_despacho': return validarPrograma(decodificar(bytes));
   }
 }

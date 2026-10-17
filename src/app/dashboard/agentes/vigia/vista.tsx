@@ -95,8 +95,10 @@ export const TEXTO_ESTADO_CORREO: Record<string, string> = {
   red: 'No se pudo mandar por correo: falla de red o sin confirmar',
 };
 
-export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministrar, acciones, sufijo = '', avisosPendientes }: {
+export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministrar, acciones, sufijo = '', avisosPendientes, standby = false }: {
   datos: Promise<DatosTablero>;
+  /** T-A4-32: perfil cinco_agentes → se ocultan los controles stand-by (autoenvío, POD adjunto). Sin perfil: idéntico a hoy. */
+  standby?: boolean;
   sufijo?: string;
   /** T-A4-22: cuántos avisos de viaje esperan a una persona (`null` = no se pudo contar). Opcional: sin él el enlace va sin número. */
   avisosPendientes?: Promise<number | null>;
@@ -128,7 +130,7 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
           </Bloque>
 
           <Bloque mensaje="No se pudo leer la cola de aprobación." esqueleto={<EsqTabla filas={3} />}>
-            <BloqueAprobacion datos={datos} puedeDecidir={puedeDecidir} acciones={acciones} />
+            <BloqueAprobacion datos={datos} puedeDecidir={puedeDecidir} acciones={acciones} standby={standby} />
           </Bloque>
 
           <Bloque mensaje="No se pudieron leer las excepciones." esqueleto={<EsqTabla filas={3} />}>
@@ -141,7 +143,7 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
 
           <div className="grid lg:grid-cols-2 gap-4">
             <Bloque mensaje="No se pudo leer la configuración." esqueleto={<EsqTabla filas={4} />}>
-              <BloqueConfiguracion datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
+              <BloqueConfiguracion datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} standby={standby} />
             </Bloque>
             <Bloque mensaje="No se pudo leer la bitácora." esqueleto={<EsqTabla filas={4} />}>
               <BloqueBitacora datos={datos} />
@@ -249,7 +251,7 @@ export async function BloqueEstadoYKpis({ datos: p, ahoraMs }: { datos: Promise<
   );
 }
 
-export async function BloqueAprobacion({ datos: p, puedeDecidir, acciones }: { datos: Promise<DatosTablero>; puedeDecidir: boolean; acciones: AccionesVigia }) {
+export async function BloqueAprobacion({ datos: p, puedeDecidir, acciones, standby = false }: { datos: Promise<DatosTablero>; puedeDecidir: boolean; acciones: AccionesVigia; standby?: boolean }) {
   const d = await p;
   return (
     <section className="card p-4" aria-labelledby="h-aprob">
@@ -272,7 +274,7 @@ export async function BloqueAprobacion({ datos: p, puedeDecidir, acciones }: { d
                 {m.riesgo && <Chip tono={m.riesgo === 'alto' ? 'bad' : m.riesgo === 'medio' ? 'warn' : 'ok'}>Riesgo {m.riesgo}</Chip>}
                 {m.senales.includes('inyeccion') && <Chip tono="bad">Mensaje con instrucciones raras</Chip>}
                 {m.senales.includes('folio_ajeno') && <Chip tono="warn">Preguntó por un folio que no es suyo</Chip>}
-                {m.adjuntos.length > 0 && <Chip>Adjuntará: {m.adjuntos.join(', ')}</Chip>}
+                {!standby && m.adjuntos.length > 0 && <Chip>Adjuntará: {m.adjuntos.join(', ')}</Chip>}
                 <span className="ml-auto text-[11px]" style={{ color: 'var(--faint)' }}>{fechaHoraMx(m.creadoEn)}</span>
               </div>
               <blockquote className="text-[12.5px] pl-3 border-l-2" style={{ borderColor: 'var(--line2)', color: 'var(--muted)' }}>
@@ -386,7 +388,7 @@ export async function BloqueConversaciones({ datos: p, ahoraMs, puedeDecidir, ac
   );
 }
 
-export async function BloqueConfiguracion({ datos: p, puedeAdministrar, acciones }: { datos: Promise<DatosTablero>; puedeAdministrar: boolean; acciones: AccionesVigia }) {
+export async function BloqueConfiguracion({ datos: p, puedeAdministrar, acciones, standby = false }: { datos: Promise<DatosTablero>; puedeAdministrar: boolean; acciones: AccionesVigia; standby?: boolean }) {
   const { config } = await p;
   return (
     <section className="card p-4" aria-labelledby="h-cfg">
@@ -395,11 +397,11 @@ export async function BloqueConfiguracion({ datos: p, puedeAdministrar, acciones
         <h2 id="h-cfg" className="font-display text-[15px] font-semibold">Configuración y SLA</h2>
       </div>
       {puedeAdministrar ? (
-        <FormaConfig accion={acciones.config} valores={config} />
+        <FormaConfig accion={acciones.config} valores={config} standby={standby} />
       ) : (
         <ul className="text-[12.5px] space-y-1" style={{ color: 'var(--muted)' }}>
           <li>Vigía: {config.habilitado ? 'encendido' : 'apagado'}</li>
-          <li>Modo: {config.modoAprobacion === 'siempre' ? 'siempre aprobar' : 'autoenviar solo bajo riesgo ya validado'}</li>
+          {!standby && <li>Modo: {config.modoAprobacion === 'siempre' ? 'siempre aprobar' : 'autoenviar solo bajo riesgo ya validado'}</li>}
           <li>SLA de respuesta: {numero(config.slaRespuestaMin)} min · dueño a los {numero(config.slaRespuestaMin + config.escalarNivel2Min)} min · clientes críticos: {numero(Math.min(config.slaRespuestaMin, config.slaCriticoMin))} min</li>
           <li>Retención: {numero(config.retencionDias)} días</li>
           <li className="pt-1" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esto.</li>

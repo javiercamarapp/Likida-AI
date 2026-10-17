@@ -47,7 +47,7 @@ export interface DepsConfigPanel {
 /** El preflight real: lee la flota y juzga con la config que se pretende guardar (no con la guardada). */
 export async function preflightReal(tenantId: string, config: ConfigConductor): Promise<ResultadoPreflight> {
   const datos = await leerDatosPreflight(tenantId);
-  return evaluarPreflight({ ...datos, config: { activo: config.activo, perfilSeguimiento: config.perfilSeguimiento, solicitudesMin: config.solicitudesMin } });
+  return evaluarPreflight({ ...datos, config: { activo: config.activo, perfilSeguimiento: config.perfilSeguimiento, solicitudesMin: config.solicitudesMin, cohortePiloto: config.cohortePiloto ?? null } });
 }
 export const depsConfigReales: DepsConfigPanel = {
   leer: leerConfigConductor, contactos: cargarContactosTrafico, guardar: guardarConfigConductor, bitacora: anotarBitacora, preflight: preflightReal,

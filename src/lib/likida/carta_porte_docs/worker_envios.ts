@@ -38,6 +38,7 @@
 import { createHash } from 'node:crypto';
 import { logger } from '@/lib/logger';
 import { aXlsxPlantillaTms, MIME_XLSX } from './exportacion';
+import { hallazgoRepetido, traducirErroresTms } from './errores_tms';
 import { siguienteEstado, TOPE_TRANSITORIOS, type EnvioEnMaquina, type EventoEnvio, type MotivoAlerta, type Transicion } from './envio_estados';
 import { prechequear } from './prechequeo';
 import { construirPlantilla } from './plantilla_tms';
@@ -45,6 +46,7 @@ import type { DocumentoFila, EstadoEnvioTms, TipoEvento } from './repo';
 import type { CambiosEnvio, EnvioDetalle, EnvioReclamado, ResultadoReclamo } from './repo_envios';
 import type { ConfigSalida } from './salida_config';
 import { SIN_TMS, type EntradaCarga, type ResultadoCarga, type SalidaTms } from './tms_puerto';
+import type { Hallazgo } from './validacion';
 
 /** Envíos que toma una pasada (la subida de cada uno es una llamada de red: pocos y bien hechos). */
 export const TOPE_ENVIOS_POR_PASADA = 10;
@@ -76,6 +78,13 @@ export interface DepsEnvios {
   evento(tenantId: string, documentoId: string, tipo: TipoEvento, detalle: Record<string, unknown>): Promise<void>;
   /** El documento vuelve a «por revisar» con el motivo (no hay nada que enviar hasta que una persona lo corrija). */
   devolverARevision(tenantId: string, documentoId: string, versionDoc: number, motivo: string): Promise<void>;
+  /**
+   * El sistema del cliente rechazó el contenido (T-A3-29): el documento vuelve a «por revisar» con los hallazgos del rechazo
+   * como bloqueos y `rechazo_causa = 'tms_rechazo'`. Si el documento ya cambió o ya no está aprobado, no hay nada que devolver.
+   */
+  devolverPorRechazo(tenantId: string, documentoId: string, versionDoc: number, hallazgos: Hallazgo[], ubicaciones: string[]): Promise<void>;
+  /** Huellas (sha256 de la plantilla) de los envíos de ese documento que el TMS ya rechazó: lo idéntico no se reenvía solo. */
+  huellasRechazadas(tenantId: string, documentoId: string): Promise<string[]>;
   /** El aviso de la alerta única de UN envío (reque agotado, rechazo, transitorios agotados). T-A3-30 lo lleva a la oficina. */
   alertarEnvio(a: { tenantId: string; envioId: string; documentoId: string; motivo: MotivoAlerta; destinatario: string; mensaje: string }): Promise<void>;
   /** Alerta de infraestructura al operador del sistema (nunca lanza). */
@@ -126,7 +135,23 @@ export const resultadoEnviosVacio = (): ResultadoEnvios => ({
   errores: 0, fallos: [],
 });
 
-const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e)).replace(/\s+/g, ' ').slice(0, 200);
+/** Lo que jamás debe llegar a un log: un RFC (persona moral o física) o un correo. Se tapa ANTES de recortar. */
+const PATRON_RFC = /(?<![A-Z0-9])[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}(?![A-Z0-9])/gi;
+const PATRON_CORREO = /[^\s@<>"']+@[^\s@<>"']+/g;
+export const sinPII = (t: string): string => t.replace(PATRON_CORREO, '[correo]').replace(PATRON_RFC, '[rfc]');
+const msg = (e: unknown): string => sinPII((e instanceof Error ? e.message : String(e)).replace(/\s+/g, ' ')).slice(0, 200);
+
+/** Los únicos campos del detalle de un evento que pasan al log estructurado `cp_envio.*`: ids, contadores y códigos cortos; nunca contenido. */
+const CAMPOS_LOG = ['envioId', 'versionDoc', 'intentos', 'agotado', 'duplicado', 'clase', 'errores'] as const;
+function camposDeLog(detalle: Record<string, unknown>): Record<string, string | number | boolean> {
+  const o: Record<string, string | number | boolean> = {};
+  for (const k of CAMPOS_LOG) {
+    const v = detalle[k];
+    if (typeof v === 'number' || typeof v === 'boolean') o[k] = v;
+    else if (typeof v === 'string' && v.length <= 64) o[k] = sinPII(v);
+  }
+  return o;
+}
 const sha256 = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex');
 const iso = (ms: number): string => new Date(ms).toISOString();
 
@@ -152,7 +177,15 @@ export async function correrWorkerEnvios(deps: DepsEnvios, opts: OpcionesEnvios)
   if (!reclamo.ok) { r.sinMigracion = true; return r; }
   r.reclamados = reclamo.envios.length;
 
-  const ctx: Contexto = { deps, opts, r, circuitos: new Map(), config: new Map(), puertos: new Map() };
+  // Cada evento de la bitácora deja además su renglón estructurado `cp_envio.<tipo>`: ids y contadores, jamás el contenido.
+  const depsLog: DepsEnvios = {
+    ...deps,
+    evento: async (tenantId, documentoId, tipo, detalle) => {
+      logger.info(`cp_envio.${tipo}`, { tenantId, documentoId, ...camposDeLog(detalle) });
+      return deps.evento(tenantId, documentoId, tipo, detalle);
+    },
+  };
+  const ctx: Contexto = { deps: depsLog, opts, r, circuitos: new Map(), config: new Map(), puertos: new Map() };
   for (const rec of reclamo.envios) {
     try {
       await procesarEnvio(ctx, rec);
@@ -163,8 +196,22 @@ export async function correrWorkerEnvios(deps: DepsEnvios, opts: OpcionesEnvios)
       logger.error('cp_envios.envio_fallo', { envioId: rec.id, err: msg(e) });
     }
   }
+  logger.info('cp_envio.pasada', contadoresDeLog(r));
   return r;
 }
+
+/** Cifras de la pasada para el log y el latido: solo números y banderas. */
+export function contadoresDeLog(r: ResultadoEnvios): Record<string, number | boolean> {
+  return {
+    reclamados: r.reclamados, enviados: r.enviados, rechazados: r.rechazados, pendientes_reque: r.pendientesReque, en_espera_manual: r.enEsperaManual,
+    reintentos: r.reintentos, soltados: r.soltados, errores: r.errores, envios_pendientes: enviosPendientes(r), circuito_tms_abierto: r.circuitosAbiertos > 0,
+    credenciales_caducadas: r.credencialesCaducadas,
+  };
+}
+
+/** Envíos que siguen esperando tras la pasada (reque, subida manual, reintento o soltados sin intentar). */
+export const enviosPendientes = (r: Pick<ResultadoEnvios, 'pendientesReque' | 'enEsperaManual' | 'reintentos' | 'soltados'>): number =>
+  r.pendientesReque + r.enEsperaManual + r.reintentos + r.soltados;
 
 // ── Un envío ────────────────────────────────────────────────────────────────
 
@@ -265,6 +312,16 @@ async function subir(ctx: Contexto, e: EntradaSubida): Promise<void> {
   const plantilla = construirPlantilla(doc.extraccion, { clienteInterno: null, plantilla: envio.plantilla });
   const archivo = aXlsxPlantillaTms(plantilla);
   const huella = sha256(archivo);
+
+  // Guardia anti-bucle (T-A3-29): el MISMO contenido, con la misma plantilla, que el TMS ya rechazó no se reenvía solo.
+  // Exige una corrección que cambie la plantilla; si no, el documento vuelve a revisión con el motivo dicho en llano.
+  if (e.estado !== 'enviando' && (await deps.huellasRechazadas(tenantId, doc.id)).includes(huella)) {
+    if (!(await deps.actualizarEnvio(tenantId, envio.id, [e.estado], { estado: 'descartado', proximaRevision: null, soltarLease: true }))) { r.conflictos++; return; }
+    r.descartados++;
+    await deps.evento(tenantId, doc.id, 'envio_error', { envioId: envio.id, causa: 'mismo_contenido_rechazado', versionDoc: doc.version });
+    await devolverPorRechazo(ctx, doc, [hallazgoRepetido()], []);
+    return;
+  }
 
   // `listo`/`error_transitorio` ⇒ `enviando` (la máquina vuelve a revisar los bloqueos). Un `enviando` reclamado es la
   // recuperación de un lease vencido: ya está en el estado correcto y se reenvía con la MISMA llave.
@@ -377,6 +434,10 @@ async function aplicarResultado(ctx: Contexto, e: EntradaSubida, res: ResultadoC
       if (!(await deps.actualizarEnvio(tenantId, envio.id, ['enviando'], cambios))) { r.conflictos++; return; }
       r.rechazados++;
       await deps.evento(tenantId, doc.id, 'envio_rechazado', { envioId: envio.id, clase: res.clase, errores: res.errores.length });
+      // El error vuelve a la bandeja como hallazgos sobre los campos de Likida (T-A3-29), ANTES de avisar a la oficina:
+      // quien reciba el aviso debe encontrar el documento ya por revisar.
+      const tr = traducirErroresTms(res.errores, { mercancias: doc.extraccion.mercancias.length, mensajeLlano: res.mensajeLlano });
+      await devolverPorRechazo(ctx, doc, tr.hallazgos, tr.ubicaciones);
       await alertaDeLaMaquina(ctx, envio, doc, t);
       return;
     }
@@ -449,6 +510,18 @@ async function registrarTransicion(ctx: Contexto, envio: EnvioDetalle, doc: Docu
   if (t.estado === 'listo' && manual) r.enEsperaManual++;
 }
 
+/** Devuelve el documento a revisión con los hallazgos del rechazo. Un fallo NO tumba el lote: el envío ya quedó `rechazado_tms` y el documento se puede reabrir a mano. */
+async function devolverPorRechazo(ctx: Contexto, doc: DocumentoFila, hallazgos: Hallazgo[], ubicaciones: string[]): Promise<void> {
+  const { deps, r } = ctx;
+  try {
+    await deps.devolverPorRechazo(doc.tenantId, doc.id, doc.version, hallazgos, ubicaciones);
+    r.devueltosARevision++;
+  } catch (e) {
+    r.fallos.push(`rechazo ${doc.id.slice(0, 8)}: ${msg(e)}`);
+    logger.error('cp_envios.devolver_por_rechazo_fallo', { documentoId: doc.id, err: msg(e) });
+  }
+}
+
 /** Si la máquina pidió la alerta única: toma el candado (la base decide quién avisa), avisa y deja el evento. */
 async function alertaDeLaMaquina(ctx: Contexto, envio: EnvioDetalle, doc: DocumentoFila, t: Extract<Transicion, { ok: true }>): Promise<void> {
   if (!t.alerta) return;
@@ -475,7 +548,7 @@ async function abrirCircuito(ctx: Contexto, tenantId: string, codigo: string, er
   const c = circuitoDe(ctx, tenantId);
   c.abierto = true;
   ctx.r.circuitosAbiertos++;
-  logger.error('cp_envios.circuito_abierto', { tenantId, codigo });
+  logger.error('cp_envio.circuito_abierto', { tenantId, codigo });
   await ctx.deps.alertarOperador('cron.carta_porte_salida', { error, codigo, tenantId });
 }
 

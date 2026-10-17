@@ -373,3 +373,39 @@ describe('BloqueInsights (T-A4-41)', () => {
     expect(html).toContain('data-tarjeta="horas_ahorradas"');
   });
 });
+
+// T-A4-32 · stand-by bajo el perfil cinco_agentes: los controles de autoenvío y el POD adjunto no se muestran;
+// sin el perfil (standby ausente o false) la pantalla es idéntica a la de siempre.
+describe('stand-by bajo el perfil (T-A4-32)', () => {
+  const pend = { id: '22222222-2222-4222-8222-222222222222', conversacionId: '1', clienteNombre: 'Compras Acme', mensajeCliente: 'm',
+    borrador: 'b', intencion: 'eta' as const, riesgo: 'bajo' as const, senales: [], adjuntos: ['Comprobante de entrega (POD)'], creadoEn: hace(2) };
+
+  it('configuración con perfil: sin la opción de autoenviar ni su umbral; el modo queda en «siempre aprobar»', async () => {
+    const html = await pintar(BloqueConfiguracion({ datos: Promise.resolve(base()), puedeAdministrar: true, acciones, standby: true }));
+    expect(html).not.toContain('autoenviar_bajo_riesgo');
+    expect(html).not.toContain('Autoenviar');
+    expect(html).not.toContain('Aprobaciones sin editar');
+    expect(html).toContain('value="siempre"');
+  });
+  it('configuración sin perfil: idéntica a hoy (con la opción y el umbral), con o sin la propiedad', async () => {
+    const sin = await pintar(BloqueConfiguracion({ datos: Promise.resolve(base()), puedeAdministrar: true, acciones }));
+    const falso = await pintar(BloqueConfiguracion({ datos: Promise.resolve(base()), puedeAdministrar: true, acciones, standby: false }));
+    expect(sin).toBe(falso);
+    expect(sin).toContain('autoenviar_bajo_riesgo');
+    expect(sin).toContain('Aprobaciones sin editar');
+  });
+  it('quien solo mira, con perfil: no ve la línea «Modo» (autoenvío)', async () => {
+    const d = base({ config: { ...configApagada('t1'), habilitado: true, modoAprobacion: 'autoenviar_bajo_riesgo' } });
+    const con = await pintar(BloqueConfiguracion({ datos: Promise.resolve(d), puedeAdministrar: false, acciones, standby: true }));
+    expect(con).not.toContain('autoenviar');
+    const sin = await pintar(BloqueConfiguracion({ datos: Promise.resolve(d), puedeAdministrar: false, acciones }));
+    expect(sin).toContain('autoenviar solo bajo riesgo ya validado');
+  });
+  it('cola de aprobación con perfil: no anuncia el POD adjunto; sin perfil sí', async () => {
+    const con = await pintar(BloqueAprobacion({ datos: Promise.resolve(base({ pendientes: [pend] })), puedeDecidir: true, acciones, standby: true }));
+    expect(con).not.toContain('Adjuntará');
+    expect(con).toContain('value="aprobar"');
+    const sin = await pintar(BloqueAprobacion({ datos: Promise.resolve(base({ pendientes: [pend] })), puedeDecidir: true, acciones }));
+    expect(sin).toContain('Adjuntará: Comprobante de entrega (POD)');
+  });
+});

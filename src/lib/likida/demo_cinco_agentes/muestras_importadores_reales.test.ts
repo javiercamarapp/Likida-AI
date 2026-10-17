@@ -12,9 +12,13 @@ import { matrizDeArchivoCatalogo } from '../peajes/archivo';
 import { parsearCasetasMatriz } from '../peajes/casetas';
 import { interpretarDesglose } from '../peajes/desglose';
 import { parsearTagsMatriz } from '../peajes/tags';
+import { evaluarListo } from '../vigia/aviso/listo';
+import { leerProgramaCsv } from '../vigia/programa/lector';
+import { normalizarPrograma, type FilaPrograma } from '../vigia/programa/normalizar';
 import { analizarHistorial } from '../vigia/historial/analisis';
 import { leerExportWhatsapp } from '../vigia/historial/export_whatsapp';
 import { textoDeZip } from '../vigia/historial/zip_lector';
+import { construirProgramaDemo } from './programa_demo';
 import { bytesMuestra, textoMuestra } from './muestras.test.util';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -175,5 +179,55 @@ describe('carta porte: el detector real de instrucciones escondidas', () => {
   it('marca el CSV de prueba de inyección y NO el documento normal', () => {
     expect(detectarInyeccion(textoMuestra('carta_porte/orden_c12_4_PRUEBA_INYECCION.csv')).riesgo).toBe(true);
     expect(detectarInyeccion(textoMuestra('carta_porte/orden_c12_1.csv')).riesgo).toBe(false);
+  });
+});
+
+describe('programa de despacho (A4): el lector y el normalizador reales leen el CSV sintético y salen los casos del guion', () => {
+  const REL = 'programa/programa_despacho_sintetico.csv';
+  const leer = (texto: string) => {
+    const lectura = leerProgramaCsv(texto, { terminal: 'GDL' });
+    return { lectura, normal: normalizarPrograma(lectura) };
+  };
+  const { lectura, normal } = leer(textoMuestra(REL));
+  const porClave = (caja: string | null, unidad: string | null) => normal.filas.find((f) => f.caja === caja && f.unidad === unidad);
+
+  it('el archivo de muestra es EXACTAMENTE lo que el generador escribe (sin editar a mano) y pesa poco', () => {
+    expect(textoMuestra(REL)).toBe(construirProgramaDemo(1));
+    expect(Buffer.byteLength(textoMuestra(REL))).toBeLessThan(4_000);
+  });
+  it('sin avisos del lector y sin una sola fila descartada', () => {
+    expect(lectura.avisos).toEqual([]);
+    expect(normal.calidad.descartadas).toEqual([]);
+    expect(normal.filas.every((f) => f.avisos.length === 0)).toBe(true);
+    expect(normal.filas.every((f) => f.fecha === '2026-10-20' && f.zonaHoraria === 'America/Mexico_City')).toBe(true);
+  });
+  it('con la regla proxy: 3 listos para avisar, 1 incompleto (falta CCP), 1 sin caja y 1 sin unidad', () => {
+    const veredictos = normal.filas.map((f) => ({ caja: f.caja, unidad: f.unidad, ...evaluarListo(f) }));
+    expect(veredictos.filter((v) => v.listo).map((v) => v.caja)).toEqual(['ZC1001', 'ZC1002', 'ZC1004']);
+    const incompleto = veredictos.find((v) => v.caja === 'ZC1003');
+    expect(incompleto).toMatchObject({ listo: false, faltantes: ['ccp'] });
+    const sinCaja = veredictos.find((v) => v.unidad === 'ZU2005');
+    expect(sinCaja).toMatchObject({ caja: null, listo: false, faltantes: ['caja'] });
+    expect(veredictos.find((v) => v.caja === 'ZC1006')).toMatchObject({ unidad: null, listo: false, faltantes: ['unidad'] });
+    expect(normal.calidad).toMatchObject({ validas: 6, sinCaja: 1, cajaSinUnidad: 1 });
+  });
+  it('la cita se interpreta en America/Mexico_City (UTC−6, sin horario de verano)', () => {
+    expect(porClave('ZC1001', 'ZU2001')?.citaEn).toBe('2026-10-20T14:00:00-06:00');
+  });
+  it('el segundo corte cambia SOLO la unidad de una caja lista: los campos vigilados de esa fila cambian y los de las demás no', () => {
+    const vigilados = (f: FilaPrograma) => JSON.stringify([f.caja, f.unidad, f.ccp, f.transito, f.citaEn, f.citaTexto, f.cliente, f.consignatario]);
+    const dos = leer(construirProgramaDemo(2)).normal;
+    expect(dos.filas).toHaveLength(normal.filas.length);
+    const cambiadas = normal.filas.filter((f, i) => vigilados(f) !== vigilados(dos.filas[i]));
+    expect(cambiadas.map((f) => [f.caja, f.unidad, dos.filas[normal.filas.indexOf(f)].unidad])).toEqual([['ZC1004', 'ZU2004', 'ZU2099']]);
+    expect(evaluarListo(dos.filas[normal.filas.indexOf(cambiadas[0])]).listo).toBe(true);
+  });
+  it('todo está rotulado SIMULADO y no hay datos de personas ni de empresas (solo claves inventadas)', () => {
+    const texto = textoMuestra(REL);
+    const filas = lectura.filas.map((f) => f.celdas);
+    expect(filas.every((c) => /SIMULADO/.test(c.COMENTARIOS ?? ''))).toBe(true);
+    expect(texto).not.toMatch(/[^\s@;]+@[^\s@;]+\.[a-z]{2,}/i);
+    expect(texto).not.toMatch(/\b\d{10,}\b/);
+    expect(filas.every((c) => /^CLIENTE SINT \d\d$/.test(c.CLIENTE))).toBe(true);
   });
 });

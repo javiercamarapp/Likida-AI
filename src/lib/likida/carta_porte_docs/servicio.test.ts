@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./repo', async () => (await import('./repo_falso.fixture')).api);
 vi.mock('../bitacora_escritura', () => ({ anotarBitacora: vi.fn(async () => true) }));
@@ -9,6 +9,11 @@ import { DIAS_RETENCION, MAX_INTENTOS, nombreArchivoSeguro, procesarDocumento, r
 import { defectuosos, excelAtlas, fotoRemision, pdfBoreal, pdfEscaneado, xmlCartaPorte, csvAtlas, correoTexto, extraccionAtlasOk, RFC } from './documentos_sinteticos.fixture';
 import { llmFalso, lecturaBoreal, salida } from './llm_falso.fixture';
 import * as repo from './repo';
+
+// T-A3-68 f: el orden por omisión pasó a 3.8 Flash → Sonnet (niveles 2, 3). Estas pruebas ejercitan la escalera completa de tres
+// niveles, así que fijan el orden por entorno (la misma variable que usa producción).
+beforeAll(() => { vi.stubEnv('LIKIDA_CARTAPORTE_NIVELES_TEXTO', '1,2,3'); vi.stubEnv('LIKIDA_CARTAPORTE_NIVELES_VISION', '1,2,3'); });
+afterAll(() => { vi.unstubAllEnvs(); });
 
 beforeEach(() => { reset(); sembrarFlotas(); });
 
@@ -119,6 +124,15 @@ describe('procesarDocumento', () => {
     expect(d.extraccion?.mercancias[0].peso_kg.valor).toBe('30000');
     expect(d.procesandoHasta).toBeNull();
     expect(d.ultimoError).toBeNull();
+  });
+
+  it('el nombre del archivo llega al extractor: EXPO deduce el régimen y deja el pedimento vacío (T-A3-46)', async () => {
+    const llm = llmFalso((e) => salida(e.nivel, { folio_cliente: ['EX-200', 0.97, 'Folio: EX-200'] }, [{ descripcion: ['Piezas de plastico', 0.97, null], bienes_transp: ['24121500', 0.97, null], cantidad: ['10', 0.97, null], clave_unidad: ['H87', 0.97, null], peso_kg: ['100', 0.97, null], pedimento: ['26 47 1234 5670001', 0.97, null], rfc_importador: [RFC.atlas, 0.97, null] }]));
+    const { documentoId } = await subirYProcesar(A, Buffer.from('Folio: EX-200\nMercancia: Piezas de plastico\n'), llm, 'CCP Transportes-Cliente EXPO TX4471 15-10-26.txt');
+    const f = estado.docs.get(documentoId)!.extraccion!.mercancias[0];
+    expect(f.regimen_aduanero).toMatchObject({ valor: 'EXD', origen: 'derivado' });
+    expect(f.pedimento.valor).toBeNull();
+    expect(f.rfc_importador.valor).toBeNull();
   });
 
   it('un PDF escaneado y una foto van al modelo como imagen', async () => {
@@ -319,6 +333,34 @@ describe('validarDocumento: avisos que solo la base sabe', () => {
     await validarDocumento(A, { id: 'x', riesgoInyeccion: false, remitenteReconocido: null }, e);
     expect(estado.llamadas.slice(antes)).toEqual([]);
     void RFC;
+  });
+});
+
+describe('validarDocumento: catálogos SAT (T-A3-24)', () => {
+  const doc = { id: 'x', riesgoInyeccion: false, remitenteReconocido: null };
+  it('tabla vacía → solo avisos, no bloquea; ≤ 1 consulta por catálogo por documento', async () => {
+    const e = extraccionAtlasOk(); e.mercancias.push({ ...e.mercancias[0], descripcion: { ...e.mercancias[0].descripcion } });
+    e.campos.peso_bruto_total = { ...e.campos.peso_bruto_total, valor: '16800' };
+    const v = await validarDocumento(A, doc, e);
+    expect(v.hallazgos.some((h) => h.codigo === 'catalogo_no_cargado')).toBe(true);
+    expect(v.bloqueos).toBe(0);
+    const por = estado.consultasCatalogoSat;
+    expect(por.length).toBeGreaterThan(0);
+    expect(new Set(por).size).toBe(por.length);
+  });
+  it('catálogo cargado: clave inexistente bloquea; existente no', async () => {
+    estado.catalogosSat.set('c_ClaveProdServCP', new Map([['24131500', {}]]));
+    const ok = await validarDocumento(A, doc, extraccionAtlasOk());
+    expect(ok.hallazgos.some((h) => h.codigo === 'clave_no_catalogo')).toBe(false);
+    const e = extraccionAtlasOk(); e.mercancias[0].bienes_transp = { ...e.mercancias[0].bienes_transp, valor: '24999999' };
+    const mal = await validarDocumento(A, doc, e);
+    expect(mal.hallazgos.some((h) => h.codigo === 'clave_no_catalogo' && h.severidad === 'bloqueo')).toBe(true);
+  });
+  it('un error al leer el catálogo degrada a aviso, no rompe ni bloquea', async () => {
+    estado.fallar.set('cargarCatalogoSat', new Error('caída de la base'));
+    const v = await validarDocumento(A, doc, extraccionAtlasOk());
+    expect(v.bloqueos).toBe(0);
+    expect(v.hallazgos.some((h) => h.codigo === 'catalogo_no_cargado')).toBe(true);
   });
 });
 

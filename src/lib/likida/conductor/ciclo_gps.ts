@@ -6,6 +6,7 @@ import { estaPendiente, estaResuelto, type HitoFila, type TipoHito } from './tip
 import type { ViajeContexto } from './repo';
 import { MINUTOS_SIN_POSICION } from './observabilidad';
 import { evaluarSalidaTms } from './salida_tms';
+import type { ResultadoHuerfanos } from './huerfanos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CICLO POR GEOCERCA — que el sistema se entere solo de que el tractor llegó o salió (P2, ola 4c).
@@ -65,6 +66,8 @@ export interface MuestraGps {
   lat: number; lng: number; medidaEn: Date; ignicion?: boolean | null;
   /** T-A5-14: referencia de despacho (0802, ya normalizada) con la que el proveedor etiquetó la posición; ausente/`null` = no la trae. */
   despachoRef?: string | null;
+  /** T-A5-37: proveedor de la posición (`posicion.proveedor`); de él sale la cadencia de poleo por proveedor. Ausente = no se sabe. */
+  proveedor?: string | null;
 }
 
 export interface SitioGps extends GeocercaGeom { id: string; nombre: string }
@@ -279,6 +282,10 @@ export interface PuertosCicloGps {
   salidasTms?(viajeIds: string[]): Promise<Map<string, string> | undefined>;
   /** T-A5-22: registra `salida_carga` con la marca del TMS (fuente, interpretación y validación `sistema`). Misma escritura condicional que el chofer: si ya lo registraron, `carrera`. */
   aplicarSalidaTms?(v: ViajeContexto, h: HitoFila, marca: Date, config: ConfigConductor, ahora: Date): Promise<ResultadoAplicar>;
+  /** T-A5-66: las flotas que encendieron `registrar_geocerca_huerfana` (0820). Ausente o vacío = no hay barrido de eventos sin viaje. */
+  flotasConHuerfanos?(): Promise<string[]>;
+  /** T-A5-66: el barrido de eventos de geocerca SIN viaje abierto (`huerfanos.ts`). Recibe estos mismos puertos (ya sin las flotas con perfil). */
+  huerfanos?(p: PuertosCicloGps, ahora: Date, venceEn?: number): Promise<ResultadoHuerfanos>;
 }
 
 export interface ResultadoCicloGps {
@@ -302,13 +309,35 @@ export interface ResultadoCicloGps {
   /** T-A5-22: salidas de carga registradas desde la marca del TMS (casilla `aplicarSalidaDelTms`) y marcas que el GPS contradijo (no se registraron). */
   salidasTmsAplicadas?: number;
   salidasTmsDiscrepantes?: number;
+  /** T-A5-66: lo que el barrido de eventos sin viaje guardó y reconcilió (solo si hay puerto y alguna flota lo encendió). */
+  huerfanos?: ResultadoHuerfanos;
   fallos: string[];
   cortadosPorReloj: number;
 }
 
 const TIPOS: readonly TipoDeteccion[] = ['llegada_carga', 'salida_carga', 'llegada_descarga', 'salida_descarga'];
 
+/**
+ * El ciclo por geocerca: primero los viajes abiertos y, DESPUÉS, la rama «sin viaje» (T-A5-66): los cruces de unidades que ya no tienen
+ * un viaje abierto se guardan como huérfanos y los huérfanos de un viaje que aparece se reconcilian. Esa rama es de las flotas que la
+ * encendieron; sin puerto o sin flotas no hace nada y el resultado es el de siempre. Un fallo de la rama no tumba el barrido de viajes.
+ */
 export async function barridoCicloGps(p: PuertosCicloGps, ahora: Date = new Date(), venceEn?: number): Promise<ResultadoCicloGps> {
+  const r = await barridoDeViajes(p, ahora, venceEn);
+  if (p.huerfanos && p.flotasConHuerfanos) {
+    try {
+      const h = await p.huerfanos(p, ahora, venceEn);
+      if (h.flotas > 0) r.huerfanos = h;
+      r.fallos.push(...h.fallos);
+    } catch (e) {
+      r.fallos.push(`huérfanos: ${e instanceof Error ? e.message : 'error inesperado'}`);
+      logger.error('conductor.ciclo_gps_huerfanos_fallo', { err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return r;
+}
+
+async function barridoDeViajes(p: PuertosCicloGps, ahora: Date, venceEn: number | undefined): Promise<ResultadoCicloGps> {
   const r: ResultadoCicloGps = {
     viajes: 0, evaluados: 0, detectados: 0, llegadas: 0, salidas: 0, fueraDeOrden: 0, yaDetectados: 0, sinSitio: 0, sinMuestras: 0, cedidosAOtroViaje: 0,
     detectadosViaDespacho: 0, detectadosViaUnidadVentana: 0, unidadesConsultadas: 0, unidadesSinPosicion: 0, salidasTmsAplicadas: 0, salidasTmsDiscrepantes: 0, fallos: [], cortadosPorReloj: 0,

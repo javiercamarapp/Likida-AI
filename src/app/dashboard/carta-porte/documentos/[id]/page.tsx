@@ -7,14 +7,20 @@ import { logger } from '@/lib/logger';
 import { DatoInvalido, mensajeParaPantalla } from '@/lib/likida/errores';
 import { aprobarDocumento, abrirRevision, corregirCampos, crearViajeDeDocumento, eliminarDocumento, quitarRenglon, rechazarDocumento, reabrirDocumento } from '@/lib/likida/carta_porte_docs/bandeja';
 import { flotaBajoPerfil, marcarSubidoAMano, MENSAJE_FUNCION_NO_DISPONIBLE } from '@/lib/likida/carta_porte_docs/envio';
+import { esFlotaSimulada } from '@/lib/likida/carta_porte_docs/salida_simulada';
+import { puertoSupabase } from '@/lib/likida/carta_porte_docs/catalogo_puerto';
+import { proponerCatalogo, propuestaVacia, registrosDePropuesta, type LadoParte } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
+import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { repoEnvios, type ErrorEnvio } from '@/lib/likida/carta_porte_docs/repo_envios';
 import { detectarFormato, prepararContenido } from '@/lib/likida/carta_porte_docs/contenido';
 import { cambiosDeFormulario } from '@/lib/likida/carta_porte_docs/formulario';
 import { revisionDe } from '@/lib/likida/carta_porte_docs/presentacion';
 import * as repo from '@/lib/likida/carta_porte_docs/repo';
+import { reasignarRevisor } from '@/lib/likida/carta_porte_docs/revisor';
+import { leerConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import { sufijoTenant } from '../../../sufijo';
 import type { ResultadoAccion } from '../forma_accion';
-import { VistaRevision, type OriginalVista } from './vista';
+import { VistaRevision, type CatalogoBanner, type OriginalVista, type RevisorVista } from './vista';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -85,7 +91,49 @@ export default async function PaginaRevision({
   const lin = linaje.get(id);
   const padre = lin?.rol === 'hijo' ? await repo.leerDocumento(tenantId, lin.padreId) : null;
 
+  // Tras aprobar: lo que una persona tecleó y valdría la pena guardar en el catálogo del cliente. Es opcional, así que un
+  // fallo al leerlo apaga el banner (y se loguea); jamás tumba la revisión.
+  let catalogo: CatalogoBanner | null = null;
+  if (doc.estado === 'aprobado' && doc.clienteId && doc.extraccion) {
+    try {
+      const [cat, clientes] = await Promise.all([repo.cargarCatalogoCliente(tenantId, doc.clienteId), repo.listarClientes(tenantId)]);
+      const cliente = clientes.find((c) => c.id === doc.clienteId);
+      const propuesta = proponerCatalogo(doc.extraccion, cat);
+      if (cliente && !propuestaVacia(propuesta)) catalogo = { cliente: cliente.nombre, propuesta };
+    } catch (e) {
+      logger.warn('carta_porte_docs.catalogo_banner', { documentoId: id, err: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  // T-A3-31. Solo se pinta si la flota usa asignación; un fallo de lectura (p. ej. base sin la 0790) deja la pantalla como siempre.
+  let revisor: RevisorVista | null = null;
+  try {
+    const [config, asignados, usuarios] = await Promise.all([leerConfigSalida(tenantId), repo.revisoresDeDocumentos(tenantId, [id]), repo.usuariosRevisores(tenantId)]);
+    const actualId = asignados.get(id) ?? null;
+    if (config.destinatarioRevisionUsuario !== null || actualId !== null) {
+      revisor = { actualId, opciones: usuarios.map((u) => ({ id: u.id, nombre: u.nombre ?? u.email })) };
+    }
+  } catch (e) {
+    logger.warn('carta_porte_docs.revisor_no_disponible', { documentoId: id, err: e instanceof Error ? e.message : String(e) });
+  }
+
   const ruta = `${RUTA_PADRE}/${id}`;
+
+  async function reasignar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+    'use server';
+    const s = await resolverTenantEfectivo(RUTA_PADRE, sp);
+    if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { ok: false, error: 'Tu rol no puede reasignar documentos de Carta Porte.' };
+    try {
+      if (String(fd.get('documentoId') ?? '') !== id) return { ok: false, error: 'La forma no corresponde a este documento. Recarga la pantalla.' };
+      const crudo = String(fd.get('revisorId') ?? '');
+      if (crudo !== '' && !UUID.test(crudo)) return { ok: false, error: 'No se reconoce a esa persona.' };
+      const r = await reasignarRevisor(s.tenantId, id, crudo === '' ? null : crudo, { id: s.userId });
+      revalidatePath(ruta); revalidatePath(RUTA_PADRE);
+      return { ok: true, mensaje: r.cambio ? (r.usuarioId ? 'Caso reasignado.' : 'El caso quedó sin persona asignada: le toca a todos los revisores.') : 'Ya estaba asignado así.' };
+    } catch (e) {
+      return { ok: false, error: mensajeParaPantalla(e, 'reasignar el caso') };
+    }
+  }
 
   /** Una sola acción atiende todos los botones: `intencion` dice cuál se apretó. */
   async function revisar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
@@ -143,7 +191,7 @@ export default async function PaginaRevision({
         return { ok: true, mensaje: 'Documento aprobado.', detalles };
       }
       if (intencion === 'rechazar') {
-        await rechazarDocumento(s.tenantId, id, version, String(fd.get('motivo') ?? ''), s.userId);
+        await rechazarDocumento(s.tenantId, id, version, String(fd.get('motivo') ?? ''), s.userId, new Date(), String(fd.get('causa') ?? ''));
         revalidatePath(ruta); revalidatePath(RUTA_PADRE);
         return { ok: true, mensaje: 'Documento rechazado.' };
       }
@@ -168,6 +216,30 @@ export default async function PaginaRevision({
           ? { ok: true, mensaje: r.yaEstaba ? 'Ya estaba marcada como subida a mano.' : 'Listo: quedó registrado que la plantilla se subió a mano. Likida no la volverá a enviar.' }
           : { ok: false, error: r.mensaje };
       }
+      if (intencion === 'guardar_catalogo') {
+        // Se recalcula con lo que hay en la base (no con lo que dice el navegador): del formulario solo salen qué filas se
+        // marcaron y el SKU que la persona confirmó.
+        const d = await repo.leerDocumento(s.tenantId, id);
+        if (!d) throw new DatoInvalido('Ese documento no está en tu flota, o alguien lo borró. Recarga la pantalla.');
+        if (d.estado !== 'aprobado' || !d.clienteId || !d.extraccion) return { ok: false, error: 'Solo se guarda en el catálogo lo de un documento aprobado y ligado a un cliente.' };
+        if (d.version !== version) throw new DatoInvalido('Otra persona cambió este documento mientras lo revisabas. Recarga la pantalla y vuelve a intentarlo.');
+        const propuesta = proponerCatalogo(d.extraccion, await repo.cargarCatalogoCliente(s.tenantId, d.clienteId));
+        const productos = fd.getAll('cat_prod').map((v) => Number(v)).filter((n) => Number.isInteger(n) && n >= 0)
+          .map((indice) => ({ indice, sku: String(fd.get(`cat_sku_${indice}`) ?? '') }));
+        const partes = fd.getAll('cat_parte').map(String).filter((v): v is LadoParte => v === 'origen' || v === 'destino');
+        const r = registrosDePropuesta(propuesta, d.clienteId, { productos, partes });
+        if (!r.ok) return { ok: false, error: r.errores.join(' ') };
+        const puerto = puertoSupabase();
+        if (r.productos.length > 0) await puerto.aplicarLote(s.tenantId, 'producto', r.productos, s.userId);
+        if (r.partes.length > 0) await puerto.aplicarLote(s.tenantId, 'parte', r.partes, s.userId);
+        // Solo conteos: la bitácora sobrevive a un borrado ARCO y no lleva datos de terceros.
+        await anotarBitacora(
+          { tenantId: s.tenantId, actor: actor, accion: 'ccp.catalogo_desde_documento', entidad: 'tenant', entidadId: s.tenantId, detalle: { productos: r.productos.length, partes: r.partes.length } },
+          { evento: 'carta_porte_docs.bitacora_no_escribio' },
+        );
+        revalidatePath(ruta);
+        return { ok: true, mensaje: `Guardado en el catálogo: ${r.productos.length} producto(s) y ${r.partes.length} remitente(s) o destinatario(s). El próximo documento igual saldrá con estos datos.` };
+      }
       if (intencion === 'viaje') {
         // Doble defensa: aunque la pantalla no ofrezca el botón, la acción se niega bajo el perfil (y `crearViajeDeDocumento` también).
         if (restringidoAccion) return { ok: false, error: MENSAJE_FUNCION_NO_DISPONIBLE };
@@ -190,10 +262,12 @@ export default async function PaginaRevision({
       original={original}
       operadores={restringido ? [] : operadores.filter((o) => o.activo).map((o) => ({ id: o.id, nombre: o.nombre }))}
       eventos={eventos.map((e) => ({ tipo: e.tipo, creadoEn: e.creadoEn }))}
-      acciones={{ revisar }}
+      acciones={{ revisar, reasignar }}
+      revisor={revisor}
       sufijo={sufijoTenant(sp)}
-      envio={envio ? { estado: envio.estado, proximaRevision: envio.proximaRevision, motivo: motivoDeRechazo(envio.ultimoError) } : null}
+      envio={envio ? { estado: envio.estado, proximaRevision: envio.proximaRevision, motivo: motivoDeRechazo(envio.ultimoError), ...(esFlotaSimulada(tenantId) ? { simulado: true } : {}) } : null}
       perfilRestringido={restringido}
+      catalogo={catalogo}
       salida={viaje ? { folio: viaje.folio ?? viaje.id.slice(0, 8) } : null}
       puedeEliminar={puedeAdministrar(rol)}
       embarque={lin?.rol === 'hijo' && padre ? { indice: lin.indice ?? 0, total: lin.total, clave: lin.clave, padreId: padre.id, padreNombre: padre.nombreArchivo } : null}

@@ -14,6 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { logger } from '@/lib/logger';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { conPool } from '../lotes';
 import { generarPdfLiquidacionExterna } from './pdf';
 import { generarExcelFormato, generarPdfFormato, type DatosFormato } from './render_formato';
@@ -78,12 +79,42 @@ export interface Dependencias {
 const CANAL_TTL_MS = 30_000;
 const canalRecordado = new Map<string, { canal: CanalEntrega; hasta: number }>();
 
-/** Lee el canal de la flota. Sin config, sin la migración o si la base no responde ⇒ `whatsapp` (comportamiento idéntico al de siempre;
- *  el fallo no se recuerda, se reintenta en la siguiente llamada). El cron ya filtra por canal en `trabajoPendiente`, que sí LANZA ante un fallo de base. */
+/**
+ * Lee el canal de la flota.
+ *
+ * FAIL-SAFE DE PRODUCTO (hallazgo ALTO, oct-2026): bajo el perfil `cinco_agentes`, A1 (liquidación) es SIEMPRE por
+ * correo — nunca por WhatsApp. Esto se decide ANTES de mirar `liquidacion_correo_config`, y sin excepción: ni la
+ * ausencia de fila, ni una fila vieja o mal puesta (`canal: 'whatsapp'`/`'ambos'`), ni una migración 0785 sin
+ * aplicar, ni un fallo al leer la tabla pueden hacer que una flota de este perfil reciba por WhatsApp. Es la
+ * dirección conservadora: el riesgo real era aplicar el perfil (`aplicar-cinco-agentes.sh`) SIN el paso que deja la
+ * fila explícita, y caer en el default de siempre. `aplicar-cinco-agentes.sh` también inserta esa fila con
+ * `canal: 'correo'` (defensa en profundidad: código Y configuración), pero este default no depende de que ese paso
+ * se haya corrido ni de que se mantenga correcto después.
+ *
+ * Para el RESTO de las flotas (sin perfil `cinco_agentes`) el default por ausencia de fila, migración sin aplicar o
+ * lectura fallida SIGUE siendo `whatsapp`, a propósito y no por descuido: cambiarlo de forma global dejaría, para
+ * cualquier flota que nunca configuró `liquidacion_correo_config` (hoy la inmensa mayoría), la liquidación sin
+ * entregar por NINGÚN canal — ni WhatsApp (porque el canal ya no sería `whatsapp`) ni correo (esa entrega nace de
+ * `recibirDesglose`/el pull del T-A1-24, que esta función no puede invocar ni inventar). El fallo no se recuerda:
+ * se reintenta en la siguiente llamada. El cron ya filtra por canal en `trabajoPendiente`, que sí LANZA ante un
+ * fallo de base.
+ *
+ * `perfilDeTenant(..., 'permitir')`: un bache leyendo `tenant_perfil` para una flota NUNCA antes confirmada como
+ * `cinco_agentes` debe leerse como "sin perfil" aquí (comportamiento de siempre), no como "asumir cinco_agentes".
+ * Su modo por omisión (`'restringir'`) es al revés a propósito PARA OTRAS superficies (ocultar de más ante la duda es
+ * seguro); aquí sería la dirección insegura: convertiría cualquier bache transitorio de esa tabla, para CUALQUIER
+ * flota, en una fuga del canal de entrega de TODAS las liquidaciones hacia `correo` sin que nadie lo pidiera. Una
+ * flota que SÍ se confirmó `cinco_agentes` alguna vez sigue protegida: `perfilDeTenant` recuerda ese último valor y
+ * lo devuelve aunque la lectura de ahora falle.
+ */
 async function canalDeEntregaPorOmision(tenantId: string): Promise<CanalEntrega> {
   const ahora = Date.now();
   const r = canalRecordado.get(tenantId);
   if (r && r.hasta > ahora) return r.canal;
+  if ((await perfilDeTenant(tenantId, ahora, 'permitir')) === 'cinco_agentes') {
+    canalRecordado.set(tenantId, { canal: 'correo', hasta: ahora + CANAL_TTL_MS });
+    return 'correo';
+  }
   let lectura: Awaited<ReturnType<typeof leerConfigCorreo>>;
   try {
     lectura = await leerConfigCorreo(tenantId);

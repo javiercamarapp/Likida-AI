@@ -51,6 +51,7 @@ const RUTA: Record<CronId, string> = {
   'buzon-entrega': '/api/cron/buzon-entrega',
   'carta-porte-docs': '/api/cron/carta-porte-docs',
   guardia: '/api/cron/guardia',
+  tms: '/api/cron/tms',
 };
 
 /** Qué hace cada reloj, en una línea, para que el rojo se pueda priorizar. */
@@ -74,6 +75,7 @@ const OFICIO: Record<CronId, string> = {
   'buzon-entrega': 'arma y manda al contador el lote de facturas aprobadas, reintenta con espera y marca lo que Resend no confirma',
   'carta-porte-docs': 'extrae los documentos de Carta Porte que quedaron en la bandeja, reintenta con espera y avisa a la oficina de los que traen dudas o no se pudieron leer',
   guardia: 'la guardia de producción: clasifica la bandeja con las reglas del A0, mide los componentes de /estado, avisa al operador de lo nuevo (S1/S2 o fuente ciega) y purga la retención de latencias',
+  tms: 'lee del sistema de transporte del cliente (solo lectura) los viajes, liquidaciones, peajes y posiciones de las flotas que lo conectaron, y los entrega a cada agente'
 };
 
 /**

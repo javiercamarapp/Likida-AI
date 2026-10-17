@@ -4,6 +4,7 @@ import {
 } from './repo';
 import { leerEpisodiosSenalVida, leerFlotasConConectorDegradado, leerHitosDeViajes, leerMuestrasGps, leerSitiosGeometriaDeFlotas, leerSitiosGeometriaDeViajes, leerUltimaMuestraGps, leerViajesActivos } from './trabajo';
 import type { PuertosSenalVida } from './senal_vida';
+import { senalesApagadas } from './senales_conduccion';
 
 /** Los puertos reales del barrido de «sin señal de vida»: Supabase y Meta (el envío, los destinatarios y la ubicación son los del motor del Conductor). */
 export function puertosSenalVidaReales(): PuertosSenalVida {
@@ -25,5 +26,7 @@ export function puertosSenalVidaReales(): PuertosSenalVida {
     enviar: motor.enviar,
     destinatarios: motor.destinatarios,
     ubicacion: motor.ubicacion,
+    // T-A5-68: nace apagado (sin adaptador de proveedor real: BLOQUEO EXTERNO); el mismo puerto que el del motor.
+    senalesConduccion: motor.senalesConduccion ?? senalesApagadas,
   };
 }
