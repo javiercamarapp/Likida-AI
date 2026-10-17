@@ -112,3 +112,50 @@ describe('la caída al respaldo por un proveedor caído también se cuenta con s
     expect(contadoresDeCaidas()['respaldo:proveedor_transitorio:anthropic/claude-sonnet-5.5']).toBe(1);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T-SYS-27 — el campo raíz del 400: `SalidaLlmSchema` (extractor de A3) declaraba `maxItems` en tres arrays
+// (`campos`, `mercancias` y los `campos` de cada mercancía). La prueba con modelos reales (16-oct) achacó el 400 de
+// los dos Gemini al esquema estricto; aquí se prueba, con el esquema REAL de A3 (sin tocar `caidas.ts` ni la lista
+// `MODELOS_SIN_ESQUEMA_ESTRICTO`, fuera de alcance de esta tarea), que un modelo que SÍ intenta el modo estricto
+// (nivel 3, Sonnet — los dos Gemini ya estaban exceptuados por esa lista y por eso no sirven para esta prueba)
+// recibe el 400 mientras el esquema declare `maxItems`, y responde en una sola llamada en cuanto se quita.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('T-SYS-27: SalidaLlmSchema (A3) sin `maxItems` — el campo que tumbaba el esquema estricto con 400', () => {
+  it('el esquema JSON que ve el modelo no declara `maxItems` en ningún array', async () => {
+    const { SalidaLlmSchema } = await import('../likida/carta_porte_docs/extractor');
+    const texto = JSON.stringify(z.toJSONSchema(SalidaLlmSchema, { target: 'draft-7' }));
+    expect(texto).not.toContain('maxItems');
+  });
+
+  it('con el esquema real de A3, un modelo que intenta el modo estricto responde en UNA sola llamada, sin caer a json_object', async () => {
+    const { SalidaLlmSchema } = await import('../likida/carta_porte_docs/extractor');
+    const textoEsquema = JSON.stringify(z.toJSONSchema(SalidaLlmSchema, { target: 'draft-7' }));
+    // El mock modela lo medido con el proveedor real: un intento estricto (`json_schema`) con `maxItems` en el
+    // esquema recibe 400; sin `maxItems` responde bien a la primera. No se mockea por rol ni por modelo — se
+    // decide SOLO por lo que de verdad declara el esquema, para que esta prueba sea roja hoy y verde tras el fix.
+    create.mockImplementation(async (body: { response_format?: { type?: string } }) => {
+      if (body.response_format?.type === 'json_schema' && textoEsquema.includes('maxItems')) throw error400();
+      return salidaCartaPorteOk();
+    });
+    const avisos: unknown[] = [];
+    const { generateStructured } = await import('./openrouter');
+    // Nivel 3 (Sonnet, `cartaporte_extractor_escala2`) a propósito: los dos Gemini de los niveles 1 y 2 ya están en
+    // `MODELOS_SIN_ESQUEMA_ESTRICTO` (T-A3-68 a) y por eso SIEMPRE usan `json_object` sin intentar el modo
+    // estricto — esa lista es la cascada ya integrada y no se toca aquí. Sonnet sí intenta el modo estricto primero,
+    // así que es el que deja ver, sin tocar nada más, si el 400 viene del esquema.
+    const r = await generateStructured({
+      role: 'cartaporte_extractor_escala2', system: 'SISTEMA', messages: [{ role: 'user', content: 'doc' }],
+      schema: SalidaLlmSchema, schemaName: 'carta_porte_extraccion', onCaida: (c) => avisos.push(c),
+    });
+    expect(r.data.campos[0]?.valor).toBe('44100');
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(avisos).toEqual([]);
+  });
+});
+
+const salidaCartaPorteOk = () => ({
+  model: 'anthropic/claude-sonnet-5.5',
+  choices: [{ message: { content: JSON.stringify({ campos: [{ clave: 'origen_cp', valor: '44100', confianza: 0.9, evidencia: 'x' }], mercancias: [], notas: null }) }, finish_reason: 'stop' }],
+  usage: { prompt_tokens: 100, completion_tokens: 50, cost: 0.001 },
+});
