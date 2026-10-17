@@ -295,6 +295,21 @@ const SALUDA = (nombre: string | null) => (nombre ? `Hola ${nombre.split(/\s+/)[
 export const MARCA_AVISO = 'Aviso de privacidad:';
 export const MARCA_BAJA = 'Para dejar de recibir mensajes escribe BAJA';
 
+/**
+ * ¿El texto que DE VERDAD salió llevaba el pie del aviso? La constancia del
+ * art. 16 no la justifica «hubo envío», la justifica «salió el pie», y por eso
+ * el predicado vive acá, junto a las marcas y a la guardia del pulido, y no en
+ * el servicio: una segunda definición sería el bug de mañana.
+ *
+ * El testigo es `MARCA_BAJA` porque es la única parte que el pie trae SIEMPRE:
+ * `MARCA_AVISO` depende de que la flota tenga liga de aviso configurada (ver
+ * `pieDePrimerContacto`), así que exigirla le negaría la constancia a una
+ * flota sin liga — otro problema, y no el de esta función.
+ */
+export function trajoPieDeAviso(texto: string): boolean {
+  return texto.includes(MARCA_BAJA);
+}
+
 function pieDePrimerContacto(nombreFlota: string, url: string | null): string {
   return `\n\nTus mensajes se atienden con apoyo de un asistente automatizado de ${nombreFlota}.${url ? ` ${MARCA_AVISO} ${url}.` : ''} ${MARCA_BAJA}.`;
 }
