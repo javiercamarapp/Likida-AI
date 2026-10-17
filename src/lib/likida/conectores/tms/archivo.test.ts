@@ -215,6 +215,9 @@ describe('equivalencia: API falsa vs archivo (mismos mapeos, mismas salidas)', (
     expect(porArchivo).toEqual(porApi);
   });
 
+  // Timeout explícito 20s (16-oct-2026, release 2): el default de vitest (5s) lo agota el
+  // runner de CI, más lento que una Mac local para parsear/paginar 2,000 filas; no es una
+  // regresión de código, es margen para el entorno compartido.
   it('2 000 viajes por archivo se leen completos y paginados', async () => {
     const muchos: Cruda[] = Array.from({ length: 2000 }, (_, i) => ({
       Icident: `M-${i}`, unidad: `UNI-${i % 50}`, 'Fecha Salida': `${dia(i)} 0${i % 9}:${String(i % 60).padStart(2, '0')}:00`, 'Fecha Llegada': '', origen: 'A', destino: 'B', estatus: 'Cerrado',
@@ -223,7 +226,7 @@ describe('equivalencia: API falsa vs archivo (mismos mapeos, mismas salidas)', (
     const r = await leerViajes(sesion, VENTANA);
     expect(r.ok && r.filas.length).toBe(2000);
     expect(r.ok && r.completa).toBe(true);
-  });
+  }, 20_000);
 
   it('una fila corrupta del archivo no entra a los lectores y queda informada por ruta', async () => {
     const csv = 'Icident;unidad;Fecha Salida;Fecha Llegada;origen;destino;estatus\nD-1;UNI-1;2026-03-01 08:00:00;2026-03-01 18:00:00;A;B;Cerrado\nD-2;UNI-2;truncada';
