@@ -186,7 +186,7 @@ describe('ningún texto de la app bajo el perfil trae un «$» de plan', () => {
       <main>contenido</main>
     </DashboardChrome>,
   );
-  const texto = (html: string) => html.replace(/<script[^>]*>[\s\S]*?<\/script\s*>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const texto = (html: string) => html.replace(/<script[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
   const PLANES = /\$|MXN|\/\s*mes|mensualidad|plan\s+(pro|básico|basico|x)\b|precio|suscripci|facturaci[oó]n/i;
 
   it.each(['flota_admin', 'superadmin', 'encargado', 'contador'])('el marco (layout + menú) con perfil no tiene «$», precios ni «Plan y facturación» (%s)', (rol) => {
