@@ -74,9 +74,14 @@ const ItemMerc = z.object({
 export const MAX_NOTAS = 400;
 export const MAX_EVIDENCIA = 300;
 
+// T-SYS-27: SIN `.max()` en los arrays de abajo — `maxItems` en el JSON Schema estricto tumbaba con HTTP 400 a
+// gemini-3.5-flash-lite y gemini-3.8-flash (medido 16-oct, doc 24/29; prueba en openrouter_esquema_estricto.test.ts).
+// El tope sigue aplicando vía `.refine()` (no se representa en el JSON Schema que ve el modelo — ver la prueba
+// «no declara maxItems»), más el slice ya existente en `extraccionDeLlm` y el guard de `bandeja.ts`.
 export const SalidaLlmSchema = z.object({
-  campos: z.array(ItemDoc).max(80),
-  mercancias: z.array(z.object({ campos: z.array(ItemMerc).max(40) })).max(MAX_MERCANCIAS),
+  campos: z.array(ItemDoc).refine((arr) => arr.length <= 80, { message: 'Máximo 80 campos por documento.' }),
+  mercancias: z.array(z.object({ campos: z.array(ItemMerc).refine((arr) => arr.length <= 40, { message: 'Máximo 40 campos por mercancía.' }) }))
+    .refine((arr) => arr.length <= MAX_MERCANCIAS, { message: `Máximo ${MAX_MERCANCIAS} mercancías por documento.` }),
   notas: z.string().nullable(),
 });
 export type SalidaLlmDatos = z.infer<typeof SalidaLlmSchema>;
