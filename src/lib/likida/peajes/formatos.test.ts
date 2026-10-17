@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  normalizarTag, normalizarNombre, horaDeTexto, horaDeCelda, fechaHoraDeCelda, aInstanteMx, montoDeCelda,
+  normalizarTag, normalizarNombre, repararMojibake, horaDeTexto, horaDeCelda, fechaHoraDeCelda, aInstanteMx, montoDeCelda,
 } from './formatos';
 
 describe('normalizarTag — el mismo dispositivo escrito de tres maneras', () => {
@@ -146,5 +146,40 @@ describe('montoDeCelda — el dinero no se adivina', () => {
     for (const v of ['', 'N/A', null, undefined, '1,23,45', '12.34.5', '1.2.3', 'abc', '$', '--5', '1e5', NaN, Infinity]) {
       expect(montoDeCelda(v as never)).toBeNull();
     }
+  });
+});
+
+describe('repararMojibake — UTF-8 leído como Windows-1252', () => {
+  // Las formas reales del archivo, escritas con escapes para que el editor no las «arregle».
+  const BUCERIAS = 'BUCER\u00c3\u008dAS';
+  const PENITA = 'LA PE\u00c3\u2018ITA';
+  const MEXICO = 'ENT. M\u00c3\u2030XICO';
+
+  it('repara Í, Ñ y É', () => {
+    expect(repararMojibake(BUCERIAS)).toBe('BUCERÍAS');
+    expect(repararMojibake(PENITA)).toBe('LA PEÑITA');
+    expect(repararMojibake(MEXICO)).toBe('ENT. MÉXICO');
+  });
+  it('deja intacto el texto bueno y la «Ã» suelta', () => {
+    expect(repararMojibake('CASETA NORMAL')).toBe('CASETA NORMAL');
+    expect(repararMojibake('BUCERÍAS')).toBe('BUCERÍAS');
+    expect(repararMojibake('PE\u00c3 NORTE')).toBe('PE\u00c3 NORTE');
+    expect(repararMojibake('Ã')).toBe('Ã');
+    expect(repararMojibake('')).toBe('');
+  });
+  it('es idempotente', () => {
+    for (const m of [BUCERIAS, PENITA, MEXICO]) {
+      const una = repararMojibake(m);
+      expect(repararMojibake(una)).toBe(una);
+    }
+  });
+  it('no toca texto con caracteres fuera de Latin-1/Windows-1252', () => {
+    expect(repararMojibake('Ã Ω')).toBe('Ã Ω');
+  });
+  it('normalizarNombre da la misma llave con y sin mojibake', () => {
+    expect(normalizarNombre(BUCERIAS)).toBe('bucerias');
+    expect(normalizarNombre(BUCERIAS)).toBe(normalizarNombre('Bucerías'));
+    expect(normalizarNombre(PENITA)).toBe('la penita');
+    expect(normalizarNombre(MEXICO)).toBe('ent mexico');
   });
 });

@@ -12,6 +12,7 @@ import {
 } from '@/lib/likida/intake/desglose_peaje';
 import { evidenciaGpsDeDesglose } from '@/lib/likida/peajes/evidencia_gps';
 import { anularDesgloseDb } from '@/lib/likida/peajes/datos';
+import { validarPeriodoDeclarado } from '@/lib/likida/peajes/periodo';
 import { bitacoraConciliada } from '@/lib/likida/peajes/bitacora_conciliada';
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../../sufijo';
@@ -155,11 +156,20 @@ export default async function PaginaAgentePeajes({
     if (!(archivo instanceof File) || archivo.size === 0) return { error: 'Elige el archivo del desglose (Excel, CSV o PDF).' };
     if (archivo.size > MAX_DESGLOSE_BYTES) return { error: MENSAJE_ARCHIVO_GRANDE };
     const proveedor = String(fd.get('proveedor') ?? '').trim();
+    // El periodo del archivo (opcional): decide qué cobro es extemporáneo. Las dos fechas o ninguna.
+    const desde = String(fd.get('periodo_desde') ?? '').trim();
+    const hasta = String(fd.get('periodo_hasta') ?? '').trim();
+    let periodo: { desde: string; hasta: string } | null = null;
+    if (desde || hasta) {
+      const v = validarPeriodoDeclarado(desde, hasta);
+      if (!v.ok) return { error: v.motivo };
+      periodo = { desde: v.periodo.desde, hasta: v.periodo.hasta };
+    }
 
     try {
       const buffer = Buffer.from(await archivo.arrayBuffer());
       const importado = await importarDesglose(tenantId, {
-        nombre: archivo.name, buffer, proveedor: proveedor || undefined,
+        nombre: archivo.name, buffer, proveedor: proveedor || undefined, periodo,
       });
       // El motivo del parseo VIAJA al usuario tal cual: nombra la columna que
       // faltó o por qué el PDF no alcanza — es el error útil, no uno genérico.

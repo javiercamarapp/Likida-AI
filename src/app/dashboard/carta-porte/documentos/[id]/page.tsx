@@ -6,6 +6,8 @@ import { puedeAdministrar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
 import { DatoInvalido, mensajeParaPantalla } from '@/lib/likida/errores';
 import { aprobarDocumento, abrirRevision, corregirCampos, crearViajeDeDocumento, eliminarDocumento, quitarRenglon, rechazarDocumento, reabrirDocumento } from '@/lib/likida/carta_porte_docs/bandeja';
+import { flotaBajoPerfil, marcarSubidoAMano, MENSAJE_FUNCION_NO_DISPONIBLE } from '@/lib/likida/carta_porte_docs/envio';
+import { repoEnvios, type ErrorEnvio } from '@/lib/likida/carta_porte_docs/repo_envios';
 import { detectarFormato, prepararContenido } from '@/lib/likida/carta_porte_docs/contenido';
 import { cambiosDeFormulario } from '@/lib/likida/carta_porte_docs/formulario';
 import { revisionDe } from '@/lib/likida/carta_porte_docs/presentacion';
@@ -23,6 +25,13 @@ const RUTA_PADRE = '/dashboard/carta-porte/documentos';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TTL_FIRMA_S = 300;
 
+/** Dónde falló el envío (hoja, fila, campo, código): el repositorio solo guarda la ubicación, nunca el valor. */
+function motivoDeRechazo(e: ErrorEnvio | null): string | null {
+  if (!e) return null;
+  const partes = [e.hoja ? `hoja ${e.hoja}` : null, e.fila !== undefined ? `fila ${e.fila}` : null, e.campo ? `campo ${e.campo}` : null].filter(Boolean);
+  const donde = partes.join(', ');
+  return [donde, e.codigo ? `código ${e.codigo}` : null].filter(Boolean).join(' · ') || null;
+}
 async function originalDe(d: repo.DocumentoFila): Promise<OriginalVista> {
   if (d.purgadoEn || !d.storageRuta) return { tipo: 'nada', motivo: 'El archivo ya se borró por retención; solo quedan los datos leídos.' };
   if (d.estado === 'dividido') return { tipo: 'nada', motivo: 'El archivo se dividió en un documento por embarque; el contenido de cada uno está en su propia revisión.' };
@@ -60,14 +69,18 @@ export default async function PaginaRevision({
   // La primera apertura arranca el tiempo de revisión medido (idempotente).
   const doc = previo.estado === 'por_revisar' ? await abrirRevision(tenantId, id, userId) : previo;
 
-  const [original, operadores, eventos, viaje, linaje, hijos] = await Promise.all([
+  const [original, operadores, eventos, viaje, linaje, hijos, envios, restringido] = await Promise.all([
     originalDe(doc),
     repo.operadoresDeFlota(tenantId),
     repo.listarEventos(tenantId, id),
     doc.viajeId ? repo.viajePorId(tenantId, doc.viajeId) : Promise.resolve(null),
     repo.linajeDeDocumentos(tenantId, [id]),
     doc.estado === 'dividido' ? repo.hijosDeDocumento(tenantId, id) : Promise.resolve([]),
+    doc.estado === 'aprobado' ? repoEnvios.listarPorDocumento(tenantId, id) : Promise.resolve([]),
+    flotaBajoPerfil(tenantId),
   ]);
+  // El envío de la versión vigente (los descartados son de versiones viejas): de él depende qué botones del modo manual se ven.
+  const envio = envios.find((e) => e.versionDoc === doc.version && e.estado !== 'descartado') ?? null;
   // De qué archivo nació este embarque (si nació de partir uno): su nombre para el enlace de regreso.
   const lin = linaje.get(id);
   const padre = lin?.rol === 'hijo' ? await repo.leerDocumento(tenantId, lin.padreId) : null;
@@ -87,7 +100,9 @@ export default async function PaginaRevision({
       const intencion = String(fd.get('intencion') ?? '');
       const operadorId = String(fd.get('operadorId') ?? '');
       const actor = { id: s.userId };
-      const operador = UUID.test(operadorId) ? operadorId : null;
+      // Bajo el perfil restringido no hay operador de viaje: el campo, si llega, se ignora.
+      const restringidoAccion = await flotaBajoPerfil(s.tenantId);
+      const operador = !restringidoAccion && UUID.test(operadorId) ? operadorId : null;
 
       // Los cambios escritos viajan con CASI todas las intenciones: la forma entera es lo que la persona vio.
       const aplicarForma = async (versionVista: number): Promise<number> => {
@@ -144,7 +159,18 @@ export default async function PaginaRevision({
         revalidatePath(RUTA_PADRE);
         return { ok: true, mensaje: 'Documento y archivo eliminados. Vuelve a la bandeja.' };
       }
+      if (intencion === 'subido_a_mano') {
+        const d = await repo.leerDocumento(s.tenantId, id);
+        if (!d) throw new DatoInvalido('Ese documento no está en tu flota, o alguien lo borró. Recarga la pantalla.');
+        const r = await marcarSubidoAMano(s.tenantId, d, version, actor);
+        revalidatePath(ruta); revalidatePath(RUTA_PADRE);
+        return r.ok
+          ? { ok: true, mensaje: r.yaEstaba ? 'Ya estaba marcada como subida a mano.' : 'Listo: quedó registrado que la plantilla se subió a mano. Likida no la volverá a enviar.' }
+          : { ok: false, error: r.mensaje };
+      }
       if (intencion === 'viaje') {
+        // Doble defensa: aunque la pantalla no ofrezca el botón, la acción se niega bajo el perfil (y `crearViajeDeDocumento` también).
+        if (restringidoAccion) return { ok: false, error: MENSAJE_FUNCION_NO_DISPONIBLE };
         const r = await crearViajeDeDocumento(s.tenantId, id, actor, operador);
         revalidatePath(ruta);
         return r.ok
@@ -162,10 +188,12 @@ export default async function PaginaRevision({
       doc={doc}
       revision={revisionDe(doc)}
       original={original}
-      operadores={operadores.filter((o) => o.activo).map((o) => ({ id: o.id, nombre: o.nombre }))}
+      operadores={restringido ? [] : operadores.filter((o) => o.activo).map((o) => ({ id: o.id, nombre: o.nombre }))}
       eventos={eventos.map((e) => ({ tipo: e.tipo, creadoEn: e.creadoEn }))}
       acciones={{ revisar }}
       sufijo={sufijoTenant(sp)}
+      envio={envio ? { estado: envio.estado, proximaRevision: envio.proximaRevision, motivo: motivoDeRechazo(envio.ultimoError) } : null}
+      perfilRestringido={restringido}
       salida={viaje ? { folio: viaje.folio ?? viaje.id.slice(0, 8) } : null}
       puedeEliminar={puedeAdministrar(rol)}
       embarque={lin?.rol === 'hijo' && padre ? { indice: lin.indice ?? 0, total: lin.total, clave: lin.clave, padreId: padre.id, padreNombre: padre.nombreArchivo } : null}

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { fechaHoraMx, numero, porcentaje } from '@/lib/formato';
 import type { CatalogosFiltro } from '@/lib/likida/conductor/repo_validacion';
 import { textoTiempo } from '@/lib/likida/conductor/planificador';
-import type { EpisodioVista, Excepcion, FilaTablero, HitoVista, IndicadoresVista, Semaforo, Tablero, TipoExcepcion } from '@/lib/likida/conductor/tablero';
+import { esFolioSimulado, type EpisodioVista, type Excepcion, type FilaTablero, type HitoVista, type IndicadoresVista, type Semaforo, type Tablero, type TipoExcepcion } from '@/lib/likida/conductor/tablero';
 import type { Estancia } from '@/lib/likida/conductor/estadias_anden';
 import { AccionesHito, FormaAsignarSitios, type AccionOficinaServidor, type ModoAccion, type OpcionSitio } from './acciones-forma';
 
@@ -35,11 +35,19 @@ export const ORDEN_SEMAFORO: Semaforo[] = ['sin_reporte', 'atrasado', 'a_tiempo'
 const EXCEPCION: Record<TipoExcepcion, string> = {
   escalado_sin_atender: 'Escalado sin atender', sin_reporte: 'Sin reporte', atrasado: 'Atrasado', sin_coincidencia: 'Ubicación sin coincidencia',
   llegada_sin_confirmar: 'Llegada sin confirmar', llegada_sin_sitio: 'Llegada sin sitio para conciliar',
-  estadia_excedida: 'Estadía excedida', horas_incoherentes: 'Horas incoherentes',
+  estadia_excedida: 'Estadía excedida', horas_incoherentes: 'Horas incoherentes', sin_a_quien_escalar: 'Sin a quién escalar',
+  pendiente_cruce_largo: 'Pendiente de cruce por mucho tiempo', salida_tms_discrepante: 'Salida del TMS sin confirmar',
 };
 const GRAVEDAD: Record<1 | 2 | 3, { texto: string; color: string }> = {
   3: { texto: 'Urgente', color: 'var(--bad)' }, 2: { texto: 'Revisar', color: 'var(--warn)' }, 1: { texto: 'Vigilar', color: 'var(--muted)' },
 };
+
+/** T-A5-26: rótulo de los datos de demostración del seed. Nunca se mezclan con reales sin decirlo. */
+export function EtiquetaSimulado() {
+  return (
+    <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wide" style={{ color: 'var(--warn)', background: 'var(--warnbg)' }}>SIMULADO</span>
+  );
+}
 
 export function PuntoSemaforo({ s }: { s: Semaforo }) {
   const c = SEMAFORO[s];
@@ -60,6 +68,11 @@ function Kpi({ titulo, valor, nota, tono }: { titulo: string; valor: string; not
     </div>
   );
 }
+
+/** T-A5-26: textos exactos de los estados vacíos y de falta, en lenguaje llano. */
+export const TEXTO_SIN_VIAJES = 'Todavía no hay viajes en seguimiento. Marca operadores en Configuración y sube sus viajes.';
+export const TEXTO_SIN_GPS = 'Sin GPS conectado: las llegadas por geocerca no están activas (se siguen pidiendo por WhatsApp).';
+export const TEXTO_SIN_TELEFONO = 'Este operador no tiene teléfono: no se le puede escribir; se avisará al jefe.';
 
 const minutos = (m: number): string => (m < 60 ? `${numero(Math.round(m))} min` : textoTiempo(m));
 
@@ -217,8 +230,8 @@ function CeldaHito({ h, puedeActuar, accion, viajeId }: { h: HitoVista; puedeAct
       )}
       {resuelto && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]" style={{ color: 'var(--muted)' }}>
-          {h.fuente && <span>vía {FUENTE_TEXTO[h.fuente] ?? h.fuente}</span>}
-          {h.validadoPor && <span style={{ color: 'var(--ok)' }}>validado ({h.validadoPor === 'gps' ? 'ubicación' : h.validadoPor})</span>}
+          {h.fuente && <span>vía {FUENTE_TEXTO[h.fuente] ?? 'otro medio'}</span>}
+          {h.validadoPor && <span style={{ color: 'var(--ok)' }}>validado ({h.validadoPor === 'gps' ? 'ubicación' : h.validadoPor === 'oficina' ? 'oficina' : 'sistema'})</span>}
           {h.fotos.map((f) => (
             <a key={f.id} href={`/api/v1/evidencias/${f.id}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 underline" title="Abrir la foto (el enlace dura 10 minutos)">
               <Camera width={11} height={11} aria-hidden />{FOTO_TEXTO[f.tipo]}
@@ -258,10 +271,11 @@ export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios }: {
 }) {
   const v = f.viaje;
   return (
-    <li className="card p-3.5 space-y-2.5" aria-label={`Viaje ${v.folio ?? v.id}`}>
+    <li className="card p-3.5 space-y-2.5" aria-label={`Viaje ${v.folio ?? 'sin folio'}`}>
       <div className="flex items-center gap-2.5 flex-wrap">
         <PuntoSemaforo s={f.semaforo} />
         <span className="font-medium text-[13px]">{v.folio ?? 'sin folio'}</span>
+        {esFolioSimulado(v.folio) && <EtiquetaSimulado />}
         <span className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{v.operadorNombre ?? 'Sin operador'}</span>
         <span className="text-[12px]" style={{ color: 'var(--faint)' }}>
           {[v.terminalNombre, v.clienteNombre].filter(Boolean).join(' · ')}
@@ -269,6 +283,27 @@ export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios }: {
         <span className="ml-auto text-[12px]" style={{ color: 'var(--muted)' }}>{v.origen ?? '—'} → {v.destino ?? '—'}</span>
       </div>
       <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{f.motivo}</p>
+      {v.operadorSinTelefono === true && (
+        <p role="note" className="text-[12px] flex items-start gap-1.5" style={{ color: 'var(--warn)' }}>
+          <CircleAlert width={13} height={13} aria-hidden className="mt-0.5 shrink-0" />{TEXTO_SIN_TELEFONO}
+        </p>
+      )}
+      <p className="text-[12px] flex items-center gap-1.5" style={{ color: f.ubicacion.obsoleta ? 'var(--warn)' : 'var(--muted)' }}>
+        {f.ubicacion.fuente === 'sin_dato' ? <MapPinOff size={13} aria-hidden /> : <MapPin size={13} aria-hidden />}
+        {f.ubicacion.texto}
+      </p>
+      {f.transito && (
+        <p className="text-[12px] flex items-center gap-1.5" style={{ color: 'var(--muted)' }} aria-label="Tránsito">
+          <Flag size={13} aria-hidden />
+          <span className="font-medium">Tránsito:</span> {f.transito.texto}
+        </p>
+      )}
+      {f.salidaTms && (
+        <p className="text-[12px] flex items-center gap-1.5" style={{ color: f.salidaTms.estado === 'discrepancia' ? 'var(--warn)' : 'var(--muted)' }} aria-label="Salida del TMS">
+          <Flag size={13} aria-hidden />
+          {f.salidaTms.texto}
+        </p>
+      )}
       {(f.sitioCarga || f.sitioDescarga) ? (
         <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Se valida contra: {f.sitioCarga ?? 'carga sin sitio asignado'} → {f.sitioDescarga ?? 'descarga sin sitio asignado'}</p>
       ) : (
@@ -350,6 +385,11 @@ export function TableroHitos({
           ))}
         </div>
         <FiltrosTablero f={filtros} catalogos={catalogos} ocultos={ocultos} accionUrl={accionUrl} />
+        {tablero.sinGps && (
+          <p role="note" className="text-[12px] flex items-start gap-1.5" style={{ color: 'var(--warn)' }}>
+            <MapPinOff width={13} height={13} aria-hidden className="mt-0.5 shrink-0" />{TEXTO_SIN_GPS}
+          </p>
+        )}
         {tablero.hayMas && (
           <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
             Hay más viajes en curso de los que este tablero lista: usa los filtros (patio, cliente o chofer) para ver el resto.
@@ -363,7 +403,7 @@ export function TableroHitos({
           <CircleAlert width={14} height={14} aria-hidden />
           {filtros.terminalId || filtros.clienteId || filtros.operadorId || filtros.semaforo
             ? 'Ningún viaje en curso cumple esos filtros.'
-            : 'No hay viajes aceptados en curso: cuando un chofer acepte un viaje aparece aquí con sus cinco hitos.'}
+            : TEXTO_SIN_VIAJES}
         </section>
       ) : (
         <ul className="space-y-3">

@@ -2,6 +2,9 @@ import {
   probarConGuardas, sinApiQueProbar, veredictoHttp,
   type Conector, type ResultadoPrueba,
 } from './tipos';
+import {
+  CREDENCIALES_TMS_API_LECTURA, NOMBRE_TMS_API_LECTURA, probarTmsApiLectura,
+} from './tms/ficha';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS SISTEMAS DE LA OFICINA — ERP, contabilidad, TMS y el archivo.
@@ -124,6 +127,30 @@ export const TMS_GENERICO: Conector = {
   probar: async () => sinApiQueProbar(
     'No hay API que probar todavía: el camino de hoy es el archivo. Si tu TMS tiene API, mándanos su documentación y una credencial de lectura y lo conectamos.',
   ),
+};
+
+/**
+ * La API de lectura del sistema de gestión de transporte del cliente (login con usuario y
+ * contraseña de una cuenta de servicio). SOLO LECTURA. Convive con `TMS_GENERICO` (la ruta por
+ * archivo), que no se toca. Sin documentación del login no hay `fuente`: queda `requiere_piloto`
+ * y `fuente: null` (BLOQUEO EXTERNO). La lógica de `probar()` vive en `tms/ficha.ts`.
+ */
+export const TMS_API_LECTURA: Conector = {
+  id: 'tms_api_lectura',
+  nombre: NOMBRE_TMS_API_LECTURA,
+  categoria: 'Hoja de cálculo y archivo',
+  queHace: 'Lee de la API de tu sistema de transporte las liquidaciones y los movimientos que ya capturaste, para no recapturarlos en Likida. Solo lectura: no escribe nada en tu sistema.',
+  // NO es `api_en_vivo`: sin la documentación del login no hay endpoint que citar.
+  formaDeConectar: 'requiere_piloto',
+  comoConectaHoy: 'Todavía no se conecta de punta a punta. Hace falta la documentación del inicio de sesión de tu API y una cuenta de servicio de solo lectura (sin correo personal). Con eso, "Probar conexión" hace únicamente el login y la lectura de una fila.',
+  paraSubirDeEscalon: 'La documentación del inicio de sesión de tu API, una cuenta de servicio de solo lectura, un ambiente de prueba y, si tu red lo exige, abrir el acceso (IP fija, VPN o Zero Trust) desde tu área de sistemas.',
+  // Solo lectura. NINGUNA capacidad de escritura sobre el sistema de operación del cliente.
+  capacidades: ['leer_viajes', 'leer_movimientos'],
+  // Usa `conector_credencial` (cofre cifrado por tenant), no `rastreo_credencial`.
+  claveAlmacen: null,
+  fuente: null,
+  credenciales: CREDENCIALES_TMS_API_LECTURA,
+  probar: (v, http) => probarTmsApiLectura(v, http),
 };
 
 // ── SAP Business One ───────────────────────────────────────────────────────
@@ -543,6 +570,7 @@ export const ODOO: Conector = {
 export const CONECTORES_ERP: readonly Conector[] = [
   ARCHIVO_CONTABLE,
   TMS_GENERICO,
+  TMS_API_LECTURA,
   SAP_B1,
   CONTPAQI,
   ORACLE_FUSION,

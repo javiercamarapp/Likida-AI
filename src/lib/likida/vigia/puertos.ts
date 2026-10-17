@@ -21,6 +21,8 @@ import type {
   MensajeVigia, NivelDirector, Riesgo, TipoEvento,
 } from './tipos';
 import type { enviarCorreo } from '@/lib/correo/enviar';
+import type { DepsGenerar } from './aviso/generar';
+import type { AvisoParaEntrega, DepsEntrega } from './aviso/entrega';
 
 export interface ResultadoRecibir {
   mensajeId: string;
@@ -129,7 +131,7 @@ export interface RepoVigia {
   actualizarConversacion(tenantId: string, id: string, parche: Partial<{
     viajeId: string | null; molestiaNivel: number; molestiaMotivos: string[]; molestiaEn: string | null;
     escalamientoNivel: number; escaladoEn: string | null; control: 'agente' | 'humano'; tomadaPor: string | null; tomadaEn: string | null;
-    atendidaEn: string | null; atendidaPor: string | null;
+    atendidaEn: string | null; atendidaPor: string | null; prioridad: number;
   }>, guarda?: GuardaConversacion): Promise<boolean>;
   /** El cliente fue atendido: se apaga el reloj del SLA, la insistencia y la escalera. */
   marcarRespondida(tenantId: string, conversacionId: string, ahora: Date): Promise<void>;
@@ -144,6 +146,11 @@ export interface RepoVigia {
    * gerente asignado al cliente. Sin lista ni asignado, el destino de siempre. Sin duplicados. Falla hacia el destino de siempre.
    */
   destinatariosNivel(tenantId: string, contacto: Contacto, nivel: NivelDirector): Promise<DestinatarioAviso[]>;
+  /**
+   * 0798: a quién avisar como «servicio al cliente» para ese cliente: los contactos activos de la flota para él o para todos.
+   * Vacío si no hay lista (o la base no tiene la migración): quien llama sigue con gerente/director como siempre. No modifica los niveles.
+   */
+  destinatariosServicioCliente(tenantId: string, clienteId: string | null): Promise<DestinatarioAviso[]>;
   /**
    * 0674: reclama el correo de respaldo de (aviso, persona). Insertar la llave ES reclamarla: `null` = otro lo lleva o ya salió.
    * Un arriendo vencido (la corrida que lo llevaba murió) se retoma. Lanza si la base no puede responder.
@@ -163,7 +170,7 @@ export interface RepoVigia {
    * Cierra los hilos cuyo cliente lleva esperando desde antes de `antesDe` (ciclo muerto: el cliente se fue, nadie contestó, ya se
    * escaló lo que se podía). Devuelve los cerrados. Si el cliente vuelve a escribir, abre una conversación nueva.
    */
-  expirarCiclosInactivos(antesDe: Date, limite: number, ahora: Date): Promise<Array<{ tenantId: string; id: string }>>;
+  expirarCiclosInactivos(antesDe: Date, limite: number, ahora: Date, excluirTenants?: readonly string[]): Promise<Array<{ tenantId: string; id: string }>>;
   aprobadosAtorados(antesDe: Date, limite: number): Promise<Array<{ tenantId: string; id: string }>>;
   purgar(limite: number): Promise<number>;
 
@@ -175,8 +182,24 @@ export interface RepoVigia {
   archivoAdjunto(a: { tenantId: string; clienteId: string; viajeId: string; clave: AdjuntoRef['clave'] }): Promise<ArchivoParaEnviar | null>;
 }
 
+/** Lo que la pasada de avisos del cron necesita de UNA flota con el aviso encendido (T-A4-21). */
+export interface ContextoAvisosFlota {
+  tenantId: string;
+  generar: DepsGenerar;
+  entrega: DepsEntrega;
+  /** Avisos `aprobado` listos para entregar (a lo más `limite`); la entrega vuelve a verificar el estado. */
+  aprobados(limite: number): Promise<AvisoParaEntrega[]>;
+}
+
+/** Puerto de la pasada de avisos: las flotas con el aviso encendido, ya con sus accesos. Sin él, el cron no corre avisos. */
+export interface PuertoAvisosCron {
+  flotas(limite: number): Promise<ContextoAvisosFlota[]>;
+}
+
 export interface DepsVigia {
   repo: RepoVigia;
+  /** T-A4-21: pasada de avisos de viaje dentro del cron (solo en minutos múltiplo de 5, después del escalamiento). */
+  avisos?: PuertoAvisosCron | null;
   modelo?: PuertoModelo | null;
   pulir?: PuertoPulir | null;
   enviar?: Enviador;
@@ -189,4 +212,15 @@ export interface DepsVigia {
   enviarDocumento?: (telefono: string, link: string, nombre: string, pie?: string) => Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number }>;
   enviarCliente?: (e: EntradaEnvioCliente, enviar?: Enviador, opciones?: { confirmacionDeBaja?: boolean }) => Promise<ResultadoEnvioCliente>;
   ahora?: () => Date;
+  /**
+   * La migración 0798 ya está aplicada en esta base (la intención `datos_unidad` cabe en el CHECK). Sin esto el servicio la
+   * degrada a `otro`. Cableado real: `LIKIDA_VIGIA_DATOS_UNIDAD=si` (deps.ts).
+   */
+  datosUnidad?: boolean;
+  /**
+   * Perfil de la flota (fase 1): ¿el Vigía está en «Próximamente» para este tenant? Si sí, el WhatsApp del cliente y los
+   * botones del gerente NO leen, escriben ni envían nada. Cableado real: `moduloEnStandBy(tenant,'vigia')` (deps.ts);
+   * sin el puerto (pruebas) no se consulta.
+   */
+  enStandBy?: (tenantId: string) => Promise<boolean>;
 }

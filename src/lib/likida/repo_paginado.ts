@@ -97,6 +97,8 @@ export interface ViajeEnCursoRow {
   unidadId: string | null; unidadEco: string | null;
   fechaInicio: string | null;
   avisadoEn: string | null; aceptadoEn: string | null; escaladoEn: string | null;
+  /** Quién aceptó: 'chofer' | 'importacion' | 'oficina' | null (T-A5-06). */
+  aceptadoOrigen?: string | null;
   avisosEnviados: number;
 }
 
@@ -105,7 +107,7 @@ export interface ViajeEnCursoRow {
 // en tiempo de compilación — un `+` lo ensancha a `string` y la respuesta cae
 // a `GenericStringError[]`, exactamente el bug que este archivo evita en
 // runtime (ver `pg.ts`) pero casi reproduce en tipos.
-const COLUMNAS_VIAJE_EN_CURSO = 'id, folio, origen, destino, estatus, unidad_id, fecha_inicio, avisado_en, aceptado_en, escalado_en, avisos_enviados, operador:operador_id(nombre), unidad:unidad_id(numero_economico)';
+const COLUMNAS_VIAJE_EN_CURSO = 'id, folio, origen, destino, estatus, unidad_id, fecha_inicio, avisado_en, aceptado_en, aceptado_origen, escalado_en, avisos_enviados, operador:operador_id(nombre), unidad:unidad_id(numero_economico)';
 
 function filaViajeEnCurso(v: Record<string, unknown>): ViajeEnCursoRow {
   return {
@@ -121,6 +123,7 @@ function filaViajeEnCurso(v: Record<string, unknown>): ViajeEnCursoRow {
     avisadoEn: (v.avisado_en as string) || null,
     aceptadoEn: (v.aceptado_en as string) || null,
     escaladoEn: (v.escalado_en as string) || null,
+    aceptadoOrigen: (v.aceptado_origen as string) || null,
     avisosEnviados: Number(v.avisos_enviados ?? 0),
   };
 }

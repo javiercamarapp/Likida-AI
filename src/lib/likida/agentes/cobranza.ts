@@ -470,7 +470,7 @@ export function rotarPorHora<T>(lista: readonly T[], ahora: Date): T[] {
   return [...lista.slice(desde), ...lista.slice(0, desde)];
 }
 
-export async function ejecutarCobranzaGlobal(ahora: Date = new Date(), opts: { venceEn?: number } = {}): Promise<{ tenants: number; contactados: number; cortadosPorReloj: number; fallos: string[]; rechazoMasivo?: boolean }> {
+export async function ejecutarCobranzaGlobal(ahora: Date = new Date(), opts: { venceEn?: number; excluirTenants?: ReadonlySet<string> } = {}): Promise<{ tenants: number; contactados: number; cortadosPorReloj: number; fallos: string[]; rechazoMasivo?: boolean }> {
   // `traerTodo` y no el `.limit(1000)` que vivía aquí — que estaba EXACTAMENTE
   // en el tope de PostgREST, donde "hay 1,000" y "hay 90,000" son
   // indistinguibles (auditoría de escala 15k). Un solo cliente de 500
@@ -487,7 +487,9 @@ export async function ejecutarCobranzaGlobal(ahora: Date = new Date(), opts: { v
     'ejecutarCobranzaGlobal',
   );
   // Orden estable (por id) y DESPUÉS rotado por hora: ver `rotarPorHora`.
-  const tenants = rotarPorHora([...new Set(data.map((v) => v.tenant_id as string))].sort(), ahora);
+  // Las flotas con perfil (0770) no reciben cobranza: es un módulo en stand-by.
+  const saltar = opts.excluirTenants;
+  const tenants = rotarPorHora([...new Set(data.map((v) => v.tenant_id as string))].filter((t) => !saltar?.has(t)).sort(), ahora);
 
   // Un solo vencimiento para TODA la corrida (auditoría 3, REND-C2): a 750
   // camiones los envíos seriales nunca cabían en el maxDuration y el proceso

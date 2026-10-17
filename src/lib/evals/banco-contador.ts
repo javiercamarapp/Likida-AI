@@ -22,7 +22,7 @@
 // hallazgo accionable es «falta la ficha», no «el agente es tonto».
 //
 // La fuente de cada respuesta es el corpus fiscal verificado de la ola 1 y
-// la ola 2 (docs/conocimiento/01–11, 10-contradicciones, 11-huecos), citado
+// la ola 2 (la documentación interna–11, 10-contradicciones, 11-huecos), citado
 // en `fundamento`. Nada de este archivo se afirma de memoria.
 // ═══════════════════════════════════════════════════════════════════════════
 

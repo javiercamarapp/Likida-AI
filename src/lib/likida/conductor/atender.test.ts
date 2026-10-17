@@ -397,6 +397,16 @@ describe('«ya lo atiendo» del jefe o del patio', () => {
     expect(x.marcar).not.toHaveBeenCalled();
   });
 
+  it('flota con perfil (Conductor en «Próximamente»): se consume en silencio, sin marcar ni cerrar nada', async () => {
+    const x = mk(true);
+    const cerrar = vi.fn(async () => 1);
+    const r = await atenderAcuseJefe('5219990000099', `jefe_atiendo:${V}`, AHORA, { ...x.deps, cerrarSenalVida: cerrar, enStandBy: async () => true });
+    expect(r).toBe('');
+    expect(x.marcar).not.toHaveBeenCalled();
+    expect(cerrar).not.toHaveBeenCalled();
+    expect(x.deps.evento).not.toHaveBeenCalled();
+  });
+
   it('lo que no es el botón del jefe devuelve null', async () => {
     const x = mk(true);
     expect(await atenderAcuseJefe('5219990000099', 'hola', AHORA, x.deps)).toBeNull();

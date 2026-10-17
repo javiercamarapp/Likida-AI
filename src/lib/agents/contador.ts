@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CONTADOR — el experto fiscal del autotransporte, y el EXAMINADO de la
-// fase 2 de EVALOPS (E.26; diseño en docs/conocimiento/22-evaluacion.md).
+// fase 2 de EVALOPS (E.26; diseño en la documentación interna).
 //
 // Qué es: un agente de UNA vuelta (pregunta → opinión fundada) cuyo único
 // material afirmable es el corpus de fichas verificadas de `normas/`,

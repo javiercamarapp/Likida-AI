@@ -122,7 +122,7 @@ describe('el techo diario que llega a la RPC sale de la FLOTA, no de una env glo
   // MAX fijada) ya no es el $60 puesto a mano que la auditoría 25 midió y no
   // subió — se deriva de `COSTO_ESTIMADO_USD.viajeCompleto` con margen. Una
   // flota de 15,000 viajes/mes (~500/día, el volumen objetivo de
-  // docs/escala-15k.md) YA NO se acota en el freno por defecto.
+  // la documentación interna) YA NO se acota en el freno por defecto.
   it('CAP-1: sin env MAX fijada, una flota de 15,000 viajes/mes no se acota en el techo por defecto', async () => {
     vi.stubEnv('LIKIDA_LLM_TENANT_DAILY_BUDGET_USD', '5');
     tablas.set('tenant', { data: { config: { politica: [{ concepto: 'diesel' }] } }, error: null });

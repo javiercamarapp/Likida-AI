@@ -409,6 +409,24 @@ describe('derivarJornadas — el reloj de la corrida', () => {
     }
   });
 
+  it('una flota con perfil (0770) se SALTA: no asienta nada y SUELTA su claim (no lo retiene hasta el lease)', async () => {
+    viajes = [viaje(1, 'op-a', 'u-1'), viaje(2, 'op-b', null)];
+    posiciones.set(`u-1|${DIA}`, [`${DIA}T14:00:00.000Z`, `${DIA}T23:00:00.000Z`]);
+    const r = await derivarJornadas({ ahora: AHORA, excluirTenants: new Set([T]) });
+
+    expect(r.revisados).toBe(0);
+    expect(r.asentados).toBe(0);
+    expect(asegurarDiaJornada).not.toHaveBeenCalled();
+    expect(asentarMarca).not.toHaveBeenCalled();
+    expect([...trabajos.values()].filter((t) => t.claimToken !== null)).toEqual([]);
+  });
+
+  it('con otra flota excluida, esta sigue derivando', async () => {
+    viajes = [viaje(1, 'op-a', null)];
+    const r = await derivarJornadas({ ahora: AHORA, excluirTenants: new Set(['otra-flota']) });
+    expect(r.asentados).toBe(1);
+  });
+
   it('sin `venceEn` el motor NO corta — el reloj es del llamador, no del motor', async () => {
     viajes = [viaje(1, 'op-a', null)];
     const r = await derivarJornadas({ ahora: AHORA });

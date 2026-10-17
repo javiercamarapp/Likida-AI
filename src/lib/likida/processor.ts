@@ -13,6 +13,7 @@ import { guardiaCifras } from '@/lib/likida/cuadre/guardia';
 import { cuadrarDesdeDB, ventanaDesdeDB } from '@/lib/likida/cuadre/desde_db';
 import { fechaDudosa } from '@/lib/likida/cuadre/fecha_dudosa';
 import { pipelineTenantApagado } from '@/lib/likida/interruptor_tenant';
+import { moduloEnStandBy } from '@/lib/auth/perfil_tenant';
 import { etiquetaConcepto, copiasDeComprobante } from '@/lib/likida/cuadre/engine';
 import { mensajePideFechaOtraVez } from '@/lib/likida/intake/pedir_fecha';
 import { resumenCuadre, type CuadreParaResumen } from '@/lib/likida/cuadre/resumen';
@@ -715,9 +716,10 @@ async function atenderTextoOficina(
     const rVigia = await atenderDecisionVigia(
       { tenantId: cuenta.tenantId, rol: cuenta.rol, userId: cuenta.userId }, texto, crearDepsVigia(),
     );
-    if (rVigia) {
+    if (rVigia !== null) {
       logger.info('oficina.vigia_decision', { user: cuenta.userId, rol: cuenta.rol });
-      await sendText(from, rVigia);
+      // '' = el Vigía está en «Próximamente» para esta flota (perfil): el botón se consume sin contestar.
+      if (rVigia) await sendText(from, rVigia);
       return true;
     }
   } catch (e) {
@@ -942,6 +944,10 @@ const COSTO_MINIMO_TURNO_MS = 15_000;
  * aquí reenviar la MISMA foto sin comprimir falla otra vez por el mismo
  * motivo, así que hay que decírselo con esas palabras.
  */
+/** Lo que se le dice a un operador cuya flota tiene el perfil `cinco_agentes` (0770) cuando manda un comprobante o pide cerrar. */
+const MENSAJE_SIN_COMPROBANTES_POR_WA =
+  'Por ahora tu flota no recibe comprobantes ni cierra liquidaciones por este WhatsApp. Entrega tus papeles en tu oficina 🙏.';
+
 const MENSAJE_FOTO_PESADA =
   'Tu foto es muy pesada para que la pueda leer 📦. Intenta mandarla de nuevo o comprimida, por favor. 🙏';
 
@@ -1653,7 +1659,8 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     if (msg.type === 'text' && msg.text) {
       const acuseJefe = await atenderAcuseJefe(msg.from, msg.text);
       if (acuseJefe !== null) {
-        await sendText(msg.from, acuseJefe);
+        // '' = la flota tiene el Conductor en «Próximamente» (perfil): se consume sin contestar.
+        if (acuseJefe) await sendText(msg.from, acuseJefe);
         return;
       }
     }
@@ -1854,6 +1861,10 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       await sendText(msg.from, 'Tu flota puso en pausa la recepción automática por WhatsApp ahorita. Guarda tu foto o mensaje y reenvíamelo más tarde, o contacta a tu oficina.');
       return;
     }
+    // EL PERFIL DE LA FLOTA (0770), FASE 1: el Conductor (A5) está en «Próximamente». Con perfil, el WhatsApp del chofer
+    // NO registra hitos, no pide ubicación y no avisa al jefe a nombre del módulo; el resto del turno (ROJO, ARCO,
+    // talacha, agente genérico, la regla de comprobantes del perfil) sigue como antes. Falla cerrado si el perfil no se lee.
+    const conductorEnStandBy = await moduloEnStandBy(op.tenantId, 'conductor');
     // ── CAPA E1: LA NOTA DE VOZ DEL CHOFER SE VUELVE TEXTO, AQUÍ Y SOLO AQUÍ ─
     //
     // El chofer asustado manda audio, no escribe (blueprint 19). La conversión
@@ -2163,6 +2174,11 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // trae cada uno cuando se le pregunte si van, y evita pagarla otra vez al
       // adjuntarlos. Un comprobante vale mucho más que una llamada de visión.
       if (msg.type === 'image' && msg.mediaId) {
+        // EL PERFIL DE LA FLOTA (0770): sin lectura de comprobantes por WhatsApp (ver el gemelo de abajo).
+        if (await pipelineTenantApagado(op.tenantId, 'ocr')) {
+          await sendText(msg.from, MENSAJE_SIN_COMPROBANTES_POR_WA);
+          return;
+        }
         try {
           // El `??` es el gancho de QA (ver InboundMessage.mediaDataUrlQA):
           // producción siempre trae el campo undefined y descarga de Meta.
@@ -2491,7 +2507,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // Mismo criterio que el POD: el CAPTION decide qué papel es y sin él la foto sigue como comprobante.
       // Se resuelve PRIMERO a qué hito pertenece (sin hito no se paga la descarga) y se sube con el mismo
       // pipeline y bucket que el POD. No es un gasto: no toca el OCR, la liquidación ni la barrera del «listo».
-      const evidenciaPrevia = await hitoParaEvidenciaDelChofer({ tenantId: op.tenantId, operadorId: op.operadorId, viajeId, caption: msg.text });
+      const evidenciaPrevia = conductorEnStandBy ? null : await hitoParaEvidenciaDelChofer({ tenantId: op.tenantId, operadorId: op.operadorId, viajeId, caption: msg.text });
       if (evidenciaPrevia) {
         // Sin hito al cual colgarla y sin que la foto pueda ser el aviso: se le dice, como siempre.
         if (!evidenciaPrevia.hito && !evidenciaPrevia.comoHito) {
@@ -2543,6 +2559,14 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           logger.error('conductor.evidencia_error', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
           await say(mensajeEvidencia('fallo', evidenciaPrevia.tipo));
         }
+        return;
+      }
+
+      // EL PERFIL DE LA FLOTA (0770): una flota con perfil `cinco_agentes` no lee comprobantes por WhatsApp (la
+      // liquidación no va por aquí). Va DESPUÉS de la evidencia de hitos y de la carta porte sellada, que son del
+      // Conductor y siguen vivas, y ANTES de la barrera de intake y del OCR.
+      if (await pipelineTenantApagado(op.tenantId, 'ocr')) {
+        await say(MENSAJE_SIN_COMPROBANTES_POR_WA);
         return;
       }
 
@@ -3768,7 +3792,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       // Agente 5 (0385): el pin se ADJUNTA a la llegada que el chofer acaba de reportar y se compara contra el sitio
       // del viaje. (Antes esta llamada vivía en el bloque «sin viaje», donde `viajeId` es siempre nulo: nunca corría.)
       // No registra ningún hito por sí solo. Best-effort: devuelve la línea que se agrega a la respuesta, o nada.
-      const lineaConductor = await atenderPinConductor({
+      const lineaConductor = conductorEnStandBy ? null : await atenderPinConductor({
         tenantId: op.tenantId, operadorId: op.operadorId, viajeId, lat: msg.lat, lng: msg.lng,
         enviadoEn: msg.timestampMs ? new Date(msg.timestampMs) : null,
       });
@@ -3915,7 +3939,7 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
       return;
     }
 
-    const rConductor = await atenderConductor({
+    const rConductor = conductorEnStandBy ? null : await atenderConductor({
       tenantId: op.tenantId,
       operadorId: op.operadorId,
       telefono: msg.from,
@@ -4422,6 +4446,13 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // se libera el claim para que el mensaje no quede atascado. No resuelve
     // "el segundo mensaje se contesta", pero sí "el operador sabe que no se
     // perdió, y puede volver a mandarlo".
+    // EL PERFIL DE LA FLOTA (0770): el cierre y el cuadre por WhatsApp quedan en stand-by (la liquidación se
+    // entrega por correo). Va ANTES del mutex: no hay nada que tomar ni que soltar.
+    if (await pipelineTenantApagado(op.tenantId, 'cuadre')) {
+      await say(MENSAJE_SIN_COMPROBANTES_POR_WA);
+      return;
+    }
+
     const tokenCierre = nuevoTokenDeLock();
     const lock = await intentarLockViaje(viajeId, {
       ttlMs: TTL_LOCK_CIERRE_MS, maxWaitMs: reloj.acotar(12_000), token: tokenCierre,

@@ -180,7 +180,7 @@ export interface SelectoresCapufe {
  * MEDIDO CONTRA EL PORTAL REAL EL 5-AGO-2026, uno por uno, sin escribir nada.
  *
  * El arnés que lo midió es `pruebas-manuales/capufe-prevuelo.prueba.ts` y su
- * reporte queda en `pruebas-manuales/ensayo/<fecha>/capufe-prevuelo.txt`. Vale
+ * reporte queda en `pruebas-manuales/ensayo/<fecha>/` (no versionado). Vale
  * la pena volver a correrlo antes de cada temporada de facturación: es una
  * visita de lectura y cuesta dos segundos.
  *

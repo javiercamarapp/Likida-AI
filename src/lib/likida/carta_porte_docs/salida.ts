@@ -5,10 +5,15 @@
 // borrador del complemento Carta Porte 3.1 con el checklist y los validadores SAT
 // que YA existen (`getBorradorViaje` → `armarBorrador` → `validarComplemento`).
 //
-// ESTE MÓDULO NO TIMBRA y no importa nada del camino del timbre (PAC, CFDI,
+// ESTE MÓDULO NO TIMBRA NI CREA CCP, y no importa nada del camino del timbre (PAC, CFDI,
 // `carta_porte_timbre`): una prueba lo vigila leyendo los imports. Un documento
 // de un cliente, aunque lo apruebe un humano, produce un BORRADOR; emitir el
 // complemento sigue siendo el acto separado y supervisado de siempre.
+//
+// ── STAND-BY BAJO EL PERFIL «cinco_agentes» ─────────────────────────────────
+// Para las flotas bajo ese perfil, aprobar = PREPARAR EL ENVÍO AL TMS (`envio.ts`), no crear viaje. Aquí
+// `aplicarSalidaViaje` se conserva intacta para las demás flotas, pero bajo el perfil responde «no disponible»
+// SIN tocar la base (ni siquiera lee el operador): el camino queda oculto y bloqueado, no borrado.
 //
 // ── LO QUE SE RESPETA DEL VIAJE EXISTENTE ───────────────────────────────────
 //   · Si ya hay un viaje con ese folio, SOLO se llenan sus huecos (columnas
@@ -29,6 +34,7 @@ import type { Extraccion } from './campos';
 import { DatoInvalido } from '../errores';
 import { getBorradorViaje, validarMercancia } from '../carta_porte_datos';
 import { anotarBitacora } from '../bitacora_escritura';
+import { MENSAJE_FUNCION_NO_DISPONIBLE, flotaBajoPerfil } from './envio';
 import * as repo from './repo';
 import type { DocumentoFila, MercanciaInsertar, OperadorMin } from './repo';
 
@@ -164,6 +170,7 @@ async function evaluarBorrador(tenantId: string, viajeId: string): Promise<Borra
 export async function aplicarSalidaViaje(
   tenantId: string, doc: DocumentoFila, opciones: { operadorId?: string | null; actor?: { id?: string; email?: string } } = {},
 ): Promise<ResultadoSalida> {
+  if (await flotaBajoPerfil(tenantId)) return { ok: false, motivo: 'datos_invalidos', mensaje: MENSAJE_FUNCION_NO_DISPONIBLE };
   if (doc.estado !== 'aprobado' || !doc.extraccion) {
     return { ok: false, motivo: 'datos_invalidos', mensaje: 'Solo se puede crear el viaje de un documento aprobado.' };
   }

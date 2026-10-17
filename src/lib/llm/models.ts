@@ -24,7 +24,7 @@
 //   con los prompts—. NO es Zero Data Retention: ZDR se contrata por
 //   organización con cada proveedor, no se activa con una bandera por llamada,
 //   y nadie lo ha firmado con OpenRouter (anexo de subencargados, pendiente #3;
-//   docs/conocimiento/11-datos-personales.md §ZDR). El aviso de privacidad ya
+//   la documentación interna §ZDR). El aviso de privacidad ya
 //   dice exactamente eso (auditoría 8) y este comentario dice lo mismo desde la
 //   auditoría 18 (B7): la justificación interna no puede prometer más que el
 //   texto que lee el titular. REGLA (16-ago-2026): TODO el stack de este repo
@@ -100,7 +100,7 @@ const DEFAULTS: Record<ModelRole, string> = {
   // pedido de Javier: "cada agente su stack según su tipo de acción, los
   // mejores en su área"). Verificados contra OpenRouter ese día; la matriz
   // agente→rol vive en agente_definicion.modelo_rol (0125) y la tabla
-  // humana en docs/conocimiento/stack-modelos-agentes.md. ──────────────────
+  // humana en la documentación interna ──────────────────
   //
   // EXTRACCIÓN (Cazador/Enriquecedor: parsear páginas y normalizar datos —
   // volumen alto, cero creatividad): el open-weight chico de OpenAI, el
@@ -199,7 +199,7 @@ const DEFAULTS: Record<ModelRole, string> = {
   //                      decidida pero NO cableada: nada la dispara aún.
   //   · extraccion, codigo, codigo_escritura, qa  son de los agentes del
   //                      catálogo que siguen en 'disenado' (ver
-  //                      docs/conocimiento/stack-modelos-agentes.md).
+  //                      la documentación interna).
   // No se borran porque la decisión de qué modelo les toca ya está tomada y
   // documentada; borrarlas obligaría a volver a tomarla.
   //
@@ -269,7 +269,7 @@ export const ROLE_PARAMS: Record<ModelRole, { temperature: number; reasoning?: '
 // ═══════════════════════════════════════════════════════════════════════════
 // COSTOS UNITARIOS PARA DIMENSIONAR TOPES (auditoría 24, TC-N1 / WA-1 / ARQ-2).
 //
-// Son las cifras que este mismo archivo y `docs/escala-15k.md` ya citan en
+// Son las cifras que este mismo archivo y la documentación interna ya citan en
 // prosa; aquí viven como números para que un tope se DERIVE de ellas en vez
 // de copiarlas a mano. No son precios de proveedor (eso es `PRICES` en
 // openrouter.ts): son lo que una operación completa le cuesta al tenant.
