@@ -193,3 +193,58 @@ describe('inyección de fórmulas en el archivo real', () => {
     expect(csv).not.toMatch(/,=cmd/);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REN-C19-C1 · el costo de la exportación no puede crecer con los documentos.
+//
+// La ruta declara `maxDuration = 60` y acepta hasta `MAX_DOCS = 500`. Una
+// consulta por documento (el folio del viaje) más una escritura por documento
+// (el evento «exportado») son hasta 1,000 viajes a la base EN SERIE: a 50 ms
+// cada uno, 50 s, y el sello de `marcarExportado` ya cometió antes del bucle.
+// La flota se queda con 500 documentos marcados «exportado», sin archivo, y el
+// reintento del panel —que no manda `?ids=`— contesta 404 porque filtra por
+// `exportadoEn === null`. El archivo se vuelve irrecuperable desde la pantalla.
+//
+// Esta prueba mide el invariante, no la implementación: cuenta los viajes a la
+// base y exige que 40 documentos cuesten lo mismo que 1. Se pone roja ante
+// CUALQUIER N+1 nuevo en esta ruta, sin importar qué función se meta al bucle.
+//
+// La cota no es «constante» sino «por lote»: los folios van por `traerPorIds`,
+// que trocea en tandas de `IDS_POR_TANDA = 200` para no meter 500 uuid en la
+// URL de un GET, así que el peor caso de esta ruta (500 documentos) son 3
+// consultas de folios + 1 lista + 1 sello + 1 insert de eventos, no 1,000.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('REN-C19-C1 · las consultas no crecen con el número de documentos', () => {
+  function sembrar(n: number): void {
+    reset(); limite = true; tenant = { ok: true, tenantId: A, rol: 'flota_admin' };
+    for (let i = 1; i <= n; i++) {
+      const docId = `${String(i).padStart(8, '0')}-1111-4111-8111-111111111111`;
+      const viajeId = `${String(i).padStart(8, '0')}-2222-4222-8222-222222222222`;
+      doc(docId, A, { viajeId });
+      estado.viajes.push({
+        tenantId: A, id: viajeId, folio: `V-${i}`, origen: null, destino: null, fechaInicio: null, kmRecorridos: null,
+        operadorId: `op-${i}`, unidadId: null, clienteId: null, ccpOrigenCp: null, ccpDestinoCp: null,
+        ccpOrigenEstado: null, ccpDestinoEstado: null, ccpRfcDestinatario: null, ccpTranspInternac: null, estatus: 'liquidado',
+      });
+    }
+  }
+
+  it('40 documentos con 40 viajes distintos cuestan las mismas consultas que 1', async () => {
+    sembrar(1);
+    expect((await GET(peticion())).status).toBe(200);
+    const conUno = estado.llamadas.length;
+
+    sembrar(40);
+    expect((await GET(peticion())).status).toBe(200);
+    const conCuarenta = estado.llamadas.length;
+
+    expect(conCuarenta, `1 doc = ${conUno} consultas, 40 docs = ${conCuarenta}: la ruta hace una consulta por documento`).toBe(conUno);
+  });
+
+  it('los 40 quedan sellados y con su evento, no solo el primero', async () => {
+    sembrar(40);
+    expect((await GET(peticion())).status).toBe(200);
+    expect([...estado.docs.values()].filter((d) => d.exportadoEn !== null)).toHaveLength(40);
+    expect(estado.eventos.filter((e) => e.tipo === 'exportado')).toHaveLength(40);
+  });
+});

@@ -184,6 +184,14 @@ export const api: typeof Real = {
     if (!d || d.tenantId !== tenantId) throw new Error('repo falso: FK compuesta (evento de otra flota)');
     estado.eventos.push({ tenantId, documentoId, tipo, actorId, detalle: clon(detalle), creadoEn: ahoraIso() });
   },
+  async registrarEventos(tenantId, documentoIds, tipo, actorId, detalle = {}) {
+    falla('registrarEventos');
+    for (const documentoId of documentoIds) {
+      const d = estado.docs.get(documentoId);
+      if (!d || d.tenantId !== tenantId) throw new Error('repo falso: FK compuesta (evento de otra flota)');
+      estado.eventos.push({ tenantId, documentoId, tipo, actorId, detalle: clon(detalle), creadoEn: ahoraIso() });
+    }
+  },
   async listarEventos(tenantId, documentoId) {
     return estado.eventos.filter((e) => e.tenantId === tenantId && e.documentoId === documentoId).map((e) => ({ tipo: e.tipo as never, actorId: e.actorId, detalle: e.detalle, creadoEn: e.creadoEn }));
   },
@@ -263,7 +271,11 @@ export const api: typeof Real = {
   async borrarExportConfig(tenantId, id) { estado.exportConfigs = estado.exportConfigs.filter((c) => !(c.tenantId === tenantId && c.id === id)); },
 
   async viajePorFolio(tenantId, folio) { const v = estado.viajes.find((x) => x.tenantId === tenantId && x.folio === folio); return v ? clon(v) : null; },
-  async viajePorId(tenantId, id) { const v = estado.viajes.find((x) => x.tenantId === tenantId && x.id === id); return v ? clon(v) : null; },
+  async foliosDeViajes(tenantId, ids) {
+    falla('foliosDeViajes');
+    return new Map(estado.viajes.filter((x) => x.tenantId === tenantId && ids.includes(x.id)).map((x) => [x.id, x.folio]));
+  },
+  async viajePorId(tenantId, id) { falla('viajePorId'); const v = estado.viajes.find((x) => x.tenantId === tenantId && x.id === id); return v ? clon(v) : null; },
   async operadoresDeFlota(tenantId) { return estado.operadores.filter((o) => o.tenantId === tenantId).map(({ tenantId: _t, ...o }) => o); },
   async unidadesPorPlacas(tenantId, placas) {
     return estado.unidades.filter((u) => u.tenantId === tenantId && u.placas.toUpperCase() === placas.toUpperCase()).map((u) => ({ id: u.id, activo: u.activo }));

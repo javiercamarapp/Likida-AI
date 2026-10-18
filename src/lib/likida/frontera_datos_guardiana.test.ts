@@ -413,7 +413,13 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // tenant — llama con el id YA ANCLADO al tenant por `leerObjetivo`, que es
 // el guardia de esta función. Funcionalidad nueva, no código migrado.
 // Integración cinco-integracion-2 (+ auditoria-seguridad sobre la misma base): el barrido real del árbol fusionado mide 2,222 llamadas; techo subido a lo medido, sin relajar la regla.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_222;
+// AUDITORÍA 32 · continuación 20 (18-oct-2026), REN-C19-C1: +2 llamadas (2,222 → 2,224), medido con el barrido real, las dos en
+// `carta_porte_docs/repo.ts` —que ya contaba— y las dos por `acotada` con `tenant_id` anclado: `foliosDeViajes` (los folios por lote,
+// vía `traerPorIds`, que trocea en tandas de 200 para no meter 500 uuid en la URL de un GET) y `registrarEventos` (un insert de
+// eventos por lote). Sustituyen DOS BUCLES en `api/export/carta-porte-docs/route.ts` que hacían hasta ~1,000 viajes a la base en
+// serie contra `maxDuration = 60`; el techo cuenta sedes de llamada, no viajes a la base, así que +2 aquí son 997 menos en el peor
+// caso real. Funcionalidad que YA existía, movida al lote; no código migrado fuera de la frontera.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_224;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

@@ -73,10 +73,10 @@ export async function GET(req: Request) {
     const elegidos = idsParam ? filas.filter((d) => idsParam.includes(d.id)) : filas.filter((d) => d.exportadoEn === null);
     if (elegidos.length === 0) return new NextResponse('No hay documentos aprobados para exportar.', { status: 404 });
 
-    const folios = new Map<string, string | null>();
-    for (const d of elegidos) {
-      if (d.viajeId && !folios.has(d.viajeId)) folios.set(d.viajeId, (await repo.viajePorId(t.tenantId, d.viajeId))?.folio ?? null);
-    }
+    // Los folios en UNA consulta y los eventos en UN insert (REN-C19-C1): en serie eran hasta 1,000 viajes a la
+    // base contra `maxDuration = 60`, y el sello de abajo ya cometió, así que el timeout dejaba 500 documentos
+    // marcados «exportado» sin archivo — irrecuperables desde el panel, que reintenta sin `?ids=`.
+    const folios = await repo.foliosDeViajes(t.tenantId, [...new Set(elegidos.map((d) => d.viajeId).filter((x): x is string => x !== null))]);
     const r = exportarDocumentos(elegidos.map((doc) => ({ doc, viajeFolio: doc.viajeId ? folios.get(doc.viajeId) ?? null : null })), formato, cfg, nombre);
     if (r.documentos === 0) return new NextResponse('No hay documentos aprobados para exportar.', { status: 404 });
 
@@ -85,7 +85,7 @@ export async function GET(req: Request) {
     try {
       const idsListos = elegidos.filter((d) => !r.omitidos.some((o) => o.id === d.id)).map((d) => d.id);
       await repo.marcarExportado(t.tenantId, idsListos);
-      for (const id of idsListos) await repo.registrarEvento(t.tenantId, id, 'exportado', s?.userId ?? null, { formato, config: nombre });
+      await repo.registrarEventos(t.tenantId, idsListos, 'exportado', s?.userId ?? null, { formato, config: nombre });
     } catch (e) {
       logger.warn('export.cp_docs_sello_fallo', { error: e instanceof Error ? e.message : String(e) });
     }

@@ -283,6 +283,14 @@ export async function registrarEvento(tenantId: string, documentoId: string, tip
   if (r.error) throw new Error(`cartaporte_docs evento ${tipo}: ${r.error.message}`);
 }
 
+/** El MISMO evento para varios documentos en UN insert. Mismo contrato que `registrarEvento`: un fallo se lanza. */
+export async function registrarEventos(tenantId: string, documentoIds: string[], tipo: TipoEvento, actorId: string | null, detalle: Record<string, unknown> = {}): Promise<void> {
+  if (documentoIds.length === 0) return;
+  const r = await acotada(supabaseAdmin().from('cp_documento_evento')
+    .insert(documentoIds.map((documentoId) => ({ tenant_id: tenantId, documento_id: documentoId, tipo, actor_id: actorId, detalle }))), 'cpdocs.eventos_lote');
+  if (r.error) throw new Error(`cartaporte_docs eventos ${tipo}: ${r.error.message}`);
+}
+
 export async function listarEventos(tenantId: string, documentoId: string): Promise<Array<{ tipo: TipoEvento; actorId: string | null; detalle: Record<string, unknown>; creadoEn: string }>> {
   const r = await acotada(supabaseAdmin().from('cp_documento_evento').select('tipo, actor_id, detalle, created_at')
     .eq('tenant_id', tenantId).eq('documento_id', documentoId).order('id', { ascending: true }).limit(200), 'cpdocs.eventos');
@@ -476,6 +484,22 @@ export async function viajePorId(tenantId: string, id: string): Promise<ViajeMin
   const r = await acotada(supabaseAdmin().from('viaje').select(COL_VIAJE).eq('tenant_id', tenantId).eq('id', id).maybeSingle(), 'cpdocs.viaje_id');
   const f = exigir(r, 'cpdocs.viaje_id');
   return f ? aViaje(f as unknown as Fila) : null;
+}
+
+/**
+ * Los folios de varios viajes POR LOTE: una exportación de 500 documentos no puede pagar 500 viajes a la base.
+ *
+ * Por `traerPorIds` y no un `.in()` directo con los 500: la lista entera viaja EN LA URL (~37 caracteres por
+ * uuid, 18.6 KB con 500) y rebota en el proxy con 414 antes de llegar — y aquí un rebote no es un aviso en el
+ * log, es la exportación entera sin archivo. `traerPorIds` la parte en tandas de `IDS_POR_TANDA` (200), así que
+ * son 3 consultas en el peor caso de esta ruta y ninguna puede tocar ni el techo de URL ni el recorte silencioso
+ * de PostgREST a 1,000 filas.
+ */
+export async function foliosDeViajes(tenantId: string, ids: string[]): Promise<Map<string, string | null>> {
+  if (ids.length === 0) return new Map();
+  const filas = await traerPorIds<Fila>(ids, (t) => acotada(supabaseAdmin().from('viaje').select('id, folio')
+    .eq('tenant_id', tenantId).in('id', t), 'cpdocs.viaje_folios') as never, 'cpdocs.viaje_folios');
+  return new Map(filas.map((f) => [String(f.id), s(f.folio)]));
 }
 
 export interface OperadorMin { id: string; nombre: string; activo: boolean }
