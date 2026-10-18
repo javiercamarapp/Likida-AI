@@ -10,6 +10,7 @@ import { evaluarSalidaTms, textoSalidaTms } from './salida_tms';
 import { anclaDe, textoTiempo } from './planificador';
 import type { AccionOficinaFila, DatosTablero, IndicadoresCrudos, ViajeTablero, VeredictoFila } from './repo_validacion';
 import type { EpisodioTablero } from './repo';
+import { esMarcaAvisoChofer, nivelesFallidosAlChofer } from './senal_vida';
 import type { ReubicacionesCliente } from './reubicaciones';
 import { ETIQUETA, estaResuelto, TIPOS_HITO, type HitoFila, type TipoHito } from './tipos';
 import { llegadaPorConfirmar, llegadaSinSitio, textoVeredicto, type ResultadoValidacion, type Veredicto } from './validacion';
@@ -560,7 +561,19 @@ export function episodiosVista(eps: readonly EpisodioTablero[]): EpisodioVista[]
     //
     // El motivo NO se interpola en el texto: es texto libre de hasta 200
     // caracteres que viene de la base y acaba pintado en la pantalla.
-    const noSalio = (nivel: 1 | 2 | 3): boolean => e.ultimoError !== null && e.nivelEnviado === nivel;
+    // AGE-C20-A1: lo de arriba es verdad para el error de la ESCALACIÓN, no para el de un aviso al chofer.
+    // `marcaAvisoChoferFallido` es ACUMULATIVA (conserva el nivel anterior) y nadie la limpia al reclamar el
+    // siguiente nivel, así que atribuirla al último nivel reclamado invierte los dos hechos: con el aviso 1
+    // rechazado y el 2 entregado, el tablero daba el 1 por entregado y el 2 por perdido — y como la escalera
+    // SIEMPRE termina en el nivel 3, el desenlace normal era «el aviso al jefe de tráfico NO salió» en la cara
+    // del jefe que acababa de recibirlo. Los niveles están EN la marca y se leen con el MISMO parser que usa la
+    // escalera (`nivelesFallidosAlChofer`), no con una segunda lista. Un error que NO es la marca solo lo
+    // escribe la rama de escalación (`senal_vida.ts:399,417`), que reclama el nivel 3 antes de mandar: ése sí
+    // es del último nivel reclamado, y así se conserva el anclaje original de AGE-C19-A1.
+    const fallidosAlChofer = nivelesFallidosAlChofer(e.ultimoError);
+    const errorSinMarca = e.ultimoError !== null && !esMarcaAvisoChofer(e.ultimoError);
+    const noSalio = (nivel: 1 | 2 | 3): boolean =>
+      (nivel !== 3 && fallidosAlChofer.has(nivel)) || (errorSinMarca && e.nivelEnviado === nivel);
     const pasos: EpisodioVista['pasos'] = [];
     if (e.aviso1En) pasos.push({ texto: noSalio(1) ? 'Primer aviso al chofer: NO salió' : 'Primer aviso al chofer', en: e.aviso1En });
     if (e.aviso2En) pasos.push({ texto: noSalio(2) ? 'Segundo aviso al chofer: NO salió' : 'Segundo aviso al chofer', en: e.aviso2En });

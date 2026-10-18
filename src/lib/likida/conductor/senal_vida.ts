@@ -153,12 +153,18 @@ export interface EpisodioFila {
 
 const MARCA_AVISO_FALLIDO = 'aviso_chofer_fallido:';
 
-/** Cuántos de los avisos 1 y 2 NO le llegaron al chofer por un rechazo definitivo (ventana de 24 h cerrada, plantilla sin aprobar, teléfono inválido). */
-export function avisosFallidosAlChofer(ultimoError: string | null | undefined): number {
-  if (!ultimoError?.startsWith(MARCA_AVISO_FALLIDO)) return 0;
-  const niveles = ultimoError.slice(MARCA_AVISO_FALLIDO.length).split('|')[0].split(',').filter((n) => n === '1' || n === '2');
-  return new Set(niveles).size;
+/** ¿`ultimo_error` es la marca de un aviso al chofer rechazado, y no el error de la escalación al jefe? */
+export const esMarcaAvisoChofer = (ultimoError: string | null | undefined): boolean => ultimoError?.startsWith(MARCA_AVISO_FALLIDO) === true;
+
+/** CUÁLES de los avisos 1 y 2 NO le llegaron al chofer. La marca es acumulativa, así que los niveles se leen de ella y no del nivel reclamado. */
+export function nivelesFallidosAlChofer(ultimoError: string | null | undefined): ReadonlySet<1 | 2> {
+  if (!esMarcaAvisoChofer(ultimoError)) return new Set();
+  const niveles = ultimoError!.slice(MARCA_AVISO_FALLIDO.length).split('|')[0].split(',');
+  return new Set(niveles.filter((n) => n === '1' || n === '2').map((n) => Number(n) as 1 | 2));
 }
+
+/** Cuántos de los avisos 1 y 2 NO le llegaron al chofer por un rechazo definitivo (ventana de 24 h cerrada, plantilla sin aprobar, teléfono inválido). */
+export const avisosFallidosAlChofer = (ultimoError: string | null | undefined): number => nivelesFallidosAlChofer(ultimoError).size;
 
 /** El texto de `ultimo_error` tras un rechazo definitivo del aviso `nivel` al chofer: conserva la marca del nivel anterior. */
 export function marcaAvisoChoferFallido(previo: string | null | undefined, nivel: 1 | 2, mensaje: string): string {
