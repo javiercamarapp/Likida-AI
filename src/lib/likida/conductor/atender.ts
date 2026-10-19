@@ -16,18 +16,23 @@ import {
 import { cicloDelServicio, hitoEnCiclo, type CicloEfectivo, type CicloServicioFila } from './ciclo_servicio';
 import { tenantDelViaje } from './trabajo';
 import { puertosGastosReales, responderGastos, type PuertosGastos, type RespuestaGastos } from './gastos_etc';
-import { estaResuelto, leerBotonConductor, PREFIJO_BOTON, type HitoFila, type FuenteHito, type RespuestaSenalVida, type TipoEvidencia, type TipoHito } from './tipos';
+import { estaResuelto, leerBotonConductor, PREFIJO_BOTON, type BotonLeido, type HitoFila, type FuenteHito, type RespuestaSenalVida, type TipoEvidencia, type TipoHito } from './tipos';
 import { silencioDeRespuesta } from './senal_vida';
 import { escalarPorProblema, puertosReales } from './ejecutor';
 import { avisarOficinaDeHito } from './avisos_oficina';
 import { puedeAcusar } from './escalamiento';
 import { debeSellarTrasValidar, depsValidacionReales, validarHitoContraSitio, type EntradaValidarHito, type SalidaValidar } from './validar_hito';
-import { guardarEvidencia, hitoLlegadaReciente } from './repo_validacion';
+import {
+  documentoCierreDeLaFoto, guardarEvidencia, hitoLlegadaReciente, puertosDocumentosCierreReales,
+  registrarFotoDocumentoCierre as registrarFotoDocumentoCierreRepo, registrarRespuestaChoferDocumentosCierre,
+} from './repo_validacion';
+import { MENSAJE_SIN_CATEGORIA_DOCUMENTO, type DocumentoCierreFila, type DocumentoCierrePrevio, type MetadatosFoto } from './documentos_cierre';
 import { decidirSelloInicio, ETIQUETA_EVIDENCIA, hitoParaEvidencia, mensajeEvidencia, mensajeSelloInicio, tipoEvidenciaDeCaption, type EvidenciaSelloFila } from './evidencia';
 import { textoVeredicto, veredictoSellaLlegada } from './validacion';
 import { puertosEstadiaReales, responderEstadiaDescarga, type PuertosEstadia } from './alertas_estadia';
 import type { OpcionResultadoDescarga, RespuestaEstadia } from './mensajes';
 import { preguntarResultado, puertosResultadoReales, responderResultadoDescarga, type PuertosResultado } from './resultado_descarga';
+import { preguntarDocumentosCierre, type PuertosDocumentosCierre } from './documentos_cierre';
 import {
   puertosReporteAtenderReales, responderReporteBoton, responderReporteTexto, type PuertosReporteAtender,
 } from './reporte_llegada';
@@ -78,6 +83,10 @@ export interface DepsAtender {
   adjuntarUbicacion: typeof adjuntarUbicacion;
   cargarHitos(tenantId: string, viajeId: string): Promise<HitoFila[]>;
   guardarEvidencia: typeof guardarEvidencia;
+  /** T-A5-53/54: clasificar y registrar la foto de un documento de cierre, y la respuesta del chofer a N11. */
+  documentoCierreDeLaFoto: typeof documentoCierreDeLaFoto;
+  registrarFotoDocumentoCierre: typeof registrarFotoDocumentoCierreRepo;
+  registrarRespuestaDocumentosCierre: typeof registrarRespuestaChoferDocumentosCierre;
   /** P2 (0636): el chofer contestó un botón del «¿sigues bien?». Opcional: las pruebas que no lo ejercen no lo declaran. */
   responderSenalVida?(tenantId: string, viajeId: string, respuesta: RespuestaSenalVida, ahora: Date, config?: ConfigConductor): Promise<'cerrado' | 'sin_episodio' | 'fallo'>;
   /** T-A5-44: los puertos del patio de entrega (catálogo, bitácora, aviso al supervisor). Opcional: sin él se usan los reales, y solo si la flota lo encendió. */
@@ -88,6 +97,8 @@ export interface DepsAtender {
   reporte?: PuertosReporteAtender;
   /** T-A5-46: los puertos del resultado de la descarga y la caja cargada (bitácora, claim, aviso al supervisor). Opcional: sin él, los reales. */
   resultado?: PuertosResultado;
+  /** T-A5-53: los puertos de la solicitud de documentos de cierre (leer/crear el snapshot del catálogo). Opcional: sin él, los reales. */
+  documentosCierre?: PuertosDocumentosCierre;
   /** T-A5-47: los puertos de la asignación con botones (aceptar, instrucciones, aviso del rechazo). Opcional: sin él, los reales. */
   asignacion?: PuertosAsignacion;
   /** T-A5-51: la pregunta de gastos/ETC. Opcional: las pruebas que no la ejercen no lo declaran. */
@@ -122,6 +133,9 @@ export const depsReales: DepsAtender = {
   adjuntarUbicacion,
   cargarHitos,
   guardarEvidencia,
+  documentoCierreDeLaFoto,
+  registrarFotoDocumentoCierre: registrarFotoDocumentoCierreRepo,
+  registrarRespuestaDocumentosCierre: registrarRespuestaChoferDocumentosCierre,
   responderSenalVida: (tenantId, viajeId, respuesta, ahora, config) => responderEpisodioSenalVida(tenantId, viajeId, respuesta, silencioDeRespuesta(respuesta, config), ahora),
   ciclosDe: leerCicloServicio,
   evidenciasSello: leerEvidenciasSelloViaje,
@@ -236,6 +250,10 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
   }
   // T-A5-45: «¿ya inició la descarga?» — el botón `estadia_descarga:<viaje>:si|no` es de este módulo pero tampoco registra un hito.
   if (botonPatio?.prefijo === PREFIJO_BOTON.estadiaDescarga) return atenderEstadia(e, botonPatio, ahora, deps);
+  // T-A5-53: la respuesta a la plantilla N11 («Ya los envié» / «Me falta uno») tampoco registra un hito: solo se anota en la solicitud.
+  if (botonPatio?.prefijo === PREFIJO_BOTON.documentosCierreListo || botonPatio?.prefijo === PREFIJO_BOTON.documentosCierreFalta) {
+    return atenderRespuestaDocumentosCierre(e, botonPatio, ahora, deps);
+  }
   // T-A5-46: «¿cómo terminó la descarga?» — el botón `resultado_descarga:<viaje>:<opción>` o, con la pregunta abierta, su texto equivalente.
   if (botonPatio?.prefijo === PREFIJO_BOTON.resultadoDescarga) return atenderResultado(e, botonPatio, null, ahora, deps);
   const opcionTexto = botonPatio || !e.viajeAbiertoId ? null : leerTextoResultadoDescarga(e.texto);
@@ -346,7 +364,7 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
     const salida = mensajeParaChofer(decision, ctx, ahora, aplicado);
     const pedir = efectos.pedirUbicacion ? { solicitarUbicacion: TEXTO_PEDIR_UBICACION } : {};
     // Con la confirmación apagada, el hito registrado queda en silencio (todo lo demás sí se contesta).
-    const pregunta = [efectos.preguntaPatio, efectos.preguntaResultado].filter((x): x is Salida => Boolean(x));
+    const pregunta = [efectos.preguntaPatio, efectos.preguntaResultado, efectos.preguntaDocumentos].filter((x): x is Salida => Boolean(x));
     if (!config.confirmarAlChofer && decision.accion === 'registrar' && aplicado === 'ok') return { mensajes: [...pregunta], ...pedir };
     if (config.pedirFotoEvidencia && decision.accion === 'registrar' && aplicado === 'ok') {
       const invitacion = invitacionFoto(decision.objetivo);
@@ -440,6 +458,21 @@ async function atenderEstadia(
     return { mensajes };
   } catch (err) {
     logger.error('conductor.estadia_atender_fallo', { viaje: boton.viajeId, err: err instanceof Error ? err.message : String(err) });
+    return { mensajes: [FALLO] };
+  }
+}
+
+/** T-A5-53: la respuesta a la plantilla N11 («Ya los envié» / «Me falta uno»). No registra ningún hito: solo se anota en la solicitud viva. */
+async function atenderRespuestaDocumentosCierre(e: EntradaAtender, boton: BotonLeido, ahora: Date, deps: DepsAtender): Promise<SalidaAtender | null> {
+  try {
+    const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, boton.viajeId);
+    if (!viaje) return { mensajes: [{ texto: 'Ese botón es de otro viaje o ya no está vigente. 🙏' }] };
+    const respuesta = boton.prefijo === PREFIJO_BOTON.documentosCierreListo ? 'evid_listo' : 'evid_falta';
+    const tocadas = await deps.registrarRespuestaDocumentosCierre(e.tenantId, viaje.id, respuesta, ahora);
+    if (tocadas === 0) return { mensajes: [{ texto: 'Ese aviso ya no está vigente. 👍' }] };
+    return { mensajes: [{ texto: respuesta === 'evid_listo' ? 'Gracias, lo reviso. Si falta algo te aviso. 🙏' : 'Va, mándamela cuando puedas. 🙏' }] };
+  } catch (err) {
+    logger.error('conductor.documentos_cierre_respuesta_fallo', { viaje: boton.viajeId, err: err instanceof Error ? err.message : String(err) });
     return { mensajes: [FALLO] };
   }
 }
@@ -577,7 +610,7 @@ interface ContextoAplicar {
   mensajeEn: Date;
   config: ConfigConductor;
   /** Lo que `aplicar` descubre y el llamador necesita después del acuse. */
-  efectos: { pedirUbicacion: boolean; preguntaPatio?: Salida | null; preguntaResultado?: Salida | null };
+  efectos: { pedirUbicacion: boolean; preguntaPatio?: Salida | null; preguntaResultado?: Salida | null; preguntaDocumentos?: Salida | null };
 }
 
 /** La invitación (opcional, por flota) a mandar la foto de evidencia del hito recién registrado. */
@@ -632,6 +665,11 @@ async function aplicar(d: Decision, c: ContextoAplicar): Promise<'ok' | 'carrera
       // T-A5-46: la salida de la descarga abre «¿cómo terminó?» (solo si la flota lo encendió; best-effort; sin respuesta no bloquea el cierre).
       if (d.objetivo === 'salida_descarga' && c.config.resultadoDescargaActivo === true) {
         c.efectos.preguntaResultado = await preguntarResultado(deps.resultado ?? puertosResultadoReales(), c.config, viaje, registrado);
+      }
+      // T-A5-53: la salida de la descarga abre la solicitud de documentos de cierre (N11; solo si la flota lo encendió y el cliente
+      // tiene catálogo; best-effort; sin respuesta no bloquea el cierre ni el regreso).
+      if (d.objetivo === 'salida_descarga' && c.config.pedirDocumentosCierreActivo === true) {
+        c.efectos.preguntaDocumentos = await preguntarDocumentosCierre(deps.documentosCierre ?? puertosDocumentosCierreReales(), c.config, viaje, registrado);
       }
       // El aviso a la oficina es best-effort y no retrasa el acuse más de lo que cuesta un envío.
       const esLlegada = d.objetivo === 'llegada_carga' || d.objetivo === 'llegada_descarga';
@@ -1014,3 +1052,54 @@ export async function registrarHitoDesdeFoto(e: EntradaFotoComoHito, deps: DepsA
 }
 
 export { textoVeredicto };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOS DOCUMENTOS DE CIERRE (T-A5-53/54, 0823) — la foto se clasifica contra
+// los documentos aún pendientes del catálogo del cliente de ESE viaje (la
+// solicitud ya se armó al terminar la descarga) y avanza esa fila. Sin
+// categoría clara, se guarda igual: nunca se adivina ni se pierde. Mismo
+// bucket y mismo pipeline de subida que el POD/evidencia.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface EntradaDocumentoCierrePrevio { tenantId: string; operadorId: string; viajeId: string; caption: string | undefined }
+
+/** `null` = sin solicitud viva de este viaje (sin catálogo del cliente, o ya está completa): la foto sigue su camino normal de comprobante. */
+export async function documentoCierreDeLaFotoDelChofer(e: EntradaDocumentoCierrePrevio, deps: DepsAtender = depsReales): Promise<DocumentoCierrePrevio | null> {
+  try {
+    const viaje = await deps.viajeDelOperador(e.tenantId, e.operadorId, e.viajeId);
+    if (!viaje) return null;
+    return await deps.documentoCierreDeLaFoto(e.tenantId, e.viajeId, e.caption);
+  } catch (err) {
+    logger.warn('conductor.documento_cierre_previo_fallo', { viaje: e.viajeId, err: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
+}
+
+export interface EntradaFotoDocumentoCierreChofer {
+  tenantId: string;
+  viajeId: string;
+  documentoId: string | null;
+  pendientes: readonly DocumentoCierreFila[];
+  ruta: string;
+  sha256: string;
+  waMessageId?: string | null;
+  /** Fase 2 (sin analizador de imagen hoy: ausente = siempre legible, nunca bloquea). */
+  metadatos?: MetadatosFoto | null;
+  ahora?: Date;
+}
+
+/** Registra la foto ya subida (hito `salida_descarga`, ya resuelto). Devuelve el acuse al chofer; nunca lanza. */
+export async function registrarFotoDocumentoCierreDelChofer(e: EntradaFotoDocumentoCierreChofer, deps: DepsAtender = depsReales): Promise<string> {
+  try {
+    const hitos = await deps.cargarHitos(e.tenantId, e.viajeId);
+    const hito = hitos.find((h) => h.tipo === 'salida_descarga' && estaResuelto(h));
+    if (!hito) return MENSAJE_SIN_CATEGORIA_DOCUMENTO; // no debería pasar (ya había pendientes), pero no se inventa un hito al cual colgarla
+    return await deps.registrarFotoDocumentoCierre({
+      tenantId: e.tenantId, hito, documentoId: e.documentoId, pendientes: e.pendientes, ruta: e.ruta, sha256: e.sha256,
+      waMessageId: e.waMessageId ?? null, metadatos: e.metadatos, ahora: e.ahora,
+    });
+  } catch (err) {
+    logger.error('conductor.foto_documento_cierre_del_chofer_fallo', { viaje: e.viajeId, err: err instanceof Error ? err.message : String(err) });
+    return MENSAJE_SIN_CATEGORIA_DOCUMENTO;
+  }
+}

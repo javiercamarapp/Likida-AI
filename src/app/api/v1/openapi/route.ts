@@ -1716,6 +1716,54 @@ function documento(servidor: string) {
           responses: { '200': { description: 'Sitios de la flota.', content: { 'application/json': { schema: { type: 'object' } } } }, ...respuestasError },
         },
       },
+      '/v1/evidencias': {
+        get: {
+          operationId: 'listarDocumentosDeCierre',
+          'x-likida-area': 'operacion',
+          summary: 'Los documentos de cierre que pide el catálogo del cliente (T-A5-53/54): cuáles llegaron, cuáles faltan.',
+          description: 'Área `operacion`. `viajeId` es obligatorio (sin él, 400 sin consultar nada). Un viaje sin catálogo del cliente, de otra flota o sin solicitud armada todavía contesta lista vacía. `estado` de cada documento: `pendiente`, `recibido` o `revisar` (foto de mala calidad aceptada tras dos intentos; nunca bloquea el viaje).',
+          tags: ['hitos'],
+          parameters: [{ name: 'viajeId', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: {
+            '200': {
+              description: 'El estado de los documentos de cierre de ese viaje.',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      datos: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            id: { type: 'string', format: 'uuid' },
+                            documentoRequeridoId: { type: 'string', format: 'uuid', nullable: true },
+                            nombre: { type: 'string' },
+                            tipo: { type: 'string', enum: ['basico', 'complementario'] },
+                            estado: { type: 'string', enum: ['pendiente', 'recibido', 'revisar'] },
+                            solicitadoEn: { type: 'string', format: 'date-time' },
+                            recibidoEn: { type: 'string', format: 'date-time', nullable: true },
+                            evidenciaId: { type: 'string', format: 'uuid', nullable: true },
+                            intentosLegibilidad: { type: 'integer' },
+                            respuestaChofer: { type: 'string', enum: ['evid_listo', 'evid_falta'], nullable: true },
+                          },
+                        },
+                      },
+                      resumen: {
+                        type: 'object',
+                        properties: { usaCatalogo: { type: 'boolean' }, total: { type: 'integer' }, recibidos: { type: 'integer' }, faltan: { type: 'integer' } },
+                      },
+                    },
+                    required: ['datos', 'resumen'],
+                  },
+                },
+              },
+            },
+            ...respuestasError,
+          },
+        },
+      },
       '/v1/evidencias/{id}': {
         get: {
           operationId: 'abrirEvidenciaDeHito',

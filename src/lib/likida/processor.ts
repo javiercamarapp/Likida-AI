@@ -37,7 +37,11 @@ import { versionAvisoVigente, pideAtencionPrivacidad, respuestaPrivacidad } from
 import { mensajeEvidencia } from '@/lib/likida/conductor/evidencia';
 import { atenderPreguntaConvenio } from '@/lib/likida/convenios/pregunta';
 import { guardiaDatosSeguridad } from '@/lib/likida/conductor/guardia_seguridad';
-import { atenderConductor, atenderAcuseJefe, atenderPinConductor, hitoParaEvidenciaDelChofer, registrarEvidenciaDelChofer, registrarHitoDesdeFoto } from '@/lib/likida/conductor/atender';
+import {
+  atenderConductor, atenderAcuseJefe, atenderPinConductor, hitoParaEvidenciaDelChofer, registrarEvidenciaDelChofer, registrarHitoDesdeFoto,
+  documentoCierreDeLaFotoDelChofer, registrarFotoDocumentoCierreDelChofer,
+} from '@/lib/likida/conductor/atender';
+import { MENSAJE_FOTO_DOCUMENTO_FALLO } from '@/lib/likida/conductor/documentos_cierre';
 import {
   interpretarMarcaJornada, interpretarConformidadJornada,
   atenderMarcaJornada, atenderConformidadJornada, resumenParaOperador,
@@ -2481,6 +2485,45 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
     // al contador de intake al entrar y -1 al salir; el "listo" espera a que ese
     // contador llegue a 0 antes de cuadrar → nunca cierra sobre datos parciales.
     if (msg.type === 'image' && msg.mediaId) {
+      // ── ¿ES FOTO DE UN DOCUMENTO DE CIERRE? (T-A5-53/54, 0823) ──────────────────
+      //
+      // Va ANTES del POD/carta-porte-sellada a propósito: `esCaptionPod` matiza por CONTENER
+      // «carta porte» (no exacto), y es justo el nombre que la ficha pone de ejemplo para el
+      // catálogo de cierre (T-A5-52) — si un cliente lo declara así, su «carta porte firmada»
+      // tiene que clasificarse contra SU catálogo granular, no desaparecer en el POD genérico de
+      // siempre. Solo aplica si YA hay una solicitud viva de este viaje (catálogo del cliente,
+      // armada al terminar la descarga) con documentos aún pendientes: sin ella, `documentoCierreDeLaFotoDelChofer`
+      // devuelve `null` de inmediato y la foto sigue exactamente el camino de siempre (POD, evidencia de hito, comprobante).
+      const documentoCierrePrevio = conductorEnStandBy ? null : await documentoCierreDeLaFotoDelChofer({ tenantId: op.tenantId, operadorId: op.operadorId, viajeId, caption: msg.text });
+      if (documentoCierrePrevio) {
+        try {
+          let dataUrl: string | null;
+          try {
+            dataUrl = msg.mediaDataUrlQA ?? await downloadMediaAsDataUrl(msg.mediaId);
+          } catch (e) {
+            if (e instanceof ImagenDemasiadoPesadaError) { await say(MENSAJE_FOTO_PESADA); return; }
+            throw e;
+          }
+          if (!dataUrl) { await say('No pude descargar tu foto 😕. ¿Me la reenvías?'); return; }
+          const huella = await hashImagen(dataUrl);
+          const marca = documentoCierrePrevio.documentoId ? documentoCierrePrevio.documentoId.slice(0, 8) : 'sin_categoria';
+          const ruta = await subirComprobante(op.tenantId, viajeId, `doc_${marca}_${huella.slice(0, 24)}`, dataUrl);
+          if (!ruta) {
+            logger.error('conductor.documento_cierre_sin_guardar', { viaje: viajeId, tenant: op.tenantId });
+            await say(MENSAJE_FOTO_DOCUMENTO_FALLO);
+            return;
+          }
+          await say(await registrarFotoDocumentoCierreDelChofer({
+            tenantId: op.tenantId, viajeId, documentoId: documentoCierrePrevio.documentoId, pendientes: documentoCierrePrevio.pendientes,
+            ruta, sha256: huella, waMessageId: msg.waMessageId ?? null,
+          }));
+        } catch (e) {
+          logger.error('conductor.documento_cierre_error', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
+          await say(MENSAJE_FOTO_DOCUMENTO_FALLO);
+        }
+        return;
+      }
+
       // ── ¿ES LA CARTA PORTE SELLADA? (POD por foto, F4) ────────────────────
       //
       // El CAPTION es la única señal determinística de qué papel es la foto;

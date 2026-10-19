@@ -19718,3 +19718,83 @@ begin
   raise exception E'ENVIO_TMS_0790 activo-unico=% terminal-no-estorba=% reclamo-sin-repetir=% alerta-unica=% evento-en-dominio=% sin-grants-abiertos=%   (esperado t / t / t / t / t / t)',
     activo_unico, terminal_libre, reclamo, alerta, evento, grants;
 end $$;
+
+-- ── 353. Documentos de cierre (Agente 5 Conductor, T-A5-53/54, mig. 0823): CHECK ampliado, FKs que desligan sin romper, único por documento y dominios cerrados ──
+-- `viaje_hito_evidencia.tipo` acepta 'documento_cierre' y sigue cerrado a lo demás; borrar el documento del catálogo (0809) desliga
+-- la evidencia (SET NULL), no la borra; `viaje_documento_cierre` es único por (viaje, documento), su CHECK de coherencia
+-- (`estado='recibido'` exige `recibido_en`) y el dominio de `respuesta_chofer` se imponen solos; borrar la evidencia desliga la fila
+-- de seguimiento (SET NULL), no se la lleva. Sin grants directos a anon/authenticated.
+-- Esperado: EVIDENCIA_DOC_CIERRE_0823 tipo-ampliado=t tipo-cerrado=t fk-documento-set-null=t unico-viaje-documento=t recibido-coherente=t respuesta-dominio=t fk-evidencia-set-null=t sin-grants-abiertos=t
+do $$
+declare
+  ta uuid := gen_random_uuid(); cli uuid := gen_random_uuid(); op uuid := gen_random_uuid(); v uuid := gen_random_uuid(); h uuid := gen_random_uuid();
+  doc1 uuid := gen_random_uuid(); ev uuid; dc uuid;
+  tipo_ampliado boolean := false; tipo_cerrado boolean := false; fk_documento_set_null boolean := false; unico boolean := false;
+  recibido_coherente boolean := false; respuesta_dominio boolean := false; fk_evidencia_set_null boolean := false; grants boolean := true;
+  f text; r text;
+begin
+  insert into tenant (id, nombre) values (ta, 'ZZZ EVIDENCIA DOC CIERRE 0823');
+  insert into cliente (id, tenant_id, nombre) values (cli, ta, 'Cliente ZZZ 0823');
+  insert into operador (id, tenant_id, nombre, telefono) values (op, ta, 'Chofer ZZZ 0823', '28999000011');
+  insert into viaje (id, tenant_id, operador_id, folio, origen, destino, estatus)
+    values (v, ta, op, 'ZZZ-0823', 'Origen ZZZ', 'Destino ZZZ', 'abierto');
+  insert into viaje_hito (id, tenant_id, viaje_id, tipo, estado, ciclo, recibido_en, fuente)
+    values (h, ta, v, 'salida_descarga', 'recibido', 1, now(), 'texto');
+  insert into cliente_documento_requerido (id, tenant_id, cliente_id, nombre, tipo) values (doc1, ta, cli, 'Carta porte firmada ZZZ', 'basico');
+
+  insert into viaje_hito_evidencia (tenant_id, viaje_id, viaje_hito_id, ciclo, tipo, ruta, sha256, documento_requerido_id)
+    values (ta, v, h, 1, 'documento_cierre', ta || '/v/zzz0823.jpg', repeat('a', 64), doc1)
+    returning id into ev;
+  tipo_ampliado := ev is not null;
+  begin
+    insert into viaje_hito_evidencia (tenant_id, viaje_id, viaje_hito_id, ciclo, tipo, ruta, sha256) values (ta, v, h, 1, 'zzz_inventado', ta || '/v/x.jpg', repeat('b', 64));
+  exception when check_violation then tipo_cerrado := true;
+  end;
+
+  insert into viaje_documento_cierre (tenant_id, viaje_id, documento_requerido_id, nombre_solicitado, tipo_solicitado, viaje_hito_evidencia_id, estado, recibido_en)
+    values (ta, v, doc1, 'Carta porte firmada ZZZ', 'basico', ev, 'recibido', now())
+    returning id into dc;
+
+  -- Único por (viaje, documento): el segundo intento del MISMO documento falla (ANTES de tocar el catálogo).
+  begin
+    insert into viaje_documento_cierre (tenant_id, viaje_id, documento_requerido_id, nombre_solicitado, tipo_solicitado, estado)
+      values (ta, v, doc1, 'Carta porte firmada ZZZ', 'basico', 'pendiente');
+  exception when unique_violation then unico := true;
+  end;
+
+  -- Coherencia: 'recibido' sin recibido_en se rechaza.
+  begin
+    insert into viaje_documento_cierre (tenant_id, viaje_id, documento_requerido_id, nombre_solicitado, tipo_solicitado, estado)
+      values (ta, v, gen_random_uuid(), 'Otro ZZZ', 'basico', 'recibido');
+  exception when check_violation then recibido_coherente := true;
+  end;
+
+  -- Dominio cerrado de la respuesta del chofer a N11.
+  begin
+    update viaje_documento_cierre set respuesta_chofer = 'zzz_inventado' where id = dc;
+  exception when check_violation then respuesta_dominio := true;
+  end;
+
+  -- Borrar el documento del catálogo DESLIGA la evidencia Y la fila de seguimiento (SET NULL); ninguna de las dos se borra.
+  delete from cliente_documento_requerido where id = doc1;
+  fk_documento_set_null := (select documento_requerido_id from viaje_hito_evidencia where id = ev) is null
+    and exists (select 1 from viaje_hito_evidencia where id = ev)
+    and (select documento_requerido_id from viaje_documento_cierre where id = dc) is null
+    and (select nombre_solicitado from viaje_documento_cierre where id = dc) = 'Carta porte firmada ZZZ'; -- el snapshot sobrevive
+
+  -- Borrar la evidencia DESLIGA la fila de seguimiento (SET NULL), no se la lleva.
+  delete from viaje_hito_evidencia where id = ev;
+  fk_evidencia_set_null := (select viaje_hito_evidencia_id from viaje_documento_cierre where id = dc) is null
+    and exists (select 1 from viaje_documento_cierre where id = dc);
+
+  foreach f in array array['select', 'insert', 'update', 'delete'] loop
+    foreach r in array array['anon', 'authenticated'] loop
+      if r = 'authenticated' and f = 'select' then continue; end if; -- authenticated SÍ lee, filtrado por RLS (ve_operacion + tenant)
+      if has_table_privilege(r, 'public.viaje_documento_cierre', f) then grants := false; end if;
+    end loop;
+  end loop;
+  if not (select relrowsecurity from pg_class where oid = 'public.viaje_documento_cierre'::regclass) then grants := false; end if;
+
+  raise exception E'EVIDENCIA_DOC_CIERRE_0823 tipo-ampliado=% tipo-cerrado=% fk-documento-set-null=% unico-viaje-documento=% recibido-coherente=% respuesta-dominio=% fk-evidencia-set-null=% sin-grants-abiertos=%   (esperado t / t / t / t / t / t / t / t)',
+    tipo_ampliado, tipo_cerrado, fk_documento_set_null, unico, recibido_coherente, respuesta_dominio, fk_evidencia_set_null, grants;
+end $$;

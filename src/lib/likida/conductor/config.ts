@@ -136,6 +136,13 @@ export interface ConfigConductor {
    */
   resultadoDescargaActivo?: boolean;
   /**
+   * T-A5-53 (R24): al terminar la descarga, si el cliente del viaje tiene catálogo de documentos (0809), el agente pide por WhatsApp
+   * (plantilla N11) los que falten y clasifica cada foto que llegue. Apagada por omisión: la plantilla sigue `nueva_para_aprobacion`
+   * en el catálogo de Meta (`docs/operacion/plantillas-meta.md`), así que encenderla sin esa aprobación solo deja el envío en 132001.
+   * Aún sin columna propia (mismo «construido y apagado» que `resultadoDescargaActivo`/`patioEntregaActivo` antes de su migración).
+   */
+  pedirDocumentosCierreActivo?: boolean;
+  /**
    * T-A5-47 (R02/R03/R05): la asignación del viaje sale con la plantilla N01 y botones «Acepto el viaje» / «No puedo tomarlo» (en lugar de
    * `viaje_asignado` sin botones), y al aceptar el chofer recibe sus instrucciones completas. Apagado por omisión (hasta la fase 2); aún sin
    * columna propia: se fija al armar la configuración, como `patioEntregaActivo`.
@@ -246,6 +253,7 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   reporteLlegadaActivo: false,
   constanciaReportesActiva: false,
   resultadoDescargaActivo: false,
+  pedirDocumentosCierreActivo: false,
   asignacionBotonesActiva: false,
   gastosEtcActiva: false,
   detenidoAvisoMin: 15,
@@ -478,6 +486,7 @@ export function validarConfigConductor(cruda: Partial<ConfigConductor>): { ok: C
       reporteLlegadaActivo: b.reporteLlegadaActivo === true,
       constanciaReportesActiva: b.constanciaReportesActiva === true,
       resultadoDescargaActivo: b.resultadoDescargaActivo === true,
+      pedirDocumentosCierreActivo: b.pedirDocumentosCierreActivo === true,
       asignacionBotonesActiva: b.asignacionBotonesActiva === true,
       gastosEtcActiva: b.gastosEtcActiva === true,
       detenidoAvisoMin,

@@ -270,7 +270,13 @@ import { join, relative, sep } from 'node:path';
 //   con el lector oficial y PDF verificado por su cabecera; el correo al cliente sale solo si la flota lo activó (apagado por omisión).
 //   Prueba: `v1/ccp-timbrado/route.test.ts`.
 // Integración cinco-integracion-2 (+ cartaporte sobre la misma base 108): 111 + 1 (ccp-timbrado) = 112.
-const RUTAS_APP_REVISADAS = 112;
+// 112 → 113 (frente A5 Conductor, T-A5-53/54, 0823): `api/v1/evidencias/route.ts` — el listado de los documentos de
+//   cierre de UN viaje (cuáles llegaron, cuáles faltan, cuáles quedaron «revisar» por foto ilegible). Su puerta:
+//   `abrir(req, 'operacion')` (llave de API por área o cookie+CSRF) antes de leer; `viajeId` es obligatorio (sin
+//   él, 400 sin consultar nada) y la lectura va SIEMPRE acotada al tenant de la credencial (`leerDocumentosCierre`
+//   filtra por `tenant_id`); un `viajeId` de otra flota o sin solicitud armada contesta lista vacía, igual que
+//   «sin catálogo del cliente» — nunca filtra qué existe en otra flota. Prueba: `v1/evidencias/route.test.ts`.
+const RUTAS_APP_REVISADAS = 113;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

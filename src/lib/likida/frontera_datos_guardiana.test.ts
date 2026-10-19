@@ -413,7 +413,15 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // tenant — llama con el id YA ANCLADO al tenant por `leerObjetivo`, que es
 // el guardia de esta función. Funcionalidad nueva, no código migrado.
 // Integración cinco-integracion-2 (+ auditoria-seguridad sobre la misma base): el barrido real del árbol fusionado mide 2,222 llamadas; techo subido a lo medido, sin relajar la regla.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_222;
+// T-A5-53/54 (documentos de cierre, 0823): +6 llamadas (2,222 → 2,228), las seis en `conductor/repo_validacion.ts` (ya era de los
+// archivos fuera de la frontera, junto con `guardarEvidencia`/`leerEvidencias` existentes): `leerDocumentosCierre` (select),
+// `crearSolicitudDocumentosCierre` (upsert del snapshot), `guardarEvidenciaDocumentoCierre` (insert de la evidencia + update del
+// seguimiento) y `guardarEvidenciaDocumentoCierreSinCategoria` y `registrarRespuestaChoferDocumentosCierre` (un insert y un update
+// más). Todas por `acotada`, ancladas a `tenant_id`. Cubiertas por `documentos_cierre.test.ts` (lógica pura), `v1/evidencias/
+// route.test.ts` (la lectura) y `processor_hitos.test.ts` (el cableado de la foto); las reglas que solo Postgres demuestra —CHECK
+// ampliado, FKs que desligan sin romper, RLS— en `supabase/tests/0823_documentos_cierre_evidencia.sql` y el bloque 353 de
+// `verificaciones.sql`. Sin migración de código viejo: funcionalidad nueva.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_228;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

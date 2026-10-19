@@ -15,6 +15,13 @@ import type { PosicionComparada, SitioValidable, Veredicto, ResultadoValidacion,
 import { telefonoAlcanzable } from './preflight_piloto';
 import type { RutaExistente } from './rutas';
 import { TIPOS_HITO, type HitoFila, type TipoEvidencia, type TipoHito } from './tipos';
+import { faltaEsquema, leerDocumentosCliente } from './repo';
+import { catalogoDeCliente, esTipoDocumento } from './documentos_cliente';
+import {
+  documentoDeCaption, documentosARequerir, decidirFotoDocumento, estadoDeAccion, esEstadoDocumentoCierre, mensajeFotoDocumento, motivoIlegible,
+  MENSAJE_FOTO_DOCUMENTO_FALLO, MENSAJE_SIN_CATEGORIA_DOCUMENTO,
+  type AccionFotoDocumento, type DocumentoCierreFila, type DocumentoCierrePrevio, type EstadoDocumentoCierre, type MetadatosFoto, type PuertosDocumentosCierre,
+} from './documentos_cierre';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL ACCESO A DATOS DE LA SEGUNDA ENTREGA DEL AGENTE 5 (0385): sitios, veredictos
@@ -317,6 +324,163 @@ export async function hitoDeFlota(tenantId: string, hitoId: string): Promise<{ i
   const res = await acotada(supabaseAdmin().from('viaje_hito').select('id, viaje_id, tipo, estado').eq('tenant_id', tenantId).eq('id', hitoId.toLowerCase()).maybeSingle(), 'oficina.hito_de_flota');
   const f = exigir(res as never, 'oficina.hito_de_flota') as Fila | null;
   return f ? { id: String(f.id), viajeId: String(f.viaje_id), tipo: f.tipo as TipoHito, estado: String(f.estado) } : null;
+}
+
+// ── T-A5-53/54: documentos de cierre (0823) ─────────────────────────────────
+
+const COLUMNAS_DOC_CIERRE =
+  'id, tenant_id, viaje_id, documento_requerido_id, nombre_solicitado, tipo_solicitado, solicitado_en, recibido_en, viaje_hito_evidencia_id, intentos_legibilidad, estado, respuesta_chofer';
+
+function filaADocumentoCierre(f: Fila): DocumentoCierreFila | null {
+  const id = s(f.id); const viajeId = s(f.viaje_id); const documentoRequeridoId = s(f.documento_requerido_id); const nombreSolicitado = s(f.nombre_solicitado);
+  // `documentoRequeridoId` SÍ puede ser null (el documento se borró del catálogo después de pedirse): la fila y su snapshot siguen vivos.
+  if (!id || !viajeId || !nombreSolicitado || !esTipoDocumento(f.tipo_solicitado) || !esEstadoDocumentoCierre(f.estado)) return null;
+  const respuesta = f.respuesta_chofer;
+  return {
+    id, tenantId: String(f.tenant_id), viajeId, documentoRequeridoId, nombreSolicitado,
+    tipoSolicitado: f.tipo_solicitado, solicitadoEn: String(f.solicitado_en), recibidoEn: s(f.recibido_en),
+    viajeHitoEvidenciaId: s(f.viaje_hito_evidencia_id), intentosLegibilidad: Number(f.intentos_legibilidad ?? 0), estado: f.estado,
+    respuestaChofer: respuesta === 'evid_listo' || respuesta === 'evid_falta' ? respuesta : null,
+  };
+}
+
+/** La solicitud de documentos de cierre de ESE viaje. `[]` = aún no se armó, el cliente no tiene catálogo, o la base no tiene la 0823. Lanza si falla por otra causa. */
+export async function leerDocumentosCierre(tenantId: string, viajeId: string): Promise<DocumentoCierreFila[]> {
+  const res = await acotada(supabaseAdmin().from('viaje_documento_cierre').select(COLUMNAS_DOC_CIERRE)
+    .eq('tenant_id', tenantId).eq('viaje_id', viajeId).order('nombre_solicitado').order('id'), 'conductor.documentos_cierre_leer');
+  if (res.error) {
+    if (faltaEsquema(res.error, /viaje_documento_cierre/i)) return [];
+    throw new Error(`conductor.documentos_cierre_leer: ${res.error.message}`);
+  }
+  return ((res.data ?? []) as unknown as Fila[]).map(filaADocumentoCierre).filter((d): d is DocumentoCierreFila => d !== null);
+}
+
+/**
+ * Arma el snapshot del catálogo del cliente para este viaje (idempotente: `upsert … ignoreDuplicates` por si dos llamadas
+ * corren a la vez). Sin cliente en el viaje, o sin catálogo de ese cliente (0809), devuelve `[]` — nada que pedir, el POD
+ * de siempre sigue igual. Lanza si la base falla por otra causa que no sea el esquema sin migrar.
+ */
+export async function crearSolicitudDocumentosCierre(tenantId: string, viajeId: string, clienteId: string | null, ahora: Date): Promise<DocumentoCierreFila[]> {
+  if (!clienteId) return [];
+  const catalogo = catalogoDeCliente(await leerDocumentosCliente(tenantId), clienteId);
+  const porPedir = documentosARequerir(catalogo);
+  if (porPedir.length === 0) return [];
+  const filas = porPedir.map((d) => ({
+    tenant_id: tenantId, viaje_id: viajeId, documento_requerido_id: d.documentoRequeridoId,
+    nombre_solicitado: d.nombre, tipo_solicitado: d.tipo, solicitado_en: ahora.toISOString(), estado: 'pendiente',
+  }));
+  const res = await acotada(supabaseAdmin().from('viaje_documento_cierre')
+    .upsert(filas, { onConflict: 'viaje_id,documento_requerido_id', ignoreDuplicates: true }), 'conductor.documentos_cierre_crear');
+  if (res.error) {
+    if (faltaEsquema(res.error, /viaje_documento_cierre/i)) return [];
+    throw new Error(`conductor.documentos_cierre_crear: ${res.error.message}`);
+  }
+  return leerDocumentosCierre(tenantId, viajeId);
+}
+
+/** Los puertos reales de la solicitud (T-A5-53): leer lo ya armado y, si falta, armarlo. */
+export function puertosDocumentosCierreReales(): PuertosDocumentosCierre {
+  return { leer: leerDocumentosCierre, crear: crearSolicitudDocumentosCierre };
+}
+
+export type ResultadoFotoDocumentoCierre = 'ok' | 'duplicada' | 'fallo';
+
+/**
+ * Guarda la foto de UN documento de cierre ya identificado (`documentDeCaption` encontró a cuál pertenece) como evidencia del
+ * hito `salida_descarga`, y avanza su fila en `viaje_documento_cierre` según la decisión de legibilidad (T-A5-54): `pedir_repetir`
+ * deja el documento `pendiente` (con el intento anotado: la foto SÍ queda guardada, el chofer solo repite); `aceptar_ok`/
+ * `aceptar_revisar` lo cierran. Mismo candado de duplicados que `guardarEvidencia` (sha+hito, y el mensaje de WhatsApp).
+ */
+export async function guardarEvidenciaDocumentoCierre(e: {
+  tenantId: string; hito: Pick<HitoFila, 'id' | 'viajeId' | 'ciclo'>; documentoCierreId: string; documentoRequeridoId: string | null;
+  ruta: string; sha256: string; waMessageId: string | null; accion: AccionFotoDocumento; intentos: number; ahora: Date;
+}): Promise<ResultadoFotoDocumentoCierre> {
+  if (!e.ruta.startsWith(`${e.tenantId}/`) || e.ruta.length > 300) return 'fallo';
+  const ins = await acotada(supabaseAdmin().from('viaje_hito_evidencia').insert({
+    tenant_id: e.tenantId, viaje_id: e.hito.viajeId, viaje_hito_id: e.hito.id, ciclo: e.hito.ciclo, tipo: 'documento_cierre',
+    ruta: e.ruta, sha256: e.sha256, wa_message_id: e.waMessageId, documento_requerido_id: e.documentoRequeridoId,
+  }).select('id').single(), 'conductor.documento_cierre_evidencia_guardar');
+  if (ins.error) {
+    const code = (ins.error as { code?: string }).code;
+    if (code === '23505') return 'duplicada';
+    logger.error('conductor.documento_cierre_evidencia_fallo', { documento: e.documentoCierreId, err: ins.error.message });
+    return 'fallo';
+  }
+  const evidenciaId = s((ins.data as Fila | null)?.id);
+  const estado: EstadoDocumentoCierre = estadoDeAccion(e.accion);
+  const upd = await acotada(supabaseAdmin().from('viaje_documento_cierre').update({
+    estado, intentos_legibilidad: e.intentos, recibido_en: estado === 'pendiente' ? null : e.ahora.toISOString(), viaje_hito_evidencia_id: evidenciaId,
+  }).eq('id', e.documentoCierreId).eq('tenant_id', e.tenantId), 'conductor.documento_cierre_estado_actualizar');
+  if (upd.error) logger.warn('conductor.documento_cierre_estado_no_anotado', { documento: e.documentoCierreId, err: upd.error.message });
+  return 'ok';
+}
+
+/** La foto llegó, pero su caption no nombró a ninguno de los documentos pendientes: se guarda igual (nunca se pierde), sin marcar ningún documento. */
+export async function guardarEvidenciaDocumentoCierreSinCategoria(e: {
+  tenantId: string; hito: Pick<HitoFila, 'id' | 'viajeId' | 'ciclo'>; ruta: string; sha256: string; waMessageId: string | null;
+}): Promise<ResultadoFotoDocumentoCierre> {
+  if (!e.ruta.startsWith(`${e.tenantId}/`) || e.ruta.length > 300) return 'fallo';
+  const ins = await acotada(supabaseAdmin().from('viaje_hito_evidencia').insert({
+    tenant_id: e.tenantId, viaje_id: e.hito.viajeId, viaje_hito_id: e.hito.id, ciclo: e.hito.ciclo, tipo: 'documento_cierre',
+    ruta: e.ruta, sha256: e.sha256, wa_message_id: e.waMessageId, documento_requerido_id: null,
+  }), 'conductor.documento_cierre_evidencia_sin_categoria');
+  if (ins.error) {
+    const code = (ins.error as { code?: string }).code;
+    if (code === '23505') return 'duplicada';
+    logger.error('conductor.documento_cierre_evidencia_sin_categoria_fallo', { viaje: e.hito.viajeId, err: ins.error.message });
+    return 'fallo';
+  }
+  return 'ok';
+}
+
+/** La respuesta del chofer a la plantilla N11 («Ya los envié» / «Me falta uno»): se anota en TODOS los documentos aún pendientes de ese viaje. Devuelve cuántas filas tocó (0 = no había solicitud viva). */
+export async function registrarRespuestaChoferDocumentosCierre(tenantId: string, viajeId: string, respuesta: 'evid_listo' | 'evid_falta', ahora: Date): Promise<number> {
+  const res = await acotada(supabaseAdmin().from('viaje_documento_cierre')
+    .update({ respuesta_chofer: respuesta, respuesta_chofer_en: ahora.toISOString() })
+    .eq('tenant_id', tenantId).eq('viaje_id', viajeId).eq('estado', 'pendiente').select('id'), 'conductor.documento_cierre_respuesta');
+  if (res.error) {
+    if (faltaEsquema(res.error, /viaje_documento_cierre/i)) return 0;
+    throw new Error(`conductor.documento_cierre_respuesta: ${res.error.message}`);
+  }
+  return ((res.data ?? []) as unknown[]).length;
+}
+
+/** ¿La foto que llega es de un documento de cierre? `null` = no hay solicitud viva de este viaje (sin catálogo, o ya está completa): la foto sigue su camino normal de comprobante/POD. */
+export async function documentoCierreDeLaFoto(tenantId: string, viajeId: string, caption: string | undefined): Promise<DocumentoCierrePrevio | null> {
+  const filas = await leerDocumentosCierre(tenantId, viajeId);
+  const pendientes = filas.filter((f) => f.estado === 'pendiente');
+  if (pendientes.length === 0) return null;
+  return { pendientes, documentoId: documentoDeCaption(caption, pendientes) };
+}
+
+/**
+ * Registra la foto ya subida: la clasifica (si `documentoId` viene nulo, sin categoría clara), evalúa legibilidad (T-A5-54; sin
+ * `metadatos` —fase 1— siempre legible) y guarda. Devuelve el acuse al chofer; nunca lanza.
+ */
+export async function registrarFotoDocumentoCierre(e: {
+  tenantId: string; hito: Pick<HitoFila, 'id' | 'viajeId' | 'ciclo'>; documentoId: string | null; pendientes: readonly DocumentoCierreFila[];
+  ruta: string; sha256: string; waMessageId: string | null; metadatos?: MetadatosFoto | null; ahora?: Date;
+}): Promise<string> {
+  const ahora = e.ahora ?? new Date();
+  try {
+    if (e.documentoId === null) {
+      const r = await guardarEvidenciaDocumentoCierreSinCategoria({ tenantId: e.tenantId, hito: e.hito, ruta: e.ruta, sha256: e.sha256, waMessageId: e.waMessageId });
+      return r === 'duplicada' ? 'Ya tenía esa foto. 👍' : MENSAJE_SIN_CATEGORIA_DOCUMENTO;
+    }
+    const fila = e.pendientes.find((p) => p.documentoRequeridoId === e.documentoId);
+    if (!fila) return MENSAJE_SIN_CATEGORIA_DOCUMENTO; // carrera: ya no está pendiente (otra foto lo resolvió primero)
+    const decision = decidirFotoDocumento({ motivo: motivoIlegible(e.metadatos), intentosPrevios: fila.intentosLegibilidad });
+    const r = await guardarEvidenciaDocumentoCierre({
+      tenantId: e.tenantId, hito: e.hito, documentoCierreId: fila.id, documentoRequeridoId: fila.documentoRequeridoId,
+      ruta: e.ruta, sha256: e.sha256, waMessageId: e.waMessageId, accion: decision.accion, intentos: decision.intentos, ahora,
+    });
+    if (r === 'duplicada') return `Ya tenía esa foto de ${fila.nombreSolicitado}. 👍`;
+    if (r === 'fallo') return MENSAJE_FOTO_DOCUMENTO_FALLO;
+    return mensajeFotoDocumento(decision.accion, fila.nombreSolicitado);
+  } catch (err) {
+    logger.error('conductor.foto_documento_cierre_fallo', { viaje: e.hito.viajeId, err: err instanceof Error ? err.message : String(err) });
+    return MENSAJE_FOTO_DOCUMENTO_FALLO;
+  }
 }
 
 // ── Las acciones de la oficina (RPC atómicas con bitácora) ──────────────────

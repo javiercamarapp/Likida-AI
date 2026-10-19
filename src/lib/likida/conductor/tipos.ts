@@ -16,8 +16,8 @@ export type EstadoHito = typeof ESTADOS_HITO[number];
 
 export type FuenteHito = 'texto' | 'boton' | 'ubicacion' | 'foto' | 'sistema' | 'oficina';
 
-/** Qué papel es la foto que respalda un hito (0385). */
-export type TipoEvidencia = 'sello' | 'anden' | 'recibido' | 'otra';
+/** Qué papel es la foto que respalda un hito (0385). `documento_cierre` (0823/T-A5-53): foto de UN documento del catálogo de cierre del cliente, colgada de `salida_descarga`. */
+export type TipoEvidencia = 'sello' | 'anden' | 'recibido' | 'otra' | 'documento_cierre';
 export type InterpretacionHito = 'regla' | 'boton' | 'llm' | 'ubicacion' | 'foto' | 'sistema';
 export type ValidadoPor = 'oficina' | 'gps' | 'sistema';
 
@@ -130,6 +130,9 @@ export const PREFIJO_BOTON = {
   /** T-A5-51: botones de la plantilla N03 («Sí, necesito gastos» / «No necesito»). Solo `<prefijo>:<viaje>`. */
   gastosSi: 'gastos_si',
   gastosNo: 'gastos_no',
+  /** T-A5-53: botones de la plantilla N11 («Ya los envié» / «Me falta uno»). Payload igual al `payloadPrefijo` del catálogo de Meta. Solo `<prefijo>:<viaje>`. */
+  documentosCierreListo: 'evid_listo',
+  documentosCierreFalta: 'evid_falta',
 } as const;
 
 export type RespuestaSenalVida = 'estoy' | 'voy_a_cargar' | 'estoy_bien';
