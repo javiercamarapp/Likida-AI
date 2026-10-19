@@ -141,15 +141,15 @@ describe('(a) bajo el perfil, cada página no permitida rebota y cada permitida 
   const permitidas = new Set(Object.keys(RUTAS_PERFIL_CINCO_AGENTES));
   const negadas = GATEADAS.filter((p) => !permitidas.has(clave(p)));
   const permitidasEnLista = GATEADAS.filter((p) => permitidas.has(clave(p)));
-  // «Próximamente» (fase 1, 15-oct-2026): vigia y conductor están en la lista cerrada pero no se operan; su puerta
-  // manda a la pantalla «Próximamente», no a /dashboard. Las demás permitidas abren.
+  // A4/A5 se encendieron el 18-oct-2026: ya no hay módulo «próximamente», así que las 11 rutas que antes
+  // mandaban a esa pantalla ahora abren como cualquier otra permitida.
   const proximamente = permitidasEnLista.filter((p) => rutaProximamenteEnPerfil('cinco_agentes', clave(p)));
   const abiertas = permitidasEnLista.filter((p) => !rutaProximamenteEnPerfil('cinco_agentes', clave(p)));
 
-  it('el reparto es el de la matriz de T-PER-01 con «Próximamente»: 32 negadas, 26 abiertas (+2: el catálogo y la configuración del Agente de Carta Porte, A3) y 11 «Próximamente» (más integraciones, que solo redirige)', () => {
+  it('el reparto es el de la matriz de T-PER-01 con A4/A5 encendidos: 32 negadas, 37 abiertas (+2: el catálogo y la configuración del Agente de Carta Porte, A3) y 0 «Próximamente»', () => {
     expect(negadas.length).toBe(32);
-    expect(abiertas.length).toBe(26);
-    expect(proximamente.length).toBe(11);
+    expect(abiertas.length).toBe(37);
+    expect(proximamente.length).toBe(0);
     expect(negadas.length + abiertas.length + proximamente.length + 1).toBe(70);
   });
 
