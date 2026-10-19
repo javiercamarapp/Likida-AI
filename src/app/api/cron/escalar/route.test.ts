@@ -50,6 +50,14 @@ const vigilarReglas = vi.fn(async () => ({ reglas: 0, disparadas: 0, avisos: 0, 
 vi.mock('@/lib/likida/reglas/vigilante', () => ({
   vigilarReglas: (...a: unknown[]) => vigilarReglas(...(a as [])),
 }));
+// 19-oct-2026: el sexto barrido — `avisoHuerfanos` (primer emisor real). Se
+// dobla en cero por lo mismo que reglas/orquestador: aquí se mide el reparto
+// del reloj y los interruptores, no el motor (que tiene su propia suite,
+// avisar_huerfanos.test.ts).
+const avisarHuerfanosPendientes = vi.fn(async (..._a: unknown[]) => ({ conPendientes: 0, avisados: 0, fallos: 0 }));
+vi.mock('@/lib/likida/avisar_huerfanos', () => ({
+  avisarHuerfanosPendientes: (...a: unknown[]) => avisarHuerfanosPendientes(...(a as [])),
+}));
 // 0323: el mismo cron horario hospeda el barrido durable de Cal.com para no
 // sumar otra invocación facturable ni depender de reintentos del proveedor.
 const ejecutarMantenimientoCalcom = vi.fn(async () => ({
@@ -446,6 +454,55 @@ describe('el vigilante de reglas (A19) corre aquí, y falla como los demás', ()
     const res = await GET(peticion('Bearer secreto-de-prueba'));
     expect(res.status).toBe(200);
     expect(vigilarReglas).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 19-oct-2026: el sexto barrido, `avisoHuerfanos` — su primer emisor real.
+// Mismo criterio que reglas/orquestador: try/catch propio (un fallo no le
+// quita el turno a nadie), su fallo pinta la corrida en 500, sin palanca
+// propia (la global lo apaga con todo).
+// ═══════════════════════════════════════════════════════════════════════════
+describe('el aviso de comprobantes huérfanos (avisar_huerfanos) corre aquí, y falla como los demás', () => {
+  beforeEach(() => {
+    escalarViajesSinAceptar.mockReset().mockResolvedValue({ escalados: 0 });
+    ejecutarCobranzaGlobal.mockReset().mockResolvedValue({ tenants: 0, contactados: 0, fallos: [] });
+    alertarOperador.mockClear();
+    logger.error.mockClear();
+    estaApagado.mockReset().mockResolvedValue(false);
+    avisarHuerfanosPendientes.mockReset().mockResolvedValue({ conPendientes: 0, avisados: 0, fallos: 0 });
+  });
+
+  it('se despacha en cada corrida y su resultado viaja en el cuerpo', async () => {
+    avisarHuerfanosPendientes.mockResolvedValue({ conPendientes: 3, avisados: 1, fallos: 0 });
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(avisarHuerfanosPendientes).toHaveBeenCalledTimes(1);
+    expect((await res.json()).huerfanos).toEqual({ conPendientes: 3, avisados: 1, fallos: 0 });
+  });
+
+  it('una flota cuyo aviso no se pudo evaluar pinta la corrida en 500 — no se sale en verde con un barrido a medias', async () => {
+    avisarHuerfanosPendientes.mockResolvedValue({ conPendientes: 1, avisados: 0, fallos: 1 });
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(500);
+  });
+
+  it('si el barrido entero revienta: 500, el error en el cuerpo, y los otros motores CORRIERON igual', async () => {
+    avisarHuerfanosPendientes.mockRejectedValue(new Error('comprobante_huerfano: relation does not exist'));
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(500);
+    const cuerpo = await res.json();
+    expect(String((cuerpo.huerfanos as { error?: string }).error)).toContain('relation does not exist');
+    expect(escalarViajesSinAceptar).toHaveBeenCalledTimes(1);
+    expect(ejecutarCobranzaGlobal).toHaveBeenCalledTimes(1);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.huerfanos', expect.objectContaining({ codigo: expect.stringMatching(/./) }));
+  });
+
+  it('con el interruptor global apagado NO corre: no tiene palanca propia porque no es un agente', async () => {
+    estaApagado.mockImplementation(async (n: string) => n === 'global');
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(avisarHuerfanosPendientes).not.toHaveBeenCalled();
   });
 });
 

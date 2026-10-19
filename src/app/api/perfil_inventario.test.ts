@@ -78,9 +78,6 @@ describe('crons: cada cron del repo está clasificado', () => {
     jornada: /tenantsConPerfilASaltar\('jornada'\)/,
     'jornada-alertas': /tenantsConPerfilASaltar\('jornada-alertas'\)/,
     'buzon-entrega': /tenantsConPerfilASaltar\('buzon-entrega'\)/,
-    // «Próximamente» (fase 1): A4 y A5 no corren para flotas con perfil.
-    vigia: /tenantsConPerfilASaltar\('vigia'\)/,
-    'conductor-hitos': /tenantsConPerfilASaltar\('conductor-hitos'\)/,
   };
   /** Mixto: sigue corriendo para los cinco agentes y salta lo de stand-by por sección. */
   const MIXTO: Record<string, RegExp> = { escalar: /tenantsConPerfil\(\)[\s\S]*tenantsConPerfil\(\)[\s\S]*tenantsConPerfil\(\)/ };

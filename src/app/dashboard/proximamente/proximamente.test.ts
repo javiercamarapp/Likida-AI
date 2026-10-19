@@ -39,7 +39,7 @@ describe('la pantalla «Próximamente» no toca datos de la flota', () => {
 });
 
 describe('el contenido por módulo', () => {
-  it('hay uno por cada módulo «próximamente», ligado a una ruta real que el perfil anuncia', () => {
+  it('hay uno por cada módulo «próximamente» (ninguno hoy: A4/A5 se encendieron el 18-oct-2026)', () => {
     expect(Object.keys(CONTENIDO_PROXIMAMENTE).sort()).toEqual([...MODULOS_PROXIMAMENTE_PERFIL].sort());
     for (const [modulo, c] of Object.entries(CONTENIDO_PROXIMAMENTE)) {
       expect(RUTAS_PERFIL_CINCO_AGENTES[c!.rutaReal], modulo).toBe(modulo);

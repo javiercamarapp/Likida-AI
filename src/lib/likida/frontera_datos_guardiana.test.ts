@@ -276,7 +276,23 @@ import { join, relative } from 'node:path';
 // salida al TMS, el catálogo del cliente, los catálogos SAT y la bandeja de hallazgos de `carta_porte_docs/*`; todo con `tenant_id`, por `acotada`/`traerTodo`. Funcionalidad nueva, no código migrado.
 // 16-oct-2026, T-A3-67: techo 310 → 314 archivos (rojo heredado de las tareas A3 anteriores, medido con el barrido real; T-A3-67 no agrega consultas directas: solo cablea lectores ya existentes en servicio.ts).
 // Integración cinco-integracion-2 (+ cartaporte sobre la misma base): el barrido real del árbol fusionado mide 321 archivos; techo subido a lo medido, sin relajar la regla.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
+// 18-oct-2026, T-A2-35 (gate de arquitectura, bajada): el módulo de peajes tenía SEIS archivos llamando a Supabase cada uno por su cuenta
+// (`datos.ts`, `revision_cobros.ts`, `bitacora_conciliada.ts`, `vinculos_conciliacion.ts`, `vinculos_reporte.ts`) además de `intake/desglose_peaje.ts`
+// y `ingesta.ts`. Los cinco primeros se consolidaron, tal cual (mismas firmas, mismos cuerpos, sin cambiar comportamiento), en el nuevo
+// `peajes/repo.ts` — el mismo patrón que ya siguen `vigia/repo.ts`/`conductor/repo.ts`/`reglas/repo.ts` para sus propios módulos (no exime del
+// conteo del guardia: `FRONTERA` solo exime la raíz, pero reduce seis archivos contados a uno). `ingesta.ts` NO se migró: aun quitando sus
+// consultas reales, `Buffer.from(` (la firma HMAC y el `bufferDeBytea`) sigue coincidiendo con la misma expresión regular, así que seguiría
+// contado — migrar sus consultas no bajaba el conteo y sí arriesgaba el camino del cron sin ninguna ganancia medible. `intake/desglose_peaje.ts`
+// tampoco: sus consultas viven DENTRO de `conciliarDesgloseInterno`, la misma función bajo revisión de rendimiento de `escala.test.ts` (60 000
+// líneas) — mezclar ese refactor con una afinación de rendimiento en la pasada más riesgosa del módulo no se justifica; queda como tarea aparte.
+// El barrido real tras la consolidación mide 317 archivos (321 − 6 archivos vueltos a contar como 2: `repo.ts` nuevo + los dos que no se tocaron,
+// `intake/desglose_peaje.ts` e `ingesta.ts`, que YA estaban contados antes). Techo bajado a lo medido, bienvenido: "bajarlo... es bienvenido: el
+// techo se ajusta hacia abajo el mismo día" (ver la nota de la cabecera). Llamadas SIN cambio (2,222): migrar código no quita consultas, solo
+// las reubica — el techo de llamadas no se tocó.
+// Integración con avisoHuerfanos (19-oct-2026, sobre la misma base): +1 archivo (317 → 318), `avisar_huerfanos.ts` — barrido cruzado de
+// TODAS las flotas (por diseño, igual que otros avisos de cola atorada), por `traerTodo` y anclado a `tenant_id` por fila. Funcionalidad
+// nueva. Techo de integración = suma de los dos tramos, medido con el barrido real tras fusionar ambas ramas.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 318;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -413,15 +429,17 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // tenant — llama con el id YA ANCLADO al tenant por `leerObjetivo`, que es
 // el guardia de esta función. Funcionalidad nueva, no código migrado.
 // Integración cinco-integracion-2 (+ auditoria-seguridad sobre la misma base): el barrido real del árbol fusionado mide 2,222 llamadas; techo subido a lo medido, sin relajar la regla.
-// T-A5-53/54 (documentos de cierre, 0823): +6 llamadas (2,222 → 2,228), las seis en `conductor/repo_validacion.ts` (ya era de los
-// archivos fuera de la frontera, junto con `guardarEvidencia`/`leerEvidencias` existentes): `leerDocumentosCierre` (select),
-// `crearSolicitudDocumentosCierre` (upsert del snapshot), `guardarEvidenciaDocumentoCierre` (insert de la evidencia + update del
-// seguimiento) y `guardarEvidenciaDocumentoCierreSinCategoria` y `registrarRespuestaChoferDocumentosCierre` (un insert y un update
-// más). Todas por `acotada`, ancladas a `tenant_id`. Cubiertas por `documentos_cierre.test.ts` (lógica pura), `v1/evidencias/
-// route.test.ts` (la lectura) y `processor_hitos.test.ts` (el cableado de la foto); las reglas que solo Postgres demuestra —CHECK
-// ampliado, FKs que desligan sin romper, RLS— en `supabase/tests/0823_documentos_cierre_evidencia.sql` y el bloque 353 de
+// 19-oct-2026, avisoHuerfanos: +2 llamadas (2,222 → 2,224), las dos de `avisar_huerfanos.ts` (ver arriba).
+// Integración con T-A5-53/54 (documentos de cierre, 0823, sobre la misma base): +6 llamadas (2,224 → 2,230), las seis en
+// `conductor/repo_validacion.ts` (ya era de los archivos fuera de la frontera, junto con `guardarEvidencia`/`leerEvidencias`
+// existentes): `leerDocumentosCierre` (select), `crearSolicitudDocumentosCierre` (upsert del snapshot),
+// `guardarEvidenciaDocumentoCierre` (insert de la evidencia + update del seguimiento) y
+// `guardarEvidenciaDocumentoCierreSinCategoria` y `registrarRespuestaChoferDocumentosCierre` (un insert y un update más). Todas
+// por `acotada`, ancladas a `tenant_id`. Cubiertas por `documentos_cierre.test.ts` (lógica pura), `v1/evidencias/route.test.ts`
+// (la lectura) y `processor_hitos.test.ts` (el cableado de la foto); las reglas que solo Postgres demuestra —CHECK ampliado,
+// FKs que desligan sin romper, RLS— en `supabase/tests/0823_documentos_cierre_evidencia.sql` y el bloque 353 de
 // `verificaciones.sql`. Sin migración de código viejo: funcionalidad nueva.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_228;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_230;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

@@ -104,26 +104,24 @@ describe('/dashboard bajo el perfil', () => {
   });
 });
 
-describe('«Próximamente» en el menú y en el Resumen (fase 1)', () => {
-  it('el menú enseña vigía y conductor con la etiqueta «Próximamente» y su link va al anuncio, no a la función', () => {
+describe('«Próximamente» en el menú y en el Resumen (A4/A5 encendidos el 18-oct-2026)', () => {
+  it('el menú ya enlaza a vigía y conductor directo a su función, sin etiqueta «Próximamente»', () => {
     ruta = '/dashboard/agentes/peajes';
     const html = renderToStaticMarkup(<SidebarNav rol="flota_admin" perfil="cinco_agentes" />);
     ruta = '/dashboard';
     const hrefs = hrefsDe(html);
-    expect(hrefs).toContain('/dashboard/proximamente/vigia');
-    expect(hrefs).toContain('/dashboard/proximamente/conductor');
-    for (const p of ['/dashboard/agentes/vigia', '/dashboard/agentes/conductores']) expect(hrefs).not.toContain(p);
-    expect(html).toContain('Servicio al cliente');
-    expect(html).toContain('Comunicación con operadores');
-    expect((html.match(/Próximamente<\/span>/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect(hrefs).not.toContain('/dashboard/proximamente/vigia');
+    expect(hrefs).not.toContain('/dashboard/proximamente/conductor');
+    for (const p of ['/dashboard/agentes/vigia', '/dashboard/agentes/conductores']) expect(hrefs).toContain(p);
+    expect(html).not.toContain('Próximamente');
   });
 
-  it('A1, A2 y A3 siguen enlazando a su función, sin etiqueta', () => {
+  it('A1-A5 enlazan a su función, sin etiqueta', () => {
     ruta = '/dashboard/agentes/peajes';
     const html = renderToStaticMarkup(<SidebarNav rol="flota_admin" perfil="cinco_agentes" />);
     ruta = '/dashboard';
     const hrefs = hrefsDe(html);
-    for (const p of ['/dashboard/agentes/liquidacion', '/dashboard/agentes/peajes', '/dashboard/agentes/carta-porte']) expect(hrefs).toContain(p);
+    for (const p of ['/dashboard/agentes/liquidacion', '/dashboard/agentes/peajes', '/dashboard/agentes/carta-porte', '/dashboard/agentes/vigia', '/dashboard/agentes/conductores']) expect(hrefs).toContain(p);
   });
 
   it('SIN perfil el menú no cambia: nada de «Próximamente», links a las funciones', () => {

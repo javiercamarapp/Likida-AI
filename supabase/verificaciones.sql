@@ -19798,3 +19798,74 @@ begin
   raise exception E'EVIDENCIA_DOC_CIERRE_0823 tipo-ampliado=% tipo-cerrado=% fk-documento-set-null=% unico-viaje-documento=% recibido-coherente=% respuesta-dominio=% fk-evidencia-set-null=% sin-grants-abiertos=%   (esperado t / t / t / t / t / t / t / t)',
     tipo_ampliado, tipo_cerrado, fk_documento_set_null, unico, recibido_coherente, respuesta_dominio, fk_evidencia_set_null, grants;
 end $$;
+
+-- ── 0841. Cierra las `for all` que la 0292 dejó pendientes de decisión ─────
+--
+-- AUDITORÍA DE SEGURIDAD 18-OCT-2026. Mismo patrón de la 239 (mig. 0292),
+-- extendido a las tablas que esa migración dejó explícitamente "fuera de
+-- alcance a propósito". Se asevera, actuando DE VERDAD como `authenticated`:
+--   (a) un `flota_admin` SIGUE LEYENDO sus propias credenciales de conector
+--       y sus invitaciones (no se rompió el panel);
+--   (b) el INSERT/UPDATE de una credencial de conector por esa misma sesión
+--       afecta 0 filas (RLS lo niega, ya no hay `for all`);
+--   (c) el INSERT de una invitación por esa misma sesión afecta 0 filas;
+--   (d) un `contador` (ni flota_admin ni superadmin) no puede leer NI escribir
+--       `plan` por la policy de escritura (la de lectura sigue abierta a
+--       cualquier autenticado, eso no cambia) ni `evento_stripe` (que no
+--       tiene lectura separada: debe quedar en 0 para ambos verbos);
+--   (e) `service_role` —el rol con el que la app escribe de verdad— no se
+--       tocó: sigue pudiendo insertar una credencial de conector.
+do $$
+declare
+  t uuid := gen_random_uuid(); fa uuid := gen_random_uuid(); conta uuid := gen_random_uuid();
+  cc_leidas int; cc_tocadas int; inv_tocadas int;
+  plan_leidas int; stripe_leidas int; stripe_tocadas text := 'no';
+  por_admin text := 'no';
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0841__');
+  insert into public.app_user (id, tenant_id, email, rol, activo)
+    values (fa, t, '__verif_0841_fa@likida.test', 'flota_admin', true);
+  insert into public.app_user (id, tenant_id, email, rol, activo)
+    values (conta, t, '__verif_0841_conta@likida.test', 'contador', true);
+  insert into public.conector_credencial (tenant_id, conector_id, valores_cifrados)
+    values (t, 'wialon', 'cifrado-de-prueba-0841');
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', fa)::text, true);
+
+  -- (a) el panel sigue leyendo
+  select count(*) into cc_leidas from public.conector_credencial where tenant_id = t;
+
+  -- (b) la escritura por la puerta de atrás ya no entra
+  update public.conector_credencial set activo = false where tenant_id = t;
+  get diagnostics cc_tocadas = row_count;
+
+  -- (c) una invitación falsa tampoco
+  begin
+    insert into public.invitacion (tenant_id, email, rol, token_hash, expira_en)
+      values (t, 'colado@ejemplo.invalid', 'flota_admin', 'x', now() + interval '1 day');
+  exception when insufficient_privilege then null; end;
+  select count(*) into inv_tocadas from public.invitacion where tenant_id = t;
+
+  -- (d) un contador (sin rol de superadmin) no puede ver ni tocar `plan`/`evento_stripe`
+  perform set_config('request.jwt.claims', json_build_object('sub', conta)::text, true);
+  update public.plan set activo = false where clave = 'flota';
+  get diagnostics plan_leidas = row_count;
+  begin
+    insert into public.evento_stripe (id, tipo) values ('__verif_0841__', 'colado');
+    stripe_tocadas := 'ENTRO';
+  exception when insufficient_privilege then stripe_tocadas := 'rebota'; end;
+  select count(*) into stripe_leidas from public.evento_stripe where id = '__verif_0841__';
+
+  reset role;
+
+  -- (e) la app sí sigue pudiendo escribir por su camino real
+  begin
+    insert into public.conector_credencial (tenant_id, conector_id, valores_cifrados)
+      values (t, 'samsara', 'cifrado-de-prueba-0841-b');
+    por_admin := 'entro';
+  exception when others then por_admin := 'REBOTO: ' || sqlerrm; end;
+
+  raise exception E'POLICIES_SOLO_LECTURA_0841  flota_admin-lee-conector=%  update-conector=%  invitacion-colada=%  contador-update-plan=%  evento_stripe-insert=%  evento_stripe-ve=%  por-service-role=%   (esperado 1 / 0 / 0 / 0 / rebota / 0 / entro)',
+    cc_leidas, cc_tocadas, inv_tocadas, plan_leidas, stripe_tocadas, stripe_leidas, por_admin;
+end $$;

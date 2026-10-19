@@ -74,6 +74,10 @@ vi.mock('@/lib/likida/reglas/vigilante', () => ({
 vi.mock('@/lib/likida/orquestador/correr_vivo', () => ({
   correrOrquestadorVivo: async () => ({ barrido: 'no_disponible', avisos: 'no_disponible', fallos: 0 }),
 }));
+// avisoHuerfanos: el sexto barrido, doblado en cero por lo mismo: aquí se prueba la cadena del interruptor, no el aviso.
+vi.mock('@/lib/likida/avisar_huerfanos', () => ({
+  avisarHuerfanosPendientes: async () => ({ conPendientes: 0, avisados: 0, fallos: 0 }),
+}));
 // El barrido CRM comparte cron desde 0323; este arnés aísla la lectura real
 // de interruptores. Su contrato y sus errores se prueban en route.test.ts.
 vi.mock('@/lib/admin/calcom', () => ({
