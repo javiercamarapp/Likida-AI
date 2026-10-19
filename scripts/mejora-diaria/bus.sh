@@ -33,13 +33,25 @@ export WORKER_KEY="$(leer LIKIDA_WORKER_KEY)"
 export APP_URL="$(leer LIKIDA_WORKER_URL)"
 [ -z "$APP_URL" ] && export APP_URL="https://app.likida.ai"
 export BUS_URL="$(leer NEXT_PUBLIC_SUPABASE_URL)"
-export BUS_KEY="$(leer SUPABASE_SERVICE_ROLE_KEY)"
 
 if [ -n "$WORKER_KEY" ] && [ -n "$APP_URL" ]; then
   export BUS_MODO="worker"
+  # El service role NO entra al entorno cuando hay identidad de worker (0135).
+  # Vacío y no ausente: las ramas legacy leen os.environ["BUS_KEY"] sin guardia.
+  export BUS_KEY=""
 else
   export BUS_MODO="legacy"
-  echo "[bus] AVISO: sin LIKIDA_WORKER_KEY — usando service role (migra con crear-worker-llave.py)" >&2
+  # Falla en cerrado contra producción. El camino viejo carga el service role en
+  # la Mac; eso solo se tolera contra una pila local. Si falta la llave y la URL
+  # es remota, la respuesta es sembrar la llave, no bajar el control.
+  case "$BUS_URL" in
+    ""|*localhost*|*127.0.0.1*) ;;
+    *) echo "[bus] ALTO: sin LIKIDA_WORKER_KEY y BUS_URL es remota — me niego a usar service role desde la Mac." >&2
+       echo "[bus] Siembra la identidad: python3 scripts/mejora-diaria/crear-worker-llave.py" >&2
+       exit 0 ;;
+  esac
+  export BUS_KEY="$(leer SUPABASE_SERVICE_ROLE_KEY)"
+  echo "[bus] AVISO: sin LIKIDA_WORKER_KEY — service role contra pila LOCAL" >&2
   [ -z "$BUS_URL" ] || [ -z "$BUS_KEY" ] && { echo "[bus] sin credenciales en .env.local — no reporto." >&2; exit 0; }
 fi
 
