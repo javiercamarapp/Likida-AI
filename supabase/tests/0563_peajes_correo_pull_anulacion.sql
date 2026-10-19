@@ -38,7 +38,7 @@ begin
     (A, repeat('4', 64), 'd.csv', 1, '\x61', 'panel');
   v_falla := false;
   begin
-    insert into public.peaje_ingesta_archivo (tenant_id, huella, nombre, bytes, contenido, origen) values (A, repeat('5', 64), 'e.csv', 1, '\x61', 'sftp');
+    insert into public.peaje_ingesta_archivo (tenant_id, huella, nombre, bytes, contenido, origen) values (A, repeat('5', 64), 'e.csv', 1, '\x61', 'ftp');
   exception when check_violation then v_falla := true; end;
   if not v_falla then raise exception 'FALLO a: origen inventado aceptado'; end if;
 
