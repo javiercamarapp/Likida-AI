@@ -433,7 +433,18 @@ export default async function Login({
           y aire. Meter aquí una banda de imagen le habría robado alto vertical
           al único formulario que importa, en el dispositivo donde menos alto
           hay. Y como está en `display:none`, tampoco se descarga ni la lee un
-          lector de pantalla en el teléfono. */}
+          lector de pantalla en el teléfono.
+
+          AUDITORÍA DE RENDIMIENTO (18-oct-2026): el comentario de arriba decía
+          la mitad de la verdad. `display:none` evita el PINTADO, no la
+          DESCARGA — un `<img src>` plano se pide igual aunque su contenedor
+          esté oculto. Medido con Lighthouse móvil real contra /login: este
+          JPEG de 325 KB (el recurso más pesado de la página, 48% del peso
+          total) SÍ se transfería en el viewport de 375px donde nunca se ve.
+          `loading="lazy"` sí corta la descarga aquí porque un elemento sin
+          caja (display:none) nunca entra en el IntersectionObserver que lo
+          dispara — por eso en escritorio (donde `lg:flex` SÍ le da caja y
+          está en el viewport inicial) sigue cargando de inmediato. */}
       <aside className="hidden lg:flex lg:flex-col lg:py-10 lg:pl-6 lg:pr-10">
         <figure className="login-lamina min-h-0 flex-1">
           {/* eslint-disable-next-line @next/next/no-img-element -- fondo estático de marca, no contenido de producto: `next/image` aquí solo agrega un pase de optimización sobre un JPEG que ya se sirve al tamaño exacto */}
@@ -441,6 +452,8 @@ export default async function Login({
             src="/images/login-hero.jpg"
             alt="Fila de cajas secas estacionadas en un patio de maniobras, perdiéndose en la niebla de la mañana."
             className="login-foto"
+            loading="lazy"
+            decoding="async"
           />
           <div className="login-velo" />
           <figcaption className="absolute inset-x-0 bottom-0 p-9">
