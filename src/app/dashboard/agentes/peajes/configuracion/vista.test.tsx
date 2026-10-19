@@ -113,7 +113,13 @@ describe('mensajes', () => {
 });
 
 describe('recepción por correo y pull (0563)', () => {
-  const cfg = { correoActivo: true, correoToken: 'abcdefghjkmnpqrstvwxyz23', remitentes: ['pase.example'], pullUrl: 'https://tms.flota.example/cortes', pullActivo: true, pullIntervaloMin: 60, pullUltimoEn: '2026-10-01T12:00:00Z', pullUltimoError: null, pullConCredencial: true };
+  const cfg = {
+    correoActivo: true, correoToken: 'abcdefghjkmnpqrstvwxyz23', remitentes: ['pase.example'],
+    pullUrl: 'https://tms.flota.example/cortes', pullActivo: true, pullIntervaloMin: 60, pullUltimoEn: '2026-10-01T12:00:00Z', pullUltimoError: null, pullConCredencial: true,
+    // SFTP (0843): esta pantalla aún no tiene su sección (pendiente); la flota de las pruebas de correo/pull nunca lo configuró.
+    sftpHost: null, sftpPuerto: 22, sftpUsuario: null, sftpRuta: null, sftpHuellas: [] as string[],
+    sftpActivo: false, sftpIntervaloMin: 60, sftpUltimoEn: null, sftpUltimoError: null, sftpConCredencial: false,
+  };
   const E = (o: Partial<EntradasVista> = {}): EntradasVista => ({ config: cfg, puedeAdministrar: true, direccionCorreo: 'pj-abcdefghjkmnpqrstvwxyz23@mail.likida.ai', cofreConfigurado: true, ...o });
 
   it('muestra la dirección del buzón de correo, los remitentes permitidos y los botones de quien administra', () => {

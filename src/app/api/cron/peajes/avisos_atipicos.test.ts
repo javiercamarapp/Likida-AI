@@ -7,6 +7,7 @@ vi.mock('@/lib/admin/salud', () => ({ puertaCron: async () => null, registrarLat
 vi.mock('@/lib/likida/interruptores', () => ({ leerInterruptor: async () => 'encendido' }));
 vi.mock('@/lib/likida/peajes/ingesta', () => ({ procesarColaPeajes: async () => ({ tomados: 0, procesados: 0, fallidos: 0, reintentar: 0, claimPerdido: 0 }) }));
 vi.mock('@/lib/likida/peajes/pull', () => ({ ejecutarPulls: async () => ({ reclamadas: 0, exitosas: 0, fallidas: 0, recibidos: 0, duplicados: 0, rechazados: 0 }) }));
+vi.mock('@/lib/likida/peajes/ingesta_sftp', () => ({ ejecutarSftpPeajes: async () => ({ reclamadas: 0, exitosas: 0, fallidas: 0, recibidos: 0, duplicados: 0, rechazados: 0 }) }));
 vi.mock('@/lib/likida/peajes/aviso_oficina', () => ({ reintentarAvisosPeajes: async () => ({ revisados: 0, enviados: 0, pendientes: 0 }) }));
 const atipicos = vi.fn(async (..._a: unknown[]): Promise<Record<string, number>> => ({ revisados: 0, enviados: 0, pendientes: 0 }));
 vi.mock('@/lib/likida/peajes/aviso_atipicos', () => ({ reintentarAvisosAtipicos: (...a: unknown[]) => atipicos(...a) }));

@@ -8,7 +8,7 @@ Regla de oro: se retrocede en dos niveles. El nivel 1 (apagar) es inmediato, rev
 
 1. **Poner el modo en descarga.** Pantalla `/dashboard/agentes/carta-porte/configuracion`, «Modo de salida: descarga». Desde ese momento el sistema no consulta ni sube nada al TMS; cada envío queda «listo».
 2. **Apagar el interruptor `agente:carta_porte_salida_tms`** desde el panel de interruptores de administración. Apagado o ilegible, la pasada de envíos se salta (falla cerrado) y la extracción de la bandeja sigue normal.
-   - Aviso: el panel solo puede escribir ese interruptor cuando una migración nueva amplíe la lista de nombres de la restricción `interruptor_id_dominio` de la tabla `interruptor`. Mientras no exista, usa el paso 1 como palanca real. Verifica antes de contar con el paso 2 (ver verificación abajo).
+   - Aviso: el panel solo puede ESCRIBIR ese interruptor en un entorno donde ya esté aplicada `0842_interruptor_carta_porte_salida_tms.sql` (amplía `interruptor_id_dominio`). Si no está aplicada, el paso 1 (modo descarga) es la palanca real. Verifica antes de contar con este paso (ver verificación abajo).
 3. **Efecto sobre los documentos:** los envíos quedan donde estaban. Los «listos» se bajan con **Descargar plantilla del TMS** y se suben a mano; después, **Marcar como subido a mano**. Los que esperaban requerimiento se quedan esperando, sin avisos nuevos. Ningún documento aprobado se pierde ni se reenvía por duplicado (cada envío tiene llave de idempotencia).
 4. **Si hay un envío «enviándose» trabado:** espera a que venza su reserva (2 minutos); después de eso se puede marcar como subido a mano.
 
@@ -62,7 +62,7 @@ Marca cada línea con la evidencia (captura o consulta), no de memoria.
 Tras apagar (nivel 1):
 
 - [ ] La configuración muestra «descarga» y guarda al recargar.
-- [ ] El interruptor `agente:carta_porte_salida_tms` figura apagado en el panel, o se anotó que la migración de su nombre aún no está aplicada y el modo descarga es la palanca.
+- [ ] El interruptor `agente:carta_porte_salida_tms` figura apagado en el panel (requiere `0842_interruptor_carta_porte_salida_tms.sql` aplicada), o se anotó que esa migración aún no está aplicada en este entorno y el modo descarga es la palanca.
 - [ ] El cron de Carta Porte responde: la extracción corre y la salida dice «saltada» o no sube nada (revisar el registro `cron.carta_porte_docs.salida_saltada`).
 - [ ] Un documento aprobado de prueba queda «Listo para enviar» y se descarga la plantilla.
 - [ ] «Marcar como subido a mano» cambia el estado y el botón desaparece.

@@ -4,7 +4,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import ssh2, { type Connection, type ParsedKey, type SFTPWrapper } from 'ssh2';
 import { ErrorTablaPropia } from './contrato';
 import { crearLectorTablaPropia } from './lector';
-import { crearClienteSftp, huellaDeHex, type DestinoSftp } from './sftp';
+import { crearClienteSftp, crearClienteSftpBinario, huellaDeHex, type DestinoSftp } from './sftp';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // INTEGRACIÓN CON UN SERVIDOR SFTP REAL EN PROCESO (el `Server` que trae ssh2) en
@@ -213,6 +213,17 @@ describe('cliente SFTP contra un servidor ssh2 real en localhost', () => {
     const e = await falla(crearClienteSftp().leerArchivo(destino({ host: '127.0.0.1' }), { maxBytes: 1_000 }));
     expect(e.falla).toBe('formato');
     expect(e.message).toContain('pública');
+  });
+
+  it('crearClienteSftpBinario (peajes/ingesta_sftp.ts): MISMO núcleo compartido (huella, SSRF, clasificación) — bytes crudos, sin pasar por TextDecoder', async () => {
+    archivos['/entrega/corte-pase.xlsx'] = { contenido: CSV };
+    const binario = crearClienteSftpBinario({ resolver: async () => '127.0.0.1' });
+    const bytes = await binario.leerArchivoBinario(destino({ ruta: '/entrega/corte-pase.xlsx' }), { maxBytes: 1_000_000, timeoutMs: 8_000 });
+    expect(Buffer.from(bytes).toString('utf-8')).toBe(CSV);
+    // La misma huella equivocada rebota IGUAL por el núcleo compartido, sin tocar la credencial en el mensaje.
+    const e = await falla(binario.leerArchivoBinario(destino({ ruta: '/entrega/corte-pase.xlsx', huellas: [HUELLA_OTRA] }), { maxBytes: 1_000_000, timeoutMs: 8_000 }));
+    expect(e.falla).toBe('credencial');
+    expect(e.message).not.toContain('clave-de-prueba');
   });
 
   it('de punta a punta por el lector: credencial cifrada → CSV de posiciones y de geocercas por el mismo servidor', async () => {

@@ -126,7 +126,7 @@ Qué se rompe si el código llega antes que la base: el cron de Carta Porte y la
 
 Después de aplicar: comprobar que existen las cuatro (`select to_regclass('public.cp_envio_tms'), to_regclass('public.cp_sat_catalogo');`), dejar el modo de salida en `descarga` y seguir `docs/operacion/carta-porte-salida-tms.md`. Para deshacer: `docs/operacion/carta-porte-salida-tms-rollback.md`.
 
-Falta (migración aparte, aún no escrita): ampliar la restricción `interruptor_id_dominio` con `agente:carta_porte_salida_tms`, sin lo cual el panel no puede apagarlo (ver el rollback).
+Ya escrita: `0842_interruptor_carta_porte_salida_tms.sql` amplía la restricción `interruptor_id_dominio` con `agente:carta_porte_salida_tms` (aditiva, sin quitar ningún nombre); aplicarla es lo que deja al panel apagar esa salida sin recurrir al modo `descarga` (ver el rollback).
 
 ## Lo que sigue pendiente (auditoría 24, no cerrado aquí)
 
