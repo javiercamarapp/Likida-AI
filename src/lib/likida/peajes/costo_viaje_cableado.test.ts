@@ -9,12 +9,19 @@ let db: DbFalsa;
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => db.cliente }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 let candidatos: Array<{ indice: number }> | 'falla' = [];
-vi.mock('./revision_cobros', () => ({
-  revisionDeDesglose: async () => {
-    if (candidatos === 'falla') throw new Error('base caída');
-    return { revision: { candidatos } };
-  },
-}));
+// T-A2-35: `revisionDeDesglose` y `leerVinculosParaArchivo` viven ahora en el mismo archivo
+// (`./repo`, la consolidación del guardia de arquitectura) — se mockea solo esa función y se
+// conserva el resto real con `importActual`, en vez de sustituir todo el módulo.
+vi.mock('./repo', async () => {
+  const real = await vi.importActual<typeof import('./repo')>('./repo');
+  return {
+    ...real,
+    revisionDeDesglose: async () => {
+      if (candidatos === 'falla') throw new Error('base caída');
+      return { revision: { candidatos } };
+    },
+  };
+});
 
 const { leerVinculosParaArchivo } = await import('./vinculos_reporte');
 const { armarVinculos, vinculosAExcel } = await import('./vinculos_archivos');

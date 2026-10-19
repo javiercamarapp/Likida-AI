@@ -34,7 +34,7 @@ Un documento con bloqueos abiertos **nunca** queda «listo».
 | `agente:carta_porte_salida_tms` | **Solo la salida** al TMS (la lectura y la bandeja siguen). | No se sube ni se consulta nada. Los envíos se quedan donde están. Si no se puede leer, se asume apagado (no envía). |
 | `cp_salida_config.modo = descarga` | Que el sistema suba por su cuenta. | Todo queda «listo» para bajarlo a mano. |
 
-Aviso importante: la fila del interruptor `agente:carta_porte_salida_tms` solo se puede escribir desde el panel cuando una migración nueva amplíe la lista de nombres permitidos de la tabla `interruptor` (la restricción `interruptor_id_dominio`). Mientras no exista esa migración, la lectura contesta «encendido» por omisión y la palanca práctica para detener las subidas es poner el modo en **descarga** (pantalla de configuración). Ver el rollback.
+La fila del interruptor `agente:carta_porte_salida_tms` ya se puede escribir desde el panel: la migración `0842_interruptor_carta_porte_salida_tms.sql` amplió la lista de nombres permitidos de la tabla `interruptor` (la restricción `interruptor_id_dominio`), de forma aditiva. **Mientras esa migración no esté aplicada en un entorno** (ver `supabase/APLICAR-EN-PRODUCCION.md`), la lectura contesta «encendido» por omisión y la palanca práctica para detener las subidas sigue siendo poner el modo en **descarga** (pantalla de configuración). Ver el rollback.
 
 ## Parámetros y valores de arranque
 

@@ -3,8 +3,8 @@
 Atiende por WhatsApp a los **clientes** de la flota (quien espera su carga): clasifica
 lo que preguntan, contesta con datos reales del viaje, el gerente aprueba con un
 toque, y lo molesto o sin respuesta escala por niveles. Migraciones `0400` y `0401` (base), `0481`-`0482` (costo de IA propio y
-adjuntos), `0484` (grupos críticos, histórico exportado y alertas), `0647` (respuestas rápidas aprobadas), `0673`-`0674` (directores por nivel y copia por correo) y `0795`-`0799` (aviso proactivo de viaje, servicio al cliente, turnos, prioridad y «solo avisar»; ver «Aviso proactivo y alcance inicial»). Estado al 15-oct-2026:
-construido y probado con dobles y, para 0795-0799, contra una base local de pruebas; **ninguna de esas migraciones está aplicada en la base real** (ver «Puesta en marcha»).
+adjuntos), `0484` (grupos críticos, histórico exportado y alertas), `0647` (respuestas rápidas aprobadas), `0673`-`0674` (directores por nivel y copia por correo) y `0795`-`0799` (aviso proactivo de viaje, servicio al cliente, turnos, prioridad y «solo avisar»; ver «Aviso proactivo y alcance inicial»). Estado al 19-oct-2026:
+construido y probado con dobles y, para 0795-0799, contra una base local de pruebas; **todas esas migraciones (0400, 0401, 0481-0484, 0647, 0673-0674, 0795-0799) ya están aplicadas en la base real** (verificado hoy contra `/api/health`, base en 0840; ver «Puesta en marcha» para encenderlo por flota).
 
 Antes de este agente, un número que no era chofer, oficina ni proveedor recibía
 «no te tengo registrado como operador». Esa regla **se conserva** para cualquier
@@ -78,7 +78,7 @@ unidad y operador) desde el programa de despacho, siempre por confirmación huma
 
 ## Puesta en marcha para una flota
 
-1. Aplicar `0400`, `0401`, `0481`, `0482`, `0484` y `0647` —y `0673`/`0674` si se quiere la lista de directores y el respaldo por correo— (la compuerta de despliegue exige migraciones antes de `[deploy]`; sin la 0484 no hay grupos, histórico ni plazo crítico, y sin la 0647 no hay respuestas rápidas: el Vigía contesta como siempre).
+1. Aplicar `0400`, `0401`, `0481`, `0482`, `0484` y `0647` —y `0673`/`0674` si se quiere la lista de directores y el respaldo por correo— (la compuerta de despliegue exige migraciones antes de `[deploy]`; sin la 0484 no hay grupos, histórico ni plazo crítico, y sin la 0647 no hay respuestas rápidas: el Vigía contesta como siempre). Ya aplicadas en la base real (19-oct-2026); este paso queda para quien levante una base nueva desde cero.
 2. Plantillas de Meta: aprobar `vigia_respuesta_cliente_v1`, `vigia_aprobacion_v1` y
    `vigia_escalamiento_v1` (texto exacto en `docs/operacion/plantillas-meta.md`). Sin ellas
    todo funciona **dentro** de la ventana de 24 h; fuera, el envío se rechaza y queda como fallido.

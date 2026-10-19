@@ -175,81 +175,98 @@ export interface DepsClienteSftp {
   resolver?: (host: string) => Promise<string>;
 }
 
-export function crearClienteSftp(deps: DepsClienteSftp = {}): ClienteSftp {
-  return {
-    async leerArchivo(d, o) {
-      const ip = await (deps.resolver ?? resolverHostSftp)(d.host);
-      let Cliente: Ssh2Modulo['Client'];
-      try {
-        // Import con literal (no por variable) a propósito: así el trazador de Next incluye `ssh2` en la función; va en
-        // `serverExternalPackages` (next.config.ts) para que sus binarios opcionales no pasen por el empaquetador.
-        const m = (await (deps.cargar ? deps.cargar() : import('ssh2'))) as unknown as { Client?: unknown; default?: { Client?: unknown } };
-        const c = m.Client ?? m.default?.Client;
-        if (typeof c !== 'function') throw new Error('sin Client');
-        Cliente = c as Ssh2Modulo['Client'];
-      } catch {
-        throw new ErrorTablaPropia('El lector SFTP no está habilitado en este despliegue (falta el cliente SSH); deja el archivo en una dirección https o usa el endpoint.', 'formato');
-      }
-      const timeoutMs = o.timeoutMs ?? TIMEOUT_SFTP_MS;
-      return new Promise<string>((resolver, rechazar) => {
-        const cliente = new Cliente();
-        let terminado = false;
-        let huellaPresentada: string | null = null;
-        let huellaRechazada = false;
-        const temporizador = setTimeout(() => fin(new ErrorTablaPropia('El servidor SFTP no contestó a tiempo.', 'proveedor')), timeoutMs);
-        function fin(r: ErrorTablaPropia | string): void {
-          if (terminado) return;
-          terminado = true;
-          clearTimeout(temporizador);
-          try { cliente.destroy(); } catch { /* ya cerrado */ }
-          if (typeof r === 'string') resolver(r); else rechazar(r);
-        }
-        cliente.on('error', (e: unknown) => fin(clasificarErrorSsh(e, huellaPresentada, huellaRechazada)));
-        cliente.on('close', () => fin(clasificarErrorSsh({ level: 'client-socket' }, huellaPresentada, huellaRechazada)));
-        cliente.on('ready', () => {
-          cliente.sftp((errSftp, sftp) => {
-            if (errSftp) return fin(new ErrorTablaPropia('El servidor SFTP no ofreció el subsistema de archivos.', 'proveedor'));
-            sftp.stat(d.ruta, (errStat, st) => {
-              if (errStat) return fin(clasificarErrorSftp(errStat));
-              if (!st.isFile()) return fin(new ErrorTablaPropia('La ruta configurada no es un archivo en el servidor SFTP.', 'formato'));
-              if (st.size > o.maxBytes) return fin(new ErrorTablaPropia(`El archivo en el servidor SFTP pesa más de ${Math.round(o.maxBytes / 1_000_000)} MB; acótalo o divídelo.`, 'formato'));
-              const trozos: Uint8Array[] = []; let total = 0;
-              const flujo = sftp.createReadStream(d.ruta);
-              flujo.on('data', (t: Uint8Array) => {
-                total += t.length;
-                if (total > o.maxBytes) { flujo.destroy(); return fin(new ErrorTablaPropia(`El archivo en el servidor SFTP pesa más de ${Math.round(o.maxBytes / 1_000_000)} MB; acótalo o divídelo.`, 'formato')); }
-                trozos.push(t);
-              });
-              flujo.on('error', (e: unknown) => fin(clasificarErrorSftp(e)));
-              flujo.on('end', () => {
-                const todo = new Uint8Array(total); let a = 0;
-                for (const t of trozos) { todo.set(t, a); a += t.length; }
-                fin(new TextDecoder('utf-8').decode(todo));
-              });
-            });
+/**
+ * El núcleo compartido: conecta, verifica la huella, lee UN archivo y resuelve con sus BYTES crudos
+ * (sin decodificar). `crearClienteSftp` (texto, csv/geocercas/cursos de tabla_propia) y
+ * `crearClienteSftpBinario` (binario, el corte de peajes en Excel/PDF — ver
+ * `peajes/ingesta_sftp.ts`) son las dos únicas envolturas: la huella de host, el SSRF, los
+ * timeouts y la clasificación de errores viven AQUÍ UNA SOLA VEZ.
+ */
+async function leerBytesSftp(d: DestinoSftp, o: OpcionesSftp, deps: DepsClienteSftp): Promise<Uint8Array> {
+  const ip = await (deps.resolver ?? resolverHostSftp)(d.host);
+  let Cliente: Ssh2Modulo['Client'];
+  try {
+    // Import con literal (no por variable) a propósito: así el trazador de Next incluye `ssh2` en la función; va en
+    // `serverExternalPackages` (next.config.ts) para que sus binarios opcionales no pasen por el empaquetador.
+    const m = (await (deps.cargar ? deps.cargar() : import('ssh2'))) as unknown as { Client?: unknown; default?: { Client?: unknown } };
+    const c = m.Client ?? m.default?.Client;
+    if (typeof c !== 'function') throw new Error('sin Client');
+    Cliente = c as Ssh2Modulo['Client'];
+  } catch {
+    throw new ErrorTablaPropia('El lector SFTP no está habilitado en este despliegue (falta el cliente SSH); deja el archivo en una dirección https o usa el endpoint.', 'formato');
+  }
+  const timeoutMs = o.timeoutMs ?? TIMEOUT_SFTP_MS;
+  return new Promise<Uint8Array>((resolver, rechazar) => {
+    const cliente = new Cliente();
+    let terminado = false;
+    let huellaPresentada: string | null = null;
+    let huellaRechazada = false;
+    const temporizador = setTimeout(() => fin(new ErrorTablaPropia('El servidor SFTP no contestó a tiempo.', 'proveedor')), timeoutMs);
+    function fin(r: ErrorTablaPropia | Uint8Array): void {
+      if (terminado) return;
+      terminado = true;
+      clearTimeout(temporizador);
+      try { cliente.destroy(); } catch { /* ya cerrado */ }
+      if (r instanceof ErrorTablaPropia) rechazar(r); else resolver(r);
+    }
+    cliente.on('error', (e: unknown) => fin(clasificarErrorSsh(e, huellaPresentada, huellaRechazada)));
+    cliente.on('close', () => fin(clasificarErrorSsh({ level: 'client-socket' }, huellaPresentada, huellaRechazada)));
+    cliente.on('ready', () => {
+      cliente.sftp((errSftp, sftp) => {
+        if (errSftp) return fin(new ErrorTablaPropia('El servidor SFTP no ofreció el subsistema de archivos.', 'proveedor'));
+        sftp.stat(d.ruta, (errStat, st) => {
+          if (errStat) return fin(clasificarErrorSftp(errStat));
+          if (!st.isFile()) return fin(new ErrorTablaPropia('La ruta configurada no es un archivo en el servidor SFTP.', 'formato'));
+          if (st.size > o.maxBytes) return fin(new ErrorTablaPropia(`El archivo en el servidor SFTP pesa más de ${Math.round(o.maxBytes / 1_000_000)} MB; acótalo o divídelo.`, 'formato'));
+          const trozos: Uint8Array[] = []; let total = 0;
+          const flujo = sftp.createReadStream(d.ruta);
+          flujo.on('data', (t: Uint8Array) => {
+            total += t.length;
+            if (total > o.maxBytes) { flujo.destroy(); return fin(new ErrorTablaPropia(`El archivo en el servidor SFTP pesa más de ${Math.round(o.maxBytes / 1_000_000)} MB; acótalo o divídelo.`, 'formato')); }
+            trozos.push(t);
+          });
+          flujo.on('error', (e: unknown) => fin(clasificarErrorSftp(e)));
+          flujo.on('end', () => {
+            const todo = new Uint8Array(total); let a = 0;
+            for (const t of trozos) { todo.set(t, a); a += t.length; }
+            fin(todo);
           });
         });
-        try {
-          cliente.connect({
-            host: ip, port: d.puerto, username: d.usuario,
-            ...(d.clave !== undefined ? { password: d.clave } : {}),
-            ...(d.llave !== undefined ? { privateKey: d.llave } : {}),
-            ...(d.frase !== undefined ? { passphrase: d.frase } : {}),
-            readyTimeout: Math.min(timeoutMs, CONEXION_SFTP_MS),
-            hostHash: 'sha256',
-            hostVerifier: (hex: string) => {
-              huellaPresentada = huellaDeHex(hex);
-              const ok = d.huellas.includes(huellaPresentada);
-              if (!ok) huellaRechazada = true;
-              return ok;
-            },
-            tryKeyboard: false, agent: undefined,
-          });
-        } catch {
-          // ssh2 lanza aquí si la llave no se puede leer (formato, frase ausente o incorrecta).
-          fin(new ErrorTablaPropia('La llave privada no se pudo leer (formato no reconocido o frase incorrecta).', 'credencial'));
-        }
       });
-    },
-  };
+    });
+    try {
+      cliente.connect({
+        host: ip, port: d.puerto, username: d.usuario,
+        ...(d.clave !== undefined ? { password: d.clave } : {}),
+        ...(d.llave !== undefined ? { privateKey: d.llave } : {}),
+        ...(d.frase !== undefined ? { passphrase: d.frase } : {}),
+        readyTimeout: Math.min(timeoutMs, CONEXION_SFTP_MS),
+        hostHash: 'sha256',
+        hostVerifier: (hex: string) => {
+          huellaPresentada = huellaDeHex(hex);
+          const ok = d.huellas.includes(huellaPresentada);
+          if (!ok) huellaRechazada = true;
+          return ok;
+        },
+        tryKeyboard: false, agent: undefined,
+      });
+    } catch {
+      // ssh2 lanza aquí si la llave no se puede leer (formato, frase ausente o incorrecta).
+      fin(new ErrorTablaPropia('La llave privada no se pudo leer (formato no reconocido o frase incorrecta).', 'credencial'));
+    }
+  });
+}
+
+export function crearClienteSftp(deps: DepsClienteSftp = {}): ClienteSftp {
+  return { async leerArchivo(d, o) { return new TextDecoder('utf-8').decode(await leerBytesSftp(d, o, deps)); } };
+}
+
+/** El punto de inyección para el canal BINARIO (peajes): las pruebas ponen un doble aquí; producción usa `crearClienteSftpBinario()`. */
+export interface ClienteSftpBinario {
+  leerArchivoBinario(destino: DestinoSftp, opciones: OpcionesSftp): Promise<Uint8Array>;
+}
+
+/** Mismo cliente que `crearClienteSftp` (huella de host obligatoria, SSRF-safe), sin decodificar a texto: para un archivo binario (Excel/PDF). */
+export function crearClienteSftpBinario(deps: DepsClienteSftp = {}): ClienteSftpBinario {
+  return { leerArchivoBinario(d, o) { return leerBytesSftp(d, o, deps); } };
 }

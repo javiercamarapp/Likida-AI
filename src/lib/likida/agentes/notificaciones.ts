@@ -208,10 +208,17 @@ const CON_EMISOR: ReadonlySet<string> = new Set([
   // `avisar(..., 'cola_atorada', ...)` desde el mismo `finally` del cron de
   // facturación: una llamada por flota con tickets que ESA corrida bloqueó
   // (`bloqueadosPorFlota` — requiere_cuenta, CAPTCHA), con la magnitud MEDIDA.
-  // Los otros cinco agentes siguen sin este par a propósito: sus colas solo se
-  // miden en el render, no en un cron, y listarlos sin emisor sería el bug
-  // original de la pestaña.
+  // Los otros cuatro agentes (cobranza, conductores, peajes, proveedores)
+  // siguen sin este par a propósito: sus colas solo se miden en el render, no
+  // en un cron, y listarlos sin emisor sería el bug original de la pestaña.
   'facturas:cola_atorada',
+  // `avisarHuerfanosPendientes` (avisar_huerfanos.ts), desde el cron `escalar`
+  // (barrido de salud, cada hora): un comprobante sin viaje es exactamente la
+  // semántica de `cola_atorada` para el Agente de Liquidación — el OCR ya hizo
+  // su parte y lo que queda depende de que una persona lo adjunte o lo
+  // descarte. `avisoHuerfanos` existía desde el 1-ago-2026 sin llamador; éste
+  // es su primer emisor real (19-oct-2026).
+  'liquidacion:cola_atorada',
   // íd. desde `escalarViajesSinAceptar` (escalar_viaje.ts), con el fallo real
   // por flota: la que no tiene teléfono de jefe capturado.
   'conductores:corrida_fallida',

@@ -14197,25 +14197,26 @@ begin
     vigilante_late, faltantes, cron_inventado_rebota;
 end $$;
 
--- ── 204. Las palancas de carta_porte y copiloto entran al catálogo, y las 58 de antes siguen (mig. 0250) ──
+-- ── 204. Las palancas de carta_porte, copiloto y la salida de Carta Porte al TMS entran al catálogo (mig. 0250 + 0842) ──
 --
--- Lo que SOLO la base puede demostrar de la 0250 (mismo molde que el bloque
--- 203 le aplicó al `cron_latido_id_dominio` de la 0248):
+-- Lo que SOLO la base puede demostrar de la 0250 y de la 0842 (mismo molde
+-- que el bloque 203 le aplicó al `cron_latido_id_dominio` de la 0248):
 --
---  (a) LAS DOS NUEVAS ENTRAN. `agente:carta_porte` y `agente:copiloto` tienen
---      desde la 0250 call sites reales que las preguntan (carta_porte_wa.ts y
---      /api/admin/copiloto): si el CHECK no las admitiera, apagar al agente
---      desde Observabilidad rebotaría con check_violation justo durante el
---      incidente para el que la palanca existe.
+--  (a) LAS TRES NUEVAS ENTRAN. `agente:carta_porte` y `agente:copiloto` (0250)
+--      y `agente:carta_porte_salida_tms` (0842, T-A3-28) tienen call sites
+--      reales que las preguntan (carta_porte_wa.ts, /api/admin/copiloto y
+--      /api/cron/carta-porte-docs): si el CHECK no las admitiera, apagar al
+--      agente desde Observabilidad rebotaría con check_violation justo
+--      durante el incidente para el que la palanca existe.
 --
 --  (b) LAS 58 DE ANTES SIGUEN ENTRANDO. La mitad que de verdad se escapa: el
 --      CHECK se reescribe ENTERO (drop + add) y un id olvidado no da error —
 --      lo borra del catálogo en silencio (el incidente que la 0227 corrigió).
---      Por eso se prueban los 60, uno por uno, contra la lista del espejo
+--      Por eso se prueban los 61, uno por uno, contra la lista del espejo
 --      INTERRUPTORES (interruptores.ts).
 --
 --  (c) UN ID INVENTADO SIGUE REBOTANDO. Si el dominio se hubiera quedado sin
---      CHECK, los 60 entrarían — y también cualquier basura.
+--      CHECK, los 61 entrarían — y también cualquier basura.
 --
 -- El DO revierte con su excepción final: no queda ni una fila.
 do $$
@@ -14245,7 +14246,8 @@ declare
     'agente:automejora', 'agente:especialistas_incidente', 'agente:fundraising',
     'agente:scorer', 'agente:dossier', 'agente:vigia',
     'agente:demo_prep', 'agente:propuestas', 'agente:cazador',
-    'agente:carta_porte', 'agente:copiloto'
+    'agente:carta_porte', 'agente:copiloto',
+    'agente:carta_porte_salida_tms'
   ];
   k text;
   n_catalogo int;
@@ -14255,7 +14257,7 @@ declare
 begin
   n_catalogo := array_length(ids, 1);
 
-  -- (a)+(b) los 60, uno por uno: el CHECK se reescribe entero y un olvido no grita.
+  -- (a)+(b) los 61, uno por uno: el CHECK se reescribe entero y un olvido no grita.
   foreach k in array ids loop
     begin
       insert into public.interruptor (id) values (k)
@@ -14275,7 +14277,7 @@ begin
     invento_rebota := true;
   end;
 
-  raise exception 'PALANCAS_0250  n_catalogo=%  faltantes=%  invento_rebota=%   (esperado 60 / ninguno / t)',
+  raise exception 'PALANCAS_0250  n_catalogo=%  faltantes=%  invento_rebota=%   (esperado 61 / ninguno / t)',
     n_catalogo, faltantes, invento_rebota;
 end $$;
 
@@ -19717,4 +19719,75 @@ begin
 
   raise exception E'ENVIO_TMS_0790 activo-unico=% terminal-no-estorba=% reclamo-sin-repetir=% alerta-unica=% evento-en-dominio=% sin-grants-abiertos=%   (esperado t / t / t / t / t / t)',
     activo_unico, terminal_libre, reclamo, alerta, evento, grants;
+end $$;
+
+-- ── 0841. Cierra las `for all` que la 0292 dejó pendientes de decisión ─────
+--
+-- AUDITORÍA DE SEGURIDAD 18-OCT-2026. Mismo patrón de la 239 (mig. 0292),
+-- extendido a las tablas que esa migración dejó explícitamente "fuera de
+-- alcance a propósito". Se asevera, actuando DE VERDAD como `authenticated`:
+--   (a) un `flota_admin` SIGUE LEYENDO sus propias credenciales de conector
+--       y sus invitaciones (no se rompió el panel);
+--   (b) el INSERT/UPDATE de una credencial de conector por esa misma sesión
+--       afecta 0 filas (RLS lo niega, ya no hay `for all`);
+--   (c) el INSERT de una invitación por esa misma sesión afecta 0 filas;
+--   (d) un `contador` (ni flota_admin ni superadmin) no puede leer NI escribir
+--       `plan` por la policy de escritura (la de lectura sigue abierta a
+--       cualquier autenticado, eso no cambia) ni `evento_stripe` (que no
+--       tiene lectura separada: debe quedar en 0 para ambos verbos);
+--   (e) `service_role` —el rol con el que la app escribe de verdad— no se
+--       tocó: sigue pudiendo insertar una credencial de conector.
+do $$
+declare
+  t uuid := gen_random_uuid(); fa uuid := gen_random_uuid(); conta uuid := gen_random_uuid();
+  cc_leidas int; cc_tocadas int; inv_tocadas int;
+  plan_leidas int; stripe_leidas int; stripe_tocadas text := 'no';
+  por_admin text := 'no';
+begin
+  insert into public.tenant (id, nombre) values (t, '__verif_0841__');
+  insert into public.app_user (id, tenant_id, email, rol, activo)
+    values (fa, t, '__verif_0841_fa@likida.test', 'flota_admin', true);
+  insert into public.app_user (id, tenant_id, email, rol, activo)
+    values (conta, t, '__verif_0841_conta@likida.test', 'contador', true);
+  insert into public.conector_credencial (tenant_id, conector_id, valores_cifrados)
+    values (t, 'wialon', 'cifrado-de-prueba-0841');
+
+  set local role authenticated;
+  perform set_config('request.jwt.claims', json_build_object('sub', fa)::text, true);
+
+  -- (a) el panel sigue leyendo
+  select count(*) into cc_leidas from public.conector_credencial where tenant_id = t;
+
+  -- (b) la escritura por la puerta de atrás ya no entra
+  update public.conector_credencial set activo = false where tenant_id = t;
+  get diagnostics cc_tocadas = row_count;
+
+  -- (c) una invitación falsa tampoco
+  begin
+    insert into public.invitacion (tenant_id, email, rol, token_hash, expira_en)
+      values (t, 'colado@ejemplo.invalid', 'flota_admin', 'x', now() + interval '1 day');
+  exception when insufficient_privilege then null; end;
+  select count(*) into inv_tocadas from public.invitacion where tenant_id = t;
+
+  -- (d) un contador (sin rol de superadmin) no puede ver ni tocar `plan`/`evento_stripe`
+  perform set_config('request.jwt.claims', json_build_object('sub', conta)::text, true);
+  update public.plan set activo = false where clave = 'flota';
+  get diagnostics plan_leidas = row_count;
+  begin
+    insert into public.evento_stripe (id, tipo) values ('__verif_0841__', 'colado');
+    stripe_tocadas := 'ENTRO';
+  exception when insufficient_privilege then stripe_tocadas := 'rebota'; end;
+  select count(*) into stripe_leidas from public.evento_stripe where id = '__verif_0841__';
+
+  reset role;
+
+  -- (e) la app sí sigue pudiendo escribir por su camino real
+  begin
+    insert into public.conector_credencial (tenant_id, conector_id, valores_cifrados)
+      values (t, 'samsara', 'cifrado-de-prueba-0841-b');
+    por_admin := 'entro';
+  exception when others then por_admin := 'REBOTO: ' || sqlerrm; end;
+
+  raise exception E'POLICIES_SOLO_LECTURA_0841  flota_admin-lee-conector=%  update-conector=%  invitacion-colada=%  contador-update-plan=%  evento_stripe-insert=%  evento_stripe-ve=%  por-service-role=%   (esperado 1 / 0 / 0 / 0 / rebota / 0 / entro)',
+    cc_leidas, cc_tocadas, inv_tocadas, plan_leidas, stripe_tocadas, stripe_leidas, por_admin;
 end $$;

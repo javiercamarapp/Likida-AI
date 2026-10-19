@@ -20,6 +20,8 @@ const procesar = vi.fn(async (..._a: unknown[]): Promise<Record<string, number>>
 vi.mock('@/lib/likida/peajes/ingesta', () => ({ procesarColaPeajes: (...a: unknown[]) => procesar(...a) }));
 const pulls = vi.fn(async (..._a: unknown[]): Promise<Record<string, number>> => ({ reclamadas: 0, exitosas: 0, fallidas: 0, recibidos: 0, duplicados: 0, rechazados: 0 }));
 vi.mock('@/lib/likida/peajes/pull', () => ({ ejecutarPulls: (...a: unknown[]) => pulls(...a) }));
+const sftp = vi.fn(async (..._a: unknown[]): Promise<Record<string, number>> => ({ reclamadas: 0, exitosas: 0, fallidas: 0, recibidos: 0, duplicados: 0, rechazados: 0 }));
+vi.mock('@/lib/likida/peajes/ingesta_sftp', () => ({ ejecutarSftpPeajes: (...a: unknown[]) => sftp(...a) }));
 const avisos = vi.fn(async (..._a: unknown[]): Promise<Record<string, number>> => ({ revisados: 0, enviados: 0, pendientes: 0 }));
 vi.mock('@/lib/likida/peajes/aviso_oficina', () => ({ reintentarAvisosPeajes: (...a: unknown[]) => avisos(...a) }));
 const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
@@ -33,8 +35,9 @@ const j = async (r: Response) => (await r.json()) as Record<string, unknown>;
 
 beforeEach(() => {
   autorizado = 'si'; interruptores = {};
-  procesar.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); pulls.mockClear(); avisos.mockClear();
+  procesar.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); pulls.mockClear(); sftp.mockClear(); avisos.mockClear();
   pulls.mockResolvedValue({ reclamadas: 0, exitosas: 0, fallidas: 0, recibidos: 0, duplicados: 0, rechazados: 0 });
+  sftp.mockResolvedValue({ reclamadas: 0, exitosas: 0, fallidas: 0, recibidos: 0, duplicados: 0, rechazados: 0 });
   avisos.mockResolvedValue({ revisados: 0, enviados: 0, pendientes: 0 });
   procesar.mockResolvedValue({ tomados: 2, procesados: 2, fallidos: 0, reintentar: 0, claimPerdido: 0 });
 });
@@ -138,10 +141,51 @@ describe('pull y avisos a la oficina (0563)', () => {
     expect((await j(r)).avisos).toBeNull();
   });
 
-  it('con una palanca apagada no se consulta ningún pull ni se avisa nada', async () => {
+  it('con una palanca apagada no se consulta ningún pull, SFTP ni se avisa nada', async () => {
     interruptores = { 'agente:peajes': 'apagado' };
     await llamar();
     expect(pulls).not.toHaveBeenCalled();
+    expect(sftp).not.toHaveBeenCalled();
     expect(avisos).not.toHaveBeenCalled();
+  });
+});
+
+describe('SFTP de peajes (0843) — cuarto canal, mismo blindaje que el pull', () => {
+  it('se consulta ANTES de procesar la cola, y viaja en el cuerpo y en el latido', async () => {
+    const orden: string[] = [];
+    sftp.mockImplementationOnce(async () => { orden.push('sftp'); return { reclamadas: 1, exitosas: 1, fallidas: 0, recibidos: 1, duplicados: 0, rechazados: 0 }; });
+    procesar.mockImplementationOnce(async () => { orden.push('cola'); return { tomados: 2, procesados: 2, fallidos: 0, reintentar: 0, claimPerdido: 0 }; });
+    const r = await llamar();
+    expect(orden).toEqual(['sftp', 'cola']);
+    expect(await j(r)).toMatchObject({ corrio: true, sftp: { recibidos: 1 } });
+    expect(sftp).toHaveBeenCalledWith(expect.objectContaining({ limite: 3, venceEn: expect.any(Number) }));
+    expect(registrarLatido).toHaveBeenCalledWith('peajes', 'ok', expect.objectContaining({ sftp: expect.anything() }));
+  });
+
+  it('un SFTP que LANZA no impide procesar la cola; la corrida queda `parcial`, nunca `ok`', async () => {
+    sftp.mockRejectedValueOnce(new Error('rpc caída'));
+    const r = await llamar();
+    expect(r.status).toBe(200);
+    expect(procesar).toHaveBeenCalled();
+    expect((await j(r)).sftp).toBeNull();
+    expect(registrarLatido).toHaveBeenCalledWith('peajes', 'parcial', expect.anything());
+  });
+
+  it('huella de host rechazada u otra flota fallida deja el latido `parcial` sin tumbar la corrida', async () => {
+    sftp.mockResolvedValueOnce({ reclamadas: 1, exitosas: 0, fallidas: 1, recibidos: 0, duplicados: 0, rechazados: 0 });
+    const r = await llamar();
+    expect(r.status).toBe(200);
+    expect(procesar).toHaveBeenCalled();
+    expect(registrarLatido).toHaveBeenLastCalledWith('peajes', 'parcial', expect.anything());
+  });
+
+  it('aislamiento: la flota con pull activo y la flota con SFTP activo se consultan por sus canales SIN mezclar resultados', async () => {
+    // Cada canal es su propio reclamo (RPC distinta): el pull de UNA flota nunca reporta
+    // lo que trajo el SFTP de otra, y viceversa — lo demuestra que cada mock recibe y
+    // devuelve su propio resumen, independiente del otro.
+    pulls.mockResolvedValueOnce({ reclamadas: 1, exitosas: 1, fallidas: 0, recibidos: 3, duplicados: 0, rechazados: 0 });
+    sftp.mockResolvedValueOnce({ reclamadas: 1, exitosas: 1, fallidas: 0, recibidos: 5, duplicados: 0, rechazados: 0 });
+    const r = await llamar();
+    expect(await j(r)).toMatchObject({ pulls: { recibidos: 3 }, sftp: { recibidos: 5 } });
   });
 });

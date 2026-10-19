@@ -51,10 +51,9 @@ const { CRONS_PERFIL_CINCO_AGENTES, CRONS_PROXIMAMENTE_PERFIL } = await import('
 // ── La clasificación (la ficha T-PER-06 + B1) ───────────────────────────────
 /**
  * Stand-by: el motor recibe `excluirTenants` de `tenantsConPerfilASaltar(<cron>)`.
- * `vigia` y `conductor-hitos` son los crons de los módulos «Próximamente» (fase 1, decisión del 15-oct-2026):
- * la flota con perfil los salta igual que a un stand-by (`CRONS_PROXIMAMENTE_PERFIL`).
+ * `vigia` y `conductor-hitos` se encendieron para las flotas con perfil el 18-oct-2026 y pasaron a PERMITIDOS.
  */
-const STANDBY = ['facturar', 'descarga-sat', 'jornada', 'jornada-alertas', 'asistencia', 'buzon-entrega', 'vigia', 'conductor-hitos'] as const;
+const STANDBY = ['facturar', 'descarga-sat', 'jornada', 'jornada-alertas', 'asistencia', 'buzon-entrega'] as const;
 /** MIXTO: sigue para el Conductor, y sus secciones de stand-by piden `tenantsConPerfil()`. */
 const MIXTOS = ['escalar'] as const;
 /** Sirven a los cinco agentes o son plomería compartida: NO se saltan a nadie. */
@@ -64,6 +63,7 @@ const PERMITIDOS = [
   // T-TMS-12: el conector al sistema del cliente. Solo corre para flotas que lo activaron (opt-in); no filtra por
   // perfil, igual que los demás permitidos.
   'tms',
+  'vigia', 'conductor-hitos', // A4/A5, encendidos 18-oct-2026
 ] as const;
 /**
  * PLATAFORMA: no iteran flotas con datos operativos. `runner` despacha los agentes de Likida (CRM/prospección con
@@ -95,12 +95,8 @@ describe('T-PER-06 · el inventario de crons está clasificado', () => {
     for (const c of [...STANDBY, ...PLATAFORMA]) expect(cronAplicaAPerfil(c)).toBe(false);
   });
 
-  it('los crons de los módulos «Próximamente» (vigia, conductor-hitos) están declarados aparte y no figuran entre los permitidos', () => {
-    expect([...CRONS_PROXIMAMENTE_PERFIL].sort()).toEqual(['conductor-hitos', 'vigia']);
-    for (const c of CRONS_PROXIMAMENTE_PERFIL) {
-      expect(CRONS_PERFIL_CINCO_AGENTES, c).not.toContain(c);
-      expect(STANDBY as readonly string[], c).toContain(c);
-    }
+  it('no hay ningún cron «Próximamente» hoy: A4/A5 se encendieron el 18-oct-2026', () => {
+    expect([...CRONS_PROXIMAMENTE_PERFIL]).toEqual([]);
   });
 
   it('cada ruta de cron del disco está en vercel.json (no hay cron huérfano sin clasificar)', () => {
