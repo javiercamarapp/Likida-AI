@@ -472,7 +472,7 @@ export function rutaPermitidaEnPerfil(perfil: PerfilTenant | string, href: strin
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Módulos del perfil que se muestran pero no se operan todavía. */
-export const MODULOS_PROXIMAMENTE_PERFIL: readonly ModuloPerfil[] = ['vigia', 'conductor'];
+export const MODULOS_PROXIMAMENTE_PERFIL: readonly ModuloPerfil[] = [];
 
 /** El módulo al que pertenece una ruta del perfil, o `null` si no está en la lista cerrada. */
 export function moduloDeRutaPerfil(perfil: PerfilTenant | string, href: string): ModuloPerfil | null {
@@ -518,11 +518,13 @@ export const API_PERFIL_CINCO_AGENTES: Readonly<Record<'v1' | 'export' | 'dashbo
     'peajes',                                   // A2
     'ccp-timbrado',                             // A3: aviso del TMS con el CCP ya timbrado (T-A3-33)
     'viajes', 'operadores', 'unidades',         // base
+    'hitos', 'estadias', 'sitios', 'conductor', 'evidencias', // A5 (encendido 18-oct-2026)
   ],
   export: [
     'liquidaciones', 'liquidaciones-externas', 'pdf', // A1
     'peajes-revision', 'peajes-candidatos', 'peajes-vinculos', // A2 (T-A2-31: bitacora-peaje, bitacora-conciliada y peajes-reclamacion son stand-by: estímulo RMF 9.1.8 y evidencia GPS)
     'carta-porte-docs', 'carta-porte-xml',      // A3
+    'vigia-faqs',                                // A4 (encendido 18-oct-2026)
   ],
   dashboard: [
     'evento', // el pageview del panel: cero datos, 204 siempre
@@ -530,12 +532,13 @@ export const API_PERFIL_CINCO_AGENTES: Readonly<Record<'v1' | 'export' | 'dashbo
 };
 
 /**
- * Superficies de API de los módulos «próximamente» (A4 y A5): existen, el perfil
- * las NIEGA hasta que el módulo se encienda. Mismo criterio que la lista de arriba.
+ * Superficies de API de módulos «próximamente» (ninguno hoy: A4 y A5 se
+ * encendieron el 18-oct-2026 y sus rutas ya viven en `API_PERFIL_CINCO_AGENTES`
+ * arriba). Queda declarada para el próximo módulo que entre en fase 1.
  */
 export const API_PROXIMAMENTE_PERFIL: Readonly<Record<'v1' | 'export' | 'dashboard', readonly string[]>> = {
-  v1: ['hitos', 'estadias', 'sitios', 'conductor', 'evidencias'], // A5
-  export: ['vigia-faqs'],                                          // A4
+  v1: [],
+  export: [],
   dashboard: [],
 };
 
@@ -589,7 +592,9 @@ export const CRONS_PERFIL_CINCO_AGENTES: readonly string[] = [
   'peajes',                  // A2
   'carta-porte-docs',        // A3
   'gps',                     // sincroniza posiciones/eventos del proveedor del cliente (solo entrada de datos; no manda nada a nadie)
-  // `escalar` es MIXTO: la escalación del conductor (A5, «próximamente»), la cobranza, los relojes
+  'vigia',                   // A4 (encendido 18-oct-2026)
+  'conductor-hitos',         // A5 (encendido 18-oct-2026)
+  // `escalar` es MIXTO: la escalación del conductor (A5), la cobranza, los relojes
   // legales de incidencias y las reglas (stand-by) se saltan flotas con perfil por sección.
   'escalar',
   'tms',                     // el conector al sistema del cliente: solo corre para flotas que lo activaron (credencial probada + mapeo)
@@ -597,10 +602,11 @@ export const CRONS_PERFIL_CINCO_AGENTES: readonly string[] = [
 ];
 
 /**
- * Crons de los módulos «próximamente»: NO corren para flotas con perfil (cada uno
- * filtra por `tenantsConPerfilASaltar` en su ruta). Siguen corriendo para el resto.
+ * Crons de módulos «próximamente» (ninguno hoy: A4 y A5 se encendieron el
+ * 18-oct-2026 y ya viven en `CRONS_PERFIL_CINCO_AGENTES` arriba). Queda
+ * declarada para el próximo módulo que entre en fase 1.
  */
-export const CRONS_PROXIMAMENTE_PERFIL: readonly string[] = ['vigia', 'conductor-hitos'];
+export const CRONS_PROXIMAMENTE_PERFIL: readonly string[] = [];
 
 /** Toda ruta que el mapa de áreas conoce — para las pruebas que exigen que cada una esté clasificada en el perfil. */
 export function rutasConocidas(): string[] {
