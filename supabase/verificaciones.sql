@@ -14197,25 +14197,26 @@ begin
     vigilante_late, faltantes, cron_inventado_rebota;
 end $$;
 
--- ── 204. Las palancas de carta_porte y copiloto entran al catálogo, y las 58 de antes siguen (mig. 0250) ──
+-- ── 204. Las palancas de carta_porte, copiloto y la salida de Carta Porte al TMS entran al catálogo (mig. 0250 + 0842) ──
 --
--- Lo que SOLO la base puede demostrar de la 0250 (mismo molde que el bloque
--- 203 le aplicó al `cron_latido_id_dominio` de la 0248):
+-- Lo que SOLO la base puede demostrar de la 0250 y de la 0842 (mismo molde
+-- que el bloque 203 le aplicó al `cron_latido_id_dominio` de la 0248):
 --
---  (a) LAS DOS NUEVAS ENTRAN. `agente:carta_porte` y `agente:copiloto` tienen
---      desde la 0250 call sites reales que las preguntan (carta_porte_wa.ts y
---      /api/admin/copiloto): si el CHECK no las admitiera, apagar al agente
---      desde Observabilidad rebotaría con check_violation justo durante el
---      incidente para el que la palanca existe.
+--  (a) LAS TRES NUEVAS ENTRAN. `agente:carta_porte` y `agente:copiloto` (0250)
+--      y `agente:carta_porte_salida_tms` (0842, T-A3-28) tienen call sites
+--      reales que las preguntan (carta_porte_wa.ts, /api/admin/copiloto y
+--      /api/cron/carta-porte-docs): si el CHECK no las admitiera, apagar al
+--      agente desde Observabilidad rebotaría con check_violation justo
+--      durante el incidente para el que la palanca existe.
 --
 --  (b) LAS 58 DE ANTES SIGUEN ENTRANDO. La mitad que de verdad se escapa: el
 --      CHECK se reescribe ENTERO (drop + add) y un id olvidado no da error —
 --      lo borra del catálogo en silencio (el incidente que la 0227 corrigió).
---      Por eso se prueban los 60, uno por uno, contra la lista del espejo
+--      Por eso se prueban los 61, uno por uno, contra la lista del espejo
 --      INTERRUPTORES (interruptores.ts).
 --
 --  (c) UN ID INVENTADO SIGUE REBOTANDO. Si el dominio se hubiera quedado sin
---      CHECK, los 60 entrarían — y también cualquier basura.
+--      CHECK, los 61 entrarían — y también cualquier basura.
 --
 -- El DO revierte con su excepción final: no queda ni una fila.
 do $$
@@ -14245,7 +14246,8 @@ declare
     'agente:automejora', 'agente:especialistas_incidente', 'agente:fundraising',
     'agente:scorer', 'agente:dossier', 'agente:vigia',
     'agente:demo_prep', 'agente:propuestas', 'agente:cazador',
-    'agente:carta_porte', 'agente:copiloto'
+    'agente:carta_porte', 'agente:copiloto',
+    'agente:carta_porte_salida_tms'
   ];
   k text;
   n_catalogo int;
@@ -14255,7 +14257,7 @@ declare
 begin
   n_catalogo := array_length(ids, 1);
 
-  -- (a)+(b) los 60, uno por uno: el CHECK se reescribe entero y un olvido no grita.
+  -- (a)+(b) los 61, uno por uno: el CHECK se reescribe entero y un olvido no grita.
   foreach k in array ids loop
     begin
       insert into public.interruptor (id) values (k)
@@ -14275,7 +14277,7 @@ begin
     invento_rebota := true;
   end;
 
-  raise exception 'PALANCAS_0250  n_catalogo=%  faltantes=%  invento_rebota=%   (esperado 60 / ninguno / t)',
+  raise exception 'PALANCAS_0250  n_catalogo=%  faltantes=%  invento_rebota=%   (esperado 61 / ninguno / t)',
     n_catalogo, faltantes, invento_rebota;
 end $$;
 
