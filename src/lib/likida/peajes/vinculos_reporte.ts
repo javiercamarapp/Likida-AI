@@ -1,15 +1,21 @@
-import { supabaseAdmin } from '@/lib/supabase/admin';
-import { acotada } from '../presupuesto';
-import { traerTodo, traerPorIds, conteo } from '../pg';
-import { vinculosDeDesglose, listarUnidades } from './datos';
+import { logger } from '@/lib/logger';
+import {
+  leerDesgloseVigenteParaVinculos, leerLineasParaVinculosArchivo, leerViajesConOrigenDestino,
+  vinculosDeDesglose, listarUnidades, revisionDeDesglose,
+} from './repo';
 import type { LineaParaVinculos, VinculoParaArchivo } from './vinculos_archivos';
 import { costoPorViaje, type CostoViaje, type ViajeCosto } from './costo_viaje';
-import { revisionDeDesglose } from './revision_cobros';
-import { logger } from '@/lib/logger';
 
 // T-A2-22 — lee lo que necesita el archivo «casetas ligadas a viaje» de UN desglose, siempre con el
 // tenant de la sesión. `null` = el desglose no existe (o está anulado) en esa flota. Lanza ante error
 // de base o lectura incompleta: jamás devuelve un archivo corto.
+//
+// T-A2-35: las consultas directas a Supabase se movieron a `./repo`
+// (`leerDesgloseVigenteParaVinculos`, `leerLineasParaVinculosArchivo`,
+// `leerViajesConOrigenDestino`); esta función se quedó aquí porque llama a
+// `revisionDeDesglose` como una dependencia de OTRO archivo a propósito
+// (`costo_viaje_cableado.test.ts` la mockea para probar la resiliencia ante
+// un fallo al calcular candidatos) — ver la nota en `repo.ts`.
 
 export interface DatosVinculos {
   lineas: LineaParaVinculos[];
@@ -20,19 +26,11 @@ export interface DatosVinculos {
 }
 
 export async function leerVinculosParaArchivo(tenantId: string, desgloseId: string): Promise<DatosVinculos | null> {
-  const admin = supabaseAdmin();
-  const { data: desglose, error } = await acotada(admin.from('desglose_peaje')
-    .select('id').eq('tenant_id', tenantId).eq('id', desgloseId).is('anulado_en', null).maybeSingle(), 'peajes.vinculos_archivo.desglose');
-  if (error) throw new Error(`leerVinculosParaArchivo: ${error.message}`);
+  const desglose = await leerDesgloseVigenteParaVinculos(tenantId, desgloseId);
   if (!desglose) return null;
 
   const [crudas, vinculos, unidades] = await Promise.all([
-    traerTodo<Record<string, unknown>>(
-      (d, h) => acotada(admin.from('desglose_peaje_linea')
-        .select('id, indice, fecha, hora, caseta, monto, clase, unidad_archivo, unidad_id', conteo(d))
-        .eq('tenant_id', tenantId).eq('desglose_id', desgloseId).order('indice').order('id').range(d, h), 'peajes.vinculos_archivo.lineas'),
-      'peajes.vinculos_archivo.lineas',
-    ),
+    leerLineasParaVinculosArchivo(tenantId, desgloseId),
     vinculosDeDesglose(tenantId, desgloseId),
     listarUnidades(tenantId),
   ]);
@@ -54,11 +52,7 @@ export async function leerVinculosParaArchivo(tenantId: string, desgloseId: stri
   const folios = new Map<string, string>();
   const viajesCosto: ViajeCosto[] = [];
   if (viajeIds.length > 0) {
-    const vs = await traerPorIds<{ id: unknown; folio: unknown; origen: unknown; destino: unknown }>(
-      viajeIds,
-      (tanda) => acotada(admin.from('viaje').select('id, folio, origen, destino').eq('tenant_id', tenantId).in('id', tanda), 'peajes.vinculos_archivo.viajes'),
-      'peajes.vinculos_archivo.viajes',
-    );
+    const vs = await leerViajesConOrigenDestino(tenantId, viajeIds);
     for (const v of vs) {
       if (typeof v.folio === 'string' && v.folio !== '') folios.set(String(v.id), v.folio);
       viajesCosto.push({
