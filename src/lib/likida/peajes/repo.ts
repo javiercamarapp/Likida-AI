@@ -49,6 +49,7 @@ import { createHash } from 'node:crypto';
 import { generarToken, esTokenValido } from '@/lib/correo/buzon';
 import { hostNoPublico } from '@/lib/http/destino_publico';
 import { cifrar, cofreConfigurado } from '../conectores/cofre';
+import { partirUrlSftp, leerHuellas, normalizarLlave } from '../conectores/tabla_propia/sftp';
 import type { HallazgoAtipico, ConfigAtipicos } from './atipicos';
 import { validarConfigAvisos, configAvisosEfectiva, type ConfigAvisos } from './config_avisos';
 import { validarMargenLejos, margenLejosEfectivo } from './gps_umbral';
@@ -794,9 +795,22 @@ export interface ConfigEntradas {
   pullUltimoError: string | null;
   /** Hay un token guardado (cifrado); el valor NUNCA vuelve a la pantalla. */
   pullConCredencial: boolean;
+  sftpHost: string | null;
+  sftpPuerto: number;
+  sftpUsuario: string | null;
+  sftpRuta: string | null;
+  sftpHuellas: string[];
+  sftpActivo: boolean;
+  sftpIntervaloMin: number;
+  sftpUltimoEn: string | null;
+  sftpUltimoError: string | null;
+  /** Hay una credencial guardada (cifrada); el valor NUNCA vuelve a la pantalla. */
+  sftpConCredencial: boolean;
 }
 
-const COLUMNAS_ENTRADAS = 'correo_activo, correo_token, remitentes_permitidos, pull_url, pull_activo, pull_intervalo_min, pull_ultimo_en, pull_ultimo_error, pull_credencial_cifrada';
+// Un solo literal (no concatenado): Supabase infiere las columnas del TEXTO LITERAL de `.select()` — partido en
+// dos `+` deja de ser literal para TypeScript y el `data` que vuelve cae a un tipo genérico sin esas propiedades.
+const COLUMNAS_ENTRADAS = 'correo_activo, correo_token, remitentes_permitidos, pull_url, pull_activo, pull_intervalo_min, pull_ultimo_en, pull_ultimo_error, pull_credencial_cifrada, sftp_host, sftp_puerto, sftp_usuario, sftp_ruta, sftp_huellas, sftp_activo, sftp_intervalo_min, sftp_ultimo_en, sftp_ultimo_error, sftp_credencial_cifrada';
 
 /** La configuración de correo/pull de la flota, o null si nunca se configuró. Lanza ante error de base. */
 export async function leerConfigEntradas(tenantId: string): Promise<ConfigEntradas | null> {
@@ -814,6 +828,16 @@ export async function leerConfigEntradas(tenantId: string): Promise<ConfigEntrad
     pullUltimoEn: (data.pull_ultimo_en as string | null) ?? null,
     pullUltimoError: (data.pull_ultimo_error as string | null) ?? null,
     pullConCredencial: typeof data.pull_credencial_cifrada === 'string' && data.pull_credencial_cifrada.length > 0,
+    sftpHost: (data.sftp_host as string | null) ?? null,
+    sftpPuerto: Number(data.sftp_puerto ?? 22),
+    sftpUsuario: (data.sftp_usuario as string | null) ?? null,
+    sftpRuta: (data.sftp_ruta as string | null) ?? null,
+    sftpHuellas: Array.isArray(data.sftp_huellas) ? (data.sftp_huellas as unknown[]).map(String) : [],
+    sftpActivo: data.sftp_activo === true,
+    sftpIntervaloMin: Number(data.sftp_intervalo_min ?? 60),
+    sftpUltimoEn: (data.sftp_ultimo_en as string | null) ?? null,
+    sftpUltimoError: (data.sftp_ultimo_error as string | null) ?? null,
+    sftpConCredencial: typeof data.sftp_credencial_cifrada === 'string' && data.sftp_credencial_cifrada.length > 0,
   };
 }
 
@@ -949,6 +973,113 @@ export async function cerrarPullPeajes(
   if (c.avanzarA) cambios.pull_ultimo_en = c.avanzarA;
   const { error } = await acotada(supabaseAdmin().from('peaje_ingesta_config').update(cambios).eq('tenant_id', tenantId), 'peajes.pull.cerrar');
   if (error) logger.error('peajes.pull.cerrar', { tenant: tenantId, err: error.message });
+}
+
+// ── El canal SFTP (0843) ─────────────────────────────────────────────────────
+// Mismo molde que el pull: la flota da host, puerto, usuario, credencial
+// (contraseña y/o llave+frase) y la RUTA de un archivo fijo que el proveedor
+// sobrescribe cada corte. La huella SHA256 del host es obligatoria (sin ella
+// no se guarda, igual que en `tabla_propia`): no hay «confiar en el primer
+// contacto». `partirUrlSftp`/`leerHuellas`/`normalizarLlave` son los MISMOS
+// helpers de `tabla_propia/sftp.ts`: nada se valida dos veces con reglas que
+// puedan divergir.
+
+export interface EntradaSftpPeajes {
+  /** `sftp://host[:puerto]/ruta/archivo.ext` — sin usuario ni clave dentro de la dirección. */
+  url: string;
+  usuario: string;
+  /** Contraseña. Al menos una de `clave`/`llave` es obligatoria. */
+  clave?: string;
+  /** Llave privada en PEM/OpenSSH (una sola línea o ya con saltos: se normaliza igual que en tabla_propia). */
+  llave?: string;
+  /** Solo tiene sentido con `llave`. */
+  frase?: string;
+  /** Huellas separadas por coma/espacio/salto de línea, «SHA256:…» (hasta 5). */
+  huellas: string;
+  intervaloMin: number;
+}
+
+/** Valida y guarda la configuración del canal SFTP. No conecta: eso lo hace `ingesta_sftp.ts` al correr el cron. */
+export async function guardarSftpPeajes(tenantId: string, entrada: EntradaSftpPeajes): Promise<ResultadoPull> {
+  const u = partirUrlSftp(entrada.url);
+  if ('error' in u) return { ok: false, motivo: `la dirección sftp:// ${u.error}` };
+  const usuario = entrada.usuario.trim();
+  if (!/^[A-Za-z0-9_.@-]{1,64}$/.test(usuario)) return { ok: false, motivo: 'falta el usuario SFTP (letras, dígitos, . _ - @)' };
+  const clave = entrada.clave ?? '';
+  if (/[\u0000-\u001f]/.test(clave) || clave.length > 256) return { ok: false, motivo: 'la contraseña SFTP tiene caracteres no permitidos o es demasiado larga' };
+  const llaveCruda = entrada.llave ?? '';
+  if (clave === '' && llaveCruda.trim() === '') return { ok: false, motivo: 'falta la contraseña SFTP o la llave privada' };
+  let llave: string | undefined;
+  if (llaveCruda.trim() !== '') {
+    const l = normalizarLlave(llaveCruda);
+    if ('error' in l) return { ok: false, motivo: l.error };
+    llave = l.ok;
+  }
+  const frase = entrada.frase ?? '';
+  if (frase !== '' && llave === undefined) return { ok: false, motivo: 'la frase de la llave solo aplica con una llave privada' };
+  if (frase.length > 256) return { ok: false, motivo: 'la frase de la llave es demasiado larga' };
+  const h = leerHuellas(entrada.huellas);
+  if ('error' in h) return { ok: false, motivo: h.error };
+  if (!Number.isInteger(entrada.intervaloMin) || entrada.intervaloMin < 15 || entrada.intervaloMin > 1440) {
+    return { ok: false, motivo: 'El intervalo va de 15 a 1,440 minutos.' };
+  }
+  if (!cofreConfigurado()) return { ok: false, motivo: 'El cofre de credenciales no está configurado (LIKIDA_COFRE_LLAVE): no se puede guardar la credencial SFTP de forma segura.' };
+  const cambios: Record<string, unknown> = {
+    sftp_host: u.ok.host, sftp_puerto: u.ok.puerto, sftp_usuario: usuario, sftp_ruta: u.ok.ruta, sftp_huellas: h.ok,
+    sftp_credencial_cifrada: cifrar({ clave: clave || undefined, llave, frase: frase || undefined }),
+    sftp_activo: true, sftp_intervalo_min: entrada.intervaloMin, sftp_proximo_en: new Date().toISOString(), sftp_ultimo_error: null,
+  };
+  const ok = await guardarEntradas(tenantId, cambios, 'guardar_sftp');
+  return ok ? { ok: true } : { ok: false, motivo: 'No se pudo guardar. Inténtalo de nuevo.' };
+}
+
+export async function apagarSftpPeajes(tenantId: string): Promise<boolean> {
+  return guardarEntradas(tenantId, { sftp_activo: false }, 'apagar_sftp');
+}
+
+/** Borra la credencial guardada (contraseña/llave/frase quedan en NULL); el host/usuario/ruta se conservan. */
+export async function borrarCredencialSftp(tenantId: string): Promise<boolean> {
+  return guardarEntradas(tenantId, { sftp_credencial_cifrada: null, sftp_activo: false }, 'borrar_credencial_sftp');
+}
+
+export interface SftpReclamado {
+  tenantId: string;
+  destino: { host: string; puerto: number; usuario: string; ruta: string; huellas: readonly string[] };
+  /** La credencial YA DESCIFRADA es responsabilidad de `ingesta_sftp.ts` (necesita `descifrar` del cofre, inyectable para pruebas). */
+  credencialCifrada: string | null;
+  ultimoEn: string | null;
+  intervaloMin: number;
+}
+
+/** Toma las flotas cuyo SFTP ya toca (claim con lease, `peaje_sftp_reclamar`). Lanza ante error de base. */
+export async function reclamarSftpsPeajes(limite: number, leaseSegundos = 600): Promise<SftpReclamado[]> {
+  const r = await acotada(supabaseAdmin().rpc('peaje_sftp_reclamar', { p_limite: limite, p_lease_segundos: leaseSegundos }), 'peajes.sftp.reclamar');
+  if (r.error) throw new Error(`peajes.sftp.reclamar: ${r.error.message}`);
+  return ((r.data ?? []) as Array<Record<string, unknown>>).map((f) => ({
+    tenantId: String(f.tenant_id),
+    destino: {
+      host: String(f.sftp_host), puerto: Number(f.sftp_puerto ?? 22), usuario: String(f.sftp_usuario),
+      ruta: String(f.sftp_ruta), huellas: Array.isArray(f.sftp_huellas) ? (f.sftp_huellas as unknown[]).map(String) : [],
+    },
+    credencialCifrada: (f.sftp_credencial_cifrada as string | null) ?? null,
+    ultimoEn: (f.sftp_ultimo_en as string | null) ?? null, intervaloMin: Number(f.sftp_intervalo_min ?? 60),
+  }));
+}
+
+/** Cierra un SFTP: con éxito avanza `sftp_ultimo_en` y programa el siguiente turno; con error, reintenta pronto (tope 30 min). */
+export async function cerrarSftpPeajes(
+  tenantId: string, c: { ok: boolean; avanzarA: string | null; error: string | null; intervaloMin: number; ahora?: Date },
+): Promise<void> {
+  const ahora = c.ahora ?? new Date();
+  const espera = c.ok ? c.intervaloMin : Math.min(c.intervaloMin, 30);
+  const cambios: Record<string, unknown> = {
+    sftp_proximo_en: new Date(ahora.getTime() + espera * 60_000).toISOString(),
+    sftp_ultimo_error: c.error ? c.error.slice(0, 500) : null,
+    updated_at: ahora.toISOString(),
+  };
+  if (c.avanzarA) cambios.sftp_ultimo_en = c.avanzarA;
+  const { error } = await acotada(supabaseAdmin().from('peaje_ingesta_config').update(cambios).eq('tenant_id', tenantId), 'peajes.sftp.cerrar');
+  if (error) logger.error('peajes.sftp.cerrar', { tenant: tenantId, err: error.message });
 }
 
 // ── Aviso a la oficina y anulación del desglose (0563) ─────────────────────

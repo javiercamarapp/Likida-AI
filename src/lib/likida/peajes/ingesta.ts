@@ -135,7 +135,7 @@ export type ResultadoRecepcion =
   | { ok: false; codigo: 'cola_llena' | 'error'; motivo: string };
 
 /** Encola el archivo. Idempotente por (flota, huella). */
-export type OrigenArchivoPeaje = 'api' | 'panel' | 'correo' | 'pull';
+export type OrigenArchivoPeaje = 'api' | 'panel' | 'correo' | 'pull' | 'sftp';
 
 export async function recibirArchivoPeaje(tenantId: string, c: CuerpoIngesta, origen: OrigenArchivoPeaje = 'api'): Promise<ResultadoRecepcion> {
   const huella = huellaDe(c.contenido);
