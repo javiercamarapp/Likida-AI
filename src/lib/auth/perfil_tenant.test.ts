@@ -154,11 +154,11 @@ describe('crons', () => {
   });
 });
 
-describe('moduloEnStandBy: la puerta del WhatsApp de A4/A5 en «Próximamente»', () => {
-  it('con perfil, vigia y conductor están en stand-by; los módulos operables (liquidacion, peajes, carta_porte) no', async () => {
+describe('moduloEnStandBy: la puerta del WhatsApp de la fase 1 de «Próximamente»', () => {
+  it('con la lista vacía (18-oct-2026: A4/A5 ya encendidos), ningún módulo está en stand-by', async () => {
     conPerfil();
-    expect(await m.moduloEnStandBy(CON, 'conductor')).toBe(true);
-    expect(await m.moduloEnStandBy(CON, 'vigia')).toBe(true);
+    expect(await m.moduloEnStandBy(CON, 'conductor')).toBe(false);
+    expect(await m.moduloEnStandBy(CON, 'vigia')).toBe(false);
     expect(await m.moduloEnStandBy(CON, 'liquidacion')).toBe(false);
     expect(await m.moduloEnStandBy(CON, 'peajes')).toBe(false);
   });
@@ -169,8 +169,8 @@ describe('moduloEnStandBy: la puerta del WhatsApp de A4/A5 en «Próximamente»'
     expect(await m.moduloEnStandBy(null, 'vigia')).toBe(false);
   });
 
-  it('falla CERRADO: si el perfil no se puede leer y no hay valor previo, se asume stand-by', async () => {
+  it('un módulo que no está en MODULOS_PROXIMAMENTE_PERFIL nunca es stand-by, ni con el perfil ilegible (la puerta fail-closed de abajo ya no aplica a estos dos)', async () => {
     porTenant.set(CON, { data: null, error: { message: 'timeout' } });
-    expect(await m.moduloEnStandBy(CON, 'conductor')).toBe(true);
+    expect(await m.moduloEnStandBy(CON, 'conductor')).toBe(false);
   });
 });

@@ -55,7 +55,12 @@ export function crearDbFalsa(
     delete() { this.op = 'delete'; return this; }
     upsert(p: unknown, o?: { onConflict?: string; ignoreDuplicates?: boolean }) { this.op = 'upsert'; this.payload = p; this.opcionesUpsert = o ?? {}; return this; }
     eq(c: string, v: unknown) { this.filtros.push([c, 'eq', v]); return this; }
-    in(c: string, v: unknown[]) { this.filtros.push([c, 'in', v]); return this; }
+    // El valor se guarda como `Set` (no como arreglo) para que `coincide()` compare cada fila en O(1) en vez
+    // de recorrer `v` con `.includes()` por cada fila de la tabla: a escala (60 000 filas × cientos de
+    // tandas de 100 ids en el UPDATE agrupado de `conciliarDesglose`) esa búsqueda lineal era el verdadero
+    // costo medido de la prueba de rendimiento (`escala.test.ts`), no el cruce ni ninguna consulta real
+    // contra Postgres — el `Set` se construye UNA vez por llamada, aquí, no por fila.
+    in(c: string, v: unknown[]) { this.filtros.push([c, 'in', new Set(v)]); return this; }
     gte(c: string, v: unknown) { this.filtros.push([c, 'gte', v]); return this; }
     lte(c: string, v: unknown) { this.filtros.push([c, 'lte', v]); return this; }
     is(c: string, v: unknown) { this.filtros.push([c, 'is', v]); return this; }
@@ -71,7 +76,7 @@ export function crearDbFalsa(
       return this.filtros.every(([c, o, v]) => {
         const x = f[c];
         if (o === 'eq') return x === v;
-        if (o === 'in') return (v as unknown[]).includes(x);
+        if (o === 'in') return (v as Set<unknown>).has(x);
         if (o === 'is') return v === null ? x === null || x === undefined : x === v;
         if (o === 'nis') return v === null ? x !== null && x !== undefined : x !== v;
         if (x === null || x === undefined) return false;

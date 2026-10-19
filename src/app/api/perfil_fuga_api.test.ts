@@ -125,11 +125,13 @@ const RUTAS: { clave: string; raiz: 'v1' | 'export'; recurso: string; pathname: 
 // Qué sigue vivo bajo el perfil, escrito a mano desde la ficha (T-PER-05) y la
 // lista de B1. Todo lo demás debe contestar 403 por perfil.
 // ccp-timbrado (T-A3-33): el TMS avisa el CCP ya timbrado — es del Agente de Carta Porte (A3), vivo bajo el perfil.
-const V1_PERMITIDOS = ['viajes', 'unidades', 'operadores', 'peajes', 'liquidaciones-externas', 'ccp-timbrado'];
-// «Próximamente» (fase 1, 15-oct-2026): las APIs de A5 (conductor) y A4 (vigía) existen pero el perfil las niega
-// hasta que el módulo se encienda (`API_PROXIMAMENTE_PERFIL`).
-const V1_PROXIMAMENTE = ['hitos', 'sitios', 'conductor', 'estadias', 'evidencias'];
-const EXPORT_PROXIMAMENTE = ['vigia-faqs'];
+const V1_PERMITIDOS = [
+  'viajes', 'unidades', 'operadores', 'peajes', 'liquidaciones-externas', 'ccp-timbrado',
+  'hitos', 'sitios', 'conductor', 'estadias', 'evidencias', // A5, encendido 18-oct-2026
+];
+// «Próximamente» (fase 1): ninguna hoy — A4 y A5 se encendieron el 18-oct-2026.
+const V1_PROXIMAMENTE: string[] = [];
+const EXPORT_PROXIMAMENTE: string[] = [];
 // DECISIÓN PENDIENTE (preguntas-javier.md, T-PER-05): la ficha manda 403 a las
 // «liquidaciones propias»; la lista vigente de B1 las deja vivas porque
 // `/dashboard/[id]` (revisión de lo cuadrado) está en la lista. Aquí se fija lo
@@ -143,6 +145,7 @@ const V1_VIVOS_POR_DECIDIR = ['liquidaciones'];
 const EXPORT_PERMITIDOS = [
   'liquidaciones-externas', 'peajes-revision', 'carta-porte-docs', 'carta-porte-xml',
   'peajes-candidatos', 'peajes-vinculos',
+  'vigia-faqs', // A4, encendido 18-oct-2026
 ];
 const EXPORT_VIVOS_POR_DECIDIR = ['liquidaciones', 'pdf'];
 const V1_STAND_BY = ['clientes'];

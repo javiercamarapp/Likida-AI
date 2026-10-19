@@ -82,8 +82,8 @@ describe('matriz: lo permitido es exactamente la lista del perfil', () => {
     const permitidos = deSuperficie('cron').filter((f) => f.veredicto === 'permitido').map((f) => f.id.replace('/api/cron/', ''));
     for (const c of ['facturar', 'descarga-sat', 'jornada', 'jornada-alertas', 'asistencia', 'buzon-entrega']) expect(permitidos, c).not.toContain(c);
     for (const c of ['gps', 'peajes', 'carta-porte-docs', 'liquidaciones-externas']) expect(permitidos, c).toContain(c);
-    // Módulos «Próximamente» (fase 1): sus crons saltan las flotas con perfil, así que figuran negados.
-    for (const c of ['vigia', 'conductor-hitos']) expect(permitidos, c).not.toContain(c);
+    // A4/A5 se encendieron el 18-oct-2026: sus crons ya corren para flotas con perfil, igual que A1-A3.
+    for (const c of ['vigia', 'conductor-hitos']) expect(permitidos, c).toContain(c);
   });
 
   it('el MCP y el chat figuran negados por completo (todo o nada bajo el perfil)', () => {
