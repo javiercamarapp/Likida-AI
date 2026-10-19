@@ -597,15 +597,20 @@ describe('un interruptor sin emisor no se puede encender', () => {
     }
   });
 
-  it('`cola_atorada` se guarda SOLO en facturas y sigue rebotando en los otros 5', () => {
-    // El emisor real es el cron de facturación (`procesarLoteEnCola`): avisa
-    // por cada flota con tickets bloqueados en la corrida. Las colas de los
-    // otros cinco agentes solo se miden en el render, no en un cron — su par
-    // sin emisor sería el bug original de la pestaña.
+  it('`cola_atorada` se guarda en facturas y en liquidación, y sigue rebotando en los otros 4', () => {
+    // El emisor de facturas es el cron de facturación (`procesarLoteEnCola`):
+    // avisa por cada flota con tickets bloqueados en la corrida. El de
+    // liquidación es `avisarHuerfanosPendientes` (avisar_huerfanos.ts), desde
+    // el cron `escalar`: avisa por cada flota con comprobantes sin viaje.
+    // Las colas de los otros cuatro agentes (cobranza, conductores, peajes,
+    // proveedores) solo se miden en el render, no en un cron — su par sin
+    // emisor sería el bug original de la pestaña.
     for (const a of AGENTES_NOTIFICABLES) {
       if (!a.eventos.includes('cola_atorada')) continue;
       const v = validarConfigNotificaciones(a, { eventos: ['cola_atorada'], roles: ['flota_admin'] });
-      expect('ok' in v && v.ok.eventos, a.id).toEqual(a.id === 'facturas' ? ['cola_atorada'] : []);
+      expect('ok' in v && v.ok.eventos, a.id).toEqual(
+        a.id === 'facturas' || a.id === 'liquidacion' ? ['cola_atorada'] : [],
+      );
     }
   });
 

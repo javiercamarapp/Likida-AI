@@ -18,7 +18,6 @@ import { alarmasConductor, contadoresConductor } from '@/lib/likida/conductor/ob
 import { horaYDiaMx } from '@/lib/likida/conductor/config';
 import { contarVoluntariosActivos, correrMantenimientoConductor, leerConfigConductor } from '@/lib/likida/conductor/repo';
 import { leerInterruptor, type NombreInterruptor } from '@/lib/likida/interruptores';
-import { tenantsConPerfilASaltar } from '@/lib/auth/perfil_tenant';
 import { sinFlotasEnViajes, sinFlotasEnCandidatos, sinFlotasEnValidacion } from '@/lib/likida/conductor/sin_flotas';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
@@ -93,9 +92,8 @@ export async function GET(req: Request) {
   try {
     const inicio = Date.now();
     const venceEn = inicio + (maxDuration * 1000) - MARGEN_MS;
-    // El Conductor (A5) está en «Próximamente» para las flotas con perfil (fase 1): ninguna pasada les manda ni les valida nada.
-    // Si la tabla del perfil no se puede leer, esto lanza y el cron NO corre (falla cerrado; el siguiente tick reintenta).
-    const saltar = await tenantsConPerfilASaltar('conductor-hitos');
+    // El Conductor (A5) se encendió para las flotas con perfil el 18-oct-2026: ninguna flota se excluye ya por tener perfil.
+    const saltar: ReadonlySet<string> = new Set();
     const r = await correrConductor(sinFlotasEnViajes(puertosReales(), saltar), { venceEn });
 
     // 0385: las dos pasadas nuevas. Cada una aislada: si una revienta, la otra corre y el latido sale `parcial`

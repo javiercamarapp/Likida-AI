@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// PERFIL `cinco_agentes`, FASE 1 (decisión del 15-oct-2026): el Conductor (A5) es SOLO «Próximamente». El WhatsApp del
-// chofer NO registra hitos, NO pide ubicación y NO avisa a nadie a nombre del módulo (revisión adversarial C1).
-// Sin fila de perfil NADA cambia; si el perfil no se puede leer, falla cerrado.
+// PERFIL `cinco_agentes`: el Conductor (A5) se encendió el 18-oct-2026 (salió de
+// `MODULOS_PROXIMAMENTE_PERFIL`). El WhatsApp del chofer SÍ registra hitos, SÍ pide
+// ubicación y SÍ avisa a nombre del módulo, igual que sin perfil.
+// Si el perfil no se puede leer, falla cerrado en `perfilDeTenant` (otras pruebas lo cubren);
+// aquí solo importa que, con perfil legible, el Conductor opera.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const runAgent = vi.fn();
@@ -95,19 +97,9 @@ const fetchSpy = vi.fn(async (_url: string, init?: RequestInit) => {
 const CHOFER = '5219990000001';
 let n = 0;
 const texto = (t: string) => ({ from: CHOFER, type: 'text' as const, text: t, waMessageId: `wa-sb-${n++}` });
-const foto = (caption: string) => ({ from: CHOFER, type: 'image' as const, mediaId: 'm1', text: caption, waMessageId: `wa-sb-${n++}` });
 const pin = () => ({ from: CHOFER, type: 'location' as const, lat: 20.97, lng: -89.62, waMessageId: `wa-sb-${n++}` });
 
-function conductorNoToco() {
-  expect(atenderConductor).not.toHaveBeenCalled();
-  expect(atenderPinConductor).not.toHaveBeenCalled();
-  expect(hitoParaEvidenciaDelChofer).not.toHaveBeenCalled();
-  expect(registrarEvidenciaDelChofer).not.toHaveBeenCalled();
-  expect(registrarHitoDesdeFoto).not.toHaveBeenCalled();
-  expect(enviarSolicitudUbicacion).not.toHaveBeenCalled();
-}
-
-describe('processInbound — el Conductor (A5) en «Próximamente» bajo el perfil cinco_agentes', () => {
+describe('processInbound — el Conductor (A5) ya encendido bajo el perfil cinco_agentes', () => {
   beforeEach(() => {
     salientes.length = 0;
     vi.clearAllMocks();
@@ -125,28 +117,16 @@ describe('processInbound — el Conductor (A5) en «Próximamente» bajo el perf
     process.env.WHATSAPP_PHONE_NUMBER_ID = '123456789';
   });
 
-  it('«llegué a la carga» con perfil: el Conductor ni se invoca (0 hitos, 0 solicitud de ubicación, 0 acuse del módulo)', async () => {
+  it('«llegué a la carga» con perfil: el Conductor se invoca y manda su mensaje, igual que sin perfil', async () => {
     await processInbound(texto('llegué a la carga'));
-    conductorNoToco();
-    expect(salientes.some((s) => s.includes('Anotado'))).toBe(false);
+    expect(atenderConductor).toHaveBeenCalledTimes(1);
+    expect(salientes).toContain('Anotado ✅');
   });
 
-  it('la foto con caption de sello con perfil: no se busca ni se registra evidencia/hito del Conductor', async () => {
-    await processInbound(foto('sello de la caseta'));
-    conductorNoToco();
-  });
-
-  it('el pin de ubicación con perfil: el Conductor no lo adjunta ni lo compara', async () => {
+  it('el pin de ubicación con perfil: el Conductor lo adjunta y lo compara', async () => {
     await processInbound(pin());
-    conductorNoToco();
-    expect(salientes.every((s) => !s.includes('linea del conductor'))).toBe(true);
-  });
-
-  it('el «Ya lo atiendo» se pregunta al módulo (que decide en silencio): cadena vacía = no se contesta nada', async () => {
-    atenderAcuseJefe.mockResolvedValue('');
-    await processInbound(texto('jefe_atiendo:v1'));
-    expect(salientes).toEqual([]);
-    expect(resolveOperador).not.toHaveBeenCalled();
+    expect(atenderPinConductor).toHaveBeenCalledTimes(1);
+    expect(salientes.some((s) => s.includes('linea del conductor'))).toBe(true);
   });
 
   it('SIN fila de perfil nada cambia: el Conductor atiende como siempre', async () => {
@@ -157,10 +137,10 @@ describe('processInbound — el Conductor (A5) en «Próximamente» bajo el perf
     expect(enviarSolicitudUbicacion).toHaveBeenCalledTimes(1);
   });
 
-  it('si el perfil no se puede leer (flota sin valor previo) falla CERRADO: el Conductor no se invoca', async () => {
+  it('si el perfil no se puede leer, el Conductor sigue operando (ya no es «Próximamente»: no depende de poder leer el perfil)', async () => {
     tablaPerfil = { data: null, error: { message: 'timeout' } };
     await processInbound(texto('llegué a la carga'));
-    conductorNoToco();
-    expect(logger.warn).toHaveBeenCalledWith('perfil_tenant.ilegible', expect.any(Object));
+    expect(atenderConductor).toHaveBeenCalledTimes(1);
+    expect(salientes).toContain('Anotado ✅');
   });
 });

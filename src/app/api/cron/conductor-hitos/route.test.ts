@@ -53,16 +53,10 @@ vi.mock('@/lib/likida/convenios/repo', () => ({ ConveniosNoDisponibles: Convenio
 const alertarOperador = vi.fn(async (..._a: unknown[]) => {});
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...a) }));
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'cod' }));
-// «Próximamente» (fase 1): el Conductor salta las flotas con perfil. `flotasConPerfil` simula quiénes son.
-let flotasConPerfil = new Set<string>();
-let perfilIlegible = false;
-vi.mock('@/lib/auth/perfil_tenant', () => ({
-  tenantsConPerfilASaltar: async (c: string) => {
-    expect(c).toBe('conductor-hitos');
-    if (perfilIlegible) throw new Error('perfil_tenant: no se pudo leer la lista de flotas con perfil (caída)');
-    return flotasConPerfil;
-  },
-  sinTenantsDePerfil: <T,>(filas: readonly T[], saltar: ReadonlySet<string>, idDe: (f: T) => string) => filas.filter((f) => !saltar.has(idDe(f))),
+// A5 se encendió el 18-oct-2026: el cron ya no excluye flotas con perfil (`saltar` nace vacío en route.ts).
+// `sinTenantsDePerfil` sigue siendo el filtro genérico real que usan las pasadas; se deja pasar al original.
+vi.mock('@/lib/auth/perfil_tenant', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
@@ -71,7 +65,7 @@ const llamar = () => GET(new Request('https://app.likida.ai/api/cron/conductor-h
 const j = async (r: Response) => (await r.json()) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 beforeEach(() => {
-  autorizado = 'si'; interruptores = {}; horaMx = 12; voluntarios = 0; flotasConPerfil = new Set(); perfilIlegible = false;
+  autorizado = 'si'; interruptores = {}; horaMx = 12; voluntarios = 0;
   correr.mockClear(); registrarLatido.mockClear(); alertarOperador.mockClear(); mantenimiento.mockClear(); alertasEstadia.mockClear(); llegadas.mockClear(); barrido.mockClear(); acercamiento.mockClear(); ciclo.mockClear(); sitios.mockClear(); senal.mockClear(); detencion.mockClear();
 });
 
@@ -372,33 +366,14 @@ describe('T-A5-27: observabilidad mínima en el latido', () => {
   });
 });
 
-describe('«Próximamente»: las flotas con perfil no entran a ninguna pasada del Conductor', () => {
-  it('el motor recibe puertos que ya no traen los viajes de las flotas con perfil', async () => {
-    flotasConPerfil = new Set(['con-perfil']);
-    let vistos: Array<{ id: string }> = [];
-    correr.mockImplementationOnce(async (...a: unknown[]) => {
-      vistos = await (a[0] as { viajesActivos: (n: number) => Promise<Array<{ id: string }>> }).viajesActivos(10);
-      return { sembrados: 0, viajes: 0, solicitudes: 0, recordatorios: 0, escalaciones: 0, rechazosReintentables: 0, configIlegible: 0, sinDestinatario: 0, cortadosPorReloj: 0, cortadaPorRechazoMasivo: false, fallos: [], saltados: {} };
-    });
-    expect((await llamar()).status).toBe(200);
-    expect(vistos).toEqual([{ tenantId: 'libre', id: 'b' }]);
-  });
-
-  it('sin flotas con perfil el motor ve todos los viajes (nada cambia)', async () => {
+describe('A5 encendido el 18-oct-2026: ya no filtra flotas con perfil', () => {
+  it('el motor ve todos los viajes, con o sin perfil', async () => {
     let vistos: unknown[] = [];
     correr.mockImplementationOnce(async (...a: unknown[]) => {
       vistos = await (a[0] as { viajesActivos: (n: number) => Promise<unknown[]> }).viajesActivos(10);
       return { sembrados: 0, viajes: 0, solicitudes: 0, recordatorios: 0, escalaciones: 0, rechazosReintentables: 0, configIlegible: 0, sinDestinatario: 0, cortadosPorReloj: 0, cortadaPorRechazoMasivo: false, fallos: [], saltados: {} };
     });
-    await llamar();
+    expect((await llamar()).status).toBe(200);
     expect(vistos).toHaveLength(2);
-  });
-
-  it('si no se puede leer quién tiene perfil, NADA corre y el latido sale en fallo (falla cerrado)', async () => {
-    perfilIlegible = true;
-    const r = await llamar();
-    expect(r.status).toBe(500);
-    expect(correr).not.toHaveBeenCalled();
-    expect(registrarLatido).toHaveBeenCalledWith('conductor-hitos', 'fallo', expect.anything());
   });
 });

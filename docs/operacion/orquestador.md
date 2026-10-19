@@ -93,9 +93,8 @@ mismos umbrales y nombres (en vivo ≤ 30 min, atrasada ≤ 6 h, obsoleta); al i
 
 ## Pendientes y bloqueos
 
-- Aplicar la 0650 en una base real requiere autorización y respaldo (no se aplicó nada).
+- `0650`, `0651` y `0652` ya están aplicadas en la base real (verificado 19-oct-2026 contra `/api/health`, base en 0840): `escalar_a_persona` abre tareas de verdad, el aviso saliente (0651) manda correo cuando la flota lo encendió, y el barrido de salud transversal (0652) corre cada hora dentro del cron `escalar` (confirmado línea por línea contra `src/app/api/cron/escalar/route.ts`).
 - El aviso por **WhatsApp** a la persona (hoy es por correo y apagado por defecto) exige una plantilla aprobada por Meta; ver arriba.
-- Aplicar la 0651 y la 0652 junto con la 0650 (sin ellas el código lo dice: no avisa ni barre, y todo lo demás sigue como antes).
 - La pestaña completa `/dashboard/chat` sigue en el área de dinero (regla heredada y su prueba); abrirla al jefe de tráfico es una decisión de producto.
   La API del chat y la caja del tablero ya admiten roles de operación.
 - Verificación contra el modelo real y contra datos reales de una flota: no hecha (las pruebas usan un doble del modelo y fuentes en memoria).
