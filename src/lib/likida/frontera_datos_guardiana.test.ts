@@ -276,7 +276,12 @@ import { join, relative } from 'node:path';
 // salida al TMS, el catálogo del cliente, los catálogos SAT y la bandeja de hallazgos de `carta_porte_docs/*`; todo con `tenant_id`, por `acotada`/`traerTodo`. Funcionalidad nueva, no código migrado.
 // 16-oct-2026, T-A3-67: techo 310 → 314 archivos (rojo heredado de las tareas A3 anteriores, medido con el barrido real; T-A3-67 no agrega consultas directas: solo cablea lectores ya existentes en servicio.ts).
 // Integración cinco-integracion-2 (+ cartaporte sobre la misma base): el barrido real del árbol fusionado mide 321 archivos; techo subido a lo medido, sin relajar la regla.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
+// 19-oct-2026, A2 Peajes (canal SFTP, 0843): 321 → 322. OJO, este +1 NO es acceso real a Supabase: es `peajes/ingesta_sftp.ts`, que
+// delega TODO su acceso a datos a `leerCuerpoIngesta`/`recibirArchivoPeaje` (ya dentro de la frontera) y solo cae en el regex genérico
+// `\.(from|rpc)\(` del guardia por `Buffer.from(bytes).toString('base64')` — un falso positivo del patrón, no del código. Se documenta
+// en vez de reescribir el `Buffer.from` idiomático para esquivar el regex. Las 2 llamadas reales nuevas (ver el techo de abajo) están en
+// `peajes/datos.ts` (ya contado), por `acotada`, ancladas a `tenant_id`.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 322;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -413,7 +418,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // tenant — llama con el id YA ANCLADO al tenant por `leerObjetivo`, que es
 // el guardia de esta función. Funcionalidad nueva, no código migrado.
 // Integración cinco-integracion-2 (+ auditoria-seguridad sobre la misma base): el barrido real del árbol fusionado mide 2,222 llamadas; techo subido a lo medido, sin relajar la regla.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_222;
+// 19-oct-2026, A2 Peajes (canal SFTP, 0843): +3 (2,222 → 2,225) — 2 reales en `peajes/datos.ts` (`peaje_sftp_reclamar` vía RPC,
+// y `peaje_ingesta_config` al cerrar la config), por `acotada`, ancladas a `tenant_id`; +1 falso positivo del regex en
+// `ingesta_sftp.ts` (ver el techo de archivos de arriba).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_225;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
