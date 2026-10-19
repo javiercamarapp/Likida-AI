@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { procesarColaPeajes } from '@/lib/likida/peajes/ingesta';
 import { ejecutarPulls, type ResumenPulls } from '@/lib/likida/peajes/pull';
+import { ejecutarSftpPeajes, type ResumenSftpPeajes } from '@/lib/likida/peajes/ingesta_sftp';
 import { reintentarAvisosPeajes, type ResumenAvisos } from '@/lib/likida/peajes/aviso_oficina';
 import { reintentarAvisosAtipicos, type ResumenAvisosAtipicos } from '@/lib/likida/peajes/aviso_atipicos';
 import { leerInterruptor } from '@/lib/likida/interruptores';
@@ -24,9 +25,11 @@ export const maxDuration = 120;
 // agente); un fallo de infraestructura reintenta con backoff.
 //
 // Además (0563): PRIMERO consulta los endpoints de las flotas con pull activo
-// (`peajes/pull.ts`: lo que traiga entra a la misma cola) y AL FINAL barre los avisos
-// a la oficina que quedaron por enviar. Ninguno de los dos tumba la corrida: un pull o un
-// aviso que falla se dice en el cuerpo y en el latido (`parcial`), la cola se procesa igual.
+// (`peajes/pull.ts`: lo que traiga entra a la misma cola), TAMBIÉN PRIMERO las flotas
+// con SFTP activo (0843, `peajes/ingesta_sftp.ts`: mismo molde, cuarto canal) y AL FINAL
+// barre los avisos a la oficina que quedaron por enviar. Ninguno de los tres tumba la
+// corrida: un pull, un SFTP o un aviso que falla se dice en el cuerpo y en el latido
+// (`parcial`), la cola se procesa igual.
 //
 // Respeta la palanca `global` y la del agente de peajes y FALLA CERRADO si no
 // puede leerlas, igual que sus hermanos. Un latido en TODO camino de salida.
@@ -66,6 +69,11 @@ export async function GET(req: Request) {
     try { pulls = await ejecutarPulls({ limite: 3, venceEn: Date.now() + 40_000 }); } catch (e) {
       logger.error('cron.peajes.pull_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
+    // 1b. El SFTP (0843): mismo margen, mismo blindaje — una flota que falla nunca tumba el cron.
+    let sftp: ResumenSftpPeajes | null = null;
+    try { sftp = await ejecutarSftpPeajes({ limite: 3, venceEn: Date.now() + 40_000 }); } catch (e) {
+      logger.error('cron.peajes.sftp_fallo', { error: e instanceof Error ? e.message : String(e) });
+    }
     // 2. La cola.
     const r = await procesarColaPeajes({ limite: 3, venceEn: Date.now() + 100_000 });
     // 3. Los avisos a la oficina que no salieron al procesar.
@@ -78,16 +86,18 @@ export async function GET(req: Request) {
     try { avisosAtipicos = await reintentarAvisosAtipicos(5); } catch (e) {
       logger.error('cron.peajes.avisos_atipicos_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
-    logger.info('cron.peajes.ok', { ...r, pulls, avisos, avisosAtipicos });
+    logger.info('cron.peajes.ok', { ...r, pulls, sftp, avisos, avisosAtipicos });
     // `fallidos` y `reintentar` son trabajo que NO terminó bien: ni «ok» ni «fallo»
-    // total, que son las dos maneras de mentir aquí. Un pull fallido o un aviso que no
-    // salió tampoco es «ok».
+    // total, que son las dos maneras de mentir aquí. Un pull, un SFTP fallido o un
+    // aviso que no salió tampoco es «ok».
     const parcial = r.fallidos > 0 || r.reintentar > 0 || r.claimPerdido > 0
-      || (pulls?.fallidas ?? 0) > 0 || pulls === null || (avisos?.pendientes ?? 0) > 0
+      || (pulls?.fallidas ?? 0) > 0 || pulls === null
+      || (sftp?.fallidas ?? 0) > 0 || sftp === null
+      || (avisos?.pendientes ?? 0) > 0
       || avisosAtipicos === null || avisosAtipicos.pendientes > 0
       || (r.atipicos?.fallidos ?? 0) > 0;
-    await registrarLatido('peajes', parcial ? 'parcial' : 'ok', { ...r, pulls, avisos, avisosAtipicos });
-    return NextResponse.json({ corrio: true, ...r, pulls, avisos, avisosAtipicos });
+    await registrarLatido('peajes', parcial ? 'parcial' : 'ok', { ...r, pulls, sftp, avisos, avisosAtipicos });
+    return NextResponse.json({ corrio: true, ...r, pulls, sftp, avisos, avisosAtipicos });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     const codigo = codigoDeError(e);
