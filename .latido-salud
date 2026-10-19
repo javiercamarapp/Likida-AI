@@ -29,6 +29,20 @@ Sin intermitencia. Hay un ROTO fijo, 5/5:
 
 Estado: 1 ROTO (ambiental, explicado), resto SANO.
 
+Addendum (hallazgo de CI, no de las 5 corridas locales — estas usaron `npm
+test` plano, sin `--coverage`): al vigilar el PR #541, la corrida de `CI`
+disparada por `push` falló en "Tests (con umbral de cobertura)"
+(`npm run test:coverage`) mientras la disparada por `pull_request` sobre el
+MISMO commit pasó limpia. Causa: `src/lib/likida/peajes/escala.test.ts:245`
+(`expect(ms).toBeLessThan(PRESUPUESTO.cruzar)`, presupuesto 50,000ms, midió
+73,678ms) — un tercer archivo de presupuesto de tiempo, además de
+`normas/fundamento.test.ts` y `duplicados.test.ts`, pero sin la guardia
+`skipIf(LIKIDA_COBERTURA)` que esos dos sí tienen. Corre siempre
+instrumentado bajo cobertura y por eso es candidato a fallar intermitente
+quien sabe cuándo. No es de este PR (ninguno de los 16 paquetes toca ese
+archivo ni su cadena de imports). Reportado en el PR y en issue #547, con
+propuesta de patch, sin aplicarlo (alcance distinto al de esta rama).
+
 ## Bloque 2 — Dependencias
 `npm audit --json`: 5 vulnerabilidades HIGH (antes del bump; sin cambio
 después). `npm outdated --json`: 20 paquetes, clasificados con criterio
@@ -116,13 +130,16 @@ nuevo cada semana por diseño del propio documento.
 Saltado. Sin `.env.local` ni variables de Supabase/OpenRouter/OpenAI/
 WhatsApp/CRON_SECRET en este entorno efímero. No se estimó nada.
 
-## Estado: PARCIAL (Bloque 1 con 1 hallazgo ambiental, resto OK)
+## Estado: PARCIAL (Bloque 1 con 2 hallazgos ambientales/CI, resto OK)
 Los cuatro bloques corrieron. Bloque 1 encontró un ROTO fijo (5/5) con causa
 raíz confirmada y acotada al propio entorno de esta rutina (root sin
 `initdb`) — no bloqueante para CI real ni para desarrollo normal, reportado
-igual porque la regla del bloque es "ROTO va primero". Bloque 2: 1 PR nuevo
-(#541, borrador, 16 dependencias mecánicas, suite idéntica antes/después),
-5 issues nuevos (#542-#546, cada major con su propio análisis — ninguno
-urgente, ninguno con CVE). Bloque 3: 1 hallazgo de documentación nuevo
-(CLAUDE.md:21, archivo citado que no existe), sin acción automática (es
-texto, no código). Bloque 4 se saltó por falta de datos (esperado).
+igual porque la regla del bloque es "ROTO va primero" — y, ya vigilando el
+PR, una falla intermitente real en CI bajo `--coverage` (peajes/escala.test.ts,
+issue #547). Bloque 2: 1 PR nuevo (#541, borrador, 16 dependencias
+mecánicas, suite idéntica antes/después, CI verde en la corrida de
+`pull_request`), 5 issues nuevos (#542-#546, cada major con su propio
+análisis — ninguno urgente, ninguno con CVE). Bloque 3: 1 hallazgo de
+documentación nuevo (CLAUDE.md:21, archivo citado que no existe), sin acción
+automática (es texto, no código). Bloque 4 se saltó por falta de datos
+(esperado).
