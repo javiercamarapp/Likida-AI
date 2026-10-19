@@ -376,6 +376,33 @@ export async function GET(req: Request) {
       huboFallo = true;
     }
 
+    // ── EL SEXTO BARRIDO: LOS COMPROBANTES HUÉRFANOS (19-oct-2026) ──────────
+    // `avisoHuerfanos` (lib/correo/avisos.ts) existía desde el 1-ago-2026 sin
+    // un solo llamador: la cuenta de comprobantes sin viaje solo se medía en
+    // el render (`contarHuerfanosPendientes`, el badge de Inicio y la bandeja
+    // de /dashboard/huerfanos). El catálogo ya declaraba
+    // `liquidacion:cola_atorada` sin emisor — el mismo bug que `cola_atorada`/
+    // `escalado` tuvieron en los otros agentes. Va aquí por la misma razón que
+    // los relojes, las reglas y el orquestador: no es un dato que cambie en
+    // minutos, y otra URL/secreto/latido por esto sería ceremonia. Su
+    // try/catch propio: un fallo de este barrido no le quita el turno a
+    // nadie. Sin palanca propia (la global lo apaga con todo).
+    enVuelo = 'huerfanos';
+    try {
+      const { avisarHuerfanosPendientes } = await import('@/lib/likida/avisar_huerfanos');
+      const huerfanos = await avisarHuerfanosPendientes(new Date(), { venceEn: venceBarridos });
+      logger.info('cron.huerfanos.ok', { ...huerfanos });
+      resultado.huerfanos = huerfanos;
+      if (huerfanos.fallos > 0) huboFallo = true;
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      const codigo = codigoDeError(e);
+      logger.error('cron.huerfanos.falló', { error, codigo });
+      await alertarOperador('cron.huerfanos', { error, codigo });
+      resultado.huerfanos = { error };
+      huboFallo = true;
+    }
+
     enVuelo = null;
   };
 
