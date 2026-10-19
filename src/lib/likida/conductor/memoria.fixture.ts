@@ -156,6 +156,11 @@ export function crearMemoria(opts: { viajes?: ViajeContexto[]; config?: Partial<
     evidenciasSello: async (_t, viajeId) => evidencias
       .filter((x) => x.viajeId === viajeId && x.tipo === 'sello' && x.creadaEn)
       .map((x) => ({ tipo: 'sello' as const, creadaEn: x.creadaEn! })),
+    // T-A5-53/54: ningún fixture de memoria siembra una solicitud de documentos de cierre todavía (sin cliente_id ni catálogo
+    // en esta base en memoria); «sin solicitud viva» es el comportamiento de siempre para quien no ejercita este módulo.
+    documentoCierreDeLaFoto: async () => null,
+    registrarFotoDocumentoCierre: async () => 'Recibí tu foto, pero no supe a cuál documento pertenece. La dejo guardada para que la revisen. 🙏',
+    registrarRespuestaDocumentosCierre: async () => 0,
   };
 
   /** Atajo: un hito ya registrado a las `hora` (UTC, hoy 2026-10-02). */

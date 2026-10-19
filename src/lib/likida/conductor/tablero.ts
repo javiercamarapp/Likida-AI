@@ -11,7 +11,7 @@ import { anclaDe, textoTiempo } from './planificador';
 import type { AccionOficinaFila, DatosTablero, IndicadoresCrudos, ViajeTablero, VeredictoFila } from './repo_validacion';
 import type { EpisodioTablero } from './repo';
 import type { ReubicacionesCliente } from './reubicaciones';
-import { ETIQUETA, estaResuelto, TIPOS_HITO, type HitoFila, type TipoHito } from './tipos';
+import { ETIQUETA, estaResuelto, TIPOS_HITO, type HitoFila, type TipoEvidencia, type TipoHito } from './tipos';
 import { llegadaPorConfirmar, llegadaSinSitio, textoVeredicto, type ResultadoValidacion, type Veredicto } from './validacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -51,7 +51,7 @@ export interface HitoVista {
   validadoPor: HitoFila['validadoPor'];
   evidencias: number;
   /** Cada foto viva del ciclo vigente (para abrirla con GET /v1/evidencias/{id}). */
-  fotos: Array<{ id: string; tipo: 'sello' | 'anden' | 'recibido' | 'otra' }>;
+  fotos: Array<{ id: string; tipo: TipoEvidencia }>;
   /** Por qué quedó `omitido` (`inferido_por_<tipo>`: avisó uno posterior · `viaje_abierto_vencido`: lo cerró el barrido de viajes viejos · …). */
   omitidoMotivo: string | null;
   escaladoEn: string | null;
@@ -278,7 +278,7 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
     const hs = [...aplicarPerfil(hitosPorViaje.get(viaje.id) ?? [], config.perfilSeguimiento)].sort((a, b) => TIPOS_HITO.indexOf(a.tipo) - TIPOS_HITO.indexOf(b.tipo));
     // Las evidencias cuentan solo las del CICLO vigente del hito (una corrección retira el hito, no las fotos viejas del historial).
     const evidenciasVigentes = new Map<string, number>();
-    const fotosVigentes = new Map<string, Array<{ id: string; tipo: 'sello' | 'anden' | 'recibido' | 'otra' }>>();
+    const fotosVigentes = new Map<string, Array<{ id: string; tipo: TipoEvidencia }>>();
     for (const e of datos.evidencias) {
       const h = hs.find((x) => x.id === e.hitoId);
       if (h && e.ciclo === h.ciclo && e.ruta !== null) {

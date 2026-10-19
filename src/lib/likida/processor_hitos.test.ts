@@ -19,6 +19,8 @@ const atenderPinConductor = vi.fn();
 const hitoParaEvidenciaDelChofer = vi.fn();
 const registrarEvidenciaDelChofer = vi.fn();
 const registrarHitoDesdeFoto = vi.fn();
+const documentoCierreDeLaFotoDelChofer = vi.fn();
+const registrarFotoDocumentoCierreDelChofer = vi.fn();
 const subirComprobante = vi.fn();
 const enviarSolicitudUbicacion = vi.fn();
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
@@ -33,6 +35,11 @@ vi.mock('@/lib/likida/conductor/atender', () => ({
   hitoParaEvidenciaDelChofer: (...a: unknown[]) => hitoParaEvidenciaDelChofer(...a),
   registrarEvidenciaDelChofer: (...a: unknown[]) => registrarEvidenciaDelChofer(...a),
   registrarHitoDesdeFoto: (...a: unknown[]) => registrarHitoDesdeFoto(...a),
+  documentoCierreDeLaFotoDelChofer: (...a: unknown[]) => documentoCierreDeLaFotoDelChofer(...a),
+  registrarFotoDocumentoCierreDelChofer: (...a: unknown[]) => registrarFotoDocumentoCierreDelChofer(...a),
+}));
+vi.mock('@/lib/likida/conductor/documentos_cierre', () => ({
+  MENSAJE_FOTO_DOCUMENTO_FALLO: 'No pude guardar esa foto ahorita 😕 — consérvala y reenvíamela en un momento, por favor.',
 }));
 vi.mock('@/lib/likida/intake/almacen', async (original) => ({
   ...(await original<Record<string, unknown>>()),
@@ -108,7 +115,8 @@ describe('processInbound — los hitos del chofer, cableados', () => {
     salientes.length = 0;
     runAgent.mockReset(); resolveOperador.mockReset(); atenderConductor.mockReset(); atenderAcuseJefe.mockReset();
     atenderPinConductor.mockReset(); hitoParaEvidenciaDelChofer.mockReset(); registrarEvidenciaDelChofer.mockReset(); registrarHitoDesdeFoto.mockReset(); subirComprobante.mockReset(); enviarSolicitudUbicacion.mockReset(); descargarMedia.mockClear();
-    atenderPinConductor.mockResolvedValue(null); hitoParaEvidenciaDelChofer.mockResolvedValue(null); enviarSolicitudUbicacion.mockResolvedValue({ ok: true });
+    documentoCierreDeLaFotoDelChofer.mockReset(); registrarFotoDocumentoCierreDelChofer.mockReset();
+    atenderPinConductor.mockResolvedValue(null); hitoParaEvidenciaDelChofer.mockResolvedValue(null); documentoCierreDeLaFotoDelChofer.mockResolvedValue(null); enviarSolicitudUbicacion.mockResolvedValue({ ok: true });
     resolveOperador.mockResolvedValue({ tenantId: 't1', operadorId: 'o1' });
     atenderConductor.mockResolvedValue(null);
     atenderAcuseJefe.mockResolvedValue(null);
@@ -354,6 +362,82 @@ describe('processInbound — los hitos del chofer, cableados', () => {
       subirComprobante.mockResolvedValue('t1/v1/x.jpg');
       registrarEvidenciaDelChofer.mockRejectedValue(new Error('base caída'));
       await processInbound(foto('recibido'));
+      expect(salientes[0]).toMatch(/No pude guardar esa foto/);
+    });
+  });
+
+  // ── T-A5-53/54 (0823): la foto de un DOCUMENTO DE CIERRE (caption del catálogo del cliente) ──
+  describe('la foto de un documento de cierre (T-A5-53/54)', () => {
+    const foto = (caption?: string) => ({ from: '5219993700779', type: 'image' as const, mediaId: 'media-1', text: caption, waMessageId: 'wa-foto' });
+    const pendiente = { id: 'dc1', documentoRequeridoId: 'd1', nombreSolicitado: 'Carta porte firmada', tipoSolicitado: 'basico' as const, estado: 'pendiente' as const, intentosLegibilidad: 0 };
+
+    // Se consulta SIEMPRE primero (antes del POD y de la evidencia de hito): `esCaptionPod` matiza por CONTENER
+    // «carta porte» (no exacto) y es justo el nombre de ejemplo del catálogo de cierre (T-A5-52) — si un cliente lo
+    // declara así, tiene que clasificarse contra SU catálogo, no desaparecer en el POD genérico. Sin solicitud viva
+    // (el mock por omisión resuelve null) cae rápido al camino de siempre, como aquí.
+    it('sin solicitud viva (null): cae al camino de siempre (evidencia de hito, POD o comprobante)', async () => {
+      hitoParaEvidenciaDelChofer.mockResolvedValue({ tipo: 'sello', hito: { id: 'h1', tipo: 'salida_carga', ciclo: 1 } });
+      await processInbound(foto('sello'));
+      expect(documentoCierreDeLaFotoDelChofer).toHaveBeenCalledWith(expect.objectContaining({ caption: 'sello' }));
+      expect(registrarFotoDocumentoCierreDelChofer).not.toHaveBeenCalled();
+      expect(hitoParaEvidenciaDelChofer).toHaveBeenCalled(); // el camino de siempre sigue intacto
+    });
+
+    it('caption que nombra un documento pendiente: sube, clasifica y registra (ANTES del POD, aunque el caption contenga «carta porte»)', async () => {
+      documentoCierreDeLaFotoDelChofer.mockResolvedValue({ pendientes: [pendiente], documentoId: 'd1' });
+      subirComprobante.mockResolvedValue('t1/v1/doc_d1_x.jpg');
+      registrarFotoDocumentoCierreDelChofer.mockResolvedValue('Recibí tu foto de Carta porte firmada ✅.');
+      await processInbound(foto('Carta porte firmada'));
+      expect(descargarMedia).toHaveBeenCalledWith('media-1');
+      expect(documentoCierreDeLaFotoDelChofer.mock.calls[0][0]).toMatchObject({ tenantId: 't1', operadorId: 'o1', viajeId: 'v1', caption: 'Carta porte firmada' });
+      expect(subirComprobante).toHaveBeenCalledWith('t1', 'v1', expect.stringMatching(/^doc_d1_[0-9a-f]{24}$/), expect.stringContaining('data:image'));
+      expect(hitoParaEvidenciaDelChofer).not.toHaveBeenCalled(); // no cae al POD/evidencia: ya lo resolvió el catálogo
+      expect(registrarFotoDocumentoCierreDelChofer.mock.calls[0][0]).toMatchObject({
+        tenantId: 't1', viajeId: 'v1', documentoId: 'd1', pendientes: [pendiente], ruta: 't1/v1/doc_d1_x.jpg', waMessageId: 'wa-foto', sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+      });
+      expect(salientes).toEqual(['Recibí tu foto de Carta porte firmada ✅.']);
+      expect(runAgent).not.toHaveBeenCalled();
+    });
+
+    it('sin categoría clara (documentoId null): se sube igual, con marca «sin_categoria» en el nombre', async () => {
+      documentoCierreDeLaFotoDelChofer.mockResolvedValue({ pendientes: [pendiente], documentoId: null });
+      subirComprobante.mockResolvedValue('t1/v1/doc_sin_categoria_x.jpg');
+      registrarFotoDocumentoCierreDelChofer.mockResolvedValue('Recibí tu foto, pero no supe a cuál documento pertenece. La dejo guardada para que la revisen. 🙏');
+      await processInbound(foto('no sé qué es esto'));
+      expect(subirComprobante).toHaveBeenCalledWith('t1', 'v1', expect.stringMatching(/^doc_sin_categoria_[0-9a-f]{24}$/), expect.anything());
+      expect(registrarFotoDocumentoCierreDelChofer.mock.calls[0][0]).toMatchObject({ documentoId: null, pendientes: [pendiente] });
+      expect(salientes[0]).toMatch(/no supe a cuál documento/);
+    });
+
+    it('sin solicitud viva (null): no sube nada con el prefijo "doc_" y sigue su camino de comprobante', async () => {
+      documentoCierreDeLaFotoDelChofer.mockResolvedValue(null);
+      await processInbound(foto('algo')).catch(() => {});
+      expect(subirComprobante).not.toHaveBeenCalledWith('t1', 'v1', expect.stringMatching(/^doc_/), expect.anything());
+      expect(registrarFotoDocumentoCierreDelChofer).not.toHaveBeenCalled();
+    });
+
+    it('si la descarga falla, se le dice y no se sube ni se registra nada', async () => {
+      documentoCierreDeLaFotoDelChofer.mockResolvedValue({ pendientes: [pendiente], documentoId: 'd1' });
+      descargarMedia.mockResolvedValueOnce(null);
+      await processInbound(foto('Carta porte firmada'));
+      expect(salientes[0]).toMatch(/No pude descargar tu foto/);
+      expect(subirComprobante).not.toHaveBeenCalled();
+      expect(registrarFotoDocumentoCierreDelChofer).not.toHaveBeenCalled();
+    });
+
+    it('si la subida falla, se le dice (nunca silencio) y no se registra nada', async () => {
+      documentoCierreDeLaFotoDelChofer.mockResolvedValue({ pendientes: [pendiente], documentoId: 'd1' });
+      subirComprobante.mockResolvedValue(undefined);
+      await processInbound(foto('Carta porte firmada'));
+      expect(salientes[0]).toMatch(/No pude guardar esa foto/);
+      expect(registrarFotoDocumentoCierreDelChofer).not.toHaveBeenCalled();
+    });
+
+    it('si registrar lanza, también se le dice (nunca silencio)', async () => {
+      documentoCierreDeLaFotoDelChofer.mockResolvedValue({ pendientes: [pendiente], documentoId: 'd1' });
+      subirComprobante.mockResolvedValue('t1/v1/x.jpg');
+      registrarFotoDocumentoCierreDelChofer.mockRejectedValue(new Error('base caída'));
+      await processInbound(foto('Carta porte firmada'));
       expect(salientes[0]).toMatch(/No pude guardar esa foto/);
     });
   });

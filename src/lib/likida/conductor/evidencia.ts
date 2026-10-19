@@ -17,7 +17,8 @@ import { estaResuelto, TIPOS_HITO, type HitoFila, type TipoEvidencia, type TipoH
 
 const MAX_LARGO_CAPTION = 60;
 
-function limpiar(texto: string): string {
+/** Normaliza para comparar por forma: sin acentos, en minúsculas, solo letras/números/espacios. La reusa `documentos_cierre.ts` (T-A5-53). */
+export function limpiar(texto: string): string {
   return texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -43,6 +44,8 @@ const HITOS_DE: Record<TipoEvidencia, readonly TipoHito[]> = {
   anden: ['llegada_descarga', 'llegada_carga'],
   recibido: ['salida_descarga', 'llegada_descarga'],
   otra: [],
+  // T-A5-53: el documento de cierre se pide DESPUÉS de terminar la descarga; cuelga del mismo hito que «recibido».
+  documento_cierre: ['salida_descarga'],
 };
 
 /** Hasta cuándo, tras registrarse un hito, se le puede colgar una foto (horas). */
@@ -67,6 +70,7 @@ export function hitoParaEvidencia(tipo: TipoEvidencia, hitos: readonly HitoFila[
 
 export const ETIQUETA_EVIDENCIA: Record<TipoEvidencia, string> = {
   sello: 'el sello', anden: 'el andén', recibido: 'el sello de recibido', otra: 'la evidencia',
+  documento_cierre: 'el documento',
 };
 
 /** El acuse al chofer, con la verdad de cada desenlace. */
