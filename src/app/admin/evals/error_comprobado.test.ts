@@ -60,7 +60,7 @@ describe('admin/evals: la pantalla dice "no se pudo leer" cuando de verdad no se
   });
 
   it('la lectura de eval_corrida comprueba r.error antes de pintar "Ninguna todavía"', () => {
-    const bloque = cuerpo("const r = await admin.from('eval_corrida')", 'for (const def of AGENTES)');
+    const bloque = cuerpo("const r = await admin.from('eval_corrida')", 'secciones.push(...await Promise.all(AGENTES.map');
     expect(bloque).toMatch(/if \(r\.error\) throw new Error\(r\.error\.message\)/);
     expect(PAGINA).toMatch(/corridasError/);
   });

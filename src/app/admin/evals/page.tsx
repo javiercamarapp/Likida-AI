@@ -98,7 +98,13 @@ export default async function Evals({
     corridasError = e instanceof Error ? e.message : 'no se pudo leer';
   }
 
-  for (const def of AGENTES) {
+  // PERF (auditoría rendimiento, oct-2026): las lecturas de cada agente son
+  // INDEPENDIENTES entre sí (cada una es su propio try/catch) — antes corrían
+  // en un `for` secuencial, un viaje redondo a la base detrás del otro. Mismo
+  // patrón que ya usa `/admin/calidad-evals` (Promise.all + catch por fuente):
+  // el bloque de cada agente sigue cayendo solo a `estado = null` si falla,
+  // sin tumbar al otro.
+  secciones.push(...await Promise.all(AGENTES.map(async (def) => {
     let estado: EstadoEvals | null = null;
     let porCaso: PorCaso[] = [];
     try {
@@ -119,8 +125,8 @@ export default async function Evals({
         });
       }
     } catch { estado = null; }
-    secciones.push({ ...def, estado, porCaso });
-  }
+    return { ...def, estado, porCaso };
+  })));
 
   return (
     <main className="h-full">
