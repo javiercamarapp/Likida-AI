@@ -25,6 +25,14 @@
 // `cp_envio_marcar_alerta` (0790). Por eso un envío con `alertaEnviada = true` nunca
 // vuelve a pedir alerta, y quien persiste debe tomar el candado antes de avisar.
 //
+// `listo_manual` (T-A3-??) es distinto: no es un motivo que esta máquina DECIDA (no hay
+// campo `alerta` para él), sino una decisión del WORKER cuando `pendiente_prechequeo` o
+// `pendiente_reque` transicionan a `listo` en modo manual — ocurre EXACTAMENTE UNA VEZ por
+// construcción (la máquina nunca regresa a esos dos estados desde `listo`), así que el
+// worker lo avisa directo, sin tomar el candado de arriba (ese candado es para FALLOS
+// terminales; reusarlo aquí silenciaría un aviso de fallo real si la flota luego pasa a
+// modo con conector).
+//
 // Determinismo: el reloj entra como argumento (`ahora`), la zona horaria de la
 // ventana es explícita (`zona`); no se usa `Date.now()` ni la zona del servidor.
 // Invariante: un documento con bloqueos abiertos NUNCA queda en `listo`.
@@ -65,7 +73,7 @@ export type EventoEnvio =
   | { tipo: 'iniciar_envio' }
   | { tipo: 'resultado_envio'; resultado: 'enviado' | 'rechazado' | 'transitorio'; motivo?: string | null };
 
-export type MotivoAlerta = 'reque_agotado' | 'rechazado_tms' | 'transitorio_agotado';
+export type MotivoAlerta = 'reque_agotado' | 'rechazado_tms' | 'transitorio_agotado' | 'listo_manual';
 
 export interface DevolverDocumento { estado: 'por_revisar'; motivo: string }
 

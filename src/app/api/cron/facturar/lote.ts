@@ -356,6 +356,14 @@ export async function procesarLoteEnCola(
       const r = await facturarAlVuelo({ gastoId: g.id, tenantId: g.tenant_id, modo, hoy });
       resultados.push({ gastoId: g.id, tenantId: g.tenant_id, comercio: comercioDe.get(g.id) ?? null, ...r });
       if (r.bloqueado) anotarBloqueo(g.tenant_id, g.id, r.bloqueado);
+      // EL FALLBACK «SIN ADAPTADOR» (0844): la primera vez que un comercio sin
+      // adaptador escrito aparece, `facturarAlVuelo` marca su propio candado
+      // (`autofactura_aviso_sin_robot_en`, independiente de `autofactura_bloqueada_en`)
+      // y devuelve `avisoSinRobot`. Se trata EXACTAMENTE como `bloqueado` para
+      // decidir a quién avisarle esta corrida — es el mismo "algo nuevo pasó,
+      // hay que decírselo a una persona"— aunque el ticket NO salga de la cola
+      // automática (`enrutar()` lo sigue mandando con 'sin_robot' cada vez).
+      if (r.avisoSinRobot) anotarBloqueo(g.tenant_id, g.id, r.avisoSinRobot);
     };
 
     const anotarBloqueo = (tenantId: string, gastoId: string, motivo: string) => {
