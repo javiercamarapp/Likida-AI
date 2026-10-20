@@ -536,6 +536,64 @@ describe('facturarAlVuelo · lo que NO se intenta', () => {
     expect(facturarConAgente).not.toHaveBeenCalled();
   });
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // 0844 — EL FALLBACK GENÉRICO (comercio SIN adaptador): `enrutar()` ya armaba
+  // el mensaje con la liga del portal y los datos leídos del ticket
+  // (`mensajeParaEncargado`, motivo 'sin_robot'), pero NADA disparaba el aviso:
+  // este `return` no tocaba la base, así que `lote.ts` nunca veía el gasto en
+  // `bloqueadosPorFlota` y el WhatsApp no salía jamás. Estas dos pruebas fijan
+  // el candado nuevo: se dispara UNA vez y no se repite en la corrida siguiente
+  // del mismo comprobante.
+  // ═════════════════════════════════════════════════════════════════════════
+  it('sin adaptador, PRIMERA vez: marca el candado del aviso y lo dice en el resultado', async () => {
+    adaptadorDe.mockReturnValue(null);
+    lectura = { data: g({ autofactura_aviso_sin_robot_en: null }), error: null };
+
+    const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', hoy: HOY, ahora: AHORA });
+
+    expect(r).toMatchObject({ intentado: false, motivo: 'sin_adaptador' });
+    // La liga y los datos ya los arma `mensajeParaEncargado` (enrutar.ts); lo
+    // que esto prueba es que SE DECIDIÓ avisar, con el comercio nombrado.
+    expect(r.avisoSinRobot).toContain('enerser');
+    expect(r.avisoSinRobot).toContain('se avisó al encargado');
+    // El candado se escribe en SU PROPIA columna, no en `autofactura_bloqueada_en`:
+    // esa la lee `enrutar()` para elegir el texto ("sin_robot" vs "bloqueado"),
+    // y pisarla aquí haría que la próxima lectura dijera "se intentó y no se
+    // pudo" cuando la verdad es que nadie lo intentó.
+    const marcaAviso = sinSello().find((u) => 'autofactura_aviso_sin_robot_en' in u.fila);
+    expect(marcaAviso).toEqual({
+      fila: { autofactura_aviso_sin_robot_en: AHORA },
+      por: [['id', 'g-1'], ['tenant_id', 't-1']],
+    });
+    expect(marcas()).toEqual([]); // no tocó la marca de "emisión en curso"
+  });
+
+  it('sin adaptador, SEGUNDA vez (candado ya puesto): no repite el aviso', async () => {
+    adaptadorDe.mockReturnValue(null);
+    // El candado ya quedó puesto en una corrida anterior.
+    lectura = { data: g({ autofactura_aviso_sin_robot_en: '2026-08-03T10:00:00.000Z' }), error: null };
+
+    const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', hoy: HOY, ahora: AHORA });
+
+    // El ticket SIGUE sin facturar y sigue diciendo por qué — no se esconde,
+    // una persona lo puede seguir facturando con la liga que ya recibió.
+    expect(r).toMatchObject({ intentado: false, motivo: 'sin_adaptador' });
+    // Pero NO vuelve a disparar el aviso: sin este campo, `lote.ts` no lo
+    // vuelve a meter en `bloqueadosPorFlota` y el WhatsApp no se repite.
+    expect(r.avisoSinRobot).toBeUndefined();
+    expect(sinSello().some((u) => 'autofactura_aviso_sin_robot_en' in u.fila)).toBe(false);
+  });
+
+  it('CON adaptador registrado, el candado del fallback no se toca (camino normal intacto)', async () => {
+    // Control: un comercio CON adaptador nunca pasa por `decidirAutofactura`
+    // con motivo `sin_adaptador`, así que el candado nuevo no se escribe ni de
+    // casualidad — el camino de siempre queda exactamente igual.
+    const r = await facturarAlVuelo({ gastoId: 'g-1', tenantId: 't-1', modo: 'emitir', hoy: HOY, ahora: AHORA });
+    expect(r.motivo).toBeUndefined();
+    expect(r.avisoSinRobot).toBeUndefined();
+    expect(sinSello().some((u) => 'autofactura_aviso_sin_robot_en' in u.fila)).toBe(false);
+  });
+
   it('un gasto sin la columna `ocr_confianza` NO LLEGA AL PORTAL ni en modo emitir', async () => {
     // Reproducción de punta a punta del agujero del NaN: la fila llega sin esa
     // clave —un `select` que la deje fuera, una vista, un renombre de columna

@@ -136,6 +136,13 @@ describe('el texto: solo folio y liga (PII mínima)', () => {
   it('sin folio legible dice «sin folio», no inventa nada', () => {
     expect(textoAlerta('transitorio_agotado', '', 6, 'u').cuerpo).toContain('sin folio');
   });
+
+  it('`listo_manual` dice que ya está listo para subir, con folio y liga, no que algo falló', () => {
+    const liga = 'https://app.test/x';
+    const t = textoAlerta('listo_manual', 'LP-0001', 6, liga);
+    expect(t.cuerpo).toBe(`Documento LP-0001: la Carta Porte está lista para subir al sistema del cliente. ${liga}`);
+    expect(t.asunto).not.toMatch(/rechaz|no responde|sigue sin/i);
+  });
 });
 
 describe('la regla del outbox', () => {

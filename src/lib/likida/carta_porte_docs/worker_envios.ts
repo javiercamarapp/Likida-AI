@@ -267,7 +267,7 @@ async function procesarEnvio(ctx: Contexto, rec: EnvioReclamado): Promise<void> 
     const cambios = cambiosDe(t, { causa, soltar: !seguirAEnviar });
     if (t.estado === 'listo' && manual) cambios.proximaRevision = iso(deps.ahora() + ESPERA_LISTO_MANUAL_MIN * 60_000);
     if (!(await deps.actualizarEnvio(tenantId, envio.id, [ya], cambios))) { r.conflictos++; return; }
-    await registrarTransicion(ctx, envio, doc, ya, t, causa, manual);
+    await registrarTransicion(ctx, envio, doc, ya, t, causa, manual, config);
     if (!seguirAEnviar) return;
     estado = 'listo';
   } else if (manual) {
@@ -331,7 +331,7 @@ async function subir(ctx: Contexto, e: EntradaSubida): Promise<void> {
     const cambios = cambiosDe(t, { causa: null, soltar: t.estado !== 'enviando' });
     if (t.estado === 'enviando') cambios.plantillaSha256 = huella;
     if (!(await deps.actualizarEnvio(tenantId, envio.id, [e.estado], cambios))) { r.conflictos++; return; }
-    if (t.estado !== 'enviando') { await registrarTransicion(ctx, envio, doc, e.estado, t, null, false); return; }
+    if (t.estado !== 'enviando') { await registrarTransicion(ctx, envio, doc, e.estado, t, null, false, config); return; }
   }
 
   const entrada: EntradaCarga = {
@@ -484,7 +484,7 @@ function cambiosDe(t: Extract<Transicion, { ok: true }>, o: { causa: string | nu
 }
 
 /** Eventos y efectos de una transición del prechequeo (o del reque). La alerta única se decide aquí y se cobra con el candado. */
-async function registrarTransicion(ctx: Contexto, envio: EnvioDetalle, doc: DocumentoFila, desde: EstadoEnvioTms, t: Extract<Transicion, { ok: true }>, causa: string | null, manual: boolean): Promise<void> {
+async function registrarTransicion(ctx: Contexto, envio: EnvioDetalle, doc: DocumentoFila, desde: EstadoEnvioTms, t: Extract<Transicion, { ok: true }>, causa: string | null, manual: boolean, config: ConfigSalida): Promise<void> {
   const { deps, r } = ctx;
   const { tenantId } = envio;
   if (t.devolverDocumento) {
@@ -507,7 +507,33 @@ async function registrarTransicion(ctx: Contexto, envio: EnvioDetalle, doc: Docu
     // El reque apareció: el envío sigue su camino (la subida deja su propio evento).
     logger.info('cp_envios.reque_aparecio', { envioId: envio.id });
   }
-  if (t.estado === 'listo' && manual) r.enEsperaManual++;
+  if (t.estado === 'listo' && manual) {
+    r.enEsperaManual++;
+    // Primera (y única) vez que ESTE envío llega a `listo` en modo manual: nadie más lo va a decir, porque la máquina
+    // nunca regresa a `pendiente_prechequeo`/`pendiente_reque` desde `listo` (ver cabecera de `envio_estados.ts`). Es
+    // una decisión del WORKER, no de la máquina pura, así que se avisa directo (sin el candado de alerta única: ese
+    // candado es para FALLOS terminales y reusarlo aquí podría silenciar un aviso de fallo real si la flota pasa
+    // después a modo con conector).
+    await avisarListoManual(ctx, envio, doc, config);
+  }
+}
+
+/** El aviso de ÉXITO en modo manual (sin conector del TMS): el documento ya está listo para que alguien lo suba a mano. */
+async function avisarListoManual(ctx: Contexto, envio: EnvioDetalle, doc: DocumentoFila, config: ConfigSalida): Promise<void> {
+  const { deps, r } = ctx;
+  const { tenantId } = envio;
+  const destinatario = config.destinatarioAlertaCorreo ?? 'la oficina';
+  try {
+    await deps.alertarEnvio({
+      tenantId, envioId: envio.id, documentoId: doc.id, motivo: 'listo_manual', destinatario,
+      mensaje: 'La Carta Porte ya está lista para subir al sistema del cliente.',
+    });
+    r.alertas++;
+    await deps.evento(tenantId, doc.id, 'envio_alertado', { envioId: envio.id, motivo: 'listo_manual' });
+  } catch (e) {
+    r.alertasFallidas++;
+    r.fallos.push(`alerta ${envio.id.slice(0, 8)}: ${msg(e)}`);
+  }
 }
 
 /** Devuelve el documento a revisión con los hallazgos del rechazo. Un fallo NO tumba el lote: el envío ya quedó `rechazado_tms` y el documento se puede reabrir a mano. */

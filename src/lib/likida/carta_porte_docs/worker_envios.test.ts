@@ -535,6 +535,37 @@ describe('modo manual: descarga, o flota sin conector', () => {
     expect(devueltos).toHaveLength(1);
   });
 
+  it('la primera vez que un envío llega a `listo` en modo manual se avisa a la oficina (sin tomar el candado de alerta única)', async () => {
+    config = { ...config, destinatarioAlertaCorreo: 'oficina@flota.test' };
+    const e = sembrar(A, 1); // sin conector (`SIN_TMS`) ⇒ manual
+    const r = await pasada();
+    expect(r).toMatchObject({ enEsperaManual: 1, alertas: 1, alertasFallidas: 0 });
+    expect(alertasEnvio).toHaveLength(1);
+    expect(alertasEnvio[0]).toMatchObject({ motivo: 'listo_manual', envioId: e.id, documentoId: e.documentoId, destinatario: 'oficina@flota.test' });
+    expect(eventos.filter((x) => x.tipo === 'envio_alertado')).toHaveLength(1);
+    // Es un aviso de ÉXITO, no de fallo terminal: NO toma el candado `cp_envio_marcar_alerta` (0790).
+    expect((await leer(A, e.id)).alertaEnviadaEn).toBeNull();
+  });
+
+  it('el aviso de `listo` manual NO se repite en las revisiones periódicas posteriores (varias pasadas del cron)', async () => {
+    config = { ...config, destinatarioAlertaCorreo: 'oficina@flota.test' };
+    const e = sembrar(A, 1);
+    await pasada(); // 1.ª pasada: llega a `listo`, un aviso
+    expect(alertasEnvio).toHaveLength(1);
+    for (let i = 0; i < 3; i++) { avanzar((ESPERA_LISTO_MANUAL_MIN + 1) * MIN); await pasada(); }
+    expect(alertasEnvio).toHaveLength(1); // sigue siendo UNO tras 3 revisiones de 6 h más
+    expect((await leer(A, e.id)).estado).toBe('listo');
+  });
+
+  it('si el aviso de `listo` manual no pudo salir, la pasada lo cuenta pero no tumba el lote (el envío sigue `listo`)', async () => {
+    config = { ...config, destinatarioAlertaCorreo: 'oficina@flota.test' };
+    const e = sembrar(A, 1);
+    const r = await pasada(deps({ alertarEnvio: async () => { throw new Error('correo caído'); } }));
+    expect(r).toMatchObject({ enEsperaManual: 1, alertas: 0, alertasFallidas: 1, errores: 0 });
+    expect(r.fallos.join(' ')).toContain('correo caído');
+    expect((await leer(A, e.id)).estado).toBe('listo');
+  });
+
   it('si la flota pasa a modo API, sus `listo` salen en la siguiente revisión', async () => {
     const e = sembrar(A, 1);
     await pasada(); // sin conector: espera

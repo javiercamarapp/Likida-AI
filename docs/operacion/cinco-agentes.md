@@ -4,8 +4,10 @@ Punto de entrada para quien opera una flota con el perfil `cinco_agentes`: qué 
 enciende y se apaga el perfil en una flota. Este índice no repite el contenido de los documentos: los enlaza. No lleva
 nombres de personas ni de empresas; se habla siempre de «la flota».
 
-Fase vigente: **A1 liquidación, A2 peajes y A3 carta porte activos; A4 vigía y A5 conductor «Próximamente»** (visibles en el
-menú, sin datos ni acciones). El estado por agente (crons, migraciones) está en [indice-agentes.md](indice-agentes.md).
+Fase vigente: **los cinco agentes activos (A1 liquidación, A2 peajes, A3 carta porte, A4 vigía y A5 conductor)**. A4 y A5
+se encendieron para el perfil el 18-oct-2026 (`MODULOS_PROXIMAMENTE_PERFIL` quedó vacío en `src/lib/auth/visibilidad.ts`) —
+ya no se muestran como «Próximamente», se operan igual que A1-A3. El estado por agente (crons, migraciones) está en
+[indice-agentes.md](indice-agentes.md).
 
 Solo se enlazan documentos que existen en esta rama. Los de la conexión con el sistema de transporte, los insights y la
 salida de carta porte se añadirán a esta tabla cuando se integren sus frentes.
@@ -19,7 +21,7 @@ salida de carta porte se añadirán a esta tabla cuando se integren sus frentes.
 | Operar o revertir peajes | [conciliacion-peajes.md](conciliacion-peajes.md), [peajes-revision-cobros.md](peajes-revision-cobros.md) y [peajes-rollback.md](peajes-rollback.md) |
 | Operar liquidación | [liquidacion-externa.md](liquidacion-externa.md) y [liquidacion-desglose-correo.md](liquidacion-desglose-correo.md) |
 | Operar carta porte | [carta-porte-multiformato.md](carta-porte-multiformato.md) |
-| Preparar el vigía y el conductor para la fase 2 | [vigia-cliente.md](vigia-cliente.md), [vigia-aviso-proactivo.md](vigia-aviso-proactivo.md) y [agente-conductor.md](agente-conductor.md) |
+| Operar el vigía y el conductor (ya encendidos) | [vigia-cliente.md](vigia-cliente.md), [vigia-aviso-proactivo.md](vigia-aviso-proactivo.md) y [agente-conductor.md](agente-conductor.md) |
 | Plantillas de WhatsApp (catálogo generado) | [plantillas-meta.md](plantillas-meta.md) |
 | Fixtures y datos de prueba (siempre sintéticos) | [fixtures-sinteticos.md](fixtures-sinteticos.md) |
 
@@ -35,7 +37,7 @@ exactos viven en [perfil-cinco-agentes.md](perfil-cinco-agentes.md); aquí solo 
    muestra qué tiene hoy la flota.
 3. **Aplicar el perfil.** El mismo script sin `--verificar`: una transacción, solo esa flota, sin borrar datos.
 4. **Comprobar como el cliente.** El superadmin que mira la flota con `?tenant=` ve lo mismo que el cliente: menú
-   recortado, A4 y A5 con «Próximamente», APIs y crons de stand-by cerrados.
+   recortado a los cinco agentes, APIs y crons de stand-by cerrados.
 5. **Revisar los resultados** de cada agente activo: todo número con fuente, todo candidato rotulado como tal, ninguna
    cifra de ahorro sin línea base.
 

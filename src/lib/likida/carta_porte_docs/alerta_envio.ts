@@ -7,7 +7,10 @@
 // este módulo decide A QUIÉN y POR QUÉ CANAL, y arma un texto que no lleva datos del documento (solo folio y liga).
 //
 // ── DESTINATARIOS (configurables en `cp_salida_config`; ninguno está definido por el cliente, B-6) ──────────────
-//   · reque_agotado / transitorio_agotado → `destinatarioAlertaCorreo` + `destinatarioAlertaUsuario` (su correo y su WhatsApp).
+//   · reque_agotado / transitorio_agotado / listo_manual → `destinatarioAlertaCorreo` + `destinatarioAlertaUsuario`
+//     (su correo y su WhatsApp). `listo_manual` es el aviso de ÉXITO en modo manual (sin conector del TMS): el envío
+//     llegó a `listo` sin problemas y alguien tiene que subirlo a mano; lo decide el WORKER (`worker_envios.ts`), no
+//     esta máquina, y por eso NO pasa por el candado de alerta única (ver `envio_estados.ts`).
 //   · rechazado_tms → el destinatario de REVISIÓN (`destinatarioRevisionCorreo` / `…Usuario`, T-A3-31); sin él, el de alerta.
 //   · Sin nada configurado → el jefe de tráfico por WhatsApp, como hoy hace `avisarOficina`. Sin ni siquiera él, el aviso
 //     NO se pierde: sube al operador del sistema.
@@ -75,6 +78,12 @@ export function textoAlerta(motivo: MotivoAlerta, folio: string, reintentosMax: 
         asunto: `Carta Porte: el sistema del cliente no responde (documento ${f})`,
         resumen: `${f}: sin respuesta del sistema`,
         cuerpo: `Documento ${f}: el sistema del cliente no respondió tras varios intentos. Revisa la conexión o súbelo a mano y márcalo como subido a mano. ${liga}`,
+      };
+    case 'listo_manual':
+      return {
+        asunto: `Carta Porte: el documento ${f} ya está listo para subir`,
+        resumen: `${f}: listo para subir`,
+        cuerpo: `Documento ${f}: la Carta Porte está lista para subir al sistema del cliente. ${liga}`,
       };
   }
 }

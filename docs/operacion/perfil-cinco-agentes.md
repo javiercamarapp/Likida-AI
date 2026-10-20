@@ -6,37 +6,33 @@ conductor) más la base mínima para operarlos. Todo lo demás queda **en stand-
 flujos de comprobantes por WhatsApp), sin borrar nada. **Una flota sin fila de perfil se comporta exactamente
 como siempre.**
 
-## Fase 1: A1, A2 y A3 activos; A4 y A5 «Próximamente»
+## Fase 2 (vigente desde el 18-oct-2026): los cinco agentes activos
 
-Decisión del 15-oct-2026. Hoy el perfil opera **liquidación (A1), peajes (A2) y Carta Porte (A3)**. El **vigía de
-servicio al cliente (A4)** y el **conductor (A5)** se **ven** en el menú y en el Resumen con la etiqueta
-«Próximamente», pero **no se operan**:
+Decisión del 15-oct-2026 (fase 1): el perfil arrancó operando solo **liquidación (A1), peajes (A2) y Carta Porte
+(A3)**, con el **vigía de servicio al cliente (A4)** y el **conductor (A5)** visibles pero bloqueados («Próximamente»).
+**Esa fase 1 ya terminó.** El 18-oct-2026 se sacó `vigia`/`conductor` de `MODULOS_PROXIMAMENTE_PERFIL` (que hoy está
+vacío, `[]`, en `src/lib/auth/visibilidad.ts`), y sus rutas/API/crons se movieron de las listas de stand-by a las
+listas vivas (`API_PERFIL_CINCO_AGENTES`, `CRONS_PERFIL_CINCO_AGENTES`). **A4 y A5 se operan igual que A1-A3** para
+toda flota con perfil `cinco_agentes` — no hay distinción por flota, es por perfil.
 
-- **Páginas:** las rutas de A4/A5 siguen en `RUTAS_PERFIL_CINCO_AGENTES` (por eso se ven), pero están en
-  `MODULOS_PROXIMAMENTE_PERFIL` (`['vigia', 'conductor']`). `exigirRutaDePerfil` las corta **antes de tocar un dato**
-  (también sus server actions) y manda a `/dashboard/proximamente/<modulo>`, una pantalla única de solo texto: qué
-  hará el agente, sin datos de la flota, sin formularios, sin botones de acción, sin envíos. No manda a `/dashboard`.
-- **Menú y Resumen:** el link lleva a esa misma pantalla, con la etiqueta «Próximamente». La ficha del Resumen ya no
-  consulta la última corrida.
-- **API:** `/api/v1/{hitos,estadias,sitios,conductor,evidencias}` y `/api/export/vigia-faqs` están en
-  `API_PROXIMAMENTE_PERFIL` y se niegan (403).
-- **Crons:** `vigia` y `conductor-hitos` (`CRONS_PROXIMAMENTE_PERFIL`) saltan las flotas con perfil: filtran los viajes y
-  conversaciones antes de decidir nada. En `escalar` (mixto) también se salta la escalación del conductor.
-  `gps` sigue corriendo (solo trae posiciones y eventos del proveedor del cliente; no envía nada).
-- **Chat y MCP:** siguen cerrados para toda flota con perfil.
-- **Sin fila de perfil:** nada cambia; A4/A5 abren como siempre.
+- **Páginas:** las rutas de A4/A5 siguen en `RUTAS_PERFIL_CINCO_AGENTES`, y ahora también operan de verdad: ya no
+  caen en `/dashboard/proximamente/<modulo>`.
+- **Menú y Resumen:** sin la etiqueta «Próximamente»; la ficha del Resumen consulta la última corrida con normalidad.
+- **API:** `/api/v1/{hitos,estadias,sitios,conductor,evidencias}` viven en `API_PERFIL_CINCO_AGENTES`.
+- **Crons:** `vigia` y `conductor-hitos` corren para las flotas con perfil igual que para cualquier otra.
+- **Chat y MCP:** siguen cerrados para toda flota con perfil (eso no cambió).
+- **Sin fila de perfil:** nada cambia; siempre se ha comportado igual.
 
-**Encender la fase 2** para una flota: sacar `vigia` y/o `conductor` de `MODULOS_PROXIMAMENTE_PERFIL`, mover sus
-recursos de `API_PROXIMAMENTE_PERFIL` a `API_PERFIL_CINCO_AGENTES` y sus crons de `CRONS_PROXIMAMENTE_PERFIL` a
-`CRONS_PERFIL_CINCO_AGENTES` (y ajustar `perfil_inventario.test.ts` y `perfil_proximamente.test.ts`). Hoy esa lista es
-por perfil, no por flota: encenderlos es para todas las flotas con `cinco_agentes`.
+La pantalla `/dashboard/proximamente/<modulo>` y las listas `MODULOS_PROXIMAMENTE_PERFIL`/`API_PROXIMAMENTE_PERFIL`/
+`CRONS_PROXIMAMENTE_PERFIL` se conservan en el código (vacías hoy) para la próxima vez que haga falta recortar un
+módulo nuevo del mismo modo — no se borraron, solo están sin uso.
 
-**WhatsApp de A4/A5 bajo el perfil (fase 1):** el chofer ya no dispara el Conductor: `moduloEnStandBy(tenant,'conductor')`
-(en `perfil_tenant.ts`) corta, en el processor, el registro de hitos, la evidencia de hitos, el pin que el Conductor
-compara y la solicitud de ubicación; el «Ya lo atiendo» del jefe se consume en silencio. El resto del turno del chofer
-(ROJO/ARCO, talacha, agente genérico, «sin comprobantes por WhatsApp») sigue como siempre. El Vigía tampoco responde:
-el mensaje de un cliente de la allowlist se descarta sin guardarlo ni escalarlo, y los botones `vig_*` del gerente se
-consumen sin contestar. Todo falla CERRADO si el perfil no se puede leer. Sin fila de perfil nada cambia.
+**WhatsApp de A4/A5 bajo el perfil (vigente desde el 18-oct-2026):** `moduloEnStandBy(tenant, modulo)` revisa
+`MODULOS_PROXIMAMENTE_PERFIL`, que hoy está vacío — así que esta función SIEMPRE devuelve `false` y ya NO corta nada:
+el chofer dispara el Conductor con normalidad (registro de hitos, evidencia, el pin que compara, la solicitud de
+ubicación, el «Ya lo atiendo» del jefe) y el Vigía responde a los clientes de la allowlist igual que para cualquier
+otra flota. La función y el corte en el processor se conservan en el código (sin uso hoy) para la próxima vez que
+un módulo nuevo necesite el mismo tratamiento de «Próximamente». Sin fila de perfil nada cambia (nunca cambió).
 
 **Lectura del perfil con la base caída:** `perfilDeTenant` falla CERRADO: sin valor previo en la instancia (arranque en frío) y con la
 tabla ilegible asume `cinco_agentes`, incluso para una flota SIN perfil. Es deliberado (nunca enseña ni opera de más); el costo
@@ -46,11 +42,11 @@ conocido). No se acota para no perder el fail-closed de las flotas CON perfil.
 
 **Siembra de hitos:** `sembrar_hitos_conductor` (0801) ya se salta a toda flota con fila en `tenant_perfil` (siembra y conciliación).
 
-**Límites conocidos de la fase 1:** (a) el pin de ubicación del chofer sigue guardándose en `posicion` y avisando al
-jefe (función de ruta anterior al módulo, no del Conductor); (b) el cron `vigia` ejecuta la retención `vigia_purgar`
-(solo borra lo vencido, no envía ni lee) para todas las flotas; (c) la lectura de correos vencidos del Vigía
-(`vigia_correos_vencidos`) trae hasta 20 filas de cualquier flota y descarta las de perfil: con 20 o más filas de perfil
-atoradas podrían tapar a una flota libre (hoy no hay filas así).
+**Límites conocidos, heredados de la fase 1 (histórico, confirmar si siguen vigentes ahora que A4/A5 operan):**
+(a) el pin de ubicación del chofer se guarda en `posicion` y avisa al jefe (función de ruta anterior al módulo, no
+del Conductor); (b) el cron `vigia` ejecuta la retención `vigia_purgar` (solo borra lo vencido, no envía ni lee) para
+todas las flotas; (c) la lectura de correos vencidos del Vigía (`vigia_correos_vencidos`) trae hasta 20 filas de
+cualquier flota: con 20 o más filas de perfil atoradas podrían tapar a una flota libre (hoy no hay filas así).
 
 ## Cómo funciona
 
@@ -61,7 +57,7 @@ atoradas podrían tapar a una flota libre (hoy no hay filas así).
   - `RUTAS_STAND_BY_PERFIL_CINCO_AGENTES` — lo que existe y el perfil oculta (solo documenta y alimenta las pruebas).
   - `API_PERFIL_CINCO_AGENTES` — recursos de `/v1`, exports y endpoints de `/api/dashboard` que siguen vivos.
   - `CRONS_PERFIL_CINCO_AGENTES` — crons que siguen corriendo para estas flotas.
-  - `MODULOS_PROXIMAMENTE_PERFIL`, `API_PROXIMAMENTE_PERFIL`, `CRONS_PROXIMAMENTE_PERFIL` — lo que A4/A5 muestran pero no operan (fase 1).
+  - `MODULOS_PROXIMAMENTE_PERFIL`, `API_PROXIMAMENTE_PERFIL`, `CRONS_PROXIMAMENTE_PERFIL` — vacías desde el 18-oct-2026 (A4/A5 ya operan); se conservan para el próximo módulo que necesite el mismo tratamiento.
 - **Falla cerrado:** lo que no está en la lista se niega. Una pantalla, recurso o cron nuevo sin clasificar
   no aparece bajo el perfil, y una prueba falla hasta que alguien lo clasifique.
 - **El perfil solo quita:** se aplica encima del rol, nunca da acceso que el rol no tenía.

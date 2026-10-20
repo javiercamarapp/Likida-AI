@@ -214,6 +214,20 @@ export interface ResultadoAutofactura {
   captura?: string;
   /** Se sacó de la cola automática, con el motivo que se guardó en la fila. */
   bloqueado?: string;
+  /**
+   * PRIMERA VEZ que se detecta `sin_adaptador` para ESTE gasto: se marcó
+   * `autofactura_aviso_sin_robot_en` y hay que avisarle al encargado.
+   *
+   * Viene vacío en todas las corridas siguientes aunque el ticket SIGA sin
+   * adaptador — es el candado anti-duplicado del fallback (ver
+   * `marcarAvisoSinRobot`). `lote.ts` lo trata exactamente como `bloqueado`
+   * para decidir A QUIÉN avisar, pero es un campo SEPARADO a propósito: no
+   * toca `autofactura_bloqueada_en`/`autofactura_bloqueo`, que `enrutar()` lee
+   * para elegir el texto del mensaje ('sin_robot' vs 'bloqueado'). Confundir
+   * los dos candados le cambiaría a la persona "no sé llenarlo solo" por "se
+   * intentó y no se pudo", que sería falso.
+   */
+  avisoSinRobot?: string;
 }
 
 /**
@@ -297,6 +311,26 @@ export async function facturarAlVuelo(args: {
 
   if (!decision.procede) {
     logger.info('autofactura.no_procede', { gastoId: args.gastoId, motivo: decision.motivo });
+    // EL FALLBACK GENÉRICO: un comercio que SÍ se reconoce (portal, campos
+    // leídos) pero para el que nadie escribió un adaptador. `enrutar()` ya
+    // arma el mensaje con la liga del portal y los datos que el OCR extrajo
+    // (`mensajeParaEncargado`, motivo 'sin_robot') — lo que faltaba era quién
+    // lo disparara: este `return` no tocaba la base, así que el ticket nunca
+    // entraba a `bloqueadosPorFlota` (`lote.ts`) y el WhatsApp no salía jamás,
+    // aunque el ticket se quedara viendo la pantalla de "por facturar" para
+    // siempre. Solo la PRIMERA vez (candado en `data.autofactura_aviso_sin_robot_en`,
+    // columna de la 0844): de ahí en adelante se sigue reportando `sin_adaptador`
+    // en cada corrida —el ticket no se esconde, una persona puede facturarlo—
+    // pero sin `avisoSinRobot`, así que no se repite el WhatsApp.
+    if (decision.motivo === 'sin_adaptador' && !data.autofactura_aviso_sin_robot_en) {
+      const avisado = await marcarAvisoSinRobot(admin, args.gastoId, args.tenantId, args.ahora);
+      return {
+        intentado: false, facturado: false, motivo: decision.motivo, detalle: decision.detalle,
+        ...(avisado
+          ? { avisoSinRobot: `sin adaptador escrito para ${decision.detalle ?? t.comercio?.clave ?? 'este portal'}: se avisó al encargado con la liga del portal y los datos del ticket` }
+          : {}),
+      };
+    }
     return { intentado: false, facturado: false, motivo: decision.motivo, detalle: decision.detalle };
   }
 
@@ -789,6 +823,40 @@ async function levantarEmisionEnCurso(
 }
 
 /**
+ * EL CANDADO DEL FALLBACK «SIN ADAPTADOR» (0844) — una sola marca por gasto.
+ *
+ * A PROPÓSITO no es `bloquear()`: esa función escribe `autofactura_bloqueada_en`
+ * y `autofactura_bloqueo`, que `enrutar()` lee para decidir el TEXTO del
+ * mensaje ('bloqueado' = "se intentó y no se pudo" vs 'sin_robot' = "no sé
+ * llenarlo solo"). Si este candado pisara esas columnas, la próxima vez que
+ * alguien mirara el ticket —`getPorFacturar`, otro `armarAviso`— leería la
+ * frase equivocada: nadie intentó nada, es que no hay quien lo intente. Por
+ * eso vive en su PROPIA columna y no saca al ticket de la cola: el ticket
+ * sigue viéndose en la pantalla, una persona lo puede facturar, y si algún
+ * día se escribe el adaptador la máquina lo retoma sin que nadie lo desatore.
+ *
+ * NO LANZA: igual que `bloquear()`, un WhatsApp que no salió es un aviso
+ * perdido —se dice en el log—, nunca una corrida perdida.
+ */
+async function marcarAvisoSinRobot(
+  admin: ReturnType<typeof supabaseAdmin>,
+  gastoId: string,
+  tenantId: string,
+  ahora?: string,
+): Promise<boolean> {
+  const { error } = await admin
+    .from('gasto')
+    .update({ autofactura_aviso_sin_robot_en: ahora ?? new Date().toISOString() })
+    .eq('id', gastoId)
+    .eq('tenant_id', tenantId);
+  if (error) {
+    logger.error('autofactura.aviso_sin_robot_sin_guardar', { gastoId, err: error.message });
+    return false;
+  }
+  return true;
+}
+
+/**
  * Saca un gasto de la cola automática, con el motivo por escrito.
  *
  * NO lo esconde: sigue saliendo en `getPorFacturar` —o sea en la pantalla de
@@ -867,7 +935,7 @@ function motivoDeBloqueo(r: {
 
 /** Lo que las dos rutas leen de `gasto`. Una sola lista: dos se desincronizan. */
 const COLUMNAS =
-  'id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, ocr_extra, ocr_confianza, autofactura_bloqueada_en, autofactura_bloqueo';
+  'id, concepto, monto, fecha, folio, rfc_emisor, cfdi_uuid, ocr_extra, ocr_confianza, autofactura_bloqueada_en, autofactura_bloqueo, autofactura_aviso_sin_robot_en';
 
 /**
  * CUÁNTO DURA UN CLAIM antes de que se pueda volver a tomar el ticket.
