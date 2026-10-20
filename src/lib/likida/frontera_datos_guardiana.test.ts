@@ -449,7 +449,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 319;
 // (la lectura) y `processor_hitos.test.ts` (el cableado de la foto); las reglas que solo Postgres demuestra —CHECK ampliado,
 // FKs que desligan sin romper, RLS— en `supabase/tests/0823_documentos_cierre_evidencia.sql` y el bloque 353 de
 // `verificaciones.sql`. Sin migración de código viejo: funcionalidad nueva.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_233;
+// Integración con A6 Autofactura (aviso "comercio sin adaptador", mig. 0844, sobre la misma base): +1 llamada (2,233 → 2,234),
+// `marcarAvisoSinRobot` en `facturacion/al_vuelo.ts:848` (`.from('gasto').update(...)`, candado de un solo aviso por gasto,
+// por `tenant_id` + `id`). Funcionalidad nueva, no código migrado; cubierta por `al_vuelo.test.ts`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_234;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

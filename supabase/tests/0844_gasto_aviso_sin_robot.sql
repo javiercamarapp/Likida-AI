@@ -41,7 +41,10 @@ begin
   end if;
 end $$;
 
--- (c) idempotente: repetir la migración no borra la marca ya puesta.
+reset role;
+
+-- (c) idempotente: repetir la migración no borra la marca ya puesta. La migración es DDL (ALTER TABLE):
+-- exige ser dueño de `gasto` (postgres), no `service_role` — por eso el `reset role` va ANTES de este `\i`.
 \i supabase/migrations/0844_gasto_aviso_sin_robot.sql
 
 do $$
@@ -53,5 +56,4 @@ begin
   if v is null then raise exception '0844 c: la migración repetida borró la marca ya puesta'; end if;
 end $$;
 
-reset role;
 rollback;
