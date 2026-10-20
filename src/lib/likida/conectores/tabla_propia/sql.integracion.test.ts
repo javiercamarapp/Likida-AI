@@ -31,7 +31,12 @@ const dirBin = (): string | null => {
 };
 const BIN = dirBin();
 const OPENSSL = spawnSync('which', ['openssl']).status === 0;
-const puedeCorrer = BIN !== null && OPENSSL;
+// `initdb` se NIEGA a correr como root (uid 0) y los contenedores de las sesiones en la nube corren asi:
+// mirar si el binario EXISTE no basta, hay que poder EJECUTARLO. Sin este tercer candado el archivo FALLA
+// en vez de omitirse y deja `npm test` en rojo en cualquier corrida desatendida, que es justo la compuerta
+// que esas rutinas usan de linea base. En CI (ubuntu-24.04, usuario `runner`) y en la Mac no cambia nada.
+const ES_ROOT = typeof process.getuid === 'function' && process.getuid() === 0;
+const puedeCorrer = BIN !== null && OPENSSL && !ES_ROOT;
 
 const puertoLibre = (): Promise<number> => new Promise((ok, mal) => {
   const s = net.createServer();
