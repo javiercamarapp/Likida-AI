@@ -50,8 +50,8 @@ export interface HitoVista {
   validacion: { resultado: ResultadoValidacion; texto: string; distanciaM: number | null } | null;
   validadoPor: HitoFila['validadoPor'];
   evidencias: number;
-  /** Cada foto viva del ciclo vigente (para abrirla con GET /v1/evidencias/{id}). */
-  fotos: Array<{ id: string; tipo: TipoEvidencia }>;
+  /** Cada foto viva del ciclo vigente (para abrirla con GET /v1/evidencias/{id}). `reusoTenant` = esta MISMA foto ya se usó en otro viaje/hito de la flota (0852): no bloqueó, solo se marca para revisión. */
+  fotos: Array<{ id: string; tipo: TipoEvidencia; reusoTenant: boolean }>;
   /** Por qué quedó `omitido` (`inferido_por_<tipo>`: avisó uno posterior · `viaje_abierto_vencido`: lo cerró el barrido de viajes viejos · …). */
   omitidoMotivo: string | null;
   escaladoEn: string | null;
@@ -278,12 +278,12 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
     const hs = [...aplicarPerfil(hitosPorViaje.get(viaje.id) ?? [], config.perfilSeguimiento)].sort((a, b) => TIPOS_HITO.indexOf(a.tipo) - TIPOS_HITO.indexOf(b.tipo));
     // Las evidencias cuentan solo las del CICLO vigente del hito (una corrección retira el hito, no las fotos viejas del historial).
     const evidenciasVigentes = new Map<string, number>();
-    const fotosVigentes = new Map<string, Array<{ id: string; tipo: TipoEvidencia }>>();
+    const fotosVigentes = new Map<string, Array<{ id: string; tipo: TipoEvidencia; reusoTenant: boolean }>>();
     for (const e of datos.evidencias) {
       const h = hs.find((x) => x.id === e.hitoId);
       if (h && e.ciclo === h.ciclo && e.ruta !== null) {
         evidenciasVigentes.set(h.id, (evidenciasVigentes.get(h.id) ?? 0) + 1);
-        fotosVigentes.set(h.id, [...(fotosVigentes.get(h.id) ?? []), { id: e.id, tipo: e.tipo }]);
+        fotosVigentes.set(h.id, [...(fotosVigentes.get(h.id) ?? []), { id: e.id, tipo: e.tipo, reusoTenant: e.reusoTenant }]);
       }
     }
     const validaciones = new Map<string, ResultadoValidacion>();
@@ -505,6 +505,12 @@ export interface IndicadoresVista {
   validadosUbicacion: number;
   sinCoincidencia: number;
   capturadosOficina: number;
+  /** 0853: llegadas (carga/descarga) recibidas o validadas en el periodo — el denominador de `tasaValidacionDegradada`. */
+  llegadasValidables: number;
+  /** 0853: de las validables, cuántas corrieron en modo DEGRADADO (sin GPS real: 'sin_dato', o 'validado' solo con el pin del chofer). */
+  validacionDegradada: number;
+  /** 0–1, o null sin llegadas validables en el periodo (un 0% no debe parecer "todo confiable" cuando no hay con qué medir). */
+  tasaValidacionDegradada: number | null;
 }
 
 export function indicadoresVista(c: IndicadoresCrudos): IndicadoresVista {
@@ -514,6 +520,8 @@ export function indicadoresVista(c: IndicadoresCrudos): IndicadoresVista {
     minutosRespuestaPromedio: c.conRespuestaMedida > 0 ? c.minutosRespuestaPromedio : null,
     conRespuestaMedida: c.conRespuestaMedida, escalados: c.escalados, omitidos: c.omitidos,
     validadosUbicacion: c.validadosUbicacion, sinCoincidencia: c.sinCoincidencia, capturadosOficina: c.capturadosOficina,
+    llegadasValidables: c.llegadasValidables, validacionDegradada: c.validacionDegradada,
+    tasaValidacionDegradada: c.llegadasValidables > 0 ? Math.round((c.validacionDegradada / c.llegadasValidables) * 1000) / 1000 : null,
   };
 }
 

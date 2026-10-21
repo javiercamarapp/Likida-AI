@@ -229,7 +229,7 @@ export function crearMundo(o: OpcionesMundo) {
     }));
     const sitios = new Map<string, string>();
     for (const v of viajes) { const s = o.sitios?.[v.id]; if (s?.carga) sitios.set(s.carga.id, s.carga.nombre); if (s?.descarga) sitios.set(s.descarga.id, s.descarga.nombre); }
-    const evidencias: EvidenciaFila[] = m.evidencias.filter((e) => hitos.some((h) => h.id === e.hitoId)).map((e, i) => ({ id: `e${i}`, hitoId: e.hitoId, ciclo: e.ciclo, tipo: e.tipo as EvidenciaFila['tipo'], ruta: e.ruta, creadaEn: '' }));
+    const evidencias: EvidenciaFila[] = m.evidencias.filter((e) => hitos.some((h) => h.id === e.hitoId)).map((e, i) => ({ id: `e${i}`, hitoId: e.hitoId, ciclo: e.ciclo, tipo: e.tipo as EvidenciaFila['tipo'], ruta: e.ruta, creadaEn: '', reusoTenant: false }));
     return { viajes, hayMas: false, hitos, veredictos: ver, evidencias, acciones: [], sitios };
   };
 
