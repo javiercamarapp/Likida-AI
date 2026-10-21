@@ -223,6 +223,8 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0564_liquidacion_formato_flota.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0843_peajes_sftp.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0844_gasto_aviso_sin_robot.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0845_equipo_candado_ultimo_dueno.sql
+          PGUSER=postgres bash supabase/tests/0845_equipo_candado_ultimo_dueno_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0775_peajes_revision_cobros.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0778_peaje_excepcion_unidad.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0812_peaje_tag_tipo_unidad.sql
