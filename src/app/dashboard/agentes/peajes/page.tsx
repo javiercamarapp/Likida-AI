@@ -16,7 +16,7 @@ import { revisionDeDesglose, listarReclamos } from '@/lib/likida/peajes/revision
 import { validarPeriodoDeclarado } from '@/lib/likida/peajes/periodo';
 import { bitacoraConciliada } from '@/lib/likida/peajes/bitacora_conciliada';
 import { logger } from '@/lib/logger';
-import { sufijoTenant } from '../../sufijo';
+import { sufijoTenant, querystringCompleto } from '../../sufijo';
 import { avisoAgentePeajesApagado } from './apagado';
 import { superficiePeajesDeTenant, MOTIVO_STAND_BY_PERFIL } from '@/lib/likida/peajes/superficie_perfil';
 import { VistaAgentePeajes } from './vista';
@@ -60,7 +60,9 @@ export default async function PaginaAgentePeajes({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; desglose?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/peajes', sp);
+  // Querystring REAL (`?desglose=`): si la sesión expira a media navegación,
+  // el rebote a /login la conserva — ver el comentario largo en guard.ts.
+  const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/peajes', sp, querystringCompleto(sp));
   if (!puedeVerRuta(rol, '/dashboard/agentes/peajes')) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
   // T-A2-31: qué del stand-by se lee y se pinta. Con perfil `cinco_agentes` (o sin poder leerlo: falla cerrado) nada de eso.

@@ -21,7 +21,7 @@ import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { KpiTile, EstadoVacio, ChartCard, StatusPill } from '../../admin/ui/kit';
 import { HBars } from '../../admin/ui/graficas';
 import { Dona } from '../../admin/charts';
-import { sufijoTenant } from '../sufijo';
+import { sufijoTenant, querystringCompleto } from '../sufijo';
 import { LineasPorConciliar, NINGUNO_VALOR } from './vista-consolidado';
 import { calcularSinCfdi } from './sin-cfdi';
 
@@ -133,7 +133,9 @@ export default async function CombustibleCasetasPage({
   searchParams: Promise<{ vista?: string; tenant?: string; ok?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId } = await resolverTenantEfectivo('/dashboard/combustible-casetas', sp);
+  // Querystring REAL (`?ok=`): si la sesión expira a media navegación, el
+  // rebote a /login la conserva — ver el comentario largo en guard.ts.
+  const { tenantId } = await resolverTenantEfectivo('/dashboard/combustible-casetas', sp, querystringCompleto(sp));
   const sufijo = sufijoTenant(sp);
 
   // FE-8: LA MISMA función que el contador (`inicio-contador.tsx`) y el chat
