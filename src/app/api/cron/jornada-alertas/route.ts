@@ -74,13 +74,19 @@ export async function GET(req: Request) {
         sinCierreProbable: r.sinCierreProbable, inicioEnFuturo: r.inicioEnFuturo, sinDestinatario: r.sinDestinatario,
         rechazosReintentables: r.rechazosReintentables, cortadosPorReloj: r.cortadosPorReloj, listaTruncada: r.listaTruncada,
         fallos: r.fallos.length,
-        motivo: r.cortadaPorRechazoMasivo ? 'WhatsApp rechazó varios avisos seguidos por un motivo reintentable; la corrida se detuvo.' : undefined,
+        motivo: r.cortadaPorRechazoMasivo
+          ? `WhatsApp rechazó varios avisos seguidos por un motivo reintentable para la flota ${r.tenantCausanteRechazoMasivo ?? 'desconocida'}; se saltó el resto de sus jornadas (las demás flotas de esta corrida sí se procesaron).`
+          : undefined,
+        tenantCausanteRechazoMasivo: r.tenantCausanteRechazoMasivo,
+        jornadaCausanteRechazoMasivo: r.jornadaCausanteRechazoMasivo,
       },
     };
     if (r.cortadaPorRechazoMasivo) {
       await alertarOperador('cron.jornada_alertas', {
-        error: 'WhatsApp rechazó varios avisos de tope de jornada seguidos por un motivo reintentable (rate limit o bloqueo). La corrida se detuvo; los avisos quedaron sin reclamar.',
+        error: `WhatsApp rechazó varios avisos de tope de jornada seguidos por un motivo reintentable (rate limit o bloqueo) para la flota ${r.tenantCausanteRechazoMasivo ?? 'desconocida'} (jornada ${r.jornadaCausanteRechazoMasivo ?? 'desconocida'}). Se saltaron el resto de sus jornadas en esta corrida; las demás flotas sí se procesaron.`,
         codigo: 'wa_rechazo_masivo',
+        tenantId: r.tenantCausanteRechazoMasivo,
+        jornadaId: r.jornadaCausanteRechazoMasivo,
       });
     }
     return NextResponse.json({ corrio: true, ...r, fallos: r.fallos.slice(0, 20) });

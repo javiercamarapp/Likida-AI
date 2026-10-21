@@ -146,12 +146,43 @@ describe('correrAlertasTope', () => {
     expect(r.fallos[0]).toMatch(/no se alerta sin leerlo/);
     expect(p.reclamar).not.toHaveBeenCalled();
   });
-  it('rechazo reintentable libera el nivel para la siguiente corrida', async () => {
+  it('rechazo reintentable que de verdad NO se pudo encolar (sin `encolado`) sí libera el nivel', async () => {
+    // `encolado` ausente (no `true`): Meta nunca aceptó dejarlo pendiente en `wa_outbox`, así que
+    // nada va a llegar solo. Sin liberar, este nivel nunca se reintentaría.
     const p = puertos([a('inicio_jornada', hace(13))], { enviarWa: vi.fn(async () => ({ ok: false, reintentable: true, motivo: '429' })) });
     const r = await correrAlertasTope(p, { ahora: AHORA });
     expect(r.rechazosReintentables).toBe(1);
     expect(p.liberar).toHaveBeenCalled();
     expect(p.cerrar).not.toHaveBeenCalled();
+  });
+  it('HALLAZGO 1 (A12): un rechazo ENCOLADO (ya en wa_outbox) NO libera el nivel — se cerraría dos veces si se liberara', async () => {
+    // `encolado: true` (429/5xx o token 190 vencido, RES-1): el cliente de Meta YA dejó el mensaje en
+    // `wa_outbox` y se va a entregar solo. Antes, `enviarWa` descartaba este campo y `correrAlertasTope`
+    // llamaba `p.liberar`, así que la corrida siguiente volvía a reclamar y mandaba un SEGUNDO WhatsApp
+    // real para el mismo (jornada, nivel).
+    const p = puertos([a('inicio_jornada', hace(13))], {
+      enviarWa: vi.fn(async () => ({ ok: false, reintentable: false, encolado: true, motivo: 'token vencido' })),
+    });
+    const r = await correrAlertasTope(p, { ahora: AHORA });
+    expect(r.rechazosReintentables).toBe(1);
+    expect(p.liberar).not.toHaveBeenCalled();
+    // Se cierra como una falla normal (sin liberar, sin volver a reclamar): el outbox entrega solo.
+    expect(p.cerrar).toHaveBeenCalledWith(expect.objectContaining({ estado: 'fallida' }));
+  });
+  it('HALLAZGO 1 (A12): con un solo destinatario reintentable (429) encolado y el otro reintentable sin encolar, tampoco libera', async () => {
+    // El encargado queda encolado (429, RES-1) y el operador falla reintentable pero SIN encolar
+    // (p. ej. el teléfono no tiene WhatsApp registrado del lado de Meta, sin cola). Basta con que
+    // UNO esté encolado para que liberar duplicaría ese envío: no se libera.
+    const p = puertos([a('inicio_jornada', hace(13))], {
+      enviarWa: vi.fn(async (_tel: string, _msg: unknown, _tenantId: string, _ahora: Date, contexto: string) => (
+        contexto === 'jornada.alerta_encargado'
+          ? { ok: false, reintentable: true, encolado: true, motivo: '429' }
+          : { ok: false, reintentable: true, motivo: '429 sin cola' }
+      )),
+    });
+    await correrAlertasTope(p, { ahora: AHORA });
+    expect(p.liberar).not.toHaveBeenCalled();
+    expect(p.cerrar).toHaveBeenCalledWith(expect.objectContaining({ estado: 'fallida' }));
   });
   it('sin destinatarios se asienta sin_destinatario', async () => {
     const p = puertos([a('inicio_jornada', hace(10))], {
@@ -170,5 +201,33 @@ describe('correrAlertasTope', () => {
     await correrAlertasTope(p, { ahora: AHORA });
     const msg = (p.enviarWa as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(JSON.stringify(msg)).toMatch(/al menos/);
+  });
+
+  describe('HALLAZGO 2 (A12): el corte por rechazo masivo es por flota, no global', () => {
+    it('una flota con el canal roto NO bloquea a las demás flotas de la misma corrida', async () => {
+      // La RPC real ordena por (tenant_id, jornada_id): la flota rota viene PRIMERO, como en producción.
+      const filasRota: FilaCandidata[] = Array.from({ length: 6 }, (_, i) => ({
+        tenantId: 'flota-rota', jornadaId: `j-rota-${i + 1}`, operadorId: 'o-rota', dia: '2026-10-02', config: CFG,
+      }));
+      const filasSanas: FilaCandidata[] = ['flota-sana-1', 'flota-sana-2', 'flota-sana-3'].map((t) => (
+        { tenantId: t, jornadaId: `j-${t}`, operadorId: `o-${t}`, dia: '2026-10-02', config: CFG }
+      ));
+      let claimSeq = 0;
+      const p = puertos([a('inicio_jornada', hace(10))], {
+        candidatas: async () => ({ filas: [...filasRota, ...filasSanas], hayMas: false }),
+        reclamar: vi.fn(async () => { claimSeq += 1; return { id: `r${claimSeq}`, token: `tk${claimSeq}` }; }),
+        enviarWa: vi.fn(async (_tel: string, _msg: unknown, tenantId: string) => (
+          tenantId === 'flota-rota' ? { ok: false, reintentable: true, motivo: '429' } : { ok: true, reintentable: false }
+        )),
+      });
+      const r = await correrAlertasTope(p, { ahora: AHORA });
+      expect(r.cortadaPorRechazoMasivo).toBe(true);
+      expect(r.tenantCausanteRechazoMasivo).toBe('flota-rota');
+      // Las 5 primeras filas de la flota rota se intentan (y se liberan); la 6ª se SALTA sin reclamar.
+      expect(r.rechazosReintentables).toBe(5);
+      // Las 3 flotas sanas, que vienen DESPUÉS en la lista, SÍ se avisan en la MISMA corrida.
+      expect(r.alertas.aviso).toBe(3);
+      expect(r.revisadas).toBe(5 + 3);
+    });
   });
 });

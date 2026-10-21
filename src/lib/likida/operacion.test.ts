@@ -15,6 +15,12 @@ let DOBLE: Doble = crearDoble('2026-08-14');
 let TABLAS: Record<string, unknown[]> = {};
 /** Tablas que deben fallar, con su mensaje. */
 let FALLAN: Record<string, string> = {};
+/** Tablas cuya ESCRITURA (`single`/`then`, nunca la lectura de `range`/
+ *  `limit`) debe chocar contra un índice único — simula la CARRERA: el
+ *  chequeo explícito de aplicación pasó limpio (la lectura previa no ve
+ *  conflicto) y el INSERT/UPDATE choca de todos modos porque otro request
+ *  escribió entre medio. Mapea tabla → nombre del índice. */
+let FALLAN_UNIQUE: Record<string, string> = {};
 /** Tablas cuyo UPDATE toca CERO filas (id ajeno, fila borrada). Es la mitad
  *  nueva del mock: sin ella, el `.select('id')` post-update devolvería filas
  *  siempre y la comprobación de filas afectadas sería imposible de probar. */
@@ -50,6 +56,10 @@ function constructor(tabla: string) {
     eq: (c: string, v: unknown) => { filtros.push([c, v]); return api; },
     is: (c: string, v: unknown) => { filtros.push([c, v]); return api; },
     neq: (c: string, v: unknown) => { filtros.push([`!${c}`, v]); return api; },
+    // `in` de `unidadTieneViajeAbierto` (hallazgo ALTO): solo se usa para
+    // armar el filtro, el recorte real lo decide `TABLAS[tabla]` como todo lo
+    // demás en este mock.
+    in: (c: string, v: unknown) => { filtros.push([c, v]); return api; },
     order: () => api,
     // `limit` cierra una consulta de UNA página (`getViajesSinAsignar`): rebana
     // igual que PostgREST y el `count` exacto es el de la tabla ENTERA, no el de la página.
@@ -70,19 +80,23 @@ function constructor(tabla: string) {
     insert: (v: unknown) => { registro.op = 'insert'; registro.valores = v; escrituras.push(registro); return api; },
     update: (v: unknown) => { registro.op = 'update'; registro.valores = v; escrituras.push(registro); return api; },
     single: () => Promise.resolve(
-      FALLAN[tabla] ? { data: null, error: { message: FALLAN[tabla] } } : { data: { id: `${tabla}-nuevo` }, error: null },
+      FALLAN_UNIQUE[tabla]
+        ? { data: null, error: { message: `duplicate key value violates unique constraint "${FALLAN_UNIQUE[tabla]}"`, code: '23505' } }
+        : FALLAN[tabla] ? { data: null, error: { message: FALLAN[tabla] } } : { data: { id: `${tabla}-nuevo` }, error: null },
     ),
     // Un update sin `.single()` se espera directo: `then` lo hace thenable.
     // Una ESCRITURA que se espera así devuelve las filas tocadas (como el
     // `.select('id')` de PostgREST): una por defecto, cero si la tabla está
     // en TOCAN_CERO — el caso del id ajeno que el WHERE por tenant no toca.
     then: (res: (v: unknown) => unknown) => Promise.resolve(
-      FALLAN[tabla]
-        ? { data: null, error: { message: FALLAN[tabla] } }
-        : {
-          data: registro.op === 'select' ? null : (TOCAN_CERO.has(tabla) ? [] : [{ id: `${tabla}-tocada` }]),
-          error: null,
-        },
+      FALLAN_UNIQUE[tabla]
+        ? { data: null, error: { message: `duplicate key value violates unique constraint "${FALLAN_UNIQUE[tabla]}"`, code: '23505' } }
+        : FALLAN[tabla]
+          ? { data: null, error: { message: FALLAN[tabla] } }
+          : {
+            data: registro.op === 'select' ? null : (TOCAN_CERO.has(tabla) ? [] : [{ id: `${tabla}-tocada` }]),
+            error: null,
+          },
     ).then(res),
   };
   return api;
@@ -110,7 +124,7 @@ const {
 const { DatoInvalido } = await import('./errores');
 
 beforeEach(() => {
-  TABLAS = {}; FALLAN = {}; TOCAN_CERO = new Set(); escrituras.length = 0;
+  TABLAS = {}; FALLAN = {}; FALLAN_UNIQUE = {}; TOCAN_CERO = new Set(); escrituras.length = 0;
   DOBLE = crearDoble('2026-08-14');
 });
 
@@ -486,6 +500,34 @@ describe('escrituras', () => {
     expect(escrituras.find((e) => e.tabla === 'viaje')).toBeUndefined();
   });
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // HALLAZGO ALTO: `asignarUnidad()`/`crearViaje()` comprobaban que la unidad
+  // fuera de la flota y que no estuviera de baja, pero NUNCA que no tuviera
+  // ya otro viaje abierto — el gemelo de `uq_viaje_abierto_por_operador`
+  // (0029) que nunca se escribió del lado de `unidad_id`. Migración 0849
+  // (`uq_viaje_abierto_por_unidad`) cierra el hueco en la base; estas pruebas
+  // cubren el candado de APLICACIÓN que da el mensaje legible.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('crearViaje RECHAZA una unidad que YA tiene OTRO viaje abierto, y no inserta el viaje', async () => {
+    // Cualquier fila en `viaje` simula un viaje abierto ya enganchado a esa
+    // unidad — el mock no filtra por valor, solo por presencia.
+    TABLAS = { unidad: [{ id: 'u-1' }], viaje: [{ id: 'v-ya-abierto' }] };
+    await expect(crearViaje('t-1', { folio: 'VJ-14', unidadId: 'u-1' })).rejects.toThrow(
+      'Esa unidad ya está en OTRO viaje abierto',
+    );
+    // Mutación: sin esta aserción, borrar el candado y dejar pasar el INSERT
+    // seguiría verde en la prueba "ACEPTA" de arriba.
+    expect(escrituras.find((e) => e.tabla === 'viaje')).toBeUndefined();
+  });
+
+  it('crearViaje: si el chequeo pasó limpio pero el INSERT choca contra uq_viaje_abierto_por_unidad (carrera), da el MISMO mensaje legible — no el 23505 crudo', async () => {
+    TABLAS = { unidad: [{ id: 'u-1' }] }; // sin 'viaje': el chequeo explícito no ve nada
+    FALLAN_UNIQUE = { viaje: 'uq_viaje_abierto_por_unidad' };
+    await expect(crearViaje('t-1', { folio: 'VJ-15', unidadId: 'u-1' })).rejects.toThrow(
+      'Esa unidad ya está en OTRO viaje abierto',
+    );
+  });
+
   it('asignarUnidad ACEPTA una unidad que sí pertenece al tenant', async () => {
     TABLAS = { unidad: [{ id: 'u-1' }] };
     await asignarUnidad('t-1', 'v-1', 'u-1');
@@ -503,6 +545,24 @@ describe('escrituras', () => {
     );
     // seguiría verde en la prueba de arriba.
     expect(escrituras.find((e) => e.tabla === 'viaje')).toBeUndefined();
+  });
+
+  // HALLAZGO ALTO (reproducción del escenario del hallazgo): asignar la MISMA
+  // unidad a dos viajes abiertos distintos — el segundo intento debe fallar.
+  it('asignarUnidad RECHAZA una unidad que YA tiene OTRO viaje abierto, y no toca el viaje', async () => {
+    TABLAS = { unidad: [{ id: 'u-1' }], viaje: [{ id: 'v-ya-abierto' }] };
+    await expect(asignarUnidad('t-1', 'v-2', 'u-1')).rejects.toThrow(
+      'Esa unidad ya está en OTRO viaje abierto',
+    );
+    expect(escrituras.find((e) => e.tabla === 'viaje')).toBeUndefined();
+  });
+
+  it('asignarUnidad: si el chequeo pasó limpio pero el UPDATE choca contra uq_viaje_abierto_por_unidad (carrera), da el MISMO mensaje legible — no el 23505 crudo', async () => {
+    TABLAS = { unidad: [{ id: 'u-1' }] }; // sin 'viaje': el chequeo explícito no ve nada
+    FALLAN_UNIQUE = { viaje: 'uq_viaje_abierto_por_unidad' };
+    await expect(asignarUnidad('t-1', 'v-2', 'u-1')).rejects.toThrow(
+      'Esa unidad ya está en OTRO viaje abierto',
+    );
   });
 
   it('asignarUnidad(..., null) desasigna sin comprobar nada — no hay unidad que verificar', async () => {

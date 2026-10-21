@@ -72,6 +72,46 @@ vi.mock('@/lib/likida/buzon/servicio', () => ({
 // La bitácora se anota best-effort al final; el doble solo registra que se llamó.
 vi.mock('@/lib/likida/agentes/corridas', () => ({ registrarCorrida: vi.fn(async () => {}) }));
 
+// ── EL TRANSPORTE DE RED: `httpsPublico`, no `fetch` (AUDITORÍA ADVERSARIAL ───
+// ALTO #1, A9-SSRF) ───────────────────────────────────────────────────────────
+// La ruta ya no llama a `fetch()` directo para los dos adjuntos de Resend: pasa
+// por `httpsPublico` (el mismo wrapper anti-SSRF de `peajes/pull.ts` y
+// `conectores/tms/sesion.ts`). El doble de abajo imita el SUBCONJUNTO real que
+// la ruta usa — `aceptar` y el tope (`maxBytes`/`maxBytesAbsoluto`) — para que
+// las pruebas de tamaño sigan ejercitando la MISMA clasificación (tope de
+// archivo vs. fallo de red) que corre en producción, no una reimplementación
+// aparte.
+vi.mock('@/lib/http/https_publico', () => ({ httpsPublico: vi.fn() }));
+const { httpsPublico } = await import('@/lib/http/https_publico');
+
+interface RespSim { estado?: number; headers?: Record<string, string>; cuerpo?: string; bytes?: Uint8Array; lanzar?: boolean }
+type PeticionSim = {
+  url: string;
+  maxBytes?: number;
+  maxBytesAbsoluto?: number;
+  aceptar?: (estado: number, encabezados: Record<string, string>) => boolean;
+};
+
+function stubHttp(resolver: (url: string, timeoutMs: number) => RespSim) {
+  vi.mocked(httpsPublico).mockImplementation(async (p: PeticionSim, timeoutMs: number) => {
+    const r = resolver(p.url, timeoutMs);
+    if (r.lanzar) throw new Error('simulado: la conexión se interrumpió');
+    const estado = r.estado ?? 200;
+    const encabezados = r.headers ?? {};
+    if (p.aceptar && !p.aceptar(estado, encabezados)) {
+      return { estado, cuerpo: '', bytes: new Uint8Array(0), encabezados };
+    }
+    const bytes = r.bytes ?? new TextEncoder().encode(r.cuerpo ?? '');
+    const techo = Math.max(1, p.maxBytesAbsoluto ?? 8 * 1024 * 1024);
+    const maxBytes = Math.min(p.maxBytes ?? techo, techo);
+    const declarado = Number(encabezados['content-length'] ?? 0) || 0;
+    if ((declarado > 0 && declarado > maxBytes) || bytes.length > maxBytes) {
+      throw new Error(`La respuesta del proveedor supera el límite de ${maxBytes / (1024 * 1024)} MiB.`);
+    }
+    return { estado, cuerpo: r.cuerpo ?? Buffer.from(bytes).toString('utf8'), bytes, encabezados };
+  });
+}
+
 const { POST } = await import('./route');
 const { logger } = await import('@/lib/logger');
 
@@ -120,12 +160,12 @@ beforeEach(async () => {
   rpcs.length = 0;
   correosRegistrados.clear();
   borrados.length = 0;
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    if (String(url).includes('/attachments/')) {
-      return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
+  stubHttp((url) => {
+    if (url.includes('/attachments/')) {
+      return { cuerpo: JSON.stringify({ download_url: 'https://x/y' }) };
     }
-    return new Response('<Comprobante/>', { status: 200 });
-  }));
+    return { cuerpo: '<Comprobante/>' };
+  });
 });
 
 describe('la firma se verifica ANTES de leer nada del cuerpo', () => {
@@ -237,12 +277,12 @@ describe('los adjuntos', () => {
     // Un correo con varias facturas donde una viene ilegible debe guardar el
     // resto. (El caso "la descarga se cayó" ya no termina aquí: es transitorio
     // y sale por 503 — ver el bloque de la descarga caída, abajo.)
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (String(url).includes('att_malo')) return new Response(JSON.stringify({ download_url: 'https://x/malo' }), { status: 200 });
-      if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
-      if (String(url).includes('/malo')) return new Response('no soy un xml', { status: 200 });
-      return new Response('<Comprobante/>', { status: 200 });
-    }));
+    stubHttp((url) => {
+      if (url.includes('att_malo')) return { cuerpo: JSON.stringify({ download_url: 'https://x/malo' }) };
+      if (url.includes('/attachments/')) return { cuerpo: JSON.stringify({ download_url: 'https://x/y' }) };
+      if (url.includes('/malo')) return { cuerpo: 'no soy un xml' };
+      return { cuerpo: '<Comprobante/>' };
+    });
     const r = await POST(pedir(evento({
       attachments: [
         { id: 'att_malo', filename: 'a.xml' },
@@ -254,10 +294,10 @@ describe('los adjuntos', () => {
   });
 
   it('un XML que no es CFDI se cuenta como ignorado, no como guardado', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
-      return new Response('<otraCosa/>', { status: 200 });
-    }));
+    stubHttp((url) => {
+      if (url.includes('/attachments/')) return { cuerpo: JSON.stringify({ download_url: 'https://x/y' }) };
+      return { cuerpo: '<otraCosa/>' };
+    });
     const r = await POST(pedir(evento()));
     expect(await r.json()).toMatchObject({ guardadas: 0, ignoradas: 1 });
   });
@@ -265,21 +305,21 @@ describe('los adjuntos', () => {
 
 describe('0530 — PDF y zip entran al buzón, con su propio tope', () => {
   const adjuntos = (...n: string[]) => ({ attachments: n.map((filename, i) => ({ id: `att_${i}`, filename })) });
-  const stub = (cuerpoDe: (id: string) => Response) => vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    const m = String(url).match(/att_(\d)/);
-    if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: `https://x/d${m ? m[1] : '0'}` }), { status: 200 });
-    return cuerpoDe(String(url));
-  }));
+  const stub = (cuerpoDe: (url: string) => RespSim) => stubHttp((url) => {
+    const m = url.match(/att_(\d)/);
+    if (url.includes('/attachments/')) return { cuerpo: JSON.stringify({ download_url: `https://x/d${m ? m[1] : '0'}` }) };
+    return cuerpoDe(url);
+  });
 
   it('un PDF y un zip ya no se descartan por extensión: llegan a la ingesta como BYTES', async () => {
-    stub(() => new Response(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0xff, 0xfe]), { status: 200 }));
+    stub(() => ({ bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0xff, 0xfe]) }));
     const r = await POST(pedir(evento(adjuntos('a.pdf', 'b.zip'))));
     expect(r.status).toBe(200);
     expect(recibidosPorIngesta.map((x) => [x.nombre, x.bytes])).toEqual([['a.pdf', 6], ['b.zip', 6]]);
   });
 
   it('un PDF de 8 MB pasa (el tope de pdf/zip es 12 MB); un XML de 8 MB no (el suyo sigue en 4 MB)', async () => {
-    stub(() => new Response(new Uint8Array(8 * 1024 * 1024), { status: 200, headers: { 'content-length': String(8 * 1024 * 1024) } }));
+    stub(() => ({ bytes: new Uint8Array(8 * 1024 * 1024), headers: { 'content-length': String(8 * 1024 * 1024) } }));
     const r = await POST(pedir(evento(adjuntos('grande.pdf', 'grande.xml'))));
     expect(r.status).toBe(200);
     expect(recibidosPorIngesta.map((x) => x.nombre)).toEqual(['grande.pdf']);
@@ -287,14 +327,14 @@ describe('0530 — PDF y zip entran al buzón, con su propio tope', () => {
   });
 
   it('el total del correo está acotado (30 MB): el adjunto que lo pasa se ignora, no se materializa', async () => {
-    stub(() => new Response(new Uint8Array(11 * 1024 * 1024), { status: 200 }));
+    stub(() => ({ bytes: new Uint8Array(11 * 1024 * 1024) }));
     await POST(pedir(evento(adjuntos('1.zip', '2.zip', '3.zip', '4.zip'))));
     expect(recibidosPorIngesta).toHaveLength(2);
     expect(logger.warn).toHaveBeenCalledWith('correo_entrante.correo_gigante', expect.anything());
   });
 
   it('un fallo TRANSITORIO de la ingesta (base, visión) = 503 y el correo se libera para reintentar', async () => {
-    stub(() => new Response('<Comprobante/>', { status: 200 }));
+    stub(() => ({ cuerpo: '<Comprobante/>' }));
     caidasDeIngesta = 1;
     const r = await POST(pedir(evento()));
     expect(r.status).toBe(503);
@@ -310,17 +350,14 @@ describe('0530 — PDF y zip entran al buzón, con su propio tope', () => {
 describe('el tope de tamaño del adjunto (4 MB, el mismo del panel)', () => {
   it('un adjunto que DECLARA más del tope se ignora por tamaño y los demás siguen', async () => {
     // El corte por `content-length` declarado evita materializar el cuerpo.
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (String(url).includes('att_gordo')) return new Response(JSON.stringify({ download_url: 'https://x/gordo' }), { status: 200 });
-      if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
-      if (String(url).includes('/gordo')) {
-        return new Response('<Comprobante/>', {
-          status: 200,
-          headers: { 'content-length': String(5 * 1024 * 1024) },
-        });
+    stubHttp((url) => {
+      if (url.includes('att_gordo')) return { cuerpo: JSON.stringify({ download_url: 'https://x/gordo' }) };
+      if (url.includes('/attachments/')) return { cuerpo: JSON.stringify({ download_url: 'https://x/y' }) };
+      if (url.includes('/gordo')) {
+        return { cuerpo: '<Comprobante/>', headers: { 'content-length': String(5 * 1024 * 1024) } };
       }
-      return new Response('<Comprobante/>', { status: 200 });
-    }));
+      return { cuerpo: '<Comprobante/>' };
+    });
     const r = await POST(pedir(evento({
       attachments: [
         { id: 'att_gordo', filename: 'estado enorme.xml' },
@@ -339,12 +376,12 @@ describe('el tope de tamaño del adjunto (4 MB, el mismo del panel)', () => {
   });
 
   it('un chunked que no declara tamaño se corta por el largo real leído', async () => {
-    // Una transferencia chunked no trae content-length: el doble chequeo de
-    // `leerCuerpo` (api/v1/_escritura.ts) también mide lo que de verdad llegó.
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
-      return new Response('<Comprobante/>' + 'x'.repeat(4 * 1024 * 1024), { status: 200 });
-    }));
+    // Una transferencia chunked no trae content-length: `httpsPublico` corta la conexión en vuelo al pasarse
+    // del tope (igual que antes hacía el doble chequeo de `leerCuerpo`, api/v1/_escritura.ts).
+    stubHttp((url) => {
+      if (url.includes('/attachments/')) return { cuerpo: JSON.stringify({ download_url: 'https://x/y' }) };
+      return { cuerpo: '<Comprobante/>' + 'x'.repeat(4 * 1024 * 1024) };
+    });
     const r = await POST(pedir(evento()));
     expect(r.status).toBe(200);
     expect(await r.json()).toMatchObject({ guardadas: 0, ignoradas: 1 });
@@ -353,10 +390,10 @@ describe('el tope de tamaño del adjunto (4 MB, el mismo del panel)', () => {
 });
 
 describe('una descarga caída NO consume el correo (F6)', () => {
-  const fetchCaido = () => vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
-    return new Response('resend caído', { status: 500 });
-  }));
+  const fetchCaido = () => stubHttp((url) => {
+    if (url.includes('/attachments/')) return { cuerpo: JSON.stringify({ download_url: 'https://x/y' }) };
+    return { estado: 500, cuerpo: 'resend caído' };
+  });
 
   it('descarga caída → 503 y el claim de correo se libera', async () => {
     // Con la fila puesta, el reintento de Resend saldría "ya_procesado" sin
@@ -372,10 +409,10 @@ describe('una descarga caída NO consume el correo (F6)', () => {
     expect((await POST(pedir(evento()))).status).toBe(503);
     // El reintento de Resend, ya con la red viva: la fila quedó liberada, así
     // que el insert de idempotencia entra de nuevo y el CFDI se guarda.
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
-      return new Response('<Comprobante/>', { status: 200 });
-    }));
+    stubHttp((url) => {
+      if (url.includes('/attachments/')) return { cuerpo: JSON.stringify({ download_url: 'https://x/y' }) };
+      return { cuerpo: '<Comprobante/>' };
+    });
     const r = await POST(pedir(evento()));
     expect(r.status).toBe(200);
     expect(await r.json()).toMatchObject({ ok: true, guardadas: 1 });
@@ -383,10 +420,10 @@ describe('una descarga caída NO consume el correo (F6)', () => {
 
   it('contenido basura → 200 ignorado y el correo SÍ queda consumido', async () => {
     // Reintentar un XML que no es CFDI trae el mismo XML: permanente.
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
-      return new Response('<otraCosa/>', { status: 200 });
-    }));
+    stubHttp((url) => {
+      if (url.includes('/attachments/')) return { cuerpo: JSON.stringify({ download_url: 'https://x/y' }) };
+      return { cuerpo: '<otraCosa/>' };
+    });
     const r = await POST(pedir(evento()));
     expect(r.status).toBe(200);
     expect(await r.json()).toMatchObject({ guardadas: 0, ignoradas: 1 });
@@ -400,12 +437,12 @@ describe('una descarga caída NO consume el correo (F6)', () => {
     // `factura_proveedor` tiene unique(tenant_id, cfdi_uuid) (mig. 0091) y
     // `guardarFacturaProveedor` convierte ese choque en `duplicada`: en el
     // reintento los ya guardados rebotan sin segunda fila y los caídos entran.
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (String(url).includes('att_caido')) return new Response(JSON.stringify({ download_url: 'https://x/caido' }), { status: 200 });
-      if (String(url).includes('/attachments/')) return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
-      if (String(url).includes('/caido')) return new Response('resend caído', { status: 500 });
-      return new Response('<Comprobante/>', { status: 200 });
-    }));
+    stubHttp((url) => {
+      if (url.includes('att_caido')) return { cuerpo: JSON.stringify({ download_url: 'https://x/caido' }) };
+      if (url.includes('/attachments/')) return { cuerpo: JSON.stringify({ download_url: 'https://x/y' }) };
+      if (url.includes('/caido')) return { estado: 500, cuerpo: 'resend caído' };
+      return { cuerpo: '<Comprobante/>' };
+    });
     const r = await POST(pedir(evento({
       attachments: [
         { id: 'att_bueno', filename: 'a.xml' },
@@ -476,39 +513,42 @@ describe('el kill switch de agente:proveedores (0110) — Fase 1 del blueprint',
 // ═══════════════════════════════════════════════════════════════════════════
 // EL PRESUPUESTO DE TIEMPO DE LAS DESCARGAS (23-ago-2026)
 //
-// Los dos `fetch` a Resend no tenían timeout. Un proveedor que acepta la
-// conexión y CALLA dejaba la función esperando hasta que la mataba la
-// plataforma — y ahí está el daño real: al morir no corre el `delete` que
-// libera la fila de dedup, el correo queda marcado como procesado sin haberlo
-// sido, y el reintento de Resend sale por "ya_procesado". El CFDI se pierde
-// para siempre, en silencio.
+// Las dos peticiones a Resend (ahora por `httpsPublico`, antes `fetch`) no
+// tenían timeout. Un proveedor que acepta la conexión y CALLA dejaba la
+// función esperando hasta que la mataba la plataforma — y ahí está el daño
+// real: al morir no corre el `delete` que libera la fila de dedup, el correo
+// queda marcado como procesado sin haberlo sido, y el reintento de Resend sale
+// por "ya_procesado". El CFDI se pierde para siempre, en silencio.
 //
-// Con `AbortSignal.timeout` la descarga colgada se corta, cuenta como CAÍDA
-// (transitorio) y el correo sale por 503 con su fila liberada — o sea, vuelve
-// a la cola de Resend entero.
+// `httpsPublico` recibe un `timeoutMs` (el presupuesto que queda de la
+// corrida, `restanteMs()`) y es el propio `httpsPublico` quien corta la
+// conexión al vencer (ver `https_publico_tls.test.ts`); aquí solo se prueba
+// que la ruta SÍ pasa un presupuesto finito —no infinito— y que una descarga
+// que se interrumpe (red, timeout) no se lleva el CFDI por delante.
 // ═══════════════════════════════════════════════════════════════════════════
 describe('una descarga que se cuelga no se lleva el CFDI por delante', () => {
-  it('el fetch lleva AbortSignal: un proveedor que calla no bloquea la función', async () => {
-    let señalRecibida: AbortSignal | undefined;
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      if (String(url).includes('/attachments/')) {
-        señalRecibida = init?.signal ?? undefined;
-        return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
+  it('se pasa un presupuesto de tiempo finito (no infinito) a la descarga de metadatos de Resend', async () => {
+    let timeoutRecibido: number | undefined;
+    stubHttp((url, timeoutMs) => {
+      if (url.includes('/attachments/')) {
+        timeoutRecibido = timeoutMs;
+        return { cuerpo: JSON.stringify({ download_url: 'https://x/y' }) };
       }
-      return new Response('<Comprobante/>', { status: 200 });
-    }));
+      return { cuerpo: '<Comprobante/>' };
+    });
     await POST(pedir(evento()));
-    expect(señalRecibida).toBeInstanceOf(AbortSignal);
+    expect(timeoutRecibido).toBeGreaterThan(0);
+    expect(timeoutRecibido).toBeLessThanOrEqual(8_000);
   });
 
-  it('si la descarga se ABORTA, el correo NO queda consumido: 503', async () => {
-    // Se simula lo que hace `AbortSignal.timeout` al vencer.
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (String(url).includes('/attachments/')) {
-        return new Response(JSON.stringify({ download_url: 'https://x/y' }), { status: 200 });
+  it('si la descarga se INTERRUMPE (red, timeout), el correo NO queda consumido: 503', async () => {
+    // Simula lo que hace el timeout interno de `httpsPublico` al vencer.
+    stubHttp((url) => {
+      if (url.includes('/attachments/')) {
+        return { cuerpo: JSON.stringify({ download_url: 'https://x/y' }) };
       }
-      throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
-    }));
+      return { lanzar: true };
+    });
     const r = await POST(pedir(evento()));
     // 503 y no 200: Resend tiene que volver a entregarlo.
     expect(r.status).toBe(503);
