@@ -251,11 +251,15 @@ describe('reasignarOperador', () => {
     expect(eqIdPropio).toHaveBeenCalledWith('id', 'o-2');
     expect(eqTenantPropio).toHaveBeenCalledWith('tenant_id', 't-1');
     expect(from).toHaveBeenCalledWith('viaje');
+    // A33-05: la aceptación del chofer ANTERIOR se limpia en el MISMO update. Sin eso,
+    // `avisado_en = null` sobre un viaje ya aceptado rompe el CHECK `viaje_aceptado_requiere_aviso`
+    // (0058:40-41) y la reasignación entera se cae. Se limpia junto con `aceptado_origen`, igual
+    // que `retirar_voluntario` al devolver un viaje a «sin aceptar» (0800:91-93).
     // AUDITORÍA A8 ESCALACIÓN (ALTO, hallazgo 1): hay CAMBIO real de operador
     // (de 'o-1' a 'o-2'), así que el mismo UPDATE que mueve `operador_id`
     // resetea el reloj de aviso/escalación del chofer ANTERIOR — si no, el
     // nuevo chofer hereda el sello de alguien que ya ni tiene el viaje.
-    expect(update).toHaveBeenCalledWith({ operador_id: 'o-2', avisado_en: null, escalado_en: null, avisos_enviados: 0 });
+    expect(update).toHaveBeenCalledWith({ operador_id: 'o-2', avisado_en: null, escalado_en: null, avisos_enviados: 0, aceptado_en: null, aceptado_origen: null });
     expect(eqViajeUpdate).toHaveBeenCalledWith('id', 'v-1');
     expect(eqTenantUpdate).toHaveBeenCalledWith('tenant_id', 't-1');
   });
@@ -285,7 +289,7 @@ describe('reasignarOperador', () => {
       previoResult.mockResolvedValue({ data: { operador_id: 'o-1' }, error: null });
       const r = await reasignarOperador('t-1', 'v-1', 'o-2');
       expect(r.cambio).toBe(true);
-      expect(update).toHaveBeenCalledWith({ operador_id: 'o-2', avisado_en: null, escalado_en: null, avisos_enviados: 0 });
+      expect(update).toHaveBeenCalledWith({ operador_id: 'o-2', avisado_en: null, escalado_en: null, avisos_enviados: 0, aceptado_en: null, aceptado_origen: null });
     });
 
     it('PRIMERA asignación (sin chofer previo): no hay reloj que heredar, pero tampoco hace daño resetearlo — el payload no lleva los tres campos porque ya nacen en null/0', async () => {
@@ -294,7 +298,7 @@ describe('reasignarOperador', () => {
       // `cambio` es true (null !== 'o-2'), pero no había reloj corriendo — el
       // único contrato que importa es que NO deje un reloj ajeno puesto, y
       // aquí nunca lo hubo.
-      expect(update).toHaveBeenCalledWith({ operador_id: 'o-2', avisado_en: null, escalado_en: null, avisos_enviados: 0 });
+      expect(update).toHaveBeenCalledWith({ operador_id: 'o-2', avisado_en: null, escalado_en: null, avisos_enviados: 0, aceptado_en: null, aceptado_origen: null });
     });
 
     it('reasignar al MISMO operador (sin cambio real): NO toca el reloj — sigue corriendo para ese chofer', async () => {
