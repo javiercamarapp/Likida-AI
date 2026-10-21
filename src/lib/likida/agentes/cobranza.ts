@@ -14,6 +14,7 @@ import {
 import { ejecutarCobranzaGastos, resultadoGastoVacio, type ResultadoCobranzaGasto } from './cobranza_gasto';
 import { getPerfilCrudo } from '../repo';
 import { ventanaCobranzaDeclarada } from '../perfil/preguntas';
+import { estaApagado } from '../interruptores';
 
 // El motor PURO (config, ventana, tiers, mensaje) vive en cobranza_pura.ts
 // desde el 14-ago-2026 — la página del agente lo corre en el navegador para
@@ -238,6 +239,27 @@ export async function ejecutarCobranza(
   ahora: Date = new Date(),
   opts: { ignorarVentana?: boolean; venceEn?: number } = {},
 ): Promise<ResultadoCobranza> {
+  // ── EL KILL SWITCH GLOBAL (0110), ANTES que cualquier otra cosa ───────────
+  // AUDITORÍA ADVERSARIAL (21-oct-2026): `agente:cobranza` YA vive en el
+  // catálogo de interruptores.ts desde la 0110 y el cron de emergencias
+  // (api/cron/escalar/route.ts) lo pregunta antes de llamar a
+  // `ejecutarCobranzaGlobal` — pero ESTE motor, el que "Ejecutar ahora" del
+  // panel llama DIRECTO por tenant, nunca lo preguntaba: un incidente real
+  // (el agente portándose mal con un cliente en WhatsApp) que Javier apaga
+  // desde /admin/observabilidad o ⌘K seguía corriendo si alguien apretaba el
+  // botón a mano, porque `ejecutarCobranza` ignora `ignorarVentana` para la
+  // VENTANA pero nunca preguntaba por el freno de emergencia global.
+  // `config.activo` (abajo) es la pausa DE LA FLOTA; esto es el freno
+  // GLOBAL, y ninguno sustituye al otro — un agente apagado globalmente no
+  // corre ni a mano, igual que "pausado es pausado". Fail-closed: lo decide
+  // `estaApagado` (ver la cabecera de interruptores.ts).
+  if (await estaApagado('agente:cobranza')) {
+    logger.warn('agente_cobranza.apagado_global', { tenantId });
+    return {
+      revisados: 0, contactados: 0, sinTelefono: 0,
+      omitido: 'apagado por el interruptor global agente:cobranza', fallos: [], cortadosPorReloj: 0,
+    };
+  }
   const config = await leerConfigCobranza(tenantId);
   if (!config.activo) {
     return { revisados: 0, contactados: 0, sinTelefono: 0, omitido: 'el agente está pausado', fallos: [], cortadosPorReloj: 0 };
