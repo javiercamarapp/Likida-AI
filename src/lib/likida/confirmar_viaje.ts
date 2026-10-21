@@ -1,6 +1,9 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { decidirInicio, type EstadoInicio, type ViajeAsignado } from './inicio_viaje';
+import { armarInstrucciones, puertosAsignacionReales, SIN_DATOS } from './conductor/asignacion';
+import { preguntarGastosAlAceptar } from './conductor/gastos_etc';
+import { cargarViajeContexto, leerConfigConductor } from './conductor/repo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL PEGAMENTO ENTRE "SE LE AVISÓ" Y "DIJO QUE SÍ".
@@ -23,7 +26,64 @@ import { decidirInicio, type EstadoInicio, type ViajeAsignado } from './inicio_v
 // a propósito y aquí no se corrige. Arrancar el que no era mete los
 // comprobantes de una ruta en la liquidación de otra, y eso se descubre hasta
 // el cuadre, con el papel ya entregado.
+//
+// ── ACEPTAR POR TEXTO O POR FOTO TAMBIÉN MANDA LAS INSTRUCCIONES ─────────
+//
+// T-A5-47 (`conductor/asignacion.ts`) le puso instrucciones (caja, cita,
+// rutas) y la pregunta de gastos/ETC a la aceptación por BOTÓN, pero esos dos
+// caminos — éste y `aceptarPorActividad` — seguían marcando `aceptado_en` y
+// callándose: un chofer con la perilla `asignacionBotonesActiva` encendida que
+// ignora el botón y escribe "sí" (o manda su primer ticket) quedaba con el
+// viaje aceptado y SIN caja, SIN cita, SIN rutas y SIN la pregunta de gastos —
+// nada en el log lo delataba, porque "aceptado" sí quedó escrito.
+// `enviarInstruccionesSiBotonesActivo` (abajo) cierra ese hueco llamando a las
+// MISMAS `armarInstrucciones`/`preguntarGastosAlAceptar` que usa el botón, con
+// el MISMO guardia: solo corre cuando la llamada de ESTE turno fue la que
+// marcó `aceptado_en` (el `is('aceptado_en', null)` de `marcarAceptado`), así
+// que un segundo "sí" o una segunda foto del mismo viaje no reenvían nada.
+//
+// Sin la perilla, nada cambia: `armarInstrucciones` nació detrás de ella (fase
+// 2, apagada por omisión) y aquí sigue igual — no se le inventa una
+// instrucción a una flota que no pidió el flujo de botones.
 // ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Lo que hace `responderAsignacion` al aceptar por BOTÓN (`conductor/asignacion.ts`), para la aceptación por TEXTO
+ * o por FOTO: instrucciones + pregunta de gastos/ETC. Nunca lanza — el viaje YA quedó aceptado, así que esto fallar
+ * no le puede costar la confirmación al chofer. No hace nada si la flota no tiene `asignacionBotonesActiva` (el
+ * comportamiento de siempre) o si no se pudo leer el viaje o su teléfono.
+ */
+async function enviarInstruccionesSiBotonesActivo(tenantId: string, viajeId: string, ahora: Date): Promise<void> {
+  try {
+    const config = await leerConfigConductor(tenantId);
+    if (config.asignacionBotonesActiva !== true) return;
+
+    const v = await cargarViajeContexto(tenantId, viajeId);
+    if (!v) {
+      logger.warn('viaje.instrucciones_fuera_de_boton_sin_viaje', { viajeId });
+      return;
+    }
+    if (!v.operadorTelefono) {
+      logger.warn('viaje.instrucciones_fuera_de_boton_sin_telefono', { viajeId });
+      return;
+    }
+
+    const p = puertosAsignacionReales();
+    let datos = SIN_DATOS;
+    try {
+      datos = await p.datos(v);
+    } catch (err) {
+      // Sin caja/rutas no se retiene nada: las instrucciones salen diciendo «por confirmar» (mismo criterio que el botón).
+      logger.warn('conductor.asignacion_datos_fallo', { viaje: v.id, err: err instanceof Error ? err.message : String(err) });
+    }
+    const m = armarInstrucciones(v, datos, config.patioQueManda, ahora);
+    await p.enviar(v.operadorTelefono, m, 'conductor.asignacion_instrucciones', tenantId, ahora);
+    await p.convenio(tenantId, viajeId).catch((err) => logger.warn('conductor.asignacion_convenio_fallo', { viaje: viajeId, err: err instanceof Error ? err.message : String(err) }));
+    await preguntarGastosAlAceptar(p.enviar, config, v, v.operadorTelefono, ahora);
+  } catch (err) {
+    logger.warn('viaje.instrucciones_fuera_de_boton_fallo', { viajeId, err: err instanceof Error ? err.message : String(err) });
+  }
+}
 
 /** Los viajes que se le avisaron y todavía no acepta. */
 export async function viajesPorConfirmar(tenantId: string, operadorId: string): Promise<ViajeAsignado[]> {
@@ -125,7 +185,11 @@ export async function aceptarPorActividad(
 ): Promise<void> {
   try {
     const marcado = await marcarAceptado(tenantId, viajeId, operadorId);
-    if (marcado) logger.info('viaje.aceptado_por_actividad', { viajeId });
+    if (marcado) {
+      logger.info('viaje.aceptado_por_actividad', { viajeId });
+      // Mismo cierre del hueco que atenderConfirmacion, para quien acepta mandando la foto (ver el bloque de arriba).
+      await enviarInstruccionesSiBotonesActivo(tenantId, viajeId, new Date());
+    }
   } catch (e) {
     logger.warn('viaje.aceptar_por_actividad_falló', { viajeId, err: e instanceof Error ? e.message : String(e) });
   }
@@ -192,6 +256,8 @@ export async function atenderConfirmacion(args: {
     // el filtro de la base es lo que impide que se marque el viaje de otro.
     const ok = await marcarAceptado(args.tenantId, d.viajeElegido, args.operadorId);
     logger.info('viaje.confirmado_por_chofer', { viajeId: d.viajeElegido, primeraVez: ok });
+    // Mismo cierre del hueco que aceptarPorActividad, para quien acepta escribiendo "sí" / "va" (ver el bloque de arriba).
+    if (ok) await enviarInstruccionesSiBotonesActivo(args.tenantId, d.viajeElegido, new Date());
     return { mensaje: d.mensaje, viajeConfirmado: d.viajeElegido, estado: d.estado };
   }
 
