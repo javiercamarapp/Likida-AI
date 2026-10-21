@@ -9,6 +9,7 @@ import {
   CATEGORIAS_COBRO, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, type CategoriaCobro, type CandidatoCobro,
 } from '@/lib/likida/peajes/reglas_cobro';
 import { ETIQUETA_SENAL } from '@/lib/likida/peajes/cruces_atipicos';
+import { FormaRegistrarReclamo } from './forma-registrar-reclamo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA REVISIÓN DE COBROS EN PANTALLA — lo que finanzas hace primero con el archivo
@@ -371,18 +372,10 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
         </div>
       )}
       {desglose && conCandidatos.length > 0 && (
-        <form action={acciones.crearReclamo} className="flex items-end gap-2 flex-wrap mt-4">
-          <input type="hidden" name="desglose" value={desglose} />
-          <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Registrar reclamo de</span>
-            <select name="categoria" required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
-              {conCandidatos.map((c) => <option key={c} value={c}>{ETIQUETA_CATEGORIA_COBRO[c]} ({numero(revision?.revision.porCategoria[c].n ?? 0)})</option>)}
-            </select></label>
-          <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Enviado el (si ya lo enviaste)</span>
-            <input type="date" name="enviado_en" className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
-          <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Folio del portal (opc.)</span>
-            <input name="referencia" maxLength={120} className={`${CSS_INPUT} w-[150px] mt-0.5`} style={ESTILO_INPUT} /></label>
-          <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Registrar reclamo</button>
-        </form>
+        <FormaRegistrarReclamo
+          accion={acciones.crearReclamo} desglose={desglose}
+          opciones={conCandidatos.map((c) => ({ categoria: c, n: revision?.revision.porCategoria[c].n ?? 0 }))}
+        />
       )}
       {desglose && conCandidatos.length > 0 && (
         <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>El número de cruces, el importe y el cobro más antiguo se toman de los candidatos de la categoría, no de lo que escribas.</p>
