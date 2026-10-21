@@ -123,7 +123,7 @@ describe('el barrido', () => {
     evaluar.mockResolvedValue([DISPARO]);
     const r = await vigilarReglas(AHORA);
 
-    expect(r).toEqual({ reglas: 1, disparadas: 1, avisos: 1, fallos: 0, diferidas: 0 });
+    expect(r).toEqual({ reglas: 1, disparadas: 1, avisos: 1, fallos: 0, diferidas: 0, cortadasPorReloj: 0 });
     expect(enviarConFallback).toHaveBeenCalledWith('5210000000002', expect.objectContaining({
       texto: expect.stringContaining('$3,500.00'),
       plantilla: expect.objectContaining({ nombre: 'regla_aviso_v1', parametros: expect.arrayContaining(['1']) }),
@@ -152,7 +152,7 @@ describe('el barrido', () => {
     sellosDe.mockResolvedValue(new Set(['gasto|g-1|']));
     const r = await vigilarReglas(AHORA);
     expect(enviarConFallback).not.toHaveBeenCalled();
-    expect(r).toEqual({ reglas: 1, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0 });
+    expect(r).toEqual({ reglas: 1, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0, cortadasPorReloj: 0 });
     expect(anotarCorrida).toHaveBeenCalledWith('t-1', 'r-1', AHORA, 0);
   });
 
@@ -170,7 +170,7 @@ describe('el barrido', () => {
     const r = await vigilarReglas(AHORA);
     expect(sellosDe).not.toHaveBeenCalled();
     expect(enviarConFallback).not.toHaveBeenCalled();
-    expect(r).toEqual({ reglas: 1, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0 });
+    expect(r).toEqual({ reglas: 1, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0, cortadasPorReloj: 0 });
   });
 
   it('varios casos nuevos salen en UN mensaje, no en cinco WhatsApps', async () => {
@@ -247,7 +247,7 @@ describe('el reclamo antes de mandar (0660)', () => {
     expect(enviarConFallback).not.toHaveBeenCalled();
     expect(registrarAviso).not.toHaveBeenCalled();
     expect(anotarCorrida).toHaveBeenCalledWith('t-1', 'r-1', AHORA, 0);
-    expect(r).toEqual({ reglas: 1, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0 });
+    expect(r).toEqual({ reglas: 1, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0, cortadasPorReloj: 0 });
   });
 
   it('con un reclamo PARCIAL manda solo los casos que ganó', async () => {
@@ -365,7 +365,7 @@ describe('aislamiento entre reglas y entre flotas', () => {
       .mockRejectedValueOnce(new Error('relation does not exist'))
       .mockResolvedValueOnce([{ ...DISPARO, objeto: 'viaje', objetoId: 'v-9', clave: 'c' }]);
     const r = await vigilarReglas(AHORA);
-    expect(r).toEqual({ reglas: 2, disparadas: 1, avisos: 1, fallos: 1, diferidas: 0 });
+    expect(r).toEqual({ reglas: 2, disparadas: 1, avisos: 1, fallos: 1, diferidas: 0, cortadasPorReloj: 0 });
     expect(enviarConFallback).toHaveBeenCalledTimes(1);
     expect(logger.error).toHaveBeenCalledWith('reglas.regla_fallo', expect.objectContaining({ regla: 'r-1' }));
   });
@@ -377,7 +377,7 @@ describe('aislamiento entre reglas y entre flotas', () => {
 
   it('sin reglas activas la corrida es un cero honesto', async () => {
     const r = await vigilarReglas(AHORA);
-    expect(r).toEqual({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0 });
+    expect(r).toEqual({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0, cortadasPorReloj: 0 });
   });
 });
 
@@ -451,6 +451,14 @@ describe('límite de frecuencia por regla (0520)', () => {
     const r = await vigilarReglas(AHORA);
     expect(r).toMatchObject({ diferidas: 1, disparadas: 1 });
     expect(enviarConFallback).toHaveBeenCalledTimes(1);
+  });
+
+  it('ORQUESTADOR hallazgo #4: con el reloj YA vencido, corta ANTES de la primera regla y lo cuenta en cortadasPorReloj', async () => {
+    reglasActivas.mockResolvedValue([REGLA_DINERO, REGLA_OPERACION]);
+    const r = await vigilarReglas(AHORA, { venceEn: Date.now() - 1 });
+    expect(r.cortadasPorReloj).toBe(2);
+    expect(enviarConFallback).not.toHaveBeenCalled();
+    expect(r).toEqual({ reglas: 2, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0, cortadasPorReloj: 2 });
   });
 
   it('purga el historial viejo al final del barrido sin tumbarlo si falla', async () => {

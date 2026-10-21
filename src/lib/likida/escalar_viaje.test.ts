@@ -92,7 +92,7 @@ let resultadosUpdate: Array<{ data?: unknown; error: { message: string } | null 
 /** Cada método de la cadena de lectura, con sus argumentos. */
 const filtros: Array<[string, unknown[]]> = [];
 /** Cada update ejecutado: qué se escribió y con qué filtros. */
-const updates: Array<{ fila: Record<string, unknown>; por: Array<[string, unknown]> }> = [];
+const updates: Array<{ fila: Record<string, unknown>; por: Array<[string, unknown]>; is: Array<[string, unknown]> }> = [];
 /**
  * La estrategia por flota (B4): lo que `getConfig` lee de `tenant.config` vía
  * `.from('tenant').select('rfc, config').eq('id', t).maybeSingle()`. Sin
@@ -131,17 +131,19 @@ const from = vi.fn((tabla: string) => tabla === 'tenant' ? cadenaTenant() : ({
   // esperarlo: así la prueba ve TODOS los filtros con que se acotó, no el
   // primero. Un mock que se resolviera en el primer `.eq` haría pasar en verde
   // justo el descuido que hay que vigilar — un update sin acotar por tenant.
-  // `.is()` y `.select()` son parte del claim (`reclamarEscalacion`): se
-  // encadenan sin registrarse en `por` porque las pruebas de acotación por
-  // tenant solo verifican los `.eq()`.
+  // `.select()` es parte del claim (`reclamarEscalacion`) y no hace falta
+  // registrarlo. `.is()` SÍ se registra (en `is`, separado de `por`): es el
+  // hallazgo 3 (A8 Escalación) — el claim tiene que comprobar `escalado_en IS
+  // NULL` Y `aceptado_en IS NULL` en el MISMO UPDATE condicional.
   update: (fila: Record<string, unknown>) => {
     const por: Array<[string, unknown]> = [];
+    const esIs: Array<[string, unknown]> = [];
     const nodo: Record<string, unknown> = {};
     nodo.eq = (col: string, val: unknown) => { por.push([col, val]); return nodo; };
-    nodo.is = () => nodo;
+    nodo.is = (col: string, val: unknown) => { esIs.push([col, val]); return nodo; };
     nodo.select = () => nodo;
     nodo.then = (r: (v: unknown) => unknown) => {
-      updates.push({ fila, por });
+      updates.push({ fila, por, is: esIs });
       const res = resultadosUpdate[updates.length - 1] ?? resultadosUpdate.at(-1) ?? { error: null };
       return Promise.resolve(res).then(r);
     };
@@ -486,6 +488,42 @@ describe('escalarViajesSinAceptar', () => {
     expect(avisarAlChofer).not.toHaveBeenCalled();
     expect(sendText).not.toHaveBeenCalled();
     expect(sendTemplate).not.toHaveBeenCalled();
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AUDITORÍA A8 ESCALACIÓN (ALTO, hallazgo 3): el claim comprueba
+  // `aceptado_en IS NULL` en el MISMO UPDATE, no en una lectura separada.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('el claim comprueba `aceptado_en IS NULL` en el MISMO UPDATE condicional que `escalado_en`', async () => {
+    lectura = { data: [fila()], error: null };
+    await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+    expect(updates[0].is).toContainEqual(['escalado_en', null]);
+    expect(updates[0].is).toContainEqual(['aceptado_en', null]);
+  });
+
+  it('EL CHOFER ACEPTA JUSTO ANTES DEL CLAIM: la carrera la gana la aceptación y el viaje NO escala', async () => {
+    // `viajesSinAceptar` lo leyó con `aceptado_en IS NULL` (sigue viniendo en
+    // el lote), pero justo antes de que esta corrida llegara al claim, el
+    // chofer contestó "sí" y `marcarAceptado` (confirmar_viaje.ts) puso
+    // `aceptado_en` con su propio UPDATE condicional. Sin la comprobación del
+    // hallazgo 3, el claim de abajo ganaría igual —solo mira `escalado_en`— y
+    // el jefe recibiría un aviso de que el chofer no contestó cuando SÍ lo
+    // hizo. Con la condición en el mismo UPDATE, el claim pierde la carrera
+    // exactamente como pierde contra otra corrida que ya puso `escalado_en`.
+    lectura = { data: [fila()], error: null };
+    resultadosUpdate = [{ data: [], error: null }];
+
+    const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+
+    expect(r.escalados).toBe(0);
+    expect(r.fallos).toEqual([]);   // perder la carrera contra la aceptación no es un fallo
+    expect(avisarAlChofer).not.toHaveBeenCalled();
+    expect(sendText).not.toHaveBeenCalled();
+    expect(sendTemplate).not.toHaveBeenCalled();
+    // Y el UPDATE sí intentó la condición correcta — si no la llevara, este
+    // mock no tendría manera de distinguir la carrera perdida de un bug que
+    // simplemente dejó de reclamar nada.
+    expect(updates[0].is).toContainEqual(['aceptado_en', null]);
   });
 
   it('cada flota recibe el aviso en SU teléfono, y la que no tiene no le roba el de otra', async () => {

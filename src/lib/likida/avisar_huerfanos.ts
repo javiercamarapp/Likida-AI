@@ -47,6 +47,12 @@ export interface ResultadoAvisoHuerfanos {
   avisados: number;
   /** Errores al evaluar una flota concreta. Nunca tumba la corrida. */
   fallos: number;
+  /** Flotas que NO se evaluaron porque `venceEn` ya había vencido
+   *  (AUDITORÍA 28, hallazgos #2/#3 del Orquestador): era el ÚNICO de los
+   *  cuatro barridos horarios de `cron/escalar` que no revisaba el reloj
+   *  compartido dentro de su propio bucle antes de cada correo — `opts.venceEn`
+   *  solo cortaba la LECTURA (`traerTodo`), nunca el envío de abajo. */
+  cortadasPorReloj: number;
 }
 
 export async function avisarHuerfanosPendientes(
@@ -97,7 +103,20 @@ export async function avisarHuerfanosPendientes(
 
   let avisados = 0;
   let fallos = 0;
-  for (const tenantId of tenants) {
+  let cortadasPorReloj = 0;
+  const listaTenants = [...tenants];
+  for (let i = 0; i < listaTenants.length; i++) {
+    // AUDITORÍA 28 (hallazgos #2/#3): el MISMO `venceEn` que ya cortaba la
+    // LECTURA de arriba (vía `opts` en `traerTodo`) también tiene que cortar
+    // este bucle, que es el que manda correo de verdad — igual que
+    // `vigilarReglas` (`reglas/vigilante.ts`): corte limpio ANTES del
+    // próximo envío, nunca a medio envío.
+    if (opts.venceEn && Date.now() >= opts.venceEn) {
+      cortadasPorReloj = listaTenants.length - i;
+      logger.warn('huerfanos.corte_por_reloj', { pendientes: cortadasPorReloj });
+      break;
+    }
+    const tenantId = listaTenants[i];
     const c = porFlota.get(tenantId);
     const cuantos = c?.cuantos ?? 0;
     const diasDelMasViejo = c ? Math.max(0, Math.floor((ahora.getTime() - c.masViejoMs) / 86_400_000)) : null;
@@ -115,5 +134,5 @@ export async function avisarHuerfanosPendientes(
     }
   }
 
-  return { conPendientes: porFlota.size, avisados, fallos };
+  return { conPendientes: porFlota.size, avisados, fallos, cortadasPorReloj };
 }
