@@ -14,7 +14,7 @@ import {
 import { ejecutarCobranzaGastos, resultadoGastoVacio, type ResultadoCobranzaGasto } from './cobranza_gasto';
 import { getPerfilCrudo } from '../repo';
 import { ventanaCobranzaDeclarada } from '../perfil/preguntas';
-import { estaApagado } from '../interruptores';
+import { estaApagado, frenoTemporalActivo, marcarFrenoTemporal } from '../interruptores';
 
 // El motor PURO (config, ventana, tiers, mensaje) vive en cobranza_pura.ts
 // desde el 14-ago-2026 — la página del agente lo corre en el navegador para
@@ -228,6 +228,15 @@ export interface ResultadoCobranza {
  *  teléfonos malos, es la cuenta limitada o bloqueada. */
 export const TOPE_RECHAZOS_META_COBRANZA = 5;
 
+/** HALLAZGO 2 (auditoría adversarial, 21-oct-2026): cuánto dura el freno
+ *  AUTOMÁTICO (`freno_temporal`, 0854) que deja el rechazo masivo — el
+ *  tiempo que una invocación DISTINTA (otro tenant, u otro clic del botón
+ *  "Ejecutar ahora") se abstiene de volver a golpear el mismo número antes
+ *  de reintentar. Corto a propósito: es un freno de emergencia, no una
+ *  pausa — si Meta ya se recuperó, cinco minutos después vuelve a correr
+ *  solo, sin que nadie tenga que ir a /admin/observabilidad a soltarlo. */
+export const TTL_FRENO_RECHAZO_MASIVO_WHATSAPP_MS = 5 * 60_000;
+
 /**
  * Corre la cobranza de UNA flota. `ignorarVentana` es para el botón
  * "Ejecutar ahora" de la página del agente — el humano que aprieta ES la
@@ -258,6 +267,26 @@ export async function ejecutarCobranza(
     return {
       revisados: 0, contactados: 0, sinTelefono: 0,
       omitido: 'apagado por el interruptor global agente:cobranza', fallos: [], cortadosPorReloj: 0,
+    };
+  }
+
+  // ── EL FRENO DE RECHAZO MASIVO, ENTRE INVOCACIONES (HALLAZGO 2, 21-oct) ──
+  // `rechazosSeguidos` (abajo) es una variable LOCAL a ESTA llamada:
+  // `ejecutarCobranzaGlobal` la propaga bien ENTRE flotas porque las recorre
+  // en un bucle secuencial dentro de la MISMA invocación — pero el botón
+  // "Ejecutar ahora" del panel llama `ejecutarCobranza` directo por tenant,
+  // por fuera de ese bucle. Dos clics casi simultáneos (de flotas distintas,
+  // o del mismo superadmin insistiendo) podían acumular 5+5 rechazos contra
+  // el MISMO número de WhatsApp compartido antes de que cualquiera de los
+  // dos viera el freno del otro. `freno_temporal` (0854) es la marca
+  // compartida: la prende quien PRIMERO llega a `TOPE_RECHAZOS_META_COBRANZA`
+  // (abajo, y también en `ejecutarCobranzaGastos`) y la siguiente llamada —
+  // manual o del cron — la ve aquí, al inicio, antes de intentar nada.
+  if (await frenoTemporalActivo('cobranza:rechazo_masivo_whatsapp', ahora)) {
+    logger.warn('agente_cobranza.freno_rechazo_masivo_activo', { tenantId });
+    return {
+      revisados: 0, contactados: 0, sinTelefono: 0,
+      omitido: 'pausado por un rechazo masivo reciente de WhatsApp (freno automático, se suelta solo)', fallos: [], cortadosPorReloj: 0,
     };
   }
   const config = await leerConfigCobranza(tenantId);
@@ -459,6 +488,11 @@ export async function ejecutarCobranza(
           error: `WhatsApp rechazó ${rechazosSeguidos} cobranzas seguidas por un motivo reintentable (rate limit o bloqueo). La corrida se detuvo.`,
           codigo: 'wa_rechazo_masivo',
         });
+        // HALLAZGO 2: deja la marca compartida para que CUALQUIER otra
+        // invocación (manual o del cron) se abstenga, no solo las flotas que
+        // siga este mismo bucle — ver la cabecera del freno en interruptores.ts.
+        await marcarFrenoTemporal('cobranza:rechazo_masivo_whatsapp', TTL_FRENO_RECHAZO_MASIVO_WHATSAPP_MS,
+          `${rechazosSeguidos} rechazos reintentables seguidos (tenant ${tenantId})`, ahora);
         break;
       }
       continue;

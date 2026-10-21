@@ -458,7 +458,7 @@ export async function documentoCierreDeLaFoto(tenantId: string, viajeId: string,
 
 /**
  * Registra la foto ya subida: la clasifica (si `documentoId` viene nulo, sin categoría clara), evalúa legibilidad (T-A5-54; sin
- * `metadatos` —fase 1— siempre legible) y guarda. Devuelve el acuse al chofer; nunca lanza.
+ * `metadatos` —imagen que `sharp` no pudo leer, u otro llamador que no los manda— siempre legible) y guarda. Devuelve el acuse al chofer; nunca lanza.
  */
 export async function registrarFotoDocumentoCierre(e: {
   tenantId: string; hito: Pick<HitoFila, 'id' | 'viajeId' | 'ciclo'>; documentoId: string | null; pendientes: readonly DocumentoCierreFila[];

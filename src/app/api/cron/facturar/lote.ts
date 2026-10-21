@@ -109,8 +109,15 @@ interface Renglon extends ResultadoAutofactura {
  * NUNCA tumba la corrida: para cuando esto se llama, todo lo que había que
  * facturar ya se facturó y se guardó. Un WhatsApp que no salió es un aviso
  * perdido —y se dice en la respuesta—, no una corrida perdida.
+ *
+ * EXPORTADA para `agente-06-sin-adaptador.e2e.test.ts`: es el único punto
+ * donde el camino «sin adaptador» (0844) de `facturarAlVuelo` —que marca
+ * `avisoSinRobot` y `anotarBloqueo` trata como un bloqueo más, arriba— se
+ * convierte de verdad en el WhatsApp que recibe el encargado. Probarlo sin
+ * exportarla exigiría doblar medio `procesarLoteEnCola` (Playwright, datos
+ * fiscales, el navegador) para ejercitar dos líneas de cableado.
  */
-async function avisarALasPersonas(
+export async function avisarALasPersonas(
   bloqueadosPorFlota: Map<string, Array<{ gastoId: string; motivo: string }>>,
   hoy: string,
 ): Promise<Array<{ tenantId: string; enviado: boolean; tickets?: number; motivo?: string }>> {

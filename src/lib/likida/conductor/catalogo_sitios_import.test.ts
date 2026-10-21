@@ -43,6 +43,29 @@ describe('leerCatalogo', () => {
     expect(leerCatalogo('  ').errores[0]).toMatchObject({ linea: 0 });
     expect(leerCatalogo('[{').errores[0]).toMatchObject({ linea: 0 });
   });
+
+  // HALLAZGO 2 (auditoría A5): el importador solo rechazaba radios no numéricos; uno absurdamente chico
+  // (10 m) o grande (500,000 m) pasaba silencioso hasta que la base lo rechazara por la constraint
+  // `geocerca_radio_sano` (o la aceptara, si cayó dentro del rango pero sigue siendo absurdo).
+  it('un radio positivo fuera de [25, 100000] m se rechaza como error de validación, no pasa silencioso', () => {
+    const r = leerCatalogo('nombre,lat,lng,radio_m\nSitio chico,20,-100,10\nSitio enorme,20,-100,500000\nSitio sano,20,-100,150\n');
+    expect(r.filas.map((f) => f.linea)).toEqual([4]); // solo «Sitio sano» pasa
+    expect(r.errores.map((e) => e.linea)).toEqual([2, 3]);
+    expect(r.errores[0]!.mensaje).toMatch(/radio/i);
+    expect(r.errores[1]!.mensaje).toMatch(/radio/i);
+  });
+
+  it('radio ausente, 0 o negativo NO es error (significa «sin declarar»: usa el default más adelante)', () => {
+    const r = leerCatalogo('nombre,lat,lng,radio_m\nA,20,-100,\nB,20,-100,0\nC,20,-100,-5\n');
+    expect(r.errores).toEqual([]);
+    expect(r.filas.map((f) => f.radio_m)).toEqual([null, 0, -5]);
+  });
+
+  it('un radio en el límite exacto (25 o 100,000) se acepta', () => {
+    const r = leerCatalogo('nombre,lat,lng,radio_m\nMin,20,-100,25\nMax,20,-100,100000\n');
+    expect(r.errores).toEqual([]);
+    expect(r.filas.map((f) => f.radio_m)).toEqual([25, 100000]);
+  });
 });
 
 describe('motivosCoordenadas', () => {
