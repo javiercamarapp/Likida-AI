@@ -189,6 +189,7 @@ export type EstadoRenglon = { estado: Estado; etiqueta: string; validado?: boole
  */
 const ETIQUETA_CAPTURA: Record<string, string> = {
   duplicado: 'Duplicado',
+  posible_duplicado_sin_folio: 'Posible duplicado',
   monto_invalido: 'Monto inválido',
   comprobante_no_fiscal: 'No es comprobante fiscal',
 };
