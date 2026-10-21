@@ -6,6 +6,7 @@ import {
 } from './servicio';
 import { escenario, RepoEnMemoria } from './repo.fixture';
 import { estatus, AHORA, T1, T2, CLIENTE_A, CLIENTE_A2, CLIENTE_B, VIAJE_1, VIAJE_2, VIAJE_AJENO } from './datos.fixture';
+import { evaluarEscalamiento } from './escalamiento';
 import type { DepsVigia } from './puertos';
 import type { EntradaEnvioCliente, ResultadoEnvioCliente } from './enviar';
 
@@ -594,6 +595,28 @@ describe('toma de control humana', () => {
     expect((await cerrarConversacion({ tenantId: T1, userId: 'u' }, conv.id, deps)).ok).toBe(true);
     expect(repo.conversaciones.get(conv.id)!.estado).toBe('cerrada');
     expect((await tomarConversacion({ tenantId: T1, userId: 'u' }, conv.id, deps)).ok).toBe(false);
+  });
+
+  it('«Yo me encargo» → «Devolver al Vigía» sin que nadie respondiera: limpia atendidaEn y el nivel 1 de la escalera vuelve a poder dispararse', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus());
+    const { deps } = armar(repo);
+    await atenderMensajeCliente(msg('¿dónde va mi viaje?'), deps);
+    const conv = [...repo.conversaciones.values()][0];
+
+    await tomarConversacion({ tenantId: T1, userId: 'u-gerente' }, conv.id, deps);
+    expect(repo.conversaciones.get(conv.id)!.atendidaEn).not.toBeNull();
+
+    await devolverConversacion({ tenantId: T1, userId: 'u-gerente' }, conv.id, deps);
+    const despues = repo.conversaciones.get(conv.id)!;
+    expect(despues).toMatchObject({ control: 'agente', tomadaPor: null, atendidaEn: null });
+
+    // Sin el fix, atendidaEn seguía puesta y evaluarEscalamiento bloqueaba el nivel 1 (escalamiento.ts:135) aunque el
+    // cliente llevara más del SLA esperando y nadie le hubiera respondido realmente.
+    const config = await repo.config(T1);
+    const ahoraMs = Date.parse(despues.sinRespuestaDesde!) + config.slaRespuestaMin * 60_000;
+    const accion = evaluarEscalamiento({ conversacion: { ...despues, id: conv.id }, config, ahoraMs });
+    expect(accion).toMatchObject({ nivel: 1, motivo: 'sin_respuesta' });
   });
 });
 
