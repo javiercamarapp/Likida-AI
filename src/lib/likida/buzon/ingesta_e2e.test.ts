@@ -69,8 +69,8 @@ function mundo(opciones: { textosPdf?: Record<string, string>; visionConfianza?:
       },
       completarFacturaConXml: async (_t, uuid) => {
         const f = facturas.find((x) => x.uuid === uuid.toLowerCase());
-        if (!f || f.xml) return false;
-        f.xml = true; f.revision = false; f.fuente = 'xml'; return true;
+        if (!f || f.xml) return 'sin_cambio';
+        f.xml = true; f.revision = false; f.fuente = 'xml'; return 'completada';
       },
       guardarFacturaDePdf: async (_t, d, _rfc, o) => {
         if (facturas.some((x) => x.uuid === d.uuid.toLowerCase())) return { ok: false, motivo: 'duplicada' };
