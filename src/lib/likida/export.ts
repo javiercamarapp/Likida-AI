@@ -35,9 +35,32 @@ export function fechaIsoMx(iso?: string | null): string {
   return hoyMx(d);
 }
 
+/**
+ * AUDITORÍA ADVERSARIAL ALTO #1 — INYECCIÓN DE FÓRMULAS CSV (CWE-1236, OWASP).
+ *
+ * `toCsv` es el serializador COMPARTIDO de todos los export (facturas de
+ * proveedor, liquidaciones, bitácora de peajes del conector TMS, la entrega
+ * automática al contador…) y varias de esas filas traen texto libre que viene
+ * de un CFDI ajeno llegado por correo NO autenticado (solo protegido por el
+ * token del buzón): `Concepto/@Descripcion`, `Emisor/@Rfc`, `Receptor/@Rfc`
+ * (`proveedores.ts: leerDescripcionPrimerConcepto`). Si esa celda empieza con
+ * `=`, `+`, `-`, `@`, tabulador o retorno de carro, Excel/Sheets la evalúa como
+ * FÓRMULA al abrir el archivo (`=HYPERLINK("http://...")`, `=cmd|'/c calc'!A1`)
+ * — quien manda el correo controla una fórmula que corre en la máquina de quien
+ * importa el CSV al ERP.
+ *
+ * Se neutraliza aquí, en el ÚNICO punto de serialización, para cubrir CUALQUIER
+ * campo libre de CUALQUIER export que use `toCsv` — no solo los tres campos de
+ * la auditoría — anteponiendo `'`: el patrón estándar (mismo que ya usan
+ * `export_configurable.ts.celda` y `liquidacion_externa/csv.ts.celdaTexto` para
+ * sus propios exports). Un `number` NUNCA se toca: un total negativo legítimo
+ * (una nota de crédito) sigue siendo número, no texto "protegido" — por eso el
+ * chequeo mira el TIPO original de `v`, antes de convertirlo a string.
+ */
 function csvCell(v: unknown): string {
   const s = v == null ? '' : String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  const protegido = typeof v !== 'number' && /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return /[",\n]/.test(protegido) ? `"${protegido.replace(/"/g, '""')}"` : protegido;
 }
 
 export function toCsv<T extends object>(rows: T[], headers?: Array<keyof T>): string {
