@@ -141,6 +141,12 @@ export const RUTA_DE_DIFERENCIA: Record<TipoDiferencia, RutaDeAviso> = {
   // jefe es exactamente esa intervención. Mandarla al panel la volvería un
   // letrero que nadie tiene que atender.
   oposicion_titular: 'decision',
+  // A DIFERENCIA de `duplicado` (abajo, 'panel'): ahí la máquina YA resolvió
+  // cuál es copia con una llave dura (UUID/folio) y excluyó el sobrante. Aquí
+  // NO hay llave dura —el patrón es solo concepto+monto+emisor+día— así que
+  // nadie resolvió nada: el jefe tiene que mirar los comprobantes y decidir
+  // si es el mismo gasto cobrado dos veces o dos gastos distintos.
+  posible_duplicado_sin_folio: 'decision',
   diesel_desviacion: 'decision',       // consumo fuera de rango: puede ser robo
   tarjeta_no_empresa: 'decision',      // la flota DECLARÓ que la tarjeta no es suya (o que reembolsa al chofer): el estímulo no se acredita y lo confirma el jefe o el contador
   // E1-B (M5): mientras la causa sea solo «no ha contestado», el jefe NO puede

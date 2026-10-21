@@ -19,6 +19,7 @@ export const ROTULO_DIFERENCIA: Record<TipoDiferencia, string> = {
   sobre_politica: 'Sobre política',
   sin_comprobante: 'Sin comprobante',
   duplicado: 'Duplicado',
+  posible_duplicado_sin_folio: 'Posible duplicado (sin folio)',
   sin_cfdi: 'Sin CFDI',
   anticipo: 'Diferencia contra el anticipo',
   ocr_baja_confianza: 'Lectura dudosa (OCR)',

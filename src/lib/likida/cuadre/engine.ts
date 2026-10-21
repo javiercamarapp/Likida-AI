@@ -442,7 +442,7 @@ export const SIN_ESTIMULO: TipoDiferencia[] = [...SIN_IVA_ACREDITABLE, 'combusti
  * en el renglón de deducibilidad, ver `liquidacion/deducibilidad.ts`— pero ya
  * no puede bajar un estatus que nunca podría volver a subir.
  */
-export const REVISAR_OPERATIVO: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'monto_invalido', 'complemento_no_verificable', 'efectivo_sobre_15', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'iva_mes_del_pago', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'tarjeta_no_empresa', 'tarjeta_sin_declarar', 'oposicion_titular'];
+export const REVISAR_OPERATIVO: TipoDiferencia[] = ['ocr_baja_confianza', 'sin_cfdi', 'monto_invalido', 'complemento_no_verificable', 'efectivo_sobre_15', 'viatico_excede_fiscal', 'factura_por_vencer', 'alimentacion_sin_soporte', 'alimentacion_transporte_sin_tarjeta_credito', 'viatico_rfc_operador', 'monto_discrepante', 'monto_implausible', 'moneda_extranjera', 'texto_sospechoso', 'fecha_sospechosa', 'iva_mes_del_pago', 'folio_verificar', 'comprobante_no_fiscal', 'diesel_desviacion', 'tarjeta_no_empresa', 'tarjeta_sin_declarar', 'oposicion_titular', 'posible_duplicado_sin_folio'];
 
 /**
  * Lo que baja una liquidación a «Por revisar». DERIVADA, no copiada.
@@ -673,6 +673,49 @@ export function copiasDeComprobante(gastos: Gasto[]): Map<string, string> {
     }
   }
   return originalDe;
+}
+
+/**
+ * Grupos de gastos que PARECEN el mismo comprobante repetido cuando ni el
+ * folio ni el UUID del CFDI dan una llave dura para saberlo.
+ *
+ * AUDITORÍA ADVERSARIAL (21-oct-2026, verificado con prueba real): un ticket
+ * borroso, un folio tapado, o cualquier comprobante informal que no imprime
+ * folio, nunca entra a `vistoFolio`/`vistoUuid` de `copiasDeComprobante` —esa
+ * función solo agrupa por `cfdiUuid` o por `concepto|folioNorm|monto|emisor`—
+ * así que podía repetirse cualquier número de veces sin que el motor lo
+ * notara nunca, sin importar la confianza del OCR con la que se leyó el
+ * monto. El operador podía cobrar el mismo gasto dos o más veces.
+ *
+ * ESTO NO ES `copiasDeComprobante`. Esa función tiene una llave DURA (UUID o
+ * folio) y por eso puede EXCLUIR la copia del total con certeza. Aquí la
+ * llave es `concepto|monto|emisor` a secas — compatible con dos comprobantes
+ * DISTINTOS y legítimos (dos cargadas de $800 de diésel en la misma
+ * gasolinera, el mismo día) — así que esta función NUNCA decide cuál (si
+ * alguno) es copia ni excluye nada: solo declara el PATRÓN para que una
+ * persona lo mire, el mismo principio que ya aplica `ocr_baja_confianza`.
+ *
+ * LA VENTANA ES EL MISMO DÍA, por el mismo criterio con el que
+ * `tope_alimentacion.ts` agrupa el tope diario: un solo motor no necesita dos
+ * ventanas distintas para la misma pregunta ("¿qué tan cerca en el tiempo").
+ * SIN FECHA NO SE AGRUPA —igual que allá—: no saber el día no permite
+ * afirmar "cercano", y afirmarlo sería la cifra inventada que este producto
+ * no puede permitirse. Un comprobante sin fecha cae en su propio grupo de un
+ * solo elemento y por lo tanto nunca produce una sospecha por esta vía.
+ */
+export function gruposSospechososSinFolio(gastos: Gasto[]): Gasto[][] {
+  const porLlave = new Map<string, Gasto[]>();
+  for (const g of gastos) {
+    // El folio o el UUID ya le dan a `copiasDeComprobante` una llave dura:
+    // esto es solo para lo que esa función no puede ver.
+    if (g.folio || g.cfdiUuid) continue;
+    if (!(g.monto > 0) || !g.fecha) continue;
+    const key = `${strip_accents(g.concepto.toLowerCase())}|${g.monto}|${g.rfcEmisor ?? ''}|${g.fecha.slice(0, 10)}`;
+    const lista = porLlave.get(key) ?? [];
+    lista.push(g);
+    porLlave.set(key, lista);
+  }
+  return [...porLlave.values()].filter((grupo) => grupo.length >= 2);
 }
 
 /**
@@ -1356,6 +1399,27 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       monto: round2(copias.reduce((a, c) => a + (c.monto > 0 ? c.monto : 0), 0)),
       nota: `Comprobante duplicado: ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)}${g.folio ? ` folio ${sanitizarFolio(g.folio)}` : ''} por ${mxn(g.monto)} aparece ${veces} veces (${copias.length === 1 ? 'una excluida' : `${copias.length} excluidas`} del total).`,
       gastoId: originalId,
+    });
+  }
+
+  // 2b) Patrón sospechoso SIN folio ni UUID (ver `gruposSospechososSinFolio`).
+  //
+  // A DIFERENCIA DEL PASO 2: aquí no hay llave dura, así que NO se excluye
+  // nada del total ni se decide cuál es "el original" — solo se declara la
+  // sospecha y se manda a revisión humana (entra a `REVISAR_OPERATIVO`).
+  // Corre SIEMPRE, sin importar `ocrConfianza`: el problema es la AUSENCIA de
+  // folio/UUID, no qué tan bien se leyó el monto.
+  for (const grupo of gruposSospechososSinFolio(input.gastos)) {
+    const g = grupo[0];
+    diferencias.push({
+      tipo: 'posible_duplicado_sin_folio',
+      concepto: g.concepto,
+      // Impacto en pesos: 0. Afirmar cuánto se duplicó exigiría decidir cuál
+      // de los `grupo.length` comprobantes es la copia, y eso es justo lo
+      // que esta función no puede saber.
+      monto: 0,
+      nota: `${grupo.length} comprobantes de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} por ${mxn(g.monto)}${g.rfcEmisor ? ` del mismo emisor (${g.rfcEmisor})` : ''} el ${g.fecha}, sin folio ni UUID de CFDI: no se puede confirmar si es el mismo comprobante repetido o gastos distintos — revísalo antes de reembolsarlo.`,
+      gastoId: g.id,
     });
   }
 
