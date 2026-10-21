@@ -48,6 +48,11 @@ export interface ResultadoVigilancia {
   /** Reglas con casos nuevos cuyo aviso se POSPUSO por su límite de frecuencia
    *  (no se sellaron: salen en el siguiente aviso permitido). */
   diferidas: number;
+  /** Reglas que NO llegaron a correr porque `venceEn` ya había vencido
+   *  (AUDITORÍA 28, hallazgo #4 del Orquestador): sin este número, la
+   *  alerta de «tres cortes seguidos» de `cron/escalar` no veía nunca un
+   *  corte de este barrido, aunque el `break` de abajo ya lo cortara. */
+  cortadasPorReloj: number;
 }
 
 /** Cuántas filas caben en un aviso antes de resumir. Diez líneas se leen en
@@ -244,9 +249,15 @@ export async function vigilarReglas(
 ): Promise<ResultadoVigilancia> {
   // Las flotas con perfil (0770) no vigilan reglas: es un módulo en stand-by.
   const reglas = (await reglasActivas()).filter((r) => !opts.excluirTenants?.has(r.tenantId));
-  const r: ResultadoVigilancia = { reglas: reglas.length, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0 };
+  const r: ResultadoVigilancia = { reglas: reglas.length, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0, cortadasPorReloj: 0 };
+  let intentadas = 0;
   for (const regla of reglas) {
-    if (opts.venceEn && Date.now() >= opts.venceEn) break;
+    if (opts.venceEn && Date.now() >= opts.venceEn) {
+      r.cortadasPorReloj = reglas.length - intentadas;
+      logger.warn('reglas.corte_por_reloj', { pendientes: r.cortadasPorReloj });
+      break;
+    }
+    intentadas++;
     try {
       const { avisados, diferida } = await correrRegla(regla, ahora);
       if (avisados > 0) {

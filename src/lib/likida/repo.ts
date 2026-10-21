@@ -363,14 +363,30 @@ export async function reasignarOperador(tenantId: string, viajeId: string, opera
   const previo = await acotada(supabaseAdmin().from('viaje').select('operador_id').eq('id', viajeId).eq('tenant_id', tenantId).maybeSingle(), 'reasignarOperador.previo');
   const operadorAnteriorId = typeof (previo.data as { operador_id?: unknown } | null)?.operador_id === 'string'
     ? String((previo.data as { operador_id: string }).operador_id) : null;
+  const cambio = operadorAnteriorId !== operadorId;
+
+  // AUDITORÍA A8 ESCALACIÓN (ALTO, hallazgo 1): `avisado_en`/`escalado_en`/`avisos_enviados`
+  // son el reloj del CHOFER, no del viaje. `avisarAlChofer()` solo marca `avisado_en` la
+  // PRIMERA vez (`.is('avisado_en', null)`, operacion.ts) — sin resetear aquí, un viaje
+  // reasignado a otro chofer hereda el sello del ANTERIOR: `viajesSinAceptar()` ya no lo ve
+  // (si el chofer viejo ya fue escalado, `escalado_en` sigue puesto y el nuevo chofer nunca
+  // recibe el recordatorio de las 5 h) o escala con el instante en que se avisó al chofer
+  // viejo, no al nuevo. Solo se resetea en un cambio REAL de operador — reasignar al MISMO
+  // chofer (clic repetido, re-submit) no debe reiniciar un reloj que sigue corriendo para él.
+  const payload: Record<string, unknown> = { operador_id: operadorId };
+  if (cambio) {
+    payload.avisado_en = null;
+    payload.escalado_en = null;
+    payload.avisos_enviados = 0;
+  }
 
   const { error } = await acotada(supabaseAdmin()
     .from('viaje')
-    .update({ operador_id: operadorId })
+    .update(payload)
     .eq('id', viajeId)
     .eq('tenant_id', tenantId), 'reasignarOperador');
   if (error) throw new Error(`reasignarOperador: ${error.message}`);
-  return { cambio: operadorAnteriorId !== operadorId, operadorAnteriorId };
+  return { cambio, operadorAnteriorId };
 }
 
 export async function addGasto(tenantId: string, viajeId: string, g: Gasto): Promise<void> {

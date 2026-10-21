@@ -174,6 +174,52 @@ describe('aislamiento por tenant', () => {
   });
 });
 
+describe('AUDITORÍA 28 (hallazgos #2/#3): el reloj compartido corta el ENVÍO, no solo la lectura', () => {
+  it('BE-7: si el reloj vence DESPUÉS de leer pero ANTES de la segunda flota, se corta ahí — igual que `vigilarReglas`', async () => {
+    // Antes de este fix, `opts.venceEn` solo llegaba a `traerTodo` (la
+    // LECTURA de arriba): una vez pasada esa lectura, el `for` de abajo —el
+    // que manda el correo de verdad— corría completo sin volver a mirar el
+    // reloj. Aquí la lectura pasa con el reloj todavía vivo, y es `avisar()`
+    // —el envío de la PRIMERA flota— el que lo agota, para probar que el
+    // bucle lo nota ANTES de la segunda.
+    pendientes = [
+      { tenant_id: 't-1', creado_en: diasAntes(1) },
+      { tenant_id: 't-2', creado_en: diasAntes(1) },
+    ];
+    vi.useFakeTimers();
+    try {
+      const inicio = new Date('2026-10-19T12:00:00.000Z');
+      vi.setSystemTime(inicio);
+      const venceEn = inicio.getTime() + 1_000;
+      avisar.mockImplementationOnce(async () => {
+        vi.setSystemTime(new Date(venceEn + 1)); // el envío a t-1 "tardó" más que el reloj
+        return { avisado: true, porque: 'ok', destinatarios: 1, magnitud: 1 };
+      });
+
+      const r = await avisarHuerfanosPendientes(AHORA, { venceEn });
+
+      expect(avisar).toHaveBeenCalledTimes(1);
+      expect(avisar.mock.calls[0][0]).toBe('t-1');
+      expect(r.avisados).toBe(1);
+      expect(r.cortadasPorReloj).toBe(1); // t-2 se queda sin evaluar
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('con el reloj lejos de vencer, nada se corta (el camino de siempre no se rompe)', async () => {
+    pendientes = [
+      { tenant_id: 't-1', creado_en: diasAntes(1) },
+      { tenant_id: 't-2', creado_en: diasAntes(1) },
+    ];
+
+    const r = await avisarHuerfanosPendientes(AHORA, { venceEn: Date.now() + 60_000 });
+
+    expect(avisar).toHaveBeenCalledTimes(2);
+    expect(r.cortadasPorReloj).toBe(0);
+  });
+});
+
 describe('un fallo al evaluar una flota no tumba a las demás ni la corrida', () => {
   it('se cuenta en `fallos`, se grita en el log, y las otras flotas SÍ reciben su aviso', async () => {
     pendientes = [

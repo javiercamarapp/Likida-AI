@@ -89,6 +89,7 @@ export const SIN_NORMA: Partial<Record<TipoDiferencia, string>> = {
   sobre_politica: 'Tope de la propia flota, no de la ley.',
   sin_comprobante: 'Falta operativa: no llegó la foto.',
   duplicado: 'Calidad del dato: el mismo comprobante dos veces.',
+  posible_duplicado_sin_folio: 'Calidad del dato: sospecha de copia sin folio/UUID para confirmarla — no se afirma cuál es la repetida.',
   anticipo: 'Aritmética del viaje, no una regla fiscal.',
   ocr_baja_confianza: 'Calidad de la lectura.',
   // Un juicio sobre qué es plausible en una ruta, no una regla. La ley no dice
