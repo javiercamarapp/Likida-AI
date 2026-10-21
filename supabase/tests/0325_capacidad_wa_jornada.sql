@@ -751,9 +751,15 @@ insert into public.operador(id, tenant_id, nombre, telefono, aviso_privacidad_en
   ('32510000-0000-4000-8000-000000000102', '32500000-0000-4000-8000-000000000100', 'Op compartido B', '523250000102', '2026-01-01');
 insert into public.unidad(id, tenant_id, numero_economico) values
   ('32530000-0000-4000-8000-000000000101', '32500000-0000-4000-8000-000000000100', 'COMP-0325');
-insert into public.viaje(id, tenant_id, operador_id, unidad_id, avisado_en, aceptado_en) values
-  ('32520000-0000-4000-8000-000000000101', '32500000-0000-4000-8000-000000000100', '32510000-0000-4000-8000-000000000101', '32530000-0000-4000-8000-000000000101', '2026-09-02 13:59+00', '2026-09-02 14:00+00'),
-  ('32520000-0000-4000-8000-000000000102', '32500000-0000-4000-8000-000000000100', '32510000-0000-4000-8000-000000000102', '32530000-0000-4000-8000-000000000101', '2026-09-02 21:59+00', '2026-09-02 22:00+00');
+-- El primer viaje se marca 'liquidado': desde la 0851 (posterior a esta prueba)
+-- una misma unidad no puede tener dos viajes 'abierto'/'en_cuadre' a la vez
+-- (uq_viaje_abierto_por_unidad). El estatus de liquidación no excluye el
+-- aceptado_en de ninguno de los dos como fuente para el derivador de jornada,
+-- así que la ambigüedad GPS entre operadores que este bloque prueba se
+-- conserva intacta.
+insert into public.viaje(id, tenant_id, operador_id, unidad_id, avisado_en, aceptado_en, estatus) values
+  ('32520000-0000-4000-8000-000000000101', '32500000-0000-4000-8000-000000000100', '32510000-0000-4000-8000-000000000101', '32530000-0000-4000-8000-000000000101', '2026-09-02 13:59+00', '2026-09-02 14:00+00', 'liquidado'),
+  ('32520000-0000-4000-8000-000000000102', '32500000-0000-4000-8000-000000000100', '32510000-0000-4000-8000-000000000102', '32530000-0000-4000-8000-000000000101', '2026-09-02 21:59+00', '2026-09-02 22:00+00', 'abierto');
 insert into public.posicion(tenant_id, unidad_id, lat, lng, medida_en, proveedor) values
   ('32500000-0000-4000-8000-000000000100', '32530000-0000-4000-8000-000000000101', 20, -89, '2026-09-02 12:00+00', '0325-compartido'),
   ('32500000-0000-4000-8000-000000000100', '32530000-0000-4000-8000-000000000101', 20, -89, '2026-09-03 03:00+00', '0325-compartido');

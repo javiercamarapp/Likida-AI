@@ -181,6 +181,10 @@ jobs:
           PGUSER=postgres bash supabase/tests/0335_db_retencion_r3_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0338_db_retencion_r5_red.sql
           PGUSER=postgres bash supabase/tests/0338_db_retencion_r5_concurrencia.sh localhost 5432 postgres
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0325_capacidad_wa_jornada.sql
+          PGUSER=postgres bash supabase/tests/0325_jornada_concurrencia.sh localhost 5432 postgres
+          PGUSER=postgres bash supabase/tests/0325_upgrade_forward_only.sh localhost 5432 postgres
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0327_jornada_r2_regresiones.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0339_jornada_integridad_red.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0340_arco_alcance.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0341_gps_alerta_minima.sql
