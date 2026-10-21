@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { crearDbFalsa, type DbFalsa, type Fila } from './db_falsa.test.util';
+import { crearDbFalsa, type DbFalsa, type Fila, type RpcResultado } from './db_falsa.test.util';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // T-A2-13 — el detector de cruces atípicos dentro de la ingesta, con datos
@@ -12,7 +12,7 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 const corridas: Array<{ estado: string; error?: string }> = [];
 vi.mock('../agentes/corridas', () => ({ registrarCorrida: async (_t: string, _a: string, c: { estado: string; error?: string }) => { corridas.push(c); } }));
 
-const { procesarColaPeajes, recibirArchivoPeaje } = await import('./ingesta');
+const { procesarColaPeajes, recibirArchivoPeaje, MAX_PENDIENTES_POR_FLOTA } = await import('./ingesta');
 const { revisarAtipicosDeDesglose } = await import('./revision_atipicos');
 
 const T = '11111111-1111-4111-8111-111111111111';
@@ -40,6 +40,24 @@ function claimFalso(args: Record<string, unknown>): Fila[] {
   return els.map((a) => ({ id: a.id, tenant_id: a.tenant_id, nombre: a.nombre, proveedor: a.proveedor, intentos: a.intentos, reclamo: a.reclamo, desglose_id: null }));
 }
 
+/** `peaje_archivo_encolar` (0850) en memoria — mismo contrato que en cola.test.ts: dedup por huella + tope por flota. */
+function encolarFalso(args: Record<string, unknown>): RpcResultado {
+  const tenantId = args.p_tenant as string;
+  const huella = args.p_huella as string;
+  const existente = db.tablas.peaje_ingesta_archivo.find((a) => a.tenant_id === tenantId && a.huella === huella);
+  if (existente) return [{ id: existente.id, estado: existente.estado, duplicado: true }];
+  const pendientes = db.tablas.peaje_ingesta_archivo
+    .filter((a) => a.tenant_id === tenantId && ['pendiente', 'procesando'].includes(a.estado as string)).length;
+  if (pendientes >= MAX_PENDIENTES_POR_FLOTA) return { error: { message: `tope de ${MAX_PENDIENTES_POR_FLOTA} archivos pendientes por flota`, code: '54000' } };
+  const id = `enc-${Math.random().toString(36).slice(2)}`;
+  db.tablas.peaje_ingesta_archivo.push({
+    id, tenant_id: tenantId, huella, nombre: args.p_nombre, proveedor: args.p_proveedor ?? null, origen: args.p_origen,
+    bytes: args.p_bytes, contenido: args.p_contenido, estado: 'pendiente', intentos: 0, proximo_intento_en: new Date().toISOString(),
+    reclamo: null, reclamado_hasta: null, desglose_id: null, ultimo_error: null,
+  });
+  return [{ id, estado: 'pendiente', duplicado: false }];
+}
+
 async function ingerir(nombre: string, texto: string) {
   const r = await recibirArchivoPeaje(T, { nombre, proveedor: 'PASE', contenido: Buffer.from(texto) });
   expect(r.ok).toBe(true);
@@ -52,7 +70,7 @@ beforeEach(() => {
     peaje_ingesta_archivo: [],
     unidad: [], peaje_tag: [], peaje_caseta: [], viaje: [], gasto: [],
     peaje_atipico_config: [{ tenant_id: T, activo: true, umbrales: null }],
-  }, { archivo_dummy: () => [], peaje_archivo_reclamar: claimFalso, peaje_posiciones_ventana: () => [] });
+  }, { archivo_dummy: () => [], peaje_archivo_reclamar: claimFalso, peaje_archivo_encolar: encolarFalso, peaje_posiciones_ventana: () => [] });
 });
 
 describe('atípicos dentro de la ingesta', () => {
