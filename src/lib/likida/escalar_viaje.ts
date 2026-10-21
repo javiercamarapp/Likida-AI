@@ -558,6 +558,20 @@ export async function escalarViajesSinAceptar(args: {
  * sino que la base no conteste), no se manda ningún mensaje. Mandarlo sin
  * saber si el sello quedó puesto es exactamente el riesgo que esto existe
  * para cerrar.
+ *
+ * AUDITORÍA A8 ESCALACIÓN (ALTO, hallazgo 3): el claim comprobaba SOLO
+ * `escalado_en IS NULL`, no `aceptado_en IS NULL` — esa segunda condición vivía
+ * únicamente en la LECTURA previa (`viajesSinAceptar`). Entre que esa lectura
+ * trajo la fila y el momento en que este UPDATE corre, el chofer puede haber
+ * contestado *sí* (`confirmar_viaje.ts` pone `aceptado_en` con su propio UPDATE
+ * condicional) — y sin la misma condición aquí, el claim ganaba igual, sellaba
+ * `escalado_en` y la corrida le mandaba al jefe un aviso de que el chofer no
+ * contestó cuando SÍ lo había hecho. `.is('aceptado_en', null)` entra en el
+ * MISMO `UPDATE` condicional —no en una comprobación separada antes o
+ * después— porque es la única manera de que la lectura y la escritura sean
+ * una sola operación atómica: una fila que ya tiene `aceptado_en` puesto pierde
+ * el claim exactamente igual que una que ya tiene `escalado_en` puesto —no es
+ * un error, es el resultado esperado de la carrera contra la aceptación.
  */
 async function reclamarEscalacion(
   admin: ReturnType<typeof supabaseAdmin>,
@@ -573,6 +587,7 @@ async function reclamarEscalacion(
     // inofensivo se copia mañana a uno que sí puede cruzar flotas.
     .eq('tenant_id', v.tenantId)
     .is('escalado_en', null)
+    .is('aceptado_en', null)
     .select('id'), 'reclamarEscalacion');
 
   if (error) {
