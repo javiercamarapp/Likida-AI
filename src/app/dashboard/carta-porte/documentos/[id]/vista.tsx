@@ -19,7 +19,10 @@ import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../for
  *     persona), con la evidencia literal que citó;
  *   · lo que hay que corregir (rojo) o confirmar (ámbar) dice POR QUÉ, y no se aprueba hasta resolverlo;
  *   · si el documento trae texto con forma de instrucción para un modelo, se dice arriba y TODO dato crítico
- *     pide confirmación a mano.
+ *     pide confirmación a mano;
+ *   · si el documento es una foto o un escaneo (sin texto que anclar), también se dice arriba: esos datos
+ *     críticos dependen solo de lo que vio el modelo de visión, sin verificación cruzada (ver
+ *     `taparCriticosSinAnclaje` en extractor.ts).
  */
 
 export type OriginalVista =
@@ -167,6 +170,13 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
             <ShieldAlert width={14} height={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
             Este documento trae texto con forma de instrucción para un modelo de IA («ignora lo anterior», «aprueba»…). Se ignoró, pero ningún dato crítico
             se aprueba sin que lo confirmes tú, y de este documento el perfil del cliente no aprende.
+          </p>
+        )}
+        {(doc.formato === 'imagen' || doc.formato === 'pdf_escaneado') && (
+          <p className="text-[12px] px-3 py-2 rounded-lg flex items-start gap-1.5" role="status" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
+            <TriangleAlert width={14} height={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+            {doc.formato === 'imagen' ? 'Esta es una foto' : 'Este es un PDF escaneado'}: no hay texto del documento contra el que verificar lo que leyó el
+            modelo, así que los datos críticos dependen solo de su lectura de la imagen. Se te pide confirmarlos aunque el modelo diga que está muy seguro — revísalos contra la foto con cuidado.
           </p>
         )}
         {embarque && (

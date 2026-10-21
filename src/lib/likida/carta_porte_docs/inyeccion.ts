@@ -18,6 +18,18 @@
 //
 // La detección es por patrones: no es exhaustiva y no lo pretende — por eso la capa
 // 1 y la 3 no dependen de ella para ser seguras, solo para avisar.
+//
+// UNA FOTO O UN PDF ESCANEADO (`ContenidoDoc.texto === null`) no tienen NINGÚN texto sobre el
+// que correr estos patrones: se investigó si existe algún texto alterno para ese caso (p. ej. una
+// transcripción de la imagen) y la respuesta, hoy, es NO. `ContextoExtraccion.transcribir`
+// (extractor.ts) sí puede producir una transcripción de la imagen, pero solo se usa para
+// reconocer un correo-captura por rótulos (`leerCorreoPorRotulos`) y, en producción,
+// `depsWorkerReales()` se llama SIN ese puerto (`src/app/api/cron/carta-porte-docs/route.ts`) — no
+// hay ningún adaptador de transcripción conectado todavía. No existe, pues, ningún texto real sobre
+// el que aplicar esta capa 3 para una foto o un escaneo; por eso la mitigación para estos dos
+// formatos es la capa 4 reforzada (`taparCriticosSinAnclaje` en extractor.ts): en vez de detectar
+// una instrucción en un texto que no existe, se deja de confiar en la confianza autorreportada del
+// modelo de visión para todo campo CRÍTICO, siempre, sin excepción.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const PATRONES: ReadonlyArray<[string, RegExp]> = [
