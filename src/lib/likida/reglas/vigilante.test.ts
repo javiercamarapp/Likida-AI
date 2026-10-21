@@ -453,6 +453,36 @@ describe('límite de frecuencia por regla (0520)', () => {
     expect(enviarConFallback).toHaveBeenCalledTimes(1);
   });
 
+  it('REGRESIÓN (hallazgo ALTO): minHorasEntreAvisos=48 y el último aviso real a las 30 h — la ventana de lectura YA NO es fija en 24h, así que lo ve y pospone', async () => {
+    // Antes del fix, `correrRegla` siempre leía `avisosEnviadosDesde(... , ahora - 24h)`
+    // sin importar `minHorasEntreAvisos`. Un dueño que pide "no más de un aviso
+    // cada 48 h", con el último aviso real a las 30 h (más de 24h, menos de 48h),
+    // quedaba con el historial FUERA de esa ventana fija: `evaluarFrecuencia`
+    // veía la lista vacía, el chequeo se saltaba solo, y el WhatsApp salía 18h
+    // antes de lo pedido.
+    const regla48 = { ...REGLA_DINERO, minHorasEntreAvisos: 48 };
+    reglasActivas.mockResolvedValue([regla48]);
+    const avisoHace30h = hace(30);
+    // El mock simula el `.gte('enviado_en', desde)` real de repo.ts: solo
+    // devuelve lo que cae DENTRO de la ventana pedida, no todo el historial.
+    avisosEnviadosDesde.mockImplementation(async (..._a: unknown[]) => {
+      const desde = _a[2] as Date;
+      return avisoHace30h.getTime() >= desde.getTime() ? [avisoHace30h] : [];
+    });
+
+    const r = await vigilarReglas(AHORA);
+
+    // La ventana pedida cubrió las 48h de la regla, no un fijo de 24h.
+    const desdePedido = avisosEnviadosDesde.mock.calls[0]?.[2] as Date;
+    expect(AHORA.getTime() - desdePedido.getTime()).toBe(48 * 3_600_000);
+    // Con el historial YA visto, la separación mínima pospone el aviso: no se
+    // manda, no se sella, no se registra como enviado.
+    expect(r.diferidas).toBe(1);
+    expect(enviarConFallback).not.toHaveBeenCalled();
+    expect(sellarDisparos).not.toHaveBeenCalled();
+    expect(registrarAviso).not.toHaveBeenCalled();
+  });
+
   it('ORQUESTADOR hallazgo #4: con el reloj YA vencido, corta ANTES de la primera regla y lo cuenta en cortadasPorReloj', async () => {
     reglasActivas.mockResolvedValue([REGLA_DINERO, REGLA_OPERACION]);
     const r = await vigilarReglas(AHORA, { venceEn: Date.now() - 1 });
