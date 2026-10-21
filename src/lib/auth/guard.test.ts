@@ -151,6 +151,42 @@ describe('requireSessionTenant', () => {
     await expect(requireSessionTenant('/dashboard')).resolves.toEqual(s);
     expect(redirect).not.toHaveBeenCalled();
   });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // HALLAZGO MEDIO (auditoría de este repo, 21-oct-2026): el tercer
+  // argumento `querystring` — lo que `querystringCompleto` (dashboard/
+  // sufijo.ts) construye a partir de los `searchParams` REALES de la
+  // página. Sin él, una sesión que expira a media navegación en
+  // `/dashboard/viajes?f=abiertos&q=xyz&c=abc123` rebotaba a
+  // `/login?next=/dashboard/viajes` — el `destino` LITERAL, sin los
+  // filtros ni la página. Con él, el redirect lo conserva.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('sin sesión Y con querystring real: el next cuelga el destino COMPLETO, no solo el literal', async () => {
+    getSessionTenant.mockResolvedValue(null);
+    await expect(
+      requireSessionTenant('/dashboard/viajes', undefined, '?f=abiertos&q=xyz&c=abc123'),
+    ).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(
+      `/login?next=${encodeURIComponent('/dashboard/viajes?f=abiertos&q=xyz&c=abc123')}`,
+    );
+  });
+
+  it('sin querystring (el caso de siempre, 44 de los 48 callers): el next sigue siendo solo el destino', async () => {
+    getSessionTenant.mockResolvedValue(null);
+    await expect(requireSessionTenant('/dashboard/viajes')).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(`/login?next=${encodeURIComponent('/dashboard/viajes')}`);
+  });
+
+  it('superadmin SIN selección Y con querystring real: el selector de flota también conserva los filtros', async () => {
+    getSessionTenant.mockResolvedValue(SUPER);
+    leerSeleccionFlota.mockResolvedValue(null);
+    await expect(
+      requireSessionTenant('/dashboard/viajes', undefined, '?f=abiertos&q=xyz'),
+    ).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(
+      `/admin/elegir-flota?next=${encodeURIComponent('/dashboard/viajes?f=abiertos&q=xyz')}`,
+    );
+  });
 });
 
 // `requireSuperadmin` es la puerta de /admin — la consola de negocio de
