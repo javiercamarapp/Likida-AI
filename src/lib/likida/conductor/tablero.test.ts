@@ -152,13 +152,22 @@ describe('la línea de tiempo del viaje', () => {
   it('cuenta solo las evidencias del ciclo vigente y con archivo (las purgadas no cuentan)', () => {
     const hs = hitos('1', { salida_carga: { estado: 'recibido', fuente: 'texto', mensajeEn: hace(30), recibidoEn: hace(30), ciclo: 2 } });
     const evidencias: EvidenciaFila[] = [
-      { id: 'e1', hitoId: '1-salida_carga', ciclo: 1, tipo: 'sello', ruta: 'x', creadaEn: hace(60) },
-      { id: 'e2', hitoId: '1-salida_carga', ciclo: 2, tipo: 'sello', ruta: 'y', creadaEn: hace(20) },
-      { id: 'e3', hitoId: '1-salida_carga', ciclo: 2, tipo: 'otra', ruta: null, creadaEn: hace(20) },
+      { id: 'e1', hitoId: '1-salida_carga', ciclo: 1, tipo: 'sello', ruta: 'x', creadaEn: hace(60), reusoTenant: false },
+      { id: 'e2', hitoId: '1-salida_carga', ciclo: 2, tipo: 'sello', ruta: 'y', creadaEn: hace(20), reusoTenant: false },
+      { id: 'e3', hitoId: '1-salida_carga', ciclo: 2, tipo: 'otra', ruta: null, creadaEn: hace(20), reusoTenant: false },
     ];
     const t = armarTablero(datos([viaje('1')], hs, { evidencias }), cfg(), AHORA);
     expect(t.filas[0].hitos[1].evidencias).toBe(1);
-    expect(t.filas[0].hitos[1].fotos).toEqual([{ id: 'e2', tipo: 'sello' }]);
+    expect(t.filas[0].hitos[1].fotos).toEqual([{ id: 'e2', tipo: 'sello', reusoTenant: false }]);
+  });
+
+  it('T-A5 (0852): la bandera de reuso entre viajes pasa del dato crudo a la foto del tablero', () => {
+    const hs = hitos('1', { salida_carga: { estado: 'recibido', fuente: 'texto', mensajeEn: hace(30), recibidoEn: hace(30), ciclo: 1 } });
+    const evidencias: EvidenciaFila[] = [
+      { id: 'e1', hitoId: '1-salida_carga', ciclo: 1, tipo: 'sello', ruta: 'x', creadaEn: hace(30), reusoTenant: true },
+    ];
+    const t = armarTablero(datos([viaje('1')], hs, { evidencias }), cfg(), AHORA);
+    expect(t.filas[0].hitos[1].fotos).toEqual([{ id: 'e1', tipo: 'sello', reusoTenant: true }]);
   });
 
   it('los nombres de sitio salen del catálogo', () => {
@@ -314,7 +323,10 @@ describe('filtrarPorSemaforo', () => {
 });
 
 describe('indicadoresVista', () => {
-  const crudos = { recibidos: 40, sinInsistencia: 30, conRespuestaMedida: 25, minutosRespuestaPromedio: 12.4, escalados: 3, omitidos: 2, validadosUbicacion: 20, sinCoincidencia: 1, capturadosOficina: 4 };
+  const crudos = {
+    recibidos: 40, sinInsistencia: 30, conRespuestaMedida: 25, minutosRespuestaPromedio: 12.4, escalados: 3, omitidos: 2, validadosUbicacion: 20, sinCoincidencia: 1, capturadosOficina: 4,
+    llegadasValidables: 25, validacionDegradada: 5,
+  };
   it('la tasa de hitos reportados sin insistencia y el tiempo medio de respuesta', () => {
     expect(indicadoresVista(crudos)).toMatchObject({ tasaSinInsistencia: 0.75, minutosRespuestaPromedio: 12.4, escalados: 3 });
   });
@@ -323,6 +335,14 @@ describe('indicadoresVista', () => {
   });
   it('sin respuestas medibles el tiempo medio es null aunque la base mande un número', () => {
     expect(indicadoresVista({ ...crudos, conRespuestaMedida: 0, minutosRespuestaPromedio: 0 }).minutosRespuestaPromedio).toBeNull();
+  });
+
+  // T-A5 (0853): validez de la validación por ubicación — cuánto corre en modo DEGRADADO (sin GPS real).
+  it('la tasa de validación degradada (sin_dato o solo pin)', () => {
+    expect(indicadoresVista(crudos)).toMatchObject({ llegadasValidables: 25, validacionDegradada: 5, tasaValidacionDegradada: 0.2 });
+  });
+  it('sin llegadas validables en el periodo la tasa es null (no un 0% que parezca "todo confiable")', () => {
+    expect(indicadoresVista({ ...crudos, llegadasValidables: 0, validacionDegradada: 0 }).tasaValidacionDegradada).toBeNull();
   });
 });
 

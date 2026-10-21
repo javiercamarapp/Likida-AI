@@ -192,7 +192,7 @@ describe('estadías: periodo, viaje y liquidación', () => {
         { hitoId: `${V1}-llegada_carga`, ciclo: 1, resultado: 'validado' as const, motivo: null, fuente: 'pin' as const, distanciaM: 5, radioM: 300, toleranciaM: 150, sitioId: null, medidaEn: null },
         { hitoId: `${V1}-llegada_carga`, ciclo: 2, resultado: 'sin_coincidencia' as const, motivo: null, fuente: 'gps' as const, distanciaM: 900, radioM: 300, toleranciaM: 150, sitioId: null, medidaEn: null },
       ],
-      evidencias: [{ id: 'e', hitoId: `${V1}-salida_carga`, ciclo: 1, tipo: 'sello' as const, ruta: 'x', creadaEn: hace(299) }],
+      evidencias: [{ id: 'e', hitoId: `${V1}-salida_carga`, ciclo: 1, tipo: 'sello' as const, ruta: 'x', creadaEn: hace(299), reusoTenant: false }],
     };
     const [f] = armarFilasEstadias(d, AHORA, pacto).filas;
     expect(f.estancia.llegada?.validacion).toBe('sin_coincidencia');

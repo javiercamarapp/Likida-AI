@@ -267,6 +267,8 @@ export interface EvidenciaFila {
   tipo: TipoEvidencia;
   ruta: string | null;
   creadaEn: string;
+  /** T-A5 (0852): esta MISMA foto (sha256) ya se usó como evidencia en otra combinación de hito+ciclo de la MISMA flota — típicamente, de OTRO viaje. No bloqueó el registro; solo se marca para revisión humana en el tablero. */
+  reusoTenant: boolean;
 }
 
 /** Registra una evidencia ya subida a Storage. `duplicada` = ese mensaje o esa foto ya estaban (reintento del webhook). */
@@ -295,10 +297,11 @@ export async function guardarEvidencia(a: {
 export async function leerEvidencias(tenantId: string, viajeIds: string[]): Promise<EvidenciaFila[]> {
   if (viajeIds.length === 0) return [];
   const filas = await traerPorIds<Fila>(viajeIds, (t) => acotada(supabaseAdmin()
-    .from('viaje_hito_evidencia').select('id, viaje_hito_id, ciclo, tipo, ruta, created_at')
+    .from('viaje_hito_evidencia').select('id, viaje_hito_id, ciclo, tipo, ruta, created_at, reuso_tenant_evidencia_id')
     .eq('tenant_id', tenantId).in('viaje_id', t).order('created_at', { ascending: true }), 'tablero.evidencias') as never, 'tablero.evidencias');
   return filas.map((f) => ({
     id: String(f.id), hitoId: String(f.viaje_hito_id), ciclo: Number(f.ciclo), tipo: f.tipo as TipoEvidencia, ruta: s(f.ruta), creadaEn: String(f.created_at),
+    reusoTenant: f.reuso_tenant_evidencia_id != null,
   }));
 }
 
@@ -729,6 +732,10 @@ export interface IndicadoresCrudos {
   validadosUbicacion: number;
   sinCoincidencia: number;
   capturadosOficina: number;
+  /** 0853: llegadas (carga/descarga) recibidas o validadas en el periodo — el ÚNICO tipo de hito que `validar_hito.ts` compara contra ubicación. */
+  llegadasValidables: number;
+  /** 0853: de las validables, cuántas corrieron en modo DEGRADADO — 'sin_dato' (sin geocerca o sin ubicación con qué comparar) o 'validado' SOLO con el pin que el chofer elige a mano (sin GPS real en la ventana). */
+  validacionDegradada: number;
 }
 
 export async function leerIndicadores(tenantId: string, desde: Date, hasta: Date, f: FiltrosTablero = {}): Promise<IndicadoresCrudos> {
@@ -746,6 +753,7 @@ export async function leerIndicadores(tenantId: string, desde: Date, hasta: Date
     minutosRespuestaPromedio: typeof r.minutos_respuesta_promedio === 'number' ? r.minutos_respuesta_promedio : null,
     escalados: num(r.escalados), omitidos: num(r.omitidos), validadosUbicacion: num(r.validados_ubicacion),
     sinCoincidencia: num(r.sin_coincidencia), capturadosOficina: num(r.capturados_oficina),
+    llegadasValidables: num(r.llegadas_validables), validacionDegradada: num(r.validacion_degradada),
   };
 }
 
