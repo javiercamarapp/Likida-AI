@@ -5,6 +5,7 @@ import { getLiquidacionDetalle } from '@/lib/likida/analytics';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { puedeExportar, puedeAsignar, puedeAdministrar } from '@/lib/auth/permisos';
 import { instruccionesAlCambiarOperador } from '@/lib/likida/convenios/envio';
+import { avisarAlChofer } from '@/lib/likida/operacion';
 import { reasignarOperador, buscarCatalogo, contarCatalogo, type OpcionCatalogo, type TipoCatalogo } from '@/lib/likida/repo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantPedido } from '@/lib/auth/tenant-api';
@@ -158,15 +159,38 @@ export default async function Detalle({
     if (!operadorId) {
       return { error: 'Elige un chofer de la lista: escribir un nombre a medias no basta, y adivinar a quién te referías no es cosa de este panel.' };
     }
+    let cambio: Awaited<ReturnType<typeof reasignarOperador>>;
     try {
-      const cambio = await reasignarOperador(t, d!.viajeId, operadorId);
-      // El chofer nuevo recibe las instrucciones del convenio del cliente (nunca lanza ni deshace la reasignación).
-      await instruccionesAlCambiarOperador(t, d!.viajeId, cambio);
-      revalidatePath(`/dashboard/${id}`);
-      return { ok: 'Listo: el viaje quedó a nombre del chofer que elegiste.' };
+      cambio = await reasignarOperador(t, d!.viajeId, operadorId);
     } catch (err) {
       return { error: mensajeParaPantalla(err, 'reasignar el chofer') };
     }
+    // AUDITORÍA A8 ESCALACIÓN (ALTO, hallazgo 1): esta pantalla reseteaba
+    // `avisado_en` (dentro de `reasignarOperador`, en cada cambio REAL de
+    // chofer) pero nunca avisaba al chofer nuevo — a diferencia de
+    // `/dashboard/despacho` (`asignarYAvisar`, despacho/page.tsx:277-308) y del
+    // flujo por WhatsApp (`asignar_wa.ts`), que SÍ llaman `avisarAlChofer`
+    // justo después de reasignar. Sin el aviso, `avisado_en` se queda en NULL
+    // para siempre y el viaje reasignado por aquí queda invisible para
+    // `viajesSinAceptar()`/A8 — el chofer nuevo nunca recibe el WhatsApp de
+    // asignación y nadie se entera. Mismo patrón: asignado SÍ queda si el
+    // aviso falla (best-effort), y se dice para que se pueda reintentar.
+    let avisoFallo = false;
+    try {
+      await avisarAlChofer(t, operadorId, d!.viajeId);
+    } catch (err) {
+      logger.error('dashboard.reasignar.aviso_fallo', {
+        viajeId: d!.viajeId, operadorId, err: err instanceof Error ? err.message : String(err),
+      });
+      avisoFallo = true;
+    }
+    // El chofer nuevo recibe las instrucciones del convenio del cliente (nunca lanza ni deshace la reasignación).
+    await instruccionesAlCambiarOperador(t, d!.viajeId, cambio);
+    revalidatePath(`/dashboard/${id}`);
+    if (avisoFallo) {
+      return { error: 'El viaje quedó a nombre del chofer que elegiste, pero el aviso de WhatsApp no salió — vuelve a intentarlo desde aquí.' };
+    }
+    return { ok: 'Listo: el viaje quedó a nombre del chofer que elegiste.' };
   }
 
   /**
