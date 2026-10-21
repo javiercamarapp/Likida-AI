@@ -211,6 +211,21 @@ describe('el seguimiento de reclamos de punta a punta', () => {
     expect((await R.registrarNotaDeCredito(T, { reclamoId: 'no-existe', monto: 5, fecha: '2026-04-01' })).ok).toBe(false);
   });
 
+  it('un doble envío (dos pestañas, un reintento) choca con el candado de idempotencia y no crea una fila gemela', async () => {
+    // HALLAZGO ALTO #1 (auditoría adversarial): el formulario ya deshabilita su botón mientras la
+    // acción corre (useActionState), pero esa es defensa de UI. Aquí se prueba la defensa de BASE: el
+    // índice único parcial `peaje_reclamo_activo_unico` (migración 0845) choca en el segundo INSERT —
+    // simulado aquí como lo hace `cola.test.ts` con `peaje_ingesta_archivo_huella_unica`, porque la base
+    // en memoria no aplica índices únicos de verdad (eso lo prueba Postgres real, no esta base falsa).
+    const { id } = await subir('01 A 10 DE MARZO.xlsx', { filas: 500, inicio: '2026-03-01', extemporaneos: 5 });
+    db.fallar('peaje_reclamo.insert', 'duplicate key value violates unique constraint "peaje_reclamo_activo_unico"');
+    const r = await R.crearReclamoDeCategoria(T, { desgloseId: id, categoria: 'extemporaneo' });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error('no debería crearse');
+    expect(r.motivo).toMatch(/ya hay un reclamo abierto/i);
+    expect(db.tablas.peaje_reclamo ?? []).toHaveLength(0);
+  });
+
   it('el reclamo de una flota no lo toca otra', async () => {
     const { id } = await subir('01 A 10 DE MARZO.xlsx', { filas: 500, inicio: '2026-03-01', extemporaneos: 5 });
     const c = await R.crearReclamoDeCategoria(T, { desgloseId: id, categoria: 'extemporaneo' });

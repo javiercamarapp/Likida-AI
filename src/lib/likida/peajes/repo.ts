@@ -2354,6 +2354,14 @@ export async function listarReclamos(tenantId: string, hoy: string): Promise<{ r
  * Registra un reclamo a partir de los CANDIDATOS de una categoría de un desglose: cuántos cruces, cuánto
  * dinero y el cobro más antiguo salen del cálculo (no de lo que diga el formulario). Nace `preparado`, o
  * `enviado` si se da la fecha de envío.
+ *
+ * CANDADO DE IDEMPOTENCIA (auditoría adversarial, HALLAZGO ALTO #1; migración 0845): el formulario ya
+ * deshabilita su botón mientras la acción corre, pero esa es defensa de UI — dos pestañas, un doble POST
+ * de red o un reintento igual podían llegar aquí dos veces y crear dos reclamos gemelos por el mismo
+ * dinero. El candado real es el índice único parcial `peaje_reclamo_activo_unico` (mismo molde que 0815):
+ * el segundo INSERT choca con el unique y aquí se traduce a un motivo legible (mismo criterio de
+ * `ingesta.ts` con `peaje_ingesta_archivo_huella_unica`: se detecta por el MENSAJE del error, no por
+ * `error.code` — PostgREST no siempre lo trae, y es lo único que la base en memoria de las pruebas puede fingir).
  */
 export async function crearReclamoDeCategoria(
   tenantId: string,
@@ -2374,6 +2382,9 @@ export async function crearReclamoDeCategoria(
     fecha_cobro_mas_antiguo: fechas[0], enviado_en: enviado,
     referencia_portal: entrada.referenciaPortal?.trim().slice(0, 120) || null, notas: entrada.notas?.trim().slice(0, 1000) || null,
   }).select('id').single(), 'revision_cobros.crear_reclamo');
+  if (error && /duplicate key|unique/i.test(error.message)) {
+    return { ok: false, motivo: `Ya hay un reclamo abierto de «${ETIQUETA_CATEGORIA_COBRO[entrada.categoria]}» para este desglose. Revisa el seguimiento antes de crear otro (probable doble envío).` };
+  }
   if (error || !data) {
     logger.error('revision_cobros.crear_reclamo', { tenant: tenantId, err: error?.message ?? 'sin id' });
     return { ok: false, motivo: 'No se pudo registrar el reclamo. Inténtalo de nuevo.' };
