@@ -21,6 +21,7 @@ import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { conteo, traerTodo } from './pg';
 import { DatoInvalido } from './errores';
+import { violaIndice } from './pg_errores';
 import { esNumero, esNumeroONulo, esObjeto, esTextoONulo, formaInesperada } from './comercial';
 import { CONECTORES_GPS } from './conectores/gps';
 import { papelMasProximo } from './administracion';
@@ -513,6 +514,44 @@ async function unidadDeBaja(tenantId: string, unidadId: string): Promise<boolean
   return filas.some((u) => u.activo === false);
 }
 
+/**
+ * ¿Esa unidad ya tiene OTRO viaje abierto en este tenant? (hallazgo ALTO:
+ * `asignarUnidad`/`crearViaje` comprobaban que la unidad fuera de la flota y
+ * que no estuviera de baja, pero nunca que no estuviera YA en un viaje
+ * abierto — el gemelo de `uq_viaje_abierto_por_operador` (0029) que nunca se
+ * escribió del lado de `unidad_id`).
+ *
+ * `excluirViajeId` es para `asignarUnidad`: si la unidad ya está EN ESE MISMO
+ * viaje, no es un choque — es la asignación que ya existe (re-guardar el
+ * mismo formulario no debe rebotar contra sí mismo).
+ *
+ * Este chequeo es el mensaje legible; `uq_viaje_abierto_por_unidad` (0849) es
+ * la garantía real contra la carrera entre dos requests casi simultáneos —
+ * ver el `catch` de `asignarUnidad`/`crearViaje` para cuando esta lectura
+ * pasa limpia y el INSERT/UPDATE choca contra el índice de todos modos.
+ */
+async function unidadTieneViajeAbierto(tenantId: string, unidadId: string, excluirViajeId?: string): Promise<boolean> {
+  const filas = await traerTodo<{ id: unknown }>(
+    (d, h) => {
+      let q = supabaseAdmin().from('viaje').select('id', conteo(d))
+        .eq('tenant_id', tenantId).eq('unidad_id', unidadId).in('estatus', ['abierto', 'en_cuadre']);
+      if (excluirViajeId) q = q.neq('id', excluirViajeId);
+      return acotada(q.order('id').range(d, h), 'unidadTieneViajeAbierto');
+    },
+    'unidadTieneViajeAbierto',
+  );
+  return filas.length > 0;
+}
+
+/** El mensaje que ve el jefe de tráfico cuando la unidad ya está en otro
+ *  viaje abierto — mismo texto para el chequeo explícito y para el 23505 del
+ *  índice (`uq_viaje_abierto_por_unidad`, 0849) que lo respalda en la carrera. */
+function mensajeUnidadConViajeAbierto(): DatoInvalido {
+  return new DatoInvalido(
+    'Esa unidad ya está en OTRO viaje abierto. Cierra o desasigna ese viaje antes de volver a asignarla — una unidad no puede estar en dos viajes a la vez.',
+  );
+}
+
 /** El gemelo de `unidadDeBaja` para el chofer: un operador dado de baja no
  *  recibe viajes nuevos ni por POST directo. Ver `CambiosOperador.activo`. */
 async function operadorDeBaja(tenantId: string, operadorId: string): Promise<boolean> {
@@ -603,6 +642,12 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
   if (v.unidadId && (await unidadDeBaja(tenantId, v.unidadId))) {
     throw new DatoInvalido('Esa unidad está dada de baja. Si volvió al parque, vuelve a ponerla disponible en Unidades antes de asignarla.');
   }
+  // HALLAZGO ALTO: la unidad tampoco puede YA estar en OTRO viaje abierto —
+  // ver `unidadTieneViajeAbierto` y el índice `uq_viaje_abierto_por_unidad`
+  // (0849) que respalda esto contra la carrera entre dos requests.
+  if (v.unidadId && (await unidadTieneViajeAbierto(tenantId, v.unidadId))) {
+    throw mensajeUnidadConViajeAbierto();
+  }
 
   // Y el tercero, para el cliente que paga el flete (14-ago-2026).
   if (v.clienteId && !(await clientePropioLocal(tenantId, v.clienteId))) {
@@ -627,7 +672,15 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
     km_recorridos: v.kmRecorridos ?? null,
     estatus: 'abierto',
   }).select('id').single(), 'crearViaje');
-  if (error) throw new Error(`crearViaje: ${error.message}`);
+  if (error) {
+    // El chequeo de arriba ya cubrió el caso normal; esto es la carrera: dos
+    // requests leyeron "sin viaje abierto" casi al mismo tiempo y el segundo
+    // INSERT choca contra `uq_viaje_abierto_por_unidad` (0849). Sin este
+    // `if`, el jefe de tráfico vería el 23505 crudo de Postgres en vez de un
+    // mensaje que entienda.
+    if (violaIndice(error, 'uq_viaje_abierto_por_unidad')) throw mensajeUnidadConViajeAbierto();
+    throw new Error(`crearViaje: ${error.message}`);
+  }
   const id = (data as { id?: unknown } | null)?.id;
   if (!id) throw new Error('crearViaje: el insert no devolvió id');
 
@@ -795,6 +848,13 @@ export async function asignarUnidad(tenantId: string, viajeId: string, unidadId:
   if (unidadId && (await unidadDeBaja(tenantId, unidadId))) {
     throw new DatoInvalido('Esa unidad está dada de baja. Si volvió al parque, vuelve a ponerla disponible en Unidades antes de asignarla.');
   }
+  // HALLAZGO ALTO: la unidad tampoco puede YA estar en OTRO viaje abierto —
+  // gemelo del candado de `crearViaje`. `excluirViajeId = viajeId`: si la
+  // unidad ya está EN ESTE MISMO viaje, re-guardar el mismo formulario no
+  // debe rebotar contra sí mismo.
+  if (unidadId && (await unidadTieneViajeAbierto(tenantId, unidadId, viajeId))) {
+    throw mensajeUnidadConViajeAbierto();
+  }
 
   // El `.select('id')` no es adorno: con el id de un viaje de OTRA flota este
   // UPDATE toca cero filas y Postgres no lo considera un error. Sin mirar lo
@@ -803,7 +863,13 @@ export async function asignarUnidad(tenantId: string, viajeId: string, unidadId:
   const { data, error } = await acotada(supabaseAdmin().from('viaje')
     .update({ unidad_id: unidadId })
     .eq('id', viajeId).eq('tenant_id', tenantId).select('id'), 'asignarUnidad');
-  if (error) throw new Error(`asignarUnidad: ${error.message}`);
+  if (error) {
+    // Misma carrera que en `crearViaje`: el chequeo de arriba pasó limpio y
+    // el UPDATE choca contra `uq_viaje_abierto_por_unidad` (0849) porque otro
+    // request asignó la unidad casi al mismo tiempo.
+    if (violaIndice(error, 'uq_viaje_abierto_por_unidad')) throw mensajeUnidadConViajeAbierto();
+    throw new Error(`asignarUnidad: ${error.message}`);
+  }
   if (!Array.isArray(data) || data.length === 0) {
     throw new Error('asignarUnidad: el viaje no existe en esta flota');
   }
