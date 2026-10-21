@@ -2,9 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Sin perfiles de tenant (0770): este archivo prueba el cron de siempre. El filtro por perfil tiene
 // su propia prueba (src/app/api/cron/perfil_crons.test.ts).
+// `tenantsConPerfil` es un `vi.fn` (y no una flecha fija) para el bloque de abajo (AUDITORÍA A8,
+// hallazgo 2): necesita poder devolver una flota con perfil en UNA prueba sin afectar a las demás.
+const { tenantsConPerfil } = vi.hoisted(() => ({ tenantsConPerfil: vi.fn(async () => new Set<string>()) }));
 vi.mock('@/lib/auth/perfil_tenant', () => ({
   tenantsConPerfilASaltar: async () => new Set<string>(),
-  tenantsConPerfil: async () => new Set<string>(),
+  tenantsConPerfil: (...a: unknown[]) => tenantsConPerfil(...(a as [])),
 }));
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -624,5 +627,52 @@ describe('el orquestador vivo (P6) corre aquí, con su claim, y falla como los d
     estaApagado.mockImplementation(async (n: string) => n === 'global');
     expect((await GET(peticion('Bearer secreto-de-prueba'))).status).toBe(200);
     expect(correrOrquestadorVivo).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA A8 ESCALACIÓN (ALTO, hallazgo 2): el Conductor (A5) se encendió
+// para las flotas con perfil `cinco_agentes` el 18-oct-2026 (commit 1395821d5)
+// pero la escalación de viaje no aceptado —que es PARTE de A5— seguía
+// excluyéndolas. Las secciones de stand-by de este MISMO cron (cobranza,
+// relojes legales, reglas) SÍ siguen en «Próximamente» y deben seguir
+// pidiendo `tenantsConPerfil()`.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('AUDITORÍA A8 ESCALACIÓN (hallazgo 2): la escalación del Conductor ya no excluye flotas con perfil', () => {
+  beforeEach(() => {
+    escalarViajesSinAceptar.mockReset().mockResolvedValue({ escalados: 0 });
+    ejecutarCobranzaGlobal.mockReset().mockResolvedValue({ tenants: 0, contactados: 0, fallos: [] });
+    avisarRelojesLegales.mockReset().mockResolvedValue({ revisadas: 0, avisadas: 0, fallos: 0, cortadasPorReloj: 0 });
+    vigilarReglas.mockReset().mockResolvedValue({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0 });
+    alertarOperador.mockClear();
+    estaApagado.mockReset().mockResolvedValue(false);
+    // Hay una flota con perfil: si la escalación la sigue excluyendo, este
+    // `mockResolvedValue` (no `Once`: lo ven las tres secciones que todavía
+    // lo piden) lo delataría en `escalarViajesSinAceptar`.
+    tenantsConPerfil.mockReset().mockResolvedValue(new Set(['flota-cinco-agentes']));
+  });
+
+  it('escalarViajesSinAceptar NO recibe excluirTenants, aunque exista una flota con perfil', async () => {
+    await GET(peticion('Bearer secreto-de-prueba'));
+    const opciones = escalarViajesSinAceptar.mock.calls[0][0] as { excluirTenants?: ReadonlySet<string> };
+    expect(opciones.excluirTenants ?? new Set()).toEqual(new Set());
+  });
+
+  it('la COBRANZA (stand-by) sigue pidiendo tenantsConPerfil() y la recibe como excluirTenants', async () => {
+    await GET(peticion('Bearer secreto-de-prueba'));
+    const opciones = ejecutarCobranzaGlobal.mock.calls[0][1] as { excluirTenants?: ReadonlySet<string> };
+    expect(opciones.excluirTenants).toEqual(new Set(['flota-cinco-agentes']));
+  });
+
+  it('los RELOJES LEGALES (stand-by) también siguen pidiendo tenantsConPerfil()', async () => {
+    await GET(peticion('Bearer secreto-de-prueba'));
+    const opciones = avisarRelojesLegales.mock.calls[0][1] as { excluirTenants?: ReadonlySet<string> };
+    expect(opciones.excluirTenants).toEqual(new Set(['flota-cinco-agentes']));
+  });
+
+  it('las REGLAS (stand-by) también siguen pidiendo tenantsConPerfil()', async () => {
+    await GET(peticion('Bearer secreto-de-prueba'));
+    const opciones = (vigilarReglas.mock.calls[0] as unknown as unknown[])[1] as { excluirTenants?: ReadonlySet<string> };
+    expect(opciones.excluirTenants).toEqual(new Set(['flota-cinco-agentes']));
   });
 });

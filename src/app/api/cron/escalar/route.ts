@@ -222,9 +222,14 @@ export async function GET(req: Request) {
       resultado.aceptacion = { saltado: 'interruptor agente:conductores' };
     } else {
       try {
-        // El Conductor (A5) está en «Próximamente» para las flotas con perfil (fase 1): su escalación no las toca.
-        const excluirTenants = await tenantsConPerfil();
-        const r = await conReintentoDeTimeout(() => escalarViajesSinAceptar({ venceEn: venceEscalacion, excluirTenants }), 'escalarViajesSinAceptar');
+        // AUDITORÍA A8 ESCALACIÓN (ALTO, hallazgo 2): el Conductor (A5) se encendió para las
+        // flotas con perfil el 18-oct-2026 (commit 1395821d5, que actualizó vigia/route.ts y
+        // conductor-hitos/route.ts) pero dejó ESTA exclusión intacta — la escalación de viaje
+        // no aceptado es parte del propio Agente de Conductores (A5) y no debía seguir
+        // saltando esas flotas. Ya no se excluye a nadie aquí; las secciones de stand-by de
+        // ESTE MISMO cron (cobranza, relojes legales, reglas, más abajo) siguen pidiendo
+        // `tenantsConPerfil()` porque esos módulos SÍ siguen en «Próximamente».
+        const r = await conReintentoDeTimeout(() => escalarViajesSinAceptar({ venceEn: venceEscalacion }), 'escalarViajesSinAceptar');
         logger.info('cron.escalar.ok', { ...r });
         resultado.aceptacion = r;
       } catch (e) {
