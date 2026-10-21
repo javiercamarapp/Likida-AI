@@ -464,11 +464,16 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 320;
 // que CONSERVA el claim (en vez de borrarlo) cuando el rechazo de Meta ya quedó encolado en `wa_outbox`, para que un
 // timeout de red no produzca un segundo envío real del mismo recordatorio. Por `tenant_id` + la llave del claim, igual que
 // el resto del archivo. Cubierto por `cobranza_reloj.test.ts`, `cobranza_gasto_e2e.test.ts` y `cobranza_freno_emergencia.test.ts`.
+// AUDITORÍA ADVERSARIAL (ALTO #2, mig. 0848, 21-oct-2026, sobre la misma base): +1 llamada (2,237 → 2,238), en `buzon/repo.ts`
+// (`completarFacturaConXml`: el segundo `.from('factura_proveedor').update(...)` que guarda `xml_crudo_tardio` cuando el
+// folio ya fue decidido — el CFDI real, evidencia fiscal CFF 30, dejaba de guardarse). `buzon/repo.ts` YA estaba fuera
+// de la frontera (no es `lib/likida/repo.ts`); esto no migra código viejo, es una rama nueva del mismo archivo. Cubierta
+// por `completar_cfdi_tardio.test.ts`.
 // Integración con A2 Peajes (protocolo de discrepancia geográfica, hallazgo alto de la auditoría adversarial del 21-oct-2026,
-// sobre la misma base): +2 llamadas (2,237 → 2,239), en `peajes/aviso_discrepancia.ts` (lectura de la línea del desglose y de
+// sobre la misma base): +2 llamadas (2,238 → 2,240), en `peajes/aviso_discrepancia.ts` (lectura de la línea del desglose y de
 // la última posición GPS), por `acotada`, ancladas a `tenant_id`. Funcionalidad nueva, no código migrado; cubierta por
 // `aviso_discrepancia.test.ts`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_239;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_240;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
