@@ -174,9 +174,37 @@ export async function adjuntarPdfAFactura(
  */
 export type ResultadoCompletarXml = 'completada' | 'guardado_tardio' | 'sin_cambio';
 
+/** Qué tan distinto es un monto NUEVO (del XML) de uno que YA se había guardado (de leer el PDF), en forma
+ *  relativa — 1% absorbe el redondeo normal entre OCR y el dato duro sin dejar pasar una cifra fabricada.
+ *  Sin baseline (el viejo es `null`/`undefined`/0 — una fila sin ese dato aún, no una cifra real que comparar)
+ *  no hay discrepancia que declarar: comparar contra cero dividiría por cero y cualquier total la dispararía. */
+function difiereMonto(viejo: number | null | undefined, nuevo: number | null | undefined): boolean {
+  if (viejo === null || viejo === undefined || viejo === 0) return false;
+  if (nuevo === null || nuevo === undefined) return false;
+  return Math.abs(nuevo - viejo) / Math.abs(viejo) > 0.01;
+}
+
+/** Un RFC distinto nunca es "redondeo de OCR": si YA había uno guardado y el XML trae otro, es una
+ *  discrepancia dura, sin umbral. */
+function difiereRfc(viejo: string | null | undefined, nuevo: string | null | undefined): boolean {
+  if (!viejo || !nuevo) return false;
+  return viejo.trim().toUpperCase() !== nuevo.trim().toUpperCase();
+}
+
 /**
  * El XML llegó DESPUÉS del PDF: la factura que se había leído de un PDF se completa con el dato duro y deja de
  * pedir revisión. Solo si sigue PENDIENTE y aún sin XML: una factura ya aprobada no cambia de cifras por detrás.
+ *
+ * AUDITORÍA ADVERSARIAL ALTO #2 (A9, 21-oct-2026) — el único cotejo antes de sobrescribir era el UUID + "sigue
+ * pendiente y sin XML": NINGUNA comparación contra las cifras que YA se habían leído del PDF/visión. El buzón
+ * es entrada SIN AUTENTICAR, así que un correo hostil puede mandar PRIMERO un PDF con un UUID elegido (cae en
+ * revisión por baja confianza de OCR, como cualquier PDF) y DESPUÉS un XML con el MISMO UUID pero
+ * total/subtotal/IVA/RFC distintos — y esta función apagaba `requiere_revision` sin que nadie comparara las
+ * dos lecturas. Ahora, antes de sobrescribir, se lee lo que la fila YA tenía y se compara contra el XML
+ * (`difiereMonto`/`difiereRfc`, 1% en montos, RFC exacto): si algo no cuadra, la fila SIGUE pidiendo revisión
+ * — con el motivo exacto de qué no cuadró — en vez de quedar como una factura normal sin aviso. El dato del
+ * XML se guarda igual (es evidencia fiscal real, CFF art. 30), pero no se da por bueno sin que una persona lo
+ * mire.
  *
  * Si la factura YA NO está pendiente (un humano la aprobó o rechazó mientras el CFDI real seguía en camino —
  * PDF llegó primero, XML llegó después de la decisión), el CFDI es evidencia fiscal (CFF art. 30: 5 años) y NO
@@ -189,15 +217,52 @@ export type ResultadoCompletarXml = 'completada' | 'guardado_tardio' | 'sin_camb
 export async function completarFacturaConXml(
   tenantId: string, uuid: string, xml: CfdiXmlData, xmlCrudo: string, rfcFlota: string | null, estadoSat: EstadoSat | null,
 ): Promise<ResultadoCompletarXml> {
+  // Lo que YA se había guardado (de leer el PDF) para ESTA misma fila pendiente-sin-XML — el baseline contra
+  // el que se compara el XML que está por llegar. Mismo filtro que el UPDATE de abajo: si cambió entre esta
+  // lectura y ese UPDATE (otro proceso la decidió, por ejemplo), el UPDATE simplemente afecta 0 filas, igual
+  // que antes de este cambio — no se abre ninguna ventana de carrera nueva.
+  const previa = await acotada(supabaseAdmin()
+    .from('factura_proveedor')
+    .select('total, sub_total, iva, emisor_rfc, receptor_rfc')
+    .eq('tenant_id', tenantId)
+    .eq('cfdi_uuid', uuid.toLowerCase())
+    .eq('estado', 'pendiente')
+    .is('xml_crudo', null)
+    .limit(1), 'buzon.completar_con_xml_previa');
+  if (faltaMigracion(previa.error)) return 'sin_cambio';
+  if (previa.error) throw new Error(`completarFacturaConXml (previa): ${previa.error.message}`);
+  const filaPrevia = ((previa.data ?? []) as unknown as Array<Record<string, unknown>>)[0] as {
+    total: number | null; sub_total: number | null; iva: number | null;
+    emisor_rfc: string | null; receptor_rfc: string | null;
+  } | undefined;
+
+  const nuevoSubTotal = typeof xml.subTotal === 'number' ? xml.subTotal : null;
+  const nuevoIva = xml.ivaTraslado || null;
+  const discrepancias: string[] = [];
+  if (filaPrevia) {
+    if (difiereMonto(filaPrevia.total, xml.total)) discrepancias.push(`total leído del PDF ${filaPrevia.total} vs XML ${xml.total}`);
+    if (difiereMonto(filaPrevia.sub_total, nuevoSubTotal)) discrepancias.push(`subtotal leído del PDF ${filaPrevia.sub_total} vs XML ${nuevoSubTotal}`);
+    if (difiereMonto(filaPrevia.iva, nuevoIva)) discrepancias.push(`IVA leído del PDF ${filaPrevia.iva} vs XML ${nuevoIva}`);
+    if (difiereRfc(filaPrevia.emisor_rfc, xml.rfcEmisor ?? null)) discrepancias.push(`RFC emisor leído del PDF ${filaPrevia.emisor_rfc} vs XML ${xml.rfcEmisor}`);
+    if (difiereRfc(filaPrevia.receptor_rfc, xml.rfcReceptor ?? null)) discrepancias.push(`RFC receptor leído del PDF ${filaPrevia.receptor_rfc} vs XML ${xml.rfcReceptor}`);
+  }
+  const hayDiscrepancia = discrepancias.length > 0;
+
   const { data, error } = await acotada(supabaseAdmin()
     .from('factura_proveedor')
     .update({
-      xml_crudo: xmlCrudo, fuente_datos: 'xml', requiere_revision: false, revision_motivo: null,
+      xml_crudo: xmlCrudo, fuente_datos: 'xml',
+      // Si el PDF y el XML no cuadran, la revisión NO se apaga — se FUERZA, con el motivo exacto, para que un
+      // humano compare ambas lecturas antes de tratar esta fila como una factura normal.
+      requiere_revision: hayDiscrepancia,
+      revision_motivo: hayDiscrepancia
+        ? `el XML no coincide con lo leído del PDF: ${discrepancias.join('; ')}`.slice(0, 300)
+        : null,
       emisor_rfc: xml.rfcEmisor ?? null, receptor_rfc: xml.rfcReceptor ?? null,
       receptor_es_flota: compararReceptor(xml.rfcReceptor, rfcFlota),
       fecha: xml.fecha ? xml.fecha.slice(0, 10) : null,
-      sub_total: typeof xml.subTotal === 'number' ? xml.subTotal : null,
-      iva: xml.ivaTraslado || null, total: xml.total,
+      sub_total: nuevoSubTotal,
+      iva: nuevoIva, total: xml.total,
       descripcion: leerDescripcionPrimerConcepto(xmlCrudo),
       conceptos: Math.max(1, xml.conceptos.length),
       estado_sat: estadoSat,

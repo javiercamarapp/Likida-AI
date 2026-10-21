@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { cuerpoAcotado } from '../_cuerpo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { httpsPublico } from '@/lib/http/https_publico';
 import { verificarFirma, mensajeDeRechazo } from '@/lib/correo/firma_entrante';
 import { tokenDeDestinatarios, dominioBuzon } from '@/lib/correo/buzon';
 import { atenderCorreoCartaPorte, tokenCpDeDestinatarios } from '@/lib/likida/carta_porte_docs/correo_entrante';
@@ -88,6 +89,59 @@ const MAX_WEBHOOK_BYTES = 256 * 1024;
 // (ver `finPresupuesto` abajo). Sin un número explícito aquí, el presupuesto se
 // calcularía contra un default de la plataforma que puede cambiar sin avisar.
 export const maxDuration = 60;
+
+/**
+ * AUDITORÍA ADVERSARIAL ALTO #1 (A9) — SSRF EN LA DESCARGA DE ADJUNTOS.
+ *
+ * Las dos peticiones a Resend (los metadatos del adjunto y, con la
+ * `download_url` que esos metadatos entregan, el binario) usaban `fetch()`
+ * directo. Las demás salidas de red de este repo a un destino que NO es un
+ * literal fijo propio pasan por `httpsPublico` (`peajes/pull.ts`,
+ * `conectores/tms/sesion.ts`): DNS validado CONTRA la IP que de verdad abre el
+ * socket (sin la ventana de DNS-rebinding de un `fetch` que resuelve dos
+ * veces), sin credenciales en la URL y sin seguir redirects a ciegas. La
+ * `download_url` la fabrica Resend, pero sigue siendo una URL dinámica que
+ * esta función no controla — el mismo estándar aplica.
+ *
+ * No se siguen redirects (a propósito, a diferencia del investigador de
+ * prospectos): un adjunto no necesita esa flexibilidad, y seguir un redirect a
+ * ciegas en una descarga binaria es la clase de bypass de SSRF que esta
+ * función existe para evitar. Si Resend alguna vez redirige esta descarga,
+ * cuenta como fallo transitorio (503, Resend reintenta) — no un bypass.
+ */
+async function bajarAdjuntoResend(
+  url: string, tope: number, timeoutMs: number,
+): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; motivo: 'tope'; declarado: number } | { ok: false; motivo: 'http' }> {
+  let declarado = 0;
+  try {
+    const r = await httpsPublico({
+      url,
+      metodo: 'GET',
+      // El tope de ESTE adjunto (4 MB para XML, 12 MB para PDF/zip) con el
+      // techo absoluto correspondiente: sin `maxBytesAbsoluto` el techo global
+      // de `httpsPublico` (8 MiB) habría rechazado un PDF/zip legítimo de entre
+      // 8 y 12 MB que el buzón siempre aceptó.
+      maxBytes: tope,
+      maxBytesAbsoluto: MAX_ADJUNTO_PDF_ZIP_BYTES,
+      aceptar: (estado, encabezados) => {
+        declarado = Number(encabezados['content-length'] ?? '') || 0;
+        return true;
+      },
+    }, timeoutMs);
+    if (r.estado < 200 || r.estado >= 300) return { ok: false, motivo: 'http' };
+    return { ok: true, bytes: r.bytes };
+  } catch (e) {
+    // `httpsPublico` lanza tanto por red/timeout (transitorio) como por tope de
+    // tamaño excedido (permanente: el reintento trae el mismo archivo). El
+    // DECLARADO se capturó en `aceptar` ANTES de que el tope cortara la
+    // descarga, así que el log de arriba puede decir el tamaño real sin
+    // inventar una cifra para el caso chunked sin `content-length` (ahí queda
+    // en 0: se dice honestamente que no se conoce, no se aproxima).
+    const msg = e instanceof Error ? e.message : '';
+    if (declarado > tope || /supera el límite/.test(msg)) return { ok: false, motivo: 'tope', declarado };
+    return { ok: false, motivo: 'http' };
+  }
+}
 
 export async function POST(req: Request) {
   // El cuerpo CRUDO: `JSON.parse` + `stringify` reordena llaves y la firma
@@ -331,39 +385,41 @@ export async function POST(req: Request) {
       // abajo devuelve el correo a la cola de Resend con todo por hacer.
       if (restanteMs() === 0) { caidas++; continue; }
 
-      const meta = await fetch(
-        `https://api.resend.com/emails/${emailId}/attachments/${adj.id}`,
-        { headers: { Authorization: `Bearer ${llave}` }, signal: AbortSignal.timeout(restanteMs()) },
-      );
-      if (!meta.ok) { caidas++; continue; }
-      const { download_url: url } = (await meta.json()) as { download_url?: string };
+      const meta = await httpsPublico({
+        url: `https://api.resend.com/emails/${encodeURIComponent(emailId)}/attachments/${encodeURIComponent(adj.id)}`,
+        metodo: 'GET',
+        encabezados: { Authorization: `Bearer ${llave}`, Accept: 'application/json' },
+      }, restanteMs());
+      if (meta.estado < 200 || meta.estado >= 300) { caidas++; continue; }
+      const { download_url: url } = JSON.parse(meta.cuerpo) as { download_url?: string };
       if (!url) { caidas++; continue; }
 
       if (restanteMs() === 0) { caidas++; continue; }
-      const bin = await fetch(url, { signal: AbortSignal.timeout(restanteMs()) });
-      if (!bin.ok) { caidas++; continue; }
-
       // El TOPE, con el doble chequeo de `leerCuerpo` (api/v1/_escritura.ts):
-      // primero lo DECLARADO, para ni siquiera materializar un cuerpo gigante;
-      // después el largo REAL, porque una transferencia chunked no declara
-      // nada. Pasarse es fallo PERMANENTE — el reintento trae el mismo
+      // primero lo DECLARADO (vía `aceptar`, dentro de `bajarAdjuntoResend`),
+      // para ni siquiera materializar un cuerpo gigante; después el largo REAL
+      // — `httpsPublico` corta la conexión en vuelo ante una transferencia
+      // chunked que no declara nada, así que tampoco ahí se materializa de
+      // más. Pasarse es fallo PERMANENTE — el reintento trae el mismo
       // archivo—, se loguea con nombre (saneado: lo escribió el emisor) y
       // tamaño para que sea visible, y los demás adjuntos siguen.
       const tope = topeDe(adj.filename ?? '');
-      const declarado = Number(bin.headers.get('content-length') || 0);
-      if (declarado > tope) {
-        logger.warn('correo_entrante.adjunto_gigante', {
-          emailId, archivo: sanitizarTexto(adj.filename), bytes: declarado,
-        });
-        ignoradas++; continue;
+      const descarga = await bajarAdjuntoResend(url, tope, restanteMs());
+      if (!descarga.ok) {
+        if (descarga.motivo === 'tope') {
+          logger.warn('correo_entrante.adjunto_gigante', {
+            emailId, archivo: sanitizarTexto(adj.filename),
+            // 0 cuando el proveedor no declaró `content-length` (chunked): no se
+            // inventa una cifra, se dice que no se conoce el tamaño exacto.
+            bytes: descarga.declarado > 0 ? descarga.declarado : null,
+          });
+          ignoradas++;
+        } else {
+          caidas++;
+        }
+        continue;
       }
-      const bytes = new Uint8Array(await bin.arrayBuffer());
-      if (bytes.length > tope) {
-        logger.warn('correo_entrante.adjunto_gigante', {
-          emailId, archivo: sanitizarTexto(adj.filename), bytes: bytes.length,
-        });
-        ignoradas++; continue;
-      }
+      const bytes = descarga.bytes;
       if (bytesCorreo + bytes.length > MAX_BYTES_CORREO) {
         logger.warn('correo_entrante.correo_gigante', { emailId, archivo: sanitizarTexto(adj.filename), bytes: bytesCorreo + bytes.length });
         ignoradas++; continue;
@@ -371,7 +427,8 @@ export async function POST(req: Request) {
       bytesCorreo += bytes.length;
       descargados.push({ nombre: adj.filename ?? 'sin nombre', bytes });
     } catch (e) {
-      // Aquí solo pueden lanzar los fetch y sus lecturas: es la red — transitorio. Un adjunto caído NO tumba
+      // Aquí solo puede lanzar el JSON mal formado de los metadatos (`bajarAdjuntoResend` ya clasifica sus
+      // propios fallos sin lanzar): es la red o un cuerpo ilegible — transitorio. Un adjunto caído NO tumba
       // a los demás: el resto del correo se sigue intentando.
       logger.warn('correo_entrante.adjunto', { emailId, err: e instanceof Error ? e.message : String(e) });
       caidas++;
