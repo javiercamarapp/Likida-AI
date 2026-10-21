@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- 0845 — PEAJES: candado de idempotencia en `peaje_reclamo` (auditoría
+-- 0847 — PEAJES: candado de idempotencia en `peaje_reclamo` (auditoría
 -- adversarial, HALLAZGO ALTO #1).
 --
 -- El botón «Registrar reclamo» (A2, reclamación de peajes) dispara un INSERT
@@ -30,4 +30,4 @@ create unique index if not exists peaje_reclamo_activo_unico
   where estado <> 'rechazado';
 
 comment on index public.peaje_reclamo_activo_unico is
-  '0845: un reclamo ACTIVO (no rechazado) por flota+desglose+categoría. Hace idempotente el doble envío de "Registrar reclamo" (defensa de base, además de useActionState en el formulario).';
+  '0847: un reclamo ACTIVO (no rechazado) por flota+desglose+categoría. Hace idempotente el doble envío de "Registrar reclamo" (defensa de base, además de useActionState en el formulario).';
