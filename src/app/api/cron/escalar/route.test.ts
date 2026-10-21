@@ -600,24 +600,61 @@ describe('BE-7 — los barridos ven el reloj y la corrida tiene techo duro', () 
     expect(registrarLatido).toHaveBeenCalledWith('escalar', 'parcial', { cortesSeguidos: 1, cortados: 7 });
   });
 
-  it('si un barrido se cuelga más allá del techo, la ruta responde y LATE igual — `parcial`, con el motor en vuelo nombrado', async () => {
+  // HALLAZGO ALTO (21-oct-2026): el aislamiento de "si uno truena, el otro
+  // igual intenta" sólo cubría EXCEPCIONES. Un `await` sobre una promesa que
+  // nunca resuelve (un `fetch` sin tope, un motor que ignoró su `venceEn`) no
+  // lanza — se queda ahí, y la cadena secuencial de `await` de `correrMotores`
+  // NUNCA llegaba a los barridos siguientes en esa corrida. Esta prueba ANTES
+  // documentaba el hueco (`vigilarReglas`/`correrOrquestadorVivo`/
+  // `avisarHuerfanosPendientes` quedaban en `not.toHaveBeenCalled()` hasta que
+  // el reloj duro de TODA la corrida, a los 110 s, cortaba por `enVuelo:
+  // 'relojes'`). Con el fix, cada barrido tiene SU PROPIO presupuesto —menor
+  // que el reloj duro— y al vencer la cadena SIGUE: los tres barridos de
+  // después SÍ corren, mucho antes de que el reloj duro de la invocación
+  // entre en juego.
+  it('si un barrido se cuelga más allá de SU presupuesto individual, los barridos siguientes SÍ corren y el cuerpo nombra qué motor se cortó por timeout individual', async () => {
+    vigilarReglas.mockClear();
+    correrOrquestadorVivo.mockClear();
+    avisarHuerfanosPendientes.mockClear();
     vi.useFakeTimers();
     try {
-      // `avisarVencimientos` no contesta nunca: un `fetch` sin tope, un motor
-      // que ignoró su reloj. Antes esto era una lambda muerta a los 120 s sin
-      // latido; ahora la ruta gana la carrera a los 110 s.
+      // `avisarVencimientos` no contesta nunca. Su presupuesto individual
+      // (`PRESUPUESTO_VENCIMIENTOS_MS` = 20 s) es muchísimo menor que el reloj
+      // duro de la invocación (110 s): la carrera la gana el presupuesto
+      // individual, no `conRelojDuro`.
       avisarVencimientos.mockImplementation(() => new Promise(() => {}));
       const pendiente = GET(peticion('Bearer secreto-de-prueba'));
-      await vi.advanceTimersByTimeAsync(111_000);
+      await vi.advanceTimersByTimeAsync(21_000);
       const res = await pendiente;
       const cuerpo = await res.json();
-      expect(cuerpo.corteDuro).toMatchObject({ motorEnVuelo: 'relojes' });
-      expect(registrarLatido).toHaveBeenCalledTimes(1);
-      expect(registrarLatido).toHaveBeenCalledWith('escalar', 'parcial', expect.objectContaining({ corteDuro: 'relojes', cortesSeguidos: 1 }));
-      expect(logger.error).toHaveBeenCalledWith('cron.escalar.corte_duro', expect.objectContaining({ enVuelo: 'relojes' }));
-      // Los dos motores de antes SÍ corrieron y su parte viaja en el cuerpo.
+
+      // No fue el reloj duro de toda la corrida el que cortó — fue el
+      // presupuesto individual del barrido de vencimientos, y el cuerpo lo
+      // nombra en su propio campo.
+      expect(cuerpo.corteDuro).toBeUndefined();
+      expect(cuerpo.relojes.vencimientos).toMatchObject({ codigo: 'timeout_individual', motor: 'vencimientos' });
+      expect(logger.error).toHaveBeenCalledWith('cron.escalar.timeout_individual', expect.objectContaining({ motor: 'vencimientos' }));
+      expect(alertarOperador).toHaveBeenCalledWith('cron.escalar', expect.objectContaining({ codigo: 'timeout_individual' }));
+
+      // EL HUECO QUE ESTA PRUEBA DOCUMENTABA: los tres barridos posteriores ya
+      // NO se quedan sin turno — corrieron, aunque `avisarVencimientos` nunca
+      // haya contestado.
+      expect(vigilarReglas).toHaveBeenCalledTimes(1);
+      expect(correrOrquestadorVivo).toHaveBeenCalledTimes(1);
+      expect(avisarHuerfanosPendientes).toHaveBeenCalledTimes(1);
+
+      // Los motores de antes (aceptación/cobranza) y el de incidencias (que sí
+      // contestó) corrieron normal y su parte viaja en el cuerpo.
       expect(cuerpo.aceptacion).toEqual({ escalados: 0, cortadosPorReloj: 0 });
       expect(cuerpo.comprobacion).toEqual({ tenants: 0, contactados: 0, cortadosPorReloj: 0, fallos: [] });
+      expect(cuerpo.relojes.incidencias).toEqual({ revisadas: 0, avisadas: 0, fallos: 0, cortadasPorReloj: 0 });
+
+      // Un motor que no contesta es, para el contrato de la ruta (OP-C1), lo
+      // mismo que un motor que truena: la corrida pinta 500 y el latido sale
+      // `fallo` — no puede salir en verde con un barrido mudo.
+      expect(res.status).toBe(500);
+      expect(registrarLatido).toHaveBeenCalledTimes(1);
+      expect(registrarLatido).toHaveBeenCalledWith('escalar', 'fallo', expect.objectContaining({ cortesSeguidos: 0 }));
     } finally {
       vi.useRealTimers();
     }

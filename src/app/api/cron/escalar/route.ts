@@ -94,6 +94,79 @@ async function conReintentoDeTimeout<T>(fn: () => Promise<T>, etiqueta: string):
   }
 }
 
+// ── HALLAZGO ALTO (21-oct-2026): EL AISLAMIENTO DE ARRIBA SOLO CUBRÍA
+// EXCEPCIONES, NO CUELGUES ────────────────────────────────────────────────
+//
+// Los seis barridos de `correrMotores` corren en una cadena de `await`
+// SECUENCIAL. "Corren en su propio try/catch cada uno: si uno truena, el
+// otro igual intenta" (comentario de arriba) es verdad para un `throw`, pero
+// un `await` sobre una promesa que NUNCA RESUELVE —un `fetch` sin tope, un
+// motor que ignoró su `venceEn`— no lanza: se queda ahí, y la ejecución
+// JAMÁS llega a los barridos siguientes en esa corrida. El único respaldo
+// era `conRelojDuro`/`venceDuro` sobre TODA la invocación: garantizaba que
+// la RUTA respondiera a tiempo, no que `reglas`, `orquestador` ni
+// `huerfanos` corrieran ni una vez.
+//
+// La prueba `route.test.ts` ('si un barrido se cuelga…') documentaba el
+// hueco: con `avisarVencimientos` colgado, los tres barridos posteriores
+// NUNCA se invocaban hasta que el reloj duro de los 110 s cortaba TODA la
+// corrida.
+//
+// El arreglo: cada barrido se envuelve en `conTimeoutIndividual` con SU
+// PROPIO presupuesto —menor que `venceDuro`—, y al vencer se registra como
+// fallido (mismo criterio que una excepción real: log + alerta + `huboFallo`)
+// y la cadena SIGUE con el siguiente. Igual que `conRelojDuro`, esto no
+// CANCELA la promesa perdedora —no hay forma de matar un `await` a la mitad
+// en JS—: sigue corriendo de fondo hasta que Vercel apague la invocación,
+// pero ya sin quitarle el turno a los barridos de después.
+//
+// Los números son topes CONSERVADORES, no un reparto exacto del minuto.
+// `aceptación`, `comprobación` y `calcom` ya reciben su propio `venceEn`
+// como parámetro (ESC-3/ESC-4/0323) y lo respetan cuando el motor SÍ mira su
+// reloj — este backstop solo entra cuando no lo mira, por eso su presupuesto
+// es un poco mayor al que ya tenían asignado. Los barridos de después
+// comparten `venceBarridos` como parámetro pero cada uno queda topado
+// APARTE, para que uno colgado no se quede con el turno de los otros
+// cuatro. Todos quedan muy por arriba de los timeouts de red que ya existen
+// DENTRO de cada motor (`acotada` 8 s, correo 5 s, Meta 10-15 s, backstop
+// del cliente Supabase 25 s) para no cortar una corrida legítima con varias
+// llamadas en secuencia.
+const PRESUPUESTO_ACEPTACION_MS = 50_000;
+const PRESUPUESTO_COBRANZA_MS = 90_000;
+const PRESUPUESTO_CALCOM_MS = 40_000;
+const PRESUPUESTO_RELOJES_INCIDENCIAS_MS = 20_000;
+const PRESUPUESTO_VENCIMIENTOS_MS = 20_000;
+const PRESUPUESTO_REGLAS_MS = 20_000;
+const PRESUPUESTO_ORQUESTADOR_MS = 20_000;
+const PRESUPUESTO_HUERFANOS_MS = 20_000;
+
+/** El testigo del corte individual. Un `Symbol` y no `null`/`undefined` para
+ *  que un barrido que legítimamente resolviera a un valor nulo no se
+ *  confunda con un corte (mismo patrón que `CORTE_DURO` en `_reloj_duro.ts`). */
+const CORTE_INDIVIDUAL = Symbol('cron.escalar.corte_individual');
+
+/** Envuelve UN barrido con su propio presupuesto. Si `trabajo` no contesta a
+ *  tiempo, resuelve a `CORTE_INDIVIDUAL` en vez de quedarse esperando para
+ *  siempre — la cadena de `await` secuencial de `correrMotores` puede
+ *  seguir con el siguiente barrido. Si `trabajo` lanza, la excepción sigue
+ *  de largo (la captura el `catch` de cada call site, sin tocar). */
+async function conTimeoutIndividual<T>(
+  trabajo: Promise<T>,
+  presupuestoMs: number,
+): Promise<T | typeof CORTE_INDIVIDUAL> {
+  let temporizador: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race<T | typeof CORTE_INDIVIDUAL>([
+      trabajo,
+      new Promise<typeof CORTE_INDIVIDUAL>((resolver) => {
+        temporizador = setTimeout(() => resolver(CORTE_INDIVIDUAL), presupuestoMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(temporizador);
+  }
+}
+
 /** La lectura del interruptor, con su reintento: `leerInterruptor` no lanza
  *  (devuelve 'ilegible'), así que el reintento va sobre el VALOR. */
 async function leerInterruptorConReintento(nombre: NombreInterruptor): Promise<Awaited<ReturnType<typeof leerInterruptor>>> {
@@ -201,6 +274,21 @@ export async function GET(req: Request) {
     estado: 'fallo', detalle: { codigo: 'corrida_sin_cerrar' },
   };
 
+  /** Registra que un barrido excedió SU presupuesto individual: mismo
+   *  criterio que una excepción real (log + alerta al operador + `huboFallo`),
+   *  pero no hay `catch` que lo intercepte —no lanzó, solo dejó de
+   *  contestar— así que cada call site lo llama explícitamente cuando
+   *  `conTimeoutIndividual` devuelve `CORTE_INDIVIDUAL`. */
+  const timeoutIndividual = async (etiqueta: string, presupuestoMs: number) => {
+    logger.error('cron.escalar.timeout_individual', { motor: etiqueta, presupuestoMs });
+    await alertarOperador('cron.escalar', {
+      error: `El barrido "${etiqueta}" excedió su presupuesto individual (${presupuestoMs} ms) sin responder; se cortó y los barridos siguientes corrieron igual.`,
+      codigo: 'timeout_individual',
+    });
+    huboFallo = true;
+    return { error: `timeout individual (${presupuestoMs} ms) sin responder`, codigo: 'timeout_individual', motor: etiqueta };
+  };
+
   const correrMotores = async (): Promise<void> => {
 
     // El primer motor ES el Agente de Conductores —`escalar_viaje.ts` registra
@@ -229,9 +317,16 @@ export async function GET(req: Request) {
         // saltando esas flotas. Ya no se excluye a nadie aquí; las secciones de stand-by de
         // ESTE MISMO cron (cobranza, relojes legales, reglas, más abajo) siguen pidiendo
         // `tenantsConPerfil()` porque esos módulos SÍ siguen en «Próximamente».
-        const r = await conReintentoDeTimeout(() => escalarViajesSinAceptar({ venceEn: venceEscalacion }), 'escalarViajesSinAceptar');
-        logger.info('cron.escalar.ok', { ...r });
-        resultado.aceptacion = r;
+        const r = await conTimeoutIndividual(
+          conReintentoDeTimeout(() => escalarViajesSinAceptar({ venceEn: venceEscalacion }), 'escalarViajesSinAceptar'),
+          PRESUPUESTO_ACEPTACION_MS,
+        );
+        if (r === CORTE_INDIVIDUAL) {
+          resultado.aceptacion = await timeoutIndividual('aceptacion', PRESUPUESTO_ACEPTACION_MS);
+        } else {
+          logger.info('cron.escalar.ok', { ...r });
+          resultado.aceptacion = r;
+        }
       } catch (e) {
         const error = e instanceof Error ? e.message : String(e);
         // El `codigo` es lo que separa "token vencido" de "tabla no existe" en el
@@ -261,9 +356,16 @@ export async function GET(req: Request) {
       try {
         // Las flotas con perfil (0770) se saltan: la cobranza es un módulo en stand-by.
         const excluirTenants = await tenantsConPerfil();
-        const r = await conReintentoDeTimeout(() => ejecutarCobranzaGlobal(new Date(), { venceEn: venceCobranza, excluirTenants }), 'ejecutarCobranzaGlobal');
-        logger.info('cron.cobranza.ok', { ...r });
-        resultado.comprobacion = r;
+        const r = await conTimeoutIndividual(
+          conReintentoDeTimeout(() => ejecutarCobranzaGlobal(new Date(), { venceEn: venceCobranza, excluirTenants }), 'ejecutarCobranzaGlobal'),
+          PRESUPUESTO_COBRANZA_MS,
+        );
+        if (r === CORTE_INDIVIDUAL) {
+          resultado.comprobacion = await timeoutIndividual('comprobacion', PRESUPUESTO_COBRANZA_MS);
+        } else {
+          logger.info('cron.cobranza.ok', { ...r });
+          resultado.comprobacion = r;
+        }
       } catch (e) {
         const error = e instanceof Error ? e.message : String(e);
         // Mismo criterio que el catch de arriba: código estable para el
@@ -283,12 +385,19 @@ export async function GET(req: Request) {
     enVuelo = 'calcom';
     try {
       const { ejecutarMantenimientoCalcom } = await import('@/lib/admin/calcom');
-      const calcom = await ejecutarMantenimientoCalcom({
-        callbackUrl: `${appUrl()}/api/webhook/calcom`,
-        venceEn: Math.min(Date.now() + 30_000, venceDuro),
-      });
-      logger.info('cron.calcom.ok', { ...calcom });
-      resultado.calcom = calcom;
+      const r = await conTimeoutIndividual(
+        ejecutarMantenimientoCalcom({
+          callbackUrl: `${appUrl()}/api/webhook/calcom`,
+          venceEn: Math.min(Date.now() + 30_000, venceDuro),
+        }),
+        PRESUPUESTO_CALCOM_MS,
+      );
+      if (r === CORTE_INDIVIDUAL) {
+        resultado.calcom = await timeoutIndividual('calcom', PRESUPUESTO_CALCOM_MS);
+      } else {
+        logger.info('cron.calcom.ok', { ...r });
+        resultado.calcom = r;
+      }
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       const codigo = codigoDeError(e);
@@ -313,13 +422,27 @@ export async function GET(req: Request) {
     try {
       // Las flotas con perfil (0770) se saltan los relojes de incidencias (módulo en stand-by).
       const excluirTenants = await tenantsConPerfil();
-      const [relojes, vencimientos] = [
-        await avisarRelojesLegales(new Date(), { venceEn: venceBarridos, excluirTenants }),
-        await avisarVencimientos(new Date(), { venceEn: venceBarridos }),
-      ];
+      // Cada uno de los dos con SU PROPIO presupuesto (hallazgo 21-oct-2026): si
+      // `avisarRelojesLegales` se cuelga ya no se come el turno de
+      // `avisarVencimientos`, y viceversa.
+      const rIncidencias = await conTimeoutIndividual(
+        avisarRelojesLegales(new Date(), { venceEn: venceBarridos, excluirTenants }),
+        PRESUPUESTO_RELOJES_INCIDENCIAS_MS,
+      );
+      const relojes = rIncidencias === CORTE_INDIVIDUAL
+        ? await timeoutIndividual('relojes_incidencias', PRESUPUESTO_RELOJES_INCIDENCIAS_MS)
+        : rIncidencias;
+      const rVencimientos = await conTimeoutIndividual(
+        avisarVencimientos(new Date(), { venceEn: venceBarridos }),
+        PRESUPUESTO_VENCIMIENTOS_MS,
+      );
+      const vencimientos = rVencimientos === CORTE_INDIVIDUAL
+        ? await timeoutIndividual('vencimientos', PRESUPUESTO_VENCIMIENTOS_MS)
+        : rVencimientos;
       logger.info('cron.relojes.ok', { ...relojes, vencimientos });
       resultado.relojes = { incidencias: relojes, vencimientos };
-      if (relojes.fallos > 0 || vencimientos.fallos > 0) huboFallo = true;
+      if ((relojes as { fallos?: number }).fallos ?? 0) huboFallo = true;
+      if ((vencimientos as { fallos?: number }).fallos ?? 0) huboFallo = true;
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       const codigo = codigoDeError(e);
@@ -347,10 +470,18 @@ export async function GET(req: Request) {
     try {
       const { vigilarReglas } = await import('@/lib/likida/reglas/vigilante');
       // Las flotas con perfil (0770) se saltan: las reglas son un módulo en stand-by.
-      const reglas = await vigilarReglas(new Date(), { venceEn: venceBarridos, excluirTenants: await tenantsConPerfil() });
-      logger.info('cron.reglas.ok', { ...reglas });
-      resultado.reglas = reglas;
-      if (reglas.fallos > 0) huboFallo = true;
+      const excluirTenants = await tenantsConPerfil();
+      const r = await conTimeoutIndividual(
+        vigilarReglas(new Date(), { venceEn: venceBarridos, excluirTenants }),
+        PRESUPUESTO_REGLAS_MS,
+      );
+      if (r === CORTE_INDIVIDUAL) {
+        resultado.reglas = await timeoutIndividual('reglas', PRESUPUESTO_REGLAS_MS);
+      } else {
+        logger.info('cron.reglas.ok', { ...r });
+        resultado.reglas = r;
+        if (r.fallos > 0) huboFallo = true;
+      }
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       const codigo = codigoDeError(e);
@@ -368,10 +499,14 @@ export async function GET(req: Request) {
     enVuelo = 'orquestador';
     try {
       const { correrOrquestadorVivo } = await import('@/lib/likida/orquestador/correr_vivo');
-      const orq = await correrOrquestadorVivo({ venceEn: venceBarridos });
-      logger.info('cron.orquestador.ok', { ...orq });
-      resultado.orquestador = orq;
-      if (orq.fallos > 0) huboFallo = true;
+      const orq = await conTimeoutIndividual(correrOrquestadorVivo({ venceEn: venceBarridos }), PRESUPUESTO_ORQUESTADOR_MS);
+      if (orq === CORTE_INDIVIDUAL) {
+        resultado.orquestador = await timeoutIndividual('orquestador', PRESUPUESTO_ORQUESTADOR_MS);
+      } else {
+        logger.info('cron.orquestador.ok', { ...orq });
+        resultado.orquestador = orq;
+        if (orq.fallos > 0) huboFallo = true;
+      }
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       const codigo = codigoDeError(e);
@@ -395,10 +530,17 @@ export async function GET(req: Request) {
     enVuelo = 'huerfanos';
     try {
       const { avisarHuerfanosPendientes } = await import('@/lib/likida/avisar_huerfanos');
-      const huerfanos = await avisarHuerfanosPendientes(new Date(), { venceEn: venceBarridos });
-      logger.info('cron.huerfanos.ok', { ...huerfanos });
-      resultado.huerfanos = huerfanos;
-      if (huerfanos.fallos > 0) huboFallo = true;
+      const huerfanos = await conTimeoutIndividual(
+        avisarHuerfanosPendientes(new Date(), { venceEn: venceBarridos }),
+        PRESUPUESTO_HUERFANOS_MS,
+      );
+      if (huerfanos === CORTE_INDIVIDUAL) {
+        resultado.huerfanos = await timeoutIndividual('huerfanos', PRESUPUESTO_HUERFANOS_MS);
+      } else {
+        logger.info('cron.huerfanos.ok', { ...huerfanos });
+        resultado.huerfanos = huerfanos;
+        if (huerfanos.fallos > 0) huboFallo = true;
+      }
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       const codigo = codigoDeError(e);
