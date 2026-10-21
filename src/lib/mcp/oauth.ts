@@ -711,10 +711,38 @@ export interface ClienteParaRevision {
   anfitriones: string[];
   estado: EstadoCliente;
   creadoEn: string;
+  /**
+   * Tokens OAuth vivos (acceso y refresco, sin revocar) que tiene este
+   * cliente AHORA MISMO — AUDITORÍA ADVERSARIAL, HALLAZGO ALTO #1: el diálogo
+   * de "Rechazar" decía QUE iba a revocar tokens, nunca A CUÁNTOS, así que
+   * quien confirmaba no sabía el alcance real (potencialmente de varias
+   * flotas que ya dieron consentimiento). Se cuenta ANTES de decidir —
+   * decidir ya es irreversible — para que el diálogo lo diga explícito.
+   */
+  tokensVivos: number;
+}
+
+/** Cuántos tokens OAuth vivos tiene un cliente AHORA, sin revocar ninguno.
+ *  `head: true` + `count: 'exact'`: PostgREST cuenta en la base y no manda
+ *  NI UNA fila (mismo patrón que `admin/negocio.ts/contarFilas`) — y por eso
+ *  tampoco choca con el recorte silencioso a 1,000 filas de PostgREST que
+ *  advierte el CLAUDE.md del repo: un `head` nunca trae filas que recortar. */
+async function contarTokensVivos(clientId: string): Promise<number> {
+  const { count, error } = await supabaseAdmin()
+    .from('mcp_oauth_token')
+    .select('id', { count: 'exact', head: true })
+    .eq('cliente_id', clientId)
+    .is('revocado_en', null);
+  if (error) throw new Error(`mcp.oauth.contar_tokens_vivos: ${error.message}`);
+  if (typeof count !== 'number') {
+    throw new Error('mcp.oauth.contar_tokens_vivos: PostgREST no devolvió el conteo — no se afirma un 0 que nadie midió.');
+  }
+  return count;
 }
 
 /** Clientes pendientes (los más nuevos primero). LANZA si la base falla: «no hay
- *  nada por revisar» pintado sobre una base caída es la mentira que evitamos. */
+ *  nada por revisar» pintado sobre una base caída es la mentira que evitamos.
+ *  Trae también, por cliente, sus tokens vivos (ver `ClienteParaRevision`). */
 export async function listarClientesPendientes(limite = 100): Promise<ClienteParaRevision[]> {
   const { data, error } = await supabaseAdmin()
     .from('mcp_oauth_cliente')
@@ -724,17 +752,19 @@ export async function listarClientesPendientes(limite = 100): Promise<ClientePar
     .order('id')
     .limit(Math.max(1, Math.min(limite, 200)));
   if (error) throw new Error(`mcp_oauth_cliente: ${error.message}`);
-  return (data ?? []).map((f) => {
+  return Promise.all((data ?? []).map(async (f) => {
     const uris = Array.isArray(f.redirect_uris) ? f.redirect_uris.map(String) : [];
+    const clientId = String(f.id);
     return {
-      clientId: String(f.id),
+      clientId,
       nombre: (f.nombre as string) ?? null,
       redirectUris: uris,
       anfitriones: anfitrionesDe(uris),
       estado: 'pendiente' as const,
       creadoEn: String(f.creado_en),
+      tokensVivos: await contarTokensVivos(clientId),
     };
-  });
+  }));
 }
 
 /**
