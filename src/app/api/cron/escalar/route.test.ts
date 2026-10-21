@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Sin perfiles de tenant (0770): este archivo prueba el cron de siempre. El filtro por perfil tiene
 // su propia prueba (src/app/api/cron/perfil_crons.test.ts).
@@ -46,7 +46,7 @@ const correrOrquestadorVivo = vi.fn(async (..._a: unknown[]): Promise<Record<str
 vi.mock('@/lib/likida/orquestador/correr_vivo', () => ({
   correrOrquestadorVivo: (...a: unknown[]) => correrOrquestadorVivo(...(a as [])),
 }));
-const vigilarReglas = vi.fn(async () => ({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0 }));
+const vigilarReglas = vi.fn(async (): Promise<Record<string, unknown>> => ({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0 }));
 vi.mock('@/lib/likida/reglas/vigilante', () => ({
   vigilarReglas: (...a: unknown[]) => vigilarReglas(...(a as [])),
 }));
@@ -54,7 +54,7 @@ vi.mock('@/lib/likida/reglas/vigilante', () => ({
 // dobla en cero por lo mismo que reglas/orquestador: aquí se mide el reparto
 // del reloj y los interruptores, no el motor (que tiene su propia suite,
 // avisar_huerfanos.test.ts).
-const avisarHuerfanosPendientes = vi.fn(async (..._a: unknown[]) => ({ conPendientes: 0, avisados: 0, fallos: 0 }));
+const avisarHuerfanosPendientes = vi.fn(async (..._a: unknown[]): Promise<Record<string, unknown>> => ({ conPendientes: 0, avisados: 0, fallos: 0 }));
 vi.mock('@/lib/likida/avisar_huerfanos', () => ({
   avisarHuerfanosPendientes: (...a: unknown[]) => avisarHuerfanosPendientes(...(a as [])),
 }));
@@ -294,6 +294,18 @@ describe('el reloj se reparte y los cortes repetidos se gritan', () => {
     estaApagado.mockReset().mockResolvedValue(false);
   });
 
+  // AUDITORÍA 28 (hallazgo #4): estas pruebas tocan `vigilarReglas` y
+  // `correrOrquestadorVivo` directamente (no los dobla ningún otro beforeEach
+  // de este describe). Sin este `afterEach` el mock quedaría con un corte
+  // distinto de cero para los describes de abajo (BE-7, el orquestador) que
+  // SÍ dependen del cero por omisión.
+  afterEach(() => {
+    vigilarReglas.mockReset().mockResolvedValue({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0, cortadasPorReloj: 0 });
+    correrOrquestadorVivo.mockReset().mockResolvedValue({
+      barrido: { flotas: 0, abiertas: 0, cerradas: 0, fallos: 0, cortadoPorReloj: false }, avisos: 'no_disponible', fallos: 0,
+    });
+  });
+
   it('a cada motor le pasa SU vencimiento, y el de la cobranza es más tarde', async () => {
     await GET(peticion('Bearer secreto-de-prueba'));
     const { venceEn: venceEscalacion } = escalarViajesSinAceptar.mock.calls[0][0] as { venceEn: number };
@@ -326,6 +338,33 @@ describe('el reloj se reparte y los cortes repetidos se gritan', () => {
     expect(res.status).toBe(200);
     expect(registrarLatido).toHaveBeenCalledWith('escalar', 'ok', { cortesSeguidos: 0, cortados: 0 });
     expect(alertarOperador).not.toHaveBeenCalled();
+  });
+
+  // AUDITORÍA 28, HALLAZGO #4: antes de esta corrección, un corte repetido en
+  // el vigilante de reglas o en el orquestador vivo NUNCA sumaba a `cortados`
+  // — la racha de «tres cortes seguidos» era ciega a esos dos barridos.
+  it('un corte del VIGILANTE DE REGLAS (quinto barrido) sí suma a `cortados` y a la racha', async () => {
+    vigilarReglas.mockReset().mockResolvedValue({ reglas: 5, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0, cortadasPorReloj: 3 });
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect((await res.json()).cortadosPorReloj).toBe(3);
+    expect(registrarLatido).toHaveBeenCalledWith('escalar', 'parcial', { cortesSeguidos: 1, cortados: 3 });
+  });
+
+  it('TRES corridas seguidas con el vigilante de reglas cortado: dispara la alerta igual que los otros motores', async () => {
+    latidoPrevio = { ultimoLatido: new Date().toISOString(), estado: 'parcial', detalle: { cortesSeguidos: 2 } };
+    vigilarReglas.mockReset().mockResolvedValue({ reglas: 5, disparadas: 0, avisos: 0, fallos: 0, diferidas: 0, cortadasPorReloj: 2 });
+    await GET(peticion('Bearer secreto-de-prueba'));
+    expect(alertarOperador).toHaveBeenCalledWith('cron.escalar', expect.objectContaining({ codigo: 'corte_por_reloj_repetido' }));
+  });
+
+  it('un corte del ORQUESTADOR VIVO (`barrido.cortadoPorReloj`) también suma a `cortados`', async () => {
+    correrOrquestadorVivo.mockReset().mockResolvedValue({
+      barrido: { flotas: 25, abiertas: 1, cerradas: 0, fallos: 0, cortadoPorReloj: true },
+      avisos: 'no_disponible', fallos: 0,
+    });
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect((await res.json()).cortadosPorReloj).toBe(1);
+    expect(registrarLatido).toHaveBeenCalledWith('escalar', 'parcial', { cortesSeguidos: 1, cortados: 1 });
   });
 
   // OP-C1 (mismo criterio que descarga-sat, health.ts): Cal.com sin API
@@ -473,6 +512,13 @@ describe('el aviso de comprobantes huérfanos (avisar_huerfanos) corre aquí, y 
     avisarHuerfanosPendientes.mockReset().mockResolvedValue({ conPendientes: 0, avisados: 0, fallos: 0 });
   });
 
+  // La prueba de `cortadasPorReloj` de más abajo deja este mock con un corte
+  // distinto de cero; sin este `afterEach` ese corte se filtraba a BE-7 (que
+  // no reinicia `avisarHuerfanosPendientes` en su propio beforeEach).
+  afterEach(() => {
+    avisarHuerfanosPendientes.mockReset().mockResolvedValue({ conPendientes: 0, avisados: 0, fallos: 0, cortadasPorReloj: 0 });
+  });
+
   it('se despacha en cada corrida y su resultado viaja en el cuerpo', async () => {
     avisarHuerfanosPendientes.mockResolvedValue({ conPendientes: 3, avisados: 1, fallos: 0 });
     const res = await GET(peticion('Bearer secreto-de-prueba'));
@@ -503,6 +549,16 @@ describe('el aviso de comprobantes huérfanos (avisar_huerfanos) corre aquí, y 
     const res = await GET(peticion('Bearer secreto-de-prueba'));
     expect(res.status).toBe(200);
     expect(avisarHuerfanosPendientes).not.toHaveBeenCalled();
+  });
+
+  // AUDITORÍA 28 (hallazgos #2/#3, corregidos hoy en `avisarHuerfanosPendientes`):
+  // ahora que el sexto barrido SÍ cuenta `cortadasPorReloj`, ese número tiene
+  // que sumar a la cuenta de `cortados` del cron — el mismo criterio que ya
+  // regía para los otros cinco barridos.
+  it('un corte del sexto barrido (huérfanos) también suma a `cortados`', async () => {
+    avisarHuerfanosPendientes.mockResolvedValue({ conPendientes: 5, avisados: 1, fallos: 0, cortadasPorReloj: 4 });
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect((await res.json()).cortadosPorReloj).toBe(4);
   });
 });
 
