@@ -161,17 +161,27 @@ describe('ejecutarCobranza — ventana de 24 h cerrada: habla la plantilla (AG-A
 // avisos sin que nadie haya podido mandárselo.
 // ═══════════════════════════════════════════════════════════════════════════
 describe('un rechazo REINTENTABLE no consume el tier (RES-1)', () => {
-  it('429 en el texto y en la plantilla: el claim se BORRA y el fallo lo dice', async () => {
+  it('429 en el texto y en la plantilla: ya quedó en wa_outbox (encolado) — el claim se CONSERVA, no se borra (HALLAZGO 2)', async () => {
     sendText.mockResolvedValue(null);
     sendTemplate.mockResolvedValue({ ok: false, error: 'rate limit', codigo: 130429 });
     const r = await ejecutarCobranza('t1', AHORA, { ignorarVentana: true });
 
     expect(r.rechazosReintentables).toBe(2);
     expect(r.contactados).toBe(0);
-    // El rescate de claims huérfanos borra una vez al entrar; los dos borrados
-    // extra son los tiers liberados.
-    expect(borrados.filter((t) => t === 'cobranza_contacto').length).toBeGreaterThanOrEqual(3);
-    expect(r.fallos[0]).toMatch(/se reintenta en la siguiente corrida/);
+    // AUDITORÍA 28 (HALLAZGO 2): un 130429 es "reintentable" PORQUE el
+    // cliente de Meta (client.ts) ya lo encoló en `wa_outbox` — borrar el
+    // claim aquí dejaría a cobranza y al outbox reintentando el MISMO
+    // mensaje por caminos independientes, sin llave compartida (riesgo real
+    // de doble envío). Solo el rescate de claims huérfanos borra al entrar;
+    // los dos tiers rechazados se CONSERVAN (se actualizan, no se borran).
+    expect(borrados.filter((t) => t === 'cobranza_contacto').length).toBe(1);
+    const resultados = updates.filter((u) => u.tabla === 'cobranza_contacto').map((u) => u.fila as { enviado: boolean; detalle: string });
+    expect(resultados).toHaveLength(2);
+    for (const fila of resultados) {
+      expect(fila.enviado).toBe(false);
+      expect(fila.detalle).toMatch(/ya en la cola de salida de WhatsApp/);
+    }
+    expect(r.fallos[0]).toMatch(/ya en la cola de salida de WhatsApp/);
   });
 
   it('un rechazo NO reintentable (plantilla sin aprobar) SÍ consume el tier', async () => {
@@ -205,7 +215,7 @@ describe('ejecutarCobranza — con el registro de la ventana (P0-B)', () => {
     expect(sendTemplate).not.toHaveBeenCalled();
   });
 
-  it('un 429 del TEXTO ya no manda además la plantilla (el texto quedó en wa_outbox: duplicaría) y el tier no se consume', async () => {
+  it('un 429 del TEXTO ya no manda además la plantilla (duplicaría), y el claim se CONSERVA porque el texto ya quedó en wa_outbox (HALLAZGO 2)', async () => {
     estadoVentana = 'abierta';
     sendText.mockResolvedValue(null);
     rechazoTexto = { codigo: undefined, status: 429 };
@@ -213,6 +223,11 @@ describe('ejecutarCobranza — con el registro de la ventana (P0-B)', () => {
     expect(sendTemplate).not.toHaveBeenCalled();
     expect(r.contactados).toBe(0);
     expect(r.rechazosReintentables).toBe(2);
-    expect(r.fallos[0]).toMatch(/se reintenta en la siguiente corrida/);
+    // AUDITORÍA 28 (HALLAZGO 2): el 429 del texto ya quedó encolado en
+    // wa_outbox del lado del cliente de Meta — borrar el claim aquí abriría
+    // una carrera entre ese reintento y uno nuevo, independiente, de cobranza.
+    // El claim se conserva: no se reintenta desde aquí.
+    expect(r.fallos[0]).toMatch(/ya en la cola de salida de WhatsApp/);
+    expect(updates.filter((u) => u.tabla === 'cobranza_contacto')).toHaveLength(2);
   });
 });

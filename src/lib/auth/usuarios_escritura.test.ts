@@ -7,6 +7,26 @@
 //   · la baja escribe `activo=false` + sello + BAN en Auth + bitácora;
 //   · nadie se toca a sí mismo, ni al superadmin, ni al último dueño;
 //   · un ban que falla se DICE (`sesionRevocada:false`), no se finge.
+//
+// AUDITORÍA ADVERSARIAL (21-oct-2026), HALLAZGO ALTO #2 — TOCTOU: el recuento
+// del «último dueño activo» y el UPDATE de la fila ya NO son dos consultas
+// separadas desde este módulo; son UNA llamada a la RPC atómica
+// (`equipo_cambiar_rol` / `equipo_desactivar_usuario`, migración 0845) que
+// hace las dos cosas en la MISMA transacción, bajo un candado por tenant. Lo
+// que este archivo fija de ese cierre:
+//   · cambiarRolUsuario/desactivarUsuario YA NO hacen su propio SELECT de
+//     conteo — un solo SELECT (leerObjetivo) y una sola llamada a `rpc`;
+//   · la RPC se llama con tenant, usuario, rol ACTUAL leído y (para la baja)
+//     el actor — la base decide 'ok' | 'ultimo_dueno' | 'conflicto';
+//   · dos llamadas que «se traslapan» (simuladas con Promise.allSettled,
+//     dejando que la RPC — que en la base real se serializa con el candado —
+//     responda 'ok' a una y 'ultimo_dueno' a la otra) nunca producen DOS
+//     bajas/degradaciones exitosas sobre los dos únicos dueños. La prueba de
+//     que el candado de Postgres de verdad serializa dos SESIONES
+//     concurrentes (no solo que este módulo propaga bien lo que la RPC
+//     contesta) vive en `supabase/tests/0846_equipo_candado_ultimo_dueno_
+//     concurrencia.sh`, contra Postgres real — un mock de un solo hilo no
+//     puede demostrar una condición de carrera de dos transacciones.
 // ═══════════════════════════════════════════════════════════════════════════
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -88,13 +108,13 @@ beforeEach(() => {
 });
 
 describe('cambiarRolUsuario', () => {
-  it('actualiza anclado a tenant y al rol actual, y anota de→a en bitácora', async () => {
-    colas.set('app_user', [{ data: fila() }, { data: [{ id: U }] }]);
+  it('llama a la RPC atómica con tenant, usuario, rol ACTUAL y rol nuevo, y anota de→a en bitácora', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
     const r = await cambiarRolUsuario(TENANT, U, 'encargado', ACTOR);
     expect(r).toEqual({ de: 'contador', a: 'encargado' });
-    const [up] = updatesDe('app_user');
-    expect(up.payload).toEqual({ rol: 'encargado' });
-    expect(up.eq).toEqual(expect.arrayContaining([['id', U], ['tenant_id', TENANT], ['rol', 'contador']]));
+    expect(rpc).toHaveBeenCalledWith('equipo_cambiar_rol',
+      { p_tenant: TENANT, p_usuario: U, p_rol_actual: 'contador', p_rol_nuevo: 'encargado' });
     expect(anotarBitacora).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: TENANT, accion: 'usuario.rol_cambiado', entidad: 'app_user', entidadId: U, detalle: { de: 'contador', a: 'encargado' } }),
       expect.anything(),
@@ -113,10 +133,10 @@ describe('cambiarRolUsuario', () => {
     expect(llamadas).toHaveLength(0);
   });
 
-  it('una cuenta de otra flota (o inexistente) es «no está en tu equipo»: no toca nada', async () => {
+  it('una cuenta de otra flota (o inexistente) es «no está en tu equipo»: no llama a la RPC', async () => {
     colas.set('app_user', [{ data: null }]);
     await expect(cambiarRolUsuario(TENANT, U, 'encargado', ACTOR)).rejects.toThrow(/no está en tu equipo/);
-    expect(updatesDe('app_user')).toHaveLength(0);
+    expect(rpc).not.toHaveBeenCalled();
     const [lectura] = llamadas;
     expect(lectura.eq).toEqual(expect.arrayContaining([['id', U], ['tenant_id', TENANT]]));
   });
@@ -124,32 +144,35 @@ describe('cambiarRolUsuario', () => {
   it('un superadmin no se administra desde el panel del cliente', async () => {
     colas.set('app_user', [{ data: fila({ rol: 'superadmin' }) }]);
     await expect(cambiarRolUsuario(TENANT, U, 'contador', ACTOR)).rejects.toThrow(/de Likida/);
-    expect(updatesDe('app_user')).toHaveLength(0);
+    expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('el ÚLTIMO dueño activo no se degrada (count real, no .length)', async () => {
-    colas.set('app_user', [{ data: fila({ rol: 'flota_admin' }) }, { count: 0, data: null }]);
+  it('el ÚLTIMO dueño activo no se degrada: la RPC dice "ultimo_dueno" y nadie anota bitácora', async () => {
+    colas.set('app_user', [{ data: fila({ rol: 'flota_admin' }) }]);
+    rpc.mockResolvedValueOnce({ data: 'ultimo_dueno', error: null });
     await expect(cambiarRolUsuario(TENANT, U, 'contador', ACTOR)).rejects.toThrow(/único dueño/);
-    const conteo = llamadas.find((l) => l.head);
-    expect(conteo?.eq).toEqual(expect.arrayContaining([['tenant_id', TENANT], ['rol', 'flota_admin'], ['activo', true]]));
-    expect(conteo?.neq).toEqual([['id', U]]);
-    expect(updatesDe('app_user')).toHaveLength(0);
+    expect(rpc).toHaveBeenCalledWith('equipo_cambiar_rol',
+      { p_tenant: TENANT, p_usuario: U, p_rol_actual: 'flota_admin', p_rol_nuevo: 'contador' });
+    expect(anotarBitacora).not.toHaveBeenCalled();
   });
 
   it('con otro dueño activo sí se degrada', async () => {
-    colas.set('app_user', [{ data: fila({ rol: 'flota_admin' }) }, { count: 1, data: null }, { data: [{ id: U }] }]);
+    colas.set('app_user', [{ data: fila({ rol: 'flota_admin' }) }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
     await expect(cambiarRolUsuario(TENANT, U, 'contador', ACTOR)).resolves.toEqual({ de: 'flota_admin', a: 'contador' });
   });
 
-  it('0 filas en el update (cambió mientras tanto) NO es éxito y no anota bitácora', async () => {
-    colas.set('app_user', [{ data: fila() }, { data: [] }]);
+  it('"conflicto" (el rol cambió mientras tanto) NO es éxito y no anota bitácora', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    rpc.mockResolvedValueOnce({ data: 'conflicto', error: null });
     await expect(cambiarRolUsuario(TENANT, U, 'encargado', ACTOR)).rejects.toThrow(/cambió mientras tanto/);
     expect(anotarBitacora).not.toHaveBeenCalled();
   });
 
-  it('una cuenta dada de baja no cambia de rol: primero se reactiva', async () => {
+  it('una cuenta dada de baja no cambia de rol: primero se reactiva (no llega a llamar la RPC)', async () => {
     colas.set('app_user', [{ data: fila({ activo: false }) }]);
     await expect(cambiarRolUsuario(TENANT, U, 'encargado', ACTOR)).rejects.toThrow(/dada de baja/);
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it('un error de lectura LANZA (no es DatoInvalido): la base caída no se disfraza de captura', async () => {
@@ -158,17 +181,62 @@ describe('cambiarRolUsuario', () => {
     await expect(p).rejects.toThrow('fetch failed');
     await expect(p).rejects.not.toBeInstanceOf(DatoInvalido);
   });
+
+  it('un error de la RPC (base caída a medio candado) LANZA — no se disfraza de "último dueño" ni de éxito', async () => {
+    colas.set('app_user', [{ data: fila({ rol: 'flota_admin' }) }]);
+    rpc.mockResolvedValueOnce({ data: null, error: { message: 'deadlock detected' } });
+    const p = cambiarRolUsuario(TENANT, U, 'contador', ACTOR);
+    await expect(p).rejects.toThrow('deadlock detected');
+    await expect(p).rejects.not.toBeInstanceOf(DatoInvalido);
+    expect(anotarBitacora).not.toHaveBeenCalled();
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // HALLAZGO ALTO #2 (TOCTOU) — reproducción con llamadas CONCURRENTES
+  // SIMULADAS (Promise.allSettled: las dos invocaciones arrancan en el mismo
+  // tick, antes de que ninguna de las dos resuelva su primer await). Dos
+  // dueños activos, DOS degradaciones a la vez — una para cada uno,
+  // excluyéndose mutuamente. La RPC (que en la base real se serializa con el
+  // candado de 0845) contesta 'ok' a la que "gana" el candado y
+  // 'ultimo_dueno' a la que llega después y ya ve al otro degradado — nunca
+  // las dos 'ok'. Esto fija que ESTE módulo no reintroduce su propio chequeo
+  // de conteo (ya no lo tiene: confía entero en lo que la RPC atómica
+  // contesta) y que dos llamadas que se traslapan de verdad nunca producen
+  // dos bajas exitosas sobre los dos únicos dueños.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('TOCTOU: dos degradaciones concurrentes sobre los DOS únicos dueños — una pasa, la otra rebota, nunca las dos', async () => {
+    const U1 = '33333333-2222-4333-8444-555555555555';
+    const U2 = '44444444-2222-4333-8444-555555555555';
+    colas.set('app_user', [{ data: fila({ id: U1, rol: 'flota_admin' }) }, { data: fila({ id: U2, rol: 'flota_admin' }) }]);
+    rpc.mockImplementationOnce(async () => ({ data: 'ok', error: null }))
+      .mockImplementationOnce(async () => ({ data: 'ultimo_dueno', error: null }));
+
+    const [r1, r2] = await Promise.allSettled([
+      cambiarRolUsuario(TENANT, U1, 'contador', ACTOR),
+      cambiarRolUsuario(TENANT, U2, 'contador', ACTOR),
+    ]);
+
+    const resultados = [r1, r2];
+    const exitos = resultados.filter((r) => r.status === 'fulfilled');
+    const rebotes = resultados.filter((r) => r.status === 'rejected');
+    expect(exitos).toHaveLength(1);
+    expect(rebotes).toHaveLength(1);
+    expect((rebotes[0] as PromiseRejectedResult).reason).toBeInstanceOf(DatoInvalido);
+    expect((rebotes[0] as PromiseRejectedResult).reason.message).toMatch(/único dueño/);
+    // Solo la que de verdad pasó anota bitácora — la que rebotó no deja un
+    // "cambio" falso en el historial.
+    expect(anotarBitacora).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('desactivarUsuario — la baja en tres capas', () => {
-  it('activo=false + sello + BAN permanente en Auth + bitácora', async () => {
-    colas.set('app_user', [{ data: fila() }, { data: [{ id: U }] }]);
+  it('llama a la RPC atómica (rol ACTUAL + actor) y, si contesta "ok": BAN permanente en Auth + bitácora', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
     const r = await desactivarUsuario(TENANT, U, ACTOR);
     expect(r).toEqual({ sesionRevocada: true });
-    const [up] = updatesDe('app_user');
-    expect(up.payload).toMatchObject({ activo: false, desactivado_por: OTRO });
-    expect(String((up.payload as Record<string, unknown>).desactivado_en)).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-    expect(up.eq).toEqual(expect.arrayContaining([['id', U], ['tenant_id', TENANT], ['activo', true]]));
+    expect(rpc).toHaveBeenCalledWith('equipo_desactivar_usuario',
+      { p_tenant: TENANT, p_usuario: U, p_rol_actual: 'contador', p_actor: OTRO });
     expect(updateUserById).toHaveBeenCalledWith(U, { ban_duration: BAN_PERMANENTE });
     expect(anotarBitacora).toHaveBeenCalledWith(
       expect.objectContaining({ accion: 'usuario.desactivado', entidadId: U, detalle: { rol: 'contador', sesion_revocada: true } }),
@@ -176,8 +244,9 @@ describe('desactivarUsuario — la baja en tres capas', () => {
     );
   });
 
-  it('si el ban falla, la fila queda de baja pero se DICE (sesionRevocada=false) y queda en log y bitácora', async () => {
-    colas.set('app_user', [{ data: fila() }, { data: [{ id: U }] }]);
+  it('si el ban falla, la fila ya quedó de baja (la RPC dijo "ok") pero se DICE (sesionRevocada=false) y queda en log y bitácora', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
     updateUserById.mockResolvedValueOnce({ error: { message: 'auth caído' } });
     const r = await desactivarUsuario(TENANT, U, ACTOR);
     expect(r).toEqual({ sesionRevocada: false });
@@ -191,26 +260,60 @@ describe('desactivarUsuario — la baja en tres capas', () => {
     await expect(desactivarUsuario(TENANT, U, { id: U })).rejects.toThrow(/a ti mismo/);
     expect(llamadas).toHaveLength(0);
     expect(updateUserById).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('el último dueño activo no se da de baja', async () => {
-    colas.set('app_user', [{ data: fila({ rol: 'flota_admin' }) }, { count: 0, data: null }]);
+  it('el último dueño activo no se da de baja: la RPC dice "ultimo_dueno" y no toca Auth', async () => {
+    colas.set('app_user', [{ data: fila({ rol: 'flota_admin' }) }]);
+    rpc.mockResolvedValueOnce({ data: 'ultimo_dueno', error: null });
     await expect(desactivarUsuario(TENANT, U, ACTOR)).rejects.toThrow(/único dueño/);
+    expect(rpc).toHaveBeenCalledWith('equipo_desactivar_usuario',
+      { p_tenant: TENANT, p_usuario: U, p_rol_actual: 'flota_admin', p_actor: OTRO });
     expect(updateUserById).not.toHaveBeenCalled();
   });
 
-  it('ya de baja: se rechaza sin tocar Auth', async () => {
+  it('ya de baja: se rechaza sin llamar a la RPC ni tocar Auth', async () => {
     colas.set('app_user', [{ data: fila({ activo: false }) }]);
     await expect(desactivarUsuario(TENANT, U, ACTOR)).rejects.toThrow(/ya está dada de baja/);
+    expect(rpc).not.toHaveBeenCalled();
     expect(updateUserById).not.toHaveBeenCalled();
   });
 
-  it('0 filas en el update: ni ban ni bitácora', async () => {
-    colas.set('app_user', [{ data: fila() }, { data: [] }]);
+  it('"conflicto" (ya no estaba activa cuando corrió la RPC): ni ban ni bitácora', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    rpc.mockResolvedValueOnce({ data: 'conflicto', error: null });
     await expect(desactivarUsuario(TENANT, U, ACTOR)).rejects.toBeInstanceOf(DatoInvalido);
     expect(updateUserById).not.toHaveBeenCalled();
     expect(anotarBitacora).not.toHaveBeenCalled();
-    expect(rpc).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // HALLAZGO ALTO #2 (TOCTOU) — misma reproducción que en cambiarRolUsuario,
+  // ahora sobre la baja: dos BAJAS concurrentes simuladas sobre los DOS
+  // únicos dueños activos de una flota. La RPC (serializada en la base real
+  // por el candado de 0845) le dice 'ok' a la que gana el candado y
+  // 'ultimo_dueno' a la que llega después — nunca las dos 'ok'. Fija que
+  // desactivarUsuario tampoco reintrodujo su propio chequeo de conteo.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('TOCTOU: dos bajas concurrentes sobre los DOS únicos dueños — una pasa, la otra rebota, nunca las dos', async () => {
+    const U1 = '33333333-2222-4333-8444-555555555555';
+    const U2 = '44444444-2222-4333-8444-555555555555';
+    colas.set('app_user', [{ data: fila({ id: U1, rol: 'flota_admin' }) }, { data: fila({ id: U2, rol: 'flota_admin' }) }]);
+    rpc.mockImplementationOnce(async () => ({ data: 'ok', error: null }))
+      .mockImplementationOnce(async () => ({ data: 'ultimo_dueno', error: null }));
+
+    const [r1, r2] = await Promise.allSettled([
+      desactivarUsuario(TENANT, U1, { id: U2 }),
+      desactivarUsuario(TENANT, U2, { id: U1 }),
+    ]);
+
+    const resultados = [r1, r2];
+    expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const rebotes = resultados.filter((r) => r.status === 'rejected');
+    expect(rebotes).toHaveLength(1);
+    expect((rebotes[0] as PromiseRejectedResult).reason).toBeInstanceOf(DatoInvalido);
+    expect((rebotes[0] as PromiseRejectedResult).reason.message).toMatch(/único dueño/);
   });
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -222,13 +325,15 @@ describe('desactivarUsuario — la baja en tres capas', () => {
   // migración 0318, ni siquiera preguntaba por `activo`).
   // ═══════════════════════════════════════════════════════════════════════
   it('también tumba de un tiro los tokens MCP vivos del usuario (revocar_mcp_oauth_usuario)', async () => {
-    colas.set('app_user', [{ data: fila() }, { data: [{ id: U }] }]);
+    colas.set('app_user', [{ data: fila() }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
     await desactivarUsuario(TENANT, U, ACTOR);
     expect(rpc).toHaveBeenCalledWith('revocar_mcp_oauth_usuario', { p_tenant: TENANT, p_usuario: U });
   });
 
   it('si revocar los tokens MCP falla, la baja NO se revierte — se loguea y sigue', async () => {
-    colas.set('app_user', [{ data: fila() }, { data: [{ id: U }] }]);
+    colas.set('app_user', [{ data: fila() }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
     rpc.mockResolvedValueOnce({ data: null, error: { message: 'rpc caída' } });
     const r = await desactivarUsuario(TENANT, U, ACTOR);
     expect(r).toEqual({ sesionRevocada: true });

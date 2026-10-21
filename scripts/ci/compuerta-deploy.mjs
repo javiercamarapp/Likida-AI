@@ -34,15 +34,36 @@ import { pathToFileURL } from 'node:url';
 
 export const HEALTH_URL = 'https://app.likida.ai/api/health';
 
-/** TODOS los prefijos de cuatro dígitos en `supabase/migrations` (sin repetir, ordenados). */
+/**
+ * TODOS los prefijos de cuatro dígitos en `supabase/migrations` (sin repetir, ordenados).
+ *
+ * HALLAZGO CONFIRMADO (21-oct-2026): con un `Set` simple, dos ARCHIVOS DISTINTOS con el
+ * mismo prefijo (p. ej. `0845_feature_a.sql` y `0845_feature_b_colisiona.sql`) se
+ * colapsaban en silencio a un solo elemento `'0845'` — ni la compuerta de deploy
+ * (`decidir()`) ni `verificar-migraciones-aplicadas.mjs` podían ver que faltaba aplicar
+ * la segunda. Esto ya pasó una vez en este repo (0275/0276, ver
+ * `src/lib/likida/migraciones_verificadas.test.ts`), renumerada a mano porque nada lo
+ * detectó solo. Ahora dos nombres de archivo distintos con el mismo prefijo son un
+ * ERROR explícito, no un elemento repetido: la compuerta y el verificador fallan
+ * cerrado (no construyen / "NO se pudo verificar") en vez de seguir como si la base
+ * estuviera al día.
+ */
 export function prefijosMigraciones(dir = 'supabase/migrations') {
-  const vistos = new Set(
-    readdirSync(dir)
-      .map((f) => /^(\d{4})_.*\.sql$/.exec(f)?.[1])
-      .filter((p) => p !== undefined),
-  );
-  if (vistos.size === 0) throw new Error(`${dir} sin migraciones`);
-  return [...vistos].sort();
+  const porPrefijo = new Map(); // prefijo de 4 dígitos -> primer archivo visto con ese prefijo
+  for (const archivo of readdirSync(dir)) {
+    const prefijo = /^(\d{4})_.*\.sql$/.exec(archivo)?.[1];
+    if (prefijo === undefined) continue;
+    const anterior = porPrefijo.get(prefijo);
+    if (anterior !== undefined && anterior !== archivo) {
+      throw new Error(
+        `colisión de prefijo: ${anterior} y ${archivo} comparten el prefijo ${prefijo} en ${dir} — ` +
+        'dos migraciones DISTINTAS no pueden compartir número; renumera una de las dos antes de continuar.',
+      );
+    }
+    porPrefijo.set(prefijo, archivo);
+  }
+  if (porPrefijo.size === 0) throw new Error(`${dir} sin migraciones`);
+  return [...porPrefijo.keys()].sort();
 }
 
 // La MISMA regex que `decidir()` aplica a la primera línea del commit —
@@ -198,7 +219,14 @@ async function main() {
   const iUrl = args.indexOf('--health');
   const url = iUrl !== -1 && args[iUrl + 1] ? args[iUrl + 1] : HEALTH_URL;
   const asunto = asuntoDelCommit(args);
-  const prefijosCodigo = prefijosMigraciones();
+  let prefijosCodigo;
+  try {
+    prefijosCodigo = prefijosMigraciones();
+  } catch (e) {
+    console.log(`compuerta: ${e instanceof Error ? e.message : String(e)}`);
+    console.log('compuerta: NO construir');
+    process.exit(1);
+  }
   const codigo = prefijosCodigo[prefijosCodigo.length - 1];
   const health = await leerHealth(url);
   const v = decidir({ asunto, codigo, prefijosCodigo, health });

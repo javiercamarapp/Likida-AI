@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { decidir, ultimaMigracion, prefijosMigraciones, ultimoConDeployEnAsunto } from './compuerta-deploy.mjs';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -148,6 +150,35 @@ describe('OP-A (25, ALTO REINCIDENTE): el ancla de la deriva mira solo el ASUNTO
 
   it('usa la MISMA regex que decidir() — [deploy:forzar] también cuenta', () => {
     expect(ultimoConDeployEnAsunto([{ sha: 'x', asunto: 'hotfix [deploy:forzar]' }])).toBe('x');
+  });
+});
+
+// HALLAZGO CONFIRMADO (21-oct-2026): `prefijosMigraciones()` metía los prefijos en un
+// `Set`, así que DOS ARCHIVOS DISTINTOS con el mismo prefijo de 4 dígitos se colapsaban
+// en silencio a un solo elemento — ni esta función ni `decidir()` (que la alimenta por
+// `prefijosCodigo`) podían ver la colisión. Reproduce el escenario del auditor: dos
+// archivos reales en un directorio temporal con el mismo prefijo.
+describe('prefijosMigraciones: colisión de prefijo entre DOS ARCHIVOS DISTINTOS', () => {
+  it('con un prefijo repetido, lanza explícitamente en vez de colapsar a un solo elemento', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'likida-colision-prefijo-'));
+    try {
+      writeFileSync(join(dir, '0845_feature_a.sql'), '-- a');
+      writeFileSync(join(dir, '0845_feature_b_colisiona.sql'), '-- b');
+      expect(() => prefijosMigraciones(dir)).toThrowError(/colisión de prefijo.*0845_feature_a\.sql.*0845_feature_b_colisiona\.sql|colisión de prefijo.*0845_feature_b_colisiona\.sql.*0845_feature_a\.sql/s);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('sin colisión (el caso real de hoy), sigue devolviendo el conjunto normal sin romper el pipeline', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'likida-sin-colision-'));
+    try {
+      writeFileSync(join(dir, '0001_a.sql'), '-- a');
+      writeFileSync(join(dir, '0002_b.sql'), '-- b');
+      expect(prefijosMigraciones(dir)).toEqual(['0001', '0002']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
