@@ -8,6 +8,7 @@ import { fechaHoraMx } from '@/lib/formato';
 import { BarraPagina } from '../../dashboard/resumen-visual';
 import { EstadoVacio, EstadoError } from '../ui/kit';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
+import { FormaRechazarCliente } from './forma-rechazar';
 
 export const dynamic = 'force-dynamic';
 
@@ -105,9 +106,7 @@ export default async function McpClientesPage() {
                   <FormaConAviso accion={accionAprobar} boton="Aprobar" columnas="md:grid-cols-1">
                     <input type="hidden" name="cliente" value={c.clientId} />
                   </FormaConAviso>
-                  <FormaConAviso accion={accionRechazar} boton="Rechazar" columnas="md:grid-cols-1">
-                    <input type="hidden" name="cliente" value={c.clientId} />
-                  </FormaConAviso>
+                  <FormaRechazarCliente accion={accionRechazar} clientId={c.clientId} nombre={c.nombre ?? 'Sin nombre'} />
                 </div>
               </section>
             ))

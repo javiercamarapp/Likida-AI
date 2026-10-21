@@ -352,6 +352,15 @@ export async function ejecutarCobranza(
     let detalle: string | null = null;
     /** RES-1: el rechazo fue "vuelve más tarde" y el tier NO debe consumirse. */
     let reintentable = false;
+    /** AUDITORÍA 28 (HALLAZGO 2, CRÍTICO): el cliente de Meta (`client.ts`) YA
+     *  dejó este MISMO payload en `wa_outbox` — por un timeout/error de red
+     *  (donde Meta pudo haber aceptado el mensaje igual, ver RETRASO_AMBIGUO_SEGUNDOS)
+     *  o por un rechazo explícito reintentable (429/5xx: `encolarSalidaWhatsApp`
+     *  corre siempre que `esReintentableMeta` es true). `enviarConFallback` ya
+     *  calcula esto en `encolado` precisamente para que un llamador que reclama
+     *  "una sola vez" no vuelva a soltar su reclamo — ver el comentario de
+     *  `fueEncoladoPorMeta` en enviar_con_fallback.ts. */
+    let encolado = false;
     try {
       // `enviarConFallback` (P0-B, 0360): el texto con los días y la firma cuando
       // la ventana de 24 h está abierta, y la plantilla `recordatorio_cierre`
@@ -383,30 +392,49 @@ export async function ejecutarCobranza(
           ? `WhatsApp rechazó el texto libre y la plantilla también falló: ${envio.mensaje}`
           : `WhatsApp rechazó el mensaje: ${envio.mensaje}`;
         reintentable = envio.reintentable;
+        encolado = envio.encolado === true;
       }
     } catch (e) {
       detalle = e instanceof Error ? e.message : 'error inesperado al enviar';
     }
 
     if (reintentable) {
-      // El claim se BORRA: el unique queda libre y la corrida siguiente
-      // vuelve a intentar este mismo tier, entero.
-      await admin.from('cobranza_contacto')
-        .delete()
-        .eq('tenant_id', tenantId).eq('viaje_id', v.viajeId).eq('tier', v.tier)
-        .then(({ error }) => {
-          if (error) logger.error('cobranza.claim_no_liberado', { viaje: v.viajeId, err: error.message });
-        });
       r.rechazosReintentables = (r.rechazosReintentables ?? 0) + 1;
       rechazosSeguidos++;
-      r.fallos.push(`${v.folio ?? v.viajeId}: ${detalle} (se reintenta en la siguiente corrida)`);
-      logger.warn('cobranza.rechazo_reintentable', { tenantId, viaje: v.viajeId, tier: v.tier });
+      if (encolado) {
+        // AUDITORÍA 28 (HALLAZGO 2, CRÍTICO): el mensaje YA está en `wa_outbox`
+        // esperando su propio reintento. BORRAR el claim aquí liberaría el
+        // tier y la corrida siguiente llamaría a Meta DE CERO — un SEGUNDO
+        // mecanismo de reintento, independiente del outbox, compitiendo por el
+        // MISMO mensaje sin ninguna llave compartida. Si los dos llegan a
+        // salir, el chofer recibe el recordatorio dos veces. El claim se
+        // CONSERVA: este tier queda resuelto para cobranza y su suerte real
+        // la decide el outbox, no un segundo intento de aquí.
+        await admin.from('cobranza_contacto')
+          .update({ enviado: false, detalle: `${detalle} (ya en la cola de salida de WhatsApp — no se reintenta aquí)` })
+          .eq('viaje_id', v.viajeId).eq('tier', v.tier).eq('tenant_id', tenantId)
+          .then(({ error }) => { if (error) logger.warn('cobranza.encolado_sin_anotar', { viaje: v.viajeId, err: error.message }); });
+        r.fallos.push(`${v.folio ?? v.viajeId}: ${detalle} (ya en la cola de salida de WhatsApp, no se reintenta aquí)`);
+        logger.warn('cobranza.rechazo_reintentable_encolado', { tenantId, viaje: v.viajeId, tier: v.tier });
+      } else {
+        // El claim se BORRA: el unique queda libre y la corrida siguiente
+        // vuelve a intentar este mismo tier, entero. Seguro SOLO porque nada
+        // quedó encolado del lado del cliente de Meta para este envío.
+        await admin.from('cobranza_contacto')
+          .delete()
+          .eq('tenant_id', tenantId).eq('viaje_id', v.viajeId).eq('tier', v.tier)
+          .then(({ error }) => {
+            if (error) logger.error('cobranza.claim_no_liberado', { viaje: v.viajeId, err: error.message });
+          });
+        r.fallos.push(`${v.folio ?? v.viajeId}: ${detalle} (se reintenta en la siguiente corrida)`);
+        logger.warn('cobranza.rechazo_reintentable', { tenantId, viaje: v.viajeId, tier: v.tier });
+      }
       if (rechazosSeguidos >= TOPE_RECHAZOS_META_COBRANZA) {
         r.rechazoMasivo = true;
         r.cortadosPorReloj = cola.paraContactar.length - (r.contactados + r.fallos.length);
         logger.error('cobranza.rechazo_masivo', { tenantId, rechazosSeguidos });
         await alertarOperador('wa.rechazo_masivo', {
-          error: `WhatsApp rechazó ${rechazosSeguidos} cobranzas seguidas por un motivo reintentable (rate limit o bloqueo). La corrida se detuvo; los tiers quedaron sin consumir.`,
+          error: `WhatsApp rechazó ${rechazosSeguidos} cobranzas seguidas por un motivo reintentable (rate limit o bloqueo). La corrida se detuvo.`,
           codigo: 'wa_rechazo_masivo',
         });
         break;

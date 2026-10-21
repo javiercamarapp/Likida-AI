@@ -456,12 +456,17 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 319;
 // sobre la misma base): +1 llamada (2,234 → 2,235), `marcar_jornada_alerta_enviada` vía RPC en `jornada/alerta_tope_datos.ts:93`
 // (candado de un solo envío real por nivel, mismo patrón que `cp_envio_marcar_alerta`). Funcionalidad nueva, no código migrado;
 // cubierta por `alerta_tope.test.ts` y `agente-12-jornada.e2e.test.ts`.
-// AUDITORÍA ADVERSARIAL (ALTO #2, mig. 0848, 21-oct-2026, sobre la misma base): +1 llamada (2,235 → 2,236), en `buzon/repo.ts`
+// Auditoría 28 (HALLAZGO 2, A7 Cobranza, sobre la misma base): +2 llamadas (2,235 → 2,237), un `.from('cobranza_contacto').update(...)` en
+// `agentes/cobranza.ts` y un `.from('cobranza_gasto_contacto').update(...)` en `agentes/cobranza_gasto.ts` — el camino nuevo
+// que CONSERVA el claim (en vez de borrarlo) cuando el rechazo de Meta ya quedó encolado en `wa_outbox`, para que un
+// timeout de red no produzca un segundo envío real del mismo recordatorio. Por `tenant_id` + la llave del claim, igual que
+// el resto del archivo. Cubierto por `cobranza_reloj.test.ts`, `cobranza_gasto_e2e.test.ts` y `cobranza_freno_emergencia.test.ts`.
+// AUDITORÍA ADVERSARIAL (ALTO #2, mig. 0848, 21-oct-2026, sobre la misma base): +1 llamada (2,237 → 2,238), en `buzon/repo.ts`
 // (`completarFacturaConXml`: el segundo `.from('factura_proveedor').update(...)` que guarda `xml_crudo_tardio` cuando el
 // folio ya fue decidido — el CFDI real, evidencia fiscal CFF 30, dejaba de guardarse). `buzon/repo.ts` YA estaba fuera
 // de la frontera (no es `lib/likida/repo.ts`); esto no migra código viejo, es una rama nueva del mismo archivo. Cubierta
 // por `completar_cfdi_tardio.test.ts`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_236;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_238;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
