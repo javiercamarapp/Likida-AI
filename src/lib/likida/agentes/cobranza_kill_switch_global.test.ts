@@ -29,7 +29,13 @@ import { crearBaseEnMemoria, type BaseEnMemoria, type Fila } from '@/lib/pruebas
 
 const interruptor = vi.hoisted(() => ({ apagado: false }));
 const estaApagado = vi.hoisted(() => vi.fn(async (nombre: string) => nombre === 'agente:cobranza' && interruptor.apagado));
-vi.mock('../interruptores', () => ({ estaApagado }));
+// HALLAZGO 2 (21-oct-2026): `cobranza.ts`/`cobranza_gasto.ts` también preguntan
+// el freno AUTOMÁTICO de rechazo masivo (`freno_temporal`, 0854) al inicio —
+// esta suite prueba el kill switch MANUAL, no ese freno, así que el doble lo
+// deja siempre apagado (sin marca) para no interferir.
+const frenoTemporalActivo = vi.hoisted(() => vi.fn(async () => false));
+const marcarFrenoTemporal = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('../interruptores', () => ({ estaApagado, frenoTemporalActivo, marcarFrenoTemporal }));
 
 const estado = vi.hoisted(() => ({ db: null as unknown as BaseEnMemoria }));
 const meta = vi.hoisted(() => ({ enviarTexto: vi.fn(), sendTemplate: vi.fn() }));

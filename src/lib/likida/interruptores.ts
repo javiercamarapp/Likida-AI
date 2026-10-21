@@ -388,3 +388,91 @@ async function anotarEnBitacora(
     { evento: 'interruptores.bitacora_no_escribio', contexto: { interruptor: nombre } },
   );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL FRENO TEMPORAL (0854) — automático, con TTL, DISTINTO del kill switch
+// de arriba.
+//
+// `interruptor` es la palanca MANUAL: la mueve una persona desde
+// /admin/observabilidad o ⌘K, exige motivo, y se queda apagada hasta que
+// alguien la vuelva a encender. `freno_temporal` es la versión AUTOMÁTICA:
+// el mismo código que detecta un problema transitorio (p. ej. el rate-limit
+// de Meta) lo prende él mismo, SIN motivo obligatorio ni actor humano, y se
+// suelta SOLO cuando pasa su `activo_hasta` — nadie necesita acordarse de
+// apagarlo.
+//
+// NACE del HALLAZGO 2 de la auditoría adversarial de A7 Cobranza
+// (21-oct-2026): el freno de rechazo masivo de WhatsApp
+// (`TOPE_RECHAZOS_META_COBRANZA`/`TOPE_RECHAZOS_META_GASTO`) vivía en una
+// variable LOCAL a cada llamada de `ejecutarCobranza` — `ejecutarCobranzaGlobal`
+// la propaga bien ENTRE flotas porque las recorre en un bucle secuencial
+// dentro de la MISMA invocación, pero el botón "Ejecutar ahora" del panel
+// llama a `ejecutarCobranza` directo por tenant, por fuera de ese bucle:
+// varias corridas manuales concurrentes podían acumular rechazos contra el
+// MISMO número compartido sin que ninguna viera el freno de la otra.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** El catálogo real — mismo criterio que INTERRUPTORES: un nombre fuera de
+ *  esta lista rebota en el CHECK de la base en vez de vivir en silencio sin
+ *  frenar nada. */
+export const FRENOS_TEMPORALES = ['cobranza:rechazo_masivo_whatsapp'] as const;
+export type NombreFrenoTemporal = (typeof FRENOS_TEMPORALES)[number];
+
+function esFrenoTemporalValido(nombre: string): nombre is NombreFrenoTemporal {
+  return (FRENOS_TEMPORALES as readonly string[]).includes(nombre);
+}
+
+/**
+ * Prende un freno temporal por `ttlMs` milisegundos. Lo llama el código que
+ * ACABA de detectar el problema (p. ej. 5 rechazos reintentables seguidos de
+ * Meta) — no una persona. Best-effort A PROPÓSITO (mismo criterio que
+ * `anotarEnBitacora`): el rechazo masivo YA se detectó y la corrida de ESTA
+ * instancia YA se detuvo por su cuenta; si la escritura del freno falla, la
+ * peor consecuencia es que una invocación DISTINTA no lo vea — no que esta
+ * siga mandando WhatsApp.
+ */
+export async function marcarFrenoTemporal(
+  nombre: NombreFrenoTemporal,
+  ttlMs: number,
+  motivo: string,
+  ahora: Date = new Date(),
+): Promise<void> {
+  if (!esFrenoTemporalValido(nombre)) {
+    logger.error('freno_temporal.nombre_invalido', { nombre });
+    return;
+  }
+  const activoHasta = new Date(ahora.getTime() + ttlMs).toISOString();
+  const { error } = await acotada(supabaseAdmin()
+    .from('freno_temporal')
+    .upsert({ id: nombre, activo_hasta: activoHasta, motivo, creado_en: ahora.toISOString() }, { onConflict: 'id' }),
+    'marcarFrenoTemporal');
+  if (error) logger.error('freno_temporal.no_marcado', { nombre, err: error.message });
+}
+
+/**
+ * ¿Está activo este freno? SIN FILA = SIN FRENO, y una fila con
+ * `activo_hasta` ya vencido se trata exactamente igual (nadie la borra: se
+ * vuelve inerte sola).
+ *
+ * FAIL-CLOSED, mismo criterio que `estaApagado`: un error de lectura
+ * devuelve `true` (freno activo) con log — si no se puede saber si el número
+ * sigue bloqueado, no se le insiste.
+ */
+export async function frenoTemporalActivo(nombre: NombreFrenoTemporal, ahora: Date = new Date()): Promise<boolean> {
+  try {
+    const { data, error } = await acotada(supabaseAdmin()
+      .from('freno_temporal')
+      .select('activo_hasta')
+      .eq('id', nombre)
+      .maybeSingle(), 'frenoTemporalActivo');
+    if (error) {
+      logger.error('freno_temporal.ilegible', { nombre, err: error.message });
+      return true;
+    }
+    if (!data) return false;
+    return new Date(data.activo_hasta as string).getTime() > ahora.getTime();
+  } catch (e) {
+    logger.error('freno_temporal.ilegible', { nombre, err: e instanceof Error ? e.message : String(e) });
+    return true;
+  }
+}
