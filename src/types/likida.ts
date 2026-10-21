@@ -94,7 +94,17 @@ export interface Gasto {
 export type TipoDiferencia =
   | 'sobre_politica'       // monto excede el tope de la política
   | 'sin_comprobante'      // gasto esperado del trayecto sin comprobante
-  | 'duplicado'            // mismo UUID/folio/monto repetido
+  | 'duplicado'            // mismo UUID/folio/monto repetido (certeza: llave dura)
+  // AUDITORÍA ADVERSARIAL (21-oct-2026): un gasto SIN folio Y SIN cfdiUuid
+  // (ticket borroso, folio tapado, comprobante informal que no imprime folio)
+  // nunca entra a `vistoFolio`/`vistoUuid` de `copiasDeComprobante` — puede
+  // repetirse cualquier número de veces sin que el motor lo note, y el
+  // operador cobraría el mismo gasto dos o más veces. SIN la certeza del
+  // folio/UUID no se puede afirmar "es copia" (eso sería inventar una
+  // decisión con un dato ambiguo): solo se declara el PATRÓN sospechoso —
+  // mismo concepto+monto+emisor+día, 2 o más veces— y se manda a revisión
+  // humana. NO excluye nada del total comprobado (`duplicado` sí lo hace).
+  | 'posible_duplicado_sin_folio'
   | 'sin_cfdi'             // requiere CFDI y no lo trae
   | 'anticipo'             // diferencia contra el anticipo entregado
   | 'ocr_baja_confianza'   // extracción dudosa, revisar a mano

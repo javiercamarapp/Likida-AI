@@ -11,24 +11,35 @@
 //   · NO importa nada del camino del timbre (PAC, CFDI, `carta_porte_timbre`): una prueba lee los imports.
 //
 // ── PERFIL «cinco_agentes» ──────────────────────────────────────────────────
-// Bajo ese perfil «crear viaje» queda en stand-by (código intacto, inalcanzable). La guardia del perfil la entrega
-// el frente B1 (`perfilRestringido`); mientras no esté integrado, aquí vive una guardia SUSTITUIBLE que por defecto
-// dice «sin perfil» (comportamiento de siempre para toda flota). `fijarGuardiaPerfil` la reemplaza.
+// Bajo ese perfil «crear viaje» queda en stand-by (código intacto, inalcanzable). La guardia del perfil YA
+// lee el dato real de B1 (`tenant_perfil`, mig. 0770, vía `perfilDeTenant`) — ver `PERFIL_REAL` abajo.
+// `fijarGuardiaPerfil` sigue existiendo para las pruebas (simulan el perfil sin tocar la base real).
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { createHash } from 'node:crypto';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { leerConfigSalida } from './salida_config';
 import * as repo from './repo';
 import type { DocumentoFila, EnvioTmsFila, EstadoEnvioTms } from './repo';
 
 export type GuardiaPerfil = (tenantId: string) => Promise<boolean>;
 
-/** Por defecto ninguna flota está en el perfil: nada cambia para nadie hasta que B1 conecte su guardia. */
-const SIN_PERFIL: GuardiaPerfil = async () => false;
-let guardia: GuardiaPerfil = SIN_PERFIL;
+/**
+ * La guardia de producción: ¿la flota tiene perfil (cinco_agentes es el único que existe hoy, mig. 0770)?
+ *
+ * `siNoSePuedeLeer: 'permitir'` A PROPÓSITO — al revés del default de `perfilDeTenant` ('restringir', el
+ * lado seguro cuando el perfil RECORTA acceso). Aquí no se recorta: se BIFURCA a un flujo distinto
+ * (preparar envío al TMS en vez de crear el viaje). Si la tabla no se puede leer y no hay valor previo,
+ * asumir "cinco_agentes" sin saberlo desviaría a una flota NORMAL hacia un camino que no espera — peor
+ * que mantenerle su comportamiento de siempre unos segundos mientras la base se recupera. Mismo patrón que
+ * `interruptor_tenant.ts` (la palanca operativa del chofer, que tampoco se apaga por un bache de lectura).
+ */
+const PERFIL_REAL: GuardiaPerfil = async (tenantId) => (await perfilDeTenant(tenantId, Date.now(), 'permitir')) !== null;
 
-/** Sustituye la guardia (B1 pasa aquí `perfilRestringido`). Sin argumento, vuelve al valor por defecto. */
-export function fijarGuardiaPerfil(g?: GuardiaPerfil): void { guardia = g ?? SIN_PERFIL; }
+let guardia: GuardiaPerfil = PERFIL_REAL;
+
+/** Sustituye la guardia (las pruebas simulan el perfil sin tocar `tenant_perfil`). Sin argumento, vuelve a leer el perfil real. */
+export function fijarGuardiaPerfil(g?: GuardiaPerfil): void { guardia = g ?? PERFIL_REAL; }
 
 /** ¿La flota está bajo el perfil restringido (cinco agentes)? Ante un fallo de la guardia se asume que SÍ: es el lado seguro. */
 export async function flotaBajoPerfil(tenantId: string): Promise<boolean> {
