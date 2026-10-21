@@ -96,19 +96,6 @@ async function leerObjetivo(tenantId: string, usuarioId: string): Promise<Usuari
   };
 }
 
-/** Cuántos dueños ACTIVOS quedan en la flota sin contar a `excluir`. `count`
- *  real, no `.length` de una lista topada. */
-async function otrosDuenosActivos(tenantId: string, excluir: string): Promise<number> {
-  const { count, error } = await acotada(supabaseAdmin().from('app_user')
-    .select('id', { count: 'exact', head: true })
-    .eq('tenant_id', tenantId)
-    .eq('rol', 'flota_admin')
-    .eq('activo', true)
-    .neq('id', excluir), 'equipo.duenosActivos');
-  if (error) throw new Error(`equipo.duenosActivos: ${error.message}`);
-  return count ?? 0;
-}
-
 async function anotar(
   tenantId: string,
   accion: string,
@@ -123,9 +110,25 @@ async function anotar(
 }
 
 /**
- * Cambia el rol de alguien del equipo. El UPDATE va anclado al rol ACTUAL
- * leído (optimista): si otro dueño lo cambió entre la lectura y el update,
- * toca cero filas y se pide recargar en vez de pisar en silencio.
+ * Cambia el rol de alguien del equipo.
+ *
+ * AUDITORÍA ADVERSARIAL (21-oct-2026), HALLAZGO ALTO #2 — TOCTOU: hasta esta
+ * versión, el recuento de "¿hay otro dueño activo?" (`otrosDuenosActivos`,
+ * ya retirada) y el UPDATE corrían en DOS peticiones separadas a PostgREST
+ * —cada una su PROPIA transacción—, sin nada que las serializara entre sí.
+ * Con exactamente dos dueños activos, degradar a los dos A LA VEZ podía
+ * dejar que las dos lecturas vieran "sí hay otro" antes de que ninguna de
+ * las dos confirmara su UPDATE: las dos pasaban, y la flota se quedaba sin
+ * ningún `flota_admin` activo.
+ *
+ * El candado real vive AHORA en la base (`equipo_cambiar_rol`, migración
+ * 0845): recuento y UPDATE en la MISMA función SQL, bajo un
+ * `pg_advisory_xact_lock` por tenant — una llamada concurrente para la
+ * MISMA flota espera a que la anterior confirme o aborte antes de
+ * recontar, así que ve el estado YA actualizado, nunca el viejo. El UPDATE
+ * sigue anclado al rol ACTUAL leído aquí (optimista): si otro dueño lo
+ * cambió entre la lectura y la llamada, la función devuelve 'conflicto' en
+ * vez de 'ok' y se pide recargar, en vez de pisar en silencio.
  */
 export async function cambiarRolUsuario(
   tenantId: string,
@@ -143,18 +146,15 @@ export async function cambiarRolUsuario(
   const objetivo = await leerObjetivo(tenantId, usuarioId);
   if (!objetivo.activo) throw new DatoInvalido('Esa cuenta está dada de baja. Reactívala primero si quieres cambiarle el rol.');
   if (objetivo.rol === rolNuevo) throw new DatoInvalido(`Esa cuenta ya es ${nombreDeRol(rolNuevo)}.`);
-  if (objetivo.rol === 'flota_admin' && (await otrosDuenosActivos(tenantId, usuarioId)) === 0) {
+
+  const { data: motivo, error } = await acotada(supabaseAdmin()
+    .rpc('equipo_cambiar_rol', { p_tenant: tenantId, p_usuario: usuarioId, p_rol_actual: objetivo.rol, p_rol_nuevo: rolNuevo }),
+    'equipo.cambiarRol');
+  if (error) throw new Error(`equipo.cambiarRol: ${error.message}`);
+  if (motivo === 'ultimo_dueno') {
     throw new DatoInvalido('Es el único dueño activo de la flota: nombra a otro dueño antes de cambiarle el rol.');
   }
-
-  const { data, error } = await acotada(supabaseAdmin().from('app_user')
-    .update({ rol: rolNuevo })
-    .eq('id', usuarioId)
-    .eq('tenant_id', tenantId)
-    .eq('rol', objetivo.rol)
-    .select('id'), 'equipo.cambiarRol');
-  if (error) throw new Error(`equipo.cambiarRol: ${error.message}`);
-  if (!Array.isArray(data) || data.length === 0) {
+  if (motivo !== 'ok') {
     throw new DatoInvalido('El rol de esa cuenta cambió mientras tanto. Recarga la pantalla y vuelve a intentarlo.');
   }
 
@@ -171,6 +171,12 @@ export interface ResultadoBaja {
 
 /**
  * Da de baja: `activo = false` + ban en Auth + bitácora. NO borra la fila.
+ *
+ * AUDITORÍA ADVERSARIAL (21-oct-2026), HALLAZGO ALTO #2 — mismo TOCTOU que
+ * `cambiarRolUsuario` (ver su comentario) y mismo cierre: el recuento del
+ * "último dueño activo" y el UPDATE de la fila corren en una sola llamada
+ * (`equipo_desactivar_usuario`, migración 0845), bajo el candado por tenant
+ * que serializa cualquier baja/degradación concurrente de la MISMA flota.
  */
 export async function desactivarUsuario(
   tenantId: string,
@@ -183,19 +189,15 @@ export async function desactivarUsuario(
   }
   const objetivo = await leerObjetivo(tenantId, usuarioId);
   if (!objetivo.activo) throw new DatoInvalido('Esa cuenta ya está dada de baja.');
-  if (objetivo.rol === 'flota_admin' && (await otrosDuenosActivos(tenantId, usuarioId)) === 0) {
+
+  const { data: motivo, error } = await acotada(supabaseAdmin()
+    .rpc('equipo_desactivar_usuario', { p_tenant: tenantId, p_usuario: usuarioId, p_rol_actual: objetivo.rol, p_actor: actor.id }),
+    'equipo.desactivar');
+  if (error) throw new Error(`equipo.desactivar: ${error.message}`);
+  if (motivo === 'ultimo_dueno') {
     throw new DatoInvalido('Es el único dueño activo de la flota: nombra a otro dueño antes de darlo de baja.');
   }
-
-  const { data, error } = await acotada(supabaseAdmin().from('app_user')
-    .update({ activo: false, desactivado_en: new Date().toISOString(), desactivado_por: actor.id })
-    .eq('id', usuarioId)
-    .eq('tenant_id', tenantId)
-    // Dos clics no pisan el sello original de la baja.
-    .eq('activo', true)
-    .select('id'), 'equipo.desactivar');
-  if (error) throw new Error(`equipo.desactivar: ${error.message}`);
-  if (!Array.isArray(data) || data.length === 0) {
+  if (motivo !== 'ok') {
     throw new DatoInvalido('Esa cuenta ya no estaba activa. Recarga la pantalla.');
   }
 

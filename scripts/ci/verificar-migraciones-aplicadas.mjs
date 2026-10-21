@@ -57,15 +57,29 @@ export function cotejarConjuntos({ repo, aplicados }) {
  * `0271_mcp_oauth_rol`). Una fila con `nombre` ausente o con un formato que
  * no empieza en cuatro dígitos NO inventa un prefijo: se ignora, igual que
  * `prefijosAplicados` en `src/app/api/health/migracion.ts`.
+ *
+ * HALLAZGO CONFIRMADO (21-oct-2026, mismo principio que `prefijosMigraciones` en
+ * `compuerta-deploy.mjs`): si la base registra DOS NOMBRES DISTINTOS con el mismo
+ * prefijo, un `Set` simple los colapsa a un solo elemento y el cotejo por CONJUNTO
+ * (`cotejarConjuntos()`) nunca ve la colisión. Ahora es un ERROR explícito.
  * @param {Array<{ nombre?: unknown }>} filas
  */
 export function prefijosDeFilas(filas) {
-  const vistos = new Set();
+  const porPrefijo = new Map(); // prefijo de 4 dígitos -> primer `nombre` visto con ese prefijo
   for (const f of filas) {
-    const p = typeof f?.nombre === 'string' ? PREFIJO.exec(f.nombre)?.[1] : undefined;
-    if (p !== undefined) vistos.add(p);
+    const nombre = typeof f?.nombre === 'string' ? f.nombre : undefined;
+    const p = nombre !== undefined ? PREFIJO.exec(nombre)?.[1] : undefined;
+    if (p === undefined) continue;
+    const anterior = porPrefijo.get(p);
+    if (anterior !== undefined && anterior !== nombre) {
+      throw new Error(
+        `colisión de prefijo: ${anterior} y ${nombre} comparten el prefijo ${p} en migraciones_aplicadas() — ` +
+        'la base registró dos migraciones DISTINTAS con el mismo número; no se puede cotejar el conjunto.',
+      );
+    }
+    porPrefijo.set(p, nombre);
   }
-  return [...vistos].sort();
+  return [...porPrefijo.keys()].sort();
 }
 
 /** El mismo parser que `aplicar-migraciones-y-humos.sh` usa hoy (paso 2/3)
@@ -91,7 +105,13 @@ async function main() {
     process.exit(1);
   }
 
-  const repo = prefijosMigraciones();
+  let repo;
+  try {
+    repo = prefijosMigraciones();
+  } catch (e) {
+    console.log(`verificador de migraciones: NO se pudo verificar — ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(1);
+  }
 
   let mod;
   try {
@@ -123,7 +143,13 @@ async function main() {
     process.exit(1);
   }
 
-  const aplicados = prefijosDeFilas(r.filas);
+  let aplicados;
+  try {
+    aplicados = prefijosDeFilas(r.filas);
+  } catch (e) {
+    console.log(`verificador de migraciones: NO se pudo verificar — ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(1);
+  }
   const { faltantes, sobrantes, ok } = cotejarConjuntos({ repo, aplicados });
 
   console.log(`verificador de migraciones · repo=${repo.length} · base=${aplicados.length}`);

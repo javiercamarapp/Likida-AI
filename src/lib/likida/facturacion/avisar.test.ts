@@ -9,6 +9,7 @@ const sendText = vi.fn();
 const sendTemplate = vi.fn();
 const getPorFacturar = vi.fn();
 const insert = vi.fn(async () => ({ error: null }));
+const cuentasCompartidas = vi.fn(async (_tenantId: string) => new Set<string>());
 
 vi.mock('@/lib/meta/client', () => ({
   sendText: (...a: unknown[]) => sendText(...a),
@@ -17,6 +18,9 @@ vi.mock('@/lib/meta/client', () => ({
 }));
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({ from: () => ({ insert } as unknown) }),
+}));
+vi.mock('./cuentas', () => ({
+  cuentasCompartidas: (tenantId: string) => cuentasCompartidas(tenantId),
 }));
 vi.mock('./pendientes', async (original) => ({
   ...(await original<Record<string, unknown>>()),
@@ -116,6 +120,22 @@ describe('armarAviso', () => {
   it('sin nada que hacer NO arma mensaje — no se gasta una plantilla en vacío', () => {
     expect(armarAviso([]).texto).toBe('');
   });
+
+  // HALLAZGO ALTO (auditoría adversarial): `armarAviso` evaluaba `cuentaCompartida`
+  // SIEMPRE como `false` (el default de `enrutar`), a diferencia de la decisión REAL
+  // de facturación (`facturarAlVuelo`/`facturarLoteAlVuelo`), que sí consulta
+  // `cuentasCompartidas(tenantId)`. Para un comercio con `requiereCuenta: true` y
+  // cuenta YA compartida, el aviso podía decir «pide cuenta» de un ticket que la
+  // máquina ya puede facturar sola.
+  it('con la cuenta compartida y robot escrito, deja de avisar: ya lo hace la máquina', () => {
+    const t = [armar(g({ id: '1', fecha: '2026-08-04', extra: CON_CUENTA }), HOY)];
+    // Sin pasar `cuentaCompartida` (como antes del arreglo): sigue avisando.
+    expect(armarAviso(t, HAY_ROBOT).cuantos).toBe(1);
+    // Con `cuentaCompartida` en true para oxxo_gas: el ticket deja de necesitar
+    // a la persona, igual que ve `facturarAlVuelo`.
+    const a = armarAviso(t, HAY_ROBOT, (clave) => clave === 'oxxo_gas');
+    expect(a.cuantos).toBe(0);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -134,6 +154,7 @@ describe('avisarPorFacturar', () => {
     // Un ticket de OXXO Gas: pide cuenta, así que va con la persona y el aviso
     // tiene cuerpo. La fecha cae dentro del mes de HOY para que no esté vencido.
     getPorFacturar.mockResolvedValue([armar(g({ id: '1', fecha: '2026-08-04', extra: CON_CUENTA }), HOY)]);
+    cuentasCompartidas.mockResolvedValue(new Set());
   });
 
   it('dentro de la ventana: sale el texto con la liga y NO se gasta plantilla', async () => {
@@ -188,5 +209,30 @@ describe('avisarPorFacturar', () => {
     expect(r.motivo).toBeTruthy();
     // El texto se devuelve igual: es lo que la pantalla enseña para reenviar a mano.
     expect(r.texto).toContain('oxxogas');
+  });
+
+  // HALLAZGO ALTO (auditoría adversarial): `avisarPorFacturar` nunca consultaba
+  // `cuentasCompartidas(tenantId)` antes de armar el aviso real por WhatsApp. Sin
+  // adaptador escrito para oxxo_gas en este entorno, la cuenta compartida no vuelve
+  // automático al ticket (sigue sin quién lo opere), pero SÍ cambia la premisa que
+  // el aviso le explica al encargado: deja de decir «pide cuenta» (ya no es cierto)
+  // y pasa a decir que falta el robot — exactamente lo que `enrutar` distingue.
+  it('consulta la MISMA cuenta compartida que ve la decisión real de facturación', async () => {
+    cuentasCompartidas.mockResolvedValue(new Set(['oxxo_gas']));
+    sendText.mockResolvedValue('wamid-texto');
+    const r = await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
+    expect(cuentasCompartidas).toHaveBeenCalledWith('t1');
+    expect(r.enviado).toBe(true);
+    expect(r.tickets).toBe(1);
+    expect(r.texto).not.toMatch(/pide cuenta/);
+    expect(r.texto).toMatch(/todavía no lo sé llenar solo/i);
+  });
+
+  it('sin cuenta compartida, no cambia nada: sigue avisando como antes', async () => {
+    cuentasCompartidas.mockResolvedValue(new Set());
+    sendText.mockResolvedValue('wamid-texto');
+    const r = await avisarPorFacturar({ tenantId: 't1', telefono: '5219990000001', hoy: HOY });
+    expect(r.enviado).toBe(true);
+    expect(r.tickets).toBe(1);
   });
 });

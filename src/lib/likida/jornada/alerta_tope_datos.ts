@@ -8,8 +8,9 @@ import { enviarCorreo } from '@/lib/correo/enviar';
 import { destinatariosEscalacion } from '../conductor/escalamiento';
 import { asientosDeJornada, leerPolitica } from './repo';
 import type {
-  ConfigAlerta, PuertosAlerta, FilaCandidata, NivelAlerta, CanalEncargado, CanalOperador,
+  ConfigAlerta, PuertosAlerta, FilaCandidata, NivelAlerta, CanalEncargado, CanalOperador, EstadoDestino, ReclamoAlerta,
 } from './alerta_tope';
+import type { Procedencia } from './modelo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS PUERTOS REALES DE LA ALERTA DE TOPE (base, WhatsApp y correo) y la
@@ -66,8 +67,37 @@ export const puertosAlertaReales: PuertosAlerta = {
       p_cota: a.cota, p_fuente: a.fuente, p_descanso_abierto: a.descansoSinCierre, p_ahora: a.ahora.toISOString(),
     }), 'jornada.alerta.reclamar');
     if (error) { logger.error('jornada.alerta_reclamar_fallo', { err: error.message }); return 'fallo'; }
-    const fila = (Array.isArray(data) ? data[0] : data) as { alerta_id?: string; claim_token?: string } | null | undefined;
-    return fila?.alerta_id && fila.claim_token ? { id: fila.alerta_id, token: fila.claim_token } : null;
+    const fila = (Array.isArray(data) ? data[0] : data) as {
+      alerta_id?: string; claim_token?: string; ya_enviado?: boolean;
+      minutos_registrados?: number; tope_minutos?: number; cota_inferior?: boolean; fuente?: string; descanso_sin_cierre?: boolean;
+      encargado_canal?: string | null; encargado_estado?: string; encargado_motivo?: string | null;
+      operador_canal?: string | null; operador_estado?: string; operador_motivo?: string | null;
+    } | null | undefined;
+    if (!fila?.alerta_id || !fila.claim_token) return null;
+    const reclamo: ReclamoAlerta = { id: fila.alerta_id, token: fila.claim_token };
+    // El candado `enviado_en` (0845): esta retoma ya tuvo un envío real confirmado en un intento
+    // anterior. Los datos que siguen son los PRESERVADOS por la base (no los que mandamos nosotros
+    // en `a.*`), con los que de verdad salió el primer aviso.
+    if (fila.ya_enviado === true) {
+      reclamo.yaEnviado = {
+        minutos: Number(fila.minutos_registrados ?? a.minutos), topeMin: Number(fila.tope_minutos ?? a.topeMin),
+        cota: fila.cota_inferior === true, fuente: (fila.fuente as Procedencia | undefined) ?? a.fuente,
+        descansoSinCierre: fila.descanso_sin_cierre === true,
+        encargado: { canal: (fila.encargado_canal as CanalEncargado | null) ?? null, estado: (fila.encargado_estado as EstadoDestino | undefined) ?? 'pendiente', motivo: fila.encargado_motivo ?? null },
+        operador: { canal: (fila.operador_canal as CanalOperador | null) ?? null, estado: (fila.operador_estado as EstadoDestino | undefined) ?? 'pendiente', motivo: fila.operador_motivo ?? null },
+      };
+    }
+    return reclamo;
+  },
+  async marcarEnviada(a) {
+    const { data, error } = await acotada(supabaseAdmin().rpc('marcar_jornada_alerta_enviada', {
+      p_tenant: a.tenantId, p_id: a.reclamo.id, p_claim: a.reclamo.token,
+      p_enc_canal: a.encargado.canal, p_enc_estado: a.encargado.estado, p_enc_motivo: a.encargado.motivo,
+      p_op_canal: a.operador.canal, p_op_estado: a.operador.estado, p_op_motivo: a.operador.motivo,
+      p_ahora: a.ahora.toISOString(),
+    }), 'jornada.alerta.marcar_enviada');
+    if (error) { logger.error('jornada.alerta_marcar_enviada_fallo', { err: error.message }); return false; }
+    return data === true;
   },
   async cerrar(a) {
     const { data, error } = await acotada(supabaseAdmin().rpc('cerrar_jornada_alerta', {

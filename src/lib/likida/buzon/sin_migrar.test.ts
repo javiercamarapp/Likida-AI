@@ -79,7 +79,7 @@ describe('repo del buzón sin la 0530', () => {
     estado.db.fallarProxima('factura_proveedor', 'select', NO_COLUMNA);
     expect(await repo.facturaPorUuid(T, 'u')).toEqual({ id: 'f1', estado: 'pendiente', tieneXml: true, tienePdf: false });
     estado.db.fallarProxima('factura_proveedor', 'update', NO_COLUMNA);
-    expect(await repo.completarFacturaConXml(T, 'u', { rfcEmisor: null, rfcReceptor: null, fecha: null, total: 1, conceptos: [] } as never, '<x/>', null, null)).toBe(false);
+    expect(await repo.completarFacturaConXml(T, 'u', { rfcEmisor: null, rfcReceptor: null, fecha: null, total: 1, conceptos: [] } as never, '<x/>', null, null)).toBe('sin_cambio');
   });
 });
 
@@ -90,7 +90,7 @@ describe('ingesta sin la 0530', () => {
       repo: {
         registrarRecepcion: async () => {}, recepcionPrevia: async () => null,
         subirPdf: async () => { throw new repo.BuzonSinMigrar('falta el bucket'); },
-        facturaPorUuid: async () => null, adjuntarPdfAFactura: async () => true, completarFacturaConXml: async () => false,
+        facturaPorUuid: async () => null, adjuntarPdfAFactura: async () => true, completarFacturaConXml: async () => 'sin_cambio',
         guardarFacturaDePdf: async () => ({ ok: true, facturaId: 'f', receptorEsFlota: null }), ...sobre,
       },
       pdf: {
