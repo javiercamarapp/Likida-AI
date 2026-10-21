@@ -166,12 +166,29 @@ export async function adjuntarPdfAFactura(
 }
 
 /**
+ * 'completada'      — la fila seguía PENDIENTE y sin XML: se completó con el dato duro (caso normal).
+ * 'guardado_tardio' — AUDITORÍA ADVERSARIAL ALTO #2 (0845): la factura YA estaba decidida (o ya tenía XML) cuando
+ *                     llegó este CFDI; el XML real se guardó en `xml_crudo_tardio` en vez de perderse.
+ * 'sin_cambio'      — no hay nada nuevo que guardar (ya tenía un XML tardío de un correo anterior) o el entorno
+ *                      aún no trae la 0530/0845 (se dice honestamente, no se inventa un guardado que no ocurrió).
+ */
+export type ResultadoCompletarXml = 'completada' | 'guardado_tardio' | 'sin_cambio';
+
+/**
  * El XML llegó DESPUÉS del PDF: la factura que se había leído de un PDF se completa con el dato duro y deja de
  * pedir revisión. Solo si sigue PENDIENTE y aún sin XML: una factura ya aprobada no cambia de cifras por detrás.
+ *
+ * Si la factura YA NO está pendiente (un humano la aprobó o rechazó mientras el CFDI real seguía en camino —
+ * PDF llegó primero, XML llegó después de la decisión), el CFDI es evidencia fiscal (CFF art. 30: 5 años) y NO
+ * puede desaparecer solo porque llegó tarde: antes de la 0845 el UPDATE de arriba afectaba 0 filas y la función
+ * devolvía sin guardar nada. Ahora, en ese caso, se intenta un SEGUNDO guardado en `xml_crudo_tardio` /
+ * `recibido_tardio_en` (0845) — columnas aparte, que NUNCA tocan `estado`, `decidido_por` ni `decidido_en`: no es
+ * tarea de este escritor decidir qué hacer con una aprobación o un rechazo ya firmado por una persona, solo
+ * asegurar que el dato duro del CFDI quede guardado y recuperable en vez de descartado en silencio.
  */
 export async function completarFacturaConXml(
   tenantId: string, uuid: string, xml: CfdiXmlData, xmlCrudo: string, rfcFlota: string | null, estadoSat: EstadoSat | null,
-): Promise<boolean> {
+): Promise<ResultadoCompletarXml> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('factura_proveedor')
     .update({
@@ -191,9 +208,24 @@ export async function completarFacturaConXml(
     .is('xml_crudo', null)
     .select('id'), 'buzon.completar_con_xml');
   // Sin la 0530 ninguna fila se leyó de un PDF: no hay nada que completar (el XML duplicado es solo un duplicado).
-  if (faltaMigracion(error)) return false;
+  if (faltaMigracion(error)) return 'sin_cambio';
   if (error) throw new Error(`completarFacturaConXml: ${error.message}`);
-  return (data ?? []).length > 0;
+  if ((data ?? []).length > 0) return 'completada';
+
+  // La fila no era PENDIENTE-sin-XML (ya decidida, o ya tenía XML de otra vía): el CFDI real no se descarta.
+  // `.is('xml_crudo_tardio', null)`: solo la PRIMERA llegada tardía se queda con la fecha — un reintento del
+  // mismo correo (o el mismo CFDI llegando dos veces) no debe correr el reloj ni pisar lo ya guardado.
+  const tardio = await acotada(supabaseAdmin()
+    .from('factura_proveedor')
+    .update({ xml_crudo_tardio: xmlCrudo, recibido_tardio_en: new Date().toISOString() })
+    .eq('tenant_id', tenantId)
+    .eq('cfdi_uuid', uuid.toLowerCase())
+    .is('xml_crudo_tardio', null)
+    .select('id'), 'buzon.completar_con_xml_tardio');
+  // Entorno sin la 0845: no hay dónde guardarlo. Se dice (false/'sin_cambio'), no se inventa un guardado.
+  if (faltaMigracion(tardio.error)) return 'sin_cambio';
+  if (tardio.error) throw new Error(`completarFacturaConXml (tardío): ${tardio.error.message}`);
+  return (tardio.data ?? []).length > 0 ? 'guardado_tardio' : 'sin_cambio';
 }
 
 export type ResultadoFacturaPdf = { ok: true; facturaId: string; receptorEsFlota: boolean | null } | { ok: false; motivo: 'duplicada' | 'error' };
