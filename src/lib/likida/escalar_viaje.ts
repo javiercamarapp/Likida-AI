@@ -64,6 +64,42 @@ export const HORAS_PARA_ESCALAR = 5;
 export const HORAS_MINIMAS_ESCALACION = 1;
 
 /**
+ * AUDITORÍA A8 ESCALACIÓN (ALTO, hallazgo 2): el cupo YA NO es un `LIMIT 100`
+ * global plano.
+ *
+ * Antes, `viajesSinAceptar` traía como máximo 100 filas de TODAS las flotas
+ * juntas, ordenadas por antigüedad (`avisado_en` ascendente) — y el corte fino
+ * por tenant (`horasEscalacion`, en `escalarViajesSinAceptar`) se aplicaba
+ * DESPUÉS, en memoria, sobre esas 100 filas ya traídas. Una sola flota con más
+ * de 100 viajes atascados ocupaba las 100 posiciones del cupo en cada
+ * corrida: las demás flotas, aunque tuvieran candidatos sanos (pocos,
+ * recientes), ni siquiera llegaban a la base de datos para que el corte por
+ * tenant las evaluara. Sin error ni log — el panel de esa flota se veía igual
+ * de bien.
+ *
+ * El fix son DOS cupos, no uno:
+ *  - `CUPO_CRUDO_VIAJES_SIN_ACEPTAR`: el techo de la CONSULTA a la base.
+ *    Mucho más generoso que 100, para que una sola flota atascada no agote el
+ *    lote antes de que las demás flotas aparezcan en el resultado.
+ *  - `CUPO_POR_TENANT_VIAJES_SIN_ACEPTAR`: el tope de CADA flota dentro de ese
+ *    lote. Se aplica en memoria, sobre las filas ya traídas (que siguen
+ *    ordenadas por antigüedad), así que una flota con cientos de viajes
+ *    viejos no se queda con más de su cupo aunque el lote crudo la traiga
+ *    completa — deja lugar para las demás.
+ *
+ * El presupuesto de ENVÍOS del cron (el "techo de 100 por corrida" del
+ * comentario original) lo sigue poniendo el reloj (`venceEn`/
+ * `PLAZO_ESCALACION_MS`, ESC-3) DENTRO de `escalarViajesSinAceptar`: si el
+ * lote de candidatos crece, el corte por tiempo sigue cortando igual y lo que
+ * no alcanzó encabeza la corrida siguiente — subir el cupo crudo no rompe esa
+ * garantía, solo evita que una flota atascada le robe el lugar a otra ANTES
+ * de llegar al reloj.
+ */
+export const CUPO_CRUDO_VIAJES_SIN_ACEPTAR = 1000;
+/** El mismo techo de siempre (100), ahora POR FLOTA en vez de global. */
+export const CUPO_POR_TENANT_VIAJES_SIN_ACEPTAR = 100;
+
+/**
  * Plantilla de Meta para avisarle al jefe. Tiene que estar aprobada.
  *
  * ES EL PLAN B, NO EL MENSAJE. Su cuerpo aprobado se escribió para OTRO evento
@@ -91,6 +127,11 @@ export interface ViajeSinAceptar {
  * Los viajes avisados que el chofer no ha aceptado y que ya pasaron el plazo.
  *
  * `ahora` se inyecta para que la prueba no dependa del reloj de la máquina.
+ *
+ * EL CUPO ES POR FLOTA (hallazgo 2, ver `CUPO_POR_TENANT_VIAJES_SIN_ACEPTAR`
+ * arriba): una flota con cientos de viajes atascados no puede ocupar más que
+ * su propio tope, así que las demás SIEMPRE llegan a aparecer aquí si tienen
+ * algún candidato dentro del lote crudo.
  */
 export async function viajesSinAceptar(ahora: Date = new Date(), horas: number = HORAS_PARA_ESCALAR): Promise<ViajeSinAceptar[]> {
   const limite = new Date(ahora.getTime() - horas * 3_600_000).toISOString();
@@ -108,19 +149,24 @@ export async function viajesSinAceptar(ahora: Date = new Date(), horas: number =
     .not('avisado_en', 'is', null)
     .lte('avisado_en', limite)
     // MÁS VIEJO PRIMERO (auditoría de escala 15k): sin `.order()`, Postgres
-    // devuelve los 100 en el orden que quiera — con más de 100 vencidos entre
-    // corridas, un viaje concreto podía quedarse fuera del lote PARA SIEMPRE
-    // sin rastro de que existía. Ordenado por antigüedad, el lote es una cola
-    // que drena: lo que no cupo hoy encabeza la corrida siguiente (escalar
-    // sella `escalado_en` y lo saca del filtro). El techo de 100 por corrida
-    // se queda: es el presupuesto de envíos del cron, no una ventana de vista.
+    // devuelve las filas en el orden que quiera — con más vencidos que el
+    // cupo entre corridas, un viaje concreto podía quedarse fuera del lote
+    // PARA SIEMPRE sin rastro de que existía. Ordenado por antigüedad, el
+    // lote es una cola que drena: lo que no cupo hoy encabeza la corrida
+    // siguiente (escalar sella `escalado_en` y lo saca del filtro).
+    //
+    // AUDITORÍA A8 ESCALACIÓN (ALTO, hallazgo 2): este `.limit()` YA NO es el
+    // cupo final — es solo el techo de la CONSULTA (`CUPO_CRUDO_VIAJES_SIN_
+    // ACEPTAR`, generoso a propósito). El cupo que de verdad importa, por
+    // flota, se aplica ABAJO sobre las filas ya traídas; ver el comentario
+    // largo junto a esas constantes.
     .order('avisado_en', { ascending: true })
-    .limit(100), 'viajesSinAceptar');
+    .limit(CUPO_CRUDO_VIAJES_SIN_ACEPTAR), 'viajesSinAceptar');
 
   if (error) throw new Error(`viajesSinAceptar: ${error.message}`);
 
   type Rel = { nombre?: string; telefono?: string };
-  return (data ?? []).map((v) => {
+  const candidatos = (data ?? []).map((v) => {
     const rel = v.operador as Rel | Rel[] | null;
     const op = Array.isArray(rel) ? rel[0] : rel;
     return {
@@ -133,6 +179,19 @@ export async function viajesSinAceptar(ahora: Date = new Date(), horas: number =
       avisadoEn: v.avisado_en as string,
       avisosEnviados: Number(v.avisos_enviados ?? 0),
     };
+  });
+
+  // AUDITORÍA A8 ESCALACIÓN (ALTO, hallazgo 2): el recorte final es POR
+  // FLOTA. Las filas ya vienen ordenadas por antigüedad (el `.order()` de
+  // arriba), así que cortar aquí, en orden, conserva "más viejo primero"
+  // DENTRO de cada flota — y una flota que ya alcanzó su cupo simplemente deja
+  // de aportar filas, sin tocar el cupo de las demás.
+  const porTenant = new Map<string, number>();
+  return candidatos.filter((v) => {
+    const cuantos = porTenant.get(v.tenantId) ?? 0;
+    if (cuantos >= CUPO_POR_TENANT_VIAJES_SIN_ACEPTAR) return false;
+    porTenant.set(v.tenantId, cuantos + 1);
+    return true;
   });
 }
 

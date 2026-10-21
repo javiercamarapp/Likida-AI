@@ -155,8 +155,10 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({ from: (...a: unknown[]) => from(...(a as [string])) }),
 }));
 
-const { viajesSinAceptar, armarAvisoJefe, escalarViajesSinAceptar, HORAS_PARA_ESCALAR } =
-  await import('./escalar_viaje');
+const {
+  viajesSinAceptar, armarAvisoJefe, escalarViajesSinAceptar, HORAS_PARA_ESCALAR,
+  CUPO_CRUDO_VIAJES_SIN_ACEPTAR, CUPO_POR_TENANT_VIAJES_SIN_ACEPTAR,
+} = await import('./escalar_viaje');
 
 const AHORA = new Date('2026-08-04T18:00:00.000Z');
 /** El instante exacto en que un viaje avisado empieza a contar como vencido. */
@@ -219,7 +221,10 @@ describe('viajesSinAceptar', () => {
     expect(args('is')).toContainEqual(['escalado_en', null]);
     // Un viaje que nunca se avisó no ha empezado a correr ningún reloj.
     expect(args('not')).toContainEqual(['avisado_en', 'is', null]);
-    expect(args('limit')).toContainEqual([100]);
+    // AUDITORÍA A8 ESCALACIÓN (hallazgo 2): el `.limit()` de la CONSULTA ya no
+    // es 100 — es el cupo crudo, generoso. El tope de 100 por flota se aplica
+    // después, en memoria (ver el describe de abajo).
+    expect(args('limit')).toContainEqual([CUPO_CRUDO_VIAJES_SIN_ACEPTAR]);
   });
 
   it('el corte son 5 h EXACTAS contadas desde el `ahora` que se le pasa', async () => {
@@ -284,6 +289,92 @@ describe('viajesSinAceptar', () => {
     lectura = { data: [fila({ folio: null, operador_id: null, operador: null, avisos_enviados: null })], error: null };
     const [v] = await viajesSinAceptar(AHORA);
     expect(v).toMatchObject({ folio: null, operadorId: null, operadorNombre: null, avisosEnviados: 0 });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AUDITORÍA A8 ESCALACIÓN (ALTO, hallazgo 2): el cupo es POR FLOTA, no un
+  // `LIMIT 100` global plano. Antes, una sola flota atascada podía ocupar las
+  // 100 posiciones del lote crudo y las demás ni llegaban a aparecer aquí —
+  // el corte fino por tenant (`horasEscalacion`) se aplicaba DESPUÉS, sobre
+  // un lote que ya las había excluido.
+  // ═══════════════════════════════════════════════════════════════════════
+  describe('el cupo es por flota, no global (hallazgo 2)', () => {
+    /** Una fila bien vieja (muy por delante del piso de 1 h) para simular el
+     *  atasco: toda del mismo tenant, para que monopolizar el `LIMIT` global
+     *  viejo fuera trivial si el bug sigue vivo. */
+    const filaVieja = (tenantId: string, i: number) => fila({
+      id: `${tenantId}-v${i}`, tenant_id: tenantId, folio: `VJ-${tenantId}-${i}`,
+      avisado_en: '2026-08-01T00:00:00.000Z', // muy viejo
+    });
+    /** Una fila reciente de una flota sana: pocos candidatos, pero legítimos. */
+    const filaReciente = (tenantId: string, i: number) => fila({
+      id: `${tenantId}-r${i}`, tenant_id: tenantId, folio: `VJ-${tenantId}-${i}`,
+      avisado_en: '2026-08-04T17:00:00.000Z', // reciente, cerca de `AHORA`
+    });
+
+    it('UNA flota con más de 100 viajes atascados no se queda con más de su cupo', async () => {
+      const atascados = Array.from({ length: 150 }, (_, i) => filaVieja('t-atascada', i));
+      lectura = { data: atascados, error: null };
+
+      const r = await viajesSinAceptar(AHORA);
+
+      expect(r).toHaveLength(CUPO_POR_TENANT_VIAJES_SIN_ACEPTAR);
+      expect(new Set(r.map((v) => v.tenantId))).toEqual(new Set(['t-atascada']));
+    });
+
+    it('3+ FLOTAS: una atascada con >100 filas viejas y las demás con pocas filas recientes — las demás SÍ aparecen', async () => {
+      // Antes de este fix, las 150 filas de `t-atascada` (las más viejas)
+      // agotaban el `LIMIT 100` de la consulta y `t-sana-1`/`t-sana-2` jamás
+      // llegaban a este arreglo, aunque tuvieran candidatos sanos y recientes.
+      lectura = {
+        data: [
+          ...Array.from({ length: 150 }, (_, i) => filaVieja('t-atascada', i)),
+          filaReciente('t-sana-1', 0), filaReciente('t-sana-1', 1),
+          filaReciente('t-sana-2', 0),
+        ],
+        error: null,
+      };
+
+      const r = await viajesSinAceptar(AHORA);
+
+      const porTenant = new Map<string, number>();
+      for (const v of r) porTenant.set(v.tenantId, (porTenant.get(v.tenantId) ?? 0) + 1);
+
+      // La atascada se recorta a su cupo — no desaparece, pero tampoco se
+      // queda con todo.
+      expect(porTenant.get('t-atascada')).toBe(CUPO_POR_TENANT_VIAJES_SIN_ACEPTAR);
+      // Y lo que importa: las flotas sanas SÍ aparecen, con TODOS sus
+      // candidatos (ninguna les quitó el lugar).
+      expect(porTenant.get('t-sana-1')).toBe(2);
+      expect(porTenant.get('t-sana-2')).toBe(1);
+      expect(r.map((v) => v.folio)).toContain('VJ-t-sana-1-0');
+      expect(r.map((v) => v.folio)).toContain('VJ-t-sana-2-0');
+    });
+
+    it('dentro de cada flota, el cupo conserva "más viejo primero"', async () => {
+      // Dos flotas, cada una con más candidatos que su cupo: lo que se
+      // recorta tiene que ser lo MÁS NUEVO de cada una, no una mezcla sin
+      // criterio — igual que hacía el `LIMIT` global antes de este fix.
+      const vieja = (t: string, i: number, horas: number) => fila({
+        id: `${t}-${i}`, tenant_id: t, folio: `VJ-${t}-${i}`,
+        avisado_en: new Date(AHORA.getTime() - horas * 3_600_000).toISOString(),
+      });
+      lectura = {
+        data: [
+          ...Array.from({ length: 101 }, (_, i) => vieja('t-1', i, 10 + i)), // más viejo primero ya en el orden de la "consulta"
+          ...Array.from({ length: 101 }, (_, i) => vieja('t-2', i, 10 + i)),
+        ],
+        error: null,
+      };
+
+      const r = await viajesSinAceptar(AHORA);
+      const deT1 = r.filter((v) => v.tenantId === 't-1');
+      // Se queda con las 100 MÁS VIEJAS (horas 10..109), no con la más nueva
+      // (la de la posición 100, horas 110... en realidad construidas en orden
+      // ascendente de antigüedad: la que se cae es la última, la MENOS vieja).
+      expect(deT1).toHaveLength(100);
+      expect(deT1.map((v) => v.folio)).not.toContain('VJ-t-1-100');
+    });
   });
 });
 
