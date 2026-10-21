@@ -246,10 +246,11 @@ export const CATALOGO: { [K in PlantillaId]: Plantilla & { id: K; frase: (p: Par
   },
 
   // ── 4 ───────────────────────────────────────────────────────────────────
-  // El sello lleva el conteo (ver `clave` en lectores.ts): 2 viajes sin
-  // liquidar avisa una vez, y si sube a 3 vuelve a avisar. Sellar solo por
-  // chofer haría que el problema creciera en silencio después del primer
-  // aviso.
+  // El sello lleva el conteo Y el viaje más viejo sin liquidar (ver `clave`
+  // en lectores.ts, hallazgo 21-oct-2026): 2 viajes sin liquidar avisa una
+  // vez, y si sube a 3 vuelve a avisar. Sellar solo por conteo dejaría sin
+  // avisar la oscilación sube-baja-sube con viajes distintos (el sello es
+  // PERMANENTE, sin TTL, para esta tabla).
   chofer_con_viajes_sin_liquidar: {
     id: 'chofer_con_viajes_sin_liquidar',
     titulo: 'Chofer que acumula viajes sin liquidar',
