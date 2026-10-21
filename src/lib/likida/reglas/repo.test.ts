@@ -325,6 +325,65 @@ describe('listar y barrer', () => {
     const r = await reglasActivas();
     expect(r.map((x) => x.id)).toEqual(['r-1']);
   });
+
+  it('A13 (hallazgo alto): el tope global reparte entre flotas, no excluye a la de UUID "mayor" pasada tras pasada', async () => {
+    // 600 reglas activas repartidas en 3 flotas (200 cada una), ya en el
+    // orden que trae la base: tenant_id ascendente y luego creada_en.
+    const porFlota = 200;
+    const tenants = ['tenant-a', 'tenant-b', 'tenant-c'];
+    const todas = tenants.flatMap((tenantId) => Array.from({ length: porFlota }, (_, i) => ({
+      ...FILA,
+      id: `${tenantId}-r-${i}`,
+      tenant_id: tenantId,
+      creada_en: new Date(2026, 0, 1 + i).toISOString(),
+    })));
+    pon('regla_vigilancia:select', { data: todas });
+
+    // "pasada tras pasada": el cron corre el barrido muchas veces con la
+    // misma foto de la base (nada cambia entre corridas horarias).
+    for (let pasada = 0; pasada < 5; pasada++) {
+      const activas = await reglasActivas(500);
+      expect(activas).toHaveLength(500);
+      const porTenant = new Map<string, number>();
+      for (const r of activas) porTenant.set(r.tenantId, (porTenant.get(r.tenantId) ?? 0) + 1);
+
+      // Antes del fix: order by tenant_id + limit(500) dejaba a 'tenant-c'
+      // en 0 (tenant-a y tenant-b ya llenaban las 500 por sí solas).
+      // Con el reparto por rondas, CADA flota entra en TODAS las pasadas.
+      for (const tenantId of tenants) {
+        expect(porTenant.get(tenantId) ?? 0).toBeGreaterThan(0);
+      }
+      // Y el reparto es proporcional, no una sola flota acaparando el tope:
+      // 500 entre 3 se reparte 167/167/166 (ninguna por debajo de ⌊500/3⌋).
+      for (const tenantId of tenants) {
+        expect(porTenant.get(tenantId)!).toBeGreaterThanOrEqual(Math.floor(500 / tenants.length));
+      }
+    }
+  });
+
+  it('el reparto conserva, dentro de cada flota, la antigüedad (creada_en) ya ordenada por la base', async () => {
+    const tenants = ['tenant-a', 'tenant-b', 'tenant-c'];
+    const todas = tenants.flatMap((tenantId) => Array.from({ length: 200 }, (_, i) => ({
+      ...FILA,
+      id: `${tenantId}-r-${i}`,
+      tenant_id: tenantId,
+      creada_en: new Date(2026, 0, 1 + i).toISOString(),
+    })));
+    pon('regla_vigilancia:select', { data: todas });
+    const activas = await reglasActivas(500);
+    const deA = activas.filter((r) => r.tenantId === 'tenant-a').map((r) => Number(r.id.replace('tenant-a-r-', '')));
+    // Las primeras (más antiguas) de tenant-a entran antes que las últimas.
+    // (Orden NUMÉRICO del índice, no lexicográfico: "r-10" es más antigua que
+    // "r-2" aunque "10" ordene antes que "2" como texto.)
+    expect(deA[0]).toBe(0);
+    expect(deA).toEqual([...deA].sort((a, b) => a - b));
+  });
+
+  it('con menos reglas que el tope, el reparto no cambia nada (atajo sin romper el caso normal)', async () => {
+    pon('regla_vigilancia:select', { data: [FILA, { ...FILA, id: 'r-2', tenant_id: 'otro-tenant' }] });
+    const r = await reglasActivas(500);
+    expect(r.map((x) => x.id)).toEqual(['r-1', 'r-2']);
+  });
 });
 
 describe('los sellos', () => {

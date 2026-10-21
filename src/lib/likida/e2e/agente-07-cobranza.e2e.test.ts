@@ -101,15 +101,24 @@ describe('fallo', () => {
     expect(meta.salientes).toHaveLength(0);
   });
 
-  it('rate limit (429, REINTENTABLE): el tier NO se consume y la corrida siguiente lo manda', async () => {
+  it('rate limit (429, REINTENTABLE): ya quedó en wa_outbox (encolado) — el claim se CONSERVA y la corrida siguiente NO vuelve a llamar a Meta (HALLAZGO 2, auditoría 28)', async () => {
     meta.estado.bloqueados.add(meta.norm(TEL_A1));
     const r = await ejecutarCobranza(A, AHORA);
     expect(r.rechazosReintentables).toBe(1);
-    expect(contactos('v1')).toHaveLength(0);          // el claim se liberó
+    // AUDITORÍA 28 (HALLAZGO 2): un 130429 es "reintentable" PORQUE el
+    // cliente de Meta ya lo deja en `wa_outbox` para reintentarlo él solo —
+    // liberar el claim aquí abriría una carrera entre ese reintento y uno
+    // nuevo e independiente de cobranza (riesgo real de doble envío). El
+    // claim se CONSERVA (se actualiza, no se borra).
+    expect(contactos('v1')).toMatchObject([{ tier: 3, enviado: false }]);
+    expect(String(contactos('v1')[0].detalle)).toMatch(/ya en la cola de salida de WhatsApp/);
     expect(contactos('v2')).toHaveLength(1);          // el otro viaje sí salió
     meta.estado.bloqueados.clear();
     await ejecutarCobranza(A, new Date(AHORA.getTime() + 3_600_000));
-    expect(contactos('v1')).toMatchObject([{ tier: 3, enviado: true }]);
+    // La corrida siguiente NO vuelve a llamar a Meta para v1: el claim ya
+    // quedó resuelto, y la suerte real del mensaje la decide el outbox.
+    expect(aBaja(TEL_A1)).toHaveLength(0);
+    expect(contactos('v1')).toHaveLength(1); // sigue la misma fila, ninguna nueva
   });
 
   it('un operador SIN teléfono se anota (para que la pantalla diga a quién no puede) y no truena a los demás', async () => {

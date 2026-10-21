@@ -8,6 +8,7 @@ import { registrarCorrida } from '../agentes/corridas';
 import { avisarDesgloseConciliado } from './aviso_oficina';
 import { revisarAtipicosDeDesglose } from './revision_atipicos';
 import { vincularDesglose } from './vinculos_conciliacion';
+import { avisarDiscrepanciasDesglose } from './aviso_discrepancia';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA INGESTA AUTOMÁTICA DEL DESGLOSE DE PEAJE (0376).
@@ -186,14 +187,21 @@ export interface ResumenCola {
   atipicos?: { revisados: number; hallazgos: number; fallidos: number };
   /** El vínculo cruce→viaje (T-A2-21): solo existe si la flota lo activó. Conteos, nunca unidades ni importes. */
   vinculos?: { calculados: number; fallidos: number };
+  /** El protocolo de discrepancia geográfica (T-A2-37): candidatos críticos de `unidad_inmovilizada` avisados. */
+  discrepancia?: { evaluados: number; enviados: number; sinDestinatario: number; pendientes: number };
 }
 
 const minutos = (n: number) => new Date(Date.now() + n * 60_000).toISOString();
 
 export async function procesarColaPeajes(
-  opciones: { limite?: number; leaseSegundos?: number; venceEn?: number; avisar?: (tenantId: string, desgloseId: string) => Promise<unknown> } = {},
+  opciones: {
+    limite?: number; leaseSegundos?: number; venceEn?: number;
+    avisar?: (tenantId: string, desgloseId: string) => Promise<unknown>;
+    avisarDiscrepancias?: typeof avisarDiscrepanciasDesglose;
+  } = {},
 ): Promise<ResumenCola> {
   const avisar = opciones.avisar ?? avisarDesgloseConciliado;
+  const avisarDiscrepancias = opciones.avisarDiscrepancias ?? avisarDiscrepanciasDesglose;
   const limite = opciones.limite ?? 5;
   const lease = opciones.leaseSegundos ?? LEASE_SEGUNDOS;
   const admin = supabaseAdmin();
@@ -278,6 +286,23 @@ export async function procesarColaPeajes(
         // procesado (el barrido del cron lo reintenta). Nunca lanza, pero se blinda de todos modos.
         try { await avisar(a.tenant_id, imp.desgloseId); } catch (e) {
           logger.error('peajes.cola.aviso', { archivo: a.id, err: e instanceof Error ? e.message : String(e) });
+        }
+        // El protocolo de discrepancia geográfica (T-A2-37): candidatos críticos de `unidad_inmovilizada`
+        // de ESTE desglose. Va DESPUÉS de cerrar, igual que `atipicos`/`vinculos`: un fallo aquí no reabre
+        // ni tumba el archivo, y el candidato sigue visible en la pantalla de revisión aunque el aviso falle.
+        try {
+          const disc = await avisarDiscrepancias(a.tenant_id, imp.desgloseId);
+          if (disc.evaluados > 0) {
+            r.discrepancia ??= { evaluados: 0, enviados: 0, sinDestinatario: 0, pendientes: 0 };
+            r.discrepancia.evaluados += disc.evaluados;
+            r.discrepancia.enviados += disc.enviados;
+            r.discrepancia.sinDestinatario += disc.sinDestinatario;
+            r.discrepancia.pendientes += disc.pendientes;
+          }
+        } catch (e) {
+          r.discrepancia ??= { evaluados: 0, enviados: 0, sinDestinatario: 0, pendientes: 0 };
+          r.discrepancia.pendientes += 1;
+          logger.error('cron.peajes.discrepancia_fallo', { archivo: a.id, codigo: codigoDeError(e) });
         }
       }
     } catch (e) {

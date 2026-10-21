@@ -222,9 +222,14 @@ export async function GET(req: Request) {
       resultado.aceptacion = { saltado: 'interruptor agente:conductores' };
     } else {
       try {
-        // El Conductor (A5) está en «Próximamente» para las flotas con perfil (fase 1): su escalación no las toca.
-        const excluirTenants = await tenantsConPerfil();
-        const r = await conReintentoDeTimeout(() => escalarViajesSinAceptar({ venceEn: venceEscalacion, excluirTenants }), 'escalarViajesSinAceptar');
+        // AUDITORÍA A8 ESCALACIÓN (ALTO, hallazgo 2): el Conductor (A5) se encendió para las
+        // flotas con perfil el 18-oct-2026 (commit 1395821d5, que actualizó vigia/route.ts y
+        // conductor-hitos/route.ts) pero dejó ESTA exclusión intacta — la escalación de viaje
+        // no aceptado es parte del propio Agente de Conductores (A5) y no debía seguir
+        // saltando esas flotas. Ya no se excluye a nadie aquí; las secciones de stand-by de
+        // ESTE MISMO cron (cobranza, relojes legales, reglas, más abajo) siguen pidiendo
+        // `tenantsConPerfil()` porque esos módulos SÍ siguen en «Próximamente».
+        const r = await conReintentoDeTimeout(() => escalarViajesSinAceptar({ venceEn: venceEscalacion }), 'escalarViajesSinAceptar');
         logger.info('cron.escalar.ok', { ...r });
         resultado.aceptacion = r;
       } catch (e) {
@@ -431,12 +436,26 @@ export async function GET(req: Request) {
     // lleva en el latido, que es el único estado que este cron ya persiste.
     const relojesCorte = resultado.relojes as { incidencias?: { cortadasPorReloj?: number }; vencimientos?: { cortadosPorReloj?: number } } | undefined;
     const calcomCorte = Number((resultado.calcom as { cortadasPorReloj?: number } | undefined)?.cortadasPorReloj ?? 0);
+    // AUDITORÍA 28 (hallazgo #4 del Orquestador): hasta hoy esta suma no veía
+    // un corte repetido en `reglas`, `huerfanos` ni `orquestador` — los tres
+    // barridos de abajo SÍ cortan por reloj (BE-7 y la corrección de hoy en
+    // `avisarHuerfanosPendientes`), pero esta cuenta nunca los leía, así que
+    // una racha de tres cortes seguidos en cualquiera de ellos nunca disparaba
+    // la alerta de `corte_por_reloj_repetido`.
+    const reglasCorte = Number((resultado.reglas as { cortadasPorReloj?: number } | undefined)?.cortadasPorReloj ?? 0);
+    const huerfanosCorte = Number((resultado.huerfanos as { cortadasPorReloj?: number } | undefined)?.cortadasPorReloj ?? 0);
+    const orquestadorBarrido = (resultado.orquestador as { barrido?: unknown } | undefined)?.barrido;
+    const orquestadorCorte = (typeof orquestadorBarrido === 'object' && orquestadorBarrido !== null
+      && (orquestadorBarrido as { cortadoPorReloj?: boolean }).cortadoPorReloj) ? 1 : 0;
     const cortados = Number((resultado.comprobacion as { cortadosPorReloj?: number } | undefined)?.cortadosPorReloj ?? 0)
       + Number((resultado.aceptacion as { cortadosPorReloj?: number } | undefined)?.cortadosPorReloj ?? 0)
       // BE-7: los barridos también cortan, y sus cortes cuentan en la racha.
       + Number(relojesCorte?.incidencias?.cortadasPorReloj ?? 0)
       + Number(relojesCorte?.vencimientos?.cortadosPorReloj ?? 0)
-      + calcomCorte;
+      + calcomCorte
+      + reglasCorte
+      + huerfanosCorte
+      + orquestadorCorte;
     let cortesSeguidos = 0;
     if (cortados > 0 || corteDuro) {
       try {

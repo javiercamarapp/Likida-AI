@@ -198,7 +198,25 @@ export interface Destino { nombre: string; telefono: string }
 export interface ResultadoEnvioAviso { ok: boolean; reintentable: boolean; motivo?: string }
 export type EstadoDestino = 'pendiente' | 'enviado' | 'fallido' | 'sin_destinatario' | 'no_aplica';
 
-export interface ReclamoAlerta { id: string; token: string }
+export interface DestinoCerrado<C> { canal: C | null; estado: EstadoDestino; motivo: string | null }
+
+export interface ReclamoAlerta {
+  id: string;
+  token: string;
+  /**
+   * Presente SOLO cuando este reclamo es la RETOMA de un claim con arriendo vencido cuyo envío
+   * real ya se había confirmado en un intento anterior (candado `enviado_en`, migración 0845): el
+   * proceso murió entre que Meta aceptó el WhatsApp y que se cerró el registro. Trae los datos
+   * EXACTOS con los que salió ese primer aviso real (preservados, no recalculados) para que
+   * `correrAlertasTope` cierre el registro sin reenviar nada — nunca un segundo WhatsApp real para
+   * el mismo (jornada, nivel).
+   */
+  yaEnviado?: {
+    minutos: number; topeMin: number; cota: boolean; fuente: Procedencia; descansoSinCierre: boolean;
+    encargado: DestinoCerrado<CanalEncargado>;
+    operador: DestinoCerrado<CanalOperador>;
+  };
+}
 
 export interface PuertosAlerta {
   candidatas(ahora: Date, limite: number): Promise<{ filas: FilaCandidata[]; hayMas: boolean }>;
@@ -207,10 +225,22 @@ export interface PuertosAlerta {
   datosDelOperador(tenantId: string, operadorId: string): Promise<DatosOperador | null>;
   encargados(tenantId: string, terminalId: string | null): Promise<Destino[]>;
   reclamar(a: { tenantId: string; jornadaId: string; nivel: NivelAlerta; minutos: number; topeMin: number; cota: boolean; fuente: Procedencia; descansoSinCierre: boolean; ahora: Date }): Promise<ReclamoAlerta | null | 'fallo'>;
+  /**
+   * El candado de "ya se envió de verdad" (0845): se llama UNA vez, inmediatamente después de
+   * confirmar que al menos un destinatario recibió el aviso real (Meta aceptó el WhatsApp, o el
+   * correo salió) — ANTES de `cerrar`. Si el proceso muere después de esta llamada y antes de
+   * `cerrar`, la siguiente corrida ve el reclamo como `yaEnviado` y no reenvía nada.
+   */
+  marcarEnviada(a: {
+    tenantId: string; reclamo: ReclamoAlerta;
+    encargado: DestinoCerrado<CanalEncargado>;
+    operador: DestinoCerrado<CanalOperador>;
+    ahora: Date;
+  }): Promise<boolean>;
   cerrar(a: {
     tenantId: string; reclamo: ReclamoAlerta; estado: 'enviada' | 'parcial' | 'fallida' | 'sin_destinatario';
-    encargado: { canal: CanalEncargado | null; estado: EstadoDestino; motivo: string | null };
-    operador: { canal: CanalOperador | null; estado: EstadoDestino; motivo: string | null };
+    encargado: DestinoCerrado<CanalEncargado>;
+    operador: DestinoCerrado<CanalOperador>;
     ahora: Date;
   }): Promise<boolean>;
   liberar(tenantId: string, reclamo: ReclamoAlerta): Promise<boolean>;
@@ -292,6 +322,25 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
       if (reclamo === null) { r.yaAvisadas++; continue; }
       if (reclamo === 'fallo') { r.fallos.push(`jornada ${f.jornadaId}: no se pudo reclamar la alerta ${nivel}`); continue; }
 
+      // ── RETOMA DE UN CLAIM YA ENVIADO DE VERDAD (candado `enviado_en`, 0845) ──
+      // El proceso anterior murió ENTRE que Meta confirmó el WhatsApp real y que se cerró el
+      // registro. No se envía NADA de nuevo (sería un segundo WhatsApp real para el mismo
+      // nivel): solo se cierra el registro con los datos EXACTOS del primer envío real.
+      if (reclamo.yaEnviado) {
+        const { encargado, operador } = reclamo.yaEnviado;
+        const aplicablesYa = [encargado.estado, operador.estado].filter((e) => e !== 'no_aplica');
+        const algunEnviadoYa = aplicablesYa.includes('enviado');
+        const algunFallidoYa = aplicablesYa.includes('fallido');
+        const estadoYa = algunEnviadoYa ? (algunFallidoYa || aplicablesYa.includes('sin_destinatario') ? 'parcial' : 'enviada')
+          : algunFallidoYa ? 'fallida' : 'sin_destinatario';
+        const cerradaYa = await p.cerrar({ tenantId: f.tenantId, reclamo, estado: estadoYa, encargado, operador, ahora });
+        if (!cerradaYa) { r.fallos.push(`jornada ${f.jornadaId}: el claim (ya enviado de verdad) se perdió antes de cerrar la alerta ${nivel}`); continue; }
+        if (algunEnviadoYa) r.alertas[nivel]++;
+        if (estadoYa === 'sin_destinatario') { r.sinDestinatario++; r.fallos.push(`jornada ${f.jornadaId}: no hay a quién avisar el nivel ${nivel} (retomado)`); }
+        else if (estadoYa === 'fallida') r.fallos.push(`jornada ${f.jornadaId} (${nivel}, retomado): ${encargado.motivo ?? operador.motivo ?? 'rechazado'}`);
+        continue;
+      }
+
       const op = await p.datosDelOperador(f.tenantId, f.operadorId);
       const datos: DatosAviso = {
         nombreOperador: op?.nombre ?? '', nivel, minutos: curso.minutos, topeMin, cotaInferior: curso.cotaInferior,
@@ -360,14 +409,17 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
         continue;
       }
       rechazosSeguidos = 0;
+      const encCerrado: DestinoCerrado<CanalEncargado> = { canal: cfg.canalEncargado === 'ninguno' ? null : cfg.canalEncargado, estado: encEstado, motivo: encMotivo };
+      const opCerrado: DestinoCerrado<CanalOperador> = { canal: cfg.canalOperador === 'whatsapp' ? 'whatsapp' : null, estado: opEstado, motivo: opMotivo };
+      if (algunEnviado) {
+        // EL CANDADO (0845): al menos un destinatario YA recibió el aviso real (Meta lo confirmó, o
+        // salió el correo). Se marca AQUÍ MISMO, antes de cerrar — si el proceso muere entre esta
+        // línea y `cerrar`, la siguiente corrida verá `reclamo.yaEnviado` y no reenviará nada.
+        await p.marcarEnviada({ tenantId: f.tenantId, reclamo, encargado: encCerrado, operador: opCerrado, ahora });
+      }
       const estado = algunEnviado ? (algunFallido || aplicables.includes('sin_destinatario') ? 'parcial' : 'enviada')
         : algunFallido ? 'fallida' : 'sin_destinatario';
-      const cerrada = await p.cerrar({
-        tenantId: f.tenantId, reclamo, estado,
-        encargado: { canal: cfg.canalEncargado === 'ninguno' ? null : cfg.canalEncargado, estado: encEstado, motivo: encMotivo },
-        operador: { canal: cfg.canalOperador === 'whatsapp' ? 'whatsapp' : null, estado: opEstado, motivo: opMotivo },
-        ahora,
-      });
+      const cerrada = await p.cerrar({ tenantId: f.tenantId, reclamo, estado, encargado: encCerrado, operador: opCerrado, ahora });
       if (!cerrada) { r.fallos.push(`jornada ${f.jornadaId}: el claim se perdió antes de cerrar la alerta ${nivel}`); continue; }
       if (algunEnviado) r.alertas[nivel]++;
       if (estado === 'sin_destinatario') { r.sinDestinatario++; r.fallos.push(`jornada ${f.jornadaId}: no hay a quién avisar el nivel ${nivel}`); }

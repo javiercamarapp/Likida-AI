@@ -98,3 +98,12 @@ describe('ejecutarCobranzaGlobal — nadie se queda sin turno', () => {
     expect(r.contactados).toBe(0);
   });
 });
+
+// AUDITORÍA 28 — HALLAZGO ALTO #1, TAREA 1(b): el freno de `rechazoMasivo` de
+// UNA flota detiene las flotas restantes de la corrida global (RES-1). El
+// `vi.spyOn(cobranza, 'ejecutarCobranza').mockImplementation(...)` que se
+// intentó aquí NO intercepta la llamada interna que `ejecutarCobranzaGlobal`
+// hace a `ejecutarCobranza` dentro del MISMO módulo (el import local no pasa
+// por el binding exportado que el spy reemplaza) — la prueba quedaría verde
+// por accidente, sin probar nada. La prueba real, con una base en memoria que
+// sí filtra por tenant, vive en `cobranza_freno_emergencia.test.ts`.

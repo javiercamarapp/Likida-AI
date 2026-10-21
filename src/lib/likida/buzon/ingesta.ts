@@ -207,10 +207,17 @@ export async function procesarCorreoBuzon(
         if (uuid) { delCorreo.set(uuid, { facturaId: g.facturaId }); porNombre.set(sinExtension(h.nombre), uuid); }
       } else if (g.motivo === 'duplicada' && uuid) {
         // ¿La fila existente se leyó de un PDF? Entonces este XML la COMPLETA con el dato duro.
-        const completada = await deps.repo.completarFacturaConXml(tenantId, uuid, cfdi, texto, ctx.rfcFlota, estadoSat);
+        const resultado = await deps.repo.completarFacturaConXml(tenantId, uuid, cfdi, texto, ctx.rfcFlota, estadoSat);
         const existente = await deps.repo.facturaPorUuid(tenantId, uuid);
-        if (completada) await anotar(h, 'xml', 'procesada', { cfdiUuid: uuid, facturaId: existente?.id ?? null, motivo: 'completó con el XML una factura leída de un PDF' });
-        else await anotar(h, 'xml', 'duplicada', { cfdiUuid: uuid, facturaId: existente?.id ?? null, motivo: 'CFDI ya recibido (mismo folio fiscal)' });
+        if (resultado === 'completada') {
+          await anotar(h, 'xml', 'procesada', { cfdiUuid: uuid, facturaId: existente?.id ?? null, motivo: 'completó con el XML una factura leída de un PDF' });
+        } else if (resultado === 'guardado_tardio') {
+          // AUDITORÍA ADVERSARIAL ALTO #2 (0845): la factura ya estaba aprobada/rechazada por una persona — la
+          // decisión NO cambia — pero el CFDI real (evidencia fiscal, CFF 30) quedó guardado, no descartado.
+          await anotar(h, 'xml', 'duplicada', { cfdiUuid: uuid, facturaId: existente?.id ?? null, motivo: 'CFDI de una factura ya decidida: se guardó el XML real como evidencia fiscal, sin tocar la decisión' });
+        } else {
+          await anotar(h, 'xml', 'duplicada', { cfdiUuid: uuid, facturaId: existente?.id ?? null, motivo: 'CFDI ya recibido (mismo folio fiscal)' });
+        }
         if (existente) { delCorreo.set(uuid, { facturaId: existente.id }); porNombre.set(sinExtension(h.nombre), uuid); }
       } else if (g.motivo === 'error' && cfdi.uuid && typeof cfdi.total === 'number') {
         // Con UUID y total es la base la que falló: transitorio.

@@ -104,3 +104,41 @@ function masLargo(casaron: string[]): string | null {
   if (!casaron.length) return null;
   return [...casaron].sort((a, b) => b.length - a.length)[0];
 }
+
+/**
+ * ¿El HOSTNAME de `url` es, literalmente o como subdominio, alguno de
+ * `dominiosVerificados`?
+ *
+ * SEGURIDAD (hallazgo 21-oct-2026, cola-jefe.tsx «Abrir el portal»):
+ * `urlFacturacion` puede venir de un QR fotografiado por cualquiera que le
+ * mande una foto al número de intake — nunca pasó por una persona de la
+ * oficina. El botón de la cola del jefe la abre con PRIORIDAD sobre el portal
+ * fijo del catálogo, así que antes de confiar en ella hay que saber que
+ * pertenece al mismo comercio que ya se identificó, no solo que `includes()`
+ * encontró la subcadena en algún lado del string (eso es lo que hace
+ * `identificarComercio`, y es exactamente lo que un atacante puede fabricar
+ * metiendo el dominio real en la RUTA o la QUERY de un host ajeno).
+ *
+ * Deliberadamente NO compara contra un solo dominio (el de `portal`): un
+ * comercio puede tener varios dominios registrados que NO son subdominio uno
+ * del otro y van al MISMO portal — ver `megasur` (`reconocer.dominios:
+ * ['megasur.com.mx', 'g500sureste.com.mx']`, dos marcas del sureste, un solo
+ * formulario). Compararla solo contra `portal` rechazaría ese caso legítimo.
+ *
+ * Usa `new URL(...).hostname`, no `.includes()`: el hostname es lo único que
+ * el navegador usa para decidir a dónde conecta. Una URL que no parsea se
+ * trata como no confiable (fail closed).
+ */
+export function hostnameDeConfianza(url: string, dominiosVerificados: string[]): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  if (!host) return false;
+  return dominiosVerificados.some((d) => {
+    const base = d.trim().toLowerCase();
+    return base !== '' && (host === base || host.endsWith(`.${base}`));
+  });
+}

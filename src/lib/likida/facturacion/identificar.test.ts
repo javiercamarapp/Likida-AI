@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { identificarComercio } from './identificar';
+import { identificarComercio, hostnameDeConfianza } from './identificar';
 import { COMERCIOS, comercio } from './comercios';
 
 // De qué comercio es el ticket. Es el primer paso de todo: sin comercio no se
@@ -51,6 +51,54 @@ describe('identificarComercio', () => {
 
   it('sin ninguna señal devuelve null', () => {
     expect(identificarComercio({})).toBeNull();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SEGURIDAD: ¿LA LIGA DEL TICKET DE VERDAD ES DE ESTE COMERCIO? (21-oct-2026)
+//
+// `identificarComercio` usa `.includes()` sobre el string completo — correcto
+// para DETECTAR de quién es el ticket (barato, tolera basura alrededor), pero
+// no para decidir si una URL concreta es SEGURA de abrir: un atacante puede
+// meter el dominio real en la ruta o la query de un host ajeno
+// (`https://login-real.net/oxxogas.com/cuenta`) y `.includes('oxxogas.com')`
+// da verdadero. `hostnameDeConfianza` es la puerta que de verdad decide qué
+// liga llega al botón "Abrir el portal" (`cola-jefe.tsx`): compara el
+// HOSTNAME, el único dato que el navegador usa para conectar.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('hostnameDeConfianza', () => {
+  it('el mismo dominio exacto es de confianza', () => {
+    expect(hostnameDeConfianza('https://oxxogas.com/x', ['oxxogas.com'])).toBe(true);
+  });
+
+  it('un subdominio del dominio registrado sigue siendo de confianza (sucursal)', () => {
+    expect(hostnameDeConfianza('https://sucursal22.oxxogas.com/factura', ['oxxogas.com'])).toBe(true);
+  });
+
+  it('un dominio DISTINTO no es de confianza, aunque el real aparezca en la ruta o la query', () => {
+    expect(hostnameDeConfianza('https://login-real.net/oxxogas.com/cuenta', ['oxxogas.com'])).toBe(false);
+    expect(hostnameDeConfianza('https://evil.net/?ref=oxxogas.com', ['oxxogas.com'])).toBe(false);
+  });
+
+  it('un dominio que solo termina parecido no cuela (no es sufijo de punto)', () => {
+    // "malaoxxogas.com" NO termina en ".oxxogas.com" — es otro dominio, no un
+    // subdominio. Sin el punto, `endsWith` colaría cualquier dominio que
+    // termine con las mismas letras.
+    expect(hostnameDeConfianza('https://malaoxxogas.com/x', ['oxxogas.com'])).toBe(false);
+  });
+
+  it('dos dominios registrados del MISMO comercio que NO son subdominio uno del otro se respetan los dos (G500 Sureste)', () => {
+    const dominios = comercio('megasur')!.reconocer.dominios!;
+    expect(hostnameDeConfianza('https://megasur.com.mx/ticket', dominios)).toBe(true);
+    expect(hostnameDeConfianza('https://g500sureste.com.mx/ticket', dominios)).toBe(true);
+  });
+
+  it('una URL que no parsea no es de confianza (falla cerrado)', () => {
+    expect(hostnameDeConfianza('no-es-una-url', ['oxxogas.com'])).toBe(false);
+  });
+
+  it('sin dominios registrados, nada es de confianza', () => {
+    expect(hostnameDeConfianza('https://oxxogas.com/x', [])).toBe(false);
   });
 });
 
