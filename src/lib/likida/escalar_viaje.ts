@@ -147,7 +147,7 @@ export async function viajesSinAceptar(ahora: Date = new Date(), horas: number =
     .is('aceptado_en', null)
     .is('escalado_en', null)
     // A8 ESCALACIÓN (hallazgo confirmado, la otra mitad del hueco del "sí"): un
-    // viaje que el chofer rechazó EXPLÍCITAMENTE (`rechazado_en`, mig. 0854,
+    // viaje que el chofer rechazó EXPLÍCITAMENTE (`rechazado_en`, mig. 0855,
     // puesto por `atenderConfirmacion` en confirmar_viaje.ts) ya avisó al jefe
     // de inmediato — dejarlo pasar por aquí lo reportaría como "no contestó"
     // cinco horas después, perdiendo que SÍ contestó y dijo que no.

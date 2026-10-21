@@ -171,7 +171,7 @@ export async function marcarAceptado(
  * AUDITORÍA A8 ESCALACIÓN (hallazgo confirmado, la otra mitad del hueco del
  * "sí"): `armarRecordatorioChofer` (escalar_viaje.ts) le promete al chofer
  * "con cualquiera de las dos [sí o no] le aviso a tu encargado", pero hasta
- * esta migración (0854) nada escribía NADA cuando contestaba que no — ni un
+ * esta migración (0855) nada escribía NADA cuando contestaba que no — ni un
  * campo en la base, ni un evento — y la escalación de las 5 h lo trataba como
  * "no contestó", perdiendo que SÍ contestó y dijo que no.
  *

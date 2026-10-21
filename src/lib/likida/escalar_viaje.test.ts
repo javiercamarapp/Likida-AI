@@ -219,7 +219,7 @@ describe('viajesSinAceptar', () => {
     // Sin `escalado_en is null` el jefe recibe el mismo aviso cada hora, que es
     // como se entrena a un canal para que se ignore.
     expect(args('is')).toContainEqual(['escalado_en', null]);
-    // AUDITORÍA A8 ESCALACIÓN (hallazgo confirmado, mig. 0854): un viaje que el
+    // AUDITORÍA A8 ESCALACIÓN (hallazgo confirmado, mig. 0855): un viaje que el
     // chofer ya rechazó EXPLÍCITAMENTE no debe volver a tratarse como "no
     // contestó" — el jefe ya recibió el aviso inmediato del rechazo.
     expect(args('is')).toContainEqual(['rechazado_en', null]);
@@ -623,7 +623,7 @@ describe('escalarViajesSinAceptar', () => {
 
   // ═══════════════════════════════════════════════════════════════════════
   // AUDITORÍA A8 ESCALACIÓN (hallazgo confirmado, la otra mitad del hueco del
-  // "sí", mig. 0854): el claim TAMBIÉN comprueba `rechazado_en IS NULL`, por
+  // "sí", mig. 0855): el claim TAMBIÉN comprueba `rechazado_en IS NULL`, por
   // la misma razón que `aceptado_en` — entre la lectura y el claim el chofer
   // pudo haber contestado "no" por el mismo camino que la aceptación.
   // ═══════════════════════════════════════════════════════════════════════

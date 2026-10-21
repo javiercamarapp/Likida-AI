@@ -19872,7 +19872,7 @@ begin
     cc_leidas, cc_tocadas, inv_tocadas, plan_leidas, stripe_tocadas, stripe_leidas, por_admin;
 end $$;
 
--- ── 0854. Un viaje no se puede rechazar sin haberse avisado, y el índice de la cola sigue cubriendo la consulta (mig. 0854) ──
+-- ── 0855. Un viaje no se puede rechazar sin haberse avisado, y el índice de la cola sigue cubriendo la consulta (mig. 0855) ──
 --
 -- AUDITORÍA A8 ESCALACIÓN (confirmado, dos ángulos del mismo hueco con el caso
 -- del "sí", bloque 37/mig. 0058): hasta esta migración, un chofer que

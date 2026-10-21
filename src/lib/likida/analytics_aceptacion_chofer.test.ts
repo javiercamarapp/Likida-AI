@@ -75,7 +75,7 @@ describe('getEventosConductores — la aceptación importada se rotula aparte', 
     expect(ev.find((e) => e.folio === 'F-2' && e.tipo === 'en_seguimiento_importado')).toBeDefined();
   });
 
-  // AUDITORÍA A8 ESCALACIÓN (hallazgo confirmado, mig. 0854): antes de esta
+  // AUDITORÍA A8 ESCALACIÓN (hallazgo confirmado, mig. 0855): antes de esta
   // columna, el "no" explícito del chofer no dejaba NINGÚN rastro — ni un
   // evento aquí ni en ningún otro lado.
   it('un rechazado_en sale como «rechazado» en la bitácora', async () => {

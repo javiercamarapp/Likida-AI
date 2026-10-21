@@ -954,7 +954,7 @@ export interface EventoConductor {
 
 const SELLOS_CONDUCTOR: ReadonlyArray<[EventoConductor['tipo'], string]> = [
   ['avisado', 'avisado_en'], ['acepto', 'aceptado_en'],
-  // AUDITORÍA A8 ESCALACIÓN (hallazgo confirmado, mig. 0854): el "no" explícito
+  // AUDITORÍA A8 ESCALACIÓN (hallazgo confirmado, mig. 0855): el "no" explícito
   // del chofer ahora deja un sello (`rechazado_en`) y por eso entra a la misma
   // bitácora que "avisado"/"acepto" — antes esa respuesta no dejaba rastro.
   ['rechazado', 'rechazado_en'], ['escalado', 'escalado_en'],
