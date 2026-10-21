@@ -946,14 +946,18 @@ export async function contarViajes(
 /** Un renglón de la bitácora del Agente de Conductores (F4): cada sello real
  *  del ciclo de comunicación con el chofer, del más reciente al más viejo. */
 export interface EventoConductor {
-  tipo: 'avisado' | 'acepto' | 'en_seguimiento_importado' | 'escalado' | 'llegada' | 'descarga' | 'regreso';
+  tipo: 'avisado' | 'acepto' | 'en_seguimiento_importado' | 'rechazado' | 'escalado' | 'llegada' | 'descarga' | 'regreso';
   folio: string;
   operador: string | null;
   cuando: string;
 }
 
 const SELLOS_CONDUCTOR: ReadonlyArray<[EventoConductor['tipo'], string]> = [
-  ['avisado', 'avisado_en'], ['acepto', 'aceptado_en'], ['escalado', 'escalado_en'],
+  ['avisado', 'avisado_en'], ['acepto', 'aceptado_en'],
+  // AUDITORÍA A8 ESCALACIÓN (hallazgo confirmado, mig. 0855): el "no" explícito
+  // del chofer ahora deja un sello (`rechazado_en`) y por eso entra a la misma
+  // bitácora que "avisado"/"acepto" — antes esa respuesta no dejaba rastro.
+  ['rechazado', 'rechazado_en'], ['escalado', 'escalado_en'],
   ['llegada', 'llegada_en'], ['descarga', 'descarga_en'], ['regreso', 'regreso_en'],
 ];
 
@@ -964,7 +968,7 @@ async function leerSellosRecientes(tenantId: string, limite: number, nombre: str
   const res = await acotada(
     supabaseAdmin()
     .from('viaje')
-    .select('folio, id, avisado_en, aceptado_en, aceptado_origen, escalado_en, llegada_en, descarga_en, regreso_en, operador:operador_id(nombre)')
+    .select('folio, id, avisado_en, aceptado_en, aceptado_origen, rechazado_en, escalado_en, llegada_en, descarga_en, regreso_en, operador:operador_id(nombre)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .limit(limite),

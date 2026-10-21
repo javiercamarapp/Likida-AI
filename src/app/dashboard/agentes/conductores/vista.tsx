@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import {
-  MessagesSquare, Send, CheckCheck, Flag, MapPin, Package, Truck, Sparkles,
+  MessagesSquare, Send, CheckCheck, Flag, MapPin, Package, Truck, Sparkles, Ban,
 } from 'lucide-react';
 import type { EventoConductor } from '@/lib/likida/analytics';
 import { HORAS_PARA_ESCALAR } from '@/lib/likida/escalar_viaje';
@@ -25,6 +25,8 @@ const EVENTO: Record<EventoConductor['tipo'], { Icono: typeof Send; texto: (e: E
   avisado: { Icono: Send, color: 'var(--muted)', texto: (e) => `Le avisó a ${e.operador ?? 'el operador'} de su viaje ${e.folio}` },
   acepto: { Icono: CheckCheck, color: 'var(--ok)', texto: (e) => `${e.operador ?? 'El operador'} aceptó el viaje ${e.folio}` },
   en_seguimiento_importado: { Icono: Truck, color: 'var(--muted)', texto: (e) => `El viaje ${e.folio} entró en seguimiento por importación (no lo aceptó el chofer)` },
+  // AUDITORÍA A8 ESCALACIÓN (hallazgo confirmado, mig. 0854): el "no" explícito ya deja rastro — antes esta respuesta no aparecía en ningún lado.
+  rechazado: { Icono: Ban, color: 'var(--bad)', texto: (e) => `${e.operador ?? 'El operador'} dijo que NO le toca el viaje ${e.folio}` },
   escalado: { Icono: Flag, color: 'var(--bad)', texto: (e) => `Escaló el viaje ${e.folio} al jefe — nadie aceptaba` },
   llegada: { Icono: MapPin, color: 'var(--ok)', texto: (e) => `${e.operador ?? 'El operador'} avisó que llegó (${e.folio})` },
   descarga: { Icono: Package, color: 'var(--warn)', texto: (e) => `${e.operador ?? 'El operador'} está descargando (${e.folio})` },

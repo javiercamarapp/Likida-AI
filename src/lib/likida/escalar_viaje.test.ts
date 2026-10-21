@@ -219,6 +219,10 @@ describe('viajesSinAceptar', () => {
     // Sin `escalado_en is null` el jefe recibe el mismo aviso cada hora, que es
     // como se entrena a un canal para que se ignore.
     expect(args('is')).toContainEqual(['escalado_en', null]);
+    // AUDITORÍA A8 ESCALACIÓN (hallazgo confirmado, mig. 0855): un viaje que el
+    // chofer ya rechazó EXPLÍCITAMENTE no debe volver a tratarse como "no
+    // contestó" — el jefe ya recibió el aviso inmediato del rechazo.
+    expect(args('is')).toContainEqual(['rechazado_en', null]);
     // Un viaje que nunca se avisó no ha empezado a correr ningún reloj.
     expect(args('not')).toContainEqual(['avisado_en', 'is', null]);
     // AUDITORÍA A8 ESCALACIÓN (hallazgo 2): el `.limit()` de la CONSULTA ya no
@@ -615,6 +619,37 @@ describe('escalarViajesSinAceptar', () => {
     // mock no tendría manera de distinguir la carrera perdida de un bug que
     // simplemente dejó de reclamar nada.
     expect(updates[0].is).toContainEqual(['aceptado_en', null]);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AUDITORÍA A8 ESCALACIÓN (hallazgo confirmado, la otra mitad del hueco del
+  // "sí", mig. 0855): el claim TAMBIÉN comprueba `rechazado_en IS NULL`, por
+  // la misma razón que `aceptado_en` — entre la lectura y el claim el chofer
+  // pudo haber contestado "no" por el mismo camino que la aceptación.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('el claim comprueba `rechazado_en IS NULL` en el MISMO UPDATE condicional', async () => {
+    lectura = { data: [fila()], error: null };
+    await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+    expect(updates[0].is).toContainEqual(['rechazado_en', null]);
+  });
+
+  it('EL CHOFER RECHAZA JUSTO ANTES DEL CLAIM: la carrera la gana el rechazo y el viaje NO escala', async () => {
+    // Mismo mecanismo que la aceptación de arriba, para el "no" explícito: el
+    // chofer contestó justo antes de que esta corrida llegara al claim y
+    // `marcarRechazados` (confirmar_viaje.ts) ya puso `rechazado_en`. Sin la
+    // condición en el MISMO UPDATE, el claim ganaría igual y el jefe recibiría
+    // el aviso de "no contestó" sobre un viaje que SÍ contestó, rechazándolo.
+    lectura = { data: [fila()], error: null };
+    resultadosUpdate = [{ data: [], error: null }];
+
+    const r = await escalarViajesSinAceptar({ telefonoJefePorTenant: TEL, ahora: AHORA });
+
+    expect(r.escalados).toBe(0);
+    expect(r.fallos).toEqual([]);
+    expect(avisarAlChofer).not.toHaveBeenCalled();
+    expect(sendText).not.toHaveBeenCalled();
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(updates[0].is).toContainEqual(['rechazado_en', null]);
   });
 
   it('cada flota recibe el aviso en SU teléfono, y la que no tiene no le roba el de otra', async () => {
