@@ -298,7 +298,10 @@ import { join, relative } from 'node:path';
 // del patrón, no del código. Se documenta en vez de reescribir el `Buffer.from` idiomático para esquivar el regex. Las 2 llamadas reales
 // nuevas (ver el techo de abajo) viven en `peajes/repo.ts` (T-A2-35 ya consolidó ahí lo que antes era `datos.ts`), por `acotada`, ancladas
 // a `tenant_id`.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 319;
+// Integración con A2 Peajes (protocolo de discrepancia geográfica conectado al cron, hallazgo alto de la auditoría adversarial
+// del 21-oct-2026, sobre la misma base): +1 archivo (319 → 320), `peajes/aviso_discrepancia.ts` — lee la línea del desglose y
+// la última posición GPS para armar el reporte real a seguridad cuando una unidad `unidad_inmovilizada` cruza un peaje.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 320;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -466,7 +469,11 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 319;
 // folio ya fue decidido — el CFDI real, evidencia fiscal CFF 30, dejaba de guardarse). `buzon/repo.ts` YA estaba fuera
 // de la frontera (no es `lib/likida/repo.ts`); esto no migra código viejo, es una rama nueva del mismo archivo. Cubierta
 // por `completar_cfdi_tardio.test.ts`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_238;
+// Integración con A2 Peajes (protocolo de discrepancia geográfica, hallazgo alto de la auditoría adversarial del 21-oct-2026,
+// sobre la misma base): +2 llamadas (2,238 → 2,240), en `peajes/aviso_discrepancia.ts` (lectura de la línea del desglose y de
+// la última posición GPS), por `acotada`, ancladas a `tenant_id`. Funcionalidad nueva, no código migrado; cubierta por
+// `aviso_discrepancia.test.ts`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_240;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
