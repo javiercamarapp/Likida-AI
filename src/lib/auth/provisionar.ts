@@ -14,6 +14,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { logger } from '@/lib/logger';
+import { esCorreoYaRegistrado } from './invitar';
 
 /** El dominio de `app_user_rol_dominio` menos `operador` (sin login desde el
  *  7-ago-2026). `vendedor` (0105) es rol de LIKIDA: siempre con tenantId
@@ -88,6 +89,41 @@ function normalizarTelefonoOficina(crudo: string): string {
   return destinatarioWhatsApp(soloDigitos.length === 10 ? `52${soloDigitos}` : soloDigitos);
 }
 
+/**
+ * Resuelve, por correo, un `auth.users` que YA EXISTE pero que `createUser`
+ * no puede devolver (solo regresa el usuario que ÉL crea). Hace falta porque
+ * `login/page.tsx:141-149` (Google OAuth) no tiene equivalente de
+ * `shouldCreateUser:false` — Supabase no lo ofrece para OAuth —, así que
+ * CUALQUIER correo real de Google se auto-registra en `auth.users` solo con
+ * tocar "Entrar con Google", sin pasar por `provisionarUsuario`. Cuando
+ * después un `flota_admin` invita a esa MISMA persona, `createUser` rebota
+ * con "already registered" y, hasta este cambio, el alta se abandonaba ahí:
+ * la cuenta existe en Auth pero no tiene fila `app_user` en ningún tenant y
+ * queda huérfana en `/sin-acceso` para siempre (ver `SIN_ROL` en session.ts).
+ *
+ * supabase-js NO expone un `getUserByEmail`/`listUsers({ email })` — paginar
+ * TODOS los usuarios del proyecto para encontrar uno sería tan lento como
+ * inválido como lectura de un dato que debería ser puntual. `generateLink`
+ * es el único método admin que acepta un correo y regresa el `User` completo
+ * sin paginar. Se usa `type: 'recovery'` y no `signup`/`invite`/`magiclink` a
+ * propósito: esos tres SÍ pueden CREAR al usuario si no existe todavía (ver
+ * el comentario de `generateLink` en `@supabase/auth-js`), y esta función
+ * solo se llama DESPUÉS de que `createUser` ya confirmó que el correo existe
+ * — `recovery` es el único tipo que falla en vez de crear si una carrera lo
+ * dejara de ser verdad entre una llamada y la otra. Genera un token de
+ * recuperación sin usar en `auth.users` (efecto secundario inevitable del
+ * único método disponible para esto), pero el link nunca se manda a nadie ni
+ * se guarda — se descarta todo excepto `data.user.id`.
+ */
+async function resolverAuthExistentePorCorreo(
+  admin: ReturnType<typeof supabaseAdmin>,
+  email: string,
+): Promise<{ id: string } | null> {
+  const { data, error } = await admin.auth.admin.generateLink({ type: 'recovery', email });
+  if (error || !data.user) return null;
+  return { id: data.user.id };
+}
+
 export async function provisionarUsuario(
   tenantId: string | null,
   email: string,
@@ -103,27 +139,70 @@ export async function provisionarUsuario(
 
   const admin = supabaseAdmin();
   const { data, error } = await admin.auth.admin.createUser({ email, email_confirm: true });
-  if (error || !data.user) throw new Error(error?.message ?? 'no se pudo crear el usuario de Auth');
+
+  let userId: string;
+  // Si el usuario de Auth lo creó ESTA llamada, el rollback de abajo puede
+  // borrarlo sin reparos. Si en vez lo ENLAZAMOS porque ya existía (rama de
+  // "already registered"), NO es nuestro para borrar — borrarlo sería tirar
+  // la cuenta real de otra persona (o la de este mismo usuario en otro flujo)
+  // por un choque de ESTE insert.
+  let authEsNuestro: boolean;
+
+  if (error || !data.user) {
+    // Cualquier otro fallo de `createUser` (SMTP, cuota, etc.) sigue su
+    // camino de siempre: no es el caso que esta rama resuelve.
+    if (!error || !esCorreoYaRegistrado(error)) {
+      throw new Error(error?.message ?? 'no se pudo crear el usuario de Auth');
+    }
+
+    // `app_user.email` es NOT NULL UNIQUE desde la 0001 — a lo más una fila
+    // en TODO el proyecto, de cualquier tenant. Si YA hay una, este correo de
+    // verdad es cliente de Likida (aquí o en otra flota, quizá la
+    // competencia) y SEG-7 (invitar.ts) exige seguir tratándolo como "ya
+    // registrado" sin tocar nada — el llamador ya sabe traducir este mismo
+    // error con `esCorreoYaRegistrado`/`mensajeAltaNeutro`. Solo cuando NO
+    // hay ninguna fila `app_user` es el caso huérfano de Google: se completa
+    // el alta de verdad enlazando la fila nueva al `id` de Auth que YA
+    // EXISTE, en vez de dejarla abandonada.
+    const { data: existente, error: errExistente } = await admin
+      .from('app_user')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+    if (errExistente) throw new Error(errExistente.message);
+    if (existente) throw new Error(error.message);
+
+    const resuelto = await resolverAuthExistentePorCorreo(admin, email);
+    if (!resuelto) throw new Error(error.message);
+
+    userId = resuelto.id;
+    authEsNuestro = false;
+  } else {
+    userId = data.user.id;
+    authEsNuestro = true;
+  }
 
   const { error: errInsert } = await admin.from('app_user').insert({
-    id: data.user.id, tenant_id: tenantId, email, nombre: nombre ?? null, rol,
+    id: userId, tenant_id: tenantId, email, nombre: nombre ?? null, rol,
     telefono: telefonoCanonico,
   });
   if (errInsert) {
-    // ── ROLLBACK (auditoría 24, H6). Sin esto, un insert que rebota (el
-    // teléfono ya identifica a otra cuenta — índice 0059—, un bache) dejaba
-    // un usuario de Auth SIN fila en app_user: una cuenta que puede iniciar
-    // sesión (magic link) y aterriza en /sin-acceso, y que además bloquea
-    // para siempre un segundo alta con el mismo correo («already
-    // registered»). Se borra el usuario de Auth que ESTA llamada creó; si el
-    // borrado también falla, se dice en el log y el error original sigue su
-    // camino — el llamador ya sabe que el alta no se completó.
-    const { error: errBorrar } = await admin.auth.admin.deleteUser(data.user.id);
-    if (errBorrar) {
-      logger.error('provisionar.rollback_fallo', { userId: data.user.id, err: errBorrar.message, causa: errInsert.message });
+    if (authEsNuestro) {
+      // ── ROLLBACK (auditoría 24, H6). Sin esto, un insert que rebota (el
+      // teléfono ya identifica a otra cuenta — índice 0059—, un bache) dejaba
+      // un usuario de Auth SIN fila en app_user: una cuenta que puede iniciar
+      // sesión (magic link) y aterriza en /sin-acceso, y que además bloquea
+      // para siempre un segundo alta con el mismo correo («already
+      // registered»). Se borra el usuario de Auth que ESTA llamada creó; si el
+      // borrado también falla, se dice en el log y el error original sigue su
+      // camino — el llamador ya sabe que el alta no se completó.
+      const { error: errBorrar } = await admin.auth.admin.deleteUser(userId);
+      if (errBorrar) {
+        logger.error('provisionar.rollback_fallo', { userId, err: errBorrar.message, causa: errInsert.message });
+      }
     }
     throw new Error(errInsert.message);
   }
 
-  return { userId: data.user.id };
+  return { userId };
 }
