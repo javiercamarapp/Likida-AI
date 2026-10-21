@@ -1100,6 +1100,21 @@ describe('cuadrarViaje — texto dirigido al lector automático', () => {
     });
     expect(r.diferencias.some((d) => d.tipo === 'texto_sospechoso')).toBe(false);
   });
+
+  // El chequeo DETERMINISTA (intake/ocr.ts, deteccion_inyeccion.ts) cazó algo
+  // que el modelo no autorreportó: la nota lo dice explícitamente, en vez de
+  // sonar igual que un autorreporte sencillo del modelo.
+  it('cuando el chequeo determinista encontró indicios, la nota lo dice aunque el lector no se haya autorreportado', () => {
+    const r = cuadrarViaje({
+      viajeId: 'v1', anticipo: 500, politica,
+      gastos: [g({ concepto: 'diesel', monto: 487.5, folio: 'A1', cfdiUuid: 'u1',
+                   ocrExtra: { textoSospechoso: true, textoSospechosoIndicios: ['ignorar_instrucciones'] } })],
+    });
+    const d = r.diferencias.find((d) => d.tipo === 'texto_sospechoso');
+    expect(d?.nota).toContain('ignorar_instrucciones');
+    expect(d?.nota).toMatch(/aunque el lector no lo haya señalado/);
+    expect(r.estatus).toBe('revisar');
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

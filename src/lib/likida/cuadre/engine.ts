@@ -1160,8 +1160,28 @@ export function cuadrarViaje(input: CuadreInput): Omit<Liquidacion, 'id' | 'crea
       }
     }
 
+    // `textoSospechoso` (intake/ocr.ts) ya es la OR del autorreporte del
+    // modelo con un chequeo determinista por regex sobre el texto que el
+    // modelo dice haber leído (`detectarInyeccion`, `deteccion_inyeccion.ts`)
+    // — no depende solo de que el modelo se autorreporte. `monto: 0` sigue
+    // siendo correcto: ninguna de las dos señales es una MEDICIÓN de dinero,
+    // es un juicio sobre el PAPEL, y solo una persona puede decidir si el
+    // gasto es real. Lo que SÍ cambia con una señal más confiable no es el
+    // dinero, es la revisión: `texto_sospechoso` ya vive en
+    // `REVISAR_OPERATIVO` (arriba), así que esta observación por sí sola
+    // fuerza `estatus: 'revisar'` — el gate más fuerte que tiene este motor,
+    // sin inventar un segundo nivel de "bloqueo" que la liquidación no tiene
+    // en ningún otro lado.
     if (extraOcr?.textoSospechoso) {
-      diferencias.push({ tipo: 'texto_sospechoso', concepto: g.concepto, monto: 0, nota: `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} traía texto dirigido al lector automático. Se capturó el total impreso, pero conviene ver el papel original.`, gastoId: g.id });
+      const indicios = Array.isArray(extraOcr?.textoSospechosoIndicios) ? (extraOcr.textoSospechosoIndicios as unknown[]).filter((i): i is string => typeof i === 'string') : [];
+      // Cuando el chequeo DETERMINISTA encontró algo (indicios no vacío), se
+      // lo dice al contralor aunque el lector no lo haya autorreportado: es
+      // justo el caso que este chequeo existe para cazar — el modelo "mintió"
+      // y la observación sale igual.
+      const nota = indicios.length > 0
+        ? `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} traía texto con forma de instrucción en lo ya extraído del papel (${indicios.join(', ')}) — detectado por el chequeo automático, aunque el lector no lo haya señalado él mismo. Se capturó el total impreso, pero conviene ver el papel original.`
+        : `El comprobante de ${etiquetaConcepto(g.concepto, g.ocrExtra as Record<string, unknown> | undefined)} de ${mxn(g.monto)} traía texto dirigido al lector automático. Se capturó el total impreso, pero conviene ver el papel original.`;
+      diferencias.push({ tipo: 'texto_sospechoso', concepto: g.concepto, monto: 0, nota, gastoId: g.id });
     }
 
     // (El tope fiscal de alimentación se evalúa POR DÍA, después del bucle.)

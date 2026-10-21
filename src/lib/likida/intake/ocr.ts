@@ -16,6 +16,7 @@ import { generateStructured, StructuredError, TruncatedError, resumenCausa } fro
 import { esErrorDePresupuesto, type LlmBudget } from '@/lib/llm/budget';
 import { alertarOperador, contadorDeFallos } from '@/lib/observability/alerta';
 import { bufferFromDataUrl, esRfcValido, esUuidValido, rfcChecksumOk } from './cfdi';
+import { detectarInyeccion } from '../deteccion_inyeccion';
 import { decodificarCodigosYReducir, redimensionarParaVision } from './cfdi_imagen';
 import { normalizarFecha, corregirVolteoDiaMes } from './fecha';
 import { hoyMx } from '@/lib/formato';
@@ -249,14 +250,36 @@ export type MotivoFallo = typeof MOTIVOS_FALLO[number];
 export const MARCA_NO_FISCAL = 'noEsComprobanteFiscal';
 
 /**
- * Marca que el modelo vio texto dirigido a ÉL dentro de la imagen.
+ * Marca que HAY texto dirigido a un modelo dentro de la imagen.
  *
  * Va en `ocrExtra`, no en `motivo`: el comprobante se lee bien y el gasto entra
  * con su monto impreso. Lo que cambia es que el motor levanta una observación
  * para el CONTRALOR — el operador no se entera, porque el aviso no es para él y
  * porque avisarle a quien quizá lo intentó solo le enseña a hacerlo mejor.
+ *
+ * HALLAZGO (21-oct-2026): hasta ahora esta marca SOLO salía del autorreporte
+ * del propio modelo de visión (`data.texto_sospechoso`), instruido por
+ * lenguaje natural en el SYSTEM prompt — sin ningún chequeo independiente
+ * detrás. Un modelo comprometido (o convencido por la inyección) puede leer
+ * los campos bien y simplemente no marcar la casilla: el "testigo" y el
+ * "acusado" eran la misma pieza. Ahora esta marca es la OR de dos señales:
+ * el autorreporte Y `detectarInyeccion` (determinista, por regex — el mismo
+ * detector que usa Carta Porte/A3, ver `deteccion_inyeccion.ts`) corriendo
+ * sobre el texto LIBRE que el modelo dice haber leído del papel. Un modelo
+ * que miente sobre sí mismo ya no cierra el hueco: el chequeo determinista no
+ * depende de su autorreporte.
  */
 export const MARCA_TEXTO_SOSPECHOSO = 'textoSospechoso';
+
+/**
+ * Los nombres de los patrones de `detectarInyeccion` que dispararon sobre el
+ * texto extraído (nunca el texto mismo — ver `deteccion_inyeccion.ts`).
+ * Ausente cuando el chequeo determinista no encontró nada, incluso si
+ * `textoSospechoso` es true solo por el autorreporte del modelo: así el
+ * contralor distingue "el lector avisó" de "el chequeo automático lo cazó
+ * aunque el lector no dijera nada".
+ */
+export const MARCA_INYECCION_INDICIOS = 'textoSospechosoIndicios';
 
 /**
  * Deja utilizable la liga que el modelo leyó del papel. NO inventa dominio: si
@@ -545,6 +568,29 @@ export async function extraerComprobante(
   vigilante.exito();
   const { data } = res;
 
+  // ── DEFENSA DETERMINISTA CONTRA INYECCIÓN, SOBRE EL TEXTO YA EXTRAÍDO ────
+  //
+  // `data.texto_sospechoso` es el autorreporte del modelo (ver SYSTEM, arriba,
+  // y `MARCA_TEXTO_SOSPECHOSO`). Aquí se corre ADEMÁS `detectarInyeccion`
+  // —el mismo detector determinista por regex de Carta Porte/A3— sobre cada
+  // campo de texto LIBRE que el modelo dice haber leído del papel: no sobre la
+  // foto (eso ya lo intenta el propio modelo de visión), sino sobre su propia
+  // transcripción. Las dos señales se combinan con OR más abajo
+  // (`textoSospechoso`): un modelo que lee bien los campos pero "miente" en su
+  // autorreporte ya no deja el hueco abierto, porque esta capa no depende de
+  // lo que el modelo diga de sí mismo.
+  //
+  // Campo por campo (no uno solo concatenado) para que `indiciosPorCampo`
+  // sirva de diagnóstico útil — "cuál campo trajo la instrucción" — sin tener
+  // que adivinarlo después sobre un blob.
+  const CAMPOS_TEXTO_LIBRE = [data.producto, data.estacion, data.sucursal, data.emisor, data.fecha_impresa, data.folio, data.web_id, data.url_facturacion]
+    .filter((v): v is string => typeof v === 'string' && v.length > 0);
+  const indiciosDeterministas = new Set<string>();
+  for (const campo of CAMPOS_TEXTO_LIBRE) {
+    for (const i of detectarInyeccion(campo).indicios) indiciosDeterministas.add(i);
+  }
+  const riesgoDeterminista = indiciosDeterministas.size > 0;
+
   // Cruce con el QR del CFDI (gana sobre el OCR para campos fiscales).
   let uuid = data.cfdi_uuid && esUuidValido(data.cfdi_uuid) ? data.cfdi_uuid.toLowerCase() : undefined;
   // Un RFC con forma válida pero dígito verificador roto está MAL LEÍDO. No se
@@ -736,7 +782,13 @@ export async function extraerComprobante(
       montoDiscrepante: montoDiscrepante || undefined,
       // El papel traía texto dirigido al extractor. El gasto entra igual, con su
       // monto impreso; lo que se levanta es una observación para el contralor.
-      [MARCA_TEXTO_SOSPECHOSO]: data.texto_sospechoso || undefined,
+      // OR del autorreporte del modelo con el chequeo determinista de arriba:
+      // cualquiera de los dos marca el comprobante.
+      [MARCA_TEXTO_SOSPECHOSO]: (Boolean(data.texto_sospechoso) || riesgoDeterminista) || undefined,
+      // Solo presente cuando el chequeo DETERMINISTA encontró algo — sirve
+      // para distinguir "el lector avisó" de "el chequeo automático lo cazó
+      // aunque el lector no dijera nada" (ver MARCA_INYECCION_INDICIOS).
+      [MARCA_INYECCION_INDICIOS]: riesgoDeterminista ? [...indiciosDeterministas] : undefined,
       // El papel dice que no ampara deducción. El gasto entra igual —es dinero
       // que el operador puso— y el motor levanta que hay que pedir la factura.
       [MARCA_NO_FISCAL]: data.documento === 'nota_no_fiscal' || undefined,

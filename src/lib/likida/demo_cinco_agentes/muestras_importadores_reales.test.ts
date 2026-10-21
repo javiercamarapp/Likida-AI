@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import { describe, expect, it } from 'vitest';
-import { detectarInyeccion } from '../carta_porte_docs/inyeccion';
+import { detectarInyeccion } from '../deteccion_inyeccion';
 import { leerGeocercasCsv, leerPosicionesCsv, partirCsv } from '../conectores/tabla_propia/csv';
 import { geocercasASitios } from '../conectores/tabla_propia/importar_geocercas';
 import { haversineM } from '../conectores/tabla_propia/validar';
