@@ -12,6 +12,7 @@ import {
   type ConfigGasto, type GastoDeOperador, type ItemCobro, type PlanCobroGasto, type MotivoComprobante,
   type ContactoMedible, type Efectividad, type OperadorCobro,
 } from './cobranza_gasto_pura';
+import { estaApagado } from '../interruptores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA COBRANZA POR GASTO (0525) — el lado con base de datos.
@@ -342,12 +343,22 @@ export interface OpcionesCobranzaGasto {
 /**
  * Corre la cobranza POR GASTO de UNA flota. La ventana horaria y el agente pausado los decide el llamador
  * (`ejecutarCobranza`), igual que para la cobranza por viaje; aquí se decide si la flota la encendió.
+ *
+ * EL KILL SWITCH GLOBAL (0110) se pregunta AQUÍ TAMBIÉN y no solo en `ejecutarCobranza` (auditoría
+ * adversarial, 21-oct-2026, mismo hallazgo que cobranza.ts): hoy el único llamador es `ejecutarCobranza`,
+ * que ya corta antes de llegar aquí, pero esta función queda exportada y un llamador futuro que la invoque
+ * directo (sin pasar por `ejecutarCobranza`) no debe heredar un hueco por el que un incidente apagado
+ * globalmente sigue mandando WhatsApp de cobranza por gasto. Fail-closed, igual que allá.
  */
 export async function ejecutarCobranzaGastos(
   tenantId: string,
   ahora: Date = new Date(),
   opts: OpcionesCobranzaGasto = {},
 ): Promise<ResultadoCobranzaGasto> {
+  if (await estaApagado('agente:cobranza')) {
+    logger.warn('agente_cobranza.apagado_global', { tenantId, modulo: 'gasto' });
+    return resultadoGastoVacio('apagado por el interruptor global agente:cobranza');
+  }
   const config = await leerConfigGasto(tenantId);
   if (!config.porGasto) return resultadoGastoVacio('la cobranza por gasto está apagada');
 
