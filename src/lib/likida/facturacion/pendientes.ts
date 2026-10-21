@@ -2,7 +2,7 @@ import { traerTodoPorLlave, llaveFechaId, despuesDeFechaId, PAGINA, type LlaveFe
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
-import { identificarComercio } from './identificar';
+import { identificarComercio, hostnameDeConfianza } from './identificar';
 import { calcularCaducidad, type Caducidad } from './caducidad';
 import type { Comercio, ClaveCampo } from './comercios';
 
@@ -244,13 +244,39 @@ export async function contarConCfdi(tenantId: string): Promise<number | null> {
 
 export function armar(g: FilaGasto, hoy: string): TicketPorFacturar {
   const extra = (g.ocr_extra ?? {}) as Record<string, unknown>;
-  const urlTicket = typeof extra.urlFacturacion === 'string' ? extra.urlFacturacion : null;
+  const urlTicketCrudo = typeof extra.urlFacturacion === 'string' ? extra.urlFacturacion : null;
 
   const c: Comercio | null = identificarComercio({
-    urlFacturacion: urlTicket ?? undefined,
+    urlFacturacion: urlTicketCrudo ?? undefined,
     rfcEmisor: g.rfc_emisor ?? undefined,
     textoTicket: typeof extra.emisor === 'string' ? extra.emisor : undefined,
   });
+
+  // SEGURIDAD (hallazgo 21-oct-2026): `urlTicketCrudo` puede venir de un QR que
+  // nunca vio una persona de la oficina — el intake lo lee de una FOTO que
+  // cualquiera manda por WhatsApp. `cola-jefe.tsx` abre esa liga con PRIORIDAD
+  // sobre el portal fijo del catálogo en el botón "Abrir el portal". Antes de
+  // dejar que salga de este módulo, se exige que su dominio sea el MISMO (o un
+  // subdominio) de alguno de los que el catálogo tiene registrados para el
+  // comercio que YA se identificó (por URL, RFC o texto) — no basta con que
+  // `identificarComercio` haya encontrado la subcadena en algún lado del
+  // string, porque eso es justo lo que un QR de phishing puede fabricar.
+  //
+  // Si no cuadra, NO se propaga: `urlTicket` queda `null` y quien lo consuma
+  // (la cola del jefe) cae al portal verificado — exactamente el mismo camino
+  // que ya sigue cuando el ticket nunca trajo liga. Se queda registrado para
+  // que alguien revise si fue un intento o un dominio legítimo que falta dar
+  // de alta (caso medido: G500 Sureste reconoce DOS dominios —
+  // `megasur.com.mx` y `g500sureste.com.mx`— para el mismo portal, así que la
+  // comparación es contra la lista completa del comercio, no solo contra
+  // `portal`).
+  let urlTicket = urlTicketCrudo;
+  if (urlTicket && c && !hostnameDeConfianza(urlTicket, c.reconocer.dominios ?? [])) {
+    logger.warn('facturacion.liga_ticket_dominio_ajeno', {
+      gastoId: g.id, comercio: c.clave, urlTicket,
+    });
+    urlTicket = null;
+  }
 
   // Sin comercio reconocido NO se inventa un plazo: `calcularCaducidad` con
   // fecha ausente ya devuelve `desconocido`, y aquí se usa el default más

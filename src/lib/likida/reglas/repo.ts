@@ -351,21 +351,59 @@ export async function listarReglas(tenantId: string): Promise<ReglaEnPantalla[]>
 // ── Lo que atiende el cron ─────────────────────────────────────────────────
 
 /**
+ * Reparte `reglas` entre flotas en rondas: la ronda 0 toma la regla más
+ * antigua de CADA tenant, la ronda 1 la segunda de cada tenant, y así hasta
+ * llenar `tope`. A diferencia de un corte por `ORDER BY tenant_id` (que deja
+ * FUERA, pasada tras pasada, a los tenants cuyo UUID ordena después), aquí
+ * cada flota entra a cada ronda: con 3 flotas y tope 500 ninguna se queda
+ * en 0, la peor queda en ⌊500/3⌋ = 166. Dentro de cada flota se conserva el
+ * orden por antigüedad (`creada_en`) que ya traía la fila.
+ */
+function repartirPorTenant(reglas: ReglaGuardada[], tope: number): ReglaGuardada[] {
+  if (reglas.length <= tope) return reglas;
+  const porTenant = new Map<string, ReglaGuardada[]>();
+  for (const r of reglas) {
+    const cola = porTenant.get(r.tenantId);
+    if (cola) cola.push(r); else porTenant.set(r.tenantId, [r]);
+  }
+  const colas = [...porTenant.values()];
+  const resultado: ReglaGuardada[] = [];
+  for (let ronda = 0; resultado.length < tope; ronda++) {
+    const antesDeLaRonda = resultado.length;
+    for (const cola of colas) {
+      if (resultado.length >= tope) break;
+      if (cola[ronda]) resultado.push(cola[ronda]);
+    }
+    if (resultado.length === antesDeLaRonda) break; // todas las colas se agotaron
+  }
+  return resultado;
+}
+
+/**
  * TODAS las reglas activas, de todas las flotas. LANZA si no se pueden leer:
  * un barrido ciego no es un barrido tranquilo.
+ *
+ * `tope` es el techo GLOBAL (costo: cada regla activa es una consulta por
+ * corrida horaria y un WhatsApp potencial), pero el reparto entre flotas que
+ * compiten por ese techo es justo (`repartirPorTenant`), no un corte por
+ * orden alfabético de `tenant_id`. La lectura cruda pide un margen
+ * (`tope * MARGEN_LECTURA`) para que el reparto tenga de dónde elegir — hoy,
+ * con `TOPE_REGLAS_POR_FLOTA = 30`, eso cubre más de 1,600 flotas a la vez.
  */
 export async function reglasActivas(tope = 500): Promise<ReglaGuardada[]> {
+  const MARGEN_LECTURA = 10;
   const { data, error } = await acotada(supabaseAdmin()
     .from('regla_vigilancia')
     .select(COLUMNAS)
     .eq('estado', 'activa')
     .order('tenant_id')
     .order('creada_en')
-    .limit(tope), 'reglas.activas');
+    .limit(tope * MARGEN_LECTURA), 'reglas.activas');
   if (error) throw new Error(`reglasActivas: ${error.message}`);
-  return ((data ?? []) as unknown as FilaRegla[])
+  const reglas = ((data ?? []) as unknown as FilaRegla[])
     .map(desdeFila)
     .filter((r): r is ReglaGuardada => r !== null);
+  return repartirPorTenant(reglas, tope);
 }
 
 /** Los sellos que YA existen para esta regla, entre los disparos candidatos.
