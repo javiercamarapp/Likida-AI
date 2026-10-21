@@ -4,7 +4,7 @@
 --   (b) se pueden llenar juntas sin romper ningún CHECK existente, y la factura
 --       sigue APROBADA (la migración no toca la decisión);
 --   (c) llenar solo una de las dos (sin la otra) rebota por el CHECK de coherencia.
--- Correr:  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/0845_factura_proveedor_cfdi_tardio.sql
+-- Correr:  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/0848_factura_proveedor_cfdi_tardio.sql
 begin;
 create extension if not exists pgtap;
 select plan(3);
