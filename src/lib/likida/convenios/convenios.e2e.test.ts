@@ -87,9 +87,12 @@ describe('el ciclo completo de un convenio', () => {
     expect(wa).toHaveLength(2);
     expect(await atenderPreguntaConvenio({ tenantId: T, operadorId, viajeAbiertoId: viajeId, texto: '¿Por dónde entro?' })).toContain('Entra por la puerta 1 de carga'); // la pregunta sigue respondiendo
     // Rechazo REINTENTABLE (límite de tasa) en otro viaje: libera el reclamo y la corrida siguiente lo manda.
+    // Unidad DISTINTA a propósito: `viajeId` sigue abierto (nunca se liquidó en esta prueba) y
+    // `uq_viaje_abierto_por_unidad` (0849) rechaza enganchar la MISMA unidad a un segundo viaje abierto.
     const otroOp = String(mundo.poner('operador', { tenant_id: T, nombre: 'Ana López', telefono: '5213398765432', activo: true }).id);
+    const otraUnidad = String(mundo.poner('unidad', { tenant_id: T, numero_economico: 'T-13' }).id);
     respuestaMeta = { ok: false, motivo: 'rechazo_no_ventana', mensaje: 'límite de tasa', fueraDeVentana: false, reintentable: true, ventana: 'abierta' };
-    const v2 = String(await crearViaje(T, { operadorId: otroOp, unidadId, clienteId, origen: 'Planta Zapopan', destino: 'CEDIS Tlaquepaque', folio: 'F-2004' }));
+    const v2 = String(await crearViaje(T, { operadorId: otroOp, unidadId: otraUnidad, clienteId, origen: 'Planta Zapopan', destino: 'CEDIS Tlaquepaque', folio: 'F-2004' }));
     respuestaMeta = null;
     expect(await despacharInstrucciones(T, v2)).toMatchObject({ estado: 'enviado' });
     expect(wa.at(-1)!.telefono).toBe('5213398765432');
@@ -295,9 +298,11 @@ describe('P7 — convenio editado en pantalla y ciclo del cron', () => {
     expect(wa).toHaveLength(1); // solo el despacho original
     expect(JSON.stringify(mundo.tablas.viaje_convenio[0].instrucciones)).toContain('puerta 1 de carga');
     expect(JSON.stringify(mundo.tablas.viaje_convenio[0].instrucciones)).not.toContain('puerta 7');
-    // un viaje nuevo del mismo cliente SÍ toma la versión nueva
+    // un viaje nuevo del mismo cliente SÍ toma la versión nueva. Unidad DISTINTA a propósito: `viajeId`
+    // sigue abierto y `uq_viaje_abierto_por_unidad` (0849) rechaza la MISMA unidad en dos viajes abiertos.
     const otro = String(mundo.poner('operador', { tenant_id: T, nombre: 'Ana López', telefono: '5213398765432', activo: true }).id);
-    await crearViaje(T, { operadorId: otro, unidadId, clienteId, origen: 'Planta Zapopan', destino: 'CEDIS Tlaquepaque', folio: 'F-3004' });
+    const otraUnidad = String(mundo.poner('unidad', { tenant_id: T, numero_economico: 'T-13' }).id);
+    await crearViaje(T, { operadorId: otro, unidadId: otraUnidad, clienteId, origen: 'Planta Zapopan', destino: 'CEDIS Tlaquepaque', folio: 'F-3004' });
     expect(cuerpo(1)).toContain('puerta 7 de carga');
     // la forma que se abrió antes (versión vieja) choca: no se guarda nada
     const viejo = await guardarConvenioDelPanel({ tenantId: T, rol: 'flota_admin' }, { ...entradaEditada(conv, { nombre: 'Pisado' }), version: String(versionQueLeyoLaForma) });
