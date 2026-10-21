@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { crearDbFalsa, type DbFalsa, type Fila } from '../peajes/db_falsa.test.util';
+import { crearDbFalsa, type DbFalsa, type Fila, type RpcResultado } from '../peajes/db_falsa.test.util';
 import './reloj_adelantado.fixture';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -22,7 +22,7 @@ vi.mock('@/lib/ratelimit', () => ({ rateLimit: async () => true, clientIp: () =>
 vi.mock('../agentes/corridas', () => ({ registrarCorrida: async () => {} }));
 
 const { POST } = await import('@/app/api/peajes/ingesta/route');
-const { claveDeFlota, firmarIngesta, procesarColaPeajes } = await import('../peajes/ingesta');
+const { claveDeFlota, firmarIngesta, procesarColaPeajes, MAX_PENDIENTES_POR_FLOTA } = await import('../peajes/ingesta');
 const { bitacoraConciliada } = await import('../peajes/bitacora_conciliada');
 const { conciliarDesglose } = await import('../intake/desglose_peaje');
 
@@ -65,6 +65,23 @@ const rpcPosiciones = (args: Record<string, unknown>): Fila[] =>
   (args.p_ventanas as Array<{ linea_id: string; unidad_id: string; desde: string; hasta: string }>).flatMap((v) =>
     posiciones.filter((p) => p.unidad_id === v.unidad_id && p.medida_en >= v.desde && p.medida_en <= v.hasta)
       .map((p) => ({ linea_id: v.linea_id, lat: p.lat, lng: p.lng, medida_en: p.medida_en })));
+/** `peaje_archivo_encolar` (0850) en memoria — mismo contrato que en cola.test.ts: dedup por huella + tope por flota. */
+function encolarFalso(args: Record<string, unknown>): RpcResultado {
+  const tenantId = args.p_tenant as string;
+  const huella = args.p_huella as string;
+  const existente = db.tablas.peaje_ingesta_archivo.find((a) => a.tenant_id === tenantId && a.huella === huella);
+  if (existente) return [{ id: existente.id, estado: existente.estado, duplicado: true }];
+  const pendientes = db.tablas.peaje_ingesta_archivo
+    .filter((a) => a.tenant_id === tenantId && ['pendiente', 'procesando'].includes(a.estado as string)).length;
+  if (pendientes >= MAX_PENDIENTES_POR_FLOTA) return { error: { message: `tope de ${MAX_PENDIENTES_POR_FLOTA} archivos pendientes por flota`, code: '54000' } };
+  const id = `enc-${Math.random().toString(36).slice(2)}`;
+  db.tablas.peaje_ingesta_archivo.push({
+    id, tenant_id: tenantId, huella, nombre: args.p_nombre, proveedor: args.p_proveedor ?? null, origen: args.p_origen,
+    bytes: args.p_bytes, contenido: args.p_contenido, estado: 'pendiente', intentos: 0, proximo_intento_en: new Date().toISOString(),
+    reclamo: null, reclamado_hasta: null, desglose_id: null, ultimo_error: null,
+  });
+  return [{ id, estado: 'pendiente', duplicado: false }];
+}
 
 async function enviar(T: string, contenido: string, opts: { nombre?: string; rotacion?: number; firmarComo?: string; tsDeltaMs?: number } = {}) {
   const cuerpo = JSON.stringify({ nombre: opts.nombre ?? 'corte-pase.csv', proveedor: 'PASE', contenido_base64: Buffer.from(contenido).toString('base64') });
@@ -81,7 +98,7 @@ beforeEach(() => {
   process.env.PEAJES_INGESTA_SECRETO = SECRETO;
   apagado = false;
   posiciones = [{ unidad_id: 'u-a', lat: N.lat + 0.001, lng: N.lng, medida_en: '2026-08-05T16:30:30.000Z' }];
-  db = crearDbFalsa(base(), { peaje_archivo_reclamar: claimFalso, peaje_posiciones_ventana: rpcPosiciones });
+  db = crearDbFalsa(base(), { peaje_archivo_reclamar: claimFalso, peaje_archivo_encolar: encolarFalso, peaje_posiciones_ventana: rpcPosiciones });
 });
 
 describe('feliz', () => {

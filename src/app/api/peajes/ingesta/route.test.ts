@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { crearDbFalsa, type DbFalsa } from '@/lib/likida/peajes/db_falsa.test.util';
+import { crearDbFalsa, type DbFalsa, type Fila, type RpcResultado } from '@/lib/likida/peajes/db_falsa.test.util';
 
 // El buzón firmado del desglose de peajes. Lo que se fija es su CONTRATO de
 // seguridad y de idempotencia: firma antes que nada, fail-closed sin secreto,
@@ -15,7 +15,7 @@ vi.mock('@/lib/likida/interruptores', () => ({ estaApagado: async () => apagado 
 let limitar: (clave: string) => boolean = () => true;
 vi.mock('@/lib/ratelimit', () => ({ rateLimit: async (clave: string) => limitar(clave), clientIp: () => '1.2.3.4' }));
 
-const { claveDeFlota, firmarIngesta, MAX_CUERPO_INGESTA_BYTES } = await import('@/lib/likida/peajes/ingesta');
+const { claveDeFlota, firmarIngesta, MAX_CUERPO_INGESTA_BYTES, MAX_PENDIENTES_POR_FLOTA } = await import('@/lib/likida/peajes/ingesta');
 const { POST } = await import('./route');
 
 const SECRETO = 's'.repeat(40);
@@ -35,6 +35,24 @@ function pedir(cuerpo: string, o: { flota?: string | null; firmarCon?: string; t
   return POST(new Request('https://app.likida.ai/api/peajes/ingesta', { method: 'POST', headers, body: cuerpo }));
 }
 
+/** `peaje_archivo_encolar` (0850) en memoria — mismo contrato que en cola.test.ts: dedup por huella + tope por flota. */
+function encolarFalso(args: Record<string, unknown>): RpcResultado {
+  const tenantId = args.p_tenant as string;
+  const huella = args.p_huella as string;
+  const existente = db.tablas.peaje_ingesta_archivo.find((a) => a.tenant_id === tenantId && a.huella === huella);
+  if (existente) return [{ id: existente.id, estado: existente.estado, duplicado: true }];
+  const pendientes = db.tablas.peaje_ingesta_archivo
+    .filter((a) => a.tenant_id === tenantId && ['pendiente', 'procesando'].includes(a.estado as string)).length;
+  if (pendientes >= MAX_PENDIENTES_POR_FLOTA) return { error: { message: `tope de ${MAX_PENDIENTES_POR_FLOTA} archivos pendientes por flota`, code: '54000' } };
+  const id = `enc-${Math.random().toString(36).slice(2)}`;
+  db.tablas.peaje_ingesta_archivo.push({
+    id, tenant_id: tenantId, huella, nombre: args.p_nombre, proveedor: args.p_proveedor ?? null, origen: args.p_origen,
+    bytes: args.p_bytes, contenido: args.p_contenido, estado: 'pendiente', intentos: 0, proximo_intento_en: new Date().toISOString(),
+    reclamo: null, reclamado_hasta: null, desglose_id: null, ultimo_error: null,
+  } satisfies Fila);
+  return [{ id, estado: 'pendiente', duplicado: false }];
+}
+
 beforeEach(() => {
   process.env.PEAJES_INGESTA_SECRETO = SECRETO;
   apagado = false;
@@ -42,7 +60,7 @@ beforeEach(() => {
   db = crearDbFalsa({
     peaje_ingesta_config: [{ tenant_id: A, rotacion: 1, activa: true }, { tenant_id: B, rotacion: 1, activa: false }],
     peaje_ingesta_archivo: [],
-  });
+  }, { peaje_archivo_encolar: encolarFalso });
 });
 
 describe('la firma es la puerta', () => {
@@ -171,7 +189,7 @@ describe('el kill switch', () => {
   });
 
   it('un error al guardar es 503, no un éxito falso', async () => {
-    db.fallar('peaje_ingesta_archivo.insert', 'disco lleno');
+    db.fallar('rpc:peaje_archivo_encolar', 'disco lleno');
     expect((await pedir(cuerpoDe())).status).toBe(503);
   });
 });

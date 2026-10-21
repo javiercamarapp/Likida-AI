@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { crearDbFalsa, type DbFalsa, type Fila } from './db_falsa.test.util';
+import { crearDbFalsa, type DbFalsa, type Fila, type RpcResultado } from './db_falsa.test.util';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA COLA DE INGESTA contra una base en memoria: recepción idempotente, claim
@@ -42,6 +42,29 @@ function claimFalso(args: Record<string, unknown>): Fila[] {
   return elegibles.map((a) => ({ id: a.id, tenant_id: a.tenant_id, nombre: a.nombre, proveedor: a.proveedor, intentos: a.intentos, reclamo: a.reclamo, desglose_id: a.desglose_id ?? null }));
 }
 
+/**
+ * `peaje_archivo_encolar` (0850) en memoria: dedup por huella + tope de `MAX_PENDIENTES_POR_FLOTA`
+ * por flota. No simula el candado de transacción (el fake es síncrono: una llamada corre COMPLETA
+ * antes de que la siguiente empiece, así que ya es atómica sin necesitar uno) — simula el MISMO
+ * contrato que la función de Postgres: dedup primero, tope después, insert al final.
+ */
+function encolarFalso(args: Record<string, unknown>): RpcResultado {
+  const tenantId = args.p_tenant as string;
+  const huella = args.p_huella as string;
+  const existente = db.tablas.peaje_ingesta_archivo.find((a) => a.tenant_id === tenantId && a.huella === huella);
+  if (existente) return [{ id: existente.id, estado: existente.estado, duplicado: true }];
+  const pendientes = db.tablas.peaje_ingesta_archivo
+    .filter((a) => a.tenant_id === tenantId && ['pendiente', 'procesando'].includes(a.estado as string)).length;
+  if (pendientes >= MAX_PENDIENTES_POR_FLOTA) return { error: { message: `tope de ${MAX_PENDIENTES_POR_FLOTA} archivos pendientes por flota`, code: '54000' } };
+  const id = `enc-${Math.random().toString(36).slice(2)}`;
+  db.tablas.peaje_ingesta_archivo.push({
+    id, tenant_id: tenantId, huella, nombre: args.p_nombre, proveedor: args.p_proveedor ?? null, origen: args.p_origen,
+    bytes: args.p_bytes, contenido: args.p_contenido, estado: 'pendiente', intentos: 0, proximo_intento_en: new Date(relojClaim - 1000).toISOString(),
+    reclamo: null, reclamado_hasta: null, desglose_id: null, ultimo_error: null,
+  });
+  return [{ id, estado: 'pendiente', duplicado: false }];
+}
+
 const archivo = (over: Fila = {}): Fila => ({
   id: 'a1', tenant_id: T, huella: huellaDe(buf(CSV)), nombre: 'pase.csv', proveedor: 'PASE', origen: 'api', bytes: CSV.length,
   contenido: byteaDeBuffer(buf(CSV)), estado: 'pendiente', intentos: 0, proximo_intento_en: new Date(relojClaim - 1000).toISOString(),
@@ -50,7 +73,7 @@ const archivo = (over: Fila = {}): Fila => ({
 
 beforeEach(() => {
   relojClaim = Date.now();
-  db = crearDbFalsa({ peaje_ingesta_archivo: [] }, { peaje_archivo_reclamar: claimFalso });
+  db = crearDbFalsa({ peaje_ingesta_archivo: [] }, { peaje_archivo_reclamar: claimFalso, peaje_archivo_encolar: encolarFalso });
   registrarCorrida.mockClear();
 });
 afterEach(() => vi.useRealTimers());
@@ -87,31 +110,29 @@ describe('recibirArchivoPeaje — idempotente por (flota, huella)', () => {
     expect((await recibirArchivoPeaje('flota-2', { nombre: 'x.csv', proveedor: null, contenido: buf('otro contenido,1\n') })).ok).toBe(true);
   });
   it('un error de base se reporta como error, no como éxito', async () => {
-    db.fallar('peaje_ingesta_archivo.insert', 'base caída');
+    db.fallar('rpc:peaje_archivo_encolar', 'base caída');
     const r = await recibirArchivoPeaje(T, { nombre: 'x.csv', proveedor: null, contenido: buf(CSV) });
     expect(r).toMatchObject({ ok: false, codigo: 'error' });
   });
-  it('la carrera de dos envíos simultáneos del mismo archivo: el que choca con el unique cuenta como duplicado', async () => {
-    // Simula que entre el «¿existe?» y el insert otro envío ya lo metió.
-    db.fallar('peaje_ingesta_archivo.insert', 'duplicate key value violates unique constraint "peaje_ingesta_archivo_huella_unica"');
+  // AUDITORÍA ADVERSARIAL (21-oct-2026, HALLAZGO CRÍTICO): el dedup por huella y el tope por flota
+  // vivían en dos pasos separados (SELECT + SELECT count + INSERT, sin candado) — dos envíos
+  // CONCURRENTES del mismo archivo podían pasar el primer chequeo juntos y los dos insertar, o dos
+  // envíos nuevos podían leer el mismo count bajo el tope y los dos entrar. `peaje_archivo_encolar`
+  // (0850) junta las tres cosas en una sola llamada con candado de transacción por flota: la prueba
+  // de CONCURRENCIA REAL (contra Postgres, dos conexiones de verdad) vive en
+  // `supabase/tests/0850_peaje_ingesta_tope_candado_concurrencia.sh`; aquí (con el fake síncrono de
+  // supabase-js) solo se confirma que `recibirArchivoPeaje` hace UNA sola llamada atómica, no la
+  // carrera de tres.
+  it('dos envíos CONCURRENTES del mismo archivo: solo uno inserta, el otro ve duplicado (no hay carrera de tres pasos)', async () => {
     db.tablas.peaje_ingesta_archivo = [];
-    const original = db.cliente.from;
-    let vistoSelect = 0;
-    db.cliente.from = (t: string) => {
-      const q = original(t) as { maybeSingle: () => PromiseLike<unknown> };
-      if (t === 'peaje_ingesta_archivo') {
-        const mm = q.maybeSingle.bind(q);
-        q.maybeSingle = () => {
-          vistoSelect++;
-          // la primera consulta no ve nada; en la segunda (post-choque) ya existe
-          if (vistoSelect === 2) db.tablas.peaje_ingesta_archivo = [archivo()];
-          return mm();
-        };
-      }
-      return q;
-    };
-    const r = await recibirArchivoPeaje(T, { nombre: 'x.csv', proveedor: null, contenido: buf(CSV) });
-    expect(r).toMatchObject({ ok: true, duplicado: true });
+    const [a, b] = await Promise.all([
+      recibirArchivoPeaje(T, { nombre: 'uno.csv', proveedor: null, contenido: buf(CSV) }),
+      recibirArchivoPeaje(T, { nombre: 'dos.csv', proveedor: null, contenido: buf(CSV) }),
+    ]);
+    expect(db.tablas.peaje_ingesta_archivo).toHaveLength(1);
+    expect(a.ok && b.ok && a.id === b.id).toBe(true);
+    expect([a, b].filter((r) => r.ok && !r.duplicado)).toHaveLength(1);
+    expect([a, b].filter((r) => r.ok && r.duplicado)).toHaveLength(1);
   });
 });
 

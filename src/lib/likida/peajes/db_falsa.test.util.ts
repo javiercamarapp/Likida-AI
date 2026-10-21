@@ -8,9 +8,18 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type Fila = Record<string, unknown>;
-type Resp = { data: unknown; error: { message: string } | null; count?: number | null };
+type Resp = { data: unknown; error: { message: string; code?: string } | null; count?: number | null };
 
 export interface Llamada { tabla: string; op: string; filtros: Array<[string, string, unknown]>; payload?: unknown }
+
+/**
+ * Lo que una función fake de `rpc()` puede devolver: filas (éxito, como antes)
+ * o un error DINÁMICO con `code` (p. ej. `54000`) — para simular una función de
+ * Postgres que decide en el momento, según el estado de la tabla, si rechaza
+ * (candado/tope atómico: 0693, 0849) en vez de un fallo fijo pre-registrado
+ * con `fallar()`.
+ */
+export type RpcResultado = Fila[] | { error: { message: string; code?: string } };
 
 export interface DbFalsa {
   tablas: Record<string, Fila[]>;
@@ -24,7 +33,7 @@ let secuencia = 0;
 
 export function crearDbFalsa(
   inicial: Record<string, Fila[]> = {},
-  rpcs: Record<string, (args: Record<string, unknown>) => Fila[]> = {},
+  rpcs: Record<string, (args: Record<string, unknown>) => RpcResultado> = {},
 ): DbFalsa {
   const tablas: Record<string, Fila[]> = Object.fromEntries(Object.entries(inicial).map(([k, v]) => [k, v.map((f) => ({ ...f }))]));
   const llamadas: Llamada[] = [];
@@ -42,7 +51,7 @@ export function crearDbFalsa(
     private head = false;
     private retorna = false;
     private opcionesUpsert: { onConflict?: string; ignoreDuplicates?: boolean } = {};
-    constructor(private tabla: string, private fuente?: () => Fila[], private clave?: string) {}
+    constructor(private tabla: string, private fuente?: () => RpcResultado, private clave?: string) {}
 
     select(_c?: string, o?: { count?: string; head?: boolean }) {
       if (this.op !== 'select') this.retorna = true;
@@ -94,7 +103,9 @@ export function crearDbFalsa(
       if (falla) return { data: null, error: { message: falla } };
 
       if (this.fuente) {
-        let filas = this.fuente().filter((f) => this.coincide(f));
+        const resultado = this.fuente();
+        if (!Array.isArray(resultado)) return { data: null, error: resultado.error };
+        let filas = resultado.filter((f) => this.coincide(f));
         for (const [c, asc] of [...this.orden].reverse()) {
           filas = [...filas].sort((a, b) => (a[c]! < b[c]! ? -1 : a[c]! > b[c]! ? 1 : 0) * (asc ? 1 : -1));
         }
