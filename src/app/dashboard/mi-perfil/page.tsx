@@ -3,6 +3,7 @@ import { UserRound, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { supabaseServer } from '@/lib/supabase/server';
 import { estadoMfa, MSG_MFA_SUPERADMIN, type VeredictoMfaSuperadmin } from '@/lib/auth/mfa';
 import { requireSessionTenant } from '@/lib/auth/guard';
+import { rateLimit } from '@/lib/ratelimit';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
@@ -52,6 +53,38 @@ const TOPE_BYTES = 2 * 1024 * 1024;
  */
 function volverAMiPerfil(sufijo: string, estado: string): string {
   return `/dashboard/mi-perfil${sufijo ? `${sufijo}&` : '?'}${estado}`;
+}
+
+/**
+ * HALLAZGO ALTO #1 (auditoría adversarial, 21-oct-2026): `verificarMfa` y
+ * `quitarMfa` llamaban a `sb2.auth.mfa.verify` con el código de 6 dígitos y
+ * CERO límite de tasa — rompía el patrón que YA sigue /login
+ * (`dentroDelLimite`/`dentroDelLimitePorCuenta`, `login/page.tsx:78-112`).
+ * La cuenta de superadmin cruza TODOS los tenants: una sesión AAL1 robada
+ * (cookie robada, XSS, lo que sea) podía quedarse martillando el TOTP sin
+ * que nada la frenara — a 10/5min el techo de abajo ni se acerca a los
+ * 10^6 códigos posibles, pero vuelve el ataque impráctico sin estorbar un
+ * dedazo real.
+ *
+ * POR QUÉ POR USUARIO Y NO POR IP (a diferencia de /login): aquí el
+ * atacante YA TIENE la sesión — la cookie viaja con cualquier IP que use.
+ * Limitar por IP no frena a ESE actor; lo que hay que acotar es cuántos
+ * códigos puede probar ESTA CUENTA en la ventana, sin importar desde dónde
+ * los manda.
+ *
+ * UN SOLO CONTADOR para las dos acciones (mismo prefijo `mfa:codigo:`): la
+ * una y la otra gastan el mismo cupo porque las dos son LO MISMO —adivinar
+ * el código de esta cuenta—, así que repartir los intentos entre
+ * «Verificar sesión» y «Quitar el factor» no debe duplicar el presupuesto.
+ *
+ * SIN `fallaCerrado` explícito: el default de `rateLimit` (CERRADO ante un
+ * blip de Redis, SEG-4 auditoría 24) es el correcto aquí. A diferencia de
+ * /login, esto NO es la única vía de entrada al panel — negar de más un
+ * intento de MFA en un blip transitorio de Redis es mucho más barato que
+ * dejar sin frenos la única defensa contra fuerza bruta del superadmin.
+ */
+async function dentroDelLimiteMfa(userId: string): Promise<boolean> {
+  return await rateLimit(`mfa:codigo:${userId}`, 10, 5 * 60_000);
 }
 
 export default async function MiPerfilFlota({
@@ -215,7 +248,8 @@ export default async function MiPerfilFlota({
 
   async function verificarMfa(formData: FormData) {
     'use server';
-    await requireSessionTenant('/dashboard/mi-perfil');
+    const { userId } = await requireSessionTenant('/dashboard/mi-perfil');
+    if (!(await dentroDelLimiteMfa(userId))) redirect(volverAMiPerfil(sufijo, 'error=mfa_limite'));
     const sb2 = await supabaseServer();
     const factorId = String(formData.get('factorId') ?? '');
     const codigo = String(formData.get('codigo') ?? '').trim();
@@ -229,7 +263,8 @@ export default async function MiPerfilFlota({
 
   async function quitarMfa(formData: FormData) {
     'use server';
-    await requireSessionTenant('/dashboard/mi-perfil');
+    const { userId } = await requireSessionTenant('/dashboard/mi-perfil');
+    if (!(await dentroDelLimiteMfa(userId))) redirect(volverAMiPerfil(sufijo, 'error=mfa_limite'));
     const sb2 = await supabaseServer();
     const factorId = String(formData.get('factorId') ?? '');
     if (!factorId) redirect(volverAMiPerfil(sufijo, 'error=mfa'));
@@ -262,6 +297,7 @@ export default async function MiPerfilFlota({
     peso: 'La imagen pasa de 2 MB — usa una más ligera.',
     mfa: 'No se pudo completar la operación del segundo factor — intenta de nuevo.',
     mfa_codigo: 'El código no es válido — revisa tu app de autenticación y vuelve a intentar.',
+    mfa_limite: 'Demasiados intentos con el código — espera unos minutos y vuelve a intentarlo.',
     mcp: 'No se pudieron cortar los accesos MCP — recarga la pantalla y vuelve a intentar.',
     sesiones: 'No se pudo confirmar el cierre de tus sesiones — vuelve a intentarlo.',
   };
