@@ -103,12 +103,33 @@ export function ColaJefe({ filas, marcarFacturada, maxFilas, totalFilas }: {
   );
 }
 
+/**
+ * A dónde manda el botón "Abrir el portal".
+ *
+ * `urlTicket` YA llegó depurada del servidor (`armar()` en
+ * `lib/likida/facturacion/pendientes.ts`): ahí se descarta si su dominio no
+ * pertenece al comercio que se identificó, antes de que exista como prop de
+ * este componente — el QR de un ticket lo fotografía cualquiera que le mande
+ * una foto al número de intake, nunca pasó por una persona de la oficina. Si
+ * no llegó (o se descartó allá), se usa `fila.portal`: la URL fija y
+ * verificada del catálogo.
+ *
+ * `fila.portal` YA ES una URL completa (`https://…`, viene de
+ * `Comercio.portal`) — nunca un hostname pelón. Prefijarle `https://` de
+ * nuevo (como hacía esta línea) produce `https://https://dominio…`, un enlace
+ * roto: exactamente el camino que toma TODO ticket sin `urlTicket`, así que el
+ * bug no era cosmético.
+ */
+export function ligaDelPortal(fila: Pick<FilaJefe, 'urlTicket' | 'portal'>): string {
+  return fila.urlTicket ?? fila.portal;
+}
+
 /** El detalle expandido: exactamente lo que el jefe necesita para capturar
  *  en el portal, y la salida de la cola cuando ya quedó. */
 function MesaDeTrabajo({ fila, marcarFacturada }: { fila: FilaJefe; marcarFacturada: AccionMarcarFacturada }) {
   const [estado, accion] = useActionState(marcarFacturada, null);
   const [copiado, setCopiado] = useState<string | null>(null);
-  const liga = fila.urlTicket ?? `https://${fila.portal}`;
+  const liga = ligaDelPortal(fila);
 
   function copiar(clave: string, texto: string) {
     void navigator.clipboard.writeText(texto).then(() => {
