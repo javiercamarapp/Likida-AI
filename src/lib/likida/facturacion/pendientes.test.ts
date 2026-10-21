@@ -83,6 +83,61 @@ describe('armar un ticket por facturar', () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// SEGURIDAD (hallazgo 21-oct-2026): el botón "Abrir el portal" de la cola del
+// jefe (`cola-jefe.tsx`) usa `urlTicket` con PRIORIDAD sobre el portal fijo
+// del catálogo. `urlTicket` sale de un QR que lee la visión de una FOTO que
+// cualquiera manda al número de intake — nunca pasó por una persona de la
+// oficina — así que un QR de phishing que imite el login de un comercio real
+// llegaría sin filtro hasta ese botón de confianza.
+//
+// El caso de ataque realista NO es "la liga no identifica a nadie" (eso ya
+// cae en `incompleto` y nunca llega al botón): es que el RFC o el texto del
+// MISMO ticket SÍ identifiquen bien al comercio —es un ticket real, el OCR lo
+// leyó bien— mientras la liga del QR apunta a otro dominio. `oxxo` (RFC
+// CCO8605231N4, dominio registrado `oxxo.com`) es el caso real: es el emisor
+// más fotografiado del banco de QA.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('armar: urlTicket se filtra contra el dominio del comercio ya identificado', () => {
+  it('(a) dominio AJENO al catálogo: no se propaga, aunque el RFC sí identifique al comercio', () => {
+    const t = armar({
+      ...base,
+      rfc_emisor: 'CCO8605231N4', // Cadena Comercial Oxxo — identifica el comercio por RFC
+      ocr_extra: { urlFacturacion: 'https://cuenta-oxxo-segura.phishing-example.net/login' },
+    }, '2026-08-04');
+    expect(t.comercio?.clave).toBe('oxxo');
+    // NO se propaga: cola-jefe.tsx cae a `fila.portal` (el del catálogo), no a
+    // la liga del QR.
+    expect(t.urlTicket).toBeNull();
+  });
+
+  it('(b) MISMO dominio o subdominio del comercio: se respeta, el caso legítimo sigue funcionando', () => {
+    const t = armar({
+      ...base,
+      rfc_emisor: null,
+      ocr_extra: { urlFacturacion: 'https://sucursal22.oxxogas.com/factura' }, // subdominio de oxxogas.com
+    }, '2026-08-04');
+    expect(t.comercio?.clave).toBe('oxxo_gas');
+    expect(t.urlTicket).toBe('https://sucursal22.oxxogas.com/factura');
+  });
+
+  it('(b.2) dos dominios registrados del MISMO comercio que no son subdominio uno del otro (G500 Sureste) también se respetan', () => {
+    const t1 = armar({ ...base, rfc_emisor: null, ocr_extra: { urlFacturacion: 'https://megasur.com.mx/ticket' } }, '2026-08-04');
+    expect(t1.comercio?.clave).toBe('megasur');
+    expect(t1.urlTicket).toBe('https://megasur.com.mx/ticket');
+
+    const t2 = armar({ ...base, rfc_emisor: null, ocr_extra: { urlFacturacion: 'https://g500sureste.com.mx/ticket' } }, '2026-08-04');
+    expect(t2.comercio?.clave).toBe('megasur');
+    expect(t2.urlTicket).toBe('https://g500sureste.com.mx/ticket');
+  });
+
+  it('(c) sin urlTicket: comportamiento actual sin cambio (el comercio se sigue identificando por RFC)', () => {
+    const t = armar({ ...base, rfc_emisor: 'CCO8605231N4', ocr_extra: {} }, '2026-08-04');
+    expect(t.comercio?.clave).toBe('oxxo');
+    expect(t.urlTicket).toBeNull();
+  });
+});
+
 describe('resumen', () => {
   it('separa vencidos de urgentes y suma lo que se pierde', () => {
     const lista = [
