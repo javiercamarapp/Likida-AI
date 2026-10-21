@@ -473,7 +473,12 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 320;
 // sobre la misma base): +2 llamadas (2,238 → 2,240), en `peajes/aviso_discrepancia.ts` (lectura de la línea del desglose y de
 // la última posición GPS), por `acotada`, ancladas a `tenant_id`. Funcionalidad nueva, no código migrado; cubierta por
 // `aviso_discrepancia.test.ts`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_240;
+// AUDITORÍA A8 ESCALACIÓN (hallazgo confirmado, 21-oct-2026, sobre la misma base): +1 llamada (2,240 → 2,241), en
+// `confirmar_viaje.ts` (que ya contaba): `marcarRechazados` — el `.from('viaje').update(...)` que escribe
+// `rechazado_en` cuando el chofer dice EXPLÍCITAMENTE que no. Mismo candado por tenant/operador que `marcarAceptado`,
+// por `is('aceptado_en', null)`/`is('rechazado_en', null)`. Funcionalidad nueva, no código migrado; cubierta por
+// `confirmar_viaje.test.ts`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_241;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

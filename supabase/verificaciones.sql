@@ -19871,3 +19871,54 @@ begin
   raise exception E'POLICIES_SOLO_LECTURA_0841  flota_admin-lee-conector=%  update-conector=%  invitacion-colada=%  contador-update-plan=%  evento_stripe-insert=%  evento_stripe-ve=%  por-service-role=%   (esperado 1 / 0 / 0 / 0 / rebota / 0 / entro)',
     cc_leidas, cc_tocadas, inv_tocadas, plan_leidas, stripe_tocadas, stripe_leidas, por_admin;
 end $$;
+
+-- ── 0854. Un viaje no se puede rechazar sin haberse avisado, y el índice de la cola sigue cubriendo la consulta (mig. 0854) ──
+--
+-- AUDITORÍA A8 ESCALACIÓN (confirmado, dos ángulos del mismo hueco con el caso
+-- del "sí", bloque 37/mig. 0058): hasta esta migración, un chofer que
+-- contestaba "no" explícitamente no dejaba NINGÚN rastro en la base —ni un
+-- campo, ni un evento— y la escalación de las 5 h lo trataba como "no
+-- contestó", perdiendo que SÍ contestó y dijo que no.
+--
+-- `rechazado_en` sigue el MISMO patrón que `aceptado_en`: `viaje_rechazado_
+-- requiere_aviso` rebota un rechazo sin aviso previo, exactamente como
+-- `viaje_aceptado_requiere_aviso` lo hace con la aceptación. El candado de UNA
+-- sola vez (`is('rechazado_en', null)` en el UPDATE de `marcarRechazados`,
+-- confirmar_viaje.ts) es disciplina de la app, no del CHECK, y se prueba en
+-- TS (confirmar_viaje.test.ts); aquí solo se comprueba lo que SOLO Postgres
+-- puede demostrar.
+--
+-- El índice parcial `viaje_sin_aceptar_idx` (el que sirve a `viajesSinAceptar`)
+-- se recreó en esta misma migración con `rechazado_en is null` en su
+-- predicado, porque esa consulta ahora también filtra por esa columna (mismo
+-- commit, escalar_viaje.ts). Si el índice no cubriera el predicado nuevo, la
+-- escalación seguiría funcionando pero recorriendo `viaje` completo en cada
+-- corrida del cron — lento, no incorrecto, y por eso se verifica aquí y no con
+-- una excepción de negocio.
+do $$
+declare
+  t uuid; o uuid; v uuid;
+  rechazo_sin_aviso_rebotado boolean := false;
+  indice_cubre_rechazo boolean;
+begin
+  insert into tenant (nombre) values ('ZZZ VERIF RECHAZO') returning id into t;
+  insert into operador (tenant_id, nombre, telefono)
+    values (t, 'ZZZ Verif Rechazo', '5215559999998') returning id into o;
+  insert into viaje (tenant_id, operador_id, estatus) values (t, o, 'abierto') returning id into v;
+
+  begin
+    update viaje set rechazado_en = now() where id = v;   -- sin avisado_en
+  exception when check_violation then rechazo_sin_aviso_rebotado := true;
+  end;
+
+  select exists (
+    select 1 from pg_indexes
+    where schemaname = 'public' and tablename = 'viaje' and indexname = 'viaje_sin_aceptar_idx'
+      and indexdef ilike '%rechazado_en%'
+  ) into indice_cubre_rechazo;
+
+  delete from tenant where id = t;
+
+  raise exception E'CONFIRMACION_VIAJE_RECHAZO  rechazar-sin-aviso-rebotado=%  indice-cubre-rechazado_en=%   (esperado true / true)',
+    rechazo_sin_aviso_rebotado, indice_cubre_rechazo;
+end $$;

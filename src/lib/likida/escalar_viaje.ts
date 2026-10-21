@@ -146,6 +146,12 @@ export async function viajesSinAceptar(ahora: Date = new Date(), horas: number =
     .eq('estatus', 'abierto')
     .is('aceptado_en', null)
     .is('escalado_en', null)
+    // A8 ESCALACIÓN (hallazgo confirmado, la otra mitad del hueco del "sí"): un
+    // viaje que el chofer rechazó EXPLÍCITAMENTE (`rechazado_en`, mig. 0854,
+    // puesto por `atenderConfirmacion` en confirmar_viaje.ts) ya avisó al jefe
+    // de inmediato — dejarlo pasar por aquí lo reportaría como "no contestó"
+    // cinco horas después, perdiendo que SÍ contestó y dijo que no.
+    .is('rechazado_en', null)
     .not('avisado_en', 'is', null)
     .lte('avisado_en', limite)
     // MÁS VIEJO PRIMERO (auditoría de escala 15k): sin `.order()`, Postgres
@@ -647,6 +653,12 @@ async function reclamarEscalacion(
     .eq('tenant_id', v.tenantId)
     .is('escalado_en', null)
     .is('aceptado_en', null)
+    // Mismo mecanismo que la condición de `aceptado_en` de arriba: entre la
+    // LECTURA de `viajesSinAceptar` y este claim, el chofer pudo haber
+    // contestado "no" por el mismo camino que la aceptación. Sin esta
+    // condición en el MISMO UPDATE, el claim ganaría igual y el jefe recibiría
+    // el aviso de "no contestó" sobre un viaje que SÍ contestó (rechazándolo).
+    .is('rechazado_en', null)
     .select('id'), 'reclamarEscalacion');
 
   if (error) {
