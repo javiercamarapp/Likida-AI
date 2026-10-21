@@ -44,9 +44,22 @@ describe('cotejarConjuntos: el repo contra lo que la base tiene aplicado', () =>
 });
 
 describe('prefijosDeFilas: extrae prefijos de cuatro dígitos, sin inventar', () => {
-  it('extrae el prefijo del nombre de cada fila, sin repetir y ordenado', () => {
-    expect(prefijosDeFilas([{ nombre: '0271_mcp_oauth_rol' }, { nombre: '0002_algo' }, { nombre: '0002_otra' }]))
+  // HALLAZGO CONFIRMADO (21-oct-2026): esta prueba afirmaba, como si fuera el
+  // comportamiento correcto, que `prefijosDeFilas` colapsaba en silencio dos
+  // filas con NOMBRES DISTINTOS que comparten prefijo ('0002_algo' y
+  // '0002_otra') a un solo elemento '0002'. Eso es exactamente el bug: si la
+  // base registró dos migraciones DISTINTAS con el mismo número, el cotejo por
+  // CONJUNTO (`cotejarConjuntos`) nunca podía ver la colisión. Ahora es un
+  // ERROR explícito, mismo principio que `prefijosMigraciones` en
+  // `compuerta-deploy.mjs`.
+  it('dos filas con el MISMO nombre completo no son una colisión: el prefijo no se repite', () => {
+    expect(prefijosDeFilas([{ nombre: '0271_mcp_oauth_rol' }, { nombre: '0271_mcp_oauth_rol' }, { nombre: '0002_algo' }]))
       .toEqual(['0002', '0271']);
+  });
+
+  it('dos filas con el MISMO prefijo y NOMBRES DISTINTOS: colisión real, lanza en vez de colapsar', () => {
+    expect(() => prefijosDeFilas([{ nombre: '0271_mcp_oauth_rol' }, { nombre: '0002_algo' }, { nombre: '0002_otra' }]))
+      .toThrowError(/colisión de prefijo: 0002_algo y 0002_otra comparten el prefijo 0002/);
   });
 
   it('una fila con formato raro (sin prefijo de cuatro dígitos) NO inventa un prefijo: se ignora', () => {

@@ -292,6 +292,30 @@ describe('toda migración está comprobada o exenta a propósito', () => {
     expect(TITULOS.split('\n').length).toBeGreaterThan(10);
   });
 
+  // HALLAZGO CONFIRMADO (21-oct-2026, mismo principio que `prefijosMigraciones` en
+  // `compuerta-deploy.mjs` y `prefijosDeFilas` en `verificar-migraciones-aplicadas.mjs`):
+  // este guardián indexa `EXENTAS` y el regex contra `TITULOS` por el prefijo de
+  // cuatro dígitos (`num`), no por el nombre de archivo completo. Si dos archivos
+  // DISTINTOS comparten prefijo (una colisión de numeración), el segundo archivo
+  // pasaría la prueba "comprobada o exenta" heredando en silencio la exención o el
+  // bloque de verificaciones.sql escrito para el PRIMERO — sin que nadie haya
+  // decidido nada sobre el segundo. Una colisión de prefijo es un error real, no
+  // "la misma migración otra vez": se detecta aquí, antes de que EXENTAS/TITULOS
+  // puedan enmascararla.
+  it('ninguna migración comparte prefijo con otra migración DISTINTA', () => {
+    const porPrefijo = new Map();
+    const colisiones = [];
+    for (const { num, archivo } of migraciones) {
+      const anterior = porPrefijo.get(num);
+      if (anterior !== undefined && anterior !== archivo) colisiones.push(`${anterior} y ${archivo} comparten el prefijo ${num}`);
+      else porPrefijo.set(num, archivo);
+    }
+    expect(
+      colisiones,
+      `colisión de prefijo: dos migraciones DISTINTAS no pueden compartir número:\n  ${colisiones.join('\n  ')}`,
+    ).toEqual([]);
+  });
+
   it('ninguna se queda sin decisión', () => {
     const huerfanas = migraciones
       .filter(({ num }) => !EXENTAS[num])
