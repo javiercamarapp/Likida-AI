@@ -162,6 +162,38 @@ describe('importarDesglose: tope, periodo oficial y calidad guardada', () => {
     expect(db.tablas.desglose_peaje ?? []).toHaveLength(0);
   }, 60_000);
 
+  it('un .xlsx con 100 000 filas (muy por encima del tope) NO se materializa completo: la lectura se acota con sheetRows, no tras parsear la hoja entera', async () => {
+    const FILAS_REALES = 100_000;
+    const filas: Array<Array<string | number>> = [['Fecha', 'Caseta', 'Importe']];
+    for (let i = 0; i < FILAS_REALES; i++) filas.push(['05/03/2026', 'Caseta Ejemplo Norte', 10]);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet(filas), 'Hoja1');
+    const buffer = Buffer.from(XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }));
+
+    const t0 = Date.now();
+    const leido = await parsearArchivoDesglose('enorme.xlsx', buffer);
+    const ms = Date.now() - t0;
+    if (!leido.ok) throw new Error(leido.motivo);
+    // La prueba directa de que NO se materializó el archivo entero: el resultado se
+    // detuvo muy por debajo de las 100 000 líneas reales (acotado por `sheetRows`,
+    // no por un `.slice()` después de parsear la hoja completa).
+    expect(leido.lineas.length).toBeLessThan(FILAS_REALES - 20_000);
+    expect(leido.calidad.lecturaAcotada).toBe(true);
+    // Y es rápido: si se hubiera descomprimido/parseado la hoja entera (100 000 filas ×
+    // 19 celdas en el peor caso real), tardaría muchísimo más que leer ~60 000 acotadas.
+    expect(ms).toBeLessThan(10_000);
+
+    const r = await importarDesglose(T, { nombre: 'enorme.xlsx', buffer });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.motivo).toMatch(/tope.*60000/);
+      // El conteo es un PISO (la lectura se acotó): nunca se afirma la cifra real sin
+      // haberla medido — misma doctrina que `archivo.ts` con «X o más filas».
+      expect(r.motivo).toMatch(/o más/);
+    }
+    expect(db.tablas.desglose_peaje ?? []).toHaveLength(0);
+  }, 30_000);
+
   it('guarda clase, unidad del archivo, periodo oficial (del nombre), No. de periodo y la calidad', async () => {
     const { buffer } = generarLibroIave({ filas: 200, inicio: '2026-03-01', noPeriodo: 805, extemporaneos: 5 });
     const r = await importarDesglose(T, { nombre: '01 A 10 DE MARZO.xlsx', buffer });

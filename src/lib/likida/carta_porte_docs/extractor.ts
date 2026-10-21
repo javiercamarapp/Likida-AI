@@ -50,7 +50,7 @@ import { registrarEscalamiento, type CodigoEscalamiento } from './contador_escal
 import { llaveTexto } from './catalogos';
 import { MAX_TEXTO_MODELO, type ContenidoDoc, type FormatoDoc } from './contenido';
 import { completarDerivados, type ContextoDerivar, type FormatoLector, type ResultadoLector } from './derivar';
-import { detectarInyeccion } from './inyeccion';
+import { detectarInyeccion } from '../deteccion_inyeccion';
 import { limpiarTexto, normalizarNumero, normalizarValor, type OrdenFecha } from './normalizar';
 import { leerBol } from './lectores/bol';
 import { leerOrdenAgente } from './lectores/orden_agente';

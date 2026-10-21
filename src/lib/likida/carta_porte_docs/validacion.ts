@@ -25,7 +25,7 @@ import {
   CAT_COLONIA, CAT_CP, CAT_EMBALAJE, CAT_FRACCION, CAT_PELIGROSO, CAT_PRODUCTO, CAT_UNIDAD,
   clavesDeFraccion, esClaveProductoGenerica, esFraccionGenerica, mismaFraccion, normalizarFraccion, type ResolvedorSat,
 } from './catalogos_sat';
-import { valorSospechoso } from './inyeccion';
+import { valorSospechoso } from '../deteccion_inyeccion';
 import { normalizarIdDestino, normalizarNumero } from './normalizar';
 import { rfcChecksumOk } from '../intake/cfdi';
 import type { ReglaTramoCliente } from './perfiles';

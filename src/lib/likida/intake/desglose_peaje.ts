@@ -70,12 +70,30 @@ export const TOLERANCIA_CENTAVOS_MXN = TOLERANCIA_MONTO_MXN;
  *  (el cliente revisa hasta dos meses). Más que esto ya no es un corte: es un
  *  archivo equivocado, y se dice en vez de importar a medias.
  *
- *  LÍMITES DE ESCALA (por qué 60 000 cabe): el Excel se lee entero en memoria
- *  (≈ 1 MB de archivo → ≈ 10 000 filas × 19 celdas, unas decenas de MB); las
- *  líneas se escriben en lotes de `LOTE_INSERCION_LINEAS` y el cruce las anota
- *  agrupando las que reciben la misma anotación (ver `conciliarDesgloseInterno`),
- *  así que ni la escritura ni el cruce son una consulta por línea. */
+ *  LÍMITES DE ESCALA (por qué 60 000 cabe): las líneas se escriben en lotes de
+ *  `LOTE_INSERCION_LINEAS` y el cruce las anota agrupando las que reciben la
+ *  misma anotación (ver `conciliarDesgloseInterno`), así que ni la escritura
+ *  ni el cruce son una consulta por línea. La LECTURA del Excel/ODS ya no es
+ *  "entero en memoria": ver `TOPE_LECTURA_HOJA_DESGLOSE`. */
 export const MAX_LINEAS_DESGLOSE = 60_000;
+/** Margen sobre `MAX_LINEAS_DESGLOSE` para el `sheetRows` con el que se LEE la
+ *  hoja (no para el tope de negocio, que sigue siendo el de arriba). Cubre:
+ *  el encabezado puede estar hasta en el renglón `TOPE_BUSQUEDA_ENCABEZADO`
+ *  (15, ver `parsearDesgloseHoja`) porque los desgloses reales traen título y
+ *  datos del cliente arriba, y los renglones en blanco o de totales que se
+ *  saltan sin contar como línea. No necesita cuadrar 1:1 con "líneas de
+ *  datos": si el margen no bastó, el chequeo de `MAX_LINEAS_DESGLOSE` sobre el
+ *  resultado YA acotado (en `importarDesglose`) sigue de red de sanidad. */
+export const MARGEN_LECTURA_DESGLOSE = 1_000;
+/** Tope de filas FÍSICAS que se leen de la hoja (XLSX `sheetRows`): por encima
+ *  de esto, ni se materializa en memoria. ANTES no había tope aquí — a
+ *  diferencia de los otros 3 lectores de Excel del repo (`importacion/archivo.ts`,
+ *  `carta_porte_docs/contenido.ts`, `carta_porte_docs/lector_plantilla_tms.ts`),
+ *  que sí acotan con `sheetRows` — así que un .xlsx de pocos KB podía
+ *  descomprimirse a millones de filas (bomba de descompresión) ANTES de que el
+ *  tope de `MAX_LINEAS_DESGLOSE` pudiera decir nada: se comprobaba recién sobre
+ *  el resultado YA parseado entero. */
+export const TOPE_LECTURA_HOJA_DESGLOSE = MAX_LINEAS_DESGLOSE + MARGEN_LECTURA_DESGLOSE;
 /** Filas por INSERT al guardar las líneas del desglose. */
 export const LOTE_INSERCION_LINEAS = 1000;
 /** Ids por UPDATE ... IN (...) al anotar el cruce (la URL de PostgREST no admite listas enormes). */
@@ -140,6 +158,10 @@ export interface CalidadArchivo {
   /** Hoja leída y hojas ignoradas (solo se lee la principal: la secundaria repite filas). */
   hojaLeida: string | null;
   hojasIgnoradas: string[];
+  /** La lectura de la hoja se detuvo en `TOPE_LECTURA_HOJA_DESGLOSE` (XLSX `sheetRows`):
+   *  el archivo real puede traer MÁS filas de las que se alcanzaron a leer. AUSENTE
+   *  (no `false`) cuando no aplica (PDF, o Excel/ODS que no tocó el tope). */
+  lecturaAcotada?: true;
 }
 
 export type ResultadoParseo =
@@ -605,14 +627,23 @@ export async function parsearArchivoDesglose(nombre: string, buffer: Buffer, opc
       // SOLO LA HOJA PRINCIPAL (la primera). En los archivos reales del proveedor la
       // segunda hoja («Hoja1», «CAMIONETA») trae filas que YA están en la principal:
       // leerla duplicaría cruces. `sheets: 0` ni siquiera la parsea (menos memoria).
-      const libro = XLSX.read(buffer, { type: 'buffer', sheets: 0 });
+      // `sheetRows`: nunca se descomprime más de `TOPE_LECTURA_HOJA_DESGLOSE` filas de la
+      // hoja — sin esto, un .xlsx/.xls/.ods de pocos KB puede expandirse a millones de
+      // filas en memoria ANTES de que `MAX_LINEAS_DESGLOSE` (abajo, en `importarDesglose`)
+      // pudiera decir nada (auditoría ALTO: los otros 3 lectores de Excel del repo ya
+      // acotan así; este era el único que leía la hoja entera).
+      const libro = XLSX.read(buffer, { type: 'buffer', sheets: 0, sheetRows: TOPE_LECTURA_HOJA_DESGLOSE });
       const hoja = libro.Sheets[libro.SheetNames[0]];
       if (!hoja) return { ok: false, motivo: 'El archivo no trae ninguna hoja con datos.' };
+      // `!fullref` lo pone la librería SOLO cuando `sheetRows` de verdad truncó la hoja
+      // (hay más filas en el archivo de las que se leyeron): no es un cálculo nuestro.
+      const lecturaAcotada = '!fullref' in hoja;
       filas = XLSX.utils.sheet_to_json<Celda[]>(hoja, { header: 1, raw: true, defval: '' });
       const r = parsearDesgloseHoja(filas, opciones);
       if (r.ok) {
         r.calidad.hojaLeida = libro.SheetNames[0];
         r.calidad.hojasIgnoradas = libro.SheetNames.slice(1);
+        if (lecturaAcotada) r.calidad.lecturaAcotada = true;
         if (libro.SheetNames.length > 1) {
           r.avisos.push(
             `El archivo trae ${libro.SheetNames.length} hojas; se leyó solo la primera («${libro.SheetNames[0]}»). `
@@ -924,9 +955,15 @@ export async function importarDesglose(
     return { ok: false, motivo: 'El archivo se leyó pero no traía ninguna línea con importe.' };
   }
   if (parseo.lineas.length > MAX_LINEAS_DESGLOSE) {
+    // Red de sanidad tras el `sheetRows` de `parsearArchivoDesglose`: si el margen de
+    // lectura no alcanzó, se sigue rechazando aquí — nunca se importa a medias. Cuando la
+    // LECTURA se acotó (`lecturaAcotada`), el conteo es un PISO: el archivo real puede
+    // traer más líneas de las que se alcanzaron a leer, y no se afirma una cifra exacta
+    // que podría ser falsa.
+    const piso = parseo.calidad.lecturaAcotada ? ' o más' : '';
     return {
       ok: false,
-      motivo: `El archivo trae ${parseo.lineas.length} líneas y el tope por desglose es ${MAX_LINEAS_DESGLOSE}. Pártelo por periodo y súbelo en partes.`,
+      motivo: `El archivo trae ${parseo.lineas.length}${piso} líneas y el tope por desglose es ${MAX_LINEAS_DESGLOSE}. Pártelo por periodo y súbelo en partes.`,
     };
   }
 
