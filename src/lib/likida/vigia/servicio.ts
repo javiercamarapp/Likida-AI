@@ -814,7 +814,11 @@ export async function devolverConversacion(actor: Actor, conversacionId: string,
   const { repo } = deps;
   const conv = await repo.conversacion(actor.tenantId, conversacionId);
   if (!conv || conv.estado !== 'activa') return { ok: false, motivo: 'no_encontrado', mensaje: 'No encuentro esa conversación activa en tu flota.' };
-  await repo.actualizarConversacion(actor.tenantId, conv.id, { control: 'agente', tomadaPor: null, tomadaEn: null });
+  // `tomarConversacion` pone `atendidaEn` para frenar el nivel 1 de la escalera mientras el gerente «se encarga». Si lo devuelve
+  // sin que el cliente recibiera una respuesta real, hay que apagar esa marca: si no, el nivel 1 queda bloqueado el resto del
+  // ciclo (`evaluarEscalamiento` en escalamiento.ts:135) aunque nadie haya atendido al cliente. `marcarRespondida` (una respuesta
+  // real sí salió) ya la limpia por su cuenta, así que esto es correcto en los dos casos: con o sin respuesta previa.
+  await repo.actualizarConversacion(actor.tenantId, conv.id, { control: 'agente', tomadaPor: null, tomadaEn: null, atendidaEn: null });
   await repo.evento(actor.tenantId, { conversacionId: conv.id, tipo: 'devuelta', actorUserId: actor.userId });
   return { ok: true, mensaje: 'El Vigía vuelve a redactar en este hilo (con tu aprobación, según el modo de tu flota).' };
 }
