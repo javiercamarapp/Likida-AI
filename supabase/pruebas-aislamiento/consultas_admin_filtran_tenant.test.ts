@@ -424,6 +424,6 @@ describe('exención estrecha del lookup CRM de Cal.com', () => {
     const cron = sinComentarios(readFileSync('src/app/api/cron/escalar/route.ts', 'utf8'));
     expect(cron).toMatch(/await puertaCron\('escalar'/);
     expect(cron.indexOf('if (puerta) return puerta')).toBeGreaterThan(-1);
-    expect(cron.indexOf('if (puerta) return puerta')).toBeLessThan(cron.indexOf('await ejecutarMantenimientoCalcom('));
+    expect(cron.indexOf('if (puerta) return puerta')).toBeLessThan(cron.indexOf('ejecutarMantenimientoCalcom('));
   });
 });
