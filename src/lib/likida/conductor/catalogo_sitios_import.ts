@@ -30,6 +30,9 @@ export const CUPO_MAX = 30;
 export const CUPO_DEFECTO = 20;
 export const DISTANCIA_DUPLICADO_M = 100;
 export const RADIO_DEFECTO_M = 150;
+/** Misma cota que `geocerca_radio_sano` (migración 0050): el importador la replica aquí para avisar en la fila ANTES de que la base la rechace (o peor, la acepte si cae dentro del rango pero es absurda, p. ej. 90,000 m). */
+export const RADIO_MIN_M = 25;
+export const RADIO_MAX_M = 100000;
 export const TERMINAL_SIN_ASIGNAR = '(sin terminal)';
 export const TERMINAL_EXTRANJERO = 'Extranjero (EE. UU. y otros)';
 /** Tope de filas por llamada a la base: el importador de la 0385 acepta 2000 por lote (MAX_FILAS_SITIOS). */
@@ -145,6 +148,14 @@ function construirFila(linea: number, r: Record<string, unknown>, errores: Error
   const activo = aActivo(r.activo);
   if (lat === 'invalido' || lng === 'invalido') { errores.push({ linea, mensaje: 'La latitud o la longitud no es un número.' }); return null; }
   if (radio === 'invalido') { errores.push({ linea, mensaje: 'El radio no es un número.' }); return null; }
+  // Un radio ≤ 0 (o ausente) significa «no declarado»: se sustituye por el default más abajo, no es un error.
+  // Un radio POSITIVO fuera de [RADIO_MIN_M, RADIO_MAX_M] sí es un dato absurdo del cliente (p. ej. 10 m o
+  // 500,000 m) y se rechaza aquí — antes no se replicaba esta cota en absoluto, y cualquier valor positivo
+  // (hasta 100 km) pasaba sin aviso hasta que, al importar, la base lo rechazara por `geocerca_radio_sano`.
+  if (radio !== null && radio > 0 && (radio < RADIO_MIN_M || radio > RADIO_MAX_M)) {
+    errores.push({ linea, mensaje: `El radio (${radio} m) está fuera de rango: debe ser de ${RADIO_MIN_M} a ${RADIO_MAX_M} m.` });
+    return null;
+  }
   if (activo === 'invalido') { errores.push({ linea, mensaje: `No entiendo el estatus «${String(r.activo)}»: usa activo o inactivo.` }); return null; }
   const tipoTxt = texto(r.tipo);
   let tipo: TipoSitio | null = null;

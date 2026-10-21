@@ -301,7 +301,12 @@ import { join, relative } from 'node:path';
 // Integración con A2 Peajes (protocolo de discrepancia geográfica conectado al cron, hallazgo alto de la auditoría adversarial
 // del 21-oct-2026, sobre la misma base): +1 archivo (319 → 320), `peajes/aviso_discrepancia.ts` — lee la línea del desglose y
 // la última posición GPS para armar el reporte real a seguridad cuando una unidad `unidad_inmovilizada` cruza un peaje.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 320;
+// Auditoría A5 Conductor, HALLAZGO 1 (foto ilegible sin metadatos reales, 21-oct-2026, sobre la misma base): +1 archivo
+// (320 → 321), `intake/calidad_foto.ts` — mismo falso positivo YA documentado arriba para `ingesta_sftp.ts`: el archivo
+// no toca Supabase, solo cae en el regex genérico `\.(from|rpc)\(` por `Buffer.from(b64, 'base64')` al decodificar la
+// foto para medirla con `sharp`. Se documenta en vez de reescribir el `Buffer.from` idiomático para esquivar el regex.
+// Llamadas SIN cambio: no hay ninguna llamada real a Supabase en este archivo.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de

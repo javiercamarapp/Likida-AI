@@ -22,6 +22,7 @@ import type { Gasto } from '@/types/likida';
 import { extraerComprobante } from '@/lib/likida/intake/ocr';
 import { createLlmBudget } from '@/lib/llm/budget';
 import { hashImagen } from '@/lib/likida/intake/hash';
+import { metadatosDeFoto } from '@/lib/likida/intake/calidad_foto';
 import { subirComprobante } from '@/lib/likida/intake/almacen';
 import {
   mensajeGuardadoSinViaje, mensajeGuardadoTrasLiquidar, mensajeOfrecer,
@@ -2513,9 +2514,13 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
             await say(MENSAJE_FOTO_DOCUMENTO_FALLO);
             return;
           }
+          // T-A5-54: metadatos REALES de la foto ya descargada (ancho/luminancia vía `sharp`,
+          // ver `calidad_foto.ts`) — sin esto, `motivoIlegible` siempre daba `null` y la
+          // contingencia de «foto chica/oscura» nunca se disparaba en producción.
+          const metadatos = await metadatosDeFoto(dataUrl);
           await say(await registrarFotoDocumentoCierreDelChofer({
             tenantId: op.tenantId, viajeId, documentoId: documentoCierrePrevio.documentoId, pendientes: documentoCierrePrevio.pendientes,
-            ruta, sha256: huella, waMessageId: msg.waMessageId ?? null,
+            ruta, sha256: huella, waMessageId: msg.waMessageId ?? null, metadatos,
           }));
         } catch (e) {
           logger.error('conductor.documento_cierre_error', { viaje: viajeId, err: e instanceof Error ? e.message : String(e) });
