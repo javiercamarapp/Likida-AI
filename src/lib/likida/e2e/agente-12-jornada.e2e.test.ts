@@ -280,17 +280,21 @@ describe('Agente 12 — Jornada: alerta de tope — FALLO', () => {
     expect((await alertasDeJornadas(A, ['j-a']))[0]).toMatchObject({ estado: 'parcial', operadorEstado: 'fallido' });
   });
 
-  it('un rechazo REINTENTABLE (429) suelta el nivel: no se consume y la siguiente corrida lo avisa', async () => {
+  it('un rechazo REINTENTABLE (429) queda ENCOLADO en wa_outbox: no suelta el nivel (HALLAZGO 1, A12) — se cierra como fallida y el mensaje llega por su cuenta', async () => {
+    // Meta acepta dejar el 429 pendiente en wa_outbox (RES-1): soltar el claim aquí
+    // mandaría un SEGUNDO WhatsApp real cuando la siguiente corrida reclame el mismo
+    // nivel, duplicando el aviso que ya va a salir solo desde la cola.
     jornadaEnCurso(A, 'j-a', 'op-a', 660);
     await guardarConfigAlerta(A, { ...CONFIG_ENCENDIDA, canalOperador: 'ninguno' }, ACTOR);
     meta.estado.bloqueados.add(meta.norm(TEL_JEFE_A));
     const r1 = await corrida();
     expect(r1.rechazosReintentables).toBe(1);
-    expect(alertas()).toHaveLength(0); // el claim se soltó
+    expect(alertas()).toHaveLength(1); // el claim NO se soltó: ya quedó encolado
+    expect(alertas()[0]).toMatchObject({ estado: 'fallida', encargado_estado: 'fallido' });
     meta.estado.bloqueados.clear();
     const r2 = await corrida();
-    expect(r2.alertas.aviso).toBe(1);
-    expect(alertas()[0]).toMatchObject({ estado: 'enviada', encargado_estado: 'enviado' });
+    expect(r2.alertas.aviso).toBe(0); // no hay un segundo envío real: el nivel ya se cerró
+    expect(alertas()).toHaveLength(1);
   });
 
   it('sin a quién avisar se asienta «sin_destinatario» y se dice en la corrida', async () => {
