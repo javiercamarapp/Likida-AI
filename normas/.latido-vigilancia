@@ -1,45 +1,50 @@
----
-fecha_corrida: 2026-10-20 (martes)
+fecha_corrida: 2026-10-21 (miércoles)
 ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-10-19 (39 días, incluye 5 viernes de
-  cuota de diésel — 11, 18 y 25-sep, 02, 09 y 16-oct — el día 1-oct, que
-  disparaba la deriva de ley trimestral, y la ventana completa de
-  anticipadas del SAT de los 4 lunes de oct). Sigue arrancando en 09-10
-  para la próxima corrida.
+rango_pendiente: 2026-09-11 — 2026-10-20 (40 días, incluye 5 viernes de
+  cuota de diésel — 11, 18 y 25-sep, 02, 09 y 16-oct —, el día 1-oct, que
+  disparaba la deriva de ley trimestral, y 4 lunes completos de
+  anticipadas del SAT de oct). Sigue arrancando en 09-10 para la
+  próxima corrida.
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
   no hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
 cuota_diesel: no_evaluable_hoy — hoy no es viernes, y los 5 viernes del
-  rango pendiente (11, 18, 25-sep, 02, 09, 16-oct) tampoco se pudieron
-  verificar (mismo bloqueo). Sigue sin verificar desde el 05-sep.
-etag_sat: no_aplica_hoy — no es lunes. Los 4 lunes del rango pendiente
-  (14, 21, 28-sep, 05, 12, 19-oct) tampoco se pudieron verificar.
+  rango pendiente tampoco se pudieron verificar (mismo bloqueo). Sigue
+  sin verificar desde el 05-sep.
+etag_sat: no_aplica_hoy — no es lunes (miércoles). Confirmado bloqueado
+  igual: HEAD a www.sat.gob.mx también cayó en el mismo 403 de política
+  al probarlo hoy como control.
 deriva_ley_check: no_aplica_hoy — no es día 1 de trimestre. El 01-oct-2026
-  (día 1 de Q4) cayó dentro del rango pendiente y no se verificó.
+  (día 1 de Q4) sigue dentro del rango pendiente, sin verificar.
 estado: >
-  INFRA — CUARTA corrida consecutiva bloqueada (12-sep #461, 15-sep #471
-  y 20-sep #483 reportaron el mismo corte; esta es la cuarta, y la
-  primera después de un salto de 30 días sin ningún commit de latido —
-  no hay evidencia de que la rutina haya intentado correr entre el
-  20-sep y hoy; puede ser que el trigger programado no disparó en ese
-  intervalo, o que disparó y falló antes de escribir latido). Probado de
-  nuevo con dos rutas de red independientes: curl directo por
-  HTTPS_PROXY y WebFetch (infraestructura propia de Anthropic, no el
-  proxy de la sesión) — AMBAS siguen bloqueadas. curl: "CONNECT tunnel
-  failed, response 403" contra sidofqa.segob.gob.mx (notas y
-  diarios/porFecha), www.sat.gob.mx y www.diputados.gob.mx, y
-  www.google.com como control (también 403 — confirma que el bloqueo es
-  de política de egreso general de la sesión, no del SIDOF). WebFetch:
-  "getaddrinfo ENOTFOUND sidofqa.segob.gob.mx" contra el mismo endpoint.
-  /root/.ccr/__agentproxy/status muestra recentRelayFailures vacío — no
-  es una caída de conexión, es rechazo de política. No se leyó ninguna
-  nota del DOF en esta corrida ni en las tres anteriores. No se tocó
-  ninguna ficha de normas/. El rango sin verificar ya cubre 39 días,
-  5 viernes de cuota de diésel, 4 lunes de anticipadas del SAT y el
-  disparador trimestral del 01-oct. Requiere intervención humana:
-  permitir sidofqa.segob.gob.mx, dof.gob.mx, www.sat.gob.mx y
+  INFRA — QUINTA corrida consecutiva bloqueada (12-sep #461, 15-sep #471,
+  20-sep #483 y 20-oct #553 reportaron el mismo corte; esta es la
+  quinta). Probado de nuevo con curl directo por HTTPS_PROXY:
+  "CONNECT tunnel failed, response 403" contra sidofqa.segob.gob.mx
+  (notas y diarios/porFecha) y www.sat.gob.mx — ambos con el mismo 403
+  de política ("gateway answered 403 to CONNECT") visible en
+  /root/.ccr/__agentproxy/status → recentRelayFailures. No es caída de
+  conexión, es rechazo de política de egreso para estos dominios. No se
+  leyó ninguna nota del DOF en esta corrida ni en las cuatro anteriores.
+  No se tocó ninguna ficha de normas/. El bloqueo lleva activo desde al
+  menos el 10-sep-2026 — 41 días, 5 viernes de cuota de diésel sin
+  verificar, 4 lunes de anticipadas del SAT sin verificar, y el
+  disparador trimestral del 01-oct sin verificar. Requiere intervención
+  humana: permitir sidofqa.segob.gob.mx, dof.gob.mx, www.sat.gob.mx y
   www.diputados.gob.mx en la política de egreso de este entorno
   programado, o correr esta rutina desde un entorno con esos dominios
-  permitidos. Van cuatro PRs (#461, #471, #483 y este) pidiendo el mismo
-  cambio de configuración.
+  permitidos. Van CINCO PRs (#461, #471, #483, #553 y este) pidiendo el
+  mismo cambio de configuración — no es algo que la rutina pueda
+  resolver reintentando.
+  NOTA DE HIGIENE: entre el 16 y el 20-oct se abrieron PRs nuevos casi a
+  diario para el mismo corte (#478, #479, #480, #482, #489, #495, #496,
+  #500, #503, #509, #510, #513, #517, #519, #526, #530, #548, #553) —
+  la skill dice "sin hallazgos, no abras PR" y una corrida que no pudo
+  correr no genera hallazgo nuevo cada día. El usuario ya cerró en bloque
+  ~15 de esos el 19-oct. Esta corrida NO abre un PR nuevo: actualiza
+  #553 (la más reciente que seguía abierta) y cierra #548 como
+  duplicado. Mientras el bloqueo siga siendo el mismo reportado, las
+  próximas corridas deberían seguir este patrón — actualizar el PR INFRA
+  abierto en vez de abrir uno nuevo — hasta que una persona lo resuelva
+  o lo cierre.
