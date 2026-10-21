@@ -20,7 +20,7 @@ begin;
 insert into public.tenant (id, nombre) values
   ('08510000-0000-4000-8000-0000000000a1', 'Flota A 0851');
 insert into public.operador (id, tenant_id, nombre, telefono) values
-  ('08510000-0000-4000-8000-0000000000b1', '08510000-0000-4000-8000-0000000000a1', 'Chofer 1 0851', '525500000851'),
+  ('08510000-0000-4000-8000-0000000000b1', '08510000-0000-4000-8000-0000000000a1', 'Chofer 1 0851', '525500000853'),
   ('08510000-0000-4000-8000-0000000000b2', '08510000-0000-4000-8000-0000000000a1', 'Chofer 2 0851', '525500000850'),
   -- b3/b4 son EXCLUSIVOS de (d): b1/b2 ya tienen un viaje abierto a esas
   -- alturas del script (d4, vía b2) y reusarlos chocaría contra
