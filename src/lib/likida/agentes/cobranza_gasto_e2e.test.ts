@@ -227,15 +227,27 @@ describe('fallo del proveedor', () => {
     expect(meta.sendTemplate).not.toHaveBeenCalled();
   });
 
-  it('un rechazo REINTENTABLE (429) libera el claim: el tier no se consume y la corrida siguiente sí lo manda', async () => {
+  it('un rechazo REINTENTABLE (429) ya quedó en wa_outbox: el claim se CONSERVA y la corrida siguiente NO reintenta por su cuenta (HALLAZGO 2)', async () => {
+    // AUDITORÍA 28 (HALLAZGO 2, CRÍTICO): un 429 es "reintentable" precisamente
+    // PORQUE el cliente de Meta ya deja ese mismo payload en `wa_outbox` para
+    // reintentarlo él solo. Si cobranza TAMBIÉN liberara el claim y la corrida
+    // siguiente volviera a llamar a Meta de cero, los dos reintentos —el del
+    // outbox y el de cobranza— podrían salir los dos: el chofer recibiría el
+    // mismo recordatorio dos veces. El claim debe CONSERVARSE.
     meta.sendTemplate.mockResolvedValue({ ok: false, error: 'rate limit', codigo: 130429, status: 429 });
     const r = await ejecutarCobranza(A, AHORA);
     expect(r.rechazosReintentables).toBe(1);
-    expect(contactos()).toHaveLength(0);
+    expect(contactos()).toEqual([expect.objectContaining({ gasto_id: 'g1', enviado: false })]);
+    expect(String(contactos()[0].detalle)).toMatch(/ya en la cola de salida de WhatsApp/);
+
+    // La corrida siguiente NO vuelve a llamar a Meta para este lote: el claim
+    // sigue ahí y el tier no se reconsidera "pendiente".
+    meta.sendTemplate.mockClear();
     meta.sendTemplate.mockResolvedValue(OK);
     const r2 = await ejecutarCobranza(A, mas(1));
-    expect(r2.gasto?.mensajes).toBe(1);
-    expect(contactos()).toEqual([expect.objectContaining({ gasto_id: 'g1', enviado: true })]);
+    expect(r2.gasto?.mensajes).toBe(0);
+    expect(meta.sendTemplate).not.toHaveBeenCalled();
+    expect(contactos()).toHaveLength(1);
   });
 
   it('el chofer SIN teléfono se dice (bitácora con motivo) y no se reintenta cada hora', async () => {

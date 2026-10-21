@@ -438,6 +438,9 @@ export async function ejecutarCobranzaGastos(
     let via: 'texto' | 'plantilla' | null = null;
     let detalle: string | null = null;
     let reintentable = false;
+    /** AUDITORÍA 28 (HALLAZGO 2, CRÍTICO): mismo criterio que la cobranza por
+     *  viaje — ver el comentario largo en cobranza.ts. */
+    let encolado = false;
     try {
       const envio = await enviarConFallback(grupo.operador.telefono as string, {
         texto: armarMensajeGastos(grupo.items, opts.firma ?? '', opts.instrucciones ?? ''),
@@ -456,25 +459,40 @@ export async function ejecutarCobranzaGastos(
           ? `WhatsApp rechazó el texto libre y la plantilla también falló: ${envio.mensaje}`
           : `WhatsApp rechazó el mensaje: ${envio.mensaje}`;
         reintentable = envio.reintentable;
+        encolado = envio.encolado === true;
       }
     } catch (e) {
       detalle = e instanceof Error ? e.message : 'error inesperado al enviar';
     }
 
     if (reintentable) {
-      // «Vuelve más tarde» (429, bloqueo): el claim se BORRA y el tier queda libre para la corrida siguiente.
-      await admin.from('cobranza_gasto_contacto')
-        .delete().eq('tenant_id', tenantId).eq('lote_id', lote)
-        .then(({ error }) => { if (error) logger.error('cobranza_gasto.claim_no_liberado', { tenantId, lote, err: error.message }); });
       r.rechazosReintentables++;
       rechazosSeguidos++;
-      r.fallos.push(`${grupo.operador.nombre ?? grupo.operador.operadorId}: ${detalle} (se reintenta en la siguiente corrida)`);
+      if (encolado) {
+        // AUDITORÍA 28 (HALLAZGO 2, CRÍTICO): el lote YA quedó en `wa_outbox`
+        // (timeout de red o rechazo explícito reintentable que el cliente de
+        // Meta encola siempre). Borrar el claim aquí liberaría el lote y la
+        // corrida siguiente volvería a llamar a Meta DE CERO — un segundo
+        // mecanismo de reintento compitiendo con el outbox por el MISMO
+        // mensaje, sin llave compartida. El claim se CONSERVA.
+        await admin.from('cobranza_gasto_contacto')
+          .update({ enviado: false, detalle: `${detalle} (ya en la cola de salida de WhatsApp — no se reintenta aquí)` })
+          .eq('tenant_id', tenantId).eq('lote_id', lote)
+          .then(({ error }) => { if (error) logger.warn('cobranza_gasto.encolado_sin_anotar', { tenantId, lote, err: error.message }); });
+        r.fallos.push(`${grupo.operador.nombre ?? grupo.operador.operadorId}: ${detalle} (ya en la cola de salida de WhatsApp, no se reintenta aquí)`);
+      } else {
+        // «Vuelve más tarde» sin nada encolado: el claim se BORRA y el lote queda libre para la corrida siguiente.
+        await admin.from('cobranza_gasto_contacto')
+          .delete().eq('tenant_id', tenantId).eq('lote_id', lote)
+          .then(({ error }) => { if (error) logger.error('cobranza_gasto.claim_no_liberado', { tenantId, lote, err: error.message }); });
+        r.fallos.push(`${grupo.operador.nombre ?? grupo.operador.operadorId}: ${detalle} (se reintenta en la siguiente corrida)`);
+      }
       if (rechazosSeguidos >= TOPE_RECHAZOS_META_GASTO) {
         r.rechazoMasivo = true;
         r.cortadosPorReloj = plan.paraContactar.length - (r.mensajes + r.fallos.length + r.pospuestosPorTope);
         logger.error('cobranza_gasto.rechazo_masivo', { tenantId, rechazosSeguidos });
         await alertarOperador('wa.rechazo_masivo', {
-          error: `WhatsApp rechazó ${rechazosSeguidos} cobranzas por gasto seguidas por un motivo reintentable (rate limit o bloqueo). La corrida se detuvo; los tiers quedaron sin consumir.`,
+          error: `WhatsApp rechazó ${rechazosSeguidos} cobranzas por gasto seguidas por un motivo reintentable (rate limit o bloqueo). La corrida se detuvo.`,
           codigo: 'wa_rechazo_masivo',
         });
         break;
