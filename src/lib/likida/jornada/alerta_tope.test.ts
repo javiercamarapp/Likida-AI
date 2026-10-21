@@ -24,6 +24,7 @@ function puertos(asientos: Asiento[] | null, over: Partial<PuertosAlerta> = {}):
     datosDelOperador: async () => ({ nombre: 'Luis', telefono: '5215500000001', terminalId: null }),
     encargados: async () => [{ nombre: 'Jefe', telefono: '5215500000002' }],
     reclamar: vi.fn(async () => ({ id: 'r1', token: 'tk' })),
+    marcarEnviada: vi.fn(async () => true),
     cerrar: vi.fn(async () => true),
     liberar: vi.fn(async () => true),
     enviarWa: vi.fn(async () => ({ ok: true, reintentable: false })),
@@ -86,6 +87,42 @@ describe('correrAlertasTope', () => {
     expect(r.alertas.aviso).toBe(1);
     expect(p.enviarWa).toHaveBeenCalledTimes(2);
     expect(p.cerrar).toHaveBeenCalledWith(expect.objectContaining({ estado: 'enviada' }));
+  });
+  it('en cuanto hay un envío real confirmado se marca el candado ANTES de cerrar (0845)', async () => {
+    const orden: string[] = [];
+    const p = puertos([a('inicio_jornada', hace(10))], {
+      marcarEnviada: vi.fn(async () => { orden.push('marcar'); return true; }),
+      cerrar: vi.fn(async () => { orden.push('cerrar'); return true; }),
+    });
+    await correrAlertasTope(p, { ahora: AHORA });
+    expect(p.marcarEnviada).toHaveBeenCalledWith(expect.objectContaining({
+      encargado: expect.objectContaining({ estado: 'enviado' }), operador: expect.objectContaining({ estado: 'enviado' }),
+    }));
+    expect(orden).toEqual(['marcar', 'cerrar']);
+  });
+  it('un reclamo retomado tras un envío real ya confirmado NO reenvía nada: cierra con lo preservado', async () => {
+    const p = puertos([a('inicio_jornada', hace(10))], {
+      datosDelOperador: vi.fn(async () => ({ nombre: 'Luis', telefono: '5215500000001', terminalId: null })),
+      reclamar: vi.fn(async (): ReturnType<PuertosAlerta['reclamar']> => ({
+        id: 'r1', token: 'tk',
+        yaEnviado: {
+          minutos: 500, topeMin: 720, cota: true, fuente: 'gps' as Procedencia, descansoSinCierre: true,
+          encargado: { canal: 'whatsapp', estado: 'enviado', motivo: null },
+          operador: { canal: 'whatsapp', estado: 'fallido', motivo: 'plantilla sin aprobar' },
+        },
+      })),
+    });
+    const r = await correrAlertasTope(p, { ahora: AHORA });
+    expect(p.enviarWa).not.toHaveBeenCalled();
+    expect(p.enviarCorreo).not.toHaveBeenCalled();
+    expect(p.datosDelOperador).not.toHaveBeenCalled(); // no hace falta: nada que redactar ni a quién enviarle
+    expect(p.marcarEnviada).not.toHaveBeenCalled();
+    expect(p.cerrar).toHaveBeenCalledWith(expect.objectContaining({
+      estado: 'parcial',
+      encargado: { canal: 'whatsapp', estado: 'enviado', motivo: null },
+      operador: { canal: 'whatsapp', estado: 'fallido', motivo: 'plantilla sin aprobar' },
+    }));
+    expect(r.alertas.aviso).toBe(1);
   });
   it('una flota con perfil (0770) se SALTA: ni se revisa, ni se reclama, ni se avisa; las demás siguen', async () => {
     const p = puertos([a('inicio_jornada', hace(10))]);

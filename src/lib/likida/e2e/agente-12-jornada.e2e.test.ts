@@ -42,6 +42,7 @@ const rpcs = {
     }
     return filas.sort((x, y) => String(x.tenant_id).localeCompare(String(y.tenant_id)) || String(x.jornada_id).localeCompare(String(y.jornada_id))).slice(0, Number(a.p_limite ?? 500));
   },
+  // El shape que lee `alerta_tope_datos.ts` en ambas ramas (reclamo nuevo y retoma): ver 0845.
   reclamar_jornada_alerta: (a: Record<string, unknown>): Fila[] => {
     const tabla = (db.tablas.jornada_alerta ??= []);
     const ahora = Date.parse(String(a.p_ahora));
@@ -53,17 +54,41 @@ const rpcs = {
     const expira = new Date(ahora + 300_000).toISOString();
     const previa = tabla.find((x) => x.jornada_id === a.p_jornada && x.nivel === nivel);
     const datos = { minutos_registrados: a.p_minutos, tope_minutos: a.p_tope, cota_inferior: a.p_cota, fuente: a.p_fuente, descanso_sin_cierre: a.p_descanso_abierto };
+    const fresco = (f: Fila) => ({
+      alerta_id: f.id, claim_token: f.claim_token, ya_enviado: f.enviado_en != null,
+      minutos_registrados: f.minutos_registrados, tope_minutos: f.tope_minutos, cota_inferior: f.cota_inferior,
+      fuente: f.fuente, descanso_sin_cierre: f.descanso_sin_cierre,
+      encargado_canal: f.encargado_canal ?? null, encargado_estado: f.encargado_estado ?? 'pendiente', encargado_motivo: f.encargado_motivo ?? null,
+      operador_canal: f.operador_canal ?? null, operador_estado: f.operador_estado ?? 'pendiente', operador_motivo: f.operador_motivo ?? null,
+    });
     if (previa) {
       if (!(previa.estado === 'reclamada' && Date.parse(String(previa.claim_expira_en)) <= ahora && previa.tenant_id === a.p_tenant)) return [];
-      Object.assign(previa, datos, { claim_token: uuid(), claim_expira_en: expira });
-      return [{ alerta_id: previa.id, claim_token: previa.claim_token }];
+      const yaEnviado = previa.enviado_en != null;
+      previa.claim_token = uuid(); previa.claim_expira_en = expira;
+      // Candado `enviado_en` (0845): si el envío real YA se confirmó en un intento anterior, la
+      // retoma NO pisa minutos_registrados/cota_inferior/fuente/descanso_sin_cierre ni los estados
+      // por destinatario — el expediente conserva con qué salió el aviso real.
+      if (!yaEnviado) Object.assign(previa, datos);
+      return [fresco(previa)];
     }
     const fila: Fila = {
       id: uuid(), tenant_id: a.p_tenant, jornada_id: a.p_jornada, nivel, ...datos, estado: 'reclamada',
       encargado_estado: 'pendiente', operador_estado: 'pendiente', claim_token: uuid(), claim_expira_en: expira, creada_en: a.p_ahora, cerrada_en: null,
+      enviado_en: null,
     };
     tabla.push(fila);
-    return [{ alerta_id: fila.id, claim_token: fila.claim_token }];
+    return [fresco(fila)];
+  },
+  // El candado "una sola vez" (0845): se marca ANTES de cerrar, en cuanto hay un envío real confirmado.
+  marcar_jornada_alerta_enviada: (a: Record<string, unknown>): boolean => {
+    const f = (db.tablas.jornada_alerta ?? []).find((x) => x.id === a.p_id && x.tenant_id === a.p_tenant && x.claim_token === a.p_claim && x.estado === 'reclamada' && x.enviado_en == null);
+    if (!f) return false;
+    Object.assign(f, {
+      enviado_en: a.p_ahora,
+      encargado_canal: a.p_enc_canal, encargado_estado: a.p_enc_estado, encargado_motivo: a.p_enc_motivo,
+      operador_canal: a.p_op_canal, operador_estado: a.p_op_estado, operador_motivo: a.p_op_motivo,
+    });
+    return true;
   },
   cerrar_jornada_alerta: (a: Record<string, unknown>): boolean => {
     const f = (db.tablas.jornada_alerta ?? []).find((x) => x.id === a.p_id && x.tenant_id === a.p_tenant && x.claim_token === a.p_claim && x.estado === 'reclamada');
@@ -337,6 +362,45 @@ describe('Agente 12 — Jornada: alerta de tope — DUPLICADO', () => {
     expect(r.alertas.aviso).toBe(1);
     expect(alertas()).toHaveLength(1);
     expect(alertas()[0]).toMatchObject({ id: 'zombie', estado: 'enviada', minutos_registrados: 660 });
+  });
+
+  it('un WhatsApp real YA confirmado por Meta, con caída antes de cerrar: la retoma del lease vencido no reenvía nada y conserva los datos del primer envío real', async () => {
+    jornadaEnCurso(A, 'j-a', 'op-a', 660); // 11 h = 91.7 % del tope de 12 h → aviso
+    // El cierre (`cerrar_jornada_alerta`) falla UNA vez: simula el proceso muriendo DESPUÉS de que
+    // Meta ya aceptó el WhatsApp (eso pasa por `meta.fixture`, nada lo intercepta) pero ANTES de
+    // que el registro se cierre.
+    let crasheado = false;
+    db.fallar('rpc:cerrar_jornada_alerta', 'caída simulada tras el envío real', () => {
+      if (crasheado) return false;
+      crasheado = true;
+      return true;
+    });
+
+    const r1 = await corrida();
+    // El aviso real SÍ salió (Meta lo aceptó) aunque el cierre falló.
+    expect(salientesA()).toHaveLength(2);
+    expect(r1.fallos.some((f) => f.includes('j-a'))).toBe(true);
+    expect(alertas()).toHaveLength(1);
+    const idOriginal = alertas()[0].id;
+    // El claim quedó abierto (nunca se cerró), pero el candado `enviado_en` ya marcó el envío real
+    // con el estado exacto por destinatario, ANTES del intento de cierre que falló.
+    expect(alertas()[0]).toMatchObject({ estado: 'reclamada', encargado_estado: 'enviado', operador_estado: 'enviado', minutos_registrados: 660 });
+    expect(alertas()[0].enviado_en).toBeTruthy();
+
+    // Pasan 301 s: el arriendo del claim (300 s) ya venció, pero el cron real corre cada 900 s, así
+    // que esta es justo la siguiente corrida que lo retoma — con la jornada un poco más avanzada.
+    const AHORA2 = new Date(AHORA.getTime() + 301_000);
+    const r2 = await correrAlertasTope(puertosAlertaReales, { ahora: AHORA2 });
+
+    // NO se manda un segundo WhatsApp real para el mismo nivel.
+    expect(salientesA()).toHaveLength(2);
+    expect(r2.alertas.aviso).toBe(1);
+    expect(alertas()).toHaveLength(1);
+    // Es EL MISMO registro, cerrado ahora, con los datos EXACTOS del primer envío real (660 min,
+    // no los ~665 que mediría esta segunda corrida si los recalculara).
+    expect(alertas()[0]).toMatchObject({
+      id: idOriginal, estado: 'enviada', minutos_registrados: 660, encargado_estado: 'enviado', operador_estado: 'enviado', claim_token: null,
+    });
   });
 });
 

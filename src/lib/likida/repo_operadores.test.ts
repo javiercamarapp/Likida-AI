@@ -184,7 +184,11 @@ describe('reasignarOperador', () => {
     expect(eqIdPropio).toHaveBeenCalledWith('id', 'o-2');
     expect(eqTenantPropio).toHaveBeenCalledWith('tenant_id', 't-1');
     expect(from).toHaveBeenCalledWith('viaje');
-    expect(update).toHaveBeenCalledWith({ operador_id: 'o-2' });
+    // AUDITORÍA A8 ESCALACIÓN (ALTO, hallazgo 1): hay CAMBIO real de operador
+    // (de 'o-1' a 'o-2'), así que el mismo UPDATE que mueve `operador_id`
+    // resetea el reloj de aviso/escalación del chofer ANTERIOR — si no, el
+    // nuevo chofer hereda el sello de alguien que ya ni tiene el viaje.
+    expect(update).toHaveBeenCalledWith({ operador_id: 'o-2', avisado_en: null, escalado_en: null, avisos_enviados: 0 });
     expect(eqViajeUpdate).toHaveBeenCalledWith('id', 'v-1');
     expect(eqTenantUpdate).toHaveBeenCalledWith('tenant_id', 't-1');
   });
@@ -196,6 +200,44 @@ describe('reasignarOperador', () => {
     expect(await reasignarOperador('t-1', 'v-1', 'o-2')).toEqual({ cambio: true, operadorAnteriorId: null });
     previoResult.mockResolvedValue({ data: { operador_id: 'o-2' }, error: null });
     expect(await reasignarOperador('t-1', 'v-1', 'o-2')).toEqual({ cambio: false, operadorAnteriorId: 'o-2' });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AUDITORÍA A8 ESCALACIÓN (ALTO, hallazgo 1): reasignar a OTRO chofer tiene
+  // que resetear `avisado_en`/`escalado_en`/`avisos_enviados` — ese reloj es
+  // del chofer, no del viaje, y `avisarAlChofer()` solo marca `avisado_en` la
+  // PRIMERA vez (`.is('avisado_en', null)`).
+  // ═══════════════════════════════════════════════════════════════════════
+  describe('AUDITORÍA A8 — reset del reloj de aviso/escalación al reasignar', () => {
+    beforeEach(() => {
+      propioResult.mockResolvedValue({ data: { id: 'o-2', nombre: 'Ana', telefono: '52999', terminal: null }, error: null });
+      updateResult.mockResolvedValue({ error: null });
+    });
+
+    it('CAMBIO real de operador (o-1 → o-2): resetea los tres campos en el MISMO update', async () => {
+      previoResult.mockResolvedValue({ data: { operador_id: 'o-1' }, error: null });
+      const r = await reasignarOperador('t-1', 'v-1', 'o-2');
+      expect(r.cambio).toBe(true);
+      expect(update).toHaveBeenCalledWith({ operador_id: 'o-2', avisado_en: null, escalado_en: null, avisos_enviados: 0 });
+    });
+
+    it('PRIMERA asignación (sin chofer previo): no hay reloj que heredar, pero tampoco hace daño resetearlo — el payload no lleva los tres campos porque ya nacen en null/0', async () => {
+      previoResult.mockResolvedValue({ data: { operador_id: null }, error: null });
+      await reasignarOperador('t-1', 'v-1', 'o-2');
+      // `cambio` es true (null !== 'o-2'), pero no había reloj corriendo — el
+      // único contrato que importa es que NO deje un reloj ajeno puesto, y
+      // aquí nunca lo hubo.
+      expect(update).toHaveBeenCalledWith({ operador_id: 'o-2', avisado_en: null, escalado_en: null, avisos_enviados: 0 });
+    });
+
+    it('reasignar al MISMO operador (sin cambio real): NO toca el reloj — sigue corriendo para ese chofer', async () => {
+      previoResult.mockResolvedValue({ data: { operador_id: 'o-2' }, error: null });
+      const r = await reasignarOperador('t-1', 'v-1', 'o-2');
+      expect(r.cambio).toBe(false);
+      // Sin los tres campos: un clic repetido de "asignar" sobre el mismo
+      // chofer no debe reiniciar un plazo de escalación que ya está corriendo.
+      expect(update).toHaveBeenCalledWith({ operador_id: 'o-2' });
+    });
   });
 
   it('AUDITORÍA 10: RECHAZA reasignar a un operador de OTRA flota, y no toca el viaje', async () => {
