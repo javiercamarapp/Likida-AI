@@ -1083,7 +1083,7 @@ export interface EntradaFotoDocumentoCierreChofer {
   ruta: string;
   sha256: string;
   waMessageId?: string | null;
-  /** Fase 2 (sin analizador de imagen hoy: ausente = siempre legible, nunca bloquea). */
+  /** `processor.ts` la manda con ancho/luminancia reales (`intake/calidad_foto.ts`, vía `sharp`); ausente/`null` (p. ej. imagen ilegible para `sharp`) = siempre legible, nunca bloquea. */
   metadatos?: MetadatosFoto | null;
   ahora?: Date;
 }
