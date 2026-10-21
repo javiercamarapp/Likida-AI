@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectarInyeccion, valorSospechoso } from './inyeccion';
+import { detectarInyeccion, valorSospechoso } from './deteccion_inyeccion';
 
 describe('detectarInyeccion', () => {
   it.each([
