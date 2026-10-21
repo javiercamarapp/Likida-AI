@@ -104,7 +104,10 @@ async function enviarInstrucciones(
       await p.cerrar(tenantId, viajeId, cual, r.via, ahora);
       return { estado: 'enviado', canal: r.via };
     }
-    if (r.reintentable) await p.liberar(tenantId, viajeId, cual);
+    // `encolado`: el cliente de Meta YA dejo el texto en `wa_outbox` (429/5xx/timeout, o token 190/401).
+    // Soltar el sello aqui lo manda DOS veces: lo entrega el drenado del outbox y lo vuelve a mandar la
+    // pasada siguiente del cron. Solo se libera cuando el rechazo no quedo encolado. (A33-03)
+    if (r.reintentable && !r.encolado) await p.liberar(tenantId, viajeId, cual);
     logger.warn('convenios.envio_rechazado', { viajeId, cual, motivo: r.motivo, reintentable: r.reintentable });
     return { estado: 'rechazado', motivo: r.mensaje, reintentable: r.reintentable };
   } catch (e) {
