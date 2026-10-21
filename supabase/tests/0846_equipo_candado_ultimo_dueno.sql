@@ -1,7 +1,7 @@
 \set ON_ERROR_STOP on
 -- 0845 — equipo_cambiar_rol / equipo_desactivar_usuario (TOCTOU del "último dueño activo", auditoría adversarial
 -- 21-oct-2026). Contra Postgres REAL, dentro de una transacción revertida. La carrera de verdad (dos sesiones
--- concurrentes sobre la MISMA flota) vive en 0845_equipo_candado_ultimo_dueno_concurrencia.sh — este archivo cubre
+-- concurrentes sobre la MISMA flota) vive en 0846_equipo_candado_ultimo_dueno_concurrencia.sh — este archivo cubre
 -- lo que una sola sesión ya puede demostrar:
 --   (a) con 2 dueños activos, degradar a uno PASA (motivo 'ok') y el otro sigue siendo el único dueño;
 --   (b) con 1 solo dueño activo, degradarlo rebota ('ultimo_dueno') y el rol NO cambia;

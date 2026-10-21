@@ -24,7 +24,7 @@
 //     bajas/degradaciones exitosas sobre los dos únicos dueños. La prueba de
 //     que el candado de Postgres de verdad serializa dos SESIONES
 //     concurrentes (no solo que este módulo propaga bien lo que la RPC
-//     contesta) vive en `supabase/tests/0845_equipo_candado_ultimo_dueno_
+//     contesta) vive en `supabase/tests/0846_equipo_candado_ultimo_dueno_
 //     concurrencia.sh`, contra Postgres real — un mock de un solo hilo no
 //     puede demostrar una condición de carrera de dos transacciones.
 // ═══════════════════════════════════════════════════════════════════════════

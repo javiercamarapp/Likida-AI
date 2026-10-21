@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- 0845 · AUDITORÍA ADVERSARIAL (21-oct-2026), HALLAZGO ALTO #2 — TOCTOU en la
+-- 0846 · AUDITORÍA ADVERSARIAL (21-oct-2026), HALLAZGO ALTO #2 — TOCTOU en la
 -- protección del «último dueño activo».
 --
 -- ── EL HALLAZGO ────────────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ begin
 end;
 $$;
 comment on function public.equipo_cambiar_rol is
-  '0845: cambia el rol de alguien del equipo, con el recuento del "último dueño activo" y el UPDATE condicional EN LA MISMA transacción, bajo un candado de transacción por flota (TOCTOU, auditoría adversarial 21-oct-2026). Devuelve ok | ultimo_dueno | conflicto.';
+  '0846: cambia el rol de alguien del equipo, con el recuento del "último dueño activo" y el UPDATE condicional EN LA MISMA transacción, bajo un candado de transacción por flota (TOCTOU, auditoría adversarial 21-oct-2026). Devuelve ok | ultimo_dueno | conflicto.';
 revoke all on function public.equipo_cambiar_rol(uuid, uuid, text, text) from public, anon, authenticated;
 grant execute on function public.equipo_cambiar_rol(uuid, uuid, text, text) to service_role;
 
@@ -119,6 +119,6 @@ begin
 end;
 $$;
 comment on function public.equipo_desactivar_usuario is
-  '0845: da de baja (activo=false) a alguien del equipo, con el mismo candado y recuento atómico que equipo_cambiar_rol (TOCTOU, auditoría adversarial 21-oct-2026). El ban de Auth y la bitácora siguen viviendo en TypeScript (usuarios_escritura.ts) — esta función solo cierra la ventana de carrera de la fila. Devuelve ok | ultimo_dueno | conflicto.';
+  '0846: da de baja (activo=false) a alguien del equipo, con el mismo candado y recuento atómico que equipo_cambiar_rol (TOCTOU, auditoría adversarial 21-oct-2026). El ban de Auth y la bitácora siguen viviendo en TypeScript (usuarios_escritura.ts) — esta función solo cierra la ventana de carrera de la fila. Devuelve ok | ultimo_dueno | conflicto.';
 revoke all on function public.equipo_desactivar_usuario(uuid, uuid, text, uuid) from public, anon, authenticated;
 grant execute on function public.equipo_desactivar_usuario(uuid, uuid, text, uuid) to service_role;
