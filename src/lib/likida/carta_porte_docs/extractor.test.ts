@@ -3,7 +3,7 @@ import { detectarFormato, prepararContenido, type ContenidoDoc } from './conteni
 import {
   SalidaLlmSchema, construirSistema, construirUsuario, evidenciaEnTexto, extraerDocumento, extraccionDeLlm, fusionar, necesitaEscala, valorEnTexto,
 } from './extractor';
-import { campoDoc } from './campos';
+import { campoDoc, UMBRAL_CRITICO } from './campos';
 import { validarExtraccion } from './validacion';
 import { aprender, firmaDe, type Perfil } from './perfiles';
 import { cv, extraccionAtlasOk, pdfBoreal, fotoRemision, xmlCartaPorte, excelAtlas, correoTexto, RFC, xmlPropio } from './documentos_sinteticos.fixture';
@@ -186,14 +186,22 @@ describe('extraerDocumento', () => {
       expect(r.extraccion.campos.origen_cp.confianza).toBeLessThanOrEqual(0.6);
       expect(r.extraccion.campos.destino_cp.confianza).toBeLessThanOrEqual(0.6);
     });
-    it('en una FOTO no hay texto que anclar: la confianza del modelo se respeta', async () => {
-      const llm = llmFalso((e) => salida(e.nivel, { folio_cliente: ['5521', 0.93, 'REMISION 5521'] }, [{ descripcion: ['Cemento', 0.9, null], bienes_transp: ['30111500', 0.9, null], cantidad: ['24', 0.9, null], clave_unidad: ['TNE', 0.9, null], peso_kg: ['24000', 0.9, null] }]));
+    it('en una FOTO no hay texto que anclar: lo NO crítico respeta la confianza del modelo, pero lo CRÍTICO siempre exige confirmar', async () => {
+      // El modelo reporta 0.99 (lo más seguro que puede decir) en TODOS los campos, críticos o no.
+      const llm = llmFalso((e) => salida(e.nivel, { folio_cliente: ['5521', 0.93, 'REMISION 5521'] }, [{ descripcion: ['Cemento', 0.99, null], bienes_transp: ['30111500', 0.99, null], cantidad: ['24', 0.99, null], clave_unidad: ['TNE', 0.99, null], peso_kg: ['24000', 0.99, null] }]));
       const c = await contenido(await fotoRemision());
       const r = await extraerDocumento(c, { llm, nivelMaximo: 1 });
       expect(llm.llamadas[0].texto).toBeNull();
       expect(llm.llamadas[0].imagenes).toHaveLength(1);
+      // folio_cliente NO es crítico: sin anclaje posible, pero tampoco hace falta — se respeta lo que dijo el modelo.
       expect(r.extraccion.campos.folio_cliente.confianza).toBeCloseTo(0.93, 2);
-      expect(r.extraccion.mercancias[0].peso_kg.confianza).toBeCloseTo(0.9, 2);
+      // peso_kg SÍ es crítico: aunque el modelo diga 0.99, sin texto que anclar no se acepta tal cual — se tapa por
+      // debajo de UMBRAL_CRITICO y queda con la nota de por qué, para que validarExtraccion pida confirmación humana.
+      const peso = r.extraccion.mercancias[0].peso_kg;
+      expect(peso.confianza).toBeLessThan(UMBRAL_CRITICO);
+      expect(peso.notas?.join(' ')).toMatch(/no hay texto contra el que verificar/i);
+      const v = validarExtraccion(r.extraccion);
+      expect(v.hallazgos.some((h) => h.campo === 'peso_kg' && h.renglon === 0 && h.severidad === 'confirmar' && h.codigo === 'confianza_baja')).toBe(true);
     });
     it('helpers de anclaje', () => {
       expect(evidenciaEnTexto('rfc remitente: abc', 'RFC remitente: ABC 123')).toBe(true);
