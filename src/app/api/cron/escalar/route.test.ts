@@ -769,3 +769,64 @@ describe('AUDITORÍA A8 ESCALACIÓN (hallazgo 2): la escalación del Conductor y
     expect(opciones.excluirTenants).toEqual(new Set(['flota-cinco-agentes']));
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA del orquestador (hallazgo medio): `tenantsConPerfil()` se llamaba
+// 3 VECES por corrida (cobranza, relojes, reglas) para EXACTAMENTE la misma
+// consulta, cruda y sin `conReintentoDeTimeout` — la única sin ese reintento
+// de los tres barridos que la piden. Estas pruebas fijan el arreglo: se
+// cachea dentro de la misma invocación (una sola llamada real cuando sale
+// bien) y un timeout transitorio se reintenta igual que ya hacen
+// `escalarViajesSinAceptar` y `ejecutarCobranzaGlobal` arriba — no tumba la
+// corrida completa.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('tenantsConPerfil(): cacheada dentro de la corrida y con reintento ante timeout', () => {
+  beforeEach(() => {
+    escalarViajesSinAceptar.mockReset().mockResolvedValue({ escalados: 0 });
+    ejecutarCobranzaGlobal.mockReset().mockResolvedValue({ tenants: 0, contactados: 0, fallos: [] });
+    avisarRelojesLegales.mockReset().mockResolvedValue({ revisadas: 0, avisadas: 0, fallos: 0, cortadasPorReloj: 0 });
+    avisarVencimientos.mockReset().mockResolvedValue({ candidatos: 0, avisados: 0, fallos: 0, cortadosPorReloj: 0 });
+    vigilarReglas.mockReset().mockResolvedValue({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0 });
+    alertarOperador.mockClear();
+    logger.error.mockClear();
+    logger.warn.mockClear();
+    estaApagado.mockReset().mockResolvedValue(false);
+    tenantsConPerfil.mockReset().mockResolvedValue(new Set(['flota-cinco-agentes']));
+  });
+
+  it('se llama UNA sola vez por corrida, aunque la pidan cobranza, relojes Y reglas', async () => {
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(tenantsConPerfil).toHaveBeenCalledTimes(1);
+    // y los tres barridos SÍ recibieron el mismo resultado cacheado:
+    expect((ejecutarCobranzaGlobal.mock.calls[0][1] as { excluirTenants?: ReadonlySet<string> }).excluirTenants).toEqual(new Set(['flota-cinco-agentes']));
+    expect((avisarRelojesLegales.mock.calls[0][1] as { excluirTenants?: ReadonlySet<string> }).excluirTenants).toEqual(new Set(['flota-cinco-agentes']));
+    expect(((vigilarReglas.mock.calls[0] as unknown as unknown[])[1] as { excluirTenants?: ReadonlySet<string> }).excluirTenants).toEqual(new Set(['flota-cinco-agentes']));
+  });
+
+  it('un timeout transitorio se reintenta UNA vez y la corrida sigue sana (no tumba cobranza, relojes ni reglas)', async () => {
+    tenantsConPerfil
+      .mockRejectedValueOnce(new Error('tenantsConPerfil: sin respuesta en 8000 ms (tope de consulta)'))
+      .mockResolvedValueOnce(new Set(['flota-cinco-agentes']));
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    // Un solo reintento le basta: la segunda llamada ya contesta y se cachea — las tres secciones la usan sin volver a pedirla.
+    expect(tenantsConPerfil).toHaveBeenCalledTimes(2);
+    expect(alertarOperador).not.toHaveBeenCalled();
+    expect((ejecutarCobranzaGlobal.mock.calls[0][1] as { excluirTenants?: ReadonlySet<string> }).excluirTenants).toEqual(new Set(['flota-cinco-agentes']));
+  }, 15_000);
+
+  it('si el reintento TAMBIÉN falla, solo la sección que la pidió primero (cobranza) se cae en 500 — relojes y reglas, que llegan después, reintentan fresco y siguen sanos', async () => {
+    tenantsConPerfil
+      .mockRejectedValueOnce(new Error('tenantsConPerfil: sin respuesta en 8000 ms (tope de consulta)'))
+      .mockRejectedValueOnce(new Error('tenantsConPerfil: sin respuesta en 8000 ms (tope de consulta)'))
+      .mockResolvedValue(new Set(['flota-cinco-agentes']));
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(500);
+    expect((await res.json()).comprobacion).toMatchObject({ error: expect.stringMatching(/sin respuesta/) });
+    expect(alertarOperador).toHaveBeenCalledWith('cron.cobranza', expect.objectContaining({ codigo: expect.any(String) }));
+    // El fallo NO se cachea: relojes y reglas, que llegan después, piden tenantsConPerfil() de nuevo y esta vez sí contesta.
+    expect(avisarRelojesLegales.mock.calls[0][1]).toMatchObject({ excluirTenants: new Set(['flota-cinco-agentes']) });
+    expect(((vigilarReglas.mock.calls[0] as unknown as unknown[])[1] as { excluirTenants?: ReadonlySet<string> }).excluirTenants).toEqual(new Set(['flota-cinco-agentes']));
+  }, 15_000);
+});

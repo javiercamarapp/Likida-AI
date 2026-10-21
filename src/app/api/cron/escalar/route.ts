@@ -289,6 +289,19 @@ export async function GET(req: Request) {
     return { error: `timeout individual (${presupuestoMs} ms) sin responder`, codigo: 'timeout_individual', motor: etiqueta };
   };
 
+  // AUDITORÍA del orquestador (hallazgo medio): `tenantsConPerfil()` es una lectura PURA sin filtro (gratis reintentarla,
+  // igual que los interruptores de arriba) y, dentro de UNA MISMA invocación, cobranza, relojes y reglas piden EXACTAMENTE
+  // la misma lista (no cambia entre los tres puntos). Antes se llamaba 3 veces, cruda, sin `conReintentoDeTimeout` ni
+  // caché: triple exposición al mismo cuelgue por nada. Se cachea solo en éxito —un fallo (incluso tras el reintento) NO
+  // se guarda, así que la siguiente sección sigue intentando fresco en vez de heredar un error ya resuelto.
+  let tenantsConPerfilCache: Set<string> | undefined;
+  const tenantsConPerfilCacheada = async (): Promise<Set<string>> => {
+    if (tenantsConPerfilCache) return tenantsConPerfilCache;
+    const r = await conReintentoDeTimeout(() => tenantsConPerfil(), 'tenantsConPerfil');
+    tenantsConPerfilCache = r;
+    return r;
+  };
+
   const correrMotores = async (): Promise<void> => {
 
     // El primer motor ES el Agente de Conductores —`escalar_viaje.ts` registra
@@ -355,7 +368,7 @@ export async function GET(req: Request) {
     } else {
       try {
         // Las flotas con perfil (0770) se saltan: la cobranza es un módulo en stand-by.
-        const excluirTenants = await tenantsConPerfil();
+        const excluirTenants = await tenantsConPerfilCacheada();
         const r = await conTimeoutIndividual(
           conReintentoDeTimeout(() => ejecutarCobranzaGlobal(new Date(), { venceEn: venceCobranza, excluirTenants }), 'ejecutarCobranzaGlobal'),
           PRESUPUESTO_COBRANZA_MS,
@@ -421,7 +434,7 @@ export async function GET(req: Request) {
     enVuelo = 'relojes';
     try {
       // Las flotas con perfil (0770) se saltan los relojes de incidencias (módulo en stand-by).
-      const excluirTenants = await tenantsConPerfil();
+      const excluirTenants = await tenantsConPerfilCacheada();
       // Cada uno de los dos con SU PROPIO presupuesto (hallazgo 21-oct-2026): si
       // `avisarRelojesLegales` se cuelga ya no se come el turno de
       // `avisarVencimientos`, y viceversa.
@@ -470,7 +483,7 @@ export async function GET(req: Request) {
     try {
       const { vigilarReglas } = await import('@/lib/likida/reglas/vigilante');
       // Las flotas con perfil (0770) se saltan: las reglas son un módulo en stand-by.
-      const excluirTenants = await tenantsConPerfil();
+      const excluirTenants = await tenantsConPerfilCacheada();
       const r = await conTimeoutIndividual(
         vigilarReglas(new Date(), { venceEn: venceBarridos, excluirTenants }),
         PRESUPUESTO_REGLAS_MS,

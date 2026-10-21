@@ -12,6 +12,9 @@ type Resp = { data: unknown; error: { message: string; code?: string } | null };
 let porTenant = new Map<string, Resp>();
 let lista: Resp = { data: [], error: null };
 let lecturas = 0;
+/** Para el test de `acotada()`: cuando está prendido, la consulta de `tenantsConPerfil()` nunca resuelve por su cuenta —
+ *  solo el tope de `acotada` (con temporizadores falsos) la hace contestar. */
+let colgarLista = false;
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (t: string) => {
@@ -21,7 +24,8 @@ vi.mock('@/lib/supabase/admin', () => ({
       b.select = () => b;
       b.eq = (_c: string, v: string) => { tenant = v; return b; };
       b.maybeSingle = async () => { lecturas++; return porTenant.get(tenant ?? '') ?? { data: null, error: null }; };
-      b.then = (res: (v: unknown) => unknown) => Promise.resolve(lista).then(res);
+      b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+        (colgarLista ? new Promise(() => {}) : Promise.resolve(lista)).then(res, rej);
       return b;
     },
   }),
@@ -36,6 +40,7 @@ beforeEach(() => {
   porTenant = new Map();
   lista = { data: [], error: null };
   lecturas = 0;
+  colgarLista = false;
   redirect.mockClear();
 });
 
@@ -151,6 +156,35 @@ describe('crons', () => {
     const filas = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
     expect(m.sinTenantsDePerfil(filas, new Set(['b']), (f) => f.id)).toEqual([{ id: 'a' }, { id: 'c' }]);
     expect(m.sinTenantsDePerfil(filas, new Set(), (f) => f.id)).toEqual(filas);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // AUDITORÍA del orquestador (hallazgo medio): `tenantsConPerfil()` era la única
+  // consulta de TODA la ruta `/api/cron/escalar` sin `acotada()` — un cuelgue
+  // solo lo paraba el backstop GLOBAL de 25s del cliente de Supabase, no el tope
+  // fino de 8s del resto del cron. Esta prueba demuestra que SÍ tiene tope ahora:
+  // una consulta que nunca resuelve por su cuenta contesta igual al vencer
+  // `TOPE_CONSULTA_MS + GRACIA_TOPE_MS` (9.5s), con el mismo error-por-valor que
+  // usa el resto del repo (nunca un `throw` nativo de fetch sin capturar).
+  // ═══════════════════════════════════════════════════════════════════════════
+  it('tenantsConPerfilASaltar (vía tenantsConPerfil) está acotada: una consulta colgada contesta al tope, no se queda esperando para siempre', async () => {
+    colgarLista = true;
+    vi.useFakeTimers();
+    try {
+      const p = m.tenantsConPerfilASaltar('facturar');
+      // Antes del tope no ha contestado — si no estuviera acotada, nunca contestaría.
+      await vi.advanceTimersByTimeAsync(9_000);
+      let aun = true;
+      p.then(() => { aun = false; }, () => { aun = false; });
+      await Promise.resolve();
+      expect(aun).toBe(true);
+      // Al pasar TOPE_CONSULTA_MS (8s) + la gracia (1.5s) de `acotada`, contesta con el error-por-valor
+      // (no una tabla inexistente) y `tenantsConPerfil` lo convierte en un throw: «no se pudo leer».
+      await vi.advanceTimersByTimeAsync(600);
+      await expect(p).rejects.toThrow(/no se pudo leer|sin respuesta/);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -24,6 +24,7 @@
 import { redirect } from 'next/navigation';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from '@/lib/likida/presupuesto';
 import { logger } from '@/lib/logger';
 import {
   PERFILES_TENANT, rutaPermitidaEnPerfil, apiPermitidaEnPerfil, CRONS_PERFIL_CINCO_AGENTES,
@@ -201,9 +202,17 @@ export async function tenantsConPerfilASaltar(nombreCron: string): Promise<Set<s
  * cobranza y las reglas, que no) — ahí cada sección de stand-by pide esta lista
  * y se salta a esas flotas. Lanza si no puede leer la tabla (falla cerrado). Una
  * tabla que aún no existe (0770 sin aplicar) es "ninguna flota con perfil".
+ *
+ * AUDITORÍA del orquestador (hallazgo medio): esta era la única consulta de
+ * TODA la ruta `/api/cron/escalar` sin `acotada()` — la misma clase de bug que
+ * colgó un cron entero (AUDITORÍA 8, ALTO REINCIDENTE, `presupuesto.ts:243-247`).
+ * Sin el techo fino de 8 s, un cuelgue aquí solo lo paraba el backstop GLOBAL
+ * de 25 s del cliente de Supabase — once segundos más de exposición que el
+ * resto del cron, por una consulta que además se repite 3 veces por corrida
+ * (ver el caché en `cron/escalar/route.ts`).
  */
 export async function tenantsConPerfil(): Promise<Set<string>> {
-  const { data, error } = await tablaPerfil().select('tenant_id');
+  const { data, error } = await acotada(tablaPerfil().select('tenant_id'), 'perfil_tenant.tenants_con_perfil');
   if (error && (error.code === '42P01' || error.code === 'PGRST205')) return new Set();
   if (error) throw new Error(`perfil_tenant: no se pudo leer la lista de flotas con perfil (${error.message})`);
   return new Set((data ?? []).map((f) => String(f.tenant_id)));

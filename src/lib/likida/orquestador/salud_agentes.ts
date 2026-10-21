@@ -35,6 +35,24 @@ export const AGENTES_VIGILADOS: readonly AgenteVigilado[] = [
   // que ya escribe latido; un documento que nadie procesa se queda en «recibido» sin ruido, que es justo lo que este barrido existe para
   // destapar. Sin `corridas`: el worker no escribe `agente_corrida` (su señal es el latido y los eventos de cada documento).
   { id: 'carta_porte', etiqueta: 'Carta Porte (bandeja de documentos)', cron: 'carta-porte-docs', corridas: null, pantalla: '/dashboard/carta-porte/documentos', destino: 'jefe_de_trafico' },
+  // GPS (auditoría de orquestador, hallazgo medio): el poller de posiciones/geocercas tiene cron propio (`gps`, cada 5 min) que ya
+  // registra latido — faltaba en esta lista, así que un GPS caído solo alertaba AL EQUIPO DE LIKIDA (`alertarOperador`), nunca a la
+  // flota. Sin `corridas`: no es de `AgenteConCorridas` (no escribe `agente_corrida`); su señal es solo el latido.
+  { id: 'gps', etiqueta: 'GPS (posiciones y geocercas)', cron: 'gps', corridas: null, pantalla: '/dashboard/mapa', destino: 'jefe_de_trafico' },
+  // Jornada (0241): el motor que deriva el registro de jornada (LFT 132 fr. XXXIV) desde hitos y posiciones. Cron propio (`jornada`,
+  // cada hora), sin mensajes a nadie — pero un cron caído deja huecos en un documento LABORAL que después nadie puede llenar. Mismo
+  // trato que GPS: antes solo había `alertarOperador` interno.
+  { id: 'jornada', etiqueta: 'Jornada (derivación del registro legal)', cron: 'jornada', corridas: null, pantalla: '/dashboard/jornada', destino: 'jefe_de_trafico' },
+  // Jornada — alerta de tope (0502, Agente 12): cron SEPARADO (`jornada-alertas`, cada 15 min) que sí manda WhatsApp al encargado y al
+  // operador cuando una jornada cruza el umbral legal. Falla por su lado (ver cabecera de la ruta): un caído aquí no se nota en el
+  // latido de `jornada` ni en el de `escalar`, así que necesita su propia entrada.
+  { id: 'jornada_alertas', etiqueta: 'Jornada (alerta de tope)', cron: 'jornada-alertas', corridas: null, pantalla: '/dashboard/jornada', destino: 'jefe_de_trafico' },
+  // Reglas / «Mis reglas» (0229, A19 en el catálogo de vigilancias): el vigilante NO tiene cron propio — corre dentro de `escalar`
+  // (`vigilarReglas`, importado en `cron/escalar/route.ts`), así que el cron que «lo despierta» y cuyo latido hay que vigilar es
+  // `escalar`. Antes una regla caída solo mandaba `alertarOperador('cron.reglas', …)` al equipo de Likida; la flota que configuró la
+  // regla nunca se enteraba de que dejó de vigilarse. Sin `corridas`: cada regla anota su propia `ultima_corrida_en` en
+  // `regla_vigilancia` (no en `agente_corrida`), fuera del dominio de `AgenteConCorridas`.
+  { id: 'reglas', etiqueta: 'Mis reglas (vigilancias personalizadas)', cron: 'escalar', corridas: null, pantalla: '/dashboard/reglas', destino: 'jefe_de_trafico' },
 ];
 
 export interface LatidoVisto { estado: 'ok' | 'vencido' | 'sin_latido'; haceMin: number | null; ultimoEstado: 'ok' | 'fallo' | 'saltado' | 'parcial' | null }
