@@ -378,6 +378,13 @@ export async function reasignarOperador(tenantId: string, viajeId: string, opera
     payload.avisado_en = null;
     payload.escalado_en = null;
     payload.avisos_enviados = 0;
+    // A33-05: `avisado_en = null` sobre un viaje YA ACEPTADO viola el CHECK de la 0058
+    // (`viaje_aceptado_requiere_aviso`: no hay `aceptado_en` sin `avisado_en`) y el UPDATE
+    // ENTERO se cae, asi que reasignar a otro chofer era imposible y al jefe de trafico se
+    // le pedia reintentar. La aceptacion es del chofer ANTERIOR: se limpia con el reloj,
+    // igual que `retirar_voluntario` al devolver un viaje a «sin aceptar» (0800:91-93).
+    payload.aceptado_en = null;
+    payload.aceptado_origen = null;
   }
 
   const { error } = await acotada(supabaseAdmin()
