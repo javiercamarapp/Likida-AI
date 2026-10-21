@@ -2,11 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const createUser = vi.fn();
 const deleteUser = vi.fn();
+const generateLink = vi.fn();
 const insert = vi.fn();
-const from = vi.fn(() => ({ insert }));
+const maybeSingle = vi.fn();
+const eq = vi.fn(() => ({ maybeSingle }));
+const select = vi.fn(() => ({ eq }));
+const from = vi.fn(() => ({ insert, select }));
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
-    auth: { admin: { createUser: (...a: unknown[]) => createUser(...a), deleteUser: (...a: unknown[]) => deleteUser(...(a as [])) } },
+    auth: {
+      admin: {
+        createUser: (...a: unknown[]) => createUser(...a),
+        deleteUser: (...a: unknown[]) => deleteUser(...(a as [])),
+        generateLink: (...a: unknown[]) => generateLink(...a),
+      },
+    },
     from: (...a: unknown[]) => from(...(a as [])),
   }),
 }));
@@ -20,10 +30,17 @@ describe('provisionarUsuario', () => {
     createUser.mockReset();
     deleteUser.mockReset();
     deleteUser.mockResolvedValue({ data: {}, error: null });
+    generateLink.mockReset();
     logger.error.mockClear();
     insert.mockReset();
     insert.mockResolvedValue({ error: null });
     from.mockClear();
+    select.mockClear();
+    eq.mockClear();
+    maybeSingle.mockReset();
+    // Por default, el correo NO tiene ninguna fila `app_user` todavía — las
+    // pruebas de la rama "huérfana de Google" lo cambian explícitamente.
+    maybeSingle.mockResolvedValue({ data: null, error: null });
   });
 
   // ── H6 (auditoría 24): un insert que rebota no deja un usuario de Auth
@@ -72,6 +89,87 @@ describe('provisionarUsuario', () => {
   it('si Auth falla al crear el usuario, lanza con el mensaje de Supabase', async () => {
     createUser.mockResolvedValue({ data: { user: null }, error: { message: 'correo ya registrado' } });
     await expect(provisionarUsuario('t-1', 'ya@existe.mx')).rejects.toThrow('correo ya registrado');
+    expect(insert).not.toHaveBeenCalled();
+    // Mensaje que NO matchea `esCorreoYaRegistrado`: no es el caso que esta
+    // rama resuelve, así que ni se consulta `app_user` ni se intenta enlazar.
+    expect(from).not.toHaveBeenCalled();
+    expect(generateLink).not.toHaveBeenCalled();
+  });
+
+  // ── HALLAZGO MEDIO (auditoría de login/Google): `entrarConGoogle`
+  // (login/page.tsx:141-149) no tiene equivalente de `shouldCreateUser:false`
+  // —Supabase no lo ofrece para OAuth—, así que cualquier correo real de
+  // Google se auto-registra en `auth.users` solo con tocar "Entrar con
+  // Google", SIN pasar por `provisionarUsuario`. Cuando después un
+  // `flota_admin` invita a esa misma persona, `createUser` rebota con
+  // "already registered" y, ANTES de este fix, el alta se abandonaba ahí: la
+  // persona existía en Auth pero nunca en `app_user`, y quedaba varada en
+  // `/sin-acceso` para siempre. ──────────────────────────────────────────
+  describe('correo huérfano: existe en auth.users (p.ej. Google) pero SIN fila app_user en ningún tenant', () => {
+    beforeEach(() => {
+      // Un Error REAL, no un objeto literal: `esCorreoYaRegistrado` exige
+      // `instanceof Error` (así llega el `AuthError` real de supabase-js).
+      createUser.mockResolvedValue({ data: { user: null }, error: new Error('User already registered') });
+      maybeSingle.mockResolvedValue({ data: null, error: null }); // ninguna fila app_user con ese correo
+    });
+
+    it('resuelve el auth.users YA EXISTENTE (sin crear uno nuevo) y completa el alta enlazándolo', async () => {
+      generateLink.mockResolvedValue({ data: { user: { id: 'u-huerfano' } }, error: null });
+
+      const r = await provisionarUsuario('t-1', 'huerfano@flotademo.mx', 'Ana', 'contador');
+
+      expect(createUser).toHaveBeenCalledTimes(1); // se intentó, pero NO se creó un segundo usuario
+      expect(from).toHaveBeenCalledWith('app_user');
+      expect(select).toHaveBeenCalledWith('id');
+      expect(eq).toHaveBeenCalledWith('email', 'huerfano@flotademo.mx');
+      expect(generateLink).toHaveBeenCalledWith({ type: 'recovery', email: 'huerfano@flotademo.mx' });
+      expect(insert).toHaveBeenCalledWith({
+        id: 'u-huerfano', tenant_id: 't-1', email: 'huerfano@flotademo.mx', nombre: 'Ana', rol: 'contador',
+        telefono: null,
+      });
+      expect(r).toEqual({ userId: 'u-huerfano' });
+      // La persona QUEDA OPERATIVA: hay fila app_user real, no el mensaje
+      // neutro sin efecto que `esCorreoYaRegistrado` producía antes.
+    });
+
+    it('si el insert del enlace falla, NO borra el usuario de Auth (no lo creó esta llamada)', async () => {
+      generateLink.mockResolvedValue({ data: { user: { id: 'u-huerfano-2' } }, error: null });
+      insert.mockResolvedValue({ error: { message: 'duplicate key value violates unique constraint "app_user_telefono_uniq"' } });
+
+      await expect(provisionarUsuario('t-1', 'huerfano2@flotademo.mx', 'X', 'contador', '4771234567'))
+        .rejects.toThrow('app_user_telefono_uniq');
+      // El borrado es SOLO para el usuario que esta llamada crea (H6); borrar
+      // uno que ya existía sería tirar la cuenta real de otra persona por un
+      // choque de este insert.
+      expect(deleteUser).not.toHaveBeenCalled();
+    });
+
+    it('si no se puede resolver el id existente (generateLink falla), mantiene el error original de "ya registrado"', async () => {
+      generateLink.mockResolvedValue({ data: { user: null }, error: { message: 'user not found' } });
+
+      await expect(provisionarUsuario('t-1', 'rara@flotademo.mx')).rejects.toThrow('User already registered');
+      expect(insert).not.toHaveBeenCalled();
+    });
+  });
+
+  it('correo que YA tiene fila app_user (cliente real, aquí o en otra flota): sigue "ya registrado", SIN enlazar ni crear fila nueva', async () => {
+    createUser.mockResolvedValue({ data: { user: null }, error: new Error('User already registered') });
+    // SEG-7 (invitar.ts): este correo YA es cliente de Likida de verdad —no
+    // es el caso huérfano— y hay que seguir sin tocar nada, para que el
+    // panel del dueño no sea un oráculo de qué correos son de otra flota.
+    maybeSingle.mockResolvedValue({ data: { id: 'app-user-ya-existente' }, error: null });
+
+    await expect(provisionarUsuario('t-1', 'cliente@otraflota.mx')).rejects.toThrow('User already registered');
+    expect(generateLink).not.toHaveBeenCalled();
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('si la consulta de app_user por correo falla (bache), lanza ESE error y no intenta resolver nada', async () => {
+    createUser.mockResolvedValue({ data: { user: null }, error: new Error('User already registered') });
+    maybeSingle.mockResolvedValue({ data: null, error: { message: 'fetch failed' } });
+
+    await expect(provisionarUsuario('t-1', 'bache@flotademo.mx')).rejects.toThrow('fetch failed');
+    expect(generateLink).not.toHaveBeenCalled();
     expect(insert).not.toHaveBeenCalled();
   });
 

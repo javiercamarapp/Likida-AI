@@ -473,13 +473,22 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 320;
 // sobre la misma base): +2 llamadas (2,238 → 2,240), en `peajes/aviso_discrepancia.ts` (lectura de la línea del desglose y de
 // la última posición GPS), por `acotada`, ancladas a `tenant_id`. Funcionalidad nueva, no código migrado; cubierta por
 // `aviso_discrepancia.test.ts`.
-// AUDITORÍA ADVERSARIAL (HALLAZGO 2, A7 Cobranza, 21-oct-2026, sobre la misma base): +2 llamadas (2,239 → 2,241; el barrido real
-// medía 2,239 — un margen de 1 que ya traía el techo anterior), en `interruptores.ts` (que ya contaba): `marcarFrenoTemporal`
-// (`.from('freno_temporal').upsert(...)`) y `frenoTemporalActivo` (`.from('freno_temporal').select(...)`), el freno AUTOMÁTICO
-// con TTL (mig. 0854) que cierra el hueco del contador local de rechazo masivo entre invocaciones concurrentes de
-// `ejecutarCobranza`/`ejecutarCobranzaGastos`. `cobranza.ts`/`cobranza_gasto.ts` solo llaman a esas dos funciones, sin `.from(`
-// propio nuevo. Funcionalidad nueva, no código migrado; cubierta por `cobranza_freno_rechazo_masivo_persistente.test.ts`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_241;
+// 21-oct-2026, fix del alta huérfana por Google OAuth (hallazgo MEDIO): +1
+// llamada (2,240 → 2,241), en `lib/auth/provisionar.ts` (`.from('app_user')
+// .select('id')…` para saber si el correo YA tiene fila `app_user` en
+// cualquier tenant antes de enlazar un `auth.users` existente que
+// `createUser` no pudo crear). El archivo YA estaba fuera de la frontera
+// (su insert de siempre); esto no suma un archivo, solo una consulta más en
+// uno que ya contaba. Por `.eq('email', …)` contra la columna NOT NULL
+// UNIQUE de la 0001 — no cruza tenant, solo confirma si existe. Cubierta por
+// `provisionar.test.ts`.
+// AUDITORÍA ADVERSARIAL (HALLAZGO 2, A7 Cobranza, 21-oct-2026, sobre la misma base): +2 llamadas (2,241 → 2,243), en
+// `interruptores.ts` (que ya contaba): `marcarFrenoTemporal` (`.from('freno_temporal').upsert(...)`) y
+// `frenoTemporalActivo` (`.from('freno_temporal').select(...)`), el freno AUTOMÁTICO con TTL (mig. 0854) que cierra el
+// hueco del contador local de rechazo masivo entre invocaciones concurrentes de `ejecutarCobranza`/`ejecutarCobranzaGastos`.
+// `cobranza.ts`/`cobranza_gasto.ts` solo llaman a esas dos funciones, sin `.from(` propio nuevo. Funcionalidad nueva, no
+// código migrado; cubierta por `cobranza_freno_rechazo_masivo_persistente.test.ts`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_243;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

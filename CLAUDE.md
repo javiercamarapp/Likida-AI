@@ -87,8 +87,18 @@ el panel afirma "aún no hay liquidaciones" estando ciego. Ver `exigir()` y
 - **Un solo sistema de avisos/diálogos** (`admin/ui/{aviso-resultado,
   notificaciones,confirmar}.tsx`, ver DESIGN.md §3): no se escribe un `Aviso`
   local ni un `confirm()` nuevo.
-- `requireSessionTenant(destino)` arma su redirect a /login con un string fijo,
-  así que **pierde el query string** — por eso existe `dashboard/sufijo.ts`.
+- `requireSessionTenant(destino, sp?, querystring?)` (21-oct-2026) recibe un
+  tercer argumento OPCIONAL: el querystring real de la página
+  (`querystringCompleto(sp)` en `dashboard/sufijo.ts`), que cuelga del
+  `next=` del redirect a /login — antes SIEMPRE se perdía porque el redirect
+  solo usaba el `destino` literal hardcodeado por cada caller.
+  `resolverTenantEfectivo` lo reenvía igual. Solo lo pasan hoy
+  `/dashboard/viajes`, `/dashboard/despacho`, `/dashboard/agentes/peajes` y
+  `/dashboard/combustible-casetas` — el resto de los ~44 callers sigue sin
+  pasarlo (comportamiento idéntico a antes, el argumento es opcional) hasta
+  que alguien lo adopte. `dashboard/sufijo.ts` (`sufijoTenant`) sigue
+  resolviendo la OTRA mitad: `?tenant=`/`?vista=`/`?rol=` entre links
+  internos, no a través de este redirect.
 
 ## Cómo se verifica
 
