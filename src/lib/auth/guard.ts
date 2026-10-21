@@ -70,9 +70,29 @@ export async function requireSessionTenant(
    * impersonación firmada allá. Para cualquier otro rol no hace nada.
    */
   sp?: { vista?: string; tenant?: string; rol?: string },
+  /**
+   * El querystring REAL de la request (filtros, paginación — lo que
+   * `sufijoTenant`/`sp` arriba NO cubre), ya serializado con su `?` inicial
+   * (`querystringCompleto` en `dashboard/sufijo.ts` lo construye). HALLAZGO
+   * MEDIO (auditoría de este repo, 21-oct-2026): sin esto, una sesión que
+   * expira a media navegación en `/dashboard/viajes?f=abiertos&q=...&c=...`
+   * rebotaba a `/login?next=/dashboard/viajes` — el `destino` LITERAL que
+   * cada caller trae hardcodeado — y tras volver a entrar el usuario
+   * aterrizaba en la página pelona, sin sus filtros ni su página de
+   * paginación. `dashboard/sufijo.ts` (`sufijoTenant`) no resolvía esto:
+   * solo preserva `?tenant=`/`?vista=`/`?rol=` de la previsualización de
+   * superadmin entre links INTERNOS, nunca a través de este redirect.
+   *
+   * Opcional y centralizado a propósito: el caller que quiera el fix real
+   * lo pasa (ver `/dashboard/viajes`, `/dashboard/despacho`,
+   * `/dashboard/agentes/peajes` y `/dashboard/combustible-casetas`); los
+   * demás 27 callers de este archivo siguen exactamente igual que antes.
+   */
+  querystring?: string,
 ): Promise<SessionTenant & { tenantId: string }> {
   const s = await getSessionTenant();
-  if (!s) redirect(`/login?next=${encodeURIComponent(destino)}`);
+  const destinoCompleto = querystring ? `${destino}${querystring}` : destino;
+  if (!s) redirect(`/login?next=${encodeURIComponent(destinoCompleto)}`);
   if (s.rol === 'superadmin') await exigirMfaSuperadmin(destino);
   if (!s.tenantId) {
     if (s.rol === 'superadmin') {
@@ -99,8 +119,9 @@ export async function requireSessionTenant(
         return { ...s, tenantId: tenantDemo() };
       }
       // SIN selección NO hay tenant implícito: al selector, con el destino
-      // para volver. Este redirect es el que mató el fallback a demo.
-      redirect(`/admin/elegir-flota?next=${encodeURIComponent(destino)}`);
+      // para volver (con su querystring real, mismo criterio que arriba).
+      // Este redirect es el que mató el fallback a demo.
+      redirect(`/admin/elegir-flota?next=${encodeURIComponent(destinoCompleto)}`);
     }
     // El vendedor (0105) no tiene tenant NI pantalla en /dashboard: su casa
     // es /vendedor. Sin esta rama, el aterrizaje post-login (que por default

@@ -24,3 +24,29 @@ export function sufijoTenant(sp: { tenant?: string; vista?: string; rol?: string
   if (!sp?.rol) return base;
   return `${base}${base ? '&' : '?'}rol=${encodeURIComponent(sp.rol)}`;
 }
+
+/**
+ * HALLAZGO MEDIO (auditoría de este repo, 21-oct-2026): `sufijoTenant` de
+ * arriba resuelve la mitad del problema — arrastra `?tenant=`/`?vista=`/
+ * `?rol=` entre links INTERNOS de /dashboard. La otra mitad es el REDIRECT
+ * a /login cuando la sesión expira a media navegación: `requireSessionTenant`
+ * (guard.ts) armaba ese redirect con el `destino` LITERAL que cada página le
+ * pasa (p.ej. `/dashboard/viajes`), nunca con la querystring real que el
+ * usuario tenía abierta (`?f=abiertos&q=...&c=...&p=3`) — tras volver a
+ * entrar, aterrizaba en la página pelona, sin sus filtros ni su página.
+ *
+ * Esta función serializa TODO lo que `searchParams` traiga (filtros,
+ * paginación, y también `tenant`/`vista`/`rol` — la previsualización de
+ * superadmin se pierde igual si la sesión expira a media navegación) para
+ * pasarlo como tercer argumento a `requireSessionTenant`/
+ * `resolverTenantEfectivo`, que lo cuelgan del `next=` del redirect.
+ */
+export function querystringCompleto(sp: Record<string, string | undefined> | undefined): string {
+  if (!sp) return '';
+  const qs = new URLSearchParams();
+  for (const [clave, valor] of Object.entries(sp)) {
+    if (valor !== undefined && valor !== '') qs.set(clave, valor);
+  }
+  const s = qs.toString();
+  return s ? `?${s}` : '';
+}

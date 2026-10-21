@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sufijoTenant } from './sufijo';
+import { sufijoTenant, querystringCompleto } from './sufijo';
 
 describe('sufijoTenant — el ?tenant=/?vista=/?rol= que no se puede perder', () => {
   it('sin previsualización devuelve vacío (un rol real entra sin query string)', () => {
@@ -22,5 +22,37 @@ describe('sufijoTenant — el ?tenant=/?vista=/?rol= que no se puede perder', ()
 
   it('codifica valores con caracteres especiales', () => {
     expect(sufijoTenant({ tenant: 't con espacios' })).toBe('?tenant=t%20con%20espacios');
+  });
+});
+
+// HALLAZGO MEDIO (auditoría de este repo, 21-oct-2026): esta es la otra
+// mitad — el querystring REAL (filtros, paginación) que `sufijoTenant` no
+// cubre, para colgarlo del redirect a /login cuando la sesión expira a
+// media navegación (ver guard.ts y las pruebas de `requireSessionTenant`
+// en guard.test.ts).
+describe('querystringCompleto — el querystring real para el redirect de /login', () => {
+  it('sin searchParams devuelve vacío', () => {
+    expect(querystringCompleto(undefined)).toBe('');
+  });
+
+  it('con searchParams vacío devuelve vacío', () => {
+    expect(querystringCompleto({})).toBe('');
+  });
+
+  it('serializa los filtros reales de una página (viajes: f, q, c)', () => {
+    expect(querystringCompleto({ f: 'abiertos', q: 'ACME', c: 'cursor-abc' }))
+      .toBe('?f=abiertos&q=ACME&c=cursor-abc');
+  });
+
+  it('omite claves undefined o cadena vacía (un searchParams típico de Next trae varias)', () => {
+    expect(querystringCompleto({ f: 'abiertos', q: undefined, c: '' })).toBe('?f=abiertos');
+  });
+
+  it('también incluye tenant/vista/rol — la previsualización de superadmin se pierde igual al expirar', () => {
+    expect(querystringCompleto({ tenant: 't-7', f: 'escalados' })).toBe('?tenant=t-7&f=escalados');
+  });
+
+  it('codifica valores con caracteres especiales', () => {
+    expect(querystringCompleto({ q: 'flota & cía' })).toBe('?q=flota+%26+c%C3%ADa');
   });
 });
