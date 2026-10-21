@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- 0849 — Una unidad, un viaje abierto. Gemelo de la 0029
+-- 0851 — Una unidad, un viaje abierto. Gemelo de la 0029
 -- (`uq_viaje_abierto_por_operador`), pero sobre `unidad_id`.
 --
 -- HALLAZGO ALTO CONFIRMADO. `asignarUnidad()` y `crearViaje()`
