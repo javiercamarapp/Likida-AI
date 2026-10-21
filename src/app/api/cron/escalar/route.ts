@@ -431,12 +431,26 @@ export async function GET(req: Request) {
     // lleva en el latido, que es el único estado que este cron ya persiste.
     const relojesCorte = resultado.relojes as { incidencias?: { cortadasPorReloj?: number }; vencimientos?: { cortadosPorReloj?: number } } | undefined;
     const calcomCorte = Number((resultado.calcom as { cortadasPorReloj?: number } | undefined)?.cortadasPorReloj ?? 0);
+    // AUDITORÍA 28 (hallazgo #4 del Orquestador): hasta hoy esta suma no veía
+    // un corte repetido en `reglas`, `huerfanos` ni `orquestador` — los tres
+    // barridos de abajo SÍ cortan por reloj (BE-7 y la corrección de hoy en
+    // `avisarHuerfanosPendientes`), pero esta cuenta nunca los leía, así que
+    // una racha de tres cortes seguidos en cualquiera de ellos nunca disparaba
+    // la alerta de `corte_por_reloj_repetido`.
+    const reglasCorte = Number((resultado.reglas as { cortadasPorReloj?: number } | undefined)?.cortadasPorReloj ?? 0);
+    const huerfanosCorte = Number((resultado.huerfanos as { cortadasPorReloj?: number } | undefined)?.cortadasPorReloj ?? 0);
+    const orquestadorBarrido = (resultado.orquestador as { barrido?: unknown } | undefined)?.barrido;
+    const orquestadorCorte = (typeof orquestadorBarrido === 'object' && orquestadorBarrido !== null
+      && (orquestadorBarrido as { cortadoPorReloj?: boolean }).cortadoPorReloj) ? 1 : 0;
     const cortados = Number((resultado.comprobacion as { cortadosPorReloj?: number } | undefined)?.cortadosPorReloj ?? 0)
       + Number((resultado.aceptacion as { cortadosPorReloj?: number } | undefined)?.cortadosPorReloj ?? 0)
       // BE-7: los barridos también cortan, y sus cortes cuentan en la racha.
       + Number(relojesCorte?.incidencias?.cortadasPorReloj ?? 0)
       + Number(relojesCorte?.vencimientos?.cortadosPorReloj ?? 0)
-      + calcomCorte;
+      + calcomCorte
+      + reglasCorte
+      + huerfanosCorte
+      + orquestadorCorte;
     let cortesSeguidos = 0;
     if (cortados > 0 || corteDuro) {
       try {
