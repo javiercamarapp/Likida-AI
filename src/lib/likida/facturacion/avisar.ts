@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger';
 import { getPorFacturar, type TicketPorFacturar } from './pendientes';
 import { enrutar, mensajeParaEncargado, repartir } from './enrutar';
 import { portalesOperables } from './adaptadores/registro';
+import { cuentasCompartidas } from './cuentas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL AVISO POR WHATSAPP DE LO QUE HAY QUE FACTURAR.
@@ -62,12 +63,22 @@ export interface ResultadoAviso {
  * portal que NADIE va a operar —eso no se arregla solo—, y NO hay que avisarle
  * de uno que el piloto va a intentar en la siguiente corrida: avisar de algo
  * que ya se está haciendo entrena a ignorar el aviso.
+ *
+ * `cuentaCompartida` es la MISMA pregunta que decide `facturarAlVuelo`/
+ * `facturarLoteAlVuelo` (`cuentasCompartidas(tenantId)`, `facturacion/cuentas.ts`):
+ * ¿la flota ya compartió en el cofre la cuenta de ESE portal? Sin pasarla, esta
+ * función la evaluaba siempre como `false` —el default de `enrutar`— y el aviso
+ * podía decirle al encargado "ese portal pide cuenta" para un comercio que el
+ * cofre YA tiene cubierto, mientras la decisión real de facturación sí veía la
+ * cuenta compartida y mandaba el ticket por el camino automático: dos lecturas
+ * distintas del mismo dato, en el mismo flujo.
  */
 export function armarAviso(
   tickets: TicketPorFacturar[],
   sabeOperarlo: (clave: string) => boolean = (c) => portalesOperables().includes(c),
+  cuentaCompartida: (clave: string) => boolean = () => false,
 ): { texto: string; cuantos: number } {
-  const { mensajes, incompletos } = repartir(tickets, sabeOperarlo);
+  const { mensajes, incompletos } = repartir(tickets, sabeOperarlo, cuentaCompartida);
 
   // Los que necesitan a una persona: los de cuenta, y los incompletos que aún
   // no vencen (esos sí se pueden salvar buscando el dato en el papel).
@@ -95,7 +106,7 @@ export function armarAviso(
   // cuenta al final — decir "y 14 más" es honesto; listar 20 hace que no se lea
   // ninguno.
   for (const t of orden.slice(0, 6)) {
-    const r = enrutar(t, t.comercio ? sabeOperarlo(t.comercio.clave) : false);
+    const r = enrutar(t, t.comercio ? sabeOperarlo(t.comercio.clave) : false, t.comercio ? cuentaCompartida(t.comercio.clave) : false);
     if (r.via === 'mensaje') {
       lineas.push(mensajeParaEncargado(t, r));
     } else {
@@ -131,7 +142,11 @@ export async function avisarPorFacturar(args: {
   hoy?: string;
 }): Promise<ResultadoAviso> {
   const tickets = await getPorFacturar(args.tenantId, args.hoy);
-  const { texto, cuantos } = armarAviso(tickets);
+  // La misma pregunta que ve `facturarAlVuelo`/`facturarLoteAlVuelo` antes de decidir
+  // quién factura: solo se lee el cofre si hay algún comercio que pida cuenta, igual
+  // que allá (una lectura de base por lote, no por ticket).
+  const cuentas = tickets.some((t) => t.comercio?.requiereCuenta) ? await cuentasCompartidas(args.tenantId) : new Set<string>();
+  const { texto, cuantos } = armarAviso(tickets, undefined, (clave) => cuentas.has(clave));
 
   if (cuantos === 0) {
     return { enviado: false, tickets: 0, texto: '', motivo: 'No hay nada que una persona tenga que facturar.' };
