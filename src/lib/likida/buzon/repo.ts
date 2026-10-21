@@ -228,6 +228,7 @@ export async function completarFacturaConXml(
     .eq('cfdi_uuid', uuid.toLowerCase())
     .eq('estado', 'pendiente')
     .is('xml_crudo', null)
+    // orden-no-importa: tenant_id+cfdi_uuid es único por factura_proveedor_tenant_uuid_key, el filtro ya deja a lo más una fila
     .limit(1), 'buzon.completar_con_xml_previa');
   if (faltaMigracion(previa.error)) return 'sin_cambio';
   if (previa.error) throw new Error(`completarFacturaConXml (previa): ${previa.error.message}`);
