@@ -9,7 +9,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 const alertarOperador = vi.fn(async (..._a: unknown[]) => true);
-vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: (...a: unknown[]) => alertarOperador(...a) }));
+vi.mock('@/lib/observability/alerta', () => ({
+  alertarOperador: (...a: unknown[]) => alertarOperador(...a),
+  contadorDeFallos: (umbral: number) => {
+    let seguidos = 0;
+    return {
+      get seguidos() { return seguidos; },
+      fallo(): boolean { seguidos += 1; return seguidos >= umbral; },
+      exito(): void { seguidos = 0; },
+    };
+  },
+}));
 vi.mock('../../presupuesto', async (orig) => ({ ...(await orig<Record<string, unknown>>()), acotada: (q: unknown) => q }));
 
 const leerCredencial = vi.fn();
