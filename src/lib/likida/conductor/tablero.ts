@@ -1,4 +1,5 @@
 import type { ConfigConductor } from './config';
+import { resumenDocumentosCierre, type ResumenDocumentosCierre } from './documentos_cierre';
 import { esLocalAbierto, type EstadoTransito } from './estados_transito';
 import { calcularEstancias, excedeUmbral, type Estancia } from './estadias_anden';
 import { estadoReporte, hitoActivo, reubicacionesDespuesDelPrimero, type Reubicacion } from './maquina';
@@ -108,6 +109,13 @@ export interface FilaTablero {
   transito: TransitoFila | null;
   /** T-A5-22: la «Fecha Salida» del TMS como candidato a `salida_carga` o como discrepancia con el GPS. `null` = sin marca, o el hito ya está registrado. Solo se lee: el tablero no registra nada. */
   salidaTms: SalidaTmsFila | null;
+  /**
+   * T-A5-69: el resumen de documentos de cierre de ESTE viaje (T-A5-53/54) — los mismos datos que expone
+   * `GET /v1/evidencias`, nunca una copia. `null` = `datos.documentosCierre` no se pudo leer (no se afirma nada);
+   * `usaCatalogo: false` = sí se leyó y este viaje no tiene solicitud (sin catálogo del cliente, o la perilla
+   * `pedirDocumentosCierreActivo` apagada): es un dato real, no un hueco.
+   */
+  documentosCierre: ResumenDocumentosCierre | null;
 }
 
 /** T-A5-22: lo que pinta la línea «TMS». */
@@ -350,6 +358,9 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
     // T-A5-22: informativo. La marca del TMS se propone o se señala como discrepancia; registrar el hito es del barrido (con la casilla).
     const salidaTms = salidaTmsDeFila(viaje, hs, datos, config, ahora);
 
+    // T-A5-69: ausente (no se pudo leer) → `null`, sin afirmar nada; leído → siempre un resumen, aunque sea `usaCatalogo: false`.
+    const documentosCierre = datos.documentosCierre ? datos.documentosCierre.get(viaje.id) ?? resumenDocumentosCierre([]) : null;
+
     filas.push({
       viaje, hitos: vistas, semaforo, motivo, hitoActivo: activo?.tipo ?? null, minutosVencido, estancias,
       sitioCarga: viaje.origenSitioId ? datos.sitios.get(viaje.origenSitioId) ?? null : null,
@@ -357,6 +368,7 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
       ubicacion: ubicacionDeFila(viaje, datos, ahora),
       transito,
       salidaTms,
+      documentosCierre,
     });
 
     // ── La cola de excepciones ───────────────────────────────────────────

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CONFIG_CONDUCTOR_DEFAULT } from '@/lib/likida/conductor/config';
+import { resumenDocumentosCierre, type DocumentoCierreFila } from '@/lib/likida/conductor/documentos_cierre';
 import { hitoVacio } from '@/lib/likida/conductor/memoria.fixture';
 import type { DatosTablero, ViajeTablero } from '@/lib/likida/conductor/repo_validacion';
 import { armarTablero, episodiosVista, esFolioSimulado, indicadoresVista } from '@/lib/likida/conductor/tablero';
@@ -404,5 +405,63 @@ describe('el tablero de hitos — reubicaciones por cliente (T-A5-63)', () => {
     const h = html(t);
     expect(h).toContain('Sin dato');
     expect(h).not.toContain('Descargar evidencia');
+  });
+});
+
+describe('el tablero de hitos — documentos de cierre (T-A5-69, A5 Conductor)', () => {
+  const docFila = (over: Partial<DocumentoCierreFila> = {}): DocumentoCierreFila => ({
+    id: 'dc1', tenantId: 't1', viajeId: '1', documentoRequeridoId: 'd1', nombreSolicitado: 'Carta porte firmada', tipoSolicitado: 'basico',
+    solicitadoEn: '2026-10-01T10:00:00.000Z', recibidoEn: null, viajeHitoEvidenciaId: null, intentosLegibilidad: 0, estado: 'pendiente', respuestaChofer: null,
+    ...over,
+  });
+
+  it('sin leerse (`documentosCierre` ausente en los datos del tablero) no se pinta nada: no se inventa un «0 de 0»', () => {
+    const html = pintar(datos([V('1')], H('1', {})));
+    expect(html).not.toContain('Documentos de cierre');
+  });
+
+  it('el viaje sin solicitud viva (sin catálogo del cliente, o la perilla apagada) tampoco pinta nada: es un dato real, no un hueco', () => {
+    const documentosCierre = new Map([['1', resumenDocumentosCierre([])]]);
+    const html = pintar(datos([V('1')], H('1', {}), { documentosCierre }));
+    expect(html).not.toContain('Documentos de cierre');
+  });
+
+  it('con un documento pendiente: muestra cuántos llegaron de cuántos y el nombre del que falta', () => {
+    const filas = [
+      docFila({ id: 'a', estado: 'recibido', recibidoEn: '2026-10-01T12:00:00.000Z' }),
+      docFila({ id: 'b', documentoRequeridoId: 'd2', nombreSolicitado: 'Pedimento', estado: 'pendiente' }),
+    ];
+    const documentosCierre = new Map([['1', resumenDocumentosCierre(filas)]]);
+    const html = pintar(datos([V('1')], H('1', {}), { documentosCierre }));
+    expect(html).toContain('Documentos de cierre');
+    expect(html).toContain('1');
+    expect(html).toContain('recibidos');
+    expect(html).toContain('faltan: Pedimento');
+  });
+
+  it('todos los documentos recibidos: no dice «faltan» nada', () => {
+    const filas = [docFila({ id: 'a', estado: 'recibido', recibidoEn: '2026-10-01T12:00:00.000Z' })];
+    const documentosCierre = new Map([['1', resumenDocumentosCierre(filas)]]);
+    const html = pintar(datos([V('1')], H('1', {}), { documentosCierre }));
+    expect(html).toContain('Documentos de cierre');
+    expect(html).not.toContain('faltan:');
+  });
+
+  it('una foto marcada «revisar» por mala calidad lo avisa, sin bloquear el viaje', () => {
+    const filas = [docFila({ estado: 'revisar', recibidoEn: '2026-10-01T12:00:00.000Z', intentosLegibilidad: 2 })];
+    const documentosCierre = new Map([['1', resumenDocumentosCierre(filas)]]);
+    const html = pintar(datos([V('1')], H('1', {}), { documentosCierre }));
+    expect(html).toContain('1 con foto por revisar (calidad)');
+  });
+
+  it('un viaje con solicitud y otro sin ella: cada tarjeta pinta lo que de verdad le corresponde', () => {
+    const documentosCierre = new Map([
+      ['1', resumenDocumentosCierre([docFila({ viajeId: '1', estado: 'pendiente' })])],
+      ['2', resumenDocumentosCierre([])],
+    ]);
+    const html = pintar(datos([V('1'), V('2')], [...H('1', {}), ...H('2', {})], { documentosCierre }));
+    // El aria-label y el texto visible repiten la frase una vez por tarjeta: con una sola solicitud viva, solo un par.
+    expect(html.match(/Documentos de cierre/g)?.length).toBe(2);
+    expect(html).toContain('faltan: Carta porte firmada');
   });
 });
