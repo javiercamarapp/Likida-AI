@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
-  MAX_INTENTOS_AVISO, TOPE_AVISOS_POR_FLOTA_Y_CORRIDA, avisarEscalacion, avisarEscalacionesPendientes, correoDeTarea, esUrgente,
+  MAX_INTENTOS_AVISO, TOPE_AVISOS_POR_FLOTA_Y_CORRIDA, VENTANA_TOPE_AVISOS_MIN, avisarEscalacion, avisarEscalacionesPendientes, correoDeTarea, esUrgente,
   type DepsAvisoEscalacion, type TareaParaAviso,
 } from './aviso_escalacion';
 import type { ConfigNotificaciones, UsuarioAvisable } from '../agentes/notificaciones';
@@ -20,8 +20,9 @@ function tarea(sobre: Partial<TareaParaAviso> = {}): TareaParaAviso {
 }
 
 function armar(inicial: TareaParaAviso[], sobre: Partial<DepsAvisoEscalacion> & { conf?: ConfigNotificaciones | { error: string }; envio?: () => Promise<{ ok: true } | { ok: false; motivo: string }> } = {}) {
-  const filas = new Map(inicial.map((t) => [t.id, { ...t, reclamada: false, detalle: null as string | null }]));
+  const filas = new Map(inicial.map((t) => [t.id, { ...t, reclamada: false, detalle: null as string | null, avisadaEn: null as Date | null }]));
   const enviados: Array<{ a: string[]; asunto: string }> = [];
+  let reloj = new Date('2026-10-02T15:00:00Z');
   const deps: DepsAvisoEscalacion = {
     async leerTarea(_t, id) { const f = filas.get(id); return f ? { ...f } : null; },
     async reclamar(_t, id) {
@@ -33,16 +34,23 @@ function armar(inicial: TareaParaAviso[], sobre: Partial<DepsAvisoEscalacion> & 
       const f = filas.get(id);
       if (!f || f.avisoEstado !== 'pendiente') return;
       f.avisoEstado = estado; f.detalle = detalle; if (estado === 'pendiente') f.reclamada = false;
+      if (estado === 'enviado') f.avisadaEn = reloj;
     },
     async config() { return 'error' in (sobre.conf ?? {}) ? (sobre.conf as { error: string }) : { ok: (sobre.conf as ConfigNotificaciones) ?? CONF_ENCENDIDO }; },
     async usuarios() { return USUARIOS; },
     canalListo: () => true,
     async enviar(a, correo) { enviados.push({ a, asunto: correo.asunto }); return sobre.envio ? sobre.envio() : { ok: true }; },
     async nombreFlota() { return 'Flota de prueba'; },
-    ahora: () => new Date('2026-10-02T15:00:00Z'),
+    // El MISMO contador real que comparten el barrido y la escalación en caliente: cuenta, EN LA BASE en memoria de
+    // esta prueba, los avisos de esta flota marcados `enviado` desde `desde` — igual que la consulta real a
+    // `orquestador_escalacion` (`avisada_en >= desde`).
+    async avisosRecientes(tenantId, desde) {
+      return [...filas.values()].filter((f) => f.tenantId === tenantId && f.avisoEstado === 'enviado' && f.avisadaEn !== null && f.avisadaEn.getTime() >= desde.getTime()).length;
+    },
+    ahora: () => reloj,
     ...sobre,
   };
-  return { deps, filas, enviados };
+  return { deps, filas, enviados, avanzar: (min: number) => { reloj = new Date(reloj.getTime() + min * 60_000); } };
 }
 
 describe('el aviso de una tarea escalada', () => {
@@ -153,14 +161,21 @@ describe('el aviso de una tarea escalada', () => {
   });
 });
 
-describe('el barrido de avisos pendientes', () => {
-  it('manda a lo más 3 por flota y por corrida; el resto espera a la siguiente sin perderse', async () => {
+describe('el barrido de avisos pendientes (PRUEBA DE CONTROL: sigue respetando su propio tope)', () => {
+  it('manda a lo más 3 por flota y por corrida; el resto espera a LA SIGUIENTE CORRIDA (una hora después) sin perderse', async () => {
     const tareas = Array.from({ length: 5 }, (_, i) => tarea({ id: `t${i}`, motivo: 'otro', destino: 'jefe_de_trafico' }));
     const r = armar(tareas);
     const res = await avisarEscalacionesPendientes(tareas.map((t) => ({ tenantId: T, id: t.id })), r.deps);
     expect(res.enviadas).toBe(TOPE_AVISOS_POR_FLOTA_Y_CORRIDA);
     expect(res.topadas).toBe(2);
     expect(r.filas.get('t3')!.avisoEstado).toBe('pendiente');
+    // dentro de la MISMA ventana (el barrido horario real no vuelve a correr hasta la próxima hora) el contador
+    // real sigue topado: no se pierde, pero tampoco se manda antes de tiempo.
+    const antesDeTiempo = await avisarEscalacionesPendientes(['t3', 't4'].map((id) => ({ tenantId: T, id })), r.deps);
+    expect(antesDeTiempo.enviadas).toBe(0);
+    expect(antesDeTiempo.topadas).toBe(2);
+    // una hora después (la siguiente corrida real) el cupo se liberó y el resto SÍ se manda.
+    r.avanzar(VENTANA_TOPE_AVISOS_MIN + 1);
     const res2 = await avisarEscalacionesPendientes(['t3', 't4'].map((id) => ({ tenantId: T, id })), r.deps);
     expect(res2.enviadas).toBe(2);
   });
@@ -170,6 +185,46 @@ describe('el barrido de avisos pendientes', () => {
     const res = await avisarEscalacionesPendientes([{ tenantId: T, id: 't1' }], r.deps, { venceEn: Date.now() - 1 });
     expect(res.revisadas).toBe(0);
     expect(r.enviados).toHaveLength(0);
+  });
+});
+
+describe('R10: el tope es UN SOLO contador real, compartido por el barrido y por la escalación en caliente', () => {
+  it('cada llamada EN CALIENTE (una por incidente, con el resumen parafraseado distinto cada vez) se topa sola a partir de la 4ª, sin esperar al barrido', async () => {
+    // Cinco incidentes "distintos" para el contador de dedupe (el resumen cambia la huella de `llaveDedupe`, como
+    // describe el hallazgo: un modelo que parafrasea el mismo problema abre una tarea NUEVA cada vez), todos del
+    // MISMO destino y la MISMA flota — el escenario exacto de inundación que este tope cierra.
+    const resumenes = [
+      'El chofer no contesta desde hace una hora',
+      'El operador sigue sin responder, ya pasó más tiempo',
+      'Seguimos sin poder localizar al chofer',
+      'El chofer continúa sin contestar llamadas',
+      'Cuarta vez que se intenta contactar al operador sin éxito',
+    ];
+    const tareas = resumenes.map((resumen, i) => tarea({ id: `c${i}`, motivo: 'operador_sin_respuesta', destino: 'jefe_de_trafico', viajeFolio: null, resumen }));
+    const r = armar(tareas);
+    const resultados: string[] = [];
+    for (const t of tareas) resultados.push(await avisarEscalacion(T, t.id, r.deps));
+    expect(resultados).toEqual(['enviado', 'enviado', 'enviado', 'topado', 'topado']);
+    expect(r.enviados).toHaveLength(TOPE_AVISOS_POR_FLOTA_Y_CORRIDA);
+    // las topadas NO consumieron intento ni quedaron marcadas: siguen pendientes, listas para la siguiente ventana
+    expect(r.filas.get('c3')).toMatchObject({ avisoEstado: 'pendiente', avisoIntentos: 0 });
+    expect(r.filas.get('c4')).toMatchObject({ avisoEstado: 'pendiente', avisoIntentos: 0 });
+  });
+
+  it('lo que YA mandó el barrido en esta hora cuenta contra el cupo del camino en caliente (y viceversa): no son dos topes de 3 que suman 6', async () => {
+    const delBarrido = Array.from({ length: 3 }, (_, i) => tarea({ id: `b${i}`, motivo: 'falla_de_agente', destino: 'mesa_de_control', viajeFolio: null, resumen: `Falla del agente ${i}` }));
+    const r = armar(delBarrido);
+    const barrido = await avisarEscalacionesPendientes(delBarrido.map((t) => ({ tenantId: T, id: t.id })), r.deps);
+    expect(barrido.enviadas).toBe(3);
+    // el asistente, en caliente, escala un incidente DISTINTO de la MISMA flota justo después: el cupo ya se gastó
+    const enCaliente = tarea({ id: 'caliente', motivo: 'posible_emergencia', destino: 'mesa_de_control', resumen: 'Una emergencia nueva y distinta' });
+    r.filas.set('caliente', { ...enCaliente, reclamada: false, detalle: null, avisadaEn: null });
+    expect(await avisarEscalacion(T, 'caliente', r.deps)).toBe('topado');
+    expect(r.enviados).toHaveLength(3);
+    // pasada la hora, el cupo se libera y el aviso en caliente (que NUNCA se perdió) sale solo
+    r.avanzar(VENTANA_TOPE_AVISOS_MIN + 1);
+    expect(await avisarEscalacion(T, 'caliente', r.deps)).toBe('enviado');
+    expect(r.enviados).toHaveLength(4);
   });
 });
 

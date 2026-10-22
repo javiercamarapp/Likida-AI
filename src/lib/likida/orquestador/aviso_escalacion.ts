@@ -25,13 +25,22 @@ import { rolPuedeLeerTarea } from './permisos';
 //     tarea de dinero —diferencia de liquidación, duda fiscal— no llega al encargado: `rolPuedeLeerTarea`). Si la tarea va
 //     DIRIGIDA al contador (`destino = 'contador'`) también le llega a sus cuentas activas con correo: la pantalla del asistente
 //     no es suya, por eso no sale del reparto por pantalla, pero la tarea es de él (R09-3: antes ningún contador la recibía).
-//  5. TOPE: a lo más 3 correos por flota y por corrida; el resto espera a la siguiente (sin perderse).
+//  5. TOPE: a lo más 3 correos por flota y por corrida; el resto espera a la siguiente (sin perderse). El tope es UN
+//     SOLO contador real (cuántos avisos de esta flota se mandaron en la última hora, leído de la propia tabla —
+//     `avisosRecientes`), no dos: tanto el barrido horario (`avisarEscalacionesPendientes`) como la escalación en
+//     caliente (`fuentes_reales.ts` → `crearEscalacion` → este mismo `avisarEscalacion`) pasan por AQUÍ antes de
+//     reclamar el envío. Antes la herramienta en caliente llamaba a `avisarEscalacion` sin pasar por ningún tope: un
+//     modelo que parafrasea el mismo incidente (el `resumen` cambia la huella de `llaveDedupe`) abría una tarea NUEVA
+//     cada vez y cada una mandaba su correo sin límite, mientras el barrido sí respetaba el suyo — dos contadores
+//     independientes de 3 suman 6, no el tope real que la flota espera.
 //  6. NUNCA LANZA y nunca decide nada: manda un correo con el resumen YA limpio (sin teléfonos, correos ni ligas).
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const MAX_INTENTOS_AVISO = 3;
 export const REINTENTO_AVISO_MIN = 10;
 export const TOPE_AVISOS_POR_FLOTA_Y_CORRIDA = 3;
+/** La ventana del contador real compartido: una hora, la cadencia del barrido horario (`vercel.json`, "7 * * * *"). */
+export const VENTANA_TOPE_AVISOS_MIN = 60;
 export const EVENTO_AVISO = 'escalado' as const;
 
 export interface TareaParaAviso {
@@ -50,7 +59,7 @@ export type EstadoFinalAviso = 'enviado' | 'omitido' | 'agotado' | 'pendiente';
 
 export type ResultadoAvisoTarea =
   | 'enviado' | 'omitido_apagado' | 'omitido_sin_canal' | 'omitido_sin_destinatario'
-  | 'reintentara' | 'agotado' | 'ocupado' | 'ya_avisada' | 'no_aplica' | 'sin_config' | 'error';
+  | 'reintentara' | 'agotado' | 'ocupado' | 'ya_avisada' | 'no_aplica' | 'sin_config' | 'topado' | 'error';
 
 export interface DepsAvisoEscalacion {
   leerTarea(tenantId: string, id: string): Promise<TareaParaAviso | null>;
@@ -63,6 +72,12 @@ export interface DepsAvisoEscalacion {
   canalListo(): boolean;
   enviar(destinatarios: string[], correo: ReturnType<typeof avisoEscalacionAsistente>): Promise<{ ok: true } | { ok: false; motivo: string }>;
   nombreFlota(tenantId: string): Promise<string | null>;
+  /**
+   * Cuántos avisos de ESTA flota quedaron `enviado` desde `desde` (la propia tabla: `aviso_estado = 'enviado' AND
+   * avisada_en >= desde`). El contador real que el barrido y la escalación en caliente COMPARTEN: ninguno de los
+   * dos manda si ya se alcanzó `TOPE_AVISOS_POR_FLOTA_Y_CORRIDA` entre los dos caminos juntos.
+   */
+  avisosRecientes(tenantId: string, desde: Date): Promise<number>;
   ahora(): Date;
 }
 
@@ -121,6 +136,14 @@ export async function avisarEscalacion(tenantId: string, tareaId: string, deps: 
     if (reciben.length === 0) {
       await deps.marcar(tenantId, t.id, 'omitido', 'sin destinatario: nadie marcado puede leer esta tarea');
       return 'omitido_sin_destinatario';
+    }
+
+    // El tope: el MISMO contador real para el barrido y para la escalación en caliente (ver el bloque de arriba).
+    // No se reclama ni se consume un intento: la tarea sigue pendiente y se reintenta sola en la siguiente ventana.
+    const desdeTope = new Date(deps.ahora().getTime() - VENTANA_TOPE_AVISOS_MIN * 60_000);
+    if ((await deps.avisosRecientes(tenantId, desdeTope)) >= TOPE_AVISOS_POR_FLOTA_Y_CORRIDA) {
+      logger.info('orquestador.aviso_topado', { tenantId, tarea: t.id, motivo: t.motivo });
+      return 'topado';
     }
 
     if (!(await deps.reclamar(tenantId, t.id))) return 'ocupado';
@@ -182,6 +205,9 @@ export async function avisarEscalacionesPendientes(
     else if (res.startsWith('omitido')) r.omitidas++;
     else if (res === 'reintentara') r.reintentables++;
     else if (res === 'agotado') r.agotadas++;
+    // El contador real (compartido con la escalación en caliente) también puede topar aquí, no solo el `mandadas`
+    // en memoria de este barrido: por ejemplo, si el camino en caliente ya usó el cupo de esta flota.
+    else if (res === 'topado') r.topadas++;
   }
   return r;
 }
