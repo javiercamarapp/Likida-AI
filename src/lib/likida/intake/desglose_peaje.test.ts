@@ -278,6 +278,61 @@ describe('cruzarLineasDesglose', () => {
     expect(r.gastoId).toBe('exacto');
     expect(r.diferencia).toBe(0);
   });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // HALLAZGO MEDIO (21-oct-2026): un gasto SIN verificación independiente del
+  // monto (sin QR/CFDI) que ADEMÁS trae una señal real de sospecha no puede
+  // cerrar la conciliación en silencio — ver la cabecera del archivo y
+  // `verificacion.ts: cuadra_sin_verificacion_independiente`.
+  // ═══════════════════════════════════════════════════════════════════════
+  describe('sin verificación independiente + señal de sospecha → se marca para revisión', () => {
+    it('texto_sospechoso y sin CFDI, dentro de la ventana de un cobro real: NO queda cuadra en silencio', () => {
+      const [r] = cruzarLineasDesglose(
+        [{ fecha: '2026-08-05', monto: 189 }],
+        [{ id: 'g1', viajeId: 'v1', monto: 189, fecha: '2026-08-05', cfdiValido: false, textoSospechoso: true }],
+      );
+      expect(r.estatus).toBe('cuadra'); // el gasto sigue respaldando el viaje: no se desfaza el cruce
+      expect(r.gastoId).toBe('g1');
+      expect(r.detalle).toMatchObject({ bajaConfianzaSinVerificacion: true, gastoTextoSospechoso: true });
+    });
+
+    it('baja ocrConfianza (sin texto_sospechoso) y sin CFDI, dentro de ventana: misma marca', () => {
+      const [r] = cruzarLineasDesglose(
+        [{ fecha: '2026-08-05', monto: 189 }],
+        [{ id: 'g1', viajeId: 'v1', monto: 189, fecha: '2026-08-05', cfdiValido: false, ocrConfianza: 0.4 }],
+      );
+      expect(r.estatus).toBe('cuadra');
+      expect(r.detalle).toMatchObject({ bajaConfianzaSinVerificacion: true, gastoOcrConfianza: 0.4 });
+    });
+
+    it('el flujo completo: clasificarVerificacion manda ese detalle a por_verificar, no a cuadra silencioso', async () => {
+      const { clasificarVerificacion } = await import('../peajes/verificacion');
+      const [r] = cruzarLineasDesglose(
+        [{ fecha: '2026-08-05', monto: 189 }],
+        [{ id: 'g1', viajeId: 'v1', monto: 189, fecha: '2026-08-05', cfdiValido: false, textoSospechoso: true }],
+      );
+      const v = clasificarVerificacion({ estatus: r.estatus, detalle: r.detalle, gpsVeredicto: null });
+      expect(v).toMatchObject({ estado: 'por_verificar', motivo: 'cuadra_sin_verificacion_independiente' });
+    });
+
+    it('CASO DE CONTROL: gasto normal, sin CFDI y sin ninguna señal de sospecha → sigue cuadrando normal (no romper el flujo feliz)', () => {
+      const [r] = cruzarLineasDesglose(
+        [{ fecha: '2026-08-05', monto: 189 }],
+        [{ id: 'g1', viajeId: 'v1', monto: 189, fecha: '2026-08-05', cfdiValido: false, ocrConfianza: 0.95 }],
+      );
+      expect(r.estatus).toBe('cuadra');
+      expect(r.detalle).not.toHaveProperty('bajaConfianzaSinVerificacion');
+    });
+
+    it('CASO DE CONTROL: cfdiValido=true (QR verificado) con baja confianza NO se marca — el QR ya verificó el monto', () => {
+      const [r] = cruzarLineasDesglose(
+        [{ fecha: '2026-08-05', monto: 189 }],
+        [{ id: 'g1', viajeId: 'v1', monto: 189, fecha: '2026-08-05', cfdiValido: true, ocrConfianza: 0.3, textoSospechoso: true }],
+      );
+      expect(r.estatus).toBe('cuadra');
+      expect(r.detalle).not.toHaveProperty('bajaConfianzaSinVerificacion');
+    });
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -21,6 +21,7 @@ export type MotivoVerificacion =
   | 'gasto'                  // cuadra: gasto; el GPS no aportó (sin datos)
   | 'gps_no_coincide'        // por verificar: cuadra con gasto pero el GPS dice que la unidad estaba lejos
   | 'unidad_distinta'        // por verificar: el TAG es de una unidad y el gasto de otra
+  | 'cuadra_sin_verificacion_independiente' // por verificar: el gasto que cuadró no tiene QR/CFDI verificado y se leyó con baja confianza o el extractor lo marcó sospechoso
   | 'monto_distinto'         // por verificar: hay gasto cercano pero el monto no cuadra
   | 'ambigua'                // por verificar: dos gastos igual de buenos
   | 'sin_fecha'              // por verificar: la línea no trae fecha legible
@@ -73,6 +74,17 @@ export function clasificarVerificacion(e: EntradaVerificacion): Verificacion {
       return {
         estado: 'por_verificar', motivo: 'unidad_distinta',
         explicacion: 'Cuadra con un gasto de caseta, pero el TAG pertenece a otra unidad que la del viaje del gasto. Revisa si el TAG se prestó o si el gasto es de otro camión.',
+      };
+    }
+    // HALLAZGO MEDIO (21-oct-2026): el gasto que cuadró por fecha/monto no tiene QR/CFDI
+    // verificado (verificación independiente del monto) Y además se leyó con baja
+    // confianza o el extractor lo marcó sospechoso. Un ticket falsificado que caiga por
+    // casualidad en la ventana fecha/monto de un cobro real no debe quedar "cuadra" sin
+    // que un humano lo vea — ver `desglose_peaje.ts: cuadrar`.
+    if (e.detalle?.bajaConfianzaSinVerificacion === true) {
+      return {
+        estado: 'por_verificar', motivo: 'cuadra_sin_verificacion_independiente',
+        explicacion: 'Cuadra por fecha y monto con un gasto de caseta, pero ese comprobante no tiene ninguna verificación independiente (sin QR/CFDI) y se leyó con baja confianza o el extractor lo marcó sospechoso. Revisa el ticket original antes de dar por buena la conciliación.',
       };
     }
     if (e.gpsVeredicto === 'confirma') {
