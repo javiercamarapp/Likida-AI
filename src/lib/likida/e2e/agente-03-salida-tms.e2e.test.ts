@@ -349,6 +349,21 @@ describe('PDF M3 (forma de remisión de exportación)', () => {
     const [envio] = await envioDe(A, r.documentoId);
     expect(envio).toMatchObject({ estado: 'listo', intentos: 0 });
     expect(tms.llamadas).toHaveLength(0);
+
+    // El aviso de ÉXITO en modo manual (`listo_manual`, worker_envios.ts:avisarListoManual): nadie más va a decir que
+    // ya se puede subir a mano, así que la cadena REAL tiene que dejarlo en `alertas` con el texto exacto que arma el
+    // worker (el texto FORMATEADO del canal real — `textoAlerta('listo_manual', …)` — lo prueba alerta_envio.test.ts;
+    // aquí lo que viaja por `DepsEnvios.alertarEnvio` es el mensaje crudo, antes de ese formateo).
+    expect(alertas).toHaveLength(1);
+    expect(alertas[0]).toMatchObject({
+      tenantId: A,
+      envioId: envio.id,
+      documentoId: r.documentoId,
+      motivo: 'listo_manual',
+      destinatario: 'oficina@flota-a.test',
+      mensaje: 'La Carta Porte ya está lista para subir al sistema del cliente.',
+    });
+    expect(tipos(r.documentoId)).toEqual(expect.arrayContaining(['envio_alertado']));
     sinViajeNiPac();
   });
 });
