@@ -237,6 +237,25 @@ describe('duplicados, spam y mensajes que no son texto', () => {
     expect(b.texto).toContain('lo paso a tu ejecutivo');
     expect(alGerente[0].op.texto).toContain('mandó un archivo que el Vigía no lee');
   });
+
+  // A4 Vigía (21-oct): `factura_pod` sin POD adjuntable deja una `tarea` pendiente («tu ejecutivo te lo hace
+  // llegar») que NO entra en `faltantes` ni prende `requiereHumano` — antes el gerente podía aprobar con un
+  // toque sin ver ningún aviso de que esa entrega queda sin seguimiento automatizado. `advertenciaDeBorrador`
+  // ahora la incluye explícitamente.
+  it('factura_pod sin archivo adjuntable: la tarea de entrega queda explícita en el aviso al gerente', async () => {
+    const { repo } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus()); // podRecibido: false, facturaEmitida: false, adjuntos: [] (default)
+    const { deps, alGerente } = armar(repo);
+    await atenderMensajeCliente(msg('¿Ya tienen la factura o el POD de mi viaje?'), deps);
+    const [b] = repo.salientes();
+    expect(b.intencion).toBe('factura_pod');
+    const [evBorrador] = repo.eventosDe('borrador');
+    expect(evBorrador.detalle).toMatchObject({ faltantes: [], tareas: ['entrega_de_archivo'] });
+    expect(b.texto).toContain('tu ejecutivo te lo hace llegar');
+    expect(alGerente).toHaveLength(1);
+    expect(alGerente[0].op.texto).toContain('tu ejecutivo le hace llegar un archivo');
+    expect(alGerente[0].op.texto).toContain('nadie lo hace de forma automática, dale seguimiento tú');
+  });
 });
 
 describe('lo que NO hay no se inventa: «lo consulto» y se escala', () => {
