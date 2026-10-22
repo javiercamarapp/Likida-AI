@@ -13,7 +13,9 @@ import type { EntradaEnvioCliente, ResultadoEnvioCliente } from '../vigia/enviar
 // aprobación de un toque del gerente → envío al cliente (aviso de privacidad la primera vez) → reloj del SLA →
 // barrido del cron (nivel 1 responsable, nivel 2 dueño) → toma de control humana / BAJA.
 // DOBLES: repo en memoria (mismas garantías que la 0400), servicio de estatus de viaje, envío al cliente y al gerente.
-// Todo sintético. Lo de la Ola 3 (grupos críticos, histórico exportado, FAQs) queda como pendiente de integración.
+// Todo sintético. Lo de la Ola 3 (grupos críticos, histórico exportado, FAQs) YA está cubierto, no aquí sino en
+// `vigia/ciclo_completo.e2e.test.ts`: «P5 · alerta de 10 min con la cola llena de hilos agotados» (grupos críticos)
+// y «P5 · del histórico exportado a una respuesta rápida aprobada y usada, y al reporte en Excel» (histórico + FAQs).
 // ═══════════════════════════════════════════════════════════════════════════
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));

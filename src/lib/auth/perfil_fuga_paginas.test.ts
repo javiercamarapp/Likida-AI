@@ -265,12 +265,12 @@ describe('(b) inicioDe bajo el perfil: a dónde se rebota a cada rol', () => {
     }
   });
 
-  // HALLAZGO ABIERTO (T-PER-02, ver preguntas-javier.md): el contador es un rol de solo `dinero`. Bajo el
-  // perfil, `/dashboard` no es suyo (rebota a su casa, /dashboard/contador) y su casa está en stand-by
-  // (rebota a /dashboard): bucle de redirecciones. Las flotas del perfil hoy no tienen contadores, pero
-  // el rol existe. `it.fails` documenta el defecto sin esconderlo: cuando se decida y corrija dónde
-  // aterriza el contador bajo el perfil, esta prueba se pondrá en rojo y habrá que quitar la marca.
-  it.fails('el contador bajo el perfil termina en una pantalla que abre, sin bucle de redirecciones (defecto conocido)', async () => {
+  // T-PER-02 (corregido el 21-oct-2026): el contador es un rol de solo `dinero`. Bajo el perfil,
+  // `/dashboard` no es suyo (rebota a su casa, /dashboard/contador) y su casa quedaba en stand-by
+  // (rebotaba a /dashboard): bucle de redirecciones. El rebote de `exigirRutaDePerfil` ahora es
+  // consciente del rol (`inicioDe(rol, perfil)`) y aterriza al contador en la ventana del Agente de
+  // Liquidación (A1, `dinero` y permitida en la lista cerrada) en vez de insistir en /dashboard.
+  it('el contador bajo el perfil termina en una pantalla que abre, sin bucle de redirecciones', async () => {
     getSessionTenant.mockResolvedValue(sesion(CON, 'contador'));
     const saltos: string[] = [];
     let actual = '/dashboard';
