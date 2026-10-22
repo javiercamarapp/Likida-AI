@@ -542,11 +542,21 @@ export const API_PROXIMAMENTE_PERFIL: Readonly<Record<'v1' | 'export' | 'dashboa
   dashboard: [],
 };
 
+/**
+ * Subrutas de un segmento PERMITIDO que pertenecen a un módulo de stand-by. La lista de arriba decide por el primer
+ * segmento, así que `viajes` deja pasar `viajes/<id>/contribucion`, que entrega ingreso, margen y estado de cobro
+ * (Rentabilidad y Cobranza). Se niega por patrón de la ruta completa.
+ */
+const API_PERFIL_SUBRUTAS_NEGADAS: readonly RegExp[] = [
+  /^\/api\/v1\/viajes\/[^/?#]+\/contribucion(?:[/?#]|$)/,
+];
+
 /** ¿Esta ruta de API (`/api/v1/...`, `/api/export/...`, `/api/dashboard/...`) sigue viva bajo el perfil? */
 export function apiPermitidaEnPerfil(perfil: PerfilTenant | string, pathname: string): boolean {
   if (perfil !== 'cinco_agentes') return false;
   const m = /^\/api\/(v1|export|dashboard)\/([^/?#]+)/.exec(pathname);
   if (!m) return false;
+  if (API_PERFIL_SUBRUTAS_NEGADAS.some((re) => re.test(pathname))) return false;
   return API_PERFIL_CINCO_AGENTES[m[1] as 'v1' | 'export' | 'dashboard'].includes(m[2]);
 }
 
