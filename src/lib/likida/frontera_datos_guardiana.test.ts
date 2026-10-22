@@ -505,12 +505,20 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // nadie iba a entregar por NINGÚN camino — agrega un `.from('liquidacion_externa').select(...)` y un
 // `.from('liquidacion_desglose').select(...)`. Funcionalidad nueva (la red de alerta de `servicio.ts`), no código
 // migrado; cubierta por `trabajo_huerfana.test.ts` y `servicio_huerfana_correo.test.ts`.
-// A5 CONDUCTOR, TABLERO DE DOCUMENTOS DE CIERRE (21-oct-2026): +1 llamada (2,246 → 2,247), en `conductor/repo_validacion.ts`
+// AUDITORÍA DEL ORQUESTADOR — TOPE DE AVISOS COMPARTIDO (hallazgo BAJO confirmado, 21-oct-2026): +1 llamada
+// (2,246 → 2,247), en `orquestador/fuentes_reales.ts` (que ya contaba). `depsAvisoReales().avisosRecientes` —
+// el `.from('orquestador_escalacion').select('id', { count: 'exact', head: true })...` que cuenta, por flota,
+// cuántos avisos quedaron `enviado` en la última hora: el contador real que ahora comparten el barrido horario
+// (`avisarEscalacionesPendientes`) y la escalación en caliente (`crearEscalacion` → `avisarEscalacion`), para que
+// la herramienta `escalar` del chat ya no mande avisos sin límite cuando el modelo parafrasea el mismo incidente.
+// Funcionalidad nueva (cierra el bypass del tope anti-ruido), no código migrado; cubierta por
+// `aviso_escalacion.test.ts` (R10) y `orquestador_vivo.e2e.test.ts` (casos 9 y 10).
+// A5 CONDUCTOR, TABLERO DE DOCUMENTOS DE CIERRE (21-oct-2026): +1 llamada (2,247 → 2,248; en master era 2,246 → 2,247), en `conductor/repo_validacion.ts`
 // (que ya contaba). `leerDocumentosCierrePorViajes` agrega UN `.from('viaje_documento_cierre').select(...)` (por lotes, con
 // `traerPorIds`, anclado a `tenant_id`) para pintar en el tablero interno (`/dashboard/agentes/conductores`) el mismo resumen
 // que ya exponía `GET /v1/evidencias` — antes solo vivía en la API externa, nunca en la vista del jefe de tráfico. 0 archivos
 // nuevos. Funcionalidad nueva, no código migrado; cubierta por `tablero-hitos.test.tsx` y `tablero.test.ts`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_247;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_248;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

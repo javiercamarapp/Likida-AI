@@ -315,6 +315,16 @@ export function depsAvisoReales(): DepsAvisoEscalacion {
       const r = await acotada(supabaseAdmin().from('tenant').select('nombre').eq('id', tenantId).limit(1), 'orquestador.aviso_flota');
       return r.error ? null : ((r.data ?? []) as Array<{ nombre: string | null }>)[0]?.nombre ?? null;
     },
+    async avisosRecientes(tenantId, desde) {
+      // El contador real compartido por el barrido y la escalación en caliente (ver `aviso_escalacion.ts`): cuántos
+      // avisos de ESTA flota quedaron `enviado` desde `desde`. Sin la 0651 (la columna `avisada_en`) no hay tope que
+      // aplicar: se dice 0 y el aviso sigue su curso normal, igual que el resto de los lectores de esta tabla.
+      const r = await acotada(supabaseAdmin().from('orquestador_escalacion').select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenantId).eq('aviso_estado', 'enviado').gte('avisada_en', desde.toISOString()), 'orquestador.aviso_recientes');
+      if (esSinTabla(r.error)) return 0;
+      if (r.error || typeof r.count !== 'number') throw new Error(`orquestador.aviso_recientes: ${r.error?.message ?? 'sin conteo'}`);
+      return r.count;
+    },
   };
 }
 
