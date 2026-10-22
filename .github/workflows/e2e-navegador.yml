@@ -54,7 +54,8 @@ jobs:
   e2e-navegador:
     name: Pila local + Playwright contra el producto
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # 25 (antes 15, 22-oct-2026): dos corridas se cancelaron a los 15 min por la descarga lenta de Chromium.
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -139,6 +140,15 @@ jobs:
           # Mismo motivo que ci.yml (31-ago-2026): el paso de TypeScript de
           # `next build` empezó a tronar por heap en el runner estándar.
           NODE_OPTIONS: --max-old-space-size=6144
+
+      # Caché del navegador: sin ella cada corrida descargaba Chromium. Medido el 22-oct-2026: el paso tardó
+      # 0.4 min con red buena y 11.6 min con red lenta, y tres corridas (master y dos PR) pasaron del límite.
+      # La clave lleva la versión de Playwright; si se actualiza sin tocar la clave, `install` baja la que falte.
+      - name: Caché de Chromium (Playwright)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-1.63.0-chromium
 
       - name: Chromium para Playwright
         run: npx playwright install --with-deps chromium
