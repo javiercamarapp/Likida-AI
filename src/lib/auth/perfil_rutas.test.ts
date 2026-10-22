@@ -132,6 +132,15 @@ describe('API bajo el perfil', () => {
     expect(apiPermitidaEnPerfil('cinco_agentes', '/api/v1/clientes')).toBe(false);
     expect(apiPermitidaEnPerfil('cinco_agentes', '/api/v1/recurso-nuevo')).toBe(false);
   });
+  it('v1: una subruta de stand-by bajo un segmento permitido se niega (contribución = margen y cobro)', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    expect(apiPermitidaEnPerfil('cinco_agentes', `/api/v1/viajes/${id}/contribucion`)).toBe(false);
+    expect(apiPermitidaEnPerfil('cinco_agentes', `/api/v1/viajes/${id}/contribucion?x=1`)).toBe(false);
+    // Las hermanas logísticas y el recurso base siguen vivos.
+    expect(apiPermitidaEnPerfil('cinco_agentes', `/api/v1/viajes/${id}`)).toBe(true);
+    expect(apiPermitidaEnPerfil('cinco_agentes', `/api/v1/viajes/${id}/citas`)).toBe(true);
+    expect(apiPermitidaEnPerfil('cinco_agentes', `/api/v1/viajes/${id}/sitios`)).toBe(true);
+  });
   it('export: los de stand-by se niegan', () => {
     for (const n of ['poliza', 'jornada', 'convenios', 'facturas-proveedor', 'nuevo']) {
       expect(apiPermitidaEnPerfil('cinco_agentes', `/api/export/${n}`), n).toBe(false);
