@@ -1,6 +1,7 @@
-import { CheckCircle2, CircleAlert, CircleDashed, Clock, MapPin, MapPinOff, Camera, UserCog, Flag } from 'lucide-react';
+import { CheckCircle2, CircleAlert, CircleDashed, Clock, MapPin, MapPinOff, Camera, UserCog, Flag, FileCheck2, FileWarning } from 'lucide-react';
 import Link from 'next/link';
 import { fechaHoraMx, numero, porcentaje } from '@/lib/formato';
+import type { ResumenDocumentosCierre } from '@/lib/likida/conductor/documentos_cierre';
 import type { CatalogosFiltro } from '@/lib/likida/conductor/repo_validacion';
 import { textoTiempo } from '@/lib/likida/conductor/planificador';
 import { esFolioSimulado, type EpisodioVista, type Excepcion, type FilaTablero, type HitoVista, type IndicadoresVista, type Semaforo, type Tablero, type TipoExcepcion } from '@/lib/likida/conductor/tablero';
@@ -275,6 +276,30 @@ function CeldaHito({ h, puedeActuar, accion, viajeId }: { h: HitoVista; puedeAct
   );
 }
 
+/**
+ * T-A5-69 (A5 Conductor): qué documentos de cierre faltan/llegaron/necesitan revisión en ESTE viaje — los MISMOS
+ * datos que `GET /v1/evidencias`, armados con la misma `resumenDocumentosCierre`. `null` (no se pudo leer) o
+ * `usaCatalogo: false` (sin solicitud: el cliente no tiene catálogo, o la perilla sigue apagada) NO pintan nada:
+ * la regla del repo es nunca inventar una cifra, y «0 de 0 documentos» se leería como una medición que no existe.
+ */
+function DocumentosCierreFila({ r }: { r: ResumenDocumentosCierre }) {
+  if (!r.usaCatalogo) return null;
+  const faltan = r.faltantes.length;
+  const porRevisar = r.conProblemaDeCalidad.length;
+  const color = faltan > 0 ? 'var(--warn)' : 'var(--ok)';
+  return (
+    <p className="text-[12px] flex items-start gap-1.5" style={{ color }} aria-label="Documentos de cierre">
+      {faltan > 0 ? <FileWarning width={13} height={13} aria-hidden className="mt-0.5 shrink-0" /> : <FileCheck2 width={13} height={13} aria-hidden className="mt-0.5 shrink-0" />}
+      <span>
+        <span className="font-medium">Documentos de cierre:</span>{' '}
+        <span className="cifra-mono">{numero(r.recibidos)}</span> de <span className="cifra-mono">{numero(r.total)}</span> recibidos
+        {faltan > 0 && <> · faltan: {r.faltantes.map((f) => f.nombreSolicitado).join(', ')}</>}
+        {porRevisar > 0 && <span style={{ color: 'var(--warn)' }}> · {numero(porRevisar)} {porRevisar === 1 ? 'con foto por revisar (calidad)' : 'con fotos por revisar (calidad)'}</span>}
+      </span>
+    </p>
+  );
+}
+
 function ResumenEstancia({ e }: { e: Estancia }) {
   const texto = e.fase === 'cerrada' ? `${minutos(e.minutos ?? 0)} (cerrada)`
     : e.fase === 'en_curso' ? `${minutos(e.minutos ?? 0)} y sigue en el andén`
@@ -325,6 +350,7 @@ export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios }: {
       ) : (
         <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Sin sitios asignados: las llegadas de este viaje no se pueden validar contra la ubicación.</p>
       )}
+      {f.documentosCierre && <DocumentosCierreFila r={f.documentosCierre} />}
       {puedeActuar && <FormaAsignarSitios accion={accionSitios} viajeId={v.id} sitios={sitios} />}
       <ol className="flex flex-wrap gap-x-4 gap-y-3">
         {f.hitos.map((h) => <CeldaHito key={h.id} h={h} puedeActuar={puedeActuar} accion={accion} viajeId={v.id} />)}
