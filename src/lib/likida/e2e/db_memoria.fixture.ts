@@ -36,6 +36,9 @@ export function crearDbMemoria(
 
   class Q implements PromiseLike<Resp> {
     private filtros: Array<[string, string, unknown]> = [];
+    /** `.or('col.op.val,col2.op2.val2')` (PostgREST): se cumple si CUALQUIERA
+     *  de las condiciones empata — se evalúa junto con `filtros` (AND). */
+    private orCondiciones: Array<[string, string, string]> | null = null;
     private op = 'select';
     private payload: unknown = undefined;
     private orden: Array<[string, boolean]> = [];
@@ -67,6 +70,16 @@ export function crearDbMemoria(
     lt(c: string, v: unknown) { this.filtros.push([c, 'lt', v]); return this; }
     gt(c: string, v: unknown) { this.filtros.push([c, 'gt', v]); return this; }
     neq(c: string, v: unknown) { this.filtros.push([c, 'neq', v]); return this; }
+    /** `'activo.is.null,activo.eq.true'` → [[col, op, valor-crudo], …]. Solo
+     *  los operadores que ya se usan en el repo (`is`, `eq`, `lt`, `gt`). */
+    or(condicion: string) {
+      this.orCondiciones = condicion.split(',').map((parte) => {
+        const i1 = parte.indexOf('.');
+        const i2 = parte.indexOf('.', i1 + 1);
+        return [parte.slice(0, i1), parte.slice(i1 + 1, i2), parte.slice(i2 + 1)];
+      });
+      return this;
+    }
     order(c: string, o?: { ascending?: boolean }) { this.orden.push([c, o?.ascending !== false]); return this; }
     range(d: number, h: number) { this.desde = d; this.hasta = h; return this; }
     limit(n: number) { this.hasta = Math.min(this.hasta, this.desde + n - 1); return this; }
@@ -74,7 +87,7 @@ export function crearDbMemoria(
     single() { this.unico = 'single'; return this; }
 
     private coincide(f: Fila): boolean {
-      return this.filtros.every(([c, o, v]) => {
+      const pasaFiltros = this.filtros.every(([c, o, v]) => {
         const x = f[c];
         if (o === 'eq') return x === v;
         if (o === 'in') return (v as unknown[]).includes(x);
@@ -87,6 +100,21 @@ export function crearDbMemoria(
         if (o === 'lt') return (x as string | number) < (v as string | number);
         if (o === 'gt') return (x as string | number) > (v as string | number);
         return true;
+      });
+      if (!pasaFiltros) return false;
+      if (!this.orCondiciones) return true;
+      // Valor crudo de PostgREST: 'null'/'true'/'false' son literales, no texto.
+      const crudo = (s: string): unknown => (s === 'null' ? null : s === 'true' ? true : s === 'false' ? false : s);
+      return this.orCondiciones.some(([c, o, vCrudo]) => {
+        const x = f[c];
+        const v = crudo(vCrudo);
+        if (o === 'is') return v === null ? x === null || x === undefined : x === v;
+        if (o === 'eq') return x === v;
+        if (o === 'neq') return x !== v;
+        if (x === null || x === undefined) return false;
+        if (o === 'lt') return (x as string | number) < (v as string | number);
+        if (o === 'gt') return (x as string | number) > (v as string | number);
+        return false;
       });
     }
 
