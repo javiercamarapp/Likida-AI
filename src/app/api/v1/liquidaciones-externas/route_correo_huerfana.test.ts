@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HALLAZGO MEDIO (oct-2026): una liquidación de un tenant `cinco_agentes`
-// (Innovativos) que entra por el endpoint GENERAL (`POST /v1/liquidaciones-externas`,
+// (un tenant cinco_agentes) que entra por el endpoint GENERAL (`POST /v1/liquidaciones-externas`,
 // `recibirLiquidacionExterna`) en vez de `/v1/liquidaciones-externas/desgloses`
 // queda HUÉRFANA para siempre — `canalDeEntregaPorOmision` fuerza el canal a
 // `correo` (fail-safe correcto: nunca manda por WhatsApp), pero NINGÚN código de
@@ -61,7 +61,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('next/navigation', () => ({ redirect: () => { throw new Error('NEXT_REDIRECT (no debería llamarse en esta prueba)'); } }));
-let tenantActual = 't-innovativos';
+let tenantActual = 't-cinco-agentes-x';
 vi.mock('@/app/api/v1/_comun', async (orig) => ({
   ...(await orig<typeof import('@/app/api/v1/_comun')>()),
   abrir: async () => ({ ok: true, tenantId: tenantActual, rol: 'llave:administracion' }),
@@ -73,7 +73,7 @@ vi.mock('@/lib/likida/liquidacion_externa/repo', async (orig) => ({
 
 /** Solo se usa en el caso SIN regresión (canal whatsapp/ambos): el guardia nuevo no debe tocar ese camino. */
 const filaAceptada = () => ({
-  id: '11111111-1111-4111-8111-111111111111', tenantId: tenantActual, claveExterna: 'INNOVATIVOS-R1', huella: 'x'.repeat(64),
+  id: '11111111-1111-4111-8111-111111111111', tenantId: tenantActual, claveExterna: 'CLIENTE-EXT-R1', huella: 'x'.repeat(64),
   sistemaOrigen: 'SAP', operadorId: 'o-1', operadorNombre: 'Operador Uno', operadorTelefono: '525512345678', // grep-limpio:ok
   foliosViaje: ['VJ-9'], viajeIds: [], periodoDesde: '2026-10-01', periodoHasta: '2026-10-07',
   conceptos: [{ clave: null, descripcion: 'Sueldo', tipo: 'percepcion', monto: 100 }], total: 100, moneda: 'MXN',
@@ -98,7 +98,7 @@ const { reiniciarIdempotencia } = await import('../_escritura');
 const CINCO_AGENTES: Resp = { data: { perfil: 'cinco_agentes' }, error: null };
 
 const CUERPO = () => ({
-  claveExterna: 'INNOVATIVOS-R1', sistemaOrigen: 'SAP', operador: { telefono: '5512345678' }, // grep-limpio:ok
+  claveExterna: 'CLIENTE-EXT-R1', sistemaOrigen: 'SAP', operador: { telefono: '5512345678' }, // grep-limpio:ok
   viajes: ['VJ-9'], periodo: { desde: '2026-10-01', hasta: '2026-10-07' },
   conceptos: [{ descripcion: 'Sueldo', tipo: 'percepcion', monto: 100 }], total: 100, moneda: 'MXN',
 });

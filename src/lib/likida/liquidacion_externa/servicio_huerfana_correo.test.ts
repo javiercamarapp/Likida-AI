@@ -42,10 +42,10 @@ beforeEach(() => { candidatas = []; alertarOperador.mockClear(); });
 
 describe('procesarLiquidacionesExternas: la fase de huérfanas de correo', () => {
   it('candidata cuyo tenant resuelve a canal `correo` ⇒ confirmada, contada y avisada', async () => {
-    candidatas = [{ id: 'l-1', tenantId: 't-innovativos', claveExterna: 'INNOVATIVOS-R1', creadaEn: '2026-10-20T11:00:00.000Z' }];
+    candidatas = [{ id: 'l-1', tenantId: 't-cinco-agentes-x', claveExterna: 'CLIENTE-EXT-R1', creadaEn: '2026-10-20T11:00:00.000Z' }];
     const canalDeEntrega = vi.fn(async (): Promise<CanalEntrega> => 'correo');
     const r = await procesarLiquidacionesExternas({ ...base, canalDeEntrega }, 10);
-    expect(r.huerfanasCorreo).toEqual({ candidatas: 1, confirmadas: 1, tenants: ['t-innovativos'] });
+    expect(r.huerfanasCorreo).toEqual({ candidatas: 1, confirmadas: 1, tenants: ['t-cinco-agentes-x'] });
     expect(alertarOperador).toHaveBeenCalledTimes(1);
     expect(alertarOperador.mock.calls[0][0]).toBe('liqext.huerfanas_correo');
   });
@@ -60,12 +60,12 @@ describe('procesarLiquidacionesExternas: la fase de huérfanas de correo', () =>
 
   it('el canal se resuelve UNA sola vez por tenant (cacheado dentro de la pasada), aunque haya varias candidatas', async () => {
     candidatas = [
-      { id: 'l-1', tenantId: 't-innovativos', claveExterna: 'K-1', creadaEn: 'c' },
-      { id: 'l-2', tenantId: 't-innovativos', claveExterna: 'K-2', creadaEn: 'c' },
+      { id: 'l-1', tenantId: 't-cinco-agentes-x', claveExterna: 'K-1', creadaEn: 'c' },
+      { id: 'l-2', tenantId: 't-cinco-agentes-x', claveExterna: 'K-2', creadaEn: 'c' },
     ];
     const canalDeEntrega = vi.fn(async (): Promise<CanalEntrega> => 'correo');
     const r = await procesarLiquidacionesExternas({ ...base, canalDeEntrega }, 10);
-    expect(r.huerfanasCorreo).toEqual({ candidatas: 2, confirmadas: 2, tenants: ['t-innovativos'] });
+    expect(r.huerfanasCorreo).toEqual({ candidatas: 2, confirmadas: 2, tenants: ['t-cinco-agentes-x'] });
     expect(canalDeEntrega).toHaveBeenCalledTimes(1);
   });
 
