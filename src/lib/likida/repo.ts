@@ -414,6 +414,13 @@ export async function reasignarOperador(tenantId: string, viajeId: string, opera
     // igual que `retirar_voluntario` al devolver un viaje a «sin aceptar» (0800:91-93).
     payload.aceptado_en = null;
     payload.aceptado_origen = null;
+    // A34-01: la 0855 añadió `viaje_rechazado_requiere_aviso` (`rechazado_en is null or
+    // avisado_en is not null`), tan incondicional como el CHECK de la 0058 que cerró A33-05.
+    // Un viaje que el chofer RECHAZÓ explícitamente trae `rechazado_en` puesto, así que
+    // `avisado_en = null` volvía a tumbar el UPDATE ENTERO: reasignar ese viaje era imposible
+    // y al jefe de tráfico se le pedía reintentar para siempre. El rechazo es del chofer
+    // ANTERIOR — igual que la aceptación — y se limpia con el mismo reloj.
+    payload.rechazado_en = null;
   }
 
   const { error } = await acotada(supabaseAdmin()
