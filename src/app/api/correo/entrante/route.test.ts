@@ -53,6 +53,8 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+let limitar: (clave: string) => boolean = () => true;
+vi.mock('@/lib/ratelimit', () => ({ rateLimit: async (clave: string) => limitar(clave), clientIp: () => '1.2.3.4' }));
 // La INGESTA (xml/pdf/zip, `buzon/ingesta.ts`) tiene su propia prueba E2E con dobles; aquí se prueba el
 // WEBHOOK (firma, flota por destinatario, descarga con topes, claim del correo). El doble clasifica por
 // contenido, como lo haría la ingesta de verdad: un CFDI se guarda, un archivo desconocido se ignora, y
@@ -152,6 +154,7 @@ beforeEach(async () => {
   process.env.RESEND_EMAIL_DOMAIN = 'mail.likida.ai';
   process.env.RESEND_API_KEY = 'llave';
   flotaDevuelta = { id: 't-1', rfc: 'AAA010101AAA' };
+  limitar = () => true;
   errorFlota = null; errorDedup = null; errorBorrado = null;
   interruptorResp = { data: null, error: null }; // sin fila = ENCENDIDO
   tablasTocadas.length = 0;
@@ -165,6 +168,15 @@ beforeEach(async () => {
       return { cuerpo: JSON.stringify({ download_url: 'https://x/y' }) };
     }
     return { cuerpo: '<Comprobante/>' };
+  });
+});
+
+describe('rate limit por IP, antes de leer el cuerpo o verificar el secreto', () => {
+  it('pasado el límite → 429 sin tocar la base, aunque la firma sea válida', async () => {
+    limitar = () => false;
+    const r = await POST(pedir(evento()));
+    expect(r.status).toBe(429);
+    expect(tablasTocadas, 'no debió tocar la base').toEqual([]);
   });
 });
 
