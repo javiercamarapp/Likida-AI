@@ -15,6 +15,20 @@
 // cruce contra el GPS del TMS del cliente NO se puede afirmar sin acceso a su
 // TMS: queda documentado como v2, nunca como tarjeta viva.
 //
+// HALLAZGO MEDIO (21-oct-2026): el cruce por fecha±1 día y monto±$1 trata
+// CUALQUIER gasto de caseta como verdad de referencia, sin comprobar que ese
+// gasto venga de un comprobante genuino — esas filas las escribe el intake de
+// A1 por OCR, y el GPS (`cruce_gps.ts`) solo confirma que la UNIDAD estuvo
+// cerca de la caseta, nunca el monto ni la existencia del ticket. Un ticket
+// FALSIFICADO que caiga por casualidad en la ventana fecha/monto de un cobro
+// real pasaba a `cuadra` sin ningún humano viéndolo. El fix NO exige QR/CFDI
+// en todo cruce (la mayoría de los peajes NO lo traen: es el caso normal) —
+// solo cuando el gasto que cuadró ADEMÁS no tiene verificación independiente
+// del monto (`cfdiValido`) Y trae una señal real de sospecha (baja
+// `ocrConfianza` o `textoSospechoso`, PR #578), el cruce se manda a revisión
+// humana en vez de cerrarse en silencio (ver `cuadrar` más abajo y
+// `verificacion.ts: cuadra_sin_verificacion_independiente`).
+//
 // ── LA REGLA DURA, LA MISMA DEL CONSOLIDADO ──────────────────────────────
 //
 // "Ante la duda no se adivina." Dos candidatos igual de buenos NO ligan la
@@ -41,6 +55,7 @@ import { enLotes } from '../lotes';
 import { round2 } from '@/lib/formato';
 import { toCsv } from '../export';
 import { leerArchivoUniversal, ArchivoNoSoportado } from './archivo';
+import { MARCA_TEXTO_SOSPECHOSO } from './ocr';
 import { VENTANA_DIAS_FECHA, TOLERANCIA_MONTO_MXN } from './consolidado';
 import { registrarCorrida } from '../agentes/corridas';
 import { contextoEvidenciaGps, llaveUnidadDia } from '../peajes/evidencia_gps';
@@ -703,7 +718,23 @@ export interface GastoCaseta {
   monto: number;
   /** ISO YYYY-MM-DD. El fondo del cruce ya viene filtrado a con-fecha. */
   fecha: string;
+  /** true solo cuando el QR del CFDI se decodificó y validó (`ocr.ts: cfdiValido`): el
+   *  monto está VERIFICADO por un código, no solo leído por visión. Ausente/false es el
+   *  caso normal — la mayoría de los tickets de caseta no traen CFDI — y por sí solo NO
+   *  es señal de nada. */
+  cfdiValido?: boolean | null;
+  /** 0–1, confianza del modelo de visión al leer el ticket (`ocr.ts: ocrConfianza`). Ausente = no se midió. */
+  ocrConfianza?: number | null;
+  /** El extractor marcó el ticket con texto dirigido a un modelo, por autorreporte o por el
+   *  chequeo determinista de `detectarInyeccion` (PR #578, `ocr.ts: MARCA_TEXTO_SOSPECHOSO`). */
+  textoSospechoso?: boolean;
 }
+
+/** Confianza de OCR por debajo de la cual una lectura se considera dudosa — el mismo
+ *  umbral que usa el motor de cuadre por omisión para `ocr_baja_confianza`
+ *  (`cuadre/engine.ts: umbralConfianza`). Mantenerlos iguales evita dos nociones
+ *  distintas de "baja confianza" en el mismo repo. */
+const UMBRAL_CONFIANZA_BAJA = 0.85;
 
 export interface CruceLinea {
   estatus: EstatusLineaDesglose;
@@ -853,6 +884,18 @@ export function cruzarLineasDesglose(
       // cuadran, pero quizá el TAG se prestó o el gasto es de otro camión. Se
       // marca para revisión humana; no se desfaza el cruce.
       const unidadDistinta = !!linea.unidadId && !!mejor.gasto.unidadId && linea.unidadId !== mejor.gasto.unidadId;
+      // HALLAZGO MEDIO (21-oct-2026, ver cabecera del archivo): el gasto que cuadró es la
+      // única "verdad de referencia" de este cruce, y nada aquí comprueba que venga de un
+      // comprobante genuino. `cfdiValido` es la única verificación INDEPENDIENTE del monto
+      // (un código QR/CFDI decodificado, no leído por visión) — su ausencia es el caso
+      // normal (la mayoría de los peajes no traen CFDI) y NO es, por sí sola, señal de
+      // nada. Pero cuando ADEMÁS el ticket se leyó con baja confianza o el extractor lo
+      // marcó sospechoso (autorreporte + `detectarInyeccion`, PR #578), un ticket
+      // FALSIFICADO que cayera por casualidad en la ventana fecha/monto de un cobro real
+      // quedaría conciliado en silencio. Se marca para revisión — el cruce NO se desfaza
+      // (el gasto sigue respaldando el viaje): misma doctrina que `unidad_distinta`.
+      const confianzaBaja = mejor.gasto.ocrConfianza != null && mejor.gasto.ocrConfianza < UMBRAL_CONFIANZA_BAJA;
+      const sinVerificacionIndependiente = !mejor.gasto.cfdiValido && (confianzaBaja || !!mejor.gasto.textoSospechoso);
       return {
         estatus: 'cuadra',
         viajeId: mejor.gasto.viajeId,
@@ -863,6 +906,11 @@ export function cruzarLineasDesglose(
           gastoId: mejor.gasto.id, montoGasto: mejor.gasto.monto, fechaGasto: mejor.gasto.fecha,
           ...(desempate ? { desempate } : {}),
           ...(unidadDistinta ? { alerta: 'unidad_distinta', unidad_tag: linea.unidadId, unidad_gasto: mejor.gasto.unidadId } : {}),
+          ...(sinVerificacionIndependiente ? {
+            bajaConfianzaSinVerificacion: true,
+            gastoOcrConfianza: mejor.gasto.ocrConfianza ?? null,
+            gastoTextoSospechoso: !!mejor.gasto.textoSospechoso,
+          } : {}),
         },
       };
     };
@@ -1157,10 +1205,15 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
     // Misma razón que arriba: con ~45,000 gastos/mes, las casetas del rango
     // pasan de 1,000 y el `.limit(5000)` recortado marcaba `sin_contraparte`
     // líneas que SÍ tenían contraparte.
-    const data = await traerTodo<{ id: unknown; viaje_id: unknown; monto: unknown; fecha: unknown }>(
+    const data = await traerTodo<{
+      id: unknown; viaje_id: unknown; monto: unknown; fecha: unknown;
+      cfdi_valido: unknown; ocr_confianza: unknown; ocr_extra: unknown;
+    }>(
       (d, h) => acotada(supabaseAdmin()
         .from('gasto')
-        .select('id, viaje_id, monto, fecha', conteo(d))
+        // `cfdi_valido`, `ocr_confianza` y `ocr_extra` (por `MARCA_TEXTO_SOSPECHOSO`): la
+        // señal de integridad del gasto para el hallazgo medio del 21-oct-2026 (ver cabecera).
+        .select('id, viaje_id, monto, fecha, cfdi_valido, ocr_confianza, ocr_extra', conteo(d))
         .eq('tenant_id', tenantId)
         .eq('concepto', 'caseta')
         .gte('fecha', desde)
@@ -1175,6 +1228,9 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
         viajeId: String(g.viaje_id),
         monto: Number(g.monto),
         fecha: String(g.fecha).slice(0, 10),
+        cfdiValido: (g.cfdi_valido as boolean | null) ?? null,
+        ocrConfianza: g.ocr_confianza != null ? Number(g.ocr_confianza) : null,
+        textoSospechoso: Boolean((g.ocr_extra as Record<string, unknown> | null)?.[MARCA_TEXTO_SOSPECHOSO]),
       }));
   }
 
