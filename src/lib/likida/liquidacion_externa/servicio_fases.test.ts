@@ -18,6 +18,7 @@ vi.mock('./repo', async (orig) => ({
 vi.mock('./trabajo', () => ({
   trabajoPendiente: vi.fn(async () => { orden.push('whatsapp'); return trabajo; }),
   avisosPendientes: vi.fn(async () => []),
+  candidatasHuerfanaCorreo: vi.fn(async () => []),
 }));
 vi.mock('../presupuesto', async (orig) => ({ ...(await orig<typeof import('../presupuesto')>()), acotada: (q: unknown) => q }));
 const logError = vi.fn();

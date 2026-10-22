@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LiquidacionExterna } from '@/lib/likida/liquidacion_externa/repo';
 
-// POST /v1/liquidaciones-externas con el gate por canal (T-A1-17): si la flota recibe el desglose por correo, el POST recibe y
-// guarda (201 «recibida») pero NO intenta WhatsApp. Sin config, `whatsapp` o `ambos`: el camino de siempre.
+// POST /v1/liquidaciones-externas con el gate por canal (T-A1-17 + hallazgo MEDIO oct-2026): si la flota recibe el
+// desglose por correo, el POST YA NO recibe nada — se rechaza con 400 ANTES de guardar (ver `route_correo_huerfana.test.ts`
+// para el porqué: aceptarla dejaba la liquidación huérfana para siempre, sin WhatsApp y sin fila de correo). Sin config,
+// `whatsapp` o `ambos`: el camino de siempre (se recibe y se intenta la entrega por WhatsApp).
 
 vi.mock('@/app/api/v1/_comun', async (orig) => {
   const real = (await orig()) as Record<string, unknown>;
@@ -28,6 +30,10 @@ let config: { ok: true; valor: { canal: string } } | { ok: false; motivo: string
 vi.mock('@/lib/likida/liquidacion_externa/servicio', () => ({
   recibirLiquidacionExterna: (...a: [string, unknown, string]) => recibir(...a),
   intentarEntrega: (...a: unknown[]) => intentar(...a),
+  // El guardia del endpoint general (hallazgo MEDIO, oct-2026) lee `dependenciasPorOmision.canalDeEntrega` antes de
+  // crear: en esta prueba se simula con el MISMO `config` que ya controla `leerConfigCorreo` — no es la resolución
+  // real (perfil + config; eso lo prueba `route_correo_huerfana.test.ts`), solo necesita devolver el canal del caso.
+  dependenciasPorOmision: { canalDeEntrega: async () => (config instanceof Error ? 'whatsapp' : config.ok ? config.valor.canal : 'whatsapp') },
 }));
 vi.mock('@/lib/likida/liquidacion_externa/repo', async (orig) => ({
   ...(await orig<typeof import('@/lib/likida/liquidacion_externa/repo')>()),
@@ -57,11 +63,13 @@ beforeEach(() => {
 });
 
 describe('POST liquidaciones-externas: gate por canal', () => {
-  it('canal correo ⇒ 201 «recibida», se guardó y NO se intentó WhatsApp', async () => {
+  it('canal correo ⇒ 400, NADA se recibió ni se intentó (el camino correcto es /desgloses)', async () => {
     config = { ok: true, valor: { canal: 'correo' } };
     const r = await postear();
-    expect(r.status).toBe(201);
-    expect(recibir).toHaveBeenCalledTimes(1);
+    expect(r.status).toBe(400);
+    const cuerpo = await r.json();
+    expect(cuerpo.error.codigo).toBe('parametro_invalido');
+    expect(recibir).not.toHaveBeenCalled();
     expect(intentar).not.toHaveBeenCalled();
   });
 

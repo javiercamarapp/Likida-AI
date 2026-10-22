@@ -498,7 +498,14 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // `rechazado_en` cuando el chofer dice EXPLÍCITAMENTE que no. Mismo candado por tenant/operador que `marcarAceptado`,
 // por `is('aceptado_en', null)`/`is('rechazado_en', null)`. Funcionalidad nueva, no código migrado; cubierta por
 // `confirmar_viaje.test.ts`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_244;
+// LIQUIDACIÓN EXTERNA — HUÉRFANA DE CORREO (hallazgo MEDIO, 21-oct-2026): +2 llamadas (2,244 → 2,246), en
+// `liquidacion_externa/trabajo.ts` (que ya contaba: es el archivo declarado que cruza tenants a propósito —
+// ver su cabecera). `candidatasHuerfanaCorreo` — la consulta que detecta liquidaciones `pendiente` que entraron
+// por el endpoint general (sin fila de `liquidacion_desglose`) y que, si el tenant resuelve a canal `correo`,
+// nadie iba a entregar por NINGÚN camino — agrega un `.from('liquidacion_externa').select(...)` y un
+// `.from('liquidacion_desglose').select(...)`. Funcionalidad nueva (la red de alerta de `servicio.ts`), no código
+// migrado; cubierta por `trabajo_huerfana.test.ts` y `servicio_huerfana_correo.test.ts`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_246;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

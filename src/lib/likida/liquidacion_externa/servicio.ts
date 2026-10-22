@@ -31,7 +31,8 @@ import {
   type LiquidacionExterna, type TipoAcuse, type ResultadoConfirmacion, type ConfigFormatoFlota, type AvisoDiscrepancia,
   type TareaDiferencia,
 } from './repo';
-import { trabajoPendiente, avisosPendientes } from './trabajo';
+import { trabajoPendiente, avisosPendientes, candidatasHuerfanaCorreo } from './trabajo';
+import { alertarOperador } from '@/lib/observability/alerta';
 import { avisarNoCoincidePorOmision, tareaDeDiferencia, type AvisarNoCoincide } from './aviso_no_coincide';
 import { copiarAJefePorOmision, type CopiarAJefe, type ResultadoCopia } from './copia_jefe';
 import type { LiquidacionExternaNormalizada } from './esquema';
@@ -391,6 +392,17 @@ export interface ResumenPasada {
   pull?: ResumenPull;
   /** La fase de entregas por correo (T-A1-16). Ausente si la pasada no tiene esa fase; con `errores: 1` si la fase lanzó. */
   correo?: ResumenEntregasCorreo;
+  /** Liquidaciones huérfanas de correo (hallazgo MEDIO, oct-2026): `pendiente`, canal `correo`, sin fila de desglose. */
+  huerfanasCorreo?: ResumenHuerfanasCorreo;
+}
+
+export interface ResumenHuerfanasCorreo {
+  /** `pendiente`, viejas, sin fila de desglose — antes de filtrar por el canal real del tenant. */
+  candidatas: number;
+  /** De las candidatas, cuántas de verdad resuelven a canal `correo` (y por lo tanto SÍ están huérfanas). */
+  confirmadas: number;
+  /** Las flotas afectadas (para el log/latido; nunca cifras de dinero). */
+  tenants: string[];
 }
 
 export interface ResumenPull {
@@ -446,6 +458,60 @@ async function faseDeCorreo(deps: Dependencias, limite: number): Promise<Resumen
   }
 }
 
+/** Cuánto tiene que llevar `pendiente` una candidata antes de contarla: tiempo de sobra para que, si viniera del camino
+ *  normal, ya hubiera quedado `en_cola`/`enviada` o visible como retenida. */
+const UMBRAL_HUERFANA_MS = 20 * 60_000;
+
+/**
+ * La fase del hallazgo MEDIO (oct-2026): detecta liquidaciones `pendiente` que nadie va a entregar por NINGÚN canal
+ * (WhatsApp lo bloquea el fail-safe de `canalDeEntregaPorOmision`; correo nunca nace porque no vinieron por
+ * `/desgloses`). `candidatasHuerfanaCorreo` cruza tenants por tabla (no sabe el canal real); aquí se filtra cada
+ * candidata por el canal QUE DE VERDAD resuelve su tenant (perfil + config, cacheado), y solo lo que resuelve a
+ * `correo` se cuenta y se avisa. Nunca lanza: una lectura caída se reporta en `errores` y la siguiente pasada reintenta.
+ */
+async function faseDeHuerfanasCorreo(deps: Dependencias, ahoraIso: string): Promise<ResumenHuerfanasCorreo> {
+  const vacio: ResumenHuerfanasCorreo = { candidatas: 0, confirmadas: 0, tenants: [] };
+  let candidatas: Awaited<ReturnType<typeof candidatasHuerfanaCorreo>>;
+  try {
+    candidatas = await candidatasHuerfanaCorreo(LOTE_CRON, new Date(Date.parse(ahoraIso) - UMBRAL_HUERFANA_MS).toISOString());
+  } catch (e) {
+    logger.error('liqext.huerfanas_lectura_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return vacio;
+  }
+  if (candidatas.length === 0) return vacio;
+
+  const canalDe = deps.canalDeEntrega ?? canalDeEntregaPorOmision;
+  const canalPorTenant = new Map<string, CanalEntrega>();
+  const confirmadas: typeof candidatas = [];
+  for (const c of candidatas) {
+    let canal = canalPorTenant.get(c.tenantId);
+    if (canal === undefined) {
+      try {
+        canal = await canalDe(c.tenantId);
+      } catch {
+        canal = 'whatsapp'; // no se sabe: no se acusa huérfana sin estar seguros.
+      }
+      canalPorTenant.set(c.tenantId, canal);
+    }
+    if (canal === 'correo') confirmadas.push(c);
+  }
+  if (confirmadas.length > 0) {
+    const tenants = [...new Set(confirmadas.map((c) => c.tenantId))];
+    logger.error('liqext.huerfanas_correo', {
+      n: confirmadas.length, tenants,
+      muestra: confirmadas.slice(0, 5).map((c) => ({ tenant: c.tenantId, clave: c.claveExterna, creada: c.creadaEn })),
+    });
+    await alertarOperador('liqext.huerfanas_correo', {
+      n: confirmadas.length, tenants: tenants.join(','),
+      detalle: 'Liquidación(es) "pendiente" con canal de entrega = correo y SIN fila de desglose: entraron por el '
+        + 'endpoint general (no por /desgloses) y nadie las va a mandar por ningún canal. Revisa el panel de la flota '
+        + 'y reenvíalas por /v1/liquidaciones-externas/desgloses.',
+    });
+    return { candidatas: candidatas.length, confirmadas: confirmadas.length, tenants };
+  }
+  return { candidatas: candidatas.length, confirmadas: 0, tenants: [] };
+}
+
 export async function procesarLiquidacionesExternas(
   deps: Dependencias = dependenciasPorOmision, limite = LOTE_CRON,
 ): Promise<ResumenPasada> {
@@ -458,6 +524,12 @@ export async function procesarLiquidacionesExternas(
     avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 },
     ...(pull ? { pull } : {}), ...(correo ? { correo } : {}),
   };
+  // Mejor esfuerzo: un fallo de esta fase NO tumba la entrega de WhatsApp ni la de correo.
+  try {
+    resumen.huerfanasCorreo = await faseDeHuerfanasCorreo(deps, deps.ahora().toISOString());
+  } catch (e) {
+    logger.error('liqext.huerfanas_pasada_fallo', { err: e instanceof Error ? e.message : String(e) });
+  }
   await conPool(trabajo, 4, async (liq) => {
     const r = await intentarEntrega(liq, deps);
     if (r === 'enviada') resumen.enviadas++;

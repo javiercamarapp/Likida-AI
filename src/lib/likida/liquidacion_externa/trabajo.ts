@@ -44,6 +44,56 @@ export async function trabajoPendiente(limite: number, ahoraIso: string): Promis
   return ((exigir(res, 'liqext.trabajo') ?? []) as unknown as Fila[]).map(aLiquidacionExterna);
 }
 
+// ── HUÉRFANAS DE CORREO (hallazgo MEDIO, oct-2026) ──────────────────────────
+//
+// Si una liquidación de una flota con canal de entrega `correo` entra por el
+// endpoint GENERAL (`POST /v1/liquidaciones-externas`, `recibirLiquidacionExterna`)
+// en vez de `/desgloses`, `canalDeEntregaPorOmision` fuerza el canal a `correo`
+// (fail-safe) y por lo tanto `intentarEntrega` NUNCA manda por WhatsApp — pero
+// ninguna fila nace en `liquidacion_entrega_correo` (esa tabla SOLO la llenan
+// `desglose_recibir.ts`, `liberar_envio.ts` y `reenvio_correo.ts`, las tres del
+// camino `/desgloses`). La liquidación queda `pendiente` para siempre, sin
+// alerta y sin forma de que una persona se entere.
+//
+// Esta consulta cruza flotas a propósito (igual que `trabajoPendiente`, arriba):
+// barre TODAS las `pendiente` más viejas que el umbral y descarta las que SÍ
+// tienen un encabezado de desglose (`liquidacion_desglose`) — esas vinieron por
+// `/desgloses` y, si siguen sin entregas, es porque alguien las retuvo a
+// propósito (neto negativo, tipo sin regla…) y ya son visibles en el panel
+// como «retenidas». Lo que sobra son candidatas: `servicio.ts` todavía filtra
+// por el CANAL REAL de cada tenant (perfil + config), porque esta tabla no lo sabe.
+
+export interface CandidataHuerfanaCorreo { id: string; tenantId: string; claveExterna: string; creadaEn: string }
+
+/** `pendiente`, creadas antes de `antesIso`, sin fila en `liquidacion_desglose`. Acotado a un lote.
+ *  LANZA ante un error de lectura real: una candidata huérfana no detectada por un fallo silencioso es justo el
+ *  modo de falla que esta consulta existe para cerrar. Sin la migración 0786 (tabla `liquidacion_desglose` ausente):
+ *  NINGUNA liquidación pudo venir por `/desgloses`, así que todas las `pendiente` viejas son candidatas. */
+export async function candidatasHuerfanaCorreo(limite: number, antesIso: string): Promise<CandidataHuerfanaCorreo[]> {
+  const res = await acotada(supabaseAdmin().from('liquidacion_externa')
+    .select('id, tenant_id, clave_externa, created_at')
+    .eq('estado', 'pendiente').lte('created_at', antesIso)
+    .order('created_at', { ascending: true }).order('id').limit(limite), 'liqext.huerfanas_candidatas');
+  const filas = (exigir(res, 'liqext.huerfanas_candidatas') ?? []) as unknown as
+    Array<{ id: string; tenant_id: string; clave_externa: string; created_at: string }>;
+  if (filas.length === 0) return [];
+
+  const ids = filas.map((f) => f.id);
+  const desg = await acotada(supabaseAdmin().from('liquidacion_desglose')
+    .select('liquidacion_externa_id').in('liquidacion_externa_id', ids), 'liqext.huerfanas_desgloses');
+  let conDesglose = new Set<string>();
+  if (desg.error) {
+    const ausente = desg.error.code === '42P01' || desg.error.code === 'PGRST205'
+      || /does not exist|schema cache/i.test(desg.error.message ?? '');
+    if (!ausente) throw new Error(`liqext.huerfanas_desgloses: ${desg.error.message}`);
+    // Tabla ausente ⇒ ninguna liquidación tiene desglose: todas las `pendiente` viejas quedan como candidatas.
+  } else {
+    conDesglose = new Set((desg.data ?? []).map((d) => String((d as { liquidacion_externa_id: unknown }).liquidacion_externa_id)));
+  }
+  return filas.filter((f) => !conDesglose.has(f.id))
+    .map((f) => ({ id: f.id, tenantId: f.tenant_id, claveExterna: f.clave_externa, creadaEn: f.created_at }));
+}
+
 /** Los avisos de discrepancia que el cron tiene que mover (0643): pendientes cuyo reintento ya toca y los que quedaron
  *  `enviando` con el arriendo vencido (el proceso que los mandaba murió). Acotado a un lote. Sin la tabla (base sin 0643): nada. */
 export async function avisosPendientes(limite: number, ahoraIso: string): Promise<AvisoDiscrepancia[]> {

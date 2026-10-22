@@ -81,7 +81,7 @@ export async function GET(req: Request) {
     const c = r.correo;
     const correoSinTerminar = !!c && (c.fallidas > 0 || c.reintentar > 0 || c.sinConfigurar > 0 || c.sinConfirmar > 0 || c.errores > 0);
     const parcial = r.fallidas > 0 || r.reintentar > 0 || r.avisos.reintentar > 0 || r.avisos.fallidos > 0
-      || correoSinTerminar || (r.pull?.errores ?? 0) > 0;
+      || correoSinTerminar || (r.pull?.errores ?? 0) > 0 || (r.huerfanasCorreo?.confirmadas ?? 0) > 0;
     await registrarLatido('liquidaciones-externas', parcial ? 'parcial' : 'ok', { ...r });
     return NextResponse.json({ corrio: true, ...r });
   } catch (e) {
