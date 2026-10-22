@@ -251,7 +251,7 @@ export async function resolverTenantEfectivo(
   // perfil). Todas las páginas Y las server actions de /dashboard pasan por esta
   // función con la ruta de su pantalla, así que una pantalla en stand-by queda
   // cerrada para ambas. Sin perfil, no hace nada.
-  await exigirRutaDePerfil(tenantId, destino);
+  await exigirRutaDePerfil(tenantId, destino, sesion.rol);
 
   return { ...sesion, tenantId, tenantNombre, tenantExiste };
 }
