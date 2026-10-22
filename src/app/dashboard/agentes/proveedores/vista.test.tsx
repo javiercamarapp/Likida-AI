@@ -134,6 +134,17 @@ describe('VistaAgenteProveedores — lo nuevo de la 0108 se dice', () => {
     expect(pintarVista([{ ...BASE, estadoSat: null, origen: null }])).toContain('SAT sin consultar');
   });
 
+  it('«no_encontrado» (folio que el SAT NO reconoce) grita IGUAL que «cancelado» — ni tono ni ícono de "sin consultar"', () => {
+    const html = pintarVista([{ ...BASE, estadoSat: 'no_encontrado' }]);
+    // Mismo tratamiento visual que CANCELADO: color var(--bad) + ícono TriangleAlert.
+    expect(html).toContain('el SAT NO LO ENCUENTRA');
+    expect(html).toContain('stroke="currentColor"'); // el ícono TriangleAlert se renderizó
+    expect(html).toContain('color:var(--bad)');
+    // No debe compartir el bloque apagado de "pendiente"/"sin consultar".
+    expect(html).not.toContain('SAT sin consultar');
+    expect(html).not.toContain('SAT sin contestar al ingerir');
+  });
+
   it('«Exportada» SOLO con exportadaEn; una aprobada sin exportar sigue siendo «Aprobada»', () => {
     const aprobada = { ...BASE, estado: 'aprobada' as const, decididoPor: 'ana', decididoEn: '2026-08-14T17:00:00Z' };
     expect(pintarVista([aprobada])).toContain('Aprobada');
