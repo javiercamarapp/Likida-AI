@@ -13,6 +13,7 @@ import { atenderAdjuntosBuzon, type AdjuntoBuzon } from '@/lib/likida/buzon/serv
 import { estaApagado } from '@/lib/likida/interruptores';
 import { registrarCorrida } from '@/lib/likida/agentes/corridas';
 import { sanitizarTexto } from '@/lib/likida/intake/sanitizar';
+import { rateLimit, clientIp } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -26,14 +27,22 @@ export const dynamic = 'force-dynamic';
 //
 // ── EL ORDEN DE LAS COMPROBACIONES NO ES ARBITRARIO ──────────────────────
 //
-//  1. FIRMA primero, antes de leer una sola cosa del cuerpo. Este endpoint es
+//  1. RATE LIMIT por IP, antes de leer nada — mismo patrón que
+//     `/api/peajes/ingesta` (:44). La firma HMAC de Svix hace inviable
+//     forjar un webhook sin `RESEND_WEBHOOK_SECRET`, pero una vez que SÍ hay
+//     firma válida (cuenta de Resend comprometida, o un reenvío legítimo en
+//     bucle) no había techo de cuántos correos/adjuntos por minuto podía
+//     absorber un buzón. El BUZÓN (destinatario) solo se conoce tras leer y
+//     parsear el cuerpo, así que aquí el identificador es la IP — igual que
+//     peajes/ingesta antes de resolver la flota.
+//  2. FIRMA después, antes de leer una sola cosa del cuerpo. Este endpoint es
 //     un POST sin autenticar y lo que dispara no es inocuo: mete una factura
 //     con su RFC, su monto y su UUID a la contabilidad de un cliente. Sin
 //     firma, Likida sería un buzón por el que cualquiera empuja gasto falso.
-//  2. TENANT después, y desde el DESTINATARIO —el buzón al que escribieron—,
+//  3. TENANT después, y desde el DESTINATARIO —el buzón al que escribieron—,
 //     nunca desde el remitente. El `from` de un correo se falsifica en dos
 //     líneas; el token del destinatario no se adivina.
-//  3. IDEMPOTENCIA al final: Resend reintenta ante cualquier respuesta que no
+//  4. IDEMPOTENCIA al final: Resend reintenta ante cualquier respuesta que no
 //     sea 2xx, y sin esto un reintento duplicaría la factura.
 //
 // ── QUÉ SE CONTESTA DESPUÉS DE LA FIRMA: 200 O 503, SEGÚN LA CLASE ───────
@@ -144,6 +153,15 @@ async function bajarAdjuntoResend(
 }
 
 export async function POST(req: Request) {
+  // RATE LIMIT por IP, antes de leer el cuerpo o verificar el secreto — mismo
+  // límite que `/api/peajes/ingesta` (60/min). El volumen esperado aquí es
+  // comparable (un buzón recibe facturas sueltas de proveedor, no ráfagas),
+  // así que no hay razón para un tope distinto.
+  if (!(await rateLimit(`correo-entrante:ip:${clientIp(req)}`, 60, 60_000))) {
+    logger.warn('correo_entrante.rate_limit', {});
+    return new NextResponse('Demasiadas peticiones', { status: 429 });
+  }
+
   // El cuerpo CRUDO: `JSON.parse` + `stringify` reordena llaves y la firma
   // dejaría de cuadrar. Ver `firma_entrante.ts`.
   const crudo = await cuerpoAcotado(req, MAX_WEBHOOK_BYTES);
