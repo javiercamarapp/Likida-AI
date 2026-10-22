@@ -52,6 +52,10 @@ const listar = vi.fn(async (..._a: unknown[]): Promise<{ filas: LiquidacionExter
 vi.mock('@/lib/likida/liquidacion_externa/servicio', () => ({
   recibirLiquidacionExterna: (...a: [string, unknown, string]) => recibir(...a),
   intentarEntrega: (...a: unknown[]) => intentar(...a),
+  // El guardia del endpoint general (hallazgo MEDIO, oct-2026): esta suite no prueba el canal, así que siempre
+  // resuelve `whatsapp` — el camino de siempre. El rechazo por canal `correo` lo prueban `route_canal.test.ts` y
+  // `route_correo_huerfana.test.ts`.
+  dependenciasPorOmision: { canalDeEntrega: async () => 'whatsapp' },
 }));
 vi.mock('@/lib/likida/liquidacion_externa/repo', async (orig) => ({
   ...(await orig<typeof import('@/lib/likida/liquidacion_externa/repo')>()),

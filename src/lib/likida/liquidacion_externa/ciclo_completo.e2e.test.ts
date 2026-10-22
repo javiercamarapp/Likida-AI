@@ -112,6 +112,7 @@ vi.mock('./trabajo', () => ({
   avisosPendientes: vi.fn((...a: Parameters<typeof avisosMem.avisosPendientes>) => avisosMem.avisosPendientes(...a)),
   trabajoPendiente: vi.fn(async (limite: number, ahoraIso: string) =>
     [...store.values()].filter((f) => f.estado === 'en_cola' || (f.estado === 'pendiente' && f.proximoIntentoEn <= ahoraIso)).slice(0, limite).map((f) => ({ ...f }))),
+  candidatasHuerfanaCorreo: vi.fn(async () => []),
 }));
 
 // ── el outbox de WhatsApp (con llave de deduplicación) ──────────────────────
