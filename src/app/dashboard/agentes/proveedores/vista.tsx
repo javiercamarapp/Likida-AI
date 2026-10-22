@@ -344,7 +344,15 @@ function NotaSat({ estadoSat }: { estadoSat: FacturaProveedor['estadoSat'] }) {
     );
   }
   if (estadoSat === 'no_encontrado') {
-    return <span className="block text-[10.5px] mt-0.5" style={{ color: 'var(--warn)' }}>el SAT no lo encuentra</span>;
+    // El SAT no reconoce ese folio fiscal — la señal más fuerte de un CFDI
+    // inventado (el buzón acepta cualquier XML sin validar el sello digital).
+    // MISMO tratamiento que 'cancelado': no se ve igual de discreto que
+    // "pendiente"/"sin consultar".
+    return (
+      <span className="inline-flex items-center gap-1 text-[10.5px] mt-0.5 font-medium" style={{ color: 'var(--bad)' }}>
+        <TriangleAlert width={10} height={10} strokeWidth={2} /> el SAT NO LO ENCUENTRA — folio no reconocido
+      </span>
+    );
   }
   return (
     <span className="block text-[10.5px] mt-0.5" style={{ color: 'var(--faint)' }}>

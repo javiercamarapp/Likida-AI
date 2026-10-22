@@ -27,6 +27,14 @@ describe('cuadra con una señal en contra → por_verificar, jamás acusación',
   it('si hay las dos señales gana la del GPS (primera) y sigue siendo por_verificar', () => {
     expect(clasificarVerificacion(e({ gpsVeredicto: 'no_coincide', detalle: { alerta: 'unidad_distinta' } })).estado).toBe('por_verificar');
   });
+  // HALLAZGO MEDIO (21-oct-2026): el gasto que cuadró no tiene QR/CFDI verificado y
+  // además se leyó con baja confianza o el extractor lo marcó sospechoso — ver
+  // `desglose_peaje.ts: cuadrar`.
+  it('el gasto que cuadró no tiene verificación independiente y vino sospechoso: por_verificar, nunca cuadra silencioso', () => {
+    const v = clasificarVerificacion(e({ detalle: { bajaConfianzaSinVerificacion: true, gastoTextoSospechoso: true } }));
+    expect(v).toMatchObject({ estado: 'por_verificar', motivo: 'cuadra_sin_verificacion_independiente' });
+    expect(v.explicacion).toMatch(/sin QR\/CFDI/);
+  });
 });
 
 describe('no_cuadra → siempre por_verificar', () => {

@@ -1,4 +1,5 @@
 import type { ConfigConductor } from './config';
+import { resumenDocumentosCierre, type ResumenDocumentosCierre } from './documentos_cierre';
 import { esLocalAbierto, type EstadoTransito } from './estados_transito';
 import { calcularEstancias, excedeUmbral, type Estancia } from './estadias_anden';
 import { estadoReporte, hitoActivo, reubicacionesDespuesDelPrimero, type Reubicacion } from './maquina';
@@ -50,8 +51,8 @@ export interface HitoVista {
   validacion: { resultado: ResultadoValidacion; texto: string; distanciaM: number | null } | null;
   validadoPor: HitoFila['validadoPor'];
   evidencias: number;
-  /** Cada foto viva del ciclo vigente (para abrirla con GET /v1/evidencias/{id}). */
-  fotos: Array<{ id: string; tipo: TipoEvidencia }>;
+  /** Cada foto viva del ciclo vigente (para abrirla con GET /v1/evidencias/{id}). `reusoTenant` = esta MISMA foto ya se usó en otro viaje/hito de la flota (0852): no bloqueó, solo se marca para revisión. */
+  fotos: Array<{ id: string; tipo: TipoEvidencia; reusoTenant: boolean }>;
   /** Por qué quedó `omitido` (`inferido_por_<tipo>`: avisó uno posterior · `viaje_abierto_vencido`: lo cerró el barrido de viajes viejos · …). */
   omitidoMotivo: string | null;
   escaladoEn: string | null;
@@ -108,6 +109,13 @@ export interface FilaTablero {
   transito: TransitoFila | null;
   /** T-A5-22: la «Fecha Salida» del TMS como candidato a `salida_carga` o como discrepancia con el GPS. `null` = sin marca, o el hito ya está registrado. Solo se lee: el tablero no registra nada. */
   salidaTms: SalidaTmsFila | null;
+  /**
+   * T-A5-69: el resumen de documentos de cierre de ESTE viaje (T-A5-53/54) — los mismos datos que expone
+   * `GET /v1/evidencias`, nunca una copia. `null` = `datos.documentosCierre` no se pudo leer (no se afirma nada);
+   * `usaCatalogo: false` = sí se leyó y este viaje no tiene solicitud (sin catálogo del cliente, o la perilla
+   * `pedirDocumentosCierreActivo` apagada): es un dato real, no un hueco.
+   */
+  documentosCierre: ResumenDocumentosCierre | null;
 }
 
 /** T-A5-22: lo que pinta la línea «TMS». */
@@ -278,12 +286,12 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
     const hs = [...aplicarPerfil(hitosPorViaje.get(viaje.id) ?? [], config.perfilSeguimiento)].sort((a, b) => TIPOS_HITO.indexOf(a.tipo) - TIPOS_HITO.indexOf(b.tipo));
     // Las evidencias cuentan solo las del CICLO vigente del hito (una corrección retira el hito, no las fotos viejas del historial).
     const evidenciasVigentes = new Map<string, number>();
-    const fotosVigentes = new Map<string, Array<{ id: string; tipo: TipoEvidencia }>>();
+    const fotosVigentes = new Map<string, Array<{ id: string; tipo: TipoEvidencia; reusoTenant: boolean }>>();
     for (const e of datos.evidencias) {
       const h = hs.find((x) => x.id === e.hitoId);
       if (h && e.ciclo === h.ciclo && e.ruta !== null) {
         evidenciasVigentes.set(h.id, (evidenciasVigentes.get(h.id) ?? 0) + 1);
-        fotosVigentes.set(h.id, [...(fotosVigentes.get(h.id) ?? []), { id: e.id, tipo: e.tipo }]);
+        fotosVigentes.set(h.id, [...(fotosVigentes.get(h.id) ?? []), { id: e.id, tipo: e.tipo, reusoTenant: e.reusoTenant }]);
       }
     }
     const validaciones = new Map<string, ResultadoValidacion>();
@@ -350,6 +358,9 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
     // T-A5-22: informativo. La marca del TMS se propone o se señala como discrepancia; registrar el hito es del barrido (con la casilla).
     const salidaTms = salidaTmsDeFila(viaje, hs, datos, config, ahora);
 
+    // T-A5-69: ausente (no se pudo leer) → `null`, sin afirmar nada; leído → siempre un resumen, aunque sea `usaCatalogo: false`.
+    const documentosCierre = datos.documentosCierre ? datos.documentosCierre.get(viaje.id) ?? resumenDocumentosCierre([]) : null;
+
     filas.push({
       viaje, hitos: vistas, semaforo, motivo, hitoActivo: activo?.tipo ?? null, minutosVencido, estancias,
       sitioCarga: viaje.origenSitioId ? datos.sitios.get(viaje.origenSitioId) ?? null : null,
@@ -357,6 +368,7 @@ export function armarTablero(datos: DatosTablero, config: ConfigConductor, ahora
       ubicacion: ubicacionDeFila(viaje, datos, ahora),
       transito,
       salidaTms,
+      documentosCierre,
     });
 
     // ── La cola de excepciones ───────────────────────────────────────────
@@ -505,6 +517,12 @@ export interface IndicadoresVista {
   validadosUbicacion: number;
   sinCoincidencia: number;
   capturadosOficina: number;
+  /** 0853: llegadas (carga/descarga) recibidas o validadas en el periodo — el denominador de `tasaValidacionDegradada`. */
+  llegadasValidables: number;
+  /** 0853: de las validables, cuántas corrieron en modo DEGRADADO (sin GPS real: 'sin_dato', o 'validado' solo con el pin del chofer). */
+  validacionDegradada: number;
+  /** 0–1, o null sin llegadas validables en el periodo (un 0% no debe parecer "todo confiable" cuando no hay con qué medir). */
+  tasaValidacionDegradada: number | null;
 }
 
 export function indicadoresVista(c: IndicadoresCrudos): IndicadoresVista {
@@ -514,6 +532,8 @@ export function indicadoresVista(c: IndicadoresCrudos): IndicadoresVista {
     minutosRespuestaPromedio: c.conRespuestaMedida > 0 ? c.minutosRespuestaPromedio : null,
     conRespuestaMedida: c.conRespuestaMedida, escalados: c.escalados, omitidos: c.omitidos,
     validadosUbicacion: c.validadosUbicacion, sinCoincidencia: c.sinCoincidencia, capturadosOficina: c.capturadosOficina,
+    llegadasValidables: c.llegadasValidables, validacionDegradada: c.validacionDegradada,
+    tasaValidacionDegradada: c.llegadasValidables > 0 ? Math.round((c.validacionDegradada / c.llegadasValidables) * 1000) / 1000 : null,
   };
 }
 

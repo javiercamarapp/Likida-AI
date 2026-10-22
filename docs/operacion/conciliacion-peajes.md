@@ -74,9 +74,9 @@ Ejemplo de firma en Node (también en la pantalla de configuración):
 const firma = 'v1=' + createHmac('sha256', LLAVE).update(`${ts}.${FLOTA_ID}.${cuerpo}`).digest('hex');
 ```
 
-## Más formas de entrada (ola 3, mig. 0563)
+## Más formas de entrada (ola 3, mig. 0563; SFTP, mig. 0843)
 
-Los tres canales son **independientes** (activar uno no enciende ni enseña la llave de otro) y comparten
+Los cuatro canales son **independientes** (activar uno no enciende ni enseña la llave de otro) y comparten
 la misma cola, la misma huella sha256 por flota y el mismo cron.
 
 ### Correo `pj-<token>@<dominio>`
@@ -119,7 +119,11 @@ inocuo que el endpoint devuelva el mismo archivo en cada consulta.
 - **Claim con lease** (`peaje_pull_reclamar`, `FOR UPDATE SKIP LOCKED`): dos cron no consultan la misma flota a la vez.
   Un fallo (token rechazado, HTTP ≠ 200, JSON roto, cola llena) **no avanza el cursor** y reintenta en ≤ 30 min; el
   último error se muestra en la configuración.
-- **SFTP: no se construyó.** Requiere una librería (`ssh2`) que no está en el repo y credenciales/host de la flota; ver Bloqueos.
+- **SFTP: construido (0843).** Cuarto canal, mismo molde que el pull (Likida consulta, la flota publica un
+  archivo fijo en su SFTP); reusa el cliente SSH ya instalado para `tabla_propia/sftp.ts` (`ssh2`, huella de
+  host obligatoria, SSRF-safe) por su envoltura binaria `crearClienteSftpBinario`. Claim con lease propio
+  (`peaje_sftp_reclamar`) y cableado en `/api/cron/peajes` junto al pull. Ver `src/lib/likida/peajes/ingesta_sftp.ts`
+  y la prueba contra Postgres real `supabase/tests/0843_peajes_sftp.sql`.
 
 ## Aviso a la oficina
 
@@ -262,8 +266,8 @@ la pantalla tras declarar el mapeo. Fallo de infraestructura → reintento con b
    API pública de PASE/IAVE/TeleVía; el envío lo haría un script o el TMS de la flota). Para el **correo**:
    `RESEND_EMAIL_DOMAIN` + `RESEND_API_KEY` + el webhook de Resend (`/api/correo/entrante`) configurados. Para el **pull**:
    un endpoint de la flota que cumpla el contrato de arriba y `LIKIDA_COFRE_LLAVE` si lleva token.
-6. **SFTP**: no construido. Necesita instalar una librería SFTP (hoy no hay ninguna en el repo), el host/usuario/llave
-   de la flota y su alta en el cofre; cuando exista, se implementa como otra fuente del mismo claim.
+6. **SFTP**: construido (0843, `ingesta_sftp.ts`, cableado en `/api/cron/peajes`). Lo que falta es operativo, no de
+   código: el host/usuario/llave reales de una flota y su alta cifrada en el cofre para probarlo contra un SFTP real.
 7. Salida a SAP: pull (lista + exportación configurable); no hay escritura a SAP ni webhook saliente.
 8. Migraciones 0375/0376/0562/0563 sin aplicar a ninguna base remota (a propósito); aplicar antes de desplegar.
 9. **Corredores (cursos) y acceso a las tablas de GPS de la flota**: el reporte de reclamación usa las geocercas del catálogo (con su **polígono nativo**

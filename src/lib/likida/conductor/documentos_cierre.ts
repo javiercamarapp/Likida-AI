@@ -28,10 +28,16 @@ import type { ViajeContexto } from './repo';
 //      pide repetir UNA vez; al segundo intento fallido se acepta igual,
 //      marcada «revisar». El contador es POR DOCUMENTO (no se comparte entre
 //      documentos distintos del mismo viaje) y nunca bloquea el viaje.
-//      FASE 1 (esta entrega): sin un analizador de imagen real, `metadatos`
-//      llega ausente y toda foto se acepta como legible — la heurística y el
-//      contador quedan listos, probados y a la espera de ese dato (fase 2,
-//      igual que `fotoRegistraHito`/`detectarHitosGps` en su momento).
+//      FASE 2 (parcial): `processor.ts` ya manda `metadatos` reales —ancho en
+//      píxeles y luminancia, vía `intake/calidad_foto.ts` (sharp) sobre la
+//      foto ya descargada— así que «pequeña»/«oscura» SÍ disparan
+//      `pedir_repetir`/`aceptar_revisar` en producción. «Borrosa» sigue sin
+//      detector real (ningún llamador la marca hoy: `metadatos.borrosa`
+//      llega `null`) — la heurística y el contador ya están listos y
+//      probados para cuando exista, igual que `fotoRegistraHito`/
+//      `detectarHitosGps` en su momento. Hasta entonces, sin `metadatos`
+//      (p. ej. si `sharp` no pudo leer la imagen) la foto se acepta como
+//      legible, igual que siempre: esto nunca bloquea el viaje.
 //
 // ── APAGADA HASTA APROBAR N11 (R24/plantillas-meta.md) ──────────────────────
 // `pedirDocumentosCierreActivo` nace `false` (sin columna en

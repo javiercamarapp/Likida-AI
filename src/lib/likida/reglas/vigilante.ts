@@ -112,7 +112,18 @@ async function correrRegla(regla: ReglaGuardada, ahora: Date): Promise<Resultado
   // sale agrupado cuando el límite lo permita. Si el historial no se puede leer,
   // `avisosEnviadosDesde` lanza y la regla falla POR SU LADO (se reintenta a la
   // hora siguiente): mandar sin saber cuántos van rompería el tope.
-  const previos = await avisosEnviadosDesde(regla.tenantId, regla.id, new Date(ahora.getTime() - 24 * 3_600_000));
+  //
+  // LA VENTANA DE LECTURA tiene que cubrir el límite MÁS ANCHO que esta regla
+  // pueda pedir, no solo el del tope diario: `minHorasEntreAvisos` es
+  // configurable hasta `MIN_HORAS_TOPE` (168 h, forma.tsx). Si la ventana se
+  // quedara fija en 24 h, un dueño que pide "no más de un aviso cada 48 h" con
+  // el último aviso real a las 30 h vería ese aviso caer FUERA de la lectura:
+  // `evaluarFrecuencia` recibiría el historial vacío, el chequeo se saltaría
+  // solo, y el WhatsApp saldría 18 h antes de lo pedido — la frecuencia se
+  // rompería en silencio. 24 h es el piso (lo que pide el tope diario aunque
+  // `minHorasEntreAvisos` sea 0 o esté sin configurar).
+  const ventanaHoras = Math.max(24, regla.minHorasEntreAvisos ?? 24);
+  const previos = await avisosEnviadosDesde(regla.tenantId, regla.id, new Date(ahora.getTime() - ventanaHoras * 3_600_000));
   const veredicto = evaluarFrecuencia(previos, ahora, {
     maxAvisosDia: regla.maxAvisosDia, minHorasEntreAvisos: regla.minHorasEntreAvisos,
   });

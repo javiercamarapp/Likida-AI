@@ -90,6 +90,7 @@ vi.mock('./trabajo', () => ({
     [...store.values()]
       .filter((f) => f.estado === 'en_cola' || (f.estado === 'pendiente' && f.proximoIntentoEn <= ahoraIso))
       .slice(0, limite).map((f) => ({ ...f }))),
+  candidatasHuerfanaCorreo: vi.fn(async () => []),
 }));
 vi.mock('../presupuesto', async (orig) => ({ ...(await orig<typeof import('../presupuesto')>()), acotada: (q: unknown) => q }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -371,7 +372,12 @@ describe('el cron: procesarLiquidacionesExternas', () => {
   });
 
   it('con la cola vacía no hace nada ni lanza', async () => {
-    expect(await procesarLiquidacionesExternas(deps, 10)).toEqual({ tomadas: 0, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 } });
+    expect(await procesarLiquidacionesExternas(deps, 10)).toEqual({
+      tomadas: 0, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0,
+      avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 },
+      // Hallazgo MEDIO (oct-2026): la fase de huérfanas de correo siempre deja su resumen, con `candidatasHuerfanaCorreo` mockeada a `[]` arriba.
+      huerfanasCorreo: { candidatas: 0, confirmadas: 0, tenants: [] },
+    });
   });
 
   it('IDEMPOTENTE: pasar el cron dos veces no manda dos veces lo ya encolado', async () => {

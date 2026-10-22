@@ -9,14 +9,17 @@
 // implementada, que es la distancia exacta entre lo que promete la landing y
 // lo que hace el producto.
 //
-// ── QUÉ SE IMPLEMENTA HOY, Y POR QUÉ SOLO ESO ─────────────────────────────
-// Samsara. Es el único de los cuatro cuya autenticación no necesita abrir
-// sesión —el token viaja en cada petición— así que un lector suyo se puede
-// escribir y probar sin una cuenta viva. Los otros tres (Wialon, Geotab,
-// Navixy) hacen login primero y devuelven un identificador de sesión; su
-// lector se escribe cuando haya una cuenta de piloto contra la cual verificarlo,
-// porque escribirlo a ciegas contra la documentación es exactamente cómo se
-// consigue un adaptador que parece funcionar y no funciona.
+// ── QUÉ SE IMPLEMENTA HOY, Y POR QUÉ ───────────────────────────────────────
+// Los cuatro: Samsara (`probar()` sin abrir sesión, el token viaja en cada
+// petición) y Wialon, Geotab y Navixy (login primero, identificador de sesión)
+// — estos tres en `posiciones_proveedores.ts`, escritos contra la documentación
+// oficial de cada fabricante y probados con FIXTURES DE CONTRATO
+// (`posiciones_proveedores.test.ts`: las respuestas de ejemplo salen de la doc,
+// no de una instancia viva). NINGUNO de los tres se ha ejecutado contra una
+// cuenta real de piloto — no existe una — y eso sigue declarado en
+// `docs/operacion/gps-proveedores.md` como bloqueo externo: escribirlos a
+// ciegas contra la documentación no sustituye verificarlos contra una cuenta
+// viva, solo adelanta el trabajo para cuando haya una.
 //
 // `leerPosiciones` no está en la interfaz `Conector` obligatoria: es opcional
 // a propósito. Un conector sin lector devuelve `null` y el poller lo salta

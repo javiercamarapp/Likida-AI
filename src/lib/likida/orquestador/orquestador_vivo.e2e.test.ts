@@ -18,7 +18,7 @@ const { makeExecutor } = await import('@/lib/llm/tool-executor');
 const { conPermisos } = await import('./herramientas');
 const { ponerFuentes } = await import('./fuentes');
 const { crearFuentesEnMemoria, datosVacios } = await import('./fuentes.fixture');
-const { avisarEscalacion, MAX_INTENTOS_AVISO } = await import('./aviso_escalacion');
+const { avisarEscalacion, MAX_INTENTOS_AVISO, TOPE_AVISOS_POR_FLOTA_Y_CORRIDA, VENTANA_TOPE_AVISOS_MIN } = await import('./aviso_escalacion');
 const { correrCicloVivo } = await import('./ciclo_cron');
 const { llaveDedupe } = await import('./escalamiento');
 const { AGENTES_VIGILADOS } = await import('./salud_agentes');
@@ -35,6 +35,7 @@ const B = 'flota-b';   // aviso APAGADO (el default)
 interface Tarea {
   id: string; tenantId: string; destino: any; motivo: any; viajeFolio: string | null; resumen: string; dedupe: string;
   estado: 'abierta' | 'atendida'; avisoEstado: 'pendiente' | 'enviado' | 'omitido' | 'agotado'; avisoIntentos: number; reclamada: boolean; detalle: string | null; rol: string; nota: string | null;
+  avisadaEn: number | null;
 }
 
 function mundo() {
@@ -67,7 +68,7 @@ function mundo() {
     const previa = tareas.find((y) => y.tenantId === t && y.dedupe === x.dedupe && y.estado === 'abierta');
     if (previa) return { estado: 'ya_abierta', id: previa.id, creadaEn: new Date(AHORA).toISOString() };
     const id = `t${++n}`;
-    tareas.push({ id, tenantId: t, ...x, estado: 'abierta', avisoEstado: 'pendiente', avisoIntentos: 0, reclamada: false, detalle: null, nota: null });
+    tareas.push({ id, tenantId: t, ...x, estado: 'abierta', avisoEstado: 'pendiente', avisoIntentos: 0, reclamada: false, detalle: null, nota: null, avisadaEn: null });
     return { estado: 'creada', id };
   };
 
@@ -82,12 +83,17 @@ function mundo() {
       const f = tareas.find((x) => x.id === id && x.tenantId === t);
       if (!f || f.avisoEstado !== 'pendiente') return;
       f.avisoEstado = estado; f.detalle = detalle; f.reclamada = false;   // (el reclamo de 10 min de la base se simula soltándolo al cerrar el intento)
+      if (estado === 'enviado') f.avisadaEn = reloj;
     },
     async config(t) { return { ok: config[t] }; },
     async usuarios() { return usuarios; },
     canalListo: () => true,
     async enviar(para, c) { if (falloCorreo) return { ok: false, motivo: 'Resend 429' }; correos.push({ para, asunto: c.asunto, tono: c.tono }); return { ok: true }; },
     async nombreFlota(t) { return t === A ? 'Flota A' : 'Flota B'; },
+    // El MISMO contador real (0651, `avisada_en`) que comparten el barrido y la escalación en caliente del asistente.
+    async avisosRecientes(t, desde) {
+      return tareas.filter((x) => x.tenantId === t && x.avisoEstado === 'enviado' && x.avisadaEn !== null && x.avisadaEn >= desde.getTime()).length;
+    },
     ahora: () => new Date(reloj),
   };
 
@@ -280,5 +286,52 @@ describe('E2E del orquestador vivo', () => {
     w.avanzar(31);
     await w.ciclo();
     expect(w.tareas).toHaveLength(antes);
+  });
+
+  it('9) HALLAZGO R10: un modelo que PARAFRASEA el mismo incidente en caliente (hash distinto cada vez) NO inunda el correo — a partir del 4º se topa, sin perder la tarea', async () => {
+    const llamar = w.asistente(A);
+    // Cinco turnos del mismo incidente real, redactado con palabras apenas distintas cada vez (el `resumen` cambia la
+    // huella de `llaveDedupe`: cada turno abre una tarea NUEVA, exactamente el escenario del hallazgo). Mismo destino.
+    const resumenes = [
+      'El chofer no contesta y el GPS lleva horas sin moverse',
+      'Sigue sin contestar el chofer; el GPS no se mueve desde hace rato',
+      'Todavía nada del chofer, el GPS continúa congelado',
+      'El chofer sigue sin dar señales, el GPS no avanza',
+      'Quinto intento: el chofer no responde y el GPS sigue quieto',
+    ];
+    // SIN folio a propósito: es el caso del hallazgo (`llaveDedupe` sin folio usa la huella del resumen, por eso cada
+    // parafraseo abre una tarea nueva; CON folio las 5 llamadas dedupicarían en una sola, como ya prueba el caso 1).
+    const resultados: Array<Record<string, any>> = [];
+    for (const resumen of resumenes) resultados.push(await llamar('escalar_a_persona', { destino: 'mesa_de_control', motivo: 'posible_emergencia', resumen }));
+
+    // las 5 tareas se CREARON (el modelo nunca se entera del tope: no es su decisión, es el sistema el que controla el ruido)
+    expect(resultados.every((r) => r.creada)).toBe(true);
+    expect(w.tareas.filter((t) => t.tenantId === A)).toHaveLength(5);
+    // pero el correo solo salió para las primeras 3: el contador real (compartido con el barrido) topó el resto
+    expect(w.correos).toHaveLength(TOPE_AVISOS_POR_FLOTA_Y_CORRIDA);
+    expect(resultados.slice(0, 3).every((r) => r.avisoPorCorreo)).toBe(true);
+    expect(resultados.slice(3).every((r) => !r.avisoPorCorreo)).toBe(true);
+    // las topadas NO quedaron descartadas: siguen pendientes (ni omitidas ni agotadas), listas para la siguiente ventana
+    const topadas = w.tareas.filter((t) => t.tenantId === A).slice(3);
+    expect(topadas.every((t) => t.avisoEstado === 'pendiente' && t.avisoIntentos === 0)).toBe(true);
+
+    // una hora después, un sexto turno del MISMO incidente (otra vez parafraseado) sí se avisa: el cupo se liberó
+    w.avanzar(VENTANA_TOPE_AVISOS_MIN + 1);
+    const r6 = await llamar('escalar_a_persona', { destino: 'mesa_de_control', motivo: 'posible_emergencia', resumen: 'Sexto aviso, el chofer sigue sin aparecer' });
+    expect(r6).toMatchObject({ creada: true, avisoPorCorreo: true });
+    expect(w.correos).toHaveLength(TOPE_AVISOS_POR_FLOTA_Y_CORRIDA + 1);
+  });
+
+  it('10) PRUEBA DE CONTROL cruzada: lo que el barrido ya avisó en esta hora cuenta contra el cupo de una escalación en caliente inmediata (un solo contador real, no 3+3)', async () => {
+    w.caerVigia(A); w.caerVigia(B);
+    await w.ciclo(); // abre y avisa UNA tarea de sistema para A (vigia) — 1 de 3 usado
+    expect(w.correos).toHaveLength(1);
+    const llamar = w.asistente(A);
+    await llamar('escalar_a_persona', { destino: 'mesa_de_control', motivo: 'cliente_molesto', resumen: 'Un cliente está furioso por el retraso' });
+    await llamar('escalar_a_persona', { destino: 'mesa_de_control', motivo: 'cliente_molesto', resumen: 'El mismo cliente, ahora amenaza con cancelar' });
+    expect(w.correos).toHaveLength(TOPE_AVISOS_POR_FLOTA_Y_CORRIDA); // 1 del barrido + 2 del asistente = el tope ya se usó
+    const r4 = await llamar('escalar_a_persona', { destino: 'mesa_de_control', motivo: 'cliente_molesto', resumen: 'Tercera queja del mismo cliente, distinta redacción' });
+    expect(r4).toMatchObject({ creada: true, avisoPorCorreo: false }); // la 4ª en esta ventana (venga de donde venga) no manda
+    expect(w.correos).toHaveLength(TOPE_AVISOS_POR_FLOTA_Y_CORRIDA);
   });
 });

@@ -15,6 +15,20 @@
 // cruce contra el GPS del TMS del cliente NO se puede afirmar sin acceso a su
 // TMS: queda documentado como v2, nunca como tarjeta viva.
 //
+// HALLAZGO MEDIO (21-oct-2026): el cruce por fecha±1 día y monto±$1 trata
+// CUALQUIER gasto de caseta como verdad de referencia, sin comprobar que ese
+// gasto venga de un comprobante genuino — esas filas las escribe el intake de
+// A1 por OCR, y el GPS (`cruce_gps.ts`) solo confirma que la UNIDAD estuvo
+// cerca de la caseta, nunca el monto ni la existencia del ticket. Un ticket
+// FALSIFICADO que caiga por casualidad en la ventana fecha/monto de un cobro
+// real pasaba a `cuadra` sin ningún humano viéndolo. El fix NO exige QR/CFDI
+// en todo cruce (la mayoría de los peajes NO lo traen: es el caso normal) —
+// solo cuando el gasto que cuadró ADEMÁS no tiene verificación independiente
+// del monto (`cfdiValido`) Y trae una señal real de sospecha (baja
+// `ocrConfianza` o `textoSospechoso`, PR #578), el cruce se manda a revisión
+// humana en vez de cerrarse en silencio (ver `cuadrar` más abajo y
+// `verificacion.ts: cuadra_sin_verificacion_independiente`).
+//
 // ── LA REGLA DURA, LA MISMA DEL CONSOLIDADO ──────────────────────────────
 //
 // "Ante la duda no se adivina." Dos candidatos igual de buenos NO ligan la
@@ -41,6 +55,7 @@ import { enLotes } from '../lotes';
 import { round2 } from '@/lib/formato';
 import { toCsv } from '../export';
 import { leerArchivoUniversal, ArchivoNoSoportado } from './archivo';
+import { MARCA_TEXTO_SOSPECHOSO } from './ocr';
 import { VENTANA_DIAS_FECHA, TOLERANCIA_MONTO_MXN } from './consolidado';
 import { registrarCorrida } from '../agentes/corridas';
 import { contextoEvidenciaGps, llaveUnidadDia } from '../peajes/evidencia_gps';
@@ -70,12 +85,30 @@ export const TOLERANCIA_CENTAVOS_MXN = TOLERANCIA_MONTO_MXN;
  *  (el cliente revisa hasta dos meses). Más que esto ya no es un corte: es un
  *  archivo equivocado, y se dice en vez de importar a medias.
  *
- *  LÍMITES DE ESCALA (por qué 60 000 cabe): el Excel se lee entero en memoria
- *  (≈ 1 MB de archivo → ≈ 10 000 filas × 19 celdas, unas decenas de MB); las
- *  líneas se escriben en lotes de `LOTE_INSERCION_LINEAS` y el cruce las anota
- *  agrupando las que reciben la misma anotación (ver `conciliarDesgloseInterno`),
- *  así que ni la escritura ni el cruce son una consulta por línea. */
+ *  LÍMITES DE ESCALA (por qué 60 000 cabe): las líneas se escriben en lotes de
+ *  `LOTE_INSERCION_LINEAS` y el cruce las anota agrupando las que reciben la
+ *  misma anotación (ver `conciliarDesgloseInterno`), así que ni la escritura
+ *  ni el cruce son una consulta por línea. La LECTURA del Excel/ODS ya no es
+ *  "entero en memoria": ver `TOPE_LECTURA_HOJA_DESGLOSE`. */
 export const MAX_LINEAS_DESGLOSE = 60_000;
+/** Margen sobre `MAX_LINEAS_DESGLOSE` para el `sheetRows` con el que se LEE la
+ *  hoja (no para el tope de negocio, que sigue siendo el de arriba). Cubre:
+ *  el encabezado puede estar hasta en el renglón `TOPE_BUSQUEDA_ENCABEZADO`
+ *  (15, ver `parsearDesgloseHoja`) porque los desgloses reales traen título y
+ *  datos del cliente arriba, y los renglones en blanco o de totales que se
+ *  saltan sin contar como línea. No necesita cuadrar 1:1 con "líneas de
+ *  datos": si el margen no bastó, el chequeo de `MAX_LINEAS_DESGLOSE` sobre el
+ *  resultado YA acotado (en `importarDesglose`) sigue de red de sanidad. */
+export const MARGEN_LECTURA_DESGLOSE = 1_000;
+/** Tope de filas FÍSICAS que se leen de la hoja (XLSX `sheetRows`): por encima
+ *  de esto, ni se materializa en memoria. ANTES no había tope aquí — a
+ *  diferencia de los otros 3 lectores de Excel del repo (`importacion/archivo.ts`,
+ *  `carta_porte_docs/contenido.ts`, `carta_porte_docs/lector_plantilla_tms.ts`),
+ *  que sí acotan con `sheetRows` — así que un .xlsx de pocos KB podía
+ *  descomprimirse a millones de filas (bomba de descompresión) ANTES de que el
+ *  tope de `MAX_LINEAS_DESGLOSE` pudiera decir nada: se comprobaba recién sobre
+ *  el resultado YA parseado entero. */
+export const TOPE_LECTURA_HOJA_DESGLOSE = MAX_LINEAS_DESGLOSE + MARGEN_LECTURA_DESGLOSE;
 /** Filas por INSERT al guardar las líneas del desglose. */
 export const LOTE_INSERCION_LINEAS = 1000;
 /** Ids por UPDATE ... IN (...) al anotar el cruce (la URL de PostgREST no admite listas enormes). */
@@ -140,6 +173,10 @@ export interface CalidadArchivo {
   /** Hoja leída y hojas ignoradas (solo se lee la principal: la secundaria repite filas). */
   hojaLeida: string | null;
   hojasIgnoradas: string[];
+  /** La lectura de la hoja se detuvo en `TOPE_LECTURA_HOJA_DESGLOSE` (XLSX `sheetRows`):
+   *  el archivo real puede traer MÁS filas de las que se alcanzaron a leer. AUSENTE
+   *  (no `false`) cuando no aplica (PDF, o Excel/ODS que no tocó el tope). */
+  lecturaAcotada?: true;
 }
 
 export type ResultadoParseo =
@@ -605,14 +642,23 @@ export async function parsearArchivoDesglose(nombre: string, buffer: Buffer, opc
       // SOLO LA HOJA PRINCIPAL (la primera). En los archivos reales del proveedor la
       // segunda hoja («Hoja1», «CAMIONETA») trae filas que YA están en la principal:
       // leerla duplicaría cruces. `sheets: 0` ni siquiera la parsea (menos memoria).
-      const libro = XLSX.read(buffer, { type: 'buffer', sheets: 0 });
+      // `sheetRows`: nunca se descomprime más de `TOPE_LECTURA_HOJA_DESGLOSE` filas de la
+      // hoja — sin esto, un .xlsx/.xls/.ods de pocos KB puede expandirse a millones de
+      // filas en memoria ANTES de que `MAX_LINEAS_DESGLOSE` (abajo, en `importarDesglose`)
+      // pudiera decir nada (auditoría ALTO: los otros 3 lectores de Excel del repo ya
+      // acotan así; este era el único que leía la hoja entera).
+      const libro = XLSX.read(buffer, { type: 'buffer', sheets: 0, sheetRows: TOPE_LECTURA_HOJA_DESGLOSE });
       const hoja = libro.Sheets[libro.SheetNames[0]];
       if (!hoja) return { ok: false, motivo: 'El archivo no trae ninguna hoja con datos.' };
+      // `!fullref` lo pone la librería SOLO cuando `sheetRows` de verdad truncó la hoja
+      // (hay más filas en el archivo de las que se leyeron): no es un cálculo nuestro.
+      const lecturaAcotada = '!fullref' in hoja;
       filas = XLSX.utils.sheet_to_json<Celda[]>(hoja, { header: 1, raw: true, defval: '' });
       const r = parsearDesgloseHoja(filas, opciones);
       if (r.ok) {
         r.calidad.hojaLeida = libro.SheetNames[0];
         r.calidad.hojasIgnoradas = libro.SheetNames.slice(1);
+        if (lecturaAcotada) r.calidad.lecturaAcotada = true;
         if (libro.SheetNames.length > 1) {
           r.avisos.push(
             `El archivo trae ${libro.SheetNames.length} hojas; se leyó solo la primera («${libro.SheetNames[0]}»). `
@@ -672,7 +718,23 @@ export interface GastoCaseta {
   monto: number;
   /** ISO YYYY-MM-DD. El fondo del cruce ya viene filtrado a con-fecha. */
   fecha: string;
+  /** true solo cuando el QR del CFDI se decodificó y validó (`ocr.ts: cfdiValido`): el
+   *  monto está VERIFICADO por un código, no solo leído por visión. Ausente/false es el
+   *  caso normal — la mayoría de los tickets de caseta no traen CFDI — y por sí solo NO
+   *  es señal de nada. */
+  cfdiValido?: boolean | null;
+  /** 0–1, confianza del modelo de visión al leer el ticket (`ocr.ts: ocrConfianza`). Ausente = no se midió. */
+  ocrConfianza?: number | null;
+  /** El extractor marcó el ticket con texto dirigido a un modelo, por autorreporte o por el
+   *  chequeo determinista de `detectarInyeccion` (PR #578, `ocr.ts: MARCA_TEXTO_SOSPECHOSO`). */
+  textoSospechoso?: boolean;
 }
+
+/** Confianza de OCR por debajo de la cual una lectura se considera dudosa — el mismo
+ *  umbral que usa el motor de cuadre por omisión para `ocr_baja_confianza`
+ *  (`cuadre/engine.ts: umbralConfianza`). Mantenerlos iguales evita dos nociones
+ *  distintas de "baja confianza" en el mismo repo. */
+const UMBRAL_CONFIANZA_BAJA = 0.85;
 
 export interface CruceLinea {
   estatus: EstatusLineaDesglose;
@@ -822,6 +884,18 @@ export function cruzarLineasDesglose(
       // cuadran, pero quizá el TAG se prestó o el gasto es de otro camión. Se
       // marca para revisión humana; no se desfaza el cruce.
       const unidadDistinta = !!linea.unidadId && !!mejor.gasto.unidadId && linea.unidadId !== mejor.gasto.unidadId;
+      // HALLAZGO MEDIO (21-oct-2026, ver cabecera del archivo): el gasto que cuadró es la
+      // única "verdad de referencia" de este cruce, y nada aquí comprueba que venga de un
+      // comprobante genuino. `cfdiValido` es la única verificación INDEPENDIENTE del monto
+      // (un código QR/CFDI decodificado, no leído por visión) — su ausencia es el caso
+      // normal (la mayoría de los peajes no traen CFDI) y NO es, por sí sola, señal de
+      // nada. Pero cuando ADEMÁS el ticket se leyó con baja confianza o el extractor lo
+      // marcó sospechoso (autorreporte + `detectarInyeccion`, PR #578), un ticket
+      // FALSIFICADO que cayera por casualidad en la ventana fecha/monto de un cobro real
+      // quedaría conciliado en silencio. Se marca para revisión — el cruce NO se desfaza
+      // (el gasto sigue respaldando el viaje): misma doctrina que `unidad_distinta`.
+      const confianzaBaja = mejor.gasto.ocrConfianza != null && mejor.gasto.ocrConfianza < UMBRAL_CONFIANZA_BAJA;
+      const sinVerificacionIndependiente = !mejor.gasto.cfdiValido && (confianzaBaja || !!mejor.gasto.textoSospechoso);
       return {
         estatus: 'cuadra',
         viajeId: mejor.gasto.viajeId,
@@ -832,6 +906,11 @@ export function cruzarLineasDesglose(
           gastoId: mejor.gasto.id, montoGasto: mejor.gasto.monto, fechaGasto: mejor.gasto.fecha,
           ...(desempate ? { desempate } : {}),
           ...(unidadDistinta ? { alerta: 'unidad_distinta', unidad_tag: linea.unidadId, unidad_gasto: mejor.gasto.unidadId } : {}),
+          ...(sinVerificacionIndependiente ? {
+            bajaConfianzaSinVerificacion: true,
+            gastoOcrConfianza: mejor.gasto.ocrConfianza ?? null,
+            gastoTextoSospechoso: !!mejor.gasto.textoSospechoso,
+          } : {}),
         },
       };
     };
@@ -924,9 +1003,15 @@ export async function importarDesglose(
     return { ok: false, motivo: 'El archivo se leyó pero no traía ninguna línea con importe.' };
   }
   if (parseo.lineas.length > MAX_LINEAS_DESGLOSE) {
+    // Red de sanidad tras el `sheetRows` de `parsearArchivoDesglose`: si el margen de
+    // lectura no alcanzó, se sigue rechazando aquí — nunca se importa a medias. Cuando la
+    // LECTURA se acotó (`lecturaAcotada`), el conteo es un PISO: el archivo real puede
+    // traer más líneas de las que se alcanzaron a leer, y no se afirma una cifra exacta
+    // que podría ser falsa.
+    const piso = parseo.calidad.lecturaAcotada ? ' o más' : '';
     return {
       ok: false,
-      motivo: `El archivo trae ${parseo.lineas.length} líneas y el tope por desglose es ${MAX_LINEAS_DESGLOSE}. Pártelo por periodo y súbelo en partes.`,
+      motivo: `El archivo trae ${parseo.lineas.length}${piso} líneas y el tope por desglose es ${MAX_LINEAS_DESGLOSE}. Pártelo por periodo y súbelo en partes.`,
     };
   }
 
@@ -1120,10 +1205,15 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
     // Misma razón que arriba: con ~45,000 gastos/mes, las casetas del rango
     // pasan de 1,000 y el `.limit(5000)` recortado marcaba `sin_contraparte`
     // líneas que SÍ tenían contraparte.
-    const data = await traerTodo<{ id: unknown; viaje_id: unknown; monto: unknown; fecha: unknown }>(
+    const data = await traerTodo<{
+      id: unknown; viaje_id: unknown; monto: unknown; fecha: unknown;
+      cfdi_valido: unknown; ocr_confianza: unknown; ocr_extra: unknown;
+    }>(
       (d, h) => acotada(supabaseAdmin()
         .from('gasto')
-        .select('id, viaje_id, monto, fecha', conteo(d))
+        // `cfdi_valido`, `ocr_confianza` y `ocr_extra` (por `MARCA_TEXTO_SOSPECHOSO`): la
+        // señal de integridad del gasto para el hallazgo medio del 21-oct-2026 (ver cabecera).
+        .select('id, viaje_id, monto, fecha, cfdi_valido, ocr_confianza, ocr_extra', conteo(d))
         .eq('tenant_id', tenantId)
         .eq('concepto', 'caseta')
         .gte('fecha', desde)
@@ -1138,6 +1228,9 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
         viajeId: String(g.viaje_id),
         monto: Number(g.monto),
         fecha: String(g.fecha).slice(0, 10),
+        cfdiValido: (g.cfdi_valido as boolean | null) ?? null,
+        ocrConfianza: g.ocr_confianza != null ? Number(g.ocr_confianza) : null,
+        textoSospechoso: Boolean((g.ocr_extra as Record<string, unknown> | null)?.[MARCA_TEXTO_SOSPECHOSO]),
       }));
   }
 

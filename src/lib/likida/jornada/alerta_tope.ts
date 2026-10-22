@@ -35,7 +35,11 @@ import type { PoliticaFlota } from './riesgo';
 //     95 %, se avisa ESE nivel (no los tres a la vez).
 //  6. TODO SALE POR `enviarConFallback` (ventana de 24 h → texto; fuera →
 //     plantilla del catálogo). Un rechazo reintentable (429, red) suelta el
-//     claim y se reintenta; uno definitivo se registra con su motivo.
+//     claim y se reintenta; uno definitivo se registra con su motivo. Un
+//     rechazo ENCOLADO (Meta ya lo dejó en `wa_outbox`: `encolado === true`,
+//     mismo campo que RES-1) NO suelta el claim tampoco — el mensaje se va a
+//     entregar solo, y soltarlo mandaría un SEGUNDO WhatsApp real para el
+//     mismo (jornada, nivel) en la siguiente corrida.
 //  7. No es asesoría jurídica ni un dictamen: es un aviso sobre lo registrado,
 //     con la misma leyenda que el resto del producto.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -195,7 +199,20 @@ export function armarCorreoEncargado(d: DatosAviso): Correo {
 export interface FilaCandidata { tenantId: string; jornadaId: string; operadorId: string; dia: string; config: ConfigAlerta }
 export interface DatosOperador { nombre: string; telefono: string | null; terminalId: string | null }
 export interface Destino { nombre: string; telefono: string }
-export interface ResultadoEnvioAviso { ok: boolean; reintentable: boolean; motivo?: string }
+export interface ResultadoEnvioAviso {
+  ok: boolean;
+  reintentable: boolean;
+  motivo?: string;
+  /**
+   * El cliente de Meta YA dejó este mensaje en `wa_outbox` (mismo campo que `enviarConFallback`,
+   * ver `fueEncoladoPorMeta`): un rechazo reintentable (429/5xx) o con token vencido (190/401)
+   * se encola y SE VA A ENTREGAR SOLO. Quien reclama «una sola vez por nivel» no debe soltar el
+   * claim ni reenviar cuando esto es `true` — igual que `escalar_viaje.ts`, `acuse_folio.ts` y
+   * `liquidacion_externa/aviso_no_coincide.ts`. Descartarlo (como hacía este archivo antes) manda
+   * un SEGUNDO WhatsApp real en la siguiente corrida para el mismo (jornada, nivel).
+   */
+  encolado?: boolean;
+}
 export type EstadoDestino = 'pendiente' | 'enviado' | 'fallido' | 'sin_destinatario' | 'no_aplica';
 
 export interface DestinoCerrado<C> { canal: C | null; estado: EstadoDestino; motivo: string | null }
@@ -264,6 +281,9 @@ export interface ResultadoAlertasTope {
   cortadosPorReloj: number;
   listaTruncada: boolean;
   cortadaPorRechazoMasivo: boolean;
+  /** El tenant cuya flota rota disparó el corte por rechazo masivo (para diagnóstico). */
+  tenantCausanteRechazoMasivo?: string;
+  jornadaCausanteRechazoMasivo?: string;
   fallos: string[];
 }
 
@@ -286,11 +306,20 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
 
   const politicas = new Map<string, PoliticaFlota | null | 'ilegible'>();
   const encargados = new Map<string, Destino[] | 'ilegible'>();
-  let rechazosSeguidos = 0;
+  // El corte por rechazo masivo es POR TENANT (HALLAZGO 2, A12): antes era un contador único para
+  // toda la corrida, así que una sola flota con el canal de WhatsApp roto cortaba la corrida ENTERA
+  // con un `break` global y dejaba sin evaluar a TODAS las flotas que ordenan después (la RPC
+  // `jornadas_en_curso_para_alerta` ordena por `tenant_id, d.id`). Como el rechazo también libera el
+  // claim (HALLAZGO 1), esas mismas filas volvían a ser las primeras en la siguiente corrida: un
+  // bloqueo indefinido para las demás flotas. Ahora cada flota tiene su propio contador y, al llegar
+  // a su tope, solo se saltan SUS filas restantes — las demás flotas de la misma corrida sí se evalúan.
+  const rechazosSeguidosPorTenant = new Map<string, number>();
+  const tenantsCortadosPorRechazoMasivo = new Set<string>();
 
   for (let i = 0; i < lista.length; i++) {
     const f = lista[i];
     if (opts.venceEn !== undefined && Date.now() >= opts.venceEn) { r.cortadosPorReloj = lista.length - i; break; }
+    if (tenantsCortadosPorRechazoMasivo.has(f.tenantId)) continue;
     r.revisadas++;
     try {
       const asientos = await p.asientos(f.tenantId, f.jornadaId);
@@ -352,8 +381,9 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
       let encEstado: EstadoDestino = 'no_aplica';
       let encMotivo: string | null = null;
       let encReintentable = false;
+      let encEncolado = false;
       if (cfg.canalEncargado !== 'ninguno') {
-        let intentos = 0; let enviados = 0; let reint = 0; let ultimo = '';
+        let intentos = 0; let enviados = 0; let reint = 0; let encol = 0; let ultimo = '';
         if (cfg.canalEncargado === 'whatsapp' || cfg.canalEncargado === 'ambos') {
           if (!encargados.has(`${f.tenantId}|${op?.terminalId ?? ''}`)) {
             try { encargados.set(`${f.tenantId}|${op?.terminalId ?? ''}`, await p.encargados(f.tenantId, op?.terminalId ?? null)); } catch (e) {
@@ -368,29 +398,40 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
             for (const d of dest ?? []) {
               intentos++;
               const e = await p.enviarWa(d.telefono, msg, f.tenantId, ahora, 'jornada.alerta_encargado');
-              if (e.ok) enviados++; else { ultimo = e.motivo ?? 'rechazado'; if (e.reintentable) reint++; }
+              if (e.ok) enviados++; else {
+                ultimo = e.motivo ?? 'rechazado';
+                // `encolado === true`: Meta ya dejó ESTE mensaje en `wa_outbox` (RES-1); cuenta como
+                // reintentable (no se consume el nivel), pero NO se libera el claim por él — ver abajo.
+                if (e.reintentable || e.encolado === true) reint++;
+                if (e.encolado === true) encol++;
+              }
             }
           }
         }
         if ((cfg.canalEncargado === 'correo' || cfg.canalEncargado === 'ambos') && cfg.correoEncargado) {
           intentos++;
           const e = await p.enviarCorreo(cfg.correoEncargado, armarCorreoEncargado(datos));
-          if (e.ok) enviados++; else { ultimo = e.motivo ?? 'rechazado'; if (e.reintentable) reint++; }
+          if (e.ok) enviados++; else { ultimo = e.motivo ?? 'rechazado'; if (e.reintentable || e.encolado === true) reint++; if (e.encolado === true) encol++; }
         }
         if (enviados > 0) encEstado = 'enviado';
         else if (intentos === 0) encEstado = 'sin_destinatario';
-        else { encEstado = 'fallido'; encMotivo = ultimo.slice(0, 200); encReintentable = reint === intentos; }
+        else { encEstado = 'fallido'; encMotivo = ultimo.slice(0, 200); encReintentable = reint === intentos; encEncolado = encol > 0; }
       }
 
       // ── OPERADOR ──
       let opEstado: EstadoDestino = 'no_aplica';
       let opMotivo: string | null = null;
       let opReintentable = false;
+      let opEncolado = false;
       if (cfg.canalOperador === 'whatsapp') {
         if (!op?.telefono) { opEstado = 'sin_destinatario'; }
         else {
           const e = await p.enviarWa(op.telefono, armarAvisoOperador(datos), f.tenantId, ahora, 'jornada.alerta_operador');
-          if (e.ok) opEstado = 'enviado'; else { opEstado = 'fallido'; opMotivo = (e.motivo ?? 'rechazado').slice(0, 200); opReintentable = e.reintentable; }
+          if (e.ok) opEstado = 'enviado'; else {
+            opEstado = 'fallido'; opMotivo = (e.motivo ?? 'rechazado').slice(0, 200);
+            opReintentable = e.reintentable || e.encolado === true;
+            opEncolado = e.encolado === true;
+          }
         }
       }
 
@@ -400,15 +441,33 @@ export async function correrAlertasTope(p: PuertosAlerta, opts: { ahora?: Date; 
       const todosFallidosReintentables = !algunEnviado && algunFallido
         && (encEstado !== 'fallido' || encReintentable) && (opEstado !== 'fallido' || opReintentable);
       if (todosFallidosReintentables) {
-        // Nada llegó y todo fue reintentable: el nivel NO se consume, la siguiente corrida lo reintenta.
-        await p.liberar(f.tenantId, reclamo);
         r.rechazosReintentables++;
-        rechazosSeguidos++;
-        r.fallos.push(`jornada ${f.jornadaId} (${nivel}): ${encMotivo ?? opMotivo ?? 'rechazado'} (se reintenta en la siguiente corrida)`);
-        if (rechazosSeguidos >= MAX_RECHAZOS_SEGUIDOS) { r.cortadaPorRechazoMasivo = true; break; }
-        continue;
+        const rechazosDeEstaFlota = (rechazosSeguidosPorTenant.get(f.tenantId) ?? 0) + 1;
+        rechazosSeguidosPorTenant.set(f.tenantId, rechazosDeEstaFlota);
+        if (rechazosDeEstaFlota >= MAX_RECHAZOS_SEGUIDOS) {
+          // Solo SE SALTA el resto de las filas de ESTA flota (break local, no global): las demás
+          // flotas de la misma corrida se siguen evaluando normalmente.
+          r.cortadaPorRechazoMasivo = true;
+          r.tenantCausanteRechazoMasivo = f.tenantId;
+          r.jornadaCausanteRechazoMasivo = f.jornadaId;
+          tenantsCortadosPorRechazoMasivo.add(f.tenantId);
+        }
+        // HALLAZGO 1 (A12): si ALGÚN destinatario fallido ya quedó ENCOLADO de verdad en `wa_outbox`
+        // (Meta aceptó dejarlo pendiente: 429/5xx/token 190), el mensaje se va a entregar SOLO.
+        // Liberar el claim aquí haría que la siguiente corrida reclame el mismo nivel y mande un
+        // SEGUNDO WhatsApp real. Solo se libera cuando NADA quedó en cola (p. ej. un correo con
+        // error de red: no tiene outbox propio, así que sin liberar nunca se reintentaría).
+        const algunEncolado = (encEstado === 'fallido' && encEncolado) || (opEstado === 'fallido' && opEncolado);
+        if (!algunEncolado) {
+          await p.liberar(f.tenantId, reclamo);
+          r.fallos.push(`jornada ${f.jornadaId} (${nivel}): ${encMotivo ?? opMotivo ?? 'rechazado'} (se reintenta en la siguiente corrida)`);
+          continue;
+        }
+        // Al menos uno ya está en la cola de WhatsApp: se cierra como una falla normal más abajo
+        // (sin liberar, sin volver a reclamar); el mensaje encolado llega por su cuenta.
+      } else {
+        rechazosSeguidosPorTenant.set(f.tenantId, 0);
       }
-      rechazosSeguidos = 0;
       const encCerrado: DestinoCerrado<CanalEncargado> = { canal: cfg.canalEncargado === 'ninguno' ? null : cfg.canalEncargado, estado: encEstado, motivo: encMotivo };
       const opCerrado: DestinoCerrado<CanalOperador> = { canal: cfg.canalOperador === 'whatsapp' ? 'whatsapp' : null, estado: opEstado, motivo: opMotivo };
       if (algunEnviado) {

@@ -138,38 +138,35 @@ export type ResultadoRecepcion =
 /** Encola el archivo. Idempotente por (flota, huella). */
 export type OrigenArchivoPeaje = 'api' | 'panel' | 'correo' | 'pull' | 'sftp';
 
+interface FilaEncolar { id: string; estado: string; duplicado: boolean }
+
 export async function recibirArchivoPeaje(tenantId: string, c: CuerpoIngesta, origen: OrigenArchivoPeaje = 'api'): Promise<ResultadoRecepcion> {
   const huella = huellaDe(c.contenido);
   const admin = supabaseAdmin();
 
-  const existente = await acotada(admin.from('peaje_ingesta_archivo').select('id, estado')
-    .eq('tenant_id', tenantId).eq('huella', huella).maybeSingle(), 'peajes.ingesta.existente');
-  if (existente.error) return { ok: false, codigo: 'error', motivo: existente.error.message };
-  if (existente.data) return { ok: true, id: String(existente.data.id), duplicado: true, estado: String(existente.data.estado) };
-
-  // Un tope de pendientes por flota: sin él, una llave filtrada llenaría la tabla.
-  const pend = await acotada(admin.from('peaje_ingesta_archivo').select('id', { count: 'exact', head: true })
-    .eq('tenant_id', tenantId).in('estado', ['pendiente', 'procesando']), 'peajes.ingesta.pendientes');
-  if (pend.error) return { ok: false, codigo: 'error', motivo: pend.error.message };
-  if ((pend.count ?? 0) >= MAX_PENDIENTES_POR_FLOTA) {
-    return { ok: false, codigo: 'cola_llena', motivo: `Hay ${pend.count} archivos pendientes de procesar; espera a que se vacíe la cola.` };
-  }
-
-  const ins = await acotada(admin.from('peaje_ingesta_archivo').insert({
-    tenant_id: tenantId, huella, nombre: c.nombre, proveedor: c.proveedor, origen,
-    bytes: c.contenido.length, contenido: byteaDeBuffer(c.contenido), estado: 'pendiente',
-  }).select('id').single(), 'peajes.ingesta.insertar');
-  if (ins.error || !ins.data) {
-    // La carrera de dos envíos simultáneos del mismo archivo: el segundo choca con
-    // el unique y se trata como duplicado, no como error.
-    if (ins.error && /duplicate key|unique/i.test(ins.error.message)) {
-      const otra = await acotada(admin.from('peaje_ingesta_archivo').select('id, estado')
-        .eq('tenant_id', tenantId).eq('huella', huella).maybeSingle(), 'peajes.ingesta.carrera');
-      if (otra.data) return { ok: true, id: String(otra.data.id), duplicado: true, estado: String(otra.data.estado) };
+  // El dedup por huella y el tope de pendientes por flota (MAX_PENDIENTES_POR_FLOTA) viven en UNA
+  // sola función de base (`peaje_archivo_encolar`, 0850), con un candado de transacción por flota —
+  // mismo molde que 0693 (`vigia_respuesta_rapida_aprobar`). Antes esto era un SELECT count y un
+  // INSERT por separado SIN candado: dos envíos concurrentes podían leer el mismo count por debajo
+  // del tope y los dos insertar, rebasándolo (TOCTOU real, auditoría adversarial 21-oct-2026,
+  // reproducido por `_race_toctou.test.ts`). Con el candado, el segundo espera al primero y ya ve el
+  // tope — así que el camino de «choca con el unique, se trata como duplicado» que antes cubría la
+  // carrera a nivel aplicación deja de hacer falta: el candado la cierra antes de que el INSERT
+  // pueda chocar.
+  const r = await acotada(admin.rpc('peaje_archivo_encolar', {
+    p_tenant: tenantId, p_huella: huella, p_nombre: c.nombre, p_proveedor: c.proveedor,
+    p_origen: origen, p_bytes: c.contenido.length, p_contenido: byteaDeBuffer(c.contenido),
+  }), 'peajes.ingesta.encolar');
+  if (r.error) {
+    if (r.error.code === '54000') {
+      return { ok: false, codigo: 'cola_llena', motivo: `Hay ${MAX_PENDIENTES_POR_FLOTA} archivos pendientes de procesar; espera a que se vacíe la cola.` };
     }
-    return { ok: false, codigo: 'error', motivo: ins.error?.message ?? 'sin id' };
+    return { ok: false, codigo: 'error', motivo: r.error.message };
   }
-  return { ok: true, id: String(ins.data.id), duplicado: false, estado: 'pendiente' };
+  const filas = (r.data ?? []) as FilaEncolar[];
+  const fila = filas[0];
+  if (!fila) return { ok: false, codigo: 'error', motivo: 'peaje_archivo_encolar no devolvió fila' };
+  return { ok: true, id: String(fila.id), duplicado: Boolean(fila.duplicado), estado: String(fila.estado) };
 }
 
 // ── El proceso (lo llama el cron) ───────────────────────────────────────────

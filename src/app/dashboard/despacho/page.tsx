@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { sufijoTenant } from '../sufijo';
+import { sufijoTenant, querystringCompleto } from '../sufijo';
 import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
@@ -93,7 +93,9 @@ export default async function PaginaDespacho({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; p?: string; q?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/despacho', sp);
+  // Querystring REAL (`?p=`/`?q=`): si la sesión expira a media navegación,
+  // el rebote a /login la conserva — ver el comentario largo en guard.ts.
+  const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/despacho', sp, querystringCompleto(sp));
   if (!puedeVerRuta(rol, '/dashboard/despacho')) redirect('/dashboard');
 
   const puedeCapturarDinero = puedeVerArea(rol, 'dinero');

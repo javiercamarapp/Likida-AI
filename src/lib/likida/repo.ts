@@ -248,6 +248,29 @@ export function sanearCatalogo(q: string | undefined | null): string {
 }
 
 /**
+ * Ids de unidades con viaje ABIERTO en este tenant (hallazgo ALTO: ver
+ * `uq_viaje_abierto_por_unidad`, 0849). `asignarUnidad`/`crearViaje`
+ * (operacion.ts) ya tienen su propio candado de servidor contra esto, pero
+ * eso solo evita que un POST directo lo logre — sin esto, el COMBO de
+ * `/dashboard/despacho` seguía OFRECIENDO esas unidades, así que el jefe de
+ * tráfico podía intentarlo (y chocar con el candado) cuando la pantalla
+ * debía habérselo quitado de enfrente desde antes.
+ *
+ * Acotado igual que el resto del catálogo: una flota con más unidades
+ * abiertas que `MAX_PAGINAS` páginas necesita filtrar en SQL, no aquí — pero
+ * eso excede lo que un combo de 20 opciones resuelve.
+ */
+async function unidadesConViajeAbierto(tenantId: string): Promise<string[]> {
+  const filas = await traerTodo<{ unidad_id: unknown }>(
+    (d, h) => acotada(supabaseAdmin().from('viaje').select('unidad_id', conteo(d))
+      .eq('tenant_id', tenantId).in('estatus', ['abierto', 'en_cuadre']).not('unidad_id', 'is', null)
+      .order('unidad_id').range(d, h), 'unidadesConViajeAbierto'),
+    'unidadesConViajeAbierto',
+  );
+  return [...new Set(filas.map((f) => f.unidad_id).filter((id): id is string => typeof id === 'string'))];
+}
+
+/**
  * Hasta `limite` (≤ `TOPE_CATALOGO`) opciones ACTIVAS del catálogo, filtradas
  * por `q` en la base. Sin `q` son las primeras por orden alfabético — el
  * arranque del combo, no "todas".
@@ -273,6 +296,12 @@ export async function buscarCatalogo(
     .eq('tenant_id', tenantId)
     .eq('activo', true);
   if (texto) consulta = consulta.ilike(cat.columna, `%${texto}%`);
+  // HALLAZGO ALTO: el combo de unidades no debe ni OFRECER una unidad que ya
+  // está en otro viaje abierto — ver `unidadesConViajeAbierto` arriba.
+  if (tipo === 'unidad') {
+    const ocupadas = await unidadesConViajeAbierto(tenantId);
+    if (ocupadas.length > 0) consulta = consulta.not('id', 'in', `(${ocupadas.join(',')})`);
+  }
 
   const { data, error } = await acotada(consulta.order(cat.columna).limit(tope), `buscarCatalogo:${tipo}`);
   if (error) throw new Error(`buscarCatalogo:${tipo}: ${error.message}`);

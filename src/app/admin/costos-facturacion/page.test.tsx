@@ -1,4 +1,5 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -56,20 +57,35 @@ vi.mock('@/lib/formato', async (importar) => ({
   hoyMx: dobles.hoyMx,
 }));
 
-import { FormaConAviso } from '../ui/forma';
+import { FormaConAviso, type AccionDeForma } from '../ui/forma';
+import { FormaEmitirMensualidad } from './forma-emitir';
 import CostosFacturacionPage from './page';
 
-function formasConAviso(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
-  if (Array.isArray(nodo)) { for (const hijo of nodo) formasConAviso(hijo, salida); return salida; }
+type AccionEmitir = (previo: unknown, fd: FormData) => Promise<{ ok?: string; error?: string }>;
+
+/** Recorre el árbol ya renderizado (sin montar DOM) y junta cada elemento
+ *  cuyo `type` sea `componente` — así se extraen, de la página REAL, tanto
+ *  las server actions cerradas por CLOSURE como las props que la página le
+ *  pasó a cada formulario (mismo patrón que `mcp-clientes/page.test.tsx`). */
+function buscarElementos(nodo: ReactNode, componente: unknown, salida: Elemento[] = []): Elemento[] {
+  if (Array.isArray(nodo)) { for (const hijo of nodo) buscarElementos(hijo, componente, salida); return salida; }
   if (!isValidElement<Record<string, unknown>>(nodo)) return salida;
-  if (nodo.type === FormaConAviso) salida.push(nodo);
-  formasConAviso(nodo.props.children as ReactNode, salida);
+  if (nodo.type === componente) salida.push(nodo);
+  buscarElementos(nodo.props.children as ReactNode, componente, salida);
   return salida;
 }
 function accionDelBoton(pagina: ReactNode, patron: RegExp) {
-  const forma = formasConAviso(pagina).find((f) => patron.test(String(f.props.boton)));
+  const forma = buscarElementos(pagina, FormaConAviso).find((f) => patron.test(String(f.props.boton)));
   if (!forma) throw new Error(`No se encontró un FormaConAviso con botón que matchee ${patron}`);
   return forma.props.accion as (previo: unknown, fd: FormData) => Promise<{ ok?: string; error?: string }>;
+}
+/** "Emitir" dejó de ser un `FormaConAviso` de un clic (HALLAZGO MEDIO,
+ *  auditoría adversarial) — ahora es `FormaEmitirMensualidad`, que SÍ exige
+ *  confirmar en un diálogo antes de invocar la server action real. */
+function accionEmitirDeLaPagina(pagina: ReactNode) {
+  const [forma] = buscarElementos(pagina, FormaEmitirMensualidad);
+  if (!forma) throw new Error('No se encontró FormaEmitirMensualidad en la página');
+  return forma;
 }
 
 const fd = (campos: Record<string, string>) => { const f = new FormData(); for (const [k, v] of Object.entries(campos)) f.set(k, v); return f; };
@@ -120,7 +136,7 @@ it('accionPrecio: con IVA declarado, dice que ya se puede contratar', async () =
 
 it('accionEmitir: sin flota elegida, error explícito y NO llama emitirMensualidad', async () => {
   const pagina = await CostosFacturacionPage();
-  const accion = accionDelBoton(pagina, /^Emitir$/);
+  const accion = accionEmitirDeLaPagina(pagina).props.accion as AccionEmitir;
   const r = await accion(null, fd({ tenantId: '' }));
   expect(r).toEqual({ error: 'Elige una flota.' });
   expect(dobles.emitirMensualidad).not.toHaveBeenCalled();
@@ -130,7 +146,7 @@ it('accionEmitir: el periodo es el MES EN CURSO en hora de México, no UTC (regr
   dobles.hoyMx.mockReturnValue('2026-12-31'); // 31 de diciembre en México
   dobles.emitirMensualidad.mockResolvedValue({ monto: 2784, subtotal: 2400, iva: 384, referencia: 'REF-1' });
   const pagina = await CostosFacturacionPage();
-  const accion = accionDelBoton(pagina, /^Emitir$/);
+  const accion = accionEmitirDeLaPagina(pagina).props.accion as AccionEmitir;
   await accion(null, fd({ tenantId: 'tn-1' }));
   // Debe emitir DICIEMBRE (2026-12-01 al 2026-12-31), nunca enero.
   expect(dobles.emitirMensualidad).toHaveBeenCalledWith('tn-1', '2026-12-01', '2026-12-31');
@@ -139,11 +155,80 @@ it('accionEmitir: el periodo es el MES EN CURSO en hora de México, no UTC (regr
 it('accionEmitir: dice las TRES cifras (total, base, IVA) y la referencia — verlas juntas es lo que deja cachar un IVA mal puesto', async () => {
   dobles.emitirMensualidad.mockResolvedValue({ monto: 2784, subtotal: 2400, iva: 384, referencia: 'REF-1' });
   const pagina = await CostosFacturacionPage();
-  const accion = accionDelBoton(pagina, /^Emitir$/);
+  const accion = accionEmitirDeLaPagina(pagina).props.accion as AccionEmitir;
   const r = await accion(null, fd({ tenantId: 'tn-1' }));
   expect(r.ok).toContain('REF-1');
   expect(dobles.revalidatePath).toHaveBeenCalledWith('/admin/costos-facturacion');
   expect(dobles.revalidatePath).toHaveBeenCalledWith('/dashboard/suscripcion');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA ADVERSARIAL, HALLAZGO MEDIO: "Emitir" era un `FormaConAviso` de un
+// solo clic — sin diálogo — que disparaba `emitirMensualidad` (acción fiscal
+// real, constraint de unicidad por periodo en la base) de inmediato. Ahora es
+// `FormaEmitirMensualidad` (BotonConfirmar/DialogoConfirmar, tono="peligro",
+// mismo molde que `FormaRechazarCliente` del PR #583). Estas tres pruebas son
+// la INTEGRACIÓN: que la página de verdad use ESE componente (no el de un
+// clic), que le pase el periodo REAL calculado por `periodoMesActualMx`, y
+// que la server action cerrada por CLOSURE sea la que de verdad emite cuando
+// se confirma.
+// ═══════════════════════════════════════════════════════════════════════════
+
+it('INTEGRACIÓN — "Emitir" de la página real es FormaEmitirMensualidad (confirmación), NUNCA FormaConAviso (un solo clic)', async () => {
+  const pagina = await CostosFacturacionPage();
+  expect(buscarElementos(pagina, FormaEmitirMensualidad)).toHaveLength(1);
+  // Si alguien revirtiera el arreglo reintroduciendo el de un clic, ningún
+  // FormaConAviso con botón "Emitir" debe volver a existir.
+  expect(buscarElementos(pagina, FormaConAviso).some((f) => f.props.boton === 'Emitir')).toBe(false);
+});
+
+it('INTEGRACIÓN — el botón "Emitir" abre el diálogo de confirmación en vez de ejecutar directo, con el periodo REAL y las flotas reales', async () => {
+  dobles.hoyMx.mockReturnValue('2026-10-15');
+  const pagina = await CostosFacturacionPage();
+  const forma = accionEmitirDeLaPagina(pagina);
+  expect(forma.props.periodoIni).toBe('2026-10-01');
+  expect(forma.props.periodoFin).toBe('2026-10-31');
+  expect(forma.props.flotas).toEqual([{ id: 'tn-1', nombre: 'ACME' }]);
+
+  // Se vuelve a renderizar EL MISMO componente con las props REALES que la
+  // página le pasó, para comprobar su marcado: el disparador visible es
+  // type="button" (no envía nada por sí solo) y lo que SÍ envía vive DENTRO
+  // del <dialog>, cerrado por omisión.
+  const html = renderToStaticMarkup(
+    <FormaEmitirMensualidad
+      accion={forma.props.accion as AccionDeForma}
+      flotas={forma.props.flotas as Array<{ id: string; nombre: string }>}
+      periodoIni={forma.props.periodoIni as string}
+      periodoFin={forma.props.periodoFin as string}
+    />,
+  );
+  expect(html).toMatch(/<button type="button"[^>]*>Emitir<\/button>/);
+  expect(html).toContain('<dialog');
+  expect(html).not.toMatch(/<dialog[^>]*\sopen/);
+});
+
+it('INTEGRACIÓN — confirmar en el diálogo (el type="submit" real) SÍ emite la mensualidad', async () => {
+  dobles.emitirMensualidad.mockResolvedValue({ monto: 2784, subtotal: 2400, iva: 384, referencia: 'REF-1' });
+  const pagina = await CostosFacturacionPage();
+  const forma = accionEmitirDeLaPagina(pagina);
+  const accion = forma.props.accion as AccionEmitir;
+
+  // El botón "Sí, emitir mensualidad" es type="submit": confirmarlo envía
+  // EXACTAMENTE este formulario a esta action. Invocarla aquí simula ESE
+  // envío, no un clic cualquiera sobre el disparador.
+  const r = await accion(null, fd({ tenantId: 'tn-1' }));
+  expect(dobles.emitirMensualidad).toHaveBeenCalledWith('tn-1', expect.any(String), expect.any(String));
+  expect(r.ok).toContain('REF-1');
+});
+
+it('INTEGRACIÓN — cancelar NO ejecuta: el botón Cancelar es type="button" y no hay otra vía al formulario que emite', () => {
+  const html = renderToStaticMarkup(
+    <FormaEmitirMensualidad accion={async () => null} flotas={[{ id: 'tn-1', nombre: 'ACME' }]} periodoIni="2026-10-01" periodoFin="2026-10-31" />,
+  );
+  // Cancelar es type="button": no hay <form> que envíe al cancelar, así que
+  // no hay manera de que ese clic llegue a invocar `emitirMensualidad`.
+  expect(html).toMatch(/<button type="button"[^>]*>Cancelar<\/button>/);
+  expect(dobles.emitirMensualidad).not.toHaveBeenCalled();
 });
 
 it('accionConciliar: manda el userId de la SESIÓN al conciliar, y timbra DESPUÉS con su propio try', async () => {
@@ -170,7 +255,7 @@ it('accionConciliar: un PAC caído NO deshace el pago ya registrado — se dice 
 
 it('un "por cobrar" caído se DICE — nunca se confunde con "nada pendiente"', async () => {
   dobles.getPorCobrar.mockRejectedValueOnce(new Error('caída'));
-  const html = (await import('react-dom/server')).renderToStaticMarkup(await CostosFacturacionPage());
+  const html = renderToStaticMarkup(await CostosFacturacionPage());
   expect(html).toContain('No se pudo leer lo que está por cobrarse');
   expect(html).not.toContain('Nada pendiente de cobro');
 });

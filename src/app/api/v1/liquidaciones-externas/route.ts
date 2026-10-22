@@ -42,9 +42,10 @@ import {
   buscarPorClave, leerPorId, listarLiquidacionesExternas, ESTADOS,
   type EstadoLiquidacionExterna, type FiltroListado,
 } from '@/lib/likida/liquidacion_externa/repo';
-import { recibirLiquidacionExterna, intentarEntrega } from '@/lib/likida/liquidacion_externa/servicio';
+import { recibirLiquidacionExterna, intentarEntrega, dependenciasPorOmision } from '@/lib/likida/liquidacion_externa/servicio';
 import { leerConfigCorreo } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { aLiquidacionExternaApi, type LiquidacionExternaApi } from '@/lib/likida/liquidacion_externa/api';
+import { DatoInvalido } from '@/lib/likida/errores';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -101,6 +102,25 @@ export async function POST(req: Request) {
     mensajeConflicto:
       'Ya existe una liquidación con esa `claveExterna` y OTRO contenido. Likida no sobrescribe una liquidación ya recibida (el chofer pudo haberla visto). Si es una corrección, mándala con una `claveExterna` nueva (por ejemplo, la misma con sufijo `-R1`) y avisa a la oficina.',
     crear: async () => {
+      // HALLAZGO MEDIO (oct-2026): una flota cuyo canal de entrega resuelve a `correo` (perfil `cinco_agentes`, o su
+      // propia config) NO puede recibir por este endpoint. `recibirLiquidacionExterna` respeta el fail-safe y nunca
+      // manda por WhatsApp — correcto —, pero esta función no genera ni inserta la fila de `liquidacion_entrega_correo`
+      // (esa tabla solo la llenan `desglose_recibir.ts`/`liberar_envio.ts`/`reenvio_correo.ts`, las tres del camino
+      // `/desgloses`, que SÍ arman el .xlsx que ese camino exige: `procesarEntregasCorreo` rechaza una entrega sin
+      // `xlsx_ruta` y esa ruta está cerrada a `.xlsx` de un tenant — ver `exigirRutaDelTenant` en `repo_correo.ts`).
+      // Reinventar esa generación aquí sería duplicar un flujo ya probado con sus propias reglas (asunto sin dinero,
+      // SHA256, idempotencia por rol); se rechaza EXPLÍCITO en vez de aceptar un 201 silencioso que deja la
+      // liquidación huérfana para siempre (ver `faseDeHuerfanasCorreo` en `servicio.ts`, la red que detecta el caso
+      // si de todos modos ocurre). Solo se checa al CREAR: una liquidación ya existente (reintento idempotente) se
+      // sigue leyendo y acusando normal, aunque haya entrado antes de este guardia.
+      const canal = await dependenciasPorOmision.canalDeEntrega(acceso.tenantId);
+      if (canal === 'correo') {
+        throw new DatoInvalido(
+          'Esta flota entrega las liquidaciones por correo, no por WhatsApp. `POST /v1/liquidaciones-externas` solo '
+          + 'arma la entrega por WhatsApp: esta liquidación quedaría recibida pero sin forma de llegar a nadie. Usa '
+          + '`POST /v1/liquidaciones-externas/desgloses`, que es el camino que además genera y adjunta el Excel por correo.',
+        );
+      }
       const { liquidacion } = await recibirLiquidacionExterna(acceso.tenantId, datos, huellaDelContenido);
       // Se intenta entregar YA, pero la entrega no es parte de la promesa de
       // este POST: `intentarEntrega` nunca lanza, y lo que no salga ahora lo

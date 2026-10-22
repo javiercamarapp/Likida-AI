@@ -194,23 +194,39 @@ async function choferConViajes(
       id: string; folio: string | null; operador_id: string; operador: { nombre?: string } | null;
     }>;
 
-  const porOperador = new Map<string, { nombre: string; folios: string[] }>();
+  const porOperador = new Map<string, { nombre: string; folios: string[]; idsAscenso: string[] }>();
   for (const v of filas) {
     const previo = porOperador.get(v.operador_id)
-      ?? { nombre: v.operador?.nombre?.trim() || 'un chofer', folios: [] };
+      ?? { nombre: v.operador?.nombre?.trim() || 'un chofer', folios: [], idsAscenso: [] };
     previo.folios.push(v.folio || v.id.slice(0, 8));
+    // `filas` ya viene ordenada por created_at ascendente (ver el `.order`
+    // arriba), así que idsAscenso[0] es SIEMPRE el viaje más viejo sin
+    // liquidar de este operador.
+    previo.idsAscenso.push(v.id);
     porOperador.set(v.operador_id, previo);
   }
 
   const out: Disparo[] = [];
-  for (const [operadorId, { nombre, folios }] of porOperador) {
+  for (const [operadorId, { nombre, folios, idsAscenso }] of porOperador) {
     if (folios.length < p.n) continue;
     out.push({
       objeto: 'operador', objetoId: operadorId,
-      // El conteo VA en la clave: 2 viajes avisa una vez, y si se le juntan 3
-      // vuelve a avisar. Sellar solo por chofer dejaría el problema creciendo
-      // en silencio justo después del único aviso.
-      clave: String(folios.length),
+      // HALLAZGO 21-oct-2026: el conteo SOLO no basta como ciclo. El sello de
+      // `regla_disparo` es PERMANENTE (sin TTL ni purga para esta tabla —
+      // `purgarAvisosViejos` solo opera sobre `regla_aviso`), así que un
+      // chofer que llega a 3 (sella clave='3'), baja a 2 (se liquida uno) y
+      // vuelve a subir a 3 con un viaje DISTINTO repite el mismo conteo: el
+      // sello ya existente lo lee como "ya avisado" y el problema —genuino,
+      // con viajes distintos— nunca se vuelve a avisar.
+      //
+      // Fix: el ciclo es (conteo, viaje más viejo sin liquidar), no solo el
+      // conteo. El viaje más viejo SÍ cambia cuando la racha se rompe y se
+      // vuelve a acumular (la liquidación resuelve primero los viajes más
+      // viejos — orden FIFO del propio query), y se mantiene igual mientras
+      // la racha sigue siendo la MISMA (caso de control: 3 viajes que no
+      // cambian no deben volver a avisar). No se rastrea estado nuevo: el id
+      // ya viene en la fila que el lector ya trae.
+      clave: `${folios.length}:${idsAscenso[0]}`,
       evidencia: `${nombre} lleva ${folios.length} viajes sin liquidar: ${folios.slice(0, 8).join(', ')}${folios.length > 8 ? '…' : ''}.`,
     });
   }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { crearDbFalsa, type DbFalsa, type Fila } from './db_falsa.test.util';
+import { crearDbFalsa, type DbFalsa, type Fila, type RpcResultado } from './db_falsa.test.util';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CICLO COMPLETO DE LA CONCILIACIÓN DE PEAJES, de punta a punta (con dobles).
@@ -137,6 +137,23 @@ function claimArchivos(args: Record<string, unknown>): Fila[] {
   for (const a of els) { a.estado = 'procesando'; a.reclamo = `tok-${a.id}`; a.intentos = (a.intentos as number) + 1; }
   return els.map((a) => ({ id: a.id, tenant_id: a.tenant_id, nombre: a.nombre, proveedor: a.proveedor, intentos: a.intentos, reclamo: a.reclamo, desglose_id: null }));
 }
+/** `peaje_archivo_encolar` (0850) en memoria — mismo contrato que en cola.test.ts: dedup por huella + tope por flota. */
+function encolarFalso(args: Record<string, unknown>): RpcResultado {
+  const tenantId = args.p_tenant as string;
+  const huella = args.p_huella as string;
+  const existente = db.tablas.peaje_ingesta_archivo.find((a) => a.tenant_id === tenantId && a.huella === huella);
+  if (existente) return [{ id: existente.id, estado: existente.estado, duplicado: true }];
+  const pendientes = db.tablas.peaje_ingesta_archivo
+    .filter((a) => a.tenant_id === tenantId && ['pendiente', 'procesando'].includes(a.estado as string)).length;
+  if (pendientes >= ingesta.MAX_PENDIENTES_POR_FLOTA) return { error: { message: `tope de ${ingesta.MAX_PENDIENTES_POR_FLOTA} archivos pendientes por flota`, code: '54000' } };
+  const id = `enc-${Math.random().toString(36).slice(2)}`;
+  db.tablas.peaje_ingesta_archivo.push({
+    id, tenant_id: tenantId, huella, nombre: args.p_nombre, proveedor: args.p_proveedor ?? null, origen: args.p_origen,
+    bytes: args.p_bytes, contenido: args.p_contenido, estado: 'pendiente', intentos: 0, proximo_intento_en: new Date().toISOString(),
+    reclamo: null, reclamado_hasta: null, desglose_id: null, ultimo_error: null,
+  });
+  return [{ id, estado: 'pendiente', duplicado: false }];
+}
 function claimPull(): Fila[] {
   const ahora = new Date().toISOString();
   const els = db.tablas.peaje_ingesta_config.filter((c) => c.pull_activo === true && c.pull_url && String(c.pull_proximo_en) <= ahora);
@@ -171,7 +188,7 @@ const peticion = (ruta: string, init: RequestInit = {}, tenant = T) =>
 const idDesglose = (n = 0) => String(db.tablas.desglose_peaje[n].id);
 
 beforeEach(() => {
-  db = crearDbFalsa(base(), { peaje_archivo_reclamar: claimArchivos, peaje_pull_reclamar: claimPull, peaje_avisos_pendientes: avisosPendientes, peaje_posiciones_ventana: rpcPosiciones, peaje_curso_reemplazar: rpcCursos });
+  db = crearDbFalsa(base(), { peaje_archivo_reclamar: claimArchivos, peaje_archivo_encolar: encolarFalso, peaje_pull_reclamar: claimPull, peaje_avisos_pendientes: avisosPendientes, peaje_posiciones_ventana: rpcPosiciones, peaje_curso_reemplazar: rpcCursos });
   correosProcesados.clear(); correosEnCurso.clear(); adjuntos.clear(); envios.length = 0;
   telefonoDinero = { [T]: '525599990000', [T2]: '525588880000' }; envioOk = true; apagado = false;
   process.env.RESEND_API_KEY = 're_test';

@@ -301,7 +301,12 @@ import { join, relative } from 'node:path';
 // Integración con A2 Peajes (protocolo de discrepancia geográfica conectado al cron, hallazgo alto de la auditoría adversarial
 // del 21-oct-2026, sobre la misma base): +1 archivo (319 → 320), `peajes/aviso_discrepancia.ts` — lee la línea del desglose y
 // la última posición GPS para armar el reporte real a seguridad cuando una unidad `unidad_inmovilizada` cruza un peaje.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 320;
+// Auditoría A5 Conductor, HALLAZGO 1 (foto ilegible sin metadatos reales, 21-oct-2026, sobre la misma base): +1 archivo
+// (320 → 321), `intake/calidad_foto.ts` — mismo falso positivo YA documentado arriba para `ingesta_sftp.ts`: el archivo
+// no toca Supabase, solo cae en el regex genérico `\.(from|rpc)\(` por `Buffer.from(b64, 'base64')` al decodificar la
+// foto para medirla con `sharp`. Se documenta en vez de reescribir el `Buffer.from` idiomático para esquivar el regex.
+// Llamadas SIN cambio: no hay ninguna llamada real a Supabase en este archivo.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -473,7 +478,47 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 320;
 // sobre la misma base): +2 llamadas (2,238 → 2,240), en `peajes/aviso_discrepancia.ts` (lectura de la línea del desglose y de
 // la última posición GPS), por `acotada`, ancladas a `tenant_id`. Funcionalidad nueva, no código migrado; cubierta por
 // `aviso_discrepancia.test.ts`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_240;
+// 21-oct-2026, fix del alta huérfana por Google OAuth (hallazgo MEDIO): +1
+// llamada (2,240 → 2,241), en `lib/auth/provisionar.ts` (`.from('app_user')
+// .select('id')…` para saber si el correo YA tiene fila `app_user` en
+// cualquier tenant antes de enlazar un `auth.users` existente que
+// `createUser` no pudo crear). El archivo YA estaba fuera de la frontera
+// (su insert de siempre); esto no suma un archivo, solo una consulta más en
+// uno que ya contaba. Por `.eq('email', …)` contra la columna NOT NULL
+// UNIQUE de la 0001 — no cruza tenant, solo confirma si existe. Cubierta por
+// `provisionar.test.ts`.
+// AUDITORÍA ADVERSARIAL (HALLAZGO 2, A7 Cobranza, 21-oct-2026, sobre la misma base): +2 llamadas (2,241 → 2,243), en
+// `interruptores.ts` (que ya contaba): `marcarFrenoTemporal` (`.from('freno_temporal').upsert(...)`) y
+// `frenoTemporalActivo` (`.from('freno_temporal').select(...)`), el freno AUTOMÁTICO con TTL (mig. 0854) que cierra el
+// hueco del contador local de rechazo masivo entre invocaciones concurrentes de `ejecutarCobranza`/`ejecutarCobranzaGastos`.
+// `cobranza.ts`/`cobranza_gasto.ts` solo llaman a esas dos funciones, sin `.from(` propio nuevo. Funcionalidad nueva, no
+// código migrado; cubierta por `cobranza_freno_rechazo_masivo_persistente.test.ts`.
+// AUDITORÍA A8 ESCALACIÓN (hallazgo confirmado, 21-oct-2026, sobre la misma base): +1 llamada (2,243 → 2,244), en
+// `confirmar_viaje.ts` (que ya contaba): `marcarRechazados` — el `.from('viaje').update(...)` que escribe
+// `rechazado_en` cuando el chofer dice EXPLÍCITAMENTE que no. Mismo candado por tenant/operador que `marcarAceptado`,
+// por `is('aceptado_en', null)`/`is('rechazado_en', null)`. Funcionalidad nueva, no código migrado; cubierta por
+// `confirmar_viaje.test.ts`.
+// LIQUIDACIÓN EXTERNA — HUÉRFANA DE CORREO (hallazgo MEDIO, 21-oct-2026): +2 llamadas (2,244 → 2,246), en
+// `liquidacion_externa/trabajo.ts` (que ya contaba: es el archivo declarado que cruza tenants a propósito —
+// ver su cabecera). `candidatasHuerfanaCorreo` — la consulta que detecta liquidaciones `pendiente` que entraron
+// por el endpoint general (sin fila de `liquidacion_desglose`) y que, si el tenant resuelve a canal `correo`,
+// nadie iba a entregar por NINGÚN camino — agrega un `.from('liquidacion_externa').select(...)` y un
+// `.from('liquidacion_desglose').select(...)`. Funcionalidad nueva (la red de alerta de `servicio.ts`), no código
+// migrado; cubierta por `trabajo_huerfana.test.ts` y `servicio_huerfana_correo.test.ts`.
+// AUDITORÍA DEL ORQUESTADOR — TOPE DE AVISOS COMPARTIDO (hallazgo BAJO confirmado, 21-oct-2026): +1 llamada
+// (2,246 → 2,247), en `orquestador/fuentes_reales.ts` (que ya contaba). `depsAvisoReales().avisosRecientes` —
+// el `.from('orquestador_escalacion').select('id', { count: 'exact', head: true })...` que cuenta, por flota,
+// cuántos avisos quedaron `enviado` en la última hora: el contador real que ahora comparten el barrido horario
+// (`avisarEscalacionesPendientes`) y la escalación en caliente (`crearEscalacion` → `avisarEscalacion`), para que
+// la herramienta `escalar` del chat ya no mande avisos sin límite cuando el modelo parafrasea el mismo incidente.
+// Funcionalidad nueva (cierra el bypass del tope anti-ruido), no código migrado; cubierta por
+// `aviso_escalacion.test.ts` (R10) y `orquestador_vivo.e2e.test.ts` (casos 9 y 10).
+// A5 CONDUCTOR, TABLERO DE DOCUMENTOS DE CIERRE (21-oct-2026): +1 llamada (2,247 → 2,248; en master era 2,246 → 2,247), en `conductor/repo_validacion.ts`
+// (que ya contaba). `leerDocumentosCierrePorViajes` agrega UN `.from('viaje_documento_cierre').select(...)` (por lotes, con
+// `traerPorIds`, anclado a `tenant_id`) para pintar en el tablero interno (`/dashboard/agentes/conductores`) el mismo resumen
+// que ya exponía `GET /v1/evidencias` — antes solo vivía en la API externa, nunca en la vista del jefe de tráfico. 0 archivos
+// nuevos. Funcionalidad nueva, no código migrado; cubierta por `tablero-hitos.test.tsx` y `tablero.test.ts`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_248;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

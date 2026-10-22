@@ -181,6 +181,10 @@ jobs:
           PGUSER=postgres bash supabase/tests/0335_db_retencion_r3_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0338_db_retencion_r5_red.sql
           PGUSER=postgres bash supabase/tests/0338_db_retencion_r5_concurrencia.sh localhost 5432 postgres
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0325_capacidad_wa_jornada.sql
+          PGUSER=postgres bash supabase/tests/0325_jornada_concurrencia.sh localhost 5432 postgres
+          PGUSER=postgres bash supabase/tests/0325_upgrade_forward_only.sh localhost 5432 postgres
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0327_jornada_r2_regresiones.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0339_jornada_integridad_red.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0340_arco_alcance.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0341_gps_alerta_minima.sql
@@ -231,6 +235,10 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0812_peaje_tag_tipo_unidad.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0847_peaje_reclamo_candado_idempotencia.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0848_factura_proveedor_cfdi_tardio.sql
+          PGUSER=postgres bash supabase/tests/0849_arco_cancelacion_candado_concurrencia.sh localhost 5432 postgres
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0850_peaje_ingesta_tope_candado.sql
+          PGUSER=postgres bash supabase/tests/0850_peaje_ingesta_tope_candado_concurrencia.sh localhost 5432 postgres
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0851_un_viaje_abierto_por_unidad.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0813_peaje_unidad_inmovilizada.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0785_liquidacion_correo_destinatarios.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0786_liquidacion_desglose_meta.sql
@@ -338,6 +346,9 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0809_aislamiento_tablas_cinco_agentes.sql
           PGUSER=postgres bash supabase/tests/0809_migraciones_reaplicables.sh localhost 5432 postgres
           PGUSER=postgres bash supabase/tests/0380_conductor_claim_concurrencia.sh localhost 5432 postgres
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0852_evidencia_reuso_tenant.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0853_tablero_validacion_degradada.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0854_freno_temporal.sql
 
       # ── Capa 0: contratos de leases/fencing en Postgres real ───────────
       # Este archivo no es informativo: pg_prove interpreta el TAP y falla

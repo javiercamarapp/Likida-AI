@@ -18,9 +18,9 @@ import { TIPOS_HITO, type HitoFila, type TipoEvidencia, type TipoHito } from './
 import { faltaEsquema, leerDocumentosCliente } from './repo';
 import { catalogoDeCliente, esTipoDocumento } from './documentos_cliente';
 import {
-  documentoDeCaption, documentosARequerir, decidirFotoDocumento, estadoDeAccion, esEstadoDocumentoCierre, mensajeFotoDocumento, motivoIlegible,
+  documentoDeCaption, documentosARequerir, decidirFotoDocumento, estadoDeAccion, esEstadoDocumentoCierre, mensajeFotoDocumento, motivoIlegible, resumenDocumentosCierre,
   MENSAJE_FOTO_DOCUMENTO_FALLO, MENSAJE_SIN_CATEGORIA_DOCUMENTO,
-  type AccionFotoDocumento, type DocumentoCierreFila, type DocumentoCierrePrevio, type EstadoDocumentoCierre, type MetadatosFoto, type PuertosDocumentosCierre,
+  type AccionFotoDocumento, type DocumentoCierreFila, type DocumentoCierrePrevio, type EstadoDocumentoCierre, type MetadatosFoto, type PuertosDocumentosCierre, type ResumenDocumentosCierre,
 } from './documentos_cierre';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -267,6 +267,8 @@ export interface EvidenciaFila {
   tipo: TipoEvidencia;
   ruta: string | null;
   creadaEn: string;
+  /** T-A5 (0852): esta MISMA foto (sha256) ya se usó como evidencia en otra combinación de hito+ciclo de la MISMA flota — típicamente, de OTRO viaje. No bloqueó el registro; solo se marca para revisión humana en el tablero. */
+  reusoTenant: boolean;
 }
 
 /** Registra una evidencia ya subida a Storage. `duplicada` = ese mensaje o esa foto ya estaban (reintento del webhook). */
@@ -295,10 +297,11 @@ export async function guardarEvidencia(a: {
 export async function leerEvidencias(tenantId: string, viajeIds: string[]): Promise<EvidenciaFila[]> {
   if (viajeIds.length === 0) return [];
   const filas = await traerPorIds<Fila>(viajeIds, (t) => acotada(supabaseAdmin()
-    .from('viaje_hito_evidencia').select('id, viaje_hito_id, ciclo, tipo, ruta, created_at')
+    .from('viaje_hito_evidencia').select('id, viaje_hito_id, ciclo, tipo, ruta, created_at, reuso_tenant_evidencia_id')
     .eq('tenant_id', tenantId).in('viaje_id', t).order('created_at', { ascending: true }), 'tablero.evidencias') as never, 'tablero.evidencias');
   return filas.map((f) => ({
     id: String(f.id), hitoId: String(f.viaje_hito_id), ciclo: Number(f.ciclo), tipo: f.tipo as TipoEvidencia, ruta: s(f.ruta), creadaEn: String(f.created_at),
+    reusoTenant: f.reuso_tenant_evidencia_id != null,
   }));
 }
 
@@ -383,6 +386,28 @@ export function puertosDocumentosCierreReales(): PuertosDocumentosCierre {
   return { leer: leerDocumentosCierre, crear: crearSolicitudDocumentosCierre };
 }
 
+/**
+ * T-A5-69: el resumen de documentos de cierre de CADA viaje listado, para el tablero del jefe de tráfico — los
+ * MISMOS datos que ya expone `GET /v1/evidencias` (misma `resumenDocumentosCierre` sobre las mismas filas; nunca
+ * una copia). Cada id de `viajeIds` SIEMPRE trae una entrada: un viaje sin solicitud trae `usaCatalogo: false`,
+ * que es un dato real («este viaje no usa el catálogo»), no un hueco. Lanza si la lectura falla por completo
+ * (lo atrapa `leerDatosTablero`: ausente en `DatosTablero` = no se pudo leer, el tablero no afirma nada).
+ */
+export async function leerDocumentosCierrePorViajes(tenantId: string, viajeIds: string[]): Promise<Map<string, ResumenDocumentosCierre>> {
+  const mapa = new Map<string, ResumenDocumentosCierre>();
+  if (viajeIds.length === 0) return mapa;
+  const filas = await traerPorIds<Fila>(viajeIds, (t) => acotada(supabaseAdmin().from('viaje_documento_cierre').select(COLUMNAS_DOC_CIERRE)
+    .eq('tenant_id', tenantId).in('viaje_id', t), 'tablero.documentos_cierre') as never, 'tablero.documentos_cierre');
+  const porViaje = new Map<string, DocumentoCierreFila[]>();
+  for (const f of filas) {
+    const d = filaADocumentoCierre(f);
+    if (!d) continue;
+    porViaje.set(d.viajeId, [...(porViaje.get(d.viajeId) ?? []), d]);
+  }
+  for (const id of viajeIds) mapa.set(id, resumenDocumentosCierre(porViaje.get(id) ?? []));
+  return mapa;
+}
+
 export type ResultadoFotoDocumentoCierre = 'ok' | 'duplicada' | 'fallo';
 
 /**
@@ -455,7 +480,7 @@ export async function documentoCierreDeLaFoto(tenantId: string, viajeId: string,
 
 /**
  * Registra la foto ya subida: la clasifica (si `documentoId` viene nulo, sin categoría clara), evalúa legibilidad (T-A5-54; sin
- * `metadatos` —fase 1— siempre legible) y guarda. Devuelve el acuse al chofer; nunca lanza.
+ * `metadatos` —imagen que `sharp` no pudo leer, u otro llamador que no los manda— siempre legible) y guarda. Devuelve el acuse al chofer; nunca lanza.
  */
 export async function registrarFotoDocumentoCierre(e: {
   tenantId: string; hito: Pick<HitoFila, 'id' | 'viajeId' | 'ciclo'>; documentoId: string | null; pendientes: readonly DocumentoCierreFila[];
@@ -635,6 +660,8 @@ export interface DatosTablero {
   sinDestino?: NivelSinDestino[];
   /** T-A5-44: patios de entrega distintos del esperado que el supervisor aún no atendió. Ausente = no se pudo leer: no se inventa una alerta. */
   patiosDistintos?: ExcepcionPatio[];
+  /** T-A5-69: el resumen de documentos de cierre (T-A5-53/54) por viaje, para el tablero. Ausente = no se pudo leer (ver `leerDocumentosCierrePorViajes`): el tablero no afirma nada. Presente = una entrada por cada viaje listado, aunque sea `usaCatalogo: false`. */
+  documentosCierre?: Map<string, ResumenDocumentosCierre>;
 }
 
 /** Los viajes activos de la flota con todo lo que el tablero necesita. Un solo tenant, siempre. */
@@ -700,7 +727,15 @@ export async function leerDatosTablero(tenantId: string, f: FiltrosTablero = {})
   } catch (e) {
     logger.warn('conductor.tablero_patio_no_leido', { err: e instanceof Error ? e.message : String(e) });
   }
-  return { viajes, hayMas, hitos: hitosCrudos.map(filaAHito), veredictos, evidencias, acciones, sitios, sitioCodigos, sitiosCoords, posiciones, sinDestino, patiosDistintos };
+  // T-A5-69: el resumen de documentos de cierre, por viaje. Si la lectura falla (sin migrar, base caída) no se
+  // afirma nada: `documentosCierre` queda ausente y el tablero no pinta un «0 de 0» inventado.
+  let documentosCierre: Map<string, ResumenDocumentosCierre> | undefined;
+  try {
+    documentosCierre = await leerDocumentosCierrePorViajes(tenantId, ids);
+  } catch (e) {
+    logger.warn('conductor.tablero_documentos_cierre_no_leido', { err: e instanceof Error ? e.message : String(e) });
+  }
+  return { viajes, hayMas, hitos: hitosCrudos.map(filaAHito), veredictos, evidencias, acciones, sitios, sitioCodigos, sitiosCoords, posiciones, sinDestino, patiosDistintos, documentosCierre };
 }
 
 export interface CatalogosFiltro {
@@ -729,6 +764,10 @@ export interface IndicadoresCrudos {
   validadosUbicacion: number;
   sinCoincidencia: number;
   capturadosOficina: number;
+  /** 0853: llegadas (carga/descarga) recibidas o validadas en el periodo — el ÚNICO tipo de hito que `validar_hito.ts` compara contra ubicación. */
+  llegadasValidables: number;
+  /** 0853: de las validables, cuántas corrieron en modo DEGRADADO — 'sin_dato' (sin geocerca o sin ubicación con qué comparar) o 'validado' SOLO con el pin que el chofer elige a mano (sin GPS real en la ventana). */
+  validacionDegradada: number;
 }
 
 export async function leerIndicadores(tenantId: string, desde: Date, hasta: Date, f: FiltrosTablero = {}): Promise<IndicadoresCrudos> {
@@ -746,6 +785,7 @@ export async function leerIndicadores(tenantId: string, desde: Date, hasta: Date
     minutosRespuestaPromedio: typeof r.minutos_respuesta_promedio === 'number' ? r.minutos_respuesta_promedio : null,
     escalados: num(r.escalados), omitidos: num(r.omitidos), validadosUbicacion: num(r.validados_ubicacion),
     sinCoincidencia: num(r.sin_coincidencia), capturadosOficina: num(r.capturados_oficina),
+    llegadasValidables: num(r.llegadas_validables), validacionDegradada: num(r.validacion_degradada),
   };
 }
 

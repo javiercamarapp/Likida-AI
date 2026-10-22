@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react';
 import { Check, PencilLine, X } from 'lucide-react';
 import { fechaHoraMx } from '@/lib/formato';
 import { StatusPill } from '../ui/kit';
+import { BotonConfirmar } from '../ui/confirmar';
 import type { PiezaEnCola } from '@/lib/likida/agentes/cola';
 
 export type ResultadoPieza = { ok?: string; error?: string } | null;
@@ -114,11 +115,23 @@ export function FormaPieza({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
  *  archivo es 'use client'. Mantener en sincronía con cola.ts si cambia. */
 const TIPOS_ENVIABLES_UI = new Set(['correo_frio', 'correo_seguimiento']);
 
-/** El paso de ENVÍO de una aprobada (0120): un click aparte con claim
- *  anti-doble-click en el servidor. Dice a quién sale y con qué versión;
- *  sin correo del prospecto, lo dice en vez de ofrecer un botón muerto. Un
- *  tipo INTERNO (ficha/brief/propuesta — AGB-4) tampoco ofrece botón: esas
- *  piezas son un expediente sobre el prospecto, no algo que se le manda. */
+/**
+ * El paso de ENVÍO de una aprobada (0120): un click aparte con claim
+ * anti-doble-click en el servidor. Dice a quién sale y con qué versión;
+ * sin correo del prospecto, lo dice en vez de ofrecer un botón muerto. Un
+ * tipo INTERNO (ficha/brief/propuesta — AGB-4) tampoco ofrece botón: esas
+ * piezas son un expediente sobre el prospecto, no algo que se le manda.
+ *
+ * AUDITORÍA ADVERSARIAL, HALLAZGO MEDIO: "Enviar por correo" manda un correo
+ * REAL a un prospecto externo vía Resend con un solo clic — efecto
+ * irreversible FUERA del sistema (a diferencia de "Rechazar" en `FormaPieza`,
+ * que ya exige un paso intermedio propio para revelar el motivo). Se envuelve
+ * con el ÚNICO sistema de confirmación del repo (`admin/ui/confirmar`,
+ * DESIGN.md §3), mismo molde que `FormaRechazarCliente` (admin/mcp-clientes,
+ * PR #583): `BotonConfirmar`/`DialogoConfirmar` con `tono="peligro"`, y el
+ * diálogo DICE a qué correo y a quién se va a enviar — no "¿estás seguro?" a
+ * secas.
+ */
 export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: AccionPieza }) {
   const [estado, enviar, pendiente] = useActionState<ResultadoPieza, FormData>(accion, null);
   const enviable = TIPOS_ENVIABLES_UI.has(pieza.tipo);
@@ -147,11 +160,18 @@ export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
         {!enviable ? (
           <span className="text-[11.5px]" style={{ color: 'var(--faint)' }}>pieza interna — no se manda al prospecto</span>
         ) : pieza.prospectoCorreo ? (
-          <button type="submit" disabled={pendiente}
+          <BotonConfirmar
+            etiqueta={pendiente ? 'Enviando…' : 'Enviar por correo'}
+            tono="peligro"
+            deshabilitado={pendiente}
+            etiquetaConfirmar="Sí, enviar"
+            titulo="Enviar por correo"
+            descripcion={`Se va a mandar "${pieza.titulo}" a ${pieza.prospectoEmpresa ? `${pieza.prospectoEmpresa} — ` : ''}`
+              + `${pieza.prospectoCorreo}. Resend lo entrega al instante — es un correo real a un prospecto externo, `
+              + 'y no hay botón para deshacerlo.'}
             className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3.5 py-1.5 rounded-full transition-opacity hover:opacity-85 disabled:opacity-50"
-            style={{ background: 'var(--ink)', color: 'var(--surface)' }}>
-            {pendiente ? 'Enviando…' : 'Enviar por correo'}
-          </button>
+            style={{ background: 'var(--ink)', color: 'var(--surface)' }}
+          />
         ) : (
           <span className="text-[11.5px]" style={{ color: 'var(--faint)' }}>sin correo capturado — se captura en Vendedores</span>
         )}

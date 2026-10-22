@@ -37,6 +37,12 @@ import {
 type Resultado = { data: unknown; error: { message: string } | null };
 const OK = (data: unknown): Resultado => ({ data, error: null });
 const FALLA = (message = 'la base no contestó'): Resultado => ({ data: null, error: { message } });
+/** Para `.select(col, { count: 'exact', head: true })`: sin esto `cadena()`
+ *  devuelve `{data, error}` SIN `count`, y `contarTokensVivos` leería
+ *  `undefined` y lanzaría — que es justo lo que hay que poder simular aparte
+ *  (ver el caso "si no se puede contar..." más abajo). */
+type ResultadoConteo = Resultado & { count: number };
+const CONTEO = (count: number): ResultadoConteo => ({ data: null, error: null, count });
 
 /** Cadena PostgREST falsa: todo método devuelve la cadena, await → resultado. */
 function cadena(resultado: Resultado): unknown {
@@ -715,11 +721,22 @@ describe('decidirCliente (el superadmin)', () => {
 });
 
 describe('listarClientesPendientes', () => {
-  it('lista con sus anfitriones; la base caída LANZA (no devuelve vacío)', async () => {
-    conTablas({ mcp_oauth_cliente: [OK([{ id: 'a', nombre: 'Claude', redirect_uris: ['https://atacante.tld/cb'], estado: 'pendiente', creado_en: PASADO }])] });
+  it('lista con sus anfitriones y sus tokens vivos; la base caída LANZA (no devuelve vacío)', async () => {
+    conTablas({
+      mcp_oauth_cliente: [OK([{ id: 'a', nombre: 'Claude', redirect_uris: ['https://atacante.tld/cb'], estado: 'pendiente', creado_en: PASADO }])],
+      mcp_oauth_token: [CONTEO(3)],
+    });
     const l = await listarClientesPendientes();
     expect(l[0].anfitriones).toEqual(['atacante.tld']);
+    expect(l[0].tokensVivos).toBe(3);
     conTablas({ mcp_oauth_cliente: [FALLA()] });
+    await expect(listarClientesPendientes()).rejects.toThrow();
+  });
+  it('si no se puede contar los tokens vivos de un cliente, LANZA — no afirma un 0 que nadie midió', async () => {
+    conTablas({
+      mcp_oauth_cliente: [OK([{ id: 'a', nombre: 'Claude', redirect_uris: [], estado: 'pendiente', creado_en: PASADO }])],
+      mcp_oauth_token: [FALLA('boom')],
+    });
     await expect(listarClientesPendientes()).rejects.toThrow();
   });
 });

@@ -12,6 +12,7 @@ import {
   type ConfigGasto, type GastoDeOperador, type ItemCobro, type PlanCobroGasto, type MotivoComprobante,
   type ContactoMedible, type Efectividad, type OperadorCobro,
 } from './cobranza_gasto_pura';
+import { estaApagado, frenoTemporalActivo, marcarFrenoTemporal } from '../interruptores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA COBRANZA POR GASTO (0525) — el lado con base de datos.
@@ -39,6 +40,12 @@ export * from './cobranza_gasto_pura';
 
 /** Rechazos reintentables SEGUIDOS que detienen la corrida (mismo criterio RES-1 que la cobranza por viaje). */
 export const TOPE_RECHAZOS_META_GASTO = 5;
+/** HALLAZGO 2 (auditoría adversarial, 21-oct-2026) — mismo valor y misma
+ *  llave compartida ('cobranza:rechazo_masivo_whatsapp') que el TTL de
+ *  cobranza.ts: ambos motores comparten el MISMO número de WhatsApp, así
+ *  que comparten el MISMO freno. Ver la cabecera de `TTL_FRENO_RECHAZO_MASIVO_
+ *  WHATSAPP_MS` en cobranza.ts y la del freno en interruptores.ts. */
+export const TTL_FRENO_RECHAZO_MASIVO_WHATSAPP_MS = 5 * 60_000;
 /** Cuánto atrás mide la efectividad. */
 export const DIAS_EFECTIVIDAD = 30;
 /** Retención de la bitácora por gasto: igual que `cobranza_contacto` (0332). */
@@ -342,12 +349,30 @@ export interface OpcionesCobranzaGasto {
 /**
  * Corre la cobranza POR GASTO de UNA flota. La ventana horaria y el agente pausado los decide el llamador
  * (`ejecutarCobranza`), igual que para la cobranza por viaje; aquí se decide si la flota la encendió.
+ *
+ * EL KILL SWITCH GLOBAL (0110) se pregunta AQUÍ TAMBIÉN y no solo en `ejecutarCobranza` (auditoría
+ * adversarial, 21-oct-2026, mismo hallazgo que cobranza.ts): hoy el único llamador es `ejecutarCobranza`,
+ * que ya corta antes de llegar aquí, pero esta función queda exportada y un llamador futuro que la invoque
+ * directo (sin pasar por `ejecutarCobranza`) no debe heredar un hueco por el que un incidente apagado
+ * globalmente sigue mandando WhatsApp de cobranza por gasto. Fail-closed, igual que allá.
  */
 export async function ejecutarCobranzaGastos(
   tenantId: string,
   ahora: Date = new Date(),
   opts: OpcionesCobranzaGasto = {},
 ): Promise<ResultadoCobranzaGasto> {
+  if (await estaApagado('agente:cobranza')) {
+    logger.warn('agente_cobranza.apagado_global', { tenantId, modulo: 'gasto' });
+    return resultadoGastoVacio('apagado por el interruptor global agente:cobranza');
+  }
+  // HALLAZGO 2: defensa en profundidad, igual razón que el kill switch de
+  // arriba — hoy el único llamador es `ejecutarCobranza`, que ya pregunta
+  // este freno antes de llegar aquí, pero esta función queda exportada y un
+  // llamador futuro directo no debe heredar el hueco.
+  if (await frenoTemporalActivo('cobranza:rechazo_masivo_whatsapp', ahora)) {
+    logger.warn('agente_cobranza.freno_rechazo_masivo_activo', { tenantId, modulo: 'gasto' });
+    return resultadoGastoVacio('pausado por un rechazo masivo reciente de WhatsApp (freno automático, se suelta solo)');
+  }
   const config = await leerConfigGasto(tenantId);
   if (!config.porGasto) return resultadoGastoVacio('la cobranza por gasto está apagada');
 
@@ -495,6 +520,10 @@ export async function ejecutarCobranzaGastos(
           error: `WhatsApp rechazó ${rechazosSeguidos} cobranzas por gasto seguidas por un motivo reintentable (rate limit o bloqueo). La corrida se detuvo.`,
           codigo: 'wa_rechazo_masivo',
         });
+        // HALLAZGO 2: misma marca compartida que cobranza.ts — el número de
+        // WhatsApp es el mismo para ambos motores.
+        await marcarFrenoTemporal('cobranza:rechazo_masivo_whatsapp', TTL_FRENO_RECHAZO_MASIVO_WHATSAPP_MS,
+          `${rechazosSeguidos} rechazos reintentables seguidos (cobranza por gasto, tenant ${tenantId})`, ahora);
         break;
       }
       continue;

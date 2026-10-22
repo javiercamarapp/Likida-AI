@@ -25,13 +25,22 @@
 // aplica: marcador aleatorio alrededor del documento, instrucciones al modelo de
 // tratarlo como información, esquema cerrado de salida y ANCLAJE de cada valor al
 // texto (un valor que el documento no contiene pierde confianza).
+//
+// UNA FOTO O UN PDF ESCANEADO NO TIENEN TEXTO (`texto === null`): ni el anclaje de
+// arriba ni `detectarInyeccion` pueden correr contra píxeles, así que para estos dos
+// formatos las dos defensas quedan sin efecto por diseño (no hay con qué verificar). La
+// mitigación NO finge un anclaje que no existe: en vez de aceptar la confianza que
+// autorreporta el modelo de visión, `taparCriticosSinAnclaje` le pone un TOPE por
+// debajo de `UMBRAL_CRITICO` a cada campo CRÍTICO sin importar qué tan alta la haya
+// declarado — así `validarExtraccion` siempre pide confirmación humana para esos
+// campos en una foto o un escaneo, sean el 0.6 o el 0.99 que haya dicho el modelo.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { randomBytes } from 'node:crypto';
 import type { CaidaLlm } from '@/lib/llm/caidas';
 import { z } from 'zod';
 import {
-  CAMPOS_DOC, CAMPOS_DOC_LLM, CAMPOS_MERCANCIA, CAMPOS_MERCANCIA_LLM, CLAVES_DOC, CLAVES_DOC_LLM, CLAVES_MERCANCIA, CLAVES_MERCANCIA_LLM, MAX_MERCANCIAS, UMBRAL_ESCALA,
+  CAMPOS_DOC, CAMPOS_DOC_LLM, CAMPOS_MERCANCIA, CAMPOS_MERCANCIA_LLM, CLAVES_DOC, CLAVES_DOC_LLM, CLAVES_MERCANCIA, CLAVES_MERCANCIA_LLM, MAX_MERCANCIAS, UMBRAL_CRITICO, UMBRAL_ESCALA,
   campoDoc, campoMercancia, etiquetaCampo, extraccionVacia, type CampoDoc, type CampoValor, type Extraccion,
 } from './campos';
 import {
@@ -41,7 +50,7 @@ import { registrarEscalamiento, type CodigoEscalamiento } from './contador_escal
 import { llaveTexto } from './catalogos';
 import { MAX_TEXTO_MODELO, type ContenidoDoc, type FormatoDoc } from './contenido';
 import { completarDerivados, type ContextoDerivar, type FormatoLector, type ResultadoLector } from './derivar';
-import { detectarInyeccion } from './inyeccion';
+import { detectarInyeccion } from '../deteccion_inyeccion';
 import { limpiarTexto, normalizarNumero, normalizarValor, type OrdenFecha } from './normalizar';
 import { leerBol } from './lectores/bol';
 import { leerOrdenAgente } from './lectores/orden_agente';
@@ -223,7 +232,8 @@ function convertirItem(
   let conf = Math.min(0.99, Math.max(0, item.confianza)) - n.penalizacion;
   const evidencia = limpiarTexto(item.evidencia, 200);
   if (texto !== null) {
-    // Anclaje: solo se puede verificar contra texto (no contra píxeles).
+    // Anclaje: solo se puede verificar contra texto (no contra píxeles). Para texto === null (foto o escaneo) este
+    // bloque no corre — ahí la mitigación es `taparCriticosSinAnclaje`, al final de `extraerDocumento`.
     if (!evidencia || !evidenciaEnTexto(evidencia, texto)) {
       conf = Math.min(conf, def.critico ? 0.6 : 0.7);
       notas.push(evidencia ? 'La evidencia que citó el modelo no aparece en el documento.' : 'El modelo no citó evidencia del documento.');
@@ -318,6 +328,35 @@ export function fusionar(bajo: Extraccion, alto: Extraccion): Extraccion {
     e.mercancias = alto.mercancias.length > 0 ? alto.mercancias : bajo.mercancias;
   }
   return e;
+}
+
+/**
+ * Una foto o un PDF escaneado no tienen texto contra el que anclar (ver el encabezado del archivo): `convertirItem`
+ * directamente no aplica el anclaje para `texto === null`. Esta función es la mitigación: tras terminar TODA la cascada
+ * (niveles, fusión entre niveles, validadores deterministas), tapa la confianza de cada campo CRÍTICO que siga viniendo
+ * del modelo (`origen: 'llm'`) por debajo de `UMBRAL_CRITICO`, para que `validarExtraccion` SIEMPRE pida confirmación
+ * humana en esos campos — nunca se acepta solo porque el modelo diga que está seguro.
+ *
+ * El tope es `UMBRAL_CRITICO - 0.06` (no `-0.01`) a propósito: `fusionar()` SUMA +0.05 cuando dos niveles del modelo
+ * coinciden en el mismo valor (dos lecturas de la misma imagen suelen coincidir), y esta función corre
+ * DESPUÉS de esa fusión, en el resultado ya terminado — nunca dentro del bucle de escalamiento, para no provocar un
+ * nivel más caro solo por este tope (la decisión de escalar ya se tomó con la confianza real del modelo).
+ */
+export function taparCriticosSinAnclaje(e: Extraccion): Extraccion {
+  const TOPE = Math.round((UMBRAL_CRITICO - 0.06) * 100) / 100;
+  const NOTA = 'Foto o escaneo: no hay texto contra el que verificar este dato crítico de forma independiente; lo confirma una persona, sin importar qué tan segura diga estar la lectura.';
+  const topar = (c: CampoValor | undefined): CampoValor | undefined => {
+    if (!c || c.valor === null || c.valor === '' || c.origen !== 'llm' || c.confianza <= TOPE) return c;
+    return { ...c, confianza: TOPE, notas: [...(c.notas ?? []), NOTA] };
+  };
+  const campos = { ...e.campos };
+  for (const d of CAMPOS_DOC) if (d.critico) { const v = topar(campos[d.clave]); if (v) campos[d.clave] = v; }
+  const mercancias = e.mercancias.map((fila) => {
+    const copia = { ...fila };
+    for (const d of CAMPOS_MERCANCIA) if (d.critico) { const v = topar(copia[d.clave]); if (v) copia[d.clave] = v; }
+    return copia;
+  });
+  return { campos, mercancias };
 }
 
 // ── La orquestación ─────────────────────────────────────────────────────────
@@ -595,6 +634,9 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
     registrarEscalamiento(esc);
   }
   if (acumulado) {
+    // Foto o PDF escaneado: sin texto no hubo anclaje posible (ver taparCriticosSinAnclaje). Se aplica AQUÍ, después de
+    // toda la cascada y su fusión, para no alterar las decisiones de escalamiento que ya se tomaron con la confianza real.
+    if (c.texto === null) acumulado = taparCriticosSinAnclaje(acumulado);
     r.revisionHumana = revisionHumanaFinal(acumulado, fallos, lecturas);
     for (const h of r.revisionHumana) r.avisos.push(`Revisión humana: ${etiquetaCampo(h.campo, h.renglon)} — ${h.motivo} Valores en conflicto: ${h.valores.map((v) => `«${v}»`).join(', ')}.`);
   }

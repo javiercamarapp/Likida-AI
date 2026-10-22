@@ -440,7 +440,19 @@ async function escalarPorFallo(tenantId: string, conversacionId: string, contact
   }
 }
 
-function advertenciaDeBorrador(b: { faltantes: string[]; requiereHumano: boolean; adjuntos?: Array<AdjuntoRef['clave']>; origen?: string }, senales: string[]): string | null {
+/**
+ * Etiqueta de cada `tarea` (Borrador.tareas) para el aviso de aprobación. `entrega_de_archivo` es
+ * la única que existe hoy (redactor.ts: `seccionFacturaPod`, cuando el POD no se puede adjuntar);
+ * cualquier tarea nueva que se agregue ahí debe tener su entrada aquí para no caer en el genérico.
+ */
+const ETIQUETA_TAREA: Record<string, string> = {
+  entrega_de_archivo: 'el texto le promete al cliente que tu ejecutivo le hace llegar un archivo (p. ej. el POD) — nadie lo hace de forma automática, dale seguimiento tú',
+};
+
+function advertenciaDeBorrador(
+  b: { faltantes: string[]; tareas: string[]; requiereHumano: boolean; adjuntos?: Array<AdjuntoRef['clave']>; origen?: string },
+  senales: string[],
+): string | null {
   const partes: string[] = [];
   if (b.origen === 'respuesta_rapida') partes.push('es una respuesta rápida que tú aprobaste para una pregunta parecida: revisa que conteste lo que preguntó el cliente');
   if (b.adjuntos && b.adjuntos.length > 0) partes.push(`adjuntará: ${b.adjuntos.map(nombreDeAdjunto).join(', ')} (solo si la ventana de 24 h del cliente sigue abierta)`);
@@ -448,6 +460,16 @@ function advertenciaDeBorrador(b: { faltantes: string[]; requiereHumano: boolean
   if (senales.includes('folio_ajeno')) partes.push('preguntó por un folio que no es suyo');
   if (senales.includes('no_texto')) partes.push('mandó un archivo que el Vigía no lee');
   if (b.faltantes.length > 0) partes.push(`falta información real: ${b.faltantes.join(', ')}`);
+  // T-A4-vigía (21-oct): una `tarea` NO es un dato faltante (el texto ya contesta con datos reales) ni
+  // necesariamente `requiereHumano` (no siempre dispara el escalamiento por SLA de `evaluarEscalamiento`
+  // en servicio.ts) — es una promesa de seguimiento MANUAL que hoy no tiene cola ni recordatorio en el
+  // resto del ciclo (solo decide autoenvío en `politica.ts`). Sin este aviso explícito, el gerente podía
+  // aprobar con un toque un mensaje que compromete una entrega sin que quede rastro de que alguien debe
+  // hacerla. Se resuelve aquí, en el aviso de aprobación que YA es obligatorio para este caso (`politica.ts`
+  // fuerza 'aprobar' cuando hay tareas, nunca 'autoenviar'), en vez de inventar un `MotivoEscalamiento` nuevo:
+  // eso reportaría la bitácora `sin_dato` con `faltantes: []` (falso) y dispararía el flujo de
+  // `avisoAServicioCubre`, pensado para datos de unidad ausentes, no para esto.
+  if (b.tareas.length > 0) partes.push(b.tareas.map((t) => ETIQUETA_TAREA[t] ?? `hay una tarea manual pendiente sin seguimiento automatizado: ${t}`).join('; '));
   if (b.requiereHumano && partes.length === 0) partes.push('este caso lo debe atender una persona');
   return partes.length > 0 ? partes.join('; ') : null;
 }
@@ -814,7 +836,11 @@ export async function devolverConversacion(actor: Actor, conversacionId: string,
   const { repo } = deps;
   const conv = await repo.conversacion(actor.tenantId, conversacionId);
   if (!conv || conv.estado !== 'activa') return { ok: false, motivo: 'no_encontrado', mensaje: 'No encuentro esa conversación activa en tu flota.' };
-  await repo.actualizarConversacion(actor.tenantId, conv.id, { control: 'agente', tomadaPor: null, tomadaEn: null });
+  // `tomarConversacion` pone `atendidaEn` para frenar el nivel 1 de la escalera mientras el gerente «se encarga». Si lo devuelve
+  // sin que el cliente recibiera una respuesta real, hay que apagar esa marca: si no, el nivel 1 queda bloqueado el resto del
+  // ciclo (`evaluarEscalamiento` en escalamiento.ts:135) aunque nadie haya atendido al cliente. `marcarRespondida` (una respuesta
+  // real sí salió) ya la limpia por su cuenta, así que esto es correcto en los dos casos: con o sin respuesta previa.
+  await repo.actualizarConversacion(actor.tenantId, conv.id, { control: 'agente', tomadaPor: null, tomadaEn: null, atendidaEn: null });
   await repo.evento(actor.tenantId, { conversacionId: conv.id, tipo: 'devuelta', actorUserId: actor.userId });
   return { ok: true, mensaje: 'El Vigía vuelve a redactar en este hilo (con tu aprobación, según el modo de tu flota).' };
 }

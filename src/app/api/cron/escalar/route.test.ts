@@ -600,24 +600,61 @@ describe('BE-7 — los barridos ven el reloj y la corrida tiene techo duro', () 
     expect(registrarLatido).toHaveBeenCalledWith('escalar', 'parcial', { cortesSeguidos: 1, cortados: 7 });
   });
 
-  it('si un barrido se cuelga más allá del techo, la ruta responde y LATE igual — `parcial`, con el motor en vuelo nombrado', async () => {
+  // HALLAZGO ALTO (21-oct-2026): el aislamiento de "si uno truena, el otro
+  // igual intenta" sólo cubría EXCEPCIONES. Un `await` sobre una promesa que
+  // nunca resuelve (un `fetch` sin tope, un motor que ignoró su `venceEn`) no
+  // lanza — se queda ahí, y la cadena secuencial de `await` de `correrMotores`
+  // NUNCA llegaba a los barridos siguientes en esa corrida. Esta prueba ANTES
+  // documentaba el hueco (`vigilarReglas`/`correrOrquestadorVivo`/
+  // `avisarHuerfanosPendientes` quedaban en `not.toHaveBeenCalled()` hasta que
+  // el reloj duro de TODA la corrida, a los 110 s, cortaba por `enVuelo:
+  // 'relojes'`). Con el fix, cada barrido tiene SU PROPIO presupuesto —menor
+  // que el reloj duro— y al vencer la cadena SIGUE: los tres barridos de
+  // después SÍ corren, mucho antes de que el reloj duro de la invocación
+  // entre en juego.
+  it('si un barrido se cuelga más allá de SU presupuesto individual, los barridos siguientes SÍ corren y el cuerpo nombra qué motor se cortó por timeout individual', async () => {
+    vigilarReglas.mockClear();
+    correrOrquestadorVivo.mockClear();
+    avisarHuerfanosPendientes.mockClear();
     vi.useFakeTimers();
     try {
-      // `avisarVencimientos` no contesta nunca: un `fetch` sin tope, un motor
-      // que ignoró su reloj. Antes esto era una lambda muerta a los 120 s sin
-      // latido; ahora la ruta gana la carrera a los 110 s.
+      // `avisarVencimientos` no contesta nunca. Su presupuesto individual
+      // (`PRESUPUESTO_VENCIMIENTOS_MS` = 20 s) es muchísimo menor que el reloj
+      // duro de la invocación (110 s): la carrera la gana el presupuesto
+      // individual, no `conRelojDuro`.
       avisarVencimientos.mockImplementation(() => new Promise(() => {}));
       const pendiente = GET(peticion('Bearer secreto-de-prueba'));
-      await vi.advanceTimersByTimeAsync(111_000);
+      await vi.advanceTimersByTimeAsync(21_000);
       const res = await pendiente;
       const cuerpo = await res.json();
-      expect(cuerpo.corteDuro).toMatchObject({ motorEnVuelo: 'relojes' });
-      expect(registrarLatido).toHaveBeenCalledTimes(1);
-      expect(registrarLatido).toHaveBeenCalledWith('escalar', 'parcial', expect.objectContaining({ corteDuro: 'relojes', cortesSeguidos: 1 }));
-      expect(logger.error).toHaveBeenCalledWith('cron.escalar.corte_duro', expect.objectContaining({ enVuelo: 'relojes' }));
-      // Los dos motores de antes SÍ corrieron y su parte viaja en el cuerpo.
+
+      // No fue el reloj duro de toda la corrida el que cortó — fue el
+      // presupuesto individual del barrido de vencimientos, y el cuerpo lo
+      // nombra en su propio campo.
+      expect(cuerpo.corteDuro).toBeUndefined();
+      expect(cuerpo.relojes.vencimientos).toMatchObject({ codigo: 'timeout_individual', motor: 'vencimientos' });
+      expect(logger.error).toHaveBeenCalledWith('cron.escalar.timeout_individual', expect.objectContaining({ motor: 'vencimientos' }));
+      expect(alertarOperador).toHaveBeenCalledWith('cron.escalar', expect.objectContaining({ codigo: 'timeout_individual' }));
+
+      // EL HUECO QUE ESTA PRUEBA DOCUMENTABA: los tres barridos posteriores ya
+      // NO se quedan sin turno — corrieron, aunque `avisarVencimientos` nunca
+      // haya contestado.
+      expect(vigilarReglas).toHaveBeenCalledTimes(1);
+      expect(correrOrquestadorVivo).toHaveBeenCalledTimes(1);
+      expect(avisarHuerfanosPendientes).toHaveBeenCalledTimes(1);
+
+      // Los motores de antes (aceptación/cobranza) y el de incidencias (que sí
+      // contestó) corrieron normal y su parte viaja en el cuerpo.
       expect(cuerpo.aceptacion).toEqual({ escalados: 0, cortadosPorReloj: 0 });
       expect(cuerpo.comprobacion).toEqual({ tenants: 0, contactados: 0, cortadosPorReloj: 0, fallos: [] });
+      expect(cuerpo.relojes.incidencias).toEqual({ revisadas: 0, avisadas: 0, fallos: 0, cortadasPorReloj: 0 });
+
+      // Un motor que no contesta es, para el contrato de la ruta (OP-C1), lo
+      // mismo que un motor que truena: la corrida pinta 500 y el latido sale
+      // `fallo` — no puede salir en verde con un barrido mudo.
+      expect(res.status).toBe(500);
+      expect(registrarLatido).toHaveBeenCalledTimes(1);
+      expect(registrarLatido).toHaveBeenCalledWith('escalar', 'fallo', expect.objectContaining({ cortesSeguidos: 0 }));
     } finally {
       vi.useRealTimers();
     }
@@ -731,4 +768,65 @@ describe('AUDITORÍA A8 ESCALACIÓN (hallazgo 2): la escalación del Conductor y
     const opciones = (vigilarReglas.mock.calls[0] as unknown as unknown[])[1] as { excluirTenants?: ReadonlySet<string> };
     expect(opciones.excluirTenants).toEqual(new Set(['flota-cinco-agentes']));
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA del orquestador (hallazgo medio): `tenantsConPerfil()` se llamaba
+// 3 VECES por corrida (cobranza, relojes, reglas) para EXACTAMENTE la misma
+// consulta, cruda y sin `conReintentoDeTimeout` — la única sin ese reintento
+// de los tres barridos que la piden. Estas pruebas fijan el arreglo: se
+// cachea dentro de la misma invocación (una sola llamada real cuando sale
+// bien) y un timeout transitorio se reintenta igual que ya hacen
+// `escalarViajesSinAceptar` y `ejecutarCobranzaGlobal` arriba — no tumba la
+// corrida completa.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('tenantsConPerfil(): cacheada dentro de la corrida y con reintento ante timeout', () => {
+  beforeEach(() => {
+    escalarViajesSinAceptar.mockReset().mockResolvedValue({ escalados: 0 });
+    ejecutarCobranzaGlobal.mockReset().mockResolvedValue({ tenants: 0, contactados: 0, fallos: [] });
+    avisarRelojesLegales.mockReset().mockResolvedValue({ revisadas: 0, avisadas: 0, fallos: 0, cortadasPorReloj: 0 });
+    avisarVencimientos.mockReset().mockResolvedValue({ candidatos: 0, avisados: 0, fallos: 0, cortadosPorReloj: 0 });
+    vigilarReglas.mockReset().mockResolvedValue({ reglas: 0, disparadas: 0, avisos: 0, fallos: 0 });
+    alertarOperador.mockClear();
+    logger.error.mockClear();
+    logger.warn.mockClear();
+    estaApagado.mockReset().mockResolvedValue(false);
+    tenantsConPerfil.mockReset().mockResolvedValue(new Set(['flota-cinco-agentes']));
+  });
+
+  it('se llama UNA sola vez por corrida, aunque la pidan cobranza, relojes Y reglas', async () => {
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    expect(tenantsConPerfil).toHaveBeenCalledTimes(1);
+    // y los tres barridos SÍ recibieron el mismo resultado cacheado:
+    expect((ejecutarCobranzaGlobal.mock.calls[0][1] as { excluirTenants?: ReadonlySet<string> }).excluirTenants).toEqual(new Set(['flota-cinco-agentes']));
+    expect((avisarRelojesLegales.mock.calls[0][1] as { excluirTenants?: ReadonlySet<string> }).excluirTenants).toEqual(new Set(['flota-cinco-agentes']));
+    expect(((vigilarReglas.mock.calls[0] as unknown as unknown[])[1] as { excluirTenants?: ReadonlySet<string> }).excluirTenants).toEqual(new Set(['flota-cinco-agentes']));
+  });
+
+  it('un timeout transitorio se reintenta UNA vez y la corrida sigue sana (no tumba cobranza, relojes ni reglas)', async () => {
+    tenantsConPerfil
+      .mockRejectedValueOnce(new Error('tenantsConPerfil: sin respuesta en 8000 ms (tope de consulta)'))
+      .mockResolvedValueOnce(new Set(['flota-cinco-agentes']));
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(200);
+    // Un solo reintento le basta: la segunda llamada ya contesta y se cachea — las tres secciones la usan sin volver a pedirla.
+    expect(tenantsConPerfil).toHaveBeenCalledTimes(2);
+    expect(alertarOperador).not.toHaveBeenCalled();
+    expect((ejecutarCobranzaGlobal.mock.calls[0][1] as { excluirTenants?: ReadonlySet<string> }).excluirTenants).toEqual(new Set(['flota-cinco-agentes']));
+  }, 15_000);
+
+  it('si el reintento TAMBIÉN falla, solo la sección que la pidió primero (cobranza) se cae en 500 — relojes y reglas, que llegan después, reintentan fresco y siguen sanos', async () => {
+    tenantsConPerfil
+      .mockRejectedValueOnce(new Error('tenantsConPerfil: sin respuesta en 8000 ms (tope de consulta)'))
+      .mockRejectedValueOnce(new Error('tenantsConPerfil: sin respuesta en 8000 ms (tope de consulta)'))
+      .mockResolvedValue(new Set(['flota-cinco-agentes']));
+    const res = await GET(peticion('Bearer secreto-de-prueba'));
+    expect(res.status).toBe(500);
+    expect((await res.json()).comprobacion).toMatchObject({ error: expect.stringMatching(/sin respuesta/) });
+    expect(alertarOperador).toHaveBeenCalledWith('cron.cobranza', expect.objectContaining({ codigo: expect.any(String) }));
+    // El fallo NO se cachea: relojes y reglas, que llegan después, piden tenantsConPerfil() de nuevo y esta vez sí contesta.
+    expect(avisarRelojesLegales.mock.calls[0][1]).toMatchObject({ excluirTenants: new Set(['flota-cinco-agentes']) });
+    expect(((vigilarReglas.mock.calls[0] as unknown as unknown[])[1] as { excluirTenants?: ReadonlySet<string> }).excluirTenants).toEqual(new Set(['flota-cinco-agentes']));
+  }, 15_000);
 });

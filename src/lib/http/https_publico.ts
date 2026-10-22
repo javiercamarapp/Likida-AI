@@ -20,8 +20,20 @@ interface PeticionPublica {
    * Por omisión solo https, como siempre.
    */
   permitirHttp?: boolean;
-  /** Tope de bytes del cuerpo (por omisión y como máximo, 8 MiB). */
+  /** Tope de bytes del cuerpo (por omisión y como máximo, 8 MiB — o `maxBytesAbsoluto`, si se da). */
   maxBytes?: number;
+  /**
+   * AUDITORÍA A9 (buzón de facturas): el techo de 8 MiB es deliberado y GLOBAL —
+   * lo hereda cualquier llamador que no diga lo contrario — pero el buzón de
+   * facturas ya tenía su propio tope documentado y probado de 12 MiB para
+   * PDF/zip (`MAX_ADJUNTO_PDF_ZIP_BYTES`, `correo/entrante/route.ts`), de ANTES
+   * de pasar por aquí. Subir el techo GLOBAL a 12 MiB habría aflojado la cota
+   * de memoria para TODOS los demás llamadores (el investigador, el pull de
+   * peajes, los conectores TMS) sin que ninguno lo pidiera. Este campo es el
+   * opt-in explícito: solo sube el techo para la llamada que lo pasa. Sin él,
+   * el techo sigue siendo exactamente 8 MiB, como siempre.
+   */
+  maxBytesAbsoluto?: number;
   /** Al llegar a `maxBytes`, entregar lo leído en vez de fallar (para páginas
    *  web, donde el recorte es lo esperado y no un error). */
   truncar?: boolean;
@@ -44,9 +56,10 @@ export async function httpsPublico(p: PeticionPublica, timeoutMs: number) {
   if ((url.protocol !== 'https:' && !(esHttp && p.permitirHttp)) || url.username || url.password || hostNoPublico(url.hostname)) {
     throw new Error('El proveedor debe usar una dirección HTTPS pública sin credenciales en la URL.');
   }
-  const maxBytes = Math.min(p.maxBytes ?? MAX_RESPUESTA_PUBLICA_BYTES, MAX_RESPUESTA_PUBLICA_BYTES);
+  const techo = Math.max(1, p.maxBytesAbsoluto ?? MAX_RESPUESTA_PUBLICA_BYTES);
+  const maxBytes = Math.min(p.maxBytes ?? techo, techo);
   const truncar = p.truncar === true;
-  return new Promise<{ estado: number; cuerpo: string; encabezados: Record<string, string> }>((resolve, reject) => {
+  return new Promise<{ estado: number; cuerpo: string; bytes: Uint8Array; encabezados: Record<string, string> }>((resolve, reject) => {
     let terminado = false;
     let req: ClientRequest | undefined;
     let respuesta: IncomingMessage | undefined;
@@ -98,14 +111,20 @@ export async function httpsPublico(p: PeticionPublica, timeoutMs: number) {
         for (const [clave, valor] of Object.entries(r.headers)) {
           if (valor !== undefined) encabezados[clave.toLowerCase()] = Array.isArray(valor) ? valor.join(', ') : valor;
         }
-        const entregar = (cuerpo: string) => {
+        // `bytes` conserva el cuerpo SIN decodificar: un PDF o un zip (0530,
+        // buzón de facturas) no son UTF-8, y `cuerpo` (string) los habría
+        // corrompido en silencio para quien sí los necesita crudos. `cuerpo`
+        // se queda para los llamadores de texto (ya eran la mayoría): decodificar
+        // una vez y exponer ambas vistas es más simple y más seguro que pedirle a
+        // cada llamador que decida si le toca decodificar.
+        const entregar = (crudo: Buffer) => {
           if (terminado) return;
           terminado = true;
           clearTimeout(timer);
-          resolve({ estado: r.statusCode ?? 0, cuerpo, encabezados });
+          resolve({ estado: r.statusCode ?? 0, cuerpo: crudo.toString('utf8'), bytes: new Uint8Array(crudo), encabezados });
         };
         if (p.aceptar && !p.aceptar(r.statusCode ?? 0, encabezados)) {
-          entregar('');
+          entregar(Buffer.alloc(0));
           r.destroy();
           return;
         }
@@ -126,14 +145,14 @@ export async function httpsPublico(p: PeticionPublica, timeoutMs: number) {
             // la conexión — el resto nunca se lee a memoria.
             const cabe = maxBytes - total;
             if (cabe > 0) { partes.push(chunk.subarray(0, cabe)); total += cabe; }
-            entregar(Buffer.concat(partes, total).toString('utf8'));
+            entregar(Buffer.concat(partes, total));
             r.destroy();
             return;
           }
           total += chunk.byteLength;
           partes.push(chunk);
         });
-        r.on('end', () => entregar(Buffer.concat(partes, total).toString('utf8')));
+        r.on('end', () => entregar(Buffer.concat(partes, total)));
       };
       req = esHttp
         ? http.request({ ...opciones, protocol: 'http:', port: url.port || 80 }, alResponder)

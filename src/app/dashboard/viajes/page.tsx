@@ -10,7 +10,7 @@ import { interpretarFilasViajes, importarViajes, archivoTraeCitas } from '@/lib/
 import { getZonaHorariaTenant } from '@/lib/likida/repo';
 import { zonaOCdmx } from '@/lib/likida/conductor/config';
 import { logger } from '@/lib/logger';
-import { sufijoTenant } from '../sufijo';
+import { sufijoTenant, querystringCompleto } from '../sufijo';
 import { VistaViajes, type FiltroViajes, type FilaRegistroViaje } from './vista';
 import type { ResultadoImportarUI } from './importar';
 import { MAX_ARCHIVO_SUBIDA_BYTES, MENSAJE_ARCHIVO_GRANDE } from '@/lib/http/subidas_formulario';
@@ -40,7 +40,10 @@ export default async function PaginaViajes({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; f?: string; q?: string; c?: string; p?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/viajes', sp);
+  // Querystring REAL (filtros `?f=`/`?q=`/`?c=`, también `?tenant=`/`?vista=`/
+  // `?rol=`): si la sesión expira a media navegación, el rebote a /login la
+  // conserva — ver el comentario largo en guard.ts y `querystringCompleto`.
+  const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/viajes', sp, querystringCompleto(sp));
   if (!puedeVerRuta(rol, '/dashboard/viajes')) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
   const verDinero = puedeVerArea(rol, 'dinero');

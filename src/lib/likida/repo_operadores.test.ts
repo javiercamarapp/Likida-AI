@@ -27,7 +27,10 @@ const listaResult = vi.fn();
 const limitLista = vi.fn(() => listaResult());
 const orderLista = vi.fn(() => ({ limit: limitLista }));
 const ilikeLista = vi.fn(() => ({ order: orderLista }));
-const eqActivo = vi.fn(() => ({ order: orderLista, ilike: ilikeLista }));
+// `.not('id', 'in', …)` (hallazgo ALTO, solo en el catálogo de unidad):
+// misma forma que `eqActivo` después — sigue aceptando `order`/`ilike`.
+const notLista = vi.fn(() => ({ order: orderLista, ilike: ilikeLista }));
+const eqActivo = vi.fn(() => ({ order: orderLista, ilike: ilikeLista, not: notLista }));
 const eqTenantLista = vi.fn(() => ({ eq: eqActivo }));
 const selectLista = vi.fn(() => ({ eq: eqTenantLista }));
 
@@ -50,6 +53,18 @@ const update = vi.fn(() => ({ eq: eqViajeUpdate }));
 const previoResult = vi.fn();
 const selectPrevio = vi.fn(() => ({ eq: () => ({ eq: () => ({ maybeSingle: () => previoResult() }) }) }));
 
+// `unidadesConViajeAbierto` (hallazgo ALTO, repo.ts): `select('unidad_id',
+// conteo) .eq(tenant) .in(estatus) .not(unidad_id is null) .order .range` —
+// la MISMA escalera paginada que `traerTodo` usa en todo el archivo, pero
+// sobre `viaje` y no sobre `operador`/`cliente`/`unidad`.
+const abiertasResult = vi.fn();
+const rangeAbiertas = vi.fn(() => abiertasResult());
+const orderAbiertas = vi.fn(() => ({ range: rangeAbiertas }));
+const notAbiertas = vi.fn(() => ({ order: orderAbiertas }));
+const inAbiertas = vi.fn(() => ({ not: notAbiertas }));
+const eqTenantAbiertas = vi.fn(() => ({ in: inAbiertas }));
+const selectAbiertas = vi.fn(() => ({ eq: eqTenantAbiertas }));
+
 /**
  * `select()` de la tabla `operador` sirve a DOS llamadores con formas
  * distintas: `listOperadores` (columnas `id, nombre`, filtra activo+tenant,
@@ -62,6 +77,13 @@ const from = vi.fn((tabla: string) => {
   // `listOperadores` — es el punto de `buscarCatalogo`: una sola escalera.
   if (tabla === 'cliente' || tabla === 'unidad') {
     return { select: (_c: string, opts?: unknown) => (opts ? selectConteo() : selectLista()) };
+  }
+  // `viaje` sirve a DOS llamadores con formas distintas: `reasignarOperador`
+  // (columnas `operador_id`, `selectPrevio`) y `unidadesConViajeAbierto`
+  // (columnas `unidad_id`, `selectAbiertas`) — igual que `operador` arriba,
+  // se distinguen por las columnas pedidas.
+  if (tabla === 'viaje') {
+    return { update, select: (cols: string) => (cols.includes('unidad_id') ? selectAbiertas() : selectPrevio()) };
   }
   if (tabla !== 'operador') return { update, select: selectPrevio };
   return {
@@ -125,7 +147,12 @@ describe('listOperadores', () => {
 describe('buscarCatalogo / contarCatalogo (FE-2)', () => {
   beforeEach(() => {
     listaResult.mockReset(); conteoResult.mockReset(); from.mockClear();
-    limitLista.mockClear(); orderLista.mockClear(); ilikeLista.mockClear();
+    limitLista.mockClear(); orderLista.mockClear(); ilikeLista.mockClear(); notLista.mockClear();
+    // Por omisión, ninguna unidad tiene viaje abierto — las pruebas que no
+    // son del hallazgo ALTO (abajo) no deben notar que esta consulta existe.
+    abiertasResult.mockReset(); abiertasResult.mockResolvedValue({ data: [], error: null, count: 0 });
+    rangeAbiertas.mockClear(); orderAbiertas.mockClear(); notAbiertas.mockClear();
+    inAbiertas.mockClear(); eqTenantAbiertas.mockClear(); selectAbiertas.mockClear();
   });
 
   it('la unidad se busca y se ordena por numero_economico, no por nombre', async () => {
@@ -135,6 +162,46 @@ describe('buscarCatalogo / contarCatalogo (FE-2)', () => {
     expect(ilikeLista).toHaveBeenCalledWith('numero_economico', '%T-0%');
     expect(orderLista).toHaveBeenCalledWith('numero_economico');
     expect(r).toEqual([{ id: 'u-1', etiqueta: 'T-014' }]);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // HALLAZGO ALTO: el combo de unidades no debía EXCLUIR las que ya están en
+  // un viaje abierto — el jefe de tráfico podía elegirlas desde la UI y
+  // chocar con el candado de servidor (operacion.ts) en vez de no verlas.
+  // ═══════════════════════════════════════════════════════════════════════
+  it('el catálogo de UNIDAD consulta primero qué unidades tienen viaje abierto, acotado por tenant', async () => {
+    listaResult.mockResolvedValue({ data: [{ id: 'u-1', numero_economico: 'T-014' }], error: null });
+    await buscarCatalogo('t-1', 'unidad');
+    expect(from).toHaveBeenCalledWith('viaje');
+    expect(eqTenantAbiertas).toHaveBeenCalledWith('tenant_id', 't-1');
+    expect(inAbiertas).toHaveBeenCalledWith('estatus', ['abierto', 'en_cuadre']);
+    expect(notAbiertas).toHaveBeenCalledWith('unidad_id', 'is', null);
+  });
+
+  it('el catálogo de UNIDAD EXCLUYE las que ya tienen viaje abierto', async () => {
+    abiertasResult.mockResolvedValue({ data: [{ unidad_id: 'u-1' }], error: null, count: 1 });
+    listaResult.mockResolvedValue({ data: [{ id: 'u-2', numero_economico: 'T-020' }], error: null });
+    const r = await buscarCatalogo('t-1', 'unidad');
+    expect(notLista).toHaveBeenCalledWith('id', 'in', '(u-1)');
+    expect(r).toEqual([{ id: 'u-2', etiqueta: 'T-020' }]);
+  });
+
+  it('con CERO unidades ocupadas, el catálogo de UNIDAD no manda ningún `.not(id, in, …)` — solo lo pide si hay algo que excluir', async () => {
+    abiertasResult.mockResolvedValue({ data: [], error: null, count: 0 });
+    listaResult.mockResolvedValue({ data: [{ id: 'u-1', numero_economico: 'T-014' }], error: null });
+    const r = await buscarCatalogo('t-1', 'unidad');
+    expect(notLista).not.toHaveBeenCalled();
+    expect(r).toEqual([{ id: 'u-1', etiqueta: 'T-014' }]);
+  });
+
+  it('cliente y operador NO consultan viajes abiertos — la exclusión es SOLO de unidad', async () => {
+    listaResult.mockResolvedValue({ data: [{ id: 'c-1', nombre: 'ACME' }], error: null });
+    await buscarCatalogo('t-1', 'cliente');
+    expect(from).not.toHaveBeenCalledWith('viaje');
+    from.mockClear();
+    listaResult.mockResolvedValue({ data: [{ id: 'o-1', nombre: 'Juan' }], error: null });
+    await buscarCatalogo('t-1', 'operador');
+    expect(from).not.toHaveBeenCalledWith('viaje');
   });
 
   it('sin `q` no se manda ilike: el arranque del combo son los primeros N', async () => {

@@ -24,6 +24,24 @@ vi.mock('@/lib/likida/interruptores', () => ({ estaApagado: async () => apagado 
 vi.mock('@/lib/likida/agentes/corridas', () => ({ registrarCorrida: vi.fn(async () => {}) }));
 vi.mock('@/lib/likida/intake/sat', async (orig) => ({ ...(await orig<Record<string, unknown>>()), consultarCFDI: async () => ({ estado: 'vigente' }) }));
 
+// La ruta ya no descarga los adjuntos de Resend con `fetch()` directo: pasa por
+// `httpsPublico` (wrapper anti-SSRF, HALLAZGO 1 de A9). El doble de abajo imita
+// el mismo subconjunto que `route.test.ts` — metadatos (`cuerpo`) y descarga
+// real (`bytes`) — para seguir ejerciendo la cadena completa del e2e.
+vi.mock('@/lib/http/https_publico', () => ({ httpsPublico: vi.fn() }));
+const { httpsPublico } = await import('@/lib/http/https_publico');
+vi.mocked(httpsPublico).mockImplementation(async (p: { url: string }) => {
+  const u = p.url;
+  const m = /\/attachments\/(.+)$/.exec(u);
+  if (m) {
+    if (descargaCaida) throw new Error('simulado: la descarga de metadatos falló');
+    const cuerpo = JSON.stringify({ download_url: `https://dl.example.invalid/${m[1]}` });
+    return { estado: 200, cuerpo, bytes: new TextEncoder().encode(cuerpo), encabezados: {} };
+  }
+  const contenido = xmlDe.get(u.split('/').pop()!) ?? '';
+  return { estado: 200, cuerpo: contenido, bytes: new TextEncoder().encode(contenido), encabezados: {} };
+});
+
 const { POST } = await import('@/app/api/correo/entrante/route');
 const { listarFacturasProveedor, decidirFacturaProveedor, exportarAprobadas, marcarExportadas } = await import('../proveedores');
 
@@ -77,12 +95,6 @@ beforeEach(() => {
     { factura_proveedor: [['tenant_id', 'cfdi_uuid']] },
     { factura_proveedor: { estado: 'pendiente', exportada_en: null, decidido_por: null, decidido_en: null, ocr_confianza: null } },
   );
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    const u = String(url);
-    const m = /\/attachments\/(.+)$/.exec(u);
-    if (m) return descargaCaida ? new Response('boom', { status: 500 }) : new Response(JSON.stringify({ download_url: `https://dl.example.invalid/${m[1]}` }), { status: 200 });
-    return new Response(xmlDe.get(u.split('/').pop()!) ?? '', { status: 200 });
-  }));
 });
 
 describe('feliz: correo → bandeja → aprobación → export', () => {

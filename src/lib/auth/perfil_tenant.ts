@@ -24,10 +24,11 @@
 import { redirect } from 'next/navigation';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acotada } from '@/lib/likida/presupuesto';
 import { logger } from '@/lib/logger';
 import {
   PERFILES_TENANT, rutaPermitidaEnPerfil, apiPermitidaEnPerfil, CRONS_PERFIL_CINCO_AGENTES,
-  moduloProximamenteDeRuta, rutaProximamente, MODULOS_PROXIMAMENTE_PERFIL,
+  moduloProximamenteDeRuta, rutaProximamente, MODULOS_PROXIMAMENTE_PERFIL, inicioDe,
   type PerfilTenant, type ModuloPerfil,
 } from './visibilidad';
 
@@ -126,8 +127,17 @@ export async function moduloEnStandBy(tenantId: string | null | undefined, modul
  * Una server action de una pantalla en stand-by llama a `resolverTenantEfectivo`
  * o a `requireSessionTenant` con la ruta de su pantalla: este rebote la corta
  * antes de que toque un dato.
+ *
+ * `rol`, cuando se conoce (ambos callers lo pasan), afina el rebote con
+ * `inicioDe(rol, perfil)` en vez del `/dashboard` fijo: para un rol que no ve
+ * `operacion` —el contador, que solo ve `dinero`— `/dashboard` NO es una
+ * pantalla que abra (`resolverTenantEfectivo` lo rebotaría de vuelta a su
+ * casa), así que el `/dashboard` fijo producía un bucle de redirecciones
+ * entre esa casa y este rebote (T-PER-02, hallazgo del 21-oct-2026). Sin
+ * `rol` (callers que no lo tienen a mano) el destino sigue siendo
+ * `/dashboard`, igual que siempre.
  */
-export async function exigirRutaDePerfil(tenantId: string | null | undefined, destino: string): Promise<void> {
+export async function exigirRutaDePerfil(tenantId: string | null | undefined, destino: string, rol?: string): Promise<void> {
   const perfil = await perfilDeTenant(tenantId);
   if (!perfil) return;
   if (rutaPermitidaEnPerfil(perfil, destino)) {
@@ -141,7 +151,7 @@ export async function exigirRutaDePerfil(tenantId: string | null | undefined, de
     return;
   }
   logger.warn('perfil_tenant.ruta_negada', { tenantId, destino });
-  redirect('/dashboard');
+  redirect(rol ? inicioDe(rol, perfil) : '/dashboard');
 }
 
 /**
@@ -201,9 +211,17 @@ export async function tenantsConPerfilASaltar(nombreCron: string): Promise<Set<s
  * cobranza y las reglas, que no) — ahí cada sección de stand-by pide esta lista
  * y se salta a esas flotas. Lanza si no puede leer la tabla (falla cerrado). Una
  * tabla que aún no existe (0770 sin aplicar) es "ninguna flota con perfil".
+ *
+ * AUDITORÍA del orquestador (hallazgo medio): esta era la única consulta de
+ * TODA la ruta `/api/cron/escalar` sin `acotada()` — la misma clase de bug que
+ * colgó un cron entero (AUDITORÍA 8, ALTO REINCIDENTE, `presupuesto.ts:243-247`).
+ * Sin el techo fino de 8 s, un cuelgue aquí solo lo paraba el backstop GLOBAL
+ * de 25 s del cliente de Supabase — once segundos más de exposición que el
+ * resto del cron, por una consulta que además se repite 3 veces por corrida
+ * (ver el caché en `cron/escalar/route.ts`).
  */
 export async function tenantsConPerfil(): Promise<Set<string>> {
-  const { data, error } = await tablaPerfil().select('tenant_id');
+  const { data, error } = await acotada(tablaPerfil().select('tenant_id'), 'perfil_tenant.tenants_con_perfil');
   if (error && (error.code === '42P01' || error.code === 'PGRST205')) return new Set();
   if (error) throw new Error(`perfil_tenant: no se pudo leer la lista de flotas con perfil (${error.message})`);
   return new Set((data ?? []).map((f) => String(f.tenant_id)));

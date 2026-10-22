@@ -119,7 +119,9 @@ export const puertosAlertaReales: PuertosAlerta = {
   },
   async enviarWa(telefono, msg, tenantId, ahora, contexto) {
     const e = await enviarConFallback(telefono, { texto: msg.texto, plantilla: msg.plantilla, contexto, tenantId, ahora });
-    return e.ok ? { ok: true, reintentable: false } : { ok: false, reintentable: e.reintentable, motivo: e.mensaje };
+    // `encolado` (RES-1): Meta ya dejó el mensaje en `wa_outbox` para un rechazo reintentable o con
+    // token vencido — se descartaba aquí y causaba un segundo WhatsApp real (HALLAZGO 1, A12).
+    return e.ok ? { ok: true, reintentable: false } : { ok: false, reintentable: e.reintentable, encolado: e.encolado, motivo: e.mensaje };
   },
   async enviarCorreo(para, correo) {
     const e = await enviarCorreo(para, correo);

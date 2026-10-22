@@ -142,11 +142,21 @@ async function firmarImpersonacion(actorId: string, tenantId: string): Promise<v
 export async function resolverTenantEfectivo(
   destino: string,
   sp: { vista?: string; tenant?: string; rol?: string } | undefined,
+  /**
+   * El querystring REAL de la página (filtros, paginación — `?f=...&q=...&
+   * c=...` en /dashboard/viajes, por ejemplo), ya serializado con su `?`
+   * inicial. Se reenvía tal cual a `requireSessionTenant` para que, si la
+   * sesión expira a media navegación, el rebote a /login (o al selector de
+   * flota) conserve esos filtros — ver el comentario largo en guard.ts.
+   * Opcional: los callers que no lo pasan se comportan exactamente igual
+   * que antes.
+   */
+  querystring?: string,
 ): Promise<TenantEfectivo> {
   // `sp` viaja a la puerta: con intención de "ver como" el superadmin
   // conserva la base demo del flujo auditado; sin ella, la puerta devuelve
   // su selección explícita o lo manda al selector (guard.ts).
-  const sesionReal = await requireSessionTenant(destino, sp);
+  const sesionReal = await requireSessionTenant(destino, sp, querystring);
 
   // "Ver como": un superadmin puede mirar el panel con los ojos de otro rol
   // (`?rol=encargado`) para comparar qué ve cada quien. Solo QUITA visibilidad
@@ -241,7 +251,7 @@ export async function resolverTenantEfectivo(
   // perfil). Todas las páginas Y las server actions de /dashboard pasan por esta
   // función con la ruta de su pantalla, así que una pantalla en stand-by queda
   // cerrada para ambas. Sin perfil, no hace nada.
-  await exigirRutaDePerfil(tenantId, destino);
+  await exigirRutaDePerfil(tenantId, destino, sesion.rol);
 
   return { ...sesion, tenantId, tenantNombre, tenantExiste };
 }

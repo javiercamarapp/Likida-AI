@@ -29,7 +29,14 @@ export async function pipelineTenantApagado(tenantId: string, pipeline: Pipeline
   // WhatsApp (`cuadre`): no depende de que alguien haya movido la palanca (el script del perfil además las deja
   // escritas, con motivo, para que /admin las muestre). `whatsapp` (la recepción) sigue viva: el Conductor la usa.
   // Si la tabla del perfil no se puede leer NO se apaga: esta palanca es operativa, no de incidente.
-  if (pipeline !== 'whatsapp' && (await perfilDeTenant(tenantId, Date.now(), 'permitir')) !== null) return true;
+  //
+  // AUDITORÍA ADVERSARIAL BAJO (21-oct-2026): la comparación era `!== null` — "cualquier perfil",
+  // no "el perfil cinco_agentes" específicamente. Hoy es inofensivo porque `PerfilTenant`
+  // (`auth/visibilidad.ts:362`) solo admite 'cinco_agentes', así que el comportamiento no cambia. Pero
+  // es fragilidad latente: el día que se agregue un SEGUNDO perfil, `!== null` apagaría OCR/cuadre
+  // también para ESE tenant sin que nadie lo hubiera pedido. La comparación explícita obliga a revisar
+  // este call-site A PROPÓSITO en ese momento, en vez de heredar el apagado por accidente.
+  if (pipeline !== 'whatsapp' && (await perfilDeTenant(tenantId, Date.now(), 'permitir')) === 'cinco_agentes') return true;
   // Envuelto en try/catch, no solo en el `{ error }` de Supabase: esta
   // palanca corre en CADA turno del chofer, en el mismo webhook que 700+
   // pruebas ejercitan con dobles simplificados de `supabaseAdmin()` que no

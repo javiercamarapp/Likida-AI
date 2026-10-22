@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CONFIG_CONDUCTOR_DEFAULT } from '@/lib/likida/conductor/config';
+import { resumenDocumentosCierre, type DocumentoCierreFila } from '@/lib/likida/conductor/documentos_cierre';
 import { hitoVacio } from '@/lib/likida/conductor/memoria.fixture';
 import type { DatosTablero, ViajeTablero } from '@/lib/likida/conductor/repo_validacion';
 import { armarTablero, episodiosVista, esFolioSimulado, indicadoresVista } from '@/lib/likida/conductor/tablero';
@@ -25,7 +26,10 @@ function H(viajeId: string, e: Partial<Record<TipoHito, string | Partial<HitoFil
   });
 }
 const FILTROS: FiltrosVista = { terminalId: '', clienteId: '', operadorId: '', semaforo: '', dias: 7 };
-const IND = indicadoresVista({ recibidos: 40, sinInsistencia: 30, conRespuestaMedida: 25, minutosRespuestaPromedio: 12.4, escalados: 3, omitidos: 0, validadosUbicacion: 20, sinCoincidencia: 1, capturadosOficina: 0 });
+const IND = indicadoresVista({
+  recibidos: 40, sinInsistencia: 30, conRespuestaMedida: 25, minutosRespuestaPromedio: 12.4, escalados: 3, omitidos: 0, validadosUbicacion: 20, sinCoincidencia: 1, capturadosOficina: 0,
+  llegadasValidables: 22, validacionDegradada: 2,
+});
 
 function pintar(datos: DatosTablero, o: { puedeActuar?: boolean; ind?: ReturnType<typeof indicadoresVista> | null; filtros?: FiltrosVista; episodios?: ReturnType<typeof episodiosVista> | null } = {}) {
   return renderToStaticMarkup(
@@ -94,10 +98,19 @@ describe('el tablero de hitos — lo que ve el jefe de tráfico', () => {
     expect(html).toContain('12 min');
     expect(html).toContain('Hitos escalados');
     expect(html).toContain('últimos 7 días');
+    // T-A5 (0853): 2 de 22 llegadas validables en modo degradado = 9%.
+    expect(html).toContain('Validación en modo degradado');
+    expect(html).toContain('9%');
+    expect(html).toContain('2 de 22 llegadas');
   });
 
   it('un indicador SIN datos dice «sin datos», nunca 0', () => {
-    const html = pintar(datos([], []), { ind: indicadoresVista({ recibidos: 0, sinInsistencia: 0, conRespuestaMedida: 0, minutosRespuestaPromedio: null, escalados: 0, omitidos: 0, validadosUbicacion: 0, sinCoincidencia: 0, capturadosOficina: 0 }) });
+    const html = pintar(datos([], []), {
+      ind: indicadoresVista({
+        recibidos: 0, sinInsistencia: 0, conRespuestaMedida: 0, minutosRespuestaPromedio: null, escalados: 0, omitidos: 0, validadosUbicacion: 0, sinCoincidencia: 0, capturadosOficina: 0,
+        llegadasValidables: 0, validacionDegradada: 0,
+      }),
+    });
     expect(html).toContain('sin datos');
     expect(html).toContain('ningún hito recibido en el periodo');
     expect(html).not.toContain('0%');
@@ -143,10 +156,16 @@ describe('el tablero de hitos — lo que ve el jefe de tráfico', () => {
 
   it('la validación positiva y la evidencia fotográfica se ven en la línea de tiempo', () => {
     const veredictos = [{ hitoId: '1-llegada_carga', ciclo: 1, resultado: 'validado' as const, motivo: null, fuente: 'pin' as const, distanciaM: 40, radioM: 300, toleranciaM: 150, sitioId: null, medidaEn: hace(30) }];
-    const evidencias = [{ id: 'e', hitoId: '1-llegada_carga', ciclo: 1, tipo: 'anden' as const, ruta: 'x', creadaEn: hace(29) }];
+    const evidencias = [{ id: 'e', hitoId: '1-llegada_carga', ciclo: 1, tipo: 'anden' as const, ruta: 'x', creadaEn: hace(29), reusoTenant: false }];
     const html = pintar(datos([V('1')], H('1', { llegada_carga: { estado: 'validado', fuente: 'texto', mensajeEn: hace(30), recibidoEn: hace(30), validadoEn: hace(29), validadoPor: 'gps' } }), { veredictos, evidencias }));
     expect(html).toContain('en el sitio (40 m)');
     expect(html).toContain('validado (ubicación)');
+  });
+
+  it('T-A5 (0852): una foto marcada como reuso entre viajes se ve con alerta', () => {
+    const evidencias = [{ id: 'e', hitoId: '1-llegada_carga', ciclo: 1, tipo: 'anden' as const, ruta: 'x', creadaEn: hace(29), reusoTenant: true }];
+    const html = pintar(datos([V('1')], H('1', { llegada_carga: hace(30) }), { evidencias }));
+    expect(html).toContain('OTRO viaje/hito de la flota');
   });
 
   it('una captura de oficina muestra quién y por qué', () => {
@@ -172,8 +191,8 @@ describe('el tablero de hitos — lo que ve el jefe de tráfico', () => {
 
   it('las fotos de evidencia se abren con GET /v1/evidencias/{id} (enlace de corta vida), una por papel', () => {
     const evidencias = [
-      { id: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0e1', hitoId: '1-salida_carga', ciclo: 1, tipo: 'sello' as const, ruta: 'x', creadaEn: hace(10) },
-      { id: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0e2', hitoId: '1-salida_carga', ciclo: 1, tipo: 'otra' as const, ruta: null, creadaEn: hace(9) },
+      { id: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0e1', hitoId: '1-salida_carga', ciclo: 1, tipo: 'sello' as const, ruta: 'x', creadaEn: hace(10), reusoTenant: false },
+      { id: '4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0e2', hitoId: '1-salida_carga', ciclo: 1, tipo: 'otra' as const, ruta: null, creadaEn: hace(9), reusoTenant: false },
     ];
     const html = pintar(datos([V('1')], H('1', { llegada_carga: hace(100), salida_carga: hace(50) }), { evidencias }));
     expect(html).toContain('href="/api/v1/evidencias/4f1f6e2e-95c1-4c52-9f9e-3f6f6bd8d0e1"');
@@ -386,5 +405,63 @@ describe('el tablero de hitos — reubicaciones por cliente (T-A5-63)', () => {
     const h = html(t);
     expect(h).toContain('Sin dato');
     expect(h).not.toContain('Descargar evidencia');
+  });
+});
+
+describe('el tablero de hitos — documentos de cierre (T-A5-69, A5 Conductor)', () => {
+  const docFila = (over: Partial<DocumentoCierreFila> = {}): DocumentoCierreFila => ({
+    id: 'dc1', tenantId: 't1', viajeId: '1', documentoRequeridoId: 'd1', nombreSolicitado: 'Carta porte firmada', tipoSolicitado: 'basico',
+    solicitadoEn: '2026-10-01T10:00:00.000Z', recibidoEn: null, viajeHitoEvidenciaId: null, intentosLegibilidad: 0, estado: 'pendiente', respuestaChofer: null,
+    ...over,
+  });
+
+  it('sin leerse (`documentosCierre` ausente en los datos del tablero) no se pinta nada: no se inventa un «0 de 0»', () => {
+    const html = pintar(datos([V('1')], H('1', {})));
+    expect(html).not.toContain('Documentos de cierre');
+  });
+
+  it('el viaje sin solicitud viva (sin catálogo del cliente, o la perilla apagada) tampoco pinta nada: es un dato real, no un hueco', () => {
+    const documentosCierre = new Map([['1', resumenDocumentosCierre([])]]);
+    const html = pintar(datos([V('1')], H('1', {}), { documentosCierre }));
+    expect(html).not.toContain('Documentos de cierre');
+  });
+
+  it('con un documento pendiente: muestra cuántos llegaron de cuántos y el nombre del que falta', () => {
+    const filas = [
+      docFila({ id: 'a', estado: 'recibido', recibidoEn: '2026-10-01T12:00:00.000Z' }),
+      docFila({ id: 'b', documentoRequeridoId: 'd2', nombreSolicitado: 'Pedimento', estado: 'pendiente' }),
+    ];
+    const documentosCierre = new Map([['1', resumenDocumentosCierre(filas)]]);
+    const html = pintar(datos([V('1')], H('1', {}), { documentosCierre }));
+    expect(html).toContain('Documentos de cierre');
+    expect(html).toContain('1');
+    expect(html).toContain('recibidos');
+    expect(html).toContain('faltan: Pedimento');
+  });
+
+  it('todos los documentos recibidos: no dice «faltan» nada', () => {
+    const filas = [docFila({ id: 'a', estado: 'recibido', recibidoEn: '2026-10-01T12:00:00.000Z' })];
+    const documentosCierre = new Map([['1', resumenDocumentosCierre(filas)]]);
+    const html = pintar(datos([V('1')], H('1', {}), { documentosCierre }));
+    expect(html).toContain('Documentos de cierre');
+    expect(html).not.toContain('faltan:');
+  });
+
+  it('una foto marcada «revisar» por mala calidad lo avisa, sin bloquear el viaje', () => {
+    const filas = [docFila({ estado: 'revisar', recibidoEn: '2026-10-01T12:00:00.000Z', intentosLegibilidad: 2 })];
+    const documentosCierre = new Map([['1', resumenDocumentosCierre(filas)]]);
+    const html = pintar(datos([V('1')], H('1', {}), { documentosCierre }));
+    expect(html).toContain('1 con foto por revisar (calidad)');
+  });
+
+  it('un viaje con solicitud y otro sin ella: cada tarjeta pinta lo que de verdad le corresponde', () => {
+    const documentosCierre = new Map([
+      ['1', resumenDocumentosCierre([docFila({ viajeId: '1', estado: 'pendiente' })])],
+      ['2', resumenDocumentosCierre([])],
+    ]);
+    const html = pintar(datos([V('1'), V('2')], [...H('1', {}), ...H('2', {})], { documentosCierre }));
+    // El aria-label y el texto visible repiten la frase una vez por tarjeta: con una sola solicitud viva, solo un par.
+    expect(html.match(/Documentos de cierre/g)?.length).toBe(2);
+    expect(html).toContain('faltan: Carta porte firmada');
   });
 });

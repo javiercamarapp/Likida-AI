@@ -176,14 +176,59 @@ describe('chofer_con_viajes_sin_liquidar — el conteo va en la clave', () => {
     expect(r[0].evidencia).toContain('A-1, A-2');
   });
 
-  it('el conteo ES la clave: de 2 a 3 viajes vuelve a avisar en vez de callarse', async () => {
+  it('el conteo VA en la clave: de 2 a 3 viajes vuelve a avisar en vez de callarse', async () => {
     pon('viaje', [v('v1', 'op-1', 'A-1'), v('v2', 'op-1', 'A-2')]);
     const dos = await evaluar('chofer_con_viajes_sin_liquidar', { n: 2 }, TENANT, AHORA);
     tablas.respuestas.clear();
     pon('viaje', [v('v1', 'op-1', 'A-1'), v('v2', 'op-1', 'A-2'), v('v3', 'op-1', 'A-3')]);
     const tres = await evaluar('chofer_con_viajes_sin_liquidar', { n: 2 }, TENANT, AHORA);
-    expect(dos[0].clave).toBe('2');
-    expect(tres[0].clave).toBe('3');
+    // El conteo sigue siendo prefijo de la clave, pero YA NO es toda la
+    // clave (hallazgo 21-oct-2026): lleva también el viaje más viejo.
+    expect(dos[0].clave).toBe('2:v1');
+    expect(tres[0].clave).toBe('3:v1');
+  });
+
+  it('HALLAZGO 21-oct: llega a 3, baja a 2 (se liquida el más viejo) y vuelve a subir a 3 con un viaje DISTINTO — debe volver a avisar', async () => {
+    // Racha 1: v1, v2, v3 (v1 es el más viejo). Dispara y queda sellada con
+    // clave '3:v1' (simulando lo que sellarDisparos ya guardó).
+    pon('viaje', [v('v1', 'op-1', 'A-1'), v('v2', 'op-1', 'A-2'), v('v3', 'op-1', 'A-3')]);
+    const primeraVez = await evaluar('chofer_con_viajes_sin_liquidar', { n: 3 }, TENANT, AHORA);
+    expect(primeraVez).toHaveLength(1);
+    expect(primeraVez[0].clave).toBe('3:v1');
+
+    // Se liquida v1 (el más viejo): baja a 2, no dispara (bajo el umbral).
+    tablas.respuestas.clear();
+    pon('viaje', [v('v2', 'op-1', 'A-2'), v('v3', 'op-1', 'A-3')]);
+    const dos = await evaluar('chofer_con_viajes_sin_liquidar', { n: 3 }, TENANT, AHORA);
+    expect(dos).toHaveLength(0);
+
+    // Sube un viaje NUEVO (v4): vuelve a 3, pero son viajes DISTINTOS a la
+    // primera racha. El más viejo ahora es v2, no v1 — clave distinta, SÍ
+    // debe volver a avisar (antes del fix, con clave='3' puro, esto chocaba
+    // contra el sello ya existente y NO avisaba).
+    tablas.respuestas.clear();
+    pon('viaje', [v('v2', 'op-1', 'A-2'), v('v3', 'op-1', 'A-3'), v('v4', 'op-1', 'A-4')]);
+    const segundaVez = await evaluar('chofer_con_viajes_sin_liquidar', { n: 3 }, TENANT, AHORA);
+    expect(segundaVez).toHaveLength(1);
+    expect(segundaVez[0].clave).toBe('3:v2');
+    expect(segundaVez[0].clave).not.toBe(primeraVez[0].clave);
+  });
+
+  it('caso de control: el chofer se queda en 3 sin cambios — misma clave, NO debe re-disparar', async () => {
+    const filasSinCambios = [v('v1', 'op-1', 'A-1'), v('v2', 'op-1', 'A-2'), v('v3', 'op-1', 'A-3')];
+    pon('viaje', filasSinCambios);
+    const primeraCorrida = await evaluar('chofer_con_viajes_sin_liquidar', { n: 3 }, TENANT, AHORA);
+
+    tablas.respuestas.clear();
+    pon('viaje', filasSinCambios);
+    const segundaCorrida = await evaluar('chofer_con_viajes_sin_liquidar', { n: 3 }, TENANT, AHORA);
+
+    // El lector SIEMPRE devuelve el disparo (es sellarDisparos/sellosDe en
+    // repo.ts quien filtra por clave ya sellada) — lo que esta prueba fija
+    // es que la clave NO cambia entre corridas cuando nada cambió, que es
+    // justo la propiedad que permite que el sello la detenga.
+    expect(primeraCorrida[0].clave).toBe(segundaCorrida[0].clave);
+    expect(primeraCorrida[0].clave).toBe('3:v1');
   });
 
   it('solo cuenta viajes abiertos o en cuadre — un liquidado no es deuda', async () => {

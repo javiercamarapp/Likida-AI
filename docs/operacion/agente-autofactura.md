@@ -163,6 +163,13 @@ Probado en CI (sin red, sin portales reales):
   por flota).
 - Unitarias del control (`control_emision.test.ts`), de la vinculación (`vinculacion_remota.test.ts`), del motor
   contra HTML fixture (`contrato_portales.test.ts`) y de la ruta de `facturar`.
+- **El fallback "sin adaptador"** (candado de la migración 0844, 19-oct-2026: columna
+  `gasto.autofactura_aviso_sin_robot_en`) — de punta a punta en
+  `src/lib/likida/e2e/agente-06-sin-adaptador.e2e.test.ts` (21-oct-2026): un comercio que el catálogo reconoce pero
+  que nadie tiene registrado como adaptador ni como piloto, `facturarAlVuelo` decidiendo `sin_adaptador` y
+  cerrando el candado, y la función real `avisarALasPersonas` (`cron/facturar/lote.ts`) disparando el WhatsApp con
+  la liga del portal y los datos del ticket. Este camino era estructuralmente inalcanzable en
+  `agente-06-autofactura.e2e.test.ts` (que fija `adaptadorDe` siempre no-nulo).
 
 **No** probado, y no lo puede probar el código:
 

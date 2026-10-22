@@ -4,7 +4,10 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 
 import { logger } from '@/lib/logger';
 import { CONFIG_CONDUCTOR_DEFAULT, type ConfigConductor } from './config';
-import { barridoCicloGps, muestrasDeViaje, type ClaimCruce, type MuestraGps, type PuertosCicloGps, type SitioGps, type SitiosViaje } from './ciclo_gps';
+import {
+  barridoCicloGps, despachoRefsAbiertosPorUnidad, muestrasDeViaje, saneaDespachoRefMuestras,
+  type ClaimCruce, type MuestraGps, type PuertosCicloGps, type SitioGps, type SitiosViaje,
+} from './ciclo_gps';
 import { filaAViajeCtx } from './repo';
 import { hitoVacio, viajeBase } from './memoria.fixture';
 import { TIPOS_HITO, type HitoFila } from './tipos';
@@ -99,6 +102,50 @@ describe('barridoCicloGps — despacho sobre unidad + ventana', () => {
     await barridoCicloGps(w.puertos, AHORA);
     expect(w.aplicar).toEqual(['vA-llegada_carga']);
     expect(logger.info).toHaveBeenCalledWith('conductor.ciclo_gps_deteccion', { viaje: 'vA', hito: 'llegada_carga', via: 'despacho' });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Auditoría media A10: `despacho_ref` llega SIN validar del proveedor/TMS/SFTP del propio cliente
+// (`normalizarDespachoRef` en tabla_propia/filas.ts solo mayusculiza y recorta). Antes de que una muestra se
+// use para enrutarse por despacho, se sanea contra el ÚNICO conjunto de verdad: los `despacho_ref` de los
+// viajes REALES y ABIERTOS de esa unidad, leídos de la base en este mismo barrido — nunca contra uno viejo,
+// cerrado o de otra unidad/flota, aunque el string coincida por casualidad.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('despachoRefsAbiertosPorUnidad — el conjunto de verdad, por tenant+unidad', () => {
+  it('agrupa por tenant+unidad y descarta los viajes sin unidad o sin despacho_ref', () => {
+    const m = despachoRefsAbiertosPorUnidad([
+      { tenantId: 't1', unidadId: 'u1', despachoRef: 'D1' },
+      { tenantId: 't1', unidadId: 'u1', despachoRef: 'D2' },
+      { tenantId: 't1', unidadId: 'u2', despachoRef: 'D1' }, // misma referencia, OTRA unidad: no se mezcla
+      { tenantId: 't1', unidadId: null, despachoRef: 'D9' },
+      { tenantId: 't1', unidadId: 'u3', despachoRef: null },
+    ]);
+    expect(m.get('t1|u1')).toEqual(new Set(['D1', 'D2']));
+    expect(m.get('t1|u2')).toEqual(new Set(['D1']));
+    expect(m.has('t1|u3')).toBe(false);
+  });
+});
+
+describe('saneaDespachoRefMuestras — limpia lo que no corresponde a ningún viaje real y abierto', () => {
+  it('conserva el despachoRef que SÍ es de un viaje real y abierto de esa unidad', () => {
+    const ms = [dentro(0, 'D1')];
+    expect(saneaDespachoRefMuestras(ms, new Set(['D1']))[0].despachoRef).toBe('D1');
+  });
+
+  it('limpia a null el despachoRef que no corresponde a NINGÚN viaje abierto — p. ej. el de un viaje viejo/cerrado de la misma unidad', () => {
+    const ms = [dentro(0, 'D-VIEJO')];
+    expect(saneaDespachoRefMuestras(ms, new Set(['D-ACTUAL']))[0].despachoRef).toBeNull();
+  });
+
+  it('sin ningún viaje real y abierto en esa unidad, cualquier referencia se limpia', () => {
+    const ms = [dentro(0, 'D1')];
+    expect(saneaDespachoRefMuestras(ms, new Set())[0].despachoRef).toBeNull();
+  });
+
+  it('una muestra sin referencia no se toca', () => {
+    const ms = [dentro(0, null)];
+    expect(saneaDespachoRefMuestras(ms, new Set(['D1']))[0].despachoRef).toBeNull();
   });
 });
 

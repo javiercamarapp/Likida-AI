@@ -49,6 +49,37 @@ describe('qué agentes vigila el barrido', () => {
     expect(plan.abrir[0].resumen).toMatch(/dejó de latir/);
     expect(plan.abrir[0].resumen).toContain('/dashboard/carta-porte/documentos');
   });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Hallazgo medio del orquestador (auditoría): GPS, Jornada (motor y alerta de tope) y Reglas tenían latido propio
+  // y `alertarOperador` AL EQUIPO DE LIKIDA, pero no estaban en `AGENTES_VIGILADOS` — una caída ahí nunca abría una
+  // tarea `falla_de_agente` visible para LA FLOTA. Mismo molde que la prueba de carta-porte-docs arriba: cada uno
+  // vencido abre su propia tarea con el destino y la pantalla correctas.
+  // ═══════════════════════════════════════════════════════════════════════════
+  it.each([
+    { id: 'gps', cron: 'gps', pantalla: '/dashboard/mapa' },
+    { id: 'jornada', cron: 'jornada', pantalla: '/dashboard/jornada' },
+    { id: 'jornada_alertas', cron: 'jornada-alertas', pantalla: '/dashboard/jornada' },
+    { id: 'reglas', cron: 'escalar', pantalla: '/dashboard/reglas' },
+  ])('un latido vencido de $cron (agente $id) es una falla y abre su propia tarea', ({ id, cron, pantalla }) => {
+    const e = sana({ latidos: { ...sana().latidos!, [cron]: { estado: 'vencido', haceMin: 40, ultimoEstado: 'ok' } } });
+    const plan = planBarrido(e);
+    const propia = plan.abrir.find((a) => a.agente === id);
+    expect(propia, `agente ${id} (cron ${cron}) debería abrir tarea`).toBeDefined();
+    expect(propia).toMatchObject({ agente: id, destino: 'jefe_de_trafico', dedupe: `barrido:${id}` });
+    expect(propia!.resumen).toMatch(/dejó de latir/);
+    expect(propia!.resumen).toContain(pantalla);
+  });
+
+  it('GPS, Jornada (motor y alerta) y Reglas están en AGENTES_VIGILADOS con el cron correcto', () => {
+    const porId = new Map(AGENTES_VIGILADOS.map((a) => [a.id, a]));
+    expect(porId.get('gps')).toMatchObject({ cron: 'gps', corridas: null });
+    expect(porId.get('jornada')).toMatchObject({ cron: 'jornada', corridas: null });
+    expect(porId.get('jornada_alertas')).toMatchObject({ cron: 'jornada-alertas', corridas: null });
+    // Reglas (vigilante.ts) no tiene cron propio: corre dentro de `escalar` (`vigilarReglas`, llamado desde
+    // `cron/escalar/route.ts`), así que su latido es el de ese cron.
+    expect(porId.get('reglas')).toMatchObject({ cron: 'escalar', corridas: null });
+  });
 });
 
 describe('qué es una falla y qué no', () => {

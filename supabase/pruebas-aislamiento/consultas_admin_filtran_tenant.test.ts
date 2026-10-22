@@ -311,6 +311,10 @@ const DUNNING_CORRIDA = ".from('agente_corrida').select('estado, fin, error, res
 const PERFIL_PUNTO_DE_ACCESO = ".from('tenant_perfil')";
 // Piloto de conductores (0800): cuenta voluntarios activos de TODAS las flotas para el latido de la plataforma.
 const CONDUCTOR_VOLUNTARIOS_ACTIVOS = ".from('operador').select('id', { count: 'exact', head: true }).eq('agente_voluntario', true).eq('activo', true)";
+// Alta huérfana de Google OAuth (hallazgo MEDIO, 21-oct-2026): ¿ese correo YA
+// es cliente de Likida en CUALQUIER flota, antes de decidir si se enlaza un
+// auth.users existente?
+const APP_USER_EXISTE_POR_CORREO = ".from('app_user').select('id').eq('email', email).maybeSingle()";
 const EXENCIONES_CONSULTA = [{
   archivo: 'src/lib/auth/perfil_tenant.ts', tabla: 'tenant_perfil', cadena: PERFIL_PUNTO_DE_ACCESO,
   razon: 'Es la definición del único punto de acceso a tenant_perfil (`tablaPerfil`, tope de frontera_datos_guardiana): no ejecuta nada por sí misma. Sus dos usos filtran por flota (`perfilDeTenant` con `.eq(tenant_id)`) o barren a propósito todas las flotas con perfil para el cron (`tenantsSinPerfilParaCron` con `.select(tenant_id)`), y esos dos usos sí pasan por esta misma prueba. No exime otro archivo ni otra consulta.',
@@ -338,6 +342,9 @@ const EXENCIONES_CONSULTA = [{
 }, {
   archivo: 'src/lib/admin/calcom.ts', tabla: 'prospecto', cadena: CALCOM_LOOKUP,
   razon: 'CRM global de LIKIDA (0105): tenant_id sólo existe al cerrar. Este SELECT por correo canónico y no duplicado decide 0/1/>1 para reconciliar no-show; la entrada productiva es cron/escalar tras puertaCron y la entrega usa el webhook firmado. No exime escrituras ni otras tablas o consultas.',
+}, {
+  archivo: 'src/lib/auth/provisionar.ts', tabla: 'app_user', cadena: APP_USER_EXISTE_POR_CORREO,
+  razon: '`app_user.email` es NOT NULL UNIQUE desde la 0001: a lo más una fila en TODO el proyecto, de cualquier tenant. `entrarConGoogle` (login/page.tsx) no tiene equivalente de `shouldCreateUser:false` para OAuth, así que un correo real de Google se auto-registra en `auth.users` sin pasar por `provisionarUsuario`; cuando después un flota_admin lo invita, `createUser` rebota con "already registered" y esta consulta decide, A PROPÓSITO, si ese correo YA es cliente de Likida en CUALQUIER flota —no solo en la de quien invita— antes de resolver y enlazar el `auth.users` existente. Filtrar por `tenant_id` AQUÍ sería el bug que esta consulta existe para evitar: tratar como "nuevo" (y enlazable a este tenant) a un correo que ya es cliente de OTRA flota, quizá la competencia — exactamente lo que SEG-7 (invitar.ts) prohíbe revelar o mezclar. El INSERT que de verdad crea la fila, unas líneas más abajo en el mismo archivo, SÍ lleva `tenant_id: tenantId` y sigue vigilado por esta prueba. No exime ninguna otra consulta de provisionar.ts.',
 }];
 function consultaExenta(archivo: string, tabla: string, cadena: string): boolean {
   const normalizar = (s: string) => s.replace(/\s+/g, '');
@@ -424,6 +431,6 @@ describe('exención estrecha del lookup CRM de Cal.com', () => {
     const cron = sinComentarios(readFileSync('src/app/api/cron/escalar/route.ts', 'utf8'));
     expect(cron).toMatch(/await puertaCron\('escalar'/);
     expect(cron.indexOf('if (puerta) return puerta')).toBeGreaterThan(-1);
-    expect(cron.indexOf('if (puerta) return puerta')).toBeLessThan(cron.indexOf('await ejecutarMantenimientoCalcom('));
+    expect(cron.indexOf('if (puerta) return puerta')).toBeLessThan(cron.indexOf('ejecutarMantenimientoCalcom('));
   });
 });
