@@ -681,13 +681,38 @@ export function rolEfectivo(rolReal: string, rolPedido?: string | null): string 
   return rolPedido;
 }
 
-export function inicioDe(rol: string): string {
+/**
+ * Bajo el perfil `cinco_agentes`, el aterrizaje de quien solo ve `dinero`: el
+ * panel del contador (`/dashboard/contador`) queda en
+ * `RUTAS_STAND_BY_PERFIL_CINCO_AGENTES`, así que no sirve de destino — es
+ * exactamente el bucle de T-PER-02. La ventana del Agente de Liquidación
+ * (A1) SÍ es `dinero` (`AREA_POR_RUTA`) y SÍ está en la lista cerrada del
+ * perfil (`RUTAS_PERFIL_CINCO_AGENTES`), así que es una pantalla real que
+ * abre para ese rol bajo ese perfil.
+ */
+const INICIO_DINERO_PERFIL_CINCO_AGENTES = '/dashboard/agentes/liquidacion';
+
+export function inicioDe(rol: string, perfil?: PerfilTenant | null): string {
   // PRIMERO el panel ajeno: un rol que vive fuera de /dashboard no se rebota
   // adentro ni por accidente. Desde el 14-ago-2026 aplica al `vendedor`
   // (0105): sin áreas, su destino es /vendedor. El orden importaría el día
   // que alguien le dé un área a un rol de esta tabla — por eso va primero.
   const propio = PANEL_PROPIO[rol];
   if (propio) return propio;
+
+  // CON PERFIL: el aterrizaje tiene que ser una pantalla que el PERFIL
+  // también deje ver — si no, este rebote (por ÁREA) y el rebote de
+  // `exigirRutaDePerfil` (por LISTA CERRADA) se devuelven el uno al otro sin
+  // parar. T-PER-02: el contador bajo `cinco_agentes` rebotaba de /dashboard
+  // (que su rol no ve) a /dashboard/contador (que el perfil no ve) y de
+  // vuelta — un bucle de redirecciones real, no solo teórico.
+  if (perfil) {
+    if (puedeVerArea(rol, 'operacion') && rutaPermitidaEnPerfil(perfil, '/dashboard')) return '/dashboard';
+    if (puedeVerArea(rol, 'dinero') && rutaPermitidaEnPerfil(perfil, INICIO_DINERO_PERFIL_CINCO_AGENTES)) {
+      return INICIO_DINERO_PERFIL_CINCO_AGENTES;
+    }
+    return '/sin-acceso';
+  }
 
   if (puedeVerArea(rol, 'operacion')) return '/dashboard';
   // El rol que solo ve dinero aterriza en el panel del contador. La raíz se

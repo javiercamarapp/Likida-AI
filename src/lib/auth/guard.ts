@@ -137,7 +137,7 @@ export async function requireSessionTenant(
   // tenant que de verdad mira, no contra el de su selección) y solo rutas del
   // panel (`/cuenta` y demás no tienen perfil).
   if (s.rol !== 'superadmin' && destino.startsWith('/dashboard')) {
-    await exigirRutaDePerfil(s.tenantId, destino);
+    await exigirRutaDePerfil(s.tenantId, destino, s.rol);
   }
   return s as SessionTenant & { tenantId: string };
 }
