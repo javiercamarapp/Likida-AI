@@ -17,7 +17,8 @@ import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { AreaChartSimple, Dona } from '../charts';
 import { IconoProveedor } from '../proveedor-icono';
 import { ChartCard, EstadoVacio, KpiTile, StatusPill } from '../ui/kit';
-import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../ui/forma';
+import { FormaConAviso, Campo, type ResultadoAccion } from '../ui/forma';
+import { FormaEmitirMensualidad } from './forma-emitir';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,12 +90,31 @@ const FASE_LABEL: Record<string, string> = {
  * actions y toda la lógica de cobro quedaron tal cual.
  */
 /**
- * Emite la mensualidad de una flota.
+ * El periodo del MES EN CURSO (México) — compartido entre `accionEmitir` (el
+ * cálculo real que se emite) y la página (lo que el diálogo de confirmación
+ * le anuncia al superadmin ANTES de emitir, vía `FormaEmitirMensualidad`).
+ * Una fecha tecleada a mano es la forma más fácil de cobrar dos veces el
+ * mismo mes con periodos que no cuadran, y el índice único de la 0057 solo
+ * protege si las fechas son las mismas — por eso se calcula en un solo lugar.
  *
- * El periodo es el MES EN CURSO y se calcula aquí, no se captura: una fecha
- * tecleada a mano es la forma más fácil de cobrar dos veces el mismo mes con
- * periodos que no cuadran, y el índice único de la 0057 solo protege si las
- * fechas son las mismas.
+ * DAT-23 (auditoría prod): el mes salía de `getUTCMonth()`. El 31 de
+ * diciembre a las 18:01 hora de México ya es 1 de enero en UTC, así que
+ * "emitir la mensualidad de este mes" emitía la de ENERO — con el periodo
+ * equivocado, el índice `una_por_periodo` (0057) sin nada contra qué chocar,
+ * y diciembre sin cobrar. El mes es el de México, como el resto del panel.
+ */
+function periodoMesActualMx(): { ini: string; fin: string } {
+  const [anio, mes] = hoyMx().split('-').map(Number);
+  const ini = `${anio}-${String(mes).padStart(2, '0')}-01`;
+  // Día 0 del mes SIGUIENTE = último del actual. La aritmética va en UTC a
+  // propósito: ya opera sobre un año y un mes resueltos en México, no sobre el
+  // reloj.
+  const fin = new Date(Date.UTC(anio, mes, 0)).toISOString().slice(0, 10);
+  return { ini, fin };
+}
+
+/**
+ * Emite la mensualidad de una flota.
  */
 async function accionEmitir(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
   'use server';
@@ -102,17 +122,7 @@ async function accionEmitir(_previo: ResultadoAccion, fd: FormData): Promise<Res
   const tenantId = String(fd.get('tenantId') ?? '');
   if (!tenantId) return { error: 'Elige una flota.' };
 
-  // DAT-23 (auditoría prod): el mes salía de `getUTCMonth()`. El 31 de
-  // diciembre a las 18:01 hora de México ya es 1 de enero en UTC, así que
-  // "emitir la mensualidad de este mes" emitía la de ENERO — con el periodo
-  // equivocado, el índice `una_por_periodo` (0057) sin nada contra qué chocar,
-  // y diciembre sin cobrar. El mes es el de México, como el resto del panel.
-  const [anio, mes] = hoyMx().split('-').map(Number);
-  const ini = `${anio}-${String(mes).padStart(2, '0')}-01`;
-  // Día 0 del mes SIGUIENTE = último del actual. La aritmética va en UTC a
-  // propósito: ya opera sobre un año y un mes resueltos en México, no sobre el
-  // reloj.
-  const fin = new Date(Date.UTC(anio, mes, 0)).toISOString().slice(0, 10);
+  const { ini, fin } = periodoMesActualMx();
 
   try {
     const r = await emitirMensualidad(tenantId, ini, fin);
@@ -163,6 +173,9 @@ async function accionConciliar(_previo: ResultadoAccion, fd: FormData): Promise<
 export default async function CostosFacturacionPage() {
   const r = await getResumenNegocio();
   const costoPorViaje = r.viajesProcesados > 0 ? r.costoIaUsd / r.viajesProcesados : null;
+  // Mismo cálculo que corre `accionEmitir` — el diálogo de confirmación le
+  // anuncia al superadmin el periodo REAL que se va a emitir.
+  const periodoActual = periodoMesActualMx();
 
   const hayStripe = stripeConfigurado();
   const modo = modoStripe();
@@ -304,10 +317,12 @@ export default async function CostosFacturacionPage() {
 
             <div className="mt-3">
               <h3 className="text-xs font-medium mb-2" style={{ color: 'var(--muted)' }}>Emitir la mensualidad de este mes</h3>
-              <FormaConAviso accion={accionEmitir} boton="Emitir">
-                <Selector nombre="tenantId" etiqueta="Flota" requerido
-                  opciones={[{ valor: '', texto: 'Elige…' }, ...r.flotas.map((f) => ({ valor: f.id, texto: f.nombre }))]} />
-              </FormaConAviso>
+              <FormaEmitirMensualidad
+                accion={accionEmitir}
+                flotas={r.flotas.map((f) => ({ id: f.id, nombre: f.nombre }))}
+                periodoIni={periodoActual.ini}
+                periodoFin={periodoActual.fin}
+              />
             </div>
 
             <div className="mt-5">
