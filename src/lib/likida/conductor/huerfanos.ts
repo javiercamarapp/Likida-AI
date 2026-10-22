@@ -1,6 +1,6 @@
 import { logger } from '@/lib/logger';
 import {
-  buscarEntrada, buscarSalida, HORAS_VENTANA_GPS, MINUTOS_FUTURO_TOLERADO, TOPE_VIAJES_CICLO_GPS,
+  buscarEntrada, buscarSalida, despachoRefsAbiertosPorUnidad, HORAS_VENTANA_GPS, MINUTOS_FUTURO_TOLERADO, TOPE_VIAJES_CICLO_GPS,
   type ClaimCruce, type Deteccion, type MuestraGps, type PuertosCicloGps, type SitioGps, type SitiosViaje, type TipoDeteccion, type UnidadDeViaje,
 } from './ciclo_gps';
 import { aplicarPerfil } from './perfil';
@@ -104,6 +104,23 @@ export function hitosDeCruce(ev: Pick<EventoNuevo, 'geocercaId' | 'tipo'>, sitio
  * otro despacho no es de este viaje); si falta alguna, por ventana (de `VENTANA_RECONCILIACION_H` horas antes de aceptarse el viaje en adelante).
  * De los más viejos a los más nuevos.
  */
+/**
+ * Auditoría media A10: limpia el `despachoRef` de los huérfanos que NO corresponden a NINGÚN viaje real y abierto
+ * de esa unidad (el mismo saneo que `ciclo_gps.ts` le aplica a las muestras de GPS, mismo patrón de riesgo: el
+ * valor viene sin validar del proveedor/TMS del cliente). Un huérfano saneado cae al camino YA EXISTENTE para
+ * «sin referencia» en `huerfanosDelViaje` (la ventana de `VENTANA_RECONCILIACION_H`) en vez de arriesgarse a que
+ * un string malformado, por casualidad igual al de un viaje viejo o cerrado, decida a qué viaje se liga. Pura.
+ */
+export function saneaDespachoRefHuerfanos(
+  eventos: readonly EventoHuerfano[], refsAbiertosPorUnidad: ReadonlyMap<string, ReadonlySet<string>>,
+): EventoHuerfano[] {
+  return eventos.map((ev) => {
+    if (ev.despachoRef == null) return ev;
+    const refs = refsAbiertosPorUnidad.get(`${ev.tenantId}|${ev.unidadId}`);
+    return refs && refs.has(ev.despachoRef) ? ev : { ...ev, despachoRef: null };
+  });
+}
+
 export function huerfanosDelViaje(
   v: { tenantId: string; unidadId: string | null; aceptadoEn: string | null; despachoRef?: string | null },
   eventos: readonly EventoHuerfano[],
@@ -222,9 +239,12 @@ async function reconciliar(
     const viajes = (await p.viajes(TOPE_VIAJES_CICLO_GPS)).filter((v) => configs.has(v.tenantId) && v.unidadId && v.aceptadoEn);
     if (viajes.length === 0) return;
     const unidades = [...new Map(viajes.map((v) => [llave({ tenantId: v.tenantId, unidadId: v.unidadId! }), { tenantId: v.tenantId, unidadId: v.unidadId! }])).values()];
-    const pendientes = await x.pendientes(unidades, TOPE_HUERFANOS_PENDIENTES);
-    r.pendientes = pendientes.length;
-    if (pendientes.length === 0) return;
+    const pendientesCrudos = await x.pendientes(unidades, TOPE_HUERFANOS_PENDIENTES);
+    r.pendientes = pendientesCrudos.length;
+    if (pendientesCrudos.length === 0) return;
+    // Auditoría media A10: solo cuenta como «con referencia» si esa referencia es la de un viaje real y abierto
+    // de esa unidad AHORA MISMO — no basta con que el huérfano la traiga.
+    const pendientes = saneaDespachoRefHuerfanos(pendientesCrudos, despachoRefsAbiertosPorUnidad(viajes));
     const conHuerfanos = new Set(pendientes.map(llave));
     const aLigar = viajes
       .filter((v) => conHuerfanos.has(llave({ tenantId: v.tenantId, unidadId: v.unidadId! })))

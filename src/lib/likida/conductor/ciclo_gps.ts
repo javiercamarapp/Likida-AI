@@ -191,6 +191,40 @@ export function muestrasDeViaje(
   return { muestras: muestrasUnidad, via: 'unidad_ventana' };
 }
 
+/**
+ * Auditoría media A10: `despacho_ref` llega del proveedor/TMS/SFTP del propio cliente SIN validarse contra la base —
+ * `normalizarDespachoRef` (tabla_propia/filas.ts) solo mayusculiza y recorta, nunca confirma que el valor sea de un
+ * viaje real. El conjunto de abajo es la ÚNICA fuente de verdad para «real y activo»: los `despacho_ref` de los
+ * viajes que este mismo barrido leyó de la base como abiertos, por unidad (`tenantId|unidadId`, igual que las
+ * muestras). Un viaje viejo, cerrado, de otra unidad o de otra flota NUNCA entra aquí, aunque su número coincida
+ * por casualidad con el de la muestra.
+ */
+export function despachoRefsAbiertosPorUnidad(
+  viajesAbiertos: readonly Pick<ViajeContexto, 'tenantId' | 'unidadId' | 'despachoRef'>[],
+): Map<string, Set<string>> {
+  const m = new Map<string, Set<string>>();
+  for (const v of viajesAbiertos) {
+    if (!v.unidadId || !v.despachoRef) continue;
+    const k = `${v.tenantId}|${v.unidadId}`;
+    let s = m.get(k);
+    if (!s) { s = new Set(); m.set(k, s); }
+    s.add(v.despachoRef);
+  }
+  return m;
+}
+
+/**
+ * Limpia el `despachoRef` de las muestras que NO corresponden a NINGÚN viaje real y abierto de esa unidad: se
+ * tratan como si no trajeran referencia — caen al camino YA EXISTENTE de «sin despacho» (`unidad_ventana` aquí,
+ * la ventana de reconciliación en `huerfanos.ts`) en vez de arriesgarse a enrutar por un string malformado que
+ * coincide por casualidad con el de un viaje viejo o cerrado. Pura: no toca la base.
+ */
+export function saneaDespachoRefMuestras(
+  muestras: readonly MuestraGps[], refsReales: ReadonlySet<string>,
+): MuestraGps[] {
+  return muestras.map((m) => (m.despachoRef != null && !refsReales.has(m.despachoRef) ? { ...m, despachoRef: null } : m));
+}
+
 export interface EntradaProxima {
   hitos: Readonly<Record<TipoDeteccion, HitoFila | undefined>>;
   sitios: SitiosViaje;
@@ -403,6 +437,11 @@ async function barridoDeViajes(p: PuertosCicloGps, ahora: Date, venceEn: number 
   const unidades = new Map<string, UnidadDeViaje>();
   for (const v of [...candidatos, ...cedidos.filter((c) => c.despachoRef)]) unidades.set(`${v.tenantId}|${v.unidadId}`, { tenantId: v.tenantId, unidadId: v.unidadId! });
   const muestrasPorUnidad = await p.muestras([...unidades.values()], desde);
+  // Auditoría media A10: antes de enrutar por despacho, se limpia el `despachoRef` de las muestras que no
+  // corresponden a NINGÚN viaje real y abierto de esa unidad (`aptos`, ya leído de la base) — un string
+  // malformado del proveedor que coincida por casualidad con un viaje viejo/cerrado no cuenta.
+  const refsAbiertosPorUnidad = despachoRefsAbiertosPorUnidad(aptos);
+  for (const [k, ms] of muestrasPorUnidad) muestrasPorUnidad.set(k, saneaDespachoRefMuestras(ms, refsAbiertosPorUnidad.get(k) ?? new Set()));
   const limite = ahora.getTime() + MINUTOS_FUTURO_TOLERADO * 60_000;
   // T-A5-27: unidades en tránsito sin una sola posición reciente (dato de la unidad, no del viaje).
   const frescas = ahora.getTime() - MINUTOS_SIN_POSICION * 60_000;

@@ -3,9 +3,9 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 import { CONFIG_CONDUCTOR_DEFAULT, type ConfigConductor } from './config';
-import { barridoCicloGps, type ClaimCruce, type MuestraGps, type PuertosCicloGps, type SitioGps, type SitiosViaje } from './ciclo_gps';
+import { barridoCicloGps, despachoRefsAbiertosPorUnidad, type ClaimCruce, type MuestraGps, type PuertosCicloGps, type SitioGps, type SitiosViaje } from './ciclo_gps';
 import {
-  barridoHuerfanos, detectarCrucesSinViaje, hitosDeCruce, huerfanosDelViaje, VENTANA_RECONCILIACION_H,
+  barridoHuerfanos, detectarCrucesSinViaje, hitosDeCruce, huerfanosDelViaje, saneaDespachoRefHuerfanos, VENTANA_RECONCILIACION_H,
   type EventoHuerfano, type EventoNuevo, type PuertosHuerfanos, type UltimoCruce,
 } from './huerfanos';
 import { sinFlotasEnViajes } from './sin_flotas';
@@ -116,6 +116,64 @@ describe('hitosDeCruce y huerfanosDelViaje', () => {
 
   it('otra unidad u otra flota no cuadran', () => {
     expect(huerfanosDelViaje(viaje, [ev({ unidadId: 'u2', en: en(590) }), ev({ tenantId: 't2', en: en(590) })])).toEqual([]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Auditoría media A10: `despacho_ref` llega SIN validar del proveedor/TMS del cliente (`normalizarDespachoRef`
+// solo mayusculiza y recorta). `saneaDespachoRefHuerfanos` es el saneo que lo valida contra el ÚNICO conjunto de
+// verdad — los `despacho_ref` de los viajes REALES y ABIERTOS de esa unidad, leídos de la base en este mismo
+// barrido — antes de que `huerfanosDelViaje` lo use para decidir a qué viaje se liga.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('saneaDespachoRefHuerfanos — valida contra los viajes REALES y ABIERTOS antes de enrutar', () => {
+  const ev = (o: Partial<EventoHuerfano>): EventoHuerfano => ({ id: 'e', tenantId: 't1', unidadId: 'u1', geocercaId: 's-origen', tipo: 'entrada', en: en(0), distanciaM: 10, despachoRef: null, ...o });
+
+  it('una referencia que SÍ es de un viaje real y abierto de esa unidad se conserva intacta', () => {
+    const refs = new Map([['t1|u1', new Set(['D-9'])]]);
+    const [e] = saneaDespachoRefHuerfanos([ev({ despachoRef: 'D-9' })], refs);
+    expect(e.despachoRef).toBe('D-9');
+  });
+
+  it('una referencia que NO corresponde a NINGÚN viaje abierto de esa unidad se limpia a null (huérfana/sin asignar)', () => {
+    // «D-1» pudo ser el despacho de un viaje YA CERRADO de la misma unidad — no está entre los reales y abiertos
+    // de este barrido, así que no autoriza nada, aunque el string coincida por casualidad.
+    const refs = new Map([['t1|u1', new Set(['D-2'])]]);
+    const [e] = saneaDespachoRefHuerfanos([ev({ despachoRef: 'D-1' })], refs);
+    expect(e.despachoRef).toBeNull();
+  });
+
+  it('sin ningún viaje abierto de esa unidad (set ausente), cualquier referencia se limpia', () => {
+    const [e] = saneaDespachoRefHuerfanos([ev({ despachoRef: 'D-1' })], new Map());
+    expect(e.despachoRef).toBeNull();
+  });
+
+  it('un evento ya sin referencia no se toca (sigue null)', () => {
+    const [e] = saneaDespachoRefHuerfanos([ev({ despachoRef: null })], new Map([['t1|u1', new Set(['D-2'])]]));
+    expect(e.despachoRef).toBeNull();
+  });
+
+  it('la referencia es de OTRA unidad de la misma flota: no cuenta (el conjunto está por tenant+unidad)', () => {
+    const refs = new Map([['t1|u2', new Set(['D-1'])]]); // la unidad real con ese despacho es u2, no u1
+    const [e] = saneaDespachoRefHuerfanos([ev({ unidadId: 'u1', despachoRef: 'D-1' })], refs);
+    expect(e.despachoRef).toBeNull();
+  });
+
+  it('EL ESCENARIO DEL HALLAZGO: un huérfano con la referencia de un viaje viejo/cerrado ya NO se queda excluido para siempre '
+    + 'por esa coincidencia — cae al camino existente de "sin despacho" (ventana) y si cae dentro, reconcilia', () => {
+    const viajeReal = { tenantId: 't1', unidadId: 'u1', aceptadoEn: en(600).toISOString(), despachoRef: 'D-REAL' as string | null };
+    // «D-VIEJO» no es de NINGÚN viaje abierto ahora (pudo ser el de un viaje ya cerrado de la misma unidad).
+    const huerfano = ev({ id: 'h1', despachoRef: 'D-VIEJO', en: new Date(en(600).getTime() - (VENTANA_RECONCILIACION_H - 1) * 3_600_000) });
+
+    // SIN el saneo: la rama de «los dos traen referencia» compara 'D-VIEJO' contra 'D-REAL' — no cuadran NUNCA,
+    // sin importar qué tan cerca esté la hora del evento de la aceptación del viaje (queda huérfano para siempre).
+    expect(huerfanosDelViaje(viajeReal, [huerfano])).toEqual([]);
+
+    // CON el saneo (el conjunto real y abierto de u1 es solo {'D-REAL'}, el de viajeReal): 'D-VIEJO' se limpia a
+    // null, y el evento cae al camino YA EXISTENTE para «sin despacho» — la ventana de reconciliación — donde SÍ
+    // cuadra porque está dentro de las VENTANA_RECONCILIACION_H horas antes de aceptarse el viaje.
+    const refsReales = despachoRefsAbiertosPorUnidad([viajeReal]);
+    const saneados = saneaDespachoRefHuerfanos([huerfano], refsReales);
+    expect(huerfanosDelViaje(viajeReal, saneados).map((e) => e.id)).toEqual(['h1']);
   });
 });
 
