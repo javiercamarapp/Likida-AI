@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Scale3d } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { EstadoError } from '@/app/admin/ui/kit';
 import { FormaConAviso, type ResultadoAccion } from '@/app/admin/ui/forma';
@@ -23,6 +24,10 @@ export const dynamic = 'force-dynamic';
 
 const RUTA = '/dashboard/legal';
 const SOLO_DUENO = 'Solo el dueño de la flota acepta los documentos y otorga el mandato en nombre de la empresa.';
+// El mandato da poder de operar portales de facturación (Facturas), que un perfil restringido deja en stand-by.
+// Otorgarlo se niega bajo perfil; RETIRARLO sigue disponible: quitarle a la flota la forma de retirar un mandato ya
+// otorgado sería peor que el hueco original.
+const MANDATO_NO_DISPONIBLE = 'El mandato de autofacturación no está disponible en el plan de esta flota.';
 
 /**
  * TÉRMINOS, AVISO Y MANDATO DE LA FLOTA (auditoría ola 1, #48).
@@ -68,6 +73,7 @@ export default async function PaginaLegal({
     'use server';
     const s = await sesionDeDueno(sp);
     if (!s) return { error: SOLO_DUENO };
+    if (await perfilDeTenant(s.tenantId)) return { error: MANDATO_NO_DISPONIBLE };
     const r = await registrarAceptacion(s.tenantId, s.userId, 'mandato_autofacturacion');
     if (!r.ok) return { error: r.motivo ?? 'No se pudo registrar el mandato.' };
     revalidatePath(RUTA);
@@ -115,6 +121,7 @@ export default async function PaginaLegal({
   const pendientes = filas ? pendientesDeUsuario(filas, userId) : null;
   const mandato = filas ? mandatoDe(filas) : null;
   const esDueno = puedeAdministrar(rol) && rol !== 'superadmin';
+  const conPerfil = (await perfilDeTenant(tenantId)) !== null;
 
   return (
     <main className="h-full">
@@ -186,6 +193,8 @@ export default async function PaginaLegal({
                       </FormaConAviso>
                     )}
                   </>
+                ) : conPerfil ? (
+                  <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>{MANDATO_NO_DISPONIBLE}</p>
                 ) : esDueno ? (
                   <FormaConAviso accion={accionOtorgarMandato} boton="Otorgo el mandato en nombre de mi empresa" columnas="md:grid-cols-1">
                     <span />
