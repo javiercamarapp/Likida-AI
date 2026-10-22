@@ -128,6 +128,25 @@ Después de aplicar: comprobar que existen las cuatro (`select to_regclass('publ
 
 Ya escrita: `0842_interruptor_carta_porte_salida_tms.sql` amplía la restricción `interruptor_id_dominio` con `agente:carta_porte_salida_tms` (aditiva, sin quitar ningún nombre); aplicarla es lo que deja al panel apagar esa salida sin recurrir al modo `descarga` (ver el rollback).
 
+## Próxima tanda: 0843 a 0848 (actualización 21-oct-2026)
+
+> **Pendiente de aplicar. Este documento no la ejecuta.** Ya escritas y fusionadas a `master`, sin confirmar
+> todavía contra `schema_migrations` ni contra el esquema en vivo de producción. Se aplican con `supabase db push`
+> (orden de archivo), con copia de seguridad previa y autorización, y siempre ANTES de un `[deploy]` que use el
+> código que las necesita.
+
+| # | Archivo | Qué es |
+|---|---|---|
+| 0843 | `0843_peajes_sftp.sql` | Cuarto canal de ingesta de peajes (SFTP): tabla/columnas de configuración y `peaje_sftp_reclamar` (claim con lease), mismo molde que el pull. |
+| 0844 | `0844_gasto_aviso_sin_robot.sql` | Columna `gasto.autofactura_aviso_sin_robot_en` — candado de "ya se avisó una vez" para el fallback "comercio sin adaptador" del Agente 6 (Autofactura). |
+| 0845 | `0845_jornada_alerta_enviado_candado.sql` | Candado "ya se envió de verdad" (`jornada_alerta.enviado_en`) para cerrar la ventana entre el WhatsApp real de una alerta de jornada y el cierre de su claim. |
+| 0846 | `0846_equipo_candado_ultimo_dueno.sql` | Candado contra el TOCTOU de dos degradaciones concurrentes de `flota_admin` que dejarían a la flota sin ningún dueño activo (auditoría adversarial, hallazgo alto #2). |
+| 0847 | `0847_peaje_reclamo_candado_idempotencia.sql` | Índice único parcial en `peaje_reclamo` contra reclamos gemelos por el mismo desglose y categoría (auditoría adversarial, hallazgo alto #1). |
+| 0848 | `0848_factura_proveedor_cfdi_tardio.sql` | Dos columnas (`xml_crudo_tardio`, `recibido_tardio_en`) para no perder el XML real de un CFDI que llega después de que un humano ya decidió la factura (auditoría adversarial, hallazgo alto #2). |
+
+Ninguna se da por aplicada aquí — confirmar con `/api/health` → `migracion.base` y contra `schema_migrations`
+antes de asumir que ya corrieron.
+
 ## Lo que sigue pendiente (auditoría 24, no cerrado aquí)
 
 - ~~**DAT-3 / DAT-4**: piso ≥ 0 en las cinco columnas de dinero de `gasto`, y
