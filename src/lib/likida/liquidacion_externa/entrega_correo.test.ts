@@ -425,3 +425,15 @@ describe('utilidades puras', () => {
     expect(nombreAdjunto.endsWith('.xlsx')).toBe(true);
   });
 });
+
+
+describe('A37-A1-02: el correo de una corrección se rotula CORRECCIÓN', () => {
+  it('una clave «-R<n>» lleva CORRECCIÓN en el asunto y avisa que reemplaza al anterior; la normal no', () => {
+    const c = armarCorreoDesglose({ claveExterna: 'BIT-T01-1228-R1', periodoDesde: '2026-10-09', periodoHasta: '2026-10-14' }).correo;
+    expect(c.asunto).toMatch(/^CORRECCIÓN — Desglose de pago — bitácora 1228-R1/);
+    expect(c.parrafos[0]).toMatch(/reemplaza al que se envió antes/);
+    const n = armarCorreoDesglose({ claveExterna: 'BIT-T01-1228', periodoDesde: '2026-10-09', periodoHasta: '2026-10-14' }).correo;
+    expect(n.asunto).not.toMatch(/CORRECCIÓN/);
+    expect(n.parrafos.join(' ')).not.toMatch(/CORRECCIÓN/);
+  });
+});

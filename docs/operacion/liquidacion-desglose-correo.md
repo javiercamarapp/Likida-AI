@@ -135,7 +135,11 @@ siguiente lectura la resuelve sola.
 
 **Corrección de un desglose ya enviado.** Si llega la misma bitácora con contenido distinto, Likida **no sobrescribe ni
 envía** (el operador pudo haber recibido ya el primero): abre `correccion_pendiente` con el neto anterior y el nuevo.
-Una persona decide mandar la corrección, que entra con la clave de la bitácora terminada en `-R1` (`-R2`, etc.).
+Una persona decide mandar la corrección: vuelve a enviar la bitácora corregida a `POST /api/v1/liquidaciones-externas/desgloses`
+con `"correccion": { "motivo": "…" }` en el sobre (llave de administración). Entra como liquidación nueva con la clave terminada en `-R1`
+(`-R2`, etc.), con su archivo nuevo; el operador la recibe con el asunto «CORRECCIÓN — Desglose de pago…» y el aviso de que reemplaza
+al anterior; la original queda como constancia y la excepción `correccion_pendiente` se cierra. Reintentar la misma corrección no
+crea otra. (Una bitácora cuyo nombre original ya termine en `-R<n>` se rotularía como corrección sin serlo: evita ese sufijo.)
 
 **Retenido por una guarda.** Un neto negativo o un tipo de operador sin regla dejan el desglose guardado sin entregas y
 con su excepción. Quien administra la flota puede **liberar el envío** desde el detalle (queda en la auditoría quién y

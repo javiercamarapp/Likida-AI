@@ -144,15 +144,18 @@ export function bitacoraDeClave(clave: string): string {
 export function armarCorreoDesglose(ctx: ContextoLiquidacion): { correo: Correo; nombreAdjunto: string } {
   const bitacora = bitacoraDeClave(ctx.claveExterna);
   const rango = rangoCorto(ctx.periodoDesde, ctx.periodoHasta);
-  const asunto = `Desglose de pago — bitácora ${bitacora}${rango ? ` — ${rango}` : ''}`;
+  // A37-A1-02: una clave terminada en `-R<n>` es la CORRECCIÓN de un desglose ya enviado: el operador debe saberlo de inmediato.
+  const esCorreccion = /-R\d+$/.test(ctx.claveExterna);
+  const asunto = `${esCorreccion ? 'CORRECCIÓN — ' : ''}Desglose de pago — bitácora ${bitacora}${rango ? ` — ${rango}` : ''}`;
   const seguro = bitacora.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60) || 'bitacora';
   return {
     nombreAdjunto: `desglose-${seguro}.xlsx`,
     correo: {
       asunto,
-      avance: 'Desglose de pago adjunto.',
-      titulo: 'Desglose de pago',
+      avance: esCorreccion ? 'CORRECCIÓN: desglose de pago adjunto.' : 'Desglose de pago adjunto.',
+      titulo: esCorreccion ? 'Desglose de pago (corrección)' : 'Desglose de pago',
       parrafos: [
+        ...(esCorreccion ? ['CORRECCIÓN: este desglose reemplaza al que se envió antes de esta bitácora; el anterior ya no es válido.'] : []),
         `Va adjunto el desglose de pago de la bitácora ${bitacora}.`,
         'El detalle está en el archivo de Excel.',
         'Si algo no coincide, responde a este correo.',
