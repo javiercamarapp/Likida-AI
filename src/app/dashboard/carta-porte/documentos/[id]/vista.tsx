@@ -7,6 +7,7 @@ import { CAUSAS_RECHAZO, type CausaRechazo } from '@/lib/likida/carta_porte_docs
 import { propuestaVacia, type PropuestaCatalogo } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
 import { FRASE_ENVIADO_SIMULADO, ROTULO_SIMULADO } from '@/lib/likida/carta_porte_docs/salida_simulada';
 import { lineasDelOriginal, marcaDeFila, resumenDeMarcas } from '@/lib/likida/carta_porte_docs/revision_formato';
+import { AvisosLectura } from './avisos_lectura';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../forma_accion';
 
 /**
@@ -165,6 +166,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
             {meta.escalamientos.length > 0 ? ` · se releyó ${numero(meta.escalamientos.length)} ${meta.escalamientos.length === 1 ? 'vez' : 'veces'} con un modelo más fuerte` : ''}
           </p>
         )}
+        <AvisosLectura meta={meta} />
         {doc.riesgoInyeccion && (
           <p className="text-[12px] px-3 py-2 rounded-lg flex items-start gap-1.5" role="alert" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
             <ShieldAlert width={14} height={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />

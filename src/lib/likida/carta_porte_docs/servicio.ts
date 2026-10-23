@@ -105,6 +105,12 @@ export async function recibirDocumento(tenantId: string, e: EntradaDocumento, de
   return { ok: true, documentoId: documento.id, duplicado, estado: documento.estado, formato: documento.formato };
 }
 
+/** Un aviso de lectura que además es una PÉRDIDA de datos (embarques que no se leyeron): bloquea la aprobación. */
+function perdida(contenido: { avisos: string[]; perdidas?: Array<{ mensaje: string; bloquea: boolean }> }, mensaje: string): void {
+  contenido.avisos.push(mensaje);
+  contenido.perdidas = [...(contenido.perdidas ?? []), { mensaje, bloquea: true }];
+}
+
 // ── La validación completa (con lo que solo la base sabe) ───────────────────
 
 /**
@@ -114,7 +120,7 @@ export async function recibirDocumento(tenantId: string, e: EntradaDocumento, de
  */
 export async function validarDocumento(
   tenantId: string,
-  doc: Pick<DocumentoFila, 'id' | 'riesgoInyeccion' | 'remitenteReconocido'> & { capturaIncompleta?: { ultimoRotulo: string } | null; requiereCapturaManual?: MetaExtraccion['requiereCapturaManual']; extraccion?: DocumentoFila['extraccion'] },
+  doc: Pick<DocumentoFila, 'id' | 'riesgoInyeccion' | 'remitenteReconocido'> & { capturaIncompleta?: { ultimoRotulo: string } | null; lecturaIncompleta?: Array<{ mensaje: string; bloquea: boolean }>; requiereCapturaManual?: MetaExtraccion['requiereCapturaManual']; extraccion?: DocumentoFila['extraccion'] },
   e: Extraccion,
   opc: { tms?: SalidaTms } = {},
 ): Promise<ResultadoValidacion> {
@@ -126,6 +132,10 @@ export async function validarDocumento(
   const extra: Hallazgo[] = [];
   // T-A3-67: lo que el lector no pudo leer se declara en cada revalidación (no se pierde al corregir un campo).
   const manual = doc.requiereCapturaManual ?? doc.extraccion?.meta?.requiereCapturaManual ?? null;
+  // A37-A3-03: lo que la lectura dejó fuera (embarques, páginas, filas) se declara en cada revalidación, también tras corregir un campo.
+  for (const p of doc.lecturaIncompleta ?? doc.extraccion?.meta?.lecturaIncompleta ?? []) {
+    extra.push({ campo: 'documento', renglon: null, severidad: p.bloquea ? 'bloqueo' : 'confirmar', codigo: 'lectura_incompleta', mensaje: `${p.mensaje}${p.bloquea ? ' No se puede aprobar hasta que se lea completo: divide el archivo y súbelo por partes, o captura lo que falta.' : ' Confirma que no falta nada.'}` });
+  }
   if (manual) {
     extra.push({ campo: 'documento', renglon: null, severidad: 'bloqueo', codigo: 'requiere_captura_manual', mensaje: 'Esta remisión escaneada no se pudo leer porque no hay modelo de visión configurado. No se inventó ningún dato: captúrala a mano contra el original.' });
   }
@@ -318,15 +328,15 @@ export async function procesarDocumento(
       const div = await dividirEnHijos(tenantId, doc, version, plan, ahora);
       if (div.estado === 'ok') return div.resultado;
       if (div.estado === 'perdido') return { ok: false, motivo: 'perdi_el_lease', mensaje: 'Otra invocación terminó este documento primero.', permanente: false };
-      contenido.avisos.push(`El archivo trae ${plan.embarques.length} embarques pero esta base aún no sabe partirlos: se leyó el primero; sube el resto por separado.`);
+      perdida(contenido, `El archivo trae ${plan.embarques.length} embarques pero esta base aún no sabe partirlos: se leyó el primero; sube el resto por separado.`);
     } else if (variasHojas !== null) {
       const otras = variasHojas.otras.slice(0, 5).map((n) => `«${n}»`).join(', ');
-      contenido.avisos.push(`El libro trae ${variasHojas.embarques} embarques en la hoja «${variasHojas.hojaDelFolio}» y además datos en otra(s) hoja(s) (${otras}): partirlo dejaría a cada embarque sin esas hojas, así que no se parte. Se leyó el primero; deja los embarques en una sola hoja o súbelos por separado.`);
+      perdida(contenido, `El libro trae ${variasHojas.embarques} embarques en la hoja «${variasHojas.hojaDelFolio}» y además datos en otra(s) hoja(s) (${otras}): partirlo dejaría a cada embarque sin esas hojas, así que no se parte. Se leyó el primero; deja los embarques en una sola hoja o súbelos por separado.`);
     } else if (mismoEmbarque) {
       contenido.hojasMismoEmbarque = mismoEmbarque.hojas;
       contenido.avisos.push(mismoEmbarque.aviso);
     } else if (exceso !== null) {
-      contenido.avisos.push(`El archivo trae ${exceso} embarques (más de ${MAX_EMBARQUES}): no se parte solo. Se leyó el primero; divide el archivo y súbelo por partes.`);
+      perdida(contenido, `El archivo trae ${exceso} embarques (más de ${MAX_EMBARQUES}): no se parte solo. Se leyó el primero; divide el archivo y súbelo por partes.`);
     }
 
     // T-A3-67: la transcripción de una captura/escaneo se pide UNA vez por documento (la usan la clasificación y, después, el extractor).
@@ -370,13 +380,15 @@ export async function procesarDocumento(
     }
 
     const requiereCapturaManual: MetaExtraccion['requiereCapturaManual'] = sinVision ? { formato: 'C', motivo: 'sin_vision' } : null;
-    const docVista = { id: doc.id, riesgoInyeccion: r.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido, capturaIncompleta: r.capturaIncompleta, requiereCapturaManual };
+    const lecturaIncompleta = contenido.perdidas ?? [];
+    const docVista = { id: doc.id, riesgoInyeccion: r.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido, capturaIncompleta: r.capturaIncompleta, requiereCapturaManual, lecturaIncompleta };
     const validacion = await validarDocumento(tenantId, docVista, extraccion);
     const meta: MetaExtraccion = {
       origen: r.origen, nivel: r.nivel, escalamientos: r.escalamientos, ...(r.revisionHumana.length > 0 ? { revisionHumana: r.revisionHumana } : {}), ...(r.caidas.length > 0 ? { caidas: r.caidas } : {}), avisos: [...r.avisos, ...avisosCatalogo], notasModelo: r.notasModelo, indiciosInyeccion: r.indiciosInyeccion,
       ...(r.capturaIncompleta ? { capturaIncompleta: r.capturaIncompleta } : {}),
       ...(formatoEntrada ? { formatoEntrada } : {}),
       ...(requiereCapturaManual ? { requiereCapturaManual } : {}),
+      ...(lecturaIncompleta.length > 0 ? { lecturaIncompleta } : {}),
     };
     const guardada = await repo.actualizarDocumento(tenantId, documentoId, version, {
       estado: 'por_revisar', formato: contenido.formato, perfil_id: r.perfilId, perfil_version: r.perfilVersion,
