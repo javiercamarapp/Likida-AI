@@ -308,7 +308,8 @@ import { join, relative } from 'node:path';
 // Llamadas SIN cambio: no hay ninguna llamada real a Supabase en este archivo.
 // Auditoría 35, R04-fiscal-01 (liga del SAT con copia de campos fiscales, mig. 0858): +1 archivo (321 → 322), `sat_descarga/liga_campos.ts` —
 // la liga automática (`gasto_ligar_cfdi_campos`, con respaldo al UPDATE de siempre si la migración no está aplicada); todo por `acotada` con `tenant_id`.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 322;
+// Auditoría 37, S57-01/S18-01: +1 archivo (322 → 323), `sat_descarga/rfc_tenant.ts` — lee `tenant.rfc` (el RFC fiscal verificado) para atar el buzón del SAT al tenant; todo por `acotada`.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 323;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -564,7 +565,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 322;
 // intentos en la base) que precede al UPDATE de respaldo (que se conserva mientras la base no tenga la 0861). 0 archivos nuevos. Cubierta por
 // `reenvio_fallida.test.ts` y supabase/tests/0861_*. Las demás piezas de la 0861 (nota de crédito, ARCO) no suman llamadas: viven en la base.
 // INTEGRACIÓN OLEADA 4 (23-oct-2026): de #644/#645/#646/#647 solo #647 toca el conteo (+1); el barrido real del árbol fusionado mide 2,264 (techo = medido, sin holgura).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_264;
+// Auditoría 37 (+4, 2264 → 2268): rfc_tenant.ts (+2 lecturas de tenant.rfc), ciclo.ts (+1, estatus del sello ya puesto, S57-04) y
+// transferencia.ts (+1, alargar la reserva del timbrado ante error ambiguo del PAC, S61-01).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_268;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
