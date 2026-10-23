@@ -19,7 +19,9 @@ const R = await import('./revision_cobros');
 
 const T = 'tenant-1';
 const OTRO = 'tenant-2';
-beforeEach(() => { db = crearDbFalsa({}); });
+// Estas pruebas ejercen el camino anterior (leer-sumar-escribir): la base falsa simula que la migración 0860 aún NO está aplicada.
+// El camino con la función atómica se prueba en `nota_credito_rpc.test.ts`.
+beforeEach(() => { db = crearDbFalsa({}, { peaje_nota_credito_registrar: () => ({ error: { message: 'Could not find the function', code: 'PGRST202' } }) }); });
 
 async function subir(nombre: string, op: Parameters<typeof generarLibroIave>[0], tenant = T) {
   const { buffer, esperado } = generarLibroIave({ hojaSecundaria: true, ...op });
