@@ -951,6 +951,28 @@ describe('facturar() — la interfaz de un solo ticket', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+describe('parsearCosto — coma sola: decimal vs. miles (residuo oleada 4)', () => {
+  it('una coma con 1 o 2 dígitos detrás es decimal, no miles', () => {
+    expect(parsearCosto('1,5')).toBe(1.5);
+    expect(parsearCosto('12,5')).toBe(12.5);
+    expect(parsearCosto('0,5')).toBe(0.5);
+  });
+  it('los miles nunca empiezan con cero: «0,125» es 0.125 (a centavos, 0.13), no 125', () => {
+    expect(parsearCosto('0,125')).toBe(0.13);
+  });
+  it('lo que ya funcionaba NO cambia', () => {
+    expect(parsearCosto('50,000')).toBe(50000);
+    expect(parsearCosto('1,234')).toBe(1234);
+    expect(parsearCosto('52,500')).toBe(52500);
+    expect(parsearCosto('1,234.50')).toBe(1234.5);
+    expect(parsearCosto('1.234,50')).toBe(1234.5);
+    expect(parsearCosto('12,50')).toBe(12.5);
+    expect(parsearCosto('')).toBeNull();
+    expect(parsearCosto('N/D')).toBeNull();
+    expect(parsearCosto(null)).toBeNull();
+  });
+});
+
 describe('parsearCosto', () => {
   it('lee lo que el portal imprime en la columna Costo', () => {
     expect(parsearCosto('$180.00')).toBe(180);
