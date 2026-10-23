@@ -2408,10 +2408,37 @@ export async function marcarReclamoEnviado(tenantId: string, id: string, enviado
  * proveedor llegan sin detalle: aquí solo se suma lo que SÍ se acreditó.
  */
 export async function registrarNotaDeCredito(
-  tenantId: string, entrada: { reclamoId: string; monto: number; fecha: string; referencia?: string | null },
+  tenantId: string, entrada: { reclamoId: string; monto: number; fecha: string; referencia?: string | null; versionVista?: string | null },
 ): Promise<Resultado> {
   if (!Number.isFinite(entrada.monto) || entrada.monto <= 0 || entrada.monto > 1e9) return { ok: false, motivo: 'El monto de la nota de crédito debe ser mayor a cero.' };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(entrada.fecha)) return { ok: false, motivo: 'La fecha de la nota debe ser AAAA-MM-DD.' };
+
+  // A33-06 (migración 0860): camino ATÓMICO e IDEMPOTENTE en la base (candado de fila + clave por reclamo). La clave junta el reclamo, lo que
+  // la pantalla VIO (`versionVista`: estado y total acreditado al pintar el formulario) y el contenido de la nota: un doble clic o dos pestañas
+  // mandan la misma y se registra UNA vez; dos notas legítimas distintas (otro monto/fecha/folio, u otro estado visto) llevan claves distintas.
+  const clave = entrada.versionVista == null ? null
+    : createHash('sha256').update([entrada.reclamoId, entrada.versionVista, entrada.monto.toFixed(2), entrada.fecha, entrada.referencia?.trim() ?? ''].join('|')).digest('hex');
+  const viaRpc = await acotada(supabaseAdmin().rpc('peaje_nota_credito_registrar', {
+    p_tenant: tenantId, p_reclamo: entrada.reclamoId, p_monto: entrada.monto, p_fecha: entrada.fecha,
+    p_referencia: entrada.referencia?.trim().slice(0, 120) || null, p_clave: clave,
+  }), 'revision_cobros.nota_rpc');
+  if (!viaRpc.error) {
+    const d = (Array.isArray(viaRpc.data) ? viaRpc.data[0] : viaRpc.data) as { ok?: boolean; codigo?: string } | null;
+    if (d?.ok) return { ok: true };
+    if (d?.codigo === 'no_existe') return { ok: false, motivo: 'Ese reclamo no existe en tu flota.' };
+    if (d?.codigo === 'sin_enviar') return { ok: false, motivo: 'El reclamo aún no está enviado: márcalo como enviado antes de registrar una nota de crédito.' };
+    if (d?.codigo === 'monto_invalido') return { ok: false, motivo: 'El monto de la nota de crédito debe ser mayor a cero.' };
+    if (d?.codigo === 'fecha_invalida') return { ok: false, motivo: 'La fecha de la nota debe ser AAAA-MM-DD.' };
+    logger.error('revision_cobros.nota_rpc', { tenant: tenantId, err: 'respuesta inesperada de la función' });
+    return { ok: false, motivo: 'No se pudo guardar la nota de crédito.' };
+  }
+  const codigoRpc = (viaRpc.error as { code?: string }).code;
+  if (codigoRpc !== '42883' && codigoRpc !== 'PGRST202') {
+    logger.error('revision_cobros.nota_rpc', { tenant: tenantId, err: viaRpc.error.message });
+    return { ok: false, motivo: 'No se pudo guardar la nota de crédito.' };
+  }
+  // La migración 0860 aún no está aplicada en esta base: se cae al camino anterior (leer-sumar-escribir, SIN candado) y se avisa.
+  logger.warn('revision_cobros.nota_sin_0860', { tenant: tenantId, aviso: 'peaje_nota_credito_registrar no existe: camino sin candado; aplicar la migración 0860' });
   const { data: r, error: errR } = await acotada(supabaseAdmin().from('peaje_reclamo')
     .select('id, estado, monto_reclamado, monto_acreditado').eq('tenant_id', tenantId).eq('id', entrada.reclamoId).maybeSingle(), 'revision_cobros.reclamo');
   if (errR) { logger.error('revision_cobros.reclamo', { tenant: tenantId, err: errR.message }); return { ok: false, motivo: 'No se pudo leer el reclamo.' }; }

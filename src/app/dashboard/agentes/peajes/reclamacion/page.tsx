@@ -92,6 +92,7 @@ export default async function PaginaReclamacionPeajes({
     const monto = Number(String(fd.get('monto') ?? '').trim().replace(/[$,\s]/g, ''));
     const r = await registrarNotaDeCredito(tenantId, {
       reclamoId: String(fd.get('reclamo') ?? ''), monto, fecha: String(fd.get('fecha') ?? ''), referencia: String(fd.get('referencia') ?? '') || null,
+      versionVista: fd.has('version_vista') ? String(fd.get('version_vista')) : null, // A33-06: idempotencia del doble envío (migración 0860)
     });
     volverReclamos(sufijo, r.ok ? 'Nota de crédito registrada.' : `error:${r.motivo}`);
   }
