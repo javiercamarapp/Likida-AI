@@ -276,7 +276,12 @@ import { join, relative, sep } from 'node:path';
 //   él, 400 sin consultar nada) y la lectura va SIEMPRE acotada al tenant de la credencial (`leerDocumentosCierre`
 //   filtra por `tenant_id`); un `viajeId` de otra flota o sin solicitud armada contesta lista vacía, igual que
 //   «sin catálogo del cliente» — nunca filtra qué existe en otra flota. Prueba: `v1/evidencias/route.test.ts`.
-const RUTAS_APP_REVISADAS = 113;
+// 113 → 114 (A37-A1-01, liquidación por correo): `api/v1/liquidaciones-externas/contactos/route.ts` — carga de los correos de operadores y
+//   coordinadores (antes `aplicarContactos` no tenía llamador y corregirlo exigía SQL). Su puerta: `abrir(req, 'administracion')` ANTES de leer
+//   el cuerpo; la flota sale de la credencial (un `tenant_id` en el cuerpo es 400); estricta (≤ 500 contactos, ≤ 400 KB, campos cerrados);
+//   solo toca `correo` y `coordinador_id` de operadores que YA existen (nunca crea ni toca `telefono`); idempotente; la respuesta jamás repite
+//   un correo. Prueba: `v1/liquidaciones-externas/contactos/route.test.ts`.
+const RUTAS_APP_REVISADAS = 114;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

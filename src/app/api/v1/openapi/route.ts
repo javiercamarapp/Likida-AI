@@ -1495,6 +1495,35 @@ function documento(servidor: string) {
           },
         },
       },
+      '/v1/liquidaciones-externas/contactos': {
+        post: {
+          operationId: 'cargarContactosLiquidacion',
+          'x-likida-area': 'administracion',
+          summary: 'Carga los correos de los operadores y de sus coordinadores (liquidación por correo).',
+          description:
+            'Área `administracion`. Cuerpo `{ "contactos": [ { numeroEmpleado, correo?, coordinadorNombre?, coordinadorCorreo? } ] }` (1 a 500). '
+            + 'El operador se busca por `numeroEmpleado` y NUNCA se crea; solo se actualizan `correo` y el coordinador (jamás el teléfono). Una celda vacía no borra lo que ya había. '
+            + 'IDEMPOTENTE: re-enviar lo mismo cuenta en `sinCambios`. Sin estos correos, cada desglose abre la excepción «operador sin correo». La respuesta habla de «fila N» y del motivo; nunca repite un correo.',
+          tags: ['liquidaciones'],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { contactos: { type: 'array', minItems: 1, maxItems: 500, items: { type: 'object', properties: {
+            numeroEmpleado: { type: 'string', maxLength: 40 },
+            correo: { type: 'string', maxLength: 254 },
+            coordinadorNombre: { type: 'string', maxLength: 200 },
+            coordinadorCorreo: { type: 'string', maxLength: 254 },
+          }, required: ['numeroEmpleado'], additionalProperties: false } } }, required: ['contactos'], additionalProperties: false } } } },
+          responses: {
+            '200': { description: 'Qué pasó con cada fila.', content: { 'application/json': { schema: { type: 'object', properties: { datos: { type: 'object', properties: {
+              actualizados: { type: 'integer' }, sinCambios: { type: 'integer' }, coordinadoresNuevos: { type: 'integer' },
+              sinOperador: { type: 'array', items: { type: 'object', properties: { fila: { type: 'integer' }, motivo: { type: 'string' } } } },
+              ambiguos: { type: 'array', items: { type: 'object', properties: { fila: { type: 'integer' }, motivo: { type: 'string' } } } },
+              invalidas: { type: 'array', items: { type: 'object', properties: { fila: { type: 'integer' }, motivo: { type: 'string' } } } },
+              advertencias: { type: 'array', items: { type: 'string' } },
+              resumen: { type: 'string' },
+            }, required: ['actualizados', 'sinCambios'] } }, required: ['datos'] } } } },
+            ...respuestasError,
+          },
+        },
+      },
       '/v1/liquidaciones-externas/exportacion': {
         get: {
           operationId: 'exportarLiquidacionesExternas',
