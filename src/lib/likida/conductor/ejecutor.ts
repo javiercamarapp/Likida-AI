@@ -6,13 +6,14 @@ import {
   destinatariosEscalacion, ubicacionConocida, type Destino,
 } from './escalamiento';
 import {
-  anotarAvisoAlChofer, cerrarAvisoReclamado, leerConfigConductor, liberarAvisoReclamado, marcarHitoEscalado, reclamarAviso,
+  anotarAvisoAlChofer, cerrarAvisoReclamado, leerAgenteChoferHabilitado, leerConfigConductor, liberarAvisoReclamado, marcarHitoEscalado, reclamarAviso,
   leerCicloServicio, registrarEvento, type EventoHito, type ViajeContexto,
 } from './repo';
 import { cicloDelServicio, type CicloServicioFila } from './ciclo_servicio';
 import { cerrarHitosDeViajesVencidos, contarEnviadosPorChofer, leerAvisosDeHitos, leerHitosDeViajes, leerMuestrasGps, leerSitiosGeometriaDeViajes, leerViajesActivos, sembrarHitos } from './trabajo';
 import type { MuestraGps, SitiosViaje, UnidadDeViaje } from './ciclo_gps';
 import { clavesPoleoDe, lapsoMaxCompuertaMin, puedeEscribirAlChofer } from './compuerta_movimiento';
+import { aplicarCompuertaAgente, conCompuertaAlChofer } from './compuerta_agente';
 import { leerSenalesDeUnidades, senalesApagadas, type SenalesConduccion } from './senales_conduccion';
 import { planificar, type AccionPlan, type AvisoReclamado, type MotivoNada } from './planificador';
 import { armarEscalacion, armarRecordatorio, armarSolicitud, type MensajeSaliente, type MotivoEscalacion } from './solicitudes';
@@ -445,16 +446,17 @@ export function puertosReales(): PuertosConductor {
     hitosDe: leerHitosDeViajes,
     avisosDe: leerAvisosDeHitos,
     enviadosHoyPorChofer: contarEnviadosPorChofer,
-    configDe: leerConfigConductor,
+    // 0859: sin la marca explícita de la flota el Agente 5 se lee APAGADO (ningún motor le toma viajes) y, además, cada envío al chofer pasa por la base.
+    configDe: async (t) => aplicarCompuertaAgente(await leerConfigConductor(t)),
     ciclosDe: leerCicloServicio,
     reclamar: reclamarAviso,
     cerrarAviso: cerrarAvisoReclamado,
     liberarAviso: liberarAvisoReclamado,
     anotarAvisoChofer: anotarAvisoAlChofer,
     marcarEscalado: marcarHitoEscalado,
-    enviar: (telefono, m, contexto, tenantId, ahora) => enviarConFallback(telefono, {
+    enviar: conCompuertaAlChofer((telefono, m, contexto, tenantId, ahora) => enviarConFallback(telefono, {
       texto: m.texto, botones: m.botones, plantilla: m.plantilla, contexto, tenantId, ahora,
-    }),
+    }), leerAgenteChoferHabilitado),
     destinatarios: destinatariosEscalacion,
     ubicacion: ubicacionConocida,
     evento: (h, evento, detalle) => registrarEvento(h, evento, detalle),

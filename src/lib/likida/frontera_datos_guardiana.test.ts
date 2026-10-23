@@ -547,6 +547,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 322;
 // A33-06 (migración 0860, oct-2026): +1 llamada (2,250 → 2,251), en `peajes/repo.ts` (`registrarNotaDeCredito`): `.rpc('peaje_nota_credito_registrar')`,
 // la función atómica e idempotente (candado de fila + clave por reclamo) que reemplaza el leer-sumar-escribir sin candado. 0 archivos nuevos. El
 // camino anterior (3 llamadas) se conserva como respaldo mientras la migración no esté aplicada. Cubierta por `nota_credito_rpc.test.ts` y supabase/tests/0860_*.
+// A5 COMPUERTA (A35-A5-01, oct-2026): +1 llamada (2,250 → 2,251), en `conductor/repo.ts` (que ya contaba): `leerAgenteChoferHabilitado` llama a
+// la función `conductor_agente_chofer_habilitado` (0859) con `acotada`, acotada por flota (`p_tenant`), antes de cada envío al chofer.
+// 0 archivos nuevos con llamadas. Funcionalidad nueva, no código migrado; cubierta por `compuerta_agente_repo.test.ts`.
 const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_251;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
