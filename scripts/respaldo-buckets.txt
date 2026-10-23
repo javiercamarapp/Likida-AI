@@ -1,0 +1,16 @@
+# Lista ÚNICA de buckets de Supabase Storage que respalda scripts/respaldo-storage.sh
+# (la usan también .github/workflows/backup-storage.yml y la documentación).
+# Un bucket por línea; `#` comenta.
+#
+# Una prueba (src/lib/likida/respaldo_buckets_completos.test.ts) cruza esta lista
+# contra los `insert into storage.buckets` de supabase/migrations y falla si una
+# migración crea un bucket que no está aquí. Al crear un bucket nuevo, agrégalo.
+comprobantes
+liquidaciones
+avatares
+bus
+buzon-facturas       # facturas recibidas del buzón (evidencia fiscal, CFF art. 30)
+cartaporte-docs      # documentos de Carta Porte (evidencia fiscal)
+agente-insumos
+marketing_hooks_video
+marketing_referencias

@@ -54,6 +54,6 @@ export function lecturaAtlas(nivel: 1 | 2 | 3 = 1, folio = 'ATL-20481') {
     operador_nombre: ['Juan Pérez López', c, 'Juan Pérez López'], unidad_placas: ['ABC1234', c, 'ABC1234'],
   }, [{
     descripcion: ['Botellas de vidrio vacías', c, 'Botellas de vidrio vacías'], bienes_transp: ['24131500', c, '24131500'],
-    cantidad: ['1,200', c, '1,200'], unidad_texto: ['Cajas', c, 'Cajas'], peso_kg: ['8,400', c, '8,400'],
+    cantidad: ['1,200', c, '1,200'], unidad_texto: ['Cajas', c, 'Cajas'], peso_kg: ['8,400', c, '8,400'], material_peligroso: ['No', c, 'No'],
   }]);
 }

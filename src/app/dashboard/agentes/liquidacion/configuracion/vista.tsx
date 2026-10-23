@@ -202,7 +202,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
                   <span className="flex items-center gap-2 text-[12.5px]">
                     <input type="checkbox" name="activa" defaultChecked={config.activa} disabled={off} /> Activar el envío
                   </span>
-                  <Ayuda>Apagado, no sale ningún correo aunque haya desgloses listos.</Ayuda>
+                  <Ayuda>Apagado, no sale ningún correo aunque haya desgloses listos: quedan en espera y salen solos al encenderlo.</Ayuda>
                 </Etiqueta>
                 <Etiqueta t="Nombre del remitente">
                   <input name="remitenteNombre" defaultValue={config.remitenteNombre ?? ''} maxLength={MAX_ETIQUETA} placeholder="(sin definir)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={off} />

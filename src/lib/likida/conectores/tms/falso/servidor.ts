@@ -122,3 +122,22 @@ export function crearServidorTmsFalso(op: OpcionesServidor = {}): ServidorTmsFal
     reiniciarLimite() { aceptadas = 0; },
   };
 }
+
+/**
+ * Adaptador: el servidor falso habla `SolicitudHttp`/`RespuestaHttp`; el conector (sesión TMS) habla `PeticionHttp`
+ * (URL completa) y espera el cuerpo como texto. Solo traduce formas; no abre red.
+ */
+export function comoHttpDeConector(servidor: Pick<ServidorTmsFalso, 'http'>): (p: {
+  url: string; metodo: 'GET' | 'POST'; encabezados?: Record<string, string>; cuerpo?: string;
+}) => Promise<{ estado: number; cuerpo: string; encabezados: Record<string, string> }> {
+  return async (p) => {
+    const u = new URL(p.url);
+    const query: Record<string, string> = {};
+    u.searchParams.forEach((v, k) => { query[k] = v; });
+    const r = await servidor.http({
+      metodo: p.metodo, ruta: u.pathname, query, headers: p.encabezados,
+      ...(p.cuerpo !== undefined ? { cuerpo: JSON.parse(p.cuerpo) as unknown } : {}),
+    });
+    return { estado: r.status, cuerpo: typeof r.cuerpo === 'string' ? r.cuerpo : JSON.stringify(r.cuerpo), encabezados: r.headers };
+  };
+}

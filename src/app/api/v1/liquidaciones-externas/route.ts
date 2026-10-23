@@ -46,6 +46,7 @@ import { recibirLiquidacionExterna, intentarEntrega, dependenciasPorOmision } fr
 import { leerConfigCorreo } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { aLiquidacionExternaApi, type LiquidacionExternaApi } from '@/lib/likida/liquidacion_externa/api';
 import { DatoInvalido } from '@/lib/likida/errores';
+import { MENSAJE_CANAL_CORREO_SIN_WHATSAPP } from '@/lib/likida/liquidacion_externa/canal_correo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -115,11 +116,7 @@ export async function POST(req: Request) {
       // sigue leyendo y acusando normal, aunque haya entrado antes de este guardia.
       const canal = await dependenciasPorOmision.canalDeEntrega(acceso.tenantId);
       if (canal === 'correo') {
-        throw new DatoInvalido(
-          'Esta flota entrega las liquidaciones por correo, no por WhatsApp. `POST /v1/liquidaciones-externas` solo '
-          + 'arma la entrega por WhatsApp: esta liquidación quedaría recibida pero sin forma de llegar a nadie. Usa '
-          + '`POST /v1/liquidaciones-externas/desgloses`, que es el camino que además genera y adjunta el Excel por correo.',
-        );
+        throw new DatoInvalido(MENSAJE_CANAL_CORREO_SIN_WHATSAPP);
       }
       const { liquidacion } = await recibirLiquidacionExterna(acceso.tenantId, datos, huellaDelContenido);
       // Se intenta entregar YA, pero la entrega no es parte de la promesa de

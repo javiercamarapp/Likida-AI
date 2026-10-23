@@ -151,10 +151,16 @@ const EXPORT_VIVOS_POR_DECIDIR = ['liquidaciones', 'pdf'];
 const V1_STAND_BY = ['clientes'];
 const EXPORT_STAND_BY = ['poliza', 'facturas-proveedor', 'convenios', 'jornada', 'bitacora-peaje', 'bitacora-conciliada', 'peajes-reclamacion'];
 
-const viveBajoPerfil = (raiz: 'v1' | 'export', recurso: string) =>
-  raiz === 'v1'
-    ? [...V1_PERMITIDOS, ...V1_VIVOS_POR_DECIDIR].includes(recurso)
-    : [...EXPORT_PERMITIDOS, ...EXPORT_VIVOS_POR_DECIDIR].includes(recurso);
+// Subrutas de un segmento PERMITIDO que son de stand-by (Rentabilidad y Cobranza): `viajes/<id>/contribucion` entrega
+// ingreso, margen y estado de cobro. El perfil las niega por la ruta completa (API_PERFIL_SUBRUTAS_NEGADAS).
+const SUBRUTAS_STAND_BY_V1 = [/^\/api\/v1\/viajes\/[^/]+\/contribucion$/];
+
+const viveBajoPerfil = (raiz: 'v1' | 'export', recurso: string, pathname?: string) =>
+  pathname && SUBRUTAS_STAND_BY_V1.some((re) => re.test(pathname))
+    ? false
+    : raiz === 'v1'
+      ? [...V1_PERMITIDOS, ...V1_VIVOS_POR_DECIDIR].includes(recurso)
+      : [...EXPORT_PERMITIDOS, ...EXPORT_VIVOS_POR_DECIDIR].includes(recurso);
 
 async function endpoints(raiz: 'v1' | 'export'): Promise<Endpoint[]> {
   const salida: Endpoint[] = [];
@@ -234,7 +240,7 @@ describe('(0) el inventario de rutas está clasificado a mano', () => {
 
   it('la lista de esta prueba coincide con la del producto en los dos sentidos', () => {
     for (const r of RUTAS) {
-      expect(apiPermitidaEnPerfil('cinco_agentes', r.pathname), `${r.raiz}/${r.recurso}`).toBe(viveBajoPerfil(r.raiz, r.recurso));
+      expect(apiPermitidaEnPerfil('cinco_agentes', r.pathname), `${r.raiz}/${r.recurso}`).toBe(viveBajoPerfil(r.raiz, r.recurso, r.pathname));
     }
   });
 });
@@ -245,7 +251,7 @@ describe('(0) el inventario de rutas está clasificado a mano', () => {
 describe('(1) /v1 con llave `administracion`: recurso × perfil', () => {
   it.each(V1.map((e) => [`${e.metodo} ${e.pathname}`, e] as const))('CON perfil · %s', async (_n, e) => {
     const r = await llamar(e, 'llave');
-    if (viveBajoPerfil('v1', e.recurso)) {
+    if (viveBajoPerfil('v1', e.recurso, e.pathname)) {
       expect(r.porPerfil, `${e.pathname} vivo bajo el perfil no debe negarse por perfil`).toBe(false);
       expect(negosPorPerfil()).toBe(0);
     } else {
@@ -316,7 +322,7 @@ describe('(2) por cookie de flota_admin: /v1 (lecturas) y /api/export/*', () => 
   it.each(V1_GET.map((e) => [e.pathname, e] as const))('v1 · CON perfil · GET %s', async (_n, e) => {
     sesion = comoDueno(CON);
     const r = await llamar(e, 'cookie');
-    if (viveBajoPerfil('v1', e.recurso)) expect(r.porPerfil).toBe(false);
+    if (viveBajoPerfil('v1', e.recurso, e.pathname)) expect(r.porPerfil).toBe(false);
     else {
       expect(r.status).toBe(403);
       expect(r.porPerfil).toBe(true);

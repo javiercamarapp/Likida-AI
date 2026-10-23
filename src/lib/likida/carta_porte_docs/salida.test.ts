@@ -16,7 +16,7 @@ describe('planDeViaje (pura)', () => {
       ccp: { origenCp: '44100', destinoCp: '64000', origenEstado: 'JAL', destinoEstado: 'NLE', transpInternac: null },
     });
     expect(r.plan.origen).toBe('Distribuidora Atlas SA de CV · CP 44100 · JAL');
-    expect(r.plan.mercancias).toEqual([{ descripcion: 'Botellas de vidrio vacías', bienesTransp: '24131500', cantidad: 1200, claveUnidad: 'XBX', pesoKg: 8400, materialPeligroso: null }]);
+    expect(r.plan.mercancias).toEqual([{ descripcion: 'Botellas de vidrio vacías', bienesTransp: '24131500', cantidad: 1200, claveUnidad: 'XBX', pesoKg: 8400, materialPeligroso: false }]);
   });
 
   it('sin folio del cliente el folio sale de la huella del documento (estable)', () => {

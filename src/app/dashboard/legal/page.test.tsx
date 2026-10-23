@@ -6,12 +6,14 @@ const d = vi.hoisted(() => ({
   sesion: { tenantId: 't-1', rol: 'flota_admin', userId: 'u-dueno' } as Record<string, unknown>,
   filas: [] as unknown[],
   lecturaFalla: false,
+  perfil: null as string | null,
   registrar: vi.fn(), revocar: vi.fn(), guardarDatos: vi.fn(), leerDatos: vi.fn(),
 }));
 vi.mock('@/lib/legal/datos_responsable', () => ({
   guardarDatosResponsable: (...a: unknown[]) => d.guardarDatos(...a),
   leerDatosResponsable: (...a: unknown[]) => d.leerDatos(...a),
 }));
+vi.mock('@/lib/auth/perfil_tenant', () => ({ perfilDeTenant: async () => d.perfil }));
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => d.sesion }));
 vi.mock('next/navigation', () => ({
   redirect: (u: string) => { throw new Error(`REDIRECT ${u}`); },
@@ -43,6 +45,7 @@ beforeEach(() => {
   d.sesion = { tenantId: 't-1', rol: 'flota_admin', userId: 'u-dueno' };
   d.filas = [];
   d.lecturaFalla = false;
+  d.perfil = null;
   d.registrar.mockResolvedValue({ ok: true, registrada: true });
   d.revocar.mockResolvedValue({ ok: true });
   d.leerDatos.mockResolvedValue({ razonSocial: null, domicilio: null, contactoPrivacidad: null });
@@ -105,6 +108,28 @@ describe('/dashboard/legal', () => {
   });
 
   it('retirar el mandato llama a la revocación con la sesión', async () => {
+    d.filas = [{ documento: 'mandato_autofacturacion', version: MANDATO_AUTOFACTURACION.version, aceptadoEn: '2026-10-02T15:00:00Z', userId: 'u-dueno', revocadoEn: null }];
+    const accion = accionDe(await PaginaLegal(sp), 'Retirar el mandato');
+    expect((await accion!(null, new FormData())).ok).toMatch(/Mandato retirado/);
+    expect(d.revocar).toHaveBeenCalledWith('t-1', 'u-dueno');
+  });
+
+  it('bajo un perfil restringido NO se ofrece otorgar el mandato (Facturas está en stand-by) y se dice por qué', async () => {
+    d.perfil = 'cinco_agentes';
+    const html = renderToStaticMarkup(await PaginaLegal(sp));
+    expect(html).not.toContain('Otorgo el mandato');
+    expect(html).toContain('no está disponible en el plan de esta flota');
+  });
+
+  it('bajo perfil, otorgar por POST directo se niega sin tocar la base (aunque el formulario no se pinte)', async () => {
+    const accion = accionDe(await PaginaLegal(sp), 'Otorgo el mandato en nombre de mi empresa');
+    d.perfil = 'cinco_agentes';
+    expect((await accion!(null, new FormData())).error).toMatch(/no está disponible/);
+    expect(d.registrar).not.toHaveBeenCalled();
+  });
+
+  it('bajo perfil, RETIRAR un mandato ya otorgado sigue disponible', async () => {
+    d.perfil = 'cinco_agentes';
     d.filas = [{ documento: 'mandato_autofacturacion', version: MANDATO_AUTOFACTURACION.version, aceptadoEn: '2026-10-02T15:00:00Z', userId: 'u-dueno', revocadoEn: null }];
     const accion = accionDe(await PaginaLegal(sp), 'Retirar el mandato');
     expect((await accion!(null, new FormData())).ok).toMatch(/Mandato retirado/);

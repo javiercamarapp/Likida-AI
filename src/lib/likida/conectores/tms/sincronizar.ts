@@ -46,7 +46,8 @@ import {
   validarLiquidacionExterna,
 } from '../../liquidacion_externa/esquema';
 import { buscarPorClave } from '../../liquidacion_externa/repo';
-import { recibirLiquidacionExterna } from '../../liquidacion_externa/servicio';
+import { dependenciasPorOmision, recibirLiquidacionExterna } from '../../liquidacion_externa/servicio';
+import { MENSAJE_CANAL_CORREO_SIN_WHATSAPP } from '../../liquidacion_externa/canal_correo';
 import { recibirArchivoPeaje } from '../../peajes/ingesta';
 import { toCsv } from '../../export';
 import { leerCredencial, marcarProbada } from '../credenciales';
@@ -189,7 +190,7 @@ const vacioResumen = (recurso: RecursoSincronizable, estado: EstadoRecurso): Res
   recurso, estado, leidas: 0, nuevas: 0, omitidas: 0, entregadas: 0, rechazadas: 0, pendientes: 0, conflictos: 0, backlog: false,
 });
 
-function urlBaseHttps(v: string | undefined): string | null {
+export function urlBaseHttps(v: string | undefined): string | null {
   try {
     const u = new URL((v ?? '').trim());
     return u.protocol === 'https:' ? u.origin + u.pathname.replace(/\/+$/, '') : null;
@@ -633,16 +634,27 @@ export const entregasReales: Entregas = {
     if (r.error) throw new Error(`importarViajes: ${r.error}`);
     // Lo que la puerta no pudo amarrar (operador, unidad, cliente) NO se marca como entregado: se dice y se reintenta
     // cuando el catálogo lo permita. Los folios ya existentes (`saltados`) sí cuentan como hechos.
-    const noHechos = new Set<string>([...r.sinOperador, ...r.sinUnidad, ...r.sinCliente, ...r.operadorOcupado]);
+    const noHechos = new Set<string>([...r.sinOperador, ...r.sinUnidad, ...r.sinCliente, ...r.operadorOcupado, ...(r.unidadOcupada ?? [])]);
     return {
       hechas: filas.map((f) => f.folio).filter((f) => !noHechos.has(f)),
       pendientes: noHechos.size,
-      detalle: noHechos.size > 0 ? `${noHechos.size} viaje(s) sin entrar: falta operador, unidad o cliente en el catálogo, o el operador ya tiene un viaje abierto.` : undefined,
+      detalle: noHechos.size > 0 ? `${noHechos.size} viaje(s) sin entrar: falta operador, unidad o cliente en el catálogo, o el operador o la unidad ya tiene un viaje abierto.` : undefined,
     };
   },
 
   async liquidaciones(tenantId, items) {
     const hechas: string[] = []; let conflictos = 0; let pendientes = 0;
+    // Mismo guardia que `POST /v1/liquidaciones-externas` (A35-TRANSVERSAL-02): esta puerta guarda por la vía vieja y
+    // NUNCA arma la entrega por correo (esa solo nace en `recibirDesglose`). Si la flota entrega por correo, guardar aquí
+    // dejaría la liquidación `pendiente` para siempre y la clave marcada como entregada (no se reentregaría después por
+    // la vía correcta). Se rechaza al CREAR con el mismo mensaje: la clave queda sin marcar, se avisa y no hay huérfana.
+    // Se lee el canal una sola vez por tanda y solo si hay algo que crear; lo ya existente sigue su curso normal.
+    let porCanal = 0;
+    let canalCorreo: boolean | undefined;
+    const esCorreo = async (): Promise<boolean> => {
+      canalCorreo ??= (await dependenciasPorOmision.canalDeEntrega(tenantId)) === 'correo';
+      return canalCorreo;
+    };
     for (const it of items) {
       const existente = await buscarPorClave(tenantId, it.clave);
       if (existente) {
@@ -652,6 +664,7 @@ export const entregasReales: Entregas = {
         continue;
       }
       try {
+        if (await esCorreo()) { porCanal += 1; pendientes += 1; continue; }
         await recibirLiquidacionExterna(tenantId, validarLiquidacionExterna(it.cuerpo), it.huella);
         hechas.push(it.clave);
       } catch (e) {
@@ -663,7 +676,10 @@ export const entregasReales: Entregas = {
     }
     return {
       hechas, pendientes, conflictos,
-      detalle: conflictos > 0 ? `${conflictos} liquidación(es) cambiaron en el origen después de recibirse; Likida no las sobrescribe.` : undefined,
+      detalle: [
+        porCanal > 0 ? `${porCanal} liquidación(es) sin guardar: ${MENSAJE_CANAL_CORREO_SIN_WHATSAPP}` : '',
+        conflictos > 0 ? `${conflictos} liquidación(es) cambiaron en el origen después de recibirse; Likida no las sobrescribe.` : '',
+      ].filter(Boolean).join(' ') || undefined,
     };
   },
 

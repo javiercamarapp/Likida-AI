@@ -61,7 +61,7 @@ completa; un prefijo sin ella no se restaura.
 | `AWS_SESSION_TOKEN` | GitHub secret | Opcional | Credencial temporal |
 | `AWS_REGION` | GitHub variable | No | Default `us-east-1` |
 | `AWS_ENDPOINT_URL` | GitHub secret | Solo R2/S3 compatible | Endpoint HTTPS del proveedor |
-| `RESPALDO_BUCKETS` | GitHub variable | No | Default: `comprobantes liquidaciones avatares bus` |
+| `RESPALDO_BUCKETS` | GitHub variable | No | Si se omite, `scripts/respaldo-buckets.txt` (los 9 buckets de las migraciones). Si se define, SUSTITUYE la lista completa: una variable vieja volvería a omitir buckets |
 | `RESPALDO_REQUIRE_REMOTE` | Entorno | CI | Debe ser `true` en el workflow |
 | `RESPALDO_ALLOW_EMPTY` | GitHub variable | No | Default `false`; cambiarlo requiere justificarlo |
 | `RESPALDO_ROOT` | Runner | No | Directorio temporal/local |

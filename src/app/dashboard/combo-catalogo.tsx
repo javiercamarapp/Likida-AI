@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { OpcionCatalogo, TipoCatalogo } from '@/lib/likida/repo';
 import { numero } from '@/lib/formato';
+import { coincidencias } from '@/lib/likida/catalogo_etiquetas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL CATÁLOGO QUE NO VIAJA (FE-2, 22-ago-2026)
@@ -94,13 +95,16 @@ export function ComboCatalogo({
     setTexto(v);
     // El id se resuelve contra lo que el SERVIDOR ofreció, nunca contra lo
     // tecleado: así el formulario no puede mandar un id que el usuario no vio.
-    const coincide = opciones.find((o) => o.etiqueta.toLowerCase() === v.trim().toLowerCase());
-    setId(coincide ? coincide.id : null);
+    // Con MÁS de una coincidencia exacta NO se adivina (R15-ux-01): `find`
+    // devolvía la primera y el viaje se asignaba al homónimo equivocado.
+    const coinciden = coincidencias(opciones, v);
+    setId(coinciden.length === 1 ? coinciden[0].id : null);
     if (temporizador.current) clearTimeout(temporizador.current);
     temporizador.current = setTimeout(() => pedir(v), FRENO_MS);
   };
 
   const sinResolver = texto.trim() !== '' && id === null;
+  const ambiguo = sinResolver && coincidencias(opciones, texto).length > 1;
 
   return (
     <div>
@@ -131,7 +135,9 @@ export function ComboCatalogo({
         </p>
       ) : sinResolver ? (
         <p className="text-[11px] mt-1" style={{ color: 'var(--warn)' }}>
-          Elige uno de la lista: se guarda el registro, no el texto.
+          {ambiguo
+            ? 'Hay varios con ese nombre: elige uno de la lista, con su teléfono o número.'
+            : 'Elige uno de la lista: se guarda el registro, no el texto.'}
         </p>
       ) : total !== null && total > opciones.length && opciones.length > 0 ? (
         <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>

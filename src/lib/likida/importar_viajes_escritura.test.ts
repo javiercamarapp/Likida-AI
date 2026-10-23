@@ -62,6 +62,14 @@ let lotesUpsert: FilaInsert[][];
  *  por llamada; vacía = nadie trae viaje abierto. */
 let ocupadosResp: Array<Array<{ operador_id: string }>>;
 let ocupadosError: { message: string } | null;
+/** DAT-34-2: unidades que YA traen viaje abierto en la base (0851) — misma
+ *  forma que `ocupadosResp`, cola aparte porque se pregunta por `unidad_id`. */
+let ocupadosUnidadResp: Array<Array<{ unidad_id: string }>>;
+let ocupadosUnidadError: { message: string } | null;
+/** DAT-34-2: unidades que "otro request" ocupa DESPUÉS de nuestra lectura:
+ *  un INSERT con una fila de esa unidad choca con `uq_viaje_abierto_por_unidad`
+ *  (23505) y, como en Postgres, la sentencia entera se revierte. */
+let unidadesOcupadasEnCarrera: Set<string>;
 
 /** La RPC de ANALYZE (0157, ESC-18): se anota cada llamada; `rpcError` la
  *  hace fallar para probar que el import NO se cae por ella. */
@@ -109,14 +117,21 @@ function fromViaje() {
       select: () => {
         const nodo: Record<string, unknown> = {};
         let porFolio = false;
+        let porUnidad = false;
         for (const m of ['eq', 'not', 'order', 'abortSignal']) nodo[m] = () => nodo;
         // Ronda 16: la lectura de folios existentes es `.in('folio', tanda)` (sin range).
-        nodo.in = (col: string) => { if (col === 'folio') { porFolio = true; lecturasFolio++; } return nodo; };
+        nodo.in = (col: string) => {
+          if (col === 'folio') { porFolio = true; lecturasFolio++; }
+          if (col === 'unidad_id') porUnidad = true;
+          return nodo;
+        };
         nodo.range = () => Promise.resolve({ data: paginasLectura.shift() ?? [], error: null });
         // La consulta de OCUPADOS (0029) no pagina: se espera el builder
         // directo — el thenable resuelve con su página.
         nodo.then = (res: (v: unknown) => unknown) =>
-          Promise.resolve(porFolio ? { data: paginasLectura.shift() ?? [], error: null } : ocupadosError
+          Promise.resolve(porFolio ? { data: paginasLectura.shift() ?? [], error: null } : porUnidad ? (ocupadosUnidadError
+            ? { data: null, error: ocupadosUnidadError }
+            : { data: ocupadosUnidadResp.shift() ?? [], error: null }) : ocupadosError
             ? { data: null, error: ocupadosError }
             : { data: ocupadosResp.shift() ?? [], error: null }).then(res);
         return nodo;
@@ -134,6 +149,13 @@ function fromViaje() {
             return Promise.resolve({
               data: null,
               error: { code: '23502', message: 'null value in column "operador_id" of relation "viaje" violates not-null constraint' },
+            });
+          }
+          const choque = lote.find((f) => f.unidad_id && unidadesOcupadasEnCarrera.has(f.unidad_id));
+          if (choque) {
+            return Promise.resolve({
+              data: null,
+              error: { code: '23505', message: 'duplicate key value violates unique constraint "uq_viaje_abierto_por_unidad"' },
             });
           }
           const insertadas = lote.filter((f) => !enBase.has(f.folio));
@@ -178,6 +200,9 @@ beforeEach(() => {
   lotesUpsert = [];
   ocupadosResp = [];
   ocupadosError = null;
+  ocupadosUnidadResp = [];
+  ocupadosUnidadError = null;
+  unidadesOcupadasEnCarrera = new Set();
   catalogoUnidades = [];
   catalogoClientes = [];
   catalogoError = null;
@@ -275,6 +300,56 @@ describe('los candados de la base, respetados ANTES del insert (laterales AUD3)'
     const r = await importarViajes('t1', [fila('V-1')]);
     expect(r.creados).toBe(0);
     expect(r.error).toMatch(/no importé nada/i);
+    expect(llamadasUpsert).toBe(0);
+  });
+});
+
+describe('DAT-34-2: uq_viaje_abierto_por_unidad (0851) rechaza UNA fila, no el lote', () => {
+  const conUnidad = (folio: string, eco: string): FilaViajeImportada => ({ ...fila(folio), unidadEco: eco });
+  beforeEach(() => {
+    catalogoUnidades = [{ id: 'u-1', numero_economico: 'T-1' }, { id: 'u-2', numero_economico: 'T-2' }];
+  });
+
+  it('REPRO: la unidad que ya trae viaje abierto en la base se salta con su folio; el resto del lote entra', async () => {
+    ocupadosUnidadResp = [[{ unidad_id: 'u-1' }]];
+    const r = await importarViajes('t1', [conUnidad('V-1', 'T-1'), conUnidad('V-2', 'T-2'), fila('V-3')]);
+    expect(r.error).toBeUndefined();
+    expect(r.creados).toBe(2);
+    expect(r.unidadOcupada).toEqual(['V-1']);
+    expect(lotesUpsert.flat().map((f) => f.folio)).toEqual(['V-2', 'V-3']);
+  });
+
+  it('dos filas de la MISMA unidad en el archivo: la primera gana, la segunda se dice', async () => {
+    const r = await importarViajes('t1', [conUnidad('V-1', 'T-1'), conUnidad('V-2', 'T-1')]);
+    expect(r.creados).toBe(1);
+    expect(r.unidadOcupada).toEqual(['V-2']);
+    expect(lotesUpsert.flat().map((f) => f.folio)).toEqual(['V-1']);
+  });
+
+  it('REPRO de la carrera: el 23505 del índice en el INSERT no tumba el lote — se reintenta fila por fila y solo la que choca se rechaza', async () => {
+    // La lectura de ocupadas salió limpia; otro request ocupó T-1 justo después.
+    unidadesOcupadasEnCarrera = new Set(['u-1']);
+    const r = await importarViajes('t1', [conUnidad('V-1', 'T-1'), conUnidad('V-2', 'T-2'), fila('V-3')]);
+    expect(r.error).toBeUndefined();
+    expect(r.creados).toBe(2);
+    expect(r.unidadOcupada).toEqual(['V-1']);
+    expect(r.saltados).toEqual([]); // no es «el folio ya existía»
+    expect([...enBase].sort()).toEqual(['V-2', 'V-3']);
+  });
+
+  it('solo el 23505 del índice de la unidad cuenta como choque de unidad: el folio, el operador y otros códigos siguen siendo falla del lote', async () => {
+    const { esChoqueUnidadAbierta } = await import('./importar_viajes');
+    expect(esChoqueUnidadAbierta({ code: '23505', message: 'violates unique constraint "uq_viaje_abierto_por_unidad"' })).toBe(true);
+    expect(esChoqueUnidadAbierta({ code: '23505', message: 'violates unique constraint "uq_viaje_abierto_por_operador"' })).toBe(false);
+    expect(esChoqueUnidadAbierta({ code: '23505', message: 'violates unique constraint "viaje_folio_unico"' })).toBe(false);
+    expect(esChoqueUnidadAbierta({ code: '23502', message: 'uq_viaje_abierto_por_unidad' })).toBe(false);
+  });
+
+  it('si la lectura de unidades ocupadas falla, NO se importa nada y se dice', async () => {
+    ocupadosUnidadError = { message: 'timeout' };
+    const r = await importarViajes('t1', [conUnidad('V-1', 'T-1')]);
+    expect(r.creados).toBe(0);
+    expect(r.error).toMatch(/unidades.*no importé nada/i);
     expect(llamadasUpsert).toBe(0);
   });
 });

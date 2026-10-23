@@ -19,6 +19,7 @@ vi.mock('./trabajo', () => ({
   trabajoPendiente: vi.fn(async () => { orden.push('whatsapp'); return trabajo; }),
   avisosPendientes: vi.fn(async () => []),
   candidatasHuerfanaCorreo: vi.fn(async () => []),
+  flotasConEnvioActivo: vi.fn(async () => []),
 }));
 vi.mock('../presupuesto', async (orig) => ({ ...(await orig<typeof import('../presupuesto')>()), acotada: (q: unknown) => q }));
 const logError = vi.fn();
@@ -31,7 +32,7 @@ let trabajo: LiquidacionExterna[] = [];
 const enviar = vi.fn(async (..._a: unknown[]) => ({ estado: 'en_cola' as const, via: 'sesion' as const }));
 const entrega = { enviarConFallback: (...a: unknown[]) => enviar(...a) } as unknown as EntregaWhatsApp;
 const lector = {} as LectorDesglosesPuerto;
-const correoOk: ResumenEntregasCorreo = { reclamadas: 2, enviadas: 2, reintentar: 0, fallidas: 0, sinConfigurar: 0, fueraDeVentana: 0, sinConfirmar: 0, errores: 0 };
+const correoOk: ResumenEntregasCorreo = { reclamadas: 2, enviadas: 2, reintentar: 0, fallidas: 0, sinConfigurar: 0, fueraDeVentana: 0, apagada: 0, sinConfirmar: 0, errores: 0 };
 const pullOk = (p: Partial<ResultadoPull> = {}): ResultadoPull => ({
   estado: 'ok', paginas: 1, leidas: 3, importadas: 2, excepciones: 1, resueltas: 0, marcadas: 0, marcasFallidas: 0, hayMas: false, cursor: null, ...p,
 });

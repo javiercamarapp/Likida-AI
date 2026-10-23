@@ -6,7 +6,7 @@ import { puedeExportar } from '@/lib/auth/permisos';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
 import { aXlsxPlantillaTms, configEstandar, exportarDocumentos, MIME_XLSX, validarConfigExport, type ExportConfig, type FormatoExport } from '@/lib/likida/carta_porte_docs/exportacion';
-import { construirPlantilla } from '@/lib/likida/carta_porte_docs/plantilla_tms';
+import { construirPlantilla, faltantesBloqueantes } from '@/lib/likida/carta_porte_docs/plantilla_tms';
 import { leerConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import * as repo from '@/lib/likida/carta_porte_docs/repo';
 
@@ -115,6 +115,13 @@ async function plantillaTms(tenantId: string, rol: string, documentoId: string):
     }
     const config = await leerConfigSalida(tenantId);
     const plantilla = construirPlantilla(doc.extraccion, { clienteInterno: null, plantilla: config.plantillaPorDefecto });
+    // Un faltante BLOQUEANTE (orígenes 2..N o destinos > 4 que la plantilla no lleva) significa que el libro saldría incompleto: no se
+    // entrega ni se sella «exportado», para que nadie suba un CCP recortado creyéndolo válido (A35-A3-04).
+    const bloqueantes = faltantesBloqueantes(plantilla);
+    if (bloqueantes.length > 0) {
+      logger.warn('export.cp_docs_bloqueado', { rol, documentoId: doc.id, bloqueantes: bloqueantes.length });
+      return new NextResponse(`La plantilla no se puede descargar: ${[...new Set(bloqueantes.map((f) => f.mensaje ?? `falta ${f.campo}`))].join(' ')}`, { status: 409 });
+    }
     const bytes = aXlsxPlantillaTms(plantilla);
     const s = await getSessionTenant();
     try {
@@ -130,6 +137,8 @@ async function plantillaTms(tenantId: string, rol: string, documentoId: string):
         'Content-Disposition': `attachment; filename="plantilla-tms-${doc.id.slice(0, 8)}.xlsx"`,
         'Cache-Control': 'no-store',
         'X-Faltantes': String(plantilla.faltantes.length),
+        // Cuántos avisos trae (celdas recortadas, layout provisional…): el visor los muestra junto al botón.
+        'X-Avisos': String(plantilla.avisos.length),
       },
     });
   } catch (e) {

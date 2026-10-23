@@ -518,7 +518,16 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // `traerPorIds`, anclado a `tenant_id`) para pintar en el tablero interno (`/dashboard/agentes/conductores`) el mismo resumen
 // que ya exponía `GET /v1/evidencias` — antes solo vivía en la API externa, nunca en la vista del jefe de tráfico. 0 archivos
 // nuevos. Funcionalidad nueva, no código migrado; cubierta por `tablero-hitos.test.tsx` y `tablero.test.ts`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_248;
+// DAT-34-2 (22-oct-2026): +1 llamada (2,248 → 2,249), en `importar_viajes.ts` (que ya contaba). `importarViajes` lee, antes de
+// insertar, las unidades que ya traen un viaje abierto o en cuadre (`.from('viaje').select('unidad_id')`, por lotes de 200,
+// anclado a `tenant_id` y con `acotada`) para rechazar solo la fila que chocaría con `uq_viaje_abierto_por_unidad` (0851) en vez
+// de tumbar el lote entero con un 23505. Funcionalidad nueva (gemelo del chequeo del operador, 0029), no código migrado;
+// cubierta por `importar_viajes_escritura.test.ts`.
+// A1 CAMINO TMS → CORREO (A35-A1-03, oct-2026): +1 llamada (2,249 → 2,250), en `liquidacion_externa/trabajo.ts` (que ya contaba y es el
+// único archivo del módulo que cruza flotas a propósito). `flotasConEnvioActivo` lee `liquidacion_correo_config` filtrando
+// `activa = true` y canal correo/ambos para decidir QUÉ flotas lee el ciclo del TMS (las que nacen apagadas no entran).
+// 0 archivos nuevos. Funcionalidad nueva, no código migrado; cubierta por `tms_a_correo.e2e.test.ts` y `trabajo_canal.test.ts`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_250;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

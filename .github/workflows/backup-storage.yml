@@ -45,7 +45,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RESPALDO_S3_DESTINO: ${{ secrets.RESPALDO_S3_DESTINO }}
-          RESPALDO_BUCKETS: ${{ vars.RESPALDO_BUCKETS || 'comprobantes liquidaciones avatares bus' }}
+          RESPALDO_BUCKETS: ${{ vars.RESPALDO_BUCKETS }}
           RESPALDO_REQUIRE_REMOTE: 'true'
           RESPALDO_ALLOW_EMPTY: ${{ vars.RESPALDO_ALLOW_EMPTY || 'false' }}
           RESPALDO_ROOT: ${{ runner.temp }}/likida-storage-backup-${{ github.run_id }}

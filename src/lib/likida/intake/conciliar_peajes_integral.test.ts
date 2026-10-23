@@ -100,7 +100,12 @@ describe('conciliarDesglose: tag↔unidad, caseta y GPS', () => {
   it('TODA consulta lleva el filtro de la flota — nada se lee ni se escribe sin tenant_id', async () => {
     await conciliarDesglose(T, 'd1', 'manual');
     for (const l of db.llamadas.filter((x) => x.op !== 'rpc')) {
-      expect(l.filtros.some(([c, o, v]) => c === 'tenant_id' && o === 'eq' && v === T), `${l.tabla}.${l.op} sin tenant`).toBe(true);
+      // Un upsert no tiene filtros: el aislamiento va en CADA fila del payload (tenant_id de la flota).
+      const filas = l.op === 'upsert' ? (l.payload as Array<{ tenant_id?: unknown }>) : [];
+      const aislado = l.op === 'upsert'
+        ? filas.length > 0 && filas.every((f) => f.tenant_id === T)
+        : l.filtros.some(([c, o, v]) => c === 'tenant_id' && o === 'eq' && v === T);
+      expect(aislado, `${l.tabla}.${l.op} sin tenant`).toBe(true);
     }
     // y el RPC de posiciones recibe SIEMPRE el tenant (lo verifica la fábrica del RPC con expect)
   });
@@ -155,7 +160,7 @@ describe('conciliarDesglose: tag↔unidad, caseta y GPS', () => {
   });
 
   it('si algunas líneas no se pueden escribir: estado parcial, con la cuenta', async () => {
-    db.fallar('desglose_peaje_linea.update', 'disco lleno');
+    db.fallar('desglose_peaje_linea.upsert', 'disco lleno');
     const r = await conciliarDesglose(T, 'd1');
     expect(r.noEscritas).toBe(5);
     expect(registrarCorrida).toHaveBeenCalledWith(T, 'peajes', expect.objectContaining({ estado: 'parcial' }));
