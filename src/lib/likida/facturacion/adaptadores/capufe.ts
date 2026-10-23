@@ -420,7 +420,9 @@ export function parsearCosto(bruto: string | null | undefined): number | null {
     n = limpio.lastIndexOf(',') > limpio.lastIndexOf('.')
       ? limpio.replace(/\./g, '').replace(',', '.')
       : limpio.replace(/,/g, '');
-  } else if (/,\d{2}$/.test(limpio)) {
+  } else if (/,\d{1,2}$/.test(limpio) || /^-?0,\d{3}$/.test(limpio)) {
+    // Coma con 1–2 dígitos detrás = decimal («1,5»); y los miles nunca
+    // empiezan con cero, así que «0,125» también es decimal.
     n = limpio.replace(/\./g, '').replace(',', '.');
   } else {
     n = limpio.replace(/,/g, '');
