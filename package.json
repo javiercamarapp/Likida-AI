@@ -48,7 +48,7 @@
     "sharp": "^0.35.3",
     "ssh2": "1.17.0",
     "xlsx": "file:vendor/xlsx-0.20.3.tgz",
-    "zod": "^4.6.5",
+    "zod": "^4.6.6",
     "zxing-wasm": "^3.1.4"
   },
   "//overrides": "sharp procesa las fotos que llegan por WhatsApp — entrada NO autenticada. Next trae su propia copia anidada, así que subir la dependencia directa no basta: sin este override quedaba un sharp <0.35.0 vulnerable (CVE-2026-33327/33328/35590/35591 en libvips) en el árbol, alcanzable desde la primera foto de un chofer.",
