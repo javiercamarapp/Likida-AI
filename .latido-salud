@@ -1,125 +1,145 @@
-fecha: 2026-09-14
+fecha: 2026-10-19
 
 ## Bloque 1 — Tests intermitentes
-5/5 corridas: mismo resultado exacto cada vez — 984 archivos verdes, 12934
-passed | 6 skipped (12940) total, exit 0, cada corrida (~128-135s). Sin
-intermitencia, sin fallos.
+5/5 corridas: mismo resultado exacto cada vez — 1683 archivos verdes + 1
+archivo roto (el mismo en las 5), 25838 passed | 1 expected fail | 36
+skipped | 1 todo (25876) total, cada corrida ~450-500s.
 
-Nota de continuidad: la falla fija de la semana pasada
-(`scripts/ci/e2e/proxy-local.test.ts`, `EAFNOSUPPORT: address family not
-supported ::1` — este contenedor no tiene stack IPv6) ya no aparece como
-fallo. El archivo ahora detecta la falta de loopback IPv6 y SALTA los 5 casos
-que la requieren en vez de fallar (ver "6 skipped" arriba, antes eran "1
-skipped" + 5 fallos fijos de entorno). No es un hallazgo — es una mejora ya
-aplicada al propio test, verificada leyendo su salida
-(`[proxy-local.test.ts] ::1 (loopback IPv6) no está disponible... se saltan
-los casos que lo requieren`).
+Sin intermitencia. Hay un ROTO fijo, 5/5:
 
-Estado: SANO.
+- `src/lib/likida/conectores/tabla_propia/sql.integracion.test.ts` — falla
+  siempre en el mismo punto (`beforeAll`, línea 73, el `initdb` que crea el
+  cluster Postgres efímero de la prueba). Causa raíz confirmada en el log:
+  `initdb: error: cannot be run as root`. Este entorno de ejecución de la
+  rutina corre como `root`; `initdb` se niega por diseño a correr así. El
+  `describe.skipIf(!puedeCorrer)` del archivo solo comprueba que existan los
+  binarios de Postgres y `openssl` (`BIN !== null && OPENSSL`) — ambos SÍ
+  existen aquí (`/usr/lib/postgresql/16/bin`, vía `dpkg` sin estar en PATH;
+  `openssl` sí en PATH), así que el guardián deja pasar la prueba hacia un
+  intento real que no puede completar bajo root.
+  No es un bug de producto ni una regresión de código: `.github/workflows/
+  ci.yml` y `ci-postgres.yml` corren en `ubuntu-24.04` como el usuario
+  `runner` (no root), así que esta falla probablemente NO se reproduce en CI
+  real ni en una máquina de desarrollo normal — es específica de que la
+  rutina de salud corre en un sandbox donde el agente es root. Queda como
+  hallazgo de robustez, no como bloqueo: el guardián de la prueba podría
+  sumar un chequeo de `process.getuid?.() !== 0` para saltar en vez de
+  fallar bajo root, pero no se tocó el archivo (no se pone nada en
+  cuarentena, por regla de esta rutina).
+
+Estado: 1 ROTO (ambiental, explicado), resto SANO.
+
+Addendum (hallazgo de CI, no de las 5 corridas locales — estas usaron `npm
+test` plano, sin `--coverage`): al vigilar el PR #541, la corrida de `CI`
+disparada por `push` falló en "Tests (con umbral de cobertura)"
+(`npm run test:coverage`) mientras la disparada por `pull_request` sobre el
+MISMO commit pasó limpia. Causa: `src/lib/likida/peajes/escala.test.ts:245`
+(`expect(ms).toBeLessThan(PRESUPUESTO.cruzar)`, presupuesto 50,000ms, midió
+73,678ms) — un tercer archivo de presupuesto de tiempo, además de
+`normas/fundamento.test.ts` y `duplicados.test.ts`, pero sin la guardia
+`skipIf(LIKIDA_COBERTURA)` que esos dos sí tienen. Corre siempre
+instrumentado bajo cobertura y por eso es candidato a fallar intermitente
+quien sabe cuándo. No es de este PR (ninguno de los 16 paquetes toca ese
+archivo ni su cadena de imports). Reportado en el PR y en issue #547, con
+propuesta de patch, sin aplicarlo (alcance distinto al de esta rama).
 
 ## Bloque 2 — Dependencias
-`npm audit --json`: 0 vulnerabilidades (antes y después de los bumps).
-`npm outdated --json`: 19 paquetes, clasificados con criterio determinista
-(parche/menor con suite verde vs. mayor vs. ruido):
+`npm audit --json`: 5 vulnerabilidades HIGH (antes del bump; sin cambio
+después). `npm outdated --json`: 20 paquetes, clasificados con criterio
+determinista (parche/menor con suite verde vs. mayor vs. ruido):
 
-- MECÁNICO (14): @sentry/nextjs 10.71.0→10.74.0, @supabase/ssr
-  0.12.6→0.12.7, @supabase/supabase-js 2.115.0→2.116.0, @types/node
-  22.20.1→22.20.2, @types/react 19.2.18→19.3.0, @types/react-dom
-  19.2.7→19.3.0, eslint-config-next 16.3.4→16.3.5, lucide-react
-  1.40.0→1.46.0, next 16.3.4→16.3.5, openai 7.10.0→7.15.0, react/react-dom
-  19.2.8→19.3.0, zod 4.5.4→4.6.5, zxing-wasm 3.1.3→3.1.4. Todos parche o
-  menor, sin cambio de API declarado.
-  → PR #467 (rama claude/salud-2026-09-14, borrador). Verificado después del
-    bump: tsc limpio, eslint 0 errores (154 warnings preexistentes, no
-    relacionados), npm audit 0 vulnerabilidades, vitest 984/984 archivos
-    verdes (12934 passed, 6 skipped, exit 0).
+- MECÁNICO (16): @sentry/nextjs 10.75.3→10.76.2, @supabase/supabase-js
+  2.117.1→2.118.0, @types/node 22.20.4→22.20.5, @upstash/qstash
+  2.11.3→2.12.0, eslint-config-next 16.3.6→16.4.2, eslint-plugin-security
+  4.1.0→4.2.0, fast-xml-parser 5.11.1→5.11.2, lucide-react 1.48.0→1.59.0,
+  next 16.4.1→16.4.2, openai 7.23.0→7.39.0, zod 4.6.5→4.6.7, zxing-wasm
+  3.1.4→3.1.5, playwright-core 1.63.0→1.64.1, @playwright/test 1.63.0→1.64.1
+  (en pareja con playwright-core), react 19.3.0→19.3.1, react-dom
+  19.3.0→19.3.1 (en pareja). Todos parche o menor, sin cambio de API
+  declarado.
+  → PR #541 (rama claude/salud-2026-10-19, borrador). Verificado después del
+    bump: tsc limpio, lint:ratchet "215/217 warnings heredados; 0 nuevos; 0
+    errores", vitest idéntico al estado previo (25838 passed | 1 expected
+    fail | 36 skipped | 1 todo — mismo único roto ambiental de Bloque 1).
 
-- NECESITA LECTURA (1): @sparticuz/chromium 149.0.0→153.0.0 (salto de major,
-  fuera del rango `^149.0.0` — no hay releases 149.x más nuevos). No tiene
-  advisory de npm (audit no rastrea CVEs de Chromium empaquetado como
-  binario), pero SÍ tiene camino real: `pagina_playwright.ts` lo usa para
-  levantar Chromium headless que navega PORTALES EXTERNOS no controlados por
-  Likida (CAPUFE y comercios, vía `adaptadores/capufe.ts` y
-  `facturacion/comercios.ts`) para automatizar autofacturación — 4 majors
-  atrás en ese camino es exposición real a vulnerabilidades de renderer/V8
-  ya parchadas río arriba.
-  → Issue #468, con lo NO verificado explícito (changelog de Chromium 150→153
-    fuera de alcance sin egress confirmado; compatibilidad con
-    playwright-core@1.63.0 sin confirmar).
+- NECESITA LECTURA (5): typescript 5.9.3→7.0.2 (issue #542, salta la serie
+  6.x — compilador nativo reescrito), eslint 9.39.5→10.13.0 (issue #543,
+  compat con eslint-config-next/eslint-plugin-security/config plana sin
+  confirmar), vitest+@vitest/coverage-v8 4.1.11→5.0.5 (issue #544, un solo
+  issue — van pineados exactos en pareja a propósito por la detección de
+  `--coverage` que usan las pruebas de tiempo), @sentry/nextjs
+  10.76.2→11.8.0 (issue #545, salto adicional al bump mecánico de esta
+  semana, instrumentación de Next.js suele cambiar entre majors), @types/node
+  22.20.5→26.6.5 (issue #546, mi lectura: NO subir — `engines.node` pide
+  `>=22`, los tipos no deberían adelantarse al runtime declarado).
 
-- RUIDO (4, descartado con razón, sin issue): eslint 9.39.5→10.10.0,
-  typescript 5.9.3→7.0.2, vitest 4.1.11→5.0.0, @vitest/coverage-v8
-  4.1.11→5.0.0. Los cuatro son majors en dependencias de DESARROLLO, sin CVE
-  asociado, ya excluidos de los grupos de `dependabot.yml` a propósito, y
-  cualquier ruptura la detiene la puerta obligatoria (tsc/eslint) antes de
-  mergear. Mismo criterio que la semana pasada (2026-09-07), mismos 4
-  paquetes (la semana pasada eran 5 — `@types/node` salió de este bucket
-  porque hoy tiene un bump de PATCH disponible en rango, que sí se tomó como
-  mecánico; su salto de major a 26.x sigue sin CVE y se sigue descartando
-  igual, solo que ya no hace falta nombrarlo aparte).
+- RUIDO (5, descartado con razón, sin issue): las 5 vulnerabilidades HIGH de
+  `npm audit` son UNA SOLA cadena — `eslint-config-next` (dev, directa) →
+  `@next/eslint-plugin-next` → `fast-glob` → `micromatch` → `braces` (ReDoS
+  por glob anidado). Es tooling de lint que solo procesa el árbol `src/` del
+  propio repo, nunca un glob con input de un atacante — sin camino de
+  explotación real. El "fix" que ofrece `npm audit fix --force` es en
+  realidad un DOWNGRADE de major de `eslint-config-next` (a 14.2.35, cuando
+  ya está instalado 16.4.2) — ir en ese sentido sería peor, no mejor.
 
 ## Bloque 3 — Deriva de documentación
-Revisados los 5 .md de la raíz: CLAUDE.md, CONTEXT.md, DESIGN.md, MARCA.md,
-README.md. (DOCUMENTO_MAESTRO, ROADMAP, DEPLOY, GUIA_BUILD, ESTADO_FINAL,
-DECISIONES_PENDIENTES no existen en la raíz — viven bajo
-`docs/conocimiento/`, fuera del alcance de este bloque, igual que semanas
-anteriores.)
+Revisados los 4 .md de la raíz: CLAUDE.md, CONTEXT.md, DESIGN.md, README.md.
+(DOCUMENTO_MAESTRO, ROADMAP, DEPLOY, GUIA_BUILD, ESTADO_FINAL,
+DECISIONES_PENDIENTES no existen en la raíz — DEPLOY.md vive bajo
+`docs/conocimiento/`, fuera del alcance de este bloque.)
 
-2 hallazgos verificables:
+1 hallazgo verificable:
 
-- README.md:145 — dice "~225 versioned, tested database migrations". Hoy hay
-  333 archivos `.sql` en `supabase/migrations/` (+ `NUMERACION-SALTADA.md`,
-  no cuenta), el más alto `0356_arco_borra_contacto_emergencia.sql`. Hace 2
-  semanas eran 255/0274, la semana pasada 325/0347, hoy 333/0356 — la brecha
-  con lo escrito sigue creciendo (108 migraciones de más hoy, eran 100 la
-  semana pasada).
+- CLAUDE.md:21 — cita `dashboard/pendiente.tsx` junto a `EstadoVacio` como
+  ejemplo del patrón "se dice qué falta y por qué". Ese archivo NO existe en
+  el repo (`find src -iname "pendiente.tsx"` no encuentra nada; lo único
+  parecido es `dashboard/agentes/conductores/configuracion/
+  pendientes_rutas.tsx`, que es un archivo distinto y no genérico).
+  `EstadoVacio` sí existe y se usa (`admin/ui/kit.tsx:352`,
+  `dashboard/facturacion/vista.tsx`) — solo el otro nombre de archivo de la
+  cita es el que no aparece en ningún lado del árbol.
 
-- CLAUDE.md:54 — cita "el insert en :279/:406" en `facturacion_escritura.ts`
-  como evidencia de que `factura_emitida` y `pago_recibido` tienen escritor.
-  Verificado hoy: la línea 378 es el insert de `factura_emitida` (se movió
-  de 279 por crecimiento del archivo, la afirmación sigue viva ahí), pero la
-  línea 406 YA NO es un segundo insert — sigue siendo la extracción del id /
-  chequeo de error de ESE MISMO insert de `factura_emitida` (líneas 401-407).
-  `pago_recibido` sí tiene escritor real — `registrarPago()` llama al RPC
-  `registrar_pago_tx` (línea 609), no un `.insert()` de JS — pero la cita de
-  línea que debía dejarlo verificable a simple vista ya no apunta ahí. El
-  hecho subyacente (pago_recibido tiene escritor) sigue siendo cierto; el
-  puntero de línea que lo probaba, no.
-
-1 ya conocido, sin resolver, mencionado solo como seguimiento (no es
-hallazgo nuevo):
-- CLAUDE.md:85 — "~2,880 pruebas (la cifra crece; no la cites de memoria)".
-  El hedge sigue siendo literalmente cierto, pero la cifra ancla sigue sin
-  orientar: hoy son 12,940 (12934 passed + 6 skipped) — la semana pasada
-  eran 12,193.
-
-README.md:148 "8,500+ automated tests" sigue siendo cierto como cota
-inferior (12,940 ≥ 8,500) — no es hallazgo.
-
-CONTEXT.md ("once estados... nuevo, contactado, cita agendada..."):
-verificado contra `ESTADOS_PROSPECTO` en `src/lib/likida/vendedores.ts:78-90`
-— los 11 estados y sus rótulos coinciden exactamente. Sin hallazgo.
-
-DESIGN.md y MARCA.md: verificadas las rutas de archivo citadas (`admin/ui/
-kit.tsx`, `admin/charts.tsx`, `admin/ui/graficas.tsx`, `lib/formato.ts`,
-`src/app/globals.css`, `src/app/logo.tsx`, `marco.ts`,
-`dashboard/sidebar-nav.tsx`, `dashboard/rutas.ts`,
-`dashboard/resumen-visual.tsx`, `dashboard/barra-acciones.tsx`,
-`lib/auth/visibilidad.ts`) — las 12 existen. Sin hallazgo.
+Sin hallazgo (verificado, coincide):
+- README.md: todas las rutas citadas existen (`docs/conocimiento/DEPLOY.md`,
+  `docs/conocimiento/CONFIGURAR-META.md`, `docs/operacion/`, `docs/legal/`,
+  `scripts/demo/cinco-agentes/`, `.env.example` con `CRON_SECRET`,
+  `public/images/logo.png`), los comandos de "Quality gates" coinciden con
+  los scripts reales de `package.json`.
+- DESIGN.md: las 7 rutas/componentes citados en la tabla de avisos/kit
+  (`admin/ui/kit.tsx` con `KpiTile`/`StatusPill`/`StatCard`/`ChartCard`,
+  `admin/charts.tsx`, `admin/ui/graficas.tsx`, `admin/ui/aviso-resultado.tsx`,
+  `admin/ui/notificaciones.tsx` con `useNotificar`/`useNotificarResultado`,
+  `admin/ui/confirmar.tsx` con `DialogoConfirmar`/`BotonConfirmar`,
+  `dashboard/chrome.tsx`) existen y los símbolos citados están ahí.
+- CLAUDE.md: `repo.ts` sí escribe `ocr_confianza`/`ocr_extra` (no
+  `ocr_raw`), `exigir`/`traerTodo` sí se usan extensivamente en
+  `analytics.ts` (aunque se definen en `./pg` e importan de ahí — la cita no
+  dice "se definen en", dice "ver... en analytics.ts", y ahí se ven; no se
+  cuenta como hallazgo porque no hay afirmación falsa que señalar con
+  archivo:línea). No se re-verificó línea por línea el resto de "Trampas ya
+  pisadas" (el bloque de catálogo operativo, patios/terminal, etc.) — fuera
+  de presupuesto de esta corrida.
 
 No se investigó (fuera de presupuesto, no verificable sin producción): "60
-agentes" y "5 automatizados de punta a punta" de los 37 portales en
-README.md — mismo límite que semanas anteriores.
+agentes" / conteo de portales automatizados si el README los menciona en
+otra sección, y la cifra "~2,880 pruebas" de CLAUDE.md:96 ya viene advertida
+en el propio texto como no citable de memoria — no se reporta como hallazgo
+nuevo cada semana por diseño del propio documento.
 
 ## Bloque 4 — Costo por liquidación
 Saltado. Sin `.env.local` ni variables de Supabase/OpenRouter/OpenAI/
 WhatsApp/CRON_SECRET en este entorno efímero. No se estimó nada.
 
-## Estado: OK
-Los cuatro bloques corrieron. Bloque 4 se saltó por falta de datos
-(esperado, mismo motivo cada semana). 1 PR nuevo (#467, borrador,
-dependencias mecánicas), 1 issue nuevo (#468, @sparticuz/chromium — camino
-de explotación real vía portales externos, no ruido). 2 hallazgos de
-documentación nuevos (README.md:145, CLAUDE.md:54), ninguno con acción
-automática — ambos son afirmaciones de texto que un PR mecánico no debe
-tocar sin que alguien decida la redacción.
+## Estado: PARCIAL (Bloque 1 con 2 hallazgos ambientales/CI, resto OK)
+Los cuatro bloques corrieron. Bloque 1 encontró un ROTO fijo (5/5) con causa
+raíz confirmada y acotada al propio entorno de esta rutina (root sin
+`initdb`) — no bloqueante para CI real ni para desarrollo normal, reportado
+igual porque la regla del bloque es "ROTO va primero" — y, ya vigilando el
+PR, una falla intermitente real en CI bajo `--coverage` (peajes/escala.test.ts,
+issue #547). Bloque 2: 1 PR nuevo (#541, borrador, 16 dependencias
+mecánicas, suite idéntica antes/después, CI verde en la corrida de
+`pull_request`), 5 issues nuevos (#542-#546, cada major con su propio
+análisis — ninguno urgente, ninguno con CVE). Bloque 3: 1 hallazgo de
+documentación nuevo (CLAUDE.md:21, archivo citado que no existe), sin acción
+automática (es texto, no código). Bloque 4 se saltó por falta de datos
+(esperado).
