@@ -5,7 +5,7 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
 import { DatoInvalido, mensajeParaPantalla } from '@/lib/likida/errores';
-import { aprobarDocumento, abrirRevision, corregirCampos, crearViajeDeDocumento, eliminarDocumento, quitarRenglon, rechazarDocumento, reabrirDocumento } from '@/lib/likida/carta_porte_docs/bandeja';
+import { aprobarDocumento, abrirRevision, corregirCampos, crearViajeDeDocumento, eliminarDocumento, quitarRenglon, rechazarDocumento, reabrirDocumento, reintentarLectura } from '@/lib/likida/carta_porte_docs/bandeja';
 import { flotaBajoPerfil, marcarSubidoAMano, MENSAJE_FUNCION_NO_DISPONIBLE } from '@/lib/likida/carta_porte_docs/envio';
 import { esFlotaSimulada } from '@/lib/likida/carta_porte_docs/salida_simulada';
 import { puertoSupabase } from '@/lib/likida/carta_porte_docs/catalogo_puerto';
@@ -194,6 +194,11 @@ export default async function PaginaRevision({
         await rechazarDocumento(s.tenantId, id, version, String(fd.get('motivo') ?? ''), s.userId, new Date(), String(fd.get('causa') ?? ''));
         revalidatePath(ruta); revalidatePath(RUTA_PADRE);
         return { ok: true, mensaje: 'Documento rechazado.' };
+      }
+      if (intencion === 'reintentar') {
+        await reintentarLectura(s.tenantId, id, version, s.userId);
+        revalidatePath(ruta); revalidatePath(RUTA_PADRE);
+        return { ok: true, mensaje: 'Listo: el documento volvió a la cola y se vuelve a leer en unos minutos.' };
       }
       if (intencion === 'reabrir') {
         await reabrirDocumento(s.tenantId, id, version, s.userId);

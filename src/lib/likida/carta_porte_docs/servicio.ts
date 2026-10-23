@@ -76,7 +76,7 @@ export interface EntradaDocumento {
 }
 
 export type ResultadoRecepcion =
-  | { ok: true; documentoId: string; duplicado: boolean; estado: repo.EstadoDoc; formato: FormatoDoc }
+  | { ok: true; documentoId: string; duplicado: boolean; estado: repo.EstadoDoc; formato: FormatoDoc; /** A37-A3-04: el archivo era de un documento fallido/rechazado y volvió a la cola. */ reabierto?: boolean }
   | { ok: false; motivo: 'agente_apagado' | 'formato' | 'cliente'; mensaje: string };
 
 export async function recibirDocumento(tenantId: string, e: EntradaDocumento, deps: DepsServicio = {}): Promise<ResultadoRecepcion> {
@@ -102,7 +102,42 @@ export async function recibirDocumento(tenantId: string, e: EntradaDocumento, de
   });
   await repo.registrarEvento(tenantId, documento.id, duplicado ? 'duplicado_recibido' : 'recibido', e.actorId ?? null,
     duplicado ? { canal: e.canal } : { canal: e.canal, formato, bytes: e.bytes.length });
+  // A37-A3-04: reenviar el MISMO archivo de un documento fallido (o rechazado) lo reabre, en vez de contestar «ya estaba».
+  if (duplicado && (documento.estado === 'fallido' || documento.estado === 'rechazado') && documento.storageRuta) {
+    const r = await reintentarDocumento(tenantId, documento, e.actorId ?? null, `reenvío del mismo archivo (${e.canal})`, ahora);
+    if (r.ok) return { ok: true, documentoId: documento.id, duplicado: false, estado: 'recibido', formato: documento.formato, reabierto: true };
+  }
   return { ok: true, documentoId: documento.id, duplicado, estado: documento.estado, formato: documento.formato };
+}
+
+/** Cuántas veces se puede reabrir a mano el MISMO documento: más que esto es un archivo que no se va a poder leer. */
+export const MAX_REINTENTOS_MANUALES = 5;
+
+export type ResultadoReintento = { ok: true } | { ok: false; mensaje: string };
+
+/**
+ * A37-A3-04 · SALIDA DE UN DOCUMENTO `fallido` TERMINAL. Con 5 intentos agotados el documento no se reclamaba nunca más y
+ * reenviar el archivo solo contestaba «ya estaba». Esto lo devuelve a `recibido` con los intentos en cero (con tope de
+ * reaperturas, bitácora y sin tocar el archivo ni la extracción previa). Solo `fallido` y `rechazado` con archivo.
+ */
+export async function reintentarDocumento(
+  tenantId: string, d: DocumentoFila, actorId: string | null, motivo: string, ahora: Date = new Date(),
+): Promise<ResultadoReintento> {
+  if (d.estado !== 'fallido' && d.estado !== 'rechazado') return { ok: false, mensaje: `Un documento «${d.estado}» no se reintenta.` };
+  if (!d.storageRuta) return { ok: false, mensaje: 'El archivo ya se purgó por retención: súbelo de nuevo.' };
+  const previos = (await repo.listarEventos(tenantId, d.id)).filter((ev) => ev.tipo === 'reabierto' && ev.detalle.reintento_manual === true).length;
+  if (previos >= MAX_REINTENTOS_MANUALES) {
+    return { ok: false, mensaje: `Este documento ya se reintentó ${previos} veces sin poder leerse. Captura el viaje a mano o pide el archivo de nuevo en otro formato.` };
+  }
+  const r = await repo.actualizarDocumento(tenantId, d.id, d.version, {
+    estado: 'recibido', intentos: 0, ultimo_error: null, procesando_hasta: null, rechazo_motivo: null, revisado_por: actorId,
+    retener_hasta: diasDespues(ahora, DIAS_RETENCION.recibido),
+  });
+  if (!r) return { ok: false, mensaje: 'Otra persona o el sistema cambió este documento a la vez. Recarga la pantalla y vuelve a intentarlo.' };
+  // Para que el SIGUIENTE agotamiento vuelva a avisar a la oficina (el candado de «una sola vez» se suelta).
+  await repo.liberarAvisoDoc(tenantId, d.id, 'agotado').catch(() => false);
+  await repo.registrarEvento(tenantId, d.id, 'reabierto', actorId, { reintento_manual: true, desde: d.estado, intentos_previos: d.intentos, motivo: motivo.slice(0, 120) });
+  return { ok: true };
 }
 
 /** Un aviso de lectura que además es una PÉRDIDA de datos (embarques que no se leyeron): bloquea la aprobación. */

@@ -365,7 +365,7 @@ export function armarAviso(tipo: TipoAvisoDoc, doc: DocumentoFila, liga: string)
     return {
       texto: [
         `⚠️ No pude leer el documento «${nombre}» que llegó por ${canalTexto(doc.canal)}.`,
-        'Pide el archivo de nuevo o captura el viaje a mano.',
+        'Ábrelo y pulsa «Reintentar lectura» (o reenvía el mismo archivo), o captura el viaje a mano.',
         `Detalle: ${liga}`,
       ].join(' '),
       resumen: 'No pude leer un documento de Carta Porte',

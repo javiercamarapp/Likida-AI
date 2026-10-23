@@ -248,9 +248,21 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
               )}
             </div>
           ) : revision === null ? (
-            <p className="card p-4 text-[12.5px]" style={{ color: 'var(--muted)' }}>
-              {doc.estado === 'fallido' ? 'El documento no se pudo leer; no hay datos que revisar.' : 'El documento todavía no tiene datos leídos.'}
-            </p>
+            <div className="card p-4 space-y-3">
+              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+                {doc.estado === 'fallido' ? 'El documento no se pudo leer; no hay datos que revisar.' : 'El documento todavía no tiene datos leídos.'}
+              </p>
+              {doc.estado === 'fallido' && acciones.revisar && (
+                <FormaAccion accion={acciones.revisar} className="space-y-2">
+                  <input type="hidden" name="documentoId" value={doc.id} />
+                  <input type="hidden" name="version" value={doc.version} />
+                  <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                    Si la causa ya se arregló (llave, proveedor caído, archivo mal subido), vuelve a leerlo. También sirve reenviar el mismo archivo.
+                  </p>
+                  <BotonEnvio variante="secundario" intencion="reintentar" etiqueta="Reintentar lectura" pendiente="Reintentando…" />
+                </FormaAccion>
+              )}
+            </div>
           ) : acciones.revisar ? (
             <FormaAccion accion={acciones.revisar} className="space-y-3">
               <input type="hidden" name="documentoId" value={doc.id} />
