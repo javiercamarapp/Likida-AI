@@ -1,6 +1,7 @@
 // Acceso a datos de Likida (service-role, scoping por tenant a mano).
 // Mapea filas de Postgres ↔ tipos del dominio.
 
+import { desambiguarEtiquetas, pistaTelefono } from './catalogo_etiquetas';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { round2 } from '@/lib/formato';
@@ -234,8 +235,10 @@ export interface OpcionCatalogo { id: string; etiqueta: string }
 /** La tabla, la columna que se enseña y por cuál se ordena/busca. Una sola
  *  tabla de verdad para las tres consultas: tres copias del mismo `.eq(
  *  'activo', true)` es la forma en que un catálogo se olvida de filtrar. */
-const CATALOGOS: Record<TipoCatalogo, { tabla: string; columna: string }> = {
-  operador: { tabla: 'operador', columna: 'nombre' },
+const CATALOGOS: Record<TipoCatalogo, { tabla: string; columna: string; pista?: string }> = {
+  // `telefono` (único por tenant, mig. 0024) desambigua homónimos: dos
+  // operadores activos pueden llamarse igual y el combo no debe confundirlos.
+  operador: { tabla: 'operador', columna: 'nombre', pista: 'telefono' },
   cliente: { tabla: 'cliente', columna: 'nombre' },
   unidad: { tabla: 'unidad', columna: 'numero_economico' },
 };
@@ -292,7 +295,7 @@ export async function buscarCatalogo(
 
   let consulta = supabaseAdmin()
     .from(cat.tabla)
-    .select(`id, ${cat.columna}`)
+    .select(cat.pista ? `id, ${cat.columna}, ${cat.pista}` : `id, ${cat.columna}`)
     .eq('tenant_id', tenantId)
     .eq('activo', true);
   if (texto) consulta = consulta.ilike(cat.columna, `%${texto}%`);
@@ -309,10 +312,13 @@ export async function buscarCatalogo(
   // columna en runtime, así que el tipo derivado de postgrest-js es un
   // `ParserError`, no una fila. La FORMA se comprueba abajo, que es lo que
   // importa.
-  return ((data ?? []) as unknown as Array<Record<string, unknown>>).map((f) => ({
+  // Etiquetas ÚNICAS dentro de lo ofrecido (R15-ux-01): el combo resuelve lo
+  // tecleado contra la etiqueta, y dos homónimos idénticos se confundían.
+  return desambiguarEtiquetas(((data ?? []) as unknown as Array<Record<string, unknown>>).map((f) => ({
     id: f.id as string,
     etiqueta: (f[cat.columna] as string) ?? '',
-  }));
+    pista: cat.pista ? pistaTelefono(f[cat.pista]) : null,
+  })));
 }
 
 /**
