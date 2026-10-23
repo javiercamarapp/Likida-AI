@@ -535,7 +535,12 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // runner (3 fallos seguidos = en pausa, sondeo cada 24 h); (2) `admin/negocio.ts` · `getUltimoInicioSinFalloPorAgente` lee la última corrida ok/parcial
 // de cada agente con fallos, para que la bandeja junte una racha de fallos en UN incidente (la racha se rompe en la última corrida sana). Funcionalidad
 // nueva sin tablas nuevas, no código migrado; cubierta por `corridas.test.ts`, `runner.test.ts` y `escalaciones.test.ts`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_253;
+// A1 RECEPCIÓN ATÓMICA (A35-A1-01, oct-2026): +1 llamada (2,250 → 2,251), en `liquidacion_externa/repo_correo.ts` (que ya contaba).
+// `recibirDesgloseAtomico` es UN `.rpc('recibir_desglose_atomico')` (0857) que reemplaza las cuatro escrituras sueltas de
+// `recibirDesglose` (liquidación, encabezado, evento, entregas) por una sola transacción; el tenant va como parámetro y la función
+// solo la ejecuta service_role. Las escrituras sueltas siguen como respaldo mientras la base no tenga la 0857. 0 archivos nuevos;
+// cubierta por `repo_correo.test.ts`, `desglose_recibir.test.ts` y `supabase/tests/0857_recibir_desglose_atomico.sql`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_254;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

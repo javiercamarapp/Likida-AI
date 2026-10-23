@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // RECIBIR UN DESGLOSE DE BITÁCORA (T-A1-15): validar → idempotencia → operador → reglas y guardas → Excel → Storage →
-// insertar → programar los correos.
+// insertar (UNA transacción, RPC 0857) → programar los correos.
 //
 // Es el equivalente, para el canal CORREO, de `recibirLiquidacionExterna` (flujo PDF anterior, que NO se toca). Un desglose por
 // bitácora; la clave de idempotencia sale de la bitácora (`claveDeBitacora`).
@@ -12,7 +12,9 @@
 //     la clave `…-R1` (docs/operacion/liquidacion-externa.md).
 //   · Una guarda que retiene (neto negativo, concepto prohibido, tipo sin regla…) inserta la liquidación `pendiente`
 //     con su motivo, SIN entregas, y abre una excepción por motivo.
-//   · ORDEN de escritura: primero el archivo, luego la fila. Un fallo de Storage lanza (reintentable) sin dejar fila.
+//   · ORDEN de escritura: primero el archivo, luego TODO lo demás en UNA transacción (RPC 0857; sin ella, el camino anterior,
+//     no atómico, que se avisa en el log). Un fallo lanza (reintentable) sin dejar nada a medias, y una recepción que SÍ quedó
+//     a medias (misma huella, sin encabezado o sin entregas ni retención) se RESCATA en vez de contestar «idempotente».
 //   · Un operador sin correo no recibe, pero coordinador/RH/archivo sí (T-A1-14); se abre la excepción que lo dice.
 //   · Likida no recalcula: el total es el de la fuente (o la suma de sus renglones, marcado como calculado).
 // ═══════════════════════════════════════════════════════════════════════════
@@ -36,8 +38,8 @@ import {
 } from './repo';
 import {
   leerConfigCorreo, leerContactoOperador, listarCoordinadores, insertarDesglose, insertarEntregas, abrirExcepcion, subirXlsx,
-  CONFIG_CORREO_POR_DEFECTO,
-  type ConfigCorreo, type ContactoOperador, type Coordinador, type MetaDesglose, type NuevaEntrega, type TipoExcepcion,
+  recibirDesgloseAtomico, desgloseIncompleto, CONFIG_CORREO_POR_DEFECTO,
+  type PedidoRecepcionAtomica, type RecepcionAtomica, type Lectura, type ConfigCorreo, type ContactoOperador, type Coordinador, type MetaDesglose, type NuevaEntrega, type TipoExcepcion,
 } from './repo_correo';
 
 // ── Dependencias (puertos) ──────────────────────────────────────────────────
@@ -59,6 +61,13 @@ export interface DependenciasDesglose {
     tenantId: string, claveExterna: string, tipo: TipoExcepcion, detalle: Record<string, unknown>, ahora: Date,
   ) => Promise<{ id: number; nueva: boolean }>;
   registrarEvento: (tenantId: string, liquidacionId: string, tipo: TipoEvento, detalle?: Record<string, unknown>) => Promise<void>;
+  /**
+   * RPC 0857: liquidación + encabezado + evento + entregas en UNA transacción (y repara lo que quedó a medias). Opcional: si no
+   * se da, o la base aún no tiene la 0857 (`no_disponible`), se usa el camino anterior, no atómico, y se avisa en el log.
+   */
+  recibirAtomico?: (tenantId: string, pedido: PedidoRecepcionAtomica) => Promise<Lectura<RecepcionAtomica>>;
+  /** ¿Una liquidación con la misma huella quedó a medias (sin encabezado, o sin retención y sin entregas)? Se rescata. */
+  desgloseIncompleto?: (tenantId: string, liquidacionId: string) => Promise<boolean>;
 }
 
 export const dependenciasDesglosePorOmision: DependenciasDesglose = {
@@ -85,6 +94,8 @@ export const dependenciasDesglosePorOmision: DependenciasDesglose = {
   insertarEntregas,
   abrirExcepcion,
   registrarEvento,
+  recibirAtomico: recibirDesgloseAtomico,
+  desgloseIncompleto,
 };
 
 // ── Resultado ───────────────────────────────────────────────────────────────
@@ -170,7 +181,7 @@ function presentar(d: DesgloseBitacora, c: ConfigCorreo): { percepciones: Renglo
 
 /**
  * Recibe UN desglose de bitácora. Lanza `CampoInvalido` si el desglose no cumple el contrato (el llamador responde 400)
- * y el error de Storage/base si algo no se pudo escribir (reintentable: nada quedó a medias antes de la fila).
+ * y el error de Storage/base si algo no se pudo escribir (reintentable: la RPC 0857 no deja nada a medias).
  */
 export async function recibirDesglose(
   tenantId: string, d: DesgloseBitacora, deps: DependenciasDesglose = dependenciasDesglosePorOmision, opciones: OpcionesDesglose = {},
@@ -195,9 +206,21 @@ export async function recibirDesglose(
   const ahora = deps.ahora();
 
   // (2) idempotencia / corrección
-  const existente = await deps.buscarPorClave(tenantId, claveExterna);
+  let existente = await deps.buscarPorClave(tenantId, claveExterna);
+  // Misma huella pero a medias (un corte entre las escrituras del camino anterior, hallazgo A35-A1-01): NO es idempotente,
+  // hay que completarla. `rescate` guarda esa fila y el resto del flujo la completa en vez de insertar otra.
+  let rescate: LiquidacionExterna | null = null;
   if (existente) {
-    if (existente.huella === huella) return { estado: 'idempotente', liquidacionId: existente.id, claveExterna };
+    if (existente.huella === huella) {
+      if (!deps.desgloseIncompleto || !(await deps.desgloseIncompleto(tenantId, existente.id))) {
+        return { estado: 'idempotente', liquidacionId: existente.id, claveExterna };
+      }
+      logger.warn('liqcorreo.recepcion_a_medias_rescate', { clave: claveExterna });
+      rescate = existente;
+      existente = null;
+    }
+  }
+  if (existente) {
     await deps.abrirExcepcion(tenantId, claveExterna, 'correccion_pendiente', {
       bitacora: d.bitacora, netoAntes: existente.total, netoDespues: liq.total,
     }, ahora);
@@ -235,24 +258,61 @@ export async function recibirDesglose(
   const xlsxRuta = await deps.subirXlsx(tenantId, claveExterna, huella, bytes);
   const xlsxSha256 = sha256Hex(bytes);
 
-  // (6) fila + encabezado + evento
+  // (6) destinatarios (solo LECTURAS, antes de escribir nada: un fallo aquí no deja medio desglose)
+  let destinos: ReturnType<typeof resolverDestinatarios>['destinos'] = [];
+  let faltantes: ReturnType<typeof resolverDestinatarios>['faltantes'] = [];
+  if (!retenida) {
+    const contacto = await deps.leerContacto(tenantId, operador.id);
+    const coordinador = contacto?.coordinadorId ? await deps.leerCoordinador(tenantId, contacto.coordinadorId) : null;
+    ({ destinos, faltantes } = resolverDestinatarios({
+      operador: { correo: contacto?.correo ?? null, rebotadoEn: contacto?.correoRebotadoEn ?? null },
+      coordinador: coordinador ? { correo: coordinador.correo, activo: coordinador.activo } : null,
+      config: {
+        rhCorreos: config.rhCorreos, archivoCorreo: config.archivoCorreo,
+        enviaCoordinador: config.enviaCoordinador, enviaRh: config.enviaRh,
+      },
+    }));
+  }
+  const entregasPedidas = destinos.map((x) => ({
+    rol: x.rol, correo: x.correo, xlsxRuta, xlsxSha256, disparo: 'auto' as const,
+  }));
   const viajeIds = await deps.resolverViajeIds(tenantId, liq.viajes);
-  const creada = await deps.insertarLiquidacion({
+  const nuevaLiquidacion: NuevaLiquidacionExterna = {
     tenantId, datos: liq, huella, operadorId: operador.id, viajeIds,
     pdfRuta: null, pdfOrigen: 'generado', pdfSha256: null,
-  });
-  await deps.insertarDesglose(tenantId, {
-    liquidacionExternaId: creada.id, bitacora: d.bitacora, terminal: d.terminal ?? null, poliza: d.poliza,
+  };
+  const meta = {
+    bitacora: d.bitacora, terminal: d.terminal ?? null, poliza: d.poliza,
     unidad: d.unidad ?? null, tipoOperador: d.tipoOperador ?? null, dias: conversion.dias,
     ...(d.numeroLiquidacion !== undefined ? { numeroLiquidacion: d.numeroLiquidacion } : {}),
     ...(d.numeroPago !== undefined ? { numeroPago: d.numeroPago } : {}),
     ...(d.bitacoras !== undefined ? { bitacoras: liq.viajes } : {}),
-    totalOrigen: conversion.totalOrigen === 'origen' ? 'tms' : 'calculado',
+    totalOrigen: (conversion.totalOrigen === 'origen' ? 'tms' : 'calculado') as 'tms' | 'calculado',
     retenidaMotivo: retenida ? decision.detalle.join(' ') : null,
-  });
-  await deps.registrarEvento(tenantId, creada.id, 'recibida', {
+  };
+  const detalleEvento = {
     origen: liq.sistemaOrigen, canal: 'correo', renglones: liq.conceptos.length, retenida, viajesEnLikida: viajeIds.length,
-  });
+  };
+
+  // (7) fila + encabezado + evento + entregas: UNA transacción (RPC 0857). Sin ella, el camino anterior (no atómico).
+  let liquidacionId: string;
+  let entregas = 0;
+  const atomica = deps.recibirAtomico
+    ? await deps.recibirAtomico(tenantId, { liquidacion: nuevaLiquidacion, meta, evento: detalleEvento, entregas: entregasPedidas })
+    : null;
+  if (atomica && atomica.ok) {
+    liquidacionId = atomica.valor.liquidacionId;
+    entregas = atomica.valor.entregas;
+    // Otra recepción concurrente ya lo guardó completo: no hay nada que abrir ni reenviar.
+    if (!atomica.valor.creada && !atomica.valor.reparada) return { estado: 'idempotente', liquidacionId, claveExterna };
+  } else {
+    if (deps.recibirAtomico) logger.warn('liqcorreo.recepcion_no_atomica', { motivo: 'la base no tiene la migracion 0857' });
+    const creada = rescate ?? await deps.insertarLiquidacion(nuevaLiquidacion);
+    liquidacionId = creada.id;
+    await deps.insertarDesglose(tenantId, { liquidacionExternaId: liquidacionId, ...meta });
+    if (!rescate) await deps.registrarEvento(tenantId, liquidacionId, 'recibida', detalleEvento);
+    entregas = await deps.insertarEntregas(tenantId, entregasPedidas.map((e) => ({ liquidacionExternaId: liquidacionId, ...e })));
+  }
 
   const excepciones: TipoExcepcion[] = [];
   const abrir = async (tipo: TipoExcepcion, detalle: Record<string, unknown>) => {
@@ -260,27 +320,13 @@ export async function recibirDesglose(
     excepciones.push(tipo);
   };
 
-  // (4 bis) retenida: sin entregas, una excepción por motivo
+  // retenida: sin entregas, una excepción por motivo
   if (retenida) {
     for (const m of decision.motivos) await abrir(MOTIVO_A_EXCEPCION[m], { motivo: m });
-    return { estado: 'creada', liquidacionId: creada.id, claveExterna, entregas: 0, retenida: true, motivos: decision.motivos, excepciones };
+    return { estado: 'creada', liquidacionId, claveExterna, entregas: 0, retenida: true, motivos: decision.motivos, excepciones };
   }
 
-  // (7) destinatarios → una entrega por destino
-  const contacto = await deps.leerContacto(tenantId, operador.id);
-  const coordinador = contacto?.coordinadorId ? await deps.leerCoordinador(tenantId, contacto.coordinadorId) : null;
-  const { destinos, faltantes } = resolverDestinatarios({
-    operador: { correo: contacto?.correo ?? null, rebotadoEn: contacto?.correoRebotadoEn ?? null },
-    coordinador: coordinador ? { correo: coordinador.correo, activo: coordinador.activo } : null,
-    config: {
-      rhCorreos: config.rhCorreos, archivoCorreo: config.archivoCorreo,
-      enviaCoordinador: config.enviaCoordinador, enviaRh: config.enviaRh,
-    },
-  });
-  const entregas = await deps.insertarEntregas(tenantId, destinos.map((x) => ({
-    liquidacionExternaId: creada.id, rol: x.rol, correo: x.correo, xlsxRuta, xlsxSha256, disparo: 'auto' as const,
-  })));
   for (const f of faltantes) await abrir(FALTANTE_A_EXCEPCION[f.motivo], { rol: f.rol, motivo: f.motivo });
 
-  return { estado: 'creada', liquidacionId: creada.id, claveExterna, entregas, retenida: false, motivos: [], excepciones };
+  return { estado: 'creada', liquidacionId, claveExterna, entregas, retenida: false, motivos: [], excepciones };
 }
