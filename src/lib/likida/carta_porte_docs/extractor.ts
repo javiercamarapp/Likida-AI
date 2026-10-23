@@ -62,7 +62,7 @@ import { leerCorreoF2 } from './lectores/correo_f2';
 import { leerCorreoF3 } from './lectores/correo_f3';
 import { clasificarFormato } from './registro_formatos';
 import { leerRotulosCorreo, lecturaConfiable } from './rotulos';
-import { extraerCartaPorteXml } from './xml_ccp';
+import { leerCartaPorteXml } from './xml_ccp';
 
 // ── El contrato con el modelo ───────────────────────────────────────────────
 
@@ -532,8 +532,13 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   // 1. XML con Carta Porte: sin modelo, y no se le pregunta a nadie lo que el XML no dice.
   // Solo un XML de verdad: un JSON de cliente con una clave «CartaPorte» no es un CFDI con 0.99 de confianza.
   if (c.xml && c.formato !== 'json') {
-    const ccp = extraerCartaPorteXml(c.xml);
-    if (ccp) { r.extraccion = completarDerivados(ccp, derivar); r.origen = 'xml'; return r; }
+    const ccp = leerCartaPorteXml(c.xml);
+    if (ccp) {
+      r.extraccion = completarDerivados(ccp.extraccion, derivar); r.origen = 'xml';
+      // A37-S33-01: lo que el XML trae y no se pudo mapear (o los destinos extra leídos) se DICE en los avisos del documento.
+      r.avisos.push(...ccp.avisos.filter((a) => !r.avisos.includes(a)));
+      return r;
+    }
   }
 
   // 1b. Lector de formato C, D o E: lee lo que el documento escribe y deja vacío lo que no trae. Si no pudo leer ningún renglón,
