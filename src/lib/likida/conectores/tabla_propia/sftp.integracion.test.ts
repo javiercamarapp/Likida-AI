@@ -23,10 +23,23 @@ const huellaDeLlave = (publica: string): string => {
   return `SHA256:${createHash('sha256').update(k.getPublicSSH()).digest('base64').replace(/=+$/, '')}`;
 };
 
-const hostKey = utils.generateKeyPairSync('ed25519');
-const otraHostKey = utils.generateKeyPairSync('ed25519');
-const llaveUsuario = utils.generateKeyPairSync('ed25519');
-const llaveConFrase = utils.generateKeyPairSync('ed25519', { passphrase: 'frase-de-prueba', cipher: 'aes256-ctr', rounds: 16 });
+// `generateKeyPairSync('ed25519')` de ssh2 1.17 entrega, en ~0.4 % de las llaves (13 de 3,000 medidas el 22-oct-2026),
+// una pública que SU PROPIO `parseKey` rechaza como «Malformed OpenSSH public key»; entonces `getPublicSSH` no existe y
+// el archivo entero tronaba al cargar (`k.getPublicSSH is not a function`), de forma intermitente en CI. No es un defecto
+// de producción: la llave es de la prueba. Se regenera hasta obtener una que ssh2 sí pueda leer.
+const generarLlave = (opciones?: Parameters<typeof utils.generateKeyPairSync>[1]) => {
+  for (let intento = 0; intento < 20; intento++) {
+    const par = utils.generateKeyPairSync('ed25519', opciones);
+    const leida = utils.parseKey(par.public) as ParsedKey | Error;
+    if (!(leida instanceof Error) && typeof leida.getPublicSSH === 'function') return par;
+  }
+  throw new Error('ssh2 no generó una llave ed25519 legible en 20 intentos');
+};
+
+const hostKey = generarLlave();
+const otraHostKey = generarLlave();
+const llaveUsuario = generarLlave();
+const llaveConFrase = generarLlave({ passphrase: 'frase-de-prueba', cipher: 'aes256-ctr', rounds: 16 });
 const HUELLA = huellaDeLlave(hostKey.public);
 const HUELLA_OTRA = huellaDeLlave(otraHostKey.public);
 
