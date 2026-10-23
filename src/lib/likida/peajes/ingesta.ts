@@ -170,7 +170,33 @@ export async function recibirArchivoPeaje(tenantId: string, c: CuerpoIngesta, or
   const filas = (r.data ?? []) as FilaEncolar[];
   const fila = filas[0];
   if (!fila) return { ok: false, codigo: 'error', motivo: 'peaje_archivo_encolar no devolvió fila' };
+  // A36-R03-01: el mismo archivo ya existe y quedó `fallida` (formato sin mapeo, barrido 0856…). Antes se
+  // devolvía como «duplicado» y los canales (pull/SFTP/correo) lo contaban como éxito: nunca se reprocesaba,
+  // y a los 30 días su contenido se purga. Regla: el reenvío del MISMO contenido lo devuelve a `pendiente`
+  // (con el contenido nuevo) solo si aún no agotó MAX_INTENTOS; los intentos NO se reinician, así un
+  // proveedor que reenvía en bucle un archivo irreparable se detiene solo (entonces hace falta «reintentar»).
+  if (fila.duplicado && fila.estado === 'fallida') {
+    const rearmado = await rearmarArchivoFallido(tenantId, String(fila.id), c.contenido);
+    if (rearmado) return { ok: true, id: String(fila.id), duplicado: false, estado: 'pendiente' };
+  }
   return { ok: true, id: String(fila.id), duplicado: Boolean(fila.duplicado), estado: String(fila.estado) };
+}
+
+/** UPDATE condicionado (el candado): solo si SIGUE `fallida` y con intentos por debajo del tope. `true` si cambió una fila. */
+async function rearmarArchivoFallido(tenantId: string, archivoId: string, contenido: Buffer): Promise<boolean> {
+  const res = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
+    .update({
+      estado: 'pendiente', contenido: byteaDeBuffer(contenido), bytes: contenido.length,
+      proximo_intento_en: new Date().toISOString(), ultimo_error: null, reclamo: null, reclamado_hasta: null,
+    })
+    .eq('tenant_id', tenantId).eq('id', archivoId).eq('estado', 'fallida').lt('intentos', MAX_INTENTOS).select('id'),
+    'peajes.ingesta.rearmar_fallida');
+  if (res.error) {
+    // Best-effort: si no se pudo, queda como estaba (duplicado/fallida) y el panel puede reintentarla a mano.
+    logger.error('peajes.ingesta.rearmar_fallida', { tenant: tenantId, err: res.error.message });
+    return false;
+  }
+  return (res.data ?? []).length > 0;
 }
 
 // ── El proceso (lo llama el cron) ───────────────────────────────────────────
