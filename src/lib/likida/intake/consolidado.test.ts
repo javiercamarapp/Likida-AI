@@ -141,6 +141,26 @@ describe('conciliarLineas — el JOIN contra gasto', () => {
     expect(r[0].candidatos).toEqual([]);
   });
 
+  it('A37-S46-01: una carga ECC12 NO se concilia con un gasto que no es combustible (comida de $850.40)', () => {
+    const lineas = [linea(1, 850, '2026-04-03T09:12:00')];
+    const gastos: Gasto[] = [{ id: 'g-comida', concepto: 'alimentacion', monto: 850.4, fecha: '2026-04-04' }];
+    const r = conciliarLineas(lineas, gastos);
+    expect(r[0].estatus).toBe('por_conciliar');
+    expect(r[0].gastoId).toBeNull();
+    expect(r[0].candidatos).toEqual([]);
+  });
+
+  it('A37-S46-01: entre un gasto de comida y uno de diésel del mismo importe, solo el diésel es candidato', () => {
+    const lineas = [linea(1, 850, '2026-04-03T09:12:00')];
+    const gastos: Gasto[] = [
+      { id: 'g-comida', concepto: 'alimentacion', monto: 850, fecha: '2026-04-03' },
+      gasto('g-diesel', 850, '2026-04-03'),
+    ];
+    const r = conciliarLineas(lineas, gastos);
+    expect(r[0].estatus).toBe('conciliada');
+    expect(r[0].gastoId).toBe('g-diesel');
+  });
+
   it('sin fecha en la línea → NUNCA intenta match automático, aunque el monto sea único', () => {
     const lineas = [linea(1, 310, undefined)]; // TAG sin ECC12
     const gastos = [gasto('g1', 310, '2026-04-10')];
