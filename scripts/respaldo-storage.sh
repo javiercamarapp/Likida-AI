@@ -9,7 +9,8 @@
 # Variables:
 #   NEXT_PUBLIC_SUPABASE_URL       URL del proyecto (obligatoria)
 #   SUPABASE_SERVICE_ROLE_KEY      llave de respaldo (obligatoria)
-#   RESPALDO_BUCKETS               buckets separados por espacios
+#   RESPALDO_BUCKETS               buckets separados por espacios; si no se define,
+#                                  se usa la lista única scripts/respaldo-buckets.txt
 #   RESPALDO_S3_DESTINO             s3://.../prefijo
 #   RESPALDO_ALLOW_EMPTY=true      permite explícitamente un respaldo vacío
 #   RESPALDO_REQUIRE_REMOTE=true   exige destino remoto (CI)
@@ -21,7 +22,14 @@ set -f
 cd "$(dirname "$0")/.."
 
 DESTINO="${1:-${RESPALDO_ROOT:-./.backups/storage}}"
-BUCKETS="${RESPALDO_BUCKETS:-comprobantes liquidaciones avatares bus}"
+# Lista única de buckets (auditoría 35, R09-01): una prueba la cruza contra las
+# migraciones. RESPALDO_BUCKETS, si se define, la sustituye por completo.
+LISTA_BUCKETS="scripts/respaldo-buckets.txt" # ya estamos en la raíz del repo (cd de arriba)
+if [ -z "${RESPALDO_BUCKETS:-}" ]; then
+  [ -f "$LISTA_BUCKETS" ] || { echo "ERROR: falta $LISTA_BUCKETS." >&2; exit 2; }
+  RESPALDO_BUCKETS="$(sed 's/#.*//' "$LISTA_BUCKETS" | tr -s ' \t\n' ' ')"
+fi
+BUCKETS="$RESPALDO_BUCKETS"
 REQUIRE_REMOTE="${RESPALDO_REQUIRE_REMOTE:-false}"
 ALLOW_EMPTY="${RESPALDO_ALLOW_EMPTY:-false}"
 URL="${NEXT_PUBLIC_SUPABASE_URL:-}"
