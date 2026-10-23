@@ -49,5 +49,6 @@ export function lecturaBoreal(nivel: NivelModelo, conf = 0.97): SalidaLlm {
     unidad_texto: ['Toneladas', conf, 'Unidad: Toneladas'],
     peso_kg: ['30', conf, 'Peso: 30 ton'],
     peso_unidad: ['ton', conf, 'Peso: 30 ton'],
+    material_peligroso: ['No', conf, 'Material peligroso: No'],
   }]);
 }

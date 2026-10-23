@@ -29,7 +29,7 @@ function extraccion(sobre: Record<string, string | null> = {}, merc: Record<stri
   const m: Record<string, string | null> = {
     bienes_transp: '43211500', descripcion: 'Equipo de computo', cantidad: '20', clave_unidad: 'H87', unidad_descripcion: 'Pieza',
     embalaje: '4G', embalaje_descripcion: 'Caja de carton', peso_kg: '14130', fraccion_arancelaria: '8471500100', tipo_materia: '05', // grep-limpio:ok
-    regimen_aduanero: 'EXD', pedimento: '24 16 3456 4000123', material_peligroso: null, clave_material_peligroso: null, // grep-limpio:ok
+    regimen_aduanero: 'EXD', pedimento: '24 16 3456 4000123', material_peligroso: 'false', clave_material_peligroso: null, // grep-limpio:ok
     ...merc,
   };
   const conv = (o: Record<string, string | null>) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, cv(v)]));
@@ -83,10 +83,13 @@ describe('construirPlantilla', () => {
     expect(hoja(r, 'RemintenteDestinatario').C12.valor).toBeNull();
   });
 
-  it('peligroso vacío → NO y clave N/A; peligroso sí sin clave → faltante', () => {
-    const r = construirPlantilla(extraccion(), ctx);
-    expect(hoja(r, 'Mercancias').L22.valor).toBe('NO');
-    expect(hoja(r, 'Mercancias').M22.valor).toBe('N/A');
+  it('peligroso SIN DATO → celda vacía y faltante (nunca «NO» por omisión, INN-A3-01); «no» declarado → NO y clave N/A', () => {
+    const r = construirPlantilla(extraccion({}, { material_peligroso: null }), ctx);
+    expect(hoja(r, 'Mercancias').L22.valor).toBeNull();
+    expect(r.faltantes).toContainEqual({ campo: 'mercancia.material_peligroso', celda: 'L22' });
+    const no = construirPlantilla(extraccion({}, { material_peligroso: 'false' }), ctx);
+    expect(hoja(no, 'Mercancias').L22.valor).toBe('NO');
+    expect(hoja(no, 'Mercancias').M22.valor).toBe('N/A');
     const p = construirPlantilla(extraccion({}, { material_peligroso: 'true' }), ctx);
     expect(hoja(p, 'Mercancias').L22.valor).toBe('SI');
     expect(p.faltantes).toContainEqual({ campo: 'mercancia.clave_material_peligroso', celda: 'M22' });
@@ -392,7 +395,7 @@ describe('LAYOUT_NORMAL contra la forma real de la plantilla (T-A3-43)', () => {
       unidad_descripcion: cv(m.F === undefined ? null : String(m.F)), embalaje: cv(m.G === undefined ? null : String(m.G)),
       embalaje_descripcion: cv(m.H === undefined ? null : String(m.H)), peso_kg: cv(String(m.I)),
       fraccion_arancelaria: cv(m.J === undefined ? null : String(m.J)), pedimento: cv(m.K === undefined ? null : String(m.K)),
-      material_peligroso: cv(m.L === 'SI' ? 'true' : null), clave_material_peligroso: cv(m.M === 'N/A' ? null : String(m.M)),
+      material_peligroso: cv(m.L === 'SI' ? 'true' : m.L === 'NO' ? 'false' : null), clave_material_peligroso: cv(m.M === 'N/A' ? null : String(m.M)),
       tipo_materia: cv(String(m.N)),
     });
     e.mercancias = v.mercancias.map(ap);
