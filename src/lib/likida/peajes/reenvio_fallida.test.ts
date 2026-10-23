@@ -59,3 +59,59 @@ describe('recibirArchivoPeaje — reenvío de un archivo fallido (A36-R03-01)', 
     expect(db.tablas.peaje_ingesta_archivo[0].contenido).toBeNull();
   });
 });
+
+// 0861: el rearme pasa por `peaje_archivo_rearmar` (candado por flota + tope de 50 + tope de intentos en la base).
+// Aquí se prueba el contrato del llamador con una base falsa; la atomicidad real la prueba supabase/tests/0861_*.
+describe('recibirArchivoPeaje — rearme por la función de la base (0861)', () => {
+  const rearmarFalso = (args: Record<string, unknown>): RpcResultado => {
+    const f = db.tablas.peaje_ingesta_archivo.find((a) => a.tenant_id === args.p_tenant && a.id === args.p_archivo);
+    if (!f) return [{ ok: false, codigo: 'no_existe' }];
+    const activos = db.tablas.peaje_ingesta_archivo.filter((a) => a.tenant_id === args.p_tenant && ['pendiente', 'procesando'].includes(a.estado as string)).length;
+    if (f.estado !== 'fallida') return [{ ok: false, codigo: 'no_fallida' }];
+    if ((f.intentos as number) >= (args.p_max_intentos as number)) return [{ ok: false, codigo: 'intentos_agotados' }];
+    if (activos >= 50) return [{ ok: false, codigo: 'cola_llena' }];
+    Object.assign(f, { estado: 'pendiente', contenido: args.p_contenido, reclamo: null, ultimo_error: null });
+    return [{ ok: true, rearmado: true }];
+  };
+  const regs = { peaje_archivo_encolar: encolarFalso, peaje_archivo_rearmar: rearmarFalso };
+
+  it('usa la función (con MAX_INTENTOS) y NO escribe la tabla por el camino viejo', async () => {
+    db = crearDbFalsa({ peaje_ingesta_archivo: [fallida()] }, regs);
+    const r = await recibirArchivoPeaje(T, { nombre: 'p.csv', proveedor: 'PASE', contenido }, 'pull');
+    expect(r).toMatchObject({ ok: true, duplicado: false, estado: 'pendiente' });
+    const rpc = db.llamadas.filter((l) => l.op === 'rpc' && l.tabla === 'rpc:peaje_archivo_rearmar');
+    expect(rpc).toHaveLength(1);
+    expect(db.llamadas.filter((l) => l.op === 'update')).toHaveLength(0);
+    expect(db.tablas.peaje_ingesta_archivo[0].intentos).toBe(1);
+  });
+
+  it('intentos agotados: la función lo niega y el reenvío sigue siendo duplicado/fallida', async () => {
+    db = crearDbFalsa({ peaje_ingesta_archivo: [fallida({ intentos: MAX_INTENTOS })] }, regs);
+    const r = await recibirArchivoPeaje(T, { nombre: 'p.csv', proveedor: 'PASE', contenido }, 'pull');
+    expect(r).toMatchObject({ ok: true, duplicado: true, estado: 'fallida' });
+  });
+
+  it('cola llena (50): el rearme se rechaza como un archivo nuevo, para que el canal reintente después', async () => {
+    const llenos = Array.from({ length: 50 }, (_, i) => fallida({ id: `p${i}`, huella: String(i).padStart(64, '0'), estado: 'pendiente', contenido: '\\x01' }));
+    db = crearDbFalsa({ peaje_ingesta_archivo: [fallida(), ...llenos] }, regs);
+    const r = await recibirArchivoPeaje(T, { nombre: 'p.csv', proveedor: 'PASE', contenido }, 'pull');
+    expect(r).toMatchObject({ ok: false, codigo: 'cola_llena' });
+    expect(db.tablas.peaje_ingesta_archivo[0].estado).toBe('fallida');
+  });
+
+  for (const code of ['PGRST202', '42883']) {
+    it(`sin la migración 0861 (${code}) cae al UPDATE anterior`, async () => {
+      db = crearDbFalsa({ peaje_ingesta_archivo: [fallida()] }, { peaje_archivo_encolar: encolarFalso, peaje_archivo_rearmar: () => ({ error: { message: 'no existe', code } }) });
+      const r = await recibirArchivoPeaje(T, { nombre: 'p.csv', proveedor: 'PASE', contenido }, 'pull');
+      expect(r).toMatchObject({ ok: true, duplicado: false, estado: 'pendiente' });
+      expect(db.tablas.peaje_ingesta_archivo[0].estado).toBe('pendiente');
+    });
+  }
+
+  it('un error real de la función NO cae al camino viejo: queda como estaba', async () => {
+    db = crearDbFalsa({ peaje_ingesta_archivo: [fallida()] }, { peaje_archivo_encolar: encolarFalso, peaje_archivo_rearmar: () => ({ error: { message: 'timeout', code: '57014' } }) });
+    const r = await recibirArchivoPeaje(T, { nombre: 'p.csv', proveedor: 'PASE', contenido }, 'pull');
+    expect(r).toMatchObject({ ok: true, duplicado: true, estado: 'fallida' });
+    expect(db.tablas.peaje_ingesta_archivo[0].estado).toBe('fallida');
+  });
+});

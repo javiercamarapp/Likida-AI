@@ -177,13 +177,43 @@ export async function recibirArchivoPeaje(tenantId: string, c: CuerpoIngesta, or
   // proveedor que reenvía en bucle un archivo irreparable se detiene solo (entonces hace falta «reintentar»).
   if (fila.duplicado && fila.estado === 'fallida') {
     const rearmado = await rearmarArchivoFallido(tenantId, String(fila.id), c.contenido);
-    if (rearmado) return { ok: true, id: String(fila.id), duplicado: false, estado: 'pendiente' };
+    if (rearmado === 'rearmado') return { ok: true, id: String(fila.id), duplicado: false, estado: 'pendiente' };
+    // Con la 0861 el rearme respeta el MISMO tope de 50 que un archivo nuevo: cola llena = el canal reintenta después.
+    if (rearmado === 'cola_llena') return { ok: false, codigo: 'cola_llena', motivo: `Hay ${MAX_PENDIENTES_POR_FLOTA} archivos pendientes de procesar; espera a que se vacíe la cola.` };
   }
   return { ok: true, id: String(fila.id), duplicado: Boolean(fila.duplicado), estado: String(fila.estado) };
 }
 
-/** UPDATE condicionado (el candado): solo si SIGUE `fallida` y con intentos por debajo del tope. `true` si cambió una fila. */
-async function rearmarArchivoFallido(tenantId: string, archivoId: string, contenido: Buffer): Promise<boolean> {
+/**
+ * Rearma un archivo `fallida` a `pendiente` sin reiniciar intentos. Migración 0861: lo hace `peaje_archivo_rearmar` en la base, bajo el
+ * candado por flota y el tope de 50 de la 0850 (el UPDATE de abajo no los tenía). Si la 0861 aún no está aplicada (42883/PGRST202) o la
+ * respuesta no se puede leer, cae al UPDATE condicionado anterior y lo avisa.
+ */
+async function rearmarArchivoFallido(tenantId: string, archivoId: string, contenido: Buffer): Promise<'rearmado' | 'no' | 'cola_llena'> {
+  const via = await acotada(supabaseAdmin().rpc('peaje_archivo_rearmar', {
+    p_tenant: tenantId, p_archivo: archivoId, p_contenido: byteaDeBuffer(contenido), p_max_intentos: MAX_INTENTOS,
+  }), 'peajes.ingesta.rearmar_rpc');
+  if (!via.error) {
+    const d = (Array.isArray(via.data) ? via.data[0] : via.data) as { ok?: boolean; codigo?: string } | null | undefined;
+    if (d && typeof d.ok === 'boolean') {
+      if (d.ok) return 'rearmado';
+      return d.codigo === 'cola_llena' ? 'cola_llena' : 'no';
+    }
+    // Respuesta ilegible: se trata como si la función no existiera (camino anterior).
+  } else {
+    const codigo = (via.error as { code?: string }).code;
+    if (codigo !== '42883' && codigo !== 'PGRST202') {
+      // Best-effort: queda como estaba (duplicado/fallida) y el panel puede reintentarla a mano.
+      logger.error('peajes.ingesta.rearmar_rpc', { tenant: tenantId, err: via.error.message });
+      return 'no';
+    }
+  }
+  logger.warn('peajes.ingesta.rearmar_sin_0861', { tenant: tenantId, aviso: 'peaje_archivo_rearmar no existe: rearme sin candado ni tope; aplicar la migración 0861' });
+  return (await rearmarArchivoFallidoSinFuncion(tenantId, archivoId, contenido)) ? 'rearmado' : 'no';
+}
+
+/** Camino anterior a la 0861: UPDATE condicionado (solo si SIGUE `fallida` y con intentos por debajo del tope). `true` si cambió una fila. */
+async function rearmarArchivoFallidoSinFuncion(tenantId: string, archivoId: string, contenido: Buffer): Promise<boolean> {
   const res = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
     .update({
       estado: 'pendiente', contenido: byteaDeBuffer(contenido), bytes: contenido.length,
