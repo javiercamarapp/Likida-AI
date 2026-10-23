@@ -2,7 +2,7 @@ import { guardarPerfilPatch, actualizarFacilidad15, getPerfilCrudo } from '../re
 import { guardarConfigCobranza, leerConfigCobranza } from '../agentes/cobranza';
 import { crearOperador, guardarPolitica } from '../administracion';
 import { crearUnidad } from '../operacion';
-import { guardarDatosFiscales, REGIMENES } from '@/lib/saas/fiscal';
+import { guardarDatosFiscalesParciales, REGIMENES } from '@/lib/saas/fiscal';
 import { getConfig } from '../config';
 import { logger } from '@/lib/logger';
 import {
@@ -128,20 +128,27 @@ async function nutrirDesdeHechos(
 ): Promise<string[]> {
   const notas: string[] = [];
   const actor = userId ? { id: userId } : undefined;
-  const rfc = hechos.rfcEmpresa ?? declarado<string>(perfil, 'rfcEmpresa');
-  const razon = hechos.razonSocial ?? declarado<string>(perfil, 'razonSocial');
-  const regimen = hechos.regimenSat ?? declarado<string>(perfil, 'regimenSat');
-  const cp = hechos.codigoPostalFiscal ?? declarado<string>(perfil, 'codigoPostalFiscal');
-  const email = hechos.emailFacturacion ?? declarado<string>(perfil, 'emailFacturacion');
+  // A36-R15-01: el tenant (CFDI + aviso de privacidad) solo se toca si ESTE
+  // turno declaró algún dato fiscal, y se mezcla sobre la fila viva: el perfil
+  // solo rellena huecos, nunca pisa lo que el dueño corrigió en otra pantalla.
   const clavesOk = new Set(REGIMENES.map((r) => r.clave));
-
-  if (rfc && razon && regimen && cp && clavesOk.has(regimen as typeof REGIMENES[number]['clave'])) {
+  const declaroFiscal = !!(hechos.rfcEmpresa || hechos.razonSocial || hechos.regimenSat
+    || hechos.codigoPostalFiscal || hechos.emailFacturacion);
+  if (declaroFiscal && (!hechos.regimenSat || clavesOk.has(hechos.regimenSat as typeof REGIMENES[number]['clave']))) {
     try {
-      await guardarDatosFiscales(tenantId, {
-        rfc, razonSocial: razon, regimenFiscal: regimen, codigoPostal: cp,
-        usoCfdi: 'G03', email,
-      });
-      notas.push('Los cinco datos del receptor CFDI 4.0 ya están en la flota (uso G03).');
+      const r = await guardarDatosFiscalesParciales(
+        tenantId,
+        {
+          rfc: hechos.rfcEmpresa, razonSocial: hechos.razonSocial, regimenFiscal: hechos.regimenSat,
+          codigoPostal: hechos.codigoPostalFiscal, email: hechos.emailFacturacion,
+        },
+        {
+          rfc: declarado<string>(perfil, 'rfcEmpresa'), razonSocial: declarado<string>(perfil, 'razonSocial'),
+          regimenFiscal: declarado<string>(perfil, 'regimenSat'), codigoPostal: declarado<string>(perfil, 'codigoPostalFiscal'),
+          email: declarado<string>(perfil, 'emailFacturacion'),
+        },
+      );
+      if (r === 'guardado') notas.push('Los datos del receptor CFDI 4.0 quedaron en la flota (lo que ya tenías capturado en otras pantallas no se tocó).');
     } catch (e) {
       // OPERABILIDAD-19C2-6: sin este log, un fallo de escritura fiscal
       // durante el onboarding era invisible para observabilidad — solo
