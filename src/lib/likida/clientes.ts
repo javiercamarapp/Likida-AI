@@ -282,7 +282,7 @@ export function validarTarifa(t: TarifaCruda): TarifaValida {
   // La coma decimal es como se teclea en México — mismo trato que
   // `ajustes_operativos.ts`. Se quitan también los separadores de millar: un
   // precio pegado desde Excel llega como "28,500.00" y `Number` daría NaN.
-  const precio = Number(crudoPrecio.replace(/\s/g, '').replace(/,(?=\d{3}\b)/g, '').replace(',', '.'));
+  const precio = Number(crudoPrecio.replace(/\s/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.'));
   if (!Number.isFinite(precio)) throw new DatoInvalido('El precio tiene que ser un número.');
   // Espeja `tarifa_precio_positivo`. Un precio de 0 no es una tarifa barata:
   // es una tarifa que cotizaría el flete gratis y se vería como una medición.

@@ -2403,6 +2403,10 @@ export async function marcarReclamoEnviado(tenantId: string, id: string, enviado
   return { ok: true };
 }
 
+const MOTIVO_NOTA_RECHAZADO = 'El proveedor rechazó este reclamo: no se le registran notas de crédito. Si te acreditó algo después, crea un reclamo nuevo.';
+const motivoNotaExcede = (nuevo: number, reclamado: number, acreditado: number): string =>
+  `Con esta nota lo acreditado (${mxn(nuevo)}) pasaría de lo reclamado (${mxn(reclamado)}); ya llevaba ${mxn(acreditado)}. Revisa el monto de la nota.`;
+
 /**
  * Registra una nota de crédito recibida y actualiza lo acreditado y el estado del reclamo. Las notas del
  * proveedor llegan sin detalle: aquí solo se suma lo que SÍ se acreditó.
@@ -2420,8 +2424,9 @@ export async function registrarNotaDeCredito(
     : createHash('sha256').update([entrada.reclamoId, entrada.versionVista, entrada.monto.toFixed(2), entrada.fecha, entrada.referencia?.trim() ?? ''].join('|')).digest('hex');
   // A36-R03-05: la función 0860 no veta un reclamo `rechazado` (la nota lo «revivía» a `acreditado` y chocaba con el único parcial
   // `peaje_reclamo_activo_unico` de la 0847) ni topa lo acreditado contra lo reclamado. Sin migrar, el veto vive aquí: una lectura previa.
-  // NO es atómico frente a otra sesión que registre al mismo tiempo; el candado definitivo queda para una migración futura (veto + tope dentro
-  // de `peaje_nota_credito_registrar`, bajo el `for update`). Si el reclamo no se encuentra, decide la función (`no_existe`).
+  // Esta lectura NO es atómica frente a otra sesión que registre al mismo tiempo: desde la migración 0861 el MISMO veto y tope viven dentro de
+  // `peaje_nota_credito_registrar`, bajo el `for update` (códigos `rechazado` y `excede_reclamado`, traducidos abajo). La lectura se conserva
+  // para la base que aún no tiene la 0861 y para dar el mensaje sin ir a la función. Si el reclamo no se encuentra, decide la función (`no_existe`).
   const { data: r, error: errR } = await acotada(supabaseAdmin().from('peaje_reclamo')
     .select('id, estado, monto_reclamado, monto_acreditado').eq('tenant_id', tenantId).eq('id', entrada.reclamoId).maybeSingle(), 'revision_cobros.reclamo');
   if (errR) { logger.error('revision_cobros.reclamo', { tenant: tenantId, err: errR.message }); return { ok: false, motivo: 'No se pudo leer el reclamo.' }; }
@@ -2435,11 +2440,11 @@ export async function registrarNotaDeCredito(
       yaRegistrada = !!previa;
     }
     if (!yaRegistrada) {
-      if (r.estado === 'rechazado') return { ok: false, motivo: 'El proveedor rechazó este reclamo: no se le registran notas de crédito. Si te acreditó algo después, crea un reclamo nuevo.' };
+      if (r.estado === 'rechazado') return { ok: false, motivo: MOTIVO_NOTA_RECHAZADO };
       const reclamado = Math.round(Number(r.monto_reclamado) * 100);
       const nuevo = Math.round(Number(r.monto_acreditado ?? 0) * 100) + Math.round(entrada.monto * 100);
       if (Number.isFinite(reclamado) && nuevo > reclamado) {
-        return { ok: false, motivo: `Con esta nota lo acreditado (${mxn(nuevo / 100)}) pasaría de lo reclamado (${mxn(reclamado / 100)}); ya llevaba ${mxn(Number(r.monto_acreditado ?? 0))}. Revisa el monto de la nota.` };
+        return { ok: false, motivo: motivoNotaExcede(nuevo / 100, reclamado / 100, Number(r.monto_acreditado ?? 0)) };
       }
     }
   }
@@ -2448,8 +2453,14 @@ export async function registrarNotaDeCredito(
     p_referencia: entrada.referencia?.trim().slice(0, 120) || null, p_clave: clave,
   }), 'revision_cobros.nota_rpc');
   if (!viaRpc.error) {
-    const d = (Array.isArray(viaRpc.data) ? viaRpc.data[0] : viaRpc.data) as { ok?: boolean; codigo?: string } | null;
+    const d = (Array.isArray(viaRpc.data) ? viaRpc.data[0] : viaRpc.data) as { ok?: boolean; codigo?: string; monto_acreditado?: number | string; monto_reclamado?: number | string } | null;
     if (d?.ok) return { ok: true };
+    // 0861 (A36-R03-05): veto y tope atómicos de la función. Antes de la 0861 estos códigos no existen y caen en el error genérico de abajo.
+    if (d?.codigo === 'rechazado') return { ok: false, motivo: MOTIVO_NOTA_RECHAZADO };
+    if (d?.codigo === 'excede_reclamado') {
+      const acreditado = Number(d.monto_acreditado ?? 0); const reclamado = Number(d.monto_reclamado ?? 0);
+      return { ok: false, motivo: motivoNotaExcede(Math.round((acreditado + entrada.monto) * 100) / 100, reclamado, acreditado) };
+    }
     if (d?.codigo === 'no_existe') return { ok: false, motivo: 'Ese reclamo no existe en tu flota.' };
     if (d?.codigo === 'sin_enviar') return { ok: false, motivo: 'El reclamo aún no está enviado: márcalo como enviado antes de registrar una nota de crédito.' };
     if (d?.codigo === 'monto_invalido') return { ok: false, motivo: 'El monto de la nota de crédito debe ser mayor a cero.' };

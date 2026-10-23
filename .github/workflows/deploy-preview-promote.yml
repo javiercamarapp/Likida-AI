@@ -317,9 +317,33 @@ jobs:
           SHA: ${{ needs.preflight.outputs.sha }}
         run: node scripts/ci/production-candidate.mjs smoke-preview "$URL" "$SHA"
 
+  # A36-R07-03: antes de tocar la base de producción, el SHA exacto debe tener
+  # en verde ci-postgres y e2e-navegador (esta ruta solo repetía `quality`).
+  ci_requeridos:
+    name: CI Postgres y E2E verdes para este SHA
+    needs: [preflight]
+    if: github.event_name == 'workflow_dispatch' && inputs.promote == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.preflight.outputs.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - name: Exigir checks requeridos del SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.preflight.outputs.sha }}
+        run: node scripts/ci/ci-requeridos.mjs "$SHA"
+
   production_migrations:
     name: Producción — aplicar migraciones reales
-    needs: [preflight, preview, smoke]
+    needs: [preflight, preview, smoke, ci_requeridos]
     if: github.event_name == 'workflow_dispatch' && inputs.promote == true
     runs-on: ubuntu-24.04
     timeout-minutes: 15

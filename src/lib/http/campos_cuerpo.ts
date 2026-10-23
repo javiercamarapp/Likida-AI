@@ -172,7 +172,7 @@ export function monto(
   } else if (typeof v === 'string') {
     // Mismo saneado que `ingreso_viaje.ts`: la coma decimal es como se teclea
     // en México y el separador de millares se pega desde un Excel.
-    const limpio = v.trim().replace(/\s/g, '').replace(/,(?=\d{3}\b)/g, '').replace(',', '.');
+    const limpio = v.trim().replace(/\s/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.');
     if (!/^-?\d+(\.\d+)?$/.test(limpio)) throw new CampoInvalido(campo, `\`${campo}\` tiene que ser un número.`);
     n = Number(limpio);
   } else {
