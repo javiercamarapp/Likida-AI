@@ -19,11 +19,10 @@ restore drill con cronómetro, el estado contractual es **no demostrado**.
 ## Backup programable de Storage
 
 El workflow `.github/workflows/backup-storage.yml` está pensado para correr
-diariamente a las 03:17 UTC, pero **el `schedule` está apagado a propósito**
-(OPERABILIDAD-19C2-2) hasta que se complete la configuración de abajo: sin
-ella fallaba cada noche sobre el único buzón de alertas. Por ahora solo se
-dispara con `workflow_dispatch`; reactivar el `schedule` es el último paso
-de la lista de "Primera configuración externa pendiente". Usa el environment
+diariamente a las 03:17 UTC (`schedule` activo desde el 23-oct-2026, tras la
+primera corrida manual verde; también se puede disparar con
+`workflow_dispatch`). Si una corrida falla, el job queda en rojo y GitHub
+avisa; nunca se declara éxito sin destino remoto. Usa el environment
 de GitHub `production-backup`, no sube comprobantes como artifacts de GitHub
 y sincroniza solo hacia el destino remoto configurado. El `aws s3 sync` no
 usa `--delete`.
@@ -81,12 +80,26 @@ Antes de llamar “verde” al backup programado, un administrador debe:
 4. Probar el workflow manualmente.
 5. Comprobar que `MANIFIESTO.json` y `MANIFIESTO.sha256` existan en el remoto.
 6. Registrar el tamaño, cantidad de objetos, hora y duración.
-7. Reactivar el `schedule` en `backup-storage.yml` (se apagó a propósito en
-   OPERABILIDAD-19C2-2 para no fallar cada noche mientras esto seguía
-   pendiente).
+7. Reactivar el `schedule` en `backup-storage.yml` (hecho el 23-oct-2026;
+   se había apagado en OPERABILIDAD-19C2-2 para no fallar cada noche).
 
 Si falta una credencial, el workflow falla cerrado. No se debe poner una llave
 real en `.env`, logs, artifacts o comentarios de PR.
+
+## Restauración del respaldo remoto (probada el 23-oct-2026)
+
+El bucket remoto es privado, versionado y cifrado, con retención de 35 días
+para las versiones viejas. Procedimiento, probado con la primera corrida
+verde (218 objetos, 160 MiB; 214/214 SHA-256 verificados al restaurar):
+
+```bash
+aws s3 sync s3://<bucket>/likida-respaldos/ <carpeta>
+cd <carpeta>
+shasum -a 256 -c MANIFIESTO.sha256   # debe dar todo OK
+```
+
+`<bucket>` es el nombre del bucket configurado en el environment
+`production-backup`; este repo es público, no se documenta aquí.
 
 ## Restore drill seguro
 
