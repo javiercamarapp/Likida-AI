@@ -161,6 +161,12 @@ export async function pullDesgloses(
       if (releidos > TOPE_RELECTURA) throw new Error('ventana de traslape mayor que el tope de relectura');
 
       const porMarcar: string[] = [];
+      // Filas que el lector ya no pudo mapear: excepción visible (solo el nombre del campo), nunca descarte silencioso.
+      for (const rech of pagina.rechazadas ?? []) {
+        r.leidas += 1;
+        await deps.abrirExcepcion(tenantId, rech.clave, 'mapeo_invalido', { campo: rech.campo }, ahora);
+        r.excepciones += 1;
+      }
       for (const crudo of pagina.items) {
         r.leidas += 1;
         const clave = claveDe(crudo);
