@@ -383,7 +383,8 @@ function huella(texto: string): string {
 function normalizarMotivo(motivo: string): string {
   return motivo
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '#')
-    .replace(/\d{4}-\d{2}-\d{2}(?:[t ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?z?)?/gi, '#')
+    .replace(/\d{4}-\d{2}-\d{2}t[\d:.]*z?/gi, '#')
+    .replace(/\d{4}-\d{2}-\d{2}/g, '#')
     // Números sueltos, NO los pegados a un nombre de variable (`LIKIDA_X_1` ≠ `LIKIDA_X_2`).
     .replace(/(?<![A-Za-z_])\d+(?![A-Za-z_\d])/g, '#')
     .replace(/\s+/g, ' ')
