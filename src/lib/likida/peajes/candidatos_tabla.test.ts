@@ -152,3 +152,14 @@ describe('el motivo de descartar y justificar', () => {
     expect(validarMotivoAccion('reclamado', 'lo que sea')).toEqual({ ok: true, motivo: null });
   });
 });
+
+
+describe('A37-A2-05: las categorías internas no se reclaman al proveedor', () => {
+  it('«caseta que no debe cruzarse» y «unidad inmovilizada» no se pueden marcar como reclamadas (sí descartar o justificar)', () => {
+    const filas = filasDeCandidatos([cand(1, { categoria: 'caseta_no_debe_cruzarse' }), cand(2, { categoria: 'unidad_inmovilizada' })], [], []);
+    for (const f of filas) {
+      expect(aplicaAccion(f, 'reclamado')).toEqual({ ok: false, motivo: 'no_reclamable' });
+      expect(aplicaAccion(f, 'justificado')).toEqual({ ok: true });
+    }
+  });
+});

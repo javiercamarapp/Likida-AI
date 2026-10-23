@@ -74,6 +74,14 @@ export const ETIQUETA_CATEGORIA_COBRO: Record<CategoriaCobro, string> = {
   caseta_no_debe_cruzarse: 'Caseta que no debe cruzarse',
 };
 
+/**
+ * A37-A2-05: categorías que son un asunto INTERNO de la flota, no un reclamo al proveedor: una caseta que la propia flota
+ * prohíbe cruzar («es un tema interno de la flota, no un reclamo al proveedor») y el cruce de una unidad que la flota declaró
+ * inmovilizada (un posible mal uso del TAG). Nunca van al archivo del portal ni se pueden convertir en reclamo.
+ */
+export const CATEGORIAS_INTERNAS: readonly CategoriaCobro[] = ['unidad_inmovilizada', 'caseta_no_debe_cruzarse'];
+export const esCategoriaInterna = (c: string): boolean => (CATEGORIAS_INTERNAS as readonly string[]).includes(c);
+
 /** Todo candidato lleva este rótulo: el reporte nunca afirma que el cobro sea indebido. */
 export const ROTULO_CANDIDATO = 'Candidato: validar con el proveedor';
 

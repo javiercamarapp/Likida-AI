@@ -53,6 +53,7 @@ function reporte(o: { lineas?: LineaCobro[]; excluir?: Set<never> | Set<string>;
   });
 }
 
+const INTERNAS: readonly string[] = ['unidad_inmovilizada', 'caseta_no_debe_cruzarse'];
 const leer = (u: Uint8Array) => XLSX.read(Buffer.from(u), { type: 'buffer' });
 
 describe('las hojas', () => {
@@ -60,13 +61,15 @@ describe('las hojas', () => {
     const r = reporte();
     const libro = leer(candidatosAExcel(r));
     const cats = [...new Set(r.filas.map((f) => f.categoria))];
-    expect(cats.sort()).toEqual([...CATEGORIAS_ARCHIVO].sort());
-    expect(libro.SheetNames).toEqual([...CATEGORIAS_ARCHIVO.map((c) => ETIQUETA_CATEGORIA_ARCHIVO[c]), 'Resumen', 'Léeme']);
+    // A37-A2-05: las categorías INTERNAS de la flota no viajan al proveedor
+    const alProveedor = CATEGORIAS_ARCHIVO.filter((c) => !INTERNAS.includes(c));
+    expect(cats.sort()).toEqual([...alProveedor].sort());
+    expect(libro.SheetNames).toEqual([...alProveedor.map((c) => ETIQUETA_CATEGORIA_ARCHIVO[c]), 'Resumen', 'Léeme']);
   });
 
   it('cada hoja trae las columnas del archivo original y lo del reclamo, y NO la interpretación interna', () => {
     const libro = leer(candidatosAExcel(reporte()));
-    for (const nombre of libro.SheetNames.slice(0, 6)) {
+    for (const nombre of libro.SheetNames.slice(0, -2)) {
       const filas = XLSX.utils.sheet_to_json<unknown[]>(libro.Sheets[nombre], { header: 1 });
       expect(filas[0]).toEqual([...ENCABEZADOS_CANDIDATOS]);
     }
@@ -185,14 +188,42 @@ describe('texto del proveedor, caracteres especiales y determinismo', () => {
 describe('el archivo se abre con el lector tolerante de Likida (round-trip)', () => {
   it('la primera hoja del Excel se lee como un desglose: mismas líneas, importes y clases', async () => {
     const r = reporte();
-    // La primera hoja es la de la categoría crítica (T-A2-36): la unidad inmovilizada va primero.
+    // A37-A2-05: la unidad inmovilizada (T-A2-36) es un asunto interno y ya no viaja: la primera hoja es la de clase.
     expect(CATEGORIAS_ARCHIVO[0]).toBe('unidad_inmovilizada');
-    const primera = r.filas.filter((f) => f.categoria === 'unidad_inmovilizada');
+    const primera = r.filas.filter((f) => f.categoria === 'clase_fuera_de_3_5');
     const lectura = await parsearArchivoDesglose('candidatos.xlsx', Buffer.from(candidatosAExcel(r)));
     expect(lectura.ok).toBe(true);
     if (!lectura.ok) return;
     expect(lectura.lineas).toHaveLength(primera.length);
-    expect(lectura.lineas[0]).toMatchObject({ fecha: '2026-03-04', caseta: 'Caseta Ejemplo Oeste', tag: 'IMDM8', monto: 100, clase: 5, unidad: '208' });
+    expect(lectura.lineas[0]).toMatchObject({ fecha: '2026-03-05', caseta: CASETA, monto: 400, clase: 9 });
     expect(lectura.calidad.columnasFaltantes ?? []).toEqual([]);
+  });
+});
+
+
+describe('A37-A2-05: el archivo del portal no lleva lo interno ni lo ya decidido', () => {
+  it('casetas prohibidas y unidades inmovilizadas NO se mandan al proveedor, y el resumen lo dice', () => {
+    const r = reporte();
+    expect(r.filas.some((f) => f.categoria === 'caseta_no_debe_cruzarse' || f.categoria === 'unidad_inmovilizada')).toBe(false);
+    expect(r.internasOmitidas).toBe(2);
+    const libro = leer(candidatosAExcel(r));
+    const res = XLSX.utils.sheet_to_json<unknown[]>(libro.Sheets.Resumen, { header: 1 }).flat().join('|');
+    expect(res).toMatch(/No incluye 2 cruce\(s\) de categorías internas/);
+  });
+
+  it('lo que una persona descartó o justificó no entra al archivo ni al monto', () => {
+    const base = reporte();
+    const ext = base.filas.find((f) => f.categoria === 'extemporaneo')!;
+    const sobre = base.filas.find((f) => f.categoria === 'importe_sobre_tarifa')!;
+    const ls = lineas;
+    const r = armarCandidatos({
+      proveedor: 'Proveedor Ejemplo', archivoNombre: 'x.xlsx', periodoDesde: '2026-03-01', periodoHasta: '2026-03-10',
+      revision: revisarCobros(ls, reglas), evaluadas: evaluarContraTarifa(ls, tarifas),
+      decididos: new Set([`${ext.indice}|extemporaneo`, `${sobre.indice}|importe_sobre_tarifa`]),
+    });
+    expect(r.filas.some((f) => f.categoria === 'extemporaneo' && f.indice === ext.indice)).toBe(false);
+    expect(r.filas.some((f) => f.categoria === 'importe_sobre_tarifa')).toBe(false);
+    expect(r.decididosOmitidos).toBe(2);
+    expect(resumirCandidatos(r).montoTotal).toBeLessThan(resumirCandidatos(base).montoTotal);
   });
 });
