@@ -813,6 +813,10 @@ export interface CorridaCruzada {
 
 export interface CorridaReciente extends CorridaCruzada {
   agente: string;
+  /** El motivo del fallo que dejó la corrida en `agente_corrida.error` (ya
+   *  redactado para una persona). Solo lo traen las lecturas de FALLOS
+   *  (`getCorridasFallidas`); ausente = la lectura no lo pidió o no hay. */
+  error?: string;
 }
 
 export interface UltimaCorridaAgente {
@@ -923,15 +927,47 @@ export async function contarCorridasFallidas(): Promise<number | null> {
 export async function getCorridasFallidas(limite = TOPE_CORRIDAS_FALLIDAS): Promise<CorridaReciente[]> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('agente_corrida')
-    .select(COLUMNAS_CORRIDA)
+    .select(`${COLUMNAS_CORRIDA}, error`)
     .eq('estado', 'fallo')
     .order('inicio', { ascending: false })
     .limit(limite), 'getCorridasFallidas');
   if (error) throw new Error(`getCorridasFallidas: ${error.message}`);
   return (data ?? []).map((f) => {
     const r = f as Record<string, unknown>;
-    return { agente: String(r.agente), ...mapearCorrida(r) };
+    return {
+      agente: String(r.agente), ...mapearCorrida(r),
+      // Solo si hay: el NULL honesto no se disfraza de cadena vacía.
+      ...(typeof r.error === 'string' && r.error.trim() ? { error: r.error } : {}),
+    };
   });
+}
+
+/**
+ * Para cada agente dado, el `inicio` de su corrida más reciente que NO fue
+ * fallo (`ok` o `parcial`) — el punto donde se ROMPIÓ su racha de fallos. Un
+ * agente sin ninguna queda fuera del mapa (nunca ha salido bien). Una consulta
+ * `limit 1` por agente, en paralelo: los agentes con fallos son pocos, y
+ * deduplicar sobre «las últimas N» mentiría con uno que no corre hace semanas.
+ * LANZA ante error de lectura (misma regla que sus hermanas).
+ */
+export async function getUltimoInicioSinFalloPorAgente(agentes: readonly string[]): Promise<Map<string, string>> {
+  const admin = supabaseAdmin();
+  const unicos = [...new Set(agentes)];
+  const filas = await Promise.all(unicos.map(async (agente) => {
+    const { data, error } = await acotada(admin
+      .from('agente_corrida')
+      .select('inicio')
+      .eq('agente', agente)
+      .in('estado', ['ok', 'parcial'])
+      .order('inicio', { ascending: false })
+      .limit(1), `getUltimoInicioSinFalloPorAgente/${agente}`);
+    if (error) throw new Error(`getUltimoInicioSinFalloPorAgente/${agente}: ${error.message}`);
+    const inicio = ((data ?? [])[0] as { inicio?: string } | undefined)?.inicio ?? null;
+    return [agente, inicio] as const;
+  }));
+  const out = new Map<string, string>();
+  for (const [agente, inicio] of filas) if (inicio) out.set(agente, inicio);
+  return out;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
