@@ -592,6 +592,7 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
   let acumulado: Extraccion | null = null;
   const lecturas: Extraccion[] = [];
   let fallos: FalloValidador[] = [];
+  let falloUltimoNivel: string | null = null;
   for (let i = 0; i < secuencia.length; i++) {
     const nivel = secuencia[i];
     ctx.signal?.throwIfAborted();
@@ -601,7 +602,18 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
     } catch (e) {
       // Un nivel que falla (salida inválida tras sus reintentos, proveedor caído) no tumba el documento si hay otro nivel: se
       // escala y se deja constancia. Presupuesto agotado y abortos sí detienen (los decide quien llama).
-      if (i === secuencia.length - 1 || ctx.signal?.aborted || (ctx.errorFatal ?? presupuestoAgotado)(e)) throw e;
+      if (ctx.signal?.aborted || (ctx.errorFatal ?? presupuestoAgotado)(e)) throw e;
+      if (i === secuencia.length - 1) {
+        // A37-A3-05: el último nivel (el más lento) falló pero ya hay una lectura de niveles anteriores: NO se descarta. Se
+        // conserva marcada por confirmar y se deja constancia del error. Sin ninguna lectura previa sí se relanza.
+        if (!acumulado) throw e;
+        const motivoFallo = `el modelo del nivel ${nivel} no entregó una lectura válida: ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}`;
+        const esc = { de: r.nivel ?? nivel, a: nivel, codigo: 'error_modelo' as const, motivo: motivoFallo };
+        r.escalamientos.push(esc);
+        registrarEscalamiento(esc);
+        falloUltimoNivel = motivoFallo;
+        break;
+      }
       const esc = { de: nivel, a: secuencia[i + 1], codigo: 'error_modelo' as const, motivo: `el modelo del nivel ${nivel} no entregó una lectura válida: ${(e instanceof Error ? e.message : String(e)).slice(0, 120)}` };
       r.escalamientos.push(esc);
       registrarEscalamiento(esc);
@@ -639,6 +651,10 @@ export async function extraerDocumento(c: ContenidoDoc, ctx: ContextoExtraccion)
     if (c.texto === null) acumulado = taparCriticosSinAnclaje(acumulado);
     r.revisionHumana = revisionHumanaFinal(acumulado, fallos, lecturas);
     for (const h of r.revisionHumana) r.avisos.push(`Revisión humana: ${etiquetaCampo(h.campo, h.renglon)} — ${h.motivo} Valores en conflicto: ${h.valores.map((v) => `«${v}»`).join(', ')}.`);
+    if (falloUltimoNivel) {
+      r.revisionHumana.push({ campo: 'documento', renglon: null, codigo: 'error_modelo', motivo: `Se conservó la lectura del nivel anterior, por confirmar: ${falloUltimoNivel}.`, valores: [] });
+      r.avisos.push(`El último nivel de lectura falló (${falloUltimoNivel}); se conservó la mejor lectura anterior para que una persona la confirme.`);
+    }
   }
   const delModelo = acumulado ?? extraccionVacia();
   r.extraccion = completarDerivados(base ? completarCon(base, delModelo) : delModelo, derivar);
