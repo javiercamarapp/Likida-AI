@@ -86,9 +86,9 @@ export const TOLERANCIA_CENTAVOS_MXN = TOLERANCIA_MONTO_MXN;
  *  archivo equivocado, y se dice en vez de importar a medias.
  *
  *  LÍMITES DE ESCALA (por qué 60 000 cabe): las líneas se escriben en lotes de
- *  `LOTE_INSERCION_LINEAS` y el cruce las anota agrupando las que reciben la
- *  misma anotación (ver `conciliarDesgloseInterno`), así que ni la escritura
- *  ni el cruce son una consulta por línea. La LECTURA del Excel/ODS ya no es
+ *  `LOTE_INSERCION_LINEAS` y el cruce las anota en lotes de
+ *  `LOTE_ESCRITURA_LINEAS` (un upsert por lote, ver `conciliarDesglose`), así
+ *  que ni la escritura ni el cruce son una consulta por línea. La LECTURA del Excel/ODS ya no es
  *  "entero en memoria": ver `TOPE_LECTURA_HOJA_DESGLOSE`. */
 export const MAX_LINEAS_DESGLOSE = 60_000;
 /** Margen sobre `MAX_LINEAS_DESGLOSE` para el `sheetRows` con el que se LEE la
@@ -111,8 +111,8 @@ export const MARGEN_LECTURA_DESGLOSE = 1_000;
 export const TOPE_LECTURA_HOJA_DESGLOSE = MAX_LINEAS_DESGLOSE + MARGEN_LECTURA_DESGLOSE;
 /** Filas por INSERT al guardar las líneas del desglose. */
 export const LOTE_INSERCION_LINEAS = 1000;
-/** Ids por UPDATE ... IN (...) al anotar el cruce (la URL de PostgREST no admite listas enormes). */
-export const TANDA_IDS_UPDATE = 100;
+/** Líneas por UPSERT al anotar el cruce (REN-34-1): una sola ida a la base por lote, no una por línea. */
+export const LOTE_ESCRITURA_LINEAS = 500;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. EL PARSEO — puro sobre filas/texto, para probarlo sin archivos reales.
@@ -1182,6 +1182,7 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
     const tagNorm = normalizarTag(f.tag as string | null);
     return {
       id: String(f.id),
+      indice: Number(f.indice),
       fecha: (f.fecha as string | null) ?? null,
       monto: Number(f.monto),
       caseta: (f.caseta as string | null) ?? null,
@@ -1266,12 +1267,17 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
   const gps = await evaluarGpsDeLineas(tenantId, paraGps, catalogo);
   const gpsPorLinea = new Map(gps.map((g) => [g.lineaId, g]));
 
-  // 5) La escritura por línea, AGRUPADA (escala 60 000): un UPDATE por línea serían decenas de
-  //    miles de consultas. Las líneas que reciben EXACTAMENTE la misma anotación (lo habitual:
-  //    «sin contraparte», sin viaje, misma unidad por TAG, mismo veredicto GPS) se escriben con
-  //    un solo UPDATE ... WHERE id IN (...) en tandas de `TANDA_IDS_UPDATE`. Best-effort por
-  //    grupo: el grupo que falle conserva su estatus previo y sus líneas se cuentan en
-  //    `noEscritas` — el resumen dice lo que quedó EN LA BASE, no lo que se calculó.
+  // 5) La escritura por línea, POR LOTES (escala 60 000; REN-34-1). Un UPDATE por línea serían decenas de
+  //    miles de idas a la red, y agrupar «las que reciben la misma anotación» solo ayudaba al caso barato
+  //    (sin contraparte): las que CUADRAN llevan cada una su viaje, su diferencia y su gasto en `detalle`,
+  //    así que cada una era un UPDATE propio. Ahora TODAS se escriben con un UPSERT por `id` en lotes de
+  //    `LOTE_ESCRITURA_LINEAS` (misma técnica que `consolidado.guardar_lineas`). Como el upsert es
+  //    INSERT ... ON CONFLICT (id) DO UPDATE, el payload lleva las columnas NOT NULL de la fila
+  //    (`tenant_id`, `desglose_id`, `indice`, `monto`) con el MISMO valor que ya tiene: en conflicto solo
+  //    cambian las columnas de la anotación; fecha/caseta/tag/hora del archivo no se envían, no se tocan.
+  //    El `tenant_id` va en cada fila y el `id` sale de las líneas leídas con `.eq('tenant_id')`: no se
+  //    puede escribir en otra flota. Best-effort por lote: el lote que falle conserva su estatus previo y
+  //    sus líneas se cuentan en `noEscritas` — el resumen dice lo que quedó EN LA BASE, no lo que se calculó.
   const anotaciones = cruces.map((c, i) => {
     const g = gpsPorLinea.get(lineas[i].id);
     const v = g?.veredicto;
@@ -1294,29 +1300,28 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
       } : null,
     };
   });
-  const grupos = new Map<string, { payload: (typeof anotaciones)[number]; posiciones: number[] }>();
-  anotaciones.forEach((payload, i) => {
-    const k = JSON.stringify(payload);
-    const g = grupos.get(k);
-    if (g) g.posiciones.push(i);
-    else grupos.set(k, { payload, posiciones: [i] });
-  });
-  const tandas: Array<{ payload: (typeof anotaciones)[number]; posiciones: number[] }> = [];
-  for (const g of grupos.values()) {
-    for (let i = 0; i < g.posiciones.length; i += TANDA_IDS_UPDATE) tandas.push({ payload: g.payload, posiciones: g.posiciones.slice(i, i + TANDA_IDS_UPDATE) });
+  const filasEscritura = anotaciones.map((anotacion, i) => ({
+    id: lineas[i].id,
+    tenant_id: tenantId,
+    desglose_id: desgloseId,
+    indice: lineas[i].indice,
+    monto: lineas[i].monto,
+    ...anotacion,
+  }));
+  const tandas: Array<{ desde: number; filas: typeof filasEscritura }> = [];
+  for (let i = 0; i < filasEscritura.length; i += LOTE_ESCRITURA_LINEAS) {
+    tandas.push({ desde: i, filas: filasEscritura.slice(i, i + LOTE_ESCRITURA_LINEAS) });
   }
-  const resultadosTanda = await enLotes(tandas, 10, async ({ payload, posiciones }) => {
+  const resultadosTanda = await enLotes(tandas, 10, async ({ filas }) => {
     const { error } = await acotada(supabaseAdmin()
       .from('desglose_peaje_linea')
-      .update(payload)
-      .in('id', posiciones.map((p) => lineas[p].id))
-      .eq('tenant_id', tenantId), 'desglose_peaje.escribir_linea');
+      .upsert(filas, { onConflict: 'id' }), 'desglose_peaje.escribir_linea');
     if (error) throw new Error(error.message);
   });
   const escrituras: Array<{ ok: { estatus: string; gps: string | null } } | { error: unknown }> = new Array(lineas.length);
   tandas.forEach((t, ti) => {
     const r = resultadosTanda[ti];
-    for (const p of t.posiciones) {
+    for (let p = t.desde; p < t.desde + t.filas.length; p++) {
       escrituras[p] = 'error' in r ? { error: r.error } : { ok: { estatus: cruces[p].estatus, gps: gpsPorLinea.get(lineas[p].id)?.veredicto?.veredicto ?? null } };
     }
   });

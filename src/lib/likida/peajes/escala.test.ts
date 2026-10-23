@@ -20,7 +20,7 @@ const desglose = await import('../intake/desglose_peaje');
 const { revisionDeDesglose } = await import('./revision_cobros');
 const { vincularPorIcident } = await import('./vincular_viaje');
 import type { ViajeFuente } from './viajes_fuente';
-const { MAX_LINEAS_DESGLOSE, LOTE_INSERCION_LINEAS } = desglose;
+const { MAX_LINEAS_DESGLOSE, LOTE_INSERCION_LINEAS, LOTE_ESCRITURA_LINEAS } = desglose;
 const { LEASE_SEGUNDOS } = await import('./ingesta');
 
 import { round2 } from '@/lib/formato';
@@ -201,6 +201,30 @@ describe('escala del tope (60 000 líneas)', () => {
     expect(msConciliar).toBeLessThan(PRESUPUESTO.conciliar);
     expect(msRevisar).toBeLessThan(PRESUPUESTO.revisar);
     expect(rssMb).toBeLessThan(1500);
+  }, 300_000);
+
+  it('REN-34-1: concilia 60 000 líneas que CUADRAN (anotación distinta cada una) con ~120 escrituras, no 60 000', async () => {
+    // El caso caro de verdad: cada línea con su gasto → su vínculo propio. (El test de arriba no siembra gastos: todo
+    // sale «sin contraparte», el único caso en que el agrupado por «misma anotación» ya ahorraba escrituras.)
+    const n = MAX_LINEAS_DESGLOSE;
+    const lineas = []; const gastos = [];
+    for (let i = 0; i < n; i++) {
+      const fecha = new Date(Date.UTC(2026, 2, 1) + (i % 60) * 86_400_000).toISOString().slice(0, 10);
+      lineas.push({ id: `l${i}`, tenant_id: T, desglose_id: 'd1', indice: i, fecha, monto: 50 + i * 0.01, caseta: `C${i % 9}`, tag: null, cruce_en: null });
+      gastos.push({ id: `g${i}`, tenant_id: T, concepto: 'caseta', viaje_id: `v${i}`, monto: 50 + i * 0.01, fecha });
+    }
+    db = crearDbFalsa({ desglose_peaje: [{ id: 'd1', tenant_id: T, proveedor: 'p' }], desglose_peaje_linea: lineas, gasto: gastos });
+    const t = performance.now();
+    const r = await desglose.conciliarDesglose(T, 'd1', 'manual');
+    const ms = performance.now() - t;
+    const escrituras = db.llamadas.filter((c) => c.tabla === 'desglose_peaje_linea' && (c.op === 'update' || c.op === 'upsert')).length;
+    console.log(`ESCALA60k conciliar-con-vinculos=${Math.round(ms)}ms escrituras=${escrituras} cuadra=${r.cuadra}`);
+    expect(r.total).toBe(n);
+    expect(r.noEscritas).toBe(0);
+    expect(r.cuadra).toBeGreaterThan(n * 0.9);
+    // Una ida a la base por lote de LOTE_ESCRITURA_LINEAS (antes: una por línea que cuadra, ≈ 60 000).
+    expect(escrituras).toBe(Math.ceil(n / LOTE_ESCRITURA_LINEAS));
+    expect(ms).toBeLessThan(PRESUPUESTO.conciliar);
   }, 300_000);
 
   it('60 001 se rechaza con un mensaje llano que dice cuántas trae, cuál es el tope y qué hacer; no guarda nada', async () => {

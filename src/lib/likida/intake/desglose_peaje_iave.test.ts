@@ -246,7 +246,7 @@ describe('importarDesglose: tope, periodo oficial y calidad guardada', () => {
   });
 });
 
-describe('conciliarDesglose a escala: anota por grupos, no una consulta por línea', () => {
+describe('conciliarDesglose a escala: anota por lotes, no una consulta por línea', () => {
   it('un desglose de 12 000 líneas se anota con pocas consultas y cuadra la cuenta', async () => {
     const { buffer } = generarLibroIave({ filas: 12_000, extemporaneos: 0, hojaSecundaria: false });
     const imp = await importarDesglose(T, { nombre: '01 A 10 DE MARZO.xlsx', buffer });
@@ -256,12 +256,12 @@ describe('conciliarDesglose a escala: anota por grupos, no una consulta por lín
     expect(r.total).toBe(12_000);
     expect(r.noEscritas).toBe(0);
     expect(r.cuadra + r.noCuadra + r.sinContraparte).toBe(12_000);
-    const updates = db.llamadas.slice(antes).filter((l) => l.tabla === 'desglose_peaje_linea' && l.op === 'update');
-    // sin gastos ni catálogo, TODAS reciben la misma anotación: ≈ 12 000/100 = 120 tandas, no 12 000
+    const updates = db.llamadas.slice(antes).filter((l) => l.tabla === 'desglose_peaje_linea' && l.op === 'upsert');
+    // escritura por lotes de 500 (REN-34-1): 12 000/500 = 24 upserts, no 12 000
     expect(updates.length).toBeLessThan(400);
     expect(updates.length).toBeGreaterThan(0);
-    // toda escritura lleva el filtro de la flota
-    expect(updates.every((u) => u.filtros.some(([c, o, v]) => c === 'tenant_id' && o === 'eq' && v === T))).toBe(true);
+    // toda fila escrita lleva el tenant_id de la flota
+    expect(updates.every((u) => (u.payload as Array<{ tenant_id?: unknown }>).every((f) => f.tenant_id === T))).toBe(true);
     // y quedaron escritas de verdad
     expect(db.tablas.desglose_peaje_linea.every((l) => l.estatus === 'sin_contraparte')).toBe(true);
   }, 120_000);
@@ -270,7 +270,7 @@ describe('conciliarDesglose a escala: anota por grupos, no una consulta por lín
     const { buffer } = generarLibroIave({ filas: 500, extemporaneos: 0, hojaSecundaria: false });
     const imp = await importarDesglose(T, { nombre: '01 A 10 DE MARZO.xlsx', buffer });
     if (!imp.ok) throw new Error(imp.motivo);
-    db.fallar('desglose_peaje_linea.update', 'base caída');
+    db.fallar('desglose_peaje_linea.upsert', 'base caída');
     const r = await conciliarDesglose(T, imp.desgloseId);
     expect(r.noEscritas).toBe(500);
     expect(r.cuadra + r.noCuadra + r.sinContraparte).toBe(0);
