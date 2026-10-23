@@ -64,72 +64,112 @@ interface CandidatoSdr {
   numeroSeguimiento: 1 | 2;
 }
 
+/** A37-S28-02: tamaño de la página del cursor y tope de filas que UNA búsqueda puede escanear. Un tope
+ *  explícito, no un `while(true)`: la cola de `contactado` puede ser larga. */
+const PAGINA_SEGUIMIENTO = 50;
+const TOPE_FILAS_ESCANEADAS_SDR = 2_000;
+/** PostgREST corta en silencio en ~1,000 filas: una lectura que llega al tope pudo quedar TRUNCADA, y una
+ *  cadencia decidida sobre un historial truncado manda correos de más (se perdería una `respuesta`). */
+const TOPE_FILAS_HISTORIAL = 1_000;
+
 /** Elige los prospectos que TOCAN hoy: contactados, sin respuesta, sin
  *  rebote/queja, con la primera salida hace ≥3 (o ≥7) días y 1 (o 2) salidas
  *  en el historial. Exportada para su prueba. LANZA ante lecturas caídas —
- *  una cadencia decidida a ciegas manda correos de más. */
+ *  una cadencia decidida a ciegas manda correos de más.
+ *
+ *  A37-S28-02: pagina por cursor `(updated_at, id)` y evalúa cada página con
+ *  TRES lecturas en lote (no dos por prospecto). Antes tomaba solo las
+ *  `limite*5` filas más viejas: tras ~25 prospectos que terminaron la cadencia,
+ *  respondieron o rebotaron y siguen `contactado` (solo el vendedor cambia ese
+ *  estado), la ventana se llenaba de descartes y ningún prospecto más nuevo
+ *  recibía seguimiento jamás. */
 export async function candidatosDeSeguimiento(limite: number, venceEn?: number): Promise<CandidatoSdr[]> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('prospecto')
-    .select('id, empresa, contacto_nombre')
-    .is('duplicado_de', null)
-    .eq('estado', 'contactado')
-    .order('updated_at', { ascending: true })
-    .limit(limite * 5), 'sdr.candidatos');
-  if (error) throw new Error(`candidatosDeSeguimiento: ${error.message}`);
-  const filas = (data ?? []) as Array<{ id: string; empresa: string; contacto_nombre: string | null }>;
-
   const elegidos: CandidatoSdr[] = [];
-  for (const f of filas) {
-    if (elegidos.length >= limite) break;
+  let cursor: { updatedAt: string; id: string } | null = null;
+  let escaneadas = 0;
+  while (elegidos.length < limite && escaneadas < TOPE_FILAS_ESCANEADAS_SDR) {
     // ── EL RELOJ, TAMBIÉN EN LA BÚSQUEDA (c7-1) ──────────────────────────────
-    // El `for` de `correrSdr` ya preguntaba la hora al FABRICAR, pero la
-    // BÚSQUEDA que lo alimenta no la preguntaba nunca — y cuesta: la
-    // sobre-lectura es ×5 (25 filas para 5 candidatos) y cada fila son DOS idas
-    // a la base (el historial de contactos y la revisión de rebote/queja). Con
-    // la cola llena de prospectos que ya contestaron o ya rebotaron, esas 50
-    // consultas se gastan enteras ANTES de que el reloj del lote llegue
-    // siquiera a preguntar por primera vez. Es el mismo hueco que la #158 cerró
-    // en `candidatoFicha` de `leads.ts`, y aquí seguía abierto.
-    //
-    // Cortar aquí es seguro y no necesita `sinTurno` propio: esta función SOLO
-    // LEE —no encola, no sella, no escribe—, y devolver menos candidatos es el
-    // caso normal que el llamador ya maneja. Quien cuenta el corte para el
-    // latido es `correrSdr`, que es quien sabe cuánto trabajo quedó.
+    // La búsqueda cuesta consultas; con la cola llena de descartes se gastaban
+    // ANTES de que el reloj del lote preguntara siquiera. Cortar aquí es seguro
+    // y no necesita `sinTurno` propio: esta función SOLO LEE, y devolver menos
+    // candidatos es el caso normal que el llamador ya maneja (`correrSdr` cuenta
+    // el corte para el latido).
     if (venceEn !== undefined && Date.now() >= venceEn) {
       logger.warn('sdr.busqueda.corte_por_reloj', { encontrados: elegidos.length });
       break;
     }
-    const { data: hist, error: errHist } = await supabaseAdmin()
+    let q = supabaseAdmin()
+      .from('prospecto')
+      .select('id, empresa, contacto_nombre, updated_at')
+      .is('duplicado_de', null)
+      .eq('estado', 'contactado')
+      .order('updated_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(PAGINA_SEGUIMIENTO);
+    // Keyset (regla del repo, `pg.ts`): estrictamente DESPUÉS del último visto.
+    if (cursor) q = q.or(`updated_at.gt.${cursor.updatedAt},and(updated_at.eq.${cursor.updatedAt},id.gt.${cursor.id})`);
+    const { data, error } = await acotada(q, 'sdr.candidatos');
+    if (error) throw new Error(`candidatosDeSeguimiento: ${error.message}`);
+    const pagina = (data ?? []) as Array<{ id: string; empresa: string; contacto_nombre: string | null; updated_at: string }>;
+    if (pagina.length === 0) break; // el cursor alcanzó el final
+    escaneadas += pagina.length;
+    const ids = pagina.map((f) => f.id);
+
+    const { data: hist, error: errHist } = await acotada(supabaseAdmin()
       .from('prospecto_contacto')
-      .select('direccion, ocurrio_en')
-      .eq('prospecto_id', f.id)
+      .select('prospecto_id, direccion, ocurrio_en')
+      .in('prospecto_id', ids)
+      .in('direccion', ['respuesta', 'salida'])
       .order('ocurrio_en', { ascending: true })
-      .limit(50);
+      .order('id', { ascending: true })
+      .limit(TOPE_FILAS_HISTORIAL), 'sdr.historial');
     if (errHist) throw new Error(`candidatosDeSeguimiento.historial: ${errHist.message}`);
-    const h = (hist ?? []) as Array<{ direccion: string; ocurrio_en: string }>;
-    if (h.some((x) => x.direccion === 'respuesta')) continue;      // contestó: humano al volante
-    const salidas = h.filter((x) => x.direccion === 'salida');
-    if (salidas.length === 0 || salidas.length > CADENCIA_SDR_DIAS.length) continue;
+    const filasHist = (hist ?? []) as Array<{ prospecto_id: string; direccion: string; ocurrio_en: string }>;
+    if (filasHist.length >= TOPE_FILAS_HISTORIAL) {
+      throw new Error('candidatosDeSeguimiento.historial: la lectura llegó al tope y pudo truncarse — no se decide la cadencia a ciegas');
+    }
 
     // Rebote/queja de CUALQUIER pieza del prospecto lo saca de la cadencia.
-    const { data: malas, error: errMalas } = await supabaseAdmin()
+    const { data: malas, error: errMalas } = await acotada(supabaseAdmin()
       .from('cola_aprobacion')
-      .select('id')
-      .eq('prospecto_id', f.id)
+      .select('prospecto_id')
+      .in('prospecto_id', ids)
       .in('entrega_estado', ['rebotado', 'queja'])
-      .limit(1);
+      .order('id', { ascending: true })
+      .limit(TOPE_FILAS_HISTORIAL), 'sdr.entrega');
     if (errMalas) throw new Error(`candidatosDeSeguimiento.entrega: ${errMalas.message}`);
-    if ((malas ?? []).length > 0) continue;
+    const filasMalas = (malas ?? []) as Array<{ prospecto_id: string }>;
+    if (filasMalas.length >= TOPE_FILAS_HISTORIAL) {
+      throw new Error('candidatosDeSeguimiento.entrega: la lectura llegó al tope y pudo truncarse — no se decide la cadencia a ciegas');
+    }
+    const conRebote = new Set(filasMalas.map((m) => m.prospecto_id));
+    const contestaron = new Set(filasHist.filter((x) => x.direccion === 'respuesta').map((x) => x.prospecto_id));
+    const salidasDe = new Map<string, string[]>();
+    for (const x of filasHist) {
+      if (x.direccion !== 'salida') continue;
+      const l = salidasDe.get(x.prospecto_id);
+      if (l) l.push(x.ocurrio_en); else salidasDe.set(x.prospecto_id, [x.ocurrio_en]);
+    }
 
-    const primeraSalida = new Date(salidas[0].ocurrio_en).getTime();
-    const diasDesde = (Date.now() - primeraSalida) / 86_400_000;
-    const objetivoDias = CADENCIA_SDR_DIAS[salidas.length - 1];
-    if (diasDesde < objetivoDias) continue;
-    elegidos.push({
-      id: f.id, empresa: f.empresa, contacto_nombre: f.contacto_nombre,
-      numeroSeguimiento: salidas.length as 1 | 2,
-    });
+    for (const f of pagina) {
+      if (elegidos.length >= limite) break;
+      if (contestaron.has(f.id)) continue;      // contestó: humano al volante
+      if (conRebote.has(f.id)) continue;
+      const salidas = salidasDe.get(f.id) ?? [];
+      if (salidas.length === 0 || salidas.length > CADENCIA_SDR_DIAS.length) continue;
+      const primeraSalida = new Date(salidas[0]).getTime();
+      const diasDesde = (Date.now() - primeraSalida) / 86_400_000;
+      const objetivoDias = CADENCIA_SDR_DIAS[salidas.length - 1];
+      if (diasDesde < objetivoDias) continue;
+      elegidos.push({
+        id: f.id, empresa: f.empresa, contacto_nombre: f.contacto_nombre,
+        numeroSeguimiento: salidas.length as 1 | 2,
+      });
+    }
+
+    const ultima = pagina[pagina.length - 1];
+    cursor = { updatedAt: ultima.updated_at, id: ultima.id };
+    if (pagina.length < PAGINA_SEGUIMIENTO) break; // página parcial: no hay más filas
   }
   return elegidos;
 }
