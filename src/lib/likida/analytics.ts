@@ -487,6 +487,9 @@ function ultimasSemanas(semanas: number, hoy: string): Array<{ anio: number; sem
 export interface GastoSemanalPorCategoria {
   categorias: string[];
   series: Array<{ nombre: string; valores: number[] }>;
+  /** A37-S23-01: gasto TOTAL de cada corte (TODOS los conceptos, no solo el top-3 de `series`). Es la base de
+   *  cualquier proyección: sumar `series` subestima en cuanto la flota tiene más de 3 conceptos. */
+  totalPorCorte?: number[];
 }
 
 /**
@@ -529,8 +532,12 @@ export async function getGastoPorSemana(
 
   const top3 = [...totalPorConcepto.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c]) => c);
 
+  const totalPorSemana = new Map<string, number>();
+  for (const f of filas) totalPorSemana.set(f.semana, (totalPorSemana.get(f.semana) ?? 0) + f.total);
+
   return {
     categorias: bloques.map((b) => b.etiqueta),
+    totalPorCorte: bloques.map((b) => round2(totalPorSemana.get(b.etiqueta) ?? 0)),
     series: top3.map((concepto) => ({
       nombre: concepto,
       valores: bloques.map((b) => round2(porSemanaConcepto.get(`${b.etiqueta}|${concepto}`) ?? 0)),
