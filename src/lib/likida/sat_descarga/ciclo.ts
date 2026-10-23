@@ -28,6 +28,7 @@ import type { Gasto } from '@/types/likida';
 import { parseCfdiXml } from '../intake/cfdi_xml';
 import { guardarYConciliarConsolidado } from '../intake/consolidado';
 import { saveCfdiXmlRaw } from '../repo';
+import { ligarGastoAutomatico } from './liga_campos';
 import { resolverDescargaSat, estadoDescargaSat } from './index';
 import { decidirCruce } from './cruce';
 import type { ProveedorDescargaSat, TipoDescarga } from './tipos';
@@ -219,25 +220,18 @@ export async function gastosSinCfdi(
 }
 
 /**
- * Liga un CFDI a un gasto. La guardia optimista `.is('cfdi_uuid', null)` es lo
- * que hace segura la carrera contra el camino de WhatsApp: si entre la lectura
- * y la escritura alguien ya le pegó su XML al mismo ticket, este update no
- * afecta ninguna fila y se devuelve `false` — no se pisa un comprobante que ya
- * estaba. Mismo patrón que `ligarLineaAGasto` (0076).
+ * Liga un CFDI a un gasto Y copia los campos fiscales de su XML (auditoría 35,
+ * R04-fiscal-01: antes solo se marcaba `xml_verificado` y el gasto se quedaba
+ * sin sub_total, IVA ni RFC receptor). La guardia optimista `cfdi_uuid is null`
+ * es lo que hace segura la carrera contra el camino de WhatsApp: si entre la
+ * lectura y la escritura alguien ya le pegó su XML al mismo ticket, no se toca
+ * ninguna fila y se devuelve `false` — no se pisa un comprobante que ya estaba.
+ * Toda la lógica vive en `liga_campos.ts` (con respaldo si la migración 0858
+ * aún no está aplicada).
  */
-async function ligar(tenantId: string, gastoId: string, cfdiUuid: string): Promise<boolean> {
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('gasto')
-    .update({ cfdi_uuid: cfdiUuid, cfdi_orden: 1, xml_verificado: true })
-    .eq('tenant_id', tenantId)
-    .eq('id', gastoId)
-    .is('cfdi_uuid', null)
-    .select('id'), 'sat_descarga.ligar');
-  if (error) {
-    logger.warn('sat.ligar_fallo', { tenantId, err: error.message });
-    return false;
-  }
-  return (data ?? []).length === 1;
+async function ligar(tenantId: string, gastoId: string, cfdiUuid: string, xml: string): Promise<boolean> {
+  const r = await ligarGastoAutomatico(tenantId, gastoId, cfdiUuid, xml);
+  return r.ligado;
 }
 
 /**
@@ -394,7 +388,7 @@ async function ingerir(
     if (yaDescargado) continue;
 
     if (decision.destino === 'casado') {
-      const ok = await ligar(cfg.tenantId, decision.gastoId, uuid);
+      const ok = await ligar(cfg.tenantId, decision.gastoId, uuid, xml);
       if (ok) {
         fondo.delete(decision.gastoId);
         await saveCfdiXmlRaw(cfg.tenantId, uuid, decision.gastoId, xml);
@@ -412,6 +406,9 @@ async function ingerir(
     }
 
     if (decision.destino === 'ambiguo') {
+      // El XML crudo se conserva también aquí: si el contralor resuelve a mano,
+      // `ligarComprobante` lo lee para copiar los campos fiscales (R04-fiscal-01).
+      await saveCfdiXmlRaw(cfg.tenantId, uuid, null, xml);
       await marcar(cfg.tenantId, uuid, 'ambiguo', null, { candidatos: decision.candidatos });
       r.ambiguos++;
       continue;

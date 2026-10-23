@@ -51,6 +51,7 @@ import { logger } from '@/lib/logger';
 import { correoDelUsuario } from '@/lib/likida/jornada/firma';
 import { DatoInvalido } from '../errores';
 import { candidatosAnotados, type EstatusCfdi } from './bandeja';
+import { camposFiscalesDeXml, esFuncionAusente } from './liga_campos';
 
 /** Quién firma. El correo NO se recibe del navegador: se resuelve del uuid de
  *  la sesión (`correoDelUsuario`), porque una firma que el cliente puede
@@ -91,6 +92,24 @@ const SQLSTATE_CFDI_NO_COINCIDE = 'CU014';
 /** `sat_cfdi_ligar_tx` (0262): el gasto ya no está disponible para el cruce
  *  — perdió la carrera contra otro cruce que le pegó folio primero. */
 const SQLSTATE_GASTO_NO_DISPONIBLE = 'CU015';
+
+/** Por qué una liga no copió los campos fiscales, en palabras del contralor. */
+function explicarSinCampos(motivo: string | null): string {
+  switch (motivo) {
+    case 'sin_xml': return 'el XML de este comprobante no está guardado';
+    case 'xml_ilegible': return 'el XML guardado no se pudo leer';
+    case 'sin_folio': return 'el XML no trae folio fiscal';
+    case 'folio_distinto': return 'el folio del XML no es el del comprobante';
+    case 'nota_de_credito': return 'es una nota de crédito';
+    case 'consolidado': return 'es un comprobante consolidado';
+    case 'total_ilegible': return 'el XML no trae un total legible';
+    case 'sin_subtotal': return 'el XML no trae el subtotal';
+    case 'total_no_coincide': return 'el total del XML no coincide con el monto del gasto';
+    case 'emisor_distinto': return 'el RFC del emisor del XML no es el del ticket';
+    case 'funcion_ausente': return 'la base aún no tiene la función de copia (migración 0858)';
+    default: return 'motivo no determinado';
+  }
+}
 
 function codigoDe(error: unknown): string | undefined {
   return error !== null && typeof error === 'object' && 'code' in error
@@ -269,7 +288,24 @@ export async function ligarComprobante(
   // `sat_cfdi_ligar_tx` (0262) hace las dos escrituras Y el expediente en UNA
   // función de Postgres: si algo falla a medio camino, la base entera
   // revierte — no queda «a medias» que reparar a mano.
-  const { error: errLigar } = await acotada(supabaseAdmin().rpc('sat_cfdi_ligar_tx', {
+  // ── R04-fiscal-01 (auditoría 35): copiar también los campos del XML ──────
+  // El XML crudo lo guardó la descarga (`cfdi_xml`, CFF 30). Si está y pasa
+  // las guardas, la liga usa `sat_cfdi_ligar_campos_tx` (0858), que copia
+  // sub_total, IVA, RFC receptor… en la MISMA transacción. Si no hay XML, no
+  // pasa las guardas, o la migración 0858 aún no está aplicada, se usa la liga
+  // de siempre (`sat_cfdi_ligar_tx`, 0263): el gasto queda ligado pero con los
+  // campos fiscales en NULL, y se le dice al contralor.
+  const { data: xmlFila } = await acotada(supabaseAdmin()
+    .from('cfdi_xml')
+    .select('xml')
+    .eq('tenant_id', tenantId)
+    .eq('cfdi_uuid', cfdi.cfdiUuid)
+    .maybeSingle(), 'sat_descarga.leer_xml_a_ligar');
+  const xmlCrudo = typeof (xmlFila as { xml?: unknown } | null)?.xml === 'string'
+    ? ((xmlFila as { xml: string }).xml) : null;
+  const { campos, motivo: motivoSinCampos } = camposFiscalesDeXml(xmlCrudo, cfdi.cfdiUuid);
+
+  const argsBase = {
     p_tenant: tenantId,
     p_cfdi: cfdiId,
     p_gasto: gastoId,
@@ -277,7 +313,28 @@ export async function ligarComprobante(
     p_candidatos: candidatosConEleccion,
     p_actor_id: actor.id,
     p_actor_email: email,
-  }), 'sat_descarga.ligar_a_mano_tx');
+  };
+  let errLigar: { code?: string; message: string } | null = null;
+  let camposCopiados = false;
+  let motivoCampos: string | null = motivoSinCampos;
+  let usarLigaVieja = campos === null;
+  if (campos !== null) {
+    const nueva = await acotada(supabaseAdmin().rpc('sat_cfdi_ligar_campos_tx', { ...argsBase, p_campos: campos }), 'sat_descarga.ligar_a_mano_campos_tx');
+    if (nueva.error && esFuncionAusente(nueva.error)) {
+      logger.warn('sat_descarga.ligar_a_mano_sin_migracion_0858', { tenantId });
+      motivoCampos = 'funcion_ausente';
+      usarLigaVieja = true;
+    } else {
+      errLigar = nueva.error;
+      const d = (nueva.data ?? {}) as { campos_copiados?: unknown; motivo_campos?: unknown };
+      camposCopiados = !nueva.error && d.campos_copiados === true;
+      if (!camposCopiados) motivoCampos = typeof d.motivo_campos === 'string' ? d.motivo_campos : motivoCampos;
+    }
+  }
+  if (usarLigaVieja) {
+    const vieja = await acotada(supabaseAdmin().rpc('sat_cfdi_ligar_tx', argsBase), 'sat_descarga.ligar_a_mano_tx');
+    errLigar = vieja.error;
+  }
 
   if (errLigar) {
     // `gasto_no_tras_liquidar` (0036/0037) bloquea tocar el CFDI de un gasto
@@ -313,7 +370,15 @@ export async function ligarComprobante(
     detalle: { cfdiUuid: cfdi.cfdiUuid, gastoId, desde: cfdi.estatus },
   });
 
-  return { ok: true, mensaje: 'Ligado. El gasto quedó facturado con este comprobante y el cruce está firmado con tu correo — si estaba mal, se deshace desde aquí y queda anotado.' };
+  const base = 'Ligado. El gasto quedó facturado con este comprobante y el cruce está firmado con tu correo — si estaba mal, se deshace desde aquí y queda anotado.';
+  if (camposCopiados) {
+    return { ok: true, mensaje: `${base} Se copiaron los importes e impuestos del XML al gasto.` };
+  }
+  logger.warn('sat_descarga.ligado_sin_campos', { tenantId, cfdi: cfdiId, motivo: motivoCampos });
+  return {
+    ok: true,
+    mensaje: `${base} OJO: los importes e impuestos del XML NO se copiaron al gasto (${explicarSinCampos(motivoCampos)}); el IVA acreditable de este gasto no se calculará hasta que se corrija.`,
+  };
 }
 
 // ── IGNORAR ────────────────────────────────────────────────────────────────
