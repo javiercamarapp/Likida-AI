@@ -52,7 +52,7 @@ export interface EntradaInsights {
   cruces: { total: number; evaluados: number };
   categorias: readonly EntradaCategoriaInsight[];
   /** De `resumirAcreditacion` (T-A2-17): lo reclamado, lo acreditado y la diferencia. */
-  acreditacion: { reclamado: number; acreditado: number; diferencia: number };
+  acreditacion: { reclamado: number; acreditado: number; diferencia: number; /** A37-A2-04: saldo de reclamos ABIERTOS; si falta, se usa reclamado - acreditado. */ pendiente?: number };
   /** De `clasificarPlazos` (T-A2-16): lo que vence en los próximos 30 días; `null` = no disponible. */
   porVencer: { cruces: number; monto: number } | null;
   /** Hallazgos atípicos aún en estado «nuevo»; `null` = no disponible. */
@@ -261,7 +261,7 @@ export function insightsDeCobros(entrada: EntradaInsights): ResultadoInsights {
   // Reclamado vs acreditado vs pendiente
   const reclamadoN = dinero(entrada.acreditacion?.reclamado);
   const acreditadoN = dinero(entrada.acreditacion?.acreditado);
-  const pendienteN = r2(Math.max(0, reclamadoN - acreditadoN));
+  const pendienteN = entrada.acreditacion?.pendiente !== undefined ? r2(Math.max(0, dinero(entrada.acreditacion.pendiente))) : r2(Math.max(0, reclamadoN - acreditadoN));
   const sinReclamos = reclamadoN === 0 && acreditadoN === 0;
   const reclamado: Kpi = {
     id: 'reclamado', titulo: 'Reclamado al proveedor', valor: reclamadoN, formato: 'pesos',

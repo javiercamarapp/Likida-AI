@@ -124,6 +124,11 @@ export interface ResumenAcreditacion {
   reclamado: number;
   acreditado: number;
   diferencia: number;
+  /**
+   * A37-A2-04: lo que de verdad falta por acreditar: SOLO reclamos abiertos (enviado / acreditado_parcial), cada uno con su
+   * saldo (nunca compensado con lo acreditado de más en otro). Un preparado o un rechazado no es dinero pendiente.
+   */
+  pendiente: number;
   /** Reclamos enviados con saldo por acreditar que aún no tienen confirmación completa. */
   sinConfirmar: string[];
   /** De esos, los que ya superaron el plazo de 3 meses sin acreditarse por completo. */
@@ -137,18 +142,23 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 export function resumirAcreditacion(reclamos: readonly ReclamoParaResumen[], hoy: string): ResumenAcreditacion {
   let rec = 0;
   let acr = 0;
+  let pend = 0;
   const sinConfirmar: string[] = [];
   const vencidos: string[] = [];
   for (const r of reclamos) {
+    // A37-A2-04: «reclamado» es lo que de verdad se le reclamó al proveedor. Un reclamo solo preparado (nunca enviado) o
+    // rechazado no se suma: antes inflaba «Reclamado» y «Falta acreditar» ante el contralor.
+    if (r.estado === 'preparado' || r.estado === 'rechazado') continue;
     rec += centavos(r.montoReclamado);
     acr += centavos(r.montoAcreditado);
     if (r.estado !== 'enviado' && r.estado !== 'acreditado_parcial') continue;
     if (centavos(r.montoReclamado) - centavos(r.montoAcreditado) <= 0) continue;
+    pend += centavos(r.montoReclamado) - centavos(r.montoAcreditado);
     sinConfirmar.push(r.id);
     if (evaluarReclamo(r, hoy).alerta === 'vencido') vencidos.push(r.id);
   }
   return {
-    reclamado: rec / 100, acreditado: acr / 100, diferencia: r2((rec - acr) / 100),
+    reclamado: rec / 100, acreditado: acr / 100, diferencia: r2((rec - acr) / 100), pendiente: pend / 100,
     sinConfirmar, superaronPlazoSinRespuesta: vencidos,
     alertas: acr > rec ? ['acreditado_mayor_que_reclamado'] : [],
   };
