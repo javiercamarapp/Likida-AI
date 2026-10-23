@@ -117,17 +117,22 @@ export function crearDbFalsa(
       if (this.op === 'insert' || this.op === 'upsert') {
         const nuevos = (Array.isArray(this.payload) ? this.payload : [this.payload]) as Fila[];
         const creados: Fila[] = [];
+        // Índice por llave de conflicto (construido una vez por llamada): el `find` lineal por fila hacía el
+        // upsert de 60 000 líneas O(n²) y medía a la base falsa, no al código.
+        const llavesUp = (this.opcionesUpsert.onConflict ?? 'id').split(',').map((s) => s.trim());
+        const claveDe = (f: Fila) => llavesUp.map((k) => JSON.stringify(f[k])).join('|');
+        const indice = this.op === 'upsert' ? new Map<string, Fila>(tabla.map((t) => [claveDe(t), t] as [string, Fila])) : null;
         for (const n of nuevos) {
           // uuid con forma válida: las rutas /v1 validan el id como uuid, y un `id-3` jamás pasaría esa puerta.
           const fila: Fila = { id: `00000000-0000-4000-8000-${String(++secuencia).padStart(12, '0')}`, ...n };
           if (this.op === 'upsert') {
-            const llaves = (this.opcionesUpsert.onConflict ?? 'id').split(',').map((s) => s.trim());
-            const previa = tabla.find((t) => llaves.every((k) => t[k] === fila[k]));
+            const previa = indice!.get(claveDe(fila));
             // `ignoreDuplicates` (ON CONFLICT DO NOTHING): la fila previa NO se toca y no se devuelve.
             if (previa && this.opcionesUpsert.ignoreDuplicates) continue;
             if (previa) { Object.assign(previa, n); creados.push(previa); continue; }
           }
           tabla.push(fila);
+          indice?.set(claveDe(fila), fila);
           creados.push(fila);
         }
         return this.devolver(creados);
