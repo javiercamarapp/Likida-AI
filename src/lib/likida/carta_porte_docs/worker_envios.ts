@@ -311,7 +311,7 @@ async function subir(ctx: Contexto, e: EntradaSubida): Promise<void> {
   // Armado: puro y determinista (mismo documento ⇒ mismos bytes ⇒ mismo sha256).
   const plantilla = construirPlantilla(doc.extraccion, { clienteInterno: null, plantilla: envio.plantilla });
   // Un faltante BLOQUEANTE (orígenes 2..N o destinos > 4 que la plantilla no lleva) hace que el libro salga incompleto: el TMS lo
-  // aceptaría por válido y se timbraría un CCP recortado. No se sube: el envío se descarta y el documento vuelve a revisión (INN-A3-04).
+  // aceptaría por válido y se timbraría un CCP recortado. No se sube: el envío se descarta y el documento vuelve a revisión (A35-A3-04).
   const bloqueantes = faltantesBloqueantes(plantilla);
   if (bloqueantes.length > 0) {
     if (!(await deps.actualizarEnvio(tenantId, envio.id, [e.estado], { estado: 'descartado', proximaRevision: null, soltarLease: true }))) { r.conflictos++; return; }

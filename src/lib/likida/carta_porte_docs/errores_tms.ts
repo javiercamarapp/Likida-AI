@@ -169,7 +169,7 @@ export function hallazgoGenerico(mensajeLlano: string | undefined): Hallazgo {
   };
 }
 
-/** Código del hallazgo cuando la plantilla armada quedaría incompleta (INN-A3-04); se arrastra como los del TMS hasta que una persona corrija. */
+/** Código del hallazgo cuando la plantilla armada quedaría incompleta (A35-A3-04); se arrastra como los del TMS hasta que una persona corrija. */
 export const CODIGO_PLANTILLA_INCOMPLETA = 'plantilla_incompleta';
 
 /** El libro que se iba a subir perdería datos (p. ej. orígenes 2..N o destinos > 4): no se manda y se dice por qué en llano. */

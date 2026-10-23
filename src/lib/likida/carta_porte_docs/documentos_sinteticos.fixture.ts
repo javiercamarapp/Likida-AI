@@ -35,7 +35,7 @@ export interface EmbarqueFixture {
   destinoNombre: string; destinoRfc: string; destinoCp: string; destinoEstado: string;
   producto: string; claveSat: string; cantidad: string; unidad: string; pesoKg: string;
   operador: string; placas: string;
-  /** Lo que el documento DICE de material peligroso («No» por omisión: la ausencia del dato pide confirmar, INN-A3-01). */
+  /** Lo que el documento DICE de material peligroso («No» por omisión: la ausencia del dato pide confirmar, A35-A3-01). */
   peligroso?: string;
 }
 
@@ -217,7 +217,7 @@ export function extraccionAtlasOk(origen: Origen = 'llm', confianza = 0.95): Ext
     mercancias: [{
       descripcion: c('Botellas de vidrio vacías'), bienes_transp: c('24131500'), cantidad: c('1200'), clave_unidad: c('XBX'),
       unidad_texto: c('Cajas'), peso_kg: c('8400'),
-      // El documento «limpio» DECLARA que no es peligroso: la ausencia del dato pide confirmar (INN-A3-01).
+      // El documento «limpio» DECLARA que no es peligroso: la ausencia del dato pide confirmar (A35-A3-01).
       material_peligroso: c('false'),
     }],
   };

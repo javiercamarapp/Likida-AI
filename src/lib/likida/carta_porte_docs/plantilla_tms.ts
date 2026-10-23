@@ -241,7 +241,7 @@ export function construirPlantilla(extOriginal: Extraccion, ctx: ContextoPlantil
     sal.avisos.push('La plantilla «nueva» (varias razones sociales) aún no está verificada contra la del TMS: úsala solo para revisar o descargar, no para enviar.');
   }
   // Una plantilla sin tabla de orígenes (la «normal» trae UNO solo, en las celdas C11..C26) no puede llevar el origen 2..N: nunca se
-  // pierde en silencio (INN-A3-04); se bloquea y se dice. Los destinos > máximo ya los bloquea `construirTabla`.
+  // pierde en silencio (A35-A3-04); se bloquea y se dice. Los destinos > máximo ya los bloquea `construirTabla`.
   const tablaOrigenes = layout.hojas.some((h) => h.tablas.some((tb) => tb.id === 'origenes'));
   const totalOrigenes = contarOrigenes(ext);
   if (!tablaOrigenes && totalOrigenes > 1) {

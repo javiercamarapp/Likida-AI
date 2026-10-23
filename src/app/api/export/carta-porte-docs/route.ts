@@ -116,7 +116,7 @@ async function plantillaTms(tenantId: string, rol: string, documentoId: string):
     const config = await leerConfigSalida(tenantId);
     const plantilla = construirPlantilla(doc.extraccion, { clienteInterno: null, plantilla: config.plantillaPorDefecto });
     // Un faltante BLOQUEANTE (orígenes 2..N o destinos > 4 que la plantilla no lleva) significa que el libro saldría incompleto: no se
-    // entrega ni se sella «exportado», para que nadie suba un CCP recortado creyéndolo válido (INN-A3-04).
+    // entrega ni se sella «exportado», para que nadie suba un CCP recortado creyéndolo válido (A35-A3-04).
     const bloqueantes = faltantesBloqueantes(plantilla);
     if (bloqueantes.length > 0) {
       logger.warn('export.cp_docs_bloqueado', { rol, documentoId: doc.id, bloqueantes: bloqueantes.length });

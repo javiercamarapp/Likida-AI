@@ -118,7 +118,7 @@ describe('el archivo', () => {
       expect(estado.eventos.filter((e) => e.tipo === 'exportado' && e.documentoId === U1)).toHaveLength(1);
     });
 
-    it('con un faltante BLOQUEANTE (2 orígenes en la plantilla normal): 409 con el motivo, no sella exportado y no entrega el archivo (INN-A3-04)', async () => {
+    it('con un faltante BLOQUEANTE (2 orígenes en la plantilla normal): 409 con el motivo, no sella exportado y no entrega el archivo (A35-A3-04)', async () => {
       const e = extraccionAtlasOk();
       e.campos.origen_2_nombre = { valor: 'Segundo Origen Sintetico SA', confianza: 0.95, evidencia: null, origen: 'llm' };
       estado.docs.get(U1)!.extraccion = e;

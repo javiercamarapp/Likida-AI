@@ -410,7 +410,7 @@ describe('el rechazo vuelve a la bandeja (T-A3-29)', () => {
     expect(eventos.some((x) => x.tipo === 'envio_error' && x.detalle.causa === 'mismo_contenido_rechazado')).toBe(true);
   });
 
-  it('un faltante BLOQUEANTE de la plantilla (2 orígenes en la normal) NO se sube: se descarta y vuelve a revisión con el motivo (INN-A3-04)', async () => {
+  it('un faltante BLOQUEANTE de la plantilla (2 orígenes en la normal) NO se sube: se descarta y vuelve a revisión con el motivo (A35-A3-04)', async () => {
     const llamadas = vi.fn(async () => ({ ok: true as const, referencia: 'REF-1' }));
     puertos.set(A, { cargarPlantilla: llamadas as unknown as SalidaTms['cargarPlantilla'], consultarReque: async () => 'existe', consultarCaja: async () => 'existe' });
     const envio = sembrar(A, 1);

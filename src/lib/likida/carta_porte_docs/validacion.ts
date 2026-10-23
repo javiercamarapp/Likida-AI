@@ -881,7 +881,7 @@ export function validarExtraccion(e: Extraccion, op: OpcionesValidacion = {}): R
         reg({ campo: 'peso_kg', renglon: i, severidad: 'confirmar', codigo: 'cantidad_peso', mensaje: `${etiquetaCampo('peso_kg', i)}: la cantidad (${q} ${u}) equivale a ${Math.round(esperado * 1000) / 1000} kg y el peso dice ${p} kg.`, relacionados: [{ campo: 'cantidad', renglon: i }, { campo: 'clave_unidad', renglon: i }] });
       }
     }
-    // INN-A3-01: «sin dato» NO es «no peligroso». Si el documento (o el catálogo del cliente) no declara nada, una persona
+    // A35-A3-01: «sin dato» NO es «no peligroso». Si el documento (o el catálogo del cliente) no declara nada, una persona
     // debe indicar Sí/No; al hacerlo el campo queda de origen humano y este «confirmar» se levanta solo. Es una declaración regulatoria.
     if (esVacio(fila.material_peligroso)) {
       reg({ campo: 'material_peligroso', renglon: i, severidad: 'confirmar', codigo: 'peligroso_sin_dato', mensaje: `${etiquetaCampo('material_peligroso', i)}: el documento no dice si es material peligroso. Indica Sí o No.` });

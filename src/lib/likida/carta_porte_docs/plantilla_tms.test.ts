@@ -83,7 +83,7 @@ describe('construirPlantilla', () => {
     expect(hoja(r, 'RemintenteDestinatario').C12.valor).toBeNull();
   });
 
-  it('peligroso SIN DATO → celda vacía y faltante (nunca «NO» por omisión, INN-A3-01); «no» declarado → NO y clave N/A', () => {
+  it('peligroso SIN DATO → celda vacía y faltante (nunca «NO» por omisión, A35-A3-01); «no» declarado → NO y clave N/A', () => {
     const r = construirPlantilla(extraccion({}, { material_peligroso: null }), ctx);
     expect(hoja(r, 'Mercancias').L22.valor).toBeNull();
     expect(r.faltantes).toContainEqual({ campo: 'mercancia.material_peligroso', celda: 'L22' });
@@ -97,7 +97,7 @@ describe('construirPlantilla', () => {
     expect(hoja(q, 'Mercancias').M22.valor).toBe('1203');
   });
 
-  it('varios orígenes en la plantilla «normal» (sin tabla de orígenes): bloquea y avisa, nunca pierde el origen 2 en silencio (INN-A3-04)', () => {
+  it('varios orígenes en la plantilla «normal» (sin tabla de orígenes): bloquea y avisa, nunca pierde el origen 2 en silencio (A35-A3-04)', () => {
     const r = construirPlantilla(extraccion({ origen_2_nombre: 'Segundo Origen Sintetico SA', origen_2_rfc: 'BBB010101BBB' }), ctx);
     const b = faltantesBloqueantes(r);
     expect(b).toHaveLength(1);

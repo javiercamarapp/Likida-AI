@@ -19,7 +19,7 @@ describe('un documento limpio', () => {
   });
 });
 
-describe('material peligroso: la ausencia de dato NO es «no peligroso» (INN-A3-01)', () => {
+describe('material peligroso: la ausencia de dato NO es «no peligroso» (A35-A3-01)', () => {
   it('si el documento no dice nada, pide confirmar y no deja aprobar', () => {
     const e = extraccionAtlasOk(); delete e.mercancias[0].material_peligroso;
     expect(codigos(e)).toContain('confirmar:peligroso_sin_dato:material_peligroso#0');
