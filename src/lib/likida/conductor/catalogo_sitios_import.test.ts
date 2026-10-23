@@ -276,3 +276,39 @@ describe('normalizarNombre', () => {
     expect(normalizarNombre('  Planta   Querétaro, #1 ')).toBe('planta queretaro 1');
   });
 });
+
+
+describe('A37-S34-01: nombres repetidos con ids distintos no rompen la importación ni la reimportación', () => {
+  const dosPlantas = () => [
+    fila(2, { nombre: 'Planta Norte', codigo: 'P-1', lat: 25.0, lng: -100.0 }),
+    fila(3, { nombre: 'Planta Norte', codigo: 'P-2', lat: 25.5, lng: -100.5 }),
+    fila(4, { nombre: 'Planta Sur', codigo: 'P-3', lat: 26.0, lng: -101.0 }),
+  ];
+
+  it('las filas de nombre repetido reciben su código al nombre (único por flota); el resto queda igual; ninguna se pierde', () => {
+    const a = analizarCatalogo(dosPlantas());
+    expect(a.listas.map((l) => l.nombre)).toEqual(['Planta Norte (P-1)', 'Planta Norte (P-2)', 'Planta Sur']);
+    expect(new Set(a.listas.map((l) => l.nombre)).size).toBe(a.listas.length);
+    expect(a.resumen.nombresDesambiguados).toBe(2);
+  });
+
+  it('es determinista: reimportar el mismo archivo da los mismos nombres y códigos (idempotente)', () => {
+    expect(analizarCatalogo(dosPlantas()).listas).toEqual(analizarCatalogo(dosPlantas()).listas);
+  });
+
+  it('también sin código explícito (código derivado) y repartidas en lotes distintos: ningún nombre se repite entre lotes', () => {
+    const filas = Array.from({ length: 4001 }, (_, i) => fila(i + 2, { nombre: i === 0 || i === 4000 ? 'Planta Norte' : `Sitio ${i}`, lat: 20 + (i % 500) * 0.01, lng: -100 - Math.floor(i / 500) * 0.01 }));
+    const a = analizarCatalogo(filas);
+    const lotes = enLotes(a.listas);
+    expect(lotes.length).toBeGreaterThan(1);
+    const nombres = lotes.flat().map((l) => l.nombre);
+    expect(new Set(nombres).size).toBe(nombres.length);
+    expect(a.listas.find((l) => l.linea === 2)!.nombre).toMatch(/^Planta Norte \(CAT-/);
+  });
+
+  it('un archivo sin nombres repetidos no cambia nada', () => {
+    const a = analizarCatalogo([fila(2, { nombre: 'A' }), fila(3, { nombre: 'B', lat: 26, lng: -101 })]);
+    expect(a.listas.map((l) => l.nombre)).toEqual(['A', 'B']);
+    expect(a.resumen.nombresDesambiguados).toBe(0);
+  });
+});
