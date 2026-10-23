@@ -116,6 +116,16 @@ export function freshBackup(payload, now = Date.now()) {
   return { id: candidates[0].id, inserted_at: new Date(candidates[0].at).toISOString(), age_hours: (now - candidates[0].at) / 3_600_000 };
 }
 
+/** A36-R07-08: la compuerta sigue aceptando hasta 24 h (los backups diarios de
+ *  Supabase no dan más fino), pero un respaldo de más de 12 h ya no pasa en
+ *  silencio: el aviso queda en el log y en el resumen del job. */
+export const BACKUP_AVISO_HORAS = 12;
+export function avisoBackup(backup) {
+  return backup.age_hours > BACKUP_AVISO_HORAS
+    ? `El backup SQL tiene ${backup.age_hours.toFixed(1)} h (aviso a partir de ${BACKUP_AVISO_HORAS} h): lo escrito desde entonces solo se recupera con PITR. Restore NO verificado.`
+    : null;
+}
+
 export async function run(mode, env = process.env, deps = {}) {
   const ref = env.SUPABASE_PROJECT_REF;
   if (!/^[a-z]{20}$/.test(ref ?? '')) throw new Error('Project ref inválido');
@@ -127,7 +137,11 @@ export async function run(mode, env = process.env, deps = {}) {
     });
     if (!response.ok) throw new Error(`Consulta backup rechazada (HTTP ${response.status})`);
     const backup = freshBackup(await response.json());
-    console.log(JSON.stringify({ backup_sql: backup, restore_verificado: false, incluye_storage: false }));
+    // `incluye_storage: false` es de ESTE backup SQL; los archivos de Storage
+    // los respalda aparte `backup-storage.yml` (nocturno, SHA-256 verificado).
+    console.log(JSON.stringify({ backup_sql: backup, restore_verificado: false, incluye_storage: false, storage_respaldado_por: 'backup-storage.yml' }));
+    const aviso = avisoBackup(backup);
+    if (aviso) console.log(`::warning::${aviso}`);
     return;
   }
   if (mode !== 'preflight' && mode !== 'connection') throw new Error('Modo inválido');

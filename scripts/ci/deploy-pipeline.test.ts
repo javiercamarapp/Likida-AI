@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { validateDatabase, freshBackup, run } from './supabase-preflight.mjs';
+import { validateDatabase, freshBackup, avisoBackup, run } from './supabase-preflight.mjs';
 import { validateDeployment, validateBaseline, validateCron, parseCookie, withProtection, validateBrowserCookie, validateLanding, validatePreviewEnv, validateSupabaseEnv, main, STAGING_REF, PRODUCTION_REF, PROJECT, DOMAINS } from './production-candidate.mjs';
 
 const workflow = readFileSync('.github/workflows/deploy-preview-promote.yml', 'utf8');
@@ -96,6 +96,22 @@ describe('destino y credenciales del preflight SQL', () => {
       expect(() => freshBackup({ backups: [{ ...backup, ...change }] }, now)).toThrow();
     }
     expect(() => freshBackup({ pitr_enabled: true, backups: [] }, now)).toThrow();
+  });
+  it('A36-R07-08: un backup de más de 12 h avisa (sin endurecer la compuerta de 24 h) y la salida nombra el respaldo de Storage', async () => {
+    const now = Date.parse('2026-09-05T12:00:00Z');
+    expect(avisoBackup(freshBackup({ backups: [{ id: 1, status: 'COMPLETED', inserted_at: '2026-09-05T11:00:00Z' }] }, now))).toBeNull();
+    const viejo = freshBackup({ backups: [{ id: 1, status: 'COMPLETED', inserted_at: '2026-09-04T13:00:00Z' }] }, now);
+    expect(viejo.age_hours).toBe(23);
+    expect(avisoBackup(viejo)).toContain('PITR');
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const hace = new Date(Date.now() - 20 * 3_600_000).toISOString();
+    const fetch = vi.fn(async () => ({ ok: true, json: async () => ({ backups: [{ id: 9, status: 'COMPLETED', inserted_at: hace }] }) }));
+    await run('backup', { NODE_ENV: 'test', SUPABASE_PROJECT_REF: ref, SUPABASE_ACCESS_TOKEN: 'synthetic-api-token' }, { fetch });
+    const salida = log.mock.calls.map((c) => String(c[0])).join('\n');
+    log.mockRestore();
+    expect(salida).toContain('"storage_respaldado_por":"backup-storage.yml"');
+    expect(salida).toContain('"restore_verificado":false');
+    expect(salida).toContain('::warning::');
   });
   it('consulta backup con GET, token sólo en header y sin seguir redirects', async () => {
     const fetch = vi.fn(async () => ({ ok: false, status: 403 }));
