@@ -43,7 +43,7 @@ const { guardarYConciliarConsolidado, decidirCruce } = vi.hoisted(() => ({
 }));
 vi.mock('../intake/consolidado', () => ({ guardarYConciliarConsolidado }));
 const { saveCfdiXmlRaw, rpcRespuesta, gastosFondo } = vi.hoisted(() => ({
-  saveCfdiXmlRaw: vi.fn(async (..._a: unknown[]) => {}),
+  saveCfdiXmlRaw: vi.fn(async (..._a: unknown[]) => true),
   rpcRespuesta: { actual: { data: null, error: null } as { data: unknown; error: unknown } },
   gastosFondo: { filas: [] as Array<Record<string, unknown>> },
 }));
@@ -90,7 +90,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   }),
 }));
 
-import { correrFlota, paquetesYaBajados, solicitudAtorada } from './ciclo';
+import { correrFlota, paquetesYaBajados, solicitudAtorada, avanzaCalendario } from './ciclo';
 import type { ProveedorDescargaSat } from './tipos';
 import type { DestinoCfdi } from './cruce';
 
@@ -158,7 +158,9 @@ function base(solicitudes: FilaSolicitud[]) {
       if (op.conteo) {
         return { data: null, error: null, count: cfdis.filter((c) => c.solicitud_id === op.filtros.solicitud_id).length };
       }
-      return { data: null, error: null };
+      // La lectura del estatus de un sello ya puesto (A37-S57-04).
+      const f = cfdis.find((c) => c.cfdi_uuid === op.filtros.cfdi_uuid);
+      return { data: f === undefined ? null : { estatus: f.estatus }, error: null };
     }
     if (op.tabla === 'sat_descarga_config') return { data: null, error: null };
     return { data: null, error: null };
@@ -874,5 +876,130 @@ describe('A36-R03-02 · un fallo transitorio al ligar no se disfraza de «ya ten
     expect(fila.estatus).toBe('disponible');
     expect((fila.candidatos as { motivo: string }).motivo).toMatch(/ya tenía comprobante/);
     expect(r.errores).toEqual([]);
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 37 · descarga SAT: S57-01/S18-01 (CRÍTICO), S57-02, S57-04.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A37-S57-01/S18-01 · un CFDI que no es del RFC del buzón NO entra a la flota', () => {
+  it('un recibido a nombre de OTRO receptor se descarta sin sellar y se dice', async () => {
+    const db = base([solicitudViva()]);
+    const { prov } = proveedor(['p1']);
+    // El buzón declarado NO es el receptor de los CFDI del paquete.
+    const r = await correrFlota({ ...CFG(), rfc: 'ZZZ010101ZZ1' }, prov, '2026-08-27', AHORA);
+    expect(db.cfdis).toHaveLength(0);
+    expect(saveCfdiXmlRaw).not.toHaveBeenCalled();
+    expect(r.errores.join(' ')).toMatch(/no es recibido por el RFC del buzón/i);
+  });
+
+  it('el receptor correcto entra igual que siempre', async () => {
+    const db = base([solicitudViva()]);
+    const { prov } = proveedor(['p1']);
+    await correrFlota(CFG(), prov, '2026-08-27', AHORA);
+    expect(db.cfdis).toHaveLength(2);
+  });
+});
+
+describe('A37-S57-02 · una descarga de EMITIDOS no mueve el calendario ni se cruza como gasto', () => {
+  it('emitidos: se sellan como ignorado, no se cruzan y ultima_descarga_hasta no avanza', async () => {
+    const db = base([solicitudViva({ tipo: 'emitidos', desde: '2026-10-01', hasta: '2026-10-23' })]);
+    const { prov } = proveedor(['p1']);
+    const avances: unknown[] = [];
+    const orig = manejar;
+    manejar = (op) => {
+      if (op.tabla === 'sat_descarga_config' && op.verbo === 'update') avances.push(op.payload);
+      return orig(op);
+    };
+    // Para un emitido el RFC del buzón tiene que ser el EMISOR del CFDI.
+    await correrFlota({ ...CFG(), rfc: 'AAA010101AAA', ultimaHasta: '2026-09-30' }, prov, '2026-10-23', AHORA);
+    expect(db.cfdis.map((c) => c.estatus)).toEqual(['ignorado', 'ignorado']);
+    expect(decidirCruce).not.toHaveBeenCalled();
+    expect(avances).toEqual([]);
+  });
+
+  it('un rango manual de recibidos con HUECO tampoco mueve el calendario', async () => {
+    // El calendario está en 30-sep: el 1 al 4 de octubre nunca se pidieron.
+    base([solicitudViva({ desde: '2026-10-05', hasta: '2026-10-23' })]);
+    const { prov } = proveedor(['p1']);
+    const avances: unknown[] = [];
+    const orig = manejar;
+    manejar = (op) => {
+      if (op.tabla === 'sat_descarga_config' && op.verbo === 'update') avances.push(op.payload);
+      return orig(op);
+    };
+    await correrFlota({ ...CFG(), ultimaHasta: '2026-09-30' }, prov, '2026-10-23', AHORA);
+    expect(avances).toEqual([]);
+  });
+
+  it('un recibidos contiguo SÍ lo mueve (el camino normal no cambia)', async () => {
+    base([solicitudViva({ desde: '2026-10-01', hasta: '2026-10-23' })]);
+    const { prov } = proveedor(['p1']);
+    const avances: Array<Record<string, unknown>> = [];
+    const orig = manejar;
+    manejar = (op) => {
+      if (op.tabla === 'sat_descarga_config' && op.verbo === 'update') avances.push(op.payload as Record<string, unknown>);
+      return orig(op);
+    };
+    await correrFlota({ ...CFG(), ultimaHasta: '2026-09-30' }, prov, '2026-10-23', AHORA);
+    expect(avances[0]).toMatchObject({ ultima_descarga_hasta: '2026-10-23' });
+  });
+});
+
+describe('avanzaCalendario (A37-S57-02) — puro', () => {
+  it('solo recibidos y sin hueco', () => {
+    expect(avanzaCalendario('recibidos', '2026-10-01', '2026-09-30', '2026-10-23')).toBe(true);
+    expect(avanzaCalendario('recibidos', '2026-09-25', '2026-09-30', '2026-10-23')).toBe(true);
+    expect(avanzaCalendario('recibidos', '2026-10-02', '2026-09-30', '2026-10-23')).toBe(false);
+    expect(avanzaCalendario('emitidos', '2026-10-01', '2026-09-30', '2026-10-23')).toBe(false);
+  });
+  it('sin calendario previo exige llegar a la ventana inicial', () => {
+    expect(avanzaCalendario('recibidos', '2026-07-25', null, '2026-10-23')).toBe(true);
+    expect(avanzaCalendario('recibidos', '2026-10-01', null, '2026-10-23')).toBe(false);
+  });
+});
+
+describe('A37-S57-04 · fallar al guardar NO da el paquete por bajado ni avanza el calendario', () => {
+  it('el XML crudo que no se guardó deja el paquete pendiente y el calendario quieto', async () => {
+    const db = base([solicitudViva()]);
+    const { prov } = proveedor(['p1']);
+    saveCfdiXmlRaw.mockResolvedValue(false);
+    const r = await correrFlota(CFG(), prov, '2026-08-27', AHORA);
+    saveCfdiXmlRaw.mockResolvedValue(true);
+    expect(db.solicitudes[0].paquetes_bajados ?? []).toEqual([]);
+    expect(db.solicitudes[0].estado).toBe('lista');
+    expect(r.descargadas).toBe(0);
+    expect(r.errores.join(' ')).toMatch(/XML|no se pudieron guardar/i);
+  });
+
+  it('un error al sellar deja el paquete pendiente (antes se daba por bajado)', async () => {
+    const db = base([solicitudViva()]);
+    const { prov } = proveedor(['p1']);
+    const orig = manejar;
+    manejar = (op) => (op.tabla === 'sat_cfdi_descargado' && op.verbo === 'upsert'
+      ? { data: null, error: { message: 'statement timeout' } } : orig(op));
+    const r = await correrFlota(CFG(), prov, '2026-08-27', AHORA);
+    expect(db.solicitudes[0].paquetes_bajados ?? []).toEqual([]);
+    expect(db.solicitudes[0].estado).toBe('lista');
+    expect(r.errores.join(' ')).toMatch(/No se pudo registrar el CFDI/);
+  });
+
+  it('un CFDI sellado que quedó DISPONIBLE sin cruzar se vuelve a procesar en el reintento', async () => {
+    const db = base([solicitudViva()]);
+    const { prov } = proveedor(['p1']);
+    // La primera pasada murió entre el sello y el cruce.
+    db.cfdis.push({ cfdi_uuid: 'p1-cfdi-1', solicitud_id: 'sol-1', estatus: 'disponible' });
+    await correrFlota(CFG(), prov, '2026-08-27', AHORA);
+    const llamadas = saveCfdiXmlRaw.mock.calls.map((c) => c[1]);
+    expect(llamadas).toContain('p1-cfdi-1');
+  });
+
+  it('un CFDI sellado y YA cruzado no se reprocesa', async () => {
+    const db = base([solicitudViva()]);
+    const { prov } = proveedor(['p1']);
+    db.cfdis.push({ cfdi_uuid: 'p1-cfdi-1', solicitud_id: 'sol-1', estatus: 'casado' });
+    await correrFlota(CFG(), prov, '2026-08-27', AHORA);
+    expect(saveCfdiXmlRaw.mock.calls.map((c) => c[1])).not.toContain('p1-cfdi-1');
   });
 });

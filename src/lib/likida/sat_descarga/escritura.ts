@@ -20,6 +20,7 @@ import { logger } from '@/lib/logger';
 import { DatoInvalido } from '../errores';
 import { resolverDescargaSat, estadoDescargaSat } from './index';
 import { VENTANA_MAX_DIAS } from './ciclo';
+import { rfcFiscalDelTenant, normalizarRfc, MENSAJE_RFC_NO_VERIFICADO, mensajeRfcAjeno } from './rfc_tenant';
 
 const RFC = /^[A-ZÑ&0-9]{12,13}$/;
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -42,6 +43,12 @@ export async function guardarConfigDescarga(
   if (!Number.isInteger(datos.peajeDiasAviso) || datos.peajeDiasAviso < 1 || datos.peajeDiasAviso > 25) {
     throw new DatoInvalido('La anticipación del aviso de peaje va de 1 a 25 días: el derecho se vence el último día del mes, así que avisar con 26 sería avisar el día 5.');
   }
+  // A37-S57-01 / A37-S18-01 (CRÍTICO): el RFC del buzón se ata al RFC fiscal
+  // VERIFICADO del tenant (`tenant.rfc`). La forma no prueba pertenencia: con
+  // la cuenta compartida del PAC, una flota podía declarar el RFC de otra.
+  const fiscal = await rfcFiscalDelTenant(tenantId);
+  if (fiscal === null) throw new DatoInvalido(MENSAJE_RFC_NO_VERIFICADO);
+  if (rfc !== fiscal) throw new DatoInvalido(mensajeRfcAjeno());
   const { error } = await acotada(supabaseAdmin()
     .from('sat_descarga_config')
     .upsert({
@@ -59,6 +66,13 @@ export async function guardarConfigDescarga(
     entidad: 'sat_descarga_config', entidadId: tenantId,
     detalle: { rfc, modo: datos.modo, activa: datos.activa, peajeDiasAviso: datos.peajeDiasAviso },
   });
+}
+
+/** `null` si el RFC declarado ES el fiscal verificado del tenant; si no, el motivo. */
+async function rechazoPorRfcAjeno(tenantId: string, declarado: unknown): Promise<string | null> {
+  const fiscal = await rfcFiscalDelTenant(tenantId);
+  if (fiscal === null) return MENSAJE_RFC_NO_VERIFICADO;
+  return normalizarRfc(declarado) === fiscal ? null : mensajeRfcAjeno();
 }
 
 export interface ResultadoVerificacionCredencial {
@@ -88,6 +102,11 @@ export async function verificarCredencial(
   if (data === null) {
     return { ok: false, mensaje: 'Todavía no has declarado el RFC del buzón que se va a descargar.' };
   }
+  // Una fila declarada ANTES de este candado (o cuyo `tenant.rfc` cambió) no
+  // autoriza a preguntarle al PAC por la e.firma de un RFC ajeno: 'Verificar'
+  // revelaría si otra flota es cliente y la serie/vigencia de su FIEL.
+  const rechazo = await rechazoPorRfcAjeno(tenantId, data.rfc);
+  if (rechazo !== null) return { ok: false, mensaje: rechazo };
 
   const r = await prov.credencial(data.rfc as string);
   if (!r.ok) {
@@ -155,6 +174,8 @@ export async function pedirRangoManual(
   if (error) throw new Error(error.message);
   if (cfg === null) return { ok: false, mensaje: 'Todavía no has declarado el RFC del buzón que se va a descargar.' };
   if (!cfg.activa) return { ok: false, mensaje: 'La descarga está pausada para esta flota. Actívala antes de pedir un rango.' };
+  const rechazo = await rechazoPorRfcAjeno(tenantId, cfg.rfc);
+  if (rechazo !== null) return { ok: false, mensaje: rechazo };
 
   // Reserva-antes-de-llamar (patrón 0227): la fila existe antes de tocar la
   // red, así que un timeout ambiguo no deja el rango pidiéndose dos veces.
