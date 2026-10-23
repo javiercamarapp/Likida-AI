@@ -10,8 +10,11 @@ const disparar = vi.hoisted(() => vi.fn(async () => ({
 })));
 vi.mock('../asistencia_camara', () => ({ dispararAsistenciaPorEventoCamara: disparar }));
 
-const estado = vi.hoisted(() => ({ reclamado: false, salud: [] as Array<Record<string, unknown>>, minimo: false, override: {} as Record<string, unknown> }));
+const estado = vi.hoisted(() => ({ reclamado: false, salud: [] as Array<Record<string, unknown>>, minimo: false, override: {} as Record<string, unknown>, fallaSalud: false, fallaOutbox: false }));
 const rpc = vi.hoisted(() => vi.fn(async (nombre: string) => {
+  if (nombre === 'listar_outboxes_eventos_pendientes' && estado.fallaOutbox) {
+    return { data: null, error: { message: 'statement timeout' } };
+  }
   if (nombre === 'listar_outboxes_eventos_pendientes') {
     return { data: [{ tenant_id: 'tenant-inactivo', proveedor: 'samsara' }], error: null };
   }
@@ -34,6 +37,9 @@ const rpc = vi.hoisted(() => vi.fn(async (nombre: string) => {
     };
   }
   if (nombre === 'finalizar_evento_seguridad') return { data: true, error: null };
+  if (nombre === 'estado_eventos_gps_operativo' && estado.fallaSalud) {
+    return { data: null, error: { message: 'statement timeout' } };
+  }
   if (nombre === 'estado_eventos_gps_operativo') return { data: estado.salud, error: null };
   // No hay credencial activa: el outbox global debe bastar.
   if (nombre === 'reclamar_polls_conector') return { data: [], error: null };
@@ -51,6 +57,8 @@ describe('outbox global de eventos graves', () => {
     estado.salud = [];
     estado.minimo = false;
     estado.override = {};
+    estado.fallaSalud = false;
+    estado.fallaOutbox = false;
   });
 
   it('dispara lo ya durable aunque la credencial esté inactiva y no exista un poll', async () => {
@@ -124,4 +132,20 @@ describe('outbox global de eventos graves', () => {
     expect(resultados).toContainEqual(expect.objectContaining({ disparos: 0, backlog: true }));
   });
 
+
+  it('A37-S38-01: si la lectura de salud falla NO lanza: devuelve un resultado con error visible', async () => {
+    estado.reclamado = true;
+    estado.fallaSalud = true;
+    const resultados = await sincronizarEventosTodas(async () => ({ estado: 500, cuerpo: '' }));
+    expect(resultados).toContainEqual(expect.objectContaining({
+      proveedor: 'salud_operativa', error: expect.stringContaining('statement timeout'),
+    }));
+  });
+  it('A37-S38-01: si listar los outboxes globales falla NO lanza: error visible y backlog', async () => {
+    estado.fallaOutbox = true;
+    const resultados = await sincronizarEventosTodas(async () => ({ estado: 500, cuerpo: '' }));
+    expect(resultados).toContainEqual(expect.objectContaining({
+      proveedor: 'outbox_global', backlog: true, error: expect.stringContaining('statement timeout'),
+    }));
+  });
 });

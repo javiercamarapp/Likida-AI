@@ -924,7 +924,17 @@ export async function sincronizarEventosTodas(
   const bootstrapDesde = new Date(instanteClaim - backfillHoras * 60 * 60 * 1000).toISOString();
   // Primero el outbox global: no consulta credenciales y por tanto sigue
   // funcionando después de desactivar o borrar el token del proveedor.
-  const outboxes = await drenarOutboxesGlobales({ venceEn: opts.venceEn, ahoraMs: ahora });
+  // A37-S38-01: son lecturas de observabilidad/drenaje global; si fallan NO
+  // pueden tumbar la corrida (ni, vía el cron, las posiciones de todas las
+  // flotas): se degradan a un resultado con error visible.
+  const outboxes = await drenarOutboxesGlobales({ venceEn: opts.venceEn, ahoraMs: ahora }).catch((e: unknown) => {
+    const error = e instanceof Error ? e.message : String(e);
+    logger.error('eventos.outbox_global_fallo', { error });
+    return [{
+      tenantId: '*', proveedor: 'outbox_global', leidos: 0, guardados: 0, huerfanos: 0,
+      disparos: 0, backlog: true, error,
+    }] satisfies ResultadoSyncEventos[];
+  });
   const credenciales = await reclamarPolls(
     'eventos', Object.keys(LECTORES_EVENTOS), ANCHO_FANOUT_FLOTAS, { bootstrapDesde },
   );
@@ -1039,7 +1049,15 @@ export async function sincronizarEventosTodas(
     outboxesPorPar.delete(`${r.tenantId}|${r.proveedor}`);
   }
   salida.push(...outboxesPorPar.values());
-  const salud = await leerSaludOperativaEventos();
+  const salud = await leerSaludOperativaEventos().catch((e: unknown) => {
+    const error = e instanceof Error ? e.message : String(e);
+    logger.error('eventos.salud_operativa_fallo', { error });
+    salida.push({
+      tenantId: '*', proveedor: 'salud_operativa', leidos: 0, guardados: 0, huerfanos: 0,
+      disparos: 0, error,
+    });
+    return [] as Array<Record<string, unknown>>;
+  });
   const saludPorPar = new Map(salud.map((m) => [`${String(m.tenant_id)}|${String(m.proveedor)}`, m]));
   const paresEnSalida = new Set(salida.map((r) => `${r.tenantId}|${r.proveedor}`));
   for (const [llave, m] of saludPorPar) {
