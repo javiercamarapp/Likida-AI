@@ -122,6 +122,10 @@ export function esFuncionAusente(error: unknown): boolean {
 export interface ResultadoLigaAutomatica {
   /** El gasto quedó ligado (false = perdió la carrera o hubo error). */
   ligado: boolean;
+  /** A36-R03-02: true = la liga FALLÓ por una causa de la base o de la red
+   *  (statement_timeout, corte, viaje liquidado…), no porque otro comprobante
+   *  llegara primero. Un fallo reintentable no es «el gasto ya tenía CFDI». */
+  fallo: boolean;
   camposCopiados: boolean;
   motivo: MotivoSinCampos | null;
 }
@@ -155,12 +159,12 @@ export async function ligarGastoAutomatico(
     if (ligado && !copiados) {
       logger.warn('sat.ligar_sin_campos', { tenantId, motivo: motivoFinal });
     }
-    return { ligado, camposCopiados: copiados, motivo: copiados ? null : motivoFinal };
+    return { ligado, fallo: false, camposCopiados: copiados, motivo: copiados ? null : motivoFinal };
   }
 
   if (!esFuncionAusente(error)) {
     logger.warn('sat.ligar_fallo', { tenantId, err: error.message });
-    return { ligado: false, camposCopiados: false, motivo };
+    return { ligado: false, fallo: true, camposCopiados: false, motivo };
   }
 
   // La migración 0858 todavía no está en esta base: se liga como antes.
@@ -174,7 +178,8 @@ export async function ligarGastoAutomatico(
     .select('id'), 'sat_descarga.ligar');
   if (errUpd) {
     logger.warn('sat.ligar_fallo', { tenantId, err: errUpd.message });
-    return { ligado: false, camposCopiados: false, motivo: 'funcion_ausente' };
+    return { ligado: false, fallo: true, camposCopiados: false, motivo: 'funcion_ausente' };
   }
-  return { ligado: (filas ?? []).length === 1, camposCopiados: false, motivo: 'funcion_ausente' };
+  const ligado = (filas ?? []).length === 1;
+  return { ligado, fallo: false, camposCopiados: false, motivo: 'funcion_ausente' };
 }
