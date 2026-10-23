@@ -16,7 +16,7 @@ vi.mock('@/lib/admin/salud', () => ({
 }));
 let interruptores: Record<string, 'encendido' | 'apagado' | 'ilegible'> = {};
 vi.mock('@/lib/likida/interruptores', () => ({ leerInterruptor: async (id: string) => interruptores[id] ?? 'encendido' }));
-const procesar = vi.fn(async (..._a: unknown[]): Promise<Record<string, number>> => ({ tomados: 2, procesados: 2, fallidos: 0, reintentar: 0, claimPerdido: 0 }));
+const procesar = vi.fn(async (..._a: unknown[]): Promise<Record<string, unknown>> => ({ tomados: 2, procesados: 2, fallidos: 0, reintentar: 0, claimPerdido: 0 }));
 vi.mock('@/lib/likida/peajes/ingesta', () => ({ procesarColaPeajes: (...a: unknown[]) => procesar(...a) }));
 const pulls = vi.fn(async (..._a: unknown[]): Promise<Record<string, number>> => ({ reclamadas: 0, exitosas: 0, fallidas: 0, recibidos: 0, duplicados: 0, rechazados: 0 }));
 vi.mock('@/lib/likida/peajes/pull', () => ({ ejecutarPulls: (...a: unknown[]) => pulls(...a) }));
@@ -80,11 +80,25 @@ describe('la corrida', () => {
     expect(procesar).toHaveBeenCalledWith(expect.objectContaining({ limite: 3, venceEn: expect.any(Number) }));
   });
 
-  it.each([{ fallidos: 1 }, { reintentar: 1 }, { claimPerdido: 1 }])('trabajo que no terminó bien (%o) → latido `parcial`, ni ok ni fallo', async (extra) => {
+  it.each([
+    { fallidos: 1 }, { reintentar: 1 }, { claimPerdido: 1 },
+    // A35-R12-rendimiento-01 (0856): archivos barridos a `fallida` o un barrido que falló no son «ok».
+    { barrido: { archivos: 1, estado: 'ok' } }, { barrido: { archivos: 0, estado: 'error' } },
+  ])('trabajo que no terminó bien (%o) → latido `parcial`, ni ok ni fallo', async (extra) => {
     procesar.mockResolvedValue({ tomados: 2, procesados: 1, fallidos: 0, reintentar: 0, claimPerdido: 0, ...extra });
     const r = await llamar();
     expect(r.status).toBe(200);
     expect(registrarLatido).toHaveBeenCalledWith('peajes', 'parcial', expect.any(Object));
+  });
+
+  it('un barrido sin vencidos, o una base sin la migración 0856, NO vuelve parcial el latido (se dice en el cuerpo)', async () => {
+    for (const barrido of [{ archivos: 0, estado: 'ok' }, { archivos: 0, estado: 'no_disponible' }]) {
+      registrarLatido.mockClear();
+      procesar.mockResolvedValue({ tomados: 0, procesados: 0, fallidos: 0, reintentar: 0, claimPerdido: 0, barrido });
+      const r = await llamar();
+      expect(await j(r)).toMatchObject({ corrio: true, barrido });
+      expect(registrarLatido).toHaveBeenCalledWith('peajes', 'ok', expect.objectContaining({ barrido }));
+    }
   });
 
   it('cruces atípicos que fallaron al procesar → latido `parcial` con el conteo `atipicos` (T-A2-33)', async () => {

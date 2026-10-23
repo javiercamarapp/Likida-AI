@@ -140,7 +140,7 @@ describe('procesarColaPeajes — el camino feliz', () => {
   it('importa, cruza, y cierra: procesada, sin contenido, con su desglose', async () => {
     db.tablas.peaje_ingesta_archivo = [archivo()];
     const r = await procesarColaPeajes();
-    expect(r).toEqual({ tomados: 1, procesados: 1, fallidos: 0, reintentar: 0, claimPerdido: 0 });
+    expect(r).toEqual({ tomados: 1, procesados: 1, fallidos: 0, reintentar: 0, claimPerdido: 0, barrido: { archivos: 0, estado: 'ok' } });
     const a = db.tablas.peaje_ingesta_archivo[0];
     expect(a).toMatchObject({ estado: 'procesada', contenido: null, ultimo_error: null, reclamo: null });
     expect(a.desglose_id).toBeTruthy();
@@ -152,7 +152,7 @@ describe('procesarColaPeajes — el camino feliz', () => {
   });
 
   it('cola vacía: no hace nada y no truena', async () => {
-    expect(await procesarColaPeajes()).toEqual({ tomados: 0, procesados: 0, fallidos: 0, reintentar: 0, claimPerdido: 0 });
+    expect(await procesarColaPeajes()).toEqual({ tomados: 0, procesados: 0, fallidos: 0, reintentar: 0, claimPerdido: 0, barrido: { archivos: 0, estado: 'ok' } });
   });
 
   it('respeta el límite por corrida', async () => {
@@ -318,5 +318,72 @@ describe('fallos', () => {
     const r = await procesarColaPeajes({ venceEn: Date.now() - 1 });
     expect(r.procesados).toBe(0);
     expect(db.tablas.peaje_ingesta_archivo.every((a) => a.estado === 'procesando')).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A35-R12-rendimiento-01 (migración 0856): un archivo que muere a mitad de proceso demasiadas veces
+// deja de reclamarse, el barrido lo manda a `fallida` y la oficina se entera en la bitácora.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('procesarColaPeajes — barrido de procesando vencidos (0856)', () => {
+  const barridoFalso = (filas: Fila[]) => (args: Record<string, unknown>): RpcResultado => {
+    expect(args).toEqual({ p_max_intentos: 3, p_gracia_minutos: 60 });
+    return filas;
+  };
+
+  it('barre ANTES de reclamar y avisa en la bitácora con una frase legible', async () => {
+    const orden: string[] = [];
+    db = crearDbFalsa({ peaje_ingesta_archivo: [] }, {
+      peaje_archivo_barrer_vencidos: (a) => { orden.push('barrer'); return barridoFalso([{ id: 'x1', tenant_id: T, nombre: 'enorme.xlsx', intentos: 3 }])(a); },
+      peaje_archivo_reclamar: (a) => { orden.push('reclamar'); return claimFalso(a); },
+    });
+    const r = await procesarColaPeajes({ limite: 3 });
+    expect(orden).toEqual(['barrer', 'reclamar']);
+    expect(r.barrido).toEqual({ archivos: 1, estado: 'ok' });
+    expect(registrarCorrida).toHaveBeenCalledTimes(1);
+    const [tenant, agente, corrida] = registrarCorrida.mock.calls[0] as [string, string, { estado: string; error: string }];
+    expect(tenant).toBe(T);
+    expect(agente).toBe('peajes');
+    expect(corrida.estado).toBe('fallo');
+    expect(corrida.error).toContain('enorme.xlsx');
+    expect(corrida.error).toContain('3 veces');
+    expect(corrida.error).toMatch(/reprocesarlo desde el panel/);
+  });
+
+  it('sin vencidos: no avisa nada y el barrido queda ok con 0', async () => {
+    db = crearDbFalsa({ peaje_ingesta_archivo: [] }, { peaje_archivo_barrer_vencidos: barridoFalso([]), peaje_archivo_reclamar: claimFalso });
+    const r = await procesarColaPeajes({ limite: 3 });
+    expect(r.barrido).toEqual({ archivos: 0, estado: 'ok' });
+    expect(registrarCorrida).not.toHaveBeenCalled();
+  });
+
+  it('una base SIN la migración (la RPC no existe) no tumba la cola: lo dice y sigue procesando', async () => {
+    db = crearDbFalsa({ peaje_ingesta_archivo: [archivo()] }, {
+      peaje_archivo_barrer_vencidos: () => ({ error: { message: 'Could not find the function public.peaje_archivo_barrer_vencidos', code: 'PGRST202' } }),
+      peaje_archivo_reclamar: claimFalso,
+    });
+    const r = await procesarColaPeajes({ limite: 3 });
+    expect(r.barrido).toEqual({ archivos: 0, estado: 'no_disponible' });
+    expect(r.procesados).toBe(1);
+  });
+
+  it('un error cualquiera del barrido tampoco tumba la cola, pero queda marcado como error', async () => {
+    db = crearDbFalsa({ peaje_ingesta_archivo: [archivo()] }, {
+      peaje_archivo_barrer_vencidos: () => ({ error: { message: 'timeout', code: '57014' } }),
+      peaje_archivo_reclamar: claimFalso,
+    });
+    const r = await procesarColaPeajes({ limite: 3 });
+    expect(r.barrido).toEqual({ archivos: 0, estado: 'error' });
+    expect(r.procesados).toBe(1);
+  });
+
+  it('si no se puede escribir la bitácora, el barrido igual cuenta el archivo (no se pierde el aviso en el log)', async () => {
+    registrarCorrida.mockRejectedValueOnce(new Error('bitácora caída'));
+    db = crearDbFalsa({ peaje_ingesta_archivo: [] }, {
+      peaje_archivo_barrer_vencidos: barridoFalso([{ id: 'x1', tenant_id: T, nombre: 'a.csv', intentos: 3 }]),
+      peaje_archivo_reclamar: claimFalso,
+    });
+    const r = await procesarColaPeajes({ limite: 3 });
+    expect(r.barrido).toEqual({ archivos: 1, estado: 'ok' });
   });
 });
