@@ -333,7 +333,7 @@ export async function correrConductor(
 type Escalacion = Extract<AccionPlan, { tipo: 'escalar' }>;
 
 /**
- * INN-A5-02: el aviso por «Tengo un problema» tiene SU PROPIA llave de claim (nivel 5, libre en 0..9), aparte de la
+ * A35-A5-02: el aviso por «Tengo un problema» tiene SU PROPIA llave de claim (nivel 5, libre en 0..9), aparte de la
  * escalera (1 y 2). Así una escalación previa por falta de respuesta no se come el aviso de una falla real.
  */
 export const NIVEL_AVISO_PROBLEMA = 5;
@@ -400,7 +400,7 @@ async function escalar(
 }
 
 /**
- * INN-A5-02: el aviso por «Tengo un problema» NO salió. Se SUELTA el claim (no se cierra como fallido) para que el
+ * A35-A5-02: el aviso por «Tengo un problema» NO salió. Se SUELTA el claim (no se cierra como fallido) para que el
  * siguiente toque del chofer lo reintente de verdad en vez de toparse con un claim muerto, y queda el evento
  * `escalado` con `entregados: 0` en la bitácora del hito para que el supervisor lo vea en el tablero.
  */

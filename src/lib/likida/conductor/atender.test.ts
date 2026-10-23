@@ -252,7 +252,7 @@ describe('botones: nadie toca un viaje que no es suyo', () => {
     expect(textos(await dice(m, `recordatorio_problema:${V1}`))).toContain('NO pude avisarle a tu jefe');
   });
 
-  it('INN-A5-02: el texto al chofer solo dice «Ya le avisé» si el aviso salió', async () => {
+  it('A35-A5-02: el texto al chofer solo dice «Ya le avisé» si el aviso salió', async () => {
     for (const [estadoAviso, dice_] of [
       ['ok', /Ya le avisé a tu jefe/], ['ya_avisado', /Ya le había avisado/],
       ['reintentable', /todavía NO llega/], ['sin_envio', /NO pude avisarle/],

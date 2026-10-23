@@ -316,7 +316,7 @@ describe('escalar: patio responsable → jefe general', () => {
   });
 });
 
-describe('INN-A5-02: «Tengo un problema» no promete un aviso que no salió', () => {
+describe('A35-A5-02: «Tengo un problema» no promete un aviso que no salió', () => {
   it('sin destinatarios: no avisa, SUELTA el claim (el siguiente toque reintenta de verdad) y deja el evento para el supervisor', async () => {
     const v = viaje('v1');
     const m = crearPuertos({ viajes: [v], hitos: hitosDe('v1'), destinatarios: () => [] });

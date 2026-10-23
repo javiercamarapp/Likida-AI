@@ -331,7 +331,7 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
       const activo = hitoActivo(hitos);
       if (!activo) return { mensajes: [{ texto: 'Ya tengo todos los avisos de este viaje. Si tienes un problema, avísale directo a tu jefe de tráfico. 🙏' }] };
       const r = await deps.escalarPorProblema(viaje, activo, hitos, ahora);
-      // INN-A5-02: solo se promete «ya le avisé» cuando el aviso SALIÓ. Es texto de seguridad: nunca prometer lo que no pasó.
+      // A35-A5-02: solo se promete «ya le avisé» cuando el aviso SALIÓ. Es texto de seguridad: nunca prometer lo que no pasó.
       return { mensajes: [{ texto: textoAvisoDeProblema(r) }] };
     }
 
