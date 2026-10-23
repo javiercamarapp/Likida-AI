@@ -40,6 +40,7 @@ import { AGENTES_FINANCIEROS, correrAgenteFinanciero, esAgenteFinanciero } from 
 import { candidatosSinDossier, investigarProspecto } from './investigador';
 import { correrSdr } from './sdr';
 import { correrEnviador } from './enviador';
+import { leerPausaPorFallos } from './corridas';
 import { logger } from '@/lib/logger';
 
 /** Piezas que una corrida del runner fabrica como máximo por agente. */
@@ -724,6 +725,19 @@ export async function correrRunner(
     if (a.presupuesto_dia_usd === null || a.presupuesto_dia_usd <= 0) {
       agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'sin presupuesto_dia_usd declarado — el runner no corre agentes sin techo' });
       continue;
+    }
+    // Candado 3b — EL CORTACIRCUITOS (23-oct-2026). Un agente con 3 corridas
+    // `fallo` SEGUIDAS no se vuelve a despachar en cada vuelta de 4 h: se
+    // reporta `saltado` con el motivo y se sondea UNA vez cada 24 h (si el
+    // sondeo sale bien, la racha se rompe sola). Antes el enriquecedor se
+    // despachaba y fallaba 127 veces en 10 días. Fail open (ver
+    // `leerPausaPorFallos`): es ahorro y silenciador de ruido, no protección.
+    {
+      const pausa = await leerPausaPorFallos(a.id);
+      if (pausa) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: pausa });
+        continue;
+      }
     }
     // Candado 4 — backpressure de la bandeja (solo agentes que encolan).
     if (a.id === 'redactor') {

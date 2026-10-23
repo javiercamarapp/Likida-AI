@@ -48,6 +48,13 @@ vi.mock('../interruptores', () => ({
 }));
 
 const correrExito = vi.fn(async (..._a: unknown[]) => ({ resultado: 'corrio' as const, piezas: 1, costoUsd: 0.01 }));
+// El cortacircuitos (23-oct-2026) lee `agente_corrida` y se llevaría las
+// respuestas en cola que esta suite reserva al gasto y a los costos sin medir:
+// aquí no hay rachas de fallo, así que la lectura devuelve «sin pausa».
+vi.mock('./corridas', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./corridas')>()),
+  leerPausaPorFallos: async () => null,
+}));
 vi.mock('./exito', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./exito')>()),
   correrAgenteExito: (...a: unknown[]) => correrExito(...a),
