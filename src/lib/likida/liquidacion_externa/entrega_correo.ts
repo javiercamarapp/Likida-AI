@@ -75,7 +75,7 @@ export interface ResumenEntregasCorreo {
   /** Quedaron `pendiente` con nuevo intento (429/5xx/red). */
   reintentar: number;
   fallidas: number;
-  /** Correo sin llave, sin dominio verificado o antes de la hora: no se gastó intento. */
+  /** Correo sin llave, sin dominio verificado o sin «Responder a» configurado: no se gastó intento. */
   sinConfigurar: number;
   /** Antes de `enviar_desde_hora`. */
   fueraDeVentana: number;
@@ -284,6 +284,15 @@ async function procesarUna(
   if (!config.activa) {
     await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_CONFIG_MS), e.ultimoError);
     resumen.apagada += 1;
+    return;
+  }
+  // 1c. «Responder a» obligatorio (A37-A1-04). El correo promete «Si algo no coincide, responde a este correo»; sin `replyTo` la
+  // respuesta cae en el buzón de campañas (`avisos@`), donde se descarta sin que nadie de la flota la vea. Fail-closed: no se
+  // manda un correo con una promesa falsa a una persona. Igual que apagada: no se gasta intento, la fila espera la configuración.
+  if (!config.responderA) {
+    logger.warn('liqcorreo.sin_responder_a', { tenant: e.tenantId, entrega: e.id });
+    await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_CONFIG_MS), e.ultimoError);
+    resumen.sinConfigurar += 1;
     return;
   }
   const abre = inicioVentanaHoy(ahora, config.enviarDesdeHora);

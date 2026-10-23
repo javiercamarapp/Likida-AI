@@ -205,6 +205,10 @@ export async function guardarConfigCorreo(tenantId: string, c: ConfigCorreo, por
   if (c.enviarDesdeHora != null && !(Number.isInteger(c.enviarDesdeHora) && c.enviarDesdeHora >= 0 && c.enviarDesdeHora <= 23)) {
     throw new DatoInvalido('enviar_desde_hora: debe ser un entero de 0 a 23');
   }
+  // A37-A1-04: el correo promete «responde a este correo»; sin «Responder a» la respuesta cae en el buzón de campañas y se pierde.
+  if (c.activa && c.canal !== 'whatsapp' && !normalizarCorreo(c.responderA, 'responder_a')) {
+    throw new DatoInvalido('responder_a: es obligatorio para activar el envío por correo (ahí llegan las respuestas del operador)');
+  }
   const fila = {
     tenant_id: tenantId,
     canal: c.canal,

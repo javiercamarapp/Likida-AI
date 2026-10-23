@@ -94,6 +94,9 @@ describe('configuración de la flota', () => {
     await expect(r.guardarConfigCorreo(T, { ...r.CONFIG_CORREO_POR_DEFECTO, rhCorreos: ['a@e.test', 'b@e.test', 'c@e.test', 'd@e.test'] }, null)).rejects.toBeInstanceOf(DatoInvalido);
     await expect(r.guardarConfigCorreo(T, { ...r.CONFIG_CORREO_POR_DEFECTO, archivoCorreo: 'sin-arroba' }, null)).rejects.toBeInstanceOf(DatoInvalido);
     await expect(r.guardarConfigCorreo(T, { ...r.CONFIG_CORREO_POR_DEFECTO, enviarDesdeHora: 24 }, null)).rejects.toBeInstanceOf(DatoInvalido);
+    // A37-A1-04: no se activa el envío por correo sin «Responder a» (las respuestas del operador caerían en el buzón de campañas)
+    await expect(r.guardarConfigCorreo(T, { ...r.CONFIG_CORREO_POR_DEFECTO, canal: 'correo', activa: true, responderA: null }, null)).rejects.toThrow(/responder_a/);
+    await expect(r.guardarConfigCorreo(T, { ...r.CONFIG_CORREO_POR_DEFECTO, canal: 'ambos', activa: true, responderA: '  ' }, null)).rejects.toBeInstanceOf(DatoInvalido);
   });
 
   it('guardar contra una base sin migraciones LANZA y nombra la migración (nunca finge haber guardado)', async () => {
