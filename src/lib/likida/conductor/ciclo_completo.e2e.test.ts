@@ -297,7 +297,7 @@ describe('2. el chofer que no contesta: la escalera 0/+15/+30/+45, el patio a lo
     const a = await chofer(w, `recordatorio_problema:${V1}:llegada_carga`, T('14:05'));
     const b = await chofer(w, `recordatorio_problema:${V1}:llegada_carga`, T('14:06'), { waMessageId: 'otro' });
     expect(a?.mensajes[0].texto).toMatch(/Ya le avisé a tu jefe de tráfico/);
-    expect(b?.mensajes[0].texto).toMatch(/Ya le avisé a tu jefe de tráfico/);
+    expect(b?.mensajes[0].texto).toMatch(/Ya le había avisado a tu jefe de tráfico/); // el 2.º toque no reenvía y no repite la promesa
     expect(meta.salientes.filter((s) => s.a === TEL_PATIO)).toHaveLength(1);
     expect(meta.salientes.find((s) => s.a === TEL_PATIO)?.cuerpo).toMatch(/el chofer reportó un problema/);
   });

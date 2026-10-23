@@ -191,7 +191,7 @@ export function crearPuertos(opts: {
   const reclamos = new Map<string, { ok: boolean | null; canal: string | null; motivo: string | null; operadorId: string | null; creado: Date }>();
   const clave = (a: Pick<NuevoAviso, 'hitoId' | 'ciclo' | 'clase' | 'nivel'>) => `${a.hitoId}|${a.ciclo}|${a.clase}|${a.nivel}`;
   for (const a of opts.avisos ?? []) {
-    reclamos.set(clave(a), { ok: true, canal: 'texto', motivo: null, operadorId: a.operadorId ?? null, creado: a.creado ?? new Date('2026-10-02T12:00:00Z') });
+    reclamos.set(clave(a), { ok: a.ok === undefined ? true : a.ok, canal: 'texto', motivo: null, operadorId: a.operadorId ?? null, creado: a.creado ?? new Date('2026-10-02T12:00:00Z') });
   }
   const enviados: EnvioMemoria[] = [];
   const eventos: EventoMemoria[] = [];
@@ -203,7 +203,7 @@ export function crearPuertos(opts: {
     viajesActivos: async (limite) => opts.viajes.filter((v) => v.estatus === 'abierto' && v.aceptadoEn).slice(0, limite),
     hitosDe: async (ids) => [...hitos.values()].filter((h) => ids.includes(h.viajeId)).map((h) => ({ ...h })),
     avisosDe: async (ids) => [...reclamos.entries()]
-      .map(([k, v]) => { const [hitoId, ciclo, clase, nivel] = k.split('|'); return { hitoId, ciclo: Number(ciclo), clase: clase as AvisoReclamado['clase'], nivel: Number(nivel), v }; })
+      .map(([k, v]) => { const [hitoId, ciclo, clase, nivel] = k.split('|'); return { hitoId, ciclo: Number(ciclo), clase: clase as AvisoReclamado['clase'], nivel: Number(nivel), ok: v.ok, v }; })
       .filter((a) => ids.includes(a.hitoId)).map(({ v: _v, ...a }) => a),
     enviadosHoyPorChofer: async (ops, desde) => {
       const c: Record<string, number> = {};
