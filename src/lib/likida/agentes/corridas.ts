@@ -200,6 +200,81 @@ export async function ultimasCorridasNegocio(
   return (data ?? []).map(desdeFilaCorrida);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// EL CORTACIRCUITOS DEL RUNNER (23-oct-2026) — un agente que falla SEGUIDO no
+// se vuelve a despachar cada 4 horas.
+//
+// Medido en producción: el `enriquecedor` falló 127 veces en 10 días (cada
+// vuelta, sin excepción), gastando una llamada al modelo condenada y metiendo
+// una fila de fallo nueva en la bitácora por vuelta — que la guardia leía como
+// incidente nuevo. Tras `FALLOS_PARA_PAUSA` corridas `fallo` SEGUIDAS (sin un
+// ok/parcial en medio) el runner lo deja en pausa y lo SONDEA una vez cada
+// `SONDEO_PAUSA_MS`: si el sondeo sale bien, la racha se rompe y vuelve a
+// correr cada vuelta; si falla, otras 24 h de pausa.
+//
+// La pausa NO escribe filas: es una lectura de las últimas 3 corridas del
+// agente (la misma tabla, sin tablas nuevas). Un agente en pausa se reporta
+// `saltado` con el motivo, que es lo que ya enseña el parte del runner.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Cuántos fallos seguidos ponen a un agente en pausa. */
+export const FALLOS_PARA_PAUSA = 3;
+/** Cada cuánto se sondea un agente en pausa (una corrida de prueba). */
+export const SONDEO_PAUSA_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * La parte PURA: dadas las últimas corridas del agente (la más reciente
+ * primero), ¿está en pausa y por qué? `null` = se despacha.
+ *
+ * «Seguidos» = las últimas `FALLOS_PARA_PAUSA` corridas TODAS en `fallo`. Si
+ * la más reciente tiene ≥ 24 h, toca el sondeo y se despacha: como el sondeo
+ * deja otro `fallo` al fallar, la pausa se reanuda sola por otras 24 h.
+ */
+export function motivoPausaPorFallos(
+  ultimas: ReadonlyArray<{ estado: string; inicio: string; error: string | null }>,
+  ahoraMs: number = Date.now(),
+): string | null {
+  if (ultimas.length < FALLOS_PARA_PAUSA) return null;
+  const racha = ultimas.slice(0, FALLOS_PARA_PAUSA);
+  if (!racha.every((c) => c.estado === 'fallo')) return null;
+  const ultimoMs = new Date(racha[0].inicio).getTime();
+  if (!Number.isFinite(ultimoMs) || ahoraMs - ultimoMs >= SONDEO_PAUSA_MS) return null;
+  const ultimo = (racha[0].error ?? 'sin motivo registrado').replace(/\s+/g, ' ').slice(0, 160);
+  return `en pausa: ${FALLOS_PARA_PAUSA} fallos seguidos (último: ${ultimo}) — se sondea una vez cada 24 h`;
+}
+
+/**
+ * La parte con I/O: lee las últimas `FALLOS_PARA_PAUSA` corridas del agente
+ * (de cualquier flota o de ninguna) y aplica `motivoPausaPorFallos`.
+ *
+ * FAIL OPEN, a diferencia de los candados de dinero: si la lectura falla se
+ * despacha como siempre. La pausa es un ahorro y un silenciador de ruido, no
+ * una protección; que una base lenta frenara a TODOS los agentes sanos sería
+ * peor que el mal que cura.
+ */
+export async function leerPausaPorFallos(agente: string, ahoraMs: number = Date.now()): Promise<string | null> {
+  try {
+    const { data, error } = await acotada(supabaseAdmin()
+      .from('agente_corrida')
+      .select('estado, inicio, error')
+      .eq('agente', agente)
+      .order('inicio', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(FALLOS_PARA_PAUSA), 'corridas.pausa_por_fallos');
+    if (error) {
+      logger.warn('corridas.pausa_lectura_fallo', { agente, err: error.message });
+      return null;
+    }
+    return motivoPausaPorFallos(
+      ((data ?? []) as Array<{ estado: string; inicio: string; error: string | null }>),
+      ahoraMs,
+    );
+  } catch (e) {
+    logger.warn('corridas.pausa_lectura_fallo', { agente, err: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
 /** «3 s», «2 min 05 s» — la duración como la lee una persona. */
 export function duracionLegible(ms: number | null): string | null {
   if (ms === null) return null;

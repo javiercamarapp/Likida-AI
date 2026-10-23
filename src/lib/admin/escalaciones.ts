@@ -21,10 +21,15 @@ import { conteo, traerTodo } from '@/lib/likida/pg';
 import { mxn } from '@/lib/formato';
 import { AGENTES_NOTIFICABLES } from '@/lib/likida/agentes/notificaciones';
 import {
-  getCorridasFallidas, contarCorridasFallidas, TOPE_CORRIDAS_FALLIDAS,
+  getCorridasFallidas, contarCorridasFallidas, getUltimoInicioSinFalloPorAgente, type CorridaReciente,
   getLiquidacionesEnRevisar, contarLiquidacionesEnRevisar,
 } from './negocio';
 import { getTicketsCruzados, contarTickets, ESTADOS_TICKET_CERRADO } from './soporte';
+
+/** Cuántas corridas fallidas se leen para armar las rachas. Más que el tope de
+ *  la cola de antes (20): una racha de 127 fallos tiene que contarse como tal,
+ *  no como «20», y el item resultante es UNO por agente. */
+const TOPE_CORRIDAS_PARA_AGRUPAR = 200;
 
 // ── Las lecturas propias (las que no existían en ningún lib) ────────────────
 
@@ -163,6 +168,11 @@ export interface ItemEscalacion {
    *  esa flota). NULL = no hay pantalla a la cual llevar — se dice, no se
    *  inventa un link que rebote. */
   href: string | null;
+  /** Identidad ESTABLE del incidente cuando el título y el `desde` cambian a
+   *  medida que el incidente crece (una racha de corridas en fallo: «3
+   *  corridas desde…» pasa a «4»). La guardia la usa como clave de dedup EN
+   *  LUGAR de título+desde. Ausente = la identidad sigue siendo título+desde. */
+  huella?: string;
 }
 
 /** Una fuente leída o su error, POR VALOR: `items === null ⟺ error !== null`.
@@ -206,6 +216,52 @@ function hrefDeCorrida(agente: string, tenantId: string | null): string | null {
   return info && tenantId ? `${info.ruta}?tenant=${tenantId}` : null;
 }
 
+/**
+ * UNA RACHA DE FALLOS = UN ITEM (23-oct-2026). Cada corrida fallida era una
+ * fila de la cola con su propio `desde`: el enriquecedor, que fallaba en cada
+ * vuelta de 4 h, producía un incidente «nuevo» por vuelta (32 correos).
+ *
+ * Aquí se juntan por agente+flota: solo cuentan los fallos POSTERIORES a la
+ * última corrida que salió bien (esa fue la ruptura de la racha); de ellos, la
+ * racha vigente es la del error MÁS RECIENTE, `desde` es su primer fallo y el
+ * conteo va en el título. La `huella` es agente+flota+error — NO el conteo ni
+ * el `desde`, que cambian al crecer la racha — así que la guardia avisa una
+ * vez, y de nuevo solo si el error cambia o la racha se rompe y reaparece.
+ * Pura y exportada para su prueba. `fallos` viene con el más reciente primero.
+ */
+export function agruparRachasDeFallo(fallos: readonly CorridaReciente[], ultimoSinFallo: ReadonlyMap<string, string>): ItemEscalacion[] {
+  const porAgente = new Map<string, CorridaReciente[]>();
+  for (const c of fallos) {
+    const rotura = ultimoSinFallo.get(c.agente);
+    if (rotura && new Date(c.inicio).getTime() <= new Date(rotura).getTime()) continue;
+    const llave = `${c.agente}|${c.tenantId ?? ''}`;
+    const lista = porAgente.get(llave);
+    if (lista) lista.push(c); else porAgente.set(llave, [c]);
+  }
+  const items: ItemEscalacion[] = [];
+  for (const lista of porAgente.values()) {
+    const nueva = lista[0];
+    const error = (nueva.error ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    const racha = lista.filter((c) => (c.error ?? '').replace(/\s+/g, ' ').trim().slice(0, 200) === error);
+    const primera = racha.reduce((a, c) => (new Date(c.inicio).getTime() < new Date(a.inicio).getTime() ? c : a));
+    const n = racha.length;
+    const base = nueva.tareasHechas !== null && nueva.tareasTotal !== null
+      ? `Se quedó en ${nueva.tareasHechas}/${nueva.tareasTotal} tareas (disparo: ${nueva.disparo}).`
+      : `Disparo: ${nueva.disparo}.`;
+    items.push({
+      fuente: 'corridas',
+      titulo: `Corrida en fallo — agente ${nueva.agente} (${n} ${n === 1 ? 'corrida' : 'corridas'} desde ${primera.inicio.slice(0, 10)})`,
+      detalle: error ? `${base} Último error: ${error}` : base,
+      tenantNombre: nueva.tenantNombre,
+      desde: primera.inicio,
+      vence: null,
+      href: hrefDeCorrida(nueva.agente, nueva.tenantId),
+      huella: `corridas|${nueva.agente}|${nueva.tenantId ?? ''}|${error}`,
+    });
+  }
+  return items;
+}
+
 /** try/catch → valor. El mensaje conserva QUÉ no se pudo leer. */
 async function porValor<T>(fn: () => Promise<T>): Promise<{ ok: T } | { error: string }> {
   try {
@@ -236,10 +292,11 @@ export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEs
     // va a mirar. Si cualquiera de las dos lecturas falla, la fuente entera
     // cae por valor (conteo null ≠ 0), igual que las liquidaciones de abajo.
     porValor(async () => {
-      const [items, total] = await Promise.all([
-        getCorridasFallidas(TOPE_CORRIDAS_FALLIDAS), contarCorridasFallidas(),
+      const [fallos, total] = await Promise.all([
+        getCorridasFallidas(TOPE_CORRIDAS_PARA_AGRUPAR), contarCorridasFallidas(),
       ]);
-      return { items, total };
+      const ultimoSinFallo = await getUltimoInicioSinFalloPorAgente(fallos.map((c) => c.agente));
+      return { items: agruparRachasDeFallo(fallos, ultimoSinFallo), total };
     }),
     porValor(() => getTalachasPendientes()),
     porValor(() => getFacturasProveedorPendientes()),
@@ -275,18 +332,7 @@ export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEs
       vence: s.venceEn,
       href: '/admin/compliance',
     }))),
-    corridas: 'error' in corridas ? fuente(corridas) : leida(corridas.ok.items.map((c) => ({
-      fuente: 'corridas',
-      titulo: `Corrida en fallo — agente ${c.agente}`,
-      // Ambos o ninguno (0102): un numerador sin denominador no dice nada.
-      detalle: c.tareasHechas !== null && c.tareasTotal !== null
-        ? `Se quedó en ${c.tareasHechas}/${c.tareasTotal} tareas (disparo: ${c.disparo}).`
-        : `Disparo: ${c.disparo}.`,
-      tenantNombre: c.tenantNombre,
-      desde: c.inicio,
-      vence: null,
-      href: hrefDeCorrida(c.agente, c.tenantId),
-    }))),
+    corridas: 'error' in corridas ? fuente(corridas) : leida(corridas.ok.items),
     talachas: 'error' in talachas ? fuente(talachas) : leida(talachas.ok.map((t) => ({
       fuente: 'talachas',
       // NULL ≠ $0: sin monto reportado se dice así, nunca "$0.00" (0107).

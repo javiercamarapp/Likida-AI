@@ -530,7 +530,12 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // R12 PEAJES COLA (A35-R12-rendimiento-01, oct-2026): +1 llamada (2,250 → 2,251), en `peajes/ingesta.ts` (que ya contaba): el
 // `.rpc('peaje_archivo_barrer_vencidos')` (0856) que manda a `fallida` los archivos `procesando` agotados antes de reclamar la cola.
 // Con `acotada`, tolera la base sin la migración. 0 archivos nuevos. Funcionalidad nueva; cubierta por `cola.test.ts`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_251;
+// ALERTAS REPETIDAS DE CORRIDAS EN FALLO (23-oct-2026): +2 llamadas (2,251 → 2,253), 0 archivos nuevos, ambas en archivos que ya contaban y ambas por
+// `acotada`: (1) `agentes/corridas.ts` · `leerPausaPorFallos` lee las últimas 3 corridas de un agente en `agente_corrida` para el cortacircuitos del
+// runner (3 fallos seguidos = en pausa, sondeo cada 24 h); (2) `admin/negocio.ts` · `getUltimoInicioSinFalloPorAgente` lee la última corrida ok/parcial
+// de cada agente con fallos, para que la bandeja junte una racha de fallos en UN incidente (la racha se rompe en la última corrida sana). Funcionalidad
+// nueva sin tablas nuevas, no código migrado; cubierta por `corridas.test.ts`, `runner.test.ts` y `escalaciones.test.ts`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_253;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
