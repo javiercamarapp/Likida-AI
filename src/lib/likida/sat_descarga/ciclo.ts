@@ -229,9 +229,9 @@ export async function gastosSinCfdi(
  * Toda la lógica vive en `liga_campos.ts` (con respaldo si la migración 0858
  * aún no está aplicada).
  */
-async function ligar(tenantId: string, gastoId: string, cfdiUuid: string, xml: string): Promise<boolean> {
+async function ligar(tenantId: string, gastoId: string, cfdiUuid: string, xml: string): Promise<'ligado' | 'perdio_carrera' | 'fallo'> {
   const r = await ligarGastoAutomatico(tenantId, gastoId, cfdiUuid, xml);
-  return r.ligado;
+  return r.ligado ? 'ligado' : r.fallo ? 'fallo' : 'perdio_carrera';
 }
 
 /**
@@ -388,12 +388,28 @@ async function ingerir(
     if (yaDescargado) continue;
 
     if (decision.destino === 'casado') {
-      const ok = await ligar(cfg.tenantId, decision.gastoId, uuid, xml);
-      if (ok) {
+      const res = await ligar(cfg.tenantId, decision.gastoId, uuid, xml);
+      if (res === 'ligado') {
         fondo.delete(decision.gastoId);
         await saveCfdiXmlRaw(cfg.tenantId, uuid, decision.gastoId, xml);
         await marcar(cfg.tenantId, uuid, 'casado', decision.gastoId, null);
         r.casados++;
+      } else if (res === 'fallo') {
+        // A36-R03-02: un fallo de la base o de la red NO es «el gasto ya tenía
+        // comprobante». El sello ya está puesto y el paquete se da por bajado,
+        // así que esta corrida es la única que tiene el XML: se guarda y el
+        // CFDI queda como 'ambiguo' con ESE gasto de candidato, que es lo que
+        // le permite al contralor ligarlo con un clic (y copiar los campos del
+        // XML crudo) en vez de perderlo. Sin migración no hay estatus
+        // 'pendiente_reintento'; este es el más cercano que la base acepta.
+        const g = fondo.get(decision.gastoId);
+        await saveCfdiXmlRaw(cfg.tenantId, uuid, null, xml);
+        await marcar(cfg.tenantId, uuid, 'ambiguo', null, {
+          motivo: 'No se pudo ligar automáticamente por un fallo temporal (no porque el gasto ya tuviera comprobante). Liga con un clic al gasto sugerido.',
+          candidatos: [{ gastoId: decision.gastoId, monto: g?.monto ?? null, fecha: g?.fecha ?? null, concepto: g?.concepto ?? null }],
+        });
+        r.errores.push(`No se pudo ligar el CFDI ${uuid} al gasto ${decision.gastoId} por un fallo temporal; quedó en la bandeja para ligarlo a mano.`);
+        r.ambiguos++;
       } else {
         // Perdió la carrera: alguien ya le pegó su comprobante a ese ticket.
         // Queda disponible y se dice — jamás se pisa un CFDI existente.

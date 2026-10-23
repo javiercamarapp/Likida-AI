@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { sinComentarios } from '@/lib/pruebas/codigo';
 import { execSync } from 'node:child_process';
-import { instanteRFC3339, mxn, usd, usd4, mxnCompacto, litros, fechaMx, fechaCorta, fechaHoraMx, round2, pctCambio, porcentaje, hoyMx, inicioDiaMx, finDiaMx, pesoArchivo } from './formato';
+import { instanteRFC3339, mxn, usd, usd4, mxnCompacto, litros, fechaMx, fechaCorta, fechaHoraMx, round2, pctCambio, porcentaje, hoyMx, inicioDiaMx, finDiaMx, pesoArchivo, parsearImporteMx } from './formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 7 · MEDIO REINCIDENTE POR TERCERA RONDA — y el número CRECÍA:
@@ -516,4 +516,52 @@ describe('instanteRFC3339: calendario y gramática compartidos', () => {
     expect(instanteRFC3339('2026-01-01T00:00:00.' + '1'.repeat(100_000) + '!Z')).toBeNull();
     expect(instanteRFC3339(null)).toBeNull();
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A36-R01-02 · «50,000» se guardaba como 50. Es dinero: el parser rechaza (NaN)
+// lo ambiguo en vez de adivinar, y acepta solo lo inequívoco.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('parsearImporteMx (A36-R01-02)', () => {
+  it('acepta lo inequívoco, con centavos y separadores', () => {
+    expect(parsearImporteMx('1,234.50')).toBe(1234.5); // MX/EU: coma miles, punto decimal
+    expect(parsearImporteMx('1.234,50')).toBe(1234.5); // coma decimal, punto miles
+    expect(parsearImporteMx('$ 52,500.75')).toBe(52500.75);
+    expect(parsearImporteMx('1,234,567')).toBe(1234567); // dos grupos: solo puede ser miles
+    expect(parsearImporteMx('1.234.567')).toBe(1234567);
+    expect(parsearImporteMx('22,5')).toBe(22.5); // coma decimal tecleada en México
+    expect(parsearImporteMx('22,50')).toBe(22.5);
+    expect(parsearImporteMx('22.5')).toBe(22.5);
+    expect(parsearImporteMx('0.125')).toBe(0.125);
+    expect(parsearImporteMx('480')).toBe(480);
+    expect(parsearImporteMx('0')).toBe(0);
+  });
+
+  it('rechaza lo ambiguo: «50,000» y «1,500» no se adivinan', () => {
+    expect(parsearImporteMx('50,000')).toBeNaN(); // 50 o 50 000
+    expect(parsearImporteMx('52,500')).toBeNaN();
+    expect(parsearImporteMx('1,500')).toBeNaN();
+    expect(parsearImporteMx('1.234')).toBeNaN(); // 1.234 o 1 234
+  });
+
+  it('rechaza basura y agrupaciones imposibles', () => {
+    for (const malo of ['', '  ', 'abc', '1,23,456', '12,34.5,6', '1.2.3', '1,234.567,8', '-5', '1e3', '1,,2', ',5', '5,']) {
+      expect(parsearImporteMx(malo), malo).toBeNaN();
+    }
+  });
+});
+
+describe('los sitios de captura usan el parser estricto (A36-R01-02)', () => {
+  const fuentes: Record<string, string> = {
+    'cotizaciones/page.tsx': readFileSync('src/app/dashboard/cotizaciones/page.tsx', 'utf8'),
+    'facturacion/estadias.tsx': readFileSync('src/app/dashboard/facturacion/estadias.tsx', 'utf8'),
+    'peajes/configuracion/page.tsx': readFileSync('src/app/dashboard/agentes/peajes/configuracion/page.tsx', 'utf8'),
+  };
+  for (const [nombre, crudo] of Object.entries(fuentes)) {
+    it(`${nombre} no adivina con replace(',', '.')`, () => {
+      const src = sinComentarios(crudo);
+      expect(src).not.toMatch(/\.replace\(',',\s*'\.'\)/);
+      expect(src).toContain('parsearImporteMx');
+    });
+  }
 });

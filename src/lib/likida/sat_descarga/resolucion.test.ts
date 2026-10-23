@@ -399,13 +399,54 @@ describe('el tenant de la sesión se impone en cada consulta', () => {
   });
 });
 
+// ── A36-R01-04: ligar valida que el total del CFDI coincida con el gasto ───
+// Cifras sintéticas: caseta de $480.00 contra un CFDI de $48,000.00.
+describe('ligar — el total del CFDI tiene que coincidir con el monto del gasto (A36-R01-04)', () => {
+  function prepara(total: string | null, monto: string) {
+    respuestas.sat_cfdi_descargado = [cfdi({ total })];
+    respuestas.gasto = [{ data: { id: 'g-1', cfdi_uuid: null, monto }, error: null }];
+    respuestas.cfdi_xml = [{ data: null, error: null }];
+    respuestasRpc = [{ data: { gasto_id: 'g-1', cfdi_uuid: UUID }, error: null }];
+  }
+
+  it('un CFDI de $48,000.00 NO se liga a un gasto de $480.00: no llama al RPC ni marca verificado', async () => {
+    prepara('48000.00', '480.00');
+    const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toBe('total_no_coincide');
+    expect(r.mensaje).toContain('$48,000.00');
+    expect(r.mensaje).toContain('$480.00');
+    expect(llamadasRpc).toEqual([]);
+  });
+
+  it('un centavo de diferencia (1,160.00 vs 1,160.01) sí se liga; dos centavos no', async () => {
+    prepara('1160.01', '1160.00');
+    expect((await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR)).ok).toBe(true);
+    llamadasRpc.length = 0;
+    prepara('1160.02', '1160.00');
+    const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
+    expect(r.motivo).toBe('total_no_coincide');
+    expect(llamadasRpc).toEqual([]);
+  });
+
+  it('el mismo importe con centavos largos (1,234.50) se liga', async () => {
+    prepara('1234.50', '1234.5');
+    expect((await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR)).ok).toBe(true);
+  });
+
+  it('sin total en el CFDI (fila vieja) no hay con qué comparar: no bloquea', async () => {
+    prepara(null, '480.00');
+    expect((await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR)).ok).toBe(true);
+  });
+});
+
 // ── AUDITORÍA 35, R04-fiscal-01: la liga MANUAL también copia los campos ────
 // Cifras sintéticas: caseta de $1,160.00 = subtotal 1,000.00 + IVA 160.00.
 describe('ligar a mano — copia de los campos fiscales del XML (0858)', () => {
   const XML = `<?xml version="1.0"?><cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="4.0" TipoDeComprobante="I" Total="1160.00" SubTotal="1000.00" Fecha="2026-10-01T10:15:00"><cfdi:Emisor Rfc="AAA010101AAA"/><cfdi:Receptor Rfc="BBB020202BBB"/><cfdi:Conceptos><cfdi:Concepto ClaveProdServ="78101800" ClaveUnidad="E48" Cantidad="1" Importe="1000.00"/></cfdi:Conceptos><cfdi:Impuestos><cfdi:Traslados><cfdi:Traslado Impuesto="002" Importe="160.00"/></cfdi:Traslados></cfdi:Impuestos><cfdi:Complemento><tfd:TimbreFiscalDigital UUID="${UUID.toUpperCase()}"/></cfdi:Complemento></cfdi:Comprobante>`;
 
   function prepara(xml: string | null) {
-    respuestas.sat_cfdi_descargado = [cfdi()];
+    respuestas.sat_cfdi_descargado = [cfdi({ total: '1160.00' })];
     respuestas.gasto = [{ data: { id: 'g-1', cfdi_uuid: null, monto: '1160.00' }, error: null }];
     respuestas.cfdi_xml = [{ data: xml === null ? null : { xml }, error: null }];
   }

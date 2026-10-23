@@ -77,6 +77,57 @@ describe('registrarNotaDeCredito con la función de la base (0860)', () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// A36-R03-05 · la RPC 0860 no veta un reclamo `rechazado` ni topa lo acreditado contra lo reclamado. NO se puede
+// migrar en este lote: el veto vive en el llamador TypeScript (lectura previa; no es atómico frente a otra sesión).
+// PENDIENTE para una migración futura: el mismo veto y el tope dentro de `peaje_nota_credito_registrar`, bajo el candado.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('registrarNotaDeCredito — vetos del llamador (A36-R03-05)', () => {
+  const nuevoRpc = () => { const llamadas: Args[] = []; return { llamadas, fn: (a: Args) => { llamadas.push(a); return [{ ok: true, duplicada: false } as Fila]; } }; };
+
+  it('un reclamo RECHAZADO no recibe notas de crédito: no revive en silencio ni llega a la función', async () => {
+    const rpc = nuevoRpc();
+    db = crearDbFalsa({ peaje_reclamo: [{ ...reclamo(), estado: 'rechazado' }] }, { peaje_nota_credito_registrar: rpc.fn });
+    const r = await R.registrarNotaDeCredito(T, { reclamoId: RECLAMO, monto: 300, fecha: '2026-09-10', versionVista: 'rechazado:0' });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error('debía rechazarse');
+    expect(r.motivo).toMatch(/rechaz/i);
+    expect(rpc.llamadas).toHaveLength(0);
+  });
+
+  it('una nota que deja lo acreditado por ENCIMA de lo reclamado (1,000.00): se rechaza con cifras; al centavo exacto sí pasa', async () => {
+    const rpc = nuevoRpc();
+    db = crearDbFalsa({ peaje_reclamo: [{ ...reclamo(), estado: 'acreditado_parcial', monto_acreditado: 700.5 }] }, { peaje_nota_credito_registrar: rpc.fn });
+    const alta = await R.registrarNotaDeCredito(T, { reclamoId: RECLAMO, monto: 299.51, fecha: '2026-09-10' }); // 1,000.01
+    expect(alta.ok).toBe(false);
+    if (alta.ok) throw new Error('debía rechazarse');
+    expect(alta.motivo).toContain('1,000.00');
+    expect(alta.motivo).toContain('700.50');
+    expect(rpc.llamadas).toHaveLength(0);
+    const justa = await R.registrarNotaDeCredito(T, { reclamoId: RECLAMO, monto: 299.5, fecha: '2026-09-10' }); // 1,000.00
+    expect(justa.ok).toBe(true);
+    expect(rpc.llamadas).toHaveLength(1);
+  });
+
+  it('el reintento IDÉNTICO (doble clic) tras completar el reclamo no se vuelve un error: la función lo reconoce como duplicado', async () => {
+    const vistas = new Set<string>();
+    db = crearDbFalsa({ peaje_reclamo: [reclamo()], peaje_reclamo_nota: [] }, {
+      peaje_nota_credito_registrar: (a) => {
+        if (vistas.has(String(a.p_clave))) return [{ ok: true, duplicada: true } as Fila];
+        vistas.add(String(a.p_clave));
+        db.tablas.peaje_reclamo_nota.push({ tenant_id: T, reclamo_id: RECLAMO, clave_idempotencia: a.p_clave });
+        Object.assign(db.tablas.peaje_reclamo[0], { monto_acreditado: 1000, estado: 'acreditado' });
+        return [{ ok: true, duplicada: false } as Fila];
+      },
+    });
+    const entrada = { reclamoId: RECLAMO, monto: 1000, fecha: '2026-09-10', referencia: 'NC-1', versionVista: 'enviado:0' };
+    expect((await R.registrarNotaDeCredito(T, entrada)).ok).toBe(true);
+    expect((await R.registrarNotaDeCredito(T, entrada)).ok).toBe(true);
+    // pero una nota NUEVA sobre el reclamo ya completo sí se rechaza
+    expect((await R.registrarNotaDeCredito(T, { ...entrada, monto: 50, versionVista: 'acreditado:1000' })).ok).toBe(false);
+  });
+});
+
 describe('registrarNotaDeCredito sin la migración 0860 (camino anterior)', () => {
   for (const code of ['PGRST202', '42883']) {
     it(`cae al camino anterior y lo avisa (${code})`, async () => {

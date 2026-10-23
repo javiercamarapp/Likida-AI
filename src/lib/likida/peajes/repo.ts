@@ -25,7 +25,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { hoyMx } from '@/lib/formato';
+import { hoyMx, mxn } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { acotada } from '../presupuesto';
@@ -2418,6 +2418,31 @@ export async function registrarNotaDeCredito(
   // mandan la misma y se registra UNA vez; dos notas legítimas distintas (otro monto/fecha/folio, u otro estado visto) llevan claves distintas.
   const clave = entrada.versionVista == null ? null
     : createHash('sha256').update([entrada.reclamoId, entrada.versionVista, entrada.monto.toFixed(2), entrada.fecha, entrada.referencia?.trim() ?? ''].join('|')).digest('hex');
+  // A36-R03-05: la función 0860 no veta un reclamo `rechazado` (la nota lo «revivía» a `acreditado` y chocaba con el único parcial
+  // `peaje_reclamo_activo_unico` de la 0847) ni topa lo acreditado contra lo reclamado. Sin migrar, el veto vive aquí: una lectura previa.
+  // NO es atómico frente a otra sesión que registre al mismo tiempo; el candado definitivo queda para una migración futura (veto + tope dentro
+  // de `peaje_nota_credito_registrar`, bajo el `for update`). Si el reclamo no se encuentra, decide la función (`no_existe`).
+  const { data: r, error: errR } = await acotada(supabaseAdmin().from('peaje_reclamo')
+    .select('id, estado, monto_reclamado, monto_acreditado').eq('tenant_id', tenantId).eq('id', entrada.reclamoId).maybeSingle(), 'revision_cobros.reclamo');
+  if (errR) { logger.error('revision_cobros.reclamo', { tenant: tenantId, err: errR.message }); return { ok: false, motivo: 'No se pudo leer el reclamo.' }; }
+  if (r) {
+    // El reintento idéntico (misma clave ya registrada) lo contesta la función como duplicado: no se veta aquí.
+    let yaRegistrada = false;
+    if (clave !== null) {
+      const { data: previa, error: errPrevia } = await acotada(supabaseAdmin().from('peaje_reclamo_nota')
+        .select('id').eq('tenant_id', tenantId).eq('reclamo_id', entrada.reclamoId).eq('clave_idempotencia', clave).maybeSingle(), 'revision_cobros.nota_previa');
+      if (errPrevia) { logger.error('revision_cobros.nota_previa', { tenant: tenantId, err: errPrevia.message }); return { ok: false, motivo: 'No se pudo leer el reclamo.' }; }
+      yaRegistrada = !!previa;
+    }
+    if (!yaRegistrada) {
+      if (r.estado === 'rechazado') return { ok: false, motivo: 'El proveedor rechazó este reclamo: no se le registran notas de crédito. Si te acreditó algo después, crea un reclamo nuevo.' };
+      const reclamado = Math.round(Number(r.monto_reclamado) * 100);
+      const nuevo = Math.round(Number(r.monto_acreditado ?? 0) * 100) + Math.round(entrada.monto * 100);
+      if (Number.isFinite(reclamado) && nuevo > reclamado) {
+        return { ok: false, motivo: `Con esta nota lo acreditado (${mxn(nuevo / 100)}) pasaría de lo reclamado (${mxn(reclamado / 100)}); ya llevaba ${mxn(Number(r.monto_acreditado ?? 0))}. Revisa el monto de la nota.` };
+      }
+    }
+  }
   const viaRpc = await acotada(supabaseAdmin().rpc('peaje_nota_credito_registrar', {
     p_tenant: tenantId, p_reclamo: entrada.reclamoId, p_monto: entrada.monto, p_fecha: entrada.fecha,
     p_referencia: entrada.referencia?.trim().slice(0, 120) || null, p_clave: clave,
@@ -2439,9 +2464,6 @@ export async function registrarNotaDeCredito(
   }
   // La migración 0860 aún no está aplicada en esta base: se cae al camino anterior (leer-sumar-escribir, SIN candado) y se avisa.
   logger.warn('revision_cobros.nota_sin_0860', { tenant: tenantId, aviso: 'peaje_nota_credito_registrar no existe: camino sin candado; aplicar la migración 0860' });
-  const { data: r, error: errR } = await acotada(supabaseAdmin().from('peaje_reclamo')
-    .select('id, estado, monto_reclamado, monto_acreditado').eq('tenant_id', tenantId).eq('id', entrada.reclamoId).maybeSingle(), 'revision_cobros.reclamo');
-  if (errR) { logger.error('revision_cobros.reclamo', { tenant: tenantId, err: errR.message }); return { ok: false, motivo: 'No se pudo leer el reclamo.' }; }
   if (!r) return { ok: false, motivo: 'Ese reclamo no existe en tu flota.' };
   if (r.estado === 'preparado') return { ok: false, motivo: 'El reclamo aún no está enviado: márcalo como enviado antes de registrar una nota de crédito.' };
 

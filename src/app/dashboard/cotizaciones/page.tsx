@@ -5,7 +5,7 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { mxn, porcentaje, fechaHoraMx, fechaMx, numero } from '@/lib/formato';
+import { parsearImporteMx, mxn, porcentaje, fechaHoraMx, fechaMx, numero } from '@/lib/formato';
 import { gananciaReal } from '@/lib/likida/cotizador/motor';
 import {
   getPanelCotizador, guardarConfigCotizador, crearCotizacion, marcarEnviada, marcarPerdida,
@@ -55,7 +55,7 @@ export default async function PaginaCotizaciones({
   // es exactamente la cotización que pierde dinero con cara de ganancia.
   const perilla = (v: FormDataEntryValue | null): number | null => {
     const s = String(v ?? '').trim();
-    return s === '' ? null : Number(s.replace(',', '.'));
+    return s === '' ? null : parsearImporteMx(s);
   };
 
   async function guardarConfig(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
