@@ -117,7 +117,7 @@ evidencia fiscal de un tercero.
 | Qué | Script | Qué se pierde sin él |
 |---|---|---|
 | **La base** (filas) | `bash scripts/respaldo.sh [destino]` | Todo: viajes, gastos, liquidaciones, facturación. |
-| **Storage** (archivos) | `bash scripts/respaldo-storage.sh [destino]` | Las FOTOS de los comprobantes y los PDF de las liquidaciones. Las filas quedan apuntando a rutas de un bucket vacío: la liquidación existe y el papel que el contralor cruza, no. |
+| **Storage** (archivos) | `bash scripts/respaldo-storage.sh [destino]` | Los archivos de TODOS los buckets (fotos de comprobantes, PDF de liquidaciones, facturas del buzón, documentos de Carta Porte, insumos del agente, avatares, bus y marketing). Las filas quedan apuntando a rutas de un bucket vacío: la liquidación existe y el papel que el contralor cruza, no. |
 
 **El segundo no existía hasta el 22-ago-2026** (RES-8). Correr solo el primero
 deja un respaldo que *parece* completo — es la forma más cara de este fallo.
@@ -137,7 +137,10 @@ RESPALDO_S3_DESTINO=s3://likida-respaldos/storage bash scripts/respaldo-storage.
 
 Variables de `respaldo-storage.sh`: `NEXT_PUBLIC_SUPABASE_URL` y
 `SUPABASE_SERVICE_ROLE_KEY` (las lee de `.env.local` si no están en el
-entorno), `RESPALDO_BUCKETS` (default `comprobantes liquidaciones bus`) y
+entorno), `RESPALDO_BUCKETS` (si no se define, usa la lista única
+`scripts/respaldo-buckets.txt`: los 9 buckets que crean las migraciones, incluidos
+`buzon-facturas`, `cartaporte-docs` y `agente-insumos`; una prueba la cruza contra
+`supabase/migrations`) y
 `RESPALDO_S3_DESTINO`. **No hay cron que lo llame**: corre contra producción
 con la service role, y esa tecla es consciente. Cadencia recomendada mientras
 no haya PITR: **semanal**, y a mano antes de cualquier migración que borre.
