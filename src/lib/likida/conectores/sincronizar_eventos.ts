@@ -38,7 +38,7 @@ import { lectorEventosDe, LECTORES_EVENTOS, esEventoGrave, type EventoSeguridadL
 import { dispararAsistenciaPorEventoCamara } from '../asistencia_camara';
 import type { Http } from './tipos';
 import { conPool } from '../lotes';
-import { finalizarPoll, reclamarPolls } from './poll_durable';
+import { finalizarPoll, procesarPollsEnPool } from './poll_durable';
 import { createHash } from 'node:crypto';
 
 /** 6× la cadencia del cron: cubre corridas saltadas sin estado por flota. */
@@ -920,8 +920,6 @@ export async function sincronizarEventosTodas(
   // no intentar ingerir 30 días en una sola función.
   const backfillHoras = horasConfiguradas('GPS_EVENTOS_BACKFILL_HORAS', 24 * 30, 24 * 365);
   const segmentoHoras = horasConfiguradas('GPS_EVENTOS_SEGMENTO_HORAS', 6, 24);
-  const instanteClaim = ahora();
-  const bootstrapDesde = new Date(instanteClaim - backfillHoras * 60 * 60 * 1000).toISOString();
   // Primero el outbox global: no consulta credenciales y por tanto sigue
   // funcionando después de desactivar o borrar el token del proveedor.
   // A37-S38-01: son lecturas de observabilidad/drenaje global; si fallan NO
@@ -935,10 +933,10 @@ export async function sincronizarEventosTodas(
       disparos: 0, backlog: true, error,
     }] satisfies ResultadoSyncEventos[];
   });
-  const credenciales = await reclamarPolls(
-    'eventos', Object.keys(LECTORES_EVENTOS), ANCHO_FANOUT_FLOTAS, { bootstrapDesde },
-  );
-  const resultados = await conPool(credenciales, ANCHO_FANOUT_FLOTAS, async (c) => {
+  // A37-S38-02: reclamo de a una flota por obrero hasta agotar elegibles o reloj.
+  const resultados = await procesarPollsEnPool('eventos', Object.keys(LECTORES_EVENTOS), ANCHO_FANOUT_FLOTAS, {
+    venceEn: opts.venceEn, ahora,
+  }, async (c) => {
     // El reloj se mira ANTES de despachar cada flota, no una vez al principio:
     // el patrón de `conRelojDuro`/`vigilarPortales`.
     if (opts.venceEn !== undefined && ahora() >= opts.venceEn) {
@@ -1030,9 +1028,9 @@ export async function sincronizarEventosTodas(
       return { ...resultado, backlog: true, error: `no se pudo finalizar el estado durable: ${e instanceof Error ? e.message : String(e)}` };
     }
   });
-  const salida: ResultadoSyncEventos[] = resultados.map((r, i): ResultadoSyncEventos => {
+  const salida: ResultadoSyncEventos[] = resultados.map((r): ResultadoSyncEventos => {
     if ('ok' in r) return r.ok;
-    const c = credenciales[i];
+    const c = r.c;
     return {
       tenantId: c.tenantId, proveedor: c.proveedor,
       leidos: 0, guardados: 0, huerfanos: 0, disparos: 0,
