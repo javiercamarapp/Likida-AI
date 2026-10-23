@@ -343,6 +343,11 @@ export interface ResultadoImportacion {
   /** Folios saltados porque su operador ya trae un viaje abierto (0029) —
    *  en la base o más arriba en el mismo archivo. */
   operadorOcupado: string[];
+  /** DAT-34-2: folios saltados porque su UNIDAD ya trae un viaje abierto
+   *  (`uq_viaje_abierto_por_unidad`, 0851) — en la base, más arriba en el mismo
+   *  archivo, o porque la carrera con otro request la ocupó entre la lectura y
+   *  el insert. Ausente si no hubo ninguno (los acuses sin choque no cambian). */
+  unidadOcupada?: string[];
   /** Números económicos del archivo que no existen en `unidad` (o que el
    *  catálogo no distingue). Sus filas NO se crean: importar un viaje con la
    *  unidad descartada en silencio dejaría el archivo diciendo una cosa y el
@@ -397,6 +402,13 @@ async function cargarCatalogo(
 
 /** Filas creadas en UN import a partir de las cuales se pide ANALYZE (ESC-18). */
 export const UMBRAL_ANALYZE = 1_000;
+
+/** ¿El error de la base es el choque contra `uq_viaje_abierto_por_unidad`
+ *  (0851)? Se exigen las DOS señales —el 23505 y el nombre del índice— para no
+ *  confundirlo con el folio duplicado ni con el índice gemelo del operador. */
+export function esChoqueUnidadAbierta(e: { code?: string; message?: string }): boolean {
+  return e.code === '23505' && (e.message ?? '').includes('uq_viaje_abierto_por_unidad');
+}
 
 async function analizarTrasImport(tenantId: string, creados: number): Promise<void> {
   try {
@@ -577,13 +589,50 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
   }
 
   const operadorOcupado: string[] = [];
-  const listas: Array<FilaViajeImportada & { unidadId: string | null; clienteId: string | null }> = [];
+  const operadorLibres: Array<FilaViajeImportada & { unidadId: string | null; clienteId: string | null }> = [];
   for (const f of amarradas) {
     const id = operadorPorNombre.get(f.operadorNombre!)!;
     if (ocupados.has(id)) { operadorOcupado.push(f.folio); continue; }
     ocupados.add(id); // la primera fila del archivo gana — como haría el 0029
+    operadorLibres.push(f);
+  }
+
+  // ── LA UNIDAD, EL GEMELO DEL OPERADOR (DAT-34-2) ──────────────────────────
+  // `uq_viaje_abierto_por_unidad` (0851): una unidad, UN viaje abierto. Sin
+  // este chequeo, una sola fila cuya unidad ya rueda en otro viaje tumbaba el
+  // lote entero de 100 con 23505 y "vuelve a subir el archivo" repetía el
+  // choque. Misma regla que el operador: la primera fila del archivo gana, las
+  // demás se saltan con su folio. Falla CERRADO si no se puede leer.
+  const unidadesOcupadas = new Set<string>();
+  const idsUnidades = [...new Set(operadorLibres.map((f) => f.unidadId).filter((u): u is string => !!u))];
+  for (let i = 0; i < idsUnidades.length; i += 200) {
+    const { data, error } = await acotada(supabaseAdmin().from('viaje')
+      .select('unidad_id')
+      .eq('tenant_id', tenantId)
+      .in('estatus', ['abierto', 'en_cuadre'])
+      .in('unidad_id', idsUnidades.slice(i, i + 200)), 'importarViajes.unidadesOcupadas');
+    if (error) {
+      logger.error('importar_viajes.unidades_ocupadas_ilegible', { tenantId, err: error.message });
+      return {
+        ...vacio(), saltados, operadoresSinAmarrar: [...operadoresSinAmarrar], sinOperador, operadorOcupado,
+        unidadesSinAmarrar: [...unidadesSinAmarrar], sinUnidad,
+        clientesSinAmarrar: [...clientesSinAmarrar], sinCliente,
+        error: 'No pude verificar qué unidades ya traen un viaje abierto — no importé nada. Vuelve a intentar.',
+      };
+    }
+    for (const r of data ?? []) unidadesOcupadas.add(String(r.unidad_id));
+  }
+  const unidadOcupada: string[] = [];
+  const listas: typeof operadorLibres = [];
+  for (const f of operadorLibres) {
+    if (f.unidadId) {
+      if (unidadesOcupadas.has(f.unidadId)) { unidadOcupada.push(f.folio); continue; }
+      unidadesOcupadas.add(f.unidadId); // la primera fila del archivo gana — como haría el 0851
+    }
     listas.push(f);
   }
+  const campoUnidadOcupada = (): Pick<ResultadoImportacion, 'unidadOcupada'> =>
+    unidadOcupada.length > 0 ? { unidadOcupada: [...unidadOcupada] } : {};
 
   let creados = 0;
   // Seguimiento del agente (T-A5-04): se activa por lote, solo para lo recién creado. Falla ABIERTO para el import
@@ -626,11 +675,31 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     // sus folios chocan en la base, vuelven sin insertar, y se reportan como
     // saltados. `creados` cuenta SOLO las filas que el insert devolvió: la
     // cifra del acuse es lo que de verdad entró, nunca el tamaño del lote.
-    const { data, error } = await acotada(
+    const insertar = (filasLote: typeof lote) => acotada(
       supabaseAdmin().from('viaje')
-        .upsert(lote, { onConflict: 'tenant_id,folio', ignoreDuplicates: true })
+        .upsert(filasLote, { onConflict: 'tenant_id,folio', ignoreDuplicates: true })
         .select('id, folio'), 'importarViajes.insert',
     );
+    let { data, error } = await insertar(lote);
+    // DAT-34-2: la carrera contra `uq_viaje_abierto_por_unidad` (otro request
+    // ocupó la unidad DESPUÉS de nuestra lectura de ocupadas) rebota el lote
+    // entero con 23505. No es falla del lote: es UNA fila. Se reintenta fila
+    // por fila y solo la que choca se rechaza, con su folio y su motivo; las
+    // demás entran. Cualquier otro error conserva el camino de siempre.
+    if (error && esChoqueUnidadAbierta(error)) {
+      const filasOk: Array<{ id?: unknown; folio?: unknown }> = [];
+      let otroError: typeof error | null = null;
+      for (const unica of lote) {
+        const r1 = await insertar([unica]);
+        if (r1.error && esChoqueUnidadAbierta(r1.error)) { unidadOcupada.push(unica.folio); continue; }
+        if (r1.error) { otroError = r1.error; break; }
+        filasOk.push(...(r1.data ?? []));
+      }
+      // Lo que ya entró fila por fila se cuenta y se le activa el seguimiento
+      // aunque otra fila falle por otra causa (mismo acuse de siempre).
+      data = filasOk as typeof data;
+      error = otroError;
+    }
     if (error) {
       logger.error('importar_viajes.lote_fallo', { tenantId, desde: i, err: error.message });
       return {
@@ -638,6 +707,7 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
         sinOperador, operadorOcupado,
         unidadesSinAmarrar: [...unidadesSinAmarrar], sinUnidad,
         clientesSinAmarrar: [...clientesSinAmarrar], sinCliente,
+        ...campoUnidadOcupada(),
         ...campoSeguimiento(),
         error: `Se crearon ${creados} y el lote que empieza en la fila ${i + 1} falló — revisa y vuelve a subir el archivo: los ya creados se saltan solos.`,
       };
@@ -645,7 +715,7 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     const insertados = new Set((data ?? []).map((v) => String(v.folio)));
     creados += insertados.size;
     for (const fila of lote) {
-      if (!insertados.has(fila.folio)) saltados.push(fila.folio);
+      if (!insertados.has(fila.folio) && !unidadOcupada.includes(fila.folio)) saltados.push(fila.folio);
     }
     const idsNuevos = (data ?? []).map((v) => (v as { id?: unknown }).id).filter((x): x is string => typeof x === 'string' && x !== '');
     if (idsNuevos.length > 0 && !seg.noDisponible) {
@@ -663,6 +733,7 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
   logger.info('importar_viajes.ok', {
     tenantId, creados, saltados: saltados.length,
     sinOperador: sinOperador.length, operadorOcupado: operadorOcupado.length,
+    unidadOcupada: unidadOcupada.length,
     sinUnidad: sinUnidad.length, sinCliente: sinCliente.length,
   });
 
@@ -678,6 +749,7 @@ export async function importarViajes(tenantId: string, filas: FilaViajeImportada
     creados, saltados, operadoresSinAmarrar: [...operadoresSinAmarrar], sinOperador, operadorOcupado,
     unidadesSinAmarrar: [...unidadesSinAmarrar], sinUnidad,
     clientesSinAmarrar: [...clientesSinAmarrar], sinCliente,
+    ...campoUnidadOcupada(),
     ...campoSeguimiento(),
   };
 }
