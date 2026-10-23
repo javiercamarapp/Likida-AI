@@ -24,7 +24,7 @@ import { acotada } from '../presupuesto';
 import { exigir, traerTodo } from '../pg';
 import { DatoInvalido } from '../errores';
 import { rutaPdfExterno, rutaExcelExterno } from './almacen';
-import { subirArchivoExterno, firmarPdfExterno, leerPorId, TIPO_XLSX } from './repo';
+import { subirArchivoExterno, firmarPdfExterno, leerPorId, TIPO_XLSX, type NuevaLiquidacionExterna } from './repo';
 import type { CursorDesglose } from './desglose_puerto';
 import type { RolDestinatario } from './correo_destinatarios';
 
@@ -423,6 +423,70 @@ export async function insertarEntregas(tenantId: string, rows: NuevaEntrega[]): 
     creadas += (exigirEscritura(ru, 'liqcorreo.entregas_insertar_una') ?? []).length;
   }
   return creadas;
+}
+
+/** Lo que recibe la RPC 0857: todo lo que `recibirDesglose` escribe, para guardarlo en UNA transacción. */
+export interface PedidoRecepcionAtomica {
+  liquidacion: NuevaLiquidacionExterna;
+  meta: Omit<MetaDesglose, 'liquidacionExternaId'>;
+  evento: Record<string, unknown>;
+  entregas: Array<Omit<NuevaEntrega, 'liquidacionExternaId'>>;
+}
+export interface RecepcionAtomica { liquidacionId: string; creada: boolean; reparada: boolean; entregas: number }
+
+/**
+ * Liquidación + encabezado + evento + entregas en una sola transacción (RPC 0857, hallazgo A35-A1-01). Si la liquidación ya
+ * existe con la misma huella pero a medias, la RPC completa lo que falta. `no_disponible` = la base aún no tiene la 0857: el
+ * llamador cae al camino anterior (no atómico) y lo avisa. Cualquier otro error LANZA: nada queda a medias y se reintenta.
+ */
+export async function recibirDesgloseAtomico(tenantId: string, p: PedidoRecepcionAtomica): Promise<Lectura<RecepcionAtomica>> {
+  const d = p.liquidacion.datos;
+  const m = p.meta;
+  const res = await acotada(supabaseAdmin().rpc('recibir_desglose_atomico', {
+    p_tenant: tenantId,
+    p_liquidacion: {
+      clave_externa: d.claveExterna, huella: p.liquidacion.huella, sistema_origen: d.sistemaOrigen,
+      operador_id: p.liquidacion.operadorId, folios_viaje: d.viajes, viaje_ids: p.liquidacion.viajeIds,
+      periodo_desde: d.periodo.desde, periodo_hasta: d.periodo.hasta, conceptos: d.conceptos, total: d.total, moneda: d.moneda,
+      pdf_ruta: p.liquidacion.pdfRuta, pdf_origen: p.liquidacion.pdfOrigen, pdf_sha256: p.liquidacion.pdfSha256,
+    },
+    p_desglose: {
+      bitacora: m.bitacora, terminal: m.terminal ?? null, poliza: m.poliza ?? null, unidad: m.unidad ?? null,
+      tipo_operador: m.tipoOperador ?? null, dias: m.dias ?? null, total_origen: m.totalOrigen,
+      retenida_motivo: recortar(m.retenidaMotivo), numero_liquidacion: m.numeroLiquidacion ?? null,
+      numero_pago: m.numeroPago ?? null, bitacoras: m.bitacoras ?? null,
+    },
+    p_evento: p.evento,
+    p_entregas: p.entregas.map((e) => ({
+      rol: e.rol, correo: normalizarCorreo(e.correo, 'correo') ?? '', xlsx_ruta: e.xlsxRuta ?? null,
+      xlsx_sha256: e.xlsxSha256 ?? null, disparo: e.disparo ?? 'auto',
+    })),
+  }), 'liqcorreo.recibir_atomico');
+  const r = res as unknown as { data: { liquidacion_id?: string; creada?: boolean; reparada?: boolean; entregas?: number } | null; error: ErrorPg };
+  if (r.error) {
+    if (r.error.code === '42883' || r.error.code === 'PGRST202' || /could not find the function/i.test(r.error.message ?? '')) {
+      return { ok: false, motivo: 'no_disponible' };
+    }
+    throw new Error(`liqcorreo.recibir_atomico: ${r.error.message ?? 'error de base'}`);
+  }
+  if (!r.data || typeof r.data.liquidacion_id !== 'string') throw new Error('liqcorreo.recibir_atomico: respuesta sin liquidacion_id');
+  return {
+    ok: true,
+    valor: { liquidacionId: r.data.liquidacion_id, creada: r.data.creada === true, reparada: r.data.reparada === true, entregas: Number(r.data.entregas ?? 0) },
+  };
+}
+
+/**
+ * ¿Quedó a medias una recepción anterior? (sin encabezado, o sin retención y sin una sola entrega). Es lo que dejaba el camino
+ * no atómico tras un corte; hoy lo rescata `recibirDesglose`. Si no se puede leer, `false` (no inventa trabajo).
+ */
+export async function desgloseIncompleto(tenantId: string, liquidacionId: string): Promise<boolean> {
+  const d = await leerDesglose(tenantId, liquidacionId);
+  if (!d.ok) return false;
+  if (d.valor === null) return true;
+  if (d.valor.retenidaMotivo !== null) return false;
+  const e = await entregasDe(tenantId, liquidacionId);
+  return e.ok && e.valor.length === 0;
 }
 
 /** Reclama hasta `limite` entregas listas (RPC 0787, `for update skip locked`). Cruza flotas a propósito: cada fila trae su tenant. */

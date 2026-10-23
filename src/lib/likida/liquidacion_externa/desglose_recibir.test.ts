@@ -330,3 +330,166 @@ describe('renombresDeConfig', () => {
 });
 
 beforeEach(() => { vi.clearAllMocks(); });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Hallazgo A35-A1-01: la recepción es atómica (RPC 0857) y lo que quedó a medias se rescata.
+// ═══════════════════════════════════════════════════════════════════════════
+
+type Pedido = import('./repo_correo').PedidoRecepcionAtomica;
+
+/** Agrega al banco una RPC atómica en memoria: o guarda todo junto, o no guarda nada (como la transacción real). */
+function conAtomica(b: Banco, modo: 'ok' | 'ausente' | 'falla'): { llamadas: Pedido[] } {
+  const llamadas: Pedido[] = [];
+  b.deps.desgloseIncompleto = async (_t, id) => {
+    const tiene = b.desgloses.some((x) => x.liquidacionExternaId === id);
+    const retenida = b.desgloses.some((x) => x.liquidacionExternaId === id && x.retenidaMotivo);
+    return !tiene || (!retenida && !b.entregas.some((e) => e.liquidacionExternaId === id));
+  };
+  b.deps.recibirAtomico = async (_t, p) => {
+    llamadas.push(p);
+    if (modo === 'ausente') return { ok: false, motivo: 'no_disponible' };
+    if (modo === 'falla') throw new Error('liqcorreo.recibir_atomico: corte a mitad'); // la transacción revierte: nada se guarda
+    b.orden.push('atomica');
+    let liq = b.liquidaciones.find((l) => l.claveExterna === p.liquidacion.datos.claveExterna);
+    const creada = !liq;
+    if (!liq) {
+      liq = { id: `liq-${b.liquidaciones.length + 1}`, tenantId: p.liquidacion.tenantId, claveExterna: p.liquidacion.datos.claveExterna,
+        huella: p.liquidacion.huella, total: p.liquidacion.datos.total } as unknown as LiquidacionExterna;
+      b.liquidaciones.push(liq);
+    }
+    const id = liq.id;
+    const faltaDesglose = !b.desgloses.some((x) => x.liquidacionExternaId === id);
+    if (faltaDesglose) { b.desgloses.push({ liquidacionExternaId: id, ...p.meta }); b.eventos.push('recibida'); }
+    const hayEntregas = b.entregas.some((e) => e.liquidacionExternaId === id);
+    let n = 0;
+    if (!p.meta.retenidaMotivo && !hayEntregas) { for (const e of p.entregas) b.entregas.push({ liquidacionExternaId: id, ...e }); n = p.entregas.length; }
+    return { ok: true, valor: { liquidacionId: id, creada, reparada: !creada && (faltaDesglose || n > 0), entregas: n } };
+  };
+  return { llamadas };
+}
+
+describe('recibirDesglose: recepción atómica (RPC 0857)', () => {
+  it('con la RPC: una sola llamada lleva liquidación, encabezado, evento y las 4 entregas; no hay inserciones sueltas', async () => {
+    const b = banco();
+    const sueltas = vi.fn();
+    b.deps.insertarLiquidacion = sueltas; b.deps.insertarDesglose = sueltas; b.deps.insertarEntregas = sueltas; b.deps.registrarEvento = sueltas;
+    const { llamadas } = conAtomica(b, 'ok');
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(sueltas).not.toHaveBeenCalled();
+    expect(llamadas).toHaveLength(1);
+    expect(llamadas[0].entregas.map((e) => e.rol)).toEqual(['operador', 'coordinador', 'rh', 'archivo']);
+    expect(llamadas[0].meta).toMatchObject({ bitacora: 'B-0001', totalOrigen: 'tms', retenidaMotivo: null });
+    expect(llamadas[0].evento).toMatchObject({ canal: 'correo', retenida: false });
+    expect(b.orden).toEqual(['subir', 'atomica']);
+    expect(r).toMatchObject({ estado: 'creada', entregas: 4, retenida: false });
+  });
+
+  it('retenida: la RPC va sin entregas y con el motivo; se abren las excepciones', async () => {
+    const b = banco();
+    const { llamadas } = conAtomica(b, 'ok');
+    const r = await recibirDesglose(TENANT, desglose({ neto: -5, percepciones: [{ concepto: 'Sueldo', monto: 100 }], deducciones: [{ concepto: 'Anticipo', monto: 105 }] }), b.deps);
+    expect(llamadas[0].entregas).toHaveLength(0);
+    expect(llamadas[0].meta.retenidaMotivo).toBeTruthy();
+    expect(r).toMatchObject({ estado: 'creada', retenida: true, entregas: 0 });
+    expect(b.excepciones.map((e) => e.tipo)).toContain('neto_negativo');
+  });
+
+  it('un corte dentro de la RPC lanza y NO deja nada; el reintento crea todo una sola vez', async () => {
+    const roto = banco();
+    conAtomica(roto, 'falla');
+    await expect(recibirDesglose(TENANT, desglose(), roto.deps)).rejects.toThrow('corte a mitad');
+    expect([roto.liquidaciones.length, roto.desgloses.length, roto.eventos.length, roto.entregas.length]).toEqual([0, 0, 0, 0]);
+
+    const sano = banco();
+    conAtomica(sano, 'ok');
+    const r1 = await recibirDesglose(TENANT, desglose(), sano.deps);
+    const r2 = await recibirDesglose(TENANT, desglose(), sano.deps);
+    expect(r1.estado).toBe('creada');
+    expect(r2.estado).toBe('idempotente');
+    expect(sano.entregas).toHaveLength(4);
+    expect(sano.liquidaciones).toHaveLength(1);
+  });
+
+  it('la base aún no tiene la 0857: cae al camino anterior, lo avisa en el log y deja todo igual que antes', async () => {
+    const { logger } = await import('@/lib/logger');
+    (logger.warn as ReturnType<typeof vi.fn>).mockClear();
+    const b = banco();
+    const { llamadas } = conAtomica(b, 'ausente');
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(llamadas).toHaveLength(1);
+    expect(b.orden).toEqual(['subir', 'insertar']);
+    expect(r).toMatchObject({ estado: 'creada', entregas: 4 });
+    expect(b.liquidaciones).toHaveLength(1);
+    expect(b.desgloses).toHaveLength(1);
+    expect(b.eventos).toEqual(['recibida']);
+    expect((logger.warn as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0])).toContain('liqcorreo.recepcion_no_atomica');
+  });
+
+  it('una carrera: otra recepción ya lo guardó completo => idempotente, sin excepciones ni reenvío', async () => {
+    const b = banco();
+    conAtomica(b, 'ok');
+    await recibirDesglose(TENANT, desglose(), b.deps);
+    b.deps.buscarPorClave = async () => null; // esta recepción no la vio al empezar
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(r.estado).toBe('idempotente');
+    expect(b.entregas).toHaveLength(4);
+  });
+});
+
+describe('recibirDesglose: rescate de una recepción que quedó a medias', () => {
+  /** Reproduce el estado que dejaba el camino anterior: la fila existe con la misma huella, sin encabezado ni entregas. */
+  function aMedias(b: Banco): void {
+    const liq = aLiquidacionExterna(desglose(), { sistemaOrigen: 'desglose-bitacora' }).liquidacion;
+    b.liquidaciones.push({ id: 'liq-previa', tenantId: TENANT, claveExterna: liq.claveExterna, huella: huellaContenido(liq), total: liq.total } as unknown as LiquidacionExterna);
+  }
+
+  it('con la RPC: la misma huella sin encabezado ni entregas NO es idempotente: se completa sobre la misma fila', async () => {
+    const b = banco();
+    conAtomica(b, 'ok');
+    aMedias(b);
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(r).toMatchObject({ estado: 'creada', liquidacionId: 'liq-previa', entregas: 4 });
+    expect(b.liquidaciones).toHaveLength(1);
+    expect(b.desgloses).toHaveLength(1);
+    expect(b.entregas).toHaveLength(4);
+    expect(b.entregas.every((e) => e.liquidacionExternaId === 'liq-previa')).toBe(true);
+    // ya completa: la siguiente es idempotente de verdad
+    expect((await recibirDesglose(TENANT, desglose(), b.deps)).estado).toBe('idempotente');
+  });
+
+  it('sin la RPC (camino anterior): también se completa, sin insertar otra liquidación ni repetir el evento', async () => {
+    const b = banco();
+    conAtomica(b, 'ausente');
+    aMedias(b);
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(r).toMatchObject({ estado: 'creada', liquidacionId: 'liq-previa', entregas: 4 });
+    expect(b.liquidaciones).toHaveLength(1);
+    expect(b.desgloses).toHaveLength(1);
+    expect(b.eventos).toHaveLength(0);
+  });
+
+  it('encabezado sin entregas y sin retención (corte justo antes de las entregas) => se crean las entregas', async () => {
+    const b = banco();
+    conAtomica(b, 'ok');
+    aMedias(b);
+    b.desgloses.push({ liquidacionExternaId: 'liq-previa', bitacora: 'B-0001', retenidaMotivo: null });
+    const r = await recibirDesglose(TENANT, desglose(), b.deps);
+    expect(r).toMatchObject({ estado: 'creada', entregas: 4 });
+    expect(b.desgloses).toHaveLength(1);
+  });
+
+  it('una retenida legítima (encabezado con motivo, sin entregas) sigue siendo idempotente: no se envía sola', async () => {
+    const b = banco();
+    conAtomica(b, 'ok');
+    aMedias(b);
+    b.desgloses.push({ liquidacionExternaId: 'liq-previa', bitacora: 'B-0001', retenidaMotivo: 'neto negativo' });
+    expect((await recibirDesglose(TENANT, desglose(), b.deps)).estado).toBe('idempotente');
+    expect(b.entregas).toHaveLength(0);
+  });
+
+  it('sin el puerto de rescate (dobles anteriores) la misma huella sigue siendo idempotente', async () => {
+    const b = banco();
+    aMedias(b);
+    expect((await recibirDesglose(TENANT, desglose(), b.deps)).estado).toBe('idempotente');
+  });
+});
