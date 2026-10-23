@@ -106,3 +106,38 @@ describe('la puerta', () => {
     expect(responderEntrevista).toHaveBeenCalledTimes(1);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A36-R01-03 — el cliente manda la pregunta que está contestando; si el
+// servidor ya avanzó (el turno anterior SÍ se guardó aunque la pantalla se
+// cortó), el «sí» del reintento NO se aplica a la pregunta siguiente.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A36-R01-03 — reintento tras un corte no responde otra pregunta', () => {
+  const leerFin = async (r: Response) => {
+    const eventos = (await r.text()).split('\n').filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
+    return eventos.find((e) => e.t === 'fin') as Record<string, unknown>;
+  };
+  const MSJ = [{ rol: 'usuario', texto: 'Sí' }];
+
+  it('preguntaId distinto de la pregunta vigente: NO llega al agente y avisa que ya avanzó', async () => {
+    const r = await postear({ mensajes: MSJ, preguntaId: 'pregunta_que_ya_se_contesto' });
+    const fin = await leerFin(r);
+    expect(responderEntrevista).not.toHaveBeenCalled();
+    expect(fin.guardado).toBe(false);
+    expect(String(fin.texto)).toMatch(/ya se guardó|ya avanzó/i);
+    expect(typeof fin.siguienteId).toBe('string');
+  });
+
+  it('preguntaId vigente: sí llega al agente y la respuesta trae el id de la siguiente pregunta', async () => {
+    const primero = await leerFin(await postear({ mensajes: MSJ, preguntaId: 'pregunta_que_ya_se_contesto' }));
+    responderEntrevista.mockClear();
+    const fin = await leerFin(await postear({ mensajes: MSJ, preguntaId: primero.siguienteId }));
+    expect(responderEntrevista).toHaveBeenCalledTimes(1);
+    expect(typeof fin.siguienteId).toBe('string');
+  });
+
+  it('un cliente viejo sin preguntaId sigue funcionando', async () => {
+    await (await postear({ mensajes: MSJ })).text();
+    expect(responderEntrevista).toHaveBeenCalledTimes(1);
+  });
+});

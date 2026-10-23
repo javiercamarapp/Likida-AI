@@ -145,6 +145,7 @@ export default async function OnboardingFlotaPage({
           )}
           <ChatEntrevista
             preguntaInicial={preguntaInicial}
+            preguntaIdInicial={entrevista.siguiente?.id ?? null}
             chipsIniciales={bien.chips}
             sustentoInicial={bien.sustento}
             perfilListoInicial={entrevista.perfilListo || onboardingFiscalListo(perfil)}

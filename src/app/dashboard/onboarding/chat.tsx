@@ -110,9 +110,11 @@ function VisualRespuesta({ v }: { v: Visual }) {
 }
 
 export function ChatEntrevista({
-  preguntaInicial, chipsIniciales, perfilListoInicial, sufijo, formulario,
+  preguntaInicial, preguntaIdInicial, chipsIniciales, perfilListoInicial, sufijo, formulario,
 }: {
   preguntaInicial: string | null;
+  /** Id de la pregunta vigente: el servidor rechaza una respuesta a otra (A36-R01-03). */
+  preguntaIdInicial?: string | null;
   chipsIniciales: OpcionChip[];
   /** Lo sigue pasando la página; el clon de ChatFlota usa Consulta, no un botón Sustento. */
   sustentoInicial?: { cita: string; texto: string } | null;
@@ -124,6 +126,7 @@ export function ChatEntrevista({
   const [historial, setHistorial] = useState<Turno[]>([]);
   const [texto, setTexto] = useState('');
   const [ocupado, setOcupado] = useState(false);
+  const [preguntaId, setPreguntaId] = useState<string | null | undefined>(preguntaIdInicial);
   const [listo, setListo] = useState(perfilListoInicial);
   const [recomendar, setRecomendar] = useState(false);
   const [menuAdjuntar, setMenuAdjuntar] = useState(false);
@@ -266,8 +269,11 @@ export function ChatEntrevista({
         body: JSON.stringify({
           mensajes: [...previos, { rol: 'usuario', texto: t || mostrado }],
           documento,
+          ...(preguntaId !== undefined ? { preguntaId } : {}),
         }),
-        signal: AbortSignal.timeout(75_000),
+        // >= maxDuration de la ruta (120 s): abortar antes dejaba al servidor
+        // guardando mientras la pantalla decía que no (A36-R15-04).
+        signal: AbortSignal.timeout(125_000),
       });
       let d: Record<string, unknown> | null = null;
       if (resp.ok && resp.body && (resp.headers.get('content-type') ?? '').includes('ndjson')) {
@@ -321,11 +327,12 @@ export function ChatEntrevista({
         q: mostrado,
         r: { texto: respuesta, chips: Array.isArray(d?.chips) ? d.chips as OpcionChip[] : undefined },
       }]);
+      if (d && (typeof d.siguienteId === 'string' || d.siguienteId === null)) setPreguntaId(d.siguienteId as string | null);
       if (d?.perfilListo === true) setListo(true);
     } catch {
       setHistorial((h) => [...h.slice(0, -1), {
         q: mostrado,
-        r: { texto: 'Se cortó la conexión. No guardé nada. Repite la respuesta o usa el formulario.' },
+        r: { texto: 'Se cortó la conexión. No pude confirmar si se guardó: revisa tu perfil (Operadores, Unidades, Fiscal) antes de repetir la respuesta, o usa el formulario.' },
       }]);
     } finally {
       clearInterval(relojFases);
