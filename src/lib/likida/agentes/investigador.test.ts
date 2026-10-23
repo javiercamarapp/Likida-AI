@@ -25,7 +25,7 @@ function builder(tabla: string) {
   const b: Record<string, unknown> = {};
   Object.assign(b, {
     select: () => b, eq: () => b, is: () => b, in: () => b, or: () => b,
-    order: () => b, limit: () => b, insert: () => b, upsert: () => b,
+    order: () => b, limit: () => b, insert: () => b, upsert: () => b, maybeSingle: () => b,
     then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
       Promise.resolve().then(responder).then(res, rej),
   });
@@ -35,8 +35,9 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: strin
 vi.mock('../interruptores', () => ({ estaApagado: async () => false }));
 vi.mock('@/lib/llm/openrouter', () => ({ generateStructured: vi.fn() }));
 vi.mock('./corridas', () => ({ registrarCorrida: vi.fn() }));
+vi.mock('@/lib/http/https_publico', () => ({ httpsPublico: vi.fn() }));
 
-const { textoVisible, enlacesInstitucionales, correosVerificados, cosecharCorreosDeNotas, candidatosSinDossier } = await import('./investigador');
+const { investigarProspecto, textoVisible, enlacesInstitucionales, correosVerificados, cosecharCorreosDeNotas, candidatosSinDossier } = await import('./investigador');
 
 describe('correosVerificados — la compuerta literal contra el contacto inventado', () => {
   const paginas = [{ url: 'https://x.mx/contacto', texto: 'Escríbenos a VENTAS@x.mx o llama al 8112345678' }];
@@ -264,5 +265,35 @@ describe('candidatosSinDossier — el cursor avanza más allá de una página ag
     // del builder, indistinguible aquí; lo que sí es observable es que el
     // resultado no incluye nada de una vuelta fantasma.
     expect(respuestas.get('prospecto')).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL MOTIVO REAL DEL FALLO DEL MODELO (23-oct-2026). 127 corridas en fallo en
+// 10 días decían lo mismo — «El modelo no pudo extraer el dossier.» — porque
+// el catch descartaba la excepción. Ahora la bitácora lleva clase + detalle
+// corto, el log lleva el mensaje limpio, y NUNCA viaja una llave.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('investigarProspecto — el catch del modelo deja el motivo real', () => {
+  it('registra «(auth: HTTP 401)» y loguea status/rol sin filtrar la llave', async () => {
+    const { generateStructured } = await import('@/lib/llm/openrouter');
+    const { registrarCorrida } = await import('./corridas');
+    const { httpsPublico } = await import('@/lib/http/https_publico');
+    const { logger } = await import('@/lib/logger');
+    respuestas.set('prospecto', [{ data: { id: 'p-1', empresa: 'Acme', sitio_web: 'https://acme.example', notas: null, correo: null, estado: 'nuevo' }, error: null }]);
+    vi.mocked(httpsPublico).mockResolvedValue({ estado: 200, encabezados: { 'content-type': 'text/html' }, cuerpo: '<html><body>Acme</body></html>' } as never);
+    const apiErr = Object.assign(new Error('401 Incorrect API key provided: sk-or-v1-abcdef1234567890abcdef1234567890'), { status: 401 });
+    vi.mocked(generateStructured).mockRejectedValue(Object.assign(new Error('Falló generación estructurada: 401'), { name: 'StructuredError', cause: apiErr }));
+
+    await expect(investigarProspecto('p-1', 'cron')).rejects.toThrow();
+
+    const corrida = vi.mocked(registrarCorrida).mock.calls.at(-1)![2];
+    expect(corrida.estado).toBe('fallo');
+    expect(corrida.error).toBe('El modelo no pudo extraer el dossier (auth: HTTP 401)');
+    const [evento, datos] = vi.mocked(logger.error).mock.calls.at(-1)! as [string, Record<string, unknown>];
+    expect(evento).toBe('investigador.modelo_fallo');
+    expect(datos).toMatchObject({ clase: 'auth', status: 401, rol: 'back_office' });
+    expect(String(datos.err).length).toBeLessThanOrEqual(200);
+    expect(JSON.stringify([corrida, datos])).not.toMatch(/sk-or/);
   });
 });
