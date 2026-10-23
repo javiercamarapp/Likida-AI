@@ -960,6 +960,7 @@ export async function getUltimoInicioSinFalloPorAgente(agentes: readonly string[
       .eq('agente', agente)
       .in('estado', ['ok', 'parcial'])
       .order('inicio', { ascending: false })
+      .order('id', { ascending: false })
       .limit(1), `getUltimoInicioSinFalloPorAgente/${agente}`);
     if (error) throw new Error(`getUltimoInicioSinFalloPorAgente/${agente}: ${error.message}`);
     const inicio = ((data ?? [])[0] as { inicio?: string } | undefined)?.inicio ?? null;

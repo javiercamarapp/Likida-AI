@@ -259,6 +259,7 @@ export async function leerPausaPorFallos(agente: string, ahoraMs: number = Date.
       .select('estado, inicio, error')
       .eq('agente', agente)
       .order('inicio', { ascending: false })
+      .order('id', { ascending: false })
       .limit(FALLOS_PARA_PAUSA), 'corridas.pausa_por_fallos');
     if (error) {
       logger.warn('corridas.pausa_lectura_fallo', { agente, err: error.message });

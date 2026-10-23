@@ -315,6 +315,8 @@ const CONDUCTOR_VOLUNTARIOS_ACTIVOS = ".from('operador').select('id', { count: '
 // es cliente de Likida en CUALQUIER flota, antes de decidir si se enlaza un
 // auth.users existente?
 const APP_USER_EXISTE_POR_CORREO = ".from('app_user').select('id').eq('email', email).maybeSingle()";
+// Cortacircuitos del runner (leerPausaPorFallos): las últimas corridas de UN agente del sistema, de cualquier flota o de ninguna.
+const CORRIDAS_PAUSA_POR_FALLOS = ".from('agente_corrida').select('estado, inicio, error').eq('agente', agente).order('inicio', { ascending: false }).order('id', { ascending: false }).limit(FALLOS_PARA_PAUSA)";
 const EXENCIONES_CONSULTA = [{
   archivo: 'src/lib/auth/perfil_tenant.ts', tabla: 'tenant_perfil', cadena: PERFIL_PUNTO_DE_ACCESO,
   razon: 'Es la definición del único punto de acceso a tenant_perfil (`tablaPerfil`, tope de frontera_datos_guardiana): no ejecuta nada por sí misma. Sus dos usos filtran por flota (`perfilDeTenant` con `.eq(tenant_id)`) o barren a propósito todas las flotas con perfil para el cron (`tenantsSinPerfilParaCron` con `.select(tenant_id)`), y esos dos usos sí pasan por esta misma prueba. No exime otro archivo ni otra consulta.',
@@ -327,6 +329,9 @@ const EXENCIONES_CONSULTA = [{
 }, {
   archivo: 'src/lib/likida/repo.ts', tabla: 'agente_corrida', cadena: DUNNING_CORRIDA,
   razon: 'La última corrida del agente cobranza_saas se lee POR AGENTE a través de todas las flotas a propósito: el agente barre `factura_saas` de toda la plataforma y su corrida es del AGENTE (tenant NULL), igual que reportes.ts, backoffice.ts y direccion.ts. La lee solo /admin/cobranza (`await requireSuperadmin()` dentro de la página; la prueba de la página lo exige). No exime ninguna otra consulta de repo.ts.',
+}, {
+  archivo: 'src/lib/likida/agentes/corridas.ts', tabla: 'agente_corrida', cadena: CORRIDAS_PAUSA_POR_FALLOS,
+  razon: 'El cortacircuitos del runner de sistema (`leerPausaPorFallos`, solo lo llama despachar tras puertaCron) decide si PAUSAR a un agente de LIKIDA tras N fallos seguidos: la racha es del AGENTE, no de una flota (sus corridas son de tenant NULL o de cualquier flota), y filtrar por una flota ocultaría la racha real. Solo lee (estado, inicio, error) para decidir pausar o no, nada llega a una pantalla de flota. Las demás consultas de corridas.ts SÍ filtran tenant_id y no quedan exentas.',
 }, {
   archivo: 'src/lib/likida/reglas/repo.ts', tabla: 'regla_aviso', cadena: REGLAS_PURGA_AVISOS,
   razon: 'Retención por EDAD (365 días) de una bitácora de operación: el DELETE barre las filas vencidas de TODAS las flotas a la vez, igual que las purgas de wa_mensaje_procesado y llm_costo del cron purgar. No lee ni devuelve datos a ninguna pantalla, solo cuenta cuántas borró; lo llama únicamente vigilarReglas (cron escalar, tras puertaCron y la palanca global). El resto de repo.ts, incluido todo lo que lee o escribe el historial por flota, sigue vigilado por esta prueba.',
