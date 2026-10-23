@@ -100,7 +100,7 @@ function montoTecleado(crudo: string, campo: string, opciones: { obligatorio: bo
     if (opciones.obligatorio) throw new DatoInvalido(`${campo} es obligatorio.`);
     return null;
   }
-  const limpio = t.replace(/[$\s]/g, '').replace(/,(?=\d{3}\b)/g, '').replace(',', '.');
+  const limpio = t.replace(/[$\s]/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.');
   if (!/^\d+(\.\d+)?$/.test(limpio)) throw new DatoInvalido(`${campo} tiene que ser un número (sin letras ni signos).`);
   const n = Number(limpio);
   if (!Number.isFinite(n)) throw new DatoInvalido(`${campo} tiene que ser un número.`);
