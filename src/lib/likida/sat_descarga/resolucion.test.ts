@@ -398,3 +398,76 @@ describe('el tenant de la sesión se impone en cada consulta', () => {
     expect((llamadasRpc[0].args as Record<string, unknown>).p_tenant).toBe(TENANT);
   });
 });
+
+// ── AUDITORÍA 35, R04-fiscal-01: la liga MANUAL también copia los campos ────
+// Cifras sintéticas: caseta de $1,160.00 = subtotal 1,000.00 + IVA 160.00.
+describe('ligar a mano — copia de los campos fiscales del XML (0858)', () => {
+  const XML = `<?xml version="1.0"?><cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="4.0" TipoDeComprobante="I" Total="1160.00" SubTotal="1000.00" Fecha="2026-10-01T10:15:00"><cfdi:Emisor Rfc="AAA010101AAA"/><cfdi:Receptor Rfc="BBB020202BBB"/><cfdi:Conceptos><cfdi:Concepto ClaveProdServ="78101800" ClaveUnidad="E48" Cantidad="1" Importe="1000.00"/></cfdi:Conceptos><cfdi:Impuestos><cfdi:Traslados><cfdi:Traslado Impuesto="002" Importe="160.00"/></cfdi:Traslados></cfdi:Impuestos><cfdi:Complemento><tfd:TimbreFiscalDigital UUID="${UUID.toUpperCase()}"/></cfdi:Complemento></cfdi:Comprobante>`;
+
+  function prepara(xml: string | null) {
+    respuestas.sat_cfdi_descargado = [cfdi()];
+    respuestas.gasto = [{ data: { id: 'g-1', cfdi_uuid: null, monto: '1160.00' }, error: null }];
+    respuestas.cfdi_xml = [{ data: xml === null ? null : { xml }, error: null }];
+  }
+
+  it('con XML válido y la migración aplicada usa sat_cfdi_ligar_campos_tx con los campos', async () => {
+    prepara(XML);
+    respuestasRpc = [{ data: { gasto_id: 'g-1', cfdi_uuid: UUID, campos_copiados: true, motivo_campos: null }, error: null }];
+    const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
+    expect(r.ok).toBe(true);
+    expect(r.mensaje).toContain('Se copiaron los importes e impuestos');
+    expect(llamadasRpc).toHaveLength(1);
+    expect(llamadasRpc[0].nombre).toBe('sat_cfdi_ligar_campos_tx');
+    const args = llamadasRpc[0].args as Record<string, unknown>;
+    expect(args.p_estatus_esperado).toBe('disponible');
+    expect(args.p_campos).toMatchObject({ total: 1160, sub_total: 1000, iva_traslado: 160, rfc_receptor: 'BBB020202BBB' });
+  });
+
+  it('sin migración 0858 cae a sat_cfdi_ligar_tx, liga y AVISA que no se copiaron campos', async () => {
+    prepara(XML);
+    respuestasRpc = [
+      { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.sat_cfdi_ligar_campos_tx' } },
+      { data: { gasto_id: 'g-1', cfdi_uuid: UUID }, error: null },
+    ];
+    const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
+    expect(r.ok).toBe(true);
+    expect(llamadasRpc.map((l) => l.nombre)).toEqual(['sat_cfdi_ligar_campos_tx', 'sat_cfdi_ligar_tx']);
+    expect(r.mensaje).toContain('NO se copiaron');
+    expect(r.mensaje).toContain('migración 0858');
+  });
+
+  it('sin XML guardado usa la liga de siempre y lo dice', async () => {
+    prepara(null);
+    respuestasRpc = [{ data: { gasto_id: 'g-1', cfdi_uuid: UUID }, error: null }];
+    const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
+    expect(r.ok).toBe(true);
+    expect(llamadasRpc.map((l) => l.nombre)).toEqual(['sat_cfdi_ligar_tx']);
+    expect(r.mensaje).toContain('NO se copiaron');
+    expect(r.mensaje).toContain('no está guardado');
+  });
+
+  it('un XML que es nota de crédito no copia nada (liga de siempre)', async () => {
+    prepara(XML.replace('TipoDeComprobante="I"', 'TipoDeComprobante="E"'));
+    respuestasRpc = [{ data: { gasto_id: 'g-1', cfdi_uuid: UUID }, error: null }];
+    const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
+    expect(llamadasRpc.map((l) => l.nombre)).toEqual(['sat_cfdi_ligar_tx']);
+    expect(r.mensaje).toContain('nota de crédito');
+  });
+
+  it('si la base rechaza los campos (total no coincide) liga y lo reporta', async () => {
+    prepara(XML);
+    respuestasRpc = [{ data: { gasto_id: 'g-1', cfdi_uuid: UUID, campos_copiados: false, motivo_campos: 'total_no_coincide' }, error: null }];
+    const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
+    expect(r.ok).toBe(true);
+    expect(r.mensaje).toContain('no coincide con el monto del gasto');
+  });
+
+  it('los SQLSTATE de la 0263 se traducen igual por el camino nuevo (CU015)', async () => {
+    prepara(XML);
+    respuestasRpc = [{ data: null, error: { code: 'CU015', message: 'gasto no disponible' } }];
+    const r = await ligarComprobante(TENANT, 'cfdi-1', 'g-1', ACTOR);
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toBe('gasto_ya_tiene_cfdi');
+    expect(llamadasRpc).toHaveLength(1);
+  });
+});
