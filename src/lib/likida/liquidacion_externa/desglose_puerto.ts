@@ -32,8 +32,17 @@ export interface ListarDesglosesParams {
   reLeerDesde?: string;
 }
 
+/** Una fila que el lector NO pudo mapear: se dice cuál y qué campo, nunca se descarta en silencio (sin valores personales). */
+export interface FilaDesgloseRechazada {
+  /** Clave de la bitácora (`BIT-<terminal>-<bitácora>`); `BIT-DESCONOCIDA` si ni eso se pudo leer. */
+  clave: string;
+  campo: string;
+}
+
 export interface PaginaDesgloses {
   items: DesgloseBitacora[];
+  /** OPCIONAL: filas leídas del origen que no se pudieron mapear (cuentan para el cursor; el pull abre `mapeo_invalido`). */
+  rechazadas?: FilaDesgloseRechazada[];
   /** Cursor de la última fila devuelta (o el recibido si la página vino vacía). */
   siguiente: CursorDesglose | null;
   hayMas: boolean;

@@ -2,11 +2,17 @@
 // son inventados con un generador determinista (misma semilla = mismos datos). La FORMA imita la descrita en el
 // levantamiento: liquidaciones con percepciones/deducciones, peajes por fechas, viajes y posiciones con `Icident`.
 
-export interface RenglonSintetico { concepto: string; valor: number }
+export interface RenglonSintetico {
+  concepto: string; valor: number;
+  /** Columna nueva `desglose` (el nombre que RH quiere ver); ausente = se usa `concepto`. SUPUESTO-API. */
+  desglose?: string;
+}
 export interface LiquidacionSintetica {
   operador: string; unidad: string; bitacora: string; de: string; a: string; dias: number;
   percepciones: RenglonSintetico[]; deducciones: RenglonSintetico[];
   desglose: { texto: string; renglones: number }; enviado: boolean;
+  /** Campos opcionales de la ruta de desglose por correo (SUPUESTO-API): faltar es un caso que se prueba. */
+  poliza?: string | null; operador_numero?: string; tipo_operador?: string; terminal?: string;
 }
 export interface PeajeSintetico {
   punto_interes: string; latitud: number; longitud: number; fecha_posicion: string; viaje: string; fecha_recibido: string;

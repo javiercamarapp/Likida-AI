@@ -190,7 +190,7 @@ const vacioResumen = (recurso: RecursoSincronizable, estado: EstadoRecurso): Res
   recurso, estado, leidas: 0, nuevas: 0, omitidas: 0, entregadas: 0, rechazadas: 0, pendientes: 0, conflictos: 0, backlog: false,
 });
 
-function urlBaseHttps(v: string | undefined): string | null {
+export function urlBaseHttps(v: string | undefined): string | null {
   try {
     const u = new URL((v ?? '').trim());
     return u.protocol === 'https:' ? u.origin + u.pathname.replace(/\/+$/, '') : null;
