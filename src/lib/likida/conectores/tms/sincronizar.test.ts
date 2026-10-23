@@ -30,6 +30,8 @@ const importarViajes = vi.fn();
 vi.mock('../../importar_viajes', async (orig) => ({ ...(await orig<Record<string, unknown>>()), importarViajes: (...a: unknown[]) => importarViajes(...a) }));
 const buscarPorClave = vi.fn();
 vi.mock('../../liquidacion_externa/repo', async (orig) => ({ ...(await orig<Record<string, unknown>>()), buscarPorClave: (...a: unknown[]) => buscarPorClave(...a) }));
+const abrirExcepcion = vi.fn(async (..._a: unknown[]) => ({ id: 1, nueva: true }));
+vi.mock('../../liquidacion_externa/repo_correo', async (orig) => ({ ...(await orig<Record<string, unknown>>()), abrirExcepcion: (...a: unknown[]) => abrirExcepcion(...a) }));
 const recibirLiquidacionExterna = vi.fn();
 const canalDeEntrega = vi.fn(async (..._a: unknown[]) => 'whatsapp');
 vi.mock('../../liquidacion_externa/servicio', () => ({
@@ -215,7 +217,7 @@ const rec = (r: Awaited<ReturnType<typeof sincronizarTms>>, recurso: RecursoSinc
 
 beforeEach(() => {
   alertarOperador.mockClear(); leerCredencial.mockReset(); marcarProbada.mockClear();
-  importarViajes.mockReset(); buscarPorClave.mockReset(); recibirLiquidacionExterna.mockReset(); recibirArchivoPeaje.mockReset(); asentarPosicionesTms.mockReset();
+  importarViajes.mockReset(); abrirExcepcion.mockClear(); buscarPorClave.mockReset(); recibirLiquidacionExterna.mockReset(); recibirArchivoPeaje.mockReset(); asentarPosicionesTms.mockReset();
   for (const k of Object.keys(tablas)) delete tablas[k];
   upserts.length = 0;
 });
@@ -463,6 +465,9 @@ describe('entregasReales.viajes', () => {
     expect(e.hechas).toEqual(['IC-1']);
     expect(e.pendientes).toBe(2);
     expect(e.detalle).toMatch(/2 viaje/);
+    // A37-TRANSVERSAL-01: el aviso dice la causa real, no culpa siempre al catálogo
+    expect(e.detalle).toMatch(/1 sin operador/);
+    expect(e.detalle).toMatch(/1 con unidad que no existe/);
   });
 
   it('un error de la puerta se propaga: nada se marca como hecho', async () => {
@@ -518,7 +523,8 @@ describe('entregasReales.liquidaciones', () => {
     expect(recibirLiquidacionExterna).not.toHaveBeenCalled();
     expect(e.conflictos).toBe(1);
     expect(e.detalle).toMatch(/no las sobrescribe/);
-    expect(e.hechas).toEqual(['B1-P1']);
+    // A37-TRANSVERSAL-03: la huella nueva NO se guarda como entregada
+    expect(e.hechas).toEqual([]);
   });
 
   it('la carrera de dos corridas (clave única) cuenta como hecha; otro error la deja pendiente para reintentar', async () => {
@@ -636,5 +642,126 @@ describe('depsReales: quién entra (opt-in) y cómo se guarda el avance', () => 
     ];
     const previas = await depsReales().huellasPrevias(TENANT, 'peajes', ['k-1', 'k-2']);
     expect([...previas]).toEqual([['k-1', 'h-1']]);
+  });
+});
+
+
+// ═══ A37: dinero y datos que se perdían en silencio ═══════════════════════════════════════════════════════════════════
+
+describe('A37-TRANSVERSAL-01: el recurso viajes necesita un campo de operador', () => {
+  it('el mapeo supuesto de viajes ya trae «operadorNombre»', () => {
+    expect(Object.keys(MAPEO_VIAJES_SUPUESTO.campos)).toContain('operadorNombre');
+  });
+
+  it('un mapeo de viajes SIN campo de operador se rechaza con la causa real y no se pide ni un dato al origen', async () => {
+    const reloj = nuevoReloj(); const o = crearOrigen(origenSintetico(), reloj);
+    const { operadorNombre: _quitado, ...camposSinOperador } = MAPEO_VIAJES_SUPUESTO.campos;
+    const flota: FlotaTms = { tenantId: TENANT, valores: { ...VALORES }, mapeos: { viajes: { ...MAPEO_VIAJES_SUPUESTO, campos: camposSinOperador } } };
+    const m = crearMundo(() => [flota], o, reloj);
+    const r = await sincronizarTms(m.deps);
+    expect(rec(r, 'viajes').estado).toBe('error');
+    expect(rec(r, 'viajes').error).toMatch(/operadorNombre/);
+    expect(rec(r, 'viajes').error).not.toMatch(/catálogo/);
+    expect(m.viajesEntregados).toHaveLength(0);
+  });
+
+  it('con operador en el origen, la fila llega a la puerta con su operadorNombre', async () => {
+    const reloj = nuevoReloj(); const datos = origenSintetico({ viajes: 2 });
+    datos.viajes = datos.viajes.map((v, i) => ({ ...v, operador: `Operador Sintético ${i + 1}` }));
+    const o = crearOrigen(datos, reloj);
+    const vistas: Array<string | null> = [];
+    const solo: FlotaTms = { tenantId: TENANT, valores: { ...VALORES }, mapeos: { viajes: MAPEO_VIAJES_SUPUESTO } };
+    const m = crearMundo(() => [solo], o, reloj);
+    m.deps.entregas.viajes = async (_t, filas) => { vistas.push(...filas.map((f) => f.operadorNombre)); return { hechas: filas.map((f) => f.folio), pendientes: 0 }; };
+    await sincronizarTms(m.deps);
+    expect(vistas).toEqual(['Operador Sintético 1', 'Operador Sintético 2']);
+  });
+});
+
+describe('A37-TRANSVERSAL-02: el cursor no avanza más allá de las filas pendientes', () => {
+  const soloViajes = (): FlotaTms => ({ tenantId: TENANT, valores: { ...VALORES }, mapeos: { viajes: MAPEO_VIAJES_SUPUESTO } });
+
+  it('con un viaje pendiente el `desde` se queda en su salida (no en hasta-1h) y la corrida siguiente lo reintenta', async () => {
+    const reloj = nuevoReloj(); const datos = origenSintetico({ viajes: 3 });
+    const salida = new Date(T0 - 3 * 86_400_000).toISOString(); // dentro del tope de 7 días
+    const m = crearMundo(() => [soloViajes()], crearOrigen(datos, reloj), reloj);
+    let ocupado = true; const intentos: string[][] = [];
+    m.deps.entregas.viajes = async (_t, filas) => {
+      intentos.push(filas.map((f) => f.folio));
+      const pend = ocupado ? filas.filter((f) => f.folio === 'IC-0001') : [];
+      return {
+        hechas: filas.filter((f) => !pend.includes(f)).map((f) => f.folio), pendientes: pend.length,
+        ...(pend.length > 0 ? { pendientesDesde: salida } : {}),
+      };
+    };
+    const r1 = await sincronizarTms(m.deps);
+    const e1 = m.estados.get(`${TENANT}|viajes`) as EstadoSync;
+    expect(rec(r1, 'viajes')).toMatchObject({ estado: 'parcial', pendientes: 1 });
+    expect(e1.desde).toBe(salida);
+    expect(Date.parse(e1.desde as string)).toBeLessThan(T0 - 3_600_000);
+
+    ocupado = false; reloj.t += 10 * 60_000;
+    await sincronizarTms(m.deps);
+    expect(intentos[1]).toEqual(['IC-0001']); // solo el pendiente: los otros ya tienen huella
+    const e2 = m.estados.get(`${TENANT}|viajes`) as EstadoSync;
+    expect(Date.parse(e2.desde as string)).toBe(T0 + 10 * 60_000 - 3_600_000); // ya sin pendientes: avanza normal
+  });
+
+  it('un pendiente sin fecha retiene el `desde` en el inicio de la ventana', async () => {
+    const reloj = nuevoReloj(); const m = crearMundo(() => [soloViajes()], crearOrigen(origenSintetico({ viajes: 2 }), reloj), reloj);
+    m.deps.entregas.viajes = async (_t, filas) => ({ hechas: filas.slice(1).map((f) => f.folio), pendientes: 1 });
+    await sincronizarTms(m.deps);
+    expect((m.estados.get(`${TENANT}|viajes`) as EstadoSync).desde).toBe(new Date(T0 - 2 * 86_400_000).toISOString());
+  });
+
+  it('el tope: un pendiente de más de 7 días se suelta CON aviso y alarma, no en silencio', async () => {
+    const reloj = nuevoReloj(); const m = crearMundo(() => [soloViajes()], crearOrigen(origenSintetico({ viajes: 2 }), reloj), reloj);
+    m.deps.entregas.viajes = async (_t, filas) => ({
+      hechas: filas.slice(1).map((f) => f.folio), pendientes: 1, pendientesDesde: new Date(T0 - 30 * 86_400_000).toISOString(),
+    });
+    const r = await sincronizarTms(m.deps);
+    expect((m.estados.get(`${TENANT}|viajes`) as EstadoSync).desde).toBe(new Date(T0 - 7 * 86_400_000).toISOString());
+    expect(rec(r, 'viajes').aviso).toMatch(/se sueltan/);
+    expect(alertarOperador).toHaveBeenCalledWith('cron.tms.pendientes_soltados', expect.objectContaining({ tenantId: TENANT, recurso: 'viajes' }));
+  });
+
+  it('entregasReales.viajes devuelve la fecha del pendiente más antiguo', async () => {
+    importarViajes.mockResolvedValue(importacion({ operadorOcupado: ['IC-2', 'IC-3'] }));
+    const a = { ...viaje('IC-2'), salida_en: '2026-10-03T10:00:00.000Z' };
+    const b = { ...viaje('IC-3'), salida_en: '2026-10-02T10:00:00.000Z' };
+    const e = await entregasReales.viajes(TENANT, [viaje('IC-1'), a, b]);
+    expect(e.pendientesDesde).toBe('2026-10-02T10:00:00.000Z');
+  });
+});
+
+describe('A37-TRANSVERSAL-03: una corrección en el origen no se descarta en silencio', () => {
+  it('liquidaciones: la corrección abre una excepción durable `correccion_pendiente` y NO se marca como entregada', async () => {
+    buscarPorClave.mockResolvedValue({ huella: 'h-vieja', total: 100 });
+    const e = await entregasReales.liquidaciones(TENANT, [liq('B1-P1', 'h-nueva')]);
+    expect(e.hechas).toEqual([]);
+    expect(e.conflictos).toBe(1);
+    expect(abrirExcepcion).toHaveBeenCalledWith(TENANT, 'B1-P1', 'correccion_pendiente', expect.objectContaining({ netoAntes: 100, netoDespues: 100 }), expect.any(Date));
+  });
+
+  it('liquidaciones: si no se pudo abrir la excepción, queda pendiente (se reintenta), no perdida', async () => {
+    buscarPorClave.mockResolvedValue({ huella: 'h-vieja', total: 100 });
+    abrirExcepcion.mockRejectedValueOnce(new Error('tabla ausente'));
+    const e = await entregasReales.liquidaciones(TENANT, [liq('B1-P1', 'h-nueva')]);
+    expect(e.hechas).toEqual([]);
+    expect(e.pendientes).toBe(1);
+  });
+
+  it('viajes: un folio ya entregado que cambió de destino NO se da por entregado con la huella nueva; la corrida queda `parcial` y lo dice', async () => {
+    const reloj = nuevoReloj(); const datos = origenSintetico({ viajes: 3 });
+    const solo: FlotaTms = { tenantId: TENANT, valores: { ...VALORES }, mapeos: { viajes: MAPEO_VIAJES_SUPUESTO } };
+    const m = crearMundo(() => [solo], crearOrigen(datos, reloj), reloj);
+    await sincronizarTms(m.deps);
+    const huellaAntes = [...m.huellas.entries()].find(([k]) => k.endsWith('|IC-0001'))?.[1];
+    datos.viajes[0] = { ...datos.viajes[0], destino: 'Otro Destino Sintético' };
+    const r2 = await sincronizarTms(m.deps);
+    expect(rec(r2, 'viajes')).toMatchObject({ estado: 'parcial', conflictos: 1, nuevas: 0, omitidas: 2 });
+    expect(rec(r2, 'viajes').aviso).toMatch(/cambiaron en el origen/);
+    expect(m.viajesEntregados).toHaveLength(3); // la puerta no se vuelve a llamar con la fila cambiada
+    expect([...m.huellas.entries()].find(([k]) => k.endsWith('|IC-0001'))?.[1]).toBe(huellaAntes);
   });
 });

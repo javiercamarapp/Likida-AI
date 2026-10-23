@@ -64,6 +64,8 @@ const sinAcentos = (s: string): string => s.normalize('NFD').replace(/[̀-ͯ]/g,
 interface Cruda {
   folio: string; despacho_ref: string; unidadEco: string; salida_en: string; llegada_en?: string;
   origen?: string; destino?: string; estatus?: string;
+  /** A37-TRANSVERSAL-01: nombre del operador en el TMS. Sin él `importarViajes` no puede crear el viaje (operador_id es NOT NULL). */
+  operadorNombre?: string;
 }
 
 function zonaDe(mapeo: MapeoTms): string {
@@ -98,7 +100,7 @@ export async function leerViajes(
     filas.push({
       folio: c.folio, origen: c.origen ?? null, destino: c.destino ?? null,
       fechaInicio: utcALocal(new Date(c.salida_en), zona).slice(0, 10),
-      anticipo: null, operadorNombre: null, unidadEco: c.unidadEco, clienteNombre: null, ingresoFlete: null, kmRecorridos: null,
+      anticipo: null, operadorNombre: c.operadorNombre?.trim() ? c.operadorNombre.trim().slice(0, 120) : null, unidadEco: c.unidadEco, clienteNombre: null, ingresoFlete: null, kmRecorridos: null,
       despacho_ref: c.despacho_ref, salida_en: c.salida_en, llegada_en: c.llegada_en ?? null,
     });
   }
