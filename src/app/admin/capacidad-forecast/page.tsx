@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { getUnidadesMedidas, escenarioDe, ESCENARIOS_VIAJES_DIA, SUPUESTOS_CAPACIDAD, LIMITES_NOMINALES } from '@/lib/admin/capacidad';
 import { ahoraMs } from '@/lib/saludo';
@@ -34,6 +35,8 @@ function proyectar(porDia: Array<{ dia: string; costoUsd: number }>): Proyeccion
 }
 
 export default async function CapacidadForecastPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const r = await getResumenNegocio();
   const proyeccion = proyectar(r.porDia);
   // El modelo de capacidad (fase 7): unidades MEDIDAS si hay muestra; si la

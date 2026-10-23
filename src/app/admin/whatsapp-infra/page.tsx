@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIONES } from '@/lib/admin/negocio';
 import { Server, Smartphone, MessageCircle, ChevronDown, Info } from 'lucide-react';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -36,6 +37,8 @@ const FUERA_DE_ALCANCE = [
  * lo dicen — solo cambió la envoltura.
  */
 export default async function WhatsappInfraPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   // FE-9: el KPI decía "Conversaciones activas: N" con el N del TOPE (20).
   const [conversaciones, total] = await Promise.all([
     getConversacionesActivas(), contarConversacionesActivas(),

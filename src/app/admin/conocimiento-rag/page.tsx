@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { BookOpen } from 'lucide-react';
 import { BarraPagina } from '../../dashboard/resumen-visual';
 import { EstadoVacio } from '../ui/kit';
@@ -18,7 +19,9 @@ export const dynamic = 'force-dynamic';
  * Re-envuelta en la anatomía de página (14-ago): lienzo `--g1` + `BarraPagina`
  * con el ícono de `rutas.ts`. El mensaje honesto es el mismo de antes.
  */
-export default function ConocimientoRagPage() {
+export default async function ConocimientoRagPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   return (
     <main className="h-full">
       <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>

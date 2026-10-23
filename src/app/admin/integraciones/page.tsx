@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd, numero } from '@/lib/formato';
@@ -76,6 +77,8 @@ function Conector({
  * con el ícono de `rutas.ts`.
  */
 export default async function IntegracionesPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const r = await getResumenNegocio();
   const salud = envHealth();
   const falta = faltantes();
