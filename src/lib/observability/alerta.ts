@@ -378,6 +378,19 @@ function huella(texto: string): string {
   return (h >>> 0).toString(36);
 }
 
+/** El motivo sin lo que cambia solo con el tiempo: UUID y números (fechas,
+ *  horas, contadores) se aplanan a `#`; mayúsculas y espacios no cuentan. */
+function normalizarMotivo(motivo: string): string {
+  return motivo
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '#')
+    .replace(/\d{4}-\d{2}-\d{2}(?:[t ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?z?)?/gi, '#')
+    // Números sueltos, NO los pegados a un nombre de variable (`LIKIDA_X_1` ≠ `LIKIDA_X_2`).
+    .replace(/(?<![A-Za-z_])\d+(?![A-Za-z_\d])/g, '#')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
 /**
  * Como `alertarOperador`, pero para un HUECO DE CONFIGURACIÓN que el propio
  * proceso YA declaró en prosa (`esHuecoDeConfiguracion` en `admin/salud.ts`
@@ -402,7 +415,10 @@ export async function alertarHuecoConfiguracion(evento: string, motivo: string, 
     }
 
     const ahora = Date.now();
-    const llave = `${evento}:${huella(motivo)}`;
+    // La huella ignora lo que VARÍA sin ser información nueva (fechas, horas,
+    // contadores de reintento, UUID): «intento 3 de 5» y «intento 4 de 5» son el
+    // mismo hueco. Cambiar de variable faltante sí cambia la huella.
+    const llave = `${evento}:${huella(normalizarMotivo(motivo))}`;
     if (!(await reservarPiso(llave, ahora, PISO_ALERTA_CONFIG_MS))) return;
 
     const datos: Array<[string, string]> = [
@@ -413,9 +429,9 @@ export async function alertarHuecoConfiguracion(evento: string, motivo: string, 
     ];
 
     const r = await enviarCorreo(para, {
-      asunto: `[Likida] Pendiente de configurar: ${evento}`,
+      asunto: `[Likida] Configuración pendiente: ${evento}`,
       avance: 'Nada se rompió: sigue pendiente un hueco de configuración ya conocido.',
-      titulo: `Pendiente de configurar: ${evento}`,
+      titulo: `Configuración pendiente: ${evento}`,
       parrafos: [
         'Esto NO es una falla: el propio proceso ya sabe exactamente qué le falta y lo dice abajo, en el campo "Motivo". Mientras tanto no hace nada a propósito — nunca simula ni adivina.',
         'De este mismo pendiente no va a llegar otro correo en varios días aunque siga sin resolverse; si lo que falta CAMBIA, este correo vuelve a salir porque eso sí es información nueva.',
