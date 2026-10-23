@@ -61,7 +61,7 @@ vi.mock('./cola', () => ({
 const registrarCorrida = vi.fn(async (..._a: unknown[]) => undefined);
 vi.mock('./corridas', () => ({ registrarCorrida: (...a: unknown[]) => registrarCorrida(...a) }));
 
-const { correrEnviador, filtrarSuprimidos, suprimirCorreo, ventanaRevisionMin, autoaprobarActivo } = await import('./enviador');
+const { correrEnviador, filtrarSuprimidos, suprimirCorreo, suprimirCorreoConfirmado, ventanaRevisionMin, autoaprobarActivo } = await import('./enviador');
 
 const PIEZA = {
   id: 'pieza-0000-1111', tipo: 'correo_frio', estado: 'pendiente', prospecto_id: 'pr-1',
@@ -206,6 +206,24 @@ describe('suprimirCorreo — idempotente y sin lanzar', () => {
   });
   it('un formato roto se ignora sin tocar la base', async () => {
     await expect(suprimirCorreo('no-es-correo', 'rebote')).resolves.toBeUndefined();
+  });
+});
+
+describe('A37-S08-01 · suprimirCorreoConfirmado — dice si la fila quedó guardada', () => {
+  it('insert bueno -> ok', async () => {
+    respuestas.set('correo_suprimido', [{ data: null, error: null }]);
+    expect(await suprimirCorreoConfirmado('baja@x.mx', 'baja')).toEqual({ ok: true });
+  });
+  it('el duplicado (23505) cuenta como guardado (idempotente)', async () => {
+    respuestas.set('correo_suprimido', [{ data: null, error: { message: 'dup', code: '23505' } }]);
+    expect(await suprimirCorreoConfirmado('ya@x.mx', 'baja')).toEqual({ ok: true });
+  });
+  it('un error de la base NO es ok y es reintentable', async () => {
+    respuestas.set('correo_suprimido', [{ data: null, error: { message: 'fetch failed', code: '08006' } }]);
+    expect(await suprimirCorreoConfirmado('baja@x.mx', 'baja')).toMatchObject({ ok: false, reintentable: true });
+  });
+  it('un formato roto NO es ok (no se guardó nada) y no es reintentable', async () => {
+    expect(await suprimirCorreoConfirmado('no-es-correo', 'baja')).toMatchObject({ ok: false, reintentable: false });
   });
 });
 
