@@ -1795,17 +1795,35 @@ export async function resolverSolicitudArco(
   tenantId: string, solicitudId: string, resolucion: string,
 ): Promise<{ enviada: boolean; error?: string }> {
   const { data: sol, error: errLee } = await acotada(supabaseAdmin()
-    .from('solicitud_arco').select('titular_ref, operador_id').eq('id', solicitudId).eq('tenant_id', tenantId).maybeSingle(),
+    .from('solicitud_arco').select('titular_ref, operador_id, tipo, estado, resuelta_en').eq('id', solicitudId).eq('tenant_id', tenantId).maybeSingle(),
     'resolverSolicitudArco.leer');
   if (errLee) throw new Error(`resolverSolicitudArco.leer: ${errLee.message}`);
   if (!sol) throw new Error('resolverSolicitudArco: la solicitud no existe en esta flota');
+  // A36-R01-01: una cancelación se EJECUTA (ejecutarCancelacionArco), no se
+  // cierra con prosa; y una solicitud ya cerrada no se vuelve a responder (se
+  // perdería la fecha real de respuesta del art. 31 y el titular recibiría
+  // el WhatsApp dos veces).
+  if (sol.tipo === 'cancelacion') {
+    throw new Error('resolverSolicitudArco: una cancelación no se resuelve con texto; usa «Ejecutar cancelación»');
+  }
+  if (sol.estado !== 'recibida' && sol.estado !== 'en_proceso') {
+    throw new Error('resolverSolicitudArco: la solicitud ya fue resuelta o cerrada; no se vuelve a responder');
+  }
 
-  const { error } = await acotada(supabaseAdmin()
+  // Guarda atómica: solo toca la fila si sigue abierta. Cero filas = otro
+  // administrador ganó la carrera; no se sobrescribe ni se reenvía el aviso.
+  const { data: tocadas, error } = await acotada(supabaseAdmin()
     .from('solicitud_arco')
     .update({ estado: 'resuelta', resuelta_en: new Date().toISOString(), resolucion })
     .eq('id', solicitudId)
-    .eq('tenant_id', tenantId), 'resolverSolicitudArco');
+    .eq('tenant_id', tenantId)
+    .in('estado', ['recibida', 'en_proceso'])
+    .is('resuelta_en', null)
+    .select('id'), 'resolverSolicitudArco');
   if (error) throw new Error(`resolverSolicitudArco: ${error.message}`);
+  if (!tocadas || tocadas.length === 0) {
+    throw new Error('resolverSolicitudArco: la solicitud ya fue resuelta o cerrada por otra persona; no se vuelve a responder');
+  }
 
   // Envío best-effort: si el titular está fuera de la ventana de 24h o el
   // número no está whitelisted, el texto no sale — la flota lo entrega aparte.
