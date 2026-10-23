@@ -10,8 +10,8 @@
 // pedía recibía los seguimientos +3/+7 igual.
 //
 // Qué hace, en orden:
-//   1. Detecta la BAJA en asunto o cuerpo (palabra completa, sin importar
-//      mayúsculas) y suprime la dirección PARA SIEMPRE — incluso si el
+//   1. Detecta la BAJA en asunto o en el texto NUEVO del cuerpo (palabra
+//      completa, sin importar mayúsculas; A37-S25-01: nunca en lo citado) y suprime la dirección PARA SIEMPRE — incluso si el
 //      remitente no matchea ningún prospecto: la baja es de la persona, no
 //      de nuestra contabilidad.
 //   2. Si matchea un prospecto, BORRA de inmediato los datos de esa persona
@@ -52,19 +52,57 @@ export function esRespuestaACampana(destinatarios: readonly string[], buzonCampa
   return destinatarios.some((d) => extraerCorreo(d) === buzonCampana);
 }
 
-/** ¿El texto pide la BAJA? Palabra COMPLETA (con o sin texto alrededor) en
- *  el asunto o en el cuerpo — «necesito darme de baja» cuenta; «trabaja»
- *  no. También la variante en inglés que los clientes de correo insertan. */
-export function esBaja(asunto: string | null, cuerpo: string | null): boolean {
-  const texto = `${asunto ?? ''}\n${(cuerpo ?? '').slice(0, 4_000)}`;
-  return /\bbaja\b/i.test(texto) || /\bunsubscribe\b/i.test(texto);
+/**
+ * Lo que NO es el texto nuevo de quien contestó: el encabezado de cita («El … escribió:»,
+ * «On … wrote:», «-----Original Message-----», «De:/From:») y todo lo que sigue.
+ */
+const INICIO_DE_CITA =
+  /^\s*(?:-{2,}\s*(?:original message|mensaje original|forwarded message|mensaje reenviado)|_{5,}|on\s.{0,200}wrote:\s*$|el\s.{0,200}escribi[óo]:\s*$|(?:de|from|enviado el|sent)\s*:)/i;
+
+/** El pie que nosotros mismos ponemos en cada correo de campaña, por si el cliente lo pega sin marcarlo como cita. */
+const PIE_DE_CAMPANA =
+  /(?:si\s+prefieres\s+no\s+recibir\s+estos\s+correos,?\s*)?responde\s+(?:con\s+)?(?:la\s+palabra\s+)?[«"“]?baja[»"”]?(?:\s+y\s+no\s+volveremos\s+a\s+escribirte)?\.?|darte\s+de\s+baja:\s*\S+|darme\s+de\s+baja\s+de\s+estos\s+correos/gi;
+
+/** «Estoy de baja médica», «de baja por maternidad»: incapacidad de quien contesta, no una petición. */
+const BAJA_LABORAL =
+  /\b(?:(?:estoy|est[aá]|se\s+encuentra|me\s+encuentro|permanezco|sigo|continuo|contin[uú]o)\s+(?:de|en)\s+baja|de\s+baja\s+(?:m[eé]dica|laboral|por\s+(?:maternidad|paternidad|enfermedad|incapacidad)))\b/gi;
+
+/** En un cuerpo largo la palabra suelta no basta: tiene que ser una petición explícita. */
+const PETICION_EXPLICITA =
+  /(?:^|\n)\s*baja[\s.!]*(?:\n|$)|\b(?:darme|d[eé]nme|dar(?:nos)?|d[eé]nnos|me\s+den|nos\s+den|me\s+des|quiero|solicito|solicitamos|pido|pedimos|favor\s+de|por\s+favor)\s+(?:de\s+baja|la\s+baja|baja)\b|\bunsubscribe\b|\bremove\s+me\b/i;
+const CUERPO_NUEVO_CORTO = 300;
+
+/** El texto que el remitente ESCRIBIÓ ahora: sin citas («>»), sin el hilo de abajo y sin nuestro pie. */
+export function textoNuevo(cuerpo: string | null): string {
+  const nuevas: string[] = [];
+  for (const linea of (cuerpo ?? '').slice(0, 4_000).split(/\r?\n/)) {
+    if (INICIO_DE_CITA.test(linea)) break;
+    if (/^\s*>/.test(linea)) continue;
+    nuevas.push(linea);
+  }
+  return nuevas.join('\n').replace(PIE_DE_CAMPANA, ' ').replace(BAJA_LABORAL, ' ').trim();
 }
 
-/** El texto visible de un cuerpo que puede venir en HTML. */
-function textoPlano(texto: string | undefined, html: string | undefined): string {
+/** ¿El texto pide la BAJA? Palabra COMPLETA en el asunto o en el texto NUEVO del
+ *  cuerpo — «necesito darme de baja» cuenta; «trabaja» no. A37-S25-01: lo CITADO
+ *  (incluido nuestro propio pie «responde BAJA»), la incapacidad laboral de un
+ *  autorespondedor y, en un cuerpo largo, la palabra suelta, NO cuentan: borrar
+ *  a quien solo contestó «sí, llámame» destruye el lead más caliente. */
+export function esBaja(asunto: string | null, cuerpo: string | null): boolean {
+  const reAsunto = (asunto ?? '').replace(PIE_DE_CAMPANA, ' ').replace(BAJA_LABORAL, ' ');
+  if (/\bbaja\b/i.test(reAsunto) || /\bunsubscribe\b/i.test(reAsunto)) return true;
+  const nuevo = textoNuevo(cuerpo);
+  if (nuevo.length > CUERPO_NUEVO_CORTO) return PETICION_EXPLICITA.test(nuevo);
+  return /\bbaja\b/i.test(nuevo) || /\bunsubscribe\b/i.test(nuevo);
+}
+
+/** El texto visible de un cuerpo que puede venir en HTML (sin lo citado: blockquote / gmail_quote). */
+export function textoPlano(texto: string | undefined, html: string | undefined): string {
   if (texto?.trim()) return texto;
   return (html ?? '')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<blockquote[\s\S]*?<\/blockquote>/gi, ' ')
+    .replace(/<div[^>]*class=["'][^"']*(?:gmail_quote|yahoo_quoted|moz-cite)[^"']*["'][\s\S]*$/i, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ');
 }
