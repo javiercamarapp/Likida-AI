@@ -410,6 +410,21 @@ describe('el rechazo vuelve a la bandeja (T-A3-29)', () => {
     expect(eventos.some((x) => x.tipo === 'envio_error' && x.detalle.causa === 'mismo_contenido_rechazado')).toBe(true);
   });
 
+  it('un faltante BLOQUEANTE de la plantilla (2 orígenes en la normal) NO se sube: se descarta y vuelve a revisión con el motivo (INN-A3-04)', async () => {
+    const llamadas = vi.fn(async () => ({ ok: true as const, referencia: 'REF-1' }));
+    puertos.set(A, { cargarPlantilla: llamadas as unknown as SalidaTms['cargarPlantilla'], consultarReque: async () => 'existe', consultarCaja: async () => 'existe' });
+    const envio = sembrar(A, 1);
+    docs.get(`${A}:${envio.documentoId}`)!.extraccion!.campos.origen_2_nombre = cv('Segundo Origen Sintetico SA');
+    const r = await pasada();
+    expect(llamadas).not.toHaveBeenCalled();
+    expect(r.enviados).toBe(0);
+    expect((await leer(A, envio.id)).estado).toBe('descartado');
+    expect(rechazosDevueltos).toHaveLength(1);
+    expect(rechazosDevueltos[0].hallazgos[0]).toMatchObject({ codigo: 'plantilla_incompleta', severidad: 'bloqueo', origen: 'tms' });
+    expect(rechazosDevueltos[0].hallazgos[0].mensaje).toMatch(/or[ií]genes/i);
+    expect(eventos.some((x) => x.tipo === 'envio_error' && x.detalle.causa === 'plantilla_incompleta')).toBe(true);
+  });
+
   it('una corrección que SÍ cambia la plantilla se envía normal', async () => {
     puertos.set(A, puertoRechazo([ERROR_FRACCION]));
     const primero = sembrar(A, 1);

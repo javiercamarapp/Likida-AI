@@ -169,6 +169,17 @@ export function hallazgoGenerico(mensajeLlano: string | undefined): Hallazgo {
   };
 }
 
+/** Código del hallazgo cuando la plantilla armada quedaría incompleta (INN-A3-04); se arrastra como los del TMS hasta que una persona corrija. */
+export const CODIGO_PLANTILLA_INCOMPLETA = 'plantilla_incompleta';
+
+/** El libro que se iba a subir perdería datos (p. ej. orígenes 2..N o destinos > 4): no se manda y se dice por qué en llano. */
+export function hallazgoPlantillaIncompleta(motivos: string[]): Hallazgo {
+  return {
+    campo: 'documento', renglon: null, severidad: 'bloqueo', codigo: CODIGO_PLANTILLA_INCOMPLETA, origen: 'tms',
+    mensaje: `La plantilla del sistema del cliente quedaría incompleta y no se envía: ${motivos.join(' ')}`,
+  };
+}
+
 /** Lo que se le dice a la persona cuando el contenido que se iba a mandar es idéntico al que el TMS ya rechazó. */
 export function hallazgoRepetido(): Hallazgo {
   return {

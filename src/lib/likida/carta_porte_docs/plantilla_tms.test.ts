@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CampoValor, Extraccion } from './campos';
-import { construirPlantilla, contarDestinos } from './plantilla_tms';
+import { construirPlantilla, contarDestinos, faltantesBloqueantes } from './plantilla_tms';
 import { AVISO_PLANTILLA_POR_CONFIG, contextoPlantillaDeConfig, elegirPlantilla } from './salida_config';
 import { LAYOUT_NORMAL, LAYOUT_NUEVA, coordenadasLayout, layoutPuedeEnviarse } from './plantilla_tms.layout';
 import { aXlsxPlantillaTms } from './exportacion';
@@ -95,6 +95,24 @@ describe('construirPlantilla', () => {
     expect(p.faltantes).toContainEqual({ campo: 'mercancia.clave_material_peligroso', celda: 'M22' });
     const q = construirPlantilla(extraccion({}, { material_peligroso: 'true', clave_material_peligroso: '1203' }), ctx);
     expect(hoja(q, 'Mercancias').M22.valor).toBe('1203');
+  });
+
+  it('varios orígenes en la plantilla «normal» (sin tabla de orígenes): bloquea y avisa, nunca pierde el origen 2 en silencio (INN-A3-04)', () => {
+    const r = construirPlantilla(extraccion({ origen_2_nombre: 'Segundo Origen Sintetico SA', origen_2_rfc: 'BBB010101BBB' }), ctx);
+    const b = faltantesBloqueantes(r);
+    expect(b).toHaveLength(1);
+    expect(b[0].mensaje).toMatch(/or[ií]genes/i);
+    expect(r.avisos.join(' ')).toMatch(/or[ií]genes/i);
+    // con un solo origen no hay nada que bloquear
+    expect(faltantesBloqueantes(construirPlantilla(extraccion(), ctx))).toEqual([]);
+  });
+
+  it('más de 4 destinos bloquea (y avisa) en la plantilla «normal»', () => {
+    const sobre: Record<string, string> = {};
+    for (let n = 2; n <= 5; n++) sobre[`destino_${n}_nombre`] = `Destino ${n} Sintetico`;
+    const r = construirPlantilla(extraccion(sobre), ctx);
+    expect(faltantesBloqueantes(r).map((f) => f.campo)).toContain('destinos');
+    expect(r.avisos.join(' ')).toMatch(/5 destinos/);
   });
 
   it('marca como texto lo que viene de un tercero y no altera el valor (neutralizar es de T-A3-08)', () => {

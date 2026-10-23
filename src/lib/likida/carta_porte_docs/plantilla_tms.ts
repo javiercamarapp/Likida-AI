@@ -25,6 +25,9 @@ export type DistanciaFormato = 'texto_km' | 'numero';
 export const MAX_DESTINOS = 4;
 export const MENSAJE_MAS_DE_4_DESTINOS = 'Más de 4 destinos: divide el embarque.';
 
+/** Los faltantes que impiden descargar o enviar la plantilla (los demás son celdas obligatorias vacías: se descargan para completarlas a mano). */
+export const faltantesBloqueantes = (p: Pick<PlantillaConstruida, 'faltantes'>): Faltante[] => p.faltantes.filter((f) => f.bloqueante === true);
+
 export interface ContextoPlantilla {
   /** Número de cliente interno (B7). Si falta se usa `numero_cliente_interno` de la extracción. */
   clienteInterno: string | null;
@@ -236,6 +239,15 @@ export function construirPlantilla(extOriginal: Extraccion, ctx: ContextoPlantil
     sal.avisos.push('La plantilla «nueva» (varias razones sociales) aún no está verificada contra la del TMS: se generó con la normal.');
   } else if (!layoutPuedeEnviarse(layout)) {
     sal.avisos.push('La plantilla «nueva» (varias razones sociales) aún no está verificada contra la del TMS: úsala solo para revisar o descargar, no para enviar.');
+  }
+  // Una plantilla sin tabla de orígenes (la «normal» trae UNO solo, en las celdas C11..C26) no puede llevar el origen 2..N: nunca se
+  // pierde en silencio (INN-A3-04); se bloquea y se dice. Los destinos > máximo ya los bloquea `construirTabla`.
+  const tablaOrigenes = layout.hojas.some((h) => h.tablas.some((tb) => tb.id === 'origenes'));
+  const totalOrigenes = contarOrigenes(ext);
+  if (!tablaOrigenes && totalOrigenes > 1) {
+    const mensaje = `El documento trae ${totalOrigenes} orígenes y la plantilla «${layout.nombre}» solo admite uno: divide el embarque o usa la plantilla «nueva».`;
+    sal.faltantes.push({ campo: 'origenes', celda: 'C11', bloqueante: true, mensaje });
+    sal.avisos.push(mensaje);
   }
   if (layout.provisional) sal.avisos.push('Layout provisional: pendiente de la plantilla en blanco del TMS (B-2).');
   if (layout.nombre === 'nueva') { sal.criterio_provisional = true; sal.avisos.push(AVISO_CRITERIO_PROVISIONAL); }

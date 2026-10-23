@@ -38,10 +38,10 @@
 import { createHash } from 'node:crypto';
 import { logger } from '@/lib/logger';
 import { aXlsxPlantillaTms, MIME_XLSX } from './exportacion';
-import { hallazgoRepetido, traducirErroresTms } from './errores_tms';
+import { hallazgoPlantillaIncompleta, hallazgoRepetido, traducirErroresTms } from './errores_tms';
 import { siguienteEstado, TOPE_TRANSITORIOS, type EnvioEnMaquina, type EventoEnvio, type MotivoAlerta, type Transicion } from './envio_estados';
 import { prechequear } from './prechequeo';
-import { construirPlantilla } from './plantilla_tms';
+import { construirPlantilla, faltantesBloqueantes } from './plantilla_tms';
 import type { DocumentoFila, EstadoEnvioTms, TipoEvento } from './repo';
 import type { CambiosEnvio, EnvioDetalle, EnvioReclamado, ResultadoReclamo } from './repo_envios';
 import type { ConfigSalida } from './salida_config';
@@ -310,6 +310,16 @@ async function subir(ctx: Contexto, e: EntradaSubida): Promise<void> {
 
   // Armado: puro y determinista (mismo documento ⇒ mismos bytes ⇒ mismo sha256).
   const plantilla = construirPlantilla(doc.extraccion, { clienteInterno: null, plantilla: envio.plantilla });
+  // Un faltante BLOQUEANTE (orígenes 2..N o destinos > 4 que la plantilla no lleva) hace que el libro salga incompleto: el TMS lo
+  // aceptaría por válido y se timbraría un CCP recortado. No se sube: el envío se descarta y el documento vuelve a revisión (INN-A3-04).
+  const bloqueantes = faltantesBloqueantes(plantilla);
+  if (bloqueantes.length > 0) {
+    if (!(await deps.actualizarEnvio(tenantId, envio.id, [e.estado], { estado: 'descartado', proximaRevision: null, soltarLease: true }))) { r.conflictos++; return; }
+    r.descartados++;
+    await deps.evento(tenantId, doc.id, 'envio_error', { envioId: envio.id, causa: 'plantilla_incompleta', versionDoc: doc.version, bloqueantes: bloqueantes.length });
+    await devolverPorRechazo(ctx, doc, [hallazgoPlantillaIncompleta([...new Set(bloqueantes.map((f) => f.mensaje ?? `falta ${f.campo}`))])], []);
+    return;
+  }
   const archivo = aXlsxPlantillaTms(plantilla);
   const huella = sha256(archivo);
 
