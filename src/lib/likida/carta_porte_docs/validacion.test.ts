@@ -19,6 +19,27 @@ describe('un documento limpio', () => {
   });
 });
 
+describe('material peligroso: la ausencia de dato NO es «no peligroso» (A35-A3-01)', () => {
+  it('si el documento no dice nada, pide confirmar y no deja aprobar', () => {
+    const e = extraccionAtlasOk(); delete e.mercancias[0].material_peligroso;
+    expect(codigos(e)).toContain('confirmar:peligroso_sin_dato:material_peligroso#0');
+    expect(validar(e).listoParaAprobar).toBe(false);
+  });
+  it('un valor null también cuenta como «sin dato»', () => {
+    const e = extraccionAtlasOk(); e.mercancias[0].material_peligroso = cv(null, 0);
+    expect(codigos(e)).toContain('confirmar:peligroso_sin_dato:material_peligroso#0');
+  });
+  it('un «no» declarado por el documento o el catálogo NO molesta', () => {
+    const e = extraccionAtlasOk(); e.mercancias[0].material_peligroso = cv('false', 0.95);
+    expect(codigos(e).join()).not.toContain('peligroso_sin_dato');
+    expect(validar(e).listoParaAprobar).toBe(true);
+  });
+  it('la persona lo resuelve poniendo Sí/No (origen humano)', () => {
+    const e = extraccionAtlasOk(); e.mercancias[0].material_peligroso = cv('false', 1, 'humano');
+    expect(codigos(e).join()).not.toContain('peligroso_sin_dato');
+  });
+});
+
 describe('campos críticos: ausentes bloquean, dudosos piden confirmación', () => {
   it('cada campo crítico ausente bloquea', () => {
     for (const k of ['origen_rfc', 'origen_cp', 'destino_rfc', 'destino_cp']) {

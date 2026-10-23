@@ -118,6 +118,23 @@ describe('el archivo', () => {
       expect(estado.eventos.filter((e) => e.tipo === 'exportado' && e.documentoId === U1)).toHaveLength(1);
     });
 
+    it('con un faltante BLOQUEANTE (2 orígenes en la plantilla normal): 409 con el motivo, no sella exportado y no entrega el archivo (A35-A3-04)', async () => {
+      const e = extraccionAtlasOk();
+      e.campos.origen_2_nombre = { valor: 'Segundo Origen Sintetico SA', confianza: 0.95, evidencia: null, origen: 'llm' };
+      estado.docs.get(U1)!.extraccion = e;
+      const r = await GET(peticion(`?formato=plantilla_tms&documento=${U1}`));
+      expect(r.status).toBe(409);
+      expect(await r.text()).toMatch(/or[ií]genes/i);
+      expect(estado.docs.get(U1)!.exportadoEn).toBeNull();
+      expect(estado.eventos.filter((x) => x.tipo === 'exportado')).toHaveLength(0);
+    });
+
+    it('los avisos NO bloquean, pero se cuentan en X-Avisos para que el visor los muestre', async () => {
+      const r = await GET(peticion(`?formato=plantilla_tms&documento=${U1}`));
+      expect(r.status).toBe(200);
+      expect(r.headers.get('x-avisos')).toMatch(/^\d+$/);
+    });
+
     it('no aprobado: 409 con mensaje llano y nada se sella', async () => {
       const r = await GET(peticion(`?formato=plantilla_tms&documento=${U2}`));
       expect(r.status).toBe(409);

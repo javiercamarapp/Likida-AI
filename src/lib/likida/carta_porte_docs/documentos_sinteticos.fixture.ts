@@ -35,6 +35,8 @@ export interface EmbarqueFixture {
   destinoNombre: string; destinoRfc: string; destinoCp: string; destinoEstado: string;
   producto: string; claveSat: string; cantidad: string; unidad: string; pesoKg: string;
   operador: string; placas: string;
+  /** Lo que el documento DICE de material peligroso («No» por omisión: la ausencia del dato pide confirmar, A35-A3-01). */
+  peligroso?: string;
 }
 
 export const EMBARQUE_ATLAS: EmbarqueFixture = {
@@ -47,12 +49,12 @@ export const EMBARQUE_ATLAS: EmbarqueFixture = {
 
 export const ENCABEZADOS_ATLAS = [
   'Folio Embarque', 'Fecha Salida', 'Remitente', 'RFC Remitente', 'CP Origen', 'Estado Origen', 'Destinatario',
-  'RFC Destinatario', 'CP Destino', 'Estado Destino', 'Producto', 'Clave SAT', 'Cantidad', 'Unidad', 'Peso (kg)', 'Operador', 'Placas',
+  'RFC Destinatario', 'CP Destino', 'Estado Destino', 'Producto', 'Clave SAT', 'Cantidad', 'Unidad', 'Peso (kg)', 'Operador', 'Placas', 'Material peligroso',
 ];
 
 export const filaAtlas = (e: EmbarqueFixture): string[] => [
   e.folio, e.fechaSalida, e.origenNombre, e.origenRfc, e.origenCp, e.origenEstado, e.destinoNombre, e.destinoRfc,
-  e.destinoCp, e.destinoEstado, e.producto, e.claveSat, e.cantidad, e.unidad, e.pesoKg, e.operador, e.placas,
+  e.destinoCp, e.destinoEstado, e.producto, e.claveSat, e.cantidad, e.unidad, e.pesoKg, e.operador, e.placas, e.peligroso ?? 'No',
 ];
 
 /** Excel de «Distribuidora Atlas»: un renglón de mercancía por fila, cabecera tras un título. */
@@ -94,6 +96,7 @@ export async function pdfBoreal(opciones: { inyeccion?: string; folio?: string; 
     `Peso total: ${opciones.pesoTotal ?? '30 ton'}`,
     'Operador: Maria Hernandez Soto',
     'Placas: XYZ9876',
+    'Material peligroso: No',
   ];
   if (opciones.inyeccion) lineas.push(opciones.inyeccion);
   lineas.forEach((l, i) => page.drawText(l.replace(/[^\x20-\x7e]/g, '?'), { x: 40, y: 800 - i * 18, size: 11, font: f }));
@@ -214,6 +217,8 @@ export function extraccionAtlasOk(origen: Origen = 'llm', confianza = 0.95): Ext
     mercancias: [{
       descripcion: c('Botellas de vidrio vacías'), bienes_transp: c('24131500'), cantidad: c('1200'), clave_unidad: c('XBX'),
       unidad_texto: c('Cajas'), peso_kg: c('8400'),
+      // El documento «limpio» DECLARA que no es peligroso: la ausencia del dato pide confirmar (A35-A3-01).
+      material_peligroso: c('false'),
     }],
   };
 }

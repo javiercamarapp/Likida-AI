@@ -146,7 +146,7 @@ const COLUMNAS_MERCANCIAS: ColumnaTabla[] = [
   t('I', 'Peso kg', 'mercancia.peso_kg', true, { texto: false }),
   t('J', 'Fracción', 'mercancia.fraccion_arancelaria', false),
   t('K', 'Número de Pedimento', 'mercancia.pedimento', false),
-  t('L', 'Material Peligroso', 'mercancia.material_peligroso', true, { transformacion: 'si_no', defecto: 'NO' }),
+  t('L', 'Material Peligroso', 'mercancia.material_peligroso', true, { transformacion: 'si_no' }),
   t('M', 'Clave Material Peligroso', 'mercancia.clave_material_peligroso', true, { defecto: 'N/A' }),
   t('N', 'Tipo de Materia', 'mercancia.tipo_materia', false),
   // Sin `campo`: la extracción no tiene «RFC del importador» (distinto del agente aduanal). Solo se escribe el encabezado;
@@ -216,7 +216,7 @@ const COLUMNAS_MERCANCIAS_NUEVA: ColumnaTabla[] = [
   t('J', 'Peso kg', 'mercancia.peso_kg', true, { texto: false }),
   t('K', 'Fracción', 'mercancia.fraccion_arancelaria', false),
   t('L', 'Número de Pedimento', 'mercancia.pedimento', false),
-  t('M', 'Material Peligroso', 'mercancia.material_peligroso', true, { transformacion: 'si_no_tilde', defecto: 'No' }),
+  t('M', 'Material Peligroso', 'mercancia.material_peligroso', true, { transformacion: 'si_no_tilde' }),
   t('N', 'Clave Material Peligroso', 'mercancia.clave_material_peligroso', false),
   t('O', 'Tipo de Materia', 'mercancia.tipo_materia', false),
   t('P', 'Descripción de la Materia', 'mercancia.descripcion_materia', false),

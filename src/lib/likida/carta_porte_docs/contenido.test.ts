@@ -114,7 +114,7 @@ describe('prepararContenido', () => {
   });
 
   it('CSV: se lee como TEXTO (el cero inicial del CP no se pierde)', async () => {
-    const { c } = await leer(csvAtlas([['F1', '15/10/2026', 'X', 'AAA010101AAA', '06600', 'CDMX', 'Y', 'BBB010101BBB', '64000', 'NL', 'P', '30111500', '1', 'Pza', '10', 'Op', 'AAA111']]));
+    const { c } = await leer(csvAtlas([['F1', '15/10/2026', 'X', 'AAA010101AAA', '06600', 'CDMX', 'Y', 'BBB010101BBB', '64000', 'NL', 'P', '30111500', '1', 'Pza', '10', 'Op', 'AAA111', 'No']]));
     expect(c.formato).toBe('csv');
     const fila = c.tabla![0].filas[1];
     expect(fila).toContain('06600');
@@ -122,7 +122,7 @@ describe('prepararContenido', () => {
   });
 
   it('CSV con coma dentro de comillas', async () => {
-    const { c } = await leer(csvAtlas([['F1', '15/10/2026', 'Plásticos, S.A.', 'AAA010101AAA', '06600', 'CDMX', 'Y', 'BBB010101BBB', '64000', 'NL', 'P', '30111500', '1', 'Pza', '10', 'Op', 'AAA111']]));
+    const { c } = await leer(csvAtlas([['F1', '15/10/2026', 'Plásticos, S.A.', 'AAA010101AAA', '06600', 'CDMX', 'Y', 'BBB010101BBB', '64000', 'NL', 'P', '30111500', '1', 'Pza', '10', 'Op', 'AAA111', 'No']]));
     expect(c.tabla![0].filas[1][2]).toBe('Plásticos, S.A.');
   });
 
