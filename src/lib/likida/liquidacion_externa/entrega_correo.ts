@@ -79,6 +79,8 @@ export interface ResumenEntregasCorreo {
   sinConfigurar: number;
   /** Antes de `enviar_desde_hora`. */
   fueraDeVentana: number;
+  /** «Activar el envío» apagado (`activa=false`): no salió nada, no se gastó intento; la fila espera a que se encienda. */
+  apagada: number;
   /** Pasadas a `fallida` «sin confirmar» (decisión humana). */
   sinConfirmar: number;
   /** Error inesperado en una fila (la fila queda reclamada hasta que venza su lease). */
@@ -86,7 +88,7 @@ export interface ResumenEntregasCorreo {
 }
 
 const RESUMEN_VACIO = (): ResumenEntregasCorreo => ({
-  reclamadas: 0, enviadas: 0, reintentar: 0, fallidas: 0, sinConfigurar: 0, fueraDeVentana: 0, sinConfirmar: 0, errores: 0,
+  reclamadas: 0, enviadas: 0, reintentar: 0, fallidas: 0, sinConfigurar: 0, fueraDeVentana: 0, apagada: 0, sinConfirmar: 0, errores: 0,
 });
 
 // ── Utilidades puras ────────────────────────────────────────────────────────
@@ -273,6 +275,17 @@ async function procesarUna(
 
   // 2. Ventana de envío (hora de México) y presupuesto de tiempo: se libera sin gastar intento.
   const config = await configDe(e.tenantId);
+  // 1b. Interruptor «Activar el envío» (INN-A1-04). La pantalla de configuración promete que apagado «no sale ningún
+  // correo aunque haya desgloses listos», pero ni `recibirDesglose` ni el RPC de reclamo lo miraban: en el alta, con los
+  // contactos reales ya cargados, un `POST /desgloses` de prueba mandaba nóminas de verdad. Este es el punto único por
+  // donde sale un correo (también el reenvío manual y la liberación de retenidas pasan por la cola), así que se corta
+  // aquí, ANTES de descargar el Excel o llamar al proveedor. No se gasta intento ni se falla la fila: queda pendiente y
+  // sale sola cuando alguien enciende el envío. (Sin fila de config el valor por defecto es `activa=false`: tampoco sale.)
+  if (!config.activa) {
+    await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_CONFIG_MS), e.ultimoError);
+    resumen.apagada += 1;
+    return;
+  }
   const abre = inicioVentanaHoy(ahora, config.enviarDesdeHora);
   if (abre && ahora.getTime() < abre.getTime()) {
     await deps.reprogramar(e.tenantId, e.id, token, e.intentos, abre, e.ultimoError);

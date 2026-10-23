@@ -418,7 +418,7 @@ export interface ResumenPull {
 }
 
 const CORREO_VACIO = (): ResumenEntregasCorreo => ({
-  reclamadas: 0, enviadas: 0, reintentar: 0, fallidas: 0, sinConfigurar: 0, fueraDeVentana: 0, sinConfirmar: 0, errores: 0,
+  reclamadas: 0, enviadas: 0, reintentar: 0, fallidas: 0, sinConfigurar: 0, fueraDeVentana: 0, apagada: 0, sinConfirmar: 0, errores: 0,
 });
 
 async function faseDePull(deps: Dependencias): Promise<ResumenPull | undefined> {

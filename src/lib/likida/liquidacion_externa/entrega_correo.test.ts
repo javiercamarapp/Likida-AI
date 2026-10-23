@@ -211,6 +211,38 @@ describe('procesarEntregasCorreo — las seis ramas de ResultadoEnvio', () => {
   });
 });
 
+describe('procesarEntregasCorreo — interruptor «Activar el envío» (INN-A1-04)', () => {
+  it('activa=false ⇒ NO envía ni descarga el Excel; reprograma sin gastar intento y lo cuenta como apagada', async () => {
+    // La pantalla promete «Apagado, no sale ningún correo aunque haya desgloses listos»: durante el alta ya hay contactos
+    // reales cargados y el integrador prueba `POST /desgloses`; nada debe salir hasta que alguien lo encienda.
+    const { e, deps } = montar({ ok: true, id: 're_no_debe_salir' }, { activa: false }, [entrega({ intentos: 2 })]);
+    const r = await procesarEntregasCorreo(deps, 10);
+    expect(e.llamadasEnviar).toEqual([]);
+    expect(r.enviadas).toBe(0);
+    expect(r.apagada).toBe(1);
+    expect(r.fallidas).toBe(0);
+    expect(e.enviadas).toEqual([]);
+    expect(e.liquidacionEnviada).toBe(0);
+    expect(e.reprogramadas).toHaveLength(1);
+    expect(e.reprogramadas[0]).toMatchObject({ id: 'e-1', intentos: 2 });
+    expect(e.reprogramadas[0]?.proximo.getTime()).toBeGreaterThan(AHORA.getTime());
+  });
+
+  it('activa=true ⇒ sigue enviando igual (el interruptor encendido no cambia nada)', async () => {
+    const { e, deps } = montar({ ok: true, id: 're_ok' }, { activa: true });
+    const r = await procesarEntregasCorreo(deps, 10);
+    expect(r.enviadas).toBe(1);
+    expect(r.apagada).toBe(0);
+    expect(e.llamadasEnviar).toHaveLength(1);
+  });
+
+  it('sin fila de config (valor por defecto, activa=false) ⇒ tampoco envía', async () => {
+    const { e, deps } = montar({ ok: true, id: 're_x' }, { ...CONFIG_CORREO_POR_DEFECTO, canal: 'correo' });
+    await procesarEntregasCorreo(deps, 10);
+    expect(e.llamadasEnviar).toEqual([]);
+  });
+});
+
 describe('procesarEntregasCorreo — idempotencia y concurrencia', () => {
   it('dos invocaciones concurrentes ⇒ un solo envío (el claim reparte filas distintas)', async () => {
     const { e, deps } = montar({ ok: true, id: 're_1' });
