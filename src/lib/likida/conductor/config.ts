@@ -190,6 +190,11 @@ export interface ConfigConductor {
   /** 0801: llamadas de seguimiento por viaje medidas antes del agente (null = sin registrar) y la fecha (AAAA-MM-DD) en que se midió. */
   lineaBaseLlamadasPorViaje: number | null;
   lineaBaseRegistradaEn: string | null;
+  /**
+   * 0859: compuerta EXPLÍCITA por flota. Solo `true` deja que el Agente 5 le escriba a un chofer. Ausente (base sin migrar, sin fila,
+   * config inválida) = apagado: aquí el seguro es NO enviar. La fija la lectura de la base, no el formulario ni el validador.
+   */
+  agenteChoferHabilitado?: boolean;
 }
 
 export const COHORTES_PILOTO = ['sin_tableta_ni_macros', 'voluntarios_abiertos'] as const;

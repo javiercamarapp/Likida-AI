@@ -527,7 +527,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // único archivo del módulo que cruza flotas a propósito). `flotasConEnvioActivo` lee `liquidacion_correo_config` filtrando
 // `activa = true` y canal correo/ambos para decidir QUÉ flotas lee el ciclo del TMS (las que nacen apagadas no entran).
 // 0 archivos nuevos. Funcionalidad nueva, no código migrado; cubierta por `tms_a_correo.e2e.test.ts` y `trabajo_canal.test.ts`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_250;
+// A5 COMPUERTA (A35-A5-01, oct-2026): +1 llamada (2,250 → 2,251), en `conductor/repo.ts` (que ya contaba): `leerAgenteChoferHabilitado` llama a
+// la función `conductor_agente_chofer_habilitado` (0859) con `acotada`, acotada por flota (`p_tenant`), antes de cada envío al chofer.
+// 0 archivos nuevos con llamadas. Funcionalidad nueva, no código migrado; cubierta por `compuerta_agente_repo.test.ts`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_251;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
