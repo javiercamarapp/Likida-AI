@@ -45,8 +45,10 @@ export function crearPuertosPdf(tenantId: string): PuertosPdf {
 
     async vision(imagenes, signal): Promise<LecturaVision> {
       const { extraerComprobante } = await import('../intake/ocr');
-      // Mismo patrón que `ingresarFacturaDesdeFoto`: la visión gasta contra el tope diario del tenant.
-      const r = await extraerComprobante(imagenes, signal, createLlmBudget(tenantId, randomUUID(), 'interactivo'));
+      // A37-S30-01: el buzón recibe correo NO autenticado (cualquiera con el token manda PDFs distintos); su
+      // visión es trabajo de FONDO y gasta de 'ocr_lote', que no puede tocar la reserva del camino interactivo
+      // (el chofer que manda la foto de su ticket por WhatsApp). Al agotarse, la visión lanza y el correo se reintenta.
+      const r = await extraerComprobante(imagenes, signal, createLlmBudget(tenantId, randomUUID(), 'ocr_lote'));
       const g = r.gasto;
       return {
         legible: r.legible,
