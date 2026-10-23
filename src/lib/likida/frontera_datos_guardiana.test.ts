@@ -306,7 +306,9 @@ import { join, relative } from 'node:path';
 // no toca Supabase, solo cae en el regex genérico `\.(from|rpc)\(` por `Buffer.from(b64, 'base64')` al decodificar la
 // foto para medirla con `sharp`. Se documenta en vez de reescribir el `Buffer.from` idiomático para esquivar el regex.
 // Llamadas SIN cambio: no hay ninguna llamada real a Supabase en este archivo.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
+// Auditoría 35, R04-fiscal-01 (liga del SAT con copia de campos fiscales, mig. 0858): +1 archivo (321 → 322), `sat_descarga/liga_campos.ts` —
+// la liga automática (`gasto_ligar_cfdi_campos`, con respaldo al UPDATE de siempre si la migración no está aplicada); todo por `acotada` con `tenant_id`.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 322;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -530,7 +532,26 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 321;
 // R12 PEAJES COLA (A35-R12-rendimiento-01, oct-2026): +1 llamada (2,250 → 2,251), en `peajes/ingesta.ts` (que ya contaba): el
 // `.rpc('peaje_archivo_barrer_vencidos')` (0856) que manda a `fallida` los archivos `procesando` agotados antes de reclamar la cola.
 // Con `acotada`, tolera la base sin la migración. 0 archivos nuevos. Funcionalidad nueva; cubierta por `cola.test.ts`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_251;
+// ALERTAS REPETIDAS DE CORRIDAS EN FALLO (23-oct-2026): +2 llamadas (2,251 → 2,253), 0 archivos nuevos, ambas en archivos que ya contaban y ambas por
+// `acotada`: (1) `agentes/corridas.ts` · `leerPausaPorFallos` lee las últimas 3 corridas de un agente en `agente_corrida` para el cortacircuitos del
+// runner (3 fallos seguidos = en pausa, sondeo cada 24 h); (2) `admin/negocio.ts` · `getUltimoInicioSinFalloPorAgente` lee la última corrida ok/parcial
+// de cada agente con fallos, para que la bandeja junte una racha de fallos en UN incidente (la racha se rompe en la última corrida sana). Funcionalidad
+// nueva sin tablas nuevas, no código migrado; cubierta por `corridas.test.ts`, `runner.test.ts` y `escalaciones.test.ts`.
+// A1 RECEPCIÓN ATÓMICA (A35-A1-01, oct-2026): +1 llamada (2,250 → 2,251), en `liquidacion_externa/repo_correo.ts` (que ya contaba).
+// `recibirDesgloseAtomico` es UN `.rpc('recibir_desglose_atomico')` (0857) que reemplaza las cuatro escrituras sueltas de
+// `recibirDesglose` (liquidación, encabezado, evento, entregas) por una sola transacción; el tenant va como parámetro y la función
+// solo la ejecuta service_role. Las escrituras sueltas siguen como respaldo mientras la base no tenga la 0857. 0 archivos nuevos;
+// cubierta por `repo_correo.test.ts`, `desglose_recibir.test.ts` y `supabase/tests/0857_recibir_desglose_atomico.sql`.
+// Auditoría 35, R04-fiscal-01 (mig. 0858): +3 llamadas (2,250 → 2,253): `liga_campos.ts` (+2: el RPC nuevo y el UPDATE de respaldo, el que
+// salió de `ciclo.ts` cuenta -1) y `resolucion.ts` (+2: la lectura del XML crudo y el RPC `sat_cfdi_ligar_campos_tx`). Todas por `acotada` con `tenant_id`.
+// A33-06 (migración 0860, oct-2026): +1 llamada (2,250 → 2,251), en `peajes/repo.ts` (`registrarNotaDeCredito`): `.rpc('peaje_nota_credito_registrar')`,
+// la función atómica e idempotente (candado de fila + clave por reclamo) que reemplaza el leer-sumar-escribir sin candado. 0 archivos nuevos. El
+// camino anterior (3 llamadas) se conserva como respaldo mientras la migración no esté aplicada. Cubierta por `nota_credito_rpc.test.ts` y supabase/tests/0860_*.
+// A5 COMPUERTA (A35-A5-01, oct-2026): +1 llamada (2,250 → 2,251), en `conductor/repo.ts` (que ya contaba): `leerAgenteChoferHabilitado` llama a
+// la función `conductor_agente_chofer_habilitado` (0859) con `acotada`, acotada por flota (`p_tenant`), antes de cada envío al chofer.
+// 0 archivos nuevos con llamadas. Funcionalidad nueva, no código migrado; cubierta por `compuerta_agente_repo.test.ts`.
+// INTEGRACIÓN OLEADA 2 (23-oct-2026): los cinco PRs partían de 2,250/2,251 por separado; juntos suman 2,251 (master con 0856) +2 (alertas) +1 (A1 recepción) +3 (fiscal 0858) +1 (peajes 0860) +1 (A5 compuerta 0859) = 2,259, medido con el barrido real.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_259;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`

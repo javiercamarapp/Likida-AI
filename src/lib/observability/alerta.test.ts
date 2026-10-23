@@ -31,7 +31,7 @@ vi.mock('@/lib/logger', () => ({
   redactarTexto: (s: string) => s.replace(/\b\d{10}\b/g, '[TEL]'),
 }));
 
-type Correo = { asunto: string; datos?: Array<[string, string]> };
+type Correo = { asunto: string; titulo?: string; datos?: Array<[string, string]> };
 
 async function cargar() {
   // Módulo fresco por prueba: el rate limit y el "avisado una vez" viven en
@@ -258,7 +258,7 @@ describe('alertarHuecoConfiguracion — el piso es de días, no de una hora', ()
 
     expect(enviarCorreo).toHaveBeenCalledTimes(1);
     const correo = enviarCorreo.mock.calls[0][1] as Correo & { tono?: string };
-    expect(correo.asunto).toBe('[Likida] Pendiente de configurar: cron.config_ausente:descarga-sat');
+    expect(correo.asunto).toBe('[Likida] Configuración pendiente: cron.config_ausente:descarga-sat');
     expect(correo.tono).toBe('atencion');
   });
 
@@ -292,6 +292,35 @@ describe('alertarHuecoConfiguracion — el piso es de días, no de una hora', ()
     expect(enviarCorreo).toHaveBeenCalledTimes(2);
   });
 
+  it('el asunto dice «Configuración pendiente», nunca «Falló»: no es una falla (23-oct-2026)', async () => {
+    vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
+    const { alertarHuecoConfiguracion } = await cargar();
+    await alertarHuecoConfiguracion('cron.config_ausente:descarga-sat', 'falta LIKIDA_SAT_PROVEEDOR', {});
+    const correo = enviarCorreo.mock.calls[0][1] as Correo;
+    expect(correo.asunto).toMatch(/Configuración pendiente/);
+    expect(correo.asunto).not.toMatch(/Falló/);
+    expect(correo.titulo).toMatch(/Configuración pendiente/);
+  });
+
+  it('un motivo que solo cambia en números/fechas (reintento 3 → 4, hora distinta) es el MISMO hueco: un solo aviso', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-20T09:00:00Z'));
+    vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
+    const { alertarHuecoConfiguracion } = await cargar();
+    await alertarHuecoConfiguracion('cron.config_ausente:descarga-sat', 'falta LIKIDA_SAT_PROVEEDOR (último intento 2026-10-20T09:00:00Z, 3 de 5)', {});
+    vi.setSystemTime(new Date('2026-10-23T09:00:00Z'));
+    await alertarHuecoConfiguracion('cron.config_ausente:descarga-sat', 'falta LIKIDA_SAT_PROVEEDOR (último intento 2026-10-23T09:00:00Z, 4 de 5)', {});
+    expect(enviarCorreo).toHaveBeenCalledTimes(1);
+  });
+
+  it('pero otra variable faltante con dígito (X_1 → X_2) SÍ es otro hueco', async () => {
+    vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
+    const { alertarHuecoConfiguracion } = await cargar();
+    await alertarHuecoConfiguracion('cron.config_ausente:descarga-sat', 'falta LIKIDA_SAT_LLAVE_1', {});
+    await alertarHuecoConfiguracion('cron.config_ausente:descarga-sat', 'falta LIKIDA_SAT_LLAVE_2', {});
+    expect(enviarCorreo).toHaveBeenCalledTimes(2);
+  });
+
   it('si el motivo CAMBIA, es información nueva y avisa aunque el piso del motivo viejo siga vivo', async () => {
     vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
     const { alertarHuecoConfiguracion } = await cargar();
@@ -312,7 +341,7 @@ describe('alertarHuecoConfiguracion — el piso es de días, no de una hora', ()
     expect(enviarCorreo).toHaveBeenCalledTimes(2);
     const asuntos = enviarCorreo.mock.calls.map((c) => (c[1] as Correo).asunto);
     expect(asuntos).toContain('[Likida] Falló cron.estado_no_ok');
-    expect(asuntos).toContain('[Likida] Pendiente de configurar: cron.config_ausente:descarga-sat');
+    expect(asuntos).toContain('[Likida] Configuración pendiente: cron.config_ausente:descarga-sat');
   });
 
   it('sin ALERTA_EMAIL no manda nada y no lanza', async () => {

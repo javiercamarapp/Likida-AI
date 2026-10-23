@@ -224,3 +224,45 @@ describe('B1 (ronda 19): una fuente ciega no hace flapping de sus incidentes', (
     expect(decidirAvisos(c, { ...ESTADO_GUARDIA_INICIAL, vistos: [clave] }).nuevos).toHaveLength(0);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UNA RACHA DE FALLOS AVISA UNA SOLA VEZ (23-oct-2026). La huella del item de
+// corridas ahora es agente+error (campo `huella`), no título+desde: la racha
+// crece, el título cambia («5 corridas desde…») y el incidente sigue siendo el
+// mismo. Solo suena de nuevo si el error cambia o la racha se rompe y reaparece.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('decidirAvisos — una racha de corridas en fallo avisa UNA vez', () => {
+  const racha = (n: number, huella = 'corridas|enriquecedor|auth', desde = '2026-10-17T00:00:00Z'): ItemEscalacion => ({
+    fuente: 'corridas', titulo: `Corrida en fallo — agente enriquecedor (${n} corridas desde 2026-10-17)`, detalle: null,
+    tenantNombre: 'Likida (negocio)', desde, vence: null, href: null, huella,
+  });
+  const pasada = (it: ItemEscalacion, previo: ReturnType<typeof decidirAvisos>['estado']) =>
+    decidirAvisos(clasificarBandeja(bandeja([it]), AHORA), previo);
+
+  it('la racha que crece (otro título, otro conteo) NO vuelve a avisar', () => {
+    let d = pasada(racha(3), ESTADO_GUARDIA_INICIAL);
+    expect(d.nuevos).toHaveLength(1);
+    for (const n of [4, 5, 6, 40]) {
+      d = pasada(racha(n), d.estado);
+      expect(d.nuevos, `racha de ${n}`).toHaveLength(0);
+      expect(d.urgentes).toHaveLength(1);
+    }
+  });
+
+  it('el mismo agente con OTRO error vuelve a avisar', () => {
+    const d1 = pasada(racha(5), ESTADO_GUARDIA_INICIAL);
+    expect(pasada(racha(1, 'corridas|enriquecedor|credito'), d1.estado).nuevos).toHaveLength(1);
+  });
+
+  it('si la racha se rompe (sin items) y reaparece, es incidente nuevo', () => {
+    const d1 = pasada(racha(5), ESTADO_GUARDIA_INICIAL);
+    const vacia = decidirAvisos(clasificarBandeja(bandeja([]), AHORA), d1.estado);
+    expect(pasada(racha(1), vacia.estado).nuevos).toHaveLength(1);
+  });
+
+  it('SIN huella el comportamiento de siempre se conserva (otros incidentes siguen identificados por título+desde)', () => {
+    const sin = (desde: string): ItemEscalacion => ({ ...item('tickets', VENCIO_AYER), desde });
+    const d1 = pasada(sin('2026-08-10T00:00:00Z'), ESTADO_GUARDIA_INICIAL);
+    expect(pasada(sin('2026-08-11T00:00:00Z'), d1.estado).nuevos).toHaveLength(1);
+  });
+});

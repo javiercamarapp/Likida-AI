@@ -31,6 +31,7 @@ import { acotada } from '../presupuesto';
 import { DatoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
 import { generateStructured } from '@/lib/llm/openrouter';
+import { clasificarFalloModelo } from '@/lib/llm/fallo_modelo';
 import { registrarCorrida, type DisparoCorrida } from './corridas';
 import { logger } from '@/lib/logger';
 
@@ -362,12 +363,19 @@ export async function investigarProspecto(
       costoUsd = r.cost;
       modelo = r.model;
     } catch (e) {
+      // El MOTIVO REAL, no un texto fijo: 127 corridas en fallo en 10 días
+      // decían lo mismo y nadie podía distinguir una llave vencida de un
+      // crédito agotado. Clase + detalle corto a la bitácora; mensaje limpio
+      // (≤ 200) + status + rol al log. Nunca llaves, cabeceras ni cuerpos.
+      const fallo = clasificarFalloModelo(e);
       await registrarCorrida(null, 'enriquecedor', {
         inicio, fin: new Date(), estado: 'fallo', disparo,
         resumen: { prospecto: prospectoId, paginas: paginas.length },
-        error: 'El modelo no pudo extraer el dossier.',
+        error: `El modelo no pudo extraer el dossier (${fallo.clase}: ${fallo.detalle})`,
       });
-      logger.error('investigador.modelo_fallo', { prospecto: prospectoId, err: e instanceof Error ? e.message : String(e) });
+      logger.error('investigador.modelo_fallo', {
+        prospecto: prospectoId, clase: fallo.clase, status: fallo.status, rol: 'back_office', err: fallo.mensaje,
+      });
       throw new DatoInvalido('El investigador no pudo extraer en este momento — reintenta.');
     }
   }

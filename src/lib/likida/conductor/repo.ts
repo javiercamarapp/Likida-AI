@@ -522,7 +522,7 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
   if (zonaCruda !== null && zonaCruda !== zonaHoraria) {
     logger.warn('conductor.zona_invalida', { tenant: tenantId, zona: String(zonaCruda).slice(0, 60) });
   }
-  if (!f) return { ...copiaDefaults(), zonaHoraria };
+  if (!f) return { ...copiaDefaults(), agenteChoferHabilitado: false, zonaHoraria };
   const v = validarConfigConductor({
     activo: f.activo as boolean,
     solicitudesMin: f.solicitudes_min as number[],
@@ -586,9 +586,25 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     // con defaults, pero un `activo = false` explícito se respeta: encender por error un agente
     // que manda WhatsApp es peor que operar con la escalera de siempre.
     logger.error('conductor.config_invalida', { tenant: tenantId, err: v.error });
-    return { ...copiaDefaults(), activo: f.activo !== false, zonaHoraria };
+    return { ...copiaDefaults(), activo: f.activo !== false, agenteChoferHabilitado: false, zonaHoraria };
   }
-  return v.ok;
+  // 0859: el interruptor explícito del Agente 5. La base sin migrar no trae la columna → undefined → apagado.
+  return { ...v.ok, agenteChoferHabilitado: f.agente_chofer_habilitado === true };
+}
+
+/**
+ * 0859: la compuerta EN BASE (`conductor_agente_chofer_habilitado`): ¿esta flota tiene al Agente 5 habilitado para escribirle a un chofer?
+ * FALLA CERRADO: cualquier error (migración sin aplicar, función ausente, base caída) o un valor que no sea `true` = no habilitado.
+ * Nunca lanza.
+ */
+export async function leerAgenteChoferHabilitado(tenantId: string): Promise<{ habilitado: boolean; razon: 'habilitado' | 'apagado' | 'compuerta_ilegible' }> {
+  try {
+    const res = await acotada(supabaseAdmin().rpc('conductor_agente_chofer_habilitado', { p_tenant: tenantId }), 'conductor.agente_chofer_habilitado');
+    if (res.error) return { habilitado: false, razon: 'compuerta_ilegible' };
+    return res.data === true ? { habilitado: true, razon: 'habilitado' } : { habilitado: false, razon: 'apagado' };
+  } catch {
+    return { habilitado: false, razon: 'compuerta_ilegible' };
+  }
 }
 
 export async function cargarContactosTrafico(tenantId: string): Promise<ContactoTrafico[]> {

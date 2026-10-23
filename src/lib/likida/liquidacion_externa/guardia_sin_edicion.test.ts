@@ -122,6 +122,9 @@ describe('guardia: ninguna escritura del código real toca un importe', () => {
     const conocidos = new Set([
       'reclamar_copia_jefe', 'cerrar_copia_jefe', 'registrar_acuse_no_coincide', 'reclamar_aviso_discrepancia',
       'cerrar_aviso_discrepancia', 'rearmar_aviso_discrepancia', 'reclamar_entregas_correo',
+      // 0857: la recepción del desglose en una transacción. Inserta las MISMAS filas que antes insertaba `recibirDesglose`
+      // (con el importe de la fuente, sin recalcular) y solo completa lo que falta con la misma huella; nunca actualiza un importe.
+      'recibir_desglose_atomico',
     ]);
     const vistos = new Set<string>();
     for (const f of FUENTES) for (const m of f.texto.matchAll(/\.rpc\(\s*['"]([a-z_0-9]+)['"]/g)) vistos.add(m[1]!);

@@ -319,3 +319,90 @@ describe('las lecturas propias de la bandeja', () => {
     await expect(getTalachasPendientes()).rejects.toThrow('fetch failed');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UNA RACHA DE FALLOS = UN INCIDENTE (23-oct-2026). El enriquecedor falló en
+// cada vuelta de 4 h durante 10 días: cada corrida fallida era una fila de la
+// cola con su propio `desde` y la guardia la avisaba como incidente NUEVO
+// (32 correos «5 incidente(s) nuevo(s)»). Ahora la racha del mismo agente con
+// el mismo error se junta en UN item: `desde` = primer fallo de la racha, el
+// conteo en el título y una huella estable que NO cambia al crecer la racha.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('getBandejaEscalaciones — las corridas en fallo se juntan en rachas', () => {
+  beforeEach(() => { respuestas.clear(); });
+  const ERR_401 = 'El modelo no pudo extraer el dossier (auth: HTTP 401)';
+  const fila = (agente: string, estado: string, inicio: string, error: string | null = null, tenantId: string | null = null) => ({
+    agente, estado, disparo: 'cron', inicio, fin: null, tareas_hechas: null, tareas_total: null,
+    tenant_id: tenantId, tenant: null, error,
+  });
+  const corridas = async () => (await getBandejaEscalaciones(AHORA)).cola.filter((i) => i.fuente === 'corridas');
+
+  it('5 fallos del mismo agente y el mismo error son UN item, desde el primero, con el conteo en el título', async () => {
+    respuestas.set('agente_corrida', {
+      data: ['2026-08-14T20:00:00Z', '2026-08-14T16:00:00Z', '2026-08-14T12:00:00Z', '2026-08-14T08:00:00Z', '2026-08-14T04:00:00Z']
+        .map((t) => fila('enriquecedor', 'fallo', t, ERR_401)),
+      error: null,
+    });
+    const items = await corridas();
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      titulo: 'Corrida en fallo — agente enriquecedor (5 corridas desde 2026-08-14)',
+      desde: '2026-08-14T04:00:00Z',
+    });
+    expect(items[0].detalle).toContain(ERR_401);
+  });
+
+  it('la huella NO depende del conteo ni del desde: crece la racha y sigue siendo el mismo incidente', async () => {
+    respuestas.set('agente_corrida', { data: [fila('enriquecedor', 'fallo', '2026-08-14T20:00:00Z', ERR_401), fila('enriquecedor', 'fallo', '2026-08-14T16:00:00Z', ERR_401)], error: null });
+    const antes = (await corridas())[0];
+    respuestas.set('agente_corrida', { data: [fila('enriquecedor', 'fallo', '2026-08-15T00:00:00Z', ERR_401), ...(respuestas.get('agente_corrida')!.data as never[])], error: null });
+    const despues = (await corridas())[0];
+    expect(despues.titulo).not.toBe(antes.titulo);
+    expect(despues.huella).toBeDefined();
+    expect(despues.huella).toBe(antes.huella);
+  });
+
+  it('un error DISTINTO es otro incidente (otra huella) y cuenta solo su propia racha', async () => {
+    respuestas.set('agente_corrida', {
+      data: [
+        fila('enriquecedor', 'fallo', '2026-08-15T04:00:00Z', 'El modelo no pudo extraer el dossier (credito: HTTP 402)'),
+        fila('enriquecedor', 'fallo', '2026-08-14T20:00:00Z', ERR_401),
+        fila('enriquecedor', 'fallo', '2026-08-14T16:00:00Z', ERR_401),
+      ],
+      error: null,
+    });
+    const items = await corridas();
+    expect(items).toHaveLength(1);
+    expect(items[0].titulo).toContain('(1 corrida desde 2026-08-15)');
+    expect(items[0].huella).not.toContain(ERR_401);
+  });
+
+  it('una corrida ok DESPUÉS de los fallos rompe la racha: nada vigente; los fallos nuevos arrancan otra', async () => {
+    const base = [
+      fila('enriquecedor', 'fallo', '2026-08-10T00:00:00Z', ERR_401),
+      fila('enriquecedor', 'fallo', '2026-08-10T04:00:00Z', ERR_401),
+      fila('enriquecedor', 'ok', '2026-08-11T00:00:00Z'),
+    ];
+    respuestas.set('agente_corrida', { data: base, error: null });
+    expect(await corridas()).toHaveLength(0);
+
+    respuestas.set('agente_corrida', { data: [...base, fila('enriquecedor', 'fallo', '2026-08-14T00:00:00Z', ERR_401), fila('enriquecedor', 'fallo', '2026-08-14T04:00:00Z', ERR_401)], error: null });
+    const items = await corridas();
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ desde: '2026-08-14T00:00:00Z' });
+    expect(items[0].titulo).toContain('2 corridas desde 2026-08-14');
+  });
+
+  it('agentes o flotas distintos NO se mezclan', async () => {
+    respuestas.set('agente_corrida', {
+      data: [
+        fila('enriquecedor', 'fallo', '2026-08-14T20:00:00Z', ERR_401),
+        fila('sdr', 'fallo', '2026-08-14T20:00:00Z', ERR_401),
+        fila('cobranza', 'fallo', '2026-08-14T20:00:00Z', ERR_401, 't1'),
+        fila('cobranza', 'fallo', '2026-08-14T20:00:00Z', ERR_401, 't2'),
+      ],
+      error: null,
+    });
+    expect(await corridas()).toHaveLength(4);
+  });
+});

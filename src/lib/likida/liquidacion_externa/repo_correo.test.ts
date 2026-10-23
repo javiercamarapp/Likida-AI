@@ -528,3 +528,65 @@ describe('guardias del archivo', () => {
     for (const f of nuevos) expect(readFileSync(`${dir}${f}`, 'utf8'), f).not.toMatch(/supabase\/admin/);
   });
 });
+
+describe('recepción atómica del desglose (RPC 0857, hallazgo A35-A1-01)', () => {
+  const pedido = () => ({
+    liquidacion: {
+      tenantId: T, huella: 'a'.repeat(64), operadorId: 'op-1', viajeIds: [], pdfRuta: null, pdfOrigen: 'generado' as const, pdfSha256: null,
+      datos: {
+        claveExterna: 'K-1', sistemaOrigen: 'desglose-bitacora', viajes: ['B-1'], periodo: { desde: '2026-10-01', hasta: '2026-10-07' },
+        conceptos: [{ descripcion: 'x', tipo: 'percepcion' as const, monto: 10 }], total: 10, moneda: 'MXN' as const,
+      },
+    },
+    meta: { bitacora: 'B-1', totalOrigen: 'tms' as const, retenidaMotivo: null },
+    evento: { canal: 'correo' },
+    entregas: [{ rol: 'operador' as const, correo: ' Op@Ejemplo.TEST ', xlsxRuta: 'r.xlsx', xlsxSha256: 'b'.repeat(64) }],
+  });
+
+  it('llama a la RPC UNA vez con el tenant, la liquidación, el encabezado, el evento y las entregas (correo normalizado)', async () => {
+    respuestas = [{ data: { liquidacion_id: LIQ, creada: true, reparada: false, entregas: 1 }, error: null }];
+    const res = await r.recibirDesgloseAtomico(T, pedido() as unknown as Parameters<typeof r.recibirDesgloseAtomico>[1]);
+    expect(res).toEqual({ ok: true, valor: { liquidacionId: LIQ, creada: true, reparada: false, entregas: 1 } });
+    expect(rpcs).toHaveLength(1);
+    expect(rpcs[0].fn).toBe('recibir_desglose_atomico');
+    expect(rpcs[0].args.p_tenant).toBe(T);
+    expect(rpcs[0].args.p_liquidacion).toMatchObject({ clave_externa: 'K-1', operador_id: 'op-1', total: 10 });
+    expect(rpcs[0].args.p_desglose).toMatchObject({ bitacora: 'B-1', total_origen: 'tms', retenida_motivo: null });
+    expect(rpcs[0].args.p_entregas).toEqual([{ rol: 'operador', correo: 'op@ejemplo.test', xlsx_ruta: 'r.xlsx', xlsx_sha256: 'b'.repeat(64), disparo: 'auto' }]);
+    expect(llamadas).toHaveLength(0); // nada de escrituras sueltas
+  });
+
+  it('la función no existe todavía (42883 / PGRST202) => no_disponible, no lanza', async () => {
+    respuestas = [{ data: null, error: { message: 'function public.recibir_desglose_atomico does not exist', code: '42883' } }];
+    expect(await r.recibirDesgloseAtomico(T, pedido() as unknown as Parameters<typeof r.recibirDesgloseAtomico>[1])).toEqual({ ok: false, motivo: 'no_disponible' });
+    respuestas = [{ data: null, error: { message: 'Could not find the function', code: 'PGRST202' } }];
+    expect(await r.recibirDesgloseAtomico(T, pedido() as unknown as Parameters<typeof r.recibirDesgloseAtomico>[1])).toEqual({ ok: false, motivo: 'no_disponible' });
+  });
+
+  it('cualquier otro error (corte, restricción, otra huella) LANZA: jamás se confunde con «no hay RPC»', async () => {
+    respuestas = [{ data: null, error: { message: 'la clave ya existe con otro contenido', code: 'P0001' } }];
+    await expect(r.recibirDesgloseAtomico(T, pedido() as unknown as Parameters<typeof r.recibirDesgloseAtomico>[1])).rejects.toThrow('recibir_atomico');
+  });
+
+  it('un correo sin forma de correo se rechaza antes de llamar a la base', async () => {
+    const p = pedido();
+    p.entregas[0].correo = 'no-es-correo';
+    await expect(r.recibirDesgloseAtomico(T, p as unknown as Parameters<typeof r.recibirDesgloseAtomico>[1])).rejects.toBeInstanceOf(DatoInvalido);
+    expect(rpcs).toHaveLength(0);
+  });
+
+  it('desgloseIncompleto: sin encabezado => true; retenido => false; sin retención y sin entregas => true; con entregas => false', async () => {
+    comportamiento = (l) => (l.tabla === 'liquidacion_desglose' ? { data: null, error: null } : { data: [], error: null });
+    expect(await r.desgloseIncompleto(T, LIQ)).toBe(true);
+    const fila = (motivo: string | null) => ({ liquidacion_externa_id: LIQ, bitacora: 'B-1', total_origen: 'tms', retenida_motivo: motivo, created_at: '2026-10-01T00:00:00Z' });
+    comportamiento = (l) => (l.tabla === 'liquidacion_desglose' ? { data: fila('neto negativo'), error: null } : { data: [], error: null });
+    expect(await r.desgloseIncompleto(T, LIQ)).toBe(false);
+    comportamiento = (l) => (l.tabla === 'liquidacion_desglose' ? { data: fila(null), error: null } : { data: [], error: null });
+    expect(await r.desgloseIncompleto(T, LIQ)).toBe(true);
+    comportamiento = (l) => (l.tabla === 'liquidacion_desglose' ? { data: fila(null), error: null }
+      : { data: [{ id: 'e1', liquidacion_externa_id: LIQ, tenant_id: T, generacion: 1, rol: 'operador', correo: 'a@b.test', estado: 'pendiente', intentos: 0, disparo: 'auto', created_at: '2026-10-01T00:00:00Z' }], error: null });
+    expect(await r.desgloseIncompleto(T, LIQ)).toBe(false);
+    comportamiento = () => ausente;
+    expect(await r.desgloseIncompleto(T, LIQ)).toBe(false);
+  });
+});
