@@ -6,6 +6,9 @@ import { acotada } from '../presupuesto';
 import { enviarConFallback } from '@/lib/meta/enviar_con_fallback';
 import { enviarCorreo } from '@/lib/correo/enviar';
 import { destinatariosEscalacion } from '../conductor/escalamiento';
+import { dentroDeVentana } from '../conductor/config';
+import { leerAgenteChoferHabilitado, leerConfigConductor } from '../conductor/repo';
+import { hayEmergenciaDeTelefono } from '../conductor/trabajo';
 import { asientosDeJornada, leerPolitica } from './repo';
 import type {
   ConfigAlerta, PuertosAlerta, FilaCandidata, NivelAlerta, CanalEncargado, CanalOperador, EstadoDestino, ReclamoAlerta,
@@ -118,6 +121,20 @@ export const puertosAlertaReales: PuertosAlerta = {
     return data === true;
   },
   async enviarWa(telefono, msg, tenantId, ahora, contexto) {
+    // A37-A5-05: el aviso AL OPERADOR le escribe con la jornada en curso (conduciendo): misma compuerta que todo envío proactivo al chofer —
+    // Agente 5 habilitado (0859, fail-closed), ventana horaria de la flota y sin emergencia abierta—. El del encargado no pasa por aquí.
+    if (contexto === 'jornada.alerta_operador') {
+      let motivo: string | null = null;
+      try {
+        if (!(await leerAgenteChoferHabilitado(tenantId)).habilitado) motivo = 'el Agente 5 no está habilitado para esta flota (o no se pudo comprobar)';
+        else if (!dentroDeVentana(await leerConfigConductor(tenantId), ahora)) motivo = 'fuera de la ventana horaria de la flota';
+        else if (await hayEmergenciaDeTelefono(tenantId, telefono, ahora)) motivo = 'el operador tiene una emergencia abierta';
+      } catch { motivo = 'no se pudo comprobar la compuerta de seguridad del operador'; }
+      if (motivo) {
+        logger.warn('jornada.alerta_operador_bloqueada', { tenant: tenantId, motivo });
+        return { ok: false, reintentable: false, motivo: `No se envió: ${motivo}.` };
+      }
+    }
     const e = await enviarConFallback(telefono, { texto: msg.texto, plantilla: msg.plantilla, contexto, tenantId, ahora });
     // `encolado` (RES-1): Meta ya dejó el mensaje en `wa_outbox` para un rechazo reintentable o con
     // token vencido — se descartaba aquí y causaba un segundo WhatsApp real (HALLAZGO 1, A12).
