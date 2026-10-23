@@ -68,6 +68,17 @@ describe('despacharInstrucciones', () => {
     expect(await envio.despacharInstrucciones(A, viajeId, puertos())).toMatchObject({ estado: 'enviado' });
   });
 
+  it('A33-03: un rechazo reintentable que Meta YA ENCOLO no libera el reclamo (el outbox lo entrega; soltarlo duplica)', async () => {
+    // `encolado` es el contrato de enviar_con_fallback.ts: un 429 ya dejo el texto en `wa_outbox`.
+    // Si se suelta el sello, el outbox entrega (1a vez) y la pasada siguiente del cron manda otra vez (2a).
+    respuesta = { ok: false, motivo: 'rechazo_no_ventana', mensaje: 'limite de tasa', fueraDeVentana: false, reintentable: true, encolado: true, ventana: 'abierta' };
+    expect(await envio.despacharInstrucciones(A, viajeId, puertos())).toMatchObject({ estado: 'rechazado', reintentable: true });
+    expect(mundo.tablas.viaje_convenio[0].despacho_reclamado_en ?? null).not.toBeNull();
+    respuesta = OK_TEXTO;
+    expect(await envio.despacharInstrucciones(A, viajeId, puertos())).toEqual({ estado: 'perdido' });
+    expect(enviados).toHaveLength(1);
+  });
+
   it('un rechazo NO reintentable (plantilla sin aprobar) deja el reclamo: no se repite cada pasada', async () => {
     respuesta = { ok: false, motivo: 'plantilla_rechazada', mensaje: 'plantilla sin aprobar', fueraDeVentana: true, reintentable: false, ventana: 'cerrada' };
     expect(await envio.despacharInstrucciones(A, viajeId, puertos())).toMatchObject({ estado: 'rechazado', reintentable: false });
