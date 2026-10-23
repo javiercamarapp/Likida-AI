@@ -29,6 +29,20 @@ async function tenantsSoloCorreo(): Promise<string[]> {
     .filter((r) => r.canal === 'correo' && /^[0-9a-f-]{36}$/i.test(String(r.tenant_id))).map((r) => r.tenant_id);
 }
 
+/** Las flotas con «Activar el envío» ENCENDIDO (`activa=true`) y canal correo/ambos: las ÚNICAS que el ciclo TMS → correo lee
+ *  (nacen apagadas: sin fila o con `activa=false` no entra ninguna). Sin la tabla (base sin 0785): ninguna. Otro error LANZA. */
+export async function flotasConEnvioActivo(): Promise<string[]> {
+  // orden-no-importa: una fila por flota (llave tenant_id); se lee completa para repartir por canal
+  const res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
+    .select('tenant_id').eq('activa', true).in('canal', ['correo', 'ambos']).limit(1000), 'liqext.trabajo_envio_activo');
+  if (res.error) {
+    if (res.error.code === '42P01' || res.error.code === 'PGRST205' || /does not exist|schema cache/i.test(res.error.message ?? '')) return [];
+    throw new Error(`liqext.trabajo_envio_activo: ${res.error.message}`);
+  }
+  return ((res.data ?? []) as unknown as Array<{ tenant_id: string }>)
+    .map((r) => String(r.tenant_id)).filter((t) => /^[0-9a-f-]{36}$/i.test(t));
+}
+
 /** Las que el cron tiene que mover: pendientes cuyo reintento ya toca y las que
  *  esperan al outbox. Acotado a un lote: lo demás es de la siguiente pasada.
  *  Cada fila trae su `tenant_id`, y todo lo que se haga con ella después va

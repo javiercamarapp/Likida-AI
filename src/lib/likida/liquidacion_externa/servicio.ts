@@ -68,7 +68,7 @@ export interface Dependencias {
   /** El canal de entrega de la flota (`whatsapp` por defecto). Con `correo` el camino WhatsApp no corre. Opcional: sin ella, la real con caché corta. */
   canalDeEntrega?: (tenantId: string) => Promise<CanalEntrega>;
   /** Las flotas con canal `correo`/`ambos` que tienen un lector del sistema de transporte (T-A1-24). Opcional: sin ella la fase `pull` no corre.
-   *  La real devuelve `[]` hasta que exista el conector HTTP (BLOQUEO EXTERNO: la API de lectura del cliente). */
+   *  La real lee el TMS por el conector (`lector_desgloses.ts`); la forma de la API es SUPUESTO-API (`desglose_tms_supuesto.ts`). */
   lectoresPull?: () => Promise<Array<{ tenantId: string; lector: LectorDesglosesPuerto }>>;
   /** Una pasada de pull para una flota. Opcional: sin ella, `pullDesgloses`. */
   pullDeFlota?: (tenantId: string, lector: LectorDesglosesPuerto) => Promise<ResultadoPull>;
@@ -141,7 +141,8 @@ export const dependenciasPorOmision: Required<Dependencias> = {
   subirArchivo: (r, b, t) => subirArchivoExterno(r, b, t),
   copiarAJefe: copiarAJefePorOmision,
   canalDeEntrega: canalDeEntregaPorOmision,
-  lectoresPull: async () => [],
+  // Import dinámico (evita el ciclo con el conector). Solo lee flotas con `activa=true` + canal correo + credencial TMS probada.
+  lectoresPull: async () => (await import('../conectores/tms/lector_desgloses')).lectoresDesglosesTmsPorOmision(),
   // Import dinámico: estos módulos arrastran la base y el proveedor de correo; solo se cargan cuando la fase corre.
   pullDeFlota: async (t, l) => (await import('./pull_desglose')).pullDesgloses(t, l),
   entregasCorreo: async (limite) => (await import('./entrega_correo')).procesarEntregasCorreo(undefined, limite),
