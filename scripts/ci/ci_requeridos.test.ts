@@ -16,7 +16,7 @@ describe('evaluarChecks', () => {
     expect(evaluarChecks({ check_runs: [ok(PG), ok(E2E, { conclusion: 'failure' })] }).estado).toBe('falla');
     expect(evaluarChecks({ check_runs: [ok(PG), ok(E2E, { conclusion: 'skipped' })] }).estado).toBe('falla');
     expect(evaluarChecks({}).estado).toBe('falla');
-    expect(evaluarChecks(null).estado).toBe('falla');
+    expect(evaluarChecks(null as never).estado).toBe('falla');
   });
   it('en curso es pendiente, pero un rojo manda sobre un pendiente', () => {
     expect(evaluarChecks({ check_runs: [ok(PG), ok(E2E, { status: 'in_progress', conclusion: null })] }).estado).toBe('pendiente');
