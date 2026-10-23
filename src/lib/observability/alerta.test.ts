@@ -31,7 +31,7 @@ vi.mock('@/lib/logger', () => ({
   redactarTexto: (s: string) => s.replace(/\b\d{10}\b/g, '[TEL]'),
 }));
 
-type Correo = { asunto: string; datos?: Array<[string, string]> };
+type Correo = { asunto: string; titulo?: string; datos?: Array<[string, string]> };
 
 async function cargar() {
   // Módulo fresco por prueba: el rate limit y el "avisado una vez" viven en
