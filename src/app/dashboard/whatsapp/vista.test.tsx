@@ -49,6 +49,19 @@ describe('la guía de arranque del chofer', () => {
     expect(html).toContain('número de PRUEBA');
   });
 
+  it('A36-R15-06: con número de PRUEBA la leyenda va DENTRO del cartel imprimible y Imprimir queda deshabilitado', () => {
+    const html = pintar({ numero: { ...CONFIGURADO, esPrueba: true }, nombreFlota: 'X', enlace, qrSvg: null, operadores: null });
+    const cartel = html.slice(html.indexOf('id="cartel-whatsapp"'), html.indexOf('</section>', html.indexOf('id="cartel-whatsapp"')));
+    expect(cartel).toContain('PRUEBA');
+    const botonImprimir = cartel.split('<button').find((b) => b.includes('Imprimir cartel')) ?? '';
+    expect(botonImprimir).toContain('disabled=""');
+    // Con el número comercial, el cartel NO lleva leyenda y Imprimir funciona.
+    const real = pintar({ numero: CONFIGURADO, nombreFlota: 'X', enlace, qrSvg: null, operadores: null });
+    const cartelReal = real.slice(real.indexOf('id="cartel-whatsapp"'), real.indexOf('</section>', real.indexOf('id="cartel-whatsapp"')));
+    expect(cartelReal).not.toContain('PRUEBA');
+    expect(cartelReal).not.toContain('disabled=""');
+  });
+
   it('el flujo del chofer lo cuenta como es: número dado de alta, aviso de privacidad, tickets, LISTO', () => {
     const html = pintar({ numero: CONFIGURADO, nombreFlota: 'X', enlace, qrSvg: null, operadores: null });
     for (const t of ['SU número de WhatsApp', 'aviso de privacidad', 'fotos de sus tickets', '«LISTO»']) expect(html).toContain(t);

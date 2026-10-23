@@ -48,6 +48,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
+import { mxn } from '@/lib/formato';
 import { correoDelUsuario } from '@/lib/likida/jornada/firma';
 import { DatoInvalido } from '../errores';
 import { candidatosAnotados, type EstatusCfdi } from './bandeja';
@@ -68,6 +69,7 @@ export type MotivoFalla =
   | 'candidato_no_ofrecido'
   | 'gasto_no_encontrado'
   | 'gasto_ya_tiene_cfdi'
+  | 'total_no_coincide'
   | 'gasto_de_viaje_liquidado'
   | 'nada_que_revertir'
   | 'sin_firma'
@@ -264,6 +266,20 @@ export async function ligarComprobante(
   }
   if (gasto.cfdi_uuid) {
     return { ok: false, motivo: 'gasto_ya_tiene_cfdi', mensaje: 'Ese gasto ya tiene comprobante: le llegó por otro camino. Likida no pisa un CFDI que ya estaba.' };
+  }
+
+  // A36-R01-04: ligar marca el gasto «facturado y verificado» y cuenta como
+  // respaldo en deducciones/cuadre. Un CFDI de $48,000.00 pegado a una caseta
+  // de $480.00 no puede quedar así por un clic. Misma tolerancia que la 0858
+  // (un centavo, en centavos enteros para no depender del flotante). Sin total
+  // en el CFDI (fila anterior a la columna) no hay con qué comparar.
+  const montoGasto = Number(gasto.monto);
+  if (cfdi.total !== null && Number.isFinite(montoGasto)
+      && Math.abs(Math.round(cfdi.total * 100) - Math.round(montoGasto * 100)) > 1) {
+    return {
+      ok: false, motivo: 'total_no_coincide',
+      mensaje: `El total del comprobante (${mxn(cfdi.total)}) no coincide con el monto del gasto (${mxn(montoGasto)}), así que no se ligó. Elige el gasto correcto, o corrige primero el monto del gasto si el comprobante es el bueno.`,
+    };
   }
 
   const candidatosConEleccion = {

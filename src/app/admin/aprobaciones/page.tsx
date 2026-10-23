@@ -4,14 +4,14 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import {
   bandejaPendiente, aprobadasSinEnviar, ultimasResueltas,
   rebotesRecientes, correosSuprimidos,
-  aprobarPieza, rechazarPieza, enviarPiezaPorCorreo,
+  aprobarPieza, rechazarPieza, enviarPiezaPorCorreo, liberarEnvioAmbiguo,
   type PiezaEnCola,
 } from '@/lib/likida/agentes/cola';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { fechaHoraMx } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { EstadoVacio, StatusPill } from '../ui/kit';
-import { FormaPieza, FormaEnvio, type ResultadoPieza } from './forma-pieza';
+import { FormaPieza, FormaEnvio, FormaLiberarAmbiguo, type ResultadoPieza } from './forma-pieza';
 import { RebotesYBajas } from './rebotes';
 
 export const dynamic = 'force-dynamic';
@@ -65,6 +65,22 @@ export default async function PaginaAprobaciones() {
       return { ok: `Enviada a ${r.destinatario} — Resend la aceptó (${r.providerId}) y el contacto quedó en el historial del prospecto.` };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'enviar la pieza') };
+    }
+  }
+
+  // A36-R11-01: salida del callejón del envío ambiguo. Quien aprieta el botón
+  // afirma que verificó en Resend que el correo NO salió.
+  async function accionLiberar(_previo: ResultadoPieza, fd: FormData): Promise<ResultadoPieza> {
+    'use server';
+    const s = await requireSuperadmin();
+    try {
+      const r = await liberarEnvioAmbiguo(String(fd.get('pieza') ?? ''), s.userId);
+      revalidatePath('/admin/aprobaciones');
+      return r.reservaLiberada
+        ? { ok: 'Liberada: vuelve a «Aprobadas por enviar» y se puede reintentar (misma llave de idempotencia).' }
+        : { ok: 'Liberada, pero NO se pudo borrar su reserva de cadencia: el reintento puede rebotar hasta pasadas 48 h. Avisa a soporte.' };
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'liberar el envío ambiguo') };
     }
   }
 
@@ -148,6 +164,14 @@ export default async function PaginaAprobaciones() {
                         // La inconsistencia VISIBLE: enviada estampada sin prueba
                         // del proveedor (el proceso murió entre envío y guardado).
                         : <span className="shrink-0" style={{ color: 'var(--warn)' }}>enviada SIN prueba del proveedor — revisar</span>
+                    )}
+                    {/* A36-R11-01: el motivo («AMBIGUO… verificar en Resend») se ve también con enviado_en
+                        puesto, y hay salida: confirmar que NO salió y reintentar. */}
+                    {p.enviadoEn && !p.providerMessageId && p.envioError && (
+                      <span className="basis-full text-[11.5px]" style={{ color: 'var(--warn)' }}>{p.envioError}</span>
+                    )}
+                    {p.enviadoEn && !p.providerMessageId && p.envioError?.startsWith('AMBIGUO') && (
+                      <FormaLiberarAmbiguo pieza={p} accion={accionLiberar} />
                     )}
                     {!p.enviadoEn && p.envioError && (
                       <span className="shrink-0" style={{ color: 'var(--bad)' }}>envío falló: reintentable</span>

@@ -124,7 +124,7 @@ describe('esFuncionAusente', () => {
 describe('ligarGastoAutomatico — con la migración 0858 aplicada', () => {
   it('manda los campos validados a gasto_ligar_cfdi_campos y reporta que se copiaron', async () => {
     const r = await ligarGastoAutomatico(TENANT, 'g-1', UUID, xmlCfdi({ iva: ['160.00'] }));
-    expect(r).toEqual({ ligado: true, camposCopiados: true, motivo: null });
+    expect(r).toEqual({ ligado: true, fallo: false, camposCopiados: true, motivo: null });
     expect(rpcs).toHaveLength(1);
     expect(rpcs[0].nombre).toBe('gasto_ligar_cfdi_campos');
     expect(rpcs[0].args).toMatchObject({ p_tenant: TENANT, p_gasto: 'g-1', p_cfdi_uuid: UUID });
@@ -136,19 +136,21 @@ describe('ligarGastoAutomatico — con la migración 0858 aplicada', () => {
     respuestaRpc = { data: { ligado: true, campos_copiados: false, motivo: 'sin_xml' }, error: null };
     const r = await ligarGastoAutomatico(TENANT, 'g-1', UUID, xmlCfdi({ tipo: 'E' }));
     expect(rpcs[0].args.p_campos).toBeNull();
-    expect(r).toEqual({ ligado: true, camposCopiados: false, motivo: 'sin_xml' });
+    expect(r).toEqual({ ligado: true, fallo: false, camposCopiados: false, motivo: 'sin_xml' });
   });
 
   it('perder la carrera (el gasto ya tenía comprobante) no es éxito', async () => {
     respuestaRpc = { data: { ligado: false, campos_copiados: false, motivo: 'gasto_no_disponible' }, error: null };
     const r = await ligarGastoAutomatico(TENANT, 'g-1', UUID, xmlCfdi());
     expect(r.ligado).toBe(false);
+    expect(r.fallo).toBe(false); // carrera perdida de verdad
   });
 
   it('un error cualquiera de la base no liga y NO cae al camino viejo', async () => {
     respuestaRpc = { data: null, error: { code: 'CU001', message: 'gasto_no_tras_liquidar' } };
     const r = await ligarGastoAutomatico(TENANT, 'g-1', UUID, xmlCfdi());
     expect(r.ligado).toBe(false);
+    expect(r.fallo).toBe(true); // A36-R03-02: error reintentable, no carrera perdida
     expect(updates).toEqual([]);
   });
 });
@@ -160,7 +162,7 @@ describe('ligarGastoAutomatico — con la migración 0858 SIN aplicar', () => {
 
   it('cae al UPDATE de siempre (solo liga) y reporta que no se copiaron campos', async () => {
     const r = await ligarGastoAutomatico(TENANT, 'g-1', UUID, xmlCfdi());
-    expect(r).toEqual({ ligado: true, camposCopiados: false, motivo: 'funcion_ausente' });
+    expect(r).toEqual({ ligado: true, fallo: false, camposCopiados: false, motivo: 'funcion_ausente' });
     expect(updates).toEqual([{ cfdi_uuid: UUID, cfdi_orden: 1, xml_verificado: true }]);
   });
 
