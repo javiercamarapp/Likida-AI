@@ -165,3 +165,33 @@ describe('lo que NO se puede tocar', () => {
     expect(r.empresa).toBeUndefined();
   });
 });
+
+// A36-R01-02 (oleada 4): el precio del diésel y el rendimiento son números que
+// tecleó una persona. `Number('50,000'.replace(',', '.'))` daba 50, que cae
+// DENTRO del rango del diésel (5-99) y se guardaba sin una sola queja.
+describe('validarAjustes — separadores ambiguos no se adivinan', () => {
+  const diesel = (v: string) => () => validarAjustes({ ...BUENOS, precioDieselPorDefecto: v });
+
+  it.each(['50,000', '52,500', '1.234'])('«%s» es ambiguo (decimal o miles): se rechaza, no se guarda 50', (v) => {
+    expect(diesel(v)).toThrow(DatoInvalido);
+    expect(diesel(v)).toThrow(/número/);
+  });
+
+  it('los casos no ambiguos conservan su valor', () => {
+    expect(validarAjustes({ ...BUENOS, precioDieselPorDefecto: '22,5' }).tabulador.precioDieselPorDefecto).toBe(22.5);
+    expect(validarAjustes({ ...BUENOS, precioDieselPorDefecto: '22.50' }).tabulador.precioDieselPorDefecto).toBe(22.5);
+    expect(validarAjustes({ ...BUENOS, rendimientoPorDefecto: '0,5' }).tabulador.rendimientoPorDefecto).toBe(0.5);
+  });
+
+  it('«1,234.50» y «1.234,50» se leen como 1234.5 (y el rango los rechaza por grandes, no por basura)', () => {
+    expect(diesel('1,234.50')).toThrow(/entre/);
+    expect(diesel('1.234,50')).toThrow(/entre/);
+  });
+
+  it('vacío y texto basura se rechazan', () => {
+    expect(diesel('')).toThrow(/Falta/);
+    expect(diesel('   ')).toThrow(/Falta/);
+    expect(diesel('abc')).toThrow(/número/);
+    expect(diesel('2x,5')).toThrow(/número/);
+  });
+});

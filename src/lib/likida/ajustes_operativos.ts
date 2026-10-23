@@ -1,4 +1,5 @@
 import { DatoInvalido } from './errores';
+import { parsearImporteMx } from '@/lib/formato';
 import type { LikidaConfig } from './config';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -117,8 +118,12 @@ function numero(crudo: string, campo: string, rango: { min: number; max: number 
   const t = crudo.trim();
   if (t === '') throw new DatoInvalido(`Falta ${campo}.`);
   // `Number('')` es 0 y `Number('  ')` también — de ahí el guard de arriba.
-  const n = Number(t.replace(',', '.'));
-  if (!Number.isFinite(n)) throw new DatoInvalido(`${campo} tiene que ser un número.`);
+  // A36-R01-02: `Number('50,000'.replace(',', '.'))` daba 50 y entraba en rango.
+  // Lo ambiguo («50,000», «1.234») se rechaza; la persona lo reescribe sin miles.
+  const n = parsearImporteMx(t);
+  if (!Number.isFinite(n)) {
+    throw new DatoInvalido(`${campo} tiene que ser un número claro. Escríbelo sin separador de miles (p. ej. 22.5 o 22,5): «50,000» o «1.234» no se sabe si son decimales o miles.`);
+  }
   if (n < rango.min || n > rango.max) {
     throw new DatoInvalido(`${campo} tiene que estar entre ${rango.min} y ${rango.max}.`);
   }
