@@ -179,3 +179,30 @@ export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
     </div>
   );
 }
+
+/**
+ * A36-R11-01 — salida del envío AMBIGUO (timeout de Resend). Solo se ofrece
+ * cuando la pieza tiene `enviado_en`, no tiene id del proveedor y su error
+ * empieza con «AMBIGUO». Confirmar = afirmar que se verificó en Resend que el
+ * correo NO salió; el diálogo lo dice sin rodeos.
+ */
+export function FormaLiberarAmbiguo({ pieza, accion }: { pieza: PiezaEnCola; accion: AccionPieza }) {
+  const [estado, liberar, pendiente] = useActionState<ResultadoPieza, FormData>(accion, null);
+  if (estado?.ok) return <span className="text-[12px]" style={{ color: 'var(--ok)' }}>{estado.ok}</span>;
+  return (
+    <form action={liberar} className="inline-flex items-center gap-2">
+      <input type="hidden" name="pieza" value={pieza.id} />
+      <BotonConfirmar
+        etiqueta={pendiente ? 'Liberando…' : 'Confirmar que NO salió y reintentar'}
+        tono="peligro"
+        deshabilitado={pendiente}
+        etiquetaConfirmar="Sí, verifiqué en Resend que no salió"
+        titulo="Liberar el envío ambiguo"
+        descripcion={`Verifica primero en Resend que "${pieza.titulo}" NO salió. Si lo liberas y sí había salido, el siguiente intento usa la misma llave de idempotencia, pero Resend solo la respeta dentro de su ventana.`}
+        className="inline-flex items-center gap-1.5 text-[11.5px] font-medium px-2.5 py-1 rounded-full transition-opacity hover:opacity-85 disabled:opacity-50"
+        style={{ background: 'var(--ink)', color: 'var(--surface)' }}
+      />
+      {estado?.error && <span className="text-[12px]" style={{ color: 'var(--bad)' }}>{estado.error}</span>}
+    </form>
+  );
+}

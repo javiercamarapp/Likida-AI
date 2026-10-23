@@ -34,6 +34,7 @@ function builder(tabla: string) {
     eq: (c: string, v: unknown) => { r.eq.push([c, v]); return b; },
     neq: () => b,
     not: () => b,
+    ilike: () => b,
     is: (c: string, v: unknown) => { r.is.push([c, v]); return b; },
     in: (c: string, v: unknown) => { r.inn.push([c, v]); return b; },
     gte: () => b,
@@ -65,7 +66,7 @@ vi.mock('@/lib/correo/enviar', () => ({ enviarCorreo: (...a: unknown[]) => envia
 
 const {
   encolarPieza, aprobarPieza, rechazarPieza, marcarEnviada, enviarPiezaPorCorreo,
-  rebotesRecientes, correosSuprimidos, aprobadasSinEnviar, TIPOS_ENVIABLES,
+  rebotesRecientes, correosSuprimidos, aprobadasSinEnviar, TIPOS_ENVIABLES, liberarEnvioAmbiguo,
 } = await import('./cola');
 const { DatoInvalido } = await import('../errores');
 const { verificarBaja } = await import('@/lib/correo/baja');
@@ -606,5 +607,43 @@ describe('AGB-4 — aprobadasSinEnviar solo lista lo ENVIABLE', () => {
     for (const interno of ['ficha_prospecto', 'brief_demo', 'propuesta_comercial']) {
       expect(TIPOS_ENVIABLES).not.toContain(interno);
     }
+  });
+});
+
+// A36-R11-01: el envío ambiguo (timeout) dejaba la pieza en un callejón sin
+// salida: `enviado_en` puesto, sin ruta que lo libere, y la reserva de
+// cadencia de 48 h (la propia pieza) bloqueaba cualquier reintento.
+describe('A36-R11-01 — liberar un envío ambiguo tras verificar en Resend que NO salió', () => {
+  it('limpia enviado_en, deja constancia en envio_error y BORRA la reserva propia de cadencia', async () => {
+    respuestas.set('cola_aprobacion', [{ data: [{ id: 'p-1', prospecto_id: 'pr-9' }], error: null }]);
+    const r = await liberarEnvioAmbiguo('p-1', 'u-1');
+    expect(r).toEqual({ reservaLiberada: true });
+    const up = de('cola_aprobacion', 'update');
+    expect(up).toHaveLength(1);
+    expect(up[0].payload).toMatchObject({ enviado_en: null });
+    expect(String((up[0].payload as { envio_error: string }).envio_error)).toMatch(/NO sali/i);
+    // Anclado: aprobada, sin prueba del proveedor (provider_message_id null).
+    expect(up[0].eq).toContainEqual(['id', 'p-1']);
+    expect(up[0].eq).toContainEqual(['estado', 'aprobado']);
+    expect(up[0].is).toContainEqual(['provider_message_id', null]);
+    // La reserva de cadencia de ESTA pieza se borra (si no, su propio reintento rebota 48 h).
+    const del = de('prospecto_contacto', 'delete');
+    expect(del).toHaveLength(1);
+    expect(del[0].eq).toContainEqual(['pieza_id', 'p-1']);
+    expect(del[0].eq).toContainEqual(['direccion', 'salida']);
+  });
+
+  it('si la pieza no está en ese estado (ya tiene provider id, o ya se liberó) falla y NO borra la reserva', async () => {
+    respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
+    await expect(liberarEnvioAmbiguo('p-1', 'u-1')).rejects.toThrow(DatoInvalido);
+    expect(de('prospecto_contacto', 'delete')).toHaveLength(0);
+  });
+
+  it('si la reserva no se pudo borrar, la pieza queda liberada pero lo DICE (reservaLiberada=false)', async () => {
+    respuestas.set('cola_aprobacion', [{ data: [{ id: 'p-1', prospecto_id: 'pr-9' }], error: null }]);
+    respuestas.set('prospecto_contacto', [{ data: null, error: { message: 'caído' } }]);
+    const r = await liberarEnvioAmbiguo('p-1', 'u-1');
+    expect(r).toEqual({ reservaLiberada: false });
+    expect(logs.error).toHaveBeenCalled();
   });
 });
