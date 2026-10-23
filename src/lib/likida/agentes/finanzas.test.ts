@@ -529,7 +529,7 @@ describe('las corridas — fail closed, idempotencia y el ROJO que no espera', (
     respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
     respuestas.set('finanzas_config', [{ data: null, error: null }]);
     respuestas.set('factura_saas', [
-      { data: [{ tenant_id: 't-1', monto: 9500, pagada_en: '2026-08-15' }], error: null },
+      { data: [{ tenant_id: 't-1', monto: 11020, subtotal: 9500, pagada_en: '2026-08-15' }], error: null },
       { count: 0, error: null },
     ]);
     respuestas.set('tenant', [{ data: [{ id: 't-1', nombre: 'Flota Uno' }], error: null }]);
@@ -539,6 +539,26 @@ describe('las corridas — fail closed, idempotencia y el ROJO que no espera', (
     expect(pieza.titulo).toBe('Cierre — 2026-08');
     expect(pieza.cuerpo).toContain('Flota Uno');
     expect(pieza.cuerpo).toContain('$9,500.00');
+    // A37-S27-01: el cobrado es el SUBTOTAL; el total con IVA (11,020) no es ingreso.
+    expect(pieza.cuerpo).not.toContain('11,020');
+  });
+
+  it('A37-S27-01: una pagada SIN subtotal no se suma (ni se adivina el IVA) y el cierre lo declara', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('finanzas_config', [{ data: null, error: null }]);
+    respuestas.set('factura_saas', [
+      { data: [
+        { tenant_id: 't-1', monto: 11020, subtotal: 9500, pagada_en: '2026-08-15' },
+        { tenant_id: 't-1', monto: 5800, subtotal: null, pagada_en: '2026-08-16' },
+      ], error: null },
+      { count: 0, error: null },
+    ]);
+    respuestas.set('tenant', [{ data: [{ id: 't-1', nombre: 'Flota Uno' }], error: null }]);
+    await correrAgenteFinanciero('cierre_mensual', 'cron', '2026-09-03');
+    const pieza = encolarPieza.mock.calls[0][0] as { cuerpo: string };
+    expect(pieza.cuerpo).toContain('$9,500.00');
+    expect(pieza.cuerpo).not.toContain('5,800');
+    expect(pieza.cuerpo).toMatch(/SIN subtotal/);
   });
 });
 
@@ -573,7 +593,7 @@ describe('el analista de métricas consulta las columnas REALES de suscripcion',
     }]);
     respuestas.set('prospecto', Array.from({ length: 6 }, () => ({ count: 0, error: null })));
     getPlanes.mockResolvedValue([
-      { clave: 'flota', precioMensual: 9_500 },
+      { clave: 'flota', precioMensual: 9_500, precioIvaIncluido: false },
       { clave: 'empresa', precioMensual: null },
     ]);
   };
@@ -601,6 +621,26 @@ describe('el analista de métricas consulta las columnas REALES de suscripcion',
     const pieza = encolarPieza.mock.calls[0][0] as { cuerpo: string };
     expect(pieza.cuerpo).toContain('MRR: SIN CIFRA COMPLETA');
     expect(pieza.cuerpo).toContain('3 activas pero 1 sin precio configurado');
+  });
+
+  it('A37-S27-01: el MRR es SIN IVA — un plan con IVA incluido se normaliza (11,600 ⇒ 10,000)', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('suscripcion', [{ data: [{ plan_clave: 'flota' }], error: null }]);
+    respuestas.set('prospecto', Array.from({ length: 6 }, () => ({ count: 0, error: null })));
+    getPlanes.mockResolvedValue([{ clave: 'flota', precioMensual: 11_600, precioIvaIncluido: true }]);
+    await correrAgenteFinanciero('analista_metricas', 'cron', '2026-08-27');
+    const pieza = encolarPieza.mock.calls[0][0] as { cuerpo: string };
+    expect(pieza.cuerpo).toContain('MRR: $10,000.00');
+  });
+
+  it('A37-S27-01: un plan sin criterio de IVA declarado deja el MRR incompleto (no se adivina)', async () => {
+    respuestas.set('cola_aprobacion', [{ count: 0, error: null }]);
+    respuestas.set('suscripcion', [{ data: [{ plan_clave: 'flota' }], error: null }]);
+    respuestas.set('prospecto', Array.from({ length: 6 }, () => ({ count: 0, error: null })));
+    getPlanes.mockResolvedValue([{ clave: 'flota', precioMensual: 11_600, precioIvaIncluido: null }]);
+    await correrAgenteFinanciero('analista_metricas', 'cron', '2026-08-27');
+    const pieza = encolarPieza.mock.calls[0][0] as { cuerpo: string };
+    expect(pieza.cuerpo).toContain('MRR: SIN CIFRA COMPLETA');
   });
 
   it('AGB-10: la consulta de suscripciones activas excluye los tenants "ZZZ QA …"', async () => {
