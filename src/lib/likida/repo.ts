@@ -1906,14 +1906,15 @@ export async function ejecutarOposicionArco(
 
 export async function ejecutarCancelacionArco(
   tenantId: string, solicitudId: string,
-): Promise<{ ok: boolean; motivo?: string; avisada: boolean; errorAviso?: string; errorAuth?: string }> {
+): Promise<{ ok: boolean; motivo?: string; avisada: boolean; errorAviso?: string; errorAuth?: string; errorEntregas?: string }> {
   const { data: sol, error: errLee } = await acotada(supabaseAdmin()
-    .from('solicitud_arco').select('titular_ref, tipo, titular_user_id').eq('id', solicitudId).eq('tenant_id', tenantId).maybeSingle(),
+    .from('solicitud_arco').select('titular_ref, tipo, titular_user_id, operador_id').eq('id', solicitudId).eq('tenant_id', tenantId).maybeSingle(),
     'ejecutarCancelacionArco.leer');
   if (errLee) throw new Error(`ejecutarCancelacionArco.leer: ${errLee.message}`);
   if (!sol) throw new Error('ejecutarCancelacionArco: la solicitud no existe en esta flota');
   const telefono = (sol.titular_ref as string | null) ?? null;
   const titularUserId = (sol.titular_user_id as string | null) ?? null;
+  const operadorId = (sol.operador_id as string | null) ?? null;
 
   const { data, error } = await acotada(supabaseAdmin().rpc('ejecutar_arco_cancelacion', {
     p_tenant: tenantId,
@@ -1927,6 +1928,17 @@ export async function ejecutarCancelacionArco(
     // se propaga tal cual — es la explicación que la pantalla enseña.
     return { ok: false, motivo: r.motivo ?? 'la base no explicó el rechazo', avisada: false };
   }
+
+  // A36-R03-03: la RPC no toca `liquidacion_entrega_correo` (0787): las
+  // entregas pendientes de la liquidación externa seguirían saliendo al correo
+  // personal del operador ya cancelado. Se omiten (sin migración). Su fallo no
+  // deshace la cancelación (ya ejecutada): se DICE en `errorEntregas`.
+  let errorEntregas: string | undefined;
+  if (operadorId) {
+    errorEntregas = await omitirEntregasCorreoDeOperador(tenantId, operadorId);
+    if (errorEntregas) logger.error('arco.entregas_correo_no_omitidas', { tenant: tenantId, err: errorEntregas });
+  }
+  const conEntregas = errorEntregas ? { errorEntregas } : {};
 
   // 0442 (cuenta de oficina): la RPC ya seudonimizó la fila y la dio de baja; el
   // LOGIN vive en Supabase Auth y solo se borra desde aquí. Se hace ANTES del
@@ -1950,7 +1962,7 @@ export async function ejecutarCancelacionArco(
     }
   }
 
-  if (!telefono) return { ok: true, avisada: false, errorAviso: errorAuth ? `sin teléfono del titular; además el login de Auth no se pudo borrar (${errorAuth})` : 'sin teléfono del titular', ...(errorAuth ? { errorAuth } : {}) };
+  if (!telefono) return { ok: true, avisada: false, errorAviso: errorAuth ? `sin teléfono del titular; además el login de Auth no se pudo borrar (${errorAuth})` : 'sin teléfono del titular', ...(errorAuth ? { errorAuth } : {}), ...conEntregas };
   try {
     const { enviarRespuestaArco } = await import('@/lib/meta/client');
     if (titularUserId) {
@@ -1959,8 +1971,8 @@ export async function ejecutarCancelacionArco(
         'Se sustituyeron tu nombre y tu correo de cuenta, se quitó tu teléfono y tu foto, se dio de baja tu acceso y se eliminaron tus conversaciones de WhatsApp, del analista y del copiloto. Se conservan la bitácora de auditoría (el registro de quién hizo qué en la plataforma) y la documentación fiscal de la flota (CFF art. 30).',
       );
       return aviso.ok
-        ? { ok: true, avisada: true, ...(errorAuth ? { errorAuth } : {}) }
-        : { ok: true, avisada: false, errorAviso: aviso.error, ...(errorAuth ? { errorAuth } : {}) };
+        ? { ok: true, avisada: true, ...(errorAuth ? { errorAuth } : {}), ...conEntregas }
+        : { ok: true, avisada: false, errorAviso: aviso.error, ...(errorAuth ? { errorAuth } : {}), ...conEntregas };
     }
     // AUDITORÍA 28, LEG-A6 [ALTO]: esta lista era CERRADA y le faltaban tres
     // categorías que `ejecutar_arco_cancelacion` (0286/0290, texto 0340) SÍ
@@ -1976,9 +1988,43 @@ export async function ejecutarCancelacionArco(
       telefono,
       'Se sustituyeron tu nombre y tu teléfono en el registro operativo, se eliminaron tus conversaciones y el contacto de emergencia registrado sobre tu persona. Se conservan: tu identificador de operador, el correo de tu cuenta, la referencia del titular en la solicitud, la documentación fiscal, y los eventos de cámara, telemetría (se borran solos a los 180 días, o 365 si fueron graves) y jornada laboral ligados a tu persona. La flota debe revisar esos datos y los pasos pendientes con su responsable de privacidad.',
     );
-    return aviso.ok ? { ok: true, avisada: true } : { ok: true, avisada: false, errorAviso: aviso.error };
+    return aviso.ok ? { ok: true, avisada: true, ...conEntregas } : { ok: true, avisada: false, errorAviso: aviso.error, ...conEntregas };
   } catch (e) {
-    return { ok: true, avisada: false, errorAviso: e instanceof Error ? e.message : String(e) };
+    return { ok: true, avisada: false, errorAviso: e instanceof Error ? e.message : String(e), ...conEntregas };
+  }
+}
+
+/**
+ * A36-R03-03: pasa a `omitida` las entregas de liquidación por correo aún no
+ * enviadas (`pendiente`/`enviando`) dirigidas al operador cancelado. Acotado a
+ * la flota, a rol `operador` y a SUS liquidaciones externas; los estados
+ * terminales no se tocan (su borrado de correo/Excel exige migración, ver PR).
+ * Devuelve el mensaje de error si algo falló, o `undefined` si quedó hecho.
+ */
+async function omitirEntregasCorreoDeOperador(tenantId: string, operadorId: string): Promise<string | undefined> {
+  try {
+    const { data: liqs, error: errLiq } = await acotada(supabaseAdmin()
+      .from('liquidacion_externa').select('id').eq('tenant_id', tenantId).eq('operador_id', operadorId).limit(2000),
+      'ejecutarCancelacionArco.liquidaciones');
+    if (errLiq) return errLiq.message;
+    const ids = ((liqs ?? []) as Array<{ id: string }>).map((l) => l.id);
+    for (let i = 0; i < ids.length; i += 100) {
+      const { error } = await acotada(supabaseAdmin()
+        .from('liquidacion_entrega_correo')
+        .update({
+          estado: 'omitida', ultimo_error: 'omitida: el operador ejerció su derecho de cancelación (ARCO)',
+          claim_token: null, claim_expira_en: null, updated_at: new Date().toISOString(),
+        })
+        .eq('tenant_id', tenantId)
+        .eq('rol', 'operador')
+        .in('estado', ['pendiente', 'enviando'])
+        .in('liquidacion_externa_id', ids.slice(i, i + 100))
+        .select('id'), 'ejecutarCancelacionArco.entregas');
+      if (error) return error.message;
+    }
+    return undefined;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
   }
 }
 

@@ -119,9 +119,12 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
       if (r.errorAuth) {
         return { error: `La cuenta quedó anonimizada y dada de baja, pero el acceso de inicio de sesión NO se pudo borrar (${r.errorAuth}); quedó bloqueado (ban permanente). Pide a soporte que lo borre de Auth.` };
       }
+      // A36-R03-03: si no se pudieron omitir las entregas de liquidación por
+      // correo pendientes del operador, se DICE (podrían salir a su correo).
+      const aviso = r.errorEntregas ? ` ATENCIÓN: no se pudieron cancelar las entregas de liquidación por correo pendientes de este operador (${r.errorEntregas}); revísalas en Liquidaciones.` : '';
       return r.avisada
-        ? { ok: `${ALCANCE_CANCELACION} Se confirmó por WhatsApp.` }
-        : { ok: `${ALCANCE_CANCELACION} La confirmación NO salió por WhatsApp${r.errorAviso ? ` (${r.errorAviso})` : ''} — entrégasela por otro canal.` };
+        ? { ok: `${ALCANCE_CANCELACION} Se confirmó por WhatsApp.${aviso}` }
+        : { ok: `${ALCANCE_CANCELACION} La confirmación NO salió por WhatsApp${r.errorAviso ? ` (${r.errorAviso})` : ''} — entrégasela por otro canal.${aviso}` };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'ejecutar la cancelación') };
     }
