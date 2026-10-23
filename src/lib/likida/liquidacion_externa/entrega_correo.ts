@@ -275,7 +275,7 @@ async function procesarUna(
 
   // 2. Ventana de envío (hora de México) y presupuesto de tiempo: se libera sin gastar intento.
   const config = await configDe(e.tenantId);
-  // 1b. Interruptor «Activar el envío» (INN-A1-04). La pantalla de configuración promete que apagado «no sale ningún
+  // 1b. Interruptor «Activar el envío» (A35-A1-04). La pantalla de configuración promete que apagado «no sale ningún
   // correo aunque haya desgloses listos», pero ni `recibirDesglose` ni el RPC de reclamo lo miraban: en el alta, con los
   // contactos reales ya cargados, un `POST /desgloses` de prueba mandaba nóminas de verdad. Este es el punto único por
   // donde sale un correo (también el reenvío manual y la liberación de retenidas pasan por la cola), así que se corta

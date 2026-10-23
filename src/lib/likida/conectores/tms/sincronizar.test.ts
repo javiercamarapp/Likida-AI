@@ -492,7 +492,7 @@ describe('entregasReales.liquidaciones', () => {
     expect(recibirLiquidacionExterna.mock.calls[0][2]).toBe('h1');
   });
 
-  it('INN-TRANSVERSAL-02: si la flota entrega por correo NO guarda por la vía vieja (sin huérfanas), con el mismo mensaje que el endpoint v1', async () => {
+  it('A35-TRANSVERSAL-02: si la flota entrega por correo NO guarda por la vía vieja (sin huérfanas), con el mismo mensaje que el endpoint v1', async () => {
     canalDeEntrega.mockResolvedValue('correo');
     buscarPorClave.mockResolvedValue(null);
     const e = await entregasReales.liquidaciones(TENANT, [liq('B1-P1', 'h1'), liq('B2-P2', 'h2')]);

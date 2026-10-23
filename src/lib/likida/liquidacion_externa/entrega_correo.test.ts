@@ -211,7 +211,7 @@ describe('procesarEntregasCorreo — las seis ramas de ResultadoEnvio', () => {
   });
 });
 
-describe('procesarEntregasCorreo — interruptor «Activar el envío» (INN-A1-04)', () => {
+describe('procesarEntregasCorreo — interruptor «Activar el envío» (A35-A1-04)', () => {
   it('activa=false ⇒ NO envía ni descarga el Excel; reprograma sin gastar intento y lo cuenta como apagada', async () => {
     // La pantalla promete «Apagado, no sale ningún correo aunque haya desgloses listos»: durante el alta ya hay contactos
     // reales cargados y el integrador prueba `POST /desgloses`; nada debe salir hasta que alguien lo encienda.

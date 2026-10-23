@@ -644,7 +644,7 @@ export const entregasReales: Entregas = {
 
   async liquidaciones(tenantId, items) {
     const hechas: string[] = []; let conflictos = 0; let pendientes = 0;
-    // Mismo guardia que `POST /v1/liquidaciones-externas` (INN-TRANSVERSAL-02): esta puerta guarda por la vía vieja y
+    // Mismo guardia que `POST /v1/liquidaciones-externas` (A35-TRANSVERSAL-02): esta puerta guarda por la vía vieja y
     // NUNCA arma la entrega por correo (esa solo nace en `recibirDesglose`). Si la flota entrega por correo, guardar aquí
     // dejaría la liquidación `pendiente` para siempre y la clave marcada como entregada (no se reentregaría después por
     // la vía correcta). Se rechaza al CREAR con el mismo mensaje: la clave queda sin marcar, se avisa y no hay huérfana.
