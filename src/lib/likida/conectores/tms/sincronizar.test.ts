@@ -31,7 +31,11 @@ vi.mock('../../importar_viajes', async (orig) => ({ ...(await orig<Record<string
 const buscarPorClave = vi.fn();
 vi.mock('../../liquidacion_externa/repo', async (orig) => ({ ...(await orig<Record<string, unknown>>()), buscarPorClave: (...a: unknown[]) => buscarPorClave(...a) }));
 const recibirLiquidacionExterna = vi.fn();
-vi.mock('../../liquidacion_externa/servicio', () => ({ recibirLiquidacionExterna: (...a: unknown[]) => recibirLiquidacionExterna(...a) }));
+const canalDeEntrega = vi.fn(async (..._a: unknown[]) => 'whatsapp');
+vi.mock('../../liquidacion_externa/servicio', () => ({
+  recibirLiquidacionExterna: (...a: unknown[]) => recibirLiquidacionExterna(...a),
+  dependenciasPorOmision: { canalDeEntrega: (...a: unknown[]) => canalDeEntrega(...a) },
+}));
 const recibirArchivoPeaje = vi.fn();
 vi.mock('../../peajes/ingesta', () => ({ recibirArchivoPeaje: (...a: unknown[]) => recibirArchivoPeaje(...a) }));
 const asentarPosicionesTms = vi.fn();
@@ -66,6 +70,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 
 import { parsearArchivoDesglose } from '../../intake/desglose_peaje';
+import { MENSAJE_CANAL_CORREO_SIN_WHATSAPP } from '../../liquidacion_externa/canal_correo';
 import type { Http } from '../tipos';
 import { generarDatos } from './falso/datos';
 import { MAPEO_LIQUIDACIONES_SUPUESTO, type LiquidacionTms } from './liquidaciones';
@@ -475,6 +480,8 @@ const liq = (clave: string, huella: string): LiquidacionTms => ({
 });
 
 describe('entregasReales.liquidaciones', () => {
+  beforeEach(() => { canalDeEntrega.mockReset(); canalDeEntrega.mockResolvedValue('whatsapp'); });
+
   it('guarda la nueva por la puerta de A1 SIN entregarla', async () => {
     buscarPorClave.mockResolvedValue(null);
     recibirLiquidacionExterna.mockResolvedValue({ liquidacion: { id: 'x' } });
@@ -483,6 +490,26 @@ describe('entregasReales.liquidaciones', () => {
     expect(recibirLiquidacionExterna).toHaveBeenCalledTimes(1);
     expect(recibirLiquidacionExterna.mock.calls[0][0]).toBe(TENANT);
     expect(recibirLiquidacionExterna.mock.calls[0][2]).toBe('h1');
+  });
+
+  it('INN-TRANSVERSAL-02: si la flota entrega por correo NO guarda por la vía vieja (sin huérfanas), con el mismo mensaje que el endpoint v1', async () => {
+    canalDeEntrega.mockResolvedValue('correo');
+    buscarPorClave.mockResolvedValue(null);
+    const e = await entregasReales.liquidaciones(TENANT, [liq('B1-P1', 'h1'), liq('B2-P2', 'h2')]);
+    expect(recibirLiquidacionExterna).not.toHaveBeenCalled();
+    expect(e.hechas).toEqual([]); // la clave NO se marca entregada: se reentregará por la vía correcta
+    expect(e.pendientes).toBe(2);
+    expect(e.detalle).toContain(MENSAJE_CANAL_CORREO_SIN_WHATSAPP);
+    expect(canalDeEntrega).toHaveBeenCalledTimes(1); // una lectura por tanda
+  });
+
+  it('con canal correo, lo YA recibido sigue su curso (hecha/conflicto) y solo se rechaza crear', async () => {
+    canalDeEntrega.mockResolvedValue('correo');
+    buscarPorClave.mockResolvedValueOnce({ huella: 'h1' }).mockResolvedValueOnce(null);
+    const e = await entregasReales.liquidaciones(TENANT, [liq('B1-P1', 'h1'), liq('B2-P2', 'h2')]);
+    expect(e.hechas).toEqual(['B1-P1']);
+    expect(e.pendientes).toBe(1);
+    expect(recibirLiquidacionExterna).not.toHaveBeenCalled();
   });
 
   it('una corrección de algo ya recibido NO se sobrescribe: se cuenta como conflicto y se dice', async () => {
