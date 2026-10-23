@@ -633,11 +633,11 @@ export const entregasReales: Entregas = {
     if (r.error) throw new Error(`importarViajes: ${r.error}`);
     // Lo que la puerta no pudo amarrar (operador, unidad, cliente) NO se marca como entregado: se dice y se reintenta
     // cuando el catálogo lo permita. Los folios ya existentes (`saltados`) sí cuentan como hechos.
-    const noHechos = new Set<string>([...r.sinOperador, ...r.sinUnidad, ...r.sinCliente, ...r.operadorOcupado]);
+    const noHechos = new Set<string>([...r.sinOperador, ...r.sinUnidad, ...r.sinCliente, ...r.operadorOcupado, ...(r.unidadOcupada ?? [])]);
     return {
       hechas: filas.map((f) => f.folio).filter((f) => !noHechos.has(f)),
       pendientes: noHechos.size,
-      detalle: noHechos.size > 0 ? `${noHechos.size} viaje(s) sin entrar: falta operador, unidad o cliente en el catálogo, o el operador ya tiene un viaje abierto.` : undefined,
+      detalle: noHechos.size > 0 ? `${noHechos.size} viaje(s) sin entrar: falta operador, unidad o cliente en el catálogo, o el operador o la unidad ya tiene un viaje abierto.` : undefined,
     };
   },
 

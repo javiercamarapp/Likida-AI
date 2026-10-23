@@ -19,6 +19,7 @@ export interface ResultadoImportarUI {
     sinOperador: string[];
     /** Folios saltados porque su operador ya trae un viaje abierto (0029). */
     operadorOcupado: string[];
+    unidadOcupada?: string[];
     /** Números económicos del archivo que no existen en Unidades. */
     unidadesSinAmarrar: string[];
     /** Folios NO creados porque su unidad no se pudo amarrar. */
@@ -97,6 +98,12 @@ export function ImportarViajes({ importar, verDinero = false }: { importar: Acci
             <p style={{ color: 'var(--warn)' }}>
               {r.operadorOcupado.length === 1 ? '1 viaje saltado' : `${r.operadorOcupado.length} viajes saltados`} porque
               su operador ya trae un viaje abierto ({r.operadorOcupado.join(', ')}) — ciérralo o liquídalo primero.
+            </p>
+          )}
+          {(r.unidadOcupada?.length ?? 0) > 0 && (
+            <p style={{ color: 'var(--warn)' }}>
+              {r.unidadOcupada!.length === 1 ? '1 viaje saltado' : `${r.unidadOcupada!.length} viajes saltados`} porque
+              su unidad ya tiene un viaje abierto ({r.unidadOcupada!.join(', ')}): ciérralo o reasígnalo antes de importar este.
             </p>
           )}
           {r.sinUnidad.length > 0 && (
