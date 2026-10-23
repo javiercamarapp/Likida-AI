@@ -21,7 +21,7 @@ import { conteo, traerTodo } from '@/lib/likida/pg';
 import { mxn } from '@/lib/formato';
 import { AGENTES_NOTIFICABLES } from '@/lib/likida/agentes/notificaciones';
 import {
-  getCorridasFallidas, contarCorridasFallidas, getUltimoInicioSinFalloPorAgente, type CorridaReciente,
+  getCorridasFallidas, contarCorridasFallidas, getUltimoInicioSinFalloPorAgente, llaveRacha, type CorridaReciente,
   getLiquidacionesEnRevisar, contarLiquidacionesEnRevisar,
 } from './negocio';
 import { getTicketsCruzados, contarTickets, ESTADOS_TICKET_CERRADO } from './soporte';
@@ -232,9 +232,10 @@ function hrefDeCorrida(agente: string, tenantId: string | null): string | null {
 export function agruparRachasDeFallo(fallos: readonly CorridaReciente[], ultimoSinFallo: ReadonlyMap<string, string>): ItemEscalacion[] {
   const porAgente = new Map<string, CorridaReciente[]>();
   for (const c of fallos) {
-    const rotura = ultimoSinFallo.get(c.agente);
+    // A37-S22-01: la ruptura es de ESTA flota; un ok del mismo agente en otra no cuenta.
+    const llave = llaveRacha(c.agente, c.tenantId);
+    const rotura = ultimoSinFallo.get(llave);
     if (rotura && new Date(c.inicio).getTime() <= new Date(rotura).getTime()) continue;
-    const llave = `${c.agente}|${c.tenantId ?? ''}`;
     const lista = porAgente.get(llave);
     if (lista) lista.push(c); else porAgente.set(llave, [c]);
   }
@@ -295,7 +296,7 @@ export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEs
       const [fallos, total] = await Promise.all([
         getCorridasFallidas(TOPE_CORRIDAS_PARA_AGRUPAR), contarCorridasFallidas(),
       ]);
-      const ultimoSinFallo = await getUltimoInicioSinFalloPorAgente(fallos.map((c) => c.agente));
+      const ultimoSinFallo = await getUltimoInicioSinFalloPorAgente(fallos.map((c) => ({ agente: c.agente, tenantId: c.tenantId })));
       return { items: agruparRachasDeFallo(fallos, ultimoSinFallo), total };
     }),
     porValor(() => getTalachasPendientes()),
