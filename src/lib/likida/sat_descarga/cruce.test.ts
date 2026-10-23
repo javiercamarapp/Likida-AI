@@ -185,3 +185,34 @@ describe('decidirCruce — una nota de crédito no se cruza contra ningún gasto
     expect(r).toEqual({ destino: 'casado', gastoId: 'g1' });
   });
 });
+
+
+describe('A37-S57-03 · el monto único NO basta para ligar solo', () => {
+  it('un ticket sin RFC y de OTRO día (18 días después) queda ambiguo, no casado', () => {
+    const r = decidirCruce(
+      { ...CFDI_BASE, fecha: '2026-08-03T12:00:00' },
+      [gasto({ id: 'g1', monto: 1160, fecha: '2026-08-21', rfcEmisor: undefined })],
+    );
+    expect(r.destino).toBe('ambiguo');
+    if (r.destino !== 'ambiguo') return;
+    expect(r.candidatos.map((c) => c.gastoId)).toEqual(['g1']);
+  });
+
+  it('sin fecha en el ticket y sin RFC tampoco se liga solo', () => {
+    const r = decidirCruce(CFDI_BASE, [gasto({ id: 'g1', monto: 1160, fecha: undefined, rfcEmisor: undefined })]);
+    expect(r.destino).toBe('ambiguo');
+  });
+
+  it('un día de diferencia sin RFC sí casa', () => {
+    const r = decidirCruce(CFDI_BASE, [gasto({ id: 'g1', monto: 1160, fecha: '2026-08-11', rfcEmisor: undefined })]);
+    expect(r).toEqual({ destino: 'casado', gastoId: 'g1' });
+  });
+
+  it('RFC conocido e igual casa aunque la fecha difiera', () => {
+    const r = decidirCruce(
+      { ...CFDI_BASE, fecha: '2026-08-03T12:00:00' },
+      [gasto({ id: 'g1', monto: 1160, fecha: '2026-08-21', rfcEmisor: RFC_ESTACION })],
+    );
+    expect(r).toEqual({ destino: 'casado', gastoId: 'g1' });
+  });
+});
