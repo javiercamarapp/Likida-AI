@@ -550,7 +550,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 322;
 // A5 COMPUERTA (A35-A5-01, oct-2026): +1 llamada (2,250 → 2,251), en `conductor/repo.ts` (que ya contaba): `leerAgenteChoferHabilitado` llama a
 // la función `conductor_agente_chofer_habilitado` (0859) con `acotada`, acotada por flota (`p_tenant`), antes de cada envío al chofer.
 // 0 archivos nuevos con llamadas. Funcionalidad nueva, no código migrado; cubierta por `compuerta_agente_repo.test.ts`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_251;
+// INTEGRACIÓN OLEADA 2 (23-oct-2026): los cinco PRs partían de 2,250/2,251 por separado; juntos suman 2,251 (master con 0856) +2 (alertas) +1 (A1 recepción) +3 (fiscal 0858) +1 (peajes 0860) +1 (A5 compuerta 0859) = 2,259, medido con el barrido real.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_259;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
