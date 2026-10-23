@@ -560,7 +560,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 322;
 // Las dos que A36-R01-01 y A36-R03-03 añaden viven en `repo.ts` (no cuentan). Funcionalidad nueva, no código migrado; cubiertas por
 // `reenvio_fallida.test.ts` y `cola.test.ts`.
 // INTEGRACIÓN OLEADA 3 (23-oct-2026): #639 (+1, 2,259 → 2,260) y #640 (+3, 2,259 → 2,262) partían de 2,259 por separado; juntos suman 2,259 + 1 + 3 = 2,263, medido con el barrido real.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_263;
+// OLEADA 4 (migración 0861): +1 llamada (2,263 → 2,264), en `peajes/ingesta.ts`: `.rpc('peaje_archivo_rearmar')` (candado por flota + tope de 50 + tope de
+// intentos en la base) que precede al UPDATE de respaldo (que se conserva mientras la base no tenga la 0861). 0 archivos nuevos. Cubierta por
+// `reenvio_fallida.test.ts` y supabase/tests/0861_*. Las demás piezas de la 0861 (nota de crédito, ARCO) no suman llamadas: viven en la base.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_264;
 // Agente 4 (Vigía), T-A4-06: +7 llamadas (1,916 → 1,923), medido con el barrido real, todas en `vigia/programa/repo.ts` (ver arriba), todas por `acotada` y con `tenant_id` (lo comprueba su `repo.test.ts`).
 // Integración Vigía + perfil (0770): el barrido real mide 1,962 = 1,961 (la rama del Vigía sola, 38 por encima de su techo declarado de 1,923) + 1 (perfil_tenant.ts). Techo subido a lo medido, sin relajar la regla.
 // T-A5-04 (Conductor, 0800): 0 archivos y +1 llamada (1,916 → 1,917), en `conductor/repo.ts` (`aceptarViajesImportados`: la RPC `aceptar_viajes_importados`, por `acotada`
