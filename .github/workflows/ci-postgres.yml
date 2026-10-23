@@ -238,6 +238,7 @@ jobs:
           PGUSER=postgres bash supabase/tests/0849_arco_cancelacion_candado_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0850_peaje_ingesta_tope_candado.sql
           PGUSER=postgres bash supabase/tests/0850_peaje_ingesta_tope_candado_concurrencia.sh localhost 5432 postgres
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0856_peaje_cola_tope_intentos_barrido.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0851_un_viaje_abierto_por_unidad.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0813_peaje_unidad_inmovilizada.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0785_liquidacion_correo_destinatarios.sql
