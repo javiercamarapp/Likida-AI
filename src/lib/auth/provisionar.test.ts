@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const createUser = vi.fn();
 const deleteUser = vi.fn();
 const generateLink = vi.fn();
+const getUserById = vi.fn();
 const insert = vi.fn();
 const maybeSingle = vi.fn();
 const eq = vi.fn(() => ({ maybeSingle }));
@@ -15,6 +16,7 @@ vi.mock('@/lib/supabase/admin', () => ({
         createUser: (...a: unknown[]) => createUser(...a),
         deleteUser: (...a: unknown[]) => deleteUser(...(a as [])),
         generateLink: (...a: unknown[]) => generateLink(...a),
+        getUserById: (...a: unknown[]) => getUserById(...a),
       },
     },
     from: (...a: unknown[]) => from(...(a as [])),
@@ -31,6 +33,7 @@ describe('provisionarUsuario', () => {
     deleteUser.mockReset();
     deleteUser.mockResolvedValue({ data: {}, error: null });
     generateLink.mockReset();
+    getUserById.mockReset();
     logger.error.mockClear();
     insert.mockReset();
     insert.mockResolvedValue({ error: null });
@@ -115,7 +118,8 @@ describe('provisionarUsuario', () => {
 
     it('resuelve el auth.users YA EXISTENTE (sin crear uno nuevo) y completa el alta enlazándolo', async () => {
       generateLink.mockResolvedValue({ data: { user: { id: 'u-huerfano' } }, error: null });
-
+      getUserById.mockResolvedValue({ data: { user: { id: 'u-huerfano', email_confirmed_at: '2026-10-01T00:00:00Z', identities: [{ provider: 'google' }] } }, error: null });
+      
       const r = await provisionarUsuario('t-1', 'huerfano@flotademo.mx', 'Ana', 'contador');
 
       expect(createUser).toHaveBeenCalledTimes(1); // se intentó, pero NO se creó un segundo usuario
@@ -134,7 +138,8 @@ describe('provisionarUsuario', () => {
 
     it('si el insert del enlace falla, NO borra el usuario de Auth (no lo creó esta llamada)', async () => {
       generateLink.mockResolvedValue({ data: { user: { id: 'u-huerfano-2' } }, error: null });
-      insert.mockResolvedValue({ error: { message: 'duplicate key value violates unique constraint "app_user_telefono_uniq"' } });
+      getUserById.mockResolvedValue({ data: { user: { id: 'u-huerfano-2', email_confirmed_at: '2026-10-01T00:00:00Z', identities: [{ provider: 'google' }] } }, error: null });
+            insert.mockResolvedValue({ error: { message: 'duplicate key value violates unique constraint "app_user_telefono_uniq"' } });
 
       await expect(provisionarUsuario('t-1', 'huerfano2@flotademo.mx', 'X', 'contador', '4771234567'))
         .rejects.toThrow('app_user_telefono_uniq');
@@ -149,6 +154,44 @@ describe('provisionarUsuario', () => {
 
       await expect(provisionarUsuario('t-1', 'rara@flotademo.mx')).rejects.toThrow('User already registered');
       expect(insert).not.toHaveBeenCalled();
+    });
+
+    // ── A37-L-seguridad-tenant-01 · PRE-SECUESTRO DE CUENTA. Un atacante que
+    // conoce el correo a invitar se registra antes con SU contraseña
+    // (POST /auth/v1/signup). Adoptar ese usuario le daría acceso con el rol
+    // invitado. Solo se adopta lo que prueba el dueño del correo: confirmado y
+    // con identidades EXCLUSIVAMENTE de Google. ──
+    describe('A37-L-seguridad-tenant-01: no adoptar un usuario de Auth cuyo origen no es Google confirmado', () => {
+      const adoptado = (user: Record<string, unknown> | null, error: unknown = null) => {
+        generateLink.mockResolvedValue({ data: { user: { id: 'u-x' } }, error: null });
+        getUserById.mockResolvedValue({ data: { user }, error });
+      };
+      const rechaza = async () => {
+        await expect(provisionarUsuario('t-1', 'victima@flotademo.mx', 'V', 'flota_admin')).rejects.toThrow('User already registered');
+        expect(insert).not.toHaveBeenCalled();
+        expect(deleteUser).not.toHaveBeenCalled();
+      };
+
+      it('rechaza al usuario creado con correo y contraseña (identidad email), aunque esté confirmado', async () => {
+        adoptado({ id: 'u-x', email_confirmed_at: '2026-10-01T00:00:00Z', identities: [{ provider: 'email' }] });
+        await rechaza();
+      });
+      it('rechaza si además de Google tiene una identidad email (contraseña ajena posible)', async () => {
+        adoptado({ id: 'u-x', email_confirmed_at: '2026-10-01T00:00:00Z', identities: [{ provider: 'google' }, { provider: 'email' }] });
+        await rechaza();
+      });
+      it('rechaza al usuario de Google SIN confirmar el correo', async () => {
+        adoptado({ id: 'u-x', email_confirmed_at: null, identities: [{ provider: 'google' }] });
+        await rechaza();
+      });
+      it('rechaza si no trae identidades (no se puede probar el origen)', async () => {
+        adoptado({ id: 'u-x', email_confirmed_at: '2026-10-01T00:00:00Z' });
+        await rechaza();
+      });
+      it('rechaza (fail-closed) si no se puede leer el usuario', async () => {
+        adoptado(null, { message: 'caído' });
+        await rechaza();
+      });
     });
   });
 
