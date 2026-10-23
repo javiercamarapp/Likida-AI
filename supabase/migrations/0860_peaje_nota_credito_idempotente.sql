@@ -1,6 +1,6 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0860 — PEAJES: registrar una nota de crédito es ATÓMICO e IDEMPOTENTE
--- (hallazgo A33-06, ALTO en dinero, auditoría 35; reaparece como INN-A2-07).
+-- (hallazgo A33-06, ALTO en dinero, auditoría 35; reaparece como A35-A2-07).
 --
 -- DEFECTO: `registrarNotaDeCredito` (peajes/repo.ts) LEÍA `monto_acreditado`,
 -- INSERTABA la nota en `peaje_reclamo_nota` y ESCRIBÍA `monto_acreditado =
