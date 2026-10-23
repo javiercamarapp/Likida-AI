@@ -10,7 +10,7 @@ import {
   type EstadiasPanel,
 } from '@/lib/likida/estadias/lector';
 import type { EpisodioEstadia, FaseEpisodio, MotivoSinMonto } from '@/lib/likida/estadias/motor';
-import { mxn, fechaHoraMx } from '@/lib/formato';
+import { parsearImporteMx, mxn, fechaHoraMx } from '@/lib/formato';
 import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
 
 /**
@@ -113,7 +113,7 @@ function Renglon({ e }: { e: EpisodioEstadia }) {
 // Vacío conserva null: nadie pactó cero por dejar el campo sin llenar.
 function perilla(v: FormDataEntryValue | null): number | null {
   const s = String(v ?? '').trim();
-  return s === '' ? null : Number(s.replace(',', '.'));
+  return s === '' ? null : parsearImporteMx(s);
 }
 
 export async function BloqueEstadias({

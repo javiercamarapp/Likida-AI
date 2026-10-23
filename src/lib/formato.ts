@@ -464,3 +464,52 @@ export function instanteRFC3339(valor: unknown): string | null {
   const ms = Date.parse(valor);
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
+
+/**
+ * Importe tecleado a mano (A36-R01-02). Es dinero: lo ambiguo se RECHAZA (NaN),
+ * no se adivina. `Number('50,000'.replace(',', '.'))` daba 50.
+ *
+ * Inequívoco: coma Y punto juntos (el último es el decimal y el otro solo puede
+ * agrupar de 3 en 3: «1,234.50», «1.234,50»); varios separadores iguales
+ * («1,234,567»); un solo separador con 1, 2 o 4+ dígitos detrás («22,5»).
+ * Ambiguo: un solo separador con exactamente 3 dígitos detrás y 1-3 delante
+ * («50,000», «1.234») — pudo ser decimal o miles; quien captura lo reescribe
+ * sin separador de miles. Sin signo, notación científica ni letras.
+ * Devuelve NaN si no es un importe claro; los validadores existentes ya
+ * rechazan NaN, y '' lo decide el llamador antes de llegar aquí.
+ */
+export function parsearImporteMx(texto: string): number {
+  const t = String(texto).replace(/[$\s]/g, '');
+  if (!/^[\d.,]+$/.test(t)) return NaN;
+  const agrupado = (s: string, sep: string) => new RegExp(`^\\d{1,3}(\\${sep}\\d{3})+$`).test(s);
+  const tieneComa = t.includes(',');
+  const tienePunto = t.includes('.');
+  let normal: string;
+  if (tieneComa && tienePunto) {
+    const dec = t.lastIndexOf(',') > t.lastIndexOf('.') ? ',' : '.';
+    const mil = dec === ',' ? '.' : ',';
+    const partes = t.split(dec);
+    if (partes.length !== 2 || !/^\d+$/.test(partes[1])) return NaN;
+    if (!/^\d+$/.test(partes[0]) && !agrupado(partes[0], mil)) return NaN;
+    normal = `${partes[0].split(mil).join('')}.${partes[1]}`;
+  } else if (tieneComa || tienePunto) {
+    const sep = tieneComa ? ',' : '.';
+    const partes = t.split(sep);
+    if (partes.length > 2) {
+      if (!agrupado(t, sep)) return NaN;
+      normal = partes.join('');
+    } else {
+      const [ent, dec] = partes;
+      if (!/^\d+$/.test(ent) || !/^\d+$/.test(dec)) return NaN;
+      // «d,ddd»: pudo ser decimal o millar. Solo «0,125» (cero a la izquierda)
+      // es claramente decimal; el resto no se adivina.
+      if (dec.length === 3 && ent !== '0') return NaN;
+      normal = `${ent}.${dec}`;
+    }
+  } else {
+    normal = t;
+  }
+  if (normal === '') return NaN;
+  const n = Number(normal);
+  return Number.isFinite(n) ? n : NaN;
+}
