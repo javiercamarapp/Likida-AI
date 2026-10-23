@@ -219,6 +219,9 @@ export async function procesarCorreoBuzon(
           await anotar(h, 'xml', 'duplicada', { cfdiUuid: uuid, facturaId: existente?.id ?? null, motivo: 'CFDI ya recibido (mismo folio fiscal)' });
         }
         if (existente) { delCorreo.set(uuid, { facturaId: existente.id }); porNombre.set(sinExtension(h.nombre), uuid); }
+      } else if (g.motivo === 'no_es_compra') {
+        // A37-S15-01: nota de crédito, traslado o nómina — no es factura de compra.
+        await anotar(h, 'xml', 'ignorada', { cfdiUuid: uuid, motivo: `CFDI de tipo ${cfdi.tipoComprobante ?? '?'}: no es una factura de compra (solo tipo I entra a la bandeja)` });
       } else if (g.motivo === 'error' && cfdi.uuid && typeof cfdi.total === 'number') {
         // Con UUID y total es la base la que falló: transitorio.
         resumen.caidas++;
