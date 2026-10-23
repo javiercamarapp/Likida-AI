@@ -11,7 +11,6 @@ describe('A37-S50-01 — los números sueltos del mensaje sobreviven a la guardi
     const r = guardiaFundamento(
       'Tu diésel de 1200 pesos y 3 tickets entra según el artículo 27 de la LISR.',
       [],
-      [],
     );
     expect(r.forzado).toBe(true);
     expect(r.reply).not.toMatch(/undefined/);
@@ -23,15 +22,16 @@ describe('A37-S50-01 — los números sueltos del mensaje sobreviven a la guardi
     const r = guardiaFundamento(
       'Con la regla 2.9 de la RFA 2026 y 0 tickets, ver también el artículo 27 de la LISR.',
       ['rfa-2026-2.9'],
-      [],
     );
     expect(r.reply).not.toMatch(/undefined/);
     expect(r.reply).toMatch(/ 0 tickets/);
     expect(r.reply.match(/regla 2\.9/gi)?.length ?? 0).toBe(1);
   });
 
-  it('un texto que ya trae caracteres privados no rompe la restauración', () => {
-    const r = guardiaFundamento('Mira 0 el artículo 27 de la LISR', [], []);
-    expect(r.reply).not.toMatch(/undefined/);
+  it('un NUL falso en la respuesta del modelo no se hace pasar por marcador', () => {
+    const nul = String.fromCharCode(0);
+    const r = guardiaFundamento(`Mira ${nul}0${nul} y 7 pesos, artículo 27 de la LISR`, ['rfa-2026-2.9']);
+    expect(r.reply).not.toContain('undefined');
+    expect(r.reply).not.toContain(nul);
   });
 });

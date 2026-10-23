@@ -20,7 +20,7 @@ vi.mock('@/lib/supabase/admin', () => ({
     const db = crearDbFalsa(TABLAS, consultas);
     return {
       from: (t: string) => {
-        const q = db.from(t) as { then: (...a: unknown[]) => unknown };
+        const q = db.from(t) as unknown as { then: unknown };
         if (leerFalla && leerFalla.tabla === t) {
           const msg = leerFalla.mensaje;
           q.then = (res: (x: unknown) => unknown) => Promise.resolve({ data: null, error: { message: msg } }).then(res);
