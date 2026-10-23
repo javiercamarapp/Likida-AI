@@ -130,10 +130,16 @@ async function revisar(tenantId: string, id: string, cambios: CambioCampo[]): Pr
   const e = d.extraccion as Extraccion;
   const dudas = (d.validacion?.hallazgos ?? []).filter((h) => h.severidad === 'confirmar' && !cambios.some((c) => c.campo === h.campo && c.renglon === h.renglon));
   if (dudas.length > 0) {
-    d = await corregirCampos(tenantId, id, d.version, dudas.map((h) => ({
-      campo: h.campo, renglon: h.renglon, confirmar: true,
-      valor: (h.renglon === null ? e.campos[h.campo]?.valor : e.mercancias[h.renglon]?.[h.campo]?.valor) ?? null,
-    })), ACTOR.id);
+    d = await corregirCampos(tenantId, id, d.version, dudas.map((h) => (
+      // A35-A3-01: «sin dato» de material peligroso NO se levanta confirmando un vacío: una persona declara Sí/No.
+      // La oficina de estas formas sintéticas contesta «No» (ninguna mercancía del dorado es peligrosa).
+      h.campo === 'material_peligroso'
+        ? { campo: h.campo, renglon: h.renglon, valor: 'No' }
+        : {
+          campo: h.campo, renglon: h.renglon, confirmar: true,
+          valor: (h.renglon === null ? e.campos[h.campo]?.valor : e.mercancias[h.renglon]?.[h.campo]?.valor) ?? null,
+        }
+    )), ACTOR.id);
   }
   return d;
 }
