@@ -59,6 +59,11 @@ export function FormaOnboarding({
     tag: string;
     monedero: string;
     pagoOperador: string;
+    dedicacion: string;
+    regimenSat: string;
+    dedicado: string;
+    hombreCamion: string;
+    tanquePropio: string;
   };
 }) {
   const [estado, enviar] = useActionState(accion, null as ResultadoAccion);
@@ -100,13 +105,13 @@ export function FormaOnboarding({
               turismo" fail-closed: una flota de pasaje/turismo deja de abrir
               la 2.9 hasta que exista ficha 3.12. */}
           <Selector nombre="dedicacion" etiqueta="¿Dedicación exclusiva al autotransporte terrestre de carga federal?"
-            opciones={SI_NO} ayuda="RFA 2026 regla 2.9: exige carga FEDERAL específicamente — la carga local/municipal no califica. Válvula del 15% de combustible en efectivo y del estímulo de peaje." />
+            valorInicial={inicial.dedicacion} opciones={SI_NO} ayuda="RFA 2026 regla 2.9: exige carga FEDERAL específicamente — la carga local/municipal no califica. Válvula del 15% de combustible en efectivo y del estímulo de peaje." />
           <Selector nombre="regimenSat" etiqueta="Régimen fiscal (clave SAT c_RegimenFiscal)"
-            opciones={REGIMEN_SAT} ayuda="La facilidad del 15% en efectivo solo abre con 612 o 624 — se calcula de la clave, no de si crees que calificas. Si no estás seguro, déjalo en blanco." />
+            valorInicial={inicial.regimenSat} opciones={REGIMEN_SAT} ayuda="La facilidad del 15% en efectivo solo abre con 612 o 624 — se calcula de la clave, no de si crees que calificas. Si no estás seguro, déjalo en blanco." />
           <Selector nombre="dedicado" etiqueta="¿Hacen transporte dedicado?"
-            opciones={SI_NO} ayuda="La RMF 2.7.7.1.3 invierte los roles del complemento Carta Porte." />
+            valorInicial={inicial.dedicado} opciones={SI_NO} ayuda="La RMF 2.7.7.1.3 invierte los roles del complemento Carta Porte." />
           <Selector nombre="hombreCamion" etiqueta="¿Hay hombre-camión (el dueño maneja)?"
-            opciones={SI_NO} ayuda="Con hombre-camión los viáticos son práctica fiscal indebida. Nos protege a los dos." />
+            valorInicial={inicial.hombreCamion} opciones={SI_NO} ayuda="Con hombre-camión los viáticos son práctica fiscal indebida. Nos protege a los dos." />
         </div>
       </section>
 
@@ -136,7 +141,7 @@ export function FormaOnboarding({
               { valor: 'km', texto: 'Por kilómetro' },
               { valor: 'sueldo', texto: 'Sueldo' },
             ]} />
-          <Selector nombre="tanquePropio" etiqueta="¿Tienen tanque propio?" opciones={SI_NO} />
+          <Selector nombre="tanquePropio" valorInicial={inicial.tanquePropio} etiqueta="¿Tienen tanque propio?" opciones={SI_NO} />
         </div>
       </section>
 

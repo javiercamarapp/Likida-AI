@@ -371,6 +371,22 @@ export function stackDeclarado(perfilCrudo: unknown): {
   };
 }
 
+/** Lo ya declarado que el formulario de onboarding debe precargar (A36-R15-02),
+ *  para que no muestre "Elige una" sobre algo que el chat ya contestó. */
+export function formularioDeclarado(perfilCrudo: unknown): {
+  dedicacion: string; regimenSat: string; dedicado: string; hombreCamion: string; tanquePropio: string;
+} {
+  const p = leerPerfil(perfilCrudo);
+  const sn = (b: boolean | undefined) => (b === undefined ? '' : b ? 'si' : 'no');
+  return {
+    dedicacion: sn(decidir(p.dedicacionExclusivaCarga)),
+    regimenSat: decidir(p.regimenSat) ?? '',
+    dedicado: sn(decidir(p.transporteDedicado)),
+    hombreCamion: sn(decidir(p.hombreCamion)),
+    tanquePropio: sn(decidir(p.tanquePropio)),
+  };
+}
+
 /** El dueño dijo "no sé" en un campo opcional. `decidir()` lo trata como
  *  no declarado (no actúa). La entrevista no lo vuelve a preguntar. */
 export function declararAusente(campos: string[]): Record<string, unknown> {

@@ -6,11 +6,12 @@ import { CONECTORES } from '@/lib/likida/conectores/registro';
 import type { CategoriaConector } from '@/lib/likida/conectores/tipos';
 import {
   onboardingFiscalListo, umbralPeajeDeclarado, stackDeclarado,
-  declararOnboarding, facilidad15Declarada, LLAVE_ONBOARDING_POSPUESTO,
+  declararOnboarding, formularioDeclarado, LLAVE_ONBOARDING_POSPUESTO,
 } from '@/lib/likida/perfil/preguntas';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { parseOnboarding } from '@/lib/likida/perfil/onboarding';
-import { getPerfilCrudo, guardarPerfilPatch, actualizarFacilidad15 } from '@/lib/likida/repo';
+import { getPerfilCrudo, guardarPerfilPatch } from '@/lib/likida/repo';
+import { guardarPerfilFormulario } from '@/lib/likida/perfil/guardar_forma';
 import { subirPoliticaPerfil } from '@/lib/likida/perfil/documentos';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { sufijoTenant } from '../sufijo';
@@ -65,11 +66,7 @@ export default async function OnboardingFlotaPage({
         parsed.datos.politicaDocumento = await subirPoliticaPerfil(ses.tenantId, archivo);
       }
       const patch = declararOnboarding(parsed.datos);
-      await guardarPerfilPatch(ses.tenantId, patch, ses.userId);
-      const f15 = facilidad15Declarada(patch);
-      if (f15) {
-        await actualizarFacilidad15(ses.tenantId, f15.dedicacionExclusivaCarga, f15.regimenElegible, ses.userId);
-      }
+      await guardarPerfilFormulario(ses.tenantId, patch, ses.userId);
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'guardar el perfil') };
     }
@@ -129,6 +126,7 @@ export default async function OnboardingFlotaPage({
           tag: stack.tag ?? '',
           monedero: stack.monedero ?? '',
           pagoOperador: stack.pagoOperador ?? '',
+          ...formularioDeclarado(perfil),
         }}
       />
     </details>
@@ -147,6 +145,7 @@ export default async function OnboardingFlotaPage({
           )}
           <ChatEntrevista
             preguntaInicial={preguntaInicial}
+            preguntaIdInicial={entrevista.siguiente?.id ?? null}
             chipsIniciales={bien.chips}
             sustentoInicial={bien.sustento}
             perfilListoInicial={entrevista.perfilListo || onboardingFiscalListo(perfil)}

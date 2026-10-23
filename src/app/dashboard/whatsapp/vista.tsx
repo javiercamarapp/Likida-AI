@@ -70,6 +70,13 @@ export function VistaArranqueWhatsApp({ datos, hrefOperadores, hrefAyuda }: {
 
           {n.estado === 'configurado' && datos.enlace && (
             <section id="cartel-whatsapp" aria-labelledby="titulo-cartel" className="card p-5">
+              {/* A36-R15-06: la leyenda va DENTRO del cartel; el CSS de impresión oculta todo lo
+                  de fuera, y un cartel de prueba sin marca se pegaba en los patios. */}
+              {n.esPrueba && (
+                <p className="mb-3 text-[15px] font-bold uppercase" style={{ color: 'var(--warn)' }}>
+                  Número de PRUEBA — no escribir, no atiende
+                </p>
+              )}
               <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
                 {datos.qrSvg && (
                   // El SVG lo arma `lib/qr.ts` en el servidor desde un texto que SALE de
@@ -93,7 +100,7 @@ export function VistaArranqueWhatsApp({ datos, hrefOperadores, hrefAyuda }: {
                   </p>
                 </div>
               </div>
-              <div className="mt-4 print:hidden"><AccionesEnlace enlace={datos.enlace} /></div>
+              <div className="mt-4 print:hidden"><AccionesEnlace enlace={datos.enlace} esPrueba={n.esPrueba} /></div>
             </section>
           )}
 

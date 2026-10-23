@@ -4,6 +4,7 @@ import { rechazoMfaSuperadminApi } from '@/lib/auth/api-superadmin';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { getPerfilCrudo } from '@/lib/likida/repo';
 import { responderEntrevista } from '@/lib/likida/perfil/entrevista-agente';
+import { estadoEntrevista, textoPregunta } from '@/lib/likida/perfil/entrevista';
 import { tenantEfectivoChat } from '@/app/api/dashboard/chat/tenant';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
@@ -85,6 +86,10 @@ export async function POST(req: NextRequest) {
   const ultimo = documento
     ? `${mensajes[mensajes.length - 1].texto}\n\nDocumento «${documento.nombre}»:\n${documento.extracto}`
     : mensajes[mensajes.length - 1].texto;
+  // A36-R01-03: la pregunta que el cliente creía estar contestando. `undefined`
+  // = cliente viejo, sin verificación; `null` = «no queda nada pendiente».
+  const idCrudo = (cuerpo as { preguntaId?: unknown })?.preguntaId;
+  const preguntaId = typeof idCrudo === 'string' ? idCrudo.slice(0, 80) : idCrudo === null ? null : undefined;
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controlador) {
@@ -96,6 +101,24 @@ export async function POST(req: NextRequest) {
         let perfil: unknown = {};
         try { perfil = await getPerfilCrudo(efectivo.tenantId); }
         finally { manda({ t: 'paso', fase: 'fin', tool: 'leer_perfil' }); }
+        const vigente = estadoEntrevista(perfil);
+        if (preguntaId !== undefined && (vigente.siguiente?.id ?? null) !== preguntaId) {
+          // El turno anterior SÍ se guardó (la pantalla se cortó antes de verlo):
+          // aplicar este «sí» a la pregunta de ahora sería una declaración fiscal
+          // que el dueño no hizo. No se interpreta nada.
+          manda({
+            t: 'fin',
+            texto: vigente.siguiente
+              ? `Tu respuesta anterior ya se guardó, así que esta pregunta es otra. No apliqué lo que acabas de escribir; revisa tu perfil si dudas.\n\n${textoPregunta(vigente.siguiente)}`
+              : 'Esa declaración ya se guardó y no queda nada pendiente. No apliqué lo que acabas de escribir.',
+            chips: vigente.siguiente?.chips ?? [],
+            perfilListo: vigente.perfilListo,
+            elegiblePeaje: vigente.elegiblePeaje,
+            guardado: false,
+            siguienteId: vigente.siguiente?.id ?? null,
+          });
+          return;
+        }
         const r = await responderEntrevista({
           tenantId: efectivo.tenantId,
           userId: sesion.userId,
@@ -104,8 +127,12 @@ export async function POST(req: NextRequest) {
           historial: mensajes.slice(0, -1),
           onPaso: (p) => manda({ t: 'paso', fase: p.fase, tool: p.tool }),
         });
+        let siguienteId: string | null | undefined;
+        try { siguienteId = estadoEntrevista(await getPerfilCrudo(efectivo.tenantId)).siguiente?.id ?? null; }
+        catch { siguienteId = undefined; /* el cliente deja de verificar este turno */ }
         manda({
           t: 'fin',
+          siguienteId,
           texto: r.texto,
           chips: r.chips,
           perfilListo: r.perfilListo,

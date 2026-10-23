@@ -232,3 +232,43 @@ export async function guardarDatosFiscales(
 
   if (error) throw new Error(`guardarDatosFiscales: ${error.message}`);
 }
+
+/**
+ * Escritura PARCIAL y conservadora de los datos fiscales (A36-R15-01/02).
+ *
+ * `guardarDatosFiscales` REEMPLAZA la fila entera: quien la llame con un
+ * perfil viejo pisa lo que el dueño corrigió en otras pantallas (RFC en
+ * suscripción, domicilio en legal, uso CFDI, correo). Aquí cada campo sale, en
+ * este orden, de: lo declarado en ESTE turno (`parcial`) > lo que ya tiene el
+ * tenant > `respaldo` (solo para llenar huecos, p. ej. el perfil del chat).
+ * Uso CFDI cae a G03 solo si el tenant no tenía ninguno; domicilio y correo
+ * nunca se borran. Si tras mezclar faltan los cinco datos del receptor, no
+ * escribe nada ('incompleto'): el formulario y el chat no inventan lo que
+ * nadie declaró.
+ *
+ * Lectura-y-escritura sin transacción: dos escritores simultáneos podrían
+ * pisarse; es el mismo riesgo que ya tenía `guardarDatosFiscales`.
+ */
+export async function guardarDatosFiscalesParciales(
+  tenantId: string,
+  parcial: Partial<DatosFiscalesCapturados>,
+  respaldo: Partial<DatosFiscalesCapturados> = {},
+): Promise<'guardado' | 'incompleto'> {
+  const actual = await getDatosFiscales(tenantId);
+  const campo = <K extends keyof DatosFiscalesCapturados>(k: K, vivo: string | null | undefined) =>
+    (parcial[k] || vivo || respaldo[k] || undefined) as string | undefined;
+
+  const rfc = campo('rfc', actual?.rfc);
+  const razonSocial = campo('razonSocial', actual?.razonSocial);
+  const regimenFiscal = campo('regimenFiscal', actual?.regimenFiscal);
+  const codigoPostal = campo('codigoPostal', actual?.codigoPostal);
+  if (!rfc || !razonSocial || !regimenFiscal || !codigoPostal) return 'incompleto';
+
+  await guardarDatosFiscales(tenantId, {
+    rfc, razonSocial, regimenFiscal, codigoPostal,
+    usoCfdi: campo('usoCfdi', actual?.usoCfdi) ?? 'G03',
+    email: campo('email', actual?.email),
+    domicilioFiscal: campo('domicilioFiscal', actual?.domicilioFiscal),
+  });
+  return 'guardado';
+}
