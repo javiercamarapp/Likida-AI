@@ -131,6 +131,11 @@ export interface ViajeContexto {
   operadorId: string;
   operadorNombre: string | null;
   operadorTelefono: string | null;
+  /**
+   * A37-A5-03: `false` = el operador está dado de baja o tiene una oposición ARCO vigente (`operador.oposicion_automatizada`). Un
+   * operador así NO recibe nada proactivo aunque su viaje siga abierto. Ausente (doble de prueba, lectura vieja) = no se sabe → activo.
+   */
+  operadorAvisable?: boolean;
   terminalId: string | null;
   unidadId: string | null;
   aceptadoEn: string | null;
@@ -160,10 +165,11 @@ export interface ViajeContexto {
 }
 
 export const COLUMNAS_VIAJE_CTX =
-  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, aceptado_origen, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, despacho_ref, cliente_id, origen_geocerca_id, destino_geocerca_id, operador:operador_id(nombre, telefono)';
+  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, aceptado_origen, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, despacho_ref, cliente_id, origen_geocerca_id, destino_geocerca_id, operador:operador_id(nombre, telefono, activo, oposicion_automatizada)';
 
 export function filaAViajeCtx(f: Fila): ViajeContexto {
-  const rel = f.operador as { nombre?: string; telefono?: string } | Array<{ nombre?: string; telefono?: string }> | null;
+  type OpRel = { nombre?: string; telefono?: string; activo?: boolean | null; oposicion_automatizada?: string | null };
+  const rel = f.operador as OpRel | OpRel[] | null;
   const op = Array.isArray(rel) ? rel[0] : rel;
   return {
     id: String(f.id),
@@ -175,6 +181,7 @@ export function filaAViajeCtx(f: Fila): ViajeContexto {
     operadorId: String(f.operador_id),
     operadorNombre: op?.nombre ?? null,
     operadorTelefono: op?.telefono ?? null,
+    operadorAvisable: op ? op.activo !== false && !op.oposicion_automatizada : true,
     terminalId: s(f.terminal_id),
     unidadId: s(f.unidad_id),
     aceptadoEn: s(f.aceptado_en),

@@ -11,6 +11,7 @@ import type { MuestraGps, SitioGps, SitiosViaje, UnidadDeViaje } from './ciclo_g
 import { normalizarNombre, type CandidatoSitio, type LadoViaje, type SitioCatalogo, type SitioEquivalencia } from './sitio_derivado';
 import { faltaEsquema, filaAEpisodio } from './repo';
 import type { EstadoEpisodios } from './senal_vida';
+import { agruparEmergencias, filtrarViajesAvisables, HORAS_EMERGENCIA_VIGENTE, TIPOS_EMERGENCIA, type EmergenciasPorFlota, type FilaEmergencia } from './seguridad_chofer';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA LISTA DE TRABAJO DEL CRON `conductor-hitos` — las lecturas que CRUZAN flotas.
@@ -94,6 +95,49 @@ export async function leerViajesActivos(limite: number): Promise<ViajeContexto[]
   }
   // Se conserva el orden del reparto (turnos), no el de la lectura por lotes.
   return ids.flatMap((id) => { const v = porId.get(id); return v ? [v] : []; });
+}
+
+/**
+ * A37-A5-02: las emergencias SIN RESOLVER de las flotas dadas (tipos de `TIPOS_EMERGENCIA` o prioridad crítica, abiertas en las últimas
+ * `HORAS_EMERGENCIA_VIGENTE` h). LANZA si no se puede leer: quien llama se detiene (fail-closed), no asume «no hay emergencias».
+ */
+export async function leerEmergenciasAbiertas(tenantIds: string[], ahora: Date = new Date()): Promise<EmergenciasPorFlota> {
+  if (tenantIds.length === 0) return new Map();
+  const desde = new Date(ahora.getTime() - HORAS_EMERGENCIA_VIGENTE * 3_600_000).toISOString();
+  const filas: FilaEmergencia[] = [];
+  for (const lote of trozos(tenantIds, 100)) {
+    const res = await acotada(supabaseAdmin().from('incidencia').select('tenant_id, operador_id, viaje_id, unidad_id')
+      .in('tenant_id', lote).neq('estado', 'resuelta').gte('abierta_en', desde)
+      .or(`tipo.in.(${TIPOS_EMERGENCIA.join(',')}),prioridad.eq.critica`).order('id').limit(2000), 'conductor.emergencias_abiertas');
+    filas.push(...((exigir(res as never, 'conductor.emergencias_abiertas') ?? []) as unknown as FilaEmergencia[]));
+  }
+  return agruparEmergencias(filas);
+}
+
+/**
+ * A37-A5-02: ¿el chofer con ESTE teléfono tiene una emergencia abierta? Es la última barrera del puerto de envío (cubre los motores
+ * que no pasan por la lista de viajes). Lanza si no se puede leer.
+ */
+export async function hayEmergenciaDeTelefono(tenantId: string, telefono: string, ahora: Date = new Date()): Promise<boolean> {
+  const op = await acotada(supabaseAdmin().from('operador').select('id').eq('tenant_id', tenantId).eq('telefono', telefono).order('id').limit(20), 'conductor.emergencia_operador');
+  const ids = ((exigir(op as never, 'conductor.emergencia_operador') ?? []) as Array<{ id: string }>).map((f) => f.id);
+  if (ids.length === 0) return false;
+  const em = (await leerEmergenciasAbiertas([tenantId], ahora)).get(tenantId);
+  return !!em && ids.some((id) => em.operadorIds.has(id));
+}
+
+/**
+ * Los viajes de `leerViajesActivos` a cuyo chofer SÍ se le puede escribir: sin emergencia abierta (A37-A5-02) y con el operador activo y
+ * sin oposición (A37-A5-03). Es la lista de trabajo de todos los motores que le escriben al chofer o escalan «porque no contestó».
+ * Lanza si no se pueden leer las emergencias.
+ */
+export async function leerViajesAvisables(limite: number): Promise<ViajeContexto[]> {
+  const viajes = await leerViajesActivos(limite);
+  if (viajes.length === 0) return viajes;
+  const em = await leerEmergenciasAbiertas([...new Set(viajes.map((v) => v.tenantId))]);
+  const r = filtrarViajesAvisables(viajes, em);
+  if (r.enEmergencia > 0 || r.operadorNoAvisable > 0) logger.info('conductor.viajes_no_avisables', { enEmergencia: r.enEmergencia, operadorNoAvisable: r.operadorNoAvisable });
+  return r.viajes;
 }
 
 /**

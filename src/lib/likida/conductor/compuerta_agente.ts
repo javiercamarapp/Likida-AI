@@ -23,11 +23,15 @@ import type { MensajeSaliente } from './solicitudes';
 const PREFIJOS_AL_CHOFER = [
   'conductor.solicitud', 'conductor.recordatorio', 'conductor.pregunta_estadia', 'conductor.senal_vida_n',
   'conductor.deteccion_parada', 'conductor.reporte_llegada', 'conductor.asignacion_instrucciones', 'conductor.gastos_etc_pregunta',
+  // A37-A5-01 y A37-A5-05: el aviso de acercamiento a la planta (convenios) y la alerta de tope de jornada al operador también le escriben al chofer en marcha.
+  'convenios.acercamiento', 'jornada.alerta_operador',
 ] as const;
+/** Los que llevan sufijo (`conductor.senal_vida_n1`, `convenios.acercamiento_origen`). */
+const PREFIJOS_CON_SUFIJO: readonly string[] = ['conductor.senal_vida_n', 'convenios.acercamiento'];
 
 /** ¿Este contexto de envío le escribe al chofer? (`conductor.senal_vida_n1`, `conductor.solicitud`, …). */
 export function esEnvioAlChofer(contexto: string): boolean {
-  return PREFIJOS_AL_CHOFER.some((p) => contexto === p || (p.endsWith('_n') && contexto.startsWith(p)));
+  return PREFIJOS_AL_CHOFER.some((p) => contexto === p || (PREFIJOS_CON_SUFIJO.includes(p) && contexto.startsWith(p)));
 }
 
 /**
@@ -48,7 +52,12 @@ type Enviar = (telefono: string, m: MensajeSaliente, contexto: string, tenantId:
  * reintentable con el motivo legible; nunca llega a Meta ni a `wa_outbox`.
  */
 export function conCompuertaAlChofer(
-  enviar: Enviar, leer: (tenantId: string) => Promise<LecturaCompuerta>, opts: { ttlMs?: number; reloj?: () => number } = {},
+  enviar: Enviar, leer: (tenantId: string) => Promise<LecturaCompuerta>,
+  opts: {
+    ttlMs?: number; reloj?: () => number;
+    /** A37-A5-02: ¿el chofer de este teléfono tiene una emergencia abierta? Lanzar = no se pudo saber = NO se envía. Sin él no se comprueba (pruebas). */
+    emergencia?: (tenantId: string, telefono: string) => Promise<boolean>;
+  } = {},
 ): Enviar {
   const ttl = opts.ttlMs ?? 30_000;
   const reloj = opts.reloj ?? Date.now;
@@ -62,10 +71,25 @@ export function conCompuertaAlChofer(
       hit = { hasta: reloj() + ttl, lectura };
       memo.set(tenantId, hit);
     }
-    if (hit.lectura.habilitado) return enviar(telefono, m, contexto, tenantId, ahora);
+    if (hit.lectura.habilitado) {
+      if (opts.emergencia) {
+        let razon: 'emergencia_abierta' | 'emergencia_ilegible' | null = null;
+        try { if (await opts.emergencia(tenantId, telefono)) razon = 'emergencia_abierta'; } catch { razon = 'emergencia_ilegible'; }
+        if (razon) {
+          logger.warn('conductor.envio_bloqueado_emergencia', { tenant: tenantId, contexto, razon });
+          return {
+            ok: false, motivo: 'rechazo_no_ventana', fueraDeVentana: false, reintentable: false, ventana: 'desconocida', bloqueadoPorCompuerta: true,
+            mensaje: razon === 'emergencia_abierta'
+              ? 'No se envió: el chofer tiene una emergencia abierta y no se le escribe hasta que se cierre.'
+              : 'No se envió: no se pudo comprobar si el chofer tiene una emergencia abierta.',
+          };
+        }
+      }
+      return enviar(telefono, m, contexto, tenantId, ahora);
+    }
     logger.warn('conductor.envio_bloqueado_agente_apagado', { tenant: tenantId, contexto, razon: hit.lectura.razon });
     return {
-      ok: false, motivo: 'rechazo_no_ventana', fueraDeVentana: false, reintentable: false, ventana: 'desconocida',
+      ok: false, motivo: 'rechazo_no_ventana', fueraDeVentana: false, reintentable: false, ventana: 'desconocida', bloqueadoPorCompuerta: true,
       mensaje: hit.lectura.razon === 'compuerta_ilegible'
         ? 'No se envió: no se pudo comprobar que el Agente 5 esté habilitado para esta flota (migración 0859 sin aplicar o base sin respuesta).'
         : 'No se envió: el Agente 5 no está habilitado para esta flota (agente_chofer_habilitado = false).',
