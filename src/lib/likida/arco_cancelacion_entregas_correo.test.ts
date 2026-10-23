@@ -21,7 +21,7 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({
     const ll = { tabla, ops: [] as Op[] };
     d.llamadas.push(ll);
     const b: Record<string, unknown> = {};
-    for (const m of ['select', 'update', 'eq', 'in', 'is', 'limit']) b[m] = (...a: unknown[]) => { ll.ops.push([m, ...a]); return b; };
+    for (const m of ['select', 'update', 'eq', 'in', 'is', 'order', 'limit']) b[m] = (...a: unknown[]) => { ll.ops.push([m, ...a]); return b; };
     b.maybeSingle = async () => ({ data: d.solicitud, error: null });
     b.then = (res: (v: unknown) => unknown) => {
       if (d.falla && tabla === 'liquidacion_entrega_correo') return res({ data: null, error: { message: 'caído' } });

@@ -2004,7 +2004,7 @@ export async function ejecutarCancelacionArco(
 async function omitirEntregasCorreoDeOperador(tenantId: string, operadorId: string): Promise<string | undefined> {
   try {
     const { data: liqs, error: errLiq } = await acotada(supabaseAdmin()
-      .from('liquidacion_externa').select('id').eq('tenant_id', tenantId).eq('operador_id', operadorId).limit(2000),
+      .from('liquidacion_externa').select('id').eq('tenant_id', tenantId).eq('operador_id', operadorId).order('id').limit(2000),
       'ejecutarCancelacionArco.liquidaciones');
     if (errLiq) return errLiq.message;
     const ids = ((liqs ?? []) as Array<{ id: string }>).map((l) => l.id);
