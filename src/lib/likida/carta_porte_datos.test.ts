@@ -104,3 +104,41 @@ describe('validarDatosCliente', () => {
     expect(() => validarDatosCliente({ ...CLIENTE_CRUDO, rfcDestinatario: 'X-123' })).toThrow(DatoInvalido);
   });
 });
+
+// A36-R01-02 (oleada 4): radio, cantidad y peso van al complemento Carta Porte.
+// `'50,000'.replace(',', '.')` los guardaba como 50 en un documento fiscal.
+describe('separadores ambiguos en radio, cantidad y peso (no se adivinan)', () => {
+  const radio = (v: string) => () => validarDeclaracion({ pisaFederal: 'si', radioKm: v });
+  const cant = (v: string) => () => validarMercancia({ ...MERC_CRUDA, cantidad: v });
+  const peso = (v: string) => () => validarMercancia({ ...MERC_CRUDA, pesoKg: v });
+
+  it.each(['50,000', '52,500', '1.234'])('«%s» se rechaza en los tres campos', (v) => {
+    expect(radio(v)).toThrow(DatoInvalido);
+    expect(cant(v)).toThrow(DatoInvalido);
+    expect(peso(v)).toThrow(DatoInvalido);
+    expect(peso(v)).toThrow(/miles/);
+  });
+
+  it('los casos claros conservan su valor', () => {
+    expect(validarDeclaracion({ pisaFederal: 'si', radioKm: '22,5' }).radioKm).toBe(22.5);
+    expect(validarMercancia({ ...MERC_CRUDA, cantidad: '0,5' }).cantidad).toBe(0.5);
+    expect(validarMercancia({ ...MERC_CRUDA, pesoKg: '1,234.50' }).pesoKg).toBe(1234.5);
+    expect(validarMercancia({ ...MERC_CRUDA, pesoKg: '1.234,50' }).pesoKg).toBe(1234.5);
+    expect(validarMercancia({ ...MERC_CRUDA, pesoKg: '22,5' }).pesoKg).toBe(22.5);
+    expect(validarMercancia({ ...MERC_CRUDA, cantidad: '120' }).cantidad).toBe(120);
+  });
+
+  it('vacío: radio y peso son «sin dato»; la cantidad es obligatoria', () => {
+    expect(validarDeclaracion({ pisaFederal: 'si', radioKm: '' }).radioKm).toBeNull();
+    expect(validarMercancia({ ...MERC_CRUDA, pesoKg: '' }).pesoKg).toBeNull();
+    expect(cant('')).toThrow(DatoInvalido);
+  });
+
+  it('texto basura se rechaza', () => {
+    for (const v of ['abc', '12kg', '1,2,3x', '--5']) {
+      expect(radio(v)).toThrow(DatoInvalido);
+      expect(cant(v)).toThrow(DatoInvalido);
+      expect(peso(v)).toThrow(DatoInvalido);
+    }
+  });
+});
