@@ -130,3 +130,28 @@ describe('el candado de producción', () => {
     expect(r.uuid).toBe('CCCC-DDDD');
   });
 });
+
+
+describe('A37-S61-01 · errores ambiguos del PAC', () => {
+  const llamar = () => timbrarMensualidad({ receptor: RECEPTOR, subtotal: 100, periodoInicio: 'a', periodoFin: 'b' });
+  it('un 502 es ambiguo', async () => {
+    process.env.FACTURAPI_SECRET_KEY = 'sk_test_abc';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'bad gateway' }), { status: 502 })));
+    await expect(llamar()).rejects.toMatchObject({ ambiguo: true });
+  });
+  it('un corte de red / timeout es ambiguo', async () => {
+    process.env.FACTURAPI_SECRET_KEY = 'sk_test_abc';
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('The operation was aborted due to timeout'); }));
+    await expect(llamar()).rejects.toMatchObject({ ambiguo: true });
+  });
+  it('una respuesta 200 ilegible es ambiguo', async () => {
+    process.env.FACTURAPI_SECRET_KEY = 'sk_test_abc';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>', { status: 200 })));
+    await expect(llamar()).rejects.toMatchObject({ ambiguo: true });
+  });
+  it('un 400 es rechazo definitivo (no ambiguo)', async () => {
+    process.env.FACTURAPI_SECRET_KEY = 'sk_test_abc';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'x' }), { status: 400 })));
+    await expect(llamar()).rejects.not.toMatchObject({ ambiguo: true });
+  });
+});
