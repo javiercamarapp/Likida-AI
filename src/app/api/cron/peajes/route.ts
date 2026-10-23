@@ -91,6 +91,7 @@ export async function GET(req: Request) {
     // total, que son las dos maneras de mentir aquí. Un pull, un SFTP fallido o un
     // aviso que no salió tampoco es «ok».
     const parcial = r.fallidos > 0 || r.reintentar > 0 || r.claimPerdido > 0
+      || (r.barrido?.archivos ?? 0) > 0 || r.barrido?.estado === 'error'
       || (pulls?.fallidas ?? 0) > 0 || pulls === null
       || (sftp?.fallidas ?? 0) > 0 || sftp === null
       || (avisos?.pendientes ?? 0) > 0

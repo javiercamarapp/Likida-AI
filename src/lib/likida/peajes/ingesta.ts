@@ -37,6 +37,10 @@ export const TOLERANCIA_FIRMA_MS = 5 * 60_000;
 export const MAX_PENDIENTES_POR_FLOTA = 50;
 export const MAX_INTENTOS = 5;
 export const LEASE_SEGUNDOS = 300;
+/** Veces que un archivo puede morir a mitad de proceso (lease vencido) antes de mandarlo a `fallida`. Igual al tope del claim en la 0856. */
+export const TOPE_VENCIDOS = 3;
+/** Minutos con el lease vencido tras los cuales el barrido cierra un `procesando` aunque tenga pocos intentos. */
+export const GRACIA_VENCIDOS_MIN = 60;
 /** Backoff entre intentos de un fallo de infraestructura: 1, 5, 15, 30 min. */
 export const BACKOFF_MIN = [1, 5, 15, 30] as const;
 
@@ -180,12 +184,62 @@ export interface ResumenCola {
   reintentar: number;
   /** El token del claim ya no era el nuestro al cerrar: lo cerró otro. */
   claimPerdido: number;
+  /**
+   * El barrido de `procesando` vencidos (0856, A35-R12-rendimiento-01): archivos que murieron a mitad de
+   * proceso demasiadas veces y se mandaron a `fallida` con motivo. Solo existe si el barrido corrió (migración
+   * aplicada): `archivos` > 0 vuelve «parcial» al latido; `estado` dice si no pudo correr (nunca en silencio).
+   */
+  barrido?: { archivos: number; estado: 'ok' | 'no_disponible' | 'error' };
   /** Los cruces atípicos (T-A2-13) de los archivos procesados: solo conteos, nunca tags ni importes. `fallidos` vuelve «parcial» al latido. */
   atipicos?: { revisados: number; hallazgos: number; fallidos: number };
   /** El vínculo cruce→viaje (T-A2-21): solo existe si la flota lo activó. Conteos, nunca unidades ni importes. */
   vinculos?: { calculados: number; fallidos: number };
   /** El protocolo de discrepancia geográfica (T-A2-37): candidatos críticos de `unidad_inmovilizada` avisados. */
   discrepancia?: { evaluados: number; enviados: number; sinDestinatario: number; pendientes: number };
+}
+
+/** La RPC del barrido aún no existe en la base (migración 0856 sin aplicar). */
+function rpcInexistente(e: { code?: string; message?: string }): boolean {
+  return e.code === 'PGRST202' || e.code === '42883' || /could not find the function|does not exist/i.test(e.message ?? '');
+}
+
+/**
+ * Manda a `fallida`, con motivo legible, los archivos `procesando` con el lease vencido que ya agotaron el
+ * tope de intentos (o llevan demasiado vencidos) — el claim ya no los entrega (0856). Avisa en la bitácora del
+ * agente de cada flota: no es silencioso. Tolera una base sin la migración (dice `no_disponible`, no lanza), y
+ * ningún fallo del barrido tumba el procesamiento de la cola.
+ */
+export async function barrerColaPeajes(): Promise<NonNullable<ResumenCola['barrido']>> {
+  const admin = supabaseAdmin();
+  let res;
+  try {
+    res = await acotada(admin.rpc('peaje_archivo_barrer_vencidos', { p_max_intentos: TOPE_VENCIDOS, p_gracia_minutos: GRACIA_VENCIDOS_MIN }), 'peajes.cola.barrer');
+  } catch (e) {
+    logger.error('peajes.cola.barrido_fallo', { codigo: codigoDeError(e) });
+    return { archivos: 0, estado: 'error' };
+  }
+  if (res.error) {
+    if (rpcInexistente(res.error)) {
+      logger.warn('peajes.cola.barrido_no_disponible', { motivo: 'falta la migración 0856: la cola corre sin barrido de procesando vencidos' });
+      return { archivos: 0, estado: 'no_disponible' };
+    }
+    logger.error('peajes.cola.barrido_fallo', { err: res.error.message });
+    return { archivos: 0, estado: 'error' };
+  }
+  const filas = (res.data ?? []) as Array<{ id: string; tenant_id: string; nombre: string; intentos: number }>;
+  for (const f of filas) {
+    logger.error('peajes.cola.barrido_vencido', { archivo: f.id, tenant: f.tenant_id, intentos: f.intentos });
+    try {
+      const ahora = new Date();
+      await registrarCorrida(f.tenant_id, 'peajes', {
+        inicio: ahora, fin: ahora, estado: 'fallo', disparo: 'cron',
+        error: `«${f.nombre}» se detuvo: el sistema lo intentó ${f.intentos} ${f.intentos === 1 ? 'vez' : 'veces'} y no alcanzó a terminarlo (suele pasar con archivos muy grandes). Se conserva para reprocesarlo desde el panel; si se repite, divídelo en archivos más chicos o avisa a soporte.`.slice(0, 500),
+      });
+    } catch (e) {
+      logger.error('peajes.cola.barrido_aviso_fallo', { archivo: f.id, codigo: codigoDeError(e) });
+    }
+  }
+  return { archivos: filas.length, estado: 'ok' };
 }
 
 const minutos = (n: number) => new Date(Date.now() + n * 60_000).toISOString();
@@ -203,6 +257,9 @@ export async function procesarColaPeajes(
   const lease = opciones.leaseSegundos ?? LEASE_SEGUNDOS;
   const admin = supabaseAdmin();
   const r: ResumenCola = { tomados: 0, procesados: 0, fallidos: 0, reintentar: 0, claimPerdido: 0 };
+
+  // Antes de reclamar: lo agotado se cierra (y se avisa) para que no ocupe el lote ni la ventana de la corrida.
+  r.barrido = await barrerColaPeajes();
 
   const claim = await acotada(admin.rpc('peaje_archivo_reclamar', { p_limite: limite, p_lease_segundos: lease }), 'peajes.cola.reclamar');
   if (claim.error) throw new Error(`peajes.cola.reclamar: ${claim.error.message}`);
