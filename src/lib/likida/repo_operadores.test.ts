@@ -164,6 +164,33 @@ describe('buscarCatalogo / contarCatalogo (FE-2)', () => {
     expect(r).toEqual([{ id: 'u-1', etiqueta: 'T-014' }]);
   });
 
+  // R15-ux-01 (auditoría 35): dos operadores activos con el MISMO nombre daban dos
+  // etiquetas idénticas y el combo resolvía al primero → el viaje y el WhatsApp
+  // del anticipo iban al homónimo equivocado. Solo el teléfono es único (0024).
+  it('R15-ux-01: homónimos salen con etiqueta distinta (últimos 4 del teléfono) y el mismo id', async () => {
+    listaResult.mockResolvedValue({ data: [
+      { id: 'o-1', nombre: 'José Hernández', telefono: '+529991114821' },
+      { id: 'o-2', nombre: 'José Hernández', telefono: '+529992220077' },
+      { id: 'o-3', nombre: 'Ana Ruiz', telefono: '+529993330001' },
+    ], error: null });
+    const r = await buscarCatalogo('t-1', 'operador', 'jos');
+    expect(r.map((o) => o.id)).toEqual(['o-1', 'o-2', 'o-3']);
+    expect(r[0].etiqueta).toBe('José Hernández · tel. ···4821');
+    expect(r[1].etiqueta).toBe('José Hernández · tel. ···0077');
+    // Quien no tiene homónimo conserva su nombre limpio: no se ensucia el rótulo.
+    expect(r[2].etiqueta).toBe('Ana Ruiz');
+    expect(new Set(r.map((o) => o.etiqueta.toLowerCase())).size).toBe(3);
+  });
+
+  it('R15-ux-01: si además coincide el teléfono (o falta) añade ordinal; nunca quedan dos etiquetas iguales', async () => {
+    listaResult.mockResolvedValue({ data: [
+      { id: 'o-1', nombre: 'Luis Gómez', telefono: null },
+      { id: 'o-2', nombre: 'luis gómez', telefono: null },
+    ], error: null });
+    const r = await buscarCatalogo('t-1', 'operador');
+    expect(new Set(r.map((o) => o.etiqueta.toLowerCase())).size).toBe(2);
+  });
+
   // ═══════════════════════════════════════════════════════════════════════
   // HALLAZGO ALTO: el combo de unidades no debía EXCLUIR las que ya están en
   // un viaje abierto — el jefe de tráfico podía elegirlas desde la UI y
