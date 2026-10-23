@@ -148,9 +148,9 @@ export async function leerAvisosDeHitos(hitoIds: string[]): Promise<Array<AvisoR
   const salida: Array<AvisoReclamado & { hitoId: string }> = [];
   for (const ids of trozos(hitoIds, 150)) {
     const filas = await traerTodo<Fila>((desde, hasta) => acotada(supabaseAdmin()
-      .from('viaje_hito_aviso').select('viaje_hito_id, ciclo, clase, nivel').in('viaje_hito_id', ids).order('id').range(desde, hasta), 'conductor.avisos_lote') as never, 'conductor.avisos_lote');
+      .from('viaje_hito_aviso').select('viaje_hito_id, ciclo, clase, nivel, ok').in('viaje_hito_id', ids).order('id').range(desde, hasta), 'conductor.avisos_lote') as never, 'conductor.avisos_lote');
     for (const f of filas) {
-      salida.push({ hitoId: String(f.viaje_hito_id), ciclo: Number(f.ciclo), clase: f.clase as AvisoReclamado['clase'], nivel: Number(f.nivel) });
+      salida.push({ hitoId: String(f.viaje_hito_id), ciclo: Number(f.ciclo), clase: f.clase as AvisoReclamado['clase'], nivel: Number(f.nivel), ok: typeof f.ok === 'boolean' ? f.ok : null });
     }
   }
   return salida;

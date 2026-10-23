@@ -332,13 +332,20 @@ export async function correrConductor(
 
 type Escalacion = Extract<AccionPlan, { tipo: 'escalar' }>;
 
+/**
+ * INN-A5-02: el aviso por «Tengo un problema» tiene SU PROPIA llave de claim (nivel 5, libre en 0..9), aparte de la
+ * escalera (1 y 2). Así una escalación previa por falta de respuesta no se come el aviso de una falla real.
+ */
+export const NIVEL_AVISO_PROBLEMA = 5;
+
 /** Ejecuta una escalación (claim → destinatarios → envío → marca). Devuelve cómo terminó. */
 async function escalar(
   p: PuertosConductor, v: ViajeContexto, hs: HitoFila[], a: Escalacion,
   avisos: ReadonlyArray<AvisoReclamado & { hitoId: string }>, ahora: Date, r: ResultadoConductor,
   motivoForzado?: MotivoEscalacion,
 ): Promise<'ok' | 'reintentable' | 'sin_envio' | 'perdido'> {
-  const claim = nuevoAviso(v, a.hito, 'escalacion', a.nivel, null);
+  const esProblema = motivoForzado === 'problema_reportado';
+  const claim = nuevoAviso(v, a.hito, 'escalacion', esProblema ? NIVEL_AVISO_PROBLEMA : a.nivel, null);
   const gano = await p.reclamar(claim);
   if (gano === 'perdido') { r.yaReclamados++; return 'perdido'; }
   if (gano === 'fallo') { r.fallos.push(`reclamo escalación ${v.id}`); return 'sin_envio'; }
@@ -349,6 +356,7 @@ async function escalar(
     r.sinDestinatario++;
     logger.error('conductor.escalacion_sin_destinatario', { tenant: v.tenantId, viaje: v.id, nivel: a.nivel });
     r.fallos.push(`${v.folio ?? v.id}: no hay a quién escalar (nivel ${a.nivel})`);
+    if (esProblema) return fallaAvisoDeProblema(p, a, claim, 'sin_destinatario');
     await p.cerrarAviso(claim, { ok: false, canal: 'ninguno', motivo: 'sin_destinatario', ult4: null });
     await p.marcarEscalado(a.hito, a.nivel, ahora);
     return 'sin_envio';
@@ -377,6 +385,10 @@ async function escalar(
     r.fallos.push(`escalación ${v.folio ?? v.id}: ${ultimoError} (queda en la cola de WhatsApp; no se reenvía)`);
     return 'reintentable';
   }
+  if (esProblema && entregados === 0) {
+    r.fallos.push(`aviso de problema ${v.folio ?? v.id}: ${ultimoError}`);
+    return fallaAvisoDeProblema(p, a, claim, ultimoError.slice(0, 200));
+  }
   await p.cerrarAviso(claim, {
     ok: entregados > 0, canal: entregados > 0 ? canal : 'ninguno',
     motivo: entregados > 0 ? null : ultimoError.slice(0, 200), ult4: ult4(destinos[0].telefono),
@@ -388,18 +400,37 @@ async function escalar(
 }
 
 /**
+ * INN-A5-02: el aviso por «Tengo un problema» NO salió. Se SUELTA el claim (no se cierra como fallido) para que el
+ * siguiente toque del chofer lo reintente de verdad en vez de toparse con un claim muerto, y queda el evento
+ * `escalado` con `entregados: 0` en la bitácora del hito para que el supervisor lo vea en el tablero.
+ */
+async function fallaAvisoDeProblema(
+  p: PuertosConductor, a: Escalacion, claim: NuevoAviso, motivo: string,
+): Promise<'sin_envio'> {
+  logger.error('conductor.aviso_problema_no_enviado', { tenant: a.hito.tenantId, viaje: a.hito.viajeId, hito: a.hito.id, motivo });
+  await p.liberarAviso(claim);
+  await p.evento(a.hito, 'escalado', { nivel: a.nivel, motivo: 'problema_reportado_sin_aviso', entregados: 0, causa: motivo });
+  return 'sin_envio';
+}
+
+/**
  * El chofer apretó «Tengo un problema»: se escala YA al nivel 1, sin esperar a que
  * se agote la escalera. Mismo claim, mismo envío: un doble toque no avisa dos veces.
  */
 export async function escalarPorProblema(
   p: PuertosConductor, v: ViajeContexto, hito: HitoFila, hs: HitoFila[], ahora: Date,
-): Promise<'ok' | 'reintentable' | 'sin_envio' | 'perdido'> {
+): Promise<'ok' | 'reintentable' | 'sin_envio' | 'ya_avisado'> {
   const r: ResultadoConductor = {
     sembrados: 0, viajes: 1, solicitudes: 0, recordatorios: 0, escalaciones: 0, yaReclamados: 0, rechazosReintentables: 0,
     configIlegible: 0, sinDestinatario: 0, cortadosPorReloj: 0, cortadaPorRechazoMasivo: false, fallos: [], saltados: {},
   };
   const avisos = await p.avisosDe([hito.id]);
-  return escalar(p, v, hs, { tipo: 'escalar', hito, nivel: 1, minutosPendiente: 0, motivo: 'sin_respuesta', ancla: ahora }, avisos, ahora, r, 'problema_reportado');
+  const res = await escalar(p, v, hs, { tipo: 'escalar', hito, nivel: 1, minutosPendiente: 0, motivo: 'sin_respuesta', ancla: ahora }, avisos, ahora, r, 'problema_reportado');
+  if (res !== 'perdido') return res;
+  // El claim ya existía. Solo es «ya avisado» si ese aviso de verdad salió (`ok = true`); con `false`, sin resultado o
+  // sin poder leerlo NO se promete nada: se le dice al chofer que no hay confirmación.
+  const previo = avisos.find((x) => x.hitoId === hito.id && x.ciclo === hito.ciclo && x.clase === 'escalacion' && x.nivel === NIVEL_AVISO_PROBLEMA);
+  return previo?.ok === true ? 'ya_avisado' : 'sin_envio';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -249,7 +249,23 @@ describe('botones: nadie toca un viaje que no es suyo', () => {
   it('si no se pudo avisar al jefe, se dice y se da la salida', async () => {
     const m = nueva();
     m.deps.escalarPorProblema = async () => 'sin_envio';
-    expect(textos(await dice(m, `recordatorio_problema:${V1}`))).toContain('No pude avisarle a tu jefe');
+    expect(textos(await dice(m, `recordatorio_problema:${V1}`))).toContain('NO pude avisarle a tu jefe');
+  });
+
+  it('INN-A5-02: el texto al chofer solo dice «Ya le avisé» si el aviso salió', async () => {
+    for (const [estadoAviso, dice_] of [
+      ['ok', /Ya le avisé a tu jefe/], ['ya_avisado', /Ya le había avisado/],
+      ['reintentable', /todavía NO llega/], ['sin_envio', /NO pude avisarle/],
+    ] as const) {
+      const m = nueva();
+      m.deps.escalarPorProblema = async () => estadoAviso;
+      const t = textos(await dice(m, `recordatorio_problema:${V1}`));
+      expect(t).toMatch(dice_);
+      if (estadoAviso === 'reintentable' || estadoAviso === 'sin_envio') {
+        expect(t).not.toMatch(/Ya le avisé|Gracias por avisar/);
+        expect(t).toMatch(/[Mm]árcale directo/);
+      }
+    }
   });
 
   it('«Compartir ubicación» abre la solicitud de ubicación y no registra ningún hito', async () => {

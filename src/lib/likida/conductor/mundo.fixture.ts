@@ -54,8 +54,8 @@ export function crearMundo(o: OpcionesMundo) {
     sembrar: async () => { for (const v of m.viajes.keys()) m.sembrar(v); return 0; },
     viajesActivos: async (l) => [...m.viajes.values()].filter((v) => v.estatus === 'abierto' && v.aceptadoEn).slice(0, l),
     hitosDe: async (ids) => [...m.hitos.values()].filter((h) => ids.includes(h.viajeId)).map((h) => ({ ...h })),
-    avisosDe: async (ids) => [...reclamos.entries()].map(([k]) => k.split('|')).filter(([hitoId]) => ids.includes(hitoId))
-      .map(([hitoId, ciclo, clase, nivel]) => ({ hitoId, ciclo: Number(ciclo), clase: clase as AvisoReclamado['clase'], nivel: Number(nivel) })),
+    avisosDe: async (ids) => [...reclamos.entries()].map(([k, v]) => ({ p: k.split('|'), ok: v.ok })).filter(({ p: [hitoId] }) => ids.includes(hitoId))
+      .map(({ p: [hitoId, ciclo, clase, nivel], ok }) => ({ hitoId, ciclo: Number(ciclo), clase: clase as AvisoReclamado['clase'], nivel: Number(nivel), ok })),
     enviadosHoyPorChofer: async (ops, desde) => {
       const c: Record<string, number> = {};
       for (const [k, v] of reclamos) {

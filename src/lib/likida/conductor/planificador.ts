@@ -29,6 +29,8 @@ export interface AvisoReclamado {
   nivel: number;
   /** El claim es del ciclo ACTUAL del hito. */
   ciclo: number;
+  /** Cómo terminó el claim: `true` salió (o quedó en la cola de WhatsApp), `false` falló, `null` sigue sin resultado. Ausente = no se leyó. */
+  ok?: boolean | null;
 }
 
 export type MotivoNada =

@@ -221,6 +221,14 @@ export const TEXTO_PEDIR_UBICACION =
 
 const FALLO: Salida = { texto: 'No pude anotarlo ahorita — mándamelo de nuevo en un momento. 🙏' };
 
+/** Lo que ve el chofer tras «Tengo un problema», según cómo terminó el aviso al jefe de tráfico. */
+export function textoAvisoDeProblema(r: 'ok' | 'reintentable' | 'sin_envio' | 'ya_avisado'): string {
+  if (r === 'ok') return 'Gracias por avisar. Ya le avisé a tu jefe de tráfico para que te contacte. 🙏';
+  if (r === 'ya_avisado') return 'Ya le había avisado a tu jefe de tráfico hace un momento. Si es urgente, márcale directo. 🙏';
+  if (r === 'reintentable') return 'Tu aviso quedó en cola y todavía NO llega a tu jefe de tráfico. Si es urgente, márcale directo ahorita. 🙏';
+  return 'NO pude avisarle a tu jefe de tráfico. Márcale directo ahorita o llama a monitoreo. 🙏';
+}
+
 export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = depsReales): Promise<SalidaAtender | null> {
   // T-A5-58: la clave de amago y el botón de pánico no se guardan ni se interpretan: antes de cualquier regla, modelo, base o log.
   const sensible = guardiaDatosSeguridad(e.texto);
@@ -323,13 +331,8 @@ export async function atenderConductor(e: EntradaAtender, deps: DepsAtender = de
       const activo = hitoActivo(hitos);
       if (!activo) return { mensajes: [{ texto: 'Ya tengo todos los avisos de este viaje. Si tienes un problema, avísale directo a tu jefe de tráfico. 🙏' }] };
       const r = await deps.escalarPorProblema(viaje, activo, hitos, ahora);
-      return {
-        mensajes: [{
-          texto: r === 'ok' || r === 'perdido'
-            ? 'Gracias por avisar. Ya le avisé a tu jefe de tráfico para que te contacte. 🙏'
-            : 'No pude avisarle a tu jefe por WhatsApp ahorita. Si es urgente, márcale directo. 🙏',
-        }],
-      };
+      // INN-A5-02: solo se promete «ya le avisé» cuando el aviso SALIÓ. Es texto de seguridad: nunca prometer lo que no pasó.
+      return { mensajes: [{ texto: textoAvisoDeProblema(r) }] };
     }
 
     // T-A5-68: «ya llegué a descargar» y «ya salí» siguen el ciclo del servicio del viaje (impo/expo/nacional).

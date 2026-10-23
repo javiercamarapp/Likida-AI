@@ -298,7 +298,7 @@ describe('escalar: patio responsable → jefe general', () => {
     const hs = [...m.hitos.values()];
     const a = await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:40'));
     const b = await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:40'));
-    expect([a, b]).toEqual(['ok', 'perdido']);
+    expect([a, b]).toEqual(['ok', 'ya_avisado']);
     expect(m.enviados).toHaveLength(1);
     expect(m.enviados[0].texto).toContain('el chofer reportó un problema');
   });
@@ -310,9 +310,65 @@ describe('escalar: patio responsable → jefe general', () => {
     const hs = [...m.hitos.values()];
     const a = await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:40'));
     const b = await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:41'));
-    expect([a, b]).toEqual(['reintentable', 'perdido']);
+    expect([a, b]).toEqual(['reintentable', 'ya_avisado']);
     expect(intentos).toBe(1);
     expect(m.enviados).toHaveLength(0);
+  });
+});
+
+describe('INN-A5-02: «Tengo un problema» no promete un aviso que no salió', () => {
+  it('sin destinatarios: no avisa, SUELTA el claim (el siguiente toque reintenta de verdad) y deja el evento para el supervisor', async () => {
+    const v = viaje('v1');
+    const m = crearPuertos({ viajes: [v], hitos: hitosDe('v1'), destinatarios: () => [] });
+    const hs = [...m.hitos.values()];
+    const a = await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:40'));
+    const b = await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:41'));
+    expect([a, b]).toEqual(['sin_envio', 'sin_envio']); // antes: el 2.º toque devolvía 'perdido' y el chofer leía «ya le avisé»
+    expect(m.enviados).toHaveLength(0);
+    expect(m.eventos.filter((e) => e.evento === 'escalado' && e.detalle.entregados === 0)).toHaveLength(2);
+  });
+
+  it('el envío falla y luego la base de contactos responde: el reintento del chofer SÍ avisa', async () => {
+    const v = viaje('v1');
+    let respondeBien = false;
+    const m = crearPuertos({
+      viajes: [v], hitos: hitosDe('v1'),
+      envio: () => (respondeBien ? { ok: true, via: 'texto' } : { ok: false, reintentable: false, mensaje: 'número inválido' }),
+    });
+    const hs = [...m.hitos.values()];
+    expect(await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:40'))).toBe('sin_envio');
+    respondeBien = true;
+    expect(await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:41'))).toBe('ok');
+    expect(m.enviados).toHaveLength(1);
+  });
+
+  it('la escalera ya escaló ese hito por falta de respuesta: el problema NUEVO sí le llega al jefe (llave propia)', async () => {
+    const v = viaje('v1');
+    const avisos = [{ hitoId: 'v1-0', clase: 'escalacion' as const, nivel: 1, ciclo: 1, ok: true }];
+    const m = crearPuertos({ viajes: [v], hitos: hitosDe('v1'), avisos });
+    const hs = [...m.hitos.values()];
+    expect(await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:40'))).toBe('ok');
+    expect(m.enviados).toHaveLength(1);
+    expect(m.enviados[0].texto).toContain('el chofer reportó un problema');
+  });
+
+  it('doble toque tras un aviso que SÍ salió: ya_avisado, sin reenviar', async () => {
+    const v = viaje('v1');
+    const m = crearPuertos({ viajes: [v], hitos: hitosDe('v1') });
+    const hs = [...m.hitos.values()];
+    const a = await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:40'));
+    const b = await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:41'));
+    expect([a, b]).toEqual(['ok', 'ya_avisado']);
+    expect(m.enviados).toHaveLength(1);
+  });
+
+  it('claim previo sin resultado o fallido: nunca ya_avisado', async () => {
+    const v = viaje('v1');
+    for (const ok of [false, null]) {
+      const m = crearPuertos({ viajes: [v], hitos: hitosDe('v1'), avisos: [{ hitoId: 'v1-0', clase: 'escalacion', nivel: 5, ciclo: 1, ok }] });
+      const hs = [...m.hitos.values()];
+      expect(await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:40'))).toBe('sin_envio');
+    }
   });
 });
 
