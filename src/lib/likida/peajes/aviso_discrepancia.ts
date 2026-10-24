@@ -45,6 +45,13 @@ export interface DepsAvisoDiscrepancia {
   avisar: typeof avisarOficina;
 }
 
+/**
+ * A37-A2-14: máximo de reportes individuales por desglose. Una unidad «de baja» con TAG en uso genera cientos de
+ * candidatos críticos; mandarlos todos en serie era un mensaje por candidato al mismo teléfono (y, si el cron moría
+ * a los 120 s, el resto no salía nunca). Pasado el tope sale UN resumen; el detalle sigue en la pantalla de revisión.
+ */
+export const TOPE_AVISOS_DISCREPANCIA = 5;
+
 const liga = () => `${appUrl()}/dashboard/agentes/peajes`;
 
 /** La última posición GPS conocida de la unidad de ESA línea (sin ventana de tiempo: puede llevar días sin reportar). */
@@ -98,7 +105,10 @@ export async function avisarDiscrepanciasDesglose(
     r.evaluados = criticos.length;
 
     const tel = await deps.destinatario(tenantId);
-    for (const c of criticos) {
+    let cortado = false; // Meta rechazó un envío: no se insiste con el resto del desglose.
+    for (const [i, c] of criticos.entries()) {
+      if (i >= TOPE_AVISOS_DISCREPANCIA) break;
+      if (cortado) { r.pendientes++; continue; }
       const entrada = discrepanciaDeCandidato(c);
       if (!entrada) continue; // no debería pasar (ya se filtró por categoría), pero el tipo lo permite.
       let posicion: PosicionConocida | null = null;
@@ -125,6 +135,25 @@ export async function avisarDiscrepanciasDesglose(
           tenant: tenantId, desglose: desgloseId, indice: c.indice, motivo: resultado.motivo, codigo: resultado.codigo,
         });
         r.pendientes++;
+        cortado = true;
+      }
+    }
+    // Lo que pasó del tope: un solo mensaje resumen (o pendiente si ya se cortó / no hay destinatario).
+    const excedentes = criticos.length - TOPE_AVISOS_DISCREPANCIA;
+    if (excedentes > 0) {
+      if (!tel) r.sinDestinatario += excedentes;
+      else if (cortado) r.pendientes += excedentes;
+      else {
+        const texto = `Peajes: además de los ${TOPE_AVISOS_DISCREPANCIA} reportes anteriores, este desglose trae ${excedentes} candidato(s) más de unidad inmovilizada con TAG en uso. Revísalos todos en ${liga()}.`;
+        const resultado = await deps.avisar(tel, texto, {
+          parametros: parametrosAvisoOficina('Peajes: discrepancia geográfica', `${excedentes} candidato(s) más de unidad inmovilizada`, liga()),
+          contexto: { tenantId, agente: 'peajes', desglose: desgloseId },
+        });
+        if (resultado.ok) r.enviados++;
+        else {
+          logger.error('peajes.discrepancia_aviso_fallo', { tenant: tenantId, desglose: desgloseId, resumen: true, motivo: resultado.motivo, codigo: resultado.codigo });
+          r.pendientes += excedentes;
+        }
       }
     }
     return r;
