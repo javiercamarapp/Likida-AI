@@ -170,7 +170,9 @@ export default async function PaginaConexiones({
     }
 
     const conectorId = typeof fd.get('conector') === 'string' ? (fd.get('conector') as string).trim().slice(0, 64) : '';
-    if (await conectorFueraDelPerfil(s.tenantId, conectorId)) return { ok: false, error: MOTIVO_CONECTOR_FUERA_DEL_PERFIL };
+    // A37-S17-09: SIEMPRE se puede desactivar (revocar y destruir el secreto propio),
+    // aunque el conector haya quedado fuera del perfil/plan; el perfil solo restringe
+    // guardar y probar.
     try {
       await desactivarCredencial(s.tenantId, conectorId, { id: s.userId });
       revalidatePath(RUTA);

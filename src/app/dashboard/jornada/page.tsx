@@ -84,13 +84,23 @@ async function fueraDeAlcance(
   alcance: AlcancePatio,
   ref: { jornadaId: string } | { asientoId: string },
 ): Promise<ResultadoAccion | null> {
+  const r = await resolverAlcance(tenantId, alcance, ref);
+  return 'rechazo' in r ? r.rechazo : null;
+}
+
+/** Igual que `fueraDeAlcance`, pero además devuelve la jornada REAL leída de la base (A37-S19-05). */
+async function resolverAlcance(
+  tenantId: string,
+  alcance: AlcancePatio,
+  ref: { jornadaId: string } | { asientoId: string },
+): Promise<{ rechazo: ResultadoAccion } | { jornadaId: string | null }> {
   try {
     const t = await terminalDeJornada(tenantId, ref);
-    if (!t.encontrado) return { ok: false, error: 'Esa jornada no existe en tu flota. Recarga la pantalla.' };
+    if (!t.encontrado) return { rechazo: { ok: false, error: 'Esa jornada no existe en tu flota. Recarga la pantalla.' } };
     exigirDentroDelAlcance(alcance, t.terminalId);
-    return null;
+    return { jornadaId: t.jornadaId ?? null };
   } catch (e) {
-    return { ok: false, error: mensajeParaPantalla(e, 'comprobar el patio del operador') };
+    return { rechazo: { ok: false, error: mensajeParaPantalla(e, 'comprobar el patio del operador') } };
   }
 }
 
@@ -248,8 +258,8 @@ export default async function PaginaJornada({
     }
 
     const asientoId = String(fd.get('asientoId') ?? '').trim();
-    const rechazoPatio = await fueraDeAlcance(p.tenantId, p.alcance, { asientoId });
-    if (rechazoPatio) return rechazoPatio;
+    const alcanceAsiento = await resolverAlcance(p.tenantId, p.alcance, { asientoId });
+    if ('rechazo' in alcanceAsiento) return alcanceAsiento.rechazo;
     const motivo = String(fd.get('motivo') ?? '').trim();
     if (!asientoId) return { ok: false, error: 'Falta la marca que se va a anular.' };
     if (motivo.length < 5) {
@@ -266,7 +276,8 @@ export default async function PaginaJornada({
       actor: { id: f.id, email: f.email },
       accion: 'jornada.marca_anulada',
       entidad: 'jornada_dia',
-      entidadId: String(fd.get('jornadaId') ?? asientoId),
+      // A37-S19-05: la jornada del ASIENTO leída de la base, nunca el `jornadaId` del formulario.
+      entidadId: alcanceAsiento.jornadaId ?? asientoId,
       detalle: { asiento: asientoId, motivo },
     }, { evento: 'jornada.bitacora_no_escribio' });
 

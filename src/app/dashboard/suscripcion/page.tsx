@@ -170,7 +170,11 @@ export default async function SuscripcionPage({
         suscripcionActual: s,
         fiscales: {
           rfc: f!.rfc!, razonSocial: f!.razonSocial!, regimenFiscal: f!.regimenFiscal!,
-          codigoPostal: f!.codigoPostal!, email: email ?? '',
+          codigoPostal: f!.codigoPostal!,
+          // A37-S20-05: el correo que la flota declaró para su factura gobierna al customer de
+          // Stripe; el de quien hace clic (p. ej. un superadmin que contrata por la flota) es
+          // solo el respaldo.
+          email: f!.email ?? email ?? '',
         },
       });
       destino = r2.urlFactura;
@@ -303,7 +307,8 @@ export default async function SuscripcionPage({
               <div className="mt-3">
                 <InstruccionesTransferencia
                   beneficiario={banco.beneficiario} banco={banco.banco} clabe={banco.clabe}
-                  monto={porPagar.monto} moneda={porPagar.moneda} referencia={porPagar.referencia}
+                  monto={porPagar.monto} subtotal={porPagar.subtotal} iva={porPagar.iva}
+                  moneda={porPagar.moneda} referencia={porPagar.referencia}
                 />
                 <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
                   Un banco no nos avisa cuando entra un depósito, así que tu factura pasa a &quot;pagada&quot; en
