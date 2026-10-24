@@ -782,6 +782,8 @@ export function cruzarLineasDesglose(
   /** `unidadId`: la unidad que `peaje_tag` casa con el TAG de la línea (null/ausente si el TAG no está dado de alta). */
   lineas: ReadonlyArray<{ fecha: string | null; monto: number; unidadId?: string | null }>,
   gastos: readonly GastoCaseta[],
+  /** A37-A2-10: ids de gasto que ya respaldan líneas de OTROS desgloses vigentes: no pueden respaldar otra. */
+  yaRespaldados: ReadonlySet<string> = new Set(),
 ): CruceLinea[] {
   // ESCALA (T-A2-32): el barrido de TODOS los gastos por cada línea era O(líneas × gastos) — a 60 000
   // líneas y ~45 000 gastos, miles de millones de comparaciones. Los gastos se indexan por día (medianoche
@@ -801,7 +803,7 @@ export function cruzarLineasDesglose(
     if (lista) lista.push({ gasto: g, orden, dia: d });
     else porDia.set(d, [{ gasto: g, orden, dia: d }]);
   });
-  const usados = new Set<string>();
+  const usados = new Set<string>(yaRespaldados);
   const resultados: CruceLinea[] = [];
 
   for (const linea of lineas) {
@@ -1251,8 +1253,13 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
     gastos = gastos.map((g) => ({ ...g, unidadId: unidadPorViajeGasto.get(g.viajeId) ?? null }));
   }
 
+  // 2b) A37-A2-10: un gasto ya respaldado por una línea de OTRO desglose vigente (un corte reemitido con otros bytes, un
+  //     mensual solapado con decenales) no respalda también esta. Gana el desglose más antiguo: así re-conciliar uno no
+  //     cambia lo que el otro ya tiene, y el orden es determinista.
+  const yaRespaldados = await gastosRespaldadosPorOtrosDesgloses(tenantId, desgloseId, gastos.map((g) => g.id), fechas);
+
   // 3) El cruce puro.
-  const cruces = cruzarLineasDesglose(lineas, gastos);
+  const cruces = cruzarLineasDesglose(lineas, gastos, yaRespaldados);
 
   // 4) El cruce por CASETA con el GPS (0375/0376): la unidad a evaluar es la del
   //    TAG y, si el TAG no está dado de alta, la del viaje que cuadró. Sin
@@ -1354,6 +1361,43 @@ async function conciliarDesgloseInterno(tenantId: string, desgloseId: string): P
   resumen.gpsSinDatos = gpsSinDatos;
   logger.info('desglose_peaje.cruce', { tenant: tenantId, ...resumen });
   return resumen;
+}
+
+/**
+ * Los ids de gasto (de `gastoIds`) que ya respaldan una línea `cuadra` de otro desglose VIGENTE de la flota, creado antes
+ * que este y con periodo traslapado con las fechas de sus líneas. Lanza ante error de base (un conjunto a medias dejaría
+ * respaldar dos veces el mismo comprobante).
+ */
+async function gastosRespaldadosPorOtrosDesgloses(
+  tenantId: string, desgloseId: string, gastoIds: readonly string[], fechas: readonly string[],
+): Promise<Set<string>> {
+  const salida = new Set<string>();
+  if (gastoIds.length === 0 || fechas.length === 0) return salida;
+  const { data: yo, error: errYo } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .select('creado_en').eq('tenant_id', tenantId).eq('id', desgloseId).maybeSingle(), 'desglose_peaje.cruce_propio');
+  if (errYo) throw new Error(`conciliarDesglose: ${errYo.message}`);
+  const creadoEn = yo?.creado_en;
+  if (typeof creadoEn !== 'string' || creadoEn === '') return salida;
+  const { data: otros, error: errOtros } = await acotada(supabaseAdmin().from('desglose_peaje')
+    .select('id').eq('tenant_id', tenantId).neq('id', desgloseId).is('anulado_en', null)
+    .lt('creado_en', creadoEn).lte('periodo_desde', fechas[fechas.length - 1]).gte('periodo_hasta', fechas[0])
+    .order('creado_en').order('id').limit(50), 'desglose_peaje.cruce_otros');
+  if (errOtros) throw new Error(`conciliarDesglose: ${errOtros.message}`);
+  const ids = (otros ?? []).map((o) => String(o.id));
+  if (ids.length === 0) return salida;
+  const buscados = new Set(gastoIds);
+  const lineasOtras = await traerTodo<{ detalle: unknown }>(
+    (d, h) => acotada(supabaseAdmin().from('desglose_peaje_linea')
+      .select('detalle', conteo(d))
+      .eq('tenant_id', tenantId).in('desglose_id', ids).eq('estatus', 'cuadra')
+      .order('desglose_id').order('indice').range(d, h), 'desglose_peaje.cruce_otras_lineas'),
+    'desglose_peaje.cruce_otras_lineas',
+  );
+  for (const l of lineasOtras) {
+    const g = (l.detalle as { gastoId?: unknown } | null)?.gastoId;
+    if (typeof g === 'string' && buscados.has(g)) salida.add(g);
+  }
+  return salida;
 }
 
 function sumarDias(fechaIso: string, delta: number): string {

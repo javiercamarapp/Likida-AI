@@ -406,7 +406,7 @@ export function VistaAgentePeajes({
 const MOTIVO_LEGIBLE: Record<string, string> = {
   sin_fecha: 'sin fecha legible en el archivo',
   sin_gastos_en_ventana: 'ningún gasto de caseta a ±1 día',
-  contraparte_ya_reclamada: 'su contraparte ya la reclamó otra línea igual',
+  contraparte_ya_reclamada: 'su contraparte ya la reclamó otra línea igual (de este u otro archivo)',
   ambigua_monto_exacto: 'dos gastos igual de buenos — decide un humano',
   ambigua_en_tolerancia: 'dos gastos igual de buenos — decide un humano',
   monto_distinto: 'el monto no coincide',
