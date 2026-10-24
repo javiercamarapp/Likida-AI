@@ -28,6 +28,7 @@
 // base propia; el selector real de Meta es el valor por omisión de `enviar`.
 // ═══════════════════════════════════════════════════════════════════════════
 import { TZ_MX, diaEnZona } from '@/lib/formato';
+import { logger } from '@/lib/logger';
 import { opcionesDeEnvio, PLANTILLA } from '@/lib/meta/plantillas_catalogo';
 import { enviarConFallback, type ResultadoEnvioConFallback } from '@/lib/meta/enviar_con_fallback';
 import { enviarAlCliente, type Enviador } from '../enviar';
@@ -84,6 +85,8 @@ export interface DepsEntrega {
   reservarAvisoAlEjecutivo?(avisoId: string, version: number): Promise<boolean>;
   enviar?: Enviador;
   ahora?: () => Date;
+  /** Solo pruebas: espera entre reintentos del cierre (por omisión 150/500 ms). */
+  esperaCierreMs?: number;
 }
 
 /** `copiar` = el ejecutivo pulsó «Copiar y marcar enviado». `automatico` = la pasada del cron / el envío directo. */
@@ -191,6 +194,22 @@ export function parametrosDelAviso(a: Pick<AvisoParaEntrega, 'datos'>, nombreFlo
 
 const corto = (s: string): string => (s.length > MAX_ERROR ? `${s.slice(0, MAX_ERROR - 1)}…` : s);
 
+const INTENTOS_CIERRE = 3;
+const ESPERA_CIERRE_MS = [150, 500];
+
+/** Cierra como `enviado` un aviso que YA salió: reintenta ante una excepción de base; `false` del repo = arriendo perdido (no se insiste). */
+async function cerrarEnviadoConReintento(deps: DepsEntrega, id: string, token: string): Promise<'cerrado' | 'arriendo_perdido' | 'sin_cierre'> {
+  for (let i = 0; i < INTENTOS_CIERRE; i++) {
+    try {
+      return (await deps.cerrar(id, token, 'enviado')) ? 'cerrado' : 'arriendo_perdido';
+    } catch (e) {
+      logger.warn('vigia.aviso.cierre_reintento', { avisoId: id, intento: i + 1, error: e instanceof Error ? e.message : String(e) });
+      if (i < INTENTOS_CIERRE - 1) await new Promise((res) => setTimeout(res, deps.esperaCierreMs ?? ESPERA_CIERRE_MS[i]));
+    }
+  }
+  return 'sin_cierre';
+}
+
 async function cerrarFallido(
   deps: DepsEntrega, a: AvisoParaEntrega, token: string, motivo: string, mensaje: string,
 ): Promise<ResultadoEntrega> {
@@ -270,8 +289,12 @@ async function enviarAlClienteConPlantilla(
   }, conPlantillaDelAviso);
 
   if (r.ok) {
-    const ok = await deps.cerrar(a.id, token, 'enviado');
-    return ok ? { estado: 'enviado', via: r.via } : { estado: 'arriendo_perdido' };
+    // A37-S62-03: el mensaje YA salió. Si el cierre falla por un bache, se reintenta; si no hay modo, NO se marca «fallido»
+    // (diría «No se pudo enviar» de algo que el cliente recibió y alguien lo reintentaría, duplicándolo).
+    const cierre = await cerrarEnviadoConReintento(deps, a.id, token);
+    if (cierre === 'cerrado') return { estado: 'enviado', via: r.via };
+    if (cierre === 'sin_cierre') logger.error('vigia.aviso.salio_sin_cierre', { avisoId: a.id, tenantId: a.tenantId });
+    return { estado: 'arriendo_perdido' };
   }
   // Rechazo de plantilla no aprobada (132001): queda registrado con su código y SIN texto libre de respaldo desde aquí.
   const u = visto.ultimo;

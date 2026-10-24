@@ -83,6 +83,10 @@ export function validarUrlDeCredencial(clave: string, valor: string): void {
   if (u.username || u.password) {
     throw new DatoInvalido(`El campo ${clave} no debe incluir usuario ni contraseña en la URL.`);
   }
+  // A37-S37-05: una llave pegada en `?key=...` o `#...` terminaría en las pistas y en el estado de la prueba, que se pintan en claro.
+  if (u.search || u.hash) {
+    throw new DatoInvalido(`El campo ${clave} no debe llevar parámetros (?...) ni fragmento (#...): si el proveedor pide una llave, captúrala en el campo de la llave, no en la dirección.`);
+  }
   if (hostNoPublico(u.hostname)) {
     throw new DatoInvalido(`El campo ${clave} apunta a una dirección de red interna (${u.hostname}). Se espera el portal público de tu proveedor.`);
   }
@@ -327,6 +331,17 @@ export async function leerCredencial(
   tenantId: string,
   conectorId: string,
 ): Promise<ValoresCredencial | null> {
+  return (await leerCredencialVersionada(tenantId, conectorId))?.valores ?? null;
+}
+
+/**
+ * Igual que `leerCredencial`, y además la VERSIÓN leída (el texto cifrado: cada guardado lo cifra con un IV nuevo, así que cambia
+ * siempre). A37-S37-04: quien prueba contra el proveedor y luego sella el resultado ancla el sello a esta versión.
+ */
+export async function leerCredencialVersionada(
+  tenantId: string,
+  conectorId: string,
+): Promise<{ valores: ValoresCredencial; version: string } | null> {
   const { data, error } = await acotada(supabaseAdmin().from('conector_credencial')
     .select('valores_cifrados')
     .eq('tenant_id', tenantId)
@@ -339,7 +354,7 @@ export async function leerCredencial(
   if (typeof cifrado !== 'string' || cifrado === '') return null;
 
   try {
-    return descifrar(cifrado);
+    return { valores: descifrar(cifrado), version: cifrado };
   } catch (e) {
     // Se dice qué pasó SIN reintentar ni adivinar: si el cofre no puede abrir
     // lo guardado, la credencial hay que capturarla de nuevo, y afirmar otra
@@ -383,17 +398,23 @@ export async function marcarProbada(
   conectorId: string,
   resultado: Pick<ResultadoPrueba, 'ok' | 'detalle'> & { verificadoContra?: string | null },
   actor?: { id?: string; email?: string },
+  /** A37-S37-04: la versión (`valores_cifrados`) con la que se probó. Si la fila ya cambió, NO se sella (el resultado era de otra credencial). */
+  versionProbada?: string,
 ): Promise<void> {
-  const { data, error } = await acotada(supabaseAdmin().from('conector_credencial')
+  let q = supabaseAdmin().from('conector_credencial')
     .update(resultado.ok
       ? { probada_en: new Date().toISOString(), ultimo_error: null }
       : { probada_en: null, ultimo_error: resultado.detalle.slice(0, TOPE_ULTIMO_ERROR) })
     .eq('tenant_id', tenantId)
     .eq('conector_id', conectorId)
-    .eq('activo', true)
-    .select('id'), 'marcarProbada');
+    .eq('activo', true);
+  if (versionProbada !== undefined) q = q.eq('valores_cifrados', versionProbada);
+  const { data, error } = await acotada(q.select('id'), 'marcarProbada');
 
   if (error) throw new Error(`marcarProbada: ${error.message}`);
+  if (versionProbada !== undefined && (!Array.isArray(data) || data.length === 0)) {
+    throw new DatoInvalido('La credencial de ese sistema cambió mientras se probaba: el resultado era de la anterior y no se selló. Vuelve a probar.');
+  }
   if (!Array.isArray(data) || data.length === 0) {
     throw new DatoInvalido('No hay una credencial activa de ese sistema en tu flota — no se pudo sellar el resultado de la prueba. Recarga la pantalla.');
   }
@@ -437,8 +458,9 @@ export async function probarCredencial(
     };
   }
 
-  const valores = await leerCredencial(tenantId, conectorId);
-  if (valores === null) {
+  const leida = await leerCredencialVersionada(tenantId, conectorId);
+  const valores = leida?.valores ?? null;
+  if (leida === null || valores === null) {
     return {
       ok: false,
       detalle: `No hay una credencial activa de ${conector.nombre} en tu flota. Captúrala antes de probar.`,
@@ -483,7 +505,7 @@ export async function probarCredencial(
     return resultado;
   }
 
-  await marcarProbada(tenantId, conectorId, resultado, actor);
+  await marcarProbada(tenantId, conectorId, resultado, actor, leida.version);
   return resultado;
 }
 

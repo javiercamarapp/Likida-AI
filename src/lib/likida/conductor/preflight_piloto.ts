@@ -4,7 +4,7 @@ import { zonaValida } from '../conectores/tabla_propia/tiempo';
 import { AVISO_SOLO_EVENTOS, UMBRALES_CALIDAD_POR_OMISION } from '../conectores/tabla_propia/calidad';
 import type { ConfigConductor } from './config';
 import type { ContactoTrafico } from './escalamiento';
-import { APROBADAS, compararConAprobadas, plantillasRequeridas } from './plantillas_requeridas';
+import { APROBADAS, compararConAprobadas, plantillasDelCicloPorPerfil, plantillasRequeridas, type PerfilPlantillas } from './plantillas_requeridas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PREFLIGHT DEL PILOTO (T-A5-25) — «¿está lista la flota?». Puro: sin I/O y sin mandar nada. Los datos los lee
@@ -60,6 +60,8 @@ export interface DatosPreflight {
   /** Posiciones de cada unidad del piloto: en las últimas 2 h y en la última hora. Unidad sin entrada = ninguna. */
   posicionesPorUnidad: Readonly<Record<string, { ultimas2h: number; ultimaHora: number }>>;
   contactos: readonly ContactoTrafico[];
+  /** A37-S36-07: perfil de la flota para exigir también las plantillas del ciclo N01-N12 (P0; con `cinco_agentes`, también P1). Sin él, solo las de config. */
+  perfilPlantillas?: PerfilPlantillas;
   /** Por omisión, `APROBADAS` (la lista que Javier actualiza cuando Meta aprueba). */
   aprobadas?: readonly string[];
 }
@@ -132,9 +134,11 @@ function comprobarEscalamiento(d: DatosPreflight): Comprobacion {
 function comprobarPlantillas(d: DatosPreflight): Comprobacion {
   const t = 'Plantillas de Meta aprobadas';
   // La compuerta es para ENCENDER la señal de vida: se exigen también sus dos plantillas.
-  const c = compararConAprobadas(plantillasRequeridas({ ...d.config, avisarSenalVida: true }), d.aprobadas ?? APROBADAS);
+  // A37-S36-07: además, las del ciclo con botones que exige el perfil (estadía, caja cargada, evidencia...): sin ellas el agente calla fuera de las 24 h.
+  const requeridas = [...new Set([...plantillasRequeridas({ ...d.config, avisarSenalVida: true }), ...(d.perfilPlantillas ? plantillasDelCicloPorPerfil(d.perfilPlantillas) : [])])];
+  const c = compararConAprobadas(requeridas, d.aprobadas ?? APROBADAS);
   if (c.lista) return ok('plantillas', t, `Las ${c.requeridas.length} plantillas necesarias están aprobadas.`);
-  return falta('plantillas', t, `Faltan por aprobar ${c.faltantes.length} de ${c.requeridas.length} plantillas: fuera de la ventana de 24 h el agente calla.`,
+  return falta('plantillas', t, `Faltan por aprobar ${c.faltantes.length} de ${c.requeridas.length} plantillas (${c.faltantes.join(', ')}): fuera de la ventana de 24 h el agente calla.`,
     'Pide a Likida que someta a Meta las plantillas faltantes (la lista está en docs/operacion/plantillas-meta.md) y espera su aprobación.');
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG_CONDUCTOR_DEFAULT } from './config';
-import { plantillasRequeridas } from './plantillas_requeridas';
+import { plantillasDelCicloPorPerfil, plantillasRequeridas } from './plantillas_requeridas';
 import {
   PORCENTAJE_MINIMO_CON_SITIO, evaluarPreflight, mensajeBloqueoSenalVida, type DatosPreflight, type IdComprobacion, type ViajeDelPiloto,
 } from './preflight_piloto';
@@ -70,6 +70,15 @@ describe('preflight del piloto', () => {
     const r = evaluarPreflight({ ...verde(), aprobadas: sinSenal });
     expect(r.bloqueos).toHaveLength(1);
     expect(r.bloqueos[0].detalle).toContain('Faltan por aprobar 2 de');
+  });
+
+  it('A37-S36-07: con perfil cinco_agentes se exigen también las plantillas P1 del ciclo (estadía, caja cargada, evidencia)', () => {
+    const base = { ...verde(), aprobadas: [...TODAS, ...plantillasDelCicloPorPerfil('piloto')] };
+    expect(faltas({ ...base, perfilPlantillas: 'piloto' })).toEqual([]);
+    const r = evaluarPreflight({ ...base, perfilPlantillas: 'cinco_agentes' });
+    expect(r.bloqueos.map((b) => b.id)).toEqual(['plantillas']);
+    for (const n of ['conductor_estadia_descarga_v1', 'aviso_supervisor_caja_cargada_v1', 'conductor_pedir_evidencia_v1']) expect(r.bloqueos[0].detalle).toContain(n);
+    expect(faltas({ ...base, perfilPlantillas: 'cinco_agentes', aprobadas: [...base.aprobadas, ...plantillasDelCicloPorPerfil('cinco_agentes')] })).toEqual([]);
   });
 
   it('rojo 9 (T-A5-64): sin cohorte definida no se enciende nada; con cualquier cohorte del catálogo, en verde', () => {

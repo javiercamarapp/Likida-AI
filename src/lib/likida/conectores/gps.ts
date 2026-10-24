@@ -502,11 +502,9 @@ export const GPS_GENERICO: Conector = {
     // contra un endpoint de escritura por descuido de quien lo configura, y
     // este método es el único candado que hay contra eso.
     const r = await http({ url: url.toString(), metodo: 'GET', encabezados });
-    const mostrable = patron === 'query'
-      // La URL con el token adentro NO se devuelve: `verificadoContra` se
-      // guarda y se enseña en el panel.
-      ? `${url.origin}${url.pathname}`
-      : url.toString();
+    // La URL con el token adentro NO se devuelve (ni query de ningún origen, A37-S37-05): `verificadoContra` se
+    // guarda y se enseña en el panel.
+    const mostrable = `${url.origin}${url.pathname}`;
     const veredicto = veredictoHttp(r, mostrable, 'Tu proveedor');
     if (!veredicto.ok) return veredicto;
     return {
