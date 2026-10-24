@@ -92,7 +92,8 @@ describe('avisarAlChofer — un fallo de lectura ya no se lee como "no hay chofe
   it('sin teléfono capturado NO lanza (es un dato, no un fallo) pero tampoco pasa sin rastro', async () => {
     RESPUESTAS.operador = { data: { telefono: null }, error: null };
     RESPUESTAS.viaje = VIAJE_OK;
-    await expect(avisarAlChofer('t-1', 'o-1', 'v-1')).resolves.toBeUndefined();
+    // A37-S18-04: devuelve `false` (no salió) para que el despacho no diga «avisado».
+    await expect(avisarAlChofer('t-1', 'o-1', 'v-1')).resolves.toBe(false);
     expect(logger.warn).toHaveBeenCalledWith('viaje.aviso_sin_destinatario',
       expect.objectContaining({ viajeId: 'v-1', escalaSolo: false }));
   });
@@ -112,7 +113,8 @@ describe('avisarAlChofer — un fallo de lectura ya no se lee como "no hay chofe
   it('control: con todo en orden avisa y marca `avisado_en`', async () => {
     RESPUESTAS.operador = OPERADOR_OK;
     RESPUESTAS.viaje = VIAJE_OK;
-    await avisarAlChofer('t-1', 'o-1', 'v-1');
+    // A37-S18-04: devuelve `true` cuando el WhatsApp SALIÓ.
+    await expect(avisarAlChofer('t-1', 'o-1', 'v-1')).resolves.toBe(true);
     expect(notificarAsignacion).toHaveBeenCalledWith(expect.objectContaining({ telefono: '+5219993700779', tenantId: 't-1' }));
     expect(actualizado).toHaveLength(1);
     expect(actualizado[0].valores).toMatchObject({ avisos_enviados: 1 });

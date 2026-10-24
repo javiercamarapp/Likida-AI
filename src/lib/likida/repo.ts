@@ -429,12 +429,23 @@ export async function reasignarOperador(tenantId: string, viajeId: string, opera
     payload.rechazado_en = null;
   }
 
-  const { error } = await acotada(supabaseAdmin()
+  // A37-S18-04: el `.select('id')` no es adorno. Con el id de un viaje inexistente o de OTRA flota este UPDATE toca CERO
+  // filas y Postgres no lo considera error: la pantalla decía «asignado» y mandaba el aviso de un viaje que no cambió.
+  const { data, error } = await acotada(supabaseAdmin()
     .from('viaje')
     .update(payload)
     .eq('id', viajeId)
-    .eq('tenant_id', tenantId), 'reasignarOperador');
-  if (error) throw new Error(`reasignarOperador: ${error.message}`);
+    .eq('tenant_id', tenantId)
+    .select('id'), 'reasignarOperador');
+  if (error) {
+    // A37-S18-05: el operador ya trae OTRO viaje abierto (`uq_viaje_abierto_por_operador`, 0029). Es el rechazo más común del
+    // despacho y tiene un mensaje escrito para pantalla — igual que en `crearViaje`; antes salía como un Error crudo.
+    if (violaIndice(error, 'uq_viaje_abierto_por_operador')) {
+      throw new DatoInvalido('Ese operador ya trae un viaje abierto — ciérralo o asígnale otro chofer.');
+    }
+    throw new Error(`reasignarOperador: ${error.message}`);
+  }
+  if (!Array.isArray(data) || data.length === 0) throw new DatoInvalido('Ese viaje no existe en tu flota. Recarga la pantalla.');
   return { cambio, operadorAnteriorId };
 }
 

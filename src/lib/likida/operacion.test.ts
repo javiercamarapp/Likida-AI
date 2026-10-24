@@ -580,7 +580,7 @@ describe('escrituras', () => {
     TABLAS = { unidad: [{ id: 'u-1' }] };
     TOCAN_CERO = new Set(['viaje']);
     await expect(asignarUnidad('t-1', 'v-ajeno', 'u-1')).rejects.toThrow(
-      'asignarUnidad: el viaje no existe en esta flota',
+      'Ese viaje no existe en tu flota. Recarga la pantalla.',
     );
   });
 

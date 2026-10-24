@@ -13,6 +13,7 @@ import { reasignarOperador, buscarCatalogo, contarCatalogo, type OpcionCatalogo,
 import { alcanceDePatio, patioParaCrear } from '@/lib/auth/patio';
 import { crearOperador } from '@/lib/likida/administracion';
 import { DatoInvalido } from '@/lib/likida/errores';
+import { guardaAsignacion, guardaReaviso, anotarAvisoAlChofer, mensajeDeAsignacion } from '@/lib/likida/despacho_asignacion';
 import { viajesEnCursoPaginados, PAGINA_MAX_VIAJES_EN_CURSO } from '@/lib/likida/repo_paginado';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
@@ -285,22 +286,34 @@ export default async function PaginaDespacho({
     const operadorId = typeof fd.get('operadorId') === 'string' ? (fd.get('operadorId') as string).trim().slice(0, 64) : '';
     if (!viajeId || !operadorId) return { error: 'Falta el viaje o el operador.' };
 
+    // A37-S18-04: el viaje tiene que existir en ESTA flota y seguir abierto; y si «asignar» es al MISMO chofer que ya lo tiene,
+    // es un reaviso disfrazado (clic repetido / pestaña vieja) y pasa por las mismas guardas que Reavisar (aceptó, baja, cooldown).
+    const guarda = await guardaAsignacion(tenantId, viajeId, operadorId);
+    if (!guarda.ok) return { error: guarda.motivo };
+
     let cambio: Awaited<ReturnType<typeof reasignarOperador>>;
     try {
       // `reasignarOperador` verifica que el operador sea de ESTA flota y el
-      // update ancla tenant — un id ajeno no encuentra fila.
+      // update ancla tenant y exige una fila afectada — un id ajeno no encuentra fila.
       cambio = await reasignarOperador(tenantId, viajeId, operadorId);
     } catch (err) {
       logger.error('despacho.asignar.fallo', { viajeId, err: err instanceof Error ? err.message : String(err) });
-      return { error: 'No se pudo asignar. Inténtalo de nuevo.' };
+      // A37-S18-05: el motivo determinista (operador/unidad con viaje abierto, baja) se DICE; lo demás es el genérico.
+      return { error: mensajeDeAsignacion(err, 'No se pudo asignar. Inténtalo de nuevo.') };
     }
     let avisoFallo = false;
+    let salio = false;
     try {
-      await avisarAlChofer(tenantId, operadorId, viajeId);
+      salio = (await avisarAlChofer(tenantId, operadorId, viajeId)) !== false;
+      avisoFallo = !salio;
     } catch (err) {
       // Asignado SÍ quedó; el aviso no salió — se dice y "Reavisar" existe.
       logger.error('despacho.aviso.fallo', { viajeId, err: err instanceof Error ? err.message : String(err) });
       avisoFallo = true;
+    }
+    if (salio) {
+      const sesion = await requireSessionTenant('/dashboard/despacho');
+      await anotarAvisoAlChofer(tenantId, viajeId, operadorId, { contarReaviso: guarda.reaviso && guarda.contarReaviso, avisosEnviados: guarda.avisosEnviados, actor: { id: sesion.userId } });
     }
     // Después del aviso del viaje, las instrucciones del convenio (primera asignación o cambio de chofer). Nunca lanza, y un
     // aviso que no salió no las frena: el chofer ya es el del viaje.
@@ -326,7 +339,8 @@ export default async function PaginaDespacho({
       await asignarUnidad(tenantId, viajeId, unidadId || null);
     } catch (err) {
       logger.error('despacho.asignar_unidad.fallo', { viajeId, err: err instanceof Error ? err.message : String(err) });
-      return { error: 'No se pudo asignar la unidad. Inténtalo de nuevo.' };
+      // A37-S18-05: «unidad dada de baja», «unidad ya en otro viaje abierto» y «viaje inexistente» tienen mensaje de pantalla.
+      return { error: mensajeDeAsignacion(err, 'No se pudo asignar la unidad. Inténtalo de nuevo.') };
     }
     redirect(destino);
   }
@@ -339,20 +353,20 @@ export default async function PaginaDespacho({
     const viajeId = typeof fd.get('viajeId') === 'string' ? (fd.get('viajeId') as string).trim().slice(0, 64) : '';
     if (!viajeId) return { error: 'Falta el viaje.' };
 
-    // El destinatario se resuelve AQUÍ, anclado al tenant — el cliente no
-    // elige a quién se le manda el WhatsApp.
-    const { data: v, error } = await supabaseAdmin()
-      .from('viaje').select('operador_id')
-      .eq('id', viajeId).eq('tenant_id', tenantId).maybeSingle();
-    if (error || !v?.operador_id) {
-      return { error: 'Ese viaje no tiene operador asignado (o no se pudo leer).' };
-    }
+    // El destinatario se resuelve AQUÍ, anclado al tenant — el cliente no elige a quién se le manda el WhatsApp. A37-S18-04: y
+    // la acción VUELVE a comprobar lo que la UI solo oculta (viaje abierto, chofer sin aceptar, operador activo, cooldown).
+    const guarda = await guardaReaviso(tenantId, viajeId);
+    if (!guarda.ok) return { error: guarda.motivo };
+    let salio = false;
     try {
-      await avisarAlChofer(tenantId, v.operador_id as string, viajeId);
+      salio = (await avisarAlChofer(tenantId, guarda.operadorId, viajeId)) !== false;
     } catch (err) {
       logger.error('despacho.reaviso.fallo', { viajeId, err: err instanceof Error ? err.message : String(err) });
       return { error: 'El aviso no salió — inténtalo de nuevo en un momento.' };
     }
+    if (!salio) return { error: 'El aviso no salió: el operador no tiene WhatsApp capturado o el envío fue rechazado. Revisa su teléfono.' };
+    const sesion = await requireSessionTenant('/dashboard/despacho');
+    await anotarAvisoAlChofer(tenantId, viajeId, guarda.operadorId, { contarReaviso: guarda.contarReaviso, avisosEnviados: guarda.avisosEnviados, actor: { id: sesion.userId } });
     redirect(destino);
   }
 
