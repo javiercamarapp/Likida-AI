@@ -91,3 +91,16 @@ describe('importar liquidaciones desde el archivo de la flota', () => {
     expect(r.problemas[0].motivo).toMatch(/periodo ilegible/);
   });
 });
+
+describe('A37-A1-liquidaciones-19: CSV en Windows-1252', () => {
+  it('un export ANSI de Excel conserva los acentos en vez de U+FFFD', () => {
+    // «Viáticos» en Windows-1252: 0xE1 = á (no es UTF-8 válido).
+    const ansi = Uint8Array.from([...'concepto\nVi'].map((c) => c.charCodeAt(0)).concat([0xe1], [...'ticos'].map((c) => c.charCodeAt(0))));
+    const r = textoDeArchivoLiquidaciones('export.csv', ansi);
+    expect(r.ok && r.texto).toContain('Viáticos');
+  });
+  it('un CSV UTF-8 sigue igual', () => {
+    const r = textoDeArchivoLiquidaciones('export.csv', bytes('concepto\nViáticos'));
+    expect(r.ok && r.texto).toBe('concepto\nViáticos');
+  });
+});
