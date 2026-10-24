@@ -358,9 +358,13 @@ function canalTexto(canal: DocumentoFila['canal']): string {
   return canal === 'correo' ? 'correo' : canal === 'whatsapp' ? 'WhatsApp' : 'el panel';
 }
 
-/** El texto para la oficina: corto, accionable y SIN datos de los campos extraídos (solo conteos y el nombre del archivo). */
+/**
+ * El texto para la oficina: corto, accionable y SIN datos de los campos extraídos (solo conteos) ni texto de terceros.
+ * A37-A3-15: el nombre del archivo lo escribe el remitente (cualquiera que conozca el buzón) y viajaría como texto libre
+ * por el número de Likida; se identifica el documento por un código corto de su id (hex, no controlable).
+ */
 export function armarAviso(tipo: TipoAvisoDoc, doc: DocumentoFila, liga: string): { texto: string; resumen: string } {
-  const nombre = doc.nombreArchivo.length > 60 ? `${doc.nombreArchivo.slice(0, 59)}…` : doc.nombreArchivo;
+  const nombre = `N.º ${doc.id.replace(/[^0-9a-f]/gi, '').slice(0, 8) || 'sin código'}`;
   if (tipo === 'agotado') {
     return {
       texto: [
