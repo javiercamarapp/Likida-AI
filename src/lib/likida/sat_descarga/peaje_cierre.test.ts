@@ -73,7 +73,9 @@ vi.mock('@/lib/meta/aviso_oficina', () => ({
   avisarOficina: async (t: string, b: string, o: { parametros: string[]; contexto?: Record<string, unknown> }) => {
     avisarOficinaLlamadas.push(o);
     const id = await sendText(t, b);
-    return id ? { ok: true, via: 'texto', id } : { ok: false, motivo: 'rechazado', fueraDeVentana: false };
+    // 'ENCOLADO' = Meta respondió 429/5xx y el cliente YA dejó el mensaje en `wa_outbox`.
+    if (id === 'ENCOLADO') return { ok: false, motivo: '429', fueraDeVentana: false, reintentable: true, encolado: true };
+    return id ? { ok: true, via: 'texto', id } : { ok: false, motivo: 'rechazado', fueraDeVentana: false, reintentable: false };
   },
 }));
 
@@ -297,6 +299,16 @@ describe('c7-17 · el sello se RESERVA antes de mandar: la idempotencia es la PK
     // que nunca salió enterraría el aviso del mes entero.
     expect(deletesDeSello()).toHaveLength(1);
     expect(deletesDeSello()[0].eq).toEqual([['tenant_id', 't-1'], ['periodo', '2026-09-01'], ['umbral', 7]]);
+  });
+
+  it('A37-S57-06: si el mensaje quedó ENCOLADO en el outbox, la reserva NO se suelta — el outbox es dueño del envío y soltarla duplicaría el aviso', async () => {
+    sembrar();
+    sendText.mockResolvedValue('ENCOLADO');
+    const r = await avisarCierrePeaje(DIA_UMBRAL_7);
+
+    expect(deletesDeSello()).toHaveLength(0);
+    expect(r.avisadas).toBe(1);
+    expect(logger.info).toHaveBeenCalledWith('peaje_cierre.encolado', expect.anything());
   });
 
   it('sin destinatario tampoco queda sello: el día que registren al contador, el aviso todavía puede salir', async () => {
