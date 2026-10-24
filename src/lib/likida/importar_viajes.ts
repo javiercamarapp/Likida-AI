@@ -112,7 +112,7 @@ const TOPE_ANTICIPO_IMPORTADO = 1_000_000;
 
 /** "$8,000.50" / "8000,50" / 8000 → número, o null si no se puede leer con
  *  seguridad. La regla de siempre: una cifra dudosa no se adivina. */
-export function leerCifraImportada(v: unknown): number | null | 'ilegible' {
+export function leerCifraImportada(v: unknown, esDinero = true): number | null | 'ilegible' {
   if (v === null || v === undefined || v === '') return null;
   if (typeof v === 'number') return Number.isFinite(v) && v >= 0 ? Math.round(v * 100) / 100 : 'ilegible';
   const limpio = String(v).replace(/[$\s]/g, '');
@@ -131,9 +131,13 @@ export function leerCifraImportada(v: unknown): number | null | 'ilegible' {
       ? limpio.replace(/\./g, '').replace(',', '.')
       : limpio.replace(/,/g, ''))
     : limpio.replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.');
-  // A37-L-03: más de 2 decimales no es una cifra de pesos: «12.500» puede ser doce mil quinientos (punto de millares) o
-  // doce con cincuenta, y adivinarlo entra como $12.50 una cifra plausible pero falsa. Se rechaza y se dice.
-  if (/\.\d{3,}$/.test(normal)) return 'ilegible';
+  // A37-L-07: solo dígitos con punto decimal (nada de '1e4' ni '0x10') y, si es DINERO, a lo más dos
+  // decimales: '1.234' (¿mil doscientos treinta y cuatro o 1.23?) es ambiguo y no se adivina ni se redondea.
+  // eslint-disable-next-line security/detect-unsafe-regex -- celda de una hoja, acotada; sin cuantificadores anidados sobre los mismos caracteres
+  const SOLO_DINERO = /^\d+(\.\d{1,2})?$/;
+  // eslint-disable-next-line security/detect-unsafe-regex -- idem
+  const SOLO_NUMERO = /^\d+(\.\d+)?$/;
+  if (!(esDinero ? SOLO_DINERO : SOLO_NUMERO).test(normal)) return 'ilegible';
   const n = Number(normal);
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 'ilegible';
 }
@@ -265,7 +269,7 @@ export function interpretarFilasViajes(
 
     const ingreso = leerCifraImportada(celda('ingreso'));
     if (ingreso === 'ilegible') { descartadas.push({ fila: f + 1, motivo: `ingreso ilegible (${folio})` }); continue; }
-    const km = leerCifraImportada(celda('km'));
+    const km = leerCifraImportada(celda('km'), false);
     if (km === 'ilegible') { descartadas.push({ fila: f + 1, motivo: `km ilegibles (${folio})` }); continue; }
 
     // Los topes de cordura son los MISMOS que el formulario ($5,000,000 / 20,000

@@ -829,14 +829,25 @@ export async function leerConfigBuzon(tenantId: string): Promise<ConfigBuzon | n
   return data ? { activa: data.activa !== false, rotacion: Number(data.rotacion) } : null;
 }
 
-/** Activa el buzón (o lo reactiva conservando la rotación vigente). */
+/**
+ * Activa el buzón (o lo reactiva). A37-S64-04: SOLO cambia `activa`; jamás reescribe `rotacion`
+ * (un upsert con la rotación leída antes devolvía a servir una llave ya rotada tras una fuga).
+ * Sin fila previa la crea con la rotación 1 (`ignoreDuplicates`: si otro la creó en medio, no pisa).
+ */
 export async function activarBuzon(tenantId: string): Promise<boolean> {
-  const actual = await leerConfigBuzon(tenantId);
-  const { error } = await acotada(supabaseAdmin().from('peaje_ingesta_config').upsert({
-    tenant_id: tenantId, rotacion: actual?.rotacion ?? 1, activa: true, updated_at: new Date().toISOString(),
-  }, { onConflict: 'tenant_id' }), 'peajes.activar_buzon');
-  if (error) logger.error('peajes.activar_buzon', { tenant: tenantId, err: error.message });
-  return !error;
+  const ahora = new Date().toISOString();
+  const activar = () => acotada(supabaseAdmin().from('peaje_ingesta_config')
+    .update({ activa: true, updated_at: ahora }).eq('tenant_id', tenantId).select('tenant_id'), 'peajes.activar_buzon');
+  const a = await activar();
+  if (a.error) { logger.error('peajes.activar_buzon', { tenant: tenantId, err: a.error.message }); return false; }
+  if ((a.data ?? []).length > 0) return true;
+  const ins = await acotada(supabaseAdmin().from('peaje_ingesta_config')
+    .upsert({ tenant_id: tenantId, rotacion: 1, activa: true, updated_at: ahora }, { onConflict: 'tenant_id', ignoreDuplicates: true }), 'peajes.activar_buzon_crear');
+  if (ins.error) { logger.error('peajes.activar_buzon', { tenant: tenantId, err: ins.error.message }); return false; }
+  // Si otra sesión creó la fila en medio, `ignoreDuplicates` no la tocó: se activa ahora, sin tocar la rotación.
+  const b = await activar();
+  if (b.error) { logger.error('peajes.activar_buzon', { tenant: tenantId, err: b.error.message }); return false; }
+  return (b.data ?? []).length > 0;
 }
 
 export async function desactivarBuzon(tenantId: string): Promise<boolean> {
@@ -850,11 +861,13 @@ export async function desactivarBuzon(tenantId: string): Promise<boolean> {
 export async function rotarLlaveBuzon(tenantId: string): Promise<boolean> {
   const actual = await leerConfigBuzon(tenantId);
   if (!actual) return false;
-  const { error } = await acotada(supabaseAdmin().from('peaje_ingesta_config')
+  const { data, error } = await acotada(supabaseAdmin().from('peaje_ingesta_config')
     .update({ rotacion: actual.rotacion + 1, updated_at: new Date().toISOString() })
-    .eq('tenant_id', tenantId).eq('rotacion', actual.rotacion), 'peajes.rotar_llave');
-  if (error) logger.error('peajes.rotar_llave', { tenant: tenantId, err: error.message });
-  return !error;
+    .eq('tenant_id', tenantId).eq('rotacion', actual.rotacion).select('tenant_id'), 'peajes.rotar_llave');
+  if (error) { logger.error('peajes.rotar_llave', { tenant: tenantId, err: error.message }); return false; }
+  // A37-S64-04: el CAS que no encuentra la rotación leída (otra sesión rotó en medio) NO es éxito.
+  if ((data ?? []).length === 0) { logger.warn('peajes.rotar_llave_cas_perdido', { tenant: tenantId }); return false; }
+  return true;
 }
 
 // ── Los canales de entrada nuevos (0563): correo y pull ─────────────────────

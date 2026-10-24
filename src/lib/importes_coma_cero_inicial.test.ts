@@ -27,7 +27,8 @@ const pasos = (s: string) => aplicarFormato(s, 'monto');
 
 describe('cero a la izquierda + coma + 3 dígitos NO es separador de miles', () => {
   it('ingreso_viaje', () => {
-    expect(ingreso('0,125')).toBe(0.125);
+    // A37-L-05: 0.125 trae tres decimales: se rechaza por centavos, NO se lee como 125 ni se redondea.
+    expect(() => ingreso('0,125')).toThrow(DatoInvalido);
     expect(ingreso('0,5')).toBe(0.5);
     expect(ingreso('1,5')).toBe(1.5);
     expect(ingreso('12,5')).toBe(12.5);
