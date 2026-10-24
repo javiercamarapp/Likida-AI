@@ -76,7 +76,7 @@ export interface EntradaDocumento {
 }
 
 export type ResultadoRecepcion =
-  | { ok: true; documentoId: string; duplicado: boolean; estado: repo.EstadoDoc; formato: FormatoDoc; /** A37-A3-04: el archivo era de un documento fallido/rechazado y volvió a la cola. */ reabierto?: boolean }
+  | { ok: true; documentoId: string; duplicado: boolean; estado: repo.EstadoDoc; formato: FormatoDoc; /** A37-A3-04: el archivo era de un documento fallido/rechazado y volvió a la cola. */ reabierto?: boolean; /** A37-S33-05: el documento previo ya se purgó por retención; el archivo recién subido se borró y NO se reabre solo. */ archivoPurgado?: boolean }
   | { ok: false; motivo: 'agente_apagado' | 'formato' | 'cliente'; mensaje: string };
 
 export async function recibirDocumento(tenantId: string, e: EntradaDocumento, deps: DepsServicio = {}): Promise<ResultadoRecepcion> {
@@ -102,6 +102,12 @@ export async function recibirDocumento(tenantId: string, e: EntradaDocumento, de
   });
   await repo.registrarEvento(tenantId, documento.id, duplicado ? 'duplicado_recibido' : 'recibido', e.actorId ?? null,
     duplicado ? { canal: e.canal } : { canal: e.canal, formato, bytes: e.bytes.length });
+  // A37-S33-05: el documento previo con esa huella ya se purgó (sin archivo): el archivo recién subido no tiene dueño ni entra a la purga
+  // por retención. Se borra y se dice la verdad; reabrir el embarque (que pudo estar aprobado) lo decide una persona.
+  if (duplicado && !documento.storageRuta) {
+    try { await repo.borrarArchivo(ruta); } catch (err) { logger.warn('carta_porte_docs.duplicado_huerfano_no_borrado', { tenantId, documentoId: documento.id, err: resumenError(err) }); }
+    return { ok: true, documentoId: documento.id, duplicado: true, estado: documento.estado, formato: documento.formato, archivoPurgado: true };
+  }
   // A37-A3-04: reenviar el MISMO archivo de un documento fallido (o rechazado) lo reabre, en vez de contestar «ya estaba».
   if (duplicado && (documento.estado === 'fallido' || documento.estado === 'rechazado') && documento.storageRuta) {
     const r = await reintentarDocumento(tenantId, documento, e.actorId ?? null, `reenvío del mismo archivo (${e.canal})`, ahora);

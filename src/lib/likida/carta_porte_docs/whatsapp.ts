@@ -164,6 +164,7 @@ export async function ingerirDesdeWhatsapp(e: EntradaWhatsapp, deps: DepsWhatsap
       return 'atendido';
     }
     const liga = `${e.urlBandeja}/${r.documentoId}`;
+    if (r.duplicado && r.archivoPurgado) { await deps.responder(`Ese documento ya se había recibido y su archivo se purgó por retención, así que no se volvió a leer 📎. Si es un embarque nuevo, captúralo a mano o pide a tu oficina que lo cargue de nuevo. Registro anterior: ${liga}`); return 'atendido'; }
     if (r.duplicado) { await deps.responder(`Ese documento ya estaba en la bandeja 📎. Revísalo aquí: ${liga}`); return 'atendido'; }
 
     let leyo = false;
