@@ -487,3 +487,21 @@ describe('A37-S59-06 el recorte no parte la liga de ubicación', () => {
     expect(b.riesgo).not.toBe('bajo');
   });
 });
+
+// A37-S59-07: tras la descarga la unidad ya puede ir con carga de OTRO cliente; su posición en vivo no es del cliente que pregunta.
+describe('A37-S59-07 no se comparte la posición de un viaje ya descargado', () => {
+  for (const etapa of ['descargando', 'entregado', 'regresando', 'cerrado'] as const) {
+    it(`etapa ${etapa}: no sale liga de GPS ni posición`, () => {
+      const b = redactarBorrador(base({ viaje: { tipo: 'uno', estatus: estatus({ etapa }) } }));
+      expect(b.texto).not.toContain('maps.google');
+      expect(b.texto).not.toMatch(/posición del GPS/);
+      expect(b.texto).toContain('no comparto la ubicación de la unidad');
+      expect(b.respaldo.posicion).toBeUndefined();
+    });
+  }
+  it('en camino o ya en destino la posición se sigue compartiendo', () => {
+    for (const etapa of ['en_curso', 'en_destino'] as const) {
+      expect(redactarBorrador(base({ viaje: { tipo: 'uno', estatus: estatus({ etapa }) } })).texto).toContain('maps.google');
+    }
+  });
+});

@@ -135,6 +135,9 @@ function frasesAvance(e: EstatusViaje, minPosicion: number, respaldo: Record<str
   return `${va}${resto} a ${e.destino} (estimado por GPS, no es hora de llegada).`;
 }
 
+/** Etapas en las que la unidad ya descargó: su posición deja de ser información del cliente. */
+const ETAPAS_SIN_POSICION: ReadonlySet<string> = new Set(['descargando', 'entregado', 'regresando', 'cerrado']);
+
 function seccionUbicacion(e: EstatusViaje, ahora: Date, faltantes: string[], respaldo: Record<string, unknown>): string {
   const partes: string[] = [`${etiquetaViaje(e)}: ${ETAPAS[e.etapa]}.`];
   if (e.ultimoHito) {
@@ -147,7 +150,10 @@ function seccionUbicacion(e: EstatusViaje, ahora: Date, faltantes: string[], res
     partes.push(e.enAnden.desde ? `Sigue en ${donde} desde las ${fechaHoraMx(e.enAnden.desde)}.` : `Sigue en ${donde}.`);
     respaldo.enAnden = e.enAnden;
   }
-  if (e.posicion) {
+  if (e.posicion && ETAPAS_SIN_POSICION.has(e.etapa)) {
+    // A37-S59-07: tras la descarga la unidad ya puede ir con la carga de otro cliente; su posición en vivo ya no es de este viaje.
+    partes.push('Como la unidad ya no va en camino con tu carga, no comparto la ubicación de la unidad.');
+  } else if (e.posicion) {
     const min = minutosDesde(e.posicion.medidaEn, ahora);
     const liga = `https://maps.google.com/?q=${e.posicion.lat.toFixed(5)},${e.posicion.lng.toFixed(5)}`;
     respaldo.posicion = e.posicion;
