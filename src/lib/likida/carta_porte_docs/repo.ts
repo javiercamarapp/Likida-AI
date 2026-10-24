@@ -649,12 +649,30 @@ export async function documentosVencidos(limite = 100): Promise<Array<{ id: stri
   return ((exigir(r, 'cpdocs.vencidos') ?? []) as unknown as Fila[]).map((f) => ({ id: String(f.id), tenantId: String(f.tenant_id), storageRuta: s(f.storage_ruta) }));
 }
 
-/** Marca la purga: sin archivo ni texto. La fila queda como constancia. Condicional a que NO se haya purgado ya. */
+/**
+ * Marca la purga: la fila queda como constancia SIN contenido personal (A37-A3-11): sin archivo, texto, extracción,
+ * validación (sus mensajes citan valores), remitente ni asunto. Solo sobreviven huella, estado, conteos, costos y fechas.
+ * Condicional a que NO se haya purgado ya.
+ */
 export async function marcarPurgado(tenantId: string, id: string): Promise<boolean> {
   const r = await acotada(supabaseAdmin().from('cp_documento')
-    .update({ storage_ruta: null, texto_extracto: null, purgado_en: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .update({
+      storage_ruta: null, texto_extracto: null, extraccion: null, validacion: null, remitente: null, asunto: null,
+      purgado_en: new Date().toISOString(), updated_at: new Date().toISOString(),
+    })
     .eq('tenant_id', tenantId).eq('id', id).is('purgado_en', null).select('id'), 'cpdocs.purgar');
   return ((exigir(r, 'cpdocs.purgar') ?? []) as unknown[]).length > 0;
+}
+
+/**
+ * A37-A3-11: al purgar, los VALORES de las correcciones (nombre, RFC, licencia que una persona tecleó) se anulan; las filas
+ * quedan (campo, renglón, quién y cuándo) para que los conteos de calidad no cambien. Idempotente.
+ */
+export async function anonimizarCorrecciones(tenantId: string, documentoId: string): Promise<void> {
+  const r = await acotada(supabaseAdmin().from('cp_correccion')
+    .update({ valor_antes: null, valor_despues: null })
+    .eq('tenant_id', tenantId).eq('documento_id', documentoId), 'cpdocs.anonimizar_correcciones');
+  if (r.error) throw new Error(`cartaporte_docs anonimizar correcciones: ${r.error.message}`);
 }
 
 // ── El worker de la bandeja (cron carta-porte-docs, 0640-0642) ──────────────
