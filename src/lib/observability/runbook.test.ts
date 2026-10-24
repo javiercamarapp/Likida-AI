@@ -186,14 +186,16 @@ describe('DEPLOY.md pide lo que hace falta para que el sistema no arranque ciego
     expect(primeraPantalla).toMatch(/backup/i);
     // Si menciona backup de Storage arriba, tiene que traer la salvedad EN LA
     // MISMA pantalla — no 84 líneas después, donde nadie la lee primero.
-    expect(primeraPantalla).toMatch(/apagad[oa]|bajo demanda|no hay backup programado/i);
+    expect(primeraPantalla).toMatch(/apagad[oa]|bajo demanda|no hay backup programado|queda en rojo/i);
   });
 
-  it('sigue siendo verdad, y consistente con RESILIENCIA-DEPLOY.md: el schedule diario está apagado a propósito', () => {
+  it('sigue siendo verdad, y consistente con RESILIENCIA-DEPLOY.md: el schedule diario está activo desde la primera corrida manual verde', () => {
     const resiliencia = readFileSync(join(RAIZ, 'docs/operacion/RESILIENCIA-DEPLOY.md'), 'utf8');
-    expect(resiliencia).toMatch(/schedule.*apagad[oa] a propósito/is);
+    expect(resiliencia).toMatch(/`schedule` activo desde el 23-oct-2026/i);
     const wf = readFileSync(join(RAIZ, '.github/workflows/backup-storage.yml'), 'utf8');
-    expect(wf).not.toMatch(/^\s*schedule:/m);
+    expect(wf).toMatch(/^\s*schedule:/m);
+    expect(wf).toContain("cron: '17 3 * * *'");
+    expect(wf).toMatch(/^\s*workflow_dispatch:/m);
   });
 
   // ═════════════════════════════════════════════════════════════════════════

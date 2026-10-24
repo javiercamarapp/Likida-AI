@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { detalleLatidos } from '@/lib/admin/salud';
 import { logger } from '@/lib/logger';
 import { VistaCrons } from './vista';
@@ -11,6 +12,8 @@ export const dynamic = 'force-dynamic';
  * re-gatear porque no dispara nada: solo mira.
  */
 export default async function CronsPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   // El `.catch(() => null)` de la casa: `null` significa «no se pudo leer», y
   // la vista lo DICE. Lo que no se hace es devolver una tabla vacía — una
   // tabla de renglones grises se leería como relojes tranquilos, que es la

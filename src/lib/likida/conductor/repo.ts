@@ -131,6 +131,11 @@ export interface ViajeContexto {
   operadorId: string;
   operadorNombre: string | null;
   operadorTelefono: string | null;
+  /**
+   * A37-A5-03: `false` = el operador está dado de baja o tiene una oposición ARCO vigente (`operador.oposicion_automatizada`). Un
+   * operador así NO recibe nada proactivo aunque su viaje siga abierto. Ausente (doble de prueba, lectura vieja) = no se sabe → activo.
+   */
+  operadorAvisable?: boolean;
   terminalId: string | null;
   unidadId: string | null;
   aceptadoEn: string | null;
@@ -160,10 +165,11 @@ export interface ViajeContexto {
 }
 
 export const COLUMNAS_VIAJE_CTX =
-  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, aceptado_origen, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, despacho_ref, cliente_id, origen_geocerca_id, destino_geocerca_id, operador:operador_id(nombre, telefono)';
+  'id, tenant_id, folio, origen, destino, estatus, operador_id, terminal_id, unidad_id, aceptado_en, aceptado_origen, cita_origen_en, cita_destino_en, eta_origen_en, eta_destino_en, despacho_ref, cliente_id, origen_geocerca_id, destino_geocerca_id, operador:operador_id(nombre, telefono, activo, oposicion_automatizada)';
 
 export function filaAViajeCtx(f: Fila): ViajeContexto {
-  const rel = f.operador as { nombre?: string; telefono?: string } | Array<{ nombre?: string; telefono?: string }> | null;
+  type OpRel = { nombre?: string; telefono?: string; activo?: boolean | null; oposicion_automatizada?: string | null };
+  const rel = f.operador as OpRel | OpRel[] | null;
   const op = Array.isArray(rel) ? rel[0] : rel;
   return {
     id: String(f.id),
@@ -175,6 +181,7 @@ export function filaAViajeCtx(f: Fila): ViajeContexto {
     operadorId: String(f.operador_id),
     operadorNombre: op?.nombre ?? null,
     operadorTelefono: op?.telefono ?? null,
+    operadorAvisable: op ? op.activo !== false && !op.oposicion_automatizada : true,
     terminalId: s(f.terminal_id),
     unidadId: s(f.unidad_id),
     aceptadoEn: s(f.aceptado_en),
@@ -522,7 +529,7 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
   if (zonaCruda !== null && zonaCruda !== zonaHoraria) {
     logger.warn('conductor.zona_invalida', { tenant: tenantId, zona: String(zonaCruda).slice(0, 60) });
   }
-  if (!f) return { ...copiaDefaults(), zonaHoraria };
+  if (!f) return { ...copiaDefaults(), agenteChoferHabilitado: false, zonaHoraria };
   const v = validarConfigConductor({
     activo: f.activo as boolean,
     solicitudesMin: f.solicitudes_min as number[],
@@ -586,9 +593,25 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     // con defaults, pero un `activo = false` explícito se respeta: encender por error un agente
     // que manda WhatsApp es peor que operar con la escalera de siempre.
     logger.error('conductor.config_invalida', { tenant: tenantId, err: v.error });
-    return { ...copiaDefaults(), activo: f.activo !== false, zonaHoraria };
+    return { ...copiaDefaults(), activo: f.activo !== false, agenteChoferHabilitado: false, zonaHoraria };
   }
-  return v.ok;
+  // 0859: el interruptor explícito del Agente 5. La base sin migrar no trae la columna → undefined → apagado.
+  return { ...v.ok, agenteChoferHabilitado: f.agente_chofer_habilitado === true };
+}
+
+/**
+ * 0859: la compuerta EN BASE (`conductor_agente_chofer_habilitado`): ¿esta flota tiene al Agente 5 habilitado para escribirle a un chofer?
+ * FALLA CERRADO: cualquier error (migración sin aplicar, función ausente, base caída) o un valor que no sea `true` = no habilitado.
+ * Nunca lanza.
+ */
+export async function leerAgenteChoferHabilitado(tenantId: string): Promise<{ habilitado: boolean; razon: 'habilitado' | 'apagado' | 'compuerta_ilegible' }> {
+  try {
+    const res = await acotada(supabaseAdmin().rpc('conductor_agente_chofer_habilitado', { p_tenant: tenantId }), 'conductor.agente_chofer_habilitado');
+    if (res.error) return { habilitado: false, razon: 'compuerta_ilegible' };
+    return res.data === true ? { habilitado: true, razon: 'habilitado' } : { habilitado: false, razon: 'apagado' };
+  } catch {
+    return { habilitado: false, razon: 'compuerta_ilegible' };
+  }
 }
 
 export async function cargarContactosTrafico(tenantId: string): Promise<ContactoTrafico[]> {

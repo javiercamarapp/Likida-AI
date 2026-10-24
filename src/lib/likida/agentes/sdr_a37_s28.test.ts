@@ -1,0 +1,51 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { crearDbFalsa, type Tablas } from './db_falsa.fixture';
+
+// A37-S28-02 (ALTO): el SDR tomaba solo los `limite*5` prospectos `contactado` con updated_at más viejo; tras ~25
+// que terminaron la cadencia / respondieron / rebotaron y siguen `contactado`, la ventana se llenaba de descartes
+// y ningún prospecto más nuevo recibía seguimiento nunca.
+const TABLAS: Tablas = {};
+vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => crearDbFalsa(TABLAS) }));
+vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock('@/lib/llm/openrouter', () => ({ generateResponse: vi.fn() }));
+vi.mock('./cola', () => ({ encolarPieza: vi.fn(), verificarFormatoCampana: vi.fn() }));
+vi.mock('./corridas', () => ({ registrarCorrida: vi.fn() }));
+vi.mock('../interruptores', () => ({ estaApagado: async () => false }));
+
+const { candidatosDeSeguimiento } = await import('./sdr');
+const hace = (dias: number) => new Date(Date.now() - dias * 86_400_000).toISOString();
+const pad = (n: number) => String(n).padStart(4, '0');
+
+beforeEach(() => { for (const k of Object.keys(TABLAS)) delete TABLAS[k]; });
+
+describe('A37-S28-02 — la ventana del SDR avanza más allá de los descartes', () => {
+  it('40 prospectos viejos que ya terminaron la cadencia no tapan a los 3 más nuevos que sí tocan', async () => {
+    TABLAS.prospecto = []; TABLAS.prospecto_contacto = []; TABLAS.cola_aprobacion = [];
+    for (let i = 0; i < 40; i++) {
+      const id = `viejo-${pad(i)}`;
+      TABLAS.prospecto.push({ id, empresa: `V${i}`, contacto_nombre: null, estado: 'contactado', duplicado_de: null, updated_at: `2026-01-01T00:${pad(i).slice(2)}:00Z` });
+      // 3 salidas = cadencia agotada.
+      for (const d of [30, 25, 20]) TABLAS.prospecto_contacto.push({ id: `${id}-${d}`, prospecto_id: id, direccion: 'salida', ocurrio_en: hace(d) });
+    }
+    for (let i = 0; i < 3; i++) {
+      const id = `nuevo-${i}`;
+      TABLAS.prospecto.push({ id, empresa: `N${i}`, contacto_nombre: null, estado: 'contactado', duplicado_de: null, updated_at: `2026-09-01T00:0${i}:00Z` });
+      TABLAS.prospecto_contacto.push({ id: `${id}-s`, prospecto_id: id, direccion: 'salida', ocurrio_en: hace(4) });
+    }
+    const r = await candidatosDeSeguimiento(5);
+    expect(r.map((c) => c.id)).toEqual(['nuevo-0', 'nuevo-1', 'nuevo-2']);
+  });
+
+  it('respondió o rebotó: descartado, y la búsqueda sigue con el siguiente', async () => {
+    TABLAS.prospecto = ['a', 'b', 'c'].map((id, i) => ({ id, empresa: id, contacto_nombre: null, estado: 'contactado', duplicado_de: null, updated_at: `2026-01-0${i + 1}T00:00:00Z` }));
+    TABLAS.prospecto_contacto = [
+      { id: '1', prospecto_id: 'a', direccion: 'salida', ocurrio_en: hace(5) },
+      { id: '2', prospecto_id: 'a', direccion: 'respuesta', ocurrio_en: hace(3) },
+      { id: '3', prospecto_id: 'b', direccion: 'salida', ocurrio_en: hace(5) },
+      { id: '4', prospecto_id: 'c', direccion: 'salida', ocurrio_en: hace(5) },
+    ];
+    TABLAS.cola_aprobacion = [{ id: 'p1', prospecto_id: 'b', entrega_estado: 'rebotado' }];
+    const r = await candidatosDeSeguimiento(1);
+    expect(r.map((c) => c.id)).toEqual(['c']);
+  });
+});

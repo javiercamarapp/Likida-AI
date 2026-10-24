@@ -718,3 +718,45 @@ export async function urgentesVencidas(minutos = 10): Promise<number> {
   if (typeof count !== 'number') throw new Error('urgentesVencidas: la base no devolvió el conteo');
   return count;
 }
+
+/**
+ * A36-R11-01 — SALIDA DEL CALLEJÓN DEL ENVÍO AMBIGUO.
+ *
+ * Tras un timeout de Resend (`motivo === 'red'`) la pieza queda con
+ * `enviado_en` puesto, sin `provider_message_id` y con `envio_error`
+ * «AMBIGUO…». Verificado en Resend que el correo NO salió, no había ruta que
+ * liberara el claim: `enviarPiezaPorCorreo` rebota («Solo una pieza APROBADA y
+ * aún no enviada») y la reserva de cadencia de 48 h puesta por el MISMO intento
+ * bloqueaba cualquier reintento. Esta función es esa ruta, y solo para ese
+ * estado: anclada a (aprobada ∧ enviada ∧ sin id del proveedor ∧ ambigua).
+ *
+ * El humano que la llama afirma que verificó en Resend. El reintento usa la
+ * misma Idempotency-Key (`pieza-<id>`): si el correo SÍ había salido, Resend
+ * no lo duplica dentro de su ventana de idempotencia.
+ *
+ * Devuelve `reservaLiberada: false` si la pieza quedó liberada pero la reserva
+ * de cadencia no se pudo borrar (el reintento rebotaría por la ventana de 48 h:
+ * la pantalla debe decirlo, no callarlo).
+ */
+export async function liberarEnvioAmbiguo(id: string, actorId: string | null): Promise<{ reservaLiberada: boolean }> {
+  const nota = `Liberada para reintento: se verificó en Resend que el correo NO salió${actorId ? ` (por ${actorId})` : ''}.`;
+  const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion')
+    .update({ enviado_en: null, envio_error: nota.slice(0, 300) })
+    .eq('id', id).eq('estado', 'aprobado')
+    .not('enviado_en', 'is', null).is('provider_message_id', null)
+    .ilike('envio_error', 'AMBIGUO%')
+    .select('id, prospecto_id'), 'liberarEnvioAmbiguo');
+  if (error) throw new Error(`liberarEnvioAmbiguo: ${error.message}`);
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new DatoInvalido('Solo una pieza aprobada con envío ambiguo (timeout, sin id del proveedor) se puede liberar. Puede que ya se liberara o que sí tenga prueba de envío. Recarga.');
+  }
+  logger.warn('cola.envio_ambiguo_liberado', { pieza: id, actor: actorId });
+  // La reserva de cadencia (0124) de ESTA pieza: sin borrarla, su propio reintento choca con las 48 h.
+  const { error: errReserva } = await supabaseAdmin().from('prospecto_contacto')
+    .delete().eq('pieza_id', id).eq('direccion', 'salida').eq('canal', 'correo');
+  if (errReserva) {
+    logger.error('cola.reserva_ambigua_sin_borrar', { pieza: id, err: errReserva.message });
+    return { reservaLiberada: false };
+  }
+  return { reservaLiberada: true };
+}

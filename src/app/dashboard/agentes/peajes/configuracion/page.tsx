@@ -33,6 +33,7 @@ import { secretoMaestro, claveDeFlota, reintentarArchivoPeaje } from '@/lib/liki
 import { cofreConfigurado } from '@/lib/likida/conectores/cofre';
 import { direccionPj } from '@/lib/likida/peajes/correo_entrante';
 import { dominioBuzon } from '@/lib/correo/buzon';
+import { parsearImporteMx } from '@/lib/formato';
 import { superficiePeajesDeTenant, MOTIVO_STAND_BY_PERFIL } from '@/lib/likida/peajes/superficie_perfil';
 import { VistaConfiguracionPeajes } from './vista';
 
@@ -266,7 +267,7 @@ export default async function PaginaConfiguracionPeajes({
     'use server';
     const no = await puertaStandBy(tenantId, 'gps');
     if (no) volverConfig(sufijo, `error:${no}`);
-    const num = (k: string) => Number(String(fd.get(k) ?? '').trim().replace(',', '.'));
+    const num = (k: string) => parsearImporteMx(String(fd.get(k) ?? ''));
     const r = await guardarGeocerca(tenantId, {
       nombre: String(fd.get('nombre') ?? ''), tipo: String(fd.get('tipo') ?? ''),
       lat: num('lat'), lng: num('lng'), radioM: num('radio_m'),
@@ -399,7 +400,7 @@ export default async function PaginaConfiguracionPeajes({
     'use server';
     const no = await puertaConfig(tenantId, 'administracion');
     if (no) volverConfig(sufijo, `error:${no}`);
-    const n = (k: string) => Number(String(fd.get(k) ?? '').trim().replace(',', '.'));
+    const n = (k: string) => parsearImporteMx(String(fd.get(k) ?? ''));
     const marcado = (k: string) => String(fd.get(k) ?? '') === '1';
     const r = await guardarUmbralesPeajes(tenantId, {
       activo: marcado('activo'),

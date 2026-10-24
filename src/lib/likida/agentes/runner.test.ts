@@ -83,6 +83,16 @@ vi.mock('../interruptores', () => ({
 
 const redactar = vi.fn(async (..._a: unknown[]) => ({ piezaId: 'p', asunto: 'x', aviso: null, costoUsd: 0.001 }));
 vi.mock('./redactor', () => ({ redactarCorreoFrio: (...a: unknown[]) => redactar(...a) }));
+// A37-S28-01: la selección de candidatos del lote vive en `candidatos_redactor.ts` (su prueba propia usa una
+// base en memoria). Aquí se conserva el contrato del runner con la cola de respuestas de `prospecto`.
+vi.mock('./candidatos_redactor', () => ({
+  candidatosDelRedactor: async () => {
+    const cola = respuestas.get('prospecto');
+    const r = cola && cola.length > 0 ? cola.shift()! : { data: [], error: null };
+    if (r.error) throw new Error(`loteRedactor.candidatos: ${r.error.message}`);
+    return (r.data ?? []) as Array<{ id: string; vendedor: { nombre?: string } | null }>;
+  },
+}));
 
 // El motor de dirección (0216) se despacha por import dinámico; el mock
 // aplica igual y evita arrastrar los lectores reales de /admin. La constante
@@ -157,6 +167,19 @@ vi.mock('./leads', async (importOriginal) => ({
   correrAgenteLeads: (...a: unknown[]) => correrLeads(...a),
 }));
 
+// El cortacircuitos (23-oct-2026): la LECTURA de las últimas corridas se
+// sustituye por filas controladas, pero la decisión sigue siendo la función
+// pura REAL — así esta suite no pierde ni una respuesta de la cola de
+// `agente_corrida` (que ya usan el gasto del día y los costos sin medir).
+const { filasPausa } = vi.hoisted(() => ({ filasPausa: new Map<string, Array<{ estado: string; inicio: string; error: string | null }>>() }));
+vi.mock('./corridas', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./corridas')>();
+  return {
+    ...real,
+    leerPausaPorFallos: async (agente: string, ahora?: number) => real.motivoPausaPorFallos(filasPausa.get(agente) ?? [], ahora),
+  };
+});
+
 const {
   correrRunner, ordenarPorCosto, llamaAlModelo, AGENTES_DESPACHABLES,
   MARGEN_RELOJ_MS, PLAZO_RUNNER_MS,
@@ -170,6 +193,7 @@ const TENANT = 'tenant-runner-test';
 
 beforeEach(() => {
   respuestas.clear();
+  filasPausa.clear();
   llamadasRpc.length = 0;
   apagados = new Set();
   interruptorFalla = false;
@@ -761,7 +785,7 @@ describe('el reloj adentro del lote', () => {
   // ── LA SOBRE-LECTURA ×4 ──────────────────────────────────────────────────
   it('el overfetch es ×2, no ×4: 10 candidatos para 5 piezas', () => {
     const fuente = readFileSync('src/lib/likida/agentes/runner.ts', 'utf8');
-    expect(fuente).toMatch(/\.limit\(tope \* 2\), 'runner\.candidatos'/);
+    expect(fuente).toMatch(/candidatosDelRedactor\(tope \* 2\)/);
     expect(fuente).not.toMatch(/\.limit\(tope \* 4\)/);
   });
 });
@@ -1403,5 +1427,51 @@ describe('el candado 5 (AGB-5) en correrRunner', () => {
     }]);
     const r = await correrRunner();
     expect(r.agentes.every((a) => a.resultado === 'saltado')).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL CORTACIRCUITOS (23-oct-2026) — 3 fallos SEGUIDOS en un agente lo pausan;
+// se sondea una vez cada 24 h. Antes el enriquecedor se despachaba (y fallaba)
+// 127 veces en 10 días, una por vuelta de 4 h.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('cortacircuitos por fallos seguidos', () => {
+  const KPI = { id: 'kpi_whatsapp', presupuesto_dia_usd: 1 };
+  const haceH = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+  const fallo = (h: number, error = 'El modelo no pudo extraer el dossier (auth: HTTP 401)') => ({ estado: 'fallo', inicio: haceH(h), error });
+
+  it('3 fallos seguidos y el último de hace 4 h: NO se despacha, saltado con el motivo', async () => {
+    respuestas.set('agente_definicion', [{ data: [KPI], error: null }]);
+    filasPausa.set('kpi_whatsapp', [fallo(4), fallo(8), fallo(12)]);
+    const r = await correrRunner();
+    expect(r.agentes[0]).toMatchObject({ agente: 'kpi_whatsapp', resultado: 'saltado' });
+    expect(r.agentes[0].motivo).toMatch(/^en pausa: 3 fallos seguidos \(último: El modelo no pudo extraer el dossier \(auth: HTTP 401\)\)/);
+    expect(correrDireccion).not.toHaveBeenCalled();
+  });
+
+  it('SONDEO: con el último fallo de hace más de 24 h se despacha UNA vez', async () => {
+    respuestas.set('agente_definicion', [{ data: [KPI], error: null }]);
+    filasPausa.set('kpi_whatsapp', [fallo(25), fallo(29), fallo(33)]);
+    const r = await correrRunner();
+    expect(r.agentes[0].resultado).toBe('corrio');
+    expect(correrDireccion).toHaveBeenCalledTimes(1);
+  });
+
+  it('una racha ROTA (un ok en medio) o de solo 2 fallos NO pausa', async () => {
+    respuestas.set('agente_definicion', [{ data: [KPI], error: null }]);
+    filasPausa.set('kpi_whatsapp', [fallo(4), { estado: 'ok', inicio: haceH(8), error: null }, fallo(12)]);
+    expect((await correrRunner()).agentes[0].resultado).toBe('corrio');
+
+    respuestas.set('agente_definicion', [{ data: [KPI], error: null }]);
+    filasPausa.set('kpi_whatsapp', [fallo(4), fallo(8)]);
+    expect((await correrRunner()).agentes[0].resultado).toBe('corrio');
+  });
+
+  it('la pausa es por agente: otro con las mismas filas ajenas sigue corriendo', async () => {
+    respuestas.set('agente_definicion', [{ data: [KPI, { id: 'documentacion', presupuesto_dia_usd: 1 }], error: null }]);
+    filasPausa.set('kpi_whatsapp', [fallo(4), fallo(8), fallo(12)]);
+    const r = await correrRunner();
+    expect(r.agentes.find((a) => a.agente === 'kpi_whatsapp')?.resultado).toBe('saltado');
+    expect(r.agentes.find((a) => a.agente === 'documentacion')?.resultado).not.toBe('saltado');
   });
 });

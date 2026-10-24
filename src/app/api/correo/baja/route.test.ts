@@ -9,8 +9,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 //  · un token inválido o de otro correo nunca suprime nada.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const suprimirCorreo = vi.fn(async (..._a: unknown[]) => {});
-vi.mock('@/lib/likida/agentes/enviador', () => ({ suprimirCorreo: (...a: unknown[]) => suprimirCorreo(...a) }));
+// A37-S08-01: la ruta usa la variante CONFIRMADA (devuelve si la fila quedó
+// guardada); `suprimirCorreo` (best-effort, para webhooks) ya no se llama aquí.
+type ResSupr = { ok: true } | { ok: false; reintentable: boolean; motivo: string };
+const suprimirCorreo = vi.fn(async (..._a: unknown[]): Promise<ResSupr> => ({ ok: true }));
+vi.mock('@/lib/likida/agentes/enviador', () => ({ suprimirCorreoConfirmado: (...a: unknown[]) => suprimirCorreo(...a) }));
 // AUDITORÍA 25 (ALTO): el POST ahora también borra los datos de persona del
 // prospecto que pidió la baja — mockeado aquí porque este archivo prueba el
 // contrato de la RUTA (quién puede suprimir), no el borrado en sí, que ya
@@ -27,7 +30,8 @@ const { firmarBaja } = await import('@/lib/correo/baja');
 const envAntes = process.env.LIKIDA_BAJA_SECRET;
 beforeEach(() => {
   process.env.LIKIDA_BAJA_SECRET = 'secreto-de-prueba-de-la-ruta';
-  suprimirCorreo.mockClear();
+  suprimirCorreo.mockReset();
+  suprimirCorreo.mockResolvedValue({ ok: true });
   borrarDatosPersonaPorBajaPorCorreo.mockClear();
 });
 afterEach(() => {
@@ -96,5 +100,32 @@ describe('POST — la única vía que de verdad suprime', () => {
     }));
     expect(r.status).toBe(200);
     expect(suprimirCorreo).toHaveBeenCalledWith('prospecto@flota.mx', expect.any(String));
+  });
+});
+
+describe('A37-S08-01 · «Listo» solo si la supresión quedó guardada', () => {
+  it('si la supresión NO se guardó (base caída), responde 500 reintentable y NO dice «Listo»', async () => {
+    suprimirCorreo.mockResolvedValue({ ok: false, reintentable: true, motivo: 'base caída' });
+    const token = firmarBaja('prospecto@flota.mx')!;
+    const r = await POST(new Request(url('prospecto@flota.mx', token), { method: 'POST' }));
+    expect(r.status).toBe(500);
+    expect(await r.text()).not.toContain('Listo');
+    expect(borrarDatosPersonaPorBajaPorCorreo).not.toHaveBeenCalled();
+  });
+
+  it('si el correo no es suprimible de forma determinista, responde 400 (no un 500 que reintente para siempre)', async () => {
+    suprimirCorreo.mockResolvedValue({ ok: false, reintentable: false, motivo: 'formato' });
+    const token = firmarBaja('prospecto@flota.mx')!;
+    const r = await POST(new Request(url('prospecto@flota.mx', token), { method: 'POST' }));
+    expect(r.status).toBe(400);
+    expect(await r.text()).not.toContain('Listo');
+  });
+
+  it('si el borrado de datos no pudo resolver al prospecto (lanza), responde 500 y no «Listo»', async () => {
+    borrarDatosPersonaPorBajaPorCorreo.mockRejectedValueOnce(new Error('prospecto ilegible: caído'));
+    const token = firmarBaja('prospecto@flota.mx')!;
+    const r = await POST(new Request(url('prospecto@flota.mx', token), { method: 'POST' }));
+    expect(r.status).toBe(500);
+    expect(await r.text()).not.toContain('Listo');
   });
 });

@@ -6,13 +6,14 @@ import {
   destinatariosEscalacion, ubicacionConocida, type Destino,
 } from './escalamiento';
 import {
-  anotarAvisoAlChofer, cerrarAvisoReclamado, leerConfigConductor, liberarAvisoReclamado, marcarHitoEscalado, reclamarAviso,
+  anotarAvisoAlChofer, cerrarAvisoReclamado, leerAgenteChoferHabilitado, leerConfigConductor, liberarAvisoReclamado, marcarHitoEscalado, reclamarAviso,
   leerCicloServicio, registrarEvento, type EventoHito, type ViajeContexto,
 } from './repo';
 import { cicloDelServicio, type CicloServicioFila } from './ciclo_servicio';
-import { cerrarHitosDeViajesVencidos, contarEnviadosPorChofer, leerAvisosDeHitos, leerHitosDeViajes, leerMuestrasGps, leerSitiosGeometriaDeViajes, leerViajesActivos, sembrarHitos } from './trabajo';
+import { cerrarHitosDeViajesVencidos, contarEnviadosPorChofer, leerAvisosDeHitos, leerHitosDeViajes, leerMuestrasGps, leerSitiosGeometriaDeViajes, hayEmergenciaDeTelefono, leerViajesAvisables, sembrarHitos } from './trabajo';
 import type { MuestraGps, SitiosViaje, UnidadDeViaje } from './ciclo_gps';
 import { clavesPoleoDe, lapsoMaxCompuertaMin, puedeEscribirAlChofer } from './compuerta_movimiento';
+import { aplicarCompuertaAgente, conCompuertaAlChofer } from './compuerta_agente';
 import { leerSenalesDeUnidades, senalesApagadas, type SenalesConduccion } from './senales_conduccion';
 import { planificar, type AccionPlan, type AvisoReclamado, type MotivoNada } from './planificador';
 import { armarEscalacion, armarRecordatorio, armarSolicitud, type MensajeSaliente, type MotivoEscalacion } from './solicitudes';
@@ -292,6 +293,11 @@ export async function correrConductor(
           await p.evento(accion.hito, 'solicitado', { nivel: accion.nivel, canal: envio.via });
           enviadosHoy[v.operadorId] = (enviadosHoy[v.operadorId] ?? 0) + 1;
           if (accion.clase === 'solicitud') r.solicitudes++; else r.recordatorios++;
+        } else if (envio.bloqueadoPorCompuerta) {
+          // A37-A5-04: lo detuvo una compuerta de seguridad (agente apagado/ilegible, emergencia abierta): NUNCA llegó a Meta. No es un
+          // aviso entregado ni un intento: se suelta el claim, no se anota el aviso y la escalera no avanza (al habilitarse arranca de cero).
+          await p.liberarAviso(claim);
+          salta('compuerta_agente');
         } else if (envio.reintentable) {
           // El texto YA está en `wa_outbox` (client.ts), que lo entrega con su backoff. Soltar el claim haría que
           // la siguiente corrida lo mande otra vez y el outbox entregue el primero: dos avisos al chofer. Se
@@ -362,7 +368,7 @@ async function escalar(
     return 'sin_envio';
   }
 
-  const avisosAlChofer = avisos.filter((x) => x.hitoId === a.hito.id && x.ciclo === a.hito.ciclo && (x.clase === 'solicitud' || x.clase === 'recordatorio')).length;
+  const avisosAlChofer = avisos.filter((x) => x.hitoId === a.hito.id && x.ciclo === a.hito.ciclo && (x.clase === 'solicitud' || x.clase === 'recordatorio') && x.ok !== false).length; // A37-A5-04: solo los que SÍ salieron
   const ubic = await p.ubicacion(v, hs, ahora);
   const msg = armarEscalacion(a.hito, v, a.nivel, motivoForzado ?? a.motivo, avisosAlChofer, ubic);
 
@@ -441,20 +447,21 @@ export function puertosReales(): PuertosConductor {
   return {
     sembrar: sembrarHitos,
     cerrarVencidos: cerrarHitosDeViajesVencidos,
-    viajesActivos: leerViajesActivos,
+    viajesActivos: leerViajesAvisables, // A37-A5-02/03: sin emergencia abierta, baja ni oposición
     hitosDe: leerHitosDeViajes,
     avisosDe: leerAvisosDeHitos,
     enviadosHoyPorChofer: contarEnviadosPorChofer,
-    configDe: leerConfigConductor,
+    // 0859: sin la marca explícita de la flota el Agente 5 se lee APAGADO (ningún motor le toma viajes) y, además, cada envío al chofer pasa por la base.
+    configDe: async (t) => aplicarCompuertaAgente(await leerConfigConductor(t)),
     ciclosDe: leerCicloServicio,
     reclamar: reclamarAviso,
     cerrarAviso: cerrarAvisoReclamado,
     liberarAviso: liberarAvisoReclamado,
     anotarAvisoChofer: anotarAvisoAlChofer,
     marcarEscalado: marcarHitoEscalado,
-    enviar: (telefono, m, contexto, tenantId, ahora) => enviarConFallback(telefono, {
+    enviar: conCompuertaAlChofer((telefono, m, contexto, tenantId, ahora) => enviarConFallback(telefono, {
       texto: m.texto, botones: m.botones, plantilla: m.plantilla, contexto, tenantId, ahora,
-    }),
+    }), leerAgenteChoferHabilitado, { emergencia: hayEmergenciaDeTelefono }),
     destinatarios: destinatariosEscalacion,
     ubicacion: ubicacionConocida,
     evento: (h, evento, detalle) => registrarEvento(h, evento, detalle),

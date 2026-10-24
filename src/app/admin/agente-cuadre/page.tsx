@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { Calculator, DollarSign, CheckCircle2 } from 'lucide-react';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -19,6 +20,8 @@ const ICONO_KPI = { width: 15, height: 15, strokeWidth: 1.75 } as const;
  * fase es cero gasto real, no un relleno.
  */
 export default async function AgenteCuadrePage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const r = await getResumenNegocio();
   const cuadre = r.porFase.find((f) => f.fase === 'cuadre');
 

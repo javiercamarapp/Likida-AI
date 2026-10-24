@@ -66,7 +66,7 @@ export interface FacturaProveedor {
 
 export type ResultadoIngesta =
   | { ok: true; facturaId: string; receptorEsFlota: boolean | null }
-  | { ok: false; motivo: 'duplicada' | 'error' };
+  | { ok: false; motivo: 'duplicada' | 'error' | 'no_es_compra' };
 
 /** La Descripcion del PRIMER Concepto, directo del XML crudo — el parser de
  *  cfdi_xml.ts no la extrae (su ciclo no la necesita) y es el campo más
@@ -132,6 +132,14 @@ export async function guardarFacturaProveedor(
   estadoSat: EstadoSat | null = null,
 ): Promise<ResultadoIngesta> {
   if (!cfdiIngresable(xml)) return { ok: false, motivo: 'error' };
+  // A37-S15-01 / A37-S55-01: la bandeja solo recibe FACTURAS DE COMPRA (Ingreso).
+  // Una nota de crédito (E) resta, un REP (P) y un traslado (T) no son compras
+  // y una nómina (N) no es de un proveedor: entraban como cuenta por pagar
+  // POSITIVA y salían así en el CSV de SAP/CONTPAQi. No se guarda `tipo` (no
+  // hay columna) ni se adivina un signo: se rechaza con motivo propio.
+  if (xml.tipoComprobante !== undefined && xml.tipoComprobante !== 'I') {
+    return { ok: false, motivo: 'no_es_compra' };
+  }
 
   const receptorEsFlota = compararReceptor(xml.rfcReceptor, rfcFlota);
 

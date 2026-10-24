@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { getResumenNegocio, getCostoPorFaseModelo } from '@/lib/admin/negocio';
 import { leerUltimasLecturas } from '@/lib/admin/qa-storage';
@@ -28,6 +29,8 @@ const ICONO_KPI = { width: 15, height: 15, strokeWidth: 1.75 } as const;
  * `llm_costo` para la fase es cero gasto real, no un relleno.
  */
 export default async function AgenteOcrPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const [r, porFaseModelo] = await Promise.all([getResumenNegocio(), getCostoPorFaseModelo()]);
   // ── LA PRECISIÓN, EN LA PANTALLA CON EL NOMBRE CORRECTO (28-ago-2026) ────
   // El medidor existe (0239/0246) y su casa es /admin/qa — pero quien busca

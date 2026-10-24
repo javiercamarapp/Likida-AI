@@ -24,8 +24,9 @@ import { acotada } from '../presupuesto';
 import { exigir, traerTodo } from '../pg';
 import { DatoInvalido } from '../errores';
 import { rutaPdfExterno, rutaExcelExterno } from './almacen';
-import { subirArchivoExterno, firmarPdfExterno, leerPorId, TIPO_XLSX } from './repo';
+import { subirArchivoExterno, firmarPdfExterno, leerPorId, TIPO_XLSX, type NuevaLiquidacionExterna } from './repo';
 import type { CursorDesglose } from './desglose_puerto';
+import type { PuertoContactos, OperadorContacto } from './contactos_csv';
 import type { RolDestinatario } from './correo_destinatarios';
 
 // ── Tipos públicos ──────────────────────────────────────────────────────────
@@ -205,6 +206,10 @@ export async function guardarConfigCorreo(tenantId: string, c: ConfigCorreo, por
   if (c.enviarDesdeHora != null && !(Number.isInteger(c.enviarDesdeHora) && c.enviarDesdeHora >= 0 && c.enviarDesdeHora <= 23)) {
     throw new DatoInvalido('enviar_desde_hora: debe ser un entero de 0 a 23');
   }
+  // A37-A1-04: el correo promete «responde a este correo»; sin «Responder a» la respuesta cae en el buzón de campañas y se pierde.
+  if (c.activa && c.canal !== 'whatsapp' && !normalizarCorreo(c.responderA, 'responder_a')) {
+    throw new DatoInvalido('responder_a: es obligatorio para activar el envío por correo (ahí llegan las respuestas del operador)');
+  }
   const fila = {
     tenant_id: tenantId,
     canal: c.canal,
@@ -295,6 +300,79 @@ export async function guardarCoordinador(
   const fila = exigirEscritura(r, 'liqcorreo.coordinador_guardar');
   if (!fila) throw new DatoInvalido('No encontré a ese coordinador en la flota');
   return aCoordinador(fila);
+}
+
+// ── Carga de contactos (A37-A1-01) ──────────────────────────────────────────
+
+/** Cuántos operadores de la flota tienen correo cargado: sin ninguno, activar el envío abriría una excepción por cada desglose. */
+export async function contarOperadoresConCorreo(tenantId: string): Promise<number> {
+  const res = await acotada(supabaseAdmin().from('operador')
+    .select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).not('correo', 'is', null), 'liqcorreo.operadores_con_correo');
+  const r = res as unknown as { count: number | null; error: ErrorPg };
+  if (r.error) throw new Error(`liqcorreo.operadores_con_correo: ${r.error.message ?? 'error'}`);
+  return r.count ?? 0;
+}
+
+/**
+ * Guardia de ACTIVAR el envío por correo (A37-A1-01): con ningún correo de operador cargado, cada desglose abriría
+ * `operador_sin_correo` y solo recibirían RH y archivo. Lanza `DatoInvalido` con el camino para cargarlos.
+ */
+export async function exigirContactosParaActivar(tenantId: string, c: Pick<ConfigCorreo, 'activa' | 'canal'>): Promise<void> {
+  if (!c.activa || c.canal === 'whatsapp') return;
+  if ((await contarOperadoresConCorreo(tenantId)) === 0) {
+    throw new DatoInvalido('Antes de activar el envío por correo carga los correos de los operadores (POST /v1/liquidaciones-externas/contactos): hoy ninguno tiene correo y cada desglose quedaría como excepción «operador sin correo».');
+  }
+}
+
+/** El adaptador real de `aplicarContactos` sobre este repo: todo acotado a la flota, sin tocar `telefono`. */
+export function puertoContactosReal(tenantId: string): PuertoContactos {
+  return {
+    async buscarOperadores(numeros) {
+      const salida = new Map<string, OperadorContacto[]>();
+      const unicos = [...new Set(numeros)];
+      for (let i = 0; i < unicos.length; i += 200) {
+        const res = await acotada(supabaseAdmin().from('operador')
+          .select('id, numero_empleado, correo, coordinador_id').eq('tenant_id', tenantId).in('numero_empleado', unicos.slice(i, i + 200))
+          .order('id').limit(1000), 'liqcorreo.contactos_buscar');
+        const r = res as unknown as { data: Fila[] | null; error: ErrorPg };
+        for (const f of exigirEscritura(r, 'liqcorreo.contactos_buscar') ?? []) {
+          const k = String(f.numero_empleado);
+          salida.set(k, [...(salida.get(k) ?? []), {
+            id: String(f.id), correo: (f.correo as string | null) ?? null, coordinadorId: (f.coordinador_id as string | null) ?? null,
+          }]);
+        }
+      }
+      return salida;
+    },
+    async asegurarCoordinador({ correo, nombre }) {
+      const c = normalizarCorreo(correo, 'correo');
+      if (!c) throw new DatoInvalido('correo: el coordinador necesita un correo');
+      const buscar = async (): Promise<Fila | null> => {
+        const res = await acotada(supabaseAdmin().from('liquidacion_coordinador')
+          .select('id, nombre').eq('tenant_id', tenantId).eq('correo', c).maybeSingle(), 'liqcorreo.coordinador_buscar');
+        return exigirEscritura(res as unknown as { data: Fila | null; error: ErrorPg }, 'liqcorreo.coordinador_buscar');
+      };
+      const previo = await buscar();
+      if (previo) {
+        if (nombre && !previo.nombre) {
+          await acotada(supabaseAdmin().from('liquidacion_coordinador').update({ nombre }).eq('tenant_id', tenantId).eq('id', String(previo.id)), 'liqcorreo.coordinador_nombre');
+        }
+        return { id: String(previo.id), creado: false };
+      }
+      try {
+        const nuevo = await guardarCoordinador(tenantId, { nombre, correo: c });
+        return { id: nuevo.id, creado: true };
+      } catch (e) {
+        // La carrera de dos cargas: el otro proceso lo creó entre la lectura y la inserción.
+        const ya = await buscar();
+        if (ya) return { id: String(ya.id), creado: false };
+        throw e;
+      }
+    },
+    async guardarContacto(operadorId, cambios) {
+      await guardarContactoOperador(tenantId, operadorId, cambios);
+    },
+  };
 }
 
 // ── Encabezado del desglose ─────────────────────────────────────────────────
@@ -423,6 +501,70 @@ export async function insertarEntregas(tenantId: string, rows: NuevaEntrega[]): 
     creadas += (exigirEscritura(ru, 'liqcorreo.entregas_insertar_una') ?? []).length;
   }
   return creadas;
+}
+
+/** Lo que recibe la RPC 0857: todo lo que `recibirDesglose` escribe, para guardarlo en UNA transacción. */
+export interface PedidoRecepcionAtomica {
+  liquidacion: NuevaLiquidacionExterna;
+  meta: Omit<MetaDesglose, 'liquidacionExternaId'>;
+  evento: Record<string, unknown>;
+  entregas: Array<Omit<NuevaEntrega, 'liquidacionExternaId'>>;
+}
+export interface RecepcionAtomica { liquidacionId: string; creada: boolean; reparada: boolean; entregas: number }
+
+/**
+ * Liquidación + encabezado + evento + entregas en una sola transacción (RPC 0857, hallazgo A35-A1-01). Si la liquidación ya
+ * existe con la misma huella pero a medias, la RPC completa lo que falta. `no_disponible` = la base aún no tiene la 0857: el
+ * llamador cae al camino anterior (no atómico) y lo avisa. Cualquier otro error LANZA: nada queda a medias y se reintenta.
+ */
+export async function recibirDesgloseAtomico(tenantId: string, p: PedidoRecepcionAtomica): Promise<Lectura<RecepcionAtomica>> {
+  const d = p.liquidacion.datos;
+  const m = p.meta;
+  const res = await acotada(supabaseAdmin().rpc('recibir_desglose_atomico', {
+    p_tenant: tenantId,
+    p_liquidacion: {
+      clave_externa: d.claveExterna, huella: p.liquidacion.huella, sistema_origen: d.sistemaOrigen,
+      operador_id: p.liquidacion.operadorId, folios_viaje: d.viajes, viaje_ids: p.liquidacion.viajeIds,
+      periodo_desde: d.periodo.desde, periodo_hasta: d.periodo.hasta, conceptos: d.conceptos, total: d.total, moneda: d.moneda,
+      pdf_ruta: p.liquidacion.pdfRuta, pdf_origen: p.liquidacion.pdfOrigen, pdf_sha256: p.liquidacion.pdfSha256,
+    },
+    p_desglose: {
+      bitacora: m.bitacora, terminal: m.terminal ?? null, poliza: m.poliza ?? null, unidad: m.unidad ?? null,
+      tipo_operador: m.tipoOperador ?? null, dias: m.dias ?? null, total_origen: m.totalOrigen,
+      retenida_motivo: recortar(m.retenidaMotivo), numero_liquidacion: m.numeroLiquidacion ?? null,
+      numero_pago: m.numeroPago ?? null, bitacoras: m.bitacoras ?? null,
+    },
+    p_evento: p.evento,
+    p_entregas: p.entregas.map((e) => ({
+      rol: e.rol, correo: normalizarCorreo(e.correo, 'correo') ?? '', xlsx_ruta: e.xlsxRuta ?? null,
+      xlsx_sha256: e.xlsxSha256 ?? null, disparo: e.disparo ?? 'auto',
+    })),
+  }), 'liqcorreo.recibir_atomico');
+  const r = res as unknown as { data: { liquidacion_id?: string; creada?: boolean; reparada?: boolean; entregas?: number } | null; error: ErrorPg };
+  if (r.error) {
+    if (r.error.code === '42883' || r.error.code === 'PGRST202' || /could not find the function/i.test(r.error.message ?? '')) {
+      return { ok: false, motivo: 'no_disponible' };
+    }
+    throw new Error(`liqcorreo.recibir_atomico: ${r.error.message ?? 'error de base'}`);
+  }
+  if (!r.data || typeof r.data.liquidacion_id !== 'string') throw new Error('liqcorreo.recibir_atomico: respuesta sin liquidacion_id');
+  return {
+    ok: true,
+    valor: { liquidacionId: r.data.liquidacion_id, creada: r.data.creada === true, reparada: r.data.reparada === true, entregas: Number(r.data.entregas ?? 0) },
+  };
+}
+
+/**
+ * ¿Quedó a medias una recepción anterior? (sin encabezado, o sin retención y sin una sola entrega). Es lo que dejaba el camino
+ * no atómico tras un corte; hoy lo rescata `recibirDesglose`. Si no se puede leer, `false` (no inventa trabajo).
+ */
+export async function desgloseIncompleto(tenantId: string, liquidacionId: string): Promise<boolean> {
+  const d = await leerDesglose(tenantId, liquidacionId);
+  if (!d.ok) return false;
+  if (d.valor === null) return true;
+  if (d.valor.retenidaMotivo !== null) return false;
+  const e = await entregasDe(tenantId, liquidacionId);
+  return e.ok && e.valor.length === 0;
 }
 
 /** Reclama hasta `limite` entregas listas (RPC 0787, `for update skip locked`). Cruza flotas a propósito: cada fila trae su tenant. */

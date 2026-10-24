@@ -7,6 +7,7 @@ import { CAUSAS_RECHAZO, type CausaRechazo } from '@/lib/likida/carta_porte_docs
 import { propuestaVacia, type PropuestaCatalogo } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
 import { FRASE_ENVIADO_SIMULADO, ROTULO_SIMULADO } from '@/lib/likida/carta_porte_docs/salida_simulada';
 import { lineasDelOriginal, marcaDeFila, resumenDeMarcas } from '@/lib/likida/carta_porte_docs/revision_formato';
+import { AvisosLectura } from './avisos_lectura';
 import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../forma_accion';
 
 /**
@@ -165,6 +166,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
             {meta.escalamientos.length > 0 ? ` · se releyó ${numero(meta.escalamientos.length)} ${meta.escalamientos.length === 1 ? 'vez' : 'veces'} con un modelo más fuerte` : ''}
           </p>
         )}
+        <AvisosLectura meta={meta} />
         {doc.riesgoInyeccion && (
           <p className="text-[12px] px-3 py-2 rounded-lg flex items-start gap-1.5" role="alert" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
             <ShieldAlert width={14} height={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
@@ -246,9 +248,21 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
               )}
             </div>
           ) : revision === null ? (
-            <p className="card p-4 text-[12.5px]" style={{ color: 'var(--muted)' }}>
-              {doc.estado === 'fallido' ? 'El documento no se pudo leer; no hay datos que revisar.' : 'El documento todavía no tiene datos leídos.'}
-            </p>
+            <div className="card p-4 space-y-3">
+              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
+                {doc.estado === 'fallido' ? 'El documento no se pudo leer; no hay datos que revisar.' : 'El documento todavía no tiene datos leídos.'}
+              </p>
+              {doc.estado === 'fallido' && acciones.revisar && (
+                <FormaAccion accion={acciones.revisar} className="space-y-2">
+                  <input type="hidden" name="documentoId" value={doc.id} />
+                  <input type="hidden" name="version" value={doc.version} />
+                  <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                    Si la causa ya se arregló (llave, proveedor caído, archivo mal subido), vuelve a leerlo. También sirve reenviar el mismo archivo.
+                  </p>
+                  <BotonEnvio variante="secundario" intencion="reintentar" etiqueta="Reintentar lectura" pendiente="Reintentando…" />
+                </FormaAccion>
+              )}
+            </div>
           ) : acciones.revisar ? (
             <FormaAccion accion={acciones.revisar} className="space-y-3">
               <input type="hidden" name="documentoId" value={doc.id} />
@@ -351,7 +365,14 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                           <Download width={14} height={14} strokeWidth={1.75} />Descargar plantilla del TMS
                         </a>
                         {envio?.estado !== 'subido_a_mano' && (
-                          <BotonEnvio variante="secundario" intencion="subido_a_mano" etiqueta="Ya la subí a mano" pendiente="Marcando…" icono={<Check width={14} height={14} strokeWidth={1.75} />} />
+                          <>
+                            <div>
+                              <label htmlFor="referenciaTms" className={ETIQUETA}>Referencia que te dio el sistema del cliente (opcional)</label>
+                              <input id="referenciaTms" name="referenciaTms" maxLength={200} autoComplete="off" spellCheck={false} className={CAMPO} style={{ background: 'var(--surface)' }} />
+                              <p className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>Con ella Likida reconoce el aviso del CCP timbrado de esta carga; sin ella el aviso se rechaza.</p>
+                            </div>
+                            <BotonEnvio variante="secundario" intencion="subido_a_mano" etiqueta="Ya la subí a mano" pendiente="Marcando…" icono={<Check width={14} height={14} strokeWidth={1.75} />} />
+                          </>
                         )}
                       </div>
                       <p className="text-[11px]" style={{ color: 'var(--faint)' }}>

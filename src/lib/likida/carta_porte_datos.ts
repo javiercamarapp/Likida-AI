@@ -11,6 +11,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { DatoInvalido } from './errores';
+import { parsearImporteMx } from '@/lib/formato';
 import { esUuidValido } from './intake/cfdi';
 import { acotada } from './presupuesto';
 import { getPerfilCrudo } from './repo';
@@ -245,9 +246,9 @@ export function validarDeclaracion(crudo: { pisaFederal: string; radioKm: string
   let radioKm: number | null = null;
   const t = crudo.radioKm.trim();
   if (t !== '') {
-    const limpio = t.replace(',', '.');
-    if (!/^\d+(\.\d+)?$/.test(limpio)) throw new DatoInvalido('El radio tiene que ser un número de kilómetros.');
-    radioKm = Number(limpio);
+    // A36-R01-02: lo ambiguo («50,000») se rechaza, no se lee como 50.
+    radioKm = parsearImporteMx(t);
+    if (Number.isNaN(radioKm)) throw new DatoInvalido(`El radio tiene que ser un número de kilómetros. ${AYUDA_SEPARADOR}`);
     if (!Number.isFinite(radioKm) || radioKm < 0 || radioKm >= 5000) {
       throw new DatoInvalido('El radio tiene que estar entre 0 y 5,000 km. Recuerda: es el RADIO entre origen y destino final, no el odómetro.');
     }
@@ -307,13 +308,15 @@ export interface MercanciaNueva {
 const CLAVE_PROD_RE = /^[0-9]{8}$/;
 const CLAVE_UNIDAD_RE = /^[A-Z0-9]{2,3}$/i;
 
-/** Un número positivo con hasta 3 decimales, en DOS regex planos: el linter
- *  de seguridad marca cualquier cuantificador anidado (`(\.\d+)?`) como
- *  backtracking potencial, y separar entero/decimal lo evita sin cambiar
- *  qué entra. El tope de 9 enteros es el mismo `< 1e9` de siempre. */
-const ENTERO_RE = /^\d{1,9}$/;
-const DECIMAL_RE = /^\d{1,9}\.\d{1,3}$/;
-const esNumeroCapturable = (t: string): boolean => ENTERO_RE.test(t) || DECIMAL_RE.test(t);
+const AYUDA_SEPARADOR = 'Escríbelo sin separador de miles (p. ej. 22.5 o 22,5): «50,000» o «1.234» no se sabe si son decimales o miles.';
+
+/** Cantidad o peso tecleados: `null` si no es un número claro de hasta 3 decimales
+ *  (A36-R01-02: nunca se adivina entre decimal y miles). */
+function numeroCapturable(texto: string): number | null {
+  const n = parsearImporteMx(texto);
+  if (!Number.isFinite(n) || n >= 1e9) return null;
+  return Math.abs(n * 1000 - Math.round(n * 1000)) > 1e-6 ? null : n;
+}
 
 /**
  * Valida lo tecleado en la forma de mercancía. Regla de la casa: `''` es
@@ -334,10 +337,10 @@ export function validarMercancia(crudo: {
     throw new DatoInvalido('La clave de bienes transportados son 8 dígitos del catálogo c_ClaveProdServCP del SAT (p. ej. 10101500). Si tu cliente no te la ha dado, déjala vacía — no se inventa.');
   }
 
-  const cantT = crudo.cantidad.trim().replace(',', '.');
-  if (!esNumeroCapturable(cantT)) throw new DatoInvalido('La cantidad tiene que ser un número mayor que cero.');
-  const cantidad = Number(cantT);
-  if (!Number.isFinite(cantidad) || cantidad <= 0 || cantidad >= 1e9) throw new DatoInvalido('La cantidad tiene que ser un número mayor que cero.');
+  const cantidadLeida = numeroCapturable(crudo.cantidad.trim());
+  if (cantidadLeida === null) throw new DatoInvalido(`La cantidad tiene que ser un número mayor que cero. ${AYUDA_SEPARADOR}`);
+  const cantidad = cantidadLeida;
+  if ( cantidad <= 0 || cantidad >= 1e9) throw new DatoInvalido('La cantidad tiene que ser un número mayor que cero.');
 
   const unidadT = crudo.claveUnidad.trim().toUpperCase();
   if (unidadT !== '' && !CLAVE_UNIDAD_RE.test(unidadT)) {
@@ -345,11 +348,11 @@ export function validarMercancia(crudo: {
   }
 
   let pesoKg: number | null = null;
-  const pesoT = crudo.pesoKg.trim().replace(',', '.');
+  const pesoT = crudo.pesoKg.trim();
   if (pesoT !== '') {
-    if (!esNumeroCapturable(pesoT)) throw new DatoInvalido('El peso tiene que ser un número de kilogramos mayor que cero.');
-    pesoKg = Number(pesoT);
-    if (!Number.isFinite(pesoKg) || pesoKg <= 0 || pesoKg >= 1e9) throw new DatoInvalido('El peso tiene que ser un número de kilogramos mayor que cero.');
+    pesoKg = numeroCapturable(pesoT);
+    if (pesoKg === null) throw new DatoInvalido(`El peso tiene que ser un número de kilogramos mayor que cero. ${AYUDA_SEPARADOR}`);
+    if ( pesoKg <= 0 || pesoKg >= 1e9) throw new DatoInvalido('El peso tiene que ser un número de kilogramos mayor que cero.');
     pesoKg = Math.round(pesoKg * 1000) / 1000;
   }
 

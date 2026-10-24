@@ -185,7 +185,7 @@ async function armarAviso(
   tenantId: string, fila: FilaDelPrograma, config: ConfigAviso, motivoListo: string, deps: DepsGenerar, ahora: Date,
 ): Promise<NuevoAviso> {
   const resuelto = await resolverFila(
-    { cliente: fila.cliente, consignatario: fila.consignatario, caja: fila.caja, unidad: fila.unidad, filaId: fila.id },
+    { cliente: fila.cliente, consignatario: fila.consignatario, caja: fila.caja, unidad: fila.unidad, filaId: fila.id, fecha: fila.fecha },
     deps.resolver,
   );
   const visibles: ReadonlySet<CampoAviso> = camposVisibles(deps.politica, resuelto.clienteId);

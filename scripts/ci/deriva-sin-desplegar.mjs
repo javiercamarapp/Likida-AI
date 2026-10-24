@@ -23,8 +23,19 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 
 /** Las rutas cuyo contenido CORRE en producción. `docs/`, `normas/` y los
- *  workflows no cambian lo que el contralor ve en pantalla. */
-export const RUTAS_QUE_CORREN = ['src/', 'supabase/'];
+ *  workflows no cambian lo que el contralor ve en pantalla.
+ *
+ *  A36-R07-04: también corren (y antes el detector era ciego a ellas) las
+ *  dependencias (`package.json`, `package-lock.json`), la configuración de
+ *  Vercel/Next (`vercel.json`, `next.config.ts`), el código de terceros
+ *  vendorizado (`vendor/`) y los estáticos servidos (`public/`). Un parche de
+ *  seguridad solo en el lock o un cambio de cabeceras en `next.config.ts` no
+ *  tocan `src/` pero sí cambian lo que corre. */
+export const RUTAS_QUE_CORREN = [
+  'src/', 'supabase/',
+  'package.json', 'package-lock.json', 'vercel.json', 'next.config.ts',
+  'vendor/', 'public/',
+];
 
 /** `git` con argumentos sueltos y sin shell. */
 const correrGit = (args) => execFileSync('git', args, { encoding: 'utf8' });

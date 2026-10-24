@@ -1,4 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+// A37-S05-01/S06-01: la página ahora llama su propia puerta; aquí la sesión es de superadmin.
+vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' })) }));
 
 // ═══════════════════════════════════════════════════════════════════════════
 // /admin/notificaciones — CERO cobertura de la página. calcularAlertas y las

@@ -45,7 +45,8 @@ vi.mock('@/lib/likida/peajes/revision_cobros', () => {
     }),
   };
 });
-vi.mock('@/lib/likida/peajes/datos', () => ({ listarTarifas: (...a: unknown[]) => tarifasDe(...a) }));
+const decisionesDe = vi.fn(async (..._a: unknown[]): Promise<unknown> => []);
+vi.mock('@/lib/likida/peajes/datos', () => ({ listarTarifas: (...a: unknown[]) => tarifasDe(...a), listarDecisionesCandidatos: (...a: unknown[]) => decisionesDe(...a) }));
 
 const { GET } = await import('./route');
 const get = (qs = '?desglose=d1') => GET(new Request(`https://app.likida.ai/api/export/peajes-candidatos${qs}`));
@@ -56,6 +57,7 @@ beforeEach(() => {
   revision.mockReset(); revision.mockResolvedValue(reporte);
   lineasDe.mockReset(); lineasDe.mockResolvedValue(filasBase);
   reclamos.mockReset(); reclamos.mockResolvedValue({ reclamos: [], resumen: {} });
+  decisionesDe.mockReset(); decisionesDe.mockResolvedValue([]);
 });
 
 describe('la puerta', () => {
@@ -155,6 +157,19 @@ describe('el archivo', () => {
     expect(libro.SheetNames).toEqual(['Clase distinta de 3 y 5', 'Importe mayor que la tarifa', 'Resumen', 'Léeme']);
     // sin la opción, el reclamo existente no cambia nada
     expect((await libroDe(await get())).SheetNames).toContain('Cobro extemporáneo');
+  });
+
+  it('A37-A2-05: lo descartado o justificado por una persona no se sube al proveedor; lo reclamado solo con excluirReclamados', async () => {
+    decisionesDe.mockResolvedValue([
+      { indice: 1, categoria: 'extemporaneo', accion: 'descartado' },
+      { indice: 0, categoria: 'clase_fuera_de_3_5', accion: 'reclamado' },
+    ]);
+    const sin = await libroDe(await get());
+    expect(sin.SheetNames).not.toContain('Cobro extemporáneo');
+    expect(sin.SheetNames).toContain('Clase distinta de 3 y 5'); // reclamado individual: solo se quita con la opción
+    const con = await libroDe(await get('?desglose=d1&excluirReclamados=1'));
+    expect(con.SheetNames).not.toContain('Clase distinta de 3 y 5');
+    expect(decisionesDe).toHaveBeenCalledWith('t-1', 'd1');
   });
 
   it('sin candidatos: libro con la hoja «Sin candidatos» y el mensaje', async () => {

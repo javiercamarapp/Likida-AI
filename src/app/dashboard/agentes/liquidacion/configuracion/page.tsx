@@ -6,7 +6,7 @@ import { sufijoTenant } from '../../../sufijo';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import {
-  leerConfigCorreo, guardarConfigCorreo, CONFIG_CORREO_POR_DEFECTO, type ConfigCorreo,
+  leerConfigCorreo, guardarConfigCorreo, exigirContactosParaActivar, CONFIG_CORREO_POR_DEFECTO, type ConfigCorreo,
 } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { VistaConfiguracionLiquidacion, leerFormularioConfig } from './vista';
 
@@ -75,6 +75,7 @@ export default async function PaginaConfiguracionLiquidacion({
       const previa = await leerConfigCorreo(tenantId);
       if (!previa.ok) volver(sufijo, 'error:La configuración de la entrega por correo todavía no está disponible en esta base.');
       cambios = camposCambiados(previa.valor, f.config);
+      await exigirContactosParaActivar(tenantId, f.config);
       await guardarConfigCorreo(tenantId, f.config, p.por);
     } catch (e) {
       // `redirect` lanza: se deja pasar. Lo demás se dice llano, sin correos ni detalles de base.

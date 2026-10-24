@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ListTree, Bot, MessageCircle, ArrowLeft, ExternalLink } from 'lucide-react';
@@ -48,6 +49,8 @@ export default async function TrazaCorridaPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const { id } = await params;
   // Un id que ni siquiera es uuid es un 404, no un error de consulta.
   if (!UUID.test(id)) notFound();

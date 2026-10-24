@@ -117,6 +117,9 @@ export default async function PaginaFacturacion({
         fecha: String(fd.get('fecha') ?? ''),
         subtotal: String(fd.get('subtotal') ?? ''),
         iva: String(fd.get('iva') ?? ''),
+        // A37-S18-02: la retención de IVA (fletes a personas morales). Sin ella
+        // el total quedaba inflado en silencio y la factura nunca se saldaba.
+        retencion: String(fd.get('retencion') ?? ''),
         serie: String(fd.get('serie') ?? ''),
         folio: String(fd.get('folio') ?? ''),
         cfdiUuid: String(fd.get('cfdiUuid') ?? ''),

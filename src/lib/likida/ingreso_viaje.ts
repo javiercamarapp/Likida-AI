@@ -77,7 +77,7 @@ function opcional(crudo: string, campo: string, tope: number): number | null {
 
   // La coma decimal es como se teclea en México; el separador de millares
   // también se pega desde un Excel ("38,500.00"), así que se quita.
-  const limpio = t.replace(/\s/g, '').replace(/,(?=\d{3}\b)/g, '').replace(',', '.');
+  const limpio = t.replace(/\s/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.');
   const n = Number(limpio);
 
   if (!Number.isFinite(n)) throw new DatoInvalido(`${campo} tiene que ser un número.`);

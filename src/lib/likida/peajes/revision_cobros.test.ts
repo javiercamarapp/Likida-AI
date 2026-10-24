@@ -19,7 +19,9 @@ const R = await import('./revision_cobros');
 
 const T = 'tenant-1';
 const OTRO = 'tenant-2';
-beforeEach(() => { db = crearDbFalsa({}); });
+// Estas pruebas ejercen el camino anterior (leer-sumar-escribir): la base falsa simula que la migración 0860 aún NO está aplicada.
+// El camino con la función atómica se prueba en `nota_credito_rpc.test.ts`.
+beforeEach(() => { db = crearDbFalsa({}, { peaje_nota_credito_registrar: () => ({ error: { message: 'Could not find the function', code: 'PGRST202' } }) }); });
 
 async function subir(nombre: string, op: Parameters<typeof generarLibroIave>[0], tenant = T) {
   const { buffer, esperado } = generarLibroIave({ hojaSecundaria: true, ...op });
@@ -210,6 +212,27 @@ describe('el seguimiento de reclamos de punta a punta', () => {
     expect((await R.registrarNotaDeCredito(T, { reclamoId: 'x', monto: 5, fecha: 'ayer' })).ok).toBe(false);
     expect((await R.registrarNotaDeCredito(T, { reclamoId: 'no-existe', monto: 5, fecha: '2026-04-01' })).ok).toBe(false);
   });
+
+  it('A37-A2-05: el reclamo por categoría excluye lo descartado/justificado y no reclama categorías internas', async () => {
+    const { id } = await subir('01 A 10 DE MARZO.xlsx', { filas: 500, inicio: '2026-03-01', extemporaneos: 10 });
+    const rep = await R.revisionDeDesglose(T, id);
+    const ext = (rep?.revision.candidatos ?? []).filter((c) => c.categoria === 'extemporaneo');
+    expect(ext).toHaveLength(10);
+    const { registrarDecisionesCandidatos } = await import('./repo');
+    await registrarDecisionesCandidatos(T, id, ext.slice(0, 4).map((c) => ({ indice: c.indice, categoria: 'extemporaneo' })), 'descartado', { motivo: 'servicio especial', actor: 'ana' });
+    const esperado = Math.round(ext.slice(4).reduce((s, c) => s + c.monto, 0) * 100) / 100;
+
+    const creado = await R.crearReclamoDeCategoria(T, { desgloseId: id, categoria: 'extemporaneo' });
+    if (!creado.ok) throw new Error(creado.motivo);
+    expect(db.tablas.peaje_reclamo[0]).toMatchObject({ n_cruces: 6, monto_reclamado: esperado });
+
+    // una caseta que la propia flota prohíbe es un asunto interno: no se convierte en reclamo al proveedor
+    expect(await R.guardarReglaCaseta(T, { nombre: 'PLAZA ORIENTE', clasesPermitidas: [], noCruzar: true })).toEqual({ ok: true });
+    const interno = await R.crearReclamoDeCategoria(T, { desgloseId: id, categoria: 'caseta_no_debe_cruzarse' });
+    expect(interno.ok).toBe(false);
+    if (!interno.ok) expect(interno.motivo).toMatch(/interno/);
+    expect(db.tablas.peaje_reclamo).toHaveLength(1);
+  }, 60_000);
 
   it('un doble envío (dos pestañas, un reintento) choca con el candado de idempotencia y no crea una fila gemela', async () => {
     // HALLAZGO ALTO #1 (auditoría adversarial): el formulario ya deshabilita su botón mientras la

@@ -50,6 +50,11 @@ export interface ContenidoDoc {
   resolucion?: { ancho: number; alto: number };
   /** Avisos de la lectura (hojas recortadas, PDF con muchas páginas…). */
   avisos: string[];
+  /**
+   * A37-A3-03: lo que la lectura DEJÓ FUERA (páginas, filas, hojas, columnas, embarques). `bloquea` = se pueden haber perdido
+   * mercancías o embarques: el documento no se aprueba hasta que una persona lo resuelva. Va a `meta.lecturaIncompleta`.
+   */
+  perdidas?: Array<{ mensaje: string; bloquea: boolean }>;
   /** Solo para correo: lo que declara la cabecera. */
   correo?: { de: string | null; asunto: string | null; fecha: string | null };
 }
@@ -189,6 +194,19 @@ export function aceptableSinExtension(bytes: Uint8Array, contentType?: string | 
   return d.clase === 'imagen' && /^image\//i.test((contentType ?? '').trim());
 }
 
+/** A37-A3-03: lo que la lectura dejó fuera, ligado al arreglo de avisos de ESA lectura (viaja a `ContenidoDoc.perdidas`). */
+const PERDIDAS = new WeakMap<string[], Array<{ mensaje: string; bloquea: boolean }>>();
+function avisarPerdida(avisos: string[], mensaje: string, bloquea: boolean): void {
+  avisos.push(mensaje);
+  const lista = PERDIDAS.get(avisos) ?? [];
+  if (!lista.some((p) => p.mensaje === mensaje)) lista.push({ mensaje, bloquea });
+  PERDIDAS.set(avisos, lista);
+}
+const conPerdidas = (c: ContenidoDoc): ContenidoDoc => {
+  const p = PERDIDAS.get(c.avisos);
+  return p && p.length > 0 ? { ...c, perdidas: p } : c;
+};
+
 const recortar = (s: string, max: number): string => (s.length > max ? s.slice(0, max) : s);
 
 /** Quita el ruido que pdf-parse agrega entre páginas. */
@@ -203,7 +221,7 @@ async function prepararPdf(bytes: Uint8Array, avisos: string[]): Promise<Conteni
     const r = await parser.getText({ first: MAX_PAGINAS_TEXTO });
     const texto = limpiarTextoPdf(r.text ?? '');
     const paginas = r.pages?.length ?? 0;
-    if (r.total && r.total > MAX_PAGINAS_TEXTO) avisos.push(`El PDF tiene ${r.total} páginas; se leyeron las primeras ${MAX_PAGINAS_TEXTO}.`);
+    if (r.total && r.total > MAX_PAGINAS_TEXTO) avisarPerdida(avisos, `El PDF tiene ${r.total} páginas; se leyeron las primeras ${MAX_PAGINAS_TEXTO}: las mercancías de las páginas siguientes no se leyeron.`, true);
     if (texto.replace(/\s+/g, '').length >= 80) {
       return { formato: 'pdf_texto', texto: recortar(texto, MAX_TEXTO_GUARDADO), imagenes: [], tabla: null, xml: null, avisos };
     }
@@ -211,7 +229,7 @@ async function prepararPdf(bytes: Uint8Array, avisos: string[]): Promise<Conteni
     const s = await parser.getScreenshot({ first: MAX_PAGINAS_IMAGEN, desiredWidth: 1400, imageDataUrl: true, imageBuffer: false });
     const imagenes = (s.pages ?? []).map((p: { dataUrl?: string }) => p.dataUrl).filter((u: string | undefined): u is string => !!u);
     if (imagenes.length === 0) throw new Error('El PDF no tiene texto ni se pudo convertir a imagen.');
-    if ((r.total ?? paginas) > MAX_PAGINAS_IMAGEN) avisos.push(`PDF escaneado de ${r.total} páginas: se leyeron las primeras ${MAX_PAGINAS_IMAGEN}.`);
+    if ((r.total ?? paginas) > MAX_PAGINAS_IMAGEN) avisarPerdida(avisos, `PDF escaneado de ${r.total} páginas: se leyeron las primeras ${MAX_PAGINAS_IMAGEN}: las mercancías de las páginas siguientes no se leyeron.`, true);
     return { formato: 'pdf_escaneado', texto: null, imagenes, tabla: null, xml: null, avisos };
   } finally {
     await parser.destroy().catch(() => {});
@@ -244,9 +262,9 @@ function celdaATexto(v: unknown): string {
 /** Una hoja a filas de texto, sin fórmulas evaluadas y con topes. */
 function hojaAFilas(ws: XLSX.WorkSheet, avisos: string[], nombre: string): string[][] {
   const filas = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: '', blankrows: false });
-  if (filas.length > MAX_FILAS_HOJA) avisos.push(`La hoja «${nombre}» tiene ${filas.length} filas; se leyeron ${MAX_FILAS_HOJA}.`);
+  if (filas.length > MAX_FILAS_HOJA) avisarPerdida(avisos, `La hoja «${nombre}» tiene ${filas.length} filas; se leyeron ${MAX_FILAS_HOJA}: las filas siguientes (embarques o mercancías) no se leyeron.`, true);
   return filas.slice(0, MAX_FILAS_HOJA).map((f) => {
-    if (f.length > MAX_COLUMNAS) avisos.push(`La hoja «${nombre}» tiene más de ${MAX_COLUMNAS} columnas; se recortó.`);
+    if (f.length > MAX_COLUMNAS) avisarPerdida(avisos, `La hoja «${nombre}» tiene más de ${MAX_COLUMNAS} columnas; se recortó.`, false);
     return f.slice(0, MAX_COLUMNAS).map(celdaATexto);
   });
 }
@@ -288,7 +306,7 @@ function prepararHoja(bytes: Uint8Array, esCsv: boolean, avisos: string[]): Cont
   }
   const nombresDatos = esCsv ? libro.SheetNames : hojasDeDatos(libro.SheetNames);
   if (nombresDatos.length < libro.SheetNames.length) avisos.push(`Plantilla del TMS: se ignoraron las hojas que no son datos (${libro.SheetNames.filter(esHojaIgnorada).join(', ')}).`);
-  if (nombresDatos.length > MAX_HOJAS) avisos.push(`El libro tiene ${nombresDatos.length} hojas; se leyeron ${MAX_HOJAS}.`);
+  if (nombresDatos.length > MAX_HOJAS) avisarPerdida(avisos, `El libro tiene ${nombresDatos.length} hojas; se leyeron ${MAX_HOJAS}: las demás hojas no se leyeron.`, true);
   const hojas: Hoja[] = nombresDatos.slice(0, MAX_HOJAS)
     .map((n) => ({ nombre: n.slice(0, 60), filas: hojaAFilas(libro.Sheets[n], avisos, n) }))
     .filter((h) => h.filas.length > 0);
@@ -435,13 +453,13 @@ export async function prepararContenido(bytes: Uint8Array, clase: ClaseDoc): Pro
   const avisos: string[] = [];
   try {
     switch (clase) {
-      case 'pdf': return await prepararPdf(bytes, avisos);
-      case 'imagen': return await prepararImagen(bytes, avisos);
-      case 'excel': return prepararHoja(bytes, false, avisos);
-      case 'csv': return prepararHoja(bytes, true, avisos);
-      case 'xml': return prepararXml(bytes, avisos);
-      case 'correo': return prepararCorreo(bytes, avisos);
-      case 'json': return prepararJson(bytes, avisos);
+      case 'pdf': return conPerdidas(await prepararPdf(bytes, avisos));
+      case 'imagen': return conPerdidas(await prepararImagen(bytes, avisos));
+      case 'excel': return conPerdidas(prepararHoja(bytes, false, avisos));
+      case 'csv': return conPerdidas(prepararHoja(bytes, true, avisos));
+      case 'xml': return conPerdidas(prepararXml(bytes, avisos));
+      case 'correo': return conPerdidas(prepararCorreo(bytes, avisos));
+      case 'json': return conPerdidas(prepararJson(bytes, avisos));
     }
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);

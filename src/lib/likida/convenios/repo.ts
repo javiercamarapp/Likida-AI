@@ -597,6 +597,21 @@ export async function reiniciarEnvios(tenantId: string, viajeId: string): Promis
   ok(res as never, 'convenios.reiniciar_envios');
 }
 
+/** Cuánto se congela el reclamo tras un rechazo DEFINITIVO: más que la vigilancia (`DIAS_VIGILANCIA` = 3 d), así el viaje no vuelve a reclamarse. */
+export const CONGELA_RECHAZO_DEFINITIVO_DIAS = 4;
+
+/**
+ * A37-A5-01: un rechazo DEFINITIVO (plantilla sin aprobar, número sin WhatsApp) deja el reclamo puesto, pero el reclamo CADUCA a los
+ * `CLAIM_CADUCA_MIN` min y el aviso se reintentaba cada ~10-15 min. Aquí se adelanta la hora del reclamo para que no caduque mientras
+ * dure la vigilancia. NO se sella `enviado_en`: el aviso no se entregó y no debe contarse como tal (reiniciar los sellos lo reabre).
+ */
+export async function congelarEnvioRechazado(tenantId: string, viajeId: string, cual: Envio, ahora: Date = new Date()): Promise<void> {
+  const hasta = new Date(ahora.getTime() + CONGELA_RECHAZO_DEFINITIVO_DIAS * 86_400_000).toISOString();
+  const res = await acotada(supabaseAdmin().from('viaje_convenio').update({ [`${cual}_reclamado_en`]: hasta })
+    .eq('tenant_id', tenantId).eq('viaje_id', viajeId).is(`${cual}_enviado_en`, null), 'convenios.congelar');
+  if (res.error) logger.warn('convenios.congelar_fallo', { viajeId, cual, err: res.error.message });
+}
+
 /** Suelta el reclamo tras un rechazo REINTENTABLE de Meta: el aviso no salió y la corrida siguiente lo intenta de nuevo. */
 export async function liberarEnvio(tenantId: string, viajeId: string, cual: Envio): Promise<void> {
   const res = await acotada(supabaseAdmin().from('viaje_convenio').update({ [`${cual}_reclamado_en`]: null })
@@ -626,15 +641,18 @@ export interface ContextoEnvio {
 
 /** El viaje y a quién escribirle. `null` = el viaje no es de esta flota. */
 export async function leerContextoEnvio(tenantId: string, viajeId: string): Promise<ContextoEnvio | null> {
-  const res = await acotada(supabaseAdmin().from('viaje').select('id, folio, origen, destino, estatus, operador:operador_id(nombre, telefono)')
+  const res = await acotada(supabaseAdmin().from('viaje').select('id, folio, origen, destino, estatus, operador:operador_id(nombre, telefono, activo, oposicion_automatizada)')
     .eq('tenant_id', tenantId).eq('id', viajeId).maybeSingle(), 'convenios.contexto');
   const f = ok(res as never, 'convenios.contexto') as Fila | null;
   if (!f) return null;
-  const rel = f.operador as { nombre?: string; telefono?: string } | Array<{ nombre?: string; telefono?: string }> | null;
+  type OpRel = { nombre?: string; telefono?: string; activo?: boolean | null; oposicion_automatizada?: string | null };
+  const rel = f.operador as OpRel | OpRel[] | null;
   const op = Array.isArray(rel) ? rel[0] : rel;
+  // A37-A5-03: un operador dado de baja o con oposición vigente no recibe nada (su teléfono puede ser de un tercero).
+  const avisable = !!op && op.activo !== false && !op.oposicion_automatizada;
   return {
     folio: s(f.folio) ?? String(f.id).slice(0, 8), origen: s(f.origen), destino: s(f.destino), estatus: String(f.estatus),
-    operadorNombre: op?.nombre ?? null, telefono: op?.telefono ?? null,
+    operadorNombre: op?.nombre ?? null, telefono: avisable ? (op?.telefono ?? null) : null,
   };
 }
 

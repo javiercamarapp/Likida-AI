@@ -1,7 +1,10 @@
 import { logger } from '@/lib/logger';
 import { enviarConFallback, type ResultadoEnvioConFallback } from '@/lib/meta/enviar_con_fallback';
+import { conCompuertaAlChofer } from '../conductor/compuerta_agente';
+import { leerAgenteChoferHabilitado } from '../conductor/repo';
+import { hayEmergenciaDeTelefono } from '../conductor/trabajo';
 import {
-  cerrarEnvio, ConveniosNoDisponibles, leerContextoEnvio, leerLigado, ligarConvenioAViaje, liberarEnvio, reclamarEnvio, reiniciarEnvios,
+  cerrarEnvio, congelarEnvioRechazado, ConveniosNoDisponibles, leerContextoEnvio, leerLigado, ligarConvenioAViaje, liberarEnvio, reclamarEnvio, reiniciarEnvios,
   type ContextoEnvio, type Envio, type ResultadoLigar, type ViajeLigado,
 } from './repo';
 import { armarMensajeAcercamiento, armarMensajeDespacho, type MensajeInstrucciones } from './mensajes';
@@ -34,9 +37,13 @@ export interface PuertosEnvio {
   reclamar(tenantId: string, viajeId: string, cual: Envio, ahora: Date): Promise<'ganado' | 'perdido' | 'fallo'>;
   cerrar(tenantId: string, viajeId: string, cual: Envio, canal: 'texto' | 'botones' | 'plantilla', ahora: Date): Promise<void>;
   liberar(tenantId: string, viajeId: string, cual: Envio): Promise<void>;
+  /** A37-A5-01: tras un rechazo DEFINITIVO, congela el reclamo para que no caduque y se reintente cada ~10-15 min. Opcional (dobles de prueba). */
+  congelar?(tenantId: string, viajeId: string, cual: Envio, ahora: Date): Promise<void>;
   reiniciar(tenantId: string, viajeId: string): Promise<void>;
   enviar(telefono: string, m: MensajeInstrucciones, contexto: string, tenantId: string, ahora: Date): Promise<ResultadoEnvioConFallback>;
 }
+
+let enviarConCompuerta: PuertosEnvio['enviar'] | undefined;
 
 export const puertosEnvioReales: PuertosEnvio = {
   ligar: (t, v) => ligarConvenioAViaje(t, v),
@@ -45,8 +52,18 @@ export const puertosEnvioReales: PuertosEnvio = {
   reclamar: reclamarEnvio,
   cerrar: cerrarEnvio,
   liberar: liberarEnvio,
+  congelar: congelarEnvioRechazado,
   reiniciar: reiniciarEnvios,
-  enviar: (telefono, m, contexto, tenantId, ahora) => enviarConFallback(telefono, { texto: m.texto, plantilla: m.plantilla, contexto, tenantId, ahora }),
+  // A37-A5-01: el aviso de acercamiento (`convenios.acercamiento_*`) le escribe al chofer en marcha: pasa por la compuerta 0859 (fail-closed) y
+  // por la de emergencias. El despacho lo pide una persona al crear el viaje y no se toca.
+  // Se arma al primer uso (no al importar): los módulos que importan este puerto sin enviar nada no dependen de la lectura de la compuerta.
+  enviar: (telefono, m, contexto, tenantId, ahora) => {
+    enviarConCompuerta ??= conCompuertaAlChofer(
+      (tel, msg, ctx, tid, a) => enviarConFallback(tel, { texto: msg.texto, plantilla: msg.plantilla, contexto: ctx, tenantId: tid, ahora: a }),
+      leerAgenteChoferHabilitado, { emergencia: hayEmergenciaDeTelefono },
+    );
+    return enviarConCompuerta(telefono, m, contexto, tenantId, ahora);
+  },
 };
 
 async function enviarInstrucciones(
@@ -107,7 +124,8 @@ async function enviarInstrucciones(
     // `encolado`: el cliente de Meta YA dejo el texto en `wa_outbox` (429/5xx/timeout, o token 190/401).
     // Soltar el sello aqui lo manda DOS veces: lo entrega el drenado del outbox y lo vuelve a mandar la
     // pasada siguiente del cron. Solo se libera cuando el rechazo no quedo encolado. (A33-03)
-    if (r.reintentable && !r.encolado) await p.liberar(tenantId, viajeId, cual);
+    if (r.bloqueadoPorCompuerta || (r.reintentable && !r.encolado)) await p.liberar(tenantId, viajeId, cual);
+    else if (cual !== 'despacho' && !r.reintentable && !r.encolado && p.congelar) await p.congelar(tenantId, viajeId, cual, ahora); // A37-A5-01
     logger.warn('convenios.envio_rechazado', { viajeId, cual, motivo: r.motivo, reintentable: r.reintentable });
     return { estado: 'rechazado', motivo: r.mensaje, reintentable: r.reintentable };
   } catch (e) {

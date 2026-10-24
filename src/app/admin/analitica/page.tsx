@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd } from '@/lib/utils';
 import { LineChart } from 'lucide-react';
@@ -39,6 +40,8 @@ const FASE_LABEL: Record<string, string> = {
  * vive en la primera tarjeta, con la explicación de qué cifra es.
  */
 export default async function AnaliticaPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const r = await getResumenNegocio();
 
   return (

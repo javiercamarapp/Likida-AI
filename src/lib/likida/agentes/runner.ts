@@ -36,10 +36,12 @@ import { esErrorDePresupuesto, createLlmBudget, type LlmBudget } from '@/lib/llm
 import { alertarOperador } from '@/lib/observability/alerta';
 import { DatoInvalido } from '../errores';
 import { redactarCorreoFrio } from './redactor';
+import { candidatosDelRedactor } from './candidatos_redactor';
 import { AGENTES_FINANCIEROS, correrAgenteFinanciero, esAgenteFinanciero } from './finanzas';
 import { candidatosSinDossier, investigarProspecto } from './investigador';
 import { correrSdr } from './sdr';
 import { correrEnviador } from './enviador';
+import { leerPausaPorFallos } from './corridas';
 import { logger } from '@/lib/logger';
 
 /** Piezas que una corrida del runner fabrica como máximo por agente. */
@@ -491,16 +493,9 @@ async function loteRedactor(
   // esa parte de la ventana se re-fabricaba sin avanzar. `.not(...)` los
   // excluye en la CONSULTA — la ventana avanza sola hacia los enviables, y
   // los que quedan fuera no vuelven a aparecer mientras no tengan correo.
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('prospecto')
-    .select('id, vendedor:vendedor_id(nombre)')
-    .is('duplicado_de', null)
-    .eq('estado', 'nuevo')
-    .not('correo', 'is', null)
-    .order('created_at', { ascending: true })
-    .limit(tope * 2), 'runner.candidatos');
-  if (error) throw new Error(`loteRedactor.candidatos: ${error.message}`);
-  const candidatos = (data ?? []) as Array<{ id: string; vendedor: { nombre?: string } | null }>;
+  // A37-S28-01: la compuerta de ICP va EN la consulta, el cursor avanza y las piezas pendientes / rechazadas
+  // recientes / contactos de 48 h se descartan en lote (ver candidatos_redactor.ts).
+  const candidatos = await candidatosDelRedactor(tope * 2);
 
   // ARQ-2: `null` es PEGAJOSO. Sumar un desconocido con `+=` lo convertía en
   // cero y el agregado salía con cara de medido.
@@ -724,6 +719,19 @@ export async function correrRunner(
     if (a.presupuesto_dia_usd === null || a.presupuesto_dia_usd <= 0) {
       agentes.push({ agente: a.id, resultado: 'saltado', motivo: 'sin presupuesto_dia_usd declarado — el runner no corre agentes sin techo' });
       continue;
+    }
+    // Candado 3b — EL CORTACIRCUITOS (23-oct-2026). Un agente con 3 corridas
+    // `fallo` SEGUIDAS no se vuelve a despachar en cada vuelta de 4 h: se
+    // reporta `saltado` con el motivo y se sondea UNA vez cada 24 h (si el
+    // sondeo sale bien, la racha se rompe sola). Antes el enriquecedor se
+    // despachaba y fallaba 127 veces en 10 días. Fail open (ver
+    // `leerPausaPorFallos`): es ahorro y silenciador de ruido, no protección.
+    {
+      const pausa = await leerPausaPorFallos(a.id);
+      if (pausa) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: pausa });
+        continue;
+      }
     }
     // Candado 4 — backpressure de la bandeja (solo agentes que encolan).
     if (a.id === 'redactor') {

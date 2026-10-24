@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getCostoPorFaseModelo } from '@/lib/admin/negocio';
 import { usd, numero } from '@/lib/formato';
 import { Settings2, ScanText, Calculator, MessagesSquare } from 'lucide-react';
@@ -34,6 +35,8 @@ const FASES = [
  * la consola (hairline sobre --surface). Cifras y fuente no cambian.
  */
 export default async function ModelOpsPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const [r, porFaseModelo] = await Promise.all([getResumenNegocio(), getCostoPorFaseModelo()]);
   const porFaseMap = new Map(r.porFase.map((f) => [f.fase, f]));
 

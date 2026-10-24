@@ -124,7 +124,7 @@ export function leerCifraImportada(v: unknown): number | null | 'ilegible' {
     ? (limpio.lastIndexOf(',') > limpio.lastIndexOf('.')
       ? limpio.replace(/\./g, '').replace(',', '.')
       : limpio.replace(/,/g, ''))
-    : limpio.replace(/,(?=\d{3}\b)/g, '').replace(',', '.');
+    : limpio.replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.');
   const n = Number(normal);
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 'ilegible';
 }

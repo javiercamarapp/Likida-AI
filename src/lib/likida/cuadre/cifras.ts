@@ -34,20 +34,12 @@ const DINERO_EN_PALABRAS =
  * WhatsApp — no casaban el patrón de arriba (exige mil/pesos) ni los dígitos,
  * y una cifra que nadie calculó salía al teléfono de quien liquida. La
  * ambigüedad ("tres comprobantes") la resuelve el chequeo por cláusula de
- * `tieneCifrasDeDinero`, con el vocabulario de NO_ES_DINERO; la doctrina del
+ * `tieneCifrasDeDinero`, con las unidades/etiquetas de `quitaNumerosQueNoSonDinero`; la doctrina del
  * archivo prefiere marcar (el reemplazo es el cuadre determinístico del motor,
  * correcto y útil) a dejar pasar.
  */
 const CARDINAL_SUELTO =
-  /\b(?:dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|diecis[ée]is|diecisiete|dieciocho|diecinueve|veinti(?:ún|uno|dos|tr[ée]s|cuatro|cinco|s[ée]is|siete|ocho|nueve)|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien(?:to)?|doscient[oa]s?|trescient[oa]s?|cuatrocient[oa]s?|quinient[oa]s?|seiscient[oa]s?|setecient[oa]s?|ochocient[oa]s?|novecient[oa]s?|mil)\b/i;
-
-/**
- * Contextos donde un número de 2+ dígitos NO es dinero. Sin esto, "van 8 fotos"
- * o un folio dispararían el reemplazo y el operador recibiría el cuadre en
- * respuesta a un "¿ya llegaron mis fotos?".
- */
-const NO_ES_DINERO =
-  /\b(?:folio|uuid|rfc|ticket|comprobantes?|fotos?|litros?|lts?|km|kil[oó]metros?|placas?|a[nñ]o|d[ií]as?|horas?|minutos?|%|por\s?ciento|art[ií]culo|regla|migraci[oó]n|viaje\s*#)\b/i;
+  /\b(?:dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|diecis[ée]is|diecisiete|dieciocho|diecinueve|veinte|veinti(?:ún|uno|dos|tr[ée]s|cuatro|cinco|s[ée]is|siete|ocho|nueve)|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien(?:to)?|doscient[oa]s?|trescient[oa]s?|cuatrocient[oa]s?|quinient[oa]s?|seiscient[oa]s?|setecient[oa]s?|ochocient[oa]s?|novecient[oa]s?|mil)\b/i;
 
 /**
  * Un número suelto de 2+ dígitos que NO forma parte de un identificador.
@@ -181,6 +173,23 @@ function sinAniosQueNoSeanMonto(texto: string): string {
  */
 const SEPARADOR_DE_CLAUSULA = /[,;.:!?¡¿]|\s+(?:y|o|pero|porque)\s+/i;
 
+const NUM_TOKEN = String.raw`(?:\d[\d.,]*|${CARDINAL_SUELTO.source})`;
+/** «40 litros», «3 días», «tres comprobantes», «16%», «16 por ciento». */
+const NUM_CON_UNIDAD_DESPUES = new RegExp(
+  String.raw`(?<![\w-])${NUM_TOKEN}\s*(?:%|(?:tickets?|comprobantes?|fotos?|litros?|lts?|km|kil[oó]metros?|placas?|a[nñ]os?|d[ií]as?|horas?|minutos?|por\s?ciento)(?![\wáéíóúñ]))`,
+  'gi',
+);
+/** «folio 1042», «artículo 27», «regla 2», «viaje #12»: el identificador va DESPUÉS. */
+const NUM_CON_ETIQUETA_ANTES = new RegExp(
+  String.raw`(?<![\wáéíóúñ])(?:folio|uuid|rfc|ticket|placas?|a[nñ]o|art[ií]culo|regla|migraci[oó]n|viaje\s*#)\s*[:#]?\s*\d[\d.,]*`,
+  'gi',
+);
+
+/** Quita de la cláusula SOLO los números con su unidad/etiqueta pegada. */
+function quitaNumerosQueNoSonDinero(clausula: string): string {
+  return clausula.replace(NUM_CON_UNIDAD_DESPUES, ' ').replace(NUM_CON_ETIQUETA_ANTES, ' ');
+}
+
 export function tieneCifrasDeDinero(texto: string): boolean {
   if (DINERO_EXPLICITO.test(texto) || DINERO_EN_PALABRAS.test(texto)) return true;
   // Un número suelto SOLO cuenta si nada en SU cláusula lo explica como otra
@@ -196,9 +205,14 @@ export function tieneCifrasDeDinero(texto: string): boolean {
   // carriles tengan agujeros distintos.
   const sinAnios = sinAniosQueNoSeanMonto(texto);
   const clausulas = sinAnios.split(SEPARADOR_DE_CLAUSULA);
-  return clausulas.some((c) =>
-    (NUMERO_SUELTO.test(c) || CARDINAL_SUELTO.test(c)) && !NO_ES_DINERO.test(c),
-  );
+  // A37-S40-01: antes bastaba UNA palabra de NO_ES_DINERO en la cláusula para
+  // apagar TODOS sus números («Con tus 6 comprobantes te sobran 3200» → false).
+  // Ahora solo se descarta el número que tiene la palabra PEGADA; lo demás de la
+  // cláusula se sigue evaluando.
+  return clausulas.some((c) => {
+    const resto = quitaNumerosQueNoSonDinero(c);
+    return NUMERO_SUELTO.test(resto) || CARDINAL_SUELTO.test(resto);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -28,7 +28,7 @@ import { normalizarValor } from './normalizar';
 import { aprender, claveDePerfil, dominioDe, firmaDe } from './perfiles';
 import { MENSAJE_FUNCION_NO_DISPONIBLE, flotaBajoPerfil, prepararEnvioTms, type ResultadoEnvio } from './envio';
 import { aplicarSalidaViaje, type ResultadoSalida } from './salida';
-import { DIAS_RETENCION, validarDocumento } from './servicio';
+import { DIAS_RETENCION, reintentarDocumento, validarDocumento } from './servicio';
 import { CODIGOS_SUMA, confianzaMinimaCritica, conservarHallazgosTms, type Hallazgo, type ResultadoValidacion } from './validacion';
 import * as repo from './repo';
 import { asignarAlLlegarARevision } from './revisor';
@@ -338,6 +338,19 @@ export async function rechazarDocumento(
   if (!r) throw new ConflictoDeVersion();
   await repo.registrarEvento(tenantId, id, 'rechazado', actorId, { motivo: m });
   return r;
+}
+
+/**
+ * A37-A3-04 · «Reintentar lectura»: un documento `fallido` (intentos agotados) vuelve a la cola con los intentos en cero.
+ * Con tope de reaperturas y bitácora; no toca el archivo. Lanza `DatoInvalido` con una frase si no procede.
+ */
+export async function reintentarLectura(tenantId: string, id: string, versionVista: number, actorId: string | null): Promise<DocumentoFila> {
+  const d = await cargar(tenantId, id);
+  if (d.estado !== 'fallido') throw new DatoInvalido(`Un documento «${d.estado}» no se reintenta: solo los que no se pudieron leer.`);
+  if (d.version !== versionVista) throw new ConflictoDeVersion();
+  const r = await reintentarDocumento(tenantId, d, actorId, 'Reintentar lectura (botón)');
+  if (!r.ok) throw new DatoInvalido(r.mensaje);
+  return cargar(tenantId, id);
 }
 
 /** Reabre un aprobado o rechazado: vuelve a «por revisar» sin tocar el viaje que ya se haya creado. */

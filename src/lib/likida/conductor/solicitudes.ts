@@ -124,11 +124,13 @@ export function armarRecordatorio(hito: HitoFila, v: ViajeContexto, nivel: numbe
   };
 }
 
-export type MotivoEscalacion = 'sin_respuesta' | 'sin_telefono' | 'problema_reportado';
+export type MotivoEscalacion = 'sin_respuesta' | 'sin_telefono' | 'sin_canal' | 'problema_reportado';
 
 const TEXTO_MOTIVO: Record<MotivoEscalacion, (n: number) => string> = {
   sin_respuesta: (n) => `sin respuesta a ${n} ${n === 1 ? 'aviso' : 'avisos'}`,
   sin_telefono: () => 'el chofer no tiene teléfono registrado',
+  // A37-A5-04: ningún aviso le llegó (plantilla sin aprobar, número sin WhatsApp): NO se dice «sin respuesta», el chofer nunca recibió nada.
+  sin_canal: () => 'no se le pudo enviar el aviso por WhatsApp; el chofer no ha recibido nada',
   problema_reportado: () => 'el chofer reportó un problema',
 };
 

@@ -46,6 +46,7 @@ import {
   validarLiquidacionExterna,
 } from '../../liquidacion_externa/esquema';
 import { buscarPorClave } from '../../liquidacion_externa/repo';
+import { abrirExcepcion } from '../../liquidacion_externa/repo_correo';
 import { dependenciasPorOmision, recibirLiquidacionExterna } from '../../liquidacion_externa/servicio';
 import { MENSAJE_CANAL_CORREO_SIN_WHATSAPP } from '../../liquidacion_externa/canal_correo';
 import { recibirArchivoPeaje } from '../../peajes/ingesta';
@@ -76,6 +77,12 @@ export const VENTANA_INICIAL_DIAS = 2;
 /** Cuánto se retrocede el `desde` al avanzar, por si el origen publica tarde. Es seguro: la idempotencia absorbe el traslape. */
 export const SOLAPE_MS = 60 * 60 * 1000;
 const DIA_MS = 86_400_000;
+/**
+ * A37-TRANSVERSAL-02: hasta cuántos días atrás se retiene el `desde` por filas pendientes. Más allá se sueltan CON aviso y
+ * alarma (nunca en silencio): una fila que no entra en una semana necesita una persona, y retener sin tope haría crecer la
+ * ventana (y el costo de cada corrida) sin límite.
+ */
+export const RETENCION_MAX_DIAS = 7;
 const LOTE_BASE = 200;
 
 // ── Dependencias (todo lo que toca la base o a otros módulos) ───────────────
@@ -104,6 +111,12 @@ export interface ResultadoEntrega {
   pendientes: number;
   /** Correcciones que la puerta no sobrescribe (A1 no pisa una liquidación ya recibida). */
   conflictos?: number;
+  /**
+   * A37-TRANSVERSAL-02: instante (ISO) de la fila pendiente MÁS ANTIGUA que se puede recuperar. Mientras haya pendientes el
+   * `desde` no pasa de aquí (sin fecha, no pasa del inicio de la ventana leída): si no, la fila se pierde cuando el traslape
+   * de 1 h la deja atrás.
+   */
+  pendientesDesde?: string;
   detalle?: string;
 }
 
@@ -328,12 +341,35 @@ async function sincronizarRecurso(
     return fallar(motivo, reanudarGuardado);
   };
 
+  /** Desde dónde NO se puede avanzar por filas pendientes de la entrega (A37-TRANSVERSAL-02). */
+  let retener: string | undefined;
+  const entregado = (e: ResultadoEntrega): void => {
+    aplicarEntrega(r, e);
+    if (e.pendientes > 0) {
+      const t = e.pendientesDesde !== undefined && Number.isFinite(Date.parse(e.pendientesDesde)) ? Date.parse(e.pendientesDesde) : Date.parse(desde);
+      retener = iso(Math.min(t, retener !== undefined ? Date.parse(retener) : t));
+    }
+  };
+
   const cerrar = async (c: CierreLectura): Promise<ResumenRecurso> => {
     r.backlog = c.backlog;
-    r.aviso = c.avisos.length > 0 ? limpiarFrase(c.avisos.join(' ')) : undefined;
+    // El aviso de la entrega (pendientes, correcciones sin aplicar) se CONSERVA: antes el del lector lo pisaba.
+    r.aviso = [r.aviso, c.avisos.length > 0 ? limpiarFrase(c.avisos.join(' ')) : ''].filter(Boolean).join(' ') || undefined;
     if (c.completa && !c.backlog) {
+      let siguiente = c.desdeFijo ?? desdeSiguiente(desde, hasta);
+      if (retener !== undefined) {
+        // A37-TRANSVERSAL-02: no se avanza más allá de la fila pendiente más antigua (con tope, dicho en voz alta).
+        const piso = Math.max(Date.parse(retener), Date.parse(hasta) - RETENCION_MAX_DIAS * DIA_MS);
+        if (Date.parse(retener) < piso) {
+          const msg = `Había filas pendientes de más de ${RETENCION_MAX_DIAS} días: se sueltan y requieren revisión manual.`;
+          r.aviso = r.aviso ? `${r.aviso} ${msg}` : msg;
+          logger.warn('tms.sincronizar.pendientes_soltados', { tenant: flota.tenantId, recurso, pendientes: r.pendientes });
+          await alertarOperador('cron.tms.pendientes_soltados', { tenantId: flota.tenantId, recurso, pendientes: r.pendientes });
+        }
+        siguiente = iso(Math.min(Date.parse(siguiente), piso));
+      }
       await deps.guardarEstado(flota.tenantId, recurso, {
-        desde: c.desdeFijo ?? desdeSiguiente(desde, hasta),
+        desde: siguiente,
         cursor: null,
         ultimaOkEn: iso(deps.ahora()),
         ultimoError: null,
@@ -361,17 +397,32 @@ async function sincronizarRecurso(
       const mapeo = mapeoCrudo as MapeoTms;
       const malo = validarMapeoOError(mapeo);
       if (malo) return await fallar(`el mapeo de viajes no es válido: ${malo}`);
+      // A37-TRANSVERSAL-01: `viaje.operador_id` es NOT NULL; sin un campo de operador en el mapeo NINGÚN viaje puede entrar
+      // y todos caerían en «sin operador» culpando al catálogo. Se rechaza el recurso con la causa real.
+      if (mapeo.campos === null || typeof mapeo.campos !== 'object' || !Object.prototype.hasOwnProperty.call(mapeo.campos, 'operadorNombre')) {
+        return await fallar('el mapeo de viajes no trae el campo «operadorNombre»: sin operador ningún viaje puede crearse en Likida');
+      }
       const l = await leerViajes(sesion, { desde, hasta, reanudar: reanudar as PuntoReanudo | undefined }, { ...opcionesLector, mapeo });
       const base = l.ok ? l : l.parcial;
       r.leidas = base.filas.length; r.rechazadas = base.rechazadas.length;
       const items = base.filas.map((f) => ({ clave: f.folio, huella: huella('viajes', f.folio, estables(f)) }));
       const estados = await clasificar(deps, flota.tenantId, 'viajes', items);
-      const porEntregar = base.filas.filter((f) => estados.get(f.folio) !== 'omitida');
-      r.omitidas = base.filas.length - porEntregar.length; r.nuevas = porEntregar.length;
+      // A37-TRANSVERSAL-03: un folio ya entregado que cambió en el origen (unidad, destino, fecha) NO lo aplica la puerta
+      // (el folio existente se salta). No se marca como entregado con la huella nueva: se cuenta como corrección sin aplicar,
+      // la corrida queda `parcial` y se dice, en vez de perderse.
+      const cambiados = base.filas.filter((f) => estados.get(f.folio) === 'actualizada');
+      const porEntregar = base.filas.filter((f) => estados.get(f.folio) === 'nueva');
+      r.omitidas = base.filas.length - porEntregar.length - cambiados.length; r.nuevas = porEntregar.length;
       if (porEntregar.length > 0) {
         const e = await deps.entregas.viajes(flota.tenantId, porEntregar);
-        aplicarEntrega(r, e);
+        entregado(e);
         await deps.guardarHuellas(flota.tenantId, 'viajes', items.filter((i) => e.hechas.includes(i.clave)));
+      }
+      if (cambiados.length > 0) {
+        r.conflictos += cambiados.length;
+        const msg = `${cambiados.length} viaje(s) cambiaron en el origen después de entrar; Likida no los modifica solos: revísalos a mano.`;
+        r.aviso = r.aviso ? `${r.aviso} ${msg}` : msg;
+        logger.warn('tms.sincronizar.viaje_corregido_en_origen', { tenant: flota.tenantId, n: cambiados.length });
       }
       if (!l.ok) return await falloLector(l.motivo, base.reanudar);
       return await cerrar({ completa: base.completa, backlog: base.backlog, reanudar: base.reanudar, avisos: base.avisos });
@@ -389,7 +440,7 @@ async function sincronizarRecurso(
       r.omitidas = base.filas.length - porEntregar.length; r.nuevas = porEntregar.length;
       if (porEntregar.length > 0) {
         const e = await deps.entregas.peajes(flota.tenantId, porEntregar, { desde, hasta });
-        aplicarEntrega(r, e);
+        entregado(e);
         await deps.guardarHuellas(flota.tenantId, 'peajes', base.filas.filter((f) => e.hechas.includes(f.clave)).map((f) => ({ clave: f.clave, huella: f.huella })));
       }
       if (!l.ok) return await falloLector(l.motivo, base.reanudar);
@@ -408,7 +459,7 @@ async function sincronizarRecurso(
       r.omitidas = base.cuerpos.length - porEntregar.length; r.nuevas = porEntregar.length;
       if (porEntregar.length > 0) {
         const e = await deps.entregas.liquidaciones(flota.tenantId, porEntregar);
-        aplicarEntrega(r, e);
+        entregado(e);
         await deps.guardarHuellas(flota.tenantId, 'liquidaciones', base.cuerpos.filter((c) => e.hechas.includes(c.clave)).map((c) => ({ clave: c.clave, huella: c.huella })));
       }
       if (!l.ok) return await falloLector(l.motivo);
@@ -635,10 +686,21 @@ export const entregasReales: Entregas = {
     // Lo que la puerta no pudo amarrar (operador, unidad, cliente) NO se marca como entregado: se dice y se reintenta
     // cuando el catálogo lo permita. Los folios ya existentes (`saltados`) sí cuentan como hechos.
     const noHechos = new Set<string>([...r.sinOperador, ...r.sinUnidad, ...r.sinCliente, ...r.operadorOcupado, ...(r.unidadOcupada ?? [])]);
+    // A37-TRANSVERSAL-02: la fila pendiente más antigua marca hasta dónde NO puede avanzar el `desde`.
+    const fechas = filas.filter((f) => noHechos.has(f.folio)).map((f) => Date.parse(f.salida_en)).filter(Number.isFinite);
+    // A37-TRANSVERSAL-01: el aviso dice la causa real (antes culpaba siempre al catálogo).
+    const causas = [
+      r.sinOperador.length > 0 ? `${r.sinOperador.length} sin operador (el viaje no trae operador o no coincide con ninguno dado de alta)` : '',
+      r.sinUnidad.length > 0 ? `${r.sinUnidad.length} con unidad que no existe en el catálogo` : '',
+      r.sinCliente.length > 0 ? `${r.sinCliente.length} con cliente que no existe en el catálogo` : '',
+      r.operadorOcupado.length > 0 ? `${r.operadorOcupado.length} con el operador ya en un viaje abierto` : '',
+      (r.unidadOcupada?.length ?? 0) > 0 ? `${r.unidadOcupada?.length} con la unidad ya en un viaje abierto` : '',
+    ].filter(Boolean);
     return {
       hechas: filas.map((f) => f.folio).filter((f) => !noHechos.has(f)),
       pendientes: noHechos.size,
-      detalle: noHechos.size > 0 ? `${noHechos.size} viaje(s) sin entrar: falta operador, unidad o cliente en el catálogo, o el operador o la unidad ya tiene un viaje abierto.` : undefined,
+      ...(fechas.length > 0 ? { pendientesDesde: new Date(Math.min(...fechas)).toISOString() } : {}),
+      detalle: noHechos.size > 0 ? `${noHechos.size} viaje(s) sin entrar: ${causas.join('; ')}.` : undefined,
     };
   },
 
@@ -659,7 +721,20 @@ export const entregasReales: Entregas = {
       const existente = await buscarPorClave(tenantId, it.clave);
       if (existente) {
         // A1 no sobrescribe una liquidación ya recibida (el chofer pudo verla): la corrección se dice, no se aplica.
-        if (existente.huella !== it.huella) conflictos += 1;
+        if (existente.huella !== it.huella) {
+          // A37-TRANSVERSAL-03: NO se marca como entregada con la huella nueva (se perdería para siempre). Se abre una
+          // excepción durable `correccion_pendiente` (idempotente: refresca si ya hay una abierta) para que una persona decida.
+          conflictos += 1;
+          try {
+            await abrirExcepcion(tenantId, it.clave, 'correccion_pendiente', {
+              origen: 'tms', netoAntes: existente.total ?? null, netoDespues: it.cuerpo.total,
+            }, new Date());
+          } catch (e) {
+            logger.warn('tms.sincronizar.correccion_sin_excepcion', { tenant: tenantId, clave: it.clave, error: limpiarFrase(e instanceof Error ? e.message : String(e)) });
+            pendientes += 1;
+          }
+          continue;
+        }
         hechas.push(it.clave);
         continue;
       }
@@ -678,7 +753,7 @@ export const entregasReales: Entregas = {
       hechas, pendientes, conflictos,
       detalle: [
         porCanal > 0 ? `${porCanal} liquidación(es) sin guardar: ${MENSAJE_CANAL_CORREO_SIN_WHATSAPP}` : '',
-        conflictos > 0 ? `${conflictos} liquidación(es) cambiaron en el origen después de recibirse; Likida no las sobrescribe.` : '',
+        conflictos > 0 ? `${conflictos} liquidación(es) cambiaron en el origen después de recibirse; Likida no las sobrescribe y quedan como excepción «corrección pendiente».` : '',
       ].filter(Boolean).join(' ') || undefined,
     };
   },

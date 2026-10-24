@@ -249,11 +249,15 @@ registerTool('top_rutas', {
  *  extendido hacia adelante. Es una estimación y lo dice — el supuesto viaja
  *  en el resultado y el prompt obliga a narrarlo (regla del producto: una
  *  estimación se muestra declarada, nunca disfrazada de medición). */
-export function proyectarPuntos(valores: number[]): {
+export function proyectarPuntos(valores: number[], opciones: { ultimoCorteParcial?: boolean } = {}): {
   cortesConDatos: number; promedioPorCorte: number; sumaObservada: number;
   proyeccionSiguienteCorte: number; proyeccionSiguientes4: number; supuesto: string;
 } | { sinDatos: true } {
-  const conDatos = valores.filter((v) => v > 0);
+  // A37-S23-01: el último corte de una serie semanal es la semana ISO EN CURSO (incompleta). Promediarla
+  // subestima la proyección, así que no entra a la base; sí cuenta en `sumaObservada` (es lo medido).
+  const parcial = opciones.ultimoCorteParcial === true;
+  const completos = parcial ? valores.slice(0, -1) : valores;
+  const conDatos = completos.filter((v) => v > 0);
   if (conDatos.length === 0) return { sinDatos: true };
   const base = conDatos.slice(-4);
   const promedio = Math.round((base.reduce((a, b) => a + b, 0) / base.length) * 100) / 100;
@@ -263,7 +267,8 @@ export function proyectarPuntos(valores: number[]): {
     sumaObservada: Math.round(valores.reduce((a, b) => a + b, 0) * 100) / 100,
     proyeccionSiguienteCorte: promedio,
     proyeccionSiguientes4: Math.round(promedio * 4 * 100) / 100,
-    supuesto: `promedio simple de los últimos ${base.length} cortes con datos, extendido hacia adelante — no considera estacionalidad ni viajes ya planeados`,
+    supuesto: `promedio simple de los últimos ${base.length} cortes con datos, extendido hacia adelante — no considera estacionalidad ni viajes ya planeados`
+      + (parcial ? '; el corte de la semana en curso (incompleto) NO entra al promedio, aunque sí a la suma observada' : ''),
   };
 }
 
@@ -288,13 +293,20 @@ registerTool('proyectar_serie', {
     const modo = modoDe(args);
     if (args.serie === 'liquidado') {
       const s = exigirModo((await getLiquidadoPorSemanaSeries(ctx.tenantId, hoyIso()))[modo], 'proyeccion/liquidado', modo);
-      return { serie: 'liquidado', modo, moneda: 'MXN', ...proyectarPuntos(s.map((p) => p.valor)) };
+      return { serie: 'liquidado', modo, moneda: 'MXN', ...proyectarPuntos(s.map((p) => p.valor), { ultimoCorteParcial: true }) };
     }
     const g = exigirModo((await getGastoPorSemanaSeries(ctx.tenantId, hoyIso()))[modo], 'proyeccion/gasto', modo);
-    // Total por corte = suma de todas las categorías en ese corte.
-    const n = Math.max(...g.series.map((x) => x.valores.length), 0);
-    const totales = Array.from({ length: n }, (_, i) => g.series.reduce((a, x) => a + (x.valores[i] ?? 0), 0));
-    return { serie: 'gasto', modo, moneda: 'MXN', ...proyectarPuntos(totales) };
+    // Total por corte de TODOS los conceptos (A37-S23-01): `series` solo trae el top-3, sumarlo subestima.
+    // Si el lector no trae el total (versión vieja), cae a la suma de las series y lo DECLARA en el supuesto.
+    let aviso = '';
+    let totales = g.totalPorCorte;
+    if (!totales) {
+      const n = Math.max(...g.series.map((x) => x.valores.length), 0);
+      totales = Array.from({ length: n }, (_, i) => g.series.reduce((a, x) => a + (x.valores[i] ?? 0), 0));
+      aviso = '; ATENCIÓN: el total por corte suma solo las categorías con más gasto, no todas — la proyección puede quedar por debajo';
+    }
+    const p = proyectarPuntos(totales, { ultimoCorteParcial: true });
+    return { serie: 'gasto', modo, moneda: 'MXN', ...('supuesto' in p ? { ...p, supuesto: p.supuesto + aviso } : p) };
   },
 });
 

@@ -459,7 +459,8 @@ export function guardiaFundamento(reply: string, permitidas: string[], historial
   // tuviera la misma forma. Pasó: al quitar una inventada, se comió el
   // "regla 2.9" que sí venía de una tool.
   const guardado: string[] = [];
-  let texto = reply;
+  // A37-S50-01: un NUL ya presente en la respuesta del modelo no puede hacerse pasar por marcador.
+  let texto = reply.replace(/\u0000/g, '');
   for (const id of citadas.filter((c) => ok.has(c))) {
     for (const p of patronesDe(id)) {
       texto = texto.replace(new RegExp(p.source, 'gi'), (m) => {
@@ -519,7 +520,7 @@ export function guardiaFundamento(reply: string, permitidas: string[], historial
   }
 
   // ── 5. Se devuelven las protegidas a su sitio ─────────────────────────────
-  texto = texto.replace(/ (\d+) /g, (_m, n) => guardado[Number(n)]);
+  texto = texto.replace(/ (\d+) /g, (_m, n) => guardado[Number(n)] ?? '');
 
   return { reply: limpiar(texto), forzado: true, quitadas: sobran };
 }

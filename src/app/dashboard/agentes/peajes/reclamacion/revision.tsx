@@ -353,6 +353,8 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
                 <div className="flex gap-3 flex-wrap items-end">
                   <form action={acciones.registrarNota} className="flex items-end gap-2 flex-wrap">
                     <input type="hidden" name="reclamo" value={r.id} />
+                    {/* A33-06: lo que esta pantalla vio; un doble clic o pestaña repetida manda lo mismo y la base lo registra una sola vez. */}
+                    <input type="hidden" name="version_vista" value={`${r.estado}:${r.montoAcreditado}`} />
                     <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Nota de crédito (MXN)</span>
                       <input name="monto" inputMode="decimal" required className={`${CSS_INPUT} w-[120px] mt-0.5`} style={ESTILO_INPUT} /></label>
                     <label className="block"><span className="etiqueta-mono text-[10px] uppercase block" style={{ color: 'var(--faint)' }}>Fecha</span>

@@ -37,6 +37,10 @@ export const TOLERANCIA_FIRMA_MS = 5 * 60_000;
 export const MAX_PENDIENTES_POR_FLOTA = 50;
 export const MAX_INTENTOS = 5;
 export const LEASE_SEGUNDOS = 300;
+/** Veces que un archivo puede morir a mitad de proceso (lease vencido) antes de mandarlo a `fallida`. Igual al tope del claim en la 0856. */
+export const TOPE_VENCIDOS = 3;
+/** Minutos con el lease vencido tras los cuales el barrido cierra un `procesando` aunque tenga pocos intentos. */
+export const GRACIA_VENCIDOS_MIN = 60;
 /** Backoff entre intentos de un fallo de infraestructura: 1, 5, 15, 30 min. */
 export const BACKOFF_MIN = [1, 5, 15, 30] as const;
 
@@ -166,7 +170,63 @@ export async function recibirArchivoPeaje(tenantId: string, c: CuerpoIngesta, or
   const filas = (r.data ?? []) as FilaEncolar[];
   const fila = filas[0];
   if (!fila) return { ok: false, codigo: 'error', motivo: 'peaje_archivo_encolar no devolvió fila' };
+  // A36-R03-01: el mismo archivo ya existe y quedó `fallida` (formato sin mapeo, barrido 0856…). Antes se
+  // devolvía como «duplicado» y los canales (pull/SFTP/correo) lo contaban como éxito: nunca se reprocesaba,
+  // y a los 30 días su contenido se purga. Regla: el reenvío del MISMO contenido lo devuelve a `pendiente`
+  // (con el contenido nuevo) solo si aún no agotó MAX_INTENTOS; los intentos NO se reinician, así un
+  // proveedor que reenvía en bucle un archivo irreparable se detiene solo (entonces hace falta «reintentar»).
+  if (fila.duplicado && fila.estado === 'fallida') {
+    const rearmado = await rearmarArchivoFallido(tenantId, String(fila.id), c.contenido);
+    if (rearmado === 'rearmado') return { ok: true, id: String(fila.id), duplicado: false, estado: 'pendiente' };
+    // Con la 0861 el rearme respeta el MISMO tope de 50 que un archivo nuevo: cola llena = el canal reintenta después.
+    if (rearmado === 'cola_llena') return { ok: false, codigo: 'cola_llena', motivo: `Hay ${MAX_PENDIENTES_POR_FLOTA} archivos pendientes de procesar; espera a que se vacíe la cola.` };
+  }
   return { ok: true, id: String(fila.id), duplicado: Boolean(fila.duplicado), estado: String(fila.estado) };
+}
+
+/**
+ * Rearma un archivo `fallida` a `pendiente` sin reiniciar intentos. Migración 0861: lo hace `peaje_archivo_rearmar` en la base, bajo el
+ * candado por flota y el tope de 50 de la 0850 (el UPDATE de abajo no los tenía). Si la 0861 aún no está aplicada (42883/PGRST202) o la
+ * respuesta no se puede leer, cae al UPDATE condicionado anterior y lo avisa.
+ */
+async function rearmarArchivoFallido(tenantId: string, archivoId: string, contenido: Buffer): Promise<'rearmado' | 'no' | 'cola_llena'> {
+  const via = await acotada(supabaseAdmin().rpc('peaje_archivo_rearmar', {
+    p_tenant: tenantId, p_archivo: archivoId, p_contenido: byteaDeBuffer(contenido), p_max_intentos: MAX_INTENTOS,
+  }), 'peajes.ingesta.rearmar_rpc');
+  if (!via.error) {
+    const d = (Array.isArray(via.data) ? via.data[0] : via.data) as { ok?: boolean; codigo?: string } | null | undefined;
+    if (d && typeof d.ok === 'boolean') {
+      if (d.ok) return 'rearmado';
+      return d.codigo === 'cola_llena' ? 'cola_llena' : 'no';
+    }
+    // Respuesta ilegible: se trata como si la función no existiera (camino anterior).
+  } else {
+    const codigo = (via.error as { code?: string }).code;
+    if (codigo !== '42883' && codigo !== 'PGRST202') {
+      // Best-effort: queda como estaba (duplicado/fallida) y el panel puede reintentarla a mano.
+      logger.error('peajes.ingesta.rearmar_rpc', { tenant: tenantId, err: via.error.message });
+      return 'no';
+    }
+  }
+  logger.warn('peajes.ingesta.rearmar_sin_0861', { tenant: tenantId, aviso: 'peaje_archivo_rearmar no existe: rearme sin candado ni tope; aplicar la migración 0861' });
+  return (await rearmarArchivoFallidoSinFuncion(tenantId, archivoId, contenido)) ? 'rearmado' : 'no';
+}
+
+/** Camino anterior a la 0861: UPDATE condicionado (solo si SIGUE `fallida` y con intentos por debajo del tope). `true` si cambió una fila. */
+async function rearmarArchivoFallidoSinFuncion(tenantId: string, archivoId: string, contenido: Buffer): Promise<boolean> {
+  const res = await acotada(supabaseAdmin().from('peaje_ingesta_archivo')
+    .update({
+      estado: 'pendiente', contenido: byteaDeBuffer(contenido), bytes: contenido.length,
+      proximo_intento_en: new Date().toISOString(), ultimo_error: null, reclamo: null, reclamado_hasta: null,
+    })
+    .eq('tenant_id', tenantId).eq('id', archivoId).eq('estado', 'fallida').lt('intentos', MAX_INTENTOS).select('id'),
+    'peajes.ingesta.rearmar_fallida');
+  if (res.error) {
+    // Best-effort: si no se pudo, queda como estaba (duplicado/fallida) y el panel puede reintentarla a mano.
+    logger.error('peajes.ingesta.rearmar_fallida', { tenant: tenantId, err: res.error.message });
+    return false;
+  }
+  return (res.data ?? []).length > 0;
 }
 
 // ── El proceso (lo llama el cron) ───────────────────────────────────────────
@@ -180,12 +240,62 @@ export interface ResumenCola {
   reintentar: number;
   /** El token del claim ya no era el nuestro al cerrar: lo cerró otro. */
   claimPerdido: number;
+  /**
+   * El barrido de `procesando` vencidos (0856, A35-R12-rendimiento-01): archivos que murieron a mitad de
+   * proceso demasiadas veces y se mandaron a `fallida` con motivo. Solo existe si el barrido corrió (migración
+   * aplicada): `archivos` > 0 vuelve «parcial» al latido; `estado` dice si no pudo correr (nunca en silencio).
+   */
+  barrido?: { archivos: number; estado: 'ok' | 'no_disponible' | 'error' };
   /** Los cruces atípicos (T-A2-13) de los archivos procesados: solo conteos, nunca tags ni importes. `fallidos` vuelve «parcial» al latido. */
   atipicos?: { revisados: number; hallazgos: number; fallidos: number };
   /** El vínculo cruce→viaje (T-A2-21): solo existe si la flota lo activó. Conteos, nunca unidades ni importes. */
   vinculos?: { calculados: number; fallidos: number };
   /** El protocolo de discrepancia geográfica (T-A2-37): candidatos críticos de `unidad_inmovilizada` avisados. */
   discrepancia?: { evaluados: number; enviados: number; sinDestinatario: number; pendientes: number };
+}
+
+/** La RPC del barrido aún no existe en la base (migración 0856 sin aplicar). */
+function rpcInexistente(e: { code?: string; message?: string }): boolean {
+  return e.code === 'PGRST202' || e.code === '42883' || /could not find the function|does not exist/i.test(e.message ?? '');
+}
+
+/**
+ * Manda a `fallida`, con motivo legible, los archivos `procesando` con el lease vencido que ya agotaron el
+ * tope de intentos (o llevan demasiado vencidos) — el claim ya no los entrega (0856). Avisa en la bitácora del
+ * agente de cada flota: no es silencioso. Tolera una base sin la migración (dice `no_disponible`, no lanza), y
+ * ningún fallo del barrido tumba el procesamiento de la cola.
+ */
+export async function barrerColaPeajes(): Promise<NonNullable<ResumenCola['barrido']>> {
+  const admin = supabaseAdmin();
+  let res;
+  try {
+    res = await acotada(admin.rpc('peaje_archivo_barrer_vencidos', { p_max_intentos: TOPE_VENCIDOS, p_gracia_minutos: GRACIA_VENCIDOS_MIN }), 'peajes.cola.barrer');
+  } catch (e) {
+    logger.error('peajes.cola.barrido_fallo', { codigo: codigoDeError(e) });
+    return { archivos: 0, estado: 'error' };
+  }
+  if (res.error) {
+    if (rpcInexistente(res.error)) {
+      logger.warn('peajes.cola.barrido_no_disponible', { motivo: 'falta la migración 0856: la cola corre sin barrido de procesando vencidos' });
+      return { archivos: 0, estado: 'no_disponible' };
+    }
+    logger.error('peajes.cola.barrido_fallo', { err: res.error.message });
+    return { archivos: 0, estado: 'error' };
+  }
+  const filas = (res.data ?? []) as Array<{ id: string; tenant_id: string; nombre: string; intentos: number }>;
+  for (const f of filas) {
+    logger.error('peajes.cola.barrido_vencido', { archivo: f.id, tenant: f.tenant_id, intentos: f.intentos });
+    try {
+      const ahora = new Date();
+      await registrarCorrida(f.tenant_id, 'peajes', {
+        inicio: ahora, fin: ahora, estado: 'fallo', disparo: 'cron',
+        error: `«${f.nombre}» se detuvo: el sistema lo intentó ${f.intentos} ${f.intentos === 1 ? 'vez' : 'veces'} y no alcanzó a terminarlo (suele pasar con archivos muy grandes). Se conserva para reprocesarlo desde el panel; si se repite, divídelo en archivos más chicos o avisa a soporte.`.slice(0, 500),
+      });
+    } catch (e) {
+      logger.error('peajes.cola.barrido_aviso_fallo', { archivo: f.id, codigo: codigoDeError(e) });
+    }
+  }
+  return { archivos: filas.length, estado: 'ok' };
 }
 
 const minutos = (n: number) => new Date(Date.now() + n * 60_000).toISOString();
@@ -203,6 +313,9 @@ export async function procesarColaPeajes(
   const lease = opciones.leaseSegundos ?? LEASE_SEGUNDOS;
   const admin = supabaseAdmin();
   const r: ResumenCola = { tomados: 0, procesados: 0, fallidos: 0, reintentar: 0, claimPerdido: 0 };
+
+  // Antes de reclamar: lo agotado se cierra (y se avisa) para que no ocupe el lote ni la ventana de la corrida.
+  r.barrido = await barrerColaPeajes();
 
   const claim = await acotada(admin.rpc('peaje_archivo_reclamar', { p_limite: limite, p_lease_segundos: lease }), 'peajes.cola.reclamar');
   if (claim.error) throw new Error(`peajes.cola.reclamar: ${claim.error.message}`);

@@ -122,6 +122,9 @@ describe('guardia: ninguna escritura del código real toca un importe', () => {
     const conocidos = new Set([
       'reclamar_copia_jefe', 'cerrar_copia_jefe', 'registrar_acuse_no_coincide', 'reclamar_aviso_discrepancia',
       'cerrar_aviso_discrepancia', 'rearmar_aviso_discrepancia', 'reclamar_entregas_correo',
+      // 0857: la recepción del desglose en una transacción. Inserta las MISMAS filas que antes insertaba `recibirDesglose`
+      // (con el importe de la fuente, sin recalcular) y solo completa lo que falta con la misma huella; nunca actualiza un importe.
+      'recibir_desglose_atomico',
     ]);
     const vistos = new Set<string>();
     for (const f of FUENTES) for (const m of f.texto.matchAll(/\.rpc\(\s*['"]([a-z_0-9]+)['"]/g)) vistos.add(m[1]!);
@@ -134,7 +137,7 @@ describe('guardia: enumeración de rutas y acciones de servidor', () => {
 
   it('hay rutas /api/v1/liquidaciones-externas/* y ninguna expone PUT, PATCH ni DELETE', () => {
     expect(rutas.map((r) => relative('src/app/api/v1/liquidaciones-externas', r.ruta)).sort()).toEqual([
-      'acuses/confirmar/route.ts', 'acuses/route.ts', 'desgloses/route.ts', 'exportacion/route.ts', 'route.ts',
+      'acuses/confirmar/route.ts', 'acuses/route.ts', 'contactos/route.ts', 'desgloses/route.ts', 'exportacion/route.ts', 'route.ts', // contactos (A37-A1-01): solo correos, no toca montos ni liquidaciones
     ]);
     for (const r of rutas) {
       const verbos = [...r.texto.matchAll(/export\s+(?:async\s+)?(?:function|const)\s+(GET|POST|PUT|PATCH|DELETE)\b/g)].map((m) => m[1]);

@@ -30,6 +30,7 @@ const dobles = vi.hoisted(() => ({
   aprobarPieza: vi.fn(),
   rechazarPieza: vi.fn(),
   enviarPiezaPorCorreo: vi.fn(),
+  liberarEnvioAmbiguo: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
@@ -45,9 +46,10 @@ vi.mock('@/lib/likida/agentes/cola', async (importar) => ({
   aprobarPieza: dobles.aprobarPieza,
   rechazarPieza: dobles.rechazarPieza,
   enviarPiezaPorCorreo: dobles.enviarPiezaPorCorreo,
+  liberarEnvioAmbiguo: dobles.liberarEnvioAmbiguo,
 }));
 
-import { FormaEnvio } from './forma-pieza';
+import { FormaEnvio, FormaLiberarAmbiguo } from './forma-pieza';
 import PaginaAprobaciones from './page';
 
 /** Recorre el árbol ya renderizado (sin montar DOM) y junta cada elemento
@@ -116,4 +118,41 @@ it('INTEGRACIÓN — si enviarPiezaPorCorreo falla, el detalle llega verbatim y 
   const r = await accion(null, fd({ pieza: 'pz-1' }));
   expect(r.error).toBeTruthy();
   expect(dobles.revalidatePath).not.toHaveBeenCalled();
+});
+
+// A36-R11-01: envío ambiguo (timeout) — la pantalla muestra el motivo y ofrece la salida.
+const AMBIGUA = {
+  ...PIEZA_POR_ENVIAR, id: 'pz-9', enviadoEn: '2026-10-20T10:00:00Z', providerMessageId: null,
+  envioError: 'AMBIGUO: el proveedor no contestó a tiempo (timeout) — el correo PUDO haber salido. Verificar en Resend antes de cualquier reenvío.',
+};
+
+it('A36-R11-01 — una pieza ambigua en «Últimas resueltas» muestra su motivo y el botón de liberar; la acción la libera con el actor', async () => {
+  dobles.aprobadasSinEnviar.mockResolvedValue([]);
+  dobles.ultimasResueltas.mockResolvedValue([AMBIGUA]);
+  dobles.liberarEnvioAmbiguo.mockResolvedValue({ reservaLiberada: true });
+  const pagina = await PaginaAprobaciones();
+  const [forma] = buscarElementos(pagina, FormaLiberarAmbiguo);
+  expect(forma).toBeDefined();
+  expect(JSON.stringify(pagina)).toContain('Verificar en Resend');
+  const r = await (forma.props.accion as AccionEnviar)(null, fd({ pieza: 'pz-9' }));
+  expect(dobles.liberarEnvioAmbiguo).toHaveBeenCalledWith('pz-9', 'admin-1');
+  expect(r.ok).toBeTruthy();
+  expect(dobles.revalidatePath).toHaveBeenCalledWith('/admin/aprobaciones');
+});
+
+it('A36-R11-01 — la reserva de cadencia no borrada se DICE en la respuesta', async () => {
+  dobles.aprobadasSinEnviar.mockResolvedValue([]);
+  dobles.ultimasResueltas.mockResolvedValue([AMBIGUA]);
+  dobles.liberarEnvioAmbiguo.mockResolvedValue({ reservaLiberada: false });
+  const pagina = await PaginaAprobaciones();
+  const [forma] = buscarElementos(pagina, FormaLiberarAmbiguo);
+  const r = await (forma.props.accion as AccionEnviar)(null, fd({ pieza: 'pz-9' }));
+  expect(r.ok).toMatch(/48 h/);
+});
+
+it('A36-R11-01 — una pieza enviada con prueba del proveedor NO ofrece liberar', async () => {
+  dobles.aprobadasSinEnviar.mockResolvedValue([]);
+  dobles.ultimasResueltas.mockResolvedValue([{ ...AMBIGUA, providerMessageId: 're_1' }]);
+  const pagina = await PaginaAprobaciones();
+  expect(buscarElementos(pagina, FormaLiberarAmbiguo)).toHaveLength(0);
 });

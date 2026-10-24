@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import {
   getConversacionesActivas, contarConversacionesActivas, buscarConversaciones, TOPE_CONVERSACIONES,
@@ -25,6 +26,8 @@ interface SearchParams { q?: string; p?: string }
  * la tarjeta, el mismo material que usa la sección gemela de consola.tsx.
  */
 export default async function ConversacionesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const sp = await searchParams;
   // ADM-1: sin `?q=` se conserva la vista de siempre (las 20 más recientes,
   // con las tarjetas y el ranking). CON `?q=` se cambia a `buscarConversaciones`

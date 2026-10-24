@@ -185,7 +185,7 @@ export function crearPuertos(opts: {
   configs?: Record<string, ConfigConductor | 'ilegible'>;
   avisos?: Array<AvisoReclamado & { hitoId: string; operadorId?: string | null; creado?: Date }>;
   destinatarios?: (tenantId: string, terminalId: string | null, nivel: 1 | 2) => Array<{ nombre: string; telefono: string }>;
-  envio?: (e: EnvioMemoria) => { ok: true; via: 'texto' | 'botones' | 'plantilla' } | { ok: false; reintentable: boolean; mensaje: string };
+  envio?: (e: EnvioMemoria) => { ok: true; via: 'texto' | 'botones' | 'plantilla' } | { ok: false; reintentable: boolean; mensaje: string; bloqueadoPorCompuerta?: boolean };
 }) {
   const hitos = new Map<string, HitoFila>((opts.hitos ?? []).map((h) => [h.id, { ...h }]));
   const reclamos = new Map<string, { ok: boolean | null; canal: string | null; motivo: string | null; operadorId: string | null; creado: Date }>();
@@ -245,7 +245,7 @@ export function crearPuertos(opts: {
         enviados.push(e);
         return { ok: true, via: r.via, id: 'wamid.X', motivo: 'ventana_abierta', ventana: 'abierta' };
       }
-      return { ok: false, motivo: 'rechazo_no_ventana', mensaje: r.mensaje, fueraDeVentana: false, reintentable: r.reintentable, ventana: 'abierta' };
+      return { ok: false, motivo: 'rechazo_no_ventana', mensaje: r.mensaje, fueraDeVentana: false, reintentable: r.reintentable, ventana: 'abierta', ...(r.bloqueadoPorCompuerta ? { bloqueadoPorCompuerta: true } : {}) };
     },
     destinatarios: async (t, term, nivel) => (opts.destinatarios ? opts.destinatarios(t, term, nivel) : [{ nombre: 'Patio', telefono: '5219990000099' }]),
     ubicacion: async () => 'sin ubicación reciente',

@@ -37,10 +37,10 @@ function Numero({ nombre, etiqueta, valor, min, max, paso, ancho }: { nombre: st
   );
 }
 
-function Interruptor({ nombre, etiqueta, activo, nota }: { nombre: string; etiqueta: string; activo: boolean; nota?: string }) {
+function Interruptor({ nombre, etiqueta, activo, nota, deshabilitado }: { nombre: string; etiqueta: string; activo: boolean; nota?: string; deshabilitado?: boolean }) {
   return (
     <label className="flex items-start gap-2 text-[12.5px]">
-      <input type="checkbox" name={nombre} value="1" defaultChecked={activo} className="mt-0.5" />
+      <input type="checkbox" name={nombre} value="1" defaultChecked={activo} disabled={deshabilitado} className="mt-0.5" />
       <span>
         <span className="font-medium">{etiqueta}</span>
         {nota && <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{nota}</span>}
@@ -102,6 +102,12 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
             <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
               El proveedor da un plazo para reclamar un cobro; <b>aún no está confirmado por escrito</b> ni se sabe desde qué fecha cuenta, por eso es ajustable.
             </p>
+            {/* A37-A2-03: el cron aún no ejecuta estos avisos y las pantallas usan siempre 3 meses. No se aparenta lo contrario. */}
+            <p role="note" className="text-[12px] font-medium p-2.5 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+              Estos avisos y el plazo ajustable aún NO están conectados: hoy no se manda ningún aviso de plazo ni recordatorio de archivo, y
+              las pantallas calculan siempre con 3 meses. Lo que captures aquí se guarda, pero todavía no se aplica. Revisa el vencimiento de tus
+              reclamos en la pantalla de seguimiento.
+            </p>
             <div className="flex items-end gap-3 flex-wrap">
               <Numero nombre="plazo_meses" etiqueta="Plazo (meses)" valor={config.avisos.plazo.meses} min={PLAZO_MESES_MIN} max={PLAZO_MESES_MAX} />
               <label className="block">
@@ -114,9 +120,9 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
             </div>
             <div className="space-y-2">
               <Interruptor nombre="aviso_plazo" etiqueta="Avisar cuando un cobro sin reclamar está por vencer" activo={config.avisos.interruptores.aviso_plazo}
-                nota="Necesita un destinatario; sin él, el vencimiento solo se ve en pantalla." />
+                nota="NO conectado: aunque lo enciendas, hoy no se envía nada. El vencimiento solo se ve en pantalla." deshabilitado />
               <Interruptor nombre="recordatorio_archivo" etiqueta="Recordar que falta el archivo de la decena" activo={config.avisos.interruptores.recordatorio_archivo}
-                nota="Pasados los días de gracia desde el cierre de una decena sin archivo. Necesita un destinatario." />
+                nota="NO conectado: aunque lo enciendas, hoy no se envía nada. Pasados los días de gracia desde el cierre de una decena sin archivo, nadie recibe el recordatorio." deshabilitado />
             </div>
             <button type="submit" className={CSS_BOTON} style={ESTILO_PRIMARIO}>Guardar plazo y avisos</button>
           </form>

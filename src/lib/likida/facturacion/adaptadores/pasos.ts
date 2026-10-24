@@ -340,7 +340,7 @@ export function aplicarFormato(valor: string | null, formato: FormatoCampo = 'te
     case 'monto':
     case 'monto_entero': {
       // Se quita todo menos dígitos, punto y coma; después la coma de millares.
-      const limpio = v.replace(/[^\d.,]/g, '').replace(/,(?=\d{3}\b)/g, '');
+      const limpio = v.replace(/[^\d.,]/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '');
       // EL GUARDA QUE PARECE DE MÁS Y NO LO ES: sin él, `Number('')` es 0 —no
       // `NaN`— así que un monto ILEGIBLE («borroso», una cadena sin un solo
       // dígito) se escribía en el portal como `0.00`. Un monto que no se leyó

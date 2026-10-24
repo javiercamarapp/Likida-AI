@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "incremental": false, "tsBuildInfoFile": null },
+  "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx", ".next/types/**/*.ts", ".next/dev/types/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx",
+    "**/*.fixture.ts", "**/*.pruebas.ts", "**/__snapshots__/**",
+    "src/lib/likida/e2e/**", "src/lib/pruebas/**"
+  ]
+}

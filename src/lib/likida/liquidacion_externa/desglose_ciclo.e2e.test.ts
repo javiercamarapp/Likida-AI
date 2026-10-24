@@ -36,7 +36,7 @@ const AHORA = new Date('2026-10-15T18:00:00.000Z');
 const TIPO_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const SECRETO = `whsec_${Buffer.from('secreto-de-prueba').toString('base64')}`;
 const CONFIG: ConfigCorreo = {
-  ...CONFIG_CORREO_POR_DEFECTO, canal: 'correo', activa: true, rhCorreos: ['rh@ejemplo.test'], archivoCorreo: 'archivo@ejemplo.test',
+  ...CONFIG_CORREO_POR_DEFECTO, canal: 'correo', activa: true, responderA: 'nomina@ejemplo.test', rhCorreos: ['rh@ejemplo.test'], archivoCorreo: 'archivo@ejemplo.test',
 };
 
 // ── la base en memoria (límite) ─────────────────────────────────────────────

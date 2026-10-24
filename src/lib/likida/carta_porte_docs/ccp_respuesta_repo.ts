@@ -100,6 +100,54 @@ async function rpcBooleana(rpc: string, tenantId: string, id: string, etiqueta: 
   return r.data === true;
 }
 
+export interface CcpRecibidoVista {
+  id: string; uuid: string; estado: EstadoCcpTimbrado; destinoCorreo: string | null; respondidoEn: string | null;
+  creadoEn: string; documentoId: string; documentoNombre: string | null;
+}
+
+/** A37-A3-01: los CCP timbrados recibidos de la flota (los más recientes), para la pantalla de confirmación. Lanza si no puede leer. */
+export async function listarCcpRecibidos(tenantId: string, limite = 50): Promise<CcpRecibidoVista[] | 'sin_migracion'> {
+  const r = await acotada(supabaseAdmin().from('cp_ccp_timbrado').select(`${COLUMNAS}, created_at`).eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false }).order('id').limit(Math.min(limite, 200)), 'ccp.listar');
+  if (r.error) {
+    if (tablaAusente(r.error)) return 'sin_migracion';
+    throw new Error(`ccp.listar: ${r.error.message}`);
+  }
+  const filas = (r.data ?? []) as unknown as Fila[];
+  const ids = [...new Set(filas.map((f) => String(f.documento_id)))];
+  const nombres = new Map<string, string>();
+  if (ids.length > 0) {
+    const d = await acotada(supabaseAdmin().from('cp_documento').select('id, nombre_archivo').eq('tenant_id', tenantId).in('id', ids).order('id').limit(200), 'ccp.listar_documentos');
+    for (const f of (exigir(d, 'ccp.listar_documentos') ?? []) as unknown as Fila[]) nombres.set(String(f.id), String(f.nombre_archivo));
+  }
+  return filas.map((f) => ({
+    id: String(f.id), uuid: String(f.uuid), estado: f.estado as EstadoCcpTimbrado, destinoCorreo: s(f.destino_correo), respondidoEn: s(f.respondido_en),
+    creadoEn: String(f.created_at), documentoId: String(f.documento_id), documentoNombre: nombres.get(String(f.documento_id)) ?? null,
+  }));
+}
+
+/**
+ * A37-A3-01: enciende/apaga «responder al cliente con el CCP timbrado» (`cp_salida_config.responder_ccp`, 0794). Crea la fila
+ * de configuración con sus valores de arranque si no existía. `sin_migracion` si la 0794 no está aplicada.
+ */
+export async function fijarRespuestaActiva(tenantId: string, activo: boolean, actorId: string | null): Promise<'ok' | 'sin_migracion'> {
+  const ahora = new Date().toISOString();
+  const u = await acotada(supabaseAdmin().from('cp_salida_config').update({ responder_ccp: activo, updated_by: actorId, updated_at: ahora })
+    .eq('tenant_id', tenantId).select('tenant_id'), 'ccp.fijar_activo');
+  if (u.error) {
+    if (tablaAusente(u.error)) return 'sin_migracion';
+    throw new Error(`ccp.fijar_activo: ${u.error.message}`);
+  }
+  if (((u.data ?? []) as unknown[]).length > 0) return 'ok';
+  const i = await acotada(supabaseAdmin().from('cp_salida_config').insert({ tenant_id: tenantId, responder_ccp: activo, updated_by: actorId, updated_at: ahora }), 'ccp.fijar_activo_alta');
+  if (i.error) {
+    if (tablaAusente(i.error)) return 'sin_migracion';
+    if (i.error.code === '23505') return fijarRespuestaActiva(tenantId, activo, actorId); // carrera con otra alta: ahora existe
+    throw new Error(`ccp.fijar_activo_alta: ${i.error.message}`);
+  }
+  return 'ok';
+}
+
 /** Las dependencias reales de `procesarCcpTimbrado` / `confirmarYResponder`. */
 export function depsCcp(): DepsCcp {
   return {

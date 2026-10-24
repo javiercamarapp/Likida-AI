@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { ShieldAlert } from 'lucide-react';
 import { StatusPill, EstadoError, EstadoVacio, type Estado } from '../ui/kit';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -86,6 +87,8 @@ function FilaEvento({ e }: { e: FilaSeguridad }) {
 }
 
 export default async function TrustSafetyPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   // Las dos lecturas caen POR SEPARADO: que los conteos fallen no debe
   // esconder la lista, ni al revés — y cada fallo se dice con su alcance.
   const [eventos, resumen] = await Promise.all([

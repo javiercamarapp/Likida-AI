@@ -1,5 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+// A37-S05-01/S06-01: la página ahora llama su propia puerta; aquí la sesión es de superadmin.
+vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' })) }));
 
 // ═══════════════════════════════════════════════════════════════════════════
 // /admin/techo-ia — la pantalla dice lo medido: el techo que aplica con su origen, el gasto de hoy o «sin

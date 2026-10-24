@@ -294,7 +294,7 @@ export async function procesarCambios(tenantId: string, ahora: Date, deps: DepsC
     trabajadas++;
 
     const resuelto = await resolverFila(
-      { cliente: fila.cliente, consignatario: fila.consignatario, caja: fila.caja, unidad: fila.unidad, filaId: fila.id },
+      { cliente: fila.cliente, consignatario: fila.consignatario, caja: fila.caja, unidad: fila.unidad, filaId: fila.id, fecha: fila.fecha },
       deps.resolver,
     );
     const visibles = camposVisibles(deps.politica, resuelto.clienteId);

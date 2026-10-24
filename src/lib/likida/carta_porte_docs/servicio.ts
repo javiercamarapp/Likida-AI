@@ -76,7 +76,7 @@ export interface EntradaDocumento {
 }
 
 export type ResultadoRecepcion =
-  | { ok: true; documentoId: string; duplicado: boolean; estado: repo.EstadoDoc; formato: FormatoDoc }
+  | { ok: true; documentoId: string; duplicado: boolean; estado: repo.EstadoDoc; formato: FormatoDoc; /** A37-A3-04: el archivo era de un documento fallido/rechazado y volvió a la cola. */ reabierto?: boolean }
   | { ok: false; motivo: 'agente_apagado' | 'formato' | 'cliente'; mensaje: string };
 
 export async function recibirDocumento(tenantId: string, e: EntradaDocumento, deps: DepsServicio = {}): Promise<ResultadoRecepcion> {
@@ -102,7 +102,48 @@ export async function recibirDocumento(tenantId: string, e: EntradaDocumento, de
   });
   await repo.registrarEvento(tenantId, documento.id, duplicado ? 'duplicado_recibido' : 'recibido', e.actorId ?? null,
     duplicado ? { canal: e.canal } : { canal: e.canal, formato, bytes: e.bytes.length });
+  // A37-A3-04: reenviar el MISMO archivo de un documento fallido (o rechazado) lo reabre, en vez de contestar «ya estaba».
+  if (duplicado && (documento.estado === 'fallido' || documento.estado === 'rechazado') && documento.storageRuta) {
+    const r = await reintentarDocumento(tenantId, documento, e.actorId ?? null, `reenvío del mismo archivo (${e.canal})`, ahora);
+    if (r.ok) return { ok: true, documentoId: documento.id, duplicado: false, estado: 'recibido', formato: documento.formato, reabierto: true };
+  }
   return { ok: true, documentoId: documento.id, duplicado, estado: documento.estado, formato: documento.formato };
+}
+
+/** Cuántas veces se puede reabrir a mano el MISMO documento: más que esto es un archivo que no se va a poder leer. */
+export const MAX_REINTENTOS_MANUALES = 5;
+
+export type ResultadoReintento = { ok: true } | { ok: false; mensaje: string };
+
+/**
+ * A37-A3-04 · SALIDA DE UN DOCUMENTO `fallido` TERMINAL. Con 5 intentos agotados el documento no se reclamaba nunca más y
+ * reenviar el archivo solo contestaba «ya estaba». Esto lo devuelve a `recibido` con los intentos en cero (con tope de
+ * reaperturas, bitácora y sin tocar el archivo ni la extracción previa). Solo `fallido` y `rechazado` con archivo.
+ */
+export async function reintentarDocumento(
+  tenantId: string, d: DocumentoFila, actorId: string | null, motivo: string, ahora: Date = new Date(),
+): Promise<ResultadoReintento> {
+  if (d.estado !== 'fallido' && d.estado !== 'rechazado') return { ok: false, mensaje: `Un documento «${d.estado}» no se reintenta.` };
+  if (!d.storageRuta) return { ok: false, mensaje: 'El archivo ya se purgó por retención: súbelo de nuevo.' };
+  const previos = (await repo.listarEventos(tenantId, d.id)).filter((ev) => ev.tipo === 'reabierto' && ev.detalle.reintento_manual === true).length;
+  if (previos >= MAX_REINTENTOS_MANUALES) {
+    return { ok: false, mensaje: `Este documento ya se reintentó ${previos} veces sin poder leerse. Captura el viaje a mano o pide el archivo de nuevo en otro formato.` };
+  }
+  const r = await repo.actualizarDocumento(tenantId, d.id, d.version, {
+    estado: 'recibido', intentos: 0, ultimo_error: null, procesando_hasta: null, rechazo_motivo: null, revisado_por: actorId,
+    retener_hasta: diasDespues(ahora, DIAS_RETENCION.recibido),
+  });
+  if (!r) return { ok: false, mensaje: 'Otra persona o el sistema cambió este documento a la vez. Recarga la pantalla y vuelve a intentarlo.' };
+  // Para que el SIGUIENTE agotamiento vuelva a avisar a la oficina (el candado de «una sola vez» se suelta).
+  await repo.liberarAvisoDoc(tenantId, d.id, 'agotado').catch(() => false);
+  await repo.registrarEvento(tenantId, d.id, 'reabierto', actorId, { reintento_manual: true, desde: d.estado, intentos_previos: d.intentos, motivo: motivo.slice(0, 120) });
+  return { ok: true };
+}
+
+/** Un aviso de lectura que además es una PÉRDIDA de datos (embarques que no se leyeron): bloquea la aprobación. */
+function perdida(contenido: { avisos: string[]; perdidas?: Array<{ mensaje: string; bloquea: boolean }> }, mensaje: string): void {
+  contenido.avisos.push(mensaje);
+  contenido.perdidas = [...(contenido.perdidas ?? []), { mensaje, bloquea: true }];
 }
 
 // ── La validación completa (con lo que solo la base sabe) ───────────────────
@@ -114,7 +155,7 @@ export async function recibirDocumento(tenantId: string, e: EntradaDocumento, de
  */
 export async function validarDocumento(
   tenantId: string,
-  doc: Pick<DocumentoFila, 'id' | 'riesgoInyeccion' | 'remitenteReconocido'> & { capturaIncompleta?: { ultimoRotulo: string } | null; requiereCapturaManual?: MetaExtraccion['requiereCapturaManual']; extraccion?: DocumentoFila['extraccion'] },
+  doc: Pick<DocumentoFila, 'id' | 'riesgoInyeccion' | 'remitenteReconocido'> & { capturaIncompleta?: { ultimoRotulo: string } | null; lecturaIncompleta?: Array<{ mensaje: string; bloquea: boolean }>; requiereCapturaManual?: MetaExtraccion['requiereCapturaManual']; extraccion?: DocumentoFila['extraccion'] },
   e: Extraccion,
   opc: { tms?: SalidaTms } = {},
 ): Promise<ResultadoValidacion> {
@@ -126,6 +167,10 @@ export async function validarDocumento(
   const extra: Hallazgo[] = [];
   // T-A3-67: lo que el lector no pudo leer se declara en cada revalidación (no se pierde al corregir un campo).
   const manual = doc.requiereCapturaManual ?? doc.extraccion?.meta?.requiereCapturaManual ?? null;
+  // A37-A3-03: lo que la lectura dejó fuera (embarques, páginas, filas) se declara en cada revalidación, también tras corregir un campo.
+  for (const p of doc.lecturaIncompleta ?? doc.extraccion?.meta?.lecturaIncompleta ?? []) {
+    extra.push({ campo: 'documento', renglon: null, severidad: p.bloquea ? 'bloqueo' : 'confirmar', codigo: 'lectura_incompleta', mensaje: `${p.mensaje}${p.bloquea ? ' No se puede aprobar hasta que se lea completo: divide el archivo y súbelo por partes, o captura lo que falta.' : ' Confirma que no falta nada.'}` });
+  }
   if (manual) {
     extra.push({ campo: 'documento', renglon: null, severidad: 'bloqueo', codigo: 'requiere_captura_manual', mensaje: 'Esta remisión escaneada no se pudo leer porque no hay modelo de visión configurado. No se inventó ningún dato: captúrala a mano contra el original.' });
   }
@@ -318,15 +363,15 @@ export async function procesarDocumento(
       const div = await dividirEnHijos(tenantId, doc, version, plan, ahora);
       if (div.estado === 'ok') return div.resultado;
       if (div.estado === 'perdido') return { ok: false, motivo: 'perdi_el_lease', mensaje: 'Otra invocación terminó este documento primero.', permanente: false };
-      contenido.avisos.push(`El archivo trae ${plan.embarques.length} embarques pero esta base aún no sabe partirlos: se leyó el primero; sube el resto por separado.`);
+      perdida(contenido, `El archivo trae ${plan.embarques.length} embarques pero esta base aún no sabe partirlos: se leyó el primero; sube el resto por separado.`);
     } else if (variasHojas !== null) {
       const otras = variasHojas.otras.slice(0, 5).map((n) => `«${n}»`).join(', ');
-      contenido.avisos.push(`El libro trae ${variasHojas.embarques} embarques en la hoja «${variasHojas.hojaDelFolio}» y además datos en otra(s) hoja(s) (${otras}): partirlo dejaría a cada embarque sin esas hojas, así que no se parte. Se leyó el primero; deja los embarques en una sola hoja o súbelos por separado.`);
+      perdida(contenido, `El libro trae ${variasHojas.embarques} embarques en la hoja «${variasHojas.hojaDelFolio}» y además datos en otra(s) hoja(s) (${otras}): partirlo dejaría a cada embarque sin esas hojas, así que no se parte. Se leyó el primero; deja los embarques en una sola hoja o súbelos por separado.`);
     } else if (mismoEmbarque) {
       contenido.hojasMismoEmbarque = mismoEmbarque.hojas;
       contenido.avisos.push(mismoEmbarque.aviso);
     } else if (exceso !== null) {
-      contenido.avisos.push(`El archivo trae ${exceso} embarques (más de ${MAX_EMBARQUES}): no se parte solo. Se leyó el primero; divide el archivo y súbelo por partes.`);
+      perdida(contenido, `El archivo trae ${exceso} embarques (más de ${MAX_EMBARQUES}): no se parte solo. Se leyó el primero; divide el archivo y súbelo por partes.`);
     }
 
     // T-A3-67: la transcripción de una captura/escaneo se pide UNA vez por documento (la usan la clasificación y, después, el extractor).
@@ -370,13 +415,15 @@ export async function procesarDocumento(
     }
 
     const requiereCapturaManual: MetaExtraccion['requiereCapturaManual'] = sinVision ? { formato: 'C', motivo: 'sin_vision' } : null;
-    const docVista = { id: doc.id, riesgoInyeccion: r.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido, capturaIncompleta: r.capturaIncompleta, requiereCapturaManual };
+    const lecturaIncompleta = contenido.perdidas ?? [];
+    const docVista = { id: doc.id, riesgoInyeccion: r.riesgoInyeccion, remitenteReconocido: doc.remitenteReconocido, capturaIncompleta: r.capturaIncompleta, requiereCapturaManual, lecturaIncompleta };
     const validacion = await validarDocumento(tenantId, docVista, extraccion);
     const meta: MetaExtraccion = {
       origen: r.origen, nivel: r.nivel, escalamientos: r.escalamientos, ...(r.revisionHumana.length > 0 ? { revisionHumana: r.revisionHumana } : {}), ...(r.caidas.length > 0 ? { caidas: r.caidas } : {}), avisos: [...r.avisos, ...avisosCatalogo], notasModelo: r.notasModelo, indiciosInyeccion: r.indiciosInyeccion,
       ...(r.capturaIncompleta ? { capturaIncompleta: r.capturaIncompleta } : {}),
       ...(formatoEntrada ? { formatoEntrada } : {}),
       ...(requiereCapturaManual ? { requiereCapturaManual } : {}),
+      ...(lecturaIncompleta.length > 0 ? { lecturaIncompleta } : {}),
     };
     const guardada = await repo.actualizarDocumento(tenantId, documentoId, version, {
       estado: 'por_revisar', formato: contenido.formato, perfil_id: r.perfilId, perfil_version: r.perfilVersion,

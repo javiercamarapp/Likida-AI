@@ -5,7 +5,7 @@ import { Check, Copy, Printer } from 'lucide-react';
 import { useNotificar } from '../../admin/ui/notificaciones';
 
 /** Copiar el enlace y imprimir el cartel — los dos gestos de la guía de arranque. */
-export function AccionesEnlace({ enlace }: { enlace: string }) {
+export function AccionesEnlace({ enlace, esPrueba = false }: { enlace: string; esPrueba?: boolean }) {
   const [copiado, setCopiado] = useState(false);
   const { notificar } = useNotificar();
 
@@ -24,13 +24,13 @@ export function AccionesEnlace({ enlace }: { enlace: string }) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <button type="button" onClick={copiar}
-        className="hairline inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
+      <button type="button" onClick={copiar} disabled={esPrueba}
+        className="hairline inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-[13px] font-medium transition-colors hover:bg-[var(--canvas)] disabled:cursor-not-allowed disabled:opacity-50">
         {copiado ? <Check aria-hidden width={14} height={14} strokeWidth={2} /> : <Copy aria-hidden width={14} height={14} strokeWidth={1.75} />}
         {copiado ? 'Copiado' : 'Copiar enlace'}
       </button>
-      <button type="button" onClick={() => window.print()}
-        className="hairline inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
+      <button type="button" onClick={() => window.print()} disabled={esPrueba}
+        className="hairline inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-[13px] font-medium transition-colors hover:bg-[var(--canvas)] disabled:cursor-not-allowed disabled:opacity-50">
         <Printer aria-hidden width={14} height={14} strokeWidth={1.75} />
         Imprimir cartel
       </button>

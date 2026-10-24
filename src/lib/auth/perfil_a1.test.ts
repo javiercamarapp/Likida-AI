@@ -26,6 +26,7 @@ const PANTALLAS_A1 = [
 const APIS_A1 = [
   '/api/v1/liquidaciones-externas',
   '/api/v1/liquidaciones-externas/desgloses',
+  '/api/v1/liquidaciones-externas/contactos',
   '/api/v1/liquidaciones-externas/acuses',
   '/api/v1/liquidaciones-externas/acuses/confirmar',
   '/api/v1/liquidaciones-externas/exportacion',

@@ -80,6 +80,20 @@ function exigirLlaveCoherente(): void {
  *  un PAC lento se lleva la invocación entera sin un solo log nuestro. Aquí
  *  además el reloj corre contra la RESERVA del timbrado (DAT-13): mientras esta
  *  llamada cuelga, nadie más puede timbrar esa factura. */
+/**
+ * El PAC no contestó de forma definitiva (timeout, red, 5xx, respuesta
+ * ilegible): el CFDI PUDO haberse creado. `ambiguo` es la marca que mira el
+ * llamador (A37-S61-01) — por propiedad y no por `instanceof`, para sobrevivir
+ * a dobles de prueba y a bundles duplicados.
+ */
+export class ErrorPacAmbiguo extends Error {
+  readonly ambiguo = true as const;
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = 'ErrorPacAmbiguo';
+  }
+}
+
 export const TIMEOUT_FACTURAPI_MS = Number(process.env.LIKIDA_TIMEOUT_FACTURAPI_MS) || 30_000;
 
 async function pedir<T>(
@@ -87,22 +101,31 @@ async function pedir<T>(
   opciones: { metodo?: 'GET' | 'POST' | 'DELETE'; cuerpo?: unknown } = {},
 ): Promise<T> {
   const { metodo = 'POST', cuerpo } = opciones;
-  const r = await fetch(`${API}${ruta}`, {
-    method: metodo,
-    headers: {
-      Authorization: `Bearer ${llave()}`,
-      'Content-Type': 'application/json',
-    },
-    body: cuerpo ? JSON.stringify(cuerpo) : undefined,
-    signal: AbortSignal.timeout(TIMEOUT_FACTURAPI_MS),
-  });
-
-  const texto = await r.text();
+  // A37-S61-01: cualquier cosa que no sea una respuesta DEFINITIVA del PAC
+  // (corte de red, timeout, 5xx, cuerpo ilegible) deja en duda si el CFDI se
+  // creó. Eso viaja como `ErrorPacAmbiguo`, y el llamador NO puede tratarlo
+  // como «no hubo CFDI».
+  let r: Response;
+  let texto: string;
+  try {
+    r = await fetch(`${API}${ruta}`, {
+      method: metodo,
+      headers: {
+        Authorization: `Bearer ${llave()}`,
+        'Content-Type': 'application/json',
+      },
+      body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+      signal: AbortSignal.timeout(TIMEOUT_FACTURAPI_MS),
+    });
+    texto = await r.text();
+  } catch (e) {
+    throw new ErrorPacAmbiguo(`Facturapi ${ruta}: sin respuesta (${e instanceof Error ? e.message : String(e)})`);
+  }
   let json: unknown;
   try {
     json = texto ? JSON.parse(texto) : {};
   } catch {
-    throw new Error(`Facturapi ${ruta}: respuesta ilegible (${r.status})`);
+    throw new ErrorPacAmbiguo(`Facturapi ${ruta}: respuesta ilegible (${r.status})`);
   }
 
   if (!r.ok) {
@@ -114,6 +137,10 @@ async function pedir<T>(
     // un DatoInvalido para que la pantalla lo enseñe.
     if (r.status === 400 || r.status === 422) {
       throw new DatoInvalido(`El SAT o Facturapi rechazaron la factura: ${mensaje}`);
+    }
+    // 5xx y 408: el PAC pudo haber creado el CFDI antes de fallar.
+    if (r.status >= 500 || r.status === 408) {
+      throw new ErrorPacAmbiguo(`Facturapi ${ruta}: ${mensaje}`);
     }
     throw new Error(`Facturapi ${ruta}: ${mensaje}`);
   }

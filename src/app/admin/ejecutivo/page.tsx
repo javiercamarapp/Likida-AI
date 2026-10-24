@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getMrr } from '@/lib/admin/negocio';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { DollarSign, Truck, CheckCircle2, Presentation } from 'lucide-react';
@@ -22,6 +23,8 @@ export const dynamic = 'force-dynamic';
  * antes era el subtítulo del header.
  */
 export default async function EjecutivoPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const [r, mrr] = await Promise.all([getResumenNegocio(), getMrr()]);
   const chipsCosto = r.porDia.slice(-8).map((d) => d.costoUsd);
   // AUDITORÍA 10, ALTO — mismo texto fijo de `admin/page.tsx`: "solo el

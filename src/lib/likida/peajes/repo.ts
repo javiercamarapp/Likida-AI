@@ -25,7 +25,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { hoyMx } from '@/lib/formato';
+import { hoyMx, mxn } from '@/lib/formato';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { acotada } from '../presupuesto';
@@ -40,7 +40,7 @@ import { parsearTarifasMatriz, planificarTarifa, type OrigenTarifa, type TarifaE
 import { parsearTagsMatriz, resolverUnidadesDeTags, validarBajaTag, type VigenciaTag } from './tags';
 import { parsearInmovilizadasMatriz, resolverUnidadesInmovilizadas, validarExcepcionUnidad, validarJustificacion } from './reglas_cobro_config';
 import {
-  revisarCobros, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, TIPOS_UNIDAD_PEAJE,
+  revisarCobros, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, TIPOS_UNIDAD_PEAJE, esCategoriaInterna,
   type CategoriaCobro, type LineaCobro, type MotivoInmovilizada, type ReglasCobro, type ResultadoRevision, type TipoUnidadPeaje, type VentanaInmovilizada,
 } from './reglas_cobro';
 import { validarMapeo, type ConfigMapeo } from './mapeo';
@@ -2369,8 +2369,14 @@ export async function crearReclamoDeCategoria(
 ): Promise<{ ok: true; id: string } | { ok: false; motivo: string }> {
   const reporte = await revisionDeDesglose(tenantId, entrada.desgloseId);
   if (!reporte) return { ok: false, motivo: 'Ese desglose no existe en tu flota (o fue anulado).' };
-  const cands = reporte.revision.candidatos.filter((c) => c.categoria === entrada.categoria);
-  if (cands.length === 0) return { ok: false, motivo: `No hay candidatos de «${ETIQUETA_CATEGORIA_COBRO[entrada.categoria]}» en ese desglose.` };
+  // A37-A2-05: lo interno de la flota no se le reclama al proveedor, y lo que una persona ya descartó, justificó o reclamó
+  // renglón por renglón no se vuelve a sumar (antes el reclamo por categoría los incluía y el monto salía inflado).
+  if (esCategoriaInterna(entrada.categoria)) {
+    return { ok: false, motivo: `«${ETIQUETA_CATEGORIA_COBRO[entrada.categoria]}» es un asunto interno de la flota, no un cobro del proveedor: no se registra como reclamo.` };
+  }
+  const decididos = new Set((await listarDecisionesCandidatos(tenantId, entrada.desgloseId)).map((d) => `${d.indice}|${d.categoria}`));
+  const cands = reporte.revision.candidatos.filter((c) => c.categoria === entrada.categoria && !c.justificacion && !decididos.has(`${c.indice}|${c.categoria}`));
+  if (cands.length === 0) return { ok: false, motivo: `No hay candidatos pendientes de «${ETIQUETA_CATEGORIA_COBRO[entrada.categoria]}» en ese desglose (los que había ya se descartaron, justificaron o reclamaron).` };
   const fechas = cands.map((c) => c.fecha).filter((f): f is string => f !== null).sort();
   if (fechas.length === 0) return { ok: false, motivo: 'Los candidatos no traen fecha de cobro: no se puede calcular el plazo de reclamo.' };
   const enviado = entrada.enviadoEn?.trim() || null;
@@ -2403,18 +2409,78 @@ export async function marcarReclamoEnviado(tenantId: string, id: string, enviado
   return { ok: true };
 }
 
+const MOTIVO_NOTA_RECHAZADO = 'El proveedor rechazó este reclamo: no se le registran notas de crédito. Si te acreditó algo después, crea un reclamo nuevo.';
+const motivoNotaExcede = (nuevo: number, reclamado: number, acreditado: number): string =>
+  `Con esta nota lo acreditado (${mxn(nuevo)}) pasaría de lo reclamado (${mxn(reclamado)}); ya llevaba ${mxn(acreditado)}. Revisa el monto de la nota.`;
+
 /**
  * Registra una nota de crédito recibida y actualiza lo acreditado y el estado del reclamo. Las notas del
  * proveedor llegan sin detalle: aquí solo se suma lo que SÍ se acreditó.
  */
 export async function registrarNotaDeCredito(
-  tenantId: string, entrada: { reclamoId: string; monto: number; fecha: string; referencia?: string | null },
+  tenantId: string, entrada: { reclamoId: string; monto: number; fecha: string; referencia?: string | null; versionVista?: string | null },
 ): Promise<Resultado> {
   if (!Number.isFinite(entrada.monto) || entrada.monto <= 0 || entrada.monto > 1e9) return { ok: false, motivo: 'El monto de la nota de crédito debe ser mayor a cero.' };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(entrada.fecha)) return { ok: false, motivo: 'La fecha de la nota debe ser AAAA-MM-DD.' };
+
+  // A33-06 (migración 0860): camino ATÓMICO e IDEMPOTENTE en la base (candado de fila + clave por reclamo). La clave junta el reclamo, lo que
+  // la pantalla VIO (`versionVista`: estado y total acreditado al pintar el formulario) y el contenido de la nota: un doble clic o dos pestañas
+  // mandan la misma y se registra UNA vez; dos notas legítimas distintas (otro monto/fecha/folio, u otro estado visto) llevan claves distintas.
+  const clave = entrada.versionVista == null ? null
+    : createHash('sha256').update([entrada.reclamoId, entrada.versionVista, entrada.monto.toFixed(2), entrada.fecha, entrada.referencia?.trim() ?? ''].join('|')).digest('hex');
+  // A36-R03-05: la función 0860 no veta un reclamo `rechazado` (la nota lo «revivía» a `acreditado` y chocaba con el único parcial
+  // `peaje_reclamo_activo_unico` de la 0847) ni topa lo acreditado contra lo reclamado. Sin migrar, el veto vive aquí: una lectura previa.
+  // Esta lectura NO es atómica frente a otra sesión que registre al mismo tiempo: desde la migración 0861 el MISMO veto y tope viven dentro de
+  // `peaje_nota_credito_registrar`, bajo el `for update` (códigos `rechazado` y `excede_reclamado`, traducidos abajo). La lectura se conserva
+  // para la base que aún no tiene la 0861 y para dar el mensaje sin ir a la función. Si el reclamo no se encuentra, decide la función (`no_existe`).
   const { data: r, error: errR } = await acotada(supabaseAdmin().from('peaje_reclamo')
     .select('id, estado, monto_reclamado, monto_acreditado').eq('tenant_id', tenantId).eq('id', entrada.reclamoId).maybeSingle(), 'revision_cobros.reclamo');
   if (errR) { logger.error('revision_cobros.reclamo', { tenant: tenantId, err: errR.message }); return { ok: false, motivo: 'No se pudo leer el reclamo.' }; }
+  if (r) {
+    // El reintento idéntico (misma clave ya registrada) lo contesta la función como duplicado: no se veta aquí.
+    let yaRegistrada = false;
+    if (clave !== null) {
+      const { data: previa, error: errPrevia } = await acotada(supabaseAdmin().from('peaje_reclamo_nota')
+        .select('id').eq('tenant_id', tenantId).eq('reclamo_id', entrada.reclamoId).eq('clave_idempotencia', clave).maybeSingle(), 'revision_cobros.nota_previa');
+      if (errPrevia) { logger.error('revision_cobros.nota_previa', { tenant: tenantId, err: errPrevia.message }); return { ok: false, motivo: 'No se pudo leer el reclamo.' }; }
+      yaRegistrada = !!previa;
+    }
+    if (!yaRegistrada) {
+      if (r.estado === 'rechazado') return { ok: false, motivo: MOTIVO_NOTA_RECHAZADO };
+      const reclamado = Math.round(Number(r.monto_reclamado) * 100);
+      const nuevo = Math.round(Number(r.monto_acreditado ?? 0) * 100) + Math.round(entrada.monto * 100);
+      if (Number.isFinite(reclamado) && nuevo > reclamado) {
+        return { ok: false, motivo: motivoNotaExcede(nuevo / 100, reclamado / 100, Number(r.monto_acreditado ?? 0)) };
+      }
+    }
+  }
+  const viaRpc = await acotada(supabaseAdmin().rpc('peaje_nota_credito_registrar', {
+    p_tenant: tenantId, p_reclamo: entrada.reclamoId, p_monto: entrada.monto, p_fecha: entrada.fecha,
+    p_referencia: entrada.referencia?.trim().slice(0, 120) || null, p_clave: clave,
+  }), 'revision_cobros.nota_rpc');
+  if (!viaRpc.error) {
+    const d = (Array.isArray(viaRpc.data) ? viaRpc.data[0] : viaRpc.data) as { ok?: boolean; codigo?: string; monto_acreditado?: number | string; monto_reclamado?: number | string } | null;
+    if (d?.ok) return { ok: true };
+    // 0861 (A36-R03-05): veto y tope atómicos de la función. Antes de la 0861 estos códigos no existen y caen en el error genérico de abajo.
+    if (d?.codigo === 'rechazado') return { ok: false, motivo: MOTIVO_NOTA_RECHAZADO };
+    if (d?.codigo === 'excede_reclamado') {
+      const acreditado = Number(d.monto_acreditado ?? 0); const reclamado = Number(d.monto_reclamado ?? 0);
+      return { ok: false, motivo: motivoNotaExcede(Math.round((acreditado + entrada.monto) * 100) / 100, reclamado, acreditado) };
+    }
+    if (d?.codigo === 'no_existe') return { ok: false, motivo: 'Ese reclamo no existe en tu flota.' };
+    if (d?.codigo === 'sin_enviar') return { ok: false, motivo: 'El reclamo aún no está enviado: márcalo como enviado antes de registrar una nota de crédito.' };
+    if (d?.codigo === 'monto_invalido') return { ok: false, motivo: 'El monto de la nota de crédito debe ser mayor a cero.' };
+    if (d?.codigo === 'fecha_invalida') return { ok: false, motivo: 'La fecha de la nota debe ser AAAA-MM-DD.' };
+    logger.error('revision_cobros.nota_rpc', { tenant: tenantId, err: 'respuesta inesperada de la función' });
+    return { ok: false, motivo: 'No se pudo guardar la nota de crédito.' };
+  }
+  const codigoRpc = (viaRpc.error as { code?: string }).code;
+  if (codigoRpc !== '42883' && codigoRpc !== 'PGRST202') {
+    logger.error('revision_cobros.nota_rpc', { tenant: tenantId, err: viaRpc.error.message });
+    return { ok: false, motivo: 'No se pudo guardar la nota de crédito.' };
+  }
+  // La migración 0860 aún no está aplicada en esta base: se cae al camino anterior (leer-sumar-escribir, SIN candado) y se avisa.
+  logger.warn('revision_cobros.nota_sin_0860', { tenant: tenantId, aviso: 'peaje_nota_credito_registrar no existe: camino sin candado; aplicar la migración 0860' });
   if (!r) return { ok: false, motivo: 'Ese reclamo no existe en tu flota.' };
   if (r.estado === 'preparado') return { ok: false, motivo: 'El reclamo aún no está enviado: márcalo como enviado antes de registrar una nota de crédito.' };
 

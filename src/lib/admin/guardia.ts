@@ -41,6 +41,8 @@ export interface ItemClasificado {
   flota: string;
   desde: string;
   vence: string | null;
+  /** Identidad estable del incidente (ver `ItemEscalacion.huella`). */
+  huella?: string;
   /** Dónde se resuelve (de la bandeja misma). */
   href: string | null;
 }
@@ -62,6 +64,7 @@ function clasificarItem(i: ItemEscalacion, ahoraMs: number): ItemClasificado {
   const base = {
     fuente: i.fuente, titulo: i.titulo, flota: i.tenantNombre,
     desde: i.desde, vence: i.vence, href: i.href,
+    ...(i.huella ? { huella: i.huella } : {}),
   };
   const vencido = i.vence !== null && new Date(i.vence).getTime() < ahoraMs;
 
@@ -156,7 +159,10 @@ export const SONDEOS_FALLIDOS_PARA_CAIDA = 2;
 const TOPE_VISTOS = 200;
 
 /** Qué incidente ES (no cuándo se miró). */
-export function claveDeItem(i: { fuente: string; titulo: string; flota: string; desde: string }): string {
+export function claveDeItem(i: { fuente: string; titulo: string; flota: string; desde: string; huella?: string }): string {
+  // Con `huella` el incidente se identifica por ELLA (agente+error en una racha de
+  // corridas en fallo), no por título+desde, que cambian cuando la racha crece.
+  if (i.huella) return `${i.fuente}|${i.huella}`;
   return `${i.fuente}|${i.titulo}|${i.flota}|${i.desde}`;
 }
 
@@ -213,14 +219,14 @@ export interface DecisionGuardia {
 }
 
 /** La huella que se persiste de un incidente: lleva su FUENTE (`fuente~hash`) para poder conservarla si esa fuente queda ciega (B1). */
-function huellaDeItem(i: { fuente: string; titulo: string; flota: string; desde: string }): string {
+function huellaDeItem(i: { fuente: string; titulo: string; flota: string; desde: string; huella?: string }): string {
   return `${i.fuente}~${huellaDeClave(claveDeItem(i))}`;
 }
 
 /** Decide qué avisar. TODO lo vigente queda como visto; lo resuelto sale solo (si reaparece, es incidente nuevo). */
 export function decidirAvisos(c: ClasificacionGuardia, previo: EstadoGuardia): DecisionGuardia {
   // Se reconoce la huella con fuente (formato actual), la huella pelona (estados viejos) y la clave cruda (script de la Mac).
-  const visto = (i: { fuente: string; titulo: string; flota: string; desde: string }) =>
+  const visto = (i: { fuente: string; titulo: string; flota: string; desde: string; huella?: string }) =>
     previo.vistos.includes(huellaDeItem(i)) || previo.vistos.includes(huellaDeClave(claveDeItem(i))) || previo.vistos.includes(claveDeItem(i));
   const urgentes = c.items.filter((i) => i.severidad === 'S1' || i.severidad === 'S2');
   const nuevos = urgentes.filter((i) => !visto(i));

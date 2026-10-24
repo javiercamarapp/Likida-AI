@@ -238,11 +238,13 @@ jobs:
           PGUSER=postgres bash supabase/tests/0849_arco_cancelacion_candado_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0850_peaje_ingesta_tope_candado.sql
           PGUSER=postgres bash supabase/tests/0850_peaje_ingesta_tope_candado_concurrencia.sh localhost 5432 postgres
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0856_peaje_cola_tope_intentos_barrido.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0851_un_viaje_abierto_por_unidad.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0813_peaje_unidad_inmovilizada.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0785_liquidacion_correo_destinatarios.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0786_liquidacion_desglose_meta.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0787_liquidacion_entrega_correo.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0857_recibir_desglose_atomico.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0814_peaje_cruce_viaje.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0815_peaje_candidato_accion.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0500_gps_backoff.sql
@@ -349,6 +351,14 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0852_evidencia_reuso_tenant.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0853_tablero_validacion_degradada.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0854_freno_temporal.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0858_ligar_cfdi_sat_copia_campos.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0860_peaje_nota_credito_idempotente.sql
+          PGUSER=postgres bash supabase/tests/0860_peaje_nota_credito_concurrencia.sh localhost 5432 postgres
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0859_agente_chofer_habilitado.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0861_oleada4_candados_en_base.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0865_jornada_declaracion_sustituye_derivada.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0866_reclamar_polls_rondas.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0863_sembrar_hitos_perfil_con_compuerta.sql
 
       # ── Capa 0: contratos de leases/fencing en Postgres real ───────────
       # Este archivo no es informativo: pg_prove interpreta el TAP y falla

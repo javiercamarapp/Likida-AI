@@ -166,9 +166,32 @@ describe('reintentarAvisosAtipicos (barrido del cron)', () => {
     const r = await A.reintentarAvisosAtipicos(5, deps());
     expect(r).toEqual({ revisados: 1, enviados: 1, pendientes: 0 });
   });
-  it('sin destinatario no cuenta como pendiente-fallo (es configuración)', async () => {
+  it('sin destinatario no cuenta como pendiente-fallo (es configuración) y el barrido ni siquiera lo toma (A37-S51-01)', async () => {
     base({ peaje_atipico_config: [config()] });
-    expect(await A.reintentarAvisosAtipicos(5, deps())).toEqual({ revisados: 1, enviados: 0, pendientes: 0 });
+    expect(await A.reintentarAvisosAtipicos(5, deps())).toEqual({ revisados: 0, enviados: 0, pendientes: 0 });
+    expect(avisarOk).not.toHaveBeenCalled();
+  });
+  it('A37-S51-01: una flota sin teléfono con 7 desgloses viejos NO atasca el barrido: la flota bien configurada recibe su aviso', async () => {
+    const desgloses = Array.from({ length: 7 }, (_, i) => `00000000-0000-4000-8000-00000000010${i}`);
+    base({
+      desglose_peaje: [...desgloses.map((id) => ({ id, tenant_id: OTRO, anulado_en: null })), { id: DES, tenant_id: T, anulado_en: null }],
+      peaje_atipico: [
+        ...desgloses.map((d, i) => hallazgo(`a${i}`, 'repeticion_caseta', `TC91${i}`, { tenant_id: OTRO, desglose_id: d, creado_en: `2026-01-0${i + 1}` })),
+        hallazgo('h1', 'repeticion_caseta', 'TC9001', { creado_en: '2026-02-01' }),
+      ],
+      peaje_atipico_config: [config({ telefono: TEL }), { tenant_id: OTRO, activo: true, umbrales: {} }],
+    });
+    const r = await A.reintentarAvisosAtipicos(5, deps());
+    expect(r).toEqual({ revisados: 1, enviados: 1, pendientes: 0 });
+    expect(avisarOk).toHaveBeenCalledTimes(1);
+  });
+  it('A37-S51-01: más de una página de hallazgos agotados tampoco atasca el barrido', async () => {
+    const agotados = Array.from({ length: 210 }, (_, i) => hallazgo(`z${String(i).padStart(3, '0')}`, 'repeticion_caseta', 'TC9009', {
+      tenant_id: OTRO, desglose_id: `00000000-0000-4000-8000-000000000${String(i).padStart(3, '0')}`, creado_en: `2025-01-01T00:${String(i).padStart(3, '0')}`,
+      detalle: { aviso: { intentos: A.MAX_INTENTOS_AVISO_ATIPICOS } },
+    }));
+    base({ peaje_atipico: [...agotados, hallazgo('h1', 'repeticion_caseta', 'TC9001', { creado_en: '2026-02-01' })] });
+    expect(await A.reintentarAvisosAtipicos(5, deps())).toEqual({ revisados: 1, enviados: 1, pendientes: 0 });
   });
   it('un envío rechazado queda como pendiente', async () => {
     avisarOk.mockResolvedValue({ ok: false, motivo: 'x' });

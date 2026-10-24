@@ -416,3 +416,34 @@ describe('aislamiento entre flotas y fallos de configuración', () => {
     expect(m.enviados).toHaveLength(0);
   });
 });
+
+
+describe('A37-A5-04: un rechazo definitivo no es un aviso entregado', () => {
+  it('con la plantilla sin aprobar, la escalación al patio NO dice «sin respuesta a N avisos»: dice que no se pudo avisar', async () => {
+    const m = crearPuertos({
+      viajes: [viaje('v1')], hitos: hitosDe('v1'),
+      envio: (e) => (e.contexto.startsWith('conductor.escalacion') ? { ok: true, via: 'texto' } : { ok: false, reintentable: false, mensaje: 'plantilla no aprobada (132001)' }),
+    });
+    for (const hhmm of ['07:30', '07:45', '08:00', '08:15']) await correrConductor(m.puertos, { ahora: mx(hhmm) });
+    await correrConductor(m.puertos, { ahora: mx('09:10') });
+    const esc = m.enviados.filter((e) => e.contexto === 'conductor.escalacion_n1');
+    expect(esc).toHaveLength(1);
+    expect(esc[0].texto).not.toMatch(/sin respuesta a/);
+    expect(esc[0].texto).toContain('no se le pudo enviar el aviso por WhatsApp');
+  });
+
+  it('lo detenido por una compuerta de seguridad (agente apagado, emergencia) no gasta el aviso: se suelta el claim y la escalera no avanza', async () => {
+    let bloqueado = true;
+    const m = crearPuertos({
+      viajes: [viaje('v1')], hitos: hitosDe('v1'),
+      envio: () => (bloqueado ? { ok: false, reintentable: false, mensaje: 'No se envió: emergencia', bloqueadoPorCompuerta: true } : { ok: true, via: 'texto' }),
+    });
+    const r1 = await correrConductor(m.puertos, { ahora: mx('07:30') });
+    expect(r1.saltados.compuerta_agente).toBe(1);
+    expect(m.reclamos.size).toBe(0);
+    expect(m.hitos.get('v1-0')).toMatchObject({ recordatoriosEnviados: 0 });
+    bloqueado = false;
+    const r2 = await correrConductor(m.puertos, { ahora: mx('07:35') });
+    expect(r2.solicitudes).toBe(1); // arranca de cero: el nivel 0 sigue disponible
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import {
   resumirDeriva, commitsSinDesplegar, publicarDeriva, RUTAS_QUE_CORREN,
 } from './deriva-sin-desplegar.mjs';
@@ -21,6 +21,20 @@ import {
 // está corriendo?»). Las dos son necesarias: quedarse atrás a propósito es el
 // flujo documentado, pero no puede ser SILENCIOSO.
 // ═══════════════════════════════════════════════════════════════════════════
+
+describe('A36-R07-04 — rutas que corren en producción', () => {
+  it('incluye dependencias, config de Vercel/Next, vendor y public (y siguen fuera docs y normas)', () => {
+    for (const ruta of ['src/', 'supabase/', 'package.json', 'package-lock.json', 'vercel.json', 'next.config.ts', 'vendor/', 'public/']) {
+      expect(RUTAS_QUE_CORREN).toContain(ruta);
+    }
+    for (const ruta of ['docs/', 'normas/', '.github/']) expect(RUTAS_QUE_CORREN).not.toContain(ruta);
+  });
+  it('cada ruta existe en el repo (una ruta con typo sería ceguera silenciosa)', () => {
+    for (const ruta of RUTAS_QUE_CORREN) {
+      expect(existsSync(ruta), ruta).toBe(true);
+    }
+  });
+});
 
 describe('resumirDeriva — el veredicto', () => {
   it('sin commits pendientes lo dice y no avisa de nada', () => {

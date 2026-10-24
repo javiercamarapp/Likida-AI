@@ -75,7 +75,7 @@ export interface ResumenEntregasCorreo {
   /** Quedaron `pendiente` con nuevo intento (429/5xx/red). */
   reintentar: number;
   fallidas: number;
-  /** Correo sin llave, sin dominio verificado o antes de la hora: no se gastó intento. */
+  /** Correo sin llave, sin dominio verificado o sin «Responder a» configurado: no se gastó intento. */
   sinConfigurar: number;
   /** Antes de `enviar_desde_hora`. */
   fueraDeVentana: number;
@@ -144,15 +144,18 @@ export function bitacoraDeClave(clave: string): string {
 export function armarCorreoDesglose(ctx: ContextoLiquidacion): { correo: Correo; nombreAdjunto: string } {
   const bitacora = bitacoraDeClave(ctx.claveExterna);
   const rango = rangoCorto(ctx.periodoDesde, ctx.periodoHasta);
-  const asunto = `Desglose de pago — bitácora ${bitacora}${rango ? ` — ${rango}` : ''}`;
+  // A37-A1-02: una clave terminada en `-R<n>` es la CORRECCIÓN de un desglose ya enviado: el operador debe saberlo de inmediato.
+  const esCorreccion = /-R\d+$/.test(ctx.claveExterna);
+  const asunto = `${esCorreccion ? 'CORRECCIÓN — ' : ''}Desglose de pago — bitácora ${bitacora}${rango ? ` — ${rango}` : ''}`;
   const seguro = bitacora.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60) || 'bitacora';
   return {
     nombreAdjunto: `desglose-${seguro}.xlsx`,
     correo: {
       asunto,
-      avance: 'Desglose de pago adjunto.',
-      titulo: 'Desglose de pago',
+      avance: esCorreccion ? 'CORRECCIÓN: desglose de pago adjunto.' : 'Desglose de pago adjunto.',
+      titulo: esCorreccion ? 'Desglose de pago (corrección)' : 'Desglose de pago',
       parrafos: [
+        ...(esCorreccion ? ['CORRECCIÓN: este desglose reemplaza al que se envió antes de esta bitácora; el anterior ya no es válido.'] : []),
         `Va adjunto el desglose de pago de la bitácora ${bitacora}.`,
         'El detalle está en el archivo de Excel.',
         'Si algo no coincide, responde a este correo.',
@@ -284,6 +287,15 @@ async function procesarUna(
   if (!config.activa) {
     await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_CONFIG_MS), e.ultimoError);
     resumen.apagada += 1;
+    return;
+  }
+  // 1c. «Responder a» obligatorio (A37-A1-04). El correo promete «Si algo no coincide, responde a este correo»; sin `replyTo` la
+  // respuesta cae en el buzón de campañas (`avisos@`), donde se descarta sin que nadie de la flota la vea. Fail-closed: no se
+  // manda un correo con una promesa falsa a una persona. Igual que apagada: no se gasta intento, la fila espera la configuración.
+  if (!config.responderA) {
+    logger.warn('liqcorreo.sin_responder_a', { tenant: e.tenantId, entrega: e.id });
+    await deps.reprogramar(e.tenantId, e.id, token, e.intentos, new Date(ahora.getTime() + ESPERA_CONFIG_MS), e.ultimoError);
+    resumen.sinConfigurar += 1;
     return;
   }
   const abre = inicioVentanaHoy(ahora, config.enviarDesdeHora);

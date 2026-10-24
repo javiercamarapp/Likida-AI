@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { FlaskConical, ScanText, Calculator, MessagesSquare, Gauge, Info, ArrowRight } from 'lucide-react';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -19,7 +20,9 @@ export const dynamic = 'force-dynamic';
  * Re-envuelta en la anatomía de página (14-ago): lienzo `--g1` + `BarraPagina`
  * con el ícono de `rutas.ts`. El mensaje honesto es el mismo de antes.
  */
-export default function PlaygroundPage() {
+export default async function PlaygroundPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   return (
     <main className="h-full">
       <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
