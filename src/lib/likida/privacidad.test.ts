@@ -496,4 +496,14 @@ describe('tipoDeSolicitudArco y venceArco — el registro que el aviso promete',
     const d = new Date(`${vence}T00:00:00Z`);
     expect([1, 2, 3, 4, 5]).toContain(d.getUTCDay());
   });
+
+  it('A37-S54-06: cuenta desde el día CIVIL de México, no el día UTC', () => {
+    // Jueves 6-ago-2026 20:00 en México = viernes 7-ago 02:00Z. Un día hábil después es el VIERNES 7,
+    // no el lunes 10 (que era lo que salía contando sobre el día UTC).
+    expect(venceArco(new Date('2026-08-07T02:00:00Z'), 1)).toBe('2026-08-07');
+    // Y en horario de oficina no cambia nada: jueves 6 a mediodía → viernes 7.
+    expect(venceArco(new Date('2026-08-06T18:00:00Z'), 1)).toBe('2026-08-07');
+    // Viernes en la noche de México (sábado UTC): el siguiente día hábil sigue siendo el lunes.
+    expect(venceArco(new Date('2026-08-08T04:00:00Z'), 1)).toBe('2026-08-10');
+  });
 });
