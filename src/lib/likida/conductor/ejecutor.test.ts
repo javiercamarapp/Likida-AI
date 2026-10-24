@@ -328,6 +328,20 @@ describe('A35-A5-02: «Tengo un problema» no promete un aviso que no salió', (
     expect(m.eventos.filter((e) => e.evento === 'escalado' && e.detalle.entregados === 0)).toHaveLength(2);
   });
 
+  it('A37-S35-05: la base de contactos LANZA tras el claim: se suelta y el siguiente toque SÍ avisa (antes quedaba «sin_envio» para siempre)', async () => {
+    const v = viaje('v1');
+    let cae = true;
+    const m = crearPuertos({
+      viajes: [v], hitos: hitosDe('v1'),
+      destinatarios: () => { if (cae) throw new Error('base no contesta'); return [{ nombre: 'A', telefono: '5211' }]; },
+    });
+    const hs = [...m.hitos.values()];
+    expect(await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:40'))).toBe('sin_envio');
+    cae = false;
+    expect(await escalarPorProblema(m.puertos, v, hs[0], hs, mx('07:41'))).toBe('ok');
+    expect(m.enviados).toHaveLength(1);
+  });
+
   it('el envío falla y luego la base de contactos responde: el reintento del chofer SÍ avisa', async () => {
     const v = viaje('v1');
     let respondeBien = false;

@@ -13,7 +13,7 @@ import { AvisoSinMigrar, crearRepoAviso, type EstadoAviso } from '@/lib/likida/v
 import { crearRepoCambios, type FilaActual } from '@/lib/likida/vigia/aviso/cambios';
 import { entregarAviso } from '@/lib/likida/vigia/aviso/entrega';
 import {
-  agruparPorDia, armarTarjeta, crearDepsCopia, crearRepoBandeja, DIAS_BANDEJA, MAX_TEXTO_AVISO, paraEntrega, validarDatoManual,
+  agruparPorDia, armarTarjeta, crearDepsCopia, crearRepoBandeja, DIAS_BANDEJA, MAX_TEXTO_AVISO, TOPE_AVISOS_BANDEJA, paraEntrega, validarDatoManual,
   type AvisoBandeja,
 } from '@/lib/likida/vigia/aviso/bandeja';
 import { sufijoTenant } from '../../../sufijo';
@@ -100,7 +100,9 @@ async function ejecutar(a: { tenantId: string; userId: string }, fd: FormData): 
   if (que === 'descartar') {
     if (!EDITABLES.includes(av.estado) && av.estado !== 'aprobado') return fallo('Este aviso ya no se puede descartar.');
     const ok = await crearRepoCambios().cambiarEstado(a.tenantId, id, av.estado, 'descartado', 'descartado por una persona');
-    return ok ? bien('Descartado: no se enviará.') : fallo(CARRERA);
+    if (ok) return bien('Descartado: no se enviará.');
+    // A37-S58-01: un aprobado que no se pudo cerrar suele ser porque el envío ya está en curso.
+    return fallo(av.estado === 'aprobado' ? 'Este aviso se está enviando en este momento y ya no se puede descartar. Recarga la pantalla.' : CARRERA);
   }
 
   if (que === 'capturar') {
@@ -108,6 +110,7 @@ async function ejecutar(a: { tenantId: string; userId: string }, fd: FormData): 
     const v = validarDatoManual({
       operadorNombre: texto(fd, 'operadorNombre'), licencia: texto(fd, 'licencia'), licenciaVence: texto(fd, 'licenciaVence'),
       telefono: texto(fd, 'telefono'), placasUnidad: texto(fd, 'placasUnidad'), placasCaja: texto(fd, 'placasCaja'), estadoCaja: texto(fd, 'estadoCaja'),
+      borrar: fd.getAll('borrar').map(String),
     });
     if (!v.ok) return fallo(v.error);
     const r = await repo.guardarDatoManual(a.tenantId, av.filaId, a.userId, v.valor);
@@ -466,6 +469,7 @@ export default async function PaginaAvisosVigia({ searchParams }: { searchParams
       sufijo={sufijoTenant(sp)}
       grupos={agruparPorDia(tarjetas)}
       total={tarjetas.length}
+      hayMas={avisos.length >= TOPE_AVISOS_BANDEJA}
       soloPendientes={soloPendientes}
       puedeDecidir={puedeDecidir}
       avisoEncendido={avisoEncendido}

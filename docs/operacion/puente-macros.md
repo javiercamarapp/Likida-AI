@@ -27,7 +27,7 @@ se documenta aquí y se pregunta antes de encender.
   omisión, sin puerto o emisor apagado), `invalida`, `enviada`, `duplicada` o `fallo`.
 - `normalizarEventoMacro`: descarta evento sin id, sin viaje, de tipo desconocido (`detencion`, `llegada`, `salida`) o con hora
   inválida o futura (más de 2 min). No inventa: el motivo vacío queda ausente.
-- Idempotencia: `claveMacro` = `viaje|tipo|evento`. El mismo evento reintentado nunca duplica la macro; el adaptador real debe
+- Idempotencia: `claveMacro` = `flota|viaje|tipo|evento` (A37-S35-08: el `viajeRef` es del proveedor y dos flotas pueden repetirlo; `EventoMacro.tenantId` es obligatorio). El mismo evento reintentado nunca duplica la macro; el adaptador real debe
   respetar esa clave (o pedir al proveedor una llave de idempotencia equivalente).
 - `emisorMacroApagado` (por omisión) y `crearDobleEmisorMacro` (pruebas, datos sintéticos).
 

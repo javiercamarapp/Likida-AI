@@ -92,12 +92,26 @@ describe('generarXmlCcp — el XML del borrador validado', () => {
     expect(r.nombreArchivo).toBe('carta-porte-F-123.xml');
   });
 
+  it('A37-S33-02: TiposFigura usa los atributos del esquema (NombreFigura), jamás `Nombre`', () => {
+    const r = generarXmlCcp(viajeDe(datosCompletos()), ID);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const figura = r.xml.split('\n').find((l) => l.includes('TiposFigura')) ?? '';
+    const atributos = [...figura.matchAll(/\s([A-Za-z]+)="/g)].map((m) => m[1]);
+    expect(atributos).toContain('NombreFigura');
+    expect(atributos).not.toContain('Nombre');
+    // Solo atributos que el XSD 3.1 declara para TiposFigura.
+    const permitidos = ['TipoFigura', 'RFCFigura', 'NumLicencia', 'NombreFigura', 'NumRegIdTribFigura', 'ResidenciaFiscalFigura'];
+    for (const a of atributos) expect(permitidos).toContain(a);
+    expect(figura).toContain('NombreFigura="Juan &quot;El Rayo&quot; Pérez"');
+  });
+
   it('escapa los cinco reservados y no deja & crudos en todo el archivo', () => {
     const r = generarXmlCcp(viajeDe(datosCompletos()), ID);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.xml).toContain('Descripcion="Cemento &lt;gris&gt; &amp; arena"');
-    expect(r.xml).toContain('Nombre="Juan &quot;El Rayo&quot; Pérez"');
+    expect(r.xml).toContain('NombreFigura="Juan &quot;El Rayo&quot; Pérez"');
     expect(r.xml).toContain('AseguraRespCivil="Qualitas &amp; Cía"');
     // Ningún & que no sea entidad — la forma barata de "no está roto".
     expect(r.xml.match(/&(?!amp;|lt;|gt;|quot;|apos;)/)).toBeNull();

@@ -276,6 +276,13 @@ describe('D · Bill of Lading en inglés', () => {
     expect(raro.incidencias).toContainEqual(expect.objectContaining({ codigo: 'renglon_no_leido', campo: 'peso_kg' }));
   });
 
+  it('A37-S32-09: un total con unidad que no es lb ni kg no se convierte como libras', () => {
+    const r = leerBol(pdfTexto('Pieces: 1\nDescription: Cases\nWeight: 100 lb\nTotal Weight: 14 tons'));
+    expect(r.extraccion.campos.peso_bruto_total?.valor).not.toBe('6.35'); // 14 «tons» NO se vuelven 14 lb
+    expect((r.extraccion.campos.peso_bruto_total?.notas ?? []).join(' ')).not.toMatch(/Convertido de libras/);
+    expect(r.incidencias).toContainEqual(expect.objectContaining({ codigo: 'renglon_no_leido', campo: 'peso_bruto_total' }));
+  });
+
   it('las Notes son de segunda mano: un RFC de Notes no se da por del remitente y la unidad «20» no es clave SAT', async () => {
     const r = leerBol(await contenido(await pdfM7()));
     const rfc = r.extraccion.campos.origen_rfc;

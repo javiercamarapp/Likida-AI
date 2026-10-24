@@ -20,7 +20,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 let fila: Record<string, unknown> | null = null;
 
-const from = vi.fn(() => {
+const from = vi.fn((_tabla?: string) => {
   const enlace: Record<string, unknown> = {};
   for (const m of ['select', 'eq']) enlace[m] = () => enlace;
   enlace.maybeSingle = async () => ({ data: fila, error: null });
@@ -34,6 +34,19 @@ const { getDatosResponsable } = await import('./repo');
 const { avisoSimplificado, avisoIntegral } = await import('./privacidad');
 
 beforeEach(() => { fila = null; });
+
+describe('A37-S12-09: una flota inexistente no cuesta la consulta de GPS', () => {
+  it('con el tenant desconocido solo se consulta `tenant`; con uno real, también el conector', async () => {
+    fila = null;
+    from.mockClear();
+    expect(await getDatosResponsable('11111111-1111-4111-8111-111111111111')).toBeNull();
+    expect(from.mock.calls.map((c) => (c as unknown as string[])[0])).toEqual(['tenant']);
+    fila = { razon_social: 'FLOTA SA DE CV', domicilio_fiscal: 'Calle 1', url_aviso_privacidad: '', contacto_privacidad: null };
+    from.mockClear();
+    await getDatosResponsable('t1');
+    expect(from.mock.calls.map((c) => (c as unknown as string[])[0])).toEqual(['tenant', 'conector_credencial']);
+  });
+});
 
 describe('getDatosResponsable — sin razón social o domicilio devuelve lo que hay (el aviso lo dice como pendiente)', () => {
   it('con razón social y domicilio, devuelve los datos', async () => {

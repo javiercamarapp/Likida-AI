@@ -9,7 +9,7 @@ import {
   leerDatosEstadias, leerHitosDeOperador, leerVeredictos, leerViajeConHitos, type DatosEstadias, type FiltrosTablero, type VeredictoFila, type ViajeTablero,
 } from './repo_validacion';
 import type { HitoFila } from './tipos';
-import { diaEnZona, TZ_MX } from '@/lib/formato';
+import { diaEnZona, inicioDiaEnZona, TZ_MX } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS SERVICIOS INTERNOS que el Agente 5 le ofrece a los demás agentes. Todos reciben el TENANT
@@ -96,10 +96,12 @@ export async function evidenciaJornadaDeViaje(
   tenantId: string, operadorId: string, dia: string, d: DepsServicios = depsServiciosReales,
 ): Promise<EvidenciaJornada> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) throw new Error('evidenciaJornadaDeViaje: el día va como AAAA-MM-DD');
-  // El día de MÉXICO, no el UTC del servidor (misma lección que el expediente de jornada).
-  const desde = new Date(`${dia}T00:00:00-06:00`);
+  // El día de la FLOTA (su `zonaHoraria`; México si no se pudo leer), no el UTC del servidor ni un -06:00 fijo (A37-S36-10).
+  const zona = (await d.config(tenantId).catch(() => ({ ...CONFIG_CONDUCTOR_DEFAULT }))).zonaHoraria;
+  const desde = inicioDiaEnZona(dia, zona);
+  if (Number.isNaN(desde.getTime())) throw new Error('evidenciaJornadaDeViaje: el día no existe');
   const hitos = await d.hitosDeOperador(tenantId, operadorId, new Date(desde.getTime() - 3_600_000), new Date(desde.getTime() + 25 * 3_600_000));
-  return evidenciaJornadaDeHitos(hitos.filter((h) => h.tenantId === tenantId), dia);
+  return evidenciaJornadaDeHitos(hitos.filter((h) => h.tenantId === tenantId), dia, zona);
 }
 
 export const hoyMxDia = (ahora: Date = new Date()): string => diaEnZona(ahora, TZ_MX);

@@ -72,9 +72,12 @@ vi.mock('next/server', async (orig) => {
 // El inbox durable GENERAL (16-ago-2026): todo permitido se persiste antes
 // del 200 y se procesa reclamando su fila — el doble minimo que deja pasar
 // el flujo feliz sin base real.
-const { bandejaInbox, fallosClaim } = vi.hoisted(() => ({
+const { bandejaInbox, fallosClaim, selladas, tomadas } = vi.hoisted(() => ({
   bandejaInbox: new Map<string, unknown>(),
   fallosClaim: new Set<string>(),
+  /** A37-S12-07: eventos ya sellados (el claim da null) y eventos que lleva OTRA invocación (el claim da null). */
+  selladas: new Set<string>(),
+  tomadas: new Set<string>(),
 }));
 vi.mock('@/lib/likida/wa_pendientes', () => ({
   // DAT-34: la deduplicación previa al rate limit. Vacío = ninguno de estos
@@ -90,8 +93,10 @@ vi.mock('@/lib/likida/wa_pendientes', () => ({
   },
   reclamarPendiente: async (id: string) => {
     if (fallosClaim.has(id)) throw new Error('lectura del claim agotó el tiempo');
+    if (selladas.has(id) || tomadas.has(id)) return null;
     return bandejaInbox.has(id) ? { id, evento: bandejaInbox.get(id), intentos: 1 } : null;
   },
+  pendienteYaSellado: async (id: string) => selladas.has(id),
   marcarPendienteProcesado: async () => undefined,
   anotarFalloPendiente: async () => undefined,
 }));
@@ -142,6 +147,8 @@ beforeEach(() => {
   enVuelo = 0; pico = 0; atendidos.length = 0; enviados.length = 0;
   processInbound.mockClear();
   fallosClaim.clear();
+  selladas.clear();
+  tomadas.clear();
   logger.info.mockClear(); logger.warn.mockClear(); logger.error.mockClear();
 });
 
@@ -304,5 +311,21 @@ describe('fallo de lectura del claim conserva el orden durable', () => {
     expect(bandejaInbox.has(audio)).toBe(true);
     expect(bandejaInbox.has(cierre)).toBe(true);
     expect(logger.error).toHaveBeenCalledWith('wa.claim_fallo', expect.objectContaining({ id: audio }));
+  });
+});
+
+describe('A37-S12-07: el claim nulo distingue «ya procesada» de «la lleva otra invocación»', () => {
+  it('reentrega con los primeros mensajes ya sellados: la cadena sigue con los pendientes', async () => {
+    atendidos.length = 0;
+    selladas.add('wamid.5215500000001.0'); selladas.add('wamid.5215500000001.1');
+    await postear(rafaga(4, '5215500000001'));
+    expect(atendidos).toEqual(['wamid.5215500000001.2', 'wamid.5215500000001.3']);
+  });
+
+  it('si el mensaje lo lleva OTRA invocación, la cadena se detiene (el orden por chofer se respeta)', async () => {
+    atendidos.length = 0;
+    tomadas.add('wamid.5215500000002.0');
+    await postear(rafaga(3, '5215500000002'));
+    expect(atendidos).toEqual([]);
   });
 });

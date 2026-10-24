@@ -7,7 +7,7 @@ vi.mock('../bitacora_escritura', () => bitacora);
 const borrador = vi.hoisted(() => ({ getBorradorViaje: vi.fn(async () => null as unknown) }));
 vi.mock('../carta_porte_datos', async (orig) => ({ ...(await orig<typeof import('../carta_porte_datos')>()), getBorradorViaje: borrador.getBorradorViaje }));
 
-import { estado, reset } from './repo_falso.fixture';
+import { api, estado, reset } from './repo_falso.fixture';
 import { A, B, lecturaAtlas, llmBoreal, sembrarFlotas, subir, subirYProcesar } from './escenario.fixture';
 import { excelAtlas, pdfBoreal } from './documentos_sinteticos.fixture';
 import { llmFalso } from './llm_falso.fixture';
@@ -95,6 +95,16 @@ describe('asignación automática al caer a revisión', () => {
       expect(await asignarAlLlegarARevision(A, id, CON_DUDA)).toEqual({ asignado: false, motivo: 'usuario_no_valido' });
     }
     expect(estado.revisores.size).toBe(0);
+  });
+
+  it('A37-S32-10: si una persona asigna entre la lectura y el update, la automática NO la pisa', async () => {
+    await guardarConfigSalida(A, { destinatarioRevisionUsuario: REVISORA }, 'sistema');
+    const id = await documento();
+    estado.revisores.set(id, OTRA); // la asignó una persona justo después de que la automática la leyó vacía
+    const espia = vi.spyOn(api, 'revisoresDeDocumentos').mockResolvedValueOnce(new Map());
+    expect((await asignarAlLlegarARevision(A, id, CON_DUDA)).asignado).toBe(false);
+    espia.mockRestore();
+    expect(estado.revisores.get(id)).toBe(OTRA);
   });
 
   it('nunca lanza: un fallo de la base se vuelve «error» y el documento sigue', async () => {

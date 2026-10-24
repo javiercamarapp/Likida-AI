@@ -13,6 +13,8 @@
 import * as XLSX from 'xlsx';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { llaveTexto } from './catalogos';
+import { exigirZipAcotado } from './zip_seguro';
+import { ETIQUETA_HTML, quitarScriptYEstilo } from './html_quitar';
 import { aBuffer, textoDeBase64, textoDeBytes, utf8DeLatin1 } from './bytes';
 
 export type FormatoDoc = 'pdf_texto' | 'pdf_escaneado' | 'imagen' | 'excel' | 'csv' | 'xml' | 'correo' | 'json';
@@ -302,6 +304,7 @@ function prepararHoja(bytes: Uint8Array, esCsv: boolean, avisos: string[]): Cont
     // raw: el CSV se lee como TEXTO — «01000» no se vuelve 1000 y «1/2/2026» no se reinterpreta.
     libro = XLSX.read(textoDeBytes(bytes).replace(/^\ufeff/, ''), { type: 'string', raw: true, cellDates: false });
   } else {
+    exigirZipAcotado(bytes); // A37-S31-05: antes de descomprimir nada
     libro = XLSX.read(aBuffer(bytes), { type: 'buffer', cellDates: true, cellFormula: false, cellHTML: false, cellStyles: false, sheetRows: MAX_FILAS_HOJA + 1 });
   }
   const nombresDatos = esCsv ? libro.SheetNames : hojasDeDatos(libro.SheetNames);
@@ -377,12 +380,11 @@ function decodificarQp(s: string): string {
   return s.replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/gi, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
 }
 
-function htmlATexto(html: string): string {
-  return html
-    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+export function htmlATexto(html: string): string {
+  return quitarScriptYEstilo(html)
     .replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d)>/gi, '\n')
     .replace(/<\/t[dh]>/gi, ' | ')
-    .replace(/<[^>]+>/g, ' ')
+    .replace(ETIQUETA_HTML, ' ')
     .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
     .replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
 }

@@ -237,6 +237,20 @@ describe('Navixy — tracker/list + tracker/get_states', () => {
     expect(llamadas.filter((l) => ruta(l) === 'tracker/get_states')).toHaveLength(3);
   });
 
+  it('A37-S37-07: sin user_time NO se asume UTC: falla «formato» en vez de dejar posiciones 6 h corridas', async () => {
+    const estados = '{"success":true,"states":{"501":{"gps":{"updated":"2026-10-01 09:29:30","location":{"lat":19.4,"lng":-99.1},"heading":270,"speed":64}}}}';
+    const { http } = enrutado((p) => ruta(p) === 'tracker/list' ? ok(fx('navixy_tracker_list.json')) : ok(estados));
+    expect(await leerPosicionesNavixy(V, http, { ahora })).toMatchObject({ ok: false, falla: 'formato' });
+  });
+
+  it('A37-S37-07: una posición con hora MÁS ADELANTE que el reloj (más una tolerancia) se descarta como inválida', async () => {
+    // user_time 09:30:00 = UTC-6 ⇒ la marca 10:30:00 local es 16:30Z, una hora en el futuro del reloj (15:30:10Z).
+    const estados = '{"success":true,"user_time":"2026-10-01 09:30:00","states":{"501":{"gps":{"updated":"2026-10-01 10:30:00","location":{"lat":19.4,"lng":-99.1},"heading":270,"speed":64}}}}';
+    const { http } = enrutado((p) => ruta(p) === 'tracker/list' ? ok(fx('navixy_tracker_list.json')) : ok(estados));
+    const r = await leerPosicionesNavixy(V, http, { ahora });
+    expect(r).toMatchObject({ ok: true, posiciones: [], invalidas: 1 });
+  });
+
   it('sin servidor regional no hay lectura (no hay host global)', async () => {
     expect(await leerPosicionesNavixy({ api_key: 'K' }, enrutado(() => ok('{}')).http)).toMatchObject({ ok: false });
   });
@@ -287,6 +301,33 @@ describe('Genérico — mapeo configurable', () => {
     const r = await leerPosicionesGenerico({ ...base, mapeo_posiciones: mapeo({ paginacion: { tipo: 'pagina', param: 'page', tamano: 10 } }) }, http);
     expect(r.ok && r.posiciones).toHaveLength(13);
     expect(llamadas).toHaveLength(2);
+  });
+
+  it('A37-S37-03: sin tamano ni tamano_param una página corta NO es el final; termina con la vacía', async () => {
+    const { http, llamadas } = enrutado((p) => {
+      const pag = Number(new URL(p.url).searchParams.get('page'));
+      const n = pag === 1 ? 100 : pag === 2 ? 40 : 0;
+      return ok(JSON.stringify({ data: Array.from({ length: n }, (_, i) => ({ id: `${pag}-${i}`, lat: 20, lon: -99, ts: '2026-10-01T10:00:00Z' })) }));
+    });
+    const r = await leerPosicionesGenerico({ ...base, mapeo_posiciones: mapeo({ paginacion: { tipo: 'pagina', param: 'page' } }) }, http);
+    expect(r.ok && r.posiciones).toHaveLength(140);
+    expect(llamadas).toHaveLength(3);
+  });
+
+  it('A37-S37-03: un proveedor que ignora el número de página (misma página siempre) aborta sin completar ni duplicar', async () => {
+    const { http, llamadas } = enrutado(() => ok(JSON.stringify({ data: Array.from({ length: 50 }, (_, i) => ({ id: `u${i}`, lat: 20, lon: -99, ts: '2026-10-01T10:00:00Z' })) })));
+    const r = await leerPosicionesGenerico({ ...base, mapeo_posiciones: mapeo({ paginacion: { tipo: 'pagina', param: 'page', tamano_param: 'size', tamano: 50 } }) }, http);
+    expect(r).toMatchObject({ ok: false, backlog: true });
+    expect(llamadas).toHaveLength(2);
+  });
+
+  it('A37-S37-03: la misma muestra repetida entre páginas distintas se cuenta una vez', async () => {
+    const { http } = enrutado((p) => {
+      const pag = Number(new URL(p.url).searchParams.get('page'));
+      return ok(JSON.stringify({ data: pag === 1 ? [{ id: 'a', lat: 20, lon: -99, ts: '2026-10-01T10:00:00Z' }, { id: 'b', lat: 20, lon: -99, ts: '2026-10-01T10:00:00Z' }] : pag === 2 ? [{ id: 'b', lat: 20, lon: -99, ts: '2026-10-01T10:00:00Z' }, { id: 'c', lat: 20, lon: -99, ts: '2026-10-01T10:00:00Z' }] : [] }));
+    });
+    const r = await leerPosicionesGenerico({ ...base, mapeo_posiciones: mapeo({ paginacion: { tipo: 'pagina', param: 'page' } }) }, http);
+    expect(r.ok && r.posiciones.map((x) => x.deviceId)).toEqual(['a', 'b', 'c']);
   });
 
   it('401 → credencial; lista ausente → formato (el mapeo no corresponde)', async () => {

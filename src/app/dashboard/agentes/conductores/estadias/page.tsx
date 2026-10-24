@@ -1,10 +1,12 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { hoyMx } from '@/lib/formato';
+import { diaEnZona, TZ_MX } from '@/lib/formato';
 import { logger } from '@/lib/logger';
+import { zonaOCdmx } from '@/lib/likida/conductor/config';
 import { armarFilasEstadias, rangoDeDias } from '@/lib/likida/conductor/estadias_lectura';
 import { leerCatalogosFiltro, leerDatosEstadias } from '@/lib/likida/conductor/repo_validacion';
+import { getZonaHorariaTenant } from '@/lib/likida/repo';
 import { sufijoTenant } from '../../../sufijo';
 import { VistaEstadias } from './vista';
 
@@ -26,16 +28,20 @@ export default async function PaginaEstadias({ searchParams }: {
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
 
-  const hasta = sp.hasta && FECHA.test(sp.hasta) ? sp.hasta : hoyMx();
+  // A37-S35-09: el periodo y las horas son de la zona de LA FLOTA (México si no se puede leer o es inválida).
+  const zonaLeida = await getZonaHorariaTenant(tenantId).then(zonaOCdmx).catch(() => null);
+  const zona = zonaLeida ?? TZ_MX; // solo para pintar los filtros: sin zona leída NO se consulta nada (abajo)
+  const hasta = sp.hasta && FECHA.test(sp.hasta) ? sp.hasta : diaEnZona(new Date(), zona);
   const desde = sp.desde && FECHA.test(sp.desde) ? sp.desde : new Date(new Date(`${hasta}T12:00:00-06:00`).getTime() - 6 * 86_400_000).toISOString().slice(0, 10);
   const uuidONada = (v: string | undefined) => (v && UUID.test(v) ? v.toLowerCase() : '');
   const filtros = { desde, hasta, terminalId: uuidONada(sp.terminal), clienteId: uuidONada(sp.cliente), operadorId: uuidONada(sp.chofer) };
-  const rango = rangoDeDias(desde, hasta);
+  const rango = rangoDeDias(desde, hasta, 93, zona);
 
   const catalogos = await leerCatalogosFiltro(tenantId).catch(() => null);
   let filas: ReturnType<typeof armarFilasEstadias> | null = null;
   let error: string | null = null;
-  if ('error' in rango) error = rango.error;
+  if (zonaLeida === null) error = 'No se pudo leer la zona horaria de la flota ahora mismo. Intenta de nuevo en un momento.';
+  else if ('error' in rango) error = rango.error;
   else {
     try {
       const datos = await leerDatosEstadias(tenantId, rango.desde, rango.hasta, {
@@ -64,7 +70,7 @@ export default async function PaginaEstadias({ searchParams }: {
       sufijo={sufijoTenant(sp)} filtros={filtros} catalogos={catalogos}
       filas={filas?.filas ?? []}
       resumen={filas?.resumen ?? { paradas: 0, cerradas: 0, enCurso: 0, minutosCerradas: 0, minutosExcedentes: null, montoPropuesto: {}, sinPacto: 0 }}
-      truncada={filas?.truncada ?? false} error={error} csvUrl={veDinero ? `/api/v1/estadias?${qs.toString()}` : null} ocultos={ocultos}
+      truncada={filas?.truncada ?? false} zonaHoraria={zona} error={error} csvUrl={veDinero ? `/api/v1/estadias?${qs.toString()}` : null} ocultos={ocultos}
     />
   );
 }

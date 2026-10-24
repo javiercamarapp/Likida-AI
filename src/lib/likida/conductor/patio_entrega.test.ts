@@ -205,10 +205,44 @@ describe('cableado: llegada a descargar → pregunta → respuesta', () => {
     await dice('ya llegué');
     const r = await dice(`hito_patio:${V1}:${P_B}`);
     expect(textos(r)).toMatch(/Anotado/);
+    // A37-S36-02: nadie fue avisado → el chofer NO lee «ya le avisé»
+    expect(textos(r)).not.toMatch(/ya le avisé/);
+    expect(textos(r)).toMatch(/NO pude avisar a tu supervisor/);
     expect(pu.cierres).toEqual([{ ok: false, motivo: 'sin_destinatario' }]);
     const ex = regla.excepcionesPatio(pu.evs);
     expect(ex[0].sinAvisar).toBe(true);
     expect(ex[0].texto).toMatch(/Nadie recibió el aviso/);
+  });
+
+  it('A37-S36-02: con el envío rechazado de forma definitiva tampoco se promete «ya le avisé»', async () => {
+    const { dice } = await escenario({ envioOk: false });
+    await dice('ya llegué');
+    expect(textos(await dice(`hito_patio:${V1}:${P_B}`))).not.toMatch(/ya le avisé/);
+  });
+
+  it('A37-S36-03: si el renglón «respondido» no se guarda, el chofer NO lee «Anotado», no se avisa, y el reintento sí funciona', async () => {
+    const { dice, pu } = await escenario();
+    await dice('ya llegué');
+    let falla = true;
+    pu.p.guardar = async (h, evento, d) => { if (falla) return false; await pu.p.evento(h, evento, d); return true; };
+    const r = await dice(`hito_patio:${V1}:${P_B}`);
+    expect(textos(r)).toMatch(/No pude anotarlo/);
+    expect(textos(r)).not.toMatch(/Anotado/);
+    expect(pu.enviados).toHaveLength(0);
+    falla = false;
+    expect(textos(await dice(`hito_patio:${V1}:${P_B}`))).toMatch(/Anotado/);
+    expect(pu.enviados).toHaveLength(1);
+  });
+
+  it('A37-S36-04: el nombre libre no guarda teléfonos, correos ni enlaces; se vuelve a pedir', async () => {
+    const { dice, pu } = await escenario();
+    await dice('ya llegué');
+    await dice(`hito_patio:${V1}:otro`);
+    const r = await dice('patio Juan Perez 5512345678'); // grep-limpio:ok
+    expect(textos(r)).toMatch(/empezando con la palabra «patio»/);
+    expect(pu.evs.some((e) => e.detalle.estado === 'respondido')).toBe(false);
+    expect(JSON.stringify(pu.evs)).not.toMatch(/5512345678/); // grep-limpio:ok
+    expect(pu.enviados).toHaveLength(0);
   });
 
   it('un envío rechazado deja el claim cerrado con ok=false y la excepción visible', async () => {

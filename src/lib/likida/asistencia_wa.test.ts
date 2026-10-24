@@ -162,7 +162,7 @@ describe('interpretarAsistencia — ROJO por familia', () => {
     expect(interpretarAsistencia('nos asaltaron y hay un herido')).toEqual({ nivel: 'rojo', modoMudo: true });
   });
 
-  it.each(['me quedé varado', 'no arranca el camión', 'se me fue el freno', 'sale humo del motor', 'se sobrecalentó'])(
+  it.each(['me quedé varado', 'no arranca el camión', 'se me fue el freno', 'sale humo del motor', 'se sobrecalentó', 'siento pánico, hay gente rara rondando el camión'])(
     '"%s" es ÁMBAR', (texto) => {
       expect(interpretarAsistencia(texto)).toEqual({ nivel: 'ambar', modoMudo: false });
     },
@@ -231,6 +231,19 @@ describe('tipoDeAsistencia y lesionados', () => {
     expect(tipoDeAsistencia('hay un herido', 'rojo')).toBe('emergencia_medica');
     expect(tipoDeAsistencia('la vía está bloqueada', 'rojo')).toBe('bloqueo');
     expect(tipoDeAsistencia('me quedé varado', 'ambar')).toBe('varado');
+  });
+
+  it('A37-S29-05: «se me murió la batería» no es emergencia médica ni lesionados; «se murió un señor» sí', () => {
+    for (const t of ['se me murio la bateria, estoy varado', 'se murio el motor', 'el camion se murio en la subida', 'se murio la unidad']) {
+      expect(lesionadosSegunTexto(t)).toBeNull();
+      expect(interpretarAsistencia(t)?.nivel).not.toBe('rojo');
+    }
+    expect(lesionadosSegunTexto('se murio un señor en el accidente')).toBe(true);
+    expect(lesionadosSegunTexto('murio mi compañero')).toBe(true);
+    // ambiguo (ni humano ni objeto): sigue siendo ROJO (mejor falso positivo) pero NO fija hay_lesionados
+    expect(interpretarAsistencia('hay un muerto')).toEqual({ nivel: 'rojo', modoMudo: false });
+    expect(tipoDeAsistencia('hay un muerto', 'rojo')).toBe('emergencia_medica');
+    expect(lesionadosSegunTexto('murio')).toBeNull();
   });
 
   it('hay_lesionados es NULL cuando el texto no lo dice — JAMÁS false', () => {

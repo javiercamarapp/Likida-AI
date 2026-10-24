@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 import {
-  barridoSitioDerivado, derivarSitio, normalizarNombre,
+  barridoSitioDerivado, derivarSitio, normalizarNombre, repartirCandidatosPorFlota,
   type CandidatoSitio, type LadoViaje, type PuertosSitioDerivado, type SitioCatalogo,
 } from './sitio_derivado';
 
@@ -143,5 +143,23 @@ describe('barridoSitioDerivado', () => {
     const r = await barridoSitioDerivado(w2.puertos, new Date(), Date.now() - 1);
     expect(r.cortadosPorReloj).toBe(2);
     expect(w2.asignados).toHaveLength(0);
+  });
+});
+
+describe('A37-S37-02: el tope se reparte entre flotas', () => {
+  const v = (tenantId: string, n: number) => ({ tenantId, id: `${tenantId}${n}` });
+  it('una flota con 400 viajes sin resolver no se come las 300 plazas: las demás entran', () => {
+    const lista = [...Array.from({ length: 400 }, (_, i) => v('gorda', i)), ...Array.from({ length: 5 }, (_, i) => v('chica', i)), ...Array.from({ length: 3 }, (_, i) => v('otra', i))];
+    const r = repartirCandidatosPorFlota(lista, 300);
+    expect(r).toHaveLength(300);
+    expect(r.filter((x) => x.tenantId === 'chica')).toHaveLength(5);
+    expect(r.filter((x) => x.tenantId === 'otra')).toHaveLength(3);
+    expect(r.filter((x) => x.tenantId === 'gorda')).toHaveLength(292);
+  });
+  it('mantiene el orden dentro de cada flota, rota el turno y no recorta si cabe', () => {
+    const lista = [v('a', 1), v('a', 2), v('b', 1), v('b', 2)];
+    expect(repartirCandidatosPorFlota(lista, 3, 0).map((x) => x.id)).toEqual(['a1', 'b1', 'a2']);
+    expect(repartirCandidatosPorFlota(lista, 3, 1).map((x) => x.id)).toEqual(['b1', 'a1', 'b2']);
+    expect(repartirCandidatosPorFlota(lista, 10)).toEqual(lista);
   });
 });

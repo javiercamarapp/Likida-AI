@@ -103,6 +103,36 @@ export function inicioDiaMx(dia: string): string {
 }
 
 /**
+ * El PRIMER instante de un día de calendario `AAAA-MM-DD` en una zona IANA cualquiera (la de LA FLOTA, `config.zonaHoraria`).
+ *
+ * A37-S35-09 / S36-10: los periodos de estadías y el «día» de la evidencia de jornada se armaban con `-06:00` fijo, que solo es
+ * cierto para México. Una flota de frontera con el horario de verano de EE. UU. (America/Tijuana, por ejemplo) quedaba
+ * desfasada 1 h en los bordes. Con `TZ_MX` el resultado es idéntico a `inicioDiaMx` (UTC−6 todo el año).
+ *
+ * Resuelve el desfase real de ESE día (dos pasadas, por si el día del cambio de hora mueve el offset). Un día que no existe
+ * (`2026-02-31`) o con otro formato devuelve `Invalid Date`, nunca un día vecino.
+ */
+export function inicioDiaEnZona(dia: string, zonaHoraria: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dia);
+  if (!m) return new Date(NaN);
+  const [anio, mes, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const medianocheUtc = Date.UTC(anio, mes - 1, d);
+  const volvio = new Date(medianocheUtc);
+  if (volvio.getUTCFullYear() !== anio || volvio.getUTCMonth() !== mes - 1 || volvio.getUTCDate() !== d) return new Date(NaN);
+  const formato = new Intl.DateTimeFormat('en-CA', {
+    timeZone: zonaHoraria, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  });
+  // Cuánto se adelanta la hora de pared de la zona respecto a UTC en el instante `t` (negativo al oeste de Greenwich).
+  const desfase = (t: number): number => {
+    const partes = formato.formatToParts(new Date(t));
+    const v = (tipo: Intl.DateTimeFormatPartTypes) => Number(partes.find((p) => p.type === tipo)?.value);
+    return Date.UTC(v('year'), v('month') - 1, v('day'), v('hour'), v('minute'), v('second')) - Math.floor(t / 1000) * 1000;
+  };
+  const primera = medianocheUtc - desfase(medianocheUtc);
+  return new Date(medianocheUtc - desfase(primera));
+}
+
+/**
  * El ÚLTIMO instante representable de un día de México:
  * `'2026-12-31'` → `'2026-12-31T23:59:59.999-06:00'`.
  *

@@ -179,7 +179,8 @@ function entradaI(p: Partial<EntradaInsights> = {}): EntradaInsights {
   }
   for (const r of [2, 4, 6, 8]) hitos.push(hitoI({ fuente: 'boton', mensajeEn: iso(0), recibidoEn: iso(r) }));
   for (let i = 0; i < 2; i++) hitos.push(hitoI({ fuente: 'oficina', estado: 'validado' }));
-  return { hitos, cruces, episodios: [], viajesSinSitio: 0, lineaBase: { llamadasPorViaje: 2, registradaEn: '2026-02-20' }, ...p };
+  // A37-S35-03: 3 hitos por viaje → los 18 sin intervención caen en 6 viajes.
+  return { hitos: hitos.map((h, i) => ({ ...h, viajeId: `v${Math.floor(i / 3)}` })), cruces, episodios: [], viajesSinSitio: 0, lineaBase: { llamadasPorViaje: 2, registradaEn: '2026-02-20' }, ...p };
 }
 
 const pintarI = (e: EntradaInsights, discrepancias: number | null = null) =>
@@ -194,8 +195,9 @@ describe('Conductores — tarjeta de insights (T-A5-32)', () => {
     expect(html).toContain('18 de 20 hitos se registraron sin que nadie los capturara');
     expect(html).toContain('Tu equipo dejó de teclear esos 18 registros');
     expect(html).toContain('Revisa los 2 que corrigió la oficina');
-    // llamadas evitadas = 18 × 2 = 36, rotulada como estimación con la fecha de la línea base
-    expect(html).toContain('36');
+    // llamadas evitadas = 6 viajes × 2 = 12, rotulada como estimación con la fecha de la línea base
+    expect(html).toContain('unas 12 llamadas evitadas');
+    expect(html).not.toContain('unas 36');
     expect(html).toContain('Estimación con tu línea base de 2026-02-20');
     // cada número trae fuente y rótulo
     expect(html).toContain('fuente: viaje_hito.fuente');

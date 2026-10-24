@@ -78,6 +78,8 @@ export interface ResultadoGeneracion {
   duplicados: number;
   /** Listas que no se procesaron por el tope de la pasada. */
   omitidas: number;
+  /** A37-A4-02: copias del MISMO servicio (otra terminal por un typo) que no generaron un segundo aviso. */
+  repetidasPorClave: number;
   /** true si se alcanzó algún tope (de proceso o de lectura). */
   acotada: boolean;
 }
@@ -85,7 +87,7 @@ export interface ResultadoGeneracion {
 function vacio(estado: ResultadoGeneracion['estado']): ResultadoGeneracion {
   return {
     estado, leidas: 0, yaTenian: 0, noListas: 0, muyTemprano: 0, citaPasada: 0, creados: 0,
-    pendientesConfirmacion: 0, aprobados: 0, sinDestinatario: 0, duplicados: 0, omitidas: 0, acotada: false,
+    pendientesConfirmacion: 0, aprobados: 0, sinDestinatario: 0, duplicados: 0, omitidas: 0, repetidasPorClave: 0, acotada: false,
   };
 }
 
@@ -251,31 +253,47 @@ export async function generarAvisos(tenantId: string, ahora: Date, deps: DepsGen
   const cfgListo = configListoDe(config);
   const r = vacio('ok');
 
+  // Se lee toda la ventana (acotada) ANTES de decidir: las copias de un mismo servicio pueden caer en páginas distintas.
+  const todas: FilaDelPrograma[] = [];
   for (let desp = 0; ; desp += PAGINA_FILAS) {
     if (desp >= TOPE_FILAS_LEIDAS) { r.acotada = true; break; }
     const pagina = await deps.repo.filasVisibles(tenantId, desde, hasta, desp, PAGINA_FILAS);
     r.leidas += pagina.length;
     if (pagina.length === 0) break;
-
-    const existentes = new Set((await deps.repo.avisosDeFilas(tenantId, pagina.map((f) => f.id))).map((a) => a.filaId));
-    for (const fila of pagina) {
-      if (existentes.has(fila.id)) { r.yaTenian++; continue; }
-      const ev = evaluarListo(paraListo(fila), cfgListo);
-      if (!ev.listo) { r.noListas++; continue; }
-      const t = evaluarTiempo(fila.citaEn, config.horasAntesCita, ahora);
-      if (t === 'muy_temprano') { r.muyTemprano++; continue; }
-      if (t === 'cita_pasada') { r.citaPasada++; continue; }
-      if (r.creados + r.duplicados >= TOPE_FILAS_POR_PASADA) { r.omitidas++; r.acotada = true; continue; }
-
-      const aviso = await armarAviso(tenantId, fila, config, ev.motivo, deps, ahora);
-      const res = await deps.repo.insertarAviso(tenantId, aviso);
-      if (res === 'duplicado') { r.duplicados++; continue; }
-      r.creados++;
-      if (aviso.estado === 'aprobado') r.aprobados++;
-      else if (aviso.estado === 'sin_destinatario') r.sinDestinatario++;
-      else r.pendientesConfirmacion++;
-    }
+    todas.push(...pagina);
     if (pagina.length < PAGINA_FILAS) break;
+  }
+
+  const existentes = new Set<string>();
+  for (let i = 0; i < todas.length; i += PAGINA_FILAS) {
+    for (const a of await deps.repo.avisosDeFilas(tenantId, todas.slice(i, i + PAGINA_FILAS).map((f) => f.id))) existentes.add(a.filaId);
+  }
+  // A37-A4-02: la terminal es texto libre; subir GDL y luego GLD deja DOS juegos de filas del mismo servicio. Un servicio es
+  // (fecha, sección, caja, unidad, cliente, consignatario, cita); si alguna copia ya tiene aviso, las demás se tienen por cubiertas.
+  const claveServicio = (f: FilaDelPrograma): string | null =>
+    f.caja === null && f.unidad === null ? null : [f.fecha, f.tipo, f.caja, f.unidad, f.cliente, f.consignatario, f.citaEn].map((x) => x ?? '').join('|');
+  const cubiertas = new Set<string>();
+  for (const f of todas) { const k = claveServicio(f); if (k !== null && existentes.has(f.id)) cubiertas.add(k); }
+
+  for (const fila of todas) {
+    if (existentes.has(fila.id)) { r.yaTenian++; continue; }
+    const k = claveServicio(fila);
+    if (k !== null && cubiertas.has(k)) { r.repetidasPorClave++; continue; }
+    const ev = evaluarListo(paraListo(fila), cfgListo);
+    if (!ev.listo) { r.noListas++; continue; }
+    const t = evaluarTiempo(fila.citaEn, config.horasAntesCita, ahora);
+    if (t === 'muy_temprano') { r.muyTemprano++; continue; }
+    if (t === 'cita_pasada') { r.citaPasada++; continue; }
+    if (r.creados + r.duplicados >= TOPE_FILAS_POR_PASADA) { r.omitidas++; r.acotada = true; continue; }
+
+    const aviso = await armarAviso(tenantId, fila, config, ev.motivo, deps, ahora);
+    const res = await deps.repo.insertarAviso(tenantId, aviso);
+    if (res === 'duplicado') { r.duplicados++; continue; }
+    r.creados++;
+    if (k !== null) cubiertas.add(k);
+    if (aviso.estado === 'aprobado') r.aprobados++;
+    else if (aviso.estado === 'sin_destinatario') r.sinDestinatario++;
+    else r.pendientesConfirmacion++;
   }
   // Una pasada sin novedad (lo normal, cada 5 min) no escribe nada; con novedad, solo números.
   if (r.creados > 0 || r.duplicados > 0 || r.omitidas > 0 || r.acotada) {

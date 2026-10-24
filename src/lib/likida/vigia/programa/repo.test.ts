@@ -58,13 +58,15 @@ describe('AISLAMIENTO: toda llamada del repo lleva el tenant', () => {
     respuesta = (l) => (l.op === 'insert' && l.tabla === 'programa_despacho_carga' ? { data: [{ id: CARGA }], error: null } : { data: [], error: null });
     await repo.registrarCarga(T1, NUEVA_CARGA);
     await repo.descartarCarga(T1, CARGA);
+    await repo.reabrirCargaSiNoEsUltima(T1, 'GDL', 'b'.repeat(64));
+    await repo.restaurarCarga(T1, CARGA, '2026-10-01T00:00:00.000Z');
     await repo.filasEnRango(T1, 'GDL', '2026-10-05', '2026-10-31');
     await repo.insertarFilas(T1, [filaPara(1)]);
     await repo.actualizarFilas(T1, [filaPara(2)]);
     await repo.registrarCambios(T1, [{ filaId: CARGA, campo: 'unidad', antes: 'A', despues: 'B', cargaId: CARGA }]);
     await repo.ocultarFilas(T1, [CARGA], CARGA);
     expect(llamadas.map((l) => `${l.tabla}:${l.op}`)).toEqual([
-      'programa_despacho_carga:insert', 'programa_despacho_carga:delete', 'programa_despacho_fila:select',
+      'programa_despacho_carga:insert', 'programa_despacho_carga:delete', 'programa_despacho_carga:select', 'programa_despacho_carga:update', 'programa_despacho_fila:select',
       'programa_despacho_fila:upsert', 'programa_despacho_fila:upsert', 'programa_despacho_cambio:insert', 'programa_despacho_fila:update',
     ]);
     for (const l of llamadas) expect(tieneTenant(l), `${l.tabla}:${l.op} sin tenant_id`).toBe(true);
@@ -145,6 +147,28 @@ describe('registrarCarga', () => {
   });
 });
 
+describe('reabrirCargaSiNoEsUltima (A37-A4-01)', () => {
+  const OTRA = 'b'.repeat(64);
+  it('si el sha es el de la última carga → null y no escribe', async () => {
+    respuesta = () => ({ data: [{ id: CARGA, archivo_sha256: OTRA }], error: null });
+    expect(await crearRepoPrograma().reabrirCargaSiNoEsUltima(T1, 'GDL', OTRA)).toBeNull();
+    expect(llamadas.some((l) => l.op === 'update')).toBe(false);
+  });
+
+  it('si entró otro archivo después → marca la carga vieja como la más reciente y devuelve su fecha anterior', async () => {
+    respuesta = (l) => {
+      if (l.op === 'update') return { data: null, error: null };
+      const porSha = l.filtros.some(([, c]) => c === 'archivo_sha256');
+      return porSha ? { data: [{ id: CARGA, created_at: '2026-10-01T00:00:00+00:00' }], error: null }
+        : { data: [{ id: 'otra', archivo_sha256: 'c'.repeat(64) }], error: null };
+    };
+    expect(await crearRepoPrograma().reabrirCargaSiNoEsUltima(T1, 'GDL', OTRA)).toEqual({ id: CARGA, creadaAnterior: '2026-10-01T00:00:00+00:00' });
+    const u = llamadas.find((l) => l.op === 'update');
+    expect(u?.filtros).toContainEqual(['eq', 'tenant_id', T1]);
+    expect(u?.filtros).toContainEqual(['eq', 'id', CARGA]);
+  });
+});
+
 describe('errores', () => {
   it('un error de la base LANZA, nunca se lee como «no hay nada»', async () => {
     respuesta = () => ({ data: null, error: { message: 'boom', code: 'XX000' } });
@@ -159,5 +183,35 @@ describe('errores', () => {
     await expect(repo.filasEnRango(T1, 'GDL', '2026-10-05', '2026-10-06')).rejects.toBeInstanceOf(ProgramaSinMigrar);
     await expect(repo.registrarCarga(T1, NUEVA_CARGA)).rejects.toThrow(/0795/);
     await expect(repo.ocultarFilas(T1, ['f'], CARGA)).rejects.toBeInstanceOf(ProgramaSinMigrar);
+  });
+});
+
+describe('A37-S59-05 · estado de la carga (0894)', () => {
+  beforeEach(() => { llamadas = []; respuesta = () => ({ data: [], error: null }); });
+  it('cargaPrevia filtra por flota, terminal y sha, y reporta si está sellada', async () => {
+    respuesta = () => ({ data: [{ id: CARGA, created_at: new Date(Date.now() - 30 * 60_000).toISOString(), completada_en: null }], error: null });
+    const c = await crearRepoPrograma().cargaPrevia!(T1, 'GDL', 'a'.repeat(64));
+    expect(c).toMatchObject({ id: CARGA, completa: false });
+    expect(c!.antiguedadMin).toBeGreaterThan(29);
+    expect(tieneTenant(llamadas[0])).toBe(true);
+    expect(llamadas[0].filtros).toEqual(expect.arrayContaining([['eq', 'terminal', 'GDL'], ['eq', 'archivo_sha256', 'a'.repeat(64)]]));
+  });
+  it('sin la 0894 (columna inexistente) la carga se asume completa: se comporta como antes', async () => {
+    respuesta = () => ({ data: null, error: { message: 'column does not exist', code: '42703' } });
+    expect(await crearRepoPrograma().cargaPrevia!(T1, 'GDL', 'a'.repeat(64))).toBeNull();
+    await expect(crearRepoPrograma().completarCarga!(T1, CARGA)).resolves.toBeUndefined();
+  });
+  it('completarCarga sella con la hora y solo esa carga de esa flota', async () => {
+    await crearRepoPrograma().completarCarga!(T1, CARGA);
+    expect(llamadas[0].op).toBe('update');
+    expect(llamadas[0].valores).toMatchObject({ completada_en: expect.any(String) });
+    expect(tieneTenant(llamadas[0])).toBe(true);
+    expect(llamadas[0].filtros).toEqual(expect.arrayContaining([['eq', 'id', CARGA]]));
+  });
+  it('cambiosDeCarga lee los de ESA carga y los reporta como fila|campo|despues', async () => {
+    respuesta = (l) => ({ data: l.rango && l.rango[0] > 0 ? [] : [{ fila_id: 'f1', campo: 'unidad', despues: 'TC9' }], error: null });
+    const s = await crearRepoPrograma().cambiosDeCarga!(T1, CARGA);
+    expect([...s]).toEqual(['f1|unidad|TC9']);
+    expect(llamadas[0].filtros).toEqual(expect.arrayContaining([['eq', 'carga_id', CARGA]]));
   });
 });

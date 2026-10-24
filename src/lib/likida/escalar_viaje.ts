@@ -5,7 +5,7 @@ import { avisar, avisarCorridasPorFlota } from './agentes/notificaciones';
 import { registrarCorrida } from './agentes/corridas';
 import { avisoEscalados } from '@/lib/correo/avisos';
 import { avisarAlChofer } from './operacion';
-import { telefonosJefe } from './contactos';
+import { resolverJefes } from './contactos';
 import { enviarTexto } from '@/lib/meta/client';
 import { enviarConFallback, fueEncoladoPorMeta } from '@/lib/meta/enviar_con_fallback';
 import { PLANTILLA } from '@/lib/meta/plantillas_catalogo';
@@ -121,6 +121,8 @@ export interface ViajeSinAceptar {
   operadorTelefono: string | null;
   avisadoEn: string;
   avisosEnviados: number;
+  /** A37-S39-06: patio del viaje, para avisar al jefe de ESE patio. */
+  terminalId?: string | null;
 }
 
 /**
@@ -142,7 +144,7 @@ export async function viajesSinAceptar(ahora: Date = new Date(), horas: number =
     // relación con operador y PostgREST rechaza el embed ambiguo — este cron
     // estuvo cayéndose en silencio por esto (detectado 14-ago-2026, el mismo
     // bug que tumbó la página de Cobranza).
-    .select('id, tenant_id, folio, operador_id, avisado_en, avisos_enviados, operador:operador_id(nombre, telefono)')
+    .select('id, tenant_id, folio, operador_id, terminal_id, avisado_en, avisos_enviados, operador:operador_id(nombre, telefono)')
     .eq('estatus', 'abierto')
     .is('aceptado_en', null)
     .is('escalado_en', null)
@@ -184,6 +186,7 @@ export async function viajesSinAceptar(ahora: Date = new Date(), horas: number =
       operadorTelefono: op?.telefono ?? null,
       avisadoEn: v.avisado_en as string,
       avisosEnviados: Number(v.avisos_enviados ?? 0),
+      terminalId: (v.terminal_id as string) ?? null,
     };
   });
 
@@ -321,8 +324,11 @@ export async function escalarViajesSinAceptar(args: {
   });
   const horasDe = (tenantId: string) => horasPorTenant.get(tenantId) ?? HORAS_PARA_ESCALAR;
 
-  const telefonos = args.telefonoJefePorTenant
-    ?? await telefonosJefe(viajes.map((v) => v.tenantId));
+  // A37-S39-06: el destinatario se resuelve POR VIAJE (su patio); la inyección
+  // por tenant (pruebas) sigue valiendo tal cual.
+  const jefeDe: (tenantId: string, terminalId: string | null) => string | null | undefined = args.telefonoJefePorTenant
+    ? (tenantId) => args.telefonoJefePorTenant![tenantId]
+    : await resolverJefes(viajes.map((v) => v.tenantId));
   const r: ResultadoEscalacion = { revisados: viajes.length, reintentados: 0, escalados: 0, fallos: [], cortadosPorReloj: 0, rechazosReintentables: 0 };
   // Para la bitácora de corridas (B3): la hora a la que ESTA corrida arrancó.
   const inicioCorrida = new Date();
@@ -430,7 +436,7 @@ export async function escalarViajesSinAceptar(args: {
     }
 
     // 2) Avisarle al jefe, que es quien puede cambiar de personal.
-    const tel = telefonos[v.tenantId];
+    const tel = jefeDe(v.tenantId, v.terminalId ?? null);
     if (tel) {
       // EN SU PROPIO try/catch. `sendTemplate` hoy atrapa sus errores de red y
       // devuelve `{ok:false}`, así que este catch no se dispara nunca — y por eso

@@ -161,7 +161,10 @@ function construirTabla(sal: PlantillaConstruida, hoja: string, tb: TablaLayout,
   const filas: Array<Record<string, CampoValor> | null> =
     tb.id === 'mercancias' ? (ext.mercancias.length > 0 ? ext.mercancias.slice(0, tb.maxFilas) : [null]) : [null];
   if (tb.id === 'mercancias' && ext.mercancias.length > tb.maxFilas) {
-    sal.avisos.push(`El documento trae ${ext.mercancias.length} mercancías y la plantilla admite ${tb.maxFilas}: se omitieron ${ext.mercancias.length - tb.maxFilas}.`);
+    // A37-S32-05: nunca se sube un libro recortado (el CCP saldría con menos mercancías y otro peso): bloquea, como los destinos.
+    const mensaje = `Más de ${tb.maxFilas} mercancías (trae ${ext.mercancias.length}): la plantilla no las lleva todas. Divide el embarque.`;
+    sal.faltantes.push({ campo: 'mercancias', celda: `A${tb.primeraFila + tb.maxFilas}`, bloqueante: true, mensaje });
+    sal.avisos.push(`El documento trae ${ext.mercancias.length} mercancías y la plantilla admite ${tb.maxFilas}: se omitirían ${ext.mercancias.length - tb.maxFilas}. ${mensaje}`);
   }
   if (tb.id === 'mercancias' && ext.mercancias.length === 0) sal.avisos.push(`El documento no trae mercancías: la fila ${tb.primeraFila} queda vacía.`);
   const nFilas = (tb.id === 'destinos' || tb.id === 'origenes') && tb.multi ? Math.min(total, tb.maxFilas) : filas.length;

@@ -59,6 +59,26 @@ describe('parsearMatrizConvenios', () => {
     expect(r.convenios[0].instrucciones).toHaveLength(1);
   });
 
+  it('A37-S39-08: la misma instrucción con OTRO lugar/momento NO se descarta en silencio: es un error visible (la base admite una por tema y texto)', () => {
+    const r = parsearMatrizConvenios([
+      ENC, ['A', 'x', '', '', 'puerta', 'Presentar identificación', 'ambos', 'origen'], ['A', 'x', '', '', 'puerta', 'Presentar identificación', 'ambos', 'destino'],
+    ], OK);
+    expect(r.convenios).toEqual([]);
+    expect(r.errores).toHaveLength(1);
+    expect(r.errores[0]).toMatchObject({ fila: 3 });
+    expect(r.errores[0].motivo).toMatch(/fila 2/);
+  });
+
+  it("A37-S39-08: el CSV exportado con «'» antepuesto (anti-fórmula) se vuelve a subir SIN el apóstrofo", () => {
+    const csv = csvConvenios([{ cliente: 'A', nombre: 'x', origen: null, destino: null, vigenteDesde: null, vigenteHasta: null, notas: null,
+      instrucciones: [{ categoria: 'seguridad', texto: '- No fumar', momento: 'ambos', lugar: 'ambos', orden: 0 }] }], { conFinanzas: false });
+    expect(csv).toContain("'- No fumar");
+    const m = matrizDeArchivo(new TextEncoder().encode(csv).buffer as ArrayBuffer);
+    const r = parsearMatrizConvenios(m, OK);
+    expect(r.errores).toEqual([]);
+    expect(r.convenios[0].instrucciones[0].texto).toBe('- No fumar');
+  });
+
   it('las fechas aceptan ISO, DD/MM/AAAA y serial de Excel; una imposible se rechaza', () => {
     const f = (d: unknown, h: unknown) => parsearMatrizConvenios([[...ENC, 'Vigente desde', 'Vigente hasta'], ['A', 'x', '', '', '', '', '', '', d, h]], OK);
     expect(f('2026-03-05', '05/04/2026').convenios[0]).toMatchObject({ vigenteDesde: '2026-03-05', vigenteHasta: '2026-04-05' });

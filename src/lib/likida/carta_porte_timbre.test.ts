@@ -25,6 +25,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 type Resp = { data?: unknown; error?: { message: string; code?: string } | null };
 type Llamada = { tabla: string; op: string; payload: unknown; filtros: string[] };
 
+/** Un UPDATE que sí afectó la fila de la reserva (el `.select('id')` de los UPDATE del timbre, A37-S33-10). */
+const filaAfectada: Resp = { data: [{ id: 'r-1' }], error: null };
 let respuestas: Record<string, Resp[]>;
 let llamadas: Llamada[];
 
@@ -212,8 +214,8 @@ describe('timbrarViaje — claim-then-act (c6-1)', () => {
     respuestas['ccp_timbre'] = [
       { data: null, error: null },  // leerContexto: nada vivo
       reservaOk,                    // la reserva entra
-      { data: null, error: null },  // sella el uuid
-      { data: null, error: null },  // consolida
+      filaAfectada,                 // sella el uuid
+      filaAfectada,                 // consolida
     ];
     const r = await timbrarViaje(T, V, { metodoPago: 'PPD', formaPago: '99' }, ACTOR);
     expect(r).toMatchObject({ ok: true, uuid: UUID, yaExistia: false });
@@ -360,7 +362,7 @@ describe('timbrarViaje — lo que se hace con cada respuesta del PAC', () => {
 
   it('CONSOLIDACIÓN FALLIDA: el folio ya quedó en la reserva, y se grita con él', async () => {
     prepararGanador([
-      { data: null, error: null },                              // el uuid SÍ se selló
+      filaAfectada,                                             // el uuid SÍ se selló
       { data: null, error: { message: 'xml demasiado grande' } }, // la consolidación no
     ]);
     const r = await timbrarViaje(T, V, { metodoPago: 'PPD', formaPago: '99' }, ACTOR);
@@ -377,10 +379,34 @@ describe('timbrarViaje — lo que se hace con cada respuesta del PAC', () => {
   it('si NI el uuid se pudo sellar, también se alerta el huérfano', async () => {
     prepararGanador([
       { data: null, error: { message: 'red caída' } },  // ni el uuid entró
-      { data: null, error: null },                      // la consolidación sí
+      filaAfectada,                                     // la consolidación sí
     ]);
     await timbrarViaje(T, V, { metodoPago: 'PPD', formaPago: '99' }, ACTOR);
     expect(alertarOperador).toHaveBeenCalledWith('timbre.uuid_huerfano', expect.anything());
+  });
+
+  it('A37-S33-10: si el UPDATE que sella el uuid afecta 0 filas, se grita el huérfano', async () => {
+    prepararGanador([
+      { data: [], error: null },   // la reserva ya no estaba pendiente: 0 filas
+      filaAfectada,
+    ]);
+    await timbrarViaje(T, V, { metodoPago: 'PPD', formaPago: '99' }, ACTOR);
+    expect(logger.error).toHaveBeenCalledWith('timbre.uuid_no_persistido', expect.objectContaining({ uuid: UUID }));
+    expect(alertarOperador).toHaveBeenCalledWith('timbre.uuid_huerfano', expect.objectContaining({ codigo: 'timbre_uuid_huerfano' }));
+  });
+
+  it('A37-S33-10: si la consolidación afecta 0 filas NO se responde éxito ni se anota «ccp.timbrado»', async () => {
+    prepararGanador([
+      filaAfectada,
+      { data: [], error: null },   // 0 filas, sin error
+    ]);
+    const r = await timbrarViaje(T, V, { metodoPago: 'PPD', formaPago: '99' }, ACTOR);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.motivo).toContain(UUID);
+    expect(r.motivo).toContain('NO vuelvas a timbrarlo');
+    expect(alertarOperador).toHaveBeenCalledWith('timbre.emitido_sin_persistir', expect.anything());
+    expect(anotarBitacora).not.toHaveBeenCalledWith(expect.objectContaining({ accion: 'ccp.timbrado' }), expect.anything());
   });
 });
 
@@ -464,7 +490,7 @@ describe('la fecha del TFD (c6-7)', () => {
 
   it('con TFD legible se guarda ESA fecha y el origen dice «tfd»', async () => {
     sembrarContexto(null);
-    respuestas['ccp_timbre'] = [{ data: null, error: null }, reservaOk, { data: null, error: null }, { data: null, error: null }];
+    respuestas['ccp_timbre'] = [{ data: null, error: null }, reservaOk, filaAfectada, filaAfectada];
     const r = await timbrarViaje(T, V, { metodoPago: 'PPD', formaPago: '99' }, ACTOR);
     expect(r).toMatchObject({ ok: true, fechaTimbrado: '2026-08-27T11:59:00' });
     expect(escrituras('update')[1].payload).toMatchObject({
@@ -474,7 +500,7 @@ describe('la fecha del TFD (c6-7)', () => {
 
   it('sin TFD cae a la del PAC y lo DECLARA («pac»), con aviso en el log', async () => {
     sembrarContexto(null);
-    respuestas['ccp_timbre'] = [{ data: null, error: null }, reservaOk, { data: null, error: null }, { data: null, error: null }];
+    respuestas['ccp_timbre'] = [{ data: null, error: null }, reservaOk, filaAfectada, filaAfectada];
     timbrar.mockResolvedValue({ ok: true, uuid: UUID, xmlTimbrado: '<cfdi/>', fechaTimbrado: '2026-08-27T12:00:00', selloSat: null, noCertificadoSat: null });
     await timbrarViaje(T, V, { metodoPago: 'PPD', formaPago: '99' }, ACTOR);
     expect(escrituras('update')[1].payload).toMatchObject({
@@ -485,7 +511,7 @@ describe('la fecha del TFD (c6-7)', () => {
 
   it('sin TFD y sin fecha del PAC, el reloj del servidor va MARCADO como tal', async () => {
     sembrarContexto(null);
-    respuestas['ccp_timbre'] = [{ data: null, error: null }, reservaOk, { data: null, error: null }, { data: null, error: null }];
+    respuestas['ccp_timbre'] = [{ data: null, error: null }, reservaOk, filaAfectada, filaAfectada];
     timbrar.mockResolvedValue({ ok: true, uuid: UUID, xmlTimbrado: '<cfdi/>', fechaTimbrado: '', selloSat: null, noCertificadoSat: null });
     await timbrarViaje(T, V, { metodoPago: 'PPD', formaPago: '99' }, ACTOR);
     expect(escrituras('update')[1].payload).toMatchObject({ fecha_timbrado_origen: 'servidor' });

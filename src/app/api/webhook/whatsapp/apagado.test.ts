@@ -247,6 +247,23 @@ describe('el interruptor global apaga el WhatsApp entrante', () => {
     expect(guardados.map((g) => g.waMessageId)).toContain('wamid.C1');
   });
 
+  it('A37-S12-08: si el aviso falla, el número NO queda silenciado 30 min: se reintenta pasado 1 min', async () => {
+    leerInterruptor.mockImplementation(async () => 'apagado');
+    sendText.mockRejectedValueOnce(new Error('Meta caída'));
+    const ahora = Date.now();
+    const reloj = vi.spyOn(Date, 'now');
+    reloj.mockReturnValue(ahora);
+    await postear(payload('5219990002006', [{ id: 'wamid.D1', type: 'text', text: { body: 'x' } }]));
+    expect(salientes).toHaveLength(0);
+    reloj.mockReturnValue(ahora + 30_000);
+    await postear(payload('5219990002006', [{ id: 'wamid.D2', type: 'text', text: { body: 'x' } }]));
+    expect(salientes, 'dentro del enfriamiento no insiste').toHaveLength(0);
+    reloj.mockReturnValue(ahora + 61_000);
+    await postear(payload('5219990002006', [{ id: 'wamid.D3', type: 'text', text: { body: 'x' } }]));
+    expect(salientes).toHaveLength(1);
+    reloj.mockRestore();
+  });
+
   it('si NI GUARDAR se pudo, se contesta 503 — jamás un 200 mentiroso (la cola durable es la de Meta)', async () => {
     guardarEventosPendientes.mockResolvedValueOnce({
       guardados: 0, fallidos: 1,

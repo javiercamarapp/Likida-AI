@@ -160,6 +160,31 @@ export interface ResultadoSitioDerivado {
 }
 
 export const TOPE_VIAJES_SITIO_DERIVADO = 300;
+/** A37-S37-02: cuántos viajes (los más nuevos) se leen para repartir el tope entre flotas. Debajo del tope de filas de PostgREST (1,000). */
+export const VENTANA_LECTURA_SITIO_DERIVADO = 1000;
+
+/**
+ * A37-S37-02: reparte el tope entre flotas (primero el más nuevo de cada una, luego el segundo...) en vez de dárselo en bloque a
+ * la flota que más viajes sin sitio tiene. Una flota con textos que no empatan ya no deja sin servicio a las demás. El turno de
+ * arranque rota con `rotacion` (cambia cada pocos minutos) para que el sobrante no sea siempre de la misma flota. Puro.
+ */
+export function repartirCandidatosPorFlota<T extends { tenantId: string }>(candidatos: readonly T[], limite: number, rotacion = 0): T[] {
+  if (candidatos.length <= limite) return [...candidatos];
+  const porFlota = new Map<string, T[]>();
+  for (const c of candidatos) porFlota.set(c.tenantId, [...(porFlota.get(c.tenantId) ?? []), c]);
+  const colas = [...porFlota.values()];
+  const inicio = ((rotacion % colas.length) + colas.length) % colas.length;
+  const turnos = [...colas.slice(inicio), ...colas.slice(0, inicio)];
+  const salida: T[] = [];
+  for (let ronda = 0; salida.length < limite; ronda++) {
+    let alguno = false;
+    for (const cola of turnos) {
+      if (ronda < cola.length && salida.length < limite) { salida.push(cola[ronda]); alguno = true; }
+    }
+    if (!alguno) break;
+  }
+  return salida;
+}
 
 export async function barridoSitioDerivado(p: PuertosSitioDerivado, ahora: Date = new Date(), venceEn?: number): Promise<ResultadoSitioDerivado> {
   const r: ResultadoSitioDerivado = { candidatos: 0, derivados: 0, sinCoincidencia: 0, sinSitioPorDecision: 0, yaAsignados: 0, fallos: 0, cortadosPorReloj: 0 };

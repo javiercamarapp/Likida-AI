@@ -1,6 +1,7 @@
 import { puertosReales } from './ejecutor';
+import { aplicarCompuertaAgente } from './compuerta_agente';
 import {
-  abrirEpisodioSenalVida, anotarFalloSenalVida, cerrarEpisodioSenalVida, leerConfigConductor, reclamarNivelSenalVida,
+  abrirEpisodioSenalVida, anotarFalloSenalVida, cerrarEpisodioSenalVida, leerConfigConductor, liberarNivelSenalVida, reclamarNivelSenalVida,
 } from './repo';
 import { leerEpisodiosSenalVida, leerFlotasConConectorDegradado, leerHitosDeViajes, leerMuestrasGps, leerSitiosGeometriaDeFlotas, leerSitiosGeometriaDeViajes, leerUltimaMuestraGps, leerViajesAvisables } from './trabajo';
 import type { PuertosSenalVida } from './senal_vida';
@@ -12,7 +13,8 @@ export function puertosSenalVidaReales(): PuertosSenalVida {
   return {
     viajes: leerViajesAvisables,
     hitosDe: leerHitosDeViajes,
-    configDe: leerConfigConductor,
+    // A37-A5-06: misma compuerta 0859 que el motor; sin la marca explícita la flota se lee apagada y no abre episodios ni escala al jefe.
+    configDe: async (t) => aplicarCompuertaAgente(await leerConfigConductor(t)),
     sitiosDe: leerSitiosGeometriaDeViajes,
     muestras: leerMuestrasGps,
     ultimaMuestra: leerUltimaMuestraGps,
@@ -23,6 +25,7 @@ export function puertosSenalVidaReales(): PuertosSenalVida {
     reclamarNivel: reclamarNivelSenalVida,
     cerrar: cerrarEpisodioSenalVida,
     anotarFallo: anotarFalloSenalVida,
+    liberarNivel: liberarNivelSenalVida,
     enviar: motor.enviar,
     destinatarios: motor.destinatarios,
     ubicacion: motor.ubicacion,

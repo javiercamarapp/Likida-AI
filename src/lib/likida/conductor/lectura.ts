@@ -1,5 +1,5 @@
 import { normalizarTelefonoWa } from '../wa_ventana';
-import { validarConfigConductor, type ConfigConductor } from './config';
+import { CONFIG_CONDUCTOR_DEFAULT, validarConfigConductor, type ConfigConductor } from './config';
 import type { ContactoTrafico } from './escalamiento';
 import { ESTADOS_HITO, TIPOS_HITO, type EstadoHito, type HitoFila, type TipoHito } from './tipos';
 
@@ -188,7 +188,13 @@ export function validarCambioConfig(cuerpo: unknown, actual: ConfigConductor): {
 
   const fusion: Partial<ConfigConductor> = { ...actual };
   for (const k of LLAVES_CONFIG) {
-    if (k in o) (fusion as Record<string, unknown>)[k] = o[k];
+    if (!(k in o)) continue;
+    // A37-S35-02: una perilla booleana solo acepta true/false. Con Boolean(), el texto "false"/"0"/"no"
+    // de un adaptador de formularios ENCENDÍA perillas que mandan WhatsApp a personas.
+    if (typeof CONFIG_CONDUCTOR_DEFAULT[k] === 'boolean' && typeof o[k] !== 'boolean') {
+      return { error: `\`${k}\` tiene que ser true o false (booleano de JSON, no texto ni número).` };
+    }
+    (fusion as Record<string, unknown>)[k] = o[k];
   }
   const v = validarConfigConductor(fusion);
   if ('error' in v) return { error: v.error };

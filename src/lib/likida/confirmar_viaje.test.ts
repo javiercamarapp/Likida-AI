@@ -29,10 +29,13 @@ let RESULTADO_UPDATE: { data: unknown; error: { message: string } | null } = { d
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
+const lecturaIs: Array<[string, unknown]> = [];
+
 function nodoLectura() {
   const nodo: Record<string, unknown> = {};
   const paso = () => nodo;
-  nodo.eq = paso; nodo.is = paso; nodo.not = paso; nodo.order = paso; nodo.in = paso;
+  nodo.is = (c: string, v: unknown) => { lecturaIs.push([c, v]); return nodo; };
+  nodo.eq = paso; nodo.not = paso; nodo.order = paso; nodo.in = paso;
   nodo.limit = () => Promise.resolve(LISTA);
   return nodo;
 }
@@ -82,7 +85,7 @@ const avisarOficina = vi.hoisted(() => vi.fn(async (
   llamadasAvisoOficina.push({ telefono, texto, parametros: o.parametros, contexto: o.contexto });
   return { ok: true, via: 'texto', id: 'wamid.TEST' };
 }));
-const cargarViajeContexto = vi.hoisted(() => vi.fn(async (): Promise<{ operadorNombre: string | null; folio: string | null } | null> => null));
+const cargarViajeContexto = vi.hoisted(() => vi.fn(async (): Promise<{ operadorNombre: string | null; folio: string | null; terminalId?: string | null } | null> => null));
 
 vi.mock('./contactos', () => ({ telefonoJefeDe }));
 vi.mock('@/lib/meta/aviso_oficina', () => ({
@@ -98,7 +101,7 @@ vi.mock('./conductor/repo', async (importOriginal) => {
   return { ...actual, cargarViajeContexto };
 });
 
-const { marcarAceptado, marcarRechazados, aceptarPorActividad, atenderConfirmacion } = await import('./confirmar_viaje');
+const { viajesPorConfirmar, marcarAceptado, marcarRechazados, aceptarPorActividad, atenderConfirmacion } = await import('./confirmar_viaje');
 
 /** Los nombres de columna por los que se acotó el UPDATE. */
 const columnas = (e: Escritura) => e.filtros.map(([c]) => c);
@@ -156,6 +159,15 @@ describe('marcarAceptado · el UPDATE se acota también por chofer', () => {
   });
 });
 
+describe('A37-S39-04: un viaje rechazado no se vuelve a ofrecer', () => {
+  it('viajesPorConfirmar excluye los viajes con rechazado_en', async () => {
+    lecturaIs.length = 0;
+    await viajesPorConfirmar('t-1', 'op-1');
+    expect(lecturaIs).toContainEqual(['rechazado_en', null]);
+    expect(lecturaIs).toContainEqual(['aceptado_en', null]);
+  });
+});
+
 describe('los dos caminos internos', () => {
   it('atenderConfirmacion pasa el operador de sus args al UPDATE', async () => {
     LISTA = { data: [{ id: 'v-7', folio: 'VJ-7', origen: 'GDL', destino: 'MTY' }], error: null };
@@ -200,12 +212,13 @@ describe('A8 ESCALACIÓN · caso "SÍ" — el jefe recibe un aviso de confirmaci
   it('tras aceptar por PRIMERA vez, se avisa al jefe que el chofer YA confirmó', async () => {
     LISTA = { data: [{ id: 'v-7', folio: 'VJ-7', origen: 'GDL', destino: 'MTY' }], error: null };
     RESULTADO_UPDATE = { data: [{ id: 'v-7' }], error: null };
-    cargarViajeContexto.mockResolvedValue({ operadorNombre: 'Juan Pérez', folio: 'VJ-7' });
+    cargarViajeContexto.mockResolvedValue({ operadorNombre: 'Juan Pérez', folio: 'VJ-7', terminalId: 'patio-b' });
 
     const r = await atenderConfirmacion({ tenantId: 't-1', operadorId: 'op-9', texto: 'va' });
 
     expect(r.viajeConfirmado).toBe('v-7');
-    expect(telefonoJefeDe).toHaveBeenCalledWith('t-1');
+    // A37-S39-06: el aviso se resuelve con el patio del viaje.
+    expect(telefonoJefeDe).toHaveBeenCalledWith('t-1', 'patio-b');
     expect(avisarOficina).toHaveBeenCalledTimes(1);
     expect(llamadasAvisoOficina[0].telefono).toBe('5210000000001');
     // El jefe se queda, HASTA HOY, con "no ha confirmado, conviene

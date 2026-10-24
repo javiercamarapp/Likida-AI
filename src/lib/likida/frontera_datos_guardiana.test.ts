@@ -577,7 +577,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 324;
 // (`estadias.tsx` -2, `facturacion/page.tsx` -1) y la lectura de `reenviarAviso` (-1). Todo por `acotada`/`traerTodo` con `tenant_id`.
 // LOTE A37 b-sat-fiscal-02 (S45-07): +3 llamadas (2,284 → 2,287) en facturacion_escritura.ts: facturasQueAmparan (factura_viaje), borradorIdempotente (factura_emitida) y la lectura de ligas de marcarEmitida. Todas por `acotada`; 0 archivos nuevos.
 // INTEGRACION G1 (24-oct-2026, PRs #665-#679): el barrido real del arbol fusionado mide 2,315 llamadas (2,284 en master 6922916: +31 de las 15 ramas, techo = medido, sin holgura).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_315;
+// INTEGRACION G2 (24-oct-2026, PRs #680-#691): el barrido real del arbol fusionado mide 2,336 llamadas (2,315 en master 5135a0c: +21 de las 12 ramas, techo = medido, sin holgura).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_336;
 // A37-S27-10 (lote b-sat-fiscal-05): +1 (2,284 → 2,285), en `agentes/insumos.ts` (`crearInsumoArchivo`): `storage.from('agente-insumos').remove`
 // para no dejar huérfano el objeto subido cuando falla el insert.
 // LOTE A37 B-sat-fiscal-06 (migración 0876): +3 llamadas (2,284 → 2,287), 0 archivos nuevos, medido con el barrido real. `gasto_correccion.ts` +2: el RPC
@@ -594,6 +595,23 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_315;
 // reclamos preparados al anular (+1, A37-A2-07). `liberarHuellaArchivo` sustituye al UPDATE inline de la huella (0 netas).
 // Auditoría 37, lote D-peajes-liquidacion-05 (+2, 2284 → 2286): peajes/repo.ts (+1 lectura de peaje_tag_baja antes de importar TAGs, S53-02; +1 lectura de desgloses anulados en listarReclamos, S53-03); ambas acotadas con `acotada` y por lotes.
 // A37-TRANSVERSAL-08 (+1): la lectura de `tms_sincronizacion` que rota el turno del cron `tms` (conectores/tms/sincronizar.ts, filtrada por tenant). Medido: 2,285.
+// Auditoría 37, A37-S12-06 (+2, 2,284 → 2,286): ruta del bus de workers (`api/worker/bus/[accion]`): lectura previa de `bus_pieza` por carpeta y descarga de la media anterior para comparar. Tablas del bus (sin tenant).
+// A37-S12-07 (+1): `pendienteYaSellado` en wa_pendientes.ts (distingue «ya procesada» de «la lleva otra invocación»). Medido: 2,285.
+// Lote A-conductor-A5-04 (+1, 2284 → 2285): `conductor/repo_validacion.ts` retira la evidencia recién insertada (`viaje_hito_evidencia`, por id y tenant)
+// cuando el UPDATE de estado del documento de cierre falla dos veces, para que el reenvío del chofer no tope con el UNIQUE por sha (A37-S36-08).
+// A37-S36-05 (lote M-A-conductor-A5-02): +1 llamada (2,284 → 2,285), `liberarNivelSenalVida` en `conductor/repo.ts` (UPDATE por id Y `tenant_id` del nivel 3 de un episodio sin destinatario, por `acotada`; cubierta por `senal_vida.test.ts` y la prueba SQL no aplica: no hay migración). Las lecturas por viaje (A37-S36-01) reemplazan llamadas existentes sin sumar.
+// Lote M-E-cartaporte-vigia-03 (A37-S33-04): +1 llamada (`unidadConViajeAbierto` en carta_porte_docs/repo.ts); medido: 2,285.
+// Lote M-E-cartaporte-vigia-01 (23-oct-2026): +2, medidas con el barrido real, ambas en carta_porte_docs/repo.ts: `ccpDeDocumento` (A37-A3-13: archivos del CCP timbrado antes de borrar el documento) y `anonimizarCorrecciones` (A37-A3-11: la purga anula los valores de las correcciones).
+// Auditoría 37, lote e-cartaporte-vigia-02 (medido con el barrido real): +5 llamadas (2,284 → 2,289), 0 archivos nuevos. `vigia/programa/repo.ts` +4
+// (A37-A4-01: `reabrirCargaSiNoEsUltima` lee la última carga, lee la carga por sha y la marca como reciente; `restaurarCarga` la devuelve a su fecha si la
+// sincronización falla) y `carta_porte_docs/repo.ts` +1 (A37-S32-01: `marcarPurgado` vacía los valores de las correcciones). Todas por `acotada`, ancladas a
+// `tenant_id`; cubiertas por `vigia/programa/repo.test.ts` y `carta_porte_docs/repo_purga.test.ts`. Funcionalidad nueva, no código migrado.
+// Auditoría 37, lote e-cartaporte-vigia-05: 2,284 → 2,287 (+3, medido). `carta_porte_docs/repo.ts` +4 (A37-S32-08: reparar un perfil sin versión
+// o una versión huérfana tras un corte: lectura de la clave, lectura de versiones, retiro del perfil y activación condicional) y
+// `vigia/aviso/bandeja.ts` -1 (A37-A4-08: el upsert por columna ya no lee el dato previo).
+// Lote M-E-cartaporte-vigia-04 (A37-S58-03 y A37-S59-05): +5 llamadas (2,284 → 2,289), 0 archivos nuevos. `vigia/historial/repo.ts` (+2: lectura de la
+// importación previa y conteo de sus mensajes para rehacer una importación a medias) y `vigia/programa/repo.ts` (+3: `cargaPrevia`, `completarCarga` y
+// `cambiosDeCarga`, estado de la carga de la 0894). Funcionalidad nueva; cubiertas por `historial/repo.test.ts` y `programa/repo.test.ts`.
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva

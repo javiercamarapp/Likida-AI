@@ -120,6 +120,18 @@ describe('las pistas reconocen sin permitir usar', () => {
     expect(pistasDe(campos, { password: 'abc123' }).password).toBe('…');
   });
 
+  it('A37-S37-05: una dirección con llave en query o fragmento no la deja en la pista', () => {
+    const c = [campo('base_url', 'texto')];
+    expect(pistasDe(c, { base_url: 'https://api.proveedor.example/v1/vehiculos?key=SECRETO#frag' }).base_url).toBe('https://api.proveedor.example/v1/vehiculos');
+    expect(pistasDe(c, { base_url: 'https://api.proveedor.example/v1' }).base_url).toBe('https://api.proveedor.example/v1');
+  });
+
+  it('A37-S37-06: los últimos 4 solo salen si el secreto mide 16 o más (con 8 serían la mitad)', () => {
+    expect(pistasDe(campos, { password: '12345678' }).password).toBe('…');
+    expect(pistasDe(campos, { password: 'a'.repeat(15) }).password).toBe('…');
+    expect(pistasDe(campos, { password: `${'a'.repeat(12)}wxyz` }).password).toBe('…wxyz');
+  });
+
   it('un campo vacío o ausente no genera pista', () => {
     const p = pistasDe(campos, { host: '', usuario: 'likida' });
     expect(p.host).toBeUndefined();

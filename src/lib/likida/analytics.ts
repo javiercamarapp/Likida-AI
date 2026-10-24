@@ -754,7 +754,8 @@ export const MINUTOS_CAPTURA_MANUAL = 4;
 export interface ValorAhorro {
   /** Comprobantes que pasaron por el Agente OCR. Conteo real. */
   documentosProcesados: number;
-  /** Liquidaciones que cerró el motor de cuadre. Conteo real. */
+  /** Liquidaciones vigentes que cerró el motor de cuadre (sin las que el
+   *  contralor rechazó, como el resto de las métricas). Conteo real. */
   liquidacionesCerradas: number;
   /** Comprobantes que llegaron sin viaje y el sistema logró amarrar. Real. */
   huerfanosResueltos: number;
@@ -787,9 +788,17 @@ interface ResumenDocumentos {
  * `noNula` acota a las filas que tengan esa columna con valor — para separar
  * "huérfanos resueltos" de "huérfanos totales" sin traerse ninguno de los dos.
  */
-async function contarFilas(tabla: string, tenantId: string, noNula?: string): Promise<number> {
+async function contarFilas(
+  tabla: string,
+  tenantId: string,
+  noNula?: string,
+  /** A37-S29-10: excluye `revision = 'rechazada'` (columna NOT NULL, mig. 0299),
+   *  igual que las migraciones 0344/0348 con el resto de las métricas. */
+  sinRechazadas = false,
+): Promise<number> {
   let q = supabaseAdmin().from(tabla).select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId);
   if (noNula) q = q.not(noNula, 'is', null);
+  if (sinRechazadas) q = q.neq('revision', 'rechazada');
   const { count, error } = await acotada(
     q,
     'getValorAhorro/contarFilas',
@@ -830,7 +839,7 @@ async function contarFilas(tabla: string, tenantId: string, noNula?: string): Pr
 export async function getValorAhorro(tenantId: string): Promise<ValorAhorro> {
   const [docs, liquidacionesCerradas, huerfanosTotales, huerfanosResueltos, costoIa] = await Promise.all([
     traerResumenDocumentos(tenantId),
-    contarFilas('liquidacion', tenantId),
+    contarFilas('liquidacion', tenantId, undefined, true),
     contarFilas('comprobante_huerfano', tenantId),
     contarFilas('comprobante_huerfano', tenantId, 'resuelto_en'),
     traerResumenCostoIaTenant(tenantId, 'getValorAhorro.llm_costo'),
@@ -1383,6 +1392,8 @@ export interface LiquidacionDetalle {
    *  unidad, cliente y los sellos de WhatsApp (0058/0090) para la línea de
    *  tiempo. Todo nullable: lo que no se capturó se pinta como guion. */
   viaje: {
+    /** `viaje.estatus` (no el de la liquidación): decide si se pinta «Reabrir» (A37-S12-02). */
+    estatus?: string | null;
     origen: string | null; destino: string | null; fechaInicio: string | null;
     creadoEn: string | null;
     unidadEco: string | null; unidadPlacas: string | null; clienteNombre: string | null;
@@ -1419,11 +1430,13 @@ export interface LiquidacionDetalle {
 
 /** Detalle de una liquidación (read-only) — para la vista de proyector. */
 export async function getLiquidacionDetalle(id: string, tenantId: string): Promise<LiquidacionDetalle | null> {
+  // A37-S12-09: un id que no es UUID (URL vieja o mal escrita bajo /dashboard/<algo>) es «no existe», no un 22P02 que cae en error.tsx.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
   const admin = supabaseAdmin();
   const res = await acotada(
     admin
     .from('liquidacion')
-    .select('id, viaje_id, estatus, total_comprobado, total_anticipo, diferencia, diferencias, ieps_acreditable, litros_diesel_acreditables, iva_acreditable, peaje_acreditable, created_at, pdf_url, viaje:viaje_id(folio, origen, destino, fecha_inicio, created_at, avisado_en, aceptado_en, llegada_en, descarga_en, regreso_en, demora_no_imputable, operador_id, operador:operador_id(nombre, telefono), unidad:unidad_id(numero_economico, placas), cliente:cliente_id(nombre))')
+    .select('id, viaje_id, estatus, total_comprobado, total_anticipo, diferencia, diferencias, ieps_acreditable, litros_diesel_acreditables, iva_acreditable, peaje_acreditable, created_at, pdf_url, viaje:viaje_id(folio, estatus, origen, destino, fecha_inicio, created_at, avisado_en, aceptado_en, llegada_en, descarga_en, regreso_en, demora_no_imputable, operador_id, operador:operador_id(nombre, telefono), unidad:unidad_id(numero_economico, placas), cliente:cliente_id(nombre))')
     .eq('id', id)
     .eq('tenant_id', tenantId)
     .maybeSingle(),
@@ -1451,7 +1464,7 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
   const gastos = reconstruida?.filas ?? crudos ?? [];
   const comprobantesEntre = await ventanaComprobantes(admin, tenantId, data.viaje_id as string);
   const viaje = data.viaje as {
-    folio?: string; origen?: string | null; destino?: string | null; fecha_inicio?: string | null;
+    folio?: string; estatus?: string | null; origen?: string | null; destino?: string | null; fecha_inicio?: string | null;
     created_at?: string | null; avisado_en?: string | null; aceptado_en?: string | null;
     llegada_en?: string | null; descarga_en?: string | null; regreso_en?: string | null;
     operador_id?: string; operador?: { nombre?: string; telefono?: string | null } | null;
@@ -1466,6 +1479,7 @@ export async function getLiquidacionDetalle(id: string, tenantId: string): Promi
     operadorId: viaje?.operador_id ?? '',
     operadorNombre: viaje?.operador?.nombre ?? '—',
     viaje: {
+      estatus: texto(viaje?.estatus),
       origen: texto(viaje?.origen), destino: texto(viaje?.destino),
       fechaInicio: texto(viaje?.fecha_inicio), creadoEn: texto(viaje?.created_at),
       unidadEco: texto(viaje?.unidad?.numero_economico), unidadPlacas: texto(viaje?.unidad?.placas),
@@ -1727,7 +1741,14 @@ async function reconstruir(
         }),
       excluidos: duplicados,
     };
-  } catch {
+  } catch (err) {
+    // A37-S29-09: una EXCEPCIÓN del motor no es lo mismo que el
+    // portón que no cuadra (esperado, devuelve null arriba sin ruido). Si esto
+    // falla de forma recurrente, todas las liquidaciones se degradan a gastos
+    // crudos y nadie se entera: queda el rastro para verlo en los logs.
+    logger.warn('analytics.reconstruir_fallo', {
+      tenantId, viajeId, err: err instanceof Error ? err.message : String(err),
+    });
     return null;
   }
 }
@@ -1795,6 +1816,8 @@ export interface DesgloseRecibido {
   porConciliar: number;
   sinMatch: number;
   monto: number;
+  /** A37-S29-07: la ventana de 1,000 líneas se llenó y este consolidado cae en su borde: sus cifras (líneas, monto, conciliadas…) son un MÍNIMO, no el total. */
+  parcial: boolean;
 }
 
 /** Los consolidados recibidos, agrupados desde sus líneas. Ventana de las
@@ -1807,6 +1830,7 @@ export interface DesgloseRecibido {
  *  las que Postgres quisiera — la bitácora podía enseñar consolidados viejos
  *  y callarse los recién recibidos. El límite se declara como lo que es y el
  *  orden garantiza que lo que entra a la ventana es lo último. */
+const VENTANA_DESGLOSES = 1000;
 export async function getDesglosesRecibidos(tenantId: string, limite = 8): Promise<DesgloseRecibido[]> {
   const res = await acotada(
     supabaseAdmin()
@@ -1815,7 +1839,7 @@ export async function getDesglosesRecibidos(tenantId: string, limite = 8): Promi
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
-    .limit(1000),
+    .limit(VENTANA_DESGLOSES),
     'getDesglosesRecibidos',
   );
   const filas = exigir(res, 'getDesglosesRecibidos') ?? [];
@@ -1828,7 +1852,7 @@ export async function getDesglosesRecibidos(tenantId: string, limite = 8): Promi
       cfdiXmlId: id,
       uuidCorto: (cfdi?.cfdi_uuid ?? id).slice(0, 8).toUpperCase(),
       recibido: cfdi?.created_at ?? null,
-      lineas: 0, conciliadas: 0, porConciliar: 0, sinMatch: 0, monto: 0,
+      lineas: 0, conciliadas: 0, porConciliar: 0, sinMatch: 0, monto: 0, parcial: false,
     };
     d.lineas += 1;
     d.monto += Number(f.monto ?? 0);
@@ -1836,6 +1860,12 @@ export async function getDesglosesRecibidos(tenantId: string, limite = 8): Promi
     else if (f.estatus === 'sin_match') d.sinMatch += 1;
     else d.porConciliar += 1;
     porCfdi.set(id, d);
+  }
+  // A37-S29-07: si la consulta llenó la ventana, el consolidado de la línea MÁS VIEJA que entró pudo quedar cortado: se marca parcial en vez
+  // de presentar una suma truncada como el total de ese estado de cuenta.
+  if (filas.length >= VENTANA_DESGLOSES && filas.length > 0) {
+    const borde = porCfdi.get(filas[filas.length - 1].cfdi_xml_id as string);
+    if (borde) borde.parcial = true;
   }
   return [...porCfdi.values()]
     .map((d) => ({ ...d, monto: round2(d.monto) }))

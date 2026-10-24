@@ -191,6 +191,59 @@ function contarRotulosConocidos(celdas: string[], hasta: number): { total: numbe
   return { total: vistos.size, cajaYOrigen: vistos.has('CAJA') && vistos.has('ORIGEN-DESTINO') };
 }
 
+/**
+ * A37-S59-02: «;» si domina fuera de comillas, «,» en otro caso. Antes bastaba UN «;» en cualquier parte del archivo
+ * (p. ej. dentro de un comentario) para leer un archivo de comas con el delimitador equivocado.
+ */
+function delimitadorDe(texto: string): ';' | ',' {
+  if (!texto.includes('"')) {
+    // Sin comillas no hay celdas que protejan un «;» o una «,» de texto: gana el que más aparece.
+    let pv = 0; let co = 0;
+    for (let i = 0; i < texto.length; i++) { const c = texto.charCodeAt(i); if (c === 59) pv++; else if (c === 44) co++; }
+    return pv > co ? ';' : ',';
+  }
+  let pv = 0; let co = 0; let dentro = false;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto.charCodeAt(i);
+    if (c === 34) dentro = !dentro;
+    else if (!dentro) { if (c === 59) pv++; else if (c === 44) co++; }
+  }
+  return pv > co ? ';' : ',';
+}
+
+/**
+ * Lee UN registro CSV que contiene comillas, desde `inicio`: una celda que EMPIEZA con «"» puede traer el delimitador, saltos de
+ * línea y comillas dobles escapadas (""). Los saltos dentro de una celda se vuelven un espacio (como en el lector de .xlsx).
+ * Devuelve las celdas, dónde sigue el archivo y cuántas líneas físicas ADICIONALES abarcó. Comillas sin cerrar = error llano:
+ * se traería el resto del archivo como una sola celda.
+ */
+function leerRegistroConComillas(texto: string, inicio: number, delim: string, linea: number): { celdas: string[]; siguiente: number; saltos: number } {
+  const celdas: string[] = [];
+  let celda = '';
+  let dentro = false;
+  let saltos = 0;
+  let i = inicio;
+  const n = texto.length;
+  for (; i < n; i++) {
+    const ch = texto[i];
+    if (dentro) {
+      if (ch === '"') {
+        if (texto[i + 1] === '"') { celda += '"'; i++; } else dentro = false;
+      } else if (ch === '\n') { saltos++; celda += ' '; } else if (ch !== '\r') celda += ch;
+      continue;
+    }
+    if (ch === '"' && celda.trim() === '') { celda = ''; dentro = true; continue; }
+    if (ch === delim) { celdas.push(celda); celda = ''; continue; }
+    if (ch === '\n') { celdas.push(celda); return { celdas, siguiente: i + 1, saltos }; }
+    if (ch !== '\r') celda += ch;
+  }
+  if (dentro) {
+    throw new ErrorLectorPrograma(`Hay una celda con comillas sin cerrar que empieza en la línea ${linea}: revisa el archivo (una comilla suelta se traga el resto del programa).`);
+  }
+  celdas.push(celda);
+  return { celdas, siguiente: n, saltos };
+}
+
 export function leerProgramaCsv(textoCrudo: string, opciones: OpcionesLector): ResultadoLector {
   const topeFilas = opciones.topeFilas ?? TOPE_FILAS_PROGRAMA;
   const lateralDesde = opciones.columnaLateral ?? COLUMNA_LATERAL_PROGRAMA;
@@ -198,7 +251,7 @@ export function leerProgramaCsv(textoCrudo: string, opciones: OpcionesLector): R
   if (texto.replace(/[;,\s]/g, '') === '') {
     throw new ErrorLectorPrograma('El archivo está vacío: no trae ninguna fila del programa.');
   }
-  const delim = texto.includes(';') ? ';' : ',';
+  const delim = delimitadorDe(texto);
   const cDelim = delim.charCodeAt(0);
 
   const filas: FilaCruda[] = [];
@@ -262,6 +315,18 @@ export function leerProgramaCsv(textoCrudo: string, opciones: OpcionesLector): R
       const ch = texto.charCodeAt(fin - 1);
       if (ch === cDelim || ch === 13 || ch === 32 || ch === 9) fin--;
       else break;
+    }
+    const comilla = texto.indexOf('"', pos);
+    if (comilla !== -1 && comilla < fin) {
+      // A37-S59-02: la línea trae comillas → registro RFC-4180 (puede abarcar varias líneas físicas).
+      const reg = leerRegistroConComillas(texto, pos, delim, lineaNo);
+      const celdas = reg.celdas;
+      while (celdas.length > 0 && celdas[celdas.length - 1].trim() === '') celdas.pop();
+      if (celdas.length > 0) procesarLinea(celdas, lineaNo);
+      lineaNo += reg.saltos;
+      if (reg.siguiente >= largo) break;
+      pos = reg.siguiente;
+      continue;
     }
     if (fin > pos) {
       const celdas = texto.slice(pos, fin).split(delim);

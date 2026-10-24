@@ -57,6 +57,9 @@ export interface NuevaCarga {
 /** Lo que se lee de una fila ya guardada para decidir si cambió. */
 export interface FilaGuardada {
   id: string;
+  /** Sección del programa (EXPORTACION, IMPORTACION…). Ausente = no se sabe (se trata como cualquier sección). */
+  tipo?: string;
+  fecha?: string;
   claveNatural: string;
   cliente: string | null;
   consignatario: string | null;
@@ -102,11 +105,29 @@ export interface CambioParaGuardar {
   cargaId: string;
 }
 
+/** Estado de una carga que ya existía (misma flota + terminal + sha256). */
+export interface CargaPrevia {
+  id: string;
+  /** `false` = se reclamó pero nadie la marcó completa (el proceso pudo morir a medias). Base sin la 0894 = `true` (se asume completa). */
+  completa: boolean;
+  /** Minutos desde que se reclamó. */
+  antiguedadMin: number;
+}
+
 export interface RepoPrograma {
   /** Reclama la carga (único por flota + terminal + sha256). `null` = ya existía: no se hace nada más. */
   registrarCarga(tenantId: string, carga: NuevaCarga): Promise<{ id: string } | null>;
   /** Deshace el reclamo de una carga cuya sincronización falló, para que se pueda reintentar. */
   descartarCarga(tenantId: string, cargaId: string): Promise<void>;
+  /**
+   * A37-A4-01: el sha256 ya existe (llave única PERMANENTE). Si esa carga es la ÚLTIMA de la terminal, el
+   * archivo es el estado actual → `null` («ya cargado»). Si después entró otro archivo, esta subida vuelve a ser
+   * la vigente: se reutiliza la carga vieja (se marca como la más reciente) y se devuelve su fecha anterior para
+   * poder restaurarla si la sincronización falla.
+   */
+  reabrirCargaSiNoEsUltima(tenantId: string, terminal: string, archivoSha256: string): Promise<{ id: string; creadaAnterior: string } | null>;
+  /** Devuelve a una carga reabierta su fecha original (la sincronización falló). */
+  restaurarCarga(tenantId: string, cargaId: string, creadaAnterior: string): Promise<void>;
   /** Todas las filas de la terminal con fecha en [desde, hasta] (visibles o no). */
   filasEnRango(tenantId: string, terminal: string, desde: string, hasta: string): Promise<FilaGuardada[]>;
   /** Filas nuevas (con `primera_vez`). Lotes de ≤ LOTE_ESCRITURA. */
@@ -116,15 +137,22 @@ export interface RepoPrograma {
   registrarCambios(tenantId: string, cambios: CambioParaGuardar[]): Promise<void>;
   /** Marca `visible = false` (no borra). */
   ocultarFilas(tenantId: string, ids: string[], cargaId: string): Promise<void>;
+  /** A37-S59-05 (0894). La carga que ya existía con ese sha256, o `null`. Opcional: un repo sin esto asume «completa». */
+  cargaPrevia?(tenantId: string, terminal: string, sha256: string): Promise<CargaPrevia | null>;
+  /** A37-S59-05 (0894). Sella la carga como completa: se llama SOLO al terminar de escribir todo. Base sin la 0894: no hace nada. */
+  completarCarga?(tenantId: string, cargaId: string): Promise<void>;
+  /** A37-S59-05. Los cambios que esa carga ya registró (`fila|campo|despues`), para no repetirlos al retomarla. */
+  cambiosDeCarga?(tenantId: string, cargaId: string): Promise<Set<string>>;
 }
 
-const COLS_FILA = 'id, clave_natural, cliente, consignatario, caja, unidad, cita_en, cita_texto, transito, ccp, huella, visible';
+const COLS_FILA = 'id, tipo, fecha, clave_natural, cliente, consignatario, caja, unidad, cita_en, cita_texto, transito, ccp, huella, visible';
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 
 function aFilaGuardada(f: Record<string, unknown>): FilaGuardada {
   return {
     id: String(f.id), claveNatural: String(f.clave_natural),
+    ...(typeof f.tipo === 'string' ? { tipo: f.tipo } : {}), ...(typeof f.fecha === 'string' ? { fecha: f.fecha } : {}),
     cliente: str(f.cliente), consignatario: str(f.consignatario), caja: str(f.caja), unidad: str(f.unidad),
     citaEn: str(f.cita_en), citaTexto: str(f.cita_texto),
     transito: String(f.transito ?? 'vacio'), ccp: String(f.ccp ?? 'vacio'),
@@ -165,6 +193,65 @@ export function crearRepoPrograma(): RepoPrograma {
       const { error } = await acotada(supabaseAdmin().from('programa_despacho_carga')
         .delete().eq('tenant_id', tenantId).eq('id', cargaId), 'programa.descartar_carga');
       exigir('descartar_carga', error);
+    },
+
+    async reabrirCargaSiNoEsUltima(tenantId, terminal, archivoSha256) {
+      const ultima = await acotada(supabaseAdmin().from('programa_despacho_carga')
+        .select('id, archivo_sha256').eq('tenant_id', tenantId).eq('terminal', terminal)
+        .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(1).maybeSingle(),
+      'programa.carga_ultima');
+      exigir('carga_ultima', ultima.error);
+      // Sin lectura de la última no se puede afirmar nada: se queda en «ya cargado» (lo seguro, no reescribe).
+      if (!ultima.data || ultima.data.archivo_sha256 === archivoSha256) return null;
+      const previa = await acotada(supabaseAdmin().from('programa_despacho_carga')
+        .select('id, created_at').eq('tenant_id', tenantId).eq('terminal', terminal)
+        .eq('archivo_sha256', archivoSha256).maybeSingle(), 'programa.carga_por_sha');
+      exigir('carga_por_sha', previa.error);
+      if (!previa.data?.id || typeof previa.data.created_at !== 'string') return null;
+      const { error } = await acotada(supabaseAdmin().from('programa_despacho_carga')
+        .update({ created_at: new Date().toISOString() }).eq('tenant_id', tenantId).eq('id', previa.data.id),
+      'programa.reabrir_carga');
+      exigir('reabrir_carga', error);
+      return { id: String(previa.data.id), creadaAnterior: previa.data.created_at };
+    },
+
+    async restaurarCarga(tenantId, cargaId, creadaAnterior) {
+      const { error } = await acotada(supabaseAdmin().from('programa_despacho_carga')
+        .update({ created_at: creadaAnterior }).eq('tenant_id', tenantId).eq('id', cargaId), 'programa.restaurar_carga');
+      exigir('restaurar_carga', error);
+    },
+
+    async cargaPrevia(tenantId, terminal, sha256) {
+      const { data, error } = await acotada(supabaseAdmin().from('programa_despacho_carga')
+        .select('id, created_at, completada_en').eq('tenant_id', tenantId).eq('terminal', terminal).eq('archivo_sha256', sha256).maybeSingle(), 'programa.carga_previa');
+      // 42703 = columna inexistente (la 0894 aún no está): se comporta como antes, la carga cuenta como completa.
+      if (error?.code === '42703') return null;
+      exigir('carga_previa', error);
+      if (!data) return null;
+      const d = data as Record<string, unknown>;
+      const creada = Date.parse(String(d.created_at));
+      return {
+        id: String(d.id), completa: d.completada_en != null,
+        antiguedadMin: Number.isNaN(creada) ? 0 : (Date.now() - creada) / 60_000,
+      };
+    },
+
+    async completarCarga(tenantId, cargaId) {
+      const { error } = await acotada(supabaseAdmin().from('programa_despacho_carga')
+        .update({ completada_en: new Date().toISOString() }).eq('tenant_id', tenantId).eq('id', cargaId), 'programa.completar_carga');
+      if (error?.code === '42703') return;
+      exigir('completar_carga', error);
+    },
+
+    async cambiosDeCarga(tenantId, cargaId) {
+      const filas = await traerTodo<Record<string, unknown>>(async (d, h) => {
+        const r = await acotada(supabaseAdmin().from('programa_despacho_cambio')
+          .select('fila_id, campo, despues').eq('tenant_id', tenantId).eq('carga_id', cargaId)
+          .order('id').range(d, h), 'programa.cambios_de_carga');
+        exigir('cambios_de_carga', r.error);
+        return r as { data: Record<string, unknown>[] | null; error: { message: string } | null };
+      }, 'programa.cambios_de_carga');
+      return new Set(filas.map((c) => `${String(c.fila_id)}|${String(c.campo)}|${c.despues == null ? '' : String(c.despues)}`));
     },
 
     async filasEnRango(tenantId, terminal, desde, hasta) {

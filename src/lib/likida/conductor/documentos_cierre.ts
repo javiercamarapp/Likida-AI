@@ -1,6 +1,6 @@
 import { logger } from '@/lib/logger';
 import { limpiar } from './evidencia';
-import { normalizarNombreDocumento, type CatalogoDeCliente, type TipoDocumento } from './documentos_cliente';
+import { MAX_LARGO_NOMBRE_DOC, normalizarNombreDocumento, type CatalogoDeCliente, type TipoDocumento } from './documentos_cliente';
 import { PREFIJO_BOTON, type HitoFila } from './tipos';
 import type { Salida } from './mensajes';
 import type { ConfigConductor } from './config';
@@ -109,7 +109,9 @@ export function resumenDocumentosCierre(filas: readonly DocumentoCierreFila[]): 
 
 // ── 3. Clasificar la foto por su caption (T-A5-53) ──────────────────────────
 
-const MAX_LARGO_CAPTION_DOCUMENTO = 60;
+// A37-S35-07: el tope del pie de foto es el MISMO que el del nombre al dar de alta (80). Con 60, un documento de 61-80
+// caracteres nunca podía clasificarse por pie de foto y quedaba pendiente para siempre.
+const MAX_LARGO_CAPTION_DOCUMENTO = MAX_LARGO_NOMBRE_DOC;
 
 /**
  * ¿El caption nombra a UNO de los documentos aún pendientes? Forma EXACTA (normalizada: sin acentos, en minúsculas, espacios

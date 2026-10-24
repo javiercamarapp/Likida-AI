@@ -64,6 +64,8 @@ export const HORAS_VIAJE_SIN_ACTIVIDAD = 24;
 /** `ignicion`: la que reporta el proveedor (0500); `null`/ausente = no la reporta (no es lo mismo que apagada). */
 export interface MuestraGps {
   lat: number; lng: number; medidaEn: Date; ignicion?: boolean | null;
+  /** A37-A5-10: velocidad (km/h, `posicion.velocidad`) de la muestra; ausente/`null` = no la trae. */
+  velocidadKmh?: number | null;
   /** T-A5-14: referencia de despacho (0802, ya normalizada) con la que el proveedor etiquetó la posición; ausente/`null` = no la trae. */
   despachoRef?: string | null;
   /** T-A5-37: proveedor de la posición (`posicion.proveedor`); de él sale la cadencia de poleo por proveedor. Ausente = no se sabe. */

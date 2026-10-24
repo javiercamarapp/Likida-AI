@@ -120,7 +120,9 @@ function poner(
   }
   const leido = actual as CampoValor;
   if (comparable(leido.valor as string) === comparable(valor)) return; // ya coinciden
-  if (leido.confianza >= UMBRAL_CRITICO) {
+  // A37-A3-09: la declaración de material peligroso es regulatoria y la columna del catálogo es un booleano sin «no sé»:
+  // si el documento ya dice algo y el catálogo lo contradice, NO se pisa en ninguna confianza; gana lo leído y una persona confirma.
+  if (leido.confianza >= UMBRAL_CRITICO || (esMercancia && clave === 'material_peligroso')) {
     destino[clave] = {
       ...leido,
       notas: [...(leido.notas ?? []), `El catálogo dice «${valor}», el documento dice «${leido.valor}». Confírmalo.`],
@@ -209,7 +211,14 @@ export function enriquecer(extraccion: Extraccion, catalogo: CatalogoCliente | n
       en('embalaje', p.embalaje);
       en('fraccion_arancelaria', p.fraccion);
       en('tipo_materia', p.tipoMateria);
-      en('material_peligroso', p.materialPeligroso ? 'true' : 'false');
+      // A37-S31-02: un «peligroso» leído del documento nunca se cede a un «no peligroso» del catálogo (dato fiscal por omisión).
+      const leido = fila.material_peligroso;
+      if (!p.materialPeligroso && !vacio(leido) && (leido as CampoValor).valor === 'true') {
+        const l = leido as CampoValor;
+        if (l.origen !== 'humano') {
+          fila.material_peligroso = { ...l, notas: [...(l.notas ?? []), 'El catálogo del cliente dice «no peligroso», el documento dice «peligroso». Confírmalo.'] };
+        }
+      } else en('material_peligroso', p.materialPeligroso ? 'true' : 'false');
       en('clave_material_peligroso', p.claveMaterialPeligroso);
     });
   }

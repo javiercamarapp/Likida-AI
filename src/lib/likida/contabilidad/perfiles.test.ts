@@ -99,3 +99,47 @@ describe('guardarPerfilExportacionErp — el escritor que faltaba', () => {
       .rejects.toThrow(/boom/);
   });
 });
+
+// A37-S39-05: la plantilla confirmada debe calzar con lo que el export escribe
+// en posiciones fijas; si no, cargos y abonos caen bajo la cabecera equivocada
+// y las sumas siguen cuadrando.
+describe('A37-S39-05 plantilla contra el orden real del export', () => {
+  const SAP_OK = {
+    cabeceraTecnica: ['JdtNum', 'RefDate', 'DueDate', 'TaxDate', 'Memo'],
+    cabeceraVisible: ['JdtNum', 'RefDate', 'DueDate', 'TaxDate', 'Memo'],
+    lineasTecnica: ['JdtNum', 'Line_ID', 'Account', 'Debit', 'Credit', 'LineMemo', 'Ref1'],
+    lineasVisible: ['JdtNum', 'Line_ID', 'Account', 'Debit', 'Credit', 'LineMemo', 'Ref1'],
+  };
+  it('SAP: rechaza Credit antes de Debit', () => {
+    const t = { ...SAP_OK, lineasTecnica: ['JdtNum', 'Line_ID', 'Account', 'Credit', 'Debit', 'LineMemo', 'Ref1'] };
+    expect(interpretarPerfilExportacion('sap_b1', t, CONFIRMADO)).toBeNull();
+  });
+  it('SAP: rechaza más columnas de las que el export escribe', () => {
+    const t = {
+      ...SAP_OK,
+      lineasTecnica: [...SAP_OK.lineasTecnica, 'ProfitCode'],
+      lineasVisible: [...SAP_OK.lineasVisible, 'ProfitCode'],
+    };
+    expect(interpretarPerfilExportacion('sap_b1', t, CONFIRMADO)).toBeNull();
+    const c = {
+      ...SAP_OK,
+      cabeceraTecnica: [...SAP_OK.cabeceraTecnica, 'Reference'],
+      cabeceraVisible: [...SAP_OK.cabeceraVisible, 'Reference'],
+    };
+    expect(interpretarPerfilExportacion('sap_b1', c, CONFIRMADO)).toBeNull();
+  });
+  it('SAP: la plantilla exacta sigue aceptándose (la fila visible puede ser descriptiva)', () => {
+    const t = { ...SAP_OK, lineasVisible: ['Numero', 'Linea', 'Cuenta', 'Debe', 'Haber', 'Memo', 'Ref'] };
+    expect(interpretarPerfilExportacion('sap_b1', t, CONFIRMADO)?.sistema).toBe('sap_b1');
+  });
+  it('CONTPAQi: rechaza un encabezado con nombres conocidos en otra posición', () => {
+    const base = ['Tipo', 'Numero', 'Fecha', 'Concepto', 'Cuenta', 'TipoMovimiento', 'Importe', 'Referencia', 'ConceptoMovimiento'];
+    const trocado = [...base];
+    [trocado[5], trocado[6]] = [trocado[6], trocado[5]];
+    expect(interpretarPerfilExportacion('contpaqi', { tipo: 'Dr', separador: ',', encabezado: trocado }, CONFIRMADO)).toBeNull();
+  });
+  it('CONTPAQi: nombres propios del contador en su lugar siguen valiendo', () => {
+    const propios = ['Tp', 'Num', 'Fch', 'Conc', 'Cta', 'Mov', 'Monto', 'Ref', 'ConcMov'];
+    expect(interpretarPerfilExportacion('contpaqi', { tipo: 'Dr', separador: ',', encabezado: propios }, CONFIRMADO)?.sistema).toBe('contpaqi');
+  });
+});

@@ -121,8 +121,17 @@ export async function cambiarLimites(tenantId: string, userId: string, l: { maxM
   await anotarBitacora({ tenantId, actor: firma(userId), accion: 'autofactura.limites_cambiados', entidad: 'autofactura', entidadId: 'control', detalle: { ok: r?.ok === true, ...l } }, { evento: 'autofactura.bitacora_no_escribio' });
   return traducir(r, 'Límites de emisión guardados.');
 }
-export async function decidirLote(tenantId: string, userId: string, loteId: string, confirmar: boolean, motivo?: string): Promise<ResultadoOp> {
-  const r = await rpc('decidir_lote_emision', { p_id: loteId, p_tenant: tenantId, p_user: userId, p_confirmar: confirmar, p_version_mandato: MANDATO_AUTOFACTURACION.version, p_motivo: motivo ?? null });
+/** Lo que la persona VIO en pantalla al decidir (A37-S29-06): cuántos tickets y qué monto tenía el lote. */
+export interface HuellaLote { tickets: number; monto: number }
+
+export async function decidirLote(tenantId: string, userId: string, loteId: string, confirmar: boolean, motivo?: string, visto?: HuellaLote | null): Promise<ResultadoOp> {
+  // A37-S29-06: confirmar sin huella es confirmar a ciegas (el cron agrega tickets a un lote «propuesto»): FAIL-CLOSED, no se llama a la base.
+  const huellaValida = !!visto && Number.isInteger(visto.tickets) && visto.tickets > 0 && Number.isFinite(visto.monto);
+  if (confirmar && !huellaValida) return { ok: false, motivo: 'No se pudo comprobar qué lote estabas viendo: recarga la pantalla y vuelve a confirmar.' };
+  const r = await rpc('decidir_lote_emision', {
+    p_id: loteId, p_tenant: tenantId, p_user: userId, p_confirmar: confirmar, p_version_mandato: MANDATO_AUTOFACTURACION.version, p_motivo: motivo ?? null,
+    ...(confirmar && huellaValida ? { p_vistos_n: visto!.tickets, p_vistos_monto: visto!.monto } : {}),
+  });
   await anotarBitacora({ tenantId, actor: firma(userId), accion: confirmar ? 'autofactura.lote_confirmado' : 'autofactura.lote_rechazado', entidad: 'autofactura', entidadId: loteId, detalle: { ok: r?.ok === true, motivo: motivo?.slice(0, 200) ?? null } }, { evento: 'autofactura.bitacora_no_escribio' });
   return traducir(r, confirmar ? 'Lote confirmado: se emite en la siguiente corrida del agente (cada 15 minutos).' : 'Lote rechazado: esos tickets vuelven a la cola.');
 }

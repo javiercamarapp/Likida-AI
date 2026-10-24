@@ -196,7 +196,7 @@ export function nodoComplementoCcp(
   for (const f of b.figuras) {
     const rfcF = d.operador?.rfc == null ? '' : ` RFCFigura="${escaparXml(d.operador.rfc)}"`;
     const lic = f.numLicencia == null ? '' : ` NumLicencia="${escaparXml(f.numLicencia)}"`;
-    abre(`        <cartaporte31:TiposFigura TipoFigura="${f.tipoFigura}" Nombre="${escaparXml(f.nombre)}"${lic}${rfcF}/>`);
+    abre(`        <cartaporte31:TiposFigura TipoFigura="${f.tipoFigura}" NombreFigura="${escaparXml(f.nombre)}"${lic}${rfcF}/>`);
   }
   abre('      </cartaporte31:FiguraTransporte>');
 
