@@ -965,6 +965,13 @@ export async function correrDescargaSat(
     .from('sat_descarga_config')
     .select('tenant_id, rfc, ultima_descarga_hasta')
     .eq('activa', true)
+    // A37-L-07: con más de 200 flotas, `.limit(200)` sin orden devolvía 200
+    // cualesquiera y las del final podían no atenderse nunca. Las más
+    // atrasadas (NULL = nunca descargada, luego la fecha más vieja) van
+    // primero; al avanzar `ultima_descarga_hasta` una flota atendida pasa al
+    // final y las demás entran en la siguiente pasada (rotación sin cursor).
+    .order('ultima_descarga_hasta', { ascending: true, nullsFirst: true })
+    .order('tenant_id')
     .limit(200), 'sat_descarga.configs');
   if (error) throw new Error(`correrDescargaSat: ${error.message}`);
 
