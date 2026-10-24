@@ -45,7 +45,9 @@ export { leerTextoPatio, excepcionesPatio } from './patio_regla';
 //   · El nombre de los patios vive solo en datos de la flota, nunca aquí.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const MAX_PATIOS = 30;
+// A37-S36-09: era 30 y se cortaba SIN avisar (los patios de nombre alfabéticamente posterior nunca salían en los botones y, si el
+// esperado era uno de ellos, el patio equivocado daba «sin_referencia» y no avisaba al supervisor). Los botones ya paginan de 2 en 2.
+const MAX_PATIOS = 200;
 const TEXTO_PEDIR_NOMBRE = 'Escríbeme el nombre del patio donde estás entregando, empezando con la palabra «patio» (por ejemplo: patio Norte).';
 const una = (t: string, n: number): string => t.replace(/\s+/g, ' ').trim().slice(0, n);
 
@@ -61,7 +63,8 @@ export function puertosPatioReales(): PuertosPatio {
   return {
     ...base,
     patios: async (tenantId) => {
-      const { sitios } = await listarSitios(tenantId, { tipo: 'patio', limite: MAX_PATIOS });
+      const { sitios, hayMas } = await listarSitios(tenantId, { tipo: 'patio', limite: MAX_PATIOS });
+      if (hayMas) logger.warn('conductor.patio_catalogo_truncado', { tenant: tenantId, limite: MAX_PATIOS });
       return sitios.filter((s) => s.activa).map((s) => ({ id: s.id, nombre: s.nombre }));
     },
     eventos: leerEventosPatio,
