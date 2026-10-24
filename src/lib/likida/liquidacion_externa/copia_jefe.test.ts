@@ -6,7 +6,7 @@ import type { LiquidacionExterna } from './repo';
 const reclamos = new Map<string, 'reclamada' | 'aceptada'>();
 const eventos: Array<{ tipo: string; detalle: Record<string, unknown> }> = [];
 const enviosDirectos: string[] = [];
-let respuesta: { ok: boolean; reintentable?: boolean } = { ok: true };
+let respuesta: { ok: boolean; reintentable?: boolean; encolado?: boolean } = { ok: true };
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 vi.mock('@/lib/env', () => ({ appUrl: () => 'https://app.example' }));
@@ -14,7 +14,7 @@ vi.mock('@/lib/meta/aviso_oficina', () => ({
   parametrosAvisoOficina: (a: string, b: string, c: string) => [a, b, c],
   avisarOficina: vi.fn(async (tel: string) => {
     enviosDirectos.push(tel);
-    return respuesta.ok ? { ok: true, via: 'texto', id: 'w' } : { ok: false, motivo: 'timeout', fueraDeVentana: false, reintentable: respuesta.reintentable ?? false };
+    return respuesta.ok ? { ok: true, via: 'texto', id: 'w' } : { ok: false, motivo: 'timeout', fueraDeVentana: false, reintentable: respuesta.reintentable ?? false, encolado: respuesta.encolado };
   }),
 }));
 vi.mock('./repo', () => ({
@@ -42,6 +42,14 @@ beforeEach(() => { reclamos.clear(); eventos.length = 0; enviosDirectos.length =
 describe('copiarAJefePorOmision y el outbox', () => {
   it('un timeout/5xx (reintentable) NO suelta el reclamo: el reintento no manda una segunda copia', async () => {
     respuesta = { ok: false, reintentable: true };
+    expect((await copiarAJefePorOmision(liq, null)).estado).toBe('enviada');
+    respuesta = { ok: true };
+    expect((await copiarAJefePorOmision(liq, null)).estado).toBe('ya_enviada');
+    expect(enviosDirectos).toHaveLength(1);
+  });
+
+  it('A37-S48-08: token vencido (no reintentable pero encolado en el outbox) NO suelta el reclamo ni se reenvía', async () => {
+    respuesta = { ok: false, reintentable: false, encolado: true };
     expect((await copiarAJefePorOmision(liq, null)).estado).toBe('enviada');
     respuesta = { ok: true };
     expect((await copiarAJefePorOmision(liq, null)).estado).toBe('ya_enviada');
