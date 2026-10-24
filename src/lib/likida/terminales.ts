@@ -249,6 +249,24 @@ export async function eliminarTerminal(
       'Asígnales otro patio (o «toda la flota») antes de borrarlo: si no, pasarían a ver y corregir toda la flota sin que nadie lo decidiera.',
     );
   }
+  // A37-S20-03: los jefes DADOS DE BAJA conservan su patio, y `terminales_conteos_tenant`
+  // (0461) solo cuenta a los activos. Al borrar el patio su terminal_id pasa a NULL
+  // y, al reactivarlos, verían y corregirían toda la flota sin que nadie lo decidiera.
+  const { data: bajas, error: errBajas } = await acotada(
+    supabaseAdmin().from('app_user').select('id')
+      .eq('tenant_id', tenantId).eq('rol', 'encargado').eq('terminal_id', terminalId).eq('activo', false)
+      .order('id').limit(50),
+    'eliminarTerminal.jefes_de_baja',
+  );
+  if (errBajas) throw new Error(`eliminarTerminal: ${errBajas.message}`);
+  const nBajas = (bajas ?? []).length;
+  if (nBajas > 0) {
+    throw new DatoInvalido(
+      `El patio «${antes.nombre}» tiene ${nBajas} ${nBajas === 1 ? 'jefe de tráfico dado de baja' : 'jefes de tráfico dados de baja'} que lo conservan. ` +
+      'Si se borra, al reactivarlos pasarían a ver y corregir toda la flota sin que nadie lo decidiera. ' +
+      'Reactívalos y asígnales otro patio (o «toda la flota») antes de borrarlo.',
+    );
+  }
 
   const { data, error } = await acotada(
     supabaseAdmin().from('terminal').delete().eq('id', terminalId).eq('tenant_id', tenantId).select('id'),
