@@ -26,7 +26,7 @@ vi.mock('@/lib/logger', () => ({
 
 import { hashDeToken, generarTokenPortal } from './portal_pago';
 import {
-  resolverLiga, vistaDelPortal, anotarAcceso, sellarUltimoAcceso, xmlDelRep, panelDelPortal,
+  resolverLiga, vistaDelPortal, anotarAcceso, sellarUltimoAcceso, xmlDelRep, panelDelPortal, TOPE_PENDIENTES_PANEL,
   TOPE_REPS_PANEL,
 } from './portal_pago_lectura';
 
@@ -359,6 +359,37 @@ describe('xmlDelRep — el error de la base no se disfraza de «todavía no hay�
 });
 
 // ── `c7-23` · LA BANDEJA NO INVENTA «sin folio · Cliente» ─────────────────
+
+describe('A37-S54-04 — la bandeja no corta en silencio', () => {
+  const una = (n: number) => ({
+    id: `p-${n}`, factura_id: 'f-1', fecha: '2026-08-20', monto: 100, referencia: `REF-${n}`,
+    metodo: 'transferencia', registrada_en: '2026-08-20T10:00:00Z',
+  });
+
+  it('con 201 pendientes enseña 200 y DICE que hay más', async () => {
+    conTablas({
+      portal_pago_propuesta: [OK(Array.from({ length: 201 }, (_, i) => una(i)))],
+      portal_pago_liga: [OK([])],
+      factura_emitida: [OK([{ id: 'f-1', serie: 'A', folio: '1', cfdi_uuid: null, cliente_id: 'c-1', estatus: 'emitida' }]), OK([])],
+      factura_saldo: [OK([])], cliente: [OK([{ id: 'c-1', nombre: 'Cemex', razon_social: null }])],
+    });
+    const panel = await panelDelPortal('t-1');
+    expect(panel.pendientes).toHaveLength(TOPE_PENDIENTES_PANEL);
+    expect(panel.pendientesTruncados).toBe(true);
+  });
+
+  it('con 200 o menos NO se marca truncado', async () => {
+    conTablas({
+      portal_pago_propuesta: [OK(Array.from({ length: 200 }, (_, i) => una(i)))],
+      portal_pago_liga: [OK([])],
+      factura_emitida: [OK([{ id: 'f-1', serie: 'A', folio: '1', cfdi_uuid: null, cliente_id: 'c-1', estatus: 'emitida' }]), OK([])],
+      factura_saldo: [OK([])], cliente: [OK([{ id: 'c-1', nombre: 'Cemex', razon_social: null }])],
+    });
+    const panel = await panelDelPortal('t-1');
+    expect(panel.pendientes).toHaveLength(200);
+    expect(panel.pendientesTruncados).toBe(false);
+  });
+});
 
 describe('panelDelPortal — una propuesta huérfana se DICE, no se rotula', () => {
   const PROPUESTA = {

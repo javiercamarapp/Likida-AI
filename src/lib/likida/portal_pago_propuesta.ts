@@ -48,6 +48,13 @@ import type { PropuestaValida } from './portal_pago';
 /** El código que Postgres devuelve al chocar contra un índice único. */
 const CHOQUE_UNICO = '23505';
 
+/**
+ * A37-S54-04: cuántas propuestas PENDIENTES admite una misma factura. Cada propuesta dispara un correo a la flota y
+ * el único freno era el límite por IP: con IPs distintas, una liga filtrada inundaba la bandeja. Pasado el tope no se
+ * acepta otra hasta que la flota concilie o descarte (no es un dato fiscal: es el freno de un canal público).
+ */
+export const TOPE_PENDIENTES_POR_FACTURA = 25;
+
 export type ResultadoPropuesta =
   | { ok: true; id: string; repetida: false }
   /** La misma fecha, monto y referencia ya estaban. No es un error: es el
@@ -67,6 +74,20 @@ export async function registrarPropuesta(
   v: PropuestaValida,
 ): Promise<ResultadoPropuesta> {
   try {
+    // La lectura del tope es de cortesía: si no se puede hacer NO se bloquea al cliente (el insert de abajo dirá si la
+    // base está caída); lo que sí se rechaza es pasarse del tope CONOCIDO.
+    try {
+      const { count, error: errTope } = await acotada(supabaseAdmin().from('portal_pago_propuesta')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', liga.tenantId).eq('factura_id', liga.facturaId).eq('estado', 'pendiente'),
+      'registrarPropuesta.tope');
+      if (!errTope && typeof count === 'number' && count >= TOPE_PENDIENTES_POR_FACTURA) {
+        logger.warn('portal_pago.propuesta_tope', { facturaId: liga.facturaId, pendientes: count });
+        return { ok: false, motivo: 'Esta factura ya tiene varios pagos registrados por conciliar. Avísale a tu contacto en la empresa para que los revise.' };
+      }
+    } catch (e) {
+      logger.warn('portal_pago.propuesta_tope_ilegible', { err: e instanceof Error ? e.message : String(e) });
+    }
     const { data, error } = await acotada(supabaseAdmin().from('portal_pago_propuesta').insert({
       tenant_id: liga.tenantId,
       liga_id: liga.ligaId,

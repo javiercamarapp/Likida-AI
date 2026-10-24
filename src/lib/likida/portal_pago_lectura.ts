@@ -472,6 +472,8 @@ export interface RepEnPanel {
 export interface PanelPortal {
   pendientes: PropuestaEnBandeja[];
   ligasVivas: LigaEnPanel[];
+  /** `true` si hay más pendientes de los que cupieron: las más nuevas NO se ven y la pantalla lo dice (A37-S54-04). */
+  pendientesTruncados: boolean;
   /** Facturas emitidas sin liga viva: las candidatas a generar enlace. */
   facturasSinLiga: Array<{ id: string; factura: string; cliente: string; saldo: number | null }>;
   /** Los últimos REPs registrados por esta flota, del más nuevo al más viejo. */
@@ -480,6 +482,9 @@ export interface PanelPortal {
    *  inventada, así que la pantalla lo DICE (hallazgo c7-4). */
   repsTruncados: boolean;
 }
+
+/** Cuántas propuestas pendientes trae el panel. Se pide UNA más para saber si hay más (A37-S54-04). */
+export const TOPE_PENDIENTES_PANEL = 200;
 
 /** Cuántos REPs trae el panel. Se declara para poder decir "hay más". */
 export const TOPE_REPS_PANEL = 50;
@@ -496,7 +501,7 @@ export async function panelDelPortal(tenantId: string): Promise<PanelPortal> {
     sb.from('portal_pago_propuesta')
       .select('id, factura_id, fecha, monto, referencia, metodo, registrada_en')
       .eq('tenant_id', tenantId).eq('estado', 'pendiente')
-      .order('registrada_en', { ascending: true }).limit(200),
+      .order('registrada_en', { ascending: true }).limit(TOPE_PENDIENTES_PANEL + 1),
     sb.from('portal_pago_liga')
       .select('id, factura_id, token_prefijo, expira_en, ultimo_acceso_en')
       .eq('tenant_id', tenantId).is('revocada_en', null)
@@ -595,7 +600,8 @@ export async function panelDelPortal(tenantId: string): Promise<PanelPortal> {
   const conLiga = new Set((ligas.data ?? []).map((l) => String((l as { factura_id: unknown }).factura_id)));
 
   return {
-    pendientes: (prop.data ?? []).map((p) => {
+    pendientesTruncados: (prop.data ?? []).length > TOPE_PENDIENTES_PANEL,
+    pendientes: (prop.data ?? []).slice(0, TOPE_PENDIENTES_PANEL).map((p) => {
       const r = p as Record<string, unknown>;
       const fid = String(r.factura_id);
       const meta = porFactura.get(fid);
