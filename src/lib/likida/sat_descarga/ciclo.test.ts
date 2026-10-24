@@ -5,7 +5,7 @@ vi.mock('@/lib/logger', () => ({
 }));
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: () => ({}) }) }));
 
-import { rangoPendiente, correrDescargaSat, VENTANA_MAX_DIAS, VENTANA_INICIAL_DIAS } from './ciclo';
+import { rangoPendiente, correrDescargaSat, VENTANA_MAX_DIAS, VENTANA_INICIAL_DIAS, SOLAPE_DIAS } from './ciclo';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -23,7 +23,8 @@ describe('rangoPendiente — el calendario que no puede saltarse un día', () =>
 
   it('arranca EL DÍA SIGUIENTE al último descargado — ni lo repite ni lo salta', () => {
     const r = rangoPendiente('2026-08-10', '2026-08-27');
-    expect(r).toEqual({ desde: '2026-08-11', hasta: '2026-08-27' });
+    // A37-L-02: «hasta» es hoy − SOLAPE_DIAS (3), no hoy.
+    expect(r).toEqual({ desde: '2026-08-11', hasta: '2026-08-24' });
   });
 
   it('corta en la ventana máxima cuando el pendiente es largo', () => {
@@ -54,7 +55,17 @@ describe('rangoPendiente — el calendario que no puede saltarse un día', () =>
   });
 
   it('cruza el fin de año sin inventar fechas', () => {
-    expect(rangoPendiente('2025-12-31', '2026-01-15')).toEqual({ desde: '2026-01-01', hasta: '2026-01-15' });
+    expect(rangoPendiente('2025-12-31', '2026-01-15')).toEqual({ desde: '2026-01-01', hasta: '2026-01-12' });
+  });
+
+  it('A37-L-02: el borde reciente NO se da por descargado — lo que el SAT publica tarde se alcanza a pedir', () => {
+    // Antes: con ultima = ayer, «hoy» se pedía y se marcaba descargado; un CFDI que
+    // el SAT asentaba 48 h después quedaba fuera para siempre (el calendario no retrocede).
+    expect(SOLAPE_DIAS).toBe(3);
+    expect(rangoPendiente('2026-08-24', '2026-08-27')).toBeNull();      // 25-27 aún no asentaron
+    expect(rangoPendiente('2026-08-23', '2026-08-27')).toEqual({ desde: '2026-08-24', hasta: '2026-08-24' });
+    // Un CFDI del 25 se pide cuando «hoy» es el 28: tres días después.
+    expect(rangoPendiente('2026-08-24', '2026-08-28')).toEqual({ desde: '2026-08-25', hasta: '2026-08-25' });
   });
 });
 
