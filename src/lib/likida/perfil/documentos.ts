@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
+import { logger } from '@/lib/logger';
 
 export const MAX_POLITICA_BYTES = 8 * 1024 * 1024;
 const TIPOS = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
@@ -34,4 +35,19 @@ export async function subirPoliticaPerfil(tenantId: string, archivo: File): Prom
   if (error) throw new Error(`No se pudo guardar el documento: ${error.message}`);
   const nombre = archivo.name.replace(/[/\\]/g, '').slice(0, 180) || `politica.${ext}`;
   return { path, nombre, contentType: tipo };
+}
+
+/**
+ * Borra un documento recién subido cuando el guardado del perfil falló (A37-S19-08):
+ * sin esto queda huérfano en el bucket privado, sin referencia ni purga. Solo toca
+ * rutas de ESTA flota y NUNCA lanza (es limpieza; el error original es el que se muestra).
+ */
+export async function borrarPoliticaPerfil(tenantId: string, path: string): Promise<void> {
+  if (!path.startsWith(`perfil/${tenantId}/politica-`)) return;
+  try {
+    const { error } = await supabaseAdmin().storage.from('comprobantes').remove([path]);
+    if (error) logger.warn('perfil.politica_huerfana_no_borrada', { tenantId, path, err: error.message });
+  } catch (e) {
+    logger.warn('perfil.politica_huerfana_no_borrada', { tenantId, path, err: e instanceof Error ? e.message : String(e) });
+  }
 }

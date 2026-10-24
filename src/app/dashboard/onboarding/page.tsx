@@ -11,8 +11,8 @@ import {
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { parseOnboarding } from '@/lib/likida/perfil/onboarding';
 import { getPerfilCrudo, guardarPerfilPatch } from '@/lib/likida/repo';
-import { guardarPerfilFormulario } from '@/lib/likida/perfil/guardar_forma';
-import { subirPoliticaPerfil } from '@/lib/likida/perfil/documentos';
+import { guardarPerfilFormulario, PerfilGuardadoParcial } from '@/lib/likida/perfil/guardar_forma';
+import { subirPoliticaPerfil, borrarPoliticaPerfil } from '@/lib/likida/perfil/documentos';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { sufijoTenant } from '../sufijo';
 import { FormaOnboarding, type Opcion } from './forma';
@@ -61,13 +61,18 @@ export default async function OnboardingFlotaPage({
     if (!parsed.ok) return { error: parsed.error };
 
     const archivo = fd.get('politica');
+    let subida: string | null = null;
     try {
       if (archivo instanceof File && archivo.size > 0) {
         parsed.datos.politicaDocumento = await subirPoliticaPerfil(ses.tenantId, archivo);
+        subida = parsed.datos.politicaDocumento.path;
       }
       const patch = declararOnboarding(parsed.datos);
       await guardarPerfilFormulario(ses.tenantId, patch, ses.userId);
     } catch (e) {
+      // A37-S19-08: si el perfil NO se escribió, el documento recién subido queda huérfano:
+      // se borra. Si el perfil SÍ se escribió (parcial), ya lo referencia y se conserva.
+      if (subida && !(e instanceof PerfilGuardadoParcial)) await borrarPoliticaPerfil(ses.tenantId, subida);
       return { error: mensajeParaPantalla(e, 'guardar el perfil') };
     }
     revalidatePath('/dashboard');

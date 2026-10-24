@@ -1,6 +1,21 @@
 import { guardarPerfilPatch, actualizarFacilidad15 } from '../repo';
 import { guardarDatosFiscalesParciales, REGIMENES } from '@/lib/saas/fiscal';
 import { facilidad15Declarada } from './preguntas';
+import { DatoInvalido } from '../errores';
+import { logger } from '@/lib/logger';
+
+/**
+ * A37-S19-08: el perfil YA quedó escrito pero la parte derivada (facilidad del 15 % o
+ * régimen del tenant) falló. Es idempotente: volver a guardar la reintenta. Se dice tal
+ * cual (no «no se pudo guardar», que mentiría) y el llamador NO debe borrar el documento
+ * subido, porque el perfil ya lo referencia.
+ */
+export class PerfilGuardadoParcial extends DatoInvalido {
+  constructor(parte: string) {
+    super(`Tus respuestas quedaron guardadas, pero no pude aplicar ${parte}. Vuelve a pulsar Guardar para reintentarlo; si se repite, avísale a Likida.`);
+    this.name = 'PerfilGuardadoParcial';
+  }
+}
 
 /**
  * Camino de escritura del FORMULARIO de onboarding (A36-R15-02). Antes solo
@@ -19,10 +34,20 @@ export async function guardarPerfilFormulario(
   await guardarPerfilPatch(tenantId, patch, userId);
   const f15 = facilidad15Declarada(patch);
   if (f15) {
-    await actualizarFacilidad15(tenantId, f15.dedicacionExclusivaCarga, f15.regimenElegible, userId);
+    try {
+      await actualizarFacilidad15(tenantId, f15.dedicacionExclusivaCarga, f15.regimenElegible, userId);
+    } catch (e) {
+      logger.error('perfil.formulario_parcial', { tenantId, parte: 'facilidad15', err: e instanceof Error ? e.message : String(e) });
+      throw new PerfilGuardadoParcial('la facilidad fiscal del 15 %');
+    }
   }
   const regimen = (patch.regimenSat as { valor?: string } | undefined)?.valor;
   if (regimen && REGIMENES.some((r) => r.clave === regimen)) {
-    await guardarDatosFiscalesParciales(tenantId, { regimenFiscal: regimen });
+    try {
+      await guardarDatosFiscalesParciales(tenantId, { regimenFiscal: regimen });
+    } catch (e) {
+      logger.error('perfil.formulario_parcial', { tenantId, parte: 'regimen', err: e instanceof Error ? e.message : String(e) });
+      throw new PerfilGuardadoParcial('el régimen fiscal a tus facturas');
+    }
   }
 }

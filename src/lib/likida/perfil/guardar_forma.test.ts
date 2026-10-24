@@ -20,7 +20,7 @@ const guardarPerfilPatch = vi.fn(async () => undefined);
 const actualizarFacilidad15 = vi.fn(async () => undefined);
 vi.mock('../repo', () => ({ guardarPerfilPatch, actualizarFacilidad15 }));
 
-const { guardarPerfilFormulario } = await import('./guardar_forma');
+const { guardarPerfilFormulario, PerfilGuardadoParcial } = await import('./guardar_forma');
 const { declararOnboarding, formularioDeclarado } = await import('./preguntas');
 
 beforeEach(() => {
@@ -50,6 +50,24 @@ describe('A36-R15-02 — un solo camino para el régimen fiscal', () => {
     fila = { rfc: null, razon_social: null, regimen_fiscal: null, codigo_postal_fiscal: null, uso_cfdi: null, email_facturacion: null, domicilio_fiscal: null };
     await guardarPerfilFormulario('t-1', declararOnboarding({ ingresosMenoresA300M: true, parteRelacionada: false, regimenSat: '601', regimenElegible: false }), 'u-1');
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe('A37-S19-08 — el guardado en pasos dice la verdad cuando queda a medias', () => {
+  it('si la facilidad del 15 % falla tras escribir el perfil lanza PerfilGuardadoParcial (no un error genérico)', async () => {
+    actualizarFacilidad15.mockRejectedValueOnce(new Error('timeout'));
+    const patch = declararOnboarding({ ingresosMenoresA300M: true, parteRelacionada: false, dedicacionExclusivaCarga: true, regimenSat: '601', regimenElegible: false });
+    const r = guardarPerfilFormulario('t-1', patch, 'u-1');
+    await expect(r).rejects.toBeInstanceOf(PerfilGuardadoParcial);
+    await expect(r).rejects.toThrow(/quedaron guardadas/);
+    expect(guardarPerfilPatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('si el propio perfil no se escribe, el error original sale tal cual (nada quedó guardado)', async () => {
+    guardarPerfilPatch.mockRejectedValueOnce(new Error('base caída'));
+    await expect(guardarPerfilFormulario('t-1', declararOnboarding({ ingresosMenoresA300M: true, parteRelacionada: false }), 'u-1'))
+      .rejects.toThrow('base caída');
+    expect(actualizarFacilidad15).not.toHaveBeenCalled();
   });
 });
 
