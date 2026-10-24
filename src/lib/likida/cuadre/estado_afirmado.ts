@@ -53,7 +53,7 @@ const AFIRMA_CIERRE: RegExp[] = [
   /\b(?:ya\s+)?(?:qued[óo]|est[áa]|dej[ée])[^.!?]{0,40}(?:cerrad|liquidad)/i,
   // "quedó lista tu liquidación" — A37-S41-08: «lista» SOLA es ruido ("tu foto quedó lista, mándame la siguiente"):
   // exige liquidación, viaje o cuadre en la misma oración.
-  /\b(?:ya\s+)?(?:qued[óo]|est[áa]|dej[ée])[^.!?]{0,40}list[oa]s?(?![\wáéíóúñ])[^.!?]{0,40}(?:liquidaci[óo]n|viaje|cuadre)/i,
+  /\b(?:qued[óo]|est[áa]|dej[ée])[^.!?]{0,40}list[oa]s?(?![\wáéíóúñ])[^.!?]{0,40}(?:liquidaci[óo]n|viaje|cuadre)/i,
   // "cerré", "ya te lo cerré", "la cerramos", "liquidé", "liquidó" — pretérito,
   // con o sin "ya". NO casa con "cierro"/"cierre" (presente/subjuntivo: raíz
   // "cier-", no "cerr-") ni con "cerrar" (infinitivo: termina en "-ar").
