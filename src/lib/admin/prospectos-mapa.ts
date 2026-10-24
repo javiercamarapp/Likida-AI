@@ -515,6 +515,15 @@ async function contarMapa(): Promise<number | null> {
   return todo.count - dup.count;
 }
 
+/** A37-S22-05: cuánto se retrocede la marca del delta para no perder filas con commit tardío. */
+export const SOLAPE_DELTA_MS = 5 * 60 * 1000;
+
+function restarSolape(marca: string): string {
+  const t = Date.parse(marca);
+  // Una marca que no se puede leer se deja tal cual: el comportamiento de antes.
+  return Number.isFinite(t) ? new Date(t - SOLAPE_DELTA_MS).toISOString() : marca;
+}
+
 /**
  * El mapa entero, o SOLO lo que cambió desde `desde` (FE-16).
  *
@@ -532,6 +541,11 @@ export async function getDatosMapa(opciones?: { desde?: string | null }): Promis
   const generadoEn = new Date().toISOString();
   // Cadena vacía = sin marca (primera carga), no una marca de 1970.
   const desde = opciones?.desde || null;
+  // A37-S22-05: `updated_at > marca` exacto pierde la fila cuya transacción
+  // hizo commit DESPUÉS del poll que fijó la marca (su updated_at es menor):
+  // nunca se entregaba. Se pide desde la marca MENOS el solape; lo re-entregado
+  // es idempotente (el cliente reemplaza por id) y no cuenta como alta.
+  const desdeConsulta = desde ? restarSolape(desde) : null;
   // traerTodoEnParalelo, no .limit(): PostgREST recorta a 1,000 filas EN
   // SILENCIO (trampa documentada en CLAUDE.md) y el universo DENUE ya pasa
   // de 33,000 — un mapa con la primera página se leería como "el país
@@ -551,7 +565,7 @@ export async function getDatosMapa(opciones?: { desde?: string | null }): Promis
         // vio como pines duplicados en el mapa (17-ago). El delta ordena por
         // la misma columna que filtra, que es lo estable ahí.
         return desde
-          ? q.gt('updated_at', desde).order('updated_at', { ascending: true }).order('id', { ascending: true }).range(d, h)
+          ? q.gt('updated_at', desdeConsulta as string).order('updated_at', { ascending: true }).order('id', { ascending: true }).range(d, h)
           : q.order('created_at', { ascending: false }).order('id', { ascending: true }).range(d, h);
       },
       desde ? 'prospecto (mapa, delta)' : 'prospecto (mapa)',

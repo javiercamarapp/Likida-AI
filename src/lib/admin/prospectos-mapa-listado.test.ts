@@ -166,12 +166,25 @@ describe('la carga inicial es LIGERA — los textos largos no viajan', () => {
 describe('el refresco es un DELTA — solo lo que cambió desde la marca', () => {
   it('pregunta por updated_at > desde y devuelve únicamente eso', async () => {
     const datos = await getDatosMapa({ desde: '2026-08-21T23:00:00.000Z' });
-    expect(espia.gt).toEqual([{ col: 'updated_at', val: '2026-08-21T23:00:00.000Z' }]);
+    // A37-S22-05: la marca se SOLAPA 5 min hacia atrás (ver `SOLAPE_DELTA_MS`).
+    expect(espia.gt).toEqual([{ col: 'updated_at', val: '2026-08-21T22:55:00.000Z' }]);
     expect(datos.delta).toBe(true);
     // La fila del 21 no cambió: no viaja. La del 22 sí; el duplicado del 22
     // tampoco sale del mapa pero empuja la marca.
     expect(datos.filas.map((f) => f[0])).toEqual([FILAS[1].id]);
     expect(datos.marca).toBe('2026-08-22T11:00:00.000Z');
+  });
+
+  it('A37-S22-05 · una fila que hizo commit tarde (updated_at menor que la marca, dentro del solape) SÍ se entrega', async () => {
+    // Marca = 22-ago 09:03. La fila de las 09:00 (3 min antes) pudo haber hecho commit después del
+    // poll que fijó la marca: con `updated_at > marca` exacto nunca llegaba.
+    const datos = await getDatosMapa({ desde: '2026-08-22T09:03:00.000Z' });
+    expect(datos.filas.map((f) => f[0])).toEqual([FILAS[1].id]);
+  });
+
+  it('A37-S22-05 · fuera del solape no se re-entrega nada (reposo sigue en cero)', async () => {
+    const datos = await getDatosMapa({ desde: '2026-08-22T09:06:00.000Z' });
+    expect(datos.filas).toEqual([]);
   });
 
   it('una cartera en reposo contesta CERO filas — no el universo', async () => {
