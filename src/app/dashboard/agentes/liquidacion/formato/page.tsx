@@ -4,6 +4,7 @@ import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { sufijoTenant } from '../../../sufijo';
 import { logger } from '@/lib/logger';
+import { dejarFlash, leerFlash } from '@/lib/likida/mensaje_flash';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { matrizDeArchivoCatalogo, MAX_CATALOGO_BYTES } from '@/lib/likida/peajes/archivo';
 import { derivarFormatoDeMatriz } from '@/lib/likida/liquidacion_externa/formato_flota';
@@ -27,9 +28,10 @@ async function puerta(tenantId: string): Promise<{ por: string } | { error: stri
   return { por: sesion.userId };
 }
 
-function volver(sufijo: string, msg: string): never {
-  const param = msg.startsWith('error:') ? `error=${encodeURIComponent(msg.slice(6))}` : `aviso=${encodeURIComponent(msg)}`;
-  redirect(`${RUTA}${sufijo}${sufijo ? '&' : '?'}${param}`);
+async function volver(sufijo: string, msg: string): Promise<never> {
+  // A37-S13-08 / A37-S14-07: el mensaje viaja en una cookie de servidor, no como texto libre en la URL.
+  await dejarFlash(RUTA, msg.startsWith('error:') ? { error: msg.slice(6) } : { aviso: msg });
+  redirect(`${RUTA}${sufijo}`);
 }
 
 /**
@@ -42,13 +44,14 @@ function volver(sufijo: string, msg: string): never {
 export default async function PaginaFormatoLiquidacion({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; aviso?: string; error?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
   const puedeAdministrar = puedeVerArea(rol, 'administracion');
+  const flash = await leerFlash(RUTA);
 
   // Primaria (sin `safe` mudo): si no se pudo leer, la pantalla lo dice; jamás «no hay formato».
   let config: ConfigFormatoFlota | null = null;
@@ -62,14 +65,14 @@ export default async function PaginaFormatoLiquidacion({
   async function accionSubirMuestra(fd: FormData) {
     'use server';
     const p = await puerta(tenantId);
-    if ('error' in p) volver(sufijo, `error:${p.error}`);
+    if ('error' in p) return volver(sufijo, `error:${p.error}`);
     const a = fd.get('archivo');
-    if (!(a instanceof File) || a.size === 0) volver(sufijo, 'error:Elige el Excel de muestra (un .xlsx con el formato que hoy mandas a tus operadores).');
-    if (a.size > MAX_CATALOGO_BYTES) volver(sufijo, 'error:Ese archivo pesa demasiado para ser una muestra (máximo 4 MB).');
+    if (!(a instanceof File) || a.size === 0) return volver(sufijo, 'error:Elige el Excel de muestra (un .xlsx con el formato que hoy mandas a tus operadores).');
+    if (a.size > MAX_CATALOGO_BYTES) return volver(sufijo, 'error:Ese archivo pesa demasiado para ser una muestra (máximo 4 MB).');
     const matriz = matrizDeArchivoCatalogo(a.name, new Uint8Array(await a.arrayBuffer()));
-    if (!matriz.ok) volver(sufijo, `error:${matriz.motivo}`);
+    if (!matriz.ok) return volver(sufijo, `error:${matriz.motivo}`);
     const d = derivarFormatoDeMatriz(matriz.matriz);
-    if (!d.ok) volver(sufijo, `error:${d.motivo}`);
+    if (!d.ok) return volver(sufijo, `error:${d.motivo}`);
     try {
       // Los teléfonos pueden existir SIN formato (0645): se leen aparte, o subir la muestra los borraría.
       const [previa, previos] = await Promise.all([leerFormatoFlota(tenantId), leerTelefonosFlota(tenantId)]);
@@ -80,24 +83,24 @@ export default async function PaginaFormatoLiquidacion({
       }, p.por);
     } catch (e) {
       logger.error('liqext.formato_subir', { err: e instanceof Error ? e.message : String(e) });
-      volver(sufijo, 'error:No se pudo guardar el formato. Inténtalo de nuevo.');
+      return volver(sufijo, 'error:No se pudo guardar el formato. Inténtalo de nuevo.');
     }
     const notas = [
       d.sinMapear.length > 0 ? `No reconocí estas columnas y NO se imprimirán: ${d.sinMapear.join(', ')}.` : '',
       ...d.advertencias,
     ].filter(Boolean).join(' ');
-    volver(sufijo, `Formato guardado desde «${a.name}»: ${d.formato.columnas.length} columnas. ${notas} Revísalo abajo; las liquidaciones nuevas ya salen con este formato.`.trim());
+    return volver(sufijo, `Formato guardado desde «${a.name}»: ${d.formato.columnas.length} columnas. ${notas} Revísalo abajo; las liquidaciones nuevas ya salen con este formato.`.trim());
   }
 
   async function accionGuardarAjustes(fd: FormData) {
     'use server';
     const p = await puerta(tenantId);
-    if ('error' in p) volver(sufijo, `error:${p.error}`);
+    if ('error' in p) return volver(sufijo, `error:${p.error}`);
     let actual: ConfigFormatoFlota | null = null;
     try { actual = await leerFormatoFlota(tenantId); } catch (e) {
-      volver(sufijo, `error:${mensajeParaPantalla(e, 'leer el formato guardado')}`);
+      return volver(sufijo, `error:${mensajeParaPantalla(e, 'leer el formato guardado')}`);
     }
-    if (!actual) volver(sufijo, 'error:Primero sube el Excel de muestra: sin formato no hay nada que ajustar.');
+    if (!actual) return volver(sufijo, 'error:Primero sube el Excel de muestra: sin formato no hay nada que ajustar.');
     const previo = actual;
     try {
       const lista = (prefijo: string, n: number): string[] => {
@@ -117,46 +120,46 @@ export default async function PaginaFormatoLiquidacion({
         discrepanciaTelefonos: leerTelefonos(String(fd.get('discrepancia') ?? ''), 'El aviso de «No coincide»'),
       }, p.por);
     } catch (e) {
-      volver(sufijo, `error:${mensajeParaPantalla(e, 'guardar el formato')}`);
+      return volver(sufijo, `error:${mensajeParaPantalla(e, 'guardar el formato')}`);
     }
-    volver(sufijo, 'Cambios guardados. Aplican a las liquidaciones que lleguen desde ahora.');
+    return volver(sufijo, 'Cambios guardados. Aplican a las liquidaciones que lleguen desde ahora.');
   }
 
   /** Los teléfonos de la copia y del aviso de discrepancia SIN formato de Excel (flotas con el PDF genérico). */
   async function accionGuardarTelefonos(fd: FormData) {
     'use server';
     const p = await puerta(tenantId);
-    if ('error' in p) volver(sufijo, `error:${p.error}`);
+    if ('error' in p) return volver(sufijo, `error:${p.error}`);
     try {
       await guardarTelefonosFlota(tenantId, {
         copia: leerTelefonos(String(fd.get('copia') ?? ''), 'La copia al jefe de flota'),
         discrepancia: leerTelefonos(String(fd.get('discrepancia') ?? ''), 'El aviso de «No coincide»'),
       }, p.por);
     } catch (e) {
-      volver(sufijo, `error:${mensajeParaPantalla(e, 'guardar los teléfonos')}`);
+      return volver(sufijo, `error:${mensajeParaPantalla(e, 'guardar los teléfonos')}`);
     }
-    volver(sufijo, 'Teléfonos guardados. La copia y el aviso de «No coincide» salen a estos números desde ahora.');
+    return volver(sufijo, 'Teléfonos guardados. La copia y el aviso de «No coincide» salen a estos números desde ahora.');
   }
 
   async function accionQuitar() {
     'use server';
     const p = await puerta(tenantId);
-    if ('error' in p) volver(sufijo, `error:${p.error}`);
+    if ('error' in p) return volver(sufijo, `error:${p.error}`);
     try { await borrarFormatoFlota(tenantId); } catch (e) {
       logger.error('liqext.formato_quitar', { err: e instanceof Error ? e.message : String(e) });
-      volver(sufijo, 'error:No se pudo quitar el formato. Inténtalo de nuevo.');
+      return volver(sufijo, 'error:No se pudo quitar el formato. Inténtalo de nuevo.');
     }
     // Los teléfonos sobreviven al formato (0645): se dice lo que de verdad quedó, no lo que se supone.
     let quedan = false;
     try { const t = await leerTelefonosFlota(tenantId); quedan = !!t && (t.copia.length > 0 || t.discrepancia.length > 0); } catch { /* el aviso es informativo */ }
-    volver(sufijo, quedan
+    return volver(sufijo, quedan
       ? 'Formato quitado: las liquidaciones nuevas salen con el PDF de siempre. Los teléfonos de la copia y del aviso se conservan.'
       : 'Formato quitado: las liquidaciones nuevas salen con el PDF de siempre y ya no se manda copia.');
   }
 
   return (
     <VistaFormatoLiquidacion
-      sufijo={sufijo} aviso={sp.aviso ?? null} error={sp.error ?? errorLectura}
+      sufijo={sufijo} aviso={flash.aviso ?? null} error={flash.error ?? errorLectura}
       config={config} telefonos={telefonos} puedeAdministrar={puedeAdministrar}
       acciones={{ subirMuestra: accionSubirMuestra, guardarAjustes: accionGuardarAjustes, quitar: accionQuitar, guardarTelefonos: accionGuardarTelefonos }}
     />
