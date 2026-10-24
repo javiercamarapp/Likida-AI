@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { Receiver } from '@upstash/qstash';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { appUrl } from '@/lib/env';
 import { hoyMx } from '@/lib/formato';
 import { estaApagado } from '@/lib/likida/interruptores';
 import { registrarLatido } from '@/lib/admin/salud';
@@ -59,9 +60,12 @@ export async function POST(req: NextRequest) {
     // Las SIGNING KEYS reales de QStash (Settings → Signing Keys) — no el
     // token: QStash firma con ellas, y verificarlas con el token fallaría.
     const receiver = new Receiver({ currentSigningKey: currentKey, nextSigningKey: nextKey });
+    // A37-S09-09: la firma se ata a la URL destino (misma base que usa quien publica), para que un
+    // mensaje firmado para OTRO endpoint no sirva aquí.
     const valido = await receiver.verify({
       signature: req.headers.get('upstash-signature') ?? '',
       body: raw,
+      url: `${appUrl() || new URL(req.url).origin}/api/cron/facturar/cola`,
     });
     if (!valido) {
       logger.warn('qstash.cola.firma_invalida', {});

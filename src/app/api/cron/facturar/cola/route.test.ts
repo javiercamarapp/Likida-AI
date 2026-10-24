@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { appUrl } from '@/lib/env';
 
 // AUDITORÍA 24, BE-6 (b): las salidas 503/401 de este callback eran MUDAS.
 const registrarLatido = vi.fn(async (..._a: unknown[]) => {});
@@ -7,8 +8,9 @@ vi.mock('@/lib/admin/salud', () => ({ registrarLatido: (...a: unknown[]) => regi
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
 let firmaValida = true;
+const verifyArgs: unknown[] = [];
 vi.mock('@upstash/qstash', () => ({
-  Receiver: class { verify = async () => firmaValida; },
+  Receiver: class { verify = async (a: unknown) => { verifyArgs.push(a); return firmaValida; }; },
 }));
 const procesarLoteEnCola = vi.fn(async () => new Response(JSON.stringify({ corrio: true }), { status: 200 }));
 vi.mock('../lote', () => ({ procesarLoteEnCola: (...a: unknown[]) => procesarLoteEnCola(...(a as [])) }));
@@ -47,6 +49,13 @@ describe('BE-6 (b) — el callback LATE en sus salidas de puerta', () => {
     process.env.UPSTASH_QSTASH_TOKEN = 'tok';
     process.env.QSTASH_CURRENT_SIGNING_KEY = 'cur';
     process.env.QSTASH_NEXT_SIGNING_KEY = 'nxt';
+  });
+
+  it('A37-S09-09: la firma se verifica atada a la URL destino de ESTE endpoint', async () => {
+    verifyArgs.length = 0;
+    await pedir();
+    expect(verifyArgs).toHaveLength(1);
+    expect(verifyArgs[0]).toMatchObject({ url: `${appUrl()}/api/cron/facturar/cola` });
   });
 
   it('sin una signing key: 503 Y latido `fallo` — antes el cron latía `ok` por encolar y esto callaba', async () => {

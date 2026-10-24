@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { appUrl } from '@/lib/env';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ESC-1 — el callback que encadena vueltas de drenado. Lo que fija:
@@ -10,8 +11,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ═══════════════════════════════════════════════════════════════════════════
 
 let firmaValida = true;
+const verifyArgs: unknown[] = [];
 vi.mock('@upstash/qstash', () => ({
-  Receiver: class { verify = async () => firmaValida; },
+  Receiver: class { verify = async (a: unknown) => { verifyArgs.push(a); return firmaValida; }; },
 }));
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
@@ -39,6 +41,15 @@ const peticion = (cuerpo: unknown) => new Request('http://likida.test/api/cron/w
 beforeEach(() => { vi.clearAllMocks(); firmaValida = true; interruptor = 'encendido'; });
 
 describe('POST /api/cron/wa-pendientes/cola', () => {
+  it('A37-S09-09: la firma se verifica atada a la URL destino de ESTE endpoint', async () => {
+    verifyArgs.length = 0;
+    await POST(new Request('https://app.likida.ai/api/cron/wa-pendientes/cola', {
+      method: 'POST', headers: { 'upstash-signature': 'firma' }, body: JSON.stringify({ vuelta: 1, cadenaId: '3f2b8c1e-5d4a-4b6c-8e7f-1a2b3c4d5e6f' }),
+    }) as never);
+    expect(verifyArgs).toHaveLength(1);
+    expect(verifyArgs[0]).toMatchObject({ url: `${appUrl()}/api/cron/wa-pendientes/cola` });
+  });
+
   it('un body chunked excesivo se corta antes de verificar la firma o drenar', async () => {
     let pedidos = 0;
     const body = new ReadableStream<Uint8Array>({
