@@ -376,6 +376,15 @@ describe('avisos a la oficina (configurables)', () => {
     expect(m.oficina).toHaveLength(2);
   });
 
+  it('A37-S34-10: si un efecto posterior al registro lanza, el hito queda registrado, se acusa éxito y la oficina SÍ recibe el aviso', async () => {
+    const m = nueva({ config: { avisarOficinaLlegada: true } });
+    m.deps.sincronizarLegado = async () => { throw new Error('timeout'); };
+    const r = await dice(m, 'ya llegué a cargar');
+    expect(estado(m, 'llegada_carga').estado).toBe('recibido');
+    expect(textos(r)).not.toContain('No pude anotarlo');
+    expect(m.oficina).toHaveLength(1);
+  });
+
   it('un duplicado no vuelve a avisar', async () => {
     const m = nueva({ config: { avisarOficinaLlegada: true } });
     await dice(m, 'ya llegué a cargar');

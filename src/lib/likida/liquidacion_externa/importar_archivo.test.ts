@@ -53,6 +53,24 @@ describe('importar liquidaciones desde el archivo de la flota', () => {
     expect(r.problemas.some((p) => p.clave === 'LQ-1' && /OTRO contenido/.test(p.motivo))).toBe(true);
   });
 
+  it('A37-S49-07: un error de base no llega textual a la pantalla (mensaje genérico, detalle al log)', async () => {
+    const x = deps();
+    x.d.recibir = async () => { throw new Error('duplicate key value violates unique constraint "liq_pkey" (host db.interno)'); };
+    const r = await importarLiquidacionesDeArchivo('t', 'liq.csv', bytes(CSV), x.d);
+    const textos = r.problemas.map((p) => p.motivo).join('\n');
+    expect(textos).not.toMatch(/duplicate key|liq_pkey|db\.interno/);
+    expect(textos).toMatch(/no se pudo guardar/);
+  });
+
+  it('A37-S49-07: con el presupuesto de tiempo agotado se detiene, avisa cuántas faltan y es seguro repetir', async () => {
+    const x = deps();
+    let t = 0;
+    const r = await importarLiquidacionesDeArchivo('t', 'liq.csv', bytes(CSV), x.d, { presupuestoMs: 1000, ahoraMs: () => (t += 600) });
+    expect(r.recibidas).toBeLessThan(2);
+    expect(r.error).toMatch(/tiempo/);
+    expect(r.error).toMatch(/Vuelve a subir/);
+  });
+
   it('archivo vacío o de tipo desconocido: error de lectura, nada se recibe', async () => {
     const x = deps();
     expect((await importarLiquidacionesDeArchivo('t', 'a.csv', bytes(''), x.d)).error).toMatch(/vacío/);

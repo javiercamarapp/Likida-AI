@@ -584,6 +584,12 @@ describe('escrituras', () => {
     );
   });
 
+  it('A37-S51-10: rechazar un POD o mover una incidencia de OTRA flota (0 filas tocadas) NO «tiene éxito»', async () => {
+    TOCAN_CERO = new Set(['pod', 'incidencia']);
+    await expect(rechazarPod('t-1', 'p-ajeno', null)).rejects.toThrow('rechazarPod: el POD no existe en esta flota');
+    await expect(cambiarEstadoIncidencia('t-1', 'i-ajena', 'resuelta')).rejects.toThrow('cambiarEstadoIncidencia: la incidencia no existe en esta flota');
+  });
+
   it('rechazar un POD NO borra el archivo — solo cambia el estado y anota', async () => {
     // Borrar la ruta dejaría la discusión con el chofer sin la prueba de lo
     // que sí mandó. Además, `pod_subido_tiene_archivo` (0047) solo exige

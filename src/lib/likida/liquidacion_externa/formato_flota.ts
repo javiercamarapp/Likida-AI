@@ -176,7 +176,7 @@ const SIN_RENGLON: Record<CampoRenglon, string[]> = {
   clave: ['clave', 'cve', 'codigo', 'clave concepto', 'cve concepto', 'codigo concepto', 'no concepto', 'num concepto', 'numero de concepto'],
   descripcion: ['concepto', 'descripcion', 'detalle', 'nombre concepto', 'nombre del concepto', 'descripcion concepto', 'rubro'],
   tipo: ['tipo', 'naturaleza', 'clase', 'tipo concepto', 'tipo de concepto'],
-  monto: ['importe', 'monto', 'valor', 'cantidad', 'importe mxn', 'monto mxn', 'total concepto'],
+  monto: ['importe', 'monto', 'importe mxn', 'monto mxn', 'total concepto'],
   montoFirmado: ['importe neto', 'monto neto', 'neto', 'monto firmado'],
   percepcion: ['percepcion', 'percepciones', 'ingresos', 'ingreso', 'abonos', 'abono', 'haber', 'a favor'],
   deduccion: ['deduccion', 'deducciones', 'descuentos', 'descuento', 'cargos', 'cargo', 'debe', 'en contra'],

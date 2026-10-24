@@ -366,10 +366,12 @@ export async function marcarPodPedido(tenantId: string, viajeId: string, operado
  * chofer mandó, y borrarlo dejaría la discusión sin prueba.
  */
 export async function rechazarPod(tenantId: string, podId: string, nota: string | null): Promise<void> {
-  const { error } = await acotada(supabaseAdmin().from('pod')
+  // A37-S51-10: `.select('id')` para saber si tocó una fila; un id de otra flota no «tiene éxito» sin tocar nada.
+  const { data, error } = await acotada(supabaseAdmin().from('pod')
     .update({ estado: 'rechazado', nota })
-    .eq('id', podId).eq('tenant_id', tenantId), 'rechazarPod');
+    .eq('id', podId).eq('tenant_id', tenantId).select('id'), 'rechazarPod');
   if (error) throw new Error(`rechazarPod: ${error.message}`);
+  if ((data ?? []).length === 0) throw new Error('rechazarPod: el POD no existe en esta flota');
 }
 
 // ── Tablero de operación ───────────────────────────────────────────────────
@@ -1348,8 +1350,9 @@ export async function crearIncidencia(tenantId: string, i: NuevaIncidencia): Pro
 export async function cambiarEstadoIncidencia(
   tenantId: string, incidenciaId: string, estado: string, ahora = new Date(),
 ): Promise<void> {
-  const { error } = await acotada(supabaseAdmin().from('incidencia')
+  const { data, error } = await acotada(supabaseAdmin().from('incidencia')
     .update({ estado, resuelta_en: estado === 'resuelta' ? ahora.toISOString() : null })
-    .eq('id', incidenciaId).eq('tenant_id', tenantId), 'cambiarEstadoIncidencia');
+    .eq('id', incidenciaId).eq('tenant_id', tenantId).select('id'), 'cambiarEstadoIncidencia');
   if (error) throw new Error(`cambiarEstadoIncidencia: ${error.message}`);
+  if ((data ?? []).length === 0) throw new Error('cambiarEstadoIncidencia: la incidencia no existe en esta flota');
 }

@@ -44,6 +44,25 @@ describe('transformaciones', () => {
     expect(aNumero('-45,5')).toEqual({ ok: -45.5 });
     expect(aNumero(12)).toEqual({ ok: 12 });
   });
+  it('A37-TRANSVERSAL-10: «1.234» sin formato declarado es ambiguo y se rechaza; declarado se lee exacto', () => {
+    expect('error' in aNumero('1.234')).toBe(true);
+    expect('error' in aNumero('1.500')).toBe(true);
+    expect(aNumero('1.234', '.')).toEqual({ ok: 1.234 });
+    expect(aNumero('1.234', ',')).toEqual({ ok: 1234 });
+    expect(aNumero('1.234,50', ',')).toEqual({ ok: 1234.5 });
+    expect(aNumero('1,234.50', '.')).toEqual({ ok: 1234.5 });
+    expect(aNumero('1,234', '.')).toEqual({ ok: 1234 });
+    expect(aNumero('189,50', ',')).toEqual({ ok: 189.5 });
+    // no ambiguos siguen igual
+    expect(aNumero('12.5')).toEqual({ ok: 12.5 });
+    expect(aNumero('0.123')).toEqual({ ok: 0.123 });
+  });
+  it('A37-TRANSVERSAL-10: «decimal» solo en numero y con valor «.» o «,»', () => {
+    const ok = base({ campos: { folio: 'id', operador: 'operador.nombre', neto: { fuente: 'neto', transformar: 'numero', decimal: ',' } } });
+    expect(validarMapeo(ok)).toEqual([]);
+    expect(validarMapeo(base({ campos: { folio: { fuente: 'id', decimal: ',' } } })).join(' ')).toMatch(/decimal/);
+    expect(validarMapeo(base({ campos: { folio: 'id', neto: { fuente: 'neto', transformar: 'numero', decimal: ';' as ',' } } })).join(' ')).toMatch(/decimal/);
+  });
   it('numero rechaza basura', () => {
     for (const v of ['abc', '', '1e5', '1,2,3', '12..5', null, {}]) expect('error' in aNumero(v)).toBe(true);
   });
