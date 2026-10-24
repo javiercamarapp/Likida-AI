@@ -163,6 +163,29 @@ describe('canal cliente_1a1: las puertas de enviarAlCliente se conservan', () =>
     expect(m.estado.cerrado?.error).not.toMatch(/boom/);
   });
 
+  it('A37-S62-03: si el cierre lanza DESPUÉS de enviar, se reintenta y nunca se marca fallido', async () => {
+    const m = montar();
+    m.deps.esperaCierreMs = 0;
+    const real = m.deps.cerrar;
+    let n = 0;
+    m.deps.cerrar = vi.fn(async (...a: Parameters<typeof real>) => { if (++n < 3) throw new Error('blip'); return real(...a); });
+    const r = await entregarAviso(aviso(), m.deps);
+    expect(r).toMatchObject({ estado: 'enviado' });
+    expect(m.enviadas).toHaveLength(1);
+    expect(m.estado.cerrado?.estado).toBe('enviado');
+  });
+
+  it('A37-S62-03: si el cierre sigue fallando, no se cierra como «fallido» ni se reenvía en la misma pasada', async () => {
+    const m = montar();
+    m.deps.esperaCierreMs = 0;
+    m.deps.cerrar = vi.fn(async () => { throw new Error('blip'); });
+    const r = await entregarAviso(aviso(), m.deps);
+    expect(r).toMatchObject({ estado: 'arriendo_perdido' });
+    expect(m.enviadas).toHaveLength(1);
+    expect(m.deps.cerrar).toHaveBeenCalledTimes(3);
+    expect(m.deps.cerrar).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), 'fallido', expect.anything());
+  });
+
   it('un aviso de OTRA flota lanza (nunca se entrega)', async () => {
     const m = montar();
     await expect(entregarAviso(aviso({ tenantId: T2 }), m.deps)).rejects.toThrow(/otra flota/);

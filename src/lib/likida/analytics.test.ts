@@ -119,19 +119,24 @@ describe('la base caída LANZA, no devuelve ceros', () => {
     await expect(detectarAnomalias(TENANT)).rejects.toThrow(/otra forma/);
   });
 
+  it('A37-S12-09: un id que no es UUID da null sin tocar la base (404, no un 22P02)', async () => {
+    expect(await getLiquidacionDetalle('algo-viejo', TENANT)).toBeNull();
+    expect(await getLiquidacionDetalle('', TENANT)).toBeNull();
+  });
+
   it('getLiquidacionDetalle lanza en vez de responder notFound()', async () => {
     // El detalle devolvía null ante error y la página respondía notFound():
     // "Esta página no existe" sobre una liquidación que SÍ existe.
     respuestas.set('liquidacion', { data: null, error: ERROR_RED });
-    await expect(getLiquidacionDetalle('liq-1', TENANT)).rejects.toThrow(/fetch failed/);
+    await expect(getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT)).rejects.toThrow(/fetch failed/);
   });
 
   it('un fallo al leer los comprobantes NO deja una tabla vacía bajo un total lleno', async () => {
     // Con la reconstrucción caída (el default del beforeEach), los renglones
     // salen de `gasto`; si ESA lectura también falla, hay que lanzar.
-    respuestas.set('liquidacion', { data: { id: 'liq-1', viaje_id: 'v1', estatus: 'cuadrada', total_comprobado: 9400, created_at: '2026-07-31T02:00:00Z' }, error: null });
+    respuestas.set('liquidacion', { data: { id: '00000000-0000-4000-8000-0000000000a1', viaje_id: 'v1', estatus: 'cuadrada', total_comprobado: 9400, created_at: '2026-07-31T02:00:00Z' }, error: null });
     respuestas.set('gasto', { data: null, error: ERROR_RED });
-    await expect(getLiquidacionDetalle('liq-1', TENANT)).rejects.toThrow(/fetch failed/);
+    await expect(getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT)).rejects.toThrow(/fetch failed/);
   });
 });
 
@@ -165,7 +170,7 @@ describe('los renglones del panel son los mismos que los del PDF', () => {
 
   beforeEach(() => {
     respuestas.set('liquidacion', {
-      data: { id: 'liq-1', viaje_id: 'v1', estatus: 'con_diferencias', total_comprobado: 9400, total_anticipo: 10000, diferencia: 600, created_at: '2026-07-31T02:00:00Z' },
+      data: { id: '00000000-0000-4000-8000-0000000000a1', viaje_id: 'v1', estatus: 'con_diferencias', total_comprobado: 9400, total_anticipo: 10000, diferencia: 600, created_at: '2026-07-31T02:00:00Z' },
       error: null,
     });
     // Si el panel volviera a leer `gasto` directo, pintaría las CUATRO filas.
@@ -177,7 +182,7 @@ describe('los renglones del panel son los mismos que los del PDF', () => {
   });
 
   it('A2: reconstruye con la fecha de cierre de la liquidación (la regla de tarjeta ajena no es retroactiva)', async () => {
-    await getLiquidacionDetalle('liq-1', TENANT);
+    await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT);
     expect(cuadrarDesdeDB.mock.calls[0][3]).toEqual({ cerradaEn: '2026-07-31T02:00:00Z' });
   });
 
@@ -192,7 +197,7 @@ describe('los renglones del panel son los mismos que los del PDF', () => {
   });
 
   it('la suma de los renglones es EXACTAMENTE el total comprobado', async () => {
-    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    const d = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT);
     const suma = d!.gastos.reduce((s, g) => s + g.monto, 0);
     expect(suma).toBe(d!.totalComprobado);
     expect(suma).toBe(9400);          // y no 10,800
@@ -212,16 +217,16 @@ describe('los renglones del panel son los mismos que los del PDF', () => {
       ],
     };
     cuadrarDesdeDB.mockResolvedValue(desordenado);
-    const primera = await getLiquidacionDetalle('liq-1', TENANT);
+    const primera = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT);
     // Segunda lectura, con las filas devueltas al revés: la tabla no se mueve.
     cuadrarDesdeDB.mockResolvedValue({ ...desordenado, gastos: [...desordenado.gastos].reverse() });
-    const segunda = await getLiquidacionDetalle('liq-1', TENANT);
+    const segunda = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT);
     expect(primera!.gastos.map((g) => g.folio)).toEqual(['D-1', 'D-2', 'CA-4471']);
     expect(segunda!.gastos.map((g) => g.folio)).toEqual(primera!.gastos.map((g) => g.folio));
   });
 
   it('el duplicado no se pinta como un comprobante normal, y se dice cuántos faltan', async () => {
-    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    const d = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT);
     expect(d!.gastos).toHaveLength(3);
     expect(d!.comprobantesExcluidos).toBe(1);
     expect(d!.comprobantesCuadran).toBe(true);
@@ -229,7 +234,7 @@ describe('los renglones del panel son los mismos que los del PDF', () => {
 
   it('los montos ≤ 0 tampoco entran: el motor no los cuenta y el papel tampoco', async () => {
     respuestas.set('liquidacion', {
-      data: { id: 'liq-1', viaje_id: 'v1', estatus: 'cuadrada', total_comprobado: 4200, total_anticipo: 4200, diferencia: 0, created_at: '2026-07-31T02:00:00Z' },
+      data: { id: '00000000-0000-4000-8000-0000000000a1', viaje_id: 'v1', estatus: 'cuadrada', total_comprobado: 4200, total_anticipo: 4200, diferencia: 0, created_at: '2026-07-31T02:00:00Z' },
       error: null,
     });
     cuadrarDesdeDB.mockResolvedValue({
@@ -238,7 +243,7 @@ describe('los renglones del panel son los mismos que los del PDF', () => {
       gastos: [{ id: 'g1', concepto: 'diesel', monto: 4200 }, { id: 'g9', concepto: 'otro', monto: 0 }],
       diferencias: [],
     });
-    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    const d = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT);
     expect(d!.gastos.map((g) => g.monto)).toEqual([4200]);
     expect(d!.comprobantesExcluidos).toBe(1);
   });
@@ -252,7 +257,7 @@ describe('los renglones del panel son los mismos que los del PDF', () => {
       totalComprobado: 0, totalDeducible: 0, totalNoDeducible: 0, totalPorConfirmar: 0,
       gastos: [], diferencias: [],
     });
-    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    const d = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT);
     expect(d!.totalComprobado).toBe(9400);
     expect(d!.comprobantesCuadran).toBe(false);   // no se pinta el pie
     expect(d!.deducibilidad).toBeNull();          // ni el desglose
@@ -260,7 +265,7 @@ describe('los renglones del panel son los mismos que los del PDF', () => {
 
   it('un centavo de diferencia por redondeo NO tira la reconstrucción', async () => {
     cuadrarDesdeDB.mockResolvedValue({ ...LIQ_RECONSTRUIDA, totalComprobado: 9400.01 });
-    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    const d = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT);
     expect(d!.comprobantesCuadran).toBe(true);
   });
 
@@ -268,7 +273,7 @@ describe('los renglones del panel son los mismos que los del PDF', () => {
     // El respaldo no puede mentir: si la tabla puede no cuadrar, la pantalla lo
     // dice en vez de dejar que el contralor lo descubra con el dedo.
     cuadrarDesdeDB.mockRejectedValue(new Error('viaje no encontrado'));
-    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    const d = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT);
     expect(d!.gastos).toHaveLength(4);
     expect(d!.comprobantesCuadran).toBe(false);
     expect(d!.comprobantesExcluidos).toBe(0);
@@ -293,7 +298,7 @@ describe('el cero real sigue siendo cero — no todo error', () => {
 describe('el detalle lleva lo que el panel necesita para no contradecir al PDF', () => {
   beforeEach(() => {
     respuestas.set('liquidacion', {
-      data: { id: 'liq-1', viaje_id: 'v1', estatus: 'cuadrada', total_comprobado: 1240, total_anticipo: 1240, diferencia: 0, created_at: '2026-07-31T02:00:00Z' },
+      data: { id: '00000000-0000-4000-8000-0000000000a1', viaje_id: 'v1', estatus: 'cuadrada', total_comprobado: 1240, total_anticipo: 1240, diferencia: 0, created_at: '2026-07-31T02:00:00Z' },
       error: null,
     });
     respuestas.set('gasto', {
@@ -306,7 +311,7 @@ describe('el detalle lleva lo que el panel necesita para no contradecir al PDF',
     // El PDF imprime `etiquetaConcepto(concepto, ocrExtra)` → "Combustible
     // Magna"; el panel imprimía "Diésel" del mismo comprobante porque el select
     // pedía `concepto, monto, folio` y nada más (auditoría 5, arquitectura, ALTO 1).
-    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    const d = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT);
     expect(d?.gastos[0].ocrExtra).toMatchObject({ producto: 'MAGNA' });
   });
 
@@ -319,34 +324,34 @@ describe('el detalle lleva lo que el panel necesita para no contradecir al PDF',
       gastos: [{ id: 'g1', concepto: 'diesel', monto: 1240, folio: 'A-1', ocrExtra: { producto: 'MAGNA' } }],
       diferencias: [],
     });
-    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    const d = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT);
     expect(d?.deducibilidad).toMatchObject({ totalDeducible: 1240, totalNoDeducible: 0, totalPorConfirmar: 0 });
   });
 
   it('la fecha NO se recorta a UTC: viaja cruda y se formatea al pintarla', async () => {
     // `.slice(0, 10)` daba "2026-08-01" para una liquidación cerrada el 31 de
     // julio a las 20:00 hora de México (auditoría 5, frontend, MEDIO 3).
-    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    const d = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT);
     expect(d?.creadoEn).toBe('2026-07-31T02:00:00Z');
   });
 
   it('trae el chofer asignado hoy — lo que "Reasignar chofer" necesita para saber de dónde parte', async () => {
     respuestas.set('liquidacion', {
       data: {
-        id: 'liq-1', viaje_id: 'v1', estatus: 'cuadrada', total_comprobado: 1240, total_anticipo: 1240, diferencia: 0,
+        id: '00000000-0000-4000-8000-0000000000a1', viaje_id: 'v1', estatus: 'cuadrada', total_comprobado: 1240, total_anticipo: 1240, diferencia: 0,
         created_at: '2026-07-31T02:00:00Z',
         viaje: { folio: 'VJ-2026-0900', operador_id: 'o-9', operador: { nombre: 'Juan Pérez' } },
       },
       error: null,
     });
-    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    const d = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT);
     expect(d?.viajeId).toBe('v1');
     expect(d?.operadorId).toBe('o-9');
     expect(d?.operadorNombre).toBe('Juan Pérez');
   });
 
   it('sin chofer asignado, operadorNombre se lee como "—" en vez de reventar', async () => {
-    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    const d = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT);
     expect(d?.operadorId).toBe('');
     expect(d?.operadorNombre).toBe('—');
   });
@@ -355,7 +360,7 @@ describe('el detalle lleva lo que el panel necesita para no contradecir al PDF',
     // La deducibilidad es un extra: que no se pueda reconstruir no puede tirar
     // la pantalla que el contralor sí puede leer.
     cuadrarDesdeDB.mockRejectedValue(new Error('viaje no encontrado'));
-    const d = await getLiquidacionDetalle('liq-1', TENANT);
+    const d = await getLiquidacionDetalle('00000000-0000-4000-8000-0000000000a1', TENANT);
     expect(d?.deducibilidad).toBeNull();
     expect(d?.totalComprobado).toBe(1240);
   });

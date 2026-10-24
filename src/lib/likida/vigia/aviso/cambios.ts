@@ -360,7 +360,10 @@ export async function procesarCambios(tenantId: string, ahora: Date, deps: DepsC
       200);
 
     const res = await deps.repo.insertarAviso(tenantId, {
-      filaId, clienteId: resuelto.clienteId, version: siguienteVersion, huella: c.huella, estado, canal: config.canalDefault,
+      // A37-S62-02: la huella incluye la versión. Con solo el texto, volver a un valor ya avisado («U1 → U2» por segunda vez)
+      // chocaba con la huella de una versión anterior y se perdía como «duplicado». Dos pasadas simultáneas de la MISMA versión
+      // siguen chocando (mismo texto, misma versión): la idempotencia se conserva.
+      filaId, clienteId: resuelto.clienteId, version: siguienteVersion, huella: siguienteVersion > 1 ? sha(`${c.huella}|v${siguienteVersion}`) : c.huella, estado, canal: config.canalDefault,
       texto: c.texto,
       datos: {
         via: 'proxy', tipo: 'actualizacion', baseVersion: baseEnviada?.version ?? null, seccion: fila.tipo, cita: fila.citaEn,

@@ -8,7 +8,7 @@ import type { HitoFila } from './tipos';
 import { debeReintentarseValidacion } from './validacion';
 import { COLUMNAS_POLIGONO, conPoligonoOCirculo, geometriaDeFila } from './geometria_datos';
 import type { MuestraGps, SitioGps, SitiosViaje, UnidadDeViaje } from './ciclo_gps';
-import { normalizarNombre, type CandidatoSitio, type LadoViaje, type SitioCatalogo, type SitioEquivalencia } from './sitio_derivado';
+import { VENTANA_LECTURA_SITIO_DERIVADO, normalizarNombre, repartirCandidatosPorFlota, type CandidatoSitio, type LadoViaje, type SitioCatalogo, type SitioEquivalencia } from './sitio_derivado';
 import { faltaEsquema, filaAEpisodio } from './repo';
 import type { EstadoEpisodios } from './senal_vida';
 import { agruparEmergencias, filtrarViajesAvisables, HORAS_EMERGENCIA_VIGENTE, TIPOS_EMERGENCIA, type EmergenciasPorFlota, type FilaEmergencia } from './seguridad_chofer';
@@ -388,9 +388,11 @@ export async function leerCandidatosSitioDerivado(limite: number): Promise<Candi
   const res = await acotada(supabaseAdmin().from('viaje')
     .select('id, tenant_id, origen, destino, cliente_id, origen_geocerca_id, destino_geocerca_id')
     .eq('estatus', 'abierto').not('aceptado_en', 'is', null).or('origen_geocerca_id.is.null,destino_geocerca_id.is.null')
-    .order('aceptado_en', { ascending: false }).order('id').limit(limite), 'conductor.sitio_derivado_viajes');
-  const viajes = (exigir(res as never, 'conductor.sitio_derivado_viajes') ?? []) as unknown as Fila[];
-  if (viajes.length === 0) return [];
+    .order('aceptado_en', { ascending: false }).order('id').limit(Math.max(limite, VENTANA_LECTURA_SITIO_DERIVADO)), 'conductor.sitio_derivado_viajes');
+  const leidos = (exigir(res as never, 'conductor.sitio_derivado_viajes') ?? []) as unknown as Fila[];
+  if (leidos.length === 0) return [];
+  // A37-S37-02: el tope se REPARTE entre flotas (rota cada 5 min) en vez de llenarse con la flota que tiene más viajes sin resolver.
+  const viajes = repartirCandidatosPorFlota(leidos.map((f) => ({ tenantId: String(f.tenant_id), f })), limite, Math.floor(Date.now() / VENTANA_ROTACION_MS)).map((x) => x.f);
 
   const derivados = new Map<string, Set<LadoViaje>>();
   for (const ids of trozos(viajes.map((v) => String(v.id)), 150)) {

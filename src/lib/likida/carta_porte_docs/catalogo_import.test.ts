@@ -72,7 +72,7 @@ describe('plantillas y lector de CSV', () => {
     expect(leerCsv(new Uint8Array([0x61, 0x2c, 0xe9, 0x0a]))).toMatchObject({ ok: false, mensaje: expect.stringContaining('UTF-8') });
     expect(leerCsv(new Uint8Array())).toMatchObject({ ok: false });
     expect(leerCsv(enc('a,b\n"abierta,1'))).toMatchObject({ ok: false, mensaje: expect.stringContaining('comillas') });
-    expect(leerCsv(new Uint8Array(TOPE_BYTES_IMPORTACION + 1).fill(0x61))).toMatchObject({ ok: false, mensaje: expect.stringContaining('5 MB') });
+    expect(leerCsv(new Uint8Array(TOPE_BYTES_IMPORTACION + 1).fill(0x61))).toMatchObject({ ok: false, mensaje: expect.stringContaining('4 MB') });
     const muchas = `a\n${'x\n'.repeat(TOPE_FILAS_IMPORTACION + 1)}`;
     expect(leerCsv(enc(muchas))).toMatchObject({ ok: false, mensaje: expect.stringContaining('20,000') });
     expect(leerCsv(enc(`a\n${'x\n'.repeat(TOPE_FILAS_IMPORTACION)}`))).toMatchObject({ ok: true });

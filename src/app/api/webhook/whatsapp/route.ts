@@ -17,7 +17,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { avisadosDeApagado, VENTANA_AVISO_APAGADO_MS } from './avisos_apagado';
 import { medirRuta } from '@/lib/observability/latencia';
 import {
-  guardarEventosPendientes, pendientesYaConocidos, reclamarPendiente,
+  guardarEventosPendientes, pendientesYaConocidos, reclamarPendiente, pendienteYaSellado,
   marcarPendienteProcesado, anotarFalloPendiente, devolverIntentoPendiente,
   iniciarRenovacionLease,
 } from '@/lib/likida/wa_pendientes';
@@ -402,7 +402,11 @@ async function manejarPOST(req: NextRequest) {
             const claim = await reclamarPendiente(f.id, 0, leaseOwner);
             // Si otra invocación tiene el mensaje anterior, esta cadena se
             // detiene: avanzar al siguiente rompería el orden por chofer.
-            if (!claim) break;
+            if (!claim) {
+              // A37-S12-07: «ya procesada» (p. ej. en la reentrega de Meta tras un 429) NO detiene la cadena; «la lleva otra invocación» sí.
+              if (await pendienteYaSellado(f.id)) continue;
+              break;
+            }
             const detenerRenovacion = claim.leaseToken && claim.leaseOwner
               ? iniciarRenovacionLease(claim.id, claim.leaseToken, claim.leaseOwner)
               : () => {};
@@ -641,6 +645,9 @@ interface WaWebhook {
  * quedó guardado. Best-effort puro: si Meta no lo acepta, el mensaje del
  * chofer sigue en el inbox igual — esto es información, no el dinero.
  */
+/** Tras un envío fallido del aviso de mantenimiento, cuánto se espera para intentarlo otra vez con ese número. */
+const COOLDOWN_REINTENTO_AVISO_MS = 60_000;
+
 async function avisarMantenimiento(mensajes: InboundMessage[]): Promise<void> {
   const ahora = Date.now();
   // Se limpia lo viejo aquí y no con un timer: este Map vive lo que viva la
@@ -651,10 +658,15 @@ async function avisarMantenimiento(mensajes: InboundMessage[]): Promise<void> {
   const numeros = [...new Set(mensajes.map((m) => m.from).filter(Boolean))];
   for (const numero of numeros) {
     if (avisadosDeApagado.has(numero)) continue;
+    // Para evitar dos envíos simultáneos del mismo POST se reserva el número ya, pero A37-S12-08: si el envío FALLA, la marca se
+    // acorta a un enfriamiento de 1 min (antes quedaba 30 min sin que el chofer se enterara de nada).
     avisadosDeApagado.set(numero, ahora);
     try {
+      // DECISIÓN (A37-S12-08): el texto es fijo, sin datos de nadie, y contesta a quien escribió (ventana de 24 h abierta); no se
+      // filtra por «operador activo» porque justo en el apagado la base puede estar inestable y callar al chofer es peor.
       await sendText(numero, 'Estamos en *mantenimiento* ahorita 🛠️. Lo que me mandes queda guardado y lo proceso en cuanto vuelva — no lo mandes otra vez. Si es una emergencia, márcale directo a tu oficina. 🙏');
     } catch (e) {
+      avisadosDeApagado.set(numero, ahora - VENTANA_AVISO_APAGADO_MS + COOLDOWN_REINTENTO_AVISO_MS);
       logger.warn('wa.aviso_apagado_falló', { err: e instanceof Error ? e.message : String(e) });
     }
   }

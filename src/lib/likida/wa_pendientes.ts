@@ -217,6 +217,20 @@ export async function reclamarPendiente(
   } : null;
 }
 
+/**
+ * A37-S12-07: ¿este evento ya está SELLADO (procesado o abandonado)? `reclamarPendiente` devuelve `null` tanto si lo tiene otra
+ * invocación como si ya terminó; la cadena de un chofer solo debe detenerse en el primer caso. Ante un error de lectura devuelve
+ * `false` (se detiene, como antes: nunca se salta un mensaje que otra invocación pudiera estar procesando).
+ */
+export async function pendienteYaSellado(id: string): Promise<boolean> {
+  const { data, error } = await acotada(supabaseAdmin().from('wa_evento_pendiente').select('procesado_en').eq('id', id).maybeSingle(), 'pendienteYaSellado');
+  if (error) {
+    logger.warn('wa.pendiente_sellado_lectura_fallo', { id, err: error.message });
+    return false;
+  }
+  return typeof (data as { procesado_en?: unknown } | null)?.procesado_en === 'string';
+}
+
 /** Sella el evento como procesado. Best-effort CON GRITO: el mensaje ya se
  *  procesó — si el sello falla, el reintento del cron rebotará aguas abajo
  *  en claimMessage (0002), no duplicará gastos. */

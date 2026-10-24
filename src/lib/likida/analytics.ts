@@ -1421,6 +1421,8 @@ export interface LiquidacionDetalle {
 
 /** Detalle de una liquidación (read-only) — para la vista de proyector. */
 export async function getLiquidacionDetalle(id: string, tenantId: string): Promise<LiquidacionDetalle | null> {
+  // A37-S12-09: un id que no es UUID (URL vieja o mal escrita bajo /dashboard/<algo>) es «no existe», no un 22P02 que cae en error.tsx.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
   const admin = supabaseAdmin();
   const res = await acotada(
     admin

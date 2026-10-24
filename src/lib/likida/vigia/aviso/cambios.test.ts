@@ -227,6 +227,23 @@ describe('procesarCambios · cambio de lo que el cliente ve', () => {
     expect(m.cierres).toHaveLength(0);
   });
 
+  it('A37-S62-02: volver a un valor ya avisado (U-101 → U-205 → U-101 → U-205) genera cada versión; ninguna se pierde como duplicado', async () => {
+    const m = mundo();
+    const { f } = await avisada(m);
+    for (const [i, unidad] of ['U-205', 'U-101', 'U-205'].entries()) {
+      m.avanzar(30 * MIN);
+      m.cambiar(f, 'unidad', unidad);
+      m.avanzar(11 * MIN);
+      const r = await m.pasar();
+      expect(r.duplicados, `paso ${i + 2}`).toBe(0);
+      expect(r.reenvios, `paso ${i + 2}`).toBe(1);
+      m.marcarEnviado(m.avisos.find((a) => a.version === i + 2)!);
+    }
+    const v4 = m.avisos.find((a) => a.version === 4)!;
+    expect(v4.texto).toContain('cambió la unidad: U-101 → U-205');
+    expect(new Set(m.avisos.map((a) => a.huella)).size).toBe(4);
+  });
+
   it('cambio de operador (viene del catálogo, no del programa) también reenvía', async () => {
     const m = mundo();
     await avisada(m);
