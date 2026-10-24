@@ -59,9 +59,9 @@ async function autenticar(cfg: ConfigSw): Promise<string | { error: ResultadoTim
     });
   } catch (e) {
     // Sin respuesta del PAC ni para autenticar: ambiguo NO — autenticar no
-    // timbra nada, así que es 'red' pero seguro de reintentar; la clase la
-    // decide el llamador del timbre, aquí solo se reporta.
-    return { error: { ok: false, clase: 'red', codigo: null, mensaje: `Sin respuesta del PAC al autenticar: ${e instanceof Error ? e.message : String(e)}` } };
+    // timbra nada y el XML jamás se envió (A37-L-04). Clase propia 'auth_red':
+    // segura de reintentar, a diferencia de 'red' (timbre ambiguo).
+    return { error: { ok: false, clase: 'auth_red', codigo: null, mensaje: `Sin respuesta del PAC al autenticar: ${e instanceof Error ? e.message : String(e)}` } };
   }
   let cuerpo: unknown = null;
   try { cuerpo = await res.json(); } catch { /* cuerpo no-JSON: se trata abajo */ }
@@ -80,6 +80,12 @@ async function autenticar(cfg: ConfigSw): Promise<string | { error: ResultadoTim
   }
   tokenCache = { token, desde: Date.now(), llave };
   return token;
+}
+
+/** La cancelación conserva su trato conservador: sin respuesta al autenticar sigue
+ *  siendo 'red' (la fila queda 'solicitada'); 'auth_red' es solo del timbre. */
+function errorCancelacion(e: ResultadoTimbre & { ok: false }): ResultadoCancelacion & { ok: false } {
+  return { ...e, clase: e.clase === 'auth_red' ? 'red' : e.clase };
 }
 
 interface RespuestaIssue {
@@ -216,7 +222,7 @@ export function crearProveedorSw(cfg: ConfigSw): ProveedorPac {
       }
 
       const auth = await autenticar(cfg);
-      if (typeof auth !== 'string') return auth.error;
+      if (typeof auth !== 'string') return errorCancelacion(auth.error);
 
       const ruta = [s.rfcEmisor, s.uuid, s.motivo, ...(s.folioSustitucion ? [s.folioSustitucion] : [])]
         .map(encodeURIComponent).join('/');
@@ -232,7 +238,7 @@ export function crearProveedorSw(cfg: ConfigSw): ProveedorPac {
         if (res.status === 401 && tokenCache !== null) {
           tokenCache = null;
           const fresco = await autenticar(cfg);
-          if (typeof fresco !== 'string') return fresco.error;
+          if (typeof fresco !== 'string') return errorCancelacion(fresco.error);
           res = await llamar(fresco);
         }
       } catch (e) {

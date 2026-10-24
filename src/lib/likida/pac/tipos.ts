@@ -37,7 +37,9 @@ export interface TimbreOk {
 
 export interface TimbreError {
   ok: false;
-  clase: 'rechazado' | 'red' | 'auth' | 'no_configurado';
+  /** `auth_red` (A37-L-04): la red falló al AUTENTICAR, antes de enviar el XML.
+   *  Nada se timbró: es seguro reintentar y la reserva se suelta (a diferencia de `red`). */
+  clase: 'rechazado' | 'red' | 'auth_red' | 'auth' | 'no_configurado';
   /** Código del PAC si lo dio (p. ej. "CFDI40147"). */
   codigo: string | null;
   /** El mensaje del PAC TAL CUAL — jamás resumido ni traducido. */

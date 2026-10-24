@@ -94,6 +94,15 @@ describe('crearProveedorSw — timbrar', () => {
     }
   });
 
+  it('A37-L-04: fallo de red AL AUTENTICAR = clase auth_red (nunca red: el XML no salió) y NO se llama a /issue', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('getaddrinfo ENOTFOUND'));
+    const r = await crearProveedorSw(CFG).timbrar('<cfdi/>');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.clase).toBe('auth_red');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('timeout del timbre = clase red, con la advertencia de verificar antes de reintentar', async () => {
     fetchMock.mockResolvedValueOnce(respAuth()).mockRejectedValueOnce(new Error('The operation was aborted due to timeout'));
     const r = await crearProveedorSw(CFG).timbrar('<cfdi/>');
@@ -199,6 +208,12 @@ describe('SW · cancelar por UUID', () => {
     const r = await crearProveedorSw(CFG).cancelar(SOL);
     expect(r).toMatchObject({ ok: false, clase: 'rechazado', codigo: 'CACFDI33' });
     if (!r.ok) expect(r.mensaje).toContain('CA305 - Certificado Inválido.');
+  });
+
+  it('A37-L-04: la cancelación sigue conservadora — sin red al autenticar sigue siendo red', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('timeout'));
+    const r = await crearProveedorSw(CFG).cancelar(SOL);
+    expect(r).toMatchObject({ ok: false, clase: 'red' });
   });
 
   it('timeout = clase red con la advertencia (no se da por cancelado)', async () => {
