@@ -212,6 +212,9 @@ export function detencionElegible(e: EntradaDetencion): { elegible: boolean; raz
   if (ventana.some((m) => haversineM(m, ultima) > metros)) return no('en_movimiento');
   if (ventana.length < requisitoDeMuestras(poleoMin, avisoMin).muestras) return no('pocas_muestras');
   // Cobertura: la primera muestra debe estar a ≥ `detenidoAvisoMin` de ahora, con la holgura de un poleo (la siguiente aún no llegó).
-  if (ahoraMs - primera.medidaEn.getTime() < (avisoMin - poleoMin) * 60_000) return no('lapso_corto');
+  // A37-S34-05: la holgura es UN poleo pero nunca más de la mitad del aviso; antes, con poleo ≥ aviso (el default conservador lo es) la resta daba ≤ 0 y
+  // la cobertura se anulaba: dos muestras de hace 2 min bastaban para «detenida ≥ 15 min».
+  const holguraMin = Math.min(poleoMin, avisoMin / 2);
+  if (ahoraMs - primera.medidaEn.getTime() < (avisoMin - holguraMin) * 60_000) return no('lapso_corto');
   return { elegible: true, razon: 'detenida' };
 }
