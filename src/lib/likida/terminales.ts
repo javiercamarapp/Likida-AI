@@ -450,26 +450,27 @@ export async function asignarSinPatio(
 export async function terminalDeJornada(
   tenantId: string,
   ref: { jornadaId: string } | { asientoId: string },
-): Promise<{ encontrado: boolean; terminalId: string | null }> {
+): Promise<{ encontrado: boolean; terminalId: string | null; jornadaId: string | null }> {
   let jornadaId: string | null = 'jornadaId' in ref ? ref.jornadaId : null;
   if ('asientoId' in ref) {
-    if (!esUuidValido(ref.asientoId)) return { encontrado: false, terminalId: null };
+    if (!esUuidValido(ref.asientoId)) return { encontrado: false, terminalId: null, jornadaId: null };
     const { data, error } = await acotada(
       supabaseAdmin().from('jornada_asiento').select('jornada_id').eq('id', ref.asientoId).eq('tenant_id', tenantId).maybeSingle(),
       'terminalDeJornada.asiento',
     );
     if (error) throw new Error(`terminalDeJornada: ${error.message}`);
     const j = (data as { jornada_id?: unknown } | null)?.jornada_id;
-    if (typeof j !== 'string') return { encontrado: false, terminalId: null };
+    if (typeof j !== 'string') return { encontrado: false, terminalId: null, jornadaId: null };
     jornadaId = j;
   }
-  if (!jornadaId || !esUuidValido(jornadaId)) return { encontrado: false, terminalId: null };
+  if (!jornadaId || !esUuidValido(jornadaId)) return { encontrado: false, terminalId: null, jornadaId: null };
   const { data: dia, error: errDia } = await acotada(
     supabaseAdmin().from('jornada_dia').select('operador_id').eq('id', jornadaId).eq('tenant_id', tenantId).maybeSingle(),
     'terminalDeJornada.dia',
   );
   if (errDia) throw new Error(`terminalDeJornada: ${errDia.message}`);
   const operadorId = (dia as { operador_id?: unknown } | null)?.operador_id;
-  if (typeof operadorId !== 'string') return { encontrado: false, terminalId: null };
-  return terminalDeRegistro('operador', tenantId, operadorId);
+  if (typeof operadorId !== 'string') return { encontrado: false, terminalId: null, jornadaId: null };
+  // A37-S19-05: la jornada REAL (la del asiento, leída de la base) para anotar la bitácora.
+  return { ...(await terminalDeRegistro('operador', tenantId, operadorId)), jornadaId };
 }

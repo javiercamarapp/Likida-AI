@@ -35,7 +35,8 @@ vi.mock('@/lib/likida/terminales', () => ({
   terminalDeJornada: async (_t: string, ref: { jornadaId?: string; asientoId?: string }) => {
     const mapa = ref.asientoId ? m.patioDeAsiento : m.patioDeJornada;
     const id = (ref.asientoId ?? ref.jornadaId) as string;
-    return id in mapa ? { encontrado: true, terminalId: mapa[id] } : { encontrado: false, terminalId: null };
+    const jornadaId = ref.asientoId ? (id === A_NORTE ? J_NORTE : id === A_SUR ? J_SUR : null) : id;
+    return id in mapa ? { encontrado: true, terminalId: mapa[id], jornadaId } : { encontrado: false, terminalId: null, jornadaId: null };
   },
   terminalesDeRegistros: async (_t: string, _tenant: string, ids: string[]) => new Map(ids.map((i) => [i, i === OP_NORTE ? NORTE : i === OP_SUR ? SUR : null])),
 }));
@@ -109,6 +110,13 @@ describe('anularMarca', () => {
     expect(await p.anularMarca({ ok: false }, fd({ asientoId: A_NORTE, motivo: MOTIVO, jornadaId: J_NORTE }))).toMatchObject({ ok: true });
     expect(m.anular).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't1', asientoId: A_NORTE, motivo: MOTIVO, usuarioId: 'u-jefe', usuarioEmail: 'jefe@flota.mx' }));
     expect(m.bitacora).toHaveBeenCalledWith(expect.objectContaining({ accion: 'jornada.marca_anulada', actor: { id: 'u-jefe', email: 'jefe@flota.mx' } }), expect.anything());
+  });
+
+  it('A37-S19-05: la bitácora cuelga de la jornada REAL del asiento, no del jornadaId que mande el formulario', async () => {
+    m.patioJefe = NORTE;
+    const p = await props();
+    await p.anularMarca({ ok: false }, fd({ asientoId: A_NORTE, motivo: MOTIVO, jornadaId: J_SUR }));
+    expect(m.bitacora).toHaveBeenCalledWith(expect.objectContaining({ entidad: 'jornada_dia', entidadId: J_NORTE }), expect.anything());
   });
 
   it('NO anula una marca de OTRO patio, aunque mande el id a mano: el patio sale de la base', async () => {

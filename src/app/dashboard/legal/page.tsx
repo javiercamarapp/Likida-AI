@@ -102,7 +102,13 @@ export default async function PaginaLegal({
     }, { id: s.userId });
     if (!r.ok) return { error: r.error };
     revalidatePath(RUTA);
-    return { ok: 'Datos guardados. El aviso de privacidad de tus choferes se actualiza solo y se les reenvía.' };
+    // A37-S19-07: no se promete un reenvío que no ocurrió (sin cambios) ni se calla que el aviso saldrá incompleto.
+    const ROTULO = { razonSocial: 'la razón social', domicilio: 'el domicilio', contactoPrivacidad: 'el contacto de privacidad' } as const;
+    const falta = (r.vacios ?? []).length > 0
+      ? ` Ojo: falta ${(r.vacios ?? []).map((c) => ROTULO[c]).join(', ')}; el aviso de privacidad saldrá sin ese dato (LFPDPPP art. 15).`
+      : '';
+    if (r.sinCambios) return { ok: `No hubo cambios: los datos ya eran esos, no se reenvió nada.${falta}` };
+    return { ok: `Datos guardados. El aviso de privacidad de tus choferes se actualiza solo y se les reenvía.${falta}` };
   }
 
   // Error DICHO: una base caída no se pinta como «no has aceptado nada».
