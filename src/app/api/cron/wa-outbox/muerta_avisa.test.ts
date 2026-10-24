@@ -201,3 +201,44 @@ describe('el outbox avisa cuando una salida MUERE, no en cualquier fallo', () =>
     vi.unstubAllGlobals();
   });
 });
+
+describe('A37-L-05 — lo VENCIDO en la cola se entierra y se avisa ANTES de reclamar', () => {
+  const rpcPorNombre = (vencidas: unknown, errVencer: { message: string; code?: string } | null = null) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (rpc as any).mockImplementation(async (nombre?: string) =>
+      nombre === 'vencer_wa_outbox' ? { data: vencidas, error: errVencer } : { data: 0, error: null });
+
+  it('hay vencidas: alerta con el conteo, y se reclama después (solo lo vigente)', async () => {
+    rpcPorNombre([{ id: 'v1', creada_en: '2026-10-17T10:00:00Z', vence_en: '2026-10-18T10:00:00Z' }, { id: 'v2', creada_en: '2026-10-18T09:00:00Z', vence_en: '2026-10-19T09:00:00Z' }]);
+    reclamarSalidasWhatsApp.mockResolvedValue([]);
+    await GET(peticion());
+    expect(alertarOperador).toHaveBeenCalledWith('cron.wa_outbox', expect.objectContaining({
+      codigo: 'salida_vencida', error: expect.stringContaining('2 mensaje(s)'),
+    }));
+    expect(reclamarSalidasWhatsApp).toHaveBeenCalled();
+  });
+
+  it('nada vencido: sin alerta de vencimiento', async () => {
+    rpcPorNombre([]);
+    reclamarSalidasWhatsApp.mockResolvedValue([]);
+    await GET(peticion());
+    expect(alertarOperador).not.toHaveBeenCalledWith('cron.wa_outbox', expect.objectContaining({ codigo: 'salida_vencida' }));
+  });
+
+  it('la migración 0902 aún no está (función inexistente): el cron drena como antes, sin alertar ni caerse', async () => {
+    rpcPorNombre(null, { message: 'function vencer_wa_outbox does not exist', code: '42883' });
+    reclamarSalidasWhatsApp.mockResolvedValue([]);
+    const r = await GET(peticion());
+    expect(r.status).toBe(200);
+    expect(reclamarSalidasWhatsApp).toHaveBeenCalled();
+    expect(alertarOperador).not.toHaveBeenCalled();
+  });
+
+  it('otro error al vencer no tumba el drenado (se avisa en el log y se reclama igual)', async () => {
+    rpcPorNombre(null, { message: 'timeout', code: '57014' });
+    reclamarSalidasWhatsApp.mockResolvedValue([]);
+    const r = await GET(peticion());
+    expect(r.status).toBe(200);
+    expect(reclamarSalidasWhatsApp).toHaveBeenCalled();
+  });
+});

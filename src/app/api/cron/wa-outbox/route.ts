@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { puertaCron, registrarLatido } from '@/lib/admin/salud';
 import { sanearPayloadWhatsApp } from '@/lib/meta/plantilla_payload';
-import { reclamarSalidasWhatsApp, finalizarSalidaWhatsApp, reconciliarReceiptsWhatsApp, purgarReceiptsWhatsApp } from '@/lib/likida/wa_outbox';
+import { reclamarSalidasWhatsApp, vencerSalidasWhatsApp, finalizarSalidaWhatsApp, reconciliarReceiptsWhatsApp, purgarReceiptsWhatsApp } from '@/lib/likida/wa_outbox';
 import { conPool } from '@/lib/likida/lotes';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { esReintentableMeta, esTokenMetaInvalido, sondearTokenWhatsApp, avisarTokenVencido } from '@/lib/meta/client';
-import { esTelefonoDemo, ERROR_TELEFONO_DEMO } from '@/lib/meta/telefono_demo';
+import { esTelefonoDemo, esDestinatarioBloqueado, ERROR_TELEFONO_DEMO, ERROR_TELEFONO_NO_ENVIABLE } from '@/lib/meta/telefono_demo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -140,14 +140,30 @@ export async function GET(req: Request) {
       fallosBackstop.push(`purga: ${error}`);
       logger.warn('wa.receipts.purga_fallo', { error });
     }
+    // A37-L-05: ANTES de reclamar, lo que ya venció (token vencido un fin de semana, etc.) se entierra y se
+    // avisa — nunca sale de golpe, días tarde, con instrucciones caducas. Su fallo no tumba el drenado.
+    try {
+      const vencidas = await vencerSalidasWhatsApp();
+      if (vencidas !== null && vencidas.length > 0) {
+        logger.warn('cron.wa_outbox.vencidas', { n: vencidas.length });
+        await alertarOperador('cron.wa_outbox', {
+          error: `${vencidas.length} mensaje(s) de WhatsApp vencieron en la cola sin enviarse (instrucciones caducas): se marcaron muertos y NO se enviarán. La más antigua se creó el ${vencidas.map((v) => v.creadaEn).sort()[0]}.`,
+          codigo: 'salida_vencida',
+        });
+      }
+    } catch (e) {
+      logger.warn('cron.wa_outbox.vencer_fallo', { error: e instanceof Error ? e.message : String(e) });
+    }
     const salidas = await reclamarSalidasWhatsApp();
     let enviadas = 0;
     let fallidas = 0;
     await conPool(salidas, 4, async (s) => {
       // El tenant demo nunca escribe a nadie: una salida con la marca de demo (28999…) muere aquí, sin llamar a Meta.
       // (No cuenta como `fallidas`: no es un fallo del canal, y volvería el latido «parcial» por algo esperado.)
-      if (esTelefonoDemo((s.payload as { to?: unknown } | null)?.to)) {
-        await finalizarYAvisarSiMurio(s, undefined, `terminal:${ERROR_TELEFONO_DEMO}`);
+      const destino = (s.payload as { to?: unknown } | null)?.to;
+      if (esDestinatarioBloqueado(destino)) {
+        // A37-L-02: demo, anonimizado por ARCO o sin forma de teléfono: terminal.
+        await finalizarYAvisarSiMurio(s, undefined, `terminal:${esTelefonoDemo(destino) ? ERROR_TELEFONO_DEMO : ERROR_TELEFONO_NO_ENVIABLE}`);
         return;
       }
       try {

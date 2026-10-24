@@ -552,4 +552,39 @@ describe('A37-S09-01 — las purgas complementarias que fallan ya no dejan el la
     expect(cuerpo.estado).toBe('parcial');
     expect(cuerpo.purgasConFallo).toEqual(expect.arrayContaining(['storage: la corrida lanzó', 'carta_porte_docs: la corrida lanzó', 'buzon_recepcion: no se pudo']));
   });
+  // A37-L-06 (lote legal-ia-01): cobertura de las demás purgas de datos personales; el estado es 'parcial' (mecanismo S09-01).
+  it('control: todo sano = latido ok y sin purgasConFallo', async () => {
+    const cuerpo = await (await GET(peticion('Bearer secreto-de-prueba'))).json();
+    expect(cuerpo.estado).toBe('ok');
+    expect(cuerpo.purgasConFallo).toEqual([]);
+  });
+  it('una purga de agentes (GPS/ventana) que devuelve ok:false: parcial y nombra la tabla', async () => {
+    purgaAgentes.mockResolvedValue([{ nombre: 'gps_posicion', ok: false, filas: null, parcial: false, error: 'timeout' }]);
+    const cuerpo = await (await GET(peticion('Bearer secreto-de-prueba'))).json();
+    expect(cuerpo.estado).toBe('parcial');
+    expect(String(cuerpo.purgasConFallo)).toContain('gps_posicion');
+  });
+  it('un ledger que falla: parcial', async () => {
+    purgaLedgers.mockResolvedValue([{ nombre: 'evento_seguridad', ok: false, filas: null, parcial: false, error: 'x' }]);
+    const cuerpo = await (await GET(peticion('Bearer secreto-de-prueba'))).json();
+    expect(cuerpo.estado).toBe('parcial');
+    expect(String(cuerpo.purgasConFallo)).toContain('evento_seguridad');
+  });
+  it('mcp_oauth y llm_presupuesto con error de RPC: parcial', async () => {
+    rpcMcpOauthRespuesta = { data: null, error: { message: 'boom', code: '57014' } };
+    const a = await (await GET(peticion('Bearer secreto-de-prueba'))).json();
+    expect(a.estado).toBe('parcial');
+    expect(String(a.purgasConFallo)).toContain('mcp_oauth');
+    rpcMcpOauthRespuesta = { data: { parcial: false }, error: null };
+    rpcLlmPresupuestoRespuesta = { data: null, error: { message: 'boom' } };
+    const b = await (await GET(peticion('Bearer secreto-de-prueba'))).json();
+    expect(String(b.purgasConFallo)).toContain('llm_presupuesto');
+    rpcLlmPresupuestoRespuesta = { data: { parcial: false }, error: null };
+  });
+  it('`fallos` que devuelve mantenimiento_de_datos también cuentan', async () => {
+    rpcRespuesta = { data: { ...(rpcRespuesta.data as object), fallos: ['gps_posicion: statement timeout'] }, error: null };
+    const cuerpo = await (await GET(peticion('Bearer secreto-de-prueba'))).json();
+    expect(cuerpo.estado).toBe('parcial');
+    expect(String(cuerpo.purgasConFallo)).toContain('gps_posicion');
+  });
 });

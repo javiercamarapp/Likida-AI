@@ -159,7 +159,11 @@ async function accionConciliar(_previo: ResultadoAccion, fd: FormData): Promise<
       const r = await timbrarFactura(id);
       nota = 'uuid' in r ? ` CFDI timbrado: ${r.uuid.slice(0, 8)}…` : ` ${r.pendiente}`;
     } catch (e) {
-      nota = ` El pago quedó registrado, pero el CFDI NO se timbró: ${mensajeParaPantalla(e, 'timbrar')}`;
+      // A37-L-03: timeout/5xx/respuesta ilegible del PAC = el CFDI PUDO crearse. Decir
+      // «NO se timbró» mandaba a timbrar a mano y emitía un segundo CFDI real.
+      nota = (e as { ambiguo?: boolean } | null)?.ambiguo === true
+        ? ` El pago quedó registrado, pero NO se sabe si el CFDI se emitió (el PAC no contestó). NO lo timbres a mano todavía: ${mensajeParaPantalla(e, 'timbrar')}`
+        : ` El pago quedó registrado, pero el CFDI NO se timbró: ${mensajeParaPantalla(e, 'timbrar')}`;
     }
 
     revalidatePath('/admin/costos-facturacion');

@@ -67,4 +67,11 @@ describe('resolverSolicitudArco — guardas (A36-R01-01)', () => {
     expect(d.updates).toHaveLength(0);
     expect(d.enviar).not.toHaveBeenCalled();
   });
+
+  it('A37-L-02: sin titular_ref NO se usa operador_id (un UUID) como teléfono', async () => {
+    d.solicitud = { titular_ref: null, operador_id: '3f9a1c07-d2b5-4e66-8a1b-0c7d2b54e660', tipo: 'acceso', estado: 'recibida', resuelta_en: null };
+    const r = await resolverSolicitudArco('t-1', 's-1', 'Entregamos tus datos');
+    expect(d.enviar).not.toHaveBeenCalled();
+    expect(r.enviada).toBe(false);
+  });
 });

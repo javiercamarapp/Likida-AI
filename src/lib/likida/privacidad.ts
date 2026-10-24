@@ -561,7 +561,7 @@ export function pideAtencionPrivacidad(texto: string): boolean {
  * le da entonces lo que sí se tiene —a quién reclamarle y dónde emplazarlo,
  * que es lo que el art. 15 fr. I persigue— y se le dice que la liga no existe.
  */
-export function respuestaPrivacidad(r: DatosResponsable): string {
+export function respuestaPrivacidad(r: DatosResponsable, registrada = true): string {
   const razonSocial = r.razonSocial?.trim();
   const domicilio = r.domicilio?.trim();
   const partes = [
@@ -590,6 +590,14 @@ export function respuestaPrivacidad(r: DatosResponsable): string {
     );
   }
 
+  if (!registrada) {
+    // A37-L-01: el registro falló. Afirmar «queda registrada» sería una constancia falsa.
+    partes.push(
+      ``,
+      `No alcancé a dejar registrada tu solicitud en este momento. Escríbeme *PRIVACIDAD* otra vez en unos minutos; mientras tanto avisé a quien administra el sistema. Tu liquidación sigue igual. 🙏`,
+    );
+    return partes.join('\n');
+  }
   partes.push(
     ``,
     // "Queda registrada" y no "ya le avisé": lo que ocurre es un registro que la

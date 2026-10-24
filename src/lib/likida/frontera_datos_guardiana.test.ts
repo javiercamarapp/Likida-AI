@@ -619,6 +619,8 @@ const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_336;
 // descargas de correo/entrante (`Array.from(`, A37-S09-04) y 2 más que mide el patrón en los repos del lote.
 // A37-S50-06 (+1): `avisarAlChofer` reclama `avisado_en` antes de enviar (UPDATE condicional) y lo devuelve si no sale: 2 `.from` donde había 1.
 // LOTE M-F-agentes-legal-ia-03 (+2): sdr.ts lee los seguimientos previos (A37-S28-03), investigador.ts lee el dossier previo (A37-S28-05), carta_porte_datos.ts pasa de 1 a 2 consultas de viajes (A37-S30-08), y repo.ts/entrega_repo.ts no cuentan. Medido: 2,286.
+// Auditoría 37, lote M-F-agentes-legal-ia-01 (+2, 2,284 → 2,286, medido con el barrido real): `wa_outbox.ts` (+1, `.rpc('vencer_wa_outbox')`, A37-L-05) y
+// `storage_borrado.ts` (+1, `storage.from(bucket).exists()` para distinguir «ya no existe» de «no se borró» antes de sellar, A37-L-05 legal).
 // Auditoría 37, lote agentes-legal-ia (medido con el barrido real): +2 llamadas (2,264 → 2,266). `candidatos_redactor.ts` suma 3 `.from(` (prospecto, cola_aprobacion, prospecto_contacto) y `runner.ts` pierde la suya (+2 netas); `sdr.ts` pasa de 3 a 3 (la lectura por prospecto se volvió lectura en lote). Todo por `acotada`.
 // LOTE A37 peajes-liquidación-graves (migración 0865): +5 llamadas (2,264 → 2,269), 0 archivos nuevos, medido con el barrido real. `jornada/repo.ts` +1:
 // `.rpc('asentar_declaracion_jornada')` (A37-S48-01; la 0865 sustituye la marca derivada bajo el lock del expediente; el INSERT anterior se conserva

@@ -38,6 +38,8 @@ export interface TimbreOk {
 
 export interface TimbreError {
   ok: false;
+  /** `auth` también cubre (A37-S51-10, A37-L-04) la red caída al AUTENTICAR, antes de enviar el XML: nada se
+   *  timbró, la reserva se suelta y es seguro reintentar (a diferencia de `red`). */
   clase: 'rechazado' | 'red' | 'auth' | 'no_configurado';
   /** Código del PAC si lo dio (p. ej. "CFDI40147"). */
   codigo: string | null;

@@ -192,6 +192,8 @@ export async function GET(req: Request) {
     let codigosParcial = true;
     let conversacionesErrorMantenimiento: string | null = null;
     let codigosErrorMantenimiento: string | null = null;
+    // A37-L-06: fallos que reporta `mantenimiento_de_datos` (0165) en su llave `fallos`; las demás purgas las recoge `fallosDePurgas`.
+    const fallosMantenimiento: string[] = [];
     do {
       vueltas++;
       const r = await supabaseAdmin().rpc('mantenimiento_de_datos', {
@@ -251,6 +253,7 @@ export async function GET(req: Request) {
       // arregla la que lanzó.
       const fallosPurga = Array.isArray(data.fallos) ? (data.fallos as unknown[]) : [];
       if (fallosPurga.length > 0) {
+        for (const f of fallosPurga) fallosMantenimiento.push(`mantenimiento_de_datos: ${String(f).slice(0, 120)}`);
         logger.error('cron.purgar.purgas_con_fallos', { fallos: fallosPurga, vuelta: vueltas });
         await alertarOperador('cron.purgar.purgas_con_fallos', { fallos: fallosPurga.map(String).join(' · ').slice(0, 500) });
         // Una purga que LANZA no es "quedó trabajo pendiente": reintentarla
@@ -477,7 +480,7 @@ export async function GET(req: Request) {
     // A37-S09-01: las purgas complementarias (Storage, carta porte, buzón,
     // ledgers, agentes, MCP, presupuesto) que fallan o lanzan ya NO dejan el
     // latido en 'ok': pasan a 'parcial' y se avisa al operador una vez.
-    const purgasConFallo = fallosDePurgas({ storage, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers });
+    const purgasConFallo = [...fallosMantenimiento, ...fallosDePurgas({ storage, mcpOauth, llmPresupuesto, cartaPorteDocs, agentesDatos, buzonRecepcionesPurgadas, vinculacionPortal, ledgers })];
     if (purgasConFallo.length > 0) {
       await alertarOperador('cron.purgar.purgas_con_fallo', { error: purgasConFallo.join(' · ').slice(0, 500) });
     }

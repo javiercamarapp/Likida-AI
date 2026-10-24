@@ -148,6 +148,30 @@ export async function encolarSalidaWhatsApp(
   }
 }
 
+export interface SalidaVencida { id: string; creadaEn: string; venceEn: string }
+
+/**
+ * A37-L-05: pasa a 'dead' lo que quedó en la cola más allá de su vigencia (`vence_en`, mig. 0902) y
+ * lo devuelve para que el cron alerte. Con un token de Meta vencido un fin de semana la cola crece y,
+ * al renovarlo, salían de golpe mensajes de días atrás con instrucciones caducas a choferes y jefes.
+ * Tolera que la migración aún no esté aplicada (función inexistente): devuelve `null` y avisa, y el
+ * cron sigue como antes. Cualquier OTRO error sí lanza: no se da por «nada vencido».
+ */
+export async function vencerSalidasWhatsApp(limite = 100): Promise<SalidaVencida[] | null> {
+  const { data, error } = await acotada(supabaseAdmin().rpc('vencer_wa_outbox', { p_limite: limite }), 'wa.outbox.vencer');
+  if (error) {
+    const codigo = (error as { code?: string }).code;
+    if (codigo === '42883' || codigo === 'PGRST202') {
+      logger.warn('wa.outbox_vigencia_no_disponible', { codigo, err: error.message });
+      return null;
+    }
+    throw new Error(`vencerSalidasWhatsApp: ${error.message}`);
+  }
+  return (Array.isArray(data) ? data as Array<{ id: string; creada_en: string; vence_en: string }> : []).map((f) => ({
+    id: String(f.id), creadaEn: String(f.creada_en), venceEn: String(f.vence_en),
+  }));
+}
+
 export async function reclamarSalidasWhatsApp(limite = 25): Promise<SalidaOutbox[]> {
   const { data, error } = await acotada(supabaseAdmin().rpc('reclamar_wa_outbox', {
     p_limite: limite, p_lease_seconds: WA_OUTBOX_LEASE_SECONDS,

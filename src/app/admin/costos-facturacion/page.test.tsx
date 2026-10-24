@@ -1,3 +1,4 @@
+import { DatoInvalido } from '@/lib/likida/errores';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
@@ -251,6 +252,18 @@ it('accionConciliar: un PAC caído NO deshace el pago ya registrado — se dice 
   const r = await accion(null, fd({ facturaId: 'f-1', referenciaBanco: 'MOV-999' }));
   expect(r.ok).toContain('Factura marcada como pagada');
   expect(r.ok).toContain('NO se timbró');
+});
+
+it('A37-L-03: un timbrado AMBIGUO (el PAC no contestó) NO dice «NO se timbró» ni invita a timbrar a mano', async () => {
+  dobles.getPorCobrar.mockResolvedValue([{ id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R', monto: 2784, subtotal: 2400, iva: 384 }]);
+  dobles.conciliar.mockResolvedValue(undefined);
+  dobles.timbrarFactura.mockRejectedValue(Object.assign(new DatoInvalido('El PAC no contestó y NO se sabe si el CFDI se creó. Busca en el panel de Facturapi la referencia R'), { ambiguo: true }));
+  const pagina = await CostosFacturacionPage();
+  const accion = accionDelBoton(pagina, /Marcar pagada/);
+  const r = await accion(null, fd({ facturaId: 'f-1', referenciaBanco: 'MOV-999' }));
+  expect(r.ok).toContain('Factura marcada como pagada');
+  expect(r.ok).not.toContain('NO se timbró');
+  expect(r.ok).toContain('NO se sabe si el CFDI se emitió');
 });
 
 it('un "por cobrar" caído se DICE — nunca se confunde con "nada pendiente"', async () => {
