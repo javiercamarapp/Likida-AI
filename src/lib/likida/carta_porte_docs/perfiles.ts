@@ -603,6 +603,16 @@ function ordenDeFecha(def: CampoDoc | undefined, celda: string, final: string): 
   return m && +m[1] <= 12 && +m[2] <= 12 && m[1] !== m[2] ? 'ambiguo' : 'mdy';
 }
 
+/**
+ * A37-S32-03 · ¿La celda de fecha NO prueba ningún orden? Verdad cuando leerla día/mes y mes/día da el MISMO valor aprobado
+ * (12/12/2026): no enseña nada y no debe borrar un `mdy` ya aprendido. Una fecha que solo cuadra día/mes (14/10/2026) SÍ es
+ * prueba en contra y devuelve false.
+ */
+function fechaNeutra(def: CampoDoc | undefined, celda: string, final: string): boolean {
+  if (!def || def.tipo !== 'fecha') return false;
+  return normalizarValor(def, celda).valor === final && normalizarValor(def, celda, { ordenFecha: 'mdy' }).valor === final;
+}
+
 /** Si la cifra es ambigua («1,200», «1.500»), ¿qué separador de miles usa este cliente, dado el valor aprobado? */
 function inferirMiles(celda: string, final: string): ',' | '.' | undefined {
   const n = normalizarNumero(celda);
@@ -654,6 +664,12 @@ function inferirRuta(arbol: unknown, final: string, igual: Igualdad): string | n
   return rutas.length === 1 ? rutas[0] : null;
 }
 
+/**
+ * A37-S32-02 · Datos de una PERSONA (operador, contacto en destino): el perfil guarda la forma en que el cliente los escribe
+ * (clave y etiqueta), nunca su valor. Los ejemplos son inmutables, sin purga y viajan al modelo como referencia de formato.
+ */
+export const esCampoPersonal = (clave: string): boolean => /^(operador_|contacto_)/.test(clave);
+
 export interface EntradaAprendizaje {
   contenido: ContenidoDoc;
   /** Lo que el humano dejó aprobado (valores finales). */
@@ -689,6 +705,7 @@ export function aprender(inp: EntradaAprendizaje): ResultadoAprendizaje {
   const camposFinales: Record<string, string> = {};
   const tablas = tablasDe(c);
   const ordenes = new Map<string, 'mdy' | 'ambiguo'>();
+  const neutras = new Set<string>();
 
   const intentar = (campo: string, mercancia: boolean, finalV: string, filaIdx: number | null): void => {
     let fuente: FuenteMapeo | null = null;
@@ -713,21 +730,23 @@ export function aprender(inp: EntradaAprendizaje): ResultadoAprendizaje {
       if (r) { fuente = { tipo: 'etiqueta', etiqueta: r.etiqueta }; miles = r.miles; celdaCruda = r.celda; linea = r.linea; }
     }
     if (!fuente) return;
+    if (esCampoPersonal(campo)) linea = `${fuente.tipo === 'columna' ? fuente.encabezado : fuente.tipo === 'etiqueta' ? fuente.etiqueta : fuente.tipo === 'ruta' ? fuente.ruta : campo}: «valor»`;
     const orden = celdaCruda ? ordenDeFecha(mercancia ? campoMercancia(campo) : campoDoc(campo), celdaCruda, finalV) : undefined;
     if (orden) ordenes.set(claveMapeo({ campo, mercancia }), orden);
+    else if (celdaCruda && fechaNeutra(mercancia ? campoMercancia(campo) : campoDoc(campo), celdaCruda, finalV)) neutras.add(claveMapeo({ campo, mercancia }));
     nuevos.set(claveMapeo({ campo, mercancia }), { campo, mercancia, fuente, ...(miles ? { separadorMiles: miles } : {}) });
     evidencias.push({ campo: mercancia ? `mercancia.${campo}` : campo, linea: linea.slice(0, 200) });
   };
 
   for (const def of CAMPOS_DOC) {
     const v = inp.final.campos[def.clave]?.valor;
-    if (typeof v === 'string' && v !== '') { camposFinales[def.clave] = v; intentar(def.clave, false, v, null); }
+    if (typeof v === 'string' && v !== '') { if (!esCampoPersonal(def.clave)) camposFinales[def.clave] = v; intentar(def.clave, false, v, null); }
   }
   inp.final.mercancias.forEach((fila, idx) => {
     for (const def of CAMPOS_MERCANCIA) {
       const v = fila[def.clave]?.valor;
       if (typeof v !== 'string' || v === '') continue;
-      if (idx === 0) camposFinales[`mercancia.${def.clave}`] = v;
+      if (idx === 0 && !esCampoPersonal(def.clave)) camposFinales[`mercancia.${def.clave}`] = v;
       // Para texto/XML solo el primer renglón puede enseñar la etiqueta (el resto repite).
       if (c.tabla || idx === 0) intentar(def.clave, true, v, idx);
     }
@@ -744,6 +763,14 @@ export function aprender(inp: EntradaAprendizaje): ResultadoAprendizaje {
     if (o === 'mdy' || hayMdy) m.ordenFecha = 'mdy';
     else if (mezcla.get(k)?.ordenFecha) m.ordenFecha = mezcla.get(k)?.ordenFecha; // ya confirmado en una versión anterior: no se pierde
     else notas.push(`fecha ambigua: confirma el orden (${m.campo}).`);
+  }
+
+  // A37-S32-03: una fecha que da lo mismo en ambos órdenes (12/12/2026) no enseña nada: la misma fuente conserva el orden ya
+  // aprendido (si no, la siguiente versión leía 03/04/2026 día/mes con confianza alta) y no cuenta como cambio.
+  for (const k of neutras) {
+    const m = nuevos.get(k);
+    const antes = mezcla.get(k);
+    if (m && !m.ordenFecha && antes?.ordenFecha && JSON.stringify(antes.fuente) === JSON.stringify(m.fuente)) m.ordenFecha = antes.ordenFecha;
   }
 
   // Mezcla: lo inferido reemplaza lo previo del mismo campo; lo no tocado se conserva.

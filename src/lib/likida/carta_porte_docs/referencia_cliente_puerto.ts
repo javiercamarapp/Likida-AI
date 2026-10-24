@@ -8,7 +8,8 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { exigir } from '@/lib/likida/pg';
+import { conteo, exigir } from '@/lib/likida/pg';
+import { leerConTope } from './lectura_paginada';
 import { logger } from '@/lib/logger';
 import { tablaAusente } from './repo';
 import { leerReferencia, type ClienteRef, type ReglaReferencia, type ViajeReferencia } from './referencia_cliente';
@@ -17,7 +18,7 @@ const TOPE_VIAJES = 5000;
 const TABLA_REGLA = 'cp_cliente_referencia';
 const TABLA_REFERENCIA = 'cp_viaje_referencia';
 
-export interface InsumosReferencia { viajes: ViajeReferencia[]; reglas: ReglaReferencia[]; clientes: ClienteRef[] }
+export interface InsumosReferencia { viajes: ViajeReferencia[]; reglas: ReglaReferencia[]; clientes: ClienteRef[]; /** A37-S32-06: hay más cargas que el tope: faltan las más viejas. */ truncado?: boolean }
 
 /** Lo que el tablero y la comparación necesitan, de UNA flota. Sin la 0832 aplicada devuelve todo vacío y lo registra. */
 export async function cargarInsumosReferencia(tenantId: string): Promise<InsumosReferencia> {
@@ -33,14 +34,16 @@ export async function cargarInsumosReferencia(tenantId: string): Promise<Insumos
   const rCli = await acotada(supabaseAdmin().from('cliente').select('id, nombre').eq('tenant_id', tenantId).order('nombre').order('id').limit(5000), 'cpref.clientes');
   const clientes = ((exigir(rCli, 'cpref.clientes') ?? []) as unknown as Array<{ id: string; nombre: string }>).map((f) => ({ id: String(f.id), nombre: String(f.nombre) }));
 
-  const rHito = await acotada(
-    supabaseAdmin().from('viaje_hito').select('viaje_id, recibido_en').eq('tenant_id', tenantId).eq('tipo', 'salida_carga').in('estado', ['recibido', 'validado'])
-      .order('recibido_en', { ascending: false }).limit(TOPE_VIAJES),
+  // A37-S32-06: paginado con range() (PostgREST corta a 1,000 y `.limit(5000)` recortaba los más viejos sin decirlo).
+  const rHito = await leerConTope<{ viaje_id: string; recibido_en: string | null }>((d, h, primera) => acotada(
+    supabaseAdmin().from('viaje_hito').select('viaje_id, recibido_en', conteo(primera ? 0 : 1)).eq('tenant_id', tenantId).eq('tipo', 'salida_carga').in('estado', ['recibido', 'validado'])
+      .order('recibido_en', { ascending: false }).order('id').range(d, h),
     'cpref.hitos',
-  );
+  ) as never, TOPE_VIAJES);
   const hitos = (exigir(rHito, 'cpref.hitos') ?? []) as unknown as Array<{ viaje_id: string; recibido_en: string | null }>;
+  const truncado = rHito.truncado;
   if (hitos.length === 0) return { viajes: [], reglas, clientes };
-  if (hitos.length >= TOPE_VIAJES) logger.warn('cartaporte_docs.referencia_truncado', { tenantId, filas: hitos.length });
+  if (truncado) logger.warn('cartaporte_docs.referencia_truncado', { tenantId, filas: hitos.length });
   const ids = hitos.map((h) => String(h.viaje_id));
 
   const rViaje = await acotada(supabaseAdmin().from('viaje').select('id, cliente_id').eq('tenant_id', tenantId).in('id', ids), 'cpref.viajes');
@@ -53,7 +56,7 @@ export async function cargarInsumosReferencia(tenantId: string): Promise<Insumos
     const r = refs.get(id);
     return { viajeId: id, clienteId: cliente.get(id) ?? null, cargaHechaEn: h.recibido_en, referencia: r?.referencia ?? null, referenciaCapturadaEn: r?.capturada_en ?? null };
   });
-  return { viajes, reglas, clientes };
+  return { viajes, reglas, clientes, ...(truncado ? { truncado: true } : {}) };
 }
 
 /** Guarda (o borra, si viene vacía) la referencia de UN viaje de la flota. La referencia no entra al CCP ni bloquea nada. */

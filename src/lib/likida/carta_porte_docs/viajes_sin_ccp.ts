@@ -61,6 +61,8 @@ export interface ListadoSinCcp {
   vacio: boolean;
   total: number;
   grupos: GrupoCliente[];
+  /** A37-S32-06: la lectura llegó a su tope y faltan salidas (las más viejas): la lista NO está completa. */
+  truncado?: boolean;
 }
 
 const ORDEN_COLOR: Record<ColorAntiguedad, number> = { verde: 0, ambar: 1, rojo: 2 };

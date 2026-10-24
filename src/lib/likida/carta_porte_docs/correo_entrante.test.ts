@@ -145,6 +145,22 @@ describe('atenderCorreoCartaPorte', () => {
     expect(r).toMatchObject({ status: 200, cuerpo: { recibidos: 1, ignorados: 2 } });
   });
 
+  it('A37-S31-03: 12 remisiones o un adjunto de más de 8 MB dejan un evento «aviso_oficina» con la cuenta de lo omitido (no se callan)', async () => {
+    const pdf = await pdfBoreal();
+    const grande = new Uint8Array(MAX_ADJUNTO_BYTES + 1).fill(37);
+    const doce = Array.from({ length: 12 }, (_, i) => ({ id: `a${i}`, filename: `r${i}.pdf` }));
+    const bytes: Record<string, Uint8Array> = { a0: pdf, a1: grande };
+    const r = await atenderCorreoCartaPorte(TOKEN_A, { ...base, attachments: doce }, deps(bytes));
+    expect(r).toMatchObject({ status: 200, cuerpo: { omitidos: 3 } }); // 2 sobrantes + 1 demasiado grande
+    const aviso = estado.eventos.find((e) => e.tipo === 'aviso_oficina');
+    expect(aviso?.detalle).toMatchObject({ motivo: 'adjuntos_omitidos', sobrantes: 2, demasiado_grandes: 1 });
+  });
+
+  it('A37-S31-03: un correo sin omisiones no deja aviso', async () => {
+    await atenderCorreoCartaPorte(TOKEN_A, { ...base, attachments: [{ id: 'a1', filename: 'ok.pdf' }] }, deps({ a1: await pdfBoreal() }));
+    expect(estado.eventos.some((e) => e.tipo === 'aviso_oficina')).toBe(false);
+  });
+
   it('con el agente apagado: 503 (para que vuelva) y sin consumir el email_id', async () => {
     const r = await atenderCorreoCartaPorte(TOKEN_A, { ...base, text: correoTexto() }, deps({}, { apagado: async () => true }));
     expect(r.status).toBe(503);

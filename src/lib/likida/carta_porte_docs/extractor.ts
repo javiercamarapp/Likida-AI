@@ -56,7 +56,7 @@ import { leerBol } from './lectores/bol';
 import { leerOrdenAgente } from './lectores/orden_agente';
 import { leerRemisionEscaneada, type VisionRemision } from './lectores/remision';
 import { ordenDeNiveles, tipoDeLectura } from './orden_niveles';
-import { aplicarPerfil, elegirPerfil, type EjemploPerfil, type Perfil } from './perfiles';
+import { aplicarPerfil, elegirPerfil, esCampoPersonal, type EjemploPerfil, type Perfil } from './perfiles';
 import { leerCorreoF1 } from './lectores/correo_f1';
 import { leerCorreoF2 } from './lectores/correo_f2';
 import { leerCorreoF3 } from './lectores/correo_f3';
@@ -168,7 +168,8 @@ export function construirUsuario(e: EntradaLlm): string {
   if (e.ejemplos.length > 0) {
     partes.push(
       'Así escribe ESTE cliente sus datos (ejemplos ya confirmados por una persona; son referencia de formato, no de valores):',
-      ...e.ejemplos.slice(-3).flatMap((ej) => ej.evidencias.slice(0, 8).map((x) => `  · ${x.campo} ← «${limpiarTexto(x.linea, 160) ?? ''}»`)),
+      // A37-S32-02: los ejemplos ya guardados pueden traer datos de personas (versiones anteriores): no viajan al modelo.
+      ...e.ejemplos.slice(-3).flatMap((ej) => ej.evidencias.filter((x) => !esCampoPersonal(x.campo.replace(/^mercancia\./, ''))).slice(0, 8).map((x) => `  · ${x.campo} ← «${limpiarTexto(x.linea, 160) ?? ''}»`)),
     );
   }
   if (e.hojasMismoEmbarque && e.hojasMismoEmbarque.length > 1) {

@@ -15,7 +15,7 @@ const { mantenerDatosAgentes, PLAZOS_AGENTES } = await import('./retencion_agent
 beforeEach(() => { respuestas.clear(); rpc.mockClear(); Object.values(logger).forEach((f) => f.mockClear()); });
 
 describe('mantenerDatosAgentes', () => {
-  it('llama las CINCO purgas con su plazo y devuelve el conteo real de cada una', async () => {
+  it('llama las SEIS purgas con su plazo y devuelve el conteo real de cada una', async () => {
     respuestas.set('purgar_wa_ventana_contacto', { data: 12, error: null });
     respuestas.set('purgar_wa_envio_registro', { data: 3, error: null });
     respuestas.set('purgar_liquidacion_externa', { data: { borradas: 2, pdfsEncolados: 2, parcial: false }, error: null });
@@ -23,8 +23,9 @@ describe('mantenerDatosAgentes', () => {
     respuestas.set('purgar_liquidacion_entrega_correo', { data: { purgadas: 4, archivosEncolados: 3, parcial: false }, error: null });
     const r = await mantenerDatosAgentes(new Date('2026-10-01T12:00:00Z'));
     expect(r.map((x) => [x.nombre, x.ok, x.filas])).toEqual([
-      ['wa_ventana_contacto', true, 12], ['wa_envio_registro', true, 3], ['liquidacion_externa', true, 2], ['peaje_archivos_fallidos', true, 1], ['liquidacion_entrega_correo', true, 4],
+      ['wa_ventana_contacto', true, 12], ['wa_envio_registro', true, 3], ['liquidacion_externa', true, 2], ['peaje_archivos_fallidos', true, 1], ['liquidacion_entrega_correo', true, 4], ['vigia_datos_personales', true, 0],
     ]);
+    expect(rpc).toHaveBeenCalledWith('purgar_vigia_datos_personales', { p_dias: 90, p_limite: PLAZOS_AGENTES.limite });
     expect(rpc).toHaveBeenCalledWith('purgar_wa_ventana_contacto', { p_dias: PLAZOS_AGENTES.waVentanaDias, p_limite: PLAZOS_AGENTES.limite });
     expect(rpc).toHaveBeenCalledWith('purgar_liquidacion_externa', { p_meses: 60, p_limite: 500, p_ahora: '2026-10-01T12:00:00.000Z' });
     expect(rpc).toHaveBeenCalledWith('purgar_peaje_archivos_fallidos', { p_dias: 30, p_limite: 500, p_ahora: '2026-10-01T12:00:00.000Z' });
@@ -37,6 +38,17 @@ describe('mantenerDatosAgentes', () => {
     expect(PLAZOS_AGENTES.liquidacionExternaMeses).toBeGreaterThanOrEqual(60);
   });
 
+  it('A37-A4-07: la purga del Vigía tolera que la 0892 aún no esté aplicada (avisa, no es fallo) pero un error real sí lo es', async () => {
+    respuestas.set('purgar_vigia_datos_personales', { data: null, error: { message: 'no function', code: 'PGRST202' } as never });
+    let r = await mantenerDatosAgentes();
+    expect(r.find((x) => x.nombre === 'vigia_datos_personales')).toMatchObject({ ok: true, filas: 0 });
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+    respuestas.set('purgar_vigia_datos_personales', { data: null, error: { message: 'boom' } });
+    r = await mantenerDatosAgentes();
+    expect(r.find((x) => x.nombre === 'vigia_datos_personales')).toMatchObject({ ok: false, error: 'boom' });
+  });
+
   it('la purga de la entrega por correo marca parcial si llenó su tope y su fallo no tumba a las otras', async () => {
     respuestas.set('purgar_liquidacion_entrega_correo', { data: { purgadas: 500, archivosEncolados: 500, parcial: true }, error: null });
     let r = await mantenerDatosAgentes();
@@ -46,7 +58,7 @@ describe('mantenerDatosAgentes', () => {
     respuestas.set('purgar_liquidacion_entrega_correo', { data: null, error: { message: 'no existe la función' } });
     r = await mantenerDatosAgentes();
     expect(r.find((x) => x.nombre === 'liquidacion_entrega_correo')).toMatchObject({ ok: false, filas: null, error: 'no existe la función' });
-    expect(r.filter((x) => x.ok)).toHaveLength(4);
+    expect(r.filter((x) => x.ok)).toHaveLength(5);
     respuestas.set('purgar_liquidacion_entrega_correo', { data: {}, error: null });
     r = await mantenerDatosAgentes();
     expect(r.find((x) => x.nombre === 'liquidacion_entrega_correo')).toMatchObject({ ok: false, error: 'respuesta_invalida' });
@@ -70,7 +82,7 @@ describe('mantenerDatosAgentes', () => {
     respuestas.set('purgar_liquidacion_externa', 'lanza');
     respuestas.set('purgar_peaje_archivos_fallidos', { data: { vaciados: 0, parcial: false }, error: null });
     const r = await mantenerDatosAgentes();
-    expect(r).toHaveLength(5);
+    expect(r).toHaveLength(6);
     expect(r[1]).toMatchObject({ nombre: 'wa_envio_registro', ok: false, filas: null, error: 'boom' });
     expect(r[2]).toMatchObject({ nombre: 'liquidacion_externa', ok: false, filas: null, error: 'red caída' });
     expect(r[0].ok).toBe(true);

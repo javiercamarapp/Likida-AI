@@ -8,7 +8,8 @@
 // de verdad hay algo distinto.
 //
 //   · Misma subida (mismo sha256, misma terminal) → «ya estaba cargado», cero
-//     escrituras. Dos cargas simultáneas del mismo archivo: la base deja pasar
+//     escrituras, SOLO si fue la última carga de la terminal (A37-A4-01: A → B → A
+//     revierte el programa y debe aplicarse; se reabre la carga vieja, no se crea otra). Dos cargas simultáneas del mismo archivo: la base deja pasar
 //     a una (llave única) y la otra recibe lo mismo.
 //   · Identidad de fila = `clave_natural` = fecha|tipo|bloque|número («#»), así
 //     que reordenar filas dentro de una sección no genera cambios.
@@ -175,18 +176,28 @@ export async function sincronizarPrograma(
   const sinFecha = lectura.filas.length - conFecha.length;
   const { claves, repetidas } = clavesNaturales(conFecha);
 
-  const carga = await repo.registrarCarga(tenantId, {
+  let carga = await repo.registrarCarga(tenantId, {
     terminal: term, origen: lectura.origen, archivoSha256: lectura.sha256,
     filasLeidas: lectura.filasLeidas, filasValidas: lectura.filas.length,
     avisos: (lectura.avisos ?? []).slice(0, 200), creadoPor: lectura.creadoPor ?? null,
   });
-  if (carga === null) return { ...VACIO, yaCargado: true };
+  let anterior: string | null = null;
+  if (carga === null) {
+    // A37-A4-01: «mismo sha» solo es «ya cargado» si fue la ÚLTIMA carga; A → B → A es un cambio real.
+    const reabierta = await repo.reabrirCargaSiNoEsUltima(tenantId, term, lectura.sha256);
+    if (reabierta === null) return { ...VACIO, yaCargado: true };
+    carga = { id: reabierta.id };
+    anterior = reabierta.creadaAnterior;
+  }
 
   try {
     return await aplicar(repo, tenantId, term, carga.id, ahora, conFecha, claves, { sinFecha, repetidas });
   } catch (e) {
     // Sin esto el reintento chocaría con la llave única y se leería «ya estaba cargado» sin estarlo.
-    try { await repo.descartarCarga(tenantId, carga.id); } catch { /* el error original es el que importa */ }
+    try {
+      if (anterior !== null) await repo.restaurarCarga(tenantId, carga.id, anterior);
+      else await repo.descartarCarga(tenantId, carga.id);
+    } catch { /* el error original es el que importa */ }
     throw e;
   }
 }
