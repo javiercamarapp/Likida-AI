@@ -47,6 +47,9 @@ async function main() {
       const r = await ejecutarAnalista({
         tenantId: TENANT, nombreFlota: 'FLOTA DE EXAMEN',
         mensajes: [{ rol: 'usuario', texto: caso.pregunta }],
+        // A37-S03-09: el examen no tiene a nadie esperando; que no gaste la
+        // reserva interactiva del chofer del tenant de demostración.
+        presupuesto: 'fondo',
       });
       respuesta = r.bloques;
       costo += r.costoUsd;
