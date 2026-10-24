@@ -1148,19 +1148,25 @@ export const DIAS_SALIDAS_SIN_CCP = 45;
  * Viajes con salida registrada (hito `salida_carga` recibido o validado) y los ids de los que ya tienen un complemento
  * APROBADO ligado (`cp_documento.viaje_id`). SOLO LECTURA; si algo falla LANZA (la pantalla dice «no se pudo leer», no «sin pendientes»).
  */
-export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new Date()): Promise<{ viajes: ViajeSalido[]; conCcp: Set<string> }> {
+/** Tope de salidas que se leen (≈ 45 días de una flota de varios cientos de unidades); pasar de esto se DICE (`truncado`). */
+export const TOPE_SALIDAS_SIN_CCP = 20_000;
+
+export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new Date()): Promise<{ viajes: ViajeSalido[]; conCcp: Set<string>; truncado: boolean }> {
   const desde = new Date(ahora.getTime() - DIAS_SALIDAS_SIN_CCP * 86_400_000).toISOString();
-  const rh = await acotada(supabaseAdmin().from('viaje_hito').select('viaje_id, mensaje_en, recibido_en')
+  // A37-S32-06: `.limit(2000)` recortaba en silencio (y PostgREST ya corta a 1,000): los viajes más viejos sin CCP desaparecían de la
+  // pantalla. Se pagina con range() y, si aun así hay más que el tope, se devuelve `truncado` para que la vista lo diga.
+  const rh = await leerConTope<Fila>((d, h, primera) => acotada(supabaseAdmin().from('viaje_hito').select('viaje_id, mensaje_en, recibido_en', conteo(primera ? 0 : 1))
     .eq('tenant_id', tenantId).eq('tipo', 'salida_carga').in('estado', ['recibido', 'validado'])
-    .gte('recibido_en', desde).order('recibido_en', { ascending: false }).limit(2000), 'cpdocs.sin_ccp_hitos');
+    .gte('recibido_en', desde).order('recibido_en', { ascending: false }).order('id').range(d, h), 'cpdocs.sin_ccp_hitos') as never, TOPE_SALIDAS_SIN_CCP);
   const hitos = (exigir(rh, 'cpdocs.sin_ccp_hitos') ?? []) as unknown as Fila[];
+  const truncado = rh.truncado;
   const salidaPorViaje = new Map<string, string>();
   for (const h of hitos) {
     const id = s(h.viaje_id); const t = s(h.mensaje_en) ?? s(h.recibido_en);
     if (id && t && !salidaPorViaje.has(id)) salidaPorViaje.set(id, t);
   }
   const ids = [...salidaPorViaje.keys()];
-  if (ids.length === 0) return { viajes: [], conCcp: new Set() };
+  if (ids.length === 0) return { viajes: [], conCcp: new Set(), truncado };
   const [filas, docs] = await Promise.all([
     traerPorIds<Fila>(ids, (t) => acotada(supabaseAdmin().from('viaje').select('id, folio, cliente_id, cliente:cliente_id (nombre)')
       .eq('tenant_id', tenantId).in('id', t), 'cpdocs.sin_ccp_viajes') as never, 'cpdocs.sin_ccp_viajes'),
@@ -1174,5 +1180,5 @@ export async function leerSalidasParaSinCcp(tenantId: string, ahora: Date = new 
   });
   const conCcp = new Set<string>();
   for (const d of docs) { const id = s(d.viaje_id); if (id) conCcp.add(id); }
-  return { viajes, conCcp };
+  return { viajes, conCcp, truncado };
 }

@@ -48,8 +48,8 @@ async function leerInsights(tenantId: string): Promise<{ insights: InsightsAgent
 async function leerSinCcp(tenantId: string): Promise<ListadoSinCcp | 'no_leido'> {
   try {
     const ahora = new Date();
-    const { viajes, conCcp } = await repoDocs.leerSalidasParaSinCcp(tenantId, ahora);
-    return listarViajesSinCcp(viajes, conCcp, ahora);
+    const { viajes, conCcp, truncado } = await repoDocs.leerSalidasParaSinCcp(tenantId, ahora);
+    return { ...listarViajesSinCcp(viajes, conCcp, ahora), ...(truncado ? { truncado: true } : {}) };
   } catch {
     return 'no_leido';
   }

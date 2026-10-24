@@ -346,7 +346,12 @@ function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
             className="text-[12.5px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>Descargar reporte (CSV)</a>
         )}
       </div>
-      {listado.vacio ? (
+      {listado.truncado && (
+        <p role="alert" className="text-[12.5px]" style={{ color: 'var(--warn)' }}>
+          La lista está incompleta: hay más salidas de las que se pueden leer de una vez y faltan las más antiguas. Revisa los viajes viejos en Viajes.
+        </p>
+      )}
+      {listado.vacio && listado.truncado ? null : listado.vacio ? (
         <EstadoVacio>No hay viajes salidos sin Carta Porte. Cuando salga uno sin complemento aparecerá aquí con las horas que lleva sin él.</EstadoVacio>
       ) : listado.grupos.map((g) => (
         <div key={g.clienteId ?? 'sin_cliente'} className="card p-4">

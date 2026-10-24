@@ -7,14 +7,22 @@ vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: () => ({
     from: (tabla: string) => {
       const q: Record<string, unknown> = {};
-      for (const op of ['select', 'eq', 'in', 'gte', 'order', 'limit']) q[op] = (...args: unknown[]) => { filtros.push({ tabla, op, args }); return q; };
-      q.then = (res: (v: unknown) => unknown) => res({ data: tablas[tabla]?.error ? null : (tablas[tabla]?.filas ?? []), error: tablas[tabla]?.error ?? null });
+      let rango: [number, number] | null = null;
+      let contar = false;
+      for (const op of ['select', 'eq', 'in', 'gte', 'order', 'limit']) q[op] = (...args: unknown[]) => { filtros.push({ tabla, op, args }); if (op === 'select') contar = (args[1] as { count?: string } | undefined)?.count === 'exact'; return q; };
+      q.range = (d: number, h: number) => { filtros.push({ tabla, op: 'range', args: [d, h] }); rango = [d, h]; return q; };
+      q.then = (res: (v: unknown) => unknown) => {
+        const todas = tablas[tabla]?.error ? null : (tablas[tabla]?.filas ?? []);
+        // Como PostgREST: respeta el rango pedido y nunca entrega más de 1,000 por respuesta.
+        const data = todas && rango ? todas.slice(rango[0], Math.min(rango[1] + 1, rango[0] + 1000)) : todas;
+        return res({ data, error: tablas[tabla]?.error ?? null, count: contar && todas ? todas.length : null });
+      };
       return q;
     },
   }),
 }));
 
-import { leerSalidasParaSinCcp } from './repo';
+import { leerSalidasParaSinCcp, TOPE_SALIDAS_SIN_CCP } from './repo';
 import { listarViajesSinCcp } from './viajes_sin_ccp';
 
 const AHORA = new Date('2026-03-10T18:00:00Z');
@@ -42,15 +50,31 @@ describe('lectura de salidas para «viajes sin Carta Porte» (T-A3-66)', () => {
     expect(filtros).toContainEqual({ tabla: 'cp_documento', op: 'eq', args: ['estado', 'aprobado'] });
     expect(filtros.some((f) => f.op === 'in' && f.args[0] === 'estado' && (f.args[1] as string[]).join() === 'recibido,validado')).toBe(true);
     // Solo lectura: ninguna escritura.
-    expect(filtros.every((f) => ['select', 'eq', 'in', 'gte', 'order', 'limit'].includes(f.op))).toBe(true);
+    expect(filtros.every((f) => ['select', 'eq', 'in', 'gte', 'order', 'limit', 'range'].includes(f.op))).toBe(true);
     // De punta a punta con el puro: v2 ya tiene complemento, queda v1 con 3 días.
     const l = listarViajesSinCcp(viajes, conCcp, AHORA);
     expect(l.grupos[0]!.viajes.map((x) => [x.viajeId, x.dias])).toEqual([['v1', 2]]);
   });
 
+  it('A37-S32-06: con 2,500 salidas lee TODAS (antes .limit(2000) y PostgREST a 1,000 se comían las más viejas) y no marca truncado', async () => {
+    tablas.viaje_hito = { filas: Array.from({ length: 2500 }, (_, i) => ({ viaje_id: `v${i}`, mensaje_en: '2026-03-08T10:00:00Z', recibido_en: '2026-03-08T10:05:00Z' })) };
+    tablas.viaje = { filas: [] };
+    tablas.cp_documento = { filas: [] };
+    const r = await leerSalidasParaSinCcp('t1', AHORA);
+    expect(filtros.filter((f) => f.tabla === 'viaje_hito' && f.op === 'range').length).toBeGreaterThanOrEqual(3);
+    expect(r.truncado).toBe(false);
+  });
+
+  it('A37-S32-06: si hay más salidas que el tope lo DICE (truncado: true) en vez de callar', async () => {
+    tablas.viaje_hito = { filas: Array.from({ length: TOPE_SALIDAS_SIN_CCP + 5 }, (_, i) => ({ viaje_id: `v${i}`, mensaje_en: '2026-03-08T10:00:00Z', recibido_en: '2026-03-08T10:05:00Z' })) };
+    tablas.viaje = { filas: [] };
+    tablas.cp_documento = { filas: [] };
+    expect((await leerSalidasParaSinCcp('t1', AHORA)).truncado).toBe(true);
+  });
+
   it('sin salidas devuelve vacío sin consultar viajes', async () => {
     tablas.viaje_hito = { filas: [] };
-    expect(await leerSalidasParaSinCcp('t1', AHORA)).toEqual({ viajes: [], conCcp: expect.any(Set) });
+    expect(await leerSalidasParaSinCcp('t1', AHORA)).toEqual({ viajes: [], conCcp: expect.any(Set), truncado: false });
     expect(filtros.some((f) => f.tabla === 'viaje')).toBe(false);
   });
 
