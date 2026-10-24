@@ -3168,7 +3168,14 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
               : null;
             if (donde && donde.viajeId !== viajeId) {
               logger.info('foto.ya_en_otro_viaje', { viaje: viajeId, otro: donde.viajeId, monto: donde.monto });
-              await say(`Ese comprobante de ${mxn(donde.monto)} ya estaba registrado en ${donde.folio ? `tu viaje *${donde.folio}*` : 'otro viaje tuyo'}, así que no lo agregué aquí para no cobrarlo dos veces. Si de verdad es de este viaje, dile a la oficina que lo mueva. 🙏`);
+              // A37-S55-10: folio y monto SOLO si el viaje es de este mismo
+              // operador. Si es de otro (o no se sabe), nada de cifras ajenas ni
+              // «tu viaje»: la foto es la misma, pero lo registrado no es suyo.
+              if (donde.operadorId && donde.operadorId === op.operadorId) {
+                await say(`Ese comprobante de ${mxn(donde.monto)} ya estaba registrado en ${donde.folio ? `tu viaje *${donde.folio}*` : 'otro viaje tuyo'}, así que no lo agregué aquí para no cobrarlo dos veces. Si de verdad es de este viaje, dile a la oficina que lo mueva. 🙏`);
+              } else {
+                await say('Ese comprobante ya estaba registrado en otro viaje de la flota, así que no lo agregué aquí para no cobrarlo dos veces. Si de verdad es de este viaje, dile a la oficina que lo revise. 🙏');
+              }
               return;
             }
             logger.info('foto.dedup_race', { viaje: viajeId });

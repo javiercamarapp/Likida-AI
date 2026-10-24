@@ -516,10 +516,10 @@ export async function gastoExistePorHash(viajeId: string, imgHash: string, tenan
  */
 export async function ubicarGastoPorHash(
   tenantId: string, imgHash: string,
-): Promise<{ viajeId: string; folio?: string; monto: number } | null> {
+): Promise<{ viajeId: string; folio?: string; monto: number; operadorId?: string } | null> {
   const { data, error } = await acotada(supabaseAdmin()
     .from('gasto')
-    .select('viaje_id, monto, viaje:viaje_id(folio)')
+    .select('viaje_id, monto, viaje:viaje_id(folio, operador_id)')
     .eq('tenant_id', tenantId)
     .eq('img_hash', imgHash)
     .limit(1), 'ubicarGastoPorHash');
@@ -529,6 +529,9 @@ export async function ubicarGastoPorHash(
     viajeId: fila.viaje_id as string,
     folio: ((fila.viaje as { folio?: string } | null)?.folio) || undefined,
     monto: Number(fila.monto),
+    // A37-S55-10: de QUIÉN es ese viaje, para no revelarle a un operador el
+    // folio y el monto del viaje de otro.
+    operadorId: ((fila.viaje as { operador_id?: string } | null)?.operador_id) || undefined,
   };
 }
 

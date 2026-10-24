@@ -228,7 +228,7 @@ describe('la foto que ya estaba en otro viaje', () => {
 
   it('se lo DICE, con el viaje donde ya está y el monto', async () => {
     addGasto.mockRejectedValue(duplicado());
-    ubicarGastoPorHash.mockResolvedValue({ viajeId: 'v-otro', folio: 'VJ-2026-0801', monto: 800 });
+    ubicarGastoPorHash.mockResolvedValue({ viajeId: 'v-otro', folio: 'VJ-2026-0801', monto: 800, operadorId: 'o1' });
 
     await processInbound(foto);
 
@@ -236,6 +236,30 @@ describe('la foto que ya estaba en otro viaje', () => {
     expect(salientes[0]).toContain('VJ-2026-0801');
     expect(salientes[0]).toContain('$800.00');
     expect(salientes[0], 'y por qué no lo puso aquí').toMatch(/no lo agregué aquí|dos veces/i);
+  });
+
+  it('A37-S55-10: si el comprobante es del viaje de OTRO operador, no se le revela folio ni monto ni se le llama «tu viaje»', async () => {
+    addGasto.mockRejectedValue(duplicado());
+    ubicarGastoPorHash.mockResolvedValue({ viajeId: 'v-otro', folio: 'VJ-2026-0801', monto: 2890, operadorId: 'o-ajeno' });
+
+    await processInbound(foto);
+
+    expect(salientes).toHaveLength(1);
+    expect(salientes[0]).not.toContain('VJ-2026-0801');
+    expect(salientes[0]).not.toContain('2,890');
+    expect(salientes[0]).not.toMatch(/tu viaje/i);
+    expect(salientes[0], 'y por qué no lo puso aquí').toMatch(/no lo agregué aquí|dos veces/i);
+  });
+
+  it('A37-S55-10: si no se sabe de quién es el viaje, tampoco se revela (fail-closed)', async () => {
+    addGasto.mockRejectedValue(duplicado());
+    ubicarGastoPorHash.mockResolvedValue({ viajeId: 'v-otro', folio: 'VJ-9', monto: 800 });
+
+    await processInbound(foto);
+
+    expect(salientes).toHaveLength(1);
+    expect(salientes[0]).not.toContain('VJ-9');
+    expect(salientes[0]).not.toContain('800');
   });
 
   it('pero la carrera de verdad —dos fotos idénticas del MISMO viaje— sigue callada', async () => {
