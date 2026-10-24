@@ -259,8 +259,26 @@ export async function importarTagsArchivo(tenantId: string, nombre: string, buff
     logger.error('peajes.importar_tags_lectura', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
     return falla('No se pudo leer el catálogo actual. Inténtalo de nuevo.');
   }
-  const { altas, rechazadas } = resolverUnidadesDeTags(lectura.tags, unidades);
-  const todasRechazadas = [...lectura.rechazadas, ...rechazadas].sort((a, b) => a.fila - b.fila);
+  const { altas: altasResueltas, rechazadas } = resolverUnidadesDeTags(lectura.tags, unidades);
+  // A37-S53-02: el importador NO reactiva en silencio un TAG dado de baja (borraría la baja y los cobros
+  // posteriores dejarían de ser candidatos). Se rechaza con motivo; reactivar es un alta manual explícita.
+  let conBaja: Set<string>;
+  try {
+    conBaja = new Set<string>();
+    for (const lote of lotes(altasResueltas.map((a) => a.tag))) {
+      const { data, error } = await acotada(
+        supabaseAdmin().from('peaje_tag_baja').select('tag').eq('tenant_id', tenantId).in('tag', lote), 'peajes.importar_tags_bajas');
+      if (error) throw new Error(error.message);
+      for (const f of (data ?? []) as Array<{ tag: unknown }>) conBaja.add(String(f.tag));
+    }
+  } catch (e) {
+    logger.error('peajes.importar_tags_bajas', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return falla('No se pudo comprobar qué TAGs están dados de baja. Inténtalo de nuevo.');
+  }
+  const altas = altasResueltas.filter((a) => !conBaja.has(a.tag));
+  const rechazadasPorBaja = altasResueltas.filter((a) => conBaja.has(a.tag))
+    .map((a) => ({ fila: a.fila, motivo: 'Este TAG está dado de baja: no se reactiva desde el archivo. Si de verdad volvió a operar, dalo de alta a mano en el catálogo.' }));
+  const todasRechazadas = [...lectura.rechazadas, ...rechazadas, ...rechazadasPorBaja].sort((a, b) => a.fila - b.fila);
   if (altas.length === 0) return { ok: true, guardadas: 0, actualizadas: 0, rechazadas: todasRechazadas };
 
   let guardadas = 0;
