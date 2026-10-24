@@ -556,4 +556,20 @@ describe('T-A5-39 · sin respuesta no escala por sí sola (opción de configurac
     await b.pasada(60);
     expect(b.enviados.filter((e) => e.telefono === SUPERVISOR)).toHaveLength(0);
   });
+
+  it('A37-S35-05: sin destinatario, o con una excepción de la base, NO se marca «escalada»: la pasada siguiente SÍ avisa', async () => {
+    const a = mundo({ config: { detencionEscalaSinRespuestaMin: 30 } });
+    a.gps.muestras = quieta(T0, 40);
+    await a.pasada();
+    a.gps.muestras = quieta(new Date(T0.getTime() + 35 * 60_000), 40);
+    const ahora = new Date(T0.getTime() + 35 * 60_000);
+    const sinNadie = await correrDeteccionParada({ ...a.cron, destinatarios: async () => [] }, { ahora });
+    expect(sinNadie.sinDestinatario).toBe(1);
+    const cae = await correrDeteccionParada({ ...a.cron, destinatarios: async () => { throw new Error('base no contesta'); } }, { ahora });
+    expect(cae.escaladas).toBe(0);
+    expect(a.bitacora.filter((e) => e.detalle.tipo === 'escalada')).toHaveLength(0);
+    const ok = await correrDeteccionParada(a.cron, { ahora });
+    expect(ok.escaladas).toBe(1);
+    expect(a.enviados.filter((e) => e.telefono === SUPERVISOR)).toHaveLength(1);
+  });
 });
