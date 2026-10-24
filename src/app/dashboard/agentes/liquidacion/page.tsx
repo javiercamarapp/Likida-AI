@@ -30,7 +30,7 @@ import { importarLiquidacionesDeArchivo } from '@/lib/likida/liquidacion_externa
 import { decodificarCursor, codificarCursor } from '@/app/api/v1/_comun';
 import { SeccionExternas, leerFiltroExterno, leerMensajeExterno } from './externas';
 import {
-  SeccionDesgloses, VistaDesgloses, PanelDetalleDesglose, SeccionExcepciones, leerMensajeDesglose,
+  SeccionDesgloses, VistaDesgloses, PanelDetalleDesglose, SeccionExcepciones, TOPE_EXCEPCIONES, TOPE_SIN_POLIZA, leerMensajeDesglose,
   leerFiltroDesglose, leerDia, destinosDe, cumpleFiltro,
   type FiltroDesglose, type FilaDesglose, type FilaSinPoliza, type FichasDesgloses, type LecturaDesgloses,
 } from './desgloses';
@@ -106,10 +106,10 @@ function volverAlDetalle(contexto: Array<[string, string]>, id: string | null, c
   redirect(`/dashboard/agentes/liquidacion?${new URLSearchParams(params).toString()}#detalle-desglose`);
 }
 
-/** Las excepciones abiertas de la flota (las 50 más recientes). `null` = no se pudo leer: jamás «sin excepciones». */
+/** Las excepciones abiertas de la flota (las 50 más recientes; pide una más para que la sección avise «hay más»). `null` = no se pudo leer: jamás «sin excepciones». */
 async function cargarExcepciones(tenantId: string) {
   try {
-    const r = await listarExcepciones(tenantId, { limite: 50 });
+    const r = await listarExcepciones(tenantId, { limite: TOPE_EXCEPCIONES + 1 });
     return r.ok ? r.valor : null;
   } catch {
     return null;
@@ -127,10 +127,11 @@ async function cargarDesgloses(
   try {
     const fichas = await fichasDesgloses(tenantId);
     if (filtro === 'sin_poliza') {
-      const ex = await listarExcepciones(tenantId, { tipo: 'sin_poliza', limite: 200 });
+      const ex = await listarExcepciones(tenantId, { tipo: 'sin_poliza', limite: TOPE_SIN_POLIZA + 1 });
       if (!ex.ok) return { ok: false };
-      const sinPoliza: FilaSinPoliza[] = ex.valor.map((x) => ({ bitacora: x.claveExterna, desde: x.primeraVez, ultimaVez: x.ultimaVez }));
-      return { ok: true, fichas, filas: [], sinPoliza, siguiente: null };
+      const sinPolizaTruncada = ex.valor.length > TOPE_SIN_POLIZA;
+      const sinPoliza: FilaSinPoliza[] = ex.valor.slice(0, TOPE_SIN_POLIZA).map((x) => ({ bitacora: x.claveExterna, desde: x.primeraVez, ultimaVez: x.ultimaVez }));
+      return { ok: true, fichas, filas: [], sinPoliza, siguiente: null, sinPolizaTruncada };
     }
     const cota = { desde: desde ? Date.parse(inicioDiaMx(desde)) : null, hasta: hasta ? Date.parse(finDiaMx(hasta)) : null };
     const filtrando = !!(filtro || desde || hasta);
