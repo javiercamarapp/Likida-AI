@@ -99,10 +99,18 @@ export function pantallaDeLogin(inv: InventarioPagina, senaDeAdentro?: string): 
 // campo de contraseña, y el `type` es lo único que no miente.
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** Escapa `\\` y `"` para meter un valor dentro de `[atributo="…"]`. */
+export function escaparAtributoCss(v: string): string {
+  return v.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 /** ¿El selector apunta a un campo que la PÁGINA declaró como contraseña? */
 export function esCampoDeContrasena(selector: string, inv: InventarioPagina): boolean {
+  // Se mira el valor crudo Y el escapado: un selector armado con
+  // `escaparAtributoCss` (id con comillas o barras) no debe esquivar la guarda.
+  const apunta = (v: string) => selector.includes(v) || selector.includes(escaparAtributoCss(v));
   return inv.campos.some(
-    (c) => c.type === 'password' && ((c.id && selector.includes(c.id)) || (c.name && selector.includes(c.name))),
+    (c) => c.type === 'password' && ((c.id && apunta(c.id)) || (c.name && apunta(c.name))),
   );
 }
 
