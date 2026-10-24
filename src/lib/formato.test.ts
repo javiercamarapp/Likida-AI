@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { sinComentarios } from '@/lib/pruebas/codigo';
 import { execSync } from 'node:child_process';
-import { instanteRFC3339, mxn, usd, usd4, mxnCompacto, litros, fechaMx, fechaCorta, fechaHoraMx, round2, pctCambio, porcentaje, hoyMx, inicioDiaMx, finDiaMx, pesoArchivo, parsearImporteMx } from './formato';
+import { instanteRFC3339, mxn, usd, usd4, mxnCompacto, litros, fechaMx, fechaCorta, fechaHoraMx, round2, pctCambio, porcentaje, hoyMx, inicioDiaMx, finDiaMx, pesoArchivo, parsearImporteMx, parsearCoordenadaMx } from './formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 7 · MEDIO REINCIDENTE POR TERCERA RONDA — y el número CRECÍA:
@@ -564,4 +564,80 @@ describe('los sitios de captura usan el parser estricto (A36-R01-02)', () => {
       expect(src).toContain('parsearImporteMx');
     });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDITORÍA 38 · A38-FE-01 / A38-FIS-01 — la regresión que dejó sin guardar
+// TODAS las geocercas de México.
+//
+// La A36-R01-02 (el bloque de arriba) hizo lo correcto: obligó a los sitios de
+// captura a leer dinero con `parsearImporteMx` en vez de adivinar con
+// `.replace(',', '.')`. Pero su guardia pide la PRESENCIA del parser estricto en
+// el archivo, y no distingue qué campo se lee con él. Al satisfacerla, el editor
+// de geocercas barrió `lat`/`lng` dentro del parser de DINERO — y el parser de
+// dinero rechaza el signo por contrato (está fijado arriba: `'-5'` → NaN).
+//
+// México entero está al oeste de Greenwich, así que toda longitud del país es
+// negativa: el propio placeholder del formulario (`-100.3899`) devolvía NaN y
+// `guardarGeocerca` contestaba «Latitud, longitud y radio deben ser números»
+// sobre tres campos que son números. `peajes/repo.ts` nunca estuvo de acuerdo:
+// valida `e.lng < -180`, o sea que SIEMPRE esperó coordenadas con signo.
+//
+// La lección es la de la guardia, no la del parser: una guardia que exige «usa
+// esta función» sin decir «para este tipo de campo» empuja a usarla donde no va.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('parsearCoordenadaMx (A38-FE-01)', () => {
+  it('acepta la longitud negativa de México, que es TODA la del país', () => {
+    expect(parsearCoordenadaMx('-100.3899')).toBe(-100.3899); // el placeholder del formulario
+    expect(parsearCoordenadaMx('-103.42')).toBe(-103.42);     // Zapopan
+    expect(parsearCoordenadaMx('-99.1332')).toBe(-99.1332);   // CDMX
+    expect(parsearCoordenadaMx('-86.8')).toBe(-86.8);         // el extremo este (Quintana Roo)
+    expect(parsearCoordenadaMx('-117.1')).toBe(-117.1);       // el extremo oeste (Tijuana)
+  });
+
+  it('acepta la latitud positiva y la coma decimal tecleada en México', () => {
+    expect(parsearCoordenadaMx('20.7416')).toBe(20.7416);
+    expect(parsearCoordenadaMx('20,7416')).toBe(20.7416);
+    expect(parsearCoordenadaMx('-103,42')).toBe(-103.42);
+    expect(parsearCoordenadaMx('0')).toBe(0);
+  });
+
+  it('hereda el rigor del parser de importes: no adivina ni acepta basura', () => {
+    for (const malo of ['', '  ', '-', 'abc', '-abc', '1.2.3', '1e3', '--5', '-', '5-', '+5']) {
+      expect(parsearCoordenadaMx(malo), malo).toBeNaN();
+    }
+    // Lo ambiguo sigue siendo ambiguo, con signo o sin él.
+    expect(parsearCoordenadaMx('-1,500')).toBeNaN();
+    expect(parsearCoordenadaMx('1.234')).toBeNaN();
+  });
+
+  it('el parser de DINERO sigue rechazando el signo (no se tocó su contrato)', () => {
+    expect(parsearImporteMx('-100.3899')).toBeNaN();
+    expect(parsearImporteMx('-5')).toBeNaN();
+  });
+});
+
+describe('una coordenada no se lee con el parser de dinero (A38-FE-01)', () => {
+  // La guardia que faltaba: cualquier archivo que lea un campo `lat:`/`lng:`
+  // de un formulario tiene que leerlo con `parsearCoordenadaMx`. Sin esto, la
+  // guardia de la A36-R01-02 vuelve a empujar las coordenadas al parser de
+  // dinero en el siguiente barrido y nadie se entera hasta que una flota no
+  // puede guardar su planta.
+  const candidatos = execSync(
+    `grep -rl "parsearImporteMx" src/ --include='*.ts' --include='*.tsx' || true`,
+    { encoding: 'utf8' },
+  ).split('\n').filter(Boolean)
+    .filter((f) => !f.includes('lib/formato.ts') && !f.includes('.test.'));
+
+  it('los archivos que capturan lat/lng importan parsearCoordenadaMx', () => {
+    const fuera = candidatos.filter((f) => {
+      const src = sinComentarios(readFileSync(f, 'utf8'));
+      const capturaCoordenada = /\blat:\s|\blng:\s/.test(src);
+      return capturaCoordenada && !src.includes('parsearCoordenadaMx');
+    });
+    expect(
+      fuera,
+      'estos archivos leen una coordenada con el parser de dinero, que rechaza el signo:\n' + fuera.join('\n'),
+    ).toEqual([]);
+  });
 });
