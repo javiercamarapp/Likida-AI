@@ -34,6 +34,8 @@ const cierres: Array<{ tenantId: string; resultado: Record<string, unknown> }> =
 let reclamadas: Array<Record<string, unknown>> = [];
 vi.mock('../conectores/poll_durable', () => ({
   reclamarPolls: async () => reclamadas,
+  procesarPollsEnPool: async (_r: string, _p: string[], _a: number, _o: unknown, fn: (c: Record<string, unknown>) => Promise<unknown>) =>
+    Promise.all(reclamadas.map((c) => fn(c).then((ok) => ({ c, ok }), (error) => ({ c, error })))),
   finalizarPoll: async (_r: string, c: { tenantId: string }, resultado: Record<string, unknown>) => { cierres.push({ tenantId: c.tenantId, resultado }); },
 }));
 

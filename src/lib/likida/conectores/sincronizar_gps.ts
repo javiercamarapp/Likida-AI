@@ -25,12 +25,11 @@ import { acotada } from '../presupuesto';
 import { descifrar } from './cofre';
 import { lectorDe, LECTORES_POSICION } from './posiciones';
 import { httpReal as crearHttpReal, type Http } from './tipos';
-import { conPool } from '../lotes';
 import { llaveEconomico } from './tabla_propia/validar';
 import { normalizarDespachoRef } from './tabla_propia/filas';
 import { PROVEEDOR_TABLA_PROPIA } from './tabla_propia/contrato';
 import { unidadesSinAvisoPrevio } from '../privacidad';
-import { finalizarPoll, reclamarPolls } from './poll_durable';
+import { finalizarPoll, procesarPollsEnPool } from './poll_durable';
 
 // ── AUDITORÍA 24, REN-2 (ALTO): EL TOPE MUDO ─────────────────────────────
 // Era `TOPE_POR_FLOTA = 500` con `.slice()` en silencio: con las 800 unidades
@@ -446,10 +445,11 @@ export async function sincronizarGpsTodas(
   // Sólo se reclama lo que el pool puede arrancar de inmediato. Reclamar 200
   // y luego expirar 196 como "sin turno" actualizaría su último inicio sin
   // haberlos atendido y reintroduciría hambre por el desempate fijo.
-  const credenciales = await reclamarPolls(
-    'posiciones', Object.keys(LECTORES_POSICION), ANCHO_FANOUT_FLOTAS,
-  );
-  const resultados = await conPool(credenciales, ANCHO_FANOUT_FLOTAS, async (c) => {
+  // A37-S38-02: ANCHO obreros reclaman de a UNA flota hasta agotar elegibles o
+  // reloj (antes: solo 4 por corrida → latencia lineal en N flotas).
+  const resultados = await procesarPollsEnPool('posiciones', Object.keys(LECTORES_POSICION), ANCHO_FANOUT_FLOTAS, {
+    venceEn: opts.venceEn, ahora,
+  }, async (c) => {
     // El reloj se mira ANTES de despachar cada flota, no una vez al principio:
     // el patrón de `conRelojDuro`/`vigilarPortales`. Lo que no alcanzó queda
     // intacto para la corrida siguiente.
@@ -484,9 +484,9 @@ export async function sincronizarGpsTodas(
       return { ...resultado, error: motivoParaPanel('finalizar_durable'), backlog: true };
     }
   });
-  const salida = resultados.map((r, i) => {
+  const salida = resultados.map((r) => {
     if ('ok' in r) return r.ok;
-    const c = credenciales[i];
+    const c = r.c;
     return {
       tenantId: c.tenantId, proveedor: c.proveedor,
       leidas: 0, guardadas: 0, huerfanas: 0,

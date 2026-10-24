@@ -221,6 +221,11 @@ describe('procesarRespuestaCampana', () => {
     await expect(borrarDatosPersonaPorBaja('pr-1', 'x@y.mx', true)).resolves.toBeUndefined();
   });
 
+  it('A37-S08-01: borrarDatosPersonaPorBajaPorCorreo LANZA si no puede resolver al prospecto (lectura caída), para que la liga responda 500', async () => {
+    respuestas.set('prospecto', [{ data: null, error: { message: 'base caída' } }]);
+    await expect(borrarDatosPersonaPorBajaPorCorreo('otra@empresa.mx')).rejects.toThrow(/prospecto ilegible/);
+  });
+
   it('borrarDatosPersonaPorBajaPorCorreo (la liga de un clic) resuelve el prospecto y borra igual', async () => {
     respuestas.set('prospecto', [{ data: [{ id: 'pr-9' }], error: null }]);
     await borrarDatosPersonaPorBajaPorCorreo('otra@empresa.mx');

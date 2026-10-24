@@ -1,5 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
+// A37-S05-01/S06-01: la página ahora llama su propia puerta; aquí la sesión es de superadmin.
+vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' })) }));
 
 // ═══════════════════════════════════════════════════════════════════════════
 // /admin/analitica — CERO cobertura. Sólo lectura (puerta en layout.tsx). Lo

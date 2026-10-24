@@ -40,6 +40,8 @@ export interface ResultadoAgente {
   cfdiUuid?: string;
   /** Ruta del XML descargado, si lo hubo. */
   xmlRuta?: string;
+  /** El CFDI SE EMITIÓ pero algo secundario no salió (p. ej. el XML no bajó): no es un fallo. */
+  aviso?: string;
   /** Por qué no se pudo. Se enseña tal cual: dice qué arreglar. */
   error?: string;
   /** Captura de la pantalla final, para poder MIRAR qué pasó. */

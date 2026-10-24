@@ -110,15 +110,30 @@ const MENSAJE_YA_ENVIADO = 'Este documento ya se envió al TMS: no hay nada que 
  *   · IDEMPOTENTE: si esa versión ya está `subido_a_mano` devuelve el mismo envío sin segundo evento.
  *   · Si todavía no hay envío de esta versión (p. ej. flota sin perfil), se prepara y se marca en el acto.
  */
+/** La referencia que el sistema del cliente dio a la carga: texto corto, sin controles. `null` = no se dio (vacía). */
+export function referenciaTmsLimpia(crudo: string | null | undefined): { ok: true; valor: string | null } | { ok: false; mensaje: string } {
+  const t = String(crudo ?? '').trim();
+  if (t === '') return { ok: true, valor: null };
+  if (t.length > 200 || /[\u0000-\u001f\u007f]/.test(t)) return { ok: false, mensaje: 'La referencia del sistema del cliente es demasiado larga (máximo 200 caracteres) o trae caracteres no válidos.' };
+  return { ok: true, valor: t };
+}
+
 export async function marcarSubidoAMano(
   tenantId: string, doc: DocumentoFila, versionVista: number, actor: { id: string | null; email?: string },
+  /** A37-A3-01: la referencia que el sistema del cliente dio a la carga; sin ella el CCP timbrado no se puede casar con este envío. */
+  referenciaTms?: string | null,
 ): Promise<ResultadoSubidoAMano> {
+  const ref = referenciaTmsLimpia(referenciaTms);
+  if (!ref.ok) return { ok: false, motivo: 'error', mensaje: ref.mensaje };
   if (doc.estado !== 'aprobado') return { ok: false, motivo: 'no_aprobado', mensaje: 'Solo se marca como subido a mano un documento aprobado.' };
   if (doc.version !== versionVista) return { ok: false, motivo: 'version_cambio', mensaje: 'Otra persona cambió este documento mientras lo revisabas. Recarga la pantalla y vuelve a intentarlo.' };
 
   const previos = await repo.enviosDeDocumento(tenantId, doc.id);
   let envio = previos.find((e) => e.versionDoc === doc.version && e.estado !== 'descartado');
-  if (envio?.estado === 'subido_a_mano') return { ok: true, envio, yaEstaba: true };
+  if (envio?.estado === 'subido_a_mano') {
+    if (ref.valor !== null) await repo.fijarReferenciaEnvio(tenantId, envio.id, ref.valor);
+    return { ok: true, envio, yaEstaba: true };
+  }
   if (envio?.estado === 'enviado') return { ok: false, motivo: 'ya_enviado', mensaje: MENSAJE_YA_ENVIADO };
   if (envio?.estado === 'enviando') return { ok: false, motivo: 'envio_en_curso', mensaje: 'El envío se está haciendo ahora. Espera a que termine antes de marcarlo como subido a mano.' };
 
@@ -136,6 +151,7 @@ export async function marcarSubidoAMano(
     if (ahora?.estado === 'enviando') return { ok: false, motivo: 'envio_en_curso', mensaje: 'El envío se está haciendo ahora. Espera a que termine antes de marcarlo como subido a mano.' };
     return { ok: false, motivo: 'error', mensaje: 'Este envío ya no admite marcarse como subido a mano (quedó descartado o cambió). Recarga la pantalla para ver su estado actual.' };
   }
-  await repo.registrarEvento(tenantId, doc.id, 'envio_subido_a_mano', actor.id, { envioId: envio.id, versionDoc: doc.version, estadoPrevio });
+  if (ref.valor !== null) await repo.fijarReferenciaEnvio(tenantId, envio.id, ref.valor);
+  await repo.registrarEvento(tenantId, doc.id, 'envio_subido_a_mano', actor.id, { envioId: envio.id, versionDoc: doc.version, estadoPrevio, conReferencia: ref.valor !== null });
   return { ok: true, envio: { ...envio, estado: 'subido_a_mano' }, yaEstaba: false };
 }

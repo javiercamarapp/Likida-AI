@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { getEquipo } from '@/lib/admin/negocio';
 import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
 import { Users } from 'lucide-react';
@@ -38,6 +39,8 @@ export default async function EquipoPage({
    *  encargado, la tabla se vuelve una lista por la que nadie puede navegar. */
   searchParams: Promise<{ q?: string; p?: string }>;
 }) {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const [equipo, sp] = await Promise.all([getEquipo(), searchParams]);
   const ordenados = [...equipo].sort((a, b) => {
     const ia = ORDEN_ROL.indexOf(a.rol as RolAppUser);

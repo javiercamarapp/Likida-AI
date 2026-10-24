@@ -1,4 +1,4 @@
-import { CATEGORIAS_COBRO, ETIQUETA_CATEGORIA_COBRO, type CandidatoCobro, type CategoriaCobro } from './reglas_cobro';
+import { CATEGORIAS_COBRO, ETIQUETA_CATEGORIA_COBRO, esCategoriaInterna, type CandidatoCobro, type CategoriaCobro } from './reglas_cobro';
 import { ETIQUETA_SENAL, type CruceAtipico, type SenalAtipica } from './cruces_atipicos';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -230,7 +230,7 @@ export type MotivoNoAplica = 'ya_decidido' | 'no_reclamable' | 'sin_fecha';
 export function aplicaAccion(f: FilaCandidato, accion: AccionCandidato): { ok: true } | { ok: false; motivo: MotivoNoAplica } {
   if (f.estado !== 'pendiente') return { ok: false, motivo: 'ya_decidido' };
   if (accion === 'reclamado') {
-    if (!esCategoriaCobro(f.categoria)) return { ok: false, motivo: 'no_reclamable' };
+    if (!esCategoriaCobro(f.categoria) || esCategoriaInterna(f.categoria)) return { ok: false, motivo: 'no_reclamable' };
     if (f.fecha === null) return { ok: false, motivo: 'sin_fecha' };
   }
   return { ok: true };

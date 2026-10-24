@@ -583,6 +583,12 @@ export const api: typeof Real = {
     e.estado = 'subido_a_mano';
     return true;
   },
+  async fijarReferenciaEnvio(tenantId, id, referencia) {
+    const e = estado.envios.find((x) => x.tenantId === tenantId && x.id === id);
+    if (!e) return false;
+    (e as unknown as { referenciaTms: string | null }).referenciaTms = referencia.slice(0, 200);
+    return true;
+  },
   async estadoEnvioPorDocumento(tenantId, documentoIds) {
     const salida: Record<string, Real.EstadoEnvioTms> = {};
     for (const e of [...estado.envios].reverse()) {

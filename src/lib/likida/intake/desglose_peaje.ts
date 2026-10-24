@@ -64,6 +64,7 @@ import { normalizarTag } from '../peajes/formatos';
 import { resolverPeriodo } from '../peajes/periodo';
 import { registrarNombresDeCasetas } from '../peajes/revision_cobros';
 import { matrizDeCsv } from '../peajes/csv';
+import { clasificarVerificacion } from '../peajes/verificacion';
 import {
   fechaHoraDeCelda, horaDeCelda, aInstanteMx, montoDeCelda as montoDeCeldaBase,
 } from '../peajes/formatos';
@@ -1545,7 +1546,7 @@ export async function detalleDesglose(tenantId: string, desgloseId: string, limi
  */
 export const LEYENDAS_BITACORA_RMF_918: readonly string[] = [
   'Bitácora de cruces conciliados contra el desglose del proveedor de peaje — el documento de la fracción II de la regla 9.1.8 de la RMF 2026: viaje (origen y destino), caseta y monto que coinciden con el desglose del sistema electrónico de pago.',
-  'Solo entran las líneas que cuadraron; las discrepancias y las líneas sin contraparte NO forman parte de esta bitácora.',
+  'Solo entran las líneas que cuadraron; las discrepancias, las líneas sin contraparte y las que quedan «por verificar» (GPS que no coincide, TAG de otra unidad, comprobante de baja confianza sin verificación independiente) NO forman parte de esta bitácora.',
   'Este documento NO afirma que el estímulo del 50% de peaje (LIF 2026, art. 20, ap. A, fr. V) proceda. Corren por cuenta del contribuyente: el aviso de marzo con inventario vehicular por buzón tributario (fr. I), pagar con TAG o sistema electrónico y conservar los estados de cuenta (fr. III), la dedicación exclusiva al autotransporte, el uso de la Red Nacional de Autopistas de Cuota, ingresos anuales menores a 300 millones de pesos y no ser parte relacionada (LISR 179).',
   'La base del acreditamiento es el importe pagado SIN IVA con factor 0.5 (fr. IV). Esta bitácora lista el monto conciliado del desglose; NO calcula el estímulo — eso decídelo con tu contador.',
   'La columna posiciones_gps_dia es evidencia OPERATIVA adicional (cuántas posiciones GPS registró la unidad del viaje el día del cruce), no un requisito de la regla. «sin datos» significa GPS sin conectar o dato faltante — no invalida el cruce conciliado.',
@@ -1622,10 +1623,10 @@ export async function bitacoraRmf918(tenantId: string, desgloseId: string): Prom
   // `traerTodo` por lo mismo que `agregarEstatus`: la bitácora RMF 9.18 con
   // el `.limit(5000)` recortado a 1,000 salía INCOMPLETA — y es un documento
   // fiscal descargable, no una vista.
-  const filas = await traerTodo<{ fecha: unknown; caseta: unknown; monto: unknown; tag: unknown; viaje_id: unknown }>(
+  const filasCuadra = await traerTodo<{ fecha: unknown; caseta: unknown; monto: unknown; tag: unknown; viaje_id: unknown; detalle: unknown; gps_veredicto: unknown; gps_detalle: unknown }>(
     (d, h) => acotada(supabaseAdmin()
       .from('desglose_peaje_linea')
-      .select('fecha, caseta, monto, tag, viaje_id', conteo(d))
+      .select('fecha, caseta, monto, tag, viaje_id, detalle, gps_veredicto, gps_detalle', conteo(d))
       .eq('tenant_id', tenantId)
       .eq('desglose_id', desgloseId)
       .eq('estatus', 'cuadra')
@@ -1633,6 +1634,19 @@ export async function bitacoraRmf918(tenantId: string, desgloseId: string): Prom
       .range(d, h), 'bitacora.lineas'),
     'bitacora.lineas',
   );
+  // A37-A2-02: el cruce deja `cuadra` en líneas que la pantalla degrada a «por verificar» (GPS que no coincide, TAG de otra
+  // unidad, ticket de baja confianza sin verificación independiente). El documento fiscal usa la MISMA regla que la pantalla
+  // (`clasificarVerificacion`): nada se lista como conciliado si un humano aún debe verlo.
+  const filas = filasCuadra.filter((f) => {
+    const gps = f.gps_detalle as Record<string, unknown> | null;
+    const v = clasificarVerificacion({
+      estatus: 'cuadra',
+      detalle: (f.detalle as Record<string, unknown> | null) ?? null,
+      gpsVeredicto: (f.gps_veredicto as 'confirma' | 'no_coincide' | 'sin_datos' | null) ?? null,
+      gpsMotivo: typeof gps?.motivo === 'string' ? gps.motivo : null,
+    });
+    return v.estado === 'cuadra';
+  });
   const lineas = filas.map((f) => ({
     fecha: (f.fecha as string | null) ?? null,
     caseta: (f.caseta as string | null) ?? null,

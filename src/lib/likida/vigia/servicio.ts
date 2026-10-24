@@ -38,6 +38,7 @@ import { generarAvisos } from './aviso/generar';
 import { entregarAviso } from './aviso/entrega';
 import { contarPendientesViejos, TOPE_PENDIENTES_LEIDOS } from './aviso/cola';
 import { clasificar } from './clasificador';
+import { clasificarPorReglas } from './intencion';
 import { sinTenantsDePerfil } from './sin_flotas';
 import { esSpam, limpiarTexto } from './entrada';
 import { claveServicio, DIAS_CICLO_INACTIVO, destinoDelDisparo, evaluarEscalamiento, faltantesDeUnidad, minutosEsperando, type AccionEscalamiento } from './escalamiento';
@@ -162,6 +163,22 @@ interface ContextoEntrante {
   ahora: Date;
 }
 
+/** El opt-out se registra PRIMERO, se cierra el hilo y se acusa UNA vez. Idempotente en la base (`registrarOptOut`). */
+async function registrarBaja(c: ContextoEntrante, conversacionId: string, deps: DepsVigia): Promise<void> {
+  const { repo } = deps;
+  const { tenantId, contacto, config, ahora } = c;
+  await repo.registrarOptOut(tenantId, contacto.id, ahora);
+  await repo.evento(tenantId, { conversacionId, tipo: 'optout', destinatarioHash: hashTelefono(contacto.telefono) });
+  await repo.cerrarConversacion(tenantId, conversacionId, ahora);
+  const nombreFlota = await repo.nombreFlota(tenantId);
+  const enviarCliente = deps.enviarCliente ?? enviarAlCliente;
+  const r = await enviarCliente({
+    tenantId, contacto: { ...contacto, estado: 'baja', optoutEn: ahora.toISOString() },
+    texto: MENSAJE_BAJA, nombreFlota, agenteHabilitado: config.habilitado,
+  }, deps.enviar, { confirmacionDeBaja: true });
+  if (!r.ok) logger.warn('vigia.acuse_baja_no_enviado', { tenant: tenantId, motivo: r.motivo });
+}
+
 async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<void> {
   const { repo } = deps;
   const { tenantId, contacto, config, recibido, ahora } = c;
@@ -169,6 +186,19 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
   const conv = await repo.conversacion(tenantId, recibido.conversacionId);
   if (!conv) throw new Error('conversación inexistente tras recibir');
   const inicioCiclo = conv.sinRespuestaDesde ?? ahora.toISOString();
+
+  // ── BAJA DETERMINISTA, ANTES de cualquier filtro (A37-S59-01) ────────────
+  // «BAJA» es una orden expresa del cliente: ni el filtro de spam ni el control humano del hilo (el gerente lo tomó) pueden
+  // tragársela. La regla es la misma de la clasificación (mensaje corto, no «la baja de la unidad 12»); no usa modelo.
+  if (c.tipo === 'texto') {
+    const porRegla = clasificarPorReglas(c.texto);
+    if (porRegla?.intencion === 'baja') {
+      await repo.anotarClasificacion(tenantId, recibido.mensajeId, porRegla);
+      await repo.evento(tenantId, { conversacionId: conv.id, tipo: 'entrante', detalle: { intencion: 'baja', clasificador: porRegla.clasificador, control: conv.control } });
+      await registrarBaja(c, conv.id, deps);
+      return;
+    }
+  }
 
   // ── SPAM: ráfagas y repeticiones no abren consultas ni avisos ───────────
   const recientes = await repo.entrantesRecientes(tenantId, conv.id, new Date(ahora.getTime() - 10 * 60_000), 25);
@@ -232,16 +262,7 @@ async function procesarEntrante(c: ContextoEntrante, deps: DepsVigia): Promise<v
 
   // ── BAJA: el opt-out se registra PRIMERO y se acusa después ─────────────
   if (cl.intencion === 'baja') {
-    await repo.registrarOptOut(tenantId, contacto.id, ahora);
-    await repo.evento(tenantId, { conversacionId: conv.id, tipo: 'optout', destinatarioHash: hashTelefono(contacto.telefono) });
-    await repo.cerrarConversacion(tenantId, conv.id, ahora);
-    const nombreFlota = await repo.nombreFlota(tenantId);
-    const enviarCliente = deps.enviarCliente ?? enviarAlCliente;
-    const r = await enviarCliente({
-      tenantId, contacto: { ...contacto, estado: 'baja', optoutEn: ahora.toISOString() },
-      texto: MENSAJE_BAJA, nombreFlota, agenteHabilitado: config.habilitado,
-    }, deps.enviar, { confirmacionDeBaja: true });
-    if (!r.ok) logger.warn('vigia.acuse_baja_no_enviado', { tenant: tenantId, motivo: r.motivo });
+    await registrarBaja(c, conv.id, deps);
     return;
   }
 

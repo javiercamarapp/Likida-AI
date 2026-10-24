@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "total": 197,
+  "total": 193,
   "porArchivo": {
     "src/app/admin/agentes/contenido.tsx": 1,
     "src/app/admin/evals/page.tsx": 1,
@@ -39,8 +39,8 @@
     "src/lib/likida/agentes/ingenieria.ts": 3,
     "src/lib/likida/agentes/leads.ts": 14,
     "src/lib/likida/agentes/redactor.ts": 2,
-    "src/lib/likida/agentes/runner.ts": 2,
-    "src/lib/likida/agentes/sdr.ts": 4,
+    "src/lib/likida/agentes/runner.ts": 1,
+    "src/lib/likida/agentes/sdr.ts": 1,
     "src/lib/likida/analytics.ts": 4,
     "src/lib/likida/asignar_wa.ts": 1,
     "src/lib/likida/asistencia_camara.ts": 1,

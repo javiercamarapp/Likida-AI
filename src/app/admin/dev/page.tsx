@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { Code2, ExternalLink } from 'lucide-react';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { getActividadGitHub, getMapaCommits, getAutoresCommits } from '@/lib/admin/github';
@@ -25,6 +26,8 @@ const REPO_URL = 'https://github.com/javiercamarapp/likida.ai';
  * eso el link directo al repositorio sigue siendo el único atajo para eso.
  */
 export default async function DevPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   // El selector de vistas necesita saber si HAY flotas (con cero, sus ligas
   // rebotarían a paneles vacíos y lo dice). Conteo directo y barato — la
   // tabla `tenant` no tiene tenant_id: es la lista de tenants misma.

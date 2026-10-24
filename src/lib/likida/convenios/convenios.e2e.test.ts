@@ -27,6 +27,12 @@ vi.mock('@/lib/meta/enviar_con_fallback', () => ({
     return { ok: true, via: 'texto', id: 'w', motivo: 'ventana_abierta', ventana: 'abierta' };
   }),
 }));
+// A37-A5-01: el Agente 5 habilitado (0859) y sin emergencia: lo que este archivo prueba es el ciclo, no las compuertas (ver acercamiento.test.ts).
+vi.mock('../conductor/repo', async (orig) => ({
+  ...(await orig<typeof import('../conductor/repo')>()),
+  leerAgenteChoferHabilitado: vi.fn(async () => ({ habilitado: true, razon: 'habilitado' })),
+}));
+vi.mock('../conductor/trabajo', async (orig) => ({ ...(await orig<typeof import('../conductor/trabajo')>()), hayEmergenciaDeTelefono: vi.fn(async () => false) }));
 let mundo = new Mundo();
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => mundo.admin() }));
 
@@ -85,6 +91,12 @@ describe('el ciclo completo de un convenio', () => {
     posicion(ORIGEN);
     await expect(barridoAcercamiento(undefined, AHORA)).resolves.toMatchObject({ enviados: 0 });
     expect(wa).toHaveLength(2);
+    // A37-A5-01: el reclamo del acercamiento ya CADUCARÍA a los 10 min y el aviso se reintentaría cada ~10-15 min tras un rechazo definitivo.
+    // Ahora el rechazo definitivo lo congela: a los 15 y 30 min no se manda nada más, y tampoco se sella como «enviado».
+    await barridoAcercamiento(undefined, new Date(AHORA.getTime() + 15 * 60_000));
+    await barridoAcercamiento(undefined, new Date(AHORA.getTime() + 30 * 60_000));
+    expect(wa).toHaveLength(2);
+    expect(mundo.tablas.viaje_convenio[0].acercamiento_origen_enviado_en ?? null).toBeNull();
     expect(await atenderPreguntaConvenio({ tenantId: T, operadorId, viajeAbiertoId: viajeId, texto: '¿Por dónde entro?' })).toContain('Entra por la puerta 1 de carga'); // la pregunta sigue respondiendo
     // Rechazo REINTENTABLE (límite de tasa) en otro viaje: libera el reclamo y la corrida siguiente lo manda.
     // Unidad DISTINTA a propósito: `viajeId` sigue abierto (nunca se liquidó en esta prueba) y

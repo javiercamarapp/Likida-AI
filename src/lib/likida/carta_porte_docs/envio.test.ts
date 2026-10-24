@@ -212,6 +212,27 @@ describe('modo manual: «Ya la subí a mano»', () => {
     expect(estado.envios.map((e) => e.estado)).toEqual(['subido_a_mano']);
   });
 
+  it('A37-A3-01: «ya la subí a mano» CAPTURA la referencia del sistema del cliente (con ella se casa el CCP timbrado); sin ella queda vacía', async () => {
+    const { id, doc } = await documentoSinOperador();
+    await aprobarDocumento(A, id, doc().version, ACTOR);
+    const r = await marcarSubidoAMano(A, doc(), doc().version, ACTOR, '  REQ-77812  ');
+    expect(r).toMatchObject({ ok: true, yaEstaba: false });
+    expect((estado.envios[0] as unknown as { referenciaTms: string | null }).referenciaTms).toBe('REQ-77812');
+    expect(estado.eventos.find((e) => e.tipo === 'envio_subido_a_mano')?.detalle).toMatchObject({ conReferencia: true });
+    // Idempotente, y una referencia dada después también se guarda.
+    const dos = await marcarSubidoAMano(A, doc(), doc().version, ACTOR, 'REQ-77813');
+    expect(dos).toMatchObject({ ok: true, yaEstaba: true });
+    expect((estado.envios[0] as unknown as { referenciaTms: string | null }).referenciaTms).toBe('REQ-77813');
+  });
+
+  it('A37-A3-01: una referencia inválida (muy larga o con controles) se rechaza sin marcar nada', async () => {
+    const { id, doc } = await documentoSinOperador();
+    await aprobarDocumento(A, id, doc().version, ACTOR);
+    expect(await marcarSubidoAMano(A, doc(), doc().version, ACTOR, 'x'.repeat(201))).toMatchObject({ ok: false });
+    expect(await marcarSubidoAMano(A, doc(), doc().version, ACTOR, 'REQ\n1')).toMatchObject({ ok: false });
+    expect(estado.envios[0].estado).not.toBe('subido_a_mano');
+  });
+
   it('un envío rechazado por el TMS SÍ se puede marcar como subido a mano (el caso típico) y queda el estado previo en el evento', async () => {
     const { id, doc } = await documentoSinOperador();
     await aprobarDocumento(A, id, doc().version, ACTOR);

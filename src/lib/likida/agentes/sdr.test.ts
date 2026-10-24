@@ -9,22 +9,27 @@ import { readFileSync } from 'fs';
 //  · el historial ilegible NO decide a ciegas: LANZA.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const respuestas = new Map<string, Array<{ data: unknown; error: { message: string } | null }>>();
-function builder(tabla: string) {
-  const responder = () => {
-    const cola = respuestas.get(tabla);
-    return cola && cola.length > 0 ? cola.shift()! : { data: [], error: null };
-  };
-  const b: Record<string, unknown> = {};
-  Object.assign(b, {
-    select: () => b, eq: () => b, is: () => b, in: () => b, limit: () => b,
-    order: () => b,
-    then: (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
-      Promise.resolve().then(responder).then(res, rej),
-  });
-  return b;
-}
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: (t: string) => builder(t) }) }));
+// A37-S28-02: la búsqueda pagina y lee en LOTE (`.in`), así que ya no sirve una cola de respuestas fijas por
+// tabla: se usa una base en memoria que FILTRA y ORDENA de verdad (db_falsa.fixture.ts).
+import { crearDbFalsa, type Tablas } from './db_falsa.fixture';
+const TABLAS: Tablas = {};
+const consultas: string[] = [];
+let leerFalla: { tabla: string; mensaje: string } | null = null;
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: () => {
+    const db = crearDbFalsa(TABLAS, consultas);
+    return {
+      from: (t: string) => {
+        const q = db.from(t) as unknown as { then: unknown };
+        if (leerFalla && leerFalla.tabla === t) {
+          const msg = leerFalla.mensaje;
+          q.then = (res: (x: unknown) => unknown) => Promise.resolve({ data: null, error: { message: msg } }).then(res);
+        }
+        return q;
+      },
+    };
+  },
+}));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 const generar = vi.fn();
 vi.mock('@/lib/llm/openrouter', () => ({ generateResponse: (...a: unknown[]) => generar(...(a as [])) }));
@@ -45,71 +50,86 @@ const { candidatosDeSeguimiento, correrSdr } = await import('./sdr');
 const PROSPECTO = { id: 'pr-1', empresa: 'Transportes X', contacto_nombre: null };
 const hace = (dias: number) => new Date(Date.now() - dias * 86_400_000).toISOString();
 
-beforeEach(() => respuestas.clear());
+/** Siembra la base en memoria: prospectos `contactado` con su historial. */
+function sembrar(o: {
+  prospectos: Array<{ id: string; empresa?: string; contacto_nombre?: string | null }>;
+  contactos?: Array<{ prospecto_id: string; direccion: 'salida' | 'respuesta'; ocurrio_en: string }>;
+  rebotadas?: string[];
+}) {
+  TABLAS.prospecto = o.prospectos.map((p, i) => ({
+    empresa: 'Transportes X', contacto_nombre: null, estado: 'contactado', duplicado_de: null,
+    updated_at: `2026-01-01T00:00:${String(i).padStart(2, '0')}Z`, ...p,
+  }));
+  TABLAS.prospecto_contacto = (o.contactos ?? []).map((c, i) => ({ id: `c${i}`, ...c }));
+  TABLAS.cola_aprobacion = (o.rebotadas ?? []).map((id, i) => ({ id: `m${i}`, prospecto_id: id, entrega_estado: 'rebotado' }));
+}
+
+beforeEach(() => {
+  for (const k of Object.keys(TABLAS)) delete TABLAS[k];
+  consultas.length = 0;
+  leerFalla = null;
+});
 
 describe('candidatosDeSeguimiento', () => {
   it('una salida hace 4 días sin respuesta: toca el seguimiento 1', async () => {
-    respuestas.set('prospecto', [{ data: [PROSPECTO], error: null }]);
-    respuestas.set('prospecto_contacto', [{ data: [{ direccion: 'salida', ocurrio_en: hace(4) }], error: null }]);
-    respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
+    sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) }] });
     const r = await candidatosDeSeguimiento(5);
     expect(r).toHaveLength(1);
     expect(r[0].numeroSeguimiento).toBe(1);
   });
 
   it('con RESPUESTA del prospecto: fuera — el humano toma la conversación', async () => {
-    respuestas.set('prospecto', [{ data: [PROSPECTO], error: null }]);
-    respuestas.set('prospecto_contacto', [{
-      data: [
-        { direccion: 'salida', ocurrio_en: hace(5) },
-        { direccion: 'respuesta', ocurrio_en: hace(3) },
-      ], error: null,
-    }]);
+    sembrar({
+      prospectos: [PROSPECTO],
+      contactos: [
+        { prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(5) },
+        { prospecto_id: 'pr-1', direccion: 'respuesta', ocurrio_en: hace(3) },
+      ],
+    });
     expect(await candidatosDeSeguimiento(5)).toHaveLength(0);
   });
 
   it('con REBOTE o QUEJA de cualquier pieza: fuera — no se insiste a un buzón quemado', async () => {
-    respuestas.set('prospecto', [{ data: [PROSPECTO], error: null }]);
-    respuestas.set('prospecto_contacto', [{ data: [{ direccion: 'salida', ocurrio_en: hace(5) }], error: null }]);
-    respuestas.set('cola_aprobacion', [{ data: [{ id: 'p-rebotada' }], error: null }]);
+    sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(5) }], rebotadas: ['pr-1'] });
     expect(await candidatosDeSeguimiento(5)).toHaveLength(0);
   });
 
   it('la salida es de hace 2 días: aún no toca (+3)', async () => {
-    respuestas.set('prospecto', [{ data: [PROSPECTO], error: null }]);
-    respuestas.set('prospecto_contacto', [{ data: [{ direccion: 'salida', ocurrio_en: hace(2) }], error: null }]);
-    respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
+    sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(2) }] });
     expect(await candidatosDeSeguimiento(5)).toHaveLength(0);
   });
 
   it('dos salidas hace 8 días: toca el seguimiento 2 (+7); TRES salidas: la cadencia terminó', async () => {
-    respuestas.set('prospecto', [{ data: [PROSPECTO, { ...PROSPECTO, id: 'pr-2' }], error: null }]);
-    respuestas.set('prospecto_contacto', [
-      { data: [{ direccion: 'salida', ocurrio_en: hace(8) }, { direccion: 'salida', ocurrio_en: hace(4) }], error: null },
-      { data: [{ direccion: 'salida', ocurrio_en: hace(20) }, { direccion: 'salida', ocurrio_en: hace(15) }, { direccion: 'salida', ocurrio_en: hace(10) }], error: null },
-    ]);
-    respuestas.set('cola_aprobacion', [{ data: [], error: null }, { data: [], error: null }]);
+    sembrar({
+      prospectos: [PROSPECTO, { ...PROSPECTO, id: 'pr-2' }],
+      contactos: [
+        { prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(8) }, { prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) },
+        { prospecto_id: 'pr-2', direccion: 'salida', ocurrio_en: hace(20) }, { prospecto_id: 'pr-2', direccion: 'salida', ocurrio_en: hace(15) },
+        { prospecto_id: 'pr-2', direccion: 'salida', ocurrio_en: hace(10) },
+      ],
+    });
     const r = await candidatosDeSeguimiento(5);
     expect(r).toHaveLength(1);
     expect(r[0]).toMatchObject({ id: 'pr-1', numeroSeguimiento: 2 });
   });
 
   it('historial ilegible: LANZA — la cadencia no se decide a ciegas', async () => {
-    respuestas.set('prospecto', [{ data: [PROSPECTO], error: null }]);
-    respuestas.set('prospecto_contacto', [{ data: null, error: { message: 'db down' } }]);
+    sembrar({ prospectos: [PROSPECTO] });
+    leerFalla = { tabla: 'prospecto_contacto', mensaje: 'db down' };
     await expect(candidatosDeSeguimiento(5)).rejects.toThrow(/historial/);
+  });
+
+  it('una lectura de historial que llega al tope pudo truncarse: LANZA, no decide', async () => {
+    sembrar({
+      prospectos: [PROSPECTO],
+      contactos: Array.from({ length: 1_000 }, () => ({ prospecto_id: 'pr-1', direccion: 'salida' as const, ocurrio_en: hace(4) })),
+    });
+    await expect(candidatosDeSeguimiento(5)).rejects.toThrow(/truncarse/);
   });
 });
 
 describe('c5-14 — el formato se verifica sobre el TEXTO FINAL, asunto incluido', () => {
-  const candidato = () => {
-    respuestas.set('prospecto', [{ data: [PROSPECTO], error: null }]);
-    respuestas.set('prospecto_contacto', [{ data: [{ direccion: 'salida', ocurrio_en: hace(4) }], error: null }]);
-    respuestas.set('cola_aprobacion', [
-      { data: [], error: null },   // sin rebote/queja
-      { data: [], error: null },   // sin pieza pendiente
-    ]);
-  };
+  const candidato = () => sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) }] });
 
   it('un guion largo en el ASUNTO descarta la pieza — antes salía igual', async () => {
     candidato();
@@ -130,14 +150,7 @@ describe('c5-14 — el formato se verifica sobre el TEXTO FINAL, asunto incluido
 });
 
 describe('AGB-9 (auditoría 24) — 0 medido ≠ costo desconocido', () => {
-  const candidato = () => {
-    respuestas.set('prospecto', [{ data: [PROSPECTO], error: null }]);
-    respuestas.set('prospecto_contacto', [{ data: [{ direccion: 'salida', ocurrio_en: hace(4) }], error: null }]);
-    respuestas.set('cola_aprobacion', [
-      { data: [], error: null },
-      { data: [], error: null },
-    ]);
-  };
+  const candidato = () => sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) }] });
 
   it('con `usage` medido y cost real (incluido 0), costoUsd es el número — nunca null', async () => {
     candidato();
@@ -156,15 +169,13 @@ describe('AGB-9 (auditoría 24) — 0 medido ≠ costo desconocido', () => {
   });
 
   it('null es PEGAJOSO: una sola llamada sin medir vuelve incierta la corrida entera, aunque las demás sí midieron', async () => {
-    respuestas.set('prospecto', [{ data: [{ ...PROSPECTO, id: 'pr-1' }, { ...PROSPECTO, id: 'pr-2' }], error: null }]);
-    respuestas.set('prospecto_contacto', [
-      { data: [{ direccion: 'salida', ocurrio_en: hace(4) }], error: null },
-      { data: [{ direccion: 'salida', ocurrio_en: hace(4) }], error: null },
-    ]);
-    respuestas.set('cola_aprobacion', [
-      { data: [], error: null }, { data: [], error: null },
-      { data: [], error: null }, { data: [], error: null },
-    ]);
+    sembrar({
+      prospectos: [{ ...PROSPECTO, id: 'pr-1' }, { ...PROSPECTO, id: 'pr-2' }],
+      contactos: [
+        { prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) },
+        { prospecto_id: 'pr-2', direccion: 'salida', ocurrio_en: hace(4) },
+      ],
+    });
     generar
       .mockResolvedValueOnce({ text: '**Asunto:** Seguimiento\nLe escribí hace unos días. ¿Le vienen bien 15 minutos?', cost: 0.001 })
       .mockResolvedValueOnce({ text: '**Asunto:** Seguimiento\nLe escribí hace unos días. ¿Le vienen bien 15 minutos?', cost: 0.003, noMedido: true });
@@ -190,23 +201,23 @@ describe('el reloj de la vuelta corta también la BÚSQUEDA del SDR (c7-1)', () 
   const RELOJ_VENCIDO = () => Date.now() - 1;
 
   it('la búsqueda con el reloj vencido no gasta ni una consulta de historial', async () => {
-    respuestas.set('prospecto', [{ data: [PROSPECTO, { ...PROSPECTO, id: 'pr-2' }], error: null }]);
-    // Si el bucle corriera, se comería estas dos respuestas.
-    respuestas.set('prospecto_contacto', [{ data: [{ direccion: 'salida', ocurrio_en: hace(4) }], error: null }]);
+    sembrar({
+      prospectos: [PROSPECTO, { ...PROSPECTO, id: 'pr-2' }],
+      contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) }],
+    });
 
     const r = await candidatosDeSeguimiento(5, RELOJ_VENCIDO());
 
     expect(r).toEqual([]);
-    // CORTA de verdad: la consulta por prospecto NO se gastó.
-    expect(respuestas.get('prospecto_contacto')).toHaveLength(1);
+    // CORTA de verdad: ni la página de prospectos ni el historial se leyeron.
+    expect(consultas).toEqual([]);
   });
 
   it('un corte en la BÚSQUEDA no puede ser mudo: la corrida lo reporta como sinTurno, no como «no había a quién»', async () => {
     // El `beforeEach` de este archivo solo limpia `respuestas`; el contador del
     // modelo se arrastra de las pruebas de arriba y aquí se afirma sobre él.
     generar.mockClear();
-    respuestas.set('prospecto', [{ data: [PROSPECTO], error: null }]);
-    respuestas.set('prospecto_contacto', [{ data: [{ direccion: 'salida', ocurrio_en: hace(4) }], error: null }]);
+    sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) }] });
 
     const r = await correrSdr('cron', 5, RELOJ_VENCIDO());
 
@@ -222,9 +233,7 @@ describe('el reloj de la vuelta corta también la BÚSQUEDA del SDR (c7-1)', () 
   });
 
   it('sin reloj la búsqueda corre entera — el parámetro es opcional a propósito', async () => {
-    respuestas.set('prospecto', [{ data: [PROSPECTO], error: null }]);
-    respuestas.set('prospecto_contacto', [{ data: [{ direccion: 'salida', ocurrio_en: hace(4) }], error: null }]);
-    respuestas.set('cola_aprobacion', [{ data: [], error: null }]);
+    sembrar({ prospectos: [PROSPECTO], contactos: [{ prospecto_id: 'pr-1', direccion: 'salida', ocurrio_en: hace(4) }] });
     const r = await candidatosDeSeguimiento(5);
     expect(r).toHaveLength(1);
   });

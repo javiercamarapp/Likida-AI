@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { GitCommitHorizontal } from 'lucide-react';
 import { getActividadCodigo } from '@/lib/admin/actividad-codigo';
 import { numero, fechaCorta } from '@/lib/formato';
@@ -23,6 +24,8 @@ function opacidad(commits: number, max: number): number {
 }
 
 export default async function ActividadCodigoPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
   const a = await getActividadCodigo();
 

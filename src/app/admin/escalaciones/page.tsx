@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import {
   Inbox, ShieldCheck, Bot, Wrench, ReceiptText, LifeBuoy, ClipboardCheck,
@@ -71,6 +72,8 @@ const TOPE_COLA = 50;
 // REAL de cada fuente — esto solo cambia de dónde lee la tarjeta.
 
 export default async function EscalacionesPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const ahora = ahoraMs();
   // Nunca lanza: los fallos de lectura vienen por valor DENTRO de la bandeja.
   const bandeja: BandejaEscalaciones = await getBandejaEscalaciones(ahora);

@@ -54,7 +54,7 @@ function montar(resultado: ResultadoEnvio | (() => ResultadoEnvio), config: Part
       e.llamadasEnviar.push({ para, asunto: correo.asunto, parrafos: correo.parrafos, op });
       return typeof resultado === 'function' ? resultado() : resultado;
     },
-    leerConfig: async () => ({ ...CONFIG_CORREO_POR_DEFECTO, canal: 'correo', activa: true, ...config }),
+    leerConfig: async () => ({ ...CONFIG_CORREO_POR_DEFECTO, canal: 'correo', activa: true, responderA: 'nomina@ejemplo.test', ...config }),
     // El claim real: una fila reclamada no la ve otro trabajador.
     reclamar: async (limite) => {
       const mias = e.cola.filter((f) => !reclamadas.has(f.id)).slice(0, limite);
@@ -236,6 +236,17 @@ describe('procesarEntregasCorreo — interruptor «Activar el envío» (A35-A1-0
     expect(e.llamadasEnviar).toHaveLength(1);
   });
 
+  it('A37-A1-04: activa pero SIN «Responder a» ⇒ no sale ningún correo (la promesa «responde a este correo» sería falsa), sin gastar intento', async () => {
+    const { e, deps } = montar({ ok: true, id: 're_x' }, { activa: true, responderA: null });
+    const r = await procesarEntregasCorreo(deps, 10);
+    expect(e.llamadasEnviar).toEqual([]);
+    expect(r.sinConfigurar).toBe(1);
+    expect(r.enviadas).toBe(0);
+    expect(e.reprogramadas).toHaveLength(1);
+    expect(e.reprogramadas[0].intentos).toBe(0);
+    expect(e.fallidas).toEqual([]);
+  });
+
   it('sin fila de config (valor por defecto, activa=false) ⇒ tampoco envía', async () => {
     const { e, deps } = montar({ ok: true, id: 're_x' }, { ...CONFIG_CORREO_POR_DEFECTO, canal: 'correo' });
     await procesarEntregasCorreo(deps, 10);
@@ -412,5 +423,17 @@ describe('utilidades puras', () => {
     const { nombreAdjunto } = armarCorreoDesglose({ claveExterna: 'BIT-T01-../12/28', periodoDesde: '2026-10-09', periodoHasta: '2026-10-14' });
     expect(nombreAdjunto).not.toMatch(/[\\/]/);
     expect(nombreAdjunto.endsWith('.xlsx')).toBe(true);
+  });
+});
+
+
+describe('A37-A1-02: el correo de una corrección se rotula CORRECCIÓN', () => {
+  it('una clave «-R<n>» lleva CORRECCIÓN en el asunto y avisa que reemplaza al anterior; la normal no', () => {
+    const c = armarCorreoDesglose({ claveExterna: 'BIT-T01-1228-R1', periodoDesde: '2026-10-09', periodoHasta: '2026-10-14' }).correo;
+    expect(c.asunto).toMatch(/^CORRECCIÓN — Desglose de pago — bitácora 1228-R1/);
+    expect(c.parrafos[0]).toMatch(/reemplaza al que se envió antes/);
+    const n = armarCorreoDesglose({ claveExterna: 'BIT-T01-1228', periodoDesde: '2026-10-09', periodoHasta: '2026-10-14' }).correo;
+    expect(n.asunto).not.toMatch(/CORRECCIÓN/);
+    expect(n.parrafos.join(' ')).not.toMatch(/CORRECCIÓN/);
   });
 });

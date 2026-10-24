@@ -39,11 +39,13 @@ export type MotivoNada =
   /** T-A5-05: viaje de importación, hito de llegada a carga y el archivo no trajo cita: no hay de dónde colgar el aviso. */
   | 'sin_cita_importada'
   /** T-A5-36: la compuerta «unidad detenida» no deja escribirle al chofer ahora (en marcha, sin GPS reciente, muestras ralas…). No es un intento. */
-  | 'compuerta_movimiento';
+  | 'compuerta_movimiento'
+  /** A37-A5-04: una compuerta de seguridad (agente apagado o ilegible, emergencia abierta) detuvo el envío; no se consumió nada. */
+  | 'compuerta_agente';
 
 export type AccionPlan =
   | { tipo: 'chofer'; hito: HitoFila; clase: 'solicitud' | 'recordatorio'; nivel: number; minutosPendiente: number; ancla: Date }
-  | { tipo: 'escalar'; hito: HitoFila; nivel: 1 | 2; minutosPendiente: number; motivo: 'sin_respuesta' | 'sin_telefono'; ancla: Date }
+  | { tipo: 'escalar'; hito: HitoFila; nivel: 1 | 2; minutosPendiente: number; motivo: 'sin_respuesta' | 'sin_telefono' | 'sin_canal'; ancla: Date }
   | { tipo: 'nada'; motivo: MotivoNada };
 
 export interface EntradaPlan {
@@ -184,12 +186,14 @@ export function planificar(e: EntradaPlan): AccionPlan {
   const mios = e.avisos.filter((a) => a.hitoId === hito.id && a.ciclo === hito.ciclo);
   const choferEnviados = mios.filter((a) => a.clase === 'solicitud' || a.clase === 'recordatorio').map((a) => a.nivel);
   const escalaciones = new Set(mios.filter((a) => a.clase === 'escalacion').map((a) => a.nivel));
+  // A37-A5-04: un aviso que Meta rechazó de forma definitiva (ok = false) ya gastó su nivel de la escalera, pero NO cuenta como entregado.
+  const entregados = mios.filter((a) => (a.clase === 'solicitud' || a.clase === 'recordatorio') && a.ok !== false).length;
   const tieneTelefono = Boolean(viaje.operadorTelefono);
 
   // ── 1. ESCALAR, cuando la escalera ya se agotó (o no había a quién escribirle) ──
   const yaSeLeEscribio = choferEnviados.length > 0 || !tieneTelefono;
   if (yaSeLeEscribio && transcurridos >= config.escalarTrasMin) {
-    const motivo = tieneTelefono ? 'sin_respuesta' as const : 'sin_telefono' as const;
+    const motivo = !tieneTelefono ? 'sin_telefono' as const : entregados === 0 ? 'sin_canal' as const : 'sin_respuesta' as const;
     if (!escalaciones.has(1)) {
       return { tipo: 'escalar', hito, nivel: 1, minutosPendiente: Math.floor(transcurridos), motivo, ancla };
     }

@@ -143,10 +143,11 @@ describe('WA-3 · «No, corregir» deja constancia', () => {
       expect.objectContaining({ tenantId: 't1', gastoId: GASTO_ID, quien: 'o1' }));
   });
 
-  it('y se le dice que quedó marcado — pero solo porque de verdad quedó', async () => {
+  it('A37-S45-01: aunque la marca SÍ quedó, no se le promete una revisión que nadie lee: se le dice que su oficina no se entera sola', async () => {
     await processInbound(boton(`mal:${GASTO_ID}`));
     const m = salientes.join(' ');
-    expect(m).toMatch(/marqué para que tu oficina lo revise/i);
+    expect(m).not.toMatch(/marqué|lo revise\b|lo va a comparar/i);
+    expect(m).toMatch(/no se entera sola/i);
     expect(m, 'la trampa vieja: mandar otra foto lo cobra dos veces').toMatch(/no me mandes otra foto/i);
   });
 
@@ -155,7 +156,7 @@ describe('WA-3 · «No, corregir» deja constancia', () => {
     await processInbound(boton(`mal:${GASTO_ID}`));
     const m = salientes.join(' ');
     expect(m).not.toMatch(/marqué/i);
-    expect(m, 'lo que entonces sí funciona').toMatch(/enséñaselo a tu oficina/i);
+    expect(m, 'lo que entonces sí funciona').toMatch(/enséñaselo/i);
   });
 
   it('«Sí, está bien» no marca nada: no hay disputa que anotar', async () => {

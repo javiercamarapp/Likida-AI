@@ -110,3 +110,26 @@ describe('resumirAcreditacion', () => {
     expect(r.sinConfirmar).toEqual([]);
   });
 });
+
+describe('A37-A2-04: Reclamado y Pendiente no suman preparados ni rechazados', () => {
+  const base = { fechaCobroMasAntiguo: '2026-08-01' };
+  it('un preparado de 40,000 (nunca enviado) y un rechazado de 25,000 NO inflan lo reclamado ni lo pendiente', () => {
+    const r = resumirAcreditacion([
+      { id: 'p', ...base, estado: 'preparado', montoReclamado: 40000, montoAcreditado: 0 },
+      { id: 'x', ...base, estado: 'rechazado', montoReclamado: 25000, montoAcreditado: 0 },
+      { id: 'e', ...base, estado: 'enviado', montoReclamado: 1000.1, montoAcreditado: 0.1 },
+    ], '2026-10-14');
+    expect(r.reclamado).toBe(1000.1);
+    expect(r.acreditado).toBe(0.1);
+    expect(r.pendiente).toBe(1000);
+  });
+
+  it('el pendiente es de reclamos abiertos: lo acreditado de más en uno no compensa el saldo de otro', () => {
+    const r = resumirAcreditacion([
+      { id: 'a', ...base, estado: 'acreditado', montoReclamado: 100, montoAcreditado: 150 },
+      { id: 'b', ...base, estado: 'enviado', montoReclamado: 300, montoAcreditado: 0 },
+    ], '2026-10-14');
+    expect(r.pendiente).toBe(300);
+  });
+});
+

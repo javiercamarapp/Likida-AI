@@ -132,6 +132,9 @@ export default async function PaginaAgenteProveedores({
     const estadoSat = await estadoSatDeCfdi(xml);
     const r = await guardarFacturaProveedor(tenantId, xml, texto, rfc, 'subida', estadoSat);
     if (!r.ok) {
+      if (r.motivo === 'no_es_compra') {
+        return { error: 'Ese CFDI no es una factura de compra (es nota de crédito, pago, traslado o nómina). Una nota de crédito resta: regístrala con tu contador, no como compra.' };
+      }
       return r.motivo === 'duplicada'
         ? { error: 'Esa factura ya está en la bandeja (mismo folio fiscal).' }
         : { error: 'No se pudo guardar la factura. Inténtalo de nuevo.' };

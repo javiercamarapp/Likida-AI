@@ -942,32 +942,48 @@ export async function getCorridasFallidas(limite = TOPE_CORRIDAS_FALLIDAS): Prom
   });
 }
 
+/** La llave de una racha: agente + flota (`''` = corrida sin flota, p. ej. `ventas`). A37-S22-01. */
+export function llaveRacha(agente: string, tenantId: string | null): string {
+  return `${agente}|${tenantId ?? ''}`;
+}
+
 /**
- * Para cada agente dado, el `inicio` de su corrida más reciente que NO fue
- * fallo (`ok` o `parcial`) — el punto donde se ROMPIÓ su racha de fallos. Un
- * agente sin ninguna queda fuera del mapa (nunca ha salido bien). Una consulta
- * `limit 1` por agente, en paralelo: los agentes con fallos son pocos, y
- * deduplicar sobre «las últimas N» mentiría con uno que no corre hace semanas.
- * LANZA ante error de lectura (misma regla que sus hermanas).
+ * Para cada par agente+flota dado, el `inicio` de su corrida más reciente que
+ * NO fue fallo (`ok` o `parcial`) — el punto donde se ROMPIÓ su racha de
+ * fallos. Un par sin ninguna queda fuera del mapa (nunca ha salido bien). Las
+ * llaves son `llaveRacha(agente, tenantId)`.
+ *
+ * A37-S22-01: antes la ruptura se calculaba solo por agente. El cron corre el
+ * mismo agente para varias flotas: si la flota B salía ok DESPUÉS de que la
+ * flota A fallara, todo fallo de A quedaba «anterior a la ruptura» y su
+ * incidente desaparecía de la bandeja.
+ *
+ * Una consulta `limit 1` por par, en paralelo: los pares con fallos son pocos,
+ * y deduplicar sobre «las últimas N» mentiría con uno que no corre hace
+ * semanas. LANZA ante error de lectura (misma regla que sus hermanas).
  */
-export async function getUltimoInicioSinFalloPorAgente(agentes: readonly string[]): Promise<Map<string, string>> {
+export async function getUltimoInicioSinFalloPorAgente(
+  pares: ReadonlyArray<{ agente: string; tenantId: string | null }>,
+): Promise<Map<string, string>> {
   const admin = supabaseAdmin();
-  const unicos = [...new Set(agentes)];
-  const filas = await Promise.all(unicos.map(async (agente) => {
-    const { data, error } = await acotada(admin
+  const unicos = new Map<string, { agente: string; tenantId: string | null }>();
+  for (const p of pares) unicos.set(llaveRacha(p.agente, p.tenantId), p);
+  const filas = await Promise.all([...unicos.entries()].map(async ([llave, { agente, tenantId }]) => {
+    const base = admin
       .from('agente_corrida')
       .select('inicio')
       .eq('agente', agente)
-      .in('estado', ['ok', 'parcial'])
+      .in('estado', ['ok', 'parcial']);
+    const { data, error } = await acotada((tenantId === null ? base.is('tenant_id', null) : base.eq('tenant_id', tenantId))
       .order('inicio', { ascending: false })
       .order('id', { ascending: false })
       .limit(1), `getUltimoInicioSinFalloPorAgente/${agente}`);
     if (error) throw new Error(`getUltimoInicioSinFalloPorAgente/${agente}: ${error.message}`);
     const inicio = ((data ?? [])[0] as { inicio?: string } | undefined)?.inicio ?? null;
-    return [agente, inicio] as const;
+    return [llave, inicio] as const;
   }));
   const out = new Map<string, string>();
-  for (const [agente, inicio] of filas) if (inicio) out.set(agente, inicio);
+  for (const [llave, inicio] of filas) if (inicio) out.set(llave, inicio);
   return out;
 }
 

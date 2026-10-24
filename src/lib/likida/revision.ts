@@ -463,6 +463,7 @@ export async function revisarLiquidacion(p: PeticionRevision): Promise<Resultado
       cuadreRecalculado = r.cuadre;
       await conservarPdfAntesDeAjuste(p.tenantId, p.liquidacionId);
     } catch (e) {
+      if (e instanceof DatoInvalido) throw e; // el veto A37-S56-01 es un mensaje para la persona
       throw new Error(`revisarLiquidacion.recalculo: ${e instanceof Error ? e.message : String(e)}`);
     }
   }

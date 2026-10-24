@@ -949,7 +949,7 @@ function documento(servidor: string) {
                     unidadId: { type: 'string', format: 'uuid', nullable: true },
                     clienteId: { type: 'string', format: 'uuid', nullable: true, description: 'De quién es el flete. Sin él no hay a quién facturarle.' },
                     ingresoFlete: { type: 'number', nullable: true, description: 'Lo que la flota COBRA por el viaje, en MXN. Ausente = `null`, nunca 0.' },
-                    kmRecorridos: { type: 'number', nullable: true },
+                    kmRecorridos: { type: 'integer', minimum: 1, maximum: 19999, nullable: true, description: 'Kilómetros enteros, 1 a 19999. Ausente o null = no se conoce (0 se rechaza: la base exige km > 0).' },
                     anticipo: { type: 'number', minimum: 0, default: 0, description: 'Efectivo adelantado al operador, MXN. Ausente = 0, y esto sí es una medición.' },
                   },
                   required: ['folio', 'operadorId'],
@@ -1471,6 +1471,7 @@ function documento(servidor: string) {
             'Área `administracion`. Cuerpo `{ "desgloses": [ … ] }` (1 a 100) o UN desglose suelto. Cada desglose: `bitacora` (obligatoria), `terminal?`, `poliza` (null si aún no existe), `operador { numeroEmpleado, nombre? }`, `unidad?`, `tipoOperador?` (`foraneo`|`local`|`permisionario`), `desde`/`hasta` (AAAA-MM-DD), `dias?`, `percepciones[]` y `deducciones[]` (`{ concepto, monto > 0, vale? }`: el signo lo da el bloque), `neto?` (si lo mandas, es el total que se valida contra los renglones) y `enviadoOrigen?`.\n\n'
             + 'ESTRICTA Y TODO-O-NADA: un campo desconocido (también un identificador de flota: la flota sale de tu credencial), un renglón en cero o un neto que no cuadra en CUALQUIER elemento es 400 con su índice y no se guarda ninguno.\n\n'
             + 'IDEMPOTENTE: la clave sale de `terminal` + `bitacora`. La misma bitácora con el mismo contenido cuenta en `idempotentes` y no reenvía nada. La misma bitácora con OTRO contenido NO se sobrescribe: sale en `excepciones` con `motivo = correccion_pendiente` y una persona decide si manda la corrección. Una guarda que retiene (neto negativo, sin póliza, concepto prohibido) cuenta en `retenidas`.\n\n'
+            + 'CORRECCIÓN DECIDIDA: con `correccion: { motivo }` en el sobre, quien administra manda estas bitácoras como corrección de las ya recibidas: entran como `<clave>-R<n>` (archivo nuevo; el operador las recibe rotuladas «CORRECCIÓN») y la original queda como constancia. Reintentar la misma corrección es idempotente.\n\n'
             + 'ESTA RUTA NO ENTREGA: solo recibe y programa; los correos salen aparte. 201 si se guardó al menos una; 200 si todo ya existía o solo hubo excepciones. Un 500 a mitad es seguro de reintentar completo: lo ya guardado vuelve como idempotente.',
           tags: ['liquidaciones', 'dinero'],
           requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { desgloses: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'object', properties: {
@@ -1487,10 +1488,39 @@ function documento(servidor: string) {
             deducciones: { type: 'array', maxItems: 100, items: { type: 'object', properties: { concepto: { type: 'string', maxLength: 120 }, monto: { type: 'number', exclusiveMinimum: 0 }, vale: { type: 'string', maxLength: 60 } }, required: ['concepto', 'monto'], additionalProperties: false } },
             neto: { type: 'number' },
             enviadoOrigen: { type: 'boolean' },
-          }, required: ['bitacora', 'operador', 'desde', 'hasta'], additionalProperties: false } } }, required: ['desgloses'], additionalProperties: false } } } },
+          }, required: ['bitacora', 'operador', 'desde', 'hasta'], additionalProperties: false } }, correccion: { type: 'object', properties: { motivo: { type: 'string', minLength: 3, maxLength: 300 } }, required: ['motivo'], additionalProperties: false } }, required: ['desgloses'], additionalProperties: false } } } },
           responses: {
             '200': { description: 'Nada nuevo se guardó (todo ya existía o solo hubo excepciones).', content: { 'application/json': { schema: { $ref: '#/components/schemas/ResultadoDesgloses' } } } },
             '201': { description: 'Se guardó al menos una liquidación.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ResultadoDesgloses' } } } },
+            ...respuestasError,
+          },
+        },
+      },
+      '/v1/liquidaciones-externas/contactos': {
+        post: {
+          operationId: 'cargarContactosLiquidacion',
+          'x-likida-area': 'administracion',
+          summary: 'Carga los correos de los operadores y de sus coordinadores (liquidación por correo).',
+          description:
+            'Área `administracion`. Cuerpo `{ "contactos": [ { numeroEmpleado, correo?, coordinadorNombre?, coordinadorCorreo? } ] }` (1 a 500). '
+            + 'El operador se busca por `numeroEmpleado` y NUNCA se crea; solo se actualizan `correo` y el coordinador (jamás el teléfono). Una celda vacía no borra lo que ya había. '
+            + 'IDEMPOTENTE: re-enviar lo mismo cuenta en `sinCambios`. Sin estos correos, cada desglose abre la excepción «operador sin correo». La respuesta habla de «fila N» y del motivo; nunca repite un correo.',
+          tags: ['liquidaciones'],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { contactos: { type: 'array', minItems: 1, maxItems: 500, items: { type: 'object', properties: {
+            numeroEmpleado: { type: 'string', maxLength: 40 },
+            correo: { type: 'string', maxLength: 254 },
+            coordinadorNombre: { type: 'string', maxLength: 200 },
+            coordinadorCorreo: { type: 'string', maxLength: 254 },
+          }, required: ['numeroEmpleado'], additionalProperties: false } } }, required: ['contactos'], additionalProperties: false } } } },
+          responses: {
+            '200': { description: 'Qué pasó con cada fila.', content: { 'application/json': { schema: { type: 'object', properties: { datos: { type: 'object', properties: {
+              actualizados: { type: 'integer' }, sinCambios: { type: 'integer' }, coordinadoresNuevos: { type: 'integer' },
+              sinOperador: { type: 'array', items: { type: 'object', properties: { fila: { type: 'integer' }, motivo: { type: 'string' } } } },
+              ambiguos: { type: 'array', items: { type: 'object', properties: { fila: { type: 'integer' }, motivo: { type: 'string' } } } },
+              invalidas: { type: 'array', items: { type: 'object', properties: { fila: { type: 'integer' }, motivo: { type: 'string' } } } },
+              advertencias: { type: 'array', items: { type: 'string' } },
+              resumen: { type: 'string' },
+            }, required: ['actualizados', 'sinCambios'] } }, required: ['datos'] } } } },
             ...respuestasError,
           },
         },

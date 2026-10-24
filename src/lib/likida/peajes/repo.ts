@@ -40,7 +40,7 @@ import { parsearTarifasMatriz, planificarTarifa, type OrigenTarifa, type TarifaE
 import { parsearTagsMatriz, resolverUnidadesDeTags, validarBajaTag, type VigenciaTag } from './tags';
 import { parsearInmovilizadasMatriz, resolverUnidadesInmovilizadas, validarExcepcionUnidad, validarJustificacion } from './reglas_cobro_config';
 import {
-  revisarCobros, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, TIPOS_UNIDAD_PEAJE,
+  revisarCobros, ETIQUETA_CATEGORIA_COBRO, ROTULO_CANDIDATO, TIPOS_UNIDAD_PEAJE, esCategoriaInterna,
   type CategoriaCobro, type LineaCobro, type MotivoInmovilizada, type ReglasCobro, type ResultadoRevision, type TipoUnidadPeaje, type VentanaInmovilizada,
 } from './reglas_cobro';
 import { validarMapeo, type ConfigMapeo } from './mapeo';
@@ -2369,8 +2369,14 @@ export async function crearReclamoDeCategoria(
 ): Promise<{ ok: true; id: string } | { ok: false; motivo: string }> {
   const reporte = await revisionDeDesglose(tenantId, entrada.desgloseId);
   if (!reporte) return { ok: false, motivo: 'Ese desglose no existe en tu flota (o fue anulado).' };
-  const cands = reporte.revision.candidatos.filter((c) => c.categoria === entrada.categoria);
-  if (cands.length === 0) return { ok: false, motivo: `No hay candidatos de «${ETIQUETA_CATEGORIA_COBRO[entrada.categoria]}» en ese desglose.` };
+  // A37-A2-05: lo interno de la flota no se le reclama al proveedor, y lo que una persona ya descartó, justificó o reclamó
+  // renglón por renglón no se vuelve a sumar (antes el reclamo por categoría los incluía y el monto salía inflado).
+  if (esCategoriaInterna(entrada.categoria)) {
+    return { ok: false, motivo: `«${ETIQUETA_CATEGORIA_COBRO[entrada.categoria]}» es un asunto interno de la flota, no un cobro del proveedor: no se registra como reclamo.` };
+  }
+  const decididos = new Set((await listarDecisionesCandidatos(tenantId, entrada.desgloseId)).map((d) => `${d.indice}|${d.categoria}`));
+  const cands = reporte.revision.candidatos.filter((c) => c.categoria === entrada.categoria && !c.justificacion && !decididos.has(`${c.indice}|${c.categoria}`));
+  if (cands.length === 0) return { ok: false, motivo: `No hay candidatos pendientes de «${ETIQUETA_CATEGORIA_COBRO[entrada.categoria]}» en ese desglose (los que había ya se descartaron, justificaron o reclamaron).` };
   const fechas = cands.map((c) => c.fecha).filter((f): f is string => f !== null).sort();
   if (fechas.length === 0) return { ok: false, motivo: 'Los candidatos no traen fecha de cobro: no se puede calcular el plazo de reclamo.' };
   const enviado = entrada.enviadoEn?.trim() || null;

@@ -1,5 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+// A37-S05-01/S06-01: la página ahora llama su propia puerta; aquí la sesión es de superadmin.
+vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' })) }));
 
 // ═══════════════════════════════════════════════════════════════════════════
 // /admin/conocimiento-rag — CERO cobertura. Página síncrona, sin datos ni
@@ -9,14 +11,14 @@ import { expect, it } from 'vitest';
 
 import ConocimientoRagPage from './page';
 
-it('declara honestamente que Likida no usa RAG hoy, sin aparentar la feature', () => {
-  const html = renderToStaticMarkup(ConocimientoRagPage());
+it('declara honestamente que Likida no usa RAG hoy, sin aparentar la feature', async () => {
+  const html = renderToStaticMarkup(await ConocimientoRagPage());
   expect(html).toContain('Likida no usa RAG');
   expect(html).toContain('no sobre una base de conocimiento documental');
 });
 
-it('no hay widgets que aparenten la feature (ni carga de documentos, ni probador de RAG)', () => {
-  const html = renderToStaticMarkup(ConocimientoRagPage());
+it('no hay widgets que aparenten la feature (ni carga de documentos, ni probador de RAG)', async () => {
+  const html = renderToStaticMarkup(await ConocimientoRagPage());
   expect(html).toContain('ni carga de documentos');
   expect(html).toContain('probador de RAG');
 });

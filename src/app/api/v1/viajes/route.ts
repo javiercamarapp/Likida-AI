@@ -259,6 +259,18 @@ function normalizarViaje(cuerpo: Record<string, unknown>): NuevoViaje & { folio:
     kmRecorridos: crudoNumerico(cuerpo, 'kmRecorridos'),
   });
 
+  // A37-S11-01. `validarIngreso` acepta 0, decimales y 20000 (su tope es de
+  // cordura y sirve también al formulario y al importador), pero la columna
+  // es `int` con `viaje_km_sanos` (0 < km < 20000, 0048/0075): el INSERT
+  // fallaba con 22P02/23514 y el integrador recibía un 500 «vuelve a
+  // intentar» que su TMS reintentaba para siempre. Es un error determinista de
+  // SU dato: 400 que nombra el campo. 0 NO se reinterpreta como «desconocido»
+  // (vacío ≠ cero): para no declararlo, se omite o se manda null.
+  const km = ingreso.kmRecorridos;
+  if (km !== null && (!Number.isInteger(km) || km < 1 || km > 19_999)) {
+    throw new CampoInvalido('kmRecorridos', '`kmRecorridos` tiene que ser un número entero entre 1 y 19999 (omítelo o mándalo null si no lo conoces).');
+  }
+
   return {
     folio,
     operadorId,

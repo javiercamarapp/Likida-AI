@@ -15,10 +15,11 @@ const MSG = { texto: 'hola' } as never;
 describe('esEnvioAlChofer', () => {
   it('reconoce los contextos que le escriben al chofer y deja pasar escalaciones y avisos al supervisor', () => {
     for (const c of ['conductor.solicitud', 'conductor.recordatorio', 'conductor.pregunta_estadia', 'conductor.senal_vida_n1', 'conductor.senal_vida_n2',
-      'conductor.deteccion_parada', 'conductor.reporte_llegada', 'conductor.asignacion_instrucciones', 'conductor.gastos_etc_pregunta']) {
+      'conductor.deteccion_parada', 'conductor.reporte_llegada', 'conductor.asignacion_instrucciones', 'conductor.gastos_etc_pregunta',
+      'convenios.acercamiento_origen', 'convenios.acercamiento_destino', 'jornada.alerta_operador']) { // A37-A5-01 / A37-A5-05
       expect(esEnvioAlChofer(c), c).toBe(true);
     }
-    for (const c of ['conductor.escalacion_n1', 'conductor.alerta_estadia', 'conductor.senal_vida_jefe', 'conductor.llegada_sin_confirmar', 'conductor.asignacion_rechazo']) {
+    for (const c of ['conductor.escalacion_n1', 'conductor.alerta_estadia', 'conductor.senal_vida_jefe', 'conductor.llegada_sin_confirmar', 'conductor.asignacion_rechazo', 'convenios.despacho', 'jornada.alerta_encargado']) {
       expect(esEnvioAlChofer(c), c).toBe(false);
     }
   });
@@ -94,5 +95,34 @@ describe('conCompuertaAlChofer: el envío al chofer pasa por la base', () => {
     expect((await gate('3', MSG, 'conductor.solicitud', 'B', new Date())).ok).toBe(false);
     expect(leer).toHaveBeenCalledTimes(2);
     expect(enviar).toHaveBeenCalledTimes(2);
+  });
+});
+
+
+describe('A37-A5-02: la emergencia abierta del chofer detiene todo envío proactivo hacia él', () => {
+  const armar = (emergencia: (t: string, tel: string) => Promise<boolean>) => {
+    const enviar = vi.fn(async () => OK);
+    const gate = conCompuertaAlChofer(enviar as never, async () => ({ habilitado: true, razon: 'habilitado' }), { emergencia });
+    return { enviar, gate };
+  };
+  it('con emergencia abierta no llega a Meta y el rechazo queda marcado como compuerta', async () => {
+    const { enviar, gate } = armar(async () => true);
+    const r = await gate('5215500000000', MSG, 'conductor.recordatorio', 't1', new Date());
+    expect(enviar).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ ok: false, reintentable: false, bloqueadoPorCompuerta: true });
+  });
+  it('si no se puede leer la emergencia (base caída) NO se envía (fail-closed)', async () => {
+    const { enviar, gate } = armar(async () => { throw new Error('caída'); });
+    const r = await gate('5215500000000', MSG, 'convenios.acercamiento_origen', 't1', new Date());
+    expect(enviar).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ ok: false, bloqueadoPorCompuerta: true });
+  });
+  it('sin emergencia envía; y un destinatario que no es el chofer (escalación) no consulta nada', async () => {
+    const consulta = vi.fn(async () => false);
+    const { enviar, gate } = armar(consulta);
+    await gate('5215500000000', MSG, 'conductor.solicitud', 't1', new Date());
+    await gate('5215500000001', MSG, 'conductor.escalacion_n1', 't1', new Date());
+    expect(enviar).toHaveBeenCalledTimes(2);
+    expect(consulta).toHaveBeenCalledTimes(1);
   });
 });

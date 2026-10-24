@@ -512,6 +512,35 @@ describe('opt-out y consentimiento', () => {
     expect(alCliente).toHaveLength(1);
   });
 
+  it('A37-S59-01: la BAJA con el hilo en CONTROL HUMANO también registra el opt-out, cierra el hilo y acusa', async () => {
+    const { repo, contacto } = escenario();
+    repo.estatus.agregar(T1, CLIENTE_A, estatus());
+    const { deps, alCliente } = armar(repo);
+    await atenderMensajeCliente(msg('¿Dónde va mi viaje?'), deps);
+    const [b] = repo.salientes();
+    await atenderDecisionVigia(cuentaGerente, `vig_tomo:${b.id}`, deps); // el gerente toma el hilo
+    expect([...repo.conversaciones.values()][0].control).toBe('humano');
+    const antes = alCliente.length;
+
+    await atenderMensajeCliente(msg('BAJA'), deps);
+    expect(repo.contactos.get(contacto.id)).toMatchObject({ estado: 'baja' });
+    expect(repo.contactos.get(contacto.id)!.optoutEn).not.toBeNull();
+    expect([...repo.conversaciones.values()][0].estado).toBe('cerrada');
+    expect(repo.eventosDe('optout')).toHaveLength(1);
+    expect(alCliente.length).toBe(antes + 1);
+    expect(alCliente.at(-1)!.texto).toContain('ya no te escribiremos');
+  });
+
+  it('A37-S59-01: la BAJA llegada en una ráfaga que el filtro de spam cortaría también se respeta', async () => {
+    const { repo, contacto } = escenario();
+    const { deps } = armar(repo);
+    for (let i = 0; i < 12; i += 1) await atenderMensajeCliente(msg(`comprar ahora ${i}`), deps);
+    expect(repo.eventosDe('spam').length).toBeGreaterThan(0);
+    await atenderMensajeCliente(msg('BAJA'), deps);
+    expect(repo.contactos.get(contacto.id)).toMatchObject({ estado: 'baja' });
+    expect(repo.eventosDe('optout')).toHaveLength(1);
+  });
+
   it('«dar de baja la unidad 12» NO es un opt-out', async () => {
     const { repo, contacto } = escenario();
     const { deps } = armar(repo);

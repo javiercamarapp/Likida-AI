@@ -42,9 +42,12 @@ function deps(d: Datos = {}, extra: Partial<DepsResolver> = {}): DepsResolver {
 }
 
 const fila = (o: Partial<FilaParaResolver> = {}): FilaParaResolver =>
-  ({ cliente: 'Cliente Uno', consignatario: 'Planta Norte', caja: 'CJ-500', unidad: 'U-101', filaId: FILA_ID, ...o });
+  ({ cliente: 'Cliente Uno', consignatario: 'Planta Norte', caja: 'CJ-500', unidad: 'U-101', filaId: FILA_ID, fecha: '2026-10-05', reque: 'RQ-100', ...o });
 
-const opSistema: OperadorDato = { tenantId: T1, nombre: 'Operador Sintético', licencia: 'LIC-0001', licenciaVence: '2027-03-01', telefono: '5252899900009' };
+const opSistema: OperadorDato = {
+  tenantId: T1, nombre: 'Operador Sintético', licencia: 'LIC-0001', licenciaVence: '2027-03-01', telefono: '5252899900009',
+  servicio: { fecha: '2026-10-05', reque: 'RQ-100' },
+};
 const manual = (o: Partial<DatoViajeManual> = {}): DatoViajeManual => ({
   tenantId: T1, filaId: FILA_ID, operadorId: null, operadorNombre: null, licencia: null, licenciaVence: null, telefono: null,
   placasUnidad: null, placasCaja: null, estadoCaja: null, ...o,
@@ -202,11 +205,25 @@ describe('resolverFila — caja', () => {
 });
 
 describe('resolverFila — operador', () => {
-  it('el del viaje abierto de la unidad gana sobre lo manual (fuente sistema)', async () => {
+  it('A37-A4-05: lo capturado a mano para la fila GANA sobre el viaje abierto de la unidad', async () => {
     const r = await resolverFila(fila(), deps({
       unidades: [unidad()], operadores: { 'u-1': opSistema }, manual: [manual({ operadorNombre: 'Otro Operador' })],
     }));
+    expect(r.operador).toMatchObject({ nombre: 'Otro Operador', fuente: 'manual' });
+  });
+  it('el del viaje abierto de la unidad se usa (fuente sistema) cuando es el MISMO servicio y no hay captura a mano', async () => {
+    const r = await resolverFila(fila(), deps({ unidades: [unidad()], operadores: { 'u-1': opSistema } }));
     expect(r.operador).toMatchObject({ nombre: 'Operador Sintético', fuente: 'sistema' });
+  });
+  it('A37-A4-05: el viaje abierto de OTRO servicio (otro REQUE o otra fecha, o sin dato de servicio) NO se nombra', async () => {
+    for (const servicio of [{ fecha: '2026-10-05', reque: 'RQ-999' }, { fecha: '2026-10-04', reque: null }, undefined]) {
+      const r = await resolverFila(fila(), deps({ unidades: [unidad()], operadores: { 'u-1': { ...opSistema, servicio } } }));
+      expect(r.operador).toBeNull();
+      expect(r.faltantes).toContain('sin_operador');
+    }
+    // sin REQUE en la fila, coincide por fecha
+    const porFecha = await resolverFila(fila({ reque: null }), deps({ unidades: [unidad()], operadores: { 'u-1': { ...opSistema, servicio: { fecha: '2026-10-05', reque: null } } } }));
+    expect(porFecha.operador).toMatchObject({ fuente: 'sistema' });
   });
   it('sin viaje en el sistema: lo manual (fuente manual)', async () => {
     const r = await resolverFila(fila(), deps({

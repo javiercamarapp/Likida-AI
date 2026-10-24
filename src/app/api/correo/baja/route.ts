@@ -1,5 +1,5 @@
 import { verificarBaja } from '@/lib/correo/baja';
-import { suprimirCorreo } from '@/lib/likida/agentes/enviador';
+import { suprimirCorreoConfirmado } from '@/lib/likida/agentes/enviador';
 import { borrarDatosPersonaPorBajaPorCorreo } from '@/lib/correo/respuesta_campana';
 import { esc } from '@/lib/correo/plantilla';
 import { logger } from '@/lib/logger';
@@ -85,16 +85,26 @@ export async function POST(req: Request) {
     return paginaError(400, 'Este enlace de baja no es válido.');
   }
   try {
-    await suprimirCorreo(correo, 'baja solicitada por liga de correo (un clic)');
+    // A37-S08-01: «Listo» SOLO con la supresión confirmada. `suprimirCorreo`
+    // (best-effort) se traga los fallos y la ruta respondía 200 sin fila: el
+    // cliente de correo da la baja por hecha y no reintenta, y la campaña
+    // sigue escribiendo a quien pidió que no (LFPDPPP art. 16 fr. II).
+    const supr = await suprimirCorreoConfirmado(correo, 'baja solicitada por liga de correo (un clic)');
+    if (!supr.ok) {
+      logger.error('correo.baja.supresion_no_guardada', { reintentable: supr.reintentable, err: supr.motivo });
+      return supr.reintentable
+        ? paginaError(500, 'No se pudo procesar la baja. Vuelve a intentar en un momento.')
+        : paginaError(400, 'Este enlace de baja no es válido.');
+    }
     // AUDITORÍA 25 (ALTO): esta vía hacía lo mismo que `respuesta_campana.ts`
     // hacía ANTES del arreglo — suprimir y nada más. Ahora borra los mismos
-    // datos de persona que borraría una respuesta de correo con BAJA.
+    // datos de persona que borraría una respuesta de correo con BAJA. Si no
+    // puede ni resolver al prospecto, LANZA (A37-S08-01) y cae al 500 de abajo.
     await borrarDatosPersonaPorBajaPorCorreo(correo);
   } catch (e) {
-    // `suprimirCorreo` ya atrapa y registra sus propios errores (best-effort,
-    // nunca lanza) — este catch es una segunda red por si acaso, no la
-    // primera. Un 500 aquí haría que Gmail reintente el one-click, que es lo
-    // correcto ante una duda real de si la baja se guardó.
+    // Un 500 aquí hace que Gmail reintente el one-click, que es lo correcto
+    // ante la duda real de si la baja o el borrado se completaron (la
+    // supresión es idempotente por PK).
     logger.error('correo.baja.fallo_inesperado', { err: e instanceof Error ? e.message : String(e) });
     return paginaError(500, 'No se pudo procesar la baja. Vuelve a intentar en un momento.');
   }

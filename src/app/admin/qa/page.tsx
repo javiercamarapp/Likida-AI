@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
   leerManifiesto, listarCorridas, gastoHoyUsd, firmarRutas, leerUltimasLecturas, BUCKET_QA_FOTOS,
@@ -21,6 +22,8 @@ export const dynamic = 'force-dynamic';
  * Storage quedan solo los bytes — ver qa-tipos.ts, cabecera.
  */
 export default async function QaPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const db = supabaseAdmin();
 
   let fotos: FotoConUrl[] = [];

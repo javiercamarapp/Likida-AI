@@ -12,7 +12,8 @@
     "llegada_en": { "fuente": "Fecha Llegada", "transformar": "fecha_local", "zona": "America/Mexico_City", "formato": "yyyy-MM-dd HH:mm:ss" },
     "origen": { "fuente": "origen", "transformar": "texto" },
     "destino": { "fuente": "destino", "transformar": "texto" },
-    "estatus": { "fuente": "estatus", "transformar": "texto" }
+    "estatus": { "fuente": "estatus", "transformar": "texto" },
+    "operadorNombre": { "fuente": "operador", "transformar": "texto" }
   },
   "clave_externa": ["despacho_ref", "unidadEco", "salida_en"],
   "obligatorios": ["despacho_ref", "unidadEco", "salida_en"]

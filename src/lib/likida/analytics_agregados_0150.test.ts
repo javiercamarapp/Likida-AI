@@ -356,7 +356,10 @@ describe('EQUIVALENCIA — reducción JS vieja vs RPC de la 0150, mismo dataset,
       });
 
       it.each([5, 13, 52])('getGastoPorSemana(%i semanas)', async (semanas) => {
-        expect(await A.getGastoPorSemana(tenant, semanas, HOY)).toEqual(legacyGastoPorSemana(TABLAS, tenant, semanas, HOY));
+        // A37-S23-01: `totalPorCorte` es un campo NUEVO (total de todos los conceptos); lo viejo no lo tenía.
+        const { totalPorCorte, ...resto } = await A.getGastoPorSemana(tenant, semanas, HOY);
+        expect(resto).toEqual(legacyGastoPorSemana(TABLAS, tenant, semanas, HOY));
+        expect(totalPorCorte).toHaveLength(semanas);
       });
 
       it.each([5, 13, 52])('getLiquidadoPorSemana(%i semanas) — día local MX', async (semanas) => {

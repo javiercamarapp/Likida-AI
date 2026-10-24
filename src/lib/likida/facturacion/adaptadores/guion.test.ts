@@ -496,14 +496,31 @@ describe('el XML', () => {
     expect(p.descargas).toEqual(['#xml']);
   });
 
-  it('si el portal no entrega el archivo, se DICE que el CFDI ya existe', async () => {
+  it('A37-S42-01: si el portal no entrega el archivo, el UUID CONFIRMADO se conserva (ok:true + aviso)', async () => {
     const p = new PaginaDoble({ presentes: [...TODOS, '#xml'], textos: { '.uuid': 'U-1' }, descargaRevienta: true });
     const r = await armar(conXml, p).facturar(CAMPOS, 'emitir');
 
-    expect(r.ok).toBe(false);
-    // Lo importante: NO se reintenta la emisión, que duplicaría el CFDI.
-    expect(r.error).toContain('El comprobante EXISTE');
-    expect(r.emisionSinConfirmar).toBe(true);
+    // Antes: ok:false + emisionSinConfirmar y SIN cfdiUuid — el gasto quedaba
+    // bloqueado sin folio aunque el CFDI existía.
+    expect(r.ok).toBe(true);
+    expect(r.cfdiUuid).toBe('U-1');
+    expect(r.emisionSinConfirmar).toBeUndefined();
+    expect(r.xmlRuta).toBeUndefined();
+    expect(r.aviso).toMatch(/SÍ se emitió/);
+  });
+
+  it('A37-S42-01: se prueban TODOS los candidatos del botón del XML', async () => {
+    const dosBotones: GuionPortal = { ...GUION_MEDIDO, xml: { boton: ['button:has-text("XML")', 'a#xml'] } };
+    const p = new PaginaDoble({ presentes: [...TODOS], textos: { '.uuid': 'U-1' }, xmlRuta: '/tmp/cfdi.xml' });
+    const original = p.descargar!;
+    p.descargar = async (sel: string) => {
+      if (sel.startsWith('button')) { p.descargas.push(sel); throw new Error('expiró'); }
+      return original(sel);
+    };
+    const r = await armar(dosBotones, p).facturar(CAMPOS, 'emitir');
+    expect(r.ok).toBe(true);
+    expect(r.xmlRuta).toBe('/tmp/cfdi.xml');
+    expect(p.descargas).toEqual(['button:has-text("XML")', 'a#xml']);
   });
 
   it('una plataforma que no sabe descargar no tumba una emisión buena', async () => {

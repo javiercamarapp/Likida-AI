@@ -1,3 +1,4 @@
+import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { ClipboardCheck, FlaskConical, Bot, ScanEye } from 'lucide-react';
 import { getEstadoEvals } from '@/lib/admin/evals';
@@ -43,6 +44,8 @@ function estadoDeVeredicto(v: string | null): { estado: Estado; texto: string } 
 }
 
 export default async function CalidadEvalsPage() {
+  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
+  await requireSuperadmin();
   const desdeIso = new Date(ahoraMs() - DIAS_VENTANA * 24 * 3600 * 1000).toISOString();
   const [evals, evalsContador, corridas, ocr] = await Promise.all([
     getEstadoEvals('analista').catch(() => null),

@@ -126,6 +126,22 @@ describe('un nivel que falla no tumba el documento si hay otro nivel', () => {
   });
 });
 
+describe('A37-A3-05: el fallo del ÚLTIMO nivel conserva la mejor lectura anterior', () => {
+  it('el nivel 2 deja el CP dudoso y el nivel 3 se cae por timeout: se devuelve la lectura del 2, por confirmar, con la nota error_modelo', async () => {
+    const llm = llmFalso((e) => {
+      if (e.nivel === 3) throw new Error('timeout de 30 s');
+      return lectura(e.nivel, { destino_estado: ['NLE', 0.99, null] });
+    });
+    const r = await extraerDocumento(captura(), { llm, niveles: [1, 2, 3] });
+    expect(llm.llamadas.map((l) => l.nivel)).toEqual([1, 2, 3]);
+    expect(r.extraccion.campos.origen_rfc.valor).toBe(RFC.boreal);
+    expect(r.escalamientos.at(-1)).toMatchObject({ a: 3, codigo: 'error_modelo', motivo: expect.stringContaining('timeout') });
+    expect(r.revisionHumana.map((h) => h.codigo)).toContain('error_modelo');
+    expect(r.avisos.join(' ')).toMatch(/último nivel.*timeout/s);
+    expect(validarExtraccion(r.extraccion).listoParaAprobar).toBe(false);
+  });
+});
+
 describe('(f) el orden de los niveles es configurable por tipo de documento', () => {
   it('niveles [2, 3] en el contexto: la primera llamada es al nivel 2 y el 1 no se usa', async () => {
     const llm = llmFalso((e) => lectura(e.nivel));

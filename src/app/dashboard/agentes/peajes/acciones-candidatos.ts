@@ -47,7 +47,7 @@ export type ResultadoAccion =
   | { ok: false; error: string };
 
 const TEXTO_OMITIDA: Record<MotivoNoAplica, string> = {
-  ya_decidido: 'ya tenían decisión', no_reclamable: 'son avisos atípicos, no cobros (no se reclaman)', sin_fecha: 'no traen fecha (no se puede contar el plazo)',
+  ya_decidido: 'ya tenían decisión', no_reclamable: 'son avisos atípicos o asuntos internos de la flota, no cobros del proveedor (no se reclaman)', sin_fecha: 'no traen fecha (no se puede contar el plazo)',
 };
 const VERBO: Record<AccionCandidato, { hecho: string; nada: string }> = {
   reclamado: { hecho: 'marcado como reclamado', nada: 'reclamar' },

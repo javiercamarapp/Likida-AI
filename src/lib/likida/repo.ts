@@ -2043,11 +2043,22 @@ export interface PollReclamado {
 }
 
 
+/** 0866 no está aplicada en la base: el reclamo en rondas no existe todavía. */
+export class RondasDePollNoDisponibles extends Error {
+  constructor(detalle: string) {
+    super(`reclamar_polls_conector sin p_no_iniciados_desde (¿falta la 0866?): ${detalle}`);
+    this.name = 'RondasDePollNoDisponibles';
+  }
+}
+
 export async function reclamarPollsConector(
   recurso: RecursoPoll,
   proveedores: string[],
   limite: number,
   worker: string,
+  /** 0866 (A37-S38-02): reclamo en rondas. `noIniciadosDesde` excluye a las flotas
+   *  ya iniciadas en esta corrida; `ahoraIso` fija el reloj del reclamo al de la app. */
+  rondas?: { noIniciadosDesde: string; ahoraIso: string },
 ): Promise<PollReclamado[]> {
   const admin = supabaseAdmin();
   const etiqueta = recurso === 'posiciones' ? 'gps' : 'eventos';
@@ -2078,7 +2089,11 @@ export async function reclamarPollsConector(
     // finalizar y recupera un worker muerto antes de la siguiente decena de
     // minutos, sin permitir que B robe trabajo legalmente en vuelo.
     p_lease_segundos: 360,
+    ...(rondas ? { p_ahora: rondas.ahoraIso, p_no_iniciados_desde: rondas.noIniciadosDesde } : {}),
   }), `${recurso}.claims`);
+  if (error && rondas && /p_no_iniciados_desde|PGRST202|Could not find the function/i.test(error.message)) {
+    throw new RondasDePollNoDisponibles(error.message);
+  }
   if (error) throw new Error(`${recurso}.claims: ${error.message}`);
   if (!Array.isArray(data)) throw new Error(`${recurso}.claims: respuesta inválida`);
   return data.map((fila) => {
