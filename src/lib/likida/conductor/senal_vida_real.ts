@@ -1,4 +1,5 @@
 import { puertosReales } from './ejecutor';
+import { aplicarCompuertaAgente } from './compuerta_agente';
 import {
   abrirEpisodioSenalVida, anotarFalloSenalVida, cerrarEpisodioSenalVida, leerConfigConductor, reclamarNivelSenalVida,
 } from './repo';
@@ -12,7 +13,8 @@ export function puertosSenalVidaReales(): PuertosSenalVida {
   return {
     viajes: leerViajesAvisables,
     hitosDe: leerHitosDeViajes,
-    configDe: leerConfigConductor,
+    // A37-A5-06: misma compuerta 0859 que el motor; sin la marca explícita la flota se lee apagada y no abre episodios ni escala al jefe.
+    configDe: async (t) => aplicarCompuertaAgente(await leerConfigConductor(t)),
     sitiosDe: leerSitiosGeometriaDeViajes,
     muestras: leerMuestrasGps,
     ultimaMuestra: leerUltimaMuestraGps,
