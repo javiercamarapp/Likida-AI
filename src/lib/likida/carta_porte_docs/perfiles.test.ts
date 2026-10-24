@@ -256,6 +256,26 @@ describe('orden de fecha por perfil (MM/DD)', () => {
     expect(b.cambios).toEqual([]);
   });
 
+  it('A37-S32-03: una fecha igual en ambos órdenes (12/12/2026) no borra el mdy aprendido ni cuenta como cambio; 03/04/2026 sigue leyéndose mes/día', async () => {
+    const c1 = await contenido(csvFecha('10/14/2026'));
+    const a = aprender({ contenido: c1, final: finalFecha('2026-10-14'), previa: null, riesgoInyeccion: false });
+    const c2 = await contenido(csvFecha('12/12/2026'));
+    const b = aprender({ contenido: c2, final: finalFecha('2026-12-12'), previa: { version: 1, mapeos: a.mapeos, ejemplos: a.ejemplos }, riesgoInyeccion: false });
+    expect(b.mapeos.find((x) => x.campo === 'fecha_salida')?.ordenFecha).toBe('mdy');
+    expect(b.cambios).toEqual([]);
+    const c3 = await contenido(csvFecha('03/04/2026'));
+    expect(fechaDe(aplicarPerfil(perfilCon(c3, b.mapeos), c3))).toBe('2026-03-04');
+  });
+
+  it('A37-S32-03: una fecha que SOLO cuadra día/mes (15/10/2026) es prueba en contra: no hereda el mdy', async () => {
+    const c1 = await contenido(csvFecha('10/14/2026'));
+    const a = aprender({ contenido: c1, final: finalFecha('2026-10-14'), previa: null, riesgoInyeccion: false });
+    const c2 = await contenido(csvFecha('15/10/2026'));
+    const b = aprender({ contenido: c2, final: finalFecha('2026-10-15'), previa: { version: 1, mapeos: a.mapeos, ejemplos: a.ejemplos }, riesgoInyeccion: false });
+    expect(b.mapeos.find((x) => x.campo === 'fecha_salida')?.ordenFecha).toBeUndefined();
+    expect(b.cambios.join(' ')).toMatch(/Corregido: fecha_salida/);
+  });
+
   it('cambiar el orden de un mapeo cuenta como cambio (mapeoIgual compara ordenFecha)', async () => {
     const c = await contenido(csvFecha('10/14/2026'));
     const previa: Mapeo[] = [{ campo: 'fecha_salida', mercancia: false, fuente: { tipo: 'columna', encabezado: 'Fecha Salida' } }];
