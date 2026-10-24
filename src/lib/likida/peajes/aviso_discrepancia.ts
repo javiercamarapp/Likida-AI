@@ -45,6 +45,9 @@ export interface DepsAvisoDiscrepancia {
   avisar: typeof avisarOficina;
 }
 
+/** A37-S51-05: tope de mensajes individuales por desglose; el resto va en UN solo resumen (el detalle está en la pantalla de revisión). */
+export const MAX_AVISOS_DISCREPANCIA_INDIVIDUALES = 5;
+
 const liga = () => `${appUrl()}/dashboard/agentes/peajes`;
 
 /** La última posición GPS conocida de la unidad de ESA línea (sin ventana de tiempo: puede llevar días sin reportar). */
@@ -98,7 +101,8 @@ export async function avisarDiscrepanciasDesglose(
     r.evaluados = criticos.length;
 
     const tel = await deps.destinatario(tenantId);
-    for (const c of criticos) {
+    for (const [pos, c] of criticos.entries()) {
+      if (pos >= MAX_AVISOS_DISCREPANCIA_INDIVIDUALES) break;
       const entrada = discrepanciaDeCandidato(c);
       if (!entrada) continue; // no debería pasar (ya se filtró por categoría), pero el tipo lo permite.
       let posicion: PosicionConocida | null = null;
@@ -124,6 +128,19 @@ export async function avisarDiscrepanciasDesglose(
         logger.error('peajes.discrepancia_aviso_fallo', {
           tenant: tenantId, desglose: desgloseId, indice: c.indice, motivo: resultado.motivo, codigo: resultado.codigo,
         });
+        r.pendientes++;
+      }
+    }
+    const resto = criticos.length - MAX_AVISOS_DISCREPANCIA_INDIVIDUALES;
+    if (resto > 0 && tel) {
+      const texto = `Peajes: además de los ${MAX_AVISOS_DISCREPANCIA_INDIVIDUALES} avisos anteriores, hay ${resto} cruces más con la unidad inmovilizada en este archivo. Revisa el detalle completo en la pantalla de revisión de peajes: ${liga()}`;
+      const resultado = await deps.avisar(tel, texto, {
+        parametros: parametrosAvisoOficina('Peajes: discrepancia geográfica', `${resto} cruces más con unidad inmovilizada`, liga()),
+        contexto: { tenantId, agente: 'peajes', desglose: desgloseId },
+      });
+      if (resultado.ok) r.enviados++;
+      else {
+        logger.error('peajes.discrepancia_resumen_fallo', { tenant: tenantId, desglose: desgloseId, motivo: resultado.motivo, codigo: resultado.codigo });
         r.pendientes++;
       }
     }

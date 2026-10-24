@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { avisarDiscrepanciasDesglose, type DepsAvisoDiscrepancia } from './aviso_discrepancia';
+import { avisarDiscrepanciasDesglose, MAX_AVISOS_DISCREPANCIA_INDIVIDUALES, type DepsAvisoDiscrepancia } from './aviso_discrepancia';
 import type { CandidatoCobro } from './reglas_cobro';
 import type { ReporteRevision } from './repo';
 import type { PosicionConocida } from './reporte_discrepancia';
@@ -127,6 +127,31 @@ describe('avisarDiscrepanciasDesglose', () => {
     const r = await avisarDiscrepanciasDesglose(T, DES, d);
     expect(r.evaluados).toBe(2);
     expect(r.enviados).toBe(2);
+    expect(avisar).toHaveBeenCalledTimes(2);
+  });
+
+  it('A37-S51-05: cientos de candidatos críticos NO son cientos de mensajes: tope individual + un solo resumen', async () => {
+    const muchos = Array.from({ length: 300 }, (_, k) => critico({ indice: k, unidad: `U-${k}` }));
+    const avisar = vi.fn(async (_tel: string, _texto: string) => ({ ok: true, via: 'texto' as const, id: 'w' }));
+    const d = deps({
+      revisionDeDesglose: vi.fn(async () => reporteCon(muchos)),
+      avisar: avisar as unknown as DepsAvisoDiscrepancia['avisar'],
+    });
+    const r = await avisarDiscrepanciasDesglose(T, DES, d);
+    expect(r.evaluados).toBe(300);
+    expect(avisar.mock.calls.length).toBeLessThanOrEqual(MAX_AVISOS_DISCREPANCIA_INDIVIDUALES + 1);
+    const resumen = avisar.mock.calls[avisar.mock.calls.length - 1][1];
+    expect(resumen).toContain(String(300 - MAX_AVISOS_DISCREPANCIA_INDIVIDUALES));
+    expect(resumen).toMatch(/pantalla de revisión/);
+  });
+
+  it('A37-S51-05: bajo el tope no hay resumen extra', async () => {
+    const avisar = vi.fn(async (_tel: string, _texto: string) => ({ ok: true, via: 'texto' as const, id: 'w' }));
+    const d = deps({
+      revisionDeDesglose: vi.fn(async () => reporteCon([critico({ indice: 0 }), critico({ indice: 1 })])),
+      avisar: avisar as unknown as DepsAvisoDiscrepancia['avisar'],
+    });
+    await avisarDiscrepanciasDesglose(T, DES, d);
     expect(avisar).toHaveBeenCalledTimes(2);
   });
 });
