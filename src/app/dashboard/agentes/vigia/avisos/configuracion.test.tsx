@@ -362,7 +362,8 @@ describe('A37-S15-05: encender, modo y canal son de la dueña', () => {
   beforeEach(() => { reiniciarCachePerfil(); });
 
   it('el encargado NO enciende el aviso ni elige modo autónomo ni WhatsApp directo: se rechaza y no se guarda nada', async () => {
-    for (const cambios of [{ habilitado: '1' }, { modo: 'autonomo' }, { canal: 'cliente_1a1' }]) {
+    const intentos: Array<Record<string, string | null>> = [{ habilitado: '1' }, { modo: 'autonomo' }, { canal: 'cliente_1a1' }];
+    for (const cambios of intentos) {
       tablas.datos.vigia_aviso_config = [];
       const r = await guardar(forma({ habilitado: null, ...cambios }));
       expect(r, JSON.stringify(cambios)).toMatchObject({ ok: false, error: expect.stringContaining('dueña') });
