@@ -127,3 +127,24 @@ describe('las pistas reconocen sin permitir usar', () => {
     expect(p.usuario).toBe('likida');
   });
 });
+
+describe('A37-TRANSVERSAL-09: v2 ata la credencial a su flota y conector (AAD)', () => {
+  const v = { usuario: 'u-sintetico', clave: 'clave-sintetica-larga' };
+  it('con contexto produce v2 y solo abre con el MISMO contexto', () => {
+    const g = cifrar(v, 'flota-a:tms_api_lectura');
+    expect(g).toMatch(/^v2\./);
+    expect(descifrar(g, 'flota-a:tms_api_lectura')).toEqual(v);
+  });
+  it('copiar el texto cifrado a la fila de OTRA flota (o de otro conector) no abre', () => {
+    const g = cifrar(v, 'flota-a:tms_api_lectura');
+    expect(() => descifrar(g, 'flota-b:tms_api_lectura')).toThrow();
+    expect(() => descifrar(g, 'flota-a:otro_conector')).toThrow();
+    expect(() => descifrar(g)).toThrow(/contexto/);
+  });
+  it('lo v1 ya guardado se sigue leyendo (con o sin contexto) y sin contexto se sigue escribiendo v1', () => {
+    const viejo = cifrar(v);
+    expect(viejo).toMatch(/^v1\./);
+    expect(descifrar(viejo)).toEqual(v);
+    expect(descifrar(viejo, 'flota-a:tms_api_lectura')).toEqual(v);
+  });
+});

@@ -33,6 +33,13 @@ import type { CampoCredencial, ValoresCredencial } from './tipos';
 /** El formato: `v1.<iv>.<tag>.<cifrado>`, todo en base64url. La versión al
  *  frente para poder rotar el algoritmo sin adivinar qué es cada cadena. */
 const VERSION = 'v1';
+/**
+ * `v2` = lo mismo que `v1` pero con DATOS ASOCIADOS (AAD de GCM): el texto cifrado queda atado a un contexto
+ * (`${tenantId}:${conectorId}`). Copiar `valores_cifrados` de la fila de una flota a la de otra ya no abre: el tag falla
+ * (A37-TRANSVERSAL-09). `v1` se sigue leyendo (sin contexto) para no romper lo ya guardado; se reescribe como `v2`
+ * la próxima vez que se guarde la credencial.
+ */
+const VERSION_CON_CONTEXTO = 'v2';
 
 /**
  * La llave de cifrado, derivada de una variable de entorno.
@@ -63,25 +70,39 @@ export function cofreConfigurado(): boolean {
   return Boolean(s && s.length >= 32);
 }
 
-export function cifrar(valores: ValoresCredencial): string {
+/**
+ * Cifra. Con `contexto` (p. ej. `${tenantId}:${conectorId}`) produce `v2`, atado a ese contexto; sin él, `v1` como siempre
+ * (las demás tablas con credenciales cifradas tienen un CHECK que exige `v1.`).
+ */
+export function cifrar(valores: ValoresCredencial, contexto?: string): string {
   const iv = randomBytes(12); // 96 bits, el tamaño que GCM espera
   const c = createCipheriv('aes-256-gcm', llave(), iv);
+  if (contexto !== undefined) c.setAAD(Buffer.from(contexto, 'utf8'));
   const cifrado = Buffer.concat([c.update(JSON.stringify(valores), 'utf8'), c.final()]);
   const tag = c.getAuthTag();
-  return [VERSION, iv.toString('base64url'), tag.toString('base64url'), cifrado.toString('base64url')].join('.');
+  const version = contexto !== undefined ? VERSION_CON_CONTEXTO : VERSION;
+  return [version, iv.toString('base64url'), tag.toString('base64url'), cifrado.toString('base64url')].join('.');
 }
 
 /**
  * Descifra. LANZA si el texto fue alterado, si la llave cambió o si el formato
  * no es el esperado — nunca devuelve un objeto a medias.
+ *
+ * `v2` EXIGE el mismo `contexto` con el que se cifró (sin él, o con otro, LANZA: es justo la copia entre flotas);
+ * `v1` no lo usa.
  */
-export function descifrar(guardado: string): ValoresCredencial {
+export function descifrar(guardado: string, contexto?: string): ValoresCredencial {
   const partes = guardado.split('.');
-  if (partes.length !== 4 || partes[0] !== VERSION) {
+  if (partes.length !== 4 || (partes[0] !== VERSION && partes[0] !== VERSION_CON_CONTEXTO)) {
     throw new Error('El valor guardado no tiene el formato del cofre.');
+  }
+  const conContexto = partes[0] === VERSION_CON_CONTEXTO;
+  if (conContexto && contexto === undefined) {
+    throw new Error('El valor guardado está atado a una flota y a un conector: falta el contexto para abrirlo.');
   }
   const [, iv, tag, cifrado] = partes;
   const d = createDecipheriv('aes-256-gcm', llave(), Buffer.from(iv, 'base64url'));
+  if (conContexto) d.setAAD(Buffer.from(contexto as string, 'utf8'));
   d.setAuthTag(Buffer.from(tag, 'base64url'));
   // `final()` es quien verifica el tag: si alguien alteró un bit, lanza aquí.
   const plano = Buffer.concat([d.update(Buffer.from(cifrado, 'base64url')), d.final()]).toString('utf8');

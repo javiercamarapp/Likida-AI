@@ -169,9 +169,19 @@ describe('guardarCredencial — lo que viaja al UPSERT', () => {
     await guardarCredencial(TENANT, 'sap_b1', { ...VALORES_SAP, campo_colado: 'malicia' });
 
     const [up] = toquesDeCredencial();
-    const guardado = descifrar(String((up.payload as Record<string, unknown>).valores_cifrados));
+    const guardado = descifrar(String((up.payload as Record<string, unknown>).valores_cifrados), `${TENANT}:sap_b1`);
     expect(guardado).toEqual(VALORES_SAP);
     expect(guardado).not.toHaveProperty('campo_colado');
+  });
+
+  it('A37-TRANSVERSAL-09: lo guardado es v2, atado a (flota, conector): no abre en la fila de otra flota ni de otro conector', async () => {
+    respuestas.set('conector_credencial', { data: { id: 'cred-1' }, error: null });
+    await guardarCredencial(TENANT, 'sap_b1', VALORES_SAP);
+    const [up] = toquesDeCredencial();
+    const cifrado = String((up.payload as Record<string, unknown>).valores_cifrados);
+    expect(cifrado).toMatch(/^v2\./);
+    expect(() => descifrar(cifrado, 't-otra-flota:sap_b1')).toThrow();
+    expect(() => descifrar(cifrado, `${TENANT}:otro_conector`)).toThrow();
   });
 
   it('el secreto NO viaja a la bitácora ni al logger', async () => {
@@ -575,7 +585,7 @@ describe('guardarCredencial — tabla_propia csv_sftp por sftp://', () => {
     const llavePem = '-----BEGIN ' + 'OPENSSH PRIVATE KEY-----\n' + 'QUJD'.repeat(20) + '\n-----END ' + 'OPENSSH PRIVATE KEY-----';
     await guardarCredencial(TENANT, 'tabla_propia', { ...SFTP, token: '', llave_privada: llavePem, frase_llave: 'frase' });
     const [up] = toquesDeCredencial();
-    const guardado = descifrar(String((up.payload as Record<string, unknown>).valores_cifrados));
+    const guardado = descifrar(String((up.payload as Record<string, unknown>).valores_cifrados), `${TENANT}:tabla_propia`);
     expect(guardado.huella_host).toBe(HUELLA);
     expect(guardado.llave_privada).toBe(llavePem);
     expect(guardado.frase_llave).toBe('frase');
@@ -648,7 +658,7 @@ describe('guardarCredencial — tabla_propia sql_solo_lectura', () => {
     const ca = `-----BEGIN CERTIFICATE-----\n${CUERPO_CA}\n-----END CERTIFICATE-----`;
     await expect(guardarCredencial(TENANT, 'tabla_propia', { ...SQL, sql_ca: ca })).resolves.toBe('cred-1');
     const [up] = toquesDeCredencial();
-    const guardado = descifrar(String((up.payload as Record<string, unknown>).valores_cifrados));
+    const guardado = descifrar(String((up.payload as Record<string, unknown>).valores_cifrados), `${TENANT}:tabla_propia`);
     expect(guardado.sql_ca).toBe(ca);
     expect(guardado.sql_clave).toBe('clave-sql-larga');
     expect(JSON.stringify((up.payload as Record<string, unknown>).pistas)).not.toContain(CUERPO_CA);

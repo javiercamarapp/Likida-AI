@@ -5,6 +5,7 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '../presupuesto';
 import { DatoInvalido } from '../errores';
 import { cifrar, descifrar, pistasDe, cofreConfigurado } from './cofre';
+import { contextoCredencial } from './contexto_credencial';
 import { conectorPorId } from './registro';
 import { PROVEEDOR_TABLA_PROPIA } from './tabla_propia/contrato';
 import { leerConfigTablaPropia } from './tabla_propia/config';
@@ -196,7 +197,7 @@ export async function guardarCredencial(
   const { data, error } = await acotada(supabaseAdmin().from('conector_credencial').upsert({
     tenant_id: tenantId,
     conector_id: conector.id,
-    valores_cifrados: cifrar(limpios),
+    valores_cifrados: cifrar(limpios, contextoCredencial(tenantId, conector.id)),
     pistas: pistasDe(conector.credenciales, limpios),
     activo: true,
     // Reemplazar borra la historia de la prueba A PROPÓSITO: una fila con la
@@ -339,7 +340,7 @@ export async function leerCredencial(
   if (typeof cifrado !== 'string' || cifrado === '') return null;
 
   try {
-    return descifrar(cifrado);
+    return descifrar(cifrado, contextoCredencial(tenantId, conectorId));
   } catch (e) {
     // Se dice qué pasó SIN reintentar ni adivinar: si el cofre no puede abrir
     // lo guardado, la credencial hay que capturarla de nuevo, y afirmar otra

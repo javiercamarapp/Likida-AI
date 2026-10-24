@@ -34,6 +34,7 @@ import { logger } from '@/lib/logger';
 import { diaEnZona, TZ_MX } from '@/lib/formato';
 import { acotada } from '../presupuesto';
 import { descifrar } from './cofre';
+import { contextoCredencial } from './contexto_credencial';
 import { lectorEventosDe, LECTORES_EVENTOS, esEventoGrave, type EventoSeguridadLeido } from './eventos_seguridad';
 import { dispararAsistenciaPorEventoCamara } from '../asistencia_camara';
 import type { Http } from './tipos';
@@ -625,7 +626,7 @@ export async function sincronizarEventosDeFlota(
 
   let valores;
   try {
-    valores = descifrar(valoresCifrados);
+    valores = descifrar(valoresCifrados, contextoCredencial(tenantId, conectorId));
   } catch (e) {
     return { ...base, error: `no se pudo descifrar la credencial: ${e instanceof Error ? e.message : String(e)}` };
   }
