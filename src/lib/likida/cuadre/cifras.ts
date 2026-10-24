@@ -253,7 +253,7 @@ const CAMPO_NO_MONETARIO =
   /^(?:id|uuid|n|comprobantes|copias_excluidas|cantidad|estatus|estado|cfdi_orden|orden|version)$|(?:^|_)(?:id|uuid|ids)$|[a-z]Id$|^(?:fecha|folio|litros|confianza|ocr|km|kilometros|dias|n_)|(?:_|^)(?:fecha|folio|litros|confianza|km|dias)(?:_|$)/i;
 
 /** UUID y fechas ISO embebidos en un texto: sus dígitos no son dinero. */
-const UUID_O_FECHA = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b\d{4}-\d{2}-\d{2}(?:[T ][\d:.]+Z?)?\b/gi;
+const UUID_O_FECHA = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b\d{4}-\d{2}-\d{2}\b/gi;
 
 function numerosDe(valor: unknown, acc: number[], profundidad = 0): number[] {
   if (profundidad > 8 || acc.length > 5000) return acc;   // cota dura: los resultados de tool son datos ajenos
