@@ -152,8 +152,8 @@ describe('el contrato de las 14 tools del copiloto', () => {
   });
 
   it('A37-S24-01: ni las descripciones de las tools ni el prompt del copiloto llevan «$0 MRR»/«cero clientes de pago» como hecho', () => {
-    const fuente = readFileSync(new URL('./copiloto-tools.ts', import.meta.url), 'utf8')
-      + readFileSync(new URL('./copiloto.ts', import.meta.url), 'utf8');
+    const fuente = readFileSync('src/lib/agents/copiloto-tools.ts', 'utf8')
+      + readFileSync('src/lib/agents/copiloto.ts', 'utf8');
     expect(fuente).not.toMatch(/cero clientes de pago|\$0 MRR real|MRR hoy es \$0/i);
   });
 
