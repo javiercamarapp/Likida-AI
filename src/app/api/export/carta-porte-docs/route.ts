@@ -4,6 +4,7 @@ import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { getSessionTenant } from '@/lib/auth/session';
 import { puedeExportar } from '@/lib/auth/permisos';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 import { logger } from '@/lib/logger';
 import { aXlsxPlantillaTms, configEstandar, exportarDocumentos, MIME_XLSX, validarConfigExport, type ExportConfig, type FormatoExport } from '@/lib/likida/carta_porte_docs/exportacion';
 import { construirPlantilla, faltantesBloqueantes } from '@/lib/likida/carta_porte_docs/plantilla_tms';
@@ -26,11 +27,19 @@ const MAX_DOCS = 500;
  *   ?config=estandar | <uuid de cp_export_config>   (por omisión, el estándar de Likida)
  *   ?formato=csv|json|xlsx                            (por omisión, el de la configuración)
  *   ?ids=<uuid>,<uuid>…                               (por omisión, los aprobados que aún no se exportaron)
+ *   ?todos=1                                          (A37-L-03: todos los aprobados, ya exportados o no — para volver a bajar si una descarga no llegó)
  *   ?formato=plantilla_tms&documento=<uuid>           (la plantilla multi-hoja del TMS de UN documento aprobado: 404 si no es de tu flota, 409 si no está aprobado)
  *
  * Solo salen documentos APROBADOS; el resto se reporta en el encabezado `X-Omitidos`. No timbra ni emite nada.
  */
 export async function GET(req: Request) {
+  // A37-L-03: esta GET SELLA «exportado» (efecto de escritura). Una navegación disparada desde OTRO sitio (un enlace
+  // externo, un <img>) no la pide el dueño desde nuestra pantalla: se rechaza. Sin cabeceras (curl/TMS) pasa, igual que en
+  // el resto del repo (ver auth/csrf.ts).
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('export.cp_docs_origen_ajeno', { sitio: req.headers.get('sec-fetch-site') });
+    return new NextResponse('Petición de otro sitio.', { status: 403 });
+  }
   if (!(await rateLimit(`export-cp-docs:${clientIp(req)}`, 10, 60_000))) {
     return new NextResponse('Demasiadas peticiones', { status: 429 });
   }
@@ -70,8 +79,18 @@ export async function GET(req: Request) {
     }
 
     const { filas } = await repo.listarDocumentos(t.tenantId, { estados: ['aprobado'], limite: MAX_DOCS, completo: true });
-    const elegidos = idsParam ? filas.filter((d) => idsParam.includes(d.id)) : filas.filter((d) => d.exportadoEn === null);
-    if (elegidos.length === 0) return new NextResponse('No hay documentos aprobados para exportar.', { status: 404 });
+    // A37-L-03: el sello se pone ANTES de que el navegador confirme la descarga; si ésta se cortó, los aprobados quedan como
+    // «exportados» y la selección por omisión ya no los ve. `?todos=1` (con su botón en la pantalla) los vuelve a bajar.
+    const todos = url.searchParams.get('todos') === '1';
+    const elegidos = idsParam ? filas.filter((d) => idsParam.includes(d.id)) : todos ? filas : filas.filter((d) => d.exportadoEn === null);
+    if (elegidos.length === 0) {
+      return new NextResponse(
+        filas.length > 0 && !idsParam && !todos
+          ? 'No hay documentos aprobados pendientes de exportar: todos ya figuran como exportados. Si una descarga anterior no llegó completa, usa «Volver a descargar todos los aprobados».'
+          : 'No hay documentos aprobados para exportar.',
+        { status: 404 },
+      );
+    }
 
     const folios = new Map<string, string | null>();
     for (const d of elegidos) {

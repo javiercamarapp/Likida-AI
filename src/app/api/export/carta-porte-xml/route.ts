@@ -10,6 +10,7 @@ import { puedeExportar } from '@/lib/auth/permisos';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -31,6 +32,11 @@ export const maxDuration = 120;
  * está timbrado — Likida no timbra (0049); la leyenda va dentro del archivo.
  */
 export async function GET(req: Request) {
+  // A37-L-03: esta GET sella `ccp_xml_generado_en` (escritura). Una navegación desde otro sitio no la pidió el dueño.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('export.ccp_xml_origen_ajeno', { sitio: req.headers.get('sec-fetch-site') });
+    return new NextResponse('Petición de otro sitio.', { status: 403 });
+  }
   if (!(await rateLimit(`export-ccp-xml:${clientIp(req)}`, 10, 60_000))) {
     return new NextResponse('Demasiadas peticiones', { status: 429 });
   }

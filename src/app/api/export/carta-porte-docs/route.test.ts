@@ -72,6 +72,24 @@ describe('el archivo', () => {
     expect((await GET(peticion(`?ids=${U1}`))).status).toBe(200);
   });
 
+  it('A37-L-03: ?todos=1 vuelve a bajar los aprobados aunque ya figuren exportados (descarga cortada); el 404 por omisión lo explica', async () => {
+    await GET(peticion());
+    const vacio = await GET(peticion());
+    expect(vacio.status).toBe(404);
+    expect(await vacio.text()).toContain('Volver a descargar');
+    const todos = await GET(peticion('?todos=1'));
+    expect(todos.status).toBe(200);
+    expect((await todos.text()).trim().split('\r\n')).toHaveLength(3); // encabezado + U1 + U3 (U2 por revisar, UB de otra flota)
+  });
+
+  it('A37-L-03: una navegación cross-site/same-site NO sella ni entrega (403); la mismo-origen y sin cabeceras pasan', async () => {
+    const r = await GET(new Request('https://app.likida.ai/api/export/carta-porte-docs', { headers: { 'sec-fetch-site': 'cross-site' } }));
+    expect(r.status).toBe(403);
+    expect(estado.docs.get(U1)!.exportadoEn).toBeNull();
+    expect(estado.eventos).toHaveLength(0);
+    expect((await GET(new Request('https://app.likida.ai/api/export/carta-porte-docs', { headers: { 'sec-fetch-site': 'same-origin' } }))).status).toBe(200);
+  });
+
   it('un ?ids= con documentos de OTRA flota no exporta nada de ella', async () => {
     const r = await GET(peticion(`?ids=${UB}`));
     expect(r.status).toBe(404);
