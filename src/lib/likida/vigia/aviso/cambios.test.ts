@@ -92,7 +92,7 @@ function mundo(opciones: { config?: Partial<ConfigAviso> | null; params?: Parame
       if (!a || a.estado !== desde) return false;
       if (['enviado', 'descartado', 'reemplazado'].includes(a.estado)) throw new Error('trigger: aviso es historia');
       cierres.push({ id, desde, hacia });
-      a.estado = hacia; a.datos = { ...a.datos, cierre: motivo };
+      a.estado = hacia; a.motivo = motivo; a.datos = { ...a.datos, cierre: motivo };
       return true;
     },
   };
@@ -419,6 +419,35 @@ describe('procesarCambios · anti-ruido', () => {
     const r = await m.pasar();
     expect(r).toMatchObject({ reenvios: 0, revertidos: 1 });
     expect(m.avisos[1].estado).toBe('descartado');
+  });
+
+  // A37-S58-05: A → B → A → B repetía el texto de la v2 descartada; la huella solo-contenido lo tomaba por duplicado.
+  it('A → B → A → B: la tercera versión SÍ se crea aunque repita el texto de la v2 descartada', async () => {
+    const m = mundo();
+    const { f } = await avisada(m);
+    m.avanzar(30 * MIN); m.cambiar(f, 'unidad', 'U-205'); m.avanzar(11 * MIN);
+    await m.pasar(); // v2 (U-101 → U-205)
+    m.avanzar(5 * MIN); m.cambiar(f, 'unidad', 'U-101'); m.avanzar(11 * MIN);
+    await m.pasar(); // v2 descartada
+    m.avanzar(5 * MIN); m.cambiar(f, 'unidad', 'U-205'); m.avanzar(11 * MIN);
+    const r = await m.pasar();
+    expect(r).toMatchObject({ reenvios: 1, duplicados: 0 });
+    const v3 = m.avisos.find((a) => a.version === 3)!;
+    expect(v3.texto).toContain('U-101 → U-205');
+    expect(v3.estado).toBe('pendiente_confirmacion');
+  });
+
+  it('con v1 SIN enviar, A → B → A deja la última versión (A) vigente y no la B obsoleta', async () => {
+    const m = mundo();
+    const f = m.agregarFila();
+    await m.generar(); // v1 (U-101) nunca enviada
+    m.avanzar(30 * MIN); m.cambiar(f, 'unidad', 'U-205'); m.avanzar(11 * MIN);
+    await m.pasar(); // v2 (B), v1 reemplazada
+    m.avanzar(5 * MIN); m.cambiar(f, 'unidad', 'U-101'); m.avanzar(11 * MIN);
+    const r = await m.pasar();
+    expect(r.duplicados).toBe(0);
+    expect(m.avisos.find((a) => a.version === 2)!.estado).toBe('reemplazado');
+    expect(m.avisos.find((a) => a.version === 3)!.texto).not.toContain('U-205');
   });
 
   it('una nueva modificación con v2 sin enviar lo reemplaza y el «antes» sigue siendo lo enviado', async () => {
