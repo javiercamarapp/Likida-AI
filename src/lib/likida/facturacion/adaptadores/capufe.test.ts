@@ -71,7 +71,8 @@ interface Fila { codigo: string; plaza: string; fecha: string; costo: string }
 
 type Respuesta =
   | { agrega: true; plaza?: string; fecha?: string; costo?: string }
-  | { agrega: false; aviso?: string; captcha?: string[] };
+  /** `tardia`: la fila NO está al leerla pero se pinta enseguida (portal lento). */
+  | { agrega: false; aviso?: string; captcha?: string[]; tardia?: boolean };
 
 interface OpcDoble {
   /** Qué selectores existen. Default: los nueve del pre-vuelo. */
@@ -126,6 +127,7 @@ class PortalDoble implements PaginaCapufe {
 
   private aviso: string | null;
   private ultimoCodigo = '';
+  private tardias: Fila[] = [];
   private readonly presentes: string[];
 
   existe?: (selector: string) => Promise<boolean>;
@@ -219,6 +221,7 @@ class PortalDoble implements PaginaCapufe {
       return;
     }
     this.aviso = r.aviso ?? null;
+    if (r.tardia) this.tardias.push({ codigo: this.ultimoCodigo, plaza: 'Palmillas', fecha: '2026-08-03', costo: '$180.00' });
     for (const c of r.captcha ?? []) if (!this.presentes.includes(c)) this.presentes.push(c);
   }
 
@@ -229,7 +232,12 @@ class PortalDoble implements PaginaCapufe {
     const m = /^(.*) tbody tr:nth-child\((\d+)\) td:nth-child\((\d+)\)$/.exec(sel);
     if (m && m[1] === S.tabla) {
       const fila = this.filas[Number(m[2]) - 1];
-      if (!fila) return null; // se acabaron las filas
+      if (!fila) {
+        // El portal lento pinta la fila DESPUÉS de que el código la buscó: esta
+        // lectura (fin de tabla) ya dice «no está»; las siguientes sí la ven.
+        this.filas.push(...this.tardias); this.tardias = [];
+        return null; // se acabaron las filas
+      }
       return [fila.codigo, fila.plaza, fila.fecha, fila.costo][Number(m[3]) - 1] ?? null;
     }
     return null;
@@ -711,6 +719,67 @@ describe('el costo lo dice el portal, no el OCR', () => {
     // contra su PDF y no cuadra.
     expect(r.totalPortal).toBeNull();
     expect(r.aviso).toMatch(/no se puede sumar/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('A37-S41-04/05: no verificable bloquea y la tabla se concilia antes de emitir', () => {
+  const UUID = 'AA11BB22-3333-4444-5555-666677778888';
+
+  it('A37-S41-04: un monto de ticket con coma de millares ("1,234.50") se cotea de verdad y detecta la discrepancia', async () => {
+    const m = montar({ respuestas: { [CODIGO_A]: { agrega: true, costo: '$246.00' } }, uuid: UUID });
+    const r = await m.adaptador.facturar(
+      [
+        { clave: 'codigo', etiqueta: 'Código', valor: CODIGO_A, requerido: true },
+        { clave: 'monto', etiqueta: 'Monto', valor: '1,234.50', requerido: false },
+      ] as CampoListo[], 'emitir');
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/NO SE EMITIÓ/);
+    expect(m.primera().emitido).toBe(false);
+  });
+
+  it('A37-S41-04: un monto ilegible ("N/D") en el ticket NO deja pasar el timbrado sin cotejo', async () => {
+    const m = montar({ uuid: UUID });
+    const r = await m.adaptador.facturar(
+      [
+        { clave: 'codigo', etiqueta: 'Código', valor: CODIGO_A, requerido: true },
+        { clave: 'monto', etiqueta: 'Monto', valor: 'N/D', requerido: false },
+      ] as CampoListo[], 'emitir');
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/no se pudo cotejar/);
+    expect(m.primera().emitido).toBe(false);
+  });
+
+  it('A37-S41-04: un costo ilegible del portal bloquea la emisión; con la bandera explícita sí emite', async () => {
+    const resp = { [CODIGO_A]: { agrega: true as const, costo: 'N/D' } };
+    const bloqueado = montar({ respuestas: resp, uuid: UUID });
+    const r1 = await bloqueado.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
+    expect(r1.ok).toBe(false);
+    expect(r1.error).toMatch(/no se pudo cotejar/);
+    expect(bloqueado.primera().emitido).toBe(false);
+
+    const libre = montar({ respuestas: resp, uuid: UUID, emitirAunConDiscrepancia: true });
+    const r2 = await libre.adaptador.facturarVarios([{ codigo: CODIGO_A, montoEsperado: 180 }], 'emitir');
+    expect(r2.ok).toBe(true);
+  });
+
+  it('A37-S41-05: un código "rechazado" que SÍ quedó en la tabla (fila lenta) frena la emisión', async () => {
+    const m = montar({
+      respuestas: { [CODIGO_B]: { agrega: false, tardia: true } },
+      uuid: UUID,
+    });
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }, { codigo: CODIGO_B }], 'emitir');
+    expect(r.codigos[1].estado).toBe('rechazado');
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/no coincide/);
+    expect(r.error).toContain(CODIGO_B);
+    expect(m.primera().emitido).toBe(false);
+  });
+
+  it('CONTROL — con la tabla igual a lo agregado, emite normal', async () => {
+    const m = montar({ uuid: UUID });
+    const r = await m.adaptador.facturarVarios([{ codigo: CODIGO_A }, { codigo: CODIGO_B }], 'emitir');
+    expect(r.ok).toBe(true);
   });
 });
 

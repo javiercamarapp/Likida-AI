@@ -304,6 +304,12 @@ export interface TicketCapufe {
    * y eso se dice; no se asume que cuadra.
    */
   montoEsperado?: number | null;
+  /**
+   * A37-S41-04: el ticket TRAÍA un monto pero no se pudo leer («1,234.50» daba
+   * NaN con `Number()`). Es distinto de «no trae monto»: aquí había con qué
+   * cotejar y se perdió, así que en `emitir` bloquea igual que una discrepancia.
+   */
+  montoIlegible?: boolean;
   /** De qué gasto salió, para poder nombrarlo cuando el portal lo rechaza. */
   gastoId?: string;
 }
@@ -333,6 +339,8 @@ export interface ResultadoCodigo {
   discrepanciaDeMonto?: boolean;
   /** Se agregó pero su costo no se pudo leer: no hay con qué cotejar. */
   costoIlegible?: boolean;
+  /** A37-S41-04: el ticket traía monto pero no se pudo leer: tampoco hay cotejo. */
+  montoIlegible?: boolean;
   /** Por qué no se agregó, con las palabras del portal cuando las dio. */
   motivo?: string;
 }
@@ -432,6 +440,17 @@ export function parsearCosto(bruto: string | null | undefined): number | null {
   return Number.isFinite(v) ? round2(v) : null;
 }
 
+/**
+ * El monto del ticket, leído con el MISMO parser que el costo del portal.
+ * A37-S41-04: `Number('1,234.50')` da NaN y el cotejo se saltaba en silencio.
+ * `ilegible` = el ticket sí traía algo y no se entendió (≠ no traer monto).
+ */
+function leerMontoDelTicket(bruto: string | null | undefined): { monto: number | null; ilegible: boolean } {
+  if (bruto === undefined || bruto === null || String(bruto).trim() === '') return { monto: null, ilegible: false };
+  const n = parsearCosto(String(bruto));
+  return n === null ? { monto: null, ilegible: true } : { monto: n, ilegible: false };
+}
+
 export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
   readonly comercio = 'capufe';
   readonly portal = URL_CAPUFE_SIN_REGISTRO;
@@ -494,11 +513,10 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
       return this.falloSinAbrir(m, `Este ticket no trae el código de ${LARGO_CODIGO} caracteres que pide CAPUFE. Sin él no hay nada que validar.`);
     }
 
-    const bruto = campos.find((c) => c.clave === 'monto' && c.valor)?.valor;
-    const monto = bruto === undefined || bruto === null ? NaN : Number(bruto);
+    const { monto, ilegible } = leerMontoDelTicket(campos.find((c) => c.clave === 'monto' && c.valor)?.valor);
 
     return this.facturarVarios(
-      [{ codigo: campoCodigo.valor, montoEsperado: Number.isFinite(monto) ? monto : null }],
+      [{ codigo: campoCodigo.valor, montoEsperado: monto, ...(ilegible ? { montoIlegible: true } : {}) }],
       m,
     );
   }
@@ -535,11 +553,11 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
         previos.set(t.gastoId, `Este ticket no trae el código de ${LARGO_CODIGO} caracteres que pide CAPUFE. Sin él no hay nada que validar.`);
         continue;
       }
-      const bruto = t.campos.find((c) => c.clave === 'monto' && c.valor)?.valor;
-      const monto = bruto === undefined || bruto === null ? NaN : Number(bruto);
+      const { monto, ilegible } = leerMontoDelTicket(t.campos.find((c) => c.clave === 'monto' && c.valor)?.valor);
       paraElPortal.push({
         codigo,
-        montoEsperado: Number.isFinite(monto) ? monto : null,
+        montoEsperado: monto,
+        ...(ilegible ? { montoIlegible: true } : {}),
         gastoId: t.gastoId,
       });
     }
@@ -620,6 +638,7 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
     for (const t of tickets) {
       const codigo = (t.codigo ?? '').trim();
       const r: ResultadoCodigo = { codigo, estado: 'no_intentado', gastoId: t.gastoId };
+      if (t.montoIlegible) r.montoIlegible = true;
       if (typeof t.montoEsperado === 'number' && Number.isFinite(t.montoEsperado)) {
         r.montoEsperado = round2(t.montoEsperado);
       }
@@ -713,6 +732,33 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
           ...base,
           ok: false,
           error: `NO SE EMITIÓ: el costo que devolvió CAPUFE no cuadra con el del ticket en ${discrepancias.length} de ${agregados.length} códigos (${discrepancias.map((d) => `${d.codigo}: portal ${d.costoPortal} vs ticket ${d.montoEsperado}`).join('; ')}). El portal es la fuente de verdad, así que la diferencia significa que el código puede ser de otro ticket. Un CFDI equivocado ante el SAT no se deshace: revísalo y, si la diferencia es legítima, vuelve a correr con \`emitirAunConDiscrepancia\`.`,
+        };
+      }
+
+      // A37-S41-04: «no verificable» TAMBIÉN bloquea. Antes solo una
+      // discrepancia POSITIVA frenaba; un monto de ticket ilegible o un costo
+      // del portal ilegible dejaban pasar el timbrado sin cotejo alguno.
+      const sinCotejo = agregados.filter((r) => r.costoIlegible || r.montoIlegible);
+      if (sinCotejo.length > 0 && !this.emitirAunConDiscrepancia) {
+        return {
+          ...base,
+          ok: false,
+          error: `NO SE EMITIÓ: no se pudo cotejar el importe contra el ticket en ${sinCotejo.length} de ${agregados.length} códigos (${sinCotejo.map((d) => `${d.codigo}: ${d.costoIlegible ? 'costo del portal ilegible' : 'monto del ticket ilegible'}`).join('; ')}). Un CFDI equivocado ante el SAT no se deshace: revísalo con el ticket enfrente y, si el importe es el correcto, vuelve a correr con \`emitirAunConDiscrepancia\`.`,
+        };
+      }
+
+      // A37-S41-05: ANTES de timbrar, lo que dice la tabla debe ser EXACTAMENTE
+      // lo que se cree agregado. Un código marcado «rechazado» porque la fila
+      // tardó en pintarse puede estar en la tabla (y entrar al CFDI) mientras
+      // su gasto queda sin UUID y se refactura en otra factura.
+      const enTabla = await this.codigosEnLaTabla(pagina);
+      const esperados = new Set(agregados.map((r) => r.codigo.trim().toUpperCase()));
+      const sobran = enTabla.filter((c) => !esperados.has(c));
+      if (sobran.length > 0 || enTabla.length !== esperados.size) {
+        return {
+          ...base,
+          ok: false,
+          error: `NO SE EMITIÓ: la tabla "CÓDIGOS AGREGADOS" del portal no coincide con lo que se agregó (portal: ${enTabla.length} fila(s)${sobran.length > 0 ? `, de más: ${sobran.join(', ')}` : ''}; esperadas: ${esperados.size}). Emitir facturaría una caseta que no quedó atribuida a su gasto. Revisa el portal con el ticket enfrente.`,
         };
       }
 
@@ -899,6 +945,23 @@ export class AdaptadorCapufe extends AdaptadorPlaywrightBase {
       r.discrepanciaDeMonto = true;
       r.motivo = `El ticket decía ${r.montoEsperado} y CAPUFE cobra ${costo}. Manda el portal: o el OCR leyó mal el monto, o ese código es de otro cruce.`;
     }
+  }
+
+  /**
+   * Todos los códigos que la tabla muestra HOY (en mayúsculas). Si se agota
+   * `maxFilasTabla` sin llegar al final devuelve una fila de más a propósito
+   * (`'…'`): no se puede asegurar la conciliación y el llamador bloquea.
+   */
+  private async codigosEnLaTabla(pagina: PaginaCapufe): Promise<string[]> {
+    const col = await this.columnasDeLaTabla(pagina);
+    const codigos: string[] = [];
+    for (let i = 1; i <= this.maxFilasTabla; i++) {
+      const celda = await pagina.leerTexto(this.celda(i, col.codigo));
+      if (celda === null) return codigos;
+      codigos.push(celda.trim().toUpperCase());
+    }
+    codigos.push('…');
+    return codigos;
   }
 
   /**
