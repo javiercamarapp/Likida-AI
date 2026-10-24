@@ -209,6 +209,12 @@ export interface FiltroDocumentos {
   estados?: EstadoDoc[]; desde?: string; limite?: number;
   /** Con el texto y la extracción (la exportación los necesita); por omisión la lista es liviana. */
   completo?: boolean;
+  /** A37-S10-01: solo estos documentos (el filtro va en la consulta, no en memoria). Máx. 100 por llamada. */
+  ids?: string[];
+  /** A37-S10-01: solo los que aún no se exportaron (`exportado_en IS NULL`), en la consulta. */
+  sinExportar?: boolean;
+  /** A37-S10-01: de lo más antiguo a lo más reciente (para drenar una cola por lotes sin dejar atrás los viejos). */
+  ascendente?: boolean;
 }
 
 /** La bandeja: liviana por omisión (sin texto ni extracción), de lo más reciente a lo más antiguo. */
@@ -216,7 +222,9 @@ export async function listarDocumentos(tenantId: string, f: FiltroDocumentos = {
   let q = supabaseAdmin().from('cp_documento').select(f.completo ? COLUMNAS_DOC : COLUMNAS_LISTA, { count: 'exact' }).eq('tenant_id', tenantId);
   if (f.estados && f.estados.length > 0) q = q.in('estado', f.estados);
   if (f.desde) q = q.gte('created_at', f.desde);
-  const r = await acotada(q.order('created_at', { ascending: false }).order('id').limit(Math.min(f.limite ?? 100, 500)), 'cpdocs.listar');
+  if (f.ids) q = q.in('id', f.ids.slice(0, 100));
+  if (f.sinExportar) q = q.is('exportado_en', null);
+  const r = await acotada(q.order('created_at', { ascending: !!f.ascendente }).order('id').limit(Math.min(f.limite ?? 100, 500)), 'cpdocs.listar');
   const filas = (exigir(r, 'cpdocs.listar') ?? []) as unknown as Fila[];
   return { filas: filas.map(aDocumento), total: r.count ?? filas.length };
 }
@@ -616,6 +624,22 @@ export async function marcarExportado(tenantId: string, ids: string[], ahora = n
   const r = await acotada(supabaseAdmin().from('cp_documento').update({ exportado_en: ahora.toISOString(), updated_at: ahora.toISOString() })
     .eq('tenant_id', tenantId).eq('estado', 'aprobado').in('id', ids).select('id'), 'cpdocs.exportado');
   return ((exigir(r, 'cpdocs.exportado') ?? []) as unknown[]).length;
+}
+
+/**
+ * A37-S10-02: RECLAMA de forma atómica los documentos que aún no se habían exportado
+ * (`UPDATE … WHERE exportado_en IS NULL RETURNING id`) y devuelve SOLO los que este llamador ganó. Dos descargas en
+ * paralelo reciben conjuntos disjuntos: el TMS ya no recibe la misma carga dos veces.
+ */
+export async function reclamarExportacion(tenantId: string, ids: string[], ahora = new Date()): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const ganados: string[] = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const r = await acotada(supabaseAdmin().from('cp_documento').update({ exportado_en: ahora.toISOString(), updated_at: ahora.toISOString() })
+      .eq('tenant_id', tenantId).eq('estado', 'aprobado').is('exportado_en', null).in('id', ids.slice(i, i + 100)).select('id'), 'cpdocs.reclamar_exportacion');
+    for (const f of (exigir(r, 'cpdocs.reclamar_exportacion') ?? []) as Array<{ id: string }>) ganados.push(String(f.id));
+  }
+  return ganados;
 }
 
 // ── El claim de un correo entrante (rpc 0177, compartida con el buzón de facturas) ──

@@ -9,6 +9,7 @@ import { aXlsxPlantillaTms, configEstandar, exportarDocumentos, MIME_XLSX, valid
 import { construirPlantilla, faltantesBloqueantes } from '@/lib/likida/carta_porte_docs/plantilla_tms';
 import { leerConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import * as repo from '@/lib/likida/carta_porte_docs/repo';
+import type { DocumentoFila } from '@/lib/likida/carta_porte_docs/repo';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -69,33 +70,80 @@ export async function GET(req: Request) {
       cfg = v.config; nombre = guardada.nombre; formato = formatoParam === 'csv' || formatoParam === 'json' || formatoParam === 'xlsx' ? formatoParam : guardada.formato;
     }
 
-    const { filas } = await repo.listarDocumentos(t.tenantId, { estados: ['aprobado'], limite: MAX_DOCS, completo: true });
-    const elegidos = idsParam ? filas.filter((d) => idsParam.includes(d.id)) : filas.filter((d) => d.exportadoEn === null);
+    // A37-S10-01: el filtro (ids o «sin exportar») va EN LA CONSULTA, no en memoria sobre las 500 más recientes: un
+    // aprobado antiguo y aún sin exportar ya no queda fuera de la ventana. Por omisión sale el lote más ANTIGUO de
+    // hasta MAX_DOCS (así la cola se drena en orden) y `X-Restantes` dice cuántos quedan para la siguiente descarga.
+    let elegidos: DocumentoFila[] = [];
+    let restantes = 0;
+    if (idsParam) {
+      for (let i = 0; i < idsParam.length; i += 100) {
+        const { filas } = await repo.listarDocumentos(t.tenantId, { estados: ['aprobado'], ids: idsParam.slice(i, i + 100), limite: 100, completo: true });
+        elegidos.push(...filas);
+      }
+    } else {
+      const { filas, total } = await repo.listarDocumentos(t.tenantId, { estados: ['aprobado'], sinExportar: true, ascendente: true, limite: MAX_DOCS, completo: true });
+      elegidos = filas;
+      restantes = Math.max(0, total - filas.length);
+    }
     if (elegidos.length === 0) return new NextResponse('No hay documentos aprobados para exportar.', { status: 404 });
 
     const folios = new Map<string, string | null>();
     for (const d of elegidos) {
       if (d.viajeId && !folios.has(d.viajeId)) folios.set(d.viajeId, (await repo.viajePorId(t.tenantId, d.viajeId))?.folio ?? null);
     }
-    const r = exportarDocumentos(elegidos.map((doc) => ({ doc, viajeFolio: doc.viajeId ? folios.get(doc.viajeId) ?? null : null })), formato, cfg, nombre);
+    const generar = (docs: DocumentoFila[]) => exportarDocumentos(docs.map((doc) => ({ doc, viajeFolio: doc.viajeId ? folios.get(doc.viajeId) ?? null : null })), formato, cfg, nombre);
+    let r = generar(elegidos);
     if (r.documentos === 0) return new NextResponse('No hay documentos aprobados para exportar.', { status: 404 });
 
-    // El sello DESPUÉS de generar: un sello caído no le niega el archivo a la flota, pero queda en el log.
+    // A37-S10-02 — EL SELLO ES UN RECLAMO ATÓMICO (`UPDATE … WHERE exportado_en IS NULL RETURNING`), no un aviso
+    // posterior. Sin ids (la descarga «lo nuevo») dos clics o dos usuarios en paralelo leían el mismo conjunto y el TMS
+    // recibía la carga duplicada: ahora cada descarga se queda SOLO con los que ganó, y si otra se llevó todo, 409.
+    // Con ?ids= el usuario pide a propósito volver a bajar lo ya exportado: se re-sella («la última gana»).
     const s = await getSessionTenant();
+    let idsSellados: string[] = [];
+    let avisoSello: string | null = null;
+    const idsListos = elegidos.filter((d) => !r.omitidos.some((o) => o.id === d.id)).map((d) => d.id);
     try {
-      const idsListos = elegidos.filter((d) => !r.omitidos.some((o) => o.id === d.id)).map((d) => d.id);
-      await repo.marcarExportado(t.tenantId, idsListos);
-      for (const id of idsListos) await repo.registrarEvento(t.tenantId, id, 'exportado', s?.userId ?? null, { formato, config: nombre });
+      if (idsParam) {
+        await repo.marcarExportado(t.tenantId, idsListos);
+        idsSellados = idsListos;
+      } else {
+        const ganados = new Set(await repo.reclamarExportacion(t.tenantId, idsListos));
+        if (ganados.size === 0) {
+          return new NextResponse('Otra descarga acaba de exportar estos documentos. Actualiza la pantalla.', { status: 409 });
+        }
+        if (ganados.size < idsListos.length) r = generar(elegidos.filter((d) => ganados.has(d.id)));
+        idsSellados = [...ganados];
+      }
     } catch (e) {
       logger.warn('export.cp_docs_sello_fallo', { error: e instanceof Error ? e.message : String(e) });
+      // El archivo ya existe y no se le niega a la flota, pero NO se calla (A37-S10-02, como export/facturas-proveedor):
+      // sin el sello, estos mismos documentos reaparecerán como «sin exportar» y podrían subirse dos veces al TMS.
+      avisoSello = 'El archivo está completo, pero NO se pudo marcar como exportado. Estos documentos van a reaparecer como «sin exportar»: no los subas de nuevo al TMS sin revisar cuáles ya entraron.';
+    }
+    try {
+      for (const id of idsSellados) await repo.registrarEvento(t.tenantId, id, 'exportado', s?.userId ?? null, { formato, config: nombre });
+    } catch (e) {
+      logger.warn('export.cp_docs_evento_fallo', { error: e instanceof Error ? e.message : String(e) });
     }
     logger.info('export.cp_docs_generado', { rol: t.rol, documentos: r.documentos, filas: r.filas, formato });
-    return new NextResponse(typeof r.contenido === 'string' ? r.contenido : new Blob([r.contenido as BlobPart]), {
+    // En CSV el aviso va DENTRO del archivo (primera línea, con `#`, tras el BOM); en json/xlsx no cabe sin romper el
+    // formato y va en las cabeceras.
+    let cuerpo: string | Blob;
+    if (typeof r.contenido === 'string') {
+      const bom = r.contenido.startsWith('\uFEFF') ? '\uFEFF' : '';
+      cuerpo = avisoSello && formato === 'csv' ? `${bom}# AVISO: ${avisoSello}\r\n${r.contenido.slice(bom.length)}` : r.contenido;
+    } else {
+      cuerpo = new Blob([r.contenido as BlobPart]);
+    }
+    return new NextResponse(cuerpo, {
       headers: {
         'Content-Type': r.mime,
         'Content-Disposition': `attachment; filename="${r.nombreArchivo}"`,
         'Cache-Control': 'no-store',
         'X-Omitidos': String(r.omitidos.length),
+        'X-Restantes': String(restantes),
+        ...(avisoSello ? { 'X-Sello-Fallo': '1', 'X-Aviso': encodeURIComponent(avisoSello) } : {}),
       },
     });
   } catch (e) {

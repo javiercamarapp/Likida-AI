@@ -210,3 +210,48 @@ describe('inyección de fórmulas en el archivo real', () => {
     expect(csv).not.toMatch(/,=cmd/);
   });
 });
+
+
+describe('A37-S10-01 — el filtro va en la consulta, no sobre las 500 más recientes', () => {
+  const uuidN = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+  it('un aprobado antiguo y sin exportar sale aunque haya más de 500 aprobados ya exportados y más recientes', async () => {
+    for (let n = 1; n <= 505; n++) doc(uuidN(n), A, { exportadoEn: '2026-10-04T00:00:00.000Z', createdAt: '2026-10-05T10:00:00.000Z' });
+    const r = await GET(peticion());
+    expect(r.status).toBe(200);
+    expect((await r.text()).trim().split('\r\n')).toHaveLength(2); // encabezado + el de U1
+    expect(estado.docs.get(U1)!.exportadoEn).not.toBeNull();
+  });
+
+  it('un ?ids= con un uuid fuera de las 500 más recientes también sale', async () => {
+    for (let n = 1; n <= 505; n++) doc(uuidN(n), A, { exportadoEn: '2026-10-04T00:00:00.000Z', createdAt: '2026-10-05T10:00:00.000Z' });
+    expect((await GET(peticion(`?ids=${U1}`))).status).toBe(200);
+  });
+
+  it('con más de 500 por exportar sale el lote más antiguo y X-Restantes dice cuántos faltan', async () => {
+    for (let n = 1; n <= 501; n++) doc(uuidN(n), A, { createdAt: '2026-10-05T10:00:00.000Z' });
+    const r = await GET(peticion());
+    expect(r.status).toBe(200);
+    expect(r.headers.get('x-restantes')).toBe('2'); // 502 sin exportar (U1 + 501) - 500
+    expect(estado.docs.get(U1)!.exportadoEn).not.toBeNull(); // el más antiguo va en el primer lote
+  });
+});
+
+describe('A37-S10-02 — el sello es un reclamo atómico y su fallo no se calla', () => {
+  it('dos descargas en paralelo NO reciben el mismo documento: una gana, la otra 409', async () => {
+    const [a, b] = await Promise.all([GET(peticion()), GET(peticion())]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    expect(estado.eventos.filter((e) => e.tipo === 'exportado' && e.documentoId === U1)).toHaveLength(1);
+  });
+
+  it('si el sello falla, el archivo sale pero con aviso DENTRO del csv y en cabeceras', async () => {
+    estado.fallar.set('reclamarExportacion', new Error('base caída'));
+    const r = await GET(peticion());
+    expect(r.status).toBe(200);
+    expect(r.headers.get('x-sello-fallo')).toBe('1');
+    expect(decodeURIComponent(r.headers.get('x-aviso') ?? '')).toMatch(/NO se pudo marcar/);
+    const csv = new TextDecoder('utf-8', { ignoreBOM: true }).decode(new Uint8Array(await r.arrayBuffer()));
+    expect(csv.startsWith('\uFEFF# AVISO:')).toBe(true);
+    expect(csv).toContain('Folio,FechaSalida');
+  });
+});
